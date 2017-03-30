@@ -28,7 +28,6 @@
 #include "platform/fonts/shaping/ShapeCache.h"
 #include "wtf/Allocator.h"
 #include "wtf/Forward.h"
-#include "wtf/MainThread.h"
 #include "wtf/WeakPtr.h"
 
 namespace blink {
@@ -69,12 +68,12 @@ public:
 
     ~FontFallbackList() { releaseFontData(); }
     bool isValid() const;
-    void invalidate(PassRefPtrWillBeRawPtr<FontSelector>);
+    void invalidate(FontSelector*);
 
     bool loadingCustomFonts() const;
     bool shouldSkipDrawing() const;
 
-    FontSelector* fontSelector() const { return m_fontSelector.get(); }
+    FontSelector* getFontSelector() const { return m_fontSelector.get(); }
     // FIXME: It should be possible to combine fontSelectorVersion and generation.
     unsigned fontSelectorVersion() const { return m_fontSelectorVersion; }
     unsigned generation() const { return m_generation; }
@@ -86,8 +85,8 @@ public:
             m_shapeCache = FontCache::fontCache()->getShapeCache(key)->weakPtr();
         }
         ASSERT(m_shapeCache);
-        if (fontSelector())
-            m_shapeCache->clearIfVersionChanged(fontSelector()->version());
+        if (getFontSelector())
+            m_shapeCache->clearIfVersionChanged(getFontSelector()->version());
         return m_shapeCache.get();
     }
 
@@ -130,7 +129,7 @@ private:
     GlyphPages m_pages;
     GlyphPageTreeNodeBase* m_pageZero;
     mutable const SimpleFontData* m_cachedPrimarySimpleFontData;
-    RefPtrWillBePersistent<FontSelector> m_fontSelector;
+    Persistent<FontSelector> m_fontSelector;
     unsigned m_fontSelectorVersion;
     mutable int m_familyIndex;
     unsigned short m_generation;

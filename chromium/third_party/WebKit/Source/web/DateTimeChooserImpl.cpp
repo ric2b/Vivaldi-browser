@@ -52,14 +52,14 @@ DateTimeChooserImpl::DateTimeChooserImpl(ChromeClientImpl* chromeClient, DateTim
     , m_parameters(parameters)
     , m_locale(Locale::create(parameters.locale))
 {
-    ASSERT(m_chromeClient);
-    ASSERT(m_client);
+    DCHECK(m_chromeClient);
+    DCHECK(m_client);
     m_popup = m_chromeClient->openPagePopup(this);
 }
 
-PassRefPtrWillBeRawPtr<DateTimeChooserImpl> DateTimeChooserImpl::create(ChromeClientImpl* chromeClient, DateTimeChooserClient* client, const DateTimeChooserParameters& parameters)
+DateTimeChooserImpl* DateTimeChooserImpl::create(ChromeClientImpl* chromeClient, DateTimeChooserClient* client, const DateTimeChooserParameters& parameters)
 {
-    return adoptRefWillBeNoop(new DateTimeChooserImpl(chromeClient, client, parameters));
+    return new DateTimeChooserImpl(chromeClient, client, parameters);
 }
 
 DateTimeChooserImpl::~DateTimeChooserImpl()
@@ -100,7 +100,7 @@ static String valueToDateTimeString(double value, AtomicString type)
         components.setMillisecondsSinceEpochForWeek(value);
     else
         ASSERT_NOT_REACHED();
-    return components.type() == DateComponents::Invalid ? String() : components.toString();
+    return components.getType() == DateComponents::Invalid ? String() : components.toString();
 }
 
 void DateTimeChooserImpl::writeDocument(SharedBuffer* data)
@@ -136,7 +136,7 @@ void DateTimeChooserImpl::writeDocument(SharedBuffer* data)
     addProperty("stepBase", stepBaseString, data);
     addProperty("required", m_parameters.required, data);
     addProperty("currentValue", valueToDateTimeString(m_parameters.doubleValue, m_parameters.type), data);
-    addProperty("locale", m_parameters.locale.string(), data);
+    addProperty("locale", m_parameters.locale.getString(), data);
     addProperty("todayLabel", todayLabelString, data);
     addProperty("clearLabel", locale().queryString(WebLocalizedString::CalendarClear), data);
     addProperty("weekLabel", locale().queryString(WebLocalizedString::WeekNumberLabel), data);
@@ -148,7 +148,7 @@ void DateTimeChooserImpl::writeDocument(SharedBuffer* data)
     addProperty("dayLabels", m_locale->weekDayShortLabels(), data);
     addProperty("isLocaleRTL", m_locale->isRTL(), data);
     addProperty("isRTL", m_parameters.isAnchorElementRTL, data);
-    addProperty("mode", m_parameters.type.string(), data);
+    addProperty("mode", m_parameters.type.getString(), data);
     if (m_parameters.suggestions.size()) {
         Vector<String> suggestionValues;
         Vector<String> localizedSuggestionValues;
@@ -187,7 +187,6 @@ Locale& DateTimeChooserImpl::locale()
 
 void DateTimeChooserImpl::setValueAndClosePopup(int numValue, const String& stringValue)
 {
-    RefPtrWillBeRawPtr<DateTimeChooserImpl> protector(this);
     if (numValue >= 0)
         setValue(stringValue);
     endChooser();
@@ -205,7 +204,7 @@ void DateTimeChooserImpl::closePopup()
 
 void DateTimeChooserImpl::didClosePopup()
 {
-    ASSERT(m_client);
+    DCHECK(m_client);
     m_popup = nullptr;
     m_client->didEndChooser();
 }

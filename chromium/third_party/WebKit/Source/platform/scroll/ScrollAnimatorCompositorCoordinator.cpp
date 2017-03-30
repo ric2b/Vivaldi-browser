@@ -22,30 +22,20 @@ ScrollAnimatorCompositorCoordinator::ScrollAnimatorCompositorCoordinator()
     , m_compositorAnimationId(0)
     , m_compositorAnimationGroupId(0)
 {
-#if ENABLE(OILPAN)
     ThreadState::current()->registerPreFinalizer(this);
-#endif
-    if (RuntimeEnabledFeatures::compositorAnimationTimelinesEnabled()) {
-        ASSERT(Platform::current()->compositorSupport());
-        m_compositorPlayer = adoptPtr(CompositorFactory::current().createAnimationPlayer());
-        ASSERT(m_compositorPlayer);
-        m_compositorPlayer->setAnimationDelegate(this);
-    }
+    m_compositorPlayer = adoptPtr(CompositorFactory::current().createAnimationPlayer());
+    ASSERT(m_compositorPlayer);
+    m_compositorPlayer->setAnimationDelegate(this);
 }
 
 ScrollAnimatorCompositorCoordinator::~ScrollAnimatorCompositorCoordinator()
 {
-#if !ENABLE(OILPAN)
-    ScrollAnimatorCompositorCoordinator::dispose();
-#endif
 }
 
 void ScrollAnimatorCompositorCoordinator::dispose()
 {
-    if (m_compositorPlayer) {
-        m_compositorPlayer->setAnimationDelegate(nullptr);
-        m_compositorPlayer.clear();
-    }
+    m_compositorPlayer->setAnimationDelegate(nullptr);
+    m_compositorPlayer.clear();
 }
 
 void ScrollAnimatorCompositorCoordinator::resetAnimationState()
@@ -76,37 +66,23 @@ bool ScrollAnimatorCompositorCoordinator::hasAnimationThatRequiresService() cons
 bool ScrollAnimatorCompositorCoordinator::addAnimation(
     PassOwnPtr<CompositorAnimation> animation)
 {
-    if (m_compositorPlayer) {
-        if (m_compositorPlayer->isLayerAttached()) {
-            m_compositorPlayer->addAnimation(animation.leakPtr());
-            return true;
-        }
-    } else {
-        return scrollableArea()->layerForScrolling()->addAnimation(animation);
+    if (m_compositorPlayer->isLayerAttached()) {
+        m_compositorPlayer->addAnimation(animation.leakPtr());
+        return true;
     }
     return false;
 }
 
 void ScrollAnimatorCompositorCoordinator::removeAnimation()
 {
-    if (m_compositorPlayer) {
-        if (m_compositorPlayer->isLayerAttached())
-            m_compositorPlayer->removeAnimation(m_compositorAnimationId);
-    } else {
-        if (GraphicsLayer* layer = scrollableArea()->layerForScrolling())
-            layer->removeAnimation(m_compositorAnimationId);
-    }
+    if (m_compositorPlayer->isLayerAttached())
+        m_compositorPlayer->removeAnimation(m_compositorAnimationId);
 }
 
 void ScrollAnimatorCompositorCoordinator::abortAnimation()
 {
-    if (m_compositorPlayer) {
-        if (m_compositorPlayer->isLayerAttached())
-            m_compositorPlayer->abortAnimation(m_compositorAnimationId);
-    } else {
-        if (GraphicsLayer* layer = scrollableArea()->layerForScrolling())
-            layer->abortAnimation(m_compositorAnimationId);
-    }
+    if (m_compositorPlayer->isLayerAttached())
+        m_compositorPlayer->abortAnimation(m_compositorAnimationId);
 }
 
 void ScrollAnimatorCompositorCoordinator::cancelAnimation()
@@ -133,7 +109,7 @@ void ScrollAnimatorCompositorCoordinator::cancelAnimation()
         m_runState = RunState::WaitingToCancelOnCompositor;
 
         // Get serviced the next time compositor updates are allowed.
-        scrollableArea()->registerForAnimation();
+        getScrollableArea()->registerForAnimation();
     }
 }
 
@@ -157,7 +133,7 @@ void ScrollAnimatorCompositorCoordinator::takeoverCompositorAnimation()
         m_runState = RunState::RunningOnCompositorButNeedsTakeover;
 
         // Get serviced the next time compositor updates are allowed.
-        scrollableArea()->registerForAnimation();
+        getScrollableArea()->registerForAnimation();
     }
 }
 
@@ -184,8 +160,8 @@ void ScrollAnimatorCompositorCoordinator::compositorAnimationFinished(
     case RunState::WaitingToCancelOnCompositor:
         m_runState = RunState::PostAnimationCleanup;
         // Get serviced the next time compositor updates are allowed.
-        if (scrollableArea())
-            scrollableArea()->registerForAnimation();
+        if (getScrollableArea())
+            getScrollableArea()->registerForAnimation();
         else
             resetAnimationState();
     }
@@ -196,8 +172,8 @@ bool ScrollAnimatorCompositorCoordinator::reattachCompositorPlayerIfNeeded(
 {
     bool reattached = false;
     int compositorAnimationAttachedToLayerId = 0;
-    if (scrollableArea()->layerForScrolling())
-        compositorAnimationAttachedToLayerId = scrollableArea()->layerForScrolling()->platformLayer()->id();
+    if (getScrollableArea()->layerForScrolling())
+        compositorAnimationAttachedToLayerId = getScrollableArea()->layerForScrolling()->platformLayer()->id();
 
     if (compositorAnimationAttachedToLayerId != m_compositorAnimationAttachedToLayerId) {
         if (m_compositorPlayer && timeline) {
@@ -212,7 +188,7 @@ bool ScrollAnimatorCompositorCoordinator::reattachCompositorPlayerIfNeeded(
                 ASSERT(!m_compositorPlayer->isLayerAttached());
                 timeline->playerAttached(*this);
                 m_compositorPlayer->attachLayer(
-                    scrollableArea()->layerForScrolling()->platformLayer());
+                    getScrollableArea()->layerForScrolling()->platformLayer());
                 reattached = true;
             }
             m_compositorAnimationAttachedToLayerId = compositorAnimationAttachedToLayerId;
@@ -248,14 +224,38 @@ CompositorAnimationPlayer* ScrollAnimatorCompositorCoordinator::compositorPlayer
 
 FloatPoint ScrollAnimatorCompositorCoordinator::compositorOffsetFromBlinkOffset(FloatPoint offset)
 {
-    offset.moveBy(scrollableArea()->scrollOrigin());
+    offset.moveBy(getScrollableArea()->scrollOrigin());
     return offset;
 }
 
 FloatPoint ScrollAnimatorCompositorCoordinator::blinkOffsetFromCompositorOffset(FloatPoint offset)
 {
-    offset.moveBy(-scrollableArea()->scrollOrigin());
+    offset.moveBy(-getScrollableArea()->scrollOrigin());
     return offset;
+}
+
+String ScrollAnimatorCompositorCoordinator::runStateAsText() const
+{
+    switch (m_runState) {
+    case RunState::Idle:
+        return String("Idle");
+    case RunState::WaitingToSendToCompositor:
+        return String("WaitingToSendToCompositor");
+    case RunState::RunningOnCompositor:
+        return String("RunningOnCompositor");
+    case RunState::RunningOnMainThread:
+        return String("RunningOnMainThread");
+    case RunState::RunningOnCompositorButNeedsUpdate:
+        return String("RunningOnCompositorButNeedsUpdate");
+    case RunState::WaitingToCancelOnCompositor:
+        return String("WaitingToCancelOnCompositor");
+    case RunState::PostAnimationCleanup:
+        return String("PostAnimationCleanup");
+    case RunState::RunningOnCompositorButNeedsTakeover:
+        return String("RunningOnCompositorButNeedsTakeover");
+    }
+    ASSERT_NOT_REACHED();
+    return String();
 }
 
 } // namespace blink

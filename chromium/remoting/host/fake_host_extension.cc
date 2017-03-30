@@ -8,6 +8,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "remoting/codec/video_encoder.h"
 #include "remoting/host/host_extension_session.h"
 #include "remoting/proto/control.pb.h"
@@ -21,10 +22,6 @@ class FakeExtension::Session : public HostExtensionSession {
   ~Session() override {}
 
   // HostExtensionSession interface.
-  void OnCreateVideoCapturer(
-      scoped_ptr<webrtc::DesktopCapturer>* encoder) override;
-  void OnCreateVideoEncoder(scoped_ptr<VideoEncoder>* encoder) override;
-  bool ModifiesVideoPipeline() const override;
   bool OnExtensionMessage(ClientSessionControl* client_session_control,
                           protocol::ClientStub* client_stub,
                           const protocol::ExtensionMessage& message) override;
@@ -36,28 +33,9 @@ class FakeExtension::Session : public HostExtensionSession {
   DISALLOW_COPY_AND_ASSIGN(Session);
 };
 
-FakeExtension::Session::Session(
-    FakeExtension* extension, const std::string& message_type)
-  : extension_(extension),
-    message_type_(message_type) {
-}
-
-void FakeExtension::Session::OnCreateVideoCapturer(
-    scoped_ptr<webrtc::DesktopCapturer>* capturer) {
-  extension_->has_wrapped_video_capturer_ = true;
-  if (extension_->steal_video_capturer_) {
-    capturer->reset();
-  }
-}
-
-void FakeExtension::Session::OnCreateVideoEncoder(
-    scoped_ptr<VideoEncoder>* encoder) {
-  extension_->has_wrapped_video_encoder_ = true;
-}
-
-bool FakeExtension::Session::ModifiesVideoPipeline() const {
-  return extension_->steal_video_capturer_;
-}
+FakeExtension::Session::Session(FakeExtension* extension,
+                                const std::string& message_type)
+    : extension_(extension), message_type_(message_type) {}
 
 bool FakeExtension::Session::OnExtensionMessage(
     ClientSessionControl* client_session_control,
@@ -72,28 +50,20 @@ bool FakeExtension::Session::OnExtensionMessage(
 
 FakeExtension::FakeExtension(const std::string& message_type,
                              const std::string& capability)
-  : message_type_(message_type),
-    capability_(capability),
-    steal_video_capturer_(false),
-    has_handled_message_(false),
-    has_wrapped_video_encoder_(false),
-    has_wrapped_video_capturer_(false),
-    was_instantiated_(false) {
-}
+    : message_type_(message_type), capability_(capability) {}
 
-FakeExtension::~FakeExtension() {
-}
+FakeExtension::~FakeExtension() {}
 
 std::string FakeExtension::capability() const {
   return capability_;
 }
 
-scoped_ptr<HostExtensionSession> FakeExtension::CreateExtensionSession(
+std::unique_ptr<HostExtensionSession> FakeExtension::CreateExtensionSession(
     ClientSessionControl* client_session_control,
     protocol::ClientStub* client_stub) {
   DCHECK(!was_instantiated());
   was_instantiated_ = true;
-  return make_scoped_ptr(new Session(this, message_type_));
+  return base::WrapUnique(new Session(this, message_type_));
 }
 
 } // namespace remoting

@@ -160,6 +160,7 @@ UtilityProcessHostImpl::UtilityProcessHostImpl(
 #endif
       started_(false),
       name_(base::ASCIIToUTF16("utility process")),
+      mojo_application_host_(new MojoApplicationHost),
       weak_ptr_factory_(this) {
 }
 
@@ -220,21 +221,13 @@ void UtilityProcessHostImpl::SetEnv(const base::EnvironmentMap& env) {
 
 #endif  // OS_POSIX
 
-bool UtilityProcessHostImpl::StartMojoMode() {
-  CHECK(!mojo_application_host_);
-  mojo_application_host_.reset(new MojoApplicationHost);
-
-  bool mojo_result = mojo_application_host_->Init();
-  if (!mojo_result)
-    return false;
-
+bool UtilityProcessHostImpl::Start() {
   return StartProcess();
 }
 
 ServiceRegistry* UtilityProcessHostImpl::GetServiceRegistry() {
-  if (mojo_application_host_)
-    return mojo_application_host_->service_registry();
-  return nullptr;
+  DCHECK(mojo_application_host_);
+  return mojo_application_host_->service_registry();
 }
 
 void UtilityProcessHostImpl::SetName(const base::string16& name) {
@@ -256,6 +249,10 @@ bool UtilityProcessHostImpl::StartProcess() {
 
   if (is_batch_mode_)
     return true;
+
+  bool mojo_result = mojo_application_host_->Init();
+  if (!mojo_result)
+    return false;
 
   // Name must be set or metrics_service will crash in any test which
   // launches a UtilityProcessHost.
@@ -332,7 +329,6 @@ bool UtilityProcessHostImpl::StartProcess() {
 
     // Browser command-line switches to propagate to the utility process.
     static const char* const kSwitchNames[] = {
-      switches::kDebugPluginLoading,
       switches::kNoSandbox,
       switches::kProfilerTiming,
 #if defined(OS_MACOSX)
@@ -407,15 +403,14 @@ void UtilityProcessHostImpl::OnProcessCrashed(int exit_code) {
 }
 
 void UtilityProcessHostImpl::OnProcessLaunched() {
-  if (mojo_application_host_) {
-    base::ProcessHandle handle;
-    if (RenderProcessHost::run_renderer_in_process())
-      handle = base::GetCurrentProcessHandle();
-    else
-      handle = process_->GetData().handle;
+  DCHECK(mojo_application_host_);
+  base::ProcessHandle handle;
+  if (RenderProcessHost::run_renderer_in_process())
+    handle = base::GetCurrentProcessHandle();
+  else
+    handle = process_->GetData().handle;
 
-    mojo_application_host_->Activate(this, handle);
-  }
+  mojo_application_host_->Activate(this, handle);
 }
 
 }  // namespace content

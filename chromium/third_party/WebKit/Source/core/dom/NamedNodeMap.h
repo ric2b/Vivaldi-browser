@@ -27,8 +27,6 @@
 
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/Element.h"
-#include "wtf/PassOwnPtr.h"
-#include "wtf/PassRefPtr.h"
 #include "wtf/text/AtomicString.h"
 
 namespace blink {
@@ -36,14 +34,13 @@ namespace blink {
 class Attr;
 class ExceptionState;
 
-class NamedNodeMap final : public NoBaseWillBeGarbageCollected<NamedNodeMap>, public ScriptWrappable {
+class NamedNodeMap final : public GarbageCollected<NamedNodeMap>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
-    USING_FAST_MALLOC_WILL_BE_REMOVED(NamedNodeMap);
     friend class Element;
 public:
-    static PassOwnPtrWillBeRawPtr<NamedNodeMap> create(Element* element)
+    static RawPtr<NamedNodeMap> create(Element* element)
     {
-        return adoptPtrWillBeNoop(new NamedNodeMap(element));
+        return new NamedNodeMap(element);
     }
 
 #if !ENABLE(OILPAN)
@@ -53,16 +50,16 @@ public:
 
     // Public DOM interface.
 
-    PassRefPtrWillBeRawPtr<Attr> getNamedItem(const AtomicString&) const;
-    PassRefPtrWillBeRawPtr<Attr> removeNamedItem(const AtomicString& name, ExceptionState&);
+    RawPtr<Attr> getNamedItem(const AtomicString&) const;
+    RawPtr<Attr> removeNamedItem(const AtomicString& name, ExceptionState&);
 
-    PassRefPtrWillBeRawPtr<Attr> getNamedItemNS(const AtomicString& namespaceURI, const AtomicString& localName) const;
-    PassRefPtrWillBeRawPtr<Attr> removeNamedItemNS(const AtomicString& namespaceURI, const AtomicString& localName, ExceptionState&);
+    RawPtr<Attr> getNamedItemNS(const AtomicString& namespaceURI, const AtomicString& localName) const;
+    RawPtr<Attr> removeNamedItemNS(const AtomicString& namespaceURI, const AtomicString& localName, ExceptionState&);
 
-    PassRefPtrWillBeRawPtr<Attr> setNamedItem(Attr*, ExceptionState&);
-    PassRefPtrWillBeRawPtr<Attr> setNamedItemNS(Attr*, ExceptionState&);
+    RawPtr<Attr> setNamedItem(Attr*, ExceptionState&);
+    RawPtr<Attr> setNamedItemNS(Attr*, ExceptionState&);
 
-    PassRefPtrWillBeRawPtr<Attr> item(unsigned index) const;
+    RawPtr<Attr> item(unsigned index) const;
     size_t length() const;
 
     Element* element() const { return m_element; }
@@ -74,10 +71,10 @@ private:
         : m_element(element)
     {
         // Only supports NamedNodeMaps with Element associated.
-        ASSERT(m_element);
+        DCHECK(m_element);
     }
 
-    RawPtrWillBeMember<Element> m_element;
+    Member<Element> m_element;
 };
 
 } // namespace blink

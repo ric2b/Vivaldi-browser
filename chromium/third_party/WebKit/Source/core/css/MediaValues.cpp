@@ -15,7 +15,7 @@
 #include "core/frame/Settings.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
@@ -24,7 +24,7 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<MediaValues> MediaValues::createDynamicIfFrameExists(LocalFrame* frame)
+MediaValues* MediaValues::createDynamicIfFrameExists(LocalFrame* frame)
 {
     if (frame)
         return MediaValuesDynamic::create(frame);
@@ -121,10 +121,10 @@ WebDisplayMode MediaValues::calculateDisplayMode(LocalFrame* frame)
 
 bool MediaValues::calculateThreeDEnabled(LocalFrame* frame)
 {
-    ASSERT(frame && frame->contentLayoutObject() && frame->contentLayoutObject()->compositor());
+    ASSERT(frame && !frame->contentLayoutItem().isNull() && frame->contentLayoutItem().compositor());
     bool threeDEnabled = false;
-    if (LayoutView* view = frame->contentLayoutObject())
-        threeDEnabled = view->compositor()->hasAcceleratedCompositing();
+    if (LayoutViewItem view = frame->contentLayoutItem())
+        threeDEnabled = view.compositor()->hasAcceleratedCompositing();
     return threeDEnabled;
 }
 
@@ -211,7 +211,7 @@ bool MediaValues::computeLengthImpl(double value, CSSPrimitiveValue::UnitType ty
         return false;
     }
 
-    ASSERT(factor > 0);
+    ASSERT(factor >= 0);
     result = value * factor;
     return true;
 }

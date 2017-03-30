@@ -4,12 +4,15 @@
 
 #include "chrome/browser/ui/ime/ime_window.h"
 
+#include <utility>
+
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ime/ime_native_window.h"
 #include "chrome/browser/ui/ime/ime_window_observer.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -22,12 +25,16 @@ namespace {
 // The vertical margin between the cursor and the follow-cursor window.
 const int kFollowCursorMargin = 3;
 
+// The offset from the left of follow cursor window to the left of cursor.
+const int kFollowCursorOffset = 32;
+
 }  // namespace
 
 namespace ui {
 
 ImeWindow::ImeWindow(Profile* profile,
                      const extensions::Extension* extension,
+                     content::RenderFrameHost* opener_render_frame_host,
                      const std::string& url,
                      Mode mode,
                      const gfx::Rect& bounds)
@@ -36,7 +43,7 @@ ImeWindow::ImeWindow(Profile* profile,
     title_ = extension->name();
     icon_.reset(new extensions::IconImage(
         profile, extension, extensions::IconsInfo::GetIcons(extension),
-        extension_misc::EXTENSION_ICON_SMALL, gfx::ImageSkia(), this));
+        extension_misc::EXTENSION_ICON_BITTY, gfx::ImageSkia(), this));
   }
 
   registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
@@ -46,9 +53,21 @@ ImeWindow::ImeWindow(Profile* profile,
   if (!gurl.is_valid())
     gurl = extension->GetResourceURL(url);
 
-  content::SiteInstance* instance =
-      content::SiteInstance::CreateForURL(profile, gurl);
-  content::WebContents::CreateParams create_params(profile, instance);
+  scoped_refptr<content::SiteInstance> site_instance =
+      opener_render_frame_host ? opener_render_frame_host->GetSiteInstance()
+                               : nullptr;
+  if (!site_instance ||
+      site_instance->GetSiteURL().GetOrigin() != gurl.GetOrigin()) {
+    site_instance = content::SiteInstance::CreateForURL(profile, gurl);
+  }
+  content::WebContents::CreateParams create_params(profile,
+                                                   std::move(site_instance));
+  if (opener_render_frame_host) {
+    create_params.opener_render_process_id =
+        opener_render_frame_host->GetProcess()->GetID();
+    create_params.opener_render_frame_id =
+        opener_render_frame_host->GetRoutingID();
+  }
   web_contents_.reset(content::WebContents::Create(create_params));
   web_contents_->SetDelegate(this);
   content::OpenURLParams params(gurl, content::Referrer(), SINGLETON_TAB,
@@ -67,6 +86,7 @@ void ImeWindow::Hide() {
 }
 
 void ImeWindow::Close() {
+  web_contents_.reset();
   native_window_->Close();
 }
 
@@ -85,13 +105,13 @@ void ImeWindow::FollowCursor(const gfx::Rect& cursor_bounds) {
   int screen_height = screen_bounds.height();
   int width = window_bounds.width();
   int height = window_bounds.height();
-  // By default, aligns the left of the window to the left of the cursor, and
-  // aligns the top of the window to the bottom of the cursor.
+  // By default, aligns the left of the window client area to the left of the
+  // cursor, and aligns the top of the window to the bottom of the cursor.
   // If the right of the window would go beyond the screen bounds, aligns the
   // right of the window to the screen bounds.
   // If the bottom of the window would go beyond the screen bounds, aligns the
   // bottom of the window to the cursor top.
-  int x = cursor_bounds.x();
+  int x = cursor_bounds.x() - kFollowCursorOffset;
   int y = cursor_bounds.y() + cursor_bounds.height() + kFollowCursorMargin;
   if (width < screen_width && x + width > screen_width)
     x = screen_width - width;
@@ -110,14 +130,14 @@ void ImeWindow::OnWindowDestroyed() {
   FOR_EACH_OBSERVER(ImeWindowObserver, observers_, OnWindowDestroyed(this));
   native_window_ = nullptr;
   delete this;
-  // TODO(shuchen): manages the ime window instances in ImeWindowManager.
-  // e.g. for normal window, limits the max window count, and for follow cursor
-  // window, limits single window instance (and reuse).
-  // So at here it will callback to ImeWindowManager to delete |this|.
 }
 
 void ImeWindow::AddObserver(ImeWindowObserver* observer) {
   observers_.AddObserver(observer);
+}
+
+void ImeWindow::RemoveObserver(ImeWindowObserver* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 void ImeWindow::OnExtensionIconImageChanged(extensions::IconImage* image) {
@@ -155,8 +175,20 @@ void ImeWindow::CloseContents(content::WebContents* source) {
 
 void ImeWindow::MoveContents(content::WebContents* source,
                                  const gfx::Rect& pos) {
-  if (native_window_)
+  if (!native_window_)
+    return;
+
+  if (mode_ == NORMAL) {
     native_window_->SetBounds(pos);
+    return;
+  }
+
+  // Follow-cursor window needs to remain the x/y and only allow JS to
+  // change the size.
+  gfx::Rect bounds = native_window_->GetBounds();
+  bounds.set_width(pos.width());
+  bounds.set_height(pos.height());
+  native_window_->SetBounds(bounds);
 }
 
 bool ImeWindow::IsPopupOrPanel(const content::WebContents* source) const {

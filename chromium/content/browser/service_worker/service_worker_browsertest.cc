@@ -19,6 +19,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/fileapi/chrome_blob_storage_context.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
@@ -44,6 +45,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/referrer.h"
+#include "content/public/common/resource_type.h"
 #include "content/public/common/security_style.h"
 #include "content/public/common/ssl_status.h"
 #include "content/public/common/web_preferences.h"
@@ -85,12 +87,9 @@ void RunOnIOThreadWithDelay(const base::Closure& closure,
                             base::TimeDelta delay) {
   base::RunLoop run_loop;
   BrowserThread::PostDelayedTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&RunAndQuit,
-                 closure,
-                 run_loop.QuitClosure(),
-                 base::ThreadTaskRunnerHandle::Get()),
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&RunAndQuit, closure, run_loop.QuitClosure(),
+                 base::RetainedRef(base::ThreadTaskRunnerHandle::Get())),
       delay);
   run_loop.Run();
 }
@@ -119,39 +118,6 @@ void ReceivePrepareResult(bool* is_prepared) {
 
 base::Closure CreatePrepareReceiver(bool* is_prepared) {
   return base::Bind(&ReceivePrepareResult, is_prepared);
-}
-
-// Contrary to the style guide, the output parameter of this function comes
-// before input parameters so Bind can be used on it to create a FetchCallback
-// to pass to DispatchFetchEvent.
-void ReceiveFetchResult(BrowserThread::ID run_quit_thread,
-                        const base::Closure& quit,
-                        ChromeBlobStorageContext* blob_context,
-                        FetchResult* out_result,
-                        ServiceWorkerStatusCode actual_status,
-                        ServiceWorkerFetchEventResult actual_result,
-                        const ServiceWorkerResponse& actual_response,
-                        const scoped_refptr<ServiceWorkerVersion>& worker) {
-  out_result->status = actual_status;
-  out_result->result = actual_result;
-  out_result->response = actual_response;
-  if (!actual_response.blob_uuid.empty()) {
-    out_result->blob_data_handle =
-        blob_context->context()->GetBlobDataFromUUID(
-            actual_response.blob_uuid);
-  }
-  if (!quit.is_null())
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, quit);
-}
-
-ServiceWorkerFetchDispatcher::FetchCallback CreateResponseReceiver(
-    BrowserThread::ID run_quit_thread,
-    const base::Closure& quit,
-    ChromeBlobStorageContext* blob_context,
-    FetchResult* result) {
-  return base::Bind(&ReceiveFetchResult, run_quit_thread, quit,
-                    make_scoped_refptr<ChromeBlobStorageContext>(blob_context),
-                    result);
 }
 
 void ReceiveFindRegistrationStatus(
@@ -290,7 +256,7 @@ VerifySaveDataNotInAccessControlRequestHeader(
 // an experiration far in the future.
 class LongLivedResourceInterceptor : public net::URLRequestInterceptor {
  public:
-  LongLivedResourceInterceptor(const std::string& body)
+  explicit LongLivedResourceInterceptor(const std::string& body)
       : body_(body) {}
   ~LongLivedResourceInterceptor() override {}
 
@@ -507,11 +473,9 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
                                        &fetch_result));
     fetch_run_loop.Run();
     ASSERT_TRUE(prepare_result);
-    ASSERT_TRUE(fetch_dispatcher_);
     *result = fetch_result.result;
     *response = fetch_result.response;
     *blob_data_handle = std::move(fetch_result.blob_data_handle);
-    fetch_dispatcher_.reset();
     ASSERT_EQ(SERVICE_WORKER_OK, fetch_result.status);
   }
 
@@ -658,7 +622,8 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
   void StartOnIOThread(const base::Closure& done,
                        ServiceWorkerStatusCode* result) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
-    version_->StartWorker(CreateReceiver(BrowserThread::UI, done, result));
+    version_->StartWorker(ServiceWorkerMetrics::EventType::UNKNOWN,
+                          CreateReceiver(BrowserThread::UI, done, result));
   }
 
   void InstallOnIOThread(const base::Closure& done,
@@ -666,6 +631,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
     version_->SetStatus(ServiceWorkerVersion::INSTALLING);
     version_->RunAfterStartWorker(
+        ServiceWorkerMetrics::EventType::INSTALL,
         base::Bind(&self::DispatchInstallEventOnIOThread, this, done, result),
         CreateReceiver(BrowserThread::UI, done, result));
   }
@@ -697,6 +663,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
     version_->SetStatus(ServiceWorkerVersion::ACTIVATING);
     registration_->SetActiveVersion(version_.get());
     version_->RunAfterStartWorker(
+        ServiceWorkerMetrics::EventType::ACTIVATE,
         base::Bind(&self::DispatchActivateEventOnIOThread, this, done, result),
         CreateReceiver(BrowserThread::UI, done, result));
   }
@@ -720,11 +687,44 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
         ServiceWorkerHeaderMap(), Referrer(), false));
     version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
     fetch_dispatcher_.reset(new ServiceWorkerFetchDispatcher(
-        std::move(request), version_.get(),
+        std::move(request), version_.get(), RESOURCE_TYPE_MAIN_FRAME,
         CreatePrepareReceiver(prepare_result),
-        CreateResponseReceiver(BrowserThread::UI, done, blob_context_.get(),
-                               result)));
+        CreateResponseReceiver(done, blob_context_.get(), result)));
     fetch_dispatcher_->Run();
+  }
+
+  // Contrary to the style guide, the output parameter of this function comes
+  // before input parameters so Bind can be used on it to create a FetchCallback
+  // to pass to DispatchFetchEvent.
+  void ReceiveFetchResultOnIOThread(
+      const base::Closure& quit,
+      ChromeBlobStorageContext* blob_context,
+      FetchResult* out_result,
+      ServiceWorkerStatusCode actual_status,
+      ServiceWorkerFetchEventResult actual_result,
+      const ServiceWorkerResponse& actual_response,
+      const scoped_refptr<ServiceWorkerVersion>& worker) {
+    ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
+    ASSERT_TRUE(fetch_dispatcher_);
+    fetch_dispatcher_.reset();
+    out_result->status = actual_status;
+    out_result->result = actual_result;
+    out_result->response = actual_response;
+    if (!actual_response.blob_uuid.empty()) {
+      out_result->blob_data_handle =
+          blob_context->context()->GetBlobDataFromUUID(
+              actual_response.blob_uuid);
+    }
+    if (!quit.is_null())
+      BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, quit);
+  }
+
+  ServiceWorkerFetchDispatcher::FetchCallback CreateResponseReceiver(
+      const base::Closure& quit,
+      ChromeBlobStorageContext* blob_context,
+      FetchResult* result) {
+    return base::Bind(&self::ReceiveFetchResultOnIOThread, this, quit,
+                      base::RetainedRef(blob_context), result);
   }
 
   void StopOnIOThread(const base::Closure& done,
@@ -909,7 +909,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
 
 class WaitForLoaded : public EmbeddedWorkerInstance::Listener {
  public:
-  WaitForLoaded(const base::Closure& quit) : quit_(quit) {}
+  explicit WaitForLoaded(const base::Closure& quit) : quit_(quit) {}
 
   void OnThreadStarted() override {
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, quit_);
@@ -920,10 +920,7 @@ class WaitForLoaded : public EmbeddedWorkerInstance::Listener {
   base::Closure quit_;
 };
 
-// This test has started flaking somewhat consistently on Win, Mac and Linux.
-// Disabling for now, see http://crbug.com/496065.
-IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
-                       DISABLED_TimeoutStartingWorker) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, TimeoutStartingWorker) {
   RunOnIOThread(base::Bind(&self::SetUpRegistrationOnIOThread, this,
                            "/service_worker/while_true_worker.js"));
 
@@ -1003,6 +1000,35 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, FetchEvent_Response) {
       base::Bind(&ReadResponseBody,
                  &body, base::Owned(blob_data_handle.release())));
   EXPECT_EQ("This resource is gone. Gone, gone, gone.", body);
+}
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
+                       FetchEvent_ResponseViaCache) {
+  ServiceWorkerFetchEventResult result;
+  ServiceWorkerResponse response1;
+  ServiceWorkerResponse response2;
+  scoped_ptr<storage::BlobDataHandle> blob_data_handle;
+  const base::Time start_time(base::Time::Now());
+
+  RunOnIOThread(
+      base::Bind(&self::SetUpRegistrationOnIOThread, this,
+                 "/service_worker/fetch_event_response_via_cache.js"));
+
+  FetchOnRegisteredWorker(&result, &response1, &blob_data_handle);
+  ASSERT_EQ(SERVICE_WORKER_FETCH_EVENT_RESULT_RESPONSE, result);
+  EXPECT_EQ(200, response1.status_code);
+  EXPECT_EQ("OK", response1.status_text);
+  EXPECT_TRUE(response1.response_time >= start_time);
+  EXPECT_FALSE(response1.is_in_cache_storage);
+  EXPECT_EQ(std::string(), response2.cache_storage_cache_name);
+
+  FetchOnRegisteredWorker(&result, &response2, &blob_data_handle);
+  ASSERT_EQ(SERVICE_WORKER_FETCH_EVENT_RESULT_RESPONSE, result);
+  EXPECT_EQ(200, response2.status_code);
+  EXPECT_EQ("OK", response2.status_text);
+  EXPECT_EQ(response1.response_time, response2.response_time);
+  EXPECT_TRUE(response2.is_in_cache_storage);
+  EXPECT_EQ("cache_name", response2.cache_storage_cache_name);
 }
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,

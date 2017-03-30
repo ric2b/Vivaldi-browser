@@ -7,8 +7,16 @@
 #include "media/blink/multibuffer.h"
 
 #include "base/bind.h"
+#include "base/location.h"
 
 namespace media {
+
+// Prune 80 blocks per 30 seconds.
+// This means a full cache will go away in ~5 minutes.
+enum {
+  kBlockPruneInterval = 30,
+  kBlocksPrunedPerInterval = 80,
+};
 
 // Returns the block ID closest to (but less or equal than) |pos| from |index|.
 template <class T>
@@ -42,7 +50,12 @@ static MultiBuffer::BlockId ClosestNextEntry(
 //
 // MultiBuffer::GlobalLRU
 //
-MultiBuffer::GlobalLRU::GlobalLRU() : max_size_(0), data_size_(0) {}
+MultiBuffer::GlobalLRU::GlobalLRU(
+    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
+    : max_size_(0),
+      data_size_(0),
+      background_pruning_pending_(false),
+      task_runner_(task_runner) {}
 
 MultiBuffer::GlobalLRU::~GlobalLRU() {
   // By the time we're freed, all blocks should have been removed,
@@ -56,12 +69,14 @@ void MultiBuffer::GlobalLRU::Use(MultiBuffer* multibuffer,
                                  MultiBufferBlockId block_id) {
   GlobalBlockId id(multibuffer, block_id);
   lru_.Use(id);
+  SchedulePrune();
 }
 
 void MultiBuffer::GlobalLRU::Insert(MultiBuffer* multibuffer,
                                     MultiBufferBlockId block_id) {
   GlobalBlockId id(multibuffer, block_id);
   lru_.Insert(id);
+  SchedulePrune();
 }
 
 void MultiBuffer::GlobalLRU::Remove(MultiBuffer* multibuffer,
@@ -79,11 +94,32 @@ bool MultiBuffer::GlobalLRU::Contains(MultiBuffer* multibuffer,
 void MultiBuffer::GlobalLRU::IncrementDataSize(int64_t blocks) {
   data_size_ += blocks;
   DCHECK_GE(data_size_, 0);
+  SchedulePrune();
 }
 
 void MultiBuffer::GlobalLRU::IncrementMaxSize(int64_t blocks) {
   max_size_ += blocks;
   DCHECK_GE(max_size_, 0);
+  SchedulePrune();
+}
+
+bool MultiBuffer::GlobalLRU::Pruneable() const {
+  return data_size_ > max_size_ && !lru_.Empty();
+}
+
+void MultiBuffer::GlobalLRU::SchedulePrune() {
+  if (Pruneable() && !background_pruning_pending_) {
+    task_runner_->PostDelayedTask(
+        FROM_HERE, base::Bind(&MultiBuffer::GlobalLRU::PruneTask, this),
+        base::TimeDelta::FromSeconds(kBlockPruneInterval));
+    background_pruning_pending_ = true;
+  }
+}
+
+void MultiBuffer::GlobalLRU::PruneTask() {
+  background_pruning_pending_ = false;
+  Prune(kBlocksPrunedPerInterval);
+  SchedulePrune();
 }
 
 void MultiBuffer::GlobalLRU::Prune(int64_t max_to_free) {
@@ -115,6 +151,8 @@ MultiBuffer::MultiBuffer(int32_t block_size_shift,
     : max_size_(0), block_size_shift_(block_size_shift), lru_(global_lru) {}
 
 MultiBuffer::~MultiBuffer() {
+  CHECK(pinned_.empty());
+  DCHECK_EQ(max_size_, 0);
   // Remove all blocks from the LRU.
   for (const auto& i : data_) {
     lru_->Remove(this, i.first);
@@ -351,9 +389,13 @@ void MultiBuffer::OnDataProviderEvent(DataProvider* provider_tmp) {
     present_.SetInterval(start_pos, pos, 1);
     Interval<BlockId> expanded_range = present_.find(start_pos).interval();
     NotifyAvailableRange(expanded_range, expanded_range);
-
     lru_->IncrementDataSize(blocks_added);
     Prune(blocks_added * kMaxFreesPerAdd + 1);
+  } else {
+    // Make sure to give progress reports even when there
+    // aren't any new blocks yet.
+    NotifyAvailableRange(Interval<BlockId>(start_pos, start_pos + 1),
+                         Interval<BlockId>(start_pos, start_pos));
   }
 
   // Check that it's still there before we try to delete it.
@@ -379,6 +421,7 @@ void MultiBuffer::OnDataProviderEvent(DataProvider* provider_tmp) {
 
 void MultiBuffer::MergeFrom(MultiBuffer* other) {
   // Import data and update LRU.
+  size_t data_size = data_.size();
   for (const auto& data : other->data_) {
     if (data_.insert(std::make_pair(data.first, data.second)).second) {
       if (!pinned_[data.first]) {
@@ -386,6 +429,7 @@ void MultiBuffer::MergeFrom(MultiBuffer* other) {
       }
     }
   }
+  lru_->IncrementDataSize(static_cast<int64_t>(data_.size() - data_size));
   // Update present_
   for (const auto& r : other->present_) {
     if (r.second) {
@@ -424,6 +468,7 @@ void MultiBuffer::PinRange(const BlockId& from,
 
   auto range = pinned_.find(to - 1);
   while (1) {
+    DCHECK_GE(range.value(), 0);
     if (range.value() == 0 || range.value() == how_much) {
       bool pin = range.value() == how_much;
       Interval<BlockId> transition_range =
@@ -475,6 +520,13 @@ void MultiBuffer::IncrementMaxSize(int32_t size) {
   lru_->IncrementMaxSize(size);
   DCHECK_GE(max_size_, 0);
   // Pruning only happens when blocks are added.
+}
+
+int64_t MultiBuffer::UncommittedBytesAt(const MultiBuffer::BlockId& block) {
+  auto i = writer_index_.find(block);
+  if (writer_index_.end() == i)
+    return 0;
+  return i->second->AvailableBytes();
 }
 
 }  // namespace media

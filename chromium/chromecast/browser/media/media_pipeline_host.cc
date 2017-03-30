@@ -50,14 +50,15 @@ MediaPipelineHost::~MediaPipelineHost() {
 
   for (MediaTrackMap::iterator it = media_track_map_.begin();
        it != media_track_map_.end(); ++it) {
-    scoped_ptr<MediaTrackHost> media_track(it->second);
+    std::unique_ptr<MediaTrackHost> media_track(it->second);
   }
   media_track_map_.clear();
 }
 
-void MediaPipelineHost::Initialize(LoadType load_type,
-                                   const MediaPipelineClient& client,
-                                   const CreateBackendCB& create_backend_cb) {
+void MediaPipelineHost::Initialize(
+    LoadType load_type,
+    const MediaPipelineClient& client,
+    const CreateMediaPipelineBackendCB& create_backend_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   media_pipeline_.reset(new MediaPipelineImpl());
   task_runner_.reset(new TaskRunnerImpl());
@@ -74,19 +75,19 @@ void MediaPipelineHost::Initialize(LoadType load_type,
 
 void MediaPipelineHost::SetAvPipe(
     TrackId track_id,
-    scoped_ptr<base::SharedMemory> shared_mem,
+    std::unique_ptr<base::SharedMemory> shared_mem,
     const base::Closure& pipe_read_activity_cb,
     const base::Closure& av_pipe_set_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   CHECK(track_id == kAudioTrackId || track_id == kVideoTrackId);
 
   size_t shared_mem_size = shared_mem->requested_size();
-  scoped_ptr<MediaMemoryChunk> shared_memory_chunk(
+  std::unique_ptr<MediaMemoryChunk> shared_memory_chunk(
       new SharedMemoryChunk(std::move(shared_mem), shared_mem_size));
-  scoped_ptr<MediaMessageFifo> media_message_fifo(
+  std::unique_ptr<MediaMessageFifo> media_message_fifo(
       new MediaMessageFifo(std::move(shared_memory_chunk), shared_mem_size));
   media_message_fifo->ObserveReadActivity(pipe_read_activity_cb);
-  scoped_ptr<CodedFrameProviderHost> frame_provider_host(
+  std::unique_ptr<CodedFrameProviderHost> frame_provider_host(
       new CodedFrameProviderHost(std::move(media_message_fifo)));
 
   MediaTrackMap::iterator it = media_track_map_.find(track_id);

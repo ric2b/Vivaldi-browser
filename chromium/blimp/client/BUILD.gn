@@ -27,6 +27,7 @@ source_set("blimp_client") {
   defines = [ "BLIMP_CLIENT_IMPLEMENTATION=1" ]
 
   public_deps = [
+    "//components/safe_json",
     "//ui/events",
   ]
 
@@ -49,12 +50,6 @@ source_set("blimp_client_unit_tests") {
 
   sources = []
 
-  # TODO(dtrainor): Fix the test harness to allow this to run on Android.
-  # See crbug.com/588240.
-  if (is_linux) {
-    sources += [ "session/assignment_source_unittest.cc" ]
-  }
-
   deps = [
     ":blimp_client",
     "//base",
@@ -63,6 +58,19 @@ source_set("blimp_client_unit_tests") {
     "//testing/gmock",
     "//testing/gtest",
   ]
+
+  data = []
+
+  # TODO(dtrainor): Fix the test harness to allow this to run on Android.
+  # See crbug.com/588240.
+  if (is_linux) {
+    sources += [ "session/assignment_source_unittest.cc" ]
+    deps += [
+      "//components/safe_json:test_support",
+      "//net:test_support",
+    ]
+    data += [ "session/test_selfsigned_cert.pem" ]
+  }
 }
 
 source_set("app_unit_tests") {
@@ -102,16 +110,21 @@ source_set("feature") {
     "feature/compositor/blimp_output_surface.h",
     "feature/compositor/decoding_image_generator.cc",
     "feature/compositor/decoding_image_generator.h",
+    "feature/ime_feature.cc",
+    "feature/ime_feature.h",
     "feature/navigation_feature.cc",
     "feature/navigation_feature.h",
     "feature/render_widget_feature.cc",
     "feature/render_widget_feature.h",
+    "feature/settings_feature.cc",
+    "feature/settings_feature.h",
     "feature/tab_control_feature.cc",
     "feature/tab_control_feature.h",
   ]
 
   deps = [
     "//blimp/common:blimp_common",
+    "//blimp/net:blimp_net",
     "//cc",
     "//cc/proto",
     "//gpu/command_buffer/client",
@@ -119,6 +132,7 @@ source_set("feature") {
     "//gpu/command_buffer/common:gles2_utils",
     "//gpu/skia_bindings",
     "//skia",
+    "//ui/base/ime:text_input_types",
     "//ui/events/blink",
     "//ui/events/gestures/blink",
     "//ui/gl",
@@ -216,6 +230,7 @@ if (is_android) {
     sources = [
       "app/android/java/src/org/chromium/blimp/BlimpLibraryLoader.java",
       "app/android/java/src/org/chromium/blimp/BlimpView.java",
+      "app/android/java/src/org/chromium/blimp/input/WebInputBox.java",
       "app/android/java/src/org/chromium/blimp/session/BlimpClientSession.java",
       "app/android/java/src/org/chromium/blimp/session/TabControlFeature.java",
       "app/android/java/src/org/chromium/blimp/toolbar/Toolbar.java",
@@ -309,7 +324,7 @@ if (is_android) {
       "app/android/java/src/org/chromium/blimp/BlimpLibraryLoader.java",
       "app/android/java/src/org/chromium/blimp/BlimpRendererActivity.java",
       "app/android/java/src/org/chromium/blimp/BlimpView.java",
-      "app/android/java/src/org/chromium/blimp/input/TextInputFeature.java",
+      "app/android/java/src/org/chromium/blimp/input/WebInputBox.java",
       "app/android/java/src/org/chromium/blimp/session/BlimpClientSession.java",
       "app/android/java/src/org/chromium/blimp/session/TabControlFeature.java",
       "app/android/java/src/org/chromium/blimp/toolbar/Toolbar.java",
@@ -342,7 +357,9 @@ if (is_android) {
       "//base",
       "//blimp/common/proto",
       "//blimp/net:blimp_net",
+      "//components/safe_json/android:safe_json_jni_headers",
       "//skia",
+      "//ui/base/ime:text_input_types",
       "//ui/gfx/geometry",
       "//ui/gl",
       "//url:url",
@@ -363,6 +380,8 @@ if (is_android) {
       "app/android/tab_control_feature_android.h",
       "app/android/toolbar.cc",
       "app/android/toolbar.h",
+      "app/android/web_input_box.cc",
+      "app/android/web_input_box.h",
     ]
 
     libs = [ "android" ]
@@ -375,6 +394,7 @@ if (is_android) {
       ":blimp_java",
       ":blimp_java_resources",
       "//base:base_java",
+      "//components/safe_json/android:safe_json_java",
       "//net/android:net_java",
       google_play_services_resources,
     ]

@@ -5,15 +5,17 @@
 #ifndef CHROMEOS_LOGIN_AUTH_EXTENDED_AUTHENTICATOR_IMPL_H_
 #define CHROMEOS_LOGIN_AUTH_EXTENDED_AUTHENTICATOR_IMPL_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/login/auth/extended_authenticator.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
+
+class AccountId;
 
 namespace chromeos {
 
@@ -32,7 +34,7 @@ class CHROMEOS_EXPORT ExtendedAuthenticatorImpl : public ExtendedAuthenticator {
                            const ResultCallback& success_callback) override;
   void AuthenticateToCheck(const UserContext& context,
                            const base::Closure& success_callback) override;
-  void CreateMount(const std::string& user_id,
+  void CreateMount(const AccountId& account_id,
                    const std::vector<cryptohome::KeyDefinition>& keys,
                    const ResultCallback& success_callback) override;
   void AddKey(const UserContext& context,

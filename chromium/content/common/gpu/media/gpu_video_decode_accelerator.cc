@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
@@ -15,47 +14,36 @@
 #include "base/stl_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "build/build_config.h"
-
-#include "content/common/gpu/gpu_channel.h"
-#include "content/common/gpu/media/gpu_video_accelerator_util.h"
-#include "content/common/gpu/media_messages.h"
-#include "content/public/common/content_switches.h"
+#include "content/common/gpu/media/gpu_video_decode_accelerator_factory_impl.h"
 #include "gpu/command_buffer/common/command_buffer.h"
+#include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/ipc/service/gpu_channel.h"
+#include "gpu/ipc/service/gpu_channel_manager.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_message_utils.h"
 #include "ipc/message_filter.h"
 #include "media/base/limits.h"
+#include "media/gpu/ipc/common/gpu_video_accelerator_util.h"
+#include "media/gpu/ipc/common/media_messages.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_image.h"
-#include "ui/gl/gl_surface_egl.h"
-
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#include "content/common/gpu/media/dxva_video_decode_accelerator_win.h"
-#elif defined(OS_MACOSX)
-#include "content/common/gpu/media/vt_video_decode_accelerator_mac.h"
-#elif defined(OS_CHROMEOS)
-#if defined(USE_V4L2_CODEC)
-#include "content/common/gpu/media/v4l2_device.h"
-#include "content/common/gpu/media/v4l2_slice_video_decode_accelerator.h"
-#include "content/common/gpu/media/v4l2_video_decode_accelerator.h"
-#endif
-#if defined(ARCH_CPU_X86_FAMILY)
-#include "content/common/gpu/media/vaapi_video_decode_accelerator.h"
-#include "ui/gl/gl_implementation.h"
-#endif
-#elif defined(USE_OZONE)
-#include "media/ozone/media_ozone_platform.h"
-#elif defined(OS_ANDROID)
-#include "content/common/gpu/media/android_video_decode_accelerator.h"
-#endif
-
-#include "ui/gfx/geometry/size.h"
 
 namespace content {
 
+namespace {
+static gfx::GLContext* GetGLContext(
+    const base::WeakPtr<gpu::GpuCommandBufferStub>& stub) {
+  if (!stub) {
+    DLOG(ERROR) << "Stub is gone; no GLContext.";
+    return nullptr;
+  }
+
+  return stub->decoder()->GetGLContext();
+}
+
 static bool MakeDecoderContextCurrent(
-    const base::WeakPtr<GpuCommandBufferStub> stub) {
+    const base::WeakPtr<gpu::GpuCommandBufferStub>& stub) {
   if (!stub) {
     DLOG(ERROR) << "Stub is gone; won't MakeCurrent().";
     return false;
@@ -68,6 +56,43 @@ static bool MakeDecoderContextCurrent(
 
   return true;
 }
+
+#if (defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)) || defined(OS_MACOSX)
+static bool BindImage(const base::WeakPtr<gpu::GpuCommandBufferStub>& stub,
+                      uint32_t client_texture_id,
+                      uint32_t texture_target,
+                      const scoped_refptr<gl::GLImage>& image,
+                      bool can_bind_to_sampler) {
+  if (!stub) {
+    DLOG(ERROR) << "Stub is gone; won't BindImage().";
+    return false;
+  }
+
+  gpu::gles2::GLES2Decoder* command_decoder = stub->decoder();
+  gpu::gles2::TextureManager* texture_manager =
+      command_decoder->GetContextGroup()->texture_manager();
+  gpu::gles2::TextureRef* ref = texture_manager->GetTexture(client_texture_id);
+  if (ref) {
+    texture_manager->SetLevelImage(ref, texture_target, 0, image.get(),
+                                   can_bind_to_sampler
+                                       ? gpu::gles2::Texture::BOUND
+                                       : gpu::gles2::Texture::UNBOUND);
+  }
+
+  return true;
+}
+#endif
+
+static base::WeakPtr<gpu::gles2::GLES2Decoder> GetGLES2Decoder(
+    const base::WeakPtr<gpu::GpuCommandBufferStub>& stub) {
+  if (!stub) {
+    DLOG(ERROR) << "Stub is gone; no GLES2Decoder.";
+    return base::WeakPtr<gpu::gles2::GLES2Decoder>();
+  }
+
+  return stub->decoder()->AsWeakPtr();
+}
+}  // anonymous namespace
 
 // DebugAutoLock works like AutoLock but only acquires the lock when
 // DCHECK is on.
@@ -129,19 +154,25 @@ class GpuVideoDecodeAccelerator::MessageFilter : public IPC::MessageFilter {
 
 GpuVideoDecodeAccelerator::GpuVideoDecodeAccelerator(
     int32_t host_route_id,
-    GpuCommandBufferStub* stub,
+    gpu::GpuCommandBufferStub* stub,
     const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner)
     : host_route_id_(host_route_id),
       stub_(stub),
       texture_target_(0),
+      textures_per_buffer_(0),
       filter_removed_(true, false),
       child_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       io_task_runner_(io_task_runner),
       weak_factory_for_io_(this) {
   DCHECK(stub_);
   stub_->AddDestructionObserver(this);
-  make_context_current_ =
+  get_gl_context_cb_ = base::Bind(&GetGLContext, stub_->AsWeakPtr());
+  make_context_current_cb_ =
       base::Bind(&MakeDecoderContextCurrent, stub_->AsWeakPtr());
+#if (defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)) || defined(OS_MACOSX)
+  bind_image_cb_ = base::Bind(&BindImage, stub_->AsWeakPtr());
+#endif
+  get_gles2_decoder_cb_ = base::Bind(&GetGLES2Decoder, stub_->AsWeakPtr());
 }
 
 GpuVideoDecodeAccelerator::~GpuVideoDecodeAccelerator() {
@@ -152,41 +183,10 @@ GpuVideoDecodeAccelerator::~GpuVideoDecodeAccelerator() {
 
 // static
 gpu::VideoDecodeAcceleratorCapabilities
-GpuVideoDecodeAccelerator::GetCapabilities() {
-  media::VideoDecodeAccelerator::Capabilities capabilities;
-  const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-  if (cmd_line->HasSwitch(switches::kDisableAcceleratedVideoDecode))
-    return gpu::VideoDecodeAcceleratorCapabilities();
-
-  // Query supported profiles for each VDA. The order of querying VDAs should
-  // be the same as the order of initializing VDAs. Then the returned profile
-  // can be initialized by corresponding VDA successfully.
-#if defined(OS_WIN)
-  capabilities.supported_profiles =
-      DXVAVideoDecodeAccelerator::GetSupportedProfiles();
-#elif defined(OS_CHROMEOS)
-  media::VideoDecodeAccelerator::SupportedProfiles vda_profiles;
-#if defined(USE_V4L2_CODEC)
-  vda_profiles = V4L2VideoDecodeAccelerator::GetSupportedProfiles();
-  GpuVideoAcceleratorUtil::InsertUniqueDecodeProfiles(
-      vda_profiles, &capabilities.supported_profiles);
-  vda_profiles = V4L2SliceVideoDecodeAccelerator::GetSupportedProfiles();
-  GpuVideoAcceleratorUtil::InsertUniqueDecodeProfiles(
-      vda_profiles, &capabilities.supported_profiles);
-#endif
-#if defined(ARCH_CPU_X86_FAMILY)
-  vda_profiles = VaapiVideoDecodeAccelerator::GetSupportedProfiles();
-  GpuVideoAcceleratorUtil::InsertUniqueDecodeProfiles(
-      vda_profiles, &capabilities.supported_profiles);
-#endif
-#elif defined(OS_MACOSX)
-  capabilities.supported_profiles =
-      VTVideoDecodeAccelerator::GetSupportedProfiles();
-#elif defined(OS_ANDROID)
-  capabilities = AndroidVideoDecodeAccelerator::GetCapabilities();
-#endif
-  return GpuVideoAcceleratorUtil::ConvertMediaToGpuDecodeCapabilities(
-      capabilities);
+GpuVideoDecodeAccelerator::GetCapabilities(
+    const gpu::GpuPreferences& gpu_preferences) {
+  return GpuVideoDecodeAcceleratorFactoryImpl::GetDecoderCapabilities(
+      gpu_preferences);
 }
 
 bool GpuVideoDecodeAccelerator::OnMessageReceived(const IPC::Message& msg) {
@@ -209,14 +209,16 @@ bool GpuVideoDecodeAccelerator::OnMessageReceived(const IPC::Message& msg) {
   return handled;
 }
 
-void GpuVideoDecodeAccelerator::NotifyCdmAttached(bool success) {
-  if (!Send(new AcceleratedVideoDecoderHostMsg_CdmAttached(host_route_id_,
-                                                           success)))
-    DLOG(ERROR) << "Send(AcceleratedVideoDecoderHostMsg_CdmAttached) failed";
+void GpuVideoDecodeAccelerator::NotifyInitializationComplete(bool success) {
+  if (!Send(new AcceleratedVideoDecoderHostMsg_InitializationComplete(
+          host_route_id_, success)))
+    DLOG(ERROR)
+        << "Send(AcceleratedVideoDecoderHostMsg_InitializationComplete) failed";
 }
 
 void GpuVideoDecodeAccelerator::ProvidePictureBuffers(
     uint32_t requested_num_of_buffers,
+    uint32_t textures_per_buffer,
     const gfx::Size& dimensions,
     uint32_t texture_target) {
   if (dimensions.width() > media::limits::kMaxDimension ||
@@ -226,14 +228,13 @@ void GpuVideoDecodeAccelerator::ProvidePictureBuffers(
     return;
   }
   if (!Send(new AcceleratedVideoDecoderHostMsg_ProvidePictureBuffers(
-           host_route_id_,
-           requested_num_of_buffers,
-           dimensions,
-           texture_target))) {
+          host_route_id_, requested_num_of_buffers, textures_per_buffer,
+          dimensions, texture_target))) {
     DLOG(ERROR) << "Send(AcceleratedVideoDecoderHostMsg_ProvidePictureBuffers) "
                 << "failed";
   }
   texture_dimensions_ = dimensions;
+  textures_per_buffer_ = textures_per_buffer;
   texture_target_ = texture_target;
 }
 
@@ -265,7 +266,7 @@ void GpuVideoDecodeAccelerator::PictureReady(
   if (!Send(new AcceleratedVideoDecoderHostMsg_PictureReady(
           host_route_id_, picture.picture_buffer_id(),
           picture.bitstream_buffer_id(), picture.visible_rect(),
-          picture.allow_overlay()))) {
+          picture.allow_overlay(), picture.size_changed()))) {
     DLOG(ERROR) << "Send(AcceleratedVideoDecoderHostMsg_PictureReady) failed";
   }
 }
@@ -327,161 +328,51 @@ bool GpuVideoDecodeAccelerator::Send(IPC::Message* message) {
   return stub_->channel()->Send(message);
 }
 
-void GpuVideoDecodeAccelerator::Initialize(
-    const media::VideoDecodeAccelerator::Config& config,
-    IPC::Message* init_done_msg) {
+bool GpuVideoDecodeAccelerator::Initialize(
+    const media::VideoDecodeAccelerator::Config& config) {
   DCHECK(!video_decode_accelerator_);
 
   if (!stub_->channel()->AddRoute(host_route_id_, stub_->stream_id(), this)) {
     DLOG(ERROR) << "Initialize(): failed to add route";
-    SendCreateDecoderReply(init_done_msg, false);
+    return false;
   }
 
 #if !defined(OS_WIN)
   // Ensure we will be able to get a GL context at all before initializing
   // non-Windows VDAs.
-  if (!make_context_current_.Run()) {
-    SendCreateDecoderReply(init_done_msg, false);
-    return;
+  if (!make_context_current_cb_.Run())
+    return false;
+#endif
+
+  scoped_ptr<GpuVideoDecodeAcceleratorFactoryImpl> vda_factory =
+      GpuVideoDecodeAcceleratorFactoryImpl::CreateWithGLES2Decoder(
+          get_gl_context_cb_, make_context_current_cb_, bind_image_cb_,
+          get_gles2_decoder_cb_);
+
+  if (!vda_factory) {
+    LOG(ERROR) << "Failed creating the VDA factory";
+    return false;
   }
-#endif
 
-  // Array of Create..VDA() function pointers, maybe applicable to the current
-  // platform. This list is ordered by priority of use and it should be the
-  // same as the order of querying supported profiles of VDAs.
-  const GpuVideoDecodeAccelerator::CreateVDAFp create_vda_fps[] = {
-      &GpuVideoDecodeAccelerator::CreateDXVAVDA,
-      &GpuVideoDecodeAccelerator::CreateV4L2VDA,
-      &GpuVideoDecodeAccelerator::CreateV4L2SliceVDA,
-      &GpuVideoDecodeAccelerator::CreateVaapiVDA,
-      &GpuVideoDecodeAccelerator::CreateVTVDA,
-      &GpuVideoDecodeAccelerator::CreateOzoneVDA,
-      &GpuVideoDecodeAccelerator::CreateAndroidVDA};
-
-  for (const auto& create_vda_function : create_vda_fps) {
-    video_decode_accelerator_ = (this->*create_vda_function)();
-    if (!video_decode_accelerator_ ||
-        !video_decode_accelerator_->Initialize(config, this))
-      continue;
-
-    if (video_decode_accelerator_->CanDecodeOnIOThread()) {
-      filter_ = new MessageFilter(this, host_route_id_);
-      stub_->channel()->AddFilter(filter_.get());
-    }
-    SendCreateDecoderReply(init_done_msg, true);
-    return;
+  const gpu::GpuPreferences& gpu_preferences =
+      stub_->channel()->gpu_channel_manager()->gpu_preferences();
+  video_decode_accelerator_ =
+      vda_factory->CreateVDA(this, config, gpu_preferences);
+  if (!video_decode_accelerator_) {
+    LOG(ERROR) << "HW video decode not available for profile " << config.profile
+               << (config.is_encrypted ? " with encryption" : "");
+    return false;
   }
-  video_decode_accelerator_.reset();
-  LOG(ERROR) << "HW video decode not available for profile " << config.profile
-             << (config.is_encrypted ? " with encryption" : "");
-  SendCreateDecoderReply(init_done_msg, false);
-}
 
-scoped_ptr<media::VideoDecodeAccelerator>
-GpuVideoDecodeAccelerator::CreateDXVAVDA() {
-  scoped_ptr<media::VideoDecodeAccelerator> decoder;
-#if defined(OS_WIN)
-  if (base::win::GetVersion() >= base::win::VERSION_WIN7) {
-    DVLOG(0) << "Initializing DXVA HW decoder for windows.";
-    decoder.reset(new DXVAVideoDecodeAccelerator(make_context_current_,
-        stub_->decoder()->GetGLContext()));
-  } else {
-    NOTIMPLEMENTED() << "HW video decode acceleration not available.";
+  // Attempt to set up performing decoding tasks on IO thread, if supported by
+  // the VDA.
+  if (video_decode_accelerator_->TryToSetupDecodeOnSeparateThread(
+          weak_factory_for_io_.GetWeakPtr(), io_task_runner_)) {
+    filter_ = new MessageFilter(this, host_route_id_);
+    stub_->channel()->AddFilter(filter_.get());
   }
-#endif
-  return decoder;
-}
 
-scoped_ptr<media::VideoDecodeAccelerator>
-GpuVideoDecodeAccelerator::CreateV4L2VDA() {
-  scoped_ptr<media::VideoDecodeAccelerator> decoder;
-#if defined(OS_CHROMEOS) && defined(USE_V4L2_CODEC)
-  scoped_refptr<V4L2Device> device = V4L2Device::Create(V4L2Device::kDecoder);
-  if (device.get()) {
-    decoder.reset(new V4L2VideoDecodeAccelerator(
-        gfx::GLSurfaceEGL::GetHardwareDisplay(),
-        stub_->decoder()->GetGLContext()->GetHandle(),
-        weak_factory_for_io_.GetWeakPtr(),
-        make_context_current_,
-        device,
-        io_task_runner_));
-  }
-#endif
-  return decoder;
-}
-
-scoped_ptr<media::VideoDecodeAccelerator>
-GpuVideoDecodeAccelerator::CreateV4L2SliceVDA() {
-  scoped_ptr<media::VideoDecodeAccelerator> decoder;
-#if defined(OS_CHROMEOS) && defined(USE_V4L2_CODEC)
-  scoped_refptr<V4L2Device> device = V4L2Device::Create(V4L2Device::kDecoder);
-  if (device.get()) {
-    decoder.reset(new V4L2SliceVideoDecodeAccelerator(
-        device,
-        gfx::GLSurfaceEGL::GetHardwareDisplay(),
-        stub_->decoder()->GetGLContext()->GetHandle(),
-        weak_factory_for_io_.GetWeakPtr(),
-        make_context_current_,
-        io_task_runner_));
-  }
-#endif
-  return decoder;
-}
-
-void GpuVideoDecodeAccelerator::BindImage(uint32_t client_texture_id,
-                                          uint32_t texture_target,
-                                          scoped_refptr<gl::GLImage> image) {
-  gpu::gles2::GLES2Decoder* command_decoder = stub_->decoder();
-  gpu::gles2::TextureManager* texture_manager =
-      command_decoder->GetContextGroup()->texture_manager();
-  gpu::gles2::TextureRef* ref = texture_manager->GetTexture(client_texture_id);
-  if (ref) {
-    texture_manager->SetLevelImage(ref, texture_target, 0, image.get(),
-                                   gpu::gles2::Texture::BOUND);
-  }
-}
-
-scoped_ptr<media::VideoDecodeAccelerator>
-GpuVideoDecodeAccelerator::CreateVaapiVDA() {
-  scoped_ptr<media::VideoDecodeAccelerator> decoder;
-#if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
-  decoder.reset(new VaapiVideoDecodeAccelerator(
-      make_context_current_, base::Bind(&GpuVideoDecodeAccelerator::BindImage,
-                                        base::Unretained(this))));
-#endif
-  return decoder;
-}
-
-scoped_ptr<media::VideoDecodeAccelerator>
-GpuVideoDecodeAccelerator::CreateVTVDA() {
-  scoped_ptr<media::VideoDecodeAccelerator> decoder;
-#if defined(OS_MACOSX)
-  decoder.reset(new VTVideoDecodeAccelerator(
-      make_context_current_, base::Bind(&GpuVideoDecodeAccelerator::BindImage,
-                                        base::Unretained(this))));
-#endif
-  return decoder;
-}
-
-scoped_ptr<media::VideoDecodeAccelerator>
-GpuVideoDecodeAccelerator::CreateOzoneVDA() {
-  scoped_ptr<media::VideoDecodeAccelerator> decoder;
-#if !defined(OS_CHROMEOS) && defined(USE_OZONE)
-  media::MediaOzonePlatform* platform =
-      media::MediaOzonePlatform::GetInstance();
-  decoder.reset(platform->CreateVideoDecodeAccelerator(make_context_current_));
-#endif
-  return decoder;
-}
-
-scoped_ptr<media::VideoDecodeAccelerator>
-GpuVideoDecodeAccelerator::CreateAndroidVDA() {
-  scoped_ptr<media::VideoDecodeAccelerator> decoder;
-#if defined(OS_ANDROID)
-  decoder.reset(new AndroidVideoDecodeAccelerator(stub_->decoder()->AsWeakPtr(),
-                                                  make_context_current_));
-#endif
-  return decoder;
+  return true;
 }
 
 void GpuVideoDecodeAccelerator::OnSetCdm(int cdm_id) {
@@ -489,25 +380,17 @@ void GpuVideoDecodeAccelerator::OnSetCdm(int cdm_id) {
   video_decode_accelerator_->SetCdm(cdm_id);
 }
 
-// Runs on IO thread if video_decode_accelerator_->CanDecodeOnIOThread() is
-// true, otherwise on the main thread.
+// Runs on IO thread if VDA::TryToSetupDecodeOnSeparateThread() succeeded,
+// otherwise on the main thread.
 void GpuVideoDecodeAccelerator::OnDecode(
-    const AcceleratedVideoDecoderMsg_Decode_Params& params) {
+    const media::BitstreamBuffer& bitstream_buffer) {
   DCHECK(video_decode_accelerator_);
-  media::BitstreamBuffer bitstream_buffer(params.bitstream_buffer_id,
-                                          params.buffer_handle, params.size,
-                                          params.presentation_timestamp);
-  if (!params.key_id.empty()) {
-    bitstream_buffer.SetDecryptConfig(
-        media::DecryptConfig(params.key_id, params.iv, params.subsamples));
-  }
-
   video_decode_accelerator_->Decode(bitstream_buffer);
 }
 
 void GpuVideoDecodeAccelerator::OnAssignPictureBuffers(
     const std::vector<int32_t>& buffer_ids,
-    const std::vector<uint32_t>& texture_ids) {
+    const std::vector<media::PictureBuffer::TextureIds>& texture_ids) {
   if (buffer_ids.size() != texture_ids.size()) {
     NotifyError(media::VideoDecodeAccelerator::INVALID_ARGUMENT);
     return;
@@ -525,56 +408,72 @@ void GpuVideoDecodeAccelerator::OnAssignPictureBuffers(
       NotifyError(media::VideoDecodeAccelerator::INVALID_ARGUMENT);
       return;
     }
-    gpu::gles2::TextureRef* texture_ref = texture_manager->GetTexture(
-        texture_ids[i]);
-    if (!texture_ref) {
-      DLOG(ERROR) << "Failed to find texture id " << texture_ids[i];
+    media::PictureBuffer::TextureIds buffer_texture_ids = texture_ids[i];
+    media::PictureBuffer::TextureIds service_ids;
+    if (buffer_texture_ids.size() != textures_per_buffer_) {
+      DLOG(ERROR) << "Requested " << textures_per_buffer_
+                  << " textures per picture buffer, got "
+                  << buffer_texture_ids.size();
       NotifyError(media::VideoDecodeAccelerator::INVALID_ARGUMENT);
       return;
     }
-    gpu::gles2::Texture* info = texture_ref->texture();
-    if (info->target() != texture_target_) {
-      DLOG(ERROR) << "Texture target mismatch for texture id "
-                  << texture_ids[i];
-      NotifyError(media::VideoDecodeAccelerator::INVALID_ARGUMENT);
-      return;
-    }
-    if (texture_target_ == GL_TEXTURE_EXTERNAL_OES ||
-        texture_target_ == GL_TEXTURE_RECTANGLE_ARB) {
-      // These textures have their dimensions defined by the underlying storage.
-      // Use |texture_dimensions_| for this size.
-      texture_manager->SetLevelInfo(
-          texture_ref, texture_target_, 0, GL_RGBA, texture_dimensions_.width(),
-          texture_dimensions_.height(), 1, 0, GL_RGBA, 0, gfx::Rect());
-    } else {
-      // For other targets, texture dimensions should already be defined.
-      GLsizei width = 0, height = 0;
-      info->GetLevelSize(texture_target_, 0, &width, &height, nullptr);
-      if (width != texture_dimensions_.width() ||
-          height != texture_dimensions_.height()) {
-        DLOG(ERROR) << "Size mismatch for texture id " << texture_ids[i];
+    for (size_t j = 0; j < textures_per_buffer_; j++) {
+      gpu::gles2::TextureRef* texture_ref =
+          texture_manager->GetTexture(buffer_texture_ids[j]);
+      if (!texture_ref) {
+        DLOG(ERROR) << "Failed to find texture id " << buffer_texture_ids[j];
         NotifyError(media::VideoDecodeAccelerator::INVALID_ARGUMENT);
         return;
       }
-
-      // TODO(dshwang): after moving to D3D11, remove this. crbug.com/438691
-      GLenum format =
-          video_decode_accelerator_.get()->GetSurfaceInternalFormat();
-      if (format != GL_RGBA) {
-        texture_manager->SetLevelInfo(texture_ref, texture_target_, 0, format,
-                                      width, height, 1, 0, format, 0,
-                                      gfx::Rect());
+      gpu::gles2::Texture* info = texture_ref->texture();
+      if (info->target() != texture_target_) {
+        DLOG(ERROR) << "Texture target mismatch for texture id "
+                    << buffer_texture_ids[j];
+        NotifyError(media::VideoDecodeAccelerator::INVALID_ARGUMENT);
+        return;
       }
+      if (texture_target_ == GL_TEXTURE_EXTERNAL_OES ||
+          texture_target_ == GL_TEXTURE_RECTANGLE_ARB) {
+        // These textures have their dimensions defined by the underlying
+        // storage.
+        // Use |texture_dimensions_| for this size.
+        texture_manager->SetLevelInfo(texture_ref, texture_target_, 0, GL_RGBA,
+                                      texture_dimensions_.width(),
+                                      texture_dimensions_.height(), 1, 0,
+                                      GL_RGBA, 0, gfx::Rect());
+      } else {
+        // For other targets, texture dimensions should already be defined.
+        GLsizei width = 0, height = 0;
+        info->GetLevelSize(texture_target_, 0, &width, &height, nullptr);
+        if (width != texture_dimensions_.width() ||
+            height != texture_dimensions_.height()) {
+          DLOG(ERROR) << "Size mismatch for texture id "
+                      << buffer_texture_ids[j];
+          NotifyError(media::VideoDecodeAccelerator::INVALID_ARGUMENT);
+          return;
+        }
+
+        // TODO(dshwang): after moving to D3D11, remove this. crbug.com/438691
+        GLenum format =
+            video_decode_accelerator_.get()->GetSurfaceInternalFormat();
+        if (format != GL_RGBA) {
+          texture_manager->SetLevelInfo(texture_ref, texture_target_, 0, format,
+                                        width, height, 1, 0, format, 0,
+                                        gfx::Rect());
+        }
+      }
+      service_ids.push_back(texture_ref->service_id());
+      textures.push_back(texture_ref);
     }
     buffers.push_back(media::PictureBuffer(buffer_ids[i], texture_dimensions_,
-                                           texture_ref->service_id(),
-                                           texture_ids[i]));
-    textures.push_back(texture_ref);
+                                           service_ids, buffer_texture_ids));
+  }
+  {
+    DebugAutoLock auto_lock(debug_uncleared_textures_lock_);
+    for (uint32_t i = 0; i < buffer_ids.size(); ++i)
+      uncleared_textures_[buffer_ids[i]] = textures[i];
   }
   video_decode_accelerator_->AssignPictureBuffers(buffers);
-  DebugAutoLock auto_lock(debug_uncleared_textures_lock_);
-  for (uint32_t i = 0; i < buffer_ids.size(); ++i)
-    uncleared_textures_[buffer_ids[i]] = textures[i];
 }
 
 void GpuVideoDecodeAccelerator::OnReusePictureBuffer(
@@ -620,12 +519,6 @@ void GpuVideoDecodeAccelerator::SetTextureCleared(
   DCHECK(!texture_ref->texture()->IsLevelCleared(target, 0));
   texture_manager->SetLevelCleared(texture_ref.get(), target, 0, true);
   uncleared_textures_.erase(it);
-}
-
-void GpuVideoDecodeAccelerator::SendCreateDecoderReply(IPC::Message* message,
-                                                       bool succeeded) {
-  GpuCommandBufferMsg_CreateVideoDecoder::WriteReplyParams(message, succeeded);
-  Send(message);
 }
 
 }  // namespace content

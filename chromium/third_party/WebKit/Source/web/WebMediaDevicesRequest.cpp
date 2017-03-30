@@ -47,21 +47,22 @@ void WebMediaDevicesRequest::reset()
     m_private.reset();
 }
 
-WebSecurityOrigin WebMediaDevicesRequest::securityOrigin() const
+WebSecurityOrigin WebMediaDevicesRequest::getSecurityOrigin() const
 {
-    ASSERT(!isNull() && m_private->executionContext());
-    return WebSecurityOrigin(m_private->executionContext()->securityOrigin());
+    DCHECK(!isNull());
+    DCHECK(m_private->getExecutionContext());
+    return WebSecurityOrigin(m_private->getExecutionContext()->getSecurityOrigin());
 }
 
 WebDocument WebMediaDevicesRequest::ownerDocument() const
 {
-    ASSERT(!isNull());
+    DCHECK(!isNull());
     return WebDocument(m_private->ownerDocument());
 }
 
 void WebMediaDevicesRequest::requestSucceeded(WebVector<WebMediaDeviceInfo> webDevices)
 {
-    ASSERT(!isNull());
+    DCHECK(!isNull());
 
     MediaDeviceInfoVector devices(webDevices.size());
     for (size_t i = 0; i < webDevices.size(); ++i)

@@ -21,6 +21,7 @@
       ],
       'sources': [
         'base/bind_to_task_runner_unittest.cc',
+        'base/chromecast_switches_unittest.cc',
         'base/component/component_unittest.cc',
         'base/device_capabilities_impl_unittest.cc',
         'base/error_codes_unittest.cc',
@@ -186,6 +187,7 @@
               # --enable-local-file-accesses => to load sample media files
               # --test-launcher-jobs=1 => so internal code can bind to port
               'cast_shell_browser_test --no-sandbox --enable-local-file-accesses --enable-cma-media-pipeline --ozone-platform=cast --test-launcher-jobs=1',
+              'cast_media_unittests --test-launcher-jobs=1',
             ],
           },
           'conditions': [
@@ -242,6 +244,8 @@
           'type': 'none',
           'variables': {
             'filters': [
+              # ComponentDeathTest is unable to fork processes on Android
+              'cast_base_unittests_apk --gtest_filter=*:-ComponentDeathTest.*',
               # LayerTreeHost has dozens of separate crashing test cases on Fugu. (b/22512618)
               'cc_unittests_apk --gtest_filter=*:-LayerTreeHost*',
               # The following tests all crash on fugu.

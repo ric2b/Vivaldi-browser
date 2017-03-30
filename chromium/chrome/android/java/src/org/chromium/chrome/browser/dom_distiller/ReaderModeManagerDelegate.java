@@ -14,16 +14,6 @@ import org.chromium.content_public.browser.WebContents;
  */
 public interface ReaderModeManagerDelegate {
     /**
-     * @return Reader mode header background color.
-     */
-    int getReaderModeHeaderBackgroundColor();
-
-    /**
-     * @return One of ReaderModeManager.POSSIBLE, NOT_POSSIBLE, STARTED constants.
-     */
-    int getReaderModeStatus();
-
-    /**
      * @param panel The panel to be managed.
      */
     void setReaderModePanel(ReaderModePanel panel);
@@ -35,9 +25,14 @@ public interface ReaderModeManagerDelegate {
     void createNewTab(String url);
 
     /**
-     * Notify the manager that the panel was closed using the "x" icon.
+     * Notify the manager that the panel was actually shown.
      */
-    void onCloseButtonPressed();
+    void onPanelShown();
+
+    /**
+     * Notify the manager that the panel has completely closed.
+     */
+    void onClosed(StateChangeReason reason);
 
     /**
      * Get the WebContents of the page that is being distilled.

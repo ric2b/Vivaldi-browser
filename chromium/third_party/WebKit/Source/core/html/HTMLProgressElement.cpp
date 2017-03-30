@@ -30,6 +30,7 @@
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/shadow/ProgressShadowElement.h"
 #include "core/layout/LayoutProgress.h"
+#include "core/layout/api/LayoutProgressItem.h"
 
 namespace blink {
 
@@ -49,17 +50,20 @@ HTMLProgressElement::~HTMLProgressElement()
 {
 }
 
-PassRefPtrWillBeRawPtr<HTMLProgressElement> HTMLProgressElement::create(Document& document)
+RawPtr<HTMLProgressElement> HTMLProgressElement::create(Document& document)
 {
-    RefPtrWillBeRawPtr<HTMLProgressElement> progress = adoptRefWillBeNoop(new HTMLProgressElement(document));
+    RawPtr<HTMLProgressElement> progress = new HTMLProgressElement(document);
     progress->ensureUserAgentShadowRoot();
     return progress.release();
 }
 
 LayoutObject* HTMLProgressElement::createLayoutObject(const ComputedStyle& style)
 {
-    if (!style.hasAppearance() || openShadowRoot())
+    if (!style.hasAppearance()) {
+        UseCounter::count(document(), UseCounter::ProgressElementWithNoneAppearance);
         return LayoutObject::createObject(this, style);
+    }
+    UseCounter::count(document(), UseCounter::ProgressElementWithProgressBarAppearance);
     return new LayoutProgress(this);
 }
 
@@ -86,8 +90,8 @@ void HTMLProgressElement::parseAttribute(const QualifiedName& name, const Atomic
 void HTMLProgressElement::attach(const AttachContext& context)
 {
     LabelableElement::attach(context);
-    if (LayoutProgress* layoutObject = layoutProgress())
-        layoutObject->updateFromElement();
+    if (LayoutProgressItem layoutItem = LayoutProgressItem(layoutProgress()))
+        layoutItem.updateFromElement();
 }
 
 double HTMLProgressElement::value() const
@@ -136,9 +140,9 @@ bool HTMLProgressElement::isDeterminate() const
 void HTMLProgressElement::didElementStateChange()
 {
     m_value->setWidthPercentage(position() * 100);
-    if (LayoutProgress* layoutObject = layoutProgress()) {
-        bool wasDeterminate = layoutObject->isDeterminate();
-        layoutObject->updateFromElement();
+    if (LayoutProgressItem layoutItem = LayoutProgressItem(layoutProgress())) {
+        bool wasDeterminate = layoutItem.isDeterminate();
+        layoutItem.updateFromElement();
         if (wasDeterminate != isDeterminate())
             pseudoStateChanged(CSSSelector::PseudoIndeterminate);
     }
@@ -148,15 +152,15 @@ void HTMLProgressElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 {
     ASSERT(!m_value);
 
-    RefPtrWillBeRawPtr<ProgressInnerElement> inner = ProgressInnerElement::create(document());
-    inner->setShadowPseudoId(AtomicString("-webkit-progress-inner-element", AtomicString::ConstructFromLiteral));
+    RawPtr<ProgressInnerElement> inner = ProgressInnerElement::create(document());
+    inner->setShadowPseudoId(AtomicString("-webkit-progress-inner-element"));
     root.appendChild(inner);
 
-    RefPtrWillBeRawPtr<ProgressBarElement> bar = ProgressBarElement::create(document());
-    bar->setShadowPseudoId(AtomicString("-webkit-progress-bar", AtomicString::ConstructFromLiteral));
-    RefPtrWillBeRawPtr<ProgressValueElement> value = ProgressValueElement::create(document());
+    RawPtr<ProgressBarElement> bar = ProgressBarElement::create(document());
+    bar->setShadowPseudoId(AtomicString("-webkit-progress-bar"));
+    RawPtr<ProgressValueElement> value = ProgressValueElement::create(document());
     m_value = value.get();
-    m_value->setShadowPseudoId(AtomicString("-webkit-progress-value", AtomicString::ConstructFromLiteral));
+    m_value->setShadowPseudoId(AtomicString("-webkit-progress-value"));
     m_value->setWidthPercentage(HTMLProgressElement::IndeterminatePosition * 100);
     bar->appendChild(m_value);
 
@@ -166,12 +170,6 @@ void HTMLProgressElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 bool HTMLProgressElement::shouldAppearIndeterminate() const
 {
     return !isDeterminate();
-}
-
-void HTMLProgressElement::willAddFirstAuthorShadowRoot()
-{
-    ASSERT(RuntimeEnabledFeatures::authorShadowDOMForAnyElementEnabled());
-    lazyReattachIfAttached();
 }
 
 DEFINE_TRACE(HTMLProgressElement)

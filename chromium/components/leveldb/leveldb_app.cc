@@ -4,6 +4,7 @@
 
 #include "components/leveldb/leveldb_app.h"
 
+#include "base/message_loop/message_loop.h"
 #include "components/leveldb/leveldb_service_impl.h"
 #include "mojo/shell/public/cpp/connection.h"
 
@@ -14,11 +15,9 @@ LevelDBApp::LevelDBApp() {}
 LevelDBApp::~LevelDBApp() {}
 
 void LevelDBApp::Initialize(mojo::Connector* connector,
-                            const std::string& url,
-                            uint32_t id,
-                            uint32_t user_id) {
-  tracing_.Initialize(connector, url);
-  service_.reset(new LevelDBServiceImpl);
+                            const mojo::Identity& identity,
+                            uint32_t id) {
+  tracing_.Initialize(connector, identity.name());
 }
 
 bool LevelDBApp::AcceptConnection(mojo::Connection* connection) {
@@ -27,7 +26,10 @@ bool LevelDBApp::AcceptConnection(mojo::Connection* connection) {
 }
 
 void LevelDBApp::Create(mojo::Connection* connection,
-                        mojo::InterfaceRequest<LevelDBService> request) {
+                        leveldb::LevelDBServiceRequest request) {
+  if (!service_)
+    service_.reset(
+        new LevelDBServiceImpl(base::MessageLoop::current()->task_runner()));
   bindings_.AddBinding(service_.get(), std::move(request));
 }
 

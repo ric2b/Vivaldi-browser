@@ -161,10 +161,12 @@ cr.define('cr.ui', function() {
       var shortcutText = '';
 
       // TODO(zvorygin): if more cornercases appear - optimize following
-      // code. Currently 'Enter' keystroke is passed as 'Enter', and 'Space'
-      // is passed as 'U+0020'
+      // code. Currently 'Enter' keystroke is passed as 'Enter', but 'Space'
+      // and 'Backspace' are passed as 'U+0020' and 'U+0008'.
       if (ident == 'U+0020')
         ident = 'Space';
+      else if (ident == 'U+0008')
+        ident = 'Backspace';
 
       ['CTRL', 'ALT', 'SHIFT', 'META'].forEach(function(mod) {
         if (mods[mod])
@@ -197,7 +199,8 @@ cr.define('cr.ui', function() {
       if (!this.disabled && !this.isSeparator() && this.selected) {
         // Store |contextElement| since it'll be removed by {Menu} on handling
         // 'activate' event.
-        var contextElement = this.parentNode.contextElement;
+        var contextElement = /** @type {{contextElement: Element}} */(
+            this.parentNode).contextElement;
         var activationEvent = cr.doc.createEvent('Event');
         activationEvent.initEvent('activate', true, true);
         activationEvent.originalEvent = e;

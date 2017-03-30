@@ -64,7 +64,7 @@ void SVGPreserveAspectRatioTearOff::setMeetOrSlice(unsigned short meetOrSlice, E
     target()->setMeetOrSlice(static_cast<SVGPreserveAspectRatio::SVGMeetOrSliceType>(meetOrSlice));
 }
 
-SVGPreserveAspectRatioTearOff::SVGPreserveAspectRatioTearOff(PassRefPtrWillBeRawPtr<SVGPreserveAspectRatio> target, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName)
+SVGPreserveAspectRatioTearOff::SVGPreserveAspectRatioTearOff(SVGPreserveAspectRatio* target, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName)
     : SVGPropertyTearOff<SVGPreserveAspectRatio>(target, contextElement, propertyIsAnimVal, attributeName)
 {
 }

@@ -14,11 +14,18 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "components/test_runner/app_banner_client.h"
+#include "components/test_runner/layout_dump.h"
 #include "components/test_runner/mock_credential_manager_client.h"
+#include "components/test_runner/mock_screen_orientation_client.h"
 #include "components/test_runner/mock_web_speech_recognizer.h"
+#include "components/test_runner/mock_web_user_media_client.h"
+#include "components/test_runner/pixel_dump.h"
+#include "components/test_runner/spell_check_client.h"
 #include "components/test_runner/test_interfaces.h"
 #include "components/test_runner/test_preferences.h"
 #include "components/test_runner/web_content_settings.h"
+#include "components/test_runner/web_task.h"
 #include "components/test_runner/web_test_delegate.h"
 #include "components/test_runner/web_test_proxy.h"
 #include "gin/arguments.h"
@@ -36,7 +43,6 @@
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerRegistration.h"
 #include "third_party/WebKit/public/web/WebArrayBuffer.h"
 #include "third_party/WebKit/public/web/WebArrayBufferConverter.h"
-#include "third_party/WebKit/public/web/WebBindings.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFindOptions.h"
@@ -88,65 +94,7 @@ double GetDefaultDeviceScaleFactor() {
   return 1.f;
 }
 
-class HostMethodTask : public WebMethodTask<TestRunner> {
- public:
-  typedef void (TestRunner::*CallbackMethodType)();
-  HostMethodTask(TestRunner* object, CallbackMethodType callback)
-      : WebMethodTask<TestRunner>(object), callback_(callback) {}
-
-  void RunIfValid() override { (object_->*callback_)(); }
-
- private:
-  CallbackMethodType callback_;
-};
-
 }  // namespace
-
-class InvokeCallbackTask : public WebMethodTask<TestRunner> {
- public:
-  InvokeCallbackTask(TestRunner* object, v8::Local<v8::Function> callback)
-      : WebMethodTask<TestRunner>(object),
-        callback_(blink::mainThreadIsolate(), callback),
-        argc_(0) {}
-
-  void RunIfValid() override {
-    v8::Isolate* isolate = blink::mainThreadIsolate();
-    v8::HandleScope handle_scope(isolate);
-    WebFrame* frame = object_->web_view_->mainFrame();
-
-    v8::Local<v8::Context> context = frame->mainWorldScriptContext();
-    if (context.IsEmpty())
-      return;
-
-    v8::Context::Scope context_scope(context);
-
-    scoped_ptr<v8::Local<v8::Value>[]> local_argv;
-    if (argc_) {
-        local_argv.reset(new v8::Local<v8::Value>[argc_]);
-        for (int i = 0; i < argc_; ++i)
-          local_argv[i] = v8::Local<v8::Value>::New(isolate, argv_[i]);
-    }
-
-    frame->callFunctionEvenIfScriptDisabled(
-        v8::Local<v8::Function>::New(isolate, callback_),
-        context->Global(),
-        argc_,
-        local_argv.get());
-  }
-
-  void SetArguments(int argc, v8::Local<v8::Value> argv[]) {
-    v8::Isolate* isolate = blink::mainThreadIsolate();
-    argc_ = argc;
-    argv_.reset(new v8::UniquePersistent<v8::Value>[argc]);
-    for (int i = 0; i < argc; ++i)
-      argv_[i] = v8::UniquePersistent<v8::Value>(isolate, argv[i]);
-  }
-
- private:
-  v8::UniquePersistent<v8::Function> callback_;
-  int argc_;
-  scoped_ptr<v8::UniquePersistent<v8::Value>[]> argv_;
-};
 
 class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
  public:
@@ -164,185 +112,182 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   gin::ObjectTemplateBuilder GetObjectTemplateBuilder(
       v8::Isolate* isolate) override;
 
-  void LogToStderr(const std::string& output);
-  void NotifyDone();
-  void WaitUntilDone();
-  void QueueBackNavigation(int how_far_back);
-  void QueueForwardNavigation(int how_far_forward);
-  void QueueReload();
-  void QueueLoadingScript(const std::string& script);
-  void QueueNonLoadingScript(const std::string& script);
-  void QueueLoad(gin::Arguments* args);
-  void QueueLoadHTMLString(gin::Arguments* args);
-  void SetCustomPolicyDelegate(gin::Arguments* args);
-  void WaitForPolicyDelegate();
-  int WindowCount();
-  void SetCloseRemainingWindowsWhenComplete(gin::Arguments* args);
-  void ResetTestHelperControllers();
-  void SetTabKeyCyclesThroughElements(bool tab_key_cycles_through_elements);
-  void ExecCommand(gin::Arguments* args);
-  bool IsCommandEnabled(const std::string& command);
-  bool CallShouldCloseOnWebView();
-  void SetDomainRelaxationForbiddenForURLScheme(bool forbidden,
-                                                const std::string& scheme);
-  v8::Local<v8::Value> EvaluateScriptInIsolatedWorldAndReturnValue(
-      int world_id, const std::string& script);
-  void EvaluateScriptInIsolatedWorld(int world_id, const std::string& script);
-  void SetIsolatedWorldSecurityOrigin(int world_id,
-                                      v8::Local<v8::Value> origin);
-  void SetIsolatedWorldContentSecurityPolicy(int world_id,
-                                             const std::string& policy);
+  void AddMockSpeechRecognitionResult(const std::string& transcript,
+                                      double confidence);
   void AddOriginAccessWhitelistEntry(const std::string& source_origin,
                                      const std::string& destination_protocol,
                                      const std::string& destination_host,
                                      bool allow_destination_subdomains);
-  void RemoveOriginAccessWhitelistEntry(const std::string& source_origin,
-                                        const std::string& destination_protocol,
-                                        const std::string& destination_host,
-                                        bool allow_destination_subdomains);
-  bool HasCustomPageSizeStyle(int page_index);
-  void ForceRedSelectionColors();
-  void InsertStyleSheet(const std::string& source_code);
-  bool FindString(const std::string& search_text,
-                  const std::vector<std::string>& options_array);
-  std::string SelectionAsMarkup();
-  void SetTextSubpixelPositioning(bool value);
-  void SetPageVisibility(const std::string& new_visibility);
-  void SetTextDirection(const std::string& direction_name);
-  void UseUnfortunateSynchronousResizeMode();
-  bool EnableAutoResizeMode(int min_width,
-                            int min_height,
-                            int max_width,
-                            int max_height);
-  bool DisableAutoResizeMode(int new_width, int new_height);
-  void SetMockDeviceLight(double value);
-  void ResetDeviceLight();
-  void SetMockDeviceMotion(gin::Arguments* args);
-  void SetMockDeviceOrientation(gin::Arguments* args);
-  void SetMockScreenOrientation(const std::string& orientation);
-  void DisableMockScreenOrientation();
-  void DidAcquirePointerLock();
-  void DidNotAcquirePointerLock();
-  void DidLosePointerLock();
-  void SetPointerLockWillFailSynchronously();
-  void SetPointerLockWillRespondAsynchronously();
-  void SetPopupBlockingEnabled(bool block_popups);
-  void SetJavaScriptCanAccessClipboard(bool can_access);
-  void SetXSSAuditorEnabled(bool enabled);
-  void SetAllowUniversalAccessFromFileURLs(bool allow);
-  void SetAllowFileAccessFromFileURLs(bool allow);
-  void OverridePreference(const std::string& key, v8::Local<v8::Value> value);
-  void SetAcceptLanguages(const std::string& accept_languages);
-  void SetPluginsEnabled(bool enabled);
-  bool AnimationScheduled();
-  void DumpEditingCallbacks();
-  void DumpAsMarkup();
-  void DumpAsText();
-  void DumpAsTextWithPixelResults();
-  void DumpChildFrameScrollPositions();
-  void DumpChildFramesAsMarkup();
-  void DumpChildFramesAsText();
-  void DumpIconChanges();
-  void SetAudioData(const gin::ArrayBufferView& view);
-  void DumpFrameLoadCallbacks();
-  void DumpPingLoaderCallbacks();
-  void DumpUserGestureInFrameLoadCallbacks();
-  void DumpTitleChanges();
-  void DumpCreateView();
-  void SetCanOpenWindows();
-  void DumpResourceLoadCallbacks();
-  void DumpResourceRequestCallbacks();
-  void DumpResourceResponseMIMETypes();
-  void SetImagesAllowed(bool allowed);
-  void SetMediaAllowed(bool allowed);
-  void SetScriptsAllowed(bool allowed);
-  void SetStorageAllowed(bool allowed);
-  void SetPluginsAllowed(bool allowed);
-  void SetAllowDisplayOfInsecureContent(bool allowed);
-  void SetAllowRunningOfInsecureContent(bool allowed);
-  void DumpPermissionClientCallbacks();
-  void DumpWindowStatusChanges();
-  void DumpSpellCheckCallbacks();
-  void DumpBackForwardList();
-  void DumpSelectionRect();
-  void SetPrinting();
-  void ClearPrinting();
-  void SetShouldStayOnPageAfterHandlingBeforeUnload(bool value);
-  void SetWillSendRequestClearHeader(const std::string& header);
-  void DumpResourceRequestPriorities();
-  void SetUseMockTheme(bool use);
-  void WaitUntilExternalURLLoad();
-  void DumpDragImage();
-  void DumpNavigationPolicy();
-  void DumpPageImportanceSignals();
-  void ShowWebInspector(gin::Arguments* args);
-  void CloseWebInspector();
-  bool IsChooserShown();
-  void EvaluateInWebInspector(int call_id, const std::string& script);
-  std::string EvaluateInWebInspectorOverlay(const std::string& script);
-  void ClearAllDatabases();
-  void SetDatabaseQuota(int quota);
-  void SetAlwaysAcceptCookies(bool accept);
-  void SetWindowIsKey(bool value);
-  std::string PathToLocalResource(const std::string& path);
-  void SetBackingScaleFactor(double value, v8::Local<v8::Function> callback);
-  void EnableUseZoomForDSF(v8::Local<v8::Function> callback);
-  void SetColorProfile(const std::string& name,
-                       v8::Local<v8::Function> callback);
-  void SetPOSIXLocale(const std::string& locale);
-  void SetMIDIAccessorResult(bool result);
-  void SimulateWebNotificationClick(const std::string& title, int action_index);
-  void SimulateWebNotificationClose(const std::string& title, bool by_user);
-  void AddMockSpeechRecognitionResult(const std::string& transcript,
-                                      double confidence);
-  void SetMockSpeechRecognitionError(const std::string& error,
-                                     const std::string& message);
-  bool WasMockSpeechRecognitionAborted();
-  void AddMockCredentialManagerResponse(const std::string& id,
-                                        const std::string& name,
-                                        const std::string& avatar,
-                                        const std::string& password);
   void AddWebPageOverlay();
-  void RemoveWebPageOverlay();
-  void LayoutAndPaintAsync();
-  void LayoutAndPaintAsyncThen(v8::Local<v8::Function> callback);
-  void GetManifestThen(v8::Local<v8::Function> callback);
   void CapturePixelsAsyncThen(v8::Local<v8::Function> callback);
+  void ClearAllDatabases();
+  void ClearGeofencingMockProvider();
+  void ClearPrinting();
+  void CloseWebInspector();
   void CopyImageAtAndCapturePixelsAsyncThen(int x,
                                             int y,
                                             v8::Local<v8::Function> callback);
-  void SetCustomTextOutput(const std::string& output);
-  void SetViewSourceForFrame(const std::string& name, bool enabled);
-  void SetBluetoothMockDataSet(const std::string& dataset_name);
-  void SetBluetoothManualChooser();
-  void GetBluetoothManualChooserEvents(v8::Local<v8::Function> callback);
-  void SendBluetoothManualChooserEvent(const std::string& event,
-                                       const std::string& argument);
-  void SetGeofencingMockProvider(bool service_available);
-  void ClearGeofencingMockProvider();
-  void SetGeofencingMockPosition(double latitude, double longitude);
-  void SetPermission(const std::string& name,
-                     const std::string& value,
-                     const std::string& origin,
-                     const std::string& embedding_origin);
+  void DidAcquirePointerLock();
+  void DidLosePointerLock();
+  void DidNotAcquirePointerLock();
+  void DisableMockScreenOrientation();
   void DispatchBeforeInstallPromptEvent(
       int request_id,
       const std::vector<std::string>& event_platforms,
       v8::Local<v8::Function> callback);
+  void DumpAsMarkup();
+  void DumpAsText();
+  void DumpAsTextWithPixelResults();
+  void DumpBackForwardList();
+  void DumpChildFrameScrollPositions();
+  void DumpChildFramesAsMarkup();
+  void DumpChildFramesAsText();
+  void DumpCreateView();
+  void DumpDragImage();
+  void DumpEditingCallbacks();
+  void DumpFrameLoadCallbacks();
+  void DumpIconChanges();
+  void DumpNavigationPolicy();
+  void DumpPageImportanceSignals();
+  void DumpPermissionClientCallbacks();
+  void DumpPingLoaderCallbacks();
+  void DumpResourceLoadCallbacks();
+  void DumpResourceRequestPriorities();
+  void DumpResourceResponseMIMETypes();
+  void DumpSelectionRect();
+  void DumpSpellCheckCallbacks();
+  void DumpTitleChanges();
+  void DumpUserGestureInFrameLoadCallbacks();
+  void DumpWindowStatusChanges();
+  void EnableUseZoomForDSF(v8::Local<v8::Function> callback);
+  void EvaluateInWebInspector(int call_id, const std::string& script);
+  void EvaluateScriptInIsolatedWorld(int world_id, const std::string& script);
+  void ExecCommand(gin::Arguments* args);
+  void ForceNextDrawingBufferCreationToFail();
+  void ForceNextWebGLContextCreationToFail();
+  void ForceRedSelectionColors();
+  void GetBluetoothManualChooserEvents(v8::Local<v8::Function> callback);
+  void GetManifestThen(v8::Local<v8::Function> callback);
+  void InsertStyleSheet(const std::string& source_code);
+  void LayoutAndPaintAsync();
+  void LayoutAndPaintAsyncThen(v8::Local<v8::Function> callback);
+  void LogToStderr(const std::string& output);
+  void NotImplemented(const gin::Arguments& args);
+  void NotifyDone();
+  void OverridePreference(const std::string& key, v8::Local<v8::Value> value);
+  void QueueBackNavigation(int how_far_back);
+  void QueueForwardNavigation(int how_far_forward);
+  void QueueLoad(gin::Arguments* args);
+  void QueueLoadingScript(const std::string& script);
+  void QueueNonLoadingScript(const std::string& script);
+  void QueueReload();
+  void RemoveOriginAccessWhitelistEntry(const std::string& source_origin,
+                                        const std::string& destination_protocol,
+                                        const std::string& destination_host,
+                                        bool allow_destination_subdomains);
+  void RemoveWebPageOverlay();
+  void ResetDeviceLight();
+  void ResetTestHelperControllers();
   void ResolveBeforeInstallPromptPromise(int request_id,
                                          const std::string& platform);
-
-  std::string PlatformName();
-  std::string TooltipText();
-  bool DisableNotifyDone();
-  int WebHistoryItemCount();
-  bool InterceptPostMessage();
+  void SendBluetoothManualChooserEvent(const std::string& event,
+                                       const std::string& argument);
+  void SetAcceptLanguages(const std::string& accept_languages);
+  void SetAllowDisplayOfInsecureContent(bool allowed);
+  void SetAllowFileAccessFromFileURLs(bool allow);
+  void SetAllowRunningOfInsecureContent(bool allowed);
+  void SetAllowUniversalAccessFromFileURLs(bool allow);
+  void SetAlwaysAcceptCookies(bool accept);
+  void SetAudioData(const gin::ArrayBufferView& view);
+  void SetBackingScaleFactor(double value, v8::Local<v8::Function> callback);
+  void SetBluetoothFakeAdapter(const std::string& adapter_name,
+                               v8::Local<v8::Function> callback);
+  void SetBluetoothManualChooser(bool enable);
+  void SetCanOpenWindows();
+  void SetCloseRemainingWindowsWhenComplete(gin::Arguments* args);
+  void SetColorProfile(const std::string& name,
+                       v8::Local<v8::Function> callback);
+  void SetCustomPolicyDelegate(gin::Arguments* args);
+  void SetCustomTextOutput(const std::string& output);
+  void SetDatabaseQuota(int quota);
+  void SetDomainRelaxationForbiddenForURLScheme(bool forbidden,
+                                                const std::string& scheme);
+  void SetGeofencingMockPosition(double latitude, double longitude);
+  void SetGeofencingMockProvider(bool service_available);
+  void SetImagesAllowed(bool allowed);
   void SetInterceptPostMessage(bool value);
+  void SetIsolatedWorldContentSecurityPolicy(int world_id,
+                                             const std::string& policy);
+  void SetIsolatedWorldSecurityOrigin(int world_id,
+                                      v8::Local<v8::Value> origin);
+  void SetJavaScriptCanAccessClipboard(bool can_access);
+  void SetMIDIAccessorResult(bool result);
+  void SetMediaAllowed(bool allowed);
+  void SetMockDeviceLight(double value);
+  void SetMockDeviceMotion(gin::Arguments* args);
+  void SetMockDeviceOrientation(gin::Arguments* args);
+  void SetMockScreenOrientation(const std::string& orientation);
+  void SetMockSpeechRecognitionError(const std::string& error,
+                                     const std::string& message);
+  void SetPOSIXLocale(const std::string& locale);
+  void SetPageVisibility(const std::string& new_visibility);
+  void SetPermission(const std::string& name,
+                     const std::string& value,
+                     const std::string& origin,
+                     const std::string& embedding_origin);
+  void SetPluginsAllowed(bool allowed);
+  void SetPluginsEnabled(bool enabled);
+  void SetPointerLockWillFailSynchronously();
+  void SetPointerLockWillRespondAsynchronously();
+  void SetPopupBlockingEnabled(bool block_popups);
+  void SetPrinting();
+  void SetScriptsAllowed(bool allowed);
+  void SetShouldStayOnPageAfterHandlingBeforeUnload(bool value);
+  void SetStorageAllowed(bool allowed);
+  void SetTabKeyCyclesThroughElements(bool tab_key_cycles_through_elements);
+  void SetTextDirection(const std::string& direction_name);
+  void SetTextSubpixelPositioning(bool value);
+  void SetUseMockTheme(bool use);
+  void SetViewSourceForFrame(const std::string& name, bool enabled);
+  void SetWillSendRequestClearHeader(const std::string& header);
+  void SetWindowIsKey(bool value);
+  void SetXSSAuditorEnabled(bool enabled);
+  void ShowWebInspector(gin::Arguments* args);
+  void SimulateWebNotificationClick(const std::string& title, int action_index);
+  void SimulateWebNotificationClose(const std::string& title, bool by_user);
+  void UseUnfortunateSynchronousResizeMode();
+  void WaitForPolicyDelegate();
+  void WaitUntilDone();
+  void WaitUntilExternalURLLoad();
+  void AddMockCredentialManagerError(const std::string& error);
+  void AddMockCredentialManagerResponse(const std::string& id,
+                                        const std::string& name,
+                                        const std::string& avatar,
+                                        const std::string& password);
+  bool AnimationScheduled();
+  bool CallShouldCloseOnWebView();
+  bool DisableAutoResizeMode(int new_width, int new_height);
+  bool EnableAutoResizeMode(int min_width,
+                            int min_height,
+                            int max_width,
+                            int max_height);
+  std::string EvaluateInWebInspectorOverlay(const std::string& script);
+  v8::Local<v8::Value> EvaluateScriptInIsolatedWorldAndReturnValue(
+      int world_id, const std::string& script);
+  bool FindString(const std::string& search_text,
+                  const std::vector<std::string>& options_array);
+  bool HasCustomPageSizeStyle(int page_index);
+  bool InterceptPostMessage();
+  bool IsChooserShown();
 
-  void NotImplemented(const gin::Arguments& args);
+  bool IsCommandEnabled(const std::string& command);
+  std::string PathToLocalResource(const std::string& path);
+  std::string PlatformName();
+  std::string SelectionAsMarkup();
+  std::string TooltipText();
 
-  void ForceNextWebGLContextCreationToFail();
-  void ForceNextDrawingBufferCreationToFail();
+  int WebHistoryItemCount();
+  int WindowCount();
 
   base::WeakPtr<TestRunner> runner_;
 
@@ -386,287 +331,264 @@ TestRunnerBindings::~TestRunnerBindings() {}
 gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
     v8::Isolate* isolate) {
   return gin::Wrappable<TestRunnerBindings>::GetObjectTemplateBuilder(isolate)
-      // Methods controlling test execution.
+      .SetMethod("abortModal", &TestRunnerBindings::NotImplemented)
+      .SetMethod("addDisallowedURL", &TestRunnerBindings::NotImplemented)
+      .SetMethod("addMockCredentialManagerError",
+                 &TestRunnerBindings::AddMockCredentialManagerError)
+      .SetMethod("addMockCredentialManagerResponse",
+                 &TestRunnerBindings::AddMockCredentialManagerResponse)
+      .SetMethod("addMockSpeechRecognitionResult",
+                 &TestRunnerBindings::AddMockSpeechRecognitionResult)
+      .SetMethod("addOriginAccessWhitelistEntry",
+                 &TestRunnerBindings::AddOriginAccessWhitelistEntry)
+      .SetMethod("addWebPageOverlay", &TestRunnerBindings::AddWebPageOverlay)
+      .SetMethod("animationScheduled", &TestRunnerBindings::AnimationScheduled)
+      .SetMethod("callShouldCloseOnWebView",
+                 &TestRunnerBindings::CallShouldCloseOnWebView)
+      .SetMethod("capturePixelsAsyncThen",
+                 &TestRunnerBindings::CapturePixelsAsyncThen)
+      .SetMethod("clearAllDatabases", &TestRunnerBindings::ClearAllDatabases)
+      .SetMethod("clearBackForwardList", &TestRunnerBindings::NotImplemented)
+      .SetMethod("clearGeofencingMockProvider",
+                 &TestRunnerBindings::ClearGeofencingMockProvider)
+      .SetMethod("clearPrinting", &TestRunnerBindings::ClearPrinting)
+      .SetMethod("closeWebInspector", &TestRunnerBindings::CloseWebInspector)
+      .SetMethod("copyImageAtAndCapturePixelsAsyncThen",
+                 &TestRunnerBindings::CopyImageAtAndCapturePixelsAsyncThen)
+      .SetMethod("didAcquirePointerLock",
+                 &TestRunnerBindings::DidAcquirePointerLock)
+      .SetMethod("didLosePointerLock", &TestRunnerBindings::DidLosePointerLock)
+      .SetMethod("didNotAcquirePointerLock",
+                 &TestRunnerBindings::DidNotAcquirePointerLock)
+      .SetMethod("disableAutoResizeMode",
+                 &TestRunnerBindings::DisableAutoResizeMode)
+      .SetMethod("disableMockScreenOrientation",
+                 &TestRunnerBindings::DisableMockScreenOrientation)
+      .SetMethod("dispatchBeforeInstallPromptEvent",
+                 &TestRunnerBindings::DispatchBeforeInstallPromptEvent)
+      .SetMethod("dumpAsMarkup", &TestRunnerBindings::DumpAsMarkup)
+      .SetMethod("dumpAsText", &TestRunnerBindings::DumpAsText)
+      .SetMethod("dumpAsTextWithPixelResults",
+                 &TestRunnerBindings::DumpAsTextWithPixelResults)
+      .SetMethod("dumpBackForwardList",
+                 &TestRunnerBindings::DumpBackForwardList)
+      .SetMethod("dumpChildFrameScrollPositions",
+                 &TestRunnerBindings::DumpChildFrameScrollPositions)
+      .SetMethod("dumpChildFramesAsMarkup",
+                 &TestRunnerBindings::DumpChildFramesAsMarkup)
+      .SetMethod("dumpChildFramesAsText",
+                 &TestRunnerBindings::DumpChildFramesAsText)
+      .SetMethod("dumpCreateView", &TestRunnerBindings::DumpCreateView)
+      .SetMethod("dumpDatabaseCallbacks", &TestRunnerBindings::NotImplemented)
+      .SetMethod("dumpDragImage", &TestRunnerBindings::DumpDragImage)
+      .SetMethod("dumpEditingCallbacks",
+                 &TestRunnerBindings::DumpEditingCallbacks)
+      .SetMethod("dumpFrameLoadCallbacks",
+                 &TestRunnerBindings::DumpFrameLoadCallbacks)
+      .SetMethod("dumpIconChanges", &TestRunnerBindings::DumpIconChanges)
+      .SetMethod("dumpNavigationPolicy",
+                 &TestRunnerBindings::DumpNavigationPolicy)
+      .SetMethod("dumpPageImportanceSignals",
+                 &TestRunnerBindings::DumpPageImportanceSignals)
+      .SetMethod("dumpPermissionClientCallbacks",
+                 &TestRunnerBindings::DumpPermissionClientCallbacks)
+      .SetMethod("dumpPingLoaderCallbacks",
+                 &TestRunnerBindings::DumpPingLoaderCallbacks)
+      .SetMethod("dumpResourceLoadCallbacks",
+                 &TestRunnerBindings::DumpResourceLoadCallbacks)
+      .SetMethod("dumpResourceRequestPriorities",
+                 &TestRunnerBindings::DumpResourceRequestPriorities)
+      .SetMethod("dumpResourceResponseMIMETypes",
+                 &TestRunnerBindings::DumpResourceResponseMIMETypes)
+      .SetMethod("dumpSelectionRect", &TestRunnerBindings::DumpSelectionRect)
+      .SetMethod("dumpSpellCheckCallbacks",
+                 &TestRunnerBindings::DumpSpellCheckCallbacks)
+
+      // Used at fast/dom/assign-to-window-status.html
+      .SetMethod("dumpStatusCallbacks",
+                 &TestRunnerBindings::DumpWindowStatusChanges)
+      .SetMethod("dumpTitleChanges", &TestRunnerBindings::DumpTitleChanges)
+      .SetMethod("dumpUserGestureInFrameLoadCallbacks",
+                 &TestRunnerBindings::DumpUserGestureInFrameLoadCallbacks)
+      .SetMethod("enableAutoResizeMode",
+                 &TestRunnerBindings::EnableAutoResizeMode)
+      .SetMethod("enableUseZoomForDSF",
+                 &TestRunnerBindings::EnableUseZoomForDSF)
+      .SetMethod("evaluateInWebInspector",
+                 &TestRunnerBindings::EvaluateInWebInspector)
+      .SetMethod("evaluateInWebInspectorOverlay",
+                 &TestRunnerBindings::EvaluateInWebInspectorOverlay)
+      .SetMethod("evaluateScriptInIsolatedWorld",
+                 &TestRunnerBindings::EvaluateScriptInIsolatedWorld)
+      .SetMethod(
+          "evaluateScriptInIsolatedWorldAndReturnValue",
+          &TestRunnerBindings::EvaluateScriptInIsolatedWorldAndReturnValue)
+      .SetMethod("execCommand", &TestRunnerBindings::ExecCommand)
+      .SetMethod("findString", &TestRunnerBindings::FindString)
+      .SetMethod("forceNextDrawingBufferCreationToFail",
+                 &TestRunnerBindings::ForceNextDrawingBufferCreationToFail)
+      .SetMethod("forceNextWebGLContextCreationToFail",
+                 &TestRunnerBindings::ForceNextWebGLContextCreationToFail)
+      .SetMethod("forceRedSelectionColors",
+                 &TestRunnerBindings::ForceRedSelectionColors)
+
+      // The Bluetooth functions are specified at
+      // https://webbluetoothcg.github.io/web-bluetooth/tests/.
+      .SetMethod("getBluetoothManualChooserEvents",
+                 &TestRunnerBindings::GetBluetoothManualChooserEvents)
+      .SetMethod("getManifestThen", &TestRunnerBindings::GetManifestThen)
+      .SetMethod("hasCustomPageSizeStyle",
+                 &TestRunnerBindings::HasCustomPageSizeStyle)
+      .SetMethod("insertStyleSheet", &TestRunnerBindings::InsertStyleSheet)
+      .SetProperty("interceptPostMessage",
+                   &TestRunnerBindings::InterceptPostMessage,
+                   &TestRunnerBindings::SetInterceptPostMessage)
+      .SetMethod("isChooserShown", &TestRunnerBindings::IsChooserShown)
+      .SetMethod("isCommandEnabled", &TestRunnerBindings::IsCommandEnabled)
+      .SetMethod("keepWebHistory", &TestRunnerBindings::NotImplemented)
+      .SetMethod("layoutAndPaintAsync",
+                 &TestRunnerBindings::LayoutAndPaintAsync)
+      .SetMethod("layoutAndPaintAsyncThen",
+                 &TestRunnerBindings::LayoutAndPaintAsyncThen)
       .SetMethod("logToStderr", &TestRunnerBindings::LogToStderr)
       .SetMethod("notifyDone", &TestRunnerBindings::NotifyDone)
-      .SetMethod("waitUntilDone", &TestRunnerBindings::WaitUntilDone)
+      .SetMethod("overridePreference", &TestRunnerBindings::OverridePreference)
+      .SetMethod("pathToLocalResource",
+                 &TestRunnerBindings::PathToLocalResource)
+      .SetProperty("platformName", &TestRunnerBindings::PlatformName)
       .SetMethod("queueBackNavigation",
                  &TestRunnerBindings::QueueBackNavigation)
       .SetMethod("queueForwardNavigation",
                  &TestRunnerBindings::QueueForwardNavigation)
-      .SetMethod("queueReload", &TestRunnerBindings::QueueReload)
+      .SetMethod("queueLoad", &TestRunnerBindings::QueueLoad)
       .SetMethod("queueLoadingScript", &TestRunnerBindings::QueueLoadingScript)
       .SetMethod("queueNonLoadingScript",
                  &TestRunnerBindings::QueueNonLoadingScript)
-      .SetMethod("queueLoad", &TestRunnerBindings::QueueLoad)
-      .SetMethod("queueLoadHTMLString",
-                 &TestRunnerBindings::QueueLoadHTMLString)
-      .SetMethod("setCustomPolicyDelegate",
-                 &TestRunnerBindings::SetCustomPolicyDelegate)
-      .SetMethod("waitForPolicyDelegate",
-                 &TestRunnerBindings::WaitForPolicyDelegate)
-      .SetMethod("windowCount", &TestRunnerBindings::WindowCount)
-      .SetMethod("setCloseRemainingWindowsWhenComplete",
-                 &TestRunnerBindings::SetCloseRemainingWindowsWhenComplete)
-      .SetMethod("resetTestHelperControllers",
-                 &TestRunnerBindings::ResetTestHelperControllers)
-      .SetMethod("setTabKeyCyclesThroughElements",
-                 &TestRunnerBindings::SetTabKeyCyclesThroughElements)
-      .SetMethod("execCommand", &TestRunnerBindings::ExecCommand)
-      .SetMethod("isCommandEnabled", &TestRunnerBindings::IsCommandEnabled)
-      .SetMethod("callShouldCloseOnWebView",
-                 &TestRunnerBindings::CallShouldCloseOnWebView)
-      .SetMethod("setDomainRelaxationForbiddenForURLScheme",
-                 &TestRunnerBindings::SetDomainRelaxationForbiddenForURLScheme)
-      .SetMethod(
-          "evaluateScriptInIsolatedWorldAndReturnValue",
-          &TestRunnerBindings::EvaluateScriptInIsolatedWorldAndReturnValue)
-      .SetMethod("evaluateScriptInIsolatedWorld",
-                 &TestRunnerBindings::EvaluateScriptInIsolatedWorld)
-      .SetMethod("setIsolatedWorldSecurityOrigin",
-                 &TestRunnerBindings::SetIsolatedWorldSecurityOrigin)
-      .SetMethod("setIsolatedWorldContentSecurityPolicy",
-                 &TestRunnerBindings::SetIsolatedWorldContentSecurityPolicy)
-      .SetMethod("addOriginAccessWhitelistEntry",
-                 &TestRunnerBindings::AddOriginAccessWhitelistEntry)
+      .SetMethod("queueReload", &TestRunnerBindings::QueueReload)
       .SetMethod("removeOriginAccessWhitelistEntry",
                  &TestRunnerBindings::RemoveOriginAccessWhitelistEntry)
-      .SetMethod("hasCustomPageSizeStyle",
-                 &TestRunnerBindings::HasCustomPageSizeStyle)
-      .SetMethod("forceRedSelectionColors",
-                 &TestRunnerBindings::ForceRedSelectionColors)
-      .SetMethod("insertStyleSheet", &TestRunnerBindings::InsertStyleSheet)
-      .SetMethod("findString", &TestRunnerBindings::FindString)
-      .SetMethod("selectionAsMarkup", &TestRunnerBindings::SelectionAsMarkup)
-      .SetMethod("setTextSubpixelPositioning",
-                 &TestRunnerBindings::SetTextSubpixelPositioning)
-      .SetMethod("setPageVisibility", &TestRunnerBindings::SetPageVisibility)
-      .SetMethod("setTextDirection", &TestRunnerBindings::SetTextDirection)
-      .SetMethod("useUnfortunateSynchronousResizeMode",
-                 &TestRunnerBindings::UseUnfortunateSynchronousResizeMode)
-      .SetMethod("enableAutoResizeMode",
-                 &TestRunnerBindings::EnableAutoResizeMode)
-      .SetMethod("disableAutoResizeMode",
-                 &TestRunnerBindings::DisableAutoResizeMode)
-      .SetMethod("setMockDeviceLight", &TestRunnerBindings::SetMockDeviceLight)
+      .SetMethod("removeWebPageOverlay",
+                 &TestRunnerBindings::RemoveWebPageOverlay)
       .SetMethod("resetDeviceLight", &TestRunnerBindings::ResetDeviceLight)
+      .SetMethod("resetTestHelperControllers",
+                 &TestRunnerBindings::ResetTestHelperControllers)
+      .SetMethod("resolveBeforeInstallPromptPromise",
+                 &TestRunnerBindings::ResolveBeforeInstallPromptPromise)
+      .SetMethod("selectionAsMarkup", &TestRunnerBindings::SelectionAsMarkup)
+
+      // The Bluetooth functions are specified at
+      // https://webbluetoothcg.github.io/web-bluetooth/tests/.
+      .SetMethod("sendBluetoothManualChooserEvent",
+                 &TestRunnerBindings::SendBluetoothManualChooserEvent)
+      .SetMethod("setAcceptLanguages", &TestRunnerBindings::SetAcceptLanguages)
+      .SetMethod("setAllowDisplayOfInsecureContent",
+                 &TestRunnerBindings::SetAllowDisplayOfInsecureContent)
+      .SetMethod("setAllowFileAccessFromFileURLs",
+                 &TestRunnerBindings::SetAllowFileAccessFromFileURLs)
+      .SetMethod("setAllowRunningOfInsecureContent",
+                 &TestRunnerBindings::SetAllowRunningOfInsecureContent)
+      .SetMethod("setAllowUniversalAccessFromFileURLs",
+                 &TestRunnerBindings::SetAllowUniversalAccessFromFileURLs)
+      .SetMethod("setAlwaysAcceptCookies",
+                 &TestRunnerBindings::SetAlwaysAcceptCookies)
+      .SetMethod("setAudioData", &TestRunnerBindings::SetAudioData)
+      .SetMethod("setBackingScaleFactor",
+                 &TestRunnerBindings::SetBackingScaleFactor)
+      // The Bluetooth functions are specified at
+      // https://webbluetoothcg.github.io/web-bluetooth/tests/.
+      .SetMethod("setBluetoothFakeAdapter",
+                 &TestRunnerBindings::SetBluetoothFakeAdapter)
+      .SetMethod("setBluetoothManualChooser",
+                 &TestRunnerBindings::SetBluetoothManualChooser)
+      .SetMethod("setCallCloseOnWebViews", &TestRunnerBindings::NotImplemented)
+      .SetMethod("setCanOpenWindows", &TestRunnerBindings::SetCanOpenWindows)
+      .SetMethod("setCloseRemainingWindowsWhenComplete",
+                 &TestRunnerBindings::SetCloseRemainingWindowsWhenComplete)
+      .SetMethod("setColorProfile", &TestRunnerBindings::SetColorProfile)
+      .SetMethod("setCustomPolicyDelegate",
+                 &TestRunnerBindings::SetCustomPolicyDelegate)
+      .SetMethod("setCustomTextOutput",
+                 &TestRunnerBindings::SetCustomTextOutput)
+      .SetMethod("setDatabaseQuota", &TestRunnerBindings::SetDatabaseQuota)
+      .SetMethod("setDomainRelaxationForbiddenForURLScheme",
+                 &TestRunnerBindings::SetDomainRelaxationForbiddenForURLScheme)
+      .SetMethod("setGeofencingMockPosition",
+                 &TestRunnerBindings::SetGeofencingMockPosition)
+      .SetMethod("setGeofencingMockProvider",
+                 &TestRunnerBindings::SetGeofencingMockProvider)
+      .SetMethod("setIconDatabaseEnabled", &TestRunnerBindings::NotImplemented)
+      .SetMethod("setImagesAllowed", &TestRunnerBindings::SetImagesAllowed)
+      .SetMethod("setIsolatedWorldContentSecurityPolicy",
+                 &TestRunnerBindings::SetIsolatedWorldContentSecurityPolicy)
+      .SetMethod("setIsolatedWorldSecurityOrigin",
+                 &TestRunnerBindings::SetIsolatedWorldSecurityOrigin)
+      .SetMethod("setJavaScriptCanAccessClipboard",
+                 &TestRunnerBindings::SetJavaScriptCanAccessClipboard)
+      .SetMethod("setMIDIAccessorResult",
+                 &TestRunnerBindings::SetMIDIAccessorResult)
+      .SetMethod("setMainFrameIsFirstResponder",
+                 &TestRunnerBindings::NotImplemented)
+      .SetMethod("setMediaAllowed", &TestRunnerBindings::SetMediaAllowed)
+      .SetMethod("setMockDeviceLight", &TestRunnerBindings::SetMockDeviceLight)
       .SetMethod("setMockDeviceMotion",
                  &TestRunnerBindings::SetMockDeviceMotion)
       .SetMethod("setMockDeviceOrientation",
                  &TestRunnerBindings::SetMockDeviceOrientation)
       .SetMethod("setMockScreenOrientation",
                  &TestRunnerBindings::SetMockScreenOrientation)
-      .SetMethod("disableMockScreenOrientation",
-                 &TestRunnerBindings::DisableMockScreenOrientation)
-      .SetMethod("didAcquirePointerLock",
-                 &TestRunnerBindings::DidAcquirePointerLock)
-      .SetMethod("didNotAcquirePointerLock",
-                 &TestRunnerBindings::DidNotAcquirePointerLock)
-      .SetMethod("didLosePointerLock", &TestRunnerBindings::DidLosePointerLock)
+      .SetMethod("setMockSpeechRecognitionError",
+                 &TestRunnerBindings::SetMockSpeechRecognitionError)
+      .SetMethod("setPOSIXLocale", &TestRunnerBindings::SetPOSIXLocale)
+      .SetMethod("setPageVisibility", &TestRunnerBindings::SetPageVisibility)
+      .SetMethod("setPermission", &TestRunnerBindings::SetPermission)
+      .SetMethod("setPluginsAllowed", &TestRunnerBindings::SetPluginsAllowed)
+      .SetMethod("setPluginsEnabled", &TestRunnerBindings::SetPluginsEnabled)
       .SetMethod("setPointerLockWillFailSynchronously",
                  &TestRunnerBindings::SetPointerLockWillFailSynchronously)
       .SetMethod("setPointerLockWillRespondAsynchronously",
                  &TestRunnerBindings::SetPointerLockWillRespondAsynchronously)
       .SetMethod("setPopupBlockingEnabled",
                  &TestRunnerBindings::SetPopupBlockingEnabled)
-      .SetMethod("setJavaScriptCanAccessClipboard",
-                 &TestRunnerBindings::SetJavaScriptCanAccessClipboard)
-      .SetMethod("setXSSAuditorEnabled",
-                 &TestRunnerBindings::SetXSSAuditorEnabled)
-      .SetMethod("setAllowUniversalAccessFromFileURLs",
-                 &TestRunnerBindings::SetAllowUniversalAccessFromFileURLs)
-      .SetMethod("setAllowFileAccessFromFileURLs",
-                 &TestRunnerBindings::SetAllowFileAccessFromFileURLs)
-      .SetMethod("overridePreference", &TestRunnerBindings::OverridePreference)
-      .SetMethod("setAcceptLanguages", &TestRunnerBindings::SetAcceptLanguages)
-      .SetMethod("setPluginsEnabled", &TestRunnerBindings::SetPluginsEnabled)
-      .SetMethod("dumpEditingCallbacks",
-                 &TestRunnerBindings::DumpEditingCallbacks)
-      .SetMethod("dumpAsMarkup", &TestRunnerBindings::DumpAsMarkup)
-      .SetMethod("dumpAsText", &TestRunnerBindings::DumpAsText)
-      .SetMethod("dumpAsTextWithPixelResults",
-                 &TestRunnerBindings::DumpAsTextWithPixelResults)
-      .SetMethod("dumpChildFrameScrollPositions",
-                 &TestRunnerBindings::DumpChildFrameScrollPositions)
-      .SetMethod("dumpChildFramesAsText",
-                 &TestRunnerBindings::DumpChildFramesAsText)
-      .SetMethod("dumpChildFramesAsMarkup",
-                 &TestRunnerBindings::DumpChildFramesAsMarkup)
-      .SetMethod("dumpIconChanges", &TestRunnerBindings::DumpIconChanges)
-      .SetMethod("setAudioData", &TestRunnerBindings::SetAudioData)
-      .SetMethod("dumpFrameLoadCallbacks",
-                 &TestRunnerBindings::DumpFrameLoadCallbacks)
-      .SetMethod("dumpPingLoaderCallbacks",
-                 &TestRunnerBindings::DumpPingLoaderCallbacks)
-      .SetMethod("dumpUserGestureInFrameLoadCallbacks",
-                 &TestRunnerBindings::DumpUserGestureInFrameLoadCallbacks)
-      .SetMethod("dumpTitleChanges", &TestRunnerBindings::DumpTitleChanges)
-      .SetMethod("dumpCreateView", &TestRunnerBindings::DumpCreateView)
-      .SetMethod("setCanOpenWindows", &TestRunnerBindings::SetCanOpenWindows)
-      .SetMethod("dumpResourceLoadCallbacks",
-                 &TestRunnerBindings::DumpResourceLoadCallbacks)
-      .SetMethod("dumpResourceRequestCallbacks",
-                 &TestRunnerBindings::DumpResourceRequestCallbacks)
-      .SetMethod("dumpResourceResponseMIMETypes",
-                 &TestRunnerBindings::DumpResourceResponseMIMETypes)
-      .SetMethod("setImagesAllowed", &TestRunnerBindings::SetImagesAllowed)
-      .SetMethod("setMediaAllowed", &TestRunnerBindings::SetMediaAllowed)
-      .SetMethod("setScriptsAllowed", &TestRunnerBindings::SetScriptsAllowed)
-      .SetMethod("setStorageAllowed", &TestRunnerBindings::SetStorageAllowed)
-      .SetMethod("setPluginsAllowed", &TestRunnerBindings::SetPluginsAllowed)
-      .SetMethod("animationScheduled", &TestRunnerBindings::AnimationScheduled)
-      .SetMethod("setAllowDisplayOfInsecureContent",
-                 &TestRunnerBindings::SetAllowDisplayOfInsecureContent)
-      .SetMethod("setAllowRunningOfInsecureContent",
-                 &TestRunnerBindings::SetAllowRunningOfInsecureContent)
-      .SetMethod("dumpPermissionClientCallbacks",
-                 &TestRunnerBindings::DumpPermissionClientCallbacks)
-      .SetMethod("dumpWindowStatusChanges",
-                 &TestRunnerBindings::DumpWindowStatusChanges)
-      .SetMethod("dumpSpellCheckCallbacks",
-                 &TestRunnerBindings::DumpSpellCheckCallbacks)
-      .SetMethod("dumpBackForwardList",
-                 &TestRunnerBindings::DumpBackForwardList)
-      .SetMethod("dumpSelectionRect", &TestRunnerBindings::DumpSelectionRect)
       .SetMethod("setPrinting", &TestRunnerBindings::SetPrinting)
-      .SetMethod("clearPrinting", &TestRunnerBindings::ClearPrinting)
+      .SetMethod("setScriptsAllowed", &TestRunnerBindings::SetScriptsAllowed)
+      .SetMethod("setScrollbarPolicy", &TestRunnerBindings::NotImplemented)
       .SetMethod(
           "setShouldStayOnPageAfterHandlingBeforeUnload",
           &TestRunnerBindings::SetShouldStayOnPageAfterHandlingBeforeUnload)
+      .SetMethod("setStorageAllowed", &TestRunnerBindings::SetStorageAllowed)
+      .SetMethod("setTabKeyCyclesThroughElements",
+                 &TestRunnerBindings::SetTabKeyCyclesThroughElements)
+      .SetMethod("setTextDirection", &TestRunnerBindings::SetTextDirection)
+      .SetMethod("setTextSubpixelPositioning",
+                 &TestRunnerBindings::SetTextSubpixelPositioning)
+      .SetMethod("setUseDashboardCompatibilityMode",
+                 &TestRunnerBindings::NotImplemented)
+      .SetMethod("setUseMockTheme", &TestRunnerBindings::SetUseMockTheme)
+      .SetMethod("setViewSourceForFrame",
+                 &TestRunnerBindings::SetViewSourceForFrame)
       .SetMethod("setWillSendRequestClearHeader",
                  &TestRunnerBindings::SetWillSendRequestClearHeader)
-      .SetMethod("dumpResourceRequestPriorities",
-                 &TestRunnerBindings::DumpResourceRequestPriorities)
-      .SetMethod("setUseMockTheme", &TestRunnerBindings::SetUseMockTheme)
-      .SetMethod("waitUntilExternalURLLoad",
-                 &TestRunnerBindings::WaitUntilExternalURLLoad)
-      .SetMethod("dumpDragImage", &TestRunnerBindings::DumpDragImage)
-      .SetMethod("dumpNavigationPolicy",
-                 &TestRunnerBindings::DumpNavigationPolicy)
-      .SetMethod("dumpPageImportanceSignals",
-                 &TestRunnerBindings::DumpPageImportanceSignals)
-      .SetMethod("showWebInspector", &TestRunnerBindings::ShowWebInspector)
-      .SetMethod("closeWebInspector", &TestRunnerBindings::CloseWebInspector)
-      .SetMethod("isChooserShown", &TestRunnerBindings::IsChooserShown)
-      .SetMethod("evaluateInWebInspector",
-                 &TestRunnerBindings::EvaluateInWebInspector)
-      .SetMethod("evaluateInWebInspectorOverlay",
-                 &TestRunnerBindings::EvaluateInWebInspectorOverlay)
-      .SetMethod("clearAllDatabases", &TestRunnerBindings::ClearAllDatabases)
-      .SetMethod("setDatabaseQuota", &TestRunnerBindings::SetDatabaseQuota)
-      .SetMethod("setAlwaysAcceptCookies",
-                 &TestRunnerBindings::SetAlwaysAcceptCookies)
       .SetMethod("setWindowIsKey", &TestRunnerBindings::SetWindowIsKey)
-      .SetMethod("pathToLocalResource",
-                 &TestRunnerBindings::PathToLocalResource)
-      .SetMethod("setBackingScaleFactor",
-                 &TestRunnerBindings::SetBackingScaleFactor)
-      .SetMethod("enableUseZoomForDSF",
-                 &TestRunnerBindings::EnableUseZoomForDSF)
-      .SetMethod("setColorProfile", &TestRunnerBindings::SetColorProfile)
-      .SetMethod("setPOSIXLocale", &TestRunnerBindings::SetPOSIXLocale)
-      .SetMethod("setMIDIAccessorResult",
-                 &TestRunnerBindings::SetMIDIAccessorResult)
+      .SetMethod("setXSSAuditorEnabled",
+                 &TestRunnerBindings::SetXSSAuditorEnabled)
+      .SetMethod("showWebInspector", &TestRunnerBindings::ShowWebInspector)
       .SetMethod("simulateWebNotificationClick",
                  &TestRunnerBindings::SimulateWebNotificationClick)
       .SetMethod("simulateWebNotificationClose",
                  &TestRunnerBindings::SimulateWebNotificationClose)
-      .SetMethod("addMockSpeechRecognitionResult",
-                 &TestRunnerBindings::AddMockSpeechRecognitionResult)
-      .SetMethod("setMockSpeechRecognitionError",
-                 &TestRunnerBindings::SetMockSpeechRecognitionError)
-      .SetMethod("wasMockSpeechRecognitionAborted",
-                 &TestRunnerBindings::WasMockSpeechRecognitionAborted)
-      .SetMethod("addMockCredentialManagerResponse",
-                 &TestRunnerBindings::AddMockCredentialManagerResponse)
-      .SetMethod("addWebPageOverlay", &TestRunnerBindings::AddWebPageOverlay)
-      .SetMethod("removeWebPageOverlay",
-                 &TestRunnerBindings::RemoveWebPageOverlay)
-      .SetMethod("layoutAndPaintAsync",
-                 &TestRunnerBindings::LayoutAndPaintAsync)
-      .SetMethod("layoutAndPaintAsyncThen",
-                 &TestRunnerBindings::LayoutAndPaintAsyncThen)
-      .SetMethod("getManifestThen", &TestRunnerBindings::GetManifestThen)
-      .SetMethod("capturePixelsAsyncThen",
-                 &TestRunnerBindings::CapturePixelsAsyncThen)
-      .SetMethod("copyImageAtAndCapturePixelsAsyncThen",
-                 &TestRunnerBindings::CopyImageAtAndCapturePixelsAsyncThen)
-      .SetMethod("setCustomTextOutput",
-                 &TestRunnerBindings::SetCustomTextOutput)
-      .SetMethod("setViewSourceForFrame",
-                 &TestRunnerBindings::SetViewSourceForFrame)
-      // The 4 Bluetooth functions are specified at
-      // https://webbluetoothcg.github.io/web-bluetooth/tests/.
-      .SetMethod("setBluetoothMockDataSet",
-                 &TestRunnerBindings::SetBluetoothMockDataSet)
-      .SetMethod("setBluetoothManualChooser",
-                 &TestRunnerBindings::SetBluetoothManualChooser)
-      .SetMethod("getBluetoothManualChooserEvents",
-                 &TestRunnerBindings::GetBluetoothManualChooserEvents)
-      .SetMethod("sendBluetoothManualChooserEvent",
-                 &TestRunnerBindings::SendBluetoothManualChooserEvent)
-      .SetMethod("forceNextWebGLContextCreationToFail",
-                 &TestRunnerBindings::ForceNextWebGLContextCreationToFail)
-      .SetMethod("forceNextDrawingBufferCreationToFail",
-                 &TestRunnerBindings::ForceNextDrawingBufferCreationToFail)
-      .SetMethod("setGeofencingMockProvider",
-                 &TestRunnerBindings::SetGeofencingMockProvider)
-      .SetMethod("clearGeofencingMockProvider",
-                 &TestRunnerBindings::ClearGeofencingMockProvider)
-      .SetMethod("setGeofencingMockPosition",
-                 &TestRunnerBindings::SetGeofencingMockPosition)
-      .SetMethod("setPermission", &TestRunnerBindings::SetPermission)
-      .SetMethod("dispatchBeforeInstallPromptEvent",
-                 &TestRunnerBindings::DispatchBeforeInstallPromptEvent)
-      .SetMethod("resolveBeforeInstallPromptPromise",
-                 &TestRunnerBindings::ResolveBeforeInstallPromptPromise)
-
-      // Properties.
-      .SetProperty("platformName", &TestRunnerBindings::PlatformName)
       .SetProperty("tooltipText", &TestRunnerBindings::TooltipText)
-      .SetProperty("disableNotifyDone", &TestRunnerBindings::DisableNotifyDone)
+      .SetMethod("useUnfortunateSynchronousResizeMode",
+                 &TestRunnerBindings::UseUnfortunateSynchronousResizeMode)
+      .SetMethod("waitForPolicyDelegate",
+                 &TestRunnerBindings::WaitForPolicyDelegate)
+      .SetMethod("waitUntilDone", &TestRunnerBindings::WaitUntilDone)
+      .SetMethod("waitUntilExternalURLLoad",
+                 &TestRunnerBindings::WaitUntilExternalURLLoad)
+
       // webHistoryItemCount is used by tests in LayoutTests\http\tests\history
       .SetProperty("webHistoryItemCount",
                    &TestRunnerBindings::WebHistoryItemCount)
-      .SetProperty("interceptPostMessage",
-                   &TestRunnerBindings::InterceptPostMessage,
-                   &TestRunnerBindings::SetInterceptPostMessage)
-
-      // The following are stubs.
-      .SetMethod("dumpDatabaseCallbacks", &TestRunnerBindings::NotImplemented)
-      .SetMethod("setIconDatabaseEnabled", &TestRunnerBindings::NotImplemented)
-      .SetMethod("setScrollbarPolicy", &TestRunnerBindings::NotImplemented)
-      .SetMethod("clearAllApplicationCaches",
-                 &TestRunnerBindings::NotImplemented)
-      .SetMethod("clearApplicationCacheForOrigin",
-                 &TestRunnerBindings::NotImplemented)
-      .SetMethod("clearBackForwardList", &TestRunnerBindings::NotImplemented)
-      .SetMethod("keepWebHistory", &TestRunnerBindings::NotImplemented)
-      .SetMethod("setApplicationCacheOriginQuota",
-                 &TestRunnerBindings::NotImplemented)
-      .SetMethod("setCallCloseOnWebViews", &TestRunnerBindings::NotImplemented)
-      .SetMethod("setMainFrameIsFirstResponder",
-                 &TestRunnerBindings::NotImplemented)
-      .SetMethod("setUseDashboardCompatibilityMode",
-                 &TestRunnerBindings::NotImplemented)
-      .SetMethod("deleteAllLocalStorage", &TestRunnerBindings::NotImplemented)
-      .SetMethod("localStorageDiskUsageForOrigin",
-                 &TestRunnerBindings::NotImplemented)
-      .SetMethod("originsWithLocalStorage", &TestRunnerBindings::NotImplemented)
-      .SetMethod("deleteLocalStorageForOrigin",
-                 &TestRunnerBindings::NotImplemented)
-      .SetMethod("observeStorageTrackerNotifications",
-                 &TestRunnerBindings::NotImplemented)
-      .SetMethod("syncLocalStorage", &TestRunnerBindings::NotImplemented)
-      .SetMethod("addDisallowedURL", &TestRunnerBindings::NotImplemented)
-      .SetMethod("applicationCacheDiskUsageForOrigin",
-                 &TestRunnerBindings::NotImplemented)
-      .SetMethod("abortModal", &TestRunnerBindings::NotImplemented)
-
-      // Aliases.
-      // Used at fast/dom/assign-to-window-status.html
-      .SetMethod("dumpStatusCallbacks",
-                 &TestRunnerBindings::DumpWindowStatusChanges);
+      .SetMethod("windowCount", &TestRunnerBindings::WindowCount);
 }
 
 void TestRunnerBindings::LogToStderr(const std::string& output) {
@@ -716,11 +638,6 @@ void TestRunnerBindings::QueueLoad(gin::Arguments* args) {
     args->GetNext(&target);
     runner_->QueueLoad(url, target);
   }
-}
-
-void TestRunnerBindings::QueueLoadHTMLString(gin::Arguments* args) {
-  if (runner_)
-    runner_->QueueLoadHTMLString(args);
 }
 
 void TestRunnerBindings::SetCustomPolicyDelegate(gin::Arguments* args) {
@@ -988,7 +905,6 @@ void TestRunnerBindings::SetMockDeviceOrientation(gin::Arguments* args) {
   double beta = 0.0;
   bool has_gamma = false;
   double gamma = 0.0;
-  bool has_absolute = false;
   bool absolute = false;
 
   args->GetNext(&has_alpha);
@@ -997,13 +913,12 @@ void TestRunnerBindings::SetMockDeviceOrientation(gin::Arguments* args) {
   args->GetNext(&beta);
   args->GetNext(&has_gamma);
   args->GetNext(&gamma);
-  args->GetNext(&has_absolute);
   args->GetNext(&absolute);
 
   runner_->SetMockDeviceOrientation(has_alpha, alpha,
                                     has_beta, beta,
                                     has_gamma, gamma,
-                                    has_absolute, absolute);
+                                    absolute);
 }
 
 void TestRunnerBindings::SetMockScreenOrientation(
@@ -1090,7 +1005,7 @@ void TestRunnerBindings::SetPluginsEnabled(bool enabled) {
 
 bool TestRunnerBindings::AnimationScheduled() {
   if (runner_)
-    return runner_->AnimationScheduled();
+    return runner_->GetAnimationScheduled();
   else
     return false;
 }
@@ -1173,11 +1088,6 @@ void TestRunnerBindings::SetCanOpenWindows() {
 void TestRunnerBindings::DumpResourceLoadCallbacks() {
   if (runner_)
     runner_->DumpResourceLoadCallbacks();
-}
-
-void TestRunnerBindings::DumpResourceRequestCallbacks() {
-  if (runner_)
-    runner_->DumpResourceRequestCallbacks();
 }
 
 void TestRunnerBindings::DumpResourceResponseMIMETypes() {
@@ -1376,14 +1286,16 @@ void TestRunnerBindings::SetColorProfile(
     runner_->SetColorProfile(name, callback);
 }
 
-void TestRunnerBindings::SetBluetoothMockDataSet(const std::string& name) {
+void TestRunnerBindings::SetBluetoothFakeAdapter(
+    const std::string& adapter_name,
+    v8::Local<v8::Function> callback) {
   if (runner_)
-    runner_->SetBluetoothMockDataSet(name);
+    runner_->SetBluetoothFakeAdapter(adapter_name, callback);
 }
 
-void TestRunnerBindings::SetBluetoothManualChooser() {
+void TestRunnerBindings::SetBluetoothManualChooser(bool enable) {
   if (runner_)
-    runner_->SetBluetoothManualChooser();
+    runner_->SetBluetoothManualChooser(enable);
 }
 
 void TestRunnerBindings::GetBluetoothManualChooserEvents(
@@ -1435,12 +1347,6 @@ void TestRunnerBindings::SetMockSpeechRecognitionError(
     runner_->SetMockSpeechRecognitionError(error, message);
 }
 
-bool TestRunnerBindings::WasMockSpeechRecognitionAborted() {
-  if (runner_)
-    return runner_->WasMockSpeechRecognitionAborted();
-  return false;
-}
-
 void TestRunnerBindings::AddMockCredentialManagerResponse(
     const std::string& id,
     const std::string& name,
@@ -1448,6 +1354,12 @@ void TestRunnerBindings::AddMockCredentialManagerResponse(
     const std::string& password) {
   if (runner_)
     runner_->AddMockCredentialManagerResponse(id, name, avatar, password);
+}
+
+void TestRunnerBindings::AddMockCredentialManagerError(
+    const std::string& error) {
+  if (runner_)
+    runner_->AddMockCredentialManagerError(error);
 }
 
 void TestRunnerBindings::AddWebPageOverlay() {
@@ -1489,7 +1401,8 @@ void TestRunnerBindings::CopyImageAtAndCapturePixelsAsyncThen(
 }
 
 void TestRunnerBindings::SetCustomTextOutput(const std::string& output) {
-  runner_->setCustomTextOutput(output);
+  if (runner_)
+    runner_->setCustomTextOutput(output);
 }
 
 void TestRunnerBindings::SetViewSourceForFrame(const std::string& name,
@@ -1546,7 +1459,7 @@ void TestRunnerBindings::ResolveBeforeInstallPromptPromise(
   if (!runner_)
     return;
 
-  return runner_->ResolveBeforeInstallPromptPromise(request_id, platform);
+  runner_->ResolveBeforeInstallPromptPromise(request_id, platform);
 }
 
 std::string TestRunnerBindings::PlatformName() {
@@ -1559,12 +1472,6 @@ std::string TestRunnerBindings::TooltipText() {
   if (runner_)
     return runner_->tooltip_text_;
   return std::string();
-}
-
-bool TestRunnerBindings::DisableNotifyDone() {
-  if (runner_)
-    return runner_->disable_notify_done_;
-  return false;
 }
 
 int TestRunnerBindings::WebHistoryItemCount() {
@@ -1598,8 +1505,7 @@ void TestRunnerBindings::NotImplemented(const gin::Arguments& args) {
 }
 
 TestRunner::WorkQueue::WorkQueue(TestRunner* controller)
-    : frozen_(false)
-    , controller_(controller) {}
+    : frozen_(false), controller_(controller), weak_factory_(this) {}
 
 TestRunner::WorkQueue::~WorkQueue() {
   Reset();
@@ -1611,8 +1517,9 @@ void TestRunner::WorkQueue::ProcessWorkSoon() {
 
   if (!queue_.empty()) {
     // We delay processing queued work to avoid recursion problems.
-    controller_->delegate_->PostTask(new WorkQueueTask(this));
-  } else if (!controller_->wait_until_done_) {
+    controller_->PostTask(base::Bind(&TestRunner::WorkQueue::ProcessWork,
+                                     weak_factory_.GetWeakPtr()));
+  } else if (!controller_->layout_test_runtime_flags_.wait_until_done()) {
     controller_->delegate_->TestFinished();
   }
 }
@@ -1644,34 +1551,25 @@ void TestRunner::WorkQueue::ProcessWork() {
       return;
   }
 
-  if (!controller_->wait_until_done_ && !controller_->topLoadingFrame())
+  if (!controller_->layout_test_runtime_flags_.wait_until_done() &&
+      !controller_->topLoadingFrame())
     controller_->delegate_->TestFinished();
-}
-
-void TestRunner::WorkQueue::WorkQueueTask::RunIfValid() {
-  object_->ProcessWork();
 }
 
 TestRunner::TestRunner(TestInterfaces* interfaces)
     : test_is_running_(false),
       close_remaining_windows_(false),
       work_queue_(this),
-      disable_notify_done_(false),
       web_history_item_count_(0),
       intercept_post_message_(false),
-      layout_dump_flags_(
-          false,  // dump_as_text
-          false,  // dump_child_frames_as_text
-          false,  // dump_as_markup
-          false,  // dump_child_frames_as_markup
-          false,  // dump_child_frame_scroll_positions
-          false,  // is_printing
-          false,  // dump_line_box_trees
-          false),  // debug_render_tree
       test_interfaces_(interfaces),
       delegate_(nullptr),
       web_view_(nullptr),
       web_content_settings_(new WebContentSettings()),
+      credential_manager_client_(new MockCredentialManagerClient),
+      mock_screen_orientation_client_(new MockScreenOrientationClient),
+      spellcheck_(new SpellCheckClient(this)),
+      chooser_count_(0),
       weak_factory_(this) {}
 
 TestRunner::~TestRunner() {}
@@ -1683,6 +1581,9 @@ void TestRunner::Install(WebFrame* frame) {
 void TestRunner::SetDelegate(WebTestDelegate* delegate) {
   delegate_ = delegate;
   web_content_settings_->SetDelegate(delegate);
+  spellcheck_->SetDelegate(delegate);
+  if (speech_recognizer_)
+    speech_recognizer_->SetDelegate(delegate);
 }
 
 void TestRunner::SetWebView(WebView* webView, WebTestProxyBase* proxy) {
@@ -1708,11 +1609,11 @@ void TestRunner::Reset() {
   }
 
   top_loading_frame_ = nullptr;
-  wait_until_done_ = false;
+  layout_test_runtime_flags_.Reset();
+  mock_screen_orientation_client_->ResetData();
+  drag_image_.reset();
+  views_with_scheduled_animations_.clear();
   wait_until_external_url_load_ = false;
-  policy_delegate_enabled_ = false;
-  policy_delegate_is_permissive_ = false;
-  policy_delegate_should_notify_done_ = false;
 
   WebSecurityPolicy::resetOriginAccessWhitelists();
 #if defined(__linux__) || defined(ANDROID)
@@ -1729,20 +1630,13 @@ void TestRunner::Reset() {
     delegate_->UseUnfortunateSynchronousResizeMode(false);
     delegate_->DisableAutoResizeMode(WebSize());
     delegate_->DeleteAllCookies();
-    delegate_->ResetScreenOrientation();
-    delegate_->SetBluetoothMockDataSet("");
+    delegate_->SetBluetoothManualChooser(false);
     delegate_->ClearGeofencingMockProvider();
     delegate_->ResetPermissions();
     ResetDeviceLight();
   }
 
   dump_editting_callbacks_ = false;
-  layout_dump_flags_.dump_as_text = false;
-  layout_dump_flags_.dump_as_markup = false;
-  generate_pixel_results_ = true;
-  layout_dump_flags_.dump_child_frame_scroll_positions = false;
-  layout_dump_flags_.dump_child_frames_as_text = false;
-  layout_dump_flags_.dump_child_frames_as_markup = false;
   dump_icon_changes_ = false;
   dump_as_audio_ = false;
   dump_frame_load_callbacks_ = false;
@@ -1752,17 +1646,13 @@ void TestRunner::Reset() {
   dump_create_view_ = false;
   can_open_windows_ = false;
   dump_resource_load_callbacks_ = false;
-  dump_resource_request_callbacks_ = false;
   dump_resource_response_mime_types_ = false;
   dump_window_status_changes_ = false;
   dump_spell_check_callbacks_ = false;
   dump_back_forward_list_ = false;
-  dump_selection_rect_ = false;
-  dump_drag_image_ = false;
   dump_navigation_policy_ = false;
   test_repaint_ = false;
   sweep_horizontally_ = false;
-  layout_dump_flags_.is_printing = false;
   midi_accessor_result_ = true;
   should_stay_on_page_after_handling_before_unload_ = false;
   should_dump_resource_priorities_ = false;
@@ -1773,7 +1663,6 @@ void TestRunner::Reset() {
 
   platform_name_ = "chromium";
   tooltip_text_ = std::string();
-  disable_notify_done_ = false;
   web_history_item_count_ = 0;
   intercept_post_message_ = false;
 
@@ -1784,7 +1673,7 @@ void TestRunner::Reset() {
   pointer_locked_ = false;
   pointer_lock_planned_result_ = PointerLockWillSucceed;
 
-  task_list_.RevokeAll();
+  weak_factory_.InvalidateWeakPtrs();
   work_queue_.Reset();
 
   if (close_remaining_windows_ && delegate_)
@@ -1797,8 +1686,73 @@ void TestRunner::SetTestIsRunning(bool running) {
   test_is_running_ = running;
 }
 
-void TestRunner::InvokeCallback(scoped_ptr<InvokeCallbackTask> task) {
-  delegate_->PostTask(task.release());
+void TestRunner::PostTask(const base::Closure& callback) {
+  delegate_->PostTask(new WebCallbackTask(callback));
+}
+
+void TestRunner::PostDelayedTask(long long delay,
+                                 const base::Closure& callback) {
+  delegate_->PostDelayedTask(new WebCallbackTask(callback), delay);
+}
+
+void TestRunner::PostV8Callback(const v8::Local<v8::Function>& callback) {
+  PostTask(base::Bind(&TestRunner::InvokeV8Callback, weak_factory_.GetWeakPtr(),
+                      v8::UniquePersistent<v8::Function>(
+                          blink::mainThreadIsolate(), callback)));
+}
+
+void TestRunner::PostV8CallbackWithArgs(
+    v8::UniquePersistent<v8::Function> callback,
+    int argc,
+    v8::Local<v8::Value> argv[]) {
+  std::vector<v8::UniquePersistent<v8::Value>> args;
+  for (int i = 0; i < argc; i++) {
+    args.push_back(
+        v8::UniquePersistent<v8::Value>(blink::mainThreadIsolate(), argv[i]));
+  }
+
+  PostTask(base::Bind(&TestRunner::InvokeV8CallbackWithArgs,
+                      weak_factory_.GetWeakPtr(), std::move(callback),
+                      std::move(args)));
+}
+
+void TestRunner::InvokeV8Callback(
+    const v8::UniquePersistent<v8::Function>& callback) {
+  std::vector<v8::UniquePersistent<v8::Value>> empty_args;
+  InvokeV8CallbackWithArgs(callback, std::move(empty_args));
+}
+
+void TestRunner::InvokeV8CallbackWithArgs(
+    const v8::UniquePersistent<v8::Function>& callback,
+    const std::vector<v8::UniquePersistent<v8::Value>>& args) {
+  v8::Isolate* isolate = blink::mainThreadIsolate();
+  v8::HandleScope handle_scope(isolate);
+
+  if (!web_view_)
+    return;
+  WebFrame* frame = web_view_->mainFrame();
+  v8::Local<v8::Context> context = frame->mainWorldScriptContext();
+  if (context.IsEmpty())
+    return;
+  v8::Context::Scope context_scope(context);
+
+  std::vector<v8::Local<v8::Value>> local_args;
+  for (const auto& arg : args) {
+    local_args.push_back(v8::Local<v8::Value>::New(isolate, arg));
+  }
+
+  frame->callFunctionEvenIfScriptDisabled(
+      v8::Local<v8::Function>::New(isolate, callback), context->Global(),
+      local_args.size(), local_args.data());
+}
+
+base::Closure TestRunner::CreateClosureThatPostsV8Callback(
+    const v8::Local<v8::Function>& callback) {
+  return base::Bind(
+      &TestRunner::PostTask, weak_factory_.GetWeakPtr(),
+      base::Bind(&TestRunner::InvokeV8Callback, weak_factory_.GetWeakPtr(),
+                 v8::UniquePersistent<v8::Function>(blink::mainThreadIsolate(),
+                                                    callback)));
 }
 
 bool TestRunner::shouldDumpEditingCallbacks() const {
@@ -1806,11 +1760,13 @@ bool TestRunner::shouldDumpEditingCallbacks() const {
 }
 
 void TestRunner::setShouldDumpAsText(bool value) {
-  layout_dump_flags_.dump_as_text = value;
+  layout_test_runtime_flags_.set_dump_as_text(value);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::setShouldDumpAsMarkup(bool value) {
-  layout_dump_flags_.dump_as_markup = value;
+  layout_test_runtime_flags_.set_dump_as_markup(value);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 bool TestRunner::shouldDumpAsCustomText() const {
@@ -1828,16 +1784,17 @@ void TestRunner::setCustomTextOutput(const std::string& text) {
 
 bool TestRunner::ShouldGeneratePixelResults() {
   CheckResponseMimeType();
-  return generate_pixel_results_;
+  return layout_test_runtime_flags_.generate_pixel_results();
 }
 
-bool TestRunner::ShouldStayOnPageAfterHandlingBeforeUnload() const {
+bool TestRunner::shouldStayOnPageAfterHandlingBeforeUnload() const {
   return should_stay_on_page_after_handling_before_unload_;
 }
 
 
 void TestRunner::setShouldGeneratePixelResults(bool value) {
-  generate_pixel_results_ = value;
+  layout_test_runtime_flags_.set_generate_pixel_results(value);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 bool TestRunner::ShouldDumpAsAudio() const {
@@ -1848,9 +1805,46 @@ void TestRunner::GetAudioData(std::vector<unsigned char>* buffer_view) const {
   *buffer_view = audio_data_;
 }
 
-const LayoutDumpFlags& TestRunner::GetLayoutDumpFlags() {
+bool TestRunner::IsRecursiveLayoutDumpRequested() {
   CheckResponseMimeType();
-  return layout_dump_flags_;
+  return layout_test_runtime_flags_.dump_child_frames();
+}
+
+std::string TestRunner::DumpLayout(blink::WebLocalFrame* frame) {
+  CheckResponseMimeType();
+  return ::test_runner::DumpLayout(frame, layout_test_runtime_flags_);
+}
+
+void TestRunner::DumpPixelsAsync(
+    blink::WebView* web_view,
+    const base::Callback<void(const SkBitmap&)>& callback) {
+  if (layout_test_runtime_flags_.dump_drag_image()) {
+    if (drag_image_.isNull()) {
+      // This means the test called dumpDragImage but did not initiate a drag.
+      // Return a blank image so that the test fails.
+      SkBitmap bitmap;
+      bitmap.allocN32Pixels(1, 1);
+      {
+        SkAutoLockPixels lock(bitmap);
+        bitmap.eraseColor(0);
+      }
+      callback.Run(bitmap);
+      return;
+    }
+
+    callback.Run(drag_image_.getSkBitmap());
+    return;
+  }
+
+  test_runner::DumpPixelsAsync(proxy_->web_view(), layout_test_runtime_flags_,
+                               delegate_->GetDeviceScaleFactorForTest(),
+                               callback);
+}
+
+void TestRunner::ReplicateLayoutTestRuntimeFlagsChanges(
+    const base::DictionaryValue& changed_values) {
+  layout_test_runtime_flags_.tracked_dictionary().ApplyUntrackedChanges(
+      changed_values);
 }
 
 bool TestRunner::HasCustomTextDump(std::string* custom_text_dump) const {
@@ -1872,10 +1866,6 @@ void TestRunner::setShouldDumpFrameLoadCallbacks(bool value) {
 
 bool TestRunner::shouldDumpPingLoaderCallbacks() const {
   return test_is_running_ && dump_ping_loader_callbacks_;
-}
-
-void TestRunner::setShouldDumpPingLoaderCallbacks(bool value) {
-  dump_ping_loader_callbacks_ = value;
 }
 
 void TestRunner::setShouldEnableViewSource(bool value) {
@@ -1906,16 +1896,17 @@ bool TestRunner::shouldDumpResourceLoadCallbacks() const {
   return test_is_running_ && dump_resource_load_callbacks_;
 }
 
-bool TestRunner::shouldDumpResourceRequestCallbacks() const {
-  return test_is_running_ && dump_resource_request_callbacks_;
-}
-
 bool TestRunner::shouldDumpResourceResponseMIMETypes() const {
   return test_is_running_ && dump_resource_response_mime_types_;
 }
 
 WebContentSettingsClient* TestRunner::GetWebContentSettings() const {
   return web_content_settings_.get();
+}
+
+void TestRunner::InitializeWebViewWithMocks(blink::WebView* web_view) {
+  web_view->setSpellCheckClient(spellcheck_.get());
+  web_view->setCredentialManagerClient(credential_manager_client_.get());
 }
 
 bool TestRunner::shouldDumpStatusCallbacks() const {
@@ -1930,12 +1921,8 @@ bool TestRunner::ShouldDumpBackForwardList() const {
   return dump_back_forward_list_;
 }
 
-bool TestRunner::shouldDumpSelectionRect() const {
-  return dump_selection_rect_;
-}
-
 bool TestRunner::isPrinting() const {
-  return layout_dump_flags_.is_printing;
+  return layout_test_runtime_flags_.is_printing();
 }
 
 bool TestRunner::shouldWaitUntilExternalURLLoad() const {
@@ -1964,21 +1951,22 @@ WebFrame* TestRunner::topLoadingFrame() const {
 }
 
 void TestRunner::policyDelegateDone() {
-  DCHECK(wait_until_done_);
+  DCHECK(layout_test_runtime_flags_.wait_until_done());
   delegate_->TestFinished();
-  wait_until_done_ = false;
+  layout_test_runtime_flags_.set_wait_until_done(false);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 bool TestRunner::policyDelegateEnabled() const {
-  return policy_delegate_enabled_;
+  return layout_test_runtime_flags_.policy_delegate_enabled();
 }
 
 bool TestRunner::policyDelegateIsPermissive() const {
-  return policy_delegate_is_permissive_;
+  return layout_test_runtime_flags_.policy_delegate_is_permissive();
 }
 
 bool TestRunner::policyDelegateShouldNotifyDone() const {
-  return policy_delegate_should_notify_done_;
+  return layout_test_runtime_flags_.policy_delegate_should_notify_done();
 }
 
 bool TestRunner::shouldInterceptPostMessage() const {
@@ -1992,9 +1980,8 @@ bool TestRunner::shouldDumpResourcePriorities() const {
 bool TestRunner::RequestPointerLock() {
   switch (pointer_lock_planned_result_) {
     case PointerLockWillSucceed:
-      delegate_->PostDelayedTask(
-          new HostMethodTask(this, &TestRunner::DidAcquirePointerLockInternal),
-          0);
+      PostDelayedTask(0, base::Bind(&TestRunner::DidAcquirePointerLockInternal,
+                                    weak_factory_.GetWeakPtr()));
       return true;
     case PointerLockWillRespondAsync:
       DCHECK(!pointer_locked_);
@@ -2009,8 +1996,8 @@ bool TestRunner::RequestPointerLock() {
 }
 
 void TestRunner::RequestPointerUnlock() {
-  delegate_->PostDelayedTask(
-      new HostMethodTask(this, &TestRunner::DidLosePointerLockInternal), 0);
+  PostDelayedTask(0, base::Bind(&TestRunner::DidLosePointerLockInternal,
+                                weak_factory_.GetWeakPtr()));
 }
 
 bool TestRunner::isPointerLocked() {
@@ -2021,8 +2008,12 @@ void TestRunner::setToolTipText(const WebString& text) {
   tooltip_text_ = text.utf8();
 }
 
-bool TestRunner::shouldDumpDragImage() {
-  return dump_drag_image_;
+void TestRunner::setDragImage(
+    const blink::WebImage& drag_image) {
+  if (layout_test_runtime_flags_.dump_drag_image()) {
+    if (drag_image_.isNull())
+      drag_image_ = drag_image;
+  }
 }
 
 bool TestRunner::shouldDumpNavigationPolicy() const {
@@ -2056,17 +2047,15 @@ class WorkItemBackForward : public TestRunner::WorkItem {
 };
 
 void TestRunner::NotifyDone() {
-  if (disable_notify_done_)
-    return;
-
-  // Test didn't timeout. Kill the timeout timer.
-  task_list_.RevokeAll();
+  // Test didn't timeout. Kill the pending callbacks.
+  weak_factory_.InvalidateWeakPtrs();
 
   CompleteNotifyDone();
 }
 
 void TestRunner::WaitUntilDone() {
-  wait_until_done_ = true;
+  layout_test_runtime_flags_.set_wait_until_done(true);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::QueueBackNavigation(int how_far_back) {
@@ -2149,57 +2138,24 @@ void TestRunner::QueueLoad(const std::string& url, const std::string& target) {
   work_queue_.AddWork(new WorkItemLoad(full_url, target));
 }
 
-class WorkItemLoadHTMLString : public TestRunner::WorkItem  {
- public:
-  WorkItemLoadHTMLString(const std::string& html, const WebURL& base_url)
-      : html_(html), base_url_(base_url) {}
-
-  WorkItemLoadHTMLString(const std::string& html, const WebURL& base_url,
-                         const WebURL& unreachable_url)
-      : html_(html), base_url_(base_url), unreachable_url_(unreachable_url) {}
-
-  bool Run(WebTestDelegate*, WebView* web_view) override {
-    web_view->mainFrame()->loadHTMLString(
-        WebData(html_.data(), html_.length()),
-        base_url_, unreachable_url_);
-    return true;
-  }
-
- private:
-  std::string html_;
-  WebURL base_url_;
-  WebURL unreachable_url_;
-};
-
-void TestRunner::QueueLoadHTMLString(gin::Arguments* args) {
-  std::string html;
-  args->GetNext(&html);
-
-  std::string base_url_str;
-  args->GetNext(&base_url_str);
-  WebURL base_url = WebURL(GURL(base_url_str));
-
-  if (!args->PeekNext().IsEmpty() && args->PeekNext()->IsString()) {
-    std::string unreachable_url_str;
-    args->GetNext(&unreachable_url_str);
-    WebURL unreachable_url = WebURL(GURL(unreachable_url_str));
-    work_queue_.AddWork(new WorkItemLoadHTMLString(html, base_url,
-                                                   unreachable_url));
-  } else {
-    work_queue_.AddWork(new WorkItemLoadHTMLString(html, base_url));
-  }
-}
-
 void TestRunner::SetCustomPolicyDelegate(gin::Arguments* args) {
-  args->GetNext(&policy_delegate_enabled_);
-  if (!args->PeekNext().IsEmpty() && args->PeekNext()->IsBoolean())
-    args->GetNext(&policy_delegate_is_permissive_);
+  bool value;
+  args->GetNext(&value);
+  layout_test_runtime_flags_.set_policy_delegate_enabled(value);
+
+  if (!args->PeekNext().IsEmpty() && args->PeekNext()->IsBoolean()) {
+    args->GetNext(&value);
+    layout_test_runtime_flags_.set_policy_delegate_is_permissive(value);
+  }
+
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::WaitForPolicyDelegate() {
-  policy_delegate_enabled_ = true;
-  policy_delegate_should_notify_done_ = true;
-  wait_until_done_ = true;
+  layout_test_runtime_flags_.set_policy_delegate_enabled(true);
+  layout_test_runtime_flags_.set_policy_delegate_should_notify_done(true);
+  layout_test_runtime_flags_.set_wait_until_done(true);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 int TestRunner::WindowCount() {
@@ -2488,7 +2444,7 @@ void TestRunner::SetMockDeviceMotion(
 void TestRunner::SetMockDeviceOrientation(bool has_alpha, double alpha,
                                           bool has_beta, double beta,
                                           bool has_gamma, double gamma,
-                                          bool has_absolute, bool absolute) {
+                                          bool absolute) {
   WebDeviceOrientationData orientation;
 
   // alpha
@@ -2504,10 +2460,27 @@ void TestRunner::SetMockDeviceOrientation(bool has_alpha, double alpha,
   orientation.gamma = gamma;
 
   // absolute
-  orientation.hasAbsolute = has_absolute;
   orientation.absolute = absolute;
 
   delegate_->SetDeviceOrientationData(orientation);
+}
+
+MockScreenOrientationClient* TestRunner::getMockScreenOrientationClient() {
+  return mock_screen_orientation_client_.get();
+}
+
+MockWebUserMediaClient* TestRunner::getMockWebUserMediaClient() {
+  if (!user_media_client_.get())
+    user_media_client_.reset(new MockWebUserMediaClient(delegate_));
+  return user_media_client_.get();
+}
+
+MockWebSpeechRecognizer* TestRunner::getMockWebSpeechRecognizer() {
+  if (!speech_recognizer_.get()) {
+    speech_recognizer_.reset(new MockWebSpeechRecognizer());
+    speech_recognizer_->SetDelegate(delegate_);
+  }
+  return speech_recognizer_.get();
 }
 
 void TestRunner::SetMockScreenOrientation(const std::string& orientation_str) {
@@ -2519,15 +2492,28 @@ void TestRunner::SetMockScreenOrientation(const std::string& orientation_str) {
     orientation = WebScreenOrientationPortraitSecondary;
   } else if (orientation_str == "landscape-primary") {
     orientation = WebScreenOrientationLandscapePrimary;
-  } else if (orientation_str == "landscape-secondary") {
+  } else {
+    DCHECK_EQ("landscape-secondary", orientation_str);
     orientation = WebScreenOrientationLandscapeSecondary;
   }
 
-  delegate_->SetScreenOrientation(orientation);
+  // TODO(lukasza): This is broken for OOPIFs.
+  WebLocalFrame* main_frame = web_view_->mainFrame()->toWebLocalFrame();
+  mock_screen_orientation_client_->UpdateDeviceOrientation(
+      main_frame, orientation);
 }
 
 void TestRunner::DisableMockScreenOrientation() {
-  delegate_->DisableMockScreenOrientation();
+  mock_screen_orientation_client_->SetDisabled(true);
+}
+
+void TestRunner::DidOpenChooser() {
+  chooser_count_++;
+}
+
+void TestRunner::DidCloseChooser() {
+  chooser_count_--;
+  DCHECK_LE(0, chooser_count_);
 }
 
 void TestRunner::DidAcquirePointerLock() {
@@ -2627,8 +2613,17 @@ void TestRunner::OverridePreference(const std::string& key,
   delegate_->ApplyPreferences();
 }
 
+std::string TestRunner::GetAcceptLanguages() const {
+  return layout_test_runtime_flags_.accept_languages();
+}
+
 void TestRunner::SetAcceptLanguages(const std::string& accept_languages) {
-  proxy_->SetAcceptLanguages(accept_languages);
+  if (accept_languages == GetAcceptLanguages())
+    return;
+
+  layout_test_runtime_flags_.set_accept_languages(accept_languages);
+  OnLayoutTestRuntimeFlagsChanged();
+  proxy_->web_view()->acceptLanguagesChanged();
 }
 
 void TestRunner::SetPluginsEnabled(bool enabled) {
@@ -2636,8 +2631,17 @@ void TestRunner::SetPluginsEnabled(bool enabled) {
   delegate_->ApplyPreferences();
 }
 
-bool TestRunner::AnimationScheduled() {
-  return proxy_->AnimationScheduled();
+bool TestRunner::GetAnimationScheduled() const {
+  bool is_animation_scheduled = !views_with_scheduled_animations_.empty();
+  return is_animation_scheduled;
+}
+
+void TestRunner::OnAnimationScheduled(blink::WebView* view) {
+  views_with_scheduled_animations_.insert(view);
+}
+
+void TestRunner::OnAnimationBegun(blink::WebView* view) {
+  views_with_scheduled_animations_.erase(view);
 }
 
 void TestRunner::DumpEditingCallbacks() {
@@ -2645,30 +2649,36 @@ void TestRunner::DumpEditingCallbacks() {
 }
 
 void TestRunner::DumpAsMarkup() {
-  layout_dump_flags_.dump_as_markup = true;
-  generate_pixel_results_ = false;
+  layout_test_runtime_flags_.set_dump_as_markup(true);
+  layout_test_runtime_flags_.set_generate_pixel_results(false);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::DumpAsText() {
-  layout_dump_flags_.dump_as_text = true;
-  generate_pixel_results_ = false;
+  layout_test_runtime_flags_.set_dump_as_text(true);
+  layout_test_runtime_flags_.set_generate_pixel_results(false);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::DumpAsTextWithPixelResults() {
-  layout_dump_flags_.dump_as_text = true;
-  generate_pixel_results_ = true;
+  layout_test_runtime_flags_.set_dump_as_text(true);
+  layout_test_runtime_flags_.set_generate_pixel_results(true);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::DumpChildFrameScrollPositions() {
-  layout_dump_flags_.dump_child_frame_scroll_positions = true;
+  layout_test_runtime_flags_.set_dump_child_frame_scroll_positions(true);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::DumpChildFramesAsMarkup() {
-  layout_dump_flags_.dump_child_frames_as_markup = true;
+  layout_test_runtime_flags_.set_dump_child_frames_as_markup(true);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::DumpChildFramesAsText() {
-  layout_dump_flags_.dump_child_frames_as_text = true;
+  layout_test_runtime_flags_.set_dump_child_frames_as_text(true);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::DumpIconChanges() {
@@ -2708,10 +2718,6 @@ void TestRunner::SetCanOpenWindows() {
 
 void TestRunner::DumpResourceLoadCallbacks() {
   dump_resource_load_callbacks_ = true;
-}
-
-void TestRunner::DumpResourceRequestCallbacks() {
-  dump_resource_request_callbacks_ = true;
 }
 
 void TestRunner::DumpResourceResponseMIMETypes() {
@@ -2763,15 +2769,18 @@ void TestRunner::DumpBackForwardList() {
 }
 
 void TestRunner::DumpSelectionRect() {
-  dump_selection_rect_ = true;
+  layout_test_runtime_flags_.set_dump_selection_rect(true);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::SetPrinting() {
-  layout_dump_flags_.is_printing = true;
+  layout_test_runtime_flags_.set_is_printing(true);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::ClearPrinting() {
-  layout_dump_flags_.is_printing = false;
+  layout_test_runtime_flags_.set_is_printing(false);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::SetShouldStayOnPageAfterHandlingBeforeUnload(bool value) {
@@ -2802,8 +2811,9 @@ void TestRunner::WaitUntilExternalURLLoad() {
 }
 
 void TestRunner::DumpDragImage() {
+  layout_test_runtime_flags_.set_dump_drag_image(true);
   DumpAsTextWithPixelResults();
-  dump_drag_image_ = true;
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::DumpNavigationPolicy() {
@@ -2831,7 +2841,7 @@ void TestRunner::CloseWebInspector() {
 }
 
 bool TestRunner::IsChooserShown() {
-  return proxy_->IsChooserShown();
+  return 0 < chooser_count_;
 }
 
 void TestRunner::EvaluateInWebInspector(int call_id,
@@ -2857,7 +2867,7 @@ void TestRunner::SetAlwaysAcceptCookies(bool accept) {
 }
 
 void TestRunner::SetWindowIsKey(bool value) {
-  delegate_->SetFocus(proxy_, value);
+  delegate_->SetFocus(proxy_->web_view(), value);
 }
 
 std::string TestRunner::PathToLocalResource(const std::string& path) {
@@ -2867,34 +2877,37 @@ std::string TestRunner::PathToLocalResource(const std::string& path) {
 void TestRunner::SetBackingScaleFactor(double value,
                                        v8::Local<v8::Function> callback) {
   delegate_->SetDeviceScaleFactor(value);
-  delegate_->PostTask(new InvokeCallbackTask(this, callback));
+  PostV8Callback(callback);
 }
 
 void TestRunner::EnableUseZoomForDSF(v8::Local<v8::Function> callback) {
   delegate_->EnableUseZoomForDSF();
-  delegate_->PostTask(new InvokeCallbackTask(this, callback));
+  PostV8Callback(callback);
 }
 
 void TestRunner::SetColorProfile(const std::string& name,
                                  v8::Local<v8::Function> callback) {
   delegate_->SetDeviceColorProfile(name);
-  delegate_->PostTask(new InvokeCallbackTask(this, callback));
+  PostV8Callback(callback);
 }
 
-void TestRunner::SetBluetoothMockDataSet(const std::string& name) {
-  delegate_->SetBluetoothMockDataSet(name);
+void TestRunner::SetBluetoothFakeAdapter(const std::string& adapter_name,
+                                         v8::Local<v8::Function> callback) {
+  delegate_->SetBluetoothFakeAdapter(
+      adapter_name, CreateClosureThatPostsV8Callback(callback));
 }
 
-void TestRunner::SetBluetoothManualChooser() {
-  delegate_->SetBluetoothManualChooser();
+void TestRunner::SetBluetoothManualChooser(bool enable) {
+  delegate_->SetBluetoothManualChooser(enable);
 }
 
 void TestRunner::GetBluetoothManualChooserEvents(
     v8::Local<v8::Function> callback) {
-  scoped_ptr<InvokeCallbackTask> task(new InvokeCallbackTask(this, callback));
   return delegate_->GetBluetoothManualChooserEvents(
       base::Bind(&TestRunner::GetBluetoothManualChooserEventsCallback,
-                 weak_factory_.GetWeakPtr(), base::Passed(&task)));
+                 weak_factory_.GetWeakPtr(),
+                 base::Passed(v8::UniquePersistent<v8::Function>(
+                     blink::mainThreadIsolate(), callback))));
 }
 
 void TestRunner::SendBluetoothManualChooserEvent(const std::string& event,
@@ -2925,19 +2938,18 @@ void TestRunner::DispatchBeforeInstallPromptEvent(
     int request_id,
     const std::vector<std::string>& event_platforms,
     v8::Local<v8::Function> callback) {
-  scoped_ptr<InvokeCallbackTask> task(
-      new InvokeCallbackTask(this, callback));
-
   delegate_->DispatchBeforeInstallPromptEvent(
       request_id, event_platforms,
       base::Bind(&TestRunner::DispatchBeforeInstallPromptCallback,
-                 weak_factory_.GetWeakPtr(), base::Passed(&task)));
+                 weak_factory_.GetWeakPtr(),
+                 base::Passed(v8::UniquePersistent<v8::Function>(
+                     blink::mainThreadIsolate(), callback))));
 }
 
 void TestRunner::ResolveBeforeInstallPromptPromise(
     int request_id,
     const std::string& platform) {
-  delegate_->ResolveBeforeInstallPromptPromise(request_id, platform);
+  test_interfaces_->GetAppBannerClient()->ResolvePromise(request_id, platform);
 }
 
 void TestRunner::SetPOSIXLocale(const std::string& locale) {
@@ -2960,29 +2972,27 @@ void TestRunner::SimulateWebNotificationClose(const std::string& title,
 
 void TestRunner::AddMockSpeechRecognitionResult(const std::string& transcript,
                                                 double confidence) {
-  proxy_->GetSpeechRecognizerMock()->AddMockResult(
-      WebString::fromUTF8(transcript), confidence);
+  getMockWebSpeechRecognizer()->AddMockResult(WebString::fromUTF8(transcript),
+                                              confidence);
 }
 
 void TestRunner::SetMockSpeechRecognitionError(const std::string& error,
                                                const std::string& message) {
-  proxy_->GetSpeechRecognizerMock()->SetError(WebString::fromUTF8(error),
-                                              WebString::fromUTF8(message));
-}
-
-bool TestRunner::WasMockSpeechRecognitionAborted() {
-  return proxy_->GetSpeechRecognizerMock()->WasAborted();
+  getMockWebSpeechRecognizer()->SetError(WebString::fromUTF8(error),
+                                         WebString::fromUTF8(message));
 }
 
 void TestRunner::AddMockCredentialManagerResponse(const std::string& id,
                                                   const std::string& name,
                                                   const std::string& avatar,
                                                   const std::string& password) {
-  proxy_->GetCredentialManagerClientMock()->SetResponse(
-      new WebPasswordCredential(WebString::fromUTF8(id),
-                                WebString::fromUTF8(password),
-                                WebString::fromUTF8(name),
-                                WebURL(GURL(avatar))));
+  credential_manager_client_->SetResponse(new WebPasswordCredential(
+      WebString::fromUTF8(id), WebString::fromUTF8(password),
+      WebString::fromUTF8(name), WebURL(GURL(avatar))));
+}
+
+void TestRunner::AddMockCredentialManagerError(const std::string& error) {
+  credential_manager_client_->SetError(error);
 }
 
 void TestRunner::AddWebPageOverlay() {
@@ -3000,29 +3010,48 @@ void TestRunner::LayoutAndPaintAsync() {
 }
 
 void TestRunner::LayoutAndPaintAsyncThen(v8::Local<v8::Function> callback) {
-  scoped_ptr<InvokeCallbackTask> task(
-      new InvokeCallbackTask(this, callback));
-  proxy_->LayoutAndPaintAsyncThen(base::Bind(&TestRunner::InvokeCallback,
-                                             weak_factory_.GetWeakPtr(),
-                                             base::Passed(&task)));
+  proxy_->LayoutAndPaintAsyncThen(CreateClosureThatPostsV8Callback(callback));
 }
 
 void TestRunner::GetManifestThen(v8::Local<v8::Function> callback) {
-  scoped_ptr<InvokeCallbackTask> task(
-      new InvokeCallbackTask(this, callback));
+  v8::UniquePersistent<v8::Function> persistent_callback(
+      blink::mainThreadIsolate(), callback);
+
+  if (!web_view_) {
+    WebURLResponse response;
+    response.setHTTPStatusCode(404);
+    GetManifestCallback(std::move(persistent_callback), response, "");
+    return;
+  }
 
   delegate_->FetchManifest(
       web_view_, web_view_->mainFrame()->document().manifestURL(),
       base::Bind(&TestRunner::GetManifestCallback, weak_factory_.GetWeakPtr(),
-                 base::Passed(&task)));
+                 base::Passed(std::move(persistent_callback))));
 }
 
 void TestRunner::CapturePixelsAsyncThen(v8::Local<v8::Function> callback) {
-  scoped_ptr<InvokeCallbackTask> task(
-      new InvokeCallbackTask(this, callback));
-  proxy_->CapturePixelsAsync(base::Bind(&TestRunner::CapturePixelsCallback,
-                                        weak_factory_.GetWeakPtr(),
-                                        base::Passed(&task)));
+  v8::UniquePersistent<v8::Function> persistent_callback(
+      blink::mainThreadIsolate(), callback);
+
+  if (!web_view_) {
+    CapturePixelsCallback(std::move(persistent_callback), SkBitmap());
+    return;
+  }
+
+  DumpPixelsAsync(
+      proxy_->web_view(),
+      base::Bind(&TestRunner::CapturePixelsCallback, weak_factory_.GetWeakPtr(),
+                 base::Passed(std::move(persistent_callback))));
+}
+
+void TestRunner::OnLayoutTestRuntimeFlagsChanged() {
+  if (layout_test_runtime_flags_.tracked_dictionary().changed_values().empty())
+    return;
+
+  delegate_->OnLayoutTestRuntimeFlagsChanged(
+      layout_test_runtime_flags_.tracked_dictionary().changed_values());
+  layout_test_runtime_flags_.tracked_dictionary().ResetChangeTracking();
 }
 
 void TestRunner::ForceNextWebGLContextCreationToFail() {
@@ -3037,22 +3066,33 @@ void TestRunner::ForceNextDrawingBufferCreationToFail() {
 
 void TestRunner::CopyImageAtAndCapturePixelsAsyncThen(
     int x, int y, v8::Local<v8::Function> callback) {
-  scoped_ptr<InvokeCallbackTask> task(
-      new InvokeCallbackTask(this, callback));
-  proxy_->CopyImageAtAndCapturePixels(
-      x, y, base::Bind(&TestRunner::CapturePixelsCallback,
-                       weak_factory_.GetWeakPtr(),
-                       base::Passed(&task)));
+  v8::UniquePersistent<v8::Function> persistent_callback(
+      blink::mainThreadIsolate(), callback);
+
+  if (!web_view_) {
+    CapturePixelsCallback(std::move(persistent_callback), SkBitmap());
+    return;
+  }
+
+  CopyImageAtAndCapturePixels(
+      proxy_->web_view(), x, y,
+      base::Bind(&TestRunner::CapturePixelsCallback, weak_factory_.GetWeakPtr(),
+                 base::Passed(std::move(persistent_callback))));
 }
 
-void TestRunner::GetManifestCallback(scoped_ptr<InvokeCallbackTask> task,
-                                     const blink::WebURLResponse& response,
-                                     const std::string& data) {
-  InvokeCallback(std::move(task));
+void TestRunner::GetManifestCallback(
+    v8::UniquePersistent<v8::Function> callback,
+    const blink::WebURLResponse& response,
+    const std::string& data) {
+  PostV8CallbackWithArgs(std::move(callback), 0, nullptr);
 }
 
-void TestRunner::CapturePixelsCallback(scoped_ptr<InvokeCallbackTask> task,
-                                       const SkBitmap& snapshot) {
+void TestRunner::CapturePixelsCallback(
+    v8::UniquePersistent<v8::Function> callback,
+    const SkBitmap& snapshot) {
+  if (!web_view_)
+    return;
+
   v8::Isolate* isolate = blink::mainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
 
@@ -3091,13 +3131,15 @@ void TestRunner::CapturePixelsCallback(scoped_ptr<InvokeCallbackTask> task,
   argv[2] = blink::WebArrayBufferConverter::toV8Value(
       &buffer, context->Global(), isolate);
 
-  task->SetArguments(3, argv);
-  InvokeCallback(std::move(task));
+  PostV8CallbackWithArgs(std::move(callback), arraysize(argv), argv);
 }
 
 void TestRunner::DispatchBeforeInstallPromptCallback(
-    scoped_ptr<InvokeCallbackTask> task,
+    v8::UniquePersistent<v8::Function> callback,
     bool canceled) {
+  if (!web_view_)
+    return;
+
   v8::Isolate* isolate = blink::mainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
 
@@ -3107,16 +3149,18 @@ void TestRunner::DispatchBeforeInstallPromptCallback(
     return;
 
   v8::Context::Scope context_scope(context);
-  v8::Local<v8::Value> argv[1];
-  argv[0] = v8::Boolean::New(isolate, canceled);
+  v8::Local<v8::Value> arg;
+  arg = v8::Boolean::New(isolate, canceled);
 
-  task->SetArguments(1, argv);
-  InvokeCallback(std::move(task));
+  PostV8CallbackWithArgs(std::move(callback), 1, &arg);
 }
 
 void TestRunner::GetBluetoothManualChooserEventsCallback(
-    scoped_ptr<InvokeCallbackTask> task,
+    v8::UniquePersistent<v8::Function> callback,
     const std::vector<std::string>& events) {
+  if (!web_view_)
+    return;
+
   // Build the V8 context.
   v8::Isolate* isolate = blink::mainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
@@ -3127,13 +3171,12 @@ void TestRunner::GetBluetoothManualChooserEventsCallback(
   v8::Context::Scope context_scope(context);
 
   // Convert the argument.
-  v8::Local<v8::Value> arg[1];
-  if (!gin::TryConvertToV8(isolate, events, &arg[0]))
+  v8::Local<v8::Value> arg;
+  if (!gin::TryConvertToV8(isolate, events, &arg))
     return;
 
   // Call the callback.
-  task->SetArguments(1, arg);
-  InvokeCallback(std::move(task));
+  PostV8CallbackWithArgs(std::move(callback), 1, &arg);
 }
 
 void TestRunner::LocationChangeDone() {
@@ -3142,27 +3185,36 @@ void TestRunner::LocationChangeDone() {
   // No more new work after the first complete load.
   work_queue_.set_frozen(true);
 
-  if (!wait_until_done_)
+  if (!layout_test_runtime_flags_.wait_until_done())
     work_queue_.ProcessWorkSoon();
 }
 
 void TestRunner::CheckResponseMimeType() {
   // Text output: the test page can request different types of output which we
   // handle here.
-  if (!layout_dump_flags_.dump_as_text) {
-    std::string mimeType =
-        web_view_->mainFrame()->dataSource()->response().mimeType().utf8();
-    if (mimeType == "text/plain") {
-      layout_dump_flags_.dump_as_text = true;
-      generate_pixel_results_ = false;
-    }
-  }
+
+  if (layout_test_runtime_flags_.dump_as_text())
+    return;
+
+  WebDataSource* data_source = web_view_->mainFrame()->dataSource();
+  if (!data_source)
+    return;
+
+  std::string mimeType = data_source->response().mimeType().utf8();
+  if (mimeType != "text/plain")
+    return;
+
+  layout_test_runtime_flags_.set_dump_as_text(true);
+  layout_test_runtime_flags_.set_generate_pixel_results(false);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::CompleteNotifyDone() {
-  if (wait_until_done_ && !topLoadingFrame() && work_queue_.is_empty())
+  if (layout_test_runtime_flags_.wait_until_done() && !topLoadingFrame() &&
+      work_queue_.is_empty())
     delegate_->TestFinished();
-  wait_until_done_ = false;
+  layout_test_runtime_flags_.set_wait_until_done(false);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::DidAcquirePointerLockInternal() {

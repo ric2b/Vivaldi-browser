@@ -4,7 +4,6 @@
 
 #include <vector>
 #include "cc/blink/web_layer_impl_fixed_bounds.h"
-#include "cc/layers/layer_settings.h"
 #include "cc/layers/picture_image_layer.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/geometry_test_utils.h"
@@ -70,10 +69,10 @@ TEST(WebLayerImplFixedBoundsTest, BoundsScaleSimple) {
 
 void ExpectEqualLayerRectsInTarget(cc::Layer* layer1, cc::Layer* layer2) {
   gfx::RectF layer1_rect_in_target(gfx::SizeF(layer1->bounds()));
-  layer1->draw_transform().TransformRect(&layer1_rect_in_target);
+  layer1->screen_space_transform().TransformRect(&layer1_rect_in_target);
 
   gfx::RectF layer2_rect_in_target(gfx::SizeF(layer2->bounds()));
-  layer2->draw_transform().TransformRect(&layer2_rect_in_target);
+  layer2->screen_space_transform().TransformRect(&layer2_rect_in_target);
 
   EXPECT_FLOAT_RECT_EQ(layer1_rect_in_target, layer2_rect_in_target);
 }
@@ -90,16 +89,15 @@ void CompareFixedBoundsLayerAndNormalLayer(const WebFloatPoint& anchor_point,
 
   scoped_ptr<WebLayerImplFixedBounds> root_layer(new WebLayerImplFixedBounds());
 
-  WebLayerImplFixedBounds* fixed_bounds_layer = new WebLayerImplFixedBounds(
-      cc::PictureImageLayer::Create(WebLayerImpl::LayerSettings()));
+  WebLayerImplFixedBounds* fixed_bounds_layer =
+      new WebLayerImplFixedBounds(cc::PictureImageLayer::Create());
   fixed_bounds_layer->setBounds(bounds);
   fixed_bounds_layer->SetFixedBounds(fixed_bounds);
   fixed_bounds_layer->setTransform(transform.matrix());
   fixed_bounds_layer->setPosition(position);
   root_layer->addChild(fixed_bounds_layer);
 
-  WebLayerImpl* normal_layer(
-      new WebLayerImpl(cc::PictureImageLayer::Create(cc::LayerSettings())));
+  WebLayerImpl* normal_layer(new WebLayerImpl(cc::PictureImageLayer::Create()));
 
   normal_layer->setBounds(bounds);
   normal_layer->setTransform(transform.matrix());
@@ -113,12 +111,12 @@ void CompareFixedBoundsLayerAndNormalLayer(const WebFloatPoint& anchor_point,
   host->SetRootLayer(root_layer->layer());
 
   {
-    cc::LayerTreeHostCommon::CalcDrawPropsMainInputs inputs(
+    cc::LayerTreeHostCommon::CalcDrawPropsMainInputsForTesting inputs(
         root_layer->layer(), kDeviceViewportSize);
     inputs.device_scale_factor = kDeviceScaleFactor;
     inputs.page_scale_factor = kPageScaleFactor;
     inputs.page_scale_layer = root_layer->layer(),
-    cc::LayerTreeHostCommon::CalculateDrawProperties(&inputs);
+    cc::LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 
     ExpectEqualLayerRectsInTarget(normal_layer->layer(),
                                   fixed_bounds_layer->layer());
@@ -129,12 +127,12 @@ void CompareFixedBoundsLayerAndNormalLayer(const WebFloatPoint& anchor_point,
       gfx::Size(fixed_bounds.width() / 2, fixed_bounds.height() * 2));
 
   {
-    cc::LayerTreeHostCommon::CalcDrawPropsMainInputs inputs(
+    cc::LayerTreeHostCommon::CalcDrawPropsMainInputsForTesting inputs(
         root_layer->layer(), kDeviceViewportSize);
     inputs.device_scale_factor = kDeviceScaleFactor;
     inputs.page_scale_factor = kPageScaleFactor;
     inputs.page_scale_layer = root_layer->layer(),
-    cc::LayerTreeHostCommon::CalculateDrawProperties(&inputs);
+    cc::LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 
     ExpectEqualLayerRectsInTarget(normal_layer->layer(),
                                   fixed_bounds_layer->layer());

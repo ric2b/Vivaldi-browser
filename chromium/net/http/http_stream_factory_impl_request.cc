@@ -7,13 +7,10 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
+#include "net/http/bidirectional_stream_impl.h"
 #include "net/http/http_stream_factory_impl_job.h"
 #include "net/spdy/spdy_http_stream.h"
 #include "net/spdy/spdy_session.h"
-
-#if BUILDFLAG(ENABLE_BIDIRECTIONAL_STREAM)
-#include "net/http/bidirectional_stream_job.h"
-#endif
 
 namespace net {
 
@@ -35,7 +32,7 @@ HttpStreamFactoryImpl::Request::Request(
       was_npn_negotiated_(false),
       protocol_negotiated_(kProtoUnknown),
       using_spdy_(false),
-      for_bidirectional_(stream_type == BIDIRECTIONAL_STREAM_SPDY_JOB) {
+      stream_type_(stream_type) {
   DCHECK(factory_);
   DCHECK(delegate_);
 
@@ -83,7 +80,7 @@ void HttpStreamFactoryImpl::Request::OnStreamReady(
     const ProxyInfo& used_proxy_info,
     HttpStream* stream) {
   DCHECK(!factory_->for_websockets_);
-  DCHECK(!for_bidirectional_);
+  DCHECK_EQ(HttpStreamRequest::HTTP_STREAM, stream_type_);
   DCHECK(stream);
   DCHECK(completed_);
 
@@ -91,19 +88,19 @@ void HttpStreamFactoryImpl::Request::OnStreamReady(
   delegate_->OnStreamReady(used_ssl_config, used_proxy_info, stream);
 }
 
-void HttpStreamFactoryImpl::Request::OnBidirectionalStreamJobReady(
+void HttpStreamFactoryImpl::Request::OnBidirectionalStreamImplReady(
     Job* job,
     const SSLConfig& used_ssl_config,
     const ProxyInfo& used_proxy_info,
-    BidirectionalStreamJob* stream_job) {
+    BidirectionalStreamImpl* stream_job) {
   DCHECK(!factory_->for_websockets_);
-  DCHECK(for_bidirectional_);
+  DCHECK_EQ(HttpStreamRequest::BIDIRECTIONAL_STREAM, stream_type_);
   DCHECK(stream_job);
   DCHECK(completed_);
 
   OnJobSucceeded(job);
-  delegate_->OnBidirectionalStreamJobReady(used_ssl_config, used_proxy_info,
-                                           stream_job);
+  delegate_->OnBidirectionalStreamImplReady(used_ssl_config, used_proxy_info,
+                                            stream_job);
 }
 
 void HttpStreamFactoryImpl::Request::OnWebSocketHandshakeStreamReady(
@@ -112,7 +109,7 @@ void HttpStreamFactoryImpl::Request::OnWebSocketHandshakeStreamReady(
     const ProxyInfo& used_proxy_info,
     WebSocketHandshakeStreamBase* stream) {
   DCHECK(factory_->for_websockets_);
-  DCHECK(!for_bidirectional_);
+  DCHECK_EQ(HttpStreamRequest::HTTP_STREAM, stream_type_);
   DCHECK(stream);
   DCHECK(completed_);
 
@@ -275,11 +272,7 @@ bool HttpStreamFactoryImpl::Request::HasSpdySessionKey() const {
 void HttpStreamFactoryImpl::Request::OnNewSpdySessionReady(
     Job* job,
     scoped_ptr<HttpStream> stream,
-#if BUILDFLAG(ENABLE_BIDIRECTIONAL_STREAM)
-    scoped_ptr<BidirectionalStreamJob> bidirectional_stream_job,
-#else
-    void* bidirectional_stream_job,
-#endif
+    scoped_ptr<BidirectionalStreamImpl> bidirectional_stream_impl,
     const base::WeakPtr<SpdySession>& spdy_session,
     bool direct) {
   DCHECK(job);
@@ -314,18 +307,14 @@ void HttpStreamFactoryImpl::Request::OnNewSpdySessionReady(
     // TODO(ricea): Re-instate this code when WebSockets over SPDY is
     // implemented.
     NOTREACHED();
-  } else if (for_bidirectional_) {
-    DCHECK(bidirectional_stream_job);
+  } else if (stream_type_ == HttpStreamRequest::BIDIRECTIONAL_STREAM) {
+    DCHECK(bidirectional_stream_impl);
     DCHECK(!stream);
-#if BUILDFLAG(ENABLE_BIDIRECTIONAL_STREAM)
-    delegate_->OnBidirectionalStreamJobReady(
+    delegate_->OnBidirectionalStreamImplReady(
         job->server_ssl_config(), job->proxy_info(),
-        bidirectional_stream_job.release());
-#else
-    NOTREACHED();
-#endif
+        bidirectional_stream_impl.release());
   } else {
-    DCHECK(!bidirectional_stream_job);
+    DCHECK(!bidirectional_stream_impl);
     DCHECK(stream);
     delegate_->OnStreamReady(job->server_ssl_config(), job->proxy_info(),
                              stream.release());

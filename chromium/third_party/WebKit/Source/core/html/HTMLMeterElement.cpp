@@ -27,10 +27,10 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/frame/UseCounter.h"
+#include "core/html/HTMLDivElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/html/shadow/MeterShadowElement.h"
-#include "core/layout/LayoutMeter.h"
-#include "core/layout/LayoutTheme.h"
+#include "core/layout/LayoutObject.h"
+#include "core/style/ComputedStyle.h"
 
 namespace blink {
 
@@ -46,9 +46,9 @@ HTMLMeterElement::~HTMLMeterElement()
 {
 }
 
-PassRefPtrWillBeRawPtr<HTMLMeterElement> HTMLMeterElement::create(Document& document)
+RawPtr<HTMLMeterElement> HTMLMeterElement::create(Document& document)
 {
-    RefPtrWillBeRawPtr<HTMLMeterElement> meter = adoptRefWillBeNoop(new HTMLMeterElement(document));
+    RawPtr<HTMLMeterElement> meter = new HTMLMeterElement(document);
     meter->ensureUserAgentShadowRoot();
     return meter.release();
 }
@@ -56,30 +56,16 @@ PassRefPtrWillBeRawPtr<HTMLMeterElement> HTMLMeterElement::create(Document& docu
 LayoutObject* HTMLMeterElement::createLayoutObject(const ComputedStyle& style)
 {
     switch (style.appearance()) {
-    case ContinuousCapacityLevelIndicatorPart:
-        UseCounter::count(document(), UseCounter::MeterElementWithContinuousCapacityAppearance);
-        break;
-    case DiscreteCapacityLevelIndicatorPart:
-        UseCounter::count(document(), UseCounter::MeterElementWithDiscreteCapacityAppearance);
-        break;
     case MeterPart:
         UseCounter::count(document(), UseCounter::MeterElementWithMeterAppearance);
         break;
     case NoControlPart:
         UseCounter::count(document(), UseCounter::MeterElementWithNoneAppearance);
         break;
-    case RatingLevelIndicatorPart:
-        UseCounter::count(document(), UseCounter::MeterElementWithRatingAppearance);
-        break;
-    case RelevancyLevelIndicatorPart:
-        UseCounter::count(document(), UseCounter::MeterElementWithRelevancyAppearance);
-        break;
     default:
         break;
     }
-    if (openShadowRoot() || !LayoutTheme::theme().supportsMeter(style.appearance()))
-        return LayoutObject::createObject(this, style);
-    return new LayoutMeter(this);
+    return LayoutObject::createObject(this, style);
 }
 
 void HTMLMeterElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
@@ -154,7 +140,7 @@ void HTMLMeterElement::setOptimum(double optimum)
     setFloatingPointAttribute(optimumAttr, optimum);
 }
 
-HTMLMeterElement::GaugeRegion HTMLMeterElement::gaugeRegion() const
+HTMLMeterElement::GaugeRegion HTMLMeterElement::getGaugeRegion() const
 {
     double lowValue = low();
     double highValue = high();
@@ -200,41 +186,45 @@ double HTMLMeterElement::valueRatio() const
 
 void HTMLMeterElement::didElementStateChange()
 {
-    m_value->setWidthPercentage(valueRatio()*100);
-    m_value->updatePseudo();
-    if (LayoutMeter* layoutMeter = this->layoutMeter())
-        layoutMeter->updateFromElement();
-}
-
-LayoutMeter* HTMLMeterElement::layoutMeter() const
-{
-    if (layoutObject() && layoutObject()->isMeter())
-        return toLayoutMeter(layoutObject());
-
-    LayoutObject* layoutObject = userAgentShadowRoot()->firstChild()->layoutObject();
-    return toLayoutMeter(layoutObject);
+    updateValueAppearance(valueRatio() * 100);
 }
 
 void HTMLMeterElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 {
     ASSERT(!m_value);
 
-    RefPtrWillBeRawPtr<MeterInnerElement> inner = MeterInnerElement::create(document());
+    RawPtr<HTMLDivElement> inner = HTMLDivElement::create(document());
+    inner->setShadowPseudoId(AtomicString("-webkit-meter-inner-element"));
     root.appendChild(inner);
 
-    RefPtrWillBeRawPtr<MeterBarElement> bar = MeterBarElement::create(document());
-    m_value = MeterValueElement::create(document());
-    m_value->setWidthPercentage(0);
-    m_value->updatePseudo();
+    RawPtr<HTMLDivElement> bar = HTMLDivElement::create(document());
+    bar->setShadowPseudoId(AtomicString("-webkit-meter-bar"));
+
+    m_value = HTMLDivElement::create(document());
+    updateValueAppearance(0);
     bar->appendChild(m_value);
 
     inner->appendChild(bar);
 }
 
-void HTMLMeterElement::willAddFirstAuthorShadowRoot()
+void HTMLMeterElement::updateValueAppearance(double percentage)
 {
-    ASSERT(RuntimeEnabledFeatures::authorShadowDOMForAnyElementEnabled());
-    lazyReattachIfAttached();
+    DEFINE_STATIC_LOCAL(AtomicString, optimumPseudoId, ("-webkit-meter-optimum-value"));
+    DEFINE_STATIC_LOCAL(AtomicString, suboptimumPseudoId, ("-webkit-meter-suboptimum-value"));
+    DEFINE_STATIC_LOCAL(AtomicString, evenLessGoodPseudoId, ("-webkit-meter-even-less-good-value"));
+
+    m_value->setInlineStyleProperty(CSSPropertyWidth, percentage, CSSPrimitiveValue::UnitType::Percentage);
+    switch (getGaugeRegion()) {
+    case GaugeRegionOptimum:
+        m_value->setShadowPseudoId(optimumPseudoId);
+        break;
+    case GaugeRegionSuboptimal:
+        m_value->setShadowPseudoId(suboptimumPseudoId);
+        break;
+    case GaugeRegionEvenLessGood:
+        m_value->setShadowPseudoId(evenLessGoodPseudoId);
+        break;
+    }
 }
 
 DEFINE_TRACE(HTMLMeterElement)

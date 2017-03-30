@@ -31,6 +31,7 @@
 #ifndef MediaSource_h
 #define MediaSource_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/events/EventTarget.h"
 #include "core/html/HTMLMediaSource.h"
@@ -50,10 +51,11 @@ class WebSourceBuffer;
 class MediaSource final
     : public RefCountedGarbageCollectedEventTargetWithInlineData<MediaSource>
     , public HTMLMediaSource
+    , public ActiveScriptWrappable
     , public ActiveDOMObject {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(MediaSource);
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MediaSource);
+    USING_GARBAGE_COLLECTED_MIXIN(MediaSource);
 public:
     static const AtomicString& openKeyword();
     static const AtomicString& closedKeyword();
@@ -90,10 +92,12 @@ public:
 
     // EventTarget interface
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
+
+    // ActiveScriptWrappable
+    bool hasPendingActivity() const final;
 
     // ActiveDOMObject interface
-    bool hasPendingActivity() const override;
     void stop() override;
 
     // URLRegistrable interface
@@ -129,8 +133,8 @@ private:
 
     OwnPtr<WebMediaSource> m_webMediaSource;
     AtomicString m_readyState;
-    OwnPtrWillBeMember<GenericEventQueue> m_asyncEventQueue;
-    RawPtrWillBeWeakMember<HTMLMediaElement> m_attachedElement;
+    Member<GenericEventQueue> m_asyncEventQueue;
+    WeakMember<HTMLMediaElement> m_attachedElement;
 
     Member<SourceBufferList> m_sourceBuffers;
     Member<SourceBufferList> m_activeSourceBuffers;

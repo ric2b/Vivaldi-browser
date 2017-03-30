@@ -56,7 +56,7 @@ class CONTENT_EXPORT RTCVideoDecoder
 
   // Creates a RTCVideoDecoder on the message loop of |factories|. Returns NULL
   // if failed. The video decoder will run on the message loop of |factories|.
-  static scoped_ptr<RTCVideoDecoder> Create(
+  static std::unique_ptr<RTCVideoDecoder> Create(
       webrtc::VideoCodecType type,
       media::GpuVideoAcceleratorFactories* factories);
   // Destroys |decoder| on the loop of |factories|
@@ -82,6 +82,7 @@ class CONTENT_EXPORT RTCVideoDecoder
 
   // VideoDecodeAccelerator::Client implementation.
   void ProvidePictureBuffers(uint32_t count,
+                             uint32_t textures_per_buffer,
                              const gfx::Size& size,
                              uint32_t texture_target) override;
   void DismissPictureBuffer(int32_t id) override;
@@ -108,6 +109,7 @@ class CONTENT_EXPORT RTCVideoDecoder
 
   FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest, IsBufferAfterReset);
   FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest, IsFirstBufferAfterReset);
+  FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest, GetVDAErrorCounterForTesting);
 
   RTCVideoDecoder(webrtc::VideoCodecType type,
                   media::GpuVideoAcceleratorFactories* factories);
@@ -125,10 +127,13 @@ class CONTENT_EXPORT RTCVideoDecoder
   // |id_reset|.
   bool IsFirstBufferAfterReset(int32_t id_buffer, int32_t id_reset);
 
+  int GetVDAErrorCounterForTesting() { return vda_error_counter_; }
+
   // Saves a WebRTC buffer in |decode_buffers_| for decode.
-  void SaveToDecodeBuffers_Locked(const webrtc::EncodedImage& input_image,
-                                  scoped_ptr<base::SharedMemory> shm_buffer,
-                                  const BufferData& buffer_data);
+  void SaveToDecodeBuffers_Locked(
+      const webrtc::EncodedImage& input_image,
+      std::unique_ptr<base::SharedMemory> shm_buffer,
+      const BufferData& buffer_data);
 
   // Saves a WebRTC buffer in |pending_buffers_| waiting for SHM available.
   // Returns true on success.
@@ -156,7 +161,7 @@ class CONTENT_EXPORT RTCVideoDecoder
   // Tells VDA that a picture buffer can be recycled.
   void ReusePictureBuffer(int64_t picture_buffer_id);
 
-  // Create |vda_| on |vda_loop_proxy_|.
+  // Creates |vda_| on |vda_loop_proxy_|.
   void CreateVDA(media::VideoCodecProfile profile, base::WaitableEvent* waiter);
 
   void DestroyTextures();
@@ -165,10 +170,10 @@ class CONTENT_EXPORT RTCVideoDecoder
   // Gets a shared-memory segment of at least |min_size| bytes from
   // |available_shm_segments_|. Returns NULL if there is no buffer or the
   // buffer is not big enough.
-  scoped_ptr<base::SharedMemory> GetSHM_Locked(size_t min_size);
+  std::unique_ptr<base::SharedMemory> GetSHM_Locked(size_t min_size);
 
   // Returns a shared-memory segment to the available pool.
-  void PutSHM_Locked(scoped_ptr<base::SharedMemory> shm_buffer);
+  void PutSHM_Locked(std::unique_ptr<base::SharedMemory> shm_buffer);
 
   // Allocates |count| shared memory buffers of |size| bytes.
   void CreateSHM(size_t count, size_t size);
@@ -183,16 +188,19 @@ class CONTENT_EXPORT RTCVideoDecoder
   // Records the result of InitDecode to UMA and returns |status|.
   int32_t RecordInitDecodeUMA(int32_t status);
 
-  // Assert the contract that this class is operated on the right thread.
+  // Asserts the contract that this class is operated on the right thread.
   void DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent() const;
 
-  // Query factories_ whether |profile| is supported and return true is so,
+  // Queries factories_ whether |profile| is supported and return true is so,
   // false otherwise. If true, also set resolution limits for |profile|
   // in min/max_resolution_.
   bool IsProfileSupported(media::VideoCodecProfile profile);
 
-  // Clear the pending_buffers_ queue, freeing memory.
+  // Clears the pending_buffers_ queue, freeing memory.
   void ClearPendingBuffers();
+
+  // Resets |vda_error_counter_| after a successfull run of decode.
+  void TryResetVDAErrorCounter_Locked();
 
   enum State {
     UNINITIALIZED,  // The decoder has not initialized.
@@ -206,7 +214,12 @@ class CONTENT_EXPORT RTCVideoDecoder
   static const int32_t ID_INVALID;  // indicates Reset or Release never occurred
 
   // The hardware video decoder.
-  scoped_ptr<media::VideoDecodeAccelerator> vda_;
+  std::unique_ptr<media::VideoDecodeAccelerator> vda_;
+
+  media::VideoCodecProfile vda_codec_profile_;
+
+  // Number of times that |vda_| notified of an error.
+  uint32_t vda_error_counter_;
 
   // The video codec type, as reported by WebRTC.
   const webrtc::VideoCodecType video_codec_type_;
@@ -241,7 +254,8 @@ class CONTENT_EXPORT RTCVideoDecoder
 
   // Protects |state_|, |decode_complete_callback_| , |num_shm_buffers_|,
   // |available_shm_segments_|, |pending_buffers_|, |decode_buffers_|,
-  // |next_bitstream_buffer_id_| and |reset_bitstream_buffer_id_|.
+  // |next_bitstream_buffer_id_|, |reset_bitstream_buffer_id_| and
+  // |vda_error_counter_|.
   base::Lock lock_;
 
   // The state of RTCVideoDecoder. Guarded by |lock_|.

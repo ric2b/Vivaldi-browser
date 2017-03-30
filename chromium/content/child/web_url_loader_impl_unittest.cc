@@ -6,11 +6,13 @@
 
 #include <stdint.h>
 #include <string.h>
+
 #include <utility>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -26,6 +28,7 @@
 #include "content/public/child/request_peer.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/resource_response_info.h"
+#include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
@@ -52,26 +55,12 @@ const char kFtpDirListing[] =
     "drwxr-xr-x    3 ftp      ftp          4096 May 15 18:11 goat\n"
     "drwxr-xr-x    3 ftp      ftp          4096 May 15 18:11 hat";
 
-const char kMultipartResponseMimeType[] = "multipart/x-mixed-replace";
-const char kMultipartResponseHeaders[] =
-    "HTTP/1.0 200 Peachy\r\n"
-    "Content-Type: multipart/x-mixed-replace; boundary=boundary\r\n\r\n";
-// Simple multipart response.  Imporant details for the tests are that it
-// contains multiple chunks, and that it doesn't end with a boundary, so will
-// send data in OnResponseComplete.  Also, it will resolve to kTestData.
-const char kMultipartResponse[] =
-    "--boundary\n"
-    "Content-type: text/html\n\n"
-    "bl"
-    "--boundary\n"
-    "Content-type: text/html\n\n"
-    "ah!";
-
 class TestResourceDispatcher : public ResourceDispatcher {
  public:
   TestResourceDispatcher() :
       ResourceDispatcher(nullptr, nullptr),
-      canceled_(false) {
+      canceled_(false),
+      defers_loading_(false) {
   }
 
   ~TestResourceDispatcher() override {}
@@ -80,7 +69,7 @@ class TestResourceDispatcher : public ResourceDispatcher {
 
   int StartAsync(const RequestInfo& request_info,
                  ResourceRequestBody* request_body,
-                 scoped_ptr<RequestPeer> peer) override {
+                 std::unique_ptr<RequestPeer> peer) override {
     EXPECT_FALSE(peer_);
     peer_ = std::move(peer);
     url_ = request_info.url;
@@ -100,9 +89,15 @@ class TestResourceDispatcher : public ResourceDispatcher {
   const GURL& url() { return url_; }
   const GURL& stream_url() { return stream_url_; }
 
+  void SetDefersLoading(int request_id, bool value) override {
+    defers_loading_ = value;
+  }
+  bool defers_loading() const { return defers_loading_; }
+
  private:
-  scoped_ptr<RequestPeer> peer_;
+  std::unique_ptr<RequestPeer> peer_;
   bool canceled_;
+  bool defers_loading_;
   GURL url_;
   GURL stream_url_;
 
@@ -115,8 +110,7 @@ class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
                          scoped_refptr<scheduler::TaskQueue> task_runner)
       : loader_(new WebURLLoaderImpl(
             dispatcher,
-            make_scoped_ptr(new scheduler::WebTaskRunnerImpl(task_runner)))),
-        expect_multipart_response_(false),
+            base::WrapUnique(new scheduler::WebTaskRunnerImpl(task_runner)))),
         delete_on_receive_redirect_(false),
         delete_on_receive_response_(false),
         delete_on_receive_data_(false),
@@ -155,9 +149,7 @@ class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
       const blink::WebURLResponse& response) override {
     EXPECT_TRUE(loader_);
     EXPECT_EQ(loader_.get(), loader);
-
-    // Only multipart requests may receive multiple response headers.
-    EXPECT_TRUE(expect_multipart_response_ || !did_receive_response_);
+    EXPECT_FALSE(did_receive_response_);
 
     did_receive_response_ = true;
     response_ = response;
@@ -225,8 +217,6 @@ class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
     loader_.reset();
   }
 
-  void set_expect_multipart_response() { expect_multipart_response_ = true; }
-
   void set_delete_on_receive_redirect() { delete_on_receive_redirect_ = true; }
   void set_delete_on_receive_response() { delete_on_receive_response_ = true; }
   void set_delete_on_receive_data() { delete_on_receive_data_ = true; }
@@ -241,9 +231,7 @@ class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
   const blink::WebURLResponse& response() const { return response_; }
 
  private:
-  scoped_ptr<WebURLLoaderImpl> loader_;
-
-  bool expect_multipart_response_;
+  std::unique_ptr<WebURLLoaderImpl> loader_;
 
   bool delete_on_receive_redirect_;
   bool delete_on_receive_response_;
@@ -267,7 +255,7 @@ class WebURLLoaderImplTest : public testing::Test {
       : worker_scheduler_(scheduler::WorkerScheduler::Create(
             scheduler::SchedulerTqmDelegateImpl::Create(
                 &message_loop_,
-                make_scoped_ptr(new base::DefaultTickClock())))) {
+                base::WrapUnique(new base::DefaultTickClock())))) {
     worker_scheduler_->Init();
     client_.reset(new TestWebURLLoaderClient(
         &dispatcher_, worker_scheduler_->DefaultTaskRunner()));
@@ -304,7 +292,7 @@ class WebURLLoaderImplTest : public testing::Test {
   // Assumes it is called only once for a request.
   void DoReceiveData() {
     EXPECT_EQ("", client()->received_data());
-    peer()->OnReceivedData(make_scoped_ptr(new FixedReceivedData(
+    peer()->OnReceivedData(base::WrapUnique(new FixedReceivedData(
         kTestData, strlen(kTestData), strlen(kTestData))));
     EXPECT_EQ(kTestData, client()->received_data());
   }
@@ -337,29 +325,10 @@ class WebURLLoaderImplTest : public testing::Test {
   }
 
   void DoReceiveDataFtp() {
-    peer()->OnReceivedData(make_scoped_ptr(new FixedReceivedData(
+    peer()->OnReceivedData(base::WrapUnique(new FixedReceivedData(
         kFtpDirListing, strlen(kFtpDirListing), strlen(kFtpDirListing))));
     // The FTP delegate should modify the data the client sees.
     EXPECT_NE(kFtpDirListing, client()->received_data());
-  }
-
-  void DoReceiveResponseMultipart() {
-    EXPECT_FALSE(client()->did_receive_response());
-    content::ResourceResponseInfo response_info;
-    response_info.headers = new net::HttpResponseHeaders(
-        net::HttpUtil::AssembleRawHeaders(kMultipartResponseHeaders,
-                                          strlen(kMultipartResponseHeaders)));
-    response_info.mime_type = kMultipartResponseMimeType;
-    peer()->OnReceivedResponse(response_info);
-    EXPECT_TRUE(client()->did_receive_response());
-  }
-
-  void DoReceiveDataMultipart() {
-    peer()->OnReceivedData(make_scoped_ptr(
-        new FixedReceivedData(kMultipartResponse, strlen(kMultipartResponse),
-                              strlen(kMultipartResponse))));
-    // Multipart delegate should modify the data the client sees.
-    EXPECT_NE(kMultipartResponse, client()->received_data());
   }
 
   TestWebURLLoaderClient* client() { return client_.get(); }
@@ -371,9 +340,9 @@ class WebURLLoaderImplTest : public testing::Test {
   base::MessageLoop message_loop_;
   // WorkerScheduler is needed because WebURLLoaderImpl needs a
   // scheduler::TaskQueue.
-  scoped_ptr<scheduler::WorkerScheduler> worker_scheduler_;
+  std::unique_ptr<scheduler::WorkerScheduler> worker_scheduler_;
   TestResourceDispatcher dispatcher_;
-  scoped_ptr<TestWebURLLoaderClient> client_;
+  std::unique_ptr<TestWebURLLoaderClient> client_;
 };
 
 TEST_F(WebURLLoaderImplTest, Success) {
@@ -538,6 +507,13 @@ TEST_F(WebURLLoaderImplTest, DataURLDefersLoading) {
   EXPECT_EQ("", client()->error().domain.utf8());
 }
 
+TEST_F(WebURLLoaderImplTest, DefersLoadingBeforeStart) {
+  client()->loader()->setDefersLoading(true);
+  EXPECT_FALSE(dispatcher()->defers_loading());
+  DoStartAsyncRequest();
+  EXPECT_TRUE(dispatcher()->defers_loading());
+}
+
 // FTP integration tests.  These are focused more on safe deletion than correct
 // parsing of FTP responses.
 
@@ -595,78 +571,6 @@ TEST_F(WebURLLoaderImplTest, FtpDeleteOnFail) {
   DoFailRequest();
 }
 
-// Multipart integration tests.  These are focused more on safe deletion than
-// correct parsing of Multipart responses.
-
-TEST_F(WebURLLoaderImplTest, Multipart) {
-  client()->set_expect_multipart_response();
-  DoStartAsyncRequest();
-  DoReceiveResponseMultipart();
-  DoReceiveDataMultipart();
-  DoCompleteRequest();
-  EXPECT_EQ(kTestData, client()->received_data());
-  EXPECT_FALSE(dispatcher()->canceled());
-}
-
-TEST_F(WebURLLoaderImplTest, MultipartDeleteOnReceiveFirstResponse) {
-  client()->set_expect_multipart_response();
-  client()->set_delete_on_receive_response();
-  DoStartAsyncRequest();
-  DoReceiveResponseMultipart();
-  EXPECT_EQ("", client()->received_data());
-}
-
-TEST_F(WebURLLoaderImplTest, MultipartDeleteOnReceiveSecondResponse) {
-  client()->set_expect_multipart_response();
-  DoStartAsyncRequest();
-  DoReceiveResponseMultipart();
-  client()->set_delete_on_receive_response();
-  DoReceiveDataMultipart();
-  EXPECT_EQ("", client()->received_data());
-}
-
-TEST_F(WebURLLoaderImplTest, MultipartDeleteOnReceiveFirstData) {
-  client()->set_expect_multipart_response();
-  client()->set_delete_on_receive_data();
-  DoStartAsyncRequest();
-  DoReceiveResponseMultipart();
-  DoReceiveDataMultipart();
-  EXPECT_EQ("bl", client()->received_data());
-}
-
-TEST_F(WebURLLoaderImplTest, MultipartDeleteOnReceiveMoreData) {
-  client()->set_expect_multipart_response();
-  DoStartAsyncRequest();
-  DoReceiveResponseMultipart();
-  DoReceiveDataMultipart();
-  // For multipart responses, the delegate may send some data when notified
-  // of a request completing.
-  client()->set_delete_on_receive_data();
-  peer()->OnCompletedRequest(net::OK, false, false, "", base::TimeTicks(),
-                              strlen(kTestData));
-  EXPECT_FALSE(client()->did_finish());
-  EXPECT_EQ(kTestData, client()->received_data());
-}
-
-TEST_F(WebURLLoaderImplTest, MultipartDeleteFinish) {
-  client()->set_expect_multipart_response();
-  client()->set_delete_on_finish();
-  DoStartAsyncRequest();
-  DoReceiveResponseMultipart();
-  DoReceiveDataMultipart();
-  DoCompleteRequest();
-  EXPECT_EQ(kTestData, client()->received_data());
-}
-
-TEST_F(WebURLLoaderImplTest, MultipartDeleteFail) {
-  client()->set_expect_multipart_response();
-  client()->set_delete_on_fail();
-  DoStartAsyncRequest();
-  DoReceiveResponseMultipart();
-  DoReceiveDataMultipart();
-  DoFailRequest();
-}
-
 // PlzNavigate: checks that the stream override parameters provided on
 // navigation commit are properly applied.
 TEST_F(WebURLLoaderImplTest, BrowserSideNavigationCommit) {
@@ -679,7 +583,7 @@ TEST_F(WebURLLoaderImplTest, BrowserSideNavigationCommit) {
   request.setURL(kNavigationURL);
   request.setFrameType(blink::WebURLRequest::FrameTypeTopLevel);
   request.setRequestContext(blink::WebURLRequest::RequestContextFrame);
-  scoped_ptr<StreamOverrideParameters> stream_override(
+  std::unique_ptr<StreamOverrideParameters> stream_override(
       new StreamOverrideParameters());
   stream_override->stream_url = kStreamURL;
   stream_override->response.mime_type = kMimeType;
@@ -708,6 +612,33 @@ TEST_F(WebURLLoaderImplTest, BrowserSideNavigationCommit) {
   DoCompleteRequest();
   EXPECT_FALSE(dispatcher()->canceled());
   EXPECT_EQ(kTestData, client()->received_data());
+}
+
+TEST_F(WebURLLoaderImplTest, ResponseIPAddress) {
+  GURL url("http://example.test/");
+
+  struct TestCase {
+    const char* ip;
+    const char* expected;
+  } cases[] = {
+      {"127.0.0.1", "127.0.0.1"},
+      {"123.123.123.123", "123.123.123.123"},
+      {"::1", "[::1]"},
+      {"2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+       "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]"},
+      {"2001:db8:85a3:0:0:8a2e:370:7334", "[2001:db8:85a3:0:0:8a2e:370:7334]"},
+      {"2001:db8:85a3::8a2e:370:7334", "[2001:db8:85a3::8a2e:370:7334]"},
+      {"::ffff:192.0.2.128", "[::ffff:192.0.2.128]"}};
+
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.ip);
+    content::ResourceResponseInfo info;
+    info.socket_address = net::HostPortPair(test.ip, 443);
+    blink::WebURLResponse response;
+    response.initialize();
+    WebURLLoaderImpl::PopulateURLResponse(url, info, &response, true);
+    EXPECT_EQ(test.expected, response.remoteIPAddress().utf8());
+  };
 }
 
 }  // namespace

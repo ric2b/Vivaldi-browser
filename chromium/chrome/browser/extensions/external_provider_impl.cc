@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/memory/linked_ptr.h"
 #include "base/metrics/field_trial.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
@@ -248,8 +249,7 @@ void ExternalProviderImpl::RetrieveExtensionsFromPrefs(
         if (supported_locales->GetString(j, &current_locale) &&
             l10n_util::IsValidLocaleSyntax(current_locale)) {
           current_locale = l10n_util::NormalizeLocale(current_locale);
-          if (std::find(browser_locales.begin(), browser_locales.end(),
-                        current_locale) != browser_locales.end()) {
+          if (ContainsValue(browser_locales, current_locale)) {
             locale_supported = true;
             break;
           }
@@ -345,7 +345,7 @@ void ExternalProviderImpl::RetrieveExtensionsFromPrefs(
         path = base_path.Append(external_crx);
       }
 
-      scoped_ptr<Version> version(new Version(external_version));
+      std::unique_ptr<Version> version(new Version(external_version));
       if (!version->IsValid()) {
         LOG(WARNING) << "Malformed extension dictionary for extension: "
                      << extension_id.c_str() << ".  Invalid version string \""
@@ -362,7 +362,7 @@ void ExternalProviderImpl::RetrieveExtensionsFromPrefs(
                      << "extensions from update URLs.";
         continue;
       }
-      scoped_ptr<GURL> update_url(new GURL(external_update_url));
+      std::unique_ptr<GURL> update_url(new GURL(external_update_url));
       if (!update_url->is_valid()) {
         LOG(WARNING) << "Malformed extension dictionary for extension: "
                      << extension_id.c_str() << ".  Key " << kExternalUpdateUrl
@@ -402,8 +402,9 @@ bool ExternalProviderImpl::HasExtension(
 }
 
 bool ExternalProviderImpl::GetExtensionDetails(
-    const std::string& id, Manifest::Location* location,
-    scoped_ptr<Version>* version) const {
+    const std::string& id,
+    Manifest::Location* location,
+    std::unique_ptr<Version>* version) const {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   CHECK(prefs_.get());
   CHECK(ready_);
@@ -559,7 +560,7 @@ void ExternalProviderImpl::CreateExternalProviders(
       if (connector && connector->IsEnterpriseManaged())
         location = Manifest::EXTERNAL_POLICY;
 
-      scoped_ptr<ExternalProviderImpl> kiosk_app_provider(
+      std::unique_ptr<ExternalProviderImpl> kiosk_app_provider(
           new ExternalProviderImpl(
               service, kiosk_app_manager->CreateExternalLoader(), profile,
               location, Manifest::INVALID_LOCATION, Extension::NO_FLAGS));
@@ -571,7 +572,7 @@ void ExternalProviderImpl::CreateExternalProviders(
 
     // Kiosk secondary app external provider.
     if (!kiosk_app_manager->secondary_app_external_loader_created()) {
-      scoped_ptr<ExternalProviderImpl> secondary_kiosk_app_provider(
+      std::unique_ptr<ExternalProviderImpl> secondary_kiosk_app_provider(
           new ExternalProviderImpl(
               service, kiosk_app_manager->CreateSecondaryAppExternalLoader(),
               profile, Manifest::EXTERNAL_PREF,
@@ -721,17 +722,13 @@ void ExternalProviderImpl::CreateExternalProviders(
                     Extension::WAS_INSTALLED_BY_DEFAULT)));
 #endif
 
-    scoped_ptr<ExternalProviderImpl> drive_migration_provider(
+    std::unique_ptr<ExternalProviderImpl> drive_migration_provider(
         new ExternalProviderImpl(
             service,
-            new ExtensionMigrator(profile,
-                                  extension_misc::kDriveHostedAppId,
+            new ExtensionMigrator(profile, extension_misc::kDriveHostedAppId,
                                   extension_misc::kDriveExtensionId),
-            profile,
-            Manifest::EXTERNAL_PREF,
-            Manifest::EXTERNAL_PREF_DOWNLOAD,
-            Extension::FROM_WEBSTORE |
-                Extension::WAS_INSTALLED_BY_DEFAULT));
+            profile, Manifest::EXTERNAL_PREF, Manifest::EXTERNAL_PREF_DOWNLOAD,
+            Extension::FROM_WEBSTORE | Extension::WAS_INSTALLED_BY_DEFAULT));
     drive_migration_provider->set_auto_acknowledge(true);
     provider_list->push_back(linked_ptr<ExternalProviderInterface>(
         drive_migration_provider.release()));

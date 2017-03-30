@@ -157,8 +157,18 @@ void QuicStreamFactoryPeer::CacheDummyServerConfig(
   QuicCryptoClientConfig::CachedState* cached =
       crypto_config->LookupOrCreate(quic_server_id);
   QuicClock clock;
-  cached->Initialize(server_config, source_address_token, certs, "", signature,
-                     clock.WallNow());
+  cached->Initialize(server_config, source_address_token, certs, "", "",
+                     signature, clock.WallNow());
+}
+
+QuicClientPushPromiseIndex* QuicStreamFactoryPeer::GetPushPromiseIndex(
+    QuicStreamFactory* factory) {
+  return &factory->push_promise_index_;
+}
+
+int QuicStreamFactoryPeer::GetNumPushStreamsCreated(
+    QuicStreamFactory* factory) {
+  return factory->num_push_streams_created_;
 }
 
 }  // namespace test

@@ -39,7 +39,7 @@ class CONTENT_EXPORT WebURLLoaderImpl
 
   // Takes ownership of |web_task_runner|.
   WebURLLoaderImpl(ResourceDispatcher* resource_dispatcher,
-                   scoped_ptr<blink::WebTaskRunner> web_task_runner);
+                   std::unique_ptr<blink::WebTaskRunner> web_task_runner);
   ~WebURLLoaderImpl() override;
 
   static void PopulateURLResponse(const GURL& url,
@@ -66,9 +66,13 @@ class CONTENT_EXPORT WebURLLoaderImpl
   void setDefersLoading(bool value) override;
   void didChangePriority(blink::WebURLRequest::Priority new_priority,
                          int intra_priority_value) override;
-  bool attachThreadedDataReceiver(
-      blink::WebThreadedDataReceiver* threaded_data_receiver) override;
   void setLoadingTaskRunner(blink::WebTaskRunner* loading_task_runner) override;
+
+  // This is a utility function for multipart image resources.
+  static bool ParseMultipartHeadersFromBody(const char* bytes,
+                                            size_t size,
+                                            blink::WebURLResponse* response,
+                                            size_t* end);
 
  private:
   class Context;

@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -306,7 +307,7 @@ class AutofillTable : public WebDatabaseTable {
   virtual bool RemoveAutofillProfile(const std::string& guid);
 
   // Retrieves a profile with guid |guid|.
-  scoped_ptr<AutofillProfile> GetAutofillProfile(const std::string& guid);
+  std::unique_ptr<AutofillProfile> GetAutofillProfile(const std::string& guid);
 
   // Retrieves local/server profiles in the database. Caller owns the returned
   // profiles.
@@ -329,7 +330,7 @@ class AutofillTable : public WebDatabaseTable {
   bool RemoveCreditCard(const std::string& guid);
 
   // Retrieves a credit card with guid |guid|.
-  scoped_ptr<CreditCard> GetCreditCard(const std::string& guid);
+  std::unique_ptr<CreditCard> GetCreditCard(const std::string& guid);
 
   // Retrieves the local/server credit cards in the database. Caller owns the
   // returned credit cards.

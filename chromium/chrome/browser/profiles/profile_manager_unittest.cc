@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
@@ -92,6 +93,27 @@ class UnittestProfileManager : public ::ProfileManagerWithoutInit {
     return new TestingProfile(path, this);
   }
 };
+
+void ExpectNullProfile(base::Closure closure, Profile* profile) {
+  EXPECT_EQ(nullptr, profile);
+  closure.Run();
+}
+
+void ExpectProfileWithName(const std::string& profile_name,
+                           bool incognito,
+                           base::Closure closure,
+                           Profile* profile) {
+  EXPECT_NE(nullptr, profile);
+  EXPECT_EQ(incognito, profile->IsOffTheRecord());
+  if (incognito)
+    profile = profile->GetOriginalProfile();
+
+  // Create a profile on the fly so the the same comparison
+  // can be used in Windows and other platforms.
+  EXPECT_EQ(base::FilePath().AppendASCII(profile_name),
+            profile->GetPath().BaseName());
+  closure.Run();
+}
 
 }  // namespace
 
@@ -291,6 +313,60 @@ TEST_F(ProfileManagerTest, CreateAndUseTwoProfiles) {
 
   // Make sure history cleans up correctly.
   base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(ProfileManagerTest, LoadNonExistingProfile) {
+  const std::string profile_name = "NonExistingProfile";
+  base::RunLoop run_loop_1;
+  base::RunLoop run_loop_2;
+
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  profile_manager->LoadProfile(
+      profile_name, false /* incognito */,
+      base::Bind(&ExpectNullProfile, run_loop_1.QuitClosure()));
+  run_loop_1.Run();
+
+  profile_manager->LoadProfile(
+      profile_name, true /* incognito */,
+      base::Bind(&ExpectNullProfile, run_loop_2.QuitClosure()));
+  run_loop_2.Run();
+}
+
+TEST_F(ProfileManagerTest, LoadExistingProfile) {
+  const std::string profile_name = "MyProfile";
+  const std::string other_name = "SomeOtherProfile";
+  MockObserver mock_observer1;
+  EXPECT_CALL(mock_observer1, OnProfileCreated(SameNotNull(), NotFail()))
+      .Times(testing::AtLeast(1));
+
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  CreateProfileAsync(profile_manager, profile_name, false, &mock_observer1);
+
+  // Make sure a real profile is created before continuing.
+  base::RunLoop().RunUntilIdle();
+
+  base::RunLoop load_profile;
+  bool incognito = false;
+  profile_manager->LoadProfile(
+      profile_name, incognito,
+      base::Bind(&ExpectProfileWithName, profile_name, incognito,
+                 load_profile.QuitClosure()));
+  load_profile.Run();
+
+  base::RunLoop load_profile_incognito;
+  incognito = true;
+  profile_manager->LoadProfile(
+      profile_name, incognito,
+      base::Bind(&ExpectProfileWithName, profile_name, incognito,
+                 load_profile_incognito.QuitClosure()));
+  load_profile_incognito.Run();
+
+  // Loading some other non existing profile should still return null.
+  base::RunLoop load_other_profile;
+  profile_manager->LoadProfile(
+      other_name, false,
+      base::Bind(&ExpectNullProfile, load_other_profile.QuitClosure()));
+  load_other_profile.Run();
 }
 
 TEST_F(ProfileManagerTest, CreateProfileAsyncMultipleRequests) {
@@ -628,7 +704,7 @@ TEST_F(ProfileManagerTest, LastOpenedProfiles) {
 
   // Create a browser for profile1.
   Browser::CreateParams profile1_params(profile1);
-  scoped_ptr<Browser> browser1a(
+  std::unique_ptr<Browser> browser1a(
       chrome::CreateBrowserWithTestWindowForParams(&profile1_params));
 
   last_opened_profiles = profile_manager->GetLastOpenedProfiles();
@@ -637,7 +713,7 @@ TEST_F(ProfileManagerTest, LastOpenedProfiles) {
 
   // And for profile2.
   Browser::CreateParams profile2_params(profile2);
-  scoped_ptr<Browser> browser2(
+  std::unique_ptr<Browser> browser2(
       chrome::CreateBrowserWithTestWindowForParams(&profile2_params));
 
   last_opened_profiles = profile_manager->GetLastOpenedProfiles();
@@ -646,7 +722,7 @@ TEST_F(ProfileManagerTest, LastOpenedProfiles) {
   EXPECT_EQ(profile2, last_opened_profiles[1]);
 
   // Adding more browsers doesn't change anything.
-  scoped_ptr<Browser> browser1b(
+  std::unique_ptr<Browser> browser1b(
       chrome::CreateBrowserWithTestWindowForParams(&profile1_params));
   last_opened_profiles = profile_manager->GetLastOpenedProfiles();
   ASSERT_EQ(2U, last_opened_profiles.size());
@@ -690,12 +766,12 @@ TEST_F(ProfileManagerTest, LastOpenedProfilesAtShutdown) {
 
   // Create a browser for profile1.
   Browser::CreateParams profile1_params(profile1);
-  scoped_ptr<Browser> browser1(
+  std::unique_ptr<Browser> browser1(
       chrome::CreateBrowserWithTestWindowForParams(&profile1_params));
 
   // And for profile2.
   Browser::CreateParams profile2_params(profile2);
-  scoped_ptr<Browser> browser2(
+  std::unique_ptr<Browser> browser2(
       chrome::CreateBrowserWithTestWindowForParams(&profile2_params));
 
   std::vector<Profile*> last_opened_profiles =
@@ -740,7 +816,7 @@ TEST_F(ProfileManagerTest, LastOpenedProfilesDoesNotContainIncognito) {
 
   // Create a browser for profile1.
   Browser::CreateParams profile1_params(profile1);
-  scoped_ptr<Browser> browser1(
+  std::unique_ptr<Browser> browser1(
       chrome::CreateBrowserWithTestWindowForParams(&profile1_params));
 
   last_opened_profiles = profile_manager->GetLastOpenedProfiles();
@@ -749,7 +825,7 @@ TEST_F(ProfileManagerTest, LastOpenedProfilesDoesNotContainIncognito) {
 
   // And for profile2.
   Browser::CreateParams profile2_params(profile1->GetOffTheRecordProfile());
-  scoped_ptr<Browser> browser2a(
+  std::unique_ptr<Browser> browser2a(
       chrome::CreateBrowserWithTestWindowForParams(&profile2_params));
 
   last_opened_profiles = profile_manager->GetLastOpenedProfiles();
@@ -757,7 +833,7 @@ TEST_F(ProfileManagerTest, LastOpenedProfilesDoesNotContainIncognito) {
   EXPECT_EQ(profile1, last_opened_profiles[0]);
 
   // Adding more browsers doesn't change anything.
-  scoped_ptr<Browser> browser2b(
+  std::unique_ptr<Browser> browser2b(
       chrome::CreateBrowserWithTestWindowForParams(&profile2_params));
   last_opened_profiles = profile_manager->GetLastOpenedProfiles();
   ASSERT_EQ(1U, last_opened_profiles.size());
@@ -799,7 +875,7 @@ TEST_F(ProfileManagerTest, EphemeralProfilesDontEndUpAsLastProfile) {
 
   // Create a browser for the profile.
   Browser::CreateParams profile_params(profile);
-  scoped_ptr<Browser> browser(
+  std::unique_ptr<Browser> browser(
       chrome::CreateBrowserWithTestWindowForParams(&profile_params));
   last_used_profile = profile_manager->GetLastUsedProfile();
   EXPECT_NE(profile, last_used_profile);
@@ -841,16 +917,16 @@ TEST_F(ProfileManagerTest, EphemeralProfilesDontEndUpAsLastOpenedAtShutdown) {
 
   // Create a browser for profile1.
   Browser::CreateParams profile1_params(normal_profile);
-  scoped_ptr<Browser> browser1(
+  std::unique_ptr<Browser> browser1(
       chrome::CreateBrowserWithTestWindowForParams(&profile1_params));
 
   // Create browsers for the ephemeral profile.
   Browser::CreateParams profile2_params(ephemeral_profile1);
-  scoped_ptr<Browser> browser2(
+  std::unique_ptr<Browser> browser2(
       chrome::CreateBrowserWithTestWindowForParams(&profile2_params));
 
   Browser::CreateParams profile3_params(ephemeral_profile2);
-  scoped_ptr<Browser> browser3(
+  std::unique_ptr<Browser> browser3(
       chrome::CreateBrowserWithTestWindowForParams(&profile3_params));
 
   std::vector<Profile*> last_opened_profiles =

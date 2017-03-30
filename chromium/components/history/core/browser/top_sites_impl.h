@@ -101,6 +101,9 @@ class TopSitesImpl : public TopSites, public HistoryServiceObserver {
   void OnNavigationCommitted(const GURL& url) override;
   bool HasPageThumbnail(const GURL& url) override;
 
+  // Vivaldi: Remove thumbnail for given url.
+  void RemoveThumbnailForUrl(const GURL& url) override;
+
   // RefcountedKeyedService:
   void ShutdownOnUIThread() override;
 
@@ -256,6 +259,7 @@ class TopSitesImpl : public TopSites, public HistoryServiceObserver {
   // Vivaldi:: Rebuilds the database, removing on free/deleted pages.
   void Vacuum();
   void VacuumOnDBThread();
+  void RemoveThumbnailForUrlOnDBThread(const GURL& url);
 
   // Ensures that non thread-safe methods are called on the correct thread.
   base::ThreadChecker thread_checker_;

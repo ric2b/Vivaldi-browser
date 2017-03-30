@@ -4,11 +4,12 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/environment/environment.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "mojo/shell/public/cpp/application_test_base.h"
 #include "mojo/shell/public/cpp/shell_connection.h"
@@ -18,10 +19,10 @@ namespace mojo {
 namespace test {
 
 namespace {
-// Share the application URL with multiple application tests.
-String g_url;
-uint32_t g_id = shell::mojom::Connector::kInvalidApplicationID;
-uint32_t g_user_id = shell::mojom::Connector::kUserRoot;
+
+// Share the application name with multiple application tests.
+shell::mojom::IdentityPtr g_identity;
+uint32_t g_id = shell::mojom::kInvalidInstanceID;
 
 // ShellClient request handle passed from the shell in MojoMain, stored in
 // between SetUp()/TearDown() so we can (re-)intialize new ShellConnections.
@@ -35,7 +36,9 @@ shell::mojom::ConnectorPtr g_connector;
 class ShellGrabber : public shell::mojom::ShellClient {
  public:
   explicit ShellGrabber(InterfaceRequest<shell::mojom::ShellClient> request)
-      : binding_(this, std::move(request)) {}
+      : binding_(this, std::move(request)) {
+    binding_.set_connection_error_handler([] { _exit(1); });
+  }
 
   void WaitForInitialize() {
     // Initialize is always the first call made on ShellClient.
@@ -44,37 +47,37 @@ class ShellGrabber : public shell::mojom::ShellClient {
 
  private:
   // shell::mojom::ShellClient implementation.
-  void Initialize(shell::mojom::ConnectorPtr connector,
-                  const mojo::String& url,
+  void Initialize(shell::mojom::IdentityPtr identity,
                   uint32_t id,
-                  uint32_t user_id) override {
-    g_url = url;
+                  const InitializeCallback& callback) override {
+    callback.Run(GetProxy(&g_connector));
+
+    g_identity = std::move(identity);
     g_id = id;
-    g_user_id = user_id;
     g_shell_client_request = binding_.Unbind();
-    g_connector = std::move(connector);
   }
 
   void AcceptConnection(
-      const String& requestor_url,
-      uint32_t requestor_user_id,
-      uint32_t requestor_id,
+      shell::mojom::IdentityPtr source,
+      uint32_t source_id,
       shell::mojom::InterfaceProviderRequest local_interfaces,
       shell::mojom::InterfaceProviderPtr remote_interfaces,
-      Array<String> allowed_interfaces,
-      const String& url) override {
+      shell::mojom::CapabilityRequestPtr capability_spec,
+      const String& name) override {
     CHECK(false);
   }
 
   Binding<ShellClient> binding_;
 };
 
+void IgnoreConnectorRequest(shell::mojom::ConnectorRequest) {}
+
 }  // namespace
 
 MojoResult RunAllTests(MojoHandle shell_client_request_handle) {
   {
     // This loop is used for init, and then destroyed before running tests.
-    Environment::InstantiateDefaultRunLoop();
+    base::MessageLoop message_loop;
 
     // Grab the shell handle.
     ShellGrabber grabber(
@@ -101,8 +104,6 @@ MojoResult RunAllTests(MojoHandle shell_client_request_handle) {
     argv[argc] = nullptr;
 
     testing::InitGoogleTest(&argc, const_cast<char**>(&(argv[0])));
-
-    Environment::DestroyDefaultRunLoop();
   }
 
   int result = RUN_ALL_TESTS();
@@ -118,10 +119,15 @@ TestHelper::TestHelper(ShellClient* client)
     : shell_connection_(new ShellConnection(
           client == nullptr ? &default_shell_client_ : client,
           std::move(g_shell_client_request))),
-      url_(g_url) {
+      name_(g_identity->name),
+      userid_(g_identity->user_id),
+      instance_id_(g_id) {
+  shell_connection_->SetAppTestConnectorForTesting(std::move(g_connector));
+
   // Fake ShellClient initialization.
   shell::mojom::ShellClient* shell_client = shell_connection_.get();
-  shell_client->Initialize(std::move(g_connector), g_url, g_id, g_user_id);
+  shell_client->Initialize(std::move(g_identity), g_id,
+                           base::Bind(&IgnoreConnectorRequest));
 }
 
 TestHelper::~TestHelper() {
@@ -142,8 +148,12 @@ ShellClient* ApplicationTestBase::GetShellClient() {
 void ApplicationTestBase::SetUp() {
   // A run loop is recommended for ShellConnection initialization and
   // communication.
-  if (ShouldCreateDefaultRunLoop())
-    Environment::InstantiateDefaultRunLoop();
+  if (ShouldCreateDefaultRunLoop()) {
+    CHECK(!base::MessageLoop::current());
+    // Not leaked: accessible from |base::MessageLoop::current()|.
+    base::MessageLoop* message_loop = new base::MessageLoop();
+    CHECK_EQ(message_loop, base::MessageLoop::current());
+  }
 
   CHECK(g_shell_client_request.is_pending());
   CHECK(g_connector);
@@ -158,8 +168,11 @@ void ApplicationTestBase::TearDown() {
 
   test_helper_.reset();
 
-  if (ShouldCreateDefaultRunLoop())
-    Environment::DestroyDefaultRunLoop();
+  if (ShouldCreateDefaultRunLoop()) {
+    CHECK(base::MessageLoop::current());
+    delete base::MessageLoop::current();
+    CHECK(!base::MessageLoop::current());
+  }
 }
 
 bool ApplicationTestBase::ShouldCreateDefaultRunLoop() {

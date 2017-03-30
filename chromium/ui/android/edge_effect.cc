@@ -65,8 +65,7 @@ class EdgeEffect::EffectLayer {
  public:
   EffectLayer(ui::SystemUIResourceType resource_type,
               ui::ResourceManager* resource_manager)
-      : ui_resource_layer_(cc::UIResourceLayer::Create(
-            WindowAndroidCompositor::LayerSettings())),
+      : ui_resource_layer_(cc::UIResourceLayer::Create()),
         resource_type_(resource_type),
         resource_manager_(resource_manager) {}
 

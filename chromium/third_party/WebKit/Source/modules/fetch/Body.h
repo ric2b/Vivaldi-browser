@@ -5,7 +5,9 @@
 #ifndef Body_h
 #define Body_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
+#include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "modules/ModulesExport.h"
@@ -29,10 +31,11 @@ class ScriptState;
 class MODULES_EXPORT Body
     : public GarbageCollectedFinalized<Body>
     , public ScriptWrappable
+    , public ActiveScriptWrappable
     , public ActiveDOMObject {
     WTF_MAKE_NONCOPYABLE(Body);
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(Body);
+    USING_GARBAGE_COLLECTED_MIXIN(Body);
 public:
     explicit Body(ExecutionContext*);
     ~Body() override { }
@@ -45,21 +48,18 @@ public:
     ReadableByteStream* bodyWithUseCounter();
     virtual BodyStreamBuffer* bodyBuffer() = 0;
     virtual const BodyStreamBuffer* bodyBuffer() const = 0;
+    ScriptValue v8ExtraStreamBody(ScriptState*);
 
     virtual bool bodyUsed();
     bool isBodyLocked();
 
-    // ActiveDOMObject override.
+    // ActiveScriptWrappable override.
     bool hasPendingActivity() const override;
 
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
         ActiveDOMObject::trace(visitor);
     }
-
-    // https://w3c.github.io/webappsec-credential-management/#monkey-patching-fetch-2
-    void setOpaque() { m_opaque = true; }
-    bool opaque() const { return m_opaque; }
 
 private:
     ReadableByteStream* body();
@@ -70,8 +70,6 @@ private:
     // an empty ScriptPromise if the consumption may proceed, and a
     // ScriptPromise rejected with a TypeError if it ought to be blocked.
     ScriptPromise rejectInvalidConsumption(ScriptState*);
-
-    bool m_opaque;
 };
 
 } // namespace blink

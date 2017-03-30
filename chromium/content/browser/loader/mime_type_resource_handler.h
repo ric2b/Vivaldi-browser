@@ -34,12 +34,16 @@ struct WebPluginInfo;
 // subsequent reads until it's done buffering.  As a result, the buffer
 // returned by the next ResourceHandler must have a capacity of at least
 // net::kMaxBytesToSniff * 2.
+//
+// Before a request is sent, this ResourceHandler will also set an appropriate
+// Accept header on the request based on its ResourceType, if one isn't already
+// present.
 class CONTENT_EXPORT MimeTypeResourceHandler
     : public LayeredResourceHandler,
       public ResourceController {
  public:
   // If ENABLE_PLUGINS is defined, |plugin_service| must not be NULL.
-  MimeTypeResourceHandler(scoped_ptr<ResourceHandler> next_handler,
+  MimeTypeResourceHandler(std::unique_ptr<ResourceHandler> next_handler,
                           ResourceDispatcherHostImpl* host,
                           PluginService* plugin_service,
                           net::URLRequest* request);
@@ -53,6 +57,7 @@ class CONTENT_EXPORT MimeTypeResourceHandler
                          bool* defer,
                          bool open_when_done,
                          bool ask_for_target) override;
+  bool OnWillStart(const GURL&, bool* defer) override;
   bool OnWillRead(scoped_refptr<net::IOBuffer>* buf,
                   int* buf_size,
                   int min_size) override;
@@ -81,7 +86,7 @@ class CONTENT_EXPORT MimeTypeResourceHandler
   bool SelectPluginHandler(bool* defer, bool* handled_by_plugin);
   // Returns false if the request should be cancelled.
   bool SelectNextHandler(bool* defer);
-  bool UseAlternateNextHandler(scoped_ptr<ResourceHandler> handler,
+  bool UseAlternateNextHandler(std::unique_ptr<ResourceHandler> handler,
                                const std::string& payload_for_old_handler);
 
   bool ReplayReadCompleted(bool* defer);

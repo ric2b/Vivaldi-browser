@@ -66,6 +66,7 @@ class IPC_EXPORT AttachmentBrokerPrivilegedMac
       const scoped_refptr<IPC::BrokerableAttachment>& attachment,
       base::ProcessId destination_process) override;
   void DeregisterCommunicationChannel(Endpoint* endpoint) override;
+  void ReceivedPeerPid(base::ProcessId peer_pid) override;
 
   // IPC::Listener overrides.
   bool OnMessageReceived(const Message& message) override;
@@ -141,17 +142,6 @@ class IPC_EXPORT AttachmentBrokerPrivilegedMac
   MachPortWireFormat DuplicateMachPort(const MachPortWireFormat& wire_format,
                                        base::ProcessId source_process);
 
-  // |task_port| is the task port of another process.
-  // |port_to_insert| must be a send right in the current task's name space.
-  // Creates an intermediate Mach port in |pid| and sends |port_to_insert| as a
-  // mach_msg to the intermediate Mach port.
-  // Returns the intermediate port on success, and MACH_PORT_NULL on failure.
-  // This method takes ownership of |port_to_insert|. On success, ownership is
-  // passed to the intermediate Mach port.
-  mach_port_name_t CreateIntermediateMachPort(
-      mach_port_t task_port,
-      base::mac::ScopedMachSendRight port_to_insert);
-
   // Extracts a copy of the send right to |named_right| from |task_port|.
   // Returns MACH_PORT_NULL on error.
   base::mac::ScopedMachSendRight ExtractNamedRight(
@@ -178,7 +168,10 @@ class IPC_EXPORT AttachmentBrokerPrivilegedMac
 
   // Atempts to broker all precursors whose destination is |pid|. Has no effect
   // if |port_provider_| does not have the task port for |pid|.
-  void SendPrecursorsForProcess(base::ProcessId pid);
+  // If a communication channel has not been established from the destination
+  // process, and |store_on_failure| is true, then the precursor is kept for
+  // later reuse. If |store_on_failure| is false, then the precursor is deleted.
+  void SendPrecursorsForProcess(base::ProcessId pid, bool store_on_failure);
 
   // Brokers a single precursor into the task represented by |task_port|.
   // Returns |false| on irrecoverable error.
@@ -191,7 +184,10 @@ class IPC_EXPORT AttachmentBrokerPrivilegedMac
 
   // Atempts to process all extractors whose source is |pid|. Has no effect
   // if |port_provider_| does not have the task port for |pid|.
-  void ProcessExtractorsForProcess(base::ProcessId pid);
+  // If a communication channel has not been established from the source
+  // process, and |store_on_failure| is true, then the extractor is kept for
+  // later reuse. If |store_on_failure| is false, then the extractor is deleted.
+  void ProcessExtractorsForProcess(base::ProcessId pid, bool store_on_failure);
 
   // Processes a single extractor whose source pid is represented by
   // |task_port|.

@@ -25,12 +25,15 @@ def build(out_dir, extra_options=''):
 
 def install(release_arg):
   return run('build/android/adb_install_apk.py ' + release_arg + \
-             ' --apk=CronetTest.apk')
+             ' --apk=CronetTest.apk') or \
+             run('build/android/adb_install_apk.py ' + release_arg + \
+             ' --apk=ChromiumNetTestSupport.apk')
 
 
 def test(release_arg, extra_options):
   return run('build/android/test_runner.py instrumentation '+ \
-             release_arg + ' --test-apk=CronetTestInstrumentation',
+             release_arg + ' --test-apk=CronetTestInstrumentation' + \
+             ' --fast-local-dev',
              extra_options)
 
 
@@ -43,9 +46,8 @@ def debug(extra_options):
 
 
 def stack(out_dir):
-  return run('adb logcat -d | third_party/android_tools/ndk/ndk-stack ' + \
-             '-sym ' + out_dir + '/lib')
-
+  return run('adb logcat -d | CHROMIUM_OUTPUT_DIR=' + out_dir +
+          ' third_party/android_platform/development/scripts/stack')
 
 def main():
   parser = argparse.ArgumentParser()
@@ -69,10 +71,10 @@ def main():
   print extra_options_list
   gyp_defines = 'GYP_DEFINES="OS=android enable_websockets=0 '+ \
       'disable_file_support=1 disable_ftp_support=1 '+ \
-      'enable_bidirectional_stream=1 enable_errorprone=1"'
+      'enable_errorprone=1"'
   gn_args = 'target_os="android" enable_websockets=false '+ \
       'disable_file_support=true disable_ftp_support=true '+ \
-      'enable_bidirectional_stream=false use_errorprone_java_compiler=true'
+      'use_errorprone_java_compiler=true'
   out_dir = 'out/Debug'
   release_arg = ''
   extra_options = ' '.join(extra_options_list)

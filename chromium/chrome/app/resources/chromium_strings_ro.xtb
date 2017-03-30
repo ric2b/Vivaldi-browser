@@ -21,7 +21,6 @@
 <translation id="1699664235656412242">Închideți toate ferestrele Chromium (inclusiv pe cele în modul Windows 8) și încercați din nou.</translation>
 <translation id="1708666629004767631">Chromium este disponibil într-o versiune nouă și mai sigură.</translation>
 <translation id="1725059042853530269">Fișierul <ph name="FILE_NAME" /> poate afecta experiența de navigare. De aceea, Chromium l-a blocat.</translation>
-<translation id="1745962126679160932">Chromium va stoca în siguranță informațiile dvs., astfel încât să nu trebuiască să le introduceți din nou, dar va trebui în continuare să confirmați codul de securitate al cardului pentru viitoarele plăți.</translation>
 <translation id="1774152462503052664">Permiteți Chromium să ruleze în fundal</translation>
 <translation id="1779356040007214683">Pentru mai multă siguranță în Chromium, am dezactivat câteva extensii care nu sunt incluse în <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> și care este posibil să fi fost adăugate fără știrea dvs.</translation>
 <translation id="1808667845054772817">Reinstalați Chromium</translation>
@@ -31,6 +30,7 @@
 <translation id="1929939181775079593">Chromium nu mai răspunde. Îl reporniți acum?</translation>
 <translation id="1967743265616885482">Despre un modul cu același nume se cunoaște că intră în conflict cu Chromium.</translation>
 <translation id="2077129598763517140">Utilizează accelerarea hardware când este disponibilă</translation>
+<translation id="2103655854491303969">Lansatorul de aplicații Chromium nu va mai fi disponibil.</translation>
 <translation id="2117181891440368863">Chromium s-a asigurat că certificatul acestui site a fost emis de <ph name="ISSUER" />. Serverul a oferit informații privind Certificate Transparency, însă acestea nu au fost valide.</translation>
 <translation id="2119636228670142020">Despre sistemul de operare &amp;Chromium</translation>
 <translation id="2158734852934720349">Licențe open source pentru sistemul de operare Chromium</translation>
@@ -46,6 +46,7 @@
 <translation id="2535480412977113886">Sistemul de operare Chromium nu a putut sincroniza datele, deoarece detaliile de conectare pentru contul dvs. nu sunt actualizate.</translation>
 <translation id="2558641060352364164">Acest site folosește pluginul Chromium Frame, care nu va mai fi acceptat în curând. Dezinstalează-l și fă upgrade la un browser modern.</translation>
 <translation id="2572494885440352020">Chromium Helper</translation>
+<translation id="2595977381794111014">Folosește comanda rapidă <ph name="APPS_ICON_IMAGE" /> din bara de marcaje din Chromium pentru a accesa în continuare aplicațiile.</translation>
 <translation id="2602806952220118310">Chromium – Notificări</translation>
 <translation id="2636877269779209383">Chromium are nevoie de acces la camera foto pentru a-l acorda acestui site.</translation>
 <translation id="2648074677641340862">S-a produs o eroare de sistem de operare în timpul instalării. Descărcați din nou Chromium.</translation>
@@ -100,7 +101,6 @@
 <translation id="4330585738697551178">Despre acest modul se cunoaște că intră în conflict cu Chromium.</translation>
 <translation id="4423735387467980091">Personalizați și controlați Chromium</translation>
 <translation id="4458285410772214805">Pentru ca modificarea să fie aplicată, deconectați-vă și conectați-vă din nou.</translation>
-<translation id="4488676065623537541">Detaliile de facturare au fost salvate în Chromium.</translation>
 <translation id="4549794359424059447">Versiunile Chromium ulterioare nu vor mai accepta Windows XP sau Windows Vista.</translation>
 <translation id="4567424176335768812">V-ați conectat ca <ph name="USER_EMAIL_ADDRESS" />. Acum vă puteți accesa marcajele, istoricul și alte setări de pe toate dispozitivele pe care v-ați conectat.</translation>
 <translation id="457845228957001925">Informații importante cu privire la datele dvs. Chromium</translation>
@@ -112,6 +112,7 @@
 <translation id="4987820182225656817">Invitații pot folosi Chromium fără a lăsa nicio urmă.</translation>
 <translation id="4994636714258228724">Adăugați-vă la Chromium</translation>
 <translation id="5032989939245619637">Salvați detaliile în Chromium</translation>
+<translation id="5116586539350239523">Chromium va stoca în siguranță detaliile personale, pentru a nu fi necesar să le introduci din nou.</translation>
 <translation id="5358375970380395591">Vă conectați cu un cont gestionat și îi permiteți administratorului acestuia controlul asupra profilului dvs. Chromium. Datele Chromium, cum ar fi aplicațiile, marcajele, istoricul, parolele și alte setări vor fi asociate definitiv cu <ph name="USER_NAME" />. Veți putea să ștergeți aceste date prin intermediul Tabloului de bord pentru Conturi Google, însă nu veți putea să asociați aceste date cu alt cont. <ph name="LEARN_MORE" /></translation>
 <translation id="5398878173008909840">Este disponibilă o nouă versiune Chromium.</translation>
 <translation id="5427571867875391349">Setați Chromium ca browser prestabilit</translation>
@@ -119,7 +120,6 @@
 <translation id="549669000822060376">Așteaptă până când Chromium instalează cele mai recente actualizări de sistem.</translation>
 <translation id="5563479599352954471">Caută cu o atingere</translation>
 <translation id="5620765574781326016">Află despre subiectele de pe site-uri fără să părăsești pagina.</translation>
-<translation id="5634636535844844681">Chromium necesită Windows 7 sau o versiune ulterioară.</translation>
 <translation id="5680901439334282664">conectează-te la Chromium</translation>
 <translation id="5772805321386874569">(necesită <ph name="BEGIN_BUTTON" />repornirea<ph name="END_BUTTON" /> Chromium)</translation>
 <translation id="5796460469508169315">Chromium este aproape configurat.</translation>
@@ -223,6 +223,7 @@ Chromium nu poate recupera setările.</translation>
 
 Dacă totuși vă conectați, informațiile Chromium cum ar fi marcajele, istoricul și alte setări vor fi îmbinate cu <ph name="ACCOUNT_EMAIL_NEW" />.</translation>
 <translation id="9013087743919948559">Adăugați la Chromium</translation>
+<translation id="9013262824292842194">Chromium necesită Windows Vista sau Windows XP cu SP2 sau o versiune ulterioară.</translation>
 <translation id="9019929317751753759">Pentru mai multă siguranță în Chromium, am dezactivat următoarea extensie care nu este inclusă în <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> și care este posibil să fi fost adăugată fără știrea ta.</translation>
 <translation id="9022552996538154597">Conectați-vă la Chromium</translation>
 <translation id="9036189287518468038">Lansatorul de aplicații Chromium</translation>

@@ -4,12 +4,13 @@
 
 #import "chrome/browser/ui/cocoa/website_settings/website_settings_bubble_controller.h"
 
-#include <cmath>
-
 #import <AppKit/AppKit.h>
+
+#include <cmath>
 
 #include "base/i18n/rtl.h"
 #include "base/mac/bind_objc_block.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #import "chrome/browser/certificate_viewer.h"
@@ -41,6 +42,7 @@
 #include "grit/components_google_chrome_strings.h"
 #include "grit/components_strings.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMUILocalizerAndLayoutTweaker.h"
+#include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/controls/hyperlink_button_cell.h"
 #import "ui/base/cocoa/flipped_view.h"
 #import "ui/base/cocoa/hover_image_button.h"
@@ -52,7 +54,8 @@
 
 #include "app/vivaldi_apptools.h"
 
-using ChosenObjectInfoPtr = scoped_ptr<WebsiteSettingsUI::ChosenObjectInfo>;
+using ChosenObjectInfoPtr =
+    std::unique_ptr<WebsiteSettingsUI::ChosenObjectInfo>;
 using ChosenObjectDeleteCallback =
     base::Callback<void(const WebsiteSettingsUI::ChosenObjectInfo&)>;
 
@@ -119,7 +122,7 @@ NSPoint AnchorPointForWindow(NSWindow* parent) {
     LocationBarViewMac* location_bar = [controller locationBarBridge];
     if (location_bar) {
       NSPoint bubble_point = location_bar->GetPageInfoBubblePoint();
-      origin = [parent convertBaseToScreen:bubble_point];
+      origin = ui::ConvertPointFromWindowToScreen(parent, bubble_point);
     }
   }
   return origin;
@@ -659,7 +662,7 @@ NSPoint AnchorPointForWindow(NSWindow* parent) {
 
   certificateId_ = identityInfo.cert_id;
 
-  if (identityInfo.show_ssl_decision_revoke_button) {
+  if (certificateId_ &&  identityInfo.show_ssl_decision_revoke_button) {
     NSString* text = l10n_util::GetNSString(
         IDS_PAGEINFO_RESET_INVALID_CERTIFICATE_DECISIONS_BUTTON);
     resetDecisionsButton_ =
@@ -1080,7 +1083,7 @@ NSPoint AnchorPointForWindow(NSWindow* parent) {
 
     for (auto object : chosenObjectInfoList) {
       controlOrigin.y += kPermissionsTabSpacing;
-      NSPoint rowBottomRight = [self addChosenObject:make_scoped_ptr(object)
+      NSPoint rowBottomRight = [self addChosenObject:base::WrapUnique(object)
                                               toView:permissionsView_
                                              atPoint:controlOrigin];
       controlOrigin.y = rowBottomRight.y;

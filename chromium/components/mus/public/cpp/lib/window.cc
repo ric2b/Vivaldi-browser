@@ -78,7 +78,7 @@ class ScopedTreeNotifier {
  private:
   WindowObserver::TreeChangeParams params_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ScopedTreeNotifier);
+  DISALLOW_COPY_AND_ASSIGN(ScopedTreeNotifier);
 };
 
 void RemoveChildImpl(Window* child, Window::Children* children) {
@@ -117,7 +117,7 @@ class OrderChangedNotifier {
   Window* relative_window_;
   mojom::OrderDirection direction_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(OrderChangedNotifier);
+  DISALLOW_COPY_AND_ASSIGN(OrderChangedNotifier);
 };
 
 class ScopedSetBoundsNotifier {
@@ -140,7 +140,7 @@ class ScopedSetBoundsNotifier {
   const gfx::Rect old_bounds_;
   const gfx::Rect new_bounds_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ScopedSetBoundsNotifier);
+  DISALLOW_COPY_AND_ASSIGN(ScopedSetBoundsNotifier);
 };
 
 // Some operations are only permitted in the connection that created the window.
@@ -158,7 +158,7 @@ bool OwnsWindowOrIsRoot(Window* window) {
   return OwnsWindow(window->connection(), window) || IsConnectionRoot(window);
 }
 
-void EmptyEmbedCallback(bool result, ConnectionSpecificId connection_id) {}
+void EmptyEmbedCallback(bool result) {}
 
 }  // namespace
 
@@ -222,6 +222,12 @@ void Window::SetVisible(bool value) {
   LocalSetVisible(value);
 }
 
+void Window::SetOpacity(float opacity) {
+  if (connection_)
+    tree_client()->SetOpacity(this, opacity);
+  LocalSetOpacity(opacity);
+}
+
 void Window::SetPredefinedCursor(mus::mojom::Cursor cursor_id) {
   if (cursor_id_ == cursor_id)
     return;
@@ -234,7 +240,7 @@ void Window::SetPredefinedCursor(mus::mojom::Cursor cursor_id) {
 bool Window::IsDrawn() const {
   if (!visible_)
     return false;
-  return parent_ ? parent_->IsDrawn() : drawn_;
+  return parent_ ? parent_->IsDrawn() : parent_drawn_;
 }
 
 scoped_ptr<WindowSurface> Window::RequestSurface(mojom::SurfaceType type) {
@@ -316,14 +322,14 @@ void Window::MoveToBack() {
   Reorder(parent_->children_.front(), mojom::OrderDirection::BELOW);
 }
 
-bool Window::Contains(Window* child) const {
+bool Window::Contains(const Window* child) const {
   if (!child)
     return false;
   if (child == this)
     return true;
   if (connection_)
-    CHECK_EQ(child->connection(), connection_);
-  for (Window* p = child->parent(); p; p = p->parent()) {
+    CHECK_EQ(child->connection_, connection_);
+  for (const Window* p = child->parent(); p; p = p->parent()) {
     if (p == this)
       return true;
   }
@@ -344,6 +350,15 @@ void Window::RemoveTransientWindow(Window* transient_window) {
   LocalRemoveTransientWindow(transient_window);
   if (connection_)
     tree_client()->RemoveTransientWindowFromParent(transient_window);
+}
+
+void Window::SetModal() {
+  if (is_modal_)
+    return;
+
+  LocalSetModal();
+  if (connection_)
+    tree_client()->SetModal(this);
 }
 
 Window* Window::GetChildById(Id id) {
@@ -401,17 +416,15 @@ void Window::SetCanFocus(bool can_focus) {
 }
 
 void Window::Embed(mus::mojom::WindowTreeClientPtr client) {
-  Embed(std::move(client), mus::mojom::WindowTree::kAccessPolicyDefault,
-        base::Bind(&EmptyEmbedCallback));
+  Embed(std::move(client), base::Bind(&EmptyEmbedCallback));
 }
 
 void Window::Embed(mus::mojom::WindowTreeClientPtr client,
-                   uint32_t policy_bitmask,
                    const EmbedCallback& callback) {
   if (PrepareForEmbed())
-    tree_client()->Embed(id_, std::move(client), policy_bitmask, callback);
+    tree_client()->Embed(id_, std::move(client), callback);
   else
-    callback.Run(false, 0);
+    callback.Run(false);
 }
 
 void Window::RequestClose() {
@@ -493,11 +506,13 @@ Window::Window(WindowTreeConnection* connection, Id id)
       parent_(nullptr),
       stacking_target_(nullptr),
       transient_parent_(nullptr),
+      is_modal_(false),
       input_event_handler_(nullptr),
       viewport_metrics_(CreateEmptyViewportMetrics()),
       visible_(false),
+      opacity_(1.0f),
       cursor_id_(mojom::Cursor::CURSOR_NULL),
-      drawn_(false) {}
+      parent_drawn_(false) {}
 
 WindowTreeClientImpl* Window::tree_client() {
   return static_cast<WindowTreeClientImpl*>(connection_);
@@ -588,6 +603,10 @@ void Window::LocalRemoveTransientWindow(Window* transient_window) {
   // TODO(fsamuel): We might want a notification here.
 }
 
+void Window::LocalSetModal() {
+  is_modal_ = true;
+}
+
 bool Window::LocalReorder(Window* relative, mojom::OrderDirection direction) {
   OrderChangedNotifier notifier(this, relative, direction);
   return ReorderImpl(this, relative, direction, &notifier);
@@ -625,18 +644,18 @@ void Window::LocalSetViewportMetrics(
       OnWindowViewportMetricsChanged(this, old_metrics, new_metrics));
 }
 
-void Window::LocalSetDrawn(bool value) {
-  if (drawn_ == value)
+void Window::LocalSetParentDrawn(bool value) {
+  if (parent_drawn_ == value)
     return;
 
-  // As IsDrawn() is derived from |visible_| and |drawn_|, only send drawn
-  // notification is the value of IsDrawn() is really changing.
+  // As IsDrawn() is derived from |visible_| and |parent_drawn_|, only send
+  // drawn notification is the value of IsDrawn() is really changing.
   if (IsDrawn() == value) {
-    drawn_ = value;
+    parent_drawn_ = value;
     return;
   }
   FOR_EACH_OBSERVER(WindowObserver, observers_, OnWindowDrawnChanging(this));
-  drawn_ = value;
+  parent_drawn_ = value;
   FOR_EACH_OBSERVER(WindowObserver, observers_, OnWindowDrawnChanged(this));
 }
 
@@ -648,6 +667,16 @@ void Window::LocalSetVisible(bool visible) {
                     OnWindowVisibilityChanging(this));
   visible_ = visible;
   NotifyWindowVisibilityChanged(this);
+}
+
+void Window::LocalSetOpacity(float opacity) {
+  if (opacity_ == opacity)
+    return;
+
+  float old_opacity = opacity_;
+  opacity_ = opacity;
+  FOR_EACH_OBSERVER(WindowObserver, observers_,
+                    OnWindowOpacityChanged(this, old_opacity, opacity_));
 }
 
 void Window::LocalSetPredefinedCursor(mojom::Cursor cursor_id) {
@@ -750,7 +779,7 @@ void Window::NotifyWindowVisibilityChangedUp(Window* target) {
 }
 
 bool Window::PrepareForEmbed() {
-  if (!OwnsWindow(connection_, this) && !tree_client()->is_embed_root())
+  if (!OwnsWindow(connection_, this))
     return false;
 
   while (!children_.empty())

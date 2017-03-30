@@ -12,11 +12,11 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chromeos/chromeos_export.h"
@@ -33,6 +33,7 @@ class NetworkTypePattern;
 // Struct for passing wifi access point data.
 struct CHROMEOS_EXPORT WifiAccessPoint {
   WifiAccessPoint();
+  WifiAccessPoint(const WifiAccessPoint& other);
   ~WifiAccessPoint();
   std::string ssid;  // The ssid of the WiFi node if available.
   std::string mac_address;  // The mac address of the WiFi node.
@@ -45,6 +46,7 @@ struct CHROMEOS_EXPORT WifiAccessPoint {
 // Struct for passing network scan result data.
 struct CHROMEOS_EXPORT CellularScanResult {
   CellularScanResult();
+  CellularScanResult(const CellularScanResult& other);
   ~CellularScanResult();
   std::string status;  // The network's availability status. (One of "unknown",
                        // "available", "current", or "forbidden")
@@ -95,15 +97,15 @@ CHROMEOS_EXPORT bool ParseCellularScanResults(
 // Retrieves the ONC state dictionary for |network| using GetStateProperties.
 // This includes properties from the corresponding NetworkState if it exists.
 // Assumed to be called from the primary user profile.
-CHROMEOS_EXPORT scoped_ptr<base::DictionaryValue> TranslateNetworkStateToONC(
-    const NetworkState* network);
+CHROMEOS_EXPORT std::unique_ptr<base::DictionaryValue>
+TranslateNetworkStateToONC(const NetworkState* network);
 
 // Retrieves the list of network services by passing |pattern|,
 // |configured_only|, and |visible_only| to NetworkStateHandler::
 // GetNetworkListByType(). Translates the result into a list of ONC
 // dictionaries using TranslateShillServiceToONCPart. |limit| is used to limit
 // the number of results.
-CHROMEOS_EXPORT scoped_ptr<base::ListValue> TranslateNetworkListToONC(
+CHROMEOS_EXPORT std::unique_ptr<base::ListValue> TranslateNetworkListToONC(
     NetworkTypePattern pattern,
     bool configured_only,
     bool visible_only,

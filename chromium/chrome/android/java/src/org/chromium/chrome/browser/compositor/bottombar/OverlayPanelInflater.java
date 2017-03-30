@@ -17,7 +17,7 @@ import org.chromium.ui.resources.dynamics.ViewResourceInflater;
 public abstract class OverlayPanelInflater extends ViewResourceInflater {
 
     /**
-     * The panel delegate used to get information about the panel layout.
+     * The panel used to get information about the panel layout.
      */
     protected OverlayPanel mOverlayPanel;
 
@@ -55,32 +55,9 @@ public abstract class OverlayPanelInflater extends ViewResourceInflater {
     }
 
     @Override
-    protected void onFinishInflate() {
-        if (!mOverlayPanel.isFullWidthSizePanel()) {
-            setWidth(mOverlayPanel.getMaximumWidthPx());
-        }
-    }
-
-    @Override
     protected int getWidthMeasureSpec() {
         return View.MeasureSpec.makeMeasureSpec(
                 mOverlayPanel.getMaximumWidthPx(), View.MeasureSpec.EXACTLY);
-    }
-
-    /**
-     * @param width The width of the view to be inforced.
-     */
-    private void setWidth(int width) {
-        // When the view is attached, we need to force the layout to have a specific width
-        // because the container is "full-width" (as wide as a tab). When not attached,
-        // ViewResourceInflater#layout() will properly resize the view offscreen.
-        if (shouldAttachView()) {
-            View view = getView();
-            if (view != null) {
-                view.getLayoutParams().width = width;
-                view.requestLayout();
-            }
-        }
     }
 
     /**
@@ -92,5 +69,4 @@ public abstract class OverlayPanelInflater extends ViewResourceInflater {
         if (text == null) return null;
         return text.replace(OBJ_CHARACTER, " ").trim();
     }
-
 }

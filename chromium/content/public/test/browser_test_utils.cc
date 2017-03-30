@@ -21,6 +21,9 @@
 #include "base/test/test_timeouts.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "content/browser/accessibility/accessibility_mode_helper.h"
+#include "content/browser/accessibility/browser_accessibility.h"
+#include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
@@ -781,8 +784,8 @@ std::string GetCookies(BrowserContext* browser_context, const GURL& url) {
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&GetCookiesOnIOThread, url,
-                 make_scoped_refptr(context_getter), &event, &cookies));
+      base::Bind(&GetCookiesOnIOThread, url, base::RetainedRef(context_getter),
+                 &event, &cookies));
   event.Wait();
   return cookies;
 }
@@ -798,7 +801,7 @@ bool SetCookie(BrowserContext* browser_context,
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&SetCookieOnIOThread, url, value,
-                 make_scoped_refptr(context_getter), &event, &result));
+                 base::RetainedRef(context_getter), &event, &result));
   event.Wait();
   return result;
 }
@@ -873,6 +876,31 @@ bool WaitForRenderFrameReady(RenderFrameHost* rfh) {
           "})();",
           &result));
   return result == "pageLoadComplete";
+}
+
+void EnableAccessibilityForWebContents(WebContents* web_contents) {
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(web_contents);
+  web_contents_impl->SetAccessibilityMode(AccessibilityModeComplete);
+}
+
+void WaitForAccessibilityFocusChange() {
+  scoped_refptr<content::MessageLoopRunner> loop_runner(
+      new content::MessageLoopRunner);
+  BrowserAccessibilityManager::SetFocusChangeCallbackForTesting(
+      loop_runner->QuitClosure());
+  loop_runner->Run();
+}
+
+ui::AXNodeData GetFocusedAccessibilityNodeInfo(WebContents* web_contents) {
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(web_contents);
+  BrowserAccessibilityManager* manager =
+      web_contents_impl->GetRootBrowserAccessibilityManager();
+  if (!manager)
+    return ui::AXNodeData();
+  BrowserAccessibility* focused_node = manager->GetFocus();
+  return focused_node->GetData();
 }
 
 TitleWatcher::TitleWatcher(WebContents* web_contents,
@@ -1067,9 +1095,7 @@ bool RequestFrame(WebContents* web_contents) {
       ->ScheduleComposite();
 }
 
-FrameWatcher::FrameWatcher()
-    : BrowserMessageFilter(ViewMsgStart), frames_to_wait_(0) {
-}
+FrameWatcher::FrameWatcher() : MessageFilter(), frames_to_wait_(0) {}
 
 FrameWatcher::~FrameWatcher() {
 }
@@ -1100,7 +1126,7 @@ void FrameWatcher::AttachTo(WebContents* web_contents) {
   DCHECK(web_contents);
   RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
       web_contents->GetRenderViewHost()->GetWidget());
-  widget_host->GetProcess()->AddFilter(this);
+  widget_host->GetProcess()->GetChannel()->AddFilter(this);
 }
 
 void FrameWatcher::WaitFrames(int frames_to_wait) {

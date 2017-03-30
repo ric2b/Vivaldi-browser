@@ -38,16 +38,11 @@ StyleFetchedImage::StyleFetchedImage(ImageResource* image, Document* document, c
 {
     m_isImageResource = true;
     m_image->addClient(this);
-#if ENABLE(OILPAN)
     ThreadState::current()->registerPreFinalizer(this);
-#endif
 }
 
 StyleFetchedImage::~StyleFetchedImage()
 {
-#if !ENABLE(OILPAN)
-    dispose();
-#endif
 }
 
 void StyleFetchedImage::dispose()
@@ -66,19 +61,19 @@ ImageResource* StyleFetchedImage::cachedImage() const
     return m_image.get();
 }
 
-PassRefPtrWillBeRawPtr<CSSValue> StyleFetchedImage::cssValue() const
+CSSValue* StyleFetchedImage::cssValue() const
 {
     return CSSImageValue::create(m_image->url(), const_cast<StyleFetchedImage*>(this));
 }
 
-PassRefPtrWillBeRawPtr<CSSValue> StyleFetchedImage::computedCSSValue() const
+CSSValue* StyleFetchedImage::computedCSSValue() const
 {
     return cssValue();
 }
 
 bool StyleFetchedImage::canRender() const
 {
-    return m_image->canRender();
+    return !m_image->errorOccurred() && !m_image->getImage()->isNull();
 }
 
 bool StyleFetchedImage::isLoaded() const
@@ -91,19 +86,22 @@ bool StyleFetchedImage::errorOccurred() const
     return m_image->errorOccurred();
 }
 
-LayoutSize StyleFetchedImage::imageSize(const LayoutObject* layoutObject, float multiplier) const
+LayoutSize StyleFetchedImage::imageSize(const LayoutObject&, float multiplier, const LayoutSize& defaultObjectSize) const
 {
-    return m_image->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject), multiplier);
+    if (m_image->getImage() && m_image->getImage()->isSVGImage())
+        return imageSizeForSVGImage(toSVGImage(m_image->getImage()), multiplier, defaultObjectSize);
+
+    // Image orientation should only be respected for content images,
+    // not decorative images such as StyleImage (backgrounds,
+    // border-image, etc.)
+    //
+    // https://drafts.csswg.org/css-images-3/#the-image-orientation
+    return m_image->imageSize(DoNotRespectImageOrientation, multiplier);
 }
 
 bool StyleFetchedImage::imageHasRelativeSize() const
 {
     return m_image->imageHasRelativeSize();
-}
-
-void StyleFetchedImage::computeIntrinsicDimensions(const LayoutObject*, FloatSize& intrinsicSize, FloatSize& intrinsicRatio)
-{
-    m_image->computeIntrinsicDimensions(intrinsicSize, intrinsicRatio);
 }
 
 bool StyleFetchedImage::usesImageContainerSize() const
@@ -113,34 +111,34 @@ bool StyleFetchedImage::usesImageContainerSize() const
 
 void StyleFetchedImage::addClient(LayoutObject* layoutObject)
 {
-    m_image->addClient(layoutObject);
+    m_image->addObserver(layoutObject);
 }
 
 void StyleFetchedImage::removeClient(LayoutObject* layoutObject)
 {
-    m_image->removeClient(layoutObject);
+    m_image->removeObserver(layoutObject);
 }
 
 void StyleFetchedImage::notifyFinished(Resource* resource)
 {
-    if (m_document && m_image && m_image->image() && m_image->image()->isSVGImage())
-        toSVGImage(m_image->image())->updateUseCounters(*m_document);
+    if (m_document && m_image && m_image->getImage() && m_image->getImage()->isSVGImage())
+        toSVGImage(m_image->getImage())->updateUseCounters(*m_document);
     // Oilpan: do not prolong the Document's lifetime.
     m_document.clear();
 }
 
-PassRefPtr<Image> StyleFetchedImage::image(const LayoutObject*, const IntSize& containerSize, float zoom) const
+PassRefPtr<Image> StyleFetchedImage::image(const LayoutObject&, const IntSize& containerSize, float zoom) const
 {
-    if (!m_image->image()->isSVGImage())
-        return m_image->image();
+    if (!m_image->getImage()->isSVGImage())
+        return m_image->getImage();
 
-    return SVGImageForContainer::create(toSVGImage(m_image->image()), containerSize, zoom, m_url);
+    return SVGImageForContainer::create(toSVGImage(m_image->getImage()), containerSize, zoom, m_url);
 }
 
-bool StyleFetchedImage::knownToBeOpaque(const LayoutObject* layoutObject) const
+bool StyleFetchedImage::knownToBeOpaque(const LayoutObject& layoutObject) const
 {
-    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage", "data", InspectorPaintImageEvent::data(layoutObject, *m_image.get()));
-    return m_image->image()->currentFrameKnownToBeOpaque(Image::PreCacheMetadata);
+    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage", "data", InspectorPaintImageEvent::data(&layoutObject, *m_image.get()));
+    return m_image->getImage()->currentFrameKnownToBeOpaque(Image::PreCacheMetadata);
 }
 
 DEFINE_TRACE(StyleFetchedImage)

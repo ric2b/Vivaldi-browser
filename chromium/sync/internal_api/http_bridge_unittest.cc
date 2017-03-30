@@ -385,8 +385,8 @@ TEST_F(MAYBE_SyncHttpBridgeTest, Abort) {
   int response_code = 0;
 
   io_thread()->task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(&MAYBE_SyncHttpBridgeTest::Abort, http_bridge));
+      FROM_HERE, base::Bind(&MAYBE_SyncHttpBridgeTest::Abort,
+                            base::RetainedRef(http_bridge)));
   bool success = http_bridge->MakeSynchronousPost(&os_error, &response_code);
   EXPECT_FALSE(success);
   EXPECT_EQ(net::ERR_ABORTED, os_error);
@@ -475,7 +475,7 @@ void HttpBridgeRunOnSyncThread(
     syncer::HttpPostProviderInterface** bridge_out,
     base::WaitableEvent* signal_when_created,
     base::WaitableEvent* wait_for_shutdown) {
-  scoped_ptr<syncer::HttpBridgeFactory> bridge_factory(
+  std::unique_ptr<syncer::HttpBridgeFactory> bridge_factory(
       new syncer::HttpBridgeFactory(baseline_context_getter,
                                     NetworkTimeUpdateCallback(),
                                     factory_cancelation_signal));
@@ -562,10 +562,9 @@ TEST_F(MAYBE_SyncHttpBridgeTest, EarlyAbortFactory) {
 
   // UI Thread: Initialize the HttpBridgeFactory.  The next step would be to
   // post a task to SBH::Core to have it initialized.
-  scoped_ptr<syncer::HttpBridgeFactory> factory(
-      new HttpBridgeFactory(baseline_context_getter.get(),
-                            NetworkTimeUpdateCallback(),
-                            &release_request_context_signal));
+  std::unique_ptr<syncer::HttpBridgeFactory> factory(new HttpBridgeFactory(
+      baseline_context_getter.get(), NetworkTimeUpdateCallback(),
+      &release_request_context_signal));
 
   // UI Thread: A very early shutdown request arrives and executes on the UI
   // thread before the posted sync thread task is run.

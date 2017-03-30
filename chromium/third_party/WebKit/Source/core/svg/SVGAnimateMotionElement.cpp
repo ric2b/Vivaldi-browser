@@ -98,10 +98,10 @@ void SVGAnimateMotionElement::parseAttribute(const QualifiedName& name, const At
     SVGAnimationElement::parseAttribute(name, oldValue, value);
 }
 
-SVGAnimateMotionElement::RotateMode SVGAnimateMotionElement::rotateMode() const
+SVGAnimateMotionElement::RotateMode SVGAnimateMotionElement::getRotateMode() const
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, autoVal, ("auto", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, autoReverse, ("auto-reverse", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, autoVal, ("auto"));
+    DEFINE_STATIC_LOCAL(const AtomicString, autoReverse, ("auto-reverse"));
     const AtomicString& rotate = getAttribute(SVGNames::rotateAttr);
     if (rotate == autoVal)
         return RotateAuto;
@@ -208,7 +208,7 @@ bool SVGAnimateMotionElement::calculateFromAndToValues(const String& fromString,
 bool SVGAnimateMotionElement::calculateFromAndByValues(const String& fromString, const String& byString)
 {
     m_hasToPointAtEndOfDuration = false;
-    if (animationMode() == ByAnimation && !isAdditive())
+    if (getAnimationMode() == ByAnimation && !isAdditive())
         return false;
     parsePoint(fromString, m_fromPoint);
     FloatPoint byPoint;
@@ -232,7 +232,7 @@ void SVGAnimateMotionElement::calculateAnimatedValue(float percentage, unsigned 
     if (!isAdditive())
         transform->makeIdentity();
 
-    if (animationMode() != PathAnimation) {
+    if (getAnimationMode() != PathAnimation) {
         FloatPoint toPointAtEndOfDuration = m_toPoint;
         if (isAccumulated() && repeatCount && m_hasToPointAtEndOfDuration)
             toPointAtEndOfDuration = m_toPointAtEndOfDuration;
@@ -261,7 +261,7 @@ void SVGAnimateMotionElement::calculateAnimatedValue(float percentage, unsigned 
     }
 
     transform->translate(position.x(), position.y());
-    RotateMode rotateMode = this->rotateMode();
+    RotateMode rotateMode = this->getRotateMode();
     if (rotateMode != RotateAuto && rotateMode != RotateAutoReverse)
         return;
     if (rotateMode == RotateAutoReverse)
@@ -284,7 +284,7 @@ void SVGAnimateMotionElement::applyResultsToTarget()
         return;
 
     // ...except in case where we have additional instances in <use> trees.
-    const WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement>>& instances = targetElement->instancesForElement();
+    const HeapHashSet<WeakMember<SVGElement>>& instances = targetElement->instancesForElement();
     for (SVGElement* shadowTreeElement : instances) {
         ASSERT(shadowTreeElement);
         AffineTransform* transform = shadowTreeElement->animateMotionTransform();

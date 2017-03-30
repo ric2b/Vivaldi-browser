@@ -7,6 +7,7 @@
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shelf/shelf_layout_manager.h"
+#include "ash/shelf/shelf_util.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
@@ -191,8 +192,7 @@ void TrayBackgroundView::TrayContainer::ViewHierarchyChanged(
 void TrayBackgroundView::TrayContainer::UpdateLayout() {
   // Adjust the size of status tray dark background by adding additional
   // empty border.
-  if (alignment_ == SHELF_ALIGNMENT_BOTTOM ||
-      alignment_ == SHELF_ALIGNMENT_TOP) {
+  if (IsHorizontalAlignment(alignment_)) {
     SetBorder(views::Border::CreateEmptyBorder(
         kPaddingFromEdgeOfShelf,
         kPaddingFromEdgeOfShelf,
@@ -247,7 +247,7 @@ TrayBackgroundView::TrayBackgroundView(StatusAreaWidget* status_area_widget)
   tray_event_filter_.reset(new TrayEventFilter);
 
   SetPaintToLayer(true);
-  SetFillsBoundsOpaquely(false);
+  layer()->SetFillsBoundsOpaquely(false);
   // Start the tray items not visible, because visibility changes are animated.
   views::View::SetVisible(false);
 }
@@ -403,7 +403,7 @@ void TrayBackgroundView::SetTrayBorder() {
   // Tray views are laid out right-to-left or bottom-to-top
   bool on_edge = (this == parent->child_at(0));
   int left_edge, top_edge, right_edge, bottom_edge;
-  if (shelf_alignment() == SHELF_ALIGNMENT_BOTTOM) {
+  if (IsHorizontalAlignment(shelf_alignment())) {
     top_edge = ShelfLayoutManager::kShelfItemInset;
     left_edge = 0;
     bottom_edge = kShelfSize -
@@ -450,8 +450,7 @@ bool TrayBackgroundView::RequiresNotificationWhenAnimatorDestroyed() const {
 
 void TrayBackgroundView::HideTransformation() {
   gfx::Transform transform;
-  if (shelf_alignment_ == SHELF_ALIGNMENT_BOTTOM ||
-      shelf_alignment_ == SHELF_ALIGNMENT_TOP)
+  if (IsHorizontalAlignment(shelf_alignment_))
     transform.Translate(width(), 0.0f);
   else
     transform.Translate(0.0f, height());
@@ -560,17 +559,10 @@ gfx::Rect TrayBackgroundView::GetBubbleAnchorRect(
 }
 
 TrayBubbleView::AnchorAlignment TrayBackgroundView::GetAnchorAlignment() const {
-  switch (shelf_alignment_) {
-    case SHELF_ALIGNMENT_BOTTOM:
-      return TrayBubbleView::ANCHOR_ALIGNMENT_BOTTOM;
-    case SHELF_ALIGNMENT_LEFT:
-      return TrayBubbleView::ANCHOR_ALIGNMENT_LEFT;
-    case SHELF_ALIGNMENT_RIGHT:
-      return TrayBubbleView::ANCHOR_ALIGNMENT_RIGHT;
-    case SHELF_ALIGNMENT_TOP:
-      return TrayBubbleView::ANCHOR_ALIGNMENT_TOP;
-  }
-  NOTREACHED();
+  if (shelf_alignment_ == SHELF_ALIGNMENT_LEFT)
+    return TrayBubbleView::ANCHOR_ALIGNMENT_LEFT;
+  if (shelf_alignment_ == SHELF_ALIGNMENT_RIGHT)
+    return TrayBubbleView::ANCHOR_ALIGNMENT_RIGHT;
   return TrayBubbleView::ANCHOR_ALIGNMENT_BOTTOM;
 }
 

@@ -4,6 +4,8 @@
 
 #include "chromecast/base/system_time_change_notifier.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -85,9 +87,9 @@ class SystemTimeChangeNotifierTest : public testing::Test {
     run_loop.Run();
   }
 
-  scoped_ptr<base::MessageLoop> message_loop_;
-  scoped_ptr<SystemTimeChangeNotifierPeriodicMonitor> notifier_;
-  scoped_ptr<TimeChangeObserver> observer_;
+  std::unique_ptr<base::MessageLoop> message_loop_;
+  std::unique_ptr<SystemTimeChangeNotifierPeriodicMonitor> notifier_;
+  std::unique_ptr<TimeChangeObserver> observer_;
 };
 
 TEST_F(SystemTimeChangeNotifierTest, NotChanged) {

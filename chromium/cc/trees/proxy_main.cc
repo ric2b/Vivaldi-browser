@@ -289,12 +289,6 @@ void ProxyMain::SetVisible(bool visible) {
   channel_main_->SetVisibleOnImpl(visible);
 }
 
-void ProxyMain::SetThrottleFrameProduction(bool throttle) {
-  TRACE_EVENT1("cc", "ProxyMain::SetThrottleFrameProduction", "throttle",
-               throttle);
-  channel_main_->SetThrottleFrameProductionOnImpl(throttle);
-}
-
 const RendererCapabilities& ProxyMain::GetRendererCapabilities() const {
   DCHECK(IsMainThread());
   DCHECK(!layer_tree_host_->output_surface_lost());
@@ -453,6 +447,10 @@ void ProxyMain::UpdateTopControlsState(TopControlsState constraints,
                                        bool animate) {
   DCHECK(IsMainThread());
   channel_main_->UpdateTopControlsStateOnImpl(constraints, current, animate);
+}
+
+void ProxyMain::SetOutputIsSecure(bool output_is_secure) {
+  NOTREACHED() << "Only used by SingleProxyMain";
 }
 
 bool ProxyMain::SendCommitRequestToImplThreadIfNeeded(

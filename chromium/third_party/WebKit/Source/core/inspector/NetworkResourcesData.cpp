@@ -34,20 +34,11 @@
 #include "platform/SharedBuffer.h"
 #include "platform/network/ResourceResponse.h"
 
-namespace {
-// 100MB
-static size_t maximumResourcesContentSize = 100 * 1000 * 1000;
-
-// 10MB
-static size_t maximumSingleResourceContentSize = 10 * 1000 * 1000;
-}
-
 namespace blink {
 
-
-PassRefPtrWillBeRawPtr<XHRReplayData> XHRReplayData::create(ExecutionContext* executionContext, const AtomicString& method, const KURL& url, bool async, PassRefPtr<EncodedFormData> formData, bool includeCredentials)
+RawPtr<XHRReplayData> XHRReplayData::create(ExecutionContext* executionContext, const AtomicString& method, const KURL& url, bool async, PassRefPtr<EncodedFormData> formData, bool includeCredentials)
 {
-    return adoptRefWillBeNoop(new XHRReplayData(executionContext, method, url, async, formData, includeCredentials));
+    return new XHRReplayData(executionContext, method, url, async, formData, includeCredentials);
 }
 
 void XHRReplayData::addHeader(const AtomicString& key, const AtomicString& value)
@@ -71,9 +62,10 @@ DEFINE_TRACE(XHRReplayData)
 }
 
 // ResourceData
-NetworkResourcesData::ResourceData::ResourceData(const String& requestId, const String& loaderId)
+NetworkResourcesData::ResourceData::ResourceData(const String& requestId, const String& loaderId, const KURL& requestedURL)
     : m_requestId(requestId)
     , m_loaderId(loaderId)
+    , m_requestedURL(requestedURL)
     , m_base64Encoded(false)
     , m_isContentEvicted(false)
     , m_type(InspectorPageAgent::OtherResource)
@@ -149,10 +141,10 @@ size_t NetworkResourcesData::ResourceData::decodeDataToContent()
 }
 
 // NetworkResourcesData
-NetworkResourcesData::NetworkResourcesData()
+NetworkResourcesData::NetworkResourcesData(size_t totalBufferSize, size_t resourceBufferSize)
     : m_contentSize(0)
-    , m_maximumResourcesContentSize(maximumResourcesContentSize)
-    , m_maximumSingleResourceContentSize(maximumSingleResourceContentSize)
+    , m_maximumResourcesContentSize(totalBufferSize)
+    , m_maximumSingleResourceContentSize(resourceBufferSize)
 {
 }
 
@@ -165,15 +157,13 @@ NetworkResourcesData::~NetworkResourcesData()
 
 DEFINE_TRACE(NetworkResourcesData)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_requestIdToResourceDataMap);
-#endif
 }
 
-void NetworkResourcesData::resourceCreated(const String& requestId, const String& loaderId)
+void NetworkResourcesData::resourceCreated(const String& requestId, const String& loaderId, const KURL& requestedURL)
 {
     ensureNoDataForRequestId(requestId);
-    m_requestIdToResourceDataMap.set(requestId, new ResourceData(requestId, loaderId));
+    m_requestIdToResourceDataMap.set(requestId, new ResourceData(requestId, loaderId, requestedURL));
 }
 
 void NetworkResourcesData::responseReceived(const String& requestId, const String& frameId, const ResourceResponse& response)
@@ -182,7 +172,6 @@ void NetworkResourcesData::responseReceived(const String& requestId, const Strin
     if (!resourceData)
         return;
     resourceData->setFrameId(frameId);
-    resourceData->setUrl(response.url());
     resourceData->setMimeType(response.mimeType());
     resourceData->setTextEncodingName(response.textEncodingName());
     resourceData->setDecoder(InspectorPageAgent::createResourceTextDecoder(response.mimeType(), response.textEncodingName()));
@@ -198,7 +187,7 @@ void NetworkResourcesData::responseReceived(const String& requestId, const Strin
         if (mimeType.isEmpty())
             mimeType = response.mimeType();
         if (mimeType.isEmpty())
-            mimeType = AtomicString("text/plain", AtomicString::ConstructFromLiteral);
+            mimeType = AtomicString("text/plain");
         blobData->setContentType(mimeType);
         resourceData->setDownloadedFileBlob(BlobDataHandle::create(blobData.release(), -1));
     }
@@ -311,9 +300,9 @@ void NetworkResourcesData::setXHRReplayData(const String& requestId, XHRReplayDa
     resourceData->setXHRReplayData(xhrReplayData);
 }
 
-WillBeHeapVector<RawPtrWillBeMember<NetworkResourcesData::ResourceData>> NetworkResourcesData::resources()
+HeapVector<Member<NetworkResourcesData::ResourceData>> NetworkResourcesData::resources()
 {
-    WillBeHeapVector<RawPtrWillBeMember<ResourceData>> result;
+    HeapVector<Member<ResourceData>> result;
     for (auto& request : m_requestIdToResourceDataMap)
         result.append(request.value);
     return result;
@@ -335,6 +324,8 @@ Vector<String> NetworkResourcesData::removeResource(Resource* cachedResource)
 
 void NetworkResourcesData::clear(const String& preservedLoaderId)
 {
+    if (!m_requestIdToResourceDataMap.size())
+        return;
     m_requestIdsDeque.clear();
     m_contentSize = 0;
 
@@ -352,8 +343,6 @@ void NetworkResourcesData::clear(const String& preservedLoaderId)
     m_requestIdToResourceDataMap.swap(preservedMap);
 
     m_reusedXHRReplayDataRequestIds.clear();
-    m_maximumResourcesContentSize = maximumResourcesContentSize;
-    m_maximumSingleResourceContentSize = maximumSingleResourceContentSize;
 }
 
 void NetworkResourcesData::setResourcesDataSizeLimits(size_t resourcesContentSize, size_t singleResourceContentSize)

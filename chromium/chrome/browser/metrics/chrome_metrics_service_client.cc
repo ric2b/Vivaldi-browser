@@ -23,7 +23,10 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/google/google_brand.h"
 #include "chrome/browser/metrics/chrome_stability_metrics_provider.h"
+#include "chrome/browser/metrics/metrics_reporting_state.h"
+#include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/metrics/time_ticks_experiment_win.h"
+#include "chrome/browser/sync/chrome_sync_client.h"
 #include "chrome/browser/ui/browser_otr_state.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
@@ -38,6 +41,7 @@
 #include "components/metrics/gpu/gpu_metrics_provider.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
+#include "components/metrics/metrics_service_client.h"
 #include "components/metrics/net/net_metrics_log_uploader.h"
 #include "components/metrics/net/network_metrics_provider.h"
 #include "components/metrics/net/version_utils.h"
@@ -49,6 +53,7 @@
 #include "components/omnibox/browser/omnibox_metrics_provider.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/sync_driver/device_count_metrics_provider.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
@@ -209,6 +214,8 @@ void ChromeMetricsServiceClient::RegisterPrefs(PrefRegistrySimple* registry) {
 
   RegisterInstallerFileMetricsPreferences(registry);
 
+  RegisterMetricsReportingStatePrefs(registry);
+
 #if BUILDFLAG(ANDROID_JAVA_UI)
   AndroidMetricsProvider::RegisterPrefs(registry);
 #endif  // BUILDFLAG(ANDROID_JAVA_UI)
@@ -329,6 +336,15 @@ void ChromeMetricsServiceClient::OnPluginLoadingError(
 #endif  // defined(ENABLE_PLUGINS)
 }
 
+bool ChromeMetricsServiceClient::IsReportingPolicyManaged() {
+  return IsMetricsReportingPolicyManaged();
+}
+
+metrics::MetricsServiceClient::EnableMetricsDefault
+ChromeMetricsServiceClient::GetDefaultOptIn() {
+  return GetMetricsReportingDefaultOptIn(g_browser_process->local_state());
+}
+
 void ChromeMetricsServiceClient::Initialize() {
   // Clear metrics reports if it is the first time cellular upload logic should
   // apply to avoid sudden bulk uploads. It needs to be done before initializing
@@ -341,6 +357,10 @@ void ChromeMetricsServiceClient::Initialize() {
 
   metrics_service_.reset(new metrics::MetricsService(
       metrics_state_manager_, this, g_browser_process->local_state()));
+
+  // Gets access to persistent metrics shared by sub-processes.
+  metrics_service_->RegisterMetricsProvider(
+      scoped_ptr<metrics::MetricsProvider>(new SubprocessMetricsProvider()));
 
   // Register metrics providers.
 #if defined(ENABLE_EXTENSIONS)
@@ -429,6 +449,11 @@ void ChromeMetricsServiceClient::Initialize() {
           SigninStatusMetricsProvider::CreateInstance(
               make_scoped_ptr(new ChromeSigninStatusMetricsProviderDelegate))));
 #endif  // !defined(OS_CHROMEOS)
+
+  metrics_service_->RegisterMetricsProvider(
+      scoped_ptr<metrics::MetricsProvider>(
+          new sync_driver::DeviceCountMetricsProvider(base::Bind(
+              &browser_sync::ChromeSyncClient::GetDeviceInfoTrackers))));
 
   // Clear stability metrics if it is the first time cellular upload logic
   // should apply to avoid sudden bulk uploads. It needs to be done after all
@@ -663,4 +688,8 @@ void ChromeMetricsServiceClient::Observe(
 
 void ChromeMetricsServiceClient::OnURLOpenedFromOmnibox(OmniboxLog* log) {
   metrics_service_->OnApplicationNotIdle();
+}
+
+bool ChromeMetricsServiceClient::IsUMACellularUploadLogicEnabled() {
+  return IsCellularLogicEnabled();
 }

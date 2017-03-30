@@ -2,7 +2,29 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "gen/thing.h"
+
+namespace v8 {
+
+class InterfaceOutsideOfBlink {
+ public:
+  virtual void nonBlinkVirtual() = 0;
+};
+
+}  // namespace v8
+
 namespace blink {
+
+class InsideOfBlink : public v8::InterfaceOutsideOfBlink {
+ public:
+  // This function overrides something outside of blink so don't rename it.
+  void nonBlinkVirtual() override {}
+  // This function is in blink so rename it.
+  virtual void BlinkVirtual() {}
+};
+
+class MyIterator {};
+using my_iterator = char*;
 
 class Task {
  public:
@@ -28,10 +50,10 @@ class Task {
 
   // These are special functions that we don't rename so that range-based
   // for loops and STL things work.
-  void begin() {}
-  void end() {}
-  void rbegin() {}
-  void rend() {}
+  MyIterator begin() {}
+  my_iterator end() {}
+  my_iterator rbegin() {}
+  MyIterator rend() {}
   // The trace() method is used by Oilpan, we shouldn't rename it.
   void trace() {}
   // These are used by std::unique_lock and std::lock_guard.
@@ -42,16 +64,55 @@ class Task {
 
 class Other {
   // Static begin/end/trace don't count, and should be renamed.
-  static void Begin() {}
-  static void End() {}
+  static MyIterator Begin() {}
+  static my_iterator End() {}
   static void Trace() {}
   static void Lock() {}
+};
+
+class NonIterators {
+  // begin()/end() and friends are renamed if they don't return an iterator.
+  void Begin() {}
+  int End() { return 0; }
+  void Rbegin() {}
+  int Rend() { return 0; }
 };
 
 // Test that the actual method definition is also updated.
 void Task::DoTheWork() {
   ReallyDoTheWork();
 }
+
+template <typename T>
+class Testable {
+ public:
+  typedef T Testable::*UnspecifiedBoolType;
+  // This method has a reference to a member in a "member context" and a
+  // "non-member context" to verify both are rewritten.
+  operator UnspecifiedBoolType() { return ptr_ ? &Testable::ptr_ : 0; }
+
+ private:
+  int ptr_;
+};
+
+namespace subname {
+
+class SubnameParent {
+  virtual void SubnameMethod() {}
+};
+
+}  // namespace subname
+
+class SubnameChild : public subname::SubnameParent {
+  // This subclasses from blink::subname::SubnameParent and should be renamed.
+  void SubnameMethod() override {}
+};
+
+class GenChild : public blink::GenClass {
+  // This subclasses from the blink namespace but in the gen directory so it
+  // should not be renamed.
+  void genMethod() override {}
+};
 
 }  // namespace blink
 
@@ -79,4 +140,52 @@ void F() {
   void (blink::Task::*p2)() = &BovineTask::DoTheWork;
   void (blink::Task::*p3)() = &blink::Task::ReallyDoTheWork;
   void (BovineTask::*p4)() = &BovineTask::ReallyDoTheWork;
+}
+
+bool G() {
+  // Use the Testable class to rewrite the method.
+  blink::Testable<int> tt;
+  return tt;
+}
+
+class SubclassOfInsideOfBlink : public blink::InsideOfBlink {
+ public:
+  // This function overrides something outside of blink so don't rename it.
+  void nonBlinkVirtual() override {}
+  // This function overrides something in blink so rename it.
+  void BlinkVirtual() override {}
+};
+
+class TestSubclassInsideOfBlink : public SubclassOfInsideOfBlink {
+ public:
+ public:
+  // This function overrides something outside of blink so don't rename it.
+  void nonBlinkVirtual() override {}
+  // This function overrides something in blink so rename it.
+  void BlinkVirtual() override {}
+};
+
+namespace blink {
+
+struct StructInBlink {
+  // Structs in blink should rename their methods to capitals.
+  bool Function() { return true; }
+};
+
+}  // namespace blink
+
+namespace WTF {
+
+struct StructInWTF {
+  // Structs in WTF should rename their methods to capitals.
+  bool Function() { return true; }
+};
+
+}  // namespace WTF
+
+void F2() {
+  blink::StructInBlink b;
+  b.Function();
+  WTF::StructInWTF w;
+  w.Function();
 }

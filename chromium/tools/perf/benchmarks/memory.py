@@ -9,7 +9,7 @@ import page_sets
 from telemetry import benchmark
 
 
-@benchmark.Disabled('all')  # crbug.com/581147
+@benchmark.Enabled('android')
 class MemoryMobile(perf_benchmark.PerfBenchmark):
   test = memory.Memory
   page_set = page_sets.MobileMemoryPageSet
@@ -36,17 +36,6 @@ class MemoryTop7Stress(perf_benchmark.PerfBenchmark):
   @classmethod
   def ShouldDisable(cls, possible_browser):
     return cls.IsSvelte(possible_browser)  # http://crbug.com/555092
-
-
-class MemoryLongRunningIdleGmail(perf_benchmark.PerfBenchmark):
-  """Use (recorded) real world web sites and measure memory consumption
-  of long running idle Gmail page """
-  test = memory.Memory
-  page_set = page_sets.LongRunningIdleGmailPageSet
-
-  @classmethod
-  def Name(cls):
-    return 'memory.long_running_idle_gmail'
 
 
 @benchmark.Disabled('android')  # crbug.com/542682

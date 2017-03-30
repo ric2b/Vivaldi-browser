@@ -44,8 +44,7 @@ class SESSIONS_EXPORT InMemoryTabRestoreService : public TabRestoreService {
       LiveTabContext* context) override;
   // gisli@vivaldi.com: Added RestorePreviousSession.
   std::vector<LiveTab*> RestorePreviousSession(
-      LiveTabContext* context,
-      chrome::HostDesktopType host_desktop_type) override;
+      LiveTabContext* context) override;
   Tab* RemoveTabEntryById(SessionID::id_type id) override;
   std::vector<LiveTab*> RestoreEntryById(
       LiveTabContext* context,

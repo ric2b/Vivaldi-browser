@@ -416,10 +416,18 @@ def main():
     baseline_path = os.path.normpath(dir_name + "/Inspector-" + version + ".json")
     baseline_schema = load_json(baseline_path)
 
+    expected_errors = [
+        "Debugger.globalObjectCleared: event has been removed"
+    ]
+
     errors = compare_schemas(baseline_schema["domains"], schema["domains"], False)
-    if len(errors) > 0:
+    unexpected_errors = []
+    for i in range(len(errors)):
+        if errors[i] not in expected_errors:
+            unexpected_errors.append(errors[i])
+    if len(unexpected_errors) > 0:
         sys.stderr.write("  Compatibility with %s: FAILED\n" % version)
-        for error in errors:
+        for error in unexpected_errors:
             sys.stderr.write( "    %s\n" % error)
         return 1
 
@@ -435,8 +443,7 @@ def main():
 #ifndef InspectorProtocolVersion_h
 #define InspectorProtocolVersion_h
 
-#include "wtf/Vector.h"
-#include "wtf/text/WTFString.h"
+#include "platform/inspector_protocol/String16.h"
 
 namespace blink {
 
@@ -446,29 +453,10 @@ int inspectorProtocolVersionMajor() { return %s; }
 
 int inspectorProtocolVersionMinor() { return %s; }
 
-bool supportsInspectorProtocolVersion(const String& version)
-{
-    Vector<String> tokens;
-    version.split(".", tokens);
-    if (tokens.size() != 2)
-        return false;
-
-    bool ok = true;
-    int major = tokens[0].toInt(&ok);
-    if (!ok || major != %s)
-        return false;
-
-    int minor = tokens[1].toInt(&ok);
-    if (!ok || minor > %s)
-        return false;
-
-    return true;
-}
-
 }
 
 #endif // !defined(InspectorProtocolVersion_h)
-""" % (version, major, minor, major, minor))
+""" % (version, major, minor))
 
     output_file.close()
 

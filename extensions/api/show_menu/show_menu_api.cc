@@ -65,11 +65,11 @@ int TranslateCommandIdToMenuId(int command_id) {
 }
 
 const show_menu::MenuItem* GetMenuItemById(
-  const std::vector<linked_ptr<show_menu::MenuItem>>* menuItems,
+  const std::vector<show_menu::MenuItem>* menuItems,
   int id) {
-  for (std::vector<linked_ptr<show_menu::MenuItem>>::const_iterator it =
+  for (std::vector<show_menu::MenuItem>::const_iterator it =
        menuItems->begin(); it != menuItems->end(); ++it) {
-    const show_menu::MenuItem& menuitem = **it;
+    const show_menu::MenuItem& menuitem = *it;
     if (menuitem.id == id)
       return &menuitem;
     if (menuitem.items.get() && !menuitem.items->empty()) {
@@ -278,7 +278,7 @@ void ShowMenuAPI::OnListenerAdded(const EventListenerInfo& details) {
 }
 
 VivaldiMenuController::VivaldiMenuController(Delegate* delegate,
-    std::vector<linked_ptr<show_menu::MenuItem>>* menu_items)
+    std::vector<show_menu::MenuItem>* menu_items)
   :favicon_service_(nullptr),
   delegate_(delegate),
   menu_items_(menu_items),
@@ -303,12 +303,13 @@ void VivaldiMenuController::Show(content::WebContents* web_contents,
   profile_ = Profile::FromBrowserContext(browser_context);
 
   // Populate menu
-  for (std::vector<linked_ptr<show_menu::MenuItem>>::const_iterator it =
+  for (std::vector<show_menu::MenuItem>::const_iterator it =
        menu_items_->begin();
        it != menu_items_->end(); ++it) {
-    const show_menu::MenuItem& menuitem = **it;
+    const show_menu::MenuItem& menuitem = *it;
     PopulateModel(&menuitem, &menu_model_);
   }
+
   if (HasDeveloperTools()) {
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_RELOAD_PACKAGED_APP,
@@ -321,6 +322,8 @@ void VivaldiMenuController::Show(content::WebContents* web_contents,
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_INSPECTBACKGROUNDPAGE,
                                     IDS_CONTENT_CONTEXT_INSPECTBACKGROUNDPAGE);
   }
+
+  SanitizeModel(&menu_model_);
 
   menu_.reset(::vivaldi::CreateVivaldiContextMenu(
       web_contents->GetFocusedFrame(), &menu_model_, menu_params));
@@ -428,12 +431,13 @@ void VivaldiMenuController::PopulateModel(const show_menu::MenuItem* item,
       if (item->items) {
         ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(this);
         models_.push_back(child_menu_model);
-        for (std::vector<linked_ptr<show_menu::MenuItem>>::const_iterator it =
+        for (std::vector<show_menu::MenuItem>::const_iterator it =
                 item->items->begin();
             it != item->items->end(); ++it) {
-          const show_menu::MenuItem& child = **it;
+          const show_menu::MenuItem& child = *it;
           PopulateModel(&child, child_menu_model);
         }
+        SanitizeModel(child_menu_model);
         menu_model->AddSubMenu(id, label, child_menu_model);
         load_image = true;
       } else {
@@ -459,6 +463,16 @@ void VivaldiMenuController::PopulateModel(const show_menu::MenuItem* item,
         url_map_[id] = item->url.get();
         LoadFavicon(id, *item->url);
       }
+    }
+  }
+}
+
+void VivaldiMenuController::SanitizeModel(ui::SimpleMenuModel* menu_model) {
+  for (int i = menu_model->GetItemCount()-1; i >= 0; i--) {
+    if (menu_model->GetTypeAt(i) == ui::MenuModel::TYPE_SEPARATOR) {
+      menu_model->RemoveItemAt(i);
+    } else {
+      break;
     }
   }
 }

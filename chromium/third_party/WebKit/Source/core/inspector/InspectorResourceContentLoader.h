@@ -17,19 +17,18 @@ namespace blink {
 class LocalFrame;
 class Resource;
 
-class CORE_EXPORT InspectorResourceContentLoader final : public NoBaseWillBeGarbageCollectedFinalized<InspectorResourceContentLoader> {
+class CORE_EXPORT InspectorResourceContentLoader final : public GarbageCollectedFinalized<InspectorResourceContentLoader> {
     WTF_MAKE_NONCOPYABLE(InspectorResourceContentLoader);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(InspectorResourceContentLoader);
 public:
-    static PassOwnPtrWillBeRawPtr<InspectorResourceContentLoader> create(LocalFrame* inspectedFrame)
+    static RawPtr<InspectorResourceContentLoader> create(LocalFrame* inspectedFrame)
     {
-        return adoptPtrWillBeNoop(new InspectorResourceContentLoader(inspectedFrame));
+        return new InspectorResourceContentLoader(inspectedFrame);
     }
     ~InspectorResourceContentLoader();
     void dispose();
     DECLARE_TRACE();
 
-    void ensureResourcesContentLoaded(PassOwnPtr<Closure> callback);
+    void ensureResourcesContentLoaded(PassOwnPtr<SameThreadClosure> callback);
     void didCommitLoadForLocalFrame(LocalFrame*);
 
 private:
@@ -42,12 +41,12 @@ private:
     void stop();
     bool hasFinished();
 
-    Vector<OwnPtr<Closure>> m_callbacks;
+    Vector<OwnPtr<SameThreadClosure>> m_callbacks;
     bool m_allRequestsStarted;
     bool m_started;
-    RawPtrWillBeMember<LocalFrame> m_inspectedFrame;
-    WillBeHeapHashSet<RawPtrWillBeMember<ResourceClient>> m_pendingResourceClients;
-    WillBeHeapVector<RefPtrWillBeMember<Resource>> m_resources;
+    Member<LocalFrame> m_inspectedFrame;
+    HeapHashSet<Member<ResourceClient>> m_pendingResourceClients;
+    HeapVector<Member<Resource>> m_resources;
 
     friend class ResourceClient;
 };

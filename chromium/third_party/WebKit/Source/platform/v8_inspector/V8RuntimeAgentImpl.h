@@ -31,32 +31,32 @@
 #ifndef V8RuntimeAgentImpl_h
 #define V8RuntimeAgentImpl_h
 
+#include "platform/inspector_protocol/Allocator.h"
 #include "platform/inspector_protocol/Frontend.h"
 #include "platform/v8_inspector/public/V8RuntimeAgent.h"
-#include "wtf/Forward.h"
-#include "wtf/Noncopyable.h"
 
 namespace blink {
 
-class InjectedScriptManager;
+class InjectedScript;
+class InspectedContext;
+class RemoteObjectIdBase;
 class V8DebuggerImpl;
+class V8InspectorSessionImpl;
 
 namespace protocol {
 class DictionaryValue;
 }
 
-typedef String ErrorString;
-
 using protocol::Maybe;
 
 class V8RuntimeAgentImpl : public V8RuntimeAgent {
-    WTF_MAKE_NONCOPYABLE(V8RuntimeAgentImpl);
+    PROTOCOL_DISALLOW_COPY(V8RuntimeAgentImpl);
 public:
-    V8RuntimeAgentImpl(V8DebuggerImpl*);
+    explicit V8RuntimeAgentImpl(V8InspectorSessionImpl*);
     ~V8RuntimeAgentImpl() override;
 
     // State management methods.
-    void setInspectorState(PassRefPtr<protocol::DictionaryValue>) override;
+    void setInspectorState(protocol::DictionaryValue*) override;
     void setFrontend(protocol::Frontend::Runtime*) override;
     void clearFrontend() override;
     void restore() override;
@@ -65,78 +65,74 @@ public:
     void enable(ErrorString*) override;
     void disable(ErrorString*) override;
     void evaluate(ErrorString*,
-        const String& expression,
-        const Maybe<String>& objectGroup,
+        const String16& expression,
+        const Maybe<String16>& objectGroup,
         const Maybe<bool>& includeCommandLineAPI,
         const Maybe<bool>& doNotPauseOnExceptionsAndMuteConsole,
         const Maybe<int>& executionContextId,
         const Maybe<bool>& returnByValue,
         const Maybe<bool>& generatePreview,
+        const Maybe<bool>& userGesture,
         OwnPtr<protocol::Runtime::RemoteObject>* result,
         Maybe<bool>* wasThrown,
         Maybe<protocol::Runtime::ExceptionDetails>*) override;
     void callFunctionOn(ErrorString*,
-        const String& objectId,
-        const String& expression,
+        const String16& objectId,
+        const String16& expression,
         const Maybe<protocol::Array<protocol::Runtime::CallArgument>>& optionalArguments,
         const Maybe<bool>& doNotPauseOnExceptionsAndMuteConsole,
         const Maybe<bool>& returnByValue,
         const Maybe<bool>& generatePreview,
+        const Maybe<bool>& userGesture,
         OwnPtr<protocol::Runtime::RemoteObject>* result,
         Maybe<bool>* wasThrown) override;
-    void releaseObject(ErrorString*, const String& objectId) override;
+    void releaseObject(ErrorString*, const String16& objectId) override;
     void getProperties(ErrorString*,
-        const String& objectId,
+        const String16& objectId,
         const Maybe<bool>& ownProperties,
         const Maybe<bool>& accessorPropertiesOnly,
         const Maybe<bool>& generatePreview,
         OwnPtr<protocol::Array<protocol::Runtime::PropertyDescriptor>>* result,
         Maybe<protocol::Array<protocol::Runtime::InternalPropertyDescriptor>>* internalProperties,
         Maybe<protocol::Runtime::ExceptionDetails>*) override;
-    void releaseObjectGroup(ErrorString*, const String& objectGroup) override;
+    void releaseObjectGroup(ErrorString*, const String16& objectGroup) override;
     void run(ErrorString*) override;
-    void isRunRequired(ErrorString*, bool* result) override;
     void setCustomObjectFormatterEnabled(ErrorString*, bool) override;
     void compileScript(ErrorString*,
-        const String& expression,
-        const String& sourceURL,
+        const String16& expression,
+        const String16& sourceURL,
         bool persistScript,
         int executionContextId,
-        Maybe<protocol::Runtime::ScriptId>*,
+        Maybe<String16>*,
         Maybe<protocol::Runtime::ExceptionDetails>*) override;
     void runScript(ErrorString*,
-        const protocol::Runtime::ScriptId&,
+        const String16&,
         int executionContextId,
-        const Maybe<String>& objectGroup,
+        const Maybe<String16>& objectGroup,
         const Maybe<bool>& doNotPauseOnExceptionsAndMuteConsole,
         const Maybe<bool>& includeCommandLineAPI,
         OwnPtr<protocol::Runtime::RemoteObject>* result,
         Maybe<protocol::Runtime::ExceptionDetails>*) override;
 
-    V8DebuggerImpl* debugger() { return m_debugger; }
-    InjectedScriptManager* injectedScriptManager() { return m_injectedScriptManager.get(); }
+    void reset();
+    void reportExecutionContextCreated(InspectedContext*);
+    void reportExecutionContextDestroyed(InspectedContext*);
+    void inspect(PassOwnPtr<protocol::Runtime::RemoteObject> objectToInspect, PassOwnPtr<protocol::DictionaryValue> hints);
+
+    void setClearConsoleCallback(PassOwnPtr<ClearConsoleCallback>) override;
+    PassOwnPtr<protocol::Runtime::RemoteObject> wrapObject(v8::Local<v8::Context>, v8::Local<v8::Value>, const String16& groupName, bool generatePreview = false) override;
+    PassOwnPtr<protocol::Runtime::RemoteObject> wrapTable(v8::Local<v8::Context>, v8::Local<v8::Value> table, v8::Local<v8::Value> columns) override;
+    void disposeObjectGroup(const String16&) override;
+    v8::Local<v8::Value> findObject(ErrorString*, const String16& objectId, v8::Local<v8::Context>* = nullptr, String16* groupName = nullptr) override;
+    void addInspectedObject(PassOwnPtr<Inspectable>) override;
 
 private:
-    void setClearConsoleCallback(PassOwnPtr<ClearConsoleCallback>) override;
-    void setInspectObjectCallback(PassOwnPtr<InspectCallback>) override;
-    int ensureDefaultContextAvailable(v8::Local<v8::Context>) override;
-    PassOwnPtr<protocol::Runtime::RemoteObject> wrapObject(v8::Local<v8::Context>, v8::Local<v8::Value>, const String& groupName, bool generatePreview = false) override;
-    PassOwnPtr<protocol::Runtime::RemoteObject> wrapTable(v8::Local<v8::Context>, v8::Local<v8::Value> table, v8::Local<v8::Value> columns) override;
-    void disposeObjectGroup(const String&) override;
-    v8::Local<v8::Value> findObject(const String& objectId, v8::Local<v8::Context>* = nullptr, String* groupName = nullptr) override;
-    void addInspectedObject(PassOwnPtr<Inspectable>) override;
-    void clearInspectedObjects() override;
-
-    void reportExecutionContextCreated(v8::Local<v8::Context>, const String& type, const String& origin, const String& humanReadableName, const String& frameId) override;
-    void reportExecutionContextDestroyed(v8::Local<v8::Context>) override;
-    PassOwnPtr<protocol::Runtime::ExceptionDetails> createExceptionDetails(v8::Isolate*, v8::Local<v8::Message>);
-
-    RefPtr<protocol::DictionaryValue> m_state;
+    V8InspectorSessionImpl* m_session;
+    protocol::DictionaryValue* m_state;
     protocol::Frontend::Runtime* m_frontend;
-    OwnPtr<InjectedScriptManager> m_injectedScriptManager;
     V8DebuggerImpl* m_debugger;
     bool m_enabled;
-    HashMap<String, OwnPtr<v8::Global<v8::Script>>> m_compiledScripts;
+    protocol::HashMap<String16, OwnPtr<v8::Global<v8::Script>>> m_compiledScripts;
 };
 
 } // namespace blink

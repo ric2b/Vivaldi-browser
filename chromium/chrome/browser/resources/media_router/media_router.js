@@ -41,6 +41,7 @@ cr.define('media_router', function() {
                                onNavigateToDetails);
     container.addEventListener('navigate-to-cast-mode-list',
                                onNavigateToCastMode);
+    container.addEventListener('report-filter', onFilter);
     container.addEventListener('report-initial-action', onInitialAction);
     container.addEventListener('report-initial-action-close',
                                onInitialActionClose);
@@ -48,6 +49,8 @@ cr.define('media_router', function() {
     container.addEventListener('report-sink-click-time',
                                onSinkClickTimeReported);
     container.addEventListener('report-sink-count', onSinkCountReported);
+    container.addEventListener('report-resolved-route',
+                               onReportRouteCreationOutcome);
     container.addEventListener('show-initial-state', onShowInitialState);
     container.addEventListener('sink-click', onSinkClick);
     container.addEventListener('start-casting-to-route-click',
@@ -103,6 +106,15 @@ cr.define('media_router', function() {
     container.maybeReportUserFirstAction(
         media_router.MediaRouterUserAction.CLOSE);
     media_router.browserApi.closeDialog(detail.pressEscToClose);
+  }
+
+  /**
+   * Reports when the user uses the filter input to filter the sink list. This
+   * is reported at most once each time the user enters the filter view, and
+   * only if text is actually entered in the filter input.
+   */
+  function onFilter() {
+    media_router.browserApi.reportFilter();
   }
 
   /**
@@ -238,6 +250,23 @@ cr.define('media_router', function() {
   function onReportRouteCreation(event) {
     var detail = event.detail;
     media_router.browserApi.reportRouteCreation(detail.success);
+  }
+
+  /**
+   * Reports success or the type of failure for route creation response.
+   * Called when the route is resolved; either the route creation was a success
+   * or if there was no route or the route's corresponding sink is invalid;
+   * either the sink does not exist or was not the sink we were looking for.
+   *
+   * @param {!Event} event
+   * Parameters in |event|.detail:
+   *   outcome - the outcome of a create route response.
+   *
+   */
+  function onReportRouteCreationOutcome(event) {
+    /** @type {{outcome: number}} */
+    var detail = event.detail;
+    media_router.browserApi.reportRouteCreationOutcome(detail.outcome);
   }
 
   /**

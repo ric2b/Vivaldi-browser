@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include <vector>
+
 #include "gpu/command_buffer/common/mailbox.h"
 #include "media/base/media_export.h"
 #include "ui/gfx/geometry/rect.h"
@@ -18,15 +20,19 @@ namespace media {
 // This is the media-namespace equivalent of PP_PictureBuffer_Dev.
 class MEDIA_EXPORT PictureBuffer {
  public:
-  PictureBuffer(int32_t id, gfx::Size size, uint32_t texture_id);
+  using TextureIds = std::vector<uint32_t>;
+
+  PictureBuffer(int32_t id, gfx::Size size, const TextureIds& texture_ids);
   PictureBuffer(int32_t id,
                 gfx::Size size,
-                uint32_t texture_id,
-                uint32_t internal_texture_id);
+                const TextureIds& texture_ids,
+                const TextureIds& internal_texture_ids);
   PictureBuffer(int32_t id,
                 gfx::Size size,
-                uint32_t texture_id,
-                const gpu::Mailbox& texture_mailbox);
+                const TextureIds& texture_ids,
+                const std::vector<gpu::Mailbox>& texture_mailboxes);
+  PictureBuffer(const PictureBuffer& other);
+  ~PictureBuffer();
 
   // Returns the client-specified id of the buffer.
   int32_t id() const { return id_; }
@@ -35,30 +41,35 @@ class MEDIA_EXPORT PictureBuffer {
   gfx::Size size() const {
     return size_;
   }
+  void set_size(const gfx::Size& size) { size_ = size; }
 
   // Returns the id of the texture.
   // NOTE: The texture id in the renderer process corresponds to a different
   // texture id in the GPU process.
-  uint32_t texture_id() const { return texture_id_; }
+  const TextureIds& texture_ids() const { return texture_ids_; }
 
-  uint32_t internal_texture_id() const { return internal_texture_id_; }
+  const TextureIds& internal_texture_ids() const {
+    return internal_texture_ids_;
+  }
 
-  const gpu::Mailbox& texture_mailbox() const {
-    return texture_mailbox_;
+  const gpu::Mailbox& texture_mailbox(size_t plane) const {
+    return texture_mailboxes_[plane];
   }
 
  private:
   int32_t id_;
   gfx::Size size_;
-  uint32_t texture_id_;
-  uint32_t internal_texture_id_;
-  gpu::Mailbox texture_mailbox_;
+  TextureIds texture_ids_;
+  TextureIds internal_texture_ids_;
+  std::vector<gpu::Mailbox> texture_mailboxes_;
 };
 
 // A decoded picture frame.
 // This is the media-namespace equivalent of PP_Picture_Dev.
 class MEDIA_EXPORT Picture {
  public:
+  // Defaults |size_changed_| to false. Size changed is currently only used
+  // by AVDA and is set via set_size_changd().
   Picture(int32_t picture_buffer_id,
           int32_t bitstream_buffer_id,
           const gfx::Rect& visible_rect,
@@ -81,11 +92,20 @@ class MEDIA_EXPORT Picture {
 
   bool allow_overlay() const { return allow_overlay_; }
 
+  // Returns true when the VDA has adjusted the resolution of this Picture
+  // without requesting new PictureBuffers. GpuVideoDecoder should read this
+  // as a signal to update the size of the corresponding PicutreBuffer using
+  // visible_rect() upon receiving this Picture from a VDA.
+  bool size_changed() const { return size_changed_; };
+
+  void set_size_changed(bool size_changed) { size_changed_ = size_changed; }
+
  private:
   int32_t picture_buffer_id_;
   int32_t bitstream_buffer_id_;
   gfx::Rect visible_rect_;
   bool allow_overlay_;
+  bool size_changed_;
 };
 
 }  // namespace media

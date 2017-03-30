@@ -35,7 +35,6 @@
 #include "public/platform/WebAudioDestinationConsumer.h"
 #include "public/platform/WebMediaConstraints.h"
 #include "public/platform/WebString.h"
-#include "wtf/MainThread.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
 
@@ -47,7 +46,7 @@ class ExtraDataContainer : public MediaStreamSource::ExtraData {
 public:
     ExtraDataContainer(PassOwnPtr<WebMediaStreamSource::ExtraData> extraData) : m_extraData(std::move(extraData)) { }
 
-    WebMediaStreamSource::ExtraData* extraData() { return m_extraData.get(); }
+    WebMediaStreamSource::ExtraData* getExtraData() { return m_extraData.get(); }
 
 private:
     OwnPtr<WebMediaStreamSource::ExtraData> m_extraData;
@@ -95,12 +94,12 @@ WebMediaStreamSource::operator MediaStreamSource*() const
 
 void WebMediaStreamSource::initialize(const WebString& id, Type type, const WebString& name)
 {
-    m_private = MediaStreamSource::create(id, static_cast<MediaStreamSource::Type>(type), name, false, true);
+    m_private = MediaStreamSource::create(id, static_cast<MediaStreamSource::StreamType>(type), name, false, true);
 }
 
 void WebMediaStreamSource::initialize(const WebString& id, Type type, const WebString& name, bool remote, bool readonly)
 {
-    m_private = MediaStreamSource::create(id, static_cast<MediaStreamSource::Type>(type), name, remote, readonly);
+    m_private = MediaStreamSource::create(id, static_cast<MediaStreamSource::StreamType>(type), name, remote, readonly);
 }
 
 WebString WebMediaStreamSource::id() const
@@ -109,7 +108,7 @@ WebString WebMediaStreamSource::id() const
     return m_private.get()->id();
 }
 
-WebMediaStreamSource::Type WebMediaStreamSource::type() const
+WebMediaStreamSource::Type WebMediaStreamSource::getType() const
 {
     ASSERT(!m_private.isNull());
     return static_cast<Type>(m_private.get()->type());
@@ -133,19 +132,19 @@ void WebMediaStreamSource::setReadyState(ReadyState state)
     m_private->setReadyState(static_cast<MediaStreamSource::ReadyState>(state));
 }
 
-WebMediaStreamSource::ReadyState WebMediaStreamSource::readyState() const
+WebMediaStreamSource::ReadyState WebMediaStreamSource::getReadyState() const
 {
     ASSERT(!m_private.isNull());
-    return static_cast<ReadyState>(m_private->readyState());
+    return static_cast<ReadyState>(m_private->getReadyState());
 }
 
-WebMediaStreamSource::ExtraData* WebMediaStreamSource::extraData() const
+WebMediaStreamSource::ExtraData* WebMediaStreamSource::getExtraData() const
 {
     ASSERT(!m_private.isNull());
-    MediaStreamSource::ExtraData* data = m_private->extraData();
+    MediaStreamSource::ExtraData* data = m_private->getExtraData();
     if (!data)
         return 0;
-    return static_cast<ExtraDataContainer*>(data)->extraData();
+    return static_cast<ExtraDataContainer*>(data)->getExtraData();
 }
 
 void WebMediaStreamSource::setExtraData(ExtraData* extraData)

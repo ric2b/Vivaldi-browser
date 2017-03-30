@@ -98,18 +98,17 @@ void DialAPI::OnDialError(const DialRegistry::DialErrorCode code) {
 void DialAPI::SendEventOnUIThread(const DialRegistry::DeviceList& devices) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  std::vector<linked_ptr<api::dial::DialDevice> > args;
-  for (DialRegistry::DeviceList::const_iterator it = devices.begin();
-       it != devices.end(); ++it) {
-    linked_ptr<api::dial::DialDevice> api_device =
-        make_linked_ptr(new api::dial::DialDevice);
-    it->FillDialDevice(api_device.get());
-    args.push_back(api_device);
+  std::vector<api::dial::DialDevice> args;
+  for (const DialDeviceData& device : devices) {
+    api::dial::DialDevice api_device;
+    device.FillDialDevice(&api_device);
+    args.push_back(std::move(api_device));
   }
-  scoped_ptr<base::ListValue> results = api::dial::OnDeviceList::Create(args);
-  scoped_ptr<Event> event(new Event(events::DIAL_ON_DEVICE_LIST,
-                                    dial::OnDeviceList::kEventName,
-                                    std::move(results)));
+  std::unique_ptr<base::ListValue> results =
+      api::dial::OnDeviceList::Create(args);
+  std::unique_ptr<Event> event(new Event(events::DIAL_ON_DEVICE_LIST,
+                                         dial::OnDeviceList::kEventName,
+                                         std::move(results)));
   EventRouter::Get(profile_)->BroadcastEvent(std::move(event));
 }
 
@@ -138,8 +137,9 @@ void DialAPI::SendErrorOnUIThread(const DialRegistry::DialErrorCode code) {
       break;
   }
 
-  scoped_ptr<base::ListValue> results = api::dial::OnError::Create(dial_error);
-  scoped_ptr<Event> event(new Event(
+  std::unique_ptr<base::ListValue> results =
+      api::dial::OnError::Create(dial_error);
+  std::unique_ptr<Event> event(new Event(
       events::DIAL_ON_ERROR, dial::OnError::kEventName, std::move(results)));
   EventRouter::Get(profile_)->BroadcastEvent(std::move(event));
 }

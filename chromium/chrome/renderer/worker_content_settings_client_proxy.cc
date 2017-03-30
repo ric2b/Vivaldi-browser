@@ -19,31 +19,17 @@ WorkerContentSettingsClientProxy::WorkerContentSettingsClientProxy(
     blink::WebFrame* frame)
     : routing_id_(render_frame->GetRoutingID()),
       is_unique_origin_(false) {
-  if (frame->document().securityOrigin().isUnique() ||
-      frame->top()->securityOrigin().isUnique())
+  if (frame->document().getSecurityOrigin().isUnique() ||
+      frame->top()->getSecurityOrigin().isUnique())
     is_unique_origin_ = true;
   sync_message_filter_ = content::RenderThread::Get()->GetSyncMessageFilter();
   document_origin_url_ =
-      blink::WebStringToGURL(frame->document().securityOrigin().toString());
+      blink::WebStringToGURL(frame->document().getSecurityOrigin().toString());
   top_frame_origin_url_ =
-      blink::WebStringToGURL(frame->top()->securityOrigin().toString());
+      blink::WebStringToGURL(frame->top()->getSecurityOrigin().toString());
 }
 
 WorkerContentSettingsClientProxy::~WorkerContentSettingsClientProxy() {}
-
-bool WorkerContentSettingsClientProxy::allowDatabase(
-    const blink::WebString& name,
-    const blink::WebString& display_name,
-    unsigned long estimated_size) {
-  if (is_unique_origin_)
-    return false;
-
-  bool result = false;
-  sync_message_filter_->Send(new ChromeViewHostMsg_AllowDatabase(
-      routing_id_, document_origin_url_, top_frame_origin_url_,
-      name, display_name, &result));
-  return result;
-}
 
 bool WorkerContentSettingsClientProxy::requestFileSystemAccessSync() {
   if (is_unique_origin_)

@@ -7,7 +7,6 @@
 
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
-#include "core/page/PageLifecycleObserver.h"
 #include "modules/EventTargetModules.h"
 #include "modules/bluetooth/BluetoothAdvertisingData.h"
 #include "modules/bluetooth/BluetoothRemoteGATTServer.h"
@@ -32,12 +31,11 @@ class ScriptState;
 // CallbackPromiseAdapter class comments.
 class BluetoothDevice final
     : public RefCountedGarbageCollectedEventTargetWithInlineData<BluetoothDevice>
-    , public ActiveDOMObject
-    , public PageLifecycleObserver {
+    , public ActiveDOMObject {
     USING_PRE_FINALIZER(BluetoothDevice, dispose);
     DEFINE_WRAPPERTYPEINFO();
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(BluetoothDevice);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(BluetoothDevice);
+    USING_GARBAGE_COLLECTED_MIXIN(BluetoothDevice);
 public:
     BluetoothDevice(ExecutionContext*, PassOwnPtr<WebBluetoothDevice>);
 
@@ -50,15 +48,9 @@ public:
     // dispose() is called in this case.
     // 2. When the parent document gets detached e.g. reloading a page.
     // stop() is called in this case.
-    // 3. For now (https://crbug.com/579746), when the tab is no longer in the
-    // foreground e.g. change tabs.
-    // pageVisibilityChanged() is called in this case.
     // TODO(ortuno): Users should be able to turn on notifications for
     // events on navigator.bluetooth and still remain connected even if the
     // BluetoothDevice object is garbage collected.
-    // TODO(ortuno): Allow connections when the tab is in the background.
-    // This is a short term solution instead of implementing a tab indicator
-    // for bluetooth connections.
 
     // USING_PRE_FINALIZER interface.
     // Called before the object gets garbage collected.
@@ -67,16 +59,13 @@ public:
     // ActiveDOMObject interface.
     void stop() override;
 
-    // PageLifecycleObserver interface.
-    void pageVisibilityChanged() override;
-
     // If gatt is connected then disconnects and sets gatt.connected to false.
     // Returns true if gatt was disconnected.
     bool disconnectGATTIfConnected();
 
     // EventTarget methods:
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
     // Interface required by Garbage Collection:
     DECLARE_VIRTUAL_TRACE();

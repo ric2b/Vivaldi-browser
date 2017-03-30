@@ -26,6 +26,8 @@ source_set("base") {
     "audio_buffer_queue.cc",
     "audio_buffer_queue.h",
     "audio_capturer_source.h",
+    "audio_codecs.cc",
+    "audio_codecs.h",
     "audio_converter.cc",
     "audio_converter.h",
     "audio_decoder.cc",
@@ -86,10 +88,14 @@ source_set("base") {
     "channel_mixer.h",
     "channel_mixing_matrix.cc",
     "channel_mixing_matrix.h",
+    "container_names.cc",
+    "container_names.h",
     "data_buffer.cc",
     "data_buffer.h",
     "data_source.cc",
     "data_source.h",
+    "decode_status.cc",
+    "decode_status.h",
     "decoder_buffer.cc",
     "decoder_buffer.h",
     "decoder_buffer_queue.cc",
@@ -109,6 +115,8 @@ source_set("base") {
     "djb2.cc",
     "djb2.h",
     "eme_constants.h",
+    "encryption_scheme.cc",
+    "encryption_scheme.h",
     "key_system_info.cc",
     "key_system_info.h",
     "key_systems.cc",
@@ -131,6 +139,10 @@ source_set("base") {
     "media_resources.h",
     "media_switches.cc",
     "media_switches.h",
+    "media_track.cc",
+    "media_track.h",
+    "media_tracks.cc",
+    "media_tracks.h",
     "media_util.cc",
     "media_util.h",
     "mime_util.cc",
@@ -143,7 +155,8 @@ source_set("base") {
     "multi_channel_resampler.h",
     "null_video_sink.cc",
     "null_video_sink.h",
-    "output_device.h",
+    "output_device_info.cc",
+    "output_device_info.h",
     "pipeline.h",
     "pipeline_impl.cc",
     "pipeline_impl.h",
@@ -236,10 +249,6 @@ source_set("base") {
   ]
 
   if (media_use_ffmpeg) {
-    sources += [
-      "container_names.cc",
-      "container_names.h",
-    ]
     if (!is_android) {
       sources += [
         "audio_video_metadata_extractor.cc",
@@ -350,8 +359,8 @@ source_set("test_support") {
     "fake_demuxer_stream.h",
     "fake_media_resources.cc",
     "fake_media_resources.h",
-    "fake_output_device.cc",
-    "fake_output_device.h",
+    "fake_single_thread_task_runner.cc",
+    "fake_single_thread_task_runner.h",
     "fake_text_track_stream.cc",
     "fake_text_track_stream.h",
     "gmock_callback_support.h",
@@ -367,6 +376,7 @@ source_set("test_support") {
     "test_data_util.h",
     "test_helpers.cc",
     "test_helpers.h",
+    "test_random.h",
   ]
   configs += [ "//media:media_config" ]
   deps = [
@@ -552,6 +562,16 @@ if (current_cpu == "x86" || current_cpu == "x64") {
       }
     }
   }
+}
+
+fuzzer_test("media_bit_reader_fuzzer") {
+  sources = [
+    "bit_reader_fuzzertest.cc",
+  ]
+  deps = [
+    "//base",
+    "//media",
+  ]
 }
 
 fuzzer_test("media_container_names_fuzzer") {

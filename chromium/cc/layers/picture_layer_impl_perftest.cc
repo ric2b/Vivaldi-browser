@@ -7,11 +7,11 @@
 #include "base/macros.h"
 #include "base/thread_task_runner_handle.h"
 #include "cc/debug/lap_timer.h"
-#include "cc/test/fake_display_list_raster_source.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_picture_layer_impl.h"
+#include "cc/test/fake_raster_source.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/tiles/tiling_set_raster_queue_all.h"
@@ -57,11 +57,11 @@ class PictureLayerImplPerfTest : public testing::Test {
   }
 
   void SetupPendingTree(const gfx::Size& layer_bounds) {
-    scoped_refptr<FakeDisplayListRasterSource> raster_source =
-        FakeDisplayListRasterSource::CreateFilled(layer_bounds);
+    scoped_refptr<FakeRasterSource> raster_source =
+        FakeRasterSource::CreateFilled(layer_bounds);
     host_impl_.CreatePendingTree();
     LayerTreeImpl* pending_tree = host_impl_.pending_tree();
-    pending_tree->DetachLayerTree();
+    pending_tree->ClearLayers();
 
     scoped_ptr<FakePictureLayerImpl> pending_layer =
         FakePictureLayerImpl::CreateWithRasterSource(pending_tree, 7,
@@ -102,8 +102,11 @@ class PictureLayerImplPerfTest : public testing::Test {
   void RunRasterQueueConstructTest(const std::string& test_name,
                                    const gfx::Rect& viewport) {
     host_impl_.SetViewportSize(viewport.size());
-    pending_layer_->PushScrollOffsetFromMainThread(
-        gfx::ScrollOffset(viewport.x(), viewport.y()));
+    host_impl_.pending_tree()
+        ->property_trees()
+        ->scroll_tree.UpdateScrollOffsetBaseForTesting(
+            pending_layer_->id(),
+            gfx::ScrollOffset(viewport.x(), viewport.y()));
     bool update_lcd_text = false;
     host_impl_.pending_tree()->UpdateDrawProperties(update_lcd_text);
 
@@ -147,8 +150,11 @@ class PictureLayerImplPerfTest : public testing::Test {
   void RunEvictionQueueConstructTest(const std::string& test_name,
                                      const gfx::Rect& viewport) {
     host_impl_.SetViewportSize(viewport.size());
-    pending_layer_->PushScrollOffsetFromMainThread(
-        gfx::ScrollOffset(viewport.x(), viewport.y()));
+    host_impl_.pending_tree()
+        ->property_trees()
+        ->scroll_tree.UpdateScrollOffsetBaseForTesting(
+            pending_layer_->id(),
+            gfx::ScrollOffset(viewport.x(), viewport.y()));
     bool update_lcd_text = false;
     host_impl_.pending_tree()->UpdateDrawProperties(update_lcd_text);
 

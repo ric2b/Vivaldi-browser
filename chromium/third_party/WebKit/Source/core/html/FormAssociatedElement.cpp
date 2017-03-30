@@ -38,16 +38,15 @@ namespace blink {
 using namespace HTMLNames;
 
 class FormAttributeTargetObserver : public IdTargetObserver {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(FormAttributeTargetObserver);
 public:
-    static PassOwnPtrWillBeRawPtr<FormAttributeTargetObserver> create(const AtomicString& id, FormAssociatedElement*);
+    static RawPtr<FormAttributeTargetObserver> create(const AtomicString& id, FormAssociatedElement*);
     DECLARE_VIRTUAL_TRACE();
     void idTargetChanged() override;
 
 private:
     FormAttributeTargetObserver(const AtomicString& id, FormAssociatedElement*);
 
-    RawPtrWillBeMember<FormAssociatedElement> m_element;
+    Member<FormAssociatedElement> m_element;
 };
 
 FormAssociatedElement::FormAssociatedElement()
@@ -87,7 +86,7 @@ void FormAssociatedElement::insertedInto(ContainerNode* insertionPoint)
     if (!m_formWasSetByParser || !m_form || NodeTraversal::highestAncestorOrSelf(*insertionPoint) != NodeTraversal::highestAncestorOrSelf(*m_form.get()))
         resetFormOwner();
 
-    if (!insertionPoint->inDocument())
+    if (!insertionPoint->inShadowIncludingDocument())
         return;
 
     HTMLElement* element = toHTMLElement(this);
@@ -98,7 +97,7 @@ void FormAssociatedElement::insertedInto(ContainerNode* insertionPoint)
 void FormAssociatedElement::removedFrom(ContainerNode* insertionPoint)
 {
     HTMLElement* element = toHTMLElement(this);
-    if (insertionPoint->inDocument() && element->fastHasAttribute(formAttr)) {
+    if (insertionPoint->inShadowIncludingDocument() && element->fastHasAttribute(formAttr)) {
         setFormAttributeTargetObserver(nullptr);
         resetFormOwner();
         return;
@@ -114,7 +113,7 @@ HTMLFormElement* FormAssociatedElement::findAssociatedForm(const HTMLElement* el
     const AtomicString& formId(element->fastGetAttribute(formAttr));
     // 3. If the element is reassociateable, has a form content attribute, and
     // is itself in a Document, then run these substeps:
-    if (!formId.isNull() && element->inDocument()) {
+    if (!formId.isNull() && element->inShadowIncludingDocument()) {
         // 3.1. If the first element in the Document to have an ID that is
         // case-sensitively equal to the element's form content attribute's
         // value is a form element, then associate the form-associated element
@@ -139,7 +138,7 @@ void FormAssociatedElement::formRemovedFromTree(const Node& formRoot)
 
 void FormAssociatedElement::associateByParser(HTMLFormElement* form)
 {
-    if (form && form->inDocument()) {
+    if (form && form->inShadowIncludingDocument()) {
         m_formWasSetByParser = true;
         setForm(form);
         form->didAssociateByParser();
@@ -172,7 +171,7 @@ void FormAssociatedElement::willChangeForm()
 
 void FormAssociatedElement::didChangeForm()
 {
-    if (!m_formWasSetByParser && m_form && m_form->inDocument()) {
+    if (!m_formWasSetByParser && m_form && m_form->inShadowIncludingDocument()) {
         HTMLElement* element = toHTMLElement(this);
         element->document().didAssociateFormControl(element);
     }
@@ -279,7 +278,7 @@ void FormAssociatedElement::setCustomValidity(const String& error)
     m_customValidationMessage = error;
 }
 
-void FormAssociatedElement::setFormAttributeTargetObserver(PassOwnPtrWillBeRawPtr<FormAttributeTargetObserver> newObserver)
+void FormAssociatedElement::setFormAttributeTargetObserver(RawPtr<FormAttributeTargetObserver> newObserver)
 {
     if (m_formAttributeTargetObserver)
         m_formAttributeTargetObserver->unregister();
@@ -290,7 +289,7 @@ void FormAssociatedElement::resetFormAttributeTargetObserver()
 {
     HTMLElement* element = toHTMLElement(this);
     const AtomicString& formId(element->fastGetAttribute(formAttr));
-    if (!formId.isNull() && element->inDocument())
+    if (!formId.isNull() && element->inShadowIncludingDocument())
         setFormAttributeTargetObserver(FormAttributeTargetObserver::create(formId, this));
     else
         setFormAttributeTargetObserver(nullptr);
@@ -337,9 +336,9 @@ HTMLElement& toHTMLElement(FormAssociatedElement& associatedElement)
     return const_cast<HTMLElement&>(toHTMLElement(static_cast<const FormAssociatedElement&>(associatedElement)));
 }
 
-PassOwnPtrWillBeRawPtr<FormAttributeTargetObserver> FormAttributeTargetObserver::create(const AtomicString& id, FormAssociatedElement* element)
+RawPtr<FormAttributeTargetObserver> FormAttributeTargetObserver::create(const AtomicString& id, FormAssociatedElement* element)
 {
-    return adoptPtrWillBeNoop(new FormAttributeTargetObserver(id, element));
+    return new FormAttributeTargetObserver(id, element);
 }
 
 FormAttributeTargetObserver::FormAttributeTargetObserver(const AtomicString& id, FormAssociatedElement* element)

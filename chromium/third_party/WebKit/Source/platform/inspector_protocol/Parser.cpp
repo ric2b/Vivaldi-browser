@@ -4,10 +4,8 @@
 
 #include "platform/inspector_protocol/Parser.h"
 
-#include "platform/Decimal.h"
+#include "platform/inspector_protocol/String16.h"
 #include "platform/inspector_protocol/Values.h"
-#include "wtf/text/StringBuilder.h"
-#include "wtf/text/UTF8.h"
 
 namespace blink {
 namespace protocol {
@@ -35,8 +33,7 @@ const char* const nullString = "null";
 const char* const trueString = "true";
 const char* const falseString = "false";
 
-template<typename CharType>
-bool parseConstToken(const CharType* start, const CharType* end, const CharType** tokenEnd, const char* token)
+bool parseConstToken(const UChar* start, const UChar* end, const UChar** tokenEnd, const char* token)
 {
     while (start < end && *token != '\0' && *start++ == *token++) { }
     if (*token != '\0')
@@ -45,8 +42,7 @@ bool parseConstToken(const CharType* start, const CharType* end, const CharType*
     return true;
 }
 
-template<typename CharType>
-bool readInt(const CharType* start, const CharType* end, const CharType** tokenEnd, bool canHaveLeadingZeros)
+bool readInt(const UChar* start, const UChar* end, const UChar** tokenEnd, bool canHaveLeadingZeros)
 {
     if (start == end)
         return false;
@@ -64,14 +60,13 @@ bool readInt(const CharType* start, const CharType* end, const CharType** tokenE
     return true;
 }
 
-template<typename CharType>
-bool parseNumberToken(const CharType* start, const CharType* end, const CharType** tokenEnd)
+bool parseNumberToken(const UChar* start, const UChar* end, const UChar** tokenEnd)
 {
     // We just grab the number here. We validate the size in DecodeNumber.
     // According to RFC4627, a valid number is: [minus] int [frac] [exp]
     if (start == end)
         return false;
-    CharType c = *start;
+    UChar c = *start;
     if ('-' == c)
         ++start;
 
@@ -114,13 +109,12 @@ bool parseNumberToken(const CharType* start, const CharType* end, const CharType
     return true;
 }
 
-template<typename CharType>
-bool readHexDigits(const CharType* start, const CharType* end, const CharType** tokenEnd, int digits)
+bool readHexDigits(const UChar* start, const UChar* end, const UChar** tokenEnd, int digits)
 {
     if (end - start < digits)
         return false;
     for (int i = 0; i < digits; ++i) {
-        CharType c = *start++;
+        UChar c = *start++;
         if (!(('0' <= c && c <= '9') || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')))
             return false;
     }
@@ -128,11 +122,10 @@ bool readHexDigits(const CharType* start, const CharType* end, const CharType** 
     return true;
 }
 
-template<typename CharType>
-bool parseStringToken(const CharType* start, const CharType* end, const CharType** tokenEnd)
+bool parseStringToken(const UChar* start, const UChar* end, const UChar** tokenEnd)
 {
     while (start < end) {
-        CharType c = *start++;
+        UChar c = *start++;
         if ('\\' == c) {
             c = *start++;
             // Make sure the escaped char is valid.
@@ -166,8 +159,7 @@ bool parseStringToken(const CharType* start, const CharType* end, const CharType
     return false;
 }
 
-template<typename CharType>
-bool skipComment(const CharType* start, const CharType* end, const CharType** commentEnd)
+bool skipComment(const UChar* start, const UChar* end, const UChar** commentEnd)
 {
     if (start == end)
         return false;
@@ -190,7 +182,7 @@ bool skipComment(const CharType* start, const CharType* end, const CharType** co
     }
 
     if (*start == '*') {
-        CharType previous = '\0';
+        UChar previous = '\0';
         // Block comment, read until end marker.
         for (++start; start < end; previous = *start++) {
             if (previous == '*' && *start == '/') {
@@ -205,14 +197,13 @@ bool skipComment(const CharType* start, const CharType* end, const CharType** co
     return false;
 }
 
-template<typename CharType>
-void skipWhitespaceAndComments(const CharType* start, const CharType* end, const CharType** whitespaceEnd)
+void skipWhitespaceAndComments(const UChar* start, const UChar* end, const UChar** whitespaceEnd)
 {
     while (start < end) {
         if (isSpaceOrNewline(*start)) {
             ++start;
         } else if (*start == '/') {
-            const CharType* commentEnd;
+            const UChar* commentEnd;
             if (!skipComment(start, end, &commentEnd))
                 break;
             start = commentEnd;
@@ -223,8 +214,7 @@ void skipWhitespaceAndComments(const CharType* start, const CharType* end, const
     *whitespaceEnd = start;
 }
 
-template<typename CharType>
-Token parseToken(const CharType* start, const CharType* end, const CharType** tokenStart, const CharType** tokenEnd)
+Token parseToken(const UChar* start, const UChar* end, const UChar** tokenStart, const UChar** tokenEnd)
 {
     skipWhitespaceAndComments(start, end, tokenStart);
     start = *tokenStart;
@@ -285,8 +275,7 @@ Token parseToken(const CharType* start, const CharType* end, const CharType** to
     return InvalidToken;
 }
 
-template<typename CharType>
-inline int hexToInt(CharType c)
+inline int hexToInt(UChar c)
 {
     if ('0' <= c && c <= '9')
         return c - '0';
@@ -298,52 +287,7 @@ inline int hexToInt(CharType c)
     return 0;
 }
 
-template<typename CharType>
-bool decodeUTF8(const CharType* start, const CharType* end, const CharType** utf8charEnd, StringBuilder* output)
-{
-    UChar utf16[4] = {0};
-    char utf8[6] = {0};
-    size_t utf8count = 0;
-
-    while (start < end) {
-        if (start + 1 >= end || *start != '\\' || *(start + 1) != 'x')
-            return false;
-        start += 2;
-
-        // Accumulate one more utf8 character and try converting to utf16.
-        if (start + 1 >= end)
-            return false;
-        utf8[utf8count++] = (hexToInt(*start) << 4) + hexToInt(*(start + 1));
-        start += 2;
-
-        const char* utf8start = utf8;
-        UChar* utf16start = utf16;
-        WTF::Unicode::ConversionResult conversionResult = WTF::Unicode::convertUTF8ToUTF16(&utf8start, utf8start + utf8count, &utf16start, utf16start + WTF_ARRAY_LENGTH(utf16), nullptr, true);
-
-        if (conversionResult == WTF::Unicode::sourceIllegal)
-            return false;
-
-        if (conversionResult == WTF::Unicode::conversionOK) {
-            // Not all utf8 characters were consumed - failed parsing.
-            if (utf8start != utf8 + utf8count)
-                return false;
-
-            size_t utf16length = utf16start - utf16;
-            output->append(utf16, utf16length);
-            *utf8charEnd = start;
-            return true;
-        }
-
-        // Keep accumulating utf8 characters up to buffer length (6 should be enough).
-        if (utf8count >= WTF_ARRAY_LENGTH(utf8))
-            return false;
-    }
-
-    return false;
-}
-
-template<typename CharType>
-bool decodeString(const CharType* start, const CharType* end, StringBuilder* output)
+bool decodeString(const UChar* start, const UChar* end, String16Builder* output)
 {
     while (start < end) {
         UChar c = *start++;
@@ -354,10 +298,8 @@ bool decodeString(const CharType* start, const CharType* end, StringBuilder* out
         c = *start++;
 
         if (c == 'x') {
-            // Rewind "\x".
-            if (!decodeUTF8(start - 2, end, &start, output))
-                return false;
-            continue;
+            // \x is not supported.
+            return false;
         }
 
         switch (c) {
@@ -398,8 +340,7 @@ bool decodeString(const CharType* start, const CharType* end, StringBuilder* out
     return true;
 }
 
-template<typename CharType>
-bool decodeString(const CharType* start, const CharType* end, String* output)
+bool decodeString(const UChar* start, const UChar* end, String16* output)
 {
     if (start == end) {
         *output = "";
@@ -407,26 +348,22 @@ bool decodeString(const CharType* start, const CharType* end, String* output)
     }
     if (start > end)
         return false;
-    StringBuilder buffer;
+    String16Builder buffer;
     buffer.reserveCapacity(end - start);
     if (!decodeString(start, end, &buffer))
         return false;
     *output = buffer.toString();
-    // Validate constructed utf16 string.
-    if (output->utf8(StrictUTF8Conversion).isNull())
-        return false;
     return true;
 }
 
-template<typename CharType>
-PassRefPtr<Value> buildValue(const CharType* start, const CharType* end, const CharType** valueTokenEnd, int depth)
+PassOwnPtr<Value> buildValue(const UChar* start, const UChar* end, const UChar** valueTokenEnd, int depth)
 {
     if (depth > stackLimit)
         return nullptr;
 
-    RefPtr<Value> result;
-    const CharType* tokenStart;
-    const CharType* tokenEnd;
+    OwnPtr<Value> result;
+    const UChar* tokenStart;
+    const UChar* tokenEnd;
     Token token = parseToken(start, end, &tokenStart, &tokenEnd);
     switch (token) {
     case InvalidToken:
@@ -442,16 +379,14 @@ PassRefPtr<Value> buildValue(const CharType* start, const CharType* end, const C
         break;
     case Number: {
         bool ok;
-        double value = charactersToDouble(tokenStart, tokenEnd - tokenStart, &ok);
-        if (Decimal::fromDouble(value).isInfinity())
-            ok = false;
+        double value = String16::charactersToDouble(tokenStart, tokenEnd - tokenStart, &ok);
         if (!ok)
             return nullptr;
         result = FundamentalValue::create(value);
         break;
     }
     case StringLiteral: {
-        String value;
+        String16 value;
         bool ok = decodeString(tokenStart + 1, tokenEnd - 1, &value);
         if (!ok)
             return nullptr;
@@ -459,14 +394,14 @@ PassRefPtr<Value> buildValue(const CharType* start, const CharType* end, const C
         break;
     }
     case ArrayBegin: {
-        RefPtr<ListValue> array = ListValue::create();
+        OwnPtr<ListValue> array = ListValue::create();
         start = tokenEnd;
         token = parseToken(start, end, &tokenStart, &tokenEnd);
         while (token != ArrayEnd) {
-            RefPtr<Value> arrayNode = buildValue(start, end, &tokenEnd, depth + 1);
+            OwnPtr<Value> arrayNode = buildValue(start, end, &tokenEnd, depth + 1);
             if (!arrayNode)
                 return nullptr;
-            array->pushValue(arrayNode);
+            array->pushValue(arrayNode.release());
 
             // After a list value, we expect a comma or the end of the list.
             start = tokenEnd;
@@ -487,13 +422,13 @@ PassRefPtr<Value> buildValue(const CharType* start, const CharType* end, const C
         break;
     }
     case ObjectBegin: {
-        RefPtr<DictionaryValue> object = DictionaryValue::create();
+        OwnPtr<DictionaryValue> object = DictionaryValue::create();
         start = tokenEnd;
         token = parseToken(start, end, &tokenStart, &tokenEnd);
         while (token != ObjectEnd) {
             if (token != StringLiteral)
                 return nullptr;
-            String key;
+            String16 key;
             if (!decodeString(tokenStart + 1, tokenEnd - 1, &key))
                 return nullptr;
             start = tokenEnd;
@@ -503,10 +438,10 @@ PassRefPtr<Value> buildValue(const CharType* start, const CharType* end, const C
                 return nullptr;
             start = tokenEnd;
 
-            RefPtr<Value> value = buildValue(start, end, &tokenEnd, depth + 1);
+            OwnPtr<Value> value = buildValue(start, end, &tokenEnd, depth + 1);
             if (!value)
                 return nullptr;
-            object->setValue(key, value);
+            object->setValue(key, value.release());
             start = tokenEnd;
 
             // After a key/value pair, we expect a comma or the end of the
@@ -537,12 +472,11 @@ PassRefPtr<Value> buildValue(const CharType* start, const CharType* end, const C
     return result.release();
 }
 
-template<typename CharType>
-PassRefPtr<Value> parseJSONInternal(const CharType* start, unsigned length)
+PassOwnPtr<Value> parseJSONInternal(const UChar* start, unsigned length)
 {
-    const CharType* end = start + length;
-    const CharType *tokenEnd;
-    RefPtr<Value> value = buildValue(start, end, &tokenEnd, 0);
+    const UChar* end = start + length;
+    const UChar *tokenEnd;
+    OwnPtr<Value> value = buildValue(start, end, &tokenEnd, 0);
     if (!value || tokenEnd != end)
         return nullptr;
     return value.release();
@@ -550,12 +484,10 @@ PassRefPtr<Value> parseJSONInternal(const CharType* start, unsigned length)
 
 } // anonymous namespace
 
-PassRefPtr<Value> parseJSON(const String& json)
+PassOwnPtr<Value> parseJSON(const String16& json)
 {
     if (json.isEmpty())
         return nullptr;
-    if (json.is8Bit())
-        return parseJSONInternal(json.characters8(), json.length());
     return parseJSONInternal(json.characters16(), json.length());
 }
 

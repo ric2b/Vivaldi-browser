@@ -112,11 +112,11 @@ void ClientControlDispatcher::DeliverClientMessage(
 }
 
 void ClientControlDispatcher::OnIncomingMessage(
-    scoped_ptr<CompoundBuffer> buffer) {
+    std::unique_ptr<CompoundBuffer> buffer) {
   DCHECK(client_stub_);
   DCHECK(clipboard_stub_);
 
-  scoped_ptr<ControlMessage> message =
+  std::unique_ptr<ControlMessage> message =
       ParseMessage<ControlMessage>(buffer.get());
   if (!message)
     return;
@@ -132,6 +132,8 @@ void ClientControlDispatcher::OnIncomingMessage(
     client_stub_->SetPairingResponse(message->pairing_response());
   } else if (message->has_extension_message()) {
     client_stub_->DeliverHostMessage(message->extension_message());
+  } else if (message->has_video_layout()) {
+    client_stub_->SetVideoLayout(message->video_layout());
   } else {
     LOG(WARNING) << "Unknown control message received.";
   }

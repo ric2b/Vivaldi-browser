@@ -20,6 +20,7 @@
 #include "skia/ext/skia_utils_mac.h"
 #import "third_party/mozilla/NSPasteboard+Utils.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/clipboard/clipboard_util_mac.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/size.h"
@@ -28,9 +29,6 @@
 namespace ui {
 
 namespace {
-
-// Would be nice if this were in UTCoreTypes.h, but it isn't
-NSString* const kUTTypeURLName = @"public.url-name";
 
 // Tells us if WebKit was the last to write to the pasteboard. There's no
 // actual data associated with this type.
@@ -114,7 +112,7 @@ const Clipboard::FormatType& Clipboard::GetUrlWFormatType() {
 
 // static
 const Clipboard::FormatType& Clipboard::GetPlainTextFormatType() {
-  CR_DEFINE_STATIC_LOCAL(FormatType, type, (NSStringPboardType));
+  CR_DEFINE_STATIC_LOCAL(FormatType, type, (NSPasteboardTypeString));
   return type;
 }
 
@@ -245,7 +243,7 @@ void ClipboardMac::ReadText(ClipboardType type, base::string16* result) const {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(type, CLIPBOARD_TYPE_COPY_PASTE);
   NSPasteboard* pb = GetPasteboard();
-  NSString* contents = [pb stringForType:NSStringPboardType];
+  NSString* contents = [pb stringForType:NSPasteboardTypeString];
 
   *result = base::SysNSStringToUTF16(contents);
 }
@@ -255,7 +253,7 @@ void ClipboardMac::ReadAsciiText(ClipboardType type,
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(type, CLIPBOARD_TYPE_COPY_PASTE);
   NSPasteboard* pb = GetPasteboard();
-  NSString* contents = [pb stringForType:NSStringPboardType];
+  NSString* contents = [pb stringForType:NSPasteboardTypeString];
 
   if (!contents)
     result->clear();
@@ -279,7 +277,7 @@ void ClipboardMac::ReadHTML(ClipboardType type,
   NSPasteboard* pb = GetPasteboard();
   NSArray* supportedTypes = [NSArray arrayWithObjects:NSHTMLPboardType,
                                                       NSRTFPboardType,
-                                                      NSStringPboardType,
+                                                      NSPasteboardTypeString,
                                                       nil];
   NSString* bestType = [pb availableTypeFromArray:supportedTypes];
   if (bestType) {
@@ -354,12 +352,12 @@ void ClipboardMac::ReadBookmark(base::string16* title, std::string* url) const {
   NSPasteboard* pb = GetPasteboard();
 
   if (title) {
-    NSString* contents = [pb stringForType:kUTTypeURLName];
+    NSString* contents = ClipboardUtil::GetTitleFromPasteboardURL(pb);
     *title = base::SysNSStringToUTF16(contents);
   }
 
   if (url) {
-    NSString* url_string = [[NSURL URLFromPasteboard:pb] absoluteString];
+    NSString* url_string = ClipboardUtil::GetURLFromPasteboardURL(pb);
     if (!url_string)
       url->clear();
     else
@@ -393,8 +391,8 @@ void ClipboardMac::WriteText(const char* text_data, size_t text_len) {
   std::string text_str(text_data, text_len);
   NSString* text = base::SysUTF8ToNSString(text_str);
   NSPasteboard* pb = GetPasteboard();
-  [pb addTypes:[NSArray arrayWithObject:NSStringPboardType] owner:nil];
-  [pb setString:text forType:NSStringPboardType];
+  [pb addTypes:[NSArray arrayWithObject:NSPasteboardTypeString] owner:nil];
+  [pb setString:text forType:NSPasteboardTypeString];
 }
 
 void ClipboardMac::WriteHTML(const char* markup_data,
@@ -425,18 +423,10 @@ void ClipboardMac::WriteBookmark(const char* title_data,
   std::string url_str(url_data, url_len);
   NSString* url = base::SysUTF8ToNSString(url_str);
 
-  // TODO(playmobil): In the Windows version of this function, an HTML
-  // representation of the bookmark is also added to the clipboard, to support
-  // drag and drop of web shortcuts.  I don't think we need to do this on the
-  // Mac, but we should double check later on.
-  NSURL* nsurl = [NSURL URLWithString:url];
-
+  base::scoped_nsobject<NSPasteboardItem> item(
+      ClipboardUtil::PasteboardItemFromUrl(url, title));
   NSPasteboard* pb = GetPasteboard();
-  // passing UTIs into the pasteboard methods is valid >= 10.5
-  [pb addTypes:[NSArray arrayWithObjects:NSURLPboardType, kUTTypeURLName, nil]
-         owner:nil];
-  [nsurl writeToPasteboard:pb];
-  [pb setString:title forType:kUTTypeURLName];
+  ui::ClipboardUtil::AddDataToPasteboard(pb, item);
 }
 
 void ClipboardMac::WriteBitmap(const SkBitmap& bitmap) {

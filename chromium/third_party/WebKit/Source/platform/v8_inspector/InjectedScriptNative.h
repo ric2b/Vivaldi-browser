@@ -5,17 +5,14 @@
 #ifndef InjectedScriptNative_h
 #define InjectedScriptNative_h
 
-#include "wtf/Forward.h"
-#include "wtf/HashMap.h"
+#include "platform/inspector_protocol/Collections.h"
+#include "platform/inspector_protocol/String16.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/RefCounted.h"
-#include "wtf/Vector.h"
-#include "wtf/text/WTFString.h"
 #include <v8.h>
 
 namespace blink {
 
-class InjectedScriptNative final : public RefCounted<InjectedScriptNative> {
+class InjectedScriptNative final {
 public:
     explicit InjectedScriptNative(v8::Isolate*);
     ~InjectedScriptNative();
@@ -23,22 +20,22 @@ public:
     void setOnInjectedScriptHost(v8::Local<v8::Object>);
     static InjectedScriptNative* fromInjectedScriptHost(v8::Local<v8::Object>);
 
-    int bind(v8::Local<v8::Value>, const String& groupName);
+    int bind(v8::Local<v8::Value>, const String16& groupName);
     void unbind(int id);
     v8::Local<v8::Value> objectForId(int id);
 
-    void releaseObjectGroup(const String& groupName);
-    String groupName(int objectId) const;
+    void releaseObjectGroup(const String16& groupName);
+    String16 groupName(int objectId) const;
 
 private:
-    void addObjectToGroup(int objectId, const String& groupName);
+    void addObjectToGroup(int objectId, const String16& groupName);
 
     int m_lastBoundObjectId;
     v8::Isolate* m_isolate;
-    HashMap<int, OwnPtr<v8::Global<v8::Value>>> m_idToWrappedObject;
-    typedef HashMap<int, String> IdToObjectGroupName;
+    protocol::HashMap<int, OwnPtr<v8::Global<v8::Value>>> m_idToWrappedObject;
+    typedef protocol::HashMap<int, String16> IdToObjectGroupName;
     IdToObjectGroupName m_idToObjectGroupName;
-    typedef HashMap<String, Vector<int>> NameToObjectGroup;
+    typedef protocol::HashMap<String16, protocol::Vector<int>> NameToObjectGroup;
     NameToObjectGroup m_nameToObjectGroup;
 };
 

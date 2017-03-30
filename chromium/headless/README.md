@@ -8,32 +8,32 @@ modern web platform features provided by Chromium and Blink.
 ## Headless shell
 
 The headless shell is a sample application which demonstrates the use of the
-headless API. To run it, first open the build configuration editor:
+headless API. To run it, first initialize a headless build configuration:
 
 ```
-$ gn args out/Release
+$ mkdir -p out/Debug
+$ echo 'import("//build/args/headless.gn")' > out/Debug/args.gn
+$ gn gen out/Debug
 ```
-
-and enable headless mode with `is_headless = true`.
 
 Then build the shell:
 
 ```
-$ ninja -C out/Release headless_shell
+$ ninja -C out/Debug headless_shell
 ```
 
 After the build completes, the headless shell can be run with the following
 command:
 
 ```
-$ out/Release/headless_shell https://www.google.com
+$ out/Debug/headless_shell https://www.google.com
 ```
 
 To attach a [DevTools](https://developer.chrome.com/devtools) debugger to the
 shell, start it with an argument specifying the debugging port:
 
 ```
-$ out/Release/headless_shell --remote-debugging-port=9222 https://youtube.com
+$ out/Debug/headless_shell --remote-debugging-port=9222 https://youtube.com
 ```
 
 Then navigate to `http://127.0.0.1:9222` with your browser.
@@ -49,11 +49,13 @@ The main embedder API classes are:
 - `HeadlessBrowser::Options::Builder` - Defines the embedding options, e.g.:
   - `SetMessagePump` - Replaces the default base message pump. See
     `base::MessagePump`.
+  - `SetProxyServer` - Configures an HTTP/HTTPS proxy server to be used for
+    accessing the network.
 
-## Headless API
+## Client API
 
-The headless API is used to drive the browser and interact with the loaded web
-pages. Its main classes are:
+The headless client API is used to drive the browser and interact with loaded
+web pages. Its main classes are:
 
 - `HeadlessBrowser` - Represents the global headless browser instance.
 - `HeadlessWebContents` - Represents a single "tab" within the browser.

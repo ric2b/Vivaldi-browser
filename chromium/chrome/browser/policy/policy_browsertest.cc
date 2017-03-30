@@ -78,7 +78,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
@@ -192,9 +191,25 @@
 #include "ash/shell.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
+#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/login/test/js_checker.h"
+#include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/chrome_screenshot_grabber.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chromeos/audio/cras_audio_handler.h"
+#include "chromeos/chromeos_switches.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/fake_session_manager_client.h"
+#include "chromeos/dbus/session_manager_client.h"
+#include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_bridge_service_impl.h"
+#include "components/arc/arc_service_manager.h"
+#include "components/arc/test/fake_arc_bridge_bootstrap.h"
+#include "components/arc/test/fake_arc_bridge_instance.h"
+#include "components/signin/core/account_id/account_id.h"
+#include "components/user_manager/user_manager.h"
 #include "ui/chromeos/accessibility_types.h"
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/snapshot/screenshot_grabber.h"
@@ -492,8 +507,7 @@ bool SetPluginEnabled(PluginPrefs* plugin_prefs,
 int CountPluginsOnIOThread() {
   int count = 0;
   for (content::BrowserChildProcessHostIterator iter; !iter.Done(); ++iter) {
-    if (iter.GetData().process_type == content::PROCESS_TYPE_PLUGIN ||
-        iter.GetData().process_type == content::PROCESS_TYPE_PPAPI_PLUGIN) {
+    if (iter.GetData().process_type == content::PROCESS_TYPE_PPAPI_PLUGIN) {
       count++;
     }
   }
@@ -3992,6 +4006,230 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, UnifiedDesktopEnabledByDefault) {
                NULL);
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(display_manager->unified_desktop_enabled());
+}
+
+class ArcPolicyTest : public PolicyTest {
+ public:
+  ArcPolicyTest() {}
+  ~ArcPolicyTest() override {}
+
+ protected:
+  void SetUpTest() {
+    arc::ArcAuthService::DisableUIForTesting();
+
+    browser()->profile()->GetPrefs()->SetBoolean(prefs::kArcSignedIn, true);
+    arc::ArcServiceManager::Get()->OnPrimaryUserProfilePrepared(
+        multi_user_util::GetAccountIdFromProfile(browser()->profile()));
+    arc::ArcAuthService::Get()->OnPrimaryUserProfilePrepared(
+        browser()->profile());
+  }
+
+  void TearDownTest() {
+    arc::ArcAuthService::Get()->Shutdown();
+  }
+
+  void SetUpInProcessBrowserTestFixture() override {
+    PolicyTest::SetUpInProcessBrowserTestFixture();
+    fake_session_manager_client_ = new chromeos::FakeSessionManagerClient;
+    fake_session_manager_client_->set_arc_available(true);
+    chromeos::DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
+        scoped_ptr<chromeos::SessionManagerClient>(
+            fake_session_manager_client_));
+
+    fake_arc_bridge_instance_.reset(new arc::FakeArcBridgeInstance);
+    arc::ArcServiceManager::SetArcBridgeServiceForTesting(make_scoped_ptr(
+        new arc::ArcBridgeServiceImpl(make_scoped_ptr(
+            new arc::FakeArcBridgeBootstrap(
+                fake_arc_bridge_instance_.get())))));
+  }
+
+ private:
+  chromeos::FakeSessionManagerClient *fake_session_manager_client_;
+  scoped_ptr<arc::FakeArcBridgeInstance> fake_arc_bridge_instance_;
+
+  DISALLOW_COPY_AND_ASSIGN(ArcPolicyTest);
+};
+
+// Test ArcEnabled policy.
+IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcEnabled) {
+  SetUpTest();
+
+  const PrefService* const pref = browser()->profile()->GetPrefs();
+  const arc::ArcBridgeService* const arc_bridge_service
+      = arc::ArcBridgeService::Get();
+
+  // ARC is switched off by default.
+  EXPECT_EQ(arc::ArcBridgeService::State::STOPPED, arc_bridge_service->state());
+  EXPECT_FALSE(pref->GetBoolean(prefs::kArcEnabled));
+
+  // Enable ARC.
+  PolicyMap policies;
+  policies.Set(key::kArcEnabled,
+               POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER,
+               POLICY_SOURCE_CLOUD,
+               new base::FundamentalValue(true),
+               nullptr);
+  UpdateProviderPolicy(policies);
+  EXPECT_TRUE(pref->GetBoolean(prefs::kArcEnabled));
+  EXPECT_EQ(arc::ArcBridgeService::State::READY, arc_bridge_service->state());
+
+  // Disable ARC.
+  policies.Set(key::kArcEnabled,
+               POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER,
+               POLICY_SOURCE_CLOUD,
+               new base::FundamentalValue(false),
+               nullptr);
+  UpdateProviderPolicy(policies);
+  EXPECT_FALSE(pref->GetBoolean(prefs::kArcEnabled));
+  EXPECT_EQ(arc::ArcBridgeService::State::STOPPED, arc_bridge_service->state());
+
+  TearDownTest();
+}
+
+namespace {
+const char kTestUser1[] = "test1@domain.com";
+}  // anonymous namespace
+
+class ChromeOSPolicyTest : public PolicyTest {
+ public:
+  ChromeOSPolicyTest() {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    PolicyTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitchASCII(chromeos::switches::kLoginUser,
+                                    cryptohome_id1_.id());
+    command_line->AppendSwitchASCII(chromeos::switches::kLoginProfile, "hash");
+    command_line->AppendSwitch(
+        chromeos::switches::kAllowFailedPolicyFetchForTest);
+
+    command_line->AppendSwitch(
+        chromeos::switches::kEnableSystemTimezoneAutomaticDetectionPolicy);
+  }
+
+ protected:
+  const AccountId test_account_id1_ = AccountId::FromUserEmail(kTestUser1);
+  const cryptohome::Identification cryptohome_id1_ =
+      cryptohome::Identification(test_account_id1_);
+
+  // Logs in |account_id|.
+  void LogIn(const AccountId& account_id, const std::string& user_id_hash) {
+    user_manager::UserManager::Get()->UserLoggedIn(account_id, user_id_hash,
+                                                   false);
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void NavigateToUrl(const GURL& url) {
+    ui_test_utils::NavigateToURL(browser(), url);
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void CheckSystemTimezoneAutomaticDetectionPolicyUnset() {
+    PrefService* local_state = g_browser_process->local_state();
+    EXPECT_FALSE(local_state->IsManagedPreference(
+        prefs::kSystemTimezoneAutomaticDetectionPolicy));
+    EXPECT_EQ(0, local_state->GetInteger(
+                     prefs::kSystemTimezoneAutomaticDetectionPolicy));
+  }
+
+  void SetAndTestSystemTimezoneAutomaticDetectionPolicy(int policy_value) {
+    PolicyMap policies;
+    policies.Set(key::kSystemTimezoneAutomaticDetection,
+                 POLICY_LEVEL_MANDATORY,
+                 POLICY_SCOPE_MACHINE,
+                 POLICY_SOURCE_CLOUD,
+                 new base::FundamentalValue(policy_value),
+                 NULL);
+    UpdateProviderPolicy(policies);
+
+    PrefService* local_state = g_browser_process->local_state();
+
+    EXPECT_TRUE(local_state->IsManagedPreference(
+        prefs::kSystemTimezoneAutomaticDetectionPolicy));
+    EXPECT_EQ(policy_value,
+              local_state->GetInteger(
+                  prefs::kSystemTimezoneAutomaticDetectionPolicy));
+  }
+
+  void SetEmptyPolicy() { UpdateProviderPolicy(PolicyMap()); }
+
+  bool CheckResolveTimezoneByGeolocation(bool checked, bool disabled) {
+    checker.set_web_contents(
+        browser()->tab_strip_model()->GetActiveWebContents());
+    const std::string expression = base::StringPrintf(
+        "(function () {\n"
+        "  var checkbox = "
+        "document.getElementById('resolve-timezone-by-geolocation');\n"
+        "  if (!checkbox) {\n"
+        "    console.log('resolve-timezone-by-geolocation not found.');\n"
+        "    return false;\n"
+        "  }\n"
+        "  var expected_checked = %s;\n"
+        "  var expected_disabled = %s;\n"
+        "  var checked = checkbox.checked;\n"
+        "  var disabled = checkbox.disabled;\n"
+        "  if (checked != expected_checked)\n"
+        "    console.log('ERROR: expected_checked=' + expected_checked + ' != "
+        "checked=' + checked);\n"
+        "\n"
+        "  if (disabled != expected_disabled)\n"
+        "    console.log('ERROR: expected_disabled=' + expected_disabled + ' "
+        "!= disabled=' + disabled);\n"
+        "\n"
+        "  return (checked == expected_checked && disabled == "
+        "expected_disabled);\n"
+        "})()",
+        checked ? "true" : "false", disabled ? "true" : "false");
+    return checker.GetBool(expression);
+  }
+
+ private:
+  chromeos::test::JSChecker checker;
+
+  DISALLOW_COPY_AND_ASSIGN(ChromeOSPolicyTest);
+};
+
+IN_PROC_BROWSER_TEST_F(ChromeOSPolicyTest, SystemTimezoneAutomaticDetection) {
+  ui_test_utils::NavigateToURL(browser(), GURL("chrome://settings"));
+  chromeos::system::TimeZoneResolverManager* manager =
+      g_browser_process->platform_part()->GetTimezoneResolverManager();
+
+  // Policy not set.
+  CheckSystemTimezoneAutomaticDetectionPolicyUnset();
+  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(true, false));
+  EXPECT_TRUE(manager->TimeZoneResolverShouldBeRunningForTests());
+
+  int policy_value = 0 /* USERS_DECIDE */;
+  SetAndTestSystemTimezoneAutomaticDetectionPolicy(policy_value);
+  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(true, false));
+  EXPECT_TRUE(manager->TimeZoneResolverShouldBeRunningForTests());
+
+  policy_value = 1 /* DISABLED */;
+  SetAndTestSystemTimezoneAutomaticDetectionPolicy(policy_value);
+  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(false, true));
+  EXPECT_FALSE(manager->TimeZoneResolverShouldBeRunningForTests());
+
+  policy_value = 2 /* IP_ONLY */;
+  SetAndTestSystemTimezoneAutomaticDetectionPolicy(policy_value);
+  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(true, true));
+  EXPECT_TRUE(manager->TimeZoneResolverShouldBeRunningForTests());
+
+  policy_value = 3 /* SEND_WIFI_ACCESS_POINTS */;
+  SetAndTestSystemTimezoneAutomaticDetectionPolicy(policy_value);
+  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(true, true));
+  EXPECT_TRUE(manager->TimeZoneResolverShouldBeRunningForTests());
+
+  policy_value = 1 /* DISABLED */;
+  SetAndTestSystemTimezoneAutomaticDetectionPolicy(policy_value);
+  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(false, true));
+  EXPECT_FALSE(manager->TimeZoneResolverShouldBeRunningForTests());
+
+  SetEmptyPolicy();
+  // Policy not set.
+  CheckSystemTimezoneAutomaticDetectionPolicyUnset();
+  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(true, false));
+  EXPECT_TRUE(manager->TimeZoneResolverShouldBeRunningForTests());
 }
 #endif  // defined(OS_CHROMEOS)
 

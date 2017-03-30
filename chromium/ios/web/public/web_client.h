@@ -10,7 +10,6 @@
 
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
-#include "ios/web/public/web_view_type.h"
 #include "ui/base/layout.h"
 #include "url/url_util.h"
 
@@ -77,15 +76,6 @@ class WebClient {
   // created and not called repeatedly.
   virtual bool AllowWebViewAllocInit() const;
 
-  // Returns true if all web views that are created need to be associated with
-  // a BrowserState.
-  // This method is only called if the |AllowWebViewAllocInit| returns false.
-  // If this method returns true, web views can only be created
-  // with the BrowserState whose ActiveStateManager is active.
-  // This is called once (only in debug builds) when the first web view is
-  // created and not called repeatedly.
-  virtual bool WebViewsNeedActiveStateManager() const;
-
   // Returns text to be displayed for an unsupported plugin.
   virtual base::string16 GetPluginNotSupportedText() const;
 
@@ -123,7 +113,7 @@ class WebClient {
 
   // Gives the embedder a chance to provide the JavaScript to be injected into
   // the web view as early as possible. Result must not be nil.
-  virtual NSString* GetEarlyPageScript(WebViewType web_view_type) const;
+  virtual NSString* GetEarlyPageScript() const;
 };
 
 }  // namespace web

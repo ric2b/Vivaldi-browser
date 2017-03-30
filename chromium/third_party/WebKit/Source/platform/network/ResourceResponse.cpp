@@ -51,7 +51,6 @@ ResourceResponse::ResourceResponse()
     , m_securityStyle(SecurityStyleUnknown)
     , m_httpVersion(HTTPVersionUnknown)
     , m_appCacheID(0)
-    , m_isMultipartPayload(false)
     , m_wasFetchedViaSPDY(false)
     , m_wasNpnNegotiated(false)
     , m_wasAlternateProtocolAvailable(false)
@@ -88,7 +87,6 @@ ResourceResponse::ResourceResponse(const KURL& url, const AtomicString& mimeType
     , m_securityStyle(SecurityStyleUnknown)
     , m_httpVersion(HTTPVersionUnknown)
     , m_appCacheID(0)
-    , m_isMultipartPayload(false)
     , m_wasFetchedViaSPDY(false)
     , m_wasNpnNegotiated(false)
     , m_wasAlternateProtocolAvailable(false)
@@ -130,7 +128,7 @@ ResourceResponse::ResourceResponse(CrossThreadResourceResponseData* data)
     m_httpVersion = data->m_httpVersion;
     m_appCacheID = data->m_appCacheID;
     m_appCacheManifestURL = data->m_appCacheManifestURL.copy();
-    m_isMultipartPayload = data->m_isMultipartPayload;
+    m_multipartBoundary = data->m_multipartBoundary;
     m_wasFetchedViaSPDY = data->m_wasFetchedViaSPDY;
     m_wasNpnNegotiated = data->m_wasNpnNegotiated;
     m_wasAlternateProtocolAvailable = data->m_wasAlternateProtocolAvailable;
@@ -139,6 +137,7 @@ ResourceResponse::ResourceResponse(CrossThreadResourceResponseData* data)
     m_wasFallbackRequiredByServiceWorker = data->m_wasFallbackRequiredByServiceWorker;
     m_serviceWorkerResponseType = data->m_serviceWorkerResponseType;
     m_originalURLViaServiceWorker = data->m_originalURLViaServiceWorker;
+    m_cacheStorageCacheName = data->m_cacheStorageCacheName;
     m_responseTime = data->m_responseTime;
     m_remoteIPAddress = AtomicString(data->m_remoteIPAddress);
     m_remotePort = data->m_remotePort;
@@ -153,12 +152,12 @@ PassOwnPtr<CrossThreadResourceResponseData> ResourceResponse::copyData() const
 {
     OwnPtr<CrossThreadResourceResponseData> data = adoptPtr(new CrossThreadResourceResponseData);
     data->m_url = url().copy();
-    data->m_mimeType = mimeType().string().isolatedCopy();
+    data->m_mimeType = mimeType().getString().isolatedCopy();
     data->m_expectedContentLength = expectedContentLength();
-    data->m_textEncodingName = textEncodingName().string().isolatedCopy();
+    data->m_textEncodingName = textEncodingName().getString().isolatedCopy();
     data->m_suggestedFilename = suggestedFilename().isolatedCopy();
     data->m_httpStatusCode = httpStatusCode();
-    data->m_httpStatusText = httpStatusText().string().isolatedCopy();
+    data->m_httpStatusText = httpStatusText().getString().isolatedCopy();
     data->m_httpHeaders = httpHeaderFields().copyData();
     data->m_lastModifiedDate = lastModifiedDate();
     if (m_resourceLoadTiming)
@@ -177,7 +176,7 @@ PassOwnPtr<CrossThreadResourceResponseData> ResourceResponse::copyData() const
     data->m_httpVersion = m_httpVersion;
     data->m_appCacheID = m_appCacheID;
     data->m_appCacheManifestURL = m_appCacheManifestURL.copy();
-    data->m_isMultipartPayload = m_isMultipartPayload;
+    data->m_multipartBoundary = m_multipartBoundary;
     data->m_wasFetchedViaSPDY = m_wasFetchedViaSPDY;
     data->m_wasNpnNegotiated = m_wasNpnNegotiated;
     data->m_wasAlternateProtocolAvailable = m_wasAlternateProtocolAvailable;
@@ -186,8 +185,9 @@ PassOwnPtr<CrossThreadResourceResponseData> ResourceResponse::copyData() const
     data->m_wasFallbackRequiredByServiceWorker = m_wasFallbackRequiredByServiceWorker;
     data->m_serviceWorkerResponseType = m_serviceWorkerResponseType;
     data->m_originalURLViaServiceWorker = m_originalURLViaServiceWorker.copy();
+    data->m_cacheStorageCacheName = cacheStorageCacheName().isolatedCopy();
     data->m_responseTime = m_responseTime;
-    data->m_remoteIPAddress = m_remoteIPAddress.string().isolatedCopy();
+    data->m_remoteIPAddress = m_remoteIPAddress.getString().isolatedCopy();
     data->m_remotePort = m_remotePort;
     data->m_downloadedFilePath = m_downloadedFilePath.isolatedCopy();
     data->m_downloadedFileHandle = m_downloadedFileHandle;
@@ -295,22 +295,22 @@ const AtomicString& ResourceResponse::httpHeaderField(const AtomicString& name) 
 
 static const AtomicString& cacheControlHeaderString()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, cacheControlHeader, ("cache-control", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, cacheControlHeader, ("cache-control"));
     return cacheControlHeader;
 }
 
 static const AtomicString& pragmaHeaderString()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, pragmaHeader, ("pragma", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, pragmaHeader, ("pragma"));
     return pragmaHeader;
 }
 
 void ResourceResponse::updateHeaderParsedState(const AtomicString& name)
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, ageHeader, ("age", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, dateHeader, ("date", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, expiresHeader, ("expires", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, lastModifiedHeader, ("last-modified", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, ageHeader, ("age"));
+    DEFINE_STATIC_LOCAL(const AtomicString, dateHeader, ("date"));
+    DEFINE_STATIC_LOCAL(const AtomicString, expiresHeader, ("expires"));
+    DEFINE_STATIC_LOCAL(const AtomicString, lastModifiedHeader, ("last-modified"));
 
     if (equalIgnoringCase(name, ageHeader))
         m_haveParsedAgeHeader = false;
@@ -385,8 +385,8 @@ bool ResourceResponse::cacheControlContainsMustRevalidate()
 
 bool ResourceResponse::hasCacheValidatorFields() const
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, lastModifiedHeader, ("last-modified", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, eTagHeader, ("etag", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, lastModifiedHeader, ("last-modified"));
+    DEFINE_STATIC_LOCAL(const AtomicString, eTagHeader, ("etag"));
     return !m_httpHeaderFields.get(lastModifiedHeader).isEmpty() || !m_httpHeaderFields.get(eTagHeader).isEmpty();
 }
 
@@ -422,7 +422,7 @@ static double parseDateValueInHeader(const HTTPHeaderMap& headers, const AtomicS
 double ResourceResponse::date() const
 {
     if (!m_haveParsedDateHeader) {
-        DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("date", AtomicString::ConstructFromLiteral));
+        DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("date"));
         m_date = parseDateValueInHeader(m_httpHeaderFields, headerName);
         m_haveParsedDateHeader = true;
     }
@@ -432,7 +432,7 @@ double ResourceResponse::date() const
 double ResourceResponse::age() const
 {
     if (!m_haveParsedAgeHeader) {
-        DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("age", AtomicString::ConstructFromLiteral));
+        DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("age"));
         const AtomicString& headerValue = m_httpHeaderFields.get(headerName);
         bool ok;
         m_age = headerValue.toDouble(&ok);
@@ -446,7 +446,7 @@ double ResourceResponse::age() const
 double ResourceResponse::expires() const
 {
     if (!m_haveParsedExpiresHeader) {
-        DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("expires", AtomicString::ConstructFromLiteral));
+        DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("expires"));
         m_expires = parseDateValueInHeader(m_httpHeaderFields, headerName);
         m_haveParsedExpiresHeader = true;
     }
@@ -456,7 +456,7 @@ double ResourceResponse::expires() const
 double ResourceResponse::lastModified() const
 {
     if (!m_haveParsedLastModifiedHeader) {
-        DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("last-modified", AtomicString::ConstructFromLiteral));
+        DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("last-modified"));
         m_lastModified = parseDateValueInHeader(m_httpHeaderFields, headerName);
         m_haveParsedLastModifiedHeader = true;
     }
@@ -465,13 +465,13 @@ double ResourceResponse::lastModified() const
 
 bool ResourceResponse::isAttachment() const
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("content-disposition", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, headerName, ("content-disposition"));
     String value = m_httpHeaderFields.get(headerName);
     size_t loc = value.find(';');
     if (loc != kNotFound)
         value = value.left(loc);
     value = value.stripWhiteSpace();
-    DEFINE_STATIC_LOCAL(const AtomicString, attachmentString, ("attachment", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, attachmentString, ("attachment"));
     return equalIgnoringCase(value, attachmentString);
 }
 

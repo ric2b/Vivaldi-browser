@@ -40,7 +40,7 @@ class ImeWindowBrowserTest : public InProcessBrowserTest,
 
   void CreateImeWindow(const gfx::Rect& bounds, bool follow_cursor) {
     ime_window_ = new ImeWindow(
-        browser()->profile(), nullptr, "about:blank",
+        browser()->profile(), nullptr, nullptr, "about:blank",
         follow_cursor ? ImeWindow::FOLLOW_CURSOR : ImeWindow::NORMAL, bounds);
     ime_window_->AddObserver(this);
     EXPECT_FALSE(ime_window_->ime_native_window()->IsVisible());
@@ -56,7 +56,7 @@ class ImeWindowBrowserTest : public InProcessBrowserTest,
 
   ImeWindow* ime_window_;
 
-  scoped_ptr<base::RunLoop> message_loop_runner_;
+  std::unique_ptr<base::RunLoop> message_loop_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(ImeWindowBrowserTest);
 };
@@ -76,9 +76,9 @@ IN_PROC_BROWSER_TEST_F(ImeWindowBrowserTest, CreateFollowCursorWindow) {
 IN_PROC_BROWSER_TEST_F(ImeWindowBrowserTest, FollowCursor) {
   gfx::Rect expected_bounds(100, 200, 100, 100);
   CreateImeWindow(expected_bounds, true);
-  ime_window_->FollowCursor(gfx::Rect(10, 20, 1, 10));
-  expected_bounds.set_x(10);  // cursor left.
-  expected_bounds.set_y(33);  // cursor top + cursor height + margin(3).
+  ime_window_->FollowCursor(gfx::Rect(50, 50, 1, 10));
+  expected_bounds.set_x(18);  // cursor left - titlebar width(32).
+  expected_bounds.set_y(63);  // cursor top + cursor height + margin(3).
   VerifyImeWindow(expected_bounds);
 }
 

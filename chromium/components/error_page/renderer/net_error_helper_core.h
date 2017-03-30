@@ -13,7 +13,6 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "components/error_page/common/net_error_info.h"
-#include "components/error_page/common/offline_page_types.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -53,7 +52,6 @@ class NetErrorHelperCore {
     SHOW_CACHED_COPY_BUTTON,  // "Google cached copy" button label experiment.
     DIAGNOSE_ERROR,
     SHOW_OFFLINE_PAGES_BUTTON,  // "Offline pages" experiment.
-    SHOW_OFFLINE_COPY_BUTTON,   // "Offline pages" experiment.
   };
 
   // The Delegate handles all interaction with the RenderView, WebFrame, and
@@ -65,13 +63,12 @@ class NetErrorHelperCore {
         const blink::WebURLError& error,
         bool is_failed_post,
         bool can_show_network_diagnostics_dialog,
-        OfflinePageStatus offline_page_status,
+        bool has_offline_pages,
         scoped_ptr<ErrorPageParams> params,
         bool* reload_button_shown,
         bool* show_saved_copy_button_shown,
         bool* show_cached_copy_button_shown,
         bool* show_offline_pages_button_shown,
-        bool* show_offline_copy_button_shown,
         std::string* html) const = 0;
 
     // Loads the given HTML in the frame for use as an error page.
@@ -88,7 +85,7 @@ class NetErrorHelperCore {
     virtual void UpdateErrorPage(const blink::WebURLError& error,
                                  bool is_failed_post,
                                  bool can_show_network_diagnostics_dialog,
-                                 OfflinePageStatus offline_page_status) = 0;
+                                 bool has_offline_pages) = 0;
 
     // Fetches an error page and calls into OnErrorPageFetched when done.  Any
     // previous fetch must either be canceled or finished before calling.  Can't
@@ -108,7 +105,7 @@ class NetErrorHelperCore {
         const std::string& tracking_request_body) = 0;
 
     // Starts a reload of the page in the observed frame.
-    virtual void ReloadPage(bool ignore_cache) = 0;
+    virtual void ReloadPage(bool bypass_cache) = 0;
 
     // Load the original page from cache.
     virtual void LoadPageFromCache(const GURL& page_url) = 0;
@@ -118,11 +115,6 @@ class NetErrorHelperCore {
 
     // Shows all the offline pages that were saved in storage.
     virtual void ShowOfflinePages() = 0;
-
-    // Loads the offline copy of the page that was saved in storage.
-    // Note that this is different from the saved copy in the cache as in
-    // LoadPageFromCache.
-    virtual void LoadOfflineCopy(const GURL& page_url) = 0;
 
    protected:
     virtual ~Delegate() {}
@@ -170,7 +162,6 @@ class NetErrorHelperCore {
   // Called when an error page have has been retrieved over the network.  |html|
   // must be an empty string on error.
   void OnNavigationCorrectionsFetched(const std::string& corrections,
-                                      const std::string& accept_languages,
                                       bool is_rtl);
 
   // Notifies |this| that network error information from the browser process
@@ -188,9 +179,9 @@ class NetErrorHelperCore {
                                      const std::string& api_key,
                                      const GURL& search_url);
 
-  // Notifies |this| that information about the presence of an offline version
-  // of the page has been received.
-  void OnSetOfflinePageInfo(OfflinePageStatus offline_page_status);
+  // Notifies |this| that information about whether offline pages exist has been
+  // received.
+  void OnSetHasOfflinePages(bool has_offline_pages);
 
   // Notifies |this| that the network's online status changed.
   // Handler for NetworkStateChanged notification from the browser process. If
@@ -240,13 +231,13 @@ class NetErrorHelperCore {
 
   blink::WebURLError GetUpdatedError(const blink::WebURLError& error) const;
 
-  void Reload(bool ignore_cache);
+  void Reload(bool bypass_cache);
   bool MaybeStartAutoReloadTimer();
   void StartAutoReloadTimer();
   void AutoReloadTimerFired();
   void PauseAutoReloadTimer();
 
-  OfflinePageStatus GetOfflinePageStatus() const;
+  bool HasOfflinePages() const;
 
   static bool IsReloadableError(const ErrorPageInfo& info);
 
@@ -301,9 +292,9 @@ class NetErrorHelperCore {
   int auto_reload_count_;
 
 #if defined(OS_ANDROID)
-  // Status of offline pages. This is used to decide if offline related button
-  // will be shown in certain error page.
-  OfflinePageStatus offline_page_status_;
+  // Whether offline pages exist. This is used to decide if offline related
+  // button will be shown in certain error page.
+  bool has_offline_pages_;
 #endif  // defined(OS_ANDROID)
 
   // This value is set only when a navigation has been initiated from

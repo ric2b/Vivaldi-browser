@@ -31,7 +31,7 @@
 
 namespace blink {
 
-class CORE_EXPORT CSSValue : public RefCountedWillBeGarbageCollectedFinalized<CSSValue> {
+class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
 #if ENABLE(OILPAN)
 public:
     // Override operator new to allocate CSSValue subtype objects onto
@@ -44,7 +44,8 @@ public:
     static void* allocateObject(size_t size, bool isEager)
     {
         ThreadState* state = ThreadStateFor<ThreadingTrait<CSSValue>::Affinity>::state();
-        return Heap::allocateOnHeapIndex(state, size, isEager ? BlinkGC::EagerSweepHeapIndex : BlinkGC::CSSValueHeapIndex, GCInfoTrait<CSSValue>::index());
+        const char typeName[] = "blink::CSSValue";
+        return Heap::allocateOnArenaIndex(state, size, isEager ? BlinkGC::EagerSweepArenaIndex : BlinkGC::CSSValueArenaIndex, GCInfoTrait<CSSValue>::index(), typeName);
     }
 #else
     USING_FAST_MALLOC_WITH_TYPE_NAME(blink::CSSValue);
@@ -77,7 +78,9 @@ public:
     bool isCounterValue() const { return m_classType == CounterClass; }
     bool isCursorImageValue() const { return m_classType == CursorImageClass; }
     bool isCrossfadeValue() const { return m_classType == CrossfadeClass; }
+    bool isPaintValue() const { return m_classType == PaintClass; }
     bool isFontFeatureValue() const { return m_classType == FontFeatureClass; }
+    bool isFontFamilyValue() const { return m_classType == FontFamilyClass; }
     bool isFontFaceSrcValue() const { return m_classType == FontFaceSrcClass; }
     bool isFunctionValue() const { return m_classType == FunctionClass; }
     bool isCustomIdentValue() const { return m_classType == CustomIdentClass; }
@@ -107,6 +110,7 @@ public:
     bool isGridLineNamesValue() const { return m_classType == GridLineNamesClass; }
     bool isCustomPropertyDeclaration() const { return m_classType == CustomPropertyDeclarationClass; }
     bool isVariableReferenceValue() const { return m_classType == VariableReferenceClass; }
+    bool isGridAutoRepeatValue() const { return m_classType == GridAutoRepeatClass; }
 
     bool hasFailedOrCanceledSubresources() const;
 
@@ -147,6 +151,7 @@ protected:
 
         // Image generator classes.
         CrossfadeClass,
+        PaintClass,
         LinearGradientClass,
         RadialGradientClass,
 
@@ -158,6 +163,7 @@ protected:
         BorderImageSliceClass,
         FontFeatureClass,
         FontFaceSrcClass,
+        FontFamilyClass,
 
         InheritedClass,
         InitialClass,
@@ -181,6 +187,7 @@ protected:
         FunctionClass,
         ImageSetClass,
         GridLineNamesClass,
+        GridAutoRepeatClass,
         // Do not append non-list class types here.
     };
 
@@ -222,15 +229,15 @@ private:
 };
 
 template<typename CSSValueType, size_t inlineCapacity>
-inline bool compareCSSValueVector(const WillBeHeapVector<RefPtrWillBeMember<CSSValueType>, inlineCapacity>& firstVector, const WillBeHeapVector<RefPtrWillBeMember<CSSValueType>, inlineCapacity>& secondVector)
+inline bool compareCSSValueVector(const HeapVector<Member<CSSValueType>, inlineCapacity>& firstVector, const HeapVector<Member<CSSValueType>, inlineCapacity>& secondVector)
 {
     size_t size = firstVector.size();
     if (size != secondVector.size())
         return false;
 
     for (size_t i = 0; i < size; i++) {
-        const RefPtrWillBeMember<CSSValueType>& firstPtr = firstVector[i];
-        const RefPtrWillBeMember<CSSValueType>& secondPtr = secondVector[i];
+        const Member<CSSValueType>& firstPtr = firstVector[i];
+        const Member<CSSValueType>& secondPtr = secondVector[i];
         if (firstPtr == secondPtr || (firstPtr && secondPtr && firstPtr->equals(*secondPtr)))
             continue;
         return false;
@@ -249,7 +256,7 @@ inline bool compareCSSValuePtr(const RefPtr<CSSValueType>& first, const RefPtr<C
 }
 
 template<typename CSSValueType>
-inline bool compareCSSValuePtr(const RawPtr<CSSValueType>& first, const RawPtr<CSSValueType>& second)
+inline bool compareCSSValuePtr(const CSSValueType* first, const CSSValueType* second)
 {
     if (first == second)
         return true;

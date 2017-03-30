@@ -35,7 +35,7 @@ void ShellCrashReporterClient::GetProductNameAndVersion(
 }
 #endif
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
 void ShellCrashReporterClient::GetProductNameAndVersion(
     const char** product_name,
     const char** version) {
@@ -66,7 +66,6 @@ int ShellCrashReporterClient::GetAndroidMinidumpDescriptor() {
 bool ShellCrashReporterClient::EnableBreakpadForProcess(
     const std::string& process_type) {
   return process_type == switches::kRendererProcess ||
-         process_type == switches::kPluginProcess ||
          process_type == switches::kPpapiPluginProcess ||
          process_type == switches::kZygoteProcess ||
          process_type == switches::kGpuProcess;

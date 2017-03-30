@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.bookmarks;
 import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.offlinepages.ClientId;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.SavePageCallback;
@@ -98,7 +99,7 @@ public class BookmarkModel extends BookmarkBridge {
         // feature is enabled. When it is enabled by default, we should check all the places
         // that checks for nullability of mOfflinePageBridge.
         if (OfflinePageBridge.isEnabled()) {
-            mOfflinePageBridge = new OfflinePageBridge(profile);
+            mOfflinePageBridge = OfflinePageBridge.getForProfile(profile);
             if (mOfflinePageBridge.isOfflinePageModelLoaded()) {
                 mIsOfflinePageModelLoaded = true;
             } else {
@@ -123,7 +124,6 @@ public class BookmarkModel extends BookmarkBridge {
     public void destroy() {
         if (mOfflinePageBridge != null) {
             mOfflinePageBridge.removeObserver(mOfflinePageModelObserver);
-            mOfflinePageBridge.destroy();
             mOfflinePageBridge = null;
         }
 
@@ -239,9 +239,10 @@ public class BookmarkModel extends BookmarkBridge {
         if (mOfflinePageBridge != null) {
             RecordHistogram.recordBooleanHistogram("OfflinePages.IncognitoSave",
                     webContents.isIncognito());
-            mOfflinePageBridge.savePage(webContents, bookmarkId, new SavePageCallback() {
+            ClientId clientId = ClientId.createClientIdForBookmarkId(bookmarkId);
+            mOfflinePageBridge.savePage(webContents, clientId, new SavePageCallback() {
                 @Override
-                public void onSavePageDone(int savePageResult, String url) {
+                public void onSavePageDone(int savePageResult, String url, long offlineId) {
                     int saveResult;
                     if (savePageResult == SavePageResult.SUCCESS) {
                         saveResult = AddBookmarkCallback.SAVED;
@@ -274,8 +275,7 @@ public class BookmarkModel extends BookmarkBridge {
         String url = getBookmarkById(bookmarkId).getUrl();
         if (mOfflinePageBridge == null) return url;
 
-        return mOfflinePageBridge.getLaunchUrlAndMarkAccessed(
-                mOfflinePageBridge.getPageByBookmarkId(bookmarkId), url);
+        return mOfflinePageBridge.getLaunchUrlFromOnlineUrl(url);
     }
 
     /**
@@ -305,8 +305,9 @@ public class BookmarkModel extends BookmarkBridge {
 
         List<BookmarkId> bookmarkIds = new ArrayList<BookmarkId>();
         for (OfflinePageItem offlinePage : offlinePages) {
-            if (existingBookmarks.contains(offlinePage.getBookmarkId())) {
-                bookmarkIds.add(offlinePage.getBookmarkId());
+            BookmarkId bookmarkId = getBookmarkIdForOfflineClientId(offlinePage.getClientId());
+            if (existingBookmarks.contains(bookmarkId)) {
+                bookmarkIds.add(bookmarkId);
             }
         }
         return bookmarkIds;
@@ -317,5 +318,16 @@ public class BookmarkModel extends BookmarkBridge {
      */
     public OfflinePageBridge getOfflinePageBridge() {
         return mOfflinePageBridge;
+    }
+
+    /**
+     * @param id The client id to convert.
+     * @return The bookmark id contained in the specified client id.
+     */
+    public static BookmarkId getBookmarkIdForOfflineClientId(ClientId id) {
+        if (!id.getNamespace().equals(OfflinePageBridge.BOOKMARK_NAMESPACE)) {
+            return new BookmarkId(-1, BookmarkType.NORMAL);
+        }
+        return BookmarkId.getBookmarkIdFromString(id.getId());
     }
 }

@@ -13,7 +13,6 @@
 #include "mojo/edk/system/awakable.h"
 #include "mojo/edk/system/core_test_base.h"
 #include "mojo/edk/system/test_utils.h"
-#include "mojo/public/cpp/system/macros.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -701,7 +700,7 @@ TEST_F(CoreTest, MessagePipeBasicLocalHandlePassing1) {
             hss.satisfied_signals);
   ASSERT_EQ(kAllSignals, hss.satisfiable_signals);
   num_bytes = kBufferSize;
-  num_handles = MOJO_ARRAYSIZE(handles);
+  num_handles = arraysize(handles);
   ASSERT_EQ(MOJO_RESULT_OK,
             core()->ReadMessage(
                 h_passing[1], buffer, &num_bytes, handles, &num_handles,
@@ -740,7 +739,7 @@ TEST_F(CoreTest, MessagePipeBasicLocalHandlePassing1) {
             hss.satisfied_signals);
   ASSERT_EQ(kAllSignals, hss.satisfiable_signals);
   num_bytes = kBufferSize;
-  num_handles = MOJO_ARRAYSIZE(handles);
+  num_handles = arraysize(handles);
   ASSERT_EQ(MOJO_RESULT_OK,
             core()->ReadMessage(
                 h_passed[1], buffer, &num_bytes, handles, &num_handles,
@@ -762,7 +761,7 @@ TEST_F(CoreTest, MessagePipeBasicLocalHandlePassing1) {
             hss.satisfied_signals);
   ASSERT_EQ(kAllSignals, hss.satisfiable_signals);
   num_bytes = kBufferSize;
-  num_handles = MOJO_ARRAYSIZE(handles);
+  num_handles = arraysize(handles);
   ASSERT_EQ(MOJO_RESULT_OK,
             core()->ReadMessage(
                 h_passing[1], buffer, &num_bytes, handles, &num_handles,
@@ -795,7 +794,7 @@ TEST_F(CoreTest, MessagePipeBasicLocalHandlePassing1) {
             hss.satisfied_signals);
   ASSERT_EQ(kAllSignals, hss.satisfiable_signals);
   num_bytes = kBufferSize;
-  num_handles = MOJO_ARRAYSIZE(handles);
+  num_handles = arraysize(handles);
   ASSERT_EQ(MOJO_RESULT_OK,
             core()->ReadMessage(
                 h_received, buffer, &num_bytes, handles, &num_handles,
@@ -1047,7 +1046,7 @@ TEST_F(CoreTest, MessagePipeBasicLocalHandlePassing2) {
             hss.satisfied_signals);
   ASSERT_EQ(kAllSignals, hss.satisfiable_signals);
   num_bytes = kBufferSize;
-  num_handles = MOJO_ARRAYSIZE(handles);
+  num_handles = arraysize(handles);
   ASSERT_EQ(MOJO_RESULT_OK,
             core()->ReadMessage(
                 h_passing[1], buffer, &num_bytes, handles, &num_handles,
@@ -1099,7 +1098,7 @@ TEST_F(CoreTest, MessagePipeBasicLocalHandlePassing2) {
             hss.satisfied_signals);
   ASSERT_EQ(kAllSignals, hss.satisfiable_signals);
   num_bytes = kBufferSize;
-  num_handles = MOJO_ARRAYSIZE(handles);
+  num_handles = arraysize(handles);
   ASSERT_EQ(MOJO_RESULT_OK,
             core()->ReadMessage(
                 h_passing[1], buffer, &num_bytes, handles, &num_handles,
@@ -1164,7 +1163,7 @@ TEST_F(CoreTest, MessagePipeBasicLocalHandlePassing2) {
             core()->Wait(h_passing[1], MOJO_HANDLE_SIGNAL_READABLE, 1000000000,
                          nullptr));
   num_bytes = kBufferSize;
-  num_handles = MOJO_ARRAYSIZE(handles);
+  num_handles = arraysize(handles);
   ASSERT_EQ(MOJO_RESULT_OK,
             core()->ReadMessage(
                 h_passing[1], buffer, &num_bytes, handles, &num_handles,
@@ -1210,7 +1209,7 @@ TEST_F(CoreTest, MessagePipeBasicLocalHandlePassing2) {
             hss.satisfied_signals);
   ASSERT_EQ(kAllSignals, hss.satisfiable_signals);
   num_bytes = kBufferSize;
-  num_handles = MOJO_ARRAYSIZE(handles);
+  num_handles = arraysize(handles);
   ASSERT_EQ(MOJO_RESULT_OK,
             core()->ReadMessage(
                 h_passing[1], buffer, &num_bytes, handles, &num_handles,

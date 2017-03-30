@@ -28,6 +28,11 @@ namespace base {
 class CommandLine;
 }
 
+namespace gpu {
+struct GpuPreferences;
+struct VideoMemoryUsageStats;
+}
+
 namespace content {
 
 class CONTENT_EXPORT GpuDataManagerImplPrivate {
@@ -66,13 +71,12 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   void UpdateGpuInfo(const gpu::GPUInfo& gpu_info);
 
   void UpdateVideoMemoryUsageStats(
-      const GPUVideoMemoryUsageStats& video_memory_usage_stats);
+      const gpu::VideoMemoryUsageStats& video_memory_usage_stats);
 
   void AppendRendererCommandLine(base::CommandLine* command_line) const;
 
-  void AppendGpuCommandLine(base::CommandLine* command_line) const;
-
-  void AppendPluginCommandLine(base::CommandLine* command_line) const;
+  void AppendGpuCommandLine(base::CommandLine* command_line,
+                            gpu::GpuPreferences* gpu_preferences) const;
 
   void UpdateRendererWebPrefs(WebPreferences* prefs) const;
 
@@ -114,9 +118,6 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
                           ThreeDAPIType requester);
 
   size_t GetBlacklistedFeatureCount() const;
-
-  void SetDisplayCount(unsigned int display_count);
-  unsigned int GetDisplayCount() const;
 
   bool UpdateActiveGpu(uint32_t vendor_id, uint32_t device_id);
 
@@ -194,6 +195,8 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
                       const std::string& gpu_driver_bug_list_json,
                       const gpu::GPUInfo& gpu_info);
 
+  void RunPostInitTasks();
+
   void UpdateGpuInfoHelper();
 
   void UpdateBlacklistedFeatures(const std::set<int>& features);
@@ -260,8 +263,6 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   bool domain_blocking_enabled_;
 
   GpuDataManagerImpl* owner_;
-
-  unsigned int display_count_;
 
   bool gpu_process_accessible_;
 

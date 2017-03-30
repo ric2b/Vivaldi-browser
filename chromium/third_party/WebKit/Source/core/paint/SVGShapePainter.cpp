@@ -47,17 +47,17 @@ void SVGShapePainter::paint(const PaintInfo& paintInfo)
         || m_layoutSVGShape.isShapeEmpty())
         return;
 
-    FloatRect boundingBox = m_layoutSVGShape.paintInvalidationRectInLocalCoordinates();
-    if (!paintInfo.cullRect().intersectsCullRect(m_layoutSVGShape.localTransform(), boundingBox))
+    FloatRect boundingBox = m_layoutSVGShape.paintInvalidationRectInLocalSVGCoordinates();
+    if (!paintInfo.cullRect().intersectsCullRect(m_layoutSVGShape.localSVGTransform(), boundingBox))
         return;
 
     PaintInfo paintInfoBeforeFiltering(paintInfo);
     // Shapes cannot have children so do not call updateCullRect.
-    TransformRecorder transformRecorder(paintInfoBeforeFiltering.context, m_layoutSVGShape, m_layoutSVGShape.localTransform());
+    TransformRecorder transformRecorder(paintInfoBeforeFiltering.context, m_layoutSVGShape, m_layoutSVGShape.localSVGTransform());
     {
         SVGPaintContext paintContext(m_layoutSVGShape, paintInfoBeforeFiltering);
-        if (paintContext.applyClipMaskAndFilterIfNecessary() && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintContext.paintInfo().context, m_layoutSVGShape, paintContext.paintInfo().phase, LayoutPoint())) {
-            LayoutObjectDrawingRecorder recorder(paintContext.paintInfo().context, m_layoutSVGShape, paintContext.paintInfo().phase, boundingBox, LayoutPoint());
+        if (paintContext.applyClipMaskAndFilterIfNecessary() && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintContext.paintInfo().context, m_layoutSVGShape, paintContext.paintInfo().phase)) {
+            LayoutObjectDrawingRecorder recorder(paintContext.paintInfo().context, m_layoutSVGShape, paintContext.paintInfo().phase, boundingBox);
             const SVGComputedStyle& svgStyle = m_layoutSVGShape.style()->svgStyle();
 
             bool shouldAntiAlias = svgStyle.shapeRendering() != SR_CRISPEDGES;
@@ -120,7 +120,7 @@ void SVGShapePainter::paint(const PaintInfo& paintInfo)
 class PathWithTemporaryWindingRule {
 public:
     PathWithTemporaryWindingRule(Path& path, SkPath::FillType fillType)
-        : m_path(const_cast<SkPath&>(path.skPath()))
+        : m_path(const_cast<SkPath&>(path.getSkPath()))
     {
         m_savedFillType = m_path.getFillType();
         m_path.setFillType(fillType);
@@ -130,7 +130,7 @@ public:
         m_path.setFillType(m_savedFillType);
     }
 
-    const SkPath& skPath() const { return m_path; }
+    const SkPath& getSkPath() const { return m_path; }
 
 private:
     SkPath& m_path;
@@ -148,7 +148,7 @@ void SVGShapePainter::fillShape(GraphicsContext& context, const SkPaint& paint, 
         break;
     default: {
         PathWithTemporaryWindingRule pathWithWinding(m_layoutSVGShape.path(), fillType);
-        context.drawPath(pathWithWinding.skPath(), paint);
+        context.drawPath(pathWithWinding.getSkPath(), paint);
     }
     }
 }
@@ -170,7 +170,7 @@ void SVGShapePainter::strokeShape(GraphicsContext& context, const SkPaint& paint
         Path* usePath = &m_layoutSVGShape.path();
         if (m_layoutSVGShape.hasNonScalingStroke())
             usePath = m_layoutSVGShape.nonScalingStrokePath(usePath, m_layoutSVGShape.nonScalingStrokeTransform());
-        context.drawPath(usePath->skPath(), paint);
+        context.drawPath(usePath->getSkPath(), paint);
     }
 }
 

@@ -8,8 +8,9 @@
 #import <Cocoa/Cocoa.h>
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field.h"
 #include "components/omnibox/browser/omnibox_view.h"
@@ -30,6 +31,8 @@ class Clipboard;
 class OmniboxViewMac : public OmniboxView,
                        public AutocompleteTextFieldObserver {
  public:
+  static NSColor* BaseTextColor(bool inDarkMode);
+
   OmniboxViewMac(OmniboxEditController* controller,
                  Profile* profile,
                  CommandUpdater* command_updater,
@@ -90,6 +93,7 @@ class OmniboxViewMac : public OmniboxView,
   NSRange SelectionRangeForProposedRange(NSRange proposed_range) override;
   void OnControlKeyChanged(bool pressed) override;
   bool CanCopy() override;
+  base::scoped_nsobject<NSPasteboardItem> CreatePasteboardItem() override;
   void CopyToPasteboard(NSPasteboard* pboard) override;
   bool ShouldEnableShowURL() override;
   void ShowURL() override;
@@ -190,7 +194,7 @@ class OmniboxViewMac : public OmniboxView,
 
   Profile* profile_;
 
-  scoped_ptr<OmniboxPopupView> popup_view_;
+  std::unique_ptr<OmniboxPopupView> popup_view_;
 
   AutocompleteTextField* field_;  // owned by tab controller
 

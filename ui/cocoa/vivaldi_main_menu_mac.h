@@ -3,6 +3,7 @@
 //
 #import <Cocoa/Cocoa.h>
 
+#include "base/memory/scoped_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
 
 namespace favicon {

@@ -2,17 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
+#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/api/content_settings/content_settings_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/lifetime/keep_alive_types.h"
+#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_switches.h"
@@ -27,24 +31,11 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 
-namespace {
-
-void ReleaseBrowserProcessModule() {
-  g_browser_process->ReleaseModule();
-}
-
-}  // namespace
-
 namespace extensions {
 
 class ExtensionContentSettingsApiTest : public ExtensionApiTest {
  public:
   ExtensionContentSettingsApiTest() : profile_(NULL) {}
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionApiTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kDisablePluginsDiscovery);
-  }
 
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
@@ -53,17 +44,19 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
     // save the profile.
     profile_ = browser()->profile();
 
-    // Closing the last browser window also releases a module reference. Make
+    // Closing the last browser window also releases a KeepAlive. Make
     // sure it's not the last one, so the message loop doesn't quit
     // unexpectedly.
-    g_browser_process->AddRefModule();
+    keep_alive_.reset(new ScopedKeepAlive(KeepAliveOrigin::BROWSER,
+                                          KeepAliveRestartOption::DISABLED));
   }
 
   void TearDownOnMainThread() override {
-    // ReleaseBrowserProcessModule() needs to be called in a message loop, so we
-    // post a task to do it, then run the message loop.
+    // BrowserProcess::Shutdown() needs to be called in a message loop, so we
+    // post a task to release the keep alive, then run the message loop.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&ReleaseBrowserProcessModule));
+        FROM_HERE, base::Bind(&std::unique_ptr<ScopedKeepAlive>::reset,
+                              base::Unretained(&keep_alive_), nullptr));
     content::RunAllPendingInMessageLoop();
 
     ExtensionApiTest::TearDownOnMainThread();
@@ -240,6 +233,7 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
 
  private:
   Profile* profile_;
+  std::unique_ptr<ScopedKeepAlive> keep_alive_;
 };
 
 // http://crbug.com/177163

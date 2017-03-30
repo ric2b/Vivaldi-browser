@@ -239,12 +239,11 @@ public final class InfoBarLayout extends ViewGroup implements View.OnClickListen
      */
     public void setBottomViews(String primaryText, View secondaryView, int alignment) {
         assert !TextUtils.isEmpty(primaryText);
-        ButtonCompat primaryButton = new ButtonCompat(getContext(), mAccentColor);
+        ButtonCompat primaryButton = new ButtonCompat(getContext(), mAccentColor, false);
         primaryButton.setId(R.id.button_primary);
         primaryButton.setOnClickListener(this);
         primaryButton.setText(primaryText);
         primaryButton.setTextColor(Color.WHITE);
-        primaryButton.setRaised(false);
 
         assert mButtonRowLayout == null;
         mButtonRowLayout = new InfoBarDualControlLayout(getContext(), null);

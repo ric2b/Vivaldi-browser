@@ -48,7 +48,6 @@
 #include "platform/mhtml/MHTMLArchive.h"
 #include "platform/mhtml/MHTMLParser.h"
 #include "platform/weborigin/KURL.h"
-#include "public/platform/WebCString.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebVector.h"
@@ -112,10 +111,10 @@ bool MHTMLFrameSerializerDelegate::rewriteLink(
         return false;
 
     KURL cidURI = MHTMLParser::convertContentIDToURI(contentID);
-    ASSERT(cidURI.isValid());
+    DCHECK(cidURI.isValid());
 
     if (isHTMLFrameElementBase(&element)) {
-        rewrittenLink = cidURI.string();
+        rewrittenLink = cidURI.getString();
         return true;
     }
 
@@ -124,7 +123,7 @@ bool MHTMLFrameSerializerDelegate::rewriteLink(
         bool isHandledBySerializer = doc->isHTMLDocument()
             || doc->isXHTMLDocument() || doc->isImageDocument();
         if (isHandledBySerializer) {
-            rewrittenLink = cidURI.string();
+            rewrittenLink = cidURI.getString();
             return true;
         }
     }
@@ -155,8 +154,8 @@ WebData WebFrameSerializer::generateMHTMLParts(
     const WebString& boundary, WebLocalFrame* webFrame, bool useBinaryEncoding,
     MHTMLPartsGenerationDelegate* webDelegate)
 {
-    ASSERT(webFrame);
-    ASSERT(webDelegate);
+    DCHECK(webFrame);
+    DCHECK(webDelegate);
 
     // Translate arguments from public to internal blink APIs.
     LocalFrame* frame = toWebLocalFrameImpl(webFrame)->frame();

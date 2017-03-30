@@ -179,7 +179,7 @@ void InvalidatableInterpolation::applyStack(const ActiveInterpolations& interpol
         if (interpolations.size() == 1) {
             if (firstValue) {
                 firstInterpolation.setFlagIfInheritUsed(environment);
-                firstValue->type().apply(firstValue->interpolableValue(), firstValue->nonInterpolableValue(), environment);
+                firstValue->type().apply(firstValue->interpolableValue(), firstValue->getNonInterpolableValue(), environment);
             }
             return;
         }
@@ -201,7 +201,7 @@ void InvalidatableInterpolation::applyStack(const ActiveInterpolations& interpol
         if (underlyingFraction == 0 || !underlyingValueOwner || underlyingValueOwner.type() != currentValue->type())
             underlyingValueOwner.set(currentValue);
         else
-            currentValue->type().composite(underlyingValueOwner, underlyingFraction, currentValue->value());
+            currentValue->type().composite(underlyingValueOwner, underlyingFraction, currentValue->value(), currentInterpolation.m_currentFraction);
     }
 
     if (shouldApply && underlyingValueOwner)

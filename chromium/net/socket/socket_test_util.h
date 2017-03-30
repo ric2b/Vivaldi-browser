@@ -212,6 +212,8 @@ class SocketDataProvider {
   virtual bool AllReadDataConsumed() const = 0;
   virtual bool AllWriteDataConsumed() const = 0;
 
+  virtual void OnEnableTCPFastOpenIfSupported();
+
   // Returns true if the request should be considered idle, for the purposes of
   // IsConnectedAndIdle.
   virtual bool IsIdle() const;
@@ -347,6 +349,7 @@ class StaticSocketDataProvider : public SocketDataProvider {
 // to Connect().
 struct SSLSocketDataProvider {
   SSLSocketDataProvider(IoMode mode, int result);
+  SSLSocketDataProvider(const SSLSocketDataProvider& other);
   ~SSLSocketDataProvider();
 
   void SetNextProto(NextProto proto);
@@ -392,6 +395,7 @@ class SequencedSocketData : public SocketDataProvider {
   MockWriteResult OnWrite(const std::string& data) override;
   bool AllReadDataConsumed() const override;
   bool AllWriteDataConsumed() const override;
+  void OnEnableTCPFastOpenIfSupported() override;
   bool IsIdle() const override;
 
   // An ASYNC read event with a return value of ERR_IO_PENDING will cause the
@@ -408,6 +412,8 @@ class SequencedSocketData : public SocketDataProvider {
   // occur synchronously with the call if it can.
   void Resume();
   void RunUntilPaused();
+
+  bool IsUsingTCPFastOpen() const;
 
   // When true, IsConnectedAndIdle() will return false if the next event in the
   // sequence is a synchronous.  Otherwise, the socket claims to be idle as
@@ -444,6 +450,7 @@ class SequencedSocketData : public SocketDataProvider {
   IoState write_state_;
 
   bool busy_before_sync_reads_;
+  bool is_using_tcp_fast_open_;
 
   // Used by RunUntilPaused.  NULL at all other times.
   scoped_ptr<base::RunLoop> run_until_paused_run_loop_;
@@ -537,9 +544,6 @@ class MockClientSocketFactory : public ClientSocketFactory {
 
 class MockClientSocket : public SSLClientSocket {
  public:
-  // Value returned by GetTLSUniqueChannelBinding().
-  static const char kTlsUnique[];
-
   // The BoundNetLog is needed to test LoadTimingInfo, which uses NetLog IDs as
   // unique socket IDs.
   explicit MockClientSocket(const BoundNetLog& net_log);
@@ -576,7 +580,6 @@ class MockClientSocket : public SSLClientSocket {
                            const base::StringPiece& context,
                            unsigned char* out,
                            unsigned int outlen) override;
-  int GetTLSUniqueChannelBinding(std::string* out) override;
   NextProtoStatus GetNextProto(std::string* proto) const override;
   ChannelIDService* GetChannelIDService() const override;
   Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
@@ -627,7 +630,7 @@ class MockTCPClientSocket : public MockClientSocket, public AsyncSocket {
   bool IsConnectedAndIdle() const override;
   int GetPeerAddress(IPEndPoint* address) const override;
   bool WasEverUsed() const override;
-  bool UsingTCPFastOpen() const override;
+  void EnableTCPFastOpenIfSupported() override;
   bool WasNpnNegotiated() const override;
   bool GetSSLInfo(SSLInfo* ssl_info) override;
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
@@ -690,7 +693,6 @@ class MockSSLClientSocket : public MockClientSocket, public AsyncSocket {
   bool IsConnected() const override;
   bool IsConnectedAndIdle() const override;
   bool WasEverUsed() const override;
-  bool UsingTCPFastOpen() const override;
   int GetPeerAddress(IPEndPoint* address) const override;
   bool GetSSLInfo(SSLInfo* ssl_info) override;
 
@@ -744,10 +746,11 @@ class MockUDPClientSocket : public DatagramClientSocket, public AsyncSocket {
   const BoundNetLog& NetLog() const override;
 
   // DatagramClientSocket implementation.
-  int BindToNetwork(NetworkChangeNotifier::NetworkHandle network) override;
-  int BindToDefaultNetwork() override;
-  NetworkChangeNotifier::NetworkHandle GetBoundNetwork() const override;
   int Connect(const IPEndPoint& address) override;
+  int ConnectUsingNetwork(NetworkChangeNotifier::NetworkHandle network,
+                          const IPEndPoint& address) override;
+  int ConnectUsingDefaultNetwork(const IPEndPoint& address) override;
+  NetworkChangeNotifier::NetworkHandle GetBoundNetwork() const override;
 
   // AsyncSocket implementation.
   void OnReadComplete(const MockRead& data) override;

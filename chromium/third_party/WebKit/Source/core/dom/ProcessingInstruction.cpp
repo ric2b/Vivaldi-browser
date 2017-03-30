@@ -42,16 +42,15 @@ inline ProcessingInstruction::ProcessingInstruction(Document& document, const St
     , m_target(target)
     , m_loading(false)
     , m_alternate(false)
-    , m_createdByParser(false)
     , m_isCSS(false)
     , m_isXSL(false)
     , m_listenerForXSLT(nullptr)
 {
 }
 
-PassRefPtrWillBeRawPtr<ProcessingInstruction> ProcessingInstruction::create(Document& document, const String& target, const String& data)
+RawPtr<ProcessingInstruction> ProcessingInstruction::create(Document& document, const String& target, const String& data)
 {
-    return adoptRefWillBeNoop(new ProcessingInstruction(document, target, data));
+    return new ProcessingInstruction(document, target, data);
 }
 
 ProcessingInstruction::~ProcessingInstruction()
@@ -61,9 +60,9 @@ ProcessingInstruction::~ProcessingInstruction()
         clearSheet();
 
     // FIXME: ProcessingInstruction should not be in document here.
-    // However, if we add ASSERT(!inDocument()), fast/xsl/xslt-entity.xml
+    // However, if we add DCHECK(!inShadowIncludingDocument()), fast/xsl/xslt-entity.xml
     // crashes. We need to investigate ProcessingInstruction lifetime.
-    if (inDocument() && m_isCSS)
+    if (inShadowIncludingDocument() && m_isCSS)
         document().styleEngine().removeStyleSheetCandidateNode(this);
     clearEventListenerForXSLT();
 #endif
@@ -95,7 +94,7 @@ Node::NodeType ProcessingInstruction::getNodeType() const
     return PROCESSING_INSTRUCTION_NODE;
 }
 
-PassRefPtrWillBeRawPtr<Node> ProcessingInstruction::cloneNode(bool /*deep*/)
+RawPtr<Node> ProcessingInstruction::cloneNode(bool /*deep*/)
 {
     // FIXME: Is it a problem that this does not copy m_localHref?
     // What about other data members?
@@ -163,9 +162,9 @@ void ProcessingInstruction::process(const String& href, const String& charset)
 
     clearResource();
 
-    String url = document().completeURL(href).string();
+    String url = document().completeURL(href).getString();
 
-    RefPtrWillBeRawPtr<StyleSheetResource> resource = nullptr;
+    RawPtr<StyleSheetResource> resource = nullptr;
     FetchRequest request(ResourceRequest(document().completeURL(href)), FetchInitiatorTypeNames::processinginstruction);
     if (m_isXSL) {
         if (RuntimeEnabledFeatures::xsltEnabled())
@@ -204,17 +203,17 @@ bool ProcessingInstruction::sheetLoaded()
 
 void ProcessingInstruction::setCSSStyleSheet(const String& href, const KURL& baseURL, const String& charset, const CSSStyleSheetResource* sheet)
 {
-    if (!inDocument()) {
-        ASSERT(!m_sheet);
+    if (!inShadowIncludingDocument()) {
+        DCHECK(!m_sheet);
         return;
     }
 
-    ASSERT(m_isCSS);
+    DCHECK(m_isCSS);
     CSSParserContext parserContext(document(), 0, baseURL, charset);
 
-    RefPtrWillBeRawPtr<StyleSheetContents> newSheet = StyleSheetContents::create(href, parserContext);
+    RawPtr<StyleSheetContents> newSheet = StyleSheetContents::create(href, parserContext);
 
-    RefPtrWillBeRawPtr<CSSStyleSheet> cssSheet = CSSStyleSheet::create(newSheet, this);
+    RawPtr<CSSStyleSheet> cssSheet = CSSStyleSheet::create(newSheet, this);
     cssSheet->setDisabled(m_alternate);
     cssSheet->setTitle(m_title);
     cssSheet->setMediaQueries(MediaQuerySet::create(m_media));
@@ -229,14 +228,14 @@ void ProcessingInstruction::setCSSStyleSheet(const String& href, const KURL& bas
 
 void ProcessingInstruction::setXSLStyleSheet(const String& href, const KURL& baseURL, const String& sheet)
 {
-    if (!inDocument()) {
-        ASSERT(!m_sheet);
+    if (!inShadowIncludingDocument()) {
+        DCHECK(!m_sheet);
         return;
     }
 
-    ASSERT(m_isXSL);
+    DCHECK(m_isXSL);
     m_sheet = XSLStyleSheet::create(this, href, baseURL);
-    RefPtrWillBeRawPtr<Document> protect(&document());
+    RawPtr<Document> protect(&document());
     OwnPtr<IncrementLoadEventDelayCount> delay = IncrementLoadEventDelayCount::create(document());
     parseStyleSheet(sheet);
 }
@@ -260,14 +259,14 @@ void ProcessingInstruction::parseStyleSheet(const String& sheet)
 Node::InsertionNotificationRequest ProcessingInstruction::insertedInto(ContainerNode* insertionPoint)
 {
     CharacterData::insertedInto(insertionPoint);
-    if (!insertionPoint->inDocument())
+    if (!insertionPoint->inShadowIncludingDocument())
         return InsertionDone;
 
     String href;
     String charset;
     bool isValid = checkStyleSheet(href, charset);
     if (!DocumentXSLT::processingInstructionInsertedIntoDocument(document(), this))
-        document().styleEngine().addStyleSheetCandidateNode(this, m_createdByParser);
+        document().styleEngine().addStyleSheetCandidateNode(this);
     if (isValid)
         process(href, charset);
     return InsertionDone;
@@ -276,16 +275,16 @@ Node::InsertionNotificationRequest ProcessingInstruction::insertedInto(Container
 void ProcessingInstruction::removedFrom(ContainerNode* insertionPoint)
 {
     CharacterData::removedFrom(insertionPoint);
-    if (!insertionPoint->inDocument())
+    if (!insertionPoint->inShadowIncludingDocument())
         return;
 
     // No need to remove XSLStyleSheet from StyleEngine.
     if (!DocumentXSLT::processingInstructionRemovedFromDocument(document(), this))
         document().styleEngine().removeStyleSheetCandidateNode(this);
 
-    RefPtrWillBeRawPtr<StyleSheet> removedSheet = m_sheet;
+    RawPtr<StyleSheet> removedSheet = m_sheet;
     if (m_sheet) {
-        ASSERT(m_sheet->ownerNode() == this);
+        DCHECK_EQ(m_sheet->ownerNode(), this);
         clearSheet();
     }
 
@@ -294,12 +293,12 @@ void ProcessingInstruction::removedFrom(ContainerNode* insertionPoint)
 
     // If we're in document teardown, then we don't need to do any notification of our sheet's removal.
     if (document().isActive())
-        document().removedStyleSheet(removedSheet.get());
+        document().styleEngine().setNeedsActiveStyleUpdate(removedSheet.get(), FullStyleUpdate);
 }
 
 void ProcessingInstruction::clearSheet()
 {
-    ASSERT(m_sheet);
+    DCHECK(m_sheet);
     if (m_sheet->isLoading())
         document().styleEngine().removePendingSheet(this);
     m_sheet.release()->clearOwnerNode();

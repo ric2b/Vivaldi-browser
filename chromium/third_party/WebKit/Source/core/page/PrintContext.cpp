@@ -27,17 +27,17 @@
 
 namespace blink {
 
-// By imaging to a width a little wider than the available pixels,
-// thin pages will be scaled down a little, matching the way they
-// print in IE and Camino. This lets them use fewer sheets than they
-// would otherwise, which is presumably why other browsers do this.
+// By shrinking to a width of 75% (1.333f) we will render the correct physical
+// dimensions in paged media (i.e. cm, pt,). The shrinkage used
+// to be 80% (1.25f) to match other browsers - they have since moved on.
 // Wide pages will be scaled down more than this.
-const float printingMinimumShrinkFactor = 1.25f;
+const float printingMinimumShrinkFactor = 1.333f;
 
 // This number determines how small we are willing to reduce the page content
 // in order to accommodate the widest line. If the page would have to be
 // reduced smaller to make the widest line fit, we just clip instead (this
-// behavior matches MacIE and Mozilla, at least)
+// behavior matches MacIE and Mozilla, at least).
+// TODO(rhogan): Decide if this quirk is still required.
 const float printingMaximumShrinkFactor = 2;
 
 PrintContext::PrintContext(LocalFrame* frame)
@@ -62,7 +62,7 @@ void PrintContext::computePageRects(const FloatRect& printRect, float headerHeig
         return;
 
     if (userScaleFactor <= 0) {
-        WTF_LOG_ERROR("userScaleFactor has bad value %.2f", userScaleFactor);
+        DLOG(ERROR) << "userScaleFactor has bad value " << userScaleFactor;
         return;
     }
 
@@ -76,7 +76,7 @@ void PrintContext::computePageRects(const FloatRect& printRect, float headerHeig
     pageHeight -= headerHeight + footerHeight;
 
     if (pageHeight <= 0) {
-        WTF_LOG_ERROR("pageHeight has bad value %.2f", pageHeight);
+        DLOG(ERROR) << "pageHeight has bad value " << pageHeight;
         return;
     }
 
@@ -99,7 +99,10 @@ void PrintContext::computePageRectsWithPageSizeInternal(const FloatSize& pageSiz
     IntRect docRect = view->documentRect();
 
     int pageWidth = pageSizeInPixels.width();
-    int pageHeight = pageSizeInPixels.height();
+    // We scaled with floating point arithmetic and need to ensure results like 13329.99
+    // are treated as 13330 so that we don't mistakenly assign an extra page for the
+    // stray pixel.
+    int pageHeight = pageSizeInPixels.height() + LayoutUnit::epsilon();
 
     bool isHorizontal = view->style()->isHorizontalWritingMode();
 
@@ -184,8 +187,6 @@ static LayoutBoxModelObject* enclosingBoxModelObject(LayoutObject* object)
 
 int PrintContext::pageNumberForElement(Element* element, const FloatSize& pageSizeInPixels)
 {
-    // Make sure the element is not freed during the layout.
-    RefPtrWillBeRawPtr<Element> protect(element);
     element->document().updateLayout();
 
     LayoutBoxModelObject* box = enclosingBoxModelObject(element->layoutObject());
@@ -275,9 +276,9 @@ String PrintContext::pageProperty(LocalFrame* frame, const char* propertyName, i
     if (!strcmp(propertyName, "line-height"))
         return String::number(style->lineHeight().value());
     if (!strcmp(propertyName, "font-size"))
-        return String::number(style->fontDescription().computedPixelSize());
+        return String::number(style->getFontDescription().computedPixelSize());
     if (!strcmp(propertyName, "font-family"))
-        return style->fontDescription().family().family().string();
+        return style->getFontDescription().family().family().getString();
     if (!strcmp(propertyName, "size"))
         return String::number(style->pageSize().width()) + ' ' + String::number(style->pageSize().height());
 
@@ -314,10 +315,8 @@ int PrintContext::numberOfPages(LocalFrame* frame, const FloatSize& pageSizeInPi
 
 DEFINE_TRACE(PrintContext)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_frame);
     visitor->trace(m_linkedDestinations);
-#endif
 }
 
 } // namespace blink

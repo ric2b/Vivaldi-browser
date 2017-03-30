@@ -19,8 +19,10 @@ sys.path.append(chromium_config.GetTelemetryDir())
 from telemetry.internal.backends.chrome_inspector import inspector_websocket
 from telemetry.internal.backends.chrome_inspector import websocket
 
+import common_util
 
-DEFAULT_TIMEOUT = 10 # seconds
+
+DEFAULT_TIMEOUT_SECONDS = 10 # seconds
 
 
 class DevToolsConnectionException(Exception):
@@ -92,14 +94,18 @@ class DevToolsConnection(object):
       hostname: server hostname.
       port: port number.
     """
-    self._ws = self._Connect(hostname, port)
+    self._http_hostname = hostname
+    self._http_port = port
     self._event_listeners = {}
     self._domain_listeners = {}
     self._scoped_states = {}
     self._domains_to_enable = set()
     self._tearing_down_tracing = False
-    self._set_up = False
     self._please_stop = False
+    self._ws = None
+    self._target_descriptor = None
+
+    self._Connect()
 
   def RegisterListener(self, name, listener):
     """Registers a listener for an event.
@@ -207,7 +213,16 @@ class DevToolsConnection(object):
     assert res['result'], 'Cache clearing is not supported by this browser.'
     self.SyncRequest('Network.clearBrowserCache')
 
-  def SetUpMonitoring(self):
+  def MonitorUrl(self, url, timeout_seconds=DEFAULT_TIMEOUT_SECONDS):
+    """Navigate to url and dispatch monitoring loop.
+
+    Unless you have registered a listener that will call StopMonitoring, this
+    will run until timeout from chrome.
+
+    Args:
+      url: (str) a URL to navigate to before starting monitoring loop.\
+      timeout_seconds: timeout in seconds for monitoring loop.
+    """
     for domain in self._domains_to_enable:
       self._ws.RegisterDomain(domain, self._OnDataReceived)
       if domain != self.TRACING_DOMAIN:
@@ -218,23 +233,55 @@ class DevToolsConnection(object):
       self.SyncRequestNoResponse(scoped_state,
                                  self._scoped_states[scoped_state][0])
     self._tearing_down_tracing = False
-    self._set_up = True
 
-  def StartMonitoring(self, timeout=DEFAULT_TIMEOUT):
-    """Starts monitoring.
+    self.SendAndIgnoreResponse('Page.navigate', {'url': url})
 
-    DevToolsConnection.SetUpMonitoring() has to be called first.
-    """
-    assert self._set_up, 'DevToolsConnection.SetUpMonitoring not called.'
-    self._Dispatch(timeout=timeout)
+    self._Dispatch(timeout=timeout_seconds)
     self._TearDownMonitoring()
 
   def StopMonitoring(self):
     """Stops the monitoring."""
     self._please_stop = True
 
-  def _Dispatch(self, kind='Monitoring',
-                timeout=DEFAULT_TIMEOUT):
+  def ExecuteJavaScript(self, expression):
+    """Run JavaScript expression.
+
+    Args:
+      expression: JavaScript expression to run.
+
+    Returns:
+      The return value from the JavaScript expression.
+    """
+    response = self.SyncRequest('Runtime.evaluate', {
+        'expression': expression,
+        'returnByValue': True})
+    if 'error' in response:
+      raise Exception(response['error']['message'])
+    if 'wasThrown' in response['result'] and response['result']['wasThrown']:
+      raise Exception(response['error']['result']['description'])
+    if response['result']['result']['type'] == 'undefined':
+      return None
+    return response['result']['result']['value']
+
+  def PollForJavaScriptExpression(self, expression, interval):
+    """Wait until JavaScript expression is true.
+
+    Args:
+      expression: JavaScript expression to run.
+      interval: Period between expression evaluation in seconds.
+    """
+    common_util.PollFor(lambda: bool(self.ExecuteJavaScript(expression)),
+                        'JavaScript: {}'.format(expression),
+                        interval)
+
+  def Close(self):
+    """Cleanly close chrome by closing the only tab."""
+    assert self._ws
+    response = self._HttpRequest('/close/' + self._target_descriptor['id'])
+    assert response == 'Target is closing'
+    self._ws = None
+
+  def _Dispatch(self, timeout, kind='Monitoring'):
     self._please_stop = False
     while not self._please_stop:
       try:
@@ -249,7 +296,7 @@ class DevToolsConnection(object):
       logging.info('Fetching tracing')
       self.SyncRequestNoResponse(self.TRACING_END_METHOD)
       self._tearing_down_tracing = True
-      self._Dispatch(kind='Tracing', timeout=self.TRACING_TIMEOUT)
+      self._Dispatch(timeout=self.TRACING_TIMEOUT, kind='Tracing')
     for scoped_state in self._scoped_states:
       self.SyncRequestNoResponse(scoped_state,
                                  self._scoped_states[scoped_state][1])
@@ -300,25 +347,30 @@ class DevToolsConnection(object):
     self._tearing_down_tracing = False
     self.StopMonitoring()
 
-  @classmethod
-  def _GetWebSocketUrl(cls, hostname, port):
-    r = httplib.HTTPConnection(hostname, port)
-    r.request('GET', '/json')
-    response = r.getresponse()
-    if response.status != 200:
-      raise DevToolsConnectionException(
-          'Cannot connect to DevTools, reponse code %d' % response.status)
-    json_response = json.loads(response.read())
-    r.close()
-    websocket_url = json_response[0]['webSocketDebuggerUrl']
-    return websocket_url
+  def _HttpRequest(self, path):
+    assert path[0] == '/'
+    r = httplib.HTTPConnection(self._http_hostname, self._http_port)
+    try:
+      r.request('GET', '/json' + path)
+      response = r.getresponse()
+      if response.status != 200:
+        raise DevToolsConnectionException(
+            'Cannot connect to DevTools, reponse code %d' % response.status)
+      raw_response = response.read()
+    finally:
+      r.close()
+    return raw_response
 
-  @classmethod
-  def _Connect(cls, hostname, port):
-    websocket_url = cls._GetWebSocketUrl(hostname, port)
-    ws = inspector_websocket.InspectorWebsocket()
-    ws.Connect(websocket_url)
-    return ws
+  def _Connect(self):
+    assert not self._ws
+    assert not self._target_descriptor
+    for target_descriptor in json.loads(self._HttpRequest('/list')):
+      if target_descriptor['type'] == 'page':
+        self._target_descriptor = target_descriptor
+        break
+    assert self._target_descriptor['url'] == 'about:blank'
+    self._ws = inspector_websocket.InspectorWebsocket()
+    self._ws.Connect(self._target_descriptor['webSocketDebuggerUrl'])
 
 
 class Listener(object):

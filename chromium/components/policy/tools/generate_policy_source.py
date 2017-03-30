@@ -84,6 +84,10 @@ class PolicyDetails:
     self.platforms = []
     for platform, version_range in [ p.split(':')
                                      for p in policy['supported_on'] ]:
+      if self.is_device_only and platform != 'chrome_os':
+        raise RuntimeError('is_device_only is only allowed for Chrome OS: "%s"'
+                           % p)
+
       split_result = version_range.split('-')
       if len(split_result) != 2:
         raise RuntimeError('supported_on must have exactly one dash: "%s"' % p)
@@ -689,6 +693,7 @@ def _WritePolicyConstantSource(policies, os, f, riskTags):
           '//  is_deprecated  is_device_policy  id    max_external_data_size\n')
   for policy in policies:
     if policy.is_supported:
+      f.write('  // %s\n' % policy.name)
       f.write('  { %-14s %-16s %3s, %24s,\n'
               '    %s },\n' % (
                   'true,' if policy.is_deprecated else 'false,',

@@ -43,7 +43,7 @@ namespace blink {
 
 class CORE_EXPORT Performance final : public PerformanceBase, public DOMWindowProperty {
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(Performance);
+    USING_GARBAGE_COLLECTED_MIXIN(Performance);
 public:
     static Performance* create(LocalFrame* frame)
     {
@@ -51,7 +51,7 @@ public:
     }
     ~Performance() override;
 
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
     MemoryInfo* memory();
     PerformanceNavigation* navigation() const;

@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "base/bind.h"
+#include "base/message_loop/message_loop.h"
 #include "components/mus/public/cpp/event_matcher.h"
 #include "mojo/shell/public/cpp/connection.h"
 #include "mojo/shell/public/cpp/connector.h"
@@ -42,24 +43,33 @@ void AssertTrue(bool success) {
   DCHECK(success);
 }
 
+void DoNothing() {}
+
 }  // namespace
 
 BrowserDriverApplicationDelegate::BrowserDriverApplicationDelegate()
     : connector_(nullptr),
-      binding_(this) {}
+      binding_(this),
+      weak_factory_(this) {}
 
 BrowserDriverApplicationDelegate::~BrowserDriverApplicationDelegate() {}
 
-void BrowserDriverApplicationDelegate::Initialize(mojo::Connector* connector,
-                                                  const std::string& url,
-                                                  uint32_t id,
-                                                  uint32_t user_id) {
+void BrowserDriverApplicationDelegate::Initialize(
+    mojo::Connector* connector,
+    const mojo::Identity& identity,
+    uint32_t id) {
   connector_ = connector;
   AddAccelerators();
 }
 
 bool BrowserDriverApplicationDelegate::AcceptConnection(
     mojo::Connection* connection) {
+  return true;
+}
+
+bool BrowserDriverApplicationDelegate::ShellConnectionLost() {
+  // Prevent the code in AddAccelerators() from keeping this app alive.
+  binding_.set_connection_error_handler(base::Bind(&DoNothing));
   return true;
 }
 
@@ -92,7 +102,7 @@ void BrowserDriverApplicationDelegate::AddAccelerators() {
   // to re-add our accelerators when the window manager comes back up.
   binding_.set_connection_error_handler(
       base::Bind(&BrowserDriverApplicationDelegate::AddAccelerators,
-                 base::Unretained(this)));
+                 weak_factory_.GetWeakPtr()));
 
   for (const AcceleratorSpec& spec : g_spec) {
     registrar->AddAccelerator(

@@ -75,6 +75,7 @@ public:
     const ComputedStyle& styleRef() const { return mutableStyleRef(); }
 
     const CSSToLengthConversionData& cssToLengthConversionData() const { return m_cssToLengthConversionData; }
+    CSSToLengthConversionData fontSizeConversionData() const;
 
     void setConversionFontSizes(const CSSToLengthConversionData::FontSizes& fontSizes) { m_cssToLengthConversionData.setFontSizes(fontSizes); }
     void setConversionZoom(float zoom) { m_cssToLengthConversionData.setZoom(zoom); }
@@ -112,21 +113,24 @@ public:
 
     ElementStyleResources& elementStyleResources() { return m_elementStyleResources; }
 
+    void loadPendingResources();
+
     // FIXME: Once styleImage can be made to not take a StyleResolverState
     // this convenience function should be removed. As-is, without this, call
     // sites are extremely verbose.
-    PassRefPtrWillBeRawPtr<StyleImage> styleImage(CSSPropertyID propertyId, const CSSValue& value)
+    StyleImage* styleImage(CSSPropertyID propertyId, const CSSValue& value)
     {
         return m_elementStyleResources.styleImage(propertyId, value);
     }
 
     FontBuilder& fontBuilder() { return m_fontBuilder; }
+    const FontBuilder& fontBuilder() const { return m_fontBuilder; }
     // FIXME: These exist as a primitive way to track mutations to font-related properties
     // on a ComputedStyle. As designed, these are very error-prone, as some callers
     // set these directly on the ComputedStyle w/o telling us. Presumably we'll
     // want to design a better wrapper around ComputedStyle for tracking these mutations
     // and separate it from StyleResolverState.
-    const FontDescription& parentFontDescription() { return m_parentStyle->fontDescription(); }
+    const FontDescription& parentFontDescription() const { return m_parentStyle->getFontDescription(); }
 
     void setZoom(float f)
     {
@@ -152,9 +156,12 @@ public:
     void setHasDirAutoAttribute(bool value) { m_hasDirAutoAttribute = value; }
     bool hasDirAutoAttribute() const { return m_hasDirAutoAttribute; }
 
+    void setCustomPropertySetForApplyAtRule(const String&, StylePropertySet*);
+    StylePropertySet* customPropertySetForApplyAtRule(const String&);
+
 private:
     ElementResolveContext m_elementContext;
-    RawPtrWillBeMember<Document> m_document;
+    Member<Document> m_document;
 
     // m_style is the primary output for each element's style resolve.
     RefPtr<ComputedStyle> m_style;
@@ -176,6 +183,8 @@ private:
     OwnPtr<CachedUAStyle> m_cachedUAStyle;
 
     ElementStyleResources m_elementStyleResources;
+
+    HeapHashMap<String, Member<StylePropertySet>> m_customPropertySetsForApplyAtRule;
 };
 
 } // namespace blink

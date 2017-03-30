@@ -29,14 +29,30 @@ public class BlimpClientSession {
          *                                   user if necessary.
          */
         void onAssignmentReceived(int result, int suggestedMessageResourceId);
+
+        /**
+         * Called when a connection to the engine was made successfully.
+         */
+        void onConnected();
+
+        /**
+         * Called when the engine connection was dropped.
+         * @param reason The string-based error code.
+         *               See net/base/net_errors.h for a complete list of codes
+         *               and their explanations.
+         */
+        void onDisconnected(String reason);
     }
+
+    private static final String DEFAULT_ASSIGNER_URL =
+            "https://blimp-pa.googleapis.com/v1/assignment";
 
     private final Callback mCallback;
     private long mNativeBlimpClientSessionAndroidPtr;
 
     public BlimpClientSession(Callback callback) {
         mCallback = callback;
-        mNativeBlimpClientSessionAndroidPtr = nativeInit();
+        mNativeBlimpClientSessionAndroidPtr = nativeInit(DEFAULT_ASSIGNER_URL);
     }
 
     /**
@@ -103,12 +119,23 @@ public class BlimpClientSession {
     }
 
     @CalledByNative
+    void onConnected() {
+        assert mCallback != null;
+        mCallback.onConnected();
+    }
+
+    @CalledByNative
+    void onDisconnected(String reason) {
+        mCallback.onDisconnected(reason);
+    }
+
+    @CalledByNative
     private long getNativePtr() {
         assert mNativeBlimpClientSessionAndroidPtr != 0;
         return mNativeBlimpClientSessionAndroidPtr;
     }
 
-    private native long nativeInit();
+    private native long nativeInit(String assignerUrl);
     private native void nativeConnect(long nativeBlimpClientSessionAndroid, String token);
     private native void nativeDestroy(long nativeBlimpClientSessionAndroid);
 }

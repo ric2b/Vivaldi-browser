@@ -32,6 +32,7 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/Fullscreen.h"
+#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/PageScaleConstraintsSet.h"
 #include "core/html/HTMLMediaElement.h"
@@ -45,9 +46,9 @@
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<FullscreenController> FullscreenController::create(WebViewImpl* webViewImpl)
+FullscreenController* FullscreenController::create(WebViewImpl* webViewImpl)
 {
-    return adoptPtrWillBeNoop(new FullscreenController(webViewImpl));
+    return new FullscreenController(webViewImpl);
 }
 
 FullscreenController::FullscreenController(WebViewImpl* webViewImpl)
@@ -63,7 +64,7 @@ void FullscreenController::didEnterFullScreen()
     if (!m_provisionalFullScreenElement)
         return;
 
-    RefPtrWillBeRawPtr<Element> element = m_provisionalFullScreenElement.release();
+    Element* element = m_provisionalFullScreenElement.release();
     Document& document = element->document();
     m_fullScreenFrame = document.frame();
 
@@ -78,8 +79,8 @@ void FullscreenController::didEnterFullScreen()
         m_haveEnteredFullscreen = true;
     }
 
-    Fullscreen::from(document).didEnterFullScreenForElement(element.get());
-    ASSERT(Fullscreen::currentFullScreenElementFrom(document) == element);
+    Fullscreen::from(document).didEnterFullScreenForElement(element);
+    DCHECK_EQ(Fullscreen::currentFullScreenElementFrom(document), element);
 
     if (isHTMLVideoElement(element)) {
         HTMLVideoElement* videoElement = toHTMLVideoElement(element);
@@ -157,7 +158,7 @@ void FullscreenController::enterFullScreenForElement(Element* element)
 
 void FullscreenController::exitFullScreenForElement(Element* element)
 {
-    ASSERT(element);
+    DCHECK(element);
 
     // The client is exiting full screen, so don't send a notification.
     if (m_isCancelingFullScreen)
@@ -189,6 +190,16 @@ void FullscreenController::updatePageScaleConstraints(bool removeConstraints)
     }
     m_webViewImpl->pageScaleConstraintsSet().setFullscreenConstraints(fullscreenConstraints);
     m_webViewImpl->pageScaleConstraintsSet().computeFinalConstraints();
+
+    // Although we called computedFinalConstraints() above, the "final" constraints are not
+    // actually final. They are still subject to scale factor clamping by contents size.
+    // Normally they should be dirtied due to contents size mutation after layout, however the
+    // contents size is not guaranteed to mutate, and the scale factor may remain unclamped.
+    // Just fire the event again to ensure the final constraints pick up the latest contents size.
+    m_webViewImpl->didChangeContentsSize();
+    if (m_webViewImpl->mainFrameImpl() && m_webViewImpl->mainFrameImpl()->frameView())
+        m_webViewImpl->mainFrameImpl()->frameView()->setNeedsLayout();
+
     m_webViewImpl->updateMainFrameLayoutSize();
 }
 

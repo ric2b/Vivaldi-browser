@@ -1,20 +1,32 @@
-/* Copyright 2016 The Chromium Authors. All rights reserved.
- * Use of this source code is governed by a BSD-style license that can be
- * found in the LICENSE file. */
-
-/**
- * @fileoverview
- * Common styles for Material Design settings.
- */
-
+<!-- Common styles for Material Design settings. -->
 <dom-module id="settings-shared">
   <template>
     <style>
       :root {
+        --checkbox-margin-start: 2px;
+        --checkbox-size: 16px;
+        --checkbox-spacing: 18px;
+        --iron-icon-fill-color: var(--paper-grey-600);
+        --iron-icon-height: 20px;
+        --iron-icon-width: 20px;
+        --paper-icon-button: {
+          width: 36px;
+          height: 36px;
+        };
+        --paper-input-max-width: 264px;
+        --settings-background-color: var(--paper-blue-grey-50);
         --settings-secondary: {
-          color: var(--paper-grey-500);
+          color: var(--paper-grey-600);
           font-weight: 400;
-        }
+        };
+        --settings-error-color: var(--paper-red-700);
+        --settings-hover-color: var(--google-grey-300);
+
+        /* Some colors use non-MD colors.  These custom colors are specified by
+         * UX design (bettes@). */
+        --settings-nav-grey: rgb(90, 90, 90);
+        --settings-title-bar-background-color: rgb(52, 73, 94);
+        --settings-title-bar-color: rgb(255, 255, 255);
       }
 
       h2 {
@@ -27,12 +39,9 @@
         min-height: 40px;
       }
 
-      iron-icon {
-        color: var(--paper-grey-300);
-      }
-
+      iron-icon[icon=check],
       iron-icon[icon=done] {
-        color: var(--google-green-500);
+       --iron-icon-fill-color: var(--google-green-500);
       }
 
       paper-button {
@@ -89,7 +98,7 @@
       paper-radio-button {
         --paper-radio-button-checked-color: var(--google-blue-500);
         --paper-radio-button-label-spacing: 18px;
-        --paper-radio-button-unchecked-color: var(--paper-grey-500);
+        --paper-radio-button-unchecked-color: var(--paper-grey-600);
         -webkit-margin-start: 2px;
       }
 
@@ -108,6 +117,16 @@
         text-align: end;
       }
 
+      .action-button {
+        background: var(--google-blue-500);
+        color: white;
+        font-weight: 500;
+      }
+
+      .action-button[disabled] {
+        opacity: .25;  /* TODO(dbeam): check this value with bettes. */
+      }
+
       .list-frame {
         @apply(--layout-center);
         -webkit-padding-end: 20px;
@@ -117,11 +136,8 @@
         padding-top: 0;
       }
 
-      .list-frame select {
-        -webkit-margin-start: 4px;
-      }
-
-      .list-frame .secondary {
+      .list-frame .secondary,
+      .list-item .secondary {
         @apply(--settings-secondary);
       }
 
@@ -132,17 +148,16 @@
         padding: 0;
       }
 
-      /* This button has no ink ripple */
-      .list-item.list-button {
-        @apply(--layout-center);
-        color: var(--google-blue-500);
+      .list-item.underbar {
+        border-bottom: 1px solid var(--paper-grey-300);
+      }
+
+      .list-item.selected {
         font-weight: 500;
       }
 
-      .list-item iron-icon {
-        @apply(--layout-center);
-        height: 20px;
-        width: 20px;
+      .list-item select {
+        -webkit-margin-start: 4px;
       }
 
       .list-item > .middle {
@@ -189,12 +204,6 @@
         min-height: 52px;
       }
 
-      .settings-box iron-icon {
-        @apply(--layout-center);
-        height: 20px;
-        width: 20px;
-      }
-
       .settings-box .secondary {
         @apply(--settings-secondary);
       }
@@ -236,6 +245,13 @@
 
       .vertical-list > div {
         border-top: 1px solid var(--paper-grey-300);
+      }
+
+      .settings-checkbox-spacer {
+        -webkit-margin-start: calc(
+            var(--checkbox-margin-start) +
+            var(--checkbox-size) +
+            var(--checkbox-spacing));
       }
     </style>
   </template>

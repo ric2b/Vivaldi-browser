@@ -34,9 +34,12 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/keep_alive_types.h"
+#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/mac/mac_startup_profiler.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
-#include "chrome/browser/profiles/profile_info_cache_observer.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/sessions/session_restore.h"
@@ -67,7 +70,6 @@
 #include "chrome/browser/ui/cocoa/last_active_browser_cocoa.h"
 #import "chrome/browser/ui/cocoa/profiles/profile_menu_controller.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -104,6 +106,7 @@
 
 //vivaldi
 #include "app/vivaldi_commands.h"
+#include "browser/vivaldi_app_observer.h"
 #include "extensions/api/show_menu/show_menu_api.h"
 #import  "third_party/sparkle_lib/Sparkle.framework/Headers/SUUpdater.h"
 
@@ -204,12 +207,11 @@ bool IsProfileSignedOut(Profile* profile) {
   // --new-profile-management flag.
   if (!switches::IsNewProfileManagement())
     return false;
-  ProfileInfoCache& cache =
-      g_browser_process->profile_manager()->GetProfileInfoCache();
-  size_t profile_index = cache.GetIndexOfProfileWithPath(profile->GetPath());
-  if (profile_index == std::string::npos)
-    return false;
-  return cache.ProfileIsSigninRequiredAtIndex(profile_index);
+  ProfileAttributesEntry* entry;
+  bool has_entry =
+      g_browser_process->profile_manager()->GetProfileAttributesStorage().
+          GetProfileAttributesWithPath(profile->GetPath(), &entry);
+  return has_entry && entry->IsSigninRequired();
 }
 
 }  // namespace
@@ -263,7 +265,7 @@ bool IsProfileSignedOut(Profile* profile) {
 - (GURL)handoffURLFromWebContents:(content::WebContents*)webContents;
 @end
 
-class AppControllerProfileObserver : public ProfileInfoCacheObserver {
+class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
  public:
   AppControllerProfileObserver(
       ProfileManager* profile_manager, AppController* app_controller)
@@ -271,16 +273,16 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
         app_controller_(app_controller) {
     DCHECK(profile_manager_);
     DCHECK(app_controller_);
-    profile_manager_->GetProfileInfoCache().AddObserver(this);
+    profile_manager_->GetProfileAttributesStorage().AddObserver(this);
   }
 
   ~AppControllerProfileObserver() override {
     DCHECK(profile_manager_);
-    profile_manager_->GetProfileInfoCache().RemoveObserver(this);
+    profile_manager_->GetProfileAttributesStorage().RemoveObserver(this);
   }
 
  private:
-  // ProfileInfoCacheObserver implementation:
+  // ProfileAttributesStorage::Observer implementation:
 
   void OnProfileAdded(const base::FilePath& profile_path) override {}
 
@@ -527,7 +529,7 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
 
   // Tell BrowserList not to keep the browser process alive. Once all the
   // browsers get dealloc'd, it will stop the RunLoop and fall back into main().
-  chrome::DecrementKeepAliveCount();
+  keep_alive_.reset();
 
   // Reset all pref watching, as this object outlives the prefs system.
   profilePrefRegistrar_.reset();
@@ -739,7 +741,8 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
 
   // Notify BrowserList to keep the application running so it doesn't go away
   // when all the browser windows get closed.
-  chrome::IncrementKeepAliveCount();
+  keep_alive_.reset(new ScopedKeepAlive(KeepAliveOrigin::APP_CONTROLLER,
+                                        KeepAliveRestartOption::DISABLED));
 
   [self setUpdateCheckInterval];
 
@@ -765,9 +768,10 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
   EncodingMenuControllerDelegate::BuildEncodingMenu([self lastProfile],
                                                     encodingMenu);
   }
-  // Instantiate the ProfileInfoCache observer so that we can get
+
+  // Instantiate the ProfileAttributesStorage observer so that we can get
   // notified when a profile is deleted.
-  profileInfoCacheObserver_.reset(new AppControllerProfileObserver(
+  profileAttributesStorageObserver_.reset(new AppControllerProfileObserver(
       g_browser_process->profile_manager(), self));
   if (!vivaldi::IsVivaldiRunning()) {
   // Since Chrome is localized to more languages than the OS, tell Cocoa which
@@ -805,12 +809,6 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
 
   handoff_active_url_observer_bridge_.reset(
       new HandoffActiveURLObserverBridge(self));
-}
-
-// This is called after profiles have been loaded and preferences registered.
-// It is safe to access the default profile here.
-- (void)applicationDidBecomeActive:(NSNotification*)notify {
-  content::PluginService::GetInstance()->AppActivated();
 }
 
 // Helper function for populating and displaying the in progress downloads at
@@ -1073,47 +1071,80 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
     return;
   }
 
-  // Vivaldi executes its own shortcuts from the javascript side. Mac will in
-  // addition execute shortcuts that are displayed in the menu so we must stop
-  // those. First step is to only allow proper mouse and keyboard events. We
-  // have observed during rapid keypresses that other events are the current
-  // event when commandDisptach fires (see VB-10837).
-  NSEventType eventType = [[NSApp currentEvent] type];
-  if (eventType != NSKeyDown &&
-      eventType != NSLeftMouseUp &&
-      eventType != NSRightMouseUp) {
-    return;
+  SEL action = [sender action];
+  if (action == @selector(commandFromDock:)) {
+    // Do nothing, but make it clear. The dock menu is not controlled from
+    // Vivaldi and actions from that must not be subject to those we use below.
+  } else {
+    // Vivaldi executes its own shortcuts from the javascript side. Mac will in
+    // addition execute shortcuts that are displayed in the menu so we must stop
+    // those. First step is to only allow proper mouse and keyboard events. We
+    // have observed during rapid keypresses that other events are the current
+    // event when commandDisptach fires (see VB-10837).
+    NSEventType eventType = [[NSApp currentEvent] type];
+    if (eventType != NSKeyDown &&
+        eventType != NSLeftMouseUp &&
+        eventType != NSRightMouseUp) {
+      return;
+    }
+
+    if (eventType == NSKeyDown) {
+      // Additional test for key presses. Allow those that are sent from the
+      // menu by selecting an entry and pressing space/enter and even a shortcut
+      // if there is no browser window (in that case vivaldi will not execute its
+      // own).
+      auto key = [[NSApp currentEvent] characters];
+      if ([key characterAtIndex:0] != NSCarriageReturnCharacter &&
+         [key characterAtIndex:0] != NSNewlineCharacter &&
+         [key characterAtIndex:0] != NSEnterCharacter &&
+         ![key isEqual:@" "]) {
+        Browser* browser = chrome::FindLastActiveWithProfile(
+            lastProfile->IsGuestSession() ?
+                lastProfile->GetOffTheRecordProfile() : lastProfile);
+        if (browser)
+          return;
+      }
+    }
   }
 
-  if (eventType == NSKeyDown) {
-    // Additional test for key presses. Allow those that are sent from the
-    // menu by selecting an entry and pressing space/enter and even a shortcut
-    // if there is no browser window (in that case vivaldi will not execute its
-    // own).
-    auto key = [[NSApp currentEvent] characters];
-    if ([key characterAtIndex:0] != NSCarriageReturnCharacter &&
-        [key characterAtIndex:0] != NSNewlineCharacter &&
-        [key characterAtIndex:0] != NSEnterCharacter &&
-        ![key isEqual:@" "]) {
-      Browser* browser = chrome::FindLastActiveWithProfile(
-          lastProfile->IsGuestSession() ?
-              lastProfile->GetOffTheRecordProfile() : lastProfile);
-      if (browser)
+  // NOTE(tomas@vivaldi.com): Handle shorcuts and menu items selected when no
+  // window is open. First open a window, and then send the command to the
+  // vivaldi app via VivaldiAppObserver.
+  if (vivaldi::IsVivaldiRunning()) {
+    Browser* browser = chrome::FindLastActiveWithProfile(
+        lastProfile->IsGuestSession() ? lastProfile->GetOffTheRecordProfile()
+                                      : lastProfile);
+    if (!browser)
+      browser = chrome::FindLastActiveWithProfile(
+          lastProfile->GetOffTheRecordProfile());
+
+    if (!browser) {
+      if (tag == IDC_VIV_CLOSE_TAB || tag == IDC_VIV_CLOSE_WINDOW)
         return;
+
+      if (tag == IDC_VIV_NEW_PRIVATE_WINDOW) {
+        browser = CreateBrowser(lastProfile->GetOffTheRecordProfile());
+        return;
+      }
+
+      browser = CreateBrowser(lastProfile);
+
+      // NOTE(tomas@vivaldi.com): For "new tab" and "new window" we only want to
+      // open one new window so we do not send the command onward to the vivaldi
+      // app.
+      if (tag == IDC_VIV_NEW_TAB || tag == IDC_VIV_NEW_WINDOW)
+        return;
+
+      vivaldi::VivaldiAppObserver::Get(browser->tab_strip_model()
+                                           ->GetActiveWebContents()
+                                           ->GetBrowserContext())
+          ->SetCommand(tag, browser);
+      return;
     }
   }
 
   switch (tag) {
     case IDC_NEW_TAB:
-      if (vivaldi::IsVivaldiRunning()) {
-        if(menuState_->IsCommandEnabled(tag)) {
-          if (Browser* browser = ActivateBrowser(lastProfile)) {
-            chrome::ExecuteCommand(browser, IDC_VIV_NEW_TAB);
-            break;
-          }
-          // Else fall through to create new window.
-        }
-      } else {
       // Create a new tab in an existing browser window (which we activate) if
       // possible.
       if (Browser* browser = ActivateBrowser(lastProfile)) {
@@ -1121,19 +1152,8 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
         break;
       }
       // Else fall through to create new window.
-      }
     case IDC_NEW_WINDOW:
-      if (vivaldi::IsVivaldiRunning()) {
-        if (Browser* browser = ActivateBrowser(lastProfile)) {
-          chrome::ExecuteCommand(browser, IDC_VIV_NEW_WINDOW);
-        } else {
-          // no window is open, so vivaldi app is not running.
-          // tomas@vivaldi.com - todo: open a vivaldi window, not chrome
-          CreateBrowser(lastProfile);
-        }
-      } else {
       CreateBrowser(lastProfile);
-      }
       break;
     case IDC_FOCUS_LOCATION:
       chrome::ExecuteCommand(ActivateOrCreateBrowser(lastProfile),
@@ -1216,17 +1236,6 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
       break;
     case IDC_OPTIONS:
       [self showPreferences:sender];
-      break;
-    case IDC_ABOUT:
-      if(menuState_->IsCommandEnabled(tag)) {
-        if (Browser* browser = ActivateBrowser(lastProfile)) {
-          if (vivaldi::IsVivaldiRunning()) {
-            chrome::ExecuteCommand(browser, IDC_VIV_ABOUT);
-          } else {
-            chrome::ExecuteCommand(browser, tag);
-          }
-        }
-      }
       break;
 
       case IDC_VIV_ACTIVATE_TAB:
@@ -1657,20 +1666,20 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
   if (profilesAdded)
     [dockMenu addItem:[NSMenuItem separatorItem]];
 
-  // TODO: tomas@vivaldi - setup dock menu for app
   NSString* titleStr = l10n_util::GetNSStringWithFixup(IDS_NEW_WINDOW_MAC);
   base::scoped_nsobject<NSMenuItem> item(
       [[NSMenuItem alloc] initWithTitle:titleStr
                                  action:@selector(commandFromDock:)
                           keyEquivalent:@""]);
   [item setTarget:self];
+  if (vivaldi::IsVivaldiRunning()) {
+    [item setTag:IDC_VIV_NEW_WINDOW];
+  } else
   [item setTag:IDC_NEW_WINDOW];
   [item setEnabled:[self validateUserInterfaceItem:item]];
   [dockMenu addItem:item];
 
   // |profile| can be NULL during unit tests.
-  // TODO gisli@vivaldi.com, enable incognito.
-  if (!vivaldi::IsVivaldiRunning()) {
   if (!profile ||
       IncognitoModePrefs::GetAvailability(profile->GetPrefs()) !=
           IncognitoModePrefs::DISABLED) {
@@ -1680,10 +1689,12 @@ class AppControllerProfileObserver : public ProfileInfoCacheObserver {
                                    action:@selector(commandFromDock:)
                             keyEquivalent:@""]);
     [item setTarget:self];
+    if (vivaldi::IsVivaldiRunning()) {
+      [item setTag:IDC_VIV_NEW_PRIVATE_WINDOW];
+    } else
     [item setTag:IDC_NEW_INCOGNITO_WINDOW];
     [item setEnabled:[self validateUserInterfaceItem:item]];
     [dockMenu addItem:item];
-  }
   }
 
   // TODO(rickcam): Mock out BackgroundApplicationListModel, then add unit

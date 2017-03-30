@@ -4,8 +4,7 @@
 
 #include "chromeos/binder/writable_transaction_data.h"
 
-#include <linux/android/binder.h>
-
+#include "chromeos/binder/binder_driver_api.h"
 #include "chromeos/binder/constants.h"
 #include "chromeos/binder/local_object.h"
 #include "chromeos/binder/object.h"
@@ -53,7 +52,7 @@ size_t WritableTransactionData::GetDataSize() const {
   return data_.size();
 }
 
-const uintptr_t* WritableTransactionData::GetObjectOffsets() const {
+const binder_uintptr_t* WritableTransactionData::GetObjectOffsets() const {
   return object_offsets_.data();
 }
 

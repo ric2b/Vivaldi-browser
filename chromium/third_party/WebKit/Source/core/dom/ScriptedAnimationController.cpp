@@ -50,17 +50,13 @@ ScriptedAnimationController::ScriptedAnimationController(Document* document)
 {
 }
 
-DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(ScriptedAnimationController);
-
 DEFINE_TRACE(ScriptedAnimationController)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_document);
     visitor->trace(m_callbackCollection);
     visitor->trace(m_eventQueue);
     visitor->trace(m_mediaQueryListListeners);
     visitor->trace(m_perFrameEvents);
-#endif
 }
 
 void ScriptedAnimationController::suspend()
@@ -70,7 +66,7 @@ void ScriptedAnimationController::suspend()
 
 void ScriptedAnimationController::resume()
 {
-    // It would be nice to put an ASSERT(m_suspendCount > 0) here, but in WK1 resume() can be called
+    // It would be nice to put an DCHECK(m_suspendCount > 0) here, but in WK1 resume() can be called
     // even when suspend hasn't (if a tab was created in the background).
     if (m_suspendCount > 0)
         --m_suspendCount;
@@ -97,12 +93,12 @@ void ScriptedAnimationController::cancelCallback(CallbackId id)
 
 void ScriptedAnimationController::dispatchEvents(const AtomicString& eventInterfaceFilter)
 {
-    WillBeHeapVector<RefPtrWillBeMember<Event>> events;
+    HeapVector<Member<Event>> events;
     if (eventInterfaceFilter.isEmpty()) {
         events.swap(m_eventQueue);
         m_perFrameEvents.clear();
     } else {
-        WillBeHeapVector<RefPtrWillBeMember<Event>> remaining;
+        HeapVector<Member<Event>> remaining;
         for (auto& event : m_eventQueue) {
             if (event && event->interfaceName() == eventInterfaceFilter) {
                 m_perFrameEvents.remove(eventTargetKey(event.get()));
@@ -120,12 +116,11 @@ void ScriptedAnimationController::dispatchEvents(const AtomicString& eventInterf
         // FIXME: we should figure out how to make dispatchEvent properly virtual to avoid
         // special casting window.
         // FIXME: We should not fire events for nodes that are no longer in the tree.
+        InspectorInstrumentation::AsyncTask asyncTask(eventTarget->getExecutionContext(), events[i]);
         if (LocalDOMWindow* window = eventTarget->toDOMWindow())
             window->dispatchEvent(events[i], nullptr);
         else
             eventTarget->dispatchEvent(events[i]);
-
-        InspectorInstrumentation::didRemoveEvent(eventTarget, events[i].get());
     }
 }
 
@@ -163,7 +158,7 @@ void ScriptedAnimationController::serviceScriptedAnimations(double monotonicTime
     if (!hasScheduledItems())
         return;
 
-    RefPtrWillBeRawPtr<ScriptedAnimationController> protect(this);
+    RawPtr<ScriptedAnimationController> protect(this);
 
     callMediaQueryListListeners();
     dispatchEvents();
@@ -172,21 +167,21 @@ void ScriptedAnimationController::serviceScriptedAnimations(double monotonicTime
     scheduleAnimationIfNeeded();
 }
 
-void ScriptedAnimationController::enqueueEvent(PassRefPtrWillBeRawPtr<Event> event)
+void ScriptedAnimationController::enqueueEvent(Event* event)
 {
-    InspectorInstrumentation::didEnqueueEvent(event->target(), event.get());
+    InspectorInstrumentation::asyncTaskScheduled(event->target()->getExecutionContext(), event->type(), event);
     m_eventQueue.append(event);
     scheduleAnimationIfNeeded();
 }
 
-void ScriptedAnimationController::enqueuePerFrameEvent(PassRefPtrWillBeRawPtr<Event> event)
+void ScriptedAnimationController::enqueuePerFrameEvent(RawPtr<Event> event)
 {
     if (!m_perFrameEvents.add(eventTargetKey(event.get())).isNewEntry)
         return;
     enqueueEvent(event);
 }
 
-void ScriptedAnimationController::enqueueMediaQueryChangeListeners(WillBeHeapVector<RefPtrWillBeMember<MediaQueryListListener>>& listeners)
+void ScriptedAnimationController::enqueueMediaQueryChangeListeners(HeapVector<Member<MediaQueryListListener>>& listeners)
 {
     for (size_t i = 0; i < listeners.size(); ++i) {
         m_mediaQueryListListeners.add(listeners[i]);

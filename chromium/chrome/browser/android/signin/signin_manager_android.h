@@ -7,11 +7,11 @@
 
 #include <jni.h>
 
+#include <memory>
 #include <string>
 
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/prefs/pref_change_registrar.h"
 
@@ -43,6 +43,9 @@ class SigninManagerAndroid {
 
   void FetchPolicyBeforeSignIn(JNIEnv* env,
                                const base::android::JavaParamRef<jobject>& obj);
+
+  void AbortSignIn(JNIEnv* env,
+                   const base::android::JavaParamRef<jobject>& obj);
 
   // Indicates that the user has made the choice to sign-in. |username|
   // contains the email address of the account to use as primary.
@@ -76,11 +79,9 @@ class SigninManagerAndroid {
  private:
   ~SigninManagerAndroid();
 
-#if defined(ENABLE_CONFIGURATION_POLICY)
   void OnPolicyRegisterDone(const std::string& dm_token,
                             const std::string& client_id);
   void OnPolicyFetchDone(bool success);
-#endif
 
   void OnBrowsingDataRemoverDone(
       const base::android::ScopedJavaGlobalRef<jobject>& callback);
@@ -94,7 +95,6 @@ class SigninManagerAndroid {
   // Java-side SigninManager object.
   base::android::ScopedJavaGlobalRef<jobject> java_signin_manager_;
 
-#if defined(ENABLE_CONFIGURATION_POLICY)
   // CloudPolicy credentials stored during a pending sign-in, awaiting user
   // confirmation before starting to fetch policies.
   std::string dm_token_;
@@ -103,7 +103,6 @@ class SigninManagerAndroid {
   // Username that is pending sign-in. This is used to extract the domain name
   // for the policy dialog, when |username_| corresponds to a managed account.
   std::string username_;
-#endif
 
   PrefChangeRegistrar pref_change_registrar_;
 

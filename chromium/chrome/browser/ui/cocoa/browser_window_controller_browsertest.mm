@@ -10,6 +10,7 @@
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
@@ -261,7 +262,7 @@ class BrowserWindowControllerTest : public InProcessBrowserTest {
 
     // Views not in |view_list| must either be nil or not parented.
     for (size_t i = 0; i < VIEW_ID_COUNT; ++i) {
-      if (std::find(view_list.begin(), view_list.end(), i) == view_list.end()) {
+      if (!ContainsValue(view_list, i)) {
         NSView* view = GetViewWithID(static_cast<ViewID>(i));
         EXPECT_TRUE(!view || ![view superview]);
       }
@@ -374,7 +375,7 @@ class BrowserWindowControllerTest : public InProcessBrowserTest {
   // NOTIFICATION_FULLSCREEN_CHANGED is sent asynchronously.
   // This method toggles fullscreen and waits for the notification.
   void ToggleFullscreenAndWaitForNotification() {
-    scoped_ptr<FullscreenNotificationObserver> waiter(
+    std::unique_ptr<FullscreenNotificationObserver> waiter(
         new FullscreenNotificationObserver());
     browser()
         ->exclusive_access_manager()
@@ -399,9 +400,6 @@ class BrowserWindowControllerTest : public InProcessBrowserTest {
 // DISABLED_ because it regularly times out: http://crbug.com/159002.
 IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
                        DISABLED_ProfileAvatarFullscreenButton) {
-  if (base::mac::IsOSSnowLeopard())
-    return;
-
   // Initialize the locals.
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   ASSERT_TRUE(profile_manager);
@@ -691,15 +689,16 @@ IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest, FullscreenResizeFlags) {
 // Tests that the omnibox and tabs are hidden/visible in fullscreen mode.
 // Ensure that when the user toggles this setting, the omnibox, tabs and
 // preferences are updated correctly.
+// Flakily times out. http://crbug.com/599119
 IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
-                       FullscreenToolbarIsVisibleAccordingToPrefs) {
+                       DISABLED_FullscreenToolbarIsVisibleAccordingToPrefs) {
   // This feature is only available on SystemFullscreen.
   if (!chrome::mac::SupportsSystemFullscreen())
     return;
 
-  // Tests that the preference is set to false by default.
+  // Tests that the preference is set to true by default.
   PrefService* prefs = browser()->profile()->GetPrefs();
-  EXPECT_FALSE(prefs->GetBoolean(prefs::kHideFullscreenToolbar));
+  EXPECT_TRUE(prefs->GetBoolean(prefs::kShowFullscreenToolbar));
 
   // Toggle fullscreen and check if the toolbar is shown.
   ToggleFullscreenAndWaitForNotification();
@@ -708,16 +707,18 @@ IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
   // Toggle the visibility of the fullscreen toolbar. Verify that the toolbar
   // is hidden and the preference is correctly updated.
   [[controller() presentationModeController] setToolbarFraction:0.0];
+  [[controller() presentationModeController] setMenuBarRevealProgress:0.0];
   chrome::ExecuteCommand(browser(), IDC_TOGGLE_FULLSCREEN_TOOLBAR);
-  EXPECT_TRUE(prefs->GetBoolean(prefs::kHideFullscreenToolbar));
+  EXPECT_FALSE(prefs->GetBoolean(prefs::kShowFullscreenToolbar));
   VerifyFullscreenToolbarVisibility(fullscreen_mac::OMNIBOX_TABS_HIDDEN);
 
   // Toggle out and back into fullscreen and verify that the toolbar is still
   // hidden.
   ToggleFullscreenAndWaitForNotification();
   ToggleFullscreenAndWaitForNotification();
+  [[controller() presentationModeController] setMenuBarRevealProgress:0.0];
   VerifyFullscreenToolbarVisibility(fullscreen_mac::OMNIBOX_TABS_HIDDEN);
 
   chrome::ExecuteCommand(browser(), IDC_TOGGLE_FULLSCREEN_TOOLBAR);
-  EXPECT_FALSE(prefs->GetBoolean(prefs::kHideFullscreenToolbar));
+  EXPECT_TRUE(prefs->GetBoolean(prefs::kShowFullscreenToolbar));
 }

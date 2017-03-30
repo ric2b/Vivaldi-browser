@@ -10,9 +10,9 @@
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<WindowProxyManager> WindowProxyManager::create(Frame& frame)
+RawPtr<WindowProxyManager> WindowProxyManager::create(Frame& frame)
 {
-    return adoptPtrWillBeNoop(new WindowProxyManager(frame));
+    return new WindowProxyManager(frame);
 }
 
 WindowProxyManager::~WindowProxyManager()
@@ -21,11 +21,9 @@ WindowProxyManager::~WindowProxyManager()
 
 DEFINE_TRACE(WindowProxyManager)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_frame);
     visitor->trace(m_windowProxy);
     visitor->trace(m_isolatedWorlds);
-#endif
 }
 
 WindowProxy* WindowProxyManager::windowProxy(DOMWrapperWorld& world)
@@ -38,7 +36,7 @@ WindowProxy* WindowProxyManager::windowProxy(DOMWrapperWorld& world)
         if (iter != m_isolatedWorlds.end()) {
             windowProxy = iter->value.get();
         } else {
-            OwnPtrWillBeRawPtr<WindowProxy> isolatedWorldWindowProxy = WindowProxy::create(m_isolate, m_frame, world);
+            RawPtr<WindowProxy> isolatedWorldWindowProxy = WindowProxy::create(m_isolate, m_frame, world);
             windowProxy = isolatedWorldWindowProxy.get();
             m_isolatedWorlds.set(world.worldId(), isolatedWorldWindowProxy.release());
         }
@@ -78,7 +76,7 @@ void WindowProxyManager::collectIsolatedContexts(Vector<std::pair<ScriptState*, 
         SecurityOrigin* origin = isolatedWorldWindowProxy->world().isolatedWorldSecurityOrigin();
         if (!isolatedWorldWindowProxy->isContextInitialized())
             continue;
-        result.append(std::make_pair(isolatedWorldWindowProxy->scriptState(), origin));
+        result.append(std::make_pair(isolatedWorldWindowProxy->getScriptState(), origin));
     }
 }
 

@@ -30,7 +30,7 @@
 
 namespace blink {
 
-inline ArchiveResource::ArchiveResource(
+ArchiveResource::ArchiveResource(
     PassRefPtr<SharedBuffer> data,
     const KURL& url,
     const String& contentID,
@@ -38,8 +38,6 @@ inline ArchiveResource::ArchiveResource(
     const AtomicString& textEncoding)
     : m_url(url)
     , m_contentID(contentID)
-    , m_response(
-        ResourceResponse(url, mimeType, data->size(), textEncoding, String()))
     , m_data(data)
     , m_mimeType(mimeType)
     , m_textEncoding(textEncoding)
@@ -51,15 +49,14 @@ ArchiveResource::~ArchiveResource()
 {
 }
 
-PassRefPtrWillBeRawPtr<ArchiveResource> ArchiveResource::create(
+ArchiveResource* ArchiveResource::create(
     PassRefPtr<SharedBuffer> data,
     const KURL& url,
     const String& contentID,
     const AtomicString& mimeType,
     const AtomicString& textEncoding)
 {
-    return adoptRefWillBeNoop(new ArchiveResource(
-        data, url, contentID, mimeType, textEncoding));
+    return new ArchiveResource(data, url, contentID, mimeType, textEncoding);
 }
 
 } // namespace blink

@@ -37,15 +37,12 @@ class LocalFrame;
 class InspectedFrames;
 class InspectorFrontend;
 
-typedef String ErrorString;
-
-class CORE_EXPORT InspectorApplicationCacheAgent final : public InspectorBaseAgent<InspectorApplicationCacheAgent, protocol::Frontend::ApplicationCache>, public protocol::Dispatcher::ApplicationCacheCommandHandler {
+class CORE_EXPORT InspectorApplicationCacheAgent final : public InspectorBaseAgent<InspectorApplicationCacheAgent, protocol::Frontend::ApplicationCache>, public protocol::Backend::ApplicationCache {
     WTF_MAKE_NONCOPYABLE(InspectorApplicationCacheAgent);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(InspectorApplicationCacheAgent);
 public:
-    static PassOwnPtrWillBeRawPtr<InspectorApplicationCacheAgent> create(InspectedFrames* inspectedFrames)
+    static RawPtr<InspectorApplicationCacheAgent> create(InspectedFrames* inspectedFrames)
     {
-        return adoptPtrWillBeNoop(new InspectorApplicationCacheAgent(inspectedFrames));
+        return new InspectorApplicationCacheAgent(inspectedFrames);
     }
     ~InspectorApplicationCacheAgent() override { }
     DECLARE_VIRTUAL_TRACE();
@@ -73,7 +70,7 @@ private:
 
     DocumentLoader* assertFrameWithDocumentLoader(ErrorString*, String frameId);
 
-    RawPtrWillBeMember<InspectedFrames> m_inspectedFrames;
+    Member<InspectedFrames> m_inspectedFrames;
 };
 
 } // namespace blink

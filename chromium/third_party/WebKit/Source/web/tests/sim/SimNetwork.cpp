@@ -8,8 +8,8 @@
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLLoader.h"
 #include "public/platform/WebURLLoaderClient.h"
+#include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/platform/WebURLResponse.h"
-#include "public/platform/WebUnitTestSupport.h"
 #include "web/tests/sim/SimRequest.h"
 
 namespace blink {
@@ -19,27 +19,27 @@ static SimNetwork* s_network = nullptr;
 SimNetwork::SimNetwork()
     : m_currentRequest(nullptr)
 {
-    Platform::current()->unitTestSupport()->setLoaderDelegate(this);
+    Platform::current()->getURLLoaderMockFactory()->setLoaderDelegate(this);
     ASSERT(!s_network);
     s_network = this;
 }
 
 SimNetwork::~SimNetwork()
 {
-    Platform::current()->unitTestSupport()->setLoaderDelegate(nullptr);
-    Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
+    Platform::current()->getURLLoaderMockFactory()->setLoaderDelegate(nullptr);
+    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
     s_network = nullptr;
 }
 
 SimNetwork& SimNetwork::current()
 {
-    ASSERT(s_network);
+    DCHECK(s_network);
     return *s_network;
 }
 
 void SimNetwork::servePendingRequests()
 {
-    Platform::current()->unitTestSupport()->serveAsynchronousMockedRequests();
+    Platform::current()->getURLLoaderMockFactory()->serveAsynchronousRequests();
 }
 
 void SimNetwork::didReceiveResponse(WebURLLoaderClient* client, WebURLLoader* loader, const WebURLResponse& response)
@@ -49,7 +49,7 @@ void SimNetwork::didReceiveResponse(WebURLLoaderClient* client, WebURLLoader* lo
         client->didReceiveResponse(loader, response);
         return;
     }
-    ASSERT(it->value);
+    DCHECK(it->value);
     m_currentRequest = it->value;
     m_currentRequest->didReceiveResponse(client, loader, response);
 }

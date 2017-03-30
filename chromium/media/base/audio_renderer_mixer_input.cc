@@ -15,7 +15,6 @@ namespace media {
 AudioRendererMixerInput::AudioRendererMixerInput(
     const GetMixerCB& get_mixer_cb,
     const RemoveMixerCB& remove_mixer_cb,
-    const GetHardwareParamsCB& get_hardware_params_cb,
     const std::string& device_id,
     const url::Origin& security_origin)
     : started_(false),
@@ -23,7 +22,6 @@ AudioRendererMixerInput::AudioRendererMixerInput(
       volume_(1.0f),
       get_mixer_cb_(get_mixer_cb),
       remove_mixer_cb_(remove_mixer_cb),
-      get_hardware_params_cb_(get_hardware_params_cb),
       device_id_(device_id),
       security_origin_(security_origin),
       mixer_(nullptr),
@@ -32,12 +30,14 @@ AudioRendererMixerInput::AudioRendererMixerInput(
                            base::Unretained(this))) {}
 
 AudioRendererMixerInput::~AudioRendererMixerInput() {
+  DCHECK(!started_);
   DCHECK(!mixer_);
 }
 
 void AudioRendererMixerInput::Initialize(
     const AudioParameters& params,
     AudioRendererSink::RenderCallback* callback) {
+  DCHECK(!started_);
   DCHECK(!mixer_);
   DCHECK(callback);
 
@@ -106,18 +106,19 @@ void AudioRendererMixerInput::Pause() {
 }
 
 bool AudioRendererMixerInput::SetVolume(double volume) {
+  base::AutoLock auto_lock(volume_lock_);
   volume_ = volume;
   return true;
 }
 
-OutputDevice* AudioRendererMixerInput::GetOutputDevice() {
-  return this;
+OutputDeviceInfo AudioRendererMixerInput::GetOutputDeviceInfo() {
+  return mixer_ ? mixer_->GetOutputDeviceInfo() : OutputDeviceInfo();
 }
 
 void AudioRendererMixerInput::SwitchOutputDevice(
     const std::string& device_id,
     const url::Origin& security_origin,
-    const SwitchOutputDeviceCB& callback) {
+    const OutputDeviceStatusCB& callback) {
   if (!mixer_) {
     if (pending_switch_callback_.is_null()) {
       pending_switch_callback_ = callback;
@@ -158,22 +159,6 @@ void AudioRendererMixerInput::SwitchOutputDevice(
   callback.Run(OUTPUT_DEVICE_STATUS_OK);
 }
 
-AudioParameters AudioRendererMixerInput::GetOutputParameters() {
-  if (mixer_)
-    return mixer_->GetOutputDevice()->GetOutputParameters();
-  return get_hardware_params_cb_.Run(device_id_, security_origin_);
-}
-
-OutputDeviceStatus AudioRendererMixerInput::GetDeviceStatus() {
-  if (mixer_)
-    return mixer_->GetOutputDevice()->GetDeviceStatus();
-
-  if (started_)
-    return OUTPUT_DEVICE_STATUS_ERROR_INTERNAL;
-
-  return OUTPUT_DEVICE_STATUS_OK;
-}
-
 double AudioRendererMixerInput::ProvideInput(AudioBus* audio_bus,
                                              base::TimeDelta buffer_delay) {
   // TODO(chcunningham): Delete this conversion and change ProvideInput to more
@@ -190,7 +175,13 @@ double AudioRendererMixerInput::ProvideInput(AudioBus* audio_bus,
         frames_filled, audio_bus->frames() - frames_filled);
   }
 
-  return frames_filled > 0 ? volume_ : 0;
+  // We're reading |volume_| from the audio device thread and must avoid racing
+  // with the main/media thread calls to SetVolume(). See thread safety comment
+  // in the header file.
+  {
+    base::AutoLock auto_lock(volume_lock_);
+    return frames_filled > 0 ? volume_ : 0;
+  }
 }
 
 void AudioRendererMixerInput::OnRenderError() {

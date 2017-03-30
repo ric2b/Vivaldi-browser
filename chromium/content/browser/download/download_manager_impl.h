@@ -82,11 +82,15 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
   content::DownloadItem* CreateDownloadItem(
+      const std::string& guid,
       uint32_t id,
       const base::FilePath& current_path,
       const base::FilePath& target_path,
       const std::vector<GURL>& url_chain,
       const GURL& referrer_url,
+      const GURL& site_url,
+      const GURL& tab_url,
+      const GURL& tab_refererr_url,
       const std::string& mime_type,
       const std::string& original_mime_type,
       const base::Time& start_time,
@@ -95,6 +99,7 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
       const std::string& last_modified,
       int64_t received_bytes,
       int64_t total_bytes,
+      const std::string& hash,
       content::DownloadItem::DownloadState state,
       DownloadDangerType danger_type,
       DownloadInterruptReason interrupt_reason,
@@ -104,6 +109,7 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
   BrowserContext* GetBrowserContext() const override;
   void CheckForHistoryFilesRemoval() override;
   DownloadItem* GetDownload(uint32_t id) override;
+  DownloadItem* GetDownloadByGuid(const std::string& guid) override;
 
   // For testing; specifically, accessed from TestFileErrorInjector.
   void SetDownloadItemFactoryForTesting(
@@ -117,6 +123,7 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
  private:
   using DownloadSet = std::set<DownloadItem*>;
   using DownloadMap = std::unordered_map<uint32_t, DownloadItemImpl*>;
+  using DownloadGuidMap = std::unordered_map<std::string, DownloadItemImpl*>;
   using DownloadItemImplVector = std::vector<DownloadItemImpl*>;
   using DownloadRemover = base::Callback<bool(const DownloadItemImpl*)>;
 
@@ -186,7 +193,15 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
   // DownloadManager.  This includes downloads started by the user in
   // this session, downloads initialized from the history system, and
   // "save page as" downloads.
+  // TODO(asanka): Remove this container in favor of downloads_by_guid_ as a
+  // part of http://crbug.com/593020.
   DownloadMap downloads_;
+
+  // Same as the above, but maps from GUID to download item. Note that the
+  // container is case sensitive. Hence the key needs to be normalized to
+  // upper-case when inserting new elements here. Fortunately for us,
+  // DownloadItemImpl already normalizes the string GUID.
+  DownloadGuidMap downloads_by_guid_;
 
   int history_size_;
 

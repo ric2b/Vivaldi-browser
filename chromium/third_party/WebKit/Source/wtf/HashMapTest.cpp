@@ -31,6 +31,7 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace WTF {
 
@@ -300,6 +301,311 @@ TEST(HashMapTest, ValueTypeDestructed)
     map.set(1, InstanceCounter());
     map.clear();
     EXPECT_EQ(0, InstanceCounter::counter);
+}
+
+class MoveOnly {
+public:
+    // kEmpty and kDeleted have special meanings when MoveOnly is used as the key of a hash table.
+    enum {
+        kEmpty = 0,
+        kDeleted = -1,
+        kMovedOut = -2
+    };
+
+    explicit MoveOnly(int value = kEmpty) : m_value(value) { }
+    MoveOnly(MoveOnly&& other)
+        : m_value(other.m_value)
+    {
+        other.m_value = kMovedOut;
+    }
+    MoveOnly& operator=(MoveOnly&& other)
+    {
+        m_value = other.m_value;
+        other.m_value = kMovedOut;
+        return *this;
+    }
+
+    int value() const { return m_value; }
+
+private:
+    MoveOnly(const MoveOnly&) = delete;
+    MoveOnly& operator=(const MoveOnly&) = delete;
+
+    int m_value;
+};
+
+struct MoveOnlyHashTraits : public GenericHashTraits<MoveOnly> {
+    // This is actually true, but we pretend that it's false to disable the optimization.
+    static const bool emptyValueIsZero = false;
+
+    static const bool hasIsEmptyValueFunction = true;
+    static bool isEmptyValue(const MoveOnly& value) { return value.value() == MoveOnly::kEmpty; }
+    static void constructDeletedValue(MoveOnly& slot, bool) { slot = MoveOnly(MoveOnly::kDeleted); }
+    static bool isDeletedValue(const MoveOnly& value) { return value.value() == MoveOnly::kDeleted; }
+};
+
+struct MoveOnlyHash {
+    static unsigned hash(const MoveOnly& value) { return DefaultHash<int>::Hash::hash(value.value()); }
+    static bool equal(const MoveOnly& left, const MoveOnly& right)
+    {
+        return DefaultHash<int>::Hash::equal(left.value(), right.value());
+    }
+    static const bool safeToCompareToEmptyOrDeleted = true;
+};
+
+} // anonymous namespace
+
+template <>
+struct HashTraits<MoveOnly> : public MoveOnlyHashTraits { };
+
+template <>
+struct DefaultHash<MoveOnly> {
+    using Hash = MoveOnlyHash;
+};
+
+namespace {
+
+TEST(HashMapTest, MoveOnlyValueType)
+{
+    using TheMap = HashMap<int, MoveOnly>;
+    TheMap map;
+    {
+        TheMap::AddResult addResult = map.add(1, MoveOnly(10));
+        EXPECT_TRUE(addResult.isNewEntry);
+        EXPECT_EQ(1, addResult.storedValue->key);
+        EXPECT_EQ(10, addResult.storedValue->value.value());
+    }
+    auto iter = map.find(1);
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(1, iter->key);
+    EXPECT_EQ(10, iter->value.value());
+
+    iter = map.find(2);
+    EXPECT_TRUE(iter == map.end());
+
+    // Try to add more to trigger rehashing.
+    for (int i = 2; i < 32; ++i) {
+        TheMap::AddResult addResult = map.add(i, MoveOnly(i * 10));
+        EXPECT_TRUE(addResult.isNewEntry);
+        EXPECT_EQ(i, addResult.storedValue->key);
+        EXPECT_EQ(i * 10, addResult.storedValue->value.value());
+    }
+
+    iter = map.find(1);
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(1, iter->key);
+    EXPECT_EQ(10, iter->value.value());
+
+    iter = map.find(7);
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(7, iter->key);
+    EXPECT_EQ(70, iter->value.value());
+
+    {
+        TheMap::AddResult addResult = map.set(9, MoveOnly(999));
+        EXPECT_FALSE(addResult.isNewEntry);
+        EXPECT_EQ(9, addResult.storedValue->key);
+        EXPECT_EQ(999, addResult.storedValue->value.value());
+    }
+
+    map.remove(11);
+    iter = map.find(11);
+    EXPECT_TRUE(iter == map.end());
+
+    MoveOnly oneThirty(map.take(13));
+    EXPECT_EQ(130, oneThirty.value());
+    iter = map.find(13);
+    EXPECT_TRUE(iter == map.end());
+
+    map.clear();
+}
+
+TEST(HashMapTest, MoveOnlyKeyType)
+{
+    // The content of this test is similar to the test above, except that the types of key and value are swapped.
+    using TheMap = HashMap<MoveOnly, int>;
+    TheMap map;
+    {
+        TheMap::AddResult addResult = map.add(MoveOnly(1), 10);
+        EXPECT_TRUE(addResult.isNewEntry);
+        EXPECT_EQ(1, addResult.storedValue->key.value());
+        EXPECT_EQ(10, addResult.storedValue->value);
+    }
+    auto iter = map.find(MoveOnly(1));
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(1, iter->key.value());
+    EXPECT_EQ(10, iter->value);
+
+    iter = map.find(MoveOnly(2));
+    EXPECT_TRUE(iter == map.end());
+
+    for (int i = 2; i < 32; ++i) {
+        TheMap::AddResult addResult = map.add(MoveOnly(i), i * 10);
+        EXPECT_TRUE(addResult.isNewEntry);
+        EXPECT_EQ(i, addResult.storedValue->key.value());
+        EXPECT_EQ(i * 10, addResult.storedValue->value);
+    }
+
+    iter = map.find(MoveOnly(1));
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(1, iter->key.value());
+    EXPECT_EQ(10, iter->value);
+
+    iter = map.find(MoveOnly(7));
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(7, iter->key.value());
+    EXPECT_EQ(70, iter->value);
+
+    {
+        TheMap::AddResult addResult = map.set(MoveOnly(9), 999);
+        EXPECT_FALSE(addResult.isNewEntry);
+        EXPECT_EQ(9, addResult.storedValue->key.value());
+        EXPECT_EQ(999, addResult.storedValue->value);
+    }
+
+    map.remove(MoveOnly(11));
+    iter = map.find(MoveOnly(11));
+    EXPECT_TRUE(iter == map.end());
+
+    int oneThirty = map.take(MoveOnly(13));
+    EXPECT_EQ(130, oneThirty);
+    iter = map.find(MoveOnly(13));
+    EXPECT_TRUE(iter == map.end());
+
+    map.clear();
+}
+
+class CountCopy final {
+public:
+    CountCopy() : m_counter(nullptr) { }
+    explicit CountCopy(int& counter) : m_counter(&counter) { }
+    CountCopy(const CountCopy& other)
+        : m_counter(other.m_counter)
+    {
+        if (m_counter)
+            ++*m_counter;
+    }
+    CountCopy& operator=(const CountCopy& other)
+    {
+        m_counter = other.m_counter;
+        if (m_counter)
+            ++*m_counter;
+        return *this;
+    }
+
+private:
+    int* m_counter;
+};
+
+TEST(HashMapTest, MoveShouldNotMakeCopy)
+{
+    HashMap<int, CountCopy> map;
+    int counter = 0;
+    map.add(1, CountCopy(counter));
+
+    HashMap<int, CountCopy> other(map);
+    counter = 0;
+    map = std::move(other);
+    EXPECT_EQ(0, counter);
+
+    counter = 0;
+    HashMap<int, CountCopy> yetAnother(std::move(map));
+    EXPECT_EQ(0, counter);
+}
+
+TEST(HashMapTest, UniquePtrAsKey)
+{
+    using Pointer = std::unique_ptr<int>;
+    using Map = HashMap<Pointer, int>;
+    Map map;
+    int* onePointer = new int(1);
+    {
+        Map::AddResult addResult = map.add(Pointer(onePointer), 1);
+        EXPECT_TRUE(addResult.isNewEntry);
+        EXPECT_EQ(onePointer, addResult.storedValue->key.get());
+        EXPECT_EQ(1, *addResult.storedValue->key);
+        EXPECT_EQ(1, addResult.storedValue->value);
+    }
+    auto iter = map.find(onePointer);
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(onePointer, iter->key.get());
+    EXPECT_EQ(1, iter->value);
+
+    Pointer nonexistent(new int(42));
+    iter = map.find(nonexistent.get());
+    EXPECT_TRUE(iter == map.end());
+
+    // Insert more to cause a rehash.
+    for (int i = 2; i < 32; ++i) {
+        Map::AddResult addResult = map.add(Pointer(new int(i)), i);
+        EXPECT_TRUE(addResult.isNewEntry);
+        EXPECT_EQ(i, *addResult.storedValue->key);
+        EXPECT_EQ(i, addResult.storedValue->value);
+    }
+
+    iter = map.find(onePointer);
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(onePointer, iter->key.get());
+    EXPECT_EQ(1, iter->value);
+
+    EXPECT_EQ(1, map.take(onePointer));
+    // From now on, |onePointer| is a dangling pointer.
+
+    iter = map.find(onePointer);
+    EXPECT_TRUE(iter == map.end());
+}
+
+TEST(HashMapTest, UniquePtrAsValue)
+{
+    using Pointer = std::unique_ptr<int>;
+    using Map = HashMap<int, Pointer>;
+    Map map;
+    {
+        Map::AddResult addResult = map.add(1, Pointer(new int(1)));
+        EXPECT_TRUE(addResult.isNewEntry);
+        EXPECT_EQ(1, addResult.storedValue->key);
+        EXPECT_EQ(1, *addResult.storedValue->value);
+    }
+    auto iter = map.find(1);
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(1, iter->key);
+    EXPECT_EQ(1, *iter->value);
+
+    int* onePointer = map.get(1);
+    EXPECT_TRUE(onePointer);
+    EXPECT_EQ(1, *onePointer);
+
+    iter = map.find(42);
+    EXPECT_TRUE(iter == map.end());
+
+    for (int i = 2; i < 32; ++i) {
+        Map::AddResult addResult = map.add(i, Pointer(new int(i)));
+        EXPECT_TRUE(addResult.isNewEntry);
+        EXPECT_EQ(i, addResult.storedValue->key);
+        EXPECT_EQ(i, *addResult.storedValue->value);
+    }
+
+    iter = map.find(1);
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(1, iter->key);
+    EXPECT_EQ(1, *iter->value);
+
+    Pointer one(map.take(1));
+    ASSERT_TRUE(one);
+    EXPECT_EQ(1, *one);
+
+    Pointer empty(map.take(42));
+    EXPECT_TRUE(!empty);
+
+    iter = map.find(1);
+    EXPECT_TRUE(iter == map.end());
+
+    {
+        Map::AddResult addResult = map.add(1, std::move(one));
+        EXPECT_TRUE(addResult.isNewEntry);
+        EXPECT_EQ(1, addResult.storedValue->key);
+        EXPECT_EQ(1, *addResult.storedValue->value);
+    }
 }
 
 } // anonymous namespace

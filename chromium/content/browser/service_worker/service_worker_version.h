@@ -52,7 +52,6 @@ class ServiceWorkerContextCore;
 class ServiceWorkerProviderHost;
 class ServiceWorkerRegistration;
 class ServiceWorkerURLRequestJob;
-struct NavigatorConnectClient;
 struct ServiceWorkerClientInfo;
 struct ServiceWorkerVersionInfo;
 struct TransferredMessagePort;
@@ -164,7 +163,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // Starts an embedded worker for this version.
   // This returns OK (success) if the worker is already running.
-  void StartWorker(const StatusCallback& callback);
+  // |purpose| is recorded in UMA.
+  void StartWorker(ServiceWorkerMetrics::EventType purpose,
+                   const StatusCallback& callback);
 
   // Stops an embedded worker for this version.
   // This returns OK (success) if the worker is already stopped.
@@ -184,7 +185,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // worker is running, or |error_callback| if starting the worker failed.
   // If the worker is already running, |task| is executed synchronously (before
   // this method returns).
-  void RunAfterStartWorker(const base::Closure& task,
+  // |purpose| is used for UMA.
+  void RunAfterStartWorker(ServiceWorkerMetrics::EventType purpose,
+                           const base::Closure& task,
                            const StatusCallback& error_callback);
 
   // Call this while the worker is running before dispatching an event to the
@@ -246,29 +249,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // TODO(nhiroki): Remove this after ExtendableMessageEvent is enabled by
   // default (crbug.com/543198).
   void DispatchMessageEvent(
-      const base::string16& message,
-      const std::vector<TransferredMessagePort>& sent_message_ports,
-      const StatusCallback& callback);
-
-  // Sends an extendable message event to the associated embedded worker.
-  // TODO(nhiroki): This should be moved to ServiceWorkerDispatcherHost in favor
-  // of crbug.com/570820 after ExtendableMessageEvent is implemented
-  // (crbug.com/543198).
-  void DispatchExtendableMessageEvent(
-      const base::string16& message,
-      const std::vector<TransferredMessagePort>& sent_message_ports,
-      const StatusCallback& callback);
-
-  // Sends a cross origin message event to the associated embedded worker and
-  // asynchronously calls |callback| when the message was sent (or failed to
-  // sent).
-  // It is the responsibility of the code calling this method to make sure that
-  // any transferred message ports are put on hold while potentially a process
-  // for the service worker is spun up.
-  //
-  // This must be called when the status() is ACTIVATED.
-  void DispatchCrossOriginMessageEvent(
-      const NavigatorConnectClient& client,
       const base::string16& message,
       const std::vector<TransferredMessagePort>& sent_message_ports,
       const StatusCallback& callback);
@@ -378,21 +358,14 @@ class CONTENT_EXPORT ServiceWorkerVersion
   class Metrics;
   class PingController;
 
-  enum RequestType {
-    REQUEST_CUSTOM,
-    NUM_REQUEST_TYPES
-  };
-
   struct RequestInfo {
     RequestInfo(int id,
-                RequestType type,
                 ServiceWorkerMetrics::EventType event_type,
                 const base::TimeTicks& expiration,
                 TimeoutBehavior timeout_behavior);
     ~RequestInfo();
     bool operator>(const RequestInfo& other) const;
     int id;
-    RequestType type;
     ServiceWorkerMetrics::EventType event_type;
     base::TimeTicks expiration;
     TimeoutBehavior timeout_behavior;
@@ -521,11 +494,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   void OnStartSentAndScriptEvaluated(ServiceWorkerStatusCode status);
 
-  void DispatchExtendableMessageEventAfterStartWorker(
-      const base::string16& message,
-      const std::vector<TransferredMessagePort>& sent_message_ports,
-      const StatusCallback& callback);
-
   void DispatchMessageEventInternal(
       const base::string16& message,
       const std::vector<TransferredMessagePort>& sent_message_ports,
@@ -574,6 +542,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
                                     const std::vector<url::Origin>& origins);
 
   void DidEnsureLiveRegistrationForStartWorker(
+      ServiceWorkerMetrics::EventType purpose,
+      Status prestart_status,
+      bool is_browser_startup_complete,
       const StatusCallback& callback,
       ServiceWorkerStatusCode status,
       const scoped_refptr<ServiceWorkerRegistration>& registration);
@@ -604,26 +575,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // RecordStartWorkerResult is added as a start callback by StartTimeoutTimer
   // and records metrics about startup.
-  void RecordStartWorkerResult(ServiceWorkerStatusCode status);
-
-  template <typename IDMAP>
-  void RemoveCallbackAndStopIfRedundant(IDMAP* callbacks, int request_id);
-
-  template <typename CallbackType>
-  int AddRequest(
-      const CallbackType& callback,
-      IDMap<PendingRequest<CallbackType>, IDMapOwnPointer>* callback_map,
-      RequestType request_type,
-      ServiceWorkerMetrics::EventType event_type);
-
-  template <typename CallbackType>
-  int AddRequestWithExpiration(
-      const CallbackType& callback,
-      IDMap<PendingRequest<CallbackType>, IDMapOwnPointer>* callback_map,
-      RequestType request_type,
-      ServiceWorkerMetrics::EventType event_type,
-      base::TimeTicks expiration,
-      TimeoutBehavior timeout_behavior);
+  void RecordStartWorkerResult(ServiceWorkerMetrics::EventType purpose,
+                               Status prestart_status,
+                               int trace_id,
+                               bool is_browser_startup_complete,
+                               ServiceWorkerStatusCode status);
 
   bool MaybeTimeOutRequest(const RequestInfo& info);
   void SetAllRequestExpirations(const base::TimeTicks& expiration);
@@ -692,7 +648,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
   base::TimeTicks idle_time_;
   // Holds the time that the outstanding StartWorker() request started.
   base::TimeTicks start_time_;
-  // Holds the time the worker entered STOPPING status.
+  // Holds the time the worker entered STOPPING status. This is also used as a
+  // trace event id.
   base::TimeTicks stop_time_;
   // Holds the time the worker was detected as stale and needs updating. We try
   // to update once the worker stops, but will also update if it stays alive too
@@ -716,8 +673,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   std::vector<int> pending_skip_waiting_requests_;
   scoped_ptr<net::HttpResponseInfo> main_script_http_info_;
 
-  // The status when StartWorker was invoked. Used for UMA.
-  Status prestart_status_ = NEW;
   // If not OK, the reason that StartWorker failed. Used for
   // running |start_callbacks_|.
   ServiceWorkerStatusCode start_worker_status_ = SERVICE_WORKER_OK;

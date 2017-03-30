@@ -34,7 +34,7 @@
 #include "public/platform/WebPrerender.h"
 #include "public/platform/WebPrerenderingSupport.h"
 #include "public/platform/WebString.h"
-#include "public/platform/WebUnitTestSupport.h"
+#include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/web/WebCache.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebPrerendererClient.h"
@@ -65,13 +65,13 @@ public:
 
     void setExtraDataForNextPrerender(WebPrerender::ExtraData* extraData)
     {
-        ASSERT(!m_extraData);
+        DCHECK(!m_extraData);
         m_extraData = adoptPtr(extraData);
     }
 
     WebPrerender releaseWebPrerender()
     {
-        ASSERT(!m_webPrerenders.empty());
+        DCHECK(!m_webPrerenders.empty());
         WebPrerender retval(m_webPrerenders.front());
         m_webPrerenders.pop_front();
         return retval;
@@ -93,7 +93,7 @@ private:
     {
         prerender->setExtraData(m_extraData.leakPtr());
 
-        ASSERT(!prerender->isNull());
+        DCHECK(!prerender->isNull());
         m_webPrerenders.push_back(*prerender);
     }
 
@@ -169,7 +169,8 @@ class PrerenderingTest : public testing::Test {
 public:
     ~PrerenderingTest() override
     {
-        Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
+        Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+        WebCache::clear();
     }
 
     void initialize(const char* baseURL, const char* fileName)
@@ -199,7 +200,7 @@ public:
     {
         Document* document = m_webViewHelper.webViewImpl()->mainFrameImpl()->frame()->document();
         Element* console = document->getElementById("console");
-        ASSERT(isHTMLUListElement(console));
+        DCHECK(isHTMLUListElement(console));
         return *console;
     }
 
@@ -210,13 +211,13 @@ public:
 
     WebString consoleAt(unsigned i)
     {
-        ASSERT(consoleLength() > i);
+        DCHECK_GT(consoleLength(), i);
 
         Node* item = NodeTraversal::childAt(console(), 1 + i);
 
-        ASSERT(item);
-        ASSERT(isHTMLLIElement(item));
-        ASSERT(item->hasChildren());
+        DCHECK(item);
+        DCHECK(isHTMLLIElement(item));
+        DCHECK(item->hasChildren());
 
         return item->textContent();
     }

@@ -36,6 +36,7 @@
 #include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/ChromeClient.h"
@@ -82,9 +83,9 @@ WebLayer* toWebLayer(blink::GraphicsLayer* layer)
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<ScrollingCoordinator> ScrollingCoordinator::create(Page* page)
+ScrollingCoordinator* ScrollingCoordinator::create(Page* page)
 {
-    return adoptPtrWillBeNoop(new ScrollingCoordinator(page));
+    return new ScrollingCoordinator(page);
 }
 
 ScrollingCoordinator::ScrollingCoordinator(Page* page)
@@ -105,10 +106,8 @@ ScrollingCoordinator::~ScrollingCoordinator()
 DEFINE_TRACE(ScrollingCoordinator)
 {
     visitor->trace(m_page);
-#if ENABLE(OILPAN)
     visitor->trace(m_horizontalScrollbars);
     visitor->trace(m_verticalScrollbars);
-#endif
 }
 
 void ScrollingCoordinator::setShouldHandleScrollGestureOnMainThreadRegion(const Region& region)
@@ -212,8 +211,11 @@ void ScrollingCoordinator::updateAfterCompositingChangeIfNeeded()
     for (const Frame* child = tree.firstChild(); child; child = child->tree().nextSibling()) {
         if (!child->isLocalFrame())
             continue;
-        if (WebLayer* scrollLayer = toWebLayer(toLocalFrame(child)->view()->layerForScrolling()))
-            scrollLayer->setBounds(toLocalFrame(child)->view()->contentsSize());
+        FrameView* frameView = toLocalFrame(child)->view();
+        if (!frameView || frameView->shouldThrottleRendering())
+            continue;
+        if (WebLayer* scrollLayer = toWebLayer(frameView->layerForScrolling()))
+            scrollLayer->setBounds(frameView->contentsSize());
     }
 }
 
@@ -331,25 +333,10 @@ WebScrollbarLayer* ScrollingCoordinator::getWebScrollbarLayer(ScrollableArea* sc
 
 void ScrollingCoordinator::scrollableAreaScrollbarLayerDidChange(ScrollableArea* scrollableArea, ScrollbarOrientation orientation)
 {
-// FIXME: Instead of hardcode here, we should make a setting flag.
-#if OS(MACOSX)
-    static const bool platformSupportsCoordinatedScrollbar = ScrollAnimatorMac::canUseCoordinatedScrollbar();
-#else
-    static const bool platformSupportsCoordinatedScrollbar = true;
-#endif
-
     bool isMainFrame = isForMainFrame(scrollableArea);
     GraphicsLayer* scrollbarGraphicsLayer = orientation == HorizontalScrollbar
         ? scrollableArea->layerForHorizontalScrollbar()
         : scrollableArea->layerForVerticalScrollbar();
-
-    if (!platformSupportsCoordinatedScrollbar) {
-        if (scrollbarGraphicsLayer) {
-            WebLayer* scrollbarLayer = toWebLayer(scrollbarGraphicsLayer);
-            scrollbarLayer->addMainThreadScrollingReasons(MainThreadScrollingReason::kScrollbarScrolling);
-        }
-        return;
-    }
 
     if (scrollbarGraphicsLayer) {
         Scrollbar& scrollbar = orientation == HorizontalScrollbar ? *scrollableArea->horizontalScrollbar() : *scrollableArea->verticalScrollbar();
@@ -379,8 +366,9 @@ void ScrollingCoordinator::scrollableAreaScrollbarLayerDidChange(ScrollableArea*
         // blending.
         bool isOpaqueScrollbar = !scrollbar.isOverlayScrollbar();
         scrollbarGraphicsLayer->setContentsOpaque(isMainFrame && isOpaqueScrollbar);
-    } else
+    } else {
         removeWebScrollbarLayer(scrollableArea, orientation);
+    }
 }
 
 bool ScrollingCoordinator::scrollableAreaScrollLayerDidChange(ScrollableArea* scrollableArea)
@@ -396,23 +384,8 @@ bool ScrollingCoordinator::scrollableAreaScrollLayerDidChange(ScrollableArea* sc
     WebLayer* containerLayer = toWebLayer(scrollableArea->layerForContainer());
     if (webLayer) {
         webLayer->setScrollClipLayer(containerLayer);
-        // Non-layered Viewport constrained objects, e.g. fixed position elements, are
-        // positioned in Blink using integer coordinates. In that case, we don't want
-        // to set the WebLayer's scroll position at fractional precision otherwise the
-        // WebLayer's position after snapping to device pixel can be off with regard to
-        // fixed position elements.
-        if (m_lastMainThreadScrollingReasons & MainThreadScrollingReason::kHasNonLayerViewportConstrainedObjects) {
-            webLayer->setScrollPositionDouble(DoublePoint(scrollableArea->scrollPosition() - scrollableArea->minimumScrollPosition()));
-        } else {
-            DoublePoint scrollPosition(scrollableArea->scrollPositionDouble() - scrollableArea->minimumScrollPositionDouble());
-            IntPoint flooredScrollPosition(flooredIntPoint(scrollPosition));
-            DoublePoint fractionalPart(scrollPosition.x() - flooredScrollPosition.x(), scrollPosition.y() - flooredScrollPosition.y());
-            webLayer->setScrollPositionDouble(scrollPosition);
-            // Blink can only use the integer part of the scroll offset to position elements.
-            // Sends the fractional part of the scroll offset to CC as scroll adjustment for
-            // fixed-position layer.
-            webLayer->setScrollCompensationAdjustment(fractionalPart);
-        }
+        DoublePoint scrollPosition(scrollableArea->scrollPositionDouble() - scrollableArea->minimumScrollPositionDouble());
+        webLayer->setScrollPositionDouble(scrollPosition);
 
         webLayer->setBounds(scrollableArea->contentsSize());
         bool canScrollX = scrollableArea->userInputScrollable(HorizontalScrollbar);
@@ -446,7 +419,7 @@ using GraphicsLayerHitTestRects = WTF::HashMap<const GraphicsLayer*, Vector<Layo
 // Layers have child frames inside of them. This computes a mapping for the
 // current frame which we can consult while walking the layers of that frame.
 // Whenever we descend into a new frame, a new map will be created.
-using LayerFrameMap = WillBeHeapHashMap<const PaintLayer*, WillBeHeapVector<RawPtrWillBeMember<const LocalFrame>>>;
+using LayerFrameMap = HeapHashMap<const PaintLayer*, HeapVector<Member<const LocalFrame>>>;
 static void makeLayerChildFrameMap(const LocalFrame* currentFrame, LayerFrameMap* map)
 {
     map->clear();
@@ -460,7 +433,7 @@ static void makeLayerChildFrameMap(const LocalFrame* currentFrame, LayerFrameMap
         const PaintLayer* containingLayer = ownerLayoutObject->enclosingLayer();
         LayerFrameMap::iterator iter = map->find(containingLayer);
         if (iter == map->end())
-            map->add(containingLayer, WillBeHeapVector<RawPtrWillBeMember<const LocalFrame>>()).storedValue->value.append(toLocalFrame(child));
+            map->add(containingLayer, HeapVector<Member<const LocalFrame>>()).storedValue->value.append(toLocalFrame(child));
         else
             iter->value.append(toLocalFrame(child));
     }
@@ -503,7 +476,7 @@ static void projectRectsToGraphicsLayerSpaceRecursive(
                 if (compositedLayer->layoutObject()->hasOverflowClip())
                     rect.move(compositedLayer->layoutBox()->scrolledContentOffset());
             }
-            PaintLayer::mapRectToPaintBackingCoordinates(compositedLayer->layoutObject(), rect);
+            PaintLayer::mapRectInPaintInvalidationContainerToBacking(*compositedLayer->layoutObject(), rect);
             glRects->append(rect);
         }
     }
@@ -563,7 +536,7 @@ static void projectRectsToGraphicsLayerSpace(LocalFrame* mainFrame, const LayerH
     MapCoordinatesFlags flags = UseTransforms;
     if (touchHandlerInChildFrame)
         flags |= TraverseDocumentBoundaries;
-    PaintLayer* rootLayer = mainFrame->contentLayoutObject()->layer();
+    PaintLayer* rootLayer = mainFrame->contentLayoutItem().layer();
     LayoutGeometryMap geometryMap(flags);
     geometryMap.pushMappingsToAncestor(rootLayer, 0);
     LayerFrameMap layerChildFrameMap;
@@ -651,8 +624,8 @@ void ScrollingCoordinator::touchEventTargetRectsDidChange()
 
     // FIXME: scheduleAnimation() is just a method of forcing the compositor to realize that it
     // needs to commit here. We should expose a cleaner API for this.
-    LayoutView* layoutView = m_page->deprecatedLocalMainFrame()->contentLayoutObject();
-    if (layoutView && layoutView->compositor() && layoutView->compositor()->staleInCompositingMode())
+    LayoutViewItem layoutView = m_page->deprecatedLocalMainFrame()->contentLayoutItem();
+    if (!layoutView.isNull() && layoutView.compositor() && layoutView.compositor()->staleInCompositingMode())
         m_page->deprecatedLocalMainFrame()->view()->scheduleAnimation();
 
     m_touchEventTargetRectsAreDirty = true;
@@ -689,7 +662,7 @@ void ScrollingCoordinator::setShouldUpdateScrollLayerPositionOnMainThread(MainTh
     if (WebLayer* scrollLayer = toWebLayer(layer)) {
         m_lastMainThreadScrollingReasons = mainThreadScrollingReasons;
         if (mainThreadScrollingReasons) {
-            if (ScrollAnimatorBase* scrollAnimator = layer->scrollableArea()->existingScrollAnimator())
+            if (ScrollAnimatorBase* scrollAnimator = layer->getScrollableArea()->existingScrollAnimator())
                 scrollAnimator->takeoverCompositorAnimation();
             scrollLayer->addMainThreadScrollingReasons(mainThreadScrollingReasons);
         } else {
@@ -704,7 +677,7 @@ void ScrollingCoordinator::setShouldUpdateScrollLayerPositionOnMainThread(MainTh
 
 void ScrollingCoordinator::layerTreeViewInitialized(WebLayerTreeView& layerTreeView)
 {
-    if (RuntimeEnabledFeatures::compositorAnimationTimelinesEnabled() && Platform::current()->isThreadedAnimationEnabled()) {
+    if (Platform::current()->isThreadedAnimationEnabled()) {
         m_programmaticScrollAnimatorTimeline = adoptPtr(CompositorFactory::current().createAnimationTimeline());
         layerTreeView.attachCompositorAnimationTimeline(m_programmaticScrollAnimatorTimeline->animationTimeline());
     }
@@ -734,17 +707,17 @@ bool ScrollingCoordinator::coordinatesScrollingForFrameView(FrameView* frameView
     ASSERT(isMainThread());
 
     // We currently only support composited mode.
-    LayoutView* layoutView = frameView->frame().contentLayoutObject();
-    if (!layoutView)
+    LayoutViewItem layoutView = frameView->frame().contentLayoutItem();
+    if (layoutView.isNull())
         return false;
-    return layoutView->usesCompositing();
+    return layoutView.usesCompositing();
 }
 
 Region ScrollingCoordinator::computeShouldHandleScrollGestureOnMainThreadRegion(const LocalFrame* frame, const IntPoint& frameLocation) const
 {
     Region shouldHandleScrollGestureOnMainThreadRegion;
     FrameView* frameView = frame->view();
-    if (!frameView)
+    if (!frameView || frameView->shouldThrottleRendering())
         return shouldHandleScrollGestureOnMainThreadRegion;
 
     IntPoint offset = frameLocation;
@@ -752,6 +725,8 @@ Region ScrollingCoordinator::computeShouldHandleScrollGestureOnMainThreadRegion(
 
     if (const FrameView::ScrollableAreaSet* scrollableAreas = frameView->scrollableAreas()) {
         for (const ScrollableArea* scrollableArea : *scrollableAreas) {
+            if (scrollableArea->isFrameView() && toFrameView(scrollableArea)->shouldThrottleRendering())
+                continue;
             // Composited scrollable areas can be scrolled off the main thread.
             if (scrollableArea->usesCompositedScrolling())
                 continue;
@@ -768,14 +743,14 @@ Region ScrollingCoordinator::computeShouldHandleScrollGestureOnMainThreadRegion(
     if (const FrameView::ResizerAreaSet* resizerAreas = frameView->resizerAreas()) {
         for (const LayoutBox* box : *resizerAreas) {
             IntRect bounds = box->absoluteBoundingBoxRect();
-            IntRect corner = box->layer()->scrollableArea()->touchResizerCornerRect(bounds);
+            IntRect corner = box->layer()->getScrollableArea()->touchResizerCornerRect(bounds);
             corner.moveBy(offset);
             shouldHandleScrollGestureOnMainThreadRegion.unite(corner);
         }
     }
 
     if (const FrameView::ChildrenWidgetSet* children = frameView->children()) {
-        for (const RefPtrWillBeMember<Widget>& child : *children) {
+        for (const Member<Widget>& child : *children) {
             if (!(*child).isPluginView())
                 continue;
 
@@ -800,7 +775,7 @@ Region ScrollingCoordinator::computeShouldHandleScrollGestureOnMainThreadRegion(
 static void accumulateDocumentTouchEventTargetRects(LayerHitTestRects& rects, const Document* document)
 {
     ASSERT(document);
-    const EventTargetSet* targets = document->frameHost()->eventHandlerRegistry().eventHandlerTargets(EventHandlerRegistry::TouchEventBlocking);
+    const EventTargetSet* targets = document->frameHost()->eventHandlerRegistry().eventHandlerTargets(EventHandlerRegistry::TouchStartOrMoveEventBlocking);
     if (!targets)
         return;
 
@@ -816,10 +791,15 @@ static void accumulateDocumentTouchEventTargetRects(LayerHitTestRects& rects, co
         for (const auto& eventTarget : *targets) {
             EventTarget* target = eventTarget.key;
             Node* node = target->toNode();
-            if (target->toDOMWindow() || node == document || node == document->documentElement() || node == document->body()) {
-                if (LayoutView* layoutView = document->layoutView()) {
+            LocalDOMWindow* window = target->toDOMWindow();
+            // If the target is inside a throttled frame, skip it.
+            if (window && window->frame()->view() && window->frame()->view()->shouldThrottleRendering())
+                continue;
+            if (node && node->document().view() && node->document().view()->shouldThrottleRendering())
+                continue;
+            if (window || node == document || node == document->documentElement() || node == document->body()) {
+                if (LayoutView* layoutView = document->layoutView())
                     layoutView->computeLayerHitTestRects(rects);
-                }
                 return;
             }
         }
@@ -828,12 +808,16 @@ static void accumulateDocumentTouchEventTargetRects(LayerHitTestRects& rects, co
     for (const auto& eventTarget : *targets) {
         EventTarget* target = eventTarget.key;
         Node* node = target->toNode();
-        if (!node || !node->inDocument())
+        if (!node || !node->inShadowIncludingDocument())
             continue;
 
         // If the document belongs to an invisible subframe it does not have a composited layer
         // and should be skipped.
         if (node->document().isInInvisibleSubframe())
+            continue;
+
+        // If the node belongs to a throttled frame, skip it.
+        if (node->document().view() && node->document().view()->shouldThrottleRendering())
             continue;
 
         if (node->isDocumentNode() && node != document) {
@@ -909,7 +893,7 @@ bool ScrollingCoordinator::isForRootLayer(ScrollableArea* scrollableArea) const
 
     // FIXME(305811): Refactor for OOPI.
     LayoutView* layoutView = m_page->deprecatedLocalMainFrame()->view()->layoutView();
-    return layoutView ? scrollableArea == layoutView->layer()->scrollableArea() : false;
+    return layoutView ? scrollableArea == layoutView->layer()->getScrollableArea() : false;
 }
 
 bool ScrollingCoordinator::isForMainFrame(ScrollableArea* scrollableArea) const
@@ -1009,12 +993,12 @@ MainThreadScrollingReasons ScrollingCoordinator::mainThreadScrollingReasons() co
             continue;
 
         FrameView* frameView = toLocalFrame(frame)->view();
-        if (!frameView)
+        if (!frameView || frameView->shouldThrottleRendering())
             continue;
 
         if (frameView->hasBackgroundAttachmentFixedObjects())
             reasons |= MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects;
-        FrameView::ScrollingReasons scrollingReasons = frameView->scrollingReasons();
+        FrameView::ScrollingReasons scrollingReasons = frameView->getScrollingReasons();
         const bool mayBeScrolledByInput = (scrollingReasons == FrameView::Scrollable);
         const bool mayBeScrolledByScript = mayBeScrolledByInput || (scrollingReasons ==
             FrameView::NotScrollableExplicitlyDisabled);

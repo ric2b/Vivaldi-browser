@@ -40,14 +40,15 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
-PassOwnPtrWillBeRawPtr<SelectionController> SelectionController::create(LocalFrame& frame)
+RawPtr<SelectionController> SelectionController::create(LocalFrame& frame)
 {
-    return adoptPtrWillBeNoop(new SelectionController(frame));
+    return new SelectionController(frame);
 }
 
 SelectionController::SelectionController(LocalFrame& frame)
@@ -287,7 +288,7 @@ bool SelectionController::updateSelectionForMouseDownDispatchingSelectStart(Node
     return true;
 }
 
-void SelectionController::selectClosestWordFromHitTestResult(const HitTestResult& result, AppendTrailingWhitespace appendTrailingWhitespace)
+void SelectionController::selectClosestWordFromHitTestResult(const HitTestResult& result, AppendTrailingWhitespace appendTrailingWhitespace, SelectInputEventType selectInputEventType)
 {
     Node* innerNode = result.innerNode();
     VisibleSelectionInFlatTree newSelection;
@@ -295,20 +296,28 @@ void SelectionController::selectClosestWordFromHitTestResult(const HitTestResult
     if (!innerNode || !innerNode->layoutObject())
         return;
 
-    const VisiblePositionInFlatTree& pos = visiblePositionOfHitTestResult(result);
+    // Special-case image local offset to always be zero, to avoid triggering
+    // LayoutReplaced::positionFromPoint's advancement of the position at the
+    // mid-point of the the image (which was intended for mouse-drag selection
+    // and isn't desirable for long-press).
+    HitTestResult adjustedHitTestResult = result;
+    if (selectInputEventType == SelectInputEventType::GestureLongPress && result.image())
+        adjustedHitTestResult.setNodeAndPosition(result.innerNode(), LayoutPoint(0, 0));
+
+    const VisiblePositionInFlatTree& pos = visiblePositionOfHitTestResult(adjustedHitTestResult);
     if (pos.isNotNull()) {
         newSelection = VisibleSelectionInFlatTree(pos);
         newSelection.expandUsingGranularity(WordGranularity);
     }
 
-#if OS(ANDROID)
-    // If node doesn't have text except space, tab or line break, do not
-    // select that 'empty' area.
-    EphemeralRangeInFlatTree range = EphemeralRangeInFlatTree(newSelection.start(), newSelection.end());
-    const String& str = plainText(range, TextIteratorDefaultBehavior);
-    if (str.isEmpty() || str.simplifyWhiteSpace().containsOnlyWhitespace())
-        return;
-#endif
+    if (selectInputEventType == SelectInputEventType::GestureLongPress) {
+        // If node doesn't have text except space, tab or line break, do not
+        // select that 'empty' area.
+        EphemeralRangeInFlatTree range(newSelection.start(), newSelection.end());
+        const String& str = plainText(range, TextIteratorEmitsObjectReplacementCharacter);
+        if (str.isEmpty() || str.simplifyWhiteSpace().containsOnlyWhitespace())
+            return;
+    }
 
     if (appendTrailingWhitespace == AppendTrailingWhitespace::ShouldAppend && newSelection.isRange())
         newSelection.appendTrailingWhitespace();
@@ -349,7 +358,7 @@ void SelectionController::selectClosestWordFromMouseEvent(const MouseEventWithHi
 
     AppendTrailingWhitespace appendTrailingWhitespace = (result.event().clickCount() == 2 && m_frame->editor().isSelectTrailingWhitespaceEnabled()) ? AppendTrailingWhitespace::ShouldAppend : AppendTrailingWhitespace::DontAppend;
 
-    return selectClosestWordFromHitTestResult(result.hitTestResult(), appendTrailingWhitespace);
+    return selectClosestWordFromHitTestResult(result.hitTestResult(), appendTrailingWhitespace, SelectInputEventType::Mouse);
 }
 
 void SelectionController::selectClosestMisspellingFromMouseEvent(const MouseEventWithHitTestResults& result)
@@ -432,7 +441,8 @@ void SelectionController::handleMousePressEvent(const MouseEventWithHitTestResul
 {
     // If we got the event back, that must mean it wasn't prevented,
     // so it's allowed to start a drag or selection if it wasn't in a scrollbar.
-    m_mouseDownMayStartSelect = canMouseDownStartSelect(event.innerNode()) && !event.scrollbar();
+    m_mouseDownMayStartSelect = (canMouseDownStartSelect(event.innerNode()) || isLinkSelection(event))
+        && !event.scrollbar();
     m_mouseDownWasSingleClickInSelection = false;
     // Avoid double-tap touch gesture confusion by restricting multi-click side
     // effects, e.g., word selection, to editable regions.
@@ -456,13 +466,13 @@ void SelectionController::updateSelectionForMouseDrag(Node* mousePressNode, cons
     FrameView* view = m_frame->view();
     if (!view)
         return;
-    LayoutView* layoutObject = m_frame->contentLayoutObject();
-    if (!layoutObject)
+    LayoutViewItem layoutItem = m_frame->contentLayoutItem();
+    if (layoutItem.isNull())
         return;
 
     HitTestRequest request(HitTestRequest::ReadOnly | HitTestRequest::Active | HitTestRequest::Move);
     HitTestResult result(request, view->rootFrameToContents(lastKnownMousePosition));
-    layoutObject->hitTest(result);
+    layoutItem.hitTest(result);
     updateSelectionForMouseDrag(result, mousePressNode, dragStartPos, lastKnownMousePosition);
 }
 
@@ -529,7 +539,7 @@ bool SelectionController::handlePasteGlobalSelection(const PlatformMouseEvent& m
     Frame* focusFrame = m_frame->page()->focusController().focusedOrMainFrame();
     // Do not paste here if the focus was moved somewhere else.
     if (m_frame == focusFrame && m_frame->editor().behavior().supportsGlobalSelection())
-        return m_frame->editor().command("PasteGlobalSelection").execute();
+        return m_frame->editor().createCommand("PasteGlobalSelection").execute();
 
     return false;
 }
@@ -540,15 +550,11 @@ bool SelectionController::handleGestureLongPress(const PlatformGestureEvent& ges
         return false;
 
     Node* innerNode = hitTestResult.innerNode();
-#if OS(ANDROID)
     bool innerNodeIsSelectable = innerNode && (innerNode->isContentEditable() || innerNode->isTextNode() || innerNode->canStartSelection());
-#else
-    bool innerNodeIsSelectable = innerNode && (innerNode->isContentEditable() || innerNode->isTextNode());
-#endif
     if (!innerNodeIsSelectable)
         return false;
 
-    selectClosestWordFromHitTestResult(hitTestResult, AppendTrailingWhitespace::DontAppend);
+    selectClosestWordFromHitTestResult(hitTestResult, AppendTrailingWhitespace::DontAppend, SelectInputEventType::GestureLongPress);
     return selection().isRange();
 }
 
@@ -562,7 +568,8 @@ void SelectionController::sendContextMenuEvent(const MouseEventWithHitTestResult
         || !(selection().isContentEditable() || (mev.innerNode() && mev.innerNode()->isTextNode())))
         return;
 
-    m_mouseDownMayStartSelect = true; // context menu events are always allowed to perform a selection
+    // Context menu events are always allowed to perform a selection.
+    TemporaryChange<bool> mouseDownMayStartSelectChange(m_mouseDownMayStartSelect, true);
 
     if (mev.hitTestResult().isMisspelled())
         return selectClosestMisspellingFromMouseEvent(mev);
@@ -621,6 +628,11 @@ void SelectionController::notifySelectionChanged()
 FrameSelection& SelectionController::selection() const
 {
     return m_frame->selection();
+}
+
+bool isLinkSelection(const MouseEventWithHitTestResults& event)
+{
+    return event.event().altKey() && event.isOverLink();
 }
 
 } // namespace blink

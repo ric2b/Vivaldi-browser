@@ -12,16 +12,16 @@
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "mojo/edk/embedder/process_delegate.h"
-#include "mojo/shell/application_manager.h"
+#include "mojo/shell/shell.h"
 #include "mojo/shell/standalone/tracer.h"
-#include "url/gurl.h"
 
 namespace base {
 class SingleThreadTaskRunner;
 }
 
-namespace package_manager {
-class ApplicationCatalogStore;
+namespace catalog {
+class Factory;
+class Store;
 }
 
 namespace mojo {
@@ -36,7 +36,9 @@ class Context : public edk::ProcessDelegate {
     ~InitParams();
 
     NativeRunnerDelegate* native_runner_delegate = nullptr;
-    scoped_ptr<package_manager::ApplicationCatalogStore> app_catalog;
+    scoped_ptr<catalog::Store> catalog_store;
+    // If true the edk is initialized.
+    bool init_edk = true;
   };
 
   Context();
@@ -54,16 +56,14 @@ class Context : public edk::ProcessDelegate {
   // Run the application specified on the command line.
   void RunCommandLineApplication();
 
-  ApplicationManager* application_manager() {
-    return application_manager_.get();
-  }
+  Shell* shell() { return shell_.get(); }
 
  private:
   // edk::ProcessDelegate:
   void OnShutdownComplete() override;
 
-  // Runs the app specified by |url|.
-  void Run(const GURL& url);
+  // Runs the app specified by |name|.
+  void Run(const std::string& name);
 
   scoped_refptr<base::SingleThreadTaskRunner> shell_runner_;
   scoped_ptr<base::Thread> io_thread_;
@@ -72,8 +72,10 @@ class Context : public edk::ProcessDelegate {
   // Ensure this is destructed before task_runners_ since it owns a message pipe
   // that needs the IO thread to destruct cleanly.
   Tracer tracer_;
-  scoped_ptr<ApplicationManager> application_manager_;
+  scoped_ptr<catalog::Factory> catalog_;
+  scoped_ptr<Shell> shell_;
   base::Time main_entry_time_;
+  bool init_edk_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(Context);
 };

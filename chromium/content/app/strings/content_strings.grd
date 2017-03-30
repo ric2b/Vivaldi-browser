@@ -168,6 +168,9 @@ below:
       <message name="IDS_DETAILS_WITHOUT_SUMMARY_LABEL" desc="Clickable label to show detailed information or to hide the detailed information.">
         Details
       </message>
+      <message name="IDS_DOWNLOAD_BUTTON_LABEL" desc="Clickable button label to download media file.">
+        Save
+      </message>
       <message name="IDS_SEARCHABLE_INDEX_INTRO" desc="Text that appears at the start of nearly-obsolete webpages in the form of a 'searchable index'.">
         This is a searchable index. Enter search keywords: '''
       </message>
@@ -526,6 +529,12 @@ below:
       <message name="IDS_AX_LINK_ACTION_VERB" desc="Verb stating the action that will occur when a link is clicked, as used by accessibility.">
         jump
       </message>
+      <message name="IDS_AX_POP_UP_BUTTON_ACTION_VERB" desc="Verb stating the action that will occur when a pop-up button is clicked, as used by accessibility.">
+        open
+      </message>
+      <message name="IDS_AX_DEFAULT_ACTION_VERB" desc="Verb stating the action that will occur when clicking on a generic clickable object, when we don't know what that action is, as used by accessibility.">
+        click
+      </message>
 
       <message name="IDS_AX_AM_PM_FIELD_TEXT" desc="Accessible description of the AM/PM field in a date/time control">
         AM/PM
@@ -606,11 +615,11 @@ below:
       <message name="IDS_AX_MEDIA_HIDE_CLOSED_CAPTIONS_BUTTON" desc="accessibility role description for hide closed captions button">
         hide closed captions
       </message>
-      
+
       <message name="IDS_AX_MEDIA_CAST_OFF_BUTTON" desc="accessibility role description for remote playback button">
         play on remote device
       </message>
-      
+
       <message name="IDS_AX_MEDIA_CAST_ON_BUTTON" desc="accessibility role description for remote playback control button">
         control remote playback
       </message>
@@ -682,7 +691,7 @@ below:
       <message name="IDS_AX_MEDIA_CAST_OFF_BUTTON_HELP" desc="accessibility help description for remote playback button">
         play on remote device
       </message>
-      
+
       <message name="IDS_AX_MEDIA_CAST_ON_BUTTON_HELP" desc="accessibility help description for remote playback control button">
         control remote playback
       </message>

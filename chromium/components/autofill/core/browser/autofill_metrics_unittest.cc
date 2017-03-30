@@ -6,10 +6,10 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
@@ -23,7 +23,6 @@
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_driver.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
-#include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/prefs/pref_service.h"
@@ -289,7 +288,7 @@ class TestAutofillManager : public AutofillManager {
 
  private:
   bool autofill_enabled_;
-  scoped_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<base::RunLoop> run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(TestAutofillManager);
 };
@@ -312,13 +311,13 @@ class AutofillMetricsTest : public testing::Test {
 
   base::MessageLoop message_loop_;
   TestAutofillClient autofill_client_;
-  scoped_ptr<AccountTrackerService> account_tracker_;
-  scoped_ptr<FakeSigninManagerBase> signin_manager_;
-  scoped_ptr<TestSigninClient> signin_client_;
-  scoped_ptr<TestAutofillDriver> autofill_driver_;
-  scoped_ptr<TestAutofillManager> autofill_manager_;
-  scoped_ptr<TestPersonalDataManager> personal_data_;
-  scoped_ptr<AutofillExternalDelegate> external_delegate_;
+  std::unique_ptr<AccountTrackerService> account_tracker_;
+  std::unique_ptr<FakeSigninManagerBase> signin_manager_;
+  std::unique_ptr<TestSigninClient> signin_client_;
+  std::unique_ptr<TestAutofillDriver> autofill_driver_;
+  std::unique_ptr<TestAutofillManager> autofill_manager_;
+  std::unique_ptr<TestPersonalDataManager> personal_data_;
+  std::unique_ptr<AutofillExternalDelegate> external_delegate_;
 };
 
 AutofillMetricsTest::~AutofillMetricsTest() {
@@ -371,8 +370,6 @@ void AutofillMetricsTest::TearDown() {
 }
 
 void AutofillMetricsTest::EnableWalletSync() {
-  autofill_client_.GetPrefs()->SetBoolean(
-      prefs::kAutofillWalletSyncExperimentEnabled, true);
   signin_manager_->SetAuthenticatedAccountInfo("12345", "syncuser@example.com");
 }
 
@@ -513,6 +510,46 @@ TEST_F(AutofillMetricsTest, QualityMetrics) {
   histogram_tester.ExpectBucketCount(
       "Autofill.Quality.PredictedType.ByFieldType",
       GetFieldTypeGroupMetric(NAME_FULL, AutofillMetrics::TYPE_MISMATCH), 1);
+}
+
+// Ensures that metrics that measure timing some important Autofill functions
+// actually are recorded and retrieved.
+TEST_F(AutofillMetricsTest, TimingMetrics) {
+  base::HistogramTester histogram_tester;
+
+  FormData form;
+  form.name = ASCIIToUTF16("TestForm");
+  form.origin = GURL("http://example.com/form.html");
+  form.action = GURL("http://example.com/submit.html");
+
+  FormFieldData field;
+  test::CreateTestFormField(
+      "Autofilled", "autofilled", "Elvis Aaron Presley", "text", &field);
+  field.is_autofilled = true;
+  form.fields.push_back(field);
+
+  test::CreateTestFormField(
+      "Autofill Failed", "autofillfailed", "buddy@gmail.com", "text", &field);
+  field.is_autofilled = false;
+  form.fields.push_back(field);
+
+  test::CreateTestFormField("Phone", "phone", "2345678901", "tel", &field);
+  field.is_autofilled = false;
+  form.fields.push_back(field);
+
+  // Simulate a OnFormsSeen() call that should trigger the recording.
+  std::vector<FormData> forms;
+  forms.push_back(form);
+  autofill_manager_->OnFormsSeen(forms, base::TimeTicks::Now());
+
+  // Because these metrics are related to timing, it is not possible to know in
+  // advance which bucket the sample will fall into, so we just need to make
+  // sure we have valid samples.
+  EXPECT_FALSE(
+      histogram_tester.GetAllSamples("Autofill.Timing.DetermineHeuristicTypes")
+          .empty());
+  EXPECT_FALSE(
+      histogram_tester.GetAllSamples("Autofill.Timing.ParseForm").empty());
 }
 
 // Test that we log quality metrics appropriately when an upload is triggered
@@ -1334,6 +1371,30 @@ TEST_F(AutofillMetricsTest, StoredProfileCount) {
   }
 }
 
+// Test that the local credit card count is logged correctly.
+TEST_F(AutofillMetricsTest, StoredLocalCreditCardCount) {
+  // The metric should be logged when the credit cards are first loaded.
+  {
+    base::HistogramTester histogram_tester;
+    personal_data_->RecreateCreditCards(
+        true /* include_local_credit_card */,
+        false /* include_masked_server_credit_card */,
+        false /* include_full_server_credit_card */);
+    histogram_tester.ExpectUniqueSample("Autofill.StoredLocalCreditCardCount",
+                                        1, 1);
+  }
+
+  // The metric should only be logged once.
+  {
+    base::HistogramTester histogram_tester;
+    personal_data_->RecreateCreditCards(
+        true /* include_local_credit_card */,
+        false /* include_masked_server_credit_card */,
+        false /* include_full_server_credit_card */);
+    histogram_tester.ExpectTotalCount("Autofill.StoredLocalCreditCardCount", 0);
+  }
+}
+
 // Test that we correctly log when Autofill is enabled.
 TEST_F(AutofillMetricsTest, AutofillIsEnabledAtStartup) {
   base::HistogramTester histogram_tester;
@@ -1613,8 +1674,6 @@ TEST_F(AutofillMetricsTest, CreditCardSelectedFormEvents) {
 
 // Test that we log filled form events for credit cards.
 TEST_F(AutofillMetricsTest, CreditCardFilledFormEvents) {
-  autofill_client_.GetPrefs()->SetBoolean(
-      prefs::kAutofillWalletSyncExperimentEnabled, true);
   // Creating all kinds of cards.
   personal_data_->RecreateCreditCards(
       true /* include_local_credit_card */,

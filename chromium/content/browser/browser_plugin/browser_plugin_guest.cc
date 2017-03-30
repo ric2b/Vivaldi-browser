@@ -23,6 +23,7 @@
 #include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
+#include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -126,9 +127,9 @@ int BrowserPluginGuest::GetGuestProxyRoutingID() {
   if (guest_proxy_routing_id_ != MSG_ROUTING_NONE)
     return guest_proxy_routing_id_;
 
-  // Create a swapped out RenderView for the guest in the embedder renderer
+  // Create a RenderFrameProxyHost for the guest in the embedder renderer
   // process, so that the embedder can access the guest's window object.
-  // On reattachment, we can reuse the same swapped out RenderView because
+  // On reattachment, we can reuse the same RenderFrameProxyHost because
   // the embedder process will always be the same even if the embedder
   // WebContents changes.
   //
@@ -136,20 +137,15 @@ int BrowserPluginGuest::GetGuestProxyRoutingID() {
   // owners in different processes. We probably need to clear the
   // |guest_proxy_routing_id_| and perform any necessary cleanup on Detach
   // to enable this.
-  SiteInstance* owner_site_instance = owner_web_contents_ ?
+  scoped_refptr<SiteInstance> owner_site_instance = owner_web_contents_ ?
     owner_web_contents_->GetSiteInstance() :
     SiteInstance::Create(GetWebContents()->GetBrowserContext());
-  if (SiteIsolationPolicy::IsSwappedOutStateForbidden()) {
-    int proxy_routing_id =
-        GetWebContents()->GetFrameTree()->root()->render_manager()->
-            CreateRenderFrameProxy(owner_site_instance);
-    guest_proxy_routing_id_ = RenderFrameProxyHost::FromID(
-        owner_site_instance->GetProcess()->GetID(), proxy_routing_id)
-            ->GetRenderViewHost()->GetRoutingID();
-  } else {
-    guest_proxy_routing_id_ =
-        GetWebContents()->CreateSwappedOutRenderView(owner_site_instance);
-  }
+  int proxy_routing_id =
+      GetWebContents()->GetFrameTree()->root()->render_manager()->
+          CreateRenderFrameProxy(owner_site_instance.get());
+  guest_proxy_routing_id_ = RenderFrameProxyHost::FromID(
+      owner_site_instance->GetProcess()->GetID(), proxy_routing_id)
+          ->GetRenderViewHost()->GetRoutingID();
 
   return guest_proxy_routing_id_;
 }
@@ -201,14 +197,6 @@ base::WeakPtr<BrowserPluginGuest> BrowserPluginGuest::AsWeakPtr() {
 void BrowserPluginGuest::SetFocus(RenderWidgetHost* rwh,
                                   bool focused,
                                   blink::WebFocusType focus_type) {
-  // TODO (gisli@vivaldi.com): If we have two internal pages open we get
-  //                           bouncing set focus messeages.  This check
-  //                           stops the bouncing but where is the
-  //                           root of those?
-  if (vivaldi::IsVivaldiRunning() &&
-    focused_ == focused)
-    return;
-
   focused_ = focused;
   if (!rwh)
     return;
@@ -774,12 +762,10 @@ void BrowserPluginGuest::Attach(
 void BrowserPluginGuest::OnWillAttachComplete(
     WebContentsImpl* embedder_web_contents,
     const BrowserPluginHostMsg_Attach_Params& params) {
-  bool use_cross_process_frames =
-      BrowserPluginGuestMode::UseCrossProcessFramesForGuests();
   // If a RenderView has already been created for this new window, then we need
   // to initialize the browser-side state now so that the RenderFrameHostManager
   // does not create a new RenderView on navigation.
-  if (!use_cross_process_frames && has_render_view_) {
+  if (has_render_view_) {
     // This will trigger a callback to RenderViewReady after a round-trip IPC.
     static_cast<RenderViewHostImpl*>(GetWebContents()->GetRenderViewHost())
         ->GetWidget()
@@ -803,10 +789,8 @@ void BrowserPluginGuest::OnWillAttachComplete(
   RenderWidgetHostViewGuest* rwhv = static_cast<RenderWidgetHostViewGuest*>(
       web_contents()->GetRenderWidgetHostView());
   if (rwhv)
-    rwhv->RegisterSurfaceNamespaceId();
-
-  if (!use_cross_process_frames)
-    has_render_view_ = true;
+  rwhv->RegisterSurfaceNamespaceId();
+  has_render_view_ = true;
 
   RecordAction(base::UserMetricsAction("BrowserPlugin.Guest.Attached"));
 }
@@ -819,8 +803,9 @@ void BrowserPluginGuest::OnDetach(int browser_plugin_instance_id) {
   // it's attached again.
   attached_ = false;
 
-  RenderWidgetHostViewGuest* rwhv = static_cast<RenderWidgetHostViewGuest*>(
-       web_contents()->GetRenderWidgetHostView());
+  RenderWidgetHostViewChildFrame* rwhv =
+      static_cast<RenderWidgetHostViewChildFrame*>(
+          web_contents()->GetRenderWidgetHostView());
   // If the guest is terminated, our host may already be gone.
   if (rwhv)
     rwhv->UnregisterSurfaceNamespaceId();
@@ -983,30 +968,8 @@ void BrowserPluginGuest::OnUpdateGeometry(int browser_plugin_instance_id,
                                           const gfx::Rect& view_rect) {
   // The plugin has moved within the embedder without resizing or the
   // embedder/container's view rect changing.
-
-  int dx = view_rect.x() - guest_window_rect_.x();
-  int dy = view_rect.y() - guest_window_rect_.y();
-
   guest_window_rect_ = view_rect;
-
-  for (size_t i = 0; i < plugin_moves_.size(); ++i) {
-    int x = (plugin_moves_[i].window_rect).x() ;
-    int y = (plugin_moves_[i].window_rect).y() ;
-
-    (plugin_moves_[i].window_rect).set_x( x + dx );
-    (plugin_moves_[i].window_rect).set_y( y + dy );
-  }
-
-  RenderWidgetHostViewBase* rwhv = static_cast<RenderWidgetHostViewBase*>(
-      GetRenderWidgetHostView());
-
-  if (rwhv)
-    rwhv->MovePluginWindows(plugin_moves_, browser_plugin_instance_id);
-
-  RenderWidgetHostImpl* rwh = RenderWidgetHostImpl::From(
-      GetWebContents()->GetRenderViewHost()->GetWidget());
-  if (rwh)
-    rwh->SendScreenRects();
+  GetWebContents()->SendScreenRects();
 }
 
 void BrowserPluginGuest::OnHasTouchEventHandlers(bool accept) {
@@ -1062,6 +1025,10 @@ void BrowserPluginGuest::OnImeCancelComposition() {
 void BrowserPluginGuest::OnImeCompositionRangeChanged(
       const gfx::Range& range,
       const std::vector<gfx::Rect>& character_bounds) {
+  // NOTE(andre@vivaldi.com): If a page had a focus in a textfield before the
+  // guest was fully created this would crash due to no created view. See
+  // VB-14681.
+  if (web_contents()->GetRenderWidgetHostView())
   static_cast<RenderWidgetHostViewBase*>(
       web_contents()->GetRenderWidgetHostView())->ImeCompositionRangeChanged(
           range, character_bounds);

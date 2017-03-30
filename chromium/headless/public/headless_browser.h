@@ -5,13 +5,14 @@
 #ifndef HEADLESS_PUBLIC_HEADLESS_BROWSER_H_
 #define HEADLESS_PUBLIC_HEADLESS_BROWSER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "headless/public/headless_export.h"
+#include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
 
 namespace base {
@@ -34,8 +35,10 @@ class HEADLESS_EXPORT HeadlessBrowser {
  public:
   struct Options;
 
-  // Create a new browser tab. |size| is in physical pixels.
-  virtual scoped_ptr<HeadlessWebContents> CreateWebContents(
+  // Create a new browser tab which navigates to |initial_url|. |size| is in
+  // physical pixels.
+  virtual std::unique_ptr<HeadlessWebContents> CreateWebContents(
+      const GURL& initial_url,
       const gfx::Size& size) = 0;
 
   // Returns a task runner for submitting work to the browser main thread.
@@ -56,6 +59,7 @@ class HEADLESS_EXPORT HeadlessBrowser {
 
 // Embedding API overrides for the headless browser.
 struct HeadlessBrowser::Options {
+  Options(const Options& other);
   ~Options();
 
   class Builder;
@@ -67,7 +71,13 @@ struct HeadlessBrowser::Options {
   std::string user_agent;
   std::string navigator_platform;
 
+  // Address at which DevTools should listen for connections. Disabled by
+  // default.
   net::IPEndPoint devtools_endpoint;
+
+  // Address of the HTTP/HTTPS proxy server to use. The system proxy settings
+  // are used by default.
+  net::HostPortPair proxy_server;
 
   // Optional message pump that overrides the default. Must outlive the browser.
   base::MessagePump* message_pump;
@@ -79,11 +89,13 @@ struct HeadlessBrowser::Options {
 class HeadlessBrowser::Options::Builder {
  public:
   Builder(int argc, const char** argv);
+  Builder();
   ~Builder();
 
   Builder& SetUserAgent(const std::string& user_agent);
   Builder& EnableDevToolsServer(const net::IPEndPoint& endpoint);
   Builder& SetMessagePump(base::MessagePump* message_pump);
+  Builder& SetProxyServer(const net::HostPortPair& proxy_server);
 
   Options Build();
 

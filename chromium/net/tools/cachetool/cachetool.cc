@@ -11,34 +11,17 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/utf_string_conversions.h"
 #include "net/base/io_buffer.h"
 #include "net/base/test_completion_callback.h"
 #include "net/disk_cache/disk_cache.h"
-#include "net/disk_cache/simple/simple_backend_impl.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 
 using disk_cache::Backend;
 using disk_cache::Entry;
-using disk_cache::SimpleBackendImpl;
 
 namespace {
-
-base::MessageLoopForIO* g_message_loop = nullptr;
-
-scoped_ptr<SimpleBackendImpl> CreateSimpleBackend(
-    const base::FilePath& cache_path) {
-  scoped_ptr<SimpleBackendImpl> cache_backend(new SimpleBackendImpl(
-      cache_path, 0, net::DISK_CACHE, g_message_loop->task_runner(), NULL));
-
-  net::TestCompletionCallback cb;
-  int rv = cache_backend->Init(cb.callback());
-  if (cb.GetResult(rv) != net::OK)
-    return nullptr;
-  return cache_backend;
-}
 
 // Print all of a cache's keys to stdout.
 bool ListKeys(Backend* cache_backend) {
@@ -124,7 +107,7 @@ void PrintHelp() {
   std::cout << "cachetool <cache_path> <cache_backend_type> <subcommand> ..."
             << std::endl
             << std::endl;
-  std::cout << "Available cache back-end types: simple";
+  std::cout << "Available cache backend types: simple, blockfile" << std::endl;
   std::cout << "Available subcommands:" << std::endl;
   std::cout << "  validate: Verify that the cache can be opened and return, "
             << "confirming the cache exists and is of the right type."
@@ -148,41 +131,34 @@ int main(int argc, char* argv[]) {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
 
-#if defined(OS_WIN)
-  std::vector<std::string> args;
-  base::CommandLine::StringVector wide_args = command_line.GetArgs();
-  for (const auto& arg : wide_args) {
-    args.push_back(base::WideToUTF8(arg));
-  }
-#else
   base::CommandLine::StringVector args = command_line.GetArgs();
-#endif
   if (args.size() < 3U) {
     PrintHelp();
     return 1;
   }
 
-#if defined(OS_WIN)
-  base::FilePath cache_path(wide_args[0]);
-#else
   base::FilePath cache_path(args[0]);
-#endif
   std::string cache_backend_type(args[1]);
   std::string subcommand(args[2]);
 
-  g_message_loop = &message_loop;
-  scoped_ptr<Backend> cache_backend;
+  net::BackendType backend_type;
   if (cache_backend_type == "simple") {
-    cache_backend = CreateSimpleBackend(cache_path);
+    backend_type = net::CACHE_BACKEND_SIMPLE;
+  } else if (cache_backend_type == "blockfile") {
+    backend_type = net::CACHE_BACKEND_BLOCKFILE;
   } else {
     std::cerr << "Unknown cache type." << std::endl;
     PrintHelp();
     return 1;
   }
 
-  if (!cache_backend) {
+  scoped_ptr<Backend> cache_backend;
+  net::TestCompletionCallback cb;
+  int rv = disk_cache::CreateCacheBackend(
+      net::DISK_CACHE, backend_type, cache_path, INT_MAX, false,
+      message_loop.task_runner(), nullptr, &cache_backend, cb.callback());
+  if (cb.GetResult(rv) != net::OK) {
     std::cerr << "Invalid cache." << std::endl;
-    PrintHelp();
     return 1;
   }
 

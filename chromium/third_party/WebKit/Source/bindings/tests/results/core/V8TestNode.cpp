@@ -22,7 +22,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestNode::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestNode::domTemplate, V8TestNode::refObject, V8TestNode::derefObject, V8TestNode::trace, 0, V8TestNode::preparePrototypeAndInterfaceObject, V8TestNode::installConditionallyEnabledProperties, "TestNode", &V8Node::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::NodeClassId, WrapperTypeInfo::InheritFromEventTarget, WrapperTypeInfo::Dependent, WrapperTypeInfo::WillBeGarbageCollectedObject };
+const WrapperTypeInfo V8TestNode::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestNode::domTemplate, V8TestNode::refObject, V8TestNode::derefObject, V8TestNode::trace, 0, 0, V8TestNode::preparePrototypeAndInterfaceObject, V8TestNode::installConditionallyEnabledProperties, "TestNode", &V8Node::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::NodeClassId, WrapperTypeInfo::InheritFromEventTarget, WrapperTypeInfo::Dependent, WrapperTypeInfo::GarbageCollectedObject };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -152,7 +152,7 @@ static void hrefByteStringAttributeSetterCallback(const v8::FunctionCallbackInfo
 
 static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    RefPtrWillBeRawPtr<TestNode> impl = TestNode::create();
+    RawPtr<TestNode> impl = TestNode::create();
     v8::Local<v8::Object> wrapper = info.Holder();
     wrapper = impl->associateWithWrapper(info.GetIsolate(), &V8TestNode::wrapperTypeInfo, wrapper);
     v8SetReturnValue(info, wrapper);
@@ -182,22 +182,20 @@ void V8TestNode::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>& 
     TestNodeV8Internal::constructor(info);
 }
 
-static void installV8TestNodeTemplate(v8::Local<v8::FunctionTemplate> functionTemplate, v8::Isolate* isolate)
+static void installV8TestNodeTemplate(v8::Local<v8::FunctionTemplate> interfaceTemplate, v8::Isolate* isolate)
 {
-    functionTemplate->ReadOnlyPrototype();
-
-    v8::Local<v8::Signature> defaultSignature;
-    defaultSignature = V8DOMConfiguration::installDOMClassTemplate(isolate, functionTemplate, V8TestNode::wrapperTypeInfo.interfaceName, V8Node::domTemplate(isolate), V8TestNode::internalFieldCount,
-        0, 0,
-        V8TestNodeAccessors, WTF_ARRAY_LENGTH(V8TestNodeAccessors),
-        0, 0);
-    functionTemplate->SetCallHandler(V8TestNode::constructorCallback);
-    functionTemplate->SetLength(0);
-    v8::Local<v8::ObjectTemplate> instanceTemplate = functionTemplate->InstanceTemplate();
+    // Initialize the interface object's template.
+    V8DOMConfiguration::initializeDOMInterfaceTemplate(isolate, interfaceTemplate, V8TestNode::wrapperTypeInfo.interfaceName, V8Node::domTemplate(isolate), V8TestNode::internalFieldCount);
+    interfaceTemplate->SetCallHandler(V8TestNode::constructorCallback);
+    interfaceTemplate->SetLength(0);
+    v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTemplate);
+    ALLOW_UNUSED_LOCAL(signature);
+    v8::Local<v8::ObjectTemplate> instanceTemplate = interfaceTemplate->InstanceTemplate();
     ALLOW_UNUSED_LOCAL(instanceTemplate);
-    v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
+    v8::Local<v8::ObjectTemplate> prototypeTemplate = interfaceTemplate->PrototypeTemplate();
     ALLOW_UNUSED_LOCAL(prototypeTemplate);
-    V8DOMConfiguration::setClassString(isolate, prototypeTemplate, V8TestNode::wrapperTypeInfo.interfaceName);
+    // Register DOM constants, attributes and operations.
+    V8DOMConfiguration::installAccessors(isolate, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestNodeAccessors, WTF_ARRAY_LENGTH(V8TestNodeAccessors));
 }
 
 v8::Local<v8::FunctionTemplate> V8TestNode::domTemplate(v8::Isolate* isolate)
@@ -222,16 +220,10 @@ TestNode* V8TestNode::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Va
 
 void V8TestNode::refObject(ScriptWrappable* scriptWrappable)
 {
-#if !ENABLE(OILPAN)
-    scriptWrappable->toImpl<TestNode>()->ref();
-#endif
 }
 
 void V8TestNode::derefObject(ScriptWrappable* scriptWrappable)
 {
-#if !ENABLE(OILPAN)
-    scriptWrappable->toImpl<TestNode>()->deref();
-#endif
 }
 
 } // namespace blink

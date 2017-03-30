@@ -37,8 +37,6 @@ TEST(LayerTreeSettingsTest, AllMembersChanged) {
       !settings.main_frame_before_activation_enabled;
   settings.using_synchronous_renderer_compositor =
       !settings.using_synchronous_renderer_compositor;
-  settings.accelerated_animation_enabled =
-      !settings.accelerated_animation_enabled;
   settings.can_use_lcd_text = !settings.can_use_lcd_text;
   settings.use_distance_field_text = !settings.use_distance_field_text;
   settings.gpu_rasterization_enabled = !settings.gpu_rasterization_enabled;
@@ -76,8 +74,6 @@ TEST(LayerTreeSettingsTest, AllMembersChanged) {
       settings.skewport_extrapolation_limit_in_content_pixels * 3 + 1;
   settings.max_memory_for_prepaint_percentage =
       settings.max_memory_for_prepaint_percentage * 3 + 1;
-  settings.strict_layer_property_change_checking =
-      !settings.strict_layer_property_change_checking;
   settings.use_zero_copy = !settings.use_zero_copy;
   settings.use_partial_raster = !settings.use_partial_raster;
   settings.enable_elastic_overscroll = !settings.enable_elastic_overscroll;
@@ -88,8 +84,6 @@ TEST(LayerTreeSettingsTest, AllMembersChanged) {
       settings.scheduled_raster_task_limit * 3 + 1;
   settings.use_occlusion_for_tile_prioritization =
       !settings.use_occlusion_for_tile_prioritization;
-  settings.use_compositor_animation_timelines =
-      !settings.use_compositor_animation_timelines;
   settings.wait_for_beginframe_interval =
       !settings.wait_for_beginframe_interval;
   settings.max_staging_buffer_usage_in_bytes =
@@ -111,7 +105,6 @@ TEST(LayerTreeSettingsTest, ArbitraryValues) {
   settings.use_external_begin_frame_source = true;
   settings.main_frame_before_activation_enabled = true;
   settings.using_synchronous_renderer_compositor = false;
-  settings.accelerated_animation_enabled = true;
   settings.can_use_lcd_text = false;
   settings.use_distance_field_text = false;
   settings.gpu_rasterization_enabled = false;
@@ -139,7 +132,6 @@ TEST(LayerTreeSettingsTest, ArbitraryValues) {
   settings.skewport_target_time_in_seconds = 0.6f;
   settings.skewport_extrapolation_limit_in_content_pixels = 61;
   settings.max_memory_for_prepaint_percentage = 62;
-  settings.strict_layer_property_change_checking = true;
   settings.use_zero_copy = true;
   settings.use_partial_raster = true;
   settings.enable_elastic_overscroll = false;
@@ -148,7 +140,6 @@ TEST(LayerTreeSettingsTest, ArbitraryValues) {
   settings.ignore_root_layer_flings = true;
   settings.scheduled_raster_task_limit = 41;
   settings.use_occlusion_for_tile_prioritization = true;
-  settings.use_compositor_animation_timelines = true;
   settings.wait_for_beginframe_interval = true;
   settings.max_staging_buffer_usage_in_bytes = 70;
   settings.memory_policy_ = ManagedMemoryPolicy(

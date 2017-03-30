@@ -5,6 +5,8 @@
 #ifndef HEADLESS_LIB_BROWSER_HEADLESS_BROWSER_CONTEXT_H_
 #define HEADLESS_LIB_BROWSER_HEADLESS_BROWSER_CONTEXT_H_
 
+#include <memory>
+
 #include "base/files/file_path.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
@@ -21,13 +23,11 @@ class HeadlessBrowserContext : public content::BrowserContext {
   ~HeadlessBrowserContext() override;
 
   // BrowserContext implementation:
-  scoped_ptr<content::ZoomLevelDelegate> CreateZoomLevelDelegate(
+  std::unique_ptr<content::ZoomLevelDelegate> CreateZoomLevelDelegate(
       const base::FilePath& partition_path) override;
   base::FilePath GetPath() const override;
   bool IsOffTheRecord() const override;
   net::URLRequestContextGetter* GetRequestContext() override;
-  net::URLRequestContextGetter* GetRequestContextForRenderProcess(
-      int renderer_child_id) override;
   net::URLRequestContextGetter* GetMediaRequestContext() override;
   net::URLRequestContextGetter* GetMediaRequestContextForRenderProcess(
       int renderer_child_id) override;
@@ -42,13 +42,17 @@ class HeadlessBrowserContext : public content::BrowserContext {
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionManager* GetPermissionManager() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
+  net::URLRequestContextGetter* CreateRequestContext(
+      content::ProtocolHandlerMap* protocol_handlers,
+      content::URLRequestInterceptorScopedVector request_interceptors) override;
+  net::URLRequestContextGetter* CreateRequestContextForStoragePartition(
+      const base::FilePath& partition_path,
+      bool in_memory,
+      content::ProtocolHandlerMap* protocol_handlers,
+      content::URLRequestInterceptorScopedVector request_interceptors) override;
 
   const HeadlessBrowser::Options& options() const { return options_; }
-
-  // Configure the URL request context getter to be used for serving URL
-  // requests in this browser instance.
-  void SetURLRequestContextGetter(
-      scoped_refptr<net::URLRequestContextGetter> url_request_context_getter);
+  void SetOptionsForTesting(const HeadlessBrowser::Options& options);
 
  private:
   // Performs initialization of the HeadlessBrowserContext while IO is still
@@ -56,7 +60,7 @@ class HeadlessBrowserContext : public content::BrowserContext {
   void InitWhileIOAllowed();
 
   base::FilePath path_;
-  scoped_ptr<HeadlessResourceContext> resource_context_;
+  std::unique_ptr<HeadlessResourceContext> resource_context_;
   HeadlessBrowser::Options options_;
 
   DISALLOW_COPY_AND_ASSIGN(HeadlessBrowserContext);

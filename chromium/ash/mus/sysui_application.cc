@@ -45,11 +45,10 @@ namespace sysui {
 
 namespace {
 
-// Tries to determine the corresponding container in mash from the ash container
-// for the widget.
-mash::wm::mojom::Container GetContainerId(aura::Window* container) {
-  DCHECK(container);
-  int id = container->id();
+// Tries to determine the corresponding mash container from widget init params.
+mash::wm::mojom::Container GetContainerId(
+    const views::Widget::InitParams& params) {
+  const int id = params.parent->id();
   if (id == kShellWindowId_DesktopBackgroundContainer)
     return mash::wm::mojom::Container::USER_BACKGROUND;
   // mash::wm::ShelfLayout manages both the shelf and the status area.
@@ -57,7 +56,18 @@ mash::wm::mojom::Container GetContainerId(aura::Window* container) {
       id == kShellWindowId_StatusContainer) {
     return mash::wm::mojom::Container::USER_SHELF;
   }
-  return mash::wm::mojom::Container::COUNT;
+
+  // Determine the container based on Widget type.
+  switch (params.type) {
+    case views::Widget::InitParams::Type::TYPE_BUBBLE:
+      return mash::wm::mojom::Container::BUBBLES;
+    case views::Widget::InitParams::Type::TYPE_MENU:
+      return mash::wm::mojom::Container::MENUS;
+    case views::Widget::InitParams::Type::TYPE_TOOLTIP:
+      return mash::wm::mojom::Container::TOOLTIPS;
+    default:
+      return mash::wm::mojom::Container::COUNT;
+  }
 }
 
 // Tries to determine the corresponding ash window type from the ash container
@@ -78,7 +88,7 @@ class AshWindowTreeHostMus : public AshWindowTreeHostPlatform {
  public:
   explicit AshWindowTreeHostMus(const gfx::Rect& initial_bounds)
       : AshWindowTreeHostPlatform() {
-    scoped_ptr<ui::PlatformWindow> window(new ui::StubWindow(this));
+    std::unique_ptr<ui::PlatformWindow> window(new ui::StubWindow(this));
     window->SetBounds(initial_bounds);
     SetPlatformWindow(std::move(window));
   }
@@ -118,17 +128,16 @@ class NativeWidgetFactory {
       views::internal::NativeWidgetDelegate* delegate) {
     std::map<std::string, std::vector<uint8_t>> properties;
     if (params.parent) {
-      mash::wm::mojom::Container container = GetContainerId(params.parent);
+      mash::wm::mojom::Container container = GetContainerId(params);
       if (container != mash::wm::mojom::Container::COUNT) {
         properties[mash::wm::mojom::kWindowContainer_Property] =
-            mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
+            mojo::ConvertTo<std::vector<uint8_t>>(
                 static_cast<int32_t>(container));
       }
       mash::wm::mojom::AshWindowType type = GetAshWindowType(params.parent);
       if (type != mash::wm::mojom::AshWindowType::COUNT) {
         properties[mash::wm::mojom::kAshWindowType_Property] =
-            mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
-                static_cast<int32_t>(type));
+            mojo::ConvertTo<std::vector<uint8_t>>(static_cast<int32_t>(type));
       }
     }
 
@@ -266,9 +275,9 @@ class AshInit {
 
  private:
   scoped_refptr<base::SequencedWorkerPool> worker_pool_;
-  scoped_ptr<views::AuraInit> aura_init_;
+  std::unique_ptr<views::AuraInit> aura_init_;
   ShellDelegateMus* ash_delegate_ = nullptr;
-  scoped_ptr<NativeWidgetFactory> native_widget_factory_;
+  std::unique_ptr<NativeWidgetFactory> native_widget_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AshInit);
 };
@@ -278,9 +287,8 @@ SysUIApplication::SysUIApplication() {}
 SysUIApplication::~SysUIApplication() {}
 
 void SysUIApplication::Initialize(mojo::Connector* connector,
-                                  const std::string& url,
-                                  uint32_t id,
-                                  uint32_t user_id) {
+                                  const mojo::Identity& identity,
+                                  uint32_t id) {
   ash_init_.reset(new AshInit());
   ash_init_->Initialize(connector);
 }

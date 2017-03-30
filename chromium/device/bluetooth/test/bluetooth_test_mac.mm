@@ -6,51 +6,52 @@
 
 #include <stdint.h>
 
+#include "base/mac/foundation_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "device/bluetooth/bluetooth_adapter_mac.h"
+#include "device/bluetooth/test/mock_bluetooth_cbperipheral_mac.h"
 #include "device/bluetooth/test/mock_bluetooth_central_manager_mac.h"
 #include "device/bluetooth/test/test_bluetooth_adapter_observer.h"
 #include "third_party/ocmock/OCMock/OCMock.h"
 
-#if defined(OS_IOS)
 #import <CoreBluetooth/CoreBluetooth.h>
-#else  // !defined(OS_IOS)
-#import <IOBluetooth/IOBluetooth.h>
-#endif  // defined(OS_IOS)
+
+using base::mac::ObjCCast;
+using base::scoped_nsobject;
 
 namespace device {
 
-namespace {
+// This class hides Objective-C from bluetooth_test_mac.h.
+class BluetoothTestMac::ScopedMockCentralManager {
+ public:
+  explicit ScopedMockCentralManager(MockCentralManager* mock_central_manager) {
+    mock_central_manager_.reset(mock_central_manager);
+  }
 
-CBPeripheral* CreateMockPeripheral(NSString* peripheral_identifier) {
-  Class peripheral_class = NSClassFromString(@"CBPeripheral");
-  id mock_peripheral = [OCMockObject mockForClass:[peripheral_class class]];
-  [[[mock_peripheral stub] andReturnValue:@(CBPeripheralStateDisconnected)]
-      performSelector:@selector(state)];
-  Class uuid_class = NSClassFromString(@"NSUUID");
-  [[[mock_peripheral stub]
-      andReturn:[[uuid_class performSelector:@selector(UUID)]
-                    performSelector:@selector(initWithUUIDString:)
-                         withObject:peripheral_identifier]]
-      performSelector:@selector(identifier)];
-  [[[mock_peripheral stub]
-      andReturn:[NSString stringWithUTF8String:BluetoothTest::kTestDeviceName
-                                                   .c_str()]] name];
-  return mock_peripheral;
-}
+  // Returns MockCentralManager instance.
+  MockCentralManager* get() { return mock_central_manager_.get(); };
+
+ private:
+  scoped_nsobject<MockCentralManager> mock_central_manager_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedMockCentralManager);
+};
+
+namespace {
 
 NSDictionary* CreateAdvertisementData(NSString* name, NSArray* uuids) {
   NSMutableDictionary* advertisement_data =
       [NSMutableDictionary dictionaryWithDictionary:@{
         CBAdvertisementDataLocalNameKey : name,
-        CBAdvertisementDataServiceDataKey : [NSDictionary dictionary],
+        CBAdvertisementDataServiceDataKey : @{},
         CBAdvertisementDataIsConnectable : @(YES),
       }];
-  if (uuids)
+  if (uuids) {
     [advertisement_data setObject:uuids
                            forKey:CBAdvertisementDataServiceUUIDsKey];
-  return advertisement_data;
+  }
+  return [advertisement_data retain];
 }
 
 }  // namespace
@@ -83,9 +84,11 @@ void BluetoothTestMac::InitWithoutDefaultAdapter() {
   adapter_ = adapter_mac_;
 
   if (BluetoothAdapterMac::IsLowEnergyAvailable()) {
-    id low_energy_central_manager = [[MockCentralManager alloc] init];
-    [low_energy_central_manager setState:CBCentralManagerStateUnsupported];
-    adapter_mac_->SetCentralManagerForTesting(low_energy_central_manager);
+    mock_central_manager_.reset(
+        new ScopedMockCentralManager([[MockCentralManager alloc] init]));
+    [mock_central_manager_->get() setBluetoothTestMac:this];
+    [mock_central_manager_->get() setState:CBCentralManagerStateUnsupported];
+    adapter_mac_->SetCentralManagerForTesting((id)mock_central_manager_->get());
   }
 }
 
@@ -97,9 +100,11 @@ void BluetoothTestMac::InitWithFakeAdapter() {
   adapter_ = adapter_mac_;
 
   if (BluetoothAdapterMac::IsLowEnergyAvailable()) {
-    id low_energy_central_manager = [[MockCentralManager alloc] init];
-    [low_energy_central_manager setState:CBCentralManagerStatePoweredOn];
-    adapter_mac_->SetCentralManagerForTesting(low_energy_central_manager);
+    mock_central_manager_.reset(
+        new ScopedMockCentralManager([[MockCentralManager alloc] init]));
+    mock_central_manager_->get().bluetoothTestMac = this;
+    [mock_central_manager_->get() setState:CBCentralManagerStatePoweredOn];
+    adapter_mac_->SetCentralManagerForTesting((id)mock_central_manager_->get());
   }
 }
 
@@ -108,76 +113,116 @@ BluetoothDevice* BluetoothTestMac::DiscoverLowEnergyDevice(int device_ordinal) {
   CBCentralManager* central_manager = adapter_mac_->low_energy_central_manager_;
   BluetoothLowEnergyCentralManagerDelegate* central_manager_delegate =
       adapter_mac_->low_energy_central_manager_delegate_;
-  Class cbuuid_class = NSClassFromString(@"CBUUID");
   switch (device_ordinal) {
     case 1: {
-      CBPeripheral* peripheral = CreateMockPeripheral(
-          [NSString stringWithUTF8String:kTestPeripheralUUID1.c_str()]);
-      NSString* name = [NSString stringWithUTF8String:kTestDeviceName.c_str()];
+      scoped_nsobject<MockCBPeripheral> mock_peripheral(
+          [[MockCBPeripheral alloc]
+              initWithUTF8StringIdentifier:kTestPeripheralUUID1.c_str()]);
       NSArray* uuids = @[
-        [cbuuid_class
-            UUIDWithString:[NSString stringWithUTF8String:kTestUUIDGenericAccess
-                                                              .c_str()]],
-        [cbuuid_class
-            UUIDWithString:[NSString
-                               stringWithUTF8String:kTestUUIDGenericAttribute
-                                                        .c_str()]]
+        [CBUUID UUIDWithString:@(kTestUUIDGenericAccess.c_str())],
+        [CBUUID UUIDWithString:@(kTestUUIDGenericAttribute.c_str())]
       ];
-      NSDictionary* advertisement_data = CreateAdvertisementData(name, uuids);
+      scoped_nsobject<NSDictionary> advertisement_data =
+          CreateAdvertisementData(@(kTestDeviceName.c_str()), uuids);
       [central_manager_delegate centralManager:central_manager
-                         didDiscoverPeripheral:peripheral
+                         didDiscoverPeripheral:mock_peripheral.get().peripheral
                              advertisementData:advertisement_data
                                           RSSI:@(0)];
       break;
     }
     case 2: {
-      CBPeripheral* peripheral = CreateMockPeripheral(
-          [NSString stringWithUTF8String:kTestPeripheralUUID1.c_str()]);
-      NSString* name = [NSString stringWithUTF8String:kTestDeviceName.c_str()];
+      scoped_nsobject<MockCBPeripheral> mock_peripheral(
+          [[MockCBPeripheral alloc]
+              initWithUTF8StringIdentifier:kTestPeripheralUUID1.c_str()]);
       NSArray* uuids = @[
-        [cbuuid_class
-            UUIDWithString:[NSString
-                               stringWithUTF8String:kTestUUIDImmediateAlert
-                                                        .c_str()]],
-        [cbuuid_class
-            UUIDWithString:[NSString
-                               stringWithUTF8String:kTestUUIDLinkLoss.c_str()]]
+        [CBUUID UUIDWithString:@(kTestUUIDImmediateAlert.c_str())],
+        [CBUUID UUIDWithString:@(kTestUUIDLinkLoss.c_str())]
       ];
-      NSDictionary* advertisement_data = CreateAdvertisementData(name, uuids);
+      scoped_nsobject<NSDictionary> advertisement_data =
+          CreateAdvertisementData(@(kTestDeviceName.c_str()), uuids);
       [central_manager_delegate centralManager:central_manager
-                         didDiscoverPeripheral:peripheral
+                         didDiscoverPeripheral:mock_peripheral.get().peripheral
                              advertisementData:advertisement_data
                                           RSSI:@(0)];
       break;
     }
     case 3: {
-      CBPeripheral* peripheral = CreateMockPeripheral(
-          [NSString stringWithUTF8String:kTestPeripheralUUID1.c_str()]);
-      NSString* name =
-          [NSString stringWithUTF8String:kTestDeviceNameEmpty.c_str()];
-      NSArray* uuids = nil;
-      NSDictionary* advertisement_data = CreateAdvertisementData(name, uuids);
+      scoped_nsobject<MockCBPeripheral> mock_peripheral(
+          [[MockCBPeripheral alloc]
+              initWithUTF8StringIdentifier:kTestPeripheralUUID1.c_str()]);
+      scoped_nsobject<NSDictionary> advertisement_data(
+          CreateAdvertisementData(@(kTestDeviceNameEmpty.c_str()), nil));
       [central_manager_delegate centralManager:central_manager
-                         didDiscoverPeripheral:peripheral
+                         didDiscoverPeripheral:mock_peripheral.get().peripheral
                              advertisementData:advertisement_data
                                           RSSI:@(0)];
       break;
     }
     case 4: {
-      CBPeripheral* peripheral = CreateMockPeripheral(
-          [NSString stringWithUTF8String:kTestPeripheralUUID2.c_str()]);
-      NSString* name =
-          [NSString stringWithUTF8String:kTestDeviceNameEmpty.c_str()];
+      scoped_nsobject<MockCBPeripheral> mock_peripheral(
+          [[MockCBPeripheral alloc]
+              initWithUTF8StringIdentifier:kTestPeripheralUUID2.c_str()]);
       NSArray* uuids = nil;
-      NSDictionary* advertisement_data = CreateAdvertisementData(name, uuids);
+      scoped_nsobject<NSDictionary> advertisement_data =
+          CreateAdvertisementData(@(kTestDeviceNameEmpty.c_str()), uuids);
       [central_manager_delegate centralManager:central_manager
-                         didDiscoverPeripheral:peripheral
+                         didDiscoverPeripheral:mock_peripheral.get().peripheral
                              advertisementData:advertisement_data
                                           RSSI:@(0)];
       break;
     }
   }
   return observer.last_device();
+}
+
+void BluetoothTestMac::SimulateGattConnection(BluetoothDevice* device) {
+  BluetoothLowEnergyDeviceMac* lowEnergyDeviceMac =
+      static_cast<BluetoothLowEnergyDeviceMac*>(device);
+  CBPeripheral* peripheral = lowEnergyDeviceMac->GetPeripheral();
+  MockCBPeripheral* mockPeripheral = (MockCBPeripheral*)peripheral;
+  [mockPeripheral setState:CBPeripheralStateConnected];
+  CBCentralManager* centralManager =
+      ObjCCast<CBCentralManager>(mock_central_manager_->get());
+  [centralManager.delegate centralManager:centralManager
+                     didConnectPeripheral:peripheral];
+}
+
+void BluetoothTestMac::SimulateGattConnectionError(
+    BluetoothDevice* device,
+    BluetoothDevice::ConnectErrorCode errorCode) {
+  BluetoothLowEnergyDeviceMac* lowEnergyDeviceMac =
+      static_cast<BluetoothLowEnergyDeviceMac*>(device);
+  CBPeripheral* peripheral = lowEnergyDeviceMac->GetPeripheral();
+  MockCBPeripheral* mockPeripheral = (MockCBPeripheral*)peripheral;
+  [mockPeripheral setState:CBPeripheralStateDisconnected];
+  CBCentralManager* centralManager =
+      ObjCCast<CBCentralManager>(mock_central_manager_->get());
+  NSError* error =
+      BluetoothDeviceMac::GetNSErrorFromConnectErrorCode(errorCode);
+  [centralManager.delegate centralManager:centralManager
+               didFailToConnectPeripheral:peripheral
+                                    error:error];
+}
+
+void BluetoothTestMac::SimulateGattDisconnection(BluetoothDevice* device) {
+  BluetoothLowEnergyDeviceMac* lowEnergyDeviceMac =
+      static_cast<BluetoothLowEnergyDeviceMac*>(device);
+  CBPeripheral* peripheral = lowEnergyDeviceMac->GetPeripheral();
+  MockCBPeripheral* mockPeripheral = (MockCBPeripheral*)peripheral;
+  [mockPeripheral setState:CBPeripheralStateDisconnected];
+  CBCentralManager* centralManager =
+      ObjCCast<CBCentralManager>(mock_central_manager_->get());
+  [centralManager.delegate centralManager:centralManager
+                  didDisconnectPeripheral:peripheral
+                                    error:nil];
+}
+
+void BluetoothTestMac::OnFakeBluetoothDeviceConnectGattCalled() {
+  gatt_connection_attempts_++;
+}
+
+void BluetoothTestMac::OnFakeBluetoothGattDisconnect() {
+  gatt_disconnection_attempts_++;
 }
 
 // Utility function for generating new (CBUUID, address) pairs where CBUUID

@@ -8,8 +8,7 @@ Polymer({
   properties: {
     // An array of history entries in reverse chronological order.
     historyData: {
-      type: Array,
-      value: function() { return []; }
+      type: Array
     },
 
     // The time of access of the last history item in historyData.
@@ -18,59 +17,61 @@ Polymer({
       value: 0
     },
 
-    menuOpen: {
-      type: Boolean,
-      value: false,
-      reflectToAttribute: true
+    searchTerm: {
+      type: String,
+      value: ''
     },
 
-    menuIdentifier: {
-      type: Number,
-      value: 0
+    // True if there is a pending request to the backend.
+    loading_: {
+      type: Boolean,
+      value: true
     },
 
     resultLoadingDisabled_: {
       type: Boolean,
       value: false
-    }
+    },
   },
 
-  /** @const @private */
-  X_OFFSET_: 30,
-
   listeners: {
-    'tap': 'closeMenu',
-    'toggle-menu': 'toggleMenu_'
+    'infinite-list.scroll': 'closeMenu_',
+    'tap': 'closeMenu_',
+    'toggle-menu': 'toggleMenu_',
   },
 
   /**
    * Closes the overflow menu.
+   * @private
    */
-  closeMenu: function() {
-    this.menuOpen = false;
+  closeMenu_: function() {
+    /** @type {CrSharedMenuElement} */(this.$.sharedMenu).closeMenu();
+  },
+
+  /**
+   * Mark the page as currently loading new data from the back-end.
+   */
+  setLoading: function() {
+    this.loading_ = true;
   },
 
   /**
    * Opens the overflow menu unless the menu is already open and the same button
    * is pressed.
-   * @param {Event} e The event with details of the menu item that was clicked.
+   * @param {{detail: {itemIdentifier: !Object}}} e
    * @private
    */
   toggleMenu_: function(e) {
-    var menu = this.$['overflow-menu'];
+    var target = e.detail.target;
+    /** @type {CrSharedMenuElement} */(this.$.sharedMenu).toggleMenu(
+        target, e.detail.itemIdentifier);
+  },
 
-    // Menu closes if the same button is clicked.
-    if (this.menuOpen && this.menuIdentifier == e.detail.accessTime) {
-      this.closeMenu();
-    } else {
-      this.menuOpen = true;
-      this.menuIdentifier = e.detail.accessTime;
-
-      cr.ui.positionPopupAtPoint(e.detail.x + this.X_OFFSET_, e.detail.y, menu,
-          cr.ui.AnchorType.BEFORE);
-
-      menu.focus();
-    }
+  /** @private */
+  onMoreFromSiteTap_: function() {
+    var menu = /** @type {CrSharedMenuElement} */(this.$.sharedMenu);
+    this.fire('search-changed', {search: menu.itemData.domain});
+    menu.closeMenu();
   },
 
   /**
@@ -84,8 +85,17 @@ Polymer({
    * Adds the newly updated history results into historyData. Adds new fields
    * for each result.
    * @param {!Array<!HistoryEntry>} historyResults The new history results.
+   * @param {string} searchTerm Search query used to find these results.
    */
-  addNewResults: function(historyResults) {
+  addNewResults: function(historyResults, searchTerm) {
+    this.loading_ = false;
+
+    if (this.searchTerm != searchTerm) {
+      if (this.historyData)
+        this.splice('historyData', 0, this.historyData.length);
+      this.searchTerm = searchTerm;
+    }
+
     if (historyResults.length == 0)
       return;
 
@@ -97,11 +107,12 @@ Polymer({
 
     // Resets the last history item for the currentDate if new history results
     // for currentDate is loaded.
-    var lastHistoryItem = this.historyData[this.historyData.length - 1];
-    if (lastHistoryItem && lastHistoryItem.isLastItem &&
-        lastHistoryItem.dateRelativeDay == currentDate) {
-      this.set('historyData.' + (this.historyData.length - 1) +
-          '.isLastItem', false);
+    if (this.historyData && this.historyData.length > 0) {
+      var lastHistoryItem = this.historyData[this.historyData.length - 1];
+      if (lastHistoryItem && lastHistoryItem.dateRelativeDay == currentDate) {
+        this.set('historyData.' + (this.historyData.length - 1) +
+            '.isLastItem', false);
+      }
     }
 
     for (var i = 0; i < results.length; i++) {
@@ -110,6 +121,8 @@ Polymer({
       results[i].isLastItem = false;
       results[i].isFirstItem = false;
       results[i].needsTimeGap = this.needsTimeGap_(results, i);
+      results[i].readableTimestamp =
+          searchTerm == '' ? results[i].dateTimeOfDay : results[i].dateShort;
 
       if (results[i].dateRelativeDay != currentDate) {
         results[i - 1].isLastItem = true;
@@ -119,14 +132,19 @@ Polymer({
     }
     results[i - 1].isLastItem = true;
 
-    // If it's the first time we get data, the first item will always be the
-    // first card.
-    if (this.historyData.length == 0)
+    if (!this.historyData || this.historyData.length == 0)
       results[0].isFirstItem = true;
 
-    // Adds results to the beginning of the historyData array.
-    results.unshift('historyData');
-    this.push.apply(this, results);
+    if (this.historyData) {
+      // If we have previously received data, push the new items onto the
+      // existing array.
+      results.unshift('historyData');
+      this.push.apply(this, results);
+    } else {
+      // The first time we receive data, use set() to ensure the iron-list is
+      // initialized correctly.
+      this.set('historyData', results);
+    }
 
     this.lastVisitedTime = this.historyData[this.historyData.length - 1].time;
   },
@@ -137,6 +155,9 @@ Polymer({
    * @param {number} overallItemCount The number of checkboxes selected.
    */
   unselectAllItems: function(overallItemCount) {
+    if (this.historyData === undefined)
+      return;
+
     for (var i = 0; i < this.historyData.length; i++) {
       if (this.historyData[i].selected) {
         this.set('historyData.' + i + '.selected', false);
@@ -221,9 +242,6 @@ Polymer({
    * @private
    */
   scrollHandler_: function() {
-    // Close overflow menu on scroll.
-    this.closeMenu();
-
     if (this.resultLoadingDisabled_)
       return;
 
@@ -232,10 +250,11 @@ Polymer({
     var scrollOffset = 10;
     var scrollElem = this.$['infinite-list'];
 
-    if (scrollElem.scrollHeight <=
+    if (!this.loading_ && scrollElem.scrollHeight <=
         scrollElem.scrollTop + scrollElem.clientHeight + scrollOffset) {
+      this.loading_ = true;
       chrome.send('queryHistory',
-          ['', 0, 0, this.lastVisitedTime, RESULTS_PER_PAGE]);
+          [this.searchTerm, 0, 0, this.lastVisitedTime, RESULTS_PER_PAGE]);
     }
   },
 
@@ -248,13 +267,29 @@ Polymer({
    * @private
    */
   needsTimeGap_: function(results, index) {
+    // TODO(tsergeant): Allow the final item from one batch of results to have a
+    // timegap once more results are added.
+    if (index == results.length - 1)
+      return false;
+
     var currentItem = results[index];
     var nextItem = results[index + 1];
 
-    if (index + 1 >= results.length)
-      return false;
+    if (this.searchTerm)
+      return currentItem.dateShort != nextItem.dateShort;
 
     return currentItem.time - nextItem.time > BROWSING_GAP_TIME &&
-      currentItem.dateRelativeDay == nextItem.dateRelativeDay;
+        currentItem.dateRelativeDay == nextItem.dateRelativeDay;
+  },
+
+  hasResults: function(historyDataLength) {
+    return historyDataLength > 0;
+  },
+
+  noResultsMessage_: function(searchTerm, isLoading) {
+    if (isLoading)
+      return '';
+    var messageId = searchTerm !== '' ? 'noSearchResults' : 'noResults';
+    return loadTimeData.getString(messageId);
   }
 });

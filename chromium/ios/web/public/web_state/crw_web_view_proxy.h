@@ -7,7 +7,6 @@
 
 #import <UIKit/UIKit.h>
 
-#include "ios/web/public/web_view_type.h"
 
 @class CRWWebViewScrollViewProxy;
 
@@ -31,19 +30,12 @@
 // fixed.
 @property(nonatomic, assign) CGFloat topContentPadding;
 
-// A Boolean value indicating whether web content can programmatically display
-// the keyboard.
-@property(nonatomic, assign) BOOL keyboardDisplayRequiresUserAction;
-
 // Gives the embedder access to the web view's UIScrollView in a limited and
 // controlled manner.
 @property(nonatomic, readonly) CRWWebViewScrollViewProxy* scrollViewProxy;
 
 // Returns the webview's gesture recognizers.
 @property(nonatomic, readonly) NSArray* gestureRecognizers;
-
-// Retuns the type of the web view this proxy manages.
-@property(nonatomic, readonly) web::WebViewType webViewType;
 
 // Whether or not the content view should use the content inset when setting
 // |topContentPadding|. Implementations may or may not respect the setting

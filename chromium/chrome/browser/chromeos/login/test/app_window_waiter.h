@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_TEST_APP_WINDOW_WAITER_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_TEST_APP_WINDOW_WAITER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
@@ -26,16 +27,29 @@ class AppWindowWaiter : public extensions::AppWindowRegistry::Observer {
                   const std::string& app_id);
   ~AppWindowWaiter() override;
 
+  // Waits for an AppWindow of the app to be added.
   extensions::AppWindow* Wait();
+
+  // Waits for an AppWindow of the app to be shown.
+  extensions::AppWindow* WaitForShown();
 
   // AppWindowRegistry::Observer:
   void OnAppWindowAdded(extensions::AppWindow* app_window) override;
+  void OnAppWindowShown(extensions::AppWindow* app_window,
+                        bool was_hidden) override;
 
  private:
-  extensions::AppWindowRegistry* registry_;
-  std::string app_id_;
-  base::RunLoop run_loop_;
-  extensions::AppWindow* window_;
+  enum WaitType {
+    WAIT_FOR_NONE,
+    WAIT_FOR_ADDED,
+    WAIT_FOR_SHOWN,
+  };
+
+  extensions::AppWindowRegistry* const registry_;
+  const std::string app_id_;
+  std::unique_ptr<base::RunLoop> run_loop_;
+  WaitType wait_type_ = WAIT_FOR_NONE;
+  extensions::AppWindow* window_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(AppWindowWaiter);
 };

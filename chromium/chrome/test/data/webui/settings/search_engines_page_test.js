@@ -4,108 +4,6 @@
 
 cr.define('settings_search_engines_page', function() {
   /**
-   * A test version of SearchEnginesBrowserProxy. Provides helper methods
-   * for allowing tests to know when a method was called, as well as
-   * specifying mock responses.
-   *
-   * @constructor
-   * @implements {settings.SearchEnginesBrowserProxy}
-   */
-  var TestSearchEnginesBrowserProxy = function() {
-    /** @private {!Map<string, !PromiseResolver>} */
-    this.resolverMap_ = new Map();
-    var wrapperMethods = [
-      'getSearchEnginesList',
-      'removeSearchEngine',
-      'searchEngineEditCancelled',
-      'searchEngineEditCompleted',
-      'searchEngineEditStarted',
-      'setDefaultSearchEngine',
-      'validateSearchEngineInput',
-      'manageExtension',
-      'disableExtension',
-    ];
-    wrapperMethods.forEach(this.resetResolver, this);
-
-    /** @private {!SearchEnginesInfo} */
-    this.searchEnginesInfo_ = {defaults: [], others: [], extensions: []};
-  };
-
-  TestSearchEnginesBrowserProxy.prototype = {
-    /**
-     * @param {string} methodName
-     * @return {!Promise} A promise that is resolved when the given method
-     *     is called.
-     */
-    whenCalled: function(methodName) {
-      return this.resolverMap_.get(methodName).promise;
-    },
-
-    /**
-     * Resets the PromiseResolver associated with the given method.
-     * @param {string} methodName
-     */
-    resetResolver: function(methodName) {
-      this.resolverMap_.set(methodName, new PromiseResolver());
-    },
-
-    /** @override */
-    setDefaultSearchEngine: function(modelIndex) {
-      this.resolverMap_.get('setDefaultSearchEngine').resolve(modelIndex);
-    },
-
-    /** @override */
-    removeSearchEngine: function(modelIndex) {
-      this.resolverMap_.get('removeSearchEngine').resolve(modelIndex);
-    },
-
-    /** @override */
-    searchEngineEditStarted: function(modelIndex) {
-      this.resolverMap_.get('searchEngineEditStarted').resolve(modelIndex);
-    },
-
-    /** @override */
-    searchEngineEditCancelled: function() {
-      this.resolverMap_.get('searchEngineEditCancelled').resolve();
-    },
-
-    /** @override */
-    searchEngineEditCompleted: function(searchEngine, keyword, queryUrl) {
-      this.resolverMap_.get('searchEngineEditCompleted').resolve();
-    },
-
-    /**
-     * Sets the response to be returned by |getSearchEnginesList|.
-     * @param {!SearchEnginesInfo}
-     */
-    setSearchEnginesInfo: function(searchEnginesInfo) {
-      this.searchEnginesInfo_ = searchEnginesInfo;
-    },
-
-    /** @override */
-    getSearchEnginesList: function() {
-      this.resolverMap_.get('getSearchEnginesList').resolve();
-      return Promise.resolve(this.searchEnginesInfo_);
-    },
-
-    /** @override */
-    validateSearchEngineInput: function(fieldName, fieldValue) {
-      this.resolverMap_.get('validateSearchEngineInput').resolve();
-      return Promise.resolve(true);
-    },
-
-    /** @override */
-    manageExtension: function(extensionId) {
-      this.resolverMap_.get('manageExtension').resolve(extensionId);
-    },
-
-    /** @override */
-    disableExtension: function(extensionId) {
-      this.resolverMap_.get('disableExtension').resolve(extensionId);
-    },
-  };
-
-  /**
    * @param {boolean} canBeDefault
    * @param {boolean} canBeEdited
    * @param {boolean} canBeRemoved
@@ -158,7 +56,7 @@ cr.define('settings_search_engines_page', function() {
       var browserProxy = null;
 
       setup(function() {
-        browserProxy = new TestSearchEnginesBrowserProxy();
+        browserProxy = new settings_search.TestSearchEnginesBrowserProxy();
         settings.SearchEnginesBrowserProxyImpl.instance_ = browserProxy;
         PolymerTest.clearBody();
         dialog = document.createElement('settings-search-engine-dialog');
@@ -172,7 +70,7 @@ cr.define('settings_search_engines_page', function() {
       test('DialogOpenAndClose', function() {
         return browserProxy.whenCalled('searchEngineEditStarted').then(
             function() {
-              MockInteractions.tap(dialog.$.close);
+              MockInteractions.tap(dialog.$.dialog.getCloseButton());
               return browserProxy.whenCalled('searchEngineEditCancelled');
             });
       });
@@ -248,7 +146,7 @@ cr.define('settings_search_engines_page', function() {
       var browserProxy = null;
 
       setup(function() {
-        browserProxy = new TestSearchEnginesBrowserProxy();
+        browserProxy = new settings_search.TestSearchEnginesBrowserProxy();
         settings.SearchEnginesBrowserProxyImpl.instance_ = browserProxy;
         PolymerTest.clearBody();
         entry = document.createElement('settings-search-engine-entry');
@@ -345,7 +243,7 @@ cr.define('settings_search_engines_page', function() {
       };
 
       setup(function() {
-        browserProxy = new TestSearchEnginesBrowserProxy();
+        browserProxy = new settings_search.TestSearchEnginesBrowserProxy();
         browserProxy.setSearchEnginesInfo(searchEnginesInfo);
         settings.SearchEnginesBrowserProxyImpl.instance_ = browserProxy;
         PolymerTest.clearBody();
@@ -405,7 +303,7 @@ cr.define('settings_search_engines_page', function() {
       var browserProxy = null;
 
       setup(function() {
-        browserProxy = new TestSearchEnginesBrowserProxy();
+        browserProxy = new settings_search.TestSearchEnginesBrowserProxy();
         settings.SearchEnginesBrowserProxyImpl.instance_ = browserProxy;
         PolymerTest.clearBody();
         entry = document.createElement('settings-omnibox-extension-entry');
@@ -437,11 +335,12 @@ cr.define('settings_search_engines_page', function() {
     });
   }
 
-
   return {
-    registerDialogTests: registerDialogTests,
-    registerSearchEngineEntryTests: registerSearchEngineEntryTests,
-    registerOmniboxExtensionEntryTests: registerOmniboxExtensionEntryTests,
-    registerPageTests: registerPageTests,
+    registerTests: function() {
+      registerDialogTests();
+      registerSearchEngineEntryTests();
+      registerOmniboxExtensionEntryTests();
+      registerPageTests();
+    },
   };
 });

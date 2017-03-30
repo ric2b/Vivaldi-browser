@@ -32,11 +32,11 @@ void OnGetSystemInformation(Profile* profile,
   feedback_data->set_context(profile);
   feedback_data->set_description(description);
 
-  scoped_ptr<FeedbackData::SystemLogsMap> sys_logs(
+  std::unique_ptr<FeedbackData::SystemLogsMap> sys_logs(
       new FeedbackData::SystemLogsMap);
-  for (extensions::SystemInformationList::const_iterator it = sys_info.begin();
-       it != sys_info.end(); ++it) {
-    (*sys_logs.get())[it->get()->key] = it->get()->value;
+  for (const extensions::api::feedback_private::SystemInformation& info :
+       sys_info) {
+    (*sys_logs.get())[info.key] = info.value;
   }
   feedback_data->SetAndCompressSystemInfo(std::move(sys_logs));
 

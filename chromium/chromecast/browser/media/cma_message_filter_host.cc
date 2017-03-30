@@ -6,23 +6,20 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/lazy_instance.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/sync_socket.h"
-#include "chromecast/browser/media/cma_media_pipeline_client.h"
+#include "base/threading/thread_checker.h"
 #include "chromecast/browser/media/media_pipeline_host.h"
 #include "chromecast/common/media/cma_messages.h"
-#include "chromecast/media/base/media_message_loop.h"
 #include "chromecast/media/cdm/browser_cdm_cast.h"
 #include "chromecast/media/cma/pipeline/av_pipeline_client.h"
 #include "chromecast/media/cma/pipeline/media_pipeline_client.h"
 #include "chromecast/media/cma/pipeline/video_pipeline_client.h"
-#include "chromecast/public/cast_media_shlib.h"
 #include "chromecast/public/graphics_types.h"
-#include "chromecast/public/video_plane.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "media/base/bind_to_current_loop.h"
@@ -40,57 +37,62 @@ namespace {
 
 const size_t kMaxSharedMem = 8 * 1024 * 1024;
 
-typedef std::map<uint64_t, MediaPipelineHost*> MediaPipelineCmaMap;
-
 // Map of MediaPipelineHost instances that is accessed only from the CMA thread.
 // The existence of a MediaPipelineHost* in this map implies that the instance
 // is still valid.
-base::LazyInstance<MediaPipelineCmaMap> g_pipeline_map_cma =
+class MediaPipelineCmaMap {
+ public:
+  MediaPipelineCmaMap() { thread_checker_.DetachFromThread(); }
+
+  MediaPipelineHost* GetMediaPipeline(int process_id, int media_id) {
+    DCHECK(thread_checker_.CalledOnValidThread());
+    uint64_t pipeline_id = GetPipelineId(process_id, media_id);
+    auto it = id_pipeline_map_.find(pipeline_id);
+    return it != id_pipeline_map_.end() ? it->second : nullptr;
+  }
+
+  void SetMediaPipeline(int process_id, int media_id, MediaPipelineHost* host) {
+    DCHECK(thread_checker_.CalledOnValidThread());
+    uint64_t pipeline_id = GetPipelineId(process_id, media_id);
+    auto ret = id_pipeline_map_.insert(std::make_pair(pipeline_id, host));
+
+    // Check there is no other entry with the same ID.
+    DCHECK(ret.second != false);
+  }
+
+  void DestroyMediaPipeline(int process_id,
+                            int media_id,
+                            std::unique_ptr<MediaPipelineHost> media_pipeline) {
+    DCHECK(thread_checker_.CalledOnValidThread());
+    uint64_t pipeline_id = GetPipelineId(process_id, media_id);
+    auto it = id_pipeline_map_.find(pipeline_id);
+    if (it != id_pipeline_map_.end())
+      id_pipeline_map_.erase(it);
+  }
+
+ private:
+  uint64_t GetPipelineId(int process_id, int media_id) {
+    return (static_cast<uint64_t>(process_id) << 32) +
+           static_cast<uint64_t>(media_id);
+  }
+
+  base::ThreadChecker thread_checker_;
+  std::map<uint64_t, MediaPipelineHost*> id_pipeline_map_;
+};
+
+base::LazyInstance<MediaPipelineCmaMap> g_pipeline_map =
     LAZY_INSTANCE_INITIALIZER;
 
-uint64_t GetPipelineCmaId(int process_id, int media_id) {
-  return (static_cast<uint64_t>(process_id) << 32) +
-         static_cast<uint64_t>(media_id);
-}
-
-MediaPipelineHost* GetMediaPipeline(int process_id, int media_id) {
-  DCHECK(MediaMessageLoop::GetTaskRunner()->BelongsToCurrentThread());
-  MediaPipelineCmaMap::iterator it =
-      g_pipeline_map_cma.Get().find(GetPipelineCmaId(process_id, media_id));
-  if (it == g_pipeline_map_cma.Get().end())
-    return nullptr;
-  return it->second;
-}
-
-void SetMediaPipeline(int process_id, int media_id, MediaPipelineHost* host) {
-  DCHECK(MediaMessageLoop::GetTaskRunner()->BelongsToCurrentThread());
-  std::pair<MediaPipelineCmaMap::iterator, bool> ret =
-      g_pipeline_map_cma.Get().insert(
-          std::make_pair(GetPipelineCmaId(process_id, media_id), host));
-
-  // Check there is no other entry with the same ID.
-  DCHECK(ret.second != false);
-}
-
-void DestroyMediaPipeline(int process_id,
-                          int media_id,
-                          scoped_ptr<MediaPipelineHost> media_pipeline) {
-  DCHECK(MediaMessageLoop::GetTaskRunner()->BelongsToCurrentThread());
-  MediaPipelineCmaMap::iterator it =
-      g_pipeline_map_cma.Get().find(GetPipelineCmaId(process_id, media_id));
-  if (it != g_pipeline_map_cma.Get().end())
-    g_pipeline_map_cma.Get().erase(it);
-}
-
-void SetCdmOnCmaThread(int render_process_id, int media_id,
+void SetCdmOnCmaThread(int render_process_id,
+                       int media_id,
                        BrowserCdmCast* cdm) {
-  MediaPipelineHost* pipeline = GetMediaPipeline(render_process_id, media_id);
+  MediaPipelineHost* pipeline =
+      g_pipeline_map.Get().GetMediaPipeline(render_process_id, media_id);
   if (!pipeline) {
     LOG(WARNING) << "MediaPipelineHost not alive: " << render_process_id << ","
                  << media_id;
     return;
   }
-
   pipeline->SetCdm(cdm);
 }
 
@@ -100,7 +102,8 @@ void SetCdmOnUiThread(
     int render_process_id,
     int render_frame_id,
     int media_id,
-    int cdm_id) {
+    int cdm_id,
+    scoped_refptr<base::SingleThreadTaskRunner> cma_task_runner) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   content::RenderProcessHost* host =
@@ -119,7 +122,7 @@ void SetCdmOnUiThread(
 
   BrowserCdmCast* browser_cdm_cast =
       static_cast<BrowserCdmCastUi*>(cdm.get())->browser_cdm_cast();
-  MediaMessageLoop::GetTaskRunner()->PostTask(
+  cma_task_runner->PostTask(
       FROM_HERE, base::Bind(&SetCdmOnCmaThread, render_process_id, media_id,
                             base::Unretained(browser_cdm_cast)));
 }
@@ -128,11 +131,14 @@ void SetCdmOnUiThread(
 
 CmaMessageFilterHost::CmaMessageFilterHost(
     int render_process_id,
-    scoped_refptr<CmaMediaPipelineClient> client)
+    const CreateMediaPipelineBackendCB& create_backend_cb,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    MediaResourceTracker* resource_tracker)
     : content::BrowserMessageFilter(CastMediaMsgStart),
       process_id_(render_process_id),
-      client_(client),
-      task_runner_(MediaMessageLoop::GetTaskRunner()),
+      create_backend_cb_(create_backend_cb),
+      task_runner_(task_runner),
+      resource_tracker_(resource_tracker),
       weak_factory_(this) {
   weak_this_ = weak_factory_.GetWeakPtr();
 }
@@ -177,12 +183,13 @@ void CmaMessageFilterHost::DeleteEntries() {
   for (MediaPipelineMap::iterator it = media_pipelines_.begin();
        it != media_pipelines_.end(); ) {
     int media_id = it->first;
-    scoped_ptr<MediaPipelineHost> media_pipeline(it->second);
+    std::unique_ptr<MediaPipelineHost> media_pipeline(it->second);
     media_pipelines_.erase(it++);
     task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&DestroyMediaPipeline, process_id_, media_id,
-                   base::Passed(&media_pipeline)));
+        base::Bind(&MediaPipelineCmaMap::DestroyMediaPipeline,
+                   base::Unretained(g_pipeline_map.Pointer()), process_id_,
+                   media_id, base::Passed(&media_pipeline)));
   }
 }
 
@@ -199,7 +206,8 @@ MediaPipelineHost* CmaMessageFilterHost::LookupById(int media_id) {
 void CmaMessageFilterHost::CreateMedia(int media_id, LoadType load_type) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  scoped_ptr<MediaPipelineHost> media_pipeline_host(new MediaPipelineHost());
+  std::unique_ptr<MediaPipelineHost> media_pipeline_host(
+      new MediaPipelineHost());
   MediaPipelineClient client;
   client.time_update_cb = ::media::BindToCurrentLoop(base::Bind(
       &CmaMessageFilterHost::OnTimeUpdate, weak_this_, media_id));
@@ -208,21 +216,21 @@ void CmaMessageFilterHost::CreateMedia(int media_id, LoadType load_type) {
   client.error_cb = ::media::BindToCurrentLoop(
       base::Bind(&CmaMessageFilterHost::OnPlaybackError,
                  weak_this_, media_id, media::kNoTrackId));
-  client.pipeline_backend_created_cb = base::Bind(
-      &CmaMediaPipelineClient::OnMediaPipelineBackendCreated, client_);
-  client.pipeline_backend_destroyed_cb = base::Bind(
-      &CmaMediaPipelineClient::OnMediaPipelineBackendDestroyed, client_);
+  client.pipeline_backend_created_cb =
+      base::Bind(&MediaResourceTracker::IncrementUsageCount,
+                 base::Unretained(resource_tracker_));
+  client.pipeline_backend_destroyed_cb =
+      base::Bind(&MediaResourceTracker::DecrementUsageCount,
+                 base::Unretained(resource_tracker_));
 
   task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&SetMediaPipeline,
-                 process_id_, media_id, media_pipeline_host.get()));
-  task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&MediaPipelineHost::Initialize,
-                 base::Unretained(media_pipeline_host.get()), load_type, client,
-                 base::Bind(&CmaMediaPipelineClient::CreateMediaPipelineBackend,
-                            client_)));
+      FROM_HERE, base::Bind(&MediaPipelineCmaMap::SetMediaPipeline,
+                            base::Unretained(g_pipeline_map.Pointer()),
+                            process_id_, media_id, media_pipeline_host.get()));
+  task_runner_->PostTask(FROM_HERE,
+                         base::Bind(&MediaPipelineHost::Initialize,
+                                    base::Unretained(media_pipeline_host.get()),
+                                    load_type, client, create_backend_cb_));
   std::pair<MediaPipelineMap::iterator, bool> ret =
     media_pipelines_.insert(
         std::make_pair(media_id, media_pipeline_host.release()));
@@ -238,12 +246,13 @@ void CmaMessageFilterHost::DestroyMedia(int media_id) {
   if (it == media_pipelines_.end())
     return;
 
-  scoped_ptr<MediaPipelineHost> media_pipeline(it->second);
+  std::unique_ptr<MediaPipelineHost> media_pipeline(it->second);
   media_pipelines_.erase(it);
   task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&DestroyMediaPipeline, process_id_, media_id,
-                 base::Passed(&media_pipeline)));
+      base::Bind(&MediaPipelineCmaMap::DestroyMediaPipeline,
+                 base::Unretained(g_pipeline_map.Pointer()), process_id_,
+                 media_id, base::Passed(&media_pipeline)));
 }
 
 void CmaMessageFilterHost::SetCdm(int media_id,
@@ -256,10 +265,9 @@ void CmaMessageFilterHost::SetCdm(int media_id,
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&SetCdmOnUiThread,
-                 process_id_, render_frame_id, media_id, cdm_id));
+      base::Bind(&SetCdmOnUiThread, process_id_, render_frame_id, media_id,
+                 cdm_id, task_runner_));
 }
-
 
 void CmaMessageFilterHost::CreateAvPipe(
     int media_id, TrackId track_id, size_t shared_mem_size) {
@@ -280,9 +288,9 @@ void CmaMessageFilterHost::CreateAvPipe(
   // Create the local/foreign sockets to signal media message
   // consune/feed events.
   // Use CancelableSyncSocket so that write is always non-blocking.
-  scoped_ptr<base::CancelableSyncSocket> local_socket(
+  std::unique_ptr<base::CancelableSyncSocket> local_socket(
       new base::CancelableSyncSocket());
-  scoped_ptr<base::CancelableSyncSocket> foreign_socket(
+  std::unique_ptr<base::CancelableSyncSocket> foreign_socket(
       new base::CancelableSyncSocket());
   if (!base::CancelableSyncSocket::CreatePair(local_socket.get(),
                                               foreign_socket.get()) ||
@@ -294,7 +302,7 @@ void CmaMessageFilterHost::CreateAvPipe(
   }
 
   // Shared memory used to convey media messages.
-  scoped_ptr<base::SharedMemory> shared_memory(new base::SharedMemory());
+  std::unique_ptr<base::SharedMemory> shared_memory(new base::SharedMemory());
   if (!shared_memory->CreateAndMapAnonymous(shared_mem_size) ||
       !shared_memory->ShareToProcess(PeerHandle(), &foreign_memory_handle)) {
     Send(new CmaMsg_AvPipeCreated(
@@ -330,7 +338,7 @@ void CmaMessageFilterHost::OnAvPipeSet(
     int media_id,
     TrackId track_id,
     base::SharedMemoryHandle foreign_memory_handle,
-    scoped_ptr<base::CancelableSyncSocket> foreign_socket) {
+    std::unique_ptr<base::CancelableSyncSocket> foreign_socket) {
   base::FileDescriptor foreign_socket_handle;
   foreign_socket_handle.fd = foreign_socket->handle();
   foreign_socket_handle.auto_close = false;

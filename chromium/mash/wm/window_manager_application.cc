@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "components/mus/public/cpp/event_matcher.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/interfaces/window_manager_factory.mojom.h"
@@ -14,9 +15,11 @@
 #include "mash/wm/root_window_controller.h"
 #include "mash/wm/root_windows_observer.h"
 #include "mash/wm/user_window_controller_impl.h"
+#include "mojo/converters/input_events/input_events_type_converters.h"
 #include "mojo/services/tracing/public/cpp/tracing_impl.h"
 #include "mojo/shell/public/cpp/connection.h"
 #include "mojo/shell/public/cpp/connector.h"
+#include "ui/events/event.h"
 #include "ui/mojo/init/ui_init.h"
 #include "ui/views/mus/aura_init.h"
 #include "ui/views/mus/display_converter.h"
@@ -79,10 +82,10 @@ void WindowManagerApplication::OnRootWindowDestroyed(
 }
 
 void WindowManagerApplication::OnAccelerator(uint32_t id,
-                                             mus::mojom::EventPtr event) {
+                                             const ui::Event& event) {
   for (auto* registrar : accelerator_registrars_) {
     if (registrar->OwnsAccelerator(id)) {
-      registrar->ProcessAccelerator(id, std::move(event));
+      registrar->ProcessAccelerator(id, mus::mojom::Event::From(event));
       break;
     }
   }
@@ -104,11 +107,10 @@ void WindowManagerApplication::OnAcceleratorRegistrarDestroyed(
 }
 
 void WindowManagerApplication::Initialize(mojo::Connector* connector,
-                                          const std::string& url,
-                                          uint32_t id,
-                                          uint32_t user_id) {
+                                          const mojo::Identity& identity,
+                                          uint32_t id) {
   connector_ = connector;
-  tracing_.Initialize(connector, url);
+  tracing_.Initialize(connector, identity.name());
 
   mus::mojom::WindowManagerFactoryServicePtr wm_factory_service;
   connector_->ConnectToInterface("mojo:mus", &wm_factory_service);
@@ -116,14 +118,13 @@ void WindowManagerApplication::Initialize(mojo::Connector* connector,
       window_manager_factory_binding_.CreateInterfacePtrAndBind());
 
   user_window_controller_.reset(new UserWindowControllerImpl());
-
-  root_controllers_.insert(
-      RootWindowController::CreateUsingWindowTreeHost(this));
 }
 
 bool WindowManagerApplication::AcceptConnection(mojo::Connection* connection) {
   connection->AddInterface<mash::wm::mojom::UserWindowController>(this);
   connection->AddInterface<mus::mojom::AcceleratorRegistrar>(this);
+  if (connection->GetRemoteIdentity().name() == "mojo:mash_session")
+    connection->GetInterface(&session_);
   return true;
 }
 
@@ -134,7 +135,7 @@ void WindowManagerApplication::Create(
     user_window_controller_binding_.AddBinding(user_window_controller_.get(),
                                                std::move(request));
   } else {
-    user_window_controller_requests_.push_back(make_scoped_ptr(
+    user_window_controller_requests_.push_back(base::WrapUnique(
         new mojo::InterfaceRequest<mash::wm::mojom::UserWindowController>(
             std::move(request))));
   }

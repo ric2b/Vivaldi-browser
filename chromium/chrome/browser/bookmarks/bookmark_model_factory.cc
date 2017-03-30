@@ -17,7 +17,6 @@
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/features.h"
-#include "chrome/common/pref_names.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/browser/startup_task_runner_service.h"
@@ -28,6 +27,7 @@
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
+#include "components/offline_pages/offline_page_bookmark_bridge.h"
 #include "components/offline_pages/offline_page_feature.h"
 #include "components/offline_pages/offline_page_model.h"
 #endif  // BUILDFLAG(ANDROID_JAVA_UI)
@@ -74,7 +74,6 @@ KeyedService* BookmarkModelFactory::BuildServiceInstanceFor(
       new BookmarkModel(make_scoped_ptr(new ChromeBookmarkClient(
           profile, ManagedBookmarkServiceFactory::GetForProfile(profile))));
   bookmark_model->Load(profile->GetPrefs(),
-                       profile->GetPrefs()->GetString(prefs::kAcceptLanguages),
                        profile->GetPath(),
                        StartupTaskRunnerServiceFactory::GetForProfile(profile)
                            ->GetBookmarkTaskRunner(),
@@ -91,8 +90,10 @@ KeyedService* BookmarkModelFactory::BuildServiceInstanceFor(
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
   if (offline_pages::IsOfflinePagesEnabled()) {
-    offline_pages::OfflinePageModelFactory::GetForBrowserContext(profile)->
-        Start(bookmark_model);
+    // This observer will delete itself when BookmarkModelDeleted is called.
+    bookmark_model->AddObserver(new offline_pages::OfflinePageBookmarkBridge(
+        offline_pages::OfflinePageModelFactory::GetForBrowserContext(profile),
+        bookmark_model));
   }
 #endif  // BUILDFLAG(ANDROID_JAVA_UI)
 

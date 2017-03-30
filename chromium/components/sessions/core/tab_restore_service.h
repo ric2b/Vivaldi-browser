@@ -11,7 +11,6 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sessions/core/serialized_navigation_entry.h"
 #include "components/sessions/core/session_id.h"
@@ -169,8 +168,7 @@ class SESSIONS_EXPORT TabRestoreService : public KeyedService {
 
   // gisli@vivaldi.com: Added RestorePreviousSession.
   virtual std::vector<LiveTab*> RestorePreviousSession(
-      LiveTabContext* context,
-      chrome::HostDesktopType host_desktop_type) = 0;
+      LiveTabContext* context) = 0;
 
   // Removes the Tab with id |id| from the list and returns it; ownership is
   // passed to the caller.

@@ -32,6 +32,7 @@
 
 #if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
 #include "core/CSSValueKeywords.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/ScopedEventQueue.h"
@@ -159,7 +160,6 @@ void BaseMultipleFieldsDateAndTimeInputType::didBlurFromControl()
     if (containsFocusedShadowElement())
         return;
     EventQueueScope scope;
-    RefPtrWillBeRawPtr<HTMLInputElement> protector(element());
     // Remove focus ring by CSS "focus" pseudo class.
     element().setFocus(false);
     if (SpinButtonElement *spinButton = spinButtonElement())
@@ -180,19 +180,18 @@ void BaseMultipleFieldsDateAndTimeInputType::didFocusOnControl()
 
 void BaseMultipleFieldsDateAndTimeInputType::editControlValueChanged()
 {
-    RefPtrWillBeRawPtr<HTMLInputElement> input(element());
-    String oldValue = input->value();
+    String oldValue = element().value();
     String newValue = sanitizeValue(dateTimeEditElement()->value());
     // Even if oldValue is null and newValue is "", we should assume they are same.
     if ((oldValue.isEmpty() && newValue.isEmpty()) || oldValue == newValue) {
-        input->setNeedsValidityCheck();
+        element().setNeedsValidityCheck();
     } else {
-        input->setValueInternal(newValue, DispatchNoEvent);
-        input->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::ControlValue));
-        input->dispatchFormControlInputEvent();
+        element().setValueInternal(newValue, DispatchNoEvent);
+        element().setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::ControlValue));
+        element().dispatchFormControlInputEvent();
     }
-    input->notifyFormStateChanged();
-    input->updateClearButtonVisibility();
+    element().notifyFormStateChanged();
+    element().updateClearButtonVisibility();
 }
 
 bool BaseMultipleFieldsDateAndTimeInputType::hasCustomFocusLogic() const
@@ -524,7 +523,7 @@ void BaseMultipleFieldsDateAndTimeInputType::updateView()
 
     setupLayoutParameters(layoutParameters, date);
 
-    DEFINE_STATIC_LOCAL(AtomicString, datetimeformatAttr, ("datetimeformat", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(AtomicString, datetimeformatAttr, ("datetimeformat"));
     edit->setAttribute(datetimeformatAttr, AtomicString(layoutParameters.dateTimeFormat), ASSERT_NO_EXCEPTION);
     const AtomicString pattern = edit->fastGetAttribute(HTMLNames::patternAttr);
     if (!pattern.isEmpty())
@@ -599,9 +598,8 @@ bool BaseMultipleFieldsDateAndTimeInputType::shouldClearButtonRespondToMouseEven
 
 void BaseMultipleFieldsDateAndTimeInputType::clearValue()
 {
-    RefPtrWillBeRawPtr<HTMLInputElement> input(element());
-    input->setValue("", DispatchInputAndChangeEvent);
-    input->updateClearButtonVisibility();
+    element().setValue("", DispatchInputAndChangeEvent);
+    element().updateClearButtonVisibility();
 }
 
 void BaseMultipleFieldsDateAndTimeInputType::updateClearButtonVisibility()

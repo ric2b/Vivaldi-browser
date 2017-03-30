@@ -98,6 +98,17 @@ void CreateContextMenuDownload(int render_process_id,
   dlm->DownloadUrl(std::move(dl_params));
 }
 
+// Check if an interrupted download item can be auto resumed.
+bool IsInterruptedDownloadAutoResumable(content::DownloadItem* download_item) {
+  int interrupt_reason = download_item->GetLastReason();
+  DCHECK_NE(interrupt_reason, content::DOWNLOAD_INTERRUPT_REASON_NONE);
+  return
+      interrupt_reason == content::DOWNLOAD_INTERRUPT_REASON_NETWORK_TIMEOUT ||
+      interrupt_reason == content::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED ||
+      interrupt_reason ==
+          content::DOWNLOAD_INTERRUPT_REASON_NETWORK_DISCONNECTED;
+}
+
 }  // namespace
 
 namespace content {
@@ -228,7 +239,8 @@ bool DownloadControllerAndroidImpl::HasFileAccessPermission(
 }
 
 void DownloadControllerAndroidImpl::CreateGETDownload(
-    int render_process_id, int render_view_id, int request_id) {
+    int render_process_id, int render_view_id, int request_id,
+    bool must_download) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   GlobalRequestID global_id(render_process_id, request_id);
 
@@ -238,7 +250,7 @@ void DownloadControllerAndroidImpl::CreateGETDownload(
   GetDownloadInfoCB cb = base::Bind(
         &DownloadControllerAndroidImpl::StartAndroidDownload,
         base::Unretained(this), render_process_id,
-        render_view_id);
+        render_view_id, must_download);
 
   PrepareDownloadInfo(
       global_id,
@@ -332,7 +344,7 @@ void DownloadControllerAndroidImpl::StartDownloadOnUIThread(
 }
 
 void DownloadControllerAndroidImpl::StartAndroidDownload(
-    int render_process_id, int render_view_id,
+    int render_process_id, int render_view_id, bool must_download,
     const DownloadInfoAndroid& info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -352,7 +364,7 @@ void DownloadControllerAndroidImpl::StartAndroidDownload(
         web_contents,
         base::Bind(&DownloadControllerAndroidImpl::StartAndroidDownload,
                    base::Unretained(this), render_process_id, render_view_id,
-                   info)));
+                   must_download, info)));
     return;
   }
 
@@ -360,11 +372,11 @@ void DownloadControllerAndroidImpl::StartAndroidDownload(
       web_contents,
       base::Bind(&DownloadControllerAndroidImpl::StartAndroidDownloadInternal,
                  base::Unretained(this), render_process_id, render_view_id,
-                 info));
+                 must_download, info));
 }
 
 void DownloadControllerAndroidImpl::StartAndroidDownloadInternal(
-    int render_process_id, int render_view_id,
+    int render_process_id, int render_view_id, bool must_download,
     const DownloadInfoAndroid& info, bool allowed) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!allowed)
@@ -407,7 +419,7 @@ void DownloadControllerAndroidImpl::StartAndroidDownloadInternal(
       env, GetJavaObject()->Controller(env).obj(), view.obj(), jurl.obj(),
       juser_agent.obj(), jcontent_disposition.obj(), jmime_type.obj(),
       jcookie.obj(), jreferer.obj(), info.has_user_gesture, jfilename.obj(),
-      info.total_bytes);
+      info.total_bytes, must_download);
 }
 
 void DownloadControllerAndroidImpl::OnDownloadStarted(
@@ -442,6 +454,8 @@ void DownloadControllerAndroidImpl::OnDownloadUpdated(DownloadItem* item) {
     OnDangerousDownload(item);
 
   JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jstring> jguid =
+      ConvertUTF8ToJavaString(env, item->GetGuid());
   ScopedJavaLocalRef<jstring> jurl =
       ConvertUTF8ToJavaString(env, item->GetURL().spec());
   ScopedJavaLocalRef<jstring> jmime_type =
@@ -450,19 +464,22 @@ void DownloadControllerAndroidImpl::OnDownloadUpdated(DownloadItem* item) {
       ConvertUTF8ToJavaString(env, item->GetTargetFilePath().value());
   ScopedJavaLocalRef<jstring> jfilename = ConvertUTF8ToJavaString(
       env, item->GetTargetFilePath().BaseName().value());
+  ScopedJavaLocalRef<jstring> joriginal_url =
+      ConvertUTF8ToJavaString(env, item->GetOriginalUrl().spec());
+  ScopedJavaLocalRef<jstring> jreferrer_url =
+      ConvertUTF8ToJavaString(env, item->GetReferrerUrl().spec());
 
   switch (item->GetState()) {
     case DownloadItem::IN_PROGRESS: {
       base::TimeDelta time_delta;
       item->TimeRemaining(&time_delta);
       Java_DownloadController_onDownloadUpdated(
-          env, GetJavaObject()->Controller(env).obj(),
-          jurl.obj(), jmime_type.obj(),
-          jfilename.obj(), jpath.obj(), item->GetReceivedBytes(), true,
-          item->GetId(), item->PercentComplete(), time_delta.InMilliseconds(),
+          env, GetJavaObject()->Controller(env).obj(), jurl.obj(),
+          jmime_type.obj(), jfilename.obj(), jpath.obj(),
+          item->GetReceivedBytes(), item->GetId(), jguid.obj(),
+          item->PercentComplete(), time_delta.InMilliseconds(),
           item->HasUserGesture(), item->IsPaused(),
-          // Get all requirements that allows a download to be resumable.
-          !item->GetBrowserContext()->IsOffTheRecord());
+          item->GetBrowserContext()->IsOffTheRecord());
       break;
     }
     case DownloadItem::COMPLETE:
@@ -474,23 +491,25 @@ void DownloadControllerAndroidImpl::OnDownloadUpdated(DownloadItem* item) {
       Java_DownloadController_onDownloadCompleted(
           env, GetJavaObject()->Controller(env).obj(), jurl.obj(),
           jmime_type.obj(), jfilename.obj(), jpath.obj(),
-          item->GetReceivedBytes(), true, item->GetId(),
-          item->HasUserGesture());
+          item->GetReceivedBytes(), item->GetId(), jguid.obj(),
+          joriginal_url.obj(), jreferrer_url.obj(), item->HasUserGesture());
       break;
     case DownloadItem::CANCELLED:
       Java_DownloadController_onDownloadCancelled(
-          env, GetJavaObject()->Controller(env).obj(), item->GetId());
+          env, GetJavaObject()->Controller(env).obj(), item->GetId(),
+          jguid.obj());
       break;
-    // TODO(shashishekhar): An interrupted download can be resumed. Android
-    // currently does not support resumable downloads. Add handling for
-    // interrupted case based on item->CanResume().
     case DownloadItem::INTERRUPTED:
-      // Call onDownloadCompleted with success = false.
-      Java_DownloadController_onDownloadCompleted(
+      // When device loses/changes network, we get a NETWORK_TIMEOUT,
+      // NETWORK_FAILED or NETWORK_DISCONNECTED error. Download should auto
+      // resume in this case.
+      Java_DownloadController_onDownloadInterrupted(
           env, GetJavaObject()->Controller(env).obj(), jurl.obj(),
           jmime_type.obj(), jfilename.obj(), jpath.obj(),
-          item->GetReceivedBytes(), false, item->GetId(),
-          item->HasUserGesture());
+          item->GetReceivedBytes(), item->GetId(), jguid.obj(),
+          item->CanResume(), IsInterruptedDownloadAutoResumable(item),
+          item->GetBrowserContext()->IsOffTheRecord());
+      item->RemoveObserver(this);
       break;
     case DownloadItem::MAX_DOWNLOAD_STATE:
       NOTREACHED();
@@ -501,12 +520,14 @@ void DownloadControllerAndroidImpl::OnDangerousDownload(DownloadItem* item) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> jfilename = ConvertUTF8ToJavaString(
       env, item->GetTargetFilePath().BaseName().value());
+  ScopedJavaLocalRef<jstring> jguid =
+      ConvertUTF8ToJavaString(env, item->GetGuid());
   ScopedJavaLocalRef<jobject> view_core = GetContentViewCoreFromWebContents(
       item->GetWebContents());
   if (!view_core.is_null()) {
     Java_DownloadController_onDangerousDownload(
         env, GetJavaObject()->Controller(env).obj(), view_core.obj(),
-        jfilename.obj(), item->GetId());
+        jfilename.obj(), jguid.obj());
   }
 }
 
@@ -546,12 +567,14 @@ void DownloadControllerAndroidImpl::StartContextMenuDownload(
 }
 
 void DownloadControllerAndroidImpl::DangerousDownloadValidated(
-    WebContents* web_contents, int download_id, bool accept) {
+    WebContents* web_contents,
+    const std::string& download_guid,
+    bool accept) {
   if (!web_contents)
     return;
   DownloadManagerImpl* dlm = static_cast<DownloadManagerImpl*>(
       BrowserContext::GetDownloadManager(web_contents->GetBrowserContext()));
-  DownloadItem* item = dlm->GetDownload(download_id);
+  DownloadItem* item = dlm->GetDownloadByGuid(download_guid);
   if (!item)
     return;
   if (accept)

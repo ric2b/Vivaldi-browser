@@ -9,7 +9,7 @@
 namespace mojo {
 
 InterfaceRegistry::InterfaceRegistry(Connection* connection)
-    : InterfaceRegistry(GetProxy(&client_handle_), connection) {}
+    : InterfaceRegistry(nullptr, connection) {}
 
 InterfaceRegistry::InterfaceRegistry(
     shell::mojom::InterfaceProviderRequest request,
@@ -17,8 +17,9 @@ InterfaceRegistry::InterfaceRegistry(
     : binding_(this),
       connection_(connection),
       default_binder_(nullptr) {
-  if (request.is_pending())
-    binding_.Bind(std::move(request));
+  if (!request.is_pending())
+    request = GetProxy(&client_handle_);
+  binding_.Bind(std::move(request));
 }
 
 InterfaceRegistry::~InterfaceRegistry() {
@@ -51,9 +52,9 @@ bool InterfaceRegistry::SetInterfaceBinderForName(
     return true;
   }
   LOG(WARNING) << "Connection CapabilityFilter prevented binding to interface: "
-               << interface_name << " connection_url:"
-               << connection_->GetConnectionURL() << " remote_url:"
-               << connection_->GetRemoteApplicationURL();
+               << interface_name << " connection_name:"
+               << connection_->GetConnectionName() << " remote_name:"
+               << connection_->GetRemoteIdentity().name();
   return false;
 }
 

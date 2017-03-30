@@ -7,12 +7,12 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/default_tick_clock.h"
@@ -26,11 +26,11 @@
 #include "media/base/android/media_player_android.h"
 #include "media/base/cdm_context.h"
 #include "media/base/demuxer_stream.h"
+#include "media/base/eme_constants.h"
 #include "media/base/media_keys.h"
 #include "media/base/time_delta_interpolator.h"
 #include "media/blink/webmediaplayer_delegate.h"
 #include "media/blink/webmediaplayer_params.h"
-#include "third_party/WebKit/public/platform/WebGraphicsContext3D.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
 #include "third_party/WebKit/public/platform/WebSetSinkIdCallbacks.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
@@ -56,6 +56,9 @@ class WebLayerImpl;
 }
 
 namespace gpu {
+namespace gles2 {
+class GLES2Interface;
+}
 struct MailboxHolder;
 }
 
@@ -135,13 +138,12 @@ class WebMediaPlayerAndroid
              unsigned char alpha,
              SkXfermode::Mode mode) override;
 
-  bool copyVideoTextureToPlatformTexture(
-      blink::WebGraphicsContext3D* web_graphics_context,
-      unsigned int texture,
-      unsigned int internal_format,
-      unsigned int type,
-      bool premultiply_alpha,
-      bool flip_y) override;
+  bool copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface* gl,
+                                         unsigned int texture,
+                                         unsigned int internal_format,
+                                         unsigned int type,
+                                         bool premultiply_alpha,
+                                         bool flip_y) override;
 
   // True if the loaded media has a playable video/audio track.
   bool hasVideo() const override;
@@ -165,6 +167,8 @@ class WebMediaPlayerAndroid
   blink::WebMediaPlayer::NetworkState getNetworkState() const override;
   blink::WebMediaPlayer::ReadyState getReadyState() const override;
 
+  blink::WebString getErrorMessage() override;
+
   bool hasSingleSecurityOrigin() const override;
   bool didPassCORSAccessCheck() const override;
 
@@ -173,8 +177,8 @@ class WebMediaPlayerAndroid
   // Provide statistics.
   unsigned decodedFrameCount() const override;
   unsigned droppedFrameCount() const override;
-  unsigned audioDecodedByteCount() const override;
-  unsigned videoDecodedByteCount() const override;
+  size_t audioDecodedByteCount() const override;
+  size_t videoDecodedByteCount() const override;
 
   // cc::VideoFrameProvider implementation. These methods are running on the
   // compositor thread.
@@ -205,6 +209,7 @@ class WebMediaPlayerAndroid
   void OnConnectedToRemoteDevice(const std::string& remote_playback_message)
       override;
   void OnDisconnectedFromRemoteDevice() override;
+  void OnCancelledRemotePlaybackRequest() override;
   void OnDidExitFullscreen() override;
   void OnMediaPlayerPlay() override;
   void OnMediaPlayerPause() override;
@@ -244,8 +249,9 @@ class WebMediaPlayerAndroid
   void OnWaitingForDecryptionKey() override;
 
   // WebMediaPlayerDelegate::Observer implementation.
-  void OnHidden(bool must_suspend) override;
+  void OnHidden() override;
   void OnShown() override;
+  void OnSuspendRequested(bool must_suspend) override;
   void OnPlay() override;
   void OnPause() override;
   void OnVolumeMultiplierUpdate(double multiplier) override;
@@ -338,7 +344,7 @@ class WebMediaPlayerAndroid
   // Size of the video.
   blink::WebSize natural_size_;
 
-  // Size that has been sent to StreamTexture.
+  // Size that has been sent to gpu::StreamTexture.
   blink::WebSize cached_stream_texture_size_;
 
   // The video frame object used for rendering by the compositor.
@@ -384,6 +390,13 @@ class WebMediaPlayerAndroid
   // Player ID assigned by the |player_manager_|.
   int player_id_;
 
+  // User created media session id, if any.
+  //
+  // blink::WebMediaSession::DefaultID represents the non web
+  // exposed default media session. User created session ids are
+  // greater than blink::WebMediaSession::DefaultID.
+  const int media_session_id_;
+
   // Current player states.
   blink::WebMediaPlayer::NetworkState network_state_;
   blink::WebMediaPlayer::ReadyState ready_state_;
@@ -403,6 +416,9 @@ class WebMediaPlayerAndroid
 
   // Whether the media player is playing.
   bool is_playing_;
+
+  // Whether the media player is pending to play.
+  bool is_play_pending_;
 
   // Whether media player needs to re-establish the surface texture peer.
   bool needs_establish_peer_;
@@ -434,7 +450,7 @@ class WebMediaPlayerAndroid
   // blocked.
   cc::VideoFrameProvider::Client* video_frame_provider_client_;
 
-  scoped_ptr<cc_blink::WebLayerImpl> video_weblayer_;
+  std::unique_ptr<cc_blink::WebLayerImpl> video_weblayer_;
 
 #if defined(VIDEO_HOLE)
   // A rectangle represents the geometry of video frame, when computed last
@@ -453,7 +469,7 @@ class WebMediaPlayerAndroid
 
   scoped_refptr<media::MediaLog> media_log_;
 
-  scoped_ptr<MediaInfoLoader> info_loader_;
+  std::unique_ptr<MediaInfoLoader> info_loader_;
 
   // Non-owned pointer to the CdmContext. Updated in the constructor,
   // generateKeyRequest() or setContentDecryptionModule().
@@ -480,7 +496,7 @@ class WebMediaPlayerAndroid
   // as playback progresses.
   media::TimeDeltaInterpolator interpolator_;
 
-  scoped_ptr<MediaSourceDelegate> media_source_delegate_;
+  std::unique_ptr<MediaSourceDelegate> media_source_delegate_;
 
   int frame_id_;
 

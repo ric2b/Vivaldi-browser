@@ -32,7 +32,6 @@
 
 #include "modules/mediasource/MediaSource.h"
 #include "platform/weborigin/KURL.h"
-#include "wtf/MainThread.h"
 
 namespace blink {
 
@@ -50,13 +49,13 @@ void MediaSourceRegistry::registerURL(SecurityOrigin*, const KURL& url, URLRegis
 
     MediaSource* source = static_cast<MediaSource*>(registrable);
     source->addedToRegistry();
-    m_mediaSources.set(url.string(), source);
+    m_mediaSources.set(url.getString(), source);
 }
 
 void MediaSourceRegistry::unregisterURL(const KURL& url)
 {
     ASSERT(isMainThread());
-    PersistentHeapHashMap<String, Member<MediaSource>>::iterator iter = m_mediaSources.find(url.string());
+    PersistentHeapHashMap<String, Member<MediaSource>>::iterator iter = m_mediaSources.find(url.getString());
     if (iter == m_mediaSources.end())
         return;
 

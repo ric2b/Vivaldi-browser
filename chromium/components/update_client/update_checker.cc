@@ -20,6 +20,7 @@
 #include "base/threading/thread_checker.h"
 #include "components/update_client/configurator.h"
 #include "components/update_client/crx_update_item.h"
+#include "components/update_client/persisted_data.h"
 #include "components/update_client/request_sender.h"
 #include "components/update_client/utils.h"
 #include "url/gurl.h"
@@ -27,6 +28,25 @@
 namespace update_client {
 
 namespace {
+
+// Returns a sanitized version of the brand or an empty string otherwise.
+std::string SanitizeBrand(const std::string& brand) {
+  return IsValidBrand(brand) ? brand : std::string("");
+}
+
+// Returns a sanitized version of the |ap| or an empty string otherwise.
+std::string SanitizeAp(const std::string& ap) {
+  return IsValidAp(ap) ? ap : std::string();
+}
+
+// Returns true if at least one item requires network encryption.
+bool IsEncryptionRequired(const std::vector<CrxUpdateItem*>& items) {
+  for (const auto& item : items) {
+    if (item->component.requires_network_encryption)
+      return true;
+  }
+  return false;
+}
 
 // Builds an update check request for |components|. |additional_attributes| is
 // serialized as part of the <request> element of the request to customize it
@@ -44,17 +64,27 @@ namespace {
 //    </app>
 std::string BuildUpdateCheckRequest(const Configurator& config,
                                     const std::vector<CrxUpdateItem*>& items,
+                                    PersistedData* metadata,
                                     const std::string& additional_attributes) {
+  const std::string brand(SanitizeBrand(config.GetBrand()));
   std::string app_elements;
   for (size_t i = 0; i != items.size(); ++i) {
     const CrxUpdateItem* item = items[i];
+    const std::string ap(SanitizeAp(item->component.ap));
     std::string app("<app ");
     base::StringAppendF(&app, "appid=\"%s\" version=\"%s\"", item->id.c_str(),
                         item->component.version.GetString().c_str());
+    if (!brand.empty())
+      base::StringAppendF(&app, " brand=\"%s\"", brand.c_str());
     if (item->on_demand)
       base::StringAppendF(&app, " installsource=\"ondemand\"");
+    if (!ap.empty())
+      base::StringAppendF(&app, " ap=\"%s\"", ap.c_str());
     base::StringAppendF(&app, ">");
     base::StringAppendF(&app, "<updatecheck />");
+    base::StringAppendF(&app, "<ping rd=\"%d\" ping_freshness=\"%s\" />",
+                        metadata->GetDateLastRollCall(item->id),
+                        metadata->GetPingFreshness(item->id).c_str());
     if (!item->component.fingerprint.empty()) {
       base::StringAppendF(&app,
                           "<packages>"
@@ -75,7 +105,8 @@ std::string BuildUpdateCheckRequest(const Configurator& config,
 
 class UpdateCheckerImpl : public UpdateChecker {
  public:
-  explicit UpdateCheckerImpl(const scoped_refptr<Configurator>& config);
+  UpdateCheckerImpl(const scoped_refptr<Configurator>& config,
+                    PersistedData* metadata);
   ~UpdateCheckerImpl() override;
 
   // Overrides for UpdateChecker.
@@ -85,18 +116,23 @@ class UpdateCheckerImpl : public UpdateChecker {
       const UpdateCheckCallback& update_check_callback) override;
 
  private:
-  void OnRequestSenderComplete(int error, const std::string& response);
+  void OnRequestSenderComplete(scoped_ptr<std::vector<std::string>> ids_checked,
+                               int error,
+                               const std::string& response,
+                               int retry_after_sec);
   base::ThreadChecker thread_checker_;
 
   const scoped_refptr<Configurator> config_;
+  PersistedData* metadata_;
   UpdateCheckCallback update_check_callback_;
   scoped_ptr<RequestSender> request_sender_;
 
   DISALLOW_COPY_AND_ASSIGN(UpdateCheckerImpl);
 };
 
-UpdateCheckerImpl::UpdateCheckerImpl(const scoped_refptr<Configurator>& config)
-    : config_(config) {}
+UpdateCheckerImpl::UpdateCheckerImpl(const scoped_refptr<Configurator>& config,
+                                     PersistedData* metadata)
+    : config_(config), metadata_(metadata) {}
 
 UpdateCheckerImpl::~UpdateCheckerImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -115,26 +151,40 @@ bool UpdateCheckerImpl::CheckForUpdates(
 
   update_check_callback_ = update_check_callback;
 
+  auto urls(config_->UpdateUrl());
+  if (IsEncryptionRequired(items_to_check))
+    RemoveUnsecureUrls(&urls);
+
+  std::unique_ptr<std::vector<std::string>> ids_checked(
+      new std::vector<std::string>());
+  for (auto crx : items_to_check)
+    ids_checked->push_back(crx->id);
   request_sender_.reset(new RequestSender(config_));
   request_sender_->Send(
       config_->UseCupSigning(),
-      BuildUpdateCheckRequest(*config_, items_to_check, additional_attributes),
-      config_->UpdateUrl(),
-      base::Bind(&UpdateCheckerImpl::OnRequestSenderComplete,
-                 base::Unretained(this)));
+      BuildUpdateCheckRequest(*config_, items_to_check, metadata_,
+                              additional_attributes),
+      urls, base::Bind(&UpdateCheckerImpl::OnRequestSenderComplete,
+                       base::Unretained(this), base::Passed(&ids_checked)));
   return true;
 }
 
-void UpdateCheckerImpl::OnRequestSenderComplete(int error,
-                                                const std::string& response) {
+void UpdateCheckerImpl::OnRequestSenderComplete(
+    std::unique_ptr<std::vector<std::string>> ids_checked,
+    int error,
+    const std::string& response,
+    int retry_after_sec) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!error) {
     UpdateResponse update_response;
     if (update_response.Parse(response)) {
+      int daynum = update_response.results().daystart_elapsed_days;
+      if (daynum != UpdateResponse::kNoDaystart)
+        metadata_->SetDateLastRollCall(*ids_checked, daynum);
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE,
-          base::Bind(update_check_callback_, error, update_response.results()));
+          FROM_HERE, base::Bind(update_check_callback_, error,
+                                update_response.results(), retry_after_sec));
       return;
     }
 
@@ -143,15 +193,16 @@ void UpdateCheckerImpl::OnRequestSenderComplete(int error,
   }
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(update_check_callback_, error, UpdateResponse::Results()));
+      FROM_HERE, base::Bind(update_check_callback_, error,
+                            UpdateResponse::Results(), retry_after_sec));
 }
 
 }  // namespace
 
 scoped_ptr<UpdateChecker> UpdateChecker::Create(
-    const scoped_refptr<Configurator>& config) {
-  return scoped_ptr<UpdateChecker>(new UpdateCheckerImpl(config));
+    const scoped_refptr<Configurator>& config,
+    PersistedData* persistent) {
+  return scoped_ptr<UpdateChecker>(new UpdateCheckerImpl(config, persistent));
 }
 
 }  // namespace update_client

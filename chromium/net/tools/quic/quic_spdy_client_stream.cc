@@ -50,20 +50,18 @@ void QuicSpdyClientStream::OnInitialHeadersComplete(bool fin,
   if (!SpdyUtils::ParseHeaders(decompressed_headers().data(),
                                decompressed_headers().length(),
                                &content_length_, &response_headers_)) {
+    DLOG(ERROR) << "Failed to parse headers: " << decompressed_headers();
     Reset(QUIC_BAD_APPLICATION_PAYLOAD);
     return;
   }
 
-  string status = response_headers_[":status"].as_string();
-  size_t end = status.find(" ");
-  if (end != string::npos) {
-    status.erase(end);
-  }
-  if (!StringToInt(status, &response_code_)) {
-    // Invalid response code.
+  if (!ParseHeaderStatusCode(&response_headers_, &response_code_)) {
+    DLOG(ERROR) << "Received invalid response code: "
+                << response_headers_[":status"].as_string();
     Reset(QUIC_BAD_APPLICATION_PAYLOAD);
     return;
   }
+
   MarkHeadersConsumed(decompressed_headers().length());
   DVLOG(1) << "headers complete for stream " << id();
 
@@ -73,37 +71,25 @@ void QuicSpdyClientStream::OnInitialHeadersComplete(bool fin,
 void QuicSpdyClientStream::OnTrailingHeadersComplete(bool fin,
                                                      size_t frame_len) {
   QuicSpdyStream::OnTrailingHeadersComplete(fin, frame_len);
-
-  size_t final_byte_offset = 0;
-  if (!SpdyUtils::ParseTrailers(decompressed_trailers().data(),
-                                decompressed_trailers().length(),
-                                &final_byte_offset, &response_trailers_)) {
-    Reset(QUIC_BAD_APPLICATION_PAYLOAD);
-    return;
-  }
   MarkTrailersConsumed(decompressed_trailers().length());
-
-  // The data on this stream ends at |final_byte_offset|.
-  DVLOG(1) << "Stream ends at byte offset: " << final_byte_offset
-           << "  currently read: " << stream_bytes_read();
-  OnStreamFrame(
-      QuicStreamFrame(id(), /*fin=*/true, final_byte_offset, StringPiece()));
 }
 
 void QuicSpdyClientStream::OnPromiseHeadersComplete(QuicStreamId promised_id,
                                                     size_t frame_len) {
   header_bytes_read_ += frame_len;
-  int content_length = -1;
+  int64_t content_length = -1;
   SpdyHeaderBlock promise_headers;
   if (!SpdyUtils::ParseHeaders(decompressed_headers().data(),
                                decompressed_headers().length(), &content_length,
                                &promise_headers)) {
+    DLOG(ERROR) << "Failed to parse promise headers: "
+                << decompressed_headers();
     Reset(QUIC_BAD_APPLICATION_PAYLOAD);
     return;
   }
   MarkHeadersConsumed(decompressed_headers().length());
 
-  session_->HandlePromised(promised_id, promise_headers);
+  session_->HandlePromised(id(), promised_id, promise_headers);
 }
 
 void QuicSpdyClientStream::OnDataAvailable() {
@@ -125,7 +111,9 @@ void QuicSpdyClientStream::OnDataAvailable() {
     data_.append(static_cast<char*>(iov.iov_base), iov.iov_len);
 
     if (content_length_ >= 0 &&
-        static_cast<int>(data_.size()) > content_length_) {
+        data_.size() > static_cast<uint64_t>(content_length_)) {
+      DLOG(ERROR) << "Invalid content length (" << content_length_
+                  << ") with data of size " << data_.size();
       Reset(QUIC_BAD_APPLICATION_PAYLOAD);
       return;
     }
@@ -151,16 +139,6 @@ size_t QuicSpdyClientStream::SendRequest(const SpdyHeaderBlock& headers,
   }
 
   return bytes_sent;
-}
-
-void QuicSpdyClientStream::SendBody(const string& data, bool fin) {
-  SendBody(data, fin, nullptr);
-}
-
-void QuicSpdyClientStream::SendBody(const string& data,
-                                    bool fin,
-                                    QuicAckListenerInterface* listener) {
-  WriteOrBufferData(data, fin, listener);
 }
 
 }  // namespace net

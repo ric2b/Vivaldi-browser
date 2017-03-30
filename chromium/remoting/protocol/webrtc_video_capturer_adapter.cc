@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "remoting/base/constants.h"
 #include "third_party/libyuv/include/libyuv/convert.h"
 #include "third_party/webrtc/media/engine/webrtcvideoframe.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
@@ -17,7 +18,7 @@ namespace protocol {
 const int kFramesPerSec = 30;
 
 WebrtcVideoCapturerAdapter::WebrtcVideoCapturerAdapter(
-    scoped_ptr<webrtc::DesktopCapturer> capturer)
+    std::unique_ptr<webrtc::DesktopCapturer> capturer)
     : desktop_capturer_(std::move(capturer)), weak_factory_(this) {
   DCHECK(desktop_capturer_);
 
@@ -30,7 +31,7 @@ WebrtcVideoCapturerAdapter::~WebrtcVideoCapturerAdapter() {
 }
 
 void WebrtcVideoCapturerAdapter::SetSizeCallback(
-    const SizeCallback& size_callback) {
+    const VideoStream::SizeCallback& size_callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   size_callback_ = size_callback;
 }
@@ -71,16 +72,11 @@ cricket::CaptureState WebrtcVideoCapturerAdapter::Start(
   return cricket::CS_RUNNING;
 }
 
-// Similar to the base class implementation with some important differences:
-// 1. Does not call either Stop() or Start(), as those would affect the state of
-// |desktop_capturer_|.
-// 2. Does not support unpausing after stopping the capturer. It is unclear
-// if that flow needs to be supported.
-bool WebrtcVideoCapturerAdapter::Pause(bool pause) {
+bool WebrtcVideoCapturerAdapter::PauseCapturer(bool pause) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (pause) {
-    if (capture_state() == cricket::CS_PAUSED)
+    if (paused_)
       return true;
 
     bool running = capture_state() == cricket::CS_STARTING ||
@@ -94,28 +90,25 @@ bool WebrtcVideoCapturerAdapter::Pause(bool pause) {
       return false;
     }
 
-    // Stop |capture_timer_| and set capture state to cricket::CS_PAUSED.
     capture_timer_->Stop();
-    SetCaptureState(cricket::CS_PAUSED);
+    paused_ = true;
 
     VLOG(1) << "WebrtcVideoCapturerAdapter paused.";
 
     return true;
   } else {  // Unpausing.
-    if (capture_state() != cricket::CS_PAUSED || !GetCaptureFormat() ||
-        !capture_timer_) {
+    if (!paused_ || !GetCaptureFormat() || !capture_timer_) {
       LOG(ERROR) << "Cannot unpause WebrtcVideoCapturerAdapter.";
       return false;
     }
 
-    // Restart |capture_timer_| and set capture state to cricket::CS_RUNNING;
     capture_timer_->Start(FROM_HERE,
                           base::TimeDelta::FromMicroseconds(
                               GetCaptureFormat()->interval /
                               (base::Time::kNanosecondsPerMicrosecond)),
                           this,
                           &WebrtcVideoCapturerAdapter::CaptureNextFrame);
-    SetCaptureState(cricket::CS_RUNNING);
+    paused_ = false;
 
     VLOG(1) << "WebrtcVideoCapturerAdapter unpaused.";
   }
@@ -164,7 +157,7 @@ void WebrtcVideoCapturerAdapter::OnCaptureCompleted(
   if (!frame)
     return;
 
-  scoped_ptr<webrtc::DesktopFrame> owned_frame(frame);
+  std::unique_ptr<webrtc::DesktopFrame> owned_frame(frame);
 
   // TODO(sergeyu): Currently the adapter keeps generating frames even when
   // nothing is changing on the screen. This is necessary because the video
@@ -172,29 +165,33 @@ void WebrtcVideoCapturerAdapter::OnCaptureCompleted(
   // WebRTC needs to have some mechanism to notify when the bandwidth is
   // exceeded, so the capturer can adapt frame rate.
 
-  size_t width = frame->size().width();
-  size_t height = frame->size().height();
-  if (!yuv_frame_ || yuv_frame_->GetWidth() != width ||
-      yuv_frame_->GetHeight() != height) {
+  webrtc::DesktopVector dpi =
+      frame->dpi().is_zero() ? webrtc::DesktopVector(kDefaultDpi, kDefaultDpi)
+                             : frame->dpi();
+  if (!frame_size_.equals(frame->size()) || !frame_dpi_.equals(dpi)) {
+    frame_size_ = frame->size();
+    frame_dpi_ = dpi;
     if (!size_callback_.is_null())
-      size_callback_.Run(frame->size());
-
-    scoped_ptr<cricket::WebRtcVideoFrame> webrtc_frame(
-        new cricket::WebRtcVideoFrame());
-    webrtc_frame->InitToEmptyBuffer(width, height, 0);
-    yuv_frame_ = std::move(webrtc_frame);
-
-    // Set updated_region so the whole frame is converted to YUV below.
-    frame->mutable_updated_region()->SetRect(
-        webrtc::DesktopRect::MakeWH(width, height));
+      size_callback_.Run(frame_size_, frame_dpi_);
   }
 
-  // TODO(sergeyu): This will copy the buffer if it's being used. Optimize it by
-  // keeping a queue of frames.
-  CHECK(yuv_frame_->MakeExclusive());
+  if (!yuv_frame_ ||
+      !frame_size_.equals(
+          webrtc::DesktopSize(yuv_frame_->width(), yuv_frame_->height()))) {
+    yuv_frame_ = new rtc::RefCountedObject<webrtc::I420Buffer>(
+        frame_size_.width(), frame_size_.height());
+    // Set updated_region so the whole frame is converted to YUV below.
+    frame->mutable_updated_region()->SetRect(
+        webrtc::DesktopRect::MakeSize(frame_size_));
+  }
 
-  yuv_frame_->SetTimeStamp(base::TimeTicks::Now().ToInternalValue() *
-                           base::Time::kNanosecondsPerMicrosecond);
+  if (!yuv_frame_->HasOneRef()) {
+    // Frame is still used, typically by the encoder. We have to make
+    // a copy before modifying it.
+    // TODO(sergeyu): This will copy the buffer if it's being used.
+    // Optimize it by keeping a queue of frames.
+    yuv_frame_ = webrtc::I420Buffer::Copy(yuv_frame_);
+  }
 
   for (webrtc::DesktopRegion::Iterator i(frame->updated_region()); !i.IsAtEnd();
        i.Advance()) {
@@ -211,19 +208,28 @@ void WebrtcVideoCapturerAdapter::OnCaptureCompleted(
       --top;
       ++height;
     }
+
+    int y_stride = yuv_frame_->stride(webrtc::kYPlane);
+    int u_stride = yuv_frame_->stride(webrtc::kUPlane);
+    int v_stride = yuv_frame_->stride(webrtc::kVPlane);
     libyuv::ARGBToI420(
         frame->data() + frame->stride() * top +
             left * webrtc::DesktopFrame::kBytesPerPixel,
         frame->stride(),
-        yuv_frame_->GetYPlane() + yuv_frame_->GetYPitch() * top + left,
-        yuv_frame_->GetYPitch(),
-        yuv_frame_->GetUPlane() + yuv_frame_->GetUPitch() * top / 2 + left / 2,
-        yuv_frame_->GetUPitch(),
-        yuv_frame_->GetVPlane() + yuv_frame_->GetVPitch() * top / 2 + left / 2,
-        yuv_frame_->GetVPitch(), width, height);
+        yuv_frame_->MutableData(webrtc::kYPlane) + y_stride * top + left,
+        y_stride, yuv_frame_->MutableData(webrtc::kUPlane) +
+                      u_stride * top / 2 + left / 2,
+        u_stride, yuv_frame_->MutableData(webrtc::kVPlane) +
+                      v_stride * top / 2 + left / 2,
+        v_stride, width, height);
   }
 
-  SignalVideoFrame(this, yuv_frame_.get());
+  cricket::WebRtcVideoFrame video_frame(
+      yuv_frame_, (base::TimeTicks::Now() - base::TimeTicks()) /
+                      base::TimeDelta::FromMicroseconds(1) * 1000,
+      webrtc::kVideoRotation_0);
+
+  OnFrame(this, &video_frame);
 }
 
 void WebrtcVideoCapturerAdapter::CaptureNextFrame() {

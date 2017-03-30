@@ -31,6 +31,7 @@
 #include "platform/heap/Handle.h"
 #include "public/platform/WebRTCDataChannelHandler.h"
 #include "public/platform/WebRTCDataChannelHandlerClient.h"
+#include "wtf/Compiler.h"
 
 namespace blink {
 
@@ -45,7 +46,7 @@ struct WebRTCDataChannelInit;
 
 class MODULES_EXPORT RTCDataChannel final
     : public RefCountedGarbageCollectedEventTargetWithInlineData<RTCDataChannel>
-    , public WebRTCDataChannelHandlerClient {
+    , WTF_NON_EXPORTED_BASE(public WebRTCDataChannelHandlerClient) {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(RTCDataChannel);
     DEFINE_WRAPPERTYPEINFO();
 public:
@@ -90,7 +91,7 @@ public:
 
     // EventTarget
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
     // Oilpan: need to eagerly finalize m_handler
     EAGERLY_FINALIZE();
@@ -106,10 +107,10 @@ public:
 private:
     RTCDataChannel(ExecutionContext*, PassOwnPtr<WebRTCDataChannelHandler>);
 
-    void scheduleDispatchEvent(PassRefPtrWillBeRawPtr<Event>);
+    void scheduleDispatchEvent(Event*);
     void scheduledEventTimerFired(Timer<RTCDataChannel>*);
 
-    RawPtrWillBeMember<ExecutionContext> m_executionContext;
+    Member<ExecutionContext> m_executionContext;
 
     OwnPtr<WebRTCDataChannelHandler> m_handler;
 
@@ -122,7 +123,7 @@ private:
     BinaryType m_binaryType;
 
     Timer<RTCDataChannel> m_scheduledEventTimer;
-    WillBeHeapVector<RefPtrWillBeMember<Event>> m_scheduledEvents;
+    HeapVector<Member<Event>> m_scheduledEvents;
 
     unsigned m_bufferedAmountLowThreshold;
 

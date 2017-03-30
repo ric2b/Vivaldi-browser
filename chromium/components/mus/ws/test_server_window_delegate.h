@@ -24,7 +24,7 @@ class TestServerWindowDelegate : public ServerWindowDelegate {
  private:
   // ServerWindowDelegate:
   mus::SurfacesState* GetSurfacesState() override;
-  void OnScheduleWindowPaint(const ServerWindow* window) override;
+  void OnScheduleWindowPaint(ServerWindow* window) override;
   const ServerWindow* GetRootWindow(const ServerWindow* window) const override;
   void ScheduleSurfaceDestruction(ServerWindow* window) override;
   ServerWindow* FindWindowForSurface(
@@ -33,6 +33,7 @@ class TestServerWindowDelegate : public ServerWindowDelegate {
       const ClientWindowId& client_window_id) override;
 
   const ServerWindow* root_window_;
+  scoped_refptr<mus::SurfacesState> surfaces_state_;
 
   DISALLOW_COPY_AND_ASSIGN(TestServerWindowDelegate);
 };

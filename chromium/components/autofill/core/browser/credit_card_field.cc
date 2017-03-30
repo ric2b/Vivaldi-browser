@@ -5,9 +5,10 @@
 #include "components/autofill/core/browser/credit_card_field.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -75,11 +76,11 @@ bool FieldCanFitDataForFieldType(int max_length, ServerFieldType type) {
 }  // namespace
 
 // static
-scoped_ptr<FormField> CreditCardField::Parse(AutofillScanner* scanner) {
+std::unique_ptr<FormField> CreditCardField::Parse(AutofillScanner* scanner) {
   if (scanner->IsEnd())
     return nullptr;
 
-  scoped_ptr<CreditCardField> credit_card_field(new CreditCardField);
+  std::unique_ptr<CreditCardField> credit_card_field(new CreditCardField);
   size_t saved_cursor = scanner->SaveCursor();
 
   // Credit card fields can appear in many different orders.
@@ -108,6 +109,16 @@ scoped_ptr<FormField> CreditCardField::Parse(AutofillScanner* scanner) {
           ParseField(scanner,
                      base::UTF8ToUTF16(kNameOnCardContextualRe),
                      &credit_card_field->cardholder_)) {
+        continue;
+      }
+    } else if (!credit_card_field->cardholder_last_) {
+      // Search for a last name. Since this is a dangerously generic search, we
+      // execute it only after we have found a valid credit card (first) name
+      // and haven't yet parsed the expiration date (which usually appears at
+      // the end).
+      if (!credit_card_field->expiration_month_ &&
+          ParseField(scanner, base::UTF8ToUTF16(kLastNameRe),
+                     &credit_card_field->cardholder_last_)) {
         continue;
       }
     }
@@ -293,15 +304,19 @@ bool CreditCardField::LikelyCardTypeSelectField(AutofillScanner* scanner) {
     return false;
 
   AutofillField* field = scanner->Cursor();
+
   if (!MatchesFormControlType(field->form_control_type, MATCH_SELECT))
     return false;
 
-  return AutofillField::FindValueInSelectControl(
-             *field, l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_VISA),
-             nullptr) ||
-         AutofillField::FindValueInSelectControl(
-             *field, l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_MASTERCARD),
-             nullptr);
+  // We set |ignore_whitespace| to true on these calls because this is actually
+  // a pretty common mistake; e.g., "Master Card" instead of "MasterCard".
+  bool isSelect = (AutofillField::FindShortestSubstringMatchInSelect(
+                       l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_VISA), true,
+                       field) >= 0) ||
+                  (AutofillField::FindShortestSubstringMatchInSelect(
+                       l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_MASTERCARD),
+                       true, field) >= 0);
+  return isSelect;
 }
 
 // static
@@ -352,9 +367,15 @@ void CreditCardField::AddClassifications(
   // then ignore both fields. Putting them into separate fields is probably
   // wrong, because the credit card can also contain a middle name or middle
   // initial.
-  if (cardholder_last_ == nullptr)
-    AddClassification(cardholder_, CREDIT_CARD_NAME, kBaseCreditCardParserScore,
-                      field_candidates);
+  if (cardholder_last_ == nullptr) {
+    AddClassification(cardholder_, CREDIT_CARD_NAME_FULL,
+                      kBaseCreditCardParserScore, field_candidates);
+  } else {
+    AddClassification(cardholder_, CREDIT_CARD_NAME_FIRST,
+                      kBaseCreditCardParserScore, field_candidates);
+    AddClassification(cardholder_last_, CREDIT_CARD_NAME_LAST,
+                      kBaseCreditCardParserScore, field_candidates);
+  }
 
   if (expiration_date_) {
     DCHECK(!expiration_month_);

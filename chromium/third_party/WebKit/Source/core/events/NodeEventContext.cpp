@@ -34,9 +34,7 @@
 
 namespace blink {
 
-DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(NodeEventContext)
-
-NodeEventContext::NodeEventContext(PassRefPtrWillBeRawPtr<Node> node, PassRefPtrWillBeRawPtr<EventTarget> currentTarget)
+NodeEventContext::NodeEventContext(Node* node, EventTarget* currentTarget)
     : m_node(node)
     , m_currentTarget(currentTarget)
 {

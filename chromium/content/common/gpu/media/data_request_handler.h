@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/synchronization/waitable_event.h"
 #include "content/common/content_export.h"
 #include "media/base/mac/avfoundation_glue.h"

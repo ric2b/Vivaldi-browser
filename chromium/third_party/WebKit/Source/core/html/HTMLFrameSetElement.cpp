@@ -27,6 +27,7 @@
 #include "core/CSSPropertyNames.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/events/Event.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/LocalFrame.h"
@@ -72,12 +73,12 @@ void HTMLFrameSetElement::parseAttribute(const QualifiedName& name, const Atomic
 {
     if (name == rowsAttr) {
         if (!value.isNull()) {
-            m_rowLengths = parseListOfDimensions(value.string());
+            m_rowLengths = parseListOfDimensions(value.getString());
             setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::fromAttribute(name));
         }
     } else if (name == colsAttr) {
         if (!value.isNull()) {
-            m_colLengths = parseListOfDimensions(value.string());
+            m_colLengths = parseListOfDimensions(value.getString());
             setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::fromAttribute(name));
         }
     } else if (name == frameborderAttr) {
@@ -195,7 +196,7 @@ void HTMLFrameSetElement::defaultEventHandler(Event* evt)
 
 Node::InsertionNotificationRequest HTMLFrameSetElement::insertedInto(ContainerNode* insertionPoint)
 {
-    if (insertionPoint->inDocument() && document().frame()) {
+    if (insertionPoint->inShadowIncludingDocument() && document().frame()) {
         // A document using <frameset> likely won't literally have a body, but as far as the client is concerned, the frameset is effectively the body.
         document().frame()->loader().client()->dispatchWillInsertBody();
     }

@@ -10,6 +10,7 @@ import junit.framework.TestCase;
 
 import org.chromium.base.Log;
 
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 
@@ -27,7 +28,7 @@ public class DisableIfSkipCheck extends SkipCheck {
         Method method = getTestMethod(testCase);
         if (method == null) return true;
 
-        if (method.isAnnotationPresent(DisableIf.Build.class)) {
+        if (((AnnotatedElement) method).isAnnotationPresent(DisableIf.Build.class)) {
             DisableIf.Build v = method.getAnnotation(DisableIf.Build.class);
 
             if (abi(v) && hardware(v) && sdk(v)) {
@@ -43,6 +44,7 @@ public class DisableIfSkipCheck extends SkipCheck {
         return false;
     }
 
+    @SuppressWarnings("deprecation")
     private boolean abi(DisableIf.Build v) {
         if (v.supported_abis_includes().isEmpty()) return true;
 

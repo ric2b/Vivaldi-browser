@@ -8,7 +8,6 @@
 #include "content/common/ax_content_node_data.h"
 #include "content/common/content_export.h"
 #include "content/common/view_message_enums.h"
-#include "content/public/common/common_param_traits.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_message_utils.h"
 #include "ipc/ipc_param_traits.h"
@@ -16,6 +15,7 @@
 #include "third_party/WebKit/public/web/WebAXEnums.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_tree_update.h"
+#include "ui/gfx/transform.h"
 
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
@@ -30,6 +30,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::AXContentNodeData)
   IPC_STRUCT_TRAITS_MEMBER(role)
   IPC_STRUCT_TRAITS_MEMBER(state)
   IPC_STRUCT_TRAITS_MEMBER(location)
+  IPC_STRUCT_TRAITS_MEMBER(transform)
   IPC_STRUCT_TRAITS_MEMBER(string_attributes)
   IPC_STRUCT_TRAITS_MEMBER(int_attributes)
   IPC_STRUCT_TRAITS_MEMBER(float_attributes)
@@ -43,6 +44,7 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(content::AXContentTreeData)
   IPC_STRUCT_TRAITS_MEMBER(tree_id)
   IPC_STRUCT_TRAITS_MEMBER(parent_tree_id)
+  IPC_STRUCT_TRAITS_MEMBER(focused_tree_id)
   IPC_STRUCT_TRAITS_MEMBER(url)
   IPC_STRUCT_TRAITS_MEMBER(title)
   IPC_STRUCT_TRAITS_MEMBER(mimetype)
@@ -157,8 +159,13 @@ IPC_MESSAGE_ROUTED2(AccessibilityMsg_SetValue,
                     int /* object id */,
                     base::string16 /* Value */)
 
-// Determine the accessibility object under a given point and reply with
-// a AccessibilityHostMsg_HitTestResult with the same id.
+// Determine the accessibility object under a given point.
+//
+// If the target is an object with a child frame (like if the hit test
+// result is an iframe element), it responds with
+// AccessibilityHostMsg_ChildFrameHitTestResult so that the
+// hit test can be performed recursively on the child frame. Otherwise
+// it fires an accessibility event of type ui::AX_EVENT_HOVER on the target.
 IPC_MESSAGE_ROUTED1(AccessibilityMsg_HitTest,
                     gfx::Point /* location to test */)
 
@@ -211,10 +218,15 @@ IPC_MESSAGE_ROUTED1(
     AccessibilityHostMsg_LocationChanges,
     std::vector<AccessibilityHostMsg_LocationChangeParams>)
 
-// Sent to update the browser of the location of accessibility objects.
+// Sent to update the browser of Find In Page results.
 IPC_MESSAGE_ROUTED1(
     AccessibilityHostMsg_FindInPageResult,
     AccessibilityHostMsg_FindInPageResultParams)
+
+// Sent in response to AccessibilityMsg_HitTest.
+IPC_MESSAGE_ROUTED2(AccessibilityHostMsg_ChildFrameHitTestResult,
+                    gfx::Point /* location tested */,
+                    int /* node id of result */)
 
 // Sent in response to AccessibilityMsg_SnapshotTree. The callback id that was
 // passed to the request will be returned in |callback_id|, along with

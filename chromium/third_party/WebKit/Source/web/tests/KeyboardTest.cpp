@@ -48,11 +48,11 @@ public:
     // E.g., sending in the enter key gives back "InsertNewline".
     const char* interpretKeyEvent(
         const WebKeyboardEvent& webKeyboardEvent,
-        PlatformEvent::Type keyType)
+        PlatformEvent::EventType keyType)
     {
         PlatformKeyboardEventBuilder evt(webKeyboardEvent);
         evt.setKeyType(keyType);
-        RefPtrWillBeRawPtr<KeyboardEvent> keyboardEvent = KeyboardEvent::create(evt, 0);
+        KeyboardEvent* keyboardEvent = KeyboardEvent::create(evt, 0);
         OwnPtr<Settings> settings = Settings::create();
         EditingBehavior behavior(settings->editingBehaviorType());
         return behavior.interpretKeyEvent(*keyboardEvent);

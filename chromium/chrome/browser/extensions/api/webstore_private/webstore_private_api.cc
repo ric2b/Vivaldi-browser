@@ -27,7 +27,6 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
 #include "chrome/browser/ui/app_list/app_list_util.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "components/crx_file/id_util.h"
@@ -65,9 +64,11 @@ class PendingApprovals {
   PendingApprovals();
   ~PendingApprovals();
 
-  void PushApproval(scoped_ptr<WebstoreInstaller::Approval> approval);
-  scoped_ptr<WebstoreInstaller::Approval> PopApproval(
-      Profile* profile, const std::string& id);
+  void PushApproval(std::unique_ptr<WebstoreInstaller::Approval> approval);
+  std::unique_ptr<WebstoreInstaller::Approval> PopApproval(
+      Profile* profile,
+      const std::string& id);
+
  private:
   typedef ScopedVector<WebstoreInstaller::Approval> ApprovalList;
 
@@ -80,21 +81,22 @@ PendingApprovals::PendingApprovals() {}
 PendingApprovals::~PendingApprovals() {}
 
 void PendingApprovals::PushApproval(
-    scoped_ptr<WebstoreInstaller::Approval> approval) {
+    std::unique_ptr<WebstoreInstaller::Approval> approval) {
   approvals_.push_back(approval.release());
 }
 
-scoped_ptr<WebstoreInstaller::Approval> PendingApprovals::PopApproval(
-    Profile* profile, const std::string& id) {
+std::unique_ptr<WebstoreInstaller::Approval> PendingApprovals::PopApproval(
+    Profile* profile,
+    const std::string& id) {
   for (size_t i = 0; i < approvals_.size(); ++i) {
     WebstoreInstaller::Approval* approval = approvals_[i];
     if (approval->extension_id == id &&
         profile->IsSameProfile(approval->profile)) {
       approvals_.weak_erase(approvals_.begin() + i);
-      return scoped_ptr<WebstoreInstaller::Approval>(approval);
+      return std::unique_ptr<WebstoreInstaller::Approval>(approval);
     }
   }
-  return scoped_ptr<WebstoreInstaller::Approval>();
+  return std::unique_ptr<WebstoreInstaller::Approval>();
 }
 
 api::webstore_private::Result WebstoreInstallHelperResultToApiResult(
@@ -162,9 +164,9 @@ void WebstorePrivateApi::SetWebstoreInstallerDelegateForTesting(
 }
 
 // static
-scoped_ptr<WebstoreInstaller::Approval>
-WebstorePrivateApi::PopApprovalForTesting(
-    Profile* profile, const std::string& extension_id) {
+std::unique_ptr<WebstoreInstaller::Approval>
+WebstorePrivateApi::PopApprovalForTesting(Profile* profile,
+                                          const std::string& extension_id) {
   return g_pending_approvals.Get().PopApproval(profile, extension_id);
 }
 
@@ -316,7 +318,7 @@ void WebstorePrivateBeginInstallWithManifest3Function::HandleInstallProceed() {
   // This gets cleared in CrxInstaller::ConfirmInstall(). TODO(asargent) - in
   // the future we may also want to add time-based expiration, where a whitelist
   // entry is only valid for some number of minutes.
-  scoped_ptr<WebstoreInstaller::Approval> approval(
+  std::unique_ptr<WebstoreInstaller::Approval> approval(
       WebstoreInstaller::Approval::CreateWithNoInstallPrompt(
           chrome_details_.GetProfile(), details().id,
           std::move(parsed_manifest_), false));
@@ -373,7 +375,7 @@ WebstorePrivateBeginInstallWithManifest3Function::BuildResponse(
       CreateResults(api::webstore_private::RESULT_EMPTY_STRING));
 }
 
-scoped_ptr<base::ListValue>
+std::unique_ptr<base::ListValue>
 WebstorePrivateBeginInstallWithManifest3Function::CreateResults(
     api::webstore_private::Result result) const {
   return BeginInstallWithManifest3::Results::Create(result);
@@ -387,7 +389,7 @@ WebstorePrivateCompleteInstallFunction::
 
 ExtensionFunction::ResponseAction
 WebstorePrivateCompleteInstallFunction::Run() {
-  scoped_ptr<CompleteInstall::Params> params(
+  std::unique_ptr<CompleteInstall::Params> params(
       CompleteInstall::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
   if (chrome_details_.GetProfile()->IsGuestSession() ||
@@ -520,18 +522,19 @@ void WebstorePrivateInstallBundleFunction::OnFetchComplete(
   for (const auto& entry : params_->contents) {
     // Skip already-installed items.
     bool is_installed =
-        extensions::ExtensionRegistry::Get(browser_context())->GetExtensionById(
-            entry->id, extensions::ExtensionRegistry::EVERYTHING) != nullptr;
+        extensions::ExtensionRegistry::Get(browser_context())
+            ->GetExtensionById(
+                entry.id, extensions::ExtensionRegistry::EVERYTHING) != nullptr;
     if (is_installed ||
-        InstallTracker::Get(browser_context())->GetActiveInstall(entry->id)) {
+        InstallTracker::Get(browser_context())->GetActiveInstall(entry.id)) {
       continue;
     }
     BundleInstaller::Item item;
-    item.id = entry->id;
-    item.manifest = entry->manifest;
-    item.localized_name = entry->localized_name;
-    if (entry->icon_url)
-      item.icon_url = source_url().Resolve(*entry->icon_url);
+    item.id = entry.id;
+    item.manifest = entry.manifest;
+    item.localized_name = entry.localized_name;
+    if (entry.icon_url)
+      item.icon_url = source_url().Resolve(*entry.icon_url);
     items.push_back(item);
   }
   if (items.empty()) {
@@ -621,7 +624,7 @@ WebstorePrivateSetStoreLoginFunction::
     ~WebstorePrivateSetStoreLoginFunction() {}
 
 ExtensionFunction::ResponseAction WebstorePrivateSetStoreLoginFunction::Run() {
-  scoped_ptr<SetStoreLogin::Params> params(
+  std::unique_ptr<SetStoreLogin::Params> params(
       SetStoreLogin::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
   SetWebstoreLogin(chrome_details_.GetProfile(), params->login);

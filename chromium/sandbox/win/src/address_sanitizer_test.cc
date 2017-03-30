@@ -4,10 +4,13 @@
 
 #include <stdio.h>
 
+#include <memory>
+
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/windows_version.h"
@@ -31,7 +34,7 @@ class AddressSanitizerTests : public ::testing::Test {
   }
 
  protected:
-  scoped_ptr<base::Environment> env_;
+  std::unique_ptr<base::Environment> env_;
   bool had_asan_options_;
   std::string old_asan_options_;
 };
@@ -88,17 +91,16 @@ TEST_F(AddressSanitizerTests, TestAddressSanitizer) {
     std::string data;
     ASSERT_TRUE(base::ReadFileToString(base::FilePath(temp_file_name), &data));
     // Redirection uses a feature that was added in Windows Vista.
-    if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
-      ASSERT_TRUE(
-          strstr(data.c_str(), "ERROR: AddressSanitizer: heap-buffer-overflow"))
-          << "There doesn't seem to be an ASan report:\n" << data;
-      ASSERT_TRUE(strstr(data.c_str(), "AddressSanitizerTests_Report"))
-          << "The ASan report doesn't appear to be symbolized:\n" << data;
-      ASSERT_TRUE(strstr(data.c_str(), strrchr(__FILE__, '\\')))
-          << "The stack trace doesn't have a correct filename:\n" << data;
-    } else {
-      LOG(WARNING) << "Pre-Vista versions are not supported.";
-    }
+    ASSERT_TRUE(
+        strstr(data.c_str(), "ERROR: AddressSanitizer: heap-buffer-overflow"))
+        << "There doesn't seem to be an ASan report:\n" << data;
+    ASSERT_TRUE(strstr(data.c_str(), "AddressSanitizerTests_Report"))
+        << "The ASan report doesn't appear to be symbolized:\n" << data;
+    std::string source_file_basename(__FILE__);
+    size_t last_slash = source_file_basename.find_last_of("/\\");
+    last_slash = last_slash == std::string::npos ? 0 : last_slash + 1;
+    ASSERT_TRUE(strstr(data.c_str(), &source_file_basename[last_slash]))
+        << "The stack trace doesn't have a correct filename:\n" << data;
   } else {
     LOG(WARNING) << "Not an AddressSanitizer build, skipping the run.";
   }

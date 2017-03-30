@@ -16,16 +16,18 @@ SchedulerSettings::SchedulerSettings()
       timeout_and_draw_when_animation_checkerboards(true),
       using_synchronous_renderer_compositor(false),
       throttle_frame_production(true),
+      abort_commit_before_output_surface_creation(true),
       maximum_number_of_failed_draws_before_draw_is_forced(3),
-      background_frame_interval(base::TimeDelta::FromSeconds(1)) {
-}
+      background_frame_interval(base::TimeDelta::FromSeconds(1)) {}
+
+SchedulerSettings::SchedulerSettings(const SchedulerSettings& other) = default;
 
 SchedulerSettings::~SchedulerSettings() {}
 
-scoped_refptr<base::trace_event::ConvertableToTraceFormat>
+scoped_ptr<base::trace_event::ConvertableToTraceFormat>
 SchedulerSettings::AsValue() const {
-  scoped_refptr<base::trace_event::TracedValue> state =
-      new base::trace_event::TracedValue();
+  scoped_ptr<base::trace_event::TracedValue> state(
+      new base::trace_event::TracedValue());
   state->SetBoolean("use_external_begin_frame_source",
                     use_external_begin_frame_source);
   state->SetBoolean("main_frame_while_swap_throttled_enabled",
@@ -42,7 +44,9 @@ SchedulerSettings::AsValue() const {
   state->SetBoolean("throttle_frame_production", throttle_frame_production);
   state->SetInteger("background_frame_interval",
                     background_frame_interval.InMicroseconds());
-  return state;
+  state->SetBoolean("abort_commit_before_output_surface_creation",
+                    abort_commit_before_output_surface_creation);
+  return std::move(state);
 }
 
 }  // namespace cc

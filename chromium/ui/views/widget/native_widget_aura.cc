@@ -495,7 +495,10 @@ void NativeWidgetAura::ShowWithWindowState(ui::WindowShowState state) {
     // SetInitialFocus() should be always be called, even for
     // SHOW_STATE_INACTIVE. If the window has to stay inactive, the method will
     // do the right thing.
-    SetInitialFocus(state);
+    // Activate() might fail if the window is non-activatable. In this case, we
+    // should pass SHOW_STATE_INACTIVE to SetInitialFocus() to stop the initial
+    // focused view from getting focused. See crbug.com/515594 for example.
+    SetInitialFocus(IsActive() ? state : ui::SHOW_STATE_INACTIVE);
   }
 
   // On desktop aura, a window is activated first even when it is shown as
@@ -593,10 +596,6 @@ bool NativeWidgetAura::IsFullscreen() const {
 void NativeWidgetAura::SetOpacity(unsigned char opacity) {
   if (window_)
     window_->layer()->SetOpacity(opacity / 255.0);
-}
-
-void NativeWidgetAura::SetUseDragFrame(bool use_drag_frame) {
-  NOTIMPLEMENTED();
 }
 
 void NativeWidgetAura::FlashFrame(bool flash) {
@@ -874,7 +873,6 @@ void NativeWidgetAura::OnKeyEvent(ui::KeyEvent* event) {
     return;
 
   delegate_->OnKeyEvent(event);
-  event->SetHandled();
 }
 
 void NativeWidgetAura::OnMouseEvent(ui::MouseEvent* event) {

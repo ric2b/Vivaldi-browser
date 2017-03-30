@@ -26,14 +26,14 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<AudioProcessingEvent> AudioProcessingEvent::create()
+AudioProcessingEvent* AudioProcessingEvent::create()
 {
-    return adoptRefWillBeNoop(new AudioProcessingEvent);
+    return new AudioProcessingEvent;
 }
 
-PassRefPtrWillBeRawPtr<AudioProcessingEvent> AudioProcessingEvent::create(AudioBuffer* inputBuffer, AudioBuffer* outputBuffer, double playbackTime)
+AudioProcessingEvent* AudioProcessingEvent::create(AudioBuffer* inputBuffer, AudioBuffer* outputBuffer, double playbackTime)
 {
-    return adoptRefWillBeNoop(new AudioProcessingEvent(inputBuffer, outputBuffer, playbackTime));
+    return new AudioProcessingEvent(inputBuffer, outputBuffer, playbackTime);
 }
 
 AudioProcessingEvent::AudioProcessingEvent()

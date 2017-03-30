@@ -44,10 +44,6 @@ bool WebClient::AllowWebViewAllocInit() const {
   return false;
 }
 
-bool WebClient::WebViewsNeedActiveStateManager() const {
-  return false;
-}
-
 base::string16 WebClient::GetPluginNotSupportedText() const {
   return base::string16();
 }
@@ -75,7 +71,8 @@ base::RefCountedStaticMemory* WebClient::GetDataResourceBytes(
   return nullptr;
 }
 
-NSString* WebClient::GetEarlyPageScript(WebViewType web_view_type) const {
+NSString* WebClient::GetEarlyPageScript() const {
   return @"";
 }
+
 }  // namespace web

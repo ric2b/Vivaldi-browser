@@ -58,7 +58,7 @@ class GarbageCollectedMixinConstructorMarker;
 class HeapObjectHeader;
 class PersistentNode;
 class PersistentRegion;
-class BaseHeap;
+class BaseArena;
 class SafePointAwareMutexLocker;
 class SafePointBarrier;
 class ThreadState;
@@ -112,12 +112,6 @@ static bool invokePreFinalizer(void* object)        \
     return true;                                    \
 }                                                   \
 using UsingPreFinalizerMacroNeedsTrailingSemiColon = char
-
-#if ENABLE(OILPAN)
-#define WILL_BE_USING_PRE_FINALIZER(Class, method) USING_PRE_FINALIZER(Class, method)
-#else
-#define WILL_BE_USING_PRE_FINALIZER(Class, method)
-#endif
 
 class PLATFORM_EXPORT ThreadState {
     USING_FAST_MALLOC(ThreadState);
@@ -186,11 +180,11 @@ public:
     // thread.
     static void init();
     static void shutdown();
-    static void shutdownHeapIfNecessary();
     bool isTerminating() { return m_isTerminating; }
 
     static void attachMainThread();
     static void detachMainThread();
+    void cleanupMainThread();
 
     // Trace all persistent roots, called when marking the managed heap objects.
     static void visitPersistentRoots(Visitor*);
@@ -343,7 +337,6 @@ public:
     bool isAtSafePoint() const { return m_atSafePoint; }
 
     void addInterruptor(PassOwnPtr<BlinkGCInterruptor>);
-    void removeInterruptor(BlinkGCInterruptor*);
 
     void recordStackEnd(intptr_t* endOfStack)
     {
@@ -353,11 +346,11 @@ public:
     // Get one of the heap structures for this thread.
     // The thread heap is split into multiple heap parts based on object types
     // and object sizes.
-    BaseHeap* heap(int heapIndex) const
+    BaseArena* arena(int arenaIndex) const
     {
-        ASSERT(0 <= heapIndex);
-        ASSERT(heapIndex < BlinkGC::NumberOfHeaps);
-        return m_heaps[heapIndex];
+        ASSERT(0 <= arenaIndex);
+        ASSERT(arenaIndex < BlinkGC::NumberOfArenas);
+        return m_arenas[arenaIndex];
     }
 
 #if ENABLE(ASSERT)
@@ -369,7 +362,7 @@ public:
 #endif
 
     // A region of PersistentNodes allocated on the given thread.
-    PersistentRegion* persistentRegion() const { return m_persistentRegion.get(); }
+    PersistentRegion* getPersistentRegion() const { return m_persistentRegion.get(); }
     // A region of PersistentNodes not owned by any particular thread.
 
     // Visit local thread stack and trace all pointers conservatively.
@@ -456,8 +449,8 @@ public:
         }
     }
 
-    // vectorBackingHeap() returns a heap that the vector allocation should use.
-    // We have four vector heaps and want to choose the best heap here.
+    // vectorBackingArena() returns an arena that the vector allocation should use.
+    // We have four vector arenas and want to choose the best arena here.
     //
     // The goal is to improve the succession rate where expand and
     // promptlyFree happen at an allocation point. This is a key for reusing
@@ -469,41 +462,41 @@ public:
     // - A vector is likely to be promptly freed if the same type of vector
     //   has been frequently promptly freed in the past.
     // - Given the above, when allocating a new vector, look at the four vectors
-    //   that are placed immediately prior to the allocation point of each heap.
-    //   Choose the heap where the vector is least likely to be expanded
+    //   that are placed immediately prior to the allocation point of each arena.
+    //   Choose the arena where the vector is least likely to be expanded
     //   nor promptly freed.
     //
-    // To implement the heuristics, we add a heapAge to each heap. The heapAge
+    // To implement the heuristics, we add an arenaAge to each arena. The arenaAge
     // is updated if:
     //
-    // - a vector on the heap is expanded; or
-    // - a vector that meets the condition (*) is allocated on the heap
+    // - a vector on the arena is expanded; or
+    // - a vector that meets the condition (*) is allocated on the arena
     //
     //   (*) More than 33% of the same type of vectors have been promptly
     //       freed since the last GC.
     //
-    BaseHeap* vectorBackingHeap(size_t gcInfoIndex)
+    BaseArena* vectorBackingArena(size_t gcInfoIndex)
     {
         ASSERT(checkThread());
         size_t entryIndex = gcInfoIndex & likelyToBePromptlyFreedArrayMask;
         --m_likelyToBePromptlyFreed[entryIndex];
-        int heapIndex = m_vectorBackingHeapIndex;
+        int arenaIndex = m_vectorBackingArenaIndex;
         // If m_likelyToBePromptlyFreed[entryIndex] > 0, that means that
         // more than 33% of vectors of the type have been promptly freed
         // since the last GC.
         if (m_likelyToBePromptlyFreed[entryIndex] > 0) {
-            m_heapAges[heapIndex] = ++m_currentHeapAges;
-            m_vectorBackingHeapIndex = heapIndexOfVectorHeapLeastRecentlyExpanded(BlinkGC::Vector1HeapIndex, BlinkGC::Vector4HeapIndex);
+            m_arenaAges[arenaIndex] = ++m_currentArenaAges;
+            m_vectorBackingArenaIndex = arenaIndexOfVectorArenaLeastRecentlyExpanded(BlinkGC::Vector1ArenaIndex, BlinkGC::Vector4ArenaIndex);
         }
-        ASSERT(isVectorHeapIndex(heapIndex));
-        return m_heaps[heapIndex];
+        ASSERT(isVectorArenaIndex(arenaIndex));
+        return m_arenas[arenaIndex];
     }
-    BaseHeap* expandedVectorBackingHeap(size_t gcInfoIndex);
-    static bool isVectorHeapIndex(int heapIndex)
+    BaseArena* expandedVectorBackingArena(size_t gcInfoIndex);
+    static bool isVectorArenaIndex(int arenaIndex)
     {
-        return BlinkGC::Vector1HeapIndex <= heapIndex && heapIndex <= BlinkGC::Vector4HeapIndex;
+        return BlinkGC::Vector1ArenaIndex <= arenaIndex && arenaIndex <= BlinkGC::Vector4ArenaIndex;
     }
-    void allocationPointAdjusted(int heapIndex);
+    void allocationPointAdjusted(int arenaIndex);
     void promptlyFreed(size_t gcInfoIndex);
 
     void accumulateSweepingTime(double time) { m_accumulatedSweepingTime += time; }
@@ -581,7 +574,7 @@ private:
     void eagerSweep();
 
 #if defined(ADDRESS_SANITIZER)
-    void poisonEagerHeap(BlinkGC::Poisoning);
+    void poisonEagerArena();
     void poisonAllHeaps();
 #endif
 
@@ -600,8 +593,8 @@ private:
     void invokePreFinalizers();
 
     void takeSnapshot(SnapshotType);
-    void clearHeapAges();
-    int heapIndexOfVectorHeapLeastRecentlyExpanded(int beginHeapIndex, int endHeapIndex);
+    void clearArenaAges();
+    int arenaIndexOfVectorArenaLeastRecentlyExpanded(int beginArenaIndex, int endArenaIndex);
 
     void reportMemoryToV8();
 
@@ -644,10 +637,10 @@ private:
     size_t m_gcForbiddenCount;
     double m_accumulatedSweepingTime;
 
-    BaseHeap* m_heaps[BlinkGC::NumberOfHeaps];
-    int m_vectorBackingHeapIndex;
-    size_t m_heapAges[BlinkGC::NumberOfHeaps];
-    size_t m_currentHeapAges;
+    BaseArena* m_arenas[BlinkGC::NumberOfArenas];
+    int m_vectorBackingArenaIndex;
+    size_t m_arenaAges[BlinkGC::NumberOfArenas];
+    size_t m_currentArenaAges;
 
     bool m_isTerminating;
     GarbageCollectedMixinConstructorMarker* m_gcMixinMarker;

@@ -147,7 +147,6 @@ if (!is_android) {
         "//sandbox",
         "//ui/gfx",
         "//win8:visual_elements_resources",
-        "//win8/delegate_execute",
       ]
       data_deps = [
         "//chrome/app/version_assembly:version_assembly_manifest",
@@ -314,15 +313,13 @@ if (is_mac || is_win) {
         "//chrome/app/theme:chrome_unscaled_resources",
         "//chrome_elf",
         "//components/crash/content/app",
+        "//components/policy",
         "//content/app/resources",
         "//crypto",
         "//net:net_resources",
         "//third_party/wtl",
         "//ui/views",
       ]
-      if (enable_configuration_policy) {
-        deps += [ "//components/policy" ]
-      }
       if (current_cpu == "x86") {
         # TODO(GYP) bug 512861: Lots of VCLinkerTool stuff on Windows.
         #deps += [ 'chrome_user32_delay_imports' ]  TODO(GYP)
@@ -444,9 +441,7 @@ if (is_mac || is_win) {
         }
       }
 
-      if (enable_configuration_policy) {
-        deps += [ "//chrome/browser/policy:path_parser" ]
-      }
+      deps += [ "//chrome/browser/policy:path_parser" ]
 
       if (enable_plugins && enable_pdf) {
         deps += [ "//pdf" ]
@@ -499,7 +494,6 @@ group("child_dependencies") {
     public_deps += [
       "//chrome/browser/devtools",
       "//chrome/child",
-      "//chrome/plugin",
       "//chrome/renderer",
       "//chrome/utility",
       "//content/public/child",
@@ -589,7 +583,6 @@ group("resources") {
 group("extra_resources") {
   public_deps = [
     "//chrome/browser/resources:invalidations_resources",
-    "//chrome/browser/resources:memory_internals_resources",
     "//chrome/browser/resources:net_internals_resources",
     "//chrome/browser/resources:password_manager_internals_resources",
     "//chrome/browser/resources:policy_resources",
@@ -665,7 +658,6 @@ repack("packed_extra_resources") {
     "$root_gen_dir/chrome/chrome_unscaled_resources.pak",
     "$root_gen_dir/chrome/common_resources.pak",
     "$root_gen_dir/chrome/invalidations_resources.pak",
-    "$root_gen_dir/chrome/memory_internals_resources.pak",
     "$root_gen_dir/chrome/net_internals_resources.pak",
     "$root_gen_dir/chrome/password_manager_internals_resources.pak",
     "$root_gen_dir/chrome/policy_resources.pak",
@@ -678,7 +670,6 @@ repack("packed_extra_resources") {
     "//chrome/app/theme:chrome_unscaled_resources",
     "//chrome/browser:resources",
     "//chrome/browser/resources:invalidations_resources",
-    "//chrome/browser/resources:memory_internals_resources",
     "//chrome/browser/resources:net_internals_resources",
     "//chrome/browser/resources:password_manager_internals_resources",
     "//chrome/browser/resources:policy_resources",
@@ -1027,7 +1018,6 @@ if (is_android) {
       "//chrome/browser/ui",
       "//chrome/child",
       "//chrome/common",
-      "//chrome/plugin",
       "//chrome/renderer",
       "//chrome/utility",
       "//components/safe_browsing_db:safe_browsing_db_mobile",

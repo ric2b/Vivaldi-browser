@@ -38,8 +38,8 @@ const double kInnerShadowBlurRadius = 2.0;
 const int kPaddingX = 14;
 const int kPaddingY = 4;
 
-skia::RefPtr<SkShader> GetButtonGradient(int height,
-                                         Button::ButtonState state) {
+sk_sp<SkShader> CreateButtonGradient(int height,
+                                     Button::ButtonState state) {
   ColorByState start = {0xFFF0F0F0, 0xFFF4F4F4, 0xFFEBEBEB, 0xFFEDEDED};
   ColorByState end = {0xFFE0E0E0, 0xFFE4E4E4, 0xFFDBDBDB, 0xFFDEDEDE};
 
@@ -50,11 +50,9 @@ skia::RefPtr<SkShader> GetButtonGradient(int height,
   SkColor gradient_colors[] = {start[state], start[state], end[state]};
   SkScalar gradient_positions[] = {0.0, 0.38, 1.0};
 
-  skia::RefPtr<SkShader> gradient_shader =
-      skia::AdoptRef(SkGradientShader::CreateLinear(
+  return SkGradientShader::MakeLinear(
           gradient_points, gradient_colors, gradient_positions, 3,
-          SkShader::kClamp_TileMode));
-  return gradient_shader;
+          SkShader::kClamp_TileMode);
 }
 
 void DrawConstrainedButtonBackground(const SkRect& button_rect,
@@ -74,13 +72,10 @@ void DrawConstrainedButtonBackground(const SkRect& button_rect,
   std::vector<gfx::ShadowValue> shadows(
       1, gfx::ShadowValue(gfx::Vector2d(0, kShadowOffsetY), blur,
                           shadow[button_state]));
-  skia::RefPtr<SkDrawLooper> looper = gfx::CreateShadowDrawLooper(shadows);
-  paint.setLooper(looper.get());
+  paint.setLooper(gfx::CreateShadowDrawLooper(shadows));
 
   // Background.
-  skia::RefPtr<SkShader> gradient_shader =
-      GetButtonGradient(rect.height(), button_state);
-  paint.setShader(gradient_shader.get());
+  paint.setShader(CreateButtonGradient(rect.height(), button_state));
   paint.setStyle(SkPaint::kFill_Style);
   paint.setFlags(SkPaint::kAntiAlias_Flag);
   canvas->drawRoundRect(rect, kCornerRadius, kCornerRadius, paint);
@@ -110,8 +105,7 @@ void DrawRoundRectInnerShadow(const SkRect& rect,
   SkPaint paint;
   std::vector<gfx::ShadowValue> shadows(
       1, gfx::ShadowValue(shadow_offset, kInnerShadowBlurRadius, shadow_color));
-  skia::RefPtr<SkDrawLooper> looper = gfx::CreateShadowDrawLooper(shadows);
-  paint.setLooper(looper.get());
+  paint.setLooper(gfx::CreateShadowDrawLooper(shadows));
   paint.setStyle(SkPaint::kFill_Style);
   paint.setColor(SK_ColorBLACK);  // Note: Entirely clipped.
 

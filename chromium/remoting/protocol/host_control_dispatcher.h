@@ -35,6 +35,7 @@ class HostControlDispatcher : public ChannelDispatcherBase,
   void SetCapabilities(const Capabilities& capabilities) override;
   void SetPairingResponse(const PairingResponse& pairing_response) override;
   void DeliverHostMessage(const ExtensionMessage& message) override;
+  void SetVideoLayout(const VideoLayout& layout) override;
 
   // ClipboardStub implementation for sending clipboard data to client.
   void InjectClipboardEvent(const ClipboardEvent& event) override;
@@ -53,7 +54,7 @@ class HostControlDispatcher : public ChannelDispatcherBase,
   void set_host_stub(HostStub* host_stub) { host_stub_ = host_stub; }
 
  private:
-  void OnIncomingMessage(scoped_ptr<CompoundBuffer> buffer) override;
+  void OnIncomingMessage(std::unique_ptr<CompoundBuffer> buffer) override;
 
   ClipboardStub* clipboard_stub_ = nullptr;
   HostStub* host_stub_ = nullptr;

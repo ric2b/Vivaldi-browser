@@ -16,7 +16,6 @@
 #include "components/mus/public/interfaces/surface_id.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "mojo/public/cpp/bindings/array.h"
-#include "mojo/public/cpp/system/macros.h"
 #include "mojo/shell/public/interfaces/interface_provider.mojom.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
@@ -52,7 +51,7 @@ struct WindowProperty;
 class Window {
  public:
   using Children = std::vector<Window*>;
-  using EmbedCallback = base::Callback<void(bool, ConnectionSpecificId)>;
+  using EmbedCallback = base::Callback<void(bool)>;
   using PropertyDeallocator = void (*)(int64_t value);
   using SharedProperties = std::map<std::string, std::vector<uint8_t>>;
 
@@ -88,6 +87,9 @@ class Window {
   // Visibility (also see IsDrawn()). When created windows are hidden.
   bool visible() const { return visible_; }
   void SetVisible(bool value);
+
+  float opacity() const { return opacity_; }
+  void SetOpacity(float opacity);
 
   // Cursors
   mojom::Cursor predefined_cursor() const { return cursor_id_; }
@@ -173,7 +175,7 @@ class Window {
   void MoveToBack();
 
   // Returns true if |child| is this or a descendant of this.
-  bool Contains(Window* child) const;
+  bool Contains(const Window* child) const;
 
   void AddTransientWindow(Window* transient_window);
   void RemoveTransientWindow(Window* transient_window);
@@ -185,6 +187,9 @@ class Window {
   const Window* transient_parent() const { return transient_parent_; }
   const Children& transient_children() const { return transient_children_; }
 
+  void SetModal();
+  bool is_modal() const { return is_modal_; }
+
   Window* GetChildById(Id id);
 
   void SetTextInputState(mojo::TextInputStatePtr state);
@@ -194,7 +199,7 @@ class Window {
   void SetCapture();
   void ReleaseCapture();
 
-  // Focus.
+  // Focus. See WindowTreeConnection::ClearFocus() to reset focus.
   void SetFocus();
   bool HasFocus() const;
   void SetCanFocus(bool can_focus);
@@ -205,7 +210,6 @@ class Window {
   // NOTE: callback is run synchronously if Embed() is not allowed on this
   // Window.
   void Embed(mus::mojom::WindowTreeClientPtr client,
-             uint32_t policy_bitmask,
              const EmbedCallback& callback);
 
   // TODO(sky): this API is only applicable to the WindowManager. Move it
@@ -243,6 +247,7 @@ class Window {
   void LocalRemoveChild(Window* child);
   void LocalAddTransientWindow(Window* transient_window);
   void LocalRemoveTransientWindow(Window* transient_window);
+  void LocalSetModal();
   // Returns true if the order actually changed.
   bool LocalReorder(Window* relative, mojom::OrderDirection direction);
   void LocalSetBounds(const gfx::Rect& old_bounds, const gfx::Rect& new_bounds);
@@ -251,8 +256,9 @@ class Window {
       const std::vector<gfx::Rect>& additional_client_areas);
   void LocalSetViewportMetrics(const mojom::ViewportMetrics& old_metrics,
                                const mojom::ViewportMetrics& new_metrics);
-  void LocalSetDrawn(bool drawn);
+  void LocalSetParentDrawn(bool drawn);
   void LocalSetVisible(bool visible);
+  void LocalSetOpacity(float opacity);
   void LocalSetPredefinedCursor(mojom::Cursor cursor_id);
   void LocalSetSharedProperty(const std::string& name,
                               const std::vector<uint8_t>* data);
@@ -297,6 +303,8 @@ class Window {
   Window* transient_parent_;
   Children transient_children_;
 
+  bool is_modal_;
+
   base::ObserverList<WindowObserver> observers_;
   InputEventHandler* input_event_handler_;
 
@@ -307,15 +315,15 @@ class Window {
   mojom::ViewportMetricsPtr viewport_metrics_;
 
   bool visible_;
+  float opacity_;
 
   mojom::Cursor cursor_id_;
 
   SharedProperties properties_;
 
-  // Drawn state is derived from the visible state and the parent's visible
-  // state. This field is only used if the window has no parent (eg it's a
-  // root).
-  bool drawn_;
+  // Drawn state of our parent. This is only meaningful for root Windows, in
+  // which the parent Window isn't exposed to the client.
+  bool parent_drawn_;
 
   // Value struct to keep the name and deallocator for this property.
   // Key cannot be used for this purpose because it can be char* or
@@ -328,7 +336,7 @@ class Window {
 
   std::map<const void*, Value> prop_map_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(Window);
+  DISALLOW_COPY_AND_ASSIGN(Window);
 };
 
 }  // namespace mus

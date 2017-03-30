@@ -72,6 +72,7 @@ static_library("common") {
     "//chrome/common/safe_browsing:proto",
     "//chrome/common/variations:fieldtrial_testing_config",
     "//chrome/installer/util:with_no_strings",
+    "//components/cdm/common",
     "//components/cloud_devices/common",
     "//components/component_updater",
     "//components/content_settings/core/common",
@@ -89,6 +90,7 @@ static_library("common") {
     "//components/nacl/common:switches",
     "//components/offline_pages:switches",
     "//components/omnibox/common",
+    "//components/policy",
     "//components/policy:policy_component_common",
     "//components/prefs",
     "//components/strings",
@@ -111,6 +113,7 @@ static_library("common") {
     "//ui/accessibility",
     "//ui/base",
     "//ui/gfx/ipc",
+    "//ui/gfx/ipc/skia",
     "//ui/gl",
     "//ui/message_center",
     "//ui/resources:resources",
@@ -188,8 +191,6 @@ static_library("common") {
     public_deps += [ "//third_party/boringssl" ]
   }
   if (is_mac) {
-    sources +=
-        rebase_path(gypi_values.chrome_common_mac_sources, ".", "//chrome")
     public_deps += [ ":app_mode_app_support" ]
   }
   if (is_chromeos) {
@@ -245,6 +246,8 @@ static_library("common") {
       "//components/dom_distiller/core",  # Needed by chrome_content_client.cc.
       "//third_party/wtl",
     ]
+
+    libs = [ "wintrust.lib" ]
   }
 
   if (is_mac) {
@@ -272,9 +275,6 @@ static_library("common") {
   }
   if (!enable_webrtc) {
     sources -= [ "media/webrtc_logging_messages.h" ]
-  }
-  if (enable_configuration_policy) {
-    public_deps += [ "//components/policy" ]
   }
 
   if (safe_browsing_mode == 1) {
@@ -400,6 +400,11 @@ static_library("app_mode_app_support") {
 
 mojom("mojo_bindings") {
   sources = [
+    "image_decoder.mojom",
     "resource_usage_reporter.mojom",
+  ]
+
+  public_deps = [
+    "//skia/public/interfaces",
   ]
 }

@@ -7,6 +7,7 @@
  */
 var FEEDBACK_LANDING_PAGE =
     'https://support.google.com/chrome/go/feedback_confirmation';
+
 /** @type {number}
  * @const
  */
@@ -17,11 +18,18 @@ var MAX_ATTACH_FILE_SIZE = 3 * 1024 * 1024;
  * @const
  */
 var FEEDBACK_MIN_WIDTH = 500;
+
 /**
  * @type {number}
  * @const
  */
 var FEEDBACK_MIN_HEIGHT = 585;
+
+/**
+ * @type {number}
+ * @const
+ */
+var FEEDBACK_MIN_HEIGHT_LOGIN = 482;
 
 /** @type {number}
  * @const
@@ -43,14 +51,31 @@ var SYSINFO_WINDOW_ID = 'sysinfo_window';
  */
 var STATS_WINDOW_ID = 'stats_window';
 
+/**
+ * Feedback flow defined in feedback_private.idl.
+ * @enum {string}
+ */
+var FeedbackFlow = {
+  REGULAR: 'regular',  // Flow in a regular user session.
+  LOGIN: 'login'       // Flow on the login screen.
+};
+
 var attachedFileBlob = null;
 var lastReader = null;
 
-var feedbackInfo = null;
-var systemInfo = null;
-
+/**
+ * Determines whether the system information associated with this instance of
+ * the feedback window has been received.
+ * @type {boolean}
+ */
 var isSystemInfoReady = false;
-var onSystemInfoReadyCallback = null;
+
+/**
+ * The callback used by the sys_info_page to receive the event that the system
+ * information is ready.
+ * @type {function(sysInfo)}
+ */
+var sysInfoPageOnSysInfoReadyCallback = null;
 
 /**
  * Reads the selected file when the user selects a file.
@@ -139,8 +164,7 @@ function sendReport() {
   var useSystemInfo = false;
   var useHistograms = false;
   if ($('sys-info-checkbox') != null &&
-      $('sys-info-checkbox').checked &&
-      systemInfo != null) {
+      $('sys-info-checkbox').checked) {
     // Send histograms along with system info.
     useSystemInfo = useHistograms = true;
   }
@@ -151,28 +175,19 @@ function sendReport() {
   }
 </if>
 
-  if (useSystemInfo) {
-    if (feedbackInfo.systemInformation != null) {
-      // Concatenate sysinfo if we had any initial system information
-      // sent with the feedback request event.
-      feedbackInfo.systemInformation =
-          feedbackInfo.systemInformation.concat(systemInfo);
-    } else {
-      feedbackInfo.systemInformation = systemInfo;
-    }
-  }
-
   feedbackInfo.sendHistograms = useHistograms;
 
   // If the user doesn't want to send the screenshot.
   if (!$('screenshot-checkbox').checked)
     feedbackInfo.screenshot = null;
 
-  chrome.feedbackPrivate.sendFeedback(feedbackInfo, function(result) {
+  // Request sending the report, show the landing page (if allowed), and close
+  // this window right away. The FeedbackRequest object that represents this
+  // report will take care of sending the report in the background.
+  sendFeedbackReport(useSystemInfo);
+  if (feedbackInfo.flow != FeedbackFlow.LOGIN)
     window.open(FEEDBACK_LANDING_PAGE, '_blank');
-    window.close();
-  });
-
+  window.close();
   return true;
 }
 
@@ -229,21 +244,26 @@ function resizeAppWindow() {
   // style.margin - the variable seems to not exist.
   var height = $('title-bar').scrollHeight +
       $('content-pane').scrollHeight + CONTENT_MARGIN_HEIGHT;
-  if (height < FEEDBACK_MIN_HEIGHT)
-    height = FEEDBACK_MIN_HEIGHT;
+
+  var minHeight = FEEDBACK_MIN_HEIGHT;
+  if (feedbackInfo.flow == FeedbackFlow.LOGIN)
+    minHeight = FEEDBACK_MIN_HEIGHT_LOGIN;
+  height = Math.max(height, minHeight);
 
   chrome.app.window.current().resizeTo(width, height);
 }
 
 /**
- * @return {Object} the full anonymized system information we got from the
- * system as well as the extra-app added data.
+ * A callback to be invoked when the background page of this extension receives
+ * the system information.
  */
-function getFullSystemInformation() {
-  var sysInfo = feedbackInfo.systemInformation;
-  if (systemInfo != null)
-    sysInfo = sysInfo.concat(systemInfo);
-  return sysInfo;
+function onSystemInformation() {
+  isSystemInfoReady = true;
+  // In case the sys_info_page needs to be notified by this event, do so.
+  if (sysInfoPageOnSysInfoReadyCallback != null) {
+    sysInfoPageOnSysInfoReadyCallback(feedbackInfo.systemInformation);
+    sysInfoPageOnSysInfoReadyCallback = null;
+  }
 }
 
 /**
@@ -261,7 +281,9 @@ function initialize() {
   // Add listener to receive the feedback info object.
   chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     if (request.sentFromEventPage) {
-      feedbackInfo = request.data;
+      if (!feedbackInfo.flow)
+        feedbackInfo.flow = FeedbackFlow.REGULAR;
+
       $('description-text').textContent = feedbackInfo.description;
       if (feedbackInfo.pageUrl)
         $('page-url-text').value = feedbackInfo.pageUrl;
@@ -285,12 +307,9 @@ function initialize() {
         $('user-email-text').value = email;
       });
 
-      chrome.feedbackPrivate.getSystemInformation(function(sysInfo) {
-        systemInfo = sysInfo;
-        isSystemInfoReady = true;
-        if (onSystemInfoReadyCallback != null)
-          onSystemInfoReadyCallback(getFullSystemInformation());
-      });
+      // Initiate getting the system info.
+      isSystemInfoReady = false;
+      getSystemInformation(onSystemInformation);
 
       // An extension called us with an attached file.
       if (feedbackInfo.attachedFile) {
@@ -299,6 +318,13 @@ function initialize() {
         attachedFileBlob = feedbackInfo.attachedFile.data;
         $('custom-file-container').hidden = false;
         $('attach-file').hidden = true;
+      }
+
+      // No URL and file attachment for login screen feedback.
+      if (feedbackInfo.flow == FeedbackFlow.LOGIN) {
+        $('page-url').hidden = true;
+        $('attach-file-container').hidden = true;
+        $('attach-file-note').hidden = true;
       }
 
 <if expr="chromeos">
@@ -318,7 +344,7 @@ function initialize() {
           // Opens a new window showing the full anonymized system+app
           // information.
           $('sys-info-url').onclick = function() {
-            var win = chrome.app.window.get('sys-info-window');
+            var win = chrome.app.window.get(SYSINFO_WINDOW_ID);
             if (win) {
               win.show();
               return;
@@ -326,22 +352,26 @@ function initialize() {
             chrome.app.window.create(
               '/html/sys_info.html', {
                 frame: 'chrome',
-                id: 'sys-info-window',
+                id: SYSINFO_WINDOW_ID,
                 width: 600,
                 height: 400,
                 hidden: false,
                 resizable: true
               }, function(appWindow) {
-                // Define two functions for the newly created window so that it
-                // can retrieve its needed data.
+                // Define functions for the newly created window.
+
+                // Gets the full system information for the new window.
                 appWindow.contentWindow.getFullSystemInfo =
-                    function(onSysInfoReady) {
+                    function(callback) {
                       if (isSystemInfoReady) {
-                        onSysInfoReady(getFullSystemInformation());
+                        callback(feedbackInfo.systemInformation);
                         return;
                       }
-                      onSystemInfoReadyCallback = onSysInfoReady;
+
+                      sysInfoPageOnSysInfoReadyCallback = callback;
                     };
+
+                // Returns the loadTimeData for the new window.
                 appWindow.contentWindow.getLoadTimeData = function() {
                   return loadTimeData;
                 };

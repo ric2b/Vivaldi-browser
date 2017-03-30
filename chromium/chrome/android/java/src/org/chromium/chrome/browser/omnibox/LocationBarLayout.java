@@ -30,11 +30,8 @@ import android.os.Parcelable;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.speech.RecognizerIntent;
-import android.text.Editable;
 import android.text.InputType;
-import android.text.Selection;
 import android.text.TextUtils;
-import android.text.TextWatcher;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.Pair;
@@ -49,7 +46,6 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.view.ViewStub;
-import android.view.inputmethod.BaseInputConnection;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -152,7 +148,6 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     protected TintedImageButton mDeleteButton;
     protected TintedImageButton mMicButton;
     protected UrlBar mUrlBar;
-    protected UrlContainer mUrlContainer;
     private ActionModeController mActionModeController = null;
 
     private AutocompleteController mAutocomplete;
@@ -182,12 +177,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
      */
     private String mUrlTextAfterSuggestionsReceived;
 
-    // Set to true when the URL bar text is modified programmatically. Initially set
-    // to true until the old state has been loaded.
-    private boolean mIgnoreURLBarModification = true;
     private boolean mIgnoreOmniboxItemSelection = true;
-
-    private boolean mLastUrlEditWasDelete = false;
 
     // True if we are showing the search query instead of the url.
     private boolean mQueryInTheOmnibox = false;
@@ -206,7 +196,10 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
     private boolean mSuggestionsShown;
     private boolean mUrlHasFocus;
+    private boolean mUrlFocusChangeInProgress;
     private boolean mUrlFocusedFromFakebox;
+
+    private boolean mVoiceSearchEnabled;
 
     // Set to true when the user has started typing new input in the omnibox, set to false
     // when the omnibox loses focus or becomes empty.
@@ -220,8 +213,6 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     private AnimatorSet mLocationBarIconActiveAnimator;
     private AnimatorSet mSecurityButtonShowAnimator;
     private AnimatorSet mNavigationIconShowAnimator;
-
-    private TextWatcher mTextWatcher;
 
     private OmniboxPrerender mOmniboxPrerender;
 
@@ -263,78 +254,6 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
          * Called when the omnibox is focused.
          */
         void onOmniboxFocused();
-    }
-
-    /**
-     * Class to handle text changes in the URL bar, ensuring that the appropriate
-     * buttons are displayed as the text changes, and requesting suggestions.
-     */
-    private final class UrlBarTextWatcher implements TextWatcher {
-        @Override
-        public void afterTextChanged(final Editable editableText) {
-            updateDeleteButtonVisibility();
-            updateNavigationButton();
-
-            if (mIgnoreURLBarModification) return;
-
-            if (!mHasStartedNewOmniboxEditSession && mNativeInitialized) {
-                mAutocomplete.resetSession();
-                mHasStartedNewOmniboxEditSession = true;
-                mNewOmniboxEditSessionTimestamp = SystemClock.elapsedRealtime();
-            }
-
-            if (!isInTouchMode() && mSuggestionList != null) {
-                mSuggestionList.setSelection(0);
-            }
-
-            stopAutocomplete(false);
-            if (TextUtils.isEmpty(mUrlBar.getTextWithoutAutocomplete())) {
-                hideSuggestions();
-                startZeroSuggest();
-            } else {
-                assert mRequestSuggestions == null : "Multiple omnibox requests in flight.";
-                mRequestSuggestions = new Runnable() {
-                    @Override
-                    public void run() {
-                        String textWithoutAutocomplete = mUrlBar.getTextWithoutAutocomplete();
-
-                        boolean preventAutocomplete = !shouldAutocomplete()
-                                || (editableText != null && Selection.getSelectionEnd(editableText)
-                                        != editableText.length());
-                        mRequestSuggestions = null;
-                        if (getCurrentTab() == null) return;
-                        mAutocomplete.start(
-                                getCurrentTab().getProfile(),
-                                getCurrentTab().getUrl(),
-                                textWithoutAutocomplete, preventAutocomplete);
-                    }
-                };
-                if (mNativeInitialized) {
-                    postDelayed(mRequestSuggestions, OMNIBOX_SUGGESTION_START_DELAY_MS);
-                } else {
-                    mDeferredNativeRunnables.add(mRequestSuggestions);
-                }
-            }
-
-            // Occasionally, was seeing the selection in the URL not being cleared during
-            // very rapid editing.  This is here to hopefully force a selection reset during
-            // deletes.
-            if (mLastUrlEditWasDelete) mUrlBar.setSelection(mUrlBar.getSelectionStart());
-        }
-
-        @Override
-        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            cancelPendingAutocompleteStart();
-        }
-
-        @Override
-        public void onTextChanged(CharSequence s, int start, int before, int count) {
-            // We need to determine whether the text change was triggered by a delete (so we
-            // don't autocomplete of the entered text in that case). With soft-keyboard, there
-            // is no way to know that the delete button was pressed, so we track text removal
-            // changes.
-            mLastUrlEditWasDelete = (count == 0);
-        }
     }
 
     /**
@@ -386,7 +305,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
                                 mSuggestionList.getSelectedItemPosition());
                 // Set the UrlBar text to empty, so that it will trigger a text change when we
                 // set the text to the suggestion again.
-                setUrlBarText(null, null, "");
+                setUrlBarText("", null);
                 mUrlBar.setText(selectedItem.getSuggestion().getFillIntoEdit());
                 mSuggestionList.setSelection(0);
                 mUrlBar.setSelection(mUrlBar.getText().length());
@@ -701,8 +620,6 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         }
         mUrlBar.setDelegate(this);
 
-        mUrlContainer = (UrlContainer) findViewById(R.id.url_container);
-
         mSuggestionItems = new ArrayList<OmniboxResultItem>();
         mSuggestionListAdapter = new OmniboxResultsAdapter(getContext(), this, mSuggestionItems);
 
@@ -755,9 +672,6 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
         mUrlBar.setOnKeyListener(new UrlBarKeyListener());
 
-        mTextWatcher = new UrlBarTextWatcher();
-        mUrlBar.setLocationBarTextWatcher(mTextWatcher);
-
         // mLocationBar's direction is tied to this UrlBar's text direction. Icons inside the
         // location bar, e.g. lock, refresh, X, should be reversed if UrlBar's text is RTL.
         mUrlBar.setUrlDirectionListener(new UrlBar.UrlDirectionListener() {
@@ -808,6 +722,10 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
                 });
 
         mWindowAndroid = windowAndroid;
+
+        // If the user focused the omnibox prior to the native libraries being initialized,
+        // autocomplete will not always be enabled, so we force it enabled in that case.
+        mUrlBar.setIgnoreTextChangesForAutocomplete(false);
     }
 
     /**
@@ -862,6 +780,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
      */
     @VisibleForTesting
     public void setAutocompleteController(AutocompleteController controller) {
+        if (mAutocomplete != null) stopAutocomplete(true);
         mAutocomplete = controller;
     }
 
@@ -903,13 +822,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
     @Override
     public void onUrlPreFocusChanged(boolean gainFocus) {
-        if (mToolbarDataProvider == null || mToolbarDataProvider.getTab() == null) return;
-
-        if (!mQueryInTheOmnibox
-                && FeatureUtilities.isDocumentMode(getContext())
-                && !TextUtils.isEmpty(mUrlBar.getText())) {
-            mUrlBar.setUrl(getOnlineUrlFromTab(), null);
-        }
+      // TODO(mariakhomenko): remove from the interface entirely as it's unused
     }
 
     @Override
@@ -946,7 +859,17 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
      *         a phone device.
      */
     protected boolean isUrlFocusChangeInProgress() {
-        return false;
+        return mUrlFocusChangeInProgress;
+    }
+
+    /**
+     * @param inProgress Whether a URL focus change is taking place.
+     */
+    protected void setUrlFocusChangeInProgress(boolean inProgress) {
+        mUrlFocusChangeInProgress = inProgress;
+        if (!inProgress) {
+            updateButtonVisibility();
+        }
     }
 
     /**
@@ -955,8 +878,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
      */
     public void onUrlFocusChange(boolean hasFocus) {
         mUrlHasFocus = hasFocus;
-        mUrlContainer.onUrlFocusChanged(hasFocus);
-        updateDeleteButtonVisibility();
+        updateButtonVisibility();
         updateNavigationButton();
         Tab currentTab = getCurrentTab();
         if (hasFocus) {
@@ -1016,14 +938,6 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             });
         }
 
-        // Add and remove text watcher from the URL bar with focus, so that it's
-        // not called when we modify the displayed information on focus.
-        if (hasFocus) {
-            mUrlBar.addTextChangedListener(mTextWatcher);
-        } else {
-            mUrlBar.removeTextChangedListener(mTextWatcher);
-        }
-
         if (!hasFocus) {
             mHasStartedNewOmniboxEditSession = false;
             mNewOmniboxEditSessionTimestamp = -1;
@@ -1056,6 +970,56 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             mAutocomplete.startZeroSuggest(currentTab.getProfile(), mUrlBar.getQueryText(),
                     currentTab.getUrl(), mQueryInTheOmnibox, mUrlFocusedFromFakebox);
         }
+    }
+
+    @Override
+    public void onTextChangedForAutocomplete(final boolean textDeleted) {
+        cancelPendingAutocompleteStart();
+
+        updateButtonVisibility();
+        updateNavigationButton();
+
+        if (!mHasStartedNewOmniboxEditSession && mNativeInitialized) {
+            mAutocomplete.resetSession();
+            mHasStartedNewOmniboxEditSession = true;
+            mNewOmniboxEditSessionTimestamp = SystemClock.elapsedRealtime();
+        }
+
+        if (!isInTouchMode() && mSuggestionList != null) {
+            mSuggestionList.setSelection(0);
+        }
+
+        stopAutocomplete(false);
+        if (TextUtils.isEmpty(mUrlBar.getTextWithoutAutocomplete())) {
+            hideSuggestions();
+            startZeroSuggest();
+        } else {
+            assert mRequestSuggestions == null : "Multiple omnibox requests in flight.";
+            mRequestSuggestions = new Runnable() {
+                @Override
+                public void run() {
+                    String textWithoutAutocomplete = mUrlBar.getTextWithoutAutocomplete();
+
+                    boolean preventAutocomplete = textDeleted || !mUrlBar.shouldAutocomplete();
+                    mRequestSuggestions = null;
+                    if (getCurrentTab() == null) return;
+                    mAutocomplete.start(
+                            getCurrentTab().getProfile(),
+                            getCurrentTab().getUrl(),
+                            textWithoutAutocomplete, preventAutocomplete);
+                }
+            };
+            if (mNativeInitialized) {
+                postDelayed(mRequestSuggestions, OMNIBOX_SUGGESTION_START_DELAY_MS);
+            } else {
+                mDeferredNativeRunnables.add(mRequestSuggestions);
+            }
+        }
+
+        // Occasionally, was seeing the selection in the URL not being cleared during
+        // very rapid editing.  This is here to hopefully force a selection reset during
+        // deletes.
+        if (textDeleted) mUrlBar.setSelection(mUrlBar.getSelectionStart());
     }
 
     @Override
@@ -1292,10 +1256,10 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             case OFFLINE:
                 Drawable bolt = ApiCompatibilityUtils.getDrawable(
                         getResources(), R.drawable.offline_bolt);
-                bolt.setColorFilter(ApiCompatibilityUtils.getColor(getResources(), mUseDarkColors
-                        ? R.color.locationbar_status_color
-                        : R.color.locationbar_status_color_light), PorterDuff.Mode.SRC_IN);
-                bolt.mutate();
+                bolt.mutate().setColorFilter(
+                        ApiCompatibilityUtils.getColor(getResources(), mUseDarkColors
+                                ? R.color.locationbar_status_color
+                                : R.color.locationbar_status_color_light), PorterDuff.Mode.SRC_IN);
                 mNavigationButton.setImageDrawable(bolt);
                 break;
             default:
@@ -1360,7 +1324,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
                     ApiCompatibilityUtils.setMarginStart(childLayoutParams, startMargin);
                     childView.setLayoutParams(childLayoutParams);
                 }
-                if (childView == mUrlContainer) {
+                if (childView == mUrlBar) {
                     urlContainerChildIndex = i;
                     break;
                 }
@@ -1403,10 +1367,10 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
                                 + ApiCompatibilityUtils.getMarginEnd(childLayoutParams));
             }
         }
-        LayoutParams urlLayoutParams = (LayoutParams) mUrlContainer.getLayoutParams();
+        LayoutParams urlLayoutParams = (LayoutParams) mUrlBar.getLayoutParams();
         if (ApiCompatibilityUtils.getMarginEnd(urlLayoutParams) != urlContainerMarginEnd) {
             ApiCompatibilityUtils.setMarginEnd(urlLayoutParams, urlContainerMarginEnd);
-            mUrlContainer.setLayoutParams(urlLayoutParams);
+            mUrlBar.setLayoutParams(urlLayoutParams);
         }
     }
 
@@ -1414,14 +1378,16 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
      * @return Whether the delete button should be shown.
      */
     protected boolean shouldShowDeleteButton() {
-        // Show the delete button at the endon the right when the bar has focus and has some text.
-        return mUrlBar.hasFocus() && !TextUtils.isEmpty(mUrlBar.getText());
+        // Show the delete button at the end when the bar has focus and has some text.
+        boolean hasText = !TextUtils.isEmpty(mUrlBar.getText());
+        return hasText && (mUrlBar.hasFocus() || mUrlFocusChangeInProgress);
     }
 
     /**
      * Updates the display of the delete URL content button.
      */
     protected void updateDeleteButtonVisibility() {
+        mDeleteButton.setVisibility(shouldShowDeleteButton() ? VISIBLE : GONE);
     }
 
     /**
@@ -1492,7 +1458,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             @Override
             public void onSetUrlToSuggestion(OmniboxSuggestion suggestion) {
                 if (mIgnoreOmniboxItemSelection) return;
-                setUrlBarText(null, null, suggestion.getFillIntoEdit());
+                setUrlBarText(suggestion.getFillIntoEdit(), null);
                 mUrlBar.setSelection(mUrlBar.getText().length());
                 mIgnoreOmniboxItemSelection = true;
             }
@@ -1694,7 +1660,8 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     /**
      * Cancels the queued task to start the autocomplete controller, if any.
      */
-    private void cancelPendingAutocompleteStart() {
+    @VisibleForTesting
+    void cancelPendingAutocompleteStart() {
         if (mRequestSuggestions != null) {
             // There is a request for suggestions either waiting for the native side
             // to start, or on the message queue. Remove it from wherever it is.
@@ -1750,7 +1717,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             return;
         }
 
-        setUrlBarText(null, null, query);
+        setUrlBarText(query, null);
         mUrlBar.setSelection(0, mUrlBar.getText().length());
         mUrlBar.requestFocus();
         stopAutocomplete(false);
@@ -1778,8 +1745,9 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     public void onClick(View v) {
         if (v == mDeleteButton) {
             if (!TextUtils.isEmpty(mUrlBar.getQueryText())) {
-                setUrlBarText(null, null, "");
+                setUrlBarText("", null);
                 hideSuggestions();
+                updateButtonVisibility();
             }
 
             startZeroSuggest();
@@ -1796,23 +1764,6 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             RecordUserAction.record("MobileOmniboxVoiceSearch");
             startVoiceRecognition();
         }
-    }
-
-    /**
-     * Whether we want to be showing inline autocomplete results. We don't want to show them as the
-     * user deletes input. Also if there is a composition (e.g. while using the Japanese IME),
-     * we must not autocomplete or we'll destroy the composition.
-     * @return Whether we want to be showing inline autocomplete results.
-     */
-    private boolean shouldAutocomplete() {
-        if (mLastUrlEditWasDelete) return false;
-        Editable text = mUrlBar.getText();
-
-        return mUrlBar.isCursorAtEndOfTypedText()
-                && !mUrlBar.isPastedText()
-                && !mUrlBar.isHandlingBatchInput()
-                && BaseInputConnection.getComposingSpanEnd(text)
-                        == BaseInputConnection.getComposingSpanStart(text);
     }
 
     @Override
@@ -1868,7 +1819,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             return;
         }
 
-        if (shouldAutocomplete()) {
+        if (mUrlBar.shouldAutocomplete()) {
             mUrlBar.setAutocompleteText(userText, inlineAutocompleteText);
         }
 
@@ -1986,7 +1937,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         mQueryInTheOmnibox = false;
 
         if (getCurrentTab() == null) {
-            setUrlBarText(null, null, "");
+            setUrlBarText("", null);
             return;
         }
 
@@ -1999,7 +1950,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
         if (NativePageFactory.isNativePageUrl(url, getCurrentTab().isIncognito())) {
             // Don't show anything for Chrome URLs.
-            setUrlBarText("", null, null);
+            setUrlBarText(null, "");
             return;
         }
 
@@ -2015,14 +1966,8 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
                 mQueryInTheOmnibox = true;
             }
         }
-        String path = null;
-        if (!showingQuery && FeatureUtilities.isDocumentMode(getContext())) {
-            Pair<String, String> urlText = splitPathFromUrlDisplayText(displayText);
-            displayText = urlText.first;
-            path = urlText.second;
-        }
 
-        if (setUrlBarText(displayText, path, url)) {
+        if (setUrlBarText(url, displayText)) {
             mUrlBar.deEmphasizeUrl();
             emphasizeUrl();
         }
@@ -2047,24 +1992,15 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
     /**
      * Changes the text on the url bar
+     * @param originalText The original text (URL or search terms) for copy/cut.
      * @param displayText The text (URL or search terms) for user display.
-     * @param trailingText The trailing text (path portion of the URL) to be displayed separately.
-     * @param text The original text (URL or search terms) for copy/cut.
      * @return Whether the URL was changed as a result of this call.
      */
-    private boolean setUrlBarText(String displayText, String trailingText, String text) {
-        mIgnoreURLBarModification = true;
-        boolean urlChanged = mUrlContainer.setUrlText(displayText, trailingText, text);
-        mIgnoreURLBarModification = false;
+    private boolean setUrlBarText(String originalText, String displayText) {
+        mUrlBar.setIgnoreTextChangesForAutocomplete(true);
+        boolean urlChanged = mUrlBar.setUrl(originalText, displayText);
+        mUrlBar.setIgnoreTextChangesForAutocomplete(false);
         return urlChanged;
-    }
-
-    /**
-     * Sets whether modifications to the URL bar should be ignored.
-     */
-    @Override
-    public void setIgnoreURLBarModification(boolean value) {
-        mIgnoreURLBarModification = value;
     }
 
     private void loadUrlFromOmniboxMatch(String url, int transition, int matchPosition, int type) {
@@ -2324,12 +2260,31 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     }
 
     /**
+     * Call to update the visibility of the buttons inside the location bar.
+     */
+    protected void updateButtonVisibility() {
+    }
+
+    /**
      * Call to notify the location bar that the state of the voice search microphone button may
      * need to be updated.
      */
     @Override
     public void updateMicButtonState() {
-        mMicButton.setVisibility(isVoiceSearchEnabled() ? View.VISIBLE : View.GONE);
+        mVoiceSearchEnabled = isVoiceSearchEnabled();
+        updateButtonVisibility();
+    }
+
+    /**
+     * Updates the display of the mic button.
+     * @param urlFocusChangePercent The completeion percentage of the URL focus change animation.
+     */
+    protected void updateMicButtonVisiblity(float urlFocusChangePercent) {
+        boolean visible = !shouldShowDeleteButton();
+        boolean showMicButton = mVoiceSearchEnabled && visible
+                && (mUrlBar.hasFocus() || mUrlFocusChangeInProgress
+                        || urlFocusChangePercent > 0f);
+        mMicButton.setVisibility(showMicButton ? VISIBLE : GONE);
     }
 
     /**
@@ -2347,7 +2302,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         mDeleteButton.setTint(colorStateList);
 
         setNavigationButtonType(mNavigationButtonType);
-        mUrlContainer.setUseDarkTextColors(mUseDarkColors);
+        mUrlBar.setUseDarkTextColors(mUseDarkColors);
 
         if (mSuggestionList != null) {
             mSuggestionList.setBackground(getSuggestionPopupBackground());

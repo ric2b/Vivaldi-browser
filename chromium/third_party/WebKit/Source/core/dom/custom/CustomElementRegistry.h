@@ -37,7 +37,6 @@
 #include "core/dom/custom/CustomElementDescriptorHash.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
-#include "wtf/RefPtr.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/AtomicStringHash.h"
 
@@ -62,7 +61,7 @@ protected:
     CustomElementDefinition* find(const CustomElementDescriptor&) const;
 
 private:
-    typedef WillBeHeapHashMap<CustomElementDescriptor, RefPtrWillBeMember<CustomElementDefinition>> DefinitionMap;
+    typedef HeapHashMap<CustomElementDescriptor, Member<CustomElementDefinition>> DefinitionMap;
     DefinitionMap m_definitions;
     HashSet<AtomicString> m_registeredTypeNames;
     bool m_documentWasDetached;

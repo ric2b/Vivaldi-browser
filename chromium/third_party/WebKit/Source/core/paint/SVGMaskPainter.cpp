@@ -22,11 +22,11 @@ bool SVGMaskPainter::prepareEffect(const LayoutObject& object, GraphicsContext& 
 
     m_mask.clearInvalidationMask();
 
-    FloatRect paintInvalidationRect = object.paintInvalidationRectInLocalCoordinates();
+    FloatRect paintInvalidationRect = object.paintInvalidationRectInLocalSVGCoordinates();
     if (paintInvalidationRect.isEmpty() || !m_mask.element()->hasChildren())
         return false;
 
-    context.paintController().createAndAppend<BeginCompositingDisplayItem>(object, SkXfermode::kSrcOver_Mode, 1, &paintInvalidationRect);
+    context.getPaintController().createAndAppend<BeginCompositingDisplayItem>(object, SkXfermode::kSrcOver_Mode, 1, &paintInvalidationRect);
     return true;
 }
 
@@ -35,7 +35,7 @@ void SVGMaskPainter::finishEffect(const LayoutObject& object, GraphicsContext& c
     ASSERT(m_mask.style());
     ASSERT_WITH_SECURITY_IMPLICATION(!m_mask.needsLayout());
 
-    FloatRect paintInvalidationRect = object.paintInvalidationRectInLocalCoordinates();
+    FloatRect paintInvalidationRect = object.paintInvalidationRectInLocalSVGCoordinates();
     {
         ColorFilter maskLayerFilter = m_mask.style()->svgStyle().maskType() == MT_LUMINANCE
             ? ColorFilterLuminanceToAlpha : ColorFilterNone;
@@ -43,7 +43,7 @@ void SVGMaskPainter::finishEffect(const LayoutObject& object, GraphicsContext& c
         drawMaskForLayoutObject(context, object, object.objectBoundingBox(), paintInvalidationRect);
     }
 
-    context.paintController().endItem<EndCompositingDisplayItem>(object);
+    context.getPaintController().endItem<EndCompositingDisplayItem>(object);
 }
 
 void SVGMaskPainter::drawMaskForLayoutObject(GraphicsContext& context, const LayoutObject& layoutObject, const FloatRect& targetBoundingBox, const FloatRect& targetPaintInvalidationRect)
@@ -51,10 +51,10 @@ void SVGMaskPainter::drawMaskForLayoutObject(GraphicsContext& context, const Lay
     AffineTransform contentTransformation;
     RefPtr<const SkPicture> maskContentPicture = m_mask.createContentPicture(contentTransformation, targetBoundingBox, context);
 
-    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(context, layoutObject, DisplayItem::SVGMask, LayoutPoint()))
+    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(context, layoutObject, DisplayItem::SVGMask))
         return;
 
-    LayoutObjectDrawingRecorder drawingRecorder(context, layoutObject, DisplayItem::SVGMask, targetPaintInvalidationRect, LayoutPoint());
+    LayoutObjectDrawingRecorder drawingRecorder(context, layoutObject, DisplayItem::SVGMask, targetPaintInvalidationRect);
     context.save();
     context.concatCTM(contentTransformation);
     context.drawPicture(maskContentPicture.get());

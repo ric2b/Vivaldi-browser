@@ -11,9 +11,12 @@
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "media/base/audio_decoder_config.h"
+#include "media/base/media_tracks.h"
+#include "media/base/media_util.h"
 #include "media/base/stream_parser_buffer.h"
 #include "media/base/text_track_config.h"
 #include "media/base/timestamp_constants.h"
@@ -186,8 +189,12 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
   has_audio_ = false;
   has_video_ = false;
 
+  scoped_ptr<MediaTracks> media_tracks(new MediaTracks());
   AudioDecoderConfig audio_config;
   VideoDecoderConfig video_config;
+  int detected_audio_track_count = 0;
+  int detected_video_track_count = 0;
+  int detected_text_track_count = 0;
 
   for (std::vector<Track>::const_iterator track = moov_->tracks.begin();
        track != moov_->tracks.end(); ++track) {
@@ -211,7 +218,11 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
     RCHECK(desc_idx > 0);
     desc_idx -= 1;  // BMFF descriptor index is one-based
 
-    if (track->media.handler.type == kAudio && !audio_config.IsValidConfig()) {
+    if (track->media.handler.type == kAudio) {
+      detected_audio_track_count++;
+      if (audio_config.IsValidConfig())
+        continue;  // Skip other audio tracks once we found a supported one.
+
       RCHECK(!samp_descr.audio_entries.empty());
 
       // It is not uncommon to find otherwise-valid files with incorrect sample
@@ -305,14 +316,24 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
 
       is_audio_track_encrypted_ = entry.sinf.info.track_encryption.is_encrypted;
       DVLOG(1) << "is_audio_track_encrypted_: " << is_audio_track_encrypted_;
-      audio_config.Initialize(codec, sample_format, channel_layout,
-                              sample_per_second, extra_data,
-                              is_audio_track_encrypted_, base::TimeDelta(), 0);
+      audio_config.Initialize(
+          codec, sample_format, channel_layout, sample_per_second, extra_data,
+          is_audio_track_encrypted_ ? AesCtrEncryptionScheme() : Unencrypted(),
+          base::TimeDelta(), 0);
       audio_config.set_input_samples_per_second(input_samples_per_second);
       has_audio_ = true;
       audio_track_id_ = track->header.track_id;
+      media_tracks->AddAudioTrack(
+          audio_config, base::UintToString(audio_track_id_), "main",
+          track->media.handler.name, track->media.header.language());
+      continue;
     }
-    if (track->media.handler.type == kVideo && !video_config.IsValidConfig()) {
+
+    if (track->media.handler.type == kVideo) {
+      detected_video_track_count++;
+      if (video_config.IsValidConfig())
+        continue;  // Skip other video tracks once we found a supported one.
+
       RCHECK(!samp_descr.video_entries.empty());
       if (desc_idx >= samp_descr.video_entries.size())
         desc_idx = 0;
@@ -349,16 +370,28 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
           COLOR_SPACE_HD_REC709, coded_size, visible_rect, natural_size,
           // No decoder-specific buffer needed for AVC;
           // SPS/PPS are embedded in the video stream
-          std::vector<uint8_t>(), is_video_track_encrypted_);
+          EmptyExtraData(),
+          is_video_track_encrypted_ ? AesCtrEncryptionScheme() : Unencrypted());
       has_video_ = true;
       video_track_id_ = track->header.track_id;
+      media_tracks->AddVideoTrack(
+          video_config, base::UintToString(video_track_id_), "main",
+          track->media.handler.name, track->media.header.language());
+      continue;
     }
+
+    // TODO(wolenetz): Investigate support in MSE and Chrome MSE for CEA 608/708
+    // embedded caption data in video track. At time of init segment parsing, we
+    // don't have this data (unless maybe by SourceBuffer's mimetype).
+    // See https://crbug.com/597073
+    if (track->media.handler.type == kText)
+      detected_text_track_count++;
   }
 
   if (!moov_->pssh.empty())
     OnEncryptedMediaInitData(moov_->pssh);
 
-  RCHECK(config_cb_.Run(audio_config, video_config, TextTrackConfigMap()));
+  RCHECK(config_cb_.Run(std::move(media_tracks), TextTrackConfigMap()));
 
   StreamParser::InitParameters params(kInfiniteDuration());
   if (moov_->extends.header.fragment_duration > 0) {
@@ -382,8 +415,12 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
 
   DVLOG(1) << "liveness: " << params.liveness;
 
-  if (!init_cb_.is_null())
+  if (!init_cb_.is_null()) {
+    params.detected_audio_track_count = detected_audio_track_count;
+    params.detected_video_track_count = detected_video_track_count;
+    params.detected_text_track_count = detected_text_track_count;
     base::ResetAndReturn(&init_cb_).Run(params);
+  }
 
   return true;
 }

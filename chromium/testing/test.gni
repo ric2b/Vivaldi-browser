@@ -8,121 +8,159 @@
 
 # Define a test as an executable (or apk on Android) with the "testonly" flag
 # set.
+# Variable:
+#   use_raw_android_executable: Use executable() rather than android_apk().
 template("test") {
   if (is_android) {
     import("//build/config/android/config.gni")
     import("//build/config/android/rules.gni")
 
-    main_target_name = target_name
-    library_name = "_${target_name}__library"
-    apk_name = "${target_name}_apk"
+    _use_raw_android_executable = defined(invoker.use_raw_android_executable) &&
+                                  invoker.use_raw_android_executable
 
-    shared_library(library_name) {
-      # Configs will always be defined since we set_defaults for a component
-      # in the main config. We want to use those rather than whatever came with
-      # the nested shared/static library inside the component.
-      configs = []  # Prevent list overwriting warning.
-      configs = invoker.configs
-
-      testonly = true
-
-      # Don't use "*" to forward all variables since some (like output_name
-      # and isolate_file) apply only to the APK below.
-      deps = []
-      forward_variables_from(invoker,
-                             [
-                               "all_dependent_configs",
-                               "allow_circular_includes_from",
-                               "cflags",
-                               "cflags_c",
-                               "cflags_cc",
-                               "check_includes",
-                               "data",
-                               "data_deps",
-                               "datadeps",
-                               "defines",
-                               "deps",
-                               "include_dirs",
-                               "ldflags",
-                               "lib_dirs",
-                               "libs",
-                               "output_extension",
-                               "output_name",
-                               "public",
-                               "public_configs",
-                               "public_deps",
-                               "sources",
-                               "visibility",
-                             ])
-
-      if (!defined(invoker.use_default_launcher) ||
-          invoker.use_default_launcher) {
-        deps += [ "//testing/android/native_test:native_test_native_code" ]
-      }
-    }
-
-    unittest_apk(apk_name) {
-      forward_variables_from(invoker,
-                             [
-                               "android_manifest",
-                               "deps",
-                               "enable_multidex",
-                               "use_default_launcher",
-                               "write_asset_list",
-                             ])
-      unittests_dep = ":$library_name"
-      apk_name = main_target_name
-      if (defined(invoker.output_name)) {
-        apk_name = invoker.output_name
-        unittests_binary = "lib${apk_name}.so"
-      }
-      deps += [ ":$library_name" ]
-    }
-
-    _test_name = main_target_name
+    # output_name is used to allow targets with the same name but in different
+    # packages to still produce unique runner scripts.
+    _output_name = invoker.target_name
     if (defined(invoker.output_name)) {
-      _test_name = invoker.output_name
+      _output_name = invoker.output_name
     }
-    test_runner_script_name = "${_test_name}__test_runner_script"
-    test_runner_script(test_runner_script_name) {
-      apk_target = ":$apk_name"
-      test_name = _test_name
-      test_type = "gtest"
-      test_suite = _test_name
-      if (defined(invoker.isolate_file)) {
-        isolate_file = invoker.isolate_file
+
+    _test_runner_target = "${_output_name}__test_runner_script"
+
+    if (_use_raw_android_executable) {
+      _exec_target = "${target_name}__exec"
+      _dist_target = "${target_name}__dist"
+      _exec_output =
+          "$target_out_dir/${invoker.target_name}/${invoker.target_name}"
+
+      executable(_exec_target) {
+        # Configs will always be defined since we set_defaults in BUILDCONFIG.gn.
+        configs = []
+        data_deps = []
+        forward_variables_from(invoker, "*", [ "extra_dist_files" ])
+        testonly = true
+
+        # Thanks to the set_defaults() for test(), configs are initialized with
+        # the default shared_library configs rather than executable configs.
+        configs -= [
+          "//build/config:shared_library_config",
+          "//build/config/android:hide_native_jni_exports",
+        ]
+        configs += [ "//build/config:executable_config" ]
+
+        # Don't output to the root or else conflict with the group() below.
+        output_name = rebase_path(_exec_output, root_out_dir)
+        if (is_component_build || is_asan) {
+          data_deps += [ "//build/android:cpplib_stripped" ]
+        }
+      }
+
+      create_native_executable_dist(_dist_target) {
+        testonly = true
+        dist_dir = "$root_out_dir/$target_name"
+        binary = _exec_output
+        deps = [
+          ":$_exec_target",
+        ]
+        if (defined(invoker.extra_dist_files)) {
+          extra_files = invoker.extra_dist_files
+        }
+      }
+    } else {
+      _library_target = "_${target_name}__library"
+      _apk_target = "${target_name}_apk"
+      _apk_specific_vars = [
+        "android_manifest",
+        "enable_multidex",
+        "use_default_launcher",
+        "write_asset_list",
+      ]
+      shared_library(_library_target) {
+        # Configs will always be defined since we set_defaults in BUILDCONFIG.gn.
+        configs = []  # Prevent list overwriting warning.
+        configs = invoker.configs
+        testonly = true
+
+        deps = []
+        forward_variables_from(invoker,
+                               "*",
+                               _apk_specific_vars + [
+                                     "isolate_file",
+                                     "visibility",
+                                   ])
+
+        if (!defined(invoker.use_default_launcher) ||
+            invoker.use_default_launcher) {
+          deps += [ "//testing/android/native_test:native_test_native_code" ]
+        }
+      }
+      unittest_apk(_apk_target) {
+        forward_variables_from(invoker, _apk_specific_vars + [ "deps" ])
+        unittests_dep = ":$_library_target"
+        apk_name = invoker.target_name
+        if (defined(invoker.output_name)) {
+          apk_name = invoker.output_name
+          unittests_binary = "lib${apk_name}.so"
+          install_script_name = "install_${invoker.output_name}"
+        }
+        deps += [ ":$_library_target" ]
+
+        # TODO(agrieve): Remove this data_dep once bots don't build the _apk
+        #     target (post-GYP).
+        # It's a bit backwards for the apk to depend on the runner script, since
+        # the apk is conceptually a runtime_dep of the script. However, it is
+        # currently necessary because the bots build this _apk target directly
+        # rather than the group() below.
+        data_deps = [
+          ":$_test_runner_target",
+        ]
+      }
+
+      # Incremental test targets work only for .apks.
+      _incremental_test_runner_target =
+          "${_output_name}_incremental__test_runner_script"
+      test_runner_script(_incremental_test_runner_target) {
+        forward_variables_from(invoker, [ "isolate_file" ])
+        apk_target = ":$_apk_target"
+        test_name = "${_output_name}_incremental"
+        test_type = "gtest"
+        test_suite = _output_name
+        incremental_install = true
+      }
+      group("${target_name}_incremental") {
+        testonly = true
+        datadeps = [
+          ":$_incremental_test_runner_target",
+        ]
+        deps = [
+          ":${_apk_target}_incremental",
+        ]
       }
     }
-    incremental_test_runner_script_name =
-        "${_test_name}_incremental__test_runner_script"
-    test_runner_script(incremental_test_runner_script_name) {
-      apk_target = ":$apk_name"
-      test_name = "${_test_name}_incremental"
-      test_type = "gtest"
-      test_suite = _test_name
-      incremental_install = true
-      if (defined(invoker.isolate_file)) {
-        isolate_file = invoker.isolate_file
+
+    _test_runner_target = "${_output_name}__test_runner_script"
+    test_runner_script(_test_runner_target) {
+      forward_variables_from(invoker, [ "isolate_file" ])
+      if (_use_raw_android_executable) {
+        executable_dist_dir = "$root_out_dir/$_dist_target"
+      } else {
+        apk_target = ":$_apk_target"
       }
+      test_name = _output_name
+      test_type = "gtest"
+      test_suite = _output_name
     }
 
     group(target_name) {
       testonly = true
-      datadeps = [
-        ":$test_runner_script_name",
-      ]
       deps = [
-        ":$apk_name",
+        ":$_test_runner_target",
       ]
-    }
-    group("${target_name}_incremental") {
-      testonly = true
-      datadeps = [
-        ":$incremental_test_runner_script_name",
-      ]
-      deps = [
-        ":${apk_name}_incremental",
-      ]
+      if (_use_raw_android_executable) {
+        deps += [ ":$_dist_target" ]
+      } else {
+        deps += [ ":$_apk_target" ]
+      }
     }
 
     # TODO(GYP): Delete this after we've converted everything to GN.
@@ -130,15 +168,29 @@ template("test") {
     group("${target_name}_apk_run") {
       testonly = true
       deps = [
-        ":$main_target_name",
+        ":${invoker.target_name}",
       ]
     }
   } else if (is_ios) {
-    if (is_ios) {
-      import("//build/config/ios/rules.gni")
+    import("//build/config/ios/rules.gni")
+
+    _test_target = target_name
+    _resources_bundle_data = target_name + "_resources_bundle_data"
+
+    bundle_data(_resources_bundle_data) {
+      visibility = [
+        ":${_test_target}",
+        ":${_test_target}_generate_executable",
+      ]
+      sources = [
+        "//testing/gtest_ios/Default.png",
+      ]
+      outputs = [
+        "{{bundle_resources_dir}}/{{source_file_part}}",
+      ]
     }
 
-    ios_app(target_name) {
+    app(_test_target) {
       # TODO(GYP): Make this configurable and only provide a default
       # that can be overridden.
       info_plist = "//testing/gtest_ios/unittest-Info.plist"
@@ -146,58 +198,30 @@ template("test") {
       entitlements_path = "//testing/gtest_ios"
       code_signing_identity = ""
       testonly = true
+      extra_substitutions = [ "BUNDLE_ID_TEST_NAME=$app_name" ]
 
       # See above call.
       set_sources_assignment_filter([])
 
-      forward_variables_from(invoker,
-                             [
-                               "all_dependent_configs",
-                               "allow_circular_includes_from",
-                               "cflags",
-                               "cflags_c",
-                               "cflags_cc",
-                               "cflags_objc",
-                               "cflags_objcc",
-                               "check_includes",
-                               "configs",
-                               "data",
-                               "data_deps",
-                               "defines",
-                               "include_dirs",
-                               "ldflags",
-                               "libs",
-                               "output_extension",
-                               "output_name",
-                               "public",
-                               "public_configs",
-                               "public_deps",
-                               "sources",
-                               "visibility",
-                             ])
+      forward_variables_from(invoker, "*")
 
-      if (defined(invoker.deps)) {
-        deps = invoker.deps
-      } else {
+      if (!defined(deps)) {
         deps = []
       }
       deps += [
+        ":$_resources_bundle_data",
+
         # All shared libraries must have the sanitizer deps to properly link in
         # asan mode (this target will be empty in other cases).
         "//build/config/sanitizers:deps",
       ]
     }
   } else {
-    main_target_name = target_name
-
     executable(target_name) {
+      deps = []
       forward_variables_from(invoker, "*")
 
       testonly = true
-
-      if (!defined(invoker.deps)) {
-        deps = []
-      }
       deps += [
         # All shared libraries must have the sanitizer deps to properly link in
         # asan mode (this target will be empty in other cases).
@@ -213,7 +237,7 @@ template("test") {
     group("${target_name}_run") {
       testonly = true
       deps = [
-        ":$main_target_name",
+        ":${invoker.target_name}",
       ]
     }
   }

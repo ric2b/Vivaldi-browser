@@ -12,7 +12,6 @@
 #include "base/format_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/autofill/options_util.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -74,53 +73,53 @@ ScopedJavaLocalRef<jobject> CreateJavaProfileFromNative(
       ConvertUTF8ToJavaString(env, profile.language_code()).obj());
 }
 
+void MaybeSetRawInfo(AutofillProfile* profile,
+                     autofill::ServerFieldType type,
+                     const base::android::JavaRef<jstring>& jstr) {
+  if (!jstr.is_null())
+    profile->SetRawInfo(type, ConvertJavaStringToUTF16(jstr));
+}
+
 void PopulateNativeProfileFromJava(
-    const jobject& jprofile,
+    const JavaParamRef<jobject>& jprofile,
     JNIEnv* env,
     AutofillProfile* profile) {
   profile->set_origin(
       ConvertJavaStringToUTF8(
-          Java_AutofillProfile_getOrigin(env, jprofile)));
-  profile->SetInfo(
-      AutofillType(NAME_FULL),
-      ConvertJavaStringToUTF16(Java_AutofillProfile_getFullName(env, jprofile)),
-      g_browser_process->GetApplicationLocale());
-  profile->SetRawInfo(autofill::COMPANY_NAME,
-                      ConvertJavaStringToUTF16(
-                          Java_AutofillProfile_getCompanyName(env, jprofile)));
-  profile->SetRawInfo(
-      autofill::ADDRESS_HOME_STREET_ADDRESS,
-      ConvertJavaStringToUTF16(
-          Java_AutofillProfile_getStreetAddress(env, jprofile)));
-  profile->SetRawInfo(
-      autofill::ADDRESS_HOME_STATE,
-      ConvertJavaStringToUTF16(Java_AutofillProfile_getRegion(env, jprofile)));
-  profile->SetRawInfo(autofill::ADDRESS_HOME_CITY,
-                      ConvertJavaStringToUTF16(
-                          Java_AutofillProfile_getLocality(env, jprofile)));
-  profile->SetRawInfo(
-      autofill::ADDRESS_HOME_DEPENDENT_LOCALITY,
-      ConvertJavaStringToUTF16(
-          Java_AutofillProfile_getDependentLocality(env, jprofile)));
-  profile->SetRawInfo(autofill::ADDRESS_HOME_ZIP,
-                      ConvertJavaStringToUTF16(
-                          Java_AutofillProfile_getPostalCode(env, jprofile)));
-  profile->SetRawInfo(autofill::ADDRESS_HOME_SORTING_CODE,
-                      ConvertJavaStringToUTF16(
-                          Java_AutofillProfile_getSortingCode(env, jprofile)));
-  profile->SetInfo(AutofillType(ADDRESS_HOME_COUNTRY),
+          Java_AutofillProfile_getOrigin(env, jprofile.obj())));
+  profile->SetInfo(AutofillType(NAME_FULL),
                    ConvertJavaStringToUTF16(
-                       Java_AutofillProfile_getCountryCode(env, jprofile)),
+                       Java_AutofillProfile_getFullName(env, jprofile.obj())),
                    g_browser_process->GetApplicationLocale());
-  profile->SetRawInfo(autofill::PHONE_HOME_WHOLE_NUMBER,
-                      ConvertJavaStringToUTF16(
-                          Java_AutofillProfile_getPhoneNumber(env, jprofile)));
-  profile->SetRawInfo(autofill::EMAIL_ADDRESS,
-                      ConvertJavaStringToUTF16(
-                          Java_AutofillProfile_getEmailAddress(env, jprofile)));
+  MaybeSetRawInfo(profile, autofill::COMPANY_NAME,
+                  Java_AutofillProfile_getCompanyName(env, jprofile.obj()));
+  MaybeSetRawInfo(profile, autofill::ADDRESS_HOME_STREET_ADDRESS,
+                  Java_AutofillProfile_getStreetAddress(env, jprofile.obj()));
+  MaybeSetRawInfo(profile, autofill::ADDRESS_HOME_STATE,
+                  Java_AutofillProfile_getRegion(env, jprofile.obj()));
+  MaybeSetRawInfo(profile, autofill::ADDRESS_HOME_CITY,
+                  Java_AutofillProfile_getLocality(env, jprofile.obj()));
+  MaybeSetRawInfo(
+      profile, autofill::ADDRESS_HOME_DEPENDENT_LOCALITY,
+      Java_AutofillProfile_getDependentLocality(env, jprofile.obj()));
+  MaybeSetRawInfo(profile, autofill::ADDRESS_HOME_ZIP,
+                  Java_AutofillProfile_getPostalCode(env, jprofile.obj()));
+  MaybeSetRawInfo(profile, autofill::ADDRESS_HOME_SORTING_CODE,
+                  Java_AutofillProfile_getSortingCode(env, jprofile.obj()));
+  ScopedJavaLocalRef<jstring> country_code =
+      Java_AutofillProfile_getCountryCode(env, jprofile.obj());
+  if (!country_code.is_null()) {
+    profile->SetInfo(AutofillType(ADDRESS_HOME_COUNTRY),
+                     ConvertJavaStringToUTF16(country_code),
+                     g_browser_process->GetApplicationLocale());
+  }
+  MaybeSetRawInfo(profile, autofill::PHONE_HOME_WHOLE_NUMBER,
+                  Java_AutofillProfile_getPhoneNumber(env, jprofile.obj()));
+  MaybeSetRawInfo(profile, autofill::EMAIL_ADDRESS,
+                  Java_AutofillProfile_getEmailAddress(env, jprofile.obj()));
   profile->set_language_code(
       ConvertJavaStringToUTF8(
-          Java_AutofillProfile_getLanguageCode(env, jprofile)));
+          Java_AutofillProfile_getLanguageCode(env, jprofile.obj())));
 }
 
 ScopedJavaLocalRef<jobject> CreateJavaCreditCardFromNative(
@@ -131,13 +130,15 @@ ScopedJavaLocalRef<jobject> CreateJavaCreditCardFromNative(
       ConvertUTF8ToJavaString(env, card.origin()).obj(),
       card.record_type() == CreditCard::LOCAL_CARD,
       card.record_type() == CreditCard::FULL_SERVER_CARD,
-      ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_NAME)).obj(),
+      ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_NAME_FULL))
+          .obj(),
       ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_NUMBER)).obj(),
       ConvertUTF16ToJavaString(env, card.TypeAndLastFourDigits()).obj(),
       ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_EXP_MONTH))
           .obj(),
-      ConvertUTF16ToJavaString(
-          env, card.GetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR)).obj());
+      ConvertUTF16ToJavaString(env,
+                               card.GetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR))
+          .obj());
 }
 
 void PopulateNativeCreditCardFromJava(
@@ -147,7 +148,7 @@ void PopulateNativeCreditCardFromJava(
   card->set_origin(
       ConvertJavaStringToUTF8(Java_CreditCard_getOrigin(env, jcard)));
   card->SetRawInfo(
-      CREDIT_CARD_NAME,
+      CREDIT_CARD_NAME_FULL,
       ConvertJavaStringToUTF16(Java_CreditCard_getName(env, jcard)));
   card->SetRawInfo(
       CREDIT_CARD_NUMBER,

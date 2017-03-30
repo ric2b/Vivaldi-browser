@@ -69,8 +69,13 @@ void SetEventModifiers(blink::WebInputEvent* event, const int* modifiers) {
 }
 
 void SetEventTimestamp(blink::WebInputEvent* event, const double* timestamp) {
-  event->timeStampSeconds =
-      timestamp ? *timestamp : base::Time::Now().ToDoubleT();
+  // Convert timestamp, in seconds since unix epoch, to an event timestamp
+  // which is time ticks since platform start time.
+  base::TimeTicks ticks = timestamp
+                              ? base::TimeDelta::FromSecondsD(*timestamp) +
+                                    base::TimeTicks::UnixEpoch()
+                              : base::TimeTicks::Now();
+  event->timeStampSeconds = (ticks - base::TimeTicks()).InSecondsF();
 }
 
 bool SetKeyboardEventText(blink::WebUChar* to, const std::string* from) {
@@ -248,6 +253,7 @@ Response InputHandler::DispatchMouseEvent(
   event.globalX = x * page_scale_factor_;
   event.globalY = y * page_scale_factor_;
   event.clickCount = click_count ? *click_count : 0;
+  event.pointerType = blink::WebPointerProperties::PointerType::Mouse;
 
   if (!host_)
     return Response::ServerError("Could not connect to view");
@@ -296,6 +302,7 @@ Response InputHandler::EmulateTouchFromMouseEvent(const std::string& type,
   event->globalX = x;
   event->globalY = y;
   event->clickCount = click_count ? *click_count : 0;
+  event->pointerType = blink::WebPointerProperties::PointerType::Touch;
 
   if (!host_)
     return Response::ServerError("Could not connect to view");

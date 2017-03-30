@@ -11,6 +11,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
+#include "net/base/ip_address.h"
 #include "net/dns/dns_protocol.h"
 #include "net/dns/dns_socket_pool.h"
 #include "net/log/net_log.h"
@@ -113,12 +114,9 @@ class MockDnsSocketPool : public DnsSocketPool {
 void DnsSessionTest::Initialize(unsigned num_servers) {
   CHECK(num_servers < 256u);
   config_.nameservers.clear();
-  IPAddressNumber dns_ip;
-  bool rv = ParseIPLiteralToNumber("192.168.1.0", &dns_ip);
-  EXPECT_TRUE(rv);
   for (unsigned char i = 0; i < num_servers; ++i) {
-    dns_ip[3] = i;
-    IPEndPoint dns_endpoint(dns_ip, dns_protocol::kDefaultPort);
+    IPEndPoint dns_endpoint(IPAddress(192, 168, 1, i),
+                            dns_protocol::kDefaultPort);
     config_.nameservers.push_back(dns_endpoint);
   }
 
@@ -221,27 +219,29 @@ TEST_F(DnsSessionTest, AllocateFree) {
   EXPECT_TRUE(NoMoreEvents());
 }
 
-// Expect default calculated timeout to be within 10ms of in DnsConfig.
+// Expect default calculated timeout to be within 10ms of one in DnsConfig.
 TEST_F(DnsSessionTest, HistogramTimeoutNormal) {
   Initialize(2);
-  base::TimeDelta timeoutDelta = session_->NextTimeout(0, 0) - config_.timeout;
-  EXPECT_LT(timeoutDelta.InMilliseconds(), 10);
+  base::TimeDelta delta = session_->NextTimeout(0, 0) - config_.timeout;
+  EXPECT_LE(delta.InMilliseconds(), 10);
 }
 
-// Expect short calculated timeout to be within 10ms of in DnsConfig.
+// Expect short calculated timeout to be within 10ms of one in DnsConfig.
 TEST_F(DnsSessionTest, HistogramTimeoutShort) {
   config_.timeout = base::TimeDelta::FromMilliseconds(15);
   Initialize(2);
-  base::TimeDelta timeoutDelta = session_->NextTimeout(0, 0) - config_.timeout;
-  EXPECT_LT(timeoutDelta.InMilliseconds(), 10);
+  base::TimeDelta delta = session_->NextTimeout(0, 0) - config_.timeout;
+  EXPECT_LE(delta.InMilliseconds(), 10);
 }
 
 // Expect long calculated timeout to be equal to one in DnsConfig.
+// (Default max timeout is 5 seconds, so NextTimeout should return exactly
+// the config timeout.)
 TEST_F(DnsSessionTest, HistogramTimeoutLong) {
   config_.timeout = base::TimeDelta::FromSeconds(15);
   Initialize(2);
   base::TimeDelta timeout = session_->NextTimeout(0, 0);
-  EXPECT_EQ(config_.timeout.InMilliseconds(), timeout.InMilliseconds());
+  EXPECT_EQ(timeout.InMilliseconds(), config_.timeout.InMilliseconds());
 }
 
 }  // namespace

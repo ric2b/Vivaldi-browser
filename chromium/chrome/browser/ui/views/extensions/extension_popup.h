@@ -12,7 +12,7 @@
 #include "chrome/browser/ui/views/extensions/extension_view_views.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-#include "ui/views/bubble/bubble_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "url/gurl.h"
 
 
@@ -29,7 +29,8 @@ namespace extensions {
 class ExtensionViewHost;
 }
 
-class ExtensionPopup : public views::BubbleDelegateView,
+// The bubble used for hosting a browser-action popup provided by an extension.
+class ExtensionPopup : public views::BubbleDialogDelegateView,
                        public ExtensionViewViews::Container,
                        public content::NotificationObserver,
                        public TabStripModelObserver {
@@ -50,13 +51,15 @@ class ExtensionPopup : public views::BubbleDelegateView,
   // The actual display of the popup is delayed until the page contents
   // finish loading in order to minimize UI flashing and resizing.
   static ExtensionPopup* ShowPopup(
-      scoped_ptr<extensions::ExtensionViewHost> host,
+      std::unique_ptr<extensions::ExtensionViewHost> host,
       views::View* anchor_view,
       views::BubbleBorder::Arrow arrow,
       ShowAction show_action);
 
-
   extensions::ExtensionViewHost* host() const { return host_.get(); }
+
+  // views::BubbleDialogDelegateView overrides.
+  int GetDialogButtons() const override;
 
   // content::NotificationObserver overrides.
   void Observe(int type,
@@ -107,7 +110,7 @@ class ExtensionPopup : public views::BubbleDelegateView,
   void OnDevToolsStateChanged(content::DevToolsAgentHost*, bool attached);
 
   // The contained host for the view.
-  scoped_ptr<extensions::ExtensionViewHost> host_;
+  std::unique_ptr<extensions::ExtensionViewHost> host_;
 
   // Flag used to indicate if the pop-up should open a devtools window once
   // it is shown inspecting it.

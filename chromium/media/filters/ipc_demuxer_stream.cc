@@ -78,7 +78,7 @@ AudioDecoderConfig IPCDemuxerStream::audio_decoder_config() {
   audio_config.Initialize(
       kCodecPCM, platform_audio_config.format,
       GuessChannelLayout(platform_audio_config.channel_count),
-      platform_audio_config.samples_per_second, EmptyExtraData(), false,
+      platform_audio_config.samples_per_second, EmptyExtraData(), Unencrypted(),
       base::TimeDelta(), 0);
 
   return audio_config;
@@ -104,7 +104,7 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
           reinterpret_cast<const uint8_t*>(&platform_video_config.planes),
           reinterpret_cast<const uint8_t*>(&platform_video_config.planes)
               + sizeof(platform_video_config.planes)),
-      false);
+      Unencrypted());
 
   return video_config;
 }

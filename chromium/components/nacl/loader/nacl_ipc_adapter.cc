@@ -6,6 +6,7 @@
 
 #include <limits.h>
 #include <string.h>
+#include <tuple>
 #include <utility>
 
 #include "base/bind.h"
@@ -569,11 +570,11 @@ bool NaClIPCAdapter::RewriteMessage(const IPC::Message& msg, uint32_t type) {
         case ppapi::proxy::SerializedHandle::SOCKET: {
           nacl_desc.reset(new NaClDescWrapper(NaClDescSyncSocketMake(
 #if defined(OS_WIN)
-              iter->descriptor()
+              iter->descriptor().GetHandle()
 #else
               iter->descriptor().fd
 #endif
-          )));
+              )));
           break;
         }
         case ppapi::proxy::SerializedHandle::FILE: {
@@ -581,7 +582,7 @@ bool NaClIPCAdapter::RewriteMessage(const IPC::Message& msg, uint32_t type) {
           // required, wrap it in a NaClDescQuota.
           NaClDesc* desc = NaClDescIoMakeFromHandle(
 #if defined(OS_WIN)
-              iter->descriptor(),
+              iter->descriptor().GetHandle(),
 #else
               iter->descriptor().fd,
 #endif
@@ -658,10 +659,10 @@ void NaClIPCAdapter::SaveOpenResourceMessage(
     CHECK(IPC::ReadParam(&orig_msg, &iter, &sh));
     scoped_ptr<IPC::Message> new_msg = CreateOpenResourceReply(orig_msg, sh);
 
-    scoped_ptr<NaClDescWrapper> desc_wrapper(new NaClDescWrapper(
-        NaClDescIoMakeFromHandle(
+    scoped_ptr<NaClDescWrapper> desc_wrapper(
+        new NaClDescWrapper(NaClDescIoMakeFromHandle(
 #if defined(OS_WIN)
-            sh.descriptor(),
+            sh.descriptor().GetHandle(),
 #else
             sh.descriptor().fd,
 #endif
@@ -809,7 +810,7 @@ void NaClIPCAdapter::SendMessageOnIOThread(scoped_ptr<IPC::Message> message) {
   if (!open_resource_cb_.is_null() &&
       message->type() == PpapiHostMsg_OpenResource::ID &&
       PpapiHostMsg_OpenResource::ReadSendParam(message.get(), &send_params)) {
-    const std::string key = base::get<0>(send_params);
+    const std::string key = std::get<0>(send_params);
     // Both open_resource_cb_ and SaveOpenResourceMessage must be invoked
     // from the I/O thread.
     if (open_resource_cb_.Run(

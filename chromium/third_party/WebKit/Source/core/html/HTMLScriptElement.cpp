@@ -37,15 +37,15 @@ namespace blink {
 
 using namespace HTMLNames;
 
-inline HTMLScriptElement::HTMLScriptElement(Document& document, bool wasInsertedByParser, bool alreadyStarted)
+inline HTMLScriptElement::HTMLScriptElement(Document& document, bool wasInsertedByParser, bool alreadyStarted, bool createdDuringDocumentWrite)
     : HTMLElement(scriptTag, document)
-    , m_loader(ScriptLoader::create(this, wasInsertedByParser, alreadyStarted))
+    , m_loader(ScriptLoader::create(this, wasInsertedByParser, alreadyStarted, createdDuringDocumentWrite))
 {
 }
 
-PassRefPtrWillBeRawPtr<HTMLScriptElement> HTMLScriptElement::create(Document& document, bool wasInsertedByParser, bool alreadyStarted)
+RawPtr<HTMLScriptElement> HTMLScriptElement::create(Document& document, bool wasInsertedByParser, bool alreadyStarted, bool createdDuringDocumentWrite)
 {
-    return adoptRefWillBeNoop(new HTMLScriptElement(document, wasInsertedByParser, alreadyStarted));
+    return new HTMLScriptElement(document, wasInsertedByParser, alreadyStarted, createdDuringDocumentWrite);
 }
 
 bool HTMLScriptElement::isURLAttribute(const Attribute& attribute) const
@@ -90,7 +90,7 @@ void HTMLScriptElement::parseAttribute(const QualifiedName& name, const AtomicSt
 
 Node::InsertionNotificationRequest HTMLScriptElement::insertedInto(ContainerNode* insertionPoint)
 {
-    if (insertionPoint->inDocument() && hasSourceAttribute() && !loader()->isScriptTypeSupported(ScriptLoader::DisallowLegacyTypeInTypeAttribute))
+    if (insertionPoint->inShadowIncludingDocument() && hasSourceAttribute() && !loader()->isScriptTypeSupported(ScriptLoader::DisallowLegacyTypeInTypeAttribute))
         UseCounter::count(document(), UseCounter::ScriptElementWithInvalidTypeHasSrc);
     HTMLElement::insertedInto(insertionPoint);
     logAddElementIfIsolatedWorldAndInDocument("script", srcAttr);
@@ -125,32 +125,32 @@ KURL HTMLScriptElement::src() const
 
 String HTMLScriptElement::sourceAttributeValue() const
 {
-    return getAttribute(srcAttr).string();
+    return getAttribute(srcAttr).getString();
 }
 
 String HTMLScriptElement::charsetAttributeValue() const
 {
-    return getAttribute(charsetAttr).string();
+    return getAttribute(charsetAttr).getString();
 }
 
 String HTMLScriptElement::typeAttributeValue() const
 {
-    return getAttribute(typeAttr).string();
+    return getAttribute(typeAttr).getString();
 }
 
 String HTMLScriptElement::languageAttributeValue() const
 {
-    return getAttribute(languageAttr).string();
+    return getAttribute(languageAttr).getString();
 }
 
 String HTMLScriptElement::forAttributeValue() const
 {
-    return getAttribute(forAttr).string();
+    return getAttribute(forAttr).getString();
 }
 
 String HTMLScriptElement::eventAttributeValue() const
 {
-    return getAttribute(eventAttr).string();
+    return getAttribute(eventAttr).getString();
 }
 
 bool HTMLScriptElement::asyncAttributeValue() const
@@ -174,9 +174,9 @@ void HTMLScriptElement::dispatchLoadEvent()
     dispatchEvent(Event::create(EventTypeNames::load));
 }
 
-PassRefPtrWillBeRawPtr<Element> HTMLScriptElement::cloneElementWithoutAttributesAndChildren()
+RawPtr<Element> HTMLScriptElement::cloneElementWithoutAttributesAndChildren()
 {
-    return adoptRefWillBeNoop(new HTMLScriptElement(document(), false, m_loader->alreadyStarted()));
+    return new HTMLScriptElement(document(), false, m_loader->alreadyStarted(), false);
 }
 
 DEFINE_TRACE(HTMLScriptElement)

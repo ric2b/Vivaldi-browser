@@ -14,6 +14,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/observer_list.h"
 #include "base/process/kill.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -63,12 +64,12 @@ class LatencyInfo;
 namespace content {
 class BrowserAccessibilityDelegate;
 class BrowserAccessibilityManager;
+class RenderWidgetHostViewBaseObserver;
 class SyntheticGesture;
 class SyntheticGestureTarget;
 class WebCursor;
 struct DidOverscrollParams;
 struct NativeWebKeyboardEvent;
-struct WebPluginGeometry;
 
 // Basic implementation shared by concrete RenderWidgetHostView subclasses.
 class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
@@ -172,9 +173,12 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // be used to inject synthetic input events.
   virtual scoped_ptr<SyntheticGestureTarget> CreateSyntheticGestureTarget();
 
-  // Create a BrowserAccessibilityManager for this view.
+  // Create a BrowserAccessibilityManager for a frame in this view.
+  // If |for_root_frame| is true, creates a BrowserAccessibilityManager
+  // suitable for the root frame, which may be linked to its native
+  // window container.
   virtual BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
-      BrowserAccessibilityDelegate* delegate);
+      BrowserAccessibilityDelegate* delegate, bool for_root_frame);
 
   virtual void AccessibilityShowMenu(const gfx::Point& point);
   virtual gfx::Point AccessibilityOriginInScreen(const gfx::Rect& bounds);
@@ -221,7 +225,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual void ProcessMouseEvent(const blink::WebMouseEvent& event) {}
   virtual void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) {}
   virtual void ProcessTouchEvent(const blink::WebTouchEvent& event,
-                         const ui::LatencyInfo& latency) {}
+                                 const ui::LatencyInfo& latency) {}
+  virtual void ProcessGestureEvent(const blink::WebGestureEvent& event,
+                                   const ui::LatencyInfo& latency) {}
 
   // Transform a point that is in the coordinate space of a Surface that is
   // embedded within the RenderWidgetHostViewBase's Surface to the
@@ -252,12 +258,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // |reference_host_view| is the view associated with the creating page that
   // helps to position the full screen widget on the correct monitor.
   virtual void InitAsFullscreen(RenderWidgetHostView* reference_host_view) = 0;
-
-  // Moves all plugin windows as described in the given list.
-  // |scroll_offset| is the scroll offset of the render view.
-  virtual void MovePluginWindows(
-      const std::vector<WebPluginGeometry>& moves,
-      const int owner_widget_id) = 0;
 
   // Sets the cursor to the one associated with the specified cursor_type
   virtual void UpdateCursor(const WebCursor& cursor) = 0;
@@ -365,54 +365,26 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual void LockCompositingSurface() = 0;
   virtual void UnlockCompositingSurface() = 0;
 
-#if defined(OS_MACOSX)
-  // Does any event handling necessary for plugin IME; should be called after
-  // the plugin has already had a chance to process the event. If plugin IME is
-  // not enabled, this is a no-op, so it is always safe to call.
-  // Returns true if the event was handled by IME.
-  virtual bool PostProcessEventForPluginIme(
-      const NativeWebKeyboardEvent& event) = 0;
-#endif
-
   // Updates the range of the marked text in an IME composition.
   virtual void ImeCompositionRangeChanged(
       const gfx::Range& range,
       const std::vector<gfx::Rect>& character_bounds) = 0;
 
-#if defined(OS_WIN)
-  virtual void SetParentNativeViewAccessible(
-      gfx::NativeViewAccessible accessible_parent) = 0;
-
-  // Returns an HWND that's given as the parent window for windowless Flash to
-  // workaround crbug.com/301548.
-  virtual gfx::NativeViewId GetParentForWindowlessPlugin() const = 0;
-
-  // The callback that DetachPluginsHelper calls for each child window. Call
-  // this directly if you want to do custom filtering on plugin windows first.
-  static void DetachPluginWindowsCallback(HWND window);
-#endif
+  // Add and remove observers for lifetime event notifications. The order in
+  // which notifications are sent to observers is undefined. Clients must be
+  // sure to remove the observer before they go away.
+  void AddObserver(RenderWidgetHostViewBaseObserver* observer);
+  void RemoveObserver(RenderWidgetHostViewBaseObserver* observer);
 
   // Exposed for testing.
+  virtual bool IsChildFrameForTesting() const;
   virtual cc::SurfaceId SurfaceIdForTesting() const;
 
  protected:
   // Interface class only, do not construct.
   RenderWidgetHostViewBase();
 
-#if defined(OS_WIN)
-  // Shared implementation of MovePluginWindows for use by win and aura/wina.
-  static void MovePluginWindowsHelper(
-      HWND parent,
-      const std::vector<WebPluginGeometry>& moves);
-
-  static void PaintPluginWindowsHelper(
-      HWND parent,
-      const gfx::Rect& damaged_screen_rect);
-
-  // Needs to be called before the HWND backing the view goes away to avoid
-  // crashes in Windowed plugins.
-  static void DetachPluginsHelper(HWND parent);
-#endif
+  void NotifyObserversAboutShutdown();
 
   // Whether this view is a popup and what kind of popup it is (select,
   // autofill...).
@@ -460,6 +432,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   uint32_t renderer_frame_number_;
 
   base::OneShotTimer flush_input_timer_;
+
+  base::ObserverList<RenderWidgetHostViewBaseObserver> observers_;
 
   base::WeakPtrFactory<RenderWidgetHostViewBase> weak_factory_;
 

@@ -34,9 +34,6 @@
 #include "core/dom/custom/CustomElementDescriptor.h"
 #include "core/dom/custom/CustomElementMicrotaskStep.h"
 #include "platform/heap/Handle.h"
-#include "wtf/PassOwnPtr.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
@@ -45,14 +42,14 @@ class Element;
 
 class CustomElementMicrotaskResolutionStep final : public CustomElementMicrotaskStep {
 public:
-    static PassOwnPtrWillBeRawPtr<CustomElementMicrotaskResolutionStep> create(PassRefPtrWillBeRawPtr<CustomElementRegistrationContext>, PassRefPtrWillBeRawPtr<Element>, const CustomElementDescriptor&);
+    static RawPtr<CustomElementMicrotaskResolutionStep> create(RawPtr<CustomElementRegistrationContext>, RawPtr<Element>, const CustomElementDescriptor&);
 
     ~CustomElementMicrotaskResolutionStep() override;
 
     DECLARE_VIRTUAL_TRACE();
 
 private:
-    CustomElementMicrotaskResolutionStep(PassRefPtrWillBeRawPtr<CustomElementRegistrationContext>, PassRefPtrWillBeRawPtr<Element>, const CustomElementDescriptor&);
+    CustomElementMicrotaskResolutionStep(RawPtr<CustomElementRegistrationContext>, RawPtr<Element>, const CustomElementDescriptor&);
 
     Result process() override;
 
@@ -60,8 +57,8 @@ private:
     void show(unsigned indent) override;
 #endif
 
-    RefPtrWillBeMember<CustomElementRegistrationContext> m_context;
-    RefPtrWillBeMember<Element> m_element;
+    Member<CustomElementRegistrationContext> m_context;
+    Member<Element> m_element;
     CustomElementDescriptor m_descriptor;
 };
 

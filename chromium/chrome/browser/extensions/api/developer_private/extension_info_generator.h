@@ -7,9 +7,10 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/common/extensions/api/developer_private.h"
 
@@ -35,10 +36,9 @@ class WarningService;
 // This class is designed to only have one generation running at a time!
 class ExtensionInfoGenerator {
  public:
-  using ExtensionInfoList =
-      std::vector<linked_ptr<api::developer_private::ExtensionInfo>>;
+  using ExtensionInfoList = std::vector<api::developer_private::ExtensionInfo>;
 
-  using ExtensionInfosCallback = base::Callback<void(const ExtensionInfoList&)>;
+  using ExtensionInfosCallback = base::Callback<void(ExtensionInfoList)>;
 
   explicit ExtensionInfoGenerator(content::BrowserContext* context);
   ~ExtensionInfoGenerator();
@@ -62,8 +62,9 @@ class ExtensionInfoGenerator {
                                  api::developer_private::ExtensionState state);
 
   // Callback for the asynchronous image loading.
-  void OnImageLoaded(scoped_ptr<api::developer_private::ExtensionInfo> info,
-                     const gfx::Image& image);
+  void OnImageLoaded(
+      std::unique_ptr<api::developer_private::ExtensionInfo> info,
+      const gfx::Image& image);
 
   // Returns the icon url for the default icon to use.
   const std::string& GetDefaultIconUrl(bool is_app, bool is_disabled);

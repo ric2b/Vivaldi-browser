@@ -138,7 +138,7 @@ void WMFDecoderImpl<StreamType>::Decode(
     task_runner_->PostTask(
         FROM_HERE,
         base::Bind(decode_cb,
-                   drained_ok ? DecoderType::kOk : DecoderType::kDecodeError));
+                   drained_ok ? media::DecodeStatus::OK : media::DecodeStatus::DECODE_ERROR));
     return;
   }
   DVLOG(5) << __FUNCTION__ << "(" << buffer->timestamp() << ")";
@@ -147,15 +147,15 @@ void WMFDecoderImpl<StreamType>::Decode(
   DCHECK_NE(MF_E_NOTACCEPTING, hr)
       << "The transform is neither producing output "
          "nor accepting input? This must not happen, see ProcessOutputLoop()";
-  typename DecoderType::Status status = SUCCEEDED(hr) && ProcessOutputLoop()
-                                            ? DecoderType::kOk
-                                            : DecoderType::kDecodeError;
+  typename media::DecodeStatus status = SUCCEEDED(hr) && ProcessOutputLoop()
+                                            ? media::DecodeStatus::OK
+                                            : media::DecodeStatus::DECODE_ERROR;
 
-  if (status == DecoderType::kOk &&
+  if (status == media::DecodeStatus::OK &&
       buffer->splice_timestamp() != kNoTimestamp()) {
     DVLOG(1) << "Splice detected, must drain the decoder";
     if (!Drain())
-      status = DecoderType::kDecodeError;
+      status = media::DecodeStatus::DECODE_ERROR;
   }
 
   task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));

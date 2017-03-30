@@ -65,7 +65,7 @@ public:
     BLINK_EXPORT WebMediaConstraints audioConstraints() const;
     BLINK_EXPORT WebMediaConstraints videoConstraints() const;
 
-    BLINK_EXPORT WebSecurityOrigin securityOrigin() const;
+    BLINK_EXPORT WebSecurityOrigin getSecurityOrigin() const;
     BLINK_EXPORT WebDocument ownerDocument() const;
 
     BLINK_EXPORT void requestSucceeded(const WebMediaStream&);
@@ -76,6 +76,9 @@ public:
 
     // DEPRECATED
     BLINK_EXPORT void requestFailed(const WebString& description = WebString()) { requestDenied(description); }
+
+    // For testing in content/
+    BLINK_EXPORT static WebUserMediaRequest createForTesting(const WebMediaConstraints& audio, const WebMediaConstraints& video);
 
 #if BLINK_IMPLEMENTATION
     WebUserMediaRequest(UserMediaRequest*);

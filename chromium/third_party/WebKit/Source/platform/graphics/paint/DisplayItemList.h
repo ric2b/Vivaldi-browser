@@ -11,10 +11,6 @@
 #include "wtf/Alignment.h"
 #include "wtf/Assertions.h"
 
-#ifndef NDEBUG
-#include "wtf/text/WTFString.h"
-#endif
-
 namespace blink {
 
 struct PaintChunk;
@@ -27,40 +23,25 @@ static const size_t kDisplayItemAlignment = WTF_ALIGN_OF(BeginTransform3DDisplay
 static const size_t kMaximumDisplayItemSize = sizeof(BeginTransform3DDisplayItem);
 
 // A container for a list of display items.
-class DisplayItemList : public ContiguousContainer<DisplayItem, kDisplayItemAlignment> {
+class PLATFORM_EXPORT DisplayItemList : public ContiguousContainer<DisplayItem, kDisplayItemAlignment> {
 public:
     DisplayItemList(size_t initialSizeBytes)
         : ContiguousContainer(kMaximumDisplayItemSize, initialSizeBytes) {}
     DisplayItemList(DisplayItemList&& source)
         : ContiguousContainer(std::move(source))
         , m_visualRects(std::move(source.m_visualRects))
+        , m_beginItemIndices(std::move(source.m_beginItemIndices))
     {}
 
     DisplayItemList& operator=(DisplayItemList&& source)
     {
         ContiguousContainer::operator=(std::move(source));
         m_visualRects = std::move(source.m_visualRects);
+        m_beginItemIndices = std::move(source.m_beginItemIndices);
         return *this;
     }
 
-    DisplayItem& appendByMoving(DisplayItem& item, const IntRect& visualRect)
-    {
-#ifndef NDEBUG
-        WTF::String originalDebugString = item.asDebugString();
-#endif
-        ASSERT(item.hasValidClient());
-        DisplayItem& result = ContiguousContainer::appendByMoving(item, item.derivedSize());
-        // ContiguousContainer::appendByMoving() calls an in-place constructor
-        // on item which replaces it with a tombstone/"dead display item" that
-        // can be safely destructed but should never be used.
-        ASSERT(!item.hasValidClient());
-#ifndef NDEBUG
-        // Save original debug string in the old item to help debugging.
-        item.setClientDebugString(originalDebugString);
-#endif
-        m_visualRects.append(visualRect);
-        return result;
-    }
+    DisplayItem& appendByMoving(DisplayItem&, const IntRect& visualRect);
 
     IntRect visualRect(unsigned index) const
     {
@@ -68,22 +49,10 @@ public:
         return m_visualRects[index];
     }
 
-    void appendVisualRect(const IntRect& visualRect)
-    {
-        m_visualRects.append(visualRect);
-    }
+    void appendVisualRect(const IntRect& visualRect);
 
 #if ENABLE(ASSERT)
-    void assertDisplayItemClientsAreAlive() const
-    {
-        for (auto& item : *this) {
-#ifdef NDEBUG
-            ASSERT_WITH_MESSAGE(DisplayItemClient::isAlive(item.client()), "Short-lived DisplayItemClient. See crbug.com/570030.");
-#else
-            ASSERT_WITH_MESSAGE(DisplayItemClient::isAlive(item.client()), "Short-lived DisplayItemClient: %s. See crbug.com/570030.", item.clientDebugString().utf8().data());
-#endif
-        }
-    }
+    void assertDisplayItemClientsAreAlive() const;
 #endif
 
     // Useful for iterating with a range-based for loop.
@@ -102,7 +71,12 @@ public:
     Range<const_iterator> itemsInPaintChunk(const PaintChunk&) const;
 
 private:
+    // If we're currently within a paired display item block, unions the
+    // given visual rect with the begin display item's visual rect.
+    void growCurrentBeginItemVisualRect(const IntRect& visualRect);
+
     Vector<IntRect> m_visualRects;
+    Vector<size_t> m_beginItemIndices;
 };
 
 } // namespace blink

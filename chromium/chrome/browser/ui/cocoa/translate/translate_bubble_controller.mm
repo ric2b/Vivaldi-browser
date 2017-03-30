@@ -21,6 +21,7 @@
 #include "components/translate/core/browser/translate_ui_delegate.h"
 #include "content/public/browser/browser_context.h"
 #include "grit/components_strings.h"
+#include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/controls/hyperlink_button_cell.h"
 #import "ui/base/cocoa/window_size_constants.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -109,8 +110,10 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
 
 @implementation TranslateBubbleController
 
+@synthesize webContents = webContents_;
+
 - (id)initWithParentWindow:(BrowserWindowController*)controller
-                     model:(scoped_ptr<TranslateBubbleModel>)model
+                     model:(std::unique_ptr<TranslateBubbleModel>)model
                webContents:(content::WebContents*)webContents {
   NSWindow* parentWindow = [controller window];
 
@@ -150,7 +153,10 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
   return self;
 }
 
-@synthesize webContents = webContents_;
+- (void)windowWillClose:(NSNotification*)notification {
+  model_->OnBubbleClosing();
+  [super windowWillClose:notification];
+}
 
 - (NSView*)currentView {
   NSNumber* key = @(model_->GetViewState());
@@ -166,7 +172,8 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
 - (void)showWindow:(id)sender {
   BrowserWindowController* controller = [[self parentWindow] windowController];
   NSPoint anchorPoint = [[controller toolbarController] translateBubblePoint];
-  anchorPoint = [[self parentWindow] convertBaseToScreen:anchorPoint];
+  anchorPoint =
+      ui::ConvertPointFromWindowToScreen([self parentWindow], anchorPoint);
   [self setAnchorPoint:anchorPoint];
   [super showWindow:sender];
 }
@@ -590,6 +597,7 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
 }
 
 - (void)handleNopeButtonPressed {
+  model_->DeclineTranslation();
   [self close];
 }
 
@@ -623,15 +631,18 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
 }
 
 - (void)handleDenialPopUpButtonNopeSelected {
+  model_->DeclineTranslation();
   [self close];
 }
 
 - (void)handleDenialPopUpButtonNeverTranslateLanguageSelected {
+  model_->DeclineTranslation();
   model_->SetNeverTranslateLanguage(true);
   [self close];
 }
 
 - (void)handleDenialPopUpButtonNeverTranslateSiteSelected {
+  model_->DeclineTranslation();
   model_->SetNeverTranslateSite(true);
   [self close];
 }

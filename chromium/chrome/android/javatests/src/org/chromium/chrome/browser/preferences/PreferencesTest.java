@@ -212,9 +212,6 @@ public class PreferencesTest extends NativeLibraryTestBase {
         return locationPermission;
     }
 
-    // TODO(mvanouwerkerk): Write new preference intent tests for notification settings.
-    // https://crbug.com/461885
-
     /**
      * Tests setting FontScaleFactor and ForceEnableZoom in AccessibilityPreferences and ensures
      * that ForceEnableZoom changes corresponding to FontScaleFactor.
@@ -234,9 +231,9 @@ public class PreferencesTest extends NativeLibraryTestBase {
         NumberFormat percentFormat = NumberFormat.getPercentInstance();
         // Arbitrary value 0.4f to be larger and smaller than threshold.
         float fontSmallerThanThreshold =
-                AccessibilityPreferences.FORCE_ENABLE_ZOOM_THRESHOLD_MULTIPLIER - 0.4f;
+                FontSizePrefs.FORCE_ENABLE_ZOOM_THRESHOLD_MULTIPLIER - 0.4f;
         float fontBiggerThanThreshold =
-                AccessibilityPreferences.FORCE_ENABLE_ZOOM_THRESHOLD_MULTIPLIER + 0.4f;
+                FontSizePrefs.FORCE_ENABLE_ZOOM_THRESHOLD_MULTIPLIER + 0.4f;
 
         // Set the textScaleFactor above the threshold.
         userSetTextScale(accessibilityPref, textScalePref, fontBiggerThanThreshold);

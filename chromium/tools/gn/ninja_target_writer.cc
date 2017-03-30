@@ -13,7 +13,9 @@
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/ninja_action_target_writer.h"
 #include "tools/gn/ninja_binary_target_writer.h"
+#include "tools/gn/ninja_bundle_data_target_writer.h"
 #include "tools/gn/ninja_copy_target_writer.h"
+#include "tools/gn/ninja_create_bundle_target_writer.h"
 #include "tools/gn/ninja_group_target_writer.h"
 #include "tools/gn/ninja_utils.h"
 #include "tools/gn/output_file.h"
@@ -57,7 +59,13 @@ void NinjaTargetWriter::RunAndWriteFile(const Target* target) {
   std::stringstream file;
 
   // Call out to the correct sub-type of writer.
-  if (target->output_type() == Target::COPY_FILES) {
+  if (target->output_type() == Target::BUNDLE_DATA) {
+    NinjaBundleDataTargetWriter writer(target, file);
+    writer.Run();
+  } else if (target->output_type() == Target::CREATE_BUNDLE) {
+    NinjaCreateBundleTargetWriter writer(target, file);
+    writer.Run();
+  } else if (target->output_type() == Target::COPY_FILES) {
     NinjaCopyTargetWriter writer(target, file);
     writer.Run();
   } else if (target->output_type() == Target::ACTION ||

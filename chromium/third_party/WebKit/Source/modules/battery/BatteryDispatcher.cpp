@@ -4,27 +4,45 @@
 
 #include "modules/battery/BatteryDispatcher.h"
 
+#include "platform/MojoHelper.h"
+#include "public/platform/Platform.h"
+#include "public/platform/ServiceRegistry.h"
+#include "wtf/Assertions.h"
 #include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
 BatteryDispatcher& BatteryDispatcher::instance()
 {
-    DEFINE_STATIC_LOCAL(Persistent<BatteryDispatcher>, batteryDispatcher, (new BatteryDispatcher()));
-    return *batteryDispatcher;
+    DEFINE_STATIC_LOCAL(BatteryDispatcher, batteryDispatcher, (new BatteryDispatcher));
+    return batteryDispatcher;
 }
 
 BatteryDispatcher::BatteryDispatcher()
     : m_hasLatestData(false)
-    , m_batteryDispatcherProxy(adoptPtr(new BatteryDispatcherProxy(this)))
 {
 }
 
-BatteryDispatcher::~BatteryDispatcher()
+void BatteryDispatcher::queryNextStatus()
 {
+    m_monitor->QueryNextStatus(
+        sameThreadBindForMojo(&BatteryDispatcher::onDidChange, this));
 }
 
-void BatteryDispatcher::OnUpdateBatteryStatus(const BatteryStatus& batteryStatus)
+void BatteryDispatcher::onDidChange(device::BatteryStatusPtr batteryStatus)
+{
+    queryNextStatus();
+
+    ASSERT(batteryStatus);
+
+    updateBatteryStatus(BatteryStatus(
+        batteryStatus->charging,
+        batteryStatus->charging_time,
+        batteryStatus->discharging_time,
+        batteryStatus->level));
+}
+
+void BatteryDispatcher::updateBatteryStatus(const BatteryStatus& batteryStatus)
 {
     m_batteryStatus = batteryStatus;
     m_hasLatestData = true;
@@ -33,12 +51,15 @@ void BatteryDispatcher::OnUpdateBatteryStatus(const BatteryStatus& batteryStatus
 
 void BatteryDispatcher::startListening()
 {
-    m_batteryDispatcherProxy->StartListening();
+    ASSERT(!m_monitor.is_bound());
+    Platform::current()->serviceRegistry()->connectToRemoteService(
+        mojo::GetProxy(&m_monitor));
+    queryNextStatus();
 }
 
 void BatteryDispatcher::stopListening()
 {
-    m_batteryDispatcherProxy->StopListening();
+    m_monitor.reset();
     m_hasLatestData = false;
 }
 

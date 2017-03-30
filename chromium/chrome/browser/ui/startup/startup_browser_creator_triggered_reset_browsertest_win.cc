@@ -4,12 +4,16 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/callback_list.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/lifetime/keep_alive_types.h"
+#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/profile_resetter/triggered_profile_resetter.h"
 #include "chrome/browser/profile_resetter/triggered_profile_resetter_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -60,9 +64,9 @@ class MockTriggeredProfileResetter : public TriggeredProfileResetter {
 
 bool MockTriggeredProfileResetter::has_reset_trigger_ = false;
 
-scoped_ptr<KeyedService> BuildMockTriggeredProfileResetter(
+std::unique_ptr<KeyedService> BuildMockTriggeredProfileResetter(
     content::BrowserContext* context) {
-  return make_scoped_ptr(new MockTriggeredProfileResetter);
+  return base::WrapUnique(new MockTriggeredProfileResetter);
 }
 
 }  // namespace
@@ -78,8 +82,7 @@ class StartupBrowserCreatorTriggeredResetTest : public InProcessBrowserTest {
             ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
                 base::Bind(&StartupBrowserCreatorTriggeredResetTest::
                                OnWillCreateBrowserContextServices,
-                           base::Unretained(this)))
-            .Pass();
+                           base::Unretained(this)));
   }
 
  private:
@@ -88,7 +91,8 @@ class StartupBrowserCreatorTriggeredResetTest : public InProcessBrowserTest {
         context, &BuildMockTriggeredProfileResetter);
   }
 
-  scoped_ptr<base::CallbackList<void(content::BrowserContext*)>::Subscription>
+  std::unique_ptr<
+      base::CallbackList<void(content::BrowserContext*)>::Subscription>
       will_create_browser_context_services_subscription_;
 
   DISALLOW_COPY_AND_ASSIGN(StartupBrowserCreatorTriggeredResetTest);
@@ -110,7 +114,8 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
   SessionStartupPref::SetStartupPref(profile, pref);
 
   // Keep the browser process running while browsers are closed.
-  g_browser_process->AddRefModule();
+  ScopedKeepAlive keep_alive(KeepAliveOrigin::BROWSER,
+                             KeepAliveRestartOption::DISABLED);
 
   // Close the browser.
   CloseBrowserAsynchronously(browser());
@@ -139,8 +144,6 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
   ASSERT_EQ(static_cast<int>(expected_urls.size()), tab_strip->count());
   for (size_t i = 0; i < expected_urls.size(); i++)
     EXPECT_EQ(expected_urls[i], tab_strip->GetWebContentsAt(i)->GetURL());
-
-  g_browser_process->ReleaseModule();
 }
 
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
@@ -189,7 +192,8 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
   SessionStartupPref::SetStartupPref(browser()->profile(), pref);
 
   // Keep the browser process running while browsers are closed.
-  g_browser_process->AddRefModule();
+  ScopedKeepAlive keep_alive(KeepAliveOrigin::BROWSER,
+                             KeepAliveRestartOption::DISABLED);
 
   // Close the browser.
   CloseBrowserAsynchronously(browser());
@@ -249,5 +253,4 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
   ASSERT_LT(0, other_tab_strip->count());
   EXPECT_EQ(internals::GetTriggeredResetSettingsURL(),
             other_tab_strip->GetActiveWebContents()->GetURL());
-  g_browser_process->ReleaseModule();
 }

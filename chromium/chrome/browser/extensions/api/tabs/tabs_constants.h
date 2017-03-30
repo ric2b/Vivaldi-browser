@@ -61,7 +61,6 @@ extern const char kZoomSettingsScope[];
 extern const char kExtDataKey[];
 extern const char kLastActiveTimeKey[];
 extern const char kWindowExtDataKey[];
-extern const char kDiscardedKey[];
 
 // Value consts.
 extern const char kCanOnlyMoveTabsWithinNormalWindowsError[];

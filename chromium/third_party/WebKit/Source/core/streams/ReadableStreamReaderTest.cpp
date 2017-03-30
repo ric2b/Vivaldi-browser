@@ -49,7 +49,7 @@ private:
     ScriptValue call(ScriptValue value) override
     {
         ASSERT(!value.isEmpty());
-        *m_value = toCoreString(value.v8Value()->ToString(scriptState()->context()).ToLocalChecked());
+        *m_value = toCoreString(value.v8Value()->ToString(getScriptState()->context()).ToLocalChecked());
         return value;
     }
 
@@ -74,14 +74,14 @@ private:
     ScriptValue call(ScriptValue result) override
     {
         ASSERT(!result.isEmpty());
-        v8::Isolate* isolate = scriptState()->isolate();
+        v8::Isolate* isolate = getScriptState()->isolate();
         if (!result.isObject()) {
             return result;
         }
         v8::Local<v8::Object> object = result.v8Value().As<v8::Object>();
         v8::Local<v8::String> doneString = v8String(isolate, "done");
         v8::Local<v8::String> valueString = v8String(isolate, "value");
-        v8::Local<v8::Context> context = scriptState()->context();
+        v8::Local<v8::Context> context = getScriptState()->context();
         v8::Maybe<bool> hasDone = object->Has(context, doneString);
         v8::Maybe<bool> hasValue = object->Has(context, valueString);
 
@@ -98,7 +98,7 @@ private:
 
         m_result->isSet = true;
         m_result->isDone = done.As<v8::Boolean>()->Value();
-        m_result->valueString = toCoreString(value->ToString(scriptState()->context()).ToLocalChecked());
+        m_result->valueString = toCoreString(value->ToString(getScriptState()->context()).ToLocalChecked());
         return result;
     }
 
@@ -136,18 +136,18 @@ public:
         m_stream->error(DOMException::create(AbortError, "done"));
     }
 
-    ScriptState* scriptState() { return ScriptState::forMainWorld(m_page->document().frame()); }
-    v8::Isolate* isolate() { return scriptState()->isolate(); }
-    ExecutionContext* executionContext() { return scriptState()->executionContext(); }
+    ScriptState* getScriptState() { return ScriptState::forMainWorld(m_page->document().frame()); }
+    v8::Isolate* isolate() { return getScriptState()->isolate(); }
+    ExecutionContext* getExecutionContext() { return getScriptState()->getExecutionContext(); }
 
     v8::Local<v8::Function> createCaptor(String* value)
     {
-        return StringCapturingFunction::createFunction(scriptState(), value);
+        return StringCapturingFunction::createFunction(getScriptState(), value);
     }
 
     v8::Local<v8::Function> createResultCaptor(ReadResult* value)
     {
-        return ReadResultCapturingFunction::createFunction(scriptState(), value);
+        return ReadResultCapturingFunction::createFunction(getScriptState(), value);
     }
 
     OwnPtr<DummyPageHolder> m_page;
@@ -156,22 +156,22 @@ public:
 
 TEST_F(ReadableStreamReaderTest, Construct)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_TRUE(reader->isActive());
     EXPECT_FALSE(exceptionState.hadException());
 }
 
 TEST_F(ReadableStreamReaderTest, Release)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
     String onFulfilled, onRejected;
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_TRUE(reader->isActive());
 
-    reader->closed(scriptState()).then(createCaptor(&onFulfilled), createCaptor(&onRejected));
+    reader->closed(getScriptState()).then(createCaptor(&onFulfilled), createCaptor(&onRejected));
     reader->releaseLock(exceptionState);
     EXPECT_FALSE(reader->isActive());
     EXPECT_FALSE(exceptionState.hadException());
@@ -179,11 +179,11 @@ TEST_F(ReadableStreamReaderTest, Release)
     EXPECT_TRUE(onFulfilled.isNull());
     EXPECT_TRUE(onRejected.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
     EXPECT_TRUE(onFulfilled.isNull());
     EXPECT_EQ("AbortError: the reader is already released", onRejected);
 
-    ReadableStreamReader* another = new ReadableStreamReader(executionContext(), m_stream);
+    ReadableStreamReader* another = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_TRUE(another->isActive());
     EXPECT_FALSE(reader->isActive());
     reader->releaseLock(exceptionState);
@@ -194,9 +194,9 @@ TEST_F(ReadableStreamReaderTest, Release)
 
 TEST_F(ReadableStreamReaderTest, ReadAfterRelease)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_TRUE(reader->isActive());
     reader->releaseLock(exceptionState);
     EXPECT_FALSE(exceptionState.hadException());
@@ -204,11 +204,11 @@ TEST_F(ReadableStreamReaderTest, ReadAfterRelease)
 
     ReadResult result;
     String onRejected;
-    reader->read(scriptState()).then(createResultCaptor(&result), createCaptor(&onRejected));
+    reader->read(getScriptState()).then(createResultCaptor(&result), createCaptor(&onRejected));
 
     EXPECT_FALSE(result.isSet);
     EXPECT_TRUE(onRejected.isNull());
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
 
     EXPECT_FALSE(result.isSet);
     EXPECT_EQ("TypeError: the reader is already released", onRejected);
@@ -217,11 +217,11 @@ TEST_F(ReadableStreamReaderTest, ReadAfterRelease)
 
 TEST_F(ReadableStreamReaderTest, ReleaseShouldFailWhenCalledWhileReading)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_TRUE(reader->isActive());
-    reader->read(scriptState());
+    reader->read(getScriptState());
 
     reader->releaseLock(exceptionState);
     EXPECT_TRUE(reader->isActive());
@@ -236,21 +236,21 @@ TEST_F(ReadableStreamReaderTest, ReleaseShouldFailWhenCalledWhileReading)
 
 TEST_F(ReadableStreamReaderTest, EnqueueThenRead)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
     m_stream->enqueue("hello");
     m_stream->enqueue("world");
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_EQ(ReadableStream::Readable, m_stream->stateInternal());
 
     ReadResult result;
     String onRejected;
-    reader->read(scriptState()).then(createResultCaptor(&result), createCaptor(&onRejected));
+    reader->read(getScriptState()).then(createResultCaptor(&result), createCaptor(&onRejected));
 
     EXPECT_FALSE(result.isSet);
     EXPECT_TRUE(onRejected.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
 
     EXPECT_TRUE(result.isSet);
     EXPECT_FALSE(result.isDone);
@@ -259,12 +259,12 @@ TEST_F(ReadableStreamReaderTest, EnqueueThenRead)
 
     ReadResult result2;
     String onRejected2;
-    reader->read(scriptState()).then(createResultCaptor(&result2), createCaptor(&onRejected2));
+    reader->read(getScriptState()).then(createResultCaptor(&result2), createCaptor(&onRejected2));
 
     EXPECT_FALSE(result2.isSet);
     EXPECT_TRUE(onRejected2.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
 
     EXPECT_TRUE(result2.isSet);
     EXPECT_FALSE(result2.isDone);
@@ -275,22 +275,22 @@ TEST_F(ReadableStreamReaderTest, EnqueueThenRead)
 
 TEST_F(ReadableStreamReaderTest, ReadThenEnqueue)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_EQ(ReadableStream::Readable, m_stream->stateInternal());
 
     ReadResult result, result2;
     String onRejected, onRejected2;
-    reader->read(scriptState()).then(createResultCaptor(&result), createCaptor(&onRejected));
-    reader->read(scriptState()).then(createResultCaptor(&result2), createCaptor(&onRejected2));
+    reader->read(getScriptState()).then(createResultCaptor(&result), createCaptor(&onRejected));
+    reader->read(getScriptState()).then(createResultCaptor(&result2), createCaptor(&onRejected2));
 
     EXPECT_FALSE(result.isSet);
     EXPECT_TRUE(onRejected.isNull());
     EXPECT_FALSE(result2.isSet);
     EXPECT_TRUE(onRejected2.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
 
     EXPECT_FALSE(result.isSet);
     EXPECT_TRUE(onRejected.isNull());
@@ -298,7 +298,7 @@ TEST_F(ReadableStreamReaderTest, ReadThenEnqueue)
     EXPECT_TRUE(onRejected2.isNull());
 
     m_stream->enqueue("hello");
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
 
     EXPECT_TRUE(result.isSet);
     EXPECT_FALSE(result.isDone);
@@ -308,7 +308,7 @@ TEST_F(ReadableStreamReaderTest, ReadThenEnqueue)
     EXPECT_TRUE(onRejected2.isNull());
 
     m_stream->enqueue("world");
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
 
     EXPECT_TRUE(result2.isSet);
     EXPECT_FALSE(result2.isDone);
@@ -319,9 +319,9 @@ TEST_F(ReadableStreamReaderTest, ReadThenEnqueue)
 
 TEST_F(ReadableStreamReaderTest, ClosedReader)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
 
     m_stream->close();
 
@@ -330,15 +330,15 @@ TEST_F(ReadableStreamReaderTest, ClosedReader)
     String onClosedFulfilled, onClosedRejected;
     ReadResult result;
     String onReadRejected;
-    isolate()->RunMicrotasks();
-    reader->closed(scriptState()).then(createCaptor(&onClosedFulfilled), createCaptor(&onClosedRejected));
-    reader->read(scriptState()).then(createResultCaptor(&result), createCaptor(&onReadRejected));
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
+    reader->closed(getScriptState()).then(createCaptor(&onClosedFulfilled), createCaptor(&onClosedRejected));
+    reader->read(getScriptState()).then(createResultCaptor(&result), createCaptor(&onReadRejected));
     EXPECT_TRUE(onClosedFulfilled.isNull());
     EXPECT_TRUE(onClosedRejected.isNull());
     EXPECT_FALSE(result.isSet);
     EXPECT_TRUE(onReadRejected.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
     EXPECT_EQ("undefined", onClosedFulfilled);
     EXPECT_TRUE(onClosedRejected.isNull());
     EXPECT_TRUE(result.isSet);
@@ -350,9 +350,9 @@ TEST_F(ReadableStreamReaderTest, ClosedReader)
 
 TEST_F(ReadableStreamReaderTest, ErroredReader)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
 
     m_stream->error(DOMException::create(SyntaxError, "some error"));
 
@@ -361,15 +361,15 @@ TEST_F(ReadableStreamReaderTest, ErroredReader)
 
     String onClosedFulfilled, onClosedRejected;
     String onReadFulfilled, onReadRejected;
-    isolate()->RunMicrotasks();
-    reader->closed(scriptState()).then(createCaptor(&onClosedFulfilled), createCaptor(&onClosedRejected));
-    reader->read(scriptState()).then(createCaptor(&onReadFulfilled), createCaptor(&onReadRejected));
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
+    reader->closed(getScriptState()).then(createCaptor(&onClosedFulfilled), createCaptor(&onClosedRejected));
+    reader->read(getScriptState()).then(createCaptor(&onReadFulfilled), createCaptor(&onReadRejected));
     EXPECT_TRUE(onClosedFulfilled.isNull());
     EXPECT_TRUE(onClosedRejected.isNull());
     EXPECT_TRUE(onReadFulfilled.isNull());
     EXPECT_TRUE(onReadRejected.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
     EXPECT_TRUE(onClosedFulfilled.isNull());
     EXPECT_EQ("SyntaxError: some error", onClosedRejected);
     EXPECT_TRUE(onReadFulfilled.isNull());
@@ -379,17 +379,17 @@ TEST_F(ReadableStreamReaderTest, ErroredReader)
 
 TEST_F(ReadableStreamReaderTest, PendingReadsShouldBeResolvedWhenClosed)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_EQ(ReadableStream::Readable, m_stream->stateInternal());
 
     ReadResult result, result2;
     String onRejected, onRejected2;
-    reader->read(scriptState()).then(createResultCaptor(&result), createCaptor(&onRejected));
-    reader->read(scriptState()).then(createResultCaptor(&result2), createCaptor(&onRejected2));
+    reader->read(getScriptState()).then(createResultCaptor(&result), createCaptor(&onRejected));
+    reader->read(getScriptState()).then(createResultCaptor(&result2), createCaptor(&onRejected2));
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
     EXPECT_FALSE(result.isSet);
     EXPECT_TRUE(onRejected.isNull());
     EXPECT_FALSE(result2.isSet);
@@ -401,7 +401,7 @@ TEST_F(ReadableStreamReaderTest, PendingReadsShouldBeResolvedWhenClosed)
     EXPECT_FALSE(result2.isSet);
     EXPECT_TRUE(onRejected2.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
 
     EXPECT_TRUE(result.isSet);
     EXPECT_TRUE(result.isDone);
@@ -417,17 +417,17 @@ TEST_F(ReadableStreamReaderTest, PendingReadsShouldBeResolvedWhenClosed)
 
 TEST_F(ReadableStreamReaderTest, PendingReadsShouldBeRejectedWhenErrored)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_EQ(ReadableStream::Readable, m_stream->stateInternal());
 
     String onFulfilled, onFulfilled2;
     String onRejected, onRejected2;
-    reader->read(scriptState()).then(createCaptor(&onFulfilled), createCaptor(&onRejected));
-    reader->read(scriptState()).then(createCaptor(&onFulfilled2), createCaptor(&onRejected2));
+    reader->read(getScriptState()).then(createCaptor(&onFulfilled), createCaptor(&onRejected));
+    reader->read(getScriptState()).then(createCaptor(&onFulfilled2), createCaptor(&onRejected2));
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
     EXPECT_TRUE(onFulfilled.isNull());
     EXPECT_TRUE(onRejected.isNull());
     EXPECT_TRUE(onFulfilled2.isNull());
@@ -439,7 +439,7 @@ TEST_F(ReadableStreamReaderTest, PendingReadsShouldBeRejectedWhenErrored)
     EXPECT_TRUE(onFulfilled2.isNull());
     EXPECT_TRUE(onRejected2.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
 
     EXPECT_TRUE(onFulfilled.isNull());
     EXPECT_EQ(onRejected, "SyntaxError: some error");
@@ -450,30 +450,30 @@ TEST_F(ReadableStreamReaderTest, PendingReadsShouldBeRejectedWhenErrored)
 
 TEST_F(ReadableStreamReaderTest, PendingReadsShouldBeResolvedWhenCanceled)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_EQ(ReadableStream::Readable, m_stream->stateInternal());
 
     ReadResult result, result2;
     String onRejected, onRejected2;
-    reader->read(scriptState()).then(createResultCaptor(&result), createCaptor(&onRejected));
-    reader->read(scriptState()).then(createResultCaptor(&result2), createCaptor(&onRejected2));
+    reader->read(getScriptState()).then(createResultCaptor(&result), createCaptor(&onRejected));
+    reader->read(getScriptState()).then(createResultCaptor(&result2), createCaptor(&onRejected2));
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
     EXPECT_FALSE(result.isSet);
     EXPECT_TRUE(onRejected.isNull());
     EXPECT_FALSE(result2.isSet);
     EXPECT_TRUE(onRejected2.isNull());
 
-    reader->cancel(scriptState(), ScriptValue(scriptState(), v8::Undefined(isolate())));
+    reader->cancel(getScriptState(), ScriptValue(getScriptState(), v8::Undefined(isolate())));
     EXPECT_TRUE(reader->isActive());
     EXPECT_FALSE(result.isSet);
     EXPECT_TRUE(onRejected.isNull());
     EXPECT_FALSE(result2.isSet);
     EXPECT_TRUE(onRejected2.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
 
     EXPECT_TRUE(result.isSet);
     EXPECT_TRUE(result.isDone);
@@ -489,20 +489,20 @@ TEST_F(ReadableStreamReaderTest, PendingReadsShouldBeResolvedWhenCanceled)
 
 TEST_F(ReadableStreamReaderTest, CancelShouldNotWorkWhenNotActive)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     reader->releaseLock(exceptionState);
     EXPECT_FALSE(reader->isActive());
 
     String onFulfilled, onRejected;
-    reader->cancel(scriptState(), ScriptValue(scriptState(), v8::Undefined(isolate()))).then(createCaptor(&onFulfilled), createCaptor(&onRejected));
+    reader->cancel(getScriptState(), ScriptValue(getScriptState(), v8::Undefined(isolate()))).then(createCaptor(&onFulfilled), createCaptor(&onRejected));
     EXPECT_EQ(ReadableStream::Readable, m_stream->stateInternal());
 
     EXPECT_TRUE(onFulfilled.isNull());
     EXPECT_TRUE(onRejected.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
 
     EXPECT_TRUE(onFulfilled.isNull());
     EXPECT_EQ("TypeError: the reader is already released", onRejected);
@@ -512,15 +512,15 @@ TEST_F(ReadableStreamReaderTest, CancelShouldNotWorkWhenNotActive)
 
 TEST_F(ReadableStreamReaderTest, Cancel)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_EQ(ReadableStream::Readable, m_stream->stateInternal());
 
     String onClosedFulfilled, onClosedRejected;
     String onCancelFulfilled, onCancelRejected;
-    reader->closed(scriptState()).then(createCaptor(&onClosedFulfilled), createCaptor(&onClosedRejected));
-    reader->cancel(scriptState(), ScriptValue(scriptState(), v8::Undefined(isolate()))).then(createCaptor(&onCancelFulfilled), createCaptor(&onCancelRejected));
+    reader->closed(getScriptState()).then(createCaptor(&onClosedFulfilled), createCaptor(&onClosedRejected));
+    reader->cancel(getScriptState(), ScriptValue(getScriptState(), v8::Undefined(isolate()))).then(createCaptor(&onCancelFulfilled), createCaptor(&onCancelRejected));
 
     EXPECT_EQ(ReadableStream::Closed, m_stream->stateInternal());
     EXPECT_TRUE(onClosedFulfilled.isNull());
@@ -528,7 +528,7 @@ TEST_F(ReadableStreamReaderTest, Cancel)
     EXPECT_TRUE(onCancelFulfilled.isNull());
     EXPECT_TRUE(onCancelRejected.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
     EXPECT_EQ("undefined", onClosedFulfilled);
     EXPECT_TRUE(onClosedRejected.isNull());
     EXPECT_EQ("undefined", onCancelFulfilled);
@@ -538,13 +538,13 @@ TEST_F(ReadableStreamReaderTest, Cancel)
 
 TEST_F(ReadableStreamReaderTest, Close)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_EQ(ReadableStream::Readable, m_stream->stateInternal());
 
     String onFulfilled, onRejected;
-    reader->closed(scriptState()).then(createCaptor(&onFulfilled), createCaptor(&onRejected));
+    reader->closed(getScriptState()).then(createCaptor(&onFulfilled), createCaptor(&onRejected));
 
     m_stream->close();
 
@@ -552,7 +552,7 @@ TEST_F(ReadableStreamReaderTest, Close)
     EXPECT_TRUE(onFulfilled.isNull());
     EXPECT_TRUE(onRejected.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
     EXPECT_EQ("undefined", onFulfilled);
     EXPECT_TRUE(onRejected.isNull());
     EXPECT_FALSE(exceptionState.hadException());
@@ -560,13 +560,13 @@ TEST_F(ReadableStreamReaderTest, Close)
 
 TEST_F(ReadableStreamReaderTest, Error)
 {
-    ScriptState::Scope scope(scriptState());
-    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", scriptState()->context()->Global(), isolate());
-    ReadableStreamReader* reader = new ReadableStreamReader(executionContext(), m_stream);
+    ScriptState::Scope scope(getScriptState());
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, "property", "interface", getScriptState()->context()->Global(), isolate());
+    ReadableStreamReader* reader = new ReadableStreamReader(getExecutionContext(), m_stream);
     EXPECT_EQ(ReadableStream::Readable, m_stream->stateInternal());
 
     String onFulfilled, onRejected;
-    reader->closed(scriptState()).then(createCaptor(&onFulfilled), createCaptor(&onRejected));
+    reader->closed(getScriptState()).then(createCaptor(&onFulfilled), createCaptor(&onRejected));
 
     m_stream->error(DOMException::create(SyntaxError, "some error"));
 
@@ -574,7 +574,7 @@ TEST_F(ReadableStreamReaderTest, Error)
     EXPECT_TRUE(onFulfilled.isNull());
     EXPECT_TRUE(onRejected.isNull());
 
-    isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
     EXPECT_TRUE(onFulfilled.isNull());
     EXPECT_EQ("SyntaxError: some error", onRejected);
     EXPECT_FALSE(exceptionState.hadException());

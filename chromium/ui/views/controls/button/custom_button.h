@@ -32,8 +32,11 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   // The menu button's class name.
   static const char kViewClassName[];
 
-  static const CustomButton* AsCustomButton(const views::View* view);
-  static CustomButton* AsCustomButton(views::View* view);
+  static const CustomButton* AsCustomButton(const View* view);
+  static CustomButton* AsCustomButton(View* view);
+
+  // Paint an MD-style focus ring on the given canvas at the given bounds.
+  static void PaintMdFocusRing(gfx::Canvas* canvas, View* view);
 
   ~CustomButton() override;
 
@@ -72,6 +75,12 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
     notify_action_ = notify_action;
   }
 
+  void set_hide_ink_drop_when_showing_context_menu(
+      bool hide_ink_drop_when_showing_context_menu) {
+    hide_ink_drop_when_showing_context_menu_ =
+        hide_ink_drop_when_showing_context_menu;
+  }
+
   void set_ink_drop_base_color(SkColor color) { ink_drop_base_color_ = color; }
 
   void SetHotTracked(bool is_hot_tracked);
@@ -102,6 +111,15 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
 
   // Overridden from gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;
+
+  InkDropDelegate* ink_drop_delegate() const { return ink_drop_delegate_; }
+
+  // Overridden from View:
+  void Layout() override;
+  void ViewHierarchyChanged(
+      const ViewHierarchyChangedDetails& details) override;
+  void OnFocus() override;
+  void OnBlur() override;
 
  protected:
   // Construct the Button with a Listener. See comment for Button's ctor.
@@ -135,15 +153,12 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   // state). This does not take into account enabled state.
   bool ShouldEnterHoveredState();
 
-  InkDropDelegate* ink_drop_delegate() const { return ink_drop_delegate_; }
   void set_ink_drop_delegate(InkDropDelegate* ink_drop_delegate) {
     ink_drop_delegate_ = ink_drop_delegate;
   }
 
-  // Overridden from View:
-  void ViewHierarchyChanged(
-      const ViewHierarchyChangedDetails& details) override;
-  void OnBlur() override;
+  // When called, creates and uses |md_focus_ring_| instead of a focus painter.
+  void UseMdFocusRing();
 
   // Overridden from Button:
   void NotifyClick(const ui::Event& event) override;
@@ -187,8 +202,17 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   // is clicked.
   InkDropState ink_drop_action_on_click_;
 
+  // When true, the ink drop ripple and hover will be hidden prior to showing
+  // the context menu.
+  bool hide_ink_drop_when_showing_context_menu_;
+
   // The color of the ripple and hover.
   SkColor ink_drop_base_color_;
+
+  // The MD-style focus ring. This is not done via a FocusPainter
+  // because it needs to paint to a layer so it can extend beyond the bounds of
+  // |this|.
+  views::View* md_focus_ring_;
 
   DISALLOW_COPY_AND_ASSIGN(CustomButton);
 };

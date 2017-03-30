@@ -9,11 +9,11 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
-#include "mojo/public/c/environment/async_waiter.h"
 #include "mojo/public/cpp/bindings/callback.h"
+#include "mojo/public/cpp/bindings/lib/sync_handle_watcher.h"
 #include "mojo/public/cpp/bindings/message.h"
-#include "mojo/public/cpp/environment/environment.h"
 #include "mojo/public/cpp/system/core.h"
+#include "mojo/public/cpp/system/watcher.h"
 
 namespace base {
 class Lock;
@@ -42,10 +42,7 @@ class Connector : public MessageReceiver {
   };
 
   // The Connector takes ownership of |message_pipe|.
-  Connector(
-      ScopedMessagePipeHandle message_pipe,
-      ConnectorConfig config,
-      const MojoAsyncWaiter* waiter = Environment::GetDefaultAsyncWaiter());
+  Connector(ScopedMessagePipeHandle message_pipe, ConnectorConfig config);
   ~Connector() override;
 
   // Sets the receiver to handle messages read from the message pipe.  The
@@ -123,20 +120,18 @@ class Connector : public MessageReceiver {
     return message_pipe_.get();
   }
 
-  // Requests to register |message_pipe_| with SyncHandleWatcher whenever this
-  // instance is expecting incoming messages.
-  //
-  // Please note that UnregisterSyncHandleWatch() needs to be called as many
-  // times as successful RegisterSyncHandleWatch() calls in order to cancel the
-  // effect.
-  bool RegisterSyncHandleWatch();
-  void UnregisterSyncHandleWatch();
+  // Allows |message_pipe_| to be watched while others perform sync handle
+  // watching on the same thread. Please see comments of
+  // SyncHandleWatcher::AllowWokenUpBySyncWatchOnSameThread().
+  void AllowWokenUpBySyncWatchOnSameThread();
 
-  // Watches all handles registered with SyncHandleWatcher on the same thread.
-  // The method returns true when |*should_stop| is set to true; returns false
-  // when any failure occurs during the watch, including |message_pipe_| is
-  // closed.
-  bool RunSyncHandleWatch(const bool* should_stop);
+  // Watches |message_pipe_| (as well as other handles registered to be watched
+  // together) synchronously.
+  // This method:
+  //   - returns true when |should_stop| is set to true;
+  //   - return false when any error occurs, including |message_pipe_| being
+  //     closed.
+  bool SyncWatch(const bool* should_stop);
 
   // Whether currently the control flow is inside the sync handle watcher
   // callback.
@@ -145,14 +140,16 @@ class Connector : public MessageReceiver {
   }
 
  private:
-  static void CallOnHandleReady(void* closure, MojoResult result);
+  // Callback of mojo::Watcher.
+  void OnWatcherHandleReady(MojoResult result);
+  // Callback of SyncHandleWatcher.
   void OnSyncHandleWatcherHandleReady(MojoResult result);
   void OnHandleReadyInternal(MojoResult result);
 
   void WaitToReadMore();
 
   // Returns false if |this| was destroyed during message dispatch.
-  MOJO_WARN_UNUSED_RESULT bool ReadSingleMessage(MojoResult* read_result);
+  WARN_UNUSED_RESULT bool ReadSingleMessage(MojoResult* read_result);
 
   // |this| can be destroyed during message dispatch.
   void ReadAllAvailableMessages();
@@ -166,13 +163,15 @@ class Connector : public MessageReceiver {
   // Cancels any calls made to |waiter_|.
   void CancelWait();
 
+  void EnsureSyncWatcherExists();
+
   Closure connection_error_handler_;
-  const MojoAsyncWaiter* waiter_;
 
   ScopedMessagePipeHandle message_pipe_;
   MessageReceiver* incoming_receiver_;
 
-  MojoAsyncWaitID async_wait_id_;
+  Watcher handle_watcher_;
+
   bool error_;
   bool drop_writes_;
   bool enforce_errors_from_incoming_receiver_;
@@ -183,20 +182,20 @@ class Connector : public MessageReceiver {
   // protect modifications to |message_pipe_| and |drop_writes_|.
   scoped_ptr<base::Lock> lock_;
 
-  // If non-zero, |message_pipe_| should be registered with SyncHandleWatcher.
-  size_t register_sync_handle_watch_count_;
-  // Whether |message_pipe_| has been registered with SyncHandleWatcher.
-  bool registered_with_sync_handle_watcher_;
+  scoped_ptr<SyncHandleWatcher> sync_watcher_;
+  bool allow_woken_up_by_others_;
   // If non-zero, currently the control flow is inside the sync handle watcher
   // callback.
   size_t sync_handle_watcher_callback_count_;
-  scoped_refptr<base::RefCountedData<bool>> should_stop_sync_handle_watch_;
 
   base::ThreadChecker thread_checker_;
 
+  // Create a single weak ptr and use it everywhere, to avoid the malloc/free
+  // cost of creating a new weak ptr whenever it is needed.
+  base::WeakPtr<Connector> weak_self_;
   base::WeakPtrFactory<Connector> weak_factory_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(Connector);
+  DISALLOW_COPY_AND_ASSIGN(Connector);
 };
 
 }  // namespace internal

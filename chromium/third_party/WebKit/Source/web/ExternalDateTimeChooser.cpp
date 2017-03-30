@@ -62,7 +62,7 @@ private:
         delete this;
     }
 
-    RefPtrWillBePersistent<ExternalDateTimeChooser> m_chooser;
+    Persistent<ExternalDateTimeChooser> m_chooser;
 };
 
 ExternalDateTimeChooser::~ExternalDateTimeChooser()
@@ -78,16 +78,16 @@ DEFINE_TRACE(ExternalDateTimeChooser)
 ExternalDateTimeChooser::ExternalDateTimeChooser(DateTimeChooserClient* client)
     : m_client(client)
 {
-    ASSERT(client);
+    DCHECK(client);
 }
 
-PassRefPtrWillBeRawPtr<ExternalDateTimeChooser> ExternalDateTimeChooser::create(ChromeClientImpl* chromeClient, WebViewClient* webViewClient, DateTimeChooserClient* client, const DateTimeChooserParameters& parameters)
+ExternalDateTimeChooser* ExternalDateTimeChooser::create(ChromeClientImpl* chromeClient, WebViewClient* webViewClient, DateTimeChooserClient* client, const DateTimeChooserParameters& parameters)
 {
-    ASSERT(chromeClient);
-    RefPtrWillBeRawPtr<ExternalDateTimeChooser> chooser = adoptRefWillBeNoop(new ExternalDateTimeChooser(client));
+    DCHECK(chromeClient);
+    ExternalDateTimeChooser* chooser = new ExternalDateTimeChooser(client);
     if (!chooser->openDateTimeChooser(chromeClient, webViewClient, parameters))
-        chooser.clear();
-    return chooser.release();
+        chooser = nullptr;
+    return chooser;
 }
 
 

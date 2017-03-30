@@ -24,11 +24,9 @@ Pour en savoir plus sur la confidentialité, veuillez consulter les règles de c
 <translation id="1546934824884762070">Une erreur inattendue s'est produite. Veuillez signaler le problème aux développeurs.</translation>
 <translation id="1619813076098775562">Connexion avec l'appareil Cast interrompue</translation>
 <translation id="1643640058022401035">En quittant cette page, vous mettrez fin à la session Google Chromoting.</translation>
-<translation id="1646994964686260497">Aucun appareil auquel se connecter.</translation>
 <translation id="1654128982815600832">Activation des connexions à distance pour cet ordinateur en cours…</translation>
 <translation id="170207782578677537">Échec de l'enregistrement de cet ordinateur.</translation>
 <translation id="1704090719919187045">Préférences relatives à l'hôte Chromoting</translation>
-<translation id="1738759452976856405">Arrêter l'enregistrement</translation>
 <translation id="174018511426417793">Aucun ordinateur n'est enregistré. Pour activer les connexions à distance à un ordinateur, installez l'application Bureau à distance Google Chrome sur celui-ci, puis cliquez sur "<ph name="BUTTON_NAME" />".</translation>
 <translation id="1742469581923031760">Connexion en cours…</translation>
 <translation id="1770394049404108959">Je n'arrive pas à ouvrir l'application.</translation>
@@ -124,7 +122,6 @@ Chromoting</translation>
 <translation id="3950820424414687140">Ouvrir une session</translation>
 <translation id="3989511127559254552">Pour continuer, vous devez autoriser l'accès étendu à votre ordinateur. Vous n'aurez à effectuer cette opération qu'une seule fois.</translation>
 <translation id="4006787130661126000">Si vous souhaitez utiliser le bureau à distance Google Chrome pour accéder à cet ordinateur, vous devez activer les connexions à distance.</translation>
-<translation id="401121182145179743">Vous devez tout d'abord configurer votre ordinateur pour l'accès à distance.</translation>
 <translation id="4028465833180158312">• Mises à jour de l'interface utilisateur de Material Design
 • Crédits de licence tiers
 • Affichage d'informations pour les ordinateurs à distance qui sont hors connexion</translation>
@@ -168,6 +165,7 @@ Google Chrome</translation>
 <translation id="4918086044614829423">Accepter</translation>
 <translation id="492843737083352574">Je rencontre des problèmes avec mon clavier ou ma souris.</translation>
 <translation id="4973800994433240357">En téléchargeant le programme d'installation de l'hôte Chromoting, vous acceptez les <ph name="LINK_BEGIN" />Conditions d'utilisation<ph name="LINK_END" /> de Google.</translation>
+<translation id="4985296110227979402">Vous devez tout d'abord configurer votre ordinateur pour l'accès à distance.</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (hors connexion)</translation>
 <translation id="5070121137485264635">L'hôte distant nécessite votre authentification auprès d'un site Web tiers. Pour continuer, vous devez accorder au Bureau à distance Chrome des autorisations supplémentaires afin d'accéder à l'adresse suivante :</translation>
 <translation id="5156271271724754543">Veuillez saisir le même code d'accès dans les deux champs.</translation>
@@ -177,6 +175,7 @@ Google Chrome</translation>
 <translation id="5222676887888702881">Déconnexion</translation>
 <translation id="5254120496627797685">En quittant cette page, vous mettrez fin à la session du bureau à distance Google Chrome.</translation>
 <translation id="5308380583665731573">Connexion</translation>
+<translation id="533625276787323658">Aucun appareil auquel se connecter.</translation>
 <translation id="5363265567587775042">Demandez à l'utilisateur de l'ordinateur auquel vous souhaitez accéder de cliquer sur "<ph name="SHARE" />" et de vous donner le code d'accès.</translation>
 <translation id="5379087427956679853">L'application Bureau à distance Google Chrome vous permet de partager votre ordinateur sur le Web en toute sécurité. Pour ce faire, les deux utilisateurs en question doivent exécuter cette application, disponible à l'adresse <ph name="URL" />.</translation>
 <translation id="5394895745784982830">Pour Mac (OS X 10.6 ou version ultérieure)</translation>
@@ -237,7 +236,6 @@ Google Chrome</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Voulez-vous vraiment désactiver les connexions à distance à <ph name="HOSTNAME" /> ? Si vous changez d'avis, vous devrez réactiver les connexions depuis cet ordinateur.</translation>
 <translation id="6998989275928107238">À</translation>
-<translation id="7017806586333792422">Démarrer l'enregistrement</translation>
 <translation id="7019153418965365059">Erreur d'hôte non reconnue : <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Assistance à distance</translation>
 <translation id="7038683108611689168">Aidez-nous à améliorer Google Chromoting en nous autorisant à recueillir des statistiques d'utilisation et des rapports d'erreur.</translation>

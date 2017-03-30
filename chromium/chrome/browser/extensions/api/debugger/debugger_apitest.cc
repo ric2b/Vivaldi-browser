@@ -67,15 +67,16 @@ void DebuggerApiTest::SetUpCommandLine(base::CommandLine* command_line) {
 
 void DebuggerApiTest::SetUpOnMainThread() {
   ExtensionApiTest::SetUpOnMainThread();
-  extension_ = ExtensionBuilder()
-                   .SetManifest(std::move(
-                       DictionaryBuilder()
-                           .Set("name", "debugger")
-                           .Set("version", "0.1")
-                           .Set("manifest_version", 2)
-                           .Set("permissions",
-                                std::move(ListBuilder().Append("debugger")))))
-                   .Build();
+  extension_ =
+      ExtensionBuilder()
+          .SetManifest(
+              DictionaryBuilder()
+                  .Set("name", "debugger")
+                  .Set("version", "0.1")
+                  .Set("manifest_version", 2)
+                  .Set("permissions", ListBuilder().Append("debugger").Build())
+                  .Build())
+          .Build();
 }
 
 testing::AssertionResult DebuggerApiTest::RunAttachFunction(
@@ -95,7 +96,7 @@ testing::AssertionResult DebuggerApiTest::RunAttachFunction(
   // Attach by targetId.
   scoped_refptr<DebuggerGetTargetsFunction> get_targets_function =
       new DebuggerGetTargetsFunction();
-  scoped_ptr<base::Value> value(
+  std::unique_ptr<base::Value> value(
       extension_function_test_utils::RunFunctionAndReturnSingleResult(
           get_targets_function.get(), "[]", browser()));
   base::ListValue* targets = nullptr;

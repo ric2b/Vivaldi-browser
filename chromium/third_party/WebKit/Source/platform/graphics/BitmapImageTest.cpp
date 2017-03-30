@@ -31,8 +31,10 @@
 #include "platform/graphics/BitmapImage.h"
 
 #include "platform/SharedBuffer.h"
+#include "platform/graphics/BitmapImageMetrics.h"
 #include "platform/graphics/DeferredImageDecoder.h"
 #include "platform/graphics/ImageObserver.h"
+#include "platform/testing/HistogramTester.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -40,8 +42,8 @@ namespace blink {
 
 class BitmapImageTest : public ::testing::Test {
 public:
-    class FakeImageObserver : public NoBaseWillBeGarbageCollectedFinalized<FakeImageObserver>, public ImageObserver {
-        WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(FakeImageObserver);
+    class FakeImageObserver : public GarbageCollectedFinalized<FakeImageObserver>, public ImageObserver {
+        USING_GARBAGE_COLLECTED_MIXIN(FakeImageObserver);
     public:
         FakeImageObserver() : m_lastDecodedSizeChangedDelta(0) { }
 
@@ -115,6 +117,16 @@ public:
         m_image->advanceAnimation(0);
     }
 
+    int repetitionCount()
+    {
+        return m_image->repetitionCount(true);
+    }
+
+    int animationFinished()
+    {
+        return m_image->m_animationFinished;
+    }
+
     PassRefPtr<Image> imageForDefaultFrame()
     {
         return m_image->imageForDefaultFrame();
@@ -124,11 +136,11 @@ protected:
     void SetUp() override
     {
         DeferredImageDecoder::setEnabled(m_enableDeferredDecoding);
-        m_imageObserver = adoptPtrWillBeNoop(new FakeImageObserver);
+        m_imageObserver = new FakeImageObserver;
         m_image = BitmapImage::create(m_imageObserver.get());
     }
 
-    OwnPtrWillBePersistent<FakeImageObserver> m_imageObserver;
+    Persistent<FakeImageObserver> m_imageObserver;
     RefPtr<BitmapImage> m_image;
 
 private:
@@ -165,6 +177,22 @@ TEST_F(BitmapImageTest, maybeAnimated)
         advanceAnimation();
     }
     EXPECT_FALSE(m_image->maybeAnimated());
+}
+
+TEST_F(BitmapImageTest, animationRepetitions)
+{
+    loadImage("/LayoutTests/fast/images/resources/full2loop.gif");
+    int expectedRepetitionCount = 2;
+    EXPECT_EQ(expectedRepetitionCount, repetitionCount());
+
+    // We actually loop once more than stored repetition count.
+    for (int repeat = 0; repeat < expectedRepetitionCount + 1; ++repeat) {
+        for (size_t i = 0; i < frameCount(); ++i) {
+            EXPECT_FALSE(animationFinished());
+            advanceAnimation();
+        }
+    }
+    EXPECT_TRUE(animationFinished());
 }
 
 TEST_F(BitmapImageTest, isAllDataReceived)
@@ -286,5 +314,64 @@ TEST_F(BitmapImageDeferredDecodingTest, correctDecodedDataSize)
     destroyDecodedData(false);
     EXPECT_EQ(-frameSize * 2, m_imageObserver->m_lastDecodedSizeChangedDelta);
 }
+
+template <typename HistogramEnumType>
+struct HistogramTestParams {
+    const char* filename;
+    HistogramEnumType type;
+};
+
+template <typename HistogramEnumType>
+class BitmapHistogramTest
+    : public BitmapImageTest
+    , public ::testing::WithParamInterface<HistogramTestParams<HistogramEnumType>> {
+protected:
+    void runTest(const char* histogramName)
+    {
+        HistogramTester histogramTester;
+        loadImage(this->GetParam().filename);
+        histogramTester.expectUniqueSample(histogramName, this->GetParam().type, 1);
+    }
+};
+
+using DecodedImageTypeHistogramTest = BitmapHistogramTest<BitmapImageMetrics::DecodedImageType>;
+
+TEST_P(DecodedImageTypeHistogramTest, ImageType)
+{
+    runTest("Blink.DecodedImageType");
+}
+
+DecodedImageTypeHistogramTest::ParamType kDecodedImageTypeHistogramTestParams[] = {
+    {"/LayoutTests/fast/images/resources/green.jpg", BitmapImageMetrics::ImageJPEG},
+    {"/LayoutTests/fast/images/resources/palatted-color-png-gamma-one-color-profile.png", BitmapImageMetrics::ImagePNG},
+    {"/LayoutTests/fast/images/resources/animated-10color.gif", BitmapImageMetrics::ImageGIF},
+    {"/LayoutTests/fast/images/resources/webp-color-profile-lossy.webp", BitmapImageMetrics::ImageWebP},
+    {"/LayoutTests/fast/images/resources/wrong-frame-dimensions.ico", BitmapImageMetrics::ImageICO},
+    {"/LayoutTests/fast/images/resources/lenna.bmp", BitmapImageMetrics::ImageBMP}
+};
+
+INSTANTIATE_TEST_CASE_P(DecodedImageTypeHistogramTest, DecodedImageTypeHistogramTest,
+    ::testing::ValuesIn(kDecodedImageTypeHistogramTestParams));
+
+using DecodedImageOrientationHistogramTest = BitmapHistogramTest<ImageOrientationEnum>;
+
+TEST_P(DecodedImageOrientationHistogramTest, ImageOrientation)
+{
+    runTest("Blink.DecodedImage.Orientation");
+}
+
+DecodedImageOrientationHistogramTest::ParamType kDecodedImageOrientationHistogramTestParams[] = {
+    {"/LayoutTests/fast/images/resources/exif-orientation-1-ul.jpg", OriginTopLeft},
+    {"/LayoutTests/fast/images/resources/exif-orientation-2-ur.jpg", OriginTopRight},
+    {"/LayoutTests/fast/images/resources/exif-orientation-3-lr.jpg", OriginBottomRight},
+    {"/LayoutTests/fast/images/resources/exif-orientation-4-lol.jpg", OriginBottomLeft},
+    {"/LayoutTests/fast/images/resources/exif-orientation-5-lu.jpg", OriginLeftTop},
+    {"/LayoutTests/fast/images/resources/exif-orientation-6-ru.jpg", OriginRightTop},
+    {"/LayoutTests/fast/images/resources/exif-orientation-7-rl.jpg", OriginRightBottom},
+    {"/LayoutTests/fast/images/resources/exif-orientation-8-llo.jpg", OriginLeftBottom}
+};
+
+INSTANTIATE_TEST_CASE_P(DecodedImageOrientationHistogramTest, DecodedImageOrientationHistogramTest,
+    ::testing::ValuesIn(kDecodedImageOrientationHistogramTestParams));
 
 } // namespace blink

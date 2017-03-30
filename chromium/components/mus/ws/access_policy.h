@@ -12,16 +12,19 @@
 #include "components/mus/ws/ids.h"
 
 namespace mus {
-
 namespace ws {
 
+class AccessPolicyDelegate;
 class ServerWindow;
 
-// AccessPolicy is used by WindowTreeImpl to determine what a connection is
+// AccessPolicy is used by WindowTree to determine what the WindowTree is
 // allowed to do.
 class AccessPolicy {
  public:
   virtual ~AccessPolicy() {}
+
+  virtual void Init(ConnectionSpecificId connection_id,
+                    AccessPolicyDelegate* delegate) = 0;
 
   // Unless otherwise mentioned all arguments have been validated. That is the
   // |window| arguments are non-null unless otherwise stated (eg CanSetWindow()
@@ -33,6 +36,7 @@ class AccessPolicy {
                                      const ServerWindow* child) const = 0;
   virtual bool CanRemoveTransientWindowFromParent(
       const ServerWindow* window) const = 0;
+  virtual bool CanSetModal(const ServerWindow* window) const = 0;
   virtual bool CanReorderWindow(const ServerWindow* window,
                                 const ServerWindow* relative_window,
                                 mojom::OrderDirection direction) const = 0;
@@ -42,9 +46,9 @@ class AccessPolicy {
   // descend into |window|.
   virtual bool CanDescendIntoWindowForWindowTree(
       const ServerWindow* window) const = 0;
-  virtual bool CanEmbed(const ServerWindow* window,
-                        uint32_t policy_bitmask) const = 0;
+  virtual bool CanEmbed(const ServerWindow* window) const = 0;
   virtual bool CanChangeWindowVisibility(const ServerWindow* window) const = 0;
+  virtual bool CanChangeWindowOpacity(const ServerWindow* window) const = 0;
   virtual bool CanSetWindowSurface(const ServerWindow* window,
                                    mojom::SurfaceType surface_type) const = 0;
   virtual bool CanSetWindowBounds(const ServerWindow* window) const = 0;
@@ -69,10 +73,11 @@ class AccessPolicy {
   // Returns the window to supply to the client when focus changes to |focused|.
   virtual const ServerWindow* GetWindowForFocusChange(
       const ServerWindow* focused) = 0;
+
+  virtual bool IsValidIdForNewWindow(const ClientWindowId& id) const = 0;
 };
 
 }  // namespace ws
-
 }  // namespace mus
 
 #endif  // COMPONENTS_MUS_WS_ACCESS_POLICY_H_

@@ -7,8 +7,9 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "cc/layers/video_frame_provider.h"
 #include "gpu/command_buffer/common/mailbox.h"
@@ -43,7 +44,7 @@ class StreamTextureProxy {
   };
 };
 
-typedef scoped_ptr<StreamTextureProxy, StreamTextureProxy::Deleter>
+typedef std::unique_ptr<StreamTextureProxy, StreamTextureProxy::Deleter>
     ScopedStreamTextureProxy;
 
 class StreamTextureFactoryContextObserver {
@@ -66,8 +67,8 @@ class StreamTextureFactory : public base::RefCounted<StreamTextureFactory> {
                              int player_id,
                              int frame_id) = 0;
 
-  // Creates a StreamTexture and returns its id.  Sets |*texture_id| to the
-  // client-side id of the StreamTexture. The texture is produced into
+  // Creates a gpu::StreamTexture and returns its id.  Sets |*texture_id| to the
+  // client-side id of the gpu::StreamTexture. The texture is produced into
   // a mailbox so it can be shipped in a VideoFrame.
   virtual unsigned CreateStreamTexture(unsigned texture_target,
                                        unsigned* texture_id,

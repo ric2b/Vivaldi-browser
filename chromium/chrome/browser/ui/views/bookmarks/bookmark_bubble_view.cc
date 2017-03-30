@@ -70,7 +70,7 @@ views::Widget* BookmarkBubbleView::ShowBubble(
     const gfx::Rect& anchor_rect,
     gfx::NativeView parent_window,
     bookmarks::BookmarkBubbleObserver* observer,
-    scoped_ptr<BubbleSyncPromoDelegate> delegate,
+    std::unique_ptr<BubbleSyncPromoDelegate> delegate,
     Profile* profile,
     const GURL& url,
     bool already_bookmarked) {
@@ -85,11 +85,11 @@ views::Widget* BookmarkBubbleView::ShowBubble(
     bookmark_bubble_->set_parent_window(parent_window);
   }
   views::Widget* bubble_widget =
-      views::BubbleDelegateView::CreateBubble(bookmark_bubble_);
+      views::BubbleDialogDelegateView::CreateBubble(bookmark_bubble_);
   bubble_widget->Show();
   // Select the entire title textfield contents when the bubble is first shown.
   bookmark_bubble_->title_tf_->SelectAll(true);
-  bookmark_bubble_->SetArrowPaintType(views::BubbleBorder::PAINT_NONE);
+  bookmark_bubble_->SetArrowPaintType(views::BubbleBorder::PAINT_TRANSPARENT);
 
   if (bookmark_bubble_->observer_) {
     BookmarkModel* model = BookmarkModelFactory::GetForProfile(profile);
@@ -143,12 +143,8 @@ bool BookmarkBubbleView::AcceleratorPressed(
     HandleButtonPressed(remove_button_);
     return true;
   }
-  if (key_code == ui::VKEY_ESCAPE) {
-    remove_bookmark_ = newly_bookmarked_;
-    apply_edits_ = false;
-  }
 
-  return BubbleDelegateView::AcceleratorPressed(accelerator);
+  return LocationBarBubbleDelegateView::AcceleratorPressed(accelerator);
 }
 
 void BookmarkBubbleView::Init() {
@@ -238,26 +234,25 @@ views::View* BookmarkBubbleView::GetInitiallyFocusedView() {
   return title_tf_;
 }
 
-scoped_ptr<views::View> BookmarkBubbleView::CreateFootnoteView() {
+views::View* BookmarkBubbleView::CreateFootnoteView() {
   if (!SyncPromoUI::ShouldShowSyncPromo(profile_))
     return nullptr;
 
   content::RecordAction(
       base::UserMetricsAction("Signin_Impression_FromBookmarkBubble"));
 
-  return scoped_ptr<views::View>(
-      new BubbleSyncPromoView(delegate_.get(), IDS_BOOKMARK_SYNC_PROMO_LINK,
-                              IDS_BOOKMARK_SYNC_PROMO_MESSAGE));
+  return new BubbleSyncPromoView(delegate_.get(), IDS_BOOKMARK_SYNC_PROMO_LINK,
+                                 IDS_BOOKMARK_SYNC_PROMO_MESSAGE);
 }
 
 BookmarkBubbleView::BookmarkBubbleView(
     views::View* anchor_view,
     bookmarks::BookmarkBubbleObserver* observer,
-    scoped_ptr<BubbleSyncPromoDelegate> delegate,
+    std::unique_ptr<BubbleSyncPromoDelegate> delegate,
     Profile* profile,
     const GURL& url,
     bool newly_bookmarked)
-    : BubbleDelegateView(anchor_view, views::BubbleBorder::TOP_RIGHT),
+    : LocationBarBubbleDelegateView(anchor_view, nullptr),
       observer_(observer),
       delegate_(std::move(delegate)),
       profile_(profile),
@@ -266,16 +261,13 @@ BookmarkBubbleView::BookmarkBubbleView(
       parent_model_(BookmarkModelFactory::GetForProfile(profile_),
                     BookmarkModelFactory::GetForProfile(profile_)
                         ->GetMostRecentlyAddedUserNodeForURL(url)),
-      remove_button_(NULL),
-      edit_button_(NULL),
-      close_button_(NULL),
-      title_tf_(NULL),
-      parent_combobox_(NULL),
+      remove_button_(nullptr),
+      edit_button_(nullptr),
+      close_button_(nullptr),
+      title_tf_(nullptr),
+      parent_combobox_(nullptr),
       remove_bookmark_(false),
-      apply_edits_(true) {
-  // Compensate for built-in vertical padding in the anchor view's image.
-  set_anchor_view_insets(gfx::Insets(2, 0, 2, 0));
-}
+      apply_edits_(true) {}
 
 base::string16 BookmarkBubbleView::GetTitle() {
   BookmarkModel* bookmark_model =
@@ -290,7 +282,7 @@ base::string16 BookmarkBubbleView::GetTitle() {
 }
 
 void BookmarkBubbleView::GetAccessibleState(ui::AXViewState* state) {
-  BubbleDelegateView::GetAccessibleState(state);
+  LocationBarBubbleDelegateView::GetAccessibleState(state);
   state->name =
       l10n_util::GetStringUTF16(
           newly_bookmarked_ ? IDS_BOOKMARK_BUBBLE_PAGE_BOOKMARKED :

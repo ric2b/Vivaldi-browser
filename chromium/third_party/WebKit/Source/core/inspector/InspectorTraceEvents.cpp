@@ -16,6 +16,7 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/IdentifiersFactory.h"
+#include "core/inspector/InstanceCounters.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutObject.h"
@@ -27,6 +28,7 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
+#include "platform/v8_inspector/V8StringUtil.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/Vector.h"
 #include "wtf/text/TextPosition.h"
@@ -265,7 +267,7 @@ PassOwnPtr<TracedValue> InspectorStyleRecalcInvalidationTrackingEvent::data(Node
     value->setString("frame", toHexString(node->document().frame()));
     setNodeInfo(value.get(), node, "nodeId", "nodeName");
     value->setString("reason", reason.reasonString());
-    value->setString("extraData", reason.extraData());
+    value->setString("extraData", reason.getExtraData());
     if (RefPtr<ScriptCallStack> stackTrace = ScriptCallStack::capture(1))
         stackTrace->toTracedValue(value.get(), "stackTrace");
     return value.release();
@@ -405,7 +407,7 @@ PassOwnPtr<TracedValue> InspectorSendRequestEvent::data(unsigned long identifier
     OwnPtr<TracedValue> value = TracedValue::create();
     value->setString("requestId", requestId);
     value->setString("frame", toHexString(frame));
-    value->setString("url", request.url().string());
+    value->setString("url", request.url().getString());
     value->setString("requestMethod", request.httpMethod());
     const char* priority = 0;
     switch (request.priority()) {
@@ -430,7 +432,7 @@ PassOwnPtr<TracedValue> InspectorReceiveResponseEvent::data(unsigned long identi
     value->setString("requestId", requestId);
     value->setString("frame", toHexString(frame));
     value->setInteger("statusCode", response.httpStatusCode());
-    value->setString("mimeType", response.mimeType().string().isolatedCopy());
+    value->setString("mimeType", response.mimeType().getString().isolatedCopy());
     return value.release();
 }
 
@@ -540,7 +542,7 @@ PassOwnPtr<TracedValue> InspectorParseHtmlEvent::beginData(Document* document, u
     OwnPtr<TracedValue> value = TracedValue::create();
     value->setInteger("startLine", startLine);
     value->setString("frame", toHexString(document->frame()));
-    value->setString("url", document->url().string());
+    value->setString("url", document->url().getString());
     setCallStack(value.get());
     return value.release();
 }
@@ -555,14 +557,14 @@ PassOwnPtr<TracedValue> InspectorParseHtmlEvent::endData(unsigned endLine)
 PassOwnPtr<TracedValue> InspectorParseAuthorStyleSheetEvent::data(const CSSStyleSheetResource* cachedStyleSheet)
 {
     OwnPtr<TracedValue> value = TracedValue::create();
-    value->setString("styleSheetUrl", cachedStyleSheet->url().string());
+    value->setString("styleSheetUrl", cachedStyleSheet->url().getString());
     return value.release();
 }
 
 PassOwnPtr<TracedValue> InspectorXhrReadyStateChangeEvent::data(ExecutionContext* context, XMLHttpRequest* request)
 {
     OwnPtr<TracedValue> value = TracedValue::create();
-    value->setString("url", request->url().string());
+    value->setString("url", request->url().getString());
     value->setInteger("readyState", request->readyState());
     if (LocalFrame* frame = frameForExecutionContext(context))
         value->setString("frame", toHexString(frame));
@@ -573,7 +575,7 @@ PassOwnPtr<TracedValue> InspectorXhrReadyStateChangeEvent::data(ExecutionContext
 PassOwnPtr<TracedValue> InspectorXhrLoadEvent::data(ExecutionContext* context, XMLHttpRequest* request)
 {
     OwnPtr<TracedValue> value = TracedValue::create();
-    value->setString("url", request->url().string());
+    value->setString("url", request->url().getString());
     if (LocalFrame* frame = frameForExecutionContext(context))
         value->setString("frame", toHexString(frame));
     setCallStack(value.get());
@@ -677,20 +679,48 @@ PassOwnPtr<TracedValue> InspectorEvaluateScriptEvent::data(LocalFrame* frame, co
     return value.release();
 }
 
+PassOwnPtr<TracedValue> InspectorParseScriptEvent::data(unsigned long identifier, const String& url)
+{
+    String requestId = IdentifiersFactory::requestId(identifier);
+    OwnPtr<TracedValue> value = TracedValue::create();
+    value->setString("requestId", requestId);
+    value->setString("url", url);
+    return value.release();
+}
+
 PassOwnPtr<TracedValue> InspectorCompileScriptEvent::data(const String& url, const TextPosition& textPosition)
 {
     return fillLocation(url, textPosition);
 }
 
-PassOwnPtr<TracedValue> InspectorFunctionCallEvent::data(ExecutionContext* context, int scriptId, const String& scriptName, int scriptLine)
+PassOwnPtr<TracedValue> InspectorFunctionCallEvent::data(ExecutionContext* context, const v8::Local<v8::Function>& function)
 {
     OwnPtr<TracedValue> value = TracedValue::create();
-    value->setString("scriptId", String::number(scriptId));
-    value->setString("scriptName", scriptName);
-    value->setInteger("scriptLine", scriptLine);
+    setCallStack(value.get());
     if (LocalFrame* frame = frameForExecutionContext(context))
         value->setString("frame", toHexString(frame));
-    setCallStack(value.get());
+
+    if (function.IsEmpty())
+        return value.release();
+
+    v8::Local<v8::Function> originalFunction = getBoundFunction(function);
+    v8::ScriptOrigin origin = originalFunction->GetScriptOrigin();
+    int scriptId = originalFunction->ScriptId();
+    int lineNumber = 0;
+    String scriptName;
+    if (!origin.ResourceName().IsEmpty()) {
+        V8StringResource<> stringResource(origin.ResourceName());
+        stringResource.prepare();
+        scriptName = stringResource;
+        if (!scriptName.isEmpty())
+            lineNumber = originalFunction->GetScriptLineNumber() + 1;
+    }
+    v8::Local<v8::Value> functionName = originalFunction->GetDebugName();
+    if (!functionName.IsEmpty() && functionName->IsString())
+        value->setString("functionName", toCoreString(functionName.As<v8::String>()));
+    value->setString("scriptId", String::number(scriptId));
+    value->setString("scriptName", scriptName);
+    value->setInteger("scriptLine", lineNumber);
     return value.release();
 }
 
@@ -699,7 +729,7 @@ PassOwnPtr<TracedValue> InspectorPaintImageEvent::data(const LayoutImage& layout
     OwnPtr<TracedValue> value = TracedValue::create();
     setGeneratingNodeInfo(value.get(), &layoutImage, "nodeId");
     if (const ImageResource* resource = layoutImage.cachedImage())
-        value->setString("url", resource->url().string());
+        value->setString("url", resource->url().getString());
     return value.release();
 }
 
@@ -708,7 +738,7 @@ PassOwnPtr<TracedValue> InspectorPaintImageEvent::data(const LayoutObject& ownin
     OwnPtr<TracedValue> value = TracedValue::create();
     setGeneratingNodeInfo(value.get(), &owningLayoutObject, "nodeId");
     if (const ImageResource* resource = styleImage.cachedImage())
-        value->setString("url", resource->url().string());
+        value->setString("url", resource->url().getString());
     return value.release();
 }
 
@@ -716,7 +746,7 @@ PassOwnPtr<TracedValue> InspectorPaintImageEvent::data(const LayoutObject* ownin
 {
     OwnPtr<TracedValue> value = TracedValue::create();
     setGeneratingNodeInfo(value.get(), owningLayoutObject, "nodeId");
-    value->setString("url", imageResource.url().string());
+    value->setString("url", imageResource.url().getString());
     return value.release();
 }
 

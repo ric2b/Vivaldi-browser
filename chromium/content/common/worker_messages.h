@@ -41,6 +41,7 @@ IPC_STRUCT_BEGIN(WorkerProcessMsg_CreateWorker_Params)
   IPC_STRUCT_MEMBER(base::string16, name)
   IPC_STRUCT_MEMBER(base::string16, content_security_policy)
   IPC_STRUCT_MEMBER(blink::WebContentSecurityPolicyType, security_policy_type)
+  IPC_STRUCT_MEMBER(blink::WebAddressSpace, creation_address_space)
   IPC_STRUCT_MEMBER(bool, pause_on_start)
   IPC_STRUCT_MEMBER(int, route_id)
 IPC_STRUCT_END()
@@ -54,15 +55,6 @@ IPC_MESSAGE_CONTROL1(WorkerProcessMsg_CreateWorker,
 //-----------------------------------------------------------------------------
 // WorkerProcessHost messages
 // These are messages sent from the worker process to the browser process.
-
-// Sent by the worker process to check whether access to web databases is
-// allowed.
-IPC_SYNC_MESSAGE_CONTROL4_1(WorkerProcessHostMsg_AllowDatabase,
-                            int /* worker_route_id */,
-                            GURL /* origin url */,
-                            base::string16 /* database name */,
-                            base::string16 /* database display name */,
-                            bool /* result */)
 
 // Sent by the worker process to check whether access to file system is allowed.
 IPC_SYNC_MESSAGE_CONTROL2_1(WorkerProcessHostMsg_RequestFileSystemAccessSync,

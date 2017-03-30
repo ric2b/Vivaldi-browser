@@ -28,6 +28,8 @@ class BlimpConnection;
 // message acknowledgment.
 // (Redelivery will be used in a future CL to implement Fast Recovery
 // of dropped connections.)
+// BlimpMessageOutputBuffer is created on the UI thread, and then used and
+// destroyed on the IO thread.
 class BLIMP_NET_EXPORT BlimpMessageOutputBuffer
     : public BlimpMessageProcessor,
       public BlimpMessageCheckpointObserver {
@@ -44,7 +46,7 @@ class BLIMP_NET_EXPORT BlimpMessageOutputBuffer
   // BlimpMessageProcessor implementation.
   // |callback|, if set, will be called once the remote end has acknowledged the
   // receipt of |message|.
-  void ProcessMessage(scoped_ptr<BlimpMessage> message,
+  void ProcessMessage(std::unique_ptr<BlimpMessage> message,
                       const net::CompletionCallback& callback) override;
 
   // MessageCheckpointObserver implementation.
@@ -55,15 +57,15 @@ class BLIMP_NET_EXPORT BlimpMessageOutputBuffer
 
  private:
   struct BufferEntry {
-    BufferEntry(scoped_ptr<BlimpMessage> message,
+    BufferEntry(std::unique_ptr<BlimpMessage> message,
                 net::CompletionCallback callback);
     ~BufferEntry();
 
-    const scoped_ptr<BlimpMessage> message;
+    const std::unique_ptr<BlimpMessage> message;
     const net::CompletionCallback callback;
   };
 
-  typedef std::list<scoped_ptr<BufferEntry>> MessageBuffer;
+  typedef std::list<std::unique_ptr<BufferEntry>> MessageBuffer;
 
   // Writes the next message in the buffer if an output processor is attached
   // and the buffer contains a message.

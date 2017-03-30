@@ -2,13 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
+
+#include <memory>
 #include <utility>
 
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
 #include "chrome/browser/extensions/error_console/error_console.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -18,7 +20,6 @@
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/common/extensions/api/developer_private.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/test_browser_window.h"
@@ -42,12 +43,13 @@ namespace extensions {
 
 namespace {
 
-scoped_ptr<KeyedService> BuildAPI(content::BrowserContext* context) {
-  return make_scoped_ptr(new DeveloperPrivateAPI(context));
+std::unique_ptr<KeyedService> BuildAPI(content::BrowserContext* context) {
+  return base::WrapUnique(new DeveloperPrivateAPI(context));
 }
 
-scoped_ptr<KeyedService> BuildEventRouter(content::BrowserContext* profile) {
-  return make_scoped_ptr(
+std::unique_ptr<KeyedService> BuildEventRouter(
+    content::BrowserContext* profile) {
+  return base::WrapUnique(
       new EventRouter(profile, ExtensionPrefs::Get(profile)));
 }
 
@@ -90,8 +92,8 @@ class DeveloperPrivateApiUnitTest : public ExtensionServiceTestBase {
   void TearDown() override;
 
   // The browser (and accompanying window).
-  scoped_ptr<TestBrowserWindow> browser_window_;
-  scoped_ptr<Browser> browser_;
+  std::unique_ptr<TestBrowserWindow> browser_window_;
+  std::unique_ptr<Browser> browser_;
 
   ScopedVector<TestExtensionDir> test_extension_dirs_;
 
@@ -102,9 +104,7 @@ bool DeveloperPrivateApiUnitTest::RunFunction(
     const scoped_refptr<UIThreadExtensionFunction>& function,
     const base::ListValue& args) {
   return extension_function_test_utils::RunFunction(
-      function.get(),
-      make_scoped_ptr(args.DeepCopy()),
-      browser(),
+      function.get(), base::WrapUnique(args.DeepCopy()), browser(),
       extension_function_test_utils::NONE);
 }
 
@@ -152,7 +152,7 @@ const Extension* DeveloperPrivateApiUnitTest::LoadSimpleExtension() {
           .Set("description", "an extension");
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(std::move(manifest))
+          .SetManifest(manifest.Build())
           .SetLocation(Manifest::INTERNAL)
           .SetID(id)
           .Build();
@@ -203,7 +203,7 @@ testing::AssertionResult DeveloperPrivateApiUnitTest::TestPackExtensionFunction(
   // part of the general extension api system.
   const base::Value* response_value = nullptr;
   CHECK(function->GetResultList()->Get(0u, &response_value));
-  scoped_ptr<api::developer_private::PackDirectoryResponse> response =
+  std::unique_ptr<api::developer_private::PackDirectoryResponse> response =
       api::developer_private::PackDirectoryResponse::FromValue(*response_value);
   CHECK(response);
 
@@ -405,7 +405,7 @@ TEST_F(DeveloperPrivateApiUnitTest, DISABLED_DeveloperPrivateLoadUnpacked) {
   function = new api::DeveloperPrivateLoadUnpackedFunction();
   function->SetRenderFrameHost(web_contents->GetMainFrame());
   base::ListValue unpacked_args;
-  scoped_ptr<base::DictionaryValue> options(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> options(new base::DictionaryValue());
   options->SetBoolean("failQuietly", true);
   unpacked_args.Append(options.release());
   current_ids = registry()->enabled_extensions().GetIDs();
@@ -441,7 +441,7 @@ TEST_F(DeveloperPrivateApiUnitTest,
 
   const base::Value* response_value = nullptr;
   ASSERT_TRUE(function->GetResultList()->Get(0u, &response_value));
-  scoped_ptr<api::developer_private::RequestFileSourceResponse> response =
+  std::unique_ptr<api::developer_private::RequestFileSourceResponse> response =
       api::developer_private::RequestFileSourceResponse::FromValue(
           *response_value);
   EXPECT_FALSE(response->before_highlight.empty());
@@ -472,7 +472,7 @@ TEST_F(DeveloperPrivateApiUnitTest,
   ASSERT_EQ(1u, list->GetSize());
   const base::Value* value = nullptr;
   ASSERT_TRUE(list->Get(0u, &value));
-  scoped_ptr<api::developer_private::ExtensionInfo> info =
+  std::unique_ptr<api::developer_private::ExtensionInfo> info =
       api::developer_private::ExtensionInfo::FromValue(*value);
   ASSERT_TRUE(info);
 
@@ -488,7 +488,7 @@ TEST_F(DeveloperPrivateApiUnitTest,
   ASSERT_TRUE(results->GetList(0u, &list));
   ASSERT_EQ(1u, list->GetSize());
   ASSERT_TRUE(list->Get(0u, &value));
-  scoped_ptr<api::developer_private::ItemInfo> item_info =
+  std::unique_ptr<api::developer_private::ItemInfo> item_info =
       api::developer_private::ItemInfo::FromValue(*value);
   ASSERT_TRUE(item_info);
 }
@@ -514,11 +514,12 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateDeleteExtensionErrors) {
   // Start by removing all errors for the extension of a given type (manifest).
   std::string type_string = api::developer_private::ToString(
       api::developer_private::ERROR_TYPE_MANIFEST);
-  scoped_ptr<base::ListValue> args =
+  std::unique_ptr<base::ListValue> args =
       ListBuilder()
-          .Append(std::move(DictionaryBuilder()
-                                .Set("extensionId", extension->id())
-                                .Set("type", type_string)))
+          .Append(DictionaryBuilder()
+                      .Set("extensionId", extension->id())
+                      .Set("type", type_string)
+                      .Build())
           .Build();
   scoped_refptr<UIThreadExtensionFunction> function =
       new api::DeveloperPrivateDeleteExtensionErrorsFunction();
@@ -532,10 +533,10 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateDeleteExtensionErrors) {
   int error_id = error_list[0]->id();
   args =
       ListBuilder()
-          .Append(std::move(
-              DictionaryBuilder()
-                  .Set("extensionId", extension->id())
-                  .Set("errorIds", std::move(ListBuilder().Append(error_id)))))
+          .Append(DictionaryBuilder()
+                      .Set("extensionId", extension->id())
+                      .Set("errorIds", ListBuilder().Append(error_id).Build())
+                      .Build())
           .Build();
   function = new api::DeveloperPrivateDeleteExtensionErrorsFunction();
   EXPECT_TRUE(RunFunction(function, *args)) << function->GetError();
@@ -543,10 +544,11 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateDeleteExtensionErrors) {
   EXPECT_EQ(1u, error_console->GetErrorsForExtension(extension->id()).size());
 
   // Finally remove all errors for the extension.
-  args = ListBuilder()
-             .Append(std::move(
-                 DictionaryBuilder().Set("extensionId", extension->id())))
-             .Build();
+  args =
+      ListBuilder()
+          .Append(
+              DictionaryBuilder().Set("extensionId", extension->id()).Build())
+          .Build();
   function = new api::DeveloperPrivateDeleteExtensionErrorsFunction();
   EXPECT_TRUE(RunFunction(function, *args)) << function->GetError();
   // No more errors!

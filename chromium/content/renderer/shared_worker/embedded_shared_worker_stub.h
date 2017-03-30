@@ -5,12 +5,14 @@
 #ifndef CONTENT_RENDERER_SHARED_WORKER_EMBEDDED_SHARED_WORKER_STUB_H_
 #define CONTENT_RENDERER_SHARED_WORKER_EMBEDDED_SHARED_WORKER_STUB_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
 #include "content/child/child_message_filter.h"
 #include "content/child/scoped_child_process_reference.h"
 #include "ipc/ipc_listener.h"
+#include "third_party/WebKit/public/platform/WebAddressSpace.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/web/WebContentSecurityPolicy.h"
 #include "third_party/WebKit/public/web/WebSharedWorkerClient.h"
@@ -49,6 +51,7 @@ class EmbeddedSharedWorkerStub : public IPC::Listener,
       const base::string16& name,
       const base::string16& content_security_policy,
       blink::WebContentSecurityPolicyType security_policy_type,
+      blink::WebAddressSpace creation_address_space,
       bool pause_on_start,
       int route_id);
 
@@ -93,7 +96,7 @@ class EmbeddedSharedWorkerStub : public IPC::Listener,
   bool running_ = false;
   GURL url_;
   blink::WebSharedWorker* impl_ = nullptr;
-  scoped_ptr<SharedWorkerDevToolsAgent> worker_devtools_agent_;
+  std::unique_ptr<SharedWorkerDevToolsAgent> worker_devtools_agent_;
 
   typedef std::vector<WebMessagePortChannelImpl*> PendingChannelList;
   PendingChannelList pending_channels_;

@@ -24,7 +24,7 @@ public:
     explicit LineLayoutBox(const LineLayoutItem& item)
         : LineLayoutBoxModel(item)
     {
-        ASSERT(!item || item.isBox());
+        ASSERT_WITH_SECURITY_IMPLICATION(!item || item.isBox());
     }
 
     explicit LineLayoutBox(std::nullptr_t) : LineLayoutBoxModel(nullptr) { }
@@ -49,6 +49,16 @@ public:
     LayoutUnit logicalHeight() const
     {
         return toBox()->logicalHeight();
+    }
+
+    LayoutUnit logicalTop() const
+    {
+        return toBox()->logicalTop();
+    }
+
+    LayoutUnit logicalBottom() const
+    {
+        return toBox()->logicalBottom();
     }
 
     LayoutUnit flipForWritingMode(LayoutUnit unit) const
@@ -76,9 +86,19 @@ public:
         return toBox()->flipForWritingMode(point);
     }
 
+    LayoutPoint flipForWritingModeForChild(const LineLayoutBox& child, LayoutPoint childPoint) const
+    {
+        return toBox()->flipForWritingModeForChild(toLayoutBox(child.layoutObject()), childPoint);
+    }
+
     void moveWithEdgeOfInlineContainerIfNecessary(bool isHorizontal)
     {
         toBox()->moveWithEdgeOfInlineContainerIfNecessary(isHorizontal);
+    }
+
+    void move(const LayoutUnit& width, const LayoutUnit& height)
+    {
+        toBox()->move(width, height);
     }
 
     bool hasOverflowModel() const
@@ -108,6 +128,31 @@ public:
     {
         return toBox()->scrolledContentOffset();
     }
+
+    InlineBox* createInlineBox()
+    {
+        return toBox()->createInlineBox();
+    }
+
+    InlineBox* inlineBoxWrapper() const
+    {
+        return toBox()->inlineBoxWrapper();
+    }
+
+    void setInlineBoxWrapper(InlineBox* box)
+    {
+        return toBox()->setInlineBoxWrapper(box);
+    }
+
+#ifndef NDEBUG
+
+    void showLineTreeAndMark(const InlineBox* markedBox1, const char* markedLabel1) const
+    {
+        if (layoutObject()->isLayoutBlockFlow())
+            toLayoutBlockFlow(layoutObject())->showLineTreeAndMark(markedBox1, markedLabel1);
+    }
+
+#endif
 
 private:
     LayoutBox* toBox()

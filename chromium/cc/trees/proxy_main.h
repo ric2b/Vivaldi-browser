@@ -92,7 +92,6 @@ class CC_EXPORT ProxyMain : public Proxy {
   bool CommitToActiveTree() const override;
   void SetOutputSurface(OutputSurface* output_surface) override;
   void SetVisible(bool visible) override;
-  void SetThrottleFrameProduction(bool throttle) override;
   const RendererCapabilities& GetRendererCapabilities() const override;
   void SetNeedsAnimate() override;
   void SetNeedsUpdateLayers() override;
@@ -114,6 +113,7 @@ class CC_EXPORT ProxyMain : public Proxy {
   void UpdateTopControlsState(TopControlsState constraints,
                               TopControlsState current,
                               bool animate) override;
+  void SetOutputIsSecure(bool output_is_secure) override;
 
   // This sets the channel used by ProxyMain to communicate with ProxyImpl.
   void SetChannel(scoped_ptr<ChannelMain> channel_main);

@@ -5,10 +5,13 @@
 #include "content/renderer/usb/web_usb_client_impl.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/move.h"
 #include "base/strings/utf_string_conversions.h"
@@ -20,7 +23,6 @@
 #include "mojo/public/cpp/bindings/array.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "third_party/WebKit/public/platform/WebCallbacks.h"
-#include "third_party/WebKit/public/platform/WebPassOwnPtr.h"
 #include "third_party/WebKit/public/platform/modules/webusb/WebUSBDeviceFilter.h"
 #include "third_party/WebKit/public/platform/modules/webusb/WebUSBDeviceInfo.h"
 #include "third_party/WebKit/public/platform/modules/webusb/WebUSBDeviceRequestOptions.h"
@@ -57,8 +59,9 @@ void OnGetDevicesComplete(
     ScopedWebCallbacks<blink::WebUSBClientGetDevicesCallbacks> scoped_callbacks,
     device::usb::DeviceManager* device_manager,
     mojo::Array<device::usb::DeviceInfoPtr> results) {
-  blink::WebVector<blink::WebUSBDevice*>* devices =
-      new blink::WebVector<blink::WebUSBDevice*>(results.size());
+  // TODO(dcheng): This WebVector should hold smart pointers.
+  std::unique_ptr<blink::WebVector<blink::WebUSBDevice*>> devices(
+      new blink::WebVector<blink::WebUSBDevice*>(results.size()));
   for (size_t i = 0; i < results.size(); ++i) {
     device::usb::DevicePtr device;
     device_manager->GetDevice(results[i]->guid, mojo::GetProxy(&device));
@@ -66,7 +69,7 @@ void OnGetDevicesComplete(
         std::move(device),
         mojo::ConvertTo<blink::WebUSBDeviceInfo>(results[i]));
   }
-  scoped_callbacks.PassCallbacks()->onSuccess(blink::adoptWebPtr(devices));
+  scoped_callbacks.PassCallbacks()->onSuccess(std::move(devices));
 }
 
 void OnRequestDevicesComplete(
@@ -77,10 +80,10 @@ void OnRequestDevicesComplete(
   if (result) {
     device::usb::DevicePtr device;
     device_manager->GetDevice(result->guid, mojo::GetProxy(&device));
-    blink::WebUSBDevice* web_usb_device = new WebUSBDeviceImpl(
-        std::move(device), mojo::ConvertTo<blink::WebUSBDeviceInfo>(result));
+    std::unique_ptr<blink::WebUSBDevice> web_usb_device(new WebUSBDeviceImpl(
+        std::move(device), mojo::ConvertTo<blink::WebUSBDeviceInfo>(result)));
 
-    scoped_callbacks->onSuccess(blink::adoptWebPtr(web_usb_device));
+    scoped_callbacks->onSuccess(std::move(web_usb_device));
   } else {
     scoped_callbacks->onError(
         blink::WebUSBError(blink::WebUSBError::Error::NotFound,
@@ -107,9 +110,9 @@ void WebUSBClientImpl::getDevices(
 void WebUSBClientImpl::requestDevice(
     const blink::WebUSBDeviceRequestOptions& options,
     blink::WebUSBClientRequestDeviceCallbacks* callbacks) {
-  if (!webusb_permission_bubble_) {
+  if (!chooser_service_) {
     service_registry_->ConnectToRemoteService(
-        mojo::GetProxy(&webusb_permission_bubble_));
+        mojo::GetProxy(&chooser_service_));
   }
 
   auto scoped_callbacks = MakeScopedUSBCallbacks(callbacks);
@@ -117,14 +120,14 @@ void WebUSBClientImpl::requestDevice(
   mojo::Array<device::usb::DeviceFilterPtr> device_filters =
       mojo::Array<device::usb::DeviceFilterPtr>::From(options.filters);
 
-  webusb_permission_bubble_->GetPermission(
+  chooser_service_->GetPermission(
       std::move(device_filters),
       base::Bind(&OnRequestDevicesComplete, base::Passed(&scoped_callbacks),
                  base::Unretained(device_manager_.get())));
 }
 
-void WebUSBClientImpl::setObserver(Observer* observer) {
-  if (!observer_) {
+void WebUSBClientImpl::addObserver(Observer* observer) {
+  if (observers_.empty()) {
     // Set up two sequential calls to GetDeviceChanges to avoid latency.
     device::usb::DeviceManager* device_manager = GetDeviceManager();
     device_manager->GetDeviceChanges(base::Bind(
@@ -133,7 +136,12 @@ void WebUSBClientImpl::setObserver(Observer* observer) {
         &WebUSBClientImpl::OnDeviceChangeNotification, base::Unretained(this)));
   }
 
-  observer_ = observer;
+  observers_.insert(observer);
+}
+
+void WebUSBClientImpl::removeObserver(Observer* observer) {
+  DCHECK(ContainsKey(observers_, observer));
+  observers_.erase(observer);
 }
 
 device::usb::DeviceManager* WebUSBClientImpl::GetDeviceManager() {
@@ -144,7 +152,7 @@ device::usb::DeviceManager* WebUSBClientImpl::GetDeviceManager() {
 
 void WebUSBClientImpl::OnDeviceChangeNotification(
     device::usb::DeviceChangeNotificationPtr notification) {
-  if (!observer_)
+  if (observers_.empty())
     return;
 
   device_manager_->GetDeviceChanges(base::Bind(
@@ -152,20 +160,20 @@ void WebUSBClientImpl::OnDeviceChangeNotification(
   for (size_t i = 0; i < notification->devices_added.size(); ++i) {
     const device::usb::DeviceInfoPtr& device_info =
         notification->devices_added[i];
-    device::usb::DevicePtr device;
-    device_manager_->GetDevice(device_info->guid, mojo::GetProxy(&device));
-    observer_->onDeviceConnected(blink::adoptWebPtr(new WebUSBDeviceImpl(
-        std::move(device),
-        mojo::ConvertTo<blink::WebUSBDeviceInfo>(device_info))));
+    for (auto observer : observers_) {
+      device::usb::DevicePtr device;
+      device_manager_->GetDevice(device_info->guid, mojo::GetProxy(&device));
+      observer->onDeviceConnected(base::WrapUnique(new WebUSBDeviceImpl(
+          std::move(device),
+          mojo::ConvertTo<blink::WebUSBDeviceInfo>(device_info))));
+    }
   }
   for (size_t i = 0; i < notification->devices_removed.size(); ++i) {
     const device::usb::DeviceInfoPtr& device_info =
         notification->devices_removed[i];
-    device::usb::DevicePtr device;
-    device_manager_->GetDevice(device_info->guid, mojo::GetProxy(&device));
-    observer_->onDeviceDisconnected(blink::adoptWebPtr(new WebUSBDeviceImpl(
-        std::move(device),
-        mojo::ConvertTo<blink::WebUSBDeviceInfo>(device_info))));
+    for (auto observer : observers_)
+      observer->onDeviceDisconnected(base::WrapUnique(new WebUSBDeviceImpl(
+          nullptr, mojo::ConvertTo<blink::WebUSBDeviceInfo>(device_info))));
   }
 }
 

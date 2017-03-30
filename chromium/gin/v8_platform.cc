@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/sys_info.h"
 #include "base/threading/worker_pool.h"
 #include "base/trace_event/trace_event.h"
 #include "gin/per_isolate_data.h"
@@ -24,6 +25,19 @@ V8Platform* V8Platform::Get() { return g_v8_platform.Pointer(); }
 V8Platform::V8Platform() {}
 
 V8Platform::~V8Platform() {}
+
+size_t V8Platform::NumberOfAvailableBackgroundThreads() {
+  // WorkerPool will currently always create additional threads for posted
+  // background tasks, unless there are threads sitting idle (on posix).
+  // Indicate that V8 should create no more than the number of cores available,
+  // reserving one core for the main thread.
+  const size_t available_cores =
+    static_cast<size_t>(base::SysInfo::NumberOfProcessors());
+  if (available_cores > 1) {
+    return available_cores - 1;
+  }
+  return 1;
+}
 
 void V8Platform::CallOnBackgroundThread(
     v8::Task* task,
@@ -75,6 +89,7 @@ const char* V8Platform::GetCategoryGroupName(
 uint64_t V8Platform::AddTraceEvent(char phase,
                                    const uint8_t* category_enabled_flag,
                                    const char* name,
+                                   const char* scope,
                                    uint64_t id,
                                    uint64_t bind_id,
                                    int32_t num_args,
@@ -84,9 +99,9 @@ uint64_t V8Platform::AddTraceEvent(char phase,
                                    unsigned int flags) {
   base::trace_event::TraceEventHandle handle =
       TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_BIND_ID(
-          phase, category_enabled_flag, name,
-          trace_event_internal::kGlobalScope, id, bind_id, num_args, arg_names,
-          arg_types, (const long long unsigned int*)arg_values, NULL, flags);
+          phase, category_enabled_flag, name, scope, id, bind_id, num_args,
+          arg_names, arg_types, (const long long unsigned int*)arg_values, NULL,
+          flags);
   uint64_t result;
   memcpy(&result, &handle, sizeof(result));
   return result;

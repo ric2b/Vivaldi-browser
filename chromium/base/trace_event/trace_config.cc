@@ -10,6 +10,7 @@
 
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
@@ -63,12 +64,10 @@ class ConvertableTraceConfigToTraceFormat
  public:
   explicit ConvertableTraceConfigToTraceFormat(const TraceConfig& trace_config)
       : trace_config_(trace_config) {}
+  ~ConvertableTraceConfigToTraceFormat() override {}
   void AppendAsTraceFormat(std::string* out) const override {
     out->append(trace_config_.ToString());
   }
-
- protected:
-  ~ConvertableTraceConfigToTraceFormat() override {}
 
  private:
   const TraceConfig trace_config_;
@@ -105,6 +104,10 @@ TraceConfig::TraceConfig(const std::string& category_filter_string,
       NOTREACHED();
   }
   InitializeFromStrings(category_filter_string, trace_options_string);
+}
+
+TraceConfig::TraceConfig(const DictionaryValue& config) {
+  InitializeFromConfigDict(config);
 }
 
 TraceConfig::TraceConfig(const std::string& config_string) {
@@ -158,9 +161,9 @@ std::string TraceConfig::ToString() const {
   return json;
 }
 
-scoped_refptr<ConvertableToTraceFormat>
+std::unique_ptr<ConvertableToTraceFormat>
 TraceConfig::AsConvertableToTraceFormat() const {
-  return new ConvertableTraceConfigToTraceFormat(*this);
+  return WrapUnique(new ConvertableTraceConfigToTraceFormat(*this));
 }
 
 std::string TraceConfig::ToCategoryFilterString() const {
@@ -290,18 +293,10 @@ void TraceConfig::InitializeDefault() {
   excluded_categories_.push_back("*Test");
 }
 
-void TraceConfig::InitializeFromConfigString(const std::string& config_string) {
-  scoped_ptr<base::Value> value(base::JSONReader::Read(config_string));
-  if (!value || !value->IsType(base::Value::TYPE_DICTIONARY)) {
-    InitializeDefault();
-    return;
-  }
-  scoped_ptr<base::DictionaryValue> dict(
-        static_cast<base::DictionaryValue*>(value.release()));
-
+void TraceConfig::InitializeFromConfigDict(const DictionaryValue& dict) {
   record_mode_ = RECORD_UNTIL_FULL;
   std::string record_mode;
-  if (dict->GetString(kRecordModeParam, &record_mode)) {
+  if (dict.GetString(kRecordModeParam, &record_mode)) {
     if (record_mode == kRecordUntilFull) {
       record_mode_ = RECORD_UNTIL_FULL;
     } else if (record_mode == kRecordContinuously) {
@@ -314,40 +309,55 @@ void TraceConfig::InitializeFromConfigString(const std::string& config_string) {
   }
 
   bool enable_sampling;
-  if (!dict->GetBoolean(kEnableSamplingParam, &enable_sampling))
+  if (!dict.GetBoolean(kEnableSamplingParam, &enable_sampling))
     enable_sampling_ = false;
   else
     enable_sampling_ = enable_sampling;
 
   bool enable_systrace;
-  if (!dict->GetBoolean(kEnableSystraceParam, &enable_systrace))
+  if (!dict.GetBoolean(kEnableSystraceParam, &enable_systrace))
     enable_systrace_ = false;
   else
     enable_systrace_ = enable_systrace;
 
   bool enable_argument_filter;
-  if (!dict->GetBoolean(kEnableArgumentFilterParam, &enable_argument_filter))
+  if (!dict.GetBoolean(kEnableArgumentFilterParam, &enable_argument_filter))
     enable_argument_filter_ = false;
   else
     enable_argument_filter_ = enable_argument_filter;
 
-  base::ListValue* category_list = nullptr;
-  if (dict->GetList(kIncludedCategoriesParam, &category_list))
+  const base::ListValue* category_list = nullptr;
+  if (dict.GetList(kIncludedCategoriesParam, &category_list))
     SetCategoriesFromIncludedList(*category_list);
-  if (dict->GetList(kExcludedCategoriesParam, &category_list))
+  if (dict.GetList(kExcludedCategoriesParam, &category_list))
     SetCategoriesFromExcludedList(*category_list);
-  if (dict->GetList(kSyntheticDelaysParam, &category_list))
+  if (dict.GetList(kSyntheticDelaysParam, &category_list))
     SetSyntheticDelaysFromList(*category_list);
 
   if (IsCategoryEnabled(MemoryDumpManager::kTraceCategory)) {
     // If dump triggers not set, the client is using the legacy with just
     // category enabled. So, use the default periodic dump config.
-    base::DictionaryValue* memory_dump_config = nullptr;
-    if (dict->GetDictionary(kMemoryDumpConfigParam, &memory_dump_config))
+    const base::DictionaryValue* memory_dump_config = nullptr;
+    if (dict.GetDictionary(kMemoryDumpConfigParam, &memory_dump_config))
       SetMemoryDumpConfig(*memory_dump_config);
     else
       SetDefaultMemoryDumpConfig();
   }
+}
+
+void TraceConfig::InitializeFromConfigString(const std::string& config_string) {
+  std::unique_ptr<Value> value(JSONReader::Read(config_string));
+  if (!value)
+    return InitializeDefault();
+
+  const DictionaryValue* dict = nullptr;
+  bool is_dict = value->GetAsDictionary(&dict);
+
+  if (!is_dict)
+    return InitializeDefault();
+
+  DCHECK(dict);
+  InitializeFromConfigDict(*dict);
 }
 
 void TraceConfig::InitializeFromStrings(
@@ -467,7 +477,7 @@ void TraceConfig::AddCategoryToDict(base::DictionaryValue& dict,
   if (categories.empty())
     return;
 
-  scoped_ptr<base::ListValue> list(new base::ListValue());
+  std::unique_ptr<base::ListValue> list(new base::ListValue());
   for (StringList::const_iterator ci = categories.begin();
        ci != categories.end();
        ++ci) {
@@ -556,11 +566,11 @@ void TraceConfig::ToDict(base::DictionaryValue& dict) const {
   AddCategoryToDict(dict, kSyntheticDelaysParam, synthetic_delays_);
 
   if (IsCategoryEnabled(MemoryDumpManager::kTraceCategory)) {
-    scoped_ptr<base::DictionaryValue> memory_dump_config(
+    std::unique_ptr<base::DictionaryValue> memory_dump_config(
         new base::DictionaryValue());
-    scoped_ptr<base::ListValue> triggers_list(new base::ListValue());
+    std::unique_ptr<base::ListValue> triggers_list(new base::ListValue());
     for (const MemoryDumpTriggerConfig& config : memory_dump_config_) {
-      scoped_ptr<base::DictionaryValue> trigger_dict(
+      std::unique_ptr<base::DictionaryValue> trigger_dict(
           new base::DictionaryValue());
       trigger_dict->SetInteger(kPeriodicIntervalParam,
                                static_cast<int>(config.periodic_interval_ms));

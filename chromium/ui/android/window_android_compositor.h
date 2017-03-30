@@ -10,7 +10,6 @@
 
 namespace cc {
 class Layer;
-class LayerSettings;
 }
 
 namespace ui {
@@ -20,12 +19,8 @@ class ResourceManager;
 // Android interface for compositor-related tasks.
 class UI_ANDROID_EXPORT WindowAndroidCompositor {
  public:
-  static const cc::LayerSettings& LayerSettings();
-  static void SetLayerSettings(const cc::LayerSettings& settings);
-
   virtual ~WindowAndroidCompositor() {}
 
-  virtual void AttachLayerForReadback(scoped_refptr<cc::Layer> layer) = 0;
   virtual void RequestCopyOfOutputOnRootLayer(
       scoped_ptr<cc::CopyOutputRequest> request) = 0;
   virtual void OnVSync(base::TimeTicks frame_time,

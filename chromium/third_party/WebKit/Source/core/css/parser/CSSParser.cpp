@@ -43,7 +43,7 @@ CSSSelectorList CSSParser::parsePageSelector(const CSSParserContext& context, St
     return CSSParserImpl::parsePageSelector(scope.tokenRange(), styleSheetContents);
 }
 
-PassRefPtrWillBeRawPtr<StyleRuleBase> CSSParser::parseRule(const CSSParserContext& context, StyleSheetContents* styleSheet, const String& rule)
+StyleRuleBase* CSSParser::parseRule(const CSSParserContext& context, StyleSheetContents* styleSheet, const String& rule)
 {
     return CSSParserImpl::parseRule(rule, context, styleSheet, CSSParserImpl::AllowImportRules);
 }
@@ -64,9 +64,9 @@ bool CSSParser::parseValue(MutableStylePropertySet* declaration, CSSPropertyID u
         return false;
     CSSPropertyID resolvedProperty = resolveCSSPropertyID(unresolvedProperty);
     CSSParserMode parserMode = declaration->cssParserMode();
-    RefPtrWillBeRawPtr<CSSValue> value = CSSParserFastPaths::maybeParseValue(resolvedProperty, string, parserMode);
+    CSSValue* value = CSSParserFastPaths::maybeParseValue(resolvedProperty, string, parserMode);
     if (value)
-        return declaration->setProperty(CSSProperty(resolvedProperty, value.release(), important));
+        return declaration->setProperty(CSSProperty(resolvedProperty, value, important));
     CSSParserContext context(parserMode, 0);
     if (styleSheet) {
         context = styleSheet->parserContext();
@@ -89,24 +89,27 @@ bool CSSParser::parseValueForCustomProperty(MutableStylePropertySet* declaration
     return CSSParserImpl::parseVariableValue(declaration, propertyName, value, important, context);
 }
 
+ImmutableStylePropertySet* CSSParser::parseCustomPropertySet(CSSParserTokenRange range)
+{
+    return CSSParserImpl::parseCustomPropertySet(range);
+}
+
 bool CSSParser::parseValue(MutableStylePropertySet* declaration, CSSPropertyID unresolvedProperty, const String& string, bool important, const CSSParserContext& context)
 {
     return CSSParserImpl::parseValue(declaration, unresolvedProperty, string, important, context);
 }
 
-PassRefPtrWillBeRawPtr<CSSValue> CSSParser::parseSingleValue(CSSPropertyID propertyID, const String& string, const CSSParserContext& context)
+CSSValue* CSSParser::parseSingleValue(CSSPropertyID propertyID, const String& string, const CSSParserContext& context)
 {
     if (string.isEmpty())
         return nullptr;
-    if (RefPtrWillBeRawPtr<CSSValue> value = CSSParserFastPaths::maybeParseValue(propertyID, string, context.mode()))
+    if (CSSValue* value = CSSParserFastPaths::maybeParseValue(propertyID, string, context.mode()))
         return value;
-    RefPtrWillBeRawPtr<MutableStylePropertySet> stylePropertySet = MutableStylePropertySet::create(HTMLQuirksMode);
-    bool changed = parseValue(stylePropertySet.get(), propertyID, string, false, context);
-    ASSERT_UNUSED(changed, changed == stylePropertySet->hasProperty(propertyID));
-    return stylePropertySet->getPropertyCSSValue(propertyID);
+    CSSTokenizer::Scope scope(string);
+    return CSSPropertyParser::parseSingleValue(propertyID, scope.tokenRange(), context);
 }
 
-PassRefPtrWillBeRawPtr<ImmutableStylePropertySet> CSSParser::parseInlineStyleDeclaration(const String& styleString, Element* element)
+ImmutableStylePropertySet* CSSParser::parseInlineStyleDeclaration(const String& styleString, Element* element)
 {
     return CSSParserImpl::parseInlineStyleDeclaration(styleString, element);
 }
@@ -116,10 +119,10 @@ PassOwnPtr<Vector<double>> CSSParser::parseKeyframeKeyList(const String& keyList
     return CSSParserImpl::parseKeyframeKeyList(keyList);
 }
 
-PassRefPtrWillBeRawPtr<StyleRuleKeyframe> CSSParser::parseKeyframeRule(const CSSParserContext& context, const String& rule)
+StyleRuleKeyframe* CSSParser::parseKeyframeRule(const CSSParserContext& context, const String& rule)
 {
-    RefPtrWillBeRawPtr<StyleRuleBase> keyframe = CSSParserImpl::parseRule(rule, context, nullptr, CSSParserImpl::KeyframeRules);
-    return toStyleRuleKeyframe(keyframe.get());
+    StyleRuleBase* keyframe = CSSParserImpl::parseRule(rule, context, nullptr, CSSParserImpl::KeyframeRules);
+    return toStyleRuleKeyframe(keyframe);
 }
 
 bool CSSParser::parseSupportsCondition(const String& condition)
@@ -142,7 +145,7 @@ bool CSSParser::parseColor(Color& color, const String& string, bool strict)
         return true;
     }
 
-    RefPtrWillBeRawPtr<CSSValue> value = CSSParserFastPaths::parseColor(string, strict ? HTMLStandardMode : HTMLQuirksMode);
+    CSSValue* value = CSSParserFastPaths::parseColor(string, strict ? HTMLStandardMode : HTMLQuirksMode);
     // TODO(timloh): Why is this always strict mode?
     if (!value)
         value = parseSingleValue(CSSPropertyColor, string, strictCSSParserContext());
@@ -165,7 +168,7 @@ bool CSSParser::parseSystemColor(Color& color, const String& colorString)
     return true;
 }
 
-PassRefPtrWillBeRawPtr<CSSValue> CSSParser::parseFontFaceDescriptor(CSSPropertyID propertyID, const String& propertyValue, const CSSParserContext& context)
+CSSValue* CSSParser::parseFontFaceDescriptor(CSSPropertyID propertyID, const String& propertyValue, const CSSParserContext& context)
 {
     StringBuilder builder;
     builder.appendLiteral("@font-face { ");
@@ -173,10 +176,10 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSParser::parseFontFaceDescriptor(CSSPropertyI
     builder.appendLiteral(" : ");
     builder.append(propertyValue);
     builder.appendLiteral("; }");
-    RefPtrWillBeRawPtr<StyleRuleBase> rule = parseRule(context, nullptr, builder.toString());
+    StyleRuleBase* rule = parseRule(context, nullptr, builder.toString());
     if (!rule || !rule->isFontFaceRule())
         return nullptr;
-    return toStyleRuleFontFace(rule.get())->properties().getPropertyCSSValue(propertyID);
+    return toStyleRuleFontFace(rule)->properties().getPropertyCSSValue(propertyID);
 }
 
 } // namespace blink

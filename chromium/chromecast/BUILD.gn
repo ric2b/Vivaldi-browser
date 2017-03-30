@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
 import("//build/config/locales.gni")
 import("//build/config/ui.gni")
@@ -113,7 +114,11 @@ cast_test_group("cast_tests") {
 
     # --enable-local-file-accesses => to load sample media files
     # --test-launcher-jobs=1 => so internal code can bind to port
-    filters += [ "cast_shell_browser_test --no-sandbox --enable-local-file-accesses --enable-cma-media-pipeline --ozone-platform=cast --test-launcher-jobs=1" ]
+    filters += [
+      "cast_shell_browser_test --no-sandbox --enable-local-file-accesses --enable-cma-media-pipeline --ozone-platform=cast --test-launcher-jobs=1",
+      "cast_media_unittests --test-launcher-jobs=1",
+      "ipc_tests --test-launcher-jobs=1",
+    ]
 
     if (use_alsa) {
       tests +=
@@ -262,6 +267,11 @@ action("chromecast_locales_pak") {
            "-x",
            rebase_path("$root_out_dir/chromecast_locales"),
          ] + locales
+}
+
+buildflag_header("chromecast_features") {
+  header = "chromecast_features.h"
+  flags = [ "DISABLE_DISPLAY=$disable_display" ]
 }
 
 if (is_android) {

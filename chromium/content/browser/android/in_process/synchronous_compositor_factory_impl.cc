@@ -17,7 +17,6 @@
 #include "content/browser/android/in_process/synchronous_compositor_registry_in_proc.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
-#include "content/common/gpu/client/gpu_channel_host.h"
 #include "content/common/gpu/client/webgraphicscontext3d_command_buffer_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
@@ -29,6 +28,7 @@
 #include "gpu/command_buffer/client/gl_in_process_context.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
 #include "ui/gl/android/surface_texture.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_surface_stub.h"
@@ -46,30 +46,15 @@ struct ContextHolder {
   gpu::GLInProcessContext* gl_in_process_context;
 };
 
-blink::WebGraphicsContext3D::Attributes GetDefaultAttribs() {
-  blink::WebGraphicsContext3D::Attributes attributes;
-  attributes.antialias = false;
-  attributes.depth = false;
-  attributes.stencil = false;
-  attributes.shareResources = true;
-  attributes.noAutomaticFlushes = true;
-
-  return attributes;
-}
-
 ContextHolder CreateContextHolder(
-    const blink::WebGraphicsContext3D::Attributes& attributes,
+    const gpu::gles2::ContextCreationAttribHelper& attributes,
     scoped_refptr<gpu::InProcessCommandBuffer::Service> service,
-    const gpu::GLInProcessContextSharedMemoryLimits& mem_limits,
-    bool is_offscreen) {
-  gpu::gles2::ContextCreationAttribHelper in_process_attribs;
-  WebGraphicsContext3DImpl::ConvertAttributes(attributes, &in_process_attribs);
-  in_process_attribs.lose_context_when_out_of_memory = true;
-
+    const gpu::GLInProcessContextSharedMemoryLimits& mem_limits) {
+  bool is_offscreen = true;
   scoped_ptr<gpu::GLInProcessContext> context(gpu::GLInProcessContext::Create(
-      service, NULL /* surface */, is_offscreen, gfx::kNullAcceleratedWidget,
-      gfx::Size(1, 1), NULL /* share_context */, attributes.shareResources,
-      in_process_attribs, gfx::PreferDiscreteGpu, mem_limits,
+      service, nullptr /* surface */, is_offscreen, gfx::kNullAcceleratedWidget,
+      gfx::Size(1, 1), nullptr /* share_context */, attributes,
+      gfx::PreferDiscreteGpu, mem_limits,
       BrowserGpuMemoryBufferManager::current(), nullptr));
 
   gpu::GLInProcessContext* context_ptr = context.get();
@@ -104,17 +89,23 @@ SynchronousCompositorFactoryImpl::GetCompositorTaskRunner() {
 scoped_ptr<cc::OutputSurface>
 SynchronousCompositorFactoryImpl::CreateOutputSurface(
     int routing_id,
+    uint32_t output_surface_id,
     const scoped_refptr<FrameSwapMessageQueue>& frame_swap_message_queue,
     const scoped_refptr<cc::ContextProvider>& onscreen_context,
     const scoped_refptr<cc::ContextProvider>& worker_context) {
   return make_scoped_ptr(new SynchronousCompositorOutputSurface(
-      onscreen_context, worker_context, routing_id,
+      onscreen_context, worker_context, routing_id, output_surface_id,
       SynchronousCompositorRegistryInProc::GetInstance(),
       frame_swap_message_queue));
 }
 
 InputHandlerManagerClient*
 SynchronousCompositorFactoryImpl::GetInputHandlerManagerClient() {
+  return synchronous_input_event_filter();
+}
+
+SynchronousInputHandlerProxyClient*
+SynchronousCompositorFactoryImpl::GetSynchronousInputHandlerProxyClient() {
   return synchronous_input_event_filter();
 }
 
@@ -247,13 +238,22 @@ SynchronousCompositorStreamTextureFactoryImpl::TryCreateStreamTextureFactory() {
   if (!video_context_provider_.get()) {
     DCHECK(android_view_service_.get());
 
-    blink::WebGraphicsContext3D::Attributes attributes = GetDefaultAttribs();
-    attributes.shareResources = false;
+    // This is for an offscreen context, so the default framebuffer doesn't need
+    // any alpha, depth, stencil, antialiasing.
+    gpu::gles2::ContextCreationAttribHelper attributes;
+    attributes.alpha_size = -1;
+    attributes.depth_size = 0;
+    attributes.stencil_size = 0;
+    attributes.samples = 0;
+    attributes.sample_buffers = 0;
+    attributes.bind_generates_resource = false;
+    attributes.lose_context_when_out_of_memory = true;
+
     // This needs to run in on-screen |android_view_service_| context due to
     // SurfaceTexture limitations.
     ContextHolder holder =
         CreateContextHolder(attributes, android_view_service_,
-                            gpu::GLInProcessContextSharedMemoryLimits(), false);
+                            gpu::GLInProcessContextSharedMemoryLimits());
     video_context_provider_ = new VideoContextProvider(
         ContextProviderInProcess::Create(std::move(holder.command_buffer),
                                          "Video-Offscreen-main-thread"),

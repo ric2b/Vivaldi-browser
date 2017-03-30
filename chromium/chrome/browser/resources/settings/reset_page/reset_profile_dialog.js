@@ -6,52 +6,51 @@
  * @fileoverview
  * 'settings-reset-profile-dialog' is the dialog shown for clearing profile
  * settings.
- *
- * @group Chrome Settings Elements
- * @element settings-reset-profile-dialog
  */
 Polymer({
   is: 'settings-reset-profile-dialog',
+
+  behaviors: [WebUIListenerBehavior],
 
   properties: {
     feedbackInfo_: String,
   },
 
-  attached: function() {
-    cr.define('SettingsResetPage', function() {
-      return {
-        doneResetting: function() {
-          this.$.resetSpinner.active = false;
-          this.$.dialog.close();
-          this.dispatchResetDoneEvent();
-        }.bind(this),
+  /** @private {!settings.ResetBrowserProxy} */
+  browserProxy_: null,
 
-        setFeedbackInfo: function(data) {
-          this.set('feedbackInfo_', data.feedbackInfo);
-        }.bind(this),
-      };
+  /** @override */
+  ready: function() {
+    this.browserProxy_ = settings.ResetBrowserProxyImpl.getInstance();
+
+    this.addEventListener('iron-overlay-canceled', function() {
+      this.browserProxy_.onHideResetProfileDialog();
     }.bind(this));
-  },
 
-  dispatchResetDoneEvent: function() {
-    this.dispatchEvent(new CustomEvent('reset-done'));
+    this.addWebUIListener('feedback-info-changed', function(feedbackInfo) {
+      this.feedbackInfo_ = feedbackInfo;
+    }.bind(this));
   },
 
   open: function() {
     this.$.dialog.open();
-    chrome.send('onShowResetProfileDialog');
+    this.browserProxy_.onShowResetProfileDialog();
   },
 
   /** @private */
   onCancelTap_: function() {
-    this.$.dialog.close();
-    chrome.send('onHideResetProfileDialog');
+    this.$.dialog.cancel();
   },
 
   /** @private */
   onResetTap_: function() {
     this.$.resetSpinner.active = true;
-    chrome.send('performResetProfileSettings', [this.$.sendSettings.checked]);
+    this.browserProxy_.performResetProfileSettings(
+        this.$.sendSettings.checked).then(function() {
+      this.$.resetSpinner.active = false;
+      this.$.dialog.close();
+      this.dispatchEvent(new CustomEvent('reset-done'));
+    }.bind(this));
   },
 
   /** @private */

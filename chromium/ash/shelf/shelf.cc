@@ -18,7 +18,6 @@
 #include "ash/shelf/shelf_navigator.h"
 #include "ash/shelf/shelf_util.h"
 #include "ash/shelf/shelf_view.h"
-#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/shell_window_ids.h"
@@ -43,16 +42,13 @@ const char Shelf::kNativeViewName[] = "ShelfView";
 Shelf::Shelf(ShelfModel* shelf_model,
              ShelfDelegate* shelf_delegate,
              ShelfWidget* shelf_widget)
-    : shelf_view_(NULL),
-      alignment_(shelf_widget->GetAlignment()),
-      delegate_(shelf_delegate),
-      shelf_widget_(shelf_widget) {
-  shelf_view_ = new ShelfView(
-      shelf_model, delegate_, shelf_widget_->shelf_layout_manager());
+    : delegate_(shelf_delegate),
+      shelf_widget_(shelf_widget),
+      shelf_view_(new ShelfView(shelf_model, delegate_, this)),
+      shelf_locking_manager_(this) {
   shelf_view_->Init();
   shelf_widget_->GetContentsView()->AddChildView(shelf_view_);
   shelf_widget_->GetNativeView()->SetName(kNativeViewName);
-  delegate_->OnShelfCreated(this);
 }
 
 Shelf::~Shelf() {
@@ -61,21 +57,50 @@ Shelf::~Shelf() {
 
 // static
 Shelf* Shelf::ForPrimaryDisplay() {
-  ShelfWidget* shelf_widget =
-      RootWindowController::ForShelf(Shell::GetPrimaryRootWindow())->shelf();
-  return shelf_widget ? shelf_widget->shelf() : NULL;
+  return Shelf::ForWindow(Shell::GetPrimaryRootWindow());
 }
 
 // static
-Shelf* Shelf::ForWindow(aura::Window* window) {
-  ShelfWidget* shelf_widget = RootWindowController::ForShelf(window)->shelf();
-  return shelf_widget ? shelf_widget->shelf() : NULL;
+Shelf* Shelf::ForWindow(const aura::Window* window) {
+  ShelfWidget* shelf_widget = RootWindowController::ForWindow(window)->shelf();
+  return shelf_widget ? shelf_widget->shelf() : nullptr;
 }
 
 void Shelf::SetAlignment(ShelfAlignment alignment) {
+  if (alignment_ == alignment)
+    return;
+
+  if (shelf_locking_manager_.is_locked() &&
+      alignment != SHELF_ALIGNMENT_BOTTOM_LOCKED) {
+    shelf_locking_manager_.set_stored_alignment(alignment);
+    return;
+  }
+
   alignment_ = alignment;
   shelf_view_->OnShelfAlignmentChanged();
+  shelf_widget_->OnShelfAlignmentChanged();
+  delegate_->OnShelfAlignmentChanged(this);
+  Shell::GetInstance()->OnShelfAlignmentChanged(
+      shelf_widget_->GetNativeWindow()->GetRootWindow());
   // ShelfLayoutManager will resize the shelf.
+}
+
+bool Shelf::IsHorizontalAlignment() const {
+  return ash::IsHorizontalAlignment(alignment_);
+}
+
+void Shelf::SetAutoHideBehavior(ShelfAutoHideBehavior auto_hide_behavior) {
+  if (auto_hide_behavior_ == auto_hide_behavior)
+    return;
+
+  auto_hide_behavior_ = auto_hide_behavior;
+  delegate_->OnShelfAutoHideBehaviorChanged(this);
+  Shell::GetInstance()->OnShelfAutoHideBehaviorChanged(
+      shelf_widget_->GetNativeWindow()->GetRootWindow());
+}
+
+ShelfAutoHideBehavior Shelf::GetAutoHideBehavior() const {
+  return auto_hide_behavior_;
 }
 
 gfx::Rect Shelf::GetScreenBoundsOfItemIconForWindow(
@@ -174,14 +199,6 @@ void Shelf::LaunchAppIndexAt(int item_index) {
     // Then set this one as active (or advance to the next item of its kind).
     ActivateShelfItem(found_index);
   }
-}
-
-void Shelf::SetShelfViewBounds(gfx::Rect bounds) {
-  shelf_view_->SetBoundsRect(bounds);
-}
-
-gfx::Rect Shelf::GetShelfViewBounds() const {
-  return shelf_view_->bounds();
 }
 
 gfx::Rect Shelf::GetVisibleItemsBoundsInScreen() const {

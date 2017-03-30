@@ -21,8 +21,7 @@ using vivaldi::history_search::HistoryItem;
 
 namespace DBSearch = vivaldi::history_search::DbSearch;
 
-typedef std::vector<linked_ptr<vivaldi::history_search::HistoryItem> >
-    HistoryItemList;
+typedef std::vector<vivaldi::history_search::HistoryItem> HistoryItemList;
 
 namespace {
 
@@ -88,8 +87,8 @@ void HistorySearchDbSearchFunction::SearchComplete(
             results->begin();
          iterator != results->end();
         ++iterator) {
-      history_item_vec.push_back(make_linked_ptr(
-          GetHistoryItem(**iterator).release()));
+      history_item_vec.push_back(std::move(*make_scoped_ptr(
+          GetHistoryItem(**iterator).release())));
     }
   }
   // This must be revisited since it is slow!

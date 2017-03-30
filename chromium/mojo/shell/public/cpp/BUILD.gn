@@ -21,25 +21,31 @@ source_set("cpp_for_chromium") {
 source_set("sources") {
   sources = [
     "application_runner.h",
+    "capabilities.h",
     "connect.h",
     "connection.h",
     "connector.h",
+    "identity.h",
     "initialize_base_and_icu.cc",
     "interface_binder.h",
     "interface_factory.h",
     "interface_factory_impl.h",
     "interface_registry.h",
     "lib/application_runner.cc",
+    "lib/capabilities.cc",
     "lib/connection_impl.cc",
     "lib/connection_impl.h",
     "lib/connector_impl.cc",
     "lib/connector_impl.h",
+    "lib/identity.cc",
     "lib/interface_factory_binder.h",
     "lib/interface_registry.cc",
     "lib/message_loop_ref.cc",
+    "lib/names.cc",
     "lib/shell_client.cc",
     "lib/shell_connection.cc",
     "message_loop_ref.h",
+    "names.h",
     "shell.h",
     "shell_client.h",
     "shell_connection.h",
@@ -48,7 +54,6 @@ source_set("sources") {
   deps = [
     "//base",
     "//base:i18n",
-    "//mojo/message_pump",
   ]
 
   public_deps = [
@@ -83,8 +88,32 @@ source_set("test_support") {
     "//base/test:test_support",
     "//mojo/logging",
     "//mojo/public/cpp/bindings",
-    "//mojo/public/cpp/environment",
     "//mojo/public/cpp/system",
+    "//mojo/shell/public/interfaces:interfaces_cpp_sources",
+  ]
+
+  data_deps = []
+}
+
+source_set("shell_test_support") {
+  testonly = true
+  sources = [
+    "lib/shell_test.cc",
+    "shell_test.h",
+  ]
+
+  public_deps = [
+    ":cpp",
+    "//testing/gtest",
+  ]
+
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//mojo/logging",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
+    "//mojo/shell/background:lib",
     "//mojo/shell/public/interfaces:interfaces_cpp_sources",
   ]
 

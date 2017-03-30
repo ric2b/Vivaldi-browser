@@ -25,7 +25,6 @@
 #include "chrome/browser/ui/app_list/app_list_util.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
@@ -326,8 +325,8 @@ class BookmarkAppInstaller : public base::RefCounted<BookmarkAppInstaller>,
   ExtensionService* service_;
   WebApplicationInfo web_app_info_;
 
-  scoped_ptr<content::WebContents> web_contents_;
-  scoped_ptr<FaviconDownloader> favicon_downloader_;
+  std::unique_ptr<content::WebContents> web_contents_;
+  std::unique_ptr<FaviconDownloader> favicon_downloader_;
   std::vector<GURL> urls_to_download_;
   std::vector<BookmarkAppHelper::BitmapAndSource> downloaded_bitmaps_;
 };

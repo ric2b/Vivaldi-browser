@@ -34,6 +34,7 @@
 #include "core/css/parser/CSSParser.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/StyleEngine.h"
 #include "core/frame/LocalFrame.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/style/StyleRareNonInheritedData.h"
@@ -55,20 +56,20 @@ CSSSelectorWatch& CSSSelectorWatch::from(Document& document)
     CSSSelectorWatch* watch = fromIfExists(document);
     if (!watch) {
         watch = new CSSSelectorWatch(document);
-        WillBeHeapSupplement<Document>::provideTo(document, kSupplementName, adoptPtrWillBeNoop(watch));
+        Supplement<Document>::provideTo(document, kSupplementName, watch);
     }
     return *watch;
 }
 
 CSSSelectorWatch* CSSSelectorWatch::fromIfExists(Document& document)
 {
-    return static_cast<CSSSelectorWatch*>(WillBeHeapSupplement<Document>::from(document, kSupplementName));
+    return static_cast<CSSSelectorWatch*>(Supplement<Document>::from(document, kSupplementName));
 }
 
 void CSSSelectorWatch::callbackSelectorChangeTimerFired(Timer<CSSSelectorWatch>*)
 {
     // Should be ensured by updateSelectorMatches():
-    ASSERT(!m_addedSelectors.isEmpty() || !m_removedSelectors.isEmpty());
+    DCHECK(!m_addedSelectors.isEmpty() || !m_removedSelectors.isEmpty());
 
     if (m_timerExpirations < 1) {
         m_timerExpirations++;
@@ -145,7 +146,7 @@ void CSSSelectorWatch::watchCSSSelectors(const Vector<String>& selectors)
 {
     m_watchedCallbackSelectors.clear();
 
-    const RefPtrWillBeRawPtr<StylePropertySet> callbackPropertySet = ImmutableStylePropertySet::create(nullptr, 0, UASheetMode);
+    const RawPtr<StylePropertySet> callbackPropertySet = ImmutableStylePropertySet::create(nullptr, 0, UASheetMode);
 
     for (unsigned i = 0; i < selectors.size(); ++i) {
         CSSSelectorList selectorList = CSSParser::parseSelector(CSSParserContext(UASheetMode, 0), nullptr, selectors[i]);
@@ -158,14 +159,14 @@ void CSSSelectorWatch::watchCSSSelectors(const Vector<String>& selectors)
 
         m_watchedCallbackSelectors.append(StyleRule::create(std::move(selectorList), callbackPropertySet));
     }
-    document().changedSelectorWatch();
+    document().styleEngine().watchedSelectorsChanged();
 }
 
 DEFINE_TRACE(CSSSelectorWatch)
 {
     visitor->trace(m_watchedCallbackSelectors);
     visitor->trace(m_document);
-    WillBeHeapSupplement<Document>::trace(visitor);
+    Supplement<Document>::trace(visitor);
 }
 
 } // namespace blink

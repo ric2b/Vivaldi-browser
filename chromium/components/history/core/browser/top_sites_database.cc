@@ -757,7 +757,7 @@ bool TopSitesDatabase::DeleteDataExceptBookmarkThumbnails() {
 }
 
 namespace {
-const int kTopSitesExpireDays = 7;
+const int kTopSitesExpireDays = 3;
 }  // namespace
 
 bool TopSitesDatabase::TrimThumbnailData() {
@@ -785,6 +785,21 @@ void TopSitesDatabase::Vacuum() {
   DCHECK(db_->transaction_nesting() == 0)
       << "Can not have a transaction when vacuuming.";
   ignore_result(db_->Execute("VACUUM"));
+}
+
+bool TopSitesDatabase::RemoveThumbnailForUrl(const GURL& url) {
+  sql::Transaction transaction(db_.get());
+  transaction.Begin();
+
+  sql::Statement delete_statement(db_->GetCachedStatement(
+      SQL_FROM_HERE,
+      "DELETE FROM thumbnails WHERE thumbnail notnull and url = ?"));
+  delete_statement.BindString(0, url.spec());
+
+  if (!delete_statement.Run())
+    return false;
+
+  return transaction.Commit();
 }
 
 }  // namespace history

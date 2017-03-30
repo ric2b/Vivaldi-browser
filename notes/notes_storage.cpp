@@ -47,8 +47,8 @@ void BackupCallback(const base::FilePath& path) {
 }
 
 void LoadCallback(const base::FilePath& path,
-  vivaldi::NotesStorage* storage,
-  vivaldi::NotesLoadDetails* details) {
+    const base::WeakPtr<vivaldi::NotesStorage> storage,
+    scoped_ptr<NotesLoadDetails> details) {
   bool notes_file_exists = base::PathExists(path);
   if (notes_file_exists) {
     JSONFileValueDeserializer serializer(path);
@@ -69,7 +69,7 @@ void LoadCallback(const base::FilePath& path,
 
   BrowserThread::PostTask(
     BrowserThread::UI, FROM_HERE,
-    base::Bind(&vivaldi::NotesStorage::OnLoadFinished, storage));
+    base::Bind(&NotesStorage::OnLoadFinished, storage, base::Passed(&details)));
 }
 
 // NotesLoadDetails ---------------------------------------------------------
@@ -89,7 +89,8 @@ NotesStorage::NotesStorage(
   : model_(model),
     writer_(context->GetPath().Append(kNotesFileName),
             sequenced_task_runner,
-            base::TimeDelta::FromMilliseconds(kSaveDelayMS)) {
+            base::TimeDelta::FromMilliseconds(kSaveDelayMS)),
+    weak_factory_(this){
   sequenced_task_runner_ = sequenced_task_runner;
   sequenced_task_runner_->PostTask(FROM_HERE,
     base::Bind(&BackupCallback, writer_.path()));
@@ -100,14 +101,12 @@ NotesStorage::~NotesStorage() {
     writer_.DoScheduledWrite();
 }
 
-void NotesStorage::LoadNotes(NotesLoadDetails* details) {
-  DCHECK(!details_.get());
+void NotesStorage::LoadNotes(scoped_ptr<NotesLoadDetails> details) {
   DCHECK(details);
-  details_.reset(details);
   sequenced_task_runner_->PostTask(
     FROM_HERE,
-    base::Bind(&LoadCallback, writer_.path(), make_scoped_refptr(this),
-    details_.get()));
+    base::Bind(&LoadCallback,
+        writer_.path(), weak_factory_.GetWeakPtr(), base::Passed(&details)));
 }
 
 void NotesStorage::ScheduleSave() {
@@ -120,9 +119,6 @@ void NotesStorage::NotesModelDeleted() {
   if (writer_.HasPendingWrite())
     SaveNow();
 
-  if (model_ && details_.get() && model_->root() == details_->notes_node())
-    details_->release_notes_node();
-
   model_ = NULL;
 }
 
@@ -133,11 +129,11 @@ bool NotesStorage::SerializeData(std::string* output) {
   return serializer.Serialize(*(value.get()));
 }
 
-void NotesStorage::OnLoadFinished() {
+void NotesStorage::OnLoadFinished(scoped_ptr<NotesLoadDetails> details) {
   if (!model_)
     return;
 
-  model_->DoneLoading(details_.release());
+  model_->DoneLoading(details.release());
 }
 
 bool NotesStorage::SaveNow() {

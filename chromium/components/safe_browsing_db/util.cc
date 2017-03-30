@@ -29,6 +29,14 @@ bool IsKnownList(const std::string& name) {
 }
 }  // namespace
 
+// ThreatMetadata ------------------------------------------------------------
+ThreatMetadata::ThreatMetadata()
+    : threat_pattern_type(ThreatPatternType::NONE) {}
+
+ThreatMetadata::ThreatMetadata(const ThreatMetadata& other) = default;
+
+ThreatMetadata::~ThreatMetadata() {}
+
 // SBCachedFullHashResult ------------------------------------------------------
 
 SBCachedFullHashResult::SBCachedFullHashResult() {}
@@ -160,9 +168,10 @@ std::string Unescape(const std::string& url) {
   do {
     old_size = unescaped_str.size();
     unescaped_str = net::UnescapeURLComponent(
-        unescaped_str, net::UnescapeRule::SPOOFING_AND_CONTROL_CHARS |
-                           net::UnescapeRule::SPACES |
-                           net::UnescapeRule::URL_SPECIAL_CHARS);
+        unescaped_str,
+        net::UnescapeRule::SPOOFING_AND_CONTROL_CHARS |
+            net::UnescapeRule::SPACES | net::UnescapeRule::PATH_SEPARATORS |
+            net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
   } while (old_size != unescaped_str.size() &&
            ++loop_var <= kMaxLoopIterations);
 

@@ -34,7 +34,7 @@ import traceback
 
 from webkitpy.common.host import Host
 from webkitpy.layout_tests.models import test_expectations
-from webkitpy.layout_tests.port import platform_options
+from webkitpy.layout_tests.port.factory import platform_options
 
 
 # This mirrors what the shell normally does.
@@ -61,8 +61,8 @@ def lint(host, options):
 
             try:
                 test_expectations.TestExpectations(port_to_lint,
-                    expectations_dict={expectations_file: expectations_dict[expectations_file]},
-                    is_lint_mode=True)
+                                                   expectations_dict={expectations_file: expectations_dict[expectations_file]},
+                                                   is_lint_mode=True)
             except test_expectations.ParseError as e:
                 _log.error('')
                 for warning in e.warnings:

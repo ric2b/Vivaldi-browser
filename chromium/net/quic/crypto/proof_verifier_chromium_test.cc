@@ -101,6 +101,7 @@ class DummyProofVerifierCallback : public ProofVerifierCallback {
 };
 
 const char kTestHostname[] = "test.example.com";
+const uint16_t kTestPort = 8443;
 const char kTestConfig[] = "server config bytes";
 const char kLogDescription[] = "somelog";
 
@@ -222,8 +223,9 @@ TEST_F(ProofVerifierChromiumTest, FailsIfCertFails) {
   scoped_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestConfig, certs_, "", GetTestSignature(),
-      verify_context_.get(), &error_details_, &details_, callback.get());
+      kTestHostname, kTestPort, kTestConfig, QUIC_VERSION_25, "", certs_, "",
+      GetTestSignature(), verify_context_.get(), &error_details_, &details_,
+      callback.get());
   ASSERT_EQ(QUIC_FAILURE, status);
 }
 
@@ -239,8 +241,9 @@ TEST_F(ProofVerifierChromiumTest, ValidSCTList) {
   scoped_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestConfig, certs_, ct::GetSCTListForTesting(), "",
-      verify_context_.get(), &error_details_, &details_, callback.get());
+      kTestHostname, kTestPort, kTestConfig, QUIC_VERSION_25, "", certs_,
+      ct::GetSCTListForTesting(), "", verify_context_.get(), &error_details_,
+      &details_, callback.get());
   ASSERT_EQ(QUIC_FAILURE, status);
   CheckSCT(/*sct_expected_ok=*/true);
 }
@@ -257,8 +260,9 @@ TEST_F(ProofVerifierChromiumTest, InvalidSCTList) {
   scoped_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestConfig, certs_, ct::GetSCTListWithInvalidSCT(), "",
-      verify_context_.get(), &error_details_, &details_, callback.get());
+      kTestHostname, kTestPort, kTestConfig, QUIC_VERSION_25, "", certs_,
+      ct::GetSCTListWithInvalidSCT(), "", verify_context_.get(),
+      &error_details_, &details_, callback.get());
   ASSERT_EQ(QUIC_FAILURE, status);
   CheckSCT(/*sct_expected_ok=*/false);
 }
@@ -273,8 +277,9 @@ TEST_F(ProofVerifierChromiumTest, FailsIfSignatureFails) {
   scoped_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestConfig, certs_, "", kTestConfig,
-      verify_context_.get(), &error_details_, &details_, callback.get());
+      kTestHostname, kTestPort, kTestConfig, QUIC_VERSION_25, "", certs_, "",
+      kTestConfig, verify_context_.get(), &error_details_, &details_,
+      callback.get());
   ASSERT_EQ(QUIC_FAILURE, status);
 }
 
@@ -297,8 +302,9 @@ TEST_F(ProofVerifierChromiumTest, PreservesEVIfNoPolicy) {
   scoped_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestConfig, certs_, "", GetTestSignature(),
-      verify_context_.get(), &error_details_, &details_, callback.get());
+      kTestHostname, kTestPort, kTestConfig, QUIC_VERSION_25, "", certs_, "",
+      GetTestSignature(), verify_context_.get(), &error_details_, &details_,
+      callback.get());
   ASSERT_EQ(QUIC_SUCCESS, status);
 
   ASSERT_TRUE(details_.get());
@@ -329,8 +335,9 @@ TEST_F(ProofVerifierChromiumTest, PreservesEVIfAllowed) {
   scoped_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestConfig, certs_, "", GetTestSignature(),
-      verify_context_.get(), &error_details_, &details_, callback.get());
+      kTestHostname, kTestPort, kTestConfig, QUIC_VERSION_25, "", certs_, "",
+      GetTestSignature(), verify_context_.get(), &error_details_, &details_,
+      callback.get());
   ASSERT_EQ(QUIC_SUCCESS, status);
 
   ASSERT_TRUE(details_.get());
@@ -361,8 +368,9 @@ TEST_F(ProofVerifierChromiumTest, StripsEVIfNotAllowed) {
   scoped_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestConfig, certs_, "", GetTestSignature(),
-      verify_context_.get(), &error_details_, &details_, callback.get());
+      kTestHostname, kTestPort, kTestConfig, QUIC_VERSION_25, "", certs_, "",
+      GetTestSignature(), verify_context_.get(), &error_details_, &details_,
+      callback.get());
   ASSERT_EQ(QUIC_SUCCESS, status);
 
   ASSERT_TRUE(details_.get());
@@ -394,8 +402,9 @@ TEST_F(ProofVerifierChromiumTest, IgnoresPolicyEnforcerIfNotEV) {
   scoped_ptr<DummyProofVerifierCallback> callback(
       new DummyProofVerifierCallback);
   QuicAsyncStatus status = proof_verifier.VerifyProof(
-      kTestHostname, kTestConfig, certs_, "", GetTestSignature(),
-      verify_context_.get(), &error_details_, &details_, callback.get());
+      kTestHostname, kTestPort, kTestConfig, QUIC_VERSION_25, "", certs_, "",
+      GetTestSignature(), verify_context_.get(), &error_details_, &details_,
+      callback.get());
   ASSERT_EQ(QUIC_SUCCESS, status);
 
   ASSERT_TRUE(details_.get());

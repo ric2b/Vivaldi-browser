@@ -2,17 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "extensions/browser/api/socket/tls_socket.h"
-
 #include <stddef.h>
 #include <stdint.h>
 
 #include <deque>
+#include <memory>
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
+#include "extensions/browser/api/socket/tls_socket.h"
 #include "net/base/address_list.h"
 #include "net/base/completion_callback.h"
 #include "net/base/io_buffer.h"
@@ -67,7 +66,6 @@ class MockSSLClientSocket : public net::SSLClientSocket {
                    const StringPiece&,
                    unsigned char*,
                    unsigned int));
-  MOCK_METHOD1(GetTLSUniqueChannelBinding, int(std::string*));
   MOCK_METHOD1(GetSSLCertRequestInfo, void(net::SSLCertRequestInfo*));
   MOCK_CONST_METHOD1(GetNextProto,
                      net::SSLClientSocket::NextProtoStatus(std::string*));
@@ -126,7 +124,7 @@ class TLSSocketTest : public ::testing::Test {
     net::AddressList address_list;
     // |ssl_socket_| is owned by |socket_|. TLSSocketTest keeps a pointer to
     // it to expect invocations from TLSSocket to |ssl_socket_|.
-    scoped_ptr<MockSSLClientSocket> ssl_sock(new MockSSLClientSocket);
+    std::unique_ptr<MockSSLClientSocket> ssl_sock(new MockSSLClientSocket);
     ssl_socket_ = ssl_sock.get();
     socket_.reset(new TLSSocket(std::move(ssl_sock), "test_extension_id"));
     EXPECT_CALL(*ssl_socket_, Disconnect()).Times(1);
@@ -139,7 +137,7 @@ class TLSSocketTest : public ::testing::Test {
 
  protected:
   MockSSLClientSocket* ssl_socket_;
-  scoped_ptr<TLSSocket> socket_;
+  std::unique_ptr<TLSSocket> socket_;
 };
 
 // Verify that a Read() on TLSSocket will pass through into a Read() on

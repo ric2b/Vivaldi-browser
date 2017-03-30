@@ -194,7 +194,7 @@ void CredentialManager::SignedIn(int request_id,
 
   // Store the signed-in credential so that the user can save it, if desired.
   // Prompting the user and saving are handled by the PasswordFormManager.
-  scoped_ptr<autofill::PasswordForm> form(
+  std::unique_ptr<autofill::PasswordForm> form(
       password_manager::CreatePasswordFormFromCredentialInfo(
           CredentialInfoFromWebCredential(credential), page_url));
   form->skip_zero_click = !IsZeroClickAllowed();
@@ -204,7 +204,9 @@ void CredentialManager::SignedIn(int request_id,
   // accordingly.
   form_manager_.reset(
       new password_manager::CredentialManagerPasswordFormManager(
-          client_, driver_->AsWeakPtr(), *form, this));
+          client_, driver_->AsWeakPtr(),
+          *password_manager::CreateObservedPasswordFormFromOrigin(page_url),
+          std::move(form), this));
 }
 
 void CredentialManager::SignedOut(int request_id, const GURL& source_url) {
@@ -282,6 +284,20 @@ void CredentialManager::SendCredential(
                   if (weak_this)
                     weak_this->pending_request_.reset();
                 }];
+}
+
+void CredentialManager::SendPasswordForm(int request_id,
+                                         const autofill::PasswordForm* form) {
+  password_manager::CredentialInfo info;
+  if (form) {
+    password_manager::CredentialType type_to_return =
+        form->federation_origin.unique()
+            ? password_manager::CredentialType::CREDENTIAL_TYPE_PASSWORD
+            : password_manager::CredentialType::CREDENTIAL_TYPE_FEDERATED;
+    info = password_manager::CredentialInfo(*form, type_to_return);
+    // TODO(vasilii): update |skip_zero_click| in the store (crbug.com/594110).
+  }
+  SendCredential(request_id, info);
 }
 
 password_manager::PasswordManagerClient* CredentialManager::client() const {

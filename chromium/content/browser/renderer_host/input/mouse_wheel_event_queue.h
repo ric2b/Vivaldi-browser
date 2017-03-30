@@ -17,7 +17,9 @@ namespace content {
 
 // The duration in which a ScrollEnd will be sent after the last
 // ScrollUpdate was sent for wheel based gesture scrolls.
-const int64_t kDefaultWheelScrollTransactionMs = 100;
+// Set the default wheel transaction to 0ms until
+// crbug.com/526463 is fully implemented.
+const int64_t kDefaultWheelScrollTransactionMs = 0;  // 100;
 
 class QueuedWebMouseWheelEvent;
 
@@ -29,7 +31,9 @@ class CONTENT_EXPORT MouseWheelEventQueueClient {
 
   virtual void SendMouseWheelEventImmediately(
       const MouseWheelEventWithLatencyInfo& event) = 0;
-  virtual void SendGestureEvent(const GestureEventWithLatencyInfo& event) = 0;
+  virtual void ForwardGestureEventWithLatencyInfo(
+      const blink::WebGestureEvent& event,
+      const ui::LatencyInfo& latency_info) = 0;
   virtual void OnMouseWheelEventAck(const MouseWheelEventWithLatencyInfo& event,
                                     InputEventAckState ack_result) = 0;
 };
@@ -70,20 +74,30 @@ class CONTENT_EXPORT MouseWheelEventQueue {
   }
 
   size_t queued_size() const { return wheel_queue_.size(); }
-  bool event_in_flight() const { return event_sent_for_gesture_ack_; }
+  bool event_in_flight() const {
+    return event_sent_for_gesture_ack_ != nullptr;
+  }
 
  private:
   void TryForwardNextEventToRenderer();
-  void SendScrollEnd(blink::WebGestureEvent update_event);
-  void SendGesture(const GestureEventWithLatencyInfo& gesture);
+  void SendScrollEnd(blink::WebGestureEvent update_event, bool synthetic);
+  void SendScrollBegin(const blink::WebGestureEvent& gesture_update,
+                       bool synthetic);
 
   MouseWheelEventQueueClient* client_;
-  bool needs_scroll_begin_;
   base::OneShotTimer scroll_end_timer_;
 
   typedef std::deque<QueuedWebMouseWheelEvent*> WheelEventQueue;
   WheelEventQueue wheel_queue_;
   scoped_ptr<QueuedWebMouseWheelEvent> event_sent_for_gesture_ack_;
+
+  // True if a non-synthetic GSB needs to be sent before a GSU is sent.
+  bool needs_scroll_begin_;
+
+  // True if a non-synthetic GSE needs to be sent because a non-synthetic
+  // GSB has been sent in the past.
+  bool needs_scroll_end_;
+
   bool send_gestures_;
   int64_t scroll_transaction_ms_;
   blink::WebGestureDevice scrolling_device_;

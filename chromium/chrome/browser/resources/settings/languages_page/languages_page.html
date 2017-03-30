@@ -1,15 +1,15 @@
-<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout.html">
+<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/html/cr.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-collapse/iron-collapse.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_expand_button/cr_expand_button.html">
-<link rel="import" href="chrome://resources/html/assert.html">
-<link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
-<link rel="import" href="chrome://md-settings/settings_page/settings_subheader.html">
+<link rel="import" href="chrome://md-settings/settings_page/settings_subpage.html">
 <link rel="import" href="chrome://md-settings/settings_shared_css.html">
 <link rel="import" href="language_detail_page.html">
 <link rel="import" href="languages.html">
@@ -29,28 +29,35 @@
         <div class="settings-box first two-line">
           <div class="start">
             <div i18n-content="languagesListTitle"></div>
-            <div class="secondary">[[languagesSecondary_]]</div>
+            <div class="secondary">
+              [[getProspectiveUILanguageName_(prefs.intl.app_locale.value)]]
+            </div>
           </div>
           <cr-expand-button expanded="{{languagesOpened_}}">
           </cr-expand-button>
         </div>
-        <iron-collapse id="collapse" opened="[[languagesOpened_]]">
+        <iron-collapse id="languagesCollapse" opened="[[languagesOpened_]]">
           <div class="list-frame vertical-list">
-            <array-selector id="languageSelector"
-                selected="{{detailLanguage}}"
-                items="{{languages.enabledLanguages}}"></array-selector>
             <template is="dom-repeat" items="{{languages.enabledLanguages}}">
-              <div class="list-item" on-tap="onLanguageTap_">
-                <div class="start">
-                  <div title="[[item.language.nativeDisplayName]]">
-                      [[item.language.displayName]]
-<if expr="chromeos or is_win">
-                    <iron-icon icon="done"
-                        hidden$="[[!isProspectiveUILanguage_(item.language.code, prefs.intl.app_locale.value)]]">
-                    </iron-icon>
-</if>
-                  </div>
+              <div class$="list-item [[getLanguageItemClass_(
+                      item.language.code, prefs.intl.app_locale.value)]]"
+                  on-tap="onLanguageTap_">
+<if expr="not chromeos and not is_win">
+                <div class="start" title="[[item.language.nativeDisplayName]]">
+                  [[item.language.displayName]]
                 </div>
+</if>
+<if expr="chromeos or is_win">
+                <div title="[[item.language.nativeDisplayName]]">
+                  [[item.language.displayName]]
+                </div>
+                <div class="middle">
+                  <iron-icon icon="done"
+                      hidden$="[[!isProspectiveUILanguage_(
+                          item.language.code, prefs.intl.app_locale.value)]]">
+                  </iron-icon>
+                </div>
+</if>
                 <paper-icon-button icon="settings"
                     on-tap="onShowLanguageDetailTap_"></paper-icon-button>
               </div>
@@ -69,14 +76,17 @@
           <cr-expand-button expanded="{{inputMethodsOpened_}}">
           </cr-expand-button>
         </div>
-        <iron-collapse id="collapse" opened="[[inputMethodsOpened_]]">
+        <iron-collapse id="inputMethodsCollapse"
+            opened="[[inputMethodsOpened_]]">
           <div class="list-frame vertical-list">
             <template is="dom-repeat" items="{{languages.inputMethods}}">
-              <div class="list-item">
+              <div class$=
+                  "list-item [[getInputMethodItemClass_(id, currentId)]]">
                 <div class="start">
                   <div>[[item.name]]</div>
                   <iron-icon icon="done"
-                      hidden$="[[!isCurrentInputMethod_(item.id, languages.currentInputMethod)]]">
+                      hidden$="[[!isCurrentInputMethod_(
+                          item.id, languages.currentInputMethod)]]">
                   </iron-icon>
                 </div>
                 <paper-icon-button icon="settings"></paper-icon-button>
@@ -97,16 +107,22 @@
           <cr-expand-button expanded="{{spellCheckOpened_}}">
           </cr-expand-button>
         </div>
-        <iron-collapse id="collapse" opened="[[spellCheckOpened_]]">
+        <iron-collapse id="spellCheckCollapse" opened="[[spellCheckOpened_]]">
           <div class="list-frame vertical-list">
-            <div class="list-item">
-              <template is="dom-repeat" items="{{languages.enabledLanguages}}">
-                <paper-checkbox hidden="[[!item.language.supportsSpellcheck]]"
-                    checked="[[item.state.spellCheckEnabled]]"
-                    on-change="onSpellCheckChange_"
-                    >[[item.language.displayName]]</paper-checkbox>
-              </template>
-            </div>
+            <template is="dom-repeat"
+                items="[[spellCheckLanguages_(languages.enabledLanguages.*)]]">
+              <div class="list-item">
+                <div class="start">
+                  <paper-checkbox
+                      checked="[[item.state.spellCheckEnabled]]"
+                      on-change="onSpellCheckChange_">
+                    [[item.language.displayName]]
+                  </paper-checkbox>
+                </div>
+                <paper-icon-button icon="settings"
+                    on-tap="onShowLanguageDetailTap_"></paper-icon-button>
+              </div>
+            </template>
             <div class="list-item list-button" i18n-content="manageSpellCheck"
                 on-tap="onEditDictionaryTap_">
             </div>
@@ -114,27 +130,26 @@
         </iron-collapse>
 </if>
       </neon-animatable>
-      <neon-animatable id="manage-languages">
-        <settings-subheader i18n-values="page-title:manageLanguagesPageTitle">
-        </settings-subheader>
-        <settings-manage-languages-page
-            prefs="{{prefs}}"></settings-manage-languages-page>
-      </neon-animatable>
-      <neon-animatable id="language-detail">
-        <settings-subheader id="language-detail-subheader"
-            page-title="[[detailLanguage.language.displayName]]">
-        </settings-subheader>
-        <settings-language-detail-page id="languageDetailPage"
-            prefs="{{prefs}}" detail="[[detailLanguage]]">
-        </settings-language-detail-page>
-      </neon-animatable>
+      <template is="dom-if" name="manage-languages">
+        <settings-subpage page-title="[[i18n('manageLanguagesPageTitle')]]">
+          <settings-manage-languages-page
+              prefs="{{prefs}}"></settings-manage-languages-page>
+        </settings-subpage>
+      </template>
+      <template is="dom-if" name="language-detail">
+        <settings-subpage
+            page-title="[[detailLanguage_.language.displayName]]">
+          <settings-language-detail-page id="languageDetailPage"
+              prefs="{{prefs}}" detail="[[detailLanguage_]]">
+          </settings-language-detail-page>
+        </settings-subpage>
+      </template>
 <if expr="not is_macosx">
-      <neon-animatable id="edit-dictionary">
-        <settings-subheader id="edit-dictionary-subheader"
-            i18n-values="page-title:editDictionaryPageTitle">
-        </settings-subheader>
-        <settings-edit-dictionary-page></settings-edit-dictionary-page>
-      </neon-animatable>
+      <template is="dom-if" name="edit-dictionary">
+        <settings-subpage page-title="[[i18n('editDictionaryPageTitle')]]">
+          <settings-edit-dictionary-page></settings-edit-dictionary-page>
+        </settings-subpage>
+      </template>
 </if>
     </settings-animated-pages>
   </template>

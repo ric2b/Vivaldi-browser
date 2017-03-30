@@ -39,7 +39,7 @@ enum FrameLoadType {
     FrameLoadTypeReplaceCurrentItem,
     FrameLoadTypeInitialInChildFrame,
     FrameLoadTypeInitialHistoryLoad,
-    FrameLoadTypeReloadFromOrigin,
+    FrameLoadTypeReloadBypassingCache,
 };
 
 enum NavigationType {
@@ -56,7 +56,6 @@ enum ObjectContentType {
     ObjectContentImage,
     ObjectContentFrame,
     ObjectContentNetscapePlugin,
-    ObjectContentOtherPlugin
 };
 
 enum ShouldSendReferrer {

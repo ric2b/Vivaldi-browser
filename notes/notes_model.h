@@ -109,7 +109,7 @@ class Notes_Model : public content::NotificationObserver, public KeyedService {
   int extensive_changes_;
 
   // Reads/writes bookmarks to disk.
-  scoped_refptr<NotesStorage> store_;
+  scoped_ptr<NotesStorage> store_;
 
   // current id for nodes. Used in getNewIndex()
   int64_t current_index_;

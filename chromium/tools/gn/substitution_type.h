@@ -11,7 +11,7 @@ class Err;
 class ParseNode;
 
 // Keep kSubstitutionNames, kSubstitutionNinjaNames and the
-// IsValid*Substutition functions in sync if you change anything here.
+// IsValid*Substitution functions in sync if you change anything here.
 enum SubstitutionType {
   SUBSTITUTION_LITERAL = 0,
 
@@ -32,7 +32,7 @@ enum SubstitutionType {
   SUBSTITUTION_SOURCE_OUT_DIR,  // {{source_out_dir}}
 
   // Valid for all compiler and linker tools. These depend on the target and
-  // no not vary on a per-file basis.
+  // do not vary on a per-file basis.
   SUBSTITUTION_LABEL,  // {{label}}
   SUBSTITUTION_LABEL_NAME,  // {{label_name}}
   SUBSTITUTION_ROOT_GEN_DIR,  // {{root_gen_dir}}
@@ -58,6 +58,12 @@ enum SubstitutionType {
   SUBSTITUTION_LIBS,  // {{libs}}
   SUBSTITUTION_OUTPUT_EXTENSION,  // {{output_extension}}
   SUBSTITUTION_SOLIBS,  // {{solibs}}
+
+  // Valid for bundle_data targets.
+  SUBSTITUTION_BUNDLE_ROOT_DIR,  // {{bundle_root_dir}}
+  SUBSTITUTION_BUNDLE_RESOURCES_DIR,  // {{bundle_resources_dir}}
+  SUBSTITUTION_BUNDLE_EXECUTABLE_DIR,  // {{bundle_executable_dir}}
+  SUBSTITUTION_BUNDLE_PLUGINS_DIR,  // {{bundle_plugins_dir}}
 
   // Used only for the args of actions.
   SUBSTITUTION_RSP_FILE_NAME,  // {{response_file_name}}
@@ -93,18 +99,25 @@ struct SubstitutionBits {
 
 // Returns true if the given substitution pattern references the output
 // directory. This is used to check strings that begin with a substitution to
-// verify that the produce a file in the output directory.
+// verify that they produce a file in the output directory.
 bool SubstitutionIsInOutputDir(SubstitutionType type);
 
+// Returns true if the given substitution pattern references the bundle
+// directory. This is used to check strings that begin with a substitution to
+// verify that they produce a file in the bundle directory.
+bool SubstitutionIsInBundleDir(SubstitutionType type);
+
 // Returns true if the given substitution is valid for the named purpose.
+bool IsValidBundleDataSubstitution(SubstitutionType type);
 bool IsValidSourceSubstitution(SubstitutionType type);
 // Both compiler and linker tools.
-bool IsValidToolSubstutition(SubstitutionType type);
+bool IsValidToolSubstitution(SubstitutionType type);
 bool IsValidCompilerSubstitution(SubstitutionType type);
 bool IsValidCompilerOutputsSubstitution(SubstitutionType type);
 bool IsValidLinkerSubstitution(SubstitutionType type);
 bool IsValidLinkerOutputsSubstitution(SubstitutionType type);
 bool IsValidCopySubstitution(SubstitutionType type);
+bool IsValidCompileXCassetsSubstitution(SubstitutionType type);
 
 // Like the "IsValid..." version above but checks a list of types and sets a
 // an error blaming the given source if the test fails.

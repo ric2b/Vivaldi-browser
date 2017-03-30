@@ -27,13 +27,13 @@
 
 #include "core/fetch/FetchRequest.h"
 #include "core/fetch/MemoryCache.h"
-#include "core/fetch/ResourceClientWalker.h"
+#include "core/fetch/ResourceClientOrObserverWalker.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ResourceLoader.h"
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<Resource> RawResource::fetchSynchronously(FetchRequest& request, ResourceFetcher* fetcher)
+Resource* RawResource::fetchSynchronously(FetchRequest& request, ResourceFetcher* fetcher)
 {
     request.mutableResourceRequest().setTimeoutInterval(10);
     ResourceLoaderOptions options(request.options());
@@ -42,21 +42,21 @@ PassRefPtrWillBeRawPtr<Resource> RawResource::fetchSynchronously(FetchRequest& r
     return fetcher->requestResource(request, RawResourceFactory(Resource::Raw));
 }
 
-PassRefPtrWillBeRawPtr<RawResource> RawResource::fetchImport(FetchRequest& request, ResourceFetcher* fetcher)
+RawResource* RawResource::fetchImport(FetchRequest& request, ResourceFetcher* fetcher)
 {
     ASSERT(request.resourceRequest().frameType() == WebURLRequest::FrameTypeNone);
     request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextImport);
     return toRawResource(fetcher->requestResource(request, RawResourceFactory(Resource::ImportResource)));
 }
 
-PassRefPtrWillBeRawPtr<RawResource> RawResource::fetch(FetchRequest& request, ResourceFetcher* fetcher)
+RawResource* RawResource::fetch(FetchRequest& request, ResourceFetcher* fetcher)
 {
     ASSERT(request.resourceRequest().frameType() == WebURLRequest::FrameTypeNone);
     ASSERT(request.resourceRequest().requestContext() != WebURLRequest::RequestContextUnspecified);
     return toRawResource(fetcher->requestResource(request, RawResourceFactory(Resource::Raw)));
 }
 
-PassRefPtrWillBeRawPtr<RawResource> RawResource::fetchMainResource(FetchRequest& request, ResourceFetcher* fetcher, const SubstituteData& substituteData)
+RawResource* RawResource::fetchMainResource(FetchRequest& request, ResourceFetcher* fetcher, const SubstituteData& substituteData)
 {
     ASSERT(request.resourceRequest().frameType() != WebURLRequest::FrameTypeNone);
     ASSERT(request.resourceRequest().requestContext() == WebURLRequest::RequestContextForm || request.resourceRequest().requestContext() == WebURLRequest::RequestContextFrame || request.resourceRequest().requestContext() == WebURLRequest::RequestContextHyperlink || request.resourceRequest().requestContext() == WebURLRequest::RequestContextIframe || request.resourceRequest().requestContext() == WebURLRequest::RequestContextInternal || request.resourceRequest().requestContext() == WebURLRequest::RequestContextLocation);
@@ -64,29 +64,29 @@ PassRefPtrWillBeRawPtr<RawResource> RawResource::fetchMainResource(FetchRequest&
     return toRawResource(fetcher->requestResource(request, RawResourceFactory(Resource::MainResource), substituteData));
 }
 
-PassRefPtrWillBeRawPtr<RawResource> RawResource::fetchMedia(FetchRequest& request, ResourceFetcher* fetcher)
+RawResource* RawResource::fetchMedia(FetchRequest& request, ResourceFetcher* fetcher)
 {
     ASSERT(request.resourceRequest().frameType() == WebURLRequest::FrameTypeNone);
     ASSERT(request.resourceRequest().requestContext() == WebURLRequest::RequestContextAudio || request.resourceRequest().requestContext() == WebURLRequest::RequestContextVideo);
     return toRawResource(fetcher->requestResource(request, RawResourceFactory(Resource::Media)));
 }
 
-PassRefPtrWillBeRawPtr<RawResource> RawResource::fetchTextTrack(FetchRequest& request, ResourceFetcher* fetcher)
+RawResource* RawResource::fetchTextTrack(FetchRequest& request, ResourceFetcher* fetcher)
 {
     ASSERT(request.resourceRequest().frameType() == WebURLRequest::FrameTypeNone);
     request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextTrack);
     return toRawResource(fetcher->requestResource(request, RawResourceFactory(Resource::TextTrack)));
 }
 
-PassRefPtrWillBeRawPtr<RawResource> RawResource::fetchManifest(FetchRequest& request, ResourceFetcher* fetcher)
+RawResource* RawResource::fetchManifest(FetchRequest& request, ResourceFetcher* fetcher)
 {
     ASSERT(request.resourceRequest().frameType() == WebURLRequest::FrameTypeNone);
     ASSERT(request.resourceRequest().requestContext() == WebURLRequest::RequestContextManifest);
     return toRawResource(fetcher->requestResource(request, RawResourceFactory(Resource::Manifest)));
 }
 
-RawResource::RawResource(const ResourceRequest& resourceRequest, Type type)
-    : Resource(resourceRequest, type)
+RawResource::RawResource(const ResourceRequest& resourceRequest, Type type, const ResourceLoaderOptions& options)
+    : Resource(resourceRequest, type, options)
 {
 }
 
@@ -94,7 +94,6 @@ void RawResource::appendData(const char* data, size_t length)
 {
     Resource::appendData(data, length);
 
-    RefPtrWillBeRawPtr<RawResource> protect(this);
     ResourceClientWalker<RawResourceClient> w(m_clients);
     while (RawResourceClient* c = w.next())
         c->dataReceived(this, data, length);
@@ -104,52 +103,47 @@ void RawResource::didAddClient(ResourceClient* c)
 {
     if (!hasClient(c))
         return;
-    // The calls to the client can result in events running, potentially causing
-    // this resource to be evicted from the cache and all clients to be removed,
-    // so a protector is necessary.
-    RefPtrWillBeRawPtr<RawResource> protect(this);
     ASSERT(RawResourceClient::isExpectedType(c));
     RawResourceClient* client = static_cast<RawResourceClient*>(c);
+    WeakPtr<RawResourceClient> clientWeak = client->createWeakPtr();
     for (const auto& redirect : redirectChain()) {
         ResourceRequest request(redirect.m_request);
         client->redirectReceived(this, request, redirect.m_redirectResponse);
-        if (!hasClient(c))
+        if (!clientWeak || !hasClient(c))
             return;
     }
 
     if (!m_response.isNull())
         client->responseReceived(this, m_response, nullptr);
-    if (!hasClient(c))
+    if (!clientWeak || !hasClient(c))
         return;
     if (m_data)
         client->dataReceived(this, m_data->data(), m_data->size());
-    if (!hasClient(c))
+    if (!clientWeak || !hasClient(c))
         return;
     Resource::didAddClient(client);
 }
 
 void RawResource::willFollowRedirect(ResourceRequest& newRequest, const ResourceResponse& redirectResponse)
 {
-    RefPtrWillBeRawPtr<RawResource> protect(this);
+    Resource::willFollowRedirect(newRequest, redirectResponse);
+
     ASSERT(!redirectResponse.isNull());
     ResourceClientWalker<RawResourceClient> w(m_clients);
     while (RawResourceClient* c = w.next())
         c->redirectReceived(this, newRequest, redirectResponse);
-    Resource::willFollowRedirect(newRequest, redirectResponse);
 }
 
-void RawResource::updateRequest(const ResourceRequest& request)
+void RawResource::willNotFollowRedirect()
 {
-    RefPtrWillBeRawPtr<RawResource> protect(this);
+    RawPtr<RawResource> protect(this);
     ResourceClientWalker<RawResourceClient> w(m_clients);
     while (RawResourceClient* c = w.next())
-        c->updateRequest(this, request);
+        c->redirectBlocked();
 }
 
 void RawResource::responseReceived(const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
 {
-    RefPtrWillBeRawPtr<RawResource> protect(this);
-
     bool isSuccessfulRevalidation = isCacheValidator() && response.httpStatusCode() == 304;
     Resource::responseReceived(response, nullptr);
 
@@ -174,7 +168,6 @@ void RawResource::responseReceived(const ResourceResponse& response, PassOwnPtr<
 
 void RawResource::setSerializedCachedMetadata(const char* data, size_t size)
 {
-    RefPtrWillBeRawPtr<RawResource> protect(this);
     Resource::setSerializedCachedMetadata(data, size);
     ResourceClientWalker<RawResourceClient> w(m_clients);
     while (RawResourceClient* c = w.next())
@@ -183,7 +176,6 @@ void RawResource::setSerializedCachedMetadata(const char* data, size_t size)
 
 void RawResource::didSendData(unsigned long long bytesSent, unsigned long long totalBytesToBeSent)
 {
-    RefPtrWillBeRawPtr<RawResource> protect(this);
     ResourceClientWalker<RawResourceClient> w(m_clients);
     while (RawResourceClient* c = w.next())
         c->dataSent(this, bytesSent, totalBytesToBeSent);
@@ -191,7 +183,6 @@ void RawResource::didSendData(unsigned long long bytesSent, unsigned long long t
 
 void RawResource::didDownloadData(int dataLength)
 {
-    RefPtrWillBeRawPtr<RawResource> protect(this);
     ResourceClientWalker<RawResourceClient> w(m_clients);
     while (RawResourceClient* c = w.next())
         c->dataDownloaded(this, dataLength);

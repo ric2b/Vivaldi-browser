@@ -7,12 +7,12 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/sequence_checker_impl.h"
 #include "base/stl_util.h"
@@ -75,9 +75,8 @@ class ThreadBlocker {
 class DestructionDeadlockChecker
     : public base::RefCountedThreadSafe<DestructionDeadlockChecker> {
  public:
-  explicit DestructionDeadlockChecker(
-      const scoped_refptr<SequencedWorkerPool>& pool)
-      : pool_(pool) {}
+  explicit DestructionDeadlockChecker(scoped_refptr<SequencedWorkerPool> pool)
+      : pool_(std::move(pool)) {}
 
  protected:
   virtual ~DestructionDeadlockChecker() {
@@ -295,7 +294,7 @@ class SequencedWorkerPoolTest : public testing::Test {
 
  private:
   MessageLoop message_loop_;
-  scoped_ptr<SequencedWorkerPoolOwner> pool_owner_;
+  std::unique_ptr<SequencedWorkerPoolOwner> pool_owner_;
   const scoped_refptr<TestTracker> tracker_;
 };
 
@@ -567,9 +566,8 @@ TEST_F(SequencedWorkerPoolTest, AllowsAfterShutdown) {
   const int kNumQueuedTasks = static_cast<int>(kNumWorkerThreads);
   for (int i = 0; i < kNumQueuedTasks; ++i) {
     EXPECT_TRUE(pool()->PostWorkerTaskWithShutdownBehavior(
-        FROM_HERE,
-        base::Bind(&TestTracker::PostAdditionalTasks, tracker(), i, pool(),
-                   false),
+        FROM_HERE, base::Bind(&TestTracker::PostAdditionalTasks, tracker(), i,
+                              base::RetainedRef(pool()), false),
         SequencedWorkerPool::BLOCK_SHUTDOWN));
   }
 
@@ -809,15 +807,19 @@ TEST_F(SequencedWorkerPoolTest, IsRunningOnCurrentThread) {
       unsequenced_token));
 
   pool()->PostSequencedWorkerTask(
-      token1, FROM_HERE, base::Bind(&IsRunningOnCurrentThreadTask, token1,
-                                    token2, pool(), unused_pool_owner.pool()));
+      token1, FROM_HERE,
+      base::Bind(&IsRunningOnCurrentThreadTask, token1, token2,
+                 base::RetainedRef(pool()),
+                 base::RetainedRef(unused_pool_owner.pool())));
   pool()->PostSequencedWorkerTask(
       token2, FROM_HERE,
       base::Bind(&IsRunningOnCurrentThreadTask, token2, unsequenced_token,
-                 pool(), unused_pool_owner.pool()));
+                 base::RetainedRef(pool()),
+                 base::RetainedRef(unused_pool_owner.pool())));
   pool()->PostWorkerTask(
       FROM_HERE, base::Bind(&IsRunningOnCurrentThreadTask, unsequenced_token,
-                            token1, pool(), unused_pool_owner.pool()));
+                            token1, base::RetainedRef(pool()),
+                            base::RetainedRef(unused_pool_owner.pool())));
 }
 
 // Checks that tasks are destroyed in the right context during shutdown. If a
@@ -874,9 +876,8 @@ TEST_F(SequencedWorkerPoolTest, FlushForTesting) {
                            base::Bind(&TestTracker::FastTask, tracker(), 0));
   }
   pool()->PostWorkerTask(
-      FROM_HERE,
-      base::Bind(&TestTracker::PostAdditionalTasks, tracker(), 0, pool(),
-                 true));
+      FROM_HERE, base::Bind(&TestTracker::PostAdditionalTasks, tracker(), 0,
+                            base::RetainedRef(pool()), true));
 
   // We expect all except the delayed task to have been run. We verify all
   // closures have been deleted by looking at the refcount of the
@@ -950,10 +951,10 @@ void VerifyCurrentSequencedTaskRunnerForUnsequencedTask(
   // VerifyCurrentSequencedTaskRunner() above for why the check is implemented
   // this way.
   const bool expected_equal = true;
-  task_runner->PostTask(
-      FROM_HERE,
-      Bind(&VerifySequencedTaskRunnerRunsOnCurrentThread,
-           std::move(expected_task_runner), expected_equal, callback));
+  task_runner->PostTask(FROM_HERE,
+                        Bind(&VerifySequencedTaskRunnerRunsOnCurrentThread,
+                             RetainedRef(std::move(expected_task_runner)),
+                             expected_equal, callback));
 }
 
 TEST_F(SequencedWorkerPoolTest, GetSequencedTaskRunnerForCurrentThread) {
@@ -987,7 +988,7 @@ TEST_F(SequencedWorkerPoolTest, GetSequencedTaskRunnerForCurrentThread) {
 
   pool()->PostWorkerTask(
       FROM_HERE, Bind(&VerifyCurrentSequencedTaskRunnerForUnsequencedTask,
-                      pool(), signal));
+                      RetainedRef(pool()), signal));
   event.Wait();
 }
 
@@ -1066,7 +1067,7 @@ class SequencedWorkerPoolTaskRunnerTestDelegate {
 
  private:
   MessageLoop message_loop_;
-  scoped_ptr<SequencedWorkerPoolOwner> pool_owner_;
+  std::unique_ptr<SequencedWorkerPoolOwner> pool_owner_;
 };
 
 INSTANTIATE_TYPED_TEST_CASE_P(
@@ -1104,7 +1105,7 @@ class SequencedWorkerPoolTaskRunnerWithShutdownBehaviorTestDelegate {
 
  private:
   MessageLoop message_loop_;
-  scoped_ptr<SequencedWorkerPoolOwner> pool_owner_;
+  std::unique_ptr<SequencedWorkerPoolOwner> pool_owner_;
   scoped_refptr<TaskRunner> task_runner_;
 };
 
@@ -1144,7 +1145,7 @@ class SequencedWorkerPoolSequencedTaskRunnerTestDelegate {
 
  private:
   MessageLoop message_loop_;
-  scoped_ptr<SequencedWorkerPoolOwner> pool_owner_;
+  std::unique_ptr<SequencedWorkerPoolOwner> pool_owner_;
   scoped_refptr<SequencedTaskRunner> task_runner_;
 };
 

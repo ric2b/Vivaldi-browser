@@ -58,7 +58,7 @@ class CONTENT_EXPORT VideoCaptureBufferPool
     virtual size_t mapped_size() const = 0;
     virtual void* data(int plane) = 0;
     virtual ClientBuffer AsClientBuffer(int plane) = 0;
-#if defined(OS_POSIX) && !(defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
     virtual base::FileDescriptor AsPlatformFile() = 0;
 #endif
   };
@@ -76,7 +76,7 @@ class CONTENT_EXPORT VideoCaptureBufferPool
                        gfx::GpuMemoryBufferHandle* new_handle);
 
   // Try and obtain a BufferHandle for |buffer_id|.
-  scoped_ptr<BufferHandle> GetBufferHandle(int buffer_id);
+  std::unique_ptr<BufferHandle> GetBufferHandle(int buffer_id);
 
   // Reserve or allocate a buffer to support a packed frame of |dimensions| of
   // pixel |format| and return its id. This will fail (returning kInvalidId) if
@@ -91,9 +91,9 @@ class CONTENT_EXPORT VideoCaptureBufferPool
   // On occasion, this call will decide to free an old buffer to make room for a
   // new allocation at a larger size. If so, the ID of the destroyed buffer is
   // returned via |buffer_id_to_drop|.
-  int ReserveForProducer(media::VideoPixelFormat format,
+  int ReserveForProducer(const gfx::Size& dimensions,
+                         media::VideoPixelFormat format,
                          media::VideoPixelStorage storage,
-                         const gfx::Size& dimensions,
                          int* buffer_id_to_drop);
 
   // Indicate that a buffer held for the producer should be returned back to the
@@ -111,6 +111,18 @@ class CONTENT_EXPORT VideoCaptureBufferPool
   // done, a buffer is returned to the pool for reuse.
   void RelinquishConsumerHold(int buffer_id, int num_clients);
 
+  // Attempt to reserve the same buffer that was relinquished in the last call
+  // to RelinquishProducerReservation(). If the buffer is not still being
+  // consumed, and has not yet been re-used since being consumed, and the
+  // specified |dimensions|, |format|, and |storage| agree with its last
+  // reservation, this will succeed. Otherwise, |kInvalidId| will be returned.
+  //
+  // A producer may assume the content of the buffer has been preserved and may
+  // also make modifications.
+  int ResurrectLastForProducer(const gfx::Size& dimensions,
+                               media::VideoPixelFormat format,
+                               media::VideoPixelStorage storage);
+
   // Returns a snapshot of the current number of buffers in-use divided by the
   // maximum |count_|.
   double GetBufferPoolUtilization() const;
@@ -122,18 +134,23 @@ class CONTENT_EXPORT VideoCaptureBufferPool
   // Tracker carries indication of pixel format and storage type.
   class Tracker {
    public:
-    static scoped_ptr<Tracker> CreateTracker(media::VideoPixelStorage storage);
+    static std::unique_ptr<Tracker> CreateTracker(
+        media::VideoPixelStorage storage);
 
     Tracker()
-        : pixel_count_(0), held_by_producer_(false), consumer_hold_count_(0) {}
-    virtual bool Init(media::VideoPixelFormat format,
+        : max_pixel_count_(0),
+          held_by_producer_(false),
+          consumer_hold_count_(0) {}
+    virtual bool Init(const gfx::Size& dimensions,
+                      media::VideoPixelFormat format,
                       media::VideoPixelStorage storage_type,
-                      const gfx::Size& dimensions,
                       base::Lock* lock) = 0;
     virtual ~Tracker();
 
-    size_t pixel_count() const { return pixel_count_; }
-    void set_pixel_count(size_t count) { pixel_count_ = count; }
+    const gfx::Size& dimensions() const { return dimensions_; }
+    void set_dimensions(const gfx::Size& dim) { dimensions_ = dim; }
+    size_t max_pixel_count() const { return max_pixel_count_; }
+    void set_max_pixel_count(size_t count) { max_pixel_count_ = count; }
     media::VideoPixelFormat pixel_format() const {
       return pixel_format_;
     }
@@ -151,7 +168,7 @@ class CONTENT_EXPORT VideoCaptureBufferPool
 
     // Returns a handle to the underlying storage, be that a block of Shared
     // Memory, or a GpuMemoryBuffer.
-    virtual scoped_ptr<BufferHandle> GetBufferHandle() = 0;
+    virtual std::unique_ptr<BufferHandle> GetBufferHandle() = 0;
 
     virtual bool ShareToProcess(base::ProcessHandle process_handle,
                                 base::SharedMemoryHandle* new_handle) = 0;
@@ -160,11 +177,17 @@ class CONTENT_EXPORT VideoCaptureBufferPool
                                  gfx::GpuMemoryBufferHandle* new_handle) = 0;
 
    private:
-    size_t pixel_count_;
+    // |dimensions_| may change as a Tracker is re-used, but |max_pixel_count_|,
+    // |pixel_format_|, and |storage_type_| are set once for the lifetime of a
+    // Tracker.
+    gfx::Size dimensions_;
+    size_t max_pixel_count_;
     media::VideoPixelFormat pixel_format_;
     media::VideoPixelStorage storage_type_;
+
     // Indicates whether this Tracker is currently referenced by the producer.
     bool held_by_producer_;
+
     // Number of consumer processes which hold this Tracker.
     int consumer_hold_count_;
   };
@@ -172,9 +195,9 @@ class CONTENT_EXPORT VideoCaptureBufferPool
   friend class base::RefCountedThreadSafe<VideoCaptureBufferPool>;
   virtual ~VideoCaptureBufferPool();
 
-  int ReserveForProducerInternal(media::VideoPixelFormat format,
+  int ReserveForProducerInternal(const gfx::Size& dimensions,
+                                 media::VideoPixelFormat format,
                                  media::VideoPixelStorage storage,
-                                 const gfx::Size& dimensions,
                                  int* tracker_id_to_drop);
 
   Tracker* GetTracker(int buffer_id);
@@ -187,6 +210,10 @@ class CONTENT_EXPORT VideoCaptureBufferPool
 
   // The ID of the next buffer.
   int next_buffer_id_;
+
+  // The ID of the buffer last relinquished by the producer (a candidate for
+  // resurrection).
+  int last_relinquished_buffer_id_;
 
   // The buffers, indexed by the first parameter, a buffer id.
   using TrackerMap = std::map<int, Tracker*>;

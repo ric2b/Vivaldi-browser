@@ -13,6 +13,7 @@
 #include "media/blink/webmediaplayer_impl.h"
 #include "media/blink/webmediaplayer_params.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
+#include "third_party/WebKit/public/platform/modules/mediasession/WebMediaSession.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -174,7 +175,8 @@ void WebMediaPlayerCast::Initialize(const GURL& url,
                                     int delegate_id) {
   player_manager_->Initialize(MEDIA_PLAYER_TYPE_REMOTE_ONLY, player_id_, url,
                               frame->document().firstPartyForCookies(), 0,
-                              frame->document().url(), true, delegate_id);
+                              frame->document().url(), true, delegate_id,
+                              blink::WebMediaSession::DefaultID);
   is_player_initialized_ = true;
 }
 
@@ -219,7 +221,7 @@ void WebMediaPlayerCast::OnSeekComplete(const base::TimeDelta& current_time) {
   DVLOG(1) << __FUNCTION__;
   remote_time_at_ = base::TimeTicks::Now();
   remote_time_ = current_time;
-  webmediaplayer_->OnPipelineSeeked(true, PIPELINE_OK);
+  webmediaplayer_->OnPipelineSeeked(true);
 }
 
 void WebMediaPlayerCast::OnMediaError(int error_type) {
@@ -292,6 +294,11 @@ void WebMediaPlayerCast::OnDisconnectedFromRemoteDevice() {
     t = webmediaplayer_->duration();
   }
   webmediaplayer_->OnDisconnectedFromRemoteDevice(t);
+}
+
+void WebMediaPlayerCast::OnCancelledRemotePlaybackRequest() {
+  DVLOG(1) << __FUNCTION__;
+  client_->cancelledRemotePlaybackRequest();
 }
 
 void WebMediaPlayerCast::OnDidExitFullscreen() {

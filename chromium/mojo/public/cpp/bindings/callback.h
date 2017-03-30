@@ -5,10 +5,12 @@
 #ifndef MOJO_PUBLIC_CPP_BINDINGS_CALLBACK_H_
 #define MOJO_PUBLIC_CPP_BINDINGS_CALLBACK_H_
 
+#include <type_traits>
 #include <utility>
 
+#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "mojo/public/cpp/bindings/lib/callback_internal.h"
-#include "mojo/public/cpp/bindings/lib/shared_ptr.h"
 #include "mojo/public/cpp/bindings/lib/template_util.h"
 
 namespace mojo {
@@ -31,8 +33,7 @@ class Callback<void(Args...)> {
         // because it is a virtual interface. So we have to take the arguments
         // all by value (except String which we take as a const reference due to
         // ForwardType).
-        typename internal::Callback_ParamTraits<Args>::ForwardType...)
-        const = 0;
+        typename internal::Callback_ParamTraits<Args>::ForwardType...) = 0;
   };
 
   // Constructs a "null" callback that does nothing.
@@ -40,29 +41,45 @@ class Callback<void(Args...)> {
 
   // Constructs a callback that will run |runnable|. The callback takes
   // ownership of |runnable|.
-  explicit Callback(Runnable* runnable) : sink_(runnable) {}
+  explicit Callback(Runnable* runnable) : sink_(new RunnableHolder(runnable)) {}
 
   // As above, but can take an object that isn't derived from Runnable, so long
   // as it has a compatible operator() or Run() method. operator() will be
   // preferred if the type has both.
-  template <typename Sink>
+  //
+  // The std::enable_if is used to disable this constructor if the argument is
+  // derived from Runnable. This is needed because the compiler will pick this
+  // constructor instead of the Runnable* one above when the argument is of the
+  // type of the derived class instead of down casted to a Runnable. i.e:
+  // class Foo : public Callback::Runnable {
+  //   ...
+  // };
+  // Callback cb(new Foo);
+  //
+  // The call site can fix this by using a static_cast to down cast to a
+  // Runnable*, but that shouldn't be necessary.
+  template <
+      typename Sink,
+      typename std::enable_if<!std::is_base_of<
+          Runnable,
+          typename std::remove_pointer<Sink>::type>::value>::type* = nullptr>
   Callback(const Sink& sink) {
     using sink_type = typename internal::Conditional<
         internal::HasCompatibleCallOperator<Sink, Args...>::value,
         FunctorAdapter<Sink>, RunnableAdapter<Sink>>::type;
-    sink_ = internal::SharedPtr<Runnable>(new sink_type(sink));
+    sink_ = new RunnableHolder(new sink_type(sink));
   }
 
   // As above, but can take a compatible function pointer.
   Callback(void (*function_ptr)(
       typename internal::Callback_ParamTraits<Args>::ForwardType...))
-      : sink_(new FunctionPtrAdapter(function_ptr)) {}
+      : sink_(new RunnableHolder(new FunctionPtrAdapter(function_ptr))) {}
 
   // Executes the callback function.
   void Run(typename internal::Callback_ParamTraits<Args>::ForwardType... args)
       const {
-    if (sink_.get())
-      sink_->Run(std::forward<
+    if (sink_)
+      sink_->runnable->Run(std::forward<
                  typename internal::Callback_ParamTraits<Args>::ForwardType>(
           args)...);
   }
@@ -70,7 +87,7 @@ class Callback<void(Args...)> {
   bool is_null() const { return !sink_.get(); }
 
   // Resets the callback to the "null" state.
-  void reset() { sink_.reset(); }
+  void reset() { sink_ = nullptr; }
 
  private:
   // Adapts a class that has a Run() method but is not derived from Runnable to
@@ -80,7 +97,7 @@ class Callback<void(Args...)> {
     explicit RunnableAdapter(const Sink& sink) : sink(sink) {}
     virtual void Run(
         typename internal::Callback_ParamTraits<Args>::ForwardType... args)
-        const override {
+        override {
       sink.Run(std::forward<
                typename internal::Callback_ParamTraits<Args>::ForwardType>(
           args)...);
@@ -94,7 +111,7 @@ class Callback<void(Args...)> {
     explicit FunctorAdapter(const Sink& sink) : sink(sink) {}
     virtual void Run(
         typename internal::Callback_ParamTraits<Args>::ForwardType... args)
-        const override {
+        override {
       sink.operator()(
           std::forward<
               typename internal::Callback_ParamTraits<Args>::ForwardType>(
@@ -114,7 +131,7 @@ class Callback<void(Args...)> {
         : function_ptr(function_ptr) {}
     virtual void Run(
         typename internal::Callback_ParamTraits<Args>::ForwardType... args)
-        const override {
+        override {
       (*function_ptr)(
           std::forward<
               typename internal::Callback_ParamTraits<Args>::ForwardType>(
@@ -123,7 +140,17 @@ class Callback<void(Args...)> {
     FunctionPtr function_ptr;
   };
 
-  internal::SharedPtr<Runnable> sink_;
+  struct RunnableHolder : public base::RefCountedThreadSafe<RunnableHolder> {
+    explicit RunnableHolder(Runnable* runnable) : runnable(runnable) {}
+
+    scoped_ptr<Runnable> runnable;
+
+   private:
+    friend class base::RefCountedThreadSafe<RunnableHolder>;
+    ~RunnableHolder() {}
+  };
+
+  scoped_refptr<RunnableHolder> sink_;
 };
 
 // A specialization of Callback which takes no parameters.

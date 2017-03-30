@@ -59,7 +59,6 @@
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/xml/XPathNSResolver.h"
 #include "platform/TracedValue.h"
-#include "wtf/MainThread.h"
 #include "wtf/MathExtras.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Threading.h"
@@ -93,17 +92,17 @@ void setMinimumArityTypeError(ExceptionState& exceptionState, unsigned expected,
     exceptionState.throwTypeError(ExceptionMessages::notEnoughArguments(expected, provided));
 }
 
-PassRefPtrWillBeRawPtr<NodeFilter> toNodeFilter(v8::Local<v8::Value> callback, v8::Local<v8::Object> creationContext, ScriptState* scriptState)
+RawPtr<NodeFilter> toNodeFilter(v8::Local<v8::Value> callback, v8::Local<v8::Object> creationContext, ScriptState* scriptState)
 {
     if (callback->IsNull())
         return nullptr;
-    RefPtrWillBeRawPtr<NodeFilter> filter = NodeFilter::create();
+    RawPtr<NodeFilter> filter = NodeFilter::create();
 
     v8::Local<v8::Value> filterWrapper = toV8(filter.get(), creationContext, scriptState->isolate());
     if (filterWrapper.IsEmpty())
         return nullptr;
 
-    RefPtrWillBeRawPtr<NodeFilterCondition> condition = V8NodeFilterCondition::create(callback, filterWrapper.As<v8::Object>(), scriptState);
+    RawPtr<NodeFilterCondition> condition = V8NodeFilterCondition::create(callback, filterWrapper.As<v8::Object>(), scriptState);
     filter->setCondition(condition.release());
 
     return filter.release();
@@ -677,6 +676,10 @@ LocalDOMWindow* enteredDOMWindow(v8::Isolate* isolate)
         // We don't always have an entered DOM window, for example during microtask callbacks from V8
         // (where the entered context may be the DOM-in-JS context). In that case, we fall back
         // to the current context.
+        //
+        // TODO(haraken): It's nasty to return a current window from enteredDOMWindow.
+        // All call sites should be updated so that it works even if it doesn't have
+        // an entered window.
         window = currentDOMWindow(isolate);
         ASSERT(window);
     }
@@ -711,10 +714,10 @@ ExecutionContext* toExecutionContext(v8::Local<v8::Context> context)
     v8::Local<v8::Object> global = context->Global();
     v8::Local<v8::Object> windowWrapper = V8Window::findInstanceInPrototypeChain(global, context->GetIsolate());
     if (!windowWrapper.IsEmpty())
-        return V8Window::toImpl(windowWrapper)->executionContext();
+        return V8Window::toImpl(windowWrapper)->getExecutionContext();
     v8::Local<v8::Object> workerWrapper = V8WorkerGlobalScope::findInstanceInPrototypeChain(global, context->GetIsolate());
     if (!workerWrapper.IsEmpty())
-        return V8WorkerGlobalScope::toImpl(workerWrapper)->executionContext();
+        return V8WorkerGlobalScope::toImpl(workerWrapper)->getExecutionContext();
     ASSERT(s_toExecutionContextForModules);
     return (*s_toExecutionContextForModules)(context);
 }
@@ -787,8 +790,8 @@ v8::Local<v8::Context> toV8Context(ExecutionContext* context, DOMWrapperWorld& w
             return toV8Context(frame, world);
     } else if (context->isWorkerGlobalScope()) {
         if (WorkerOrWorkletScriptController* script = toWorkerOrWorkletGlobalScope(context)->scriptController()) {
-            if (script->scriptState()->contextIsValid())
-                return script->scriptState()->context();
+            if (script->getScriptState()->contextIsValid())
+                return script->getScriptState()->context();
         }
     }
     return v8::Local<v8::Context>();
@@ -905,53 +908,6 @@ v8::Isolate* toIsolate(LocalFrame* frame)
 {
     ASSERT(frame);
     return frame->script().isolate();
-}
-
-void DevToolsFunctionInfo::ensureInitialized() const
-{
-    if (m_function.IsEmpty())
-        return;
-
-    v8::HandleScope scope(m_function->GetIsolate());
-    v8::Local<v8::Function> originalFunction = getBoundFunction(m_function);
-    m_scriptId = originalFunction->ScriptId();
-    v8::ScriptOrigin origin = originalFunction->GetScriptOrigin();
-    if (!origin.ResourceName().IsEmpty()) {
-        V8StringResource<> stringResource(origin.ResourceName());
-        stringResource.prepare();
-        m_resourceName = stringResource;
-        m_lineNumber = originalFunction->GetScriptLineNumber() + 1;
-    }
-    if (m_resourceName.isEmpty()) {
-        m_resourceName = "";
-        m_lineNumber = 1;
-    }
-
-    m_function.Clear();
-}
-
-int DevToolsFunctionInfo::scriptId() const
-{
-    ensureInitialized();
-    return m_scriptId;
-}
-
-int DevToolsFunctionInfo::lineNumber() const
-{
-    ensureInitialized();
-    return m_lineNumber;
-}
-
-String DevToolsFunctionInfo::resourceName() const
-{
-    ensureInitialized();
-    return m_resourceName;
-}
-
-PassOwnPtr<TracedValue> devToolsTraceEventData(v8::Isolate* isolate, ExecutionContext* context, v8::Local<v8::Function> function)
-{
-    DevToolsFunctionInfo info(function);
-    return InspectorFunctionCallEvent::data(context, info.scriptId(), info.resourceName(), info.lineNumber());
 }
 
 void v8ConstructorAttributeGetter(v8::Local<v8::Name> propertyName, const v8::PropertyCallbackInfo<v8::Value>& info)

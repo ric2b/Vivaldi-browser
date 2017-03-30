@@ -178,6 +178,16 @@ WebInspector.RemoteObject.prototype = {
     },
 
     /**
+     * @param {string|!RuntimeAgent.CallArgument} name
+     * @param {string} value
+     * @param {function(string=)} callback
+     */
+    setPropertyValue: function(name, value, callback)
+    {
+        throw "Not implemented";
+    },
+
+    /**
      * @param {function(this:Object, ...)} functionDeclaration
      * @param {!Array<!RuntimeAgent.CallArgument>=} args
      * @param {function(?WebInspector.RemoteObject, boolean=)=} callback
@@ -581,7 +591,7 @@ WebInspector.RemoteObjectImpl.prototype = {
             /**
              * @suppressReceiverCheck
              * @this {Node}
-             * @return {function(this:Node, string, function(), boolean=): undefined}
+             * @return {function(this:Node, string, function(), boolean=, boolean=): undefined}
              */
             function nodeRemoveEventListener()
             {
@@ -590,11 +600,27 @@ WebInspector.RemoteObjectImpl.prototype = {
                  * @param {string} type
                  * @param {function()} handler
                  * @param {boolean=} useCapture
+                 * @param {boolean=} passive
                  * @this {Node}
                  */
-                function removeEventListenerWrapper(type, handler, useCapture)
+                function removeEventListenerWrapper(type, handler, useCapture, passive)
                 {
-                    this.removeEventListener(type, handler, useCapture);
+                    // TODO(dtapuska): Remove this one closure compiler is updated
+                    // to handle EventListenerOptions and passive event listeners
+                    // has shipped. Don't JSDoc these otherwise it will fail.
+                    // @return {boolean|undefined|{capture: (boolean|undefined), passive: boolean}}
+                    function eventListenerOptions()
+                    {
+                        if (passive && useCapture)
+                            return {"capture": useCapture, "passive": passive};
+                        else if (passive)
+                            return {"passive": passive};
+                        else if (useCapture)
+                            return {"capture": useCapture};
+                        else
+                            return {};
+                    }
+                    this.removeEventListener(type, handler, eventListenerOptions());
                     if (this["on" + type])
                         this["on" + type] = null;
                 }
@@ -609,6 +635,7 @@ WebInspector.RemoteObjectImpl.prototype = {
                 return new WebInspector.EventListener(this._target,
                                                       payload.type,
                                                       payload.useCapture,
+                                                      payload.passive,
                                                       payload.handler ? this.target().runtimeModel.createRemoteObject(payload.handler) : null,
                                                       payload.originalHandler ? this.target().runtimeModel.createRemoteObject(payload.originalHandler) : null,
                                                       WebInspector.DebuggerModel.Location.fromPayload(this._debuggerModel, payload.location),
@@ -707,6 +734,7 @@ WebInspector.RemoteObjectImpl.prototype = {
     },
 
     /**
+     * @override
      * @param {string|!RuntimeAgent.CallArgument} name
      * @param {string} value
      * @param {function(string=)} callback
@@ -729,7 +757,7 @@ WebInspector.RemoteObjectImpl.prototype = {
         function evaluatedCallback(error, result, wasThrown)
         {
             if (error || wasThrown) {
-                callback(error || result.description);
+                callback(error || (result.type !== "string" ? result.description : /** @type {string} */(result.value)));
                 return;
             }
 
@@ -757,7 +785,7 @@ WebInspector.RemoteObjectImpl.prototype = {
         var setPropertyValueFunction = "function(a, b) { this[a] = b; }";
 
         var argv = [name, WebInspector.RemoteObject.toCallArgument(result)];
-        this._runtimeAgent.callFunctionOn(this._objectId, setPropertyValueFunction, argv, true, undefined, undefined, propertySetCallback);
+        this._runtimeAgent.callFunctionOn(this._objectId, setPropertyValueFunction, argv, true, undefined, undefined, undefined, propertySetCallback);
 
         /**
          * @param {?Protocol.Error} error
@@ -787,7 +815,7 @@ WebInspector.RemoteObjectImpl.prototype = {
         }
 
         var deletePropertyFunction = "function(a) { delete this[a]; return !(a in this); }";
-        this._runtimeAgent.callFunctionOn(this._objectId, deletePropertyFunction, [name], true, undefined, undefined, deletePropertyCallback);
+        this._runtimeAgent.callFunctionOn(this._objectId, deletePropertyFunction, [name], true, undefined, undefined, undefined, deletePropertyCallback);
 
         /**
          * @param {?Protocol.Error} error
@@ -831,7 +859,7 @@ WebInspector.RemoteObjectImpl.prototype = {
                 callback(this.target().runtimeModel.createRemoteObject(result), wasThrown);
         }
 
-        this._runtimeAgent.callFunctionOn(this._objectId, functionDeclaration.toString(), args, true, undefined, undefined, mycallback.bind(this));
+        this._runtimeAgent.callFunctionOn(this._objectId, functionDeclaration.toString(), args, true, undefined, undefined, undefined, mycallback.bind(this));
     },
 
     /**
@@ -852,7 +880,7 @@ WebInspector.RemoteObjectImpl.prototype = {
             callback((error || wasThrown) ? null : result.value);
         }
 
-        this._runtimeAgent.callFunctionOn(this._objectId, functionDeclaration.toString(), args, true, true, false, mycallback);
+        this._runtimeAgent.callFunctionOn(this._objectId, functionDeclaration.toString(), args, true, true, false, undefined, mycallback);
     },
 
     release: function()
@@ -1037,8 +1065,13 @@ WebInspector.ScopeRemoteObject.prototype = {
          */
         function wrappedCallback(properties, internalProperties)
         {
-            if (this._scopeRef && Array.isArray(properties))
+            if (this._scopeRef && Array.isArray(properties)) {
                 this._savedScopeProperties = properties.slice();
+                if (!this._scopeRef.callFrameId) {
+                    for (var property of this._savedScopeProperties)
+                        property.writable = false;
+                }
+            }
             callback(properties, internalProperties);
         }
 
@@ -1051,12 +1084,13 @@ WebInspector.ScopeRemoteObject.prototype = {
     /**
      * @override
      * @param {!RuntimeAgent.RemoteObject} result
-     * @param {!RuntimeAgent.CallArgument} name
+     * @param {!RuntimeAgent.CallArgument} argumentName
      * @param {function(string=)} callback
      */
-    doSetObjectPropertyValue: function(result, name, callback)
+    doSetObjectPropertyValue: function(result, argumentName, callback)
     {
-        this._debuggerModel.setVariableValue(this._scopeRef.number, /** @type {string} */ (name.value), WebInspector.RemoteObject.toCallArgument(result), this._scopeRef.callFrameId, this._scopeRef.functionId, setVariableValueCallback.bind(this));
+        var name = /** @type {string} */ (argumentName.value);
+        this._debuggerModel.setVariableValue(this._scopeRef.number, name, WebInspector.RemoteObject.toCallArgument(result), this._scopeRef.callFrameId, setVariableValueCallback.bind(this));
 
         /**
          * @param {string=} error
@@ -1082,17 +1116,14 @@ WebInspector.ScopeRemoteObject.prototype = {
 };
 
 /**
- * Either callFrameId or functionId (exactly one) must be defined.
  * @constructor
  * @param {number} number
  * @param {string=} callFrameId
- * @param {string=} functionId
  */
-WebInspector.ScopeRef = function(number, callFrameId, functionId)
+WebInspector.ScopeRef = function(number, callFrameId)
 {
     this.number = number;
     this.callFrameId = callFrameId;
-    this.functionId = functionId;
 }
 
 /**

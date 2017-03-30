@@ -25,6 +25,8 @@ if [ -r "$DEFAULTS_FILE" ]; then
   . "$DEFAULTS_FILE"
 fi
 
+install_rpm_key
+
 if [ "$repo_add_once" = "true" ]; then
   determine_rpm_package_manager
 
@@ -42,14 +44,6 @@ if [ "$repo_add_once" = "true" ]; then
     # We need to configure urpmi after the install has finished.
     # See configure_urpmi() for details.
     configure_urpmi
-    ;;
-  "yast")
-    # It looks as though yast/zypper has a lock on the RPM DB during
-    # postinstall, so we cannot add the signing key with install_rpm_key().
-    # Instead, we attempt to do this here. If the user attempt to update before
-    # the cron job imports the key, Yast will grab the key from our server and
-    # prompt the user to accept the key.
-    install_rpm_key
     ;;
   esac
 

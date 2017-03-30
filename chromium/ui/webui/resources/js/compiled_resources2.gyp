@@ -14,30 +14,14 @@
     {
       'target_name': 'cr',
       'dependencies': [
+        'promise_resolver',
         '<(EXTERNS_GYP):chrome_send',
         'assert',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
-      'target_name': 'load_time_data',
-      'dependencies': ['<(DEPTH)/third_party/jstemplate/compiled_resources2.gyp:jstemplate'],
-      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
-    },
-    {
       'target_name': 'event_tracker',
-      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
-    },
-    {
-      'target_name': 'util',
-      'dependencies': [
-        '<(EXTERNS_GYP):chrome_send',
-        'cr',
-      ],
-      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
-    },
-    {
-      'target_name': 'parse_html_subset',
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
@@ -62,6 +46,34 @@
       'target_name': 'i18n_behavior',
       'dependencies': [
         'load_time_data',
+      ],
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'load_time_data',
+      'dependencies': ['<(DEPTH)/third_party/jstemplate/compiled_resources2.gyp:jstemplate'],
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'parse_html_subset',
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'promise_resolver',
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'util',
+      'dependencies': [
+        '<(EXTERNS_GYP):chrome_send',
+        'cr',
+      ],
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'web_ui_listener_behavior',
+      'dependencies': [
+        'cr',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },

@@ -19,7 +19,7 @@ class PresentationReceiver final
     : public RefCountedGarbageCollectedEventTargetWithInlineData<PresentationReceiver>
     , DOMWindowProperty {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(PresentationReceiver);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(PresentationReceiver);
+    USING_GARBAGE_COLLECTED_MIXIN(PresentationReceiver);
     DEFINE_WRAPPERTYPEINFO();
 public:
     PresentationReceiver(LocalFrame*);
@@ -27,7 +27,7 @@ public:
 
     // EventTarget implementation.
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
     ScriptPromise getConnection(ScriptState*);
     ScriptPromise getConnections(ScriptState*);

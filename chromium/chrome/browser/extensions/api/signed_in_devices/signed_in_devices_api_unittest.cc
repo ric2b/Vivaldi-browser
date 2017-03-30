@@ -2,15 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <string>
+#include "chrome/browser/extensions/api/signed_in_devices/signed_in_devices_api.h"
 
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "base/guid.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "chrome/browser/extensions/api/signed_in_devices/signed_in_devices_api.h"
 #include "chrome/browser/extensions/extension_api_unittest.h"
 #include "chrome/browser/extensions/test_extension_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -19,6 +20,7 @@
 #include "components/browser_sync/browser/profile_sync_service_mock.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync_driver/device_info.h"
+#include "components/sync_driver/device_info_tracker.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/common/extension.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -36,10 +38,10 @@ class MockDeviceInfoTracker : public DeviceInfoTracker {
 
   bool IsSyncing() const override { return !devices_.empty(); }
 
-  scoped_ptr<DeviceInfo> GetDeviceInfo(
+  std::unique_ptr<DeviceInfo> GetDeviceInfo(
       const std::string& client_id) const override {
     NOTREACHED();
-    return scoped_ptr<DeviceInfo>();
+    return std::unique_ptr<DeviceInfo>();
   }
 
   static DeviceInfo* CloneDeviceInfo(const DeviceInfo* device_info) {
@@ -66,6 +68,11 @@ class MockDeviceInfoTracker : public DeviceInfoTracker {
   void AddObserver(Observer* observer) override { NOTREACHED(); }
 
   void RemoveObserver(Observer* observer) override { NOTREACHED(); }
+
+  int CountActiveDevices() const override {
+    NOTREACHED();
+    return 0;
+  }
 
   void Add(const DeviceInfo* device) { devices_.push_back(device); }
 
@@ -146,9 +153,9 @@ class ProfileSyncServiceMockForExtensionTests:
   MOCK_CONST_METHOD0(GetDeviceInfoTracker, DeviceInfoTracker*());
 };
 
-scoped_ptr<KeyedService> CreateProfileSyncServiceMock(
+std::unique_ptr<KeyedService> CreateProfileSyncServiceMock(
     content::BrowserContext* context) {
-  return make_scoped_ptr(new ProfileSyncServiceMockForExtensionTests(
+  return base::WrapUnique(new ProfileSyncServiceMockForExtensionTests(
       Profile::FromBrowserContext(context)));
 }
 
@@ -176,7 +183,7 @@ void VerifyDictionaryWithDeviceInfo(const base::DictionaryValue* actual_value,
   std::string public_id = GetPublicId(actual_value);
   device_info->set_public_id(public_id);
 
-  scoped_ptr<base::DictionaryValue> expected_value(device_info->ToValue());
+  std::unique_ptr<base::DictionaryValue> expected_value(device_info->ToValue());
   EXPECT_TRUE(expected_value->Equals(actual_value));
 }
 
@@ -218,8 +225,8 @@ TEST_F(ExtensionSignedInDevicesTest, GetAll) {
 
   EXPECT_CALL(*pss_mock, Shutdown());
 
-  scoped_ptr<base::ListValue> result(RunFunctionAndReturnList(
-      new SignedInDevicesGetFunction(), "[null]"));
+  std::unique_ptr<base::ListValue> result(
+      RunFunctionAndReturnList(new SignedInDevicesGetFunction(), "[null]"));
 
   // Ensure dictionary matches device info.
   VerifyDictionaryWithDeviceInfo(GetDictionaryFromList(0, result.get()),

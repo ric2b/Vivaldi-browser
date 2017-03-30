@@ -271,10 +271,18 @@ void InstallUtil::GetCriticalUpdateVersion(BrowserDistribution* dist,
 }
 
 bool InstallUtil::IsOSSupported() {
-  // We do not support anything prior to Windows 7.
+  // We do not support Win2K or older, or XP without service pack 2.
+  // NOTE(jarle@vivaldi.com): From Chr-50, XP and Vista are no longer supported.
   VLOG(1) << base::SysInfo::OperatingSystemName() << ' '
           << base::SysInfo::OperatingSystemVersion();
-  return base::win::GetVersion() >= base::win::VERSION_WIN7;
+  base::win::Version version = base::win::GetVersion();
+#if defined(VIVALDI_BUILD)
+  return (version >= base::win::VERSION_WIN7);
+#else
+  return (version > base::win::VERSION_XP) ||
+      ((version == base::win::VERSION_XP) &&
+       (base::win::OSInfo::GetInstance()->service_pack().major >= 2));
+#endif
 }
 
 void InstallUtil::AddInstallerResultItems(
@@ -615,11 +623,14 @@ base::string16 InstallUtil::GetCurrentDate() {
 
 // Open |path| with minimal access to obtain information about it, returning
 // true and populating |file| on success.
-// static
 bool InstallUtil::ProgramCompare::OpenForInfo(const base::FilePath& path,
-                                              base::File* file) {
+                                              base::File* file,
+                                              ComparisonType comparison_type) {
   DCHECK(file);
-  file->Initialize(path, base::File::FLAG_OPEN);
+  uint32_t flags = base::File::FLAG_OPEN;
+  if (comparison_type == ComparisonType::FILE_OR_DIRECTORY)
+    flags |= base::File::FLAG_BACKUP_SEMANTICS;
+  file->Initialize(path, flags);
   return file->IsValid();
 }
 
@@ -632,10 +643,15 @@ bool InstallUtil::ProgramCompare::GetInfo(const base::File& file,
 }
 
 InstallUtil::ProgramCompare::ProgramCompare(const base::FilePath& path_to_match)
+    : ProgramCompare(path_to_match, ComparisonType::FILE) {}
+
+InstallUtil::ProgramCompare::ProgramCompare(const base::FilePath& path_to_match,
+                                            ComparisonType comparison_type)
     : path_to_match_(path_to_match),
-      file_info_() {
+      file_info_(),
+      comparison_type_(comparison_type) {
   DCHECK(!path_to_match_.empty());
-  if (!OpenForInfo(path_to_match_, &file_)) {
+  if (!OpenForInfo(path_to_match_, &file_, comparison_type_)) {
     PLOG(WARNING) << "Failed opening " << path_to_match_.value()
                   << "; falling back to path string comparisons.";
   } else if (!GetInfo(file_, &file_info_)) {
@@ -679,8 +695,7 @@ bool InstallUtil::ProgramCompare::EvaluatePath(
   base::File file;
   BY_HANDLE_FILE_INFORMATION info = {};
 
-  return (OpenForInfo(path, &file) &&
-          GetInfo(file, &info) &&
+  return (OpenForInfo(path, &file, comparison_type_) && GetInfo(file, &info) &&
           info.dwVolumeSerialNumber == file_info_.dwVolumeSerialNumber &&
           info.nFileIndexHigh == file_info_.nFileIndexHigh &&
           info.nFileIndexLow == file_info_.nFileIndexLow);

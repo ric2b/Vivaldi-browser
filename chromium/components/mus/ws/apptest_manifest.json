@@ -1,5 +1,0 @@
-{
-  "url": "mojo://mus_apptests/",
-  "name": "Mus Apptests",
-  "capabilities": { "*": [ "*" ] }
-}

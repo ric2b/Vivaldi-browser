@@ -11,6 +11,7 @@ const char kVivaldiTabsToLinks[] = "vivaldi.tabs_to_links";
 const char kVivaldiLastTopSitesVacuumDate[] =
     "vivaldi.last_topsites_vacuum_date";
 const char kVivaldiTabZoom[] = "vivaldi.tab_zoom_enabled";
+const char kVivaldiHomepage[] = "vivaldi.home_page";
 
 #if defined(OS_MACOSX)
 const char kAppleKeyboardUIMode[] = "vivaldi.apple_keyboard_ui_mode";

@@ -5,8 +5,9 @@
 #ifndef CHROME_BROWSER_PASSWORD_MANAGER_SAVE_PASSWORD_INFOBAR_DELEGATE_H_
 #define CHROME_BROWSER_PASSWORD_MANAGER_SAVE_PASSWORD_INFOBAR_DELEGATE_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/timer/elapsed_timer.h"
 #include "chrome/browser/password_manager/password_manager_infobar_delegate.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
@@ -32,14 +33,10 @@ class SavePasswordInfoBarDelegate : public PasswordManagerInfoBarDelegate {
  public:
   // If we won't be showing the one-click signin infobar, creates a save
   // password infobar and delegate and adds the infobar to the InfoBarService
-  // for |web_contents|.  |uma_histogram_suffix| is empty, or one of the
-  // "group_X" suffixes used in the histogram names for infobar usage reporting;
-  // if empty, the usage is not reported, otherwise the suffix is used to choose
-  // the right histogram.
+  // for |web_contents|.
   static void Create(
       content::WebContents* web_contents,
-      scoped_ptr<password_manager::PasswordFormManager> form_to_save,
-      const std::string& uma_histogram_suffix);
+      std::unique_ptr<password_manager::PasswordFormManager> form_to_save);
 
   ~SavePasswordInfoBarDelegate() override;
 
@@ -56,26 +53,21 @@ class SavePasswordInfoBarDelegate : public PasswordManagerInfoBarDelegate {
   // Makes a ctor available in tests.
   SavePasswordInfoBarDelegate(
       content::WebContents* web_contents,
-      scoped_ptr<password_manager::PasswordFormManager> form_to_save,
-      const std::string& uma_histogram_suffix,
+      std::unique_ptr<password_manager::PasswordFormManager> form_to_save,
       bool is_smartlock_branding_enabled,
       bool should_show_first_run_experience);
 
  private:
   // The PasswordFormManager managing the form we're asking the user about,
   // and should update as per her decision.
-  scoped_ptr<password_manager::PasswordFormManager> form_to_save_;
+  std::unique_ptr<password_manager::PasswordFormManager> form_to_save_;
 
   // Used to track the results we get from the info bar.
-  password_manager::metrics_util::ResponseType infobar_response_;
+  password_manager::metrics_util::UIDismissalReason infobar_response_;
 
   // Measures the "Save password?" prompt lifetime. Used to report an UMA
   // signal.
   base::ElapsedTimer timer_;
-
-  // The group name corresponding to the domain name of |form_to_save_| if the
-  // form is on a monitored domain. Otherwise, an empty string.
-  const std::string uma_histogram_suffix_;
 
   // Records source from where infobar was triggered.
   // Infobar appearance (message, buttons) depends on value of this parameter.
@@ -90,7 +82,7 @@ class SavePasswordInfoBarDelegate : public PasswordManagerInfoBarDelegate {
 
 // Creates the platform-specific SavePassword InfoBar. This function is defined
 // in platform-specific .cc (or .mm) files.
-scoped_ptr<infobars::InfoBar> CreateSavePasswordInfoBar(
-    scoped_ptr<SavePasswordInfoBarDelegate> delegate);
+std::unique_ptr<infobars::InfoBar> CreateSavePasswordInfoBar(
+    std::unique_ptr<SavePasswordInfoBarDelegate> delegate);
 
 #endif  // CHROME_BROWSER_PASSWORD_MANAGER_SAVE_PASSWORD_INFOBAR_DELEGATE_H_

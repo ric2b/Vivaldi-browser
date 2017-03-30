@@ -13,6 +13,7 @@
 #include "apps/app_load_service.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -39,8 +40,9 @@
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_window.h"
@@ -144,6 +146,11 @@
 #include "chrome/browser/media/router/media_router_metrics.h"
 #endif
 
+#if defined(GOOGLE_CHROME_BUILD)
+#include "grit/theme_resources.h"
+#include "ui/base/resource/resource_bundle.h"
+#endif
+
 #include "app/vivaldi_apptools.h"
 
 using base::UserMetricsAction;
@@ -179,6 +186,13 @@ enum UmaEnumOpenLinkAsUser {
   OPEN_LINK_AS_USER_INACTIVE_PROFILE_MULTI_PROFILE_SESSION_ENUM_ID,
   OPEN_LINK_AS_USER_INACTIVE_PROFILE_SINGLE_PROFILE_SESSION_ENUM_ID,
   OPEN_LINK_AS_USER_LAST_ENUM_ID,
+};
+
+// State of other profiles when the "Open Link as User" context menu is shown.
+enum UmaEnumOpenLinkAsUserProfilesState {
+  OPEN_LINK_AS_USER_PROFILES_STATE_NO_OTHER_ACTIVE_PROFILES_ENUM_ID,
+  OPEN_LINK_AS_USER_PROFILES_STATE_OTHER_ACTIVE_PROFILES_ENUM_ID,
+  OPEN_LINK_AS_USER_PROFILES_STATE_LAST_ENUM_ID,
 };
 
 #if !defined(OS_CHROMEOS)
@@ -392,7 +406,7 @@ content::WebContents* GetWebContentsToUse(content::WebContents* web_contents) {
   return web_contents;
 }
 
-void WriteURLToClipboard(const GURL& url, const std::string& languages) {
+void WriteURLToClipboard(const GURL& url) {
   if (url.is_empty() || !url.is_valid())
     return;
 
@@ -402,7 +416,7 @@ void WriteURLToClipboard(const GURL& url, const std::string& languages) {
       url.SchemeIs(url::kMailToScheme)
           ? base::ASCIIToUTF16(url.path())
           : url_formatter::FormatUrl(
-                url, languages, url_formatter::kFormatUrlOmitNothing,
+                url, url_formatter::kFormatUrlOmitNothing,
                 net::UnescapeRule::NONE, nullptr, nullptr, nullptr);
 
   ui::ScopedClipboardWriter scw(ui::CLIPBOARD_TYPE_COPY_PASTE);
@@ -417,7 +431,7 @@ void WriteTextToClipboard(const base::string16& text) {
 bool g_custom_id_ranges_initialized = false;
 
 #if !defined(OS_CHROMEOS)
-void AddIconToLastMenuItem(gfx::Image icon, ui::SimpleMenuModel* menu) {
+void AddAvatarToLastMenuItem(gfx::Image icon, ui::SimpleMenuModel* menu) {
   int width = icon.Width();
   int height = icon.Height();
 
@@ -443,6 +457,21 @@ void AddIconToLastMenuItem(gfx::Image icon, ui::SimpleMenuModel* menu) {
   menu->SetIcon(menu->GetItemCount() - 1, sized_icon);
 }
 #endif  // !defined(OS_CHROMEOS)
+
+// Adds Google icon to the last added menu item. Used for Google-powered
+// services like translate and search.
+void AddGoogleIconToLastMenuItem(ui::SimpleMenuModel* menu) {
+#if defined(GOOGLE_CHROME_BUILD)
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableGoogleBrandedContextMenu) ||
+      base::FieldTrialList::FindFullName("GoogleBrandedContextMenu") ==
+          "branded") {
+    menu->SetIcon(
+        menu->GetItemCount() - 1,
+        ui::ResourceBundle::GetSharedInstance().GetImageNamed(IDR_GOOGLE_ICON));
+  }
+#endif  // defined(GOOGLE_CHROME_BUILD)
+}
 
 void OnProfileCreated(const GURL& link_url,
                       const content::Referrer& referrer,
@@ -490,6 +519,25 @@ bool RenderViewContextMenu::IsInternalResourcesURL(const GURL& url) {
   if (!url.SchemeIs(content::kChromeUIScheme))
     return false;
   return url.host() == chrome::kChromeUISyncResourcesHost;
+}
+
+// static
+void RenderViewContextMenu::AddSpellCheckServiceItem(ui::SimpleMenuModel* menu,
+                                                     bool is_checked) {
+  // When the Google branding experiment is enabled, we want to show an icon
+  // next to this item, but we can't show icons on check items.  So when the
+  // item is enabled show it as checked, and otherwise add it as a normal item
+  // (instead of a check item) so that, if necessary, we can add the Google
+  // icon.  (If the experiment is off, there's no harm in adding this as a
+  // normal item, as it will look identical to an unchecked check item.)
+  if (is_checked) {
+    menu->AddCheckItemWithStringId(IDC_CONTENT_CONTEXT_SPELLING_TOGGLE,
+                                   IDS_CONTENT_CONTEXT_SPELLING_ASK_GOOGLE);
+  } else {
+    menu->AddItemWithStringId(IDC_CONTENT_CONTEXT_SPELLING_TOGGLE,
+                              IDS_CONTENT_CONTEXT_SPELLING_ASK_GOOGLE);
+    AddGoogleIconToLastMenuItem(menu);
+  }
 }
 
 RenderViewContextMenu::RenderViewContextMenu(
@@ -926,57 +974,65 @@ void RenderViewContextMenu::AppendLinkItems() {
     if (g_browser_process->profile_manager() &&
         GetProfile()->GetProfileType() == Profile::REGULAR_PROFILE) {
       ProfileManager* profile_manager = g_browser_process->profile_manager();
-      const ProfileInfoCache& profile_info_cache =
-          profile_manager->GetProfileInfoCache();
-
       // Find all regular profiles other than the current one which have at
       // least one open window.
-      std::vector<size_t> target_profiles;
-      const size_t profile_count = profile_info_cache.GetNumberOfProfiles();
-      for (size_t profile_index = 0; profile_index < profile_count;
-           ++profile_index) {
-        base::FilePath profile_path =
-            profile_info_cache.GetPathOfProfileAtIndex(profile_index);
+      std::vector<ProfileAttributesEntry*> entries =
+          profile_manager->GetProfileAttributesStorage().
+              GetAllProfilesAttributesSortedByName();
+      std::vector<ProfileAttributesEntry*> target_profiles_entries;
+      for (ProfileAttributesEntry* entry : entries) {
+        base::FilePath profile_path = entry->GetPath();
         Profile* profile = profile_manager->GetProfileByPath(profile_path);
-        if ((profile != GetProfile()) &&
-            !profile_info_cache.IsOmittedProfileAtIndex(profile_index) &&
-            !profile_info_cache.ProfileIsSigninRequiredAtIndex(profile_index)) {
-          target_profiles.push_back(profile_index);
+        if (profile != GetProfile() &&
+            !entry->IsOmitted() && !entry->IsSigninRequired()) {
+          target_profiles_entries.push_back(entry);
           if (chrome::FindLastActiveWithProfile(profile))
             multiple_profiles_open_ = true;
         }
       }
 
-      if (!target_profiles.empty()) {
+      if (!target_profiles_entries.empty()) {
+        UmaEnumOpenLinkAsUserProfilesState profiles_state;
+        if (multiple_profiles_open_) {
+          profiles_state =
+              OPEN_LINK_AS_USER_PROFILES_STATE_OTHER_ACTIVE_PROFILES_ENUM_ID;
+        } else {
+          profiles_state =
+              OPEN_LINK_AS_USER_PROFILES_STATE_NO_OTHER_ACTIVE_PROFILES_ENUM_ID;
+        }
+        UMA_HISTOGRAM_ENUMERATION(
+            "RenderViewContextMenu.OpenLinkAsUserProfilesState", profiles_state,
+            OPEN_LINK_AS_USER_PROFILES_STATE_LAST_ENUM_ID);
+
         UMA_HISTOGRAM_ENUMERATION("RenderViewContextMenu.OpenLinkAsUserShown",
-                                  target_profiles.size(),
+                                  target_profiles_entries.size(),
                                   kOpenLinkAsUserMaxProfilesReported);
       }
 
-      if (target_profiles.size() == 1) {
-        size_t profile_index = target_profiles[0];
+      if (target_profiles_entries.size() == 1u) {
+        int menu_index = static_cast<int>(profile_link_paths_.size());
+        ProfileAttributesEntry* entry = target_profiles_entries.front();
+        profile_link_paths_.push_back(entry->GetPath());
         menu_model_.AddItem(
-            IDC_OPEN_LINK_IN_PROFILE_FIRST + profile_index,
-            l10n_util::GetStringFUTF16(
-                IDS_CONTENT_CONTEXT_OPENLINKINPROFILE,
-                profile_info_cache.GetNameOfProfileAtIndex(profile_index)));
-        AddIconToLastMenuItem(
-            profile_info_cache.GetAvatarIconOfProfileAtIndex(profile_index),
-            &menu_model_);
-      } else if (target_profiles.size() > 1) {
-        for (size_t profile_index : target_profiles) {
+            IDC_OPEN_LINK_IN_PROFILE_FIRST + menu_index,
+            l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_OPENLINKINPROFILE,
+                                       entry->GetName()));
+        AddAvatarToLastMenuItem(entry->GetAvatarIcon(), &menu_model_);
+      } else if (target_profiles_entries.size() > 1u) {
+        for (ProfileAttributesEntry* entry : target_profiles_entries) {
+          int menu_index = static_cast<int>(profile_link_paths_.size());
           // In extreme cases, we might have more profiles than available
           // command ids. In that case, just stop creating new entries - the
           // menu is probably useless at this point already.
-          if (IDC_OPEN_LINK_IN_PROFILE_FIRST + profile_index >
-              IDC_OPEN_LINK_IN_PROFILE_LAST)
+          if (IDC_OPEN_LINK_IN_PROFILE_FIRST + menu_index >
+              IDC_OPEN_LINK_IN_PROFILE_LAST) {
             break;
+          }
+          profile_link_paths_.push_back(entry->GetPath());
           profile_link_submenu_model_.AddItem(
-              IDC_OPEN_LINK_IN_PROFILE_FIRST + profile_index,
-              profile_info_cache.GetNameOfProfileAtIndex(profile_index));
-          AddIconToLastMenuItem(
-              profile_info_cache.GetAvatarIconOfProfileAtIndex(profile_index),
-              &profile_link_submenu_model_);
+              IDC_OPEN_LINK_IN_PROFILE_FIRST + menu_index, entry->GetName());
+          AddAvatarToLastMenuItem(entry->GetAvatarIcon(),
+                                  &profile_link_submenu_model_);
         }
         menu_model_.AddSubMenuWithStringId(
             IDC_CONTENT_CONTEXT_OPENLINKINPROFILE,
@@ -1048,6 +1104,10 @@ void RenderViewContextMenu::AppendSearchWebForImageItems() {
         IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE,
         l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_SEARCHWEBFORIMAGE,
                                    default_provider->short_name()));
+    if (default_provider->image_url_ref().HasGoogleBaseURLs(
+            service->search_terms_data())) {
+      AddGoogleIconToLastMenuItem(&menu_model_);
+    }
   }
 }
 
@@ -1128,6 +1188,7 @@ void RenderViewContextMenu::AppendPageItems() {
     menu_model_.AddItem(
         IDC_CONTENT_CONTEXT_TRANSLATE,
         l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_TRANSLATE, language));
+    AddGoogleIconToLastMenuItem(&menu_model_);
   }
 }
 
@@ -1147,8 +1208,7 @@ void RenderViewContextMenu::AppendPrintItem() {
 }
 
 void RenderViewContextMenu::AppendMediaRouterItem() {
-  if (!browser_context_->IsOffTheRecord() &&
-      media_router::MediaRouterEnabled(browser_context_)) {
+  if (media_router::MediaRouterEnabled(browser_context_)) {
     menu_model_.AddItemWithStringId(IDC_ROUTE_MEDIA,
                                     IDS_MEDIA_ROUTER_MENU_ITEM_TITLE);
   }
@@ -1206,6 +1266,12 @@ void RenderViewContextMenu::AppendSearchProvider() {
         l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_SEARCHWEBFOR,
                                    default_provider->short_name(),
                                    printable_selection_text));
+    TemplateURLService* service =
+        TemplateURLServiceFactory::GetForProfile(GetProfile());
+    if (default_provider->url_ref().HasGoogleBaseURLs(
+            service->search_terms_data())) {
+      AddGoogleIconToLastMenuItem(&menu_model_);
+    }
   } else {
     if ((selection_navigation_url_ != params_.link_url) &&
         ChildProcessSecurityPolicy::GetInstance()->IsWebSafeScheme(
@@ -1641,7 +1707,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
 
       Browser* browser =
           chrome::FindBrowserWithWebContents(source_web_contents_);
-      if (!browser || browser->profile()->IsOffTheRecord())
+      if (!browser)
         return false;
 
       // Disable the command if there is an active modal dialog.
@@ -1698,7 +1764,8 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
 
   // Process extension menu items.
   if (ContextMenuMatcher::IsExtensionsCustomCommandId(id)) {
-    extension_items_.ExecuteCommand(id, source_web_contents_, params_);
+    extension_items_.ExecuteCommand(id, source_web_contents_,
+                                    GetRenderFrameHost(), params_);
     return;
   }
 
@@ -1723,14 +1790,12 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
 
   if (id >= IDC_OPEN_LINK_IN_PROFILE_FIRST &&
       id <= IDC_OPEN_LINK_IN_PROFILE_LAST) {
-    ProfileManager* profile_manager = g_browser_process->profile_manager();
-    const ProfileInfoCache& profile_info_cache =
-        profile_manager->GetProfileInfoCache();
+    size_t index = static_cast<size_t>(id - IDC_OPEN_LINK_IN_PROFILE_FIRST);
+    DCHECK_LE(index, profile_link_paths_.size());
+    base::FilePath profile_path = profile_link_paths_[index];
 
-    base::FilePath profile_path = profile_info_cache.GetPathOfProfileAtIndex(
-        id - IDC_OPEN_LINK_IN_PROFILE_FIRST);
-
-    Profile* profile = profile_manager->GetProfileByPath(profile_path);
+    Profile* profile =
+        g_browser_process->profile_manager()->GetProfileByPath(profile_path);
     UmaEnumOpenLinkAsUser profile_state;
     if (chrome::FindLastActiveWithProfile(profile)) {
       profile_state = OPEN_LINK_AS_USER_ACTIVE_PROFILE_ENUM_ID;
@@ -1982,7 +2047,7 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
 
       Browser* browser =
           chrome::FindBrowserWithWebContents(source_web_contents_);
-      DCHECK(browser && !browser->profile()->IsOffTheRecord());
+      DCHECK(browser);
 
       media_router::MediaRouterDialogController* dialog_controller =
           media_router::MediaRouterDialogController::GetOrCreateForWebContents(
@@ -2153,6 +2218,10 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
   }
 }
 
+void RenderViewContextMenu::AddSpellCheckServiceItem(bool is_checked) {
+  AddSpellCheckServiceItem(&menu_model_, is_checked);
+}
+
 ProtocolHandlerRegistry::ProtocolHandlerList
     RenderViewContextMenu::GetHandlersForLinkUrl() {
   ProtocolHandlerRegistry::ProtocolHandlerList handlers =
@@ -2246,8 +2315,7 @@ void RenderViewContextMenu::Inspect(int x, int y) {
 }
 
 void RenderViewContextMenu::WriteURLToClipboard(const GURL& url) {
-  ::WriteURLToClipboard(
-      url, GetPrefs(browser_context_)->GetString(prefs::kAcceptLanguages));
+  ::WriteURLToClipboard(url);
 }
 
 void RenderViewContextMenu::MediaPlayerActionAt(

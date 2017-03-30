@@ -5,7 +5,10 @@
 #ifndef COMPONENTS_SYNC_DRIVER_NON_BLOCKING_DATA_TYPE_CONTROLLER_H_
 #define COMPONENTS_SYNC_DRIVER_NON_BLOCKING_DATA_TYPE_CONTROLLER_H_
 
+#include <string>
+
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/sync_driver/data_type_controller.h"
 #include "sync/internal_api/public/base/model_type.h"
@@ -45,7 +48,14 @@ class NonBlockingDataTypeController : public sync_driver::DataTypeController {
       const syncer::SyncError& error) override;
 
   // DataTypeController interface.
+  bool ShouldLoadModelBeforeConfigure() const override;
   void LoadModels(const ModelLoadCallback& model_load_callback) override;
+
+  // Registers non-blocking data type with sync backend. In the process the
+  // activation context is passed to ModelTypeRegistry, where ModelTypeWorker
+  // gets created and connected with ModelTypeProcessor.
+  void RegisterWithBackend(
+      sync_driver::BackendDataTypeConfigurer* configurer) override;
   void StartAssociating(const StartCallback& start_callback) override;
   void ActivateDataType(
       sync_driver::BackendDataTypeConfigurer* configurer) override;
@@ -59,10 +69,6 @@ class NonBlockingDataTypeController : public sync_driver::DataTypeController {
  protected:
   // DataTypeController is RefCounted.
   ~NonBlockingDataTypeController() override;
-
-  // Returns SharedModelTypeProcessor associated with the controller.
-  // The weak pointer should be used only on the model thread.
-  base::WeakPtr<syncer_v2::SharedModelTypeProcessor> type_processor() const;
 
   // Returns true if the call is made on UI thread.
   bool BelongsToUIThread() const;
@@ -78,15 +84,11 @@ class NonBlockingDataTypeController : public sync_driver::DataTypeController {
   virtual void RunOnUIThread(const tracked_objects::Location& from_here,
                              const base::Closure& task) = 0;
 
-  // The function will create SharedModelTypeProcessor on model thread.
-  void InitializeProcessor();
-
  private:
   void RecordStartFailure(ConfigureResult result) const;
   void RecordUnrecoverableError();
   void ReportLoadModelError(ConfigureResult result,
                             const syncer::SyncError& error);
-  void InitializeProcessorOnModelThread();
 
   // If the DataType controller is waiting for models to load, once the models
   // are loaded this function should be called to let the base class
@@ -106,6 +108,10 @@ class NonBlockingDataTypeController : public sync_driver::DataTypeController {
       syncer::SyncError error,
       scoped_ptr<syncer_v2::ActivationContext> activation_context);
 
+  // The function LoadModels() will call this function to do some works which
+  // need to be done on model thread.
+  void LoadModelsOnModelThread();
+
   // Model Type for this controller
   syncer::ModelType model_type_;
 
@@ -121,9 +127,6 @@ class NonBlockingDataTypeController : public sync_driver::DataTypeController {
   // Controller receives |activation_context_| from SharedModelTypeProcessor
   // callback and must temporarily own it until ActivateDataType is called.
   scoped_ptr<syncer_v2::ActivationContext> activation_context_;
-
-  // A weak pointer to the actual SharedModelTypeProcessor
-  base::WeakPtr<syncer_v2::SharedModelTypeProcessor> type_processor_;
 
   DISALLOW_COPY_AND_ASSIGN(NonBlockingDataTypeController);
 };

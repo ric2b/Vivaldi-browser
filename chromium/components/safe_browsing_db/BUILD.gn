@@ -30,6 +30,7 @@ group("safe_browsing_db_shared") {
 group("safe_browsing_db") {
   deps = [
     ":safe_browsing_db_shared",
+    ":v4_update_protocol_manager",
   ]
 }
 
@@ -123,22 +124,6 @@ source_set("safe_browsing_api_handler_util") {
   ]
 }
 
-source_set("util") {
-  sources = [
-    "util.cc",
-    "util.h",
-  ]
-  deps = [
-    "//base",
-    "//crypto",
-    "//net",
-  ]
-  if (is_win) {
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    cflags = [ "/wd4267" ]  # Conversion from size_t to 'type'.
-  }
-}
-
 source_set("test_database_manager") {
   sources = [
     "test_database_manager.cc",
@@ -149,6 +134,24 @@ source_set("test_database_manager") {
     "//base:base",
     "//net",
   ]
+}
+
+source_set("util") {
+  sources = [
+    "util.cc",
+    "util.h",
+  ]
+  deps = [
+    "//base",
+    "//base:base",
+    "//crypto",
+    "//net",
+    "//url:url",
+  ]
+  if (is_win) {
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    cflags = [ "/wd4267" ]  # Conversion from size_t to 'type'.
+  }
 }
 
 source_set("v4_get_hash_protocol_manager") {
@@ -168,12 +171,45 @@ source_set("v4_get_hash_protocol_manager") {
   ]
 }
 
+source_set("v4_local_database_manager") {
+  sources = [
+    "v4_local_database_manager.cc",
+    "v4_local_database_manager.h",
+  ]
+  deps = [
+    ":database_manager",
+    ":hit_report",
+    ":v4_protocol_manager_util",
+    ":v4_update_protocol_manager",
+    "//base",
+    "//content/public/browser",
+    "//net",
+    "//url:url",
+  ]
+}
+
 source_set("v4_protocol_manager_util") {
   sources = [
     "v4_protocol_manager_util.cc",
     "v4_protocol_manager_util.h",
   ]
   deps = [
+    ":proto",
+    "//base",
+    "//net",
+    "//url:url",
+  ]
+}
+
+source_set("v4_update_protocol_manager") {
+  sources = [
+    "v4_update_protocol_manager.cc",
+    "v4_update_protocol_manager.h",
+  ]
+  deps = [
+    ":proto",
+    ":util",
+    ":v4_protocol_manager_util",
     "//base",
     "//net",
     "//url:url",
@@ -187,13 +223,16 @@ source_set("unit_tests") {
     "util_unittest.cc",
     "v4_get_hash_protocol_manager_unittest.cc",
     "v4_protocol_manager_util_unittest.cc",
+    "v4_update_protocol_manager_unittest.cc",
   ]
   deps = [
     ":prefix_set",
     ":proto",
     ":util",
     ":v4_get_hash_protocol_manager",
+    ":v4_local_database_manager",
     ":v4_protocol_manager_util",
+    ":v4_update_protocol_manager",
     "//base",
     "//net",
     "//net:test_support",

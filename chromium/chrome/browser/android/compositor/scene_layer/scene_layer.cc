@@ -19,10 +19,7 @@ SceneLayer* SceneLayer::FromJavaObject(JNIEnv* env, jobject jobj) {
 }
 
 SceneLayer::SceneLayer(JNIEnv* env, jobject jobj)
-    : SceneLayer(env,
-                 jobj,
-                 cc::Layer::Create(content::Compositor::LayerSettings())) {
-}
+    : SceneLayer(env, jobj, cc::Layer::Create()) {}
 
 SceneLayer::SceneLayer(JNIEnv* env,
                        jobject jobj,

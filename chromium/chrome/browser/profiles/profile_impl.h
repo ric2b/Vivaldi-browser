@@ -7,13 +7,13 @@
 #ifndef CHROME_BROWSER_PROFILES_PROFILE_IMPL_H_
 #define CHROME_BROWSER_PROFILES_PROFILE_IMPL_H_
 
+#include <memory>
 #include <string>
 
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
@@ -78,13 +78,11 @@ class ProfileImpl : public Profile {
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // content::BrowserContext implementation:
-  scoped_ptr<content::ZoomLevelDelegate> CreateZoomLevelDelegate(
+  std::unique_ptr<content::ZoomLevelDelegate> CreateZoomLevelDelegate(
       const base::FilePath& partition_path) override;
   base::FilePath GetPath() const override;
   content::DownloadManagerDelegate* GetDownloadManagerDelegate() override;
   net::URLRequestContextGetter* GetRequestContext() override;
-  net::URLRequestContextGetter* GetRequestContextForRenderProcess(
-      int renderer_child_id) override;
   net::URLRequestContextGetter* GetMediaRequestContext() override;
   net::URLRequestContextGetter* GetMediaRequestContextForRenderProcess(
       int renderer_child_id) override;
@@ -98,6 +96,14 @@ class ProfileImpl : public Profile {
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionManager* GetPermissionManager() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
+  net::URLRequestContextGetter* CreateRequestContext(
+      content::ProtocolHandlerMap* protocol_handlers,
+      content::URLRequestInterceptorScopedVector request_interceptors) override;
+  net::URLRequestContextGetter* CreateRequestContextForStoragePartition(
+      const base::FilePath& partition_path,
+      bool in_memory,
+      content::ProtocolHandlerMap* protocol_handlers,
+      content::URLRequestInterceptorScopedVector request_interceptors) override;
 
   // Profile implementation:
   scoped_refptr<base::SequencedTaskRunner> GetIOTaskRunner() override;
@@ -122,14 +128,6 @@ class ProfileImpl : public Profile {
   net::SSLConfigService* GetSSLConfigService() override;
   bool IsSameProfile(Profile* profile) override;
   base::Time GetStartTime() const override;
-  net::URLRequestContextGetter* CreateRequestContext(
-      content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors) override;
-  net::URLRequestContextGetter* CreateRequestContextForStoragePartition(
-      const base::FilePath& partition_path,
-      bool in_memory,
-      content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors) override;
   base::FilePath last_selected_directory() override;
   void set_last_selected_directory(const base::FilePath& path) override;
   chrome_browser_net::Predictor* GetNetworkPredictor() override;
@@ -194,8 +192,8 @@ class ProfileImpl : public Profile {
 
   PrefProxyConfigTracker* CreateProxyConfigTracker();
 
-  scoped_ptr<domain_reliability::DomainReliabilityMonitor>
-      CreateDomainReliabilityMonitor(PrefService* local_state);
+  std::unique_ptr<domain_reliability::DomainReliabilityMonitor>
+  CreateDomainReliabilityMonitor(PrefService* local_state);
 
   PrefChangeRegistrar pref_change_registrar_;
 
@@ -213,29 +211,29 @@ class ProfileImpl : public Profile {
 // This can be removed once |prefs_| becomes a KeyedService too.
 // |profile_policy_connector_| in turn depends on |cloud_policy_manager_|,
 // which depends on |schema_registry_service_|.
-#if defined(ENABLE_CONFIGURATION_POLICY)
-  scoped_ptr<policy::SchemaRegistryService> schema_registry_service_;
-  scoped_ptr<policy::CloudPolicyManager> cloud_policy_manager_;
-#endif
-  scoped_ptr<policy::ProfilePolicyConnector> profile_policy_connector_;
+  std::unique_ptr<policy::SchemaRegistryService> schema_registry_service_;
+  std::unique_ptr<policy::CloudPolicyManager> cloud_policy_manager_;
+  std::unique_ptr<policy::ProfilePolicyConnector> profile_policy_connector_;
 
   // Keep |pref_validation_delegate_| above |prefs_| so that the former outlives
   // the latter.
-  scoped_ptr<TrackedPreferenceValidationDelegate> pref_validation_delegate_;
+  std::unique_ptr<TrackedPreferenceValidationDelegate>
+      pref_validation_delegate_;
 
   // Keep |prefs_| on top for destruction order because |extension_prefs_|,
   // |net_pref_observer_|, |io_data_| and others store pointers to |prefs_| and
   // shall be destructed first.
   scoped_refptr<user_prefs::PrefRegistrySyncable> pref_registry_;
-  scoped_ptr<syncable_prefs::PrefServiceSyncable> prefs_;
-  scoped_ptr<syncable_prefs::PrefServiceSyncable> otr_prefs_;
+  std::unique_ptr<syncable_prefs::PrefServiceSyncable> prefs_;
+  std::unique_ptr<syncable_prefs::PrefServiceSyncable> otr_prefs_;
   ProfileImplIOData::Handle io_data_;
 #if defined(ENABLE_EXTENSIONS)
   scoped_refptr<ExtensionSpecialStoragePolicy>
       extension_special_storage_policy_;
 #endif
-  scoped_ptr<NetPrefObserver> net_pref_observer_;
-  scoped_ptr<ssl_config::SSLConfigServiceManager> ssl_config_service_manager_;
+  std::unique_ptr<NetPrefObserver> net_pref_observer_;
+  std::unique_ptr<ssl_config::SSLConfigServiceManager>
+      ssl_config_service_manager_;
 
   // Exit type the last time the profile was opened. This is set only once from
   // prefs.
@@ -245,18 +243,18 @@ class ProfileImpl : public Profile {
   base::OneShotTimer create_session_service_timer_;
 #endif
 
-  scoped_ptr<Profile> off_the_record_profile_;
+  std::unique_ptr<Profile> off_the_record_profile_;
 
   // See GetStartTime for details.
   base::Time start_time_;
 
 #if defined(OS_CHROMEOS)
-  scoped_ptr<chromeos::Preferences> chromeos_preferences_;
+  std::unique_ptr<chromeos::Preferences> chromeos_preferences_;
 
-  scoped_ptr<chromeos::LocaleChangeGuard> locale_change_guard_;
+  std::unique_ptr<chromeos::LocaleChangeGuard> locale_change_guard_;
 #endif
 
-  scoped_ptr<PrefProxyConfigTracker> pref_proxy_config_tracker_;
+  std::unique_ptr<PrefProxyConfigTracker> pref_proxy_config_tracker_;
 
   // STOP!!!! DO NOT ADD ANY MORE ITEMS HERE!!!!
   //

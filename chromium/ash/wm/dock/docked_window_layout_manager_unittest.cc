@@ -31,6 +31,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/hit_test.h"
+#include "ui/display/manager/display_layout.h"
 #include "ui/gfx/screen.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -209,8 +210,8 @@ class DockedWindowLayoutManagerTest
   }
 
  private:
-  scoped_ptr<WindowResizer> resizer_;
-  scoped_ptr<test::ShelfViewTestAPI> shelf_view_test_;
+  std::unique_ptr<WindowResizer> resizer_;
+  std::unique_ptr<test::ShelfViewTestAPI> shelf_view_test_;
   ui::wm::WindowType window_type_;
 
   // Location at start of the drag in |window->parent()|'s coordinates.
@@ -226,7 +227,7 @@ TEST_P(DockedWindowLayoutManagerTest, AddOneWindow) {
     return;
 
   gfx::Rect bounds(0, 0, 201, 201);
-  scoped_ptr<aura::Window> window(CreateTestWindow(bounds));
+  std::unique_ptr<aura::Window> window(CreateTestWindow(bounds));
   DragRelativeToEdge(DOCKED_EDGE_RIGHT, window.get(), 0);
 
   // The window should be attached and docked at the right edge.
@@ -243,7 +244,7 @@ TEST_P(DockedWindowLayoutManagerTest, DockedWindowBoundsDontChange) {
     return;
 
   gfx::Rect bounds(0, 0, 201, 201);
-  scoped_ptr<aura::Window> window(CreateTestWindow(bounds));
+  std::unique_ptr<aura::Window> window(CreateTestWindow(bounds));
   DragRelativeToEdge(DOCKED_EDGE_RIGHT, window.get(), 0);
 
   // The window should be attached and docked at the right edge.
@@ -261,7 +262,7 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingLeft) {
     return;
 
   gfx::Rect bounds(0, 0, 201, 201);
-  scoped_ptr<aura::Window> window(CreateTestWindow(bounds));
+  std::unique_ptr<aura::Window> window(CreateTestWindow(bounds));
   DragRelativeToEdge(DOCKED_EDGE_LEFT, window.get(), 0);
 
   // The window should be attached and snapped to the right side of the screen.
@@ -273,7 +274,7 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingLeft) {
       window->parent()->layout_manager());
 
   // Create two additional windows and test their auto-placement
-  scoped_ptr<aura::Window> window1(CreateTestWindowInShellWithId(1));
+  std::unique_ptr<aura::Window> window1(CreateTestWindowInShellWithId(1));
   gfx::Rect desktop_area = window1->parent()->bounds();
   wm::GetWindowState(window1.get())->set_window_position_managed(true);
   window1->Hide();
@@ -286,7 +287,7 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingLeft) {
        min_dock_gap() - window1->bounds().width()) / 2) +
       ",32 231x320", window1->bounds().ToString());
 
-  scoped_ptr<aura::Window> window2(CreateTestWindowInShellWithId(2));
+  std::unique_ptr<aura::Window> window2(CreateTestWindowInShellWithId(2));
   wm::GetWindowState(window2.get())->set_window_position_managed(true);
   // To avoid any auto window manager changes due to SetBounds, the window
   // gets first hidden and then shown again.
@@ -311,7 +312,7 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingRight) {
     return;
 
   gfx::Rect bounds(0, 0, 201, 201);
-  scoped_ptr<aura::Window> window(CreateTestWindow(bounds));
+  std::unique_ptr<aura::Window> window(CreateTestWindow(bounds));
   DragRelativeToEdge(DOCKED_EDGE_RIGHT, window.get(), 0);
 
   // The window should be attached and snapped to the right side of the screen.
@@ -323,7 +324,7 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingRight) {
       window->parent()->layout_manager());
 
   // Create two additional windows and test their auto-placement
-  scoped_ptr<aura::Window> window1(CreateTestWindowInShellWithId(1));
+  std::unique_ptr<aura::Window> window1(CreateTestWindowInShellWithId(1));
   gfx::Rect desktop_area = window1->parent()->bounds();
   wm::GetWindowState(window1.get())->set_window_position_managed(true);
   window1->Hide();
@@ -336,7 +337,7 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingRight) {
        min_dock_gap() - window1->bounds().width()) / 2) +
       ",32 231x320", window1->bounds().ToString());
 
-  scoped_ptr<aura::Window> window2(CreateTestWindowInShellWithId(2));
+  std::unique_ptr<aura::Window> window2(CreateTestWindowInShellWithId(2));
   wm::GetWindowState(window2.get())->set_window_position_managed(true);
   // To avoid any auto window manager changes due to SetBounds, the window
   // gets first hidden and then shown again.
@@ -364,7 +365,7 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingRightSecondScreen) {
   UpdateDisplay("600x600,600x600");
 
   gfx::Rect bounds(600, 0, 201, 201);
-  scoped_ptr<aura::Window> window(CreateTestWindow(bounds));
+  std::unique_ptr<aura::Window> window(CreateTestWindow(bounds));
   // Drag pointer to the right edge of the second screen.
   DragRelativeToEdge(DOCKED_EDGE_RIGHT, window.get(), 0);
 
@@ -378,7 +379,7 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingRightSecondScreen) {
 
   // Create two additional windows and test their auto-placement
   bounds = gfx::Rect(616, 32, 231, 320);
-  scoped_ptr<aura::Window> window1(
+  std::unique_ptr<aura::Window> window1(
       CreateTestWindowInShellWithDelegate(nullptr, 1, bounds));
   gfx::Rect desktop_area = window1->parent()->bounds();
   wm::GetWindowState(window1.get())->set_window_position_managed(true);
@@ -392,7 +393,7 @@ TEST_P(DockedWindowLayoutManagerTest, AutoPlacingRightSecondScreen) {
       ",32 231x320", window1->GetBoundsInScreen().ToString());
 
   bounds = gfx::Rect(632, 48, 256, 512);
-  scoped_ptr<aura::Window> window2(
+  std::unique_ptr<aura::Window> window2(
       CreateTestWindowInShellWithDelegate(nullptr, 2, bounds));
   wm::GetWindowState(window2.get())->set_window_position_managed(true);
   // To avoid any auto window manager changes due to SetBounds, the window
@@ -414,8 +415,8 @@ TEST_P(DockedWindowLayoutManagerTest, AddTwoWindows) {
   if (!SupportsHostWindowResize())
     return;
 
-  scoped_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
-  scoped_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 210, 202)));
+  std::unique_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
+  std::unique_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 210, 202)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w1.get(), 20);
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w2.get(), 300);
 
@@ -443,8 +444,8 @@ TEST_P(DockedWindowLayoutManagerTest, TwoWindowsDragging) {
   if (!SupportsHostWindowResize())
     return;
 
-  scoped_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
-  scoped_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 210, 202)));
+  std::unique_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
+  std::unique_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 210, 202)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w1.get(), 20);
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w2.get(), 300);
 
@@ -478,11 +479,11 @@ TEST_P(DockedWindowLayoutManagerTest, ThreeWindowsDragging) {
     return;
   UpdateDisplay("600x1000");
 
-  scoped_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 310)));
+  std::unique_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 310)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w1.get(), 20);
-  scoped_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 210, 310)));
+  std::unique_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 210, 310)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w2.get(), 500);
-  scoped_ptr<aura::Window> w3(CreateTestWindow(gfx::Rect(0, 0, 220, 310)));
+  std::unique_ptr<aura::Window> w3(CreateTestWindow(gfx::Rect(0, 0, 220, 310)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w3.get(), 600);
 
   // All windows should be attached and snapped to the right side of the screen.
@@ -544,13 +545,16 @@ TEST_P(DockedWindowLayoutManagerTest, ThreeWindowsDraggingSecondScreen) {
   // Layout the secondary display to the bottom of the primary.
   ASSERT_GT(gfx::Screen::GetScreen()->GetNumDisplays(), 1);
   Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
-      test::CreateDisplayLayout(DisplayPlacement::BOTTOM, 0));
+      test::CreateDisplayLayout(display::DisplayPlacement::BOTTOM, 0));
 
-  scoped_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 1000, 201, 310)));
+  std::unique_ptr<aura::Window> w1(
+      CreateTestWindow(gfx::Rect(0, 1000, 201, 310)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w1.get(), 1000 + 20);
-  scoped_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 1000, 210, 310)));
+  std::unique_ptr<aura::Window> w2(
+      CreateTestWindow(gfx::Rect(0, 1000, 210, 310)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w2.get(), 1000 + 500);
-  scoped_ptr<aura::Window> w3(CreateTestWindow(gfx::Rect(0, 1000, 220, 310)));
+  std::unique_ptr<aura::Window> w3(
+      CreateTestWindow(gfx::Rect(0, 1000, 220, 310)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w3.get(), 1000 + 600);
 
   // All windows should be attached and snapped to the right side of the screen.
@@ -607,8 +611,8 @@ TEST_P(DockedWindowLayoutManagerTest, TwoWindowsWidthNew) {
   if (!SupportsHostWindowResize())
     return;
 
-  scoped_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
-  scoped_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 280, 202)));
+  std::unique_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
+  std::unique_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 280, 202)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w1.get(), 20);
   // The first window should get resized to ideal width.
   EXPECT_EQ(ideal_width(), w1->bounds().width());
@@ -623,9 +627,9 @@ TEST_P(DockedWindowLayoutManagerTest, TwoWindowsWidthNonResizableFirst) {
   if (!SupportsHostWindowResize())
     return;
 
-  scoped_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
+  std::unique_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
   w1->SetProperty(aura::client::kCanResizeKey, false);
-  scoped_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 280, 202)));
+  std::unique_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 280, 202)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w1.get(), 20);
   // The first window should not get resized.
   EXPECT_EQ(201, w1->bounds().width());
@@ -640,8 +644,8 @@ TEST_P(DockedWindowLayoutManagerTest, TwoWindowsWidthNonResizableSecond) {
   if (!SupportsHostWindowResize())
     return;
 
-  scoped_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
-  scoped_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 280, 202)));
+  std::unique_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
+  std::unique_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 280, 202)));
   w2->SetProperty(aura::client::kCanResizeKey, false);
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w1.get(), 20);
   // The first window should get resized to ideal width.
@@ -662,12 +666,12 @@ TEST_P(DockedWindowLayoutManagerTest, TwoWindowsWidthRestrictions) {
 
   aura::test::TestWindowDelegate delegate1;
   delegate1.set_maximum_size(gfx::Size(240, 0));
-  scoped_ptr<aura::Window> w1(CreateTestWindowWithDelegate(
-      gfx::Rect(0, 0, 201, 201), &delegate1));
+  std::unique_ptr<aura::Window> w1(
+      CreateTestWindowWithDelegate(gfx::Rect(0, 0, 201, 201), &delegate1));
   aura::test::TestWindowDelegate delegate2;
   delegate2.set_minimum_size(gfx::Size(260, 0));
-  scoped_ptr<aura::Window> w2(CreateTestWindowWithDelegate(
-      gfx::Rect(0, 0, 280, 202), &delegate2));
+  std::unique_ptr<aura::Window> w2(
+      CreateTestWindowWithDelegate(gfx::Rect(0, 0, 280, 202), &delegate2));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w1.get(), 20);
   // The first window should get resized to its maximum width.
   EXPECT_EQ(240, w1->bounds().width());
@@ -687,8 +691,8 @@ TEST_P(DockedWindowLayoutManagerTest, WidthMoreThanMax) {
 
   aura::test::TestWindowDelegate delegate;
   delegate.set_minimum_size(gfx::Size(400, 0));
-  scoped_ptr<aura::Window> window(CreateTestWindowWithDelegate(
-      gfx::Rect(0, 0, 400, 201), &delegate));
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindowWithDelegate(gfx::Rect(0, 0, 400, 201), &delegate));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, window.get(), 20);
 
   // Secondary drag ensures that we are testing the minimum size restriction
@@ -709,11 +713,11 @@ TEST_P(DockedWindowLayoutManagerTest, ThreeWindowsMinimize) {
   if (!SupportsHostWindowResize())
     return;
 
-  scoped_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
+  std::unique_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w1.get(), 20);
-  scoped_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 210, 202)));
+  std::unique_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 210, 202)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w2.get(), 200);
-  scoped_ptr<aura::Window> w3(CreateTestWindow(gfx::Rect(0, 0, 220, 204)));
+  std::unique_ptr<aura::Window> w3(CreateTestWindow(gfx::Rect(0, 0, 220, 204)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w3.get(), 300);
 
   // The last two windows should be attached and snapped to the right edge.
@@ -746,9 +750,9 @@ TEST_P(DockedWindowLayoutManagerTest, ThreeWindowsSplitHeightEvenly) {
     return;
 
   UpdateDisplay("600x1000");
-  scoped_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
+  std::unique_ptr<aura::Window> w1(CreateTestWindow(gfx::Rect(0, 0, 201, 201)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w1.get(), 20);
-  scoped_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 210, 202)));
+  std::unique_ptr<aura::Window> w2(CreateTestWindow(gfx::Rect(0, 0, 210, 202)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w2.get(), 200);
 
   // The two windows should be attached and snapped to the right edge.
@@ -769,7 +773,7 @@ TEST_P(DockedWindowLayoutManagerTest, ThreeWindowsSplitHeightEvenly) {
               min_dock_gap() * 2);
 
   // Create and dock the third window.
-  scoped_ptr<aura::Window> w3(CreateTestWindow(gfx::Rect(0, 0, 220, 204)));
+  std::unique_ptr<aura::Window> w3(CreateTestWindow(gfx::Rect(0, 0, 220, 204)));
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w3.get(), 300);
 
   // All three windows should be docked and snapped to the right edge.
@@ -797,13 +801,13 @@ TEST_P(DockedWindowLayoutManagerTest, TwoWindowsHeightRestrictions) {
   aura::test::TestWindowDelegate delegate1;
   delegate1.set_minimum_size(gfx::Size(0, 300));
   delegate1.set_maximum_size(gfx::Size(0, 300));
-  scoped_ptr<aura::Window> w1(CreateTestWindowWithDelegate(
-      gfx::Rect(0, 0, 201, 300), &delegate1));
+  std::unique_ptr<aura::Window> w1(
+      CreateTestWindowWithDelegate(gfx::Rect(0, 0, 201, 300), &delegate1));
   // The second window has maximum height.
   aura::test::TestWindowDelegate delegate2;
   delegate2.set_maximum_size(gfx::Size(0, 100));
-  scoped_ptr<aura::Window> w2(CreateTestWindowWithDelegate(
-      gfx::Rect(0, 0, 280, 90), &delegate2));
+  std::unique_ptr<aura::Window> w2(
+      CreateTestWindowWithDelegate(gfx::Rect(0, 0, 280, 90), &delegate2));
 
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w1.get(), 20);
   DragToVerticalPositionAndToEdge(DOCKED_EDGE_RIGHT, w2.get(), 200);
@@ -838,7 +842,7 @@ TEST_P(DockedWindowLayoutManagerTest, DisplayDisconnectionMovesDocked) {
   UpdateDisplay("600x700,800x600");
 
   gfx::Rect bounds(600, 0, 201, 201);
-  scoped_ptr<aura::Window> window(CreateTestWindow(bounds));
+  std::unique_ptr<aura::Window> window(CreateTestWindow(bounds));
   // Drag pointer to the right edge of the second screen.
   DragRelativeToEdge(DOCKED_EDGE_RIGHT, window.get(), 0);
 

@@ -54,6 +54,7 @@ class VideoFrameTexture : public base::RefCounted<VideoFrameTexture> {
 
 struct RenderingHelperParams {
   RenderingHelperParams();
+  RenderingHelperParams(const RenderingHelperParams& other);
   ~RenderingHelperParams();
 
   // The rendering FPS.
@@ -135,10 +136,7 @@ class RenderingHelper {
   void* GetGLDisplay();
 
   // Get the GL context.
-  scoped_refptr<gfx::GLContext> GetGLContext();
-
-  // Get the platform specific handle to the OpenGL context.
-  void* GetGLContextHandle();
+  gfx::GLContext* GetGLContext();
 
   // Get rendered thumbnails as RGB.
   // Sets alpha_solid to true if the alpha channel is entirely 0xff.
@@ -165,6 +163,7 @@ class RenderingHelper {
     std::queue<scoped_refptr<VideoFrameTexture> > pending_frames;
 
     RenderedVideo();
+    RenderedVideo(const RenderedVideo& other);
     ~RenderedVideo();
   };
 

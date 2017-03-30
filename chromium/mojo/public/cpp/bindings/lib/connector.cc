@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/synchronization/lock.h"
+#include "base/thread_task_runner_handle.h"
 #include "mojo/public/cpp/bindings/lib/sync_handle_watcher.h"
 
 namespace mojo {
@@ -44,21 +45,18 @@ class MayAutoLock {
 // ----------------------------------------------------------------------------
 
 Connector::Connector(ScopedMessagePipeHandle message_pipe,
-                     ConnectorConfig config,
-                     const MojoAsyncWaiter* waiter)
-    : waiter_(waiter),
-      message_pipe_(std::move(message_pipe)),
+                     ConnectorConfig config)
+    : message_pipe_(std::move(message_pipe)),
       incoming_receiver_(nullptr),
-      async_wait_id_(0),
       error_(false),
       drop_writes_(false),
       enforce_errors_from_incoming_receiver_(true),
       paused_(false),
       lock_(config == MULTI_THREADED_SEND ? new base::Lock : nullptr),
-      register_sync_handle_watch_count_(0),
-      registered_with_sync_handle_watcher_(false),
+      allow_woken_up_by_others_(false),
       sync_handle_watcher_callback_count_(0),
       weak_factory_(this) {
+  weak_self_ = weak_factory_.GetWeakPtr();
   // Even though we don't have an incoming receiver, we still want to monitor
   // the message pipe to know if is closed or encounters an error.
   WaitToReadMore();
@@ -75,7 +73,7 @@ void Connector::CloseMessagePipe() {
 
   CancelWait();
   MayAutoLock locker(lock_.get());
-  Close(std::move(message_pipe_));
+  message_pipe_.reset();
 }
 
 ScopedMessagePipeHandle Connector::PassMessagePipe() {
@@ -110,7 +108,7 @@ bool Connector::WaitForIncomingMessage(MojoDeadline deadline) {
     HandleError(rv != MOJO_RESULT_FAILED_PRECONDITION, false);
     return false;
   }
-  mojo_ignore_result(ReadSingleMessage(&rv));
+  ignore_result(ReadSingleMessage(&rv));
   return (rv == MOJO_RESULT_OK);
 }
 
@@ -193,73 +191,33 @@ bool Connector::Accept(Message* message) {
   return true;
 }
 
-bool Connector::RegisterSyncHandleWatch() {
+void Connector::AllowWokenUpBySyncWatchOnSameThread() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (error_)
-    return false;
+  allow_woken_up_by_others_ = true;
 
-  register_sync_handle_watch_count_++;
-
-  if (!registered_with_sync_handle_watcher_ && !paused_) {
-    registered_with_sync_handle_watcher_ =
-        SyncHandleWatcher::current()->RegisterHandle(
-            message_pipe_.get(), MOJO_HANDLE_SIGNAL_READABLE,
-            base::Bind(&Connector::OnSyncHandleWatcherHandleReady,
-                       base::Unretained(this)));
-  }
-  return true;
+  EnsureSyncWatcherExists();
+  sync_watcher_->AllowWokenUpBySyncWatchOnSameThread();
 }
 
-void Connector::UnregisterSyncHandleWatch() {
+bool Connector::SyncWatch(const bool* should_stop) {
   DCHECK(thread_checker_.CalledOnValidThread());
-
-  if (register_sync_handle_watch_count_ == 0) {
-    NOTREACHED();
-    return;
-  }
-
-  register_sync_handle_watch_count_--;
-  if (register_sync_handle_watch_count_ > 0)
-    return;
-
-  if (registered_with_sync_handle_watcher_) {
-    SyncHandleWatcher::current()->UnregisterHandle(message_pipe_.get());
-    registered_with_sync_handle_watcher_ = false;
-  }
-}
-
-bool Connector::RunSyncHandleWatch(const bool* should_stop) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK_GT(register_sync_handle_watch_count_, 0u);
 
   if (error_)
     return false;
 
   ResumeIncomingMethodCallProcessing();
 
-  if (!should_stop_sync_handle_watch_)
-    should_stop_sync_handle_watch_ = new base::RefCountedData<bool>(false);
-
-  // This object may be destroyed during the WatchAllHandles() call. So we have
-  // to preserve the boolean that WatchAllHandles uses.
-  scoped_refptr<base::RefCountedData<bool>> preserver =
-      should_stop_sync_handle_watch_;
-  const bool* should_stop_array[] = {should_stop,
-                                     &should_stop_sync_handle_watch_->data};
-  return SyncHandleWatcher::current()->WatchAllHandles(should_stop_array, 2);
+  EnsureSyncWatcherExists();
+  return sync_watcher_->SyncWatch(should_stop);
 }
 
-// static
-void Connector::CallOnHandleReady(void* closure, MojoResult result) {
-  Connector* self = static_cast<Connector*>(closure);
-  CHECK(self->async_wait_id_ != 0);
-  self->async_wait_id_ = 0;
-  self->OnHandleReadyInternal(result);
+void Connector::OnWatcherHandleReady(MojoResult result) {
+  OnHandleReadyInternal(result);
 }
 
 void Connector::OnSyncHandleWatcherHandleReady(MojoResult result) {
-  base::WeakPtr<Connector> weak_self(weak_factory_.GetWeakPtr());
+  base::WeakPtr<Connector> weak_self(weak_self_);
 
   sync_handle_watcher_callback_count_++;
   OnHandleReadyInternal(result);
@@ -280,21 +238,25 @@ void Connector::OnHandleReadyInternal(MojoResult result) {
 }
 
 void Connector::WaitToReadMore() {
-  CHECK(!async_wait_id_);
   CHECK(!paused_);
-  async_wait_id_ = waiter_->AsyncWait(message_pipe_.get().value(),
-                                      MOJO_HANDLE_SIGNAL_READABLE,
-                                      MOJO_DEADLINE_INDEFINITE,
-                                      &Connector::CallOnHandleReady,
-                                      this);
+  DCHECK(!handle_watcher_.IsWatching());
 
-  if (register_sync_handle_watch_count_ > 0 &&
-      !registered_with_sync_handle_watcher_) {
-    registered_with_sync_handle_watcher_ =
-        SyncHandleWatcher::current()->RegisterHandle(
-            message_pipe_.get(), MOJO_HANDLE_SIGNAL_READABLE,
-            base::Bind(&Connector::OnSyncHandleWatcherHandleReady,
-                       base::Unretained(this)));
+  MojoResult rv = handle_watcher_.Start(
+      message_pipe_.get(), MOJO_HANDLE_SIGNAL_READABLE,
+      base::Bind(&Connector::OnWatcherHandleReady,
+                 base::Unretained(this)));
+
+  if (rv != MOJO_RESULT_OK) {
+    // If the watch failed because the handle is invalid or its conditions can
+    // no longer be met, we signal the error asynchronously to avoid reentry.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::Bind(&Connector::OnWatcherHandleReady, weak_self_, rv));
+  }
+
+  if (allow_woken_up_by_others_) {
+    EnsureSyncWatcherExists();
+    sync_watcher_->AllowWokenUpBySyncWatchOnSameThread();
   }
 }
 
@@ -305,20 +267,13 @@ bool Connector::ReadSingleMessage(MojoResult* read_result) {
 
   // Detect if |this| was destroyed during message dispatch. Allow for the
   // possibility of re-entering ReadMore() through message dispatch.
-  base::WeakPtr<Connector> weak_self = weak_factory_.GetWeakPtr();
+  base::WeakPtr<Connector> weak_self = weak_self_;
 
   Message message;
   const MojoResult rv = ReadMessage(message_pipe_.get(), &message);
   *read_result = rv;
 
   if (rv == MOJO_RESULT_OK) {
-    // Dispatching the message may spin in a nested message loop. To ensure we
-    // continue dispatching messages when this happens start listening for
-    // messagse now.
-    if (!async_wait_id_) {
-      // TODO: Need to evaluate the perf impact of this.
-      WaitToReadMore();
-    }
     receiver_result =
         incoming_receiver_ && incoming_receiver_->Accept(&message);
   }
@@ -352,52 +307,34 @@ void Connector::ReadAllAvailableMessages() {
     if (paused_)
       return;
 
-    if (rv == MOJO_RESULT_SHOULD_WAIT) {
-      // ReadSingleMessage could end up calling HandleError which resets
-      // message_pipe_ to a dummy one that is closed. The old EDK will see the
-      // that the peer is closed immediately, while the new one is asynchronous
-      // because of thread hops. In that case, there'll still be an async
-      // waiter.
-      if (!async_wait_id_)
-        WaitToReadMore();
+    if (rv == MOJO_RESULT_SHOULD_WAIT)
       break;
-    }
   }
 }
 
 void Connector::CancelWait() {
-  if (async_wait_id_) {
-    waiter_->CancelWait(async_wait_id_);
-    async_wait_id_ = 0;
-  }
-
-  if (registered_with_sync_handle_watcher_) {
-    SyncHandleWatcher::current()->UnregisterHandle(message_pipe_.get());
-    registered_with_sync_handle_watcher_ = false;
-  }
-
-  if (should_stop_sync_handle_watch_)
-    should_stop_sync_handle_watch_->data = true;
+  handle_watcher_.Cancel();
+  sync_watcher_.reset();
 }
 
 void Connector::HandleError(bool force_pipe_reset, bool force_async_handler) {
   if (error_ || !message_pipe_.is_valid())
     return;
 
-  if (!force_pipe_reset && force_async_handler)
-    force_pipe_reset = true;
-
   if (paused_) {
-    // If the user has paused receiving messages, we shouldn't call the error
-    // handler right away. We need to wait until the user starts receiving
+    // Enforce calling the error handler asynchronously if the user has paused
+    // receiving messages. We need to wait until the user starts receiving
     // messages again.
     force_async_handler = true;
   }
 
+  if (!force_pipe_reset && force_async_handler)
+    force_pipe_reset = true;
+
   if (force_pipe_reset) {
     CancelWait();
     MayAutoLock locker(lock_.get());
-    Close(std::move(message_pipe_));
+    message_pipe_.reset();
     MessagePipe dummy_pipe;
     message_pipe_ = std::move(dummy_pipe.handle0);
   } else {
@@ -405,14 +342,21 @@ void Connector::HandleError(bool force_pipe_reset, bool force_async_handler) {
   }
 
   if (force_async_handler) {
-    // |dummy_pipe.handle1| has been destructed. Reading the pipe will
-    // eventually cause a read error on |message_pipe_| and set error state.
     if (!paused_)
       WaitToReadMore();
   } else {
     error_ = true;
     connection_error_handler_.Run();
   }
+}
+
+void Connector::EnsureSyncWatcherExists() {
+  if (sync_watcher_)
+    return;
+  sync_watcher_.reset(new SyncHandleWatcher(
+      message_pipe_.get(), MOJO_HANDLE_SIGNAL_READABLE,
+      base::Bind(&Connector::OnSyncHandleWatcherHandleReady,
+                 base::Unretained(this))));
 }
 
 }  // namespace internal

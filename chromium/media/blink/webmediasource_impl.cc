@@ -8,7 +8,6 @@
 #include "media/base/mime_util.h"
 #include "media/blink/websourcebuffer_impl.h"
 #include "media/filters/chunk_demuxer.h"
-#include "third_party/WebKit/public/platform/WebCString.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 
 using ::blink::WebString;
@@ -69,10 +68,10 @@ void WebMediaSourceImpl::markEndOfStream(
     case WebMediaSource::EndOfStreamStatusNoError:
       break;
     case WebMediaSource::EndOfStreamStatusNetworkError:
-      pipeline_status = PIPELINE_ERROR_NETWORK;
+      pipeline_status = CHUNK_DEMUXER_ERROR_EOS_STATUS_NETWORK_ERROR;
       break;
     case WebMediaSource::EndOfStreamStatusDecodeError:
-      pipeline_status = PIPELINE_ERROR_DECODE;
+      pipeline_status = CHUNK_DEMUXER_ERROR_EOS_STATUS_DECODE_ERROR;
       break;
   }
 

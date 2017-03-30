@@ -95,7 +95,7 @@ void MatchedPropertiesCache::add(const ComputedStyle& style, const ComputedStyle
     ASSERT(hash);
     Cache::AddResult addResult = m_cache.add(hash, nullptr);
     if (addResult.isNewEntry)
-        addResult.storedValue->value = adoptPtrWillBeNoop(new CachedMatchedProperties);
+        addResult.storedValue->value = new CachedMatchedProperties;
 
     CachedMatchedProperties* cacheItem = addResult.storedValue->value.get();
     if (!addResult.isNewEntry)
@@ -150,11 +150,11 @@ void MatchedPropertiesCache::sweep(Timer<MatchedPropertiesCache>*)
 
 bool MatchedPropertiesCache::isCacheable(const ComputedStyle& style, const ComputedStyle& parentStyle)
 {
-    if (style.unique() || (style.styleType() != NOPSEUDO && parentStyle.unique()))
+    if (style.unique() || (style.styleType() != PseudoIdNone && parentStyle.unique()))
         return false;
     if (style.zoom() != ComputedStyle::initialZoom())
         return false;
-    if (style.writingMode() != ComputedStyle::initialWritingMode() || style.direction() != ComputedStyle::initialDirection())
+    if (style.getWritingMode() != ComputedStyle::initialWritingMode() || style.direction() != ComputedStyle::initialDirection())
         return false;
     // The cache assumes static knowledge about which properties are inherited.
     if (parentStyle.hasExplicitlyInheritedProperties())
@@ -166,9 +166,7 @@ bool MatchedPropertiesCache::isCacheable(const ComputedStyle& style, const Compu
 
 DEFINE_TRACE(MatchedPropertiesCache)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_cache);
-#endif
 }
 
 } // namespace blink

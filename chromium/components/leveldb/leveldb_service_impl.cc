@@ -6,8 +6,9 @@
 
 #include "components/leveldb/env_mojo.h"
 #include "components/leveldb/leveldb_database_impl.h"
-#include "components/leveldb/util.h"
+#include "components/leveldb/public/cpp/util.h"
 #include "third_party/leveldatabase/env_chromium.h"
+#include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/env.h"
 #include "third_party/leveldatabase/src/include/leveldb/filter_policy.h"
@@ -15,30 +16,38 @@
 
 namespace leveldb {
 
-LevelDBServiceImpl::LevelDBServiceImpl()
-    : thread_(new LevelDBFileThread) {
-}
+LevelDBServiceImpl::LevelDBServiceImpl(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+    : thread_(new LevelDBMojoProxy(std::move(task_runner))) {}
 
 LevelDBServiceImpl::~LevelDBServiceImpl() {}
 
 void LevelDBServiceImpl::Open(filesystem::DirectoryPtr directory,
                               const mojo::String& dbname,
-                              mojo::InterfaceRequest<LevelDBDatabase> database,
+                              leveldb::LevelDBDatabaseRequest database,
                               const OpenCallback& callback) {
-  // This is the place where we open a database.
+  OpenWithOptions(leveldb::OpenOptions::New(), std::move(directory), dbname,
+                  std::move(database), callback);
+}
+
+void LevelDBServiceImpl::OpenWithOptions(
+    leveldb::OpenOptionsPtr open_options,
+    filesystem::DirectoryPtr directory,
+    const mojo::String& dbname,
+    leveldb::LevelDBDatabaseRequest database,
+    const OpenCallback& callback) {
   leveldb::Options options;
-  options.create_if_missing = true;
-  options.paranoid_checks = true;
-  // TODO(erg): Do we need a filter policy?
+  options.create_if_missing = open_options->create_if_missing;
+  options.error_if_exists = open_options->error_if_exists;
+  options.paranoid_checks = open_options->paranoid_checks;
+  options.write_buffer_size = open_options->write_buffer_size;
+  options.max_open_files = open_options->max_open_files;
+
   options.reuse_logs = leveldb_env::kDefaultLogReuseOptionValue;
   options.compression = leveldb::kSnappyCompression;
 
-  // For info about the troubles we've run into with this parameter, see:
-  // https://code.google.com/p/chromium/issues/detail?id=227313#c11
-  options.max_open_files = 80;
-
   // Register our directory with the file thread.
-  LevelDBFileThread::OpaqueDir* dir =
+  LevelDBMojoProxy::OpaqueDir* dir =
       thread_->RegisterDirectory(std::move(directory));
 
   scoped_ptr<MojoEnv> env_mojo(new MojoEnv(thread_, dir));
@@ -49,6 +58,26 @@ void LevelDBServiceImpl::Open(filesystem::DirectoryPtr directory,
 
   if (s.ok()) {
     new LevelDBDatabaseImpl(std::move(database), std::move(env_mojo),
+                            scoped_ptr<leveldb::DB>(db));
+  }
+
+  callback.Run(LeveldbStatusToError(s));
+}
+
+void LevelDBServiceImpl::OpenInMemory(leveldb::LevelDBDatabaseRequest database,
+                                      const OpenCallback& callback) {
+  leveldb::Options options;
+  options.create_if_missing = true;
+  options.max_open_files = 0;  // Use minimum.
+
+  scoped_ptr<leveldb::Env> env(leveldb::NewMemEnv(leveldb::Env::Default()));
+  options.env = env.get();
+
+  leveldb::DB* db = nullptr;
+  leveldb::Status s = leveldb::DB::Open(options, "", &db);
+
+  if (s.ok()) {
+    new LevelDBDatabaseImpl(std::move(database), std::move(env),
                             scoped_ptr<leveldb::DB>(db));
   }
 

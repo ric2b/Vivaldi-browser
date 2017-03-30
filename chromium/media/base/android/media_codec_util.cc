@@ -195,4 +195,30 @@ bool MediaCodecUtil::IsVp9DecoderAvailable() {
          IsDecoderSupportedByDevice(CodecTypeToAndroidMimeType("vp9"));
 }
 
+// static
+bool MediaCodecUtil::IsSurfaceViewOutputSupported() {
+  // Disable SurfaceView output for the Samsung Galaxy S3; it does not work
+  // well enough for even 360p24 H264 playback.  http://crbug.com/602870.
+  //
+  // Notably this is not codec agnostic at present, so any devices added to
+  // the blacklist will avoid trying to play any codecs on SurfaceView.  If
+  // needed in the future this can be expanded to be codec specific.
+  const char* model_prefixes[] = {// Exynos 4 (Mali-400)
+                                  "GT-I9300", "GT-I9305", "SHV-E210",
+                                  // Snapdragon S4 (Adreno-225)
+                                  "SCH-I535", "SCH-J201", "SCH-R530",
+                                  "SCH-I960", "SCH-S968", "SGH-T999",
+                                  "SGH-I747", "SGH-N064", 0};
+
+  std::string model(base::android::BuildInfo::GetInstance()->model());
+  for (int i = 0; model_prefixes[i]; ++i) {
+    if (base::StartsWith(model, model_prefixes[i],
+                         base::CompareCase::INSENSITIVE_ASCII)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 }  // namespace media

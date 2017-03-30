@@ -10,7 +10,6 @@ include_rules = [
   "+content/grit",
   "+content/public/common",
   "+content/public/test",
-  "+content/shell",  # for content_browsertests
   "+content/test",
 
   "+blink",
@@ -61,7 +60,6 @@ include_rules = [
   "+third_party/flac",
   "+third_party/libjingle",
   "+third_party/mozilla",
-  "+third_party/npapi/bindings",
   "+third_party/ocmock",
   "+third_party/re2",
   "+third_party/skia",
@@ -79,6 +77,7 @@ include_rules = [
   "+ui/aura",
   "+ui/base",
   "+ui/compositor",
+  "+ui/display",
   "+ui/events",
   "+ui/gfx",
   "+ui/gl",
@@ -112,3 +111,12 @@ include_rules = [
   # For generated JNI includes.
   "+jni",
 ]
+
+# content -> content/shell dependency is not allowed, except for browser tests.
+specific_include_rules = {
+  ".*_browsertest[a-z_]*\.cc": [
+    "+content/shell/browser",
+    "+content/shell/common",
+  ],
+}
+

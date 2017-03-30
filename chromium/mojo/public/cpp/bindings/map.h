@@ -26,7 +26,7 @@ namespace mojo {
 //     using the insert() method.
 template <typename Key, typename Value>
 class Map {
-  MOJO_MOVE_ONLY_TYPE(Map)
+  MOVE_ONLY_TYPE_FOR_CPP_03(Map);
 
  public:
   // Map keys cannot be move only classes.
@@ -87,9 +87,14 @@ class Map {
     return TypeConverter<U, Map>::Convert(*this);
   }
 
+  // Indicates whether the map is null (which is distinct from empty).
   bool is_null() const { return is_null_; }
 
-  // Indicates the number of keys in the map.
+  // Indicates whether the map is empty (which is distinct from null).
+  bool empty() const { return map_.empty() && !is_null_; }
+
+  // Indicates the number of keys in the map, which will be zero if the map is
+  // null.
   size_t size() const { return map_.size(); }
 
   // Inserts a key-value pair into the map. Like std::map, this does not insert
@@ -156,8 +161,7 @@ class Map {
   // Removes all contents from the Map and places them into parallel key/value
   // arrays. Each key will be copied from the source to the destination, and
   // values will be copied unless their type is designated move-only, in which
-  // case they will be passed by calling their Pass() method. Either way, the
-  // Map will be left in a null state.
+  // case they will be moved. Either way, the Map will be left in a null state.
   void DecomposeMapTo(mojo::Array<Key>* keys, mojo::Array<Value>* values) {
     std::vector<Key> key_vector;
     key_vector.reserve(map_.size());

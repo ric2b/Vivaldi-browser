@@ -398,23 +398,23 @@ Signal* Signal::FromRawMessage(DBusMessage* raw_message) {
 Response::Response() : Message() {
 }
 
-scoped_ptr<Response> Response::FromRawMessage(DBusMessage* raw_message) {
+std::unique_ptr<Response> Response::FromRawMessage(DBusMessage* raw_message) {
   DCHECK_EQ(DBUS_MESSAGE_TYPE_METHOD_RETURN,
             dbus_message_get_type(raw_message));
 
-  scoped_ptr<Response> response(new Response);
+  std::unique_ptr<Response> response(new Response);
   response->Init(raw_message);
   return response;
 }
 
-scoped_ptr<Response> Response::FromMethodCall(MethodCall* method_call) {
-  scoped_ptr<Response> response(new Response);
+std::unique_ptr<Response> Response::FromMethodCall(MethodCall* method_call) {
+  std::unique_ptr<Response> response(new Response);
   response->Init(dbus_message_new_method_return(method_call->raw_message()));
   return response;
 }
 
-scoped_ptr<Response> Response::CreateEmpty() {
-  scoped_ptr<Response> response(new Response);
+std::unique_ptr<Response> Response::CreateEmpty() {
+  std::unique_ptr<Response> response(new Response);
   response->Init(dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_RETURN));
   return response;
 }
@@ -426,20 +426,20 @@ scoped_ptr<Response> Response::CreateEmpty() {
 ErrorResponse::ErrorResponse() : Response() {
 }
 
-scoped_ptr<ErrorResponse> ErrorResponse::FromRawMessage(
+std::unique_ptr<ErrorResponse> ErrorResponse::FromRawMessage(
     DBusMessage* raw_message) {
   DCHECK_EQ(DBUS_MESSAGE_TYPE_ERROR, dbus_message_get_type(raw_message));
 
-  scoped_ptr<ErrorResponse> response(new ErrorResponse);
+  std::unique_ptr<ErrorResponse> response(new ErrorResponse);
   response->Init(raw_message);
   return response;
 }
 
-scoped_ptr<ErrorResponse> ErrorResponse::FromMethodCall(
+std::unique_ptr<ErrorResponse> ErrorResponse::FromMethodCall(
     MethodCall* method_call,
     const std::string& error_name,
     const std::string& error_message) {
-  scoped_ptr<ErrorResponse> response(new ErrorResponse);
+  std::unique_ptr<ErrorResponse> response(new ErrorResponse);
   response->Init(dbus_message_new_error(method_call->raw_message(),
                                         error_name.c_str(),
                                         error_message.c_str()));
@@ -593,6 +593,19 @@ void MessageWriter::AppendArrayOfBytes(const uint8_t* values, size_t length) {
   const bool success = dbus_message_iter_append_fixed_array(
       &(array_writer.raw_message_iter_),
       DBUS_TYPE_BYTE,
+      &values,
+      static_cast<int>(length));
+  CHECK(success) << "Unable to allocate memory";
+  CloseContainer(&array_writer);
+}
+
+void MessageWriter::AppendArrayOfDoubles(const double* values, size_t length) {
+  DCHECK(!container_is_open_);
+  MessageWriter array_writer(message_);
+  OpenArray("d", &array_writer);
+  const bool success = dbus_message_iter_append_fixed_array(
+      &(array_writer.raw_message_iter_),
+      DBUS_TYPE_DOUBLE,
       &values,
       static_cast<int>(length));
   CHECK(success) << "Unable to allocate memory";
@@ -822,7 +835,26 @@ bool MessageReader::PopArrayOfBytes(const uint8_t** bytes, size_t* length) {
   dbus_message_iter_get_fixed_array(&array_reader.raw_message_iter_,
                                     bytes,
                                     &int_length);
-  *length = static_cast<int>(int_length);
+  *length = static_cast<size_t>(int_length);
+  return true;
+}
+
+bool MessageReader::PopArrayOfDoubles(const double** doubles, size_t* length) {
+  MessageReader array_reader(message_);
+  if (!PopArray(&array_reader))
+    return false;
+  if (!array_reader.HasMoreData()) {
+    *length = 0;
+    *doubles = nullptr;
+    return true;
+  }
+  if (!array_reader.CheckDataType(DBUS_TYPE_DOUBLE))
+    return false;
+  int int_length = 0;
+  dbus_message_iter_get_fixed_array(&array_reader.raw_message_iter_,
+                                    doubles,
+                                    &int_length);
+  *length = static_cast<size_t>(int_length);
   return true;
 }
 

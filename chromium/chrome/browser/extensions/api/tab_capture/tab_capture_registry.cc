@@ -206,8 +206,8 @@ bool TabCaptureRegistry::AddRequest(content::WebContents* target_contents,
 
   // Currently, we do not allow multiple active captures for same tab.
   if (request != NULL) {
-    if (request->capture_state() != tab_capture::TAB_CAPTURE_STATE_STOPPED &&
-        request->capture_state() != tab_capture::TAB_CAPTURE_STATE_ERROR) {
+    if (request->capture_state() == tab_capture::TAB_CAPTURE_STATE_PENDING ||
+        request->capture_state() == tab_capture::TAB_CAPTURE_STATE_ACTIVE) {
       return false;
     } else {
       // Delete the request before creating its replacement (below).
@@ -324,13 +324,13 @@ void TabCaptureRegistry::DispatchStatusChangeEvent(
   if (!router)
     return;
 
-  scoped_ptr<base::ListValue> args(new base::ListValue());
+  std::unique_ptr<base::ListValue> args(new base::ListValue());
   tab_capture::CaptureInfo info;
   request->GetCaptureInfo(&info);
   args->Append(info.ToValue().release());
-  scoped_ptr<Event> event(new Event(events::TAB_CAPTURE_ON_STATUS_CHANGED,
-                                    tab_capture::OnStatusChanged::kEventName,
-                                    std::move(args)));
+  std::unique_ptr<Event> event(
+      new Event(events::TAB_CAPTURE_ON_STATUS_CHANGED,
+                tab_capture::OnStatusChanged::kEventName, std::move(args)));
   event->restrict_to_browser_context = browser_context_;
 
   router->DispatchEventToExtension(request->extension_id(), std::move(event));

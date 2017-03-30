@@ -11,7 +11,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "sync/internal_api/public/sync_manager.h"
-#include "sync/internal_api/public/test/null_sync_context_proxy.h"
 #include "sync/internal_api/public/test/test_user_share.h"
 
 class GURL;
@@ -91,7 +90,7 @@ class FakeSyncManager : public SyncManager {
                        const base::Closure& retry_task) override;
   void OnIncomingInvalidation(
       syncer::ModelType type,
-      scoped_ptr<InvalidationInterface> interface) override;
+      std::unique_ptr<InvalidationInterface> interface) override;
   void SetInvalidatorEnabled(bool invalidator_enabled) override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
@@ -99,13 +98,13 @@ class FakeSyncManager : public SyncManager {
   void SaveChanges() override;
   void ShutdownOnSyncThread(ShutdownReason reason) override;
   UserShare* GetUserShare() override;
-  syncer_v2::SyncContextProxy* GetSyncContextProxy() override;
+  scoped_ptr<syncer_v2::SyncContext> GetSyncContextProxy() override;
   const std::string cache_guid() override;
   bool ReceivedExperiment(Experiments* experiments) override;
   bool HasUnsyncedItems() override;
   SyncEncryptionHandler* GetEncryptionHandler() override;
   ScopedVector<syncer::ProtocolEvent> GetBufferedProtocolEvents() override;
-  scoped_ptr<base::ListValue> GetAllNodesForType(
+  std::unique_ptr<base::ListValue> GetAllNodesForType(
       syncer::ModelType type) override;
   void RefreshTypes(ModelTypeSet types) override;
   void RegisterDirectoryTypeDebugInfoObserver(
@@ -116,6 +115,7 @@ class FakeSyncManager : public SyncManager {
       syncer::TypeDebugInfoObserver* observer) override;
   void RequestEmitDebugInfo() override;
   void ClearServerData(const ClearServerDataCallback& callback) override;
+  void OnCookieJarChanged(bool account_mismatch) override;
 
  private:
   scoped_refptr<base::SequencedTaskRunner> sync_task_runner_;
@@ -143,11 +143,9 @@ class FakeSyncManager : public SyncManager {
   // The most recent configure reason.
   ConfigureReason last_configure_reason_;
 
-  scoped_ptr<FakeSyncEncryptionHandler> fake_encryption_handler_;
+  std::unique_ptr<FakeSyncEncryptionHandler> fake_encryption_handler_;
 
   TestUserShare test_user_share_;
-
-  syncer_v2::NullSyncContextProxy null_sync_context_proxy_;
 
   // Number of invalidations received since startup.
   int num_invalidations_received_;

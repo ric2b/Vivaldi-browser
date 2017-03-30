@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/cancelable_callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -39,7 +40,8 @@ class WebGraphicsContext3DCommandBufferImpl;
 class SynchronousCompositorOutputSurfaceClient {
  public:
   virtual void Invalidate() = 0;
-  virtual void SwapBuffers(cc::CompositorFrame* frame) = 0;
+  virtual void SwapBuffers(uint32_t output_surface_id,
+                           cc::CompositorFrame* frame) = 0;
 
  protected:
   virtual ~SynchronousCompositorOutputSurfaceClient() {}
@@ -60,6 +62,7 @@ class SynchronousCompositorOutputSurface
       const scoped_refptr<cc::ContextProvider>& context_provider,
       const scoped_refptr<cc::ContextProvider>& worker_context_provider,
       int routing_id,
+      uint32_t output_surface_id,
       SynchronousCompositorRegistry* registry,
       scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue);
   ~SynchronousCompositorOutputSurface() override;
@@ -67,7 +70,6 @@ class SynchronousCompositorOutputSurface
   void SetSyncClient(SynchronousCompositorOutputSurfaceClient* compositor);
 
   // OutputSurface.
-  void DidLoseOutputSurface() override;
   bool BindToClient(cc::OutputSurfaceClient* surface_client) override;
   void DetachFromClient() override;
   void Reshape(const gfx::Size& size,
@@ -83,7 +85,8 @@ class SynchronousCompositorOutputSurface
                     const gfx::Rect& clip,
                     const gfx::Rect& viewport_rect_for_tile_priority,
                     const gfx::Transform& transform_for_tile_priority);
-  void ReturnResources(const cc::CompositorFrameAck& frame_ack);
+  void ReturnResources(uint32_t output_surface_id,
+                       const cc::CompositorFrameAck& frame_ack);
   void DemandDrawSw(SkCanvas* canvas);
   void SetMemoryPolicy(size_t bytes_limit);
   void SetTreeActivationCallback(const base::Closure& callback);
@@ -103,7 +106,11 @@ class SynchronousCompositorOutputSurface
                        bool hardware_draw);
   bool CalledOnValidThread() const;
 
+  void CancelFallbackTick();
+  void FallbackTickFired();
+
   const int routing_id_;
+  const uint32_t output_surface_id_;
   SynchronousCompositorRegistry* const registry_;  // unowned
   bool registered_;
 
@@ -116,6 +123,10 @@ class SynchronousCompositorOutputSurface
   cc::ManagedMemoryPolicy memory_policy_;
   bool did_swap_;
   scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue_;
+
+  base::CancelableClosure fallback_tick_;
+  bool fallback_tick_pending_;
+  bool fallback_tick_running_;
 
   base::ThreadChecker thread_checker_;
 

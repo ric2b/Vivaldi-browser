@@ -132,7 +132,7 @@ void SpeechRecognition::didReceiveNoMatch(SpeechRecognitionResult* result)
     dispatchEvent(SpeechRecognitionEvent::createNoMatch(result));
 }
 
-void SpeechRecognition::didReceiveError(PassRefPtrWillBeRawPtr<SpeechRecognitionError> error)
+void SpeechRecognition::didReceiveError(SpeechRecognitionError* error)
 {
     dispatchEvent(error);
     m_started = false;
@@ -156,9 +156,9 @@ const AtomicString& SpeechRecognition::interfaceName() const
     return EventTargetNames::SpeechRecognition;
 }
 
-ExecutionContext* SpeechRecognition::executionContext() const
+ExecutionContext* SpeechRecognition::getExecutionContext() const
 {
-    return ActiveDOMObject::executionContext();
+    return ActiveDOMObject::getExecutionContext();
 }
 
 void SpeechRecognition::stop()
@@ -175,6 +175,7 @@ bool SpeechRecognition::hasPendingActivity() const
 
 SpeechRecognition::SpeechRecognition(Page* page, ExecutionContext* context)
     : PageLifecycleObserver(page)
+    , ActiveScriptWrappable(this)
     , ActiveDOMObject(context)
     , m_grammars(SpeechGrammarList::create()) // FIXME: The spec is not clear on the default value for the grammars attribute.
     , m_audioTrack(nullptr)

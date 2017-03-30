@@ -67,8 +67,9 @@ QuicSimpleClient::QuicSimpleClient(IPEndPoint server_address,
 
 QuicSimpleClient::~QuicSimpleClient() {
   if (connected()) {
-    session()->connection()->SendConnectionClosePacket(QUIC_PEER_GOING_AWAY,
-                                                       "");
+    session()->connection()->CloseConnection(
+        QUIC_PEER_GOING_AWAY, "",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
   }
   STLDeleteElements(&data_to_resend_on_connect_);
   STLDeleteElements(&data_sent_before_handshake_);
@@ -107,11 +108,9 @@ bool QuicSimpleClient::CreateUDPSocket() {
   if (bind_to_address_.size() != 0) {
     client_address_ = IPEndPoint(bind_to_address_, local_port_);
   } else if (address_family == AF_INET) {
-    client_address_ = IPEndPoint(IPAddress(0, 0, 0, 0), local_port_);
+    client_address_ = IPEndPoint(IPAddress::IPv4AllZeros(), local_port_);
   } else {
-    IPAddress any6;
-    CHECK(any6.AssignFromIPLiteral("::"));
-    client_address_ = IPEndPoint(any6, local_port_);
+    client_address_ = IPEndPoint(IPAddress::IPv6AllZeros(), local_port_);
   }
 
   int rc = socket->Connect(server_address_);
@@ -227,8 +226,9 @@ void QuicSimpleClient::Disconnect() {
   DCHECK(initialized_);
 
   if (connected()) {
-    session()->connection()->SendConnectionCloseWithDetails(
-        QUIC_PEER_GOING_AWAY, "Client disconnecting");
+    session()->connection()->CloseConnection(
+        QUIC_PEER_GOING_AWAY, "Client disconnecting",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
   }
   STLDeleteElements(&data_to_resend_on_connect_);
   STLDeleteElements(&data_sent_before_handshake_);
@@ -341,7 +341,8 @@ void QuicSimpleClient::OnClose(QuicSpdyStream* stream) {
   QuicSpdyClientStream* client_stream =
       static_cast<QuicSpdyClientStream*>(stream);
   HttpResponseInfo response;
-  SpdyHeadersToHttpResponse(client_stream->headers(), net::HTTP2, &response);
+  SpdyHeadersToHttpResponse(client_stream->response_headers(), net::HTTP2,
+                            &response);
   if (response_listener_.get() != nullptr) {
     response_listener_->OnCompleteResponse(stream->id(), *response.headers,
                                            client_stream->data());
@@ -390,7 +391,7 @@ void QuicSimpleClient::OnReadError(int result,
   Disconnect();
 }
 
-bool QuicSimpleClient::OnPacket(const QuicEncryptedPacket& packet,
+bool QuicSimpleClient::OnPacket(const QuicReceivedPacket& packet,
                                 IPEndPoint local_address,
                                 IPEndPoint peer_address) {
   session()->connection()->ProcessUdpPacket(local_address, peer_address,

@@ -41,6 +41,14 @@
   width: 100%;
 }
 
+.non-blocking > #buttons > .button {
+  color: var(--paper-blue-300);
+}
+
+.non-blocking > #buttons > #default-button {
+  -webkit-margin-end: 24px;
+}
+
 .non-blocking > div > #title {
   color: rgba(255, 255, 255, 0.87);
 }

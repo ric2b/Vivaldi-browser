@@ -44,6 +44,7 @@ struct WebLocalizedString {
         AXCheckedCheckBoxActionVerb,
         AXDateTimeFieldEmptyValueText,
         AXDayOfMonthFieldText,
+        AXDefaultActionVerb,
         AXHeadingText, // Deprecated.
         AXHourFieldText,
         AXImageMapText, // Deprecated.
@@ -89,6 +90,7 @@ struct WebLocalizedString {
         AXMillisecondFieldText,
         AXMinuteFieldText,
         AXMonthFieldText,
+        AXPopUpButtonActionVerb,
         AXRadioButtonActionVerb,
         AXSecondFieldText,
         AXTextFieldActionVerb,
@@ -103,6 +105,7 @@ struct WebLocalizedString {
         DateFormatMonthLabel,
         DateFormatYearLabel,
         DetailsLabel,
+        DownloadButtonLabel,
         FileButtonChooseFileLabel,
         FileButtonChooseMultipleFilesLabel,
         FileButtonNoFileSelectedLabel,

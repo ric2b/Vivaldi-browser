@@ -25,16 +25,16 @@ void SafeBrowsingDatabaseManager::StartOnIOThread(
     net::URLRequestContextGetter* request_context_getter,
     const V4ProtocolConfig& config) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  // Instantiate a V4GetHashProtocolManager.
   if (request_context_getter) {
+    // Instantiate a V4GetHashProtocolManager.
     v4_get_hash_protocol_manager_ = V4GetHashProtocolManager::Create(
         request_context_getter, config);
   }
 }
 
-// |shutdown| not used. Destroys the v4 protocol manager. This may be called
-// multiple times during the life of the DatabaseManager. Must be called on IO
-// thread.
+// |shutdown| not used. Destroys the v4 protocol managers. This may be called
+// multiple times during the life of the DatabaseManager.
+// Must be called on IO thread.
 void SafeBrowsingDatabaseManager::StopOnIOThread(bool shutdown) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   // This cancels all in-flight GetHash requests.

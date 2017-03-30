@@ -202,10 +202,11 @@ bool LineBoxList::hitTest(LineLayoutBoxModel layoutObject, HitTestResult& result
         return false;
 
     LayoutPoint point = locationInContainer.point();
+    IntRect hitSearchBoundingBox = locationInContainer.boundingBox();
 
     CullRect cullRect(firstLineBox()->isHorizontal() ?
-        IntRect(point.x(), point.y() - locationInContainer.topPadding(), 1, locationInContainer.topPadding() + locationInContainer.bottomPadding() + 1) :
-        IntRect(point.x() - locationInContainer.leftPadding(), point.y(), locationInContainer.rightPadding() + locationInContainer.leftPadding() + 1, 1));
+        IntRect(point.x(), hitSearchBoundingBox.y(), 1, hitSearchBoundingBox.height()) :
+        IntRect(hitSearchBoundingBox.x(), point.y(), hitSearchBoundingBox.width(), 1));
 
     if (!anyLineIntersectsRect(layoutObject, cullRect, accumulatedOffset))
         return false;
@@ -256,15 +257,15 @@ void LineBoxList::dirtyLinesFromChangedChild(LineLayoutItem container, LineLayou
             continue;
 
         if (curr.isAtomicInlineLevel()) {
-            InlineBox* wrapper = toLayoutBox(curr)->inlineBoxWrapper();
+            InlineBox* wrapper = LineLayoutBox(curr).inlineBoxWrapper();
             if (wrapper)
                 box = &wrapper->root();
         } else if (curr.isText()) {
-            InlineTextBox* textBox = toLayoutText(curr)->lastTextBox();
+            InlineTextBox* textBox = LineLayoutText(curr).lastTextBox();
             if (textBox)
                 box = &textBox->root();
         } else if (curr.isLayoutInline()) {
-            InlineBox* lastSiblingBox = toLayoutInline(curr)->lastLineBoxIncludingCulling();
+            InlineBox* lastSiblingBox = LineLayoutInline(curr).lastLineBoxIncludingCulling();
             if (lastSiblingBox)
                 box = &lastSiblingBox->root();
         }

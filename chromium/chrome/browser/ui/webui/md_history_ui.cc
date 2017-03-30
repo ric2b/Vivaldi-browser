@@ -32,20 +32,35 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
       content::WebUIDataSource::Create(chrome::kChromeUIHistoryHost);
 
   // Localized strings (alphabetical order).
+  source->AddLocalizedString("cancel", IDS_CANCEL);
   source->AddLocalizedString("clearBrowsingData",
                              IDS_CLEAR_BROWSING_DATA_TITLE);
   source->AddLocalizedString("clearSearch", IDS_MD_HISTORY_CLEAR_SEARCH);
-  source->AddLocalizedString("cancel", IDS_CANCEL);
   source->AddLocalizedString("delete", IDS_MD_HISTORY_DELETE);
+  source->AddLocalizedString("foundSearchResults",
+                             IDS_HISTORY_FOUND_SEARCH_RESULTS);
+  source->AddLocalizedString("historyMenuItem",
+                             IDS_MD_HISTORY_HISTORY_MENU_ITEM);
   source->AddLocalizedString("itemsSelected", IDS_MD_HISTORY_ITEMS_SELECTED);
+  source->AddLocalizedString("loading", IDS_HISTORY_LOADING);
   source->AddLocalizedString("moreFromSite", IDS_HISTORY_MORE_FROM_SITE);
+  source->AddLocalizedString("openAll", IDS_HISTORY_OTHER_SESSIONS_OPEN_ALL);
+  source->AddLocalizedString("openTabsMenuItem",
+                             IDS_MD_HISTORY_OPEN_TABS_MENU_ITEM);
+  source->AddLocalizedString("noResults", IDS_HISTORY_NO_RESULTS);
+  source->AddLocalizedString("noSearchResults", IDS_HISTORY_NO_SEARCH_RESULTS);
   source->AddLocalizedString("removeFromHistory", IDS_HISTORY_REMOVE_PAGE);
   source->AddLocalizedString("search", IDS_MD_HISTORY_SEARCH);
+  source->AddLocalizedString("searchResult", IDS_HISTORY_SEARCH_RESULT);
+  source->AddLocalizedString("searchResults", IDS_HISTORY_SEARCH_RESULTS);
   source->AddLocalizedString("title", IDS_HISTORY_TITLE);
 
   bool allow_deleting_history =
       prefs->GetBoolean(prefs::kAllowDeletingBrowserHistory);
   source->AddBoolean("allowDeletingHistory", allow_deleting_history);
+  source->AddResourcePath("constants.html", IDR_MD_HISTORY_CONSTANTS_HTML);
+  source->AddResourcePath("constants.js", IDR_MD_HISTORY_CONSTANTS_JS);
+  source->AddResourcePath("elements.html", IDR_MD_HISTORY_ELEMENTS_HTML);
   source->AddResourcePath("history_item.html",
                           IDR_MD_HISTORY_HISTORY_ITEM_HTML);
   source->AddResourcePath("history_item.js", IDR_MD_HISTORY_HISTORY_ITEM_JS);
@@ -59,6 +74,16 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
   source->AddResourcePath("history.js", IDR_MD_HISTORY_HISTORY_JS);
   source->AddResourcePath("shared_style.html",
                           IDR_MD_HISTORY_SHARED_STYLE_HTML);
+  source->AddResourcePath("side_bar.html", IDR_MD_HISTORY_SIDE_BAR_HTML);
+  source->AddResourcePath("side_bar.js", IDR_MD_HISTORY_SIDE_BAR_JS);
+  source->AddResourcePath("synced_device_card.html",
+                          IDR_MD_HISTORY_SYNCED_DEVICE_CARD_HTML);
+  source->AddResourcePath("synced_device_card.js",
+                          IDR_MD_HISTORY_SYNCED_DEVICE_CARD_JS);
+  source->AddResourcePath("synced_device_manager.html",
+                          IDR_MD_HISTORY_SYNCED_DEVICE_MANAGER_HTML);
+  source->AddResourcePath("synced_device_manager.js",
+                          IDR_MD_HISTORY_SYNCED_DEVICE_MANAGER_JS);
 
   source->SetDefaultResource(IDR_MD_HISTORY_HISTORY_HTML);
   source->SetJsonPath("strings.js");

@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/files/file_path.h"
@@ -208,6 +209,7 @@ void AutofillMergeTest::MergeProfiles(const std::string& profiles,
       field.name = field_type;
       field.value = value;
       field.form_control_type = "text";
+      field.is_focusable = true;
       form.fields.push_back(field);
     }
 
@@ -225,9 +227,10 @@ void AutofillMergeTest::MergeProfiles(const std::string& profiles,
             StringToFieldType(base::UTF16ToUTF8(field->name));
         field->set_heuristic_type(type);
       }
+      form_structure.IdentifySections(false);
 
       // Import the profile.
-      scoped_ptr<CreditCard> imported_credit_card;
+      std::unique_ptr<CreditCard> imported_credit_card;
       personal_data_.ImportFormData(form_structure, false,
                                     &imported_credit_card);
       EXPECT_FALSE(imported_credit_card);

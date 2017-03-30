@@ -7,10 +7,10 @@
 #include "base/macros.h"
 #include "cc/output/context_provider.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
-#include "content/common/gpu/client/gpu_channel_host.h"
-#include "content/common/gpu/gpu_messages.h"
 #include "content/renderer/gpu/stream_texture_host_android.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
+#include "gpu/ipc/common/gpu_messages.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace content {
@@ -31,12 +31,11 @@ class StreamTextureProxyImpl : public StreamTextureProxy,
 
   // StreamTextureHost::Listener implementation:
   void OnFrameAvailable() override;
-  void OnMatrixChanged(const float matrix[16]) override;
 
  private:
   void BindOnThread(int32_t stream_id);
 
-  const scoped_ptr<StreamTextureHost> host_;
+  const std::unique_ptr<StreamTextureHost> host_;
 
   // Protects access to |client_| and |loop_|.
   base::Lock lock_;
@@ -102,24 +101,18 @@ void StreamTextureProxyImpl::OnFrameAvailable() {
     client_->DidReceiveFrame();
 }
 
-void StreamTextureProxyImpl::OnMatrixChanged(const float matrix[16]) {
-  base::AutoLock lock(lock_);
-  if (client_)
-    client_->DidUpdateMatrix(matrix);
-}
-
 }  // namespace
 
 // static
 scoped_refptr<StreamTextureFactoryImpl> StreamTextureFactoryImpl::Create(
     const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
-    GpuChannelHost* channel) {
+    gpu::GpuChannelHost* channel) {
   return new StreamTextureFactoryImpl(context_provider, channel);
 }
 
 StreamTextureFactoryImpl::StreamTextureFactoryImpl(
     const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
-    GpuChannelHost* channel)
+    gpu::GpuChannelHost* channel)
     : context_provider_(context_provider), channel_(channel) {
   DCHECK(channel);
 }

@@ -69,13 +69,13 @@ public:
     void decrementSaveCount() { --m_saveCount; }
 
     // Stroke data
-    Color strokeColor() const { return m_strokeColor; }
+    Color strokeColor() const { return m_strokePaint.getColor(); }
     void setStrokeColor(const Color&);
 
     Gradient* strokeGradient() const { return m_strokeGradient.get(); }
     void setStrokeGradient(const PassRefPtr<Gradient>, float);
 
-    const StrokeData& strokeData() const { return m_strokeData; }
+    const StrokeData& getStrokeData() const { return m_strokeData; }
     void setStrokeStyle(StrokeStyle);
     void setStrokeThickness(float);
     void setLineCap(LineCap);
@@ -84,26 +84,33 @@ public:
     void setLineDash(const DashArray&, float);
 
     // Fill data
-    Color fillColor() const { return m_fillColor; }
+    Color fillColor() const { return m_fillPaint.getColor(); }
     void setFillColor(const Color&);
 
     Gradient* fillGradient() const { return m_fillGradient.get(); }
     void setFillGradient(const PassRefPtr<Gradient>, float);
 
     // Shadow. (This will need tweaking if we use draw loopers for other things.)
-    SkDrawLooper* drawLooper() const { return m_looper.get(); }
+    SkDrawLooper* drawLooper() const
+    {
+        DCHECK_EQ(m_fillPaint.getLooper(), m_strokePaint.getLooper());
+        return m_fillPaint.getLooper();
+    }
     void setDrawLooper(PassRefPtr<SkDrawLooper>);
-    void clearDrawLooper();
 
     // Text. (See TextModeFill & friends.)
     TextDrawingModeFlags textDrawingMode() const { return m_textDrawingMode; }
     void setTextDrawingMode(TextDrawingModeFlags mode) { m_textDrawingMode = mode; }
 
-    SkColorFilter* colorFilter() const { return m_colorFilter.get(); }
+    SkColorFilter* colorFilter() const
+    {
+        DCHECK_EQ(m_fillPaint.getColorFilter(), m_strokePaint.getColorFilter());
+        return m_fillPaint.getColorFilter();
+    }
     void setColorFilter(PassRefPtr<SkColorFilter>);
 
     // Image interpolation control.
-    InterpolationQuality interpolationQuality() const { return m_interpolationQuality; }
+    InterpolationQuality getInterpolationQuality() const { return m_interpolationQuality; }
     void setInterpolationQuality(InterpolationQuality);
 
     bool shouldAntialias() const { return m_shouldAntialias; }
@@ -120,17 +127,10 @@ private:
 
     StrokeData m_strokeData;
 
-    Color m_strokeColor;
     RefPtr<Gradient> m_strokeGradient;
-
-    Color m_fillColor;
     RefPtr<Gradient> m_fillGradient;
 
-    RefPtr<SkDrawLooper> m_looper;
-
     TextDrawingModeFlags m_textDrawingMode;
-
-    RefPtr<SkColorFilter> m_colorFilter;
 
     InterpolationQuality m_interpolationQuality;
 

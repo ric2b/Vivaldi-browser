@@ -57,7 +57,7 @@ public:
     bool isAlternate() const;
     bool isEnabledViaScript() const;
     bool isEnabledAndLoading() const;
-    bool hasPreferrableName(const String& currentPreferrableName) const;
+    bool hasPreferrableName() const;
     bool canBeActivated(const String& currentPreferrableName) const;
     bool isCSSStyle() const;
 
@@ -72,7 +72,7 @@ private:
 
     static Type typeOf(Node&);
 
-    RawPtrWillBeMember<Node> m_node;
+    Member<Node> m_node;
     Type m_type;
 };
 

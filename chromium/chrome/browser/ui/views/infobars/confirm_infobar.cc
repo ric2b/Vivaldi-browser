@@ -7,31 +7,33 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/views/elevation_icon_setter.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
 
 // InfoBarService -------------------------------------------------------------
 
-scoped_ptr<infobars::InfoBar> InfoBarService::CreateConfirmInfoBar(
-    scoped_ptr<ConfirmInfoBarDelegate> delegate) {
-  return make_scoped_ptr(new ConfirmInfoBar(std::move(delegate)));
+std::unique_ptr<infobars::InfoBar> InfoBarService::CreateConfirmInfoBar(
+    std::unique_ptr<ConfirmInfoBarDelegate> delegate) {
+  return base::WrapUnique(new ConfirmInfoBar(std::move(delegate)));
 }
 
 
 // ConfirmInfoBar -------------------------------------------------------------
 
-ConfirmInfoBar::ConfirmInfoBar(scoped_ptr<ConfirmInfoBarDelegate> delegate)
+ConfirmInfoBar::ConfirmInfoBar(std::unique_ptr<ConfirmInfoBarDelegate> delegate)
     : InfoBarView(std::move(delegate)),
-      label_(NULL),
-      ok_button_(NULL),
-      cancel_button_(NULL),
-      link_(NULL) {}
+      label_(nullptr),
+      ok_button_(nullptr),
+      cancel_button_(nullptr),
+      link_(nullptr) {}
 
 ConfirmInfoBar::~ConfirmInfoBar() {
   // Ensure |elevation_icon_setter_| is destroyed before |ok_button_|.
@@ -64,32 +66,44 @@ void ConfirmInfoBar::Layout() {
 
 void ConfirmInfoBar::ViewHierarchyChanged(
     const ViewHierarchyChangedDetails& details) {
-  if (details.is_add && details.child == this && (label_ == NULL)) {
+  if (details.is_add && details.child == this && (label_ == nullptr)) {
     ConfirmInfoBarDelegate* delegate = GetDelegate();
     label_ = CreateLabel(delegate->GetMessageText());
     AddViewToContentArea(label_);
 
     if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_OK) {
-      if (delegate->OKButtonTriggersUACPrompt()) {
-        // Use a label button even in MD mode as MD buttons don't support icons.
-        views::LabelButton* ok_button = CreateLabelButton(
+      if (ui::MaterialDesignController::IsModeMaterial()) {
+        views::MdTextButton* button = CreateMdTextButton(
             this, delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
-        elevation_icon_setter_.reset(new ElevationIconSetter(
-            ok_button,
-            base::Bind(&ConfirmInfoBar::Layout, base::Unretained(this))));
-        ok_button_ = ok_button;
+        button->SetCallToAction(views::MdTextButton::STRONG_CALL_TO_ACTION);
+        ok_button_ = button;
       } else {
         ok_button_ = CreateTextButton(
             this, delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
+      }
+      if (delegate->OKButtonTriggersUACPrompt()) {
+        elevation_icon_setter_.reset(new ElevationIconSetter(
+            ok_button_,
+            base::Bind(&ConfirmInfoBar::Layout, base::Unretained(this))));
       }
       AddViewToContentArea(ok_button_);
       ok_button_->SizeToPreferredSize();
     }
 
     if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_CANCEL) {
-      cancel_button_ = CreateTextButton(
-          this,
-          delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_CANCEL));
+      if (ui::MaterialDesignController::IsModeMaterial()) {
+        views::MdTextButton* button = CreateMdTextButton(
+            this,
+            delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_CANCEL));
+        // Apply CTA only if the cancel button is the only button.
+        if (delegate->GetButtons() == ConfirmInfoBarDelegate::BUTTON_CANCEL)
+          button->SetCallToAction(views::MdTextButton::STRONG_CALL_TO_ACTION);
+        cancel_button_ = button;
+      } else {
+        cancel_button_ = CreateTextButton(
+            this,
+            delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_CANCEL));
+      }
       AddViewToContentArea(cancel_button_);
       cancel_button_->SizeToPreferredSize();
     }

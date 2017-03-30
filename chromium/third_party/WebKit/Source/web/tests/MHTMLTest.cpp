@@ -42,9 +42,10 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
+#include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
-#include "public/platform/WebUnitTestSupport.h"
+#include "public/web/WebCache.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebView.h"
@@ -97,7 +98,8 @@ protected:
 
     void TearDown() override
     {
-        Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
+        Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+        WebCache::clear();
     }
 
     void registerMockedURLLoad(const std::string& url, const WebString& fileName)
@@ -194,7 +196,7 @@ TEST_F(MHTMLTest, CheckDomain)
 
     EXPECT_STREQ(kFileURL, frame->domWindow()->location()->href().ascii().data());
 
-    SecurityOrigin* origin = document->securityOrigin();
+    SecurityOrigin* origin = document->getSecurityOrigin();
     EXPECT_STRNE("localhost", origin->domain().ascii().data());
 }
 

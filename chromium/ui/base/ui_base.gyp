@@ -112,6 +112,8 @@
         'clipboard/clipboard_mac.h',
         'clipboard/clipboard_mac.mm',
         'clipboard/clipboard_types.h',
+        'clipboard/clipboard_util_mac.h',
+        'clipboard/clipboard_util_mac.mm',
         'clipboard/clipboard_util_win.cc',
         'clipboard/clipboard_util_win.h',
         'clipboard/clipboard_win.cc',
@@ -462,6 +464,7 @@
         ['use_ozone==1', {
           'dependencies': [
             '../events/devices/events_devices.gyp:events_devices',
+            '../events/ozone/events_ozone.gyp:events_ozone_evdev',
             '../events/ozone/events_ozone.gyp:events_ozone_layout',
             '../ozone/ozone.gyp:ozone_base',
           ],
@@ -725,7 +728,8 @@
       ],
       'conditions': [
         ['OS!="ios"', {
-          'dependecies': [
+          'dependencies': [
+            '../events/events.gyp:events',
             'ime/ui_base_ime.gyp:ui_base_ime',
           ],
           'sources': [

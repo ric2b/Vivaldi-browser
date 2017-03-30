@@ -42,22 +42,45 @@
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/page/Page.h"
+#include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "core/workers/WorkerGlobalScope.h"
 
 namespace blink {
 
 namespace {
 
-WillBePersistentHeapHashSet<RawPtrWillBeWeakMember<InstrumentingAgents>>& instrumentingAgentsSet()
+PersistentHeapHashSet<WeakMember<InstrumentingAgents>>& instrumentingAgentsSet()
 {
-    DEFINE_STATIC_LOCAL(WillBePersistentHeapHashSet<RawPtrWillBeWeakMember<InstrumentingAgents>>, instrumentingAgentsSet, ());
+    DEFINE_STATIC_LOCAL(PersistentHeapHashSet<WeakMember<InstrumentingAgents>>, instrumentingAgentsSet, ());
     return instrumentingAgentsSet;
 }
 
 }
 
 namespace InspectorInstrumentation {
+
+AsyncTask::AsyncTask(ExecutionContext* context, void* task) : AsyncTask(context, task, true)
+{
+}
+
+AsyncTask::AsyncTask(ExecutionContext* context, void* task, bool enabled)
+    : m_instrumentingAgents(enabled ? instrumentingAgentsFor(context) : nullptr)
+    , m_task(task)
+{
+    if (m_instrumentingAgents && m_instrumentingAgents->inspectorDebuggerAgent())
+        m_instrumentingAgents->inspectorDebuggerAgent()->asyncTaskStarted(m_task);
+}
+
+AsyncTask::~AsyncTask()
+{
+    if (m_instrumentingAgents && m_instrumentingAgents->inspectorDebuggerAgent())
+        m_instrumentingAgents->inspectorDebuggerAgent()->asyncTaskFinished(m_task);
+}
+
 int FrontendCounter::s_frontendCounter = 0;
+
+// Keep in sync with kDevToolsRequestInitiator defined in devtools_network_controller.cc
+const char kInspectorEmulateNetworkConditionsClientId[] = "X-DevTools-Emulate-Network-Conditions-Client-Id";
 }
 
 InspectorInstrumentationCookie::InspectorInstrumentationCookie()
@@ -154,7 +177,7 @@ InstrumentingAgents* instrumentingAgentsFor(EventTarget* eventTarget)
 {
     if (!eventTarget)
         return 0;
-    return instrumentingAgentsFor(eventTarget->executionContext());
+    return instrumentingAgentsFor(eventTarget->getExecutionContext());
 }
 
 InstrumentingAgents* instrumentingAgentsFor(LayoutObject* layoutObject)
@@ -173,6 +196,13 @@ InstrumentingAgents* instrumentingAgentsForNonDocumentContext(ExecutionContext* 
 {
     if (context->isWorkerGlobalScope())
         return instrumentationForWorkerGlobalScope(toWorkerGlobalScope(context));
+
+    if (context->isWorkletGlobalScope()) {
+        LocalFrame* frame = toMainThreadWorkletGlobalScope(context)->frame();
+        if (frame)
+            return instrumentingAgentsFor(frame);
+    }
+
     return 0;
 }
 

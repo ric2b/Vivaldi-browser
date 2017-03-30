@@ -76,9 +76,9 @@ static bool isValidColorString(const String& value)
     return color.setFromString(value) && !color.hasAlpha();
 }
 
-PassRefPtrWillBeRawPtr<InputType> ColorInputType::create(HTMLInputElement& element)
+InputType* ColorInputType::create(HTMLInputElement& element)
 {
-    return adoptRefWillBeNoop(new ColorInputType(element));
+    return new ColorInputType(element);
 }
 
 ColorInputType::~ColorInputType()
@@ -133,12 +133,12 @@ void ColorInputType::createShadowSubtree()
     ASSERT(element().shadow());
 
     Document& document = element().document();
-    RefPtrWillBeRawPtr<HTMLDivElement> wrapperElement = HTMLDivElement::create(document);
-    wrapperElement->setShadowPseudoId(AtomicString("-webkit-color-swatch-wrapper", AtomicString::ConstructFromLiteral));
-    RefPtrWillBeRawPtr<HTMLDivElement> colorSwatch = HTMLDivElement::create(document);
-    colorSwatch->setShadowPseudoId(AtomicString("-webkit-color-swatch", AtomicString::ConstructFromLiteral));
-    wrapperElement->appendChild(colorSwatch.release());
-    element().userAgentShadowRoot()->appendChild(wrapperElement.release());
+    HTMLDivElement* wrapperElement = HTMLDivElement::create(document);
+    wrapperElement->setShadowPseudoId(AtomicString("-webkit-color-swatch-wrapper"));
+    HTMLDivElement* colorSwatch = HTMLDivElement::create(document);
+    colorSwatch->setShadowPseudoId(AtomicString("-webkit-color-swatch"));
+    wrapperElement->appendChild(colorSwatch);
+    element().userAgentShadowRoot()->appendChild(wrapperElement);
 
     element().updateView();
 }
@@ -160,7 +160,7 @@ void ColorInputType::handleDOMActivateEvent(Event* event)
     if (element().isDisabledFormControl() || !element().layoutObject())
         return;
 
-    if (!UserGestureIndicator::processingUserGesture())
+    if (!UserGestureIndicator::utilizeUserGesture())
         return;
 
     ChromeClient* chromeClient = this->chromeClient();
@@ -262,7 +262,7 @@ Vector<ColorSuggestion> ColorInputType::suggestions() const
     Vector<ColorSuggestion> suggestions;
     HTMLDataListElement* dataList = element().dataList();
     if (dataList) {
-        RefPtrWillBeRawPtr<HTMLDataListOptionsCollection> options = dataList->options();
+        HTMLDataListOptionsCollection* options = dataList->options();
         for (unsigned i = 0; HTMLOptionElement* option = options->item(i); i++) {
             if (!element().isValidValue(option->value()))
                 continue;

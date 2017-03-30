@@ -271,7 +271,7 @@ const char kTestFilePath[] = "platform_apps/launch_files/test.txt";
 // ash, so we test that it works here.
 IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, CreateAndCloseAppWindow) {
   const Extension* extension = LoadAndLaunchPlatformApp("minimal", "Launched");
-  AppWindow* window = CreateAppWindow(extension);
+  AppWindow* window = CreateAppWindow(browser()->profile(), extension);
   CloseAppWindow(window);
 }
 
@@ -778,7 +778,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
                        AppWindowAdjustBoundsToBeVisibleOnScreen) {
   const Extension* extension = LoadAndLaunchPlatformApp("minimal", "Launched");
 
-  AppWindow* window = CreateAppWindow(extension);
+  AppWindow* window = CreateAppWindow(browser()->profile(), extension);
 
   // The screen bounds didn't change, the cached bounds didn't need to adjust.
   gfx::Rect cached_bounds(80, 100, 400, 400);
@@ -1246,9 +1246,9 @@ IN_PROC_BROWSER_TEST_F(PlatformAppIncognitoBrowserTest, IncognitoComponentApp) {
   ASSERT_TRUE(registry != NULL);
   registry->AddObserver(this);
 
-  OpenApplication(AppLaunchParams(incognito_profile, file_manager, CURRENT_TAB,
-                                  chrome::HOST_DESKTOP_TYPE_NATIVE,
-                                  extensions::SOURCE_TEST));
+  OpenApplication(CreateAppLaunchParamsUserContainer(
+      incognito_profile, file_manager, NEW_FOREGROUND_TAB,
+      extensions::SOURCE_TEST));
 
   while (!ContainsKey(opener_app_ids_, file_manager->id())) {
     content::RunAllPendingInMessageLoop();

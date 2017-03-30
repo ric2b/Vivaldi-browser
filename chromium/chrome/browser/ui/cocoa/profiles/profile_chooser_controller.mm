@@ -22,7 +22,6 @@
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/avatar_menu_observer.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profile_window.h"
@@ -301,10 +300,7 @@ void GaiaWebContentsDelegate::HandleKeyboardEvent(
 
   int chrome_command_id = [BrowserWindowUtils getCommandId:event];
 
-  bool is_text_editing_command =
-      (event.modifiers & blink::WebInputEvent::MetaKey) &&
-      (event.windowsKeyCode == ui::VKEY_A ||
-       event.windowsKeyCode == ui::VKEY_V);
+  bool is_text_editing_command = [BrowserWindowUtils isTextEditingEvent:event];
 
   // TODO(guohui): maybe should add an accelerator for the back button.
   if (chrome_command_id == IDC_CLOSE_WINDOW || chrome_command_id == IDC_EXIT ||
@@ -1227,7 +1223,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     accessPoint_ = accessPoint;
 
     avatarMenu_.reset(new AvatarMenu(
-        &g_browser_process->profile_manager()->GetProfileInfoCache(),
+        &g_browser_process->profile_manager()->GetProfileAttributesStorage(),
         observer_.get(),
         browser_));
     avatarMenu_->RebuildMenu();
@@ -1899,7 +1895,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
       ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
           profiles::GetPlaceholderAvatarIconResourceID());
   AvatarMenu::Item guestItem(std::string::npos, /* menu_index, not used */
-                             std::string::npos, /* profile_index, not used */
+                             base::FilePath(), /* profile_path, not used */
                              guestIcon);
   guestItem.active = true;
   guestItem.name = base::SysNSStringToUTF16(

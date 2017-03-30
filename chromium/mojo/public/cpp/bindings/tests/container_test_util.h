@@ -7,7 +7,7 @@
 
 #include <stddef.h>
 
-#include "mojo/public/cpp/system/macros.h"
+#include "base/move.h"
 
 namespace mojo {
 
@@ -30,7 +30,7 @@ class CopyableType {
 };
 
 class MoveOnlyType {
-  MOJO_MOVE_ONLY_TYPE(MoveOnlyType)
+  MOVE_ONLY_TYPE_FOR_CPP_03(MoveOnlyType);
  public:
   typedef MoveOnlyType Data_;
   MoveOnlyType();

@@ -4,12 +4,11 @@
 
 #include "core/dom/custom/CustomElementMicrotaskDispatcher.h"
 
-#include "core/dom/Microtask.h"
+#include "bindings/core/v8/Microtask.h"
 #include "core/dom/custom/CustomElementCallbackQueue.h"
 #include "core/dom/custom/CustomElementMicrotaskImportStep.h"
 #include "core/dom/custom/CustomElementProcessingStack.h"
 #include "core/dom/custom/CustomElementScheduler.h"
-#include "wtf/MainThread.h"
 
 namespace blink {
 
@@ -21,12 +20,10 @@ CustomElementMicrotaskDispatcher::CustomElementMicrotaskDispatcher()
 {
 }
 
-DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(CustomElementMicrotaskDispatcher)
-
 CustomElementMicrotaskDispatcher& CustomElementMicrotaskDispatcher::instance()
 {
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<CustomElementMicrotaskDispatcher>, instance, (adoptPtrWillBeNoop(new CustomElementMicrotaskDispatcher())));
-    return *instance;
+    DEFINE_STATIC_LOCAL(CustomElementMicrotaskDispatcher, instance, (new CustomElementMicrotaskDispatcher));
+    return instance;
 }
 
 void CustomElementMicrotaskDispatcher::enqueue(CustomElementCallbackQueue* queue)
@@ -38,7 +35,7 @@ void CustomElementMicrotaskDispatcher::enqueue(CustomElementCallbackQueue* queue
 
 void CustomElementMicrotaskDispatcher::ensureMicrotaskScheduledForElementQueue()
 {
-    ASSERT(m_phase == Quiescent || m_phase == Resolving);
+    DCHECK(m_phase == Quiescent || m_phase == Resolving);
     ensureMicrotaskScheduled();
 }
 
@@ -57,9 +54,10 @@ void CustomElementMicrotaskDispatcher::dispatch()
 
 void CustomElementMicrotaskDispatcher::doDispatch()
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
-    ASSERT(m_phase == Quiescent && m_hasScheduledMicrotask);
+    DCHECK(m_phase == Quiescent);
+    DCHECK(m_hasScheduledMicrotask);
     m_hasScheduledMicrotask = false;
 
     // Finishing microtask work deletes all
@@ -83,9 +81,7 @@ void CustomElementMicrotaskDispatcher::doDispatch()
 
 DEFINE_TRACE(CustomElementMicrotaskDispatcher)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_elements);
-#endif
 }
 
 } // namespace blink

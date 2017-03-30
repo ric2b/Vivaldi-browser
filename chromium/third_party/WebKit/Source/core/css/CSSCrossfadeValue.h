@@ -30,7 +30,7 @@
 #include "core/css/CSSImageGeneratorValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/fetch/ImageResource.h"
-#include "core/fetch/ImageResourceClient.h"
+#include "core/fetch/ImageResourceObserver.h"
 #include "platform/graphics/Image.h"
 
 namespace blink {
@@ -41,23 +41,23 @@ class LayoutObject;
 
 class CORE_EXPORT CSSCrossfadeValue final : public CSSImageGeneratorValue {
     friend class CrossfadeSubimageObserverProxy;
-    WILL_BE_USING_PRE_FINALIZER(CSSCrossfadeValue, dispose);
+    USING_PRE_FINALIZER(CSSCrossfadeValue, dispose);
 public:
-    static PassRefPtrWillBeRawPtr<CSSCrossfadeValue> create(PassRefPtrWillBeRawPtr<CSSValue> fromValue, PassRefPtrWillBeRawPtr<CSSValue> toValue, PassRefPtrWillBeRawPtr<CSSPrimitiveValue> percentageValue)
+    static CSSCrossfadeValue* create(CSSValue* fromValue, CSSValue* toValue, CSSPrimitiveValue* percentageValue)
     {
-        return adoptRefWillBeNoop(new CSSCrossfadeValue(fromValue, toValue, percentageValue));
+        return new CSSCrossfadeValue(fromValue, toValue, percentageValue);
     }
 
     ~CSSCrossfadeValue();
 
     String customCSSText() const;
 
-    PassRefPtr<Image> image(const LayoutObject*, const IntSize&);
+    PassRefPtr<Image> image(const LayoutObject&, const IntSize&);
     bool isFixedSize() const { return true; }
-    IntSize fixedSize(const LayoutObject*);
+    IntSize fixedSize(const LayoutObject&, const FloatSize&);
 
     bool isPending() const;
-    bool knownToBeOpaque(const LayoutObject*) const;
+    bool knownToBeOpaque(const LayoutObject&) const;
 
     void loadSubimages(Document*);
 
@@ -65,16 +65,16 @@ public:
 
     bool equals(const CSSCrossfadeValue&) const;
 
-    PassRefPtrWillBeRawPtr<CSSCrossfadeValue> valueWithURLsMadeAbsolute();
+    CSSCrossfadeValue* valueWithURLsMadeAbsolute();
 
     DECLARE_TRACE_AFTER_DISPATCH();
 
 private:
-    CSSCrossfadeValue(PassRefPtrWillBeRawPtr<CSSValue> fromValue, PassRefPtrWillBeRawPtr<CSSValue> toValue, PassRefPtrWillBeRawPtr<CSSPrimitiveValue> percentageValue);
+    CSSCrossfadeValue(CSSValue* fromValue, CSSValue* toValue, CSSPrimitiveValue* percentageValue);
 
     void dispose();
 
-    class CrossfadeSubimageObserverProxy final : public ImageResourceClient {
+    class CrossfadeSubimageObserverProxy final : public ImageResourceObserver {
         DISALLOW_NEW();
     public:
         explicit CrossfadeSubimageObserverProxy(CSSCrossfadeValue* ownerValue)
@@ -91,20 +91,18 @@ private:
         String debugName() const override { return "CrossfadeSubimageObserverProxy"; }
         void setReady(bool ready) { m_ready = ready; }
     private:
-        RawPtrWillBeMember<CSSCrossfadeValue> m_ownerValue;
+        Member<CSSCrossfadeValue> m_ownerValue;
         bool m_ready;
     };
 
     void crossfadeChanged(const IntRect&);
 
-    RefPtrWillBeMember<CSSValue> m_fromValue;
-    RefPtrWillBeMember<CSSValue> m_toValue;
-    RefPtrWillBeMember<CSSPrimitiveValue> m_percentageValue;
+    Member<CSSValue> m_fromValue;
+    Member<CSSValue> m_toValue;
+    Member<CSSPrimitiveValue> m_percentageValue;
 
-    RefPtrWillBeMember<ImageResource> m_cachedFromImage;
-    RefPtrWillBeMember<ImageResource> m_cachedToImage;
-
-    RefPtr<Image> m_generatedImage;
+    Member<ImageResource> m_cachedFromImage;
+    Member<ImageResource> m_cachedToImage;
 
     CrossfadeSubimageObserverProxy m_crossfadeSubimageObserver;
 };

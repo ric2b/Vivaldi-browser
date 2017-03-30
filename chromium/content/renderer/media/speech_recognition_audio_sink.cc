@@ -20,7 +20,7 @@ SpeechRecognitionAudioSink::SpeechRecognitionAudioSink(
     const blink::WebMediaStreamTrack& track,
     const media::AudioParameters& params,
     const base::SharedMemoryHandle memory,
-    scoped_ptr<base::SyncSocket> socket,
+    std::unique_ptr<base::SyncSocket> socket,
     const OnStoppedCB& on_stopped_cb)
     : track_(track),
       shared_memory_(memory, false),
@@ -61,11 +61,8 @@ SpeechRecognitionAudioSink::~SpeechRecognitionAudioSink() {
 // static
 bool SpeechRecognitionAudioSink::IsSupportedTrack(
     const blink::WebMediaStreamTrack& track) {
-  if (track.source().type() != blink::WebMediaStreamSource::TypeAudio)
-    return false;
-
   MediaStreamAudioSource* native_source =
-      static_cast<MediaStreamAudioSource*>(track.source().extraData());
+      MediaStreamAudioSource::From(track.source());
   if (!native_source)
     return false;
 

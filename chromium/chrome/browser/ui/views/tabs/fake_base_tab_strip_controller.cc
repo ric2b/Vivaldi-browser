@@ -70,10 +70,6 @@ bool FakeBaseTabStripController::IsTabPinned(int index) const {
   return false;
 }
 
-bool FakeBaseTabStripController::IsNewTabPage(int index) const {
-  return false;
-}
-
 void FakeBaseTabStripController::SelectTab(int index) {
   if (!IsValidIndex(index) || active_index_ == index)
     return;
@@ -147,4 +143,8 @@ void FakeBaseTabStripController::OnStoppedDraggingTabs() {
 
 void FakeBaseTabStripController::CheckFileSupported(const GURL& url) {
   tab_strip_->FileSupported(url, true);
+}
+
+SkColor FakeBaseTabStripController::GetToolbarTopSeparatorColor() const {
+  return SK_ColorBLACK;
 }

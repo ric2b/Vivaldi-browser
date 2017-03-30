@@ -28,7 +28,7 @@ namespace {
 void ShowExtensionInstallDialogImpl(
     ExtensionInstallPromptShowParams* show_params,
     const ExtensionInstallPrompt::DoneCallback& done_callback,
-    scoped_ptr<ExtensionInstallPrompt::Prompt> prompt) {
+    std::unique_ptr<ExtensionInstallPrompt::Prompt> prompt) {
   // These objects will delete themselves when the dialog closes.
   if (!show_params->GetParentWebContents()) {
     new WindowedInstallDialogController(show_params, done_callback,
@@ -45,7 +45,7 @@ void ShowExtensionInstallDialogImpl(
 ExtensionInstallDialogController::ExtensionInstallDialogController(
     ExtensionInstallPromptShowParams* show_params,
     const ExtensionInstallPrompt::DoneCallback& done_callback,
-    scoped_ptr<ExtensionInstallPrompt::Prompt> prompt)
+    std::unique_ptr<ExtensionInstallPrompt::Prompt> prompt)
     : done_callback_(done_callback) {
   ExtensionInstallPrompt::PromptType promptType = prompt->type();
   view_controller_.reset([[ExtensionInstallViewController alloc]
@@ -60,6 +60,10 @@ ExtensionInstallDialogController::ExtensionInstallDialogController(
 
   base::scoped_nsobject<CustomConstrainedWindowSheet> sheet(
       [[CustomConstrainedWindowSheet alloc] initWithCustomWindow:window]);
+  // The extension install dialog can cause window server crashes when using the
+  // complex animations provided by private APIs, so use simple animations. See
+  // https://crbug.com/548824.
+  [sheet setUseSimpleAnimations:YES];
   constrained_window_ = CreateAndShowWebModalDialogMac(
       this, show_params->GetParentWebContents(), sheet);
 

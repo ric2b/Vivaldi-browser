@@ -7,13 +7,13 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "components/password_manager/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -54,10 +54,14 @@ class AffiliatedMatchHelper : public PasswordStore::Observer,
   typedef base::Callback<void(const std::vector<std::string>&)>
       AffiliatedRealmsCallback;
 
+  typedef base::Callback<void(ScopedVector<autofill::PasswordForm>)>
+      PasswordFormsCallback;
+
   // The |password_store| must outlive |this|. Both arguments must be non-NULL,
   // except in tests which do not Initialize() the object.
-  AffiliatedMatchHelper(PasswordStore* password_store,
-                        scoped_ptr<AffiliationService> affiliation_service);
+  AffiliatedMatchHelper(
+      PasswordStore* password_store,
+      std::unique_ptr<AffiliationService> affiliation_service);
   ~AffiliatedMatchHelper() override;
 
   // Schedules deferred initialization.
@@ -80,6 +84,15 @@ class AffiliatedMatchHelper : public PasswordStore::Observer,
   virtual void GetAffiliatedWebRealms(
       const autofill::PasswordForm& android_form,
       const AffiliatedRealmsCallback& result_callback);
+
+  // Retrieves realms of web sites affiliated with the Android credentials in
+  // |forms|, sets |affiliated_web_realm| of forms, and invokes
+  // |result_callback|.
+  // NOTE: This will not issue an on-demand network request. If a request to
+  // cache fails, no web realm will be injected into corresponding form.
+  virtual void InjectAffiliatedWebRealms(
+      ScopedVector<autofill::PasswordForm> forms,
+      const PasswordFormsCallback& result_callback);
 
   // Removes cached affiliation data that is no longer needed.
   void TrimAffiliationCache();
@@ -125,6 +138,14 @@ class AffiliatedMatchHelper : public PasswordStore::Observer,
       const AffiliatedFacets& results,
       bool success);
 
+  // Called back by AffiliationService to supply the list of facets affiliated
+  // with the Android credential in |form|. Sets |form->affiliated_web_realm|,
+  // if |success| is true and |results| is non-empty. Invokes |barrier_closure|.
+  void CompleteInjectAffiliatedWebRealm(autofill::PasswordForm* form,
+                                        base::Closure barrier_closure,
+                                        const AffiliatedFacets& results,
+                                        bool success);
+
   // PasswordStore::Observer:
   void OnLoginsChanged(const PasswordStoreChangeList& changes) override;
 
@@ -136,7 +157,7 @@ class AffiliatedMatchHelper : public PasswordStore::Observer,
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_waiting_;
 
   // Being the sole consumer of AffiliationService, |this| owns the service.
-  scoped_ptr<AffiliationService> affiliation_service_;
+  std::unique_ptr<AffiliationService> affiliation_service_;
 
   base::WeakPtrFactory<AffiliatedMatchHelper> weak_ptr_factory_;
 

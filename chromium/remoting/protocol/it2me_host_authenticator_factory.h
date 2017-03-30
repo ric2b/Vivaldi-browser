@@ -5,12 +5,12 @@
 #ifndef REMOTING_PROTOCOL_IT2ME_HOST_AUTHENTICATOR_FACTORY_H_
 #define REMOTING_PROTOCOL_IT2ME_HOST_AUTHENTICATOR_FACTORY_H_
 
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "remoting/protocol/authenticator.h"
 
 namespace remoting {
@@ -23,23 +23,21 @@ namespace protocol {
 // understands both the V2 and legacy V1 authentication mechanisms.
 class It2MeHostAuthenticatorFactory : public AuthenticatorFactory {
  public:
-  It2MeHostAuthenticatorFactory(
-      const std::string& local_cert,
-      scoped_refptr<RsaKeyPair> key_pair,
-      const std::string& shared_secret,
-      const std::string& required_client_domain);
+  It2MeHostAuthenticatorFactory(const std::string& local_cert,
+                                scoped_refptr<RsaKeyPair> key_pair,
+                                const std::string& access_code,
+                                const std::string& required_client_domain);
   ~It2MeHostAuthenticatorFactory() override;
 
   // AuthenticatorFactory interface.
-  scoped_ptr<Authenticator> CreateAuthenticator(
+  std::unique_ptr<Authenticator> CreateAuthenticator(
       const std::string& local_jid,
-      const std::string& remote_jid,
-      const buzz::XmlElement* first_message) override;
+      const std::string& remote_jid) override;
 
  private:
   std::string local_cert_;
   scoped_refptr<RsaKeyPair> key_pair_;
-  std::string shared_secret_;
+  std::string access_code_hash_;
   std::string required_client_domain_;
 
   DISALLOW_COPY_AND_ASSIGN(It2MeHostAuthenticatorFactory);

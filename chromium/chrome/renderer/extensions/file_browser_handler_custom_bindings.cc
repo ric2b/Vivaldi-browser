@@ -12,7 +12,6 @@
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/web/WebDOMFileSystem.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebScriptBindings.h"
 
 namespace extensions {
 
@@ -20,18 +19,17 @@ FileBrowserHandlerCustomBindings::FileBrowserHandlerCustomBindings(
     ScriptContext* context)
     : ObjectBackedNativeHandler(context) {
   RouteFunction(
-      "GetExternalFileEntry",
-      base::Bind(&FileBrowserHandlerCustomBindings::GetExternalFileEntry,
-                 base::Unretained(this)));
-  RouteFunction("GetEntryURL",
-                base::Bind(&FileBrowserHandlerCustomBindings::GetEntryURL,
-                           base::Unretained(this)));
+      "GetExternalFileEntry", "fileBrowserHandler",
+      base::Bind(
+          &FileBrowserHandlerCustomBindings::GetExternalFileEntryCallback,
+          base::Unretained(this)));
 }
 
 void FileBrowserHandlerCustomBindings::GetExternalFileEntry(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
-  // TODO(zelidrag): Make this magic work on other platforms when file browser
-  // matures enough on ChromeOS.
+    const v8::FunctionCallbackInfo<v8::Value>& args,
+    ScriptContext* context) {
+// TODO(zelidrag): Make this magic work on other platforms when file browser
+// matures enough on ChromeOS.
 #if defined(OS_CHROMEOS)
     CHECK(args.Length() == 1);
     CHECK(args[0]->IsObject());
@@ -51,7 +49,7 @@ void FileBrowserHandlerCustomBindings::GetExternalFileEntry(
         is_directory ? blink::WebDOMFileSystem::EntryTypeDirectory
                      : blink::WebDOMFileSystem::EntryTypeFile;
     blink::WebLocalFrame* webframe =
-        blink::WebLocalFrame::frameForContext(context()->v8_context());
+        blink::WebLocalFrame::frameForContext(context->v8_context());
     args.GetReturnValue().Set(
         blink::WebDOMFileSystem::create(
             webframe,
@@ -65,14 +63,9 @@ void FileBrowserHandlerCustomBindings::GetExternalFileEntry(
 #endif
 }
 
-void FileBrowserHandlerCustomBindings::GetEntryURL(
+void FileBrowserHandlerCustomBindings::GetExternalFileEntryCallback(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
-  CHECK(args.Length() == 1);
-  CHECK(args[0]->IsObject());
-  const blink::WebURL& url =
-      blink::WebDOMFileSystem::createFileSystemURL(args[0]);
-  args.GetReturnValue().Set(
-      blink::WebScriptBindings::toV8String(url.string(), args.GetIsolate()));
+  GetExternalFileEntry(args, context());
 }
 
 }  // namespace extensions

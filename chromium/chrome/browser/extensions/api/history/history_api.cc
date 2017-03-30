@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/api/history/history_api.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -13,7 +14,6 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -39,10 +39,8 @@ namespace extensions {
 using api::history::HistoryItem;
 using api::history::VisitItem;
 
-typedef std::vector<linked_ptr<api::history::HistoryItem> >
-    HistoryItemList;
-typedef std::vector<linked_ptr<api::history::VisitItem> >
-    VisitItemList;
+typedef std::vector<api::history::HistoryItem> HistoryItemList;
+typedef std::vector<api::history::VisitItem> VisitItemList;
 
 namespace AddUrl = api::history::AddUrl;
 namespace DeleteUrl = api::history::DeleteUrl;
@@ -62,28 +60,27 @@ double MilliSecondsFromTime(const base::Time& time) {
   return 1000 * time.ToDoubleT();
 }
 
-scoped_ptr<HistoryItem> GetHistoryItem(const history::URLRow& row) {
-  scoped_ptr<HistoryItem> history_item(new HistoryItem());
+HistoryItem GetHistoryItem(const history::URLRow& row) {
+  HistoryItem history_item;
 
-  history_item->id = base::Int64ToString(row.id());
-  history_item->url.reset(new std::string(row.url().spec()));
-  history_item->title.reset(new std::string(base::UTF16ToUTF8(row.title())));
-  history_item->last_visit_time.reset(
+  history_item.id = base::Int64ToString(row.id());
+  history_item.url.reset(new std::string(row.url().spec()));
+  history_item.title.reset(new std::string(base::UTF16ToUTF8(row.title())));
+  history_item.last_visit_time.reset(
       new double(MilliSecondsFromTime(row.last_visit())));
-  history_item->typed_count.reset(new int(row.typed_count()));
-  history_item->visit_count.reset(new int(row.visit_count()));
+  history_item.typed_count.reset(new int(row.typed_count()));
+  history_item.visit_count.reset(new int(row.visit_count()));
 
   return history_item;
 }
 
-scoped_ptr<VisitItem> GetVisitItem(const history::VisitRow& row) {
-  scoped_ptr<VisitItem> visit_item(new VisitItem());
+VisitItem GetVisitItem(const history::VisitRow& row) {
+  VisitItem visit_item;
 
-  visit_item->id = base::Int64ToString(row.url_id);
-  visit_item->visit_id = base::Int64ToString(row.visit_id);
-  visit_item->visit_time.reset(
-      new double(MilliSecondsFromTime(row.visit_time)));
-  visit_item->referring_visit_id = base::Int64ToString(row.referring_visit);
+  visit_item.id = base::Int64ToString(row.url_id);
+  visit_item.visit_id = base::Int64ToString(row.visit_id);
+  visit_item.visit_time.reset(new double(MilliSecondsFromTime(row.visit_time)));
+  visit_item.referring_visit_id = base::Int64ToString(row.referring_visit);
 
   api::history::TransitionType transition = api::history::TRANSITION_TYPE_LINK;
   switch (row.transition & ui::PAGE_TRANSITION_CORE_MASK) {
@@ -124,7 +121,7 @@ scoped_ptr<VisitItem> GetVisitItem(const history::VisitRow& row) {
       DCHECK(false);
   }
 
-  visit_item->transition = transition;
+  visit_item.transition = transition;
 
   return visit_item;
 }
@@ -146,8 +143,8 @@ void HistoryEventRouter::OnURLVisited(history::HistoryService* history_service,
                                       const history::URLRow& row,
                                       const history::RedirectList& redirects,
                                       base::Time visit_time) {
-  scoped_ptr<HistoryItem> history_item = GetHistoryItem(row);
-  scoped_ptr<base::ListValue> args = OnVisited::Create(*history_item);
+  std::unique_ptr<base::ListValue> args =
+      OnVisited::Create(GetHistoryItem(row));
   DispatchEvent(profile_, events::HISTORY_ON_VISITED,
                 api::history::OnVisited::kEventName, std::move(args));
 }
@@ -165,17 +162,18 @@ void HistoryEventRouter::OnURLsDeleted(history::HistoryService* history_service,
     urls->push_back(row.url().spec());
   removed.urls.reset(urls);
 
-  scoped_ptr<base::ListValue> args = OnVisitRemoved::Create(removed);
+  std::unique_ptr<base::ListValue> args = OnVisitRemoved::Create(removed);
   DispatchEvent(profile_, events::HISTORY_ON_VISIT_REMOVED,
                 api::history::OnVisitRemoved::kEventName, std::move(args));
 }
 
-void HistoryEventRouter::DispatchEvent(Profile* profile,
-                                       events::HistogramValue histogram_value,
-                                       const std::string& event_name,
-                                       scoped_ptr<base::ListValue> event_args) {
+void HistoryEventRouter::DispatchEvent(
+    Profile* profile,
+    events::HistogramValue histogram_value,
+    const std::string& event_name,
+    std::unique_ptr<base::ListValue> event_args) {
   if (profile && EventRouter::Get(profile)) {
-    scoped_ptr<Event> event(
+    std::unique_ptr<Event> event(
         new Event(histogram_value, event_name, std::move(event_args)));
     event->restrict_to_browser_context = profile;
     EventRouter::Get(profile)->BroadcastEvent(std::move(event));
@@ -276,7 +274,7 @@ void HistoryFunctionWithCallback::SendResponseToCallback() {
 }
 
 bool HistoryGetVisitsFunction::RunAsyncImpl() {
-  scoped_ptr<GetVisits::Params> params(GetVisits::Params::Create(*args_));
+  std::unique_ptr<GetVisits::Params> params(GetVisits::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   GURL url;
@@ -299,12 +297,8 @@ void HistoryGetVisitsFunction::QueryComplete(
     const history::VisitVector& visits) {
   VisitItemList visit_item_vec;
   if (success && !visits.empty()) {
-    for (history::VisitVector::const_iterator iterator = visits.begin();
-         iterator != visits.end();
-         ++iterator) {
-      visit_item_vec.push_back(make_linked_ptr(
-          GetVisitItem(*iterator).release()));
-    }
+    for (const history::VisitRow& visit : visits)
+      visit_item_vec.push_back(GetVisitItem(visit));
   }
 
   results_ = GetVisits::Results::Create(visit_item_vec);
@@ -312,7 +306,7 @@ void HistoryGetVisitsFunction::QueryComplete(
 }
 
 bool HistorySearchFunction::RunAsyncImpl() {
-  scoped_ptr<Search::Params> params(Search::Params::Create(*args_));
+  std::unique_ptr<Search::Params> params(Search::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   base::string16 search_text = base::UTF8ToUTF16(params->query.text);
@@ -342,20 +336,15 @@ bool HistorySearchFunction::RunAsyncImpl() {
 void HistorySearchFunction::SearchComplete(history::QueryResults* results) {
   HistoryItemList history_item_vec;
   if (results && !results->empty()) {
-    for (history::QueryResults::URLResultVector::const_iterator iterator =
-            results->begin();
-         iterator != results->end();
-        ++iterator) {
-      history_item_vec.push_back(make_linked_ptr(
-          GetHistoryItem(**iterator).release()));
-    }
+    for (const history::URLResult* item : *results)
+      history_item_vec.push_back(GetHistoryItem(*item));
   }
   results_ = Search::Results::Create(history_item_vec);
   SendAsyncResponse();
 }
 
 bool HistoryAddUrlFunction::RunAsync() {
-  scoped_ptr<AddUrl::Params> params(AddUrl::Params::Create(*args_));
+  std::unique_ptr<AddUrl::Params> params(AddUrl::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   GURL url;
@@ -371,7 +360,7 @@ bool HistoryAddUrlFunction::RunAsync() {
 }
 
 bool HistoryDeleteUrlFunction::RunAsync() {
-  scoped_ptr<DeleteUrl::Params> params(DeleteUrl::Params::Create(*args_));
+  std::unique_ptr<DeleteUrl::Params> params(DeleteUrl::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   if (!VerifyDeleteAllowed())
@@ -400,7 +389,8 @@ bool HistoryDeleteUrlFunction::RunAsync() {
 }
 
 bool HistoryDeleteRangeFunction::RunAsyncImpl() {
-  scoped_ptr<DeleteRange::Params> params(DeleteRange::Params::Create(*args_));
+  std::unique_ptr<DeleteRange::Params> params(
+      DeleteRange::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   if (!VerifyDeleteAllowed())

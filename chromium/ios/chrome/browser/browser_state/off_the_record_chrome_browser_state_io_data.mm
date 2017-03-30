@@ -4,7 +4,7 @@
 
 #include "ios/chrome/browser/browser_state/off_the_record_chrome_browser_state_io_data.h"
 
-#import <UIKit/UIkit.h>
+#import <UIKit/UIKit.h>
 
 #include <utility>
 
@@ -25,6 +25,7 @@
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/web/public/web_thread.h"
 #include "net/base/sdch_manager.h"
+#include "net/cookies/cookie_store.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/extras/sqlite/sqlite_channel_id_store.h"
 #include "net/ftp/ftp_network_layer.h"
@@ -117,10 +118,6 @@ void OffTheRecordChromeBrowserStateIOData::Handle::LazyInitialize() const {
   // Set initialized_ to true at the beginning in case any of the objects
   // below try to get the ResourceContext pointer.
   initialized_ = true;
-  io_data_->safe_browsing_enabled()->Init(prefs::kSafeBrowsingEnabled,
-                                          browser_state_->GetPrefs());
-  io_data_->safe_browsing_enabled()->MoveToThread(
-      web::WebThread::GetTaskRunnerForThread(web::WebThread::IO));
   io_data_->InitializeOnUIThread(browser_state_);
 
   // Once initialized, listen to memory warnings.
@@ -131,9 +128,10 @@ void OffTheRecordChromeBrowserStateIOData::Handle::LazyInitialize() const {
       nullptr, CFNotificationSuspensionBehaviorCoalesce);
 }
 
-scoped_ptr<ChromeBrowserStateIOData::IOSChromeURLRequestContextGetterVector>
+std::unique_ptr<
+    ChromeBrowserStateIOData::IOSChromeURLRequestContextGetterVector>
 OffTheRecordChromeBrowserStateIOData::Handle::GetAllContextGetters() {
-  scoped_ptr<IOSChromeURLRequestContextGetterVector> context_getters(
+  std::unique_ptr<IOSChromeURLRequestContextGetterVector> context_getters(
       new IOSChromeURLRequestContextGetterVector());
   if (main_request_context_getter_.get())
     context_getters->push_back(main_request_context_getter_);
@@ -148,7 +146,7 @@ OffTheRecordChromeBrowserStateIOData::OffTheRecordChromeBrowserStateIOData()
 OffTheRecordChromeBrowserStateIOData::~OffTheRecordChromeBrowserStateIOData() {}
 
 void OffTheRecordChromeBrowserStateIOData::InitializeInternal(
-    scoped_ptr<IOSChromeNetworkDelegate> chrome_network_delegate,
+    std::unique_ptr<IOSChromeNetworkDelegate> chrome_network_delegate,
     ProfileParams* profile_params,
     ProtocolHandlerMap* protocol_handlers) const {
   net::URLRequestContext* main_context = main_request_context();
@@ -177,7 +175,7 @@ void OffTheRecordChromeBrowserStateIOData::InitializeInternal(
       io_thread_globals->url_request_backoff_manager.get());
 
   // For incognito, we use the default non-persistent HttpServerPropertiesImpl.
-  set_http_server_properties(scoped_ptr<net::HttpServerProperties>(
+  set_http_server_properties(std::unique_ptr<net::HttpServerProperties>(
       new net::HttpServerPropertiesImpl()));
   main_context->set_http_server_properties(http_server_properties());
 
@@ -196,11 +194,13 @@ void OffTheRecordChromeBrowserStateIOData::InitializeInternal(
   set_channel_id_service(channel_id_service);
   main_context->set_channel_id_service(channel_id_service);
 
-  main_context->set_cookie_store(
+  main_cookie_store_ =
       cookie_util::CreateCookieStore(cookie_util::CookieStoreConfig(
           cookie_path_,
           cookie_util::CookieStoreConfig::RESTORED_SESSION_COOKIES,
-          cookie_util::CookieStoreConfig::COOKIE_STORE_IOS, nullptr)));
+          cookie_util::CookieStoreConfig::COOKIE_STORE_IOS, nullptr));
+  main_context->set_cookie_store(main_cookie_store_.get());
+  main_cookie_store_->SetChannelIDServiceID(channel_id_service->GetUniqueID());
 
   http_network_session_ = CreateHttpNetworkSession(*profile_params);
   main_http_factory_ = CreateMainHttpFactory(
@@ -208,7 +208,7 @@ void OffTheRecordChromeBrowserStateIOData::InitializeInternal(
 
   main_context->set_http_transaction_factory(main_http_factory_.get());
 
-  scoped_ptr<net::URLRequestJobFactoryImpl> main_job_factory(
+  std::unique_ptr<net::URLRequestJobFactoryImpl> main_job_factory(
       new net::URLRequestJobFactoryImpl());
 
   InstallProtocolHandlers(main_job_factory.get(), protocol_handlers);
@@ -224,14 +224,14 @@ void OffTheRecordChromeBrowserStateIOData::InitializeInternal(
   main_context->set_sdch_manager(sdch_manager_.get());
 }
 
-net::URLRequestContext*
+ChromeBrowserStateIOData::AppRequestContext*
 OffTheRecordChromeBrowserStateIOData::InitializeAppRequestContext(
     net::URLRequestContext* main_context) const {
   NOTREACHED();
   return nullptr;
 }
 
-net::URLRequestContext*
+ChromeBrowserStateIOData::AppRequestContext*
 OffTheRecordChromeBrowserStateIOData::AcquireIsolatedAppRequestContext(
     net::URLRequestContext* main_context) const {
   NOTREACHED();

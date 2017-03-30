@@ -27,9 +27,12 @@
 #import "ui/views/cocoa/native_widget_mac_nswindow.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/native_cursor.h"
+#include "ui/views/test/native_widget_factory.h"
 #include "ui/views/test/test_widget_observer.h"
 #include "ui/views/test/widget_test.h"
+#include "ui/views/widget/native_widget_mac.h"
 #include "ui/views/widget/native_widget_private.h"
 #include "ui/views/window/dialog_delegate.h"
 
@@ -67,6 +70,9 @@
 
 @property(assign, nonatomic) NSUInteger drawRectCount;
 @property(assign, nonatomic) NSRect lastDirtyRect;
+@end
+
+@interface FocusableTestNSView : NSView
 @end
 
 namespace views {
@@ -204,6 +210,30 @@ class WidgetChangeObserver : public TestWidgetObserver {
   base::RunLoop* run_loop_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(WidgetChangeObserver);
+};
+
+class NativeHostHolder {
+ public:
+  NativeHostHolder()
+      : view_([[NSView alloc] init]), host_(new NativeViewHost()) {
+    host_->set_owned_by_client();
+  }
+
+  void AttachNativeView() {
+    DCHECK(!host_->native_view());
+    host_->Attach(view_.get());
+  }
+
+  void Detach() { host_->Detach(); }
+
+  gfx::NativeView view() const { return view_.get(); }
+  NativeViewHost* host() const { return host_.get(); }
+
+ private:
+  base::scoped_nsobject<NSView> view_;
+  scoped_ptr<NativeViewHost> host_;
+
+  DISALLOW_COPY_AND_ASSIGN(NativeHostHolder);
 };
 
 // Test visibility states triggered externally.
@@ -484,8 +514,9 @@ TEST_F(NativeWidgetMacTest, SetCursor) {
   EXPECT_NE(arrow, hand);
   EXPECT_NE(arrow, ibeam);
 
-  // At the start of the test, the cursor stack should be empty.
-  EXPECT_FALSE([NSCursor currentCursor]);
+  // Make arrow the current cursor.
+  [arrow set];
+  EXPECT_EQ(arrow, [NSCursor currentCursor]);
 
   // Use an event generator to ask views code to set the cursor. However, note
   // that this does not cause Cocoa to generate tracking rectangle updates.
@@ -493,7 +524,7 @@ TEST_F(NativeWidgetMacTest, SetCursor) {
                                            widget->GetNativeWindow());
 
   // Move the mouse over the first view, then simulate a tracking rectangle
-  // update.
+  // update. Verify that the cursor changed from arrow to hand type.
   event_generator.MoveMouseTo(gfx::Point(50, 50));
   [widget->GetNativeWindow() cursorUpdate:event_in_content];
   EXPECT_EQ(hand, [NSCursor currentCursor]);
@@ -550,12 +581,12 @@ TEST_F(NativeWidgetMacTest, NonWidgetParent) {
   [[native_parent contentView] addSubview:anchor_view];
 
   // Note: Don't use WidgetTest::CreateChildPlatformWidget because that makes
-  // windows of TYPE_CONTROL which are automatically made visible. But still
-  // mark it as a child to test window positioning.
+  // windows of TYPE_CONTROL which need a parent Widget to obtain the focus
+  // manager.
   Widget* child = new Widget;
   Widget::InitParams init_params;
   init_params.parent = anchor_view;
-  init_params.child = true;
+  init_params.type = Widget::InitParams::TYPE_POPUP;
   child->Init(init_params);
 
   TestWidgetObserver child_observer(child);
@@ -572,7 +603,8 @@ TEST_F(NativeWidgetMacTest, NonWidgetParent) {
       NativeWidgetMac::GetBridgeForNativeWindow(child->GetNativeWindow());
   EXPECT_EQ(native_parent, bridged_native_widget->parent()->GetNSWindow());
 
-  child->SetBounds(gfx::Rect(50, 50, 200, 100));
+  const gfx::Rect child_bounds(50, 50, 200, 100);
+  child->SetBounds(child_bounds);
   EXPECT_FALSE(child->IsVisible());
   EXPECT_EQ(0u, [[native_parent childWindows] count]);
 
@@ -583,11 +615,9 @@ TEST_F(NativeWidgetMacTest, NonWidgetParent) {
             [[native_parent childWindows] objectAtIndex:0]);
   EXPECT_EQ(native_parent, [child->GetNativeWindow() parentWindow]);
 
-  // Child should be positioned on screen relative to the parent, but note we
-  // positioned the parent in Cocoa coordinates, so we need to convert.
-  gfx::Point parent_origin = gfx::ScreenRectFromNSRect(ParentRect()).origin();
-  EXPECT_EQ(gfx::Rect(150, parent_origin.y() + 50, 200, 100),
-            child->GetWindowBoundsInScreen());
+  // Only non-toplevel Widgets are positioned relative to the parent, so the
+  // bounds set above should be in screen coordinates.
+  EXPECT_EQ(child_bounds, child->GetWindowBoundsInScreen());
 
   // Removing the anchor_view from its view hierarchy is permitted. This should
   // not break the relationship between the two windows.
@@ -945,7 +975,9 @@ class ParentCloseMonitor : public WidgetObserver {
     Widget::InitParams init_params(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
     init_params.parent = parent->GetNativeView();
     init_params.bounds = gfx::Rect(100, 100, 100, 100);
-    init_params.native_widget = new NativeWidgetCapture(child);
+    init_params.native_widget =
+        CreatePlatformNativeWidgetImpl(init_params, child, kStubCapture,
+                                       nullptr);
     child->Init(init_params);
     child->Show();
 
@@ -1109,7 +1141,8 @@ TEST_F(NativeWidgetMacTest, DoesHideTitle) {
   // Same as CreateTopLevelPlatformWidget but with a custom delegate.
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
   Widget* widget = new Widget;
-  params.native_widget = new NativeWidgetCapture(widget);
+  params.native_widget =
+        CreatePlatformNativeWidgetImpl(params, widget, kStubCapture, nullptr);
   CustomTitleWidgetDelegate delegate(widget);
   params.delegate = &delegate;
   params.bounds = gfx::Rect(0, 0, 800, 600);
@@ -1304,6 +1337,138 @@ TEST_F(NativeWidgetMacTest, SchedulePaintInRect_Borderless) {
   widget->CloseNow();
 }
 
+// Ensure traversing NSView focus correctly updates the views::FocusManager.
+TEST_F(NativeWidgetMacTest, ChangeFocusOnChangeFirstResponder) {
+  Widget* widget = CreateTopLevelPlatformWidget();
+  widget->GetRootView()->SetFocusable(true);
+  widget->Show();
+
+  base::scoped_nsobject<NSView> child_view([[FocusableTestNSView alloc]
+      initWithFrame:[widget->GetNativeView() bounds]]);
+  [widget->GetNativeView() addSubview:child_view];
+  EXPECT_TRUE([child_view acceptsFirstResponder]);
+  EXPECT_TRUE(widget->GetRootView()->IsFocusable());
+
+  FocusManager* manager = widget->GetFocusManager();
+  manager->SetFocusedView(widget->GetRootView());
+  EXPECT_EQ(manager->GetFocusedView(), widget->GetRootView());
+
+  [widget->GetNativeWindow() makeFirstResponder:child_view];
+  EXPECT_FALSE(manager->GetFocusedView());
+
+  [widget->GetNativeWindow() makeFirstResponder:widget->GetNativeView()];
+  EXPECT_EQ(manager->GetFocusedView(), widget->GetRootView());
+
+  widget->CloseNow();
+}
+
+class NativeWidgetMacViewsOrderTest : public WidgetTest {
+ public:
+  NativeWidgetMacViewsOrderTest() {}
+
+ protected:
+  // testing::Test:
+  void SetUp() override {
+    WidgetTest::SetUp();
+
+    widget_ = CreateTopLevelPlatformWidget();
+
+    ASSERT_EQ(1u, [[widget_->GetNativeView() subviews] count]);
+    compositor_view_ = [[widget_->GetNativeView() subviews] firstObject];
+
+    native_host_parent_ = new View();
+    widget_->GetContentsView()->AddChildView(native_host_parent_);
+
+    const int kNativeViewCount = 3;
+    for (int i = 0; i < kNativeViewCount; ++i) {
+      scoped_ptr<NativeHostHolder> holder(new NativeHostHolder());
+      native_host_parent_->AddChildView(holder->host());
+      holder->AttachNativeView();
+      hosts_.push_back(std::move(holder));
+    }
+    EXPECT_EQ(kNativeViewCount, native_host_parent_->child_count());
+    EXPECT_TRUE(([[widget_->GetNativeView() subviews] isEqualToArray:@[
+      compositor_view_, hosts_[0]->view(), hosts_[1]->view(), hosts_[2]->view()
+    ]]));
+  }
+
+  void TearDown() override {
+    widget_->CloseNow();
+    WidgetTest::TearDown();
+  }
+
+  NSView* GetContentNativeView() { return widget_->GetNativeView(); }
+
+  Widget* widget_ = nullptr;
+  View* native_host_parent_ = nullptr;
+  NSView* compositor_view_ = nil;
+  std::vector<scoped_ptr<NativeHostHolder>> hosts_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(NativeWidgetMacViewsOrderTest);
+};
+
+// Test that NativeViewHost::Attach()/Detach() method saves the NativeView
+// z-order.
+TEST_F(NativeWidgetMacViewsOrderTest, NativeViewAttached) {
+  hosts_[1]->Detach();
+  EXPECT_TRUE(([[GetContentNativeView() subviews] isEqualToArray:@[
+    compositor_view_, hosts_[0]->view(), hosts_[2]->view()
+  ]]));
+
+  hosts_[1]->AttachNativeView();
+  EXPECT_TRUE(([[GetContentNativeView() subviews] isEqualToArray:@[
+    compositor_view_, hosts_[0]->view(), hosts_[1]->view(),
+    hosts_[2]->view()
+  ]]));
+}
+
+// Tests that NativeViews order changes according to views::View hierarchy.
+TEST_F(NativeWidgetMacViewsOrderTest, ReorderViews) {
+  native_host_parent_->ReorderChildView(hosts_[2]->host(), 1);
+  EXPECT_TRUE(([[GetContentNativeView() subviews] isEqualToArray:@[
+    compositor_view_, hosts_[0]->view(), hosts_[2]->view(),
+    hosts_[1]->view()
+  ]]));
+
+  native_host_parent_->RemoveChildView(hosts_[2]->host());
+  EXPECT_TRUE(([[GetContentNativeView() subviews] isEqualToArray:@[
+    compositor_view_, hosts_[0]->view(), hosts_[1]->view()
+  ]]));
+
+  View* new_parent = new View();
+  native_host_parent_->RemoveChildView(hosts_[1]->host());
+  native_host_parent_->AddChildView(new_parent);
+  new_parent->AddChildView(hosts_[1]->host());
+  new_parent->AddChildView(hosts_[2]->host());
+  EXPECT_TRUE(([[GetContentNativeView() subviews] isEqualToArray:@[
+    compositor_view_, hosts_[0]->view(), hosts_[1]->view(),
+    hosts_[2]->view()
+  ]]));
+
+  native_host_parent_->ReorderChildView(new_parent, 0);
+  EXPECT_TRUE(([[GetContentNativeView() subviews] isEqualToArray:@[
+    compositor_view_, hosts_[1]->view(), hosts_[2]->view(),
+    hosts_[0]->view()
+  ]]));
+}
+
+// Test that unassociated native views stay on top after reordering.
+TEST_F(NativeWidgetMacViewsOrderTest, UnassociatedViewsIsAbove) {
+  base::scoped_nsobject<NSView> child_view([[NSView alloc] init]);
+  [GetContentNativeView() addSubview:child_view];
+  EXPECT_TRUE(([[GetContentNativeView() subviews] isEqualToArray:@[
+    compositor_view_, hosts_[0]->view(), hosts_[1]->view(),
+    hosts_[2]->view(), child_view
+  ]]));
+
+  native_host_parent_->ReorderChildView(hosts_[2]->host(), 1);
+  EXPECT_TRUE(([[GetContentNativeView() subviews] isEqualToArray:@[
+    compositor_view_, hosts_[0]->view(), hosts_[2]->view(),
+    hosts_[1]->view(), child_view
+  ]]));
+}
+
 }  // namespace test
 }  // namespace views
 
@@ -1334,4 +1499,10 @@ TEST_F(NativeWidgetMacTest, SchedulePaintInRect_Borderless) {
   lastDirtyRect_ = dirtyRect;
 }
 
+@end
+
+@implementation FocusableTestNSView
+- (BOOL)acceptsFirstResponder {
+  return YES;
+}
 @end

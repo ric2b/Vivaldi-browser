@@ -10,7 +10,7 @@ namespace vivaldi {
 
 void CreateVivaldiMainMenu(
     Profile* profile,
-    std::vector<linked_ptr<show_menu::MenuItem>>& items,
+    std::vector<show_menu::MenuItem>& items,
     const std::string& mode) {
   NOTREACHED();
   }

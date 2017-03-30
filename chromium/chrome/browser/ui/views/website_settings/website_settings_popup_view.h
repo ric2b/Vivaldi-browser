@@ -5,9 +5,10 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_WEBSITE_SETTINGS_WEBSITE_SETTINGS_POPUP_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_WEBSITE_SETTINGS_WEBSITE_SETTINGS_POPUP_VIEW_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/views/website_settings/chosen_object_view_observer.h"
@@ -15,7 +16,7 @@
 #include "chrome/browser/ui/website_settings/website_settings_ui.h"
 #include "components/security_state/security_state_model.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "ui/views/bubble/bubble_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/link_listener.h"
 #include "ui/views/controls/separator.h"
@@ -53,7 +54,7 @@ enum : int {
 class WebsiteSettingsPopupView : public content::WebContentsObserver,
                                  public PermissionSelectorViewObserver,
                                  public ChosenObjectViewObserver,
-                                 public views::BubbleDelegateView,
+                                 public views::BubbleDialogDelegateView,
                                  public views::ButtonListener,
                                  public views::LinkListener,
                                  public views::StyledLabelListener,
@@ -103,8 +104,9 @@ class WebsiteSettingsPopupView : public content::WebContentsObserver,
   void OnChosenObjectDeleted(
       const WebsiteSettingsUI::ChosenObjectInfo& info) override;
 
-  // views::BubbleDelegateView implementation.
+  // views::BubbleDialogDelegateView implementation.
   void OnWidgetDestroying(views::Widget* widget) override;
+  int GetDialogButtons() const override;
 
   // views::ButtonListener implementation.
   void ButtonPressed(views::Button* button, const ui::Event& event) override;
@@ -154,7 +156,7 @@ class WebsiteSettingsPopupView : public content::WebContentsObserver,
   content::WebContents* web_contents_;
 
   // The presenter that controls the Website Settings UI.
-  scoped_ptr<WebsiteSettings> presenter_;
+  std::unique_ptr<WebsiteSettings> presenter_;
 
   // The header section (containing security-related information).
   PopupHeaderView* header_;

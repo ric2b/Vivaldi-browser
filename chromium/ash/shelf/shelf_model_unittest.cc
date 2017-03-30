@@ -48,7 +48,6 @@ class TestShelfModelObserver : public ShelfModelObserver {
   void ShelfItemMoved(int start_index, int target_index) override {
     moved_count_++;
   }
-  void ShelfStatusChanged() override {}
 
  private:
   void AddToResult(const std::string& format, int count, std::string* result) {
@@ -92,8 +91,8 @@ class ShelfModelTest : public testing::Test {
     model_.reset();
   }
 
-  scoped_ptr<ShelfModel> model_;
-  scoped_ptr<TestShelfModelObserver> observer_;
+  std::unique_ptr<ShelfModel> model_;
+  std::unique_ptr<TestShelfModelObserver> observer_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ShelfModelTest);

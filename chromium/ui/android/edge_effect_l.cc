@@ -51,8 +51,7 @@ const ui::SystemUIResourceType kResourceId = ui::OVERSCROLL_GLOW_L;
 
 EdgeEffectL::EdgeEffectL(ui::ResourceManager* resource_manager)
     : resource_manager_(resource_manager),
-      glow_(cc::UIResourceLayer::Create(
-          WindowAndroidCompositor::LayerSettings())),
+      glow_(cc::UIResourceLayer::Create()),
       glow_alpha_(0),
       glow_scale_y_(0),
       glow_alpha_start_(0),

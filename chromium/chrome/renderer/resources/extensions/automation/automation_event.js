@@ -4,23 +4,34 @@
 
 var utils = require('utils');
 
-var AutomationEventImpl = function(type, target) {
+function AutomationEventImpl(type, target) {
   this.propagationStopped = false;
 
   // TODO(aboxhall): make these read-only properties
   this.type = type;
   this.target = target;
   this.eventPhase = Event.NONE;
-};
+}
 
 AutomationEventImpl.prototype = {
+  __proto__: null,
   stopPropagation: function() {
     this.propagationStopped = true;
-  }
+  },
 };
 
-exports.AutomationEvent = utils.expose(
-    'AutomationEvent',
-    AutomationEventImpl,
-    { functions: ['stopPropagation'],
-      readonly: ['type', 'target', 'eventPhase'] });
+function AutomationEvent() {
+  privates(AutomationEvent).constructPrivate(this, arguments);
+}
+utils.expose(AutomationEvent, AutomationEventImpl, {
+  functions: [
+    'stopPropagation',
+  ],
+  readonly: [
+    'type',
+    'target',
+    'eventPhase',
+  ],
+});
+
+exports.$set('AutomationEvent', AutomationEvent);

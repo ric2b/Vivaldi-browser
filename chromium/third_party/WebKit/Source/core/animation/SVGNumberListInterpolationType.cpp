@@ -36,13 +36,13 @@ InterpolationValue SVGNumberListInterpolationType::maybeConvertSVGValue(const SV
     return InterpolationValue(result.release());
 }
 
-PairwiseInterpolationValue SVGNumberListInterpolationType::mergeSingleConversions(InterpolationValue& start, InterpolationValue& end) const
+PairwiseInterpolationValue SVGNumberListInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
 {
     size_t startLength = toInterpolableList(*start.interpolableValue).length();
     size_t endLength = toInterpolableList(*end.interpolableValue).length();
     if (startLength != endLength)
         return nullptr;
-    return InterpolationType::mergeSingleConversions(start, end);
+    return InterpolationType::mergeSingleConversions(std::move(start), std::move(end));
 }
 
 static void padWithZeroes(OwnPtr<InterpolableValue>& listPointer, size_t paddedLength)
@@ -61,7 +61,7 @@ static void padWithZeroes(OwnPtr<InterpolableValue>& listPointer, size_t paddedL
     listPointer = result.release();
 }
 
-void SVGNumberListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value) const
+void SVGNumberListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const
 {
     const InterpolableList& list = toInterpolableList(*value.interpolableValue);
 
@@ -78,13 +78,13 @@ void SVGNumberListInterpolationType::composite(UnderlyingValueOwner& underlyingV
         underlyingList.getMutable(i)->scale(underlyingFraction);
 }
 
-PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGNumberListInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue*) const
+SVGPropertyBase* SVGNumberListInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue*) const
 {
-    RefPtrWillBeRawPtr<SVGNumberList> result = SVGNumberList::create();
+    SVGNumberList* result = SVGNumberList::create();
     const InterpolableList& list = toInterpolableList(interpolableValue);
     for (size_t i = 0; i < list.length(); i++)
         result->append(SVGNumber::create(toInterpolableNumber(list.get(i))->value()));
-    return result.release();
+    return result;
 }
 
 } // namespace blink

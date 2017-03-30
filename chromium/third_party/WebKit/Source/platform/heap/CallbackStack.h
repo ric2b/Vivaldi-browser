@@ -5,7 +5,7 @@
 #ifndef CallbackStack_h
 #define CallbackStack_h
 
-#include "platform/heap/ThreadState.h"
+#include "platform/heap/BlinkGC.h"
 #include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
 
@@ -37,7 +37,7 @@ public:
         VisitorCallback m_callback;
     };
 
-    explicit CallbackStack(size_t blockSize = defaultBlockSize);
+    explicit CallbackStack(size_t blockSize = kDefaultBlockSize);
     ~CallbackStack();
 
     void clear();
@@ -54,9 +54,10 @@ public:
     bool hasCallbackForObject(const void*);
 #endif
 
-private:
-    static const size_t defaultBlockSize = (1 << 13);
+    static const size_t kMinimalBlockSize;
+    static const size_t kDefaultBlockSize = (1 << 13);
 
+private:
     class Block {
         USING_FAST_MALLOC(Block);
     public:

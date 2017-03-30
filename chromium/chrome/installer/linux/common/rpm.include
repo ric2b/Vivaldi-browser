@@ -3,7 +3,7 @@
 # Install the repository signing key (see also:
 # https://www.google.com/linuxrepositories/)
 install_rpm_key() {
-  # Check to see if the key already exists.
+  # Check to see if all keys already exists.
   rpm -q gpg-pubkey-bf1700f8-54c12a7e > /dev/null 2>&1
   if [ "$?" -eq "0" ]; then
     # Keys already exist

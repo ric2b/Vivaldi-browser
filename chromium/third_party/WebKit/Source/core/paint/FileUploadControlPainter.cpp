@@ -32,7 +32,7 @@ void FileUploadControlPainter::paintObject(const PaintInfo& paintInfo, const Lay
         clipRecorder.emplace(paintInfo.context, m_layoutFileUploadControl, DisplayItem::ClipFileUploadControlRect, LayoutRect(clipRect));
     }
 
-    if (paintInfo.phase == PaintPhaseForeground && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutFileUploadControl, paintInfo.phase, paintOffset)) {
+    if (paintInfo.phase == PaintPhaseForeground && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutFileUploadControl, paintInfo.phase)) {
         const String& displayedFilename = m_layoutFileUploadControl.fileTextValue();
         const Font& font = m_layoutFileUploadControl.style()->font();
         TextRun textRun = constructTextRun(font, displayedFilename, m_layoutFileUploadControl.styleRef(), RespectDirection | RespectDirectionOverride);
@@ -62,11 +62,11 @@ void FileUploadControlPainter::paintObject(const PaintInfo& paintInfo, const Lay
             textY = LayoutUnit(m_layoutFileUploadControl.baselinePosition(AlphabeticBaseline, true, HorizontalLine, PositionOnContainingLine));
         TextRunPaintInfo textRunPaintInfo(textRun);
         // FIXME: Shouldn't these offsets be rounded? crbug.com/350474
-        textRunPaintInfo.bounds = FloatRect(textX.toFloat(), textY.toFloat() - m_layoutFileUploadControl.style()->fontMetrics().ascent(),
-            textWidth, m_layoutFileUploadControl.style()->fontMetrics().height());
+        textRunPaintInfo.bounds = FloatRect(textX.toFloat(), textY.toFloat() - m_layoutFileUploadControl.style()->getFontMetrics().ascent(),
+            textWidth, m_layoutFileUploadControl.style()->getFontMetrics().height());
 
         // Draw the filename.
-        LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutFileUploadControl, paintInfo.phase, textRunPaintInfo.bounds, paintOffset);
+        LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutFileUploadControl, paintInfo.phase, textRunPaintInfo.bounds);
         paintInfo.context.setFillColor(m_layoutFileUploadControl.resolveColor(CSSPropertyColor));
         paintInfo.context.drawBidiText(font, textRunPaintInfo, FloatPoint(roundToInt(textX), roundToInt(textY)));
     }

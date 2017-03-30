@@ -30,10 +30,8 @@
 #include "core/inspector/InspectorDebuggerAgent.h"
 
 #include "bindings/core/v8/V8Binding.h"
-#include "core/inspector/AsyncCallTracker.h"
-#include "core/inspector/MuteConsoleScope.h"
 #include "platform/ScriptForbiddenScope.h"
-#include "platform/v8_inspector/public/V8Debugger.h"
+#include "platform/v8_inspector/public/V8DebuggerAgent.h"
 
 namespace blink {
 
@@ -43,10 +41,9 @@ namespace DebuggerAgentState {
 static const char debuggerEnabled[] = "debuggerEnabled";
 }
 
-InspectorDebuggerAgent::InspectorDebuggerAgent(V8RuntimeAgent* runtimeAgent, V8Debugger* debugger, int contextGroupId)
+InspectorDebuggerAgent::InspectorDebuggerAgent(V8DebuggerAgent* agent)
     : InspectorBaseAgent<InspectorDebuggerAgent, protocol::Frontend::Debugger>("Debugger")
-    , m_v8DebuggerAgent(V8DebuggerAgent::create(runtimeAgent, contextGroupId))
-    , m_debugger(debugger)
+    , m_v8DebuggerAgent(agent)
 {
 }
 
@@ -59,7 +56,6 @@ InspectorDebuggerAgent::~InspectorDebuggerAgent()
 
 DEFINE_TRACE(InspectorDebuggerAgent)
 {
-    visitor->trace(m_asyncCallTracker);
     InspectorBaseAgent<InspectorDebuggerAgent, protocol::Frontend::Debugger>::trace(visitor);
 }
 
@@ -73,7 +69,6 @@ void InspectorDebuggerAgent::enable(ErrorString* errorString)
 
 void InspectorDebuggerAgent::disable(ErrorString* errorString)
 {
-    setTrackingAsyncCalls(false);
     m_state->setBoolean(DebuggerAgentState::debuggerEnabled, false);
     m_instrumentingAgents->setInspectorDebuggerAgent(nullptr);
     m_v8DebuggerAgent->disable(errorString);
@@ -91,10 +86,10 @@ void InspectorDebuggerAgent::setSkipAllPauses(ErrorString* errorString, bool inS
 
 void InspectorDebuggerAgent::setBreakpointByUrl(ErrorString* errorString,
     int inLineNumber,
-    const Maybe<String>& inUrl,
-    const Maybe<String>& inUrlRegex,
+    const Maybe<String16>& inUrl,
+    const Maybe<String16>& inUrlRegex,
     const Maybe<int>& inColumnNumber,
-    const Maybe<String>& inCondition,
+    const Maybe<String16>& inCondition,
     protocol::Debugger::BreakpointId* outBreakpointId,
     OwnPtr<Array<protocol::Debugger::Location>>* outLocations)
 {
@@ -102,7 +97,7 @@ void InspectorDebuggerAgent::setBreakpointByUrl(ErrorString* errorString,
 }
 
 void InspectorDebuggerAgent::setBreakpoint(ErrorString* errorString, PassOwnPtr<protocol::Debugger::Location> inLocation,
-    const Maybe<String>& inCondition,
+    const Maybe<String16>& inCondition,
     protocol::Debugger::BreakpointId* outBreakpointId,
     OwnPtr<protocol::Debugger::Location>* outActualLocation)
 {
@@ -110,7 +105,7 @@ void InspectorDebuggerAgent::setBreakpoint(ErrorString* errorString, PassOwnPtr<
 }
 
 void InspectorDebuggerAgent::removeBreakpoint(ErrorString* errorString,
-    const String& inBreakpointId)
+    const String16& inBreakpointId)
 {
     m_v8DebuggerAgent->removeBreakpoint(errorString, inBreakpointId);
 }
@@ -147,14 +142,9 @@ void InspectorDebuggerAgent::resume(ErrorString* errorString)
     m_v8DebuggerAgent->resume(errorString);
 }
 
-void InspectorDebuggerAgent::stepIntoAsync(ErrorString* errorString)
-{
-    m_v8DebuggerAgent->stepIntoAsync(errorString);
-}
-
 void InspectorDebuggerAgent::searchInContent(ErrorString* errorString,
-    const String& inScriptId,
-    const String& inQuery,
+    const String16& inScriptId,
+    const String16& inQuery,
     const Maybe<bool>& inCaseSensitive,
     const Maybe<bool>& inIsRegex,
     OwnPtr<Array<protocol::Debugger::SearchMatch>>* outResult)
@@ -168,63 +158,63 @@ void InspectorDebuggerAgent::canSetScriptSource(ErrorString* errorString, bool* 
 }
 
 void InspectorDebuggerAgent::setScriptSource(ErrorString* errorString,
-    const String& inScriptId,
-    const String& inScriptSource,
+    const String16& inScriptId,
+    const String16& inScriptSource,
     const Maybe<bool>& inPreview,
     Maybe<Array<protocol::Debugger::CallFrame>>* optOutCallFrames,
     Maybe<bool>* optOutStackChanged,
-    Maybe<protocol::Debugger::StackTrace>* optOutAsyncStackTrace,
+    Maybe<protocol::Runtime::StackTrace>* optOutAsyncStackTrace,
     Maybe<protocol::Debugger::SetScriptSourceError>* optOutCompileError)
 {
     m_v8DebuggerAgent->setScriptSource(errorString, inScriptId, inScriptSource, inPreview, optOutCallFrames, optOutStackChanged, optOutAsyncStackTrace, optOutCompileError);
 }
 
 void InspectorDebuggerAgent::restartFrame(ErrorString* errorString,
-    const String& inCallFrameId,
+    const String16& inCallFrameId,
     OwnPtr<Array<protocol::Debugger::CallFrame>>* outCallFrames,
-    Maybe<protocol::Debugger::StackTrace>* optOutAsyncStackTrace)
+    Maybe<protocol::Runtime::StackTrace>* optOutAsyncStackTrace)
 {
     m_v8DebuggerAgent->restartFrame(errorString, inCallFrameId, outCallFrames, optOutAsyncStackTrace);
 }
 
 void InspectorDebuggerAgent::getScriptSource(ErrorString* errorString,
-    const String& inScriptId,
-    String* outScriptSource)
+    const String16& inScriptId,
+    String16* outScriptSource)
 {
     m_v8DebuggerAgent->getScriptSource(errorString, inScriptId, outScriptSource);
 }
 
 void InspectorDebuggerAgent::getFunctionDetails(ErrorString* errorString,
-    const String& inFunctionId,
+    const String16& inFunctionId,
     OwnPtr<protocol::Debugger::FunctionDetails>* outDetails)
 {
     m_v8DebuggerAgent->getFunctionDetails(errorString, inFunctionId, outDetails);
 }
 
 void InspectorDebuggerAgent::getGeneratorObjectDetails(ErrorString* errorString,
-    const String& inObjectId,
+    const String16& inObjectId,
     OwnPtr<protocol::Debugger::GeneratorObjectDetails>* outDetails)
 {
     m_v8DebuggerAgent->getGeneratorObjectDetails(errorString, inObjectId, outDetails);
 }
 
 void InspectorDebuggerAgent::getCollectionEntries(ErrorString* errorString,
-    const String& inObjectId,
+    const String16& inObjectId,
     OwnPtr<Array<protocol::Debugger::CollectionEntry>>* outEntries)
 {
     m_v8DebuggerAgent->getCollectionEntries(errorString, inObjectId, outEntries);
 }
 
 void InspectorDebuggerAgent::setPauseOnExceptions(ErrorString* errorString,
-    const String& inState)
+    const String16& inState)
 {
     m_v8DebuggerAgent->setPauseOnExceptions(errorString, inState);
 }
 
 void InspectorDebuggerAgent::evaluateOnCallFrame(ErrorString* errorString,
-    const String& inCallFrameId,
-    const String& inExpression,
-    const Maybe<String>& inObjectGroup,
+    const String16& inCallFrameId,
+    const String16& inExpression,
+    const Maybe<String16>& inObjectGroup,
     const Maybe<bool>& inIncludeCommandLineAPI,
     const Maybe<bool>& inDoNotPauseOnExceptionsAndMuteConsole,
     const Maybe<bool>& inReturnByValue,
@@ -233,31 +223,20 @@ void InspectorDebuggerAgent::evaluateOnCallFrame(ErrorString* errorString,
     Maybe<bool>* optOutWasThrown,
     Maybe<protocol::Runtime::ExceptionDetails>* optOutExceptionDetails)
 {
-    MuteConsoleScope<InspectorDebuggerAgent> muteScope;
-    if (inDoNotPauseOnExceptionsAndMuteConsole.fromMaybe(false))
-        muteScope.enter(this);
     m_v8DebuggerAgent->evaluateOnCallFrame(errorString, inCallFrameId, inExpression, inObjectGroup, inIncludeCommandLineAPI, inDoNotPauseOnExceptionsAndMuteConsole, inReturnByValue, inGeneratePreview, outResult, optOutWasThrown, optOutExceptionDetails);
 }
 
 void InspectorDebuggerAgent::setVariableValue(ErrorString* errorString, int inScopeNumber,
-    const String& inVariableName,
+    const String16& inVariableName,
     PassOwnPtr<protocol::Runtime::CallArgument> inNewValue,
-    const Maybe<String>& inCallFrameId,
-    const Maybe<String>& inFunctionObjectId)
+    const String16& inCallFrameId)
 {
-    m_v8DebuggerAgent->setVariableValue(errorString, inScopeNumber, inVariableName, inNewValue, inCallFrameId, inFunctionObjectId);
-}
-
-void InspectorDebuggerAgent::getStepInPositions(ErrorString* errorString,
-    const String& inCallFrameId,
-    Maybe<Array<protocol::Debugger::Location>>* optOutStepInPositions)
-{
-    m_v8DebuggerAgent->getStepInPositions(errorString, inCallFrameId, optOutStepInPositions);
+    m_v8DebuggerAgent->setVariableValue(errorString, inScopeNumber, inVariableName, inNewValue, inCallFrameId);
 }
 
 void InspectorDebuggerAgent::getBacktrace(ErrorString* errorString,
     OwnPtr<Array<protocol::Debugger::CallFrame>>* outCallFrames,
-    Maybe<protocol::Debugger::StackTrace>* optOutAsyncStackTrace)
+    Maybe<protocol::Runtime::StackTrace>* optOutAsyncStackTrace)
 {
     m_v8DebuggerAgent->getBacktrace(errorString, outCallFrames, optOutAsyncStackTrace);
 }
@@ -265,47 +244,11 @@ void InspectorDebuggerAgent::getBacktrace(ErrorString* errorString,
 void InspectorDebuggerAgent::setAsyncCallStackDepth(ErrorString* errorString, int inMaxDepth)
 {
     m_v8DebuggerAgent->setAsyncCallStackDepth(errorString, inMaxDepth);
-    setTrackingAsyncCalls(m_v8DebuggerAgent->trackingAsyncCalls());
-}
-
-void InspectorDebuggerAgent::enablePromiseTracker(ErrorString* errorString,
-    const Maybe<bool>& inCaptureStacks)
-{
-    m_v8DebuggerAgent->enablePromiseTracker(errorString, inCaptureStacks);
-}
-
-void InspectorDebuggerAgent::disablePromiseTracker(ErrorString* errorString)
-{
-    m_v8DebuggerAgent->disablePromiseTracker(errorString);
-}
-
-void InspectorDebuggerAgent::getPromiseById(
-    ErrorString* errorString,
-    int inPromiseId,
-    const Maybe<String>& inObjectGroup,
-    OwnPtr<protocol::Runtime::RemoteObject>* outPromise)
-{
-    m_v8DebuggerAgent->getPromiseById(errorString, inPromiseId, inObjectGroup, outPromise);
-}
-
-void InspectorDebuggerAgent::flushAsyncOperationEvents(ErrorString* errorString)
-{
-    m_v8DebuggerAgent->flushAsyncOperationEvents(errorString);
-}
-
-void InspectorDebuggerAgent::setAsyncOperationBreakpoint(ErrorString* errorString, int inOperationId)
-{
-    m_v8DebuggerAgent->setAsyncOperationBreakpoint(errorString, inOperationId);
-}
-
-void InspectorDebuggerAgent::removeAsyncOperationBreakpoint(ErrorString* errorString, int inOperationId)
-{
-    m_v8DebuggerAgent->removeAsyncOperationBreakpoint(errorString, inOperationId);
 }
 
 void InspectorDebuggerAgent::setBlackboxedRanges(
     ErrorString* errorString,
-    const String& inScriptId,
+    const String16& inScriptId,
     PassOwnPtr<protocol::Array<protocol::Debugger::ScriptPosition>> inPositions)
 {
     m_v8DebuggerAgent->setBlackboxedRanges(errorString, inScriptId, inPositions);
@@ -318,7 +261,7 @@ bool InspectorDebuggerAgent::isPaused()
 
 void InspectorDebuggerAgent::scriptExecutionBlockedByCSP(const String& directiveText)
 {
-    RefPtr<protocol::DictionaryValue> directive = protocol::DictionaryValue::create();
+    OwnPtr<protocol::DictionaryValue> directive = protocol::DictionaryValue::create();
     directive->setString("directiveText", directiveText);
     m_v8DebuggerAgent->breakProgramOnException(protocol::Debugger::Paused::ReasonEnum::CSPViolation, directive.release());
 }
@@ -333,16 +276,41 @@ void InspectorDebuggerAgent::didExecuteScript()
     m_v8DebuggerAgent->didExecuteScript();
 }
 
+void InspectorDebuggerAgent::asyncTaskScheduled(const String& taskName, void* task)
+{
+    m_v8DebuggerAgent->asyncTaskScheduled(taskName, task, false);
+}
+
+void InspectorDebuggerAgent::asyncTaskScheduled(const String& operationName, void* task, bool recurring)
+{
+    m_v8DebuggerAgent->asyncTaskScheduled(operationName, task, recurring);
+}
+
+void InspectorDebuggerAgent::asyncTaskCanceled(void* task)
+{
+    m_v8DebuggerAgent->asyncTaskCanceled(task);
+}
+
+void InspectorDebuggerAgent::allAsyncTasksCanceled()
+{
+    m_v8DebuggerAgent->allAsyncTasksCanceled();
+}
+
+void InspectorDebuggerAgent::asyncTaskStarted(void* task)
+{
+    m_v8DebuggerAgent->asyncTaskStarted(task);
+}
+
+void InspectorDebuggerAgent::asyncTaskFinished(void* task)
+{
+    m_v8DebuggerAgent->asyncTaskFinished(task);
+}
+
 // InspectorBaseAgent overrides.
-void InspectorDebuggerAgent::setState(PassRefPtr<protocol::DictionaryValue> state)
+void InspectorDebuggerAgent::setState(protocol::DictionaryValue* state)
 {
     InspectorBaseAgent::setState(state);
     m_v8DebuggerAgent->setInspectorState(m_state);
-}
-
-void InspectorDebuggerAgent::init()
-{
-    m_asyncCallTracker = adoptPtrWillBeNoop(new AsyncCallTracker(m_v8DebuggerAgent.get(), m_instrumentingAgents.get()));
 }
 
 void InspectorDebuggerAgent::setFrontend(protocol::Frontend* frontend)
@@ -364,14 +332,6 @@ void InspectorDebuggerAgent::restore()
     m_v8DebuggerAgent->restore();
     ErrorString errorString;
     enable(&errorString);
-    setTrackingAsyncCalls(m_v8DebuggerAgent->trackingAsyncCalls());
-}
-
-void InspectorDebuggerAgent::setTrackingAsyncCalls(bool tracking)
-{
-    m_asyncCallTracker->asyncCallTrackingStateChanged(tracking);
-    if (!tracking)
-        m_asyncCallTracker->resetAsyncOperations();
 }
 
 } // namespace blink

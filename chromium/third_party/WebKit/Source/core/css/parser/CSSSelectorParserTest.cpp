@@ -120,6 +120,10 @@ TEST(CSSSelectorParserTest, ShadowDomPseudoInCompound)
         { ".a::shadow", ".a::shadow" },
         { "::content", "::content" },
         { ".a::content", ".a::content" },
+        { "::content.a", "::content.a" },
+        { "::content.a.b", "::content.a.b" },
+        { ".a::content.b", ".a::content.b" },
+        { "::content:not(#id)", "::content:not(#id)" }
     };
 
     for (auto testCase : testCases) {
@@ -183,12 +187,8 @@ TEST(CSSSelectorParserTest, InvalidSimpleAfterPseudoElementInCompound)
         "::shadow.class",
         "::selection:window-inactive::before",
         "::-webkit-volume-slider.class",
-        "::content.a",
-        "::content.a.b",
-        ".a::content.b",
         "::before:not(.a)",
         "::shadow:not(::after)",
-        "::content:not(#id)",
         "::-webkit-scrollbar:vertical:not(:first-child)",
         "video::-webkit-media-text-track-region-container.scrolling",
         "div ::before.a"
@@ -262,12 +262,12 @@ TEST(CSSSelectorParserTest, UnresolvedNamespacePrefix)
     };
 
     CSSParserContext context(HTMLStandardMode, nullptr);
-    RefPtrWillBeRawPtr<StyleSheetContents> sheet = StyleSheetContents::create(context);
+    StyleSheetContents* sheet = StyleSheetContents::create(context);
 
     for (auto testCase : testCases) {
         CSSTokenizer::Scope scope(testCase);
         CSSParserTokenRange range = scope.tokenRange();
-        CSSSelectorList list = CSSSelectorParser::parseSelector(range, context, sheet.get());
+        CSSSelectorList list = CSSSelectorParser::parseSelector(range, context, sheet);
         EXPECT_FALSE(list.isValid());
     }
 }
@@ -292,14 +292,14 @@ TEST(CSSSelectorParserTest, SerializedUniversal)
     };
 
     CSSParserContext context(HTMLStandardMode, nullptr);
-    RefPtrWillBeRawPtr<StyleSheetContents> sheet = StyleSheetContents::create(context);
+    StyleSheetContents* sheet = StyleSheetContents::create(context);
     sheet->parserAddNamespace("ns", "http://ns.org");
 
     for (auto testCase : testCases) {
         SCOPED_TRACE(testCase[0]);
         CSSTokenizer::Scope scope(testCase[0]);
         CSSParserTokenRange range = scope.tokenRange();
-        CSSSelectorList list = CSSSelectorParser::parseSelector(range, context, sheet.get());
+        CSSSelectorList list = CSSSelectorParser::parseSelector(range, context, sheet);
         EXPECT_TRUE(list.isValid());
         EXPECT_STREQ(testCase[1], list.selectorsText().ascii().data());
     }

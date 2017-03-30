@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "blimp/common/logging.h"
 #include "blimp/common/proto/blimp_message.pb.h"
 #include "blimp/net/blimp_message_processor.h"
 #include "blimp/net/blimp_message_pump.h"
@@ -32,7 +33,7 @@ class BlimpMessageSender : public BlimpMessageProcessor {
   }
 
   // BlimpMessageProcessor implementation.
-  void ProcessMessage(scoped_ptr<BlimpMessage> message,
+  void ProcessMessage(std::unique_ptr<BlimpMessage> message,
                       const net::CompletionCallback& callback) override;
 
  private:
@@ -59,10 +60,10 @@ BlimpMessageSender::~BlimpMessageSender() {
 }
 
 void BlimpMessageSender::ProcessMessage(
-    scoped_ptr<BlimpMessage> message,
+    std::unique_ptr<BlimpMessage> message,
     const net::CompletionCallback& callback) {
   DCHECK(error_observer_);
-  DVLOG(2) << "Sender::ProcessMessage " << *message;
+  VLOG(1) << "Sending " << *message;
 
   if (message->ByteSize() > static_cast<int>(kMaxPacketPayloadSizeBytes)) {
     DLOG(ERROR) << "Message rejected (too large): " << *message;
@@ -98,8 +99,8 @@ void BlimpMessageSender::OnWritePacketComplete(int result) {
 
 }  // namespace
 
-BlimpConnection::BlimpConnection(scoped_ptr<PacketReader> reader,
-                                 scoped_ptr<PacketWriter> writer)
+BlimpConnection::BlimpConnection(std::unique_ptr<PacketReader> reader,
+                                 std::unique_ptr<PacketWriter> writer)
     : reader_(std::move(reader)),
       message_pump_(new BlimpMessagePump(reader_.get())),
       writer_(std::move(writer)),

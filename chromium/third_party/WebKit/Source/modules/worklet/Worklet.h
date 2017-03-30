@@ -19,29 +19,30 @@ class ExecutionContext;
 class ScriptPromiseResolver;
 class WorkerScriptLoader;
 
-class Worklet final : public GarbageCollectedFinalized<Worklet>, public ScriptWrappable, public ActiveDOMObject {
+class Worklet : public GarbageCollectedFinalized<Worklet>, public ScriptWrappable, public ActiveDOMObject {
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(Worklet);
+    USING_GARBAGE_COLLECTED_MIXIN(Worklet);
     WTF_MAKE_NONCOPYABLE(Worklet);
 public:
-    // The ExecutionContext argument is the parent document of the Worklet. The
-    // Worklet inherits the url and userAgent, from the document.
-    static Worklet* create(ExecutionContext*);
+    virtual WorkletGlobalScope* workletGlobalScope() const = 0;
 
+    // Worklet
     ScriptPromise import(ScriptState*, const String& url);
 
     // ActiveDOMObject
     void stop() final;
 
-    DECLARE_TRACE();
+    DECLARE_VIRTUAL_TRACE();
 
-private:
+protected:
+    // The ExecutionContext argument is the parent document of the Worklet. The
+    // Worklet inherits the url and userAgent from the document.
     explicit Worklet(ExecutionContext*);
 
+private:
     void onResponse();
     void onFinished(WorkerScriptLoader*, ScriptPromiseResolver*);
 
-    RefPtrWillBeMember<WorkletGlobalScope> m_workletGlobalScope;
     Vector<RefPtr<WorkerScriptLoader>> m_scriptLoaders;
     HeapVector<Member<ScriptPromiseResolver>> m_resolvers;
 };

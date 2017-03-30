@@ -4,9 +4,11 @@
 
 #include "content/renderer/media/rtc_certificate_generator.h"
 
+#include <string>
 #include <utility>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "content/renderer/media/peer_connection_identity_store.h"
 #include "content/renderer/media/rtc_certificate.h"
 #include "content/renderer/media/webrtc/peer_connection_dependency_factory.h"
@@ -55,12 +57,12 @@ class RTCCertificateIdentityObserver
       const blink::WebRTCKeyParams& key_params,
       const GURL& url,
       const GURL& first_party_for_cookies,
-      blink::WebCallbacks<blink::WebRTCCertificate*, void>* observer) {
+      std::unique_ptr<blink::WebRTCCertificateCallback> observer) {
     DCHECK(main_thread_->BelongsToCurrentThread());
     DCHECK(!observer_) << "Already have a RequestIdentity in progress.";
-    DCHECK(observer);
     key_params_ = key_params;
-    observer_ = observer;
+    observer_ = std::move(observer);
+    DCHECK(observer_);
     // Identity request must be performed on the WebRTC signaling thread.
     signaling_thread_->PostTask(FROM_HERE, base::Bind(
         &RTCCertificateIdentityObserver::RequestIdentityOnWebRtcSignalingThread,
@@ -73,8 +75,8 @@ class RTCCertificateIdentityObserver
       GURL first_party_for_cookies) {
     DCHECK(signaling_thread_->BelongsToCurrentThread());
     rtc::scoped_ptr<PeerConnectionIdentityStore> store(
-        new PeerConnectionIdentityStore(
-            main_thread_, signaling_thread_, url, first_party_for_cookies));
+        new PeerConnectionIdentityStore(main_thread_, signaling_thread_, url,
+                                        first_party_for_cookies));
     // Request identity with |this| as the observer. OnSuccess/OnFailure will be
     // called asynchronously.
     store->RequestIdentity(WebRTCKeyParamsToKeyParams(key_params_), this);
@@ -106,18 +108,22 @@ class RTCCertificateIdentityObserver
     DCHECK(observer_);
     rtc::scoped_refptr<rtc::RTCCertificate> certificate =
         rtc::RTCCertificate::Create(std::move(identity));
-    main_thread_->PostTask(FROM_HERE, base::Bind(
-        &RTCCertificateIdentityObserver::DoCallbackOnMainThread,
-        this, new RTCCertificate(key_params_, certificate)));
+    main_thread_->PostTask(
+        FROM_HERE,
+        base::Bind(&RTCCertificateIdentityObserver::DoCallbackOnMainThread,
+                   this, base::Passed(base::WrapUnique(
+                             new RTCCertificate(key_params_, certificate)))));
   }
 
-  void DoCallbackOnMainThread(blink::WebRTCCertificate* certificate) {
+  void DoCallbackOnMainThread(
+      std::unique_ptr<blink::WebRTCCertificate> certificate) {
     DCHECK(main_thread_->BelongsToCurrentThread());
     DCHECK(observer_);
     if (certificate)
-      observer_->onSuccess(certificate);
+      observer_->onSuccess(std::move(certificate));
     else
       observer_->onError();
+    observer_.reset();
   }
 
   // The main thread is the renderer thread.
@@ -126,7 +132,7 @@ class RTCCertificateIdentityObserver
   // PeerConnectionIdentityStore::RequestIdentity on, as is required.
   const scoped_refptr<base::SingleThreadTaskRunner> signaling_thread_;
   blink::WebRTCKeyParams key_params_;
-  blink::WebCallbacks<blink::WebRTCCertificate*, void>* observer_;
+  std::unique_ptr<blink::WebRTCCertificateCallback> observer_;
 
   DISALLOW_COPY_AND_ASSIGN(RTCCertificateIdentityObserver);
 };
@@ -137,7 +143,7 @@ void RTCCertificateGenerator::generateCertificate(
     const blink::WebRTCKeyParams& key_params,
     const blink::WebURL& url,
     const blink::WebURL& first_party_for_cookies,
-    blink::WebCallbacks<blink::WebRTCCertificate*, void>* observer) {
+    std::unique_ptr<blink::WebRTCCertificateCallback> observer) {
   DCHECK(isSupportedKeyParams(key_params));
 
 #if defined(ENABLE_WEBRTC)
@@ -154,8 +160,8 @@ void RTCCertificateGenerator::generateCertificate(
       new rtc::RefCountedObject<RTCCertificateIdentityObserver>(
           main_thread, signaling_thread));
   // |identity_observer| lives until request has completed.
-  identity_observer->RequestIdentity(
-      key_params, url, first_party_for_cookies, observer);
+  identity_observer->RequestIdentity(key_params, url, first_party_for_cookies,
+                                     std::move(observer));
 #else
   observer->onError();
 #endif

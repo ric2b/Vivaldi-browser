@@ -17,7 +17,6 @@ import android.view.MotionEvent.PointerProperties;
 import android.widget.FrameLayout;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
@@ -28,6 +27,7 @@ import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
 import org.chromium.chrome.browser.compositor.layouts.phone.StackLayout;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.Stack;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackTab;
+import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -36,7 +36,6 @@ import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel.MockTabModelDelegate;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
-import org.chromium.content.browser.BrowserStartupController;
 
 /**
  * Unit tests for {@link org.chromium.chrome.browser.compositor.layouts.LayoutManagerChrome}
@@ -470,10 +469,8 @@ public class LayoutManagerTest extends InstrumentationTestCase
             @Override
             public void run() {
                 try {
-                    BrowserStartupController.get(
-                            getInstrumentation().getTargetContext(),
-                            LibraryProcessType.PROCESS_BROWSER)
-                                    .startBrowserProcessesSync(false);
+                    ChromeBrowserInitializer.getInstance(
+                            getInstrumentation().getTargetContext()).handleSynchronousStartup();
                 } catch (ProcessInitException e) {
                     fail("Failed to load browser");
                 }

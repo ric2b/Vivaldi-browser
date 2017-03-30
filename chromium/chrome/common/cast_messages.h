@@ -9,7 +9,7 @@
 #include "ipc/ipc_message_macros.h"
 #include "media/cast/common/rtp_time.h"
 #include "media/cast/logging/logging_defines.h"
-#include "media/cast/net/cast_transport_sender.h"
+#include "media/cast/net/cast_transport.h"
 #include "media/cast/net/rtcp/rtcp_defines.h"
 #include "net/base/ip_endpoint.h"
 
@@ -97,17 +97,14 @@ IPC_STRUCT_TRAITS_BEGIN(media::cast::FrameEvent)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(media::cast::RtcpCastMessage)
-  IPC_STRUCT_TRAITS_MEMBER(media_ssrc)
+  IPC_STRUCT_TRAITS_MEMBER(remote_ssrc)
   IPC_STRUCT_TRAITS_MEMBER(ack_frame_id)
   IPC_STRUCT_TRAITS_MEMBER(target_delay_ms)
   IPC_STRUCT_TRAITS_MEMBER(missing_frames_and_packets)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(media::cast::RtpReceiverStatistics)
-  IPC_STRUCT_TRAITS_MEMBER(fraction_lost)
-  IPC_STRUCT_TRAITS_MEMBER(cumulative_lost)
-  IPC_STRUCT_TRAITS_MEMBER(extended_high_sequence_number)
-  IPC_STRUCT_TRAITS_MEMBER(jitter)
+IPC_STRUCT_TRAITS_BEGIN(media::cast::RtcpPliMessage)
+  IPC_STRUCT_TRAITS_MEMBER(remote_ssrc)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(media::cast::RtcpEvent)
@@ -117,22 +114,22 @@ IPC_STRUCT_TRAITS_BEGIN(media::cast::RtcpEvent)
   IPC_STRUCT_TRAITS_MEMBER(packet_id)
 IPC_STRUCT_TRAITS_END()
 
+IPC_STRUCT_TRAITS_BEGIN(media::cast::RtcpReportBlock)
+  IPC_STRUCT_TRAITS_MEMBER(remote_ssrc)
+  IPC_STRUCT_TRAITS_MEMBER(media_ssrc)
+  IPC_STRUCT_TRAITS_MEMBER(fraction_lost)
+  IPC_STRUCT_TRAITS_MEMBER(cumulative_lost)
+  IPC_STRUCT_TRAITS_MEMBER(extended_high_sequence_number)
+  IPC_STRUCT_TRAITS_MEMBER(jitter)
+  IPC_STRUCT_TRAITS_MEMBER(last_sr)
+  IPC_STRUCT_TRAITS_MEMBER(delay_since_last_sr)
+IPC_STRUCT_TRAITS_END()
+
 IPC_STRUCT_TRAITS_BEGIN(media::cast::RtcpTimeData)
   IPC_STRUCT_TRAITS_MEMBER(ntp_seconds)
   IPC_STRUCT_TRAITS_MEMBER(ntp_fraction)
   IPC_STRUCT_TRAITS_MEMBER(timestamp)
 IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(media::cast::SendRtcpFromRtpReceiver_Params)
-  IPC_STRUCT_TRAITS_MEMBER(ssrc)
-  IPC_STRUCT_TRAITS_MEMBER(sender_ssrc)
-  IPC_STRUCT_TRAITS_MEMBER(time_data)
-  IPC_STRUCT_TRAITS_MEMBER(cast_message)
-  IPC_STRUCT_TRAITS_MEMBER(target_delay)
-  IPC_STRUCT_TRAITS_MEMBER(rtcp_events)
-  IPC_STRUCT_TRAITS_MEMBER(rtp_receiver_statistics)
-IPC_STRUCT_TRAITS_END()
-
 
 // Cast messages sent from the browser to the renderer.
 
@@ -142,13 +139,18 @@ IPC_MESSAGE_CONTROL2(CastMsg_ReceivedPacket,
 
 IPC_MESSAGE_CONTROL3(CastMsg_Rtt,
                      int32_t /* channel_id */,
-                     uint32_t /* ssrc */,
+                     uint32_t /* rtp sender ssrc */,
                      base::TimeDelta /* rtt */)
 
 IPC_MESSAGE_CONTROL3(CastMsg_RtcpCastMessage,
                      int32_t /* channel_id */,
-                     uint32_t /* ssrc */,
+                     uint32_t /* rtp sender ssrc */,
                      media::cast::RtcpCastMessage /* cast_message */)
+
+// This message indicates receiving picture loss indicator from rtp receiver.
+IPC_MESSAGE_CONTROL2(CastMsg_Pli,
+                     int32_t /* channel_id */,
+                     uint32_t /* rtp sender ssrc */)
 
 IPC_MESSAGE_CONTROL2(CastMsg_NotifyStatusChange,
                      int32_t /* channel_id */,
@@ -190,13 +192,10 @@ IPC_MESSAGE_CONTROL3(CastHostMsg_ResendFrameForKickstart,
                      uint32_t /* ssrc */,
                      uint32_t /* frame_id */)
 
-IPC_MESSAGE_CONTROL2(CastHostMsg_AddValidSsrc,
+IPC_MESSAGE_CONTROL3(CastHostMsg_AddValidRtpReceiver,
                      int32_t /* channel id */,
-                     uint32_t /* ssrc */)
-
-IPC_MESSAGE_CONTROL2(CastHostMsg_SendRtcpFromRtpReceiver,
-                     int32_t /* channel id */,
-                     media::cast::SendRtcpFromRtpReceiver_Params /* data */)
+                     uint32_t /* rtp sender ssrc */,
+                     uint32_t /* rtp receiver ssrc */)
 
 IPC_MESSAGE_CONTROL4(CastHostMsg_New,
                      int32_t /* channel_id */,
@@ -205,3 +204,36 @@ IPC_MESSAGE_CONTROL4(CastHostMsg_New,
                      base::DictionaryValue /* options */)
 
 IPC_MESSAGE_CONTROL1(CastHostMsg_Delete, int32_t /* channel_id */)
+
+// The following messages are used to build and send the RTCP packet from the
+// RTP receiver. |CastHostMsg_InitializeRtpReceiverRtcpBuilder| needs to be sent
+// before sending other optional RTCP messages.
+// |CastHostMsg_SendRtcpFromRtpReceiver| has to be sent in the end to finish
+// building the packet. The built packet will then be sent out.
+
+IPC_MESSAGE_CONTROL3(CastHostMsg_InitializeRtpReceiverRtcpBuilder,
+                     int32_t /* channel id */,
+                     uint32_t /* rtp_receiver_ssrc */,
+                     media::cast::RtcpTimeData /* time_data */)
+
+IPC_MESSAGE_CONTROL3(CastHostMsg_AddCastFeedback,
+                     int32_t /* channel id */,
+                     media::cast::RtcpCastMessage /* cast message */,
+                     base::TimeDelta /* target delay */)
+
+IPC_MESSAGE_CONTROL2(CastHostMsg_AddPli,
+                     int32_t /* channel id */,
+                     media::cast::RtcpPliMessage /* pli message */)
+
+IPC_MESSAGE_CONTROL2(
+    CastHostMsg_AddRtcpEvents,
+    int32_t /* channel id */,
+    media::cast::ReceiverRtcpEventSubscriber::RtcpEvents /* rtcp_events */)
+
+IPC_MESSAGE_CONTROL2(
+    CastHostMsg_AddRtpReceiverReport,
+    int32_t /* channel id */,
+    media::cast::RtcpReportBlock /* rtp_receiver_report_block */)
+
+IPC_MESSAGE_CONTROL1(CastHostMsg_SendRtcpFromRtpReceiver,
+                     int32_t /* channel id */)

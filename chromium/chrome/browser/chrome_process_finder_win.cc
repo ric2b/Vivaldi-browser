@@ -27,6 +27,7 @@
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
 
+#include "base/memory/scoped_ptr.h"
 
 namespace {
 

@@ -27,6 +27,7 @@
 #include "public/platform/WebVector.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
+#include <algorithm>
 
 namespace blink {
 
@@ -79,6 +80,11 @@ static WebVector<WebEncryptedMediaSessionType> convertSessionTypes(const Vector<
     return result;
 }
 
+static bool AreCodecsSpecified(const WebMediaKeySystemMediaCapability& capability)
+{
+    return !capability.codecs.isEmpty();
+}
+
 // This class allows capabilities to be checked and a MediaKeySystemAccess
 // object to be created asynchronously.
 class MediaKeySystemAccessInitializer final : public EncryptedMediaRequest {
@@ -91,7 +97,7 @@ public:
     // EncryptedMediaRequest implementation.
     WebString keySystem() const override { return m_keySystem; }
     const WebVector<WebMediaKeySystemConfiguration>& supportedConfigurations() const override { return m_supportedConfigurations; }
-    SecurityOrigin* securityOrigin() const override { return m_resolver->executionContext()->securityOrigin(); }
+    SecurityOrigin* getSecurityOrigin() const override { return m_resolver->getExecutionContext()->getSecurityOrigin(); }
     void requestSucceeded(WebContentDecryptionModuleAccess*) override;
     void requestNotSupported(const WebString& errorMessage) override;
 
@@ -110,6 +116,12 @@ private:
     // TODO(xhwang): Remove after we handle empty robustness correctly.
     // See http://crbug.com/482277
     void checkVideoCapabilityRobustness() const;
+
+    // Generate deprecation warning and log UseCounter if configuration
+    // contains only container-only contentType strings.
+    // TODO(jrummell): Remove once this is no longer allowed.
+    // See http://crbug.com/605661.
+    void checkEmptyCodecs(const WebMediaKeySystemConfiguration&);
 
     Member<ScriptPromiseResolver> m_resolver;
     const String m_keySystem;
@@ -154,6 +166,8 @@ MediaKeySystemAccessInitializer::MediaKeySystemAccessInitializer(ScriptState* sc
 
 void MediaKeySystemAccessInitializer::requestSucceeded(WebContentDecryptionModuleAccess* access)
 {
+    checkEmptyCodecs(access->getConfiguration());
+
     m_resolver->resolve(new MediaKeySystemAccess(m_keySystem, adoptPtr(access)));
     m_resolver.clear();
 }
@@ -196,9 +210,36 @@ void MediaKeySystemAccessInitializer::checkVideoCapabilityRobustness() const
     }
 
     if (hasEmptyRobustness) {
-        m_resolver->executionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel,
+        m_resolver->getExecutionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel,
             "It is recommended that a robustness level be specified. Not specifying the robustness level could "
             "result in unexpected behavior in the future, potentially including failure to play."));
+    }
+}
+
+void MediaKeySystemAccessInitializer::checkEmptyCodecs(const WebMediaKeySystemConfiguration& config)
+{
+    // This is only checking for empty codecs in the selected configuration,
+    // as apps may pass container only contentType strings for compatibility
+    // with other implementations.
+    // This will only check that all returned capabilities do not contain
+    // codecs. This avoids alerting on configurations that will continue
+    // to succeed in the future once strict checking is enforced.
+    bool areAllAudioCodecsEmpty = false;
+    if (config.hasAudioCapabilities && !config.audioCapabilities.isEmpty()) {
+        areAllAudioCodecsEmpty = std::find_if(config.audioCapabilities.begin(), config.audioCapabilities.end(), AreCodecsSpecified)
+            == config.audioCapabilities.end();
+    }
+
+    bool areAllVideoCodecsEmpty = false;
+    if (config.hasVideoCapabilities && !config.videoCapabilities.isEmpty()) {
+        areAllVideoCodecsEmpty = std::find_if(config.videoCapabilities.begin(), config.videoCapabilities.end(), AreCodecsSpecified)
+            == config.videoCapabilities.end();
+    }
+
+    if (areAllAudioCodecsEmpty || areAllVideoCodecsEmpty) {
+        Deprecation::countDeprecation(m_resolver->getExecutionContext(), UseCounter::EncryptedMediaAllSelectedContentTypesMissingCodecs);
+    } else {
+        UseCounter::count(m_resolver->getExecutionContext(), UseCounter::EncryptedMediaAllSelectedContentTypesHaveCodecs);
     }
 }
 
@@ -230,7 +271,7 @@ ScriptPromise NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess(
     }
 
     // 3-4. 'May Document use powerful features?' check.
-    ExecutionContext* executionContext = scriptState->executionContext();
+    ExecutionContext* executionContext = scriptState->getExecutionContext();
     String errorMessage;
     if (executionContext->isSecureContext(errorMessage)) {
         UseCounter::count(executionContext, UseCounter::EncryptedMediaSecureOrigin);

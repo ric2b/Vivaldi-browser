@@ -8,6 +8,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "mojo/edk/embedder/embedder.h"
@@ -18,7 +19,6 @@
 #include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/c/system/functions.h"
 #include "mojo/public/c/system/message_pipe.h"
-#include "mojo/public/cpp/system/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace mojo {
@@ -128,7 +128,7 @@ class DataPipeTest : public test::MojoTestBase {
   MojoHandle producer_, consumer_;
 
  private:
-  MOJO_DISALLOW_COPY_AND_ASSIGN(DataPipeTest);
+  DISALLOW_COPY_AND_ASSIGN(DataPipeTest);
 };
 
 TEST_F(DataPipeTest, Basic) {
@@ -146,7 +146,7 @@ TEST_F(DataPipeTest, Basic) {
   uint32_t num_bytes = 0;
 
   num_bytes =
-      static_cast<uint32_t>(MOJO_ARRAYSIZE(elements) * sizeof(elements[0]));
+      static_cast<uint32_t>(arraysize(elements) * sizeof(elements[0]));
 
   elements[0] = 123;
   elements[1] = 456;
@@ -216,7 +216,7 @@ TEST_F(DataPipeTest, SimpleReadWrite) {
 
   // Try reading; nothing there yet.
   num_bytes =
-      static_cast<uint32_t>(MOJO_ARRAYSIZE(elements) * sizeof(elements[0]));
+      static_cast<uint32_t>(arraysize(elements) * sizeof(elements[0]));
   ASSERT_EQ(MOJO_RESULT_SHOULD_WAIT, ReadData(elements, &num_bytes));
 
   // Query; nothing there yet.
@@ -799,7 +799,7 @@ TEST_F(DataPipeTest, AllOrNone) {
   // Try writing way too much.
   uint32_t num_bytes = 20u * sizeof(int32_t);
   int32_t buffer[100];
-  Seq(0, MOJO_ARRAYSIZE(buffer), buffer);
+  Seq(0, arraysize(buffer), buffer);
   ASSERT_EQ(MOJO_RESULT_OUT_OF_RANGE, WriteData(buffer, &num_bytes, true));
 
   // Should still be empty.
@@ -809,7 +809,7 @@ TEST_F(DataPipeTest, AllOrNone) {
 
   // Write some data.
   num_bytes = 5u * sizeof(int32_t);
-  Seq(100, MOJO_ARRAYSIZE(buffer), buffer);
+  Seq(100, arraysize(buffer), buffer);
   ASSERT_EQ(MOJO_RESULT_OK, WriteData(buffer, &num_bytes, true));
   ASSERT_EQ(5u * sizeof(int32_t), num_bytes);
 
@@ -834,7 +834,7 @@ TEST_F(DataPipeTest, AllOrNone) {
   /* TODO(jam): enable if we end up observing max capacity
   // Too much.
   num_bytes = 6u * sizeof(int32_t);
-  Seq(200, MOJO_ARRAYSIZE(buffer), buffer);
+  Seq(200, arraysize(buffer), buffer);
   ASSERT_EQ(MOJO_RESULT_OUT_OF_RANGE, WriteData(buffer, &num_bytes, true));
   */
 
@@ -852,13 +852,13 @@ TEST_F(DataPipeTest, AllOrNone) {
 
   // Just a little.
   num_bytes = 2u * sizeof(int32_t);
-  Seq(300, MOJO_ARRAYSIZE(buffer), buffer);
+  Seq(300, arraysize(buffer), buffer);
   ASSERT_EQ(MOJO_RESULT_OK, WriteData(buffer, &num_bytes, true));
   ASSERT_EQ(2u * sizeof(int32_t), num_bytes);
 
   // Just right.
   num_bytes = 3u * sizeof(int32_t);
-  Seq(400, MOJO_ARRAYSIZE(buffer), buffer);
+  Seq(400, arraysize(buffer), buffer);
   ASSERT_EQ(MOJO_RESULT_OK, WriteData(buffer, &num_bytes, true));
   ASSERT_EQ(3u * sizeof(int32_t), num_bytes);
 
@@ -955,7 +955,7 @@ TEST_F(DataPipeTest, AllOrNone) {
 // this.)
 TEST_F(DataPipeTest, WrapAround) {
   unsigned char test_data[1000];
-  for (size_t i = 0; i < MOJO_ARRAYSIZE(test_data); i++)
+  for (size_t i = 0; i < arraysize(test_data); i++)
     test_data[i] = static_cast<unsigned char>(i);
 
   const MojoCreateDataPipeOptions options = {
@@ -1031,7 +1031,7 @@ TEST_F(DataPipeTest, WrapAround) {
   ASSERT_EQ(MOJO_RESULT_OK, EndReadData(0));
 
   // Read as much as possible. We should read 100 bytes.
-  num_bytes = static_cast<uint32_t>(MOJO_ARRAYSIZE(read_buffer) *
+  num_bytes = static_cast<uint32_t>(arraysize(read_buffer) *
                                     sizeof(read_buffer[0]));
   memset(read_buffer, 0, num_bytes);
   ASSERT_EQ(MOJO_RESULT_OK, ReadData(read_buffer, &num_bytes));
@@ -1713,7 +1713,7 @@ TEST_F(DataPipeTest, MAYBE_Multiprocess) {
     ASSERT_EQ(MOJO_RESULT_OK, MojoWait(server_mp, MOJO_HANDLE_SIGNAL_READABLE,
                                        MOJO_DEADLINE_INDEFINITE, &hss));
     MojoHandle handles[2];
-    uint32_t num_handles = MOJO_ARRAYSIZE(handles);
+    uint32_t num_handles = arraysize(handles);
     ASSERT_EQ(MOJO_RESULT_OK,
               MojoReadMessage(server_mp, nullptr, 0, handles, &num_handles,
                               MOJO_READ_MESSAGE_FLAG_NONE));
@@ -1743,7 +1743,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(MultiprocessClient, DataPipeTest, client_mp) {
   ASSERT_EQ(MOJO_RESULT_OK, MojoWait(client_mp, MOJO_HANDLE_SIGNAL_READABLE,
                                      MOJO_DEADLINE_INDEFINITE, &hss));
   MojoHandle handles[2];
-  uint32_t num_handles = MOJO_ARRAYSIZE(handles);
+  uint32_t num_handles = arraysize(handles);
   ASSERT_EQ(MOJO_RESULT_OK,
             MojoReadMessage(client_mp, nullptr, 0, handles, &num_handles,
                             MOJO_READ_MESSAGE_FLAG_NONE));
@@ -1778,7 +1778,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(MultiprocessClient, DataPipeTest, client_mp) {
   hss = MojoHandleSignalsState();
   ASSERT_EQ(MOJO_RESULT_OK, MojoWait(client_mp, MOJO_HANDLE_SIGNAL_READABLE,
                                      MOJO_DEADLINE_INDEFINITE, &hss));
-  num_handles = MOJO_ARRAYSIZE(handles);
+  num_handles = arraysize(handles);
   ASSERT_EQ(MOJO_RESULT_OK,
             MojoReadMessage(client_mp, nullptr, 0, handles, &num_handles,
                             MOJO_READ_MESSAGE_FLAG_NONE));

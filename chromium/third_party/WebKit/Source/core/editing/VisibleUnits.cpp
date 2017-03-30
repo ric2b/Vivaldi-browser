@@ -55,6 +55,7 @@
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutItem.h"
 #include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/layout/api/LineLayoutItem.h"
 #include "core/layout/line/InlineIterator.h"
@@ -1510,20 +1511,21 @@ VisiblePositionTemplate<Strategy> startOfParagraphAlgorithm(const VisiblePositio
                 break;
         }
         LayoutObject* r = n->layoutObject();
-        if (!r) {
+        LayoutItem ri = LayoutItem(r);
+        if (ri.isNull()) {
             n = Strategy::previousPostOrder(*n, startBlock);
             continue;
         }
-        const ComputedStyle& style = r->styleRef();
+        const ComputedStyle& style = ri.styleRef();
         if (style.visibility() != VISIBLE) {
             n = Strategy::previousPostOrder(*n, startBlock);
             continue;
         }
 
-        if (r->isBR() || isEnclosingBlock(n))
+        if (ri.isBR() || isEnclosingBlock(n))
             break;
 
-        if (r->isText() && toLayoutText(r)->resolvedTextLength()) {
+        if (ri.isText() && toLayoutText(r)->resolvedTextLength()) {
             ASSERT_WITH_SECURITY_IMPLICATION(n->isTextNode());
             type = PositionAnchorType::OffsetInAnchor;
             if (style.preserveNewline()) {
@@ -2266,160 +2268,48 @@ static bool inRenderedText(const PositionTemplate<Strategy>& position)
         }
         if (box->containsCaretOffset(textOffset)) {
             // Return false for offsets inside composed characters.
-            return textOffset == 0 || textOffset == textLayoutObject->nextOffset(textLayoutObject->previousOffset(textOffset));
+            return textOffset == 0 || textOffset == nextGraphemeBoundaryOf(anchorNode, previousGraphemeBoundaryOf(anchorNode, textOffset));
         }
     }
 
     return false;
 }
 
-static Node* nextRenderedEditable(Node* node)
-{
-    for (node = nextAtomicLeafNode(*node); node; node = nextAtomicLeafNode(*node)) {
-        LayoutObject* layoutObject = node->layoutObject();
-        if (!layoutObject)
-            continue;
-        if (!node->hasEditableStyle())
-            continue;
-        // TODO(yosin) We should have a function to check |InlineBox| types
-        // in layout rather than using |InlineBox| here. See also
-        // |previousRenderedEditable()| which has a same condition.
-        if ((layoutObject->isBox() && toLayoutBox(layoutObject)->inlineBoxWrapper()) || (layoutObject->isText() && toLayoutText(layoutObject)->hasTextBoxes()))
-            return node;
-    }
-    return 0;
-}
-
-static Node* previousRenderedEditable(Node* node)
-{
-    for (node = previousAtomicLeafNode(*node); node; node = previousAtomicLeafNode(*node)) {
-        LayoutObject* layoutObject = node->layoutObject();
-        if (!layoutObject)
-            continue;
-        if (!node->hasEditableStyle())
-            continue;
-        // TODO(yosin) We should have a function to check |InlineBox| types
-        // in layout rather than using |InlineBox| here. See also
-        // |nextRenderedEditable()| which has a same condition.
-        if ((layoutObject->isBox() && toLayoutBox(layoutObject)->inlineBoxWrapper()) || (layoutObject->isText() && toLayoutText(layoutObject)->hasTextBoxes()))
-            return node;
-    }
-    return 0;
-}
-
-static int renderedOffsetOf(const Position& position)
-{
-    const int offset = position.computeEditingOffset();
-    Node* const anchorNode = position.anchorNode();
-    if (!anchorNode->isTextNode() || !anchorNode->layoutObject())
-        return offset;
-
-    // TODO(yosin) We should have a function to compute offset in |LayoutText|
-    // to avoid using |InlineBox| in "editing/".
-    int result = 0;
-    LayoutText* textLayoutObject = toLayoutText(anchorNode->layoutObject());
-    for (InlineTextBox *box = textLayoutObject->firstTextBox(); box; box = box->nextTextBox()) {
-        int start = box->start();
-        int end = box->start() + box->len();
-        if (offset < start)
-            return result;
-        if (offset <= end) {
-            result += offset - start;
-            return result;
-        }
-        result += box->len();
-    }
-    return result;
-}
-
-// TODO(yosin) We should move |rendersInDifferentPosition()to "EditingUtilities.cpp"
-// with |renderedOffsetOf()|.
 bool rendersInDifferentPosition(const Position& position1, const Position& position2)
 {
     if (position1.isNull() || position2.isNull())
         return false;
+    LayoutObject* layoutObject1;
+    const LayoutRect& rect1 = localCaretRectOfPosition(PositionWithAffinity(position1), layoutObject1);
+    LayoutObject* layoutObject2;
+    const LayoutRect& rect2 = localCaretRectOfPosition(PositionWithAffinity(position2), layoutObject2);
+    if (!layoutObject1 || !layoutObject2)
+        return layoutObject1 != layoutObject2;
+    return layoutObject1->localToAbsoluteQuad(FloatRect(rect1)) != layoutObject2->localToAbsoluteQuad(FloatRect(rect2));
+}
 
-    LayoutObject* layoutObject = position1.anchorNode()->layoutObject();
-    if (!layoutObject)
-        return false;
-
-    LayoutObject* posLayoutObject = position2.anchorNode()->layoutObject();
-    if (!posLayoutObject)
-        return false;
-
-    if (layoutObject->style()->visibility() != VISIBLE
-        || posLayoutObject->style()->visibility() != VISIBLE)
-        return false;
-
-    if (position1.anchorNode() == position2.anchorNode()) {
-        if (isHTMLBRElement(*position1.anchorNode()))
+static bool isVisuallyEmpty(const LayoutObject* layout)
+{
+    for (LayoutObject* child = layout->slowFirstChild(); child; child = child->nextSibling()) {
+        // TODO(xiaochengh): Replace type-based conditioning by virtual function.
+        if (child->isBox()) {
+            if (!toLayoutBox(child)->size().isEmpty())
+                return false;
+        } else if (child->isLayoutInline()) {
+            if (toLayoutInline(child)->firstLineBoxIncludingCulling())
+                return false;
+        } else if (child->isText()) {
+            if (toLayoutText(child)->hasTextBoxes())
+                return false;
+        } else {
             return false;
-
-        if (position1.computeEditingOffset() == position2.computeEditingOffset())
-            return false;
-
-        if (!position1.anchorNode()->isTextNode() && !position2.anchorNode()->isTextNode())
-            return true;
+        }
     }
-
-    if (isHTMLBRElement(*position1.anchorNode()) && isVisuallyEquivalentCandidate(position2))
-        return true;
-
-    if (isHTMLBRElement(*position2.anchorNode()) && isVisuallyEquivalentCandidate(position1))
-        return true;
-
-    if (!inSameContainingBlockFlowElement(position1.anchorNode(), position2.anchorNode()))
-        return true;
-
-    if (position1.anchorNode()->isTextNode() && !inRenderedText(position1))
-        return false;
-
-    if (position2.anchorNode()->isTextNode() && !inRenderedText(position2))
-        return false;
-
-    const int renderedOffset1 = renderedOffsetOf(position1);
-    const int renderedOffset2 = renderedOffsetOf(position2);
-
-    if (layoutObject == posLayoutObject && renderedOffset1 == renderedOffset2)
-        return false;
-
-    InlineBoxPosition boxPosition1 = computeInlineBoxPosition(position1, TextAffinity::Downstream);
-    InlineBoxPosition boxPosition2 = computeInlineBoxPosition(position2, TextAffinity::Downstream);
-
-    WTF_LOG(Editing, "layoutObject1:   %p [%p]\n", layoutObject, boxPosition1.inlineBox);
-    WTF_LOG(Editing, "renderedOffset1: %d\n", renderedOffset1);
-    WTF_LOG(Editing, "layoutObject2:   %p [%p]\n", posLayoutObject, boxPosition2.inlineBox);
-    WTF_LOG(Editing, "renderedOffset2: %d\n", renderedOffset2);
-    WTF_LOG(Editing, "node1 min/max:   %d:%d\n", caretMinOffset(position1.anchorNode()), caretMaxOffset(position1.anchorNode()));
-    WTF_LOG(Editing, "node2 min/max:   %d:%d\n", caretMinOffset(position2.anchorNode()), caretMaxOffset(position2.anchorNode()));
-    WTF_LOG(Editing, "----------------------------------------------------------------------\n");
-
-    if (!boxPosition1.inlineBox || !boxPosition2.inlineBox) {
-        return false;
-    }
-
-    if (boxPosition1.inlineBox->root() != boxPosition2.inlineBox->root()) {
-        return true;
-    }
-
-    if (nextRenderedEditable(position1.anchorNode()) == position2.anchorNode()
-        && renderedOffset1 == caretMaxOffset(position1.anchorNode()) && !renderedOffset2) {
-        return false;
-    }
-
-    if (previousRenderedEditable(position1.anchorNode()) == position2.anchorNode()
-        && !renderedOffset1 && renderedOffset2 == caretMaxOffset(position2.anchorNode())) {
-        return false;
-    }
-
     return true;
 }
 
-// Whether or not [node, 0] and [node, lastOffsetForEditing(node)] are their own VisiblePositions.
-// If true, adjacent candidates are visually distinct.
-// FIXME: Disregard nodes with layoutObjects that have no height, as we do in isCandidate.
 // FIXME: Share code with isCandidate, if possible.
-static bool endsOfNodeAreVisuallyDistinctPositions(Node* node)
+bool endsOfNodeAreVisuallyDistinctPositions(const Node* node)
 {
     if (!node || !node->layoutObject())
         return false;
@@ -2437,7 +2327,7 @@ static bool endsOfNodeAreVisuallyDistinctPositions(Node* node)
         return true;
 
     // There is a VisiblePosition inside an empty inline-block container.
-    return node->layoutObject()->isAtomicInlineLevel() && canHaveChildrenForEditing(node) && toLayoutBox(node->layoutObject())->size().height() != 0 && !node->hasChildren();
+    return node->layoutObject()->isAtomicInlineLevel() && canHaveChildrenForEditing(node) && !toLayoutBox(node->layoutObject())->size().isEmpty() && isVisuallyEmpty(node->layoutObject());
 }
 
 template <typename Strategy>
@@ -2961,7 +2851,7 @@ static PositionTemplate<Strategy> leftVisuallyDistinctCandidate(const VisiblePos
                 continue;
             }
 
-            offset = box->isLeftToRightDirection() ? lineLayoutItem.previousOffset(offset) : lineLayoutItem.nextOffset(offset);
+            offset = box->isLeftToRightDirection() ? previousGraphemeBoundaryOf(lineLayoutItem.node(), offset) : nextGraphemeBoundaryOf(lineLayoutItem.node(), offset);
 
             int caretMinOffset = box->caretMinOffset();
             int caretMaxOffset = box->caretMaxOffset();
@@ -3136,7 +3026,7 @@ static PositionTemplate<Strategy> rightVisuallyDistinctCandidate(const VisiblePo
                 continue;
             }
 
-            offset = box->isLeftToRightDirection() ? layoutObject->nextOffset(offset) : layoutObject->previousOffset(offset);
+            offset = box->isLeftToRightDirection() ? nextGraphemeBoundaryOf(layoutObject->node(), offset) : previousGraphemeBoundaryOf(layoutObject->node(), offset);
 
             int caretMinOffset = box->caretMinOffset();
             int caretMaxOffset = box->caretMaxOffset();

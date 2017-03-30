@@ -49,12 +49,12 @@ void FramePainter::paint(GraphicsContext& context, const GlobalPaintFlags global
             TransformPaintPropertyNode* transform = m_frameView->scrollTranslation() ? m_frameView->scrollTranslation() : m_frameView->preTranslation();
             ClipPaintPropertyNode* clip = m_frameView->contentClip();
             if (transform || clip) {
-                PaintChunkProperties properties(context.paintController().currentPaintChunkProperties());
+                PaintChunkProperties properties(context.getPaintController().currentPaintChunkProperties());
                 if (transform)
                     properties.transform = transform;
                 if (clip)
                     properties.clip = clip;
-                scopedPaintChunkProperties.emplace(context.paintController(), properties);
+                scopedPaintChunkProperties.emplace(context.getPaintController(), properties);
             }
         }
 
@@ -76,9 +76,9 @@ void FramePainter::paint(GraphicsContext& context, const GlobalPaintFlags global
         Optional<ScopedPaintChunkProperties> scopedPaintChunkProperties;
         if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
             if (TransformPaintPropertyNode* transform = m_frameView->preTranslation()) {
-                PaintChunkProperties properties(context.paintController().currentPaintChunkProperties());
+                PaintChunkProperties properties(context.getPaintController().currentPaintChunkProperties());
                 properties.transform = transform;
-                scopedPaintChunkProperties.emplace(context.paintController(), properties);
+                scopedPaintChunkProperties.emplace(context.getPaintController(), properties);
             }
         }
 
@@ -108,15 +108,15 @@ void FramePainter::paintContents(GraphicsContext& context, const GlobalPaintFlag
     else
         fillWithRed = true;
 
-    if (fillWithRed && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(context, *frameView().layoutView(), DisplayItem::DebugRedFill, LayoutPoint())) {
+    if (fillWithRed && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(context, *frameView().layoutView(), DisplayItem::DebugRedFill)) {
         IntRect contentRect(IntPoint(), frameView().contentsSize());
-        LayoutObjectDrawingRecorder drawingRecorder(context, *frameView().layoutView(), DisplayItem::DebugRedFill, contentRect, LayoutPoint());
+        LayoutObjectDrawingRecorder drawingRecorder(context, *frameView().layoutView(), DisplayItem::DebugRedFill, contentRect);
     }
 #endif
 
     LayoutView* layoutView = frameView().layoutView();
     if (!layoutView) {
-        WTF_LOG_ERROR("called FramePainter::paint with nil layoutObject");
+        DLOG(ERROR) << "called FramePainter::paint with nil layoutObject";
         return;
     }
 
@@ -187,8 +187,8 @@ void FramePainter::paintScrollCorner(GraphicsContext& context, const IntRect& co
 {
     if (frameView().scrollCorner()) {
         bool needsBackground = frameView().frame().isMainFrame();
-        if (needsBackground && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(context, *frameView().layoutView(), DisplayItem::ScrollbarCorner, LayoutPoint())) {
-            LayoutObjectDrawingRecorder drawingRecorder(context, *frameView().layoutView(), DisplayItem::ScrollbarCorner, FloatRect(cornerRect), LayoutPoint());
+        if (needsBackground && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(context, *frameView().layoutView(), DisplayItem::ScrollbarCorner)) {
+            LayoutObjectDrawingRecorder drawingRecorder(context, *frameView().layoutView(), DisplayItem::ScrollbarCorner, FloatRect(cornerRect));
             context.fillRect(cornerRect, frameView().baseBackgroundColor());
 
         }

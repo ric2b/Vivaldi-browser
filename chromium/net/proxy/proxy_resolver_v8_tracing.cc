@@ -18,6 +18,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/trace_event/trace_event.h"
 #include "net/base/address_list.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_interfaces.h"
@@ -548,6 +549,7 @@ void Job::ExecuteNonBlocking() {
 }
 
 int Job::ExecuteProxyResolver() {
+  TRACE_EVENT0("net", "Job::ExecuteProxyResolver");
   int result = ERR_UNEXPECTED;  // Initialized to silence warnings.
 
   switch (operation_) {

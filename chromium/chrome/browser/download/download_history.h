@@ -64,6 +64,12 @@ class DownloadHistory : public AllDownloadItemNotifier::Observer {
     // Fires when RemoveDownloads messages are sent to the DB thread.
     virtual void OnDownloadsRemoved(const IdSet& ids) {}
 
+    // Fires when the DownloadHistory completes the initial history query.
+    // Unlike the other observer methods, this one is invoked if the initial
+    // history query has already completed by the time the caller calls
+    // AddObserver().
+    virtual void OnHistoryQueryComplete() {}
+
     // Fires when the DownloadHistory is being destroyed so that implementors
     // can RemoveObserver() and nullify their DownloadHistory*s.
     virtual void OnDownloadHistoryDestroyed() {}
@@ -78,9 +84,8 @@ class DownloadHistory : public AllDownloadItemNotifier::Observer {
   // Neither |manager| nor |history| may be NULL.
   // DownloadService creates DownloadHistory some time after DownloadManager is
   // created and destroys DownloadHistory as DownloadManager is shutting down.
-  DownloadHistory(
-      content::DownloadManager* manager,
-      scoped_ptr<HistoryAdapter> history);
+  DownloadHistory(content::DownloadManager* manager,
+                  std::unique_ptr<HistoryAdapter> history);
 
   ~DownloadHistory() override;
 
@@ -100,8 +105,7 @@ class DownloadHistory : public AllDownloadItemNotifier::Observer {
 
   // Callback from |history_| containing all entries in the downloads database
   // table.
-  void QueryCallback(
-      scoped_ptr<std::vector<history::DownloadRow> > infos);
+  void QueryCallback(std::unique_ptr<std::vector<history::DownloadRow>> infos);
 
   // May add |item| to |history_|.
   void MaybeAddToHistory(content::DownloadItem* item);
@@ -130,7 +134,7 @@ class DownloadHistory : public AllDownloadItemNotifier::Observer {
 
   AllDownloadItemNotifier notifier_;
 
-  scoped_ptr<HistoryAdapter> history_;
+  std::unique_ptr<HistoryAdapter> history_;
 
   // Identifier of the item being created in QueryCallback(), matched up with
   // created items in OnDownloadCreated() so that the item is not re-added to
@@ -149,6 +153,8 @@ class DownloadHistory : public AllDownloadItemNotifier::Observer {
 
   // Count the number of items in the history for UMA.
   int64_t history_size_;
+
+  bool initial_history_query_complete_;
 
   base::ObserverList<Observer> observers_;
 

@@ -12,6 +12,10 @@
 #include "chrome/browser/ui/ime/ime_window_observer.h"
 #include "chrome/browser/ui/input_method/input_method_engine_base.h"
 
+namespace content {
+class RenderFrameHost;
+}  // namespace content
+
 namespace input_method {
 
 class InputMethodEngine : public InputMethodEngineBase,
@@ -22,25 +26,23 @@ class InputMethodEngine : public InputMethodEngineBase,
   ~InputMethodEngine() override;
 
   // ui::IMEEngineHandlerInterface:
-  bool SendKeyEvents(int context_id,
-                     const std::vector<KeyboardEvent>& events) override;
   bool IsActive() const override;
   std::string GetExtensionId() const override;
 
   // Creates and shows the IME window.
   // Returns 0 for errors and |error| will contains the error message.
   int CreateImeWindow(const extensions::Extension* extension,
+                      content::RenderFrameHost* render_frame_host,
                       const std::string& url,
                       ui::ImeWindow::Mode mode,
                       const gfx::Rect& bounds,
                       std::string* error);
-
+  void ShowImeWindow(int window_id);
+  void HideImeWindow(int window_id);
   void CloseImeWindows();
 
  private:
   // input_method::InputMethodEngineBase:
-  void FocusIn(const ui::IMEEngineHandlerInterface::InputContext& input_context)
-      override;
   void FocusOut() override;
   void SetCompositionBounds(const std::vector<gfx::Rect>& bounds) override;
   void UpdateComposition(const ui::CompositionText& composition_text,
@@ -48,9 +50,12 @@ class InputMethodEngine : public InputMethodEngineBase,
                          bool is_visible) override;
   void CommitTextToInputContext(int context_id,
                                 const std::string& text) override;
+  bool SendKeyEvent(ui::KeyEvent* ui_event, const std::string& code) override;
 
   // ui::ImeWindowObserver:
   void OnWindowDestroyed(ui::ImeWindow* ime_window) override;
+
+  ui::ImeWindow* FindWindowById(int window_id) const;
 
   // Holds the IME window instances for properly closing in the destructor.
   // The follow-cursor window is singleton.

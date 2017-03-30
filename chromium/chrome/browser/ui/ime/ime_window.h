@@ -5,9 +5,9 @@
 #ifndef CHROME_BROWSER_UI_IME_IME_WINDOW_H_
 #define CHROME_BROWSER_UI_IME_IME_WINDOW_H_
 
+#include <memory>
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -23,6 +23,7 @@ class GURL;
 class Profile;
 
 namespace content {
+class RenderFrameHost;
 class WebContents;
 }
 
@@ -58,8 +59,11 @@ class ImeWindow : public content::NotificationObserver,
   // Takes |url| as string instead of GURL because resolving GURL requires
   // |extension|. As the client code already passes in |extension|, it'd be
   // better to simply the client code.
+  // |opener_render_frame_host| is the RenderFrameHost from where the IME window
+  // is opened so that the security origin can be correctly set.
   ImeWindow(Profile* profile,
             const extensions::Extension* extension,
+            content::RenderFrameHost* opener_render_frame_host,
             const std::string& url,
             Mode mode,
             const gfx::Rect& bounds);
@@ -81,6 +85,7 @@ class ImeWindow : public content::NotificationObserver,
   void OnWindowDestroyed();
 
   void AddObserver(ImeWindowObserver* observer);
+  void RemoveObserver(ImeWindowObserver* observer);
 
   // Getters.
   Mode mode() const { return mode_; }
@@ -128,10 +133,10 @@ class ImeWindow : public content::NotificationObserver,
   std::string title_;
 
   // The window icon which is shown in the non client view.
-  scoped_ptr<extensions::IconImage> icon_;
+  std::unique_ptr<extensions::IconImage> icon_;
 
   // The web contents for the IME window page web UI.
-  scoped_ptr<content::WebContents> web_contents_;
+  std::unique_ptr<content::WebContents> web_contents_;
 
   ImeNativeWindow* native_window_;  // Weak, it does self-destruction.
 

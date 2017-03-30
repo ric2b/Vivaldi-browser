@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/callback.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
@@ -223,6 +224,7 @@ ModuleSystemTest::~ModuleSystemTest() {
 
 void ModuleSystemTest::SetUp() {
   env_ = CreateEnvironment();
+  base::CommandLine::ForCurrentProcess()->AppendSwitch("test-type");
 }
 
 void ModuleSystemTest::TearDown() {
@@ -253,7 +255,7 @@ void ModuleSystemTest::ExpectNoAssertionsMade() {
 }
 
 void ModuleSystemTest::RunResolvedPromises() {
-  isolate_->RunMicrotasks();
+  v8::MicrotasksScope::PerformCheckpoint(isolate_);
 }
 
 }  // namespace extensions

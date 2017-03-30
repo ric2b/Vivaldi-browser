@@ -96,7 +96,7 @@ scoped_refptr<ui::NativePixmap> GbmSurfaceFactory::CreateNativePixmap(
     gfx::BufferUsage usage) {
 #if !defined(OS_CHROMEOS)
   // Support for memory mapping accelerated buffers requires some
-  // CrOS-specific patches (using vgem).
+  // CrOS-specific patches (using dma-buf mmap API).
   DCHECK(gfx::BufferUsage::SCANOUT == usage);
 #endif
 
@@ -105,18 +105,19 @@ scoped_refptr<ui::NativePixmap> GbmSurfaceFactory::CreateNativePixmap(
   if (!buffer.get())
     return nullptr;
 
-  scoped_refptr<GbmPixmap> pixmap(new GbmPixmap(this));
-  if (!pixmap->InitializeFromBuffer(buffer))
-    return nullptr;
-
-  return pixmap;
+  return make_scoped_refptr(new GbmPixmap(this, buffer));
 }
 
 scoped_refptr<ui::NativePixmap> GbmSurfaceFactory::CreateNativePixmapFromHandle(
+    gfx::Size size,
+    gfx::BufferFormat format,
     const gfx::NativePixmapHandle& handle) {
-  scoped_refptr<GbmPixmap> pixmap(new GbmPixmap(this));
-  pixmap->Initialize(base::ScopedFD(handle.fd.fd), handle.stride);
-  return pixmap;
+  scoped_refptr<GbmBuffer> buffer = drm_thread_->CreateBufferFromFD(
+      size, format, base::ScopedFD(handle.fd.fd), handle.stride);
+  if (!buffer)
+    return nullptr;
+
+  return make_scoped_refptr(new GbmPixmap(this, buffer));
 }
 
 }  // namespace ui

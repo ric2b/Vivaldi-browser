@@ -39,12 +39,16 @@
     # GN version: //third_party/WebKit/Source/modules:modules
     'target_name': 'modules',
     'dependencies': [
+      '<(DEPTH)/device/battery/battery.gyp:device_battery_mojo_bindings',
+      '<(DEPTH)/mojo/mojo_edk.gyp:mojo_system_impl',
+      '<(DEPTH)/mojo/mojo_public.gyp:mojo_cpp_bindings',
       '<(DEPTH)/third_party/icu/icu.gyp:icui18n',
       '<(DEPTH)/third_party/icu/icu.gyp:icuuc',
       '<(DEPTH)/third_party/sqlite/sqlite.gyp:sqlite',
       '<(DEPTH)/third_party/zlib/zlib.gyp:zlib',
       '../config.gyp:config',
       'modules_generated.gyp:make_modules_generated',
+      '../../public/blink.gyp:mojo_bindings',
     ],
     'defines': [
       'BLINK_IMPLEMENTATION=1',
@@ -59,7 +63,7 @@
       '<(bindings_modules_v8_output_dir)/initPartialInterfacesInModules.cpp',
     ],
     'conditions': [
-      ['component=="shared_library" and link_core_modules_separately==1', {
+      ['component=="shared_library"', {
         'type': 'shared_library',
         'defines': [
           'BLINK_MODULES_IMPLEMENTATION=1',
@@ -97,6 +101,7 @@
     'target_name': 'modules_testing',
     'type': 'static_library',
     'dependencies': [
+      'modules',
       '../config.gyp:config',
     ],
     'defines': [
@@ -109,7 +114,7 @@
       '<(bindings_modules_v8_output_dir)/V8InternalsPartial.h',
     ],
     'conditions': [
-      ['component=="shared_library" and link_core_modules_separately==1', {
+      ['component=="shared_library"', {
         'dependencies': [
           '../core/core.gyp:webcore_shared',
           '<(DEPTH)/gin/gin.gyp:gin',

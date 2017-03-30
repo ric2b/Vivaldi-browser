@@ -4,7 +4,9 @@
 
 #include "chrome/browser/sync_file_system/sync_file_system_test_util.h"
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+#include <utility>
+
 #include "base/run_loop.h"
 #include "chrome/browser/sync_file_system/remote_file_sync_service.h"
 #include "chrome/browser/sync_file_system/sync_status_code.h"
@@ -36,7 +38,7 @@ template <typename Arg, typename Param>
 void ReceiveResult1(bool* done, Arg* arg_out, Param arg) {
   EXPECT_FALSE(*done);
   *done = true;
-  *arg_out = base::internal::CallbackForward(arg);
+  *arg_out = std::forward<Param>(arg);
 }
 
 template <typename Arg>
@@ -55,7 +57,7 @@ AssignAndQuitCallback(base::RunLoop*, SyncStatusCode*);
   template base::Callback<void(type)> CreateResultReceiver(type*);
 INSTANTIATE_RECEIVER(SyncStatusCode);
 INSTANTIATE_RECEIVER(google_apis::DriveApiErrorCode);
-INSTANTIATE_RECEIVER(scoped_ptr<RemoteFileSyncService::OriginStatusMap>);
+INSTANTIATE_RECEIVER(std::unique_ptr<RemoteFileSyncService::OriginStatusMap>);
 #undef INSTANTIATE_RECEIVER
 
 }  // namespace sync_file_system

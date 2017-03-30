@@ -52,9 +52,9 @@ void WebGLSharedObject::detachContextGroup()
     }
 }
 
-WebGraphicsContext3D* WebGLSharedObject::getAWebGraphicsContext3D() const
+gpu::gles2::GLES2Interface* WebGLSharedObject::getAGLInterface() const
 {
-    return m_contextGroup ? m_contextGroup->getAWebGraphicsContext3D() : nullptr;
+    return m_contextGroup ? m_contextGroup->getAGLInterface() : nullptr;
 }
 
 } // namespace blink

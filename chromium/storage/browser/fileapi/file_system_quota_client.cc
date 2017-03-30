@@ -5,12 +5,12 @@
 #include "storage/browser/fileapi/file_system_quota_client.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner_util.h"
@@ -114,14 +114,11 @@ void FileSystemQuotaClient::GetOriginUsage(
   }
 
   base::PostTaskAndReplyWithResult(
-      file_task_runner(),
-      FROM_HERE,
+      file_task_runner(), FROM_HERE,
       // It is safe to pass Unretained(quota_util) since context owns it.
       base::Bind(&FileSystemQuotaUtil::GetOriginUsageOnFileTaskRunner,
                  base::Unretained(quota_util),
-                 file_system_context_,
-                 origin_url,
-                 type),
+                 base::RetainedRef(file_system_context_), origin_url, type),
       callback);
 }
 
@@ -139,14 +136,10 @@ void FileSystemQuotaClient::GetOriginsForType(
 
   std::set<GURL>* origins_ptr = new std::set<GURL>();
   file_task_runner()->PostTaskAndReply(
-      FROM_HERE,
-      base::Bind(&GetOriginsForTypeOnFileTaskRunner,
-                 file_system_context_,
-                 storage_type,
-                 base::Unretained(origins_ptr)),
-      base::Bind(&DidGetOrigins,
-                 callback,
-                 base::Owned(origins_ptr)));
+      FROM_HERE, base::Bind(&GetOriginsForTypeOnFileTaskRunner,
+                            base::RetainedRef(file_system_context_),
+                            storage_type, base::Unretained(origins_ptr)),
+      base::Bind(&DidGetOrigins, callback, base::Owned(origins_ptr)));
 }
 
 void FileSystemQuotaClient::GetOriginsForHost(
@@ -164,15 +157,10 @@ void FileSystemQuotaClient::GetOriginsForHost(
 
   std::set<GURL>* origins_ptr = new std::set<GURL>();
   file_task_runner()->PostTaskAndReply(
-      FROM_HERE,
-      base::Bind(&GetOriginsForHostOnFileTaskRunner,
-                 file_system_context_,
-                 storage_type,
-                 host,
-                 base::Unretained(origins_ptr)),
-      base::Bind(&DidGetOrigins,
-                 callback,
-                 base::Owned(origins_ptr)));
+      FROM_HERE, base::Bind(&GetOriginsForHostOnFileTaskRunner,
+                            base::RetainedRef(file_system_context_),
+                            storage_type, host, base::Unretained(origins_ptr)),
+      base::Bind(&DidGetOrigins, callback, base::Owned(origins_ptr)));
 }
 
 void FileSystemQuotaClient::DeleteOriginData(
@@ -183,12 +171,9 @@ void FileSystemQuotaClient::DeleteOriginData(
   DCHECK(fs_type != kFileSystemTypeUnknown);
 
   base::PostTaskAndReplyWithResult(
-      file_task_runner(),
-      FROM_HERE,
+      file_task_runner(), FROM_HERE,
       base::Bind(&DeleteOriginOnFileTaskRunner,
-                 file_system_context_,
-                 origin,
-                 fs_type),
+                 base::RetainedRef(file_system_context_), origin, fs_type),
       callback);
 }
 

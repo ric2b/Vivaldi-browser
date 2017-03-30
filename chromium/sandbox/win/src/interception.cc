@@ -7,12 +7,12 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <set>
 
 #include "sandbox/win/src/interception.h"
 
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/win/pe_image.h"
 #include "base/win/windows_version.h"
@@ -23,7 +23,6 @@
 #include "sandbox/win/src/service_resolver.h"
 #include "sandbox/win/src/target_interceptions.h"
 #include "sandbox/win/src/target_process.h"
-#include "sandbox/win/src/wow64.h"
 
 namespace sandbox {
 
@@ -130,7 +129,7 @@ bool InterceptionManager::InitializeInterceptions() {
     return true;  // Nothing to do here
 
   size_t buffer_bytes = GetBufferSize();
-  scoped_ptr<char[]> local_buffer(new char[buffer_bytes]);
+  std::unique_ptr<char[]> local_buffer(new char[buffer_bytes]);
 
   if (!SetupConfigBuffer(local_buffer.get(), buffer_bytes))
     return false;
@@ -466,12 +465,6 @@ bool InterceptionManager::PatchClientFunctions(DllInterceptionData* thunks,
     if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                            loader_get, &ntdll_base))
-      return false;
-  }
-
-  if (base::win::GetVersion() <= base::win::VERSION_VISTA) {
-    Wow64 WowHelper(child_, ntdll_base);
-    if (!WowHelper.WaitForNtdll())
       return false;
   }
 

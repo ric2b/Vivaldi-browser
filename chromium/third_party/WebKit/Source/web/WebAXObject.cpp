@@ -30,6 +30,7 @@
 
 #include "public/web/WebAXObject.h"
 
+#include "SkMatrix44.h"
 #include "core/HTMLNames.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/dom/Document.h"
@@ -61,7 +62,7 @@
 
 namespace blink {
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 // It's not safe to call some WebAXObject APIs if a layout is pending.
 // Clients should call updateLayoutAndCheckValidity first.
 static bool isLayoutClean(Document* document)
@@ -123,8 +124,8 @@ int WebAXObject::axID() const
 bool WebAXObject::updateLayoutAndCheckValidity()
 {
     if (!isDetached()) {
-        Document* document = m_private->document();
-        if (!document || !document->topDocument().view())
+        Document* document = m_private->getDocument();
+        if (!document || !document->view())
             return false;
         document->view()->updateAllLifecyclePhases();
     }
@@ -631,9 +632,19 @@ WebRect WebAXObject::boundingBoxRect() const
     if (isDetached())
         return WebRect();
 
-    ASSERT(isLayoutClean(m_private->document()));
+#if DCHECK_IS_ON()
+    DCHECK(isLayoutClean(m_private->getDocument()));
+#endif
 
     return pixelSnappedIntRect(m_private->elementRect());
+}
+
+WebString WebAXObject::fontFamily() const
+{
+    if (isDetached())
+        return WebString();
+
+    return m_private->fontFamily();
 }
 
 float WebAXObject::fontSize() const
@@ -665,7 +676,7 @@ WebAXInvalidState WebAXObject::invalidState() const
     if (isDetached())
         return WebAXInvalidStateUndefined;
 
-    return static_cast<WebAXInvalidState>(m_private->invalidState());
+    return static_cast<WebAXInvalidState>(m_private->getInvalidState());
 }
 
 // Only used when invalidState() returns WebAXInvalidStateOther.
@@ -923,7 +934,7 @@ void WebAXObject::showContextMenu() const
     if (isDetached())
         return;
 
-    Node* node = m_private->node();
+    Node* node = m_private->getNode();
     if (!node)
         return;
 
@@ -972,7 +983,7 @@ WebAXTextStyle WebAXObject::textStyle() const
     if (isDetached())
         return WebAXTextStyleNone;
 
-    return static_cast<WebAXTextStyle>(m_private->textStyle());
+    return static_cast<WebAXTextStyle>(m_private->getTextStyle());
 }
 
 WebURL WebAXObject::url() const
@@ -1082,7 +1093,7 @@ WebNode WebAXObject::node() const
     if (isDetached())
         return WebNode();
 
-    Node* node = m_private->node();
+    Node* node = m_private->getNode();
     if (!node)
         return WebNode();
 
@@ -1094,7 +1105,7 @@ WebDocument WebAXObject::document() const
     if (isDetached())
         return WebDocument();
 
-    Document* document = m_private->document();
+    Document* document = m_private->getDocument();
     if (!document)
         return WebDocument();
 
@@ -1106,11 +1117,11 @@ bool WebAXObject::hasComputedStyle() const
     if (isDetached())
         return false;
 
-    Document* document = m_private->document();
+    Document* document = m_private->getDocument();
     if (document)
         document->updateLayoutTree();
 
-    Node* node = m_private->node();
+    Node* node = m_private->getNode();
     if (!node)
         return false;
 
@@ -1122,11 +1133,11 @@ WebString WebAXObject::computedStyleDisplay() const
     if (isDetached())
         return WebString();
 
-    Document* document = m_private->document();
+    Document* document = m_private->getDocument();
     if (document)
         document->updateLayoutTree();
 
-    Node* node = m_private->node();
+    Node* node = m_private->getNode();
     if (!node)
         return WebString();
 
@@ -1378,7 +1389,7 @@ WebAXSortDirection WebAXObject::sortDirection() const
     if (isDetached())
         return WebAXSortDirectionUndefined;
 
-    return static_cast<WebAXSortDirection>(m_private->sortDirection());
+    return static_cast<WebAXSortDirection>(m_private->getSortDirection());
 }
 
 void WebAXObject::loadInlineTextBoxes() const
@@ -1431,7 +1442,7 @@ void WebAXObject::wordBoundaries(WebVector<int>& starts, WebVector<int>& ends) c
     WebVector<int> wordStartOffsets(wordBoundaries.size());
     WebVector<int> wordEndOffsets(wordBoundaries.size());
     for (size_t i = 0; i < wordBoundaries.size(); ++i) {
-        ASSERT(wordBoundaries[i].isSimple());
+        DCHECK(wordBoundaries[i].isSimple());
         wordStartOffsets[i] = wordBoundaries[i].anchorOffset;
         wordEndOffsets[i] = wordBoundaries[i].focusOffset;
     }
@@ -1496,6 +1507,14 @@ void WebAXObject::scrollToGlobalPoint(const WebPoint& point) const
 {
     if (!isDetached())
         m_private->scrollToGlobalPoint(point);
+}
+
+SkMatrix44 WebAXObject::transformFromLocalParentFrame() const
+{
+    if (isDetached())
+        return SkMatrix44();
+
+    return m_private->transformFromLocalParentFrame();
 }
 
 WebAXObject::WebAXObject(AXObject* object)

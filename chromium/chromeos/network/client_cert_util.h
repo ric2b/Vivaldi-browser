@@ -35,6 +35,7 @@ enum ConfigType {
 
 struct CHROMEOS_EXPORT ClientCertConfig {
   ClientCertConfig();
+  ClientCertConfig(const ClientCertConfig& other);
 
   // Independent of whether the client cert (pattern or reference) is
   // configured, the location determines whether this network configuration
@@ -46,6 +47,9 @@ struct CHROMEOS_EXPORT ClientCertConfig {
 
   // If |client_cert_type| equals kPattern, this contains the pattern.
   CertificatePattern pattern;
+
+  // The value of kIdentity, to enable substitutions.
+  std::string policy_identity;
 };
 
 // Returns true only if any fields set in this pattern match exactly with

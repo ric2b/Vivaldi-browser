@@ -7,7 +7,6 @@
 
 #include "base/macros.h"
 #include "base/test/test_suite.h"
-#include "mojo/public/cpp/system/macros.h"
 
 namespace mus {
 
@@ -20,7 +19,7 @@ class WindowServerTestSuite : public base::TestSuite {
   void Initialize() override;
 
  private:
-  MOJO_DISALLOW_COPY_AND_ASSIGN(WindowServerTestSuite);
+  DISALLOW_COPY_AND_ASSIGN(WindowServerTestSuite);
 };
 
 }  // namespace mus

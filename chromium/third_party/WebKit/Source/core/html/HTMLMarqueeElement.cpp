@@ -40,9 +40,9 @@ inline HTMLMarqueeElement::HTMLMarqueeElement(Document& document)
     UseCounter::count(document, UseCounter::HTMLMarqueeElement);
 }
 
-PassRefPtrWillBeRawPtr<HTMLMarqueeElement> HTMLMarqueeElement::create(Document& document)
+RawPtr<HTMLMarqueeElement> HTMLMarqueeElement::create(Document& document)
 {
-    RefPtrWillBeRawPtr<HTMLMarqueeElement> marqueeElement(adoptRefWillBeNoop(new HTMLMarqueeElement(document)));
+    RawPtr<HTMLMarqueeElement> marqueeElement(new HTMLMarqueeElement(document));
     V8HTMLMarqueeElement::PrivateScript::createdCallbackMethod(document.frame(), marqueeElement.get());
     return marqueeElement.release();
 }
@@ -56,7 +56,7 @@ void HTMLMarqueeElement::attributeChanged(const QualifiedName& name, const Atomi
 Node::InsertionNotificationRequest HTMLMarqueeElement::insertedInto(ContainerNode* insertionPoint)
 {
     HTMLElement::insertedInto(insertionPoint);
-    if (inDocument()) {
+    if (inShadowIncludingDocument()) {
         V8HTMLMarqueeElement::PrivateScript::attachedCallbackMethod(document().frame(), this);
     }
     return InsertionDone;
@@ -65,7 +65,7 @@ Node::InsertionNotificationRequest HTMLMarqueeElement::insertedInto(ContainerNod
 void HTMLMarqueeElement::removedFrom(ContainerNode* insertionPoint)
 {
     HTMLElement::removedFrom(insertionPoint);
-    if (insertionPoint->inDocument()) {
+    if (insertionPoint->inShadowIncludingDocument()) {
         V8HTMLMarqueeElement::PrivateScript::detachedCallbackMethod(insertionPoint->document().frame(), this);
     }
 }

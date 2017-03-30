@@ -56,6 +56,7 @@
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebURLRequest.h"
 #include "wtf/StringHasher.h"
 #include "wtf/text/StringBuilder.h"
@@ -96,9 +97,8 @@ const char ContentSecurityPolicy::BlockAllMixedContent[] = "block-all-mixed-cont
 // https://w3c.github.io/webappsec/specs/upgrade/
 const char ContentSecurityPolicy::UpgradeInsecureRequests[] = "upgrade-insecure-requests";
 
-// Suborigin Directive
-// https://metromoxie.github.io/webappsec/specs/suborigins/index.html
-const char ContentSecurityPolicy::Suborigin[] = "suborigin";
+// https://mikewest.github.io/cors-rfc1918/#csp
+const char ContentSecurityPolicy::TreatAsPublicAddress[] = "treat-as-public-address";
 
 bool ContentSecurityPolicy::isDirectiveName(const String& name)
 {
@@ -111,7 +111,6 @@ bool ContentSecurityPolicy::isDirectiveName(const String& name)
         || equalIgnoringCase(name, ObjectSrc)
         || equalIgnoringCase(name, ReportURI)
         || equalIgnoringCase(name, Sandbox)
-        || equalIgnoringCase(name, Suborigin)
         || equalIgnoringCase(name, ScriptSrc)
         || equalIgnoringCase(name, StyleSrc)
         || equalIgnoringCase(name, BaseURI)
@@ -123,7 +122,8 @@ bool ContentSecurityPolicy::isDirectiveName(const String& name)
         || equalIgnoringCase(name, Referrer)
         || equalIgnoringCase(name, ManifestSrc)
         || equalIgnoringCase(name, BlockAllMixedContent)
-        || equalIgnoringCase(name, UpgradeInsecureRequests));
+        || equalIgnoringCase(name, UpgradeInsecureRequests)
+        || equalIgnoringCase(name, TreatAsPublicAddress));
 }
 
 static UseCounter::Feature getUseCounterType(ContentSecurityPolicyHeaderType type)
@@ -144,9 +144,9 @@ ContentSecurityPolicy::ContentSecurityPolicy()
     , m_scriptHashAlgorithmsUsed(ContentSecurityPolicyHashAlgorithmNone)
     , m_styleHashAlgorithmsUsed(ContentSecurityPolicyHashAlgorithmNone)
     , m_sandboxMask(0)
-    , m_suboriginName(String())
     , m_enforceStrictMixedContentChecking(false)
     , m_referrerPolicy(ReferrerPolicyDefault)
+    , m_treatAsPublicAddress(false)
     , m_insecureRequestsPolicy(SecurityContext::InsecureRequestsDoNotUpgrade)
 {
 }
@@ -160,10 +160,10 @@ void ContentSecurityPolicy::bindToExecutionContext(ExecutionContext* executionCo
 void ContentSecurityPolicy::applyPolicySideEffectsToExecutionContext()
 {
     ASSERT(m_executionContext);
-    ASSERT(securityOrigin());
+    ASSERT(getSecurityOrigin());
     // Ensure that 'self' processes correctly.
-    m_selfProtocol = securityOrigin()->protocol();
-    m_selfSource = adoptPtr(new CSPSource(this, m_selfProtocol, securityOrigin()->host(), securityOrigin()->port(), String(), CSPSource::NoWildcard, CSPSource::NoWildcard));
+    m_selfProtocol = getSecurityOrigin()->protocol();
+    m_selfSource = new CSPSource(this, m_selfProtocol, getSecurityOrigin()->host(), getSecurityOrigin()->port(), String(), CSPSource::NoWildcard, CSPSource::NoWildcard);
 
     if (didSetReferrerPolicy())
         m_executionContext->setReferrerPolicy(m_referrerPolicy);
@@ -177,14 +177,13 @@ void ContentSecurityPolicy::applyPolicySideEffectsToExecutionContext()
         }
         if (m_enforceStrictMixedContentChecking)
             document->enforceStrictMixedContentChecking();
-        if (RuntimeEnabledFeatures::suboriginsEnabled()) {
-            document->enforceSuborigin(m_suboriginName);
-        }
+        if (m_treatAsPublicAddress)
+            document->setAddressSpace(WebAddressSpacePublic);
         if (m_insecureRequestsPolicy == SecurityContext::InsecureRequestsUpgrade) {
             UseCounter::count(document, UseCounter::UpgradeInsecureRequestsEnabled);
             document->setInsecureRequestsPolicy(m_insecureRequestsPolicy);
-            if (!securityOrigin()->host().isNull())
-                document->addInsecureNavigationUpgrade(securityOrigin()->host().impl()->hash());
+            if (!getSecurityOrigin()->host().isNull())
+                document->addInsecureNavigationUpgrade(getSecurityOrigin()->host().impl()->hash());
         }
 
         for (const auto& consoleMessage : m_consoleMessages)
@@ -193,6 +192,9 @@ void ContentSecurityPolicy::applyPolicySideEffectsToExecutionContext()
 
         for (const auto& policy : m_policies)
             UseCounter::count(*document, getUseCounterType(policy->headerType()));
+
+        if (allowDynamic())
+            UseCounter::count(*document, UseCounter::CSPWithUnsafeDynamic);
     }
 
     // We disable 'eval()' even in the case of report-only policies, and rely on the check in the
@@ -209,7 +211,9 @@ ContentSecurityPolicy::~ContentSecurityPolicy()
 DEFINE_TRACE(ContentSecurityPolicy)
 {
     visitor->trace(m_executionContext);
+    visitor->trace(m_policies);
     visitor->trace(m_consoleMessages);
+    visitor->trace(m_selfSource);
 }
 
 Document* ContentSecurityPolicy::document() const
@@ -254,7 +258,7 @@ void ContentSecurityPolicy::didReceiveHeader(const String& header, ContentSecuri
 void ContentSecurityPolicy::addPolicyFromHeaderValue(const String& header, ContentSecurityPolicyHeaderType type, ContentSecurityPolicyHeaderSource source)
 {
     // If this is a report-only header inside a <meta> element, bail out.
-    if (source == ContentSecurityPolicyHeaderSourceMeta && type == ContentSecurityPolicyHeaderTypeReport && experimentalFeaturesEnabled()) {
+    if (source == ContentSecurityPolicyHeaderSourceMeta && type == ContentSecurityPolicyHeaderTypeReport) {
         reportReportOnlyInMeta(header);
         return;
     }
@@ -274,7 +278,7 @@ void ContentSecurityPolicy::addPolicyFromHeaderValue(const String& header, Conte
 
         // header1,header2 OR header1
         //        ^                  ^
-        OwnPtr<CSPDirectiveList> policy = CSPDirectiveList::create(this, begin, position, type, source);
+        Member<CSPDirectiveList> policy = CSPDirectiveList::create(this, begin, position, type, source);
 
         // When a referrer policy has already been set, the most recent
         // one takes precedence.
@@ -305,7 +309,7 @@ void ContentSecurityPolicy::setOverrideURLForSelf(const KURL& url)
     // be overwritten when we bind this object to an execution context.
     RefPtr<SecurityOrigin> origin = SecurityOrigin::create(url);
     m_selfProtocol = origin->protocol();
-    m_selfSource = adoptPtr(new CSPSource(this, m_selfProtocol, origin->host(), origin->port(), String(), CSPSource::NoWildcard, CSPSource::NoWildcard));
+    m_selfSource = new CSPSource(this, m_selfProtocol, origin->host(), origin->port(), String(), CSPSource::NoWildcard, CSPSource::NoWildcard);
 }
 
 const PassOwnPtr<Vector<CSPHeaderAndType>> ContentSecurityPolicy::headers() const
@@ -536,6 +540,60 @@ bool ContentSecurityPolicy::allowStyleWithHash(const String& source) const
     return checkDigest<&CSPDirectiveList::allowStyleHash>(source, m_styleHashAlgorithmsUsed, m_policies);
 }
 
+bool ContentSecurityPolicy::allowRequest(WebURLRequest::RequestContext context, const KURL& url, RedirectStatus redirectStatus, ReportingStatus reportingStatus) const
+{
+    switch (context) {
+    case WebURLRequest::RequestContextAudio:
+    case WebURLRequest::RequestContextTrack:
+    case WebURLRequest::RequestContextVideo:
+        return allowMediaFromSource(url, redirectStatus, reportingStatus);
+    case WebURLRequest::RequestContextBeacon:
+    case WebURLRequest::RequestContextEventSource:
+    case WebURLRequest::RequestContextFetch:
+    case WebURLRequest::RequestContextXMLHttpRequest:
+        return allowConnectToSource(url, redirectStatus, reportingStatus);
+    case WebURLRequest::RequestContextEmbed:
+    case WebURLRequest::RequestContextObject:
+        return allowObjectFromSource(url, redirectStatus, reportingStatus);
+    case WebURLRequest::RequestContextFavicon:
+    case WebURLRequest::RequestContextImage:
+    case WebURLRequest::RequestContextImageSet:
+        return allowImageFromSource(url, redirectStatus, reportingStatus);
+    case WebURLRequest::RequestContextFont:
+        return allowFontFromSource(url, redirectStatus, reportingStatus);
+    case WebURLRequest::RequestContextForm:
+        return allowFormAction(url, redirectStatus, reportingStatus);
+    case WebURLRequest::RequestContextFrame:
+    case WebURLRequest::RequestContextIframe:
+        return allowChildFrameFromSource(url, redirectStatus, reportingStatus);
+    case WebURLRequest::RequestContextImport:
+    case WebURLRequest::RequestContextScript:
+    case WebURLRequest::RequestContextXSLT:
+        return allowScriptFromSource(url, redirectStatus, reportingStatus);
+    case WebURLRequest::RequestContextManifest:
+        return allowManifestFromSource(url, redirectStatus, reportingStatus);
+    case WebURLRequest::RequestContextServiceWorker:
+    case WebURLRequest::RequestContextSharedWorker:
+    case WebURLRequest::RequestContextWorker:
+        return allowWorkerContextFromSource(url, redirectStatus, reportingStatus);
+    case WebURLRequest::RequestContextStyle:
+        return allowStyleFromSource(url, redirectStatus, reportingStatus);
+    case WebURLRequest::RequestContextCSPReport:
+    case WebURLRequest::RequestContextDownload:
+    case WebURLRequest::RequestContextHyperlink:
+    case WebURLRequest::RequestContextInternal:
+    case WebURLRequest::RequestContextLocation:
+    case WebURLRequest::RequestContextPing:
+    case WebURLRequest::RequestContextPlugin:
+    case WebURLRequest::RequestContextPrefetch:
+    case WebURLRequest::RequestContextSubresource:
+    case WebURLRequest::RequestContextUnspecified:
+        return true;
+    }
+    ASSERT_NOT_REACHED();
+    return true;
+}
+
 void ContentSecurityPolicy::usesScriptHashAlgorithms(uint8_t algorithms)
 {
     m_scriptHashAlgorithmsUsed |= algorithms;
@@ -650,9 +708,9 @@ bool ContentSecurityPolicy::didSetReferrerPolicy() const
     return false;
 }
 
-SecurityOrigin* ContentSecurityPolicy::securityOrigin() const
+SecurityOrigin* ContentSecurityPolicy::getSecurityOrigin() const
 {
-    return m_executionContext->securityContext().securityOrigin();
+    return m_executionContext->securityContext().getSecurityOrigin();
 }
 
 const KURL ContentSecurityPolicy::url() const
@@ -675,15 +733,17 @@ void ContentSecurityPolicy::enforceStrictMixedContentChecking()
     m_enforceStrictMixedContentChecking = true;
 }
 
+void ContentSecurityPolicy::treatAsPublicAddress()
+{
+    if (!RuntimeEnabledFeatures::corsRFC1918Enabled())
+        return;
+    m_treatAsPublicAddress = true;
+}
+
 void ContentSecurityPolicy::setInsecureRequestsPolicy(SecurityContext::InsecureRequestsPolicy policy)
 {
     if (policy > m_insecureRequestsPolicy)
         m_insecureRequestsPolicy = policy;
-}
-
-void ContentSecurityPolicy::enforceSuborigin(const String& name)
-{
-    m_suboriginName = name;
 }
 
 static String stripURLForUseInReport(Document* document, const KURL& url)
@@ -692,7 +752,7 @@ static String stripURLForUseInReport(Document* document, const KURL& url)
         return String();
     if (!url.isHierarchical() || url.protocolIs("file"))
         return url.protocol();
-    return document->securityOrigin()->canRequest(url) ? url.strippedForUseAsReferrer() : SecurityOrigin::create(url)->toString();
+    return document->getSecurityOrigin()->canRequest(url) ? url.strippedForUseAsReferrer() : SecurityOrigin::create(url)->toString();
 }
 
 static void gatherSecurityPolicyViolationEventData(SecurityPolicyViolationEventInit& init, Document* document, const String& directiveText, const String& effectiveDirective, const KURL& blockedURL, const String& header)
@@ -701,10 +761,10 @@ static void gatherSecurityPolicyViolationEventData(SecurityPolicyViolationEventI
         // If this load was blocked via 'frame-ancestors', then the URL of |document| has not yet
         // been initialized. In this case, we'll set both 'documentURI' and 'blockedURI' to the
         // blocked document's URL.
-        init.setDocumentURI(blockedURL.string());
-        init.setBlockedURI(blockedURL.string());
+        init.setDocumentURI(blockedURL.getString());
+        init.setBlockedURI(blockedURL.getString());
     } else {
-        init.setDocumentURI(document->url().string());
+        init.setDocumentURI(document->url().getString());
         init.setBlockedURI(stripURLForUseInReport(document, blockedURL));
     }
     init.setReferrer(document->referrer());
@@ -831,11 +891,6 @@ void ContentSecurityPolicy::reportMetaOutsideHead(const String& header)
     logToConsole("The Content Security Policy '" + header + "' was delivered via a <meta> element outside the document's <head>, which is disallowed. The policy has been ignored.");
 }
 
-void ContentSecurityPolicy::reportSuboriginInMeta(const String& suboriginName)
-{
-    logToConsole("The Suborigin name '" + suboriginName + "' was delivered via a Content Security Policy in a <meta> element and not an HTTP header, which is disallowed. The Suborigin has been ignored.");
-}
-
 void ContentSecurityPolicy::reportValueForEmptyDirective(const String& name, const String& value)
 {
     logToConsole("The Content Security Policy directive '" + name + "' should be empty, but was delivered with a value of '" + value + "'. The directive has been applied, and the value ignored.");
@@ -844,6 +899,11 @@ void ContentSecurityPolicy::reportValueForEmptyDirective(const String& name, con
 void ContentSecurityPolicy::reportInvalidInReportOnly(const String& name)
 {
     logToConsole("The Content Security Policy directive '" + name + "' is ignored when delivered in a report-only policy.");
+}
+
+void ContentSecurityPolicy::reportInvalidDirectiveInMeta(const String& directive)
+{
+    logToConsole("Content Security Policies delivered via a <meta> element may not contain the " + directive + " directive.");
 }
 
 void ContentSecurityPolicy::reportUnsupportedDirective(const String& name)
@@ -900,11 +960,6 @@ void ContentSecurityPolicy::reportInvalidSandboxFlags(const String& invalidFlags
     logToConsole("Error while parsing the 'sandbox' Content Security Policy directive: " + invalidFlags);
 }
 
-void ContentSecurityPolicy::reportInvalidSuboriginFlags(const String& invalidFlags)
-{
-    logToConsole("Error while parsing the 'suborigin' Content Security Policy directive: " + invalidFlags);
-}
-
 void ContentSecurityPolicy::reportInvalidReflectedXSS(const String& invalidValue)
 {
     logToConsole("The 'reflected-xss' Content Security Policy directive has the invalid value \"" + invalidValue + "\". Valid values are \"allow\", \"filter\", and \"block\".");
@@ -945,7 +1000,7 @@ void ContentSecurityPolicy::logToConsole(const String& message, MessageLevel lev
     logToConsole(ConsoleMessage::create(SecurityMessageSource, level, message));
 }
 
-void ContentSecurityPolicy::logToConsole(PassRefPtrWillBeRawPtr<ConsoleMessage> consoleMessage, LocalFrame* frame)
+void ContentSecurityPolicy::logToConsole(ConsoleMessage* consoleMessage, LocalFrame* frame)
 {
     if (frame)
         frame->document()->addConsoleMessage(consoleMessage);
@@ -992,7 +1047,7 @@ bool ContentSecurityPolicy::selfMatchesInnerURL() const
     // if we're in a context that bypasses Content Security Policy in the main world.
     //
     // TODO(mkwst): Revisit this once embedders have an opportunity to update their extension models.
-    return m_executionContext && SchemeRegistry::schemeShouldBypassContentSecurityPolicy(m_executionContext->securityOrigin()->protocol());
+    return m_executionContext && SchemeRegistry::schemeShouldBypassContentSecurityPolicy(m_executionContext->getSecurityOrigin()->protocol());
 }
 
 bool ContentSecurityPolicy::shouldBypassMainWorld(const ExecutionContext* context)
@@ -1003,31 +1058,6 @@ bool ContentSecurityPolicy::shouldBypassMainWorld(const ExecutionContext* contex
             return document->frame()->script().shouldBypassMainWorldCSP();
     }
     return false;
-}
-
-bool ContentSecurityPolicy::isScriptResource(const ResourceRequest& resourceRequest)
-{
-    return WebURLRequest::RequestContextScript == resourceRequest.requestContext() || WebURLRequest::RequestContextImport == resourceRequest.requestContext() || WebURLRequest::RequestContextXSLT == resourceRequest.requestContext() || WebURLRequest::RequestContextPrefetch == resourceRequest.requestContext();
-}
-
-bool ContentSecurityPolicy::isStyleResource(const ResourceRequest& resourceRequest)
-{
-    return WebURLRequest::RequestContextStyle == resourceRequest.requestContext() || WebURLRequest::RequestContextPrefetch == resourceRequest.requestContext();
-}
-
-bool ContentSecurityPolicy::isImageResource(const ResourceRequest& resourceRequest)
-{
-    return WebURLRequest::RequestContextImage == resourceRequest.requestContext() || WebURLRequest::RequestContextFavicon == resourceRequest.requestContext() || WebURLRequest::RequestContextImageSet == resourceRequest.requestContext() || WebURLRequest::RequestContextPrefetch == resourceRequest.requestContext();
-}
-
-bool ContentSecurityPolicy::isFontResource(const ResourceRequest& resourceRequest)
-{
-    return WebURLRequest::RequestContextFont == resourceRequest.requestContext() || WebURLRequest::RequestContextPrefetch == resourceRequest.requestContext();
-}
-
-bool ContentSecurityPolicy::isMediaResource(const ResourceRequest& resourceRequest)
-{
-    return WebURLRequest::RequestContextAudio == resourceRequest.requestContext() || WebURLRequest::RequestContextVideo == resourceRequest.requestContext() || WebURLRequest::RequestContextTrack == resourceRequest.requestContext() || WebURLRequest::RequestContextPrefetch == resourceRequest.requestContext();
 }
 
 bool ContentSecurityPolicy::shouldSendViolationReport(const String& report) const

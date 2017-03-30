@@ -31,17 +31,16 @@ class FileSystemApp : public mojo::ShellClient,
   static base::FilePath GetUserDataDir();
 
   // |mojo::ShellClient| override:
-  void Initialize(mojo::Connector* connector, const std::string& url,
-                  uint32_t id, uint32_t user_id) override;
+  void Initialize(mojo::Connector* connector, const mojo::Identity& identity,
+                  uint32_t id) override;
   bool AcceptConnection(mojo::Connection* connection) override;
-
   // |InterfaceFactory<Files>| implementation:
   void Create(mojo::Connection* connection,
               mojo::InterfaceRequest<FileSystem> request) override;
 
   mojo::TracingImpl tracing_;
 
-  scoped_ptr<LockTable> lock_table_;
+  scoped_refptr<LockTable> lock_table_;
 
   DISALLOW_COPY_AND_ASSIGN(FileSystemApp);
 };

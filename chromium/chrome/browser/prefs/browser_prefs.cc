@@ -72,10 +72,15 @@
 #include "components/dom_distiller/core/distilled_page_prefs.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/gcm_driver/gcm_channel_status_syncer.h"
+#include "components/metrics/metrics_service.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/ntp_snippets/ntp_snippets_service.h"
 #include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager.h"
+#include "components/policy/core/browser/browser_policy_connector.h"
+#include "components/policy/core/browser/url_blacklist_manager.h"
+#include "components/policy/core/common/policy_statistics_collector.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -87,6 +92,7 @@
 #include "components/sync_driver/sync_prefs.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/translate/core/browser/translate_prefs.h"
+#include "components/update_client/update_client.h"
 #include "components/variations/service/variations_service.h"
 #include "components/web_resource/promo_resource_service.h"
 #include "content/public/browser/render_process_host.h"
@@ -98,12 +104,6 @@
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
 #include "chrome/browser/background/background_mode_manager.h"
-#endif
-
-#if defined(ENABLE_CONFIGURATION_POLICY)
-#include "components/policy/core/browser/browser_policy_connector.h"
-#include "components/policy/core/browser/url_blacklist_manager.h"
-#include "components/policy/core/common/policy_statistics_collector.h"
 #endif
 
 #if defined(ENABLE_EXTENSIONS)
@@ -141,9 +141,9 @@
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/android/bookmarks/partner_bookmarks_shim.h"
-#include "chrome/browser/android/most_visited_sites.h"
-#include "chrome/browser/android/new_tab_page_prefs.h"
-#include "chrome/browser/android/popular_sites.h"
+#include "chrome/browser/android/ntp/most_visited_sites.h"
+#include "chrome/browser/android/ntp/new_tab_page_prefs.h"
+#include "chrome/browser/android/ntp/popular_sites.h"
 #else
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/upgrade_detector.h"
@@ -197,6 +197,7 @@
 #include "chromeos/audio/audio_devices_pref_handler_impl.h"
 #include "chromeos/timezone/timezone_resolver.h"
 #include "components/invalidation/impl/invalidator_storage.h"
+#include "components/quirks/quirks_manager.h"
 #else
 #include "chrome/browser/extensions/default_apps.h"
 #endif
@@ -274,6 +275,15 @@ const char kOverscrollVerticalResistThreshold[] =
     "overscroll.vertical_resist_threshold";
 #endif  // defined(USE_AURA)
 
+#if BUILDFLAG(ENABLE_GOOGLE_NOW)
+// Deprecated 3/2016
+const char kGoogleGeolocationAccessEnabled[] =
+    "googlegeolocationaccess.enabled";
+#endif
+
+// Deprecated 4/2016.
+const char kCheckDefaultBrowser[] = "browser.check_default_browser";
+
 }  // namespace
 
 namespace chrome {
@@ -304,16 +314,15 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   SigninManagerFactory::RegisterPrefs(registry);
   ssl_config::SSLConfigServiceManager::RegisterPrefs(registry);
   startup_metric_utils::RegisterPrefs(registry);
+  update_client::RegisterPrefs(registry);
   web_resource::PromoResourceService::RegisterPrefs(registry);
 
 #if defined(ENABLE_AUTOFILL_DIALOG)
   autofill::AutofillDialogController::RegisterPrefs(registry);
 #endif
 
-#if defined(ENABLE_CONFIGURATION_POLICY)
   policy::BrowserPolicyConnector::RegisterPrefs(registry);
   policy::PolicyStatisticsCollector::RegisterPrefs(registry);
-#endif
 
 #if defined(ENABLE_EXTENSIONS)
   EasyUnlockService::RegisterPrefs(registry);
@@ -369,6 +378,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   chromeos::StartupUtils::RegisterPrefs(registry);
   chromeos::system::AutomaticRebootManager::RegisterPrefs(registry);
   chromeos::system::InputDeviceSettings::RegisterPrefs(registry);
+  chromeos::TimeZoneResolver::RegisterPrefs(registry);
   chromeos::UserImageManager::RegisterPrefs(registry);
   chromeos::UserSessionManager::RegisterPrefs(registry);
   chromeos::WallpaperManager::RegisterPrefs(registry);
@@ -381,7 +391,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   policy::DeviceCloudPolicyManagerChromeOS::RegisterPrefs(registry);
   policy::DeviceStatusCollector::RegisterPrefs(registry);
   policy::PolicyCertServiceFactory::RegisterPrefs(registry);
-  chromeos::TimeZoneResolver::RegisterPrefs(registry);
+  quirks::QuirksManager::RegisterPrefs(registry);
 #endif
 
 #if defined(OS_MACOSX)
@@ -424,6 +434,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   MediaDeviceIDSalt::RegisterProfilePrefs(registry);
   MediaStreamDevicesController::RegisterProfilePrefs(registry);
   NetPrefObserver::RegisterProfilePrefs(registry);
+  ntp_snippets::NTPSnippetsService::RegisterProfilePrefs(registry);
   password_bubble_experiment::RegisterPrefs(registry);
   password_manager::PasswordManager::RegisterProfilePrefs(registry);
   PrefProxyConfigTrackerImpl::RegisterProfilePrefs(registry);
@@ -447,9 +458,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   autofill::AutofillDialogController::RegisterProfilePrefs(registry);
 #endif
 
-#if defined(ENABLE_CONFIGURATION_POLICY)
   policy::URLBlacklistManager::RegisterProfilePrefs(registry);
-#endif
 
 #if defined(ENABLE_EXTENSIONS)
   EasyUnlockService::RegisterProfilePrefs(registry);
@@ -585,6 +594,12 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterListPref(kURLsToRestoreOnStartupOld);
   registry->RegisterInt64Pref(kRestoreStartupURLsMigrationTime, 0);
   registry->RegisterBooleanPref(kRestoreOnStartupMigrated, false);
+
+#if BUILDFLAG(ENABLE_GOOGLE_NOW)
+  registry->RegisterBooleanPref(kGoogleGeolocationAccessEnabled, false);
+#endif
+
+  registry->RegisterBooleanPref(kCheckDefaultBrowser, true);
 }
 
 void RegisterUserProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
@@ -625,6 +640,20 @@ void MigrateObsoleteProfilePrefs(Profile* profile) {
   profile_prefs->ClearPref(kShownAutoLaunchInfobarDeprecated);
 #endif
 
+#if defined(OS_MACOSX)
+  // Migrate the value of kHideFullscreenToolbar to kShowFullscreenToolbar if
+  // it was set by the user. See crbug.com/590827.
+  // Added 03/2016.
+  const PrefService::Preference* hide_pref =
+      profile_prefs->FindPreference(prefs::kHideFullscreenToolbar);
+  if (!hide_pref->IsDefaultValue()) {
+    bool hide_pref_value =
+        profile_prefs->GetBoolean(prefs::kHideFullscreenToolbar);
+    profile_prefs->SetBoolean(prefs::kShowFullscreenToolbar, !hide_pref_value);
+    profile_prefs->ClearPref(prefs::kHideFullscreenToolbar);
+  }
+#endif
+
   // Added 12/1015.
   profile_prefs->ClearPref(kURLsToRestoreOnStartupOld);
   profile_prefs->ClearPref(kRestoreStartupURLsMigrationTime);
@@ -647,6 +676,25 @@ void MigrateObsoleteProfilePrefs(Profile* profile) {
   profile_prefs->ClearPref(kOverscrollHorizontalResistThreshold);
   profile_prefs->ClearPref(kOverscrollVerticalResistThreshold);
 #endif  // defined(USE_AURA)
+
+#if BUILDFLAG(ENABLE_GOOGLE_NOW)
+  // Added 3/2016.
+  profile_prefs->ClearPref(kGoogleGeolocationAccessEnabled);
+#endif
+
+  // Added 4/2016.
+  if (!profile_prefs->GetBoolean(kCheckDefaultBrowser)) {
+    // Seed kDefaultBrowserLastDeclined with the install date.
+    metrics::MetricsService* metrics_service =
+        g_browser_process->metrics_service();
+    base::Time install_time =
+        metrics_service
+            ? base::Time::FromTimeT(metrics_service->GetInstallDate())
+            : base::Time::Now();
+    profile_prefs->SetInt64(prefs::kDefaultBrowserLastDeclined,
+                            install_time.ToInternalValue());
+  }
+  profile_prefs->ClearPref(kCheckDefaultBrowser);
 }
 
 }  // namespace chrome

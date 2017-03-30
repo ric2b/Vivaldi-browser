@@ -129,6 +129,8 @@ class SafeBrowsingURLRequestContextGetter
 
   scoped_refptr<net::URLRequestContextGetter> system_context_getter_;
 
+  scoped_ptr<net::CookieStore> safe_browsing_cookie_store_;
+
   scoped_ptr<net::URLRequestContext> safe_browsing_request_context_;
 
   scoped_refptr<base::SingleThreadTaskRunner> network_task_runner_;
@@ -156,11 +158,24 @@ SafeBrowsingURLRequestContextGetter::GetURLRequestContext() {
       safe_browsing_request_context_->CopyFrom(
           system_context_getter_->GetURLRequestContext());
     }
-    safe_browsing_request_context_->set_cookie_store(
+    safe_browsing_cookie_store_ =
         content::CreateCookieStore(content::CookieStoreConfig(
             CookieFilePath(),
             content::CookieStoreConfig::EPHEMERAL_SESSION_COOKIES, nullptr,
-            nullptr)));
+            nullptr));
+    safe_browsing_request_context_->set_cookie_store(
+        safe_browsing_cookie_store_.get());
+    // The above cookie store will persist cookies, but the ChannelIDService in
+    // the system request context is ephemeral, which could lead to losing the
+    // keys that cookies are bound to. Since this is only used for safe
+    // browsing, any cookie bindings don't matter.
+    //
+    // For crbug.com/548423, the channel ID store and cookie store used for a
+    // request are being tracked to see if an ephemeral channel ID store is used
+    // with a persistent cookie store (which apart from here would be a bug).
+    // The following line tells that tracking to ignore the mismatch from this
+    // URLRequestContext.
+    safe_browsing_request_context_->set_has_known_mismatched_cookie_store();
   }
 
   return safe_browsing_request_context_.get();
@@ -331,7 +346,7 @@ bool SafeBrowsingService::DownloadBinHashNeeded() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
 #if defined(FULL_SAFE_BROWSING)
-  return (database_manager_->download_protection_enabled() &&
+  return (database_manager_->IsDownloadProtectionEnabled() &&
           ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled()) ||
          (download_protection_service() &&
           download_protection_service()->enabled());
@@ -571,7 +586,7 @@ void SafeBrowsingService::Start() {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&SafeBrowsingService::StartOnIOThread, this,
-                 url_request_context_getter_));
+                 base::RetainedRef(url_request_context_getter_)));
 }
 
 void SafeBrowsingService::Stop(bool shutdown) {

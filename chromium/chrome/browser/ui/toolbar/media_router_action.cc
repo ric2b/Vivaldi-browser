@@ -11,7 +11,6 @@
 #include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/media_router_metrics.h"
-#include "chrome/browser/media/router/media_router_mojo_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -104,7 +103,7 @@ base::string16 MediaRouterAction::GetAccessibleName(
 
 base::string16 MediaRouterAction::GetTooltip(
     content::WebContents* web_contents) const {
-  return l10n_util::GetStringUTF16(IDS_MEDIA_ROUTER_SHARE_YOUR_SCREEN_TEXT);
+  return l10n_util::GetStringUTF16(IDS_MEDIA_ROUTER_ICON_TOOLTIP_TEXT);
 }
 
 bool MediaRouterAction::IsEnabled(

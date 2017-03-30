@@ -8,6 +8,7 @@
 #include <set>
 
 #include "base/files/file.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "device/bluetooth/bluetooth_gatt_service.h"
@@ -60,6 +61,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceWin
   // Update included services and characteristics.
   void Update();
   uint16_t GetAttributeHandle() const { return service_attribute_handle_; }
+  base::FilePath GetServicePath() { return service_path_; }
+  BluetoothAdapterWin* GetWinAdapter() { return adapter_; }
 
  private:
   void OnGetIncludedCharacteristics(

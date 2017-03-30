@@ -17,7 +17,12 @@ namespace gfx {
 class SurfaceTexture;
 }
 
+namespace media {
+class MediaCodecBridge;
+}
+
 namespace content {
+class AVDACodecImage;
 
 // Shared state to allow communication between the AVDA and the
 // GLImages that configure GL for drawing the frames.
@@ -50,6 +55,16 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
     return surface_texture_is_attached_;
   }
 
+  // Iterates over all known codec images and updates the MediaCodec attached to
+  // each one.
+  void CodecChanged(media::MediaCodecBridge* codec);
+
+  // Methods for finding and updating the AVDACodecImage associated with a given
+  // picture buffer id. GetImageForPicture() will return null for unknown ids.
+  // Calling SetImageForPicture() with a nullptr will erase the entry.
+  void SetImageForPicture(int picture_buffer_id, AVDACodecImage* image);
+  AVDACodecImage* GetImageForPicture(int picture_buffer_id) const;
+
   // TODO(liberato): move the surface texture here and make these calls
   // attach / detach it also.  There are several changes going on in avda
   // concurrently, so I don't want to change that until the dust settles.
@@ -64,7 +79,32 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
   // will cause us to forget the last binding.
   void DidDetachSurfaceTexture();
 
+  // Helper method for coordinating the interactions between
+  // MediaCodec::ReleaseOutputBuffer() and WaitForFrameAvailable() when
+  // rendering to a SurfaceTexture; this method should never be called when
+  // rendering to a SurfaceView.
+  //
+  // The release of the codec buffer to the surface texture is asynchronous, by
+  // using this helper we can attempt to let this process complete in a non
+  // blocking fashion before the SurfaceTexture is used.
+  //
+  // Clients should call this method to release the codec buffer for rendering
+  // and then call WaitForFrameAvailable() before using the SurfaceTexture. In
+  // the ideal case the SurfaceTexture has already been updated, otherwise the
+  // method will wait for a pro-rated amount of time based on elapsed time up
+  // to a short deadline.
+  //
+  // Some devices do not reliably notify frame availability, so we use a very
+  // short deadline of only a few milliseconds to avoid indefinite stalls.
+  void RenderCodecBufferToSurfaceTexture(media::MediaCodecBridge* codec,
+                                         int codec_buffer_index);
+
+ protected:
+  virtual ~AVDASharedState();
+
  private:
+  friend class base::RefCounted<AVDASharedState>;
+
   // Platform gl texture Id for |surface_texture_|.  This will be zero if
   // and only if |texture_owner_| is null.
   // TODO(liberato): This should be GLuint, but we don't seem to have the type.
@@ -81,11 +121,15 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
   scoped_refptr<gfx::GLContext> context_;
   scoped_refptr<gfx::GLSurface> surface_;
 
- protected:
-  virtual ~AVDASharedState();
+  // Maps a picture buffer id to a AVDACodecImage.
+  std::map<int, AVDACodecImage*> codec_images_;
 
- private:
-  friend class base::RefCounted<AVDASharedState>;
+  // The time of the last call to RenderCodecBufferToSurfaceTexture(), null if
+  // if there has been no last call or WaitForFrameAvailable() has been called
+  // since the last call.
+  base::TimeTicks release_time_;
+
+  DISALLOW_COPY_AND_ASSIGN(AVDASharedState);
 };
 
 }  // namespace content

@@ -59,7 +59,7 @@ inline bool isValidLengthUnit(unsigned short type)
 
 inline bool canResolveRelativeUnits(const SVGElement* contextElement)
 {
-    return contextElement && contextElement->inDocument();
+    return contextElement && contextElement->inShadowIncludingDocument();
 }
 
 inline CSSPrimitiveValue::UnitType toCSSUnitType(unsigned short type)
@@ -231,7 +231,7 @@ void SVGLengthTearOff::convertToSpecifiedUnits(unsigned short unitType, Exceptio
     commitChange();
 }
 
-SVGLengthTearOff::SVGLengthTearOff(PassRefPtrWillBeRawPtr<SVGLength> target, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName)
+SVGLengthTearOff::SVGLengthTearOff(SVGLength* target, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName)
     : SVGPropertyTearOff<SVGLength>(target, contextElement, propertyIsAnimVal, attributeName)
 {
 }

@@ -39,6 +39,7 @@ import android.view.WindowManager;
 import android.view.animation.LinearInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.PopupWindow.OnDismissListener;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
@@ -49,10 +50,10 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.compositor.Invalidator;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
+import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.LocationBarPhone;
-import org.chromium.chrome.browser.omnibox.UrlContainer;
 import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.ColorUtils;
@@ -102,7 +103,6 @@ public class ToolbarPhone extends ToolbarLayout
     private TintedImageButton mReturnButton;
     private TintedImageButton mHomeButton;
     private TextView mUrlBar;
-    private UrlContainer mUrlContainer;
     private View mUrlActionsContainer;
     private ImageView mToolbarShadow;
 
@@ -199,6 +199,18 @@ public class ToolbarPhone extends ToolbarLayout
 
     private LayoutUpdateHost mLayoutUpdateHost;
 
+    /** Callout for the tab switcher button. */
+    private TabSwitcherCallout mTabSwitcherCallout;
+
+    /** Whether or not we've checked if the TabSwitcherCallout needs to be shown. */
+    private boolean mHasCheckedIfTabSwitcherCalloutIsNecessary;
+
+    /** Manages when the Toolbar hides and unhides. */
+    private FullscreenManager mFullscreenManager;
+
+    /** Token held when the TabSwitcherCallout is displayed to prevent the Toolbar from hiding. */
+    private int mFullscreenCalloutToken = FullscreenManager.INVALID_TOKEN;
+
     /**
      * Used to specify the visual state of the toolbar.
      */
@@ -282,7 +294,6 @@ public class ToolbarPhone extends ToolbarLayout
         mHomeButton = (TintedImageButton) findViewById(R.id.home_button);
 
         mUrlBar = (TextView) findViewById(R.id.url_bar);
-        mUrlContainer = (UrlContainer) findViewById(R.id.url_container);
 
         mUrlActionsContainer = findViewById(R.id.url_action_container);
 
@@ -387,6 +398,12 @@ public class ToolbarPhone extends ToolbarLayout
         removeView(newTabButton);
     }
 
+    @Override
+    protected boolean onMenuButtonTouchEvent(View v, MotionEvent event) {
+        dismissTabSwitcherCallout();
+        return super.onMenuButtonTouchEvent(v, event);
+    }
+
     /**
      * Sets up click and key listeners once we have native library available to handle clicks.
      */
@@ -452,6 +469,7 @@ public class ToolbarPhone extends ToolbarLayout
             // and the listener is setup.
             if (mToggleTabStackButton != null && mToggleTabStackButton.isClickable()
                     && mTabSwitcherListener != null) {
+                dismissTabSwitcherCallout();
                 cancelAppMenuUpdateBadgeAnimation();
                 mTabSwitcherListener.onClick(mToggleTabStackButton);
                 RecordUserAction.record("MobileToolbarShowStackView");
@@ -500,7 +518,7 @@ public class ToolbarPhone extends ToolbarLayout
         boolean hasVisibleViewPriorToUrlBar = false;
         for (int i = 0; i < mPhoneLocationBar.getChildCount(); i++) {
             View child = mPhoneLocationBar.getChildAt(i);
-            if (child == mUrlContainer) break;
+            if (child == mUrlBar) break;
             if (child.getVisibility() != GONE) {
                 hasVisibleViewPriorToUrlBar = true;
                 break;
@@ -766,7 +784,10 @@ public class ToolbarPhone extends ToolbarLayout
     }
 
     private void updateUrlExpansionAnimation() {
-        if (mIsInTabSwitcherMode || isTabSwitcherAnimationRunning()) return;
+        if (mIsInTabSwitcherMode || isTabSwitcherAnimationRunning()) {
+            mToolbarButtonsContainer.setVisibility(VISIBLE);
+            return;
+        }
 
         mLocationBarBackgroundOffset.setEmpty();
 
@@ -1256,22 +1277,6 @@ public class ToolbarPhone extends ToolbarLayout
     }
 
     @Override
-    protected void onNavigatedToDifferentPage() {
-        super.onNavigatedToDifferentPage();
-        if (FeatureUtilities.isDocumentMode(getContext())) {
-            mUrlContainer.setTrailingTextVisible(true);
-        }
-    }
-
-    @Override
-    public void finishLoadProgress(boolean delayed) {
-        super.finishLoadProgress(delayed);
-        if (FeatureUtilities.isDocumentMode(getContext())) {
-            mUrlContainer.setTrailingTextVisible(false);
-        }
-    }
-
-    @Override
     public void finishAnimations() {
         mClipRect = null;
         if (mTabSwitcherModeAnimation != null) {
@@ -1282,6 +1287,11 @@ public class ToolbarPhone extends ToolbarLayout
             mDelayedTabSwitcherModeAnimation.end();
             mDelayedTabSwitcherModeAnimation = null;
         }
+
+        // The Android framework calls onAnimationEnd() on listeners before Animator#isRunning()
+        // returns false. Sometimes this causes the progress bar visibility to be set incorrectly.
+        // Update the visibility now that animations are set to null. (see crbug.com/606419)
+        updateProgressBarVisibility(mIsInTabSwitcherMode);
     }
 
     @Override
@@ -1431,10 +1441,14 @@ public class ToolbarPhone extends ToolbarLayout
         if (mShowMenuBadge) {
             setMenuButtonContentDescription(!isInTabSwitcherMode);
         }
+
+        updateProgressBarVisibility(isInTabSwitcherMode);
+        updateVisualsForToolbarState(isInTabSwitcherMode);
+    }
+
+    private void updateProgressBarVisibility(boolean isInTabSwitcherMode) {
         getProgressBar().setVisibility(
                 isInTabSwitcherMode || isTabSwitcherAnimationRunning() ? INVISIBLE : VISIBLE);
-        updateVisualsForToolbarState(isInTabSwitcherMode);
-
     }
 
     @Override
@@ -1528,6 +1542,11 @@ public class ToolbarPhone extends ToolbarLayout
             // that would normally trigger a texture capture.
             mLayoutUpdateHost.requestUpdate();
         }
+    }
+
+    @Override
+    public void destroy() {
+        dismissTabSwitcherCallout();
     }
 
     @Override
@@ -1703,6 +1722,7 @@ public class ToolbarPhone extends ToolbarLayout
 
         TransitionDrawable shadowDrawable = (TransitionDrawable) mToolbarShadow.getDrawable();
         if (hasFocus) {
+            dismissTabSwitcherCallout();
             shadowDrawable.startTransition(URL_FOCUS_CHANGE_ANIMATION_DURATION_MS);
         } else {
             shadowDrawable.reverseTransition(URL_FOCUS_CHANGE_ANIMATION_DURATION_MS);
@@ -1813,6 +1833,13 @@ public class ToolbarPhone extends ToolbarLayout
         super.onTabOrModelChanged();
         updateNtpAnimationState();
         updateVisualsForToolbarState(mIsInTabSwitcherMode);
+
+        if (mHasCheckedIfTabSwitcherCalloutIsNecessary) {
+            dismissTabSwitcherCallout();
+        } else {
+            mHasCheckedIfTabSwitcherCalloutIsNecessary = true;
+            showTabSwitcherCalloutIfNecessary();
+        }
     }
 
     private static boolean isVisualStateValidForBrandColorTransition(VisualState state) {
@@ -2148,6 +2175,12 @@ public class ToolbarPhone extends ToolbarLayout
         mReturnButton.setOnClickListener(listener);
     }
 
+    @Override
+    public void setFullscreenManager(FullscreenManager manager) {
+        super.setFullscreenManager(manager);
+        mFullscreenManager = manager;
+    }
+
     private boolean isReturnButtonVisible() {
         String herbFlavor = FeatureUtilities.getHerbFlavor();
         if (!TextUtils.equals(ChromeSwitches.HERB_FLAVOR_BASIL, herbFlavor)
@@ -2165,6 +2198,34 @@ public class ToolbarPhone extends ToolbarLayout
         mUseLightDrawablesForTextureCapture = isIncognito()
                 || (currentPrimaryColor != 0
                 && ColorUtils.shoudUseLightForegroundOnBackground(currentPrimaryColor));
+    }
+
+    private void dismissTabSwitcherCallout() {
+        if (mTabSwitcherCallout != null) mTabSwitcherCallout.dismiss();
+    }
+
+    private void showTabSwitcherCalloutIfNecessary() {
+        assert mTabSwitcherCallout == null;
+        mTabSwitcherCallout =
+                TabSwitcherCallout.showIfNecessary(getContext(), mToggleTabStackButton);
+        if (mTabSwitcherCallout == null) return;
+
+        mTabSwitcherCallout.setOnDismissListener(new OnDismissListener() {
+            @Override
+            public void onDismiss() {
+                if (mFullscreenManager != null) {
+                    mFullscreenManager.hideControlsPersistent(mFullscreenCalloutToken);
+                    mFullscreenCalloutToken = FullscreenManager.INVALID_TOKEN;
+                }
+                mTabSwitcherCallout = null;
+            }
+        });
+
+        if (mFullscreenManager != null) {
+            mFullscreenCalloutToken =
+                    mFullscreenManager.showControlsPersistentAndClearOldToken(
+                            mFullscreenCalloutToken);
+        }
     }
 }
 

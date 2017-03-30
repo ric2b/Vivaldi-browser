@@ -46,7 +46,7 @@
   bool IsVisible();
 
 #ifdef VIVALDI_BUILD
-  void UpdateMediaState(TabMediaState state);
+  void UpdateMediaState(TabAlertState state);
 #endif // VIVALDI_BUILD
 
   void SetIsFullscreen(bool is_fullscreen);
@@ -119,7 +119,7 @@
   int gesture_data_;
 
 #ifdef VIVALDI_BUILD
-  TabMediaState media_state_;
+  TabAlertState media_state_;
 #endif //VIVALDI_BUILD
   bool is_visible_;
   bool is_fullscreen_;

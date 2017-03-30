@@ -7,7 +7,6 @@
 import("//build/config/features.gni")
 import("//media/media_options.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
-import("//third_party/pdfium/pdfium.gni")
 
 # root BUILD depenends on this target. Needed for package discovery
 group("fuzzers") {
@@ -40,37 +39,6 @@ fuzzer_test("courgette_fuzzer") {
   additional_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
 }
 
-fuzzer_test("dns_record_fuzzer") {
-  sources = [
-    "dns_record_fuzzer.cc",
-  ]
-  deps = [
-    "//base",
-    "//net",
-  ]
-}
-
-fuzzer_test("ftp_ctrl_response_fuzzer") {
-  sources = [
-    "ftp_ctrl_response_fuzzer.cc",
-  ]
-  deps = [
-    "//base",
-    "//net",
-  ]
-}
-
-fuzzer_test("ftp_directory_listing_fuzzer") {
-  sources = [
-    "ftp_directory_listing_fuzzer.cc",
-  ]
-  deps = [
-    "//base",
-    "//base:i18n",
-    "//net",
-  ]
-}
-
 fuzzer_test("language_detection_fuzzer") {
   sources = [
     "language_detection_fuzzer.cc",
@@ -90,6 +58,8 @@ if (proprietary_codecs) {
       "//base",
       "//media",
     ]
+    libfuzzer_options = "mp4_box_reader_fuzzer.options"
+    dict = "dicts/mp4.dict"
   }
 }
 
@@ -152,16 +122,6 @@ fuzzer_test("string_to_int_fuzzer") {
   ]
 }
 
-fuzzer_test("unescape_url_component_fuzzer") {
-  sources = [
-    "unescape_url_component_fuzzer.cc",
-  ]
-  deps = [
-    "//base",
-    "//net",
-  ]
-}
-
 fuzzer_test("url_parse_fuzzer") {
   sources = [
     "url_parse_fuzzer.cc",
@@ -199,6 +159,7 @@ fuzzer_test("gfx_png_image_fuzzer") {
     "//base",
     "//ui/gfx",
   ]
+  dict = "dicts/png.dict"
 }
 
 fuzzer_test("zlib_uncompress_fuzzer") {
@@ -207,69 +168,6 @@ fuzzer_test("zlib_uncompress_fuzzer") {
   ]
   deps = [
     "//third_party/zlib",
-  ]
-}
-
-fuzzer_test("pdfium_fuzzer") {
-  sources = [
-    "pdfium_fuzzer.cc",
-  ]
-  deps = [
-    "//third_party/pdfium",
-    "//third_party/pdfium:test_support",
-    "//v8",
-    "//v8:v8_libplatform",
-  ]
-  additional_configs = [
-    "//third_party/pdfium:pdfium_config",
-    "//v8:external_startup_data",
-  ]
-  dict = "dicts/pdf.dict"
-}
-
-if (pdf_enable_xfa) {
-  fuzzer_test("pdf_fm2js_fuzzer") {
-    sources = []
-    deps = [
-      "//third_party/pdfium/testing/libfuzzer:pdf_fm2js_fuzzer",
-    ]
-    dict = "dicts/pdf_fm2js.dict"
-  }
-
-  fuzzer_test("pdf_xml_fuzzer") {
-    sources = []
-    deps = [
-      "//third_party/pdfium/testing/libfuzzer:pdf_xml_fuzzer",
-    ]
-    dict = "dicts/pdf_xml.dict"
-  }
-}
-
-fuzzer_test("websocket_frame_parser_fuzzer") {
-  sources = [
-    "websocket_frame_parser_fuzzer.cc",
-  ]
-  deps = [
-    "//net",
-  ]
-}
-
-fuzzer_test("http_chunked_decoder_fuzzer") {
-  sources = [
-    "http_chunked_decoder_fuzzer.cc",
-  ]
-  deps = [
-    "//net",
-  ]
-}
-
-fuzzer_test("quic_crypto_framer_parse_message_fuzzer") {
-  sources = [
-    "quic_crypto_framer_parse_message_fuzzer.cc",
-  ]
-  deps = [
-    "//base",
-    "//net",
   ]
 }
 
@@ -302,18 +200,6 @@ fuzzer_test("unicode_string_codepage_create_fuzzer") {
   ]
 }
 
-if (is_linux) {
-  # libexif_fuzzer is linux only atm
-  fuzzer_test("libexif_parser_fuzzer") {
-    sources = [
-      "libexif_parser_fuzzer.cc",
-    ]
-    deps = [
-      "//third_party/libexif:libexif_fuzzers",
-    ]
-  }
-}
-
 fuzzer_test("libpng_read_fuzzer") {
   sources = [
     "libpng_read_fuzzer.cc",
@@ -322,6 +208,7 @@ fuzzer_test("libpng_read_fuzzer") {
     "//base",
     "//third_party/libpng",
   ]
+  dict = "dicts/png.dict"
 }
 
 fuzzer_test("icu_uregex_open_fuzzer") {
@@ -331,6 +218,8 @@ fuzzer_test("icu_uregex_open_fuzzer") {
   deps = [
     "//third_party/icu",
   ]
+  dict = "dicts/icu_regex.dict"
+  libfuzzer_options = "icu_uregex_open_fuzzer.options"
 }
 
 fuzzer_test("v8_script_parser_fuzzer") {
@@ -339,7 +228,6 @@ fuzzer_test("v8_script_parser_fuzzer") {
     "//v8:parser_fuzzer",
   ]
   dict = "dicts/js.dict"
-  additional_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
 }
 
 fuzzer_test("v8_json_parser_fuzzer") {
@@ -347,6 +235,7 @@ fuzzer_test("v8_json_parser_fuzzer") {
   deps = [
     "//v8:json_fuzzer",
   ]
+  dict = "dicts/json.dict"
 }
 
 fuzzer_test("v8_regexp_parser_fuzzer") {
@@ -355,4 +244,42 @@ fuzzer_test("v8_regexp_parser_fuzzer") {
     "//v8:regexp_fuzzer",
   ]
   dict = "dicts/regexp.dict"
+  libfuzzer_options = "v8_regexp_parser_fuzzer.options"
+}
+
+fuzzer_test("v8_wasm_fuzzer") {
+  sources = []
+  deps = [
+    "//v8:wasm_fuzzer",
+  ]
+  dict = "dicts/v8_wasm.dict"
+  libfuzzer_options = "v8_wasm_fuzzer.options"
+}
+
+fuzzer_test("v8_wasm_asmjs_fuzzer") {
+  sources = []
+  deps = [
+    "//v8:wasm_asmjs_fuzzer",
+  ]
+}
+
+fuzzer_test("third_party_re2_fuzzer") {
+  sources = [
+    "re2_fuzzer.cc",
+  ]
+  deps = [
+    "//third_party/re2:re2",
+  ]
+  libfuzzer_options = "re2_fuzzer.options"
+}
+
+fuzzer_test("libxml_xml_regexp_compile_fuzzer") {
+  sources = [
+    "libxml_xml_regexp_compile_fuzzer.cc",
+  ]
+  deps = [
+    "//third_party/libxml",
+  ]
+  libfuzzer_options = "libxml_xml_regexp_compile_fuzzer.options"
+  additional_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
 }

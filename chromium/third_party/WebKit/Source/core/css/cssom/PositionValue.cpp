@@ -5,10 +5,11 @@
 #include "core/css/cssom/PositionValue.h"
 
 #include "core/css/CSSValuePair.h"
+#include "core/css/cssom/LengthValue.h"
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<CSSValue> PositionValue::toCSSValue() const
+CSSValue* PositionValue::toCSSValue() const
 {
     return CSSValuePair::create(m_x->toCSSValue(), m_y->toCSSValue(), CSSValuePair::KeepIdenticalValues);
 }

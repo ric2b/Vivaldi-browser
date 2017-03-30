@@ -4,17 +4,16 @@
 
 #import "ios/web/web_state/ui/web_view_js_utils.h"
 
-#import <UIKit/UIKit.h>
+#include <CoreFoundation/CoreFoundation.h>
 #import <WebKit/WebKit.h>
 
-#include "base/ios/weak_nsobject.h"
 #include "base/logging.h"
 #include "base/mac/scoped_nsobject.h"
 
 namespace {
 
-// Converts result of WKWebView script evaluation to UIWebView format.
-NSString* UIResultFromWKResult(id result) {
+// Converts result of WKWebView script evaluation to a string.
+NSString* StringResultFromWKResult(id result) {
   if (!result)
     return @"";
 
@@ -40,22 +39,25 @@ NSString* UIResultFromWKResult(id result) {
 
 namespace web {
 
-void EvaluateJavaScript(UIWebView* web_view,
-                        NSString* script,
-                        JavaScriptCompletion completion_handler) {
-  base::WeakNSObject<UIWebView> weak_web_view(web_view);
-  dispatch_async(dispatch_get_main_queue(), ^{
-    NSString* result =
-        [weak_web_view stringByEvaluatingJavaScriptFromString:script];
-    if (completion_handler)
-      completion_handler(result, nil);
-  });
-}
+NSString* const kJSEvaluationErrorDomain = @"JSEvaluationError";
 
 void EvaluateJavaScript(WKWebView* web_view,
                         NSString* script,
                         JavaScriptCompletion completion_handler) {
   DCHECK([script length]);
+  if (!web_view && completion_handler) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSString* error_message =
+          @"JS evaluation failed because there is no web view.";
+      base::scoped_nsobject<NSError> error([[NSError alloc]
+          initWithDomain:kJSEvaluationErrorDomain
+                    code:JS_EVALUATION_ERROR_CODE_NO_WEB_VIEW
+                userInfo:@{NSLocalizedDescriptionKey : error_message}]);
+      completion_handler(nil, error);
+    });
+    return;
+  }
+
   void (^web_view_completion_handler)(id, NSError*) = nil;
   // Do not create a web_view_completion_handler if no |completion_handler| is
   // passed to this function. WKWebView guarantees to call all completion
@@ -64,7 +66,7 @@ void EvaluateJavaScript(WKWebView* web_view,
   // need to call those completion handlers.
   if (completion_handler) {
     web_view_completion_handler = ^(id result, NSError* error) {
-      completion_handler(UIResultFromWKResult(result), error);
+      completion_handler(StringResultFromWKResult(result), error);
     };
   }
   [web_view evaluateJavaScript:script

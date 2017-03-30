@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "remoting/protocol/client_authentication_config.h"
 #include "remoting/protocol/pairing_authenticator_base.h"
 
 namespace remoting {
@@ -15,29 +16,40 @@ namespace protocol {
 class PairingClientAuthenticator : public PairingAuthenticatorBase {
  public:
   PairingClientAuthenticator(
-      const std::string& client_id,
-      const std::string& paired_secret,
-      const FetchSecretCallback& fetch_pin_callback,
-      const std::string& authentication_tag);
+      const ClientAuthenticationConfig& client_auth_config,
+      const CreateBaseAuthenticatorCallback&
+          create_base_authenticator_callback);
   ~PairingClientAuthenticator() override;
 
+  // Start() or StartPaired() must be called after the authenticator is created.
+  // Start() handles both cases when pairing exists and when it doesn't.
+  // StartPaired() can only be used when pairing exists (i.e. client_id and
+  // pairing_secret are set in the |client_auth_config|). It is used to
+  // initialize the authenticator synchronously in
+  // NegotiatingClientAuthentitcator, while Start() may be executed
+  // asynchronously to fetch the PIN.
+  void Start(State initial_state, const base::Closure& resume_callback);
+  void StartPaired(State initial_state);
+
+  // Authenticator interface.
+  State state() const override;
+
  private:
-  // PairingAuthenticatorBase interface.
-  void CreateV2AuthenticatorWithPIN(
+  // PairingAuthenticatorBase overrides.
+  void CreateSpakeAuthenticatorWithPin(
       State initial_state,
-      const SetAuthenticatorCallback& callback) override;
-  void AddPairingElements(buzz::XmlElement* message) override;
+      const base::Closure& resume_callback) override;
 
   void OnPinFetched(State initial_state,
-                    const SetAuthenticatorCallback& callback,
+                    const base::Closure& resume_callback,
                     const std::string& pin);
 
-  // Protocol state.
-  bool sent_client_id_;
-  std::string client_id_;
-  const std::string& paired_secret_;
-  FetchSecretCallback fetch_pin_callback_;
-  std::string authentication_tag_;
+  ClientAuthenticationConfig client_auth_config_;
+  CreateBaseAuthenticatorCallback create_base_authenticator_callback_;
+
+  // Set to true if a PIN-based authenticator has been requested but has not
+  // yet been set.
+  bool waiting_for_pin_ = false;
 
   base::WeakPtrFactory<PairingClientAuthenticator> weak_factory_;
 

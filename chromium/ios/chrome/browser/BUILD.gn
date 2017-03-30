@@ -4,6 +4,7 @@
 
 import("//build/config/features.gni")
 import("//ios/web/js_compile.gni")
+import("//third_party/protobuf/proto_library.gni")
 
 declare_args() {
   google_test_gaia_client_id = ""
@@ -57,8 +58,12 @@ source_set("browser") {
     "bookmarks/bookmark_client_impl.h",
     "bookmarks/bookmark_model_factory.cc",
     "bookmarks/bookmark_model_factory.h",
+    "bookmarks/bookmarks_utils.cc",
+    "bookmarks/bookmarks_utils.h",
     "bookmarks/startup_task_runner_service_factory.cc",
     "bookmarks/startup_task_runner_service_factory.h",
+    "browser_state/bookmark_model_loaded_observer.cc",
+    "browser_state/bookmark_model_loaded_observer.h",
     "browser_state/browser_state_info_cache.cc",
     "browser_state/browser_state_info_cache.h",
     "browser_state/browser_state_info_cache_observer.h",
@@ -85,7 +90,11 @@ source_set("browser") {
     "browser_state/off_the_record_chrome_browser_state_io_data.mm",
     "browser_state_metrics/browser_state_metrics.cc",
     "browser_state_metrics/browser_state_metrics.h",
-    "browsing_data_change_listening.h",
+    "browsing_data/browsing_data_change_listening.h",
+    "browsing_data/browsing_data_remover_helper.cc",
+    "browsing_data/browsing_data_remover_helper.h",
+    "browsing_data/ios_chrome_browsing_data_remover.h",
+    "browsing_data/ios_chrome_browsing_data_remover.mm",
     "chrome_constants.cc",
     "chrome_constants.h",
     "chrome_paths.h",
@@ -117,12 +126,6 @@ source_set("browser") {
     "crash_report/crash_report_user_application_state.mm",
     "crash_report/crash_upload_list.cc",
     "crash_report/crash_upload_list.h",
-    "data_reduction_proxy/ios_chrome_data_reduction_proxy_io_data.h",
-    "data_reduction_proxy/ios_chrome_data_reduction_proxy_io_data.mm",
-    "data_reduction_proxy/ios_chrome_data_reduction_proxy_settings.cc",
-    "data_reduction_proxy/ios_chrome_data_reduction_proxy_settings.h",
-    "data_reduction_proxy/ios_chrome_data_reduction_proxy_settings_factory.cc",
-    "data_reduction_proxy/ios_chrome_data_reduction_proxy_settings_factory.h",
     "dom_distiller/distiller_viewer.cc",
     "dom_distiller/distiller_viewer.h",
     "dom_distiller/dom_distiller_service_factory.cc",
@@ -204,8 +207,8 @@ source_set("browser") {
     "install_time_util.mm",
     "installation_notifier.h",
     "installation_notifier.mm",
-    "interstitials/ios_chrome_controller_client.cc",
     "interstitials/ios_chrome_controller_client.h",
+    "interstitials/ios_chrome_controller_client.mm",
     "interstitials/ios_chrome_metrics_helper.h",
     "interstitials/ios_chrome_metrics_helper.mm",
     "interstitials/ios_security_interstitial_page.h",
@@ -214,6 +217,8 @@ source_set("browser") {
     "invalidation/ios_chrome_profile_invalidation_provider_factory.mm",
     "ios_chrome_field_trials.cc",
     "ios_chrome_field_trials.h",
+    "ios_chrome_io_thread.h",
+    "ios_chrome_io_thread.mm",
     "ios_chrome_main_parts.h",
     "ios_chrome_main_parts.mm",
     "memory/memory_debugger.h",
@@ -242,6 +247,8 @@ source_set("browser") {
     "net/connection_type_observer_bridge.mm",
     "net/cookie_util.h",
     "net/cookie_util.mm",
+    "net/crl_set_fetcher.cc",
+    "net/crl_set_fetcher.h",
     "net/http_server_properties_manager_factory.cc",
     "net/http_server_properties_manager_factory.h",
     "net/image_fetcher.h",
@@ -273,10 +280,16 @@ source_set("browser") {
     "passwords/ios_chrome_password_store_factory.h",
     "passwords/ios_chrome_save_password_infobar_delegate.h",
     "passwords/ios_chrome_save_password_infobar_delegate.mm",
+    "passwords/js_password_manager.h",
+    "passwords/js_password_manager.mm",
     "passwords/password_controller.h",
     "passwords/password_controller.mm",
     "passwords/password_generation_agent.h",
     "passwords/password_generation_agent.mm",
+    "passwords/password_generation_edit_view.h",
+    "passwords/password_generation_edit_view.mm",
+    "passwords/password_generation_offer_view.h",
+    "passwords/password_generation_offer_view.mm",
     "passwords/password_generation_prompt_delegate.h",
     "passwords/password_generation_utils.h",
     "passwords/password_generation_utils.mm",
@@ -301,6 +314,9 @@ source_set("browser") {
     "reading_list/reading_list_model_memory.cc",
     "reading_list/reading_list_model_memory.h",
     "reading_list/reading_list_model_observer.h",
+    "reading_list/reading_list_model_storage.h",
+    "reading_list/reading_list_model_storage_defaults.h",
+    "reading_list/reading_list_model_storage_defaults.mm",
     "search/search_util.h",
     "search/search_util.mm",
     "search_engines/search_engines_util.cc",
@@ -476,8 +492,8 @@ source_set("browser") {
     "ui/webui/history/browsing_history_handler.h",
     "ui/webui/history/favicon_source.cc",
     "ui/webui/history/favicon_source.h",
-    "ui/webui/history/history_ui.cc",
     "ui/webui/history/history_ui.h",
+    "ui/webui/history/history_ui.mm",
     "ui/webui/history/metrics_handler.cc",
     "ui/webui/history/metrics_handler.h",
     "ui/webui/net_export/net_export_ui.cc",
@@ -504,8 +520,6 @@ source_set("browser") {
     "variations/ios_chrome_variations_service_client.h",
     "web/dom_altering_lock.h",
     "web/dom_altering_lock.mm",
-    "web/web_view_type_util.h",
-    "web/web_view_type_util.mm",
     "web_data_service_factory.cc",
     "web_data_service_factory.h",
     "web_resource/web_resource_util.cc",
@@ -526,13 +540,13 @@ source_set("browser") {
     "//components/bookmarks/browser",
     "//components/browser_sync/browser",
     "//components/browser_sync/common",
+    "//components/browsing_data_ui",
     "//components/certificate_reporting",
     "//components/component_updater",
     "//components/content_settings/core/browser",
     "//components/cookie_config",
     "//components/crash/core/browser",
     "//components/crash/core/common",
-    "//components/data_reduction_proxy/core/common",
     "//components/dom_distiller/core",
     "//components/dom_distiller/ios",
     "//components/favicon/core",
@@ -551,6 +565,7 @@ source_set("browser") {
     "//components/metrics",
     "//components/metrics:net",
     "//components/metrics:profiler",
+    "//components/metrics:profiler_ios",
     "//components/metrics:ui",
     "//components/metrics_services_manager",
     "//components/net_log",
@@ -567,7 +582,6 @@ source_set("browser") {
     "//components/proxy_config",
     "//components/rappor",
     "//components/resources",
-    "//components/safe_browsing_db",
     "//components/search",
     "//components/search_engines",
     "//components/security_interstitials/core",
@@ -576,6 +590,7 @@ source_set("browser") {
     "//components/signin/core/browser",
     "//components/signin/core/common",
     "//components/signin/ios/browser",
+    "//components/ssl_config",
     "//components/strings",
     "//components/suggestions",
     "//components/sync_driver",
@@ -611,6 +626,7 @@ source_set("browser") {
 
     # TODO(crbug.com/459705): add support for resource packing and change the
     # dependency to be on the packed resources instead of the unpacked ones.
+    "//ios/chrome/app/resources",
     "//ios/chrome/app/strings",
     "//ios/chrome/app/theme",
   ]
@@ -628,13 +644,6 @@ source_set("browser") {
     deps += [
       ":rlz",
       "//components/rlz",
-    ]
-  }
-
-  if (enable_configuration_policy) {
-    deps += [
-      "//components/policy/core/browser",
-      "//components/policy/core/common",
     ]
   }
 }
@@ -706,8 +715,6 @@ source_set("test_support") {
     "browser_state/test_chrome_browser_state.mm",
     "browser_state/test_chrome_browser_state_isolated_context.h",
     "browser_state/test_chrome_browser_state_isolated_context.mm",
-    "browser_state/test_chrome_browser_state_manager.c",
-    "browser_state/test_chrome_browser_state_manager.h",
     "geolocation/location_manager+Testing.h",
     "geolocation/test_location_manager.h",
     "geolocation/test_location_manager.mm",
@@ -728,9 +735,10 @@ source_set("test_support") {
   deps = [
     ":browser",
     "//base",
-    "//components/browser_sync/browser",
+    "//components/browser_sync/browser:test_support",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
+    "//components/pref_registry:test_support",
     "//components/signin/core/browser",
     "//components/signin/ios/browser",
     "//components/sync_driver",

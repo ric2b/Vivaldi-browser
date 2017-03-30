@@ -112,7 +112,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool flash_3d_enabled;
   bool flash_stage3d_enabled;
   bool flash_stage3d_baseline_enabled;
-  bool gl_multisampling_enabled;
   bool privileged_webgl_extensions_enabled;
   bool webgl_errors_to_console_enabled;
   bool mock_scrollbars_enabled;
@@ -176,6 +175,7 @@ struct CONTENT_EXPORT WebPreferences {
   bool navigate_on_drag_drop;
   V8CacheOptions v8_cache_options;
   bool inert_visual_viewport;
+  bool record_whole_document;
   bool serve_resources_only_from_cache;
 
   // This flags corresponds to a Page's Settings' setCookieEnabled state. It
@@ -192,6 +192,11 @@ struct CONTENT_EXPORT WebPreferences {
   ImageAnimationPolicy animation_policy;
 
   bool user_gesture_required_for_presentation;
+
+  // Specifies the margin for WebVTT text tracks as a percentage of media
+  // element height/width (for horizontal/vertical text respectively).
+  // Cues will not be placed in this margin area.
+  float text_track_margin_percentage;
 
 #if defined(OS_ANDROID)
   bool text_autosizing_enabled;
@@ -214,7 +219,9 @@ struct CONTENT_EXPORT WebPreferences {
   bool clobber_user_agent_initial_scale_quirk;
   bool ignore_main_frame_overflow_hidden_quirk;
   bool report_screen_size_in_physical_pixels_quirk;
-  bool record_whole_document;
+  // Used by Android_WebView only to support legacy apps that inject script into
+  // a top-level initial empty document and expect it to persist on navigation.
+  bool resue_global_for_unowned_main_frame;
   std::string autoplay_experiment_mode;
 #endif
 

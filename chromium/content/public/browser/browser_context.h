@@ -8,14 +8,20 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <map>
+
 #include "base/callback_forward.h"
 #include "base/containers/hash_tables.h"
+#include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/scoped_vector.h"
 #include "base/supports_user_data.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/zoom_level_delegate.h"
 #include "content/public/common/push_event_payload.h"
 #include "content/public/common/push_messaging_status.h"
+#include "net/url_request/url_request_interceptor.h"
+#include "net/url_request/url_request_job_factory.h"
 
 class GURL;
 
@@ -50,6 +56,16 @@ class ResourceContext;
 class SiteInstance;
 class StoragePartition;
 class SSLHostStateDelegate;
+
+// A mapping from the scheme name to the protocol handler that services its
+// content.
+typedef std::map<
+  std::string, linked_ptr<net::URLRequestJobFactory::ProtocolHandler> >
+    ProtocolHandlerMap;
+
+// A scoped vector of protocol interceptors.
+typedef ScopedVector<net::URLRequestInterceptor>
+    URLRequestInterceptorScopedVector;
 
 // This class holds the context needed for a browsing session.
 // It lives on the UI thread. All these methods must only be called on the UI
@@ -128,6 +144,15 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   static void SetDownloadManagerForTesting(BrowserContext* browser_context,
                                            DownloadManager* download_manager);
 
+  // Makes mojo aware of this BrowserContext, and assigns a user ID number to
+  // it. Should be called for each BrowserContext created.
+  static void Initialize(BrowserContext* browser_context,
+                         const base::FilePath& path);
+
+  // Returns a Mojo User ID associated with this BrowserContext. This ID is not
+  // persistent across runs. See mojo/shell/public/interfaces/connector.mojom.
+  static const std::string& GetMojoUserIdFor(BrowserContext* browser_context);
+
   ~BrowserContext() override;
 
   // Creates a delegate to initialize a HostZoomMap and persist its information.
@@ -146,13 +171,6 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // happen on the UI thread.
   // TODO(creis): Remove this version in favor of the one below.
   virtual net::URLRequestContextGetter* GetRequestContext() = 0;
-
-  // Returns the request context appropriate for the given renderer. If the
-  // renderer process doesn't have an associated installed app, or if the
-  // installed app doesn't have isolated storage, this is equivalent to calling
-  // GetRequestContext().
-  virtual net::URLRequestContextGetter* GetRequestContextForRenderProcess(
-      int renderer_child_id) = 0;
 
   // Returns the default request context for media resources associated with
   // this context.
@@ -198,6 +216,19 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // Returns the BackgroundSyncController associated with that context if any,
   // nullptr otherwise.
   virtual BackgroundSyncController* GetBackgroundSyncController() = 0;
+
+  // Creates the main net::URLRequestContextGetter. It's called only once.
+  virtual net::URLRequestContextGetter* CreateRequestContext(
+      ProtocolHandlerMap* protocol_handlers,
+      URLRequestInterceptorScopedVector request_interceptors) = 0;
+
+  // Creates the net::URLRequestContextGetter for a StoragePartition. It's
+  // called only once per partition_path.
+  virtual net::URLRequestContextGetter* CreateRequestContextForStoragePartition(
+      const base::FilePath& partition_path,
+      bool in_memory,
+      ProtocolHandlerMap* protocol_handlers,
+      URLRequestInterceptorScopedVector request_interceptors) = 0;
 };
 
 }  // namespace content

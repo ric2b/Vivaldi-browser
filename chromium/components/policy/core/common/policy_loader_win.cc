@@ -15,13 +15,6 @@
 #include <string>
 #include <vector>
 
-// shlwapi.dll is required for PathIsUNC().
-#pragma comment(lib, "shlwapi.lib")
-// userenv.dll is required for various GPO functions.
-#pragma comment(lib, "userenv.lib")
-// ntdsapi.dll is required for Ds[Un]Bind calls.
-#pragma comment(lib, "ntdsapi.lib")
-
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
@@ -492,7 +485,7 @@ scoped_ptr<PolicyBundle> PolicyLoaderWin::Load() {
       Load3rdPartyPolicy(third_party_dict.get(), scope, bundle.get());
   }
 
-  return bundle.Pass();
+  return bundle;
 }
 
 bool PolicyLoaderWin::ReadPRegFile(const base::FilePath& preg_file,

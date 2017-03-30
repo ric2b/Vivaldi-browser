@@ -61,9 +61,9 @@ class WorkerThreadableLoader final : public ThreadableLoader, private Threadable
     USING_FAST_MALLOC(WorkerThreadableLoader);
 public:
     static void loadResourceSynchronously(WorkerGlobalScope&, const ResourceRequest&, ThreadableLoaderClient&, const ThreadableLoaderOptions&, const ResourceLoaderOptions&);
-    static PassRefPtr<WorkerThreadableLoader> create(WorkerGlobalScope& workerGlobalScope, ThreadableLoaderClient* client, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
+    static PassOwnPtr<WorkerThreadableLoader> create(WorkerGlobalScope& workerGlobalScope, ThreadableLoaderClient* client, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
     {
-        return adoptRef(new WorkerThreadableLoader(workerGlobalScope, client, options, resourceLoaderOptions, LoadAsynchronously));
+        return adoptPtr(new WorkerThreadableLoader(workerGlobalScope, client, options, resourceLoaderOptions, LoadAsynchronously));
     }
 
     ~WorkerThreadableLoader() override;
@@ -142,13 +142,13 @@ private:
 
         // All executed on the main thread.
         void mainThreadCreateLoader(ThreadableLoaderOptions, ResourceLoaderOptions, ExecutionContext*);
-        void mainThreadStart(PassOwnPtr<CrossThreadResourceRequestData>, const ReferrerPolicy, const String& outgoingReferrer);
+        void mainThreadStart(PassOwnPtr<CrossThreadResourceRequestData>);
         void mainThreadDestroy(ExecutionContext*);
         void mainThreadOverrideTimeout(unsigned long timeoutMilliseconds, ExecutionContext*);
         void mainThreadCancel(ExecutionContext*);
 
         // Only to be used on the main thread.
-        RefPtr<ThreadableLoader> m_mainThreadLoader;
+        OwnPtr<ThreadableLoader> m_mainThreadLoader;
 
         // ThreadableLoaderClientWrapper is to be used on the worker context thread.
         // The ref counting is done on either thread:
@@ -197,7 +197,7 @@ private:
 
     void didReceiveResourceTiming(const ResourceTimingInfo&) override;
 
-    RefPtrWillBePersistent<WorkerGlobalScope> m_workerGlobalScope;
+    Persistent<WorkerGlobalScope> m_workerGlobalScope;
     RefPtr<ThreadableLoaderClientWrapper> m_workerClientWrapper;
 
     MainThreadBridgeBase* m_bridge;

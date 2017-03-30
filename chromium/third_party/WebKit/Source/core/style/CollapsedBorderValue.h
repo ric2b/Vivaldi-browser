@@ -37,8 +37,8 @@ public:
         : m_color(0)
         , m_colorIsCurrentColor(true)
         , m_width(0)
-        , m_style(BNONE)
-        , m_precedence(BOFF)
+        , m_style(BorderStyleNone)
+        , m_precedence(BorderPrecedenceOff)
         , m_transparent(false)
     {
     }
@@ -53,9 +53,9 @@ public:
     {
     }
 
-    unsigned width() const { return m_style > BHIDDEN ? m_width : 0; }
+    unsigned width() const { return m_style > BorderStyleHidden ? m_width : 0; }
     EBorderStyle style() const { return static_cast<EBorderStyle>(m_style); }
-    bool exists() const { return m_precedence != BOFF; }
+    bool exists() const { return m_precedence != BorderPrecedenceOff; }
     StyleColor color() const { return m_colorIsCurrentColor ? StyleColor::currentColor() : StyleColor(m_color); }
     bool isTransparent() const { return m_transparent; }
     EBorderPrecedence precedence() const { return static_cast<EBorderPrecedence>(m_precedence); }
@@ -72,7 +72,7 @@ public:
 
     bool isVisible() const
     {
-        return style() > BHIDDEN && !isTransparent() && exists();
+        return style() > BorderStyleHidden && !isTransparent() && exists();
     }
 
     bool shouldPaint(const CollapsedBorderValue& tableCurrentBorderValue) const

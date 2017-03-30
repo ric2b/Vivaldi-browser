@@ -15,7 +15,7 @@ namespace vivaldi {
 
 void CreateVivaldiMainMenu(
     Profile* profile,
-    std::vector<linked_ptr<extensions::vivaldi::show_menu::MenuItem>>& items,
+    std::vector<extensions::vivaldi::show_menu::MenuItem>& items,
     const std::string& mode);
 
 }  // namespace vivaldi

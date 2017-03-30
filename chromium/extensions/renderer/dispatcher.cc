@@ -245,7 +245,6 @@ Dispatcher::Dispatcher(DispatcherDelegate* delegate)
       content_watcher_(new ContentWatcher()),
       source_map_(&ResourceBundle::GetSharedInstance()),
       v8_schema_registry_(new V8SchemaRegistry),
-      is_webkit_initialized_(false),
       user_script_set_manager_observer_(this),
       webrequest_used_(false) {
   const base::CommandLine& command_line =
@@ -267,6 +266,62 @@ Dispatcher::Dispatcher(DispatcherDelegate* delegate)
   request_sender_.reset(new RequestSender(this));
   PopulateSourceMap();
   WakeEventPage::Get()->Init(RenderThread::Get());
+
+  RenderThread::Get()->RegisterExtension(SafeBuiltins::CreateV8Extension());
+
+  // WebSecurityPolicy whitelists. They should be registered for both
+  // chrome-extension: and chrome-extension-resource.
+  using RegisterFunction = void (*)(const WebString&);
+  RegisterFunction register_functions[] = {
+      // Treat as secure because communication with them is entirely in the
+      // browser, so there is no danger of manipulation or eavesdropping on
+      // communication with them by third parties.
+      WebSecurityPolicy::registerURLSchemeAsSecure,
+      // As far as Blink is concerned, they should be allowed to receive CORS
+      // requests. At the Extensions layer, requests will actually be blocked
+      // unless overridden by the web_accessible_resources manifest key.
+      // TODO(kalman): See what happens with a service worker.
+      WebSecurityPolicy::registerURLSchemeAsCORSEnabled,
+      // Resources should bypass Content Security Policy checks when included in
+      // protected resources. TODO(kalman): What are "protected resources"?
+      WebSecurityPolicy::registerURLSchemeAsBypassingContentSecurityPolicy,
+      // Extension resources are HTTP-like and safe to expose to the fetch API.
+      // The rules for the fetch API are consistent with XHR.
+      WebSecurityPolicy::registerURLSchemeAsSupportingFetchAPI,
+      // Extension resources, when loaded as the top-level document, should
+      // bypass Blink's strict first-party origin checks.
+      WebSecurityPolicy::registerURLSchemeAsFirstPartyWhenTopLevel,
+  };
+
+  WebString extension_scheme(base::ASCIIToUTF16(kExtensionScheme));
+  WebString extension_resource_scheme(base::ASCIIToUTF16(
+      kExtensionResourceScheme));
+  for (RegisterFunction func : register_functions) {
+    func(extension_scheme);
+    func(extension_resource_scheme);
+  }
+
+  // For extensions, we want to ensure we call the IdleHandler every so often,
+  // even if the extension keeps up activity.
+  if (set_idle_notifications_) {
+    forced_idle_timer_.reset(new base::RepeatingTimer);
+    forced_idle_timer_->Start(
+        FROM_HERE,
+        base::TimeDelta::FromMilliseconds(kMaxExtensionIdleHandlerDelayMs),
+        RenderThread::Get(),
+        &RenderThread::IdleHandler);
+  }
+
+  // Initialize host permissions for any extensions that were activated before
+  // WebKit was initialized.
+  for (const std::string& extension_id : active_extension_ids_) {
+    const Extension* extension =
+        RendererExtensionRegistry::Get()->GetByID(extension_id);
+    CHECK(extension);
+    InitOriginPermissions(extension);
+  }
+
+  EnableCustomElementWhiteList();
 }
 
 Dispatcher::~Dispatcher() {
@@ -698,10 +753,6 @@ std::vector<std::pair<std::string, int> > Dispatcher::GetJsResources() {
                                      IDR_WEB_VIEW_INTERNAL_CUSTOM_BINDINGS_JS));
   resources.push_back(
       std::make_pair("webViewExperimental", IDR_WEB_VIEW_EXPERIMENTAL_JS));
-  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
-    resources.push_back(std::make_pair("webViewIframe",
-                                       IDR_WEB_VIEW_IFRAME_JS));
-  }
   resources.push_back(
       std::make_pair(mojo::kBindingsModuleName, IDR_MOJO_BINDINGS_JS));
   resources.push_back(
@@ -788,7 +839,7 @@ std::vector<std::pair<std::string, int> > Dispatcher::GetJsResources() {
 
 #if defined(ENABLE_MEDIA_ROUTER)
   resources.push_back(
-      std::make_pair("chrome/browser/media/router/media_router.mojom",
+      std::make_pair("chrome/browser/media/router/mojo/media_router.mojom",
                      IDR_MEDIA_ROUTER_MOJOM_JS));
   resources.push_back(
       std::make_pair("media_router_bindings", IDR_MEDIA_ROUTER_BINDINGS_JS));
@@ -832,8 +883,7 @@ void Dispatcher::RegisterNativeHandlers(ModuleSystem* module_system,
       "utils", scoped_ptr<NativeHandler>(new UtilsNativeHandler(context)));
   module_system->RegisterNativeHandler(
       "v8_context",
-      scoped_ptr<NativeHandler>(
-          new V8ContextNativeHandler(context, dispatcher)));
+      scoped_ptr<NativeHandler>(new V8ContextNativeHandler(context)));
   module_system->RegisterNativeHandler(
       "event_natives", scoped_ptr<NativeHandler>(new EventBindings(context)));
   module_system->RegisterNativeHandler(
@@ -927,67 +977,6 @@ bool Dispatcher::OnControlMessageReceived(const IPC::Message& message) {
 
   return handled;
 }
-
-void Dispatcher::WebKitInitialized() {
-  RenderThread::Get()->RegisterExtension(SafeBuiltins::CreateV8Extension());
-
-  // WebSecurityPolicy whitelists. They should be registered for both
-  // chrome-extension: and chrome-extension-resource.
-  using RegisterFunction = void (*)(const WebString&);
-  RegisterFunction register_functions[] = {
-      // Treat as secure because communication with them is entirely in the
-      // browser, so there is no danger of manipulation or eavesdropping on
-      // communication with them by third parties.
-      WebSecurityPolicy::registerURLSchemeAsSecure,
-      // As far as Blink is concerned, they should be allowed to receive CORS
-      // requests. At the Extensions layer, requests will actually be blocked
-      // unless overridden by the web_accessible_resources manifest key.
-      // TODO(kalman): See what happens with a service worker.
-      WebSecurityPolicy::registerURLSchemeAsCORSEnabled,
-      // Resources should bypass Content Security Policy checks when included in
-      // protected resources. TODO(kalman): What are "protected resources"?
-      WebSecurityPolicy::registerURLSchemeAsBypassingContentSecurityPolicy,
-      // Extension resources are HTTP-like and safe to expose to the fetch API.
-      // The rules for the fetch API are consistent with XHR.
-      WebSecurityPolicy::registerURLSchemeAsSupportingFetchAPI,
-      // Extension resources, when loaded as the top-level document, should
-      // bypass Blink's strict first-party origin checks.
-      WebSecurityPolicy::registerURLSchemeAsFirstPartyWhenTopLevel,
-  };
-
-  WebString extension_scheme(base::ASCIIToUTF16(kExtensionScheme));
-  WebString extension_resource_scheme(base::ASCIIToUTF16(
-      kExtensionResourceScheme));
-  for (RegisterFunction func : register_functions) {
-    func(extension_scheme);
-    func(extension_resource_scheme);
-  }
-
-  // For extensions, we want to ensure we call the IdleHandler every so often,
-  // even if the extension keeps up activity.
-  if (set_idle_notifications_) {
-    forced_idle_timer_.reset(new base::RepeatingTimer);
-    forced_idle_timer_->Start(
-        FROM_HERE,
-        base::TimeDelta::FromMilliseconds(kMaxExtensionIdleHandlerDelayMs),
-        RenderThread::Get(),
-        &RenderThread::IdleHandler);
-  }
-
-  // Initialize host permissions for any extensions that were activated before
-  // WebKit was initialized.
-  for (const std::string& extension_id : active_extension_ids_) {
-    const Extension* extension =
-        RendererExtensionRegistry::Get()->GetByID(extension_id);
-    CHECK(extension);
-    InitOriginPermissions(extension);
-  }
-
-  EnableCustomElementWhiteList();
-
-  is_webkit_initialized_ = true;
-}
-
 void Dispatcher::IdleNotification() {
   if (set_idle_notifications_ && forced_idle_timer_) {
     // Dampen the forced delay as well if the extension stays idle for long
@@ -1041,12 +1030,10 @@ void Dispatcher::OnActivateExtension(const std::string& extension_id) {
   // handler ticking.
   RenderThread::Get()->ScheduleIdleHandler(kInitialExtensionIdleHandlerDelayMs);
 
-  if (is_webkit_initialized_) {
-    DOMActivityLogger::AttachToWorld(
-        DOMActivityLogger::kMainWorldId, extension_id);
+  DOMActivityLogger::AttachToWorld(
+      DOMActivityLogger::kMainWorldId, extension_id);
 
-    InitOriginPermissions(extension);
-  }
+  InitOriginPermissions(extension);
 
   UpdateActiveExtensions();
 }
@@ -1227,12 +1214,10 @@ void Dispatcher::OnUpdatePermissions(
   scoped_ptr<const PermissionSet> withheld =
       params.withheld_permissions.ToPermissionSet();
 
-  if (is_webkit_initialized_) {
-    UpdateOriginPermissions(
-        extension->url(),
-        extension->permissions_data()->GetEffectiveHostPermissions(),
-        active->effective_hosts());
-  }
+  UpdateOriginPermissions(
+      extension->url(),
+      extension->permissions_data()->GetEffectiveHostPermissions(),
+      active->effective_hosts());
 
   extension->permissions_data()->SetPermissions(std::move(active),
                                                 std::move(withheld));
@@ -1257,7 +1242,7 @@ void Dispatcher::OnUpdateTabSpecificPermissions(const GURL& visible_url,
                                 extensions::ManifestPermissionSet(), new_hosts,
                                 extensions::URLPatternSet()));
 
-  if (is_webkit_initialized_ && update_origin_whitelist) {
+  if (update_origin_whitelist) {
     UpdateOriginPermissions(
         extension->url(),
         old_effective,
@@ -1275,7 +1260,7 @@ void Dispatcher::OnClearTabSpecificPermissions(
       URLPatternSet old_effective =
           extension->permissions_data()->GetEffectiveHostPermissions();
       extension->permissions_data()->ClearTabSpecificPermissions(tab_id);
-      if (is_webkit_initialized_ && update_origin_whitelist) {
+      if (update_origin_whitelist) {
         UpdateOriginPermissions(
             extension->url(),
             old_effective,
@@ -1401,31 +1386,26 @@ void Dispatcher::UpdateBindingsForContext(ScriptContext* context) {
       // ones.
       const FeatureProvider* api_feature_provider =
           FeatureProvider::GetAPIFeatures();
-      const std::vector<std::string>& apis =
-          api_feature_provider->GetAllFeatureNames();
-      for (const std::string& api_name : apis) {
-        Feature* feature = api_feature_provider->GetFeature(api_name);
-        DCHECK(feature);
-
+      for (const auto& map_entry : api_feature_provider->GetAllFeatures()) {
         // Internal APIs are included via require(api_name) from internal code
         // rather than chrome[api_name].
-        if (feature->IsInternal())
+        if (map_entry.second->IsInternal())
           continue;
 
         // If this API has a parent feature (and isn't marked 'noparent'),
         // then this must be a function or event, so we should not register.
-        if (api_feature_provider->GetParent(feature) != NULL)
+        if (api_feature_provider->GetParent(map_entry.second.get()) != nullptr)
           continue;
 
         // Skip chrome.test if this isn't a test.
-        if (api_name == "test" &&
+        if (map_entry.first == "test" &&
             !base::CommandLine::ForCurrentProcess()->HasSwitch(
                 ::switches::kTestType)) {
           continue;
         }
 
-        if (context->IsAnyFeatureAvailableToContext(*feature))
-          RegisterBinding(api_name, context);
+        if (context->IsAnyFeatureAvailableToContext(*map_entry.second.get()))
+          RegisterBinding(map_entry.first, context);
       }
       break;
     }
@@ -1639,6 +1619,10 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
   Feature::Context context_type = context->context_type();
   ModuleSystem* module_system = context->module_system();
 
+  // Only set if |context| is capable of running guests in OOPIF. Used to
+  // require additional module overrides.
+  bool guest_view_required = false;
+
   // Require AppView.
   if (context->GetAvailability("appViewEmbedderInternal").is_available()) {
     module_system->Require("appView");
@@ -1648,6 +1632,8 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
   if (context->GetAvailability("extensionOptionsInternal").is_available()) {
     module_system->Require("extensionOptions");
     module_system->Require("extensionOptionsAttributes");
+
+    guest_view_required = true;
   }
 
   // Require ExtensionView.
@@ -1667,9 +1653,13 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
       module_system->Require("webViewExperimental");
     }
 
-    if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
-      module_system->Require("webViewIframe");
-    }
+    guest_view_required = true;
+  }
+
+  if (guest_view_required &&
+      content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
+    module_system->Require("guestViewIframe");
+    module_system->Require("guestViewIframeContainer");
   }
 
   // The "guestViewDeny" module must always be loaded last. It registers

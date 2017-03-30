@@ -19,7 +19,7 @@ enum ProcessType {
   PROCESS_TYPE_UNKNOWN = 1,
   PROCESS_TYPE_BROWSER,
   PROCESS_TYPE_RENDERER,
-  PROCESS_TYPE_PLUGIN,
+  PROCESS_TYPE_PLUGIN_DEPRECATED,
   PROCESS_TYPE_WORKER_DEPRECATED,
   PROCESS_TYPE_UTILITY,
   PROCESS_TYPE_ZYGOTE,
@@ -36,7 +36,7 @@ enum ProcessType {
 };
 
 // Returns an English name of the process type, should only be used for non
-// user-visible strings, or debugging pages like about:memory.
+// user-visible strings or debugging pages.
 CONTENT_EXPORT std::string GetProcessTypeNameInEnglish(int type);
 
 }  // namespace content

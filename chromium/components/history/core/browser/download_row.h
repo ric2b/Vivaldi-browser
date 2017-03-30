@@ -25,7 +25,11 @@ struct DownloadRow {
   DownloadRow(const base::FilePath& current_path,
               const base::FilePath& target_path,
               const std::vector<GURL>& url_chain,
-              const GURL& referrer,
+              const GURL& referrer_url,
+              const GURL& site_url,
+              const GURL& tab_url,
+              const GURL& tab_referrer_url,
+              const std::string& http_method,
               const std::string& mime_type,
               const std::string& original_mime_type,
               const base::Time& start,
@@ -37,12 +41,16 @@ struct DownloadRow {
               DownloadState download_state,
               DownloadDangerType danger_type,
               DownloadInterruptReason interrupt_reason,
+              const std::string& hash,
               DownloadId id,
+              const std::string& guid,
               bool download_opened,
               const std::string& ext_id,
               const std::string& ext_name);
   DownloadRow(const DownloadRow& other);
   ~DownloadRow();
+
+  bool operator==(const DownloadRow&) const;
 
   // The current path to the download (potentially different from final if
   // download is in progress or interrupted).
@@ -59,6 +67,21 @@ struct DownloadRow {
 
   // The URL that referred us. Is not changed by UpdateDownload().
   GURL referrer_url;
+
+  // The site URL for the site instance that initiated the download.
+  GURL site_url;
+
+  // The URL of the tab that initiated the download, if any. Not changed by
+  // UpdateDownload().
+  GURL tab_url;
+
+  // The referrer of the tab that initialized the download, if any. Not changed
+  // by UpdateDownload();
+  GURL tab_referrer_url;
+
+  // HTTP method used for the request. GET is assumed if the method was not
+  // stored for a download in the history database.
+  std::string http_method;
 
   // The MIME type of the download, might be based on heuristics.
   std::string mime_type;
@@ -94,8 +117,17 @@ struct DownloadRow {
   // The reason the download was interrupted, if state == kStateInterrupted.
   DownloadInterruptReason interrupt_reason;
 
+  // The raw SHA-256 hash of the complete or partial download contents. Not hex
+  // encoded.
+  std::string hash;
+
   // The id of the download in the database. Is not changed by UpdateDownload().
+  // Note: This field should be considered deprecated in favor of |guid| below.
+  // See http://crbug.com/593020.
   DownloadId id;
+
+  // The GUID of the download in the database. Not changed by UpdateDownload().
+  std::string guid;
 
   // Whether this download has ever been opened from the browser.
   bool opened;

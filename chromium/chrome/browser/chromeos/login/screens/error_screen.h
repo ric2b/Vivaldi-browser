@@ -5,15 +5,16 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_SCREENS_ERROR_SCREEN_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_SCREENS_ERROR_SCREEN_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/chromeos/login/screens/network_error.h"
 #include "chrome/browser/chromeos/login/screens/network_error_model.h"
-#include "chrome/browser/chromeos/login/ui/oobe_display.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
+#include "chrome/browser/ui/webui/chromeos/login/oobe_screen.h"
 #include "chromeos/login/auth/login_performer.h"
 
 namespace chromeos {
@@ -25,7 +26,7 @@ class NetworkErrorView;
 // Controller for the error screen.
 class ErrorScreen : public NetworkErrorModel, public LoginPerformer::Delegate {
  public:
-  typedef scoped_ptr<base::CallbackList<void()>::Subscription>
+  typedef std::unique_ptr<base::CallbackList<void()>::Subscription>
       ConnectRequestCallbackSubscription;
 
   ErrorScreen(BaseScreenDelegate* base_screen_delegate, NetworkErrorView* view);
@@ -44,13 +45,13 @@ class ErrorScreen : public NetworkErrorModel, public LoginPerformer::Delegate {
   void FixCaptivePortal() override;
   NetworkError::UIState GetUIState() const override;
   NetworkError::ErrorState GetErrorState() const override;
-  OobeUI::Screen GetParentScreen() const override;
+  OobeScreen GetParentScreen() const override;
   void HideCaptivePortal() override;
   void OnViewDestroyed(NetworkErrorView* view) override;
   void SetUIState(NetworkError::UIState ui_state) override;
   void SetErrorState(NetworkError::ErrorState error_state,
                      const std::string& network) override;
-  void SetParentScreen(OobeUI::Screen parent_screen) override;
+  void SetParentScreen(OobeScreen parent_screen) override;
   void SetHideCallback(const base::Closure& on_hide) override;
   void ShowCaptivePortal() override;
   void ShowConnectingIndicator(bool show) override;
@@ -97,23 +98,23 @@ class ErrorScreen : public NetworkErrorModel, public LoginPerformer::Delegate {
   void StartGuestSessionAfterOwnershipCheck(
       DeviceSettingsService::OwnershipStatus ownership_status);
 
-  NetworkErrorView* view_;
+  NetworkErrorView* view_ = nullptr;
 
-  scoped_ptr<LoginPerformer> guest_login_performer_;
+  std::unique_ptr<LoginPerformer> guest_login_performer_;
 
   // Proxy which manages showing of the window for captive portal entering.
-  scoped_ptr<CaptivePortalWindowProxy> captive_portal_window_proxy_;
+  std::unique_ptr<CaptivePortalWindowProxy> captive_portal_window_proxy_;
 
   // Network state informer used to keep error screen up.
   scoped_refptr<NetworkStateInformer> network_state_informer_;
 
-  NetworkError::UIState ui_state_;
-  NetworkError::ErrorState error_state_;
+  NetworkError::UIState ui_state_ = NetworkError::UI_STATE_UNKNOWN;
+  NetworkError::ErrorState error_state_ = NetworkError::ERROR_STATE_UNKNOWN;
 
-  OobeUI::Screen parent_screen_;
+  OobeScreen parent_screen_ = OobeScreen::SCREEN_UNKNOWN;
 
   // Optional callback that is called when NetworkError screen is hidden.
-  scoped_ptr<base::Closure> on_hide_callback_;
+  std::unique_ptr<base::Closure> on_hide_callback_;
 
   // Callbacks to be invoked when a connection attempt is requested.
   base::CallbackList<void()> connect_request_callbacks_;

@@ -36,6 +36,9 @@
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/MutationCallback.h"
+#include "core/dom/MutationObserver.h"
+#include "core/dom/MutationObserverInit.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/NodeListsNodeData.h"
 #include "core/dom/NodeTraversal.h"
@@ -96,16 +99,16 @@ HTMLSelectElement::HTMLSelectElement(Document& document, HTMLFormElement* form)
     setHasCustomStyleCallbacks();
 }
 
-PassRefPtrWillBeRawPtr<HTMLSelectElement> HTMLSelectElement::create(Document& document)
+RawPtr<HTMLSelectElement> HTMLSelectElement::create(Document& document)
 {
-    RefPtrWillBeRawPtr<HTMLSelectElement> select = adoptRefWillBeNoop(new HTMLSelectElement(document, 0));
+    RawPtr<HTMLSelectElement> select = new HTMLSelectElement(document, 0);
     select->ensureUserAgentShadowRoot();
     return select.release();
 }
 
-PassRefPtrWillBeRawPtr<HTMLSelectElement> HTMLSelectElement::create(Document& document, HTMLFormElement* form)
+RawPtr<HTMLSelectElement> HTMLSelectElement::create(Document& document, HTMLFormElement* form)
 {
-    RefPtrWillBeRawPtr<HTMLSelectElement> select = adoptRefWillBeNoop(new HTMLSelectElement(document, form));
+    RawPtr<HTMLSelectElement> select = new HTMLSelectElement(document, form);
     select->ensureUserAgentShadowRoot();
     return select.release();
 }
@@ -116,8 +119,8 @@ HTMLSelectElement::~HTMLSelectElement()
 
 const AtomicString& HTMLSelectElement::formControlType() const
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, selectMultiple, ("select-multiple", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, selectOne, ("select-one", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, selectMultiple, ("select-multiple"));
+    DEFINE_STATIC_LOCAL(const AtomicString, selectOne, ("select-one"));
     return m_multiple ? selectMultiple : selectOne;
 }
 
@@ -243,14 +246,14 @@ HTMLOptionElement* HTMLSelectElement::activeSelectionEnd() const
 
 void HTMLSelectElement::add(const HTMLOptionElementOrHTMLOptGroupElement& element, const HTMLElementOrLong& before, ExceptionState& exceptionState)
 {
-    RefPtrWillBeRawPtr<HTMLElement> elementToInsert;
+    RawPtr<HTMLElement> elementToInsert;
     ASSERT(!element.isNull());
     if (element.isHTMLOptionElement())
         elementToInsert = element.getAsHTMLOptionElement();
     else
         elementToInsert = element.getAsHTMLOptGroupElement();
 
-    RefPtrWillBeRawPtr<HTMLElement> beforeElement;
+    RawPtr<HTMLElement> beforeElement;
     if (before.isHTMLElement())
         beforeElement = before.getAsHTMLElement();
     else if (before.isLong())
@@ -362,25 +365,19 @@ void HTMLSelectElement::parseAttribute(const QualifiedName& name, const AtomicSt
         // Set the attribute value to a number.
         // This is important since the style rules for this attribute can
         // determine the appearance property.
-        unsigned size = value.string().toUInt();
+        unsigned size = value.getString().toUInt();
         AtomicString attrSize = AtomicString::number(size);
         if (attrSize != value) {
             // FIXME: This is horribly factored.
             if (Attribute* sizeAttribute = ensureUniqueElementData().attributes().find(sizeAttr))
                 sizeAttribute->setValue(attrSize);
         }
-        size = std::max(size, 0u);
-
-        // Ensure that we've determined selectedness of the items at least once
-        // prior to changing the size.
-        if (oldSize != size)
-            updateListItemSelectedStates();
-
-        m_size = size;
+        m_size = std::max(size, 0u);
         setNeedsValidityCheck();
-        if (m_size != oldSize && inActiveDocument()) {
-            lazyReattachIfAttached();
-            setRecalcListItems();
+        if (m_size != oldSize) {
+            if (inActiveDocument())
+                lazyReattachIfAttached();
+            resetToDefaultSelection();
         }
     } else if (name == multipleAttr) {
         parseMultipleAttribute(value);
@@ -414,23 +411,14 @@ LayoutObject* HTMLSelectElement::createLayoutObject(const ComputedStyle&)
     return new LayoutListBox(this);
 }
 
-PassRefPtrWillBeRawPtr<HTMLCollection> HTMLSelectElement::selectedOptions()
+RawPtr<HTMLCollection> HTMLSelectElement::selectedOptions()
 {
-    updateListItemSelectedStates();
     return ensureCachedCollection<HTMLCollection>(SelectedOptions);
 }
 
-PassRefPtrWillBeRawPtr<HTMLOptionsCollection> HTMLSelectElement::options()
+RawPtr<HTMLOptionsCollection> HTMLSelectElement::options()
 {
     return ensureCachedCollection<HTMLOptionsCollection>(SelectOptions);
-}
-
-void HTMLSelectElement::updateListItemSelectedStates()
-{
-    if (!m_shouldRecalcListItems)
-        return;
-    recalcListItems();
-    setNeedsValidityCheck();
 }
 
 void HTMLSelectElement::childrenChanged(const ChildrenChange& change)
@@ -457,18 +445,6 @@ void HTMLSelectElement::accessKeyAction(bool sendMouseEvents)
 {
     focus();
     dispatchSimulatedClick(nullptr, sendMouseEvents ? SendMouseUpDownEvents : SendNoEvents);
-}
-
-void HTMLSelectElement::setMultiple(bool multiple)
-{
-    bool oldMultiple = this->multiple();
-    int oldSelectedIndex = selectedIndex();
-    setAttribute(multipleAttr, multiple ? emptyAtom : nullAtom);
-
-    // Restore selectedIndex after changing the multiple flag to preserve
-    // selection as single-line and multi-line has different defaults.
-    if (oldMultiple != this->multiple())
-        selectOption(oldSelectedIndex, DeselectOtherOptions);
 }
 
 void HTMLSelectElement::setSize(unsigned size)
@@ -534,7 +510,7 @@ void HTMLSelectElement::setLength(unsigned newLen, ExceptionState& exceptionStat
         // Removing children fires mutation events, which might mutate the DOM
         // further, so we first copy out a list of elements that we intend to
         // remove then attempt to remove them one at a time.
-        WillBeHeapVector<RefPtrWillBeMember<Element>> itemsToRemove;
+        HeapVector<Member<Element>> itemsToRemove;
         size_t optionIndex = 0;
         for (auto& item : listItems()) {
             if (isHTMLOptionElement(item) && optionIndex++ >= newLen) {
@@ -745,7 +721,7 @@ void HTMLSelectElement::listBoxOnChange()
     }
 
     if (fireOnChange) {
-        RefPtrWillBeRawPtr<HTMLSelectElement> protector(this);
+        RawPtr<HTMLSelectElement> protector(this);
         dispatchInputEvent();
         dispatchFormControlChangeEvent();
     }
@@ -758,7 +734,7 @@ void HTMLSelectElement::dispatchInputAndChangeEventForMenuList()
     HTMLOptionElement* selectedOption = this->selectedOption();
     if (m_lastOnChangeOption.get() != selectedOption) {
         m_lastOnChangeOption = selectedOption;
-        RefPtrWillBeRawPtr<HTMLSelectElement> protector(this);
+        RawPtr<HTMLSelectElement> protector(this);
         dispatchInputEvent();
         dispatchFormControlChangeEvent();
     }
@@ -789,8 +765,8 @@ const HTMLSelectElement::ListItems& HTMLSelectElement::listItems() const
         recalcListItems();
     } else {
 #if ENABLE(ASSERT)
-        WillBeHeapVector<RawPtrWillBeMember<HTMLElement>> items = m_listItems;
-        recalcListItems(false);
+        HeapVector<Member<HTMLElement>> items = m_listItems;
+        recalcListItems();
         ASSERT(items == m_listItems);
 #endif
     }
@@ -811,7 +787,7 @@ void HTMLSelectElement::setRecalcListItems()
 
     m_shouldRecalcListItems = true;
     setOptionsChangedOnLayoutObject();
-    if (!inDocument()) {
+    if (!inShadowIncludingDocument()) {
         if (HTMLOptionsCollection* collection = cachedCollection<HTMLOptionsCollection>(SelectOptions))
             collection->invalidateCache();
         invalidateSelectedItems();
@@ -823,15 +799,13 @@ void HTMLSelectElement::setRecalcListItems()
     }
 }
 
-void HTMLSelectElement::recalcListItems(bool updateSelectedStates) const
+void HTMLSelectElement::recalcListItems() const
 {
     TRACE_EVENT0("blink", "HTMLSelectElement::recalcListItems");
     m_listItems.clear();
 
     m_shouldRecalcListItems = false;
 
-    HTMLOptionElement* foundSelected = nullptr;
-    HTMLOptionElement* firstOption = nullptr;
     for (Element* currentElement = ElementTraversal::firstWithin(*this); currentElement && m_listItems.size() < maxListItems; ) {
         if (!currentElement->isHTMLElement()) {
             currentElement = ElementTraversal::nextSkippingChildren(*currentElement, this);
@@ -854,23 +828,8 @@ void HTMLSelectElement::recalcListItems(bool updateSelectedStates) const
             }
         }
 
-        if (isHTMLOptionElement(current)) {
+        if (isHTMLOptionElement(current))
             m_listItems.append(&current);
-
-            if (updateSelectedStates && !m_multiple) {
-                HTMLOptionElement& option = toHTMLOptionElement(current);
-                if (!firstOption)
-                    firstOption = &option;
-                if (option.selected()) {
-                    if (foundSelected)
-                        foundSelected->setSelectedState(false);
-                    foundSelected = &option;
-                } else if (m_size <= 1 && !foundSelected && !option.isDisabledFormControl()) {
-                    foundSelected = &option;
-                    foundSelected->setSelectedState(true);
-                }
-            }
-        }
 
         if (isHTMLHRElement(current))
             m_listItems.append(&current);
@@ -883,9 +842,46 @@ void HTMLSelectElement::recalcListItems(bool updateSelectedStates) const
         // from the <select>'s subtree at this point.
         currentElement = ElementTraversal::nextSkippingChildren(*currentElement, this);
     }
+}
 
-    if (!foundSelected && m_size <= 1 && firstOption && !firstOption->selected())
-        firstOption->setSelectedState(true);
+void HTMLSelectElement::resetToDefaultSelection()
+{
+    // https://html.spec.whatwg.org/multipage/forms.html#ask-for-a-reset
+    if (multiple())
+        return;
+    HTMLOptionElement* firstEnabledOption = nullptr;
+    int firstEnabledOptionIndex = -1;
+    HTMLOptionElement* lastSelectedOption = nullptr;
+    bool didChange = false;
+    int optionIndex = 0;
+    // We can't use HTMLSelectElement::options here because this function is
+    // called in Node::insertedInto and Node::removedFrom before invalidating
+    // node collections.
+    for (auto& item : listItems()) {
+        if (!isHTMLOptionElement(item))
+            continue;
+        HTMLOptionElement* option = toHTMLOptionElement(item);
+        if (option->selected()) {
+            if (lastSelectedOption) {
+                lastSelectedOption->setSelectedState(false);
+                didChange = true;
+            }
+            lastSelectedOption = option;
+        }
+        if (!firstEnabledOption && !option->isDisabledFormControl()) {
+            firstEnabledOption = option;
+            firstEnabledOptionIndex = optionIndex;
+        }
+        ++optionIndex;
+    }
+    if (!lastSelectedOption && m_size <= 1 && firstEnabledOption && !firstEnabledOption->selected()) {
+        selectOption(firstEnabledOption, firstEnabledOptionIndex, 0);
+        lastSelectedOption = firstEnabledOption;
+        didChange = true;
+    }
+    if (didChange)
+        setNeedsValidityCheck();
+    m_lastOnChangeOption = lastSelectedOption;
 }
 
 HTMLOptionElement* HTMLSelectElement::selectedOption() const
@@ -932,7 +928,7 @@ void HTMLSelectElement::setSuggestedIndex(int suggestedIndex)
         scrollToOption(item(listToOptionIndex(suggestedIndex)));
     }
     if (popupIsVisible())
-        m_popup->updateFromElement();
+        m_popup->updateFromElement(PopupMenu::BySelectionChange);
 }
 
 void HTMLSelectElement::scrollToOption(HTMLOptionElement* option)
@@ -947,13 +943,13 @@ void HTMLSelectElement::scrollToOption(HTMLOptionElement* option)
     // inserted before executing scrollToOptionTask().
     m_optionToScrollTo = option;
     if (!hasPendingTask)
-        document().postTask(BLINK_FROM_HERE, createSameThreadTask(&HTMLSelectElement::scrollToOptionTask, PassRefPtrWillBeRawPtr<HTMLSelectElement>(this)));
+        document().postTask(BLINK_FROM_HERE, createSameThreadTask(&HTMLSelectElement::scrollToOptionTask, RawPtr<HTMLSelectElement>(this)));
 }
 
 void HTMLSelectElement::scrollToOptionTask()
 {
-    RefPtrWillBeRawPtr<HTMLOptionElement> option = m_optionToScrollTo.release();
-    if (!option || !inDocument())
+    RawPtr<HTMLOptionElement> option = m_optionToScrollTo.release();
+    if (!option || !inShadowIncludingDocument())
         return;
     // optionRemoved() makes sure m_optionToScrollTo doesn't have an option with
     // another owner.
@@ -980,13 +976,20 @@ void HTMLSelectElement::optionInserted(HTMLOptionElement& option, bool optionIsS
 {
     ASSERT(option.ownerSelectElement() == this);
     setRecalcListItems();
-    if (optionIsSelected)
+    if (optionIsSelected) {
         selectOption(&option);
+    } else {
+        // No need to reset if we already have a selected option.
+        if (!m_lastOnChangeOption)
+            resetToDefaultSelection();
+    }
 }
 
 void HTMLSelectElement::optionRemoved(const HTMLOptionElement& option)
 {
     setRecalcListItems();
+    if (option.selected() || !m_lastOnChangeOption)
+        resetToDefaultSelection();
     if (m_lastOnChangeOption == &option)
         m_lastOnChangeOption.clear();
     if (m_optionToScrollTo == &option)
@@ -1047,7 +1050,7 @@ void HTMLSelectElement::selectOption(HTMLOptionElement* element, int optionIndex
         layoutObject->updateFromElement();
     // PopupMenu::updateFromElement() posts an O(N) task.
     if (popupIsVisible())
-        m_popup->updateFromElement();
+        m_popup->updateFromElement(PopupMenu::BySelectionChange);
 
     scrollToSelection();
     setNeedsValidityCheck();
@@ -1222,10 +1225,22 @@ void HTMLSelectElement::restoreFormControlState(const FormControlState& state)
 
 void HTMLSelectElement::parseMultipleAttribute(const AtomicString& value)
 {
+    bool oldMultiple = m_multiple;
+    int oldSelectedIndex = selectedIndex();
     m_multiple = !value.isNull();
     setNeedsValidityCheck();
-
     lazyReattachIfAttached();
+    // Restore selectedIndex after changing the multiple flag to preserve
+    // selection as single-line and multi-line has different defaults.
+    if (oldMultiple != m_multiple) {
+        // Preserving the first selection is compatible with Firefox and
+        // WebKit. However Edge seems to "ask for a reset" simply.  As of 2016
+        // March, the HTML specification says nothing about this.
+        if (oldSelectedIndex >= 0)
+            selectOption(oldSelectedIndex, DeselectOtherOptions);
+        else
+            resetToDefaultSelection();
+    }
 }
 
 void HTMLSelectElement::appendToFormData(FormData& formData)
@@ -1242,33 +1257,14 @@ void HTMLSelectElement::appendToFormData(FormData& formData)
 
 void HTMLSelectElement::resetImpl()
 {
-    HTMLOptionElement* firstOption = nullptr;
-    HTMLOptionElement* selectedOption = nullptr;
-
     for (auto& item : listItems()) {
         if (!isHTMLOptionElement(item))
             continue;
         HTMLOptionElement* option = toHTMLOptionElement(item);
-        if (option->fastHasAttribute(selectedAttr)) {
-            if (selectedOption && !m_multiple)
-                selectedOption->setSelectedState(false);
-            option->setSelectedState(true);
-            selectedOption = option;
-        } else {
-            option->setSelectedState(false);
-        }
+        option->setSelectedState(option->fastHasAttribute(selectedAttr));
         option->setDirty(false);
-
-        if (!firstOption && !option->isDisabledFormControl())
-            firstOption = option;
     }
-
-    if (!selectedOption && firstOption && !m_multiple && m_size <= 1) {
-        firstOption->setSelectedState(true);
-        selectedOption = firstOption;
-    }
-
-    m_lastOnChangeOption = selectedOption;
+    resetToDefaultSelection();
     setOptionsChangedOnLayoutObject();
     setNeedsValidityCheck();
 }
@@ -1794,7 +1790,6 @@ unsigned HTMLSelectElement::length() const
 void HTMLSelectElement::finishParsingChildren()
 {
     HTMLFormControlElementWithState::finishParsingChildren();
-    updateListItemSelectedStates();
     if (usesMenuList())
         return;
     scrollToOption(selectedOption());
@@ -1802,7 +1797,7 @@ void HTMLSelectElement::finishParsingChildren()
         cache->listboxActiveIndexChanged(this);
 }
 
-bool HTMLSelectElement::anonymousIndexedSetter(unsigned index, PassRefPtrWillBeRawPtr<HTMLOptionElement> value, ExceptionState& exceptionState)
+bool HTMLSelectElement::anonymousIndexedSetter(unsigned index, RawPtr<HTMLOptionElement> value, ExceptionState& exceptionState)
 {
     if (!value) { // undefined or null
         remove(index);
@@ -1829,30 +1824,19 @@ void HTMLSelectElement::updateListOnLayoutObject()
 
 DEFINE_TRACE(HTMLSelectElement)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_listItems);
-#endif
     visitor->trace(m_lastOnChangeOption);
     visitor->trace(m_activeSelectionAnchor);
     visitor->trace(m_activeSelectionEnd);
     visitor->trace(m_optionToScrollTo);
     visitor->trace(m_popup);
+    visitor->trace(m_popupUpdater);
     HTMLFormControlElementWithState::trace(visitor);
-}
-
-void HTMLSelectElement::willRecalcStyle(StyleRecalcChange change)
-{
-    // recalcListItems will update the selected state of the <option> elements
-    // in this <select> so we need to do it before we recalc their style so they
-    // match the right selectors (ex. :checked).
-    // TODO(esprehn): Find a way to avoid needing a willRecalcStyle callback.
-    if (m_shouldRecalcListItems)
-        recalcListItems();
 }
 
 void HTMLSelectElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 {
-    RefPtrWillBeRawPtr<HTMLContentElement> content = HTMLContentElement::create(document());
+    RawPtr<HTMLContentElement> content = HTMLContentElement::create(document());
     content->setAttribute(selectAttr, "option,optgroup,hr");
     root.appendChild(content);
 }
@@ -1920,6 +1904,7 @@ LayoutUnit HTMLSelectElement::clientPaddingRight() const
 void HTMLSelectElement::popupDidHide()
 {
     m_popupIsVisible = false;
+    unobserveTreeMutation();
     if (AXObjectCache* cache = document().existingAXObjectCache()) {
         if (layoutObject() && layoutObject()->isMenuList())
             cache->didHideMenuListPopup(toLayoutMenuList(layoutObject()));
@@ -1977,6 +1962,7 @@ void HTMLSelectElement::showPopup()
     if (!m_popup)
         m_popup = document().frameHost()->chromeClient().openPopupMenu(*document().frame(), *this);
     m_popupIsVisible = true;
+    observeTreeMutation();
 
     LayoutMenuList* menuList = toLayoutMenuList(layoutObject());
     m_popup->show();
@@ -1994,7 +1980,7 @@ void HTMLSelectElement::didRecalcStyle(StyleRecalcChange change)
 {
     HTMLFormControlElementWithState::didRecalcStyle(change);
     if (popupIsVisible())
-        m_popup->updateFromElement();
+        m_popup->updateFromElement(PopupMenu::ByStyleChange);
 }
 
 void HTMLSelectElement::detach(const AttachContext& context)
@@ -2004,11 +1990,79 @@ void HTMLSelectElement::detach(const AttachContext& context)
         m_popup->disconnectClient();
     m_popupIsVisible = false;
     m_popup = nullptr;
+    unobserveTreeMutation();
 }
 
 void HTMLSelectElement::resetTypeAheadSessionForTesting()
 {
     m_typeAhead.resetSession();
+}
+
+// PopupUpdater notifies updates of the specified SELECT element subtree to
+// a PopupMenu object.
+class HTMLSelectElement::PopupUpdater : public MutationCallback {
+public:
+    explicit PopupUpdater(HTMLSelectElement&);
+    DECLARE_VIRTUAL_TRACE();
+
+    void dispose()
+    {
+        m_observer->disconnect();
+    }
+
+private:
+    void call(const HeapVector<Member<MutationRecord>>&, MutationObserver*) override
+    {
+        m_select->didMutateSubtree();
+    }
+
+    ExecutionContext* getExecutionContext() const override
+    {
+        return &m_select->document();
+    }
+
+    Member<HTMLSelectElement> m_select;
+    Member<MutationObserver> m_observer;
+};
+
+HTMLSelectElement::PopupUpdater::PopupUpdater(HTMLSelectElement& select)
+    : m_select(select)
+{
+    m_observer = MutationObserver::create(this);
+    MutationObserverInit init;
+    init.setAttributes(true);
+    init.setCharacterData(true);
+    init.setChildList(true);
+    init.setSubtree(true);
+    m_observer->observe(&select, init, ASSERT_NO_EXCEPTION);
+}
+
+DEFINE_TRACE(HTMLSelectElement::PopupUpdater)
+{
+    visitor->trace(m_select);
+    visitor->trace(m_observer);
+    MutationCallback::trace(visitor);
+}
+
+void HTMLSelectElement::observeTreeMutation()
+{
+    DCHECK(!m_popupUpdater);
+    m_popupUpdater = new PopupUpdater(*this);
+}
+
+void HTMLSelectElement::unobserveTreeMutation()
+{
+    if (!m_popupUpdater)
+        return;
+    m_popupUpdater->dispose();
+    m_popupUpdater = nullptr;
+}
+
+void HTMLSelectElement::didMutateSubtree()
+{
+    DCHECK(popupIsVisible());
+    DCHECK(m_popup);
+    m_popup->updateFromElement(PopupMenu::ByDOMChange);
 }
 
 } // namespace blink

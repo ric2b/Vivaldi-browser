@@ -109,7 +109,7 @@ private:
         AtomicString name;
         size_t nameIndex;
         Timing specifiedTiming;
-        RefPtrWillBeMember<StyleRuleKeyframes> styleRule;
+        Member<StyleRuleKeyframes> styleRule;
         unsigned styleRuleVersion;
     };
 
@@ -124,6 +124,8 @@ private:
         Member<Animation> animation;
         const AnimatableValue* from;
         const AnimatableValue* to;
+        RefPtr<AnimatableValue> reversingAdjustedStartValue;
+        double reversingShorteningFactor;
     };
 
     HeapVector<Member<RunningAnimation>> m_runningAnimations;
@@ -162,7 +164,7 @@ private:
         Document& document() const { return m_animationTarget->document(); }
 
         void maybeDispatch(Document::ListenerType, const AtomicString& eventName, double elapsedTime);
-        RawPtrWillBeMember<Element> m_animationTarget;
+        Member<Element> m_animationTarget;
         const AtomicString m_name;
         AnimationEffect::Phase m_previousPhase;
         double m_previousIteration;
@@ -186,7 +188,7 @@ private:
         PseudoId getPseudoId() const { return m_transitionTarget->getPseudoId(); }
         Document& document() const { return m_transitionTarget->document(); }
 
-        RawPtrWillBeMember<Element> m_transitionTarget;
+        Member<Element> m_transitionTarget;
         const CSSPropertyID m_property;
         AnimationEffect::Phase m_previousPhase;
     };

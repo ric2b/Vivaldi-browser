@@ -14,13 +14,13 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/test/simple_test_tick_clock.h"
+#include "media/base/fake_single_thread_task_runner.h"
 #include "media/cast/cast_environment.h"
 #include "media/cast/logging/simple_event_subscriber.h"
-#include "media/cast/net/cast_transport_sender_impl.h"
-#include "media/cast/net/mock_cast_transport_sender.h"
+#include "media/cast/net/cast_transport_impl.h"
+#include "media/cast/net/mock_cast_transport.h"
 #include "media/cast/net/rtcp/rtcp_utility.h"
 #include "media/cast/net/rtcp/test_rtcp_packet_builder.h"
-#include "media/cast/test/fake_single_thread_task_runner.h"
 #include "media/cast/test/utility/default_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -73,7 +73,7 @@ class FrameReceiverTest : public ::testing::Test {
     testing_clock_ = new base::SimpleTestTickClock();
     testing_clock_->Advance(base::TimeTicks::Now() - base::TimeTicks());
     start_time_ = testing_clock_->NowTicks();
-    task_runner_ = new test::FakeSingleThreadTaskRunner(testing_clock_);
+    task_runner_ = new FakeSingleThreadTaskRunner(testing_clock_);
 
     cast_environment_ =
         new CastEnvironment(scoped_ptr<base::TickClock>(testing_clock_),
@@ -138,8 +138,8 @@ class FrameReceiverTest : public ::testing::Test {
   RtpCastHeader rtp_header_;
   base::SimpleTestTickClock* testing_clock_;  // Owned by CastEnvironment.
   base::TimeTicks start_time_;
-  MockCastTransportSender mock_transport_;
-  scoped_refptr<test::FakeSingleThreadTaskRunner> task_runner_;
+  MockCastTransport mock_transport_;
+  scoped_refptr<FakeSingleThreadTaskRunner> task_runner_;
   scoped_refptr<CastEnvironment> cast_environment_;
   FakeFrameClient frame_client_;
 
@@ -152,6 +152,9 @@ class FrameReceiverTest : public ::testing::Test {
 };
 
 TEST_F(FrameReceiverTest, RejectsUnparsablePackets) {
+  EXPECT_CALL(mock_transport_, AddValidRtpReceiver(_, _))
+      .WillRepeatedly(testing::Return());
+
   CreateFrameReceiverOfVideo();
 
   SimpleEventSubscriber event_subscriber;
@@ -169,12 +172,22 @@ TEST_F(FrameReceiverTest, RejectsUnparsablePackets) {
 }
 
 TEST_F(FrameReceiverTest, ReceivesOneFrame) {
+  EXPECT_CALL(mock_transport_, AddValidRtpReceiver(_, _))
+      .WillRepeatedly(testing::Return());
+
   CreateFrameReceiverOfAudio();
 
   SimpleEventSubscriber event_subscriber;
   cast_environment_->logger()->Subscribe(&event_subscriber);
 
-  EXPECT_CALL(mock_transport_, SendRtcpFromRtpReceiver(_, _, _, _, _, _, _))
+  EXPECT_CALL(mock_transport_, InitializeRtpReceiverRtcpBuilder(_, _))
+      .WillRepeatedly(testing::Return());
+  EXPECT_CALL(mock_transport_, AddCastFeedback(_, _))
+      .WillRepeatedly(testing::Return());
+  EXPECT_CALL(mock_transport_, AddPli(_)).WillRepeatedly(testing::Return());
+  EXPECT_CALL(mock_transport_, AddRtcpEvents(_))
+      .WillRepeatedly(testing::Return());
+  EXPECT_CALL(mock_transport_, SendRtcpFromRtpReceiver())
       .WillRepeatedly(testing::Return());
 
   FeedLipSyncInfoIntoReceiver();
@@ -210,12 +223,22 @@ TEST_F(FrameReceiverTest, ReceivesOneFrame) {
 }
 
 TEST_F(FrameReceiverTest, ReceivesFramesSkippingWhenAppropriate) {
+  EXPECT_CALL(mock_transport_, AddValidRtpReceiver(_, _))
+      .WillRepeatedly(testing::Return());
+
   CreateFrameReceiverOfAudio();
 
   SimpleEventSubscriber event_subscriber;
   cast_environment_->logger()->Subscribe(&event_subscriber);
 
-  EXPECT_CALL(mock_transport_, SendRtcpFromRtpReceiver(_, _, _, _, _, _, _))
+  EXPECT_CALL(mock_transport_, InitializeRtpReceiverRtcpBuilder(_, _))
+      .WillRepeatedly(testing::Return());
+  EXPECT_CALL(mock_transport_, AddCastFeedback(_, _))
+      .WillRepeatedly(testing::Return());
+  EXPECT_CALL(mock_transport_, AddPli(_)).WillRepeatedly(testing::Return());
+  EXPECT_CALL(mock_transport_, AddRtcpEvents(_))
+      .WillRepeatedly(testing::Return());
+  EXPECT_CALL(mock_transport_, SendRtcpFromRtpReceiver())
       .WillRepeatedly(testing::Return());
 
   const base::TimeDelta time_advance_per_frame =
@@ -313,12 +336,22 @@ TEST_F(FrameReceiverTest, ReceivesFramesSkippingWhenAppropriate) {
 }
 
 TEST_F(FrameReceiverTest, ReceivesFramesRefusingToSkipAny) {
+  EXPECT_CALL(mock_transport_, AddValidRtpReceiver(_, _))
+      .WillRepeatedly(testing::Return());
+
   CreateFrameReceiverOfVideo();
 
   SimpleEventSubscriber event_subscriber;
   cast_environment_->logger()->Subscribe(&event_subscriber);
 
-  EXPECT_CALL(mock_transport_, SendRtcpFromRtpReceiver(_, _, _, _, _, _, _))
+  EXPECT_CALL(mock_transport_, InitializeRtpReceiverRtcpBuilder(_, _))
+      .WillRepeatedly(testing::Return());
+  EXPECT_CALL(mock_transport_, AddCastFeedback(_, _))
+      .WillRepeatedly(testing::Return());
+  EXPECT_CALL(mock_transport_, AddPli(_)).WillRepeatedly(testing::Return());
+  EXPECT_CALL(mock_transport_, AddRtcpEvents(_))
+      .WillRepeatedly(testing::Return());
+  EXPECT_CALL(mock_transport_, SendRtcpFromRtpReceiver())
       .WillRepeatedly(testing::Return());
 
   const base::TimeDelta time_advance_per_frame =

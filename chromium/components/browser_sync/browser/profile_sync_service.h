@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
@@ -24,12 +25,12 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync_driver/data_type_controller.h"
 #include "components/sync_driver/data_type_manager.h"
 #include "components/sync_driver/data_type_manager_observer.h"
 #include "components/sync_driver/data_type_status_table.h"
-#include "components/sync_driver/device_info_sync_service.h"
 #include "components/sync_driver/glue/sync_backend_host.h"
 #include "components/sync_driver/local_device_info_provider.h"
 #include "components/sync_driver/protocol_event_observer.h"
@@ -69,11 +70,16 @@ class SessionsSyncManager;
 namespace sync_driver {
 class DataTypeManager;
 class DeviceInfoSyncService;
+class DeviceInfoTracker;
 class LocalDeviceInfoProvider;
 class OpenTabsUIDelegate;
 class SyncApiComponentFactory;
 class SyncClient;
 }  // namespace sync_driver
+
+namespace sync_driver_v2 {
+class DeviceInfoService;
+}
 
 namespace syncer {
 class BaseTransaction;
@@ -165,14 +171,8 @@ class EncryptedData;
 //   up sync at least once on their account. SetSetupInProgress(true) should be
 //   called while the user is actively configuring their account, and then
 //   SetSetupInProgress(false) should be called when configuration is complete.
-//   When SetFirstSetupComplete() == false, but SetSetupInProgress(true) has
-//   been called, then the sync engine knows not to download any user data.
-//
-//   When initial sync is complete, the UI code should call
-//   SetFirstSetupComplete() followed by SetSetupInProgress(false) - this will
-//   tell the sync engine that setup is completed and it can begin downloading
-//   data from the sync server.
-//
+//   Once both these conditions have been met, CanConfigureDataTypes() will
+//   return true and datatype configuration can begin.
 class ProfileSyncService : public sync_driver::SyncService,
                            public sync_driver::SyncFrontend,
                            public sync_driver::SyncPrefObserver,
@@ -181,7 +181,8 @@ class ProfileSyncService : public sync_driver::SyncService,
                            public KeyedService,
                            public OAuth2TokenService::Consumer,
                            public OAuth2TokenService::Observer,
-                           public SigninManagerBase::Observer {
+                           public SigninManagerBase::Observer,
+                           public GaiaCookieManagerService::Observer {
  public:
   typedef browser_sync::SyncBackendHost::Status Status;
   typedef base::Callback<bool(void)> PlatformSyncAllowedProvider;
@@ -221,6 +222,13 @@ class ProfileSyncService : public sync_driver::SyncService,
     UNKNOWN_ERROR,
   };
 
+  // If AUTO_START, sync will set IsFirstSetupComplete() automatically and sync
+  // will begin syncing without the user needing to confirm sync settings.
+  enum StartBehavior {
+    AUTO_START,
+    MANUAL_START,
+  };
+
   // Bundles the arguments for ProfileSyncService construction. This is a
   // movable struct. Because of the non-POD data members, it needs out-of-line
   // constructors, so in particular the move constructor needs to be
@@ -233,8 +241,8 @@ class ProfileSyncService : public sync_driver::SyncService,
     scoped_ptr<sync_driver::SyncClient> sync_client;
     scoped_ptr<SigninManagerWrapper> signin_wrapper;
     ProfileOAuth2TokenService* oauth2_token_service = nullptr;
-    browser_sync::ProfileSyncServiceStartBehavior start_behavior =
-        browser_sync::MANUAL_START;
+    GaiaCookieManagerService* gaia_cookie_manager_service = nullptr;
+    StartBehavior start_behavior = MANUAL_START;
     syncer::NetworkTimeUpdateCallback network_time_update_callback;
     base::FilePath base_directory;
     scoped_refptr<net::URLRequestContextGetter> url_request_context;
@@ -340,6 +348,9 @@ class ProfileSyncService : public sync_driver::SyncService,
   // Returns the SyncableService for syncer::DEVICE_INFO.
   virtual syncer::SyncableService* GetDeviceInfoSyncableService();
 
+  // Returns the ModelTypeService for syncer::DEVICE_INFO.
+  virtual syncer_v2::ModelTypeService* GetDeviceInfoService();
+
   // Returns synced devices tracker.
   virtual sync_driver::DeviceInfoTracker* GetDeviceInfoTracker() const;
 
@@ -398,6 +409,11 @@ class ProfileSyncService : public sync_driver::SyncService,
                              const std::string& password) override;
   void GoogleSignedOut(const std::string& account_id,
                        const std::string& username) override;
+
+  // GaiaCookieManagerService::Observer implementation.
+  void OnGaiaAccountsInCookieUpdated(
+      const std::vector<gaia::ListedAccount>& accounts,
+      const GoogleServiceAuthError& error) override;
 
   // Get the sync status code.
   SyncStatusSummary QuerySyncStatusSummary();
@@ -508,9 +524,6 @@ class ProfileSyncService : public sync_driver::SyncService,
 
   SigninManagerBase* signin() const;
 
-  // Used by tests.
-  bool auto_start_enabled() const;
-
   SyncErrorController* sync_error_controller() {
     return sync_error_controller_.get();
   }
@@ -592,10 +605,6 @@ class ProfileSyncService : public sync_driver::SyncService,
   syncer::SyncCredentials GetCredentials();
 
   virtual syncer::WeakHandle<syncer::JsEventHandler> GetJsEventHandler();
-
-  const sync_driver::DataTypeController::TypeMap& data_type_controllers() {
-    return data_type_controllers_;
-  }
 
   // Helper method for managing encryption UI.
   bool IsEncryptedDatatypeEnabled() const;
@@ -750,6 +759,13 @@ class ProfileSyncService : public sync_driver::SyncService,
   // Whether sync has been authenticated with an account ID.
   bool IsSignedIn() const;
 
+  // The backend can only start if sync can start and has an auth token. This is
+  // different fron CanSyncStart because it represents whether the backend can
+  // be started at this moment, whereas CanSyncStart represents whether sync can
+  // conceptually start without further user action (acquiring a token is an
+  // automatic process).
+  bool CanBackendStart() const;
+
   // True if a syncing backend exists.
   bool HasSyncingBackend() const;
 
@@ -781,6 +797,9 @@ class ProfileSyncService : public sync_driver::SyncService,
 
   // Restarts sync clearing directory in the process.
   void OnClearServerDataDone();
+
+  // True if setup has been completed at least once and is not in progress.
+  bool CanConfigureDataTypes() const;
 
   // This profile's SyncClient, which abstracts away non-Sync dependencies and
   // the Sync API component factory.
@@ -939,15 +958,20 @@ class ProfileSyncService : public sync_driver::SyncService,
   GoogleServiceAuthError last_get_token_error_;
   base::Time next_token_request_time_;
 
+  // The gaia cookie manager. Used for monitoring cookie jar changes to detect
+  // when the user signs out of the content area.
+  GaiaCookieManagerService* const gaia_cookie_manager_service_;
+
   scoped_ptr<sync_driver::LocalDeviceInfoProvider> local_device_;
 
-  // Locally owned SyncableService implementations.
+  // Locally owned SyncableService and ModelTypeService implementations.
   scoped_ptr<browser_sync::SessionsSyncManager> sessions_sync_manager_;
   scoped_ptr<sync_driver::DeviceInfoSyncService> device_info_sync_service_;
+  scoped_ptr<sync_driver_v2::DeviceInfoService> device_info_service_;
 
   scoped_ptr<syncer::NetworkResources> network_resources_;
 
-  browser_sync::ProfileSyncServiceStartBehavior start_behavior_;
+  StartBehavior start_behavior_;
   scoped_ptr<browser_sync::StartupController> startup_controller_;
 
   // The full path to the sync data directory.

@@ -34,7 +34,7 @@ namespace blink {
 class LocalDOMWindow;
 class LocalFrame;
 
-class CORE_EXPORT DOMWindowProperty : public WillBeGarbageCollectedMixin {
+class CORE_EXPORT DOMWindowProperty : public GarbageCollectedMixin {
 public:
     explicit DOMWindowProperty(LocalFrame*);
 
@@ -43,22 +43,10 @@ public:
 
     LocalFrame* frame() const { return m_frame; }
 
-    EAGERLY_FINALIZE_WILL_BE_REMOVED();
     DECLARE_VIRTUAL_TRACE();
 
 protected:
-    // TODO(Oilpan): when ~DOMWindowProperty is removed, check classes that derive
-    // from it. Several will then be able to derive from GarbageCollected<> instead.
-#if !ENABLE(OILPAN)
-    virtual ~DOMWindowProperty();
-#endif
-
-    RawPtrWillBeMember<LocalFrame> m_frame;
-
-#if !ENABLE(OILPAN)
-private:
-    LocalDOMWindow* m_associatedDOMWindow;
-#endif
+    Member<LocalFrame> m_frame;
 };
 
 } // namespace blink

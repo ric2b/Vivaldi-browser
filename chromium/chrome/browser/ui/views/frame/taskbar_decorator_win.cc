@@ -30,7 +30,7 @@ namespace {
 //
 // Docs for TaskbarList::SetOverlayIcon() say it does nothing if the HWND is not
 // valid.
-void SetOverlayIcon(HWND hwnd, scoped_ptr<SkBitmap> bitmap) {
+void SetOverlayIcon(HWND hwnd, std::unique_ptr<SkBitmap> bitmap) {
   base::win::ScopedComPtr<ITaskbarList3> taskbar;
   HRESULT result = taskbar.CreateInstance(CLSID_TaskbarList, nullptr,
                                           CLSCTX_INPROC_SERVER);
@@ -58,7 +58,7 @@ void SetOverlayIcon(HWND hwnd, scoped_ptr<SkBitmap> bitmap) {
     SkCanvas offscreen_canvas(offscreen_bitmap);
     offscreen_canvas.clear(SK_ColorTRANSPARENT);
     offscreen_canvas.drawBitmap(sk_icon, 0, kOverlayIconSize - resized_height);
-    icon = IconUtil::CreateHICONFromSkBitmap(offscreen_bitmap).Pass();
+    icon = IconUtil::CreateHICONFromSkBitmap(offscreen_bitmap);
     if (!icon.is_valid())
       return;
   }
@@ -80,7 +80,7 @@ void DrawTaskbarDecoration(gfx::NativeWindow window, const gfx::Image* image) {
 
   // Copy the image since we're going to use it on a separate thread and
   // gfx::Image isn't thread safe.
-  scoped_ptr<SkBitmap> bitmap;
+  std::unique_ptr<SkBitmap> bitmap;
   if (image) {
     bitmap.reset(new SkBitmap(
         profiles::GetAvatarIconAsSquare(*image->ToSkBitmap(), 1)));

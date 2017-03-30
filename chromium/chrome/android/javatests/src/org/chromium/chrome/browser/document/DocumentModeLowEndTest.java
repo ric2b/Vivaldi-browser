@@ -14,6 +14,7 @@ import android.test.suitebuilder.annotation.MediumTest;
 
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeApplication;
@@ -21,7 +22,6 @@ import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
-import org.chromium.chrome.test.util.DisableInTabbedMode;
 import org.chromium.content.app.SandboxedProcessService;
 import org.chromium.content.browser.test.util.CallbackHelper;
 
@@ -32,9 +32,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * Tests the how Document mode works on low end devices.
  */
 @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-@DisableInTabbedMode
 // TODO(dskiba): remove the following switch once we have Svelte bots running L
 @CommandLineFlags.Add(BaseSwitches.ENABLE_LOW_END_DEVICE_MODE)
+@DisabledTest
 public class DocumentModeLowEndTest extends DocumentModeTestBase {
 
     @Restriction(RESTRICTION_TYPE_LOW_END_DEVICE)

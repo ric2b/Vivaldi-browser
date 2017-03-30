@@ -7,15 +7,16 @@
 
 #import <AppKit/AppKit.h>
 
+#include <memory>
+
 #import "base/mac/scoped_nsobject.h"
-#include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/browser_window.h"
 #import "chrome/browser/ui/cocoa/has_weak_browser_pointer.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 
 @class BaseBubbleController;
 class Browser;
-class ProfileInfoUpdateObserver;
+class ProfileAttributesUpdateObserver;
 
 // This view controller manages the button that sits in the top of the
 // window frame when using multi-profiles, and shows information about the
@@ -31,8 +32,8 @@ class ProfileInfoUpdateObserver;
   // The menu controller, if the menu is open.
   BaseBubbleController* menuController_;
 
-  // Observer that listens for updates to the ProfileInfoCache.
-  scoped_ptr<ProfileInfoUpdateObserver> profileInfoObserver_;
+  // Observer that listens for updates to the ProfileAttributesStorage.
+  std::unique_ptr<ProfileAttributesUpdateObserver> profileAttributesObserver_;
 }
 
 // The avatar button view.

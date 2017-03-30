@@ -41,7 +41,7 @@ enum EdgeModeType {
 
 class PLATFORM_EXPORT FEConvolveMatrix final : public FilterEffect {
 public:
-    static PassRefPtrWillBeRawPtr<FEConvolveMatrix> create(Filter*, const IntSize&,
+    static FEConvolveMatrix* create(Filter*, const IntSize&,
         float, float, const IntPoint&, EdgeModeType, bool, const Vector<float>&);
 
     bool setDivisor(float);
@@ -50,7 +50,7 @@ public:
     bool setEdgeMode(EdgeModeType);
     bool setPreserveAlpha(bool);
 
-    FloatRect mapPaintRect(const FloatRect&, bool forward = true) final;
+    FloatRect mapPaintRect(const FloatRect&, bool forward = true) const final;
 
     TextStream& externalRepresentation(TextStream&, int indention) const override;
 

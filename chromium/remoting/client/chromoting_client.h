@@ -7,15 +7,17 @@
 #ifndef REMOTING_CLIENT_CHROMOTING_CLIENT_H_
 #define REMOTING_CLIENT_CHROMOTING_CLIENT_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "remoting/protocol/client_authentication_config.h"
 #include "remoting/protocol/client_stub.h"
 #include "remoting/protocol/clipboard_stub.h"
 #include "remoting/protocol/connection_to_host.h"
 #include "remoting/protocol/input_stub.h"
+#include "remoting/protocol/mouse_input_filter.h"
 #include "remoting/protocol/performance_tracker.h"
 #include "remoting/protocol/session_config.h"
 #include "remoting/protocol/video_stub.h"
@@ -50,20 +52,21 @@ class ChromotingClient : public SignalStrategy::Listener,
   ChromotingClient(ClientContext* client_context,
                    ClientUserInterface* user_interface,
                    protocol::VideoRenderer* video_renderer,
-                   scoped_ptr<AudioPlayer> audio_player);
+                   std::unique_ptr<AudioPlayer> audio_player);
 
   ~ChromotingClient() override;
 
-  void set_protocol_config(scoped_ptr<protocol::CandidateSessionConfig> config);
+  void set_protocol_config(
+      std::unique_ptr<protocol::CandidateSessionConfig> config);
 
   // Used to set fake/mock objects for tests which use the ChromotingClient.
   void SetConnectionToHostForTests(
-      scoped_ptr<protocol::ConnectionToHost> connection_to_host);
+      std::unique_ptr<protocol::ConnectionToHost> connection_to_host);
 
   // Start the client. Must be called on the main thread. |signal_strategy|
   // must outlive the client.
   void Start(SignalStrategy* signal_strategy,
-             scoped_ptr<protocol::Authenticator> authenticator,
+             const protocol::ClientAuthenticationConfig& client_auth_config,
              scoped_refptr<protocol::TransportContext> transport_context,
              const std::string& host_jid,
              const std::string& capabilities);
@@ -76,13 +79,14 @@ class ChromotingClient : public SignalStrategy::Listener,
     return connection_->clipboard_forwarder();
   }
   protocol::HostStub* host_stub() { return connection_->host_stub(); }
-  protocol::InputStub* input_stub() { return connection_->input_stub(); }
+  protocol::InputStub* input_stub() { return &mouse_input_scaler_; }
 
   // ClientStub implementation.
   void SetCapabilities(const protocol::Capabilities& capabilities) override;
   void SetPairingResponse(
       const protocol::PairingResponse& pairing_response) override;
   void DeliverHostMessage(const protocol::ExtensionMessage& message) override;
+  void SetVideoLayout(const protocol::VideoLayout& layout) override;
 
   // ClipboardStub implementation for receiving clipboard data from host.
   void InjectClipboardEvent(const protocol::ClipboardEvent& event) override;
@@ -113,7 +117,7 @@ class ChromotingClient : public SignalStrategy::Listener,
 
   base::ThreadChecker thread_checker_;
 
-  scoped_ptr<protocol::CandidateSessionConfig> protocol_config_;
+  std::unique_ptr<protocol::CandidateSessionConfig> protocol_config_;
 
   // The following are not owned by this class.
   ClientUserInterface* user_interface_ = nullptr;
@@ -121,13 +125,15 @@ class ChromotingClient : public SignalStrategy::Listener,
   SignalStrategy* signal_strategy_ = nullptr;
 
   std::string host_jid_;
-  scoped_ptr<protocol::Authenticator> authenticator_;
+  protocol::ClientAuthenticationConfig client_auth_config_;
   scoped_refptr<protocol::TransportContext> transport_context_;
 
-  scoped_ptr<protocol::SessionManager> session_manager_;
-  scoped_ptr<protocol::ConnectionToHost> connection_;
+  std::unique_ptr<protocol::SessionManager> session_manager_;
+  std::unique_ptr<protocol::ConnectionToHost> connection_;
 
-  scoped_ptr<AudioDecodeScheduler> audio_decode_scheduler_;
+  protocol::MouseInputFilter mouse_input_scaler_;
+
+  std::unique_ptr<AudioDecodeScheduler> audio_decode_scheduler_;
 
   std::string local_capabilities_;
 

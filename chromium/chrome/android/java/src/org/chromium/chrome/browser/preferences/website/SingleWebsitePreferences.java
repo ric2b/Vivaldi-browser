@@ -23,6 +23,7 @@ import android.widget.ListAdapter;
 import android.widget.ListView;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ContentSettingsType;
 import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
@@ -69,6 +70,7 @@ public class SingleWebsitePreferences extends PreferenceFragment
     // Buttons:
     public static final String PREF_RESET_SITE = "reset_site_button";
     // Website permissions (if adding new, see hasPermissionsPreferences and resetSite below):
+    public static final String PREF_BACKGROUND_SYNC_PERMISSION = "background_sync_permission_list";
     public static final String PREF_CAMERA_CAPTURE_PERMISSION = "camera_permission_list";
     public static final String PREF_COOKIES_PERMISSION = "cookies_permission_list";
     public static final String PREF_FULLSCREEN_PERMISSION = "fullscreen_permission_list";
@@ -85,17 +87,18 @@ public class SingleWebsitePreferences extends PreferenceFragment
     // All permissions from the permissions preference category must be listed here.
     // TODO(mvanouwerkerk): Use this array in more places to reduce verbosity.
     private static final String[] PERMISSION_PREFERENCE_KEYS = {
-        PREF_CAMERA_CAPTURE_PERMISSION,
-        PREF_COOKIES_PERMISSION,
-        PREF_FULLSCREEN_PERMISSION,
-        PREF_JAVASCRIPT_PERMISSION,
-        PREF_KEYGEN_PERMISSION,
-        PREF_LOCATION_ACCESS,
-        PREF_MIC_CAPTURE_PERMISSION,
-        PREF_MIDI_SYSEX_PERMISSION,
-        PREF_NOTIFICATIONS_PERMISSION,
-        PREF_POPUP_PERMISSION,
-        PREF_PROTECTED_MEDIA_IDENTIFIER_PERMISSION,
+            PREF_BACKGROUND_SYNC_PERMISSION,
+            PREF_CAMERA_CAPTURE_PERMISSION,
+            PREF_COOKIES_PERMISSION,
+            PREF_FULLSCREEN_PERMISSION,
+            PREF_JAVASCRIPT_PERMISSION,
+            PREF_KEYGEN_PERMISSION,
+            PREF_LOCATION_ACCESS,
+            PREF_MIC_CAPTURE_PERMISSION,
+            PREF_MIDI_SYSEX_PERMISSION,
+            PREF_NOTIFICATIONS_PERMISSION,
+            PREF_POPUP_PERMISSION,
+            PREF_PROTECTED_MEDIA_IDENTIFIER_PERMISSION,
     };
 
     // The website this page is displaying details about.
@@ -300,6 +303,8 @@ public class SingleWebsitePreferences extends PreferenceFragment
                 }
             } else if (PREF_RESET_SITE.equals(preference.getKey())) {
                 preference.setOnPreferenceClickListener(this);
+            } else if (PREF_BACKGROUND_SYNC_PERMISSION.equals(preference.getKey())) {
+                setUpListPreference(preference, mSite.getBackgroundSyncPermission());
             } else if (PREF_CAMERA_CAPTURE_PERMISSION.equals(preference.getKey())) {
                 setUpListPreference(preference, mSite.getCameraPermission());
             } else if (PREF_COOKIES_PERMISSION.equals(preference.getKey())) {
@@ -527,6 +532,8 @@ public class SingleWebsitePreferences extends PreferenceFragment
 
     private int getContentSettingsTypeFromPreferenceKey(String preferenceKey) {
         switch (preferenceKey) {
+            case PREF_BACKGROUND_SYNC_PERMISSION:
+                return ContentSettingsType.CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC;
             case PREF_CAMERA_CAPTURE_PERMISSION:
                 return ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA;
             case PREF_COOKIES_PERMISSION:
@@ -587,7 +594,9 @@ public class SingleWebsitePreferences extends PreferenceFragment
     @Override
     public boolean onPreferenceChange(Preference preference, Object newValue) {
         ContentSetting permission = ContentSetting.fromString((String) newValue);
-        if (PREF_CAMERA_CAPTURE_PERMISSION.equals(preference.getKey())) {
+        if (PREF_BACKGROUND_SYNC_PERMISSION.equals(preference.getKey())) {
+            mSite.setBackgroundSyncPermission(permission);
+        } else if (PREF_CAMERA_CAPTURE_PERMISSION.equals(preference.getKey())) {
             mSite.setCameraPermission(permission);
         } else if (PREF_COOKIES_PERMISSION.equals(preference.getKey())) {
             mSite.setCookiePermission(permission);
@@ -631,7 +640,11 @@ public class SingleWebsitePreferences extends PreferenceFragment
         return true;
     }
 
-    private void resetSite() {
+    /**
+     * Resets the current site, clearing all permissions and storage used (inc. cookies).
+     */
+    @VisibleForTesting
+    protected void resetSite() {
         if (getActivity() == null) return;
         // Clear the screen.
         // TODO(mvanouwerkerk): Refactor this class so that it does not depend on the screen state
@@ -644,9 +657,10 @@ public class SingleWebsitePreferences extends PreferenceFragment
         }
 
         // Clear the permissions.
+        mSite.setBackgroundSyncPermission(ContentSetting.DEFAULT);
         mSite.setCameraPermission(ContentSetting.DEFAULT);
         mSite.setCookiePermission(ContentSetting.DEFAULT);
-        WebsitePreferenceBridge.nativeClearCookieData(mSite.getAddress().getOrigin());
+        WebsitePreferenceBridge.nativeClearCookieData(mSite.getAddress().getTitle());
         mSite.setFullscreenPermission(ContentSetting.DEFAULT);
         mSite.setGeolocationPermission(ContentSetting.DEFAULT);
         mSite.setJavaScriptPermission(ContentSetting.DEFAULT);

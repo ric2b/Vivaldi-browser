@@ -5,9 +5,11 @@
 #ifndef BLIMP_CLIENT_SESSION_BLIMP_CLIENT_SESSION_H_
 #define BLIMP_CLIENT_SESSION_BLIMP_CLIENT_SESSION_H_
 
+#include <memory>
+#include <string>
+
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread.h"
 #include "blimp/client/blimp_client_export.h"
 #include "blimp/client/session/assignment_source.h"
@@ -24,13 +26,25 @@ class BlimpMessageProcessor;
 class BlimpMessageThreadPipe;
 class BrowserConnectionHandler;
 class ClientConnectionManager;
+class ThreadPipeManager;
 
 namespace client {
 
 class ClientNetworkComponents;
 class NavigationFeature;
+class ImeFeature;
 class RenderWidgetFeature;
+class SettingsFeature;
 class TabControlFeature;
+
+class NetworkEventObserver {
+ public:
+  NetworkEventObserver() {}
+  virtual ~NetworkEventObserver() {}
+
+  virtual void OnConnected() = 0;
+  virtual void OnDisconnected(int result) = 0;
+};
 
 // BlimpClientSession represents a single active session of Blimp on the client
 // regardless of whether or not the client application is in the background or
@@ -40,9 +54,9 @@ class TabControlFeature;
 // This session glues together the feature proxy components and the network
 // layer.  The network components must be interacted with on the IO thread.  The
 // feature proxies must be interacted with on the UI thread.
-class BLIMP_CLIENT_EXPORT BlimpClientSession {
+class BLIMP_CLIENT_EXPORT BlimpClientSession : public NetworkEventObserver {
  public:
-  BlimpClientSession();
+  explicit BlimpClientSession(const GURL& assigner_endpoint);
 
   // Uses the AssignmentSource to get an Assignment and then uses the assignment
   // configuration to connect to the Blimplet.
@@ -53,6 +67,7 @@ class BLIMP_CLIENT_EXPORT BlimpClientSession {
 
   TabControlFeature* GetTabControlFeature() const;
   NavigationFeature* GetNavigationFeature() const;
+  ImeFeature* GetImeFeature() const;
   RenderWidgetFeature* GetRenderWidgetFeature() const;
 
   // The AssignmentCallback for when an assignment is ready. This will trigger
@@ -61,37 +76,35 @@ class BLIMP_CLIENT_EXPORT BlimpClientSession {
                                      const Assignment& assignment);
 
  protected:
-  virtual ~BlimpClientSession();
+  ~BlimpClientSession() override;
 
   // Notified every time the AssignmentSource returns the result of an attempted
   // assignment request.
   virtual void OnAssignmentConnectionAttempted(AssignmentSource::Result result);
 
  private:
-  // Registers a message processor which will receive all messages of the |type|
-  // specified.  Returns a BlimpMessageProcessor object for sending messages of
-  // type |type|.
-  scoped_ptr<BlimpMessageProcessor> RegisterFeature(
-      BlimpMessage::Type type,
-      BlimpMessageProcessor* incoming_processor);
+  void RegisterFeatures();
+
+  // NetworkEventObserver implementation.
+  void OnConnected() override;
+  void OnDisconnected(int result) override;
 
   base::Thread io_thread_;
-  scoped_ptr<TabControlFeature> tab_control_feature_;
-  scoped_ptr<NavigationFeature> navigation_feature_;
-  scoped_ptr<RenderWidgetFeature> render_widget_feature_;
+  std::unique_ptr<TabControlFeature> tab_control_feature_;
+  std::unique_ptr<NavigationFeature> navigation_feature_;
+  std::unique_ptr<ImeFeature> ime_feature_;
+  std::unique_ptr<RenderWidgetFeature> render_widget_feature_;
+  std::unique_ptr<SettingsFeature> settings_feature_;
 
   // The AssignmentSource is used when the user of BlimpClientSession calls
   // Connect() to get a valid assignment and later connect to the engine.
-  scoped_ptr<AssignmentSource> assignment_source_;
+  std::unique_ptr<AssignmentSource> assignment_source_;
 
   // Container struct for network components.
   // Must be deleted on the IO thread.
-  scoped_ptr<ClientNetworkComponents> net_components_;
+  std::unique_ptr<ClientNetworkComponents> net_components_;
 
-  // Pipes for receiving BlimpMessages from IO thread.
-  // Incoming messages are only routed to the UI thread since all features run
-  // on the UI thread.
-  std::vector<scoped_ptr<BlimpMessageThreadPipe>> incoming_pipes_;
+  std::unique_ptr<ThreadPipeManager> thread_pipe_manager_;
 
   base::WeakPtrFactory<BlimpClientSession> weak_factory_;
 

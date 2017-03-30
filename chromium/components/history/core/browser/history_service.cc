@@ -368,15 +368,16 @@ void HistoryService::TopHosts(size_t num_hosts,
       callback);
 }
 
-void HistoryService::GetCountsForOrigins(
+void HistoryService::GetCountsAndLastVisitForOrigins(
     const std::set<GURL>& origins,
-    const GetCountsForOriginsCallback& callback) const {
+    const GetCountsAndLastVisitForOriginsCallback& callback) const {
   DCHECK(thread_) << "History service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
-  PostTaskAndReplyWithResult(thread_->task_runner().get(), FROM_HERE,
-                             base::Bind(&HistoryBackend::GetCountsForOrigins,
-                                        history_backend_.get(), origins),
-                             callback);
+  PostTaskAndReplyWithResult(
+      thread_->task_runner().get(), FROM_HERE,
+      base::Bind(&HistoryBackend::GetCountsAndLastVisitForOrigins,
+                 history_backend_.get(), origins),
+      callback);
 }
 
 void HistoryService::HostRankIfAvailable(
@@ -904,7 +905,6 @@ void HistoryService::Cleanup() {
 
 bool HistoryService::Init(
     bool no_db,
-    const std::string& languages,
     const HistoryDatabaseParams& history_database_params) {
   TRACE_EVENT0("browser,startup", "HistoryService::Init")
   SCOPED_UMA_HISTOGRAM_TIMER("History.HistoryServiceInitTime");
@@ -928,7 +928,7 @@ bool HistoryService::Init(
 
   ScheduleTask(PRIORITY_UI,
                base::Bind(&HistoryBackend::Init, history_backend_.get(),
-                          languages, no_db, history_database_params));
+                          no_db, history_database_params));
 
   if (visit_delegate_ && !visit_delegate_->Init(this))
     return false;

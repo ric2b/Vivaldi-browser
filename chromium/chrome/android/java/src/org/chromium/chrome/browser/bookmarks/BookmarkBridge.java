@@ -159,6 +159,76 @@ public class BookmarkBridge {
     }
 
     /**
+     * Contains data about a bookmark or bookmark folder.
+     */
+    public static class BookmarkItem {
+
+        private final String mTitle;
+        private final String mUrl;
+        private final BookmarkId mId;
+        private final boolean mIsFolder;
+        private final BookmarkId mParentId;
+        private final boolean mIsEditable;
+        private final boolean mIsManaged;
+
+        private BookmarkItem(BookmarkId id, String title, String url, boolean isFolder,
+                BookmarkId parentId, boolean isEditable, boolean isManaged) {
+            mId = id;
+            mTitle = title;
+            mUrl = url;
+            mIsFolder = isFolder;
+            mParentId = parentId;
+            mIsEditable = isEditable;
+            mIsManaged = isManaged;
+        }
+
+        /** @return Title of the bookmark item. */
+        public String getTitle() {
+            return mTitle;
+        }
+
+        /** @return Url of the bookmark item. */
+        public String getUrl() {
+            return mUrl;
+        }
+
+        /** @return Id of the bookmark item. */
+        public BookmarkId getId() {
+            return mId;
+        }
+
+        /** @return Whether item is a folder or a bookmark. */
+        public boolean isFolder() {
+            return mIsFolder;
+        }
+
+        /** @return Parent id of the bookmark item. */
+        public BookmarkId getParentId() {
+            return mParentId;
+        }
+
+        /** @return Whether this bookmark can be edited. */
+        public boolean isEditable() {
+            return mIsEditable;
+        }
+
+        /**@return Whether this bookmark's URL can be edited */
+        public boolean isUrlEditable() {
+            return isEditable() && mId.getType() == BookmarkType.NORMAL;
+        }
+
+        /**@return Whether this bookmark can be moved */
+        public boolean isMovable() {
+            return isEditable() && mId.getType() == BookmarkType.NORMAL;
+        }
+
+        /** @return Whether this is a managed bookmark. */
+        public boolean isManaged() {
+            return mIsManaged;
+        }
+    }
+
+    /**
      * Handler to fetch the bookmarks, titles, urls and folder hierarchy.
      * @param profile Profile instance corresponding to the active profile.
      */
@@ -524,6 +594,15 @@ public class BookmarkBridge {
     }
 
     /**
+     * Removes all the non-permanent bookmark nodes that are editable by the user. Observers are
+     * only notified when all nodes have been removed. There is no notification for individual node
+     * removals.
+     */
+    public void removeAllUserBookmarks() {
+        nativeRemoveAllUserBookmarks(mNativeBookmarkBridge);
+    }
+
+    /**
      * Move the bookmark to the new index within same folder or to a different folder.
      * @param bookmarkId The id of the bookmark that is being moved.
      * @param newParentId The parent folder id.
@@ -755,128 +834,6 @@ public class BookmarkBridge {
         return pairList;
     }
 
-
-    private native BookmarkItem nativeGetBookmarkByID(long nativeBookmarkBridge, long id,
-            int type);
-    private native void nativeGetPermanentNodeIDs(long nativeBookmarkBridge,
-            List<BookmarkId> bookmarksList);
-    private native void nativeGetTopLevelFolderParentIDs(long nativeBookmarkBridge,
-            List<BookmarkId> bookmarksList);
-    private native void nativeGetTopLevelFolderIDs(long nativeBookmarkBridge, boolean getSpecial,
-            boolean getNormal, List<BookmarkId> bookmarksList);
-    private native void nativeGetAllFoldersWithDepths(long nativeBookmarkBridge,
-            List<BookmarkId> folderList, List<Integer> depthList);
-    private native BookmarkId nativeGetRootFolderId(long nativeBookmarkBridge);
-    private native BookmarkId nativeGetMobileFolderId(long nativeBookmarkBridge);
-    private native BookmarkId nativeGetOtherFolderId(long nativeBookmarkBridge);
-    private native BookmarkId nativeGetDesktopFolderId(long nativeBookmarkBridge);
-    private native int nativeGetChildCount(long nativeBookmarkBridge, long id, int type);
-    private native void nativeGetChildIDs(long nativeBookmarkBridge, long id, int type,
-            boolean getFolders, boolean getBookmarks, List<BookmarkId> bookmarksList);
-    private native BookmarkId nativeGetChildAt(long nativeBookmarkBridge, long id, int type,
-            int index);
-    private native void nativeGetAllBookmarkIDsOrderedByCreationDate(long nativeBookmarkBridge,
-            List<BookmarkId> result);
-    private native void nativeSetBookmarkTitle(long nativeBookmarkBridge, long id, int type,
-            String title);
-    private native void nativeSetBookmarkUrl(long nativeBookmarkBridge, long id, int type,
-            String url);
-    private native boolean nativeDoesBookmarkExist(long nativeBookmarkBridge, long id, int type);
-    private native void nativeGetBookmarksForFolder(long nativeBookmarkBridge,
-            BookmarkId folderId, BookmarksCallback callback,
-            List<BookmarkItem> bookmarksList);
-    private native boolean nativeIsFolderVisible(long nativeBookmarkBridge, long id, int type);
-    private native void nativeGetCurrentFolderHierarchy(long nativeBookmarkBridge,
-            BookmarkId folderId, BookmarksCallback callback,
-            List<BookmarkItem> bookmarksList);
-    private native BookmarkId nativeAddFolder(long nativeBookmarkBridge, BookmarkId parent,
-            int index, String title);
-    private native void nativeDeleteBookmark(long nativeBookmarkBridge, BookmarkId bookmarkId);
-    private native void nativeMoveBookmark(long nativeBookmarkBridge, BookmarkId bookmarkId,
-            BookmarkId newParentId, int index);
-    private native BookmarkId nativeAddBookmark(long nativeBookmarkBridge, BookmarkId parent,
-            int index, String title, String url);
-    private native void nativeUndo(long nativeBookmarkBridge);
-    private native void nativeStartGroupingUndos(long nativeBookmarkBridge);
-    private native void nativeEndGroupingUndos(long nativeBookmarkBridge);
-    private native void nativeLoadEmptyPartnerBookmarkShimForTesting(long nativeBookmarkBridge);
-    private native void nativeSearchBookmarks(long nativeBookmarkBridge,
-            List<BookmarkMatch> bookmarkMatches, String query, int maxNumber);
-    private native long nativeInit(Profile profile);
-    private native boolean nativeIsDoingExtensiveChanges(long nativeBookmarkBridge);
-    private native void nativeDestroy(long nativeBookmarkBridge);
-    private static native boolean nativeIsEditBookmarksEnabled(long nativeBookmarkBridge);
-
-    /**
-     * Simple object representing the bookmark item.
-     */
-    public static class BookmarkItem {
-
-        private final String mTitle;
-        private final String mUrl;
-        private final BookmarkId mId;
-        private final boolean mIsFolder;
-        private final BookmarkId mParentId;
-        private final boolean mIsEditable;
-        private final boolean mIsManaged;
-
-        private BookmarkItem(BookmarkId id, String title, String url, boolean isFolder,
-                BookmarkId parentId, boolean isEditable, boolean isManaged) {
-            mId = id;
-            mTitle = title;
-            mUrl = url;
-            mIsFolder = isFolder;
-            mParentId = parentId;
-            mIsEditable = isEditable;
-            mIsManaged = isManaged;
-        }
-
-        /** @return Title of the bookmark item. */
-        public String getTitle() {
-            return mTitle;
-        }
-
-        /** @return Url of the bookmark item. */
-        public String getUrl() {
-            return mUrl;
-        }
-
-        /** @return Id of the bookmark item. */
-        public BookmarkId getId() {
-            return mId;
-        }
-
-        /** @return Whether item is a folder or a bookmark. */
-        public boolean isFolder() {
-            return mIsFolder;
-        }
-
-        /** @return Parent id of the bookmark item. */
-        public BookmarkId getParentId() {
-            return mParentId;
-        }
-
-        /** @return Whether this bookmark can be edited. */
-        public boolean isEditable() {
-            return mIsEditable;
-        }
-
-        /**@return Whether this bookmark's URL can be edited */
-        public boolean isUrlEditable() {
-            return isEditable() && mId.getType() == BookmarkType.NORMAL;
-        }
-
-        /**@return Whether this bookmark can be moved */
-        public boolean isMovable() {
-            return isEditable() && mId.getType() == BookmarkType.NORMAL;
-        }
-
-        /** @return Whether this is a managed bookmark. */
-        public boolean isManaged() {
-            return mIsManaged;
-        }
-    }
-
     /**
      * Details about callbacks that need to be called once the bookmark model has loaded.
      */
@@ -915,4 +872,56 @@ public class BookmarkBridge {
             }
         }
     }
+
+    private native BookmarkItem nativeGetBookmarkByID(long nativeBookmarkBridge, long id,
+            int type);
+    private native void nativeGetPermanentNodeIDs(long nativeBookmarkBridge,
+            List<BookmarkId> bookmarksList);
+    private native void nativeGetTopLevelFolderParentIDs(long nativeBookmarkBridge,
+            List<BookmarkId> bookmarksList);
+    private native void nativeGetTopLevelFolderIDs(long nativeBookmarkBridge, boolean getSpecial,
+            boolean getNormal, List<BookmarkId> bookmarksList);
+    private native void nativeGetAllFoldersWithDepths(long nativeBookmarkBridge,
+            List<BookmarkId> folderList, List<Integer> depthList);
+    private native BookmarkId nativeGetRootFolderId(long nativeBookmarkBridge);
+    private native BookmarkId nativeGetMobileFolderId(long nativeBookmarkBridge);
+    private native BookmarkId nativeGetOtherFolderId(long nativeBookmarkBridge);
+    private native BookmarkId nativeGetDesktopFolderId(long nativeBookmarkBridge);
+    private native int nativeGetChildCount(long nativeBookmarkBridge, long id, int type);
+    private native void nativeGetChildIDs(long nativeBookmarkBridge, long id, int type,
+            boolean getFolders, boolean getBookmarks, List<BookmarkId> bookmarksList);
+    private native BookmarkId nativeGetChildAt(long nativeBookmarkBridge, long id, int type,
+            int index);
+    private native void nativeGetAllBookmarkIDsOrderedByCreationDate(long nativeBookmarkBridge,
+            List<BookmarkId> result);
+    private native void nativeSetBookmarkTitle(long nativeBookmarkBridge, long id, int type,
+            String title);
+    private native void nativeSetBookmarkUrl(long nativeBookmarkBridge, long id, int type,
+            String url);
+    private native boolean nativeDoesBookmarkExist(long nativeBookmarkBridge, long id, int type);
+    private native void nativeGetBookmarksForFolder(long nativeBookmarkBridge,
+            BookmarkId folderId, BookmarksCallback callback,
+            List<BookmarkItem> bookmarksList);
+    private native boolean nativeIsFolderVisible(long nativeBookmarkBridge, long id, int type);
+    private native void nativeGetCurrentFolderHierarchy(long nativeBookmarkBridge,
+            BookmarkId folderId, BookmarksCallback callback,
+            List<BookmarkItem> bookmarksList);
+    private native BookmarkId nativeAddFolder(long nativeBookmarkBridge, BookmarkId parent,
+            int index, String title);
+    private native void nativeDeleteBookmark(long nativeBookmarkBridge, BookmarkId bookmarkId);
+    private native void nativeRemoveAllUserBookmarks(long nativeBookmarkBridge);
+    private native void nativeMoveBookmark(long nativeBookmarkBridge, BookmarkId bookmarkId,
+            BookmarkId newParentId, int index);
+    private native BookmarkId nativeAddBookmark(long nativeBookmarkBridge, BookmarkId parent,
+            int index, String title, String url);
+    private native void nativeUndo(long nativeBookmarkBridge);
+    private native void nativeStartGroupingUndos(long nativeBookmarkBridge);
+    private native void nativeEndGroupingUndos(long nativeBookmarkBridge);
+    private native void nativeLoadEmptyPartnerBookmarkShimForTesting(long nativeBookmarkBridge);
+    private native void nativeSearchBookmarks(long nativeBookmarkBridge,
+            List<BookmarkMatch> bookmarkMatches, String query, int maxNumber);
+    private native long nativeInit(Profile profile);
+    private native boolean nativeIsDoingExtensiveChanges(long nativeBookmarkBridge);
+    private native void nativeDestroy(long nativeBookmarkBridge);
+    private static native boolean nativeIsEditBookmarksEnabled(long nativeBookmarkBridge);
 }

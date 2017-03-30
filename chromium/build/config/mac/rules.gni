@@ -2,211 +2,146 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-mac_app_script = "//build/config/mac/mac_app.py"
+import("//build/toolchain/toolchain.gni")
 
-template("code_sign_mac") {
-  assert(defined(invoker.entitlements_path),
-         "The path to the entitlements .xcent file")
-  assert(defined(invoker.identity), "The code signing identity")
-  assert(defined(invoker.application_path), "The application to code sign")
-  assert(defined(invoker.deps))
-
-  action(target_name) {
-    sources = [
-      invoker.entitlements_path,
-    ]
-
-    _application_path = invoker.application_path
-
-    script = mac_app_script
-
-    outputs = [
-      "$_application_path/_CodeSignature/CodeResources",
-    ]
-
-    args = [
-      "codesign",
-      "-p",
-      rebase_path(invoker.application_path, root_build_dir),
-      "-i",
-      invoker.identity,
-      "-e",
-      rebase_path(invoker.entitlements_path, root_build_dir),
-    ]
-
-    forward_variables_from(invoker,
-                           [
-                             "deps",
-                             "public_deps",
-                             "visibility",
-                           ])
-  }
-}
-
-template("process_nibs_mac") {
-  assert(defined(invoker.sources), "The nib sources must be specified")
-  assert(defined(invoker.module), "The nib module must be specified")
-  assert(defined(invoker.output_dir), "The output directory must be specified")
-
-  action_foreach(target_name) {
-    sources = invoker.sources
-
-    script = mac_app_script
-
-    invoker_out_dir = invoker.output_dir
-
-    outputs = [
-      "$root_build_dir/$invoker_out_dir/{{source_name_part}}.nib",
-    ]
-
-    args = [
-      "nib",
-      "-i",
-      "{{source}}",
-      "-o",
-      invoker_out_dir,
-      "-m",
-      invoker.module,
-    ]
-  }
-
-  forward_variables_from(invoker,
-                         [
-                           "deps",
-                           "public_deps",
-                           "visibility",
-                         ])
-}
-
-template("resource_copy_mac") {
-  assert(defined(invoker.resources),
-         "The source list of resources to copy over")
-  assert(defined(invoker.bundle_directory),
-         "The directory within the bundle to place the sources in")
-
-  if (defined(invoker.app_name)) {
-    _app_name = invoker.app_name
-  } else {
-    _app_name = target_name
-  }
-
-  _bundle_directory = invoker.bundle_directory
-  _resources = invoker.resources
-
-  copy(target_name) {
-    set_sources_assignment_filter([])
-    sources = _resources
-    outputs = [
-      "$root_build_dir/$_app_name.app/$_bundle_directory/Contents/Resources/{{source_file_part}}",
-    ]
-  }
-}
-
-template("mac_app") {
+# Template to package a shared library into a Mac framework bundle.
+#
+# Arguments
+#
+#     info_plist:
+#         string, path to the Info.plist file that will be used for the bundle.
+#
+#     output_name:
+#         (optional) string, name of the generated framework without the
+#         .framework suffix. If omitted, defaults to target_name.
+#
+#     framework_version:
+#         (optional) string, version of the framework. Typically this is a
+#         single letter, like "A". If omitted, the Versions/ subdirectory
+#         structure will not be created, and build output will go directly
+#         into the framework subdirectory.
+template("mac_framework") {
   assert(defined(invoker.deps),
          "Dependencies must be specified for $target_name")
   assert(defined(invoker.info_plist),
-         "The application plist file must be specified for $target_name")
-  assert(defined(invoker.xibs),
-         "The list of XIB files must be specified for $target_name")
+         "The Info.plist file must be specified for $target_name")
 
-  group_gen_target_name = target_name
-  copy_all_target_name = target_name + "_all_copy"
+  _target_name = target_name
+  _output_name = target_name
+  if (defined(invoker.output_name)) {
+    _output_name = invoker.output_name
+  }
+  _framework_name = _output_name + ".framework"
+  _framework_version = ""
+  if (defined(invoker.framework_version)) {
+    _framework_version = invoker.framework_version
+  }
+  _framework_target = _output_name + "_framework"
 
-  # We just create a variable so we can use the same in interpolation
-  if (defined(invoker.app_name)) {
-    _app_name = invoker.app_name
-  } else {
-    _app_name = target_name
+  _shared_library_target = target_name + "_shared_library"
+  _shared_library_bundle_data = _shared_library_target + "_bundle_data"
+
+  shared_library(_shared_library_target) {
+    visibility = [ ":$_shared_library_bundle_data" ]
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "assert_no_deps",
+                             "data_deps",
+                             "info_plist",
+                             "output_name",
+                             "visibility",
+                           ])
   }
 
-  # Generate the executable
-  bin_gen_target_name = target_name + "_bin"
-  executable(bin_gen_target_name) {
-    visibility = [ ":$group_gen_target_name" ]
-    deps = invoker.deps
-    output_name = app_name
+  bundle_data(_shared_library_bundle_data) {
+    visibility = [ ":$_framework_target" ]
+    forward_variables_from(invoker, [ "testonly" ])
+    sources = [
+      "$root_out_dir/${shlib_prefix}${_shared_library_target}${shlib_extension}",
+    ]
+    outputs = [
+      "{{bundle_executable_dir}}/$_output_name",
+    ]
+    public_deps = [
+      ":$_shared_library_target",
+    ]
   }
 
-  # Process the Info.plist
-  plist_gen_target_name = target_name + "_plist"
+  _info_plist_target = target_name + "_info_plist"
 
-  action(plist_gen_target_name) {
-    visibility = [ ":$group_gen_target_name" ]
-    script = mac_app_script
+  # TODO(rsesek): Process Info.plist variables.
 
+  _info_plist_bundle_data = _info_plist_target + "_bundle_data"
+
+  bundle_data(_info_plist_bundle_data) {
+    visibility = [ ":$_framework_target" ]
+    forward_variables_from(invoker, [ "testonly" ])
     sources = [
       invoker.info_plist,
     ]
     outputs = [
-      "$root_build_dir/Info.plist",
-    ]
-
-    args = [
-      "plist",
-      "-i",
-      rebase_path(invoker.info_plist, root_build_dir),
-      "-o",
-      rebase_path(root_build_dir),
+      "{{bundle_root_dir}}/Info.plist",
     ]
   }
 
-  # Copy the generated binaries and assets to their appropriate locations
-  copy_plist_gen_target_name = target_name + "_plist_copy"
-  copy(copy_plist_gen_target_name) {
-    visibility = [ ":$group_gen_target_name" ]
-    sources = [
-      "$root_build_dir/Info.plist",
+  create_bundle(_framework_target) {
+    visibility = [ ":$_target_name" ]
+    forward_variables_from(invoker,
+                           [
+                             "data_deps",
+                             "deps",
+                             "public_deps",
+                             "testonly",
+                             "visibility",
+                           ])
+
+    if (!defined(deps)) {
+      deps = []
+    }
+    deps += [
+      ":$_info_plist_bundle_data",
+      ":$_shared_library_bundle_data",
     ]
 
-    outputs = [
-      "$root_build_dir/$app_name.app/Contents/{{source_file_part}}",
-    ]
-
-    deps = [
-      ":$plist_gen_target_name",
-    ]
+    bundle_root_dir = "$root_out_dir/$_framework_name"
+    if (_framework_version != "") {
+      bundle_root_dir += "/Versions/$_framework_version"
+    }
+    bundle_resources_dir = "$bundle_root_dir/Resources"
+    bundle_executable_dir = "$bundle_root_dir"
   }
 
-  copy_bin_target_name = target_name + "_bin_copy"
-  copy(copy_bin_target_name) {
-    visibility = [ ":$group_gen_target_name" ]
-    sources = [
-      "$root_build_dir/$app_name",
-    ]
-
-    outputs = [
-      "$root_build_dir/$app_name.app/Contents/MacOS/{{source_file_part}}",
-    ]
-
-    deps = [
-      ":$bin_gen_target_name",
-    ]
-  }
-
-  copy_xib_target_name = target_name + "_xib_copy"
-  process_nibs_mac(copy_xib_target_name) {
-    visibility = [ ":$group_gen_target_name" ]
-    sources = invoker.xibs
-    module = app_name
-    output_dir = "$app_name.app/Contents/Resources"
-  }
-
-  group(copy_all_target_name) {
-    visibility = [ ":$group_gen_target_name" ]
-    deps = [
-      ":$copy_bin_target_name",
-      ":$copy_plist_gen_target_name",
-      ":$copy_xib_target_name",
-      ":$struct_gen_target_name",
-    ]
-  }
-
-  # Top level group
-
-  group(group_gen_target_name) {
-    deps = [
-      ":$copy_all_target_name",
-    ]
+  if (_framework_version != "") {
+    action(_target_name) {
+      forward_variables_from(invoker,
+                             [
+                               "visibility",
+                               "testonly",
+                             ])
+      script = "$root_out_dir/gyp-mac-tool"
+      outputs = [
+        "$root_out_dir/$_framework_name/Versions/Current",
+      ]
+      args = [
+        "package-framework",
+        "$_framework_name",
+        "$_framework_version",
+      ]
+      deps = [
+        ":$_framework_target",
+      ]
+    }
+  } else {
+    group(_target_name) {
+      forward_variables_from(invoker,
+                             [
+                               "visibility",
+                               "testonly",
+                             ])
+      deps = [
+        ":$_framework_target",
+      ]
+    }
   }
 }

@@ -35,7 +35,15 @@ class SigninViewControllerDelegate : public content::WebContentsDelegate {
       Browser* browser);
 
   void CloseModalSignin();
-  void NavigationButtonClicked(content::WebContents* web_contents);
+
+  // Either navigates back in the signin flow if the history state allows it or
+  // closes the flow otherwise.
+  void PerformNavigation();
+
+  // This will be called by the base class to request a resize of the native
+  // view hosting the content to |height|. |height| is the total height of the
+  // content, in pixels.
+  virtual void ResizeNativeView(int height) = 0;
 
  protected:
   SigninViewControllerDelegate(SigninViewController* signin_view_controller,
@@ -49,16 +57,6 @@ class SigninViewControllerDelegate : public content::WebContentsDelegate {
   void LoadingStateChanged(content::WebContents* source,
                            bool to_different_document) override;
 
-  // This will be called by this base class when the navigation state of the
-  // sign in page allows for backwards navigation. It should display a "back"
-  // navigation button to the user.
-  virtual void ShowBackArrow() = 0;
-
-  // This will be called by this base class when the navigation state of the
-  // sign in page doesn't allow for backwards navigation. It should display a
-  // "close" button to the user.
-  virtual void ShowCloseButton() = 0;
-
   // This will be called by this base class when the tab-modal window must be
   // closed. This should close the platform-specific window that is currently
   // showing the sign in flow or the sync confirmation dialog.
@@ -68,6 +66,7 @@ class SigninViewControllerDelegate : public content::WebContentsDelegate {
   bool CanGoBack(content::WebContents* web_ui_web_contents) const;
 
   SigninViewController* signin_view_controller_;  // Not owned.
+  content::WebContents* web_contents_;  // Not owned.
   DISALLOW_COPY_AND_ASSIGN(SigninViewControllerDelegate);
 };
 

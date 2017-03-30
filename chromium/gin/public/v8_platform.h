@@ -19,6 +19,7 @@ class GIN_EXPORT V8Platform : public NON_EXPORTED_BASE(v8::Platform) {
   static V8Platform* Get();
 
   // v8::Platform implementation.
+  size_t NumberOfAvailableBackgroundThreads() override;
   void CallOnBackgroundThread(
       v8::Task* task,
       v8::Platform::ExpectedRuntime expected_runtime) override;
@@ -36,6 +37,7 @@ class GIN_EXPORT V8Platform : public NON_EXPORTED_BASE(v8::Platform) {
   uint64_t AddTraceEvent(char phase,
                          const uint8_t* category_enabled_flag,
                          const char* name,
+                         const char* scope,
                          uint64_t id,
                          uint64_t bind_id,
                          int32_t num_args,

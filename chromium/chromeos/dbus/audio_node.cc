@@ -21,6 +21,7 @@ AudioNode::AudioNode()
 
 AudioNode::AudioNode(bool is_input,
                      uint64_t id,
+                     uint64_t stable_device_id,
                      std::string device_name,
                      std::string type,
                      std::string name,
@@ -28,11 +29,14 @@ AudioNode::AudioNode(bool is_input,
                      uint64_t plugged_time)
     : is_input(is_input),
       id(id),
+      stable_device_id(stable_device_id),
       device_name(device_name),
       type(type),
       name(name),
       active(active),
       plugged_time(plugged_time) {}
+
+AudioNode::AudioNode(const AudioNode& other) = default;
 
 AudioNode::~AudioNode() {}
 
@@ -44,9 +48,9 @@ std::string AudioNode::ToString() const {
   base::StringAppendF(&result,
                       "id = 0x%" PRIx64 " ",
                       id);
-  base::StringAppendF(&result,
-                      "device_name = %s ",
-                      device_name.c_str());
+  base::StringAppendF(&result, "stable_device_id = 0x%" PRIx64 " ",
+                      stable_device_id);
+  base::StringAppendF(&result, "device_name = %s ", device_name.c_str());
   base::StringAppendF(&result,
                       "type = %s ",
                       type.c_str());

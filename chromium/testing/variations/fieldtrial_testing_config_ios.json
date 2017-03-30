@@ -28,14 +28,6 @@
             "group_name": "Enabled"
         }
     ],
-    "DataReductionProxyConfigService": [
-        {
-            "group_name": "Enabled",
-            "params": {
-                "minimum_refresh_interval_on_success_msec": "21600000"
-            }
-        }
-    ],
     "PageRevisitInstrumentation": [
         {
             "group_name": "Enabled"
@@ -54,11 +46,6 @@
     "SdchPersistence": [
         {
             "group_name": "Enabled"
-        }
-    ],
-    "SpdyEnableDependencies": [
-        {
-            "group_name": "Enable"
         }
     ],
     "SyncHttpContentCompression": [

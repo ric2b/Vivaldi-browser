@@ -268,6 +268,9 @@ void FakeGaia::Initialize() {
   // Handles /SSO GAIA call (not GAIA, made up for SAML tests).
   REGISTER_PATH_RESPONSE_HANDLER("/SSO", HandleSSO);
 
+  // Handles the /samlredirect requests for tests.
+  REGISTER_PATH_RESPONSE_HANDLER("/samlredirect", HandleSAMLRedirect);
+
   REGISTER_RESPONSE_HANDLER(
       gaia_urls->gaia_url().Resolve(kDummySAMLContinuePath),
       HandleDummySAMLContinue);
@@ -297,19 +300,20 @@ void FakeGaia::Initialize() {
       gaia_urls->oauth_user_info_url(), HandleOAuthUserInfo);
 }
 
-scoped_ptr<HttpResponse> FakeGaia::HandleRequest(const HttpRequest& request) {
+std::unique_ptr<HttpResponse> FakeGaia::HandleRequest(
+    const HttpRequest& request) {
   // The scheme and host of the URL is actually not important but required to
   // get a valid GURL in order to parse |request.relative_url|.
   GURL request_url = GURL("http://localhost").Resolve(request.relative_url);
   std::string request_path = request_url.path();
-  scoped_ptr<BasicHttpResponse> http_response(new BasicHttpResponse());
+  std::unique_ptr<BasicHttpResponse> http_response(new BasicHttpResponse());
   RequestHandlerMap::iterator iter = request_handlers_.find(request_path);
   if (iter != request_handlers_.end()) {
     LOG(WARNING) << "Serving request " << request_path;
     iter->second.Run(request, http_response.get());
   } else {
     LOG(ERROR) << "Unhandled request " << request_path;
-    return scoped_ptr<HttpResponse>();      // Request not understood.
+    return std::unique_ptr<HttpResponse>();  // Request not understood.
   }
 
   return std::move(http_response);
@@ -323,6 +327,11 @@ void FakeGaia::IssueOAuthToken(const std::string& auth_token,
 void FakeGaia::RegisterSamlUser(const std::string& account_id,
                                 const GURL& saml_idp) {
   saml_account_idp_map_[account_id] = saml_idp;
+}
+
+void FakeGaia::RegisterSamlDomainRedirectUrl(const std::string& domain,
+                                             const GURL& saml_redirect_url) {
+  saml_domain_url_map_[domain] = saml_redirect_url;
 }
 
 // static
@@ -803,4 +812,31 @@ void FakeGaia::HandleOAuthUserInfo(
   } else {
     http_response->set_code(net::HTTP_BAD_REQUEST);
   }
+}
+
+void FakeGaia::HandleSAMLRedirect(
+    const net::test_server::HttpRequest& request,
+    net::test_server::BasicHttpResponse* http_response) {
+  GURL request_url = GURL("http://localhost").Resolve(request.relative_url);
+  std::string domain;
+  GetQueryParameter(request_url.query(), "domain", &domain);
+
+  // Get the redirect url.
+  auto itr = saml_domain_url_map_.find(domain);
+  if (itr == saml_domain_url_map_.end()) {
+    http_response->set_code(net::HTTP_BAD_REQUEST);
+    return;
+  }
+
+  GURL url = itr->second;
+  url = net::AppendQueryParameter(url, "SAMLRequest", "fake_request");
+  url = net::AppendQueryParameter(url, "RelayState",
+                                  GaiaUrls::GetInstance()
+                                      ->gaia_url()
+                                      .Resolve(kDummySAMLContinuePath)
+                                      .spec());
+  std::string redirect_url = url.spec();
+  http_response->set_code(net::HTTP_TEMPORARY_REDIRECT);
+  http_response->AddCustomHeader("Google-Accounts-SAML", "Start");
+  http_response->AddCustomHeader("Location", redirect_url);
 }

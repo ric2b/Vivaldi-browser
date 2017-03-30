@@ -7,16 +7,17 @@
 
 #include "base/macros.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
+#include "components/mus/ws/user_id.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 
 namespace mus {
 namespace ws {
 
-class ConnectionManager;
+class WindowServer;
 
 class WindowTreeFactory : public mus::mojom::WindowTreeFactory {
  public:
-  explicit WindowTreeFactory(ConnectionManager* connection_manager);
+  WindowTreeFactory(WindowServer* window_server, const UserId& user_id);
   ~WindowTreeFactory() override;
 
   void AddBinding(
@@ -27,7 +28,8 @@ class WindowTreeFactory : public mus::mojom::WindowTreeFactory {
                         mojom::WindowTreeClientPtr client) override;
 
  private:
-  ConnectionManager* connection_manager_;
+  WindowServer* window_server_;
+  const UserId user_id_;
 
   mojo::BindingSet<mus::mojom::WindowTreeFactory> binding_;
 

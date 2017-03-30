@@ -5,9 +5,10 @@
 #ifndef CHROME_BROWSER_PASSWORD_MANAGER_PASSWORD_MANAGER_TEST_BASE_H_
 #define CHROME_BROWSER_PASSWORD_MANAGER_PASSWORD_MANAGER_TEST_BASE_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/test_utils.h"
@@ -39,10 +40,10 @@ class NavigationObserver : public content::WebContentsObserver {
   content::RenderFrameHost* render_frame_host() { return render_frame_host_; }
 
   // content::WebContentsObserver:
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
-  void NavigationEntryCommitted(
-      const content::LoadCommittedDetails& load_details) override;
 
  private:
   std::string wait_for_path_;
@@ -66,6 +67,10 @@ class PromptObserver {
   // Checks if the update prompt is being currently shown.
   virtual bool IsShowingUpdatePrompt() const;
 
+  // Dismisses the prompt currently open and moves the controller to the
+  // inactive state.
+  virtual void Dismiss() const = 0;
+
   // Expecting that the prompt is shown, saves the password. Checks that the
   // prompt is no longer visible afterwards.
   void Accept() const;
@@ -76,7 +81,8 @@ class PromptObserver {
 
   // Chooses the right implementation of PromptObserver and creates an instance
   // of it.
-  static scoped_ptr<PromptObserver> Create(content::WebContents* web_contents);
+  static std::unique_ptr<PromptObserver> Create(
+      content::WebContents* web_contents);
 
  protected:
   PromptObserver();

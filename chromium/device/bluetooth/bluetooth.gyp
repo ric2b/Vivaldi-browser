@@ -73,6 +73,8 @@
         'bluetooth_gatt_notify_session.h',
         'bluetooth_gatt_notify_session_android.cc',
         'bluetooth_gatt_notify_session_android.h',
+        'bluetooth_gatt_notify_session_win.cc',
+        'bluetooth_gatt_notify_session_win.h',
         'bluetooth_gatt_service.cc',
         'bluetooth_gatt_service.h',
         'bluetooth_init_win.cc',
@@ -95,6 +97,8 @@
         'bluetooth_remote_gatt_characteristic_win.h',
         'bluetooth_remote_gatt_descriptor_android.cc',
         'bluetooth_remote_gatt_descriptor_android.h',
+        'bluetooth_remote_gatt_descriptor_win.cc',
+        'bluetooth_remote_gatt_descriptor_win.h',
         'bluetooth_remote_gatt_service_android.cc',
         'bluetooth_remote_gatt_service_android.h',
         'bluetooth_remote_gatt_service_win.cc',
@@ -286,6 +290,12 @@
                   'Bthprops.cpl',
                   'setupapi.dll',
                 ],
+                'AdditionalDependencies': [
+                  # Bthprops must be listed before BluetoothApis or else delay
+                  # loading crashes.
+                  'Bthprops.lib',
+                  'BluetoothApis.lib',
+                ],
               },
             },
           },
@@ -297,6 +307,12 @@
                 # symbols declared by bthprops.lib, they actually reside here:
                 'Bthprops.cpl',
                 'setupapi.dll',
+              ],
+              'AdditionalDependencies': [
+                # Bthprops must be listed before BluetoothApis or else delay
+                # loading crashes.
+                'Bthprops.lib',
+                'BluetoothApis.lib',
               ],
             },
           },
@@ -352,8 +368,6 @@
         'test/mock_bluetooth_adapter.h',
         'test/mock_bluetooth_advertisement.cc',
         'test/mock_bluetooth_advertisement.h',
-        'test/mock_bluetooth_central_manager_mac.mm',
-        'test/mock_bluetooth_central_manager_mac.h',
         'test/mock_bluetooth_device.cc',
         'test/mock_bluetooth_device.h',
         'test/mock_bluetooth_discovery_session.cc',

@@ -52,15 +52,15 @@ public:
     typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
 
     Deque();
-    Deque(const Deque<T, inlineCapacity, Allocator>&);
-    // FIXME: Doesn't work if there is an inline buffer, due to crbug.com/360572
-    Deque<T, 0, Allocator>& operator=(const Deque&);
+    Deque(const Deque&);
+    Deque& operator=(const Deque&);
+    Deque(Deque&&);
+    Deque& operator=(Deque&&);
 
     void finalize();
     void finalizeGarbageCollectedObject() { finalize(); }
 
-    // We hard wire the inlineCapacity to zero here, due to crbug.com/360572
-    void swap(Deque<T, 0, Allocator>&);
+    void swap(Deque&);
 
     size_t size() const { return m_start <= m_end ? m_end - m_start : m_end + m_buffer.capacity() - m_start; }
     bool isEmpty() const { return m_start == m_end; }
@@ -112,10 +112,29 @@ public:
 
     template <typename VisitorDispatcher> void trace(VisitorDispatcher);
 
+    static_assert(!std::is_polymorphic<T>::value || !VectorTraits<T>::canInitializeWithMemset, "Cannot initialize with memset if there is a vtable");
+    static_assert(Allocator::isGarbageCollected || !AllowsOnlyPlacementNew<T>::value || !NeedsTracing<T>::value, "Cannot put DISALLOW_NEW_EXCEPT_PLACEMENT_NEW objects that have trace methods into an off-heap Deque");
+    static_assert(Allocator::isGarbageCollected || !IsPointerToGarbageCollectedType<T>::value, "Cannot put raw pointers to garbage-collected classes into a Deque. Use HeapDeque<Member<T>> instead.");
+
 private:
     friend class DequeIteratorBase<T, inlineCapacity, Allocator>;
 
-    typedef VectorBuffer<T, INLINE_CAPACITY, Allocator> Buffer;
+    class BackingBuffer : public VectorBuffer<T, INLINE_CAPACITY, Allocator> {
+        WTF_MAKE_NONCOPYABLE(BackingBuffer);
+    private:
+        using Base = VectorBuffer<T, INLINE_CAPACITY, Allocator>;
+        using Base::m_size;
+
+    public:
+        BackingBuffer() : Base() { }
+        explicit BackingBuffer(size_t capacity) : Base(capacity) { }
+
+        void setSize(size_t size)
+        {
+            m_size = size;
+        }
+    };
+
     typedef VectorTypeOperations<T> TypeOperations;
     typedef DequeIteratorBase<T, inlineCapacity, Allocator> IteratorBase;
 
@@ -124,7 +143,7 @@ private:
     void expandCapacityIfNeeded();
     void expandCapacity();
 
-    Buffer m_buffer;
+    BackingBuffer m_buffer;
     unsigned m_start;
     unsigned m_end;
 };
@@ -136,7 +155,7 @@ protected:
     DequeIteratorBase();
     DequeIteratorBase(const Deque<T, inlineCapacity, Allocator>*, size_t);
     DequeIteratorBase(const DequeIteratorBase&);
-    DequeIteratorBase<T, 0, Allocator>& operator=(const DequeIteratorBase<T, 0, Allocator>&);
+    DequeIteratorBase& operator=(const DequeIteratorBase<T, 0, Allocator>&);
     ~DequeIteratorBase();
 
     void assign(const DequeIteratorBase& other) { *this = other; }
@@ -224,15 +243,10 @@ inline Deque<T, inlineCapacity, Allocator>::Deque()
     : m_start(0)
     , m_end(0)
 {
-    static_assert(!std::is_polymorphic<T>::value || !VectorTraits<T>::canInitializeWithMemset, "Cannot initialize with memset if there is a vtable");
-#if ENABLE(OILPAN)
-    static_assert(Allocator::isGarbageCollected || !AllowsOnlyPlacementNew<T>::value || !NeedsTracing<T>::value, "Cannot put DISALLOW_NEW_EXCEPT_PLACEMENT_NEW objects that have trace methods into an off-heap Deque");
-#endif
-    static_assert(Allocator::isGarbageCollected || !IsPointerToGarbageCollectedType<T>::value, "Cannot put raw pointers to garbage-collected classes into a Deque. Use HeapDeque<Member<T>> instead.");
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
-inline Deque<T, inlineCapacity, Allocator>::Deque(const Deque<T, inlineCapacity, Allocator>& other)
+inline Deque<T, inlineCapacity, Allocator>::Deque(const Deque& other)
     : m_buffer(other.m_buffer.capacity())
     , m_start(other.m_start)
     , m_end(other.m_end)
@@ -247,10 +261,25 @@ inline Deque<T, inlineCapacity, Allocator>::Deque(const Deque<T, inlineCapacity,
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
-inline Deque<T, 0, Allocator>& Deque<T, inlineCapacity, Allocator>::operator=(const Deque& other)
+inline Deque<T, inlineCapacity, Allocator>& Deque<T, inlineCapacity, Allocator>::operator=(const Deque& other)
 {
     Deque<T> copy(other);
     swap(copy);
+    return *this;
+}
+
+template <typename T, size_t inlineCapacity, typename Allocator>
+inline Deque<T, inlineCapacity, Allocator>::Deque(Deque&& other)
+    : m_start(0)
+    , m_end(0)
+{
+    swap(other);
+}
+
+template <typename T, size_t inlineCapacity, typename Allocator>
+inline Deque<T, inlineCapacity, Allocator>& Deque<T, inlineCapacity, Allocator>::operator=(Deque&& other)
+{
+    swap(other);
     return *this;
 }
 
@@ -283,13 +312,34 @@ inline void Deque<T, inlineCapacity, Allocator>::finalize()
     m_buffer.destruct();
 }
 
-// FIXME: Doesn't work if there is an inline buffer, due to crbug.com/360572
 template <typename T, size_t inlineCapacity, typename Allocator>
-inline void Deque<T, inlineCapacity, Allocator>::swap(Deque<T, 0, Allocator>& other)
+inline void Deque<T, inlineCapacity, Allocator>::swap(Deque& other)
 {
+    typename BackingBuffer::OffsetRange thisHole;
+    if (m_start <= m_end) {
+        m_buffer.setSize(m_end);
+        thisHole.begin = 0;
+        thisHole.end = m_start;
+    } else {
+        m_buffer.setSize(m_buffer.capacity());
+        thisHole.begin = m_end;
+        thisHole.end = m_start;
+    }
+    typename BackingBuffer::OffsetRange otherHole;
+    if (other.m_start <= other.m_end) {
+        other.m_buffer.setSize(other.m_end);
+        otherHole.begin = 0;
+        otherHole.end = other.m_start;
+    } else {
+        other.m_buffer.setSize(other.m_buffer.capacity());
+        otherHole.begin = other.m_end;
+        otherHole.end = other.m_start;
+    }
+
+    m_buffer.swapVectorBuffer(other.m_buffer, thisHole, otherHole);
+
     std::swap(m_start, other.m_start);
     std::swap(m_end, other.m_end);
-    m_buffer.swapVectorBuffer(other.m_buffer);
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
@@ -481,7 +531,7 @@ inline DequeIteratorBase<T, inlineCapacity, Allocator>::DequeIteratorBase(const 
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
-inline DequeIteratorBase<T, 0, Allocator>& DequeIteratorBase<T, inlineCapacity, Allocator>::operator=(const DequeIteratorBase<T, 0, Allocator>& other)
+inline DequeIteratorBase<T, inlineCapacity, Allocator>& DequeIteratorBase<T, inlineCapacity, Allocator>::operator=(const DequeIteratorBase<T, 0, Allocator>& other)
 {
     m_deque = other.m_deque;
     m_index = other.m_index;
@@ -567,13 +617,6 @@ inline void swap(Deque<T, inlineCapacity, Allocator>& a, Deque<T, inlineCapacity
 {
     a.swap(b);
 }
-
-#if !ENABLE(OILPAN)
-template <typename T, size_t N>
-struct NeedsTracing<Deque<T, N>> {
-    static const bool value = false;
-};
-#endif
 
 } // namespace WTF
 

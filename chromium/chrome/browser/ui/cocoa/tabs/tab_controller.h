@@ -6,7 +6,9 @@
 #define CHROME_BROWSER_UI_COCOA_TABS_TAB_CONTROLLER_H_
 
 #import <Cocoa/Cocoa.h>
-#include "base/memory/scoped_ptr.h"
+
+#include <memory>
+
 #import "chrome/browser/ui/cocoa/hover_close_button.h"
 #import "chrome/browser/ui/cocoa/tabs/tab_strip_drag_controller.h"
 #include "chrome/browser/ui/tabs/tab_menu_model.h"
@@ -21,7 +23,7 @@ enum TabLoadingState {
   kTabCrashed,
 };
 
-@class MediaIndicatorButton;
+@class AlertIndicatorButton;
 @class MenuController;
 namespace TabControllerInternal {
 class MenuDelegate;
@@ -44,7 +46,7 @@ class MenuDelegate;
 @interface TabController : NSViewController<TabDraggingEventTarget> {
  @private
   base::scoped_nsobject<SpriteView> iconView_;
-  base::scoped_nsobject<MediaIndicatorButton> mediaIndicatorButton_;
+  base::scoped_nsobject<AlertIndicatorButton> alertIndicatorButton_;
   base::scoped_nsobject<HoverCloseButton> closeButton_;
 
   NSRect originalIconFrame_;  // frame of iconView_ as loaded from nib
@@ -57,8 +59,8 @@ class MenuDelegate;
   TabLoadingState loadingState_;
   id<TabControllerTarget> target_;  // weak, where actions are sent
   SEL action_;  // selector sent when tab is selected by clicking
-  scoped_ptr<ui::SimpleMenuModel> contextMenuModel_;
-  scoped_ptr<TabControllerInternal::MenuDelegate> contextMenuDelegate_;
+  std::unique_ptr<ui::SimpleMenuModel> contextMenuModel_;
+  std::unique_ptr<TabControllerInternal::MenuDelegate> contextMenuDelegate_;
   base::scoped_nsobject<MenuController> contextMenuController_;
 }
 
@@ -75,7 +77,7 @@ class MenuDelegate;
 @property(assign, nonatomic) id target;
 @property(assign, nonatomic) GURL url;
 @property(readonly, nonatomic) NSView* iconView;
-@property(readonly, nonatomic) MediaIndicatorButton* mediaIndicatorButton;
+@property(readonly, nonatomic) AlertIndicatorButton* alertIndicatorButton;
 @property(readonly, nonatomic) HoverCloseButton* closeButton;
 
 // Default height for tabs.
@@ -100,8 +102,8 @@ class MenuDelegate;
 - (void)setIconImage:(NSImage*)image;
 - (void)setIconImage:(NSImage*)image withToastAnimation:(BOOL)animate;
 
-// Sets the current tab media state and updates the views.
-- (void)setMediaState:(TabMediaState)mediaState;
+// Sets the current tab alert state and updates the views.
+- (void)setAlertState:(TabAlertState)alertState;
 
 // Closes the associated TabView by relaying the message to |target_| to
 // perform the close.
@@ -127,7 +129,7 @@ class MenuDelegate;
 @interface TabController(TestingAPI)
 - (int)iconCapacity;
 - (BOOL)shouldShowIcon;
-- (BOOL)shouldShowMediaIndicator;
+- (BOOL)shouldShowAlertIndicator;
 - (BOOL)shouldShowCloseButton;
 @end  // TabController(TestingAPI)
 

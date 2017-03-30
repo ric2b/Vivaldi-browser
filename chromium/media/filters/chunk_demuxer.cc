@@ -13,6 +13,7 @@
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/bind_to_current_loop.h"
@@ -364,10 +365,14 @@ ChunkDemuxer::ChunkDemuxer(
       encrypted_media_init_data_cb_(encrypted_media_init_data_cb),
       enable_text_(false),
       media_log_(media_log),
+      pending_source_init_done_count_(0),
       duration_(kNoTimestamp()),
       user_specified_duration_(-1),
       liveness_(DemuxerStream::LIVENESS_UNKNOWN),
-      splice_frames_enabled_(splice_frames_enabled) {
+      splice_frames_enabled_(splice_frames_enabled),
+      detected_audio_track_count_(0),
+      detected_video_track_count_(0),
+      detected_text_track_count_(0) {
   DCHECK(!open_cb_.is_null());
   DCHECK(!encrypted_media_init_data_cb_.is_null());
 }
@@ -541,12 +546,22 @@ ChunkDemuxer::Status ChunkDemuxer::AddId(const std::string& id,
                                    base::Unretained(this));
   }
 
+  pending_source_init_done_count_++;
+
   source_state->Init(
       base::Bind(&ChunkDemuxer::OnSourceInitDone, base::Unretained(this)),
       has_audio, has_video, encrypted_media_init_data_cb_, new_text_track_cb);
 
   source_state_map_[id] = source_state.release();
   return kOk;
+}
+
+void ChunkDemuxer::SetTracksWatcher(
+    const std::string& id,
+    const MediaTracksUpdatedCB& tracks_updated_cb) {
+  base::AutoLock auto_lock(lock_);
+  CHECK(IsValidId(id));
+  source_state_map_[id]->SetTracksWatcher(tracks_updated_cb);
 }
 
 void ChunkDemuxer::RemoveId(const std::string& id) {
@@ -596,19 +611,16 @@ bool ChunkDemuxer::EvictCodedFrames(const std::string& id,
   return itr->second->EvictCodedFrames(media_time_dts, newDataSize);
 }
 
-void ChunkDemuxer::AppendData(
-    const std::string& id,
-    const uint8_t* data,
-    size_t length,
-    TimeDelta append_window_start,
-    TimeDelta append_window_end,
-    TimeDelta* timestamp_offset,
-    const MediaSourceState::InitSegmentReceivedCB& init_segment_received_cb) {
+void ChunkDemuxer::AppendData(const std::string& id,
+                              const uint8_t* data,
+                              size_t length,
+                              TimeDelta append_window_start,
+                              TimeDelta append_window_end,
+                              TimeDelta* timestamp_offset) {
   DVLOG(1) << "AppendData(" << id << ", " << length << ")";
 
   DCHECK(!id.empty());
   DCHECK(timestamp_offset);
-  DCHECK(!init_segment_received_cb.is_null());
 
   Ranges<TimeDelta> ranges;
 
@@ -629,12 +641,10 @@ void ChunkDemuxer::AppendData(
       case INITIALIZING:
       case INITIALIZED:
         DCHECK(IsValidId(id));
-        if (!source_state_map_[id]->Append(data, length,
-                                           append_window_start,
+        if (!source_state_map_[id]->Append(data, length, append_window_start,
                                            append_window_end,
-                                           timestamp_offset,
-                                           init_segment_received_cb)) {
-          ReportError_Locked(PIPELINE_ERROR_DECODE);
+                                           timestamp_offset)) {
+          ReportError_Locked(CHUNK_DEMUXER_ERROR_APPEND_FAILED);
           return;
         }
         break;
@@ -824,6 +834,8 @@ void ChunkDemuxer::MarkEndOfStream(PipelineStatus status) {
 
   // Give a chance to resume the pending seek process.
   if (status != PIPELINE_OK) {
+    DCHECK(status == CHUNK_DEMUXER_ERROR_EOS_STATUS_DECODE_ERROR ||
+           status == CHUNK_DEMUXER_ERROR_EOS_STATUS_NETWORK_ERROR);
     ReportError_Locked(status);
     return;
   }
@@ -956,11 +968,28 @@ void ChunkDemuxer::OnSourceInitDone(
       video_->SetLiveness(params.liveness);
   }
 
+  detected_audio_track_count_ += params.detected_audio_track_count;
+  detected_video_track_count_ += params.detected_video_track_count;
+  detected_text_track_count_ += params.detected_text_track_count;
+
   // Wait until all streams have initialized.
-  if ((!source_id_audio_.empty() && !audio_) ||
-      (!source_id_video_.empty() && !video_)) {
+  pending_source_init_done_count_--;
+
+  if (pending_source_init_done_count_ > 0)
     return;
-  }
+
+  DCHECK_EQ(0, pending_source_init_done_count_);
+  DCHECK((source_id_audio_.empty() == !audio_) &&
+         (source_id_video_.empty() == !video_));
+
+  // Record detected track counts by type corresponding to an MSE playback.
+  // Counts are split into 50 buckets, capped into [0,100] range.
+  UMA_HISTOGRAM_COUNTS_100("Media.MSE.DetectedTrackCount.Audio",
+                           detected_audio_track_count_);
+  UMA_HISTOGRAM_COUNTS_100("Media.MSE.DetectedTrackCount.Video",
+                           detected_video_track_count_);
+  UMA_HISTOGRAM_COUNTS_100("Media.MSE.DetectedTrackCount.Text",
+                           detected_text_track_count_);
 
   SeekAllSources(GetStartTime());
   StartReturningData();

@@ -219,8 +219,9 @@ bool IsPartialRasterEnabled() {
   // Zero copy currently doesn't take advantage of partial raster.
   if (IsZeroCopyUploadEnabled())
     return false;
+
   const auto& command_line = *base::CommandLine::ForCurrentProcess();
-  return command_line.HasSwitch(switches::kEnablePartialRaster);
+  return !command_line.HasSwitch(switches::kDisablePartialRaster);
 }
 
 bool IsGpuMemoryBufferCompositorResourcesEnabled() {
@@ -237,12 +238,6 @@ bool IsGpuMemoryBufferCompositorResourcesEnabled() {
 
   // Native GPU memory buffers are required.
   if (!BrowserGpuMemoryBufferManager::IsNativeGpuMemoryBuffersEnabled())
-    return false;
-
-  // GPU rasterization does not support GL_TEXTURE_RECTANGLE_ARB, which is
-  // required by GpuMemoryBuffers on Mac.
-  // http://crbug.com/551072
-  if (IsForceGpuRasterizationEnabled() || IsGpuRasterizationEnabled())
     return false;
 
 #if defined(OS_MACOSX)

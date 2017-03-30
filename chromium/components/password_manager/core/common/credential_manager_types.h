@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
@@ -30,6 +31,8 @@ enum class CredentialType {
   CREDENTIAL_TYPE_FEDERATED,
   CREDENTIAL_TYPE_LAST = CREDENTIAL_TYPE_FEDERATED
 };
+
+std::ostream& operator<<(std::ostream& out, CredentialType type);
 
 struct CredentialInfo {
   CredentialInfo();
@@ -61,9 +64,15 @@ struct CredentialInfo {
 };
 
 // Create a new autofill::PasswordForm object based on |info|, valid in the
-// context of |origin|. Returns an empty scoped_ptr for CREDENTIAL_TYPE_EMPTY.
-scoped_ptr<autofill::PasswordForm> CreatePasswordFormFromCredentialInfo(
+// context of |origin|. Returns an empty std::unique_ptr for
+// CREDENTIAL_TYPE_EMPTY.
+std::unique_ptr<autofill::PasswordForm> CreatePasswordFormFromCredentialInfo(
     const CredentialInfo& info,
+    const GURL& origin);
+
+// Create a new autofill::PasswordForm object based on |origin|. The result
+// plays the role of an observed form on that page.
+std::unique_ptr<autofill::PasswordForm> CreateObservedPasswordFormFromOrigin(
     const GURL& origin);
 
 }  // namespace password_manager

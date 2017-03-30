@@ -22,17 +22,13 @@ class LevelDBApp : public mojo::ShellClient,
  private:
   // |ShellClient| override:
   void Initialize(mojo::Connector* connector,
-                  const std::string& url,
-                  uint32_t id,
-                  uint32_t user_id) override;
+                  const mojo::Identity& identity,
+                  uint32_t id) override;
   bool AcceptConnection(mojo::Connection* connection) override;
-
-  // TODO(erg): What do we have to do on shell error?
-  // bool OnShellConnectionError() override;
 
   // |InterfaceFactory<LevelDBService>| implementation:
   void Create(mojo::Connection* connection,
-              mojo::InterfaceRequest<LevelDBService> request) override;
+              leveldb::LevelDBServiceRequest request) override;
 
   mojo::TracingImpl tracing_;
   scoped_ptr<LevelDBService> service_;

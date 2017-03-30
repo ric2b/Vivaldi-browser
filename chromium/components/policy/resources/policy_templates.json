@@ -137,7 +137,7 @@
 #   persistent IDs for all fields (but not for groups!) are needed. These are
 #   specified by the 'id' keys of each policy. NEVER CHANGE EXISTING IDs,
 #   because doing so would break the deployed wire format!
-#   For your editing convenience: highest ID currently used: 320
+#   For your editing convenience: highest ID currently used: 325
 #
 # Placeholders:
 #   The following placeholder strings are automatically substituted:
@@ -148,9 +148,10 @@
 #
 # Device Policy:
 #   An additional flag 'device_only' (optional, defaults to False) indicates
-#   that this policy is only supported as a device-level Cloud Policy.
-#   In that case no entry in the UserPolicy Protobuf is generated and
-#   it is assumed that it will be added to the DevicePolicy Protobuf manually.
+#   that this policy is only supported as a device-level Cloud Policy. In that
+#   case no entry in the UserPolicy Protobuf is generated and it is assumed that
+#   it will be added to the DevicePolicy Protobuf manually.  Device policy only
+#   exists on Chrome OS.
 #
 # Enterprise defaults:
 #   For managed users on Chrome OS (i.e. users receiving user policy from the
@@ -419,8 +420,8 @@
         {
           'name': 'NetworkPredictionWifiOnly',
           'value': 1,
-          'caption': '''Predict network actions on any network that is not
-          cellular''',
+          'caption': '''Predict network actions on any network that is not cellular.
+          (Deprecated in 50, removed in 52. After 52, if value 1 is set, it will be treated as 0 - predict network actions on any network connection.)''',
         },
         {
           'name': 'NetworkPredictionNever',
@@ -1148,7 +1149,7 @@
       'name': 'PasswordManager',
       'type': 'group',
       'caption': '''Password manager''',
-      'desc': '''Configures the password manager. If the password manager is enabled, then you can choose to enable or disable whether the user may show stored passwords in clear text.''',
+      'desc': '''Configures the password manager.''',
       'policies': [
         {
           'name': 'PasswordManagerEnabled',
@@ -1186,16 +1187,19 @@
           'name': 'PasswordManagerAllowShowPasswords',
           'type': 'main',
           'schema': { 'type': 'boolean' },
-          'supported_on': ['chrome.*:8-', 'chrome_os:11-'],
+          'supported_on': ['chrome.*:8-50', 'chrome_os:11-50'],
           'features': {
             'dynamic_refresh': True,
             'per_profile': True,
           },
+          'deprecated': True,
           'example_value': False,
           'id': 17,
-          'caption': '''Allow users to show passwords in Password Manager''',
+          'caption': '''Allow users to show passwords in Password Manager (deprecated)''',
           'tags': [],
-          'desc': '''Controls whether the user may show passwords in clear text in the password manager.
+          'desc': '''The associated setting was used before reauthentication on viewing passwords was introduced. Since then, the setting and hence this policy had no effect on the behavior of Chrome. The current behavior of Chrome is now the same as if the the policy was set to disable showing passwords in clear text in the password manager settings page. That means that the settings page contains just a placeholder, and only upon the user clicking "Show" (and reauthenticating, if applicable) Chrome shows the password. Original description of the policy follows below.
+
+          Controls whether the user may show passwords in clear text in the password manager.
 
           If you disable this setting, the password manager does not allow showing stored passwords in clear text in the password manager window.
 
@@ -1548,16 +1552,16 @@
       'name': 'Proxy',
       'type': 'group',
       'caption': '''Proxy server''',
-      'desc': '''Allows you to specify the proxy server used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing proxy settings.
+      'desc': '''Allows you to specify the proxy server used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps and prevents users from changing proxy settings.
 
-      If you choose to never use a proxy server and always connect directly, all other options are ignored.
+      If you choose to never use a proxy server and always connect directly, all other options are ignored. ARC-apps will use the current network's default proxy server if any.
 
       If you choose to auto detect the proxy server, all other options are ignored.
 
       For detailed examples, visit:
       <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>
 
-      If you enable this setting, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> ignores all proxy-related options specified from the command line.
+      If you enable this setting, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps ignore all proxy-related options specified from the command line.
 
       Leaving these policies not set will allow the users to choose the proxy settings on their own.''',
       'policies': [
@@ -1615,20 +1619,22 @@
           'id': 21,
           'caption': '''Choose how to specify proxy server settings''',
           'tags': [],
-          'desc': '''Allows you to specify the proxy server used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing proxy settings.
+          'desc': '''Allows you to specify the proxy server used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps and prevents users from changing proxy settings.
 
-          If you choose to never use a proxy server and always connect directly, all other options are ignored.
+          If you choose to never use a proxy server and always connect directly, all other options are ignored. ARC-apps will use the current network's default proxy server if any.
 
-          If you choose to use system proxy settings or auto detect the proxy server, all other options are ignored.
+          If you choose to use system proxy settings, all other options are ignored. ARC-apps will use the current network's default proxy server if any.
 
-          If you choose fixed server proxy mode, you can specify further options in 'Address or URL of proxy server' and 'Comma-separated list of proxy bypass rules'.
+          If you choose to auto detect the proxy server, all other options are ignored.
+
+          If you choose fixed server proxy mode, you can specify further options in 'Address or URL of proxy server' and 'Comma-separated list of proxy bypass rules'. ARC-apps will only use the HTTP proxy server with the highest priority.
 
           If you choose to use a .pac proxy script, you must specify the URL to the script in 'URL to a proxy .pac file'.
 
           For detailed examples, visit:
           <ph name="PROXY_HELP_URL">https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett<ex>https://www.chromium.org/developers/design-documents/network-settings#TOC-Command-line-options-for-proxy-sett</ex></ph>
 
-          If you enable this setting, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> ignores all proxy-related options specified from the command line.
+          If you enable this setting, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps ignore all proxy-related options specified from the command line.
 
           Leaving this policy not set will allow the users to choose the proxy settings on their own.''',
         },
@@ -1678,7 +1684,7 @@
           'tags': [],
           'desc': '''This policy is deprecated, use ProxyMode instead.
 
-          Allows you to specify the proxy server used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing proxy settings.
+          Allows you to specify the proxy server used by <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps and prevents users from changing proxy settings.
 
           If you choose to never use a proxy server and always connect directly, all other options are ignored.
 
@@ -1765,7 +1771,7 @@
           'id': 25,
           'caption': '''Proxy bypass rules''',
           'tags': [],
-          'desc': '''<ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will bypass any proxy for the list of hosts given here.
+          'desc': '''<ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps will bypass any proxy for the list of hosts given here.
 
           This policy only takes effect if you have selected manual proxy settings at 'Choose how to specify proxy server settings'.
 
@@ -1809,7 +1815,7 @@
       'id': 116,
       'caption': '''Proxy settings''',
       'tags': ['system-security'],
-      'desc': '''Configures the proxy settings for <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.
+      'desc': '''Configures the proxy settings for <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and ARC-apps.
 
       This policy isn't ready for usage yet, please don't use it.''',
     },
@@ -5671,11 +5677,15 @@
       If enabled or not configured (default), the user will be prompted for
       video capture access except for URLs configured in the
       VideoCaptureAllowedUrls list which will be granted access without prompting.
+      ARC-apps will be able to access the camera if they have been given
+      permission.
 
       When this policy is disabled, the user will never be prompted and video
       capture only be available to URLs configured in VideoCaptureAllowedUrls.
+      ARC-apps will not be able to access the camera.
 
-      This policy affects all types of video inputs and not only the built-in camera.''',
+      Outside of ARC-apps, this policy affects all types of video inputs and
+      not only the built-in camera.''',
     },
     {
       'name': 'VideoCaptureAllowedUrls',
@@ -5737,7 +5747,9 @@
 
       New devices start out with the timezone set to "US/Pacific".
 
-      The format of the value follows the names of timezones in the "IANA Time Zone Database" (see "https://en.wikipedia.org/wiki/Tz_database"). In particular, most timezones can be referred to by "continent/large_city" or "ocean/large_city".''',
+      The format of the value follows the names of timezones in the "IANA Time Zone Database" (see "https://en.wikipedia.org/wiki/Tz_database"). In particular, most timezones can be referred to by "continent/large_city" or "ocean/large_city".
+
+      Setting this policy completely disables automatic timezone resolve by device location. It also overrides SystemTimezoneAutomaticDetection policy.''',
     },
     {
       'name': 'SystemUse24HourClock',
@@ -7487,6 +7499,7 @@
           'properties': {
             'name': { 'type': 'string' },
             'url': { 'type': 'string' },
+            'toplevel_name': { 'type': 'string' },
             'children': {
               'type': 'array',
               'items': { '$ref': 'BookmarkType' },
@@ -7542,7 +7555,9 @@
       name="GOOGLE_COM">"google.com"</ph> becomes <ph
       name="HTTPS_GOOGLE_COM">"https://google.com/"</ph>.
 
-      These bookmarks are placed in a "Managed bookmarks" folder that can't be modified by the user, but the user can choose to hide it from the bookmark bar. Managed bookmarks are not synced to the user account and can't be modified by extensions.''',
+      These bookmarks are placed in a "Managed bookmarks" folder that can't be modified by the user, but the user can choose to hide it from the bookmark bar. Managed bookmarks are not synced to the user account and can't be modified by extensions.
+
+      The folder name for the bookmarks is customizable by adding a {"toplevel_name": "some name"} list item.''',
     },
     {
       'name': 'DataCompressionProxyEnabled',
@@ -8266,6 +8281,188 @@
       If the policy is set to true, the value of required_platform_version manifest key of the auto launched with zero delay kiosk app is used as auto update target version prefix.
 
       If the policy is not configured or set to false, the required_platform_version manifest key is ignored and auto update proceeds as normal.''',
+    },
+    {
+      'name': 'LoginAuthenticationBehavior',
+      'type': 'int-enum',
+      'schema': {
+        'type': 'integer',
+        'enum': [ 0, 1, 2 ],
+      },
+      'items': [
+        {
+          'name': 'GAIA',
+          'value': 0,
+          'caption': '''Authentication via the default GAIA flow''',
+        },
+        {
+          'name': 'SAML_INTERSTITIAL',
+          'value': 1,
+          'caption': '''Redirect to SAML IdP after user confirmation''',
+        },
+      ],
+      'supported_on': ['chrome_os:51-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True,
+      },
+      'example_value': 0,
+      'id': 321,
+      'caption': '''Configure the login authentication behavior''',
+      'tags': [],
+      'desc': '''When this policy is set, the login authentication flow will be in one of the following ways depending on the value of the setting:
+
+      If set to GAIA, login will be done via the normal GAIA authentication flow.
+
+      If set to SAML_INTERSTITIAL, login will show an interstitial screen offering the user to go forward with authentication via the SAML IdP of the device's enrollment domain, or go back to the normal GAIA login flow.'''
+    },
+    {
+      'name': 'UsbDetachableWhitelist',
+      'type': 'list',
+      'schema': {
+        'type': 'array',
+        'items': {
+          'type': 'object',
+          'id': 'UsbDeviceId',
+          'properties': {
+            'vendor_id': { 'type': 'integer' },
+            'product_id': { 'type': 'integer' },
+          },
+        },
+      },
+      'supported_on': ['chrome_os:51-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True,
+      },
+      'example_value': [
+        {
+          'vendor_id' : 1027,
+          'product_id' : 24577,
+        },
+        {
+          'vendor_id' : 16700,
+          'product_id' : 8453,
+        }
+      ],
+      'id': 322,
+      'caption': '''Whitelist of USB detachable devices''',
+      'tags': ['system-security'],
+      'desc': '''Defines the list of USB devices that are allowed to be detached from their kernel driver in order to be used through the chrome.usb API directly inside a web application. Entries are pairs of USB Vendor Identifier and Product Identifier to identify a specific hardware.
+
+      If this policy is not configured, the list of a detachable USB devices is considered as empty.''',
+    },
+    {
+      'name': 'DeviceAllowBluetooth',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome_os:51-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True,
+      },
+      'example_value': True,
+      'id': 323,
+      'caption': '''Allow bluetooth on device''',
+      'tags': [],
+      'desc': '''If this policy is set to false, <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> will disable Bluetooth and the user cannot enable it back.
+
+      If this policy is set to true or left unset, the user will be able to enable or disable Bluetooth as he wishes.
+
+      If this policy is set, the user cannot change or override it.''',
+    },
+    {
+      'name': 'SuppressUnsupportedOSWarning',
+      'caption': '''Suppress the unsupported OS warning''',
+      'desc': '''Suppresses the warning that appears when <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> is running on a computer or operating system that is no longer supported.''',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.*:49-','chrome_os:49-'],
+      'features': {
+        'dynamic_refresh': False,
+        'per_profile': False,
+      },
+      'example_value': True,
+      'tags': ['system-security'],
+      'id': 324,
+    },
+    {
+      'name': 'DeviceQuirksDownloadEnabled',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome_os:51-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True,
+      },
+      'example_value': True,
+      'id': 325,
+      'caption': '''Enable queries to Quirks Server for hardware profiles''',
+      'tags': [],
+      'desc':
+      '''The Quirks Server provides hardware-specific configuration files, like
+      ICC display profiles to adjust monitor calibration.
+
+      When this policy is set to false, the device will not attempt to
+      contact the Quirks Server to download configuration files.
+
+      If this policy is true or not configured then
+      <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> will
+      automatically contact the Quirks Server and download configuration files,
+      if available, and store them on the device.  Such files might, for
+      example, be used to improve display quality of attached monitors.''',
+    },
+    {
+      'name': 'SystemTimezoneAutomaticDetection',
+      'type': 'int-enum',
+      'schema': {
+        'type': 'integer',
+        'enum': [ 0, 1, 2, 3 ],
+      },
+      'items': [
+        {
+          'name': 'TimezoneAutomaticDetectionUsersDecide',
+          'value': 0,
+          'caption': '''Let users decide.''',
+        },
+        {
+          'name': 'TimezoneAutomaticDetectionDisabled',
+          'value': 1,
+          'caption': '''Never auto-detect timezone.''',
+        },
+        {
+          'name': 'TimezoneAutomaticDetectionIPOnly',
+          'value': 2,
+          'caption': '''Always use coarse timezone detection.''',
+        },
+        {
+          'name': 'TimezoneAutomaticDetectionSendWiFiAccessPoints',
+          'value': 3,
+          'caption': '''Always send WiFi acess-points to server while resolving timezone.''',
+        },
+      ],
+      'supported_on': ['chrome_os:51-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True,
+      },
+      'example_value': 0,
+      'id': 326,
+      'caption': '''Configure the automatic timezone detection method''',
+      'tags': ['google-sharing'],
+      'desc': '''When this policy is set, automatic timezone detection flow will be in one of the following ways depending on the value of the setting:
+
+      If set to TimezoneAutomaticDetectionUsersDecide, users would be able to control automatic timezone detection using normal controls in chrome://settings.
+
+      If set to TimezoneAutomaticDetectionDisabled, automatic timezone controls in chrome://settings will be disabled. Automatic timezone detection will be always off.
+
+      If set to TimezoneAutomaticDetectionIPOnly, timezone controls in chrome://settings will be disabled. Automatic timezone detection will be always on. Timezone detection will use IP-only method to resolve location.
+
+      If set to TimezoneAutomaticDetectionSendWiFiAccessPoints, timezone controls in chrome://settings will be disabled. Automatic timezone detection will be always on. The list of visible WiFi access-points will be always sent to Geolocation API server for fine-grained timezone detection.
+
+      If this policy is not set, it will behave as if TimezoneAutomaticDetectionUsersDecide is set.
+
+      If SystemTimezone policy is set, it overrides this policy. In this case automatic timezone detection is completely disabled.''',
     },
   ],
   'messages': {

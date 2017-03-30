@@ -32,7 +32,7 @@ class FileSystemImpl : public FileSystem {
   FileSystemImpl(mojo::Connection* connection,
                  mojo::InterfaceRequest<FileSystem> request,
                  base::FilePath persistent_dir,
-                 LockTable* lock_table);
+                 scoped_refptr<LockTable> lock_table);
   ~FileSystemImpl() override;
 
   // |Files| implementation:
@@ -44,9 +44,9 @@ class FileSystemImpl : public FileSystem {
       const OpenPersistentFileSystemCallback& callback) override;
 
  private:
-  const std::string remote_application_url_;
+  const std::string remote_application_name_;
   mojo::StrongBinding<FileSystem> binding_;
-  LockTable* lock_table_;
+  scoped_refptr<LockTable> lock_table_;
 
   base::FilePath persistent_dir_;
 

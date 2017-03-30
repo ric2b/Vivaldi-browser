@@ -29,7 +29,7 @@
 
 #include "core/CoreExport.h"
 #include "core/page/Page.h"
-#include "platform/RefCountedSupplement.h"
+#include "platform/heap/Handle.h"
 
 namespace blink {
 
@@ -37,16 +37,9 @@ class ContextFeaturesClient;
 class Document;
 class Page;
 
-#if ENABLE(OILPAN)
-class ContextFeatures final : public GarbageCollectedFinalized<ContextFeatures>, public HeapSupplement<Page> {
+class ContextFeatures final : public GarbageCollectedFinalized<ContextFeatures>, public Supplement<Page> {
     USING_GARBAGE_COLLECTED_MIXIN(ContextFeatures);
 public:
-    typedef HeapSupplement<Page> SupplementType;
-#else
-class ContextFeatures : public RefCountedSupplement<Page, ContextFeatures> {
-public:
-    typedef RefCountedSupplement<Page, ContextFeatures> SupplementType;
-#endif
     enum FeatureType {
         PagePopup = 0,
         MutationEvents,
@@ -54,18 +47,14 @@ public:
     };
 
     static const char* supplementName();
-    static ContextFeatures* defaultSwitch();
-    static PassRefPtrWillBeRawPtr<ContextFeatures> create(PassOwnPtr<ContextFeaturesClient>);
+    static ContextFeatures& defaultSwitch();
+    static RawPtr<ContextFeatures> create(PassOwnPtr<ContextFeaturesClient>);
 
     static bool pagePopupEnabled(Document*);
     static bool mutationEventsEnabled(Document*);
 
     bool isEnabled(Document*, FeatureType, bool) const;
     void urlDidChange(Document*);
-
-#if ENABLE(OILPAN)
-    DEFINE_INLINE_VIRTUAL_TRACE() { HeapSupplement<Page>::trace(visitor); }
-#endif
 
 private:
     explicit ContextFeatures(PassOwnPtr<ContextFeaturesClient> client)
@@ -88,9 +77,9 @@ public:
 CORE_EXPORT void provideContextFeaturesTo(Page&, PassOwnPtr<ContextFeaturesClient>);
 void provideContextFeaturesToDocumentFrom(Document&, Page&);
 
-inline PassRefPtrWillBeRawPtr<ContextFeatures> ContextFeatures::create(PassOwnPtr<ContextFeaturesClient> client)
+inline RawPtr<ContextFeatures> ContextFeatures::create(PassOwnPtr<ContextFeaturesClient> client)
 {
-    return adoptRefWillBeNoop(new ContextFeatures(std::move(client)));
+    return new ContextFeatures(std::move(client));
 }
 
 inline bool ContextFeatures::isEnabled(Document* document, FeatureType type, bool defaultValue) const

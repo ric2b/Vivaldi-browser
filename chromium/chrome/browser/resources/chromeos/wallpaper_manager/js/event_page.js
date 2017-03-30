@@ -162,7 +162,7 @@ SurpriseWallpaper.prototype.setRandomWallpaper_ = function(dateString) {
       var wallpaperURL = wallpaper.base_url + Constants.HighResolutionSuffix;
       var onSuccess = function() {
         WallpaperUtil.saveWallpaperInfo(wallpaperURL, wallpaper.default_layout,
-            Constants.WallpaperSourceEnum.Online);
+            Constants.WallpaperSourceEnum.Daily, '');
         WallpaperUtil.saveToLocalStorage(
             Constants.AccessLastSurpriseWallpaperChangedDate,
             dateString, function() {
@@ -198,7 +198,7 @@ SurpriseWallpaper.prototype.setWallpaperFromRssItem_ = function(item,
                                                  'surprise_wallpaper',
                                                  onSuccess);
       WallpaperUtil.saveWallpaperInfo(url, layout,
-                                      Constants.WallpaperSourceEnum.Online);
+                                      Constants.WallpaperSourceEnum.Daily, '');
       var dateString = new Date().toDateString();
       WallpaperUtil.saveToLocalStorage(
           Constants.AccessLastSurpriseWallpaperChangedDate,
@@ -311,7 +311,6 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
     if (syncEnabled) {
       // If sync theme is enabled, use values from chrome.storage.sync to sync
       // wallpaper changes.
-      WallpaperUtil.requestSyncFS(function() {});
       if (changes[Constants.AccessSyncSurpriseMeEnabledKey]) {
         if (changes[Constants.AccessSyncSurpriseMeEnabledKey].newValue) {
           SurpriseWallpaper.getInstance().next();
@@ -335,12 +334,29 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
             wpDocument.querySelector('#wallpaper-grid').classList.add('small');
             if (wpDocument.querySelector('.check'))
               wpDocument.querySelector('.check').style.visibility = 'hidden';
+            wpDocument.querySelector('#checkbox').classList.remove('checked');
+            wpDocument.querySelector('#categories-list').disabled = false;
+            wpDocument.querySelector('#wallpaper-grid').disabled = false;
           });
         } else {
           wpDocument.querySelector('#wallpaper-set-by-message').textContent =
               '';
           wpDocument.querySelector('#wallpaper-grid').classList.remove('small');
-          wpDocument.querySelector('.check').style.visibility = 'visible';
+          Constants.WallpaperSyncStorage.get(
+              Constants.AccessSyncSurpriseMeEnabledKey, function(item) {
+            var enable = item[Constants.AccessSyncSurpriseMeEnabledKey];
+            if (enable) {
+              wpDocument.querySelector('#checkbox').classList.add('checked');
+              if (wpDocument.querySelector('.check'))
+                wpDocument.querySelector('.check').style.visibility = 'hidden';
+            } else {
+              wpDocument.querySelector('#checkbox').classList.remove('checked');
+              if (wpDocument.querySelector('.check'))
+                wpDocument.querySelector('.check').style.visibility = 'visible';
+            }
+            wpDocument.querySelector('#categories-list').disabled = enable;
+            wpDocument.querySelector('#wallpaper-grid').disabled = enable;
+          });
         }
       };
 

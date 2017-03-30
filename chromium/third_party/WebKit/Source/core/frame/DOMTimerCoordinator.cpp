@@ -17,7 +17,7 @@ DOMTimerCoordinator::DOMTimerCoordinator(PassOwnPtr<WebTaskRunner> timerTaskRunn
 {
 }
 
-int DOMTimerCoordinator::installNewTimeout(ExecutionContext* context, PassOwnPtrWillBeRawPtr<ScheduledAction> action, int timeout, bool singleShot)
+int DOMTimerCoordinator::installNewTimeout(ExecutionContext* context, ScheduledAction* action, int timeout, bool singleShot)
 {
     // FIXME: DOMTimers depends heavily on ExecutionContext. Decouple them.
     ASSERT(context->timers() == this);
@@ -44,9 +44,7 @@ void DOMTimerCoordinator::removeTimeoutByID(int timeoutID)
 
 DEFINE_TRACE(DOMTimerCoordinator)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_timers);
-#endif
 }
 
 int DOMTimerCoordinator::nextID()

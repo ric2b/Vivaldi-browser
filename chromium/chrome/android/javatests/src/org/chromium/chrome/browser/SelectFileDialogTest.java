@@ -104,12 +104,12 @@ public class SelectFileDialogTest extends ChromeActivityTestCaseBase<ChromeActiv
     @Feature({"TextInput", "Main"})
     public void testSelectFileAndCancelRequest() throws Throwable {
         DOMUtils.clickNode(this, mContentViewCore, "input_file");
-        CriteriaHelper.pollForCriteria(new IntentSentCriteria());
+        CriteriaHelper.pollInstrumentationThread(new IntentSentCriteria());
         assertEquals(Intent.ACTION_CHOOSER, mActivityWindowAndroidForTest.lastIntent.getAction());
         resetActivityWindowAndroidForTest();
 
         DOMUtils.clickNode(this, mContentViewCore, "input_file_multiple");
-        CriteriaHelper.pollForCriteria(new IntentSentCriteria());
+        CriteriaHelper.pollInstrumentationThread(new IntentSentCriteria());
         assertEquals(Intent.ACTION_CHOOSER, mActivityWindowAndroidForTest.lastIntent.getAction());
         Intent contentIntent = (Intent)
                 mActivityWindowAndroidForTest.lastIntent.getParcelableExtra(Intent.EXTRA_INTENT);
@@ -120,13 +120,13 @@ public class SelectFileDialogTest extends ChromeActivityTestCaseBase<ChromeActiv
         resetActivityWindowAndroidForTest();
 
         DOMUtils.clickNode(this, mContentViewCore, "input_image");
-        CriteriaHelper.pollForCriteria(new IntentSentCriteria());
+        CriteriaHelper.pollInstrumentationThread(new IntentSentCriteria());
         assertEquals(MediaStore.ACTION_IMAGE_CAPTURE,
                 mActivityWindowAndroidForTest.lastIntent.getAction());
         resetActivityWindowAndroidForTest();
 
         DOMUtils.clickNode(this, mContentViewCore, "input_audio");
-        CriteriaHelper.pollForCriteria(new IntentSentCriteria());
+        CriteriaHelper.pollInstrumentationThread(new IntentSentCriteria());
         assertEquals(MediaStore.Audio.Media.RECORD_SOUND_ACTION,
                 mActivityWindowAndroidForTest.lastIntent.getAction());
         resetActivityWindowAndroidForTest();

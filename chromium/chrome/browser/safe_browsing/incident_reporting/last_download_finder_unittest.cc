@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/guid.h"
 #include "base/location.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
@@ -71,7 +72,6 @@ scoped_ptr<KeyedService> BuildHistoryService(content::BrowserContext* context) {
               BookmarkModelFactory::GetForProfile(profile))),
           scoped_ptr<history::VisitDelegate>()));
   if (history_service->Init(
-          profile->GetPrefs()->GetString(prefs::kAcceptLanguages),
           history::HistoryDatabaseParamsForPath(profile->GetPath()))) {
     return std::move(history_service);
   }
@@ -267,8 +267,12 @@ class LastDownloadFinderTest : public testing::Test {
     return history::DownloadRow(
         base::FilePath(file_path), base::FilePath(file_path),
         std::vector<GURL>(1, GURL("http://www.google.com")),  // url_chain
-        GURL(),                                               // referrer
-        "application/octet-stream",                           // mime_type
+        GURL("http://referrer.example.com/"),                 // referrer
+        GURL("http://site-url.example.com/"),        // site instance URL
+        GURL("http://tab-url.example.com/"),         // tab URL
+        GURL("http://tab-referrer.example.com/"),    // tab referrer URL
+        std::string(),                               // HTTP method
+        "application/octet-stream",                  // mime_type
         "application/octet-stream",                  // original_mime_type
         now - base::TimeDelta::FromMinutes(10),      // start
         now - base::TimeDelta::FromMinutes(9),       // end
@@ -280,7 +284,9 @@ class LastDownloadFinderTest : public testing::Test {
         history::DownloadDangerType::NOT_DANGEROUS,  // danger_type
         history::ToHistoryDownloadInterruptReason(
             content::DOWNLOAD_INTERRUPT_REASON_NONE),  // interrupt_reason,
+        std::string(),                                 // hash
         download_id_++,                                // id
+        base::GenerateGUID(),                          // GUID
         false,                                         // download_opened
         std::string(),                                 // ext_id
         std::string());                                // ext_name

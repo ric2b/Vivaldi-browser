@@ -28,18 +28,26 @@ component("blimp_net") {
     "client_connection_manager.h",
     "common.cc",
     "common.h",
+    "compressed_packet_reader.cc",
+    "compressed_packet_reader.h",
+    "compressed_packet_writer.cc",
+    "compressed_packet_writer.h",
     "connection_error_observer.h",
     "connection_handler.h",
     "engine_authentication_handler.cc",
     "engine_authentication_handler.h",
     "engine_connection_manager.cc",
     "engine_connection_manager.h",
+    "exact_match_cert_verifier.cc",
+    "exact_match_cert_verifier.h",
     "input_message_converter.cc",
     "input_message_converter.h",
     "input_message_generator.cc",
     "input_message_generator.h",
     "null_blimp_message_processor.cc",
     "null_blimp_message_processor.h",
+    "ssl_client_transport.cc",
+    "ssl_client_transport.h",
     "stream_packet_reader.cc",
     "stream_packet_reader.h",
     "stream_packet_writer.cc",
@@ -50,6 +58,8 @@ component("blimp_net") {
     "tcp_client_transport.h",
     "tcp_engine_transport.cc",
     "tcp_engine_transport.h",
+    "thread_pipe_manager.cc",
+    "thread_pipe_manager.h",
   ]
 
   defines = [ "BLIMP_NET_IMPLEMENTATION=1" ]
@@ -59,6 +69,8 @@ component("blimp_net") {
     "//blimp/common:blimp_common",
     "//blimp/common/proto",
     "//net",
+    "//third_party/zlib",
+    "//ui/base/ime:text_input_types",
   ]
 }
 
@@ -91,12 +103,15 @@ source_set("unit_tests") {
     "blimp_message_thread_pipe_unittest.cc",
     "browser_connection_handler_unittest.cc",
     "client_connection_manager_unittest.cc",
+    "compressed_packet_unittest.cc",
     "engine_authentication_handler_unittest.cc",
     "engine_connection_manager_unittest.cc",
     "input_message_unittest.cc",
+    "ssl_client_transport_unittest.cc",
     "stream_packet_reader_unittest.cc",
     "stream_packet_writer_unittest.cc",
     "tcp_transport_unittest.cc",
+    "thread_pipe_manager_unittest.cc",
   ]
 
   deps = [
@@ -105,6 +120,7 @@ source_set("unit_tests") {
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
+    "//blimp/common:blimp_common",
     "//blimp/common/proto",
     "//net:test_support",
     "//testing/gmock",

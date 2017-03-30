@@ -15,6 +15,7 @@
 #include "platform/weborigin/KURL.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
@@ -52,11 +53,11 @@ public:
     explicit LoaderFactory(PassOwnPtr<WebDataConsumerHandle> handle)
         : m_client(nullptr)
         , m_handle(handle) {}
-    PassRefPtr<ThreadableLoader> create(ExecutionContext&, ThreadableLoaderClient* client, const ThreadableLoaderOptions&, const ResourceLoaderOptions&) override
+    PassOwnPtr<ThreadableLoader> create(ExecutionContext&, ThreadableLoaderClient* client, const ThreadableLoaderOptions&, const ResourceLoaderOptions&) override
     {
         m_client = client;
 
-        RefPtr<MockThreadableLoader> loader = MockThreadableLoader::create();
+        OwnPtr<MockThreadableLoader> loader = MockThreadableLoader::create();
         EXPECT_CALL(*loader, start(_)).WillOnce(InvokeWithoutArgs(this, &LoaderFactory::handleDidReceiveResponse));
         EXPECT_CALL(*loader, cancel()).Times(1);
         return loader.release();
@@ -77,7 +78,7 @@ public:
     FetchFormDataConsumerHandleTest() : m_page(DummyPageHolder::create(IntSize(1, 1))) {}
 
 protected:
-    Document* document() { return &m_page->document(); }
+    Document* getDocument() { return &m_page->document(); }
 
     OwnPtr<DummyPageHolder> m_page;
 };
@@ -190,7 +191,7 @@ TEST_F(FetchFormDataConsumerHandleTest, ReadFromSimplFormData)
     data->appendData("foo", 3);
     data->appendData("hoge", 4);
 
-    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::create(document(), data);
+    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::create(getDocument(), data);
     HandleReaderRunner<HandleReader> runner(handle.release());
     testing::runPendingTasks();
     OwnPtr<HandleReadResult> r = runner.wait();
@@ -204,7 +205,7 @@ TEST_F(FetchFormDataConsumerHandleTest, ReadFromComplexFormData)
     OwnPtr<ReplayingHandle> src = ReplayingHandle::create();
     src->add(Command(Command::Data, "bar"));
     src->add(Command(Command::Done));
-    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::createForTest(document(), data, new LoaderFactory(src.release()));
+    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::createForTest(getDocument(), data, new LoaderFactory(src.release()));
     char c;
     size_t readSize;
     EXPECT_EQ(kShouldWait, handle->obtainReader(nullptr)->read(&c, 1, kNone, &readSize));
@@ -222,7 +223,7 @@ TEST_F(FetchFormDataConsumerHandleTest, TwoPhaseReadFromComplexFormData)
     OwnPtr<ReplayingHandle> src = ReplayingHandle::create();
     src->add(Command(Command::Data, "bar"));
     src->add(Command(Command::Done));
-    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::createForTest(document(), data, new LoaderFactory(src.release()));
+    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::createForTest(getDocument(), data, new LoaderFactory(src.release()));
     char c;
     size_t readSize;
     EXPECT_EQ(kShouldWait, handle->obtainReader(nullptr)->read(&c, 1, kNone, &readSize));
@@ -271,7 +272,7 @@ TEST_F(FetchFormDataConsumerHandleTest, DrainAsBlobDataHandleFromSimpleFormData)
     data->append("name2", "value2");
     RefPtr<EncodedFormData> inputFormData = data->encodeMultiPartFormData();
 
-    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::create(document(), inputFormData);
+    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::create(getDocument(), inputFormData);
     OwnPtr<FetchDataConsumerHandle::Reader> reader = handle->obtainReader(nullptr);
     RefPtr<BlobDataHandle> blobDataHandle = reader->drainAsBlobDataHandle();
     ASSERT_TRUE(blobDataHandle);
@@ -288,7 +289,7 @@ TEST_F(FetchFormDataConsumerHandleTest, DrainAsBlobDataHandleFromComplexFormData
 {
     RefPtr<EncodedFormData> inputFormData = complexFormData();
 
-    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::create(document(), inputFormData);
+    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::create(getDocument(), inputFormData);
     OwnPtr<FetchDataConsumerHandle::Reader> reader = handle->obtainReader(nullptr);
     RefPtr<BlobDataHandle> blobDataHandle = reader->drainAsBlobDataHandle();
     ASSERT_TRUE(blobDataHandle);
@@ -331,7 +332,7 @@ TEST_F(FetchFormDataConsumerHandleTest, DrainAsFormDataFromSimpleFormData)
     data->append("name2", "value2");
     RefPtr<EncodedFormData> inputFormData = data->encodeMultiPartFormData();
 
-    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::create(document(), inputFormData);
+    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::create(getDocument(), inputFormData);
     OwnPtr<FetchDataConsumerHandle::Reader> reader = handle->obtainReader(nullptr);
     RefPtr<EncodedFormData> outputFormData = reader->drainAsFormData();
     ASSERT_TRUE(outputFormData);
@@ -344,7 +345,7 @@ TEST_F(FetchFormDataConsumerHandleTest, DrainAsFormDataFromComplexFormData)
 {
     RefPtr<EncodedFormData> inputFormData = complexFormData();
 
-    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::create(document(), inputFormData);
+    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::create(getDocument(), inputFormData);
     OwnPtr<FetchDataConsumerHandle::Reader> reader = handle->obtainReader(nullptr);
     RefPtr<EncodedFormData> outputFormData = reader->drainAsFormData();
     ASSERT_TRUE(outputFormData);
@@ -396,7 +397,7 @@ TEST_F(FetchFormDataConsumerHandleTest, ZeroByteReadDoesNotAffectDrainingForComp
     OwnPtr<ReplayingHandle> src = ReplayingHandle::create();
     src->add(Command(Command::Data, "bar"));
     src->add(Command(Command::Done));
-    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::createForTest(document(), complexFormData(), new LoaderFactory(src.release()));
+    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::createForTest(getDocument(), complexFormData(), new LoaderFactory(src.release()));
     OwnPtr<FetchDataConsumerHandle::Reader> reader = handle->obtainReader(nullptr);
     size_t readSize;
     EXPECT_EQ(kShouldWait, reader->read(nullptr, 0, kNone, &readSize));
@@ -413,7 +414,7 @@ TEST_F(FetchFormDataConsumerHandleTest, OneByteReadAffectsDrainingForComplexForm
     OwnPtr<ReplayingHandle> src = ReplayingHandle::create();
     src->add(Command(Command::Data, "bar"));
     src->add(Command(Command::Done));
-    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::createForTest(document(), complexFormData(), new LoaderFactory(src.release()));
+    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::createForTest(getDocument(), complexFormData(), new LoaderFactory(src.release()));
     OwnPtr<FetchDataConsumerHandle::Reader> reader = handle->obtainReader(nullptr);
     char c;
     size_t readSize;
@@ -431,7 +432,7 @@ TEST_F(FetchFormDataConsumerHandleTest, BeginReadAffectsDrainingForComplexFormDa
     src->add(Command(Command::Data, "bar"));
     src->add(Command(Command::Done));
     const void* buffer = nullptr;
-    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::createForTest(document(), complexFormData(), new LoaderFactory(src.release()));
+    OwnPtr<FetchDataConsumerHandle> handle = FetchFormDataConsumerHandle::createForTest(getDocument(), complexFormData(), new LoaderFactory(src.release()));
     OwnPtr<FetchDataConsumerHandle::Reader> reader = handle->obtainReader(nullptr);
     size_t available;
     EXPECT_EQ(kShouldWait, reader->beginRead(&buffer, kNone, &available));

@@ -12,8 +12,6 @@
 
 namespace page_load_metrics {
 
-class PageLoadMetricsObservable;
-
 // This enum represents how a page load ends. If the action occurs before the
 // page load finishes (or reaches some point like first paint), then we consider
 // the load to be aborted.
@@ -57,7 +55,8 @@ struct PageLoadExtraInfo {
                     const GURL& committed_url,
                     base::TimeDelta time_to_commit,
                     UserAbortType abort_type,
-                    base::TimeDelta time_to_abort);
+                    base::TimeDelta time_to_abort,
+                    const PageLoadMetadata& metadata);
 
   // The first time that the page was backgrounded since the navigation started.
   // If the page has not been backgrounded this will be base::TimeDelta().
@@ -83,6 +82,10 @@ struct PageLoadExtraInfo {
   // |base::TimeDelta()|.
   const UserAbortType abort_type;
   const base::TimeDelta time_to_abort;
+
+  // Extra information supplied to the page load metrics system from the
+  // renderer.
+  const PageLoadMetadata metadata;
 };
 
 // Interface for PageLoadMetrics observers. All instances of this class are
@@ -92,8 +95,16 @@ class PageLoadMetricsObserver {
  public:
   virtual ~PageLoadMetricsObserver() {}
 
-  // The page load started, with the given navigation handle.
-  virtual void OnStart(content::NavigationHandle* navigation_handle) {}
+  // The page load started, with the given navigation handle. Note that OnStart
+  // is called for same-page navigations. Implementers of OnStart that only want
+  // to process non-same-page navigations should also check to see that the page
+  // load committed via OnCommit or committed_url in
+  // PageLoadExtraInfo. currently_committed_url contains the URL of the
+  // committed page load at the time the navigation for navigation_handle was
+  // initiated, or the empty URL if there was no committed page load at the time
+  // the navigation was initiated.
+  virtual void OnStart(content::NavigationHandle* navigation_handle,
+                       const GURL& currently_committed_url) {}
 
   // OnRedirect is triggered when a page load redirects to another URL.
   // The navigation handle holds relevant data for the navigation, but will
@@ -113,6 +124,14 @@ class PageLoadMetricsObserver {
   // are aborted by the system, and thus considered failed provisional loads.
   virtual void OnFailedProvisionalLoad(
       content::NavigationHandle* navigation_handle) {}
+
+  // OnTimingUpdate is triggered when an updated PageLoadTiming is
+  // available. This method may be called multiple times over the course of the
+  // page load. Note that this is currently an experimental API which may be
+  // removed in the future. Please email loading-dev@chromium.org if you intend
+  // to override this method.
+  virtual void OnTimingUpdate(const PageLoadTiming& timing,
+                              const PageLoadExtraInfo& extra_info) {}
 
   // OnComplete is triggered when we are ready to record metrics for this page
   // load. This will happen some time after commit. The PageLoadTiming struct

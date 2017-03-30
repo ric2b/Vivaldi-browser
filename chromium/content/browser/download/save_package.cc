@@ -373,12 +373,10 @@ void SavePackage::OnMHTMLGenerated(int64_t size) {
   // TODO(rdsmith/benjhayden): Integrate canceling on DownloadItem
   // with SavePackage flow.
   if (download_->GetState() == DownloadItem::IN_PROGRESS) {
-    download_->SetTotalBytes(size);
-    download_->DestinationUpdate(size, 0, std::string());
     // Must call OnAllDataSaved here in order for
     // GDataDownloadObserver::ShouldUpload() to return true.
     // ShouldCompleteDownload() may depend on the gdata uploader to finish.
-    download_->OnAllDataSaved(DownloadItem::kEmptyFileHash);
+    download_->OnAllDataSaved(size, scoped_ptr<crypto::SecureHash>());
   }
 
   if (!download_manager_->GetDelegate()) {
@@ -783,9 +781,9 @@ void SavePackage::Finish() {
     // with SavePackage flow.
     if (download_->GetState() == DownloadItem::IN_PROGRESS) {
       if (save_type_ != SAVE_PAGE_TYPE_AS_MHTML) {
-        download_->DestinationUpdate(
-            all_save_items_count_, CurrentSpeed(), std::string());
-        download_->OnAllDataSaved(DownloadItem::kEmptyFileHash);
+        download_->DestinationUpdate(all_save_items_count_, CurrentSpeed());
+        download_->OnAllDataSaved(all_save_items_count_,
+                                  scoped_ptr<crypto::SecureHash>());
       }
       download_->MarkAsComplete();
     }
@@ -816,8 +814,7 @@ void SavePackage::SaveFinished(SaveItemId save_item_id,
   // TODO(rdsmith/benjhayden): Integrate canceling on DownloadItem
   // with SavePackage flow.
   if (download_ && (download_->GetState() == DownloadItem::IN_PROGRESS)) {
-    download_->DestinationUpdate(
-        completed_count(), CurrentSpeed(), std::string());
+    download_->DestinationUpdate(completed_count(), CurrentSpeed());
   }
 
   if (save_item->save_source() == SaveFileCreateInfo::SAVE_FILE_FROM_DOM &&
@@ -969,18 +966,28 @@ void SavePackage::GetSerializedHtmlWithLocalLinks() {
   if (successful_started_items_count != in_process_count())
     return;
 
-  // Ask all frames for their serialized data.
+  // Try to serialize all the frames gathered during GetSavableResourceLinks.
   DCHECK_EQ(0, number_of_frames_pending_response_);
   FrameTree* frame_tree =
       static_cast<RenderFrameHostImpl*>(web_contents()->GetMainFrame())
           ->frame_tree_node()->frame_tree();
   for (const auto& item : frame_tree_node_id_to_save_item_) {
-    DCHECK(item.second);  // SaveItem* != nullptr.
     int frame_tree_node_id = item.first;
+    SaveItem* save_item = item.second;
+    DCHECK(save_item);
+
     FrameTreeNode* frame_tree_node = frame_tree->FindByID(frame_tree_node_id);
-    if (frame_tree_node) {
+    if (frame_tree_node &&
+        frame_tree_node->current_frame_host()->IsRenderFrameLive()) {
+      // Ask the frame for HTML to be written to the associated SaveItem.
       GetSerializedHtmlWithLocalLinksForFrame(frame_tree_node);
       number_of_frames_pending_response_++;
+    } else {
+      // Notify SaveFileManager about the failure to save this SaveItem.
+      BrowserThread::PostTask(
+          BrowserThread::FILE, FROM_HERE,
+          base::Bind(&SaveFileManager::SaveFinished, file_manager_,
+                     save_item->id(), id(), false));
     }
   }
   if (number_of_frames_pending_response_ == 0) {
@@ -1093,7 +1100,8 @@ void SavePackage::OnSerializedHtmlWithLocalLinksResponse(
     BrowserThread::PostTask(
         BrowserThread::FILE, FROM_HERE,
         base::Bind(&SaveFileManager::UpdateSaveProgress, file_manager_,
-                   save_item->id(), new_data, static_cast<int>(data.size())));
+                   save_item->id(), base::RetainedRef(new_data),
+                   static_cast<int>(data.size())));
   }
 
   // Current frame is completed saving, call finish in file thread.
@@ -1285,8 +1293,7 @@ void SavePackage::CompleteSavableResourceLinksResponse() {
 
 base::FilePath SavePackage::GetSuggestedNameForSaveAs(
     bool can_save_as_complete,
-    const std::string& contents_mime_type,
-    const std::string& accept_langs) {
+    const std::string& contents_mime_type) {
   base::FilePath name_with_proper_ext = base::FilePath::FromUTF16Unsafe(title_);
 
   // If the page's title matches its URL, use the URL. Try to use the last path
@@ -1298,7 +1305,7 @@ base::FilePath SavePackage::GetSuggestedNameForSaveAs(
   // back to a URL, and if it matches the original page URL, we know the page
   // had no title (or had a title equal to its URL, which is fine to treat
   // similarly).
-  if (title_ == url_formatter::FormatUrl(page_url_, accept_langs)) {
+  if (title_ == url_formatter::FormatUrl(page_url_)) {
     std::string url_path;
     if (!page_url_.SchemeIs(url::kDataScheme)) {
       std::vector<std::string> url_parts = base::SplitString(
@@ -1398,23 +1405,17 @@ void SavePackage::GetSaveInfo() {
         &download_save_dir, &skip_dir_check);
   }
   std::string mime_type = web_contents()->GetContentsMimeType();
-  std::string accept_languages =
-      GetContentClient()->browser()->GetAcceptLangs(
-          web_contents()->GetBrowserContext());
-
   BrowserThread::PostTask(
       BrowserThread::FILE, FROM_HERE,
       base::Bind(&SavePackage::CreateDirectoryOnFileThread, this,
-          website_save_dir, download_save_dir, skip_dir_check,
-          mime_type, accept_languages));
+          website_save_dir, download_save_dir, skip_dir_check, mime_type));
 }
 
 void SavePackage::CreateDirectoryOnFileThread(
     const base::FilePath& website_save_dir,
     const base::FilePath& download_save_dir,
     bool skip_dir_check,
-    const std::string& mime_type,
-    const std::string& accept_langs) {
+    const std::string& mime_type) {
   base::FilePath save_dir;
   // If the default html/websites save folder doesn't exist...
   // We skip the directory check for gdata directories on ChromeOS.
@@ -1432,7 +1433,7 @@ void SavePackage::CreateDirectoryOnFileThread(
 
   bool can_save_as_complete = CanSaveAsComplete(mime_type);
   base::FilePath suggested_filename = GetSuggestedNameForSaveAs(
-      can_save_as_complete, mime_type, accept_langs);
+      can_save_as_complete, mime_type);
   base::FilePath::StringType pure_file_name =
       suggested_filename.RemoveExtension().BaseName().value();
   base::FilePath::StringType file_name_ext = suggested_filename.Extension();

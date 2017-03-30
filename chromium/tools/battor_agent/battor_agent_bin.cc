@@ -18,8 +18,8 @@
 // 5) If the last command was successful, PowerTracingAgent waits for the
 //    duration of the trace
 // 6) When the tracing should end, PowerTracingAgent records the clock sync
-//    start timestamp and sends the subprocess the RecordClockSyncMark <marker>'
-//    message via STDIN.
+//    start timestamp and sends the subprocess the
+//    'RecordClockSyncMark <marker>' message via STDIN.
 // 7) PowerTracingAgent waits for the subprocess to write a line to STDOUT
 //    ('Done.' if successful, some error message otherwise)
 // 8) If the last command was successful, PowerTracingAgent records the clock
@@ -33,6 +33,7 @@
 
 #include <stdint.h>
 
+#include <fstream>
 #include <iostream>
 
 #include "base/at_exit.h"
@@ -41,6 +42,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/strings/string_tokenizer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
 #include "tools/battor_agent/battor_agent.h"
@@ -49,12 +51,13 @@
 
 using std::endl;
 
+namespace battor {
+
 namespace {
 
 const char kIoThreadName[] = "BattOr IO Thread";
 const char kFileThreadName[] = "BattOr File Thread";
 const char kUiThreadName[] = "BattOr UI Thread";
-const int32_t kBattOrCommandTimeoutSeconds = 10;
 
 const char kUsage[] =
     "Start the battor_agent shell with:\n"
@@ -67,7 +70,7 @@ const char kUsage[] =
     "Once in the shell, you can issue the following commands:\n"
     "\n"
     "  StartTracing\n"
-    "  StopTracing\n"
+    "  StopTracing <optional file path>\n"
     "  SupportsExplicitClockSync\n"
     "  RecordClockSyncMarker <marker>\n"
     "  Exit\n"
@@ -75,14 +78,14 @@ const char kUsage[] =
     "\n";
 
 void PrintSupportsExplicitClockSync() {
-  std::cout << battor::BattOrAgent::SupportsExplicitClockSync() << endl;
+  std::cout << BattOrAgent::SupportsExplicitClockSync() << endl;
 }
 
-// Checks if an error occurred and, if it did, prints the error and exits
-// with an error code.
-void CheckError(battor::BattOrError error) {
-  if (error != battor::BATTOR_ERROR_NONE)
-    LOG(FATAL) << "Fatal error when communicating with the BattOr: " << error;
+// Logs the error and exits with an error code.
+void HandleError(battor::BattOrError error) {
+  if (error != BATTOR_ERROR_NONE)
+    LOG(FATAL) << "Fatal error when communicating with the BattOr: "
+               << BattOrErrorToString(error);
 }
 
 // Prints an error message and exits due to a required thread failing to start.
@@ -90,9 +93,15 @@ void ExitFromThreadStartFailure(const std::string& thread_name) {
   LOG(FATAL) << "Failed to start " << thread_name;
 }
 
-}  // namespace
+std::vector<std::string> TokenizeString(std::string cmd) {
+  base::StringTokenizer tokenizer(cmd, " ");
+  std::vector<std::string> tokens;
+  while (tokenizer.GetNext())
+    tokens.push_back(tokenizer.token());
+  return tokens;
+}
 
-namespace battor {
+}  // namespace
 
 // Wrapper class containing all state necessary for an independent binary to
 // use a BattOrAgent to communicate with a BattOr.
@@ -124,13 +133,31 @@ class BattOrAgentBin : public BattOrAgent::Listener {
 
       if (cmd == "StartTracing") {
         StartTracing();
-      } else if (cmd == "StopTracing") {
-        StopTracing();
+      } else if (cmd.find("StopTracing") != std::string::npos) {
+        std::vector<std::string> tokens = TokenizeString(cmd);
+        if (tokens.size() == 1 && tokens[0] == "StopTracing") {
+          // No path given.
+          StopTracing();
+        } else if (tokens.size() == 2 && tokens[0] == "StopTracing") {
+          // Path given.
+          StopTracing(tokens[1]);
+        } else {
+          std::cout << "Invalid StopTracing command." << endl;
+          std::cout << kUsage << endl;
+          continue;
+        }
         break;
       } else if (cmd == "SupportsExplicitClockSync") {
         PrintSupportsExplicitClockSync();
-      } else if (cmd == "RecordClockSyncMarker") {
-        // TODO(charliea): Write RecordClockSyncMarker.
+      } else if (cmd.find("RecordClockSyncMarker") != std::string::npos) {
+        std::vector<std::string> tokens = TokenizeString(cmd);
+        if (tokens.size() != 2 || tokens[0] != "RecordClockSyncMarker") {
+          std::cout << "Invalid RecordClockSyncMarker command." << endl;
+          std::cout << kUsage << endl;
+          continue;
+        }
+
+        RecordClockSyncMarker(tokens[1]);
       } else if (cmd == "Exit") {
         break;
       } else {
@@ -155,7 +182,7 @@ class BattOrAgentBin : public BattOrAgent::Listener {
     io_thread_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&BattOrAgentBin::CreateAgent, base::Unretained(this), path));
-    CheckError(AwaitResult());
+    done_.Wait();
   }
 
   // Performs any cleanup necessary after the BattOr binary is done running.
@@ -163,46 +190,71 @@ class BattOrAgentBin : public BattOrAgent::Listener {
     io_thread_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&BattOrAgentBin::DeleteAgent, base::Unretained(this)));
-    CheckError(AwaitResult());
+    done_.Wait();
   }
 
   void StartTracing() {
     io_thread_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&BattOrAgent::StartTracing, base::Unretained(agent_.get())));
-    CheckError(AwaitResult());
+    done_.Wait();
   }
 
   void OnStartTracingComplete(BattOrError error) override {
-    error_ = error;
-    std::cout << "Done." << endl;
+    if (error == BATTOR_ERROR_NONE)
+      std::cout << "Done." << endl;
+    else
+      HandleError(error);
+
     done_.Signal();
   }
 
-  void StopTracing() {
+  void StopTracing(const std::string& path = "") {
+    trace_output_file_ = path;
     io_thread_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&BattOrAgent::StopTracing, base::Unretained(agent_.get())));
-    CheckError(AwaitResult());
+    done_.Wait();
+    trace_output_file_ = std::string();
   }
 
   void OnStopTracingComplete(const std::string& trace,
                              BattOrError error) override {
-    error_ = error;
-
-    if (error == BATTOR_ERROR_NONE)
-      std::cout << trace;
-
-    std::cout << "Done." << endl;
+    if (error == BATTOR_ERROR_NONE) {
+      if (trace_output_file_.empty()) {
+        std::cout << trace;
+      }
+      else {
+        std::ofstream trace_stream(trace_output_file_);
+        if (!trace_stream.is_open()) {
+          std::cout << "Tracing output file could not be opened." << endl;
+          exit(1);
+        }
+        trace_stream << trace;
+        trace_stream.close();
+      }
+      std::cout << "Done." << endl;
+    } else {
+      HandleError(error);
+    }
 
     done_.Signal();
   }
 
+  void RecordClockSyncMarker(const std::string& marker) {
+    io_thread_.task_runner()->PostTask(
+        FROM_HERE, base::Bind(&BattOrAgent::RecordClockSyncMarker,
+                              base::Unretained(agent_.get()), marker));
+    done_.Wait();
+  }
+
   void OnRecordClockSyncMarkerComplete(BattOrError error) override {
-    // TODO(charliea): Implement RecordClockSyncMarker for this binary. This
-    // will probably involve reading an external file for the actual sample
-    // number to clock sync ID map.
-    NOTREACHED();
+    if (error == BATTOR_ERROR_NONE)
+      std::cout << "Done." << endl;
+    else
+      HandleError(error);
+
+    done_.Signal();
   }
 
   // Postable task for creating the BattOrAgent. Because the BattOrAgent has
@@ -223,7 +275,6 @@ class BattOrAgentBin : public BattOrAgent::Listener {
 
     agent_.reset(new BattOrAgent(path, this, file_thread_.task_runner(),
                                  ui_thread_.task_runner()));
-    error_ = BATTOR_ERROR_NONE;
     done_.Signal();
   }
 
@@ -231,25 +282,12 @@ class BattOrAgentBin : public BattOrAgent::Listener {
   // CreateAgent() above regarding why this is necessary.
   void DeleteAgent() {
     agent_.reset(nullptr);
-    error_ = BATTOR_ERROR_NONE;
     done_.Signal();
-  }
-
-  // Waits until the previously executed command has finished executing.
-  BattOrError AwaitResult() {
-    if (!done_.TimedWait(
-            base::TimeDelta::FromSeconds(kBattOrCommandTimeoutSeconds)))
-      return BATTOR_ERROR_TIMEOUT;
-
-    return error_;
   }
 
  private:
   // Event signaled when an async task has finished executing.
   base::WaitableEvent done_;
-
-  // The error from the last async command that finished.
-  BattOrError error_;
 
   // Threads needed for serial communication.
   base::Thread io_thread_;
@@ -257,7 +295,10 @@ class BattOrAgentBin : public BattOrAgent::Listener {
   base::Thread ui_thread_;
 
   // The agent capable of asynchronously communicating with the BattOr.
-  scoped_ptr<BattOrAgent> agent_;
+  std::unique_ptr<BattOrAgent> agent_;
+
+  std::string trace_output_file_;
+
 };
 
 }  // namespace battor

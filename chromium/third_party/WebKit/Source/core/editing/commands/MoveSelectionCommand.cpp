@@ -30,7 +30,7 @@
 
 namespace blink {
 
-MoveSelectionCommand::MoveSelectionCommand(PassRefPtrWillBeRawPtr<DocumentFragment> fragment, const Position& position, bool smartInsert, bool smartDelete)
+MoveSelectionCommand::MoveSelectionCommand(RawPtr<DocumentFragment> fragment, const Position& position, bool smartInsert, bool smartDelete)
     : CompositeEditCommand(*position.document()), m_fragment(fragment), m_position(position), m_smartInsert(smartInsert), m_smartDelete(smartDelete)
 {
     ASSERT(m_fragment);
@@ -63,7 +63,7 @@ void MoveSelectionCommand::doApply(EditingState* editingState)
     // set the destination to the ending point after the deletion.
     // Fixes: <rdar://problem/3910425> REGRESSION (Mail): Crash in ReplaceSelectionCommand;
     //        selection is empty, leading to null deref
-    if (!pos.inDocument())
+    if (!pos.inShadowIncludingDocument())
         pos = endingSelection().start();
 
     cleanupAfterDeletion(editingState, createVisiblePosition(pos));
@@ -71,7 +71,7 @@ void MoveSelectionCommand::doApply(EditingState* editingState)
         return;
 
     setEndingSelection(VisibleSelection(pos, endingSelection().affinity(), endingSelection().isDirectional()));
-    if (!pos.inDocument()) {
+    if (!pos.inShadowIncludingDocument()) {
         // Document was modified out from under us.
         return;
     }

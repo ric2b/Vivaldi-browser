@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/extensions/api/input_ime/input_ime_api_nonchromeos.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/common/chrome_switches.h"
@@ -32,11 +33,17 @@ IN_PROC_BROWSER_TEST_F(InputImeApiTest, CreateWindowTest) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
   ui::InputMethod* input_method =
       browser_view->GetNativeWindow()->GetHost()->GetInputMethod();
-  scoped_ptr<ui::DummyTextInputClient> client(
+  std::unique_ptr<ui::DummyTextInputClient> client(
       new ui::DummyTextInputClient(ui::TEXT_INPUT_TYPE_TEXT));
   input_method->SetFocusedTextInputClient(client.get());
+  ExtensionFunction::ScopedUserGestureForTests scoped_user_gesture;
+  InputImeActivateFunction::disable_bubble_for_testing_ = true;
 
   ASSERT_TRUE(RunExtensionTest("input_ime_nonchromeos")) << message_;
+
+  // Test the input.ime.sendKeyEvents API.
+  ASSERT_EQ(client->insert_char_count(), 1);
+  ASSERT_EQ(client->last_insert_char(), L'a');
 
   input_method->DetachTextInputClient(client.get());
 }

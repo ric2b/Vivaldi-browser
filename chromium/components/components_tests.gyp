@@ -29,6 +29,7 @@
       'autofill/core/browser/autocomplete_history_manager_unittest.cc',
       'autofill/core/browser/autofill_country_unittest.cc',
       'autofill/core/browser/autofill_data_model_unittest.cc',
+      'autofill/core/browser/autofill_data_util_unittest.cc',
       'autofill/core/browser/autofill_download_manager_unittest.cc',
       'autofill/core/browser/autofill_external_delegate_unittest.cc',
       'autofill/core/browser/autofill_field_unittest.cc',
@@ -47,7 +48,6 @@
       'autofill/core/browser/form_structure_unittest.cc',
       'autofill/core/browser/legal_message_line_unittest.cc',
       'autofill/core/browser/name_field_unittest.cc',
-      'autofill/core/browser/options_util_unittest.cc',
       'autofill/core/browser/password_generator_unittest.cc',
       'autofill/core/browser/personal_data_manager_unittest.cc',
       'autofill/core/browser/phone_field_unittest.cc',
@@ -109,6 +109,9 @@
     ],
     'child_trace_message_filter_unittest_sources': [
       'tracing/child_trace_message_filter_unittest.cc',
+    ],
+    'client_update_protocol_unittest_sources': [
+      'client_update_protocol/ecdsa_unittest.cc',
     ],
     'cloud_devices_unittest_sources': [
       'cloud_devices/common/cloud_devices_urls_unittest.cc',
@@ -355,6 +358,7 @@
       'metrics/file_metrics_provider_unittest.cc',
       'metrics/histogram_encoder_unittest.cc',
       'metrics/machine_id_provider_win_unittest.cc',
+      'metrics/data_use_tracker_unittest.cc',
       'metrics/metrics_log_manager_unittest.cc',
       'metrics/metrics_log_unittest.cc',
       'metrics/metrics_reporting_scheduler_unittest.cc',
@@ -373,7 +377,7 @@
       'metrics/leak_detector/leak_analyzer_unittest.cc',
       'metrics/leak_detector/leak_detector_unittest.cc',
       'metrics/leak_detector/leak_detector_impl_unittest.cc',
-      'metrics/leak_detector/ranked_list_unittest.cc',
+      'metrics/leak_detector/ranked_set_unittest.cc',
     ],
     'mime_util_unittest_sources': [
       'mime_util/mime_util_unittest.cc',
@@ -476,7 +480,6 @@
       'password_manager/core/browser/password_bubble_experiment_unittest.cc',
       'password_manager/core/browser/password_form_manager_unittest.cc',
       'password_manager/core/browser/password_generation_manager_unittest.cc',
-      'password_manager/core/browser/password_manager_metrics_util_unittest.cc',
       'password_manager/core/browser/password_manager_settings_migration_experiment_unittest.cc',
       'password_manager/core/browser/password_manager_unittest.cc',
       'password_manager/core/browser/password_manager_util_unittest.cc',
@@ -546,6 +549,7 @@
     ],
     'precache_unittest_sources': [
       'precache/content/precache_manager_unittest.cc',
+      'precache/core/fetcher_pool_unittest.cc',
       'precache/core/precache_database_unittest.cc',
       'precache/core/precache_fetcher_unittest.cc',
       'precache/core/precache_url_table_unittest.cc',
@@ -634,9 +638,11 @@
     ],
     'safe_browsing_db_unittest_sources': [
       'safe_browsing_db/prefix_set_unittest.cc',
+      'safe_browsing_db/testing_util.h',
       'safe_browsing_db/util_unittest.cc',
       'safe_browsing_db/v4_get_hash_protocol_manager_unittest.cc',
       'safe_browsing_db/v4_protocol_manager_util_unittest.cc',
+      'safe_browsing_db/v4_update_protocol_manager_unittest.cc',
     ],
     'safe_json_unittest_sources': [
       'safe_json/json_sanitizer_unittest.cc',
@@ -737,6 +743,9 @@
       'suggestions/suggestions_service_unittest.cc',
       'suggestions/suggestions_store_unittest.cc',
     ],
+    'supervised_user_error_page_unittest_sources': [
+      'supervised_user_error_page/supervised_user_error_page_unittest.cc',
+    ],
     'sync_bookmarks_unittest_sources': [
       'sync_bookmarks/bookmark_data_type_controller_unittest.cc',
     ],
@@ -744,6 +753,7 @@
       'sync_driver/about_sync_util_unittest.cc',
       'sync_driver/backend_migrator_unittest.cc',
       'sync_driver/data_type_manager_impl_unittest.cc',
+      'sync_driver/device_count_metrics_provider_unittest.cc',
       'sync_driver/device_info_data_type_controller_unittest.cc',
       'sync_driver/device_info_service_unittest.cc',
       'sync_driver/device_info_sync_service_unittest.cc',
@@ -810,8 +820,8 @@
     ],
     'update_client_unittest_sources': [
       'update_client/component_patcher_unittest.cc',
-      'update_client/client_update_protocol_ecdsa_unittest.cc',
       'update_client/crx_downloader_unittest.cc',
+      'update_client/persisted_data_unittest.cc',
       'update_client/ping_manager_unittest.cc',
       'update_client/request_sender_unittest.cc',
       'update_client/update_checker_unittest.cc',
@@ -873,6 +883,10 @@
       'web_resource/promo_resource_service_mobile_ntp_unittest.cc',
       'web_resource/promo_resource_service_unittest.cc',
       'web_resource/resource_request_allowed_notifier_unittest.cc',
+    ],
+    'web_restrictions_unittest_sources' : [
+      'web_restrictions/browser/web_restrictions_client_unittest.cc',
+      'web_restrictions/browser/web_restrictions_resource_throttle_unittest.cc',
     ],
     'webcrypto_unittest_sources': [
       'webcrypto/algorithms/aes_cbc_unittest.cc',
@@ -940,6 +954,7 @@
         '<@(bubble_unittest_sources)',
         '<@(captive_portal_unittest_sources)',
         '<@(certificate_reporting_unittest_sources)',
+        '<@(client_update_protocol_unittest_sources)',
         '<@(cloud_devices_unittest_sources)',
         '<@(component_updater_unittest_sources)',
         '<@(content_settings_unittest_sources)',
@@ -987,6 +1002,7 @@
         '<@(ssl_config_unittest_sources)',
         '<@(ssl_errors_unittest_sources)',
         '<@(suggestions_unittest_sources)',
+        '<@(supervised_user_error_page_unittest_sources)',
         '<@(sync_bookmarks_unittest_sources)',
         '<@(sync_driver_unittest_sources)',
         '<@(sync_sessions_unittest_sources)',
@@ -1114,6 +1130,7 @@
         'components.gyp:ssl_config',
         'components.gyp:ssl_errors',
         'components.gyp:suggestions',
+        'components.gyp:supervised_user_error_page',
         'components.gyp:sync_bookmarks',
         'components.gyp:sync_driver',
         'components.gyp:sync_driver_test_support',
@@ -1271,7 +1288,12 @@
           ],
           'conditions': [
             ['OS=="android"', {
+              'sources' : [
+                '<@(web_restrictions_unittest_sources)',
+              ],
               'dependencies': [
+                'components.gyp:web_restrictions_browser',
+                'components.gyp:web_restrictions_test_support',
                 '../build/android/ndk.gyp:cpu_features',
               ],
             }],
@@ -1310,7 +1332,6 @@
         }, { # 'OS == "ios"'
           'sources': [
             'webp_transcode/webp_decoder_unittest.mm',
-            'webp_transcode/webp_network_client_unittest.mm',
           ],
           'sources/': [
             # Exclude all tests that depends on //content (based on layered-
@@ -1374,9 +1395,6 @@
         }],
         ['OS == "android"', {
           'sources': [
-            'data_reduction_proxy/content/browser/data_reduction_proxy_debug_blocking_page_unittest.cc',
-            'data_reduction_proxy/content/browser/data_reduction_proxy_debug_resource_throttle_unittest.cc',
-            'data_reduction_proxy/content/browser/data_reduction_proxy_debug_ui_manager_unittest.cc',
             'data_usage/android/traffic_stats_amortizer_unittest.cc',
             'invalidation/impl/invalidation_logger_unittest.cc',
             'invalidation/impl/invalidation_service_android_unittest.cc',
@@ -1395,7 +1413,6 @@
             'web_modal/web_contents_modal_dialog_manager_unittest.cc',
           ],
           'dependencies': [
-            'components.gyp:data_reduction_proxy_content',
             'components.gyp:data_usage_android',
             'components.gyp:safe_json_java',
             'components.gyp:variations_java',
@@ -1451,7 +1468,8 @@
         ['chromeos==1', {
           'sources': [
             'arc/arc_bridge_service_unittest.cc',
-            'arc/ime/arc_ime_bridge_unittest.cc',
+            'arc/ime/arc_ime_service_unittest.cc',
+            'arc/intent_helper/font_size_util_unittest.cc',
             'pairing/message_buffer_unittest.cc',
             'timers/alarm_timer_unittest.cc',
             'wifi_sync/wifi_config_delegate_chromeos_unittest.cc',
@@ -1656,6 +1674,7 @@
             'components_unittests',
             'components.gyp:invalidation_java',
             'components.gyp:signin_core_browser_java',
+            'components.gyp:web_restrictions_test_support_java',
           ],
           'variables': {
             'test_suite_name': 'components_unittests',
@@ -1679,7 +1698,7 @@
             'src_paths': [
               'invalidation/impl/android/junit/',
               'policy/android/junit/',
-              'web_restrictions/junit/'
+              'web_restrictions/browser/junit/'
             ],
             'wrapper_script_name': 'helper/<(_target_name)',
           },
@@ -1762,7 +1781,6 @@
           'dependencies': [
             '../content/content.gyp:content_common',
             '../content/content.gyp:content_gpu',
-            '../content/content.gyp:content_plugin',
             '../content/content.gyp:content_renderer',
             '../content/content_shell_and_tests.gyp:content_browser_test_base',
             '../content/content_shell_and_tests.gyp:content_browser_test_support',

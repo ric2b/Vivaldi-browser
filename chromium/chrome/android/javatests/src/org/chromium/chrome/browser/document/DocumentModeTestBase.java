@@ -15,10 +15,12 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.preferences.DocumentModeManager;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -28,8 +30,8 @@ import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
 import org.chromium.chrome.test.MultiActivityTestBase;
 import org.chromium.chrome.test.util.ActivityUtils;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
+import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.chrome.test.util.DisableInTabbedMode;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TouchCommon;
@@ -45,9 +47,11 @@ import java.util.concurrent.Callable;
  * tested using the DocumentActivityTestBase class.
  */
 @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-@DisableInTabbedMode
+@Restriction(ChromeRestriction.RESTRICTION_TYPE_PHONE)
 public class DocumentModeTestBase extends MultiActivityTestBase {
     protected static final String TAG = "document";
+
+    private boolean mPreviouslyOptedOut;
 
     private static class TestTabObserver extends EmptyTabObserver {
         private ContextMenu mContextMenu;
@@ -77,6 +81,20 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
     @Override
     public void setUp() throws Exception {
         super.setUp();
+        DocumentModeManager documentModeManager = DocumentModeManager.getInstance(
+                getInstrumentation().getTargetContext());
+        mPreviouslyOptedOut = documentModeManager.isOptedOutOfDocumentMode();
+        documentModeManager.setOptedOutState(DocumentModeManager.OPT_OUT_PROMO_DISMISSED);
+    }
+
+    @Override
+    public void tearDown() throws Exception {
+        if (mPreviouslyOptedOut) {
+            DocumentModeManager documentModeManager = DocumentModeManager.getInstance(
+                    getInstrumentation().getTargetContext());
+            documentModeManager.setOptedOutState(DocumentModeManager.OPTED_OUT_OF_DOCUMENT_MODE);
+        }
+        super.tearDown();
     }
 
     /** Starts a DocumentActivity by using firing a VIEW Intent. */
@@ -170,7 +188,7 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
         ApplicationTestUtils.waitUntilChromeInForeground();
 
         // Wait until the selector is ready and the Tabs have been added to the DocumentTabModel.
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 if (!ChromeApplication.isDocumentTabModelSelectorInitializedForTests()) {
@@ -211,7 +229,7 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
 
         openLinkInNewTabViaContextMenu(false, false);
 
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 if (expectedTabCount != tabModel.getCount()) return false;
@@ -255,7 +273,7 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
             }
         });
         TouchCommon.longPressView(view);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return observer.mContextMenu != null;
@@ -292,7 +310,7 @@ public class DocumentModeTestBase extends MultiActivityTestBase {
     protected void switchToTab(final Tab tab) throws Exception {
         final TabModel tabModel =
                 ChromeApplication.getDocumentTabModelSelector().getCurrentModel();
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 // http://crbug.com/509866: TabModelUtils#setIndex() sometimes fails.

@@ -8,6 +8,7 @@
 
 #include "base/files/file_path.h"
 #include "base/test/null_task_runner.h"
+#include "content/public/browser/permission_manager.h"
 #include "content/public/test/mock_resource_context.h"
 #include "content/test/mock_background_sync_controller.h"
 #include "content/test/mock_ssl_host_state_delegate.h"
@@ -45,6 +46,7 @@ namespace content {
 
 TestBrowserContext::TestBrowserContext() {
   EXPECT_TRUE(browser_context_dir_.CreateUniqueTempDir());
+  BrowserContext::Initialize(this, browser_context_dir_.path());
 }
 
 TestBrowserContext::~TestBrowserContext() {
@@ -57,6 +59,11 @@ base::FilePath TestBrowserContext::TakePath() {
 void TestBrowserContext::SetSpecialStoragePolicy(
     storage::SpecialStoragePolicy* policy) {
   special_storage_policy_ = policy;
+}
+
+void TestBrowserContext::SetPermissionManager(
+    scoped_ptr<PermissionManager> permission_manager) {
+  permission_manager_ = std::move(permission_manager);
 }
 
 base::FilePath TestBrowserContext::GetPath() const {
@@ -81,14 +88,6 @@ net::URLRequestContextGetter* TestBrowserContext::GetRequestContext() {
     request_context_ = new TestContextURLRequestContextGetter();
   }
   return request_context_.get();
-}
-
-net::URLRequestContextGetter*
-TestBrowserContext::GetRequestContextForRenderProcess(int renderer_child_id) {
-  // TODO(creis): This should return a request context based on
-  // |render_child_id|'s StoragePartition. For now, it returns the single
-  // context for simplicity.
-  return GetRequestContext();
 }
 
 net::URLRequestContextGetter* TestBrowserContext::GetMediaRequestContext() {
@@ -134,7 +133,7 @@ SSLHostStateDelegate* TestBrowserContext::GetSSLHostStateDelegate() {
 }
 
 PermissionManager* TestBrowserContext::GetPermissionManager() {
-  return NULL;
+  return permission_manager_.get();
 }
 
 BackgroundSyncController* TestBrowserContext::GetBackgroundSyncController() {
@@ -142,6 +141,21 @@ BackgroundSyncController* TestBrowserContext::GetBackgroundSyncController() {
     background_sync_controller_.reset(new MockBackgroundSyncController());
 
   return background_sync_controller_.get();
+}
+
+net::URLRequestContextGetter* TestBrowserContext::CreateRequestContext(
+      content::ProtocolHandlerMap* protocol_handlers,
+      content::URLRequestInterceptorScopedVector request_interceptors) {
+  return GetRequestContext();
+}
+
+net::URLRequestContextGetter*
+TestBrowserContext::CreateRequestContextForStoragePartition(
+    const base::FilePath& partition_path,
+    bool in_memory,
+    ProtocolHandlerMap* protocol_handlers,
+    URLRequestInterceptorScopedVector request_interceptors) {
+  return nullptr;
 }
 
 }  // namespace content

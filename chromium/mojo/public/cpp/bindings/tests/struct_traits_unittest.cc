@@ -12,10 +12,10 @@
 #include "mojo/public/cpp/bindings/tests/rect_blink.h"
 #include "mojo/public/cpp/bindings/tests/rect_chromium.h"
 #include "mojo/public/cpp/bindings/tests/struct_with_traits_impl.h"
+#include "mojo/public/cpp/bindings/tests/variant_test_util.h"
 #include "mojo/public/interfaces/bindings/tests/struct_with_traits.mojom.h"
 #include "mojo/public/interfaces/bindings/tests/test_native_types.mojom-blink.h"
 #include "mojo/public/interfaces/bindings/tests/test_native_types.mojom-chromium.h"
-#include "mojo/public/interfaces/bindings/tests/test_native_types.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace mojo {
@@ -103,12 +103,22 @@ class StructTraitsTest : public testing::Test,
   StructTraitsTest() {}
 
  protected:
-  void BindToChromiumService(mojo::InterfaceRequest<RectService> request) {
+  void BindToChromiumService(chromium::RectServiceRequest request) {
     chromium_bindings_.AddBinding(&chromium_service_, std::move(request));
   }
+  void BindToChromiumService(blink::RectServiceRequest request) {
+    chromium_bindings_.AddBinding(
+        &chromium_service_,
+        ConvertInterfaceRequest<chromium::RectService>(std::move(request)));
+  }
 
-  void BindToBlinkService(mojo::InterfaceRequest<RectService> request) {
+  void BindToBlinkService(blink::RectServiceRequest request) {
     blink_bindings_.AddBinding(&blink_service_, std::move(request));
+  }
+  void BindToBlinkService(chromium::RectServiceRequest request) {
+    blink_bindings_.AddBinding(
+        &blink_service_,
+        ConvertInterfaceRequest<blink::RectService>(std::move(request)));
   }
 
   TraitsTestServicePtr GetTraitsTestProxy() {
@@ -126,12 +136,12 @@ class StructTraitsTest : public testing::Test,
   base::MessageLoop loop_;
 
   ChromiumRectServiceImpl chromium_service_;
-  mojo::BindingSet<chromium::RectService> chromium_bindings_;
+  BindingSet<chromium::RectService> chromium_bindings_;
 
   BlinkRectServiceImpl blink_service_;
-  mojo::BindingSet<blink::RectService> blink_bindings_;
+  BindingSet<blink::RectService> blink_bindings_;
 
-  mojo::BindingSet<TraitsTestService> traits_test_bindings_;
+  BindingSet<TraitsTestService> traits_test_bindings_;
 };
 
 }  // namespace

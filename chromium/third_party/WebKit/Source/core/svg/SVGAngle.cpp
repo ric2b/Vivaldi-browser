@@ -66,19 +66,19 @@ void SVGMarkerOrientEnumeration::notifyChange()
     m_angle->orientTypeChanged();
 }
 
-void SVGMarkerOrientEnumeration::add(PassRefPtrWillBeRawPtr<SVGPropertyBase>, SVGElement*)
+void SVGMarkerOrientEnumeration::add(SVGPropertyBase*, SVGElement*)
 {
     // SVGMarkerOrientEnumeration is only animated via SVGAngle
     ASSERT_NOT_REACHED();
 }
 
-void SVGMarkerOrientEnumeration::calculateAnimatedValue(SVGAnimationElement*, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> from, PassRefPtrWillBeRawPtr<SVGPropertyBase> to, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDurationValue, SVGElement* contextElement)
+void SVGMarkerOrientEnumeration::calculateAnimatedValue(SVGAnimationElement*, float percentage, unsigned repeatCount, SVGPropertyBase* from, SVGPropertyBase* to, SVGPropertyBase* toAtEndOfDurationValue, SVGElement* contextElement)
 {
     // SVGMarkerOrientEnumeration is only animated via SVGAngle
     ASSERT_NOT_REACHED();
 }
 
-float SVGMarkerOrientEnumeration::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> to, SVGElement* contextElement)
+float SVGMarkerOrientEnumeration::calculateDistance(SVGPropertyBase* to, SVGElement* contextElement)
 {
     // SVGMarkerOrientEnumeration is only animated via SVGAngle
     ASSERT_NOT_REACHED();
@@ -110,9 +110,9 @@ DEFINE_TRACE(SVGAngle)
     SVGPropertyHelper<SVGAngle>::trace(visitor);
 }
 
-PassRefPtrWillBeRawPtr<SVGAngle> SVGAngle::clone() const
+SVGAngle* SVGAngle::clone() const
 {
-    return adoptRefWillBeNoop(new SVGAngle(m_unitType, m_valueInSpecifiedUnits, m_orientType->enumValue()));
+    return new SVGAngle(m_unitType, m_valueInSpecifiedUnits, m_orientType->enumValue());
 }
 
 float SVGAngle::value() const
@@ -366,9 +366,9 @@ void SVGAngle::convertToSpecifiedUnits(SVGAngleType unitType)
     m_orientType->setEnumValue(SVGMarkerOrientAngle);
 }
 
-void SVGAngle::add(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement*)
+void SVGAngle::add(SVGPropertyBase* other, SVGElement*)
 {
-    RefPtrWillBeRawPtr<SVGAngle> otherAngle = toSVGAngle(other);
+    SVGAngle* otherAngle = toSVGAngle(other);
 
     // Only respect by animations, if from and by are both specified in angles (and not eg. 'auto').
     if (orientType()->enumValue() != SVGMarkerOrientAngle || otherAngle->orientType()->enumValue() != SVGMarkerOrientAngle)
@@ -386,13 +386,13 @@ void SVGAngle::assign(const SVGAngle& other)
         m_orientType->setEnumValue(otherOrientType);
 }
 
-void SVGAngle::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> from, PassRefPtrWillBeRawPtr<SVGPropertyBase> to, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDuration, SVGElement*)
+void SVGAngle::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, SVGPropertyBase* from, SVGPropertyBase* to, SVGPropertyBase* toAtEndOfDuration, SVGElement*)
 {
     ASSERT(animationElement);
-    bool isToAnimation = animationElement->animationMode() == ToAnimation;
+    bool isToAnimation = animationElement->getAnimationMode() == ToAnimation;
 
-    RefPtrWillBeRawPtr<SVGAngle> fromAngle = isToAnimation ? PassRefPtrWillBeRawPtr<SVGAngle>(this) : toSVGAngle(from);
-    RefPtrWillBeRawPtr<SVGAngle> toAngle = toSVGAngle(to);
+    SVGAngle* fromAngle = isToAnimation ? this : toSVGAngle(from);
+    SVGAngle* toAngle = toSVGAngle(to);
     SVGMarkerOrientType fromOrientType = fromAngle->orientType()->enumValue();
     SVGMarkerOrientType toOrientType = toAngle->orientType()->enumValue();
 
@@ -413,7 +413,7 @@ void SVGAngle::calculateAnimatedValue(SVGAnimationElement* animationElement, flo
     case SVGMarkerOrientAngle:
         {
             float animatedValue = value();
-            RefPtrWillBeRawPtr<SVGAngle> toAtEndOfDurationAngle = toSVGAngle(toAtEndOfDuration);
+            SVGAngle* toAtEndOfDurationAngle = toSVGAngle(toAtEndOfDuration);
 
             animationElement->animateAdditiveNumber(percentage, repeatCount, fromAngle->value(), toAngle->value(), toAtEndOfDurationAngle->value(), animatedValue);
             orientType()->setEnumValue(SVGMarkerOrientAngle);
@@ -429,7 +429,7 @@ void SVGAngle::calculateAnimatedValue(SVGAnimationElement* animationElement, flo
     }
 }
 
-float SVGAngle::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement*)
+float SVGAngle::calculateDistance(SVGPropertyBase* other, SVGElement*)
 {
     return fabsf(value() - toSVGAngle(other)->value());
 }

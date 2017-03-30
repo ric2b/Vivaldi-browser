@@ -23,6 +23,8 @@
       'common/chrome_content_client.h',
       'common/chrome_content_client_constants.cc',
       'common/chrome_content_client_ios.mm',
+      'common/chrome_media_client_android.cc',
+      'common/chrome_media_client_android.h',
       'common/chrome_result_codes.h',
       'common/chrome_utility_messages.h',
       'common/common_message_generator.cc',
@@ -62,6 +64,8 @@
       'common/multi_process_lock_linux.cc',
       'common/multi_process_lock_mac.cc',
       'common/multi_process_lock_win.cc',
+      'common/origin_trials/origin_trial_key_manager.cc',
+      'common/origin_trials/origin_trial_key_manager.h',
       'common/partial_circular_buffer.cc',
       'common/partial_circular_buffer.h',
       'common/pref_names_util.cc',
@@ -104,8 +108,6 @@
       'common/web_application_info.h',
       'common/widevine_cdm_constants.cc',
       'common/widevine_cdm_constants.h',
-      'common/worker_thread_ticker.cc',
-      'common/worker_thread_ticker.h',
     ],
     'chrome_common_extensions_sources': [
       'common/cast_messages.cc',
@@ -285,10 +287,6 @@
       'common/extensions/api/networking_private/networking_private_crypto.cc',
       'common/extensions/api/networking_private/networking_private_crypto.h',
     ],
-    'chrome_common_mac_sources': [
-      'common/media_galleries/iphoto_library.cc',
-      'common/media_galleries/iphoto_library.h',
-    ]
   },
   'targets': [
     {
@@ -337,6 +335,7 @@
         '<(DEPTH)/components/components.gyp:metrics',
         '<(DEPTH)/components/components.gyp:metrics_net',
         '<(DEPTH)/components/components.gyp:omnibox_common',
+        '<(DEPTH)/components/components.gyp:policy',
         '<(DEPTH)/components/components.gyp:policy_component_common',
         # TODO(fdoray): Remove this once the PreRead field trial has expired.
         # crbug.com/577698
@@ -357,8 +356,10 @@
         '<(DEPTH)/third_party/kasko/kasko.gyp:kasko_features',
         '<(DEPTH)/third_party/zlib/google/zip.gyp:zip',
         '<(DEPTH)/ui/gfx/ipc/gfx_ipc.gyp:gfx_ipc',
+        '<(DEPTH)/ui/gfx/ipc/skia/gfx_ipc_skia.gyp:gfx_ipc_skia',
         '<(DEPTH)/ui/resources/ui_resources.gyp:ui_resources',
         '<(DEPTH)/url/url.gyp:url_lib',
+        '<(DEPTH)/url/ipc/url_ipc.gyp:url_ipc',
       ],
       'sources': [
         '<@(chrome_common_sources)'
@@ -401,10 +402,6 @@
           'dependencies': [
             '../third_party/boringssl/boringssl.gyp:boringssl',
           ],
-        }],
-        ['OS=="mac"', {
-          'sources': [ '<@(chrome_common_mac_sources)' ],
-          'dependencies': [ 'app_mode_app_support' ],
         }],
         ['OS != "ios"', {
           'dependencies': [
@@ -497,7 +494,10 @@
           ],
         }, {
           # Non-Android.
-          'sources': [ '<@(chrome_common_importer_sources)' ]
+          'sources': [ '<@(chrome_common_importer_sources)' ],
+          'dependencies': [
+            '<(DEPTH)/url/ipc/url_ipc.gyp:url_ipc',
+        ],
         }],
         ['OS=="win"', {
           'include_dirs': [
@@ -506,6 +506,22 @@
           'dependencies': [
             '<(DEPTH)/components/components.gyp:dom_distiller_core',  # Needed by chrome_content_client.cc.
           ],
+          'all_dependent_settings': {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                'AdditionalDependencies': [
+                  'wintrust.lib',
+                ],
+              },
+            },
+          },
+          'msvs_settings': {
+            'VCLinkerTool': {
+              'AdditionalDependencies': [
+                'wintrust.lib',
+              ],
+            },
+          },
         }],
         ['OS=="mac"', {
           'dependencies': [
@@ -520,11 +536,6 @@
           'sources!': [
             'common/media/webrtc_logging_messages.h',
           ]
-        }],
-        ['configuration_policy==1', {
-          'dependencies': [
-            '<(DEPTH)/components/components.gyp:policy',
-          ],
         }],
         ['safe_browsing==1', {
           'sources': [ '<@(chrome_common_full_safe_browsing_sources)', ],
@@ -639,11 +650,12 @@
         '../mojo/mojom_bindings_generator.gypi'
       ],
       'sources': [
+        'common/image_decoder.mojom',
         'common/resource_usage_reporter.mojom',
       ],
       'dependencies': [
-        '../mojo/mojo_base.gyp:mojo_environment_chromium',
         '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+        '../skia/skia.gyp:skia_mojo',
       ],
     },
   ],

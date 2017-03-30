@@ -28,6 +28,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/user_names.h"
@@ -72,13 +73,13 @@ void DeriveCommandLine(const GURL& start_url,
 
   static const char* const kForwardSwitches[] = {
     ::switches::kBlinkSettings,
+    ::switches::kDisable2dCanvasImageChromium,
     ::switches::kDisableAccelerated2dCanvas,
     ::switches::kDisableAcceleratedJpegDecoding,
     ::switches::kDisableAcceleratedMjpegDecode,
     ::switches::kDisableAcceleratedVideoDecode,
     ::switches::kDisableBlinkFeatures,
     ::switches::kDisableCastStreamingHWEncoding,
-    ::switches::kDisableCompositorAnimationTimelines,
     ::switches::kDisableDistanceFieldText,
     ::switches::kDisableGpu,
     ::switches::kDisableGpuMemoryBufferVideoFrames,
@@ -87,7 +88,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableGpuCompositing,
     ::switches::kDisableGpuRasterization,
     ::switches::kDisableLowResTiling,
-    ::switches::kDisableMediaSource,
     ::switches::kDisablePreferCompositingToLCDText,
     ::switches::kDisablePanelFitting,
     ::switches::kDisableRGBA4444Textures,
@@ -100,7 +100,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableDisplayList2dCanvas,
     ::switches::kEnableDisplayList2dCanvas,
     ::switches::kForceDisplayList2dCanvas,
-    ::switches::kDisableEncryptedMedia,
     ::switches::kDisableGpuSandbox,
     ::switches::kEnableDistanceFieldText,
     ::switches::kEnableGpuMemoryBufferVideoFrames,
@@ -108,6 +107,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableImageColorProfiles,
     ::switches::kEnableLogging,
     ::switches::kEnableLowResTiling,
+    ::switches::kDisablePartialRaster,
     ::switches::kEnablePartialRaster,
     ::switches::kEnablePinch,
     ::switches::kEnablePreferCompositingToLCDText,
@@ -137,8 +137,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kRendererStartupDialog,
     ::switches::kRootLayerScrolls,
     ::switches::kEnableShareGroupAsyncTextureUpload,
-    ::switches::kTabCaptureUpscaleQuality,
-    ::switches::kTabCaptureDownscaleQuality,
 #if defined(USE_X11) || defined(USE_OZONE)
     ::switches::kTouchCalibration,
 #endif
@@ -148,7 +146,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kTopChromeMD,
 #endif
     ::switches::kTraceToConsole,
-    ::switches::kUIDisableCompositorAnimationTimelines,
     ::switches::kUIDisablePartialSwap,
     ::switches::kUIPrioritizeInGpuProcess,
 #if defined(USE_CRAS)
@@ -159,6 +156,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kV,
     ::switches::kVModule,
     ::switches::kEnableWebGLDraftExtensions,
+    ::switches::kDisableWebGLImageChromium,
     ::switches::kEnableWebGLImageChromium,
     ::switches::kEnableWebVR,
 #if defined(ENABLE_WEBRTC)
@@ -324,8 +322,9 @@ void GetOffTheRecordCommandLine(const GURL& start_url,
   otr_switches.SetString(switches::kGuestSession, std::string());
   otr_switches.SetString(::switches::kIncognito, std::string());
   otr_switches.SetString(::switches::kLoggingLevel, kGuestModeLoggingLevel);
-  otr_switches.SetString(switches::kLoginUser,
-                         login::GuestAccountId().GetUserEmail());
+  otr_switches.SetString(
+      switches::kLoginUser,
+      cryptohome::Identification(login::GuestAccountId()).id());
 
   // Override the home page.
   otr_switches.SetString(::switches::kHomePage,

@@ -53,11 +53,11 @@ public:
     unsigned getNumberOfChars();
     float getComputedTextLength();
     float getSubStringLength(unsigned charnum, unsigned nchars, ExceptionState&);
-    PassRefPtrWillBeRawPtr<SVGPointTearOff> getStartPositionOfChar(unsigned charnum, ExceptionState&);
-    PassRefPtrWillBeRawPtr<SVGPointTearOff> getEndPositionOfChar(unsigned charnum, ExceptionState&);
-    PassRefPtrWillBeRawPtr<SVGRectTearOff> getExtentOfChar(unsigned charnum, ExceptionState&);
+    SVGPointTearOff* getStartPositionOfChar(unsigned charnum, ExceptionState&);
+    SVGPointTearOff* getEndPositionOfChar(unsigned charnum, ExceptionState&);
+    SVGRectTearOff* getExtentOfChar(unsigned charnum, ExceptionState&);
     float getRotationOfChar(unsigned charnum, ExceptionState&);
-    int getCharNumAtPosition(PassRefPtrWillBeRawPtr<SVGPointTearOff>, ExceptionState&);
+    int getCharNumAtPosition(SVGPointTearOff*, ExceptionState&);
     void selectSubString(unsigned charnum, unsigned nchars, ExceptionState&);
 
     static SVGTextContentElement* elementFromLineLayoutItem(const LineLayoutItem);
@@ -80,9 +80,9 @@ protected:
 private:
     bool isTextContent() const final { return true; }
 
-    RefPtrWillBeMember<SVGAnimatedLength> m_textLength;
+    Member<SVGAnimatedLength> m_textLength;
     bool m_textLengthIsSpecifiedByUser;
-    RefPtrWillBeMember<SVGAnimatedEnumeration<SVGLengthAdjustType>> m_lengthAdjust;
+    Member<SVGAnimatedEnumeration<SVGLengthAdjustType>> m_lengthAdjust;
 };
 
 inline bool isSVGTextContentElement(const SVGElement& element)

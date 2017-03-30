@@ -77,6 +77,11 @@ class CastMetricsHelper {
   // This is used as an in-place replacement of content::RecordComputedAction().
   virtual void RecordSimpleAction(const std::string& action);
 
+  // Logs application specific events.
+  virtual void RecordApplicationEvent(const std::string& event);
+  virtual void RecordApplicationEventWithValue(const std::string& event,
+                                               int value);
+
   // Logs UMA record of the time the app made its first paint.
   virtual void LogTimeToFirstPaint();
 

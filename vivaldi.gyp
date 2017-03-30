@@ -13,6 +13,12 @@
           'dependencies': [
             'chromium/third_party/crashpad/crashpad/handler/handler.gyp:crashpad_handler',
           ],
+          'copies': [
+            {
+              'destination': '<(PRODUCT_DIR)',
+              'files': [ 'testdata/stp.viv' ],
+            },
+          ],
         }]
       ]
     },

@@ -34,7 +34,7 @@ namespace blink {
 class SourceGraphic;
 class FilterEffect;
 
-class PLATFORM_EXPORT Filter final : public RefCountedWillBeGarbageCollectedFinalized<Filter> {
+class PLATFORM_EXPORT Filter final : public GarbageCollectedFinalized<Filter> {
     WTF_MAKE_NONCOPYABLE(Filter);
 public:
     enum UnitScaling {
@@ -42,8 +42,8 @@ public:
         BoundingBox
     };
 
-    static PassRefPtrWillBeRawPtr<Filter> create(const FloatRect& referenceBox, const FloatRect& filterRegion, float scale, UnitScaling);
-    static PassRefPtrWillBeRawPtr<Filter> create(float scale);
+    static Filter* create(const FloatRect& referenceBox, const FloatRect& filterRegion, float scale, UnitScaling);
+    static Filter* create(float scale);
 
     ~Filter();
     DECLARE_TRACE();
@@ -62,10 +62,10 @@ public:
     const FloatRect& filterRegion() const { return m_filterRegion; }
     const FloatRect& referenceBox() const { return m_referenceBox; }
 
-    void setLastEffect(PassRefPtrWillBeRawPtr<FilterEffect>);
+    void setLastEffect(FilterEffect*);
     FilterEffect* lastEffect() const { return m_lastEffect.get(); }
 
-    SourceGraphic* sourceGraphic() const { return m_sourceGraphic.get(); }
+    SourceGraphic* getSourceGraphic() const { return m_sourceGraphic.get(); }
 
 private:
     Filter(const FloatRect& referenceBox, const FloatRect& filterRegion, float scale, UnitScaling);
@@ -75,8 +75,8 @@ private:
     float m_scale;
     UnitScaling m_unitScaling;
 
-    RefPtrWillBeMember<SourceGraphic> m_sourceGraphic;
-    RefPtrWillBeMember<FilterEffect> m_lastEffect;
+    Member<SourceGraphic> m_sourceGraphic;
+    Member<FilterEffect> m_lastEffect;
 };
 
 } // namespace blink

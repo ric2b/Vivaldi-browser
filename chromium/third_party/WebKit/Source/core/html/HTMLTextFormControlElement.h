@@ -79,7 +79,7 @@ public:
     virtual void setRangeText(const String& replacement, unsigned start, unsigned end, const String& selectionMode, ExceptionState&);
     void setSelectionRange(int start, int end, const String& direction);
     void setSelectionRange(int start, int end, TextFieldSelectionDirection = SelectionHasNoDirection, NeedToDispatchSelectEvent = DispatchSelectEvent, SelectionOption = ChangeSelection);
-    PassRefPtrWillBeRawPtr<Range> selection() const;
+    RawPtr<Range> selection() const;
 
     virtual bool supportsAutocapitalize() const = 0;
     virtual const AtomicString& defaultAutocapitalize() const = 0;
@@ -97,6 +97,7 @@ public:
     bool lastChangeWasUserEdit() const;
     virtual void setInnerEditorValue(const String&);
     String innerEditorValue() const;
+    RawPtr<Node> createPlaceholderBreakElement() const;
 
     String directionForFormData() const;
 
@@ -131,7 +132,7 @@ protected:
     virtual void subtreeHasChanged() = 0;
 
     void setLastChangeWasNotUserEdit() { m_lastChangeWasUserEdit = false; }
-
+    void addPlaceholderBreakElementIfNecessary();
     String valueWithHardLineBreaks() const;
 
     virtual bool shouldDispatchFormControlChangeEvent(String&, String&);

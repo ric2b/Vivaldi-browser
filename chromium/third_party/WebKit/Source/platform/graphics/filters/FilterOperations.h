@@ -37,11 +37,7 @@ namespace blink {
 typedef IntRectOutsets FilterOutsets;
 
 class PLATFORM_EXPORT FilterOperations {
-#if ENABLE(OILPAN)
     DISALLOW_NEW();
-#else
-    USING_FAST_MALLOC(FilterOperations);
-#endif
 public:
     FilterOperations();
     FilterOperations(const FilterOperations& other) { *this = other; }
@@ -59,7 +55,7 @@ public:
         m_operations.clear();
     }
 
-    typedef WillBeHeapVector<RefPtrWillBeMember<FilterOperation>> FilterOperationVector;
+    typedef HeapVector<Member<FilterOperation>> FilterOperationVector;
 
     FilterOperationVector& operations() { return m_operations; }
     const FilterOperationVector& operations() const { return m_operations; }
@@ -84,7 +80,6 @@ private:
     FilterOperationVector m_operations;
 };
 
-#if ENABLE(OILPAN)
 // Wrapper object for the FilterOperations part object.
 class FilterOperationsWrapper : public GarbageCollected<FilterOperationsWrapper> {
 public:
@@ -114,7 +109,6 @@ private:
 
     FilterOperations m_operations;
 };
-#endif
 
 } // namespace blink
 

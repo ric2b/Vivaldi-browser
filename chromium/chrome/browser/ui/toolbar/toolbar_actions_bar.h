@@ -186,8 +186,11 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
       const;
 
   // Pops out a given |action|, ensuring it is visible.
+  // |is_sticky| refers to whether or not the action will stay popped out if
+  // the overflow menu is opened.
   // |closure| will be called once any animation is complete.
   void PopOutAction(ToolbarActionViewController* action,
+                    bool is_sticky,
                     const base::Closure& closure);
 
   // Undoes the current "pop out"; i.e., moves the popped out action back into
@@ -207,6 +210,10 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
   // Add or remove an observer.
   void AddObserver(ToolbarActionsBarObserver* observer);
   void RemoveObserver(ToolbarActionsBarObserver* observer);
+
+  // Displays the given |bubble| once the toolbar is no longer animating.
+  void ShowToolbarActionBubble(
+      std::unique_ptr<ToolbarActionsBarBubbleDelegate> bubble);
 
   // Returns the underlying toolbar actions, but does not order them. Primarily
   // for use in testing.
@@ -232,9 +239,6 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
     return popped_out_action_;
   }
   bool in_overflow_mode() const { return main_bar_ != nullptr; }
-  bool show_icon_surfacing_bubble() const {
-    return model_->highlighting_for_toolbar_redesign();
-  }
 
   ToolbarActionsBarDelegate* delegate_for_test() { return delegate_; }
 
@@ -273,7 +277,7 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
 
   // Shows an extension message bubble, if any should be shown.
   void MaybeShowExtensionBubble(
-      scoped_ptr<extensions::ExtensionMessageBubbleController> controller);
+      std::unique_ptr<extensions::ExtensionMessageBubbleController> controller);
 
   // The delegate for this object (in a real build, this is the view).
   ToolbarActionsBarDelegate* delegate_;
@@ -325,13 +329,24 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer {
   // order to show a popup.
   ToolbarActionViewController* popped_out_action_;
 
+  // True if the popped out action is "sticky", meaning it will stay popped
+  // out even if another menu is opened.
+  bool is_popped_out_sticky_;
+
   // The task to alert the |popped_out_action_| that animation has finished, and
   // it is fully popped out.
   base::Closure popped_out_closure_;
 
-  // The controller of the bubble to show once animation finishes, if any.
-  scoped_ptr<extensions::ExtensionMessageBubbleController>
+  // The controller of the extension message bubble to show once animation
+  // finishes, if any. This has priority over
+  // |pending_toolbar_bubble_controller_|.
+  std::unique_ptr<extensions::ExtensionMessageBubbleController>
       pending_extension_bubble_controller_;
+
+  // The controller for the toolbar action bubble to show once animation
+  // finishes, if any.
+  std::unique_ptr<ToolbarActionsBarBubbleDelegate>
+      pending_toolbar_bubble_controller_;
 
   base::ObserverList<ToolbarActionsBarObserver> observers_;
 

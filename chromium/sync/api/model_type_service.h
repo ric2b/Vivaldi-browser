@@ -5,16 +5,18 @@
 #ifndef SYNC_API_MODEL_TYPE_SERVICE_H_
 #define SYNC_API_MODEL_TYPE_SERVICE_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
-#include "base/memory/scoped_ptr.h"
+#include "sync/api/conflict_resolution.h"
 #include "sync/api/entity_change.h"
 #include "sync/api/entity_data.h"
 #include "sync/api/model_type_change_processor.h"
 #include "sync/api/sync_error.h"
 #include "sync/base/sync_export.h"
+#include "sync/internal_api/public/activation_context.h"
 
 namespace syncer_v2 {
 
@@ -26,22 +28,38 @@ class MetadataChangeList;
 // metadata for entities, as well as the model type state.
 class SYNC_EXPORT ModelTypeService {
  public:
-  typedef base::Callback<void(syncer::SyncError, scoped_ptr<DataBatch>)>
+  typedef base::Callback<void(syncer::SyncError, std::unique_ptr<DataBatch>)>
       DataCallback;
   typedef std::vector<std::string> ClientTagList;
+  typedef base::Callback<std::unique_ptr<ModelTypeChangeProcessor>(
+      syncer::ModelType type,
+      ModelTypeService* service)>
+      ChangeProcessorFactory;
 
-  ModelTypeService();
+  ModelTypeService(const ChangeProcessorFactory& change_processor_factory,
+                   syncer::ModelType type);
 
   virtual ~ModelTypeService();
 
   // Creates an object used to communicate changes in the sync metadata to the
   // model type store.
-  virtual scoped_ptr<MetadataChangeList> CreateMetadataChangeList() = 0;
+  virtual std::unique_ptr<MetadataChangeList> CreateMetadataChangeList() = 0;
 
-  // Perform the initial merge of data from the sync server. Should only need
-  // to be called when sync is first turned on, not on every restart.
+  // Perform the initial merge between local and sync data. This should only be
+  // called when a data type is first enabled to start syncing, and there is no
+  // sync metadata. Best effort should be made to match local and sync data. The
+  // keys in the |entity_data_map| will have been created via GetClientTag(...),
+  // and if a local and sync data should match/merge but disagree on tags, the
+  // service should use the sync data's tag. Any local pieces of data that are
+  // not present in sync should immediately be Put(...) to the processor before
+  // returning. The same MetadataChangeList that was passed into this function
+  // can be passed to Put(...) calls. Delete(...) can also be called but should
+  // not be needed for most model types. Durable storage writes, if not able to
+  // combine all change atomically, should save the metadata after the data
+  // changes, so that this merge will be re-driven by sync if is not completely
+  // saved during the current run.
   virtual syncer::SyncError MergeSyncData(
-      scoped_ptr<MetadataChangeList> metadata_change_list,
+      std::unique_ptr<MetadataChangeList> metadata_change_list,
       EntityDataMap entity_data_map) = 0;
 
   // Apply changes from the sync server locally.
@@ -50,7 +68,7 @@ class SYNC_EXPORT ModelTypeService {
   // out, or even be empty in case when a commit confirmation is processed and
   // only the metadata needs to persisted.
   virtual syncer::SyncError ApplySyncChanges(
-      scoped_ptr<MetadataChangeList> metadata_change_list,
+      std::unique_ptr<MetadataChangeList> metadata_change_list,
       EntityChangeList entity_changes) = 0;
 
   // Asynchronously retrieve the corresponding sync data for |client_tags|.
@@ -67,17 +85,32 @@ class SYNC_EXPORT ModelTypeService {
   // it to the processor.
   virtual void OnChangeProcessorSet() = 0;
 
-  // TODO(skym): See crbug/547087, do we need all these accessors?
-  ModelTypeChangeProcessor* change_processor() const;
-
-  void set_change_processor(
-      scoped_ptr<ModelTypeChangeProcessor> change_processor);
+  // Resolve a conflict between the client and server versions of data. They are
+  // guaranteed not to match (both be deleted or have identical specifics). A
+  // default implementation chooses the server data unless it is a deletion.
+  virtual ConflictResolution ResolveConflict(
+      const EntityData& local_data,
+      const EntityData& remote_data) const;
 
   void clear_change_processor();
 
+  void OnSyncStarting(const ModelTypeChangeProcessor::StartCallback& callback);
+
+ protected:
+  // TODO(skym): See crbug/547087, do we need all these accessors?
+  ModelTypeChangeProcessor* change_processor() const;
+
+  ModelTypeChangeProcessor* GetOrCreateChangeProcessor();
+
+  // Model type for this service.
+  syncer::ModelType type() const;
+
  private:
-  // Recieves ownership in set_change_processor(...).
-  scoped_ptr<ModelTypeChangeProcessor> change_processor_;
+  std::unique_ptr<ModelTypeChangeProcessor> change_processor_;
+
+  ChangeProcessorFactory change_processor_factory_;
+
+  const syncer::ModelType type_;
 };
 
 }  // namespace syncer_v2

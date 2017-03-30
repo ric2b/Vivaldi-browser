@@ -19,22 +19,22 @@ executable("window_type_launcher") {
   ]
 
   deps = [
-    ":manifest",
     ":window_type_launcher_resources",
     "//base",
     "//base:base_static",
     "//build/config/sanitizers:deps",
     "//components/mus/public/interfaces",
-    "//mash/shell/public/interfaces",
+    "//mash/session/public/interfaces",
     "//mojo/common:common_base",
     "//mojo/converters/geometry",
     "//mojo/edk/system",
     "//mojo/message_pump",
+    "//mojo/platform_handle:platform_handle_impl",
     "//mojo/public/cpp/bindings",
     "//mojo/shell/public/cpp",
     "//mojo/shell/public/interfaces",
     "//mojo/shell/runner:init",
-    "//mojo/shell/runner/child:lib",
+    "//mojo/shell/runner/common",
     "//skia",
     "//ui/aura",
     "//ui/gfx",
@@ -44,6 +44,7 @@ executable("window_type_launcher") {
   ]
 
   data_deps = [
+    ":manifest",
     "//components/mus",
   ]
 }

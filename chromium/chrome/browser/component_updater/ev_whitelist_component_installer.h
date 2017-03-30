@@ -30,6 +30,7 @@ class EVWhitelistComponentInstallerTraits : public ComponentInstallerTraits {
  private:
   // The following methods override ComponentInstallerTraits.
   bool CanAutoUpdate() const override;
+  bool RequiresNetworkEncryption() const override;
   bool OnCustomInstall(const base::DictionaryValue& manifest,
                        const base::FilePath& install_dir) override;
   bool VerifyInstallation(const base::DictionaryValue& manifest,
@@ -40,6 +41,7 @@ class EVWhitelistComponentInstallerTraits : public ComponentInstallerTraits {
   base::FilePath GetBaseDirectory() const override;
   void GetHash(std::vector<uint8_t>* hash) const override;
   std::string GetName() const override;
+  std::string GetAp() const override;
 
   static base::FilePath GetInstalledPath(const base::FilePath& base);
 

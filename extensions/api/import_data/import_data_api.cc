@@ -20,7 +20,7 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
-#include "chrome/browser/ui/webui/options/advanced_options_utils.h"
+#include "chrome/browser/ui/webui/settings_utils.h"
 #include "chrome/browser/ui/webui/options/content_settings_handler.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/pref_names.h"
@@ -277,7 +277,7 @@ void ImporterApiFunction::SendAsyncResponse() {
 }
 
 void ImporterApiFunction::Finished() {
-  std::vector<linked_ptr<vivaldi::import_data::ProfileItem>> nodes;
+  std::vector<vivaldi::import_data::ProfileItem> nodes;
 
   for (size_t i = 0; i < api_importer_list->count(); ++i) {
     const importer::SourceProfile& source_profile =
@@ -321,7 +321,7 @@ void ImporterApiFunction::Finished() {
       profile->will_show_dialog_type = "none";
     }
 
-    std::vector<linked_ptr<vivaldi::import_data::UserProfileItem>> profileItems;
+    std::vector<vivaldi::import_data::UserProfileItem> profileItems;
 
     for (size_t i = 0; i < source_profile.user_profile_names.size(); ++i) {
       vivaldi::import_data::UserProfileItem* profItem =
@@ -332,15 +332,12 @@ void ImporterApiFunction::Finished() {
       profItem->profile_name =
           source_profile.user_profile_names.at(i).profileName;
 
-      linked_ptr<vivaldi::import_data::UserProfileItem> new_prof_node(profItem);
-
-      profileItems.push_back(new_prof_node);
+      profileItems.push_back(std::move(*profItem));
     }
 
-    profile->user_profiles = profileItems;
+    profile->user_profiles = std::move(profileItems);
 
-    linked_ptr<vivaldi::import_data::ProfileItem> new_node(profile);
-    nodes.push_back(new_node);
+    nodes.push_back(std::move(*profile));
   }
 
   results_ = vivaldi::import_data::GetProfiles::Results::Create(nodes);
@@ -540,27 +537,29 @@ void ImportDataStartImportFunction::StartImport(
 }
 
 ImportDataSetVivaldiAsDefaultBrowserFunction::
-    ImportDataSetVivaldiAsDefaultBrowserFunction() {
+    ImportDataSetVivaldiAsDefaultBrowserFunction()
+  : weak_ptr_factory_(this) {
   default_browser_worker_ =
-    new shell_integration::DefaultBrowserWorker(this, false);
+    new shell_integration::DefaultBrowserWorker(
+      base::Bind(&ImportDataSetVivaldiAsDefaultBrowserFunction::
+                    OnDefaultBrowserWorkerFinished,
+                    weak_ptr_factory_.GetWeakPtr()));
 }
 
 ImportDataSetVivaldiAsDefaultBrowserFunction::
     ~ImportDataSetVivaldiAsDefaultBrowserFunction() {
-  if (default_browser_worker_.get())
-    default_browser_worker_->ObserverDestroyed();
 }
 
-// shell_integration::DefaultWebClientObserver implementation.
-void ImportDataSetVivaldiAsDefaultBrowserFunction::SetDefaultWebClientUIState(
-    shell_integration::DefaultWebClientUIState state) {
-  if (state == shell_integration::STATE_IS_DEFAULT) {
+void
+ImportDataSetVivaldiAsDefaultBrowserFunction::OnDefaultBrowserWorkerFinished(
+    shell_integration::DefaultWebClientState state) {
+  if (state == shell_integration::IS_DEFAULT) {
     results_ =
         vivaldi::import_data::SetVivaldiAsDefaultBrowser::Results::Create(
             "true");
     SendResponse(true);  // Already default
     Release();
-  } else if (state == shell_integration::STATE_NOT_DEFAULT) {
+  } else if (state == shell_integration::NOT_DEFAULT) {
     if (shell_integration::CanSetAsDefaultBrowser() ==
         shell_integration::SET_DEFAULT_NOT_ALLOWED) {
     } else {
@@ -571,7 +570,7 @@ void ImportDataSetVivaldiAsDefaultBrowserFunction::SetDefaultWebClientUIState(
       SendResponse(true);
       Release();
     }
-  } else if (state == shell_integration::STATE_UNKNOWN) {
+  } else if (state == shell_integration::UNKNOWN_DEFAULT) {
   } else {
     return;  // Still processing.
   }
@@ -585,15 +584,17 @@ bool ImportDataSetVivaldiAsDefaultBrowserFunction::RunAsync() {
 }
 
 ImportDataIsVivaldiDefaultBrowserFunction::
-    ImportDataIsVivaldiDefaultBrowserFunction() {
+    ImportDataIsVivaldiDefaultBrowserFunction()
+ : weak_ptr_factory_(this) {
   default_browser_worker_ =
-    new shell_integration::DefaultBrowserWorker(this, false);
+    new shell_integration::DefaultBrowserWorker(
+      base::Bind(&ImportDataIsVivaldiDefaultBrowserFunction::
+                    OnDefaultBrowserWorkerFinished,
+                    weak_ptr_factory_.GetWeakPtr()));
 }
 
 ImportDataIsVivaldiDefaultBrowserFunction::
     ~ImportDataIsVivaldiDefaultBrowserFunction() {
-  if (default_browser_worker_.get())
-    default_browser_worker_->ObserverDestroyed();
 }
 
 bool ImportDataIsVivaldiDefaultBrowserFunction::RunAsync() {
@@ -603,14 +604,14 @@ bool ImportDataIsVivaldiDefaultBrowserFunction::RunAsync() {
 }
 
 // shell_integration::DefaultWebClientObserver implementation.
-void ImportDataIsVivaldiDefaultBrowserFunction::SetDefaultWebClientUIState(
-    shell_integration::DefaultWebClientUIState state) {
-  if (state == shell_integration::STATE_IS_DEFAULT) {
+void ImportDataIsVivaldiDefaultBrowserFunction::OnDefaultBrowserWorkerFinished(
+    shell_integration::DefaultWebClientState state) {
+  if (state == shell_integration::IS_DEFAULT) {
     results_ =
         vivaldi::import_data::IsVivaldiDefaultBrowser::Results::Create("true");
     SendResponse(true);  // Already default
     Release();
-  } else if (state == shell_integration::STATE_NOT_DEFAULT) {
+  } else if (state == shell_integration::NOT_DEFAULT) {
     if (shell_integration::CanSetAsDefaultBrowser() ==
         shell_integration::SET_DEFAULT_NOT_ALLOWED) {
     } else {
@@ -620,7 +621,7 @@ void ImportDataIsVivaldiDefaultBrowserFunction::SetDefaultWebClientUIState(
       SendResponse(true);
       Release();
     }
-  } else if (state == shell_integration::STATE_UNKNOWN) {
+  } else if (state == shell_integration::UNKNOWN_DEFAULT) {
   } else {
     return;  // Still processing.
   }
@@ -635,7 +636,7 @@ ImportDataLaunchNetworkSettingsFunction::
 }
 
 bool ImportDataLaunchNetworkSettingsFunction::RunAsync() {
-  options::AdvancedOptionsUtilities::ShowNetworkProxySettings(NULL);
+  settings_utils::ShowNetworkProxySettings(NULL);
   SendResponse(true);
   return true;
 }

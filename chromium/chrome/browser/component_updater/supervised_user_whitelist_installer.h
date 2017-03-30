@@ -21,7 +21,7 @@ class FilePath;
 
 class PrefRegistrySimple;
 class PrefService;
-class ProfileInfoCache;
+class ProfileAttributesStorage;
 
 namespace component_updater {
 
@@ -33,13 +33,14 @@ class SupervisedUserWhitelistInstaller {
   using WhitelistReadyCallback =
       base::Callback<void(const std::string& crx_id,
                           const base::string16& title,
+                          const base::FilePath& large_icon_path,
                           const base::FilePath& whitelist_path)>;
 
   virtual ~SupervisedUserWhitelistInstaller() {}
 
   static scoped_ptr<SupervisedUserWhitelistInstaller> Create(
       ComponentUpdateService* cus,
-      ProfileInfoCache* profile_info_cache,
+      ProfileAttributesStorage* profile_attributes_storage,
       PrefService* local_state);
 
   static void RegisterPrefs(PrefRegistrySimple* registry);

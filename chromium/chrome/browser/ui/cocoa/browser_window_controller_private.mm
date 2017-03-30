@@ -167,7 +167,7 @@ void RecordFullscreenStyle(FullscreenStyle style) {
   gfx::Rect workArea(NSRectToCGRect([windowScreen visibleFrame]));
   workArea.set_y(monitorFrame.size.height - workArea.y() - workArea.height());
 
-  scoped_ptr<DictionaryPrefUpdate> update =
+  std::unique_ptr<DictionaryPrefUpdate> update =
       chrome::GetWindowPlacementDictionaryReadWrite(
           chrome::GetWindowName(browser_.get()),
           browser_->profile()->GetPrefs());
@@ -310,22 +310,8 @@ willPositionSheet:(NSWindow*)sheet
   NSView* tabContentView = [self tabContentArea];
   NSRect tabContentFrame = [tabContentView frame];
 
-  bool contentShifted =
-      NSMaxY(tabContentFrame) != NSMaxY(newFrame) ||
-      NSMinX(tabContentFrame) != NSMinX(newFrame);
-
   tabContentFrame = newFrame;
   [tabContentView setFrame:tabContentFrame];
-
-  // If the relayout shifts the content area up or down, let the renderer know.
-  if (contentShifted) {
-    WebContents* contents = [self webContents];
-    if (contents) {
-      RenderWidgetHostView* rwhv = contents->GetRenderWidgetHostView();
-      if (rwhv)
-        rwhv->WindowFrameChanged();
-    }
-  }
 }
 
 - (void)adjustToolbarAndBookmarkBarForCompression:(CGFloat)compression {
@@ -843,7 +829,7 @@ willPositionSheet:(NSWindow*)sheet
   fullscreen_mac::SlidingStyle style;
   if ([self isFullscreenForTabContent]) {
     style = fullscreen_mac::OMNIBOX_TABS_NONE;
-  } else if (enteringPresentationMode_ || [self shouldHideFullscreenToolbar]) {
+  } else if (enteringPresentationMode_ || ![self shouldShowFullscreenToolbar]) {
     style = fullscreen_mac::OMNIBOX_TABS_HIDDEN;
   } else {
     style = fullscreen_mac::OMNIBOX_TABS_PRESENT;
@@ -921,10 +907,6 @@ willPositionSheet:(NSWindow*)sheet
 }
 
 - (NSRect)fullscreenButtonFrame {
-  // NSWindowFullScreenButton is 10.7+ and results in log spam on 10.6 if used.
-  if (base::mac::IsOSSnowLeopard())
-    return NSZeroRect;
-
   NSButton* fullscreenButton =
       [[self window] standardWindowButton:NSWindowFullScreenButton];
   if (!fullscreenButton)
@@ -1140,12 +1122,11 @@ willPositionSheet:(NSWindow*)sheet
 }
 
 - (BOOL)shouldUseCustomAppKitFullscreenTransition:(BOOL)enterFullScreen {
-  // Custom fullscreen transitions should only be available in OSX 10.10+.
+  // Custom fullscreen transitions should only be available in OSX 10.9+.
   if (base::mac::IsOSMountainLionOrEarlier())
     return NO;
 
-  // Disable the custom exit animation in OSX 10.9:
-  // https://code.google.com/p/chromium/issues/detail?id=526327#c3.
+  // Disable the custom exit animation in OSX 10.9: http://crbug.com/526327#c3.
   if (base::mac::IsOSMavericks() && !enterFullScreen)
     return NO;
 

@@ -26,7 +26,6 @@
 #include "wtf/text/StringStatics.h"
 
 #include "wtf/DynamicAnnotations.h"
-#include "wtf/MainThread.h"
 #include "wtf/StaticConstructors.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/StringImpl.h"
@@ -91,7 +90,7 @@ void StringStatics::init()
     ASSERT(isMainThread());
 
     // FIXME: These should be allocated at compile time.
-    new (NotNull, (void*)&starAtom) AtomicString("*", AtomicString::ConstructFromLiteral);
+    new (NotNull, (void*)&starAtom) AtomicString("*");
     new (NotNull, (void*)&xmlAtom) AtomicString(addStaticASCIILiteral("xml"));
     new (NotNull, (void*)&xmlnsAtom) AtomicString(addStaticASCIILiteral("xmlns"));
     new (NotNull, (void*)&xlinkAtom) AtomicString(addStaticASCIILiteral("xlink"));

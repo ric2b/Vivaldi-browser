@@ -63,11 +63,12 @@ QuicClient::QuicClient(IPEndPoint server_address,
                        const QuicConfig& config,
                        EpollServer* epoll_server,
                        ProofVerifier* proof_verifier)
-    : QuicClientBase(server_id,
-                     supported_versions,
-                     config,
-                     new QuicEpollConnectionHelper(epoll_server),
-                     proof_verifier),
+    : QuicClientBase(
+          server_id,
+          supported_versions,
+          config,
+          new QuicEpollConnectionHelper(epoll_server, QuicAllocator::SIMPLE),
+          proof_verifier),
       server_address_(server_address),
       local_port_(0),
       epoll_server_(epoll_server),
@@ -76,12 +77,13 @@ QuicClient::QuicClient(IPEndPoint server_address,
       overflow_supported_(false),
       store_response_(false),
       latest_response_code_(-1),
-      packet_reader_(CreateQuicPacketReader()) {}
+      packet_reader_(new QuicPacketReader()) {}
 
 QuicClient::~QuicClient() {
   if (connected()) {
-    session()->connection()->SendConnectionCloseWithDetails(
-        QUIC_PEER_GOING_AWAY, "Client being torn down");
+    session()->connection()->CloseConnection(
+        QUIC_PEER_GOING_AWAY, "Client being torn down",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
   }
 
   STLDeleteElements(&data_to_resend_on_connect_);
@@ -92,6 +94,10 @@ QuicClient::~QuicClient() {
 
 bool QuicClient::Initialize() {
   QuicClientBase::Initialize();
+
+  set_num_sent_client_hellos(0);
+  set_num_stateless_rejects_received(0);
+  set_connection_error(QUIC_NO_ERROR);
 
   // If an initial flow control window has not explicitly been set, then use the
   // same values that Chrome uses.
@@ -109,7 +115,7 @@ bool QuicClient::Initialize() {
 
   epoll_server_->set_timeout_in_us(50 * 1000);
 
-  if (!CreateUDPSocket()) {
+  if (!CreateUDPSocketAndBind()) {
     return false;
   }
 
@@ -129,45 +135,20 @@ QuicClient::QuicDataToResend::~QuicDataToResend() {
   }
 }
 
-bool QuicClient::CreateUDPSocket() {
-  int address_family = server_address_.GetSockAddrFamily();
-  int fd = socket(address_family, SOCK_DGRAM | SOCK_NONBLOCK, IPPROTO_UDP);
+bool QuicClient::CreateUDPSocketAndBind() {
+  int fd =
+      QuicSocketUtils::CreateUDPSocket(server_address_, &overflow_supported_);
   if (fd < 0) {
-    LOG(ERROR) << "CreateSocket() failed: " << strerror(errno);
-    return false;
-  }
-
-  int get_overflow = 1;
-  int rc = setsockopt(fd, SOL_SOCKET, SO_RXQ_OVFL, &get_overflow,
-                      sizeof(get_overflow));
-  if (rc < 0) {
-    DLOG(WARNING) << "Socket overflow detection not supported";
-  } else {
-    overflow_supported_ = true;
-  }
-
-  if (!QuicSocketUtils::SetReceiveBufferSize(fd, kDefaultSocketReceiveBuffer)) {
-    return false;
-  }
-
-  if (!QuicSocketUtils::SetSendBufferSize(fd, kDefaultSocketReceiveBuffer)) {
-    return false;
-  }
-
-  rc = QuicSocketUtils::SetGetAddressInfo(fd, address_family);
-  if (rc < 0) {
-    LOG(ERROR) << "IP detection not supported" << strerror(errno);
     return false;
   }
 
   IPEndPoint client_address;
   if (bind_to_address_.size() != 0) {
     client_address = IPEndPoint(bind_to_address_, local_port_);
-  } else if (address_family == AF_INET) {
-    client_address = IPEndPoint(IPAddress(0, 0, 0, 0), local_port_);
+  } else if (server_address_.GetSockAddrFamily() == AF_INET) {
+    client_address = IPEndPoint(IPAddress::IPv4AllZeros(), local_port_);
   } else {
-    IPAddress any6;
-    CHECK(any6.AssignFromIPLiteral("::"));
+    IPAddress any6 = IPAddress::IPv6AllZeros();
     client_address = IPEndPoint(any6, local_port_);
   }
 
@@ -175,7 +156,8 @@ bool QuicClient::CreateUDPSocket() {
   socklen_t raw_addr_len = sizeof(raw_addr);
   CHECK(client_address.ToSockAddr(reinterpret_cast<sockaddr*>(&raw_addr),
                                   &raw_addr_len));
-  rc = bind(fd, reinterpret_cast<const sockaddr*>(&raw_addr), sizeof(raw_addr));
+  int rc =
+      bind(fd, reinterpret_cast<const sockaddr*>(&raw_addr), sizeof(raw_addr));
   if (rc < 0) {
     LOG(ERROR) << "Bind failed: " << strerror(errno);
     return false;
@@ -263,8 +245,9 @@ void QuicClient::Disconnect() {
   DCHECK(initialized_);
 
   if (connected()) {
-    session()->connection()->SendConnectionCloseWithDetails(
-        QUIC_PEER_GOING_AWAY, "Client disconnecting");
+    session()->connection()->CloseConnection(
+        QUIC_PEER_GOING_AWAY, "Client disconnecting",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
   }
   STLDeleteElements(&data_to_resend_on_connect_);
   STLDeleteElements(&data_sent_before_handshake_);
@@ -298,7 +281,7 @@ void QuicClient::SendRequest(const BalsaHeaders& headers,
                              StringPiece body,
                              bool fin) {
   QuicClientPushPromiseIndex::TryHandle* handle;
-  QuicAsyncStatus rv = push_promise_index_.Try(
+  QuicAsyncStatus rv = push_promise_index()->Try(
       SpdyBalsaUtils::RequestHeadersToSpdyHeaders(headers), this, &handle);
   if (rv == QUIC_SUCCESS)
     return;
@@ -390,7 +373,7 @@ bool QuicClient::MigrateSocket(const IPAddress& new_host) {
   CleanUpUDPSocket(GetLatestFD());
 
   bind_to_address_ = new_host;
-  if (!CreateUDPSocket()) {
+  if (!CreateUDPSocketAndBind()) {
     return false;
   }
 
@@ -408,16 +391,12 @@ void QuicClient::OnEvent(int fd, EpollEvent* event) {
   DCHECK_EQ(fd, GetLatestFD());
 
   if (event->in_events & EPOLLIN) {
-    while (connected()) {
-      if (
-#if MMSG_MORE
-          !ReadAndProcessPackets()
-#else
-          !ReadAndProcessPacket()
-#endif
-              ) {
-        break;
-      }
+    bool more_to_read = true;
+    while (connected() && more_to_read) {
+      more_to_read = packet_reader_->ReadAndDispatchPackets(
+          GetLatestFD(), QuicClient::GetLatestClientAddress().port(),
+          *helper()->GetClock(), this,
+          overflow_supported_ ? &packets_dropped_ : nullptr);
     }
   }
   if (connected() && (event->in_events & EPOLLOUT)) {
@@ -433,21 +412,22 @@ void QuicClient::OnClose(QuicSpdyStream* stream) {
   DCHECK(stream != nullptr);
   QuicSpdyClientStream* client_stream =
       static_cast<QuicSpdyClientStream*>(stream);
-  BalsaHeaders headers;
-  SpdyBalsaUtils::SpdyHeadersToResponseHeaders(client_stream->headers(),
-                                               &headers);
+  BalsaHeaders response_headers;
+  SpdyBalsaUtils::SpdyHeadersToResponseHeaders(
+      client_stream->response_headers(), &response_headers);
 
   if (response_listener_.get() != nullptr) {
-    response_listener_->OnCompleteResponse(stream->id(), headers,
+    response_listener_->OnCompleteResponse(stream->id(), response_headers,
                                            client_stream->data());
   }
 
   // Store response headers and body.
   if (store_response_) {
-    latest_response_code_ = headers.parsed_response_code();
-    headers.DumpHeadersToString(&latest_response_headers_);
+    latest_response_code_ = response_headers.parsed_response_code();
+    response_headers.DumpHeadersToString(&latest_response_headers_);
     latest_response_body_ = client_stream->data();
-    latest_response_trailers_ = client_stream->trailers().DebugString();
+    latest_response_trailers_ =
+        client_stream->received_trailers().DebugString();
   }
 }
 
@@ -492,53 +472,6 @@ QuicPacketWriter* QuicClient::CreateQuicPacketWriter() {
   return new QuicDefaultPacketWriter(GetLatestFD());
 }
 
-QuicPacketReader* QuicClient::CreateQuicPacketReader() {
-  // TODO(rtenneti): Add support for QuicPacketReader.
-  //  return new QuicPacketReader();
-  return nullptr;
-}
-
-int QuicClient::ReadPacket(char* buffer,
-                           int buffer_len,
-                           IPEndPoint* server_address,
-                           IPAddress* client_ip) {
-  return QuicSocketUtils::ReadPacket(
-      GetLatestFD(), buffer, buffer_len,
-      overflow_supported_ ? &packets_dropped_ : nullptr, client_ip,
-      server_address);
-}
-
-bool QuicClient::ReadAndProcessPacket() {
-  // Allocate some extra space so we can send an error if the server goes over
-  // the limit.
-  char buf[2 * kMaxPacketSize];
-
-  IPEndPoint server_address;
-  IPAddress client_ip;
-
-  int bytes_read = ReadPacket(buf, arraysize(buf), &server_address, &client_ip);
-
-  if (bytes_read < 0) {
-    return false;
-  }
-
-  QuicEncryptedPacket packet(buf, bytes_read, false);
-
-  IPEndPoint client_address(client_ip,
-                            QuicClient::GetLatestClientAddress().port());
-
-  session()->ProcessUdpPacket(client_address, server_address, packet);
-  return true;
-}
-
-/*
-bool QuicClient::ReadAndProcessPackets() {
-  return packet_reader_->ReadAndDispatchPackets(
-      GetLatestFD(), QuicClient::GetLatestClientAddress().port(), this,
-      overflow_supported_ ? &packets_dropped_ : nullptr);
-}
-*/
-
 const IPEndPoint QuicClient::GetLatestClientAddress() const {
   if (fd_address_map_.empty()) {
     return IPEndPoint();
@@ -557,7 +490,7 @@ int QuicClient::GetLatestFD() const {
 
 void QuicClient::ProcessPacket(const IPEndPoint& self_address,
                                const IPEndPoint& peer_address,
-                               const QuicEncryptedPacket& packet) {
+                               const QuicReceivedPacket& packet) {
   session()->connection()->ProcessUdpPacket(self_address, peer_address, packet);
 }
 

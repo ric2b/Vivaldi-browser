@@ -84,7 +84,8 @@ private:
 } // namespace
 
 IDBTransaction::IDBTransaction(ScriptState* scriptState, int64_t id, const HashSet<String>& objectStoreNames, WebIDBTransactionMode mode, IDBDatabase* db, IDBOpenDBRequest* openDBRequest, const IDBDatabaseMetadata& previousMetadata)
-    : ActiveDOMObject(scriptState->executionContext())
+    : ActiveScriptWrappable(this)
+    , ActiveDOMObject(scriptState->getExecutionContext())
     , m_id(id)
     , m_database(db)
     , m_objectStoreNames(objectStoreNames)
@@ -115,6 +116,7 @@ DEFINE_TRACE(IDBTransaction)
     visitor->trace(m_error);
     visitor->trace(m_requestList);
     visitor->trace(m_objectStoreMap);
+    visitor->trace(m_createdObjectStores);
     visitor->trace(m_deletedObjectStores);
     visitor->trace(m_objectStoreCleanupMap);
     RefCountedGarbageCollectedEventTargetWithInlineData<IDBTransaction>::trace(visitor);
@@ -159,16 +161,18 @@ IDBObjectStore* IDBTransaction::objectStore(const String& name, ExceptionState& 
     const IDBDatabaseMetadata& metadata = m_database->metadata();
 
     IDBObjectStore* objectStore = IDBObjectStore::create(metadata.objectStores.get(objectStoreId), this);
-    objectStoreCreated(name, objectStore);
+    m_objectStoreMap.set(name, objectStore);
+    m_objectStoreCleanupMap.set(objectStore, objectStore->metadata());
     return objectStore;
 }
 
 void IDBTransaction::objectStoreCreated(const String& name, IDBObjectStore* objectStore)
 {
     ASSERT(m_state != Finished);
+    ASSERT(isVersionChange());
     m_objectStoreMap.set(name, objectStore);
-    if (isVersionChange())
-        m_objectStoreCleanupMap.set(objectStore, objectStore->metadata());
+    m_objectStoreCleanupMap.set(objectStore, objectStore->metadata());
+    m_createdObjectStores.add(objectStore);
 }
 
 void IDBTransaction::objectStoreDeleted(const String& name)
@@ -187,7 +191,7 @@ void IDBTransaction::objectStoreDeleted(const String& name)
 
 void IDBTransaction::setActive(bool active)
 {
-    ASSERT_WITH_MESSAGE(m_state != Finished, "A finished transaction tried to setActive(%s)", active ? "true" : "false");
+    DCHECK_NE(m_state, Finished) << "A finished transaction tried to setActive(" << (active ? "true" : "false") << ")";
     if (m_state == Finishing)
         return;
     ASSERT(active != (m_state == Active));
@@ -212,6 +216,11 @@ void IDBTransaction::abort(ExceptionState& exceptionState)
     for (IDBRequest* request : m_requestList)
         request->abort();
     m_requestList.clear();
+
+    for (IDBObjectStore* store : m_createdObjectStores) {
+        store->abort();
+        store->markDeleted();
+    }
 
     if (backendDB())
         backendDB()->abort(m_id);
@@ -241,14 +250,22 @@ void IDBTransaction::onAbort(DOMException* error)
 
     ASSERT(m_state != Finished);
     if (m_state != Finishing) {
+        // Abort was not triggered by front-end.
         ASSERT(error);
         setError(error);
 
-        // Abort was not triggered by front-end, so outstanding requests must
-        // be aborted now.
+        // Outstanding requests must be aborted.
         for (IDBRequest* request : m_requestList)
             request->abort();
         m_requestList.clear();
+
+        // Newly created stores must be marked as deleted.
+        for (IDBObjectStore* store : m_createdObjectStores)
+            store->markDeleted();
+
+        // Used stores may need to mark indexes as deleted.
+        for (auto& it : m_objectStoreCleanupMap)
+            it.key->abort();
 
         m_state = Finishing;
     }
@@ -322,16 +339,16 @@ const String& IDBTransaction::mode() const
     return IndexedDBNames::readonly;
 }
 
-PassRefPtrWillBeRawPtr<DOMStringList> IDBTransaction::objectStoreNames() const
+DOMStringList* IDBTransaction::objectStoreNames() const
 {
     if (m_mode == WebIDBTransactionModeVersionChange)
         return m_database->objectStoreNames();
 
-    RefPtrWillBeRawPtr<DOMStringList> objectStoreNames = DOMStringList::create(DOMStringList::IndexedDB);
+    DOMStringList* objectStoreNames = DOMStringList::create(DOMStringList::IndexedDB);
     for (const String& name : m_objectStoreNames)
         objectStoreNames->append(name);
     objectStoreNames->sort();
-    return objectStoreNames.release();
+    return objectStoreNames;
 }
 
 const AtomicString& IDBTransaction::interfaceName() const
@@ -339,39 +356,41 @@ const AtomicString& IDBTransaction::interfaceName() const
     return EventTargetNames::IDBTransaction;
 }
 
-ExecutionContext* IDBTransaction::executionContext() const
+ExecutionContext* IDBTransaction::getExecutionContext() const
 {
-    return ActiveDOMObject::executionContext();
+    return ActiveDOMObject::getExecutionContext();
 }
 
-DispatchEventResult IDBTransaction::dispatchEventInternal(PassRefPtrWillBeRawPtr<Event> event)
+DispatchEventResult IDBTransaction::dispatchEventInternal(Event* event)
 {
     IDB_TRACE("IDBTransaction::dispatchEvent");
-    if (m_contextStopped || !executionContext()) {
+    if (m_contextStopped || !getExecutionContext()) {
         m_state = Finished;
         return DispatchEventResult::CanceledBeforeDispatch;
     }
     ASSERT(m_state != Finished);
     ASSERT(m_hasPendingActivity);
-    ASSERT(executionContext());
+    ASSERT(getExecutionContext());
     ASSERT(event->target() == this);
     m_state = Finished;
 
     // Break reference cycles.
+    // TODO(jsbell): This can be removed c/o Oilpan.
     for (auto& it : m_objectStoreMap)
         it.value->transactionFinished();
     m_objectStoreMap.clear();
     for (auto& it : m_deletedObjectStores)
         it->transactionFinished();
+    m_createdObjectStores.clear();
     m_deletedObjectStores.clear();
 
-    WillBeHeapVector<RefPtrWillBeMember<EventTarget>> targets;
+    HeapVector<Member<EventTarget>> targets;
     targets.append(this);
     targets.append(db());
 
     // FIXME: When we allow custom event dispatching, this will probably need to change.
     ASSERT(event->type() == EventTypeNames::complete || event->type() == EventTypeNames::abort);
-    DispatchEventResult dispatchResult = IDBEventDispatcher::dispatch(event.get(), targets);
+    DispatchEventResult dispatchResult = IDBEventDispatcher::dispatch(event, targets);
     // FIXME: Try to construct a test where |this| outlives openDBRequest and we
     // get a crash.
     if (m_openDBRequest) {
@@ -392,13 +411,13 @@ void IDBTransaction::stop()
     abort(IGNORE_EXCEPTION);
 }
 
-void IDBTransaction::enqueueEvent(PassRefPtrWillBeRawPtr<Event> event)
+void IDBTransaction::enqueueEvent(Event* event)
 {
-    ASSERT_WITH_MESSAGE(m_state != Finished, "A finished transaction tried to enqueue an event of type %s.", event->type().utf8().data());
-    if (m_contextStopped || !executionContext())
+    DCHECK_NE(m_state, Finished) << "A finished transaction tried to enqueue an event of type " << event->type() << ".";
+    if (m_contextStopped || !getExecutionContext())
         return;
 
-    EventQueue* eventQueue = executionContext()->eventQueue();
+    EventQueue* eventQueue = getExecutionContext()->getEventQueue();
     event->setTarget(this);
     eventQueue->enqueueEvent(event);
 }

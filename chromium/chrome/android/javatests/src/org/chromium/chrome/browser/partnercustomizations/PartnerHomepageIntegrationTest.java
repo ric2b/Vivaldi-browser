@@ -23,7 +23,6 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.preferences.HomepageEditor;
 import org.chromium.chrome.browser.preferences.HomepagePreferences;
 import org.chromium.chrome.browser.preferences.Preferences;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -36,6 +35,7 @@ import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.content.browser.test.util.UiUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -148,18 +148,18 @@ public class PartnerHomepageIntegrationTest extends BasePartnerBrowserCustomizat
         });
     }
 
-    private void waitForCheckedState(final Preferences preferenceActivity, final boolean isChecked)
+    private void waitForCheckedState(final Preferences preferenceActivity, boolean isChecked)
             throws InterruptedException {
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(Criteria.equals(isChecked, new Callable<Boolean>() {
             @Override
-            public boolean isSatisfied() {
+            public Boolean call() {
                 // The underlying switch view in the preference can change, so we need to fetch
                 // it each time to ensure we are checking the activity view.
                 SwitchCompat homepageSwitch =
                         (SwitchCompat) preferenceActivity.findViewById(R.id.switch_widget);
-                return homepageSwitch.isChecked() == isChecked;
+                return homepageSwitch.isChecked();
             }
-        });
+        }));
     }
 
     /**
@@ -183,7 +183,7 @@ public class PartnerHomepageIntegrationTest extends BasePartnerBrowserCustomizat
                 (Button) editHomepagePreferenceActivity.findViewById(R.id.homepage_save);
         TouchCommon.singleClickView(saveButton);
 
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return editHomepagePreferenceActivity.isDestroyed();
@@ -216,7 +216,7 @@ public class PartnerHomepageIntegrationTest extends BasePartnerBrowserCustomizat
         final TabModel tabModel = getActivity().getCurrentTabModel();
         getActivity().getCurrentTabModel().addObserver(new EmptyTabModelObserver() {
             @Override
-            public void didCloseTab(Tab tab) {
+            public void didCloseTab(int tabId, boolean incognito) {
                 if (tabModel.getCount() == 0) tabClosed.notifyCalled();
             }
         });

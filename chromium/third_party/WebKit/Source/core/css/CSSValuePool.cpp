@@ -28,13 +28,14 @@
 #include "core/css/CSSValueList.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/style/ComputedStyle.h"
+#include "wtf/Threading.h"
 
 namespace blink {
 
 CSSValuePool& cssValuePool()
 {
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<CSSValuePool>, pool, (adoptPtrWillBeNoop(new CSSValuePool())));
-    return *pool;
+    DEFINE_STATIC_LOCAL(CSSValuePool, pool, (new CSSValuePool));
+    return pool;
 }
 
 CSSValuePool::CSSValuePool()
@@ -52,7 +53,7 @@ CSSValuePool::CSSValuePool()
     m_numberValueCache.resize(maximumCacheableIntegerValue + 1);
 }
 
-PassRefPtrWillBeRawPtr<CSSPrimitiveValue> CSSValuePool::createIdentifierValue(CSSValueID ident)
+CSSPrimitiveValue* CSSValuePool::createIdentifierValue(CSSValueID ident)
 {
     if (ident <= 0)
         return CSSPrimitiveValue::createIdentifier(ident);
@@ -62,12 +63,12 @@ PassRefPtrWillBeRawPtr<CSSPrimitiveValue> CSSValuePool::createIdentifierValue(CS
     return m_identifierValueCache[ident];
 }
 
-PassRefPtrWillBeRawPtr<CSSCustomIdentValue> CSSValuePool::createIdentifierValue(CSSPropertyID ident)
+CSSCustomIdentValue* CSSValuePool::createIdentifierValue(CSSPropertyID ident)
 {
     return CSSCustomIdentValue::create(ident);
 }
 
-PassRefPtrWillBeRawPtr<CSSColorValue> CSSValuePool::createColorValue(RGBA32 rgbValue)
+CSSColorValue* CSSValuePool::createColorValue(RGBA32 rgbValue)
 {
     // These are the empty and deleted values of the hash table.
     if (rgbValue == Color::transparent)
@@ -78,19 +79,28 @@ PassRefPtrWillBeRawPtr<CSSColorValue> CSSValuePool::createColorValue(RGBA32 rgbV
     if (rgbValue == Color::black)
         return m_colorBlack;
 
+    if (!isMainThread()) {
+        // TODO (crbug.com/599659): Make CSS color parsing work properly in a
+        // worker thread.
+        // Currently, ColorValueCache is not thread-safe; so we avoid interacting
+        // with it on a non-main thread.
+        return CSSColorValue::create(rgbValue);
+    }
+
     // Just wipe out the cache and start rebuilding if it gets too big.
     const unsigned maximumColorCacheSize = 512;
     if (m_colorValueCache.size() > maximumColorCacheSize)
         m_colorValueCache.clear();
 
-    RefPtrWillBeRawPtr<CSSColorValue> dummyValue = nullptr;
+    CSSColorValue* dummyValue = nullptr;
     ColorValueCache::AddResult entry = m_colorValueCache.add(rgbValue, dummyValue);
     if (entry.isNewEntry)
         entry.storedValue->value = CSSColorValue::create(rgbValue);
+
     return entry.storedValue->value;
 }
 
-PassRefPtrWillBeRawPtr<CSSPrimitiveValue> CSSValuePool::createValue(double value, CSSPrimitiveValue::UnitType type)
+CSSPrimitiveValue* CSSValuePool::createValue(double value, CSSPrimitiveValue::UnitType type)
 {
     if (std::isinf(value))
         value = 0;
@@ -121,38 +131,39 @@ PassRefPtrWillBeRawPtr<CSSPrimitiveValue> CSSValuePool::createValue(double value
     }
 }
 
-PassRefPtrWillBeRawPtr<CSSPrimitiveValue> CSSValuePool::createValue(const Length& value, const ComputedStyle& style)
+CSSPrimitiveValue* CSSValuePool::createValue(const Length& value, const ComputedStyle& style)
 {
     return CSSPrimitiveValue::create(value, style.effectiveZoom());
 }
 
-PassRefPtrWillBeRawPtr<CSSCustomIdentValue> CSSValuePool::createFontFamilyValue(const String& familyName)
+CSSFontFamilyValue* CSSValuePool::createFontFamilyValue(const String& familyName)
 {
-    RefPtrWillBeMember<CSSCustomIdentValue>& value = m_fontFamilyValueCache.add(familyName, nullptr).storedValue->value;
+    if (familyName.isNull())
+        return CSSFontFamilyValue::create(familyName);
+    Member<CSSFontFamilyValue>& value = m_fontFamilyValueCache.add(familyName, nullptr).storedValue->value;
     if (!value)
-        value = CSSCustomIdentValue::create(familyName);
+        value = CSSFontFamilyValue::create(familyName);
     return value;
 }
 
-PassRefPtrWillBeRawPtr<CSSValueList> CSSValuePool::createFontFaceValue(const AtomicString& string)
+CSSValueList* CSSValuePool::createFontFaceValue(const AtomicString& string)
 {
     // Just wipe out the cache and start rebuilding if it gets too big.
     const unsigned maximumFontFaceCacheSize = 128;
     if (m_fontFaceValueCache.size() > maximumFontFaceCacheSize)
         m_fontFaceValueCache.clear();
 
-    RefPtrWillBeMember<CSSValueList>& value = m_fontFaceValueCache.add(string, nullptr).storedValue->value;
+    Member<CSSValueList>& value = m_fontFaceValueCache.add(string, nullptr).storedValue->value;
     if (!value) {
-        RefPtrWillBeRawPtr<CSSValue> parsedValue = CSSParser::parseSingleValue(CSSPropertyFontFamily, string);
+        CSSValue* parsedValue = CSSParser::parseSingleValue(CSSPropertyFontFamily, string);
         if (parsedValue && parsedValue->isValueList())
-            value = toCSSValueList(parsedValue.get());
+            value = toCSSValueList(parsedValue);
     }
     return value;
 }
 
 DEFINE_TRACE(CSSValuePool)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_inheritedValue);
     visitor->trace(m_implicitInitialValue);
     visitor->trace(m_explicitInitialValue);
@@ -167,7 +178,6 @@ DEFINE_TRACE(CSSValuePool)
     visitor->trace(m_numberValueCache);
     visitor->trace(m_fontFaceValueCache);
     visitor->trace(m_fontFamilyValueCache);
-#endif
 }
 
 } // namespace blink

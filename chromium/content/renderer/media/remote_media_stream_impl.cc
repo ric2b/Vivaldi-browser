@@ -133,7 +133,7 @@ class RemoteVideoTrackAdapter
       const scoped_refptr<base::SingleThreadTaskRunner>& main_thread,
       webrtc::VideoTrackInterface* webrtc_track)
       : RemoteMediaStreamTrackAdapter(main_thread, webrtc_track) {
-    scoped_ptr<TrackObserver> observer(
+    std::unique_ptr<TrackObserver> observer(
         new TrackObserver(main_thread, observed_track().get()));
     // Here, we use base::Unretained() to avoid a circular reference.
     webkit_initialize_ = base::Bind(
@@ -147,15 +147,16 @@ class RemoteVideoTrackAdapter
     DCHECK(main_thread_->BelongsToCurrentThread());
     if (initialized()) {
       static_cast<MediaStreamRemoteVideoSource*>(
-          webkit_track()->source().extraData())->OnSourceTerminated();
+          webkit_track()->source().getExtraData())
+          ->OnSourceTerminated();
     }
   }
 
  private:
-  void InitializeWebkitVideoTrack(scoped_ptr<TrackObserver> observer,
+  void InitializeWebkitVideoTrack(std::unique_ptr<TrackObserver> observer,
                                   bool enabled) {
     DCHECK(main_thread_->BelongsToCurrentThread());
-    scoped_ptr<MediaStreamRemoteVideoSource> video_source(
+    std::unique_ptr<MediaStreamRemoteVideoSource> video_source(
         new MediaStreamRemoteVideoSource(std::move(observer)));
     InitializeWebkitTrack(blink::WebMediaStreamSource::TypeVideo);
     webkit_track()->source().setExtraData(video_source.get());
@@ -261,10 +262,6 @@ void RemoteAudioTrackAdapter::OnChangedOnMainThread(
   state_ = state;
 
   switch (state) {
-    case webrtc::MediaStreamTrackInterface::kInitializing:
-      // Ignore the kInitializing state since there is no match in
-      // WebMediaStreamSource::ReadyState.
-      break;
     case webrtc::MediaStreamTrackInterface::kLive:
       webkit_track()->source().setReadyState(
           blink::WebMediaStreamSource::ReadyStateLive);
@@ -309,8 +306,10 @@ void RemoteMediaStreamImpl::Observer::Unregister() {
 }
 
 void RemoteMediaStreamImpl::Observer::OnChanged() {
-  scoped_ptr<RemoteAudioTrackAdapters> audio(new RemoteAudioTrackAdapters());
-  scoped_ptr<RemoteVideoTrackAdapters> video(new RemoteVideoTrackAdapters());
+  std::unique_ptr<RemoteAudioTrackAdapters> audio(
+      new RemoteAudioTrackAdapters());
+  std::unique_ptr<RemoteVideoTrackAdapters> video(
+      new RemoteVideoTrackAdapters());
 
   CreateAdaptersForTracks(
       webrtc_stream_->GetAudioTracks(), audio.get(), main_thread_);
@@ -323,8 +322,8 @@ void RemoteMediaStreamImpl::Observer::OnChanged() {
 }
 
 void RemoteMediaStreamImpl::Observer::OnChangedOnMainThread(
-    scoped_ptr<RemoteAudioTrackAdapters> audio_tracks,
-    scoped_ptr<RemoteVideoTrackAdapters> video_tracks) {
+    std::unique_ptr<RemoteAudioTrackAdapters> audio_tracks,
+    std::unique_ptr<RemoteVideoTrackAdapters> video_tracks) {
   DCHECK(main_thread_->BelongsToCurrentThread());
   if (media_stream_)
     media_stream_->OnChanged(std::move(audio_tracks), std::move(video_tracks));
@@ -377,8 +376,8 @@ void RemoteMediaStreamImpl::InitializeOnMainThread(const std::string& label) {
 }
 
 void RemoteMediaStreamImpl::OnChanged(
-    scoped_ptr<RemoteAudioTrackAdapters> audio_tracks,
-    scoped_ptr<RemoteVideoTrackAdapters> video_tracks) {
+    std::unique_ptr<RemoteAudioTrackAdapters> audio_tracks,
+    std::unique_ptr<RemoteVideoTrackAdapters> video_tracks) {
   // Find removed tracks.
   auto audio_it = audio_track_observers_.begin();
   while (audio_it != audio_track_observers_.end()) {

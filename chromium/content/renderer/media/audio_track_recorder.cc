@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
+#include "content/renderer/media/media_stream_audio_track.h"
 #include "media/audio/audio_parameters.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_converter.h"
@@ -105,12 +106,13 @@ class AudioTrackRecorder::AudioEncoder
 
   void OnSetFormat(const media::AudioParameters& params);
 
-  void EncodeAudio(scoped_ptr<media::AudioBus> audio_bus,
+  void EncodeAudio(std::unique_ptr<media::AudioBus> audio_bus,
                    const base::TimeTicks& capture_time);
+
+  void set_paused(bool paused) { paused_ = paused; }
 
  private:
   friend class base::RefCountedThreadSafe<AudioEncoder>;
-
   ~AudioEncoder() override;
 
   bool is_initialized() const { return !!opus_encoder_; }
@@ -135,11 +137,14 @@ class AudioTrackRecorder::AudioEncoder
   media::AudioParameters output_params_;
 
   // Sampling rate adapter between an OpusEncoder supported and the provided.
-  scoped_ptr<media::AudioConverter> converter_;
-  scoped_ptr<media::AudioFifo> fifo_;
+  std::unique_ptr<media::AudioConverter> converter_;
+  std::unique_ptr<media::AudioFifo> fifo_;
 
   // Buffer for passing AudioBus data to OpusEncoder.
-  scoped_ptr<float[]> buffer_;
+  std::unique_ptr<float[]> buffer_;
+
+  // While |paused_|, AudioBuses are not encoded.
+  bool paused_;
 
   OpusEncoder* opus_encoder_;
 
@@ -151,6 +156,7 @@ AudioTrackRecorder::AudioEncoder::AudioEncoder(
     int32_t bits_per_second)
     : on_encoded_audio_cb_(on_encoded_audio_cb),
       bits_per_second_(bits_per_second),
+      paused_(false),
       opus_encoder_(nullptr) {
   // AudioEncoder is constructed on the thread that ATR lives on, but should
   // operate only on the encoder thread after that. Reset
@@ -232,29 +238,30 @@ void AudioTrackRecorder::AudioEncoder::OnSetFormat(
 }
 
 void AudioTrackRecorder::AudioEncoder::EncodeAudio(
-    scoped_ptr<media::AudioBus> input_bus,
+    std::unique_ptr<media::AudioBus> input_bus,
     const base::TimeTicks& capture_time) {
-  DVLOG(1) << __FUNCTION__ << ", #frames " << input_bus->frames();
+  DVLOG(3) << __FUNCTION__ << ", #frames " << input_bus->frames();
   DCHECK(encoder_thread_checker_.CalledOnValidThread());
   DCHECK_EQ(input_bus->channels(), input_params_.channels());
   DCHECK(!capture_time.is_null());
   DCHECK(converter_);
 
-  if (!is_initialized())
+  if (!is_initialized() || paused_)
     return;
-  // TODO(mcasas): Consider using a std::deque<scoped_ptr<AudioBus>> instead of
+  // TODO(mcasas): Consider using a std::deque<std::unique_ptr<AudioBus>>
+  // instead of
   // an AudioFifo, to avoid copying data needlessly since we know the sizes of
   // both input and output and they are multiples.
   fifo_->Push(input_bus.get());
 
   // Wait to have enough |input_bus|s to guarantee a satisfactory conversion.
   while (fifo_->frames() >= input_params_.frames_per_buffer()) {
-    scoped_ptr<media::AudioBus> audio_bus = media::AudioBus::Create(
+    std::unique_ptr<media::AudioBus> audio_bus = media::AudioBus::Create(
         output_params_.channels(), kOpusPreferredFramesPerBuffer);
     converter_->Convert(audio_bus.get());
     ToInterleaved(audio_bus.get(), buffer_.get());
 
-    scoped_ptr<std::string> encoded_data(new std::string());
+    std::unique_ptr<std::string> encoded_data(new std::string());
     if (DoEncode(opus_encoder_, buffer_.get(), kOpusPreferredFramesPerBuffer,
                  encoded_data.get())) {
       const base::TimeTicks capture_time_of_first_sample =
@@ -277,7 +284,7 @@ double AudioTrackRecorder::AudioEncoder::ProvideInput(
 
 void AudioTrackRecorder::AudioEncoder::DestroyExistingOpusEncoder() {
   // We don't DCHECK that we're on the encoder thread here, as this could be
-  // called from the dtor (main thread) or from OnSetForamt() (render thread);
+  // called from the dtor (main thread) or from OnSetFormat() (encoder thread).
   if (opus_encoder_) {
     opus_encoder_destroy(opus_encoder_);
     opus_encoder_ = nullptr;
@@ -294,7 +301,7 @@ AudioTrackRecorder::AudioTrackRecorder(
       encoder_thread_("AudioEncoderThread") {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   DCHECK(!track_.isNull());
-  DCHECK(track_.extraData());
+  DCHECK(MediaStreamAudioTrack::From(track_));
 
   // Start the |encoder_thread_|. From this point on, |encoder_| should work
   // only on |encoder_thread_|, as enforced by DCHECKs.
@@ -326,13 +333,27 @@ void AudioTrackRecorder::OnData(const media::AudioBus& audio_bus,
   DCHECK(capture_thread_checker_.CalledOnValidThread());
   DCHECK(!capture_time.is_null());
 
-  scoped_ptr<media::AudioBus> audio_data =
+  std::unique_ptr<media::AudioBus> audio_data =
       media::AudioBus::Create(audio_bus.channels(), audio_bus.frames());
   audio_bus.CopyTo(audio_data.get());
 
   encoder_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(&AudioEncoder::EncodeAudio, encoder_,
                             base::Passed(&audio_data), capture_time));
+}
+
+void AudioTrackRecorder::Pause() {
+  DCHECK(main_render_thread_checker_.CalledOnValidThread());
+  DCHECK(encoder_);
+  encoder_thread_.task_runner()->PostTask(
+      FROM_HERE, base::Bind(&AudioEncoder::set_paused, encoder_, true));
+}
+
+void AudioTrackRecorder::Resume() {
+  DCHECK(main_render_thread_checker_.CalledOnValidThread());
+  DCHECK(encoder_);
+  encoder_thread_.task_runner()->PostTask(
+      FROM_HERE, base::Bind(&AudioEncoder::set_paused, encoder_, false));
 }
 
 }  // namespace content

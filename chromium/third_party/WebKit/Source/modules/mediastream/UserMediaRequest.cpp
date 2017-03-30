@@ -58,7 +58,7 @@ static WebMediaConstraints parseOptions(ExecutionContext* context, const Boolean
     } else if (options.isMediaTrackConstraintSet()) {
         constraints = MediaConstraintsImpl::create(context, options.getAsMediaTrackConstraintSet(), errorState);
     } else {
-        ASSERT(options.isBoolean());
+        DCHECK(options.isBoolean());
         if (options.getAsBoolean()) {
             constraints = MediaConstraintsImpl::create();
         }
@@ -83,6 +83,11 @@ UserMediaRequest* UserMediaRequest::create(ExecutionContext* context, UserMediaC
     }
 
     return new UserMediaRequest(context, controller, audio, video, successCallback, errorCallback);
+}
+
+UserMediaRequest* UserMediaRequest::createForTesting(const WebMediaConstraints& audio, const WebMediaConstraints& video)
+{
+    return new UserMediaRequest(nullptr, nullptr, audio, video, nullptr, nullptr);
 }
 
 UserMediaRequest::UserMediaRequest(ExecutionContext* context, UserMediaController* controller, WebMediaConstraints audio, WebMediaConstraints video, NavigatorUserMediaSuccessCallback* successCallback, NavigatorUserMediaErrorCallback* errorCallback)
@@ -133,14 +138,14 @@ bool UserMediaRequest::isSecureContextUse(String& errorMessage)
     // While getUserMedia is blocked on insecure origins, we still want to
     // count attempts to use it.
     Deprecation::countDeprecation(document->frame(), UseCounter::GetUserMediaInsecureOrigin);
-    UseCounter::countCrossOriginIframe(*document, UseCounter::GetUserMediaInsecureOriginIframe);
+    Deprecation::countDeprecationCrossOriginIframe(*document, UseCounter::GetUserMediaInsecureOriginIframe);
     OriginsUsingFeatures::countAnyWorld(*document, OriginsUsingFeatures::Feature::GetUserMediaInsecureOrigin);
     return false;
 }
 
 Document* UserMediaRequest::ownerDocument()
 {
-    if (ExecutionContext* context = executionContext()) {
+    if (ExecutionContext* context = getExecutionContext()) {
         return toDocument(context);
     }
 
@@ -155,10 +160,10 @@ void UserMediaRequest::start()
 
 void UserMediaRequest::succeed(MediaStreamDescriptor* streamDescriptor)
 {
-    if (!executionContext())
+    if (!getExecutionContext())
         return;
 
-    RefPtrWillBeRawPtr<MediaStream> stream = MediaStream::create(executionContext(), streamDescriptor);
+    MediaStream* stream = MediaStream::create(getExecutionContext(), streamDescriptor);
 
     MediaStreamTrackVector audioTracks = stream->getAudioTracks();
     for (MediaStreamTrackVector::iterator iter = audioTracks.begin(); iter != audioTracks.end(); ++iter) {
@@ -170,28 +175,28 @@ void UserMediaRequest::succeed(MediaStreamDescriptor* streamDescriptor)
         (*iter)->component()->source()->setConstraints(m_video);
     }
 
-    m_successCallback->handleEvent(stream.get());
+    m_successCallback->handleEvent(stream);
 }
 
 void UserMediaRequest::failPermissionDenied(const String& message)
 {
-    if (!executionContext())
+    if (!getExecutionContext())
         return;
     m_errorCallback->handleEvent(NavigatorUserMediaError::create(NavigatorUserMediaError::NamePermissionDenied, message, String()));
 }
 
 void UserMediaRequest::failConstraint(const String& constraintName, const String& message)
 {
-    ASSERT(!constraintName.isEmpty());
-    if (!executionContext())
+    DCHECK(!constraintName.isEmpty());
+    if (!getExecutionContext())
         return;
     m_errorCallback->handleEvent(NavigatorUserMediaError::create(NavigatorUserMediaError::NameConstraintNotSatisfied, message, constraintName));
 }
 
 void UserMediaRequest::failUASpecific(const String& name, const String& message, const String& constraintName)
 {
-    ASSERT(!name.isEmpty());
-    if (!executionContext())
+    DCHECK(!name.isEmpty());
+    if (!getExecutionContext())
         return;
     m_errorCallback->handleEvent(NavigatorUserMediaError::create(name, message, constraintName));
 }

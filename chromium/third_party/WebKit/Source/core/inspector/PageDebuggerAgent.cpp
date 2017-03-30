@@ -35,12 +35,10 @@
 #include "core/dom/Document.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalFrame.h"
-#include "core/inspector/AsyncCallTracker.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/InstrumentingAgents.h"
-#include "core/inspector/MainThreadDebugger.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/page/Page.h"
 
@@ -48,13 +46,13 @@ using blink::protocol::Runtime::RemoteObject;
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<PageDebuggerAgent> PageDebuggerAgent::create(MainThreadDebugger* mainThreadDebugger, InspectedFrames* inspectedFrames, V8RuntimeAgent* runtimeAgent)
+RawPtr<PageDebuggerAgent> PageDebuggerAgent::create(V8DebuggerAgent* agent, InspectedFrames* inspectedFrames)
 {
-    return adoptPtrWillBeNoop(new PageDebuggerAgent(mainThreadDebugger, inspectedFrames, runtimeAgent));
+    return new PageDebuggerAgent(agent, inspectedFrames);
 }
 
-PageDebuggerAgent::PageDebuggerAgent(MainThreadDebugger* mainThreadDebugger, InspectedFrames* inspectedFrames, V8RuntimeAgent* runtimeAgent)
-    : InspectorDebuggerAgent(runtimeAgent, mainThreadDebugger->debugger(), mainThreadDebugger->contextGroupId(inspectedFrames->root()))
+PageDebuggerAgent::PageDebuggerAgent(V8DebuggerAgent* agent, InspectedFrames* inspectedFrames)
+    : InspectorDebuggerAgent(agent)
     , m_inspectedFrames(inspectedFrames)
 {
 }
@@ -99,31 +97,12 @@ void PageDebuggerAgent::restore()
 }
 
 
-void PageDebuggerAgent::muteConsole()
-{
-    FrameConsole::mute();
-}
-
-void PageDebuggerAgent::unmuteConsole()
-{
-    FrameConsole::unmute();
-}
-
 void PageDebuggerAgent::didStartProvisionalLoad(LocalFrame* frame)
 {
     if (frame == m_inspectedFrames->root()) {
         ErrorString error;
         resume(&error);
     }
-}
-
-void PageDebuggerAgent::didClearDocumentOfWindowObject(LocalFrame* frame)
-{
-    // FIXME: what about nested objects?
-    if (frame != m_inspectedFrames->root())
-        return;
-    m_asyncCallTracker->resetAsyncOperations();
-    m_v8DebuggerAgent->reset();
 }
 
 } // namespace blink

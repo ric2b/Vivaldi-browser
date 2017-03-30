@@ -46,55 +46,44 @@ void CreateVirtualViewportLayers(Layer* root_layer,
                                  scoped_refptr<Layer> outer_scroll_layer,
                                  const gfx::Size& inner_bounds,
                                  const gfx::Size& outer_bounds,
-                                 LayerTreeHost* host,
-                                 const LayerSettings& layer_settings) {
-    scoped_refptr<Layer> inner_viewport_container_layer =
-        Layer::Create(layer_settings);
-    scoped_refptr<Layer> inner_viewport_scroll_layer =
-        Layer::Create(layer_settings);
-    scoped_refptr<Layer> outer_viewport_container_layer =
-        Layer::Create(layer_settings);
-    scoped_refptr<Layer> page_scale_layer = Layer::Create(layer_settings);
+                                 LayerTreeHost* host) {
+  scoped_refptr<Layer> inner_viewport_container_layer = Layer::Create();
+  scoped_refptr<Layer> inner_viewport_scroll_layer = Layer::Create();
+  scoped_refptr<Layer> outer_viewport_container_layer = Layer::Create();
+  scoped_refptr<Layer> page_scale_layer = Layer::Create();
 
-    root_layer->AddChild(inner_viewport_container_layer);
-    inner_viewport_container_layer->AddChild(page_scale_layer);
-    page_scale_layer->AddChild(inner_viewport_scroll_layer);
-    inner_viewport_scroll_layer->AddChild(outer_viewport_container_layer);
-    outer_viewport_container_layer->AddChild(outer_scroll_layer);
+  root_layer->AddChild(inner_viewport_container_layer);
+  inner_viewport_container_layer->AddChild(page_scale_layer);
+  page_scale_layer->AddChild(inner_viewport_scroll_layer);
+  inner_viewport_scroll_layer->AddChild(outer_viewport_container_layer);
+  outer_viewport_container_layer->AddChild(outer_scroll_layer);
 
-    inner_viewport_scroll_layer->SetScrollClipLayerId(
-        inner_viewport_container_layer->id());
-    outer_scroll_layer->SetScrollClipLayerId(
-        outer_viewport_container_layer->id());
+  inner_viewport_scroll_layer->SetScrollClipLayerId(
+      inner_viewport_container_layer->id());
+  outer_scroll_layer->SetScrollClipLayerId(
+      outer_viewport_container_layer->id());
 
-    inner_viewport_container_layer->SetBounds(inner_bounds);
-    inner_viewport_scroll_layer->SetBounds(outer_bounds);
-    outer_viewport_container_layer->SetBounds(outer_bounds);
+  inner_viewport_container_layer->SetBounds(inner_bounds);
+  inner_viewport_scroll_layer->SetBounds(outer_bounds);
+  outer_viewport_container_layer->SetBounds(outer_bounds);
 
-    inner_viewport_scroll_layer->SetIsContainerForFixedPositionLayers(true);
-    outer_scroll_layer->SetIsContainerForFixedPositionLayers(true);
-    host->RegisterViewportLayers(NULL, page_scale_layer,
-                                 inner_viewport_scroll_layer,
-                                 outer_scroll_layer);
+  inner_viewport_scroll_layer->SetIsContainerForFixedPositionLayers(true);
+  outer_scroll_layer->SetIsContainerForFixedPositionLayers(true);
+  host->RegisterViewportLayers(NULL, page_scale_layer,
+                               inner_viewport_scroll_layer, outer_scroll_layer);
 }
 
 void CreateVirtualViewportLayers(Layer* root_layer,
                                  const gfx::Size& inner_bounds,
                                  const gfx::Size& outer_bounds,
                                  const gfx::Size& scroll_bounds,
-                                 LayerTreeHost* host,
-                                 const LayerSettings& layer_settings) {
-    scoped_refptr<Layer> outer_viewport_scroll_layer =
-        Layer::Create(layer_settings);
+                                 LayerTreeHost* host) {
+  scoped_refptr<Layer> outer_viewport_scroll_layer = Layer::Create();
 
-    outer_viewport_scroll_layer->SetBounds(scroll_bounds);
-    outer_viewport_scroll_layer->SetIsDrawable(true);
-    CreateVirtualViewportLayers(root_layer,
-                                outer_viewport_scroll_layer,
-                                inner_bounds,
-                                outer_bounds,
-                                host,
-                                layer_settings);
+  outer_viewport_scroll_layer->SetBounds(scroll_bounds);
+  outer_viewport_scroll_layer->SetIsDrawable(true);
+  CreateVirtualViewportLayers(root_layer, outer_viewport_scroll_layer,
+                              inner_bounds, outer_bounds, host);
 }
 
 // Creates a SingleThreadProxy that notifies the supplied |test_hooks| of
@@ -320,9 +309,7 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
   void UpdateAnimationState(bool start_ready_animations) override {
     LayerTreeHostImpl::UpdateAnimationState(start_ready_animations);
     bool has_unfinished_animation = false;
-    AnimationRegistrar* registrar =
-        animation_registrar() ? animation_registrar()
-                              : animation_host()->animation_registrar();
+    AnimationRegistrar* registrar = animation_host()->animation_registrar();
     for (const auto& it :
          registrar->active_animation_controllers_for_testing()) {
       if (it.second->HasActiveAnimation()) {
@@ -407,7 +394,7 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
 
   void DidPostSwapBuffers() override {}
   void DidAbortSwapBuffers() override {}
-  void ScheduleComposite() override { test_hooks_->ScheduleComposite(); }
+  void RequestScheduleComposite() override { test_hooks_->ScheduleComposite(); }
   void DidCompletePageScaleAnimation() override {}
   void BeginMainFrameNotExpectedSoon() override {}
 
@@ -553,6 +540,14 @@ bool LayerTreeTest::IsRemoteTest() const {
   return mode_ == CompositorMode::REMOTE;
 }
 
+gfx::Vector2dF LayerTreeTest::ScrollDelta(LayerImpl* layer_impl) {
+  gfx::ScrollOffset delta =
+      layer_impl->layer_tree_impl()
+          ->property_trees()
+          ->scroll_tree.GetScrollOffsetDeltaForTesting(layer_impl->id());
+  return gfx::Vector2dF(delta.x(), delta.y());
+}
+
 void LayerTreeTest::EndTest() {
   if (ended_)
     return;
@@ -574,34 +569,6 @@ void LayerTreeTest::EndTestAfterDelayMs(int delay_milliseconds) {
       FROM_HERE,
       base::Bind(&LayerTreeTest::EndTest, main_thread_weak_ptr_),
       base::TimeDelta::FromMilliseconds(delay_milliseconds));
-}
-
-void LayerTreeTest::PostAddAnimationToMainThread(
-    Layer* layer_to_receive_animation) {
-  main_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&LayerTreeTest::DispatchAddAnimation, main_thread_weak_ptr_,
-                 base::Unretained(layer_to_receive_animation), 0.000004));
-}
-
-void LayerTreeTest::PostAddInstantAnimationToMainThread(
-    Layer* layer_to_receive_animation) {
-  main_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&LayerTreeTest::DispatchAddAnimation,
-                 main_thread_weak_ptr_,
-                 base::Unretained(layer_to_receive_animation),
-                 0.0));
-}
-
-void LayerTreeTest::PostAddLongAnimationToMainThread(
-    Layer* layer_to_receive_animation) {
-  main_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&LayerTreeTest::DispatchAddAnimation,
-                 main_thread_weak_ptr_,
-                 base::Unretained(layer_to_receive_animation),
-                 1.0));
 }
 
 void LayerTreeTest::PostAddAnimationToMainThreadPlayer(
@@ -776,7 +743,7 @@ void LayerTreeTest::DoBeginTest() {
 
 void LayerTreeTest::SetupTree() {
   if (!layer_tree_host_->root_layer()) {
-    scoped_refptr<Layer> root_layer = Layer::Create(layer_settings_);
+    scoped_refptr<Layer> root_layer = Layer::Create();
     root_layer->SetBounds(gfx::Size(1, 1));
     layer_tree_host_->SetRootLayer(root_layer);
   }
@@ -814,16 +781,6 @@ void LayerTreeTest::RealEndTest() {
   }
 
   base::MessageLoop::current()->QuitWhenIdle();
-}
-
-void LayerTreeTest::DispatchAddAnimation(Layer* layer_to_receive_animation,
-                                         double animation_duration) {
-  DCHECK(!task_runner_provider() || task_runner_provider()->IsMainThread());
-
-  if (layer_to_receive_animation) {
-    AddOpacityTransitionToLayer(
-        layer_to_receive_animation, animation_duration, 0, 0.5, true);
-  }
 }
 
 void LayerTreeTest::DispatchAddAnimationToPlayer(
@@ -917,7 +874,6 @@ void LayerTreeTest::RunTest(CompositorMode mode, bool delegating_renderer) {
   settings_.renderer_settings.refresh_rate = 200.0;
   settings_.background_animation_rate = 200.0;
   InitializeSettings(&settings_);
-  InitializeLayerSettings(&layer_settings_);
 
   main_task_runner_->PostTask(
       FROM_HERE,
@@ -955,9 +911,9 @@ scoped_ptr<OutputSurface> LayerTreeTest::CreateOutputSurface() {
             output_surface->capabilities().delegated_rendering);
   output_surface_ = output_surface.get();
 
-  if (settings_.use_external_begin_frame_source) {
+  if (settings_.use_external_begin_frame_source &&
+      settings_.wait_for_beginframe_interval) {
     DCHECK(external_begin_frame_source_);
-    DCHECK(external_begin_frame_source_->is_ready());
   }
   return std::move(output_surface);
 }
@@ -972,16 +928,6 @@ scoped_ptr<FakeOutputSurface> LayerTreeTest::CreateFakeOutputSurface() {
 TestWebGraphicsContext3D* LayerTreeTest::TestContext() {
   return static_cast<TestContextProvider*>(output_surface_->context_provider())
       ->TestContext3d();
-}
-
-int LayerTreeTest::LastCommittedSourceFrameNumber(LayerTreeHostImpl* impl)
-    const {
-  if (impl->pending_tree())
-    return impl->pending_tree()->source_frame_number();
-  if (impl->active_tree())
-    return impl->active_tree()->source_frame_number();
-  // Source frames start at 0, so this is invalid.
-  return -1;
 }
 
 void LayerTreeTest::DestroyLayerTreeHost() {
@@ -1015,6 +961,7 @@ void LayerTreeTest::CreateRemoteClientHost(
   proto::InitializeImpl initialize_proto = proto.initialize_impl_message();
   LayerTreeSettings settings;
   settings.FromProtobuf(initialize_proto.layer_tree_settings());
+  settings.abort_commit_before_output_surface_creation = false;
   remote_client_layer_tree_host_ = LayerTreeHostForTesting::Create(
       this, mode_, client_.get(), &remote_proto_channel_bridge_.channel_impl,
       nullptr, nullptr, task_graph_runner_.get(), settings,
@@ -1051,6 +998,13 @@ LayerTreeHost* LayerTreeTest::layer_tree_host() {
   DCHECK(!task_runner_provider() || task_runner_provider()->IsMainThread() ||
          task_runner_provider()->IsMainThreadBlocked());
   return layer_tree_host_.get();
+}
+
+LayerTreeHost* LayerTreeTest::remote_client_layer_tree_host() {
+  DCHECK(!task_runner_provider() || task_runner_provider()->IsMainThread() ||
+         task_runner_provider()->IsMainThreadBlocked());
+  DCHECK(IsRemoteTest());
+  return remote_client_layer_tree_host_.get();
 }
 
 ProxyMainForTest* LayerTreeTest::GetProxyMainForTest() const {

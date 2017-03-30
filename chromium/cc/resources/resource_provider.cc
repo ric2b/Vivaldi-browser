@@ -31,11 +31,13 @@
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
+#include "skia/ext/texture_handle.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/GrTextureProvider.h"
+#include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gl/trace_util.h"
@@ -594,7 +596,8 @@ ResourceId ResourceProvider::CreateResourceFromTextureMailbox(
   if (mailbox.IsTexture()) {
     resource = InsertResource(
         id,
-        Resource(0, gfx::Size(), Resource::EXTERNAL, mailbox.target(),
+        Resource(0, mailbox.size_in_pixels(), Resource::EXTERNAL,
+                 mailbox.target(),
                  mailbox.nearest_neighbor() ? GL_NEAREST : GL_LINEAR,
                  TEXTURE_HINT_IMMUTABLE, RESOURCE_TYPE_GL_TEXTURE, RGBA_8888));
   } else {
@@ -1038,7 +1041,6 @@ ResourceProvider::ScopedWriteLockSoftware::ScopedWriteLockSoftware(
 
 ResourceProvider::ScopedWriteLockSoftware::~ScopedWriteLockSoftware() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  resource_->SetSynchronized();
   resource_provider_->UnlockForWrite(resource_);
 }
 
@@ -1066,6 +1068,7 @@ ResourceProvider::ScopedWriteLockGpuMemoryBuffer::
   resource_provider_->LazyCreateImage(resource_);
   resource_->dirty_image = true;
   resource_->is_overlay_candidate = true;
+  resource_->SetSynchronized();
 
   // GpuMemoryBuffer provides direct access to the memory used by the GPU.
   // Read lock fences are required to ensure that we're not trying to map a
@@ -1079,7 +1082,7 @@ ResourceProvider::ScopedWriteLockGpuMemoryBuffer::GetGpuMemoryBuffer() {
     gpu_memory_buffer_ =
         resource_provider_->gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
             resource_->size, BufferFormat(resource_->format),
-            gfx::BufferUsage::GPU_READ_CPU_READ_WRITE);
+            gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, 0 /* surface_id */);
   }
   return gpu_memory_buffer_.get();
 }
@@ -1092,6 +1095,9 @@ ResourceProvider::ScopedWriteLockGr::ScopedWriteLockGr(
       set_sync_token_(false) {
   DCHECK(thread_checker_.CalledOnValidThread());
   resource_provider_->LazyAllocate(resource_);
+  if (resource_->dirty_image) {
+    resource_provider_->BindImageForSampling(resource_);
+  }
 }
 
 ResourceProvider::ScopedWriteLockGr::~ScopedWriteLockGr() {
@@ -1109,13 +1115,16 @@ void ResourceProvider::ScopedWriteLockGr::InitSkSurface(
     int msaa_sample_count) {
   DCHECK(resource_->locked_for_write);
 
+  GrGLTextureInfo texture_info;
+  texture_info.fID = resource_->gl_id;
+  texture_info.fTarget = resource_->target;
   GrBackendTextureDesc desc;
   desc.fFlags = kRenderTarget_GrBackendTextureFlag;
   desc.fWidth = resource_->size.width();
   desc.fHeight = resource_->size.height();
   desc.fConfig = ToGrPixelConfig(resource_->format);
   desc.fOrigin = kTopLeft_GrSurfaceOrigin;
-  desc.fTextureHandle = resource_->gl_id;
+  desc.fTextureHandle = skia::GrGLTextureInfoToGrBackendObject(texture_info);
   desc.fSampleCnt = msaa_sample_count;
 
   bool use_worker_context = true;
@@ -1130,19 +1139,14 @@ void ResourceProvider::ScopedWriteLockGr::InitSkSurface(
     surface_props =
         SkSurfaceProps(flags, SkSurfaceProps::kLegacyFontHost_InitType);
   }
-  gr_surface_ =
-      skia::AdoptRef(gr_context->textureProvider()->wrapBackendTexture(
-          desc, kBorrow_GrWrapOwnership));
-  if (gr_surface_)
-    sk_surface_ = skia::AdoptRef(SkSurface::NewRenderTargetDirect(
-        gr_surface_->asRenderTarget(), &surface_props));
+  sk_surface_ = SkSurface::MakeFromBackendTextureAsRenderTarget(
+      gr_context, desc, &surface_props);
 }
 
 void ResourceProvider::ScopedWriteLockGr::ReleaseSkSurface() {
-  DCHECK(gr_surface_);
-  gr_surface_->prepareForExternalIO();
-  gr_surface_.clear();
-  sk_surface_.clear();
+  DCHECK(sk_surface_);
+  sk_surface_->prepareForExternalIO();
+  sk_surface_.reset();
 }
 
 ResourceProvider::SynchronousFence::SynchronousFence(
@@ -1324,7 +1328,20 @@ void ResourceProvider::PrepareSendToParent(const ResourceIdArray& resource_ids,
   std::vector<Resource*> resources;
   resources.reserve(resource_ids.size());
   for (const ResourceId id : resource_ids) {
-    resources.push_back(GetResource(id));
+    Resource* resource = GetResource(id);
+    // Check the synchronization and sync token state when delegated sync points
+    // are required. The only case where we allow a sync token to not be set is
+    // the case where the image is dirty. In that case we will bind the image
+    // lazily and generate a sync token at that point.
+    DCHECK(!output_surface_->capabilities().delegated_sync_points_required ||
+           resource->dirty_image || !resource->needs_sync_token());
+
+    // If we are validating the resource to be sent, the resource cannot be
+    // in a LOCALLY_USED state. It must have been properly synchronized.
+    DCHECK(!output_surface_->capabilities().delegated_sync_points_required ||
+           Resource::LOCALLY_USED != resource->synchronization_state());
+
+    resources.push_back(resource);
   }
 
   // Lazily create any mailboxes and verify all unverified sync tokens.
@@ -1359,6 +1376,7 @@ void ResourceProvider::PrepareSendToParent(const ResourceIdArray& resource_ids,
   }
   for (Resource* resource : need_synchronization_resources) {
     resource->UpdateSyncToken(new_sync_token);
+    resource->SetSynchronized();
   }
 
   // Transfer Resources
@@ -1764,9 +1782,10 @@ void ResourceProvider::LazyAllocate(Resource* resource) {
   gl->BindTexture(resource->target, resource->gl_id);
   if (resource->type == RESOURCE_TYPE_GPU_MEMORY_BUFFER) {
     resource->gpu_memory_buffer =
-        gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
-                                      size, BufferFormat(format),
-                                      gfx::BufferUsage::GPU_READ_CPU_READ_WRITE)
+        gpu_memory_buffer_manager_
+            ->AllocateGpuMemoryBuffer(size, BufferFormat(format),
+                                      gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
+                                      0 /* surface_id */)
             .release();
     LazyCreateImage(resource);
     resource->dirty_image = true;

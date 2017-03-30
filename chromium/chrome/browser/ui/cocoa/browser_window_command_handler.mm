@@ -55,7 +55,7 @@ void UpdateToggleStateWithTag(NSInteger tag, id item, NSWindow* window) {
 
   if (tag == IDC_TOGGLE_FULLSCREEN_TOOLBAR) {
     PrefService* prefs = browser->profile()->GetPrefs();
-    SetToggleState(prefs->GetBoolean(prefs::kHideFullscreenToolbar), item);
+    SetToggleState(prefs->GetBoolean(prefs::kShowFullscreenToolbar), item);
     return;
   }
 
@@ -265,7 +265,7 @@ Browser* FindBrowserForSender(id sender, NSWindow* window) {
   NSUInteger modifierFlags = [[NSApp currentEvent] modifierFlags];
   if ((command == IDC_RELOAD) &&
       (modifierFlags & (NSShiftKeyMask | NSControlKeyMask))) {
-    command = IDC_RELOAD_IGNORING_CACHE;
+    command = IDC_RELOAD_BYPASSING_CACHE;
     // Mask off Shift and Control so they don't affect the disposition below.
     modifierFlags &= ~(NSShiftKeyMask | NSControlKeyMask);
   }

@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#import "chrome/browser/ui/cocoa/extensions/extension_installed_bubble_controller.h"
+
 #import <Cocoa/Cocoa.h>
 #include <stddef.h>
+
+#include <memory>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
@@ -17,7 +20,6 @@
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/ui/browser_window.h"
 #import "chrome/browser/ui/cocoa/cocoa_profile_test.h"
-#import "chrome/browser/ui/cocoa/extensions/extension_installed_bubble_controller.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
 #include "chrome/browser/ui/extensions/extension_installed_bubble.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
@@ -29,6 +31,7 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/feature_switch.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/value_builder.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
@@ -62,9 +65,9 @@ class ExtensionInstalledBubbleControllerTest : public CocoaProfileTest {
 
   // Adds a WebContents to the tab strip.
   void AddWebContents() {
-    content::SiteInstance* instance = content::SiteInstance::Create(profile());
-    content::WebContents* web_contents = content::WebContents::Create(
-        content::WebContents::CreateParams(profile(), instance));
+    content::WebContents* web_contents =
+        content::WebContents::Create(content::WebContents::CreateParams(
+            profile(), content::SiteInstance::Create(profile())));
     browser()->tab_strip_model()->AppendWebContents(web_contents, true);
   }
 
@@ -79,16 +82,19 @@ class ExtensionInstalledBubbleControllerTest : public CocoaProfileTest {
     manifest.Set("manifest_version", 2);
     switch (type) {
       case PAGE_ACTION:
-        manifest.Set("page_action", DictionaryBuilder());
+        manifest.Set("page_action", DictionaryBuilder().Build());
         break;
       case BROWSER_ACTION:
-        manifest.Set("browser_action", DictionaryBuilder());
+        manifest.Set("browser_action", DictionaryBuilder().Build());
         break;
       case APP:
-        manifest.Set("app",
-                     std::move(DictionaryBuilder().Set(
-                         "launch", std::move(DictionaryBuilder().Set(
-                                       "web_url", "http://www.example.com")))));
+        manifest.Set(
+            "app",
+            DictionaryBuilder()
+                .Set("launch", DictionaryBuilder()
+                                   .Set("web_url", "http://www.example.com")
+                                   .Build())
+                .Build());
         break;
     }
 
@@ -96,16 +102,17 @@ class ExtensionInstalledBubbleControllerTest : public CocoaProfileTest {
       DictionaryBuilder command;
       command.Set(type == PAGE_ACTION ? "_execute_page_action"
                                       : "_execute_browser_action",
-                  std::move(DictionaryBuilder().Set(
-                      "suggested_key",
-                      std::move(DictionaryBuilder()
-                                    .Set("mac", "MacCtrl+Shift+E")
-                                    .Set("default", "Ctrl+Shift+E")))));
-      manifest.Set("commands", std::move(command));
+                  DictionaryBuilder()
+                      .Set("suggested_key", DictionaryBuilder()
+                                                .Set("mac", "MacCtrl+Shift+E")
+                                                .Set("default", "Ctrl+Shift+E")
+                                                .Build())
+                      .Build());
+      manifest.Set("commands", command.Build());
     }
 
     extension_ = extensions::ExtensionBuilder()
-                     .SetManifest(std::move(manifest))
+                     .SetManifest(manifest.Build())
                      .SetID(crx_file::id_util::GenerateId("foo"))
                      .SetLocation(location)
                      .Build();
@@ -171,7 +178,7 @@ class ExtensionInstalledBubbleControllerTest : public CocoaProfileTest {
   scoped_refptr<Extension> extension_;
 
   // The bubble that tests are run on.
-  scoped_ptr<ExtensionInstalledBubble> extensionBubble_;
+  std::unique_ptr<ExtensionInstalledBubble> extensionBubble_;
 
   // The icon_ to be loaded into the bubble window.
   SkBitmap icon_;
@@ -284,6 +291,9 @@ TEST_F(ExtensionInstalledBubbleControllerTest,
 // Test the layout of a bubble for an unpacked extension (which is not syncable)
 // and verify that the page action preview is enabled.
 TEST_F(ExtensionInstalledBubbleControllerTest, BubbleLayoutPageActionUnpacked) {
+  // Tests legacy behavior.
+  extensions::FeatureSwitch::ScopedOverride extension_action_override(
+      extensions::FeatureSwitch::extension_action_redesign(), false);
   // Page actions need a web contents (for the location bar to not break).
   AddWebContents();
 

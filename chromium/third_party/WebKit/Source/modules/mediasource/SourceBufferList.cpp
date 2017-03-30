@@ -81,10 +81,10 @@ void SourceBufferList::scheduleEvent(const AtomicString& eventName)
 {
     ASSERT(m_asyncEventQueue);
 
-    RefPtrWillBeRawPtr<Event> event = Event::create(eventName);
+    Event* event = Event::create(eventName);
     event->setTarget(this);
 
-    m_asyncEventQueue->enqueueEvent(event.release());
+    m_asyncEventQueue->enqueueEvent(event);
 }
 
 const AtomicString& SourceBufferList::interfaceName() const
@@ -92,7 +92,7 @@ const AtomicString& SourceBufferList::interfaceName() const
     return EventTargetNames::SourceBufferList;
 }
 
-ExecutionContext* SourceBufferList::executionContext() const
+ExecutionContext* SourceBufferList::getExecutionContext() const
 {
     return m_executionContext;
 }

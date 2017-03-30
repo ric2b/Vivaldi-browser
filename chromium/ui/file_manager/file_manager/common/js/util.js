@@ -259,10 +259,11 @@ util.Transform;
  *                           contains scaleX, scaleY and rotate90 properties.
  */
 util.applyTransform = function(element, transform) {
-  element.style.webkitTransform =
-      transform ? 'scaleX(' + transform.scaleX + ') ' +
-                  'scaleY(' + transform.scaleY + ') ' +
-                  'rotate(' + transform.rotate90 * 90 + 'deg)' :
+  // The order of rotate and scale matters.
+  element.style.transform =
+      transform ? 'rotate(' + transform.rotate90 * 90 + 'deg)' +
+                  'scaleX(' + transform.scaleX + ') ' +
+                  'scaleY(' + transform.scaleY + ') ' :
       '';
 };
 
@@ -975,7 +976,6 @@ util.getRootTypeLabel = function(locationInfo) {
     case VolumeManagerCommon.RootType.DRIVE_RECENT:
       return str('DRIVE_RECENT_COLLECTION_LABEL');
     case VolumeManagerCommon.RootType.DRIVE_OTHER:
-    case VolumeManagerCommon.RootType.DOWNLOADS:
     case VolumeManagerCommon.RootType.ARCHIVE:
     case VolumeManagerCommon.RootType.REMOVABLE:
     case VolumeManagerCommon.RootType.MTP:

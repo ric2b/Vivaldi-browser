@@ -5,10 +5,11 @@
 #include "components/autofill/core/browser/address_field.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -41,11 +42,11 @@ const int AddressField::kCityMatchType = MATCH_DEFAULT | MATCH_SELECT;
 
 const int AddressField::kStateMatchType = MATCH_DEFAULT | MATCH_SELECT;
 
-scoped_ptr<FormField> AddressField::Parse(AutofillScanner* scanner) {
+std::unique_ptr<FormField> AddressField::Parse(AutofillScanner* scanner) {
   if (scanner->IsEnd())
     return NULL;
 
-  scoped_ptr<AddressField> address_field(new AddressField);
+  std::unique_ptr<AddressField> address_field(new AddressField);
   const AutofillField* const initial_field = scanner->Cursor();
   size_t saved_cursor = scanner->SaveCursor();
 
@@ -57,7 +58,11 @@ scoped_ptr<FormField> AddressField::Parse(AutofillScanner* scanner) {
   bool has_trailing_non_labeled_fields = false;
   while (!scanner->IsEnd()) {
     const size_t cursor = scanner->SaveCursor();
-    if (address_field->ParseAddressLines(scanner) ||
+    // Ignore "Address Lookup" field. http://crbug.com/427622
+    if (ParseField(scanner, base::UTF8ToUTF16(kAddressLookupRe), NULL) ||
+        ParseField(scanner, base::UTF8ToUTF16(kAddressNameIgnoredRe), NULL)) {
+      continue;
+    } else if (address_field->ParseAddressLines(scanner) ||
         address_field->ParseCityStateZipCode(scanner) ||
         address_field->ParseCountry(scanner) ||
         address_field->ParseCompany(scanner)) {
@@ -172,10 +177,6 @@ bool AddressField::ParseAddressLines(AutofillScanner* scanner) {
   // AmericanGirl-Registration.html, BloomingdalesBilling.html,
   // EBay Registration Enter Information.html).
   if (address1_ || street_address_)
-    return false;
-
-  // Ignore "Address Lookup" field. http://crbug.com/427622
-  if (ParseField(scanner, base::UTF8ToUTF16(kAddressLookupRe), NULL))
     return false;
 
   base::string16 pattern = UTF8ToUTF16(kAddressLine1Re);

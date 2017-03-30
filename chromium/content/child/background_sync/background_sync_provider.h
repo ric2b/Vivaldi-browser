@@ -7,10 +7,10 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "content/common/background_sync_service.mojom.h"
 #include "content/public/child/worker_thread.h"
 #include "third_party/WebKit/public/platform/modules/background_sync/WebSyncProvider.h"
@@ -48,18 +48,10 @@ class BackgroundSyncProvider : public blink::WebSyncProvider,
   void registerBackgroundSync(
       const blink::WebSyncRegistration* options,
       blink::WebServiceWorkerRegistration* service_worker_registration,
-      bool requested_from_service_worker,
       blink::WebSyncRegistrationCallbacks* callbacks) override;
   void getRegistrations(
       blink::WebServiceWorkerRegistration* service_worker_registration,
       blink::WebSyncGetRegistrationsCallbacks* callbacks) override;
-  // TODO(jkarlin): Rename to releaseRegistrationHandle.
-  void releaseRegistration(int64_t handle_id) override;
-
-  void DuplicateRegistrationHandle(
-      int64_t handle_id,
-      const BackgroundSyncService::DuplicateRegistrationHandleCallback&
-          callback);
 
   // WorkerThread::Observer implementation.
   void WillStopCurrentWorkerThread() override;
@@ -67,18 +59,18 @@ class BackgroundSyncProvider : public blink::WebSyncProvider,
  private:
   // Callback handlers
   void RegisterCallback(
-      scoped_ptr<blink::WebSyncRegistrationCallbacks> callbacks,
-      BackgroundSyncError error,
-      const SyncRegistrationPtr& options);
+      std::unique_ptr<blink::WebSyncRegistrationCallbacks> callbacks,
+      mojom::BackgroundSyncError error,
+      const mojom::SyncRegistrationPtr& options);
   void GetRegistrationsCallback(
-      scoped_ptr<blink::WebSyncGetRegistrationsCallbacks> callbacks,
-      BackgroundSyncError error,
-      const mojo::Array<SyncRegistrationPtr>& registrations);
+      std::unique_ptr<blink::WebSyncGetRegistrationsCallbacks> callbacks,
+      mojom::BackgroundSyncError error,
+      const mojo::Array<mojom::SyncRegistrationPtr>& registrations);
 
   // Helper method that returns an initialized BackgroundSyncServicePtr.
-  BackgroundSyncServicePtr& GetBackgroundSyncServicePtr();
+  mojom::BackgroundSyncServicePtr& GetBackgroundSyncServicePtr();
 
-  BackgroundSyncServicePtr background_sync_service_;
+  mojom::BackgroundSyncServicePtr background_sync_service_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(BackgroundSyncProvider);

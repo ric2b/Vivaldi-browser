@@ -75,7 +75,7 @@ typedef StaticNodeTypeList<Node> StaticNodeList;
 
 class Internals final : public GarbageCollectedFinalized<Internals>, public ScriptWrappable, public ContextLifecycleObserver, public ValueIterable<int> {
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(Internals);
+    USING_GARBAGE_COLLECTED_MIXIN(Internals);
 public:
     static Internals* create(ScriptState*);
     virtual ~Internals();
@@ -94,9 +94,9 @@ public:
 
     bool isSharingStyle(Element*, Element*) const;
 
-    PassRefPtrWillBeRawPtr<CSSStyleDeclaration> computedStyleIncludingVisitedInfo(Node*) const;
+    CSSStyleDeclaration* computedStyleIncludingVisitedInfo(Node*) const;
 
-    PassRefPtrWillBeRawPtr<ShadowRoot> createUserAgentShadowRoot(Element* host);
+    ShadowRoot* createUserAgentShadowRoot(Element* host);
 
     ShadowRoot* shadowRoot(Element* host);
     ShadowRoot* youngestShadowRoot(Element* host);
@@ -159,7 +159,7 @@ public:
 
     unsigned markerCountForNode(Node*, const String&, ExceptionState&);
     unsigned activeMarkerCountForNode(Node*);
-    PassRefPtrWillBeRawPtr<Range> markerRangeForNode(Node*, const String& markerType, unsigned index, ExceptionState&);
+    Range* markerRangeForNode(Node*, const String& markerType, unsigned index, ExceptionState&);
     String markerDescriptionForNode(Node*, const String& markerType, unsigned index, ExceptionState&);
     void addTextMatchMarker(const Range*, bool isActive);
     void setMarkersActive(Node*, unsigned startOffset, unsigned endOffset, bool);
@@ -174,7 +174,7 @@ public:
     void setEditingValue(Element* inputElement, const String&, ExceptionState&);
     void setAutofilled(Element*, bool enabled, ExceptionState&);
 
-    PassRefPtrWillBeRawPtr<Range> rangeFromLocationAndLength(Element* scope, int rangeLocation, int rangeLength);
+    Range* rangeFromLocationAndLength(Element* scope, int rangeLocation, int rangeLength);
     unsigned locationFromRange(Element* scope, const Range*);
     unsigned lengthFromRange(Element* scope, const Range*);
     String rangeAsText(const Range*);
@@ -194,7 +194,8 @@ public:
     unsigned activeDOMObjectCount(Document*);
     unsigned wheelEventHandlerCount(Document*);
     unsigned scrollEventHandlerCount(Document*);
-    unsigned touchEventHandlerCount(Document*);
+    unsigned touchStartOrMoveEventHandlerCount(Document*);
+    unsigned touchEndOrCancelEventHandlerCount(Document*);
     LayerRectList* touchEventTargetLayerRects(Document*, ExceptionState&);
 
     bool executeCommand(Document*, const String& name, const String& value, ExceptionState&);
@@ -205,7 +206,7 @@ public:
     Vector<AtomicString> svgTags();
 
     // This is used to test rect based hit testing like what's done on touch screens.
-    PassRefPtrWillBeRawPtr<StaticNodeList> nodesFromRect(Document*, int x, int y, unsigned topPadding, unsigned rightPadding,
+    StaticNodeList* nodesFromRect(Document*, int x, int y, unsigned topPadding, unsigned rightPadding,
         unsigned bottomPadding, unsigned leftPadding, bool ignoreClipping, bool allowChildFrameContent, ExceptionState&) const;
 
     bool hasSpellingMarker(Document*, int from, int length);
@@ -244,7 +245,7 @@ public:
     unsigned numberOfLiveDocuments() const;
     String dumpRefCountedInstanceCounts() const;
     Vector<String> consoleMessageArgumentCounts(Document*) const;
-    PassRefPtrWillBeRawPtr<LocalDOMWindow> openDummyInspectorFrontend(const String& url);
+    LocalDOMWindow* openDummyInspectorFrontend(const String& url);
     void closeDummyInspectorFrontend();
     Vector<unsigned long> setMemoryCacheCapacities(unsigned long minDeadBytes, unsigned long maxDeadBytes, unsigned long totalBytes);
 
@@ -266,6 +267,7 @@ public:
     void setIsCursorVisible(Document*, bool, ExceptionState&);
 
     double effectiveMediaVolume(HTMLMediaElement*);
+    String effectivePreload(HTMLMediaElement*);
 
     void mediaPlayerRemoteRouteAvailabilityChanged(HTMLMediaElement*, bool);
     void mediaPlayerPlayingRemotelyChanged(HTMLMediaElement*, bool);
@@ -303,7 +305,7 @@ public:
 
     String markerTextForListItem(Element*);
 
-    void forceReload(bool endToEnd);
+    void forceReload(bool bypassCache);
 
     String getImageSourceURL(Element*);
 
@@ -354,7 +356,7 @@ public:
     bool isInCanvasFontCache(Document*, const String&);
     unsigned canvasFontCacheMaxFonts();
 
-    void setScrollChain(ScrollState*, const WillBeHeapVector<RefPtrWillBeMember<Element>>& elements, ExceptionState&);
+    void setScrollChain(ScrollState*, const HeapVector<Member<Element>>& elements, ExceptionState&);
 
     // Schedule a forced Blink GC run (Oilpan) at the end of event loop.
     // Note: This is designed to be only used from PerformanceTests/BlinkGC to explicitly measure only Blink GC time.
@@ -399,7 +401,11 @@ public:
 
     // Returns the run state of the node's scroll animator (see ScrollAnimatorCompositorCoordinater::RunState),
     // or -1 if the node does not have a scrollable area.
-    int getScrollAnimationState(Node*) const;
+    String getScrollAnimationState(Node*) const;
+
+    // Returns the run state of the node's programmatic scroll animator (see ScrollAnimatorCompositorCoordinater::RunState),
+    // or -1 if the node does not have a scrollable area.
+    String getProgrammaticScrollAnimationState(Node*) const;
 
 private:
     explicit Internals(ScriptState*);

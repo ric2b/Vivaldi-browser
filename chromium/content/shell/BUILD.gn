@@ -8,6 +8,7 @@ import("//build/config/ui.gni")
 import("//build/config/win/console_app.gni")
 import("//build/config/win/manifest.gni")
 import("//media/media_options.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
 import("//tools/grit/repack.gni")
 import("//tools/grit/grit_rule.gni")
 if (is_android) {
@@ -55,6 +56,8 @@ static_library("content_shell_lib") {
     "browser/layout_test/layout_test_bluetooth_adapter_provider.h",
     "browser/layout_test/layout_test_bluetooth_chooser_factory.cc",
     "browser/layout_test/layout_test_bluetooth_chooser_factory.h",
+    "browser/layout_test/layout_test_bluetooth_fake_adapter_setter_impl.cc",
+    "browser/layout_test/layout_test_bluetooth_fake_adapter_setter_impl.h",
     "browser/layout_test/layout_test_browser_context.cc",
     "browser/layout_test/layout_test_browser_context.h",
     "browser/layout_test/layout_test_browser_main.cc",
@@ -71,8 +74,6 @@ static_library("content_shell_lib") {
     "browser/layout_test/layout_test_javascript_dialog_manager.h",
     "browser/layout_test/layout_test_message_filter.cc",
     "browser/layout_test/layout_test_message_filter.h",
-    "browser/layout_test/layout_test_navigator_connect_service_factory.cc",
-    "browser/layout_test/layout_test_navigator_connect_service_factory.h",
     "browser/layout_test/layout_test_notification_manager.cc",
     "browser/layout_test/layout_test_notification_manager.h",
     "browser/layout_test/layout_test_permission_manager.cc",
@@ -143,8 +144,12 @@ static_library("content_shell_lib") {
     "browser/shell_web_contents_view_delegate_creator.h",
     "browser/shell_web_contents_view_delegate_mac.mm",
     "browser/shell_web_contents_view_delegate_win.cc",
+    "common/layout_test/layout_test_content_client.cc",
+    "common/layout_test/layout_test_content_client.h",
     "common/layout_test/layout_test_messages.cc",
     "common/layout_test/layout_test_messages.h",
+    "common/layout_test/layout_test_switches.cc",
+    "common/layout_test/layout_test_switches.h",
     "common/leak_detection_result.h",
     "common/shell_content_client.cc",
     "common/shell_content_client.h",
@@ -195,11 +200,11 @@ static_library("content_shell_lib") {
     "//content/public/app:both",
     "//content/public/browser",
     "//content/public/common",
-    "//content/public/plugin",
     "//content/public/renderer",
     "//content/public/utility",
   ]
   deps = [
+    ":mojo_bindings",
     ":resources",
     "//base",
     "//base:base_static",
@@ -217,12 +222,14 @@ static_library("content_shell_lib") {
     "//content/app/strings",
     "//content/gpu",
     "//content/test:layouttest_support",
+    "//content/test:test_support",
     "//device/bluetooth",
     "//device/bluetooth:mocks",
     "//gin",
     "//gpu",
     "//ipc",
     "//media",
+    "//media/mojo/services:application_factory",
     "//net",
     "//net:net_resources",
     "//skia",
@@ -240,16 +247,17 @@ static_library("content_shell_lib") {
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gfx/ipc",
+    "//ui/gfx/ipc/skia",
     "//ui/gl",
     "//url",
     "//v8",
-
-    #'copy_test_netscape_plugin',  TODO(GYP)
   ]
   if (enable_plugins) {
     deps += [
       "//content/ppapi_plugin",
+      "//ppapi:blink_deprecated_test_plugin",
       "//ppapi:blink_test_plugin",
+      "//ppapi/shared_impl",
     ]
   }
   if (mojo_media_host == "browser") {
@@ -265,7 +273,10 @@ static_library("content_shell_lib") {
   }
 
   if (is_linux) {
-    deps += [ "//build/linux:fontconfig" ]
+    deps += [
+      "//build/linux:fontconfig",
+      "//ui/gfx:test_support",
+    ]
   }
 
   if (use_x11) {
@@ -280,11 +291,13 @@ static_library("content_shell_lib") {
 
   if (is_android) {
     deps += [ "//content/shell/android:content_shell_jni_headers" ]
-    #deps -= [ "copy_test_netscape_plugin" ]  TODO(GYP)
   }
 
   if (is_posix && !is_mac) {
-    deps += [ "//components/crash/content/browser" ]
+    deps += [
+      "//components/crash/content/app",
+      "//components/crash/content/browser",
+    ]
   }
 
   if (use_aura) {
@@ -303,6 +316,7 @@ static_library("content_shell_lib") {
         "//ui/views",
         "//ui/views:test_support",
         "//ui/views/controls/webview",
+        "//ui/wm:test_support",
       ]
     } else {
       sources += [ "browser/shell_aura.cc" ]
@@ -312,11 +326,6 @@ static_library("content_shell_lib") {
       "browser/shell_platform_data_aura.cc",
       "browser/shell_platform_data_aura.h",
     ]
-  }
-
-  # The test plugin relies on X11.
-  if (is_linux && !use_x11) {
-    #deps -= [ 'copy_test_netscape_plugin' ]  TODO(GYP)
   }
 
   if (is_chromeos) {
@@ -339,6 +348,7 @@ static_library("content_shell_lib") {
 }
 
 grit("content_shell_resources_grit") {
+  # External code should depend on ":resources" instead.
   visibility = [ ":*" ]
   source = "shell_resources.grd"
   outputs = [
@@ -461,6 +471,11 @@ if (!is_android && !is_mac) {
         "//tools/imagediff($host_toolchain)",
       ]
     }
+
+    if (is_linux && !is_component_build) {
+      # Set rpath to find our own libfreetype even in a non-component build.
+      configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+    }
   }
 } else {
   group("content_shell") {
@@ -508,4 +523,10 @@ if (is_mac) {
       ":content_shell_lib",
     ]
   }
+}
+
+mojom("mojo_bindings") {
+  sources = [
+    "common/layout_test/layout_test_bluetooth_fake_adapter_setter.mojom",
+  ]
 }

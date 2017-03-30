@@ -38,15 +38,6 @@ class MockWebAudioDestinationConsumer
 
 }  // namespace
 
-MockWebMediaStreamCenter::MockWebMediaStreamCenter(
-    blink::WebMediaStreamCenterClient* client,
-    TestInterfaces* interfaces)
-    : interfaces_(interfaces) {
-}
-
-MockWebMediaStreamCenter::~MockWebMediaStreamCenter() {
-}
-
 void MockWebMediaStreamCenter::didEnableMediaStreamTrack(
     const blink::WebMediaStreamTrack& track) {
   track.source().setReadyState(blink::WebMediaStreamSource::ReadyStateLive);

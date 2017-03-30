@@ -219,7 +219,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     // CSSPropertyWebkitAspectRatio was 176
     case CSSPropertyAliasWebkitBackfaceVisibility: return 177;
     case CSSPropertyWebkitBackgroundClip: return 178;
-    case CSSPropertyWebkitBackgroundComposite: return 179;
+    // case CSSPropertyWebkitBackgroundComposite: return 179;
     case CSSPropertyWebkitBackgroundOrigin: return 180;
     case CSSPropertyAliasWebkitBackgroundSize: return 181;
     case CSSPropertyWebkitBorderAfter: return 182;
@@ -564,6 +564,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     case CSSPropertyColumnSpan: return 529;
     case CSSPropertyColumnWidth: return 530;
     case CSSPropertyColumns: return 531;
+    case CSSPropertyApplyAtRule: return 532;
 
     // 1. Add new features above this line (don't change the assigned numbers of the existing
     // items).
@@ -580,7 +581,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     return 0;
 }
 
-static int maximumCSSSampleId() { return 531; }
+static int maximumCSSSampleId() { return 532; }
 
 static EnumerationHistogram& featureObserverHistogram()
 {
@@ -695,10 +696,10 @@ bool UseCounter::isCounted(Document& document, const String& string)
     if (!host)
         return false;
 
-    CSSPropertyID propertyID = cssPropertyID(string);
-    if (propertyID == CSSPropertyInvalid)
+    CSSPropertyID unresolvedProperty = unresolvedCSSPropertyID(string);
+    if (unresolvedProperty == CSSPropertyInvalid)
         return false;
-    return host->useCounter().isCounted(propertyID);
+    return host->useCounter().isCounted(unresolvedProperty);
 }
 
 void UseCounter::count(const ExecutionContext* context, Feature feature)
@@ -740,9 +741,9 @@ void UseCounter::countCrossOriginIframe(const Document& document, Feature featur
     if (!frame)
         return;
     // Check to see if the frame can script into the top level document.
-    SecurityOrigin* securityOrigin = frame->securityContext()->securityOrigin();
+    SecurityOrigin* securityOrigin = frame->securityContext()->getSecurityOrigin();
     Frame* top = frame->tree().top();
-    if (top && !securityOrigin->canAccess(top->securityContext()->securityOrigin()))
+    if (top && !securityOrigin->canAccess(top->securityContext()->getSecurityOrigin()))
         count(frame, feature);
 }
 

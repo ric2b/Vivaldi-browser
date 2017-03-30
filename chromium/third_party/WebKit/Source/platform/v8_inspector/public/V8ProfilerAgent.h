@@ -11,14 +11,13 @@
 
 namespace blink {
 
-class PLATFORM_EXPORT V8ProfilerAgent : public protocol::Dispatcher::ProfilerCommandHandler, public V8Debugger::Agent<protocol::Frontend::Profiler> {
+class PLATFORM_EXPORT V8ProfilerAgent : public protocol::Backend::Profiler, public V8Debugger::Agent<protocol::Frontend::Profiler> {
 public:
-    static PassOwnPtr<V8ProfilerAgent> create(V8Debugger*);
     virtual ~V8ProfilerAgent() { }
 
     // API for the embedder.
-    virtual void consoleProfile(const String& title) = 0;
-    virtual void consoleProfileEnd(const String& title) = 0;
+    virtual void consoleProfile(const String16& title) = 0;
+    virtual void consoleProfileEnd(const String16& title) = 0;
 
     virtual void idleStarted() = 0;
     virtual void idleFinished() = 0;

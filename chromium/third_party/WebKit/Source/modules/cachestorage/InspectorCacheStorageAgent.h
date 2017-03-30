@@ -12,25 +12,24 @@
 
 namespace blink {
 
-typedef String ErrorString;
 
-class MODULES_EXPORT InspectorCacheStorageAgent final : public InspectorBaseAgent<InspectorCacheStorageAgent, protocol::Frontend::CacheStorage>, public protocol::Dispatcher::CacheStorageCommandHandler {
+class MODULES_EXPORT InspectorCacheStorageAgent final : public InspectorBaseAgent<InspectorCacheStorageAgent, protocol::Frontend::CacheStorage>, public protocol::Backend::CacheStorage {
     WTF_MAKE_NONCOPYABLE(InspectorCacheStorageAgent);
 
 public:
-    static PassOwnPtrWillBeRawPtr<InspectorCacheStorageAgent> create()
+    static InspectorCacheStorageAgent* create()
     {
-        return adoptPtrWillBeNoop(new InspectorCacheStorageAgent());
+        return new InspectorCacheStorageAgent();
     }
 
     ~InspectorCacheStorageAgent() override;
 
     DECLARE_VIRTUAL_TRACE();
 
-    void requestCacheNames(ErrorString*, const String& in_securityOrigin, PassRefPtr<RequestCacheNamesCallback>) override;
-    void requestEntries(ErrorString*, const String& in_cacheId, int in_skipCount, int in_pageSize, PassRefPtr<RequestEntriesCallback>) override;
-    void deleteCache(ErrorString*, const String& in_cacheId, PassRefPtr<DeleteCacheCallback>) override;
-    void deleteEntry(ErrorString*, const String& in_cacheId, const String& in_request, PassRefPtr<DeleteEntryCallback>) override;
+    void requestCacheNames(ErrorString*, const String& in_securityOrigin, PassOwnPtr<RequestCacheNamesCallback>) override;
+    void requestEntries(ErrorString*, const String& in_cacheId, int in_skipCount, int in_pageSize, PassOwnPtr<RequestEntriesCallback>) override;
+    void deleteCache(ErrorString*, const String& in_cacheId, PassOwnPtr<DeleteCacheCallback>) override;
+    void deleteEntry(ErrorString*, const String& in_cacheId, const String& in_request, PassOwnPtr<DeleteEntryCallback>) override;
 
 private:
     explicit InspectorCacheStorageAgent();

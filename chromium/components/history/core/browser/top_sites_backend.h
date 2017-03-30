@@ -75,6 +75,9 @@ class TopSitesBackend : public base::RefCountedThreadSafe<TopSitesBackend> {
   // Vivaldi: Vacuums the database.
   void VacuumDatabase();
 
+  // Vivaldi: Delete single thumbnail entries from the database.
+  void RemoveThumbnailForUrl(const GURL& url);
+
  private:
   friend class base::RefCountedThreadSafe<TopSitesBackend>;
 

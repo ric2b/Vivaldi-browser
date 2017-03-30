@@ -190,7 +190,6 @@ class PrintPreviewDialogControllerBrowserTest : public InProcessBrowserTest {
     ASSERT_NE(first_tab, initiator_);
 
     content::PluginService::GetInstance()->Init();
-    content::PluginService::GetInstance()->DisablePluginsDiscoveryForTesting();
   }
 
   void TearDownOnMainThread() override {
@@ -210,14 +209,8 @@ class PrintPreviewDialogControllerBrowserTest : public InProcessBrowserTest {
 
 // Test to verify that when a initiator navigates, we can create a new preview
 // dialog for the new tab contents.
-// http://crbug.com/377337
-#if defined(OS_WIN)
-#define MAYBE_NavigateFromInitiatorTab DISABLED_NavigateFromInitiatorTab
-#else
-#define MAYBE_NavigateFromInitiatorTab NavigateFromInitiatorTab
-#endif
 IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
-                       MAYBE_NavigateFromInitiatorTab) {
+                       NavigateFromInitiatorTab) {
   // Print for the first time.
   PrintPreview();
 
@@ -246,14 +239,8 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
 
 // Test to verify that after reloading the initiator, it creates a new print
 // preview dialog.
-// http://crbug.com/377337
-#if defined(OS_WIN)
-#define MAYBE_ReloadInitiatorTab DISABLED_ReloadInitiatorTab
-#else
-#define MAYBE_ReloadInitiatorTab ReloadInitiatorTab
-#endif
 IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
-                       MAYBE_ReloadInitiatorTab) {
+                       ReloadInitiatorTab) {
   // Print for the first time.
   PrintPreview();
 
@@ -363,7 +350,7 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
   task_management::MockWebContentsTaskManager task_manager;
   EXPECT_TRUE(task_manager.tasks().empty());
   task_manager.StartObserving();
-  EXPECT_EQ(3U, task_manager.tasks().size());
+  ASSERT_EQ(3U, task_manager.tasks().size());
   const task_management::Task* pre_existing_task = task_manager.tasks().back();
   EXPECT_EQ(task_management::Task::RENDERER, pre_existing_task->GetType());
   const base::string16 pre_existing_title = pre_existing_task->title();
@@ -383,7 +370,7 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
   // validated that a corresponding task is reported.
   PrintPreview();
   EXPECT_EQ(3U, GetTrackedTags().size());
-  EXPECT_EQ(3U, task_manager.tasks().size());
+  ASSERT_EQ(3U, task_manager.tasks().size());
   const task_management::Task* task = task_manager.tasks().back();
   EXPECT_EQ(task_management::Task::RENDERER, task->GetType());
   const base::string16 title = task->title();

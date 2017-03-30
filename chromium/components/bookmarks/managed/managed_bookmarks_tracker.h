@@ -10,6 +10,7 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "components/prefs/pref_change_registrar.h"
 
@@ -38,6 +39,7 @@ class ManagedBookmarksTracker {
   static const char kName[];
   static const char kUrl[];
   static const char kChildren[];
+  static const char kFolderName[];
 
   // If |is_supervised| is true, this will track supervised bookmarks rather
   // than managed bookmarks.

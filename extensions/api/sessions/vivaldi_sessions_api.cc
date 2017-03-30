@@ -134,7 +134,7 @@ SessionsPrivateGetAllFunction::~SessionsPrivateGetAllFunction() {}
 bool SessionsPrivateGetAllFunction::RunAsync() {
   base::ThreadRestrictions::ScopedAllowIO allow_io;
 
-  std::vector<linked_ptr<SessionItem> > sessions;
+  std::vector<SessionItem> sessions;
   base::FilePath path(GetProfile()->GetPath());
   path = path.Append(kSessionPath);
 
@@ -154,8 +154,7 @@ bool SessionsPrivateGetAllFunction::RunAsync() {
     }
     new_item->name.assign(filename);
 
-    linked_ptr<SessionItem> item(new_item);
-    sessions.push_back(item);
+    sessions.push_back(std::move(*new_item));
   }
   results_ =
       vivaldi::sessions_private::GetAll::Results::Create(sessions);

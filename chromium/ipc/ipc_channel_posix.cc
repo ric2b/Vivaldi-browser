@@ -338,6 +338,8 @@ bool ChannelPosix::CreatePipe(
 }
 
 bool ChannelPosix::Connect() {
+  WillConnect();
+
   if (!server_listen_pipe_.is_valid() && !pipe_.is_valid()) {
     DLOG(WARNING) << "Channel creation failed: " << pipe_name_;
     return false;
@@ -612,6 +614,10 @@ bool ChannelPosix::IsNamedServerInitialized(
 // static
 void ChannelPosix::SetGlobalPid(int pid) {
   global_pid_ = pid;
+}
+// static
+int ChannelPosix::GetGlobalPid() {
+  return global_pid_;
 }
 #endif  // OS_LINUX
 
@@ -1009,6 +1015,12 @@ void ChannelPosix::HandleInternalMessage(const Message& msg) {
 
       if (!FlushPrelimQueue())
         ClosePipeOnError();
+
+      if (IsAttachmentBrokerEndpoint() &&
+          AttachmentBroker::GetGlobal() &&
+          AttachmentBroker::GetGlobal()->IsPrivilegedBroker()) {
+        AttachmentBroker::GetGlobal()->ReceivedPeerPid(pid);
+      }
       break;
 
 #if defined(OS_MACOSX)
@@ -1124,6 +1136,9 @@ bool Channel::IsNamedServerInitialized(
 // static
 void Channel::SetGlobalPid(int pid) {
   ChannelPosix::SetGlobalPid(pid);
+}
+int Channel::GetGlobalPid() {
+  return ChannelPosix::GetGlobalPid();
 }
 #endif  // OS_LINUX
 

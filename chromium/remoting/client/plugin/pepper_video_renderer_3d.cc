@@ -19,6 +19,7 @@
 #include "remoting/proto/video.pb.h"
 #include "remoting/protocol/performance_tracker.h"
 #include "remoting/protocol/session_config.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_region.h"
 
 namespace remoting {
 
@@ -34,7 +35,7 @@ const uint32_t kMinimumPictureCount = 0;  // 3
 
 class PepperVideoRenderer3D::PendingPacket {
  public:
-  PendingPacket(scoped_ptr<VideoPacket> packet, const base::Closure& done)
+  PendingPacket(std::unique_ptr<VideoPacket> packet, const base::Closure& done)
       : packet_(std::move(packet)), done_runner_(done) {}
 
   ~PendingPacket() {}
@@ -42,7 +43,7 @@ class PepperVideoRenderer3D::PendingPacket {
   const VideoPacket* packet() const { return packet_.get(); }
 
  private:
-  scoped_ptr<VideoPacket> packet_;
+  std::unique_ptr<VideoPacket> packet_;
   base::ScopedClosureRunner done_runner_;
 };
 
@@ -185,8 +186,9 @@ protocol::FrameConsumer* PepperVideoRenderer3D::GetFrameConsumer() {
   return nullptr;
 }
 
-void PepperVideoRenderer3D::ProcessVideoPacket(scoped_ptr<VideoPacket> packet,
-                                               const base::Closure& done) {
+void PepperVideoRenderer3D::ProcessVideoPacket(
+    std::unique_ptr<VideoPacket> packet,
+    const base::Closure& done) {
   base::ScopedClosureRunner done_runner(done);
 
   perf_tracker_->RecordVideoPacketStats(*packet);
@@ -196,48 +198,10 @@ void PepperVideoRenderer3D::ProcessVideoPacket(scoped_ptr<VideoPacket> packet,
   if (!packet->data().size())
     return;
 
-  bool resolution_changed = false;
-
   if (packet->format().has_screen_width() &&
       packet->format().has_screen_height()) {
-    webrtc::DesktopSize frame_size(packet->format().screen_width(),
-                                   packet->format().screen_height());
-    if (!frame_size_.equals(frame_size)) {
-      frame_size_ = frame_size;
-      resolution_changed = true;
-    }
-  }
-
-  if (packet->format().has_x_dpi() && packet->format().has_y_dpi()) {
-    webrtc::DesktopVector frame_dpi(packet->format().x_dpi(),
-                                    packet->format().y_dpi());
-    if (!frame_dpi_.equals(frame_dpi)) {
-      frame_dpi_ = frame_dpi;
-      resolution_changed = true;
-    }
-  }
-
-  if (resolution_changed)
-    event_handler_->OnVideoSize(frame_size_, frame_dpi_);
-
-  // Process the frame shape, if supplied.
-  if (packet->has_use_desktop_shape()) {
-    if (packet->use_desktop_shape()) {
-      scoped_ptr<webrtc::DesktopRegion> shape(new webrtc::DesktopRegion);
-      for (int i = 0; i < packet->desktop_shape_rects_size(); ++i) {
-        Rect remoting_rect = packet->desktop_shape_rects(i);
-        shape->AddRect(webrtc::DesktopRect::MakeXYWH(
-            remoting_rect.x(), remoting_rect.y(), remoting_rect.width(),
-            remoting_rect.height()));
-      }
-      if (!frame_shape_ || !frame_shape_->Equals(*shape)) {
-        frame_shape_ = std::move(shape);
-        event_handler_->OnVideoShape(frame_shape_.get());
-      }
-    } else if (frame_shape_) {
-      frame_shape_ = nullptr;
-      event_handler_->OnVideoShape(nullptr);
-    }
+    frame_size_.set(packet->format().screen_width(),
+                    packet->format().screen_height());
   }
 
   // Report the dirty region, for debugging, if requested.

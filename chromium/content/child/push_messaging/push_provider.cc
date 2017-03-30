@@ -4,8 +4,10 @@
 
 #include "content/child/push_messaging/push_provider.h"
 
+#include <memory>
+
 #include "base/lazy_instance.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_local.h"
 #include "content/child/push_messaging/push_dispatcher.h"
@@ -75,8 +77,14 @@ void PushProvider::subscribe(
   subscription_callbacks_.AddWithID(callbacks, request_id);
   int64_t service_worker_registration_id =
       GetServiceWorkerRegistrationId(service_worker_registration);
+  PushSubscriptionOptions content_options;
+  content_options.user_visible_only = options.userVisibleOnly;
+
+  // Just treat the server key as a string of bytes and pass it to the push
+  // service.
+  content_options.sender_info = options.applicationServerKey.latin1();
   thread_safe_sender_->Send(new PushMessagingHostMsg_SubscribeFromWorker(
-      request_id, service_worker_registration_id, options.userVisibleOnly));
+      request_id, service_worker_registration_id, content_options));
 }
 
 void PushProvider::unsubscribe(
@@ -155,8 +163,8 @@ void PushProvider::OnSubscribeFromWorkerSuccess(
   if (!callbacks)
     return;
 
-  callbacks->onSuccess(blink::adoptWebPtr(
-      new blink::WebPushSubscription(endpoint, p256dh, auth)));
+  callbacks->onSuccess(
+      base::WrapUnique(new blink::WebPushSubscription(endpoint, p256dh, auth)));
 
   subscription_callbacks_.Remove(request_id);
 }
@@ -215,8 +223,8 @@ void PushProvider::OnGetSubscriptionSuccess(
   if (!callbacks)
     return;
 
-  callbacks->onSuccess(blink::adoptWebPtr(
-      new blink::WebPushSubscription(endpoint, p256dh, auth)));
+  callbacks->onSuccess(
+      base::WrapUnique(new blink::WebPushSubscription(endpoint, p256dh, auth)));
 
   subscription_callbacks_.Remove(request_id);
 }

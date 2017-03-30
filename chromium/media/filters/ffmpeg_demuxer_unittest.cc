@@ -17,6 +17,7 @@
 #include "base/threading/thread.h"
 #include "media/base/decrypt_config.h"
 #include "media/base/media_log.h"
+#include "media/base/media_tracks.h"
 #include "media/base/mock_demuxer_host.h"
 #include "media/base/test_helpers.h"
 #include "media/base/timestamp_constants.h"
@@ -97,9 +98,12 @@ class FFmpegDemuxerTest : public testing::Test {
     Demuxer::EncryptedMediaInitDataCB encrypted_media_init_data_cb = base::Bind(
         &FFmpegDemuxerTest::OnEncryptedMediaInitData, base::Unretained(this));
 
+    Demuxer::MediaTracksUpdatedCB tracks_updated_cb = base::Bind(
+        &FFmpegDemuxerTest::OnMediaTracksUpdated, base::Unretained(this));
+
     demuxer_.reset(new FFmpegDemuxer(
         message_loop_.task_runner(), data_source_.get(),
-        encrypted_media_init_data_cb, new MediaLog()));
+        encrypted_media_init_data_cb, tracks_updated_cb, new MediaLog()));
   }
 
   MOCK_METHOD1(CheckPoint, void(int v));
@@ -210,6 +214,11 @@ class FFmpegDemuxerTest : public testing::Test {
                void(EmeInitDataType init_data_type,
                     const std::vector<uint8_t>& init_data));
 
+  void OnMediaTracksUpdated(scoped_ptr<MediaTracks> tracks) {
+    CHECK(tracks.get());
+    media_tracks_ = std::move(tracks);
+  }
+
   // Accessor to demuxer internals.
   void set_duration_known(bool duration_known) {
     demuxer_->duration_known_ = duration_known;
@@ -225,6 +234,7 @@ class FFmpegDemuxerTest : public testing::Test {
   scoped_ptr<FileDataSource> data_source_;
   scoped_ptr<FFmpegDemuxer> demuxer_;
   StrictMock<MockDemuxerHost> host_;
+  scoped_ptr<MediaTracks> media_tracks_;
   base::MessageLoop message_loop_;
 
   AVFormatContext* format_context() {
@@ -1190,6 +1200,48 @@ TEST_F(FFmpegDemuxerTest, Read_EAC3_Audio) {
 #endif
 }
 
+TEST_F(FFmpegDemuxerTest, Read_Mp4_Media_Track_Info) {
+  CreateDemuxer("bear.mp4");
+  InitializeDemuxer();
+
+  EXPECT_EQ(media_tracks_->tracks().size(), 2u);
+
+  const MediaTrack& audio_track = *(media_tracks_->tracks()[0]);
+  EXPECT_EQ(audio_track.type(), MediaTrack::Audio);
+  EXPECT_EQ(audio_track.id(), "1");
+  EXPECT_EQ(audio_track.kind(), "main");
+  EXPECT_EQ(audio_track.label(), "GPAC ISO Audio Handler");
+  EXPECT_EQ(audio_track.language(), "und");
+
+  const MediaTrack& video_track = *(media_tracks_->tracks()[1]);
+  EXPECT_EQ(video_track.type(), MediaTrack::Video);
+  EXPECT_EQ(video_track.id(), "2");
+  EXPECT_EQ(video_track.kind(), "main");
+  EXPECT_EQ(video_track.label(), "GPAC ISO Video Handler");
+  EXPECT_EQ(video_track.language(), "und");
+}
+
 #endif  // defined(USE_PROPRIETARY_CODECS)
+
+TEST_F(FFmpegDemuxerTest, Read_Webm_Media_Track_Info) {
+  CreateDemuxer("bear.webm");
+  InitializeDemuxer();
+
+  EXPECT_EQ(media_tracks_->tracks().size(), 2u);
+
+  const MediaTrack& video_track = *(media_tracks_->tracks()[0]);
+  EXPECT_EQ(video_track.type(), MediaTrack::Video);
+  EXPECT_EQ(video_track.id(), "1");
+  EXPECT_EQ(video_track.kind(), "main");
+  EXPECT_EQ(video_track.label(), "");
+  EXPECT_EQ(video_track.language(), "");
+
+  const MediaTrack& audio_track = *(media_tracks_->tracks()[1]);
+  EXPECT_EQ(audio_track.type(), MediaTrack::Audio);
+  EXPECT_EQ(audio_track.id(), "2");
+  EXPECT_EQ(audio_track.kind(), "main");
+  EXPECT_EQ(audio_track.label(), "");
+  EXPECT_EQ(audio_track.language(), "");
+}
 
 }  // namespace media

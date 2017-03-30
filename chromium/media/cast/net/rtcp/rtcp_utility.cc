@@ -33,7 +33,9 @@ RtcpParser::RtcpParser(uint32_t local_ssrc, uint32_t remote_ssrc)
       has_sender_report_(false),
       has_last_report_(false),
       has_cast_message_(false),
-      has_receiver_reference_time_report_(false) {}
+      has_cst2_message_(false),
+      has_receiver_reference_time_report_(false),
+      has_picture_loss_indicator_(false) {}
 
 RtcpParser::~RtcpParser() {}
 
@@ -44,7 +46,9 @@ bool RtcpParser::Parse(base::BigEndianReader* reader) {
   has_last_report_ = false;
   receiver_log_.clear();
   has_cast_message_ = false;
+  has_cst2_message_ = false;
   has_receiver_reference_time_report_ = false;
+  has_picture_loss_indicator_ = false;
 
   while (reader->remaining()) {
     RtcpCommonHeader header;
@@ -72,10 +76,13 @@ bool RtcpParser::Parse(base::BigEndianReader* reader) {
           return false;
         break;
 
-      case kPacketTypePayloadSpecific:
+      case kPacketTypePayloadSpecific: {
         if (!ParseFeedbackCommon(&chunk, header))
           return false;
+        if (!ParsePli(&chunk, header))
+          return false;
         break;
+      }
 
       case kPacketTypeXr:
         if (!ParseExtendedReport(&chunk, header))
@@ -184,6 +191,30 @@ bool RtcpParser::ParseReportBlock(base::BigEndianReader* reader) {
   return true;
 }
 
+bool RtcpParser::ParsePli(base::BigEndianReader* reader,
+                          const RtcpCommonHeader& header) {
+  if (header.IC != 1)
+    return true;
+
+  uint32_t receiver_ssrc, sender_ssrc;
+  if (!reader->ReadU32(&receiver_ssrc))
+    return false;
+
+  // Ignore this Rtcp if the receiver ssrc does not match.
+  if (receiver_ssrc != remote_ssrc_)
+    return true;
+
+  if (!reader->ReadU32(&sender_ssrc))
+    return false;
+
+  // Ignore this Rtcp if the sender ssrc does not match.
+  if (sender_ssrc != local_ssrc_)
+    return true;
+
+  has_picture_loss_indicator_ = true;
+  return true;
+}
+
 bool RtcpParser::ParseApplicationDefined(base::BigEndianReader* reader,
                                          const RtcpCommonHeader& header) {
   uint32_t sender_ssrc;
@@ -279,7 +310,7 @@ bool RtcpParser::ParseFeedbackCommon(base::BigEndianReader* reader,
     return true;
   }
 
-  cast_message_.media_ssrc = remote_ssrc;
+  cast_message_.remote_ssrc = remote_ssrc;
 
   uint8_t last_frame_id;
   uint8_t number_of_lost_fields;
@@ -292,6 +323,7 @@ bool RtcpParser::ParseFeedbackCommon(base::BigEndianReader* reader,
   cast_message_.ack_frame_id = last_frame_id;
 
   cast_message_.missing_frames_and_packets.clear();
+  cast_message_.received_later_frames.clear();
   for (size_t i = 0; i < number_of_lost_fields; i++) {
     uint8_t frame_id;
     uint16_t packet_id;
@@ -312,6 +344,29 @@ bool RtcpParser::ParseFeedbackCommon(base::BigEndianReader* reader,
   }
 
   has_cast_message_ = true;
+
+  // Parse the extended feedback (Cst2). Ignore it if any error occurs.
+  if ((!reader->ReadU32(&name)) || (name != kCst2))
+    return true;
+  if (!reader->ReadU8(&cast_message_.feedback_count))
+    return true;
+  uint8_t number_of_receiving_fields;
+  if (!reader->ReadU8(&number_of_receiving_fields))
+    return true;
+  for (size_t i = 0; i < number_of_receiving_fields; ++i) {
+    uint32_t frame_id = cast_message_.ack_frame_id + (i << 3) + 1;
+    uint8_t bitmask;
+    if (!reader->ReadU8(&bitmask))
+      return true;
+    while (bitmask) {
+      ++frame_id;
+      if (bitmask & 1)
+        cast_message_.received_later_frames.push_back(frame_id);
+      bitmask >>= 1;
+    }
+  }
+
+  has_cst2_message_ = true;
   return true;
 }
 
@@ -454,6 +509,11 @@ base::TimeTicks ConvertNtpToTimeTicks(uint32_t ntp_seconds,
       ntp_time_us -
       (kUnixEpochInNtpSeconds * base::Time::kMicrosecondsPerSecond));
   return base::TimeTicks::UnixEpoch() + elapsed_since_unix_epoch;
+}
+
+uint32_t ConvertToNtpDiff(uint32_t delay_seconds, uint32_t delay_fraction) {
+  return ((delay_seconds & 0x0000FFFF) << 16) +
+         ((delay_fraction & 0xFFFF0000) >> 16);
 }
 
 namespace {

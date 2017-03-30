@@ -33,7 +33,7 @@ AudioPipelineImpl::~AudioPipelineImpl() {}
 
 ::media::PipelineStatus AudioPipelineImpl::Initialize(
     const ::media::AudioDecoderConfig& audio_config,
-    scoped_ptr<CodedFrameProvider> frame_provider) {
+    std::unique_ptr<CodedFrameProvider> frame_provider) {
   CMALOG(kLogControl) << __FUNCTION__ << " "
                       << audio_config.AsHumanReadableString();
   if (frame_provider) {
@@ -84,6 +84,7 @@ void AudioPipelineImpl::UpdateStatistics() {
   delta_stats.audio_bytes_decoded =
       current_stats.audio_bytes_decoded - previous_stats_.audio_bytes_decoded;
 
+  bytes_decoded_since_last_update_ = delta_stats.audio_bytes_decoded;
   previous_stats_ = current_stats;
 
   client().statistics_cb.Run(delta_stats);

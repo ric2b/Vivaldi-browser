@@ -103,14 +103,14 @@ void OfflineAudioDestinationHandler::startRendering()
     // Rendering was not started. Starting now.
     if (!m_isRenderingStarted) {
         m_isRenderingStarted = true;
-        m_renderThread->taskRunner()->postTask(BLINK_FROM_HERE,
+        m_renderThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE,
             threadSafeBind(&OfflineAudioDestinationHandler::startOfflineRendering, this));
         return;
     }
 
     // Rendering is already started, which implicitly means we resume the
     // rendering by calling |doOfflineRendering| on the render thread.
-    m_renderThread->taskRunner()->postTask(BLINK_FROM_HERE,
+    m_renderThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE,
         threadSafeBind(&OfflineAudioDestinationHandler::doOfflineRendering, this));
 }
 
@@ -200,8 +200,8 @@ void OfflineAudioDestinationHandler::suspendOfflineRendering()
     ASSERT(!isMainThread());
 
     // The actual rendering has been suspended. Notify the context.
-    if (context()->executionContext()) {
-        context()->executionContext()->postTask(BLINK_FROM_HERE,
+    if (context()->getExecutionContext()) {
+        context()->getExecutionContext()->postTask(BLINK_FROM_HERE,
             createCrossThreadTask(&OfflineAudioDestinationHandler::notifySuspend, this));
     }
 }
@@ -211,8 +211,8 @@ void OfflineAudioDestinationHandler::finishOfflineRendering()
     ASSERT(!isMainThread());
 
     // The actual rendering has been completed. Notify the context.
-    if (context()->executionContext()) {
-        context()->executionContext()->postTask(BLINK_FROM_HERE,
+    if (context()->getExecutionContext()) {
+        context()->getExecutionContext()->postTask(BLINK_FROM_HERE,
             createCrossThreadTask(&OfflineAudioDestinationHandler::notifyComplete, this));
     }
 }

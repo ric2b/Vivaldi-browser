@@ -29,10 +29,6 @@ MemoryPurgeController::MemoryPurgeController()
 {
 }
 
-MemoryPurgeController::~MemoryPurgeController()
-{
-}
-
 void MemoryPurgeController::purgeMemory()
 {
     // TODO(bashi): Add UMA
@@ -44,9 +40,7 @@ void MemoryPurgeController::purgeMemory()
 
 DEFINE_TRACE(MemoryPurgeController)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_clients);
-#endif
 }
 
 } // namespace blink

@@ -54,8 +54,9 @@ void LayoutImageResource::shutdown()
 {
     ASSERT(m_layoutObject);
 
-    if (m_cachedImage)
-        m_cachedImage->removeClient(m_layoutObject);
+    if (!m_cachedImage)
+        return;
+    m_cachedImage->removeObserver(m_layoutObject);
 }
 
 void LayoutImageResource::setImageResource(ImageResource* newImage)
@@ -65,11 +66,12 @@ void LayoutImageResource::setImageResource(ImageResource* newImage)
     if (m_cachedImage == newImage)
         return;
 
-    if (m_cachedImage)
-        m_cachedImage->removeClient(m_layoutObject);
+    if (m_cachedImage) {
+        m_cachedImage->removeObserver(m_layoutObject);
+    }
     m_cachedImage = newImage;
     if (m_cachedImage) {
-        m_cachedImage->addClient(m_layoutObject);
+        m_cachedImage->addObserver(m_layoutObject);
         if (m_cachedImage->errorOccurred())
             m_layoutObject->imageChanged(m_cachedImage.get());
     } else {
@@ -84,7 +86,7 @@ void LayoutImageResource::resetAnimation()
     if (!m_cachedImage)
         return;
 
-    m_cachedImage->image()->resetAnimation();
+    m_cachedImage->getImage()->resetAnimation();
 
     m_layoutObject->setShouldDoFullPaintInvalidation();
 }
@@ -104,11 +106,11 @@ PassRefPtr<Image> LayoutImageResource::image(const IntSize& containerSize, float
     if (!m_cachedImage)
         return Image::nullImage();
 
-    if (!m_cachedImage->image()->isSVGImage())
-        return m_cachedImage->image();
+    if (!m_cachedImage->getImage()->isSVGImage())
+        return m_cachedImage->getImage();
 
     KURL url;
-    SVGImage* svgImage = toSVGImage(m_cachedImage->image());
+    SVGImage* svgImage = toSVGImage(m_cachedImage->getImage());
     Node* node = m_layoutObject->node();
     if (node && node->isElementNode()) {
         const AtomicString& urlString = toElement(node)->imageSourceURL();
@@ -119,7 +121,7 @@ PassRefPtr<Image> LayoutImageResource::image(const IntSize& containerSize, float
 
 bool LayoutImageResource::maybeAnimated() const
 {
-    Image* image = m_cachedImage ? m_cachedImage->image() : Image::nullImage();
+    Image* image = m_cachedImage ? m_cachedImage->getImage() : Image::nullImage();
     return image->maybeAnimated();
 }
 

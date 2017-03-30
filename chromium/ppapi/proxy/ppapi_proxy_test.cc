@@ -5,6 +5,7 @@
 #include "ppapi/proxy/ppapi_proxy_test.h"
 
 #include <sstream>
+#include <tuple>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -138,13 +139,12 @@ bool ProxyTestHarnessBase::SupportsInterface(const char* name) {
   if (!reply_msg)
     return false;
 
-  base::TupleTypes<PpapiMsg_SupportsInterface::ReplyParam>::ValueTuple
-      reply_data;
+  PpapiMsg_SupportsInterface::ReplyParam reply_data;
   EXPECT_TRUE(PpapiMsg_SupportsInterface::ReadReplyParam(
       reply_msg, &reply_data));
 
   sink().ClearMessages();
-  return base::get<0>(reply_data);
+  return std::get<0>(reply_data);
 }
 
 // PluginProxyTestHarness ------------------------------------------------------
@@ -253,9 +253,8 @@ PluginProxyTestHarness::PluginDelegateMock::ShareHandleWithRemote(
     base::PlatformFile handle,
     base::ProcessId /* remote_pid */,
     bool should_close_source) {
-  return IPC::GetFileHandleForProcess(handle,
-                                      base::GetCurrentProcessHandle(),
-                                      should_close_source);
+  return IPC::GetPlatformFileForTransit(handle,
+                                        should_close_source);
 }
 
 base::SharedMemoryHandle
@@ -491,9 +490,8 @@ HostProxyTestHarness::DelegateMock::ShareHandleWithRemote(
     base::PlatformFile handle,
     base::ProcessId /* remote_pid */,
     bool should_close_source) {
-  return IPC::GetFileHandleForProcess(handle,
-                                      base::GetCurrentProcessHandle(),
-                                      should_close_source);
+  return IPC::GetPlatformFileForTransit(handle,
+                                        should_close_source);
 }
 
 base::SharedMemoryHandle
@@ -558,8 +556,8 @@ void TwoWayTest::SetUp() {
   base::WaitableEvent remote_harness_set_up(true, false);
   plugin_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(&SetUpRemoteHarness, remote_harness_, handle,
-                            io_thread_.task_runner(), &shutdown_event_,
-                            &remote_harness_set_up));
+                            base::RetainedRef(io_thread_.task_runner()),
+                            &shutdown_event_, &remote_harness_set_up));
   remote_harness_set_up.Wait();
   local_harness_->SetUpHarnessWithChannel(
       handle, io_thread_.task_runner().get(), &shutdown_event_,

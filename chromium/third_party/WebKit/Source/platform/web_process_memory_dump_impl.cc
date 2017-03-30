@@ -4,9 +4,8 @@
 
 #include "platform/web_process_memory_dump_impl.h"
 
-#include <stddef.h>
-
 #include "base/memory/discardable_memory.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/heap_profiler_heap_dump_writer.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -14,6 +13,8 @@
 #include "base/trace_event/trace_event_memory_overhead.h"
 #include "platform/web_memory_allocator_dump_impl.h"
 #include "skia/ext/skia_trace_memory_dump_impl.h"
+
+#include <stddef.h>
 
 namespace blink {
 
@@ -150,7 +151,7 @@ void WebProcessMemoryDumpImpl::addSuballocation(
 
 SkTraceMemoryDump* WebProcessMemoryDumpImpl::createDumpAdapterForSkia(
     const blink::WebString& dump_name_prefix) {
-  sk_trace_dump_list_.push_back(make_scoped_ptr(
+  sk_trace_dump_list_.push_back(base::WrapUnique(
       new skia::SkiaTraceMemoryDumpImpl(
           dump_name_prefix.utf8(), level_of_detail_, process_memory_dump_)));
   return sk_trace_dump_list_.back().get();
@@ -171,13 +172,15 @@ void WebProcessMemoryDumpImpl::dumpHeapUsage(
         bytes_by_context,
     base::trace_event::TraceEventMemoryOverhead& overhead,
     const char* allocator_name) {
-  scoped_refptr<base::trace_event::MemoryDumpSessionState> session_state =
-      process_memory_dump_->session_state();
-  scoped_refptr<base::trace_event::TracedValue> heap_dump = ExportHeapDump(
-      bytes_by_context,
-      session_state->stack_frame_deduplicator(),
-      session_state->type_name_deduplicator());
-  process_memory_dump_->AddHeapDump(allocator_name, heap_dump);
+  if (!bytes_by_context.empty()) {
+    scoped_refptr<base::trace_event::MemoryDumpSessionState> session_state =
+        process_memory_dump_->session_state();
+    std::unique_ptr<base::trace_event::TracedValue> heap_dump = ExportHeapDump(
+        bytes_by_context, session_state->stack_frame_deduplicator(),
+        session_state->type_name_deduplicator());
+    process_memory_dump_->AddHeapDump(allocator_name, std::move(heap_dump));
+  }
+
   std::string base_name = base::StringPrintf("tracing/heap_profiler_%s",
                                              allocator_name);
   overhead.DumpInto(base_name.c_str(), process_memory_dump_);

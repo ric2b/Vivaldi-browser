@@ -14,7 +14,6 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/win/windows_version.h"
-#include "sandbox/win/src/app_container.h"
 #include "sandbox/win/src/filesystem_policy.h"
 #include "sandbox/win/src/handle_policy.h"
 #include "sandbox/win/src/interception.h"
@@ -136,7 +135,8 @@ PolicyBase::PolicyBase()
       is_csrss_connected_(true),
       policy_maker_(NULL),
       policy_(NULL),
-      lowbox_sid_(NULL) {
+      lowbox_sid_(NULL),
+      lockdown_default_dacl_(false) {
   ::InitializeCriticalSection(&lock_);
   dispatcher_.reset(new TopLevelDispatcher(this));
 }
@@ -311,30 +311,6 @@ ResultCode PolicyBase::SetDelayedIntegrityLevel(
   return SBOX_ALL_OK;
 }
 
-ResultCode PolicyBase::SetAppContainer(const wchar_t* sid) {
-  if (base::win::OSInfo::GetInstance()->version() < base::win::VERSION_WIN8)
-    return SBOX_ALL_OK;
-
-  // SetLowBox and SetAppContainer are mutually exclusive.
-  if (lowbox_sid_)
-    return SBOX_ERROR_UNSUPPORTED;
-
-  // Windows refuses to work with an impersonation token for a process inside
-  // an AppContainer. If the caller wants to use a more privileged initial
-  // token, or if the lockdown level will prevent the process from starting,
-  // we have to fail the operation.
-  if (lockdown_level_ < USER_LIMITED || lockdown_level_ != initial_level_)
-    return SBOX_ERROR_CANNOT_INIT_APPCONTAINER;
-
-  DCHECK(!appcontainer_list_.get());
-  appcontainer_list_.reset(new AppContainerAttributes);
-  ResultCode rv = appcontainer_list_->SetAppContainer(sid, capabilities_);
-  if (rv != SBOX_ALL_OK)
-    return rv;
-
-  return SBOX_ALL_OK;
-}
-
 ResultCode PolicyBase::SetCapability(const wchar_t* sid) {
   capabilities_.push_back(sid);
   return SBOX_ALL_OK;
@@ -344,12 +320,7 @@ ResultCode PolicyBase::SetLowBox(const wchar_t* sid) {
   if (base::win::OSInfo::GetInstance()->version() < base::win::VERSION_WIN8)
     return SBOX_ERROR_UNSUPPORTED;
 
-  // SetLowBox and SetAppContainer are mutually exclusive.
-  if (appcontainer_list_.get())
-    return SBOX_ERROR_UNSUPPORTED;
-
   DCHECK(sid);
-
   if (lowbox_sid_)
     return SBOX_ERROR_BAD_PARAMS;
 
@@ -434,6 +405,10 @@ void PolicyBase::AddHandleToShare(HANDLE handle) {
   handles_to_share_.push_back(handle);
 }
 
+void PolicyBase::SetLockdownDefaultDacl() {
+  lockdown_default_dacl_ = true;
+}
+
 const base::HandlesToInheritVector& PolicyBase::GetHandlesBeingShared() {
   return handles_to_share_;
 }
@@ -457,15 +432,11 @@ ResultCode PolicyBase::MakeJobObject(base::win::ScopedHandle* job) {
 ResultCode PolicyBase::MakeTokens(base::win::ScopedHandle* initial,
                                   base::win::ScopedHandle* lockdown,
                                   base::win::ScopedHandle* lowbox) {
-  if (appcontainer_list_.get() && appcontainer_list_->HasAppContainer() &&
-      lowbox_sid_) {
-    return SBOX_ERROR_BAD_PARAMS;
-  }
-
   // Create the 'naked' token. This will be the permanent token associated
   // with the process and therefore with any thread that is not impersonating.
-  DWORD result = CreateRestrictedToken(lockdown_level_,  integrity_level_,
-                                       PRIMARY, lockdown);
+  DWORD result =
+      CreateRestrictedToken(lockdown_level_, integrity_level_, PRIMARY,
+                            lockdown_default_dacl_, lockdown);
   if (ERROR_SUCCESS != result)
     return SBOX_ERROR_GENERIC;
 
@@ -475,8 +446,7 @@ ResultCode PolicyBase::MakeTokens(base::win::ScopedHandle* initial,
   // not already low enough for our process.
   if (alternate_desktop_handle_ && use_alternate_desktop_ &&
       integrity_level_ != INTEGRITY_LEVEL_LAST &&
-      alternate_desktop_integrity_level_label_ < integrity_level_ &&
-      base::win::OSInfo::GetInstance()->version() >= base::win::VERSION_VISTA) {
+      alternate_desktop_integrity_level_label_ < integrity_level_) {
     // Integrity label enum is reversed (higher level is a lower value).
     static_assert(INTEGRITY_LEVEL_SYSTEM < INTEGRITY_LEVEL_UNTRUSTED,
                   "Integrity level ordering reversed.");
@@ -488,19 +458,6 @@ ResultCode PolicyBase::MakeTokens(base::win::ScopedHandle* initial,
       return SBOX_ERROR_GENERIC;
 
     alternate_desktop_integrity_level_label_ = integrity_level_;
-  }
-
-  // We are maintaining two mutually exclusive approaches. One is to start an
-  // AppContainer process through StartupInfoEx and other is replacing
-  // existing token with LowBox token after process creation.
-  if (appcontainer_list_.get() && appcontainer_list_->HasAppContainer()) {
-    // Windows refuses to work with an impersonation token. See SetAppContainer
-    // implementation for more details.
-    if (lockdown_level_ < USER_LIMITED || lockdown_level_ != initial_level_)
-      return SBOX_ERROR_CANNOT_INIT_APPCONTAINER;
-
-    *initial = base::win::ScopedHandle();
-    return SBOX_ALL_OK;
   }
 
   if (lowbox_sid_) {
@@ -533,19 +490,13 @@ ResultCode PolicyBase::MakeTokens(base::win::ScopedHandle* initial,
   // Create the 'better' token. We use this token as the one that the main
   // thread uses when booting up the process. It should contain most of
   // what we need (before reaching main( ))
-  result = CreateRestrictedToken(initial_level_, integrity_level_,
-                                 IMPERSONATION, initial);
+  result =
+      CreateRestrictedToken(initial_level_, integrity_level_, IMPERSONATION,
+                            lockdown_default_dacl_, initial);
   if (ERROR_SUCCESS != result)
     return SBOX_ERROR_GENERIC;
 
   return SBOX_ALL_OK;
-}
-
-const AppContainerAttributes* PolicyBase::GetAppContainer() const {
-  if (!appcontainer_list_.get() || !appcontainer_list_->HasAppContainer())
-    return NULL;
-
-  return appcontainer_list_.get();
 }
 
 PSID PolicyBase::GetLowBoxSid() const {

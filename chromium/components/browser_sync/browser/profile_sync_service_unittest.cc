@@ -92,14 +92,15 @@ using testing::_;
 class TestSyncServiceObserver : public sync_driver::SyncServiceObserver {
  public:
   explicit TestSyncServiceObserver(ProfileSyncService* service)
-      : service_(service), first_setup_in_progress_(false) {}
+      : service_(service), setup_in_progress_(false) {}
   void OnStateChanged() override {
-    first_setup_in_progress_ = service_->IsFirstSetupInProgress();
+    setup_in_progress_ = service_->IsSetupInProgress();
   }
-  bool first_setup_in_progress() const { return first_setup_in_progress_; }
+  bool setup_in_progress() const { return setup_in_progress_; }
+
  private:
   ProfileSyncService* service_;
-  bool first_setup_in_progress_;
+  bool setup_in_progress_;
 };
 
 // A variant of the SyncBackendHostMock that won't automatically
@@ -234,7 +235,7 @@ class ProfileSyncServiceTest : public ::testing::Test {
     auth_service()->UpdateCredentials(account_id, "oauth2_login_token");
   }
 
-  void CreateService(ProfileSyncServiceStartBehavior behavior) {
+  void CreateService(ProfileSyncService::StartBehavior behavior) {
     signin_manager()->SetAuthenticatedAccountInfo(kGaiaId, kEmail);
     component_factory_ = profile_sync_service_bundle_.component_factory();
     ProfileSyncServiceBundle::SyncClientBuilder builder(
@@ -251,7 +252,7 @@ class ProfileSyncServiceTest : public ::testing::Test {
 #if defined(OS_WIN) || defined(OS_MACOSX) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   void CreateServiceWithoutSignIn() {
-    CreateService(browser_sync::AUTO_START);
+    CreateService(ProfileSyncService::AUTO_START);
     signin_manager()->SignOut(signin_metrics::SIGNOUT_TEST,
                               signin_metrics::SignoutDelete::IGNORE_METRIC);
   }
@@ -265,8 +266,7 @@ class ProfileSyncServiceTest : public ::testing::Test {
 
   void InitializeForNthSync() {
     // Set first sync time before initialize to simulate a complete sync setup.
-    sync_driver::SyncPrefs sync_prefs(
-        service_->GetSyncClient()->GetPrefService());
+    sync_driver::SyncPrefs sync_prefs(prefs());
     sync_prefs.SetFirstSyncTime(base::Time::Now());
     sync_prefs.SetFirstSetupComplete();
     sync_prefs.SetKeepEverythingSynced(true);
@@ -393,7 +393,7 @@ class ProfileSyncServiceTest : public ::testing::Test {
 
 // Verify that the server URLs are sane.
 TEST_F(ProfileSyncServiceTest, InitialState) {
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   InitializeForNthSync();
   const std::string& url = service()->sync_service_url().spec();
   EXPECT_TRUE(url == internal::kSyncServerUrl ||
@@ -405,7 +405,7 @@ TEST_F(ProfileSyncServiceTest, SuccessfulInitialization) {
   prefs()->SetManagedPref(sync_driver::prefs::kSyncManaged,
                           new base::FundamentalValue(false));
   IssueTestTokens();
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncBackendHostCreation(1);
   InitializeForNthSync();
@@ -416,16 +416,16 @@ TEST_F(ProfileSyncServiceTest, SuccessfulInitialization) {
 // Verify that the SetSetupInProgress function call updates state
 // and notifies observers.
 TEST_F(ProfileSyncServiceTest, SetupInProgress) {
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   InitializeForFirstSync();
 
   TestSyncServiceObserver observer(service());
   service()->AddObserver(&observer);
 
   service()->SetSetupInProgress(true);
-  EXPECT_TRUE(observer.first_setup_in_progress());
+  EXPECT_TRUE(observer.setup_in_progress());
   service()->SetSetupInProgress(false);
-  EXPECT_FALSE(observer.first_setup_in_progress());
+  EXPECT_FALSE(observer.setup_in_progress());
 
   service()->RemoveObserver(&observer);
 }
@@ -435,7 +435,7 @@ TEST_F(ProfileSyncServiceTest, DisabledByPolicyBeforeInit) {
   prefs()->SetManagedPref(sync_driver::prefs::kSyncManaged,
                           new base::FundamentalValue(true));
   IssueTestTokens();
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   InitializeForNthSync();
   EXPECT_TRUE(service()->IsManaged());
   EXPECT_FALSE(service()->IsSyncActive());
@@ -445,7 +445,7 @@ TEST_F(ProfileSyncServiceTest, DisabledByPolicyBeforeInit) {
 // been initialized.
 TEST_F(ProfileSyncServiceTest, DisabledByPolicyAfterInit) {
   IssueTestTokens();
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncBackendHostCreation(1);
   InitializeForNthSync();
@@ -463,7 +463,7 @@ TEST_F(ProfileSyncServiceTest, DisabledByPolicyAfterInit) {
 // Exercies the ProfileSyncService's code paths related to getting shut down
 // before the backend initialize call returns.
 TEST_F(ProfileSyncServiceTest, AbortedByShutdown) {
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   PrepareDelayedInitSyncBackendHost();
 
   IssueTestTokens();
@@ -475,30 +475,28 @@ TEST_F(ProfileSyncServiceTest, AbortedByShutdown) {
 
 // Test RequestStop() before we've initialized the backend.
 TEST_F(ProfileSyncServiceTest, EarlyRequestStop) {
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   IssueTestTokens();
-
-  service()->RequestStop(ProfileSyncService::KEEP_DATA);
-  EXPECT_TRUE(prefs()->GetBoolean(sync_driver::prefs::kSyncSuppressStart));
-
-  // Because of suppression, this should fail.
-  sync_driver::SyncPrefs sync_prefs(
-      service()->GetSyncClient()->GetPrefService());
-  sync_prefs.SetFirstSyncTime(base::Time::Now());
-  service()->Initialize();
-  EXPECT_FALSE(service()->IsSyncActive());
-
-  // Request start.  This should be enough to allow init to happen.
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncBackendHostCreation(1);
+
+  service()->RequestStop(ProfileSyncService::KEEP_DATA);
+  EXPECT_FALSE(service()->IsSyncRequested());
+
+  // Because sync is not requested, this should fail.
+  InitializeForNthSync();
+  EXPECT_FALSE(service()->IsSyncRequested());
+  EXPECT_FALSE(service()->IsSyncActive());
+
+  // Request start. This should be enough to allow init to happen.
   service()->RequestStart();
+  EXPECT_TRUE(service()->IsSyncRequested());
   EXPECT_TRUE(service()->IsSyncActive());
-  EXPECT_FALSE(prefs()->GetBoolean(sync_driver::prefs::kSyncSuppressStart));
 }
 
 // Test RequestStop() after we've initialized the backend.
 TEST_F(ProfileSyncServiceTest, DisableAndEnableSyncTemporarily) {
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   IssueTestTokens();
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncBackendHostCreation(1);
@@ -525,7 +523,7 @@ TEST_F(ProfileSyncServiceTest, DisableAndEnableSyncTemporarily) {
 // things that deal with concepts like "signing out" and policy.
 #if !defined (OS_CHROMEOS)
 TEST_F(ProfileSyncServiceTest, EnableSyncAndSignOut) {
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncBackendHostCreation(1);
   IssueTestTokens();
@@ -541,7 +539,7 @@ TEST_F(ProfileSyncServiceTest, EnableSyncAndSignOut) {
 #endif  // !defined(OS_CHROMEOS)
 
 TEST_F(ProfileSyncServiceTest, GetSyncTokenStatus) {
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   IssueTestTokens();
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncBackendHostCreation(1);
@@ -578,7 +576,7 @@ TEST_F(ProfileSyncServiceTest, GetSyncTokenStatus) {
 }
 
 TEST_F(ProfileSyncServiceTest, RevokeAccessTokenFromTokenService) {
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   IssueTestTokens();
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncBackendHostCreation(1);
@@ -607,7 +605,7 @@ TEST_F(ProfileSyncServiceTest, RevokeAccessTokenFromTokenService) {
 // CrOS does not support signout.
 #if !defined(OS_CHROMEOS)
 TEST_F(ProfileSyncServiceTest, SignOutRevokeAccessToken) {
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   IssueTestTokens();
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncBackendHostCreation(1);
@@ -629,7 +627,7 @@ TEST_F(ProfileSyncServiceTest, SignOutRevokeAccessToken) {
 // Verify that LastSyncedTime is cleared when the user signs out.
 TEST_F(ProfileSyncServiceTest, ClearLastSyncedTimeOnSignOut) {
   IssueTestTokens();
-  CreateService(AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncBackendHostCreation(1);
   InitializeForNthSync();
@@ -658,7 +656,7 @@ TEST_F(ProfileSyncServiceTest, NoDisableSyncFlag) {
 
 // Test Sync will stop after receive memory pressure
 TEST_F(ProfileSyncServiceTest, MemoryPressureRecording) {
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   IssueTestTokens();
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncBackendHostCreation(1);
@@ -707,7 +705,7 @@ TEST_F(ProfileSyncServiceTest, OnLocalSetPassphraseEncryption) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kSyncEnableClearDataOnPassphraseEncryption);
   IssueTestTokens();
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
 
   syncer::SyncManager::ClearServerDataCallback captured_callback;
   syncer::ConfigureReason configure_reason = syncer::CONFIGURE_REASON_UNKNOWN;
@@ -758,7 +756,7 @@ TEST_F(ProfileSyncServiceTest,
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kSyncEnableClearDataOnPassphraseEncryption);
   IssueTestTokens();
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   ExpectSyncBackendHostCreation(1);
   ExpectDataTypeManagerCreation(
       1, GetRecordingConfigureCalledCallback(&configure_reason));
@@ -813,7 +811,7 @@ TEST_F(ProfileSyncServiceTest,
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kSyncEnableClearDataOnPassphraseEncryption);
   IssueTestTokens();
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   ExpectSyncBackendHostCreationCaptureClearServerData(&captured_callback);
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   InitializeForNthSync();
@@ -859,7 +857,7 @@ TEST_F(ProfileSyncServiceTest,
 // on a datatype type requesting startup, but only happens once.
 TEST_F(ProfileSyncServiceTest, PassphrasePromptDueToVersion) {
   IssueTestTokens();
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   ExpectDataTypeManagerCreation(1, GetDefaultConfigureCalledCallback());
   ExpectSyncBackendHostCreation(1);
   InitializeForNthSync();
@@ -891,7 +889,7 @@ TEST_F(ProfileSyncServiceTest, PassphrasePromptDueToVersion) {
 // RESET_LOCAL_SYNC_DATA it restarts sync.
 TEST_F(ProfileSyncServiceTest, ResetSyncData) {
   IssueTestTokens();
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   // Backend should get initialized two times: once during initialization and
   // once when handling actionable error.
   ExpectDataTypeManagerCreation(2, GetDefaultConfigureCalledCallback());
@@ -908,7 +906,7 @@ TEST_F(ProfileSyncServiceTest, ResetSyncData) {
 // dereferenced in OnSyncCycleCompleted. The fix is to use find() to check if
 // entry for sessions exists in map.
 TEST_F(ProfileSyncServiceTest, ValidPointersInDTCMap) {
-  CreateService(browser_sync::AUTO_START);
+  CreateService(ProfileSyncService::AUTO_START);
   service()->OnSessionRestoreComplete();
   service()->OnSyncCycleCompleted();
 }

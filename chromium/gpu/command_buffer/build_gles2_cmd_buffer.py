@@ -1533,6 +1533,18 @@ _NAMED_TYPE_INFO = {
       'GL_COMPARE_REF_TO_TEXTURE',
     ],
   },
+  'TextureSwizzle': {
+    'type': 'GLenum',
+    'is_complete': True,
+    'valid': [
+      'GL_RED',
+      'GL_GREEN',
+      'GL_BLUE',
+      'GL_ALPHA',
+      'GL_ZERO',
+      'GL_ONE',
+    ],
+  },
   'TextureUsage': {
     'type': 'GLenum',
     'is_complete': True,
@@ -2406,6 +2418,7 @@ _FUNCTION_INFO = {
     'type': 'Bind',
     'decoder_func': 'DoBindBufferBase',
     'gen_func': 'GenBuffersARB',
+    'unit_test': False,
     'unsafe': True,
   },
   'BindBufferRange': {
@@ -3465,6 +3478,12 @@ _FUNCTION_INFO = {
     'id_mapping': [ 'TransformFeedback' ],
     'expectation': False,
     'unsafe': True,
+  },
+  'GetLastFlushIdCHROMIUM': {
+    'gen_cmd': False,
+    'impl_func': 'False',
+    'result': ['GLuint'],
+    'extension': True,
   },
   'LinkProgram': {
     'decoder_func': 'DoLinkProgram',

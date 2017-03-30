@@ -10,9 +10,9 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
 #include "crypto/openssl_util.h"
 
@@ -42,7 +42,7 @@ SymmetricKey* SymmetricKey::GenerateRandomKey(Algorithm algorithm,
     return NULL;
 
   OpenSSLErrStackTracer err_tracer(FROM_HERE);
-  scoped_ptr<SymmetricKey> key(new SymmetricKey);
+  std::unique_ptr<SymmetricKey> key(new SymmetricKey);
   key->algorithm_ = algorithm;
   uint8_t* key_data = reinterpret_cast<uint8_t*>(
       base::WriteInto(&key->key_, key_size_in_bytes + 1));
@@ -74,7 +74,7 @@ SymmetricKey* SymmetricKey::DeriveKeyFromPassword(Algorithm algorithm,
     return NULL;
 
   OpenSSLErrStackTracer err_tracer(FROM_HERE);
-  scoped_ptr<SymmetricKey> key(new SymmetricKey);
+  std::unique_ptr<SymmetricKey> key(new SymmetricKey);
   key->algorithm_ = algorithm;
   uint8_t* key_data = reinterpret_cast<uint8_t*>(
       base::WriteInto(&key->key_, key_size_in_bytes + 1));
@@ -89,13 +89,13 @@ SymmetricKey* SymmetricKey::DeriveKeyFromPassword(Algorithm algorithm,
 SymmetricKey* SymmetricKey::Import(Algorithm algorithm,
                                    const std::string& raw_key) {
 return Import(algorithm,
-	  reinterpret_cast<unsigned char*>(const_cast<char *>(raw_key.data())),
+  reinterpret_cast<unsigned char*>(const_cast<char *>(raw_key.data())),
       raw_key.size());
 }
 
 // static
 SymmetricKey* SymmetricKey::Import(Algorithm algorithm,
-                                   const unsigned char *raw_key, 
+                                   const unsigned char *raw_key,
                                    unsigned int raw_key_len) {
   if (algorithm == AES) {
     // Whitelist supported key sizes to avoid accidentaly relying on
@@ -105,9 +105,9 @@ SymmetricKey* SymmetricKey::Import(Algorithm algorithm,
       return NULL;
   }
 
-  scoped_ptr<SymmetricKey> key(new SymmetricKey);
-  key->algorithm_ = algorithm;
+  std::unique_ptr<SymmetricKey> key(new SymmetricKey);
   key->key_.assign((const char *) raw_key, raw_key_len);
+  key->algorithm_ = algorithm;
   return key.release();
 }
 

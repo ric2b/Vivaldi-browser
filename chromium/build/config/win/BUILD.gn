@@ -33,10 +33,13 @@ config("compiler") {
 
   cflags = [
     "/Gy",  # Enable function-level linking.
-    "/GS",  # Enable buffer security checking.
     "/FS",  # Preserve previous PDB behavior.
     "/bigobj",  # Some of our files are bigger than the regular limits.
   ]
+  if (!is_clang) {
+    # TODO(thakis): Enable this with clang too, https://crbug.com/598767
+    cflags += [ "/GS" ]  # Enable buffer security checking.
+  }
 
   # Force C/C++ mode for the given GN detected file type. This is necessary
   # for precompiled headers where the same source file is compiled in both
@@ -86,6 +89,9 @@ config("compiler") {
         "-fansi-escape-codes",
       ]
     }
+
+    # Clang runtime libraries, such as the sanitizer runtimes, live here.
+    lib_dirs = [ "//third_party/llvm-build/Release+Asserts/lib/clang/3.9.0/lib/windows" ]
   }
 
   if (is_syzyasan) {
@@ -218,15 +224,13 @@ config("sdk_link") {
     ldflags = [
       "/MACHINE:X86",
       "/SAFESEH",  # Not compatible with x64 so use only for x86.
+      "/largeaddressaware",
     ]
     lib_dirs = [
       "$windows_sdk_path\Lib\winv6.3\um\x86",
       "$visual_studio_path\VC\lib",
       "$visual_studio_path\VC\atlmfc\lib",
     ]
-    if (!is_syzyasan) {
-      ldflags += [ "/largeaddressaware" ]
-    }
   }
 }
 
@@ -244,7 +248,11 @@ config("common_linker_setup") {
     #   LINK : fatal error LNK1248: image size (80000000)
     #   exceeds maximum allowable size (80000000)
     # which started happening more regularly after VS2013 Update 4.
-    "/maxilksize:2147483647",
+    # Needs to be a bit lower for VS2015, or else errors out.
+    "/maxilksize:0x7ff00000",
+
+    # Tell the linker to crash on failures.
+    "/fastfail",
   ]
 
   # ASLR makes debugging with windbg difficult because Chrome.exe and

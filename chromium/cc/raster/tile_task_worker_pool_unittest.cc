@@ -28,9 +28,9 @@
 #include "cc/resources/resource_pool.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/resources/scoped_resource.h"
-#include "cc/test/fake_display_list_raster_source.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_output_surface_client.h"
+#include "cc/test/fake_raster_source.h"
 #include "cc/test/fake_resource_provider.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_shared_bitmap_manager.h"
@@ -61,14 +61,14 @@ class TestRasterTaskImpl : public RasterTask {
       : RasterTask(dependencies),
         resource_(resource),
         reply_(reply),
-        raster_source_(
-            FakeDisplayListRasterSource::CreateFilled(gfx::Size(1, 1))) {}
+        raster_source_(FakeRasterSource::CreateFilled(gfx::Size(1, 1))) {}
 
   // Overridden from Task:
   void RunOnWorkerThread() override {
     uint64_t new_content_id = 0;
     raster_buffer_->Playback(raster_source_.get(), gfx::Rect(1, 1),
-                             gfx::Rect(1, 1), new_content_id, 1.f, true);
+                             gfx::Rect(1, 1), new_content_id, 1.f,
+                             RasterSource::PlaybackSettings());
   }
 
   // Overridden from TileTask:
@@ -89,7 +89,7 @@ class TestRasterTaskImpl : public RasterTask {
   const Resource* resource_;
   const Reply reply_;
   scoped_ptr<RasterBuffer> raster_buffer_;
-  scoped_refptr<DisplayListRasterSource> raster_source_;
+  scoped_refptr<RasterSource> raster_source_;
 
   DISALLOW_COPY_AND_ASSIGN(TestRasterTaskImpl);
 };

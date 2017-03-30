@@ -28,14 +28,14 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<RTCIceCandidateEvent> RTCIceCandidateEvent::create()
+RTCIceCandidateEvent* RTCIceCandidateEvent::create()
 {
-    return adoptRefWillBeNoop(new RTCIceCandidateEvent);
+    return new RTCIceCandidateEvent;
 }
 
-PassRefPtrWillBeRawPtr<RTCIceCandidateEvent> RTCIceCandidateEvent::create(bool canBubble, bool cancelable, RTCIceCandidate* candidate)
+RTCIceCandidateEvent* RTCIceCandidateEvent::create(bool canBubble, bool cancelable, RTCIceCandidate* candidate)
 {
-    return adoptRefWillBeNoop(new RTCIceCandidateEvent(canBubble, cancelable, candidate));
+    return new RTCIceCandidateEvent(canBubble, cancelable, candidate);
 }
 
 RTCIceCandidateEvent::RTCIceCandidateEvent()

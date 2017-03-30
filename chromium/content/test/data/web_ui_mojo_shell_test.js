@@ -13,11 +13,10 @@ var TEST_APP_URL = 'system:content_mojo_test';
 define('main', [
   'mojo/public/js/core',
   'mojo/public/js/router',
-  'mojo/services/network/public/interfaces/url_loader.mojom',
-  'mojo/shell/public/interfaces/shell.mojom',
-  'content/public/renderer/service_provider',
+  'mojo/shell/public/interfaces/connector.mojom',
+  'content/public/renderer/frame_service_registry',
   'content/public/test/test_mojo_service.mojom',
-], function (core, router, urlMojom, shellMojom, serviceRegistry, testMojom) {
+], function (core, router, connectorMojom, serviceRegistry, testMojom) {
 
   var connectToService = function(serviceProvider, iface) {
     var pipe = core.createMessagePipe();
@@ -29,19 +28,24 @@ define('main', [
   return function() {
     domAutomationController.setAutomationId(0);
     var connectorPipe =
-        serviceRegistry.connectToService(shellMojom.Connector.name);
-    var connector = new shellMojom.Connector.proxyClass(
+        serviceRegistry.connectToService(connectorMojom.Connector.name);
+    var connector = new connectorMojom.Connector.proxyClass(
         new router.Router(connectorPipe));
 
+    var identity = {};
+    identity.name = TEST_APP_URL;
+    identity.user_id = connectorMojom.kInheritUserID;
+    identity.instance = "";
     connector.connect(
-        TEST_APP_URL, 1,
+        identity,
         function (services) {
           var test = connectToService(services, testMojom.TestMojoService);
-          test.getRequestorURL().then(function(response) {
+          test.getRequestorName().then(function(response) {
             domAutomationController.send(
-                response.url == 'chrome://mojo-web-ui/');
+                response.name == 'chrome://mojo-web-ui/');
           });
         },
-        function (exposedServices) {});
+        function (exposedServices) {},
+        null);
   };
 });

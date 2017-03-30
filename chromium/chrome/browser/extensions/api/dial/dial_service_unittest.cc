@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/extensions/api/dial/dial_service.h"
+
 #include <stddef.h>
+
+#include <memory>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "chrome/browser/extensions/api/dial/dial_device_data.h"
-#include "chrome/browser/extensions/api/dial/dial_service.h"
+#include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/network_interfaces.h"
 #include "net/log/test_net_log.h"
@@ -47,16 +50,16 @@ class MockObserver : public DialService::Observer {
 class DialServiceTest : public testing::Test {
  public:
   DialServiceTest()
-    : dial_service_(&test_net_log_) {
-    CHECK(net::ParseIPLiteralToNumber("0.0.0.0", &mock_ip_));
+      : mock_ip_(net::IPAddress::IPv4AllZeros()),
+        dial_service_(&test_net_log_) {
     dial_service_.AddObserver(&mock_observer_);
     dial_socket_ = dial_service_.CreateDialSocket();
   }
  protected:
   net::TestNetLog test_net_log_;
-  net::IPAddressNumber mock_ip_;
+  net::IPAddress mock_ip_;
   DialServiceImpl dial_service_;
-  scoped_ptr<DialServiceImpl::DialSocket> dial_socket_;
+  std::unique_ptr<DialServiceImpl::DialSocket> dial_socket_;
   MockObserver mock_observer_;
 };
 

@@ -70,6 +70,13 @@ void TestWindowTree::SetWindowProperty(uint32_t change_id,
   change_id_ = change_id;
 }
 
+void TestWindowTree::SetWindowOpacity(uint32_t change_id,
+                                      uint32_t window_id,
+                                      float opacity) {
+  got_change_ = true;
+  change_id_ = change_id;
+}
+
 void TestWindowTree::AttachSurface(
     uint32_t window_id,
     mojom::SurfaceType type,
@@ -91,6 +98,11 @@ void TestWindowTree::RemoveTransientWindowFromParent(
     uint32_t change_id,
     uint32_t transient_window_id) {}
 
+void TestWindowTree::SetModal(uint32_t change_id, uint32_t window_id) {
+  got_change_ = true;
+  change_id_ = change_id;
+}
+
 void TestWindowTree::ReorderWindow(uint32_t change_id,
                                    uint32_t window_id,
                                    uint32_t relative_window_id,
@@ -111,7 +123,6 @@ void TestWindowTree::ReleaseCapture(uint32_t change_id, uint32_t window_id) {
 
 void TestWindowTree::Embed(uint32_t window_id,
                            mojom::WindowTreeClientPtr client,
-                           uint32_t policy_bitmask,
                            const EmbedCallback& callback) {}
 
 void TestWindowTree::SetFocus(uint32_t change_id, uint32_t window_id) {
@@ -132,7 +143,7 @@ void TestWindowTree::SetImeVisibility(uint32_t window_id,
                                       bool visible,
                                       mojo::TextInputStatePtr state) {}
 
-void TestWindowTree::OnWindowInputEventAck(uint32_t event_id) {
+void TestWindowTree::OnWindowInputEventAck(uint32_t event_id, bool handled) {
   EXPECT_FALSE(acked_events_.count(event_id));
   acked_events_.insert(event_id);
 }

@@ -136,7 +136,7 @@ SimpleWebViewDialog::SimpleWebViewDialog(Profile* profile)
   command_updater_->UpdateCommandEnabled(IDC_FORWARD, true);
   command_updater_->UpdateCommandEnabled(IDC_STOP, true);
   command_updater_->UpdateCommandEnabled(IDC_RELOAD, true);
-  command_updater_->UpdateCommandEnabled(IDC_RELOAD_IGNORING_CACHE, true);
+  command_updater_->UpdateCommandEnabled(IDC_RELOAD_BYPASSING_CACHE, true);
   command_updater_->UpdateCommandEnabled(IDC_RELOAD_CLEARING_CACHE, true);
 }
 
@@ -296,11 +296,6 @@ const ToolbarModel* SimpleWebViewDialog::GetToolbarModel() const {
   return toolbar_model_.get();
 }
 
-views::Widget* SimpleWebViewDialog::CreateViewsBubble(
-    views::BubbleDelegateView* bubble_delegate) {
-  return views::BubbleDelegateView::CreateBubble(bubble_delegate);
-}
-
 ContentSettingBubbleModelDelegate*
 SimpleWebViewDialog::GetContentSettingBubbleModelDelegate() {
   return bubble_model_delegate_.get();
@@ -348,11 +343,11 @@ void SimpleWebViewDialog::ExecuteCommandWithDisposition(
       web_contents->Stop();
       break;
     case IDC_RELOAD:
-      // Always reload ignoring cache.
-    case IDC_RELOAD_IGNORING_CACHE:
+    // Always reload bypassing cache.
+    case IDC_RELOAD_BYPASSING_CACHE:
     case IDC_RELOAD_CLEARING_CACHE:
       location_bar_->Revert();
-      web_contents->GetController().ReloadIgnoringCache(true);
+      web_contents->GetController().ReloadBypassingCache(true);
       break;
     default:
       NOTREACHED();

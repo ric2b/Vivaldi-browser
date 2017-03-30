@@ -264,8 +264,6 @@ remoting.ClientPluginImpl.prototype.handleMessageMethod_ = function(message) {
     this.onInitializedDeferred_.resolve();
   } else if (message.method == 'onDesktopSize') {
     this.hostDesktop_.onSizeUpdated(message);
-  } else if (message.method == 'onDesktopShape') {
-    this.hostDesktop_.onShapeUpdated(message);
   } else if (message.method == 'onPerfStats') {
     // Return value is ignored. These calls will throw an error if the value
     // is not a number.
@@ -449,11 +447,11 @@ remoting.ClientPluginImpl.prototype.connectWithExperiments_ = function(
   this.plugin_.postMessage(JSON.stringify({
     method: 'connect',
     data: {
+      hostId: host.hostId,
       hostJid: host.jabberId,
       hostPublicKey: host.publicKey,
       localJid: localJid,
       sharedSecret: '',
-      authenticationTag: host.hostId,
       capabilities: this.capabilities_.join(" "),
       clientPairingId: credentialsProvider.getPairingInfo().clientId,
       clientPairedSecret: credentialsProvider.getPairingInfo().sharedSecret,

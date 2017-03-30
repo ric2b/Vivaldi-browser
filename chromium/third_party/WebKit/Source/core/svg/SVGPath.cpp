@@ -72,10 +72,11 @@ SVGPath::SVGPath()
 {
 }
 
-SVGPath::SVGPath(PassRefPtrWillBeRawPtr<CSSPathValue> pathValue)
+SVGPath::SVGPath(CSSPathValue* pathValue)
     : SVGPropertyBase(classType())
     , m_pathValue(pathValue)
 {
+    ASSERT(m_pathValue);
 }
 
 SVGPath::~SVGPath()
@@ -84,11 +85,11 @@ SVGPath::~SVGPath()
 
 String SVGPath::valueAsString() const
 {
-    return m_pathValue->pathString();
+    return buildStringFromByteStream(byteStream());
 }
 
 
-PassRefPtrWillBeRawPtr<SVGPath> SVGPath::clone() const
+SVGPath* SVGPath::clone() const
 {
     return SVGPath::create(m_pathValue);
 }
@@ -101,14 +102,14 @@ SVGParsingError SVGPath::setValueAsString(const String& string)
     return parseStatus;
 }
 
-PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGPath::cloneForAnimation(const String& value) const
+SVGPropertyBase* SVGPath::cloneForAnimation(const String& value) const
 {
     OwnPtr<SVGPathByteStream> byteStream = SVGPathByteStream::create();
     buildByteStreamFromString(value, *byteStream);
     return SVGPath::create(CSSPathValue::create(byteStream.release()));
 }
 
-void SVGPath::add(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement*)
+void SVGPath::add(SVGPropertyBase* other, SVGElement*)
 {
     const SVGPathByteStream& otherPathByteStream = toSVGPath(other)->byteStream();
     if (byteStream().size() != otherPathByteStream.size()
@@ -119,10 +120,10 @@ void SVGPath::add(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement*)
     m_pathValue = CSSPathValue::create(addPathByteStreams(byteStream(), otherPathByteStream));
 }
 
-void SVGPath::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> fromValue, PassRefPtrWillBeRawPtr<SVGPropertyBase> toValue, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDurationValue, SVGElement*)
+void SVGPath::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, SVGPropertyBase* fromValue, SVGPropertyBase* toValue, SVGPropertyBase* toAtEndOfDurationValue, SVGElement*)
 {
     ASSERT(animationElement);
-    bool isToAnimation = animationElement->animationMode() == ToAnimation;
+    bool isToAnimation = animationElement->getAnimationMode() == ToAnimation;
 
     const SVGPath& to = toSVGPath(*toValue);
     const SVGPathByteStream& toStream = to.byteStream();
@@ -166,7 +167,7 @@ void SVGPath::calculateAnimatedValue(SVGAnimationElement* animationElement, floa
     m_pathValue = CSSPathValue::create(newStream.release());
 }
 
-float SVGPath::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> to, SVGElement*)
+float SVGPath::calculateDistance(SVGPropertyBase* to, SVGElement*)
 {
     // FIXME: Support paced animations.
     return -1;

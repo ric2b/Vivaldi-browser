@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 /**
- * @fileoverview New tab page
- * This is the main code for the new tab page used by touch-enabled Chrome
- * browsers.  For now this is still a prototype.
+ * @fileoverview New tab page 4
+ * This is the main code for a previous version of the Chrome NTP ("NTP4").
+ * Some parts of this are still used for the chrome://apps page.
  */
 
 // Use an anonymous function to enable strict mode just for this file (which
@@ -18,20 +18,6 @@ cr.define('ntp', function() {
    * @type {!Object|undefined}
    */
   var newTabView;
-
-  /**
-   * The 'notification-container' element.
-   * @type {!Element|undefined}
-   */
-  var notificationContainer;
-
-  /**
-   * If non-null, an info bubble for showing messages to the user. It points at
-   * the Most Visited label, and is used to draw more attention to the
-   * navigation dot UI.
-   * @type {!cr.ui.Bubble|undefined}
-   */
-  var promoBubble;
 
   /**
    * If non-null, an bubble confirming that the user has signed into sync. It
@@ -63,16 +49,6 @@ cr.define('ntp', function() {
   var DEFAULT_TRANSITION_TIME = 500;
 
   /**
-   * See description for these values in ntp_stats.h.
-   * @enum {number}
-   */
-  var NtpFollowAction = {
-    CLICKED_TILE: 11,
-    CLICKED_OTHER_NTP_PANE: 12,
-    OTHER: 13
-  };
-
-  /**
    * Creates a NewTabView object. NewTabView extends PageListView with
    * new tab UI specific logics.
    * @constructor
@@ -94,17 +70,9 @@ cr.define('ntp', function() {
                     pageSwitcherStart, pageSwitcherEnd);
   }
 
-  NewTabView.prototype = {
-    __proto__: ntp.PageListView.prototype,
-
-    /** @override */
-    appendTilePage: function(page, title, titleIsEditable, opt_refNode) {
-      ntp.PageListView.prototype.appendTilePage.apply(this, arguments);
-
-      if (promoBubble)
-        window.setTimeout(promoBubble.reposition.bind(promoBubble), 0);
-    }
-  };
+  // TODO(dbeam): NewTabView is now the only extender of PageListView; these
+  // classes should be merged.
+  NewTabView.prototype = {__proto__: ntp.PageListView.prototype};
 
   /**
    * Invoked at startup once the DOM is available to initialize the app.
@@ -126,10 +94,6 @@ cr.define('ntp', function() {
     themeChanged();
 
     newTabView = new NewTabView();
-
-    notificationContainer = getRequiredElement('notification-container');
-    notificationContainer.addEventListener(
-        'webkitTransitionEnd', onNotificationTransitionEnd);
 
     if (!loadTimeData.getBoolean('showWebStoreIcon')) {
       var webStoreIcon = $('chrome-web-store-link');
@@ -170,30 +134,6 @@ cr.define('ntp', function() {
       shouldShowLoginBubble = true;
     }
 
-    if (loadTimeData.valueExists('bubblePromoText')) {
-      promoBubble = new cr.ui.Bubble;
-      promoBubble.anchorNode = getRequiredElement('promo-bubble-anchor');
-      promoBubble.arrowLocation = cr.ui.ArrowLocation.BOTTOM_START;
-      promoBubble.bubbleAlignment = cr.ui.BubbleAlignment.ENTIRELY_VISIBLE;
-      promoBubble.deactivateToDismissDelay = 2000;
-      promoBubble.content = parseHtmlSubset(
-          loadTimeData.getString('bubblePromoText'), ['BR']);
-
-      var bubbleLink = promoBubble.querySelector('a');
-      if (bubbleLink) {
-        bubbleLink.addEventListener('click', function(e) {
-          chrome.send('bubblePromoLinkClicked');
-        });
-      }
-
-      promoBubble.handleCloseEvent = function() {
-        promoBubble.hide();
-        chrome.send('bubblePromoClosed');
-      };
-      promoBubble.show();
-      chrome.send('bubblePromoViewed');
-    }
-
     $('login-container').addEventListener('click', showSyncLoginUI);
     if (loadTimeData.getBoolean('shouldShowSyncLogin'))
       chrome.send('initializeSyncLogin');
@@ -204,30 +144,6 @@ cr.define('ntp', function() {
       // Mark the current page.
       newTabView.cardSlider.currentCardValue.navigationDot.classList.add(
           'selected');
-
-      if (loadTimeData.valueExists('notificationPromoText')) {
-        var promoText = loadTimeData.getString('notificationPromoText');
-        var tags = ['IMG'];
-        var attrs = {
-          src: function(node, value) {
-            return node.tagName == 'IMG' &&
-                   /^data\:image\/(?:png|gif|jpe?g)/.test(value);
-          },
-        };
-
-        var promo = parseHtmlSubset(promoText, tags, attrs);
-        var promoLink = promo.querySelector('a');
-        if (promoLink) {
-          promoLink.addEventListener('click', function(e) {
-            chrome.send('notificationPromoLinkClicked');
-          });
-        }
-
-        showNotification(promo, [], function() {
-          chrome.send('notificationPromoClosed');
-        }, 60000);
-        chrome.send('notificationPromoViewed');
-      }
 
       cr.dispatchSimpleEvent(document, 'ntpLoaded', true, true);
       document.documentElement.classList.remove('starting-up');
@@ -342,125 +258,6 @@ cr.define('ntp', function() {
 
   function setBookmarkBarAttached(attached) {
     document.documentElement.setAttribute('bookmarkbarattached', attached);
-  }
-
-  /**
-   * Timeout ID.
-   * @type {number}
-   */
-  var notificationTimeout = 0;
-
-  /**
-   * Shows the notification bubble.
-   * @param {string|Node} message The notification message or node to use as
-   *     message.
-   * @param {Array<{text: string, action: function()}>} links An array of
-   *     records describing the links in the notification. Each record should
-   *     have a 'text' attribute (the display string) and an 'action' attribute
-   *     (a function to run when the link is activated).
-   * @param {Function=} opt_closeHandler The callback invoked if the user
-   *     manually dismisses the notification.
-   * @param {number=} opt_timeout
-   */
-  function showNotification(message, links, opt_closeHandler, opt_timeout) {
-    window.clearTimeout(notificationTimeout);
-
-    var span = document.querySelector('#notification > span');
-    if (typeof message == 'string') {
-      span.textContent = message;
-    } else {
-      span.textContent = '';  // Remove all children.
-      span.appendChild(message);
-    }
-
-    var linksBin = $('notificationLinks');
-    linksBin.textContent = '';
-    for (var i = 0; i < links.length; i++) {
-      var link = new ActionLink;
-      link.textContent = links[i].text;
-      link.action = links[i].action;
-      link.onclick = function() {
-        this.action();
-        hideNotification();
-      };
-      linksBin.appendChild(link);
-    }
-
-    function closeFunc(e) {
-      if (opt_closeHandler)
-        opt_closeHandler();
-      hideNotification();
-    }
-
-    document.querySelector('#notification button').onclick = closeFunc;
-    document.addEventListener('dragstart', closeFunc);
-
-    notificationContainer.hidden = false;
-    showNotificationOnCurrentPage();
-
-    newTabView.cardSlider.frame.addEventListener(
-        'cardSlider:card_change_ended', onCardChangeEnded);
-
-    var timeout = opt_timeout || 10000;
-    notificationTimeout = window.setTimeout(hideNotification, timeout);
-  }
-
-  /**
-   * Hide the notification bubble.
-   */
-  function hideNotification() {
-    notificationContainer.classList.add('inactive');
-
-    newTabView.cardSlider.frame.removeEventListener(
-        'cardSlider:card_change_ended', onCardChangeEnded);
-  }
-
-  /**
-   * Happens when 1 or more consecutive card changes end.
-   * @param {Event} e The cardSlider:card_change_ended event.
-   */
-  function onCardChangeEnded(e) {
-    // If we ended on the same page as we started, ignore.
-    if (newTabView.cardSlider.currentCardValue.notification)
-      return;
-
-    // Hide the notification the old page.
-    notificationContainer.classList.add('card-changed');
-
-    showNotificationOnCurrentPage();
-  }
-
-  /**
-   * Move and show the notification on the current page.
-   */
-  function showNotificationOnCurrentPage() {
-    var page = newTabView.cardSlider.currentCardValue;
-    doWhenAllSectionsReady(function() {
-      if (page != newTabView.cardSlider.currentCardValue)
-        return;
-
-      // NOTE: This moves the notification to inside of the current page.
-      page.notification = notificationContainer;
-
-      // Reveal the notification and instruct it to hide itself if ignored.
-      notificationContainer.classList.remove('inactive');
-
-      // Gives the browser time to apply this rule before we remove it (causing
-      // a transition).
-      window.setTimeout(function() {
-        notificationContainer.classList.remove('card-changed');
-      }, 0);
-    });
-  }
-
-  /**
-   * When done fading out, set hidden to true so the notification can't be
-   * tabbed to or clicked.
-   * @param {Event} e The webkitTransitionEnd event.
-   */
-  function onNotificationTransitionEnd(e) {
-    if (notificationContainer.classList.contains('inactive'))
-      notificationContainer.hidden = true;
   }
 
   /**
@@ -644,12 +441,10 @@ cr.define('ntp', function() {
     getCardSlider: getCardSlider,
     onLoad: onLoad,
     leaveRearrangeMode: leaveRearrangeMode,
-    NtpFollowAction: NtpFollowAction,
     saveAppPageName: saveAppPageName,
     setAppToBeHighlighted: setAppToBeHighlighted,
     setBookmarkBarAttached: setBookmarkBarAttached,
     setFaviconDominantColor: setFaviconDominantColor,
-    showNotification: showNotification,
     themeChanged: themeChanged,
     updateLogin: updateLogin
   };

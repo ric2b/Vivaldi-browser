@@ -23,7 +23,6 @@ LayoutTestJavaScriptDialogManager::~LayoutTestJavaScriptDialogManager() {
 void LayoutTestJavaScriptDialogManager::RunJavaScriptDialog(
     WebContents* web_contents,
     const GURL& origin_url,
-    const std::string& accept_lang,
     JavaScriptMessageType javascript_message_type,
     const base::string16& message_text,
     const base::string16& default_prompt_text,
@@ -35,7 +34,6 @@ void LayoutTestJavaScriptDialogManager::RunJavaScriptDialog(
 
 void LayoutTestJavaScriptDialogManager::RunBeforeUnloadDialog(
     WebContents* web_contents,
-    const base::string16& message_text,
     bool is_reload,
     const DialogClosedCallback& callback) {
   callback.Run(true, base::string16());

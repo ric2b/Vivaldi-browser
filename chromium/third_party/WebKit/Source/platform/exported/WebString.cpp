@@ -30,7 +30,6 @@
 
 #include "public/platform/WebString.h"
 
-#include "public/platform/WebCString.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/StringUTF8Adaptor.h"
@@ -99,7 +98,7 @@ std::string WebString::latin1() const
     if (string.is8Bit())
         return std::string(reinterpret_cast<const char*>(string.characters8()), string.length());
 
-    WebCString latin1 = string.latin1();
+    CString latin1 = string.latin1();
     return std::string(latin1.data(), latin1.length());
 }
 
@@ -136,12 +135,12 @@ WebString::operator WTF::String() const
 
 WebString::WebString(const WTF::AtomicString& s)
 {
-    assign(s.string());
+    assign(s.getString());
 }
 
 WebString& WebString::operator=(const WTF::AtomicString& s)
 {
-    assign(s.string());
+    assign(s.getString());
     return *this;
 }
 

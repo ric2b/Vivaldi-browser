@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
@@ -38,7 +40,7 @@ VRDeviceManagerTest::~VRDeviceManagerTest() {
 void VRDeviceManagerTest::SetUp() {
   scoped_ptr<FakeVRDeviceProvider> provider(new FakeVRDeviceProvider());
   provider_ = provider.get();
-  device_manager_.reset(new VRDeviceManager(provider.Pass()));
+  device_manager_.reset(new VRDeviceManager(std::move(provider)));
 }
 
 TEST_F(VRDeviceManagerTest, InitializationTest) {
@@ -46,15 +48,15 @@ TEST_F(VRDeviceManagerTest, InitializationTest) {
 
   // Calling GetDevices should initialize the service if it hasn't been
   // initialized yet or the providesr have been released.
-  // The VRService should initialize each of it's providers upon it's own
+  // The mojom::VRService should initialize each of it's providers upon it's own
   // initialization.
-  mojo::Array<VRDeviceInfoPtr> webvr_devices;
+  mojo::Array<mojom::VRDeviceInfoPtr> webvr_devices;
   webvr_devices = device_manager_->GetVRDevices();
   EXPECT_TRUE(provider_->IsInitialized());
 }
 
 TEST_F(VRDeviceManagerTest, GetDevicesBasicTest) {
-  mojo::Array<VRDeviceInfoPtr> webvr_devices;
+  mojo::Array<mojom::VRDeviceInfoPtr> webvr_devices;
   webvr_devices = device_manager_->GetVRDevices();
   // Calling GetVRDevices should initialize the providers.
   EXPECT_TRUE(provider_->IsInitialized());

@@ -45,8 +45,7 @@ class SESSIONS_EXPORT PersistentTabRestoreService : public TabRestoreService {
       WindowOpenDisposition disposition) override;
   // gisli@vivaldi.com: Added RestorePreviousSession.
   std::vector<LiveTab*> RestorePreviousSession(
-      LiveTabContext* context,
-      chrome::HostDesktopType host_desktop_type) override;
+      LiveTabContext* context) override;
   void LoadTabsFromLastSession() override;
   bool IsLoaded() const override;
   void DeleteLastSession() override;

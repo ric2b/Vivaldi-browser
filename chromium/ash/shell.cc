@@ -40,10 +40,10 @@
 #include "ash/root_window_controller.h"
 #include "ash/session/session_state_delegate.h"
 #include "ash/shelf/app_list_shelf_item_delegate.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_delegate.h"
 #include "ash/shelf/shelf_item_delegate.h"
 #include "ash/shelf/shelf_item_delegate_manager.h"
-#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_model.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shelf/shelf_window_watcher.h"
@@ -53,6 +53,7 @@
 #include "ash/shell_window_ids.h"
 #include "ash/system/locale/locale_notification_controller.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/system/toast/toast_manager.h"
 #include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/utility/partial_screenshot_controller.h"
@@ -82,6 +83,7 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/workspace_controller.h"
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
@@ -115,7 +117,7 @@
 
 #if defined(OS_CHROMEOS)
 #if defined(USE_X11)
-#include "ui/gfx/x/x11_types.h"
+#include "ui/gfx/x/x11_types.h"  // nogncheck
 #endif  // defined(USE_X11)
 #include "ash/accelerators/magnifier_key_scroller.h"
 #include "ash/accelerators/spoken_feedback_toggler.h"
@@ -510,26 +512,31 @@ void Shell::UpdateShelfVisibility() {
 
 void Shell::SetShelfAutoHideBehavior(ShelfAutoHideBehavior behavior,
                                      aura::Window* root_window) {
-  ash::ShelfLayoutManager::ForShelf(root_window)->SetAutoHideBehavior(behavior);
+  Shelf::ForWindow(root_window)->SetAutoHideBehavior(behavior);
 }
 
 ShelfAutoHideBehavior Shell::GetShelfAutoHideBehavior(
     aura::Window* root_window) const {
-  return ash::ShelfLayoutManager::ForShelf(root_window)->auto_hide_behavior();
+  return Shelf::ForWindow(root_window)->auto_hide_behavior();
 }
 
 void Shell::SetShelfAlignment(ShelfAlignment alignment,
                               aura::Window* root_window) {
-  if (ash::ShelfLayoutManager::ForShelf(root_window)->SetAlignment(alignment)) {
-    FOR_EACH_OBSERVER(
-        ShellObserver, observers_, OnShelfAlignmentChanged(root_window));
-  }
+  Shelf::ForWindow(root_window)->SetAlignment(alignment);
 }
 
-ShelfAlignment Shell::GetShelfAlignment(const aura::Window* root_window) {
-  return GetRootWindowController(root_window)
-      ->GetShelfLayoutManager()
-      ->GetAlignment();
+ShelfAlignment Shell::GetShelfAlignment(const aura::Window* root_window) const {
+  return Shelf::ForWindow(root_window)->alignment();
+}
+
+void Shell::OnShelfAlignmentChanged(aura::Window* root_window) {
+  FOR_EACH_OBSERVER(ShellObserver, observers_,
+                    OnShelfAlignmentChanged(root_window));
+}
+
+void Shell::OnShelfAutoHideBehaviorChanged(aura::Window* root_window) {
+  FOR_EACH_OBSERVER(ShellObserver, observers_,
+                    OnShelfAutoHideBehaviorChanged(root_window));
 }
 
 void Shell::NotifyFullscreenStateChange(bool is_fullscreen,
@@ -582,13 +589,12 @@ SystemTray* Shell::GetPrimarySystemTray() {
 
 ShelfDelegate* Shell::GetShelfDelegate() {
   if (!shelf_delegate_) {
-    shelf_model_.reset(new ShelfModel);
     // Creates ShelfItemDelegateManager before ShelfDelegate.
     shelf_item_delegate_manager_.reset(
         new ShelfItemDelegateManager(shelf_model_.get()));
 
     shelf_delegate_.reset(delegate_->CreateShelfDelegate(shelf_model_.get()));
-    scoped_ptr<ShelfItemDelegate> controller(new AppListShelfItemDelegate);
+    std::unique_ptr<ShelfItemDelegate> controller(new AppListShelfItemDelegate);
 
     // Finding the shelf model's location of the app list and setting its
     // ShelfItemDelegate.
@@ -614,8 +620,8 @@ void Shell::SetTouchHudProjectionEnabled(bool enabled) {
 }
 
 #if defined(OS_CHROMEOS)
-ash::FirstRunHelper* Shell::CreateFirstRunHelper() {
-  return new ash::FirstRunHelperImpl;
+FirstRunHelper* Shell::CreateFirstRunHelper() {
+  return new FirstRunHelperImpl;
 }
 
 void Shell::SetCursorCompositingEnabled(bool enabled) {
@@ -637,6 +643,7 @@ Shell::Shell(ShellDelegate* delegate, base::SequencedWorkerPool* blocking_pool)
     : target_root_window_(nullptr),
       scoped_target_root_window_(nullptr),
       delegate_(delegate),
+      shelf_model_(new ShelfModel),
       window_positioner_(new WindowPositioner),
       activation_client_(nullptr),
 #if defined(OS_CHROMEOS)
@@ -729,6 +736,9 @@ Shell::~Shell() {
   // Destroy the keyboard before closing the shelf, since it will invoke a shelf
   // layout.
   DeactivateKeyboard();
+
+  // Destroy toasts
+  toast_manager_.reset();
 
   // Destroy SystemTrayDelegate before destroying the status area(s). Make sure
   // to deinitialize the shelf first, as it is initialized after the delegate.
@@ -850,10 +860,10 @@ void Shell::Init(const ShellInitParams& init_params) {
     native_cursor_manager_ = new AshNativeCursorManager;
 #if defined(OS_CHROMEOS)
     cursor_manager_.reset(
-        new CursorManager(make_scoped_ptr(native_cursor_manager_)));
+        new CursorManager(base::WrapUnique(native_cursor_manager_)));
 #else
     cursor_manager_.reset(
-        new ::wm::CursorManager(make_scoped_ptr(native_cursor_manager_)));
+        new ::wm::CursorManager(base::WrapUnique(native_cursor_manager_)));
 #endif
   }
 
@@ -864,6 +874,12 @@ void Shell::Init(const ShellInitParams& init_params) {
       display_manager_.get(), window_tree_host_manager_.get()));
 
 #if defined(OS_CHROMEOS)
+  // When running as part of mash, OzonePlatform is not initialized in the
+  // ash_sysui process. DisplayConfigurator will try to use OzonePlatform and
+  // crash. Instead, mash can manually set default display size using
+  // --ash-host-window-bounds flag.
+  if (in_mus_)
+    display_configurator_->set_configure_display(false);
   display_configurator_->Init(!gpu_support_->IsPanelFittingDisabled());
 
   // The DBusThreadManager must outlive this Shell. See the DCHECK in ~Shell.
@@ -959,7 +975,7 @@ void Shell::Init(const ShellInitParams& init_params) {
   AddShellObserver(overlay_filter_.get());
 
   accelerator_filter_.reset(new ::wm::AcceleratorFilter(
-      scoped_ptr<::wm::AcceleratorDelegate>(new AcceleratorDelegate),
+      std::unique_ptr<::wm::AcceleratorDelegate>(new AcceleratorDelegate),
       accelerator_controller_->accelerator_history()));
   AddPreTargetHandler(accelerator_filter_.get());
 
@@ -1018,7 +1034,7 @@ void Shell::Init(const ShellInitParams& init_params) {
   window_cycle_controller_.reset(new WindowCycleController());
 
   tooltip_controller_.reset(new views::corewm::TooltipController(
-      scoped_ptr<views::corewm::Tooltip>(new views::corewm::TooltipAura)));
+      std::unique_ptr<views::corewm::Tooltip>(new views::corewm::TooltipAura)));
   AddPreTargetHandler(tooltip_controller_.get());
 
   event_client_.reset(new EventClientImpl);
@@ -1038,7 +1054,7 @@ void Shell::Init(const ShellInitParams& init_params) {
       new ::wm::ShadowController(activation_client_));
 
   // Create system_tray_notifier_ before the delegate.
-  system_tray_notifier_.reset(new ash::SystemTrayNotifier());
+  system_tray_notifier_.reset(new SystemTrayNotifier());
 
   // Initialize system_tray_delegate_ before initializing StatusAreaWidget.
   system_tray_delegate_.reset(delegate()->CreateSystemTrayDelegate());
@@ -1048,6 +1064,9 @@ void Shell::Init(const ShellInitParams& init_params) {
 
   // Initialize system_tray_delegate_ after StatusAreaWidget is created.
   system_tray_delegate_->Initialize();
+
+  // Initialize toast manager
+  toast_manager_.reset(new ToastManager);
 
 #if defined(OS_CHROMEOS)
   // Create the LogoutConfirmationController after the SystemTrayDelegate.
@@ -1090,8 +1109,8 @@ void Shell::Init(const ShellInitParams& init_params) {
 #if defined(OS_CHROMEOS)
   // Set accelerator controller delegates.
   accelerator_controller_->SetBrightnessControlDelegate(
-      scoped_ptr<ash::BrightnessControlDelegate>(
-          new ash::system::BrightnessControllerChromeos));
+      std::unique_ptr<BrightnessControlDelegate>(
+          new system::BrightnessControllerChromeos));
 
   power_event_observer_.reset(new PowerEventObserver());
   user_activity_notifier_.reset(
@@ -1182,8 +1201,8 @@ ui::EventTarget* Shell::GetParentTarget() {
   return aura::Env::GetInstance();
 }
 
-scoped_ptr<ui::EventTargetIterator> Shell::GetChildIterator() const {
-  return scoped_ptr<ui::EventTargetIterator>();
+std::unique_ptr<ui::EventTargetIterator> Shell::GetChildIterator() const {
+  return std::unique_ptr<ui::EventTargetIterator>();
 }
 
 ui::EventTargeter* Shell::GetEventTargeter() {

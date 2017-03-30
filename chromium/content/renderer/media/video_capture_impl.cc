@@ -19,8 +19,8 @@
 #include "base/stl_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "content/child/child_process.h"
-#include "content/common/gpu/client/gpu_memory_buffer_impl.h"
 #include "content/common/media/video_capture_messages.h"
+#include "gpu/ipc/client/gpu_memory_buffer_impl.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/limits.h"
 #include "media/base/video_frame.h"
@@ -31,7 +31,7 @@ namespace content {
 class VideoCaptureImpl::ClientBuffer
     : public base::RefCountedThreadSafe<ClientBuffer> {
  public:
-  ClientBuffer(scoped_ptr<base::SharedMemory> buffer, size_t buffer_size)
+  ClientBuffer(std::unique_ptr<base::SharedMemory> buffer, size_t buffer_size)
       : buffer_(std::move(buffer)), buffer_size_(buffer_size) {}
 
   base::SharedMemory* buffer() const { return buffer_.get(); }
@@ -42,7 +42,7 @@ class VideoCaptureImpl::ClientBuffer
 
   virtual ~ClientBuffer() {}
 
-  const scoped_ptr<base::SharedMemory> buffer_;
+  const std::unique_ptr<base::SharedMemory> buffer_;
   const size_t buffer_size_;
 
   DISALLOW_COPY_AND_ASSIGN(ClientBuffer);
@@ -63,7 +63,7 @@ class VideoCaptureImpl::ClientBuffer2
     for (size_t i = 0; i < handles_.size(); ++i) {
       const size_t width = media::VideoFrame::Columns(i, format, size_.width());
       const size_t height = media::VideoFrame::Rows(i, format, size_.height());
-      buffers_.push_back(GpuMemoryBufferImpl::CreateFromHandle(
+      buffers_.push_back(gpu::GpuMemoryBufferImpl::CreateFromHandle(
           handles_[i], gfx::Size(width, height), gfx::BufferFormat::R_8,
           gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
           base::Bind(&ClientBuffer2::DestroyGpuMemoryBuffer,
@@ -217,6 +217,11 @@ void VideoCaptureImpl::StopCapture(int client_id) {
   }
 }
 
+void VideoCaptureImpl::RequestRefreshFrame() {
+  DCHECK(io_task_runner_->BelongsToCurrentThread());
+  Send(new VideoCaptureHostMsg_RequestRefreshFrame(device_id_));
+}
+
 void VideoCaptureImpl::GetDeviceSupportedFormats(
     const VideoCaptureDeviceFormatsCB& callback) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
@@ -247,7 +252,8 @@ void VideoCaptureImpl::OnBufferCreated(base::SharedMemoryHandle handle,
     return;
   }
 
-  scoped_ptr<base::SharedMemory> shm(new base::SharedMemory(handle, false));
+  std::unique_ptr<base::SharedMemory> shm(
+      new base::SharedMemory(handle, false));
   if (!shm->Map(length)) {
     DLOG(ERROR) << "OnBufferCreated: Map failed.";
     return;
@@ -329,7 +335,7 @@ void VideoCaptureImpl::OnBufferReceived(
 
   scoped_refptr<media::VideoFrame> frame;
   BufferFinishedCallback buffer_finished_callback;
-  scoped_ptr<gpu::SyncToken> release_sync_token(new gpu::SyncToken);
+  std::unique_ptr<gpu::SyncToken> release_sync_token(new gpu::SyncToken);
   switch (storage_type) {
     case media::VideoFrame::STORAGE_GPU_MEMORY_BUFFERS: {
       const auto& iter = client_buffer2s_.find(buffer_id);
@@ -545,7 +551,7 @@ bool VideoCaptureImpl::RemoveClient(int client_id, ClientInfoMap* clients) {
 // static
 void VideoCaptureImpl::DidFinishConsumingFrame(
     const media::VideoFrameMetadata* metadata,
-    scoped_ptr<gpu::SyncToken> release_sync_token,
+    std::unique_ptr<gpu::SyncToken> release_sync_token,
     const BufferFinishedCallback& callback_to_io_thread) {
   // Note: This function may be called on any thread by the VideoFrame
   // destructor.  |metadata| is still valid for read-access at this point.

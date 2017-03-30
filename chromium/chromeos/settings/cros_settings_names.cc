@@ -183,4 +183,20 @@ const char kExtensionCacheSize[] = "cros.device.extension_cache_size";
 // 3 = 270 degrees clockwise rotation
 const char kDisplayRotationDefault[] = "cros.display_rotation_default";
 
+// An integer pref that sets the behavior of the login authentication flow.
+// 0 = authentication using the default GAIA flow.
+// 1 = authentication using an interstitial screen that offers the user to go
+// ahead via the SAML IdP of the device's enrollment domain, or go back to the
+// normal GAIA login flow.
+const char kLoginAuthenticationBehavior[] =
+    "cros.device.login_authentication_behavior";
+
+// A boolean pref that indicates whether bluetooth should be allowed on the
+// device.
+const char kAllowBluetooth[] = "cros.device.allow_bluetooth";
+
+// A boolean pref to enable any pings or requests to the Quirks Server.
+const char kDeviceQuirksDownloadEnabled[] =
+    "cros.device.quirks_download_enabled";
+
 }  // namespace chromeos

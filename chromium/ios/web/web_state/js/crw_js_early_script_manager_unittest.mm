@@ -5,6 +5,7 @@
 #import "ios/web/web_state/js/crw_js_early_script_manager.h"
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/memory/ptr_util.h"
 #import "ios/web/public/test/crw_test_js_injection_receiver.h"
 #include "ios/web/public/test/scoped_testing_web_client.h"
 #include "ios/web/public/web_client.h"
@@ -17,7 +18,8 @@ namespace {
 
 class CRWJSEarlyScriptManagerTest : public PlatformTest {
  public:
-  CRWJSEarlyScriptManagerTest() : web_client_(make_scoped_ptr(new WebClient)) {}
+  CRWJSEarlyScriptManagerTest()
+      : web_client_(base::WrapUnique(new WebClient)) {}
 
  protected:
   void SetUp() override {
@@ -39,7 +41,7 @@ class CRWJSEarlyScriptManagerTest : public PlatformTest {
 // web::GetEarlyPageScript.
 TEST_F(CRWJSEarlyScriptManagerTest, Content) {
   NSString* injectionContent = [earlyScriptManager_ staticInjectionContent];
-  NSString* earlyScript = GetEarlyPageScript([receiver_ webViewType]);
+  NSString* earlyScript = GetEarlyPageScript();
   // |earlyScript| is a substring of |injectionContent|. The latter wraps the
   // former with "if (typeof __gCrWeb !== 'object')" check to avoid multiple
   // injections.

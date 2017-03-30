@@ -16,12 +16,15 @@
 #include "cc/layers/texture_layer.h"
 #include "cc/resources/shared_bitmap_manager.h"
 #include "components/test_runner/web_test_delegate.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebCompositorSupport.h"
 #include "third_party/WebKit/public/platform/WebGraphicsContext3D.h"
+#include "third_party/WebKit/public/platform/WebGraphicsContext3DProvider.h"
 #include "third_party/WebKit/public/platform/WebTaskRunner.h"
 #include "third_party/WebKit/public/platform/WebThread.h"
 #include "third_party/WebKit/public/platform/WebTraceLocation.h"
+#include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebKit.h"
@@ -38,37 +41,7 @@ namespace test_runner {
 
 namespace {
 
-// GLenum values copied from gl2.h.
-#define GL_FALSE 0
-#define GL_TRUE 1
-#define GL_ONE 1
-#define GL_TRIANGLES 0x0004
-#define GL_ONE_MINUS_SRC_ALPHA 0x0303
-#define GL_DEPTH_TEST 0x0B71
-#define GL_BLEND 0x0BE2
-#define GL_SCISSOR_TEST 0x0B90
-#define GL_TEXTURE_2D 0x0DE1
-#define GL_FLOAT 0x1406
-#define GL_RGBA 0x1908
-#define GL_UNSIGNED_BYTE 0x1401
-#define GL_TEXTURE_MAG_FILTER 0x2800
-#define GL_TEXTURE_MIN_FILTER 0x2801
-#define GL_TEXTURE_WRAP_S 0x2802
-#define GL_TEXTURE_WRAP_T 0x2803
-#define GL_NEAREST 0x2600
-#define GL_COLOR_BUFFER_BIT 0x4000
-#define GL_CLAMP_TO_EDGE 0x812F
-#define GL_ARRAY_BUFFER 0x8892
-#define GL_STATIC_DRAW 0x88E4
-#define GL_FRAGMENT_SHADER 0x8B30
-#define GL_VERTEX_SHADER 0x8B31
-#define GL_COMPILE_STATUS 0x8B81
-#define GL_LINK_STATUS 0x8B82
-#define GL_COLOR_ATTACHMENT0 0x8CE0
-#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
-#define GL_FRAMEBUFFER 0x8D40
-
-void PremultiplyAlpha(const unsigned color_in[3],
+void PremultiplyAlpha(const uint8_t color_in[3],
                       float alpha,
                       float color_out[4]) {
   for (int i = 0; i < 3; ++i)
@@ -149,8 +122,9 @@ TestPlugin::TestPlugin(blink::WebFrame* frame,
                        WebTestDelegate* delegate)
     : frame_(frame),
       delegate_(delegate),
-      container_(0),
-      context_(0),
+      container_(nullptr),
+      context_(nullptr),
+      gl_(nullptr),
       color_texture_(0),
       mailbox_changed_(false),
       framebuffer_(0),
@@ -200,17 +174,27 @@ TestPlugin::~TestPlugin() {
 }
 
 bool TestPlugin::initialize(blink::WebPluginContainer* container) {
-  blink::WebGraphicsContext3D::Attributes attrs;
-  context_ =
-      blink::Platform::current()->createOffscreenGraphicsContext3D(attrs);
+  DCHECK(container);
+  DCHECK_EQ(this, container->plugin());
+
+  container_ = container;
+
+  blink::Platform::ContextAttributes attrs;
+  DCHECK(!container->element().isNull());
+  DCHECK(!container->element().document().isNull());
+  blink::WebURL url = container->element().document().url();
+  blink::Platform::GraphicsInfo gl_info;
+  context_provider_ = make_scoped_ptr(
+      blink::Platform::current()->createOffscreenGraphicsContext3DProvider(
+          attrs, url, nullptr, &gl_info));
+  context_ = context_provider_ ? context_provider_->context3d() : nullptr;
+  gl_ = context_provider_ ? context_provider_->contextGL() : nullptr;
 
   if (!InitScene())
     return false;
 
-  layer_ = cc::TextureLayer::CreateForMailbox(
-      cc_blink::WebLayerImpl::LayerSettings(), this);
+  layer_ = cc::TextureLayer::CreateForMailbox(this);
   web_layer_ = make_scoped_ptr(new cc_blink::WebLayerImpl(layer_));
-  container_ = container;
   container_->setWebLayer(web_layer_.get());
   if (re_request_touch_events_) {
     container_->requestTouchEventType(
@@ -232,19 +216,19 @@ void TestPlugin::destroy() {
   layer_ = NULL;
   DestroyScene();
 
-  delete context_;
-  context_ = 0;
+  gl_ = nullptr;
+  context_provider_.reset();
 
-  container_ = 0;
-  frame_ = 0;
+  container_ = nullptr;
+  frame_ = nullptr;
 
-  blink::Platform::current()->mainThread()->taskRunner()->postTask(
+  blink::Platform::current()->mainThread()->getWebTaskRunner()->postTask(
       blink::WebTraceLocation(__FUNCTION__, __FILE__),
       new DeferredDeleteTask(make_scoped_ptr(this)));
 }
 
-NPObject* TestPlugin::scriptableObject() {
-  return 0;
+blink::WebPluginContainer* TestPlugin::container() const {
+  return container_;
 }
 
 bool TestPlugin::canProcessDrag() const {
@@ -267,37 +251,30 @@ void TestPlugin::updateGeometry(
 
   if (rect_.isEmpty()) {
     texture_mailbox_ = cc::TextureMailbox();
-  } else if (context_) {
-    context_->viewport(0, 0, rect_.width, rect_.height);
+  } else if (gl_) {
+    gl_->Viewport(0, 0, rect_.width, rect_.height);
 
-    context_->bindTexture(GL_TEXTURE_2D, color_texture_);
-    context_->texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    context_->texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    context_->texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    context_->texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    context_->texImage2D(GL_TEXTURE_2D,
-                         0,
-                         GL_RGBA,
-                         rect_.width,
-                         rect_.height,
-                         0,
-                         GL_RGBA,
-                         GL_UNSIGNED_BYTE,
-                         0);
-    context_->bindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
-    context_->framebufferTexture2D(
-        GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_texture_, 0);
+    gl_->BindTexture(GL_TEXTURE_2D, color_texture_);
+    gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    gl_->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, rect_.width, rect_.height, 0,
+                    GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    gl_->BindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+    gl_->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                              GL_TEXTURE_2D, color_texture_, 0);
 
     DrawSceneGL();
 
     gpu::Mailbox mailbox;
-    context_->genMailboxCHROMIUM(mailbox.name);
-    context_->produceTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
-    const blink::WGC3Duint64 fence_sync = context_->insertFenceSyncCHROMIUM();
-    context_->flush();
+    gl_->GenMailboxCHROMIUM(mailbox.name);
+    gl_->ProduceTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
+    const GLuint64 fence_sync = gl_->InsertFenceSyncCHROMIUM();
+    gl_->Flush();
 
     gpu::SyncToken sync_token;
-    context_->genSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+    gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
     texture_mailbox_ = cc::TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D);
   } else {
     scoped_ptr<cc::SharedBitmap> bitmap =
@@ -315,10 +292,6 @@ void TestPlugin::updateGeometry(
 
   mailbox_changed_ = true;
   layer_->SetNeedsDisplay();
-}
-
-bool TestPlugin::acceptsInputEvents() {
-  return true;
 }
 
 bool TestPlugin::isPlaceholder() {
@@ -368,7 +341,7 @@ TestPlugin::Primitive TestPlugin::ParsePrimitive(
 
 // FIXME: This method should already exist. Use it.
 // For now just parse primary colors.
-void TestPlugin::ParseColor(const blink::WebString& string, unsigned color[3]) {
+void TestPlugin::ParseColor(const blink::WebString& string, uint8_t color[3]) {
   color[0] = color[1] = color[2] = 0;
   if (string == "black")
     return;
@@ -393,31 +366,31 @@ bool TestPlugin::ParseBoolean(const blink::WebString& string) {
 }
 
 bool TestPlugin::InitScene() {
-  if (!context_)
+  if (!gl_)
     return true;
 
   float color[4];
   PremultiplyAlpha(scene_.background_color, scene_.opacity, color);
 
-  color_texture_ = context_->createTexture();
-  framebuffer_ = context_->createFramebuffer();
+  gl_->GenTextures(1, &color_texture_);
+  gl_->GenFramebuffers(1, &framebuffer_);
 
-  context_->viewport(0, 0, rect_.width, rect_.height);
-  context_->disable(GL_DEPTH_TEST);
-  context_->disable(GL_SCISSOR_TEST);
+  gl_->Viewport(0, 0, rect_.width, rect_.height);
+  gl_->Disable(GL_DEPTH_TEST);
+  gl_->Disable(GL_SCISSOR_TEST);
 
-  context_->clearColor(color[0], color[1], color[2], color[3]);
+  gl_->ClearColor(color[0], color[1], color[2], color[3]);
 
-  context_->enable(GL_BLEND);
-  context_->blendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  gl_->Enable(GL_BLEND);
+  gl_->BlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
   return scene_.primitive != PrimitiveNone ? InitProgram() && InitPrimitive()
                                            : true;
 }
 
 void TestPlugin::DrawSceneGL() {
-  context_->viewport(0, 0, rect_.width, rect_.height);
-  context_->clear(GL_COLOR_BUFFER_BIT);
+  gl_->Viewport(0, 0, rect_.width, rect_.height);
+  gl_->Clear(GL_COLOR_BUFFER_BIT);
 
   if (scene_.primitive != PrimitiveNone)
     DrawPrimitive();
@@ -453,21 +426,21 @@ void TestPlugin::DrawSceneSoftware(void* memory) {
 
 void TestPlugin::DestroyScene() {
   if (scene_.program) {
-    context_->deleteProgram(scene_.program);
+    gl_->DeleteProgram(scene_.program);
     scene_.program = 0;
   }
   if (scene_.vbo) {
-    context_->deleteBuffer(scene_.vbo);
+    gl_->DeleteBuffers(1, &scene_.vbo);
     scene_.vbo = 0;
   }
 
   if (framebuffer_) {
-    context_->deleteFramebuffer(framebuffer_);
+    gl_->DeleteFramebuffers(1, &framebuffer_);
     framebuffer_ = 0;
   }
 
   if (color_texture_) {
-    context_->deleteTexture(color_texture_);
+    gl_->DeleteTextures(1, &color_texture_);
     color_texture_ = 0;
   }
 }
@@ -490,24 +463,23 @@ bool TestPlugin::InitProgram() {
   if (!scene_.program)
     return false;
 
-  scene_.color_location = context_->getUniformLocation(scene_.program, "color");
-  scene_.position_location =
-      context_->getAttribLocation(scene_.program, "position");
+  scene_.color_location = gl_->GetUniformLocation(scene_.program, "color");
+  scene_.position_location = gl_->GetAttribLocation(scene_.program, "position");
   return true;
 }
 
 bool TestPlugin::InitPrimitive() {
   DCHECK_EQ(scene_.primitive, PrimitiveTriangle);
 
-  scene_.vbo = context_->createBuffer();
+  gl_->GenBuffers(1, &scene_.vbo);
   if (!scene_.vbo)
     return false;
 
   const float vertices[] = {0.0f, 0.8f, 0.0f,  -0.8f, -0.8f,
                             0.0f, 0.8f, -0.8f, 0.0f};
-  context_->bindBuffer(GL_ARRAY_BUFFER, scene_.vbo);
-  context_->bufferData(GL_ARRAY_BUFFER, sizeof(vertices), 0, GL_STATIC_DRAW);
-  context_->bufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+  gl_->BindBuffer(GL_ARRAY_BUFFER, scene_.vbo);
+  gl_->BufferData(GL_ARRAY_BUFFER, sizeof(vertices), 0, GL_STATIC_DRAW);
+  gl_->BufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
   return true;
 }
 
@@ -516,59 +488,60 @@ void TestPlugin::DrawPrimitive() {
   DCHECK(scene_.vbo);
   DCHECK(scene_.program);
 
-  context_->useProgram(scene_.program);
+  gl_->UseProgram(scene_.program);
 
   // Bind primitive color.
   float color[4];
   PremultiplyAlpha(scene_.primitive_color, scene_.opacity, color);
-  context_->uniform4f(
-      scene_.color_location, color[0], color[1], color[2], color[3]);
+  gl_->Uniform4f(scene_.color_location, color[0], color[1], color[2], color[3]);
 
   // Bind primitive vertices.
-  context_->bindBuffer(GL_ARRAY_BUFFER, scene_.vbo);
-  context_->enableVertexAttribArray(scene_.position_location);
-  context_->vertexAttribPointer(
-      scene_.position_location, 3, GL_FLOAT, GL_FALSE, 0, 0);
-  context_->drawArrays(GL_TRIANGLES, 0, 3);
+  gl_->BindBuffer(GL_ARRAY_BUFFER, scene_.vbo);
+  gl_->EnableVertexAttribArray(scene_.position_location);
+  gl_->VertexAttribPointer(scene_.position_location, 3, GL_FLOAT, GL_FALSE, 0,
+                           nullptr);
+  gl_->DrawArrays(GL_TRIANGLES, 0, 3);
 }
 
-unsigned TestPlugin::LoadShader(unsigned type, const std::string& source) {
-  unsigned shader = context_->createShader(type);
+GLuint TestPlugin::LoadShader(GLenum type, const std::string& source) {
+  GLuint shader = gl_->CreateShader(type);
   if (shader) {
-    context_->shaderSource(shader, source.data());
-    context_->compileShader(shader);
+    const GLchar* shader_data = source.data();
+    GLint shader_length = strlen(shader_data); //source.length();
+    gl_->ShaderSource(shader, 1, &shader_data, &shader_length);
+    gl_->CompileShader(shader);
 
     int compiled = 0;
-    context_->getShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+    gl_->GetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
     if (!compiled) {
-      context_->deleteShader(shader);
+      gl_->DeleteShader(shader);
       shader = 0;
     }
   }
   return shader;
 }
 
-unsigned TestPlugin::LoadProgram(const std::string& vertex_source,
-                                 const std::string& fragment_source) {
-  unsigned vertex_shader = LoadShader(GL_VERTEX_SHADER, vertex_source);
-  unsigned fragment_shader = LoadShader(GL_FRAGMENT_SHADER, fragment_source);
-  unsigned program = context_->createProgram();
+GLuint TestPlugin::LoadProgram(const std::string& vertex_source,
+                               const std::string& fragment_source) {
+  GLuint vertex_shader = LoadShader(GL_VERTEX_SHADER, vertex_source);
+  GLuint fragment_shader = LoadShader(GL_FRAGMENT_SHADER, fragment_source);
+  GLuint program = gl_->CreateProgram();
   if (vertex_shader && fragment_shader && program) {
-    context_->attachShader(program, vertex_shader);
-    context_->attachShader(program, fragment_shader);
-    context_->linkProgram(program);
+    gl_->AttachShader(program, vertex_shader);
+    gl_->AttachShader(program, fragment_shader);
+    gl_->LinkProgram(program);
 
     int linked = 0;
-    context_->getProgramiv(program, GL_LINK_STATUS, &linked);
+    gl_->GetProgramiv(program, GL_LINK_STATUS, &linked);
     if (!linked) {
-      context_->deleteProgram(program);
+      gl_->DeleteProgram(program);
       program = 0;
     }
   }
   if (vertex_shader)
-    context_->deleteShader(vertex_shader);
+    gl_->DeleteShader(vertex_shader);
   if (fragment_shader)
-    context_->deleteShader(fragment_shader);
+    gl_->DeleteShader(fragment_shader);
 
   return program;
 }

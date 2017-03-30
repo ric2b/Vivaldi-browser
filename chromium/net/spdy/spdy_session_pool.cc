@@ -9,6 +9,8 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/profiler/scoped_tracker.h"
+#include "base/stl_util.h"
+#include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "net/base/address_list.h"
 #include "net/http/http_network_session.h"
@@ -35,6 +37,7 @@ SpdySessionPool::SpdySessionPool(
     const base::WeakPtr<HttpServerProperties>& http_server_properties,
     TransportSecurityState* transport_security_state,
     bool enable_ping_based_connection_checking,
+    bool enable_priority_dependencies,
     NextProto default_protocol,
     size_t session_max_recv_window_size,
     size_t stream_max_recv_window_size,
@@ -48,6 +51,7 @@ SpdySessionPool::SpdySessionPool(
       enable_sending_initial_data_(true),
       enable_ping_based_connection_checking_(
           enable_ping_based_connection_checking),
+      enable_priority_dependencies_(enable_priority_dependencies),
       // TODO(akalin): Force callers to have a valid value of
       // |default_protocol_|.
       default_protocol_((default_protocol == kProtoUnknown) ? kProtoSPDY31
@@ -85,6 +89,7 @@ base::WeakPtr<SpdySession> SpdySessionPool::CreateAvailableSessionFromSocket(
     const BoundNetLog& net_log,
     int certificate_error_code,
     bool is_secure) {
+  TRACE_EVENT0("net", "SpdySessionPool::CreateAvailableSessionFromSocket");
   DCHECK_GE(default_protocol_, kProtoSPDYMinimumVersion);
   DCHECK_LE(default_protocol_, kProtoSPDYMaximumVersion);
 
@@ -94,9 +99,10 @@ base::WeakPtr<SpdySession> SpdySessionPool::CreateAvailableSessionFromSocket(
   scoped_ptr<SpdySession> new_session(new SpdySession(
       key, http_server_properties_, transport_security_state_,
       verify_domain_authentication_, enable_sending_initial_data_,
-      enable_ping_based_connection_checking_, default_protocol_,
-      session_max_recv_window_size_, stream_max_recv_window_size_, time_func_,
-      proxy_delegate_, net_log.net_log()));
+      enable_ping_based_connection_checking_, enable_priority_dependencies_,
+      default_protocol_, session_max_recv_window_size_,
+      stream_max_recv_window_size_, time_func_, proxy_delegate_,
+      net_log.net_log()));
 
   new_session->InitializeWithSocket(std::move(connection), this, is_secure,
                                     certificate_error_code);
@@ -125,7 +131,37 @@ base::WeakPtr<SpdySession> SpdySessionPool::CreateAvailableSessionFromSocket(
 
 base::WeakPtr<SpdySession> SpdySessionPool::FindAvailableSession(
     const SpdySessionKey& key,
+    const GURL& url,
     const BoundNetLog& net_log) {
+  UnclaimedPushedStreamMap::iterator url_it =
+      unclaimed_pushed_streams_.find(url);
+  if (!url.is_empty() && url_it != unclaimed_pushed_streams_.end()) {
+    DCHECK(url.SchemeIsCryptographic());
+    for (WeakSessionList::iterator it = url_it->second.begin();
+         it != url_it->second.end();) {
+      base::WeakPtr<SpdySession> spdy_session = *it;
+      // Lazy deletion of destroyed SpdySessions.
+      if (!spdy_session) {
+        it = url_it->second.erase(it);
+        continue;
+      }
+      ++it;
+      const SpdySessionKey& spdy_session_key = spdy_session->spdy_session_key();
+      if (!(spdy_session_key.proxy_server() == key.proxy_server()) ||
+          !(spdy_session_key.privacy_mode() == key.privacy_mode())) {
+        continue;
+      }
+      if (!spdy_session->VerifyDomainAuthentication(
+              key.host_port_pair().host())) {
+        continue;
+      }
+      return spdy_session;
+    }
+    if (url_it->second.empty()) {
+      unclaimed_pushed_streams_.erase(url_it);
+    }
+  }
+
   AvailableSessionMap::iterator it = LookupAvailableSessionByKey(key);
   if (it != available_sessions_.end()) {
     UMA_HISTOGRAM_ENUMERATION(
@@ -242,6 +278,52 @@ void SpdySessionPool::CloseAllSessions() {
     CloseCurrentSessionsHelper(ERR_ABORTED, "Closing all sessions.",
                                false /* idle_only */);
   }
+}
+
+void SpdySessionPool::RegisterUnclaimedPushedStream(
+    GURL url,
+    base::WeakPtr<SpdySession> spdy_session) {
+  DCHECK(!url.is_empty());
+  // This SpdySessionPool  must own |spdy_session|.
+  DCHECK(ContainsKey(sessions_, spdy_session.get()));
+  UnclaimedPushedStreamMap::iterator url_it =
+      unclaimed_pushed_streams_.lower_bound(url);
+  if (url_it == unclaimed_pushed_streams_.end() || url_it->first != url) {
+    WeakSessionList list;
+    list.push_back(std::move(spdy_session));
+    UnclaimedPushedStreamMap::value_type value(std::move(url), std::move(list));
+    unclaimed_pushed_streams_.insert(url_it, std::move(value));
+    return;
+  }
+  url_it->second.push_back(spdy_session);
+}
+
+void SpdySessionPool::UnregisterUnclaimedPushedStream(
+    const GURL& url,
+    SpdySession* spdy_session) {
+  DCHECK(!url.is_empty());
+  UnclaimedPushedStreamMap::iterator url_it =
+      unclaimed_pushed_streams_.find(url);
+  DCHECK(url_it != unclaimed_pushed_streams_.end());
+  size_t removed = 0;
+  for (WeakSessionList::iterator it = url_it->second.begin();
+       it != url_it->second.end();) {
+    // Lazy deletion of destroyed SpdySessions.
+    if (!*it) {
+      it = url_it->second.erase(it);
+      continue;
+    }
+    if (it->get() == spdy_session) {
+      it = url_it->second.erase(it);
+      ++removed;
+      break;
+    }
+    ++it;
+  }
+  if (url_it->second.empty()) {
+    unclaimed_pushed_streams_.erase(url_it);
+  }
+  DCHECK_EQ(1u, removed);
 }
 
 scoped_ptr<base::Value> SpdySessionPool::SpdySessionPoolInfoToValue() const {

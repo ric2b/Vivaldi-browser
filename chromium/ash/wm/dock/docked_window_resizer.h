@@ -5,11 +5,12 @@
 #ifndef ASH_WM_DOCK_DOCK_WINDOW_RESIZER_H_
 #define ASH_WM_DOCK_DOCK_WINDOW_RESIZER_H_
 
+#include <memory>
+
 #include "ash/wm/dock/dock_types.h"
 #include "ash/wm/window_resizer.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 
 namespace gfx {
@@ -54,7 +55,9 @@ class ASH_EXPORT DockedWindowResizer : public WindowResizer {
 
   // Tracks the window's initial position and attachment at the start of a drag
   // and informs the DockLayoutManager that a drag has started if necessary.
-  void StartedDragging();
+  // |resizer| can be used to check if the resizer has been deleted during
+  // StartedDragging.
+  void StartedDragging(base::WeakPtr<DockedWindowResizer>& resizer);
 
   // Informs the DockLayoutManager that the drag is complete if it was informed
   // of the drag start. |move_result| specifies if the drag was completed or
@@ -73,7 +76,7 @@ class ASH_EXPORT DockedWindowResizer : public WindowResizer {
   gfx::Point last_location_;
 
   // Wraps a window resizer and adds detaching / reattaching during drags.
-  scoped_ptr<WindowResizer> next_window_resizer_;
+  std::unique_ptr<WindowResizer> next_window_resizer_;
 
   // Dock container window.
   DockedWindowLayoutManager* dock_layout_;

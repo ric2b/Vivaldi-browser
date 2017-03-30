@@ -16,7 +16,6 @@
 #include "ppapi/c/dev/ppb_crypto_dev.h"
 #include "ppapi/c/dev/ppb_cursor_control_dev.h"
 #include "ppapi/c/dev/ppb_device_ref_dev.h"
-#include "ppapi/c/dev/ppb_font_dev.h"
 #include "ppapi/c/dev/ppb_gles_chromium_texture_mapping_dev.h"
 #include "ppapi/c/dev/ppb_ime_input_event_dev.h"
 #include "ppapi/c/dev/ppb_memory_dev.h"
@@ -399,15 +398,15 @@ void InterfaceList::AddPPB(const char* name,
                            Permission perm) {
   DCHECK(name_to_browser_info_.find(name) == name_to_browser_info_.end());
   name_to_browser_info_.add(
-      name, scoped_ptr<InterfaceInfo>(new InterfaceInfo(iface, perm)));
+      name, std::unique_ptr<InterfaceInfo>(new InterfaceInfo(iface, perm)));
 }
 
 void InterfaceList::AddPPP(const char* name,
                            const void* iface) {
   DCHECK(name_to_plugin_info_.find(name) == name_to_plugin_info_.end());
-  name_to_plugin_info_.add(
-      name,
-      scoped_ptr<InterfaceInfo>(new InterfaceInfo(iface, PERMISSION_NONE)));
+  name_to_plugin_info_.add(name,
+                           std::unique_ptr<InterfaceInfo>(
+                               new InterfaceInfo(iface, PERMISSION_NONE)));
 }
 
 int InterfaceList::HashInterfaceName(const std::string& name) {

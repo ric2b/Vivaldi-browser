@@ -5,6 +5,7 @@
 #include "blimp/net/blimp_message_pump.h"
 
 #include "base/macros.h"
+#include "blimp/common/logging.h"
 #include "blimp/common/proto/blimp_message.pb.h"
 #include "blimp/net/blimp_message_processor.h"
 #include "blimp/net/common.h"
@@ -52,10 +53,10 @@ void BlimpMessagePump::OnReadPacketComplete(int result) {
   DVLOG(2) << "OnReadPacketComplete, result=" << result;
   DCHECK(read_inflight_);
   read_inflight_ = false;
-  if (result == net::OK) {
-    scoped_ptr<BlimpMessage> message(new BlimpMessage);
-    if (message->ParseFromArray(buffer_->StartOfBuffer(), buffer_->offset())) {
-      DVLOG(2) << "OnReadPacketComplete, result=" << *message;
+  if (result >= 0) {
+    std::unique_ptr<BlimpMessage> message(new BlimpMessage);
+    if (message->ParseFromArray(buffer_->data(), result)) {
+      VLOG(1) << "Received " << *message;
       processor_->ProcessMessage(
           std::move(message),
           base::Bind(&BlimpMessagePump::OnProcessMessageComplete,
@@ -65,7 +66,7 @@ void BlimpMessagePump::OnReadPacketComplete(int result) {
     }
   }
 
-  if (result != net::OK) {
+  if (result < 0) {
     error_observer_->OnConnectionError(result);
   }
 }
@@ -73,7 +74,7 @@ void BlimpMessagePump::OnReadPacketComplete(int result) {
 void BlimpMessagePump::OnProcessMessageComplete(int result) {
   DVLOG(2) << "OnProcessMessageComplete, result=" << result;
 
-  if (result != net::OK) {
+  if (result < 0) {
     error_observer_->OnConnectionError(result);
     return;
   }

@@ -5,6 +5,7 @@
 #ifndef ASH_SHELF_SHELF_LAYOUT_MANAGER_H_
 #define ASH_SHELF_SHELF_LAYOUT_MANAGER_H_
 
+#include <memory>
 #include <vector>
 
 #include "ash/ash_export.h"
@@ -84,24 +85,6 @@ class ASH_EXPORT ShelfLayoutManager
   explicit ShelfLayoutManager(ShelfWidget* shelf);
   ~ShelfLayoutManager() override;
 
-  // Sets the ShelfAutoHideBehavior. See enum description for details.
-  void SetAutoHideBehavior(ShelfAutoHideBehavior behavior);
-  ShelfAutoHideBehavior auto_hide_behavior() const {
-    return auto_hide_behavior_;
-  }
-
-  // Sets the alignment. Returns true if the alignment got changed. If nothing
-  // has visually be changed, false will be returned. This can happen if either
-  // the alignment was already set, or the shelf is currently locked and cannot
-  // be changed at this time. In the latter case the change will be performed
-  // once the shelf gets unlocked.
-  bool SetAlignment(ShelfAlignment alignment);
-
-  // Returns the desired alignment for the current state, either the user's
-  // set alignment (alignment_) or SHELF_ALIGNMENT_BOTTOM when the screen
-  // is locked.
-  ShelfAlignment GetAlignment() const;
-
   void set_workspace_controller(WorkspaceController* controller) {
     workspace_controller_ = controller;
   }
@@ -127,8 +110,7 @@ class ASH_EXPORT ShelfLayoutManager
     return user_work_area_bounds_;
   }
 
-  // Stops any animations and sets the bounds of the shelf and status
-  // widgets.
+  // Stops any animations and sets the bounds of the shelf and status widgets.
   void LayoutShelf();
 
   // Returns shelf visibility state based on current value of auto hide
@@ -174,6 +156,8 @@ class ASH_EXPORT ShelfLayoutManager
 
   // Overridden from ash::ShellObserver:
   void OnLockStateChanged(bool locked) override;
+  void OnShelfAlignmentChanged(aura::Window* root_window) override;
+  void OnShelfAutoHideBehaviorChanged(aura::Window* root_window) override;
 
   // Overriden from aura::client::ActivationChangeObserver:
   void OnWindowActivated(
@@ -187,21 +171,32 @@ class ASH_EXPORT ShelfLayoutManager
   // Overridden from ash::SessionStateObserver:
   void SessionStateChanged(SessionStateDelegate::SessionState state) override;
 
-  // TODO(harrym|oshima): These templates will be moved to
-  // new Shelf class.
-  // A helper function that provides a shortcut for choosing
-  // values specific to a shelf alignment.
-  template<typename T>
-  T SelectValueForShelfAlignment(T bottom, T left, T right, T top) const {
+  // TODO(msw): Remove these accessors, kept temporarily to simplify changes.
+  void SetAutoHideBehavior(ShelfAutoHideBehavior behavior) {
+    shelf_->shelf()->SetAutoHideBehavior(behavior);
+  }
+  ShelfAutoHideBehavior auto_hide_behavior() const {
+    return shelf_->shelf()->GetAutoHideBehavior();
+  }
+
+  // TODO(msw): Remove these accessors, kept temporarily to simplify changes.
+  void SetAlignment(ShelfAlignment alignment) {
+    shelf_->shelf()->SetAlignment(alignment);
+  }
+  ShelfAlignment GetAlignment() const { return shelf_->GetAlignment(); }
+
+  // TODO(harrym|oshima): These templates will be moved to a new Shelf class.
+  // A helper function for choosing values specific to a shelf alignment.
+  template <typename T>
+  T SelectValueForShelfAlignment(T bottom, T left, T right) const {
     switch (GetAlignment()) {
       case SHELF_ALIGNMENT_BOTTOM:
+      case SHELF_ALIGNMENT_BOTTOM_LOCKED:
         return bottom;
       case SHELF_ALIGNMENT_LEFT:
         return left;
       case SHELF_ALIGNMENT_RIGHT:
         return right;
-      case SHELF_ALIGNMENT_TOP:
-        return top;
     }
     NOTREACHED();
     return right;
@@ -219,10 +214,6 @@ class ASH_EXPORT ShelfLayoutManager
   // available work area from the top of the screen.
   void SetChromeVoxPanelHeight(int height);
 
-  // Returns a ShelfLayoutManager on the display which has a shelf for
-  // given |window|. See RootWindowController::ForShelf for more info.
-  static ShelfLayoutManager* ForShelf(aura::Window* window);
-
  private:
   class AutoHideEventFilter;
   class UpdateShelfObserver;
@@ -230,6 +221,7 @@ class ASH_EXPORT ShelfLayoutManager
   friend class ash::ScreenAsh;
   friend class PanelLayoutManagerTest;
   friend class ShelfLayoutManagerTest;
+  friend class ToastManagerTest;
   FRIEND_TEST_ALL_PREFIXES(ash::AshPopupAlignmentDelegateTest, AutoHide);
   FRIEND_TEST_ALL_PREFIXES(ash::WebNotificationTrayTest, PopupAndFullscreen);
 
@@ -332,11 +324,6 @@ class ASH_EXPORT ShelfLayoutManager
   // Called when the LoginUI changes from visible to invisible.
   void UpdateShelfVisibilityAfterLoginUIChange();
 
-  // Returns true when |alignment_| is locked. This can be caused by the screen
-  // being locked, or when adding a user. Returns false when transitioning to a
-  // user session, and while the session is active.
-  bool IsAlignmentLocked() const;
-
   // The RootWindow is cached so that we don't invoke Shell::GetInstance() from
   // our destructor. We avoid that as at the time we're deleted Shell is being
   // deleted too.
@@ -345,12 +332,6 @@ class ASH_EXPORT ShelfLayoutManager
   // True when inside UpdateBoundsAndOpacity() method. Used to prevent calling
   // UpdateBoundsAndOpacity() again from SetChildBounds().
   bool updating_bounds_;
-
-  // See description above setter.
-  ShelfAutoHideBehavior auto_hide_behavior_;
-
-  // See description above getter.
-  ShelfAlignment alignment_;
 
   // Current state.
   State state_;
@@ -370,10 +351,10 @@ class ASH_EXPORT ShelfLayoutManager
 
   // EventFilter used to detect when user moves the mouse over the shelf to
   // trigger showing the shelf.
-  scoped_ptr<AutoHideEventFilter> auto_hide_event_filter_;
+  std::unique_ptr<AutoHideEventFilter> auto_hide_event_filter_;
 
   // EventFilter used to detect when user issues a gesture on a bezel sensor.
-  scoped_ptr<ShelfBezelEventFilter> bezel_event_filter_;
+  std::unique_ptr<ShelfBezelEventFilter> bezel_event_filter_;
 
   base::ObserverList<ShelfLayoutManagerObserver> observers_;
 

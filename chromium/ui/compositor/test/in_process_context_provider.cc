@@ -20,40 +20,25 @@
 
 namespace ui {
 
-namespace {
-
-// Singleton used to initialize and terminate the gles2 library.
-class GLES2Initializer {
- public:
-  GLES2Initializer() { gles2::Initialize(); }
-
-  ~GLES2Initializer() { gles2::Terminate(); }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(GLES2Initializer);
-};
-
-base::LazyInstance<GLES2Initializer> g_gles2_initializer =
-    LAZY_INSTANCE_INITIALIZER;
-
-}  // namespace
-
 // static
 scoped_refptr<InProcessContextProvider> InProcessContextProvider::Create(
     const gpu::gles2::ContextCreationAttribHelper& attribs,
+    InProcessContextProvider* shared_context,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     gpu::ImageFactory* image_factory,
     gfx::AcceleratedWidget window,
     const std::string& debug_name) {
-  return new InProcessContextProvider(
-      attribs, gpu_memory_buffer_manager, image_factory, window, debug_name);
+  return new InProcessContextProvider(attribs, shared_context,
+                                      gpu_memory_buffer_manager, image_factory,
+                                      window, debug_name);
 }
 
 // static
 scoped_refptr<InProcessContextProvider>
 InProcessContextProvider::CreateOffscreen(
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    gpu::ImageFactory* image_factory) {
+    gpu::ImageFactory* image_factory,
+    InProcessContextProvider* shared_context) {
   gpu::gles2::ContextCreationAttribHelper attribs;
   attribs.alpha_size = 8;
   attribs.blue_size = 8;
@@ -65,18 +50,20 @@ InProcessContextProvider::CreateOffscreen(
   attribs.sample_buffers = 0;
   attribs.fail_if_major_perf_caveat = false;
   attribs.bind_generates_resource = false;
-  return new InProcessContextProvider(attribs, gpu_memory_buffer_manager,
-                                      image_factory,
+  return new InProcessContextProvider(attribs, shared_context,
+                                      gpu_memory_buffer_manager, image_factory,
                                       gfx::kNullAcceleratedWidget, "Offscreen");
 }
 
 InProcessContextProvider::InProcessContextProvider(
     const gpu::gles2::ContextCreationAttribHelper& attribs,
+    InProcessContextProvider* shared_context,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     gpu::ImageFactory* image_factory,
     gfx::AcceleratedWidget window,
     const std::string& debug_name)
     : attribs_(attribs),
+      shared_context_(shared_context),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
       image_factory_(image_factory),
       window_(window),
@@ -88,6 +75,8 @@ InProcessContextProvider::InProcessContextProvider(
 InProcessContextProvider::~InProcessContextProvider() {
   DCHECK(main_thread_checker_.CalledOnValidThread() ||
          context_thread_checker_.CalledOnValidThread());
+  if (gr_context_)
+    gr_context_->releaseResourcesAndAbandonContext();
 }
 
 bool InProcessContextProvider::BindToCurrentThread() {
@@ -97,19 +86,16 @@ bool InProcessContextProvider::BindToCurrentThread() {
   if (!context_) {
     gfx::GpuPreference gpu_preference = gfx::PreferDiscreteGpu;
     context_.reset(gpu::GLInProcessContext::Create(
-        nullptr,                           /* service */
-        nullptr,                           /* surface */
-        !window_,                          /* is_offscreen */
-        window_, gfx::Size(1, 1), nullptr, /* share_context */
-        true,                              /* share_resources */
-        attribs_, gpu_preference, gpu::GLInProcessContextSharedMemoryLimits(),
+        nullptr,  /* service */
+        nullptr,  /* surface */
+        !window_, /* is_offscreen */
+        window_, gfx::Size(1, 1),
+        (shared_context_ ? shared_context_->context_.get() : nullptr), attribs_,
+        gpu_preference, gpu::GLInProcessContextSharedMemoryLimits(),
         gpu_memory_buffer_manager_, image_factory_));
 
     if (!context_)
       return false;
-
-    context_->SetContextLostCallback(base::Bind(
-        &InProcessContextProvider::OnLostContext, base::Unretained(this)));
   }
 
   capabilities_.gpu = context_->GetImplementation()->capabilities();
@@ -144,32 +130,17 @@ gpu::ContextSupport* InProcessContextProvider::ContextSupport() {
   return context_->GetImplementation();
 }
 
-static void BindGrContextCallback(const GrGLInterface* interface) {
-  cc::ContextProvider* context_provider =
-      reinterpret_cast<InProcessContextProvider*>(interface->fCallbackData);
-
-  gles2::SetGLContext(context_provider->ContextGL());
-}
-
 class GrContext* InProcessContextProvider::GrContext() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
 
   if (gr_context_)
     return gr_context_.get();
 
-  // The GrGLInterface factory will make GL calls using the C GLES2 interface.
-  // Make sure the gles2 library is initialized first on exactly one thread.
-  g_gles2_initializer.Get();
-  gles2::SetGLContext(ContextGL());
-
-  skia::RefPtr<GrGLInterface> interface = skia::AdoptRef(new GrGLInterface);
-  skia_bindings::InitCommandBufferSkiaGLBinding(interface.get());
-  interface->fCallback = BindGrContextCallback;
-  interface->fCallbackData = reinterpret_cast<GrGLInterfaceCallbackData>(this);
-
+  sk_sp<GrGLInterface> interface(
+      skia_bindings::CreateGLES2InterfaceBindings(ContextGL()));
   gr_context_ = skia::AdoptRef(GrContext::Create(
+      // GrContext takes ownership of |interface|.
       kOpenGL_GrBackend, reinterpret_cast<GrBackendContext>(interface.get())));
-
   return gr_context_.get();
 }
 
@@ -199,15 +170,7 @@ void InProcessContextProvider::DeleteCachedResources() {
 
 void InProcessContextProvider::SetLostContextCallback(
     const LostContextCallback& lost_context_callback) {
-  lost_context_callback_ = lost_context_callback;
-}
-
-void InProcessContextProvider::OnLostContext() {
-  DCHECK(context_thread_checker_.CalledOnValidThread());
-  if (!lost_context_callback_.is_null())
-    base::ResetAndReturn(&lost_context_callback_).Run();
-  if (gr_context_)
-    gr_context_->abandonContext();
+  // Pixel tests do not test lost context.
 }
 
 }  // namespace ui

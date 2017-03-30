@@ -22,10 +22,10 @@ class BlimpContentBrowserClient : public content::ContentBrowserClient {
   // content::ContentBrowserClient implementation.
   content::BrowserMainParts* CreateBrowserMainParts(
       const content::MainFunctionParams& parameters) override;
-  net::URLRequestContextGetter* CreateRequestContext(
-      content::BrowserContext* browser_context,
-      content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors) override;
+  void OverrideWebkitPrefs(content::RenderViewHost* render_view_host,
+                           content::WebPreferences* prefs) override;
+  void RegisterRenderProcessMojoServices(
+      content::ServiceRegistry* registry) override;
 
   BlimpBrowserContext* GetBrowserContext();
 

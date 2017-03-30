@@ -32,6 +32,7 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/GraphicsLayerClient.h"
 #include "platform/graphics/paint/DisplayItemClient.h"
+#include "web/WebExport.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
@@ -47,7 +48,7 @@ class WebViewImpl;
 //
 // With Slimming Paint, internal clients can extract a GraphicsContext to add
 // to the PaintController owned by the GraphicsLayer
-class PageOverlay : public GraphicsLayerClient, public DisplayItemClient {
+class WEB_EXPORT PageOverlay : public GraphicsLayerClient, public DisplayItemClient {
 public:
     class Delegate : public GarbageCollectedFinalized<Delegate> {
     public:
@@ -68,10 +69,10 @@ public:
 
     // DisplayItemClient methods.
     String debugName() const final { return "PageOverlay"; }
-    // TODO(chrishtr): fix this.
-    LayoutRect visualRect() const override { return LayoutRect(); }
+    LayoutRect visualRect() const override;
 
     // GraphicsLayerClient implementation
+    bool needsRepaint(const GraphicsLayer&) const { return true; }
     IntRect computeInterestRect(const GraphicsLayer*, const IntRect&) const override;
     void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect& interestRect) const override;
     String debugName(const GraphicsLayer*) const override;

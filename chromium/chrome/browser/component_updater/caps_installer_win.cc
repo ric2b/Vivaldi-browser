@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -77,6 +79,8 @@ class CAPSInstallerTraits : public ComponentInstallerTraits {
 
   bool CanAutoUpdate() const override { return true; }
 
+  bool RequiresNetworkEncryption() const override { return false; }
+
   bool OnCustomInstall(const base::DictionaryValue& manifest,
                        const base::FilePath& install_dir) override {
     return true;
@@ -106,6 +110,8 @@ class CAPSInstallerTraits : public ComponentInstallerTraits {
 
   // This string is shown in chrome://components.
   std::string GetName() const override { return "Chrome Crash Service"; }
+
+  std::string GetAp() const override { return std::string(); }
 };
 
 }  // namespace
@@ -115,7 +121,7 @@ void RegisterCAPSComponent(ComponentUpdateService* cus) {
   scoped_ptr<ComponentInstallerTraits> traits(
       new CAPSInstallerTraits());
   DefaultComponentInstaller* installer =
-      new DefaultComponentInstaller(traits.Pass());
+      new DefaultComponentInstaller(std::move(traits));
   installer->Register(cus, base::Closure());
 }
 

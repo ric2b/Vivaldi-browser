@@ -10,7 +10,9 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.provider.Browser;
@@ -25,6 +27,7 @@ import android.widget.FrameLayout;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.FieldTrialList;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.ThreadUtils;
@@ -36,7 +39,9 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.FrozenNativePage;
+import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.IntentHandler.TabOpenType;
 import org.chromium.chrome.browser.NativePage;
 import org.chromium.chrome.browser.SwipeRefreshHandler;
@@ -65,21 +70,24 @@ import org.chromium.chrome.browser.printing.TabPrinter;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.rlz.RevenueStats;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
-import org.chromium.chrome.browser.snackbar.LoFiBarPopupController;
+import org.chromium.chrome.browser.snackbar.LofiBarController;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ssl.SecurityStateModel;
 import org.chromium.chrome.browser.tab.TabUma.TabCreationState;
+import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
 import org.chromium.chrome.browser.tabmodel.SingleTabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tabmodel.TabReparentingParams;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.navigation_interception.InterceptNavigationDelegate;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.components.variations.VariationsAssociatedData;
 import org.chromium.content.browser.ActivityContentVideoViewEmbedder;
+import org.chromium.content.browser.ChildProcessLauncher;
 import org.chromium.content.browser.ContentVideoViewEmbedder;
 import org.chromium.content.browser.ContentView;
 import org.chromium.content.browser.ContentViewClient;
@@ -344,6 +352,12 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
     private boolean mIsFullscreenWaitingForLoad = false;
 
     /**
+     * Indicates whether this tab has been detached from its activity and the corresponding
+     * {@link WindowAndroid} for reparenting to a new activity.
+     */
+    private boolean mIsDetachedForReparenting;
+
+    /**
      * The UMA object used to report stats for this tab. Note that this may be null under certain
      * conditions, such as incognito mode.
      */
@@ -360,7 +374,7 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
 
     protected Handler mHandler;
 
-    private LoFiBarPopupController mLoFiBarPopupController;
+    private LofiBarController mLoFiBarController;
 
     /** Whether or not the tab closing the tab can send the user back to the app that opened it. */
     private boolean mIsAllowedToReturnToExternalApp;
@@ -431,6 +445,42 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
         }
 
         @Override
+        public int getSystemWindowInsetLeft() {
+            ChromeActivity activity = getActivity();
+            if (activity != null) {
+                return activity.getInsetObserverView().getSystemWindowInsetsLeft();
+            }
+            return 0;
+        }
+
+        @Override
+        public int getSystemWindowInsetTop() {
+            ChromeActivity activity = getActivity();
+            if (activity != null) {
+                return activity.getInsetObserverView().getSystemWindowInsetsTop();
+            }
+            return 0;
+        }
+
+        @Override
+        public int getSystemWindowInsetRight() {
+            ChromeActivity activity = getActivity();
+            if (activity != null) {
+                return activity.getInsetObserverView().getSystemWindowInsetsRight();
+            }
+            return 0;
+        }
+
+        @Override
+        public int getSystemWindowInsetBottom() {
+            ChromeActivity activity = getActivity();
+            if (activity != null && activity.getInsetObserverView() != null) {
+                return activity.getInsetObserverView().getSystemWindowInsetsBottom();
+            }
+            return 0;
+        }
+
+        @Override
         public ContentVideoViewEmbedder getContentVideoViewEmbedder() {
             return new ActivityContentVideoViewEmbedder(getActivity()) {
                 @Override
@@ -459,6 +509,11 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
                     super.exitFullscreenVideo();
                 }
             };
+        }
+
+        @Override
+        public String getProductVersion() {
+            return ChromeVersionInfo.getProductVersion();
         }
     }
 
@@ -638,8 +693,9 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
         mUrl = state.getVirtualUrlFromState();
 
         mTitle = state.getDisplayTitleFromState();
-        mIsTitleDirectionRtl = LocalizationUtils.getFirstStrongCharacterDirection(mTitle)
-                == LocalizationUtils.RIGHT_TO_LEFT;
+        mIsTitleDirectionRtl = mTitle != null
+                && LocalizationUtils.getFirstStrongCharacterDirection(mTitle)
+                        == LocalizationUtils.RIGHT_TO_LEFT;
     }
 
     /**
@@ -927,7 +983,7 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
      */
     public void reloadIgnoringCache() {
         if (getWebContents() != null) {
-            getWebContents().getNavigationController().reloadIgnoringCache(true);
+            getWebContents().getNavigationController().reloadBypassingCache(true);
         }
     }
 
@@ -1357,13 +1413,66 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
     }
 
     /**
-     * Detaches tab and related objects from an existing activity and attaches to a new one. This
-     * updates many delegates inside the tab and {@link ContentViewCore} both on java and native
-     * sides.
+     * Begins the tab reparenting process. Detaches the tab from its current activity and fires
+     * an Intent to reparent the tab into its new host activity.
+     *
+     * @param intent An optional intent with the desired component, flags, or extras to use when
+     *               launching the new host activity. This intent's URI and action will be
+     *               overriden. This may be null if no intent customization is needed.
+     * @param startActivityOptions Options to pass to {@link Activity#startActivity(Intent, Bundle)}
+     * @param finalizeCallback A callback that will be called after the tab is attached to the new
+     *                         host activity in {@link #attachAndFinishReparenting}.
+     * @return Whether reparenting succeeded. If false, the tab was not removed and the intent was
+     *         not fired.
+     */
+    public boolean detachAndStartReparenting(Intent intent, Bundle startActivityOptions,
+            Runnable finalizeCallback) {
+        ChromeActivity activity = getActivity();
+        if (activity == null) return false;
+
+        if (intent == null) intent = new Intent();
+        intent.setPackage(activity.getPackageName());
+        intent.setAction(Intent.ACTION_VIEW);
+        if (TextUtils.isEmpty(intent.getDataString())) intent.setData(Uri.parse(getUrl()));
+        if (isIncognito()) {
+            intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true);
+        }
+        IntentHandler.addTrustedIntentExtras(intent, activity);
+
+        boolean disabled = FieldTrialList.trialExists("TabReparenting")
+                && FieldTrialList.findFullName("TabReparenting").startsWith("Disabled");
+        if (!disabled) {
+            TabModelSelector tabModelSelector = getTabModelSelector();
+            if (tabModelSelector == null) return false;
+            mIsDetachedForReparenting = true;
+
+            // Add the tab to AsyncTabParamsManager before removing it from the current model to
+            // ensure the global count of tabs is correct. See crbug.com/611806.
+            intent.putExtra(IntentHandler.EXTRA_TAB_ID, mId);
+            AsyncTabParamsManager.add(mId,
+                    new TabReparentingParams(this, intent, finalizeCallback));
+
+            tabModelSelector.getModel(mIncognito).removeTab(this);
+
+            if (mContentViewCore != null) mContentViewCore.updateWindowAndroid(null);
+            attachTabContentManager(null);
+        }
+
+        activity.startActivity(intent, startActivityOptions);
+        return true;
+    }
+
+    /**
+     * Finishes the tab reparenting process. Attaches the tab to the new activity, and updates the
+     * tab and related objects to reference the new activity. This updates many delegates inside the
+     * tab and {@link ContentViewCore} both on java and native sides.
+     *
      * @param activity The new activity this tab should be associated with.
      * @param tabDelegateFactory The new delegate factory this tab should be using.
+     * @Param reparentingParams The TabReparentingParams associated with this reparenting process.
      */
-    public void reparentToActivity(ChromeActivity activity, TabDelegateFactory tabDelegateFactory) {
+    public void attachAndFinishReparenting(ChromeActivity activity,
+            TabDelegateFactory tabDelegateFactory, TabReparentingParams reparentingParams) {
         // TODO(yusufo): Share these calls with the construction related calls.
         // crbug.com/590281
 
@@ -1384,6 +1493,27 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
         mTopControlsVisibilityDelegate = mDelegateFactory.createTopControlsVisibilityDelegate(this);
         setInterceptNavigationDelegate(mDelegateFactory.createInterceptNavigationDelegate(this));
         mAppBannerManager = mDelegateFactory.createAppBannerManager(this);
+
+        // Reload the NativePage (if any), since the old NativePage has a reference to the old
+        // activity.
+        maybeShowNativePage(getUrl(), true);
+
+        reparentingParams.finalizeTabReparenting();
+        mIsDetachedForReparenting = false;
+
+        for (TabObserver observer : mObservers) {
+            observer.onReparentingFinished(this);
+        }
+    }
+
+    /**
+     * @return Whether the tab is detached from its Activity and {@link WindowAndroid} for
+     * reparenting. Certain functionalities will not work until it is attached to a new activity
+     * with {@link Tab#attachAndFinishReparenting(
+     * ChromeActivity, TabDelegateFactory, TabReparentingParams)}.
+     */
+    public boolean isDetachedForReparenting() {
+        return mIsDetachedForReparenting;
     }
 
     /**
@@ -1391,6 +1521,7 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
      * @param tabContentManager {@link TabContentManager} to attach to.
      */
     public void attachTabContentManager(TabContentManager tabContentManager) {
+        if (mNativeTabAndroid == 0) return;
         nativeAttachToTabContentManager(mNativeTabAndroid, tabContentManager);
     }
 
@@ -1501,8 +1632,8 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
     protected void didStartPageLoad(String validatedUrl, boolean showingErrorPage) {
         mIsFullscreenWaitingForLoad = !DomDistillerUrlUtils.isDistilledPage(validatedUrl);
 
-        if (getLoFiBarPopupController() != null) {
-            mLoFiBarPopupController.resetLoFiPopupShownForPageLoad();
+        if (getLoFiBarController() != null) {
+            mLoFiBarController.resetLoFiPopupShownForPageLoad();
         }
 
         updateTitle();
@@ -1690,11 +1821,12 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
     /**
      * Shows a native page for url if it's a valid chrome-native URL. Otherwise, does nothing.
      * @param url The url of the current navigation.
-     * @param isReload Whether the current navigation is a reload.
+     * @param forceReload If true, the current native page (if any) will not be reused, even if it
+     *                    matches the URL.
      * @return True, if a native page was displayed for url.
      */
-    boolean maybeShowNativePage(String url, boolean isReload) {
-        NativePage candidateForReuse = isReload ? null : getNativePage();
+    boolean maybeShowNativePage(String url, boolean forceReload) {
+        NativePage candidateForReuse = forceReload ? null : getNativePage();
         NativePage nativePage = NativePageFactory.createNativePageForURL(url, candidateForReuse,
                 this, getTabModelSelector(), getActivity());
         if (nativePage != null) {
@@ -2239,14 +2371,13 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
         return getActivity().getSnackbarManager();
     }
 
-    private LoFiBarPopupController getLoFiBarPopupController() {
+    private LofiBarController getLoFiBarController() {
         ThreadUtils.assertOnUiThread();
-        if (mLoFiBarPopupController == null && getSnackbarManager() != null) {
-            mLoFiBarPopupController =
-                    new LoFiBarPopupController(
-                            mThemedApplicationContext, getSnackbarManager());
+        if (mLoFiBarController == null && getSnackbarManager() != null) {
+            mLoFiBarController =
+                    new LofiBarController(mThemedApplicationContext, getSnackbarManager());
         }
-        return mLoFiBarPopupController;
+        return mLoFiBarController;
     }
 
     /**
@@ -2303,6 +2434,15 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
         mContentViewCore.onSizeChanged(originalWidth, originalHeight, 0, 0);
         mContentViewCore.onShow();
         mContentViewCore.attachImeAdapter();
+
+        // If the URL has already committed (e.g. prerendering), tell process management logic that
+        // it can rely on the process visibility signal for binding management.
+        // TODO: Call ChildProcessLauncher#determinedVisibility() at a more intuitive time.
+        // See crbug.com/537671
+        if (!mContentViewCore.getWebContents().getLastCommittedUrl().equals("")) {
+            ChildProcessLauncher.determinedVisibility(mContentViewCore.getCurrentRenderProcessId());
+        }
+
         destroyNativePageInternal(previousNativePage);
         mWebContentsObserver.didChangeThemeColor(
                 getWebContents().getThemeColor(mDefaultThemeColor));
@@ -2695,8 +2835,8 @@ public final class Tab implements ViewGroup.OnHierarchyChangeListener,
      */
     @CalledByNative
     public void onLoFiResponseReceived(boolean isPreview) {
-        if (getLoFiBarPopupController() != null) {
-            mLoFiBarPopupController.maybeCreateLoFiBar(this, isPreview);
+        if (getLoFiBarController() != null) {
+            mLoFiBarController.maybeCreateLoFiBar(this, isPreview);
         }
     }
 

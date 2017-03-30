@@ -7,6 +7,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_string_value_serializer.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "base/tracked_objects.h"
 #include "chrome/common/chrome_content_client.h"
@@ -78,13 +79,12 @@ int AsChromeProcessType(
     metrics::ProfilerEventProto::TrackedObject::ProcessType process_type) {
   switch (process_type) {
     case metrics::ProfilerEventProto::TrackedObject::UNKNOWN:
+    case metrics::ProfilerEventProto::TrackedObject::PLUGIN:
       return content::PROCESS_TYPE_UNKNOWN;
     case metrics::ProfilerEventProto::TrackedObject::BROWSER:
       return content::PROCESS_TYPE_BROWSER;
     case metrics::ProfilerEventProto::TrackedObject::RENDERER:
       return content::PROCESS_TYPE_RENDERER;
-    case metrics::ProfilerEventProto::TrackedObject::PLUGIN:
-      return content::PROCESS_TYPE_PLUGIN;
     case metrics::ProfilerEventProto::TrackedObject::WORKER:
       return content::PROCESS_TYPE_WORKER_DEPRECATED;
     case metrics::ProfilerEventProto::TrackedObject::NACL_LOADER:

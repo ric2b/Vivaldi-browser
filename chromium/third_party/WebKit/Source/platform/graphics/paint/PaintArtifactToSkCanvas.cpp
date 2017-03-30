@@ -23,7 +23,7 @@ namespace {
 
 void paintDisplayItemToSkCanvas(const DisplayItem& displayItem, SkCanvas* canvas)
 {
-    DisplayItem::Type type = displayItem.type();
+    DisplayItem::Type type = displayItem.getType();
 
     if (DisplayItem::isDrawingType(type)) {
         canvas->drawPicture(static_cast<const DrawingDisplayItem&>(displayItem).picture());
@@ -108,7 +108,7 @@ static TransformationMatrix totalTransform(const TransformPaintPropertyNode* cur
 void paintArtifactToSkCanvas(const PaintArtifact& artifact, SkCanvas* canvas)
 {
     SkAutoCanvasRestore restore(canvas, true);
-    const DisplayItemList& displayItems = artifact.displayItemList();
+    const DisplayItemList& displayItems = artifact.getDisplayItemList();
     const EffectPaintPropertyNode* previousEffect = nullptr;
     for (const PaintChunk& chunk : artifact.paintChunks()) {
         // Setup the canvas clip state first because it clobbers matrix state.
@@ -136,12 +136,12 @@ void paintArtifactToSkCanvas(const PaintArtifact& artifact, SkCanvas* canvas)
     }
 }
 
-PassRefPtr<SkPicture> paintArtifactToSkPicture(const PaintArtifact& artifact, const SkRect& bounds)
+sk_sp<const SkPicture> paintArtifactToSkPicture(const PaintArtifact& artifact, const SkRect& bounds)
 {
     SkPictureRecorder recorder;
     SkCanvas* canvas = recorder.beginRecording(bounds);
     paintArtifactToSkCanvas(artifact, canvas);
-    return adoptRef(recorder.endRecordingAsPicture());
+    return recorder.finishRecordingAsPicture();
 }
 
 } // namespace blink

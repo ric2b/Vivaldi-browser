@@ -4,7 +4,6 @@
 
 #import "ios/web/web_state/ui/crw_wk_web_view_web_controller.h"
 
-#import <WebKit/WebKit.h>
 #include <stddef.h>
 
 #include <utility>
@@ -20,13 +19,13 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
 #import "ios/net/http_response_headers_util.h"
-#import "ios/web/crw_network_activity_indicator_manager.h"
 #import "ios/web/navigation/crw_session_controller.h"
 #import "ios/web/navigation/crw_session_entry.h"
 #include "ios/web/navigation/navigation_item_impl.h"
-#include "ios/web/navigation/web_load_params.h"
 #include "ios/web/net/cert_host_pair.h"
+#import "ios/web/public/navigation_manager.h"
 #import "ios/web/net/crw_cert_verification_controller.h"
+#import "ios/web/net/crw_ssl_status_updater.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/cert_store.h"
 #include "ios/web/public/navigation_item.h"
@@ -40,7 +39,6 @@
 #import "ios/web/public/web_state/ui/crw_web_view_content_view.h"
 #import "ios/web/ui_web_view_util.h"
 #include "ios/web/web_state/blocked_popup_info.h"
-#import "ios/web/web_state/crw_pass_kit_downloader.h"
 #import "ios/web/web_state/error_translation_util.h"
 #include "ios/web/web_state/frame_info.h"
 #import "ios/web/web_state/js/crw_js_post_request_loader.h"
@@ -58,6 +56,8 @@
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_info.h"
 #include "url/url_constants.h"
+
+using web::NavigationManager;
 
 namespace {
 
@@ -86,18 +86,6 @@ NSString* GetRefererFromNavigationAction(WKNavigationAction* action) {
   return [action.request valueForHTTPHeaderField:@"Referer"];
 }
 
-NSString* const kScriptMessageName = @"crwebinvoke";
-NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
-
-// Utility functions for storing the source of NSErrors received by WKWebViews:
-// - Errors received by |-webView:didFailProvisionalNavigation:withError:| are
-//   recorded using WKWebViewErrorSource::PROVISIONAL_LOAD.  These should be
-//   aborted.
-// - Errors received by |-webView:didFailNavigation:withError:| are recorded
-//   using WKWebViewsource::NAVIGATION.  These errors should not be aborted, as
-//   the WKWebView will automatically retry the load.
-NSString* const kWKWebViewErrorSourceKey = @"ErrorSource";
-typedef enum { NONE = 0, PROVISIONAL_LOAD, NAVIGATION } WKWebViewErrorSource;
 NSError* WKWebViewErrorWithSource(NSError* error, WKWebViewErrorSource source) {
   DCHECK(error);
   base::scoped_nsobject<NSMutableDictionary> userInfo(
@@ -107,12 +95,6 @@ NSError* WKWebViewErrorWithSource(NSError* error, WKWebViewErrorSource source) {
                              code:error.code
                          userInfo:userInfo];
 }
-WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
-  DCHECK(error);
-  return static_cast<WKWebViewErrorSource>(
-      [error.userInfo[kWKWebViewErrorSourceKey] integerValue]);
-}
-
 }  // namespace
 
 #pragma mark -
@@ -155,7 +137,10 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 
 #pragma mark -
 
-@interface CRWWKWebViewWebController ()<WKNavigationDelegate, WKUIDelegate> {
+@interface CRWWKWebViewWebController ()<CRWSSLStatusUpdaterDataSource,
+                                        CRWSSLStatusUpdaterDelegate,
+                                        WKNavigationDelegate,
+                                        WKUIDelegate> {
   // The WKWebView managed by this instance.
   base::scoped_nsobject<WKWebView> _wkWebView;
 
@@ -185,17 +170,8 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   // Referrer for the current page.
   base::scoped_nsobject<NSString> _currentReferrerString;
 
-  // Handles downloading PassKit data for WKWebView. Lazy initialized.
-  base::scoped_nsobject<CRWPassKitDownloader> _passKitDownloader;
-
   // Object for loading POST requests with body.
   base::scoped_nsobject<CRWJSPOSTRequestLoader> _POSTRequestLoader;
-
-  // Whether the web page is currently performing window.history.pushState or
-  // window.history.replaceState
-  // Set to YES on window.history.willChangeState message. To NO on
-  // window.history.didPushState or window.history.didReplaceState.
-  BOOL _changingHistoryState;
 
   // CRWWebUIManager object for loading WebUI pages.
   base::scoped_nsobject<CRWWebUIManager> _webUIManager;
@@ -206,12 +182,15 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   base::scoped_nsobject<CRWCertVerificationController>
       _certVerificationController;
 
+  // Updates SSLStatus for current navigation item.
+  base::scoped_nsobject<CRWSSLStatusUpdater> _SSLStatusUpdater;
+
   // CertVerification errors which happened inside
   // |webView:didReceiveAuthenticationChallenge:completionHandler:|.
   // Key is leaf-cert/host pair. This storage is used to carry calculated
   // cert status from |didReceiveAuthenticationChallenge:| to
   // |didFailProvisionalNavigation:| delegate method.
-  scoped_ptr<CertVerificationErrorsCacheType> _certVerificationErrors;
+  std::unique_ptr<CertVerificationErrorsCacheType> _certVerificationErrors;
 
   // YES if the user has interacted with the content area since the last URL
   // change.
@@ -236,14 +215,8 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 // changed.
 @property(nonatomic, readonly) NSDictionary* wkWebViewObservers;
 
-// Activity indicator group ID for this web controller.
-@property(nonatomic, readonly) NSString* activityIndicatorGroupID;
-
 // Identifier used for storing and retrieving certificates.
 @property(nonatomic, readonly) int certGroupID;
-
-// Downloader for PassKit files. Lazy initialized.
-@property(nonatomic, readonly) CRWPassKitDownloader* passKitDownloader;
 
 // Loads POST request with body in |_wkWebView| by constructing an HTML page
 // that executes the request through JavaScript and replaces document with the
@@ -257,9 +230,6 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 // Returns the WKWebViewConfigurationProvider associated with the web
 // controller's BrowserState.
 - (web::WKWebViewConfigurationProvider&)webViewConfigurationProvider;
-
-// Creates a web view with given |config|. No-op if web view is already created.
-- (void)ensureWebViewCreatedWithConfiguration:(WKWebViewConfiguration*)config;
 
 // Returns a new autoreleased web view created with given configuration.
 - (WKWebView*)createWebViewWithConfiguration:(WKWebViewConfiguration*)config;
@@ -316,27 +286,6 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 // Called when a load ends in an SSL error and certificate chain.
 - (void)handleSSLCertError:(NSError*)error;
 
-// Adds an activity indicator tasks for this web controller.
-- (void)addActivityIndicatorTask;
-
-// Clears all activity indicator tasks for this web controller.
-- (void)clearActivityIndicatorTasks;
-
-// Updates |security_style| and |cert_status| for the NavigationItem with ID
-// |navigationItemID|, if URL and certificate chain still match |host| and
-// |certChain|.
-- (void)updateSSLStatusForNavigationItemWithID:(int)navigationItemID
-                                     certChain:(NSArray*)chain
-                                          host:(NSString*)host
-                             withSecurityStyle:(web::SecurityStyle)style
-                                    certStatus:(net::CertStatus)certStatus;
-
-// Asynchronously obtains SSL status from given |certChain| and |host| and
-// updates current navigation item. Before scheduling update changes SSLStatus'
-// cert_status and security_style to default.
-- (void)scheduleSSLStatusUpdateUsingCertChain:(NSArray*)chain
-                                         host:(NSString*)host;
-
 // Updates SSL status for the current navigation item based on the information
 // provided by web view.
 - (void)updateSSLStatusForCurrentNavigationItem;
@@ -381,16 +330,6 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 // |targetURL|.
 - (BOOL)isLoadRequestPendingForURL:(const GURL&)targetURL;
 
-// Called when web controller receives a new message from the web page.
-- (void)didReceiveScriptMessage:(WKScriptMessage*)message;
-
-// Attempts to handle a script message. Returns YES on success, NO otherwise.
-- (BOOL)respondToWKScriptMessage:(WKScriptMessage*)scriptMessage;
-
-// Used to decide whether a load that generates errors with the
-// NSURLErrorCancelled code should be cancelled.
-- (BOOL)shouldAbortLoadForCancelledError:(NSError*)error;
-
 // Called when WKWebView estimatedProgress has been changed.
 - (void)webViewEstimatedProgressDidChange;
 
@@ -413,7 +352,7 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 
 #pragma mark CRWWebController public methods
 
-- (instancetype)initWithWebState:(scoped_ptr<web::WebStateImpl>)webState {
+- (instancetype)initWithWebState:(std::unique_ptr<web::WebStateImpl>)webState {
   DCHECK(webState);
   web::BrowserState* browserState = webState->GetBrowserState();
   self = [super initWithWebState:std::move(webState)];
@@ -426,44 +365,13 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   return self;
 }
 
-- (BOOL)keyboardDisplayRequiresUserAction {
-  // TODO(stuartmorgan): Find out whether YES or NO is correct; see comment
-  // in protected header.
-  NOTIMPLEMENTED();
-  return NO;
-}
-
-- (void)setKeyboardDisplayRequiresUserAction:(BOOL)requiresUserAction {
-  NOTIMPLEMENTED();
-}
-
-- (void)evaluateJavaScript:(NSString*)script
-       stringResultHandler:(web::JavaScriptCompletion)handler {
-  NSString* safeScript = [self scriptByAddingWindowIDCheckForScript:script];
-  web::EvaluateJavaScript(_wkWebView, safeScript, handler);
-}
-
-- (web::WebViewType)webViewType {
-  return web::WK_WEB_VIEW_TYPE;
-}
-
-- (void)evaluateUserJavaScript:(NSString*)script {
-  [self setUserInteractionRegistered:YES];
-  web::EvaluateJavaScript(_wkWebView, script, nil);
-}
-
 - (void)terminateNetworkActivity {
   web::CertStore::GetInstance()->RemoveCertsForGroup(self.certGroupID);
   [super terminateNetworkActivity];
 }
 
-- (void)setPageDialogOpenPolicy:(web::PageDialogOpenPolicy)policy {
-  // TODO(eugenebut): implement dialogs/windows suppression using
-  // WKNavigationDelegate methods where possible.
-  [super setPageDialogOpenPolicy:policy];
-}
-
 - (void)close {
+  _SSLStatusUpdater.reset();
   [_certVerificationController shutDown];
   [super close];
 }
@@ -483,16 +391,16 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 
 #pragma mark - Protected property implementations
 
-- (UIView*)webView {
+- (WKWebView*)webView {
   return _wkWebView.get();
+}
+
+- (NSMutableSet*)injectedScriptManagers {
+  return _injectedScriptManagers;
 }
 
 - (UIScrollView*)webScrollView {
   return [_wkWebView scrollView];
-}
-
-- (BOOL)ignoreURLVerificationFailures {
-  return NO;
 }
 
 - (NSString*)title {
@@ -556,28 +464,6 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 
 - (void)loadRequest:(NSMutableURLRequest*)request {
   _latestWKNavigation.reset([[_wkWebView loadRequest:request] retain]);
-}
-
-- (void)loadWebHTMLString:(NSString*)html forURL:(const GURL&)URL {
-  [_wkWebView loadHTMLString:html baseURL:net::NSURLWithGURL(URL)];
-}
-
-- (BOOL)scriptHasBeenInjectedForClass:(Class)jsInjectionManagerClass
-                       presenceBeacon:(NSString*)beacon {
-  return [_injectedScriptManagers containsObject:jsInjectionManagerClass];
-}
-
-- (void)injectScript:(NSString*)script forClass:(Class)JSInjectionManagerClass {
-  // Skip evaluation if there's no content (e.g., if what's being injected is
-  // an umbrella manager).
-  if ([script length]) {
-    [super injectScript:script forClass:JSInjectionManagerClass];
-    // Every injection except windowID requires windowID check.
-    if (JSInjectionManagerClass != [CRWJSWindowIdManager class])
-      script = [self scriptByAddingWindowIDCheckForScript:script];
-    web::EvaluateJavaScript(_wkWebView, script, nil);
-  }
-  [_injectedScriptManagers addObject:JSInjectionManagerClass];
 }
 
 - (void)willLoadCurrentURLInWebView {
@@ -683,22 +569,10 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   return [super URLForHistoryNavigationFromItem:fromItem toItem:toItem];
 }
 
-- (void)setPageChangeProbability:(web::PageChangeProbability)probability {
-  // Nothing to do; no polling timer.
-}
-
 - (void)abortWebLoad {
   [_wkWebView stopLoading];
   [_pendingNavigationInfo setCancelled:YES];
   _certVerificationErrors->Clear();
-}
-
-- (void)resetLoadState {
-  // Nothing to do.
-}
-
-- (void)setSuppressDialogsWithHelperScript:(NSString*)script {
-  [self evaluateJavaScript:script stringResultHandler:nil];
 }
 
 - (void)applyWebViewScrollZoomScaleFromZoomState:
@@ -709,9 +583,6 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   // meta tags of a page may have changed since the state was recorded, so clamp
   // the zoom scale to the current range if necessary.
   DCHECK(zoomState.IsValid());
-  // Legacy-format scroll states cannot be applied to WKWebViews.
-  if (zoomState.IsLegacyFormat())
-    return;
   CGFloat zoomScale = zoomState.zoom_scale();
   if (zoomScale < self.webScrollView.minimumZoomScale)
     zoomScale = self.webScrollView.minimumZoomScale;
@@ -720,32 +591,12 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   self.webScrollView.zoomScale = zoomScale;
 }
 
-- (void)handleCancelledError:(NSError*)error {
-  if ([self shouldAbortLoadForCancelledError:error]) {
-    // Do not abort the load for WKWebView, because calling stopLoading may
-    // stop the subsequent provisional load as well.
-    [self loadCancelled];
-    [[self sessionController] discardNonCommittedEntries];
-  }
-}
-
-- (void)loadCompletedForURL:(const GURL&)loadedURL {
-  // Nothing to do.
-}
-
 // Override |handleLoadError| to check for PassKit case.
 - (void)handleLoadError:(NSError*)error inMainFrame:(BOOL)inMainFrame {
   NSString* MIMEType = [_pendingNavigationInfo MIMEType];
   if ([self.passKitDownloader isMIMETypePassKitType:MIMEType])
     return;
   [super handleLoadError:error inMainFrame:inMainFrame];
-}
-
-// Override |loadCancelled| to |cancelPendingDownload| for the
-// CRWPassKitDownloader.
-- (void)loadCancelled {
-  [_passKitDownloader cancelPendingDownload];
-  [super loadCancelled];
 }
 
 - (BOOL)isViewAlive {
@@ -763,12 +614,6 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
     @"title" : @"webViewTitleDidChange",
     @"URL" : @"webViewURLDidChange",
   };
-}
-
-- (NSString*)activityIndicatorGroupID {
-  return [NSString stringWithFormat:
-      @"WKWebViewWebController.NetworkActivityIndicatorKey.%@",
-          self.webStateImpl->GetRequestGroupID()];
 }
 
 - (int)certGroupID {
@@ -1074,139 +919,31 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   [self loadCancelled];
 }
 
-- (void)addActivityIndicatorTask {
-  [[CRWNetworkActivityIndicatorManager sharedInstance]
-      startNetworkTaskForGroup:[self activityIndicatorGroupID]];
-}
-
-- (void)clearActivityIndicatorTasks {
-  [[CRWNetworkActivityIndicatorManager sharedInstance]
-      clearNetworkTasksForGroup:[self activityIndicatorGroupID]];
-}
-
-- (void)updateSSLStatusForNavigationItemWithID:(int)navigationItemID
-                                     certChain:(NSArray*)chain
-                                          host:(NSString*)host
-                             withSecurityStyle:(web::SecurityStyle)style
-                                    certStatus:(net::CertStatus)certStatus {
-  web::NavigationManager* navigationManager =
-      self.webStateImpl->GetNavigationManager();
-
-  // The searched item almost always be the last one, so walk backward rather
-  // than forward.
-  for (int i = navigationManager->GetItemCount() - 1; 0 <= i; i--) {
-    web::NavigationItem* item = navigationManager->GetItemAtIndex(i);
-    if (item->GetUniqueID() != navigationItemID)
-      continue;
-
-    // NavigationItem's UniqueID is preserved even after redirects, so
-    // checking that cert and URL match is necessary.
-    scoped_refptr<net::X509Certificate> cert(web::CreateCertFromChain(chain));
-    int certID =
-        web::CertStore::GetInstance()->StoreCert(cert.get(), self.certGroupID);
-    std::string GURLHost = base::SysNSStringToUTF8(host);
-    web::SSLStatus& SSLStatus = item->GetSSL();
-    if (SSLStatus.cert_id == certID && item->GetURL().host() == GURLHost) {
-      web::SSLStatus previousSSLStatus = item->GetSSL();
-      SSLStatus.cert_status = certStatus;
-      SSLStatus.security_style = style;
-      if (navigationManager->GetCurrentItemIndex() == i &&
-          !previousSSLStatus.Equals(SSLStatus)) {
-        [self didUpdateSSLStatusForCurrentNavigationItem];
-      }
-    }
-    return;
-  }
-}
-
-- (void)scheduleSSLStatusUpdateUsingCertChain:(NSArray*)chain
-                                         host:(NSString*)host {
-  // Use Navigation Item's unique ID to locate requested item after
-  // obtaining cert status asynchronously.
-  int itemID = self.webStateImpl->GetNavigationManager()
-                   ->GetLastCommittedItem()
-                   ->GetUniqueID();
-
-  base::WeakNSObject<CRWWKWebViewWebController> weakSelf(self);
-  void (^SSLStatusResponse)(web::SecurityStyle, net::CertStatus) =
-      ^(web::SecurityStyle style, net::CertStatus certStatus) {
-        base::scoped_nsobject<CRWWKWebViewWebController> strongSelf(
-            [weakSelf retain]);
-        if (!strongSelf || [strongSelf isBeingDestroyed]) {
-          return;
-        }
-        [strongSelf updateSSLStatusForNavigationItemWithID:itemID
-                                                 certChain:chain
-                                                      host:host
-                                         withSecurityStyle:style
-                                                certStatus:certStatus];
-      };
-
-  [_certVerificationController
-      querySSLStatusForTrust:web::CreateServerTrustFromChain(chain, host)
-                        host:host
-           completionHandler:SSLStatusResponse];
-}
-
 - (void)updateSSLStatusForCurrentNavigationItem {
-  if ([self isBeingDestroyed])
+  if ([self isBeingDestroyed]) {
     return;
+  }
 
-  web::NavigationItem* item =
-      self.webStateImpl->GetNavigationManagerImpl().GetLastCommittedItem();
-  if (!item)
+  web::NavigationManager* navManager = self.webState->GetNavigationManager();
+  web::NavigationItem* currentNavItem = navManager->GetLastCommittedItem();
+  if (!currentNavItem) {
     return;
-
-  web::SSLStatus previousSSLStatus = item->GetSSL();
-
-  // Starting from iOS9 WKWebView blocks active mixed content, so if
-  // |hasOnlySecureContent| returns NO it means passive content.
-  item->GetSSL().content_status =
-      [_wkWebView hasOnlySecureContent]
-          ? web::SSLStatus::NORMAL_CONTENT
-          : web::SSLStatus::DISPLAYED_INSECURE_CONTENT;
-
-  // Try updating SSLStatus for current NavigationItem asynchronously.
-  scoped_refptr<net::X509Certificate> cert;
-  if (item->GetURL().SchemeIsCryptographic()) {
-    NSArray* chain = [_wkWebView certificateChain];
-    cert = web::CreateCertFromChain(chain);
-    if (cert) {
-      int oldCertID = item->GetSSL().cert_id;
-      std::string oldHost = item->GetSSL().cert_status_host;
-      item->GetSSL().cert_id = web::CertStore::GetInstance()->StoreCert(
-          cert.get(), self.certGroupID);
-      item->GetSSL().cert_status_host = _documentURL.host();
-      // Only recompute the SSLStatus information if the certificate or host has
-      // since changed. Host can be changed in case of redirect.
-      if (oldCertID != item->GetSSL().cert_id ||
-          oldHost != item->GetSSL().cert_status_host) {
-        // Real SSL status is unknown, reset cert status and security style.
-        // They will be asynchronously updated in
-        // |scheduleSSLStatusUpdateUsingCertChain|.
-        item->GetSSL().cert_status = net::CertStatus();
-        item->GetSSL().security_style = web::SECURITY_STYLE_UNKNOWN;
-
-        NSString* host = base::SysUTF8ToNSString(_documentURL.host());
-        [self scheduleSSLStatusUpdateUsingCertChain:chain host:host];
-      }
-    }
   }
 
-  if (!cert) {
-    item->GetSSL().cert_id = 0;
-    if (!item->GetURL().SchemeIsCryptographic()) {
-      // HTTP or other non-secure connection.
-      item->GetSSL().security_style = web::SECURITY_STYLE_UNAUTHENTICATED;
-    } else {
-      // HTTPS, no certificate (this use-case has not been observed).
-      item->GetSSL().security_style = web::SECURITY_STYLE_UNKNOWN;
-    }
+  if (!_SSLStatusUpdater) {
+    _SSLStatusUpdater.reset([[CRWSSLStatusUpdater alloc]
+        initWithDataSource:self
+         navigationManager:navManager
+               certGroupID:self.certGroupID]);
+    [_SSLStatusUpdater setDelegate:self];
   }
-
-  if (!previousSSLStatus.Equals(item->GetSSL())) {
-    [self didUpdateSSLStatusForCurrentNavigationItem];
-  }
+  NSString* host = base::SysUTF8ToNSString(_documentURL.host());
+  NSArray* certChain = [_wkWebView certificateChain];
+  BOOL hasOnlySecureContent = [_wkWebView hasOnlySecureContent];
+  [_SSLStatusUpdater updateSSLStatusForNavigationItem:currentNavItem
+                                         withCertHost:host
+                                            certChain:certChain
+                                 hasOnlySecureContent:hasOnlySecureContent];
 }
 
 - (void)handleHTTPAuthForChallenge:(NSURLAuthenticationChallenge*)challenge
@@ -1218,6 +955,12 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
       [space.authenticationMethod isEqual:NSURLAuthenticationMethodHTTPBasic] ||
       [space.authenticationMethod isEqual:NSURLAuthenticationMethodNTLM] ||
       [space.authenticationMethod isEqual:NSURLAuthenticationMethodHTTPDigest]);
+
+  if (self.shouldSuppressDialogs) {
+    [self didSuppressDialog];
+    completionHandler(NSURLSessionAuthChallengeRejectProtectionSpace, nil);
+    return;
+  }
 
   SEL selector = @selector(webController:
          runAuthDialogForProtectionSpace:
@@ -1370,7 +1113,7 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   // registering a load request logically comes before updating the document
   // URL, but also must come first since it uses state that is reset on URL
   // changes.
-  if (!_changingHistoryState) {
+  if (!self.changingHistoryState) {
     // If this wasn't a previously-expected load (e.g., certain back/forward
     // navigations), register the load request.
     if (![self isLoadRequestPendingForURL:newURL])
@@ -1379,7 +1122,7 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 
   [self setDocumentURL:newURL];
 
-  if (!_changingHistoryState) {
+  if (!self.changingHistoryState) {
     [self didStartLoadingURL:_documentURL updateHistory:YES];
     [self updateSSLStatusForCurrentNavigationItem];
     [self didFinishNavigation];
@@ -1393,116 +1136,6 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   web::NavigationItem* pendingItem =
       self.webState->GetNavigationManager()->GetPendingItem();
   return pendingItem && pendingItem->GetURL() == targetURL;
-}
-
-- (void)didReceiveScriptMessage:(WKScriptMessage*)message {
-  // Broken out into separate method to catch errors.
-  if (![self respondToWKScriptMessage:message]) {
-    DLOG(WARNING) << "Message from JS not handled due to invalid format";
-  }
-}
-
-- (BOOL)respondToWKScriptMessage:(WKScriptMessage*)scriptMessage {
-  CHECK(scriptMessage.frameInfo.mainFrame);
-  int errorCode = 0;
-  std::string errorMessage;
-  scoped_ptr<base::Value> inputJSONData(
-      base::JSONReader::ReadAndReturnError(
-          base::SysNSStringToUTF8(scriptMessage.body),
-          false,
-          &errorCode,
-          &errorMessage));
-  if (errorCode) {
-    DLOG(WARNING) << "JSON parse error: %s" << errorMessage.c_str();
-    return NO;
-  }
-  base::DictionaryValue* message = nullptr;
-  if (!inputJSONData->GetAsDictionary(&message)) {
-    return NO;
-  }
-  std::string windowID;
-  message->GetString("crwWindowId", &windowID);
-  // Check for correct windowID
-  if (![[self windowId] isEqualToString:base::SysUTF8ToNSString(windowID)]) {
-    DLOG(WARNING) << "Message from JS ignored due to non-matching windowID: "
-                  << [self windowId] << " != "
-                  << base::SysUTF8ToNSString(windowID);
-    return NO;
-  }
-  base::DictionaryValue* command = nullptr;
-  if (!message->GetDictionary("crwCommand", &command)) {
-    return NO;
-  }
-  if ([scriptMessage.name isEqualToString:kScriptImmediateName] ||
-      [scriptMessage.name isEqualToString:kScriptMessageName]) {
-    return [self respondToMessage:command
-                userIsInteracting:[self userIsInteracting]
-                        originURL:net::GURLWithNSURL([_wkWebView URL])];
-  }
-
-  NOTREACHED();
-  return NO;
-}
-
-- (SEL)selectorToHandleJavaScriptCommand:(const std::string&)command {
-  static std::map<std::string, SEL>* handlers = nullptr;
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    handlers = new std::map<std::string, SEL>();
-    (*handlers)["window.history.didPushState"] =
-        @selector(handleWindowHistoryDidPushStateMessage:context:);
-    (*handlers)["window.history.didReplaceState"] =
-        @selector(handleWindowHistoryDidReplaceStateMessage:context:);
-    (*handlers)["window.history.willChangeState"] =
-        @selector(handleWindowHistoryWillChangeStateMessage:context:);
-  });
-  DCHECK(handlers);
-  auto iter = handlers->find(command);
-  return iter != handlers->end()
-             ? iter->second
-             : [super selectorToHandleJavaScriptCommand:command];
-}
-
-- (BOOL)shouldAbortLoadForCancelledError:(NSError*)error {
-  DCHECK_EQ(error.code, NSURLErrorCancelled);
-  // Do not abort the load if it is for an app specific URL, as such errors
-  // are produced during the app specific URL load process.
-  const GURL errorURL =
-      net::GURLWithNSURL(error.userInfo[NSURLErrorFailingURLErrorKey]);
-  if (web::GetWebClient()->IsAppSpecificURL(errorURL))
-    return NO;
-  // Don't abort NSURLErrorCancelled errors originating from navigation
-  // as the WKWebView will automatically retry these loads.
-  WKWebViewErrorSource source = WKWebViewErrorSourceFromError(error);
-  return source != NAVIGATION;
-}
-
-- (CRWPassKitDownloader*)passKitDownloader {
-  if (_passKitDownloader) {
-    return _passKitDownloader.get();
-  }
-  base::WeakNSObject<CRWWKWebViewWebController> weakSelf(self);
-  web::PassKitCompletionHandler passKitCompletion = ^(NSData* data) {
-    base::scoped_nsobject<CRWWKWebViewWebController> strongSelf(
-        [weakSelf retain]);
-    if (!strongSelf) {
-      return;
-    }
-    // Cancel load to update web state, since the PassKit download happens
-    // through a separate flow. This follows the same flow as when PassKit is
-    // downloaded through UIWebView.
-    [strongSelf loadCancelled];
-    SEL didLoadPassKitObject = @selector(webController:didLoadPassKitObject:);
-    id<CRWWebDelegate> delegate = [strongSelf delegate];
-    if ([delegate respondsToSelector:didLoadPassKitObject]) {
-      [delegate webController:strongSelf didLoadPassKitObject:data];
-    }
-  };
-  web::BrowserState* browserState = self.webStateImpl->GetBrowserState();
-  _passKitDownloader.reset([[CRWPassKitDownloader alloc]
-      initWithContextGetter:browserState->GetRequestContext()
-          completionHandler:passKitCompletion]);
-  return _passKitDownloader.get();
 }
 
 #pragma mark -
@@ -1524,33 +1157,6 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
                          willDecelerate:(BOOL)decelerate {
   [self evaluateJavaScript:@"__gCrWeb.setWebViewScrollViewIsDragging(false)"
        stringResultHandler:nil];
-}
-
-#pragma mark -
-#pragma mark JavaScript message handlers
-
-- (BOOL)handleWindowHistoryWillChangeStateMessage:
-    (base::DictionaryValue*)message
-                                          context:(NSDictionary*)context {
-  _changingHistoryState = YES;
-  return
-      [super handleWindowHistoryWillChangeStateMessage:message context:context];
-}
-
-- (BOOL)handleWindowHistoryDidPushStateMessage:(base::DictionaryValue*)message
-                                       context:(NSDictionary*)context {
-  DCHECK(_changingHistoryState);
-  _changingHistoryState = NO;
-  return [super handleWindowHistoryDidPushStateMessage:message context:context];
-}
-
-- (BOOL)handleWindowHistoryDidReplaceStateMessage:
-    (base::DictionaryValue*)message
-                                         context:(NSDictionary*)context {
-  DCHECK(_changingHistoryState);
-  _changingHistoryState = NO;
-  return [super handleWindowHistoryDidReplaceStateMessage:message
-                                                  context:context];
 }
 
 #pragma mark -
@@ -1704,6 +1310,28 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
   }
 }
 
+#pragma mark - CRWSSLStatusUpdater DataSource/Delegate Methods
+
+- (void)SSLStatusUpdater:(CRWSSLStatusUpdater*)SSLStatusUpdater
+    querySSLStatusForCertChain:(NSArray*)certChain
+                          host:(NSString*)host
+             completionHandler:(StatusQueryHandler)completionHandler {
+  base::ScopedCFTypeRef<SecTrustRef> trust(
+      web::CreateServerTrustFromChain(certChain, host));
+  [_certVerificationController querySSLStatusForTrust:std::move(trust)
+                                                 host:host
+                                    completionHandler:completionHandler];
+}
+
+- (void)SSLStatusUpdater:(CRWSSLStatusUpdater*)SSLStatusUpdater
+    didChangeSSLStatusForNavigationItem:(web::NavigationItem*)navigationItem {
+  web::NavigationItem* currentNavigationItem =
+      self.webState->GetNavigationManager()->GetLastCommittedItem();
+  if (navigationItem == currentNavigationItem) {
+    [self didUpdateSSLStatusForCurrentNavigationItem];
+  }
+}
+
 #pragma mark -
 #pragma mark WKNavigationDelegate Methods
 
@@ -1811,7 +1439,7 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
       // dangerous.
       if (web::GetWebClient()->IsAppSpecificURL(_documentURL)) {
         [self abortWebLoad];
-        web::WebLoadParams params(webViewURL);
+        NavigationManager::WebLoadParams params(webViewURL);
         [self loadWithParams:params];
       }
       return;
@@ -1991,6 +1619,11 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
     createWebViewWithConfiguration:(WKWebViewConfiguration*)configuration
                forNavigationAction:(WKNavigationAction*)navigationAction
                     windowFeatures:(WKWindowFeatures*)windowFeatures {
+  if (self.shouldSuppressDialogs) {
+    [self didSuppressDialog];
+    return nil;
+  }
+
   GURL requestURL = net::GURLWithNSURL(navigationAction.request.URL);
 
   if (![self userIsInteracting]) {
@@ -2005,7 +1638,7 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
     }
   }
 
-  id child = [self createChildWebController];
+  CRWWebController* child = [self createChildWebController];
   // WKWebView requires WKUIDelegate to return a child view created with
   // exactly the same |configuration| object (exception is raised if config is
   // different). |configuration| param and config returned by
@@ -2017,13 +1650,21 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
 }
 
 - (void)webViewDidClose:(WKWebView*)webView {
-  [self orderClose];
+  if (self.sessionController.openedByDOM) {
+    [self.delegate webPageOrderedClose];
+  }
 }
 
 - (void)webView:(WKWebView*)webView
     runJavaScriptAlertPanelWithMessage:(NSString*)message
                       initiatedByFrame:(WKFrameInfo*)frame
                      completionHandler:(void(^)())completionHandler {
+  if (self.shouldSuppressDialogs) {
+    [self didSuppressDialog];
+    completionHandler();
+    return;
+  }
+
   SEL alertSelector = @selector(webController:
            runJavaScriptAlertPanelWithMessage:
                                    requestURL:
@@ -2043,6 +1684,12 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
                         initiatedByFrame:(WKFrameInfo*)frame
                        completionHandler:
         (void (^)(BOOL result))completionHandler {
+  if (self.shouldSuppressDialogs) {
+    [self didSuppressDialog];
+    completionHandler(NO);
+    return;
+  }
+
   SEL confirmationSelector = @selector(webController:
                 runJavaScriptConfirmPanelWithMessage:
                                           requestURL:
@@ -2064,6 +1711,12 @@ WKWebViewErrorSource WKWebViewErrorSourceFromError(NSError* error) {
                          initiatedByFrame:(WKFrameInfo*)frame
                         completionHandler:
         (void (^)(NSString *result))completionHandler {
+  if (self.shouldSuppressDialogs) {
+    [self didSuppressDialog];
+    completionHandler(nil);
+    return;
+  }
+
   SEL textInputSelector = @selector(webController:
             runJavaScriptTextInputPanelWithPrompt:
                                       defaultText:

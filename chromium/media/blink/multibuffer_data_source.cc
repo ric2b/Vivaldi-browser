@@ -190,12 +190,10 @@ void MultibufferDataSource::OnRedirect(
           FROM_HERE,
           base::Bind(&MultibufferDataSource::StartCallback, weak_ptr_));
     } else {
-      {
-        base::AutoLock auto_lock(lock_);
-        StopInternal_Locked();
-      }
-      StopLoader();
+      base::AutoLock auto_lock(lock_);
+      StopInternal_Locked();
     }
+    StopLoader();
     return;
   }
   if (url_data_->url().GetOrigin() != destination->url().GetOrigin()) {
@@ -398,6 +396,16 @@ void MultibufferDataSource::ReadTask() {
     bytes_read =
         static_cast<int>(std::min<int64_t>(available, read_op_->size()));
     bytes_read = reader_->TryRead(read_op_->data(), bytes_read);
+
+    if (bytes_read == 0 && total_bytes_ == kPositionNotSpecified) {
+      // We've reached the end of the file and we didn't know the total size
+      // before. Update the total size so Read()s past the end of the file will
+      // fail like they would if we had known the file size at the beginning.
+      total_bytes_ = reader_->Tell();
+      if (total_bytes_ != kPositionNotSpecified)
+        host_->SetTotalBytes(total_bytes_);
+    }
+
     ReadOperation::Run(std::move(read_op_), bytes_read);
   } else {
     reader_->Wait(1, base::Bind(&MultibufferDataSource::ReadTask,
@@ -570,8 +578,8 @@ void MultibufferDataSource::UpdateBufferSizes() {
   int64_t back_buffer = clamp(kTargetSecondsBufferedBehind * bytes_per_second,
                               kMinBufferPreload, kMaxBufferPreload);
   int64_t pin_forwards = kMaxBufferSize - back_buffer;
-  DCHECK_LE(preload_ + kPreloadHighExtra, pin_forwards);
-  reader_->SetMaxBuffer(back_buffer, pin_forwards);
+  DCHECK_LE(preload + kPreloadHighExtra, pin_forwards);
+  reader_->SetMaxBuffer(back_buffer, preload + kPreloadHighExtra);
 
   if (preload_ == METADATA) {
     reader_->SetPreload(0, 0);

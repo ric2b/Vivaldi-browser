@@ -23,7 +23,6 @@ class WebGLUniformLocation;
 class WebGLVertexArrayObject;
 
 class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(WebGL2RenderingContextBase);
 public:
     ~WebGL2RenderingContextBase() override;
 
@@ -45,8 +44,9 @@ public:
 
     /* Texture objects */
     void texImage2D(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, GLintptr);
-    // Have to re-declair/re-define the following texImage2D functions from base class.
-    // This is because the above texImage2D() hides the name from base class.
+    void texSubImage2D(GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, GLintptr);
+    // Have to re-declare/re-define the following tex{Sub}Image2D functions from base class.
+    // This is because the above tex{Sub}Image2D() hides the name from base class.
     void texImage2D(GLenum target, GLint level, GLint internalformat,
         GLsizei width, GLsizei height, GLint border,
         GLenum format, GLenum type, DOMArrayBufferView*);
@@ -59,18 +59,32 @@ public:
     void texImage2D(GLenum target, GLint level, GLint internalformat,
         GLenum format, GLenum type, HTMLVideoElement*, ExceptionState&);
     void texImage2D(GLenum target, GLint level, GLint internalformat,
-        GLenum format, GLenum type, PassRefPtrWillBeRawPtr<ImageBitmap>, ExceptionState&);
+        GLenum format, GLenum type, ImageBitmap*, ExceptionState&);
+    void texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+        GLsizei width, GLsizei height,
+        GLenum format, GLenum type, DOMArrayBufferView*);
+    void texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+        GLenum format, GLenum type, ImageData*);
+    void texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+        GLenum format, GLenum type, HTMLImageElement*, ExceptionState&);
+    void texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+        GLenum format, GLenum type, HTMLCanvasElement*, ExceptionState&);
+    void texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+        GLenum format, GLenum type, HTMLVideoElement*, ExceptionState&);
+    void texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+        GLenum format, GLenum type, ImageBitmap*, ExceptionState&);
 
     void texStorage2D(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
     void texStorage3D(GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLsizei);
     void texImage3D(GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, DOMArrayBufferView*);
     void texImage3D(GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, GLintptr);
     void texSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLenum, DOMArrayBufferView*);
+    void texSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLenum, GLintptr);
     void texSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLenum, GLenum, ImageData*);
     void texSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLenum, GLenum, HTMLImageElement*, ExceptionState&);
     void texSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLenum, GLenum, HTMLCanvasElement*, ExceptionState&);
     void texSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLenum, GLenum, HTMLVideoElement*, ExceptionState&);
-    void texSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLenum, GLenum, PassRefPtrWillBeRawPtr<ImageBitmap>, ExceptionState&);
+    void texSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLenum, GLenum, ImageBitmap*, ExceptionState&);
     void copyTexSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLint, GLint, GLsizei, GLsizei);
     void compressedTexImage3D(GLenum, GLint, GLenum, GLsizei, GLsizei, GLsizei, GLint, DOMArrayBufferView*);
     void compressedTexSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, DOMArrayBufferView*);
@@ -203,7 +217,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 protected:
-    WebGL2RenderingContextBase(HTMLCanvasElement*, PassOwnPtr<WebGraphicsContext3D>, const WebGLContextAttributes& requestedAttributes);
+    WebGL2RenderingContextBase(HTMLCanvasElement*, PassOwnPtr<WebGraphicsContext3DProvider>, const WebGLContextAttributes& requestedAttributes);
 
     // Helper function to validate target and the attachment combination for getFramebufferAttachmentParameters.
     // Generate GL error and return false if parameters are illegal.
@@ -232,7 +246,7 @@ protected:
     bool validateAndUpdateBufferBindBaseTarget(const char* functionName, GLenum, GLuint, WebGLBuffer*);
 
     WebGLImageConversion::PixelStoreParams getPackPixelStoreParams() override;
-    WebGLImageConversion::PixelStoreParams getUnpackPixelStoreParams() override;
+    WebGLImageConversion::PixelStoreParams getUnpackPixelStoreParams(TexImageDimension) override;
 
     bool checkAndTranslateAttachments(const char* functionName, GLenum, const Vector<GLenum>&, Vector<GLenum>&);
 
@@ -267,27 +281,27 @@ protected:
     void setTransformFeedbackActive(bool);
     void setTransformFeedbackPaused(bool);
 
-    PersistentWillBeMember<WebGLFramebuffer> m_readFramebufferBinding;
-    PersistentWillBeMember<WebGLTransformFeedback> m_transformFeedbackBinding;
+    Member<WebGLFramebuffer> m_readFramebufferBinding;
+    Member<WebGLTransformFeedback> m_transformFeedbackBinding;
 
     std::set<GLenum> m_supportedInternalFormatsStorage;
     std::set<GLenum> m_compressedTextureFormatsETC2EAC;
 
-    PersistentWillBeMember<WebGLBuffer> m_boundCopyReadBuffer;
-    PersistentWillBeMember<WebGLBuffer> m_boundCopyWriteBuffer;
-    PersistentWillBeMember<WebGLBuffer> m_boundPixelPackBuffer;
-    PersistentWillBeMember<WebGLBuffer> m_boundPixelUnpackBuffer;
-    PersistentWillBeMember<WebGLBuffer> m_boundTransformFeedbackBuffer;
-    PersistentWillBeMember<WebGLBuffer> m_boundUniformBuffer;
+    Member<WebGLBuffer> m_boundCopyReadBuffer;
+    Member<WebGLBuffer> m_boundCopyWriteBuffer;
+    Member<WebGLBuffer> m_boundPixelPackBuffer;
+    Member<WebGLBuffer> m_boundPixelUnpackBuffer;
+    Member<WebGLBuffer> m_boundTransformFeedbackBuffer;
+    Member<WebGLBuffer> m_boundUniformBuffer;
 
-    PersistentHeapVectorWillBeHeapVector<Member<WebGLBuffer>> m_boundIndexedTransformFeedbackBuffers;
-    PersistentHeapVectorWillBeHeapVector<Member<WebGLBuffer>> m_boundIndexedUniformBuffers;
+    HeapVector<Member<WebGLBuffer>> m_boundIndexedTransformFeedbackBuffers;
+    HeapVector<Member<WebGLBuffer>> m_boundIndexedUniformBuffers;
     GLint m_maxTransformFeedbackSeparateAttribs;
     size_t m_maxBoundUniformBufferIndex;
 
-    PersistentWillBeMember<WebGLQuery> m_currentBooleanOcclusionQuery;
-    PersistentWillBeMember<WebGLQuery> m_currentTransformFeedbackPrimitivesWrittenQuery;
-    PersistentHeapVectorWillBeHeapVector<Member<WebGLSampler>> m_samplerUnits;
+    Member<WebGLQuery> m_currentBooleanOcclusionQuery;
+    Member<WebGLQuery> m_currentTransformFeedbackPrimitivesWrittenQuery;
+    HeapVector<Member<WebGLSampler>> m_samplerUnits;
 
     GLint m_packRowLength;
     GLint m_packSkipPixels;

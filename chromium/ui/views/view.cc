@@ -106,7 +106,6 @@ View::View()
       enabled_(true),
       notify_enter_exit_on_child_(false),
       registered_for_visible_bounds_notification_(false),
-      clip_insets_(0, 0, 0, 0),
       needs_layout_(true),
       snap_layer_to_pixel_boundary_(false),
       flip_canvas_on_paint_for_rtl_ui_(false),
@@ -326,10 +325,6 @@ gfx::Rect View::GetContentsBounds() const {
 
 gfx::Rect View::GetLocalBounds() const {
   return gfx::Rect(size());
-}
-
-gfx::Rect View::GetLayerBoundsInPixel() const {
-  return layer()->GetTargetBounds();
 }
 
 gfx::Insets View::GetInsets() const {
@@ -721,7 +716,7 @@ void View::ConvertPointFromScreen(const View* dst, gfx::Point* p) {
   if (!widget)
     return;
   *p -= widget->GetClientAreaBoundsInScreen().OffsetFromOrigin();
-  views::View::ConvertPointFromWidget(dst, p);
+  ConvertPointFromWidget(dst, p);
 }
 
 gfx::Rect View::ConvertRectToParent(const gfx::Rect& rect) const {
@@ -809,16 +804,17 @@ void View::Paint(const ui::PaintContext& parent_context) {
   // std::optional once we can do so.
   ui::ClipRecorder clip_recorder(parent_context);
   if (paint_relative_to_parent) {
-    // Set the clip rect to the bounds of this View. Note that the X (or left)
-    // position we pass to ClipRect takes into consideration whether or not the
-    // View uses a right-to-left layout so that we paint the View in its
-    // mirrored position if need be.
-    gfx::Rect clip_rect_in_parent = bounds();
-    clip_rect_in_parent.Inset(clip_insets_);
-    if (parent_)
-      clip_rect_in_parent.set_x(
-          parent_->GetMirroredXForRect(clip_rect_in_parent));
-    clip_recorder.ClipRect(clip_rect_in_parent);
+    // Set the clip rect to the bounds of this View, or |clip_path_| if it's
+    // been set. Note that the X (or left) position we pass to ClipRect takes
+    // into consideration whether or not the View uses a right-to-left layout so
+    // that we paint the View in its mirrored position if need be.
+    if (clip_path_.isEmpty()) {
+      clip_recorder.ClipRect(GetMirroredBounds());
+    } else {
+      gfx::Path clip_path_in_parent = clip_path_;
+      clip_path_in_parent.offset(GetMirroredX(), y());
+      clip_recorder.ClipPathWithAntiAliasing(clip_path_in_parent);
+    }
   }
 
   ui::TransformRecorder transform_recorder(context);
@@ -1035,7 +1031,7 @@ void View::OnMouseEvent(ui::MouseEvent* event) {
       return;
 
     case ui::ET_MOUSEWHEEL:
-      if (OnMouseWheel(*static_cast<ui::MouseWheelEvent*>(event)))
+      if (OnMouseWheel(*event->AsMouseWheelEvent()))
         event->SetHandled();
       break;
 
@@ -1445,12 +1441,6 @@ void View::OnPaintBorder(gfx::Canvas* canvas) {
 }
 
 // Accelerated Painting --------------------------------------------------------
-
-void View::SetFillsBoundsOpaquely(bool fills_bounds_opaquely) {
-  // This method should not have the side-effect of creating the layer.
-  if (layer())
-    layer()->SetFillsBoundsOpaquely(fills_bounds_opaquely);
-}
 
 gfx::Vector2d View::CalculateOffsetToAncestorWithLayer(
     ui::Layer** layer_parent) {

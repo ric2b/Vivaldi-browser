@@ -14,13 +14,12 @@
 namespace cc {
 
 class ContentLayerClient;
-class DisplayListRecordingSource;
+class RecordingSource;
 class ResourceUpdateQueue;
 
 class CC_EXPORT PictureLayer : public Layer {
  public:
-  static scoped_refptr<PictureLayer> Create(const LayerSettings& settings,
-                                            ContentLayerClient* client);
+  static scoped_refptr<PictureLayer> Create(ContentLayerClient* client);
 
   void ClearClient();
 
@@ -33,23 +32,21 @@ class CC_EXPORT PictureLayer : public Layer {
   void SetNeedsDisplayRect(const gfx::Rect& layer_rect) override;
   bool Update() override;
   void SetIsMask(bool is_mask) override;
-  skia::RefPtr<SkPicture> GetPicture() const override;
+  sk_sp<SkPicture> GetPicture() const override;
   bool IsSuitableForGpuRasterization() const override;
 
   void RunMicroBenchmark(MicroBenchmark* benchmark) override;
 
   ContentLayerClient* client() { return client_; }
 
-  DisplayListRecordingSource* GetDisplayListRecordingSourceForTesting() {
+  RecordingSource* GetRecordingSourceForTesting() {
     return recording_source_.get();
   }
 
  protected:
-  PictureLayer(const LayerSettings& settings, ContentLayerClient* client);
+  explicit PictureLayer(ContentLayerClient* client);
   // Allow tests to inject a recording source.
-  PictureLayer(const LayerSettings& settings,
-               ContentLayerClient* client,
-               scoped_ptr<DisplayListRecordingSource> source);
+  PictureLayer(ContentLayerClient* client, scoped_ptr<RecordingSource> source);
   ~PictureLayer() override;
 
   bool HasDrawableContent() const override;
@@ -66,13 +63,10 @@ class CC_EXPORT PictureLayer : public Layer {
   void DropRecordingSourceContentIfInvalid();
 
   ContentLayerClient* client_;
-  scoped_ptr<DisplayListRecordingSource> recording_source_;
+  scoped_ptr<RecordingSource> recording_source_;
   devtools_instrumentation::
       ScopedLayerObjectTracker instrumentation_object_tracker_;
 
-  // These store the last visible layer and invalidation computed via a call
-  // to Update().
-  gfx::Rect last_updated_visible_layer_rect_;
   Region last_updated_invalidation_;
 
   int update_source_frame_number_;

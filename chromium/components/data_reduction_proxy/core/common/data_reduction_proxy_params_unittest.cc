@@ -20,13 +20,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace {
-
-const char kConfigServiceFieldTrial[] = "DataReductionProxyConfigService";
-const char kConfigServiceURLParam[] = "url";
-
-}  // namespace
-
 namespace data_reduction_proxy {
 class DataReductionProxyParamsTest : public testing::Test {
  public:
@@ -77,21 +70,6 @@ TEST_F(DataReductionProxyParamsTest, EverythingDefined) {
       DataReductionProxyParams::kFallbackAllowed |
       DataReductionProxyParams::kPromoAllowed,
       TestDataReductionProxyParams::HAS_EVERYTHING);
-  CheckParams(params, true, true, true, true);
-  CheckValues(params, TestDataReductionProxyParams::DefaultDevOrigin(),
-              TestDataReductionProxyParams::DefaultDevFallbackOrigin(),
-              TestDataReductionProxyParams::DefaultSSLOrigin(),
-              TestDataReductionProxyParams::DefaultSecureProxyCheckURL());
-}
-
-TEST_F(DataReductionProxyParamsTest, NoDevOrigin) {
-  TestDataReductionProxyParams params(
-      DataReductionProxyParams::kAllowed |
-      DataReductionProxyParams::kFallbackAllowed |
-      DataReductionProxyParams::kPromoAllowed,
-      TestDataReductionProxyParams::HAS_EVERYTHING &
-      ~TestDataReductionProxyParams::HAS_DEV_ORIGIN &
-      ~TestDataReductionProxyParams::HAS_DEV_FALLBACK_ORIGIN);
   CheckParams(params, true, true, true, true);
   CheckValues(params, TestDataReductionProxyParams::DefaultOrigin(),
               TestDataReductionProxyParams::DefaultFallbackOrigin(),
@@ -149,65 +127,22 @@ TEST_F(DataReductionProxyParamsTest, InvalidConfigurations) {
       {true, true, true, TestDataReductionProxyParams::HAS_NOTHING, true},
       {true, false, true, TestDataReductionProxyParams::HAS_NOTHING, true},
       {false, true, true, TestDataReductionProxyParams::HAS_NOTHING, false},
-      {true, true, true, TestDataReductionProxyParams::HAS_ORIGIN, true},
-      {true,
-       true,
-       true,
-       TestDataReductionProxyParams::HAS_ORIGIN |
-           TestDataReductionProxyParams::HAS_DEV_ORIGIN |
-           TestDataReductionProxyParams::HAS_DEV_FALLBACK_ORIGIN,
-       false},
-      {true,
-       false,
-       true,
-       TestDataReductionProxyParams::HAS_ORIGIN |
-           TestDataReductionProxyParams::HAS_DEV_ORIGIN |
-           TestDataReductionProxyParams::HAS_DEV_FALLBACK_ORIGIN,
-       false},
-      {false,
-       true,
-       true,
-       TestDataReductionProxyParams::HAS_ORIGIN |
-           TestDataReductionProxyParams::HAS_DEV_ORIGIN |
-           TestDataReductionProxyParams::HAS_DEV_FALLBACK_ORIGIN,
-       false},
-      {true,
-       true,
-       true,
-       TestDataReductionProxyParams::HAS_DEV_ORIGIN |
-           TestDataReductionProxyParams::HAS_DEV_FALLBACK_ORIGIN,
+      {true, true, true, TestDataReductionProxyParams::HAS_ORIGIN, false},
+      {true, false, true, TestDataReductionProxyParams::HAS_ORIGIN, false},
+      {false, true, true, TestDataReductionProxyParams::HAS_ORIGIN, false},
+      {true, true, true, TestDataReductionProxyParams::HAS_NOTHING, true},
+      {true, false, true, TestDataReductionProxyParams::HAS_FALLBACK_ORIGIN,
        true},
-      {true,
-       false,
-       true,
-       TestDataReductionProxyParams::HAS_FALLBACK_ORIGIN,
-       true},
-      {false,
-       true,
-       true,
-       TestDataReductionProxyParams::HAS_FALLBACK_ORIGIN,
+      {false, true, true, TestDataReductionProxyParams::HAS_FALLBACK_ORIGIN,
        false},
-      {true,
-       true,
-       true,
-       TestDataReductionProxyParams::HAS_FALLBACK_ORIGIN |
-           TestDataReductionProxyParams::HAS_DEV_FALLBACK_ORIGIN,
+      {true, true, true, TestDataReductionProxyParams::HAS_FALLBACK_ORIGIN,
        false},
-      {true,
-       true,
-       true,
-       TestDataReductionProxyParams::HAS_SECURE_PROXY_CHECK_URL,
-       false},
-      {true,
-       false,
-       true,
-       TestDataReductionProxyParams::HAS_SECURE_PROXY_CHECK_URL,
-       false},
-      {false,
-       true,
-       true,
-       TestDataReductionProxyParams::HAS_SECURE_PROXY_CHECK_URL,
-       false},
+      {true, true, true,
+       TestDataReductionProxyParams::HAS_SECURE_PROXY_CHECK_URL, false},
+      {true, false, true,
+       TestDataReductionProxyParams::HAS_SECURE_PROXY_CHECK_URL, false},
+      {false, true, true,
+       TestDataReductionProxyParams::HAS_SECURE_PROXY_CHECK_URL, false},
       {true, true, true, TestDataReductionProxyParams::HAS_SSL_ORIGIN, true},
       {true, false, true, TestDataReductionProxyParams::HAS_SSL_ORIGIN, true},
       {false, true, true, TestDataReductionProxyParams::HAS_SSL_ORIGIN, false},
@@ -239,44 +174,37 @@ TEST_F(DataReductionProxyParamsTest, AndroidOnePromoFieldTrial) {
 TEST_F(DataReductionProxyParamsTest, IsClientConfigEnabled) {
   const struct {
     std::string test_case;
-    bool command_line_set;
     std::string trial_group_value;
     bool expected;
   } tests[] = {
       {
-       "Nothing set", false, "", false,
+          "Nothing set", "", true,
       },
       {
-       "Command line set", true, "", true,
+          "Enabled in experiment", "Enabled", true,
       },
       {
-       "Enabled in experiment", false, "Enabled", true,
+          "Alternate enabled in experiment", "Enabled_Other", true,
       },
       {
-       "Alternate enabled in experiment", false, "EnabledOther", true,
+          "Control in experiment", "Control", true,
       },
       {
-       "Disabled in experiment", false, "Disabled", false,
+          "Disabled in experiment", "Disabled", false,
       },
       {
-       "Command line set, enabled in experiment", true, "Enabled", true,
+          "Disabled in experiment", "Disabled_Other", false,
       },
       {
-       "Command line set, disabled in experiment", true, "Disabled", true,
+          "disabled in experiment lower case", "disabled", true,
       },
   };
 
   for (const auto& test : tests) {
-    // Reset all flags.
-    base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-    if (test.command_line_set) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-          switches::kEnableDataReductionProxyConfigClient, "");
-    }
     base::FieldTrialList field_trial_list(nullptr);
     if (!test.trial_group_value.empty()) {
-      base::FieldTrialList::CreateFieldTrial(kConfigServiceFieldTrial,
-                                             test.trial_group_value);
+      ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
+          "DataReductionProxyConfigService", test.trial_group_value));
     }
     EXPECT_EQ(test.expected, params::IsConfigClientEnabled()) << test.test_case;
   }
@@ -321,9 +249,9 @@ TEST_F(DataReductionProxyParamsTest, SecureProxyCheckDefault) {
     }
 
     if (test_case.experiment_enabled) {
-      base::FieldTrialList::CreateFieldTrial(
+      ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
           "DataReductionProxySecureProxyAfterCheck",
-          test_case.in_trial_group ? "Enabled" : "Disabled");
+          test_case.in_trial_group ? "Enabled" : "Disabled"));
     }
 
     EXPECT_EQ(test_case.expected_use_by_default,
@@ -426,60 +354,61 @@ TEST_F(DataReductionProxyParamsTest, LoFiPreviewFieldTrial) {
   }
 }
 
-TEST_F(DataReductionProxyParamsTest, GetConfigServiceURL) {
+TEST_F(DataReductionProxyParamsTest, HoldbackEnabledFieldTrial) {
   const struct {
-    std::string trial_group_value;
-    std::string trial_url_param;
-  } variations[] = {
-      {
-       "Enabled", "http://enabled.config-service/",
-      },
-      {
-       "Disabled", "http://disabled.config-service/",
-      },
-      {
-       "EnabledOther", "http://other.config-service/",
-      },
+    std::string trial_group_name;
+    bool expected_enabled;
+  } tests[] = {
+      {"Enabled", true},
+      {"Enabled_Control", true},
+      {"Disabled", false},
+      {"enabled", false},
   };
 
-  variations::testing::ClearAllVariationParams();
-  for (const auto& variation : variations) {
-    std::map<std::string, std::string> variation_params;
-    variation_params[kConfigServiceURLParam] = variation.trial_url_param;
-    ASSERT_TRUE(variations::AssociateVariationParams(
-        kConfigServiceFieldTrial, variation.trial_group_value,
-        variation_params));
-  }
+  for (const auto& test : tests) {
+    base::FieldTrialList field_trial_list(nullptr);
 
+    ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
+        "DataCompressionProxyHoldback", test.trial_group_name));
+    EXPECT_EQ(test.expected_enabled, params::IsIncludedInHoldbackFieldTrial())
+        << test.trial_group_name;
+  }
+}
+
+TEST_F(DataReductionProxyParamsTest, PromoFieldTrial) {
+  const struct {
+    std::string trial_group_name;
+    bool expected_enabled;
+  } tests[] = {
+      {"Enabled", true},
+      {"Enabled_Control", true},
+      {"Disabled", false},
+      {"enabled", false},
+  };
+
+  for (const auto& test : tests) {
+    base::FieldTrialList field_trial_list(nullptr);
+
+    ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
+        "DataCompressionProxyPromoVisibility", test.trial_group_name));
+    EXPECT_EQ(test.expected_enabled, params::IsIncludedInPromoFieldTrial())
+        << test.trial_group_name;
+  }
+}
+
+TEST_F(DataReductionProxyParamsTest, GetConfigServiceURL) {
   const struct {
     std::string test_case;
     std::string flag_value;
-    std::string trial_group_value;
     GURL expected;
   } tests[] = {
       {
-          "Nothing set", "", "",
+          "Nothing set", "",
           GURL("https://datasaver.googleapis.com/v1/clientConfigs"),
       },
       {
-          "Only command line set", "http://commandline.config-service/", "",
+          "Only command line set", "http://commandline.config-service/",
           GURL("http://commandline.config-service/"),
-      },
-      {
-          "Enabled group", "", "Enabled",
-          GURL("http://enabled.config-service/"),
-      },
-      {
-          "Disabled group", "", "Disabled",
-          GURL("http://disabled.config-service/"),
-      },
-      {
-          "Alternate enabled group", "", "EnabledOther",
-          GURL("http://other.config-service/"),
-      },
-      {
-          "Command line precedence", "http://commandline.config-service/",
-          "Enabled", GURL("http://commandline.config-service/"),
       },
   };
 
@@ -489,11 +418,6 @@ TEST_F(DataReductionProxyParamsTest, GetConfigServiceURL) {
     if (!test.flag_value.empty()) {
       base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
           switches::kDataReductionProxyConfigURL, test.flag_value);
-    }
-    base::FieldTrialList field_trial_list(nullptr);
-    if (!test.trial_group_value.empty()) {
-      base::FieldTrialList::CreateFieldTrial(kConfigServiceFieldTrial,
-                                             test.trial_group_value);
     }
     EXPECT_EQ(test.expected, params::GetConfigServiceURL()) << test.test_case;
   }

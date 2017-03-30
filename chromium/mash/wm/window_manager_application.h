@@ -7,16 +7,17 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "components/mus/common/types.h"
 #include "components/mus/public/interfaces/accelerator_registrar.mojom.h"
 #include "components/mus/public/interfaces/window_manager.mojom.h"
 #include "components/mus/public/interfaces/window_manager_factory.mojom.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
+#include "mash/session/public/interfaces/session.mojom.h"
 #include "mash/wm/public/interfaces/user_window_controller.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -31,6 +32,10 @@ class UIInit;
 
 namespace views {
 class AuraInit;
+}
+
+namespace ui {
+class Event;
 }
 
 namespace mash {
@@ -69,17 +74,21 @@ class WindowManagerApplication
   void OnRootWindowDestroyed(RootWindowController* root_controller);
 
   // TODO(sky): figure out right place for this code.
-  void OnAccelerator(uint32_t id, mus::mojom::EventPtr event);
+  void OnAccelerator(uint32_t id, const ui::Event& event);
 
   void AddRootWindowsObserver(RootWindowsObserver* observer);
   void RemoveRootWindowsObserver(RootWindowsObserver* observer);
+
+  session::mojom::Session* session() {
+    return session_.get();
+  }
 
  private:
   void OnAcceleratorRegistrarDestroyed(AcceleratorRegistrarImpl* registrar);
 
   // mojo::ShellClient:
-  void Initialize(mojo::Connector* connector, const std::string& url,
-                  uint32_t id, uint32_t user_id) override;
+  void Initialize(mojo::Connector* connector, const mojo::Identity& identity,
+                  uint32_t id) override;
   bool AcceptConnection(mojo::Connection* connection) override;
 
   // InterfaceFactory<mash::wm::mojom::UserWindowController>:
@@ -101,16 +110,16 @@ class WindowManagerApplication
 
   mojo::TracingImpl tracing_;
 
-  scoped_ptr<ui::mojo::UIInit> ui_init_;
-  scoped_ptr<views::AuraInit> aura_init_;
+  std::unique_ptr<ui::mojo::UIInit> ui_init_;
+  std::unique_ptr<views::AuraInit> aura_init_;
 
   // |user_window_controller_| is created once OnEmbed() is called. Until that
   // time |user_window_controller_requests_| stores pending interface requests.
-  scoped_ptr<UserWindowControllerImpl> user_window_controller_;
+  std::unique_ptr<UserWindowControllerImpl> user_window_controller_;
   mojo::BindingSet<mash::wm::mojom::UserWindowController>
       user_window_controller_binding_;
-  std::vector<
-      scoped_ptr<mojo::InterfaceRequest<mash::wm::mojom::UserWindowController>>>
+  std::vector<std::unique_ptr<
+      mojo::InterfaceRequest<mash::wm::mojom::UserWindowController>>>
       user_window_controller_requests_;
 
   std::set<AcceleratorRegistrarImpl*> accelerator_registrars_;
@@ -118,6 +127,8 @@ class WindowManagerApplication
 
   mojo::Binding<mus::mojom::WindowManagerFactory>
       window_manager_factory_binding_;
+
+  mash::session::mojom::SessionPtr session_;
 
   base::ObserverList<RootWindowsObserver> root_windows_observers_;
 

@@ -222,6 +222,7 @@ def _AddSparkleKeys(plist):
   """Adds the Sparkle keys."""
   plist['SUScheduledCheckInterval'] = 86400
   plist['SUEnableAutomaticChecks'] = 'YES'
+  plist['SUAllowsAutomaticUpdates'] = 'NO'
   plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/mac/appcast.xml'
   #plist['SUPublicDSAKeyFile'] = 'dsa_pub.pem'
 
@@ -230,6 +231,7 @@ def _RemoveSparkleKeys(plist):
   _RemoveKeys(plist,
     'SUScheduledCheckInterval',
     'SUEnableAutomaticChecks',
+    'SUAllowsAutomaticUpdates',
     'SUFeedURL')#, note(tomas): remove DSA stuff for now
     #'SUPublicDSAKeyFile')
 

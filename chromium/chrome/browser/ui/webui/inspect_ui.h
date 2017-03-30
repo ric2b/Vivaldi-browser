@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_WEBUI_INSPECT_UI_H_
 
 #include <map>
+#include <memory>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -66,8 +67,7 @@ class InspectUI : public content::WebUIController,
 
   const base::Value* GetPrefValue(const char* name);
 
-  void AddTargetUIHandler(
-      scoped_ptr<DevToolsTargetsUIHandler> handler);
+  void AddTargetUIHandler(std::unique_ptr<DevToolsTargetsUIHandler> handler);
 
   DevToolsTargetsUIHandler* FindTargetHandler(
       const std::string& source_id);
@@ -93,7 +93,7 @@ class InspectUI : public content::WebUIController,
   typedef std::map<std::string, DevToolsTargetsUIHandler*> TargetHandlerMap;
   TargetHandlerMap target_handlers_;
 
-  scoped_ptr<PortForwardingStatusSerializer> port_status_serializer_;
+  std::unique_ptr<PortForwardingStatusSerializer> port_status_serializer_;
 
   DISALLOW_COPY_AND_ASSIGN(InspectUI);
 };

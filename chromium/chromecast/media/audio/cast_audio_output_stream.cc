@@ -47,7 +47,6 @@ MediaPipelineBackend::AudioDecoder* InitializeBackend(
   audio_config.bytes_per_channel = audio_params.bits_per_sample() / 8;
   audio_config.channel_number = audio_params.channels();
   audio_config.samples_per_second = audio_params.sample_rate();
-  audio_config.is_encrypted = false;
 
   if (!decoder->SetConfig(audio_config))
     return nullptr;
@@ -186,8 +185,8 @@ class CastAudioOutputStream::Backend
 
  private:
   const ::media::AudioParameters audio_params_;
-  scoped_ptr<MediaPipelineBackend> backend_;
-  scoped_ptr<TaskRunnerImpl> backend_task_runner_;
+  std::unique_ptr<MediaPipelineBackend> backend_;
+  std::unique_ptr<TaskRunnerImpl> backend_task_runner_;
   MediaPipelineBackend::AudioDecoder* decoder_;
   PushBufferCompletionCallback completion_cb_;
   bool first_start_;

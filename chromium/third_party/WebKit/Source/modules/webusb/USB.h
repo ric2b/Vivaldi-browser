@@ -7,8 +7,8 @@
 
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventTarget.h"
-#include "core/frame/LocalFrameLifecycleObserver.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/modules/webusb/WebUSBClient.h"
 
@@ -21,11 +21,11 @@ class WebUSBDevice;
 
 class USB final
     : public RefCountedGarbageCollectedEventTargetWithInlineData<USB>
-    , public LocalFrameLifecycleObserver
+    , public ContextLifecycleObserver
     , public WebUSBClient::Observer {
     DEFINE_WRAPPERTYPEINFO();
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(USB);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(USB);
+    USING_GARBAGE_COLLECTED_MIXIN(USB);
 public:
     static USB* create(LocalFrame& frame)
     {
@@ -41,17 +41,18 @@ public:
     DEFINE_ATTRIBUTE_EVENT_LISTENER(disconnect);
 
     // EventTarget overrides.
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
     const AtomicString& interfaceName() const override;
 
-    // LocalFrameLifecycleObserver overrides.
-    void willDetachFrameHost() override;
+    // ContextLifecycleObserver overrides.
+    void contextDestroyed() override;
 
     // WebUSBClient::Observer overrides.
-    void onDeviceConnected(WebPassOwnPtr<WebUSBDevice>) override;
-    void onDeviceDisconnected(WebPassOwnPtr<WebUSBDevice>) override;
+    void onDeviceConnected(std::unique_ptr<WebUSBDevice>) override;
+    void onDeviceDisconnected(std::unique_ptr<WebUSBDevice>) override;
 
     DECLARE_VIRTUAL_TRACE();
+    EAGERLY_FINALIZE();
 
 private:
     explicit USB(LocalFrame& frame);

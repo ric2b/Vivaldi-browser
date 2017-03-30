@@ -106,6 +106,13 @@ void RenderWidgetMusConnection::ObserveWheelEventAndResult(
   NOTIMPLEMENTED();
 }
 
+void RenderWidgetMusConnection::ObserveGestureEventAndResult(
+    const blink::WebGestureEvent& gesture_event,
+    const gfx::Vector2dF& wheel_unused_delta,
+    bool event_processed) {
+  NOTIMPLEMENTED();
+}
+
 void RenderWidgetMusConnection::OnDidHandleKeyEvent() {
   NOTIMPLEMENTED();
 }
@@ -118,12 +125,12 @@ void RenderWidgetMusConnection::OnDidOverscroll(
 void RenderWidgetMusConnection::OnInputEventAck(
     scoped_ptr<InputEventAck> input_event_ack) {
   DCHECK(!pending_ack_.is_null());
-  // TODO(fsamuel): Use the state in |input_event_ack|.
-  pending_ack_.Run();
+  pending_ack_.Run(input_event_ack->state ==
+                   InputEventAckState::INPUT_EVENT_ACK_STATE_CONSUMED);
   pending_ack_.Reset();
 }
 
-void RenderWidgetMusConnection::NonBlockingInputEventHandled(
+void RenderWidgetMusConnection::NotifyInputEventHandled(
     blink::WebInputEvent::Type handled_type) {
   NOTIMPLEMENTED();
 }
@@ -161,12 +168,12 @@ void RenderWidgetMusConnection::OnConnectionLost() {
 
 void RenderWidgetMusConnection::OnWindowInputEvent(
     scoped_ptr<blink::WebInputEvent> input_event,
-    const base::Closure& ack) {
+    const base::Callback<void(bool)>& ack) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // If we don't yet have a RenderWidgetInputHandler then we don't yet have
   // an initialized RenderWidget.
   if (!input_handler_) {
-    ack.Run();
+    ack.Run(false);
     return;
   }
   // TODO(fsamuel): It would be nice to add this DCHECK but the reality is an
@@ -177,7 +184,7 @@ void RenderWidgetMusConnection::OnWindowInputEvent(
   // TODO(fsamuel, sadrul): Track real latency info.
   ui::LatencyInfo latency_info;
   input_handler_->HandleInputEvent(*input_event, latency_info,
-                                   DISPATCH_TYPE_NORMAL);
+                                   DISPATCH_TYPE_BLOCKING);
 }
 
 }  // namespace content

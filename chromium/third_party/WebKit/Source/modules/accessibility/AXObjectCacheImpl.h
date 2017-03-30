@@ -65,6 +65,7 @@ public:
     virtual void listboxOptionStateChanged(HTMLOptionElement*);
     virtual void listboxSelectedChildrenChanged(HTMLSelectElement*);
     virtual void listboxActiveIndexChanged(HTMLSelectElement*);
+    virtual void radiobuttonRemovedFromGroup(HTMLInputElement*);
 
     void remove(LayoutObject*) override;
     void remove(Node*) override;
@@ -92,7 +93,7 @@ public:
 
     void setCanvasObjectBounds(Element*, const LayoutRect&) override;
 
-    void inlineTextBoxesUpdated(LayoutObject*) override;
+    void inlineTextBoxesUpdated(LineLayoutItem) override;
 
     // Called when the scroll offset changes.
     void handleScrollPositionChanged(FrameView*) override;
@@ -186,12 +187,12 @@ protected:
 
 private:
 
-    RawPtrWillBeMember<Document> m_document;
+    Member<Document> m_document;
     HeapHashMap<AXID, Member<AXObject>> m_objects;
     // LayoutObject and AbstractInlineTextBox are not on the Oilpan heap so we
     // do not use HeapHashMap for those mappings.
     HashMap<LayoutObject*, AXID> m_layoutObjectMapping;
-    WillBeHeapHashMap<RawPtrWillBeMember<Node>, AXID> m_nodeObjectMapping;
+    HeapHashMap<Member<Node>, AXID> m_nodeObjectMapping;
     HashMap<AbstractInlineTextBox*, AXID> m_inlineTextBoxObjectMapping;
     int m_modificationCount;
 

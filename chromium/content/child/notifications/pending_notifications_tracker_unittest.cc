@@ -4,6 +4,7 @@
 
 #include "content/child/notifications/pending_notifications_tracker.h"
 
+#include <memory>
 #include <vector>
 
 #include "base/base_paths.h"
@@ -13,7 +14,6 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -25,8 +25,8 @@
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
+#include "third_party/WebKit/public/platform/WebURLLoaderMockFactory.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/platform/WebUnitTestSupport.h"
 #include "third_party/WebKit/public/platform/modules/notifications/WebNotificationData.h"
 #include "third_party/WebKit/public/platform/modules/notifications/WebNotificationDelegate.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -37,6 +37,7 @@ namespace content {
 namespace {
 
 const char kBaseUrl[] = "http://test.com/";
+const char kIcon48x48[] = "48x48.png";
 const char kIcon100x100[] = "100x100.png";
 const char kIcon110x110[] = "110x110.png";
 const char kIcon120x120[] = "120x120.png";
@@ -59,7 +60,7 @@ class PendingNotificationsTrackerTest : public testing::Test {
             base::ThreadTaskRunnerHandle::Get())) {}
 
   ~PendingNotificationsTrackerTest() override {
-    UnitTestSupport()->unregisterAllMockedURLs();
+    GetURLLoaderMockFactory()->unregisterAllURLs();
   }
 
   void DidFetchResources(size_t index, const NotificationResources& resources) {
@@ -86,8 +87,8 @@ class PendingNotificationsTrackerTest : public testing::Test {
     return tracker_->delegate_to_pending_id_map_.size();
   }
 
-  blink::WebUnitTestSupport* UnitTestSupport() {
-    return blink::Platform::current()->unitTestSupport();
+  blink::WebURLLoaderMockFactory* GetURLLoaderMockFactory() {
+    return blink::Platform::current()->getURLLoaderMockFactory();
   }
 
   // Registers a mocked url. When fetched, |file_name| will be loaded from the
@@ -110,7 +111,7 @@ class PendingNotificationsTrackerTest : public testing::Test {
     blink::WebString string_file_path =
         blink::WebString::fromUTF8(file_path.MaybeAsASCII());
 
-    UnitTestSupport()->registerMockedURL(url, response, string_file_path);
+    GetURLLoaderMockFactory()->registerURL(url, response, string_file_path);
 
     return url;
   }
@@ -126,13 +127,13 @@ class PendingNotificationsTrackerTest : public testing::Test {
     blink::WebURLError error;
     error.reason = 404;
 
-    UnitTestSupport()->registerMockedErrorURL(url, response, error);
+    GetURLLoaderMockFactory()->registerErrorURL(url, response, error);
     return url;
   }
 
  private:
   base::MessageLoop message_loop_;
-  scoped_ptr<PendingNotificationsTracker> tracker_;
+  std::unique_ptr<PendingNotificationsTracker> tracker_;
   std::vector<NotificationResources> resources_;
 
   DISALLOW_COPY_AND_ASSIGN(PendingNotificationsTrackerTest);
@@ -141,6 +142,7 @@ class PendingNotificationsTrackerTest : public testing::Test {
 TEST_F(PendingNotificationsTrackerTest, OneNotificationMultipleResources) {
   blink::WebNotificationData notification_data;
   notification_data.icon = RegisterMockedURL(kIcon100x100);
+  notification_data.badge = RegisterMockedURL(kIcon48x48);
   notification_data.actions =
       blink::WebVector<blink::WebNotificationAction>(static_cast<size_t>(2));
   notification_data.actions[0].icon = RegisterMockedURL(kIcon110x110);
@@ -155,24 +157,30 @@ TEST_F(PendingNotificationsTrackerTest, OneNotificationMultipleResources) {
   ASSERT_EQ(0u, CountResources());
 
   base::RunLoop().RunUntilIdle();
-  UnitTestSupport()->serveAsynchronousMockedRequests();
+  GetURLLoaderMockFactory()->serveAsynchronousRequests();
 
   ASSERT_EQ(0u, CountPendingNotifications());
   ASSERT_EQ(1u, CountResources());
 
-  ASSERT_FALSE(GetResources(0u)->notification_icon.drawsNothing());
-  ASSERT_EQ(100, GetResources(0u)->notification_icon.width());
+  NotificationResources* resources = GetResources(0u);
 
-  ASSERT_EQ(2u, GetResources(0u)->action_icons.size());
-  ASSERT_FALSE(GetResources(0u)->action_icons[0].drawsNothing());
-  ASSERT_EQ(110, GetResources(0u)->action_icons[0].width());
-  ASSERT_FALSE(GetResources(0u)->action_icons[1].drawsNothing());
-  ASSERT_EQ(120, GetResources(0u)->action_icons[1].width());
+  ASSERT_FALSE(resources->notification_icon.drawsNothing());
+  ASSERT_EQ(100, resources->notification_icon.width());
+
+  ASSERT_FALSE(resources->badge.drawsNothing());
+  ASSERT_EQ(48, resources->badge.width());
+
+  ASSERT_EQ(2u, resources->action_icons.size());
+  ASSERT_FALSE(resources->action_icons[0].drawsNothing());
+  ASSERT_EQ(110, resources->action_icons[0].width());
+  ASSERT_FALSE(resources->action_icons[1].drawsNothing());
+  ASSERT_EQ(120, resources->action_icons[1].width());
 }
 
 TEST_F(PendingNotificationsTrackerTest, LargeIconsAreScaledDown) {
   blink::WebNotificationData notification_data;
   notification_data.icon = RegisterMockedURL(kIcon500x500);
+  notification_data.badge = notification_data.icon;
   notification_data.actions =
       blink::WebVector<blink::WebNotificationAction>(static_cast<size_t>(1));
   notification_data.actions[0].icon = notification_data.icon;
@@ -186,23 +194,29 @@ TEST_F(PendingNotificationsTrackerTest, LargeIconsAreScaledDown) {
   ASSERT_EQ(0u, CountResources());
 
   base::RunLoop().RunUntilIdle();
-  UnitTestSupport()->serveAsynchronousMockedRequests();
+  GetURLLoaderMockFactory()->serveAsynchronousRequests();
 
   ASSERT_EQ(0u, CountPendingNotifications());
   ASSERT_EQ(1u, CountResources());
 
-  ASSERT_FALSE(GetResources(0u)->notification_icon.drawsNothing());
-  ASSERT_EQ(kPlatformNotificationMaxIconSizePx,
-            GetResources(0u)->notification_icon.width());
-  ASSERT_EQ(kPlatformNotificationMaxIconSizePx,
-            GetResources(0u)->notification_icon.height());
+  NotificationResources* resources = GetResources(0u);
 
-  ASSERT_EQ(1u, GetResources(0u)->action_icons.size());
-  ASSERT_FALSE(GetResources(0u)->action_icons[0].drawsNothing());
+  ASSERT_FALSE(resources->notification_icon.drawsNothing());
+  ASSERT_EQ(kPlatformNotificationMaxIconSizePx,
+            resources->notification_icon.width());
+  ASSERT_EQ(kPlatformNotificationMaxIconSizePx,
+            resources->notification_icon.height());
+
+  ASSERT_FALSE(resources->badge.drawsNothing());
+  ASSERT_EQ(kPlatformNotificationMaxBadgeSizePx, resources->badge.width());
+  ASSERT_EQ(kPlatformNotificationMaxBadgeSizePx, resources->badge.height());
+
+  ASSERT_EQ(1u, resources->action_icons.size());
+  ASSERT_FALSE(resources->action_icons[0].drawsNothing());
   ASSERT_EQ(kPlatformNotificationMaxActionIconSizePx,
-            GetResources(0u)->action_icons[0].width());
+            resources->action_icons[0].width());
   ASSERT_EQ(kPlatformNotificationMaxActionIconSizePx,
-            GetResources(0u)->action_icons[0].height());
+            resources->action_icons[0].height());
 }
 
 TEST_F(PendingNotificationsTrackerTest, TwoNotifications) {
@@ -226,7 +240,7 @@ TEST_F(PendingNotificationsTrackerTest, TwoNotifications) {
   ASSERT_EQ(0u, CountResources());
 
   base::RunLoop().RunUntilIdle();
-  UnitTestSupport()->serveAsynchronousMockedRequests();
+  GetURLLoaderMockFactory()->serveAsynchronousRequests();
 
   ASSERT_EQ(0u, CountPendingNotifications());
   ASSERT_EQ(2u, CountResources());
@@ -251,7 +265,7 @@ TEST_F(PendingNotificationsTrackerTest, FetchError) {
   ASSERT_EQ(0u, CountResources());
 
   base::RunLoop().RunUntilIdle();
-  UnitTestSupport()->serveAsynchronousMockedRequests();
+  GetURLLoaderMockFactory()->serveAsynchronousRequests();
 
   ASSERT_EQ(0u, CountPendingNotifications());
   ASSERT_EQ(1u, CountResources());

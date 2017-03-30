@@ -30,18 +30,17 @@
 #ifndef InjectedScriptHost_h
 #define InjectedScriptHost_h
 
+#include "platform/inspector_protocol/Collections.h"
+#include "platform/inspector_protocol/String16.h"
 #include "platform/v8_inspector/public/V8RuntimeAgent.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/RefCounted.h"
-#include "wtf/Vector.h"
-#include "wtf/text/WTFString.h"
 #include <v8.h>
 
 namespace blink {
 
+class V8InspectorSessionImpl;
 class V8EventListenerInfo;
 class V8DebuggerImpl;
-class V8DebuggerAgentImpl;
 
 namespace protocol {
 class DictionaryValue;
@@ -52,28 +51,22 @@ class DictionaryValue;
 // InjectedScriptHost must never implemment methods that have more power over the page than the
 // page already has itself (e.g. origin restriction bypasses).
 
-class InjectedScriptHost : public RefCounted<InjectedScriptHost> {
+class InjectedScriptHost {
 public:
-    static PassRefPtr<InjectedScriptHost> create(V8DebuggerImpl*);
+    static PassOwnPtr<InjectedScriptHost> create(V8DebuggerImpl*, V8InspectorSessionImpl*);
     ~InjectedScriptHost();
-
-    void setClearConsoleCallback(PassOwnPtr<V8RuntimeAgent::ClearConsoleCallback>);
-    void setInspectObjectCallback(PassOwnPtr<V8RuntimeAgent::InspectCallback>);
-    void setDebuggerAgent(V8DebuggerAgentImpl* debuggerAgent) { m_debuggerAgent = debuggerAgent; }
-
-    void disconnect();
 
     void addInspectedObject(PassOwnPtr<V8RuntimeAgent::Inspectable>);
     void clearInspectedObjects();
     V8RuntimeAgent::Inspectable* inspectedObject(unsigned num);
 
-    void inspectImpl(PassRefPtr<protocol::Value> objectToInspect, PassRefPtr<protocol::Value> hints);
+    void inspectImpl(PassOwnPtr<protocol::Value> objectToInspect, PassOwnPtr<protocol::Value> hints);
 
     void clearConsoleMessages();
-    void debugFunction(const String& scriptId, int lineNumber, int columnNumber);
-    void undebugFunction(const String& scriptId, int lineNumber, int columnNumber);
-    void monitorFunction(const String& scriptId, int lineNumber, int columnNumber, const String& functionName);
-    void unmonitorFunction(const String& scriptId, int lineNumber, int columnNumber);
+    void debugFunction(const String16& scriptId, int lineNumber, int columnNumber);
+    void undebugFunction(const String16& scriptId, int lineNumber, int columnNumber);
+    void monitorFunction(const String16& scriptId, int lineNumber, int columnNumber, const String16& functionName);
+    void unmonitorFunction(const String16& scriptId, int lineNumber, int columnNumber);
 
     V8DebuggerImpl* debugger() { return m_debugger; }
 
@@ -82,13 +75,11 @@ public:
     v8::Local<v8::FunctionTemplate> wrapperTemplate(v8::Isolate* isolate) { return v8::Local<v8::FunctionTemplate>::New(isolate, m_wrapperTemplate); }
 
 private:
-    InjectedScriptHost(V8DebuggerImpl*);
+    InjectedScriptHost(V8DebuggerImpl*, V8InspectorSessionImpl*);
 
     V8DebuggerImpl* m_debugger;
-    V8DebuggerAgentImpl* m_debuggerAgent;
-    OwnPtr<V8RuntimeAgent::InspectCallback> m_inspectCallback;
-    OwnPtr<V8RuntimeAgent::ClearConsoleCallback> m_clearConsoleCallback;
-    Vector<OwnPtr<V8RuntimeAgent::Inspectable>> m_inspectedObjects;
+    V8InspectorSessionImpl* m_session;
+    protocol::Vector<OwnPtr<V8RuntimeAgent::Inspectable>> m_inspectedObjects;
     v8::Global<v8::FunctionTemplate> m_wrapperTemplate;
 };
 

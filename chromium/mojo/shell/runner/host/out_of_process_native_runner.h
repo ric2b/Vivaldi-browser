@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include <string>
+
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -32,26 +34,15 @@ class OutOfProcessNativeRunner : public NativeRunner {
   ~OutOfProcessNativeRunner() override;
 
   // NativeRunner:
-  void Start(
+  mojom::ShellClientPtr Start(
       const base::FilePath& app_path,
       const Identity& identity,
       bool start_sandboxed,
-      InterfaceRequest<mojom::ShellClient> request,
       const base::Callback<void(base::ProcessId)>& pid_available_callback,
       const base::Closure& app_completed_callback) override;
-  void InitHost(
-      ScopedHandle channel,
-      InterfaceRequest<mojom::ShellClient> request) override;
 
  private:
-  // |ChildController::StartApp()| callback:
-  void AppCompleted(int32_t result);
-
-  // Callback run when the child process has launched.
-  void OnProcessLaunched(
-      InterfaceRequest<mojom::ShellClient> request,
-      const base::Callback<void(base::ProcessId)>& pid_available_callback,
-      base::ProcessId pid);
+  void AppCompleted();
 
   base::TaskRunner* const launch_process_runner_;
   NativeRunnerDelegate* delegate_;

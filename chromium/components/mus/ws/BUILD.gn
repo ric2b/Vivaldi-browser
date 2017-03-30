@@ -9,20 +9,19 @@ import("//mojo/public/mojo_application_manifest.gni")
 
 source_set("lib") {
   sources = [
+    "accelerator.cc",
+    "accelerator.h",
     "access_policy.h",
     "access_policy_delegate.h",
-    "client_connection.cc",
-    "client_connection.h",
-    "connection_manager.cc",
-    "connection_manager.h",
-    "connection_manager_delegate.cc",
-    "connection_manager_delegate.h",
     "default_access_policy.cc",
     "default_access_policy.h",
+    "display.cc",
+    "display.h",
+    "display_binding.cc",
+    "display_binding.h",
     "display_manager.cc",
     "display_manager.h",
     "display_manager_delegate.h",
-    "display_manager_factory.h",
     "event_dispatcher.cc",
     "event_dispatcher.h",
     "event_dispatcher_delegate.h",
@@ -32,6 +31,12 @@ source_set("lib") {
     "focus_controller_observer.h",
     "operation.cc",
     "operation.h",
+    "platform_display.cc",
+    "platform_display.h",
+    "platform_display_delegate.h",
+    "platform_display_factory.h",
+    "platform_display_init_params.cc",
+    "platform_display_init_params.h",
     "server_window.cc",
     "server_window.h",
     "server_window_delegate.h",
@@ -44,23 +49,37 @@ source_set("lib") {
     "server_window_surface_manager.cc",
     "server_window_surface_manager.h",
     "server_window_tracker.h",
+    "user_display_manager.cc",
+    "user_display_manager.h",
+    "user_id.h",
+    "user_id_tracker.cc",
+    "user_id_tracker.h",
+    "user_id_tracker_observer.h",
     "window_coordinate_conversions.cc",
     "window_coordinate_conversions.h",
     "window_finder.cc",
     "window_finder.h",
     "window_manager_access_policy.cc",
     "window_manager_access_policy.h",
+    "window_manager_factory_registry.cc",
+    "window_manager_factory_registry.h",
+    "window_manager_factory_registry_observer.h",
     "window_manager_factory_service.cc",
     "window_manager_factory_service.h",
+    "window_manager_state.cc",
+    "window_manager_state.h",
+    "window_server.cc",
+    "window_server.h",
+    "window_server_delegate.cc",
+    "window_server_delegate.h",
+    "window_tree.cc",
+    "window_tree.h",
+    "window_tree_binding.cc",
+    "window_tree_binding.h",
     "window_tree_factory.cc",
     "window_tree_factory.h",
-    "window_tree_host_connection.cc",
-    "window_tree_host_connection.h",
-    "window_tree_host_delegate.h",
-    "window_tree_host_impl.cc",
-    "window_tree_host_impl.h",
-    "window_tree_impl.cc",
-    "window_tree_impl.h",
+    "window_tree_host_factory.cc",
+    "window_tree_host_factory.h",
   ]
 
   deps = [
@@ -68,7 +87,7 @@ source_set("lib") {
     "//cc",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
-    "//components/mus/common",
+    "//components/mus/common:mus_common",
     "//components/mus/gles2",
     "//components/mus/public/interfaces",
     "//components/mus/surfaces",
@@ -80,6 +99,7 @@ source_set("lib") {
     "//mojo/public/cpp/bindings:callback",
     "//mojo/services/tracing/public/cpp",
     "//mojo/shell/public/cpp",
+    "//mojo/shell/public/interfaces",
     "//ui/base",
     "//ui/events",
     "//ui/events/platform",
@@ -106,7 +126,7 @@ source_set("test_support") {
 
   deps = [
     "//base",
-    "//components/mus/common",
+    "//components/mus/common:mus_common",
     "//components/mus/public/cpp",
     "//components/mus/public/interfaces",
     "//mojo/common",
@@ -118,8 +138,7 @@ source_set("test_support") {
 group("tests") {
   testonly = true
   deps = [
-    ":apptests",
-    ":window_manager_unittests",
+    ":mus_ws_unittests",
   ]
   if (!is_android) {
     deps +=
@@ -127,8 +146,9 @@ group("tests") {
   }
 }
 
-test("window_manager_unittests") {
+test("mus_ws_unittests") {
   sources = [
+    "display_unittest.cc",
     "event_dispatcher_unittest.cc",
     "focus_controller_unittest.cc",
     "server_window_drawn_tracker_unittest.cc",
@@ -136,9 +156,15 @@ test("window_manager_unittests") {
     "server_window_surface_manager_test_api.h",
     "test_server_window_delegate.cc",
     "test_server_window_delegate.h",
+    "test_utils.cc",
+    "test_utils.h",
     "transient_windows_unittest.cc",
+    "user_display_manager_unittest.cc",
     "window_coordinate_conversions_unittest.cc",
     "window_finder_unittest.cc",
+    "window_manager_client_unittest.cc",
+    "window_manager_state_unittest.cc",
+    "window_tree_client_unittest.cc",
     "window_tree_unittest.cc",
   ]
 
@@ -147,70 +173,48 @@ test("window_manager_unittests") {
     ":test_support",
     "//base",
     "//base/test:test_config",
+    "//base/test:test_support",
     "//cc:cc",
-    "//components/mus/common",
+    "//components/mus/common:mus_common",
     "//components/mus/public/cpp",
+    "//components/mus/public/cpp/tests:test_support",
     "//components/mus/public/interfaces",
     "//components/mus/surfaces",
     "//mojo/converters/geometry",
     "//mojo/converters/input_events",
     "//mojo/converters/transform",
-    "//mojo/edk/test:run_all_unittests",
-    "//mojo/environment:chromium",
     "//mojo/gles2",
-    "//mojo/platform_handle:for_shared_library",
+    "//mojo/platform_handle:for_component",
     "//mojo/public/cpp/bindings:bindings",
+    "//mojo/shell/public/cpp:shell_test_support",
+    "//mojo/shell/public/cpp:sources",
+    "//mojo/shell/public/cpp:test_support",
+    "//mojo/shell/public/cpp/test:run_all_shelltests",
     "//mojo/shell/public/interfaces",
     "//testing/gtest",
     "//ui/events",
     "//ui/gfx",
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
+    "//ui/gl",
     "//ui/mojo/geometry:interfaces",
+    "//ui/mojo/geometry:util",
   ]
 
   if (!is_android) {  # TODO(GYP) Enable on Android when osmesa links.
     deps += [ "//third_party/mesa:osmesa" ]
   }
-}
-
-mojo_native_application("apptests") {
-  output_name = "mus_apptests"
-  testonly = true
-
-  sources = [
-    "window_manager_client_apptest.cc",
-    "window_tree_apptest.cc",
-  ]
-
-  deps = [
-    ":manifest",
-    ":test_support",
-    "//base",
-    "//base/test:test_config",
-    "//components/mus/common",
-    "//components/mus/public/cpp",
-    "//components/mus/public/cpp/tests:test_support",
-    "//components/mus/public/interfaces",
-    "//mojo/converters/geometry",
-    "//mojo/shell/public/cpp:sources",
-    "//mojo/shell/public/cpp:test_support",
-    "//ui/gfx:test_support",
-    "//ui/gfx/geometry",
-    "//ui/mojo/geometry:interfaces",
-    "//ui/mojo/geometry:util",
-  ]
-
-  data_deps = [
-    ":lib",
-  ]
 
   if (use_x11) {
     deps += [ "//tools/xdisplaycheck" ]
   }
+
+  data_deps = [
+    ":mus_ws_unittests_app_manifest",
+  ]
 }
 
-mojo_application_manifest("manifest") {
-  application_name = "mus_apptests"
-  source = "apptest_manifest.json"
+mojo_application_manifest("mus_ws_unittests_app_manifest") {
+  application_name = "mus_ws_unittests_app"
+  source = "mus_ws_unittests_app_manifest.json"
 }

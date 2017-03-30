@@ -4,10 +4,12 @@
 
 #include "modules/webgl/WebGL2RenderingContext.h"
 
+#include "bindings/modules/v8/UnionTypesModules.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/webgl/CHROMIUMSubscribeUniform.h"
 #include "modules/webgl/EXTColorBufferFloat.h"
 #include "modules/webgl/EXTDisjointTimerQuery.h"
@@ -25,10 +27,11 @@
 #include "modules/webgl/WebGLLoseContext.h"
 #include "platform/graphics/gpu/DrawingBuffer.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebGraphicsContext3DProvider.h"
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<CanvasRenderingContext> WebGL2RenderingContext::Factory::create(HTMLCanvasElement* canvas, const CanvasContextCreationAttributes& attrs, Document&)
+CanvasRenderingContext* WebGL2RenderingContext::Factory::create(HTMLCanvasElement* canvas, const CanvasContextCreationAttributes& attrs, Document&)
 {
     if (!RuntimeEnabledFeatures::unsafeES3APIsEnabled()) {
         canvas->dispatchEvent(WebGLContextEvent::create(EventTypeNames::webglcontextcreationerror, false, true, "Creation of WebGL2 contexts disabled."));
@@ -36,18 +39,19 @@ PassOwnPtrWillBeRawPtr<CanvasRenderingContext> WebGL2RenderingContext::Factory::
     }
 
     WebGLContextAttributes attributes = toWebGLContextAttributes(attrs);
-    OwnPtr<WebGraphicsContext3D> context(createWebGraphicsContext3D(canvas, attributes, 2));
-    if (!context)
+    OwnPtr<WebGraphicsContext3DProvider> contextProvider(createWebGraphicsContext3DProvider(canvas, attributes, 2));
+    if (!contextProvider)
         return nullptr;
-    OwnPtr<Extensions3DUtil> extensionsUtil = Extensions3DUtil::create(context.get());
+    gpu::gles2::GLES2Interface* gl = contextProvider->contextGL();
+    OwnPtr<Extensions3DUtil> extensionsUtil = Extensions3DUtil::create(gl);
     if (!extensionsUtil)
         return nullptr;
     if (extensionsUtil->supportsExtension("GL_EXT_debug_marker")) {
-        String contextLabel(String::format("WebGL2RenderingContext-%p", context.get()));
-        context->pushGroupMarkerEXT(contextLabel.ascii().data());
+        String contextLabel(String::format("WebGL2RenderingContext-%p", contextProvider.get()));
+        gl->PushGroupMarkerEXT(0, contextLabel.ascii().data());
     }
 
-    OwnPtrWillBeRawPtr<WebGL2RenderingContext> renderingContext = adoptPtrWillBeNoop(new WebGL2RenderingContext(canvas, context.release(), attributes));
+    WebGL2RenderingContext* renderingContext = new WebGL2RenderingContext(canvas, contextProvider.release(), attributes);
 
     if (!renderingContext->drawingBuffer()) {
         canvas->dispatchEvent(WebGLContextEvent::create(EventTypeNames::webglcontextcreationerror, false, true, "Could not create a WebGL2 context."));
@@ -57,7 +61,7 @@ PassOwnPtrWillBeRawPtr<CanvasRenderingContext> WebGL2RenderingContext::Factory::
     renderingContext->initializeNewContext();
     renderingContext->registerContextExtensions();
 
-    return renderingContext.release();
+    return renderingContext;
 }
 
 void WebGL2RenderingContext::Factory::onError(HTMLCanvasElement* canvas, const String& error)
@@ -65,14 +69,19 @@ void WebGL2RenderingContext::Factory::onError(HTMLCanvasElement* canvas, const S
     canvas->dispatchEvent(WebGLContextEvent::create(EventTypeNames::webglcontextcreationerror, false, true, error));
 }
 
-WebGL2RenderingContext::WebGL2RenderingContext(HTMLCanvasElement* passedCanvas, PassOwnPtr<WebGraphicsContext3D> context, const WebGLContextAttributes& requestedAttributes)
-    : WebGL2RenderingContextBase(passedCanvas, context, requestedAttributes)
+WebGL2RenderingContext::WebGL2RenderingContext(HTMLCanvasElement* passedCanvas, PassOwnPtr<WebGraphicsContext3DProvider> contextProvider, const WebGLContextAttributes& requestedAttributes)
+    : WebGL2RenderingContextBase(passedCanvas, contextProvider, requestedAttributes)
 {
 }
 
 WebGL2RenderingContext::~WebGL2RenderingContext()
 {
 
+}
+
+void WebGL2RenderingContext::setCanvasGetContextResult(RenderingContext& result)
+{
+    result.setWebGL2RenderingContext(this);
 }
 
 void WebGL2RenderingContext::registerContextExtensions()

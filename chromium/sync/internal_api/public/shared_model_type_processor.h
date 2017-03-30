@@ -6,9 +6,9 @@
 #define SYNC_INTERNAL_API_PUBLIC_SHARED_MODEL_TYPE_PROCESSOR_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "sync/api/data_batch.h"
@@ -27,7 +27,7 @@
 namespace syncer_v2 {
 struct ActivationContext;
 class CommitQueue;
-class ModelTypeEntity;
+class ProcessorEntityTracker;
 
 // A sync component embedded on the synced type's thread that helps to handle
 // communication between sync and model type threads.
@@ -38,19 +38,10 @@ class SYNC_EXPORT SharedModelTypeProcessor : public ModelTypeProcessor,
   SharedModelTypeProcessor(syncer::ModelType type, ModelTypeService* service);
   ~SharedModelTypeProcessor() override;
 
-  typedef base::Callback<void(syncer::SyncError, scoped_ptr<ActivationContext>)>
-      StartCallback;
-
-  // Called by the DataTypeController to gather additional information needed
-  // before a CommitQueue object can be created for this model type. Once the
-  // metadata has been loaded, the info is collected and given to |callback|.
-  // Once called, this can only be called again if sync is disconnected.
-  void OnSyncStarting(StartCallback callback);
-
-  // Disconnect this processor from the sync engine. Change metadata will
-  // continue being processed and persisted, but no commits can be made until
-  // the next time sync is connected.
-  void DisconnectSync();
+  // An easily bound function that constructs a SharedModelTypeProcessor.
+  static std::unique_ptr<ModelTypeChangeProcessor> CreateAsChangeProcessor(
+      syncer::ModelType type,
+      ModelTypeService* service);
 
   // Indicates that we no longer want to do any sync-related things for this
   // data type. Severs all ties to the sync thread, deletes all local sync
@@ -67,18 +58,16 @@ class SYNC_EXPORT SharedModelTypeProcessor : public ModelTypeProcessor,
 
   // ModelTypeChangeProcessor implementation.
   void Put(const std::string& client_tag,
-           scoped_ptr<EntityData> entity_data,
+           std::unique_ptr<EntityData> entity_data,
            MetadataChangeList* metadata_change_list) override;
   void Delete(const std::string& client_tag,
               MetadataChangeList* metadata_change_list) override;
-  void OnMetadataLoaded(scoped_ptr<MetadataBatch> batch) override;
-
-  // Returns the long-lived WeakPtr that is intended to be registered with the
-  // ProfileSyncService.
-  base::WeakPtr<SharedModelTypeProcessor> AsWeakPtrForUI();
+  void OnMetadataLoaded(std::unique_ptr<MetadataBatch> batch) override;
+  void OnSyncStarting(const StartCallback& callback) override;
 
   // ModelTypeProcessor implementation.
-  void ConnectSync(scoped_ptr<CommitQueue> worker) override;
+  void ConnectSync(std::unique_ptr<CommitQueue> worker) override;
+  void DisconnectSync() override;
   void OnCommitCompleted(const sync_pb::DataTypeState& type_state,
                          const CommitResponseDataList& response_list) override;
   void OnUpdateReceived(const sync_pb::DataTypeState& type_state,
@@ -87,15 +76,22 @@ class SYNC_EXPORT SharedModelTypeProcessor : public ModelTypeProcessor,
  private:
   friend class SharedModelTypeProcessorTest;
 
-  using EntityMap = std::map<std::string, scoped_ptr<ModelTypeEntity>>;
-  using UpdateMap = std::map<std::string, scoped_ptr<UpdateResponseData>>;
+  using EntityMap =
+      std::map<std::string, std::unique_ptr<ProcessorEntityTracker>>;
+  using UpdateMap = std::map<std::string, std::unique_ptr<UpdateResponseData>>;
 
   // Callback for ModelTypeService::GetData(). Used when we need to load data
   // for pending commits during the initialization process.
-  void OnDataLoaded(syncer::SyncError error, scoped_ptr<DataBatch> data_batch);
+  void OnDataLoaded(syncer::SyncError error,
+                    std::unique_ptr<DataBatch> data_batch);
 
   // Check conditions, and if met inform sync that we are ready to connect.
   void ConnectIfReady();
+
+  // Resolve a conflict between |update| and the pending commit in |entity|.
+  ConflictResolution::Type ResolveConflict(const UpdateResponseData& update,
+                                           ProcessorEntityTracker* entity,
+                                           EntityChangeList* changes);
 
   // Handle the first update received from the server after being enabled.
   void OnInitialUpdateReceived(const sync_pb::DataTypeState& type_state,
@@ -108,17 +104,18 @@ class SYNC_EXPORT SharedModelTypeProcessor : public ModelTypeProcessor,
   std::string GetHashForTag(const std::string& tag);
 
   // Gets the entity for the given tag, or null if there isn't one.
-  ModelTypeEntity* GetEntityForTag(const std::string& tag);
+  ProcessorEntityTracker* GetEntityForTag(const std::string& tag);
 
   // Gets the entity for the given tag hash, or null if there isn't one.
-  ModelTypeEntity* GetEntityForTagHash(const std::string& tag_hash);
+  ProcessorEntityTracker* GetEntityForTagHash(const std::string& tag_hash);
 
   // Create an entity in the entity map for |tag| and return a pointer to it.
   // Requires that no entity for |tag| already exists in the map.
-  ModelTypeEntity* CreateEntity(const std::string& tag, const EntityData& data);
+  ProcessorEntityTracker* CreateEntity(const std::string& tag,
+                                       const EntityData& data);
 
   // Version of the above that generates a tag for |data|.
-  ModelTypeEntity* CreateEntity(const EntityData& data);
+  ProcessorEntityTracker* CreateEntity(const EntityData& data);
 
   syncer::ModelType type_;
   sync_pb::DataTypeState data_type_state_;
@@ -137,7 +134,7 @@ class SYNC_EXPORT SharedModelTypeProcessor : public ModelTypeProcessor,
   // The interface hides the posting of tasks across threads as well as the
   // CommitQueue's implementation.  Both of these features are
   // useful in tests.
-  scoped_ptr<CommitQueue> worker_;
+  std::unique_ptr<CommitQueue> worker_;
 
   // The set of sync entities known to this object.
   EntityMap entities_;
@@ -147,13 +144,8 @@ class SYNC_EXPORT SharedModelTypeProcessor : public ModelTypeProcessor,
   // become invalid.
   ModelTypeService* const service_;
 
-  // We use two different WeakPtrFactories because we want the pointers they
-  // issue to have different lifetimes.  When asked to disconnect from the sync
-  // thread, we want to make sure that no tasks generated as part of the
-  // now-obsolete connection to affect us.  But we also want the WeakPtr we
-  // sent to the UI thread to remain valid.
+  // WeakPtrFactory for this processor which will be sent to sync thread.
   base::WeakPtrFactory<SharedModelTypeProcessor> weak_ptr_factory_;
-  base::WeakPtrFactory<SharedModelTypeProcessor> weak_ptr_factory_for_sync_;
 };
 
 }  // namespace syncer_v2

@@ -10,9 +10,6 @@
 
 namespace blink {
 
-enum class WebAppBannerPromptReply;
-enum class WebSandboxFlags;
-enum class WebTreeScopeType;
 class WebAutofillClient;
 class WebContentSettingsClient;
 class WebDevToolsAgent;
@@ -22,6 +19,10 @@ class WebNode;
 class WebScriptExecutionCallback;
 class WebSuspendableTask;
 class WebTestInterfaceFactory;
+enum class WebAppBannerPromptReply;
+enum class WebCachePolicy;
+enum class WebSandboxFlags;
+enum class WebTreeScopeType;
 struct WebPrintPresetOptions;
 
 // Interface for interacting with in process frames. This contains methods that
@@ -31,7 +32,7 @@ class WebLocalFrame : public WebFrame {
 public:
     // Creates a WebFrame. Delete this WebFrame by calling WebFrame::close().
     // It is valid to pass a null client pointer.
-    BLINK_EXPORT static WebLocalFrame* create(WebTreeScopeType, WebFrameClient*);
+    BLINK_EXPORT static WebLocalFrame* create(WebTreeScopeType, WebFrameClient*, WebFrame* opener = nullptr);
 
     // Used to create a provisional local frame in prepration for replacing a
     // remote frame if the load commits. The returned frame is only partially
@@ -87,8 +88,7 @@ public:
     // Navigation ----------------------------------------------------------
 
     // Returns a WebURLRequest corresponding to the load of the WebHistoryItem.
-    virtual WebURLRequest requestFromHistoryItem(const WebHistoryItem&, WebURLRequest::CachePolicy)
-        const = 0;
+    virtual WebURLRequest requestFromHistoryItem(const WebHistoryItem&, WebCachePolicy) const = 0;
 
     // Returns a WebURLRequest corresponding to the reload of the current
     // HistoryItem.
@@ -133,8 +133,8 @@ public:
     // instead.
     virtual bool isResourceLoadInProgress() const = 0;
 
-    // Returns true if there is a pending redirect or location change.
-    // This could be caused by:
+    // Returns true if there is a pending redirect or location change
+    // within specified interval (in seconds). This could be caused by:
     // * an HTTP Refresh header
     // * an X-Frame-Options header
     // * the respective http-equiv meta tags
@@ -142,7 +142,7 @@ public:
     // * CSP policy block
     // * reload
     // * form submission
-    virtual bool isNavigationScheduled() const = 0;
+    virtual bool isNavigationScheduledWithin(double intervalInSeconds) const = 0;
 
     // Override the normal rules for whether a load has successfully committed
     // in this frame. Used to propagate state when this frame has navigated

@@ -8,8 +8,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <deque>
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -24,6 +26,7 @@
 #include "net/base/network_change_notifier.h"
 #include "net/cert/cert_database.h"
 #include "net/http/http_server_properties.h"
+#include "net/http/http_stream_factory.h"
 #include "net/log/net_log.h"
 #include "net/proxy/proxy_server.h"
 #include "net/quic/network_connection.h"
@@ -55,6 +58,7 @@ class QuicServerInfoFactory;
 class QuicStreamFactory;
 class SocketPerformanceWatcherFactory;
 class TransportSecurityState;
+class BidirectionalStreamImpl;
 
 namespace test {
 class QuicStreamFactoryPeer;
@@ -76,7 +80,7 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
   int Request(const HostPortPair& host_port_pair,
               PrivacyMode privacy_mode,
               int cert_verify_flags,
-              base::StringPiece origin_host,
+              const GURL& url,
               base::StringPiece method,
               const BoundNetLog& net_log,
               const CompletionCallback& callback);
@@ -87,9 +91,12 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
   // returns the amount of time waiting job should be delayed.
   base::TimeDelta GetTimeDelayForWaitingJob() const;
 
-  scoped_ptr<QuicHttpStream> ReleaseStream();
+  scoped_ptr<QuicHttpStream> CreateStream();
 
-  void set_stream(scoped_ptr<QuicHttpStream> stream);
+  scoped_ptr<BidirectionalStreamImpl> CreateBidirectionalStreamImpl();
+
+  // Sets |session_|.
+  void SetSession(QuicChromiumClientSession* session);
 
   const std::string& origin_host() const { return origin_host_; }
 
@@ -101,10 +108,11 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
   QuicStreamFactory* factory_;
   HostPortPair host_port_pair_;
   std::string origin_host_;
+  std::string url_;
   PrivacyMode privacy_mode_;
   BoundNetLog net_log_;
   CompletionCallback callback_;
-  scoped_ptr<QuicHttpStream> stream_;
+  base::WeakPtr<QuicChromiumClientSession> session_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicStreamRequest);
 };
@@ -154,7 +162,8 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       int idle_connection_timeout_seconds,
       bool migrate_sessions_on_network_change,
       bool migrate_sessions_early,
-      const QuicTagVector& connection_options);
+      const QuicTagVector& connection_options,
+      bool enable_token_binding);
   ~QuicStreamFactory() override;
 
   // Returns true if there is an existing session to |server_id| which can be
@@ -171,7 +180,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   int Create(const HostPortPair& host_port_pair,
              PrivacyMode privacy_mode,
              int cert_verify_flags,
-             base::StringPiece origin_host,
+             const GURL& url,
              base::StringPiece method,
              const BoundNetLog& net_log,
              QuicStreamRequest* request);
@@ -538,6 +547,8 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   std::set<HostPortPair> quic_supported_servers_at_startup_;
 
   NetworkConnection network_connection_;
+
+  int num_push_streams_created_;
 
   QuicClientPushPromiseIndex push_promise_index_;
 

@@ -52,6 +52,7 @@ class LinuxPort(base.Port):
     DEFAULT_BUILD_DIRECTORIES = ('out',)
 
     BUILD_REQUIREMENTS_URL = 'https://chromium.googlesource.com/chromium/src/+/master/docs/linux_build_instructions.md'
+
     @classmethod
     def determine_full_port_name(cls, host, options, port_name):
         if port_name.endswith('linux'):
@@ -59,7 +60,6 @@ class LinuxPort(base.Port):
             version = host.platform.os_version
             return port_name + '-' + version
         return port_name
-
 
     def __init__(self, host, port_name, **kwargs):
         super(LinuxPort, self).__init__(host, port_name, **kwargs)
@@ -121,9 +121,9 @@ class LinuxPort(base.Port):
     def _wdiff_missing_message(self):
         return 'wdiff is not installed; please install using "sudo apt-get install wdiff"'
 
-    def _path_to_driver(self, configuration=None):
+    def _path_to_driver(self, target=None):
         binary_name = self.driver_name()
-        return self._build_path_with_configuration(configuration, binary_name)
+        return self._build_path_with_target(target, binary_name)
 
     def _path_to_helper(self):
         return None

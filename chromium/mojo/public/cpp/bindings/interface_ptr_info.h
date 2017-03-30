@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <utility>
 
-#include "mojo/public/cpp/system/macros.h"
+#include "base/move.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
 namespace mojo {
@@ -17,7 +17,7 @@ namespace mojo {
 // interface implementation, which could be used to construct an InterfacePtr.
 template <typename Interface>
 class InterfacePtrInfo {
-  MOJO_MOVE_ONLY_TYPE(InterfacePtrInfo);
+  MOVE_ONLY_TYPE_FOR_CPP_03(InterfacePtrInfo);
 
  public:
   InterfacePtrInfo() : version_(0u) {}

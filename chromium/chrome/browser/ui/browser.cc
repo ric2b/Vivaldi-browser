@@ -61,6 +61,9 @@
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/keep_alive_registry.h"
+#include "chrome/browser/lifetime/keep_alive_types.h"
+#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/memory/tab_manager_web_contents_data.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/pepper_broker_infobar_delegate.h"
@@ -388,7 +391,6 @@ Browser::Browser(const CreateParams& params)
       override_bounds_(params.initial_bounds),
       initial_show_state_(params.initial_show_state),
       is_session_restore_(params.is_session_restore),
-      host_desktop_type_(chrome::HOST_DESKTOP_TYPE_NATIVE),
       content_setting_bubble_model_delegate_(
           new BrowserContentSettingBubbleModelDelegate(this)),
       toolbar_model_delegate_(new BrowserToolbarModelDelegate(this)),
@@ -662,16 +664,10 @@ base::string16 Browser::GetWindowTitleForCurrentTab() const {
   if (title.empty())
     title = CoreTabHelper::GetDefaultTitle();
 
-#if defined(OS_MACOSX)
-  // On Mac, we don't want to suffix the page title with
-  // the application name.
+#if defined(OS_MACOSX) || defined(USE_ASH)
+  // On Mac and Ash, we don't want to suffix the page title with the application
+  // name.
   return title;
-#elif defined(USE_ASH)
-  // On Ash, we don't want to suffix the page title with the application name,
-  // but on Windows, where USE_ASH can also be true, we still want the prefix
-  // on desktop.
-  if (host_desktop_type() == chrome::HOST_DESKTOP_TYPE_ASH)
-    return title;
 #endif
   // Don't append the app name to window titles on app frames and app popups
   return is_app() ?
@@ -745,7 +741,8 @@ void Browser::OnWindowClosing() {
   // AppController on the Mac, or BackgroundContentsService for background
   // pages).
   bool should_quit_if_last_browser =
-      browser_shutdown::IsTryingToQuit() || !chrome::WillKeepAlive();
+      browser_shutdown::IsTryingToQuit() ||
+      !KeepAliveRegistry::GetInstance()->IsKeepingAlive();
 
   if (should_quit_if_last_browser && ShouldStartShutdown())
     browser_shutdown::OnShutdownStarting(browser_shutdown::WINDOW_CLOSE);
@@ -987,6 +984,14 @@ void Browser::CloseModalSigninWindow() {
 
 void Browser::ShowModalSyncConfirmationWindow() {
   signin_view_controller_.ShowModalSyncConfirmationDialog(this);
+}
+
+void Browser::RegisterKeepAlive() {
+  keep_alive_.reset(new ScopedKeepAlive(KeepAliveOrigin::BROWSER,
+                                        KeepAliveRestartOption::DISABLED));
+}
+void Browser::UnregisterKeepAlive() {
+  keep_alive_.reset();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1485,12 +1490,12 @@ void Browser::ShowCertificateViewerInDevTools(
     devtools_window->ShowCertificateViewer(cert_id);
 }
 
-scoped_ptr<content::BluetoothChooser> Browser::RunBluetoothChooser(
+std::unique_ptr<content::BluetoothChooser> Browser::RunBluetoothChooser(
     content::RenderFrameHost* frame,
     const content::BluetoothChooser::EventHandler& event_handler) {
-  scoped_ptr<BluetoothChooserDesktop> bluetooth_chooser_desktop(
+  std::unique_ptr<BluetoothChooserDesktop> bluetooth_chooser_desktop(
       new BluetoothChooserDesktop(event_handler));
-  scoped_ptr<BluetoothChooserBubbleController> bubble_controller(
+  std::unique_ptr<BluetoothChooserBubbleController> bubble_controller(
       new BluetoothChooserBubbleController(frame));
   BluetoothChooserBubbleController* bubble_controller_ptr =
       bubble_controller.get();
@@ -1507,6 +1512,11 @@ scoped_ptr<content::BluetoothChooser> Browser::RunBluetoothChooser(
   bubble_controller_ptr->set_bubble_reference(bubble_reference);
 
   return std::move(bluetooth_chooser_desktop);
+}
+
+void Browser::RequestAppBannerFromDevTools(content::WebContents* web_contents) {
+  banners::AppBannerManagerDesktop::CreateForWebContents(web_contents);
+  RequestAppBanner(web_contents);
 }
 
 bool Browser::RequestAppBanner(content::WebContents* web_contents) {
@@ -1619,7 +1629,8 @@ void Browser::NavigationStateChanged(WebContents* source,
   // need to update the command state early on load to always present usable
   // actions in the face of slow-to-commit pages.
   if (changed_flags & (content::INVALIDATE_TYPE_URL |
-                       content::INVALIDATE_TYPE_LOAD))
+                       content::INVALIDATE_TYPE_LOAD |
+                       content::INVALIDATE_TYPE_TAB))
     command_controller_->TabStateChanged();
 
   if (hosted_app_controller_)
@@ -1695,10 +1706,8 @@ void Browser::UpdateTargetURL(WebContents* source, const GURL& url) {
   if (!GetStatusBubble())
     return;
 
-  if (source == tab_strip_model_->GetActiveWebContents()) {
-    PrefService* prefs = profile_->GetPrefs();
-    GetStatusBubble()->SetURL(url, prefs->GetString(prefs::kAcceptLanguages));
-  }
+  if (source == tab_strip_model_->GetActiveWebContents())
+    GetStatusBubble()->SetURL(url);
 }
 
 void Browser::ContentsMouseEvent(WebContents* source,
@@ -1714,7 +1723,7 @@ void Browser::ContentsMouseEvent(WebContents* source,
   if (source == tab_strip_model_->GetActiveWebContents()) {
     GetStatusBubble()->MouseMoved(location, exited);
     if (exited)
-      GetStatusBubble()->SetURL(GURL(), std::string());
+      GetStatusBubble()->SetURL(GURL());
   }
 }
 

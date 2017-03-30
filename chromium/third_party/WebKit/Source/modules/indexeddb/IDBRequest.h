@@ -29,6 +29,7 @@
 #ifndef IDBRequest_h
 #define IDBRequest_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/dom/ActiveDOMObject.h"
@@ -56,16 +57,17 @@ class IDBValue;
 
 class MODULES_EXPORT IDBRequest
     : public RefCountedGarbageCollectedEventTargetWithInlineData<IDBRequest>
+    , public ActiveScriptWrappable
     , public ActiveDOMObject {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(IDBRequest);
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(IDBRequest);
+    USING_GARBAGE_COLLECTED_MIXIN(IDBRequest);
 public:
     static IDBRequest* create(ScriptState*, IDBAny* source, IDBTransaction*);
     ~IDBRequest() override;
     DECLARE_VIRTUAL_TRACE();
 
-    ScriptState* scriptState() { return m_scriptState.get(); }
+    ScriptState* getScriptState() { return m_scriptState.get(); }
     ScriptValue result(ExceptionState&);
     DOMException* error(ExceptionState&) const;
     ScriptValue source() const;
@@ -109,13 +111,15 @@ public:
     virtual void onUpgradeNeeded(int64_t oldVersion, PassOwnPtr<WebIDBDatabase>, const IDBDatabaseMetadata&, WebIDBDataLoss, String dataLossMessage) { ASSERT_NOT_REACHED(); }
     virtual void onSuccess(PassOwnPtr<WebIDBDatabase>, const IDBDatabaseMetadata&) { ASSERT_NOT_REACHED(); }
 
-    // ActiveDOMObject
+    // ActiveScriptWrappable
     bool hasPendingActivity() const final;
+
+    // ActiveDOMObject
     void stop() final;
 
     // EventTarget
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const final;
+    ExecutionContext* getExecutionContext() const final;
     void uncaughtExceptionInEventHandler() final;
 
     // Called by a version change transaction that has finished to set this
@@ -127,14 +131,14 @@ public:
 
 protected:
     IDBRequest(ScriptState*, IDBAny* source, IDBTransaction*);
-    void enqueueEvent(PassRefPtrWillBeRawPtr<Event>);
+    void enqueueEvent(Event*);
     void dequeueEvent(Event*);
     virtual bool shouldEnqueueEvent() const;
     void onSuccessInternal(IDBAny*);
     void setResult(IDBAny*);
 
     // EventTarget
-    DispatchEventResult dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) override;
+    DispatchEventResult dispatchEventInternal(Event*) override;
 
     bool m_contextStopped = false;
     Member<IDBTransaction> m_transaction;
@@ -152,7 +156,7 @@ private:
     Member<DOMException> m_error;
 
     bool m_hasPendingActivity = true;
-    WillBeHeapVector<RefPtrWillBeMember<Event>> m_enqueuedEvents;
+    HeapVector<Member<Event>> m_enqueuedEvents;
 
     // Only used if the result type will be a cursor.
     IndexedDB::CursorType m_cursorType = IndexedDB::CursorKeyAndValue;

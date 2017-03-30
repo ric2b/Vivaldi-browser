@@ -8,8 +8,8 @@ component("browser") {
   sources = [
     "blob/blob_async_builder_host.cc",
     "blob/blob_async_builder_host.h",
-    "blob/blob_async_transport_strategy.cc",
-    "blob/blob_async_transport_strategy.h",
+    "blob/blob_async_transport_request_builder.cc",
+    "blob/blob_async_transport_request_builder.h",
     "blob/blob_data_builder.cc",
     "blob/blob_data_builder.h",
     "blob/blob_data_handle.cc",
@@ -188,13 +188,15 @@ component("browser") {
     "//build/config/compiler:wexit_time_destructors",
   ]
 
+  public_deps = [
+    "//storage/common",
+  ]
   deps = [
     "//base",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
     "//net",
     "//sql",
-    "//storage/common",
     "//third_party/leveldatabase",
     "//third_party/sqlite",
     "//url",

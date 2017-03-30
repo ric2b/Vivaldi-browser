@@ -31,7 +31,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/singleton_tabs.h"
-#include "chrome/browser/ui/webui/options/options_handlers_helper.h"
+#include "chrome/browser/ui/webui/profile_helper.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/chrome_switches.h"
@@ -94,7 +94,7 @@ SyncConfigInfo::SyncConfigInfo()
 SyncConfigInfo::~SyncConfigInfo() {}
 
 bool GetConfiguration(const std::string& json, SyncConfigInfo* config) {
-  scoped_ptr<base::Value> parsed_value = base::JSONReader::Read(json);
+  std::unique_ptr<base::Value> parsed_value = base::JSONReader::Read(json);
   base::DictionaryValue* result;
   if (!parsed_value || !parsed_value->GetAsDictionary(&result)) {
     DLOG(ERROR) << "GetConfiguration() not passed a Dictionary";
@@ -200,6 +200,14 @@ void SyncSetupHandler::GetStaticLocalizedValues(
   localized_strings->SetString(
       "encryptionSectionMessage",
       GetStringFUTF16(IDS_SYNC_ENCRYPTION_SECTION_MESSAGE, product_name));
+  localized_strings->SetString(
+      "personalizeGoogleServicesTitle",
+      GetStringUTF16(IDS_SYNC_CONFIRMATION_PERSONALIZE_SERVICES_TITLE));
+  localized_strings->SetString(
+      "personalizeGoogleServicesMessage",
+      GetStringFUTF16(
+          IDS_SYNC_PERSONALIZE_GOOGLE_SERVICES_MESSAGE,
+          base::ASCIIToUTF16(chrome::kGoogleAccountActivityControlsURL)));
   localized_strings->SetString(
       "passphraseRecover",
       GetStringFUTF16(
@@ -685,7 +693,7 @@ void SyncSetupHandler::HandleStopSyncing(const base::ListValue* args) {
 
   if (delete_profile) {
     // Do as BrowserOptionsHandler::DeleteProfile().
-    options::helper::DeleteProfileAtPath(GetProfile()->GetPath(), web_ui());
+    webui::DeleteProfileAtPath(GetProfile()->GetPath(), web_ui());
   }
 }
 #endif

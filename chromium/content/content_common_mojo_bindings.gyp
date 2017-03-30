@@ -9,18 +9,19 @@
       'target_name': 'content_common_mojo_bindings_mojom',
       'type': 'none',
       'variables': {
+        'mojom_extra_generator_args': [
+          '--typemap', '<(DEPTH)/url/mojo/origin.typemap',
+          '--typemap', '<(DEPTH)/url/mojo/gurl.typemap',
+        ],
         'mojom_files': [
           # NOTE: Sources duplicated in //content/common/BUILD.gn:mojo_bindings.
           'common/application_setup.mojom',
           'common/background_sync_service.mojom',
-          'common/geolocation_service.mojom',
           'common/image_downloader/image_downloader.mojom',
           'common/leveldb_wrapper.mojom',
-          'common/permission_service.mojom',
           'common/presentation/presentation_service.mojom',
           'common/process_control.mojom',
           'common/render_frame_setup.mojom',
-          'common/service_port_service.mojom',
           'common/service_worker/embedded_worker_setup.mojom',
           'common/storage_partition_service.mojom',
           'common/vr_service.mojom',
@@ -29,20 +30,22 @@
           # NOTE: Sources duplicated in
           # //content/public/common/BUILD.gn:mojo_bindings.
           'public/common/background_sync.mojom',
-          'public/common/mojo_geoposition.mojom',
-          'public/common/permission_status.mojom',
           'public/common/service_worker_event_status.mojom',
         ],
       },
       'dependencies': [
         '../components/leveldb/leveldb.gyp:leveldb_bindings_mojom',
         '../mojo/mojo_base.gyp:mojo_application_bindings',
-        '../mojo/mojo_base.gyp:mojo_environment_chromium',
         '../mojo/mojo_public.gyp:mojo_cpp_bindings',
         '../skia/skia.gyp:skia_mojo',
+        '../third_party/WebKit/public/blink.gyp:mojo_bindings',
         '../ui/mojo/geometry/mojo_bindings.gyp:mojo_geometry_bindings',
+        '../url/url.gyp:url_interfaces_mojom',
       ],
-      'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ], 
+      'export_dependent_settings': [
+        '../url/url.gyp:url_interfaces_mojom',
+      ],
+      'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
     },
     {
       'target_name': 'content_common_mojo_bindings',

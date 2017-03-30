@@ -43,17 +43,15 @@
 #include "cc/trees/layer_tree_settings.h"
 #include "content/browser/android/child_process_launcher_android.h"
 #include "content/browser/compositor/browser_compositor_overlay_candidate_validator_android.h"
+#include "content/browser/compositor/gl_helper.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_surface_tracker.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/common/gpu/client/command_buffer_proxy_impl.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
-#include "content/common/gpu/client/gl_helper.h"
-#include "content/common/gpu/client/gpu_channel_host.h"
 #include "content/common/gpu/client/webgraphicscontext3d_command_buffer_impl.h"
-#include "content/common/gpu/gpu_process_launch_causes.h"
+#include "content/common/gpu_process_launch_causes.h"
 #include "content/common/host_shared_bitmap_manager.h"
 #include "content/public/browser/android/compositor.h"
 #include "content/public/browser/android/compositor_client.h"
@@ -61,6 +59,8 @@
 #include "gpu/blink/webgraphicscontext3d_in_process_command_buffer_impl.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/ipc/client/command_buffer_proxy_impl.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkMallocPixelRef.h"
@@ -128,11 +128,11 @@ class OutputSurfaceWithoutParent : public cc::OutputSurface,
   }
 
  private:
-  CommandBufferProxyImpl* GetCommandBufferProxy() {
+  gpu::CommandBufferProxyImpl* GetCommandBufferProxy() {
     ContextProviderCommandBuffer* provider_command_buffer =
         static_cast<content::ContextProviderCommandBuffer*>(
             context_provider_.get());
-    CommandBufferProxyImpl* command_buffer_proxy =
+    gpu::CommandBufferProxyImpl* command_buffer_proxy =
         provider_command_buffer->GetCommandBufferProxy();
     DCHECK(command_buffer_proxy);
     return command_buffer_proxy;
@@ -221,16 +221,6 @@ void Compositor::Initialize() {
 }
 
 // static
-const cc::LayerSettings& Compositor::LayerSettings() {
-  return ui::WindowAndroidCompositor::LayerSettings();
-}
-
-// static
-void Compositor::SetLayerSettings(const cc::LayerSettings& settings) {
-  ui::WindowAndroidCompositor::SetLayerSettings(settings);
-}
-
-// static
 bool CompositorImpl::IsInitialized() {
   return g_initialized;
 }
@@ -252,9 +242,9 @@ scoped_ptr<cc::SurfaceIdAllocator> CompositorImpl::CreateSurfaceIdAllocator() {
 
 CompositorImpl::CompositorImpl(CompositorClient* client,
                                gfx::NativeWindow root_window)
-    : root_layer_(cc::Layer::Create(Compositor::LayerSettings())),
-      resource_manager_(root_window),
+    : root_layer_(cc::Layer::Create()),
       surface_id_allocator_(CreateSurfaceIdAllocator()),
+      resource_manager_(root_window),
       has_transparent_background_(false),
       device_scale_factor_(1),
       window_(NULL),
@@ -328,9 +318,6 @@ void CompositorImpl::SetSurface(jobject surface) {
     window_ = window;
     ANativeWindow_acquire(window);
     surface_id_ = tracker->AddSurfaceForNativeWidget(window);
-    tracker->SetSurfaceHandle(
-        surface_id_,
-        gfx::GLSurfaceHandle(surface_id_, gfx::NATIVE_DIRECT));
     // Register first, SetVisible() might create an OutputSurface.
     RegisterViewSurface(surface_id_, j_surface.obj());
     SetVisible(true);
@@ -354,9 +341,6 @@ void CompositorImpl::CreateLayerTreeHost() {
   settings.initial_debug_state.show_fps_counter =
       command_line->HasSwitch(cc::switches::kUIShowFPSCounter);
   settings.single_thread_proxy_scheduler = true;
-
-  settings.use_compositor_animation_timelines = !command_line->HasSwitch(
-      switches::kDisableAndroidCompositorAnimationTimelines);
 
   cc::LayerTreeHost::InitParams params;
   params.client = this;
@@ -427,8 +411,8 @@ void CompositorImpl::SetNeedsComposite() {
 
 static scoped_ptr<WebGraphicsContext3DCommandBufferImpl>
 CreateGpuProcessViewContext(
-    const scoped_refptr<GpuChannelHost>& gpu_channel_host,
-    const blink::WebGraphicsContext3D::Attributes attributes,
+    const scoped_refptr<gpu::GpuChannelHost>& gpu_channel_host,
+    const gpu::gles2::ContextCreationAttribHelper& attributes,
     int surface_id) {
   GURL url("chrome://gpu/Compositor::createContext3D");
   static const size_t kBytesPerPixel = 4;
@@ -444,15 +428,14 @@ CreateGpuProcessViewContext(
   limits.max_transfer_buffer_size = std::min(
       3 * full_screen_texture_size_in_bytes, kDefaultMaxTransferBufferSize);
   limits.mapped_memory_reclaim_limit = 2 * 1024 * 1024;
-  bool lose_context_when_out_of_memory = true;
-  return make_scoped_ptr(
-      new WebGraphicsContext3DCommandBufferImpl(surface_id,
-                                                url,
-                                                gpu_channel_host.get(),
-                                                attributes,
-                                                lose_context_when_out_of_memory,
-                                                limits,
-                                                NULL));
+  GpuSurfaceTracker* tracker = GpuSurfaceTracker::Get();
+  gpu::SurfaceHandle surface_handle = tracker->GetSurfaceHandle(surface_id);
+  bool share_resources = true;
+  bool automatic_flushes = false;
+  return make_scoped_ptr(new WebGraphicsContext3DCommandBufferImpl(
+      surface_handle, url, gpu_channel_host.get(), attributes,
+      gfx::PreferIntegratedGpu, share_resources, automatic_flushes, limits,
+      nullptr));
 }
 
 void CompositorImpl::UpdateLayerTreeHost() {
@@ -517,11 +500,33 @@ void CompositorImpl::CreateOutputSurface() {
   if (!output_surface_request_pending_ || !host_->visible())
     return;
 
-  blink::WebGraphicsContext3D::Attributes attrs;
-  attrs.shareResources = true;
-  attrs.noAutomaticFlushes = true;
-  if (base::SysInfo::IsLowEndDevice())
-    attrs.alpha = has_transparent_background_;
+  // This is used for the browser compositor (offscreen) and for the display
+  // compositor (onscreen), so ask for capabilities needed by either one.
+  // The default framebuffer for an offscreen context is not used, so it does
+  // not need alpha, stencil, depth, antialiasing. The display compositor does
+  // not use these things either, except for alpha when it has a transparent
+  // background.
+  gpu::gles2::ContextCreationAttribHelper attributes;
+  attributes.alpha_size = -1;
+  attributes.stencil_size = 0;
+  attributes.depth_size = 0;
+  attributes.samples = 0;
+  attributes.sample_buffers = 0;
+  attributes.bind_generates_resource = false;
+
+  if (has_transparent_background_) {
+    attributes.alpha_size = 8;
+  } else if (base::SysInfo::IsLowEndDevice()) {
+    // In this case we prefer to use RGB565 format instead of RGBA8888 if
+    // possible.
+    // TODO(danakj): GpuCommandBufferStub constructor checks for alpha == 0 in
+    // order to enable 565, but it should avoid using 565 when -1s are specified
+    // (IOW check that a <= 0 && rgb > 0 && rgb <= 565) then alpha should be -1.
+    attributes.alpha_size = 0;
+    attributes.red_size = 5;
+    attributes.green_size = 6;
+    attributes.blue_size = 5;
+  }
 
   pending_swapbuffers_ = 0;
 
@@ -534,11 +539,12 @@ void CompositorImpl::CreateOutputSurface() {
   // still get marked as lost from the IO thread, at any point in time really).
   // But from here on just try and always lead to either
   // DidInitializeOutputSurface() or DidFailToInitializeOutputSurface().
-  scoped_refptr<GpuChannelHost> gpu_channel_host(factory->GetGpuChannel());
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(factory->GetGpuChannel());
   scoped_refptr<ContextProviderCommandBuffer> context_provider(
       ContextProviderCommandBuffer::Create(
-          CreateGpuProcessViewContext(gpu_channel_host, attrs, surface_id_),
-          BROWSER_COMPOSITOR_ONSCREEN_CONTEXT));
+          CreateGpuProcessViewContext(gpu_channel_host, attributes,
+                                      surface_id_),
+          DISPLAY_COMPOSITOR_ONSCREEN_CONTEXT));
   DCHECK(context_provider.get());
 
   scoped_ptr<cc::OutputSurface> real_output_surface(
@@ -614,10 +620,6 @@ void CompositorImpl::DidAbortSwapBuffers() {
 
 void CompositorImpl::DidCommit() {
   root_window_->OnCompositingDidCommit();
-}
-
-void CompositorImpl::AttachLayerForReadback(scoped_refptr<cc::Layer> layer) {
-  root_layer_->AddChild(layer);
 }
 
 void CompositorImpl::RequestCopyOfOutputOnRootLayer(

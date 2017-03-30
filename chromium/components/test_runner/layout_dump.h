@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "components/test_runner/layout_dump_flags.h"
+#include "components/test_runner/layout_test_runtime_flags.h"
 #include "components/test_runner/test_runner_export.h"
 
 namespace blink {
@@ -16,8 +16,10 @@ class WebLocalFrame;
 
 namespace test_runner {
 
+// Dumps textual representation of |frame| contents.  Exact dump mode depends
+// on |flags| (i.e. dump_as_text VS dump_as_markup and/or is_printing).
 TEST_RUNNER_EXPORT std::string DumpLayout(blink::WebLocalFrame* frame,
-                                          const LayoutDumpFlags& flags);
+                                          const LayoutTestRuntimeFlags& flags);
 
 }  // namespace test_runner
 

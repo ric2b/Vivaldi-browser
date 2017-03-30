@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/chrome_browser_main_chromeos.h"
 
 #include <stddef.h>
+
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,6 +19,7 @@
 #include "base/lazy_instance.h"
 #include "base/linux_util.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -39,6 +41,7 @@
 #include "chrome/browser/chromeos/dbus/chrome_proxy_resolver_delegate.h"
 #include "chrome/browser/chromeos/dbus/kiosk_info_service_provider.h"
 #include "chrome/browser/chromeos/dbus/screen_lock_service_provider.h"
+#include "chrome/browser/chromeos/display/quirks_manager_delegate_impl.h"
 #include "chrome/browser/chromeos/events/event_rewriter.h"
 #include "chrome/browser/chromeos/events/event_rewriter_controller.h"
 #include "chrome/browser/chromeos/events/keyboard_driven_event_rewriter.h"
@@ -93,6 +96,7 @@
 #include "chromeos/chromeos_paths.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/async_method_caller.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/cryptohome/homedir_methods.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -217,13 +221,13 @@ class DBusServices {
 
     ScopedVector<CrosDBusService::ServiceProviderInterface> service_providers;
     service_providers.push_back(ProxyResolutionServiceProvider::Create(
-        make_scoped_ptr(new ChromeProxyResolverDelegate())));
+        base::WrapUnique(new ChromeProxyResolverDelegate())));
     service_providers.push_back(new DisplayPowerServiceProvider(
-        make_scoped_ptr(new ChromeDisplayPowerServiceProviderDelegate)));
+        base::WrapUnique(new ChromeDisplayPowerServiceProviderDelegate)));
     service_providers.push_back(new LivenessServiceProvider);
     service_providers.push_back(new ScreenLockServiceProvider);
     service_providers.push_back(new ConsoleServiceProvider(
-        make_scoped_ptr(new ChromeConsoleServiceProviderDelegate)));
+        base::WrapUnique(new ChromeConsoleServiceProviderDelegate)));
     service_providers.push_back(new KioskInfoService);
     CrosDBusService::Initialize(std::move(service_providers));
 
@@ -286,7 +290,7 @@ class DBusServices {
   }
 
  private:
-  scoped_ptr<NetworkConnectDelegateChromeOS> network_connect_delegate_;
+  std::unique_ptr<NetworkConnectDelegateChromeOS> network_connect_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(DBusServices);
 };
@@ -328,7 +332,8 @@ void ChromeBrowserMainPartsChromeos::PreEarlyInitialization() {
       !parsed_command_line().HasSwitch(switches::kLoginUser) &&
       !parsed_command_line().HasSwitch(switches::kGuestSession)) {
     singleton_command_line->AppendSwitchASCII(
-        switches::kLoginUser, login::StubAccountId().GetUserEmail());
+        switches::kLoginUser,
+        cryptohome::Identification(login::StubAccountId()).id());
     if (!parsed_command_line().HasSwitch(switches::kLoginProfile)) {
       singleton_command_line->AppendSwitchASCII(switches::kLoginProfile,
                                                 chrome::kTestUserProfileDir);
@@ -396,6 +401,13 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
 
   CrasAudioHandler::Initialize(
       new AudioDevicesPrefHandlerImpl(g_browser_process->local_state()));
+
+  quirks::QuirksManager::Initialize(
+      std::unique_ptr<quirks::QuirksManager::Delegate>(
+          new quirks::QuirksManagerDelegateImpl()),
+      content::BrowserThread::GetBlockingPool(),
+      g_browser_process->local_state(),
+      g_browser_process->system_request_context());
 
   // Start loading machine statistics here. StatisticsProvider::Shutdown()
   // will ensure that loading is aborted on early exit.
@@ -515,11 +527,13 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
   ChromeBrowserMainPartsLinux::PreProfileInit();
 
   if (immediate_login) {
-    const std::string user_email = login::CanonicalizeUserID(
-        parsed_command_line().GetSwitchValueASCII(switches::kLoginUser));
+    const std::string cryptohome_id =
+        parsed_command_line().GetSwitchValueASCII(switches::kLoginUser);
+    const AccountId account_id(
+        cryptohome::Identification::FromString(cryptohome_id).GetAccountId());
+
     user_manager::UserManager* user_manager = user_manager::UserManager::Get();
 
-    const AccountId account_id(AccountId::FromUserEmail(user_email));
     if (policy::IsDeviceLocalAccountUser(account_id.GetUserEmail(), NULL) &&
         !user_manager->IsKnownUser(account_id)) {
       // When a device-local account is removed, its policy is deleted from disk
@@ -536,7 +550,7 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
     std::string user_id_hash =
         parsed_command_line().GetSwitchValueASCII(switches::kLoginProfile);
     user_manager->UserLoggedIn(account_id, user_id_hash, true);
-    VLOG(1) << "Relaunching browser for user: " << user_email
+    VLOG(1) << "Relaunching browser for user: " << account_id.Serialize()
             << " with hash: " << user_id_hash;
   }
 }
@@ -547,15 +561,16 @@ class GuestLanguageSetCallbackData {
   }
 
   // Must match SwitchLanguageCallback type.
-  static void Callback(const scoped_ptr<GuestLanguageSetCallbackData>& self,
-                       const locale_util::LanguageSwitchResult& result);
+  static void Callback(
+      const std::unique_ptr<GuestLanguageSetCallbackData>& self,
+      const locale_util::LanguageSwitchResult& result);
 
   Profile* profile;
 };
 
 // static
 void GuestLanguageSetCallbackData::Callback(
-    const scoped_ptr<GuestLanguageSetCallbackData>& self,
+    const std::unique_ptr<GuestLanguageSetCallbackData>& self,
     const locale_util::LanguageSwitchResult& result) {
   input_method::InputMethodManager* manager =
       input_method::InputMethodManager::Get();
@@ -595,7 +610,7 @@ void GuestLanguageSetCallbackData::Callback(
 }
 
 void SetGuestLocale(Profile* const profile) {
-  scoped_ptr<GuestLanguageSetCallbackData> data(
+  std::unique_ptr<GuestLanguageSetCallbackData> data(
       new GuestLanguageSetCallbackData(profile));
   locale_util::SwitchLanguageCallback callback(base::Bind(
       &GuestLanguageSetCallbackData::Callback, base::Passed(std::move(data))));
@@ -609,11 +624,17 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
   // -- This used to be in ChromeBrowserMainParts::PreMainMessageLoopRun()
   // -- just after CreateProfile().
 
-  // Force loading of signin profile if it was not loaded before. It is possible
-  // when we are restoring session or skipping login screen for some other
-  // reason.
-  if (!chromeos::ProfileHelper::IsSigninProfile(profile()))
+  if (chromeos::ProfileHelper::IsSigninProfile(profile())) {
+    // Flush signin profile if it is just created (new device or after recovery)
+    // to ensure it is correctly persisted.
+    if (profile()->IsNewProfile())
+      ProfileHelper::Get()->FlushProfile(profile());
+  } else {
+    // Force loading of signin profile if it was not loaded before. It is
+    // possible when we are restoring session or skipping login screen for some
+    // other reason.
     chromeos::ProfileHelper::GetSigninProfile();
+  }
 
   BootTimesRecorder::Get()->OnChromeProcessStart();
 
@@ -657,7 +678,7 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
   peripheral_battery_observer_.reset(new PeripheralBatteryObserver());
 
   renderer_freezer_.reset(
-      new RendererFreezer(scoped_ptr<RendererFreezer::Delegate>(
+      new RendererFreezer(std::unique_ptr<RendererFreezer::Delegate>(
           new FreezerCgroupProcessManager())));
 
   g_browser_process->platform_part()->InitializeAutomaticRebootManager();
@@ -724,11 +745,11 @@ void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
 
     keyboard_event_rewriters_.reset(new EventRewriterController());
     keyboard_event_rewriters_->AddEventRewriter(
-        scoped_ptr<ui::EventRewriter>(new KeyboardDrivenEventRewriter()));
+        std::unique_ptr<ui::EventRewriter>(new KeyboardDrivenEventRewriter()));
     keyboard_event_rewriters_->AddEventRewriter(
-        scoped_ptr<ui::EventRewriter>(new SpokenFeedbackEventRewriter()));
+        std::unique_ptr<ui::EventRewriter>(new SpokenFeedbackEventRewriter()));
     keyboard_event_rewriters_->AddEventRewriter(
-        scoped_ptr<ui::EventRewriter>(new EventRewriter(
+        std::unique_ptr<ui::EventRewriter>(new EventRewriter(
             ash::Shell::GetInstance()->sticky_keys_controller())));
     keyboard_event_rewriters_->Init();
   }
@@ -837,6 +858,8 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
 
   // Shutdown after PostMainMessageLoopRun() which should destroy all observers.
   CrasAudioHandler::Shutdown();
+
+  quirks::QuirksManager::Shutdown();
 
   // Called after
   // ChromeBrowserMainPartsLinux::PostMainMessageLoopRun() to be

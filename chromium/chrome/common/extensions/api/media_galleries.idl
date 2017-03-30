@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+
 // Use the <code>chrome.mediaGalleries</code> API to access media files (audio,
 // images, video) from the user's local disks (with the user's consent).
 namespace mediaGalleries {
@@ -33,7 +34,7 @@ namespace mediaGalleries {
     mimeTypeOnly
   };
 
-  [inline_doc] enum ScanProgressType {
+  [nodefine, inline_doc] enum ScanProgressType {
     // The scan started.
     start,
     // The scan was cancelled.
@@ -44,11 +45,11 @@ namespace mediaGalleries {
     // The scan encountered an error and could not proceed.
     error
   };
-  
+
   [inline_doc] dictionary GalleryChangeDetails {
     // Type of change event.
     GalleryChangeType type;
-    
+
     // Identifies the modified gallery.
     DOMString galleryId;
   };
@@ -75,7 +76,7 @@ namespace mediaGalleries {
       void ([instanceOf=DOMFileSystem] object[] mediaFileSystems,
             DOMString selectedFileSystemName);
 
-  callback DropPermissionForMediaFileSystemCallback = void ();
+  [nodefine] callback DropPermissionForMediaFileSystemCallback = void ();
 
   [inline_doc] dictionary MediaFileSystemMetadata {
     // The name of the file system.
@@ -99,7 +100,7 @@ namespace mediaGalleries {
     boolean isAvailable;
   };
 
-  [inline_doc] dictionary ScanProgressDetails {
+  [nodefine, inline_doc] dictionary ScanProgressDetails {
     // The type of progress event, i.e. start, finish, etc.
     ScanProgressType type;
 
@@ -119,7 +120,7 @@ namespace mediaGalleries {
   dictionary StreamInfo {
     // Describes format of container or codec of stream, i.e. "mp3", "h264".
     DOMString type;
-    
+
     // An unfiltered string->string dictionary of tags for the stream.
     object tags;
   };
@@ -128,30 +129,17 @@ namespace mediaGalleries {
     // The browser sniffed mime type.
     DOMString mimeType;
 
-    // Defined for images and video. In pixels.
+    // Defined for video. In pixels.
     long? height;
     long? width;
 
-    // Defined for images only.
-    double? xResolution;
-    double? yResolution;
-
     // Defined for audio and video. In seconds.
     double? duration;
-    
-    // Defined for images and video. In degrees.
+
+    // Defined for video. In degrees.
     long? rotation;
 
-    // Defined for images only.
-    DOMString? cameraMake;
-    DOMString? cameraModel;
-    double? exposureTimeSeconds;
-    boolean? flashFired;
-    double? fNumber;
-    double? focalLengthMm;
-    double? isoEquivalent;
-
-    // Defined for audio and video only.
+    // Defined for audio and video.
     DOMString? album;
     DOMString? artist;
     DOMString? comment;
@@ -180,7 +168,8 @@ namespace mediaGalleries {
   };
 
   callback AddGalleryWatchCallback = void (AddGalleryWatchResult result);
-  callback GetAllGalleryWatchCallback = void (DOMString[] galleryIds);
+  [nodefine] callback GetAllGalleryWatchCallback =
+      void (DOMString[] galleryIds);
 
   interface Functions {
     // Get the media galleries configured in this user agent. If none are
@@ -196,6 +185,8 @@ namespace mediaGalleries {
     static void addUserSelectedFolder(AddUserFolderCallback callback);
 
     // Give up access to a given media gallery.
+    [nodefine, deprecated="The user can manually drop access to galleries
+    via the permissions dialog."]
     static void dropPermissionForMediaFileSystem(
         DOMString galleryId,
         optional DropPermissionForMediaFileSystemCallback callback);
@@ -204,16 +195,19 @@ namespace mediaGalleries {
     // The scan may take a long time so progress and completion is communicated
     // by events. No permission is granted as a result of the scan, see
     // addScanResults.
+    [nodefine, deprecated="The mediaGalleries API no longer supports scanning."]
     static void startMediaScan();
 
     // Cancel any pending media scan.  Well behaved apps should provide a way
     // for the user to cancel scans they start.
+    [nodefine, deprecated="The mediaGalleries API no longer supports scanning."]
     static void cancelMediaScan();
 
     // Show the user the scan results and let them add any or all of them as
     // galleries. This should be used after the 'finish' onScanProgress()
     // event has happened. All galleries the app has access to are returned, not
     // just the newly added galleries.
+    [nodefine, deprecated="The mediaGalleries API no longer supports scanning."]
     static void addScanResults(MediaFileSystemsCallback callback);
 
     // Get metadata about a specific media file system.
@@ -221,6 +215,7 @@ namespace mediaGalleries {
         [instanceOf=DOMFileSystem] object mediaFileSystem);
 
     // Get metadata for all available media galleries.
+    [nodefine, deprecated="Use getMediaFileSystemMetadata instead."]
     static void getAllMediaFileSystemMetadata(
         MediaFileSystemsMetadataCallback callback);
 
@@ -239,9 +234,12 @@ namespace mediaGalleries {
     static void removeGalleryWatch(DOMString galleryId);
 
     // Notifies which galleries are being watched via the given callback.
+    [nodefine, deprecated="Applications should store their own gallery watches
+    as they are added."]
     static void getAllGalleryWatch(GetAllGalleryWatchCallback callback);
 
     // Removes all gallery watches.
+    [nodefine, deprecated="Use removeGalleryWatch instead."]
     static void removeAllGalleryWatch();
   };
 
@@ -251,6 +249,7 @@ namespace mediaGalleries {
 
     // The pending media scan has changed state. See details for more
     // information.
+    [nodefine, deprecated="The mediaGalleries API no longer supports scanning."]
     static void onScanProgress(ScanProgressDetails details);
   };
 };

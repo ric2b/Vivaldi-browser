@@ -7,7 +7,6 @@
 #include "cc/layers/empty_content_layer_client.h"
 #include "cc/layers/heads_up_display_layer.h"
 #include "cc/layers/layer.h"
-#include "cc/layers/layer_settings.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/proto/layer.pb.h"
 #include "cc/test/fake_layer_tree_host.h"
@@ -48,7 +47,7 @@ TEST_F(LayerProtoConverterTest, TestKeepingRoot) {
                c
      The old root node will be reused during deserialization.
   */
-  scoped_refptr<Layer> old_root = Layer::Create(LayerSettings());
+  scoped_refptr<Layer> old_root = Layer::Create();
   proto::LayerNode root_node;
   root_node.set_id(old_root->id());
   root_node.set_type(proto::LayerNode::LAYER);
@@ -69,7 +68,8 @@ TEST_F(LayerProtoConverterTest, TestKeepingRoot) {
   child_c_node->set_parent_id(child_b_node->id());
 
   scoped_refptr<Layer> new_root =
-      LayerProtoConverter::DeserializeLayerHierarchy(old_root, root_node);
+      LayerProtoConverter::DeserializeLayerHierarchy(old_root, root_node,
+                                                     layer_tree_host_.get());
 
   // The new root should not be the same as the old root.
   EXPECT_EQ(old_root->id(), new_root->id());
@@ -85,6 +85,8 @@ TEST_F(LayerProtoConverterTest, TestKeepingRoot) {
 
   scoped_refptr<Layer> child_c = child_b->children()[0];
   EXPECT_EQ(child_c_node->id(), child_c->id());
+
+  new_root->SetLayerTreeHost(nullptr);
 }
 
 TEST_F(LayerProtoConverterTest, TestNoExistingRoot) {
@@ -105,7 +107,8 @@ TEST_F(LayerProtoConverterTest, TestNoExistingRoot) {
   child_a_node->set_parent_id(new_root_id);  // root_node
 
   scoped_refptr<Layer> new_root =
-      LayerProtoConverter::DeserializeLayerHierarchy(nullptr, root_node);
+      LayerProtoConverter::DeserializeLayerHierarchy(nullptr, root_node,
+                                                     layer_tree_host_.get());
 
   // The new root should not be the same as the old root.
   EXPECT_EQ(new_root_id, new_root->id());
@@ -114,6 +117,8 @@ TEST_F(LayerProtoConverterTest, TestNoExistingRoot) {
 
   EXPECT_EQ(child_a_node->id(), child_a->id());
   EXPECT_EQ(0u, child_a->children().size());
+
+  new_root->SetLayerTreeHost(nullptr);
 }
 
 TEST_F(LayerProtoConverterTest, TestSwappingRoot) {
@@ -144,9 +149,10 @@ TEST_F(LayerProtoConverterTest, TestSwappingRoot) {
   child_c_node->set_type(proto::LayerNode::LAYER);
   child_c_node->set_parent_id(child_b_node->id());
 
-  scoped_refptr<Layer> old_root = Layer::Create(LayerSettings());
+  scoped_refptr<Layer> old_root = Layer::Create();
   scoped_refptr<Layer> new_root =
-      LayerProtoConverter::DeserializeLayerHierarchy(old_root, root_node);
+      LayerProtoConverter::DeserializeLayerHierarchy(old_root, root_node,
+                                                     layer_tree_host_.get());
 
   // The new root should not be the same as the old root.
   EXPECT_EQ(root_node.id(), new_root->id());
@@ -162,6 +168,8 @@ TEST_F(LayerProtoConverterTest, TestSwappingRoot) {
 
   scoped_refptr<Layer> child_c = child_b->children()[0];
   EXPECT_EQ(child_c_node->id(), child_c->id());
+
+  new_root->SetLayerTreeHost(nullptr);
 }
 
 TEST_F(LayerProtoConverterTest, RecursivePropertiesSerialization) {
@@ -175,13 +183,14 @@ TEST_F(LayerProtoConverterTest, RecursivePropertiesSerialization) {
      Layers marked with + have descendants with changed properties.
      Layer b also has a mask layer and a replica layer.
   */
-  scoped_refptr<Layer> layer_src_root = Layer::Create(LayerSettings());
-  scoped_refptr<Layer> layer_src_a = Layer::Create(LayerSettings());
-  scoped_refptr<Layer> layer_src_b = Layer::Create(LayerSettings());
-  scoped_refptr<Layer> layer_src_b_mask = Layer::Create(LayerSettings());
-  scoped_refptr<Layer> layer_src_b_replica = Layer::Create(LayerSettings());
-  scoped_refptr<Layer> layer_src_c = Layer::Create(LayerSettings());
-  scoped_refptr<Layer> layer_src_d = Layer::Create(LayerSettings());
+  scoped_refptr<Layer> layer_src_root = Layer::Create();
+  scoped_refptr<Layer> layer_src_a = Layer::Create();
+  scoped_refptr<Layer> layer_src_b = Layer::Create();
+  scoped_refptr<Layer> layer_src_b_mask = Layer::Create();
+  scoped_refptr<Layer> layer_src_b_replica = Layer::Create();
+  scoped_refptr<Layer> layer_src_c = Layer::Create();
+  scoped_refptr<Layer> layer_src_d = Layer::Create();
+  layer_src_root->SetLayerTreeHost(layer_tree_host_.get());
   layer_src_root->AddChild(layer_src_a);
   layer_src_root->AddChild(layer_src_b);
   layer_src_a->AddChild(layer_src_c);
@@ -190,97 +199,78 @@ TEST_F(LayerProtoConverterTest, RecursivePropertiesSerialization) {
   layer_src_b->SetReplicaLayer(layer_src_b_replica.get());
 
   proto::LayerUpdate layer_update;
-  LayerProtoConverter::SerializeLayerProperties(layer_src_root.get(),
-                                                &layer_update);
+  LayerProtoConverter::SerializeLayerProperties(
+      layer_src_root->layer_tree_host(), &layer_update);
 
   // All flags for pushing properties should have been cleared.
-  EXPECT_FALSE(layer_src_root->needs_push_properties());
-  EXPECT_FALSE(layer_src_root->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_a->needs_push_properties());
-  EXPECT_FALSE(layer_src_a->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_b->needs_push_properties());
-  EXPECT_FALSE(layer_src_b->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_b_mask->needs_push_properties());
-  EXPECT_FALSE(layer_src_b_mask->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_b_replica->needs_push_properties());
-  EXPECT_FALSE(layer_src_b_replica->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_c->needs_push_properties());
-  EXPECT_FALSE(layer_src_c->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_d->needs_push_properties());
-  EXPECT_FALSE(layer_src_d->descendant_needs_push_properties());
+  EXPECT_FALSE(
+      layer_src_root->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_root.get()));
+  EXPECT_FALSE(
+      layer_src_a->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_a.get()));
+  EXPECT_FALSE(
+      layer_src_b->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_b.get()));
+  EXPECT_FALSE(
+      layer_src_b_mask->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_b_mask.get()));
+  EXPECT_FALSE(
+      layer_src_b_replica->layer_tree_host()
+          ->LayerNeedsPushPropertiesForTesting(layer_src_b_replica.get()));
+  EXPECT_FALSE(
+      layer_src_c->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_c.get()));
+  EXPECT_FALSE(
+      layer_src_d->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_d.get()));
 
-  // AddChild changes the stacking order of child and it needs to push
-  // properties.
-  ASSERT_EQ(5, layer_update.layers_size());
-  EXPECT_EQ(layer_src_root->id(), layer_update.layers(0).id());
-  proto::LayerProperties dest_root = layer_update.layers(0);
-  EXPECT_EQ(layer_src_a->id(), layer_update.layers(1).id());
-  proto::LayerProperties dest_a = layer_update.layers(1);
-  EXPECT_EQ(layer_src_c->id(), layer_update.layers(2).id());
-  proto::LayerProperties dest_c = layer_update.layers(2);
-  EXPECT_EQ(layer_src_b->id(), layer_update.layers(3).id());
-  proto::LayerProperties dest_b = layer_update.layers(3);
-  EXPECT_EQ(layer_src_d->id(), layer_update.layers(4).id());
-  proto::LayerProperties dest_d = layer_update.layers(4);
+  // All layers needs to push properties as their layer tree host changed.
+  ASSERT_EQ(7, layer_update.layers_size());
   layer_update.Clear();
 
+  std::unordered_set<int> dirty_layer_ids;
   layer_src_a->SetNeedsPushProperties();
+  dirty_layer_ids.insert(layer_src_a->id());
   layer_src_b->SetNeedsPushProperties();
+  dirty_layer_ids.insert(layer_src_b->id());
   layer_src_b_mask->SetNeedsPushProperties();
+  dirty_layer_ids.insert(layer_src_b_mask->id());
   layer_src_d->SetNeedsPushProperties();
+  dirty_layer_ids.insert(layer_src_d->id());
 
-  LayerProtoConverter::SerializeLayerProperties(layer_src_root.get(),
-                                                &layer_update);
+  LayerProtoConverter::SerializeLayerProperties(
+      layer_src_root->layer_tree_host(), &layer_update);
 
   // All flags for pushing properties should have been cleared.
-  EXPECT_FALSE(layer_src_root->needs_push_properties());
-  EXPECT_FALSE(layer_src_root->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_a->needs_push_properties());
-  EXPECT_FALSE(layer_src_a->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_b->needs_push_properties());
-  EXPECT_FALSE(layer_src_b->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_b_mask->needs_push_properties());
-  EXPECT_FALSE(layer_src_b_mask->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_b_replica->needs_push_properties());
-  EXPECT_FALSE(layer_src_b_replica->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_c->needs_push_properties());
-  EXPECT_FALSE(layer_src_c->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_d->needs_push_properties());
-  EXPECT_FALSE(layer_src_d->descendant_needs_push_properties());
+  EXPECT_FALSE(
+      layer_src_root->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_root.get()));
+  EXPECT_FALSE(
+      layer_src_a->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_a.get()));
+  EXPECT_FALSE(
+      layer_src_b->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_b.get()));
+  EXPECT_FALSE(
+      layer_src_b_mask->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_b_mask.get()));
+  EXPECT_FALSE(
+      layer_src_b_replica->layer_tree_host()
+          ->LayerNeedsPushPropertiesForTesting(layer_src_b_replica.get()));
+  EXPECT_FALSE(
+      layer_src_c->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_c.get()));
+  EXPECT_FALSE(
+      layer_src_d->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_d.get()));
 
-  // Only 5 of the layers should have been serialized.
-  ASSERT_EQ(5, layer_update.layers_size());
-  EXPECT_EQ(layer_src_root->id(), layer_update.layers(0).id());
-  dest_root = layer_update.layers(0);
-  EXPECT_EQ(layer_src_a->id(), layer_update.layers(1).id());
-  dest_a = layer_update.layers(1);
-  EXPECT_EQ(layer_src_b->id(), layer_update.layers(2).id());
-  dest_b = layer_update.layers(2);
-  EXPECT_EQ(layer_src_d->id(), layer_update.layers(3).id());
-  dest_d = layer_update.layers(3);
-  EXPECT_EQ(layer_src_b_mask->id(), layer_update.layers(4).id());
-  proto::LayerProperties dest_b_mask = layer_update.layers(4);
-
-  // Ensure the properties and dependants metadata is correctly serialized.
-  EXPECT_FALSE(dest_root.needs_push_properties());
-  EXPECT_EQ(2, dest_root.num_dependents_need_push_properties());
-  EXPECT_FALSE(dest_root.has_base());
-
-  EXPECT_TRUE(dest_a.needs_push_properties());
-  EXPECT_EQ(0, dest_a.num_dependents_need_push_properties());
-  EXPECT_TRUE(dest_a.has_base());
-
-  EXPECT_TRUE(dest_b.needs_push_properties());
-  EXPECT_EQ(2, dest_b.num_dependents_need_push_properties());
-  EXPECT_TRUE(dest_b.has_base());
-
-  EXPECT_TRUE(dest_d.needs_push_properties());
-  EXPECT_EQ(0, dest_d.num_dependents_need_push_properties());
-  EXPECT_TRUE(dest_d.has_base());
-
-  EXPECT_TRUE(dest_b_mask.needs_push_properties());
-  EXPECT_EQ(0, dest_b_mask.num_dependents_need_push_properties());
-  EXPECT_TRUE(dest_b_mask.has_base());
+  // Only 4 of the layers should have been serialized.
+  ASSERT_EQ(4, layer_update.layers_size());
+  for (int index = 0; index < layer_update.layers_size(); index++)
+    EXPECT_NE(dirty_layer_ids.find(layer_update.layers(index).id()),
+              dirty_layer_ids.end());
+  layer_src_root->SetLayerTreeHost(nullptr);
 }
 
 TEST_F(LayerProtoConverterTest, RecursivePropertiesSerializationSingleChild) {
@@ -294,129 +284,58 @@ TEST_F(LayerProtoConverterTest, RecursivePropertiesSerializationSingleChild) {
      Layers marked with + have descendants with changed properties.
      Layer b also has a mask layer.
   */
-  scoped_refptr<Layer> layer_src_root = Layer::Create(LayerSettings());
-  scoped_refptr<Layer> layer_src_b = Layer::Create(LayerSettings());
-  scoped_refptr<Layer> layer_src_b_mask = Layer::Create(LayerSettings());
-  scoped_refptr<Layer> layer_src_c = Layer::Create(LayerSettings());
+  scoped_refptr<Layer> layer_src_root = Layer::Create();
+  scoped_refptr<Layer> layer_src_b = Layer::Create();
+  scoped_refptr<Layer> layer_src_b_mask = Layer::Create();
+  scoped_refptr<Layer> layer_src_c = Layer::Create();
   layer_src_root->AddChild(layer_src_b);
   layer_src_b->AddChild(layer_src_c);
   layer_src_b->SetMaskLayer(layer_src_b_mask.get());
+  layer_src_root->SetLayerTreeHost(layer_tree_host_.get());
 
   proto::LayerUpdate layer_update;
-  LayerProtoConverter::SerializeLayerProperties(layer_src_root.get(),
-                                                &layer_update);
-  // AddChild changes stacking order of child and we need to push proeprties of
-  // child.
-  ASSERT_EQ(3, layer_update.layers_size());
+  LayerProtoConverter::SerializeLayerProperties(
+      layer_src_root->layer_tree_host(), &layer_update);
+  // All layers need to push properties as their layer tree host changed.
+  ASSERT_EQ(4, layer_update.layers_size());
   layer_update.Clear();
 
+  std::unordered_set<int> dirty_layer_ids;
   layer_src_b->SetNeedsPushProperties();
+  dirty_layer_ids.insert(layer_src_b->id());
   layer_src_b_mask->SetNeedsPushProperties();
+  dirty_layer_ids.insert(layer_src_b_mask->id());
 
-  LayerProtoConverter::SerializeLayerProperties(layer_src_root.get(),
-                                                &layer_update);
+  LayerProtoConverter::SerializeLayerProperties(
+      layer_src_root->layer_tree_host(), &layer_update);
 
   // All flags for pushing properties should have been cleared.
-  EXPECT_FALSE(layer_src_root->needs_push_properties());
-  EXPECT_FALSE(layer_src_root->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_b->needs_push_properties());
-  EXPECT_FALSE(layer_src_b->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_b_mask->needs_push_properties());
-  EXPECT_FALSE(layer_src_b_mask->descendant_needs_push_properties());
-  EXPECT_FALSE(layer_src_c->needs_push_properties());
-  EXPECT_FALSE(layer_src_c->descendant_needs_push_properties());
+  EXPECT_FALSE(
+      layer_src_root->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_root.get()));
+  EXPECT_FALSE(
+      layer_src_b->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_b.get()));
+  EXPECT_FALSE(
+      layer_src_b_mask->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_b_mask.get()));
+  EXPECT_FALSE(
+      layer_src_c->layer_tree_host()->LayerNeedsPushPropertiesForTesting(
+          layer_src_c.get()));
 
-  // Only 3 of the layers should have been serialized.
-  ASSERT_EQ(3, layer_update.layers_size());
-  EXPECT_EQ(layer_src_root->id(), layer_update.layers(0).id());
-  proto::LayerProperties dest_root = layer_update.layers(0);
-  EXPECT_EQ(layer_src_b->id(), layer_update.layers(1).id());
-  proto::LayerProperties dest_b = layer_update.layers(1);
-  EXPECT_EQ(layer_src_b_mask->id(), layer_update.layers(2).id());
-  proto::LayerProperties dest_b_mask = layer_update.layers(2);
-
-  // Ensure the properties and dependants metadata is correctly serialized.
-  EXPECT_FALSE(dest_root.needs_push_properties());
-  EXPECT_EQ(1, dest_root.num_dependents_need_push_properties());
-  EXPECT_FALSE(dest_root.has_base());
-
-  EXPECT_TRUE(dest_b.needs_push_properties());
-  EXPECT_EQ(1, dest_b.num_dependents_need_push_properties());
-  EXPECT_TRUE(dest_b.has_base());
-
-  EXPECT_TRUE(dest_b_mask.needs_push_properties());
-  EXPECT_EQ(0, dest_b_mask.num_dependents_need_push_properties());
-  EXPECT_TRUE(dest_b_mask.has_base());
-}
-
-TEST_F(LayerProtoConverterTest, DeserializeLayerProperties) {
-  /* Testing deserialization of properties for a tree that looks like this:
-          root*+
-          /  \
-         a    b+
-               \
-                c*
-     Layers marked with * have changed properties.
-     Layers marked with + have descendants with changed properties.
-  */
-  proto::LayerUpdate updates;
-
-  scoped_refptr<Layer> root = Layer::Create(LayerSettings());
-  root->SetLayerTreeHost(layer_tree_host_.get());
-  proto::LayerProperties* root_props = updates.add_layers();
-  root_props->set_id(root->id());
-  root_props->set_needs_push_properties(true);
-  root_props->set_num_dependents_need_push_properties(1);
-  root_props->mutable_base();
-
-  scoped_refptr<Layer> a = Layer::Create(LayerSettings());
-  a->SetLayerTreeHost(layer_tree_host_.get());
-  proto::LayerProperties* a_props = updates.add_layers();
-  a_props->set_id(a->id());
-  a_props->set_needs_push_properties(false);
-  a_props->set_num_dependents_need_push_properties(0);
-  root->AddChild(a);
-
-  scoped_refptr<Layer> b = Layer::Create(LayerSettings());
-  b->SetLayerTreeHost(layer_tree_host_.get());
-  proto::LayerProperties* b_props = updates.add_layers();
-  b_props->set_id(b->id());
-  b_props->set_needs_push_properties(false);
-  b_props->set_num_dependents_need_push_properties(1);
-  root->AddChild(b);
-
-  scoped_refptr<Layer> c = Layer::Create(LayerSettings());
-  c->SetLayerTreeHost(layer_tree_host_.get());
-  proto::LayerProperties* c_props = updates.add_layers();
-  c_props->set_id(c->id());
-  c_props->set_needs_push_properties(true);
-  c_props->set_num_dependents_need_push_properties(0);
-  c_props->mutable_base();
-  b->AddChild(c);
-
-  LayerProtoConverter::DeserializeLayerProperties(root.get(), updates);
-
-  EXPECT_TRUE(root->needs_push_properties());
-  EXPECT_TRUE(root->descendant_needs_push_properties());
-
-  EXPECT_FALSE(a->needs_push_properties());
-  EXPECT_FALSE(a->descendant_needs_push_properties());
-
-  EXPECT_FALSE(b->needs_push_properties());
-  EXPECT_TRUE(b->descendant_needs_push_properties());
-
-  EXPECT_TRUE(c->needs_push_properties());
-  EXPECT_FALSE(c->descendant_needs_push_properties());
-
-  // Recursively clear out LayerTreeHost.
-  root->SetLayerTreeHost(nullptr);
+  // Only 2 of the layers should have been serialized.
+  ASSERT_EQ(2, layer_update.layers_size());
+  for (int index = 0; index < layer_update.layers_size(); index++)
+    EXPECT_NE(dirty_layer_ids.find(layer_update.layers(index).id()),
+              dirty_layer_ids.end());
+  layer_src_root->SetLayerTreeHost(nullptr);
 }
 
 TEST_F(LayerProtoConverterTest, PictureLayerTypeSerialization) {
   // Make sure that PictureLayers serialize to the
   // proto::LayerType::PICTURE_LAYER type.
-  scoped_refptr<PictureLayer> layer = PictureLayer::Create(
-      LayerSettings(), EmptyContentLayerClient::GetInstance());
+  scoped_refptr<PictureLayer> layer =
+      PictureLayer::Create(EmptyContentLayerClient::GetInstance());
 
   proto::LayerNode layer_hierarchy;
   LayerProtoConverter::SerializeLayerHierarchy(layer.get(), &layer_hierarchy);
@@ -426,14 +345,15 @@ TEST_F(LayerProtoConverterTest, PictureLayerTypeSerialization) {
 TEST_F(LayerProtoConverterTest, PictureLayerTypeDeserialization) {
   // Make sure that proto::LayerType::PICTURE_LAYER ends up building a
   // PictureLayer.
-  scoped_refptr<Layer> old_root = PictureLayer::Create(
-      LayerSettings(), EmptyContentLayerClient::GetInstance());
+  scoped_refptr<Layer> old_root =
+      PictureLayer::Create(EmptyContentLayerClient::GetInstance());
   proto::LayerNode root_node;
   root_node.set_id(old_root->id());
   root_node.set_type(proto::LayerNode::PICTURE_LAYER);
 
   scoped_refptr<Layer> new_root =
-      LayerProtoConverter::DeserializeLayerHierarchy(old_root, root_node);
+      LayerProtoConverter::DeserializeLayerHierarchy(old_root, root_node,
+                                                     layer_tree_host_.get());
 
   // Validate that the ids are equal.
   EXPECT_EQ(old_root->id(), new_root->id());
@@ -443,13 +363,14 @@ TEST_F(LayerProtoConverterTest, PictureLayerTypeDeserialization) {
   proto::LayerNode layer_node;
   new_root->SetTypeForProtoSerialization(&layer_node);
   EXPECT_EQ(proto::LayerNode::PICTURE_LAYER, layer_node.type());
+
+  new_root->SetLayerTreeHost(nullptr);
 }
 
 TEST_F(LayerProtoConverterTest, HudLayerTypeSerialization) {
   // Make sure that PictureLayers serialize to the
   // proto::LayerType::HEADS_UP_DISPLAY_LAYER type.
-  scoped_refptr<HeadsUpDisplayLayer> layer =
-      HeadsUpDisplayLayer::Create(LayerSettings());
+  scoped_refptr<HeadsUpDisplayLayer> layer = HeadsUpDisplayLayer::Create();
 
   proto::LayerNode layer_hierarchy;
   LayerProtoConverter::SerializeLayerHierarchy(layer.get(), &layer_hierarchy);
@@ -459,13 +380,14 @@ TEST_F(LayerProtoConverterTest, HudLayerTypeSerialization) {
 TEST_F(LayerProtoConverterTest, HudLayerTypeDeserialization) {
   // Make sure that proto::LayerType::HEADS_UP_DISPLAY_LAYER ends up building a
   // HeadsUpDisplayLayer.
-  scoped_refptr<Layer> old_root = HeadsUpDisplayLayer::Create(LayerSettings());
+  scoped_refptr<Layer> old_root = HeadsUpDisplayLayer::Create();
   proto::LayerNode root_node;
   root_node.set_id(old_root->id());
   root_node.set_type(proto::LayerNode::HEADS_UP_DISPLAY_LAYER);
 
   scoped_refptr<Layer> new_root =
-      LayerProtoConverter::DeserializeLayerHierarchy(old_root, root_node);
+      LayerProtoConverter::DeserializeLayerHierarchy(old_root, root_node,
+                                                     layer_tree_host_.get());
 
   // Validate that the ids are equal.
   EXPECT_EQ(old_root->id(), new_root->id());
@@ -475,6 +397,8 @@ TEST_F(LayerProtoConverterTest, HudLayerTypeDeserialization) {
   proto::LayerNode layer_node;
   new_root->SetTypeForProtoSerialization(&layer_node);
   EXPECT_EQ(proto::LayerNode::HEADS_UP_DISPLAY_LAYER, layer_node.type());
+
+  new_root->SetLayerTreeHost(nullptr);
 }
 
 }  // namespace

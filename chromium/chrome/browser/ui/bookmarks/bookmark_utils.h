@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/strings/string16.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/native_widget_types.h"
@@ -57,8 +56,7 @@ void ToggleBookmarkBarWhenVisible(content::BrowserContext* browser_context);
 // Returns a formatted version of |url| appropriate to display to a user with
 // the given |prefs|, which may be NULL.  When re-parsing this URL, clients
 // should call url_formatter::FixupURL().
-base::string16 FormatBookmarkURLForDisplay(const GURL& url,
-                                           const PrefService* prefs);
+base::string16 FormatBookmarkURLForDisplay(const GURL& url);
 
 // Returns whether the Apps shortcut is enabled. If true, then the visibility
 // of the Apps shortcut should be controllable via an item in the bookmark

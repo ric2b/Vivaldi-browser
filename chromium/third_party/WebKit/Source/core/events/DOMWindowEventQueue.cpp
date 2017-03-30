@@ -33,8 +33,8 @@
 
 namespace blink {
 
-class DOMWindowEventQueueTimer final : public NoBaseWillBeGarbageCollectedFinalized<DOMWindowEventQueueTimer>, public SuspendableTimer {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(DOMWindowEventQueueTimer);
+class DOMWindowEventQueueTimer final : public GarbageCollectedFinalized<DOMWindowEventQueueTimer>, public SuspendableTimer {
+    USING_GARBAGE_COLLECTED_MIXIN(DOMWindowEventQueueTimer);
     WTF_MAKE_NONCOPYABLE(DOMWindowEventQueueTimer);
 public:
     DOMWindowEventQueueTimer(DOMWindowEventQueue* eventQueue, ExecutionContext* context)
@@ -55,16 +55,16 @@ public:
 private:
     virtual void fired() { m_eventQueue->pendingEventTimerFired(); }
 
-    RawPtrWillBeMember<DOMWindowEventQueue> m_eventQueue;
+    Member<DOMWindowEventQueue> m_eventQueue;
 };
 
-PassRefPtrWillBeRawPtr<DOMWindowEventQueue> DOMWindowEventQueue::create(ExecutionContext* context)
+DOMWindowEventQueue* DOMWindowEventQueue::create(ExecutionContext* context)
 {
-    return adoptRefWillBeNoop(new DOMWindowEventQueue(context));
+    return new DOMWindowEventQueue(context);
 }
 
 DOMWindowEventQueue::DOMWindowEventQueue(ExecutionContext* context)
-    : m_pendingEventTimer(adoptPtrWillBeNoop(new DOMWindowEventQueueTimer(this, context)))
+    : m_pendingEventTimer(new DOMWindowEventQueueTimer(this, context))
     , m_isClosed(false)
 {
     m_pendingEventTimer->suspendIfNeeded();
@@ -76,20 +76,18 @@ DOMWindowEventQueue::~DOMWindowEventQueue()
 
 DEFINE_TRACE(DOMWindowEventQueue)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_pendingEventTimer);
     visitor->trace(m_queuedEvents);
-#endif
     EventQueue::trace(visitor);
 }
 
-bool DOMWindowEventQueue::enqueueEvent(PassRefPtrWillBeRawPtr<Event> event)
+bool DOMWindowEventQueue::enqueueEvent(Event* event)
 {
     if (m_isClosed)
         return false;
 
     ASSERT(event->target());
-    InspectorInstrumentation::didEnqueueEvent(event->target(), event.get());
+    InspectorInstrumentation::asyncTaskScheduled(event->target()->getExecutionContext(), event->type(), event);
 
     bool wasAdded = m_queuedEvents.add(event).isNewEntry;
     ASSERT_UNUSED(wasAdded, wasAdded); // It should not have already been in the list.
@@ -102,10 +100,10 @@ bool DOMWindowEventQueue::enqueueEvent(PassRefPtrWillBeRawPtr<Event> event)
 
 bool DOMWindowEventQueue::cancelEvent(Event* event)
 {
-    WillBeHeapListHashSet<RefPtrWillBeMember<Event>, 16>::iterator it = m_queuedEvents.find(event);
+    HeapListHashSet<Member<Event>, 16>::iterator it = m_queuedEvents.find(event);
     bool found = it != m_queuedEvents.end();
     if (found) {
-        InspectorInstrumentation::didRemoveEvent(event->target(), event);
+        InspectorInstrumentation::asyncTaskCanceled(event->target()->getExecutionContext(), event);
         m_queuedEvents.remove(it);
     }
     if (m_queuedEvents.isEmpty())
@@ -119,9 +117,8 @@ void DOMWindowEventQueue::close()
     m_pendingEventTimer->stop();
     if (InspectorInstrumentation::hasFrontends()) {
         for (const auto& queuedEvent : m_queuedEvents) {
-            RefPtrWillBeRawPtr<Event> event = queuedEvent;
-            if (event)
-                InspectorInstrumentation::didRemoveEvent(event->target(), event.get());
+            if (queuedEvent)
+                InspectorInstrumentation::asyncTaskCanceled(queuedEvent->target()->getExecutionContext(), queuedEvent);
         }
     }
     m_queuedEvents.clear();
@@ -137,22 +134,20 @@ void DOMWindowEventQueue::pendingEventTimerFired()
     bool wasAdded = m_queuedEvents.add(nullptr).isNewEntry;
     ASSERT_UNUSED(wasAdded, wasAdded); // It should not have already been in the list.
 
-    RefPtrWillBeRawPtr<DOMWindowEventQueue> protector(this);
-
     while (!m_queuedEvents.isEmpty()) {
-        WillBeHeapListHashSet<RefPtrWillBeMember<Event>, 16>::iterator iter = m_queuedEvents.begin();
-        RefPtrWillBeRawPtr<Event> event = *iter;
+        HeapListHashSet<Member<Event>, 16>::iterator iter = m_queuedEvents.begin();
+        Event* event = *iter;
         m_queuedEvents.remove(iter);
         if (!event)
             break;
-        dispatchEvent(event.get());
-        InspectorInstrumentation::didRemoveEvent(event->target(), event.get());
+        dispatchEvent(event);
     }
 }
 
-void DOMWindowEventQueue::dispatchEvent(PassRefPtrWillBeRawPtr<Event> event)
+void DOMWindowEventQueue::dispatchEvent(Event* event)
 {
     EventTarget* eventTarget = event->target();
+    InspectorInstrumentation::AsyncTask asyncTask(eventTarget->getExecutionContext(), event);
     if (eventTarget->toDOMWindow())
         eventTarget->toDOMWindow()->dispatchEvent(event, nullptr);
     else

@@ -17,20 +17,22 @@
 #include "public/web/WebPerformance.h"
 #include "public/web/WebRange.h"
 #include "public/web/WebTreeScopeType.h"
-#include "web/RemoteBridgeFrameOwner.h"
+#include "web/RemoteFrameOwner.h"
+#include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 #include <v8/include/v8.h>
 
 namespace blink {
 
-WebRemoteFrame* WebRemoteFrame::create(WebTreeScopeType scope, WebRemoteFrameClient* client)
+WebRemoteFrame* WebRemoteFrame::create(WebTreeScopeType scope, WebRemoteFrameClient* client, WebFrame* opener)
 {
-    return WebRemoteFrameImpl::create(scope, client);
+    return WebRemoteFrameImpl::create(scope, client, opener);
 }
 
-WebRemoteFrameImpl* WebRemoteFrameImpl::create(WebTreeScopeType scope, WebRemoteFrameClient* client)
+WebRemoteFrameImpl* WebRemoteFrameImpl::create(WebTreeScopeType scope, WebRemoteFrameClient* client, WebFrame* opener)
 {
     WebRemoteFrameImpl* frame = new WebRemoteFrameImpl(scope, client);
+    frame->setOpener(opener);
 #if ENABLE(OILPAN)
     return frame;
 #else
@@ -47,7 +49,6 @@ DEFINE_TRACE(WebRemoteFrameImpl)
 {
     visitor->trace(m_frameClient);
     visitor->trace(m_frame);
-    visitor->trace(m_ownersForChildren);
     visitor->template registerWeakMembers<WebFrame, &WebFrame::clearWeakFrames>(this);
     WebFrame::traceFrames(visitor, this);
     WebFrameImplBase::trace(visitor);
@@ -173,12 +174,6 @@ WebView* WebRemoteFrameImpl::view() const
     return WebViewImpl::fromPage(frame()->page());
 }
 
-void WebRemoteFrameImpl::removeChild(WebFrame* frame)
-{
-    WebFrame::removeChild(frame);
-    m_ownersForChildren.remove(frame);
-}
-
 WebDocument WebRemoteFrameImpl::document() const
 {
     // TODO(dcheng): this should also ASSERT_NOT_REACHED, but a lot of
@@ -199,22 +194,6 @@ bool WebRemoteFrameImpl::dispatchBeforeUnloadEvent()
 }
 
 void WebRemoteFrameImpl::dispatchUnloadEvent()
-{
-    ASSERT_NOT_REACHED();
-}
-
-NPObject* WebRemoteFrameImpl::windowObject() const
-{
-    ASSERT_NOT_REACHED();
-    return nullptr;
-}
-
-void WebRemoteFrameImpl::bindToWindowObject(const WebString& name, NPObject*)
-{
-    ASSERT_NOT_REACHED();
-}
-
-void WebRemoteFrameImpl::bindToWindowObject(const WebString& name, NPObject*, void*)
 {
     ASSERT_NOT_REACHED();
 }
@@ -286,12 +265,12 @@ v8::Local<v8::Context> WebRemoteFrameImpl::deprecatedMainWorldScriptContext() co
     return toV8Context(frame(), DOMWrapperWorld::mainWorld());
 }
 
-void WebRemoteFrameImpl::reload(bool ignoreCache)
+void WebRemoteFrameImpl::reload(WebFrameLoadType)
 {
     ASSERT_NOT_REACHED();
 }
 
-void WebRemoteFrameImpl::reloadWithOverrideURL(const WebURL& overrideUrl, bool ignoreCache)
+void WebRemoteFrameImpl::reloadWithOverrideURL(const WebURL& overrideUrl, WebFrameLoadType)
 {
     ASSERT_NOT_REACHED();
 }
@@ -301,7 +280,7 @@ void WebRemoteFrameImpl::loadRequest(const WebURLRequest&)
     ASSERT_NOT_REACHED();
 }
 
-void WebRemoteFrameImpl::loadHistoryItem(const WebHistoryItem&, WebHistoryLoadType, WebURLRequest::CachePolicy)
+void WebRemoteFrameImpl::loadHistoryItem(const WebHistoryItem&, WebHistoryLoadType, WebCachePolicy)
 {
     ASSERT_NOT_REACHED();
 }
@@ -600,20 +579,19 @@ WebString WebRemoteFrameImpl::layerTreeAsText(bool showDebugInfo) const
     return WebString();
 }
 
-WebLocalFrame* WebRemoteFrameImpl::createLocalChild(WebTreeScopeType scope, const WebString& name, const WebString& uniqueName, WebSandboxFlags sandboxFlags, WebFrameClient* client, WebFrame* previousSibling, const WebFrameOwnerProperties& frameOwnerProperties)
+WebLocalFrame* WebRemoteFrameImpl::createLocalChild(WebTreeScopeType scope, const WebString& name, const WebString& uniqueName, WebSandboxFlags sandboxFlags, WebFrameClient* client, WebFrame* previousSibling, const WebFrameOwnerProperties& frameOwnerProperties, WebFrame* opener)
 {
-    WebLocalFrameImpl* child = toWebLocalFrameImpl(WebLocalFrame::create(scope, client));
-    WillBeHeapHashMap<WebFrame*, OwnPtrWillBeMember<FrameOwner>>::AddResult result =
-        m_ownersForChildren.add(child, RemoteBridgeFrameOwner::create(child, static_cast<SandboxFlags>(sandboxFlags), frameOwnerProperties));
+    WebLocalFrameImpl* child = WebLocalFrameImpl::create(scope, client, opener);
     insertAfter(child, previousSibling);
+    RemoteFrameOwner* owner = RemoteFrameOwner::create(static_cast<SandboxFlags>(sandboxFlags), frameOwnerProperties);
     // FIXME: currently this calls LocalFrame::init() on the created LocalFrame, which may
     // result in the browser observing two navigations to about:blank (one from the initial
     // frame creation, and one from swapping it into the remote process). FrameLoader might
     // need a special initialization function for this case to avoid that duplicate navigation.
-    child->initializeCoreFrame(frame()->host(), result.storedValue->value.get(), name, uniqueName);
+    child->initializeCoreFrame(frame()->host(), owner, name, uniqueName);
     // Partially related with the above FIXME--the init() call may trigger JS dispatch. However,
     // if the parent is remote, it should never be detached synchronously...
-    ASSERT(child->frame());
+    DCHECK(child->frame());
     return child;
 }
 
@@ -624,17 +602,16 @@ void WebRemoteFrameImpl::initializeCoreFrame(FrameHost* host, FrameOwner* owner,
     m_frame->tree().setPrecalculatedName(name, uniqueName);
 }
 
-WebRemoteFrame* WebRemoteFrameImpl::createRemoteChild(WebTreeScopeType scope, const WebString& name, const WebString& uniqueName, WebSandboxFlags sandboxFlags, WebRemoteFrameClient* client)
+WebRemoteFrame* WebRemoteFrameImpl::createRemoteChild(WebTreeScopeType scope, const WebString& name, const WebString& uniqueName, WebSandboxFlags sandboxFlags, WebRemoteFrameClient* client, WebFrame* opener)
 {
-    WebRemoteFrameImpl* child = toWebRemoteFrameImpl(WebRemoteFrame::create(scope, client));
-    WillBeHeapHashMap<WebFrame*, OwnPtrWillBeMember<FrameOwner>>::AddResult result =
-        m_ownersForChildren.add(child, RemoteBridgeFrameOwner::create(nullptr, static_cast<SandboxFlags>(sandboxFlags), WebFrameOwnerProperties()));
+    WebRemoteFrameImpl* child = WebRemoteFrameImpl::create(scope, client, opener);
     appendChild(child);
-    child->initializeCoreFrame(frame()->host(), result.storedValue->value.get(), name, uniqueName);
+    RemoteFrameOwner* owner = RemoteFrameOwner::create(static_cast<SandboxFlags>(sandboxFlags), WebFrameOwnerProperties());
+    child->initializeCoreFrame(frame()->host(), owner, name, uniqueName);
     return child;
 }
 
-void WebRemoteFrameImpl::setCoreFrame(PassRefPtrWillBeRawPtr<RemoteFrame> frame)
+void WebRemoteFrameImpl::setCoreFrame(RemoteFrame* frame)
 {
     m_frame = frame;
 }
@@ -648,7 +625,7 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::fromFrame(RemoteFrame& frame)
 
 void WebRemoteFrameImpl::initializeFromFrame(WebLocalFrame* source) const
 {
-    ASSERT(source);
+    DCHECK(source);
     WebLocalFrameImpl* localFrameImpl = toWebLocalFrameImpl(source);
 
     client()->initializeChildFrame(
@@ -658,7 +635,7 @@ void WebRemoteFrameImpl::initializeFromFrame(WebLocalFrame* source) const
 
 void WebRemoteFrameImpl::setReplicatedOrigin(const WebSecurityOrigin& origin) const
 {
-    ASSERT(frame());
+    DCHECK(frame());
     frame()->securityContext()->setReplicatedOrigin(origin);
 
     // If the origin of a remote frame changed, the accessibility object for the owner
@@ -678,25 +655,33 @@ void WebRemoteFrameImpl::setReplicatedOrigin(const WebSecurityOrigin& origin) co
 
 void WebRemoteFrameImpl::setReplicatedSandboxFlags(WebSandboxFlags flags) const
 {
-    ASSERT(frame());
+    DCHECK(frame());
     frame()->securityContext()->enforceSandboxFlags(static_cast<SandboxFlags>(flags));
 }
 
 void WebRemoteFrameImpl::setReplicatedName(const WebString& name, const WebString& uniqueName) const
 {
-    ASSERT(frame());
+    DCHECK(frame());
     frame()->tree().setPrecalculatedName(name, uniqueName);
 }
 
 void WebRemoteFrameImpl::setReplicatedShouldEnforceStrictMixedContentChecking(bool shouldEnforce) const
 {
-    ASSERT(frame());
+    DCHECK(frame());
     frame()->securityContext()->setShouldEnforceStrictMixedContentChecking(shouldEnforce);
+}
+
+void WebRemoteFrameImpl::setReplicatedPotentiallyTrustworthyUniqueOrigin(bool isUniqueOriginPotentiallyTrustworthy) const
+{
+    DCHECK(frame());
+    // If |isUniqueOriginPotentiallyTrustworthy| is true, then the origin must be unique.
+    DCHECK(!isUniqueOriginPotentiallyTrustworthy || frame()->securityContext()->getSecurityOrigin()->isUnique());
+    frame()->securityContext()->getSecurityOrigin()->setUniqueOriginIsPotentiallyTrustworthy(isUniqueOriginPotentiallyTrustworthy);
 }
 
 void WebRemoteFrameImpl::DispatchLoadEventForFrameOwner() const
 {
-    ASSERT(frame()->owner()->isLocal());
+    DCHECK(frame()->owner()->isLocal());
     frame()->owner()->dispatchLoad();
 }
 

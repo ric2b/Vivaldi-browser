@@ -17,6 +17,7 @@
 #include "base/environment.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -137,24 +138,36 @@ const char kNpnTrialName[] = "NPN";
 const char kNpnTrialEnabledGroupNamePrefix[] = "Enable";
 const char kNpnTrialDisabledGroupNamePrefix[] = "Disable";
 
+// Field trial for priority dependencies.
+const char kSpdyDependenciesFieldTrial[] = "SpdyEnableDependencies";
+const char kSpdyDependenciesFieldTrialEnable[] = "Enable";
+const char kSpdyDepencenciesFieldTrialDisable[] = "Disable";
+
 // Used for the "system" URLRequestContext.
 class SystemURLRequestContext : public net::URLRequestContext {
  public:
-  SystemURLRequestContext() { net::SetURLRequestContextForNSSHttpIO(this); }
+  SystemURLRequestContext() {
+#if defined(USE_NSS_VERIFIER)
+    net::SetURLRequestContextForNSSHttpIO(this);
+#endif
+  }
 
  private:
   ~SystemURLRequestContext() override {
     AssertNoURLRequests();
+#if defined(USE_NSS_VERIFIER)
     net::SetURLRequestContextForNSSHttpIO(nullptr);
+#endif
   }
 };
 
-scoped_ptr<net::HostResolver> CreateGlobalHostResolver(net::NetLog* net_log) {
+std::unique_ptr<net::HostResolver> CreateGlobalHostResolver(
+    net::NetLog* net_log) {
   TRACE_EVENT0("startup", "IOSChromeIOThread::CreateGlobalHostResolver");
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
 
-  scoped_ptr<net::HostResolver> global_host_resolver =
+  std::unique_ptr<net::HostResolver> global_host_resolver =
       net::HostResolver::CreateSystemResolver(net::HostResolver::Options(),
                                               net_log);
 
@@ -164,7 +177,7 @@ scoped_ptr<net::HostResolver> CreateGlobalHostResolver(net::NetLog* net_log) {
   if (!command_line.HasSwitch(switches::kIOSHostResolverRules))
     return global_host_resolver;
 
-  scoped_ptr<net::MappedHostResolver> remapped_resolver(
+  std::unique_ptr<net::MappedHostResolver> remapped_resolver(
       new net::MappedHostResolver(std::move(global_host_resolver)));
   remapped_resolver->SetRulesFromString(
       command_line.GetSwitchValueASCII(switches::kIOSHostResolverRules));
@@ -377,7 +390,9 @@ void IOSChromeIOThread::Init() {
   TRACE_EVENT0("startup", "IOSChromeIOThread::Init");
   DCHECK_CURRENTLY_ON(web::WebThread::IO);
 
+#if defined(USE_NSS_VERIFIER)
   net::SetMessageLoopForNSSHttpIO();
+#endif
 
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
@@ -393,7 +408,7 @@ void IOSChromeIOThread::Init() {
   // Setup the HistogramWatcher to run on the IO thread.
   net::NetworkChangeNotifier::InitHistogramWatcher();
 
-  scoped_ptr<IOSChromeNetworkDelegate> chrome_network_delegate(
+  std::unique_ptr<IOSChromeNetworkDelegate> chrome_network_delegate(
       new IOSChromeNetworkDelegate());
 
   globals_->system_network_delegate = std::move(chrome_network_delegate);
@@ -403,7 +418,7 @@ void IOSChromeIOThread::Init() {
   variations::GetVariationParams(kNetworkQualityEstimatorFieldTrialName,
                                  &network_quality_estimator_params);
 
-  scoped_ptr<net::ExternalEstimateProvider> external_estimate_provider;
+  std::unique_ptr<net::ExternalEstimateProvider> external_estimate_provider;
   // Pass ownership.
   globals_->network_quality_estimator.reset(new net::NetworkQualityEstimator(
       std::move(external_estimate_provider), network_quality_estimator_params));
@@ -429,11 +444,13 @@ void IOSChromeIOThread::Init() {
   CreateDefaultAuthHandlerFactory();
   globals_->http_server_properties.reset(new net::HttpServerPropertiesImpl());
   // In-memory cookie store.
-  globals_->system_cookie_store = new net::CookieMonster(nullptr, nullptr);
+  globals_->system_cookie_store.reset(new net::CookieMonster(nullptr, nullptr));
   // In-memory channel ID store.
   globals_->system_channel_id_service.reset(
       new net::ChannelIDService(new net::DefaultChannelIDStore(nullptr),
                                 base::WorkerPool::GetTaskRunner(true)));
+  globals_->system_cookie_store->SetChannelIDServiceID(
+      globals_->system_channel_id_service->GetUniqueID());
   globals_->http_user_agent_settings.reset(new net::StaticHttpUserAgentSettings(
       std::string(), web::GetWebClient()->GetUserAgent(false)));
   if (command_line.HasSwitch(switches::kIOSTestingFixedHttpPort)) {
@@ -447,6 +464,7 @@ void IOSChromeIOThread::Init() {
   ConfigureAltSvcGlobals(
       base::FieldTrialList::FindFullName(kAltSvcFieldTrialName), globals_);
   ConfigureQuic();
+  ConfigurePriorityDependencies();
   InitializeNetworkOptions();
 
   const version_info::Channel channel = ::GetChannel();
@@ -474,7 +492,9 @@ void IOSChromeIOThread::Init() {
 }
 
 void IOSChromeIOThread::CleanUp() {
+#if defined(USE_NSS_VERIFIER)
   net::ShutdownNSSHttpIO();
+#endif
 
   system_url_request_context_getter_ = nullptr;
 
@@ -634,10 +654,11 @@ void IOSChromeIOThread::InitializeNetworkSessionParamsFromGlobals(
       &params->parse_alternative_services);
   globals.enable_alternative_service_with_different_host.CopyToIfSet(
       &params->enable_alternative_service_with_different_host);
-  globals.alternative_service_probability_threshold.CopyToIfSet(
-      &params->alternative_service_probability_threshold);
 
   globals.enable_npn.CopyToIfSet(&params->enable_npn);
+
+  globals.enable_priority_dependencies.CopyToIfSet(
+      &params->enable_priority_dependencies);
 
   globals.enable_quic.CopyToIfSet(&params->enable_quic);
   globals.enable_quic_for_proxies.CopyToIfSet(&params->enable_quic_for_proxies);
@@ -717,6 +738,16 @@ void IOSChromeIOThread::InitSystemRequestContextOnIOThread() {
 
   globals_->system_request_context.reset(
       ConstructSystemRequestContext(globals_, net_log_));
+}
+
+void IOSChromeIOThread::ConfigurePriorityDependencies() {
+  std::string group =
+      base::FieldTrialList::FindFullName(kSpdyDependenciesFieldTrial);
+  if (group == kSpdyDependenciesFieldTrialEnable) {
+    globals_->enable_priority_dependencies.set(true);
+  } else if (group == kSpdyDepencenciesFieldTrialDisable) {
+    globals_->enable_priority_dependencies.set(false);
+  }
 }
 
 void IOSChromeIOThread::ConfigureQuic() {
@@ -806,14 +837,6 @@ void IOSChromeIOThread::ConfigureQuicGlobals(
     supported_versions.push_back(version);
     globals->quic_supported_versions.set(supported_versions);
   }
-
-  double threshold =
-      GetAlternativeProtocolProbabilityThreshold(quic_trial_params);
-  if (threshold >= 0 && threshold <= 1) {
-    globals->alternative_service_probability_threshold.set(threshold);
-    globals->http_server_properties->SetAlternativeServiceProbabilityThreshold(
-        threshold);
-  }
 }
 
 bool IOSChromeIOThread::ShouldEnableQuic(base::StringPiece quic_trial_group) {
@@ -840,26 +863,6 @@ net::QuicTagVector IOSChromeIOThread::GetQuicConnectionOptions(
   }
 
   return net::QuicUtils::ParseQuicConnectionOptions(it->second);
-}
-
-double IOSChromeIOThread::GetAlternativeProtocolProbabilityThreshold(
-    const VariationParameters& quic_trial_params) {
-  double value;
-  // TODO(bnc): Remove when new parameter name rolls out and server
-  // configuration is changed.
-  if (base::StringToDouble(
-          GetVariationParam(quic_trial_params,
-                            "alternate_protocol_probability_threshold"),
-          &value)) {
-    return value;
-  }
-  if (base::StringToDouble(
-          GetVariationParam(quic_trial_params,
-                            "alternative_service_probability_threshold"),
-          &value)) {
-    return value;
-  }
-  return -1;
 }
 
 bool IOSChromeIOThread::ShouldQuicAlwaysRequireHandshakeConfirmation(
@@ -1020,7 +1023,7 @@ net::URLRequestContext* IOSChromeIOThread::ConstructSystemRequestContext(
   // Data URLs are always loaded through the system request context on iOS
   // (due to UIWebView limitations).
   bool set_protocol = system_job_factory->SetProtocolHandler(
-      url::kDataScheme, make_scoped_ptr(new net::DataProtocolHandler()));
+      url::kDataScheme, base::WrapUnique(new net::DataProtocolHandler()));
   DCHECK(set_protocol);
   globals->system_url_request_job_factory.reset(system_job_factory);
   context->set_job_factory(globals->system_url_request_job_factory.get());

@@ -17,6 +17,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
+#include "ipc/attachment_broker_privileged.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_listener.h"
@@ -149,7 +150,7 @@ class DesktopProcessTest : public testing::Test {
 
  protected:
   // The daemon's end of the daemon-to-desktop channel.
-  scoped_ptr<IPC::ChannelProxy> daemon_channel_;
+  std::unique_ptr<IPC::ChannelProxy> daemon_channel_;
 
   // Delegate that is passed to |daemon_channel_|.
   MockDaemonListener daemon_listener_;
@@ -160,7 +161,7 @@ class DesktopProcessTest : public testing::Test {
   scoped_refptr<AutoThreadTaskRunner> io_task_runner_;
 
   // The network's end of the network-to-desktop channel.
-  scoped_ptr<IPC::ChannelProxy> network_channel_;
+  std::unique_ptr<IPC::ChannelProxy> network_channel_;
 
   // Delegate that is passed to |network_channel_|.
   MockNetworkListener network_listener_;
@@ -172,6 +173,7 @@ DesktopProcessTest::~DesktopProcessTest() {
 }
 
 void DesktopProcessTest::SetUp() {
+  IPC::AttachmentBrokerPrivileged::CreateBrokerForSingleProcessTests();
 }
 
 void DesktopProcessTest::TearDown() {
@@ -183,7 +185,7 @@ void DesktopProcessTest::ConnectNetworkChannel(
 #if defined(OS_POSIX)
   IPC::ChannelHandle channel_handle(std::string(), desktop_process);
 #elif defined(OS_WIN)
-  IPC::ChannelHandle channel_handle(desktop_process);
+  IPC::ChannelHandle channel_handle(desktop_process.GetHandle());
 #endif  // defined(OS_WIN)
 
   network_channel_ =
@@ -267,7 +269,7 @@ void DesktopProcessTest::RunDesktopProcess() {
       IPC::ChannelHandle(channel_name), IPC::Channel::MODE_SERVER,
       &daemon_listener_, io_task_runner_.get());
 
-  scoped_ptr<MockDesktopEnvironmentFactory> desktop_environment_factory(
+  std::unique_ptr<MockDesktopEnvironmentFactory> desktop_environment_factory(
       new MockDesktopEnvironmentFactory());
   EXPECT_CALL(*desktop_environment_factory, CreatePtr())
       .Times(AnyNumber())

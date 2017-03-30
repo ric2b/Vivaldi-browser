@@ -7,15 +7,15 @@
 
 #include <vector>
 
+#include "base/move.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/message_filter.h"
-#include "mojo/public/cpp/system/macros.h"
 
 namespace mojo {
 namespace internal {
 
 class FilterChain {
-  MOJO_MOVE_ONLY_TYPE(FilterChain)
+  MOVE_ONLY_TYPE_FOR_CPP_03(FilterChain)
 
  public:
   // Doesn't take ownership of |sink|. Therefore |sink| has to stay alive while

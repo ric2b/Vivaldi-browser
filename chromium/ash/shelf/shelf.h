@@ -7,9 +7,10 @@
 
 #include "ash/ash_export.h"
 #include "ash/shelf/shelf_constants.h"
+#include "ash/shelf/shelf_locking_manager.h"
 #include "ash/shelf/shelf_types.h"
+#include "ash/shelf/shelf_widget.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/widget/widget_observer.h"
 
@@ -35,12 +36,10 @@ class ShelfDelegate;
 class ShelfIconObserver;
 class ShelfModel;
 class ShelfView;
-class ShelfWidget;
 
 namespace test {
 class ShelfTestAPI;
 }
-
 
 class ASH_EXPORT Shelf {
  public:
@@ -53,12 +52,44 @@ class ASH_EXPORT Shelf {
   static Shelf* ForPrimaryDisplay();
 
   // Return the shelf for the display that |window| is currently on, or a shelf
-  // on primary display if the shelf per display feature  is disabled. NULL if
-  // no user is logged in yet.
-  static Shelf* ForWindow(aura::Window* window);
+  // on primary display if the shelf per display feature is disabled. NULL if no
+  // user is logged in yet.
+  static Shelf* ForWindow(const aura::Window* window);
 
   void SetAlignment(ShelfAlignment alignment);
   ShelfAlignment alignment() const { return alignment_; }
+  bool IsHorizontalAlignment() const;
+
+  // Sets the ShelfAutoHideBehavior. See enum description for details.
+  void SetAutoHideBehavior(ShelfAutoHideBehavior auto_hide_behavior);
+  ShelfAutoHideBehavior auto_hide_behavior() const {
+    return auto_hide_behavior_;
+  }
+
+  // TODO(msw): Remove this accessor, kept temporarily to simplify changes.
+  ShelfAutoHideBehavior GetAutoHideBehavior() const;
+
+  // A helper functions that chooses values specific to a shelf alignment.
+  template <typename T>
+  T SelectValueForShelfAlignment(T bottom, T left, T right) const {
+    switch (alignment_) {
+      case SHELF_ALIGNMENT_BOTTOM:
+      case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+        return bottom;
+      case SHELF_ALIGNMENT_LEFT:
+        return left;
+      case SHELF_ALIGNMENT_RIGHT:
+        return right;
+    }
+    NOTREACHED();
+    return right;
+  }
+
+  // A helper functions that chooses values specific to a shelf alignment type.
+  template <typename T>
+  T PrimaryAxisValue(T horizontal, T vertical) const {
+    return IsHorizontalAlignment() ? horizontal : vertical;
+  }
 
   // Returns the screen bounds of the item for the specified window. If there is
   // no item for the specified window an empty rect is returned.
@@ -96,9 +127,10 @@ class ASH_EXPORT Shelf {
 
   ShelfWidget* shelf_widget() { return shelf_widget_; }
 
-  // Set the bounds of the shelf view.
-  void SetShelfViewBounds(gfx::Rect bounds);
-  gfx::Rect GetShelfViewBounds() const;
+  // TODO(msw): ShelfLayoutManager should not be accessed externally.
+  ShelfLayoutManager* shelf_layout_manager() {
+    return shelf_widget_->shelf_layout_manager();
+  }
 
   // Returns rectangle bounding all visible shelf items. Used screen coordinate
   // system.
@@ -110,14 +142,13 @@ class ASH_EXPORT Shelf {
  private:
   friend class test::ShelfTestAPI;
 
-  // ShelfView used to display icons.
-  ShelfView* shelf_view_;
-
-  ShelfAlignment alignment_;
-
   ShelfDelegate* delegate_;
-
   ShelfWidget* shelf_widget_;
+  ShelfView* shelf_view_;
+  ShelfLockingManager shelf_locking_manager_;
+
+  ShelfAlignment alignment_ = SHELF_ALIGNMENT_BOTTOM;
+  ShelfAutoHideBehavior auto_hide_behavior_ = SHELF_AUTO_HIDE_BEHAVIOR_NEVER;
 
   DISALLOW_COPY_AND_ASSIGN(Shelf);
 };

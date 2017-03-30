@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.customtabs;
 
 import android.app.ActivityManager;
 import android.app.Application;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
@@ -26,6 +27,7 @@ import android.support.customtabs.ICustomTabsCallback;
 import android.support.customtabs.ICustomTabsService;
 import android.text.TextUtils;
 import android.view.WindowManager;
+import android.widget.RemoteViews;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.FieldTrialList;
@@ -34,8 +36,6 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.SuppressFBWarnings;
-import org.chromium.base.library_loader.LibraryLoader;
-import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
@@ -45,7 +45,7 @@ import org.chromium.chrome.browser.WebContentsFactory;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.prerender.ExternalPrerenderHandler;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.util.IntentUtils;
@@ -169,16 +169,6 @@ public class CustomTabsConnection extends ICustomTabsService.Stub {
     private static void initializeBrowser(final Application app) {
         ThreadUtils.assertOnUiThread();
         try {
-            // Loading the native library may spuriously trigger StrictMode violations when
-            // running instrumentation tests. This does not happen if full Chrome has
-            // started before reaching this point.
-            // crbug.com/574532
-            if (!LibraryLoader.isInitialized()) {
-                StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
-                LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER)
-                        .ensureInitialized(app.getApplicationContext());
-                StrictMode.setThreadPolicy(oldPolicy);
-            }
             ChromeBrowserInitializer.getInstance(app).handleSynchronousStartup();
         } catch (ProcessInitException e) {
             Log.e(TAG, "ProcessInitException while starting the browser process.");
@@ -401,25 +391,47 @@ public class CustomTabsConnection extends ICustomTabsService.Stub {
     public boolean updateVisuals(final ICustomTabsCallback callback, Bundle bundle) {
         final Bundle actionButtonBundle = IntentUtils.safeGetBundle(bundle,
                 CustomTabsIntent.EXTRA_ACTION_BUTTON_BUNDLE);
-        if (actionButtonBundle == null) return false;
-        final int id = actionButtonBundle.getInt(CustomTabsIntent.KEY_ID,
-                CustomTabsIntent.TOOLBAR_ACTION_BUTTON_ID);
-        final Bitmap bitmap = CustomButtonParams.parseBitmapFromBundle(actionButtonBundle);
-        final String description = CustomButtonParams
-                .parseDescriptionFromBundle(actionButtonBundle);
-        if (bitmap == null || description == null) return false;
-
-        try {
-            return ThreadUtils.runOnUiThreadBlocking(new Callable<Boolean>() {
-                @Override
-                public Boolean call() throws Exception {
-                    return CustomTabActivity.updateCustomButton(callback.asBinder(), id, bitmap,
-                            description);
+        boolean result = true;
+        if (actionButtonBundle != null) {
+            final int id = IntentUtils.safeGetInt(actionButtonBundle, CustomTabsIntent.KEY_ID,
+                    CustomTabsIntent.TOOLBAR_ACTION_BUTTON_ID);
+            final Bitmap bitmap = CustomButtonParams.parseBitmapFromBundle(actionButtonBundle);
+            final String description = CustomButtonParams
+                    .parseDescriptionFromBundle(actionButtonBundle);
+            if (bitmap != null && description != null) {
+                try {
+                    result &= ThreadUtils.runOnUiThreadBlocking(new Callable<Boolean>() {
+                        @Override
+                        public Boolean call() throws Exception {
+                            return CustomTabActivity.updateCustomButton(callback.asBinder(), id,
+                                    bitmap, description);
+                        }
+                    });
+                } catch (ExecutionException e) {
+                    result = false;
                 }
-            });
-        } catch (ExecutionException e) {
-            return false;
+            }
         }
+        if (bundle.containsKey(CustomTabsIntent.EXTRA_REMOTEVIEWS)) {
+            final RemoteViews remoteViews = IntentUtils.safeGetParcelable(bundle,
+                    CustomTabsIntent.EXTRA_REMOTEVIEWS);
+            final int[] clickableIDs = IntentUtils.safeGetIntArray(bundle,
+                    CustomTabsIntent.EXTRA_REMOTEVIEWS_VIEW_IDS);
+            final PendingIntent pendingIntent = IntentUtils.safeGetParcelable(bundle,
+                    CustomTabsIntent.EXTRA_REMOTEVIEWS_PENDINGINTENT);
+            try {
+                result &= ThreadUtils.runOnUiThreadBlocking(new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() throws Exception {
+                        return CustomTabActivity.updateRemoteViews(callback.asBinder(),
+                                remoteViews, clickableIDs, pendingIntent);
+                    }
+                });
+            } catch (ExecutionException e) {
+                result = false;
+            }
+        }
+        return result;
     }
 
     /**
@@ -523,6 +535,15 @@ public class CustomTabsConnection extends ICustomTabsService.Stub {
     }
 
     /**
+     * Extracts the creator package name from the intent.
+     * @param intent The intent to get the package name from.
+     * @return the package name which can be null.
+     */
+    String extractCreatorPackage(Intent intent) {
+        return null;
+    }
+
+    /**
      * Shows a toast about any possible sign in issues encountered during custom tab startup.
      * @param session The session that corresponding custom tab is assigned.
      * @param intent The intent that launched the custom tab.
@@ -533,7 +554,7 @@ public class CustomTabsConnection extends ICustomTabsService.Stub {
      * Notifies the application of a navigation event.
      *
      * Delivers the {@link ICustomTabsConnectionCallback#onNavigationEvent}
-     * callback to the aplication.
+     * callback to the application.
      *
      * @param session The Binder object identifying the session.
      * @param navigationEvent The navigation event code, defined in {@link CustomTabsCallback}
@@ -654,10 +675,7 @@ public class CustomTabsConnection extends ICustomTabsService.Stub {
     private boolean mayPrerender(IBinder session) {
         if (FieldTrialList.findFullName("CustomTabs").equals("DisablePrerender")) return false;
         if (!DeviceClassManager.enablePrerendering()) return false;
-        // TODO(yusufo): The check for prerender in PrivacyManager now checks for the network
-        // connection type as well, we should either change that or add another check for custom
-        // tabs. Then PrivacyManager should be used to make the below check.
-        if (!PrefServiceBridge.getInstance().getNetworkPredictionEnabled()) return false;
+        if (!PrivacyPreferencesManager.getInstance(mApplication).shouldPrerender()) return false;
         if (DataReductionProxySettings.getInstance().isDataReductionProxyEnabled()) return false;
         ConnectivityManager cm =
                 (ConnectivityManager) mApplication.getApplicationContext().getSystemService(

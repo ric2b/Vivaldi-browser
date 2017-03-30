@@ -35,7 +35,7 @@ class CSSRuleList;
 class CSSStyleSheet;
 class StyleRuleBase;
 
-class CORE_EXPORT CSSRule : public RefCountedWillBeGarbageCollectedFinalized<CSSRule>, public ScriptWrappable {
+class CORE_EXPORT CSSRule : public GarbageCollectedFinalized<CSSRule>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
     virtual ~CSSRule() { }
@@ -85,8 +85,8 @@ public:
 
     CSSRule* parentRule() const { return m_parentIsRule ? m_parentRule : nullptr; }
 
-    // NOTE: Just calls notImplemented().
-    void setCSSText(const String&);
+    // The CSSOM spec states that "setting the cssText attribute must do nothing."
+    void setCSSText(const String&) { }
 
 protected:
     CSSRule(CSSStyleSheet* parent)

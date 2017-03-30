@@ -6,8 +6,10 @@
 #define CHROME_BROWSER_UI_INPUT_METHOD_INPUT_METHOD_ENGINE_BASE_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
+
 #include "base/time/time.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/composition_text.h"
@@ -28,6 +30,7 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
  public:
   struct KeyboardEvent {
     KeyboardEvent();
+    KeyboardEvent(const KeyboardEvent& other);
     virtual ~KeyboardEvent();
 
     std::string type;
@@ -123,7 +126,7 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
 
   ~InputMethodEngineBase() override;
 
-  void Initialize(scoped_ptr<InputMethodEngineBase::Observer> observer,
+  void Initialize(std::unique_ptr<InputMethodEngineBase::Observer> observer,
                   const char* extension_id,
                   Profile* profile);
 
@@ -154,8 +157,7 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
   bool IsInterestedInKeyEvent() const override;
 
   // Send the sequence of key events.
-  virtual bool SendKeyEvents(int context_id,
-                             const std::vector<KeyboardEvent>& events) = 0;
+  bool SendKeyEvents(int context_id, const std::vector<KeyboardEvent>& events);
 
   // Set the current composition and associated properties.
   bool SetComposition(int context_id,
@@ -186,6 +188,9 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
   // Notifies InputContextHanlder to commit |text|.
   virtual void CommitTextToInputContext(int context_id,
                                         const std::string& text) = 0;
+  // Sends the key event to the window tree host.
+  virtual bool SendKeyEvent(ui::KeyEvent* ui_event,
+                            const std::string& code) = 0;
 
   ui::TextInputType current_input_type_;
 
@@ -202,10 +207,10 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
   std::string extension_id_;
 
   // The observer object recieving events for this IME.
-  scoped_ptr<InputMethodEngineBase::Observer> observer_;
+  std::unique_ptr<InputMethodEngineBase::Observer> observer_;
 
   // The current preedit text, and it's cursor position.
-  scoped_ptr<ui::CompositionText> composition_text_;
+  std::unique_ptr<ui::CompositionText> composition_text_;
   int composition_cursor_;
 
   // Used with SendKeyEvents and ProcessKeyEvent to check if the key event

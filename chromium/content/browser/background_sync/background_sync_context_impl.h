@@ -37,7 +37,8 @@ class CONTENT_EXPORT BackgroundSyncContextImpl : public BackgroundSyncContext {
 
   // Create a BackgroundSyncServiceImpl that is owned by this. Call on the UI
   // thread.
-  void CreateService(mojo::InterfaceRequest<BackgroundSyncService> request);
+  void CreateService(
+      mojo::InterfaceRequest<mojom::BackgroundSyncService> request);
 
   // Called by BackgroundSyncServiceImpl objects so that they can
   // be deleted. Call on the IO thread.
@@ -49,14 +50,17 @@ class CONTENT_EXPORT BackgroundSyncContextImpl : public BackgroundSyncContext {
  protected:
   ~BackgroundSyncContextImpl() override;
 
+  void set_background_sync_manager_for_testing(
+      scoped_ptr<BackgroundSyncManager> manager);
+
  private:
   friend class BackgroundSyncServiceImplTest;
 
-  void CreateBackgroundSyncManager(
-      const scoped_refptr<ServiceWorkerContextWrapper>& context);
+  virtual void CreateBackgroundSyncManager(
+      scoped_refptr<ServiceWorkerContextWrapper> context);
 
   void CreateServiceOnIOThread(
-      mojo::InterfaceRequest<BackgroundSyncService> request);
+      mojo::InterfaceRequest<mojom::BackgroundSyncService> request);
 
   void ShutdownOnIO();
 

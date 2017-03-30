@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -51,6 +53,7 @@ bool DeserializeNotificationDatabaseData(const std::string& input,
   notification_data->body = base::UTF8ToUTF16(payload.body());
   notification_data->tag = payload.tag();
   notification_data->icon = GURL(payload.icon());
+  notification_data->badge = GURL(payload.badge());
 
   if (payload.vibration_pattern().size() > 0) {
     notification_data->vibration_pattern.assign(
@@ -70,9 +73,25 @@ bool DeserializeNotificationDatabaseData(const std::string& input,
 
   for (const auto& payload_action : payload.actions()) {
     PlatformNotificationAction action;
+
+    switch (payload_action.type()) {
+      case NotificationDatabaseDataProto::NotificationAction::BUTTON:
+        action.type = PLATFORM_NOTIFICATION_ACTION_TYPE_BUTTON;
+        break;
+      case NotificationDatabaseDataProto::NotificationAction::TEXT:
+        action.type = PLATFORM_NOTIFICATION_ACTION_TYPE_TEXT;
+        break;
+      default:
+        NOTREACHED();
+    }
+
     action.action = payload_action.action();
     action.title = base::UTF8ToUTF16(payload_action.title());
     action.icon = GURL(payload_action.icon());
+    if (payload_action.has_placeholder()) {
+      action.placeholder = base::NullableString16(
+          base::UTF8ToUTF16(payload_action.placeholder()), false);
+    }
     notification_data->actions.push_back(action);
   }
 
@@ -83,7 +102,7 @@ bool SerializeNotificationDatabaseData(const NotificationDatabaseData& input,
                                        std::string* output) {
   DCHECK(output);
 
-  scoped_ptr<NotificationDatabaseDataProto::NotificationData> payload(
+  std::unique_ptr<NotificationDatabaseDataProto::NotificationData> payload(
       new NotificationDatabaseDataProto::NotificationData());
 
   const PlatformNotificationData& notification_data = input.notification_data;
@@ -109,6 +128,7 @@ bool SerializeNotificationDatabaseData(const NotificationDatabaseData& input,
   payload->set_body(base::UTF16ToUTF8(notification_data.body));
   payload->set_tag(notification_data.tag);
   payload->set_icon(notification_data.icon.spec());
+  payload->set_badge(notification_data.badge.spec());
 
   for (size_t i = 0; i < notification_data.vibration_pattern.size(); ++i)
     payload->add_vibration_pattern(notification_data.vibration_pattern[i]);
@@ -126,9 +146,28 @@ bool SerializeNotificationDatabaseData(const NotificationDatabaseData& input,
   for (const PlatformNotificationAction& action : notification_data.actions) {
     NotificationDatabaseDataProto::NotificationAction* payload_action =
         payload->add_actions();
+
+    switch (action.type) {
+      case PLATFORM_NOTIFICATION_ACTION_TYPE_BUTTON:
+        payload_action->set_type(
+            NotificationDatabaseDataProto::NotificationAction::BUTTON);
+        break;
+      case PLATFORM_NOTIFICATION_ACTION_TYPE_TEXT:
+        payload_action->set_type(
+            NotificationDatabaseDataProto::NotificationAction::TEXT);
+        break;
+      default:
+        NOTREACHED() << "Unknown action type: " << action.type;
+    }
+
     payload_action->set_action(action.action);
     payload_action->set_title(base::UTF16ToUTF8(action.title));
     payload_action->set_icon(action.icon.spec());
+
+    if (!action.placeholder.is_null()) {
+      payload_action->set_placeholder(
+          base::UTF16ToUTF8(action.placeholder.string()));
+    }
   }
 
   NotificationDatabaseDataProto message;

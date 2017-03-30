@@ -14,7 +14,6 @@
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
@@ -216,6 +215,7 @@ class FormStructure {
   bool operator!=(const FormData& form) const;
 
  private:
+  friend class AutofillMergeTest;
   friend class FormStructureTest;
   FRIEND_TEST_ALL_PREFIXES(AutofillDownloadTest, QueryAndUploadTest);
   FRIEND_TEST_ALL_PREFIXES(FormStructureTest, FindLongestCommonPrefix);

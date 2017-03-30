@@ -18,14 +18,12 @@
         "Settings.js",
         "StaticContentProvider.js",
         "OutputStream.js",
-        "TestBase.js",
+        "SegmentedRange.js",
+        "Text.js",
         "TextRange.js",
         "TextUtils.js",
         "Throttler.js",
         "UIString.js",
         "ModuleExtensionInterfaces.js"
-    ],
-    "skip_compilation": [
-        "TestBase.js"
     ]
 }

@@ -9,7 +9,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/mac/scoped_nsobject.h"
-#include "base/memory/scoped_ptr.h"
 #include "ios/web/public/web_client.h"
 
 namespace web {
@@ -19,24 +18,15 @@ class TestWebClient : public web::WebClient {
  public:
   TestWebClient();
   ~TestWebClient() override;
-  // WebClient implementation.
-  std::string GetUserAgent(bool is_desktop_user_agent) const override;
-  NSString* GetEarlyPageScript(web::WebViewType web_view_type) const override;
-  bool WebViewsNeedActiveStateManager() const override;
 
-  // Changes the user agent for testing purposes. Passing true
-  // for |is_desktop_user_agent| affects the result of GetUserAgent(true) call.
-  // Passing false affects the result of GetUserAgent(false).
-  void SetUserAgent(const std::string& user_agent, bool is_desktop_user_agent);
+  // WebClient implementation.
+  NSString* GetEarlyPageScript() const override;
 
   // Changes Early Page Script for testing purposes.
-  void SetEarlyPageScript(NSString* page_script,
-                          web::WebViewType web_view_type);
+  void SetEarlyPageScript(NSString* page_script);
 
  private:
-  std::string user_agent_;
-  std::string desktop_user_agent_;
-  base::scoped_nsobject<NSMutableDictionary> early_page_scripts_;
+  base::scoped_nsobject<NSString> early_page_script_;
 };
 
 }  // namespace web

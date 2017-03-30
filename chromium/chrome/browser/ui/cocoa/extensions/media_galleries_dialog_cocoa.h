@@ -50,7 +50,6 @@ class MediaGalleriesDialogCocoa : public ConstrainedWindowMacDelegate,
 
   // MediaGalleryListEntryController implementation.
   void OnCheckboxToggled(MediaGalleryPrefId pref_id, bool checked) override;
-  void OnFolderViewerClicked(MediaGalleryPrefId prefId) override;
   ui::MenuModel* GetContextMenu(MediaGalleryPrefId pref_id) override;
 
  private:
@@ -70,7 +69,7 @@ class MediaGalleriesDialogCocoa : public ConstrainedWindowMacDelegate,
   CGFloat CreateCheckboxSeparator(CGFloat y_pos, NSString* header);
 
   MediaGalleriesDialogController* controller_;  // weak
-  scoped_ptr<ConstrainedWindowMac> window_;
+  std::unique_ptr<ConstrainedWindowMac> window_;
 
   // The alert that the dialog is being displayed as.
   base::scoped_nsobject<ConstrainedWindowAlert> alert_;

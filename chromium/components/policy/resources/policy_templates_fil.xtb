@@ -2,6 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fil">
 <translation id="101438888985615157">I-rotate ang screen nang 180 degrees</translation>
+<translation id="1015272884520659144">Tinutukoy ang listahan ng mga USB device na pinapahintulutang ma-detach mula sa kernel driver ng mga ito upang direktang magamit sa pamamagitan ng chrome.usb API sa loob ng isang web application. Ang mga entry ay mga pares ng Identifier ng USB Vendor at Identifier ng Produkto upang matukoy ang isang partikular na hardware.
+
+      Kung hindi na-configure ang patakarang ito, ituturing na walang laman ang listahan ng mga nade-detach na USB device.</translation>
 <translation id="1017967144265860778">Pamamahala ng power sa screen sa pag-log in</translation>
 <translation id="1019101089073227242">Itakda ang direktoryo ng data ng user</translation>
 <translation id="1022361784792428773">Ang mga ID ng Extension na dapat na iwasan ng user mula sa pag-install (o * para sa lahat)</translation>
@@ -69,8 +72,6 @@
 
       Kung hindi itatakda ang patakaran, o kung itatakda ito sa false, hindi mae-enable ang mga RC4 na cipher suite sa TLS. Maaari itong itakda sa true upang manatili itong compatible sa isang lumang server. Isa lang itong pansamantalang solusyon at dapat pa ring i-configure ang server.</translation>
 <translation id="1297182715641689552">Gumamit ng .pac proxy script</translation>
-<translation id="1300635491585192248">Hulaan ang mga pagkilos sa network sa anumang network na hindi
-          cellular</translation>
 <translation id="1304973015437969093">Ang mga extension/app ID at URL sa pag-update na tahimik na ii-install</translation>
 <translation id="1310699457130669094">Maaari kang tumukoy ng isang URL sa isang proxy .pac file dito.
 
@@ -96,6 +97,7 @@
 <translation id="1359553908012294236">Kung itatakda ang patakarang ito sa true o kung hindi ito iko-configure, ie-enable ng <ph name="PRODUCT_NAME" /> ang mga pag-log in ng bisita. Ang mga pag-log in ng bisita ay mga profile sa <ph name="PRODUCT_NAME" /> kung saan nasa incognito mode ang lahat ng window.
 
       Kung itatakda ang patakarang ito sa false, hindi papayagan ng <ph name="PRODUCT_NAME" /> na magsimula ang mga profile ng bisita.</translation>
+<translation id="1363275621236827384">I-enable ang mga query sa Quirks Server para sa mga profile sa hardware</translation>
 <translation id="1397855852561539316">Default ng iminumungkahing URL ng provider ng paghahanap</translation>
 <translation id="1398889361882383850">Pinapayagan kang itakda kung papayagan ang mga website na awtomatikong magpatakbo ng mga plugin. Maaaring payagan ang awtomatikong pagpapatakbo ng mga plugin para sa lahat ng website o tatanggihan para sa lahat ng website.
 
@@ -234,7 +236,17 @@
       Kung hindi mo pinagana ang setting na ito, sa tuwing magsasagawa ng isang pagkilos ang user na magtutulak ng isang dialog ng pagpili ng file (tulad ng pag-import ng mga bookmark, pag-upload ng mga file, pagse-save ng mga link, atbp.) sa halip ay ipapakita ang isang mensahe at ipagpapalagay na na-click ng user ang Kanselahin sa dialog ng pagpili ng file.
 
       Kung hindi nakatakda ang setting na ito, mabubuksan ng mga user ang mga dialog ng pagpili ng file bilang karaniwan.</translation>
+<translation id="1879485426724769439">Tinutukoy ang dapat gamiting timezone para sa device. Maaaring i-override ng mga user ang tinukoy na timezone para sa kasalukuyang session. Gayunpaman, maitatakda ito muli sa tinukoy na timezone kapag nag-logout. Kung magbibigay ng di-wastong value, maa-activate pa rin ang patakaran gamit ang "GMT" sa halip. Kung magbibigay ng walang lamang string, babalewalain ang patakaran.
+
+      Kung hindi ginagamit ang patakarang ito, mananatiling ginagamit ang aktibong timezone sa kasalukuyan bagama't mababago ng mga user ang timezone at patuloy ang pagbabago. Samakatuwid, naaapektuhan ng pagbabago ng isang user ang screen sa pag-login at ang lahat ng iba pang user.
+
+      Nagsisimula ang mga bagong device na nakatakda ang timezone sa "US/Pacific."
+
+      Sinusundan ng format ng value ang pangalan ng mga timezone sa "IANA Time Zone Database" (tingnan ang "https://en.wikipedia.org/wiki/Tz_database"). Partikular dito, karamihan ng mga timezone ay maaaring matukoy ayon sa "continent/large_city" o "ocean/large_city."
+
+      Kapag itinakda ang patakarang ito, ganap na madi-disable ang awtomatikong pag-alam sa timezone ayon sa lokasyon ng device. Io-override din nito ang SystemTimezoneAutomaticDetection.</translation>
 <translation id="1897365952389968758">Pinapayagang magpatakbo ng JavaScript ang lahat ng mga site</translation>
+<translation id="193259052151668190">Whitelist ng mga nade-detach na USB device</translation>
 <translation id="1933378685401357864">Larawan na wallpaper</translation>
 <translation id="193900697589383153">Nagdaragdag ng button sa pag-logout sa tray ng system.
 
@@ -589,14 +601,6 @@
           Kung nakatakda ang patakarang ito sa True o hindi ito itinakda, hindi ituturing na idle ang user habang nagpe-play ang audio. Pinipigilan nitong maabot ang pag-timeout ng idle at magawa ang pagkilos kapag idle. Gayunpaman, isasagawa ang pag-dim ng screen, pag-off ng screen at pag-lock ng screen pagkalipas ng mga naka-configure na pag-timeout, mayroon mang aktibidad ng audio o wala.
 
           Kung nakatakda sa False ang patakarang ito, hindi pipigilan ng aktibidad ng audio na maituring na idle ang user.</translation>
-<translation id="2948381198510798695">Iba-bypass ng <ph name="PRODUCT_NAME" /> ang anumang proxy para sa listahan ng mga host na ibinigay dito.
-
-          Nagkakaroon ng epekto ang patakarang ito kung napili mo ang mga manu-manong setting ng proxy sa 'Piliin kung paano tumukoy ng mga setting ng proxy server '.
-
-          Dapat mong hayaang hindi nakatakda ang patakarang ito kung pumili ka ng anumang iba pang mode para sa pagtatakda ng mga patakaran ng proxy.
-
-          Para sa higit pang mga detalyadong halimbawa, bisitahin ang:
-          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="2956777931324644324">Itinigil na ang patakarang ito simula ng bersyon 36 ng <ph name="PRODUCT_NAME" /> .
 
       Tinutukoy kung dapat i-enable ang mga extension ng TLS domain-bound na certificate.
@@ -723,6 +727,21 @@
 
           Kung hinayaang hindi nakatakda ang patakarang ito, gagamitin ang default na pandaigdigang value para sa lahat ng site mula sa patakaran na 'DefaultKeygenSetting' kung nakatakda ito, o kung hindi naman ay sa personal na configuration ng user.</translation>
 <translation id="3381968327636295719">Gamitin ang host browser bilang default</translation>
+<translation id="3398137877608138703">Pahintulutan o tanggihan ang pag-capture ng video.
+
+      Kung naka-enable o hindi naka-configure (default), ipo-prompt ang user para sa
+      access sa pag-capture ng video maliban sa mga URL na naka-configure sa
+      listahan ng VideoCaptureAllowedUrls na mabibigyan ng access nang hindi
+      pino-prompt. Maa-access ng mga ARC-app ang camera kung nabigyan ng
+      pahintulot ang mga ito.
+
+      Kapag naka-disable ang patakarang ito, hindi ipo-prompt kahit kailan ang user 
+      at ang pagkuha ng video ay magiging available lang sa mga URL na
+      naka-configure sa VideoCaptureAllowedUrls. Hindi maa-access ng mga ARC-app 
+      ang camera.
+
+      Sa labas ng mga ARC-app, naaapektuhan ng patakarang ito ang lahat ng uri ng
+      input ng video at hindi lang ang built-in na camera.</translation>
 <translation id="3417418267404583991">Kung nakatakda sa true o hindi naka-configure ang patakarang ito, papaganahin ng <ph name="PRODUCT_OS_NAME" /> ang mga pag-login ng bisita. Ang mga pag-login ng bisita ay mga walang pagkakakilanlang session ng user at hindi nangangailangan ng password.
 
       Kung nakatakda sa false ang patakarang ito, hindi papayagan ng <ph name="PRODUCT_OS_NAME" /> na masimulan ang mga session ng bisita.</translation>
@@ -740,6 +759,25 @@
 <translation id="3478024346823118645">I-wipe ang data ng user sa pag-sign-out</translation>
 <translation id="348495353354674884">Paganahin ang virtual keyboard</translation>
 <translation id="3496296378755072552">Tagapamahala ng password</translation>
+<translation id="349667858031092827">Huwag awtomatikong mag-detect ng timezone kahit kailan.</translation>
+<translation id="3502472987829488885">Nagbibigay-daan sa iyong matukoy ang proxy server na ginamit ng <ph name="PRODUCT_NAME" /> at ng mga ARC-app at pinipigilan ang mga user na baguhin ang mga setting ng proxy.
+
+          Kung pipiliin mong huwag nang gumamit ng proxy server kailanman at palaging kumonekta nang direkta, mababalewala ang lahat ng iba pang opsyon. Gagamitin ng mga ARC-app ang default na proxy server ng kasalukuyang network, kung mayroon.
+
+          Kung pipiliin mong gamitin ang mga proxy setting ng system, mababalewala ang lahat ng opsyon. Gagamitin ng mga ARC-app ang default na proxy server ng kasalukuyang network, kung mayroon.
+
+          Kung pipiliin mong awtomatikong ma-detect ang proxy server, mababalewala ang lahat ng iba pang opsyon.
+
+          Kung pipiliin mo ang naka-fix na server proxy mode, maaari kang tumukoy ng mga karagdagang opsyon sa 'Address o URL ng proxy server' at 'Comma-separated na listahan ng mga panuntunan sa pag-bypass ng proxy.' Gagamitin lang ng mga ARC-app ang HTTP na proxy server na may pinakamataas na priyoridad.
+
+          Kung pipiliin mong gumamit ng .pac na proxy script, dapat mong tukuyin ang URL patungo sa script sa 'URL patungo sa isang proxy .pac file'.
+
+          Para sa mga detalyadong halimbawa, bisitahin ang:
+          <ph name="PROXY_HELP_URL" />
+
+          Kung ie-enable mo ang setting na ito, babalewalain ng <ph name="PRODUCT_NAME" /> at ng mga ARC-app ang lahat ng opsyon na nauugnay sa proxy na tinukoy mula sa command line.
+
+          Kapag iniwang hindi nakatakda ang patakarang ito, magbibigay-daan ito sa mga user na sila mismo ang pumili ng mga setting ng proxy.</translation>
 <translation id="3504791027627803580">Tinutukoy ang URL ng search engine na ginamit upang magbigay ng paghahanap ng larawan. Ipapadala ang mga kahilingan sa paghahanap gamit ang GET na paraan. Kung nakatakda ang patakarang DefaultSearchProviderImageURLPostParams, gagamitin sa halip ng mga kahilingan sa paghahanap ng larawan ang POST na paraan.
 
           Opsyonal ang patakarang ito. Kung hindi nakatakda, walang gagamiting paghahanap ng larawan.
@@ -756,8 +794,16 @@
 
       Ang halaga ng patakaran ay dapat tukuyin gamit ang milliseconds. Limitado ang mga halaga sa sakop na 30 segundo hanggang 24 na oras.</translation>
 <translation id="3528000905991875314">Paganahin ang mga kahaliling pahina ng error</translation>
+<translation id="3538538104630456270">Ang nauugnay na setting ay ginamit bago ipinatupad ang muling pagpapatotoo sa pagtingin ng mga password. Mula noon, walang naging epekto ang setting at ang patakaran na ito sa gawi ng Chrome. Sa ngayon, ang kasalukuyang gawi ng Chrome ay parang itinakda ang patakaran na i-disable ang pagpapakita ng mga password sa malinaw na text sa page ng mga setting ng password manager. Ibig sabihin, ang mga page ng setting ay naglalaman lang ng placeholder at ipapakita lang ng Chrome ang password kapag na-click ng user ang "Ipakita" (at muling nagpatotoo, kung naaangkop). Nasa ibaba ang orihinal na paglalarawan ng patakaran.
+
+          Nakokontrol kung maaaring ipakita ng user ang mga password sa malinaw na text sa password manager.
+
+          Kung idi-disable mo ang setting na ito, hindi pinapayagan ng password manager na ipakita ang mga nakaimbak na password sa malinaw na text sa window ng password manager.
+
+          Kung ie-enable mo o hindi mo itatakda ang patakarang ito, makikita ng mga user ang kanilang mga password sa malinaw na text sa password manager.</translation>
 <translation id="3547954654003013442">Mga setting ng proxy</translation>
 <translation id="3570008976476035109">I-block ang mga plugin sa mga site na ito</translation>
+<translation id="3591584750136265240">I-configure ang gawi sa pagpapatotoo sa pag-log in</translation>
 <translation id="3627678165642179114">Paganahin o huwag paganahin ang spell checking na serbisyo sa web</translation>
 <translation id="3646859102161347133">Itakda ang uri ng magnifier sa screen</translation>
 <translation id="3653237928288822292">Default na icon ng provider ng paghahanap</translation>
@@ -840,18 +886,6 @@
 
       Ang bawat entry sa listahan ay naglalaman ng diksyunaryong dapat kabilangan ng ID ng extension sa field na 'extension-id,' at ng URL ng update nito sa field na 'update-url.'</translation>
 <translation id="3891357445869647828">Paganahin ang JavaScript</translation>
-<translation id="389421284571827139">Binibigyang-daan kang tukuyin ang proxy server na ginamit ng <ph name="PRODUCT_NAME" /> at pinipigilan ang mga user na baguhin ang mga setting ng proxy.
-
-      Kung pinili mong huwag kailanman gumamit ng proxy server at palaging direktang kumonekta, babalewalain ang lahat ng iba pang pagpipilian.
-
-      Kung pinili mong awtomatikong tukuyin ang proxy server, babalewalain ang lahat ng iba pang pagpipilian.
-
-      Para sa mga detalyadong halimbawa, bisitahin ang:
-      <ph name="PROXY_HELP_URL" />
-
-      Kung pinagana mo ang setting na ito, babalewalain ng <ph name="PRODUCT_NAME" /> ang lahat ng pagpipiliang may kaugnayan sa proxy mula sa linya ng command.
-
-      Bibigyang-daan ng pag-iwan sa mga patakarang ito na hindi nakatakda ang mga user na piliin ang mga setting ng proxy nang mag-isa.</translation>
 <translation id="3907986150060929099">Itakda ang mga inirerekumendang lokal para sa isang pampublikong session</translation>
 <translation id="391531815696899618">Dini-disable ang pagsi-sync ng Google Drive sa <ph name="PRODUCT_OS_NAME" /> Files app kapag nakatakda sa True. Sa sitwasyong iyon, walang data na maa-upload sa Google Drive.
 
@@ -880,11 +914,6 @@
 <translation id="4039085364173654945">Kinokontrol kung papayagan ang sub-content ng third-party sa isang pahina na mag-pop-up ng isang dialog box ng HTTP Basic Auth.
 
           Karaniwang hindi ito pinapagana bilang isang depensa sa phishing. Kung hindi nakatakda ang patakarang ito, hindi ito pinapagana at hindi papayagan ang sub-content ng third-party na mag-pop up ng isang dialog box ng HTTP Basic Auth.</translation>
-<translation id="4052765007567912447">Kinokontrol kung maaaring magpakita ang user o hindi ng mga password sa malinaw na teksto sa tagapamahala ng password.
-
-          Kung hindi mo pinagana ang setting na ito, hindi pinapayagan ng tagapamahala ng password ang pagpapakita ng mga naka-imbak na password sa malinaw na teksto sa window ng tagapamahala ng password.
-
-          Kung pinagana o hindi mo itinakda ang patakarang ito, makikita ng mga user ang kanilang mga password sa malinaw na teksto sa tagapamahala ng password.</translation>
 <translation id="4056910949759281379">Huwag paganahin ang SPDY protocol</translation>
 <translation id="4088589230932595924">Pinuwersa ang mode na incognito</translation>
 <translation id="4088983553732356374">Nagbibigay-daan sa iyong itakda kung maaari bang magtakda ng lokal na data ang mga website. Maaaring payagan para sa lahat ng website o tanggihan para sa lahat ng website ang pagtatakda ng lokal na data.
@@ -892,6 +921,23 @@
           Kung nakatakda ang patakarang ito sa 'Panatilihin ang cookies sa kabuuan ng session,' iki-clear ang cookies kapag nagsara ang session. Tandaan na kung tumatakbo ang <ph name="PRODUCT_NAME" /> sa 'background mode,' maaaring hindi magsara ang session kapag isinara ang huling window. Pakitingnan ang patakarang 'BackgroundModeEnabled' para sa higit pang impormasyon tungkol sa pagko-configure sa gawing ito.
 
           Kung hindi itatakda ang patakarang ito, gagamitin ang 'AllowCookies' at mababago ito ng user.</translation>
+<translation id="4098957623809244159">Hindi na ginagamit ang patakarang ito, gamitin ang ProxyMode sa halip.
+
+          Nagbibigay-daan sa iyong tukuyin ang ginagamit na server ng proxy ng <ph name="PRODUCT_NAME" /> at mga ARC-app at pumipigil sa mga user na baguhin ang mga setting ng proxy.
+
+          Kung pipiliin mong hindi gumamit ng server ng proxy kahit kailan at palaging kumonekta nang direkta, babalewalain ang lahat ng iba pang opsyon.
+
+          Kung pipiliin mong gamitin ang mga setting ng proxy ng system o awtomatikong ma-detect ang server ng proxy server, babalewalain ang lahat ng iba pang opsyon.
+
+          Kung pipiliin mo ang mga manual na setting ng proxy, maaari kang tumukoy ng mga karagdagang opsyon sa 'Address o URL ng server ng proxy,' 'URL sa isang proxy na .pac file' at 'Listahan ng mga panuntunan ng bypass ng proxy na pinaghihiwalay ng kuwit.'
+
+          Para sa mga detalyadong halimbawa, bisitahin ang:
+          <ph name="PROXY_HELP_URL" />
+
+          Kung ie-enable mo ang setting na ito, babalewalain ng <ph name="PRODUCT_NAME" /> ang lahat ng opsyon na nauugnay sa proxy na tinukoy mula sa linya ng command.
+
+          Kapag hinayaang hindi nakatakda ang patakarang ito, mabibigyang-daan ang mga user na sila mismo ang pumili ng mga setting ng proxy.</translation>
+<translation id="4103289232974211388">I-redirect sa SAML IdP pagkatapos ng kumpirmasyon ng user</translation>
 <translation id="410478022164847452">Tinutukoy ang tagal ng oras na walang input ng user na kapag lumipas ay gagawa ng pagkilos kapag idle kapag tumatakbo habang nakasaksak sa kuryente.
 
           Kapag nakatakda ang patakarang ito, tinutukoy nito ang tagal ng oras na dapat manatiling idle ang user bago gawin ng <ph name="PRODUCT_OS_NAME" /> ang pagkilos kapag idle, na maaaring hiwalay na i-configure.
@@ -1103,16 +1149,6 @@
           Ang value ay dapat na isang array ng stringified na mga diksyunaryong JSON. Ang bawat diksyunaryo ay dapat na mayroong anyong { "pattern": "$URL_PATTERN", "filter" : $FILTER }, kung saan ang $URL_PATTERN ay isang pattern ng setting ng content. Nililimitahan ng $FILTER kung aling mga client certificate ang awtomatikong pipiliin ng browser. Anuman ang filter, ang mga certificate na tumutugma sa kahilingan sa certificate ng server ang pipiliin. Kung ang $FILTER ay may anyong { "ISSUER": { "CN": "$ISSUER_CN" } }, mga client certificate na ibinigay ng isang certificate na may CommonName $ISSUER_CN lang ang pipiliin. Kung ang $FILTER ay ang walang lamang diksyunaryo na {}, hindi na nililimitahan ang pagpili ng mga client certificate.
 
           Kung hindi nakatakda ang patakarang ito, walang gagawing awtomatikong pagpili para sa anumang site.</translation>
-<translation id="4980301635509504364">Pahintulutan o tanggihan ang pagkuha ng video.
-
-      Kung naka-enable o hindi naka-configure (default), tatanungin ang user para sa
-      access sa pagkuha ng video maliban sa mga  URL na naka-configure sa listahan
-      na VideoCaptureAllowedUrls na mabibigyan ng access nang hindi nagtatanong.
-
-      Kapag naka-disabled ang patakarang ito, hindi kailanman tatanungin ang user at
-      magiging available lang ang pagkuha ng video sa mga url na naka-configure sa VideoCaptureAllowedUrls.
-
-      Naaapektuhan ng patakarang ito ang lahat ng uri ng video input at hindi lang ang built-in na camera.</translation>
 <translation id="4980635395568992380">Uri ng data:</translation>
 <translation id="4983201894483989687">Payagan ang pagpapatakbo ng mga plugin na wala na sa panahon</translation>
 <translation id="4988291787868618635">Pagkilos na gagawin kapag naabot ang idle delay</translation>
@@ -1285,7 +1321,6 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
       Kung tinukoy ito, magdaragdag ito ng parameter ng query na tinatawag na 'paghigpitan' sa URL na ginagamit upang kunin ang seed ng Mga Variation. Ang halaga ng parameter ay ang halagang tutukuyin sa patakarang ito.
 
       Kung hindi ito tinukoy, hindi nito babaguhin ang URL ng seed ng Mga Variation.</translation>
-<translation id="5564962323737505851">Kino-configure ang tagapamahala ng password. Kung pinagana ang tagapamahala ng password, maaari mong piliing paganahin o hindi paganahin kung maaaring ipakita ng user ang mga naka-imbak na password sa malinaw na teksto.</translation>
 <translation id="556941986578702361">Kontrolin ang awtomatikong pagtatago ng shelf ng <ph name="PRODUCT_OS_NAME" />.
 
       Kung nakatakda ang patakarang ito sa 'AlwaysAutoHideShelf', palaging awtomatikong itatago ang shelf.
@@ -1325,7 +1360,6 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 
       Kung hindi nakatakda ang patakarang ito, o kung nakatakda sa false, gagamitin ng <ph name="PRODUCT_NAME" /> ang umiiral nang mga setting ng online na pagsusuri sa pagbawi.</translation>
 <translation id="5732972008943405952">I-import ang data ng form ng autofill mula sa default na browser sa unang pagtakbo</translation>
-<translation id="5761030451068906335">Kino-configure ang mga proxy setting para sa <ph name="PRODUCT_NAME" />. Hindi pa handang gamitin ang patakarang ito, mangyaring huwag itong gamitin.</translation>
 <translation id="5765780083710877561">Paglalarawan:</translation>
 <translation id="5770738360657678870">Dev channel (maaaring hindi stable)</translation>
 <translation id="5774856474228476867">URL sa paghahanap ng default na provider ng paghahanap</translation>
@@ -1350,13 +1384,6 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
       Tingnan ang https://www.chromium.org/administrators/policy-list-3/user-data-directory-variables para sa isang listahan ng mga variable na magagamit.
 
       Kung hinayaang hindi nakatakda ang setting na ito, gagamitin ang default na direktoryo ng profile.</translation>
-<translation id="5819660021114910752">Tinutukoy ang timezone na gagamitin para sa device. Maaaring i-override ng mga user ang tinukoy na timezone para sa kasalukuyang session. Gayunpaman, kapag nag-logout, ibinabalik ito sa tinukoy na timezone. Kung may ibinibigay na di-wastong value, ia-activate pa rin ang patakaran gamit sa halip ang "GMT." Kung may ibinibigay na walang lamang string, babalewalain ang patakaran.
-
-      Kung hindi gagamitin ang patakarang ito, patuloy pa ring gagamitin ang kasalukuyang aktibong timezone, gayunpaman, mababago ng mga user ang timezone at patuloy na gagamitin ang pagbabago. Samakatuwid, nakakaapekto sa screen ng pag-login at sa lahat ng iba pang user ang isang pagbabago ng isang user.
-
-      Magsisimula ang mga bagong device gamit ang timezone na nakatakda sa "US/Pacific."
-
-      Sinusunod ng format ng value ang mga pangalan ng mga timezone sa "IANA Time Zone Database" (tingnan ang "https://en.wikipedia.org/wiki/Tz_database"). Sa partikular, maaaring tukuyin ang karamihan ng mga timezone sa pamamagitan ng "continent/large_city" o "ocean/large_city."</translation>
 <translation id="5826047473100157858">Tinutukoy kung maaaring buksan ng user o hindi ang mga pahina sa mode na Incognito sa <ph name="PRODUCT_NAME" />.
 
       Kung pinili ang 'Pinagana' o hinayaang hindi nakatakda ang patakaran, maaaring buksan sa mode na Incognito ang mga pahina.
@@ -1396,7 +1423,14 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 <translation id="5893553533827140852">Kung naka-enable ang setting na ito, ipo-proxy ang mga kahilingan sa pagpapatunay ng gnubby sa isang malayuang koneksyon sa host.
 
           Kung naka-disable o hindi naka-configure ang setting na ito, hindi ipo-proxy ang mga kahilingan sa pagpapatunay ng gnubby.</translation>
-<translation id="5912364507361265851">Payagan ang mga user na ipakita ang mga password sa Tagapamahala ng Password</translation>
+<translation id="5900959132054596599">Iba-bypass ng <ph name="PRODUCT_NAME" /> at mga ARC-app ang anumang proxy para sa listahan ng mga host na ibinigay rito.
+
+          Magkakaroon lang ng epekto ang patakarang ito kung pinili mo ang mga manual na setting ng proxy sa 'Piliin kung paano tutukuyin ang mga setting ng server ng proxy.'
+
+          Dapat mong hayaang hindi nakatakda ang patakarang ito kung pumili ka ng anumang iba pang mode para sa pagtatakda ng mga patakaran ng proxy.
+
+          Para sa mga mas detalyadong halimbawa, bisitahin ang:
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="5921713479449475707">Pinapayagan ang mga pag-download ng autoupdate sa pamamagitan ng HTTP</translation>
 <translation id="5921888683953999946">Itakda ang default na katayuan ng pagiging naa-access ng malaking cursor sa screen sa pag-login.
 
@@ -1546,6 +1580,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 <translation id="637934607141010488">Iulat ang listahan ng mga user ng device na kamakailang nag-log in.
 
       Kung nakatakda sa false ang patakaran, hindi iuulat ang mga user.</translation>
+<translation id="639009029157091157">Hayaang ang mga user ang magpasya.</translation>
 <translation id="6392973646875039351">Pinapagana ang AutoFill na tampok ng <ph name="PRODUCT_NAME" /> at binibigyang-daan ang mga user na mag-autocomplete ng mga form ng web gamit ang mga nakaraang inimbak na impormasyon gaya ng address o impormasyon ng credit card.
 
       Kung hindi mo pinagana ang setting na ito, magiging hindi naa-access sa mga user ang AutoFill.
@@ -1566,22 +1601,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
       Kung idi-disable mo ang setting na ito, hindi papayagan ang mga user na gamitin ang Smart Lock.
 
       Kung hindi itatakda ang patakarang ito, ang default ay hindi pinapayagan para sa mga user na pinapamahalaan ng negosyo at pinapayagan ito para sa mga hindi pinamamahalaang user.</translation>
-<translation id="6513756852541213407">Binibigyang-daan kang tukuyin ang proxy server na ginagamit ng <ph name="PRODUCT_NAME" /> at pinipigilan ang mga user na baguhin ang mga setting ng proxy.
-
-          Kung pinili mong hindi gumamit ng proxy server kailanman at palaging direktang kumonekta, binabalewala ang lahat ng iba pang pagpipilian.
-
-          Kung pinili mong gumamit ng mga proxy na setting ng system o awtomatikong tukuyin ang proxy server, binabalewala ang lahat ng iba pang pagpipilian.
-
-          Kung pinili mo ang hindi nagbabagong mode ng server proxy, matutukoy mo ang higit pang mga pagpipilian sa 'Address o URL ng proxy server' at 'Listahan ng mga bypass rule ng proxy na pinaghihiwalay ng kuwit.'
-
-          Kung pinili mong gumamit ng isang .pac proxy script, dapat mong tukuyin ang URL sa script sa 'URL sa isang proxy .pac file.'
-
-          Para sa mga detalyadong halimbawa, bisitahin ang:
-          <ph name="PROXY_HELP_URL" />
-
-          Kung pinagana mo ang setting na ito, binabalewala ng <ph name="PRODUCT_NAME" /> ang lahat ng pagpipiliang nauugnay sa proxy na tinukoy mula sa linya ng command.
-
-          Bibigyang-daan ng pag-iwan sa patakarang ito na hindi nakatakda ang mga user na piliin ang mga setting ng proxy nang mag-isa.</translation>
+<translation id="6491139795995924304">Payagan ang bluetooth sa device</translation>
 <translation id="6520802717075138474">Mag-import ng mga search engine mula sa default na browser sa unang pagtakbo</translation>
 <translation id="653608967792832033">Tinutukoy ang tagal ng oras na walang input ng user na kapag lumipas ay mala-lock ang screen kapag tumatakbo gamit ang power ng baterya.
 
@@ -1661,22 +1681,6 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 
       Kung maiiwang hindi nakatakda ang patakaran na ito, mae-enable ang panghuhula ng network ngunit magagawa ng user na baguhin ito.</translation>
 <translation id="6658245400435704251">Tinutukoy ang bilang ng mga segundo kung kailan maaaring random na antalahin ng device ang pag-download ng isang update mula sa panahon kung kailan unang na-push out ang update sa server. Maaaring hintayin ng device ang isang bahagi ng panahong ito sa pamamagitan ng oras sa orasan at ng mga natitirang bahagi sa pamamagitan ng dami ng mga pagtingin ng update. Sa anumang sitwasyon, ang scatter ay nililimitahan sa itaas sa iisang parehong tagal ng panahon upang hindi maantala nang matagal ang isang device sa paghihintay na mag-download ng isang update.</translation>
-<translation id="6672934768721876104">Hindi na ginagamit ang patakarang ito, sa halip ay gamitin ang ProxyMode.
-
-          Binibigyang-daan kang tukuyin ang proxy server na ginamit ng <ph name="PRODUCT_NAME" /> at pinipigilan ang mga user na baguhin ang mga setting ng proxy.
-
-          Kung pinili mong hindi kailanman gumamit ng proxy server at direktang kumonekta palagi, babalewalain ang lahat ng iba pang pagpipilian.
-
-          Kung pinili mong gamitin ang mga setting ng proxy ng system o awtomatikong tukuyin ang proxy server, babalewalain ang lahat ng iba pang pagpipilian.
-
-          Kung pumili ka ng mga manu-manong setting ng proxy, maaari mong tukuyin ang higit pang mga pagpipilian sa 'Address o URL ng proxy server', 'URL sa isang proxy .pac file' at 'Listahan ng mga panuntunan sa pag-bypass ng proxy na pinaghihiwalay ng kuwit'.
-
-          Para sa mga detalyadong halimbawa, bisitahin ang:
-          <ph name="PROXY_HELP_URL" />
-
-          Kung pinagana mo ang setting na ito, binabalewala ng <ph name="PRODUCT_NAME" /> ang lahat ng pagpipiliang may kaugnayan sa proxy na tinukoy mula sa linya ng command.
-
-          Bibigyang-daan ng pag-iwan sa patakarang ito ang mga user na piliin ang mga setting ng proxy nang mag-isa.</translation>
 <translation id="6689792153960219308">Iulat ang status ng hardware</translation>
 <translation id="6693751878507293182">Kung itinakda mo ang setting na ito sa pinagana ang awtomatikong paghahanap at pag-install ng mga nawawalang plugin ay hindi papaganahin sa <ph name="PRODUCT_NAME" />.
 
@@ -1820,6 +1824,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 
       Kung hindi naitakda ang patakarang ito, maaaring baguhin ng user ang listahan ng mga na-pin na app sa launcher.</translation>
 <translation id="7132877481099023201">Mga URL na mabibigyan ng access sa mga device na nakakakuha ng video nang walang prompt.</translation>
+<translation id="7167436895080860385">Pinapayagan ang mga user na ipakita ang mga password sa Password Manager (hindi na ginagamit)</translation>
 <translation id="7173856672248996428">Ephemeral na profile</translation>
 <translation id="7187256234726597551">Kung true, pinapahintulutan ang remote na pagpapatotoo para sa device at awtomatikong mabubuo at maa-upload ang isang certificate sa Server ng Pamamahala sa Device.
 
@@ -1841,6 +1846,10 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 
           Kung nakatakda ang patakaran na "RestoreOnStartup" na magpanumbalik ng mga URL mula sa mga dating session, hindi susundin ang patakarang ito at permanenteng iiimbak ang cookies para sa mga site na ito.</translation>
 <translation id="7207095846245296855">Puwersahin ang Google SafeSearch</translation>
+<translation id="7213425178181578730">Kung itatakda ang patakarang ito sa false, idi-disable ng <ph name="PRODUCT_OS_NAME" /> ang Bluetooth at hindi na ito muling mae-enable ng user.
+      Kung itatakda ang patakarang ito sa true o hahayaang hindi nakatakda, mae-enable o madi-disable ng user ang Bluetooth kailanman niya gustuhin.
+
+      Kung itatakda ang patakarang ito, hindi na ito mababago o mao-override ng user.</translation>
 <translation id="7216442368414164495">Binibigyang-daan ang mga user na mag-opt in sa pinalawak na pag-uulat sa Ligtas na Pagba-browse</translation>
 <translation id="7227967227357489766">Tinutukoy ang listahan ng mga user na pinapayagang mag-login sa device. Ang mga entry ay nasa anyo ng <ph name="USER_WHITELIST_ENTRY_FORMAT" />, gaya ng <ph name="USER_WHITELIST_ENTRY_EXAMPLE" />. Upang payagan ang mga arbitrary user sa isang domain, na gumamit ng mga entry na may anyong <ph name="USER_WHITELIST_ENTRY_WILDCARD" />.
 
@@ -1926,6 +1935,11 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 
           Kung hinayaang hindi nakatakda ang patakarang ito gagamitin ang global na default na halaga para sa lahat ng site mula sa patakaran ng 'DefaultPopupsSetting' kung nakatakda ito, o kung hindi man ay sa personal na configuration ng user.</translation>
 <translation id="7529144158022474049">Awtomatikong i-update ang scatter factor</translation>
+<translation id="7553535237300701827">Kapag itinakda ang patakarang ito, ang daloy ng pagpapatotoo sa impormasyon sa pag-log in ay magiging isa sa mga sumusunod na paraan, depende sa value ng setting:
+
+      Kung itatakda sa GAIA, gagawin ang pag-log in sa pamamagitan ng normal na daloy ng pagpapatotoo ng GAIA.
+
+      Kung itatakda sa SAML_INTERSTITIAL, makikita sa log in ang isang interstitial na screen na nag-aalok sa user na magpatuloy sa pagpapatotoo sa pamamagitan ng SAML IdP ng domain ng pag-enroll ng device, o bumalik sa normal na daloy ng pag-log in sa GAIA.</translation>
 <translation id="7567380065339179813">Pinapayagan ang mga plugin sa mga site na ito</translation>
 <translation id="7593523670408385997">Kino-configure ang laki ng cache na gagamitin ng <ph name="PRODUCT_NAME" /> sa pag-iimbak ng mga na-cache na file sa disk.
 
@@ -1944,6 +1958,9 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 
       Kung hindi pinagana o hindi nakatakda ang setting na ito, ginagamit ng <ph name="PRODUCT_NAME" /> ang piniling lokal na tinukoy ng user (kung na-configure), ang lokal ng system o ang fallback na lokal na 'en-US'.</translation>
 <translation id="7651739109954974365">Tinutukoy kung dapat paganahin ang roaming ng data para sa device. Kung nakatakda sa true, pinapayagan ang roaming ng data. Kung iniwang hindi naka-configure o nakatakda sa false, hindi magiging available ang roaming ng data.</translation>
+<translation id="7667184304362487902">Iko-configure ang mga setting ng proxy para sa <ph name="PRODUCT_NAME" /> at mga ARC-app.
+
+      Hindi pa handa sa paggamit ang patakarang ito, mangyaring huwag itong gamitin.</translation>
 <translation id="76810863974142048">URL kung saan dapat kunin ng mga client na may malayuang access ang kanilang token ng pagpapatotoo.
 
           Kung nakatakda ang patakarang ito, hihilingin ng host ng malayuang access na patotohanan ang mga client upang makakuha ng token ng pagpapatotoo mula sa URL na ito upang makakonekta. Dapat na gamitin kasama ng RemoteAccessHostTokenValidationUrl.
@@ -2017,10 +2034,36 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 <translation id="7842869978353666042">I-configure ang mga pagpipilian sa Google Drive</translation>
 <translation id="7843525027689416831">Tinutukoy ang mga flag na dapat ilapat sa <ph name="PRODUCT_NAME" /> kapag nagsimula ito. Inilalapat ang mga flag sa screen ng pag-log in lang. Ang mga flag na sine-set sa pamamagitan ng patakarang ito ay hindi nalilipat sa mga session ng user.</translation>
 <translation id="7848840259379156480">Pinapayagan kang i-configure ang default na taga-render ng HTML kapag na-install ang <ph name="PRODUCT_FRAME_NAME" />. Ang default na setting ay upang payagan ang browser ng host na gawin ang pag-render, ngunit maaari mong i-override ito at i-render ng <ph name="PRODUCT_FRAME_NAME" /> ang mga pahina ng HTML bilang default.</translation>
+<translation id="7853178359124471330">Kapag nakatakda ang patakarang ito, ang awtomatikong proseso ng pag-detect ng timezone ay magiging isa sa mga sumusunod na paraan depende sa value ng setting:
+
+      Kung maitatakda sa TimezoneAutomaticDetectionUsersDecide, makokontrol ng mga user ang awtomatikong pag-detect ng timezone gamit ang mga normal na kontrol sa chrome://settings.
+
+      Kung maitatakda sa TimezoneAutomaticDetectionDisabled, madi-disable ang mga awtomatikong kontrol sa timezone sa chrome://settings. Magiging palaging naka-off ang awtomatikong pag-detect ng timezone.
+
+      Kung maitatakda sa TimezoneAutomaticDetectionIPOnly, madi-disable ang mga kontrol sa timezone sa chrome://settings. Magiging palaging naka-on ang awtomatikong pag-detect ng timezone. Gagamit ang pag-detect ng timezone ng IP-only na paraan upang malaman ang lokasyon.
+
+      Kung maitatakda sa TimezoneAutomaticDetectionSendWiFiAccessPoints, madi-disable ang mga kontrol sa timezone sa chrome://settings. Magiging palaging naka-on ang awtomatikong pag-detect ng timezone. Ipapadala ang listahan ng mga makikitang access-point ng WiFi sa server ng Geolocation API para sa napakadetalyadong pag-detect ng timezone.
+
+      Kung hindi maitatakda ang patakarang ito, gagana ito na mukhang nakatakda ang TimezoneAutomaticDetectionUsersDecide.
+
+      Kung maitatakda ang patakaran na SystemTimezone, io-override nito ang patakarang ito. Sa sitwasyong ito, ganap na naka-disable ang awtomatikong pag-detect ng timezone.</translation>
 <translation id="7882585827992171421">Sa retail mode lamang aktibo ang patakarang ito.
 
       Tinutukoy ang id ng extension na gagamitin bilang isang screen saver sa screen sa pag-sign-in. Ang extension ay dapat na bahagi ng AppPack na naka-configure para sa domain na ito sa pamamagitan ng patakarang AppPacks.</translation>
+<translation id="7882890448959833986">Pigilan ang babala ng hindi sinusuportahang OS</translation>
 <translation id="7912255076272890813">I-configure ang mga pinapayagang uri ng app/extension</translation>
+<translation id="7928112526630078979">Nagbibigay-daan sa iyo na tukuyin ang proxy server na ginamit ng <ph name="PRODUCT_NAME" /> at ng mga ARC-app at pinipigilan ang mga user na baguhin ang mga setting ng proxy.
+
+      Kung pipiliin mong huwag nang gumamit ng proxy server kailanman at palaging kumonekta nang direkta, mababalewala ang lahat ng iba pang opsyon. Gagamitin ng mga ARC-app ang default na proxy server ng kasalukuyang network, kung mayroon.
+
+      Kung pipiliin mong awtomatikong ma-detect ang proxy server, mababalewala ang lahat ng iba pang opsyon.
+
+      Para sa mga detalyadong halimbawa, bisitahin ang:
+      <ph name="PROXY_HELP_URL" />
+
+      Kung ie-enable mo ang setting na ito, babalewalain ng <ph name="PRODUCT_NAME" /> at ng mga ARC-app ang lahat ng opsyon na nauugnay sa proxy na tinukoy mula sa command line.
+
+      Kapag iniwang hindi nakatakda ang patakarang ito, magbibigay-daan ito sa mga user na sila mismo ang pumili ng mga setting ng proxy.</translation>
 <translation id="793134539373873765">Tinutukoy kung gagamitin ang p2p para sa mga payload sa pag-update ng OS. Kung nakatakda sa True, ang mga device ay magbabahagi at susubukang gamitin ang mga payload sa pag-update sa LAN, na malamang na babawasan ang paggamit at pagsikip sa Internet bandwidth. Kung hindi available sa LAN ang payload sa pag-update, babalik ang device sa pag-download mula sa server sa pag-update. Kung nakatakda sa False o hindi naka-configure, hindi gagamitin ang p2p.</translation>
 <translation id="7933141401888114454">I-enable ang paggawa ng mga pinapangasiwaang user</translation>
 <translation id="7936098023732125869">Ine-enable ang paggamit ng default na search provider.
@@ -2058,6 +2101,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 
           Kung iniwang hindi nakatakda ang patakarang ito, i-e-enable ang setting.</translation>
 <translation id="8073243368829195">Binibigyang-daan ang paggamit ng Smart Lock</translation>
+<translation id="8074052133552427532">Palaging gumamit ng hindi detalyadong pag-detect ng timezone.</translation>
 <translation id="8099880303030573137">Idle delay kapag tumatakbo gamit ang power ng baterya</translation>
 <translation id="8102913158860568230">Default na setting ng mediastream</translation>
 <translation id="8104962233214241919">Awtomatikong pumili ng mga certificate ng client para sa mga site na ito</translation>
@@ -2082,6 +2126,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 
       Kung nakatakda ang patakarang ito sa false, hindi i-uulat ang listahan ng interface.</translation>
 <translation id="8146727383888924340">Payagan ang mga user na kumuha ng mga alok sa pamamagitan ng Pagpaparehistro ng Chrome OS</translation>
+<translation id="8148785525797916822">Pinipigilan ang babalang lumalabas kapag gumagana ang <ph name="PRODUCT_NAME" /> sa isang computer o operating system na hindi na sinusuportahan.</translation>
 <translation id="8148901634826284024">I-enable ang tampok na high contrast mode.
 
           Kung nakatakda sa true ang patakarang ito, palaging naka-enable ang high contrast mode.
@@ -2130,6 +2175,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 <translation id="8197918588508433925">Tinutukoy ng patakarang ito ang mga pinapayagang extension upang magamit ang Enterprise Platform Keys API chrome.enterprise.platformKeysPrivate.challengeUserKey() para sa malayuang pagpapatunay. Dapat magdagdag ng mga extension sa listahang ito upang magamit ang API.
 
           Kung wala sa listahan ang isang extension, o hindi nakatakda ang listahan, mabibigo ang pagtawag sa API nang may code ng error.</translation>
+<translation id="8214600119442850823">Kino-configure ang password manager.</translation>
 <translation id="8244525275280476362">Maximum na pagkaantala ng pagkuha pagkatapos matukoy na di-wasto ang patakaran</translation>
 <translation id="8256688113167012935">Kinokontrol ang pangalan ng account na <ph name="PRODUCT_OS_NAME" /> na nakikita sa screen sa pag-login para sa katumbas na account na lokal sa device.
 
@@ -2310,15 +2356,29 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
       Kung itinakda sa false ang patakarang ito, hindi makakapasok ang user o ang anumang mga app o extension sa fullscreen mode.
 
       Sa lahat ng platform maliban sa <ph name="PRODUCT_OS_NAME" />, hindi available ang kiosk mode kapag naka-disable ang fullscreen mode.</translation>
+<translation id="8795495354632096254">Ipadala palagi ang mga access-point ng WiFi sa habang inaayos ang timezone.</translation>
 <translation id="8818173863808665831">I-ulat ang heyograpikong lokasyon ng device.
 
       Kung hindi naitakda ang patakaran, o naitakda sa false, hindi ma-uulat ang lokasyon.</translation>
+<translation id="8818768076343557335">Hulaan ang mga pagkilos sa network sa anumang network na hindi cellular.
+          (Hindi na gagamitin sa 50, aalisin sa 52. Pagkatapos ng 52, kung matatakda ang value 1, ituturing itong 0 - hulaan ang mga pagkilos sa network sa anumang koneksyon sa network.)</translation>
 <translation id="8828766846428537606">I-configure ang default na home page sa <ph name="PRODUCT_NAME" /> at pinipigilan ang mga user sa pagbabago nito. Ang mga setting ng home page ng user ay lubos na naka-lock down lamang, kung pinili mo ang home page upang maging ang pahina ng bagong tab, o itakda ito upang maging URL at tumukoy ng URL ng home page. Kung hindi mo tutukuyin ang URL ng home page, maitatakda pa rin ung ser ang home page sa pahina ng bagong tab sa pamamagitan ng pagtukoy sa 'chrome://newtab'.</translation>
+<translation id="8833109046074170275">Pagpapatotoo sa pamamagitan ng default na daloy ng GAIA</translation>
 <translation id="8838303810937202360">Nagka-cache ang <ph name="PRODUCT_OS_NAME" /> ng Mga App at Extension para sa pag-install ng maraming user ng iisang device upang maiwasan ang pagda-download muli para sa bawat user.
       Kung hindi naka-configure ang patakaran na ito o ang value ay mas mababa sa 1 MB, gagamitin ng <ph name="PRODUCT_OS_NAME" /> ang default na laki ng cache.</translation>
 <translation id="8858642179038618439">Puwersahin ang YouTube Safety Mode</translation>
 <translation id="8864975621965365890">Pinipigilan ang turndown na prompt na lumilitaw kapag na-render ang isang site ng <ph name="PRODUCT_FRAME_NAME" />.</translation>
 <translation id="8870318296973696995">Home page</translation>
+<translation id="8889588091638298603">Nagbibigay ang Quirks Server ng mga configuration file na partikular sa hardware, tulad ng
+      mga ICC display profile upang isaayos ang calibration ng monitor.
+
+      Kapag nakatakda ang patakaran na ito sa false, hindi susubukan ng device na makipag-ugnayan sa Quirks Server upang mag-download ng mga configuration file.
+
+      Kung nakatakda sa true ang patakaran na ito o hindi ito naka-configure,
+      awtomatikong makikipag-ugnayan ang <ph name="PRODUCT_OS_NAME" />
+      sa Quirks Server at ida-download nito ang mga configuration file,
+      kung available, at iiimbak ang mga ito sa device.  Ang mga naturang file, halimbawa,
+      ay maaaring gamitin upang pagandahin ang kalidad ng display ng mga naka-attach na monitor.</translation>
 <translation id="8905426178924715309">Hindi na ginagamit ang patakarang ito, pakigamit na lang ang ForceGoogleSafeSearch at ForceYouTubeSafetyMode. Babalewalain ang patakarang ito kung itatakda ang alinman sa mga patakarang ForceGoogleSafeSearch o ForceYouTubeSafetyMode.
 
       Pinupuwersang isagawa ang mga query sa Google Web Search nang nakatakda ang SafeSearch sa aktibo at pinipigilan ang mga user na baguhin ang setting na ito. Ipinapatupad din ng setting na ito ang Safety Mode sa YouTube.
@@ -2360,6 +2420,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 <translation id="9042911395677044526">Nagbibigay-daan na malapat sa bawat user ang configuration ng pushing network sa isang <ph name="PRODUCT_OS_NAME" /> na device. Ang configuration ng network ay isang naka-format sa JSON  na string tulad ng tinutukoy ng format ng Configuration ng Open Network na inilalarawan sa <ph name="ONC_SPEC_URL" /></translation>
 <translation id="9084985621503260744">Tukuyin kung nakakaapekto ang aktibidad ng video sa pamamahala ng power</translation>
 <translation id="9088433379343318874">I-enable ang content provider ng pinangangasiwaang user</translation>
+<translation id="9088444059179765143">I-configure ang awtomatikong paraan ng pag-detect ng timezone</translation>
 <translation id="9096086085182305205">Whitelist ng server sa pagpapatotoo</translation>
 <translation id="9098553063150791878">Mga patakaran para sa pagpapatotoo ng HTTP</translation>
 <translation id="9104138886225968319">Nagpapadala ng mga heartbeat sa pagsubaybay sa server sa pamamahala upang magbigay-daan

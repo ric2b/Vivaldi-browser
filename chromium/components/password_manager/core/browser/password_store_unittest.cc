@@ -8,11 +8,13 @@
 // passwords. This will not be needed anymore if crbug.com/466638 is fixed.
 
 #include <stddef.h>
+
 #include <utility>
 
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -105,7 +107,7 @@ ACTION(STLDeleteElements0) {
 TEST_F(PasswordStoreTest, IgnoreOldWwwGoogleLogins) {
   scoped_refptr<PasswordStoreDefault> store(new PasswordStoreDefault(
       base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
-      make_scoped_ptr(new LoginDatabase(test_login_db_file_path()))));
+      base::WrapUnique(new LoginDatabase(test_login_db_file_path()))));
   store->Init(syncer::SyncableService::StartSyncFlare());
 
   const time_t cutoff = 1325376000;  // 00:00 Jan 1 2012 UTC
@@ -228,7 +230,7 @@ TEST_F(PasswordStoreTest, IgnoreOldWwwGoogleLogins) {
 TEST_F(PasswordStoreTest, StartSyncFlare) {
   scoped_refptr<PasswordStoreDefault> store(new PasswordStoreDefault(
       base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
-      make_scoped_ptr(new LoginDatabase(test_login_db_file_path()))));
+      base::WrapUnique(new LoginDatabase(test_login_db_file_path()))));
   StartSyncFlareMock mock;
   store->Init(
       base::Bind(&StartSyncFlareMock::StartSyncFlare, base::Unretained(&mock)));
@@ -257,22 +259,27 @@ TEST_F(PasswordStoreTest, GetLoginImpl) {
 
   scoped_refptr<PasswordStoreDefault> store(new PasswordStoreDefault(
       base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
-      make_scoped_ptr(new LoginDatabase(test_login_db_file_path()))));
+      base::WrapUnique(new LoginDatabase(test_login_db_file_path()))));
   store->Init(syncer::SyncableService::StartSyncFlare());
 
   // For each attribute in the primary key, create one form that mismatches on
   // that attribute.
-  scoped_ptr<PasswordForm> test_form(
+  std::unique_ptr<PasswordForm> test_form(
       CreatePasswordFormFromDataForTesting(kTestCredential));
-  scoped_ptr<PasswordForm> mismatching_form_1(new PasswordForm(*test_form));
+  std::unique_ptr<PasswordForm> mismatching_form_1(
+      new PasswordForm(*test_form));
   mismatching_form_1->signon_realm = kTestPSLMatchingWebRealm;
-  scoped_ptr<PasswordForm> mismatching_form_2(new PasswordForm(*test_form));
+  std::unique_ptr<PasswordForm> mismatching_form_2(
+      new PasswordForm(*test_form));
   mismatching_form_2->origin = GURL(kTestPSLMatchingWebOrigin);
-  scoped_ptr<PasswordForm> mismatching_form_3(new PasswordForm(*test_form));
+  std::unique_ptr<PasswordForm> mismatching_form_3(
+      new PasswordForm(*test_form));
   mismatching_form_3->username_element = base::ASCIIToUTF16("other_element");
-  scoped_ptr<PasswordForm> mismatching_form_4(new PasswordForm(*test_form));
+  std::unique_ptr<PasswordForm> mismatching_form_4(
+      new PasswordForm(*test_form));
   mismatching_form_4->password_element = base::ASCIIToUTF16("other_element");
-  scoped_ptr<PasswordForm> mismatching_form_5(new PasswordForm(*test_form));
+  std::unique_ptr<PasswordForm> mismatching_form_5(
+      new PasswordForm(*test_form));
   mismatching_form_5->username_value =
       base::ASCIIToUTF16("other_username_value");
 
@@ -286,7 +293,7 @@ TEST_F(PasswordStoreTest, GetLoginImpl) {
 
   store->AddLogin(*test_form);
   base::MessageLoop::current()->RunUntilIdle();
-  scoped_ptr<PasswordForm> returned_form = store->GetLoginImpl(*test_form);
+  std::unique_ptr<PasswordForm> returned_form = store->GetLoginImpl(*test_form);
   ASSERT_TRUE(returned_form);
   EXPECT_EQ(*test_form, *returned_form);
 
@@ -315,10 +322,10 @@ TEST_F(PasswordStoreTest, UpdateLoginPrimaryKeyFields) {
 
   scoped_refptr<PasswordStoreDefault> store(new PasswordStoreDefault(
       base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
-      make_scoped_ptr(new LoginDatabase(test_login_db_file_path()))));
+      base::WrapUnique(new LoginDatabase(test_login_db_file_path()))));
   store->Init(syncer::SyncableService::StartSyncFlare());
 
-  scoped_ptr<PasswordForm> old_form(
+  std::unique_ptr<PasswordForm> old_form(
       CreatePasswordFormFromDataForTesting(kTestCredentials[0]));
   store->AddLogin(*old_form);
   base::MessageLoop::current()->RunUntilIdle();
@@ -326,7 +333,7 @@ TEST_F(PasswordStoreTest, UpdateLoginPrimaryKeyFields) {
   MockPasswordStoreObserver mock_observer;
   store->AddObserver(&mock_observer);
 
-  scoped_ptr<PasswordForm> new_form(
+  std::unique_ptr<PasswordForm> new_form(
       CreatePasswordFormFromDataForTesting(kTestCredentials[1]));
   EXPECT_CALL(mock_observer, OnLoginsChanged(testing::SizeIs(2u)));
   PasswordForm old_primary_key;
@@ -368,10 +375,10 @@ TEST_F(PasswordStoreTest, RemoveLoginsCreatedBetweenCallbackIsCalled) {
 
   scoped_refptr<PasswordStoreDefault> store(new PasswordStoreDefault(
       base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
-      make_scoped_ptr(new LoginDatabase(test_login_db_file_path()))));
+      base::WrapUnique(new LoginDatabase(test_login_db_file_path()))));
   store->Init(syncer::SyncableService::StartSyncFlare());
 
-  scoped_ptr<PasswordForm> test_form(
+  std::unique_ptr<PasswordForm> test_form(
       CreatePasswordFormFromDataForTesting(kTestCredential));
   store->AddLogin(*test_form);
   base::MessageLoop::current()->RunUntilIdle();
@@ -421,11 +428,11 @@ TEST_F(PasswordStoreTest, GetLoginsWithoutAffiliations) {
 
   scoped_refptr<PasswordStoreDefault> store(new PasswordStoreDefault(
       base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
-      make_scoped_ptr(new LoginDatabase(test_login_db_file_path()))));
+      base::WrapUnique(new LoginDatabase(test_login_db_file_path()))));
   store->Init(syncer::SyncableService::StartSyncFlare());
 
   MockAffiliatedMatchHelper* mock_helper = new MockAffiliatedMatchHelper;
-  store->SetAffiliatedMatchHelper(make_scoped_ptr(mock_helper));
+  store->SetAffiliatedMatchHelper(base::WrapUnique(mock_helper));
 
   ScopedVector<PasswordForm> all_credentials;
   for (size_t i = 0; i < arraysize(kTestCredentials); ++i) {
@@ -528,11 +535,11 @@ TEST_F(PasswordStoreTest, GetLoginsWithAffiliations) {
 
   scoped_refptr<PasswordStoreDefault> store(new PasswordStoreDefault(
       base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
-      make_scoped_ptr(new LoginDatabase(test_login_db_file_path()))));
+      base::WrapUnique(new LoginDatabase(test_login_db_file_path()))));
   store->Init(syncer::SyncableService::StartSyncFlare());
 
   MockAffiliatedMatchHelper* mock_helper = new MockAffiliatedMatchHelper;
-  store->SetAffiliatedMatchHelper(make_scoped_ptr(mock_helper));
+  store->SetAffiliatedMatchHelper(base::WrapUnique(mock_helper));
 
   ScopedVector<PasswordForm> all_credentials;
   for (size_t i = 0; i < arraysize(kTestCredentials); ++i) {
@@ -716,7 +723,7 @@ TEST_F(PasswordStoreTest, MAYBE_UpdatePasswordsStoredForAffiliatedWebsites) {
       scoped_refptr<PasswordStoreDefault> store(new PasswordStoreDefault(
           base::ThreadTaskRunnerHandle::Get(),
           base::ThreadTaskRunnerHandle::Get(),
-          make_scoped_ptr(new LoginDatabase(test_login_db_file_path()))));
+          base::WrapUnique(new LoginDatabase(test_login_db_file_path()))));
       store->Init(syncer::SyncableService::StartSyncFlare());
       store->RemoveLoginsCreatedBetween(base::Time(), base::Time::Max(),
                                         base::Closure());
@@ -736,7 +743,7 @@ TEST_F(PasswordStoreTest, MAYBE_UpdatePasswordsStoredForAffiliatedWebsites) {
       // otherwise it will already start propagating updates as new Android
       // credentials are added.
       MockAffiliatedMatchHelper* mock_helper = new MockAffiliatedMatchHelper;
-      store->SetAffiliatedMatchHelper(make_scoped_ptr(mock_helper));
+      store->SetAffiliatedMatchHelper(base::WrapUnique(mock_helper));
       store->enable_propagating_password_changes_to_web_credentials(
           propagation_enabled);
 
@@ -796,6 +803,80 @@ TEST_F(PasswordStoreTest, MAYBE_UpdatePasswordsStoredForAffiliatedWebsites) {
       store->ShutdownOnUIThread();
       base::MessageLoop::current()->RunUntilIdle();
     }
+  }
+}
+
+TEST_F(PasswordStoreTest, GetLoginsWithAffiliatedRealms) {
+  /* clang-format off */
+  static const PasswordFormData kTestCredentials[] = {
+      {PasswordForm::SCHEME_HTML,
+       kTestAndroidRealm1,
+       "", "", L"", L"", L"",
+       L"username_value_1",
+       L"", true, true, 1},
+      {PasswordForm::SCHEME_HTML,
+       kTestAndroidRealm2,
+       "", "", L"", L"", L"",
+       L"username_value_2",
+       L"", true, true, 1},
+      {PasswordForm::SCHEME_HTML,
+       kTestAndroidRealm3,
+       "", "", L"", L"", L"",
+       L"username_value_3",
+       L"", true, true, 1}};
+  /* clang-format on */
+
+  const bool kFalseTrue[] = {false, true};
+  for (bool blacklisted : kFalseTrue) {
+    SCOPED_TRACE(testing::Message("use blacklisted logins: ") << blacklisted);
+    scoped_refptr<PasswordStoreDefault> store(new PasswordStoreDefault(
+        base::ThreadTaskRunnerHandle::Get(),
+        base::ThreadTaskRunnerHandle::Get(),
+        base::WrapUnique(new LoginDatabase(test_login_db_file_path()))));
+    store->Init(syncer::SyncableService::StartSyncFlare());
+    store->RemoveLoginsCreatedBetween(base::Time(), base::Time::Max(),
+                                      base::Closure());
+
+    ScopedVector<PasswordForm> all_credentials;
+    for (size_t i = 0; i < arraysize(kTestCredentials); ++i) {
+      all_credentials.push_back(
+          CreatePasswordFormFromDataForTesting(kTestCredentials[i]));
+      if (blacklisted)
+        all_credentials.back()->blacklisted_by_user = true;
+      store->AddLogin(*all_credentials.back());
+      base::MessageLoop::current()->RunUntilIdle();
+    }
+
+    MockPasswordStoreConsumer mock_consumer;
+    ScopedVector<PasswordForm> expected_results;
+    for (size_t i = 0; i < arraysize(kTestCredentials); ++i)
+      expected_results.push_back(new PasswordForm(*all_credentials[i]));
+
+    MockAffiliatedMatchHelper* mock_helper = new MockAffiliatedMatchHelper;
+    store->SetAffiliatedMatchHelper(base::WrapUnique(mock_helper));
+
+    std::vector<std::string> affiliated_web_realms;
+    affiliated_web_realms.push_back(kTestWebRealm1);
+    affiliated_web_realms.push_back(kTestWebRealm2);
+    affiliated_web_realms.push_back(std::string());
+    mock_helper->ExpectCallToInjectAffiliatedWebRealms(affiliated_web_realms);
+    for (size_t i = 0; i < expected_results.size(); ++i)
+      expected_results[i]->affiliated_web_realm = affiliated_web_realms[i];
+
+    EXPECT_CALL(mock_consumer,
+                OnGetPasswordStoreResultsConstRef(
+                    UnorderedPasswordFormElementsAre(expected_results.get())));
+    if (blacklisted)
+      store->GetBlacklistLoginsWithAffiliatedRealms(&mock_consumer);
+    else
+      store->GetAutofillableLoginsWithAffiliatedRealms(&mock_consumer);
+
+    // Since GetAutofillableLoginsWithAffiliatedRealms schedules a request for
+    // affiliated realms to UI thread, don't shutdown UI thread until there are
+    // no tasks in the UI queue.
+    base::MessageLoop::current()->RunUntilIdle();
+    store->ShutdownOnUIThread();
+    base::MessageLoop::current()->RunUntilIdle();
   }
 }
 

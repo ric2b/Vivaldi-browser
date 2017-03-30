@@ -160,7 +160,7 @@ AtomicString FrameTree::calculateUniqueNameForChildFrame(
     const int framePathSuffixLength = 3;
 
     // Find the nearest parent that has a frame with a path in it.
-    WillBeHeapVector<RawPtrWillBeMember<Frame>, 16> chain;
+    HeapVector<Member<Frame>, 16> chain;
     Frame* frame;
     for (frame = m_thisFrame; frame; frame = frame->tree().parent()) {
         if (frame->tree().uniqueName().startsWith(framePathPrefix))
@@ -170,7 +170,7 @@ AtomicString FrameTree::calculateUniqueNameForChildFrame(
     StringBuilder uniqueName;
     uniqueName.append(framePathPrefix);
     if (frame) {
-        uniqueName.append(frame->tree().uniqueName().string().substring(framePathPrefixLength,
+        uniqueName.append(frame->tree().uniqueName().getString().substring(framePathPrefixLength,
             frame->tree().uniqueName().length() - framePathPrefixLength - framePathSuffixLength));
     }
     for (int i = chain.size() - 1; i >= 0; --i) {
@@ -412,7 +412,7 @@ static void printFrames(const blink::Frame* frame, const blink::Frame* targetFra
     printIndent(indent);
     printf("  document=%p\n", frame->isLocalFrame() ? toLocalFrame(frame)->document() : 0);
     printIndent(indent);
-    printf("  uri=%s\n\n", frame->isLocalFrame() ? toLocalFrame(frame)->document()->url().string().utf8().data() : 0);
+    printf("  uri=%s\n\n", frame->isLocalFrame() ? toLocalFrame(frame)->document()->url().getString().utf8().data() : 0);
 
     for (blink::Frame* child = frame->tree().firstChild(); child; child = child->tree().nextSibling())
         printFrames(child, targetFrame, indent + 1);

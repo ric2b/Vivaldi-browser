@@ -14,6 +14,7 @@
 #include "cc/layers/layer_impl.h"
 #include "cc/trees/draw_property_utils.h"
 #include "cc/trees/layer_tree_host.h"
+#include "cc/trees/layer_tree_impl.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 
@@ -53,10 +54,11 @@ struct DataForRecursion {
   uint32_t main_thread_scrolling_reasons;
   bool scroll_tree_parent_created_by_uninheritable_criteria;
   const gfx::Transform* device_transform;
-  gfx::Vector2dF scroll_compensation_adjustment;
+  gfx::Vector2dF scroll_snap;
   gfx::Transform compound_transform_since_render_target;
   bool axis_align_since_render_target;
   int sequence_number;
+  SkColor safe_opaque_background_color;
 };
 
 template <typename LayerType>
@@ -185,7 +187,8 @@ void AddClipNodeIfNeeded(const DataForRecursion<LayerType>& data_from_ancestor,
       // Surfaces reset the rect used for layer clipping. At other nodes, layer
       // clipping state from ancestors must continue to get propagated.
       node.data.layer_clipping_uses_only_local_clip =
-          created_render_surface || !ancestor_clips_subtree;
+          (created_render_surface && layer->num_unclipped_descendants() == 0) ||
+          !ancestor_clips_subtree;
     } else {
       // Otherwise, we're either unclipped, or exist only in order to apply our
       // parent's clips in our space.
@@ -284,7 +287,7 @@ bool AddTransformNodeIfNeeded(
                           ->offset_to_transform_parent();
       source_index =
           data_from_ancestor.transform_tree_parent->transform_tree_index();
-      source_offset += data_from_ancestor.scroll_compensation_adjustment;
+      source_offset -= data_from_ancestor.scroll_snap;
     }
   }
 
@@ -304,7 +307,7 @@ bool AddTransformNodeIfNeeded(
   data_for_children->transform_tree_parent = layer;
 
   if (layer->IsContainerForFixedPositionLayers() || is_fixed)
-    data_for_children->scroll_compensation_adjustment = gfx::Vector2dF();
+    data_for_children->scroll_snap = gfx::Vector2dF();
 
   if (!requires_node) {
     data_for_children->should_flatten |= layer->should_flatten_transform();
@@ -444,9 +447,7 @@ bool AddTransformNodeIfNeeded(
   // Flattening (if needed) will be handled by |node|.
   layer->set_should_flatten_transform_from_property_tree(false);
 
-  data_for_children->scroll_compensation_adjustment +=
-      layer->ScrollDelta() + layer->ScrollCompensationAdjustment() -
-      node->data.scroll_snap;
+  data_for_children->scroll_snap += node->data.scroll_snap;
 
   node->owner_id = layer->id();
 
@@ -611,6 +612,7 @@ bool AddEffectNodeIfNeeded(
   node.data.has_copy_request = layer->HasCopyRequest();
   node.data.has_background_filters = !layer->background_filters().IsEmpty();
   node.data.has_animated_opacity = has_animated_opacity;
+  node.data.double_sided = layer->double_sided();
 
   if (!is_root) {
     // The effect node's transform id is used only when we create a render
@@ -624,6 +626,12 @@ bool AddEffectNodeIfNeeded(
           data_from_ancestor.transform_tree->next_available_id();
     }
     node.data.clip_id = data_from_ancestor.clip_tree_parent;
+    EffectNode* parent_node = data_for_children->effect_tree->Node(parent_id);
+    node.data.node_or_ancestor_has_background_filters =
+        parent_node->data.node_or_ancestor_has_background_filters ||
+        node.data.has_background_filters;
+    node.data.to_screen_opacity_is_animated =
+        parent_node->data.to_screen_opacity_is_animated || has_animated_opacity;
   } else {
     // Root render surface acts the unbounded and untransformed to draw content
     // into. Transform node created from root layer (includes device scale
@@ -631,7 +639,14 @@ bool AddEffectNodeIfNeeded(
     // to root render surface's content, but not root render surface itself.
     node.data.transform_id = kRootPropertyTreeNodeId;
     node.data.clip_id = kRootPropertyTreeNodeId;
+    node.data.node_or_ancestor_has_background_filters =
+        node.data.has_background_filters;
+    node.data.to_screen_opacity_is_animated = has_animated_opacity;
   }
+  node.data.target_id =
+      should_create_render_surface
+          ? data_from_ancestor.effect_tree->next_available_id()
+          : data_for_children->render_target;
   data_for_children->effect_tree_parent =
       data_for_children->effect_tree->Insert(node, parent_id);
   layer->SetEffectTreeIndex(data_for_children->effect_tree_parent);
@@ -713,6 +728,11 @@ void AddScrollNodeIfNeeded(
         node.data.main_thread_scrolling_reasons;
     data_for_children->scroll_tree_parent_created_by_uninheritable_criteria =
         scroll_node_uninheritable_criteria;
+
+    if (node.data.scrollable) {
+      data_for_children->scroll_tree->SetBaseScrollOffset(
+          layer->id(), layer->CurrentScrollOffset());
+    }
   }
 
   layer->SetScrollTreeIndex(data_for_children->scroll_tree_parent);
@@ -755,6 +775,20 @@ void SetBackfaceVisibilityTransform(LayerType* layer,
   }
 }
 
+template <typename LayerType>
+void SetSafeOpaqueBackgroundColor(
+    const DataForRecursion<LayerType>& data_from_ancestor,
+    LayerType* layer,
+    DataForRecursion<LayerType>* data_for_children) {
+  SkColor background_color = layer->background_color();
+  data_for_children->safe_opaque_background_color =
+      SkColorGetA(background_color) == 255
+          ? background_color
+          : data_from_ancestor.safe_opaque_background_color;
+  layer->SetSafeOpaqueBackgroundColor(
+      data_for_children->safe_opaque_background_color);
+}
+
 static void SetLayerPropertyChangedForChild(Layer* parent, Layer* child) {
   if (parent->subtree_property_changed())
     child->SetSubtreePropertyChanged();
@@ -793,6 +827,7 @@ void BuildPropertyTreesInternal(
   AddScrollNodeIfNeeded(data_from_parent, layer, &data_for_children);
 
   SetBackfaceVisibilityTransform(layer, created_transform_node);
+  SetSafeOpaqueBackgroundColor(data_from_parent, layer, &data_for_children);
 
   for (size_t i = 0; i < layer->children().size(); ++i) {
     SetLayerPropertyChangedForChild(layer, layer->child_at(i));
@@ -814,6 +849,8 @@ void BuildPropertyTreesInternal(
       DCHECK_EQ(scroll_child->scroll_parent(), layer);
       DataForRecursionFromChild<LayerType> data_from_child;
       DCHECK(scroll_child->parent());
+      data_for_children.effect_tree_parent =
+          scroll_child->parent()->effect_tree_index();
       data_for_children.render_target =
           scroll_child->parent()->effect_tree_index();
       BuildPropertyTreesInternal(scroll_child, data_for_children,
@@ -853,12 +890,13 @@ void BuildPropertyTreesTopLevelInternal(
     float device_scale_factor,
     const gfx::Rect& viewport,
     const gfx::Transform& device_transform,
-    PropertyTrees* property_trees) {
+    PropertyTrees* property_trees,
+    SkColor color) {
   if (!property_trees->needs_rebuild) {
-    UpdatePageScaleFactorInPropertyTrees(property_trees, page_scale_layer,
-                                         page_scale_factor, device_scale_factor,
-                                         device_transform);
-    UpdateElasticOverscrollInPropertyTrees(
+    draw_property_utils::UpdatePageScaleFactor(
+        property_trees, page_scale_layer, page_scale_factor,
+        device_scale_factor, device_transform);
+    draw_property_utils::UpdateElasticOverscroll(
         property_trees, overscroll_elasticity_layer, elastic_overscroll);
     property_trees->clip_tree.SetViewportClip(gfx::RectF(viewport));
     property_trees->transform_tree.SetDeviceTransform(device_transform,
@@ -906,6 +944,7 @@ void BuildPropertyTreesTopLevelInternal(
   data_for_recursion.sequence_number = property_trees->sequence_number;
   data_for_recursion.transform_tree->set_device_scale_factor(
       device_scale_factor);
+  data_for_recursion.safe_opaque_background_color = color;
 
   ClipNode root_clip;
   root_clip.data.resets_clip = true;
@@ -940,11 +979,16 @@ void PropertyTreeBuilder::BuildPropertyTrees(
     const gfx::Rect& viewport,
     const gfx::Transform& device_transform,
     PropertyTrees* property_trees) {
+  property_trees->is_main_thread = true;
+  property_trees->is_active = false;
+  SkColor color = root_layer->layer_tree_host()->background_color();
+  if (SkColorGetA(color) != 255)
+    color = SkColorSetA(color, 255);
   BuildPropertyTreesTopLevelInternal(
       root_layer, page_scale_layer, inner_viewport_scroll_layer,
       outer_viewport_scroll_layer, overscroll_elasticity_layer,
       elastic_overscroll, page_scale_factor, device_scale_factor, viewport,
-      device_transform, property_trees);
+      device_transform, property_trees, color);
 }
 
 void PropertyTreeBuilder::BuildPropertyTrees(
@@ -959,11 +1003,16 @@ void PropertyTreeBuilder::BuildPropertyTrees(
     const gfx::Rect& viewport,
     const gfx::Transform& device_transform,
     PropertyTrees* property_trees) {
+  property_trees->is_main_thread = false;
+  property_trees->is_active = root_layer->IsActive();
+  SkColor color = root_layer->layer_tree_impl()->background_color();
+  if (SkColorGetA(color) != 255)
+    color = SkColorSetA(color, 255);
   BuildPropertyTreesTopLevelInternal(
       root_layer, page_scale_layer, inner_viewport_scroll_layer,
       outer_viewport_scroll_layer, overscroll_elasticity_layer,
       elastic_overscroll, page_scale_factor, device_scale_factor, viewport,
-      device_transform, property_trees);
+      device_transform, property_trees, color);
 }
 
 }  // namespace cc

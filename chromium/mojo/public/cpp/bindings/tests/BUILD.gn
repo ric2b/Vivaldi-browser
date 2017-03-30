@@ -8,6 +8,7 @@ source_set("tests") {
   testonly = true
 
   sources = [
+    "array_common_test.h",
     "array_unittest.cc",
     "associated_interface_unittest.cc",
     "binding_callback_unittest.cc",
@@ -18,9 +19,11 @@ source_set("tests") {
     "connector_unittest.cc",
     "constant_unittest.cc",
     "container_test_util.cc",
+    "container_test_util.h",
     "equals_unittest.cc",
     "handle_passing_unittest.cc",
     "interface_ptr_unittest.cc",
+    "macros_unittest.cc",
     "map_unittest.cc",
     "message_queue.cc",
     "message_queue.h",
@@ -31,7 +34,9 @@ source_set("tests") {
     "pickled_struct_chromium.cc",
     "pickled_struct_chromium.h",
     "rect_blink.h",
+    "rect_blink_traits.h",
     "rect_chromium.h",
+    "rect_chromium_traits.h",
     "request_response_unittest.cc",
     "router_test_util.cc",
     "router_test_util.h",
@@ -44,27 +49,52 @@ source_set("tests") {
     "struct_unittest.cc",
     "struct_with_traits_impl.cc",
     "struct_with_traits_impl.h",
+    "struct_with_traits_impl_traits.cc",
+    "struct_with_traits_impl_traits.h",
     "sync_method_unittest.cc",
     "type_conversion_unittest.cc",
     "union_unittest.cc",
     "validation_unittest.cc",
+    "variant_test_util.h",
   ]
 
   deps = [
     ":mojo_public_bindings_test_utils",
-    "//mojo/environment:chromium",
     "//mojo/message_pump",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/bindings:callback",
     "//mojo/public/cpp/system",
     "//mojo/public/cpp/test_support:test_utils",
-    "//mojo/public/cpp/utility",
     "//mojo/public/interfaces/bindings/tests:test_associated_interfaces",
     "//mojo/public/interfaces/bindings/tests:test_interfaces",
     "//mojo/public/interfaces/bindings/tests:test_interfaces_blink",
     "//mojo/public/interfaces/bindings/tests:test_interfaces_chromium",
     "//mojo/public/interfaces/bindings/tests:test_interfaces_experimental",
     "//mojo/public/interfaces/bindings/tests:test_struct_traits_interfaces",
+    "//mojo/public/interfaces/bindings/tests:test_variant",
+    "//testing/gtest",
+  ]
+}
+
+source_set("for_blink_tests") {
+  testonly = true
+
+  sources = [
+    "array_common_test.h",
+    "container_test_util.cc",
+    "container_test_util.h",
+    "variant_test_util.h",
+    "wtf_array_unittest.cc",
+    "wtf_types_unittest.cc",
+  ]
+
+  deps = [
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/bindings:callback",
+    "//mojo/public/cpp/system",
+    "//mojo/public/interfaces/bindings/tests:test_interfaces",
+    "//mojo/public/interfaces/bindings/tests:test_wtf_types",
+    "//mojo/public/interfaces/bindings/tests:test_wtf_types_blink",
     "//testing/gtest",
   ]
 }
@@ -74,15 +104,17 @@ source_set("perftests") {
 
   sources = [
     "bindings_perftest.cc",
+    "e2e_perftest.cc",
   ]
 
   deps = [
+    "//base/test:test_support",
+    "//mojo/edk/test:test_support",
+    "//mojo/message_pump",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/bindings:callback",
-    "//mojo/public/cpp/environment:standalone",
     "//mojo/public/cpp/system",
     "//mojo/public/cpp/test_support:test_utils",
-    "//mojo/public/cpp/utility",
     "//mojo/public/interfaces/bindings/tests:test_interfaces",
     "//testing/gtest",
   ]

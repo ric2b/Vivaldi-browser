@@ -48,54 +48,54 @@ static const int invalidTrackIndex = -1;
 
 const AtomicString& TextTrack::subtitlesKeyword()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, subtitles, ("subtitles", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, subtitles, ("subtitles"));
     return subtitles;
 }
 
 const AtomicString& TextTrack::captionsKeyword()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, captions, ("captions", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, captions, ("captions"));
     return captions;
 }
 
 const AtomicString& TextTrack::descriptionsKeyword()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, descriptions, ("descriptions", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, descriptions, ("descriptions"));
     return descriptions;
 }
 
 const AtomicString& TextTrack::chaptersKeyword()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, chapters, ("chapters", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, chapters, ("chapters"));
     return chapters;
 }
 
 const AtomicString& TextTrack::metadataKeyword()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, metadata, ("metadata", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, metadata, ("metadata"));
     return metadata;
 }
 
 const AtomicString& TextTrack::disabledKeyword()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, open, ("disabled", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, open, ("disabled"));
     return open;
 }
 
 const AtomicString& TextTrack::hiddenKeyword()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, closed, ("hidden", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, closed, ("hidden"));
     return closed;
 }
 
 const AtomicString& TextTrack::showingKeyword()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, ended, ("showing", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, ended, ("showing"));
     return ended;
 }
 
 TextTrack::TextTrack(const AtomicString& kind, const AtomicString& label, const AtomicString& language, const AtomicString& id, TextTrackType type)
-    : TrackBase(TrackBase::TextTrack, label, language, id)
+    : TrackBase(WebMediaPlayer::TextTrack, label, language, id)
     , m_cues(nullptr)
     , m_regions(nullptr)
     , m_trackList(nullptr)
@@ -448,10 +448,10 @@ const AtomicString& TextTrack::interfaceName() const
     return EventTargetNames::TextTrack;
 }
 
-ExecutionContext* TextTrack::executionContext() const
+ExecutionContext* TextTrack::getExecutionContext() const
 {
     HTMLMediaElement* owner = mediaElement();
-    return owner ? owner->executionContext() : 0;
+    return owner ? owner->getExecutionContext() : 0;
 }
 
 HTMLMediaElement* TextTrack::mediaElement() const

@@ -41,7 +41,7 @@ class ZoomBubbleView : public LocationBarBubbleDelegateView,
                          DisplayReason reason);
 
   // Closes the showing bubble (if one exists).
-  static void CloseBubble();
+  static void CloseCurrentBubble();
 
   // Returns the zoom bubble if the zoom bubble is showing. Returns NULL
   // otherwise.
@@ -66,7 +66,7 @@ class ZoomBubbleView : public LocationBarBubbleDelegateView,
 
     // An image of the extension's icon, which appears in the zoom bubble as an
     // image button.
-    scoped_ptr<const extensions::IconImage> icon_image;
+    std::unique_ptr<const extensions::IconImage> icon_image;
   };
 
   ZoomBubbleView(views::View* anchor_view,
@@ -81,7 +81,7 @@ class ZoomBubbleView : public LocationBarBubbleDelegateView,
   void OnMouseExited(const ui::MouseEvent& event) override;
   void Init() override;
   void WindowClosing() override;
-  void Close() override;
+  void CloseBubble() override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;

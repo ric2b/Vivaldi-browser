@@ -21,6 +21,7 @@
 #include "core/svg/SVGCursorElement.h"
 
 #include "core/SVGNames.h"
+#include "core/dom/StyleChangeReason.h"
 
 namespace blink {
 
@@ -55,7 +56,7 @@ void SVGCursorElement::addClient(SVGElement* element)
 #if !ENABLE(OILPAN)
 void SVGCursorElement::removeClient(SVGElement* element)
 {
-    HashSet<RawPtr<SVGElement>>::iterator it = m_clients.find(element);
+    HashSet<SVGElement*>::iterator it = m_clients.find(element);
     if (it != m_clients.end()) {
         m_clients.remove(it);
         element->cursorElementRemoved();
@@ -87,11 +88,9 @@ void SVGCursorElement::svgAttributeChanged(const QualifiedName& attrName)
 
 DEFINE_TRACE(SVGCursorElement)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_x);
     visitor->trace(m_y);
     visitor->trace(m_clients);
-#endif
     SVGElement::trace(visitor);
     SVGTests::trace(visitor);
     SVGURIReference::trace(visitor);

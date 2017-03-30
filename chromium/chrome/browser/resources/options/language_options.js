@@ -102,10 +102,10 @@ cr.define('options', function() {
     /**
      * Map from language code to spell check dictionary download status for that
      * language.
-     * @type {Array}
+     * @type {!Object}
      * @private
      */
-    spellcheckDictionaryDownloadStatus_: [],
+    spellcheckDictionaryDownloadStatus_: {},
 
     /**
      * Number of times a spell check dictionary download failed.
@@ -264,6 +264,10 @@ cr.define('options', function() {
         // Show the 'activate-ime-menu' checkbox if the flag is tured on.
         if (loadTimeData.getBoolean('enableLanguageOptionsImeMenu'))
           $('language-options-ime-menu-template').hidden = false;
+
+        // Updates the initial checked state of the check box.
+        Preferences.getInstance().addEventListener(
+            ACTIVATE_IME_MENU_PREF, this.updateImeMenuCheckbox_.bind(this));
 
         // Listen to check on 'activate-ime-menu' checkbox.
         var checkboxImeMenu = $('activate-ime-menu');
@@ -1394,6 +1398,15 @@ cr.define('options', function() {
         Preferences.setBooleanPref(ACTIVATE_IME_MENU_PREF,
                                    checkbox.checked, true);
       }
+    },
+
+    /**
+     * Updates the activate-ime-menu check box's checked state.
+     * @param {Event} e Change event.
+     * @private
+     */
+    updateImeMenuCheckbox_: function(e) {
+      $('activate-ime-menu').checked = e.value.value;
     },
   };
 

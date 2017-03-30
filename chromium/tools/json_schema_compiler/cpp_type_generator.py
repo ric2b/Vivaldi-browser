@@ -120,10 +120,12 @@ class CppTypeGenerator(object):
     # never needs to be wrapped in pointer shenanigans.
     # TODO(kalman): change this - but it's an exceedingly far-reaching change.
     if not self.FollowRef(type_).property_type == PropertyType.ENUM:
-      if is_in_container and (is_ptr or not self.IsCopyable(type_)):
-        cpp_type = 'linked_ptr<%s>' % cpp_util.PadForGenerics(cpp_type)
-      elif is_ptr:
-        cpp_type = 'scoped_ptr<%s>' % cpp_util.PadForGenerics(cpp_type)
+      is_base_value = (cpp_type == 'base::Value' or
+                       cpp_type == 'base::DictionaryValue')
+      # Wrap ptrs and base::Values in containers (which aren't movable) in
+      # scoped_ptrs.
+      if is_ptr or (is_in_container and is_base_value):
+        cpp_type = 'std::unique_ptr<%s>' % cpp_util.PadForGenerics(cpp_type)
 
     return cpp_type
 
@@ -230,12 +232,9 @@ class CppTypeGenerator(object):
     if type_.property_type == PropertyType.REF:
       deps.add(_TypeDependency(self._FindType(type_.ref_type), hard=hard))
     elif type_.property_type == PropertyType.ARRAY:
-      # Non-copyable types are not hard because they are wrapped in linked_ptrs
-      # when generated. Otherwise they're typedefs, so they're hard (though we
-      # could generate those typedefs in every dependent namespace, but that
-      # seems weird).
-      deps = self._TypeDependencies(type_.item_type,
-                                    hard=self.IsCopyable(type_.item_type))
+      # Types in containers are hard dependencies because they are stored
+      # directly and use move semantics.
+      deps = self._TypeDependencies(type_.item_type, hard=hard)
     elif type_.property_type == PropertyType.CHOICES:
       for type_ in type_.choices:
         deps |= self._TypeDependencies(type_, hard=self.IsCopyable(type_))

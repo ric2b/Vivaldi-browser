@@ -10,20 +10,20 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<DragEvent> DragEvent::create(const AtomicString& type, bool canBubble, bool cancelable, PassRefPtrWillBeRawPtr<AbstractView> view,
+DragEvent* DragEvent::create(const AtomicString& type, bool canBubble, bool cancelable, AbstractView* view,
     int detail, int screenX, int screenY, int windowX, int windowY,
     int movementX, int movementY,
     PlatformEvent::Modifiers modifiers,
     short button, unsigned short buttons,
-    PassRefPtrWillBeRawPtr<EventTarget> relatedTarget,
+    EventTarget* relatedTarget,
     double platformTimeStamp, DataTransfer* dataTransfer,
     PlatformMouseEvent::SyntheticEventType syntheticEventType)
 {
-    return adoptRefWillBeNoop(new DragEvent(type, canBubble, cancelable, view,
+    return new DragEvent(type, canBubble, cancelable, view,
         detail, screenX, screenY, windowX, windowY,
         movementX, movementY,
         modifiers, button, buttons, relatedTarget, platformTimeStamp,
-        dataTransfer, syntheticEventType));
+        dataTransfer, syntheticEventType);
 }
 
 
@@ -37,16 +37,19 @@ DragEvent::DragEvent(DataTransfer* dataTransfer)
 {
 }
 
-DragEvent::DragEvent(const AtomicString& eventType, bool canBubble, bool cancelable, PassRefPtrWillBeRawPtr<AbstractView> view,
+DragEvent::DragEvent(const AtomicString& eventType, bool canBubble, bool cancelable, AbstractView* view,
     int detail, int screenX, int screenY, int windowX, int windowY,
     int movementX, int movementY,
     PlatformEvent::Modifiers modifiers,
-    short button, unsigned short buttons, PassRefPtrWillBeRawPtr<EventTarget> relatedTarget,
+    short button, unsigned short buttons, EventTarget* relatedTarget,
     double platformTimeStamp, DataTransfer* dataTransfer,
     PlatformMouseEvent::SyntheticEventType syntheticEventType)
     : MouseEvent(eventType, canBubble, cancelable, view, detail, screenX, screenY,
         windowX, windowY, movementX, movementY, modifiers, button, buttons, relatedTarget,
-        platformTimeStamp, syntheticEventType)
+        platformTimeStamp, syntheticEventType,
+        // TODO(zino): Should support canvas hit region because the drag event
+        // is a kind of mouse event. Please see http://crbug.com/594073
+        String())
     , m_dataTransfer(dataTransfer)
 
 {
@@ -54,7 +57,7 @@ DragEvent::DragEvent(const AtomicString& eventType, bool canBubble, bool cancela
 
 DragEvent::DragEvent(const AtomicString& type, const DragEventInit& initializer)
     : MouseEvent(type, initializer)
-    , m_dataTransfer(initializer.dataTransfer())
+    , m_dataTransfer(initializer.getDataTransfer())
 {
 }
 
@@ -68,7 +71,7 @@ bool DragEvent::isMouseEvent() const
     return false;
 }
 
-PassRefPtrWillBeRawPtr<EventDispatchMediator> DragEvent::createMediator()
+EventDispatchMediator* DragEvent::createMediator()
 {
     return DragEventDispatchMediator::create(this);
 }
@@ -79,12 +82,12 @@ DEFINE_TRACE(DragEvent)
     MouseEvent::trace(visitor);
 }
 
-PassRefPtrWillBeRawPtr<DragEventDispatchMediator> DragEventDispatchMediator::create(PassRefPtrWillBeRawPtr<DragEvent> dragEvent)
+DragEventDispatchMediator* DragEventDispatchMediator::create(DragEvent* dragEvent)
 {
-    return adoptRefWillBeNoop(new DragEventDispatchMediator(dragEvent));
+    return new DragEventDispatchMediator(dragEvent);
 }
 
-DragEventDispatchMediator::DragEventDispatchMediator(PassRefPtrWillBeRawPtr<DragEvent> dragEvent)
+DragEventDispatchMediator::DragEventDispatchMediator(DragEvent* dragEvent)
     : EventDispatchMediator(dragEvent)
 {
 }
@@ -96,7 +99,8 @@ DragEvent& DragEventDispatchMediator::event() const
 
 DispatchEventResult DragEventDispatchMediator::dispatchEvent(EventDispatcher& dispatcher) const
 {
-    event().eventPath().adjustForRelatedTarget(dispatcher.node(), event().relatedTarget());
+    if (event().relatedTargetScoped())
+        event().eventPath().adjustForRelatedTarget(dispatcher.node(), event().relatedTarget());
     return EventDispatchMediator::dispatchEvent(dispatcher);
 }
 

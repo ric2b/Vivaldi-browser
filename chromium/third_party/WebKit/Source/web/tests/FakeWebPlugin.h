@@ -50,14 +50,12 @@ public:
     // WebPlugin methods:
     bool initialize(WebPluginContainer*) override;
     void destroy() override;
-    NPObject* scriptableObject() override { return 0; }
     bool canProcessDrag() const override { return false; }
     void updateAllLifecyclePhases() override { }
     void paint(WebCanvas*, const WebRect&) override { }
     void updateGeometry(const WebRect& clientRect, const WebRect& clipRect, const WebRect& windowClipRect, const WebVector<WebRect>& cutOutsRects, bool isVisible) override { }
     void updateFocus(bool, WebFocusType) override { }
     void updateVisibility(bool) override { }
-    bool acceptsInputEvents() override { return true; }
     WebInputEventResult handleInputEvent(const WebInputEvent&, WebCursorInfo&) override { return WebInputEventResult::NotHandled; }
     bool handleDragStatusUpdate(WebDragStatus, const WebDragData&, WebDragOperationsMask, const WebPoint& position, const WebPoint& screenPosition) override { return false; }
     void didReceiveResponse(const WebURLResponse&) override { }

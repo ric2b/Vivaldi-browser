@@ -36,18 +36,15 @@
 #include "core/dom/custom/CustomElementRegistry.h"
 #include "core/dom/custom/CustomElementUpgradeCandidateMap.h"
 #include "platform/heap/Handle.h"
-#include "wtf/HashMap.h"
-#include "wtf/PassOwnPtr.h"
-#include "wtf/PassRefPtr.h"
 #include "wtf/text/AtomicString.h"
 
 namespace blink {
 
-class CustomElementRegistrationContext final : public RefCountedWillBeGarbageCollectedFinalized<CustomElementRegistrationContext> {
+class CustomElementRegistrationContext final : public GarbageCollectedFinalized<CustomElementRegistrationContext> {
 public:
-    static PassRefPtrWillBeRawPtr<CustomElementRegistrationContext> create()
+    static RawPtr<CustomElementRegistrationContext> create()
     {
-        return adoptRefWillBeNoop(new CustomElementRegistrationContext());
+        return new CustomElementRegistrationContext();
     }
 
     ~CustomElementRegistrationContext() { }
@@ -56,7 +53,7 @@ public:
     // Definitions
     void registerElement(Document*, CustomElementConstructorBuilder*, const AtomicString& type, CustomElement::NameSet validNames, ExceptionState&);
 
-    PassRefPtrWillBeRawPtr<Element> createCustomTagElement(Document&, const QualifiedName&);
+    RawPtr<Element> createCustomTagElement(Document&, const QualifiedName&);
     static void setIsAttributeAndTypeExtension(Element*, const AtomicString& type);
     static void setTypeExtension(Element*, const AtomicString& type);
 
@@ -76,7 +73,7 @@ private:
     CustomElementRegistry m_registry;
 
     // Element creation
-    OwnPtrWillBeMember<CustomElementUpgradeCandidateMap> m_candidates;
+    Member<CustomElementUpgradeCandidateMap> m_candidates;
 };
 
 } // namespace blink

@@ -22,12 +22,12 @@ class LayerTreeHostVideoTestSetNeedsDisplay
     : public LayerTreeHostVideoTest {
  public:
   void SetupTree() override {
-    scoped_refptr<Layer> root = Layer::Create(layer_settings());
+    scoped_refptr<Layer> root = Layer::Create();
     root->SetBounds(gfx::Size(10, 10));
     root->SetIsDrawable(true);
 
-    scoped_refptr<VideoLayer> video = VideoLayer::Create(
-        layer_settings(), &video_frame_provider_, media::VIDEO_ROTATION_90);
+    scoped_refptr<VideoLayer> video =
+        VideoLayer::Create(&video_frame_provider_, media::VIDEO_ROTATION_90);
     video->SetPosition(gfx::PointF(3.f, 3.f));
     video->SetBounds(gfx::Size(4, 5));
     video->SetIsDrawable(true);
@@ -69,7 +69,7 @@ class LayerTreeHostVideoTestSetNeedsDisplay
 
   void DrawLayersOnThread(LayerTreeHostImpl* host_impl) override {
     VideoLayerImpl* video = static_cast<VideoLayerImpl*>(
-        host_impl->active_tree()->root_layer()->children()[0].get());
+        host_impl->active_tree()->root_layer()->children()[0]);
 
     EXPECT_EQ(media::VIDEO_ROTATION_90, video->video_rotation());
 

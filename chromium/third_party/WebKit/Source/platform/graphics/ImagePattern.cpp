@@ -20,7 +20,7 @@ PassRefPtr<ImagePattern> ImagePattern::create(PassRefPtr<Image> image, RepeatMod
 
 ImagePattern::ImagePattern(PassRefPtr<Image> image, RepeatMode repeatMode)
     : Pattern(repeatMode)
-    , m_tileImage(image->imageForCurrentFrame())
+    , m_tileImage(toSkSp(image->imageForCurrentFrame()))
 {
     if (m_tileImage) {
         // TODO(fmalita): mechanism to extract the actual SkImageInfo from an SkImage?
@@ -30,17 +30,16 @@ ImagePattern::ImagePattern(PassRefPtr<Image> image, RepeatMode repeatMode)
     }
 }
 
-PassRefPtr<SkShader> ImagePattern::createShader()
+sk_sp<SkShader> ImagePattern::createShader() const
 {
     if (!m_tileImage)
-        return adoptRef(SkShader::CreateColorShader(SK_ColorTRANSPARENT));
+        return SkShader::MakeColorShader(SK_ColorTRANSPARENT);
 
     SkMatrix localMatrix = affineTransformToSkMatrix(m_patternSpaceTransformation);
 
     if (isRepeatXY()) {
         // Fast path: for repeatXY we just return a shader from the original image.
-        return adoptRef(m_tileImage->newShader(SkShader::kRepeat_TileMode,
-            SkShader::kRepeat_TileMode, &localMatrix));
+        return m_tileImage->makeShader(SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, &localMatrix);
     }
 
     // Skia does not have a "draw the tile only once" option. Clamp_TileMode
@@ -58,18 +57,17 @@ PassRefPtr<SkShader> ImagePattern::createShader()
     // Create a transparent image 1 pixel wider and/or taller than the
     // original, then copy the orignal into it.
     // FIXME: Is there a better way to pad (not scale) an image in skia?
-    RefPtr<SkSurface> surface = adoptRef(SkSurface::NewRasterN32Premul(
-        m_tileImage->width() + expandW, m_tileImage->height() + expandH));
+    sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(
+        m_tileImage->width() + expandW, m_tileImage->height() + expandH);
     if (!surface)
-        return adoptRef(SkShader::CreateColorShader(SK_ColorTRANSPARENT));
+        return SkShader::MakeColorShader(SK_ColorTRANSPARENT);
 
     surface->getCanvas()->clear(SK_ColorTRANSPARENT);
     SkPaint paint;
     paint.setXfermodeMode(SkXfermode::kSrc_Mode);
-    surface->getCanvas()->drawImage(m_tileImage.get(), 0, 0, &paint);
-    RefPtr<SkImage> expandedImage = adoptRef(surface->newImageSnapshot());
+    surface->getCanvas()->drawImage(m_tileImage, 0, 0, &paint);
 
-    return adoptRef(expandedImage->newShader(tileModeX, tileModeY, &localMatrix));
+    return surface->makeImageSnapshot()->makeShader(tileModeX, tileModeY, &localMatrix);
 }
 
 bool ImagePattern::isTextureBacked() const

@@ -119,11 +119,10 @@ void LayoutMultiColumnSpannerPlaceholder::computeLogicalHeight(LayoutUnit, Layou
     computedValues.m_margins.m_after = marginAfter();
 }
 
-void LayoutMultiColumnSpannerPlaceholder::invalidateTreeIfNeeded(PaintInvalidationState& paintInvalidationState)
+void LayoutMultiColumnSpannerPlaceholder::invalidatePaintOfSubtreesIfNeeded(const PaintInvalidationState& childPaintInvalidationState)
 {
-    PaintInvalidationState newPaintInvalidationState(paintInvalidationState, *this, paintInvalidationState.paintInvalidationContainer());
-    m_layoutObjectInFlowThread->invalidateTreeIfNeeded(newPaintInvalidationState);
-    LayoutBox::invalidateTreeIfNeeded(paintInvalidationState);
+    m_layoutObjectInFlowThread->invalidateTreeIfNeeded(childPaintInvalidationState);
+    LayoutBox::invalidatePaintOfSubtreesIfNeeded(childPaintInvalidationState);
 }
 
 void LayoutMultiColumnSpannerPlaceholder::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset) const

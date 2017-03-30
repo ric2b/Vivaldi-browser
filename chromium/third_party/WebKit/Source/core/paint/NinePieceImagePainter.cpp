@@ -37,10 +37,10 @@ bool NinePieceImagePainter::paint(GraphicsContext& graphicsContext, const Layout
 
     // Find out if the hasImage() check in ComputedStyle::border*Width had any affect, i.e. if a border is non-zero while border-style is
     // none or hidden.
-    if ((style.borderLeftWidth() && (style.borderLeft().style() == BNONE || style.borderLeft().style() == BHIDDEN))
-        || (style.borderRightWidth() && (style.borderRight().style() == BNONE || style.borderRight().style() == BHIDDEN))
-        || (style.borderTopWidth() && (style.borderTop().style() == BNONE || style.borderTop().style() == BHIDDEN))
-        || (style.borderBottomWidth() && (style.borderBottom().style() == BNONE || style.borderBottom().style() == BHIDDEN)))
+    if ((style.borderLeftWidth() && (style.borderLeft().style() == BorderStyleNone || style.borderLeft().style() == BorderStyleHidden))
+        || (style.borderRightWidth() && (style.borderRight().style() == BorderStyleNone || style.borderRight().style() == BorderStyleHidden))
+        || (style.borderTopWidth() && (style.borderTop().style() == BorderStyleNone || style.borderTop().style() == BorderStyleHidden))
+        || (style.borderBottomWidth() && (style.borderBottom().style() == BorderStyleNone || style.borderBottom().style() == BorderStyleHidden)))
         Deprecation::countDeprecation(m_layoutObject.document(), UseCounter::BorderImageWithBorderStyleNone);
 
     // FIXME: border-image is broken with full page zooming when tiling has to happen, since the tiling function
@@ -49,14 +49,21 @@ bool NinePieceImagePainter::paint(GraphicsContext& graphicsContext, const Layout
     rectWithOutsets.expand(style.imageOutsets(ninePieceImage));
     LayoutRect borderImageRect = rectWithOutsets;
 
-    IntSize imageSize = roundedIntSize(m_layoutObject.calculateImageIntrinsicDimensions(styleImage, borderImageRect.size(),
-        LayoutBoxModelObject::DoNotScaleByEffectiveZoom));
+    // NinePieceImage returns the image slices without effective zoom applied and thus we compute
+    // the nine piece grid on top of the image in unzoomed coordinates.
+    //
+    // FIXME: The default object size passed to imageSize() should be scaled by the zoom factor
+    // passed in. In this case it means that borderImageRect should be passed in compensated by
+    // effective zoom, since the scale factor is one. For generated images, the actual image data
+    // (gradient stops, etc.) are scaled to effective zoom instead so we must take care not to cause
+    // scale of them again.
+    IntSize imageSize = roundedIntSize(styleImage->imageSize(m_layoutObject, 1, borderImageRect.size()));
 
     IntRectOutsets borderWidths(style.borderTopWidth(), style.borderRightWidth(),
         style.borderBottomWidth(), style.borderLeftWidth());
     NinePieceImageGrid grid(ninePieceImage, imageSize, pixelSnappedIntRect(borderImageRect), borderWidths);
 
-    RefPtr<Image> image = styleImage->image(&m_layoutObject, imageSize, style.effectiveZoom());
+    RefPtr<Image> image = styleImage->image(m_layoutObject, imageSize, style.effectiveZoom());
 
     InterpolationQuality interpolationQuality = BoxPainter::chooseInterpolationQuality(m_layoutObject, image.get(), 0, rectWithOutsets.size());
     InterpolationQuality previousInterpolationQuality = graphicsContext.imageInterpolationQuality();
@@ -66,7 +73,7 @@ bool NinePieceImagePainter::paint(GraphicsContext& graphicsContext, const Layout
         InspectorPaintImageEvent::data(m_layoutObject, *styleImage));
 
     for (NinePiece piece = MinPiece; piece < MaxPiece; ++piece) {
-        NinePieceImageGrid::NinePieceDrawInfo drawInfo = grid.getNinePieceDrawInfo(piece);
+        NinePieceImageGrid::NinePieceDrawInfo drawInfo = grid.getNinePieceDrawInfo(piece, styleImage->imageScaleFactor());
 
         if (drawInfo.isDrawable) {
             if (drawInfo.isCornerPiece) {

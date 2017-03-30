@@ -69,7 +69,7 @@ public class PermissionUpdateInfobarTest extends ChromeTabbedActivityTestBase {
         ChromeTabUtils.newTabFromMenu(getInstrumentation(), getActivity());
 
         // Register for animation notifications
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 if (getActivity().getActivityTab() == null) return false;
@@ -119,19 +119,19 @@ public class PermissionUpdateInfobarTest extends ChromeTabbedActivityTestBase {
             assertFalse(webContents.isDestroyed());
 
             ChromeTabUtils.closeCurrentTab(getInstrumentation(), getActivity());
-            CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+            CriteriaHelper.pollUiThread(new Criteria() {
                 @Override
                 public boolean isSatisfied() {
                     return webContents.isDestroyed();
                 }
             });
 
-            CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+            CriteriaHelper.pollUiThread(Criteria.equals(1, new Callable<Integer>() {
                 @Override
-                public boolean isSatisfied() {
-                    return getActivity().getTabModelSelector().getModel(false).getCount() == 1;
+                public Integer call() {
+                    return getActivity().getTabModelSelector().getModel(false).getCount();
                 }
-            });
+            }));
         } finally {
             ThreadUtils.runOnUiThreadBlocking(new Runnable() {
                 @Override
@@ -148,7 +148,7 @@ public class PermissionUpdateInfobarTest extends ChromeTabbedActivityTestBase {
         ChromeTabUtils.newTabFromMenu(getInstrumentation(), getActivity());
 
         // Register for animation notifications
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 if (getActivity().getActivityTab() == null) return false;
@@ -198,27 +198,27 @@ public class PermissionUpdateInfobarTest extends ChromeTabbedActivityTestBase {
             assertFalse(webContents.isDestroyed());
 
             runJavaScriptCodeInCurrentTab("document.querySelector('iframe').src = '';");
-            CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+            CriteriaHelper.pollUiThread(Criteria.equals(0, new Callable<Integer>() {
                 @Override
-                public boolean isSatisfied() {
-                    return getInfoBars().size() == 0;
+                public Integer call() {
+                    return getInfoBars().size();
                 }
-            });
+            }));
 
             ChromeTabUtils.closeCurrentTab(getInstrumentation(), getActivity());
-            CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+            CriteriaHelper.pollUiThread(new Criteria() {
                 @Override
                 public boolean isSatisfied() {
                     return webContents.isDestroyed();
                 }
             });
 
-            CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+            CriteriaHelper.pollUiThread(Criteria.equals(1, new Callable<Integer>() {
                 @Override
-                public boolean isSatisfied() {
-                    return getActivity().getTabModelSelector().getModel(false).getCount() == 1;
+                public Integer call() {
+                    return getActivity().getTabModelSelector().getModel(false).getCount();
                 }
-            });
+            }));
         } finally {
             ThreadUtils.runOnUiThreadBlocking(new Runnable() {
                 @Override

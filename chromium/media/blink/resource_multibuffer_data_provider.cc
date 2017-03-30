@@ -130,6 +130,16 @@ bool ResourceMultiBufferDataProvider::Available() const {
   return false;
 }
 
+int64_t ResourceMultiBufferDataProvider::AvailableBytes() const {
+  int64_t bytes = 0;
+  for (const auto i : fifo_) {
+    if (i->end_of_stream())
+      break;
+    bytes += i->data_size();
+  }
+  return bytes;
+}
+
 scoped_refptr<DataBuffer> ResourceMultiBufferDataProvider::Read() {
   DCHECK(Available());
   scoped_refptr<DataBuffer> ret = fifo_.front();
@@ -164,7 +174,9 @@ void ResourceMultiBufferDataProvider::willFollowRedirect(
       if (url_data_->multibuffer()->map().empty() && fifo_.empty())
         return;
 
+      active_loader_ = nullptr;
       url_data_->Fail();
+      return;  // "this" may be deleted now.
     }
   }
 }
@@ -262,7 +274,8 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
     // If we have verified the partial response and it is correct.
     // It's also possible for a server to support range requests
     // without advertising "Accept-Ranges: bytes".
-    if (partial_response && VerifyPartialResponse(response)) {
+    if (partial_response &&
+        VerifyPartialResponse(response, destination_url_data)) {
       destination_url_data->set_range_supported();
     } else if (ok_response && pos_ == 0) {
       // We accept a 200 response for a Range:0- request, trusting the
@@ -277,8 +290,9 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
       destination_url_data->multibuffer()->OnDataProviderEvent(this);
       return;
     } else {
+      active_loader_ = nullptr;
       destination_url_data->Fail();
-      return;
+      return;  // "this" may be deleted now.
     }
   } else {
     destination_url_data->set_range_supported();
@@ -311,6 +325,16 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
     // cause clients to start using the new UrlData.
     old_url_data->RedirectTo(destination_url_data);
   }
+
+  // This test is vital for security!
+  const GURL& original_url = response.wasFetchedViaServiceWorker()
+                                 ? response.originalURLViaServiceWorker()
+                                 : response.url();
+  if (!url_data_->ValidateDataOrigin(original_url.GetOrigin())) {
+    active_loader_ = nullptr;
+    url_data_->Fail();
+    return;  // "this" may be deleted now.
+  }
 }
 
 void ResourceMultiBufferDataProvider::didReceiveData(WebURLLoader* loader,
@@ -339,8 +363,7 @@ void ResourceMultiBufferDataProvider::didReceiveData(WebURLLoader* loader,
     data_length -= to_append;
   }
 
-  if (Available())
-    url_data_->multibuffer()->OnDataProviderEvent(this);
+  url_data_->multibuffer()->OnDataProviderEvent(this);
 
   // Beware, this object might be deleted here.
 }
@@ -387,9 +410,9 @@ void ResourceMultiBufferDataProvider::didFinishLoading(
           base::TimeDelta::FromMilliseconds(kLoaderPartialRetryDelayMs));
       return;
     } else {
-      scoped_ptr<ActiveLoader> active_loader = std::move(active_loader_);
+      active_loader_ = nullptr;
       url_data_->Fail();
-      return;
+      return;  // "this" may be deleted now.
     }
   }
 
@@ -483,7 +506,8 @@ int64_t ResourceMultiBufferDataProvider::block_size() const {
 }
 
 bool ResourceMultiBufferDataProvider::VerifyPartialResponse(
-    const WebURLResponse& response) {
+    const WebURLResponse& response,
+    const scoped_refptr<UrlData>& url_data) {
   int64_t first_byte_position, last_byte_position, instance_size;
   if (!ParseContentRange(response.httpHeaderField("Content-Range").utf8(),
                          &first_byte_position, &last_byte_position,
@@ -492,7 +516,7 @@ bool ResourceMultiBufferDataProvider::VerifyPartialResponse(
   }
 
   if (url_data_->length() == kPositionNotSpecified) {
-    url_data_->set_length(instance_size);
+    url_data->set_length(instance_size);
   }
 
   if (byte_pos() != first_byte_position) {

@@ -4,13 +4,13 @@
 
 #include "chrome/browser/extensions/api/declarative_content/declarative_content_is_bookmarked_condition_tracker.h"
 
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/values_test_util.h"
@@ -39,25 +39,24 @@ scoped_refptr<Extension> CreateExtensionWithBookmarksPermission(
   if (include_bookmarks)
     permissions.Append("bookmarks");
   return ExtensionBuilder()
-      .SetManifest(std::move(DictionaryBuilder()
-                                 .Set("name", "Test extension")
-                                 .Set("version", "1.0")
-                                 .Set("manifest_version", 2)
-                                 .Set("permissions", std::move(permissions))))
+      .SetManifest(DictionaryBuilder()
+                       .Set("name", "Test extension")
+                       .Set("version", "1.0")
+                       .Set("manifest_version", 2)
+                       .Set("permissions", permissions.Build())
+                       .Build())
       .Build();
 }
 
-scoped_ptr<DeclarativeContentIsBookmarkedPredicate> CreatePredicate(
+std::unique_ptr<DeclarativeContentIsBookmarkedPredicate> CreatePredicate(
     ContentPredicateEvaluator* evaluator,
     const Extension* extension,
     bool is_bookmarked) {
   std::string error;
-  scoped_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
+  std::unique_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
       DeclarativeContentIsBookmarkedPredicate::Create(
-          evaluator,
-          extension,
-          *base::test::ParseJson(is_bookmarked ? "true" : "false"),
-          &error);
+          evaluator, extension,
+          *base::test::ParseJson(is_bookmarked ? "true" : "false"), &error);
   EXPECT_EQ("", error);
   EXPECT_TRUE(predicate);
   EXPECT_EQ(is_bookmarked, predicate->is_bookmarked());
@@ -150,10 +149,11 @@ class DeclarativeContentIsBookmarkedConditionTrackerTest
 
   Delegate delegate_;
   bookmarks::BookmarkModel* bookmark_model_;
-  scoped_ptr<DeclarativeContentIsBookmarkedConditionTracker> tracker_;
+  std::unique_ptr<DeclarativeContentIsBookmarkedConditionTracker> tracker_;
   scoped_refptr<Extension> extension_;
-  scoped_ptr<DeclarativeContentIsBookmarkedPredicate> is_bookmarked_predicate_;
-  scoped_ptr<DeclarativeContentIsBookmarkedPredicate>
+  std::unique_ptr<DeclarativeContentIsBookmarkedPredicate>
+      is_bookmarked_predicate_;
+  std::unique_ptr<DeclarativeContentIsBookmarkedPredicate>
       is_not_bookmarked_predicate_;
 
  private:
@@ -167,12 +167,9 @@ TEST(DeclarativeContentIsBookmarkedPredicateTest,
   scoped_refptr<Extension> extension =
       CreateExtensionWithBookmarksPermission(false);
   std::string error;
-  scoped_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
+  std::unique_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
       DeclarativeContentIsBookmarkedPredicate::Create(
-          nullptr,
-          extension.get(),
-          *base::test::ParseJson("true"),
-          &error);
+          nullptr, extension.get(), *base::test::ParseJson("true"), &error);
   EXPECT_THAT(error, HasSubstr("requires 'bookmarks' permission"));
   EXPECT_FALSE(predicate);
 }
@@ -183,12 +180,9 @@ TEST(DeclarativeContentIsBookmarkedPredicateTest,
   scoped_refptr<Extension> extension =
       CreateExtensionWithBookmarksPermission(true);
   std::string error;
-  scoped_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
+  std::unique_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
       DeclarativeContentIsBookmarkedPredicate::Create(
-          nullptr,
-          extension.get(),
-          *base::test::ParseJson("[]"),
-          &error);
+          nullptr, extension.get(), *base::test::ParseJson("[]"), &error);
   EXPECT_THAT(error, HasSubstr("invalid type"));
   EXPECT_FALSE(predicate);
 }
@@ -197,7 +191,7 @@ TEST(DeclarativeContentIsBookmarkedPredicateTest,
 TEST(DeclarativeContentIsBookmarkedPredicateTest, IsBookmarkedPredicateTrue) {
   scoped_refptr<Extension> extension =
       CreateExtensionWithBookmarksPermission(true);
-  scoped_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
+  std::unique_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
       CreatePredicate(nullptr, extension.get(), true);
 }
 
@@ -205,7 +199,7 @@ TEST(DeclarativeContentIsBookmarkedPredicateTest, IsBookmarkedPredicateTrue) {
 TEST(DeclarativeContentIsBookmarkedPredicateTest, IsBookmarkedPredicateFalse) {
   scoped_refptr<Extension> extension =
       CreateExtensionWithBookmarksPermission(true);
-  scoped_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
+  std::unique_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
       CreatePredicate(nullptr, extension.get(), false);
 }
 
@@ -213,7 +207,7 @@ TEST(DeclarativeContentIsBookmarkedPredicateTest, IsBookmarkedPredicateFalse) {
 // results in the proper IsUrlBookmarked state.
 TEST_F(DeclarativeContentIsBookmarkedConditionTrackerTest,
        BookmarkedAtStartOfTracking) {
-  scoped_ptr<content::WebContents> tab = MakeTab();
+  std::unique_ptr<content::WebContents> tab = MakeTab();
   LoadURL(tab.get(), GURL("http://bookmarked/"));
   EXPECT_TRUE(delegate_.evaluation_requests().empty());
 
@@ -231,7 +225,7 @@ TEST_F(DeclarativeContentIsBookmarkedConditionTrackerTest,
 TEST_F(DeclarativeContentIsBookmarkedConditionTrackerTest,
        AddAndRemoveBookmark) {
   // Create two tabs.
-  std::vector<scoped_ptr<content::WebContents>> tabs;
+  std::vector<std::unique_ptr<content::WebContents>> tabs;
   for (int i = 0; i < 2; ++i) {
     tabs.push_back(MakeTab());
     delegate_.evaluation_requests().clear();
@@ -276,7 +270,7 @@ TEST_F(DeclarativeContentIsBookmarkedConditionTrackerTest,
 // matching WebContents.
 TEST_F(DeclarativeContentIsBookmarkedConditionTrackerTest, ExtensiveChanges) {
   // Create two tabs.
-  std::vector<scoped_ptr<content::WebContents>> tabs;
+  std::vector<std::unique_ptr<content::WebContents>> tabs;
   for (int i = 0; i < 2; ++i) {
     tabs.push_back(MakeTab());
     delegate_.evaluation_requests().clear();
@@ -379,7 +373,7 @@ TEST_F(DeclarativeContentIsBookmarkedConditionTrackerTest, Navigation) {
                           GURL("http://bookmarked2/"));
 
   // Create two tabs.
-  std::vector<scoped_ptr<content::WebContents>> tabs;
+  std::vector<std::unique_ptr<content::WebContents>> tabs;
   for (int i = 0; i < 2; ++i) {
     tabs.push_back(MakeTab());
     delegate_.evaluation_requests().clear();

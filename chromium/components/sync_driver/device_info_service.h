@@ -41,12 +41,14 @@ namespace sync_driver_v2 {
 class DeviceInfoService : public syncer_v2::ModelTypeService,
                           public sync_driver::DeviceInfoTracker {
  public:
-  typedef base::Callback<void(syncer_v2::ModelTypeStore::InitCallback callback)>
+  typedef base::Callback<void(
+      const syncer_v2::ModelTypeStore::InitCallback& callback)>
       StoreFactoryFunction;
 
   DeviceInfoService(
       sync_driver::LocalDeviceInfoProvider* local_device_info_provider,
-      const StoreFactoryFunction& callback);
+      const StoreFactoryFunction& callback,
+      const ChangeProcessorFactory& change_processor_factory);
   ~DeviceInfoService() override;
 
   // ModelTypeService implementation.
@@ -69,25 +71,28 @@ class DeviceInfoService : public syncer_v2::ModelTypeService,
   ScopedVector<sync_driver::DeviceInfo> GetAllDeviceInfo() const override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
+  int CountActiveDevices() const override;
 
  private:
   friend class DeviceInfoServiceTest;
 
-  scoped_ptr<sync_pb::DeviceInfoSpecifics> CreateLocalSpecifics();
-  static scoped_ptr<sync_pb::DeviceInfoSpecifics> CreateSpecifics(
+  static scoped_ptr<sync_pb::DeviceInfoSpecifics> CopyToSpecifics(
       const sync_driver::DeviceInfo& info);
 
   // Allocate new DeviceInfo from SyncData.
-  static scoped_ptr<sync_driver::DeviceInfo> CreateDeviceInfo(
+  static scoped_ptr<sync_driver::DeviceInfo> CopyToModel(
       const sync_pb::DeviceInfoSpecifics& specifics);
   // Conversion as we prepare to hand data to the processor.
-  static scoped_ptr<syncer_v2::EntityData> CopyIntoNewEntityData(
+  static scoped_ptr<syncer_v2::EntityData> CopyToEntityData(
       const sync_pb::DeviceInfoSpecifics& specifics);
 
-  // Store SyncData in the cache.
-  void StoreSpecifics(scoped_ptr<sync_pb::DeviceInfoSpecifics> specifics);
-  // Delete SyncData from the cache.
-  void DeleteSpecifics(const std::string& client_id);
+  // Store SyncData in the cache and durable storage.
+  void StoreSpecifics(scoped_ptr<sync_pb::DeviceInfoSpecifics> specifics,
+                      syncer_v2::ModelTypeStore::WriteBatch* batch);
+  // Delete SyncData from the cache and durable storage, returns true if there
+  // was actually anything at the given tag.
+  bool DeleteSpecifics(const std::string& tag,
+                       syncer_v2::ModelTypeStore::WriteBatch* batch);
 
   // Notify all registered observers.
   void NotifyObservers();
@@ -105,6 +110,7 @@ class DeviceInfoService : public syncer_v2::ModelTypeService,
       syncer_v2::ModelTypeStore::Result result,
       scoped_ptr<syncer_v2::ModelTypeStore::RecordList> metadata_records,
       const std::string& global_metadata);
+  void OnCommit(syncer_v2::ModelTypeStore::Result result);
 
   // Checks if conditions have been met to perform reconciliation between the
   // locally provide device info and the stored device info data. If conditions
@@ -112,9 +118,15 @@ class DeviceInfoService : public syncer_v2::ModelTypeService,
   // and we send it to the processor.
   void TryReconcileLocalAndStored();
 
-  // Checks if conditions have been met to load and report metadata to our
-  // current processor if able.
-  void TryLoadAllMetadata();
+  // Writes the given device info to both local storage and to sync.
+  void PutAndStore(const sync_driver::DeviceInfo& device_info);
+
+  // Persists the changes in the given aggregators and notifies observers if
+  // indicated to do as such.
+  void CommitAndNotify(
+      scoped_ptr<syncer_v2::ModelTypeStore::WriteBatch> batch,
+      scoped_ptr<syncer_v2::MetadataChangeList> metadata_change_list,
+      bool should_notify);
 
   // |local_device_info_provider_| isn't owned.
   const sync_driver::LocalDeviceInfoProvider* const local_device_info_provider_;
@@ -134,10 +146,10 @@ class DeviceInfoService : public syncer_v2::ModelTypeService,
   // In charge of actually persiting changes to disk, or loading previous data.
   scoped_ptr<syncer_v2::ModelTypeStore> store_;
 
-  // If |store_| has invoked |LoadAllDataCallback|.
-  bool has_data_loaded_ = false;
   // If |local_device_info_provider_| has initialized.
   bool has_provider_initialized_ = false;
+  // if |change_processor()| has been given metadata.
+  bool has_metadata_loaded_ = false;
 
   // Should always be last member.
   base::WeakPtrFactory<DeviceInfoService> weak_factory_;

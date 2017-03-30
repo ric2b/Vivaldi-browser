@@ -110,7 +110,7 @@ FontTraits FontDescription::traits() const
     return FontTraits(style(), variant(), weight(), stretch());
 }
 
-FontDescription::VariantLigatures FontDescription::variantLigatures() const
+FontDescription::VariantLigatures FontDescription::getVariantLigatures() const
 {
     VariantLigatures ligatures;
 
@@ -203,7 +203,7 @@ void FontDescription::updateTypesettingFeatures()
         break;
     }
 
-    switch (kerning()) {
+    switch (getKerning()) {
     case FontDescription::NoneKerning:
         m_fields.m_typesettingFeatures &= ~blink::Kerning;
         break;

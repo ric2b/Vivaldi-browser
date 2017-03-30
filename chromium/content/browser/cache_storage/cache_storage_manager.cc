@@ -123,16 +123,16 @@ void OneOriginSizeReported(const base::Closure& callback,
 // static
 scoped_ptr<CacheStorageManager> CacheStorageManager::Create(
     const base::FilePath& path,
-    const scoped_refptr<base::SequencedTaskRunner>& cache_task_runner,
-    const scoped_refptr<storage::QuotaManagerProxy>& quota_manager_proxy) {
+    scoped_refptr<base::SequencedTaskRunner> cache_task_runner,
+    scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy) {
   base::FilePath root_path = path;
   if (!path.empty()) {
     root_path = path.Append(ServiceWorkerContextCore::kServiceWorkerDirectory)
                     .AppendASCII("CacheStorage");
   }
 
-  return make_scoped_ptr(new CacheStorageManager(root_path, cache_task_runner,
-                                                 quota_manager_proxy));
+  return make_scoped_ptr(new CacheStorageManager(
+      root_path, std::move(cache_task_runner), std::move(quota_manager_proxy)));
 }
 
 // static
@@ -211,14 +211,14 @@ void CacheStorageManager::MatchAllCaches(
 }
 
 void CacheStorageManager::SetBlobParametersForCache(
-    const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
+    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
     base::WeakPtr<storage::BlobStorageContext> blob_storage_context) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(cache_storage_map_.empty());
   DCHECK(!request_context_getter_ ||
          request_context_getter_.get() == request_context_getter.get());
   DCHECK(!blob_context_ || blob_context_.get() == blob_storage_context.get());
-  request_context_getter_ = request_context_getter;
+  request_context_getter_ = std::move(request_context_getter);
   blob_context_ = blob_storage_context;
 }
 
@@ -340,10 +340,10 @@ void CacheStorageManager::DeleteOriginData(
 
   CacheStorage* cache_storage = it->second.release();
   cache_storage_map_.erase(origin);
-  cache_storage->CloseAllCaches(
-      base::Bind(&CacheStorageManager::DeleteOriginDidClose, origin, callback,
-                 base::Passed(make_scoped_ptr(cache_storage)),
-                 weak_ptr_factory_.GetWeakPtr()));
+  cache_storage->GetSizeThenCloseAllCaches(
+      base::Bind(&CacheStorageManager::DeleteOriginDidClose,
+                 weak_ptr_factory_.GetWeakPtr(), origin, callback,
+                 base::Passed(make_scoped_ptr(cache_storage))));
 }
 
 void CacheStorageManager::DeleteOriginData(const GURL& origin) {
@@ -351,44 +351,40 @@ void CacheStorageManager::DeleteOriginData(const GURL& origin) {
   DeleteOriginData(origin, base::Bind(&EmptyQuotaStatusCallback));
 }
 
-// static
 void CacheStorageManager::DeleteOriginDidClose(
     const GURL& origin,
     const storage::QuotaClient::DeletionCallback& callback,
     scoped_ptr<CacheStorage> cache_storage,
-    base::WeakPtr<CacheStorageManager> cache_manager) {
+    int64_t origin_size) {
   // TODO(jkarlin): Deleting the storage leaves any unfinished operations
-  // hanging, resulting in unresolved promises. Fix this by guaranteeing that
-  // callbacks are called in ServiceWorkerStorage.
+  // hanging, resulting in unresolved promises. Fix this by returning early from
+  // CacheStorage operations posted after GetSizeThenCloseAllCaches is called.
   cache_storage.reset();
 
-  if (!cache_manager) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, storage::kQuotaErrorAbort));
-    return;
-  }
+  quota_manager_proxy_->NotifyStorageModified(
+      storage::QuotaClient::kServiceWorkerCache, origin,
+      storage::kStorageTypeTemporary, -1 * origin_size);
 
-  if (cache_manager->IsMemoryBacked()) {
+  if (IsMemoryBacked()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(callback, storage::kQuotaStatusOk));
     return;
   }
 
-  cache_manager->MigrateOrigin(origin);
+  MigrateOrigin(origin);
   PostTaskAndReplyWithResult(
-      cache_manager->cache_task_runner_.get(), FROM_HERE,
-      base::Bind(&DeleteDir,
-                 ConstructOriginPath(cache_manager->root_path_, origin)),
+      cache_task_runner_.get(), FROM_HERE,
+      base::Bind(&DeleteDir, ConstructOriginPath(root_path_, origin)),
       base::Bind(&DeleteOriginDidDeleteDir, callback));
 }
 
 CacheStorageManager::CacheStorageManager(
     const base::FilePath& path,
-    const scoped_refptr<base::SequencedTaskRunner>& cache_task_runner,
-    const scoped_refptr<storage::QuotaManagerProxy>& quota_manager_proxy)
+    scoped_refptr<base::SequencedTaskRunner> cache_task_runner,
+    scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy)
     : root_path_(path),
-      cache_task_runner_(cache_task_runner),
-      quota_manager_proxy_(quota_manager_proxy),
+      cache_task_runner_(std::move(cache_task_runner)),
+      quota_manager_proxy_(std::move(quota_manager_proxy)),
       weak_ptr_factory_(this) {
   if (quota_manager_proxy_.get()) {
     quota_manager_proxy_->RegisterClient(

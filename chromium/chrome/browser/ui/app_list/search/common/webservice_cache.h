@@ -5,12 +5,12 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_SEARCH_COMMON_WEBSERVICE_CACHE_H_
 #define CHROME_BROWSER_UI_APP_LIST_SEARCH_COMMON_WEBSERVICE_CACHE_H_
 
+#include <memory>
 #include <utility>
 
 #include "base/containers/mru_cache.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "ui/app_list/search/dictionary_data_store.h"
@@ -60,33 +60,30 @@ class WebserviceCache : public KeyedService,
   // Puts the new result to the query.
   void Put(QueryType type,
            const std::string& query,
-           scoped_ptr<base::DictionaryValue> result);
+           std::unique_ptr<base::DictionaryValue> result);
 
  private:
   struct Payload {
     Payload(const base::Time& time,
-            const base::DictionaryValue* result)
-        : time(time), result(result) {}
-    Payload() {}
+            std::unique_ptr<base::DictionaryValue> result);
+    Payload();
+    ~Payload();
+
+    Payload& operator=(Payload&& other);
 
     base::Time time;
-    const base::DictionaryValue* result;
+    std::unique_ptr<base::DictionaryValue> result;
   };
 
-  class CacheDeletor {
-   public:
-    void operator()(const Payload& payload);
-  };
-  typedef base::MRUCacheBase<std::string, Payload, CacheDeletor> Cache;
+  using Cache = base::MRUCache<std::string, std::unique_ptr<Payload>>;
 
   // Callback for when the cache is loaded from the dictionary data store.
-  void OnCacheLoaded(scoped_ptr<base::DictionaryValue>);
+  void OnCacheLoaded(std::unique_ptr<base::DictionaryValue>);
 
   // Populates the payload parameter with the corresponding payload stored
   // in the given dictionary. If the dictionary is invalid for any reason,
   // this method will return false.
-  bool PayloadFromDict(const base::DictionaryValue* dict,
-                       Payload* payload);
+  bool PayloadFromDict(const base::DictionaryValue* dict, Payload* payload);
 
   // Returns a dictionary value for a given payload. The returned dictionary
   // will be owned by the data_store_ cached_dict, and freed on the destruction

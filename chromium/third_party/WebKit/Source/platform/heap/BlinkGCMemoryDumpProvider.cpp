@@ -21,14 +21,14 @@ void dumpMemoryTotals(blink::WebProcessMemoryDump* memoryDump)
 {
     String dumpName = String::format("blink_gc");
     WebMemoryAllocatorDump* allocatorDump = memoryDump->createMemoryAllocatorDump(dumpName);
-    allocatorDump->addScalar("size", "bytes", Heap::allocatedSpace());
+    allocatorDump->addScalar("size", "bytes", ProcessHeap::totalAllocatedSpace());
 
     dumpName.append("/allocated_objects");
     WebMemoryAllocatorDump* objectsDump = memoryDump->createMemoryAllocatorDump(dumpName);
 
     // Heap::markedObjectSize() can be underestimated if we're still in the
     // process of lazy sweeping.
-    objectsDump->addScalar("size", "bytes", Heap::allocatedObjectSize() + Heap::markedObjectSize());
+    objectsDump->addScalar("size", "bytes", ProcessHeap::totalAllocatedObjectSize() + ProcessHeap::totalMarkedObjectSize());
 }
 
 void reportAllocation(Address address, size_t size, const char* typeName)
@@ -55,29 +55,30 @@ BlinkGCMemoryDumpProvider::~BlinkGCMemoryDumpProvider()
 
 bool BlinkGCMemoryDumpProvider::onMemoryDump(WebMemoryDumpLevelOfDetail levelOfDetail, blink::WebProcessMemoryDump* memoryDump)
 {
-    if (levelOfDetail == WebMemoryDumpLevelOfDetail::Light) {
-        dumpMemoryTotals(memoryDump);
-        return true;
-    }
-
-    Heap::collectGarbage(BlinkGC::NoHeapPointersOnStack, BlinkGC::TakeSnapshot, BlinkGC::ForcedGC);
+    // In the case of a detailed dump perform a mark-only GC pass to collect
+    // more detailed stats.
+    if (levelOfDetail == WebMemoryDumpLevelOfDetail::Detailed)
+        Heap::collectGarbage(BlinkGC::NoHeapPointersOnStack, BlinkGC::TakeSnapshot, BlinkGC::ForcedGC);
     dumpMemoryTotals(memoryDump);
 
     if (m_isHeapProfilingEnabled) {
+        // Overhead should always be reported, regardless of light vs. heavy.
         base::trace_event::TraceEventMemoryOverhead overhead;
         base::hash_map<base::trace_event::AllocationContext, size_t> bytesByContext;
         {
             MutexLocker locker(m_allocationRegisterMutex);
-            for (const auto& allocSize : *m_allocationRegister)
-                bytesByContext[allocSize.context] += allocSize.size;
-
+            if (levelOfDetail == WebMemoryDumpLevelOfDetail::Detailed) {
+                for (const auto& allocSize : *m_allocationRegister)
+                    bytesByContext[allocSize.context] += allocSize.size;
+            }
             m_allocationRegister->EstimateTraceMemoryOverhead(&overhead);
         }
         memoryDump->dumpHeapUsage(bytesByContext, overhead, "blink_gc");
     }
 
     // Merge all dumps collected by Heap::collectGarbage.
-    memoryDump->takeAllDumpsFrom(m_currentProcessMemoryDump.get());
+    if (levelOfDetail == WebMemoryDumpLevelOfDetail::Detailed)
+        memoryDump->takeAllDumpsFrom(m_currentProcessMemoryDump.get());
     return true;
 }
 
@@ -116,7 +117,7 @@ BlinkGCMemoryDumpProvider::BlinkGCMemoryDumpProvider()
 
 void BlinkGCMemoryDumpProvider::insert(Address address, size_t size, const char* typeName)
 {
-    base::trace_event::AllocationContext context = base::trace_event::AllocationContextTracker::GetContextSnapshot();
+    base::trace_event::AllocationContext context = base::trace_event::AllocationContextTracker::GetInstanceForCurrentThread()->GetContextSnapshot();
     context.type_name = typeName;
     MutexLocker locker(m_allocationRegisterMutex);
     if (m_allocationRegister)

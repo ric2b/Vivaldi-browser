@@ -7,6 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
+#include "public/platform/BlameContext.h"
 
 namespace blink {
 
@@ -16,8 +17,7 @@ class MessageEvent;
 class SecurityOrigin;
 enum class FrameDetachType;
 
-class CORE_EXPORT FrameClient : public NoBaseWillBeGarbageCollectedFinalized<FrameClient> {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(FrameClient);
+class CORE_EXPORT FrameClient : public GarbageCollectedFinalized<FrameClient> {
 public:
     virtual bool inShadowTree() const = 0;
 
@@ -42,6 +42,8 @@ public:
     virtual bool willCheckAndDispatchMessageEvent(SecurityOrigin* /*target*/, MessageEvent*, LocalFrame* /*sourceFrame*/) const { return false; }
 
     virtual void frameFocused() const = 0;
+
+    virtual BlameContext* frameBlameContext() { return nullptr; }
 
     virtual ~FrameClient() { }
 

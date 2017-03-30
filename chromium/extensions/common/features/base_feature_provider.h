@@ -9,10 +9,13 @@
 #include <string>
 #include <vector>
 
-#include "base/memory/linked_ptr.h"
-#include "base/values.h"
+#include "base/memory/scoped_ptr.h"
 #include "extensions/common/features/feature_provider.h"
 #include "extensions/common/features/simple_feature.h"
+
+namespace Base {
+class DictionaryValue;
+}
 
 namespace extensions {
 
@@ -32,11 +35,10 @@ class BaseFeatureProvider : public FeatureProvider {
   Feature* GetParent(Feature* feature) const override;
   std::vector<Feature*> GetChildren(const Feature& parent) const override;
 
-  const std::vector<std::string>& GetAllFeatureNames() const override;
+  const FeatureMap& GetAllFeatures() const override;
 
  private:
-  typedef std::map<std::string, linked_ptr<Feature> > FeatureMap;
-  FeatureMap features_;
+  std::map<std::string, scoped_ptr<Feature>> features_;
 
   // Populated on first use.
   mutable std::vector<std::string> feature_names_;

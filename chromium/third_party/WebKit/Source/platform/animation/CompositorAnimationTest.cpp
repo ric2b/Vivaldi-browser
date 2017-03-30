@@ -11,21 +11,21 @@ namespace blink {
 
 TEST(WebCompositorAnimationTest, DefaultSettings)
 {
-    scoped_ptr<CompositorAnimationCurve> curve(new CompositorFloatAnimationCurve());
-    scoped_ptr<CompositorAnimation> animation(new CompositorAnimation(
+    std::unique_ptr<CompositorAnimationCurve> curve(new CompositorFloatAnimationCurve());
+    std::unique_ptr<CompositorAnimation> animation(new CompositorAnimation(
         *curve, CompositorTargetProperty::OPACITY, 1, 0));
 
     // Ensure that the defaults are correct.
     EXPECT_EQ(1, animation->iterations());
     EXPECT_EQ(0, animation->startTime());
     EXPECT_EQ(0, animation->timeOffset());
-    EXPECT_EQ(CompositorAnimation::DirectionNormal, animation->direction());
+    EXPECT_EQ(CompositorAnimation::DirectionNormal, animation->getDirection());
 }
 
 TEST(WebCompositorAnimationTest, ModifiedSettings)
 {
-    scoped_ptr<CompositorFloatAnimationCurve> curve(new CompositorFloatAnimationCurve());
-    scoped_ptr<CompositorAnimation> animation(new CompositorAnimation(
+    std::unique_ptr<CompositorFloatAnimationCurve> curve(new CompositorFloatAnimationCurve());
+    std::unique_ptr<CompositorAnimation> animation(new CompositorAnimation(
         *curve, CompositorTargetProperty::OPACITY, 1, 0));
     animation->setIterations(2);
     animation->setStartTime(2);
@@ -35,7 +35,7 @@ TEST(WebCompositorAnimationTest, ModifiedSettings)
     EXPECT_EQ(2, animation->iterations());
     EXPECT_EQ(2, animation->startTime());
     EXPECT_EQ(2, animation->timeOffset());
-    EXPECT_EQ(CompositorAnimation::DirectionReverse, animation->direction());
+    EXPECT_EQ(CompositorAnimation::DirectionReverse, animation->getDirection());
 }
 
 } // namespace blink

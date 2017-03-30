@@ -25,13 +25,13 @@ source_set("browser") {
     "autocomplete_history_manager.cc",
     "autocomplete_history_manager.h",
     "autofill-inl.h",
-    "autofill_cc_infobar_delegate.cc",
-    "autofill_cc_infobar_delegate.h",
     "autofill_client.h",
     "autofill_country.cc",
     "autofill_country.h",
     "autofill_data_model.cc",
     "autofill_data_model.h",
+    "autofill_data_util.cc",
+    "autofill_data_util.h",
     "autofill_download_manager.cc",
     "autofill_download_manager.h",
     "autofill_driver.h",
@@ -91,8 +91,6 @@ source_set("browser") {
     "legal_message_line.h",
     "name_field.cc",
     "name_field.h",
-    "options_util.cc",
-    "options_util.h",
     "password_generator.cc",
     "password_generator.h",
     "payments/payments_client.cc",
@@ -169,7 +167,6 @@ source_set("browser") {
   deps = [
     "//base",
     "//base:i18n",
-    "//components/autofill/core/browser/proto",
     "//components/autofill/core/common",
     "//components/data_use_measurement/core",
     "//components/infobars/core",
@@ -199,6 +196,10 @@ source_set("browser") {
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//url",
+  ]
+
+  public_deps = [
+    "//components/autofill/core/browser/proto",
   ]
 
   configs += [
@@ -237,7 +238,6 @@ source_set("test_support") {
     "//base",
     "//base/test:test_support",
     "//components/autofill/core/browser",
-    "//components/autofill/core/browser/proto",
     "//components/autofill/core/common",
     "//components/os_crypt",
     "//components/pref_registry",
@@ -263,6 +263,7 @@ source_set("unit_tests") {
     "autocomplete_history_manager_unittest.cc",
     "autofill_country_unittest.cc",
     "autofill_data_model_unittest.cc",
+    "autofill_data_util_unittest.cc",
     "autofill_download_manager_unittest.cc",
     "autofill_external_delegate_unittest.cc",
     "autofill_field_unittest.cc",
@@ -281,7 +282,6 @@ source_set("unit_tests") {
     "form_structure_unittest.cc",
     "legal_message_line_unittest.cc",
     "name_field_unittest.cc",
-    "options_util_unittest.cc",
     "password_generator_unittest.cc",
     "personal_data_manager_unittest.cc",
     "phone_field_unittest.cc",

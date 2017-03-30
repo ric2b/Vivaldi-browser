@@ -249,8 +249,6 @@ WebInspector.ShortcutsScreen.registerShortcuts = function()
     section.addAlternateKeys(WebInspector.shortcutRegistry.shortcutDescriptorsForAction("debugger.step-over"), WebInspector.UIString("Step over"));
     section.addAlternateKeys(WebInspector.shortcutRegistry.shortcutDescriptorsForAction("debugger.step-into"), WebInspector.UIString("Step into"));
     section.addAlternateKeys(WebInspector.shortcutRegistry.shortcutDescriptorsForAction("debugger.step-out"), WebInspector.UIString("Step out"));
-    if (Runtime.experiments.isEnabled("stepIntoAsync"))
-        section.addAlternateKeys(WebInspector.shortcutRegistry.shortcutDescriptorsForAction("debugger.step-into"), WebInspector.UIString("Step into"));
 
     var nextAndPrevFrameKeys = WebInspector.ShortcutsScreen.SourcesPanelShortcuts.NextCallFrame.concat(WebInspector.ShortcutsScreen.SourcesPanelShortcuts.PrevCallFrame);
     section.addRelatedKeys(nextAndPrevFrameKeys, WebInspector.UIString("Next/previous call frame"));
@@ -418,7 +416,7 @@ WebInspector.ShortcutsScreen.SourcesPanelShortcuts = {
     ],
 
     GoToMember: [
-        WebInspector.KeyboardShortcut.makeDescriptor("p", WebInspector.KeyboardShortcut.Modifiers.CtrlOrMeta | WebInspector.KeyboardShortcut.Modifiers.Shift)
+        WebInspector.KeyboardShortcut.makeDescriptor("o", WebInspector.KeyboardShortcut.Modifiers.CtrlOrMeta | WebInspector.KeyboardShortcut.Modifiers.Shift)
     ],
 
     GoToLine: [

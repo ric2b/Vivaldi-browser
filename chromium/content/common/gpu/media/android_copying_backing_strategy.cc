@@ -18,10 +18,6 @@
 
 namespace content {
 
-const static GLfloat kIdentityMatrix[16] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
-                                            0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-                                            0.0f, 0.0f, 0.0f, 1.0f};
-
 AndroidCopyingBackingStrategy::AndroidCopyingBackingStrategy(
     AVDAStateProvider* state_provider)
     : state_provider_(state_provider),
@@ -60,7 +56,7 @@ gfx::ScopedJavaSurface AndroidCopyingBackingStrategy::Initialize(
 
 void AndroidCopyingBackingStrategy::Cleanup(
     bool have_context,
-    const AndroidVideoDecodeAccelerator::OutputBufferMap&) {
+    const AndroidVideoDecodeAccelerator::OutputBufferMap& buffers) {
   DCHECK(state_provider_->ThreadChecker().CalledOnValidThread());
 
   if (copier_)
@@ -77,6 +73,10 @@ AndroidCopyingBackingStrategy::GetSurfaceTexture() const {
 
 uint32_t AndroidCopyingBackingStrategy::GetTextureTarget() const {
   return GL_TEXTURE_2D;
+}
+
+gfx::Size AndroidCopyingBackingStrategy::GetPictureBufferSize() const {
+  return state_provider_->GetSize();
 }
 
 void AndroidCopyingBackingStrategy::UseCodecBufferForPictureBuffer(
@@ -114,10 +114,11 @@ void AndroidCopyingBackingStrategy::UseCodecBufferForPictureBuffer(
     surface_texture_->UpdateTexImage();
   }
 
-  float transfrom_matrix[16];
-  surface_texture_->GetTransformMatrix(transfrom_matrix);
+  float transform_matrix[16];
+  surface_texture_->GetTransformMatrix(transform_matrix);
 
-  uint32_t picture_buffer_texture_id = picture_buffer.texture_id();
+  DCHECK_LE(1u, picture_buffer.texture_ids().size());
+  uint32_t picture_buffer_texture_id = picture_buffer.texture_ids()[0];
 
   // Defer initializing the CopyTextureCHROMIUMResourceManager until it is
   // needed because it takes 10s of milliseconds to initialize.
@@ -135,18 +136,15 @@ void AndroidCopyingBackingStrategy::UseCodecBufferForPictureBuffer(
   //    attached.
   // 2. SurfaceTexture requires us to apply a transform matrix when we show
   //    the texture.
-  // TODO(hkuang): get the StreamTexture transform matrix in GPU process
-  // instead of using default matrix crbug.com/226218.
   copier_->DoCopyTextureWithTransform(
       state_provider_->GetGlDecoder().get(), GL_TEXTURE_EXTERNAL_OES,
       surface_texture_id_, GL_TEXTURE_2D, picture_buffer_texture_id,
       state_provider_->GetSize().width(), state_provider_->GetSize().height(),
-      false, false, false, kIdentityMatrix);
+      true, false, false, transform_matrix);
 }
 
 void AndroidCopyingBackingStrategy::CodecChanged(
-    media::VideoCodecBridge* codec,
-    const AndroidVideoDecodeAccelerator::OutputBufferMap&) {
+    media::VideoCodecBridge* codec) {
   media_codec_ = codec;
 }
 
@@ -159,6 +157,35 @@ void AndroidCopyingBackingStrategy::OnFrameAvailable() {
 
 bool AndroidCopyingBackingStrategy::ArePicturesOverlayable() {
   return false;
+}
+
+void AndroidCopyingBackingStrategy::UpdatePictureBufferSize(
+    media::PictureBuffer* picture_buffer,
+    const gfx::Size& new_size) {
+  // This strategy uses 2D textures who's allocated memory is dependent on the
+  // size. To update size in all places, we must:
+  // 1) Update the PictureBuffer meta-data
+  picture_buffer->set_size(new_size);
+
+  // 2) Update the GL texture via glTexImage2D. This step assumes the caller
+  // has made our GL context current.
+  DCHECK_LE(1u, picture_buffer->texture_ids().size());
+  glBindTexture(GL_TEXTURE_2D, picture_buffer->texture_ids()[0]);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, new_size.width(), new_size.height(),
+               0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+  state_provider_->GetGlDecoder()->RestoreActiveTextureUnitBinding(
+      GL_TEXTURE_2D);
+
+  // 3) Update the CHROMIUM Texture's size.
+  gpu::gles2::TextureRef* texture_ref =
+      state_provider_->GetTextureForPicture(*picture_buffer);
+  RETURN_IF_NULL(texture_ref);
+  gpu::gles2::TextureManager* texture_manager =
+      state_provider_->GetGlDecoder()->GetContextGroup()->texture_manager();
+  RETURN_IF_NULL(texture_manager);
+  texture_manager->SetLevelInfo(texture_ref, GetTextureTarget(), 0, GL_RGBA,
+                                new_size.width(), new_size.height(), 1, 0,
+                                GL_RGBA, GL_UNSIGNED_BYTE, gfx::Rect(new_size));
 }
 
 }  // namespace content

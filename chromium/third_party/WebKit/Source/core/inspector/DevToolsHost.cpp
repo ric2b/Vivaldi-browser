@@ -30,7 +30,6 @@
 #include "core/inspector/DevToolsHost.h"
 
 #include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/V8RecursionScope.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
 #include "core/clipboard/Pasteboard.h"
 #include "core/dom/ExecutionContext.h"
@@ -61,9 +60,9 @@ namespace blink {
 
 class FrontendMenuProvider final : public ContextMenuProvider {
 public:
-    static PassRefPtrWillBeRawPtr<FrontendMenuProvider> create(DevToolsHost* devtoolsHost, const Vector<ContextMenuItem>& items)
+    static RawPtr<FrontendMenuProvider> create(DevToolsHost* devtoolsHost, const Vector<ContextMenuItem>& items)
     {
-        return adoptRefWillBeNoop(new FrontendMenuProvider(devtoolsHost, items));
+        return new FrontendMenuProvider(devtoolsHost, items);
     }
 
     ~FrontendMenuProvider() override
@@ -114,7 +113,7 @@ private:
     {
     }
 
-    RawPtrWillBeMember<DevToolsHost> m_devtoolsHost;
+    Member<DevToolsHost> m_devtoolsHost;
     Vector<ContextMenuItem> m_items;
 };
 
@@ -147,7 +146,7 @@ void DevToolsHost::evaluateScript(const String& expression)
         return;
     ScriptState::Scope scope(scriptState);
     UserGestureIndicator gestureIndicator(DefinitelyProcessingNewUserGesture);
-    V8RecursionScope recursionScope(scriptState->isolate());
+    v8::MicrotasksScope microtasks(scriptState->isolate(), v8::MicrotasksScope::kRunMicrotasks);
     v8::Local<v8::String> source = v8AtomicString(scriptState->isolate(), expression.utf8().data());
     V8ScriptRunner::compileAndRunInternalScript(source, scriptState->isolate(), String(), TextPosition());
 }
@@ -169,7 +168,7 @@ float DevToolsHost::zoomFactor()
     float zoomFactor = m_frontendFrame->pageZoomFactor();
     // Cancel the device scale factor applied to the zoom factor in
     // use-zoom-for-dsf mode.
-    const HostWindow* hostWindow = m_frontendFrame->view()->hostWindow();
+    const HostWindow* hostWindow = m_frontendFrame->view()->getHostWindow();
     float windowToViewportRatio = hostWindow->windowToViewportScalar(1.0f);
     return zoomFactor / windowToViewportRatio;
 }
@@ -219,7 +218,7 @@ void DevToolsHost::sendMessageToEmbedder(const String& message)
 void DevToolsHost::showContextMenu(LocalFrame* targetFrame, float x, float y, const Vector<ContextMenuItem>& items)
 {
     ASSERT(m_frontendFrame);
-    RefPtrWillBeRawPtr<FrontendMenuProvider> menuProvider = FrontendMenuProvider::create(this, items);
+    RawPtr<FrontendMenuProvider> menuProvider = FrontendMenuProvider::create(this, items);
     m_menuProvider = menuProvider.get();
     float zoom = targetFrame->pageZoomFactor();
     if (m_client)

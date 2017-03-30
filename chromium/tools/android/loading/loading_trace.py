@@ -5,6 +5,8 @@
 """Represents the trace of a page load."""
 
 import json
+
+import devtools_monitor
 import page_track
 import request_track
 import tracing
@@ -32,7 +34,8 @@ class LoadingTrace(object):
     self.metadata = metadata
     self.page_track = page
     self.request_track = request
-    self.tracing_track = tracing_track
+    self._tracing_track = tracing_track
+    self._tracing_json_str = None
 
   def ToJsonDict(self):
     """Returns a dictionary representing this instance."""
@@ -67,3 +70,48 @@ class LoadingTrace(object):
     """Returns an instance from a json file saved by ToJsonFile()."""
     with open(json_path) as input_file:
       return cls.FromJsonDict(json.load(input_file))
+
+  @classmethod
+  def RecordUrlNavigation(
+      cls, url, connection, chrome_metadata, categories=None,
+      timeout_seconds=devtools_monitor.DEFAULT_TIMEOUT_SECONDS):
+    """Create a loading trace by using controller to fetch url.
+
+    Args:
+      url: (str) url to fetch.
+      connection: An opened devtools connection.
+      chrome_metadata: Dictionary of chrome metadata.
+      categories: TracingTrack categories to capture.
+      timeout_seconds: monitoring connection timeout in seconds.
+
+    Returns:
+      LoadingTrace instance.
+    """
+    page = page_track.PageTrack(connection)
+    request = request_track.RequestTrack(connection)
+    trace = tracing.TracingTrack(
+        connection,
+        categories=(tracing.DEFAULT_CATEGORIES if categories is None
+                    else categories))
+    connection.MonitorUrl(url, timeout_seconds=timeout_seconds)
+    return cls(url, chrome_metadata, page, request, trace)
+
+  @property
+  def tracing_track(self):
+    if not self._tracing_track:
+      self._RestoreTracingTrack()
+    return self._tracing_track
+
+  def Slim(self):
+    """Slims the memory usage of a trace by dropping the TraceEvents from it.
+
+    The tracing track is restored on-demand when accessed.
+    """
+    self._tracing_json_str = json.dumps(self._tracing_track.ToJsonDict())
+    self._tracing_track = None
+
+  def _RestoreTracingTrack(self):
+    assert self._tracing_json_str
+    self._tracing_track = tracing.TracingTrack.FromJsonDict(
+        json.loads(self._tracing_json_str))
+    self._tracing_json_str = None

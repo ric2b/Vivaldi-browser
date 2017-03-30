@@ -17,11 +17,11 @@ protected:
         : InterpolationType(PropertyHandle(property))
     { }
 
-    CSSPropertyID cssProperty() const { return property().cssProperty(); }
+    CSSPropertyID cssProperty() const { return getProperty().cssProperty(); }
 
     virtual InterpolationValue maybeConvertSingle(const PropertySpecificKeyframe&, const InterpolationEnvironment&, const InterpolationValue& underlying, ConversionCheckers&) const;
     virtual InterpolationValue maybeConvertNeutral(const InterpolationValue& underlying, ConversionCheckers&) const { ASSERT_NOT_REACHED(); return nullptr; }
-    virtual InterpolationValue maybeConvertInitial() const { ASSERT_NOT_REACHED(); return nullptr; }
+    virtual InterpolationValue maybeConvertInitial(const StyleResolverState&) const { ASSERT_NOT_REACHED(); return nullptr; }
     virtual InterpolationValue maybeConvertInherit(const StyleResolverState&, ConversionCheckers&) const { ASSERT_NOT_REACHED(); return nullptr; }
     virtual InterpolationValue maybeConvertValue(const CSSValue& value, const StyleResolverState&, ConversionCheckers&) const { ASSERT_NOT_REACHED(); return nullptr; }
 };

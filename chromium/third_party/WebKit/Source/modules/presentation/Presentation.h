@@ -21,10 +21,10 @@ class PresentationRequest;
 //
 // TODO(Oilpan): switch to GarbageCollected<Presentation> once object is unconditionally on the Oilpan heap.
 class Presentation final
-    : public GarbageCollectedFinalized<Presentation>
+    : public GarbageCollected<Presentation>
     , public ScriptWrappable
     , public DOMWindowProperty {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(Presentation);
+    USING_GARBAGE_COLLECTED_MIXIN(Presentation);
     DEFINE_WRAPPERTYPEINFO();
 public:
     static Presentation* create(LocalFrame*);

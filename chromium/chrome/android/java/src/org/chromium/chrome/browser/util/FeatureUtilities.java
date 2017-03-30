@@ -124,8 +124,12 @@ public class FeatureUtilities {
     }
 
     /**
-     * Whether the device could possibly run in Document mode (may return true even
-     * if the document mode is turned off).
+     * Whether the device could possibly run in Document mode (may return true even if the document
+     * mode is turned off).
+     *
+     * This function can't be changed to return false (even if document mode is deleted) because we
+     * need to know whether a user needs to be migrated away.
+     *
      * @param context The context to use for checking configuration.
      * @return Whether the device could possibly run in Document mode.
      */
@@ -148,6 +152,14 @@ public class FeatureUtilities {
      */
     public static void setCustomTabVisible(boolean visible) {
         nativeSetCustomTabVisible(visible);
+    }
+
+    /**
+     * Records whether the activity is in multi-window mode with native-side feature utilities.
+     * @param isInMultiWindowMode Whether the activity is in Android N multi-window mode.
+     */
+    public static void setIsInMultiWindowMode(boolean isInMultiWindowMode) {
+        nativeSetIsInMultiWindowMode(isInMultiWindowMode);
     }
 
     /**
@@ -219,9 +231,16 @@ public class FeatureUtilities {
     }
 
     /**
+     * Caches flags that must take effect on startup but are set via native code.
+     */
+    public static void cacheNativeFlags() {
+        cacheHerbFlavor();
+    }
+
+    /**
      * Caches which flavor of Herb the user prefers from native.
      */
-    public static void cacheHerbFlavor() {
+    private static void cacheHerbFlavor() {
         Context context = ApplicationStatus.getApplicationContext();
         if (isHerbDisallowed(context)) return;
 
@@ -243,6 +262,8 @@ public class FeatureUtilities {
             newFlavor = ChromeSwitches.HERB_FLAVOR_CHIVE;
         } else if (newFlavor.startsWith(ChromeSwitches.HERB_FLAVOR_DILL)) {
             newFlavor = ChromeSwitches.HERB_FLAVOR_DILL;
+        } else if (newFlavor.startsWith(ChromeSwitches.HERB_FLAVOR_ELDERBERRY)) {
+            newFlavor = ChromeSwitches.HERB_FLAVOR_ELDERBERRY;
         }
 
         CommandLine instance = CommandLine.getInstance();
@@ -256,6 +277,8 @@ public class FeatureUtilities {
             newFlavor = ChromeSwitches.HERB_FLAVOR_CHIVE;
         } else if (instance.hasSwitch(ChromeSwitches.HERB_FLAVOR_DILL_SWITCH)) {
             newFlavor = ChromeSwitches.HERB_FLAVOR_DILL;
+        } else if (instance.hasSwitch(ChromeSwitches.HERB_FLAVOR_ELDERBERRY_SWITCH)) {
+            newFlavor = ChromeSwitches.HERB_FLAVOR_ELDERBERRY;
         }
 
         Log.d(TAG, "Caching flavor: " + newFlavor);
@@ -268,5 +291,6 @@ public class FeatureUtilities {
 
     private static native void nativeSetDocumentModeEnabled(boolean enabled);
     private static native void nativeSetCustomTabVisible(boolean visible);
+    private static native void nativeSetIsInMultiWindowMode(boolean isInMultiWindowMode);
     public static native void nativeSetSqlMmapDisabledByDefault();
 }

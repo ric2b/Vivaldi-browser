@@ -7,6 +7,8 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
@@ -18,7 +20,7 @@ namespace remoting {
 // over a Native Messaging channel.
 class LogMessageHandler {
  public:
-  typedef base::Callback<void (scoped_ptr<base::Value> message)> Delegate;
+  typedef base::Callback<void(std::unique_ptr<base::Value> message)> Delegate;
 
   explicit LogMessageHandler(const Delegate& delegate);
   ~LogMessageHandler();

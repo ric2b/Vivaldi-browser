@@ -19,7 +19,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
 {
   "name": "gpu driver bug list",
   // Please update the version number whenever you change this file.
-  "version": "8.59",
+  "version": "8.66",
   "entries": [
     {
       "id": 1,
@@ -190,7 +190,11 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
       "id": 12,
       "description": "Limit max cube map texure size to 1024 on Macs with Intel GPUs",
       "os": {
-        "type": "macosx"
+        "type": "macosx",
+        "version": {
+          "op": "<",
+          "value": "10.9"
+        }
       },
       "vendor_id": "0x8086",
       "features": [
@@ -746,23 +750,6 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
       "vendor_id": "0x10de",
       "features": [
         "init_vertex_attributes"
-      ]
-    },
-    {
-      "id": 66,
-      "description": "Force glFinish() after compositing on older OS X on Intel GPU",
-      "cr_bugs": [123409],
-      "os": {
-        "type": "macosx",
-        "version": {
-          "op": "<=",
-          "value": "10.7"
-        }
-      },
-      "vendor_id": "0x8086",
-      "multi_gpu_category": "active",
-      "features": [
-        "force_gl_finish_after_compositing"
       ]
     },
     {
@@ -1553,7 +1540,7 @@ LONG_STRING_CONST(
       "vendor_id": "0x8086",
       "multi_gpu_category": "active",
       "features": [
-        "disable_msaa_on_non_webgl_contexts"
+        "msaa_is_slow"
       ]
     },
     {
@@ -1793,6 +1780,88 @@ LONG_STRING_CONST(
       ]
     },
     {
+      "id": 150,
+      "cr_bugs": [563714],
+      "description": "Alignment works incorrectly with unpack buffer bound",
+      "os": {
+        "type": "linux"
+      },
+      "vendor_id": "0x10de",
+      "gl_vendor": "NVIDIA.*",
+      "features": [
+        "unpack_alignment_workaround_with_unpack_buffer"
+      ]
+    },
+    {
+      "id": 151,
+      "cr_bugs": [563714],
+      "description": "Alignment works incorrectly with unpack buffer bound",
+      "os": {
+        "type": "macosx"
+      },
+      "features": [
+        "unpack_alignment_workaround_with_unpack_buffer"
+      ]
+    },
+    {
+      "id": 152,
+      "cr_bugs": [581777],
+      "description": "copyTexImage2D fails when reading from IOSurface on multiple GPU types.",
+      "os": {
+        "type": "macosx"
+      },
+      "features": [
+        "use_intermediary_for_copy_texture_image"
+      ]
+    },
+    {
+      "id": 153,
+      "cr_bugs": [594016],
+      "description": "Vivante GC1000 with EXT_multisampled_render_to_texture fails glReadPixels",
+      "os": {
+        "type": "linux"
+      },
+      "gl_vendor": "Vivante Corporation",
+      "gl_renderer": "Vivante GC1000",
+      "features": [
+        "disable_multisampled_render_to_texture"
+      ]
+    },
+    {
+      "id": 154,
+      "cr_bugs": [581777],
+      "description": "glReadPixels does not work on IOSurface backed textures",
+      "os": {
+        "type": "macosx"
+      },
+      "exceptions": [
+        {
+          "os": {
+            "type": "macosx",
+            "version": {
+              "op": ">=",
+              "value": "10.9"
+            }
+          }
+        }
+      ],
+      "features": [
+        "iosurface_readback_workaround"
+      ]
+    },
+    {
+      "id": 155,
+      "cr_bugs": [597794],
+      "description": "Seamless cubemap does not work for Mac Intel",
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "disable_texture_cube_map_seamless"
+      ]
+    },
+    {
       "id": 156,
       "cr_bugs": [598474],
       "description": "glEGLImageTargetTexture2DOES crashes",
@@ -1811,6 +1880,25 @@ LONG_STRING_CONST(
       ]
     },
     {
+      "id": 157,
+      "description": "Testing fences was broken on Mali ES2 drivers for specific phone models",
+      "cr_bugs": [589814],
+      "os": {
+        "type": "android"
+      },
+      "machine_model_name": ["SM-G361H", "SM-G531H"],
+      "gl_vendor": "ARM.*",
+      "gl_renderer": "Mali.*",
+      "gl_type": "gles",
+      "gl_version": {
+        "op": "<",
+        "value": "3.0"
+      },
+      "disabled_extensions": [
+        "EGL_KHR_fence_sync"
+      ]
+    },
+    {
       "id": 158,
       "description": "IOSurface use becomes pathologically slow over time on 10.10.",
       "cr_bugs": [580616],
@@ -1823,6 +1911,18 @@ LONG_STRING_CONST(
       },
       "features": [
         "disable_overlay_ca_layers"
+      ]
+    },
+    {
+      "id": 166,
+      "cr_bugs": [612474],
+      "description": "Crash reports for glDiscardFramebuffer on Adreno 530",
+      "gl_renderer": "Adreno \\(TM\\) 5.*",
+      "os": {
+        "type": "android"
+      },
+      "features": [
+        "disable_discard_framebuffer"
       ]
     }
   ]

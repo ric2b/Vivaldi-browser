@@ -40,6 +40,7 @@
 #include "core/editing/markers/DocumentMarker.h"
 #include "core/fileapi/FileError.h"
 #include "core/frame/Frame.h"
+#include "core/frame/FrameTypes.h"
 #include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLFormElement.h"
@@ -84,6 +85,7 @@
 #include "public/platform/WebFileError.h"
 #include "public/platform/WebFileInfo.h"
 #include "public/platform/WebFileSystem.h"
+#include "public/platform/WebFontDescription.h"
 #include "public/platform/WebHistoryScrollRestorationType.h"
 #include "public/platform/WebMediaPlayer.h"
 #include "public/platform/WebMediaPlayerClient.h"
@@ -108,9 +110,9 @@
 #include "public/platform/modules/indexeddb/WebIDBTypes.h"
 #include "public/web/WebAXEnums.h"
 #include "public/web/WebAXObject.h"
+#include "public/web/WebClientRedirectPolicy.h"
 #include "public/web/WebConsoleMessage.h"
 #include "public/web/WebContentSecurityPolicy.h"
-#include "public/web/WebFontDescription.h"
 #include "public/web/WebFormElement.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebFrameLoadType.h"
@@ -381,6 +383,9 @@ STATIC_ASSERT_ENUM(WebApplicationCacheHost::ProgressEvent, ApplicationCacheHost:
 STATIC_ASSERT_ENUM(WebApplicationCacheHost::UpdateReadyEvent, ApplicationCacheHost::UPDATEREADY_EVENT);
 STATIC_ASSERT_ENUM(WebApplicationCacheHost::CachedEvent, ApplicationCacheHost::CACHED_EVENT);
 STATIC_ASSERT_ENUM(WebApplicationCacheHost::ObsoleteEvent, ApplicationCacheHost::OBSOLETE_EVENT);
+
+STATIC_ASSERT_ENUM(WebClientRedirectPolicy::NotClientRedirect, ClientRedirectPolicy::NotClientRedirect);
+STATIC_ASSERT_ENUM(WebClientRedirectPolicy::ClientRedirect, ClientRedirectPolicy::ClientRedirect);
 
 STATIC_ASSERT_ENUM(WebCursorInfo::TypePointer, Cursor::Pointer);
 STATIC_ASSERT_ENUM(WebCursorInfo::TypeCross, Cursor::Cross);
@@ -730,7 +735,7 @@ STATIC_ASSERT_ENUM(WebFrameLoadType::Same, FrameLoadTypeSame);
 STATIC_ASSERT_ENUM(WebFrameLoadType::ReplaceCurrentItem, FrameLoadTypeReplaceCurrentItem);
 STATIC_ASSERT_ENUM(WebFrameLoadType::InitialInChildFrame, FrameLoadTypeInitialInChildFrame);
 STATIC_ASSERT_ENUM(WebFrameLoadType::InitialHistoryLoad, FrameLoadTypeInitialHistoryLoad);
-STATIC_ASSERT_ENUM(WebFrameLoadType::ReloadFromOrigin, FrameLoadTypeReloadFromOrigin);
+STATIC_ASSERT_ENUM(WebFrameLoadType::ReloadBypassingCache, FrameLoadTypeReloadBypassingCache);
 
 STATIC_ASSERT_ENUM(FrameDetachType::Remove, WebFrameClient::DetachType::Remove);
 STATIC_ASSERT_ENUM(FrameDetachType::Swap, WebFrameClient::DetachType::Swap);

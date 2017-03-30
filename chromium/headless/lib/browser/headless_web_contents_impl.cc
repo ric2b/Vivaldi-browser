@@ -5,8 +5,10 @@
 #include "headless/lib/browser/headless_web_contents_impl.h"
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/trace_event/trace_event.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -29,8 +31,16 @@ class WebContentsObserverAdapter : public content::WebContentsObserver {
 
   ~WebContentsObserverAdapter() override {}
 
+  void RenderViewReady() override { observer_->WebContentsReady(); }
+
   void DocumentOnLoadCompletedInMainFrame() override {
     observer_->DocumentOnLoadCompletedInMainFrame();
+  }
+
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    observer_->DidFinishNavigation(navigation_handle->HasCommitted() &&
+                                   !navigation_handle->IsErrorPage());
   }
 
  private:
@@ -87,7 +97,7 @@ bool HeadlessWebContentsImpl::OpenURL(const GURL& url) {
 
 void HeadlessWebContentsImpl::AddObserver(Observer* observer) {
   DCHECK(observer_map_.find(observer) == observer_map_.end());
-  observer_map_[observer] = make_scoped_ptr(
+  observer_map_[observer] = base::WrapUnique(
       new WebContentsObserverAdapter(web_contents_.get(), observer));
 }
 

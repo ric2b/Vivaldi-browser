@@ -5,6 +5,8 @@
 #ifndef IOS_CHROME_BROWSER_SSL_IOS_CHROME_SECURITY_STATE_MODEL_CLIENT_H_
 #define IOS_CHROME_BROWSER_SSL_IOS_CHROME_SECURITY_STATE_MODEL_CLIENT_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "components/security_state/security_state_model.h"
 #include "components/security_state/security_state_model_client.h"
@@ -37,7 +39,7 @@ class IOSChromeSecurityStateModelClient
   friend class web::WebStateUserData<IOSChromeSecurityStateModelClient>;
 
   web::WebState* web_state_;
-  scoped_ptr<security_state::SecurityStateModel> security_state_model_;
+  std::unique_ptr<security_state::SecurityStateModel> security_state_model_;
 
   DISALLOW_COPY_AND_ASSIGN(IOSChromeSecurityStateModelClient);
 };

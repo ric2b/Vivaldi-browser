@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "remoting/host/security_key/gnubby_extension_session.h"
+
 #include <stddef.h>
 
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -20,7 +23,6 @@
 #include "net/socket/unix_domain_client_socket_posix.h"
 #include "remoting/host/host_mock_objects.h"
 #include "remoting/host/security_key/gnubby_auth_handler.h"
-#include "remoting/host/security_key/gnubby_extension_session.h"
 #include "remoting/proto/internal.pb.h"
 #include "remoting/protocol/client_stub.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -65,13 +67,15 @@ class TestClientStub : public protocol::ClientStub {
     run_loop_->Quit();
   }
 
+  void SetVideoLayout(const protocol::VideoLayout& layout) override {}
+
   // protocol::ClipboardStub implementation.
   void InjectClipboardEvent(const protocol::ClipboardEvent& event) override {}
 
   // protocol::CursorShapeStub implementation.
   void SetCursorShape(const protocol::CursorShapeInfo& cursor_shape) override {}
 
-  void WaitForDeliverHostMessage(const base::TimeDelta& max_timeout) {
+  void WaitForDeliverHostMessage(base::TimeDelta max_timeout) {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, run_loop_->QuitClosure(), max_timeout);
     run_loop_->Run();
@@ -91,7 +95,7 @@ class TestClientStub : public protocol::ClientStub {
 
  private:
   protocol::ExtensionMessage message_;
-  scoped_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<base::RunLoop> run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(TestClientStub);
 };
@@ -105,7 +109,7 @@ class GnubbyExtensionSessionTest : public testing::Test {
     // once |gnubby_extension_session_| is destroyed.
     mock_gnubby_auth_handler_ = new MockGnubbyAuthHandler();
     gnubby_extension_session_->SetGnubbyAuthHandlerForTesting(
-        make_scoped_ptr(mock_gnubby_auth_handler_));
+        base::WrapUnique(mock_gnubby_auth_handler_));
   }
 
   void WaitForAndVerifyHostMessage() {
@@ -138,7 +142,7 @@ class GnubbyExtensionSessionTest : public testing::Test {
   base::MessageLoopForIO message_loop_;
 
   // Object under test.
-  scoped_ptr<GnubbyExtensionSession> gnubby_extension_session_;
+  std::unique_ptr<GnubbyExtensionSession> gnubby_extension_session_;
 
   MockGnubbyAuthHandler* mock_gnubby_auth_handler_ = nullptr;
 

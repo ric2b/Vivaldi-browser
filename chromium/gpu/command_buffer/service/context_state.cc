@@ -87,6 +87,8 @@ TextureUnit::TextureUnit()
     : bind_target(GL_TEXTURE_2D) {
 }
 
+TextureUnit::TextureUnit(const TextureUnit& other) = default;
+
 TextureUnit::~TextureUnit() {
 }
 
@@ -432,9 +434,10 @@ ErrorState* ContextState::GetErrorState() {
 }
 
 void ContextState::EnableDisable(GLenum pname, bool enable) const {
-  if (pname == GL_PRIMITIVE_RESTART_FIXED_INDEX) {
-    if (feature_info_->feature_flags().emulate_primitive_restart_fixed_index)
-      pname = GL_PRIMITIVE_RESTART;
+  if (pname == GL_PRIMITIVE_RESTART_FIXED_INDEX &&
+      feature_info_->feature_flags().emulate_primitive_restart_fixed_index) {
+    // GLES2DecoderImpl::DoDrawElements can handle this situation
+    return;
   }
   if (enable) {
     glEnable(pname);
@@ -459,15 +462,9 @@ void ContextState::UpdateUnpackParameters() const {
   if (bound_pixel_unpack_buffer.get()) {
     glPixelStorei(GL_UNPACK_ROW_LENGTH, unpack_row_length);
     glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, unpack_image_height);
-    glPixelStorei(GL_UNPACK_SKIP_PIXELS, unpack_skip_pixels);
-    glPixelStorei(GL_UNPACK_SKIP_ROWS, unpack_skip_rows);
-    glPixelStorei(GL_UNPACK_SKIP_IMAGES, unpack_skip_images);
   } else {
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
-    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
-    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
-    glPixelStorei(GL_UNPACK_SKIP_IMAGES, 0);
   }
 }
 
@@ -597,23 +594,23 @@ void ContextState::UnbindSampler(Sampler* sampler) {
 }
 
 PixelStoreParams ContextState::GetPackParams() {
+  DCHECK_EQ(0, pack_skip_pixels);
+  DCHECK_EQ(0, pack_skip_rows);
   PixelStoreParams params;
   params.alignment = pack_alignment;
   params.row_length = pack_row_length;
-  params.skip_pixels = pack_skip_pixels;
-  params.skip_rows = pack_skip_rows;
   return params;
 }
 
 PixelStoreParams ContextState::GetUnpackParams(Dimension dimension) {
+  DCHECK_EQ(0, unpack_skip_pixels);
+  DCHECK_EQ(0, unpack_skip_rows);
+  DCHECK_EQ(0, unpack_skip_images);
   PixelStoreParams params;
   params.alignment = unpack_alignment;
   params.row_length = unpack_row_length;
-  params.skip_pixels = unpack_skip_pixels;
-  params.skip_rows = unpack_skip_rows;
   if (dimension == k3D) {
     params.image_height = unpack_image_height;
-    params.skip_images = unpack_skip_images;
   }
   return params;
 }

@@ -21,6 +21,12 @@
 
 namespace {
 
+// Override the default margin provided by views::kPanel*Margin so that the
+// hosted WebContents fill more of the bubble. However, it can't fill the entire
+// bubble since that would draw over the rounded corners and make the bubble
+// square. See http://crbug.com/593203.
+const int kBubbleMargin = 2;
+
 ExtensionViewViews* GetExtensionView(extensions::ExtensionViewHost* host) {
   return static_cast<ExtensionViewViews*>(host->view());
 }
@@ -42,7 +48,7 @@ ExtensionPopup* ExtensionPopup::Create(extensions::ExtensionViewHost* host,
                                        views::BubbleBorder::Arrow arrow,
                                        ShowAction show_action) {
   auto popup = new ExtensionPopup(host, anchor_view, arrow, show_action);
-  views::BubbleDelegateView::CreateBubble(popup);
+  views::BubbleDialogDelegateView::CreateBubble(popup);
   return popup;
 }
 #endif
@@ -51,21 +57,18 @@ ExtensionPopup::ExtensionPopup(extensions::ExtensionViewHost* host,
                                views::View* anchor_view,
                                views::BubbleBorder::Arrow arrow,
                                ShowAction show_action)
-    : BubbleDelegateView(anchor_view, arrow),
+    : BubbleDialogDelegateView(anchor_view, arrow),
       host_(host),
       devtools_callback_(base::Bind(
           &ExtensionPopup::OnDevToolsStateChanged, base::Unretained(this))),
       widget_initialized_(false) {
   inspect_with_devtools_ = show_action == SHOW_AND_INSPECT;
-  // Adjust the margin so that contents fit better.
-  const int margin = views::BubbleBorder::GetCornerRadius() / 2;
-  set_margins(gfx::Insets(margin, margin, margin, margin));
+  set_margins(gfx::Insets(kBubbleMargin));
   SetLayoutManager(new views::FillLayout());
   AddChildView(GetExtensionView(host));
   GetExtensionView(host)->set_container(this);
   // ExtensionPopup closes itself on very specific de-activation conditions.
   set_close_on_deactivate(false);
-
 
   // Listen for the containing view calling window.close();
   registrar_.Add(
@@ -94,6 +97,10 @@ ExtensionPopup::~ExtensionPopup() {
 
   GetExtensionView(
       host_.get())->GetBrowser()->tab_strip_model()->RemoveObserver(this);
+}
+
+int ExtensionPopup::GetDialogButtons() const {
+  return ui::DIALOG_BUTTON_NONE;
 }
 
 void ExtensionPopup::Observe(int type,
@@ -179,7 +186,7 @@ void ExtensionPopup::OnAnchorWindowActivation() {
 
 // static
 ExtensionPopup* ExtensionPopup::ShowPopup(
-    scoped_ptr<extensions::ExtensionViewHost> host,
+    std::unique_ptr<extensions::ExtensionViewHost> host,
     views::View* anchor_view,
     views::BubbleBorder::Arrow arrow,
     ShowAction show_action) {

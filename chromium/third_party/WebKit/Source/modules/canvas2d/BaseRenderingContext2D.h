@@ -7,7 +7,6 @@
 
 #include "bindings/core/v8/UnionTypesCore.h"
 #include "bindings/modules/v8/UnionTypesModules.h"
-#include "core/html/canvas/CanvasRenderingContext.h"
 #include "modules/ModulesExport.h"
 #include "modules/canvas2d/CanvasGradient.h"
 #include "modules/canvas2d/CanvasPathMethods.h"
@@ -26,7 +25,7 @@ class SVGMatrixTearOff;
 
 typedef HTMLImageElementOrHTMLVideoElementOrHTMLCanvasElementOrImageBitmap CanvasImageSourceUnion;
 
-class MODULES_EXPORT BaseRenderingContext2D : public WillBeGarbageCollectedMixin, public CanvasPathMethods {
+class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin, public CanvasPathMethods {
     WTF_MAKE_NONCOPYABLE(BaseRenderingContext2D);
 public:
     ~BaseRenderingContext2D() override;
@@ -79,8 +78,8 @@ public:
     void save();
     void restore();
 
-    PassRefPtrWillBeRawPtr<SVGMatrixTearOff> currentTransform() const;
-    void setCurrentTransform(PassRefPtrWillBeRawPtr<SVGMatrixTearOff>);
+    SVGMatrixTearOff* currentTransform() const;
+    void setCurrentTransform(SVGMatrixTearOff*);
 
     void scale(double sx, double sy);
     void rotate(double angleInRadians);
@@ -116,7 +115,7 @@ public:
     CanvasGradient* createRadialGradient(double x0, double y0, double r0, double x1, double y1, double r1, ExceptionState&);
     CanvasPattern* createPattern(const CanvasImageSourceUnion&, const String& repetitionType, ExceptionState&);
 
-    ImageData* createImageData(ImageData*) const;
+    ImageData* createImageData(ImageData*, ExceptionState&) const;
     ImageData* createImageData(double width, double height, ExceptionState&) const;
     ImageData* getImageData(double sx, double sy, double sw, double sh, ExceptionState&) const;
     void putImageData(ImageData*, double dx, double dy, ExceptionState&);
@@ -179,7 +178,7 @@ protected:
 
     void checkOverdraw(const SkRect&, const SkPaint*, CanvasRenderingContext2DState::ImageType, DrawType);
 
-    WillBeHeapVector<OwnPtrWillBeMember<CanvasRenderingContext2DState>> m_stateStack;
+    HeapVector<Member<CanvasRenderingContext2DState>> m_stateStack;
     AntiAliasingMode m_clipAntialiasing;
 
 private:
@@ -216,8 +215,8 @@ bool BaseRenderingContext2D::draw(const DrawFunc& drawFunc, const ContainsFunc& 
     // If gradient size is zero, then paint nothing.
     CanvasStyle* style = state().style(paintType);
     if (style) {
-        CanvasGradient* gradient = style->canvasGradient();
-        if (gradient && gradient->gradient()->isZeroSize())
+        CanvasGradient* gradient = style->getCanvasGradient();
+        if (gradient && gradient->getGradient()->isZeroSize())
             return false;
     }
 

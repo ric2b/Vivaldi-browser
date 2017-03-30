@@ -17,7 +17,7 @@ namespace operations {
 namespace {
 
 // Convert the request |value| into a list of actions.
-Actions ConvertRequestValueToActions(scoped_ptr<RequestValue> value) {
+Actions ConvertRequestValueToActions(std::unique_ptr<RequestValue> value) {
   using extensions::api::file_system_provider_internal::
       GetActionsRequestedSuccess::Params;
 
@@ -27,8 +27,8 @@ Actions ConvertRequestValueToActions(scoped_ptr<RequestValue> value) {
   Actions result;
   for (const auto& idl_action : params->actions) {
     Action action;
-    action.id = idl_action->id;
-    action.title = idl_action->title.get() ? *idl_action->title : std::string();
+    action.id = idl_action.id;
+    action.title = idl_action.title.get() ? *idl_action.title : std::string();
     result.push_back(action);
   }
 
@@ -67,14 +67,14 @@ bool GetActions::Execute(int request_id) {
 }
 
 void GetActions::OnSuccess(int /* request_id */,
-                           scoped_ptr<RequestValue> result,
+                           std::unique_ptr<RequestValue> result,
                            bool has_more) {
   callback_.Run(ConvertRequestValueToActions(std::move(result)),
                 base::File::FILE_OK);
 }
 
 void GetActions::OnError(int /* request_id */,
-                         scoped_ptr<RequestValue> /* result */,
+                         std::unique_ptr<RequestValue> /* result */,
                          base::File::Error error) {
   callback_.Run(Actions(), error);
 }

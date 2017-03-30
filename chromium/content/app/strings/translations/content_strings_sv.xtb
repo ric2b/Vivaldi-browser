@@ -51,6 +51,7 @@
 <translation id="2896972712917208084">alternativknappsgrupp</translation>
 <translation id="2901282870647571346">aktuell filmstatus</translation>
 <translation id="2908441821576996758">Ange en kommaavgränsad lista med e-postadresser.</translation>
+<translation id="2931838996092594335">klicka</translation>
 <translation id="2940813599313844715">objekt</translation>
 <translation id="2942448076852699108">markerat innehåll</translation>
 <translation id="3040011195152428237">länk</translation>
@@ -97,6 +98,7 @@
 <translation id="512758898067543763">radrubrik</translation>
 <translation id="5164977714490026579">Värdet måste vara större än eller lika med <ph name="MINIMUM" />.</translation>
 <translation id="5307600278924710095">Ange en del följt av <ph name="ATSIGN" />. <ph name="INVALIDADDRESS" /> är ofullständig.</translation>
+<translation id="5317780077021120954">Spara</translation>
 <translation id="5406322316791861025">figur</translation>
 <translation id="5453733299334684579">trädobjekt</translation>
 <translation id="5466621249238537318">Välj en eller flera filer.</translation>
@@ -176,6 +178,7 @@
 <translation id="8785498733064193001">starta uppspelning</translation>
 <translation id="8851136666856101339">huvud</translation>
 <translation id="8987927404178983737">Månad</translation>
+<translation id="9002566407876343676">öppna</translation>
 <translation id="901493112792887934">aktuell tid i sekunder</translation>
 <translation id="9048119486235211610">navigering</translation>
 <translation id="9050748414552849310">visa textning</translation>

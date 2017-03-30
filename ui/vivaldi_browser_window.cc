@@ -12,7 +12,6 @@
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/views/download/download_shelf_view.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
@@ -87,8 +86,7 @@ void VivaldiBrowserWindow::Show() {
   // calls to Browser::GetLastActive() will return the wrong result if we do not
   // explicitly set it here.
   // A similar block also appears in BrowserWindowCocoa::Show().
-  if (browser()->host_desktop_type() != chrome::HOST_DESKTOP_TYPE_ASH)
-    BrowserList::SetLastActive(browser());
+  BrowserList::SetLastActive(browser());
 #endif
 }
 
@@ -227,12 +225,6 @@ bool VivaldiBrowserWindow::IsFullscreen() const {
   return false;
 }
 
-#if defined(OS_WIN)
-bool VivaldiBrowserWindow::IsInMetroSnapMode() const {
-  return false;
-}
-#endif
-
 bool VivaldiBrowserWindow::IsFullscreenBubbleVisible() const {
   return false;
 }
@@ -276,11 +268,7 @@ bool VivaldiBrowserWindow::IsDownloadShelfVisible() const {
 }
 
 DownloadShelf* VivaldiBrowserWindow::GetDownloadShelf() {
-  if (!download_shelf_.get()) {
-    download_shelf_.reset(new DownloadShelfView(browser_.get(), NULL));
-    download_shelf_->set_owned_by_client();
-  }
-  return download_shelf_.get();
+  return NULL;
 }
 
 void VivaldiBrowserWindow::ShowWebsiteSettings(Profile* profile,

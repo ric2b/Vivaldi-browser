@@ -43,7 +43,7 @@ class SafeBrowsingDatabaseManager
     // Called when the result of checking a browse URL is known.
     virtual void OnCheckBrowseUrlResult(const GURL& url,
                                         SBThreatType threat_type,
-                                        const std::string& metadata) {}
+                                        const ThreatMetadata& metadata) {}
 
     // Called when the result of checking a download URL is known.
     virtual void OnCheckDownloadUrlResult(const std::vector<GURL>& url_chain,
@@ -55,7 +55,7 @@ class SafeBrowsingDatabaseManager
 
     // Called when the result of checking the API blacklist is known.
     virtual void OnCheckApiBlacklistUrlResult(const GURL& url,
-                                              const std::string& metadata) {}
+                                              const ThreatMetadata& metadata) {}
 
     // Called when the result of checking the resource blacklist is known.
     virtual void OnCheckResourceUrlResult(const GURL& url,
@@ -83,7 +83,7 @@ class SafeBrowsingDatabaseManager
   virtual bool CanCheckUrl(const GURL& url) const = 0;
 
   // Returns whether download protection is enabled.
-  virtual bool download_protection_enabled() const = 0;
+  virtual bool IsDownloadProtectionEnabled() const = 0;
 
   // Called on the IO thread to check if the given url is safe or not.  If we
   // can synchronously determine that the url is safe, CheckUrl returns true.

@@ -42,9 +42,77 @@ _kind_to_cpp_literal_suffix = {
   mojom.UINT64:       "ULL",
 }
 
-# TODO(rockot): Get rid of this global. This requires some refactoring of the
+# TODO(rockot): Get rid of these globals. This requires some refactoring of the
 # generator library code so that filters can use the generator as context.
 _current_typemap = {}
+_for_blink = False
+# TODO(rockot, yzshen): The variant handling is kind of a hack currently. Make
+# it right.
+_variant = None
+
+
+class _NameFormatter(object):
+  """A formatter for the names of kinds or values."""
+
+  def __init__(self, token, variant):
+    self._token = token
+    self._variant = variant
+
+  def Format(self, separator, prefixed=False, internal=False,
+             include_variant=False, add_same_module_namespaces=False):
+    parts = []
+    if self._ShouldIncludeNamespace(add_same_module_namespaces):
+      if prefixed:
+        parts.append("")
+      parts.extend(self._GetNamespace())
+      if include_variant and self._variant:
+        parts.append(self._variant)
+    parts.extend(self._GetName(internal))
+    return separator.join(parts)
+
+  def FormatForCpp(self, add_same_module_namespaces=False, internal=False):
+    return self.Format(
+        "::", prefixed=True,
+        add_same_module_namespaces=add_same_module_namespaces,
+        internal=internal, include_variant=True)
+
+  def FormatForMojom(self):
+    return self.Format(".", add_same_module_namespaces=True)
+
+  def _MapKindName(self, token, internal):
+    if not internal:
+      return token.name
+    if mojom.IsStructKind(token) and token.native_only:
+      return "mojo::Array_Data<uint8_t>"
+    if (mojom.IsStructKind(token) or mojom.IsUnionKind(token) or
+        mojom.IsInterfaceKind(token) or mojom.IsEnumKind(token)):
+      return token.name + "_Data"
+    return token.name
+
+  def _GetName(self, internal):
+    name = []
+    if internal:
+      name.append("internal")
+    if self._token.parent_kind:
+      name.append(self._MapKindName(self._token.parent_kind, internal))
+    # Both variable and enum constants are constructed like:
+    # Namespace::Struct::CONSTANT_NAME
+    # For enums, CONSTANT_NAME is EnumName::ENUM_VALUE.
+    if isinstance(self._token, mojom.EnumValue):
+      name.extend([self._token.enum.name, self._token.name])
+    else:
+      name.append(self._MapKindName(self._token, internal))
+    return name
+
+  def _ShouldIncludeNamespace(self, add_same_module_namespaces):
+    return add_same_module_namespaces or self._token.imported_from
+
+  def _GetNamespace(self):
+    if self._token.imported_from:
+      return NamespaceToArray(self._token.imported_from["namespace"])
+    elif hasattr(self._token, "module"):
+      return NamespaceToArray(self._token.module.namespace)
+    return []
 
 
 def ConstantValue(constant):
@@ -56,54 +124,31 @@ def DefaultValue(field):
       assert field.default == "default"
       return "%s::New()" % GetNameForKind(field.kind)
     return ExpressionToText(field.default, kind=field.kind)
-  if (mojom.IsStringKind(field.kind) or mojom.IsArrayKind(field.kind) or
-      mojom.IsMapKind(field.kind)):
+  if mojom.IsArrayKind(field.kind) or mojom.IsMapKind(field.kind):
     return "nullptr";
+  if mojom.IsStringKind(field.kind):
+    return "" if _for_blink else "nullptr"
   return ""
 
 def NamespaceToArray(namespace):
   return namespace.split(".") if namespace else []
 
-def GetNamePartsForKind(kind, add_same_module_namespaces, internal):
-  def MapKindName_(kind):
-    if not internal:
-      return kind.name
-    if mojom.IsStructKind(kind) and kind.native_only:
-      return "mojo::Array_Data<uint8_t>"
-    if (mojom.IsStructKind(kind) or mojom.IsUnionKind(kind) or
-        mojom.IsInterfaceKind(kind) or mojom.IsEnumKind(kind)):
-      return kind.name + "_Data"
-    return kind.name
-
-  parts = []
-  if kind.imported_from:
-    parts.extend(NamespaceToArray(kind.imported_from["namespace"]))
-  elif hasattr(kind, "module") and add_same_module_namespaces:
-    parts.extend(NamespaceToArray(kind.module.namespace))
-  if internal:
-    parts.append("internal")
-  if kind.parent_kind:
-    parts.append(MapKindName_(kind.parent_kind))
-  parts.append(MapKindName_(kind))
-  return parts
-
 def GetNameForKind(kind, internal=False):
-  parts = GetNamePartsForKind(kind, False, internal)
-  return "::".join(parts)
+  return _NameFormatter(kind, _variant).FormatForCpp(internal=internal)
 
 def GetQualifiedNameForKind(kind, internal=False):
-  # Always start with an empty part to force a leading "::" on output.
-  parts = [""]
-  parts.extend(GetNamePartsForKind(kind, True, internal))
-  return "::".join(parts)
+  return _NameFormatter(kind, _variant).FormatForCpp(
+      internal=internal, add_same_module_namespaces=True)
 
 def GetFullMojomNameForKind(kind):
-  parts = GetNamePartsForKind(kind, True, False)
-  return ".".join(parts)
+  return _NameFormatter(kind, _variant).FormatForMojom()
 
 def IsTypemappedKind(kind):
   return hasattr(kind, "name") and \
       GetFullMojomNameForKind(kind) in _current_typemap
+
+def IsCloneableKind(kind):
+  return mojom.IsCloneableKind(kind, IsTypemappedKind)
 
 def IsNativeOnlyKind(kind):
   return mojom.IsStructKind(kind) and kind.native_only
@@ -170,7 +215,8 @@ def GetCppArrayArgWrapperType(kind):
   if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
     return "%sPtr" % GetNameForKind(kind)
   if mojom.IsArrayKind(kind):
-    return "mojo::Array<%s> " % GetCppArrayArgWrapperType(kind.kind)
+    pattern = "mojo::WTFArray<%s>" if _for_blink else "mojo::Array<%s>"
+    return pattern % GetCppArrayArgWrapperType(kind.kind)
   if mojom.IsMapKind(kind):
     return "mojo::Map<%s, %s> " % (GetCppArrayArgWrapperType(kind.key_kind),
                                    GetCppArrayArgWrapperType(kind.value_kind))
@@ -184,7 +230,7 @@ def GetCppArrayArgWrapperType(kind):
     raise Exception("Arrays of associated interface requests not yet "
                     "supported!")
   if mojom.IsStringKind(kind):
-    return "mojo::String"
+    return "WTF::String" if _for_blink else "mojo::String"
   if mojom.IsGenericHandleKind(kind):
     return "mojo::ScopedHandle"
   if mojom.IsDataPipeConsumerKind(kind):
@@ -207,7 +253,8 @@ def GetCppResultWrapperType(kind):
   if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
     return "%sPtr" % GetNameForKind(kind)
   if mojom.IsArrayKind(kind):
-    return "mojo::Array<%s>" % GetCppArrayArgWrapperType(kind.kind)
+    pattern = "mojo::WTFArray<%s>" if _for_blink else "mojo::Array<%s>"
+    return pattern % GetCppArrayArgWrapperType(kind.kind)
   if mojom.IsMapKind(kind):
     return "mojo::Map<%s, %s>" % (GetCppArrayArgWrapperType(kind.key_kind),
                                   GetCppArrayArgWrapperType(kind.value_kind))
@@ -220,7 +267,7 @@ def GetCppResultWrapperType(kind):
   if mojom.IsAssociatedInterfaceRequestKind(kind):
     return "%sAssociatedRequest" % GetNameForKind(kind.kind)
   if mojom.IsStringKind(kind):
-    return "mojo::String"
+    return "WTF::String" if _for_blink else "mojo::String"
   if mojom.IsGenericHandleKind(kind):
     return "mojo::ScopedHandle"
   if mojom.IsDataPipeConsumerKind(kind):
@@ -249,7 +296,8 @@ def GetCppWrapperType(kind):
   if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
     return "%sPtr" % GetNameForKind(kind)
   if mojom.IsArrayKind(kind):
-    return "mojo::Array<%s>" % GetCppArrayArgWrapperType(kind.kind)
+    pattern = "mojo::WTFArray<%s>" if _for_blink else "mojo::Array<%s>"
+    return pattern % GetCppArrayArgWrapperType(kind.kind)
   if mojom.IsMapKind(kind):
     return "mojo::Map<%s, %s>" % (GetCppArrayArgWrapperType(kind.key_kind),
                                   GetCppArrayArgWrapperType(kind.value_kind))
@@ -262,7 +310,7 @@ def GetCppWrapperType(kind):
   if mojom.IsAssociatedInterfaceRequestKind(kind):
     return "%sAssociatedRequest" % GetNameForKind(kind.kind)
   if mojom.IsStringKind(kind):
-    return "mojo::String"
+    return "WTF::String" if _for_blink else "mojo::String"
   if mojom.IsGenericHandleKind(kind):
     return "mojo::ScopedHandle"
   if mojom.IsDataPipeConsumerKind(kind):
@@ -283,7 +331,8 @@ def GetCppConstWrapperType(kind):
   if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
     return "%sPtr" % GetNameForKind(kind)
   if mojom.IsArrayKind(kind):
-    return "mojo::Array<%s>" % GetCppArrayArgWrapperType(kind.kind)
+    pattern = "mojo::WTFArray<%s>" if _for_blink else "mojo::Array<%s>"
+    return pattern % GetCppArrayArgWrapperType(kind.kind)
   if mojom.IsMapKind(kind):
     return "mojo::Map<%s, %s>" % (GetCppArrayArgWrapperType(kind.key_kind),
                                   GetCppArrayArgWrapperType(kind.value_kind))
@@ -298,7 +347,7 @@ def GetCppConstWrapperType(kind):
   if mojom.IsEnumKind(kind):
     return GetNameForKind(kind)
   if mojom.IsStringKind(kind):
-    return "const mojo::String&"
+    return "const WTF::String&" if _for_blink else "const mojo::String&"
   if mojom.IsGenericHandleKind(kind):
     return "mojo::ScopedHandle"
   if mojom.IsDataPipeConsumerKind(kind):
@@ -360,19 +409,7 @@ def GetUnionGetterReturnType(kind):
 
 def TranslateConstants(token, kind):
   if isinstance(token, mojom.NamedValue):
-    # Both variable and enum constants are constructed like:
-    # Namespace::Struct::CONSTANT_NAME
-    # For enums, CONSTANT_NAME is ENUM_NAME_ENUM_VALUE.
-    name = []
-    if token.imported_from:
-      name.extend(NamespaceToArray(token.namespace))
-    if token.parent_kind:
-      name.append(token.parent_kind.name)
-    if isinstance(token, mojom.EnumValue):
-      name.extend([token.enum.name, token.name])
-    else:
-      name.append(token.name)
-    return "::".join(name)
+    return _NameFormatter(token, _variant).FormatForCpp()
 
   if isinstance(token, mojom.BuiltinValue):
     if token.value == "double.INFINITY" or token.value == "float.INFINITY":
@@ -477,7 +514,7 @@ class Generator(generator.Generator):
     "should_inline": ShouldInlineStruct,
     "should_inline_union": ShouldInlineUnion,
     "is_array_kind": mojom.IsArrayKind,
-    "is_cloneable_kind": mojom.IsCloneableKind,
+    "is_cloneable_kind": IsCloneableKind,
     "is_enum_kind": mojom.IsEnumKind,
     "is_integral_kind": mojom.IsIntegralKind,
     "is_move_only_kind": mojom.IsMoveOnlyKind,
@@ -503,10 +540,16 @@ class Generator(generator.Generator):
     "under_to_camel": generator.UnderToCamel,
   }
 
-  def GetExtraHeaders(self):
+  def GetExtraTraitsHeaders(self):
     extra_headers = set()
-    for name, entry in self.typemap.iteritems():
-      extra_headers.update(entry["headers"])
+    for entry in self.typemap.itervalues():
+      extra_headers.update(entry.get("traits_headers", []))
+    return list(extra_headers)
+
+  def GetExtraPublicHeaders(self):
+    extra_headers = set()
+    for entry in self.typemap.itervalues():
+      extra_headers.update(entry.get("public_headers", []))
     return list(extra_headers)
 
   def GetJinjaExports(self):
@@ -521,7 +564,9 @@ class Generator(generator.Generator):
       "unions": self.GetUnions(),
       "interfaces": self.GetInterfaces(),
       "variant": self.variant,
-      "extra_headers": self.GetExtraHeaders(),
+      "extra_traits_headers": self.GetExtraTraitsHeaders(),
+      "extra_public_headers": self.GetExtraPublicHeaders(),
+      "for_blink": self.for_blink,
     }
 
   @staticmethod
@@ -547,6 +592,10 @@ class Generator(generator.Generator):
   def GenerateFiles(self, args):
     global _current_typemap
     _current_typemap = self.typemap
+    global _for_blink
+    _for_blink = self.for_blink
+    global _variant
+    _variant = self.variant
     suffix = "-%s" % self.variant if self.variant else ""
     self.Write(self.GenerateModuleHeader(),
         self.MatchMojomFilePath("%s%s.h" % (self.module.name, suffix)))

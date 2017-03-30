@@ -54,11 +54,9 @@ class FormData;
 // FIXME: InputType should not inherit InputTypeView. It's conceptually wrong.
 class CORE_EXPORT InputType : public InputTypeView {
     WTF_MAKE_NONCOPYABLE(InputType);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(InputType);
-
 public:
-    static PassRefPtrWillBeRawPtr<InputType> create(HTMLInputElement&, const AtomicString&);
-    static PassRefPtrWillBeRawPtr<InputType> createText(HTMLInputElement&);
+    static InputType* create(HTMLInputElement&, const AtomicString&);
+    static InputType* createText(HTMLInputElement&);
     static const AtomicString& normalizeTypeName(const AtomicString&);
     ~InputType() override;
 
@@ -76,7 +74,6 @@ public:
     virtual bool isInteractiveContent() const;
     virtual bool isTextButton() const;
     virtual bool isTextField() const;
-    virtual bool isImage() const;
 
     // Form value functions
 
@@ -149,6 +146,7 @@ public:
     virtual void disableSecureTextInput();
     virtual void accessKeyAction(bool sendMouseEvents);
     virtual bool canBeSuccessfulSubmitButton();
+    virtual bool matchesDefaultPseudoClass();
 
     // Miscellaneous functions
 

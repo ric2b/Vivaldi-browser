@@ -38,6 +38,7 @@
 #include "core/editing/FrameSelection.h"
 #include "core/editing/iterators/CharacterIterator.h"
 #include "core/editing/iterators/TextIterator.h"
+#include "core/editing/serializers/Serialization.h"
 #include "core/events/Event.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
@@ -72,7 +73,7 @@ HTMLTextFormControlElement::~HTMLTextFormControlElement()
 Node::InsertionNotificationRequest HTMLTextFormControlElement::insertedInto(ContainerNode* insertionPoint)
 {
     HTMLFormControlElementWithState::insertedInto(insertionPoint);
-    if (!insertionPoint->inDocument())
+    if (!insertionPoint->inShadowIncludingDocument())
         return InsertionDone;
     String initialValue = value();
     setTextAsOfLastFormControlChangeEvent(initialValue.isNull() ? emptyString() : initialValue);
@@ -138,7 +139,7 @@ static bool isNotLineBreak(UChar ch) { return ch != newlineCharacter && ch != ca
 bool HTMLTextFormControlElement::isPlaceholderEmpty() const
 {
     const AtomicString& attributeValue = fastGetAttribute(placeholderAttr);
-    return attributeValue.string().find(isNotLineBreak) == kNotFound;
+    return attributeValue.getString().find(isNotLineBreak) == kNotFound;
 }
 
 bool HTMLTextFormControlElement::placeholderShouldBeVisible() const
@@ -352,7 +353,7 @@ void HTMLTextFormControlElement::setSelectionRange(int start, int end, TextField
     start = std::min(std::max(start, 0), end);
     cacheSelection(start, end, direction);
 
-    if (selectionOption == NotChangeSelection || (selectionOption == ChangeSelectionIfFocused && document().focusedElement() != this) || !inDocument()) {
+    if (selectionOption == NotChangeSelection || (selectionOption == ChangeSelectionIfFocused && document().focusedElement() != this) || !inShadowIncludingDocument()) {
         if (eventBehaviour == DispatchSelectEvent)
             scheduleSelectEvent();
         return;
@@ -408,7 +409,7 @@ int HTMLTextFormControlElement::indexForVisiblePosition(const VisiblePosition& p
     if (enclosingTextFormControl(indexPosition) != this)
         return 0;
     ASSERT(indexPosition.document());
-    RefPtrWillBeRawPtr<Range> range = Range::create(*indexPosition.document());
+    RawPtr<Range> range = Range::create(*indexPosition.document());
     range->setStart(innerEditorElement(), 0, ASSERT_NO_EXCEPTION);
     range->setEnd(indexPosition.computeContainerNode(), indexPosition.offsetInContainerNode(), ASSERT_NO_EXCEPTION);
     return TextIterator::rangeLength(range->startPosition(), range->endPosition());
@@ -455,9 +456,9 @@ int HTMLTextFormControlElement::computeSelectionEnd() const
 
 static const AtomicString& directionString(TextFieldSelectionDirection direction)
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, none, ("none", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, forward, ("forward", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, backward, ("backward", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, none, ("none"));
+    DEFINE_STATIC_LOCAL(const AtomicString, forward, ("forward"));
+    DEFINE_STATIC_LOCAL(const AtomicString, backward, ("backward"));
 
     switch (direction) {
     case SelectionHasNoDirection:
@@ -504,7 +505,7 @@ static inline void setContainerAndOffsetForRange(Node* node, int offset, Node*& 
     }
 }
 
-PassRefPtrWillBeRawPtr<Range> HTMLTextFormControlElement::selection() const
+RawPtr<Range> HTMLTextFormControlElement::selection() const
 {
     if (!layoutObject() || !isTextFormControl())
         return nullptr;
@@ -547,11 +548,11 @@ PassRefPtrWillBeRawPtr<Range> HTMLTextFormControlElement::selection() const
 
 const AtomicString& HTMLTextFormControlElement::autocapitalize() const
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, off, ("off", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, none, ("none", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, characters, ("characters", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, words, ("words", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, sentences, ("sentences", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, off, ("off"));
+    DEFINE_STATIC_LOCAL(const AtomicString, none, ("none"));
+    DEFINE_STATIC_LOCAL(const AtomicString, characters, ("characters"));
+    DEFINE_STATIC_LOCAL(const AtomicString, words, ("words"));
+    DEFINE_STATIC_LOCAL(const AtomicString, sentences, ("sentences"));
 
     const AtomicString& value = fastGetAttribute(autocapitalizeAttr);
     if (equalIgnoringCase(value, none) || equalIgnoringCase(value, off))
@@ -593,7 +594,7 @@ void HTMLTextFormControlElement::selectionChanged(bool userTriggered)
 
 void HTMLTextFormControlElement::scheduleSelectEvent()
 {
-    RefPtrWillBeRawPtr<Event> event = Event::createBubble(EventTypeNames::select);
+    RawPtr<Event> event = Event::createBubble(EventTypeNames::select);
     event->setTarget(this);
     document().enqueueUniqueAnimationFrameEvent(event.release());
 }
@@ -619,6 +620,23 @@ bool HTMLTextFormControlElement::lastChangeWasUserEdit() const
     return m_lastChangeWasUserEdit;
 }
 
+RawPtr<Node> HTMLTextFormControlElement::createPlaceholderBreakElement() const
+{
+    return HTMLBRElement::create(document());
+}
+
+void HTMLTextFormControlElement::addPlaceholderBreakElementIfNecessary()
+{
+    HTMLElement* innerEditor = innerEditorElement();
+    if (innerEditor->layoutObject() && !innerEditor->layoutObject()->style()->preserveNewline())
+        return;
+    Node* lastChild = innerEditor->lastChild();
+    if (!lastChild || !lastChild->isTextNode())
+        return;
+    if (toText(lastChild)->data().endsWith('\n') || toText(lastChild)->data().endsWith('\r'))
+        innerEditor->appendChild(createPlaceholderBreakElement());
+}
+
 void HTMLTextFormControlElement::setInnerEditorValue(const String& value)
 {
     ASSERT(!openShadowRoot());
@@ -635,24 +653,20 @@ void HTMLTextFormControlElement::setInnerEditorValue(const String& value)
     if (isHTMLBRElement(innerEditor->lastChild()))
         innerEditor->removeChild(innerEditor->lastChild(), ASSERT_NO_EXCEPTION);
 
-    innerEditor->setInnerText(value, ASSERT_NO_EXCEPTION);
+    // We don't use setTextContent.  It triggers unnecessary paint.
+    if (value.isEmpty())
+        innerEditor->removeChildren();
+    else
+        replaceChildrenWithText(innerEditor, value, ASSERT_NO_EXCEPTION);
 
-    if (value.endsWith('\n') || value.endsWith('\r'))
-        innerEditor->appendChild(HTMLBRElement::create(document()));
+    // Add <br> so that we can put the caret at the next line of the last
+    // newline.
+    addPlaceholderBreakElementIfNecessary();
 
     if (textIsChanged && layoutObject()) {
         if (AXObjectCache* cache = document().existingAXObjectCache())
             cache->handleTextFormControlChanged(this);
     }
-}
-
-static String finishText(StringBuilder& result)
-{
-    // Remove one trailing newline; there's always one that's collapsed out by layoutObject.
-    size_t size = result.length();
-    if (size && result[size - 1] == '\n')
-        result.resize(--size);
-    return result.toString();
 }
 
 String HTMLTextFormControlElement::innerEditorValue() const
@@ -664,12 +678,15 @@ String HTMLTextFormControlElement::innerEditorValue() const
 
     StringBuilder result;
     for (Node& node : NodeTraversal::inclusiveDescendantsOf(*innerEditor)) {
-        if (isHTMLBRElement(node))
-            result.append(newlineCharacter);
-        else if (node.isTextNode())
+        if (isHTMLBRElement(node)) {
+            ASSERT(&node == innerEditor->lastChild());
+            if (&node != innerEditor->lastChild())
+                result.append(newlineCharacter);
+        } else if (node.isTextNode()) {
             result.append(toText(node).data());
+        }
     }
-    return finishText(result);
+    return result.toString();
 }
 
 static void getNextSoftBreak(RootInlineBox*& line, Node*& breakNode, unsigned& breakOffset)
@@ -712,7 +729,9 @@ String HTMLTextFormControlElement::valueWithHardLineBreaks() const
     StringBuilder result;
     for (Node& node : NodeTraversal::descendantsOf(*innerText)) {
         if (isHTMLBRElement(node)) {
-            result.append(newlineCharacter);
+            ASSERT(&node == innerText->lastChild());
+            if (&node != innerText->lastChild())
+                result.append(newlineCharacter);
         } else if (node.isTextNode()) {
             String data = toText(node).data();
             unsigned length = data.length();
@@ -730,7 +749,7 @@ String HTMLTextFormControlElement::valueWithHardLineBreaks() const
         while (breakNode == node)
             getNextSoftBreak(line, breakNode, breakOffset);
     }
-    return finishText(result);
+    return result.toString();
 }
 
 HTMLTextFormControlElement* enclosingTextFormControl(const Position& position)
@@ -780,7 +799,7 @@ static Position innerNodePosition(const Position& innerPosition)
     ASSERT(!innerPosition.isAfterAnchor());
     HTMLElement* element = toHTMLElement(innerPosition.anchorNode());
     ASSERT(element);
-    RefPtrWillBeRawPtr<NodeList> childNodes = element->childNodes();
+    RawPtr<NodeList> childNodes = element->childNodes();
     if (!childNodes->length())
         return Position(element, 0);
 
@@ -810,7 +829,7 @@ static Position findWordBoundary(const HTMLElement* innerEditor, const Position&
 {
     StringBuilder concatTexts;
     Vector<unsigned> lengthList;
-    WillBeHeapVector<RawPtrWillBeMember<Text>> textList;
+    HeapVector<Member<Text>> textList;
 
     if (startPosition.anchorNode()->isTextNode())
         ASSERT(startPosition.isOffsetInAnchor());

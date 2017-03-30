@@ -52,12 +52,12 @@ public:
     intptr_t GetElementCount() override;
     intptr_t GetEquivalenceClass() override;
 
-    static v8::RetainedObjectInfo* retainedDOMInfo(uint16_t classId, v8::Local<v8::Value> wrapper);
+    static v8::RetainedObjectInfo* createRetainedDOMInfo(uint16_t classId, v8::Local<v8::Value> wrapper);
 
 private:
     // V8 guarantees to keep RetainedObjectInfos alive only during a GC or heap snapshotting round, when renderer
     // doesn't get control. This allows us to use raw pointers.
-    RawPtrWillBeUntracedMember<Node> m_root;
+    UntracedMember<Node> m_root;
 };
 
 class ActiveDOMObjectsInfo final : public RetainedObjectInfo {

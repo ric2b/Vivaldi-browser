@@ -105,7 +105,10 @@ bool FilterOperations::hasOutsets() const
 {
     for (size_t i = 0; i < m_operations.size(); ++i) {
         FilterOperation::OperationType operationType = m_operations.at(i)->type();
-        if (operationType == FilterOperation::BLUR || operationType == FilterOperation::DROP_SHADOW || operationType == FilterOperation::REFERENCE)
+        if (operationType == FilterOperation::BLUR
+            || operationType == FilterOperation::DROP_SHADOW
+            || operationType == FilterOperation::REFERENCE
+            || operationType == FilterOperation::BOX_REFLECT)
             return true;
     }
     return false;
@@ -139,9 +142,9 @@ FilterOutsets FilterOperations::outsets() const
         }
         case FilterOperation::REFERENCE: {
             ReferenceFilterOperation* referenceOperation = toReferenceFilterOperation(filterOperation);
-            if (referenceOperation->filter() && referenceOperation->filter()->lastEffect()) {
+            if (referenceOperation->getFilter() && referenceOperation->getFilter()->lastEffect()) {
                 FloatRect outsetRect(0, 0, 1, 1);
-                outsetRect = referenceOperation->filter()->lastEffect()->mapRectRecursive(outsetRect);
+                outsetRect = referenceOperation->getFilter()->lastEffect()->mapRectRecursive(outsetRect);
                 FilterOutsets outsets(
                     std::max(0.0f, -outsetRect.y()),
                     std::max(0.0f, outsetRect.x() + outsetRect.width() - 1),
@@ -150,6 +153,10 @@ FilterOutsets FilterOperations::outsets() const
                 );
                 totalOutsets += outsets;
             }
+            break;
+        }
+        case FilterOperation::BOX_REFLECT: {
+            // Already accounted for at all call sites.
             break;
         }
         default:
@@ -176,4 +183,3 @@ bool FilterOperations::hasFilterThatMovesPixels() const
 }
 
 } // namespace blink
-

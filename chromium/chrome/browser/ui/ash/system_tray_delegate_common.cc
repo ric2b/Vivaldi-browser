@@ -17,7 +17,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/system_tray_delegate_utils.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/upgrade_detector.h"
 #include "chrome/grit/locale_settings.h"
@@ -89,7 +88,6 @@ void SystemTrayDelegateCommon::ShowChromeSlow() {
 
 void SystemTrayDelegateCommon::ShowHelp() {
   chrome::ShowHelpForProfile(ProfileManager::GetLastUsedProfile(),
-                             chrome::HOST_DESKTOP_TYPE_ASH,
                              chrome::HELP_SOURCE_MENU);
 }
 

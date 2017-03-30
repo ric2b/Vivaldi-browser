@@ -8,7 +8,6 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -221,7 +220,7 @@ class NativeDialogContainer : public BaseDialogContainer {
   views::NonClientFrameView* CreateNonClientFrameView(
       views::Widget* widget) override {
     FullSizeBubbleFrameView* frame = new FullSizeBubbleFrameView();
-    scoped_ptr<views::BubbleBorder> border(new views::BubbleBorder(
+    std::unique_ptr<views::BubbleBorder> border(new views::BubbleBorder(
         views::BubbleBorder::FLOAT, kShadowType, gfx::kPlaceholderColor));
     border->set_use_theme_background_color(true);
     frame->SetBubbleBorder(std::move(border));

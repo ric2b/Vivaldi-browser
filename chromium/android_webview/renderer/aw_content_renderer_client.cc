@@ -68,9 +68,6 @@ void AwContentRendererClient::RenderThreadStarted() {
   visited_link_slave_.reset(new visitedlink::VisitedLinkSlave);
   thread->AddObserver(visited_link_slave_.get());
 
-  // Using WebString requires blink initialization.
-  thread->EnsureWebKitInitialized();
-
   blink::WebString content_scheme(base::ASCIIToUTF16(url::kContentScheme));
   blink::WebSecurityPolicy::registerURLSchemeAsLocal(content_scheme);
 
@@ -164,9 +161,8 @@ void AwContentRendererClient::RenderViewCreated(
   AwRenderViewExt::RenderViewCreated(render_view);
 
   new printing::PrintWebViewHelper(
-      render_view,
-      scoped_ptr<printing::PrintWebViewHelper::Delegate>(
-          new AwPrintWebViewHelperDelegate()));
+      render_view, std::unique_ptr<printing::PrintWebViewHelper::Delegate>(
+                       new AwPrintWebViewHelperDelegate()));
 }
 
 bool AwContentRendererClient::HasErrorPage(int http_status_code,
@@ -229,6 +225,29 @@ bool AwContentRendererClient::IsLinkVisited(unsigned long long link_hash) {
 void AwContentRendererClient::AddKeySystems(
     std::vector<media::KeySystemInfo>* key_systems) {
   AwAddKeySystems(key_systems);
+}
+
+bool AwContentRendererClient::ShouldUseMediaPlayerForURL(const GURL& url) {
+  // Android WebView needs to support codecs that Chrome does not, for these
+  // cases we must force the usage of Android MediaPlayer instead of Chrome's
+  // internal player.
+  //
+  // Note: Despite these extensions being forwarded for playback to MediaPlayer,
+  // HTMLMediaElement.canPlayType() will return empty for these containers.
+  // TODO(boliu): If this is important, extend media::MimeUtil for WebView.
+  //
+  // Format list mirrors:
+  // http://developer.android.com/guide/appendix/media-formats.html
+  static const char* kMediaPlayerExtensions[] = {
+      ".3gp",  ".ts",    ".flac", ".mid", ".xmf",
+      ".mxmf", ".rtttl", ".rtx",  ".ota", ".imy"};
+  for (const auto& extension : kMediaPlayerExtensions) {
+    if (base::EndsWith(url.path(), extension,
+                       base::CompareCase::INSENSITIVE_ASCII)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool AwContentRendererClient::ShouldOverridePageVisibilityState(

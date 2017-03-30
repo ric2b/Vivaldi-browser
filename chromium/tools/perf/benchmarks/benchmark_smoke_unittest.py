@@ -23,7 +23,6 @@ from benchmarks import indexeddb_perf
 from benchmarks import jetstream
 from benchmarks import kraken
 from benchmarks import memory
-from benchmarks import new_tab
 from benchmarks import octane
 from benchmarks import rasterize_and_record_micro
 from benchmarks import repaint
@@ -31,6 +30,7 @@ from benchmarks import spaceport
 from benchmarks import speedometer
 from benchmarks import sunspider
 from benchmarks import text_selection
+from benchmarks import tracing
 
 
 def SmokeTestGenerator(benchmark):
@@ -80,7 +80,6 @@ def SmokeTestGenerator(benchmark):
 _BLACK_LIST_TEST_MODULES = {
     image_decoding,  # Always fails on Mac10.9 Tests builder.
     indexeddb_perf,  # Always fails on Win7 & Android Tests builder.
-    new_tab,  # Fails fairly often on the Linux Tests builder, crbug.com/535664
     octane,  # Often fails & take long time to timeout on cq bot.
     rasterize_and_record_micro,  # Always fails on cq bot.
     repaint,  # Often fails & takes long time to timeout on cq bot.
@@ -88,7 +87,7 @@ _BLACK_LIST_TEST_MODULES = {
     speedometer,  # Takes 101 seconds.
     jetstream,  # Take 206 seconds.
     text_selection,  # Always fails on cq bot.
-    memory  # Flaky on bots, crbug.com/513767
+    memory  # Flaky on bots, crbug.com/513767.
 }
 
 # Some smoke benchmark tests that run quickly on desktop platform can be very
@@ -96,6 +95,7 @@ _BLACK_LIST_TEST_MODULES = {
 _ANDROID_BLACK_LIST_MODULES = {
     kraken,  # Takes 275 seconds on Android.
     sunspider,  # Takes 163 seconds on Android.
+    tracing,  # Failed on Android bot, crbug.com/600989.
 }
 
 

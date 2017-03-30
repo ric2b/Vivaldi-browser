@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
@@ -20,26 +21,23 @@
 namespace syncer_v2 {
 
 ModelTypeStoreBackend::ModelTypeStoreBackend() {
-  // ModelTypeStoreBackend is used on different thread from the one where it is
-  // created.
-  DetachFromThread();
 }
 
 ModelTypeStoreBackend::~ModelTypeStoreBackend() {
-  DCHECK(CalledOnValidThread());
 }
 
-scoped_ptr<leveldb::Env> ModelTypeStoreBackend::CreateInMemoryEnv() {
-  return make_scoped_ptr(leveldb::NewMemEnv(leveldb::Env::Default()));
+std::unique_ptr<leveldb::Env> ModelTypeStoreBackend::CreateInMemoryEnv() {
+  return base::WrapUnique(leveldb::NewMemEnv(leveldb::Env::Default()));
 }
 
-void ModelTypeStoreBackend::TakeEnvOwnership(scoped_ptr<leveldb::Env> env) {
+void ModelTypeStoreBackend::TakeEnvOwnership(
+    std::unique_ptr<leveldb::Env> env) {
   env_ = std::move(env);
 }
 
 ModelTypeStore::Result ModelTypeStoreBackend::Init(const std::string& path,
                                                    leveldb::Env* env) {
-  DCHECK(CalledOnValidThread());
+  DFAKE_SCOPED_LOCK(push_pop_);
   leveldb::DB* db_raw = nullptr;
 
   leveldb::Options options;
@@ -62,7 +60,7 @@ ModelTypeStore::Result ModelTypeStoreBackend::ReadRecordsWithPrefix(
     const ModelTypeStore::IdList& id_list,
     ModelTypeStore::RecordList* record_list,
     ModelTypeStore::IdList* missing_id_list) {
-  DCHECK(CalledOnValidThread());
+  DFAKE_SCOPED_LOCK(push_pop_);
   DCHECK(db_);
   record_list->reserve(id_list.size());
   leveldb::ReadOptions read_options;
@@ -87,11 +85,11 @@ ModelTypeStore::Result ModelTypeStoreBackend::ReadRecordsWithPrefix(
 ModelTypeStore::Result ModelTypeStoreBackend::ReadAllRecordsWithPrefix(
     const std::string& prefix,
     ModelTypeStore::RecordList* record_list) {
-  DCHECK(CalledOnValidThread());
+  DFAKE_SCOPED_LOCK(push_pop_);
   DCHECK(db_);
   leveldb::ReadOptions read_options;
   read_options.verify_checksums = true;
-  scoped_ptr<leveldb::Iterator> iter(db_->NewIterator(read_options));
+  std::unique_ptr<leveldb::Iterator> iter(db_->NewIterator(read_options));
   const leveldb::Slice prefix_slice(prefix);
   for (iter->Seek(prefix_slice); iter->Valid(); iter->Next()) {
     leveldb::Slice key = iter->key();
@@ -107,8 +105,8 @@ ModelTypeStore::Result ModelTypeStoreBackend::ReadAllRecordsWithPrefix(
 }
 
 ModelTypeStore::Result ModelTypeStoreBackend::WriteModifications(
-    scoped_ptr<leveldb::WriteBatch> write_batch) {
-  DCHECK(CalledOnValidThread());
+    std::unique_ptr<leveldb::WriteBatch> write_batch) {
+  DFAKE_SCOPED_LOCK(push_pop_);
   DCHECK(db_);
   leveldb::Status status =
       db_->Write(leveldb::WriteOptions(), write_batch.get());

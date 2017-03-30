@@ -77,13 +77,25 @@ class ArcBridgeService : public ArcBridgeHost {
     virtual void OnAppInstanceReady() {}
     virtual void OnAppInstanceClosed() {}
 
+    // Called whenever the ARC audio interface state changes.
+    virtual void OnAudioInstanceReady() {}
+    virtual void OnAudioInstanceClosed() {}
+
     // Called whenever the ARC auth interface state changes.
     virtual void OnAuthInstanceReady() {}
     virtual void OnAuthInstanceClosed() {}
 
+    // Called whenever ARC Bluetooth instance is ready.
+    virtual void OnBluetoothInstanceReady() {}
+    virtual void OnBluetoothInstanceClosed() {}
+
     // Called whenever the ARC clipboard interface state changes.
     virtual void OnClipboardInstanceReady() {}
     virtual void OnClipboardInstanceClosed() {}
+
+    // Called whenever the ARC crash collector interface state changes.
+    virtual void OnCrashCollectorInstanceReady() {}
+    virtual void OnCrashCollectorInstanceClosed() {}
 
     // Called whenever the ARC IME interface state changes.
     virtual void OnImeInstanceReady() {}
@@ -104,6 +116,10 @@ class ArcBridgeService : public ArcBridgeHost {
     // Called whenever the ARC net interface state changes.
     virtual void OnNetInstanceReady() {}
     virtual void OnNetInstanceClosed() {}
+
+    // Called whenever the ARC policy interface state changes.
+    virtual void OnPolicyInstanceReady() {}
+    virtual void OnPolicyInstanceClosed() {}
 
     // Called whenever the ARC power interface state changes.
     virtual void OnPowerInstanceReady() {}
@@ -155,8 +171,13 @@ class ArcBridgeService : public ArcBridgeHost {
   // you want to be notified when this is ready. This can only be called on the
   // thread that this class was created on.
   AppInstance* app_instance() { return app_ptr_.get(); }
+  AudioInstance* audio_instance() { return audio_ptr_.get(); }
   AuthInstance* auth_instance() { return auth_ptr_.get(); }
+  BluetoothInstance* bluetooth_instance() { return bluetooth_ptr_.get(); }
   ClipboardInstance* clipboard_instance() { return clipboard_ptr_.get(); }
+  CrashCollectorInstance* crash_collector_instance() {
+    return crash_collector_ptr_.get();
+  }
   ImeInstance* ime_instance() { return ime_ptr_.get(); }
   InputInstance* input_instance() { return input_ptr_.get(); }
   IntentHelperInstance* intent_helper_instance() {
@@ -166,26 +187,37 @@ class ArcBridgeService : public ArcBridgeHost {
   NotificationsInstance* notifications_instance() {
     return notifications_ptr_.get();
   }
+  PolicyInstance* policy_instance() { return policy_ptr_.get(); }
   PowerInstance* power_instance() { return power_ptr_.get(); }
   ProcessInstance* process_instance() { return process_ptr_.get(); }
   VideoInstance* video_instance() { return video_ptr_.get(); }
 
   int32_t app_version() const { return app_ptr_.version(); }
+  int32_t audio_version() const { return audio_ptr_.version(); }
+  int32_t bluetooth_version() const { return bluetooth_ptr_.version(); }
   int32_t auth_version() const { return auth_ptr_.version(); }
   int32_t clipboard_version() const { return clipboard_ptr_.version(); }
+  int32_t crash_collector_version() const {
+    return crash_collector_ptr_.version();
+  }
   int32_t ime_version() const { return ime_ptr_.version(); }
   int32_t input_version() const { return input_ptr_.version(); }
   int32_t intent_helper_version() const { return intent_helper_ptr_.version(); }
   int32_t net_version() const { return net_ptr_.version(); }
   int32_t notifications_version() const { return notifications_ptr_.version(); }
+  int32_t policy_version() const { return policy_ptr_.version(); }
   int32_t power_version() const { return power_ptr_.version(); }
   int32_t process_version() const { return process_ptr_.version(); }
   int32_t video_version() const { return video_ptr_.version(); }
 
   // ArcHost:
   void OnAppInstanceReady(AppInstancePtr app_ptr) override;
+  void OnAudioInstanceReady(AudioInstancePtr audio_ptr) override;
   void OnAuthInstanceReady(AuthInstancePtr auth_ptr) override;
+  void OnBluetoothInstanceReady(BluetoothInstancePtr bluetooth_ptr) override;
   void OnClipboardInstanceReady(ClipboardInstancePtr clipboard_ptr) override;
+  void OnCrashCollectorInstanceReady(
+      CrashCollectorInstancePtr crash_collector_ptr) override;
   void OnImeInstanceReady(ImeInstancePtr ime_ptr) override;
   void OnInputInstanceReady(InputInstancePtr input_ptr) override;
   void OnIntentHelperInstanceReady(
@@ -193,6 +225,7 @@ class ArcBridgeService : public ArcBridgeHost {
   void OnNetInstanceReady(NetInstancePtr net_ptr) override;
   void OnNotificationsInstanceReady(
       NotificationsInstancePtr notifications_ptr) override;
+  void OnPolicyInstanceReady(PolicyInstancePtr policy_ptr) override;
   void OnPowerInstanceReady(PowerInstancePtr power_ptr) override;
   void OnProcessInstanceReady(ProcessInstancePtr process_ptr) override;
   void OnVideoInstanceReady(VideoInstancePtr video_ptr) override;
@@ -228,39 +261,51 @@ class ArcBridgeService : public ArcBridgeHost {
 
   // Called when one of the individual channels is closed.
   void CloseAppChannel();
+  void CloseAudioChannel();
   void CloseAuthChannel();
+  void CloseBluetoothChannel();
   void CloseClipboardChannel();
+  void CloseCrashCollectorChannel();
   void CloseImeChannel();
   void CloseInputChannel();
   void CloseIntentHelperChannel();
   void CloseNetChannel();
   void CloseNotificationsChannel();
+  void ClosePolicyChannel();
   void ClosePowerChannel();
   void CloseProcessChannel();
   void CloseVideoChannel();
 
   // Callbacks for QueryVersion.
   void OnAppVersionReady(int32_t version);
+  void OnAudioVersionReady(int32_t version);
   void OnAuthVersionReady(int32_t version);
+  void OnBluetoothVersionReady(int32_t version);
   void OnClipboardVersionReady(int32_t version);
+  void OnCrashCollectorVersionReady(int32_t version);
   void OnImeVersionReady(int32_t version);
   void OnInputVersionReady(int32_t version);
   void OnIntentHelperVersionReady(int32_t version);
   void OnNetVersionReady(int32_t version);
   void OnNotificationsVersionReady(int32_t version);
+  void OnPolicyVersionReady(int32_t version);
   void OnPowerVersionReady(int32_t version);
   void OnProcessVersionReady(int32_t version);
   void OnVideoVersionReady(int32_t version);
 
   // Mojo interfaces.
   AppInstancePtr app_ptr_;
+  AudioInstancePtr audio_ptr_;
   AuthInstancePtr auth_ptr_;
+  BluetoothInstancePtr bluetooth_ptr_;
   ClipboardInstancePtr clipboard_ptr_;
+  CrashCollectorInstancePtr crash_collector_ptr_;
   ImeInstancePtr ime_ptr_;
   InputInstancePtr input_ptr_;
   IntentHelperInstancePtr intent_helper_ptr_;
   NetInstancePtr net_ptr_;
   NotificationsInstancePtr notifications_ptr_;
+  PolicyInstancePtr policy_ptr_;
   PowerInstancePtr power_ptr_;
   ProcessInstancePtr process_ptr_;
   VideoInstancePtr video_ptr_;
@@ -272,13 +317,17 @@ class ArcBridgeService : public ArcBridgeHost {
   // To keep the xxx_instance() functions being trivial, store the instance
   // pointer in a temporary variable to avoid losing its reference.
   AppInstancePtr temporary_app_ptr_;
+  AudioInstancePtr temporary_audio_ptr_;
   AuthInstancePtr temporary_auth_ptr_;
+  BluetoothInstancePtr temporary_bluetooth_ptr_;
   ClipboardInstancePtr temporary_clipboard_ptr_;
+  CrashCollectorInstancePtr temporary_crash_collector_ptr_;
   ImeInstancePtr temporary_ime_ptr_;
   InputInstancePtr temporary_input_ptr_;
   IntentHelperInstancePtr temporary_intent_helper_ptr_;
   NetInstancePtr temporary_net_ptr_;
   NotificationsInstancePtr temporary_notifications_ptr_;
+  PolicyInstancePtr temporary_policy_ptr_;
   PowerInstancePtr temporary_power_ptr_;
   ProcessInstancePtr temporary_process_ptr_;
   VideoInstancePtr temporary_video_ptr_;

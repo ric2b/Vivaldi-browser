@@ -63,9 +63,9 @@ public:
     long long estimatedLength;
 };
 
-PassOwnPtrWillBeRawPtr<ProgressTracker> ProgressTracker::create(LocalFrame* frame)
+ProgressTracker* ProgressTracker::create(LocalFrame* frame)
 {
-    return adoptPtrWillBeNoop(new ProgressTracker(frame));
+    return new ProgressTracker(frame);
 }
 
 ProgressTracker::ProgressTracker(LocalFrame* frame)

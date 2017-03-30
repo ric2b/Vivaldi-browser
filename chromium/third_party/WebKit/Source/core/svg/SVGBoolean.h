@@ -42,19 +42,19 @@ public:
     typedef void TearOffType;
     typedef bool PrimitiveType;
 
-    static PassRefPtrWillBeRawPtr<SVGBoolean> create(bool value = false)
+    static SVGBoolean* create(bool value = false)
     {
-        return adoptRefWillBeNoop(new SVGBoolean(value));
+        return new SVGBoolean(value);
     }
 
-    PassRefPtrWillBeRawPtr<SVGBoolean> clone() const { return create(m_value); }
+    SVGBoolean* clone() const { return create(m_value); }
 
     String valueAsString() const override;
     SVGParsingError setValueAsString(const String&);
 
-    void add(PassRefPtrWillBeRawPtr<SVGPropertyBase>, SVGElement*) override;
-    void calculateAnimatedValue(SVGAnimationElement*, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> from, PassRefPtrWillBeRawPtr<SVGPropertyBase> to, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDurationValue, SVGElement*) override;
-    float calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> to, SVGElement*) override;
+    void add(SVGPropertyBase*, SVGElement*) override;
+    void calculateAnimatedValue(SVGAnimationElement*, float percentage, unsigned repeatCount, SVGPropertyBase* from, SVGPropertyBase* to, SVGPropertyBase* toAtEndOfDurationValue, SVGElement*) override;
+    float calculateDistance(SVGPropertyBase* to, SVGElement*) override;
 
     bool value() const { return m_value; }
     void setValue(bool value) { m_value = value; }

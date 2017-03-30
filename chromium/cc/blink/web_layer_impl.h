@@ -16,7 +16,6 @@
 #include "base/memory/scoped_ptr.h"
 #include "cc/blink/cc_blink_export.h"
 #include "cc/layers/layer_client.h"
-#include "third_party/WebKit/public/platform/WebCString.h"
 #include "third_party/WebKit/public/platform/WebColor.h"
 #include "third_party/WebKit/public/platform/WebDoublePoint.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
@@ -39,25 +38,17 @@ class ConvertableToTraceFormat;
 }
 
 namespace cc {
-class Animation;
 class FilterOperations;
 class Layer;
-class LayerSettings;
 }
 
 namespace cc_blink {
-
-class WebToCCAnimationDelegateAdapter;
 
 class WebLayerImpl : public blink::WebLayer {
  public:
   CC_BLINK_EXPORT WebLayerImpl();
   CC_BLINK_EXPORT explicit WebLayerImpl(scoped_refptr<cc::Layer>);
   ~WebLayerImpl() override;
-
-  CC_BLINK_EXPORT static void SetLayerSettings(
-      const cc::LayerSettings& settings);
-  CC_BLINK_EXPORT static const cc::LayerSettings& LayerSettings();
 
   CC_BLINK_EXPORT cc::Layer* layer() const;
 
@@ -106,17 +97,10 @@ class WebLayerImpl : public blink::WebLayer {
   blink::WebColor backgroundColor() const override;
   void setFilters(const cc::FilterOperations& filters) override;
   void setBackgroundFilters(const cc::FilterOperations& filters) override;
-  void setAnimationDelegate(
-      blink::WebCompositorAnimationDelegate* delegate) override;
-  bool addAnimation(cc::Animation* animation) override;
-  void removeAnimation(int animation_id) override;
-  void pauseAnimation(int animation_id, double time_offset) override;
-  void abortAnimation(int animation_id) override;
-  bool hasActiveAnimation() override;
+  bool hasActiveAnimationForTesting() override;
   void setForceRenderSurface(bool force) override;
   void setScrollPositionDouble(blink::WebDoublePoint position) override;
   blink::WebDoublePoint scrollPositionDouble() const override;
-  void setScrollCompensationAdjustment(blink::WebDoublePoint position) override;
   void setScrollClipLayer(blink::WebLayer* clip_layer) override;
   bool scrollable() const override;
   void setUserScrollable(bool horizontal, bool vertical) override;
@@ -147,6 +131,7 @@ class WebLayerImpl : public blink::WebLayer {
   void setScrollClient(blink::WebLayerScrollClient* client) override;
   void setLayerClient(cc::LayerClient* client) override;
   const cc::Layer* ccLayer() const override;
+  cc::Layer* ccLayer() override;
   void setElementId(uint64_t id) override;
   uint64_t elementId() const override;
   void setCompositorMutableProperties(uint32_t properties) override;
@@ -161,8 +146,6 @@ class WebLayerImpl : public blink::WebLayer {
   bool contents_opaque_is_fixed_;
 
  private:
-  scoped_ptr<WebToCCAnimationDelegateAdapter> animation_delegate_adapter_;
-
   DISALLOW_COPY_AND_ASSIGN(WebLayerImpl);
 };
 

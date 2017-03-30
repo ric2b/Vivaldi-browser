@@ -18,7 +18,7 @@ namespace blink {
 // static
 PermissionStatus* PermissionStatus::take(ScriptPromiseResolver* resolver, WebPermissionStatus status, WebPermissionType type)
 {
-    return PermissionStatus::createAndListen(resolver->executionContext(), status, type);
+    return PermissionStatus::createAndListen(resolver->getExecutionContext(), status, type);
 }
 
 PermissionStatus* PermissionStatus::createAndListen(ExecutionContext* executionContext, WebPermissionStatus status, WebPermissionType type)
@@ -30,7 +30,8 @@ PermissionStatus* PermissionStatus::createAndListen(ExecutionContext* executionC
 }
 
 PermissionStatus::PermissionStatus(ExecutionContext* executionContext, WebPermissionStatus status, WebPermissionType type)
-    : ActiveDOMObject(executionContext)
+    : ActiveScriptWrappable(this)
+    , ActiveDOMObject(executionContext)
     , m_status(status)
     , m_type(type)
     , m_listening(false)
@@ -47,9 +48,9 @@ const AtomicString& PermissionStatus::interfaceName() const
     return EventTargetNames::PermissionStatus;
 }
 
-ExecutionContext* PermissionStatus::executionContext() const
+ExecutionContext* PermissionStatus::getExecutionContext() const
 {
-    return ActiveDOMObject::executionContext();
+    return ActiveDOMObject::getExecutionContext();
 }
 
 void PermissionStatus::permissionChanged(WebPermissionType type, WebPermissionStatus status)
@@ -86,11 +87,11 @@ void PermissionStatus::startListening()
 {
     ASSERT(!m_listening);
 
-    WebPermissionClient* client = Permissions::getClient(executionContext());
+    WebPermissionClient* client = Permissions::getClient(getExecutionContext());
     if (!client)
         return;
     m_listening = true;
-    client->startListening(m_type, KURL(KURL(), executionContext()->securityOrigin()->toString()), this);
+    client->startListening(m_type, KURL(KURL(), getExecutionContext()->getSecurityOrigin()->toString()), this);
 }
 
 void PermissionStatus::stopListening()
@@ -98,10 +99,10 @@ void PermissionStatus::stopListening()
     if (!m_listening)
         return;
 
-    ASSERT(executionContext());
+    ASSERT(getExecutionContext());
 
     m_listening = false;
-    WebPermissionClient* client = Permissions::getClient(executionContext());
+    WebPermissionClient* client = Permissions::getClient(getExecutionContext());
     if (!client)
         return;
     client->stopListening(this);

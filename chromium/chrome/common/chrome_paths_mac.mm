@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #import "base/mac/foundation_util.h"
 #import "base/mac/scoped_nsautorelease_pool.h"
+#include "base/memory/free_deleter.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "build/build_config.h"
@@ -225,14 +226,6 @@ base::FilePath GetFrameworkBundlePath() {
 
 bool GetLocalLibraryDirectory(base::FilePath* result) {
   return base::mac::GetLocalDirectory(NSLibraryDirectory, result);
-}
-
-bool GetUserLibraryDirectory(base::FilePath* result) {
-  return base::mac::GetUserDirectory(NSLibraryDirectory, result);
-}
-
-bool GetUserApplicationsDirectory(base::FilePath* result) {
-  return base::mac::GetUserDirectory(NSApplicationDirectory, result);
 }
 
 bool GetGlobalApplicationSupportDirectory(base::FilePath* result) {

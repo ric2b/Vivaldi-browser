@@ -16,6 +16,7 @@
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "net/quic/crypto/quic_compressed_certs_cache.h"
 #include "net/quic/quic_crypto_server_stream.h"
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_spdy_session.h"
@@ -42,7 +43,8 @@ class QuicServerSessionVisitor {
   virtual ~QuicServerSessionVisitor() {}
 
   virtual void OnConnectionClosed(QuicConnectionId connection_id,
-                                  QuicErrorCode error) = 0;
+                                  QuicErrorCode error,
+                                  const std::string& error_details) = 0;
   virtual void OnWriteBlocked(QuicBlockedWriterInterface* blocked_writer) = 0;
   // Called after the given connection is added to the time-wait list.
   virtual void OnConnectionAddedToTimeWaitList(QuicConnectionId connection_id) {
@@ -58,10 +60,12 @@ class QuicServerSessionBase : public QuicSpdySession {
   QuicServerSessionBase(const QuicConfig& config,
                         QuicConnection* connection,
                         QuicServerSessionVisitor* visitor,
-                        const QuicCryptoServerConfig* crypto_config);
+                        const QuicCryptoServerConfig* crypto_config,
+                        QuicCompressedCertsCache* compressed_certs_cache);
 
   // Override the base class to notify the owner of the connection close.
   void OnConnectionClosed(QuicErrorCode error,
+                          const std::string& error_details,
                           ConnectionCloseSource source) override;
   void OnWriteBlocked() override;
 
@@ -77,7 +81,8 @@ class QuicServerSessionBase : public QuicSpdySession {
     return crypto_stream_.get();
   }
 
-  // Override base class to process FEC config received from client.
+  // Override base class to process bandwidth related config received from
+  // client.
   void OnConfigNegotiated() override;
 
   void set_serving_region(const std::string& serving_region) {
@@ -92,15 +97,16 @@ class QuicServerSessionBase : public QuicSpdySession {
   // Return false when connection is closed or forward secure encryption hasn't
   // established yet or number of server initiated streams already reaches the
   // upper limit.
-  bool ShouldCreateOutgoingDynamicStream();
+  bool ShouldCreateOutgoingDynamicStream() override;
 
   // If we should create an incoming stream, returns true. Otherwise
   // does error handling, including communicating the error to the client and
   // possibly closing the connection, and returns false.
-  virtual bool ShouldCreateIncomingDynamicStream(QuicStreamId id);
+  bool ShouldCreateIncomingDynamicStream(QuicStreamId id) override;
 
   virtual QuicCryptoServerStreamBase* CreateQuicCryptoServerStream(
-      const QuicCryptoServerConfig* crypto_config) = 0;
+      const QuicCryptoServerConfig* crypto_config,
+      QuicCompressedCertsCache* compressed_certs_cache) = 0;
 
   const QuicCryptoServerConfig* crypto_config() { return crypto_config_; }
 
@@ -109,6 +115,11 @@ class QuicServerSessionBase : public QuicSpdySession {
   friend class test::QuicSimpleServerSessionPeer;
 
   const QuicCryptoServerConfig* crypto_config_;
+
+  // The cache which contains most recently compressed certs.
+  // Owned by QuicDispatcher.
+  QuicCompressedCertsCache* compressed_certs_cache_;
+
   scoped_ptr<QuicCryptoServerStreamBase> crypto_stream_;
   QuicServerSessionVisitor* visitor_;
 
@@ -127,6 +138,12 @@ class QuicServerSessionBase : public QuicSpdySession {
 
   // Number of packets sent to the peer, at the time we last sent a SCUP.
   int64_t last_scup_packet_number_;
+
+  // Converts QuicBandwidth to an int32 bytes/second that can be
+  // stored in CachedNetworkParameters.  TODO(jokulik): This function
+  // should go away once we fix http://b//27897982
+  int32_t BandwidthToCachedParameterBytesPerSecond(
+      const QuicBandwidth& bandwidth);
 
   DISALLOW_COPY_AND_ASSIGN(QuicServerSessionBase);
 };

@@ -94,10 +94,6 @@ class TabContentManager : public ThumbnailCacheObserver {
   void RemoveTabThumbnail(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& obj,
                           jint tab_id);
-  void RemoveTabThumbnailFromDiskAtAndAboveId(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      jint min_forbidden_id);
   void GetDecompressedThumbnail(JNIEnv* env,
                                 const base::android::JavaParamRef<jobject>& obj,
                                 jint tab_id);
@@ -110,14 +106,14 @@ class TabContentManager : public ThumbnailCacheObserver {
   class TabReadbackRequest;
   typedef base::hash_map<int, scoped_refptr<cc::Layer>> LayerMap;
   typedef base::hash_map<int, scoped_refptr<ThumbnailLayer>> ThumbnailLayerMap;
-  typedef base::ScopedPtrHashMap<int, scoped_ptr<TabReadbackRequest>>
+  typedef base::ScopedPtrHashMap<int, std::unique_ptr<TabReadbackRequest>>
       TabReadbackRequestMap;
 
   void PutThumbnailIntoCache(int tab_id,
                              float thumbnail_scale,
                              const SkBitmap& bitmap);
 
-  scoped_ptr<ThumbnailCache> thumbnail_cache_;
+  std::unique_ptr<ThumbnailCache> thumbnail_cache_;
   ThumbnailLayerMap static_layer_cache_;
   LayerMap live_layer_list_;
   TabReadbackRequestMap pending_tab_readbacks_;

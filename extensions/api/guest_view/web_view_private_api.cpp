@@ -8,8 +8,6 @@
 #include "base/base64.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/memory/tab_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/thumbnails/simple_thumbnail_crop.h"
@@ -24,6 +22,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/schema/web_view_private.h"
 #include "skia/ext/image_operations.h"
 #include "skia/ext/platform_canvas.h"
@@ -33,6 +32,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/scrollbar_size.h"
 #include "ui/gfx/skbitmap_operations.h"
+
 
 using content::WebContents;
 using content::RenderViewHost;
@@ -490,14 +490,14 @@ bool WebViewPrivateGetPageHistoryFunction::RunAsyncSafe(WebViewGuest* guest) {
 
   int currentEntryIndex = controller.GetCurrentEntryIndex();
 
-  std::vector<linked_ptr<
-      vivaldi::web_view_private::GetPageHistory::Results::PageHistoryType>>
+  std::vector<
+      vivaldi::web_view_private::GetPageHistory::Results::PageHistoryType>
       history;
 
   for (int i = 0; i < controller.GetEntryCount(); i++) {
     content::NavigationEntry* entry = controller.GetEntryAtIndex(i);
-    base::string16 name = entry->GetTitleForDisplay(std::string());
-    linked_ptr<
+    base::string16 name = entry->GetTitleForDisplay();
+    scoped_ptr<
         vivaldi::web_view_private::GetPageHistory::Results::PageHistoryType>
         history_entry(new vivaldi::web_view_private::GetPageHistory::Results::
                           PageHistoryType);
@@ -505,7 +505,7 @@ bool WebViewPrivateGetPageHistoryFunction::RunAsyncSafe(WebViewGuest* guest) {
     std::string urlstr = entry->GetVirtualURL().spec();
     history_entry->url = urlstr;
     history_entry->index = i;
-    history.push_back(history_entry);
+    history.push_back(std::move(*history_entry));
   }
   results_ = vivaldi::web_view_private::GetPageHistory::Results::Create(
       currentEntryIndex, history);
@@ -513,31 +513,6 @@ bool WebViewPrivateGetPageHistoryFunction::RunAsyncSafe(WebViewGuest* guest) {
   SendResponse(true);
 
   return true;
-}
-
-WebViewPrivateDiscardPageFunction::WebViewPrivateDiscardPageFunction() {}
-
-WebViewPrivateDiscardPageFunction::~WebViewPrivateDiscardPageFunction() {}
-
-bool WebViewPrivateDiscardPageFunction::RunAsyncSafe(WebViewGuest* guest) {
-  WebContents* web_contents = guest->web_contents();
-
-  int64_t web_content_id = reinterpret_cast<int64_t>(web_contents);
-
-  memory::TabManager* tab_manager = g_browser_process->GetTabManager();
-
-  WebContents* newcontents = tab_manager->DiscardTabById(web_content_id);
-
-  bool success = true;
-  if (!newcontents) {
-    success = false;
-    error_ = "Error: WebContents not freed. Was active, played media or "
-             "already discarded.";
-  }
-
-  SendResponse(success);
-
-  return success;
 }
 
 WebViewPrivateSetExtensionHostFunction::

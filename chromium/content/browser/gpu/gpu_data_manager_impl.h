@@ -21,7 +21,6 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "content/public/browser/gpu_data_manager.h"
-#include "content/public/common/gpu_memory_stats.h"
 #include "content/public/common/three_d_api_types.h"
 #include "gpu/config/gpu_info.h"
 
@@ -29,6 +28,11 @@ class GURL;
 
 namespace base {
 class CommandLine;
+}
+
+namespace gpu {
+struct GpuPreferences;
+struct VideoMemoryUsageStats;
 }
 
 namespace content {
@@ -103,18 +107,18 @@ class CONTENT_EXPORT GpuDataManagerImpl
   void UpdateGpuInfo(const gpu::GPUInfo& gpu_info);
 
   void UpdateVideoMemoryUsageStats(
-      const GPUVideoMemoryUsageStats& video_memory_usage_stats);
+      const gpu::VideoMemoryUsageStats& video_memory_usage_stats);
 
   // Insert disable-feature switches corresponding to preliminary gpu feature
   // flags into the renderer process command line.
   void AppendRendererCommandLine(base::CommandLine* command_line) const;
 
   // Insert switches into gpu process command line: kUseGL, etc.
-  void AppendGpuCommandLine(base::CommandLine* command_line) const;
-
-  // Insert switches into plugin process command line:
-  // kDisableCoreAnimationPlugins.
-  void AppendPluginCommandLine(base::CommandLine* command_line) const;
+  // If the gpu_preferences isn't a nullptr, the gpu_preferences will be set
+  // for some GPU switches which have been replaced by GpuPreferences, and those
+  // switches will not be append to the command_line anymore.
+  void AppendGpuCommandLine(base::CommandLine* command_line,
+                            gpu::GpuPreferences* gpu_preferences) const;
 
   // Update WebPreferences for renderer based on blacklisting decisions.
   void UpdateRendererWebPrefs(WebPreferences* prefs) const;
@@ -171,9 +175,6 @@ class CONTENT_EXPORT GpuDataManagerImpl
 
   // Get number of features being blacklisted.
   size_t GetBlacklistedFeatureCount() const;
-
-  void SetDisplayCount(unsigned int display_count);
-  unsigned int GetDisplayCount() const;
 
   // Set the active gpu.
   // Return true if it's a different GPU from the previous active one.

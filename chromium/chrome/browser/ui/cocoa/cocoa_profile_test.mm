@@ -13,7 +13,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -57,9 +56,8 @@ void CocoaProfileTest::SetUp() {
   ASSERT_TRUE(profile_manager_.SetUp());
 
   profile_ = profile_manager_.CreateTestingProfile(
-      "Person 1", scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
-      base::UTF8ToUTF16("Person 1"), 0, std::string(),
-      testing_factories_);
+      "Person 1", std::unique_ptr<syncable_prefs::PrefServiceSyncable>(),
+      base::UTF8ToUTF16("Person 1"), 0, std::string(), testing_factories_);
   ASSERT_TRUE(profile_);
 
   // TODO(shess): These are needed in case someone creates a browser

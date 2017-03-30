@@ -57,18 +57,6 @@ void QuicMultipathReceivedPacketManager::RecordPacketReceived(
   manager->RecordPacketReceived(bytes, header, receipt_time);
 }
 
-void QuicMultipathReceivedPacketManager::RecordPacketRevived(
-    QuicPathId path_id,
-    QuicPacketNumber packet_number) {
-  QuicReceivedPacketManager* manager = path_managers_[path_id];
-  if (manager == nullptr) {
-    QUIC_BUG << "Revived a packet on a non-existent path.";
-    return;
-  }
-
-  manager->RecordPacketRevived(packet_number);
-}
-
 bool QuicMultipathReceivedPacketManager::IsMissing(
     QuicPathId path_id,
     QuicPacketNumber packet_number) {
@@ -91,23 +79,6 @@ bool QuicMultipathReceivedPacketManager::IsAwaitingPacket(
   }
 
   return manager->IsAwaitingPacket(packet_number);
-}
-
-void QuicMultipathReceivedPacketManager::UpdateReceivedPacketInfo(
-    std::vector<QuicAckFrame>* ack_frames,
-    QuicTime approximate_now,
-    bool force_all_paths) {
-  QuicAckFrame ack_frame;
-  for (std::pair<QuicPathId, QuicReceivedPacketManager*>
-           per_path_received_packet_manager : path_managers_) {
-    if (!force_all_paths &&
-        !per_path_received_packet_manager.second->ack_frame_updated()) {
-      continue;
-    }
-    per_path_received_packet_manager.second->UpdateReceivedPacketInfo(
-        &ack_frame, approximate_now);
-    ack_frames->push_back(ack_frame);
-  }
 }
 
 void QuicMultipathReceivedPacketManager::UpdatePacketInformationSentByPeer(

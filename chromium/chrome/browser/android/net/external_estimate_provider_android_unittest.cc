@@ -10,6 +10,7 @@
 #include "base/at_exit.h"
 #include "base/test/histogram_tester.h"
 #include "base/time/time.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/network_quality_estimator.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -36,7 +37,7 @@ TEST(ExternalEstimateProviderAndroidTest, BasicsTest) {
 class TestNetworkQualityEstimator : public net::NetworkQualityEstimator {
  public:
   TestNetworkQualityEstimator(
-      scoped_ptr<chrome::android::ExternalEstimateProviderAndroid>
+      std::unique_ptr<chrome::android::ExternalEstimateProviderAndroid>
           external_estimate_provider,
       const std::map<std::string, std::string>& variation_params)
       : NetworkQualityEstimator(std::move(external_estimate_provider),
@@ -74,9 +75,13 @@ class TestExternalEstimateProviderAndroid
 // Tests if the |ExternalEstimateProviderAndroid| notifies
 // |NetworkQualityEstimator|.
 TEST(ExternalEstimateProviderAndroidTest, DelegateTest) {
+  content::TestBrowserThreadBundle thread_bundle(
+      content::TestBrowserThreadBundle::IO_MAINLOOP);
+
   base::ShadowingAtExitManager at_exit_manager;
   base::HistogramTester histogram_tester;
-  scoped_ptr<TestExternalEstimateProviderAndroid> external_estimate_provider;
+  std::unique_ptr<TestExternalEstimateProviderAndroid>
+      external_estimate_provider;
   external_estimate_provider.reset(new TestExternalEstimateProviderAndroid());
 
   TestExternalEstimateProviderAndroid* ptr = external_estimate_provider.get();

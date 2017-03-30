@@ -11,13 +11,13 @@
 
 namespace blink {
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 static unsigned checkConnectedSubframeCountIsConsistent(Node&);
 #endif
 
 void ChildFrameDisconnector::disconnect(DisconnectPolicy policy)
 {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     checkConnectedSubframeCountIsConsistent(root());
 #endif
 
@@ -60,7 +60,7 @@ void ChildFrameDisconnector::disconnectCollectedFrameOwners()
         HTMLFrameOwnerElement* owner = m_frameOwners[i].get();
         // Don't need to traverse up the tree for the first owner since no
         // script could have moved it.
-        if (!i || root().containsIncludingShadowDOM(owner))
+        if (!i || root().isShadowIncludingInclusiveAncestorOf(owner))
             owner->disconnectContentFrame();
     }
 }
@@ -71,7 +71,7 @@ void ChildFrameDisconnector::collectFrameOwners(ElementShadow& shadow)
         collectFrameOwners(*root);
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 static unsigned checkConnectedSubframeCountIsConsistent(Node& node)
 {
     unsigned count = 0;
@@ -91,12 +91,12 @@ static unsigned checkConnectedSubframeCountIsConsistent(Node& node)
 
     // If we undercount there's possibly a security bug since we'd leave frames
     // in subtrees outside the document.
-    ASSERT(node.connectedSubframeCount() >= count);
+    DCHECK_GE(node.connectedSubframeCount(), count);
 
     // If we overcount it's safe, but not optimal because it means we'll traverse
     // through the document in ChildFrameDisconnector looking for frames that have
     // already been disconnected.
-    ASSERT(node.connectedSubframeCount() == count);
+    DCHECK_EQ(node.connectedSubframeCount(), count);
 
     return count;
 }

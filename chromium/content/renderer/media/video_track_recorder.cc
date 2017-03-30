@@ -14,14 +14,15 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/video_frame.h"
+#include "media/base/video_util.h"
 #include "ui/gfx/geometry/size.h"
 
 extern "C" {
 // VPX_CODEC_DISABLE_COMPAT excludes parts of the libvpx API that provide
 // backwards compatibility for legacy applications using the library.
 #define VPX_CODEC_DISABLE_COMPAT 1
-#include "third_party/libvpx_new/source/libvpx/vpx/vp8cx.h"
-#include "third_party/libvpx_new/source/libvpx/vpx/vpx_encoder.h"
+#include "third_party/libvpx/source/libvpx/vpx/vp8cx.h"
+#include "third_party/libvpx/source/libvpx/vpx/vpx_encoder.h"
 }
 
 using media::VideoFrame;
@@ -45,12 +46,12 @@ struct VpxCodecDeleter {
   }
 };
 
-typedef scoped_ptr<vpx_codec_ctx_t, VpxCodecDeleter> ScopedVpxCodecCtxPtr;
+typedef std::unique_ptr<vpx_codec_ctx_t, VpxCodecDeleter> ScopedVpxCodecCtxPtr;
 
 void OnFrameEncodeCompleted(
     const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_cb,
     const scoped_refptr<VideoFrame>& frame,
-    scoped_ptr<std::string> data,
+    std::unique_ptr<std::string> data,
     base::TimeTicks capture_timestamp,
     bool keyframe) {
   DVLOG(1) << (keyframe ? "" : "non ") << "keyframe "<< data->length() << "B, "
@@ -75,7 +76,7 @@ void OnFrameEncodeCompleted(
 class VideoTrackRecorder::VpxEncoder final
     : public base::RefCountedThreadSafe<VpxEncoder> {
  public:
-  static void ShutdownEncoder(scoped_ptr<base::Thread> encoding_thread,
+  static void ShutdownEncoder(std::unique_ptr<base::Thread> encoding_thread,
                               ScopedVpxCodecCtxPtr encoder);
 
   VpxEncoder(bool use_vp9,
@@ -123,7 +124,7 @@ class VideoTrackRecorder::VpxEncoder final
 
   // Thread for encoding. Active for the lifetime of VpxEncoder. All variables
   // below this are used in this thread.
-  scoped_ptr<base::Thread> encoding_thread_;
+  std::unique_ptr<base::Thread> encoding_thread_;
   // VP8 internal objects: configuration and encoder.
   vpx_codec_enc_cfg_t codec_config_;
   // |encoder_| is a special scoped pointer to guarantee proper destruction.
@@ -139,7 +140,7 @@ class VideoTrackRecorder::VpxEncoder final
 
 // static
 void VideoTrackRecorder::VpxEncoder::ShutdownEncoder(
-    scoped_ptr<base::Thread> encoding_thread,
+    std::unique_ptr<base::Thread> encoding_thread,
     ScopedVpxCodecCtxPtr encoder) {
   DCHECK(encoding_thread->IsRunning());
   encoding_thread->Stop();
@@ -186,11 +187,22 @@ void VideoTrackRecorder::VpxEncoder::StartFrameEncode(
 }
 
 void VideoTrackRecorder::VpxEncoder::EncodeOnEncodingThread(
-    const scoped_refptr<VideoFrame>& frame,
+    const scoped_refptr<VideoFrame>& video_frame,
     base::TimeTicks capture_timestamp) {
   TRACE_EVENT0("video",
                "VideoTrackRecorder::VpxEncoder::EncodeOnEncodingThread");
   DCHECK(encoding_thread_->task_runner()->BelongsToCurrentThread());
+
+  if (!(video_frame->format() == media::PIXEL_FORMAT_I420 ||
+        video_frame->format() == media::PIXEL_FORMAT_YV12 ||
+        video_frame->format() == media::PIXEL_FORMAT_YV12A)) {
+    NOTREACHED();
+    return;
+  }
+  scoped_refptr<media::VideoFrame> frame = video_frame;
+  // Drop alpha channel since we do not support it yet.
+  if (frame->format() == media::PIXEL_FORMAT_YV12A)
+    frame = media::WrapAsI420VideoFrame(video_frame);
 
   const gfx::Size frame_size = frame->visible_rect().size();
   if (!IsInitialized() ||
@@ -227,7 +239,7 @@ void VideoTrackRecorder::VpxEncoder::EncodeOnEncodingThread(
                                << vpx_codec_error(encoder_.get()) << " -"
                                << vpx_codec_error_detail(encoder_.get());
 
-  scoped_ptr<std::string> data(new std::string);
+  std::unique_ptr<std::string> data(new std::string);
   bool keyframe = false;
   vpx_codec_iter_t iter = NULL;
   const vpx_codec_cx_pkt_t* pkt = NULL;
@@ -268,9 +280,9 @@ void VideoTrackRecorder::VpxEncoder::ConfigureEncoding(const gfx::Size& size) {
   DCHECK_EQ(240u, codec_config_.g_h);
   DCHECK_EQ(256u, codec_config_.rc_target_bitrate);
   // Use the selected bitrate or adjust default bit rate to account for the
-  // actual size.
+  // actual size.  Note: |rc_target_bitrate| units are kbit per second.
   if (bits_per_second_ > 0) {
-    codec_config_.rc_target_bitrate = bits_per_second_;
+    codec_config_.rc_target_bitrate = bits_per_second_ / 1000;
   } else {
     codec_config_.rc_target_bitrate = size.GetArea() *
                                       codec_config_.rc_target_bitrate /
@@ -306,9 +318,11 @@ void VideoTrackRecorder::VpxEncoder::ConfigureEncoding(const gfx::Size& size) {
   // Note that due to http://crbug.com/440223, it might be necessary to force a
   // key frame after 10,000frames since decoding fails after 30,000 non-key
   // frames.
+  // Forcing a keyframe in regular intervals also allows seeking in the
+  // resulting recording with decent performance.
   codec_config_.kf_mode = VPX_KF_AUTO;
   codec_config_.kf_min_dist = 0;
-  codec_config_.kf_max_dist = 30000;
+  codec_config_.kf_max_dist = 100;
 
   // Do not saturate CPU utilization just for encoding. On a lower-end system
   // with only 1 or 2 cores, use only one thread for encoding. On systems with
@@ -377,18 +391,17 @@ VideoTrackRecorder::VideoTrackRecorder(
           new VpxEncoder(use_vp9, on_encoded_video_callback, bits_per_second)) {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   DCHECK(!track_.isNull());
-  DCHECK(track_.extraData());
+  DCHECK(track_.getExtraData());
 
   // StartFrameEncode() will be called on Render IO thread.
-  AddToVideoTrack(this,
-                  base::Bind(&VideoTrackRecorder::VpxEncoder::StartFrameEncode,
-                             encoder_),
-                  track_);
+  MediaStreamVideoSink::ConnectToTrack(
+      track_,
+      base::Bind(&VideoTrackRecorder::VpxEncoder::StartFrameEncode, encoder_));
 }
 
 VideoTrackRecorder::~VideoTrackRecorder() {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
-  RemoveFromVideoTrack(this, track_);
+  MediaStreamVideoSink::DisconnectFromTrack();
   track_.reset();
 }
 

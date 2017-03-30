@@ -29,26 +29,22 @@ namespace {
 
 void AddNodeHelper(bookmarks::ManagedBookmarkService* managed,
                    const BookmarkNode* node,
-                   std::vector<linked_ptr<BookmarkTreeNode>>* nodes,
+                   std::vector<BookmarkTreeNode>* nodes,
                    bool recurse,
                    bool only_folders) {
-  if (node->IsVisible()) {
-    linked_ptr<BookmarkTreeNode> new_node(
-        GetBookmarkTreeNode(managed, node, recurse, only_folders));
-    nodes->push_back(new_node);
-  }
+  if (node->IsVisible())
+    nodes->push_back(GetBookmarkTreeNode(managed, node, recurse, only_folders));
 }
 
 }  // namespace
 
-BookmarkTreeNode* GetBookmarkTreeNode(
-    bookmarks::ManagedBookmarkService* managed,
-    const BookmarkNode* node,
-    bool recurse,
-    bool only_folders) {
-  BookmarkTreeNode* bookmark_tree_node = new BookmarkTreeNode;
+BookmarkTreeNode GetBookmarkTreeNode(bookmarks::ManagedBookmarkService* managed,
+                                     const BookmarkNode* node,
+                                     bool recurse,
+                                     bool only_folders) {
+  BookmarkTreeNode bookmark_tree_node;
   PopulateBookmarkTreeNode(managed, node, recurse, only_folders,
-                           bookmark_tree_node);
+                           &bookmark_tree_node);
   return bookmark_tree_node;
 }
 
@@ -88,18 +84,19 @@ void PopulateBookmarkTreeNode(
   }
 
   std::string temp;
-  node->GetMetaInfo("Nickname", &temp);
-  out_bookmark_tree_node->nickname =  temp;
-
-  node->GetMetaInfo("Description", &temp);
-  out_bookmark_tree_node->description =  temp;
-
-  node->GetMetaInfo("Thumbnail", &temp);
-  out_bookmark_tree_node->thumbnail =  temp;
-
-  node->GetMetaInfo("Speeddial", &temp);
-  bool speeddial = (temp == "true") ? true : false;
-  out_bookmark_tree_node->speeddial =  speeddial;
+  if (node->GetMetaInfo("Nickname", &temp)) {
+    out_bookmark_tree_node->nickname = temp;
+  }
+  if (node->GetMetaInfo("Description", &temp)) {
+    out_bookmark_tree_node->description = temp;
+  }
+  if (node->GetMetaInfo("Thumbnail", &temp)) {
+    out_bookmark_tree_node->thumbnail = temp;
+  }
+  if (node->GetMetaInfo("Speeddial", &temp)) {
+    bool speeddial = (temp == "true") ? true : false;
+    out_bookmark_tree_node->speeddial = speeddial;
+  }
 
   out_bookmark_tree_node->trash = (node->type() ==
                                bookmarks::BookmarkNode::TRASH);
@@ -111,30 +108,29 @@ void PopulateBookmarkTreeNode(
   }
 
   if (recurse && node->is_folder()) {
-    std::vector<linked_ptr<BookmarkTreeNode>> children;
+    std::vector<BookmarkTreeNode> children;
     for (int i = 0; i < node->child_count(); ++i) {
       const BookmarkNode* child = node->GetChild(i);
       if (child->IsVisible() && (!only_folders || child->is_folder())) {
-        linked_ptr<BookmarkTreeNode> child_node(
+        children.push_back(
             GetBookmarkTreeNode(managed, child, true, only_folders));
-        children.push_back(child_node);
       }
     }
     out_bookmark_tree_node->children.reset(
-        new std::vector<linked_ptr<BookmarkTreeNode>>(children));
+        new std::vector<BookmarkTreeNode>(std::move(children)));
   }
 }
 
 void AddNode(bookmarks::ManagedBookmarkService* managed,
              const BookmarkNode* node,
-             std::vector<linked_ptr<BookmarkTreeNode>>* nodes,
+             std::vector<BookmarkTreeNode>* nodes,
              bool recurse) {
   return AddNodeHelper(managed, node, nodes, recurse, false);
 }
 
 void AddNodeFoldersOnly(bookmarks::ManagedBookmarkService* managed,
                         const BookmarkNode* node,
-                        std::vector<linked_ptr<BookmarkTreeNode>>* nodes,
+                        std::vector<BookmarkTreeNode>* nodes,
                         bool recurse) {
   return AddNodeHelper(managed, node, nodes, recurse, true);
 }

@@ -9,7 +9,7 @@
 
 namespace blink {
 
-DedicatedWorkerMessagingProxy::DedicatedWorkerMessagingProxy(InProcessWorkerBase* workerObject, PassOwnPtrWillBeRawPtr<WorkerClients> workerClients)
+DedicatedWorkerMessagingProxy::DedicatedWorkerMessagingProxy(InProcessWorkerBase* workerObject, WorkerClients* workerClients)
     : WorkerMessagingProxy(workerObject, workerClients)
 {
 }
@@ -18,7 +18,7 @@ DedicatedWorkerMessagingProxy::~DedicatedWorkerMessagingProxy()
 {
 }
 
-PassRefPtr<WorkerThread> DedicatedWorkerMessagingProxy::createWorkerThread(double originTime)
+PassOwnPtr<WorkerThread> DedicatedWorkerMessagingProxy::createWorkerThread(double originTime)
 {
     return DedicatedWorkerThread::create(loaderProxy(), workerObjectProxy(), originTime);
 }

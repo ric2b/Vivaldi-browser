@@ -30,12 +30,8 @@ class MEDIA_EXPORT MimeUtil {
     MP3,
     AC3,
     EAC3,
-    MPEG2_AAC_LC,
-    MPEG2_AAC_MAIN,
-    MPEG2_AAC_SSR,
-    MPEG4_AAC_LC,
-    MPEG4_AAC_SBR_v1,
-    MPEG4_AAC_SBR_PS_v2,
+    MPEG2_AAC,
+    MPEG4_AAC,
     VORBIS,
     OPUS,
     H264,
@@ -91,8 +87,16 @@ class MEDIA_EXPORT MimeUtil {
   };
   typedef std::map<std::string, CodecEntry> StringToCodecMappings;
 
-  // For faster lookup, keep hash sets.
+  // Initializes the supported media types into hash sets for faster lookup.
   void InitializeMimeTypeMaps();
+
+  // Initializes the supported media formats (|media_format_map_|).
+  void AddSupportedMediaFormats();
+
+  // Adds |mime_type| with the specified codecs to |media_format_map_|.
+  void AddContainerWithCodecs(const std::string& mime_type,
+                              const CodecSet& codecs_list,
+                              bool is_proprietary_mime_type);
 
   // Returns IsSupported if all codec IDs in |codecs| are unambiguous and are
   // supported in |mime_type_lower_case|. MayBeSupported is returned if at least
@@ -113,9 +117,11 @@ class MEDIA_EXPORT MimeUtil {
   // |is_ambiguous| is true if |codec_id| did not have enough information to
   // unambiguously determine the proper Codec enum value. If |is_ambiguous|
   // is true |codec| contains the best guess for the intended Codec enum value.
+  // |is_encrypted| means the codec will be used with encrypted blocks.
   bool StringToCodec(const std::string& codec_id,
                      Codec* codec,
-                     bool* is_ambiguous) const;
+                     bool* is_ambiguous,
+                     bool is_encrypted) const;
 
   // Returns true if |codec| is supported when contained in
   // |mime_type_lower_case|. Note: This method will always return false for
@@ -148,8 +154,9 @@ class MEDIA_EXPORT MimeUtil {
   // A map of mime_types and hash map of the supported codecs for the mime_type.
   MediaFormatMappings media_format_map_;
 
-  // Keeps track of whether proprietary codec support should be
-  // advertised to callers.
+  // List of proprietary containers in |media_format_map_|.
+  std::vector<std::string> proprietary_media_containers_;
+  // Whether proprietary codec support should be advertised to callers.
   bool allow_proprietary_codecs_;
 
   // Lookup table for string compare based string -> Codec mappings.

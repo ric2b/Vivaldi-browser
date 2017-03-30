@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/memory/shared_memory.h"
 #include "build/build_config.h"
-#include "content/common/gpu/client/command_buffer_proxy_impl.h"
 #include "content/common/pepper_file_util.h"
 #include "content/public/common/content_client.h"
 #include "content/public/renderer/content_renderer_client.h"
@@ -18,7 +17,9 @@
 #include "content/renderer/pepper/gfx_conversion.h"
 #include "content/renderer/pepper/ppb_graphics_3d_impl.h"
 #include "content/renderer/pepper/video_decoder_shim.h"
+#include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "media/base/limits.h"
+#include "media/gpu/ipc/client/gpu_video_decode_accelerator_host.h"
 #include "media/video/video_decode_accelerator.h"
 #include "ppapi/c/pp_completion_callback.h"
 #include "ppapi/c/pp_errors.h"
@@ -64,7 +65,7 @@ media::VideoCodecProfile PepperToMediaVideoProfile(PP_VideoProfile profile) {
     case PP_VIDEOPROFILE_VP8_ANY:
       return media::VP8PROFILE_ANY;
     case PP_VIDEOPROFILE_VP9_ANY:
-      return media::VP9PROFILE_ANY;
+      return media::VP9PROFILE_PROFILE0;
     // No default case, to catch unhandled PP_VideoProfile values.
   }
 
@@ -133,7 +134,8 @@ int32_t PepperVideoDecoderHost::OnHostMsgInitialize(
   PPB_Graphics3D_Impl* graphics3d =
       static_cast<PPB_Graphics3D_Impl*>(enter_graphics.object());
 
-  CommandBufferProxyImpl* command_buffer = graphics3d->GetCommandBufferProxy();
+  gpu::CommandBufferProxyImpl* command_buffer =
+      graphics3d->GetCommandBufferProxy();
   if (!command_buffer)
     return PP_ERROR_FAILED;
 
@@ -145,10 +147,14 @@ int32_t PepperVideoDecoderHost::OnHostMsgInitialize(
   if (acceleration != PP_HARDWAREACCELERATION_NONE) {
     // This is not synchronous, but subsequent IPC messages will be buffered, so
     // it is okay to immediately send IPC messages.
-    decoder_ = command_buffer->CreateVideoDecoder();
-    if (decoder_ && decoder_->Initialize(profile_, this)) {
-      initialized_ = true;
-      return PP_OK;
+    gpu::GpuChannelHost* channel = command_buffer->channel();
+    if (channel) {
+      decoder_.reset(
+          new media::GpuVideoDecodeAcceleratorHost(channel, command_buffer));
+      if (decoder_->Initialize(profile_, this)) {
+        initialized_ = true;
+        return PP_OK;
+      }
     }
     decoder_.reset();
     if (acceleration == PP_HARDWAREACCELERATION_ONLY)
@@ -274,10 +280,11 @@ int32_t PepperVideoDecoderHost::OnHostMsgAssignTextures(
 
   std::vector<media::PictureBuffer> picture_buffers;
   for (uint32_t i = 0; i < texture_ids.size(); i++) {
+    media::PictureBuffer::TextureIds ids;
+    ids.push_back(texture_ids[i]);
     media::PictureBuffer buffer(
         texture_ids[i],  // Use the texture_id to identify the buffer.
-        gfx::Size(size.width, size.height),
-        texture_ids[i]);
+        gfx::Size(size.width, size.height), ids);
     picture_buffers.push_back(buffer);
   }
   decoder_->AssignPictureBuffers(picture_buffers);
@@ -346,8 +353,10 @@ int32_t PepperVideoDecoderHost::OnHostMsgReset(
 
 void PepperVideoDecoderHost::ProvidePictureBuffers(
     uint32_t requested_num_of_buffers,
+    uint32_t textures_per_buffer,
     const gfx::Size& dimensions,
     uint32_t texture_target) {
+  DCHECK_EQ(1u, textures_per_buffer);
   RequestTextures(std::max(min_picture_count_, requested_num_of_buffers),
                   dimensions,
                   texture_target,
@@ -425,7 +434,6 @@ void PepperVideoDecoderHost::NotifyError(
     case media::VideoDecodeAccelerator::ILLEGAL_STATE:
     case media::VideoDecodeAccelerator::INVALID_ARGUMENT:
     case media::VideoDecodeAccelerator::PLATFORM_FAILURE:
-    case media::VideoDecodeAccelerator::LARGEST_ERROR_ENUM:
       pp_error = PP_ERROR_RESOURCE_FAILED;
       break;
     // No default case, to catch unhandled enum values.

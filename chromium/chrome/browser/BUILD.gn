@@ -42,8 +42,11 @@ if (is_win) {
   config("browser_win_linker_flags") {
     libs = [
       "credui.lib",
+      "cryptui.lib",
+      "dwmapi.lib",
       "netapi32.lib",
       "ndfapi.lib",  # Used by browser/net/net_error_diagnostics_dialog_win.h
+      "pdh.lib",
     ]
     ldflags = [ "/DELAYLOAD:ndfapi.dll" ]
   }
@@ -81,6 +84,8 @@ source_set("browser") {
   sources = []
   libs = []
   ldflags = []
+
+  allow_circular_includes_from = [ "//chrome/browser/ui" ]
 
   # iOS/non-iOS shared deps. New dependencies should generally be added in the
   # non-iOS deps below.
@@ -148,7 +153,9 @@ source_set("browser") {
     "//components/packed_ct_ev_whitelist",
     "//components/password_manager/core/browser",
     "//components/password_manager/core/common",
+    "//components/policy",
     "//components/policy:policy_component",
+    "//components/policy/proto",
     "//components/proxy_config",
     "//components/query_parser",
     "//components/rappor",
@@ -168,6 +175,7 @@ source_set("browser") {
     "//components/startup_metric_utils/common",
     "//components/strings",
     "//components/suggestions",
+    "//components/supervised_user_error_page",
     "//components/sync_bookmarks",
     "//components/sync_driver",
     "//components/sync_sessions",
@@ -188,6 +196,8 @@ source_set("browser") {
     "//components/webdata_services",
     "//content/public/browser",
     "//content/public/common",
+    "//content/public/common:feature_h264_with_openh264_ffmpeg",
+    "//content/public/common:features",
     "//courgette:courgette_lib",
     "//crypto",
     "//google_apis",
@@ -363,12 +373,12 @@ source_set("browser") {
       "//media/midi",
       "//mojo/common",
       "//mojo/edk/system",
-      "//mojo/environment:chromium",
       "//mojo/public/cpp/bindings",
       "//mojo/public/js",
       "//mojo/shell/public/cpp",
       "//net:extras",
       "//net:net_with_v8",
+      "//skia/public",
       "//storage/browser",
       "//storage/common",
       "//third_party/WebKit/public:image_resources",
@@ -416,16 +426,20 @@ source_set("browser") {
   if (!is_win && !is_mac && !is_ios) {
     sources += [ "net/net_error_diagnostics_dialog_generic.cc" ]
   }
-  if (!is_android && !is_ios && !is_chromeos && enable_configuration_policy) {
+  if (!is_android && !is_ios && !is_chromeos) {
     sources += [
       "net/disk_cache_dir_policy_handler.cc",
       "net/disk_cache_dir_policy_handler.h",
     ]
   }
-  if (!is_android && !is_ios && enable_configuration_policy) {
+  if (!is_android && !is_ios) {
     sources += [
       "download/download_dir_policy_handler.cc",
       "download/download_dir_policy_handler.h",
+    ]
+    deps += [
+      "//chrome/browser/policy:path_parser",
+      "//net:net_browser_services",
     ]
   }
   if (is_mac) {
@@ -494,48 +508,6 @@ source_set("browser") {
     deps += [ "//components/nacl/browser" ]
   }
 
-  if (enable_configuration_policy) {
-    sources +=
-        rebase_path(gypi_values.chrome_browser_policy_shared_with_ios_sources,
-                    ".",
-                    "//chrome")
-    deps += [
-      "//components/policy",
-      "//components/policy/proto",
-    ]
-    if (!is_ios) {
-      sources += rebase_path(gypi_values.chrome_browser_policy_non_ios_sources,
-                             ".",
-                             "//chrome")
-    }
-    if (!is_chromeos) {
-      sources += rebase_path(
-              gypi_values.chrome_browser_policy_shared_with_ios_not_chromeos_sources,
-              ".",
-              "//chrome")
-    }
-    if (is_win || is_mac || is_desktop_linux) {
-      sources += rebase_path(gypi_values.chrome_browser_policy_desktop_sources,
-                             ".",
-                             "//chrome")
-    }
-    if (is_android || is_ios) {
-      sources += rebase_path(gypi_values.chrome_browser_policy_mobile_sources,
-                             ".",
-                             "//chrome")
-    } else {
-      deps += [
-        "//chrome/browser/policy:path_parser",
-        "//net:net_browser_services",
-      ]
-    }
-  } else {
-    # Configuration policy disabled.
-    sources += rebase_path(gypi_values.chrome_browser_policy_disabled_sources,
-                           ".",
-                           "//chrome")
-  }
-
   if (enable_plugins) {
     sources +=
         rebase_path(gypi_values.chrome_browser_plugins_sources, ".", "//chrome")
@@ -594,6 +566,10 @@ source_set("browser") {
                            ".",
                            "//chrome")
     deps += [ "//chrome/browser/chromeos" ]
+  } else {  # Non-ChromeOS.
+    sources += rebase_path(gypi_values.chrome_browser_non_chromeos_sources,
+                           ".",
+                           "//chrome")
   }
 
   if (is_chromeos || is_ios) {
@@ -641,7 +617,7 @@ source_set("browser") {
     deps += [
       "//components/mus/public/cpp",
       "//content/public/common",
-      "//mojo/shell/runner/child:lib",
+      "//mojo/shell/runner/common",
       "//ui/aura",
       "//ui/compositor",
       "//ui/keyboard",
@@ -795,8 +771,6 @@ source_set("browser") {
       "//components/toolbar",
       "//components/web_contents_delegate_android",
     ]
-
-    defines += [ "ENABLE_DATA_REDUCTION_PROXY_DEBUGGING" ]
   }
 
   if (is_android) {
@@ -871,7 +845,6 @@ source_set("browser") {
       "//third_party/iaccessible2",
       "//third_party/isimpledom",
       "//third_party/wtl",
-      "//ui/metro_viewer",
     ]
 
     all_dependent_configs = [ ":browser_win_linker_flags" ]
@@ -971,10 +944,16 @@ source_set("browser") {
     deps += [ "//chrome/browser/media/router" ]
   }
 
-  if (mojo_media_host == "browser") {
-    deps += [ "//media/mojo/services:application_factory" ]
-  } else if (enable_mojo_media) {
+  if (enable_mojo_media) {
     configs += [ "//media/mojo/services:mojo_media_config" ]
+    sources += [
+      "media/output_protection_impl.cc",
+      "media/output_protection_impl.h",
+    ]
+    deps += [ "//media/mojo/interfaces" ]
+    if (mojo_media_host == "browser") {
+      deps += [ "//media/mojo/services:application_factory" ]
+    }
   }
 
   if (enable_wayland_server) {

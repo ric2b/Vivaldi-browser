@@ -45,7 +45,6 @@
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/range/range.h"
@@ -87,12 +86,12 @@ class ImeEventGuard;
 class RenderFrameImpl;
 class RenderFrameProxy;
 class RenderWidgetCompositor;
+class RenderWidgetOwnerDelegate;
 class RenderWidgetScreenMetricsEmulator;
 class ResizingModeSelector;
 struct ContextMenuParams;
 struct DidOverscrollParams;
 struct ResizeParams;
-struct WebPluginGeometry;
 
 // RenderWidget provides a communication bridge between a WebWidget and
 // a RenderWidgetHost, the latter of which lives in a different process.
@@ -149,6 +148,13 @@ class CONTENT_EXPORT RenderWidget
     return host_context_menu_location_;
   }
 
+  void set_owner_delegate(RenderWidgetOwnerDelegate* owner_delegate) {
+    DCHECK(!owner_delegate_);
+    owner_delegate_ = owner_delegate;
+  }
+
+  RenderWidgetOwnerDelegate* owner_delegate() { return owner_delegate_; }
+
   // ScreenInfo exposed so it can be passed to subframe RenderWidgets.
   blink::WebScreenInfo screen_info() const { return screen_info_; }
 
@@ -195,7 +201,7 @@ class CONTENT_EXPORT RenderWidget
       scoped_ptr<cc::FrameTimingTracker::CompositeTimingSet> composite_events,
       scoped_ptr<cc::FrameTimingTracker::MainFrameTimingSet> main_frame_events)
       override;
-  void ScheduleAnimation() override;
+  void RequestScheduleAnimation() override;
   void UpdateVisualState() override;
   void WillBeginCompositorFrame() override;
 
@@ -205,10 +211,14 @@ class CONTENT_EXPORT RenderWidget
   void ObserveWheelEventAndResult(const blink::WebMouseWheelEvent& wheel_event,
                                   const gfx::Vector2dF& wheel_unused_delta,
                                   bool event_processed) override;
+  void ObserveGestureEventAndResult(const blink::WebGestureEvent& gesture_event,
+                                    const gfx::Vector2dF& unused_delta,
+                                    bool event_processed) override;
+
   void OnDidHandleKeyEvent() override;
   void OnDidOverscroll(const DidOverscrollParams& params) override;
   void OnInputEventAck(scoped_ptr<InputEventAck> input_event_ack) override;
-  void NonBlockingInputEventHandled(
+  void NotifyInputEventHandled(
       blink::WebInputEvent::Type handled_type) override;
   void SetInputHandler(RenderWidgetInputHandler* input_handler) override;
   void UpdateTextInputState(ShowIme show_ime,
@@ -273,14 +283,6 @@ class CONTENT_EXPORT RenderWidget
 
   // Stop compositing.
   void WillCloseLayerTreeView();
-
-  // Called when a plugin is moved.  These events are queued up and sent with
-  // the next paint or scroll message to the host.
-  void SchedulePluginMove(const WebPluginGeometry& move);
-
-  // Called when a plugin window has been destroyed, to make sure the currently
-  // pending moves don't try to reference it.
-  void CleanupWindowInPluginMoves(gfx::PluginWindowHandle window);
 
   RenderWidgetCompositor* compositor() const;
 
@@ -355,6 +357,10 @@ class CONTENT_EXPORT RenderWidget
   // process. This method does nothing when the browser process is not able to
   // handle composition range and composition character bounds.
   void UpdateCompositionInfo(bool should_update_range);
+
+  // Change the device ICC color profile while running a layout test.
+  void SetDeviceColorProfileForTesting(const std::vector<char>& color_profile);
+  void ResetDeviceColorProfileForTesting();
 
  protected:
   // Friend RefCounted so that the dtor can be non-public. Using this class
@@ -456,6 +462,7 @@ class CONTENT_EXPORT RenderWidget
   void OnGetFPS();
   void OnUpdateScreenRects(const gfx::Rect& view_screen_rect,
                            const gfx::Rect& window_screen_rect);
+  void OnUpdateWindowScreenRect(const gfx::Rect& window_screen_rect);
   void OnShowImeIfNeeded();
   void OnSetSurfaceIdNamespace(uint32_t surface_id_namespace);
   void OnHandleCompositorProto(const std::vector<uint8_t>& proto);
@@ -477,8 +484,7 @@ class CONTENT_EXPORT RenderWidget
   void AutoResizeCompositor();
 
   virtual void SetDeviceScaleFactor(float device_scale_factor);
-  virtual bool SetDeviceColorProfile(const std::vector<char>& color_profile);
-  virtual void ResetDeviceColorProfileForTesting();
+  bool SetDeviceColorProfile(const std::vector<char>& color_profile);
 
   virtual void OnOrientationChange();
 
@@ -488,14 +494,10 @@ class CONTENT_EXPORT RenderWidget
   // the ACK that the screen has been updated. For a given paint operation,
   // these overrides will always be called in the order DidInitiatePaint,
   // DidFlushPaint.
-  virtual void DidInitiatePaint() {}
-  virtual void DidFlushPaint() {}
+  virtual void DidInitiatePaint();
+  virtual void DidFlushPaint();
 
   virtual GURL GetURLForGraphicsContext3D();
-
-  // Gets the scroll offset of this widget, if this widget has a notion of
-  // scroll offset.
-  virtual gfx::Vector2d GetScrollOffset();
 
   // Sets the "hidden" state of this widget.  All accesses to is_hidden_ should
   // use this method so that we can properly inform the RenderThread of our
@@ -558,7 +560,7 @@ class CONTENT_EXPORT RenderWidget
 
   // Creates a 3D context associated with this view.
   scoped_ptr<WebGraphicsContext3DCommandBufferImpl> CreateGraphicsContext3D(
-      GpuChannelHost* gpu_channel_host);
+      gpu::GpuChannelHost* gpu_channel_host);
 
   // Sends an ACK to the browser process during the next compositor frame.
   void OnWaitNextFrameForTests(int routing_id);
@@ -574,6 +576,9 @@ class CONTENT_EXPORT RenderWidget
   // We are responsible for destroying this object via its Close method.
   // May be NULL when the window is closing.
   blink::WebWidget* webwidget_;
+
+  // The delegate of the owner of this object.
+  RenderWidgetOwnerDelegate* owner_delegate_;
 
   // This is lazily constructed and must not outlive webwidget_.
   scoped_ptr<RenderWidgetCompositor> compositor_;
@@ -688,10 +693,6 @@ class CONTENT_EXPORT RenderWidget
 
   // The kind of popup this widget represents, NONE if not a popup.
   blink::WebPopupType popup_type_;
-
-  // Holds all the needed plugin window moves for a scroll.
-  typedef std::vector<WebPluginGeometry> WebPluginGeometryVector;
-  WebPluginGeometryVector plugin_window_moves_;
 
   // While we are waiting for the browser to update window sizes, we track the
   // pending size temporarily.

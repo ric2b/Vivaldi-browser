@@ -30,6 +30,8 @@
 #include "third_party/WebKit/public/web/modules/serviceworker/WebServiceWorkerContextProxy.h"
 #include "v8/include/v8.h"
 
+struct ServiceWorkerMsg_ExtendableMessageEvent_Params;
+
 namespace base {
 class SingleThreadTaskRunner;
 class TaskRunner;
@@ -37,7 +39,6 @@ class TaskRunner;
 
 namespace blink {
 struct WebCircularGeofencingRegion;
-struct WebCrossOriginServiceWorkerClient;
 class WebDataSource;
 struct WebServiceWorkerClientQueryOptions;
 class WebServiceWorkerContextProxy;
@@ -51,7 +52,6 @@ class Message;
 
 namespace content {
 
-struct NavigatorConnectClient;
 struct PlatformNotificationData;
 struct PushEventPayload;
 struct ServiceWorkerClientInfo;
@@ -65,7 +65,7 @@ class WebServiceWorkerRegistrationImpl;
 class ServiceWorkerContextClient
     : public blink::WebServiceWorkerContextClient {
  public:
-  using SyncCallback = mojo::Callback<void(ServiceWorkerEventStatus)>;
+  using SyncCallback = mojo::Callback<void(mojom::ServiceWorkerEventStatus)>;
 
   // Returns a thread-specific client instance.  This does NOT create a
   // new instance.
@@ -111,8 +111,7 @@ class ServiceWorkerContextClient
   void workerContextStarted(
       blink::WebServiceWorkerContextProxy* proxy) override;
   void didEvaluateWorkerScript(bool success) override;
-  void didInitializeWorkerContext(v8::Local<v8::Context> context,
-                                  const blink::WebURL& url) override;
+  void didInitializeWorkerContext(v8::Local<v8::Context> context) override;
   void willDestroyWorkerContext(v8::Local<v8::Context> context) override;
   void workerContextDestroyed() override;
   void reportException(const blink::WebString& error_message,
@@ -161,9 +160,9 @@ class ServiceWorkerContextClient
       const blink::WebString& message,
       blink::WebMessagePortChannelArray* channels) override;
   void postMessageToCrossOriginClient(
-      const blink::WebCrossOriginServiceWorkerClient& client,
-      const blink::WebString& message,
-      blink::WebMessagePortChannelArray* channels) override;
+      const blink::WebCrossOriginServiceWorkerClient&,
+      const blink::WebString&,
+      blink::WebMessagePortChannelArray*) override;
   void focus(const blink::WebString& uuid,
              blink::WebServiceWorkerClientCallbacks*) override;
   void navigate(const blink::WebString& uuid,
@@ -177,7 +176,7 @@ class ServiceWorkerContextClient
       const blink::WebVector<blink::WebSecurityOrigin>& origins) override;
 
   virtual void DispatchSyncEvent(
-      const blink::WebSyncRegistration& registration,
+      const std::string& tag,
       blink::WebServiceWorkerContextProxy::LastChanceOption last_chance,
       const SyncCallback& callback);
 
@@ -197,9 +196,7 @@ class ServiceWorkerContextClient
   void OnActivateEvent(int request_id);
   void OnExtendableMessageEvent(
       int request_id,
-      const base::string16& message,
-      const std::vector<TransferredMessagePort>& sent_message_ports,
-      const std::vector<int>& new_routing_ids);
+      const ServiceWorkerMsg_ExtendableMessageEvent_Params& params);
   void OnInstallEvent(int request_id);
   void OnFetchEvent(int request_id, const ServiceWorkerFetchRequest& request);
   void OnNotificationClickEvent(
@@ -224,11 +221,6 @@ class ServiceWorkerContextClient
       const std::vector<TransferredMessagePort>& sent_message_ports,
       const std::vector<int>& new_routing_ids);
 
-  void OnCrossOriginMessageToWorker(
-      const NavigatorConnectClient& client,
-      const base::string16& message,
-      const std::vector<TransferredMessagePort>& sent_message_ports,
-      const std::vector<int>& new_routing_ids);
   void OnDidGetClient(int request_id, const ServiceWorkerClientInfo& client);
   void OnDidGetClients(
       int request_id, const std::vector<ServiceWorkerClientInfo>& clients);

@@ -45,7 +45,7 @@ WebRtcMediaStreamAdapter::~WebRtcMediaStreamAdapter() {
 
 void WebRtcMediaStreamAdapter::TrackAdded(
     const blink::WebMediaStreamTrack& track) {
-  if (track.source().type() == blink::WebMediaStreamSource::TypeAudio)
+  if (track.source().getType() == blink::WebMediaStreamSource::TypeAudio)
     CreateAudioTrack(track);
   else
     CreateVideoTrack(track);
@@ -54,11 +54,11 @@ void WebRtcMediaStreamAdapter::TrackAdded(
 void WebRtcMediaStreamAdapter::TrackRemoved(
     const blink::WebMediaStreamTrack& track) {
   const std::string track_id = track.id().utf8();
-  if (track.source().type() == blink::WebMediaStreamSource::TypeAudio) {
+  if (track.source().getType() == blink::WebMediaStreamSource::TypeAudio) {
     webrtc_media_stream_->RemoveTrack(
         webrtc_media_stream_->FindAudioTrack(track_id));
   } else {
-    DCHECK_EQ(track.source().type(), blink::WebMediaStreamSource::TypeVideo);
+    DCHECK_EQ(track.source().getType(), blink::WebMediaStreamSource::TypeVideo);
     scoped_refptr<webrtc::VideoTrackInterface> webrtc_track =
         webrtc_media_stream_->FindVideoTrack(track_id).get();
     webrtc_media_stream_->RemoveTrack(webrtc_track.get());
@@ -75,10 +75,10 @@ void WebRtcMediaStreamAdapter::TrackRemoved(
 
 void WebRtcMediaStreamAdapter::CreateAudioTrack(
     const blink::WebMediaStreamTrack& track) {
-  DCHECK_EQ(track.source().type(), blink::WebMediaStreamSource::TypeAudio);
+  DCHECK_EQ(track.source().getType(), blink::WebMediaStreamSource::TypeAudio);
   // A media stream is connected to a peer connection, enable the
   // peer connection mode for the sources.
-  MediaStreamAudioTrack* native_track = MediaStreamAudioTrack::GetTrack(track);
+  MediaStreamAudioTrack* native_track = MediaStreamAudioTrack::From(track);
   if (!native_track) {
     DLOG(ERROR) << "No native track for blink audio track.";
     return;
@@ -92,10 +92,9 @@ void WebRtcMediaStreamAdapter::CreateAudioTrack(
 
   if (native_track->is_local_track()) {
     const blink::WebMediaStreamSource& source = track.source();
-    MediaStreamAudioSource* audio_source =
-        static_cast<MediaStreamAudioSource*>(source.extraData());
-    if (audio_source && audio_source->GetAudioCapturer().get())
-      audio_source->GetAudioCapturer()->EnablePeerConnectionMode();
+    MediaStreamAudioSource* audio_source = MediaStreamAudioSource::From(source);
+    if (audio_source && audio_source->audio_capturer())
+      audio_source->audio_capturer()->EnablePeerConnectionMode();
   }
 
   webrtc_media_stream_->AddTrack(audio_track);
@@ -103,7 +102,7 @@ void WebRtcMediaStreamAdapter::CreateAudioTrack(
 
 void WebRtcMediaStreamAdapter::CreateVideoTrack(
     const blink::WebMediaStreamTrack& track) {
-  DCHECK_EQ(track.source().type(), blink::WebMediaStreamSource::TypeVideo);
+  DCHECK_EQ(track.source().getType(), blink::WebMediaStreamSource::TypeVideo);
   MediaStreamVideoWebRtcSink* adapter =
       new MediaStreamVideoWebRtcSink(track, factory_);
   video_adapters_.push_back(adapter);

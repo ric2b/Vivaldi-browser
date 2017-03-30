@@ -324,7 +324,7 @@ Value RunToolchain(Scope* scope,
 
   // This object will actually be copied into the one owned by the toolchain
   // manager, but that has to be done in the lock.
-  scoped_ptr<Toolchain> toolchain(new Toolchain(scope->settings(), label));
+  std::unique_ptr<Toolchain> toolchain(new Toolchain(scope->settings(), label));
   toolchain->set_defined_from(function);
   toolchain->visibility().SetPublic();
 
@@ -406,6 +406,10 @@ const char kTool_Help[] =
     "    Other tools:\n"
     "      \"stamp\": Tool for creating stamp files\n"
     "      \"copy\": Tool to copy files.\n"
+    "\n"
+    "    Platform specific tools:\n"
+    "      \"copy_bundle_data\": [iOS, OS X] Tool to copy files in a bundle.\n"
+    "      \"compile_xcassets\": [iOS, OS X] Tool to compile asset catalogs.\n"
     "\n"
     "Tool variables\n"
     "\n"
@@ -529,6 +533,10 @@ const char kTool_Help[] =
     "        output_name if one is manually specified for it) if the prefix\n"
     "        is not already there. The result will show up in the\n"
     "        {{output_name}} substitution pattern.\n"
+    "\n"
+    "        Individual targets can opt-out of the output prefix by setting:\n"
+    "          output_prefix_override = true\n"
+    "        (see \"gn help output_prefix_override\").\n"
     "\n"
     "        This is typically used to prepend \"lib\" to libraries on\n"
     "        Posix systems:\n"
@@ -718,6 +726,18 @@ const char kTool_Help[] =
     "  {{source}} which is the source of the copy. The stamp tool allows\n"
     "  only the common tool substitutions.\n"
     "\n"
+    "  The copy_bundle_data and compile_xcassets tools only allows the common\n"
+    "  tool substitutions. Both tools are required to create iOS/OS X bundles\n"
+    "  and need only be defined on those platforms.\n"
+    "\n"
+    "  The copy_bundle_data tool will be called with one source and needs to\n"
+    "  copy (optionally optimizing the data representation) to its output. It\n"
+    "  may be called with a directory as input and it needs to be recursively\n"
+    "  copied.\n"
+    "\n"
+    "  The compile_xcassets tool will be called with one or more source (each\n"
+    "  an asset catalog) that needs to be compiled to a single output.\n"
+    "\n"
     "Separate linking and dependencies for shared libraries\n"
     "\n"
     "  Shared libraries are special in that not all changes to them require\n"
@@ -812,15 +832,19 @@ Value RunTool(Scope* scope,
   } else if (IsLinkerTool(tool_type)) {
     subst_validator = &IsValidLinkerSubstitution;
     subst_output_validator = &IsValidLinkerOutputsSubstitution;
-  } else if (tool_type == Toolchain::TYPE_COPY) {
+  } else if (tool_type == Toolchain::TYPE_COPY ||
+             tool_type == Toolchain::TYPE_COPY_BUNDLE_DATA) {
     subst_validator = &IsValidCopySubstitution;
     subst_output_validator = &IsValidCopySubstitution;
+  } else if (tool_type == Toolchain::TYPE_COMPILE_XCASSETS) {
+    subst_validator = &IsValidCompileXCassetsSubstitution;
+    subst_output_validator = &IsValidCompileXCassetsSubstitution;
   } else {
-    subst_validator = &IsValidToolSubstutition;
-    subst_output_validator = &IsValidToolSubstutition;
+    subst_validator = &IsValidToolSubstitution;
+    subst_output_validator = &IsValidToolSubstitution;
   }
 
-  scoped_ptr<Tool> tool(new Tool);
+  std::unique_ptr<Tool> tool(new Tool);
 
   if (!ReadPattern(&block_scope, "command", subst_validator, tool.get(),
                    &Tool::set_command, err) ||
@@ -851,9 +875,12 @@ Value RunTool(Scope* scope,
     return Value();
   }
 
-  if (tool_type != Toolchain::TYPE_COPY && tool_type != Toolchain::TYPE_STAMP) {
-    // All tools except the copy and stamp tools should have outputs. The copy
-    // and stamp tool's outputs are generated internally.
+  if (tool_type != Toolchain::TYPE_COPY &&
+      tool_type != Toolchain::TYPE_STAMP &&
+      tool_type != Toolchain::TYPE_COPY_BUNDLE_DATA &&
+      tool_type != Toolchain::TYPE_COMPILE_XCASSETS) {
+    // All tools should have outputs, except the copy, stamp, copy_bundle_data
+    // and compile_xcassets tools that generate their outputs internally.
     if (!ReadOutputs(&block_scope, function, subst_output_validator,
                      tool.get(), err))
       return Value();

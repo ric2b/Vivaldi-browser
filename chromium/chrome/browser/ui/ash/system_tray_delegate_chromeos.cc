@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/ash/system_tray_delegate_chromeos.h"
 
 #include <stddef.h>
+
 #include <algorithm>
 #include <set>
 #include <string>
@@ -13,7 +14,6 @@
 
 #include "ash/ash_switches.h"
 #include "ash/desktop_background/desktop_background_controller.h"
-#include "ash/display/display_manager.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/session/session_state_delegate.h"
 #include "ash/session/session_state_observer.h"
@@ -38,6 +38,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -81,7 +82,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -169,10 +169,10 @@ void BluetoothDeviceConnectError(
     device::BluetoothDevice::ConnectErrorCode error_code) {
 }
 
-scoped_ptr<ash::CastConfigDelegate> CreateCastConfigDelegate() {
+std::unique_ptr<ash::CastConfigDelegate> CreateCastConfigDelegate() {
   if (CastConfigDelegateMediaRouter::IsEnabled())
-    return make_scoped_ptr(new CastConfigDelegateMediaRouter());
-  return make_scoped_ptr(new CastConfigDelegateChromeos());
+    return base::WrapUnique(new CastConfigDelegateMediaRouter());
+  return base::WrapUnique(new CastConfigDelegateChromeos());
 }
 
 void ShowSettingsSubPageForActiveUser(const std::string& sub_page) {
@@ -238,6 +238,7 @@ void SystemTrayDelegateChromeOS::Initialize() {
   DBusThreadManager::Get()->GetSessionManagerClient()->AddObserver(this);
 
   input_method::InputMethodManager::Get()->AddObserver(this);
+  input_method::InputMethodManager::Get()->AddImeMenuObserver(this);
   ui::ime::InputMethodMenuManager::GetInstance()->AddObserver(this);
 
   g_browser_process->platform_part()->GetSystemClock()->AddObserver(this);
@@ -463,12 +464,6 @@ void SystemTrayDelegateChromeOS::ShowNetworkSettingsForGuid(
 }
 
 void SystemTrayDelegateChromeOS::ShowDisplaySettings() {
-  // TODO(michaelpg): Allow display settings to be shown when they are updated
-  // to work for 3+ displays. See issue 467195.
-  if (ash::Shell::GetInstance()->display_manager()->num_connected_displays() >
-      2) {
-    return;
-  }
   content::RecordAction(base::UserMetricsAction("ShowDisplayOptions"));
   ShowSettingsSubPageForActiveUser(kDisplaySettingsSubPageName);
 }
@@ -516,7 +511,6 @@ void SystemTrayDelegateChromeOS::ShowIMESettings() {
 
 void SystemTrayDelegateChromeOS::ShowHelp() {
   chrome::ShowHelpForProfile(ProfileManager::GetActiveUserProfile(),
-                             chrome::HOST_DESKTOP_TYPE_ASH,
                              chrome::HELP_SOURCE_MENU);
 }
 
@@ -707,7 +701,7 @@ void SystemTrayDelegateChromeOS::GetAvailableIMEList(ash::IMEInfoList* list) {
   input_method::InputMethodManager* manager =
       input_method::InputMethodManager::Get();
   input_method::InputMethodUtil* util = manager->GetInputMethodUtil();
-  scoped_ptr<input_method::InputMethodDescriptors> ime_descriptors(
+  std::unique_ptr<input_method::InputMethodDescriptors> ime_descriptors(
       manager->GetActiveIMEState()->GetActiveInputMethods());
   std::string current =
       manager->GetActiveIMEState()->GetCurrentInputMethod().id();
@@ -804,7 +798,7 @@ SystemTrayDelegateChromeOS::GetVolumeControlDelegate() const {
 }
 
 void SystemTrayDelegateChromeOS::SetVolumeControlDelegate(
-    scoped_ptr<ash::VolumeControlDelegate> delegate) {
+    std::unique_ptr<ash::VolumeControlDelegate> delegate) {
   volume_control_delegate_.swap(delegate);
 }
 
@@ -1221,7 +1215,7 @@ void SystemTrayDelegateChromeOS::DeviceRemoved(
 }
 
 void SystemTrayDelegateChromeOS::OnStartBluetoothDiscoverySession(
-    scoped_ptr<device::BluetoothDiscoverySession> discovery_session) {
+    std::unique_ptr<device::BluetoothDiscoverySession> discovery_session) {
   // If the discovery session was returned after a request to stop discovery
   // (e.g. the user dismissed the Bluetooth detailed view before the call
   // returned), don't claim the discovery session and let it clean up.
@@ -1293,6 +1287,16 @@ void SystemTrayDelegateChromeOS::OnShutdownPolicyChanged(
   FOR_EACH_OBSERVER(ash::ShutdownPolicyObserver, shutdown_policy_observers_,
                     OnShutdownPolicyChanged(reboot_on_shutdown));
 }
+
+void SystemTrayDelegateChromeOS::ImeMenuActivationChanged(bool is_active) {
+  GetSystemTrayNotifier()->NotifyRefreshIMEMenu(is_active);
+}
+
+void SystemTrayDelegateChromeOS::ImeMenuListChanged() {}
+
+void SystemTrayDelegateChromeOS::ImeMenuItemsChanged(
+    const std::string& engine_id,
+    const std::vector<input_method::InputMethodManager::MenuItem>& items) {}
 
 const base::string16
 SystemTrayDelegateChromeOS::GetLegacySupervisedUserMessage() const {

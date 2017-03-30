@@ -18,6 +18,7 @@
 #include "gpu/command_buffer/service/gl_context_mock.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_mock.h"
+#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/program_manager.h"
 #include "gpu/command_buffer/service/query_manager.h"
 #include "gpu/command_buffer/service/renderbuffer_manager.h"
@@ -196,6 +197,7 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
 
   struct InitState {
     InitState();
+    InitState(const InitState& other);
 
     std::string extensions;
     std::string gl_version;
@@ -753,6 +755,7 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
   void SetupInitStateManualExpectations(bool es3_capable);
 
   scoped_ptr< ::testing::StrictMock<MockCommandBufferEngine> > engine_;
+  GpuPreferences gpu_preferences_;
   scoped_refptr<ContextGroup> group_;
   MockGLStates gl_states_;
   base::MessageLoop message_loop_;

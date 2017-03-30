@@ -20,9 +20,13 @@
 #include "components/signin/core/common/profile_management_switches.h"
 #include "grit/theme_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/background.h"
 #include "ui/views/resources/grit/views_resources.h"
@@ -48,6 +52,24 @@ BrowserNonClientFrameView::~BrowserNonClientFrameView() {
 
 void BrowserNonClientFrameView::OnBrowserViewInitViewsComplete() {}
 
+gfx::ImageSkia BrowserNonClientFrameView::GetOTRAvatarIcon() const {
+  if (!ui::MaterialDesignController::IsModeMaterial())
+    return *GetThemeProviderForProfile()->GetImageSkiaNamed(IDR_OTR_ICON);
+  const SkColor icon_color = color_utils::PickContrastingColor(
+      SK_ColorWHITE, gfx::kChromeIconGrey, GetFrameColor());
+  return gfx::CreateVectorIcon(gfx::VectorIconId::INCOGNITO, 24, icon_color);
+}
+
+SkColor BrowserNonClientFrameView::GetToolbarTopSeparatorColor() const {
+  const auto color_id =
+      ShouldPaintAsActive()
+          ? ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR
+          : ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR_INACTIVE;
+  return ShouldPaintAsThemed() ? GetThemeProvider()->GetColor(color_id)
+                               : ThemeProperties::GetDefaultColor(
+                                     color_id, browser_view_->IsOffTheRecord());
+}
+
 void BrowserNonClientFrameView::UpdateToolbar() {
 }
 
@@ -61,87 +83,76 @@ views::View* BrowserNonClientFrameView::GetProfileSwitcherView() const {
 
 void BrowserNonClientFrameView::VisibilityChanged(views::View* starting_from,
                                                   bool is_visible) {
-  if (!is_visible)
-    return;
-
-#if defined(OS_CHROMEOS)
-  // On ChromeOS we always need to give the old avatar button a chance to update
-  // in case we're in a teleported window. On desktop, the old avatar button
-  // only shows up when in incognito mode.
-  UpdateOldAvatarButton();
-  OnProfileAvatarChanged(base::FilePath());
-#else
-  if (!browser_view_->IsRegularOrGuestSession()) {
-    // The first time UpdateOldAvatarButton() is called the window is not
-    // visible so DrawTaskBarDecoration() has no effect. Therefore we need to
-    // call it again once the window is visible.
-    UpdateOldAvatarButton();
-  }
-
-  // Call OnProfileAvatarChanged() in this case to make sure the task bar icon
-  // is correctly updated. Guest profiles don't badge the icon so no need to do
-  // this in guest mode.
-  if (!browser_view_->IsGuestSession())
+  // UpdateTaskbarDecoration() calls DrawTaskbarDecoration(), but that does
+  // nothing if the window is not visible.  So even if we've already gotten the
+  // up-to-date decoration, we need to run the update procedure again here when
+  // the window becomes visible.
+  if (is_visible)
     OnProfileAvatarChanged(base::FilePath());
-#endif
 }
 
 bool BrowserNonClientFrameView::ShouldPaintAsThemed() const {
   return browser_view_->IsBrowserTypeNormal();
 }
 
-#if !defined(OS_CHROMEOS)
-SkColor BrowserNonClientFrameView::GetFrameColor() const {
+SkColor BrowserNonClientFrameView::GetFrameColor(bool active) const {
   ThemeProperties::OverwritableByUserThemeProperty color_id =
-      ShouldPaintAsActive() ? ThemeProperties::COLOR_FRAME
-                            : ThemeProperties::COLOR_FRAME_INACTIVE;
-  return ShouldPaintAsThemed() ? GetThemeProvider()->GetColor(color_id)
-                               : ThemeProperties::GetDefaultColor(
-                                     color_id, browser_view_->IsOffTheRecord());
+      active ? ThemeProperties::COLOR_FRAME
+             : ThemeProperties::COLOR_FRAME_INACTIVE;
+  return ShouldPaintAsThemed() ?
+      GetThemeProviderForProfile()->GetColor(color_id) :
+      ThemeProperties::GetDefaultColor(color_id,
+                                       browser_view_->IsOffTheRecord());
 }
 
-gfx::ImageSkia* BrowserNonClientFrameView::GetFrameImage() const {
-  const bool incognito = browser_view_->IsOffTheRecord();
-  int resource_id;
-  if (browser_view_->IsBrowserTypeNormal()) {
-    if (ShouldPaintAsActive()) {
-      resource_id = incognito ? IDR_THEME_FRAME_INCOGNITO : IDR_THEME_FRAME;
-    } else {
-      resource_id = incognito ? IDR_THEME_FRAME_INCOGNITO_INACTIVE
-                              : IDR_THEME_FRAME_INACTIVE;
-    }
-    return GetThemeProvider()->GetImageSkiaNamed(resource_id);
+gfx::ImageSkia BrowserNonClientFrameView::GetFrameImage(bool active) const {
+  const ui::ThemeProvider* tp = frame_->GetThemeProvider();
+  int frame_image_id = active ? IDR_THEME_FRAME : IDR_THEME_FRAME_INACTIVE;
+
+  // |default_uses_color| means the default frame is painted with a solid color.
+  // When false, the default frame is painted with assets.
+#if defined(OS_CHROMEOS)
+  bool default_uses_color = true;
+#else
+  bool default_uses_color = ui::MaterialDesignController::IsModeMaterial();
+#endif
+  if (default_uses_color) {
+    return ShouldPaintAsThemed() && (tp->HasCustomImage(frame_image_id) ||
+                                     tp->HasCustomImage(IDR_THEME_FRAME))
+               ? *tp->GetImageSkiaNamed(frame_image_id)
+               : gfx::ImageSkia();
   }
 
-  if (ShouldPaintAsActive()) {
-    resource_id = incognito ? IDR_THEME_FRAME_INCOGNITO : IDR_FRAME;
-  } else {
-    resource_id = incognito ? IDR_THEME_FRAME_INCOGNITO_INACTIVE
-                            : IDR_THEME_FRAME_INACTIVE;
-  }
-
-  if (ShouldPaintAsThemed()) {
-    // On Linux, we want to use theme images provided by the system theme when
-    // enabled, even if we are an app or popup window.
-    return GetThemeProvider()->GetImageSkiaNamed(resource_id);
-  }
-
-  // Otherwise, never theme app and popup windows.
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  return rb.GetImageSkiaNamed(resource_id);
+  return ShouldPaintAsThemed()
+             ? *tp->GetImageSkiaNamed(frame_image_id)
+             : *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+                   frame_image_id);
 }
 
-gfx::ImageSkia* BrowserNonClientFrameView::GetFrameOverlayImage() const {
-  const ui::ThemeProvider* tp = GetThemeProvider();
-  if (tp->HasCustomImage(IDR_THEME_FRAME_OVERLAY) &&
-      browser_view_->IsBrowserTypeNormal() &&
-      !browser_view_->IsOffTheRecord()) {
-    return tp->GetImageSkiaNamed(ShouldPaintAsActive() ?
-        IDR_THEME_FRAME_OVERLAY : IDR_THEME_FRAME_OVERLAY_INACTIVE);
-  }
-  return nullptr;
+gfx::ImageSkia BrowserNonClientFrameView::GetFrameOverlayImage(
+    bool active) const {
+  if (browser_view_->IsOffTheRecord() || !browser_view_->IsBrowserTypeNormal())
+    return gfx::ImageSkia();
+
+  const ui::ThemeProvider* tp = frame_->GetThemeProvider();
+  int frame_overlay_image_id =
+      active ? IDR_THEME_FRAME_OVERLAY : IDR_THEME_FRAME_OVERLAY_INACTIVE;
+  return tp->HasCustomImage(frame_overlay_image_id)
+             ? *tp->GetImageSkiaNamed(frame_overlay_image_id)
+             : gfx::ImageSkia();
 }
-#endif  // !defined(OS_CHROMEOS)
+
+SkColor BrowserNonClientFrameView::GetFrameColor() const {
+  return GetFrameColor(ShouldPaintAsActive());
+}
+
+gfx::ImageSkia BrowserNonClientFrameView::GetFrameImage() const {
+  return GetFrameImage(ShouldPaintAsActive());
+}
+
+gfx::ImageSkia BrowserNonClientFrameView::GetFrameOverlayImage() const {
+  return GetFrameOverlayImage(ShouldPaintAsActive());
+}
 
 void BrowserNonClientFrameView::UpdateOldAvatarButton() {
   if (browser_view_->ShouldShowAvatar()) {
@@ -168,11 +179,9 @@ void BrowserNonClientFrameView::UpdateOldAvatarButton() {
   bool should_show_avatar_menu =
       avatar_button_ || AvatarMenu::ShouldShowAvatarMenu();
 
-  if (!AvatarMenuButton::GetAvatarImages(browser_view_, should_show_avatar_menu,
-                                         &avatar, &taskbar_badge_avatar,
-                                         &is_rectangle)) {
+  if (!AvatarMenuButton::GetAvatarImages(this, should_show_avatar_menu, &avatar,
+                                         &taskbar_badge_avatar, &is_rectangle))
     return;
-  }
 
   // Disable the menu when we should not show the menu.
   if (avatar_button_ && !AvatarMenu::ShouldShowAvatarMenu())
@@ -181,28 +190,53 @@ void BrowserNonClientFrameView::UpdateOldAvatarButton() {
     avatar_button_->SetAvatarIcon(avatar, is_rectangle);
 }
 
+void BrowserNonClientFrameView::ViewHierarchyChanged(
+    const ViewHierarchyChangedDetails& details) {
+  if (details.is_add && details.child == this)
+    UpdateAvatar();
+}
+
+void BrowserNonClientFrameView::ActivationChanged(bool active) {
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    // On Windows, while deactivating the widget, this is called before the
+    // active HWND has actually been changed.  Since we want the avatar state to
+    // reflect that the window is inactive, we force NonClientFrameView to see
+    // the "correct" state as an override.
+    set_active_state_override(&active);
+    UpdateAvatar();
+    set_active_state_override(nullptr);
+
+    // Changing the activation state may change the toolbar top separator color
+    // that's used as the stroke around tabs/the new tab button.
+    browser_view_->tabstrip()->SchedulePaint();
+  }
+
+  // Changing the activation state may change the visible frame color.
+  SchedulePaint();
+}
+
 void BrowserNonClientFrameView::OnProfileAdded(
     const base::FilePath& profile_path) {
-  UpdateTaskbarDecoration();
-  UpdateAvatar();
+  OnProfileAvatarChanged(profile_path);
 }
 
 void BrowserNonClientFrameView::OnProfileWasRemoved(
     const base::FilePath& profile_path,
     const base::string16& profile_name) {
-  UpdateTaskbarDecoration();
-  UpdateAvatar();
+  OnProfileAvatarChanged(profile_path);
 }
 
 void BrowserNonClientFrameView::OnProfileAvatarChanged(
     const base::FilePath& profile_path) {
   UpdateTaskbarDecoration();
-  // Profile avatars are only displayed in incognito or on ChromeOS teleported
-  // windows.
-#if !defined(OS_CHROMEOS)
-  if (!browser_view()->IsGuestSession() && browser_view()->IsOffTheRecord())
-#endif
-    UpdateOldAvatarButton();
+  UpdateAvatar();
+}
+
+const ui::ThemeProvider*
+BrowserNonClientFrameView::GetThemeProviderForProfile() const {
+  // Because the frame's accessor reads the ThemeProvider from the profile and
+  // not the widget, it can be called even before we're in a view hierarchy.
+  return frame_->GetThemeProvider();
 }
 
 void BrowserNonClientFrameView::UpdateTaskbarDecoration() {
@@ -214,7 +248,7 @@ void BrowserNonClientFrameView::UpdateTaskbarDecoration() {
   // the returned images are not initialized.  This can happen if the user
   // deletes the current profile.
   if (AvatarMenuButton::GetAvatarImages(
-          browser_view_, AvatarMenu::ShouldShowAvatarMenu(), &avatar,
+          this, AvatarMenu::ShouldShowAvatarMenu(), &avatar,
           &taskbar_badge_avatar, &is_rectangle)) {
     // For popups and panels which don't have the avatar button, we still
     // need to draw the taskbar decoration. Even though we have an icon on the

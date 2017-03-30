@@ -4,16 +4,15 @@
 
 #include "chrome/browser/android/fullscreen/fullscreen_infobar_delegate.h"
 
+#include <memory>
+
 #include "base/android/jni_string.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/android/android_theme_resources.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/infobars/core/infobar.h"
-#include "components/prefs/pref_service.h"
 #include "components/url_formatter/elide_url.h"
 #include "grit/components_strings.h"
 #include "jni/FullscreenInfoBarDelegate_jni.h"
@@ -31,7 +30,7 @@ jlong LaunchFullscreenInfoBar(JNIEnv* env,
   InfoBarService* infobar_service =
       InfoBarService::FromWebContents(tab_android->web_contents());
   infobar_service->AddInfoBar(
-      infobar_service->CreateConfirmInfoBar(make_scoped_ptr(delegate)));
+      infobar_service->CreateConfirmInfoBar(base::WrapUnique(delegate)));
   return reinterpret_cast<intptr_t>(delegate);
 }
 
@@ -70,13 +69,9 @@ int FullscreenInfoBarDelegate::GetIconId() const {
 }
 
 base::string16 FullscreenInfoBarDelegate::GetMessageText() const {
-  Profile* profile =
-      ProfileManager::GetActiveUserProfile()->GetOriginalProfile();
-  std::string language =
-      profile->GetPrefs()->GetString(prefs::kAcceptLanguages);
   return l10n_util::GetStringFUTF16(
       IDS_FULLSCREEN_INFOBAR_TEXT,
-      url_formatter::FormatUrlForSecurityDisplay(origin_, language));
+      url_formatter::FormatUrlForSecurityDisplay(origin_));
 }
 
 base::string16 FullscreenInfoBarDelegate::GetButtonLabel(

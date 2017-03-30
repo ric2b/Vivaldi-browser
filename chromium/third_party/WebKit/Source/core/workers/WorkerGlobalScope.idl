@@ -43,9 +43,13 @@
     [RaisesException] void importScripts(DOMString... urls);
     readonly attribute WorkerNavigator navigator;
 
-    // Console API (non-standard but widely implemented in some form)
-    // https://developer.chrome.com/devtools/docs/console-api
+    // Console API
+    // https://console.spec.whatwg.org/#console-interface
     [Replaceable] readonly attribute WorkerConsole console;
+
+    // CORS and RFC1918
+    // https://mikewest.github.io/cors-rfc1918/#feature-detect
+    [RuntimeEnabled=CorsRFC1918, ImplementedAs=addressSpaceForBindings] readonly attribute AddressSpace addressSpace;
 
     // Unhandled Promise Rejection Events
     // https://github.com/domenic/unhandled-rejections-browser-spec

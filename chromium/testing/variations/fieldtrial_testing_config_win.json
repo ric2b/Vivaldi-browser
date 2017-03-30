@@ -22,12 +22,12 @@
     ],
     "AutomaticTabDiscarding": [
         {
-            "enable_featuress": [
+            "enable_features": [
                 "AutomaticTabDiscarding"
             ],
-            "group_name": "Enabled_Once_5",
+            "group_name": "Enabled_Once_10-gen2",
             "params": {
-                "MinimumProtectionTime": "300"
+                "MinimumProtectionTime": "600"
             }
         }
     ],
@@ -59,12 +59,17 @@
             "group_name": "Enabled"
         }
     ],
-    "DataReductionProxyConfigService": [
+    "DefaultBrowserInfobar": [
         {
-            "group_name": "Enabled",
-            "params": {
-                "minimum_refresh_interval_on_success_msec": "21600000"
-            }
+            "group_name": "SettingsText"
+        }
+    ],
+    "DocumentWriteEvaluator": [
+        {
+            "enable_features": [
+                "DocumentWriteEvaluator"
+            ],
+            "group_name": "Enabled"
         }
     ],
     "EnableGoogleCachedCopyTextExperiment": [
@@ -171,6 +176,14 @@
             "group_name": "Disabled"
         }
     ],
+    "PreRead": [
+        {
+            "group_name": "NoPrefetchArgument",
+            "params": {
+                "NoPrefetchArgument": "true"
+            }
+        }
+    ],
     "QUIC": [
         {
             "group_name": "Enabled"
@@ -183,6 +196,9 @@
     ],
     "RenderingPipelineThrottling": [
         {
+            "enable_features": [
+                "RenderingPipelineThrottling"
+            ],
             "group_name": "Enabled"
         }
     ],
@@ -215,9 +231,22 @@
             "group_name": "DontShowAndDontSend"
         }
     ],
+    "ResourcePriorities": [
+        {
+            "group_name": "AllExceptAsyncScripts_11011_1_1_10"
+        },
+        {
+            "group_name": "Control"
+        }
+    ],
     "SRTPromptFieldTrial": [
         {
             "group_name": "On"
+        }
+    ],
+    "SSLCommonNameMismatchHandling": [
+        {
+            "group_name": "Enabled"
         }
     ],
     "SafeBrowsingReportPhishingErrorLink": [
@@ -264,11 +293,6 @@
             "group_name": "enforce_always_with_extensions_and_dse"
         }
     ],
-    "SpdyEnableDependencies": [
-        {
-            "group_name": "Enable"
-        }
-    ],
     "StrictSecureCookies": [
         {
             "group_name": "Enabled"
@@ -287,9 +311,26 @@
             "group_name": "Enabled"
         }
     ],
+    "TokenBinding": [
+        {
+            "enable_features": [
+                "token-binding"
+            ],
+            "group_name": "TokenBinding"
+        }
+    ],
     "TriggeredResetFieldTrial": [
         {
             "group_name": "On"
+        }
+    ],
+    "V8SerializeOptions": [
+        {
+            "enable_features": [
+                "V8_Serialize_Eager",
+                "V8_Serialize_Age_Code"
+            ],
+            "group_name": "SerializeEagerAndAgeCode"
         }
     ],
     "VarationsServiceControl": [
@@ -302,6 +343,14 @@
     ],
     "WebFontsIntervention": [
         {
+            "group_name": "Enabled"
+        }
+    ],
+    "WebRTC-H264WithOpenH264FFmpeg": [
+        {
+            "enable_features": [
+                "WebRTC-H264WithOpenH264FFmpeg"
+            ],
             "group_name": "Enabled"
         }
     ],

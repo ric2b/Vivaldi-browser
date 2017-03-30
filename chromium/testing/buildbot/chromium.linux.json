@@ -1,8 +1,5 @@
 {
   "Android GN": {
-    "additional_compile_targets": [
-      "all"
-    ],
     "gtest_tests": [
       {
         "test": "android_webview_unittests"
@@ -71,25 +68,10 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "mojo_public_environment_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "mojo_public_system_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "mojo_public_utility_unittests"
-      },
-      {
         "test": "mojo_runner_host_unittests"
-      },
-      {
-        "test": "mojo_shell_unittests"
       },
       {
         "test": "mojo_surfaces_lib_unittests"
@@ -253,16 +235,16 @@
     ],
     "instrumentation_tests": [
       {
-        "test": "AndroidWebViewTest"
+        "test": "android_webview_test_apk"
       },
       {
-        "test": "ChromePublicTest"
+        "test": "chrome_public_test_apk"
       },
       {
-        "test": "ContentShellTest"
+        "test": "chrome_sync_shell_test_apk"
       },
       {
-        "test": "ChromeSyncShellTest"
+        "test": "content_shell_test_apk"
       }
     ],
     "scripts": [
@@ -398,16 +380,16 @@
     ],
     "instrumentation_tests": [
       {
-        "test": "AndroidWebViewTest"
+        "test": "android_webview_test_apk"
       },
       {
-        "test": "ChromePublicTest"
+        "test": "chrome_public_test_apk"
       },
       {
-        "test": "ContentShellTest"
+        "test": "chrome_sync_shell_test_apk"
       },
       {
-        "test": "ChromeSyncShellTest"
+        "test": "content_shell_test_apk"
       }
     ],
     "scripts": [
@@ -580,6 +562,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "app_list_shower_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "app_list_unittests"
       },
       {
@@ -728,6 +716,9 @@
         "test": "extensions_unittests"
       },
       {
+        "test": "filesystem_service_unittests"
+      },
+      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -785,6 +776,12 @@
         "test": "jingle_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "leveldb_service_unittests"
+      },
+      {
         "test": "mash_unittests"
       },
       {
@@ -830,19 +827,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "mojo_public_environment_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "mojo_public_system_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "mojo_public_utility_unittests"
       },
       {
         "test": "mojo_runner_host_unittests"
@@ -858,6 +843,12 @@
       },
       {
         "test": "mojo_view_manager_lib_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "mus_ws_unittests"
       },
       {
         "swarming": {
@@ -950,10 +941,13 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "views_unittests"
+        "test": "views_mus_unittests"
       },
       {
-        "test": "window_manager_unittests"
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "views_unittests"
       },
       {
         "swarming": {
@@ -1024,6 +1018,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "accessibility_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "app_list_shower_unittests"
       },
       {
         "swarming": {
@@ -1162,6 +1162,9 @@
         "test": "extensions_unittests"
       },
       {
+        "test": "filesystem_service_unittests"
+      },
+      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -1217,6 +1220,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "leveldb_service_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "media_blink_unittests"
       },
       {
@@ -1247,22 +1256,16 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "mojo_public_environment_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "mojo_public_system_unittests"
       },
       {
+        "test": "mojo_system_unittests"
+      },
+      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "mojo_public_utility_unittests"
-      },
-      {
-        "test": "mojo_system_unittests"
+        "test": "mus_ws_unittests"
       },
       {
         "swarming": {
@@ -1419,6 +1422,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "app_list_shower_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "app_list_unittests"
       },
       {
@@ -1630,19 +1639,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "mojo_public_environment_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "mojo_public_system_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "mojo_public_utility_unittests"
       },
       {
         "test": "mojo_system_unittests"

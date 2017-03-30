@@ -9,12 +9,13 @@
 #include "content/browser/gpu/gpu_process_host_ui_shim.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/gpu/client/webgraphicscontext3d_command_buffer_impl.h"
-#include "content/common/gpu/gpu_process_launch_causes.h"
+#include "content/common/gpu_process_launch_causes.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/content_browser_test.h"
 #include "gpu/blink/webgraphicscontext3d_in_process_command_buffer_impl.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "ui/gl/gl_switches.h"
@@ -27,9 +28,32 @@ const content::CauseForGpuLaunch kInitCause =
     content::
         CAUSE_FOR_GPU_LAUNCH_WEBGRAPHICSCONTEXT3DCOMMANDBUFFERIMPL_INITIALIZE;
 
+scoped_ptr<WebGraphicsContext3DCommandBufferImpl> CreateContext(
+    gpu::GpuChannelHost* gpu_channel_host) {
+  // This is for an offscreen context, so the default framebuffer doesn't need
+  // any alpha, depth, stencil, antialiasing.
+  gpu::gles2::ContextCreationAttribHelper attributes;
+  attributes.alpha_size = -1;
+  attributes.depth_size = 0;
+  attributes.stencil_size = 0;
+  attributes.samples = 0;
+  attributes.sample_buffers = 0;
+  attributes.bind_generates_resource = false;
+  bool share_resources = false;
+  bool automatic_flushes = false;
+  return make_scoped_ptr(
+      WebGraphicsContext3DCommandBufferImpl::CreateOffscreenContext(
+          gpu_channel_host, attributes, gfx::PreferIntegratedGpu,
+          share_resources, automatic_flushes, GURL(),
+          WebGraphicsContext3DCommandBufferImpl::SharedMemoryLimits(),
+          nullptr));
+}
+
 class ContextTestBase : public content::ContentBrowserTest {
  public:
   void SetUpOnMainThread() override {
+    // This may leave the provider_ null in some cases, so tests need to early
+    // out.
     if (!content::BrowserGpuChannelHostFactory::CanUseForTesting())
       return;
 
@@ -39,36 +63,36 @@ class ContextTestBase : public content::ContentBrowserTest {
     content::BrowserGpuChannelHostFactory* factory =
         content::BrowserGpuChannelHostFactory::instance();
     CHECK(factory);
-    bool lose_context_when_out_of_memory = false;
     base::RunLoop run_loop;
     factory->EstablishGpuChannel(kInitCause, run_loop.QuitClosure());
     run_loop.Run();
-    scoped_refptr<content::GpuChannelHost>
-        gpu_channel_host(factory->GetGpuChannel());
-    DCHECK(gpu_channel_host.get());
-    context_.reset(
-        WebGraphicsContext3DCommandBufferImpl::CreateOffscreenContext(
-            gpu_channel_host.get(),
-            blink::WebGraphicsContext3D::Attributes(),
-            lose_context_when_out_of_memory,
-            GURL(),
-            WebGraphicsContext3DCommandBufferImpl::SharedMemoryLimits(),
-            NULL));
-    CHECK(context_.get());
-    context_->InitializeOnCurrentThread();
-    context_support_ = context_->GetContextSupport();
+    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(
+        factory->GetGpuChannel());
+    CHECK(gpu_channel_host);
+
+    provider_ = content::ContextProviderCommandBuffer::Create(
+        CreateContext(gpu_channel_host.get()),
+        content::OFFSCREEN_CONTEXT_FOR_TESTING);
+    bool bound = provider_->BindToCurrentThread();
+    CHECK(bound);
+    gl_ = provider_->ContextGL();
+    context_support_ = provider_->ContextSupport();
+
     ContentBrowserTest::SetUpOnMainThread();
   }
 
   void TearDownOnMainThread() override {
     // Must delete the context first.
-    context_.reset(NULL);
+    provider_ = nullptr;
     ContentBrowserTest::TearDownOnMainThread();
   }
 
  protected:
-  scoped_ptr<content::WebGraphicsContext3DCommandBufferImpl> context_;
-  gpu::ContextSupport* context_support_;
+  gpu::gles2::GLES2Interface* gl_ = nullptr;
+  gpu::ContextSupport* context_support_ = nullptr;
+
+ private:
+  scoped_refptr<content::ContextProviderCommandBuffer> provider_;
 };
 
 }  // namespace
@@ -121,25 +145,11 @@ class BrowserGpuChannelHostFactoryTest : public ContentBrowserTest {
     run_loop.Run();
   }
 
-  GpuChannelHost* GetGpuChannel() {
-    return GetFactory()->GetGpuChannel();
-  }
+  gpu::GpuChannelHost* GetGpuChannel() { return GetFactory()->GetGpuChannel(); }
 
   static void Signal(bool *event) {
     CHECK_EQ(*event, false);
     *event = true;
-  }
-
-  scoped_ptr<WebGraphicsContext3DCommandBufferImpl> CreateContext() {
-    bool lose_context_when_out_of_memory = false;
-    return make_scoped_ptr(
-        WebGraphicsContext3DCommandBufferImpl::CreateOffscreenContext(
-            GetGpuChannel(),
-            blink::WebGraphicsContext3D::Attributes(),
-            lose_context_when_out_of_memory,
-            GURL(),
-            WebGraphicsContext3DCommandBufferImpl::SharedMemoryLimits(),
-            NULL));
   }
 };
 
@@ -185,7 +195,7 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
 IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
                        MAYBE_AlreadyEstablished) {
   DCHECK(!IsChannelEstablished());
-  scoped_refptr<GpuChannelHost> gpu_channel =
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel =
       GetFactory()->EstablishGpuChannelSync(kInitCause);
 
   // Expect established callback immediately.
@@ -199,9 +209,7 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
 #endif
 
 // Test fails on Windows because GPU Channel set-up fails.
-// Mac only fails GPU set-up on MacOS 10.6, but we have no version-specific
-// macros for disabling tests.
-#if !defined(OS_WIN) && !defined(OS_MACOSX)
+#if !defined(OS_WIN)
 #define MAYBE_GrContextKeepsGpuChannelAlive GrContextKeepsGpuChannelAlive
 #else
 #define MAYBE_GrContextKeepsGpuChannelAlive \
@@ -221,22 +229,33 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
   // Step 2: verify that holding onto the provider's GrContext will
   // retain the host after provider is destroyed.
   scoped_refptr<ContextProviderCommandBuffer> provider =
-      ContextProviderCommandBuffer::Create(CreateContext(),
+      ContextProviderCommandBuffer::Create(CreateContext(GetGpuChannel()),
                                            OFFSCREEN_CONTEXT_FOR_TESTING);
   EXPECT_TRUE(provider->BindToCurrentThread());
 
-  skia::RefPtr<GrContext> gr_context = skia::SharePtr(provider->GrContext());
-  provider = nullptr;
+  sk_sp<GrContext> gr_context = sk_ref_sp(provider->GrContext());
 
   SkImageInfo info = SkImageInfo::MakeN32Premul(100, 100);
-  skia::RefPtr<SkSurface> surface = skia::AdoptRef(SkSurface::NewRenderTarget(
-      gr_context.get(), SkSurface::kNo_Budgeted, info));
+  sk_sp<SkSurface> surface = SkSurface::MakeRenderTarget(
+      gr_context.get(), SkBudgeted::kNo, info);
+  EXPECT_TRUE(surface);
+
+  // Destroy the GL context after we made a surface.
+  provider = nullptr;
+
+  // New surfaces will fail to create now.
+  sk_sp<SkSurface> surface2 =
+      SkSurface::MakeRenderTarget(gr_context.get(), SkBudgeted::kNo, info);
+  EXPECT_FALSE(surface2);
+
+  // Drop our reference to the gr_context also.
   gr_context = nullptr;
 
-  // use the canvas after the provider and grcontext have been locally
-  // unref'ed. This should work just fine thanks to SkSurface_Gpu ref'ing
-  // the GrContext, which is ref'ing the GrGLInterfaceForWebGraphicsContext3D,
-  // which owns the commandbuffer instance.
+  // After the context provider is destroyed, the surface no longer has access
+  // to the GrContext, even though it's alive. Use the canvas after the provider
+  // and GrContext have been locally unref'ed. This should work fine as the
+  // GrContext has been abandoned when the GL context provider was destroyed
+  // above.
   SkPaint greenFillPaint;
   greenFillPaint.setColor(SK_ColorGREEN);
   greenFillPaint.setStyle(SkPaint::kFill_Style);
@@ -255,10 +274,10 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
                        MAYBE_CrashAndRecover) {
   DCHECK(!IsChannelEstablished());
   EstablishAndWait();
-  scoped_refptr<GpuChannelHost> host = GetGpuChannel();
+  scoped_refptr<gpu::GpuChannelHost> host = GetGpuChannel();
 
   scoped_refptr<ContextProviderCommandBuffer> provider =
-      ContextProviderCommandBuffer::Create(CreateContext(),
+      ContextProviderCommandBuffer::Create(CreateContext(GetGpuChannel()),
                                            OFFSCREEN_CONTEXT_FOR_TESTING);
   base::RunLoop run_loop;
   int counter = 0;

@@ -20,19 +20,31 @@
 #include "mojo/edk/system/data_pipe_control_message.h"
 #include "mojo/edk/system/node_controller.h"
 #include "mojo/edk/system/ports_message.h"
+#include "mojo/edk/system/request_context.h"
+#include "mojo/public/c/system/data_pipe.h"
 
 namespace mojo {
 namespace edk {
 
 namespace {
 
+const uint8_t kFlagPeerClosed = 0x01;
+
+#pragma pack(push, 1)
+
 struct SerializedState {
   MojoCreateDataPipeOptions options;
   uint64_t pipe_id;
-  bool peer_closed;
   uint32_t write_offset;
   uint32_t available_capacity;
+  uint8_t flags;
+  char padding[7];
 };
+
+static_assert(sizeof(SerializedState) % 8 == 0,
+              "Invalid SerializedState size.");
+
+#pragma pack(pop)
 
 }  // namespace
 
@@ -83,6 +95,28 @@ MojoResult DataPipeProducerDispatcher::Close() {
   base::AutoLock lock(lock_);
   DVLOG(1) << "Closing data pipe producer " << pipe_id_;
   return CloseNoLock();
+}
+
+MojoResult DataPipeProducerDispatcher::Watch(
+    MojoHandleSignals signals,
+    const Watcher::WatchCallback& callback,
+    uintptr_t context) {
+  base::AutoLock lock(lock_);
+
+  if (is_closed_ || in_transit_)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  return awakable_list_.AddWatcher(
+      signals, callback, context, GetHandleSignalsStateNoLock());
+}
+
+MojoResult DataPipeProducerDispatcher::CancelWatch(uintptr_t context) {
+  base::AutoLock lock(lock_);
+
+  if (is_closed_ || in_transit_)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  return awakable_list_.RemoveWatcher(context);
 }
 
 MojoResult DataPipeProducerDispatcher::WriteData(const void* elements,
@@ -282,13 +316,14 @@ bool DataPipeProducerDispatcher::EndSerialize(
     PlatformHandle* platform_handles) {
   SerializedState* state = static_cast<SerializedState*>(destination);
   memcpy(&state->options, &options_, sizeof(MojoCreateDataPipeOptions));
+  memset(state->padding, 0, sizeof(state->padding));
 
   base::AutoLock lock(lock_);
   DCHECK(in_transit_);
   state->pipe_id = pipe_id_;
-  state->peer_closed = peer_closed_;
   state->write_offset = write_offset_;
   state->available_capacity = available_capacity_;
+  state->flags = peer_closed_ ? kFlagPeerClosed : 0;
 
   ports[0] = control_port_.name();
 
@@ -350,6 +385,7 @@ DataPipeProducerDispatcher::Deserialize(const void* data,
   scoped_refptr<PlatformSharedBuffer> ring_buffer =
       PlatformSharedBuffer::CreateFromPlatformHandle(
           state->options.capacity_num_bytes,
+          false /* read_only */,
           ScopedPlatformHandle(buffer_handle));
   if (!ring_buffer) {
     DLOG(ERROR) << "Failed to deserialize shared buffer handle.";
@@ -363,9 +399,9 @@ DataPipeProducerDispatcher::Deserialize(const void* data,
 
   {
     base::AutoLock lock(dispatcher->lock_);
-    dispatcher->peer_closed_ = state->peer_closed;
     dispatcher->write_offset_ = state->write_offset;
     dispatcher->available_capacity_ = state->available_capacity;
+    dispatcher->peer_closed_ = state->flags & kFlagPeerClosed;
     dispatcher->InitializeNoLock();
   }
 
@@ -438,6 +474,8 @@ void DataPipeProducerDispatcher::NotifyWrite(uint32_t num_bytes) {
 }
 
 void DataPipeProducerDispatcher::OnPortStatusChanged() {
+  DCHECK(RequestContext::current());
+
   base::AutoLock lock(lock_);
 
   // We stop observing the control port as soon it's transferred, but this can

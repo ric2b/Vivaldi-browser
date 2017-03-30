@@ -5,10 +5,11 @@
 #ifndef CHROME_BROWSER_SYNC_FILE_SYSTEM_DRIVE_BACKEND_CALLBACK_TRACKER_INTERNAL_H_
 #define CHROME_BROWSER_SYNC_FILE_SYSTEM_DRIVE_BACKEND_CALLBACK_TRACKER_INTERNAL_H_
 
+#include <memory>
+#include <utility>
+
 #include "base/callback.h"
-#include "base/callback_internal.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 
 namespace sync_file_system {
@@ -24,7 +25,7 @@ class AbortHelper {
   ~AbortHelper();
   base::WeakPtr<AbortHelper> AsWeakPtr();
 
-  static scoped_ptr<AbortHelper> TakeOwnership(
+  static std::unique_ptr<AbortHelper> TakeOwnership(
       const base::WeakPtr<AbortHelper>& abort_helper);
 
  private:
@@ -42,9 +43,10 @@ struct InvokeAndInvalidateHelper<void(Args...)> {
   static void Run(const base::WeakPtr<AbortHelper>& abort_helper,
                   const base::Callback<void(Args...)>& callback,
                   Args... args) {
-    scoped_ptr<AbortHelper> deleter = AbortHelper::TakeOwnership(abort_helper);
+    std::unique_ptr<AbortHelper> deleter =
+        AbortHelper::TakeOwnership(abort_helper);
     if (deleter) {
-      callback.Run(base::internal::CallbackForward(args)...);
+      callback.Run(std::forward<Args>(args)...);
     }
   }
 };

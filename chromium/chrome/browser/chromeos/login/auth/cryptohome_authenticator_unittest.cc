@@ -4,6 +4,8 @@
 
 
 #include <stdint.h>
+
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -12,7 +14,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
@@ -124,8 +126,8 @@ std::vector<uint8_t> GetOwnerPublicKey() {
 bool CreateOwnerKeyInSlot(PK11SlotInfo* slot) {
   const std::vector<uint8_t> key(
       kOwnerPrivateKey, kOwnerPrivateKey + arraysize(kOwnerPrivateKey));
-  return crypto::ImportNSSKeyFromPrivateKeyInfo(slot, key,
-                                                true /* permanent */);
+  return crypto::ImportNSSKeyFromPrivateKeyInfo(
+             slot, key, true /* permanent */) != nullptr;
 }
 
 }  // namespace
@@ -168,7 +170,7 @@ class CryptohomeAuthenticatorTest : public testing::Test {
 
     fake_cryptohome_client_ = new FakeCryptohomeClient;
     chromeos::DBusThreadManager::GetSetterForTesting()->SetCryptohomeClient(
-        scoped_ptr<CryptohomeClient>(fake_cryptohome_client_));
+        std::unique_ptr<CryptohomeClient>(fake_cryptohome_client_));
 
     SystemSaltGetter::Initialize();
 
@@ -247,8 +249,8 @@ class CryptohomeAuthenticatorTest : public testing::Test {
         .RetiresOnSaturation();
   }
 
-  void ExpectGetKeyDataExCall(scoped_ptr<int64_t> key_type,
-                              scoped_ptr<std::string> salt) {
+  void ExpectGetKeyDataExCall(std::unique_ptr<int64_t> key_type,
+                              std::unique_ptr<std::string> salt) {
     key_definitions_.clear();
     key_definitions_.push_back(cryptohome::KeyDefinition(
         std::string() /* secret */,
@@ -266,10 +268,10 @@ class CryptohomeAuthenticatorTest : public testing::Test {
           cryptohome::KeyDefinition::ProviderData("salt"));
       key_definition.provider_data.back().bytes = std::move(salt);
     }
-    EXPECT_CALL(*mock_homedir_methods_,
-                GetKeyDataEx(cryptohome::Identification(
-                                 user_context_.GetAccountId().GetUserEmail()),
-                             kCryptohomeGAIAKeyLabel, _))
+    EXPECT_CALL(
+        *mock_homedir_methods_,
+        GetKeyDataEx(cryptohome::Identification(user_context_.GetAccountId()),
+                     kCryptohomeGAIAKeyLabel, _))
         .WillOnce(WithArg<2>(Invoke(
             this, &CryptohomeAuthenticatorTest::InvokeGetDataExCallback)));
   }
@@ -285,10 +287,10 @@ class CryptohomeAuthenticatorTest : public testing::Test {
           kCryptohomeGAIAKeyLabel,
           cryptohome::PRIV_DEFAULT));
     }
-    EXPECT_CALL(*mock_homedir_methods_,
-                MountEx(cryptohome::Identification(
-                            user_context_.GetAccountId().GetUserEmail()),
-                        cryptohome::Authorization(auth_key), mount, _))
+    EXPECT_CALL(
+        *mock_homedir_methods_,
+        MountEx(cryptohome::Identification(user_context_.GetAccountId()),
+                cryptohome::Authorization(auth_key), mount, _))
         .Times(1)
         .RetiresOnSaturation();
   }
@@ -325,7 +327,7 @@ class CryptohomeAuthenticatorTest : public testing::Test {
   ScopedTestCrosSettings test_cros_settings_;
 
   TestingProfile profile_;
-  scoped_ptr<TestingProfileManager> profile_manager_;
+  std::unique_ptr<TestingProfileManager> profile_manager_;
   user_manager::FakeUserManager* user_manager_;
   ScopedUserManagerEnabler user_manager_enabler_;
 
@@ -335,7 +337,7 @@ class CryptohomeAuthenticatorTest : public testing::Test {
   MockAuthStatusConsumer consumer_;
 
   scoped_refptr<CryptohomeAuthenticator> auth_;
-  scoped_ptr<TestAttemptState> state_;
+  std::unique_ptr<TestAttemptState> state_;
   FakeCryptohomeClient* fake_cryptohome_client_;
 
   scoped_refptr<ownership::MockOwnerKeyUtil> owner_key_util_;
@@ -562,14 +564,16 @@ TEST_F(CryptohomeAuthenticatorTest, DriveDataResync) {
   // Set up mock async method caller to respond successfully to a cryptohome
   // remove attempt.
   mock_caller_->SetUp(true, cryptohome::MOUNT_ERROR_NONE);
-  EXPECT_CALL(*mock_caller_,
-              AsyncRemove(user_context_.GetAccountId().GetUserEmail(), _))
+  EXPECT_CALL(
+      *mock_caller_,
+      AsyncRemove(cryptohome::Identification(user_context_.GetAccountId()), _))
       .Times(1)
       .RetiresOnSaturation();
 
   // Set up mock homedir methods to respond successfully to a cryptohome create
   // attempt.
-  ExpectGetKeyDataExCall(scoped_ptr<int64_t>(), scoped_ptr<std::string>());
+  ExpectGetKeyDataExCall(std::unique_ptr<int64_t>(),
+                         std::unique_ptr<std::string>());
   ExpectMountExCall(true /* expect_create_attempt */);
 
   state_->PresetOnlineLoginStatus(AuthFailure::AuthFailureNone());
@@ -585,8 +589,9 @@ TEST_F(CryptohomeAuthenticatorTest, DriveResyncFail) {
 
   // Set up mock async method caller to fail a cryptohome remove attempt.
   mock_caller_->SetUp(false, cryptohome::MOUNT_ERROR_NONE);
-  EXPECT_CALL(*mock_caller_,
-              AsyncRemove(user_context_.GetAccountId().GetUserEmail(), _))
+  EXPECT_CALL(
+      *mock_caller_,
+      AsyncRemove(cryptohome::Identification(user_context_.GetAccountId()), _))
       .Times(1)
       .RetiresOnSaturation();
 
@@ -616,15 +621,17 @@ TEST_F(CryptohomeAuthenticatorTest, DriveDataRecover) {
 
   // Set up mock async method caller to respond successfully to a key migration.
   mock_caller_->SetUp(true, cryptohome::MOUNT_ERROR_NONE);
-  EXPECT_CALL(*mock_caller_,
-              AsyncMigrateKey(user_context_.GetAccountId().GetUserEmail(), _,
-                              transformed_key_.GetSecret(), _))
+  EXPECT_CALL(
+      *mock_caller_,
+      AsyncMigrateKey(cryptohome::Identification(user_context_.GetAccountId()),
+                      _, transformed_key_.GetSecret(), _))
       .Times(1)
       .RetiresOnSaturation();
 
   // Set up mock homedir methods to respond successfully to a cryptohome mount
   // attempt.
-  ExpectGetKeyDataExCall(scoped_ptr<int64_t>(), scoped_ptr<std::string>());
+  ExpectGetKeyDataExCall(std::unique_ptr<int64_t>(),
+                         std::unique_ptr<std::string>());
   ExpectMountExCall(false /* expect_create_attempt */);
 
   state_->PresetOnlineLoginStatus(AuthFailure::AuthFailureNone());
@@ -641,9 +648,10 @@ TEST_F(CryptohomeAuthenticatorTest, DriveDataRecoverButFail) {
   // Set up mock async method caller to fail a key migration attempt,
   // asserting that the wrong password was used.
   mock_caller_->SetUp(false, cryptohome::MOUNT_ERROR_KEY_FAILURE);
-  EXPECT_CALL(*mock_caller_,
-              AsyncMigrateKey(user_context_.GetAccountId().GetUserEmail(), _,
-                              transformed_key_.GetSecret(), _))
+  EXPECT_CALL(
+      *mock_caller_,
+      AsyncMigrateKey(cryptohome::Identification(user_context_.GetAccountId()),
+                      _, transformed_key_.GetSecret(), _))
       .Times(1)
       .RetiresOnSaturation();
 
@@ -686,7 +694,8 @@ TEST_F(CryptohomeAuthenticatorTest, DriveCreateForNewUser) {
 
   // Set up mock homedir methods to respond successfully to a cryptohome create
   // attempt.
-  ExpectGetKeyDataExCall(scoped_ptr<int64_t>(), scoped_ptr<std::string>());
+  ExpectGetKeyDataExCall(std::unique_ptr<int64_t>(),
+                         std::unique_ptr<std::string>());
   ExpectMountExCall(true /* expect_create_attempt */);
 
   // Set up state as though a cryptohome mount attempt has occurred
@@ -732,8 +741,10 @@ TEST_F(CryptohomeAuthenticatorTest, DriveUnlock) {
   // Set up mock async method caller to respond successfully to a cryptohome
   // key-check attempt.
   mock_caller_->SetUp(true, cryptohome::MOUNT_ERROR_NONE);
-  EXPECT_CALL(*mock_caller_,
-              AsyncCheckKey(user_context_.GetAccountId().GetUserEmail(), _, _))
+  EXPECT_CALL(
+      *mock_caller_,
+      AsyncCheckKey(cryptohome::Identification(user_context_.GetAccountId()), _,
+                    _))
       .Times(1)
       .RetiresOnSaturation();
 
@@ -755,8 +766,8 @@ TEST_F(CryptohomeAuthenticatorTest, DriveLoginWithPreHashedPassword) {
   // mount when this pre-hashed key is used.
 
   ExpectGetKeyDataExCall(
-      make_scoped_ptr(new int64_t(Key::KEY_TYPE_SALTED_SHA256)),
-      make_scoped_ptr(new std::string(kSalt)));
+      base::WrapUnique(new int64_t(Key::KEY_TYPE_SALTED_SHA256)),
+      base::WrapUnique(new std::string(kSalt)));
   ExpectMountExCall(false /* expect_create_attempt */);
 
   auth_->AuthenticateToLogin(NULL, user_context_);
@@ -773,8 +784,8 @@ TEST_F(CryptohomeAuthenticatorTest, FailLoginWithMissingSalt) {
   // pre-hashed key was used to create the cryptohome but without the required
   // salt.
   ExpectGetKeyDataExCall(
-      make_scoped_ptr(new int64_t(Key::KEY_TYPE_SALTED_SHA256)),
-      scoped_ptr<std::string>());
+      base::WrapUnique(new int64_t(Key::KEY_TYPE_SALTED_SHA256)),
+      std::unique_ptr<std::string>());
 
   auth_->AuthenticateToLogin(NULL, user_context_);
   base::RunLoop().Run();

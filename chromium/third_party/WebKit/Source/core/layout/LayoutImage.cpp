@@ -85,7 +85,7 @@ void LayoutImage::styleDidChange(StyleDifference diff, const ComputedStyle* oldS
         intrinsicSizeChanged();
 }
 
-void LayoutImage::setImageResource(PassOwnPtrWillBeRawPtr<LayoutImageResource> imageResource)
+void LayoutImage::setImageResource(LayoutImageResource* imageResource)
 {
     ASSERT(!m_imageResource);
     m_imageResource = imageResource;
@@ -175,7 +175,7 @@ void LayoutImage::invalidatePaintAndMarkForLayoutIfNeeded()
     contentChanged(ImageChanged);
 }
 
-void LayoutImage::notifyFinished(Resource* newImage)
+void LayoutImage::imageNotifyFinished(ImageResource* newImage)
 {
     if (!m_imageResource)
         return;
@@ -240,14 +240,14 @@ bool LayoutImage::foregroundIsKnownToBeOpaqueInRect(const LayoutRect& localRect,
     if (style()->objectPosition() != ComputedStyle::initialObjectPosition())
         return false;
     // Object-fit may leave parts of the content box empty.
-    ObjectFit objectFit = style()->objectFit();
+    ObjectFit objectFit = style()->getObjectFit();
     if (objectFit != ObjectFitFill && objectFit != ObjectFitCover)
         return false;
     if (!m_imageResource->cachedImage())
         return false;
     // Check for image with alpha.
     TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage", "data", InspectorPaintImageEvent::data(this, *m_imageResource->cachedImage()));
-    return m_imageResource->cachedImage()->image()->currentFrameKnownToBeOpaque(Image::PreCacheMetadata);
+    return m_imageResource->cachedImage()->getImage()->currentFrameKnownToBeOpaque(Image::PreCacheMetadata);
 }
 
 bool LayoutImage::computeBackgroundIsKnownToBeObscured() const
@@ -309,17 +309,17 @@ bool LayoutImage::needsPreferredWidthsRecalculation() const
 {
     if (LayoutReplaced::needsPreferredWidthsRecalculation())
         return true;
-    return embeddedContentBox();
+    return embeddedReplacedContent();
 }
 
-LayoutBox* LayoutImage::embeddedContentBox() const
+LayoutReplaced* LayoutImage::embeddedReplacedContent() const
 {
     if (!m_imageResource)
         return nullptr;
 
     ImageResource* cachedImage = m_imageResource->cachedImage();
-    if (cachedImage && cachedImage->image() && cachedImage->image()->isSVGImage())
-        return toSVGImage(cachedImage->image())->embeddedContentBox();
+    if (cachedImage && cachedImage->getImage() && cachedImage->getImage()->isSVGImage())
+        return toSVGImage(cachedImage->getImage())->embeddedReplacedContent();
 
     return nullptr;
 }

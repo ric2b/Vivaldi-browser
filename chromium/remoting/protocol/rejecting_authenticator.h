@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "remoting/protocol/authenticator.h"
 
 namespace remoting {
@@ -24,9 +25,10 @@ class RejectingAuthenticator : public Authenticator {
   RejectionReason rejection_reason() const override;
   void ProcessMessage(const buzz::XmlElement* message,
                       const base::Closure& resume_callback) override;
-  scoped_ptr<buzz::XmlElement> GetNextMessage() override;
+  std::unique_ptr<buzz::XmlElement> GetNextMessage() override;
   const std::string& GetAuthKey() const override;
-  scoped_ptr<ChannelAuthenticator> CreateChannelAuthenticator() const override;
+  std::unique_ptr<ChannelAuthenticator> CreateChannelAuthenticator()
+      const override;
 
  private:
   RejectionReason rejection_reason_;

@@ -70,15 +70,16 @@ BlimpBrowserContext::~BlimpBrowserContext() {
 
 void BlimpBrowserContext::InitWhileIOAllowed() {
   // Ensures ~/.config/blimp_engine directory exists.
-  scoped_ptr<base::Environment> env(base::Environment::Create());
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
   base::FilePath config_dir(base::nix::GetXDGDirectory(
       env.get(), base::nix::kXdgConfigHomeEnvVar, base::nix::kDotConfigDir));
   path_ = config_dir.Append("blimp_engine");
   if (!base::PathExists(path_))
     base::CreateDirectory(path_);
+  BrowserContext::Initialize(this, path_);
 }
 
-scoped_ptr<content::ZoomLevelDelegate>
+std::unique_ptr<content::ZoomLevelDelegate>
 BlimpBrowserContext::CreateZoomLevelDelegate(const base::FilePath&) {
   return nullptr;
 }
@@ -96,30 +97,16 @@ BlimpBrowserContext::GetDownloadManagerDelegate() {
   return nullptr;
 }
 
+net::URLRequestContextGetter*
+BlimpBrowserContext::GetSystemRequestContextGetter() {
+  if (!system_context_getter_) {
+    system_context_getter_ = new BlimpSystemURLRequestContextGetter();
+  }
+  return system_context_getter_.get();
+}
+
 net::URLRequestContextGetter* BlimpBrowserContext::GetRequestContext() {
   return GetDefaultStoragePartition(this)->GetURLRequestContext();
-}
-
-const scoped_refptr<BlimpURLRequestContextGetter>&
-BlimpBrowserContext::CreateRequestContext(
-    content::ProtocolHandlerMap* protocol_handlers,
-    content::URLRequestInterceptorScopedVector request_interceptors) {
-  DCHECK(!resource_context_->url_request_context_getter());
-  // net_log_ is owned by BrowserMainParts.
-  resource_context_->set_url_request_context_getter(
-      new BlimpURLRequestContextGetter(
-          ignore_certificate_errors_, GetPath(),
-          content::BrowserThread::GetMessageLoopProxyForThread(
-              content::BrowserThread::IO),
-          content::BrowserThread::GetMessageLoopProxyForThread(
-              content::BrowserThread::FILE),
-          protocol_handlers, std::move(request_interceptors), net_log_));
-  return resource_context_->url_request_context_getter();
-}
-
-net::URLRequestContextGetter*
-BlimpBrowserContext::GetRequestContextForRenderProcess(int renderer_child_id) {
-  return GetRequestContext();
 }
 
 net::URLRequestContextGetter* BlimpBrowserContext::GetMediaRequestContext() {
@@ -167,6 +154,31 @@ content::PermissionManager* BlimpBrowserContext::GetPermissionManager() {
 
 content::BackgroundSyncController*
 BlimpBrowserContext::GetBackgroundSyncController() {
+  return nullptr;
+}
+
+net::URLRequestContextGetter* BlimpBrowserContext::CreateRequestContext(
+    content::ProtocolHandlerMap* protocol_handlers,
+    content::URLRequestInterceptorScopedVector request_interceptors) {
+  DCHECK(!resource_context_->url_request_context_getter());
+  // net_log_ is owned by BrowserMainParts.
+  resource_context_->set_url_request_context_getter(
+      new BlimpURLRequestContextGetter(
+          ignore_certificate_errors_, GetPath(),
+          content::BrowserThread::GetMessageLoopProxyForThread(
+              content::BrowserThread::IO),
+          content::BrowserThread::GetMessageLoopProxyForThread(
+              content::BrowserThread::FILE),
+          protocol_handlers, std::move(request_interceptors), net_log_));
+  return resource_context_->url_request_context_getter().get();
+}
+
+net::URLRequestContextGetter*
+BlimpBrowserContext::CreateRequestContextForStoragePartition(
+    const base::FilePath& partition_path,
+    bool in_memory,
+    content::ProtocolHandlerMap* protocol_handlers,
+    content::URLRequestInterceptorScopedVector request_interceptors) {
   return nullptr;
 }
 

@@ -219,7 +219,7 @@ public class WebappActivity extends FullScreenActivity {
 
     @Override
     public void postInflationStartup() {
-        initializeSplashScreen();
+        initializeWebappData();
 
         super.postInflationStartup();
         WebappControlContainer controlContainer =
@@ -234,7 +234,7 @@ public class WebappActivity extends FullScreenActivity {
         return mWebappInfo;
     }
 
-    private void initializeSplashScreen() {
+    private void initializeWebappData() {
         final int backgroundColor = ColorUtils.getOpaqueColor(mWebappInfo.backgroundColor(
                 ApiCompatibilityUtils.getColor(getResources(), R.color.webapp_default_bg)));
 
@@ -252,13 +252,37 @@ public class WebappActivity extends FullScreenActivity {
                 ? WebappUma.SPLASHSCREEN_COLOR_STATUS_CUSTOM
                 : WebappUma.SPLASHSCREEN_COLOR_STATUS_DEFAULT);
 
-        WebappDataStorage.open(this, mWebappInfo.id()).getSplashScreenImage(
-                new WebappDataStorage.FetchCallback<Bitmap>() {
+        final Intent intent = getIntent();
+        WebappRegistry.getWebappDataStorage(this, mWebappInfo.id(),
+                new WebappRegistry.FetchWebappDataStorageCallback() {
                     @Override
-                    public void onDataRetrieved(Bitmap splashImage) {
-                        initializeSplashScreenWidgets(backgroundColor, splashImage);
+                    public void onWebappDataStorageRetrieved(WebappDataStorage storage) {
+                        if (storage == null) return;
+
+                        // The information in the WebappDataStorage may have been purged by the
+                        // user clearing their history or not launching the web app recently.
+                        // Restore the data if necessary from the intent.
+                        storage.updateFromShortcutIntent(intent);
+
+                        // A recent last used time is the indicator that the web app is still
+                        // present on the home screen, and enables sources such as notifications to
+                        // launch web apps. Thus, we do not update the last used time when the web
+                        // app is not directly launched from the home screen, as this interferes
+                        // with the heuristic.
+                        if (mWebappInfo.isLaunchedFromHomescreen()) {
+                            storage.updateLastUsedTime();
+                        }
+
+                        // Retrieve the splash image if it exists.
+                        storage.getSplashScreenImage(new WebappDataStorage.FetchCallback<Bitmap>() {
+                            @Override
+                            public void onDataRetrieved(Bitmap splashImage) {
+                                initializeSplashScreenWidgets(backgroundColor, splashImage);
+                            }
+                        });
                     }
-                });
+                }
+        );
     }
 
     private void initializeSplashScreenWidgets(int backgroundColor, Bitmap splashImage) {

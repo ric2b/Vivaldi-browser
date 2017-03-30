@@ -68,7 +68,7 @@ scoped_refptr<const Extension> GetExtensionWithHostPermission(
                        .Set("description", "an extension")
                        .Set("manifest_version", 2)
                        .Set("version", "1.0.0")
-                       .Set("permissions", std::move(permissions))
+                       .Set("permissions", permissions.Build())
                        .Build())
       .SetLocation(location)
       .SetID(id)
@@ -313,16 +313,6 @@ TEST(PermissionsDataTest, GetPermissionMessages_ManyHostsPermissions) {
   EXPECT_TRUE(VerifyOnePermissionMessageWithSubmessages(
       extension->permissions_data(),
       "Read and change your data on a number of websites", submessages));
-}
-
-TEST(PermissionsDataTest, GetPermissionMessages_LocationApiPermission) {
-  scoped_refptr<Extension> extension;
-  extension = LoadManifest("permissions",
-                           "location-api.json",
-                           Manifest::COMPONENT,
-                           Extension::NO_FLAGS);
-  EXPECT_TRUE(VerifyOnePermissionMessage(extension->permissions_data(),
-                                         "Detect your physical location"));
 }
 
 TEST(PermissionsDataTest, GetPermissionMessages_ManyHosts) {

@@ -5,8 +5,9 @@
 #ifndef ASH_MUS_SYSUI_APPLICATION_H_
 #define ASH_MUS_SYSUI_APPLICATION_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "mojo/services/tracing/public/cpp/tracing_impl.h"
 #include "mojo/shell/public/cpp/shell_client.h"
 
@@ -23,13 +24,12 @@ class SysUIApplication : public mojo::ShellClient {
  private:
   // mojo::ShellClient:
   void Initialize(mojo::Connector* connector,
-                  const std::string& url,
-                  uint32_t id,
-                  uint32_t user_id) override;
+                  const mojo::Identity& identity,
+                  uint32_t id) override;
   bool AcceptConnection(mojo::Connection* connection) override;
 
   mojo::TracingImpl tracing_;
-  scoped_ptr<AshInit> ash_init_;
+  std::unique_ptr<AshInit> ash_init_;
 
   DISALLOW_COPY_AND_ASSIGN(SysUIApplication);
 };

@@ -39,7 +39,7 @@ protected:
         m_featuresBackup.restore();
     }
 
-    PaintArtifactCompositor& paintArtifactCompositor() { return *m_paintArtifactCompositor; }
+    PaintArtifactCompositor& getPaintArtifactCompositor() { return *m_paintArtifactCompositor; }
     cc::Layer* rootLayer() { return m_paintArtifactCompositor->rootLayer(); }
     void update(const PaintArtifact& artifact) { m_paintArtifactCompositor->update(artifact); }
 
@@ -142,6 +142,34 @@ TEST_F(PaintArtifactCompositorTest, TransformCombining)
         layer->transform().TransformRect(&mappedRect);
         EXPECT_EQ(gfx::RectF(0, 0, 600, 400), mappedRect);
     }
+}
+
+TEST_F(PaintArtifactCompositorTest, LayerOriginCancellation)
+{
+    RefPtr<ClipPaintPropertyNode> clip = ClipPaintPropertyNode::create(
+        nullptr, FloatRoundedRect(100, 100, 100, 100));
+    RefPtr<TransformPaintPropertyNode> transform = TransformPaintPropertyNode::create(
+        TransformationMatrix().scale(2), FloatPoint3D());
+
+    TestPaintArtifact artifact;
+    artifact.chunk(transform, clip, nullptr)
+        .rectDrawing(FloatRect(12, 34, 56, 78), Color::white);
+    update(artifact.build());
+
+    ASSERT_EQ(1u, rootLayer()->children().size());
+    cc::Layer* clipLayer = rootLayer()->child_at(0);
+    EXPECT_EQ(gfx::Size(100, 100), clipLayer->bounds());
+    EXPECT_EQ(translation(100, 100), clipLayer->transform());
+    EXPECT_TRUE(clipLayer->masks_to_bounds());
+
+    ASSERT_EQ(1u, clipLayer->children().size());
+    cc::Layer* layer = clipLayer->child_at(0);
+    EXPECT_EQ(gfx::Size(56, 78), layer->bounds());
+    gfx::Transform expectedTransform;
+    expectedTransform.Translate(-100, -100);
+    expectedTransform.Scale(2, 2);
+    expectedTransform.Translate(12, 34);
+    EXPECT_EQ(expectedTransform, layer->transform());
 }
 
 TEST_F(PaintArtifactCompositorTest, OneClip)
@@ -304,6 +332,21 @@ TEST_F(PaintArtifactCompositorTest, SiblingClips)
             Pointee(drawsRectangle(FloatRect(0, 0, 640, 480), Color::black)));
         EXPECT_EQ(translation(-400, 0), blackLayer->transform());
     }
+}
+
+TEST_F(PaintArtifactCompositorTest, ForeignLayerPassesThrough)
+{
+    scoped_refptr<cc::Layer> layer = cc::Layer::Create();
+
+    TestPaintArtifact artifact;
+    artifact.chunk(PaintChunkProperties())
+        .foreignLayer(FloatPoint(50, 100), IntSize(400, 300), layer);
+    update(artifact.build());
+
+    ASSERT_EQ(1u, rootLayer()->children().size());
+    EXPECT_EQ(layer, rootLayer()->child_at(0));
+    EXPECT_EQ(gfx::Size(400, 300), layer->bounds());
+    EXPECT_EQ(translation(50, 100), layer->transform());
 }
 
 } // namespace

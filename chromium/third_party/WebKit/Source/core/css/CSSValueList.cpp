@@ -41,7 +41,7 @@ bool CSSValueList::removeAll(CSSValue* val)
 {
     bool found = false;
     for (int index = m_values.size() - 1; index >= 0; --index) {
-        RefPtrWillBeMember<CSSValue>& value = m_values.at(index);
+        Member<CSSValue>& value = m_values.at(index);
         if (value && val && value->equals(*val)) {
             m_values.remove(index);
             found = true;
@@ -54,16 +54,16 @@ bool CSSValueList::removeAll(CSSValue* val)
 bool CSSValueList::hasValue(CSSValue* val) const
 {
     for (size_t index = 0; index < m_values.size(); index++) {
-        const RefPtrWillBeMember<CSSValue>& value = m_values.at(index);
+        const Member<CSSValue>& value = m_values.at(index);
         if (value && val && value->equals(*val))
             return true;
     }
     return false;
 }
 
-PassRefPtrWillBeRawPtr<CSSValueList> CSSValueList::copy()
+CSSValueList* CSSValueList::copy()
 {
-    RefPtrWillBeRawPtr<CSSValueList> newList = nullptr;
+    CSSValueList* newList = nullptr;
     switch (m_valueListSeparator) {
     case SpaceSeparator:
         newList = createSpaceSeparated();
@@ -79,7 +79,7 @@ PassRefPtrWillBeRawPtr<CSSValueList> CSSValueList::copy()
     }
     for (size_t index = 0; index < m_values.size(); index++)
         newList->append(m_values[index]);
-    return newList.release();
+    return newList;
 }
 
 String CSSValueList::customCSSText() const

@@ -201,7 +201,7 @@ IN_PROC_BROWSER_TEST_P(AcceleratorCommandsFullscreenBrowserTest,
   views::Widget::InitParams params;
   params.delegate = new MaximizableWidgetDelegate();
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  scoped_ptr<views::Widget> widget(new views::Widget);
+  std::unique_ptr<views::Widget> widget(new views::Widget);
   widget->Init(params);
   widget->Show();
 
@@ -280,7 +280,7 @@ IN_PROC_BROWSER_TEST_P(AcceleratorCommandsPlatformAppFullscreenBrowserTest,
     extensions::AppWindow::CreateParams params;
     params.frame = extensions::AppWindow::FRAME_CHROME;
     extensions::AppWindow* app_window =
-        CreateAppWindowFromParams(extension, params);
+        CreateAppWindowFromParams(browser()->profile(), extension, params);
     extensions::NativeAppWindow* native_app_window =
         app_window->GetBaseWindow();
     SetToInitialShowState(app_window);
@@ -305,7 +305,7 @@ IN_PROC_BROWSER_TEST_P(AcceleratorCommandsPlatformAppFullscreenBrowserTest,
     extensions::AppWindow::CreateParams params;
     params.frame = extensions::AppWindow::FRAME_NONE;
     extensions::AppWindow* app_window =
-        CreateAppWindowFromParams(extension, params);
+        CreateAppWindowFromParams(browser()->profile(), extension, params);
     extensions::NativeAppWindow* native_app_window =
         app_window->GetBaseWindow();
     ASSERT_TRUE(app_window->GetBaseWindow()->IsActive());

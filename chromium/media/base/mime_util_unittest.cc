@@ -140,7 +140,7 @@ TEST(MimeUtilTest, CommonMediaMimeType) {
   EXPECT_TRUE(IsSupportedMediaMimeType("video/ogg"));
 #endif  // OS_ANDROID
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && defined(USE_PROPRIETARY_CODECS)
   // HLS is supported on Android API level 14 and higher and Chrome supports
   // API levels 15 and higher, so these are expected to be supported.
   bool kHlsSupported = true;
@@ -296,9 +296,7 @@ TEST(IsCodecSupportedOnPlatformTest, EncryptedCodecBehavior) {
           case MimeUtil::INVALID_CODEC:
           case MimeUtil::AC3:
           case MimeUtil::EAC3:
-          case MimeUtil::MPEG2_AAC_LC:
-          case MimeUtil::MPEG2_AAC_MAIN:
-          case MimeUtil::MPEG2_AAC_SSR:
+          case MimeUtil::MPEG2_AAC:
           case MimeUtil::THEORA:
             EXPECT_FALSE(result);
             break;
@@ -306,9 +304,7 @@ TEST(IsCodecSupportedOnPlatformTest, EncryptedCodecBehavior) {
           // These codecs are always available with platform decoder support.
           case MimeUtil::PCM:
           case MimeUtil::MP3:
-          case MimeUtil::MPEG4_AAC_LC:
-          case MimeUtil::MPEG4_AAC_SBR_v1:
-          case MimeUtil::MPEG4_AAC_SBR_PS_v2:
+          case MimeUtil::MPEG4_AAC:
           case MimeUtil::VORBIS:
           case MimeUtil::H264:
             EXPECT_TRUE(result);
@@ -354,9 +350,7 @@ TEST(IsCodecSupportedOnPlatformTest, ClearCodecBehaviorWithAndroidPipeline) {
           case MimeUtil::INVALID_CODEC:
           case MimeUtil::AC3:
           case MimeUtil::EAC3:
-          case MimeUtil::MPEG2_AAC_LC:
-          case MimeUtil::MPEG2_AAC_MAIN:
-          case MimeUtil::MPEG2_AAC_SSR:
+          case MimeUtil::MPEG2_AAC:
           case MimeUtil::THEORA:
             EXPECT_FALSE(result);
             break;
@@ -364,9 +358,7 @@ TEST(IsCodecSupportedOnPlatformTest, ClearCodecBehaviorWithAndroidPipeline) {
           // These codecs are always available via MediaPlayer.
           case MimeUtil::PCM:
           case MimeUtil::MP3:
-          case MimeUtil::MPEG4_AAC_LC:
-          case MimeUtil::MPEG4_AAC_SBR_v1:
-          case MimeUtil::MPEG4_AAC_SBR_PS_v2:
+          case MimeUtil::MPEG4_AAC:
           case MimeUtil::VORBIS:
           case MimeUtil::H264:
           case MimeUtil::VP8:
@@ -414,13 +406,9 @@ TEST(IsCodecSupportedOnPlatformTest, ClearCodecBehaviorWithUnifiedPipeline) {
 
           // These codecs are always supported with the unified pipeline.
           case MimeUtil::PCM:
-          case MimeUtil::MPEG2_AAC_LC:
-          case MimeUtil::MPEG2_AAC_MAIN:
-          case MimeUtil::MPEG2_AAC_SSR:
+          case MimeUtil::MPEG2_AAC:
           case MimeUtil::MP3:
-          case MimeUtil::MPEG4_AAC_LC:
-          case MimeUtil::MPEG4_AAC_SBR_v1:
-          case MimeUtil::MPEG4_AAC_SBR_PS_v2:
+          case MimeUtil::MPEG4_AAC:
           case MimeUtil::OPUS:
           case MimeUtil::VORBIS:
           case MimeUtil::VP8:
@@ -451,6 +439,21 @@ TEST(IsCodecSupportedOnPlatformTest, OpusOggSupport) {
         EXPECT_EQ(info.is_unified_media_pipeline_enabled,
                   MimeUtil::IsCodecSupportedOnPlatform(
                       MimeUtil::OPUS, "audio/ogg", false, info));
+      });
+}
+
+TEST(IsCodecSupportedOnPlatformTest, HLSDoesNotSupportMPEG2AAC) {
+  // Vary all parameters; thus use default initial state.
+  MimeUtil::PlatformInfo states_to_vary = VaryAllFields();
+  MimeUtil::PlatformInfo test_states;
+
+  RunCodecSupportTest(
+      states_to_vary, test_states,
+      [](const MimeUtil::PlatformInfo& info, MimeUtil::Codec codec) {
+        EXPECT_FALSE(MimeUtil::IsCodecSupportedOnPlatform(
+            MimeUtil::MPEG2_AAC, "application/x-mpegurl", false, info));
+        EXPECT_FALSE(MimeUtil::IsCodecSupportedOnPlatform(
+            MimeUtil::MPEG2_AAC, "application/vnd.apple.mpegurl", false, info));
       });
 }
 

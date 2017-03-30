@@ -44,6 +44,7 @@
 #include "third_party/WebKit/public/web/WebFrameLoadType.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 
+using blink::WebCachePolicy;
 using blink::WebFrame;
 using blink::WebHistoryCommitType;
 using blink::WebHistoryItem;
@@ -64,7 +65,7 @@ bool HistoryController::GoToEntry(
     blink::WebLocalFrame* main_frame,
     scoped_ptr<HistoryEntry> target_entry,
     scoped_ptr<NavigationParams> navigation_params,
-    WebURLRequest::CachePolicy cache_policy) {
+    WebCachePolicy cache_policy) {
   DCHECK(!main_frame->parent());
   HistoryFrameLoadVector same_document_loads;
   HistoryFrameLoadVector different_document_loads;
@@ -144,6 +145,11 @@ void HistoryController::RecursiveGoToEntry(
         new_item.documentSequenceNumber() ==
             old_item.documentSequenceNumber()) {
       same_document_loads.push_back(std::make_pair(frame, new_item));
+
+      // Returning here (and omitting child frames which have also changed) is
+      // wrong, but not returning here is worse. See the discussion in
+      // NavigationControllerImpl::FindFramesToNavigate for more information.
+      return;
     } else {
       different_document_loads.push_back(std::make_pair(frame, new_item));
       // For a different document, the subframes will be destroyed, so there's

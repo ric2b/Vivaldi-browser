@@ -1,14 +1,18 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+#include "remoting/host/security_key/gnubby_auth_handler.h"
+
 #include <stdint.h>
 #include <unistd.h>
+
+#include <memory>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_restrictions.h"
@@ -18,7 +22,6 @@
 #include "net/socket/stream_socket.h"
 #include "net/socket/unix_domain_server_socket_posix.h"
 #include "remoting/base/logging.h"
-#include "remoting/host/security_key/gnubby_auth_handler.h"
 #include "remoting/host/security_key/gnubby_socket.h"
 
 namespace {
@@ -64,7 +67,7 @@ class GnubbyAuthHandlerLinux : public GnubbyAuthHandler {
   void SendErrorAndCloseConnection(int gnubby_connection_id) override;
   void SetSendMessageCallback(const SendMessageCallback& callback) override;
   size_t GetActiveConnectionCountForTest() const override;
-  void SetRequestTimeoutForTest(const base::TimeDelta& timeout) override;
+  void SetRequestTimeoutForTest(base::TimeDelta timeout) override;
 
   // Starts listening for connection.
   void DoAccept();
@@ -89,10 +92,10 @@ class GnubbyAuthHandlerLinux : public GnubbyAuthHandler {
   base::ThreadChecker thread_checker_;
 
   // Socket used to listen for authorization requests.
-  scoped_ptr<net::UnixDomainServerSocket> auth_socket_;
+  std::unique_ptr<net::UnixDomainServerSocket> auth_socket_;
 
   // A temporary holder for an accepted connection.
-  scoped_ptr<net::StreamSocket> accept_socket_;
+  std::unique_ptr<net::StreamSocket> accept_socket_;
 
   // Used to pass gnubby extension messages to the client.
   SendMessageCallback send_message_callback_;
@@ -109,9 +112,9 @@ class GnubbyAuthHandlerLinux : public GnubbyAuthHandler {
   DISALLOW_COPY_AND_ASSIGN(GnubbyAuthHandlerLinux);
 };
 
-scoped_ptr<GnubbyAuthHandler> GnubbyAuthHandler::Create(
+std::unique_ptr<GnubbyAuthHandler> GnubbyAuthHandler::Create(
     const SendMessageCallback& callback) {
-  scoped_ptr<GnubbyAuthHandler> auth_handler(new GnubbyAuthHandlerLinux());
+  std::unique_ptr<GnubbyAuthHandler> auth_handler(new GnubbyAuthHandlerLinux());
   auth_handler->SetSendMessageCallback(callback);
   return auth_handler;
 }
@@ -139,7 +142,7 @@ void GnubbyAuthHandlerLinux::CreateGnubbyConnection() {
     // socket below. Consider moving this class to a different thread if this
     // causes any problems. See crbug.com/509807.
     // TODO(joedow): Since this code now runs as a host extension, we should
-    //               perform our IO on a separate thread.
+    //               perform our IO on a separate thread: crbug.com/591739
     base::ThreadRestrictions::ScopedAllowIO allow_io;
 
     // If the file already exists, a socket in use error is returned.
@@ -200,8 +203,7 @@ size_t GnubbyAuthHandlerLinux::GetActiveConnectionCountForTest() const {
   return active_sockets_.size();
 }
 
-void GnubbyAuthHandlerLinux::SetRequestTimeoutForTest(
-    const base::TimeDelta& timeout) {
+void GnubbyAuthHandlerLinux::SetRequestTimeoutForTest(base::TimeDelta timeout) {
   request_timeout_ = timeout;
 }
 

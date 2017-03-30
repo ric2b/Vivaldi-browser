@@ -27,7 +27,11 @@
 #include "platform/network/ResourceRequest.h"
 
 #include "platform/HTTPNames.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebAddressSpace.h"
+#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
 
 namespace blink {
@@ -48,6 +52,7 @@ ResourceRequest::ResourceRequest(CrossThreadResourceRequestData* data)
     m_httpHeaderFields.adopt(data->m_httpHeaders.release());
 
     setHTTPBody(data->m_httpBody);
+    setAttachedCredential(data->m_attachedCredential);
     setAllowStoredCredentials(data->m_allowStoredCredentials);
     setReportUploadProgress(data->m_reportUploadProgress);
     setHasUserGesture(data->m_hasUserGesture);
@@ -68,7 +73,7 @@ ResourceRequest::ResourceRequest(CrossThreadResourceRequestData* data)
     m_didSetHTTPReferrer = data->m_didSetHTTPReferrer;
     m_checkForBrowserSideNavigation = data->m_checkForBrowserSideNavigation;
     m_uiStartTime = data->m_uiStartTime;
-    m_originatesFromReservedIPRange = data->m_originatesFromReservedIPRange;
+    m_isExternalRequest = data->m_isExternalRequest;
     m_inputPerfMetricReportPolicy = data->m_inputPerfMetricReportPolicy;
     m_followedRedirect = data->m_followedRedirect;
 }
@@ -81,13 +86,15 @@ PassOwnPtr<CrossThreadResourceRequestData> ResourceRequest::copyData() const
     data->m_timeoutInterval = timeoutInterval();
     data->m_firstPartyForCookies = firstPartyForCookies().copy();
     data->m_requestorOrigin = requestorOrigin() ? requestorOrigin()->isolatedCopy() : nullptr;
-    data->m_httpMethod = httpMethod().string().isolatedCopy();
+    data->m_httpMethod = httpMethod().getString().isolatedCopy();
     data->m_httpHeaders = httpHeaderFields().copyData();
     data->m_priority = priority();
     data->m_intraPriorityValue = m_intraPriorityValue;
 
     if (m_httpBody)
         data->m_httpBody = m_httpBody->deepCopy();
+    if (m_attachedCredential)
+        data->m_attachedCredential = m_attachedCredential->deepCopy();
     data->m_allowStoredCredentials = m_allowStoredCredentials;
     data->m_reportUploadProgress = m_reportUploadProgress;
     data->m_hasUserGesture = m_hasUserGesture;
@@ -108,7 +115,7 @@ PassOwnPtr<CrossThreadResourceRequestData> ResourceRequest::copyData() const
     data->m_didSetHTTPReferrer = m_didSetHTTPReferrer;
     data->m_checkForBrowserSideNavigation = m_checkForBrowserSideNavigation;
     data->m_uiStartTime = m_uiStartTime;
-    data->m_originatesFromReservedIPRange = m_originatesFromReservedIPRange;
+    data->m_isExternalRequest = m_isExternalRequest;
     data->m_inputPerfMetricReportPolicy = m_inputPerfMetricReportPolicy;
     data->m_followedRedirect = m_followedRedirect;
     return data.release();
@@ -143,12 +150,12 @@ void ResourceRequest::removeCredentials()
     m_url.setPass(String());
 }
 
-ResourceRequestCachePolicy ResourceRequest::getCachePolicy() const
+WebCachePolicy ResourceRequest::getCachePolicy() const
 {
     return m_cachePolicy;
 }
 
-void ResourceRequest::setCachePolicy(ResourceRequestCachePolicy cachePolicy)
+void ResourceRequest::setCachePolicy(WebCachePolicy cachePolicy)
 {
     m_cachePolicy = cachePolicy;
 }
@@ -229,7 +236,7 @@ void ResourceRequest::setHTTPOrigin(PassRefPtr<SecurityOrigin> origin)
 {
     setHTTPHeaderField(HTTPNames::Origin, origin->toAtomicString());
     if (origin->hasSuborigin())
-        setHTTPHeaderField(HTTPNames::Suborigin, AtomicString(origin->suboriginName()));
+        setHTTPHeaderField(HTTPNames::Suborigin, AtomicString(origin->suborigin()->name()));
 }
 
 void ResourceRequest::clearHTTPOrigin()
@@ -280,6 +287,16 @@ void ResourceRequest::setHTTPBody(PassRefPtr<EncodedFormData> httpBody)
     m_httpBody = httpBody;
 }
 
+EncodedFormData* ResourceRequest::attachedCredential() const
+{
+    return m_attachedCredential.get();
+}
+
+void ResourceRequest::setAttachedCredential(PassRefPtr<EncodedFormData> attachedCredential)
+{
+    m_attachedCredential = attachedCredential;
+}
+
 bool ResourceRequest::allowStoredCredentials() const
 {
     return m_allowStoredCredentials;
@@ -320,55 +337,26 @@ void ResourceRequest::clearHTTPHeaderField(const AtomicString& name)
     m_httpHeaderFields.remove(name);
 }
 
-bool equalIgnoringHeaderFields(const ResourceRequest& a, const ResourceRequest& b)
+void ResourceRequest::setExternalRequestStateFromRequestorAddressSpace(WebAddressSpace requestorSpace)
 {
-    if (a.url() != b.url())
-        return false;
+    static_assert(WebAddressSpaceLocal < WebAddressSpacePrivate, "Local is inside Private");
+    static_assert(WebAddressSpaceLocal < WebAddressSpacePublic, "Local is inside Public");
+    static_assert(WebAddressSpacePrivate < WebAddressSpacePublic, "Private is inside Public");
 
-    if (a.getCachePolicy() != b.getCachePolicy())
-        return false;
+    // TODO(mkwst): This only checks explicit IP addresses. We'll have to move all this up to //net and //content in
+    // order to have any real impact on gateway attacks. That turns out to be a TON of work. https://crbug.com/378566
+    if (!RuntimeEnabledFeatures::corsRFC1918Enabled()) {
+        m_isExternalRequest = false;
+        return;
+    }
 
-    if (a.timeoutInterval() != b.timeoutInterval())
-        return false;
+    WebAddressSpace targetSpace = WebAddressSpacePublic;
+    if (Platform::current()->isReservedIPAddress(m_url.host()))
+        targetSpace = WebAddressSpacePrivate;
+    if (SecurityOrigin::create(m_url)->isLocalhost())
+        targetSpace = WebAddressSpaceLocal;
 
-    if (a.firstPartyForCookies() != b.firstPartyForCookies())
-        return false;
-
-    if (a.httpMethod() != b.httpMethod())
-        return false;
-
-    if (a.allowStoredCredentials() != b.allowStoredCredentials())
-        return false;
-
-    if (a.priority() != b.priority())
-        return false;
-
-    if (a.referrerPolicy() != b.referrerPolicy())
-        return false;
-
-    EncodedFormData* formDataA = a.httpBody();
-    EncodedFormData* formDataB = b.httpBody();
-
-    if (!formDataA)
-        return !formDataB;
-    if (!formDataB)
-        return !formDataA;
-
-    if (*formDataA != *formDataB)
-        return false;
-
-    return true;
-}
-
-bool ResourceRequest::compare(const ResourceRequest& a, const ResourceRequest& b)
-{
-    if (!equalIgnoringHeaderFields(a, b))
-        return false;
-
-    if (a.httpHeaderFields() != b.httpHeaderFields())
-        return false;
-
-    return true;
+    m_isExternalRequest = requestorSpace > targetSpace;
 }
 
 bool ResourceRequest::isConditional() const
@@ -410,7 +398,7 @@ bool ResourceRequest::hasCacheValidatorFields() const
 void ResourceRequest::initialize(const KURL& url)
 {
     m_url = url;
-    m_cachePolicy = UseProtocolCachePolicy;
+    m_cachePolicy = WebCachePolicy::UseProtocolCachePolicy;
     m_timeoutInterval = s_defaultTimeoutInterval;
     m_httpMethod = HTTPNames::GET;
     m_allowStoredCredentials = true;
@@ -429,17 +417,14 @@ void ResourceRequest::initialize(const KURL& url)
     m_requestContext = WebURLRequest::RequestContextUnspecified;
     m_frameType = WebURLRequest::FrameTypeNone;
     m_fetchRequestMode = WebURLRequest::FetchRequestModeNoCORS;
-    // Contrary to the Fetch spec, we default to same-origin mode here, and deal
-    // with CORS modes in updateRequestForAccessControl if we're called in a
-    // context which requires it.
-    m_fetchCredentialsMode = WebURLRequest::FetchCredentialsModeSameOrigin;
+    m_fetchCredentialsMode = WebURLRequest::FetchCredentialsModeInclude;
     m_fetchRedirectMode = WebURLRequest::FetchRedirectModeFollow;
     m_referrerPolicy = ReferrerPolicyDefault;
     m_loFiState = WebURLRequest::LoFiUnspecified;
     m_didSetHTTPReferrer = false;
     m_checkForBrowserSideNavigation = true;
     m_uiStartTime = 0;
-    m_originatesFromReservedIPRange = false;
+    m_isExternalRequest = false;
     m_inputPerfMetricReportPolicy = InputToLoadPerfMetricReportPolicy::NoReport;
     m_followedRedirect = false;
     m_requestorOrigin = SecurityOrigin::createUnique();

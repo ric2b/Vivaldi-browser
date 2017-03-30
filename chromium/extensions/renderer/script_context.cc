@@ -4,6 +4,7 @@
 
 #include "extensions/renderer/script_context.h"
 
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
@@ -12,6 +13,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "content/public/child/v8_value_converter.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "extensions/common/constants.h"
@@ -29,7 +31,6 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebScopedMicrotaskSuppression.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "v8/include/v8.h"
 
@@ -185,7 +186,8 @@ v8::Local<v8::Value> ScriptContext::CallFunction(
   v8::EscapableHandleScope handle_scope(isolate());
   v8::Context::Scope scope(v8_context());
 
-  blink::WebScopedMicrotaskSuppression suppression;
+  v8::MicrotasksScope microtasks(
+      isolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
   if (!is_valid_) {
     return handle_scope.Escape(
         v8::Local<v8::Primitive>(v8::Undefined(isolate())));
@@ -208,6 +210,14 @@ v8::Local<v8::Value> ScriptContext::CallFunction(
 Feature::Availability ScriptContext::GetAvailability(
     const std::string& api_name) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  if (base::StartsWith(api_name, "test", base::CompareCase::SENSITIVE)) {
+    bool allowed = base::CommandLine::ForCurrentProcess()->
+                       HasSwitch(::switches::kTestType);
+    Feature::AvailabilityResult result =
+        allowed ? Feature::IS_AVAILABLE : Feature::MISSING_COMMAND_LINE_SWITCH;
+    return Feature::Availability(result,
+                                 allowed ? "" : "Only allowed in tests");
+  }
   // Hack: Hosted apps should have the availability of messaging APIs based on
   // the URL of the page (which might have access depending on some extension
   // with externally_connectable), not whether the app has access to messaging
@@ -292,8 +302,8 @@ GURL ScriptContext::GetEffectiveDocumentURL(const blink::WebFrame* frame,
   if (parent && !parent->document().isNull()) {
     // Only return the parent URL if the frame can access it.
     const blink::WebDocument& parent_document = parent->document();
-    if (frame->document().securityOrigin().canAccess(
-            parent_document.securityOrigin())) {
+    if (frame->document().getSecurityOrigin().canAccess(
+            parent_document.getSecurityOrigin())) {
       return parent_document.url();
     }
   }
@@ -434,7 +444,8 @@ v8::Local<v8::Value> ScriptContext::RunScript(
     return v8::Undefined(isolate());
   }
 
-  blink::WebScopedMicrotaskSuppression suppression;
+  v8::MicrotasksScope microtasks(
+      isolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::TryCatch try_catch(isolate());
   try_catch.SetCaptureMessage(true);
   v8::ScriptOrigin origin(

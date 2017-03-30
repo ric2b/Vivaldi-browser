@@ -30,15 +30,15 @@ namespace blink {
 
 class CORE_EXPORT HTMLImageLoader final : public ImageLoader {
 public:
-    static PassOwnPtrWillBeRawPtr<HTMLImageLoader> create(Element* element)
+    static RawPtr<HTMLImageLoader> create(Element* element)
     {
-        return adoptPtrWillBeNoop(new HTMLImageLoader(element));
+        return new HTMLImageLoader(element);
     }
     ~HTMLImageLoader() override;
 
     void dispatchLoadEvent() override;
 
-    void notifyFinished(Resource*) override;
+    void imageNotifyFinished(ImageResource*) override;
     String debugName() const override { return "HTMLImageLoader"; }
 
 private:

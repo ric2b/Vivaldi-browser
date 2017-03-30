@@ -34,7 +34,7 @@ namespace blink {
 class PlatformEvent {
     DISALLOW_NEW();
 public:
-    enum Type {
+    enum EventType {
         NoType = 0,
 
         // PlatformKeyboardEvent
@@ -121,14 +121,27 @@ public:
         RailsModeVertical   = 2,
     };
 
-    Type type() const { return static_cast<Type>(m_type); }
+    // These values are direct mappings of the values in WebInputEvent
+    // so the values can be cast between the enumerations. static_asserts
+    // checking this are in web/WebInputEventConversion.cpp.
+    enum DispatchType {
+        Blocking,
+        EventNonBlocking,
+        // All listeners are passive.
+        ListenersNonBlockingPassive,
+        // This value represents a state which would have normally blocking
+        // but was forced to be non-blocking.
+        ListenersForcedNonBlockingPassive,
+    };
+
+    EventType type() const { return static_cast<EventType>(m_type); }
 
     bool shiftKey() const { return m_modifiers & ShiftKey; }
     bool ctrlKey() const { return m_modifiers & CtrlKey; }
     bool altKey() const { return m_modifiers & AltKey; }
     bool metaKey() const { return m_modifiers & MetaKey; }
 
-    Modifiers modifiers() const { return static_cast<Modifiers>(m_modifiers); }
+    Modifiers getModifiers() const { return static_cast<Modifiers>(m_modifiers); }
 
     double timestamp() const { return m_timestamp; }
 
@@ -140,14 +153,14 @@ protected:
     {
     }
 
-    explicit PlatformEvent(Type type)
+    explicit PlatformEvent(EventType type)
         : m_type(type)
         , m_modifiers(0)
         , m_timestamp(0)
     {
     }
 
-    PlatformEvent(Type type, Modifiers modifiers, double timestamp)
+    PlatformEvent(EventType type, Modifiers modifiers, double timestamp)
         : m_type(type)
         , m_modifiers(modifiers)
         , m_timestamp(timestamp)

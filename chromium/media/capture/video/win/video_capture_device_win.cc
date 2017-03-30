@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <list>
+#include <utility>
 
 #include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
@@ -334,7 +335,7 @@ void VideoCaptureDeviceWin::AllocateAndStart(
   if (state_ != kIdle)
     return;
 
-  client_ = client.Pass();
+  client_ = std::move(client);
 
   // Get the camera capability that best match the requested format.
   const CapabilityWin found_capability =
@@ -452,7 +453,7 @@ void VideoCaptureDeviceWin::FrameReceived(const uint8_t* buffer,
                                           int length,
                                           base::TimeTicks timestamp) {
   client_->OnIncomingCapturedData(buffer, length, capture_format_, 0,
-                                  base::TimeTicks::Now());
+                                  timestamp);
 }
 
 bool VideoCaptureDeviceWin::CreateCapabilityMap() {

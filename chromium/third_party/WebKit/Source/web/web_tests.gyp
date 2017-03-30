@@ -47,14 +47,16 @@
             'variables': { 'enable_wexit_time_destructors': 1, },
             'dependencies': [
                 '../../public/blink.gyp:blink',
+                '../../public/blink.gyp:mojo_bindings',
                 '../config.gyp:unittest_config',
+                '../modules/modules.gyp:modules',
                 '../platform/blink_platform_tests.gyp:blink_platform_test_support',
                 '../wtf/wtf.gyp:wtf',
-                '../wtf/wtf_tests.gyp:wtf_unittest_helpers',
                 'web.gyp:blink_web_test_support',
                 '<(DEPTH)/base/base.gyp:base',
                 '<(DEPTH)/base/base.gyp:base_i18n',
                 '<(DEPTH)/base/base.gyp:test_support_base',
+                '<(DEPTH)/gpu/gpu.gyp:gpu_unittest_utils',
                 '<(DEPTH)/testing/gmock.gyp:gmock',
                 '<(DEPTH)/testing/gtest.gyp:gtest',
                 '<(DEPTH)/third_party/libwebp/libwebp.gyp:libwebp',
@@ -65,27 +67,29 @@
             ],
             'sources': [
                 '../web/tests/RunAllTests.cpp',
+                '<@(bindings_unittest_files)',
+                '<@(core_unittest_files)',
+                '<@(modules_unittest_files)',
+                '<@(platform_web_unittest_files)',
+                '<@(web_unittest_files)',
             ],
             'include_dirs': [
                 '../../public/web',
                 '../web',
                 'src',
             ],
+            'defines': [
+                'BLINK_IMPLEMENTATION=1',
+                'INSIDE_BLINK',
+            ],
             'conditions': [
                 ['component!="shared_library"', {
                     'dependencies': [
                         '../core/core.gyp:webcore',
                     ],
-                    'defines': [
-                        'BLINK_IMPLEMENTATION=1',
-                        'INSIDE_BLINK',
-                    ],
-                    'sources': [
-                        '<@(bindings_unittest_files)',
-                        '<@(core_unittest_files)',
-                        '<@(modules_unittest_files)',
-                        '<@(platform_web_unittest_files)',
-                        '<@(web_unittest_files)',
+                }, {
+                    'dependencies': [
+                        '../core/core.gyp:webcore_shared',
                     ],
                 }],
                 ['OS=="win" and component!="shared_library"', {

@@ -38,9 +38,9 @@ FEOffset::FEOffset(Filter* filter, float dx, float dy)
 {
 }
 
-PassRefPtrWillBeRawPtr<FEOffset> FEOffset::create(Filter* filter, float dx, float dy)
+FEOffset* FEOffset::create(Filter* filter, float dx, float dy)
 {
-    return adoptRefWillBeNoop(new FEOffset(filter, dx, dy));
+    return new FEOffset(filter, dx, dy);
 }
 
 float FEOffset::dx() const
@@ -63,20 +63,20 @@ void FEOffset::setDy(float dy)
     m_dy = dy;
 }
 
-FloatRect FEOffset::mapRect(const FloatRect& rect, bool forward)
+FloatRect FEOffset::mapRect(const FloatRect& rect, bool forward) const
 {
     FloatRect result = rect;
     if (forward)
-        result.move(filter()->applyHorizontalScale(m_dx), filter()->applyVerticalScale(m_dy));
+        result.move(getFilter()->applyHorizontalScale(m_dx), getFilter()->applyVerticalScale(m_dy));
     else
-        result.move(-filter()->applyHorizontalScale(m_dx), -filter()->applyVerticalScale(m_dy));
+        result.move(-getFilter()->applyHorizontalScale(m_dx), -getFilter()->applyVerticalScale(m_dy));
     return result;
 }
 
 PassRefPtr<SkImageFilter> FEOffset::createImageFilter(SkiaImageFilterBuilder& builder)
 {
     RefPtr<SkImageFilter> input(builder.build(inputEffect(0), operatingColorSpace()));
-    Filter* filter = this->filter();
+    Filter* filter = this->getFilter();
     SkImageFilter::CropRect cropRect = getCropRect();
     return adoptRef(SkOffsetImageFilter::Create(SkFloatToScalar(filter->applyHorizontalScale(m_dx)), SkFloatToScalar(filter->applyVerticalScale(m_dy)), input.get(), &cropRect));
 }

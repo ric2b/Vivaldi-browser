@@ -7,13 +7,12 @@
 #include <set>
 
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
-#include "content/common/gpu/gpu_channel.h"
-#include "content/public/common/content_switches.h"
+#include "content/common/gpu/media/shared_memory_region.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
+#include "gpu/ipc/service/gpu_channel.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/bitstream_buffer.h"
 #include "media/base/limits.h"
@@ -104,12 +103,6 @@ AndroidVideoEncodeAccelerator::~AndroidVideoEncodeAccelerator() {
 media::VideoEncodeAccelerator::SupportedProfiles
 AndroidVideoEncodeAccelerator::GetSupportedProfiles() {
   SupportedProfiles profiles;
-
-#if defined(ENABLE_WEBRTC)
-  const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-  if (cmd_line->HasSwitch(switches::kDisableWebRtcHWEncoding))
-    return profiles;
-#endif
 
   const struct {
       const media::VideoCodec codec;
@@ -426,14 +419,11 @@ void AndroidVideoEncodeAccelerator::DequeueOutput() {
 
   media::BitstreamBuffer bitstream_buffer = available_bitstream_buffers_.back();
   available_bitstream_buffers_.pop_back();
-  scoped_ptr<base::SharedMemory> shm(
-      new base::SharedMemory(bitstream_buffer.handle(), false));
-  RETURN_ON_FAILURE(shm->Map(bitstream_buffer.size()),
-                    "Failed to map SHM",
-                    kPlatformFailureError);
-  RETURN_ON_FAILURE(size <= shm->mapped_size(),
-                    "Encoded buffer too large: " << size << ">"
-                                                 << shm->mapped_size(),
+  scoped_ptr<SharedMemoryRegion> shm(
+      new SharedMemoryRegion(bitstream_buffer, false));
+  RETURN_ON_FAILURE(shm->Map(), "Failed to map SHM", kPlatformFailureError);
+  RETURN_ON_FAILURE(size <= shm->size(),
+                    "Encoded buffer too large: " << size << ">" << shm->size(),
                     kPlatformFailureError);
 
   media::MediaCodecStatus status = media_codec_->CopyFromOutputBuffer(

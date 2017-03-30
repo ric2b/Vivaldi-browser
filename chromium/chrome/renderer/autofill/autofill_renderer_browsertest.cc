@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <tuple>
+
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
@@ -38,8 +40,8 @@ using blink::WebVector;
 
 namespace autofill {
 
-typedef base::Tuple<int, autofill::FormData, autofill::FormFieldData,
-                    gfx::RectF> AutofillQueryParam;
+using AutofillQueryParam =
+    std::tuple<int, autofill::FormData, autofill::FormFieldData, gfx::RectF>;
 
 class AutofillRendererTest : public ChromeRenderViewTest {
  public:
@@ -49,11 +51,6 @@ class AutofillRendererTest : public ChromeRenderViewTest {
  protected:
   void SetUp() override {
     ChromeRenderViewTest::SetUp();
-
-    // Don't want any delay for form state sync changes. This will still post a
-    // message so updates will get coalesced, but as soon as we spin the message
-    // loop, it will generate an update.
-    SendContentStateImmediately();
   }
 
   void SimulateRequestAutocompleteResult(
@@ -87,7 +84,7 @@ TEST_F(AutofillRendererTest, SendForms) {
   ASSERT_NE(nullptr, message);
   AutofillHostMsg_FormsSeen::Param params;
   AutofillHostMsg_FormsSeen::Read(message, &params);
-  std::vector<FormData> forms = base::get<0>(params);
+  std::vector<FormData> forms = std::get<0>(params);
   ASSERT_EQ(1UL, forms.size());
   ASSERT_EQ(4UL, forms[0].fields.size());
 
@@ -150,7 +147,7 @@ TEST_F(AutofillRendererTest, SendForms) {
       AutofillHostMsg_FormsSeen::ID);
   ASSERT_NE(nullptr, message);
   AutofillHostMsg_FormsSeen::Read(message, &params);
-  forms = base::get<0>(params);
+  forms = std::get<0>(params);
   ASSERT_EQ(1UL, forms.size());
   ASSERT_EQ(3UL, forms[0].fields.size());
 
@@ -182,7 +179,7 @@ TEST_F(AutofillRendererTest, EnsureNoFormSeenIfTooFewFields) {
   ASSERT_NE(nullptr, message);
   AutofillHostMsg_FormsSeen::Param params;
   AutofillHostMsg_FormsSeen::Read(message, &params);
-  const std::vector<FormData>& forms = base::get<0>(params);
+  const std::vector<FormData>& forms = std::get<0>(params);
   ASSERT_EQ(0UL, forms.size());
 }
 
@@ -215,7 +212,7 @@ TEST_F(AutofillRendererTest, DynamicallyAddedUnownedFormElements) {
   ASSERT_NE(nullptr, message);
   AutofillHostMsg_FormsSeen::Param params;
   AutofillHostMsg_FormsSeen::Read(message, &params);
-  std::vector<FormData> forms = base::get<0>(params);
+  std::vector<FormData> forms = std::get<0>(params);
   ASSERT_EQ(1UL, forms.size());
   ASSERT_EQ(7UL, forms[0].fields.size());
 
@@ -228,7 +225,7 @@ TEST_F(AutofillRendererTest, DynamicallyAddedUnownedFormElements) {
       AutofillHostMsg_FormsSeen::ID);
   ASSERT_NE(nullptr, message);
   AutofillHostMsg_FormsSeen::Read(message, &params);
-  forms = base::get<0>(params);
+  forms = std::get<0>(params);
   ASSERT_EQ(1UL, forms.size());
   ASSERT_EQ(9UL, forms[0].fields.size());
 

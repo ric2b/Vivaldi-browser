@@ -31,7 +31,6 @@
 #ifndef GraphicsLayerDebugInfo_h
 #define GraphicsLayerDebugInfo_h
 
-#include "base/memory/ref_counted.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/CompositingReasons.h"
 #include "platform/graphics/PaintInvalidationReason.h"
@@ -39,6 +38,8 @@
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/Vector.h"
+
+#include <memory>
 
 namespace base {
 namespace trace_event {
@@ -55,12 +56,12 @@ public:
     GraphicsLayerDebugInfo();
     ~GraphicsLayerDebugInfo();
 
-    scoped_refptr<base::trace_event::TracedValue> asTracedValue() const;
+    std::unique_ptr<base::trace_event::TracedValue> asTracedValue() const;
 
-    CompositingReasons compositingReasons() const { return m_compositingReasons; }
+    CompositingReasons getCompositingReasons() const { return m_compositingReasons; }
     void setCompositingReasons(CompositingReasons reasons) { m_compositingReasons = reasons; }
 
-    SquashingDisallowedReasons squashingDisallowedReasons() const { return m_squashingDisallowedReasons; }
+    SquashingDisallowedReasons getSquashingDisallowedReasons() const { return m_squashingDisallowedReasons; }
     void setSquashingDisallowedReasons(SquashingDisallowedReasons reasons) { m_squashingDisallowedReasons = reasons; }
     void setOwnerNodeId(int id) { m_ownerNodeId = id; }
 

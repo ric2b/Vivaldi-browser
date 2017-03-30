@@ -9,12 +9,12 @@
 
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "base/threading/thread_checker.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service.h"
-#include "components/arc/auth/arc_auth_fetcher.h"
 #include "components/arc/common/auth.mojom.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/syncable_prefs/pref_service_syncable_observer.h"
+#include "components/syncable_prefs/synced_pref_observer.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 #include "google_apis/gaia/ubertoken_fetcher.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -41,15 +41,24 @@ namespace arc {
 class ArcAuthService : public ArcService,
                        public AuthHost,
                        public ArcBridgeService::Observer,
-                       public ArcAuthFetcher::Delegate,
                        public UbertokenConsumer,
-                       public GaiaAuthConsumer {
+                       public GaiaAuthConsumer,
+                       public syncable_prefs::PrefServiceSyncableObserver,
+                       public syncable_prefs::SyncedPrefObserver {
  public:
   enum class State {
-    DISABLE,        // ARC is not allowed to run (default).
-    FETCHING_CODE,  // ARC is allowed, receiving auth_2 code.
-    NO_CODE,        // ARC is allowed, auth_2 code was not received.
-    ENABLE,         // ARC is allowed, auth_2 code was received.
+    STOPPED,        // ARC is not running.
+    FETCHING_CODE,  // ARC may be running or not. Auth code is fetching.
+    ACTIVE,         // ARC is running.
+  };
+
+  enum class UIPage {
+    NO_PAGE,         // Hide everything.
+    START,           // Initial start page.
+    LSO_PROGRESS,    // LSO loading progress page.
+    LSO,             // LSO page to enter user's credentials.
+    START_PROGRESS,  // Arc starting progress page.
+    ERROR,           // Arc start error page.
   };
 
   class Observer {
@@ -60,7 +69,10 @@ class ArcAuthService : public ArcService,
     virtual void OnOptInChanged(State state) {}
 
     // Called to notify that OptIn UI needs to be closed.
-    virtual void OnOptInUINeedToClose() {}
+    virtual void OnOptInUIClose() {}
+
+    // Called to notify that OptIn UI needs to show specific page.
+    virtual void OnOptInUIShowPage(UIPage page, const base::string16& status) {}
   };
 
   explicit ArcAuthService(ArcBridgeService* bridge_service);
@@ -90,23 +102,30 @@ class ArcAuthService : public ArcService,
   // ArcBridgeService::Observer:
   void OnAuthInstanceReady() override;
 
-  // Overrides AuthHost.  For security reason this code can be used only
-  // once and exists for specific period of time.
+  // AuthHost:
+  // For security reason this code can be used only once and exists for specific
+  // period of time.
   void GetAuthCodeDeprecated(
       const GetAuthCodeDeprecatedCallback& callback) override;
   void GetAuthCode(const GetAuthCodeCallback& callback) override;
+  void OnSignInComplete() override;
+  void OnSignInFailed(arc::ArcSignInFailureReason reason) override;
+  // Callback is called with a bool that indicates the management status of the
+  // user.
+  void GetIsAccountManaged(
+      const GetIsAccountManagedCallback& callback) override;
 
-  // May be called internally as response to on Arc OptIn preference change
-  // or externally from Arc support platform app.
-  void FetchAuthCode();
+  // Called from Arc support platform app to start LSO.
+  void StartLso();
+
+  // Called from Arc support platform app to set auth code and start arc.
+  void SetAuthCodeAndStartArc(const std::string& auth_code);
 
   // Called from Arc support platform app when user cancels signing.
   void CancelAuthCode();
 
-  // ArcAuthFetcher::Delegate:
-  void OnAuthCodeFetched(const std::string& auth_code) override;
-  void OnAuthCodeNeedUI() override;
-  void OnAuthCodeFailed() override;
+  void EnableArc();
+  void DisableArc();
 
   // UbertokenConsumer:
   void OnUbertokenSuccess(const std::string& token) override;
@@ -116,13 +135,30 @@ class ArcAuthService : public ArcService,
   void OnMergeSessionSuccess(const std::string& data) override;
   void OnMergeSessionFailure(const GoogleServiceAuthError& error) override;
 
+  // syncable_prefs::PrefServiceSyncableObserver
+  void OnIsSyncingChanged() override;
+
+  // syncable_prefs::SyncedPrefObserver
+  void OnSyncedPrefChanged(const std::string& path, bool from_sync) override;
+
+  // Returns current page that has to be shown in OptIn UI.
+  UIPage ui_page() const { return ui_page_; }
+  // Returns current page status, relevant to the specific page.
+  const base::string16& ui_page_status() { return ui_page_status_; }
+
  private:
-  void SetAuthCodeAndStartArc(const std::string& auth_code);
-  void ShowUI();
+  void StartArc();
+  void PrepareContext();
+  void ShowUI(UIPage page, const base::string16& status);
   void CloseUI();
+  void SetUIPage(UIPage page, const base::string16& status);
   void SetState(State state);
+  void ShutdownBridge();
   void ShutdownBridgeAndCloseUI();
+  void ShutdownBridgeAndShowUI(UIPage page, const base::string16& status);
   void OnOptInPreferenceChanged();
+  void StartUI();
+  void OnPrepareContextFailed();
 
   // Unowned pointer. Keeps current profile.
   Profile* profile_ = nullptr;
@@ -130,17 +166,20 @@ class ArcAuthService : public ArcService,
   // communication and shared with Arc OptIn UI platform app.
   content::StoragePartition* storage_partition_ = nullptr;
 
-  // Registrar used to monitor ARC opt-in state.
+  // Registrar used to monitor ARC enabled state.
   PrefChangeRegistrar pref_change_registrar_;
 
   mojo::Binding<AuthHost> binding_;
-  base::ThreadChecker thread_checker_;
-  State state_ = State::DISABLE;
+  State state_ = State::STOPPED;
   base::ObserverList<Observer> observer_list_;
-  scoped_ptr<ArcAuthFetcher> auth_fetcher_;
-  scoped_ptr<GaiaAuthFetcher> merger_fetcher_;
-  scoped_ptr<UbertokenFetcher> ubertoken_fethcher_;
+  std::unique_ptr<GaiaAuthFetcher> merger_fetcher_;
+  std::unique_ptr<UbertokenFetcher> ubertoken_fethcher_;
   std::string auth_code_;
+  GetAuthCodeCallback auth_callback_;
+  bool initial_opt_in_ = false;
+  bool context_prepared_ = false;
+  UIPage ui_page_ = UIPage::NO_PAGE;
+  base::string16 ui_page_status_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcAuthService);
 };

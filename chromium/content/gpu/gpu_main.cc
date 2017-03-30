@@ -20,12 +20,7 @@
 #include "build/build_config.h"
 #include "content/child/child_process.h"
 #include "content/common/content_constants_internal.h"
-#include "content/common/gpu/gpu_config.h"
-#include "content/common/gpu/gpu_host_messages.h"
-#include "content/common/gpu/gpu_memory_buffer_factory.h"
-#include "content/common/gpu/media/gpu_jpeg_decode_accelerator.h"
-#include "content/common/gpu/media/gpu_video_decode_accelerator.h"
-#include "content/common/gpu/media/gpu_video_encode_accelerator.h"
+#include "content/common/gpu_host_messages.h"
 #include "content/common/sandbox_linux/sandbox_linux.h"
 #include "content/gpu/gpu_child_thread.h"
 #include "content/gpu/gpu_process.h"
@@ -38,6 +33,9 @@
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/config/gpu_util.h"
+#include "gpu/ipc/common/gpu_memory_buffer_support.h"
+#include "gpu/ipc/service/gpu_config.h"
+#include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
@@ -64,7 +62,7 @@
 
 #if defined(USE_X11)
 #include "ui/base/x/x11_util.h"
-#include "ui/gfx/x/x11_switches.h"
+#include "ui/gfx/x/x11_switches.h"  // nogncheck
 #endif
 
 #if defined(OS_LINUX)
@@ -87,6 +85,10 @@
 
 #if defined(CYGPROFILE_INSTRUMENTATION)
 const int kGpuTimeout = 30000;
+#elif defined(OS_WIN)
+// Use a slightly longer timeout on Windows due to prevalence of slow and
+// infected machines.
+const int kGpuTimeout = 15000;
 #else
 const int kGpuTimeout = 10000;
 #endif
@@ -375,22 +377,15 @@ int GpuMain(const MainFunctionParams& parameters) {
 #elif defined(OS_MACOSX)
     gpu_info.sandboxed = Sandbox::SandboxIsCurrentlyActive();
 #endif
-
-    gpu_info.video_decode_accelerator_capabilities =
-        content::GpuVideoDecodeAccelerator::GetCapabilities();
-    gpu_info.video_encode_accelerator_supported_profiles =
-        content::GpuVideoEncodeAccelerator::GetSupportedProfiles();
-    gpu_info.jpeg_decode_accelerator_supported =
-        content::GpuJpegDecodeAccelerator::IsSupported();
   } else {
     dead_on_arrival = true;
   }
 
   logging::SetLogMessageHandler(NULL);
 
-  scoped_ptr<GpuMemoryBufferFactory> gpu_memory_buffer_factory;
-  if (GpuMemoryBufferFactory::GetNativeType() != gfx::EMPTY_BUFFER)
-    gpu_memory_buffer_factory = GpuMemoryBufferFactory::CreateNativeType();
+  scoped_ptr<gpu::GpuMemoryBufferFactory> gpu_memory_buffer_factory;
+  if (gpu::GetNativeGpuMemoryBufferType() != gfx::EMPTY_BUFFER)
+    gpu_memory_buffer_factory = gpu::GpuMemoryBufferFactory::CreateNativeType();
 
   gpu::SyncPointManager sync_point_manager(false);
 
@@ -589,13 +584,6 @@ bool StartSandboxWindows(const sandbox::SandboxInterfaceInfo* sandbox_info) {
   // content.
   sandbox::TargetServices* target_services = sandbox_info->target_services;
   if (target_services) {
-#if defined(ADDRESS_SANITIZER)
-    // Bind and leak dbghelp.dll before the token is lowered, otherwise
-    // AddressSanitizer will crash when trying to symbolize a report.
-    if (!LoadLibraryA("dbghelp.dll"))
-      return false;
-#endif
-
     target_services->LowerToken();
     return true;
   }

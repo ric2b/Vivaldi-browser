@@ -63,7 +63,7 @@ MediaStream* MediaStream::create(ExecutionContext* context)
 
 MediaStream* MediaStream::create(ExecutionContext* context, MediaStream* stream)
 {
-    ASSERT(stream);
+    DCHECK(stream);
 
     MediaStreamTrackVector audioTracks;
     MediaStreamTrackVector videoTracks;
@@ -312,18 +312,18 @@ const AtomicString& MediaStream::interfaceName() const
     return EventTargetNames::MediaStream;
 }
 
-ExecutionContext* MediaStream::executionContext() const
+ExecutionContext* MediaStream::getExecutionContext() const
 {
-    return ContextLifecycleObserver::executionContext();
+    return ContextLifecycleObserver::getExecutionContext();
 }
 
 void MediaStream::addRemoteTrack(MediaStreamComponent* component)
 {
-    ASSERT(component);
+    DCHECK(component);
     if (m_stopped)
         return;
 
-    MediaStreamTrack* track = MediaStreamTrack::create(executionContext(), component);
+    MediaStreamTrack* track = MediaStreamTrack::create(getExecutionContext(), component);
     switch (component->source()->type()) {
     case MediaStreamSource::TypeAudio:
         m_audioTracks.append(track);
@@ -345,7 +345,7 @@ void MediaStream::addRemoteTrack(MediaStreamComponent* component)
 
 void MediaStream::removeRemoteTrack(MediaStreamComponent* component)
 {
-    ASSERT(component);
+    DCHECK(component);
     if (m_stopped)
         return;
 
@@ -382,7 +382,7 @@ void MediaStream::removeRemoteTrack(MediaStreamComponent* component)
     }
 }
 
-void MediaStream::scheduleDispatchEvent(PassRefPtrWillBeRawPtr<Event> event)
+void MediaStream::scheduleDispatchEvent(Event* event)
 {
     m_scheduledEvents.append(event);
 
@@ -395,10 +395,10 @@ void MediaStream::scheduledEventTimerFired(Timer<MediaStream>*)
     if (m_stopped)
         return;
 
-    WillBeHeapVector<RefPtrWillBeMember<Event>> events;
+    HeapVector<Member<Event>> events;
     events.swap(m_scheduledEvents);
 
-    WillBeHeapVector<RefPtrWillBeMember<Event>>::iterator it = events.begin();
+    HeapVector<Member<Event>>::iterator it = events.begin();
     for (; it != events.end(); ++it)
         dispatchEvent((*it).release());
 

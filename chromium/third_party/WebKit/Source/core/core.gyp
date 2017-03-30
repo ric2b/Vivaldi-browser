@@ -114,7 +114,6 @@
         '<(DEPTH)/third_party/libwebp/libwebp.gyp:libwebp',
         '<(DEPTH)/third_party/libxml/libxml.gyp:libxml',
         '<(DEPTH)/third_party/libxslt/libxslt.gyp:libxslt',
-        '<(DEPTH)/third_party/npapi/npapi.gyp:npapi',
         '<(DEPTH)/third_party/qcms/qcms.gyp:qcms',
         '<(DEPTH)/third_party/snappy/snappy.gyp:snappy',
         '<(DEPTH)/third_party/sqlite/sqlite.gyp:sqlite',
@@ -177,11 +176,11 @@
         '<(DEPTH)/third_party/libwebp/libwebp.gyp:libwebp',
         '<(DEPTH)/third_party/libxml/libxml.gyp:libxml',
         '<(DEPTH)/third_party/libxslt/libxslt.gyp:libxslt',
-        '<(DEPTH)/third_party/npapi/npapi.gyp:npapi',
         '<(DEPTH)/third_party/ots/ots.gyp:ots',
         '<(DEPTH)/third_party/qcms/qcms.gyp:qcms',
         '<(DEPTH)/third_party/sqlite/sqlite.gyp:sqlite',
         '<(DEPTH)/third_party/zlib/zlib.gyp:zlib',
+        '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
         '<(DEPTH)/url/url.gyp:url_lib',
         '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
       ],
@@ -196,7 +195,6 @@
         '<(DEPTH)/third_party/libwebp/libwebp.gyp:libwebp',
         '<(DEPTH)/third_party/libxml/libxml.gyp:libxml',
         '<(DEPTH)/third_party/libxslt/libxslt.gyp:libxslt',
-        '<(DEPTH)/third_party/npapi/npapi.gyp:npapi',
         '<(DEPTH)/third_party/ots/ots.gyp:ots',
         '<(DEPTH)/third_party/qcms/qcms.gyp:qcms',
         '<(DEPTH)/third_party/sqlite/sqlite.gyp:sqlite',
@@ -289,6 +287,13 @@
       ],
       # Disable c4267 warnings until we fix size_t to int truncations.
       'msvs_disabled_warnings': [ 4267, ],
+      'conditions': [
+        # Shard this target into parts to work around linker limitations.
+        # on link time code generation builds. See crbug.com/599186
+        ['OS=="win" and buildtype=="Official"', {
+          'msvs_shard': 5,
+        }],
+      ],
     },
     {
       # GN version: //third_party/WebKit/Source/core:html
@@ -301,7 +306,7 @@
         '<@(webcore_html_files)',
       ],
       'conditions': [
-        # Shard this taret into parts to work around linker limitations.
+        # Shard this target into parts to work around linker limitations.
         # on link time code generation builds.
         ['OS=="win" and buildtype=="Official"', {
           'msvs_shard': 5,
@@ -340,7 +345,7 @@
         '<@(webcore_rendering_files)',
       ],
       'conditions': [
-        # Shard this taret into parts to work around linker limitations.
+        # Shard this target into parts to work around linker limitations.
         # on link time code generation builds.
         ['OS=="win" and buildtype=="Official"', {
           'msvs_shard': 5,
@@ -452,7 +457,6 @@
         '../platform/blink_platform.gyp:blink_platform',
         '../wtf/wtf.gyp:wtf',
         '<(DEPTH)/skia/skia.gyp:skia',
-        '<(DEPTH)/third_party/npapi/npapi.gyp:npapi',
         '<(DEPTH)/third_party/qcms/qcms.gyp:qcms',
         '<(DEPTH)/url/url.gyp:url_lib',
         '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
@@ -462,7 +466,6 @@
         '../platform/blink_platform.gyp:blink_platform',
         '../wtf/wtf.gyp:wtf',
         '<(DEPTH)/skia/skia.gyp:skia',
-        '<(DEPTH)/third_party/npapi/npapi.gyp:npapi',
         '<(DEPTH)/third_party/qcms/qcms.gyp:qcms',
         '<(DEPTH)/url/url.gyp:url_lib',
         '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
@@ -479,7 +482,6 @@
       'type': 'static_library',
       'dependencies': [
         '../config.gyp:config',
-        '../wtf/wtf_tests.gyp:wtf_unittest_helpers',
         'webcore_prerequisites',
       ],
       'defines': [
@@ -500,7 +502,7 @@
         ['exclude', 'testing/js'],
       ],
       'conditions': [
-        ['component!="shared_library" or link_core_modules_separately==0', {
+        ['component!="shared_library"', {
           'dependencies': [
             'webcore',
             'webcore_generated',
@@ -539,7 +541,6 @@
         '<(DEPTH)/skia/skia.gyp:skia',
         '<(DEPTH)/third_party/libxml/libxml.gyp:libxml',
         '<(DEPTH)/third_party/libxslt/libxslt.gyp:libxslt',
-        '<(DEPTH)/third_party/npapi/npapi.gyp:npapi',
         '<(DEPTH)/third_party/qcms/qcms.gyp:qcms',
         '<(DEPTH)/third_party/snappy/snappy.gyp:snappy',
         '<(DEPTH)/third_party/sqlite/sqlite.gyp:sqlite',
@@ -551,7 +552,6 @@
         '../wtf/wtf.gyp:wtf',
         '<(DEPTH)/base/base.gyp:base',
         '<(DEPTH)/skia/skia.gyp:skia',
-        '<(DEPTH)/third_party/npapi/npapi.gyp:npapi',
         '<(DEPTH)/third_party/qcms/qcms.gyp:qcms',
         '<(DEPTH)/url/url.gyp:url_lib',
         '<(DEPTH)/v8/tools/gyp/v8.gyp:v8',
@@ -562,7 +562,7 @@
         ],
       },
       'conditions': [
-        ['component!="shared_library" or link_core_modules_separately==0', {
+        ['component!="shared_library"', {
         }, {
           'defines': [
             'BLINK_CORE_IMPLEMENTATION=1',

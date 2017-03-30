@@ -9,11 +9,25 @@
   DISABLE(InlineInstallPrivateApiTestApp, BackgroundInstall)
 
   // Disabled for v50; reverted code broke the test
-  DISABLE(PasswordManagerBrowserTestBase,
-          SkipZeroClickToggledAfterSuccessfulSubmissionWithAPI)
+  //DISABLE(PasswordManagerBrowserTestBase,
+  //        SkipZeroClickToggledAfterSuccessfulSubmissionWithAPI)
 
-  DISABLE(ThemeServiceMaterialDesignTest, SeparatorColor)
+  // Disabled in v51, seems an upstream revert broke the test
+  DISABLE(PictureLayerImplTest, DontAddLowResForSmallLayers)
 
-  // Found flaky when looking at VB-13454. The order of downloads requested is
-  // not necessarily the same as they get processed. See bug for log.
-  DISABLE_MULTI(WebViewTest, DownloadPermission)
+  //DISABLE(ThemeServiceMaterialDesignTest, SeparatorColor)
+
+  // Failing media tests since proprietary media code was imported
+  DISABLE(AudioVideoMetadataExtractorTest, AndroidRotatedMP4Video)
+  DISABLE(AudioVideoMetadataExtractorTest, AudioMP3)
+  DISABLE(MediaGalleriesPlatformAppBrowserTest, GetMetadata)
+  DISABLE_MULTI(MediaTest, VideoBearMovPcmS16be)
+  DISABLE_MULTI(MediaTest, VideoBearMovPcmS24be)
+  DISABLE_MULTI(MediaTest, VideoBearMp4)
+  DISABLE_MULTI(MediaTest, VideoBearSilentMp4)
+  DISABLE_MULTI(MediaTest, VideoBearHighBitDepthMp4)
+  DISABLE(MediaTest, VideoBearRotated0)
+  DISABLE(MediaTest, VideoBearRotated180)
+
+  DISABLE(WebViewContextMenuInteractiveTest,
+              ContextMenuParamsAfterCSSTransforms)

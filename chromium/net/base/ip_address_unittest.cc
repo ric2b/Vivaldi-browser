@@ -24,6 +24,20 @@ std::string DumpIPAddress(const IPAddress& v) {
   return out;
 }
 
+TEST(IPAddressTest, ConstructIPv4) {
+  EXPECT_EQ("127.0.0.1", IPAddress::IPv4Localhost().ToString());
+
+  IPAddress ipv4_ctor(192, 168, 1, 1);
+  EXPECT_EQ("192.168.1.1", ipv4_ctor.ToString());
+}
+
+TEST(IPAddressTest, ConstructIPv6) {
+  EXPECT_EQ("::1", IPAddress::IPv6Localhost().ToString());
+
+  IPAddress ipv6_ctor(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+  EXPECT_EQ("102:304:506:708:90a:b0c:d0e:f10", ipv6_ctor.ToString());
+}
+
 TEST(IPAddressTest, IsIPVersion) {
   uint8_t addr1[4] = {192, 168, 0, 1};
   IPAddress ip_address1(addr1);
@@ -80,6 +94,16 @@ TEST(IPAddressTest, IsZero) {
 
   IPAddress empty_address;
   EXPECT_FALSE(empty_address.IsZero());
+}
+
+TEST(IPAddressTest, AllZeros) {
+  EXPECT_TRUE(IPAddress::AllZeros(0).empty());
+
+  EXPECT_EQ(3u, IPAddress::AllZeros(3).size());
+  EXPECT_TRUE(IPAddress::AllZeros(3).IsZero());
+
+  EXPECT_EQ("0.0.0.0", IPAddress::IPv4AllZeros().ToString());
+  EXPECT_EQ("::", IPAddress::IPv6AllZeros().ToString());
 }
 
 TEST(IPAddressTest, ToString) {
@@ -226,6 +250,118 @@ TEST(IPAddressTest, ConvertIPv4MappedIPv6ToIPv4) {
 
   IPAddress result = ConvertIPv4MappedIPv6ToIPv4(ipv4mapped_address);
   EXPECT_EQ(expected, result);
+}
+
+// Test parsing invalid CIDR notation literals.
+TEST(IPAddressTest, ParseCIDRBlock_Invalid) {
+  const char* const bad_literals[] = {"foobar",
+                                      "",
+                                      "192.168.0.1",
+                                      "::1",
+                                      "/",
+                                      "/1",
+                                      "1",
+                                      "192.168.1.1/-1",
+                                      "192.168.1.1/33",
+                                      "::1/-3",
+                                      "a::3/129",
+                                      "::1/x",
+                                      "192.168.0.1//11",
+                                      "192.168.1.1/+1",
+                                      "192.168.1.1/ +1",
+                                      "192.168.1.1/"};
+
+  for (const auto& bad_literal : bad_literals) {
+    IPAddress ip_address;
+    size_t prefix_length_in_bits;
+
+    EXPECT_FALSE(
+        ParseCIDRBlock(bad_literal, &ip_address, &prefix_length_in_bits));
+  }
+}
+
+// Test parsing a valid CIDR notation literal.
+TEST(IPAddressTest, ParseCIDRBlock_Valid) {
+  IPAddress ip_address;
+  size_t prefix_length_in_bits;
+
+  EXPECT_TRUE(
+      ParseCIDRBlock("192.168.0.1/11", &ip_address, &prefix_length_in_bits));
+
+  EXPECT_EQ("192,168,0,1", DumpIPAddress(ip_address));
+  EXPECT_EQ(11u, prefix_length_in_bits);
+
+  EXPECT_TRUE(ParseCIDRBlock("::ffff:192.168.0.1/112", &ip_address,
+                             &prefix_length_in_bits));
+
+  EXPECT_EQ("0,0,0,0,0,0,0,0,0,0,255,255,192,168,0,1",
+            DumpIPAddress(ip_address));
+  EXPECT_EQ(112u, prefix_length_in_bits);
+}
+
+TEST(IPAddressTest, ParseURLHostnameToAddress_FailParse) {
+  IPAddress address;
+  EXPECT_FALSE(ParseURLHostnameToAddress("bad value", &address));
+  EXPECT_FALSE(ParseURLHostnameToAddress("bad:value", &address));
+  EXPECT_FALSE(ParseURLHostnameToAddress(std::string(), &address));
+  EXPECT_FALSE(ParseURLHostnameToAddress("192.168.0.1:30", &address));
+  EXPECT_FALSE(ParseURLHostnameToAddress("  192.168.0.1  ", &address));
+  EXPECT_FALSE(ParseURLHostnameToAddress("::1", &address));
+  EXPECT_FALSE(ParseURLHostnameToAddress("[192.169.0.1]", &address));
+}
+
+TEST(IPAddressTest, ParseURLHostnameToAddress_IPv4) {
+  IPAddress address;
+  EXPECT_TRUE(ParseURLHostnameToAddress("192.168.0.1", &address));
+  EXPECT_EQ("192,168,0,1", DumpIPAddress(address));
+  EXPECT_EQ("192.168.0.1", address.ToString());
+}
+
+TEST(IPAddressTest, ParseURLHostnameToAddress_IPv6) {
+  IPAddress address;
+  EXPECT_TRUE(ParseURLHostnameToAddress("[1:abcd::3:4:ff]", &address));
+  EXPECT_EQ("0,1,171,205,0,0,0,0,0,0,0,3,0,4,0,255", DumpIPAddress(address));
+  EXPECT_EQ("1:abcd::3:4:ff", address.ToString());
+}
+
+TEST(IPAddressTest, IPAddressStartsWith) {
+  IPAddress ipv4_address(192, 168, 10, 5);
+
+  uint8_t ipv4_prefix1[] = {192, 168, 10};
+  EXPECT_TRUE(IPAddressStartsWith(ipv4_address, ipv4_prefix1));
+
+  uint8_t ipv4_prefix3[] = {192, 168, 10, 5};
+  EXPECT_TRUE(IPAddressStartsWith(ipv4_address, ipv4_prefix3));
+
+  uint8_t ipv4_prefix2[] = {192, 168, 10, 10};
+  EXPECT_FALSE(IPAddressStartsWith(ipv4_address, ipv4_prefix2));
+
+  // Prefix is longer than the address.
+  uint8_t ipv4_prefix4[] = {192, 168, 10, 10, 0};
+  EXPECT_FALSE(IPAddressStartsWith(ipv4_address, ipv4_prefix4));
+
+  IPAddress ipv6_address;
+  EXPECT_TRUE(ipv6_address.AssignFromIPLiteral("2a00:1450:400c:c09::64"));
+
+  uint8_t ipv6_prefix1[] = {42, 0, 20, 80, 64, 12, 12, 9};
+  EXPECT_TRUE(IPAddressStartsWith(ipv6_address, ipv6_prefix1));
+
+  uint8_t ipv6_prefix2[] = {41, 0, 20, 80, 64, 12, 12, 9,
+                            0,  0, 0,  0,  0,  0,  100};
+  EXPECT_FALSE(IPAddressStartsWith(ipv6_address, ipv6_prefix2));
+
+  uint8_t ipv6_prefix3[] = {42, 0, 20, 80, 64, 12, 12, 9,
+                            0,  0, 0,  0,  0,  0,  0,  100};
+  EXPECT_TRUE(IPAddressStartsWith(ipv6_address, ipv6_prefix3));
+
+  uint8_t ipv6_prefix4[] = {42, 0, 20, 80, 64, 12, 12, 9,
+                            0,  0, 0,  0,  0,  0,  0,  0};
+  EXPECT_FALSE(IPAddressStartsWith(ipv6_address, ipv6_prefix4));
+
+  // Prefix is longer than the address.
+  uint8_t ipv6_prefix5[] = {42, 0, 20, 80, 64, 12, 12, 9, 0,
+                            0,  0, 0,  0,  0,  0,  0,  10};
+  EXPECT_FALSE(IPAddressStartsWith(ipv6_address, ipv6_prefix5));
 }
 
 }  // anonymous namespace

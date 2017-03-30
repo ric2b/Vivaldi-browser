@@ -19,10 +19,8 @@ namespace content {
 CONTENT_EXPORT extern const char kChromeDevToolsScheme[];
 CONTENT_EXPORT extern const char kChromeUIScheme[];  // Used for WebUIs.
 CONTENT_EXPORT extern const char kVivaldiUIScheme[];
-CONTENT_EXPORT extern const char kExeScheme[];
 CONTENT_EXPORT extern const char kGuestScheme[];
 CONTENT_EXPORT extern const char kMetadataScheme[];
-CONTENT_EXPORT extern const char kMojoScheme[];
 CONTENT_EXPORT extern const char kSwappedOutScheme[];
 CONTENT_EXPORT extern const char kViewSourceScheme[];
 #if defined(OS_CHROMEOS)
@@ -64,7 +62,6 @@ CONTENT_EXPORT extern const char kChromeUINetworkErrorsListingURL[];
 CONTENT_EXPORT extern const char kChromeUINetworkErrorURL[];
 CONTENT_EXPORT extern const char kChromeUIPpapiFlashCrashURL[];
 CONTENT_EXPORT extern const char kChromeUIPpapiFlashHangURL[];
-CONTENT_EXPORT extern const char kChromeUIServiceWorkerInternalsURL[];
 
 // Special URL used to start a navigation to an error page.
 CONTENT_EXPORT extern const char kUnreachableWebDataURL[];
@@ -73,9 +70,6 @@ CONTENT_EXPORT extern const char kUnreachableWebDataURL[];
 CONTENT_EXPORT extern const char kChromeUINetworkViewCacheURL[];
 CONTENT_EXPORT extern const char kChromeUIResourcesURL[];
 CONTENT_EXPORT extern const char kChromeUIShorthangURL[];
-
-// Special URL used to swap out a view being rendered by another process.
-CONTENT_EXPORT extern const char kSwappedOutURL[];
 
 }  // namespace content
 

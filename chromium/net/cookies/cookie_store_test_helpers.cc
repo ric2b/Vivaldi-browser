@@ -34,10 +34,9 @@ namespace net {
 const int kDelayedTime = 0;
 
 DelayedCookieMonster::DelayedCookieMonster()
-      : cookie_monster_(new CookieMonster(NULL, NULL)),
-        did_run_(false),
-        result_(false) {
-}
+    : cookie_monster_(new CookieMonster(nullptr, nullptr)),
+      did_run_(false),
+      result_(false) {}
 
 DelayedCookieMonster::~DelayedCookieMonster() {
 }
@@ -87,7 +86,7 @@ void DelayedCookieMonster::SetCookieWithDetailsAsync(
     base::Time last_access_time,
     bool secure,
     bool http_only,
-    bool same_site,
+    CookieSameSite same_site,
     bool enforce_strict_secure,
     CookiePriority priority,
     const SetCookiesCallback& callback) {
@@ -213,6 +212,10 @@ DelayedCookieMonster::AddCallbackForCookie(
     const CookieChangedCallback& callback) {
   ADD_FAILURE();
   return scoped_ptr<CookieStore::CookieChangedSubscription>();
+}
+
+bool DelayedCookieMonster::IsEphemeral() {
+  return true;
 }
 
 //

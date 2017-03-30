@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 
+#include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "components/wifi/wifi_export.h"
 
@@ -31,6 +32,7 @@ typedef std::set<Frequency> FrequencySet;
 // |GetVisibleNetworks|.
 struct WIFI_EXPORT NetworkProperties {
   NetworkProperties();
+  NetworkProperties(const NetworkProperties& other);
   ~NetworkProperties();
 
   std::string connection_state;

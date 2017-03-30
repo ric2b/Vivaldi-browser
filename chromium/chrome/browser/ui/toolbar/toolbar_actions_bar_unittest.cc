@@ -14,7 +14,6 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
-#include "chrome/browser/ui/extensions/extension_toolbar_icon_surfacing_bubble_delegate.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
@@ -96,10 +95,8 @@ ToolbarActionsBarUnitTest::ToolbarActionsBarUnitTest(bool use_redesign)
 ToolbarActionsBarUnitTest::~ToolbarActionsBarUnitTest() {}
 
 void ToolbarActionsBarUnitTest::SetUp() {
-  if (use_redesign_) {
-    redesign_switch_.reset(new extensions::FeatureSwitch::ScopedOverride(
-        extensions::FeatureSwitch::extension_action_redesign(), true));
-  }
+  redesign_switch_.reset(new extensions::FeatureSwitch::ScopedOverride(
+      extensions::FeatureSwitch::extension_action_redesign(), use_redesign_));
 
   BrowserWithTestWindowTest::SetUp();
   // The toolbar typically displays extension icons, so create some extension
@@ -428,56 +425,6 @@ INSTANTIATE_TEST_CASE_P(
                     ui::MaterialDesignController::MATERIAL_NORMAL,
                     ui::MaterialDesignController::MATERIAL_HYBRID));
 
-TEST_P(ToolbarActionsBarRedesignUnitTest, IconSurfacingBubbleAppearance) {
-  // Without showing anything new, we shouldn't show the bubble, and should
-  // auto-acknowledge it.
-  EXPECT_FALSE(
-      ExtensionToolbarIconSurfacingBubbleDelegate::ShouldShowForProfile(
-          profile()));
-  PrefService* prefs = profile()->GetPrefs();
-  EXPECT_TRUE(
-      prefs->GetBoolean(prefs::kToolbarIconSurfacingBubbleAcknowledged));
-
-  // Clear the pref for testing, and add an extension that wouldn't normally
-  // have an icon. We should now show the bubble.
-  prefs->ClearPref(prefs::kToolbarIconSurfacingBubbleAcknowledged);
-  CreateAndAddExtension("extension",
-                        extensions::extension_action_test_util::NO_ACTION);
-  EXPECT_TRUE(ExtensionToolbarIconSurfacingBubbleDelegate::ShouldShowForProfile(
-      profile()));
-
-  // If the bubble was recently shown, we shouldn't show it again...
-  scoped_ptr<ToolbarActionsBarBubbleDelegate> bubble_delegate(
-      new ExtensionToolbarIconSurfacingBubbleDelegate(profile()));
-  bubble_delegate->OnBubbleShown();
-  bubble_delegate->OnBubbleClosed(
-      ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_USER_ACTION);
-  EXPECT_FALSE(
-    ExtensionToolbarIconSurfacingBubbleDelegate::ShouldShowForProfile(
-        profile()));
-
-  // ...But if it was only dismissed, we should show it before too long.
-  base::Time two_days_ago = base::Time::Now() - base::TimeDelta::FromDays(2);
-  prefs->SetInt64(prefs::kToolbarIconSurfacingBubbleLastShowTime,
-                  two_days_ago.ToInternalValue());
-  EXPECT_TRUE(ExtensionToolbarIconSurfacingBubbleDelegate::ShouldShowForProfile(
-      profile()));
-
-  // If it's acknowledged, then it should never show again, and should be
-  // recorded as acknowledged.
-  bubble_delegate->OnBubbleShown();
-  bubble_delegate->OnBubbleClosed(
-      ToolbarActionsBarBubbleDelegate::CLOSE_EXECUTE);
-  EXPECT_FALSE(
-      ExtensionToolbarIconSurfacingBubbleDelegate::ShouldShowForProfile(
-          profile()));
-  base::Time one_week_ago = base::Time::Now() - base::TimeDelta::FromDays(7);
-  prefs->SetInt64(prefs::kToolbarIconSurfacingBubbleLastShowTime,
-                  one_week_ago.ToInternalValue());
-  EXPECT_TRUE(
-      prefs->GetBoolean(prefs::kToolbarIconSurfacingBubbleAcknowledged));
-}
-
 // Test the bounds calculation for different indices.
 TEST_P(ToolbarActionsBarRedesignUnitTest, TestActionFrameBounds) {
   const int kIconWidth = ToolbarActionsBar::IconWidth(false);
@@ -596,4 +543,65 @@ TEST_P(ToolbarActionsBarRedesignUnitTest, TestStartAndEndIndexes) {
   EXPECT_EQ(3u, overflow_bar()->GetStartIndexInBounds());
   EXPECT_EQ(3u, overflow_bar()->GetEndIndexInBounds());
   EXPECT_FALSE(toolbar_actions_bar()->NeedsOverflow());
+}
+
+// Tests the logic for determining if the container needs an overflow menu item.
+TEST_P(ToolbarActionsBarRedesignUnitTest, TestNeedsOverflow) {
+  CreateAndAddExtension(
+      "extension 1",
+      extensions::extension_action_test_util::BROWSER_ACTION);
+  // One extension on the main bar, none overflowed. Overflow not needed.
+  EXPECT_EQ(1u, toolbar_actions_bar()->GetIconCount());
+  EXPECT_EQ(0u, overflow_bar()->GetIconCount());
+  EXPECT_FALSE(toolbar_actions_bar()->NeedsOverflow());
+
+  // Set one extension in the overflow menu, none on the main bar. Overflow
+  // needed.
+  toolbar_model()->SetVisibleIconCount(0u);
+  EXPECT_EQ(0u, toolbar_actions_bar()->GetIconCount());
+  EXPECT_EQ(1u, overflow_bar()->GetIconCount());
+  EXPECT_TRUE(toolbar_actions_bar()->NeedsOverflow());
+
+  // Pop out an extension for a non-sticky popup. Even though the extension is
+  // on the main bar, overflow is still needed because it will pop back in
+  // when the menu is opened.
+  ToolbarActionViewController* action = toolbar_actions_bar()->GetActions()[0];
+  {
+    base::RunLoop run_loop;
+    toolbar_actions_bar()->PopOutAction(action, false, run_loop.QuitClosure());
+    run_loop.Run();
+  }
+  EXPECT_EQ(1u, toolbar_actions_bar()->GetIconCount());
+  EXPECT_TRUE(toolbar_actions_bar()->NeedsOverflow());
+
+  // Back to one in overflow, none on the main bar.
+  toolbar_actions_bar()->UndoPopOut();
+  EXPECT_EQ(0u, toolbar_actions_bar()->GetIconCount());
+  EXPECT_EQ(1u, overflow_bar()->GetIconCount());
+  EXPECT_TRUE(toolbar_actions_bar()->NeedsOverflow());
+
+  // Pop out an extension for a sticky popup. Overflow shouldn't be needed now
+  // because the extension will remain popped out even when the menu opens.
+  {
+    base::RunLoop run_loop;
+    toolbar_actions_bar()->PopOutAction(action, true, run_loop.QuitClosure());
+    run_loop.Run();
+  }
+  EXPECT_EQ(1u, toolbar_actions_bar()->GetIconCount());
+  EXPECT_FALSE(toolbar_actions_bar()->NeedsOverflow());
+
+  // Add another extension and verify that if one is still in overflow when
+  // another is popped out, we still need overflow.
+  toolbar_actions_bar()->UndoPopOut();
+  CreateAndAddExtension(
+      "extension 2",
+      extensions::extension_action_test_util::BROWSER_ACTION);
+  toolbar_model()->SetVisibleIconCount(0u);
+  {
+    base::RunLoop run_loop;
+    toolbar_actions_bar()->PopOutAction(action, true, run_loop.QuitClosure());
+    run_loop.Run();
+  }
+  EXPECT_EQ(1u, toolbar_actions_bar()->GetIconCount());
+  EXPECT_TRUE(toolbar_actions_bar()->NeedsOverflow());
 }

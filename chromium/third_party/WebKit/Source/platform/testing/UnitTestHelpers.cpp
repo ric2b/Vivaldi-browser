@@ -30,13 +30,13 @@
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "platform/SharedBuffer.h"
+#include "platform/Timer.h"
 #include "public/platform/FilePathConversion.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
-#include "public/platform/WebUnitTestSupport.h"
 #include "wtf/text/StringUTF8Adaptor.h"
 
 namespace blink {
@@ -44,7 +44,13 @@ namespace testing {
 
 void runPendingTasks()
 {
-    Platform::current()->currentThread()->taskRunner()->postTask(BLINK_FROM_HERE, bind(&exitRunLoop));
+    Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&exitRunLoop));
+    enterRunLoop();
+}
+
+void runDelayedTasks(double delayMs)
+{
+    Platform::current()->currentThread()->getWebTaskRunner()->postDelayedTask(BLINK_FROM_HERE, bind(&exitRunLoop), delayMs);
     enterRunLoop();
 }
 

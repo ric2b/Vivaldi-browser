@@ -1,10 +1,12 @@
 include_rules = [
   # Allow inclusion of specific components that we depend on. We may only
   # depend on components which we share with the mojo html_viewer.
-  "+components/leveldb/public/interfaces",
+  "+components/filesystem",
+  "+components/leveldb",
   "+components/mime_util",
   "+components/mus/public/interfaces",
   "+components/mus/public",
+  "+components/profile_service",
   "+components/scheduler/common",
   "+components/tracing",
   "+components/url_formatter",
@@ -50,6 +52,7 @@ include_rules = [
   # No inclusion of WebKit from the browser, other than strictly enum/POD,
   # header-only types, and some selected common code.
   "-third_party/WebKit",
+  "+third_party/WebKit/public/platform/WebAddressSpace.h",
   "+third_party/WebKit/public/platform/WebCircularGeofencingRegion.h",
   "+third_party/WebKit/public/platform/WebCursorInfo.h",
   "+third_party/WebKit/public/platform/WebDisplayMode.h",
@@ -62,9 +65,12 @@ include_rules = [
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
   "+third_party/WebKit/public/platform/WebScreenInfo.h",
   "+third_party/WebKit/public/platform/WebString.h",
+  "+third_party/WebKit/public/platform/modules/geolocation/geolocation.mojom.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h",
   "+third_party/WebKit/public/platform/modules/notifications/WebNotificationPermission.h",
+  "+third_party/WebKit/public/platform/modules/permissions/permission.mojom.h",
+  "+third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h",
   "+third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h",
   "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h",
   "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h",
@@ -96,6 +102,10 @@ include_rules = [
   "+third_party/WebKit/public/web/WebTextInputType.h",
   "+third_party/WebKit/public/web/WebTreeScopeType.h",
   "+third_party/WebKit/public/web/mac/WebScrollbarTheme.h",
+
+  # Until we define where mojo interfaces should live in blink we whitelist each
+  # one separately.
+  "+third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h"
 
   # DO NOT ADD ANY CHROME OR COMPONENTS INCLUDES HERE!!!
   # See https://sites.google.com/a/chromium.org/dev/developers/content-module

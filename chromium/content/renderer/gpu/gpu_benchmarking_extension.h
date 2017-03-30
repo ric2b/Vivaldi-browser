@@ -48,14 +48,18 @@ class GpuBenchmarking : public gin::Wrappable<GpuBenchmarking> {
   bool Swipe(gin::Arguments* args);
   bool ScrollBounce(gin::Arguments* args);
   bool PinchBy(gin::Arguments* args);
+  float VisualViewportX();
+  float VisualViewportY();
   float VisualViewportHeight();
   float VisualViewportWidth();
+  float PageScaleFactor();
   bool Tap(gin::Arguments* args);
   void ClearImageCache();
   int RunMicroBenchmark(gin::Arguments* args);
   bool SendMessageToMicroBenchmark(int id, v8::Local<v8::Object> message);
   bool HasGpuChannel();
   bool HasGpuProcess();
+  void GetGpuDriverBugWorkarounds(gin::Arguments* args);
 
   DISALLOW_COPY_AND_ASSIGN(GpuBenchmarking);
 };

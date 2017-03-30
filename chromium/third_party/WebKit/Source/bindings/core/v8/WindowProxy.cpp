@@ -74,12 +74,11 @@ namespace blink {
 static void checkDocumentWrapper(v8::Local<v8::Object> wrapper, Document* document)
 {
     ASSERT(V8Document::toImpl(wrapper) == document);
-    ASSERT(!document->isHTMLDocument() || (V8Document::toImpl(v8::Local<v8::Object>::Cast(wrapper->GetPrototype())) == document));
 }
 
-PassOwnPtrWillBeRawPtr<WindowProxy> WindowProxy::create(v8::Isolate* isolate, Frame* frame, DOMWrapperWorld& world)
+RawPtr<WindowProxy> WindowProxy::create(v8::Isolate* isolate, Frame* frame, DOMWrapperWorld& world)
 {
-    return adoptPtrWillBeNoop(new WindowProxy(frame, &world, isolate));
+    return new WindowProxy(frame, &world, isolate);
 }
 
 WindowProxy::WindowProxy(Frame* frame, PassRefPtr<DOMWrapperWorld> world, v8::Isolate* isolate)
@@ -111,7 +110,7 @@ void WindowProxy::disposeContext(GlobalDetachmentBehavior behavior)
         LocalFrame* frame = toLocalFrame(m_frame);
         // The embedder could run arbitrary code in response to the willReleaseScriptContext callback, so all disposing should happen after it returns.
         frame->loader().client()->willReleaseScriptContext(context, m_world->worldId());
-        InspectorInstrumentation::willReleaseScriptContext(frame, m_scriptState.get());
+        MainThreadDebugger::instance()->contextWillBeDestroyed(m_scriptState.get());
     }
 
     m_document.clear();
@@ -143,6 +142,15 @@ void WindowProxy::clearForNavigation()
     ScriptState::Scope scope(m_scriptState.get());
 
     disposeContext(DetachGlobal);
+}
+
+v8::Local<v8::Object> WindowProxy::globalIfNotDetached()
+{
+    if (!isContextInitialized())
+        return v8::Local<v8::Object>();
+    ASSERT(m_scriptState->contextIsValid());
+    ASSERT(m_global == m_scriptState->context()->Global());
+    return m_global.newLocal(m_isolate);
 }
 
 v8::Local<v8::Object> WindowProxy::releaseGlobal()
@@ -249,7 +257,7 @@ bool WindowProxy::initialize()
     if (m_world->isMainWorld()) {
         // ActivityLogger for main world is updated within updateDocument().
         updateDocument();
-        origin = m_frame->securityContext()->securityOrigin();
+        origin = m_frame->securityContext()->getSecurityOrigin();
         // FIXME: Can this be removed when CSP moves to browser?
         ContentSecurityPolicy* csp = m_frame->securityContext()->contentSecurityPolicy();
         context->AllowCodeGenerationFromStrings(csp->allowEval(0, ContentSecurityPolicy::SuppressReport));
@@ -261,8 +269,7 @@ bool WindowProxy::initialize()
     }
     if (m_frame->isLocalFrame()) {
         LocalFrame* frame = toLocalFrame(m_frame);
-        MainThreadDebugger::initializeContext(context, frame, m_world->worldId());
-        InspectorInstrumentation::didCreateScriptContext(frame, m_scriptState.get(), origin, m_world->worldId());
+        MainThreadDebugger::instance()->contextCreated(m_scriptState.get(), frame, origin);
         frame->loader().client()->didCreateScriptContext(context, m_world->extensionGroup(), m_world->worldId());
     }
     return true;
@@ -428,7 +435,7 @@ void WindowProxy::updateDocumentProperty()
     // We also stash a reference to the document on the inner global object so that
     // LocalDOMWindow objects we obtain from JavaScript references are guaranteed to have
     // live Document objects.
-    V8HiddenValue::setHiddenValue(m_scriptState.get(), toInnerGlobalObject(context), V8HiddenValue::document(m_isolate), documentWrapper);
+    V8HiddenValue::setHiddenValue(m_scriptState.get(), v8::Local<v8::Object>::Cast(context->Global()->GetPrototype()), V8HiddenValue::document(m_isolate), documentWrapper);
 }
 
 void WindowProxy::updateActivityLogger()
@@ -468,7 +475,7 @@ void WindowProxy::setSecurityToken(SecurityOrigin* origin)
     if (m_world->isPrivateScriptIsolatedWorld()) {
         token = "private-script://" + token;
     } else if (m_world->isIsolatedWorld()) {
-        SecurityOrigin* frameSecurityOrigin = m_frame->securityContext()->securityOrigin();
+        SecurityOrigin* frameSecurityOrigin = m_frame->securityContext()->getSecurityOrigin();
         String frameSecurityToken = frameSecurityOrigin->toString();
         // We need to check the return value of domainWasSetInDOM() on the
         // frame's SecurityOrigin because, if that's the case, only
@@ -497,7 +504,7 @@ void WindowProxy::updateDocument()
         return;
     updateActivityLogger();
     updateDocumentProperty();
-    updateSecurityOrigin(m_frame->securityContext()->securityOrigin());
+    updateSecurityOrigin(m_frame->securityContext()->getSecurityOrigin());
 }
 
 static v8::Local<v8::Value> getNamedProperty(HTMLDocument* htmlDocument, const AtomicString& key, v8::Local<v8::Object> creationContext, v8::Isolate* isolate)
@@ -505,7 +512,7 @@ static v8::Local<v8::Value> getNamedProperty(HTMLDocument* htmlDocument, const A
     if (!htmlDocument->hasNamedItem(key) && !htmlDocument->hasExtraNamedItem(key))
         return v8Undefined();
 
-    RefPtrWillBeRawPtr<DocumentNameCollection> items = htmlDocument->documentNamedItems(key);
+    RawPtr<DocumentNameCollection> items = htmlDocument->documentNamedItems(key);
     if (items->isEmpty())
         return v8Undefined();
 
@@ -517,11 +524,13 @@ static v8::Local<v8::Value> getNamedProperty(HTMLDocument* htmlDocument, const A
             return toV8(frame->domWindow(), creationContext, isolate);
         return toV8(element, creationContext, isolate);
     }
-    return toV8(PassRefPtrWillBeRawPtr<HTMLCollection>(items.release()), creationContext, isolate);
+    return toV8(RawPtr<HTMLCollection>(items.release()), creationContext, isolate);
 }
 
 static void getter(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
+    if (!property->IsString())
+        return;
     // FIXME: Consider passing StringImpl directly.
     AtomicString name = toCoreAtomicString(property.As<v8::String>());
     HTMLDocument* htmlDocument = V8HTMLDocument::toImpl(info.Holder());

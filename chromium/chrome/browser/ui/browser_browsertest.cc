@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/browser.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
@@ -13,7 +16,6 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
@@ -33,14 +35,13 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/cld_data_harness.h"
 #include "chrome/browser/translate/cld_data_harness_factory.h"
-#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -52,7 +53,6 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/tabs/pinned_tab_codec.h"
@@ -1955,9 +1955,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_PageZoom) {
         new content::MessageLoopRunner);
     content::HostZoomMap::ZoomLevelChangedCallback callback(
         base::Bind(&OnZoomLevelChanged, loop_runner->QuitClosure()));
-    scoped_ptr<content::HostZoomMap::Subscription> sub =
-        content::HostZoomMap::GetDefaultForBrowserContext(
-            browser()->profile())->AddZoomLevelChangedCallback(callback);
+    std::unique_ptr<content::HostZoomMap::Subscription> sub =
+        content::HostZoomMap::GetDefaultForBrowserContext(browser()->profile())
+            ->AddZoomLevelChangedCallback(callback);
     chrome::Zoom(browser(), content::PAGE_ZOOM_IN);
     loop_runner->Run();
     sub.reset();
@@ -1971,9 +1971,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_PageZoom) {
         new content::MessageLoopRunner);
     content::HostZoomMap::ZoomLevelChangedCallback callback(
         base::Bind(&OnZoomLevelChanged, loop_runner->QuitClosure()));
-    scoped_ptr<content::HostZoomMap::Subscription> sub =
-        content::HostZoomMap::GetDefaultForBrowserContext(
-            browser()->profile())->AddZoomLevelChangedCallback(callback);
+    std::unique_ptr<content::HostZoomMap::Subscription> sub =
+        content::HostZoomMap::GetDefaultForBrowserContext(browser()->profile())
+            ->AddZoomLevelChangedCallback(callback);
     chrome::Zoom(browser(), content::PAGE_ZOOM_RESET);
     loop_runner->Run();
     sub.reset();
@@ -1987,9 +1987,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_PageZoom) {
         new content::MessageLoopRunner);
     content::HostZoomMap::ZoomLevelChangedCallback callback(
         base::Bind(&OnZoomLevelChanged, loop_runner->QuitClosure()));
-    scoped_ptr<content::HostZoomMap::Subscription> sub =
-        content::HostZoomMap::GetDefaultForBrowserContext(
-            browser()->profile())->AddZoomLevelChangedCallback(callback);
+    std::unique_ptr<content::HostZoomMap::Subscription> sub =
+        content::HostZoomMap::GetDefaultForBrowserContext(browser()->profile())
+            ->AddZoomLevelChangedCallback(callback);
     chrome::Zoom(browser(), content::PAGE_ZOOM_OUT);
     loop_runner->Run();
     sub.reset();
@@ -2324,9 +2324,10 @@ IN_PROC_BROWSER_TEST_F(LaunchBrowserWithNonAsciiUserDatadir,
   // Verify that the window is present.
   ASSERT_TRUE(browser());
   ASSERT_TRUE(browser()->profile());
-  // Verify that the profile has been added correctly to the ProfileInfoCache.
+  // Verify that the profile has been added correctly to the
+  // ProfileAttributesStorage.
   ASSERT_EQ(1u, g_browser_process->profile_manager()->
-      GetProfileInfoCache().GetNumberOfProfiles());
+      GetProfileAttributesStorage().GetNumberOfProfiles());
 }
 #endif  // defined(OS_WIN)
 
@@ -2354,9 +2355,10 @@ IN_PROC_BROWSER_TEST_F(LaunchBrowserWithTrailingSlashDatadir,
   // Verify that the window is present.
   ASSERT_TRUE(browser());
   ASSERT_TRUE(browser()->profile());
-  // Verify that the profile has been added correctly to the ProfileInfoCache.
+  // Verify that the profile has been added correctly to the
+  // ProfileAttributesStorage.
   ASSERT_EQ(1u, g_browser_process->profile_manager()->
-      GetProfileInfoCache().GetNumberOfProfiles());
+      GetProfileAttributesStorage().GetNumberOfProfiles());
 }
 #endif  // defined(OS_WIN)
 
@@ -3165,7 +3167,7 @@ class JSBooleanResultGetter {
   }
 
  private:
-  scoped_ptr<base::Value> js_result_;
+  std::unique_ptr<base::Value> js_result_;
   DISALLOW_COPY_AND_ASSIGN(JSBooleanResultGetter);
 };
 

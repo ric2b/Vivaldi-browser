@@ -11,10 +11,6 @@
 #include "base/process/process_handle.h"
 #include "build/build_config.h"
 
-#if defined(OS_WIN)
-#include <windows.h>
-#endif
-
 #ifdef PVALLOC_AVAILABLE
 // Build config explicitly tells us whether or not pvalloc is available.
 #elif defined(LIBC_GLIBC) && !defined(USE_TCMALLOC)
@@ -24,14 +20,6 @@
 #endif
 
 namespace base {
-
-// Enables low fragmentation heap (LFH) for every heaps of this process. This
-// won't have any effect on heaps created after this function call. It will not
-// modify data allocated in the heaps before calling this function. So it is
-// better to call this function early in initialization and again before
-// entering the main loop.
-// Note: Returns true on Windows 2000 without doing anything.
-BASE_EXPORT bool EnableLowFragmentationHeap();
 
 // Enables 'terminate on heap corruption' flag. Helps protect against heap
 // overflow. Has no effect if the OS doesn't provide the necessary facility.
@@ -43,12 +31,6 @@ BASE_EXPORT void EnableTerminationOnOutOfMemory();
 // Terminates process. Should be called only for out of memory errors.
 // Crash reporting classifies such crashes as OOM.
 BASE_EXPORT void TerminateBecauseOutOfMemory(size_t size);
-
-#if defined(OS_WIN)
-// Returns the module handle to which an address belongs. The reference count
-// of the module is not incremented.
-BASE_EXPORT HMODULE GetModuleFromAddress(void* address);
-#endif
 
 #if defined(OS_LINUX) || defined(OS_ANDROID)
 BASE_EXPORT extern size_t g_oom_size;

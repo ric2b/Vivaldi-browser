@@ -12,13 +12,13 @@ namespace blink {
 
 class RemoteDOMWindow final : public DOMWindow {
 public:
-    static PassRefPtrWillBeRawPtr<RemoteDOMWindow> create(RemoteFrame& frame)
+    static RemoteDOMWindow* create(RemoteFrame& frame)
     {
-        return adoptRefWillBeNoop(new RemoteDOMWindow(frame));
+        return new RemoteDOMWindow(frame);
     }
 
     // EventTarget overrides:
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
     // DOMWindow overrides:
     DECLARE_VIRTUAL_TRACE();
@@ -70,21 +70,22 @@ public:
     void moveTo(int x, int y) const override;
     void resizeBy(int x, int y) const override;
     void resizeTo(int width, int height) const override;
-    PassRefPtrWillBeRawPtr<MediaQueryList> matchMedia(const String&) override;
-    PassRefPtrWillBeRawPtr<CSSStyleDeclaration> getComputedStyle(Element*, const String& pseudoElt) const override;
-    PassRefPtrWillBeRawPtr<CSSRuleList> getMatchedCSSRules(Element*, const String& pseudoElt) const override;
+    MediaQueryList* matchMedia(const String&) override;
+    CSSStyleDeclaration* getComputedStyle(Element*, const String& pseudoElt) const override;
+    CSSRuleList* getMatchedCSSRules(Element*, const String& pseudoElt) const override;
     int requestAnimationFrame(FrameRequestCallback*) override;
     int webkitRequestAnimationFrame(FrameRequestCallback*) override;
     void cancelAnimationFrame(int id) override;
     int requestIdleCallback(IdleRequestCallback*, const IdleRequestOptions&) override;
     void cancelIdleCallback(int id) override;
+    CustomElementsRegistry* customElements() const override;
 
     void frameDetached();
 
 private:
     explicit RemoteDOMWindow(RemoteFrame&);
 
-    RawPtrWillBeMember<RemoteFrame> m_frame;
+    Member<RemoteFrame> m_frame;
 };
 
 } // namespace blink

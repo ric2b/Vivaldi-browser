@@ -124,8 +124,8 @@ static void parseSizes(const CharacterType* value, unsigned length, Vector<IntSi
 
 static LinkEventSender& linkLoadEventSender()
 {
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<LinkEventSender>, sharedLoadEventSender, (LinkEventSender::create(EventTypeNames::load)));
-    return *sharedLoadEventSender;
+    DEFINE_STATIC_LOCAL(LinkEventSender, sharedLoadEventSender, (LinkEventSender::create(EventTypeNames::load)));
+    return sharedLoadEventSender;
 }
 
 static bool styleSheetTypeIsSupported(const String& type)
@@ -155,9 +155,9 @@ inline HTMLLinkElement::HTMLLinkElement(Document& document, bool createdByParser
 {
 }
 
-PassRefPtrWillBeRawPtr<HTMLLinkElement> HTMLLinkElement::create(Document& document, bool createdByParser)
+RawPtr<HTMLLinkElement> HTMLLinkElement::create(Document& document, bool createdByParser)
 {
-    return adoptRefWillBeNoop(new HTMLLinkElement(document, createdByParser));
+    return new HTMLLinkElement(document, createdByParser);
 }
 
 HTMLLinkElement::~HTMLLinkElement()
@@ -166,7 +166,7 @@ HTMLLinkElement::~HTMLLinkElement()
     m_sizes->setObserver(nullptr);
     m_relList->setObserver(nullptr);
     m_link.clear();
-    if (inDocument())
+    if (inShadowIncludingDocument())
         document().styleEngine().removeStyleSheetCandidateNode(this);
     linkLoadEventSender().cancelEvent(this);
 #endif
@@ -193,6 +193,9 @@ void HTMLLinkElement::parseAttribute(const QualifiedName& name, const AtomicStri
     } else if (name == mediaAttr) {
         m_media = value.lower();
         process();
+    } else if (name == scopeAttr) {
+        m_scope = value;
+        process();
     } else if (name == disabledAttr) {
         UseCounter::count(document(), UseCounter::HTMLLinkElementDisabled);
         if (LinkStyle* link = linkStyle())
@@ -209,17 +212,17 @@ void HTMLLinkElement::parseAttribute(const QualifiedName& name, const AtomicStri
 
 bool HTMLLinkElement::shouldLoadLink()
 {
-    return inDocument();
+    return inShadowIncludingDocument();
 }
 
-bool HTMLLinkElement::loadLink(const String& type, const String& as, const KURL& url)
+bool HTMLLinkElement::loadLink(const String& type, const String& as, const String& media, const KURL& url)
 {
-    return m_linkLoader->loadLink(m_relAttribute, crossOriginAttributeValue(fastGetAttribute(HTMLNames::crossoriginAttr)), type, as, url, document(), NetworkHintsInterfaceImpl());
+    return m_linkLoader->loadLink(m_relAttribute, crossOriginAttributeValue(fastGetAttribute(HTMLNames::crossoriginAttr)), type, as, media, url, document(), NetworkHintsInterfaceImpl());
 }
 
 LinkResource* HTMLLinkElement::linkResourceToProcess()
 {
-    bool visible = inDocument() && !m_isInShadowTree;
+    bool visible = inShadowIncludingDocument() && !m_isInShadowTree;
     if (!visible) {
         ASSERT(!linkStyle() || !linkStyle()->hasSheet());
         return nullptr;
@@ -230,8 +233,11 @@ LinkResource* HTMLLinkElement::linkResourceToProcess()
             m_link = LinkImport::create(this);
         } else if (m_relAttribute.isManifest()) {
             m_link = LinkManifest::create(this);
+        } else if (RuntimeEnabledFeatures::linkServiceWorkerEnabled() && m_relAttribute.isServiceWorker()) {
+            if (document().frame())
+                m_link = document().frame()->loader().client()->createServiceWorkerLinkResource(this);
         } else {
-            OwnPtrWillBeRawPtr<LinkStyle> link = LinkStyle::create(this);
+            RawPtr<LinkStyle> link = LinkStyle::create(this);
             if (fastHasAttribute(disabledAttr)) {
                 UseCounter::count(document(), UseCounter::HTMLLinkElementDisabled);
                 link->setDisabledState(true);
@@ -274,7 +280,7 @@ Node::InsertionNotificationRequest HTMLLinkElement::insertedInto(ContainerNode* 
 {
     HTMLElement::insertedInto(insertionPoint);
     logAddElementIfIsolatedWorldAndInDocument("link", relAttr, hrefAttr);
-    if (!insertionPoint->inDocument())
+    if (!insertionPoint->inShadowIncludingDocument())
         return InsertionDone;
 
     m_isInShadowTree = isInShadowTree();
@@ -284,7 +290,7 @@ Node::InsertionNotificationRequest HTMLLinkElement::insertedInto(ContainerNode* 
         return InsertionDone;
     }
 
-    document().styleEngine().addStyleSheetCandidateNode(this, m_createdByParser);
+    document().styleEngine().addStyleSheetCandidateNode(this);
 
     process();
 
@@ -297,7 +303,7 @@ Node::InsertionNotificationRequest HTMLLinkElement::insertedInto(ContainerNode* 
 void HTMLLinkElement::removedFrom(ContainerNode* insertionPoint)
 {
     HTMLElement::removedFrom(insertionPoint);
-    if (!insertionPoint->inDocument())
+    if (!insertionPoint->inShadowIncludingDocument())
         return;
 
     m_linkLoader->released();
@@ -308,12 +314,12 @@ void HTMLLinkElement::removedFrom(ContainerNode* insertionPoint)
     }
     document().styleEngine().removeStyleSheetCandidateNode(this);
 
-    RefPtrWillBeRawPtr<StyleSheet> removedSheet = sheet();
+    RawPtr<StyleSheet> removedSheet = sheet();
 
     if (m_link)
         m_link->ownerRemoved();
 
-    document().removedStyleSheet(removedSheet.get());
+    document().styleEngine().setNeedsActiveStyleUpdate(removedSheet.get(), FullStyleUpdate);
 }
 
 void HTMLLinkElement::finishParsingChildren()
@@ -470,9 +476,9 @@ DEFINE_TRACE(HTMLLinkElement)
     DOMTokenListObserver::trace(visitor);
 }
 
-PassOwnPtrWillBeRawPtr<LinkStyle> LinkStyle::create(HTMLLinkElement* owner)
+RawPtr<LinkStyle> LinkStyle::create(HTMLLinkElement* owner)
 {
-    return adoptPtrWillBeNoop(new LinkStyle(owner));
+    return new LinkStyle(owner);
 }
 
 LinkStyle::LinkStyle(HTMLLinkElement* owner)
@@ -508,7 +514,7 @@ enum StyleSheetCacheStatus {
 
 void LinkStyle::setCSSStyleSheet(const String& href, const KURL& baseURL, const String& charset, const CSSStyleSheetResource* cachedStyleSheet)
 {
-    if (!m_owner->inDocument()) {
+    if (!m_owner->inShadowIncludingDocument()) {
         ASSERT(!m_sheet);
         return;
     }
@@ -531,14 +537,14 @@ void LinkStyle::setCSSStyleSheet(const String& href, const KURL& baseURL, const 
         return;
     }
     // Completing the sheet load may cause scripts to execute.
-    RefPtrWillBeRawPtr<Node> protector(m_owner.get());
+    RawPtr<Node> protector(m_owner.get());
 
     CSSParserContext parserContext(m_owner->document(), 0, baseURL, charset);
 
     DEFINE_STATIC_LOCAL(EnumerationHistogram, restoredCachedStyleSheetHistogram, ("Blink.RestoredCachedStyleSheet", 2));
     DEFINE_STATIC_LOCAL(EnumerationHistogram, restoredCachedStyleSheet2Histogram, ("Blink.RestoredCachedStyleSheet2", StyleSheetCacheStatusCount));
 
-    if (RefPtrWillBeRawPtr<StyleSheetContents> restoredSheet = const_cast<CSSStyleSheetResource*>(cachedStyleSheet)->restoreParsedStyleSheet(parserContext)) {
+    if (RawPtr<StyleSheetContents> restoredSheet = const_cast<CSSStyleSheetResource*>(cachedStyleSheet)->restoreParsedStyleSheet(parserContext)) {
         ASSERT(restoredSheet->isCacheable());
         ASSERT(!restoredSheet->isLoading());
 
@@ -560,7 +566,7 @@ void LinkStyle::setCSSStyleSheet(const String& href, const KURL& baseURL, const 
     StyleSheetCacheStatus cacheStatus = cachedStyleSheet->response().wasCached() ? StyleSheetInDiskCache : StyleSheetNewEntry;
     restoredCachedStyleSheet2Histogram.count(cacheStatus);
 
-    RefPtrWillBeRawPtr<StyleSheetContents> styleSheet = StyleSheetContents::create(href, parserContext);
+    RawPtr<StyleSheetContents> styleSheet = StyleSheetContents::create(href, parserContext);
 
     if (m_sheet)
         clearSheet();
@@ -570,7 +576,7 @@ void LinkStyle::setCSSStyleSheet(const String& href, const KURL& baseURL, const 
     m_sheet->setTitle(m_owner->title());
     setCrossOriginStylesheetStatus(m_sheet.get());
 
-    styleSheet->parseAuthorStyleSheet(cachedStyleSheet, m_owner->document().securityOrigin());
+    styleSheet->parseAuthorStyleSheet(cachedStyleSheet, m_owner->document().getSecurityOrigin());
 
     m_loading = false;
     styleSheet->notifyLoadedSheet(cachedStyleSheet);
@@ -677,16 +683,13 @@ void LinkStyle::setDisabledState(bool disabled)
             return;
         }
 
-        if (m_sheet)
+        if (m_sheet) {
             m_sheet->setDisabled(disabled);
-
-        // Load the sheet, since it's never been loaded before.
-        if (!m_sheet && m_disabledState == EnabledViaScript) {
-            if (m_owner->shouldProcessStyle())
-                process();
-        } else {
-            m_owner->document().styleEngine().resolverChanged(FullStyleUpdate);
+            return;
         }
+
+        if (m_disabledState == EnabledViaScript && m_owner->shouldProcessStyle())
+            process();
     }
 }
 
@@ -695,7 +698,7 @@ void LinkStyle::setCrossOriginStylesheetStatus(CSSStyleSheet* sheet)
     if (m_fetchFollowingCORS && resource() && !resource()->errorOccurred()) {
         // Record the security origin the CORS access check succeeded at, if cross origin.
         // Only origins that are script accessible to it may access the stylesheet's rules.
-        sheet->setAllowRuleAccessFromOrigin(m_owner->document().securityOrigin());
+        sheet->setAllowRuleAccessFromOrigin(m_owner->document().getSecurityOrigin());
     }
     m_fetchFollowingCORS = false;
 }
@@ -705,12 +708,13 @@ void LinkStyle::process()
     ASSERT(m_owner->shouldProcessStyle());
     String type = m_owner->typeValue().lower();
     String as = m_owner->asValue().lower();
+    String media = m_owner->media().lower();
     LinkRequestBuilder builder(m_owner);
 
     if (m_owner->relAttribute().getIconType() != InvalidIcon && builder.url().isValid() && !builder.url().isEmpty()) {
         if (!m_owner->shouldLoadLink())
             return;
-        if (!document().securityOrigin()->canDisplay(builder.url()))
+        if (!document().getSecurityOrigin()->canDisplay(builder.url()))
             return;
         if (!document().contentSecurityPolicy()->allowImageFromSource(builder.url()))
             return;
@@ -718,7 +722,7 @@ void LinkStyle::process()
             document().frame()->loader().client()->dispatchDidChangeIcons(m_owner->relAttribute().getIconType());
     }
 
-    if (!m_owner->loadLink(type, as, builder.url()))
+    if (!m_owner->loadLink(type, as, media, builder.url()))
         return;
 
     if (m_disabledState != Disabled && m_owner->relAttribute().isStyleSheet() && styleSheetTypeIsSupported(type) && shouldLoadResource() && builder.url().isValid()) {
@@ -737,7 +741,7 @@ void LinkStyle::process()
         LocalFrame* frame = loadingFrame();
         if (!m_owner->media().isEmpty() && frame && frame->document()) {
             RefPtr<ComputedStyle> documentStyle = StyleResolver::styleForDocument(*frame->document());
-            RefPtrWillBeRawPtr<MediaQuerySet> media = MediaQuerySet::create(m_owner->media());
+            RawPtr<MediaQuerySet> media = MediaQuerySet::create(m_owner->media());
             MediaQueryEvaluator evaluator(frame);
             mediaQueryMatches = evaluator.eval(media.get());
         }
@@ -753,7 +757,7 @@ void LinkStyle::process()
         FetchRequest request = builder.build(lowPriority);
         CrossOriginAttributeValue crossOrigin = crossOriginAttributeValue(m_owner->fastGetAttribute(HTMLNames::crossoriginAttr));
         if (crossOrigin != CrossOriginAttributeNotSet) {
-            request.setCrossOriginAccessControl(document().securityOrigin(), crossOrigin);
+            request.setCrossOriginAccessControl(document().getSecurityOrigin(), crossOrigin);
             setFetchFollowingCORS();
         }
         setResource(CSSStyleSheetResource::fetch(request, document().fetcher()));
@@ -767,9 +771,9 @@ void LinkStyle::process()
         }
     } else if (m_sheet) {
         // we no longer contain a stylesheet, e.g. perhaps rel or type was changed
-        RefPtrWillBeRawPtr<StyleSheet> removedSheet = m_sheet.get();
+        RawPtr<StyleSheet> removedSheet = m_sheet.get();
         clearSheet();
-        document().removedStyleSheet(removedSheet.get());
+        document().styleEngine().setNeedsActiveStyleUpdate(removedSheet.get(), FullStyleUpdate);
     }
 }
 

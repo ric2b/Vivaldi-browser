@@ -26,11 +26,8 @@ struct WindowData {
   mojo.Rect bounds;
   map<string, array<uint8>> properties;
   // True if this window is visible. The window may not be drawn on screen (see
-  // drawn for specifics).
+  // OnWindowParentDrawnStateChanged() for details).
   bool visible;
-  // True if this window is drawn on screen. A window is drawn if attached to
-  // the root and all ancestors (including this window) are visible.
-  bool drawn;
   ViewportMetrics viewport_metrics;
 };
 
@@ -69,17 +66,6 @@ enum SurfaceType {
 // change id in anyway, it is up to the client to assign a value and use it.
 // Generally the change id is an ever increasing integer.
 interface WindowTree {
-  const int32 kAccessPolicyDefault = 0;
-
-  // An embed root has the following abilities:
-  // . The app sees all the descendants of the window the app is ebmedded at,
-  //   even those from separate connections.
-  // . The app is able to Embed() in all the descendants of the window the app
-  //   is embedded at, even those from separate connections.
-  // Only connections originating from the WindowTreeHostFactory can grant
-  // this policy.
-  const int32 kAccessPolicyEmbedRoot = 1;
-
   // Creates a new window with the specified id. It is up to the client to
   // ensure the id is unique to the connection (the id need not be globally
   // unique). Additionally the connection id (embedded in |window_id|) must
@@ -140,6 +126,9 @@ interface WindowTree {
                     string name,
                     array<uint8>? value);
 
+  // Sets the opacity of the specified window to |opacity|.
+  SetWindowOpacity(uint32 change_id, uint32 window_id, float opacity);
+
   // Attaches a Surface to a particular window.
   AttachSurface(uint32 window_id,
                 SurfaceType type,
@@ -179,6 +168,13 @@ interface WindowTree {
   // This does not change transient window's position in the window hierarchy.
   RemoveTransientWindowFromParent(uint32 change_id, uint32 transient_window_id);
 
+  // Sets |window_id| to be modal to its transient parent.
+  // This fails if |window_id| does not identify a valid window.
+  // TODO(mohsen): If |window_id| does not have a transient parent, this will
+  // have no effect. Plan is to make a window modal to system if it does not
+  // have a transient parent.
+  SetModal(uint32 change_id, uint32 window_id);
+
   // Reorders a window in its parent, relative to |relative_window_id| according
   // to |direction|. Only the connection that created the window's parent can
   // reorder its children.
@@ -204,9 +200,8 @@ interface WindowTree {
   //
   // When a connection embeds a WindowTreeClient the originating connection no
   // longer has privileges to access or see any of the children of the window.
-  // If the window had existing children the children are removed. The one
-  // exception is the root connection and any connections with the policy
-  // kAccessPolicyEmbedRoot.
+  // If the window had existing children the children are removed. The
+  // WindowManager gets to see the whole tree.
   //
   // A window may only have one embedding in it at a time. Subsequent calls to
   // Embed() for the same window result in the currently embedded
@@ -217,17 +212,17 @@ interface WindowTree {
   // The embedder can detect when the embedded app disconnects by way of
   // OnEmbeddedAppDisconnected().
   //
-  // The callback returns whether the embedding was successful, and if the
-  // embedding was successful and the originating connection is an embed root
-  // the resulting id of the new connection.
-  //
-  // policy_bitmask is a bitmask of the kAccessPolicy constants. See them for
-  // details.
-  Embed(uint32 window_id,
-        WindowTreeClient client,
-        uint32 policy_bitmask) => (bool success, uint16 connection_id);
+  // The callback returns whether the embedding was successful.
+  Embed(uint32 window_id, WindowTreeClient client) => (bool success);
 
+  // Sets focus to the specified window, use 0 to clear focus. For a window to
+  // get focus the following has to happen: the window is drawn, the window has
+  // been marked as focusable (see SetCanFocus()) and the window is in a
+  // container the WindowManager has identified as allowing activation
+  // (see WindowManagerClient::AddActivationParent()).
   SetFocus(uint32 change_id, uint32 window_id);
+
+  // Marks the specified window as being able to receive focus.
   SetCanFocus(uint32 window_id, bool can_focus);
 
   // Sets the cursor when the pointer is inside |window_id| to a system standard
@@ -246,7 +241,7 @@ interface WindowTree {
   SetImeVisibility(uint32 window_id, bool visible, mojo.TextInputState? state);
 
   // See documentation for WindowTreeClient::OnWindowInputEvent().
-  OnWindowInputEventAck(uint32 event_id);
+  OnWindowInputEventAck(uint32 event_id, bool handled);
 
   // See description of WindowManager for details.
   GetWindowManagerClient(associated WindowManagerClient& internal);
@@ -260,12 +255,13 @@ interface WindowTreeClient {
   // Invoked when the client application has been embedded at |root|.
   // See Embed() on WindowTree for more details. |tree| will be a handle back to
   // the window manager service, unless the connection is to the root connection
-  // in which case it will be null.
+  // in which case it will be null. |parent_drawn| is true if roots parent is
+  // drawn, see OnParentDrawnStateChanged() for details.
   OnEmbed(uint16 connection_id,
           WindowData root,
           WindowTree? tree,
           uint32 focused_window,
-          uint32 access_policy);
+          bool parent_drawn);
 
   // Invoked when the application embedded at |window| is disconnected. In other
   // words the embedded app closes the connection to the server. This is called
@@ -281,7 +277,9 @@ interface WindowTreeClient {
   OnLostCapture(uint32 window);
 
   // Called in response to NewTopLevelWindow() successfully completing.
-  OnTopLevelCreated(uint32 change_id, WindowData data);
+  // |parent_drawn| is true if the parent of the window is drawn, see
+  // OnDrawnStateChanged() for details.
+  OnTopLevelCreated(uint32 change_id, WindowData data, bool parent_drawn);
 
   // Invoked when a window's bounds have changed.
   OnWindowBoundsChanged(uint32 window,
@@ -330,17 +328,20 @@ interface WindowTreeClient {
   // Invoked when the visibility of the specified window changes.
   OnWindowVisibilityChanged(uint32 window, bool visible);
 
-  // Invoked when a change to the visibility of |window| or one if it's
-  // ancestors is done such that the drawn state changes. This is only invoked
-  // for the top most window of a particular connection. For example, if you
-  // have the hierarchy: A -> B1 -> B2 (B2 is a child of B1 and B1 a child of
-  // A), B1/B2 are from connection 2 and A from connection 1 with all windows
-  // visible and drawn and the visiblity of A changes to false, then connection
-  // 2 is told the drawn state of B1 has changed (to false), but is not told
-  // anything about B2 as it's drawn state can be calculated from that of B1.
+  // Invoked when the opacity of the specified window has changed.
+  OnWindowOpacityChanged(uint32 window, float old_opacity, float new_opacity);
+
+  // Invoked when the drawn state of |window|'s parent changes. The drawn state
+  // is determined by the visibility of a Window and the Windows ancestors. A
+  // Window is drawn if all ancestors are visible, not drawn if any ancestor is
+  // hidden.
   //
-  // NOTE: This is not invoked if OnWindowVisibilityChanged() is invoked.
-  OnWindowDrawnStateChanged(uint32 window, bool drawn);
+  // The initial drawn state is communicated by way of OnTopLevelCreated() or
+  // OnEmbed().
+  //
+  // This function is only called for root Windows as the drawn state of all
+  // other windows can be determined from their parent.
+  OnWindowParentDrawnStateChanged(uint32 window, bool drawn);
 
   // Invoked when a window property is changed. If this change is a removal,
   // |new_data| is null.
@@ -350,10 +351,16 @@ interface WindowTreeClient {
 
   // Invoked when an event is targeted at the specified window. The client must
   // call WindowTree::OnWindowInputEventAck() with the same |event_id| to notify
-  // that the event has been processed. The client will not receive farther
-  // events until the event is ack'ed.
+  // that the event has been processed, and with a boolean |handled| to notify
+  // if the event was consumed. The client will not receive farther events until
+  // the event is ack'ed.
   OnWindowInputEvent(uint32 event_id, uint32 window, Event event);
 
+  // Called in two distinct cases: when a window known to the connection gains
+  // focus, or when focus moves from a window known to the connection to a
+  // window not known to the connection. In the later case |focused_window_id|
+  // is 0. As with other functions this is only called if the client did not
+  // initiate the change.
   OnWindowFocused(uint32 focused_window_id);
 
   OnWindowPredefinedCursorChanged(uint32 window_id, Cursor cursor_id);

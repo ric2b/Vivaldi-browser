@@ -65,9 +65,11 @@
         '../ui/base/ui_base.gyp:ui_base',
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../ui/gfx/ipc/gfx_ipc.gyp:gfx_ipc',
+        '../ui/gfx/ipc/skia/gfx_ipc_skia.gyp:gfx_ipc_skia',
         '../url/url.gyp:url_lib',
         '../third_party/boringssl/boringssl.gyp:boringssl',
         '../third_party/libxml/libxml.gyp:libxml',
+        '../url/ipc/url_ipc.gyp:url_ipc',
         'common/api/api.gyp:extensions_api',
         'extensions_resources.gyp:extensions_resources',
         'extensions_strings.gyp:extensions_strings',
@@ -202,6 +204,7 @@
       'dependencies': [
         'extensions_resources.gyp:extensions_resources',
         '../components/components.gyp:guest_view_renderer',
+        '../content/content.gyp:content_common',
         '../content/content.gyp:content_resources',
         '../gin/gin.gyp:gin',
         '../mojo/mojo_public.gyp:mojo_js_bindings',
@@ -217,8 +220,11 @@
       'msvs_disabled_warnings': [ 4267, ],
       'conditions': [
         ['enable_wifi_display==1', {
+          'dependencies': [
+            '../third_party/wds/wds.gyp:libwds',
+          ],
           'sources': [
-            '<@(extensions_render_sources_wifi_display)',
+            '<@(extensions_renderer_sources_wifi_display)',
           ],
         }],
       ],

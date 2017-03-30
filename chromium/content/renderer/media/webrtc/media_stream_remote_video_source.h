@@ -24,7 +24,7 @@ class TrackObserver;
 class CONTENT_EXPORT MediaStreamRemoteVideoSource
      : public MediaStreamVideoSource {
  public:
-  MediaStreamRemoteVideoSource(scoped_ptr<TrackObserver> observer);
+  MediaStreamRemoteVideoSource(std::unique_ptr<TrackObserver> observer);
   ~MediaStreamRemoteVideoSource() override;
 
   // Should be called when the remote video track this source originates from is
@@ -49,7 +49,7 @@ class CONTENT_EXPORT MediaStreamRemoteVideoSource
 
   // Used by tests to test that a frame can be received and that the
   // MediaStreamRemoteVideoSource behaves as expected.
-  webrtc::VideoRendererInterface* RenderInterfaceForTest();
+  rtc::VideoSinkInterface<cricket::VideoFrame>* SinkInterfaceForTest();
 
  private:
   void OnChanged(webrtc::MediaStreamTrackInterface::TrackState state);
@@ -58,7 +58,7 @@ class CONTENT_EXPORT MediaStreamRemoteVideoSource
   // libjingle thread and forward it to the IO-thread.
   class RemoteVideoSourceDelegate;
   scoped_refptr<RemoteVideoSourceDelegate> delegate_;
-  scoped_ptr<TrackObserver> observer_;
+  std::unique_ptr<TrackObserver> observer_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaStreamRemoteVideoSource);
 };

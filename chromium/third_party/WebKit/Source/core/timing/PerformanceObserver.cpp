@@ -13,7 +13,6 @@
 #include "core/timing/PerformanceObserverEntryList.h"
 #include "core/timing/PerformanceObserverInit.h"
 #include "platform/Timer.h"
-#include "wtf/MainThread.h"
 #include <algorithm>
 
 namespace blink {
@@ -79,7 +78,7 @@ void PerformanceObserver::enqueuePerformanceEntry(PerformanceEntry& entry)
 
 bool PerformanceObserver::shouldBeSuspended() const
 {
-    return m_callback->executionContext() && m_callback->executionContext()->activeDOMObjectsAreSuspended();
+    return m_callback->getExecutionContext() && m_callback->getExecutionContext()->activeDOMObjectsAreSuspended();
 }
 
 void PerformanceObserver::deliver()

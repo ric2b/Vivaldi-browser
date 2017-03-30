@@ -41,14 +41,10 @@ namespace blink {
 
 class ExecutionContext;
 class InspectorFrontend;
-class V8Debugger;
 class V8ProfilerAgent;
 
-typedef String ErrorString;
-
-class CORE_EXPORT InspectorProfilerAgent final : public InspectorBaseAgent<InspectorProfilerAgent, protocol::Frontend::Profiler>, public protocol::Dispatcher::ProfilerCommandHandler {
+class CORE_EXPORT InspectorProfilerAgent final : public InspectorBaseAgent<InspectorProfilerAgent, protocol::Frontend::Profiler>, public protocol::Backend::Profiler {
     WTF_MAKE_NONCOPYABLE(InspectorProfilerAgent);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(InspectorProfilerAgent);
 public:
     class Client {
     public:
@@ -57,18 +53,18 @@ public:
         virtual void profilingStopped() { }
     };
 
-    static PassOwnPtrWillBeRawPtr<InspectorProfilerAgent> create(V8Debugger*, Client*);
+    static RawPtr<InspectorProfilerAgent> create(V8ProfilerAgent*, Client*);
     ~InspectorProfilerAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
     // InspectorBaseAgent overrides.
-    void setState(PassRefPtr<protocol::DictionaryValue>) override;
+    void setState(protocol::DictionaryValue*) override;
     void setFrontend(protocol::Frontend*) override;
     void clearFrontend() override;
     void restore() override;
 
-    void consoleProfile(ExecutionContext*, const String& title);
-    void consoleProfileEnd(const String& title);
+    void consoleProfile(ExecutionContext*, const String16& title);
+    void consoleProfileEnd(const String16& title);
 
     void enable(ErrorString*) override;
     void disable(ErrorString*) override;
@@ -82,10 +78,10 @@ public:
     void didLeaveNestedRunLoop();
 
 private:
-    InspectorProfilerAgent(V8Debugger*, Client*);
+    InspectorProfilerAgent(V8ProfilerAgent*, Client*);
 
     Client* m_client;
-    OwnPtr<V8ProfilerAgent> m_v8ProfilerAgent;
+    V8ProfilerAgent* m_v8ProfilerAgent;
 };
 
 } // namespace blink

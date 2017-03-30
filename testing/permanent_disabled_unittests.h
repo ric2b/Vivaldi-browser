@@ -13,17 +13,15 @@
   DISABLE(BrowserOptionsOverlayWebUITest, testNavigationInBackground)
   // ******
 
+  // Nacl is disabled in Vivaldi
+  DISABLE_ALL(ChromeServiceWorkerFetchPPAPITest)
+  DISABLE_ALL(ChromeServiceWorkerFetchPPAPIPrivateTest)
+
   // In Vivaldi this will always break since the relevant code has been modified
   DISABLE(ExtensionApiTest, StubsApp)
 
   // internal HTML page modified, breaking the test
   DISABLE(HelpPageWebUITest, testOpenHelpPage)
-
-  // tomas@vivaldi.com: disabled this test due to incognito work in progress.
-  // VB-7149
-  DISABLE(RenderViewContextMenuPrefsTest,
-          DisableOpenInIncognitoWindowWhenIncognitoIsDisabled)
-  // ******
 
   DISABLE(UberUIBrowserTest, EnableMdExtensionsHidesExtensions)
   DISABLE(UberUIBrowserTest, EnableMdHistoryHidesHistory)
@@ -38,6 +36,10 @@
           testRunningAuditManually_noErrors)
   DISABLE(WebUIAccessibilityAuditBrowserTest_TestsDisabledInFixture,
           testRunningAuditManuallySeveralTimes)
+
+  // Found flaky when looking at VB-13454. The order of downloads requested is
+  // not necessarily the same as they get processed. See bug for log.
+  DISABLE_MULTI(WebViewTest, DownloadPermission)
 
   // In Vivaldi this will always break since the relevant code has been modified
   DISABLE(WebViewTest, Shim_TestRendererNavigationRedirectWhileUnattached)

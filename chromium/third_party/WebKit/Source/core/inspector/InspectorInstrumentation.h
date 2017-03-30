@@ -77,10 +77,22 @@ public:
     bool isValid() const { return !!m_instrumentingAgents; }
 
 private:
-    RefPtrWillBeMember<InstrumentingAgents> m_instrumentingAgents;
+    Member<InstrumentingAgents> m_instrumentingAgents;
 };
 
 namespace InspectorInstrumentation {
+
+class CORE_EXPORT AsyncTask {
+    STACK_ALLOCATED();
+public:
+    AsyncTask(ExecutionContext*, void* task);
+    AsyncTask(ExecutionContext*, void* task, bool enabled);
+    ~AsyncTask();
+
+private:
+    Member<InstrumentingAgents> m_instrumentingAgents;
+    void* m_task;
+};
 
 class CORE_EXPORT FrontendCounter {
     STATIC_ONLY(FrontendCounter);
@@ -110,6 +122,8 @@ InstrumentingAgents* instrumentingAgentsFor(WorkerGlobalScope*);
 
 // Helper for the one above.
 CORE_EXPORT InstrumentingAgents* instrumentingAgentsForNonDocumentContext(ExecutionContext*);
+
+CORE_EXPORT extern const char kInspectorEmulateNetworkConditionsClientId[];
 
 }  // namespace InspectorInstrumentation
 

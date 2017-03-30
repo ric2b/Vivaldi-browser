@@ -18,6 +18,7 @@ namespace prefs {
 #if defined(OS_CHROMEOS) && defined(ENABLE_APP_LIST)
 extern const char kArcApps[];
 extern const char kArcEnabled[];
+extern const char kArcSignedIn[];
 #endif
 extern const char kChildAccountStatusKnown[];
 extern const char kDefaultApps[];
@@ -156,6 +157,7 @@ extern const char kContextualSearchEnabled[];
 #if defined(OS_MACOSX)
 extern const char kConfirmToQuitEnabled[];
 extern const char kHideFullscreenToolbar[];
+extern const char kShowFullscreenToolbar[];
 #endif
 extern const char kPromptForDownload[];
 extern const char kAlternateErrorPagesEnabled[];
@@ -203,6 +205,9 @@ extern const char kLanguageSendFunctionKeys[];
 extern const char kLanguageXkbAutoRepeatEnabled[];
 extern const char kLanguageXkbAutoRepeatDelay[];
 extern const char kLanguageXkbAutoRepeatInterval[];
+
+// TODO(dmazzoni): move accessibility prefs out of chrome/.
+// http://crbug.com/594887
 extern const char kAccessibilityLargeCursorEnabled[];
 extern const char kAccessibilityStickyKeysEnabled[];
 extern const char kAccessibilitySpokenFeedbackEnabled[];
@@ -214,7 +219,13 @@ extern const char kAccessibilityScreenMagnifierScale[];
 extern const char kAccessibilityVirtualKeyboardEnabled[];
 extern const char kAccessibilityAutoclickEnabled[];
 extern const char kAccessibilityAutoclickDelayMs[];
+extern const char kAccessibilityCaretHighlightEnabled[];
+extern const char kAccessibilityCursorHighlightEnabled[];
+extern const char kAccessibilityFocusHighlightEnabled[];
+extern const char kAccessibilitySelectToSpeakEnabled[];
+extern const char kAccessibilitySwitchAccessEnabled[];
 extern const char kShouldAlwaysShowAccessibilityMenu[];
+
 extern const char kLabsAdvancedFilesystemEnabled[];
 extern const char kLabsMediaplayerEnabled[];
 extern const char kEnableAutoScreenLock[];
@@ -295,6 +306,7 @@ extern const char kForceYouTubeSafetyMode[];
 extern const char kRecordHistory[];
 extern const char kDeleteTimePeriod[];
 extern const char kLastClearBrowsingDataTime[];
+extern const char kClearBrowsingDataHistoryNoticeShownTimes[];
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 extern const char kUsesSystemTheme[];
 #endif
@@ -312,7 +324,6 @@ extern const char kPluginsPluginsList[];
 extern const char kPluginsDisabledPlugins[];
 extern const char kPluginsDisabledPluginsExceptions[];
 extern const char kPluginsEnabledPlugins[];
-extern const char kNpapiFlashMigratedToPepperFlash[];
 #if defined(ENABLE_PLUGINS)
 extern const char kPluginsShowDetails[];
 #endif
@@ -322,7 +333,7 @@ extern const char kPluginsAlwaysAuthorize[];
 extern const char kPluginsMetadata[];
 extern const char kPluginsResourceCacheUpdate[];
 #endif
-extern const char kCheckDefaultBrowser[];
+extern const char kDefaultBrowserLastDeclined[];
 extern const char kResetCheckDefaultBrowser[];
 extern const char kDefaultBrowserSettingEnabled[];
 #if defined(OS_MACOSX)
@@ -428,6 +439,8 @@ extern const char kGLVersionString[];
 extern const char kCrashReportingEnabled[];
 #endif
 
+extern const char kMetricsDefaultOptIn[];
+
 extern const char kDeviceOpenNetworkConfiguration[];
 
 extern const char kProfileLastUsed[];
@@ -477,9 +490,6 @@ extern const char kDefaultTasksBySuffix[];
 
 extern const char kSelectFileLastDirectory[];
 
-extern const char kHungPluginDetectFrequency[];
-extern const char kPluginMessageResponseTimeout[];
-
 extern const char kSpellCheckDictionaries[];
 extern const char kSpellCheckDictionary[];
 extern const char kSpellCheckUseSpellingService[];
@@ -497,11 +507,8 @@ extern const char kShutdownNumProcessesSlow[];
 
 extern const char kRestartLastSessionOnShutdown[];
 #if !defined(OS_ANDROID)
+extern const char kSuppressUnsupportedOSWarning[];
 extern const char kWasRestarted[];
-#endif
-
-#if defined(OS_WIN)
-extern const char kRelaunchMode[];
 #endif
 
 extern const char kDisableExtensions[];
@@ -560,9 +567,6 @@ extern const char kWebAppCreateInQuickLaunchBar[];
 
 extern const char kGeolocationAccessToken[];
 
-#if BUILDFLAG(ENABLE_GOOGLE_NOW)
-extern const char kGoogleGeolocationAccessEnabled[];
-#endif
 extern const char kGoogleNowLauncherEnabled[];
 
 extern const char kDefaultAudioCaptureDevice[];
@@ -688,6 +692,7 @@ extern const char kDebuggingFeaturesRequested[];
 
 #if defined(OS_CHROMEOS)
 extern const char kResolveDeviceTimezoneByGeolocation[];
+extern const char kSystemTimezoneAutomaticDetectionPolicy[];
 #endif  // defined(OS_CHROMEOS)
 
 #if !defined(OS_ANDROID)
@@ -695,7 +700,6 @@ extern const char kAttemptedToEnableAutoupdate[];
 
 extern const char kMediaGalleriesUniqueId[];
 extern const char kMediaGalleriesRememberedGalleries[];
-extern const char kMediaGalleriesLastScanTime[];
 #endif  // !defined(OS_ANDROID)
 
 #if defined(USE_ASH)

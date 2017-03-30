@@ -133,17 +133,6 @@ public:
         return containsWrapper();
     }
 
-    void markAsDependentGroup(ScriptWrappable* groupRoot, v8::Isolate* isolate)
-    {
-        ASSERT(containsWrapper());
-        ASSERT(groupRoot && groupRoot->containsWrapper());
-
-        // FIXME: There has to be a better way.
-        v8::UniqueId groupId(*reinterpret_cast<intptr_t*>(&groupRoot->m_wrapper));
-        m_wrapper.MarkPartiallyDependent();
-        isolate->SetObjectGroupId(v8::Persistent<v8::Value>::Cast(m_wrapper), groupId);
-    }
-
     void setReference(const v8::Persistent<v8::Object>& parent, v8::Isolate* isolate)
     {
         isolate->SetReference(parent, m_wrapper);
@@ -151,20 +140,9 @@ public:
 
     bool containsWrapper() const { return !m_wrapper.IsEmpty(); }
 
-    virtual bool hasPendingActivity() const;
-
-#if !ENABLE(OILPAN)
-protected:
-    virtual ~ScriptWrappable()
-    {
-        // We must not get deleted as long as we contain a wrapper. If this happens, we screwed up ref
-        // counting somewhere. Crash here instead of crashing during a later gc cycle.
-        RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(!containsWrapper());
-    }
-#endif
     // With Oilpan we don't need a ScriptWrappable destructor.
     //
-    // - 'RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(!containsWrapper())' is not needed
+    // 'RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(!containsWrapper())' is not needed
     // because Oilpan is not using reference counting at all. If containsWrapper() is true,
     // it means that ScriptWrappable still has a wrapper. In this case, the destructor
     // must not be called since the wrapper has a persistent handle back to this ScriptWrappable object.
@@ -175,7 +153,7 @@ private:
     void disposeWrapper(const v8::WeakCallbackInfo<ScriptWrappable>& data)
     {
         auto scriptWrappable = reinterpret_cast<ScriptWrappable*>(data.GetInternalField(v8DOMWrapperObjectIndex));
-        RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(scriptWrappable == this);
+        SECURITY_CHECK(scriptWrappable == this);
         RELEASE_ASSERT(containsWrapper());
         m_wrapper.Reset();
     }
@@ -231,26 +209,6 @@ public: \
     } \
 private: \
     static const WrapperTypeInfo& s_wrapperTypeInfo
-
-// Defines 'wrapperTypeInfo' virtual method, which should never be called.
-//
-// This macro is used when there exists a class hierarchy with a root class
-// and most of the subclasses are script-wrappable but not all of them.
-// In that case, the root class can inherit from ScriptWrappable and use
-// this macro, and let subclasses have a choice whether or not use
-// DEFINE_WRAPPERTYPEINFO macro. The script-wrappable subclasses which have
-// corresponding IDL file must call DEFINE_WRAPPERTYPEINFO, and the others
-// must not.
-#define DEFINE_WRAPPERTYPEINFO_NOT_REACHED() \
-public: \
-    const WrapperTypeInfo* wrapperTypeInfo() const override \
-    { \
-        ASSERT_NOT_REACHED(); \
-        return 0; \
-    } \
-private: \
-    typedef void end_of_define_wrappertypeinfo_not_reached_t
-
 
 // Declares 'wrapperTypeInfo' method without definition.
 //

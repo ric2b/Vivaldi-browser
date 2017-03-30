@@ -39,8 +39,9 @@ class PasswordsPrivateEventRouter :
   void OnListenerRemoved(const EventListenerInfo& details) override;
 
   // PasswordsPrivateDelegate::Observer overrides:
-  void OnSavedPasswordsListChanged(const std::vector<linked_ptr<
-      api::passwords_private::PasswordUiEntry>>& entries) override;
+  void OnSavedPasswordsListChanged(
+      const std::vector<api::passwords_private::PasswordUiEntry>& entries)
+      override;
   void OnPasswordExceptionsListChanged(
       const std::vector<std::string>& exceptions) override;
   void OnPlaintextPasswordFetched(
@@ -63,11 +64,14 @@ class PasswordsPrivateEventRouter :
 
   // Cached parameters which are saved so that when new listeners are added, the
   // most up-to-date lists can be sent to them immediately.
-  scoped_ptr<base::ListValue> cached_saved_password_parameters_;
-  scoped_ptr<base::ListValue> cached_password_exception_parameters_;
+  std::unique_ptr<base::ListValue> cached_saved_password_parameters_;
+  std::unique_ptr<base::ListValue> cached_password_exception_parameters_;
 
   // Whether this class is currently listening for changes to password changes.
   bool listening_;
+
+  // True if we should ignore an update from PasswordsPrivateDelegate.
+  bool ignore_updates_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordsPrivateEventRouter);
 };

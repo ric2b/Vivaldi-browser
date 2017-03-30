@@ -22,6 +22,7 @@
 #include "core/svg/SVGImageElement.h"
 
 #include "core/CSSPropertyNames.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/layout/LayoutImageResource.h"
 #include "core/layout/svg/LayoutSVGImage.h"
 
@@ -63,7 +64,7 @@ bool SVGImageElement::currentFrameHasSingleSecurityOrigin() const
 {
     if (LayoutSVGImage* layoutSVGImage = toLayoutSVGImage(layoutObject())) {
         if (layoutSVGImage->imageResource()->hasImage()) {
-            if (Image* image = layoutSVGImage->imageResource()->cachedImage()->image())
+            if (Image* image = layoutSVGImage->imageResource()->cachedImage()->getImage())
                 return image->currentFrameHasSingleSecurityOrigin();
         }
     }
@@ -133,7 +134,7 @@ void SVGImageElement::svgAttributeChanged(const QualifiedName& attrName)
 
     if (SVGURIReference::isKnownAttribute(attrName)) {
         SVGElement::InvalidationGuard invalidationGuard(this);
-        if (inDocument())
+        if (inShadowIncludingDocument())
             imageLoader().updateFromElement(ImageLoader::UpdateIgnorePreviousError);
         else
             m_needsLoaderURIUpdate = true;
@@ -176,7 +177,7 @@ void SVGImageElement::attach(const AttachContext& context)
 Node::InsertionNotificationRequest SVGImageElement::insertedInto(ContainerNode* rootParent)
 {
     SVGGraphicsElement::insertedInto(rootParent);
-    if (!rootParent->inDocument())
+    if (!rootParent->inShadowIncludingDocument())
         return InsertionDone;
 
     // We can only resolve base URIs properly after tree insertion - hence, URI mutations while

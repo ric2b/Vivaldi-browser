@@ -6,6 +6,7 @@
 
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -267,6 +268,16 @@ void FakeBluetoothAdapterClient::SetSecondVisible(bool visible) {
     FOR_EACH_OBSERVER(BluetoothAdapterClient::Observer, observers_,
                       AdapterRemoved(dbus::ObjectPath(kSecondAdapterPath)));
   }
+}
+
+void FakeBluetoothAdapterClient::SetUUIDs(
+    const std::vector<std::string>& uuids) {
+  properties_->uuids.ReplaceValue(uuids);
+}
+
+void FakeBluetoothAdapterClient::SetSecondUUIDs(
+    const std::vector<std::string>& uuids) {
+  second_properties_->uuids.ReplaceValue(uuids);
 }
 
 void FakeBluetoothAdapterClient::OnPropertyChanged(

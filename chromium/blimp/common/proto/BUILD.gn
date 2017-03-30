@@ -27,10 +27,12 @@ proto_library("proto_internal") {
   sources = [
     "blimp_message.proto",
     "compositor.proto",
+    "ime.proto",
     "input.proto",
     "navigation.proto",
     "protocol_control.proto",
     "render_widget.proto",
+    "settings.proto",
     "tab_control.proto",
   ]
 

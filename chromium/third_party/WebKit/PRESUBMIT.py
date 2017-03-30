@@ -170,24 +170,6 @@ def _CheckForPrintfDebugging(input_api, output_api):
     return []
 
 
-def _CheckForDangerousTestFunctions(input_api, output_api):
-    """Tests should not be using serveAsynchronousMockedRequests, since it does
-    not guarantee that the threaded HTML parser will have completed."""
-    serve_async_requests_re = input_api.re.compile(
-        r'serveAsynchronousMockedRequests')
-    errors = input_api.canned_checks._FindNewViolationsOfRule(
-        lambda _, x: not serve_async_requests_re.search(x),
-        input_api, None)
-    errors = ['  * %s' % violation for violation in errors]
-    if errors:
-        return [output_api.PresubmitPromptOrNotify(
-            'You should probably be using one of the FrameTestHelpers::'
-            '(re)load* functions instead of '
-            'serveAsynchronousMockedRequests() in the following '
-            'locations:\n%s' % '\n'.join(errors))]
-    return []
-
-
 def _CheckForFailInFile(input_api, f):
     pattern = input_api.re.compile('^FAIL')
     errors = []
@@ -235,7 +217,7 @@ def _CheckForForbiddenNamespace(input_api, output_api):
     """Checks that Blink uses Chromium namespaces only in permitted code."""
     # This list is not exhaustive, but covers likely ones.
     chromium_namespaces = ["base", "cc", "content", "gfx", "net", "ui"]
-    chromium_classes = ["scoped_ptr", "scoped_refptr"]
+    chromium_classes = ["scoped_refptr"]
 
     def source_file_filter(path):
         return input_api.FilterSourceFile(path,
@@ -266,7 +248,6 @@ def CheckChangeOnUpload(input_api, output_api):
     results.extend(_CommonChecks(input_api, output_api))
     results.extend(_CheckStyle(input_api, output_api))
     results.extend(_CheckForPrintfDebugging(input_api, output_api))
-    results.extend(_CheckForDangerousTestFunctions(input_api, output_api))
     results.extend(_CheckForInvalidPreferenceError(input_api, output_api))
     results.extend(_CheckForForbiddenNamespace(input_api, output_api))
     return results

@@ -49,13 +49,6 @@ struct SegmenterExpectedRun {
 
 class RunSegmenterTest : public testing::Test {
 protected:
-#if !LOG_DISABLED
-    static void SetUpTestCase()
-    {
-        LogFonts = { WTFLogChannelOn };
-    }
-#endif
-
     void CheckRuns(const Vector<SegmenterTestRun>& runs, FontOrientation orientation, FontVariant variant)
     {
         String text(emptyString16Bit());
@@ -209,6 +202,12 @@ TEST_F(RunSegmenterTest, JapaneseSmallCaps)
         { "いろは", USCRIPT_HIRAGANA, OrientationIterator::OrientationKeep, SmallCapsIterator::SmallCapsSameCase, FontFallbackPriority::Text },
     });
 }
+
+TEST_F(RunSegmenterTest, DingbatsMiscSymbolsModifier)
+{
+    CHECK_RUNS_HORIZONTAL_NORMAL({ { "⛹🏻✍🏻✊🏼", USCRIPT_COMMON, OrientationIterator::OrientationKeep, SmallCapsIterator::SmallCapsSameCase, FontFallbackPriority::EmojiEmoji } });
+}
+
 
 TEST_F(RunSegmenterTest, ArmenianCyrillicSmallCaps)
 {

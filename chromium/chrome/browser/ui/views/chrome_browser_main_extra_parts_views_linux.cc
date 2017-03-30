@@ -10,7 +10,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/libgtk2ui/gtk2_ui.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -105,8 +104,7 @@ void ChromeBrowserMainExtraPartsViewsLinux::PreProfileInit() {
   base::string16 message = l10n_util::GetStringFUTF16(
       IDS_REFUSE_TO_RUN_AS_ROOT_2, l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
 
-  chrome::ShowMessageBox(NULL, title, message,
-                         chrome::MESSAGE_BOX_TYPE_WARNING);
+  chrome::ShowWarningMessageBox(NULL, title, message);
 
   // Avoids gpu_process_transport_factory.cc(153)] Check failed:
   // per_compositor_data_.empty() when quit is chosen.

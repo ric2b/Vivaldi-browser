@@ -25,7 +25,8 @@
 
 #include "core/CoreExport.h"
 #include "core/fetch/ImageResource.h"
-#include "core/fetch/ImageResourceClient.h"
+#include "core/fetch/ImageResourceObserver.h"
+#include "core/fetch/ResourceClient.h"
 #include "platform/heap/Handle.h"
 #include "wtf/HashSet.h"
 #include "wtf/WeakPtr.h"
@@ -43,9 +44,8 @@ class LayoutImageResource;
 template<typename T> class EventSender;
 using ImageEventSender = EventSender<ImageLoader>;
 
-class CORE_EXPORT ImageLoader : public NoBaseWillBeGarbageCollectedFinalized<ImageLoader>, public ImageResourceClient {
-    WILL_BE_USING_PRE_FINALIZER(ImageLoader, dispose);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(ImageLoader);
+class CORE_EXPORT ImageLoader : public GarbageCollectedFinalized<ImageLoader>, public ImageResourceObserver {
+    USING_PRE_FINALIZER(ImageLoader, dispose);
 public:
     explicit ImageLoader(Element*);
     ~ImageLoader() override;
@@ -101,9 +101,9 @@ public:
     static void dispatchPendingLoadEvents();
     static void dispatchPendingErrorEvents();
 
-    bool getImageAnimationPolicy(ImageResource*, ImageAnimationPolicy&) final;
+    bool getImageAnimationPolicy(ImageAnimationPolicy&) final;
 protected:
-    void notifyFinished(Resource*) override;
+    void imageNotifyFinished(ImageResource*) override;
 
 private:
     class Task;
@@ -143,12 +143,12 @@ private:
     // have already been finalized in the current lazy sweeping.
     void dispose();
 
-    RawPtrWillBeMember<Element> m_element;
-    RefPtrWillBeMember<ImageResource> m_image;
+    Member<Element> m_element;
+    Member<ImageResource> m_image;
     // FIXME: Oilpan: We might be able to remove this Persistent hack when
     // ImageResourceClient is traceable.
     GC_PLUGIN_IGNORE("http://crbug.com/383741")
-    RefPtrWillBePersistent<Element> m_keepAlive;
+    Persistent<Element> m_keepAlive;
 
     Timer<ImageLoader> m_derefElementTimer;
     AtomicString m_failedLoadURL;

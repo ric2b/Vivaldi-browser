@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/trace_event/trace_event.h"
 #include "components/scheduler/base/real_time_domain.h"
 #include "components/scheduler/base/task_queue_impl.h"
 #include "components/scheduler/base/task_queue_manager_delegate.h"
@@ -38,7 +39,7 @@ TaskQueueManager::TaskQueueManager(
     const char* tracing_category,
     const char* disabled_by_default_tracing_category,
     const char* disabled_by_default_verbose_tracing_category)
-    : real_time_domain_(new RealTimeDomain()),
+    : real_time_domain_(new RealTimeDomain(tracing_category)),
       delegate_(delegate),
       task_was_run_on_quiescence_monitored_queue_(false),
       work_batch_size_(1),
@@ -366,13 +367,13 @@ LazyNow TaskQueueManager::CreateLazyNow() const {
   return LazyNow(delegate_.get());
 }
 
-scoped_refptr<base::trace_event::ConvertableToTraceFormat>
+scoped_ptr<base::trace_event::ConvertableToTraceFormat>
 TaskQueueManager::AsValueWithSelectorResult(
     bool should_run,
     internal::WorkQueue* selected_work_queue) const {
   DCHECK(main_thread_checker_.CalledOnValidThread());
-  scoped_refptr<base::trace_event::TracedValue> state =
-      new base::trace_event::TracedValue();
+  scoped_ptr<base::trace_event::TracedValue> state(
+      new base::trace_event::TracedValue());
   state->BeginArray("queues");
   for (auto& queue : queues_)
     queue->AsValueInto(state.get());
@@ -390,7 +391,7 @@ TaskQueueManager::AsValueWithSelectorResult(
   for (auto& time_domain : time_domains_)
     time_domain->AsValueInto(state.get());
   state->EndArray();
-  return state;
+  return std::move(state);
 }
 
 void TaskQueueManager::OnTaskQueueEnabled(internal::TaskQueueImpl* queue) {

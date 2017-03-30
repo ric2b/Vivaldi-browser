@@ -20,6 +20,9 @@ static void recordSelectorStats(const CSSParserContext& context, const CSSSelect
         for (const CSSSelector* current = selector; current ; current = current->tagHistory()) {
             UseCounter::Feature feature = UseCounter::NumberOfFeatures;
             switch (current->getPseudoType()) {
+            case CSSSelector::PseudoAny:
+                feature = UseCounter::CSSSelectorPseudoAny;
+                break;
             case CSSSelector::PseudoUnresolved:
                 feature = UseCounter::CSSSelectorPseudoUnresolved;
                 break;
@@ -118,9 +121,6 @@ CSSSelectorList CSSSelectorParser::consumeCompoundSelectorList(CSSParserTokenRan
         return CSSSelectorList();
     selectorList.append(selector.release());
     while (!range.atEnd() && range.peek().type() == CommaToken) {
-        // FIXME: This differs from the spec grammar:
-        // Spec: compound_selector S* [ COMMA S* compound_selector ]* S*
-        // Impl: compound_selector S* [ COMMA S* compound_selector S* ]*
         range.consumeIncludingWhitespace();
         selector = consumeCompoundSelector(range);
         range.consumeWhitespace();
@@ -258,6 +258,8 @@ bool isSimpleSelectorValidAfterPseudoElement(const CSSParserSelector& simpleSele
 {
     if (compoundPseudoElement == CSSSelector::PseudoUnknown)
         return true;
+    if (compoundPseudoElement == CSSSelector::PseudoContent)
+        return simpleSelector.match() != CSSSelector::PseudoElement;
     if (simpleSelector.match() != CSSSelector::PseudoClass)
         return false;
     CSSSelector::PseudoType pseudo = simpleSelector.pseudoType();
@@ -385,7 +387,7 @@ PassOwnPtr<CSSParserSelector> CSSSelectorParser::consumeId(CSSParserTokenRange& 
     OwnPtr<CSSParserSelector> selector = CSSParserSelector::create();
     selector->setMatch(CSSSelector::Id);
     const AtomicString& value = range.consume().value();
-    selector->setValue(value, isQuirksModeBehavior(m_context.mode()));
+    selector->setValue(value, isQuirksModeBehavior(m_context.matchMode()));
     return selector.release();
 }
 
@@ -399,7 +401,7 @@ PassOwnPtr<CSSParserSelector> CSSSelectorParser::consumeClass(CSSParserTokenRang
     OwnPtr<CSSParserSelector> selector = CSSParserSelector::create();
     selector->setMatch(CSSSelector::Class);
     const AtomicString& value = range.consume().value();
-    selector->setValue(value, isQuirksModeBehavior(m_context.mode()));
+    selector->setValue(value, isQuirksModeBehavior(m_context.matchMode()));
     return selector.release();
 }
 

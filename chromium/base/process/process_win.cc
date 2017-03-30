@@ -5,7 +5,6 @@
 #include "base/process/process.h"
 
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/kill.h"
 #include "base/win/windows_version.h"
@@ -46,7 +45,7 @@ Process& Process::operator=(Process&& other) {
 Process Process::Current() {
   Process process;
   process.is_current_process_ = true;
-  return process.Pass();
+  return process;
 }
 
 // static

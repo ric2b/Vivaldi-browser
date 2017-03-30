@@ -44,7 +44,7 @@ private:
     Node& node() const { return *m_node; }
     NodeChildRemovalTracker* previous() { return m_previous; }
 
-    RawPtrWillBeMember<Node> m_node;
+    Member<Node> m_node;
     // Using raw pointers are safe because these NodeChildRemovalTrackers are
     // guaranteed to be on a stack.
     NodeChildRemovalTracker* m_previous;
@@ -66,7 +66,7 @@ inline NodeChildRemovalTracker::~NodeChildRemovalTracker()
 inline bool NodeChildRemovalTracker::isBeingRemoved(Node* node)
 {
     for (NodeChildRemovalTracker* removal = s_last; removal; removal = removal->previous()) {
-        if (removal->node().containsIncludingShadowDOM(node))
+        if (removal->node().isShadowIncludingInclusiveAncestorOf(node))
             return true;
     }
 

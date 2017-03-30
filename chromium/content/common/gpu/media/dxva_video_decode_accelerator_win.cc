@@ -21,7 +21,6 @@
 #include "base/base_paths_win.h"
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/file_version_info.h"
 #include "base/files/file_path.h"
@@ -34,7 +33,6 @@
 #include "base/trace_event/trace_event.h"
 #include "base/win/windows_version.h"
 #include "build/build_config.h"
-#include "content/public/common/content_switches.h"
 #include "media/base/win/mf_initializer.h"
 #include "media/video/video_decode_accelerator.h"
 #include "third_party/angle/include/EGL/egl.h"
@@ -43,7 +41,6 @@
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_fence.h"
 #include "ui/gl/gl_surface_egl.h"
-#include "ui/gl/gl_switches.h"
 
 namespace {
 
@@ -114,6 +111,91 @@ DEFINE_GUID(CLSID_VideoProcessorMFT,
 DEFINE_GUID(MF_XVP_PLAYBACK_MODE, 0x3c5d293f, 0xad67, 0x4e29, 0xaf, 0x12,
             0xcf, 0x3e, 0x23, 0x8a, 0xcc, 0xe9);
 
+// Defines the GUID for the Intel H264 DXVA device.
+static const GUID DXVA2_Intel_ModeH264_E = {
+  0x604F8E68, 0x4951, 0x4c54,{ 0x88, 0xFE, 0xAB, 0xD2, 0x5C, 0x15, 0xB3, 0xD6}
+};
+
+// R600, R700, Evergreen and Cayman AMD cards. These support DXVA via UVD3
+// or earlier, and don't handle resolutions higher than 1920 x 1088 well.
+static const DWORD g_AMDUVD3GPUList[] = {
+  0x9400, 0x9401, 0x9402, 0x9403, 0x9405, 0x940a, 0x940b, 0x940f, 0x94c0,
+  0x94c1, 0x94c3, 0x94c4, 0x94c5, 0x94c6, 0x94c7, 0x94c8, 0x94c9, 0x94cb,
+  0x94cc, 0x94cd, 0x9580, 0x9581, 0x9583, 0x9586, 0x9587, 0x9588, 0x9589,
+  0x958a, 0x958b, 0x958c, 0x958d, 0x958e, 0x958f, 0x9500, 0x9501, 0x9504,
+  0x9505, 0x9506, 0x9507, 0x9508, 0x9509, 0x950f, 0x9511, 0x9515, 0x9517,
+  0x9519, 0x95c0, 0x95c2, 0x95c4, 0x95c5, 0x95c6, 0x95c7, 0x95c9, 0x95cc,
+  0x95cd, 0x95ce, 0x95cf, 0x9590, 0x9591, 0x9593, 0x9595, 0x9596, 0x9597,
+  0x9598, 0x9599, 0x959b, 0x9610, 0x9611, 0x9612, 0x9613, 0x9614, 0x9615,
+  0x9616, 0x9710, 0x9711, 0x9712, 0x9713, 0x9714, 0x9715, 0x9440, 0x9441,
+  0x9442, 0x9443, 0x9444, 0x9446, 0x944a, 0x944b, 0x944c, 0x944e, 0x9450,
+  0x9452, 0x9456, 0x945a, 0x945b, 0x945e, 0x9460, 0x9462, 0x946a, 0x946b,
+  0x947a, 0x947b, 0x9480, 0x9487, 0x9488, 0x9489, 0x948a, 0x948f, 0x9490,
+  0x9491, 0x9495, 0x9498, 0x949c, 0x949e, 0x949f, 0x9540, 0x9541, 0x9542,
+  0x954e, 0x954f, 0x9552, 0x9553, 0x9555, 0x9557, 0x955f, 0x94a0, 0x94a1,
+  0x94a3, 0x94b1, 0x94b3, 0x94b4, 0x94b5, 0x94b9, 0x68e0, 0x68e1, 0x68e4,
+  0x68e5, 0x68e8, 0x68e9, 0x68f1, 0x68f2, 0x68f8, 0x68f9, 0x68fa, 0x68fe,
+  0x68c0, 0x68c1, 0x68c7, 0x68c8, 0x68c9, 0x68d8, 0x68d9, 0x68da, 0x68de,
+  0x68a0, 0x68a1, 0x68a8, 0x68a9, 0x68b0, 0x68b8, 0x68b9, 0x68ba, 0x68be,
+  0x68bf, 0x6880, 0x6888, 0x6889, 0x688a, 0x688c, 0x688d, 0x6898, 0x6899,
+  0x689b, 0x689e, 0x689c, 0x689d, 0x9802, 0x9803, 0x9804, 0x9805, 0x9806,
+  0x9807, 0x9808, 0x9809, 0x980a, 0x9640, 0x9641, 0x9647, 0x9648, 0x964a,
+  0x964b, 0x964c, 0x964e, 0x964f, 0x9642, 0x9643, 0x9644, 0x9645, 0x9649,
+  0x6720, 0x6721, 0x6722, 0x6723, 0x6724, 0x6725, 0x6726, 0x6727, 0x6728,
+  0x6729, 0x6738, 0x6739, 0x673e, 0x6740, 0x6741, 0x6742, 0x6743, 0x6744,
+  0x6745, 0x6746, 0x6747, 0x6748, 0x6749, 0x674a, 0x6750, 0x6751, 0x6758,
+  0x6759, 0x675b, 0x675d, 0x675f, 0x6840, 0x6841, 0x6842, 0x6843, 0x6849,
+  0x6850, 0x6858, 0x6859, 0x6760, 0x6761, 0x6762, 0x6763, 0x6764, 0x6765,
+  0x6766, 0x6767, 0x6768, 0x6770, 0x6771, 0x6772, 0x6778, 0x6779, 0x677b,
+  0x6700, 0x6701, 0x6702, 0x6703, 0x6704, 0x6705, 0x6706, 0x6707, 0x6708,
+  0x6709, 0x6718, 0x6719, 0x671c, 0x671d, 0x671f, 0x683D, 0x9900, 0x9901,
+  0x9903, 0x9904, 0x9905, 0x9906, 0x9907, 0x9908, 0x9909, 0x990a, 0x990b,
+  0x990c, 0x990d, 0x990e, 0x990f, 0x9910, 0x9913, 0x9917, 0x9918, 0x9919,
+  0x9990, 0x9991, 0x9992, 0x9993, 0x9994, 0x9995, 0x9996, 0x9997, 0x9998,
+  0x9999, 0x999a, 0x999b, 0x999c, 0x999d, 0x99a0, 0x99a2, 0x99a4,
+};
+
+// Legacy Intel GPUs (Second generation) which have trouble with resolutions
+// higher than 1920 x 1088
+static const DWORD g_IntelLegacyGPUList[] = {
+  0x102, 0x106, 0x116, 0x126,
+};
+
+// Provides scoped access to the underlying buffer in an IMFMediaBuffer
+// instance.
+class MediaBufferScopedPointer {
+ public:
+  MediaBufferScopedPointer(IMFMediaBuffer* media_buffer)
+      : media_buffer_(media_buffer),
+        buffer_(nullptr),
+        max_length_(0),
+        current_length_(0) {
+    HRESULT hr = media_buffer_->Lock(&buffer_, &max_length_, &current_length_);
+    CHECK(SUCCEEDED(hr));
+  }
+
+  ~MediaBufferScopedPointer() {
+    HRESULT hr = media_buffer_->Unlock();
+    CHECK(SUCCEEDED(hr));
+  }
+
+  uint8_t* get() {
+    return buffer_;
+  }
+
+  DWORD current_length() const {
+    return current_length_;
+  }
+
+ private:
+  base::win::ScopedComPtr<IMFMediaBuffer> media_buffer_;
+  uint8_t* buffer_;
+  DWORD max_length_;
+  DWORD current_length_;
+
+  DISALLOW_COPY_AND_ASSIGN(MediaBufferScopedPointer);
+};
+
 }  // namespace
 
 namespace content {
@@ -123,7 +205,10 @@ static const media::VideoCodecProfile kSupportedProfiles[] = {
   media::H264PROFILE_MAIN,
   media::H264PROFILE_HIGH,
   media::VP8PROFILE_ANY,
-  media::VP9PROFILE_ANY
+  media::VP9PROFILE_PROFILE0,
+  media::VP9PROFILE_PROFILE1,
+  media::VP9PROFILE_PROFILE2,
+  media::VP9PROFILE_PROFILE3
 };
 
 CreateDXGIDeviceManager DXVAVideoDecodeAccelerator::create_dxgi_device_manager_
@@ -285,55 +370,188 @@ template<class T>
 base::win::ScopedComPtr<T> QueryDeviceObjectFromANGLE(int object_type) {
   base::win::ScopedComPtr<T> device_object;
 
-  EGLDisplay egl_display = gfx::GLSurfaceEGL::GetHardwareDisplay();
+  EGLDisplay egl_display = nullptr;
   intptr_t egl_device = 0;
   intptr_t device = 0;
+
+  {
+    TRACE_EVENT0("gpu", "QueryDeviceObjectFromANGLE. GetHardwareDisplay");
+    egl_display = gfx::GLSurfaceEGL::GetHardwareDisplay();
+  }
 
   RETURN_ON_FAILURE(
       gfx::GLSurfaceEGL::HasEGLExtension("EGL_EXT_device_query"),
       "EGL_EXT_device_query missing",
       device_object);
 
-  PFNEGLQUERYDISPLAYATTRIBEXTPROC QueryDisplayAttribEXT =
-      reinterpret_cast<PFNEGLQUERYDISPLAYATTRIBEXTPROC>(eglGetProcAddress(
-        "eglQueryDisplayAttribEXT"));
+  PFNEGLQUERYDISPLAYATTRIBEXTPROC QueryDisplayAttribEXT = nullptr;
 
-  RETURN_ON_FAILURE(
-      QueryDisplayAttribEXT,
-      "Failed to get the eglQueryDisplayAttribEXT function from ANGLE",
-      device_object);
+  {
+    TRACE_EVENT0("gpu", "QueryDeviceObjectFromANGLE. eglGetProcAddress");
 
-  PFNEGLQUERYDEVICEATTRIBEXTPROC QueryDeviceAttribEXT =
-      reinterpret_cast<PFNEGLQUERYDEVICEATTRIBEXTPROC>(eglGetProcAddress(
-          "eglQueryDeviceAttribEXT"));
+    QueryDisplayAttribEXT =
+        reinterpret_cast<PFNEGLQUERYDISPLAYATTRIBEXTPROC>(eglGetProcAddress(
+            "eglQueryDisplayAttribEXT"));
 
-  RETURN_ON_FAILURE(
-      QueryDeviceAttribEXT,
-      "Failed to get the eglQueryDeviceAttribEXT function from ANGLE",
-      device_object);
+    RETURN_ON_FAILURE(
+        QueryDisplayAttribEXT,
+        "Failed to get the eglQueryDisplayAttribEXT function from ANGLE",
+        device_object);
+  }
 
-  RETURN_ON_FAILURE(
-      QueryDisplayAttribEXT(egl_display, EGL_DEVICE_EXT, &egl_device),
-      "The eglQueryDisplayAttribEXT function failed to get the EGL device",
-      device_object);
+  PFNEGLQUERYDEVICEATTRIBEXTPROC QueryDeviceAttribEXT = nullptr;
+
+  {
+    TRACE_EVENT0("gpu", "QueryDeviceObjectFromANGLE. eglGetProcAddress");
+
+    QueryDeviceAttribEXT =
+        reinterpret_cast<PFNEGLQUERYDEVICEATTRIBEXTPROC>(eglGetProcAddress(
+            "eglQueryDeviceAttribEXT"));
+
+    RETURN_ON_FAILURE(
+        QueryDeviceAttribEXT,
+        "Failed to get the eglQueryDeviceAttribEXT function from ANGLE",
+        device_object);
+  }
+
+  {
+    TRACE_EVENT0("gpu", "QueryDeviceObjectFromANGLE. QueryDisplayAttribEXT");
+
+    RETURN_ON_FAILURE(
+        QueryDisplayAttribEXT(egl_display, EGL_DEVICE_EXT, &egl_device),
+        "The eglQueryDisplayAttribEXT function failed to get the EGL device",
+        device_object);
+  }
 
   RETURN_ON_FAILURE(
       egl_device,
       "Failed to get the EGL device",
       device_object);
 
-  RETURN_ON_FAILURE(
-      QueryDeviceAttribEXT(
-      reinterpret_cast<EGLDeviceEXT>(egl_device), object_type, &device),
-      "The eglQueryDeviceAttribEXT function failed to get the device",
-      device_object);
+  {
+    TRACE_EVENT0("gpu", "QueryDeviceObjectFromANGLE. QueryDisplayAttribEXT");
 
-  RETURN_ON_FAILURE(device, "Failed to get the ANGLE device", device_object);
+    RETURN_ON_FAILURE(
+        QueryDeviceAttribEXT(
+            reinterpret_cast<EGLDeviceEXT>(egl_device), object_type, &device),
+            "The eglQueryDeviceAttribEXT function failed to get the device",
+            device_object);
+
+    RETURN_ON_FAILURE(device, "Failed to get the ANGLE device", device_object);
+  }
 
   device_object = reinterpret_cast<T*>(device);
   return device_object;
 }
 
+H264ConfigChangeDetector::H264ConfigChangeDetector()
+    : last_sps_id_(0),
+      last_pps_id_(0),
+      config_changed_(false),
+      pending_config_changed_(false) {
+}
+
+H264ConfigChangeDetector::~H264ConfigChangeDetector() {
+}
+
+bool H264ConfigChangeDetector::DetectConfig(const uint8_t* stream,
+                                            unsigned int size) {
+  std::vector<uint8_t> sps;
+  std::vector<uint8_t> pps;
+  media::H264NALU nalu;
+  bool idr_seen = false;
+
+  if (!parser_.get())
+    parser_.reset(new media::H264Parser);
+
+  parser_->SetStream(stream, size);
+  config_changed_ = false;
+
+  while (true) {
+    media::H264Parser::Result result = parser_->AdvanceToNextNALU(&nalu);
+
+    if (result == media::H264Parser::kEOStream)
+      break;
+
+    if (result == media::H264Parser::kUnsupportedStream) {
+      DLOG(ERROR) << "Unsupported H.264 stream";
+      return false;
+    }
+
+    if (result != media::H264Parser::kOk) {
+      DLOG(ERROR) << "Failed to parse H.264 stream";
+      return false;
+    }
+
+    switch (nalu.nal_unit_type) {
+      case media::H264NALU::kSPS:
+        result = parser_->ParseSPS(&last_sps_id_);
+        if (result == media::H264Parser::kUnsupportedStream) {
+          DLOG(ERROR) << "Unsupported SPS";
+          return false;
+        }
+
+        if (result != media::H264Parser::kOk) {
+          DLOG(ERROR) << "Could not parse SPS";
+          return false;
+        }
+
+        sps.assign(nalu.data, nalu.data + nalu.size);
+        break;
+
+      case media::H264NALU::kPPS:
+        result = parser_->ParsePPS(&last_pps_id_);
+        if (result == media::H264Parser::kUnsupportedStream) {
+          DLOG(ERROR) << "Unsupported PPS";
+          return false;
+        }
+        if (result != media::H264Parser::kOk) {
+          DLOG(ERROR) << "Could not parse PPS";
+          return false;
+        }
+        pps.assign(nalu.data, nalu.data + nalu.size);
+        break;
+
+      case media::H264NALU::kIDRSlice:
+        idr_seen = true;
+        // If we previously detected a configuration change, and see an IDR
+        // slice next time around, we need to flag a configuration change.
+        if (pending_config_changed_) {
+          config_changed_ = true;
+          pending_config_changed_ = false;
+        }
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  if (!sps.empty() && sps != last_sps_) {
+    if (!last_sps_.empty()) {
+      // Flag configuration changes after we see an IDR slice.
+      if (idr_seen) {
+        config_changed_ = true;
+      } else {
+        pending_config_changed_ = true;
+      }
+    }
+    last_sps_.swap(sps);
+  }
+
+  if (!pps.empty() && pps != last_pps_) {
+    if (!last_pps_.empty()) {
+      // Flag configuration changes after we see an IDR slice.
+      if (idr_seen) {
+        config_changed_ = true;
+      } else {
+        pending_config_changed_ = true;
+      }
+    }
+    last_pps_.swap(pps);
+  }
+  return true;
+}
 
 // Maintains information about a DXVA picture buffer, i.e. whether it is
 // available for rendering, the texture information, etc.
@@ -634,7 +852,7 @@ bool DXVAVideoDecodeAccelerator::DXVAPictureBuffer::CopySurfaceComplete(
   GLint current_texture = 0;
   glGetIntegerv(GL_TEXTURE_BINDING_2D, &current_texture);
 
-  glBindTexture(GL_TEXTURE_2D, picture_buffer_.texture_id());
+  glBindTexture(GL_TEXTURE_2D, picture_buffer_.texture_ids()[0]);
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
@@ -675,8 +893,9 @@ DXVAVideoDecodeAccelerator::PendingSampleInfo::PendingSampleInfo(
 DXVAVideoDecodeAccelerator::PendingSampleInfo::~PendingSampleInfo() {}
 
 DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
-    const base::Callback<bool(void)>& make_context_current,
-    gfx::GLContext* gl_context)
+    const GetGLContextCallback& get_gl_context_cb,
+    const MakeGLContextCurrentCallback& make_context_current_cb,
+    bool enable_accelerated_vpx_decode)
     : client_(NULL),
       dev_manager_reset_token_(0),
       dx11_dev_manager_reset_token_(0),
@@ -685,15 +904,16 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
       pictures_requested_(false),
       inputs_before_decode_(0),
       sent_drain_message_(false),
-      make_context_current_(make_context_current),
+      get_gl_context_cb_(get_gl_context_cb),
+      make_context_current_cb_(make_context_current_cb),
       codec_(media::kUnknownVideoCodec),
       decoder_thread_("DXVAVideoDecoderThread"),
       pending_flush_(false),
       use_dx11_(false),
       use_keyed_mutex_(false),
       dx11_video_format_converter_media_type_needs_init_(true),
-      gl_context_(gl_context),
       using_angle_device_(false),
+      enable_accelerated_vpx_decode_(enable_accelerated_vpx_decode),
       weak_this_factory_(this) {
   weak_ptr_ = weak_this_factory_.GetWeakPtr();
   memset(&input_stream_info_, 0, sizeof(input_stream_info_));
@@ -706,6 +926,11 @@ DXVAVideoDecodeAccelerator::~DXVAVideoDecodeAccelerator() {
 
 bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
                                             Client* client) {
+  if (get_gl_context_cb_.is_null() || make_context_current_cb_.is_null()) {
+    NOTREACHED() << "GL callbacks are required for this VDA";
+    return false;
+  }
+
   if (config.is_encrypted) {
     NOTREACHED() << "Encrypted streams are not supported for this VDA";
     return false;
@@ -788,6 +1013,10 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
       SendMFTMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0),
       "Send MFT_MESSAGE_NOTIFY_START_OF_STREAM notification failed",
       PLATFORM_FAILURE, false);
+
+  config_ = config;
+
+  config_change_detector_.reset(new H264ConfigChangeDetector);
 
   SetState(kNormal);
 
@@ -1004,6 +1233,7 @@ void DXVAVideoDecodeAccelerator::AssignPictureBuffers(
   // and mark these buffers as available for use.
   for (size_t buffer_index = 0; buffer_index < buffers.size();
        ++buffer_index) {
+    DCHECK_LE(1u, buffers[buffer_index].texture_ids().size());
     linked_ptr<DXVAPictureBuffer> picture_buffer =
         DXVAPictureBuffer::Create(*this, buffers[buffer_index], egl_config_);
     RETURN_AND_NOTIFY_ON_FAILURE(picture_buffer.get(),
@@ -1041,13 +1271,15 @@ void DXVAVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_buffer_id) {
   // us that we can now recycle this picture buffer, so if we were waiting to
   // dispose of it we now can.
   if (it == output_picture_buffers_.end()) {
-    it = stale_output_picture_buffers_.find(picture_buffer_id);
-    RETURN_AND_NOTIFY_ON_FAILURE(it != stale_output_picture_buffers_.end(),
-        "Invalid picture id: " << picture_buffer_id, INVALID_ARGUMENT,);
-    main_thread_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&DXVAVideoDecodeAccelerator::DeferredDismissStaleBuffer,
-                   weak_this_factory_.GetWeakPtr(), picture_buffer_id));
+    if (!stale_output_picture_buffers_.empty()) {
+      it = stale_output_picture_buffers_.find(picture_buffer_id);
+      RETURN_AND_NOTIFY_ON_FAILURE(it != stale_output_picture_buffers_.end(),
+          "Invalid picture id: " << picture_buffer_id, INVALID_ARGUMENT,);
+      main_thread_task_runner_->PostTask(
+          FROM_HERE,
+          base::Bind(&DXVAVideoDecodeAccelerator::DeferredDismissStaleBuffer,
+                     weak_this_factory_.GetWeakPtr(), picture_buffer_id));
+    }
     return;
   }
 
@@ -1066,7 +1298,7 @@ void DXVAVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_buffer_id) {
                                 base::Unretained(this)));
     }
   } else {
-    RETURN_AND_NOTIFY_ON_FAILURE(make_context_current_.Run(),
+    RETURN_AND_NOTIFY_ON_FAILURE(make_context_current_cb_.Run(),
                                  "Failed to make context current",
                                  PLATFORM_FAILURE, );
     it->second->ResetReuseFence();
@@ -1088,7 +1320,7 @@ void DXVAVideoDecodeAccelerator::WaitForOutputBuffer(int32_t picture_buffer_id,
   DCHECK(picture_buffer->waiting_to_reuse());
 
   gfx::GLFence* fence = picture_buffer->reuse_fence();
-  RETURN_AND_NOTIFY_ON_FAILURE(make_context_current_.Run(),
+  RETURN_AND_NOTIFY_ON_FAILURE(make_context_current_cb_.Run(),
                                "Failed to make context current",
                                PLATFORM_FAILURE, );
   if (count <= kMaxIterationsForANGLEReuseFlush && !fence->HasCompleted()) {
@@ -1182,7 +1414,9 @@ void DXVAVideoDecodeAccelerator::Destroy() {
   delete this;
 }
 
-bool DXVAVideoDecodeAccelerator::CanDecodeOnIOThread() {
+bool DXVAVideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
+    const base::WeakPtr<Client>& decode_client,
+    const scoped_refptr<base::SingleThreadTaskRunner>& decode_task_runner) {
   return false;
 }
 
@@ -1193,17 +1427,19 @@ GLenum DXVAVideoDecodeAccelerator::GetSurfaceInternalFormat() const {
 // static
 media::VideoDecodeAccelerator::SupportedProfiles
 DXVAVideoDecodeAccelerator::GetSupportedProfiles() {
+  TRACE_EVENT0("gpu,startup",
+    "DXVAVideoDecodeAccelerator::GetSupportedProfiles");
+
   // TODO(henryhsu): Need to ensure the profiles are actually supported.
   SupportedProfiles profiles;
   for (const auto& supported_profile : kSupportedProfiles) {
+    std::pair<int, int> min_resolution = GetMinResolution(supported_profile);
+    std::pair<int, int> max_resolution = GetMaxResolution(supported_profile);
+
     SupportedProfile profile;
     profile.profile = supported_profile;
-    // Windows Media Foundation H.264 decoding does not support decoding videos
-    // with any dimension smaller than 48 pixels:
-    // http://msdn.microsoft.com/en-us/library/windows/desktop/dd797815
-    profile.min_resolution.SetSize(48, 48);
-    // Use 1088 to account for 16x16 macroblocks.
-    profile.max_resolution.SetSize(1920, 1088);
+    profile.min_resolution.SetSize(min_resolution.first, min_resolution.second);
+    profile.max_resolution.SetSize(max_resolution.first, max_resolution.second);
     profiles.push_back(profile);
   }
   return profiles;
@@ -1223,6 +1459,212 @@ void DXVAVideoDecodeAccelerator::PreSandboxInitialization() {
     LoadLibrary(L"mshtmlmedia.dll");
 #endif
   }
+}
+
+// static
+std::pair<int, int> DXVAVideoDecodeAccelerator::GetMinResolution(
+    media::VideoCodecProfile profile) {
+  TRACE_EVENT0("gpu,startup",
+    "DXVAVideoDecodeAccelerator::GetMinResolution");
+  std::pair<int, int> min_resolution;
+  if (profile >= media::H264PROFILE_BASELINE &&
+      profile <= media::H264PROFILE_HIGH) {
+    // Windows Media Foundation H.264 decoding does not support decoding videos
+    // with any dimension smaller than 48 pixels:
+    // http://msdn.microsoft.com/en-us/library/windows/desktop/dd797815
+    min_resolution = std::make_pair(48, 48);
+  } else {
+    // TODO(ananta)
+    // Detect this properly for VP8/VP9 profiles.
+    min_resolution = std::make_pair(16, 16);
+  }
+  return min_resolution;
+}
+
+// static
+std::pair<int, int> DXVAVideoDecodeAccelerator::GetMaxResolution(
+    const media::VideoCodecProfile profile) {
+  TRACE_EVENT0("gpu,startup",
+               "DXVAVideoDecodeAccelerator::GetMaxResolution");
+  std::pair<int, int> max_resolution;
+  if (profile >= media::H264PROFILE_BASELINE &&
+      profile <= media::H264PROFILE_HIGH) {
+    max_resolution = GetMaxH264Resolution();
+  } else {
+    // TODO(ananta)
+    // Detect this properly for VP8/VP9 profiles.
+    max_resolution = std::make_pair(4096, 2160);
+  }
+  return max_resolution;
+}
+
+std::pair<int, int> DXVAVideoDecodeAccelerator::GetMaxH264Resolution() {
+  TRACE_EVENT0("gpu,startup",
+               "DXVAVideoDecodeAccelerator::GetMaxH264Resolution");
+  // The H.264 resolution detection operation is expensive. This static flag
+  // allows us to run the detection once.
+  static bool resolution_detected = false;
+  // Use 1088 to account for 16x16 macroblocks.
+  static std::pair<int, int> max_resolution = std::make_pair(1920, 1088);
+  if (resolution_detected)
+    return max_resolution;
+
+  resolution_detected = true;
+
+  // On Windows 7 the maximum resolution supported by media foundation is
+  // 1920 x 1088.
+  if (base::win::GetVersion() == base::win::VERSION_WIN7)
+    return max_resolution;
+
+  // To detect if a driver supports the desired resolutions, we try and create
+  // a DXVA decoder instance for that resolution and profile. If that succeeds
+  // we assume that the driver supports H/W H.264 decoding for that resolution.
+  HRESULT hr = E_FAIL;
+  base::win::ScopedComPtr<ID3D11Device> device;
+
+  {
+    TRACE_EVENT0("gpu,startup",
+      "GetMaxH264Resolution. QueryDeviceObjectFromANGLE");
+
+    device = QueryDeviceObjectFromANGLE<ID3D11Device>(EGL_D3D11_DEVICE_ANGLE);
+    if (!device.get())
+      return max_resolution;
+  }
+
+  base::win::ScopedComPtr<ID3D11VideoDevice> video_device;
+  hr = device.QueryInterface(IID_ID3D11VideoDevice,
+                             video_device.ReceiveVoid());
+  if (FAILED(hr))
+    return max_resolution;
+
+  GUID decoder_guid = {};
+
+  {
+    TRACE_EVENT0("gpu,startup",
+                 "GetMaxH264Resolution. H.264 guid search begin");
+    // Enumerate supported video profiles and look for the H264 profile.
+    bool found = false;
+    UINT profile_count = video_device->GetVideoDecoderProfileCount();
+    for (UINT profile_idx = 0; profile_idx < profile_count; profile_idx++) {
+      GUID profile_id = {};
+      hr = video_device->GetVideoDecoderProfile(profile_idx, &profile_id);
+      if (SUCCEEDED(hr) &&
+          (profile_id == DXVA2_ModeH264_E ||
+          profile_id == DXVA2_Intel_ModeH264_E)) {
+        decoder_guid = profile_id;
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+      return max_resolution;
+  }
+
+  // Legacy AMD drivers with UVD3 or earlier and some Intel GPU's crash while
+  // creating surfaces larger than 1920 x 1088.
+  if (IsLegacyGPU(device.get()))
+    return max_resolution;
+
+  // We look for the following resolutions in the driver.
+  // TODO(ananta)
+  // Look into whether this list needs to be expanded.
+  static std::pair<int, int> resolution_array[] = {
+    // Use 1088 to account for 16x16 macroblocks.
+    std::make_pair(1920, 1088),
+    std::make_pair(2560, 1440),
+    std::make_pair(3840, 2160),
+    std::make_pair(4096, 2160),
+    std::make_pair(4096, 2304),
+  };
+
+  {
+    TRACE_EVENT0("gpu,startup",
+                 "GetMaxH264Resolution. Resolution search begin");
+
+    for (size_t res_idx = 0; res_idx < arraysize(resolution_array);
+         res_idx++) {
+      D3D11_VIDEO_DECODER_DESC desc = {};
+      desc.Guid = decoder_guid;
+      desc.SampleWidth = resolution_array[res_idx].first;
+      desc.SampleHeight = resolution_array[res_idx].second;
+      desc.OutputFormat = DXGI_FORMAT_NV12;
+      UINT config_count = 0;
+      hr = video_device->GetVideoDecoderConfigCount(&desc, &config_count);
+      if (FAILED(hr) || config_count == 0)
+        return max_resolution;
+
+      D3D11_VIDEO_DECODER_CONFIG config = {};
+      hr = video_device->GetVideoDecoderConfig(&desc, 0, &config);
+      if (FAILED(hr))
+        return max_resolution;
+
+      base::win::ScopedComPtr<ID3D11VideoDecoder> video_decoder;
+      hr = video_device->CreateVideoDecoder(&desc, &config,
+          video_decoder.Receive());
+      if (!video_decoder.get())
+        return max_resolution;
+
+      max_resolution = resolution_array[res_idx];
+    }
+  }
+  return max_resolution;
+}
+
+// static
+bool DXVAVideoDecodeAccelerator::IsLegacyGPU(ID3D11Device* device) {
+  static const int kAMDGPUId1 = 0x1002;
+  static const int kAMDGPUId2 = 0x1022;
+  static const int kIntelGPU = 0x8086;
+
+  static bool legacy_gpu = true;
+  // This flag ensures that we determine the GPU type once.
+  static bool legacy_gpu_determined = false;
+
+  if (legacy_gpu_determined)
+    return legacy_gpu;
+
+  legacy_gpu_determined = true;
+
+  base::win::ScopedComPtr<IDXGIDevice> dxgi_device;
+  HRESULT hr = dxgi_device.QueryFrom(device);
+  if (FAILED(hr))
+    return legacy_gpu;
+
+  base::win::ScopedComPtr<IDXGIAdapter> adapter;
+  hr = dxgi_device->GetAdapter(adapter.Receive());
+  if (FAILED(hr))
+    return legacy_gpu;
+
+  DXGI_ADAPTER_DESC adapter_desc = {};
+  hr = adapter->GetDesc(&adapter_desc);
+  if (FAILED(hr))
+    return legacy_gpu;
+
+  // We check if the device is an Intel or an AMD device and whether it is in
+  // the global list defined by the g_AMDUVD3GPUList and g_IntelLegacyGPUList
+  // arrays above. If yes then the device is treated as a legacy device.
+  if ((adapter_desc.VendorId == kAMDGPUId1) ||
+       adapter_desc.VendorId == kAMDGPUId2) {
+    {
+      TRACE_EVENT0("gpu,startup",
+                   "DXVAVideoDecodeAccelerator::IsLegacyGPU. AMD check");
+      for (size_t i = 0; i < arraysize(g_AMDUVD3GPUList); i++) {
+        if (adapter_desc.DeviceId == g_AMDUVD3GPUList[i])
+          return legacy_gpu;
+      }
+    }
+  } else if (adapter_desc.VendorId == kIntelGPU) {
+    {
+      TRACE_EVENT0("gpu,startup",
+        "DXVAVideoDecodeAccelerator::IsLegacyGPU. Intel check");
+      for (size_t i = 0; i < arraysize(g_IntelLegacyGPUList); i++) {
+        if (adapter_desc.DeviceId == g_IntelLegacyGPUList[i])
+          return legacy_gpu;
+      }
+    }
+  }
+  legacy_gpu = false;
+  return legacy_gpu;
 }
 
 bool DXVAVideoDecodeAccelerator::InitDecoder(media::VideoCodecProfile profile) {
@@ -1255,10 +1697,12 @@ bool DXVAVideoDecodeAccelerator::InitDecoder(media::VideoCodecProfile profile) {
                       false);
     codec_ = media::kCodecH264;
     clsid = __uuidof(CMSH264DecoderMFT);
-  } else if ((profile == media::VP8PROFILE_ANY ||
-              profile == media::VP9PROFILE_ANY) &&
-             base::CommandLine::ForCurrentProcess()->HasSwitch(
-                 switches::kEnableAcceleratedVpxDecode)) {
+  } else if (enable_accelerated_vpx_decode_ &&
+             (profile == media::VP8PROFILE_ANY ||
+              profile == media::VP9PROFILE_PROFILE0 ||
+              profile == media::VP9PROFILE_PROFILE1 ||
+              profile == media::VP9PROFILE_PROFILE2 ||
+              profile == media::VP9PROFILE_PROFILE3)) {
     int program_files_key = base::DIR_PROGRAM_FILES;
     if (base::win::OSInfo::GetInstance()->wow64_status() ==
         base::win::OSInfo::WOW64_ENABLED) {
@@ -1367,15 +1811,16 @@ bool DXVAVideoDecodeAccelerator::CheckDecoderDxvaSupport() {
     DVLOG(1) << "Failed to set Low latency mode on decoder. Error: " << hr;
   }
 
+  auto gl_context = get_gl_context_cb_.Run();
+  RETURN_ON_FAILURE(gl_context, "Couldn't get GL context", false);
+
   // The decoder should use DX11 iff
   // 1. The underlying H/W decoder supports it.
   // 2. We have a pointer to the MFCreateDXGIDeviceManager function needed for
   //    this. This should always be true for Windows 8+.
   // 3. ANGLE is using DX11.
-  DCHECK(gl_context_);
   if (create_dxgi_device_manager_ &&
-      (gl_context_->GetGLRenderer().find("Direct3D11") !=
-           std::string::npos)) {
+      (gl_context->GetGLRenderer().find("Direct3D11") != std::string::npos)) {
     UINT32 dx11_aware = 0;
     attributes->GetUINT32(MF_SA_D3D11_AWARE, &dx11_aware);
     use_dx11_ = !!dx11_aware;
@@ -1577,8 +2022,9 @@ void DXVAVideoDecodeAccelerator::ProcessPendingSamples() {
   if (!output_picture_buffers_.size())
     return;
 
-  RETURN_AND_NOTIFY_ON_FAILURE(make_context_current_.Run(),
-      "Failed to make context current", PLATFORM_FAILURE,);
+  RETURN_AND_NOTIFY_ON_FAILURE(make_context_current_cb_.Run(),
+                               "Failed to make context current",
+                               PLATFORM_FAILURE, );
 
   OutputBuffers::iterator index;
 
@@ -1590,7 +2036,6 @@ void DXVAVideoDecodeAccelerator::ProcessPendingSamples() {
       PendingSampleInfo* pending_sample = NULL;
       {
         base::AutoLock lock(decoder_lock_);
-
         PendingSampleInfo& sample_info = pending_output_samples_.front();
         if (sample_info.picture_buffer_id != -1)
           continue;
@@ -1674,13 +2119,22 @@ void DXVAVideoDecodeAccelerator::Invalidate() {
   if (GetState() == kUninitialized)
     return;
 
+  // Best effort to make the GL context current.
+  make_context_current_cb_.Run();
+
   decoder_thread_.Stop();
   weak_this_factory_.InvalidateWeakPtrs();
   output_picture_buffers_.clear();
   stale_output_picture_buffers_.clear();
   pending_output_samples_.clear();
-  pending_input_buffers_.clear();
+  // We want to continue processing pending input after detecting a config
+  // change.
+  if (GetState() != kConfigChange)
+    pending_input_buffers_.clear();
   decoder_.Release();
+  pictures_requested_ = false;
+
+  config_change_detector_.reset();
 
   if (use_dx11_) {
     if (video_format_converter_mft_.get()) {
@@ -1693,6 +2147,7 @@ void DXVAVideoDecodeAccelerator::Invalidate() {
     d3d11_device_manager_.Release();
     d3d11_query_.Release();
     dx11_video_format_converter_media_type_needs_init_ = true;
+    multi_threaded_.Release();
   } else {
     d3d9_.Release();
     d3d9_device_ex_.Release();
@@ -1732,10 +2187,8 @@ void DXVAVideoDecodeAccelerator::RequestPictureBuffers(int width, int height) {
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
   // This task could execute after the decoder has been torn down.
   if (GetState() != kUninitialized && client_) {
-    client_->ProvidePictureBuffers(
-        kNumPictureBuffers,
-        gfx::Size(width, height),
-        GL_TEXTURE_2D);
+    client_->ProvidePictureBuffers(kNumPictureBuffers, 1,
+                                   gfx::Size(width, height), GL_TEXTURE_2D);
   }
 }
 
@@ -1847,13 +2300,31 @@ void DXVAVideoDecodeAccelerator::DecodeInternal(
     return;
   }
 
+  // Check if the resolution, bit rate, etc changed in the stream. If yes we
+  // reinitialize the decoder to ensure that the stream decodes correctly.
+  bool config_changed = false;
+
+  HRESULT hr = CheckConfigChanged(sample.get(), &config_changed);
+  RETURN_AND_NOTIFY_ON_HR_FAILURE(hr, "Failed to check video stream config",
+      PLATFORM_FAILURE,);
+
+  if (config_changed) {
+    pending_input_buffers_.push_back(sample);
+    main_thread_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&DXVAVideoDecodeAccelerator::ConfigChanged,
+                   weak_this_factory_.GetWeakPtr(),
+                   config_));
+    return;
+  }
+
   if (!inputs_before_decode_) {
     TRACE_EVENT_ASYNC_BEGIN0("gpu", "DXVAVideoDecodeAccelerator.Decoding",
                              this);
   }
   inputs_before_decode_++;
 
-  HRESULT hr = decoder_->ProcessInput(0, sample.get(), 0);
+  hr = decoder_->ProcessInput(0, sample.get(), 0);
   // As per msdn if the decoder returns MF_E_NOTACCEPTING then it means that it
   // has enough data to produce one or more output samples. In this case the
   // recommended options are to
@@ -1931,7 +2402,7 @@ void DXVAVideoDecodeAccelerator::HandleResolutionChanged(int width,
   main_thread_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&DXVAVideoDecodeAccelerator::DismissStaleBuffers,
-                 weak_this_factory_.GetWeakPtr()));
+                 weak_this_factory_.GetWeakPtr(), false));
 
   main_thread_task_runner_->PostTask(
       FROM_HERE,
@@ -1941,13 +2412,17 @@ void DXVAVideoDecodeAccelerator::HandleResolutionChanged(int width,
                  height));
 }
 
-void DXVAVideoDecodeAccelerator::DismissStaleBuffers() {
+void DXVAVideoDecodeAccelerator::DismissStaleBuffers(bool force) {
+  RETURN_AND_NOTIFY_ON_FAILURE(make_context_current_cb_.Run(),
+                               "Failed to make context current",
+                               PLATFORM_FAILURE, );
+
   OutputBuffers::iterator index;
 
   for (index = output_picture_buffers_.begin();
        index != output_picture_buffers_.end();
        ++index) {
-    if (index->second->available()) {
+    if (force || index->second->available()) {
       DVLOG(1) << "Dismissing picture id: " << index->second->id();
       client_->DismissPictureBuffer(index->second->id());
     } else {
@@ -1962,6 +2437,10 @@ void DXVAVideoDecodeAccelerator::DismissStaleBuffers() {
 
 void DXVAVideoDecodeAccelerator::DeferredDismissStaleBuffer(
     int32_t picture_buffer_id) {
+  RETURN_AND_NOTIFY_ON_FAILURE(make_context_current_cb_.Run(),
+                               "Failed to make context current",
+                               PLATFORM_FAILURE, );
+
   OutputBuffers::iterator it = stale_output_picture_buffers_.find(
       picture_buffer_id);
   DCHECK(it != stale_output_picture_buffers_.end());
@@ -2076,8 +2555,9 @@ void DXVAVideoDecodeAccelerator::CopySurfaceComplete(
   if (picture_buffer->available())
     return;
 
-  RETURN_AND_NOTIFY_ON_FAILURE(make_context_current_.Run(),
-      "Failed to make context current", PLATFORM_FAILURE,);
+  RETURN_AND_NOTIFY_ON_FAILURE(make_context_current_cb_.Run(),
+                               "Failed to make context current",
+                               PLATFORM_FAILURE, );
 
   DCHECK(!output_picture_buffers_.empty());
 
@@ -2454,6 +2934,41 @@ bool DXVAVideoDecodeAccelerator::SetTransformOutputType(
     media_type.Release();
   }
   return false;
+}
+
+HRESULT DXVAVideoDecodeAccelerator::CheckConfigChanged(
+    IMFSample* sample, bool* config_changed) {
+  if (codec_ != media::kCodecH264)
+    return S_FALSE;
+
+  base::win::ScopedComPtr<IMFMediaBuffer> buffer;
+  HRESULT hr = sample->GetBufferByIndex(0, buffer.Receive());
+  RETURN_ON_HR_FAILURE(hr, "Failed to get buffer from input sample", hr);
+
+  MediaBufferScopedPointer scoped_media_buffer(buffer.get());
+
+  if (!config_change_detector_->DetectConfig(
+          scoped_media_buffer.get(),
+          scoped_media_buffer.current_length())) {
+    RETURN_ON_HR_FAILURE(E_FAIL, "Failed to detect H.264 stream config",
+        E_FAIL);
+  }
+  *config_changed = config_change_detector_->config_changed();
+  return S_OK;
+}
+
+void DXVAVideoDecodeAccelerator::ConfigChanged(
+    const Config& config) {
+  DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
+
+  SetState(kConfigChange);
+  DismissStaleBuffers(true);
+  Invalidate();
+  Initialize(config_, client_);
+  decoder_thread_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&DXVAVideoDecodeAccelerator::DecodePendingInputBuffers,
+                 base::Unretained(this)));
 }
 
 }  // namespace content

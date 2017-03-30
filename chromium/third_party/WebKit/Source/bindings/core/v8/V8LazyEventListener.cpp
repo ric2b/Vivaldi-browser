@@ -76,7 +76,7 @@ v8::Local<v8::Object> toObjectWrapper(T* domObject, ScriptState* scriptState)
 v8::Local<v8::Value> V8LazyEventListener::callListenerFunction(ScriptState* scriptState, v8::Local<v8::Value> jsEvent, Event* event)
 {
     ASSERT(!jsEvent.IsEmpty());
-    v8::Local<v8::Object> listenerObject = getListenerObject(scriptState->executionContext());
+    v8::Local<v8::Object> listenerObject = getListenerObject(scriptState->getExecutionContext());
     if (listenerObject.IsEmpty())
         return v8::Local<v8::Value>();
 
@@ -85,10 +85,10 @@ v8::Local<v8::Value> V8LazyEventListener::callListenerFunction(ScriptState* scri
     if (handlerFunction.IsEmpty() || receiver.IsEmpty())
         return v8::Local<v8::Value>();
 
-    if (!scriptState->executionContext()->isDocument())
+    if (!scriptState->getExecutionContext()->isDocument())
         return v8::Local<v8::Value>();
 
-    LocalFrame* frame = toDocument(scriptState->executionContext())->frame();
+    LocalFrame* frame = toDocument(scriptState->getExecutionContext())->frame();
     if (!frame)
         return v8::Local<v8::Value>();
 
@@ -213,7 +213,7 @@ void V8LazyEventListener::fireErrorEvent(v8::Local<v8::Context> v8Context, Execu
     if (v8Call(message->GetLineNumber(v8Context), lineNumber)
         && v8Call(message->GetStartColumn(v8Context), columnNumber))
         ++columnNumber;
-    RefPtrWillBeRawPtr<ErrorEvent> event = ErrorEvent::create(messageText, m_sourceURL, lineNumber, columnNumber, &world());
+    RawPtr<ErrorEvent> event = ErrorEvent::create(messageText, m_sourceURL, lineNumber, columnNumber, &world());
 
     AccessControlStatus accessControlStatus = NotSharableCrossOrigin;
     if (message->IsOpaque())

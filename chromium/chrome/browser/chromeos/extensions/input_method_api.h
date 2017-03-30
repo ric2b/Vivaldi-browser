@@ -5,9 +5,10 @@
 #ifndef CHROME_BROWSER_CHROMEOS_EXTENSIONS_INPUT_METHOD_API_H_
 #define CHROME_BROWSER_CHROMEOS_EXTENSIONS_INPUT_METHOD_API_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "chrome/common/extensions/api/input_method_private.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
@@ -157,6 +158,23 @@ class InputMethodPrivateSetXkbLayoutFunction
   DISALLOW_COPY_AND_ASSIGN(InputMethodPrivateSetXkbLayoutFunction);
 };
 
+// Implements the inputMethodPrivate.showInputView method.
+class InputMethodPrivateShowInputViewFunction
+    : public UIThreadExtensionFunction {
+ public:
+  InputMethodPrivateShowInputViewFunction() {}
+
+ protected:
+  ~InputMethodPrivateShowInputViewFunction() override {}
+
+  ResponseAction Run() override;
+
+ private:
+  DECLARE_EXTENSION_FUNCTION("inputMethodPrivate.showInputView",
+                             INPUTMETHODPRIVATE_SHOWINPUTVIEW)
+  DISALLOW_COPY_AND_ASSIGN(InputMethodPrivateShowInputViewFunction);
+};
+
 class InputMethodAPI : public BrowserContextKeyedAPI,
                        public extensions::EventRouter::Observer {
  public:
@@ -188,11 +206,11 @@ class InputMethodAPI : public BrowserContextKeyedAPI,
   content::BrowserContext* const context_;
 
   // Created lazily upon OnListenerAdded.
-  scoped_ptr<chromeos::ExtensionInputMethodEventRouter>
+  std::unique_ptr<chromeos::ExtensionInputMethodEventRouter>
       input_method_event_router_;
-  scoped_ptr<chromeos::ExtensionDictionaryEventRouter>
+  std::unique_ptr<chromeos::ExtensionDictionaryEventRouter>
       dictionary_event_router_;
-  scoped_ptr<chromeos::ExtensionImeMenuEventRouter> ime_menu_event_router_;
+  std::unique_ptr<chromeos::ExtensionImeMenuEventRouter> ime_menu_event_router_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMethodAPI);
 };

@@ -1,0 +1,14 @@
+{
+  "manifest_version": 1,
+  "name": "exe:content_browser",
+  "display_name": "Content Browser",
+  "capabilities": {
+    "required": {
+      "*": { "interfaces": [ "*" ] },
+      "mojo:shell": {
+        "classes": [ "client_process", "instance_name" ],
+        "interfaces": [ "*" ]
+      }
+    }
+  }
+}

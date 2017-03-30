@@ -393,8 +393,8 @@ class WebViewInteractiveTestBase : public extensions::PlatformAppBrowserTest {
     LOG(INFO) << "DIFF: x = " << diff.x() << ", y = " << diff.y();
 
     const int left_spacing = 40 + padding.x();  // div.style.paddingLeft = 40px.
-    // div.style.paddingTop = 50px + (input box height = 26px).
-    const int top_spacing = 50 + 26 + padding.y();
+    // div.style.paddingTop = 60px + (input box height = 26px).
+    const int top_spacing = 60 + 26 + padding.y();
 
     // If the popup is placed within |threshold_px| of the expected position,
     // then we consider the test as a pass.
@@ -502,10 +502,11 @@ class WebViewInteractiveTest : public WebViewInteractiveTestBase,
   }
 };
 
+class WebViewNewWindowInteractiveTest : public WebViewInteractiveTest {};
+
 // The following class of tests do not work for OOPIF <webview>.
 // TODO(ekaramad): Make this tests work with OOPIF and replace the test classes
 // with WebViewInteractiveTest (see crbug.com/582562).
-class WebViewNewWindowInteractiveTest : public WebViewInteractiveTestBase {};
 class WebViewFocusInteractiveTest : public WebViewInteractiveTestBase {};
 class WebViewPopupInteractiveTest : public WebViewInteractiveTestBase {};
 class WebViewContextMenuInteractiveTest : public WebViewInteractiveTestBase {};
@@ -514,6 +515,10 @@ class WebViewDragDropInteractiveTest : public WebViewInteractiveTestBase {};
 
 INSTANTIATE_TEST_CASE_P(WebViewInteractiveTests,
                         WebViewInteractiveTest,
+                        testing::Bool());
+
+INSTANTIATE_TEST_CASE_P(WebViewInteractiveTests,
+                        WebViewNewWindowInteractiveTest,
                         testing::Bool());
 
 // ui_test_utils::SendMouseMoveSync doesn't seem to work on OS_MACOSX, and
@@ -743,27 +748,27 @@ IN_PROC_BROWSER_TEST_P(WebViewInteractiveTest, DISABLED_EditCommandsNoMenu) {
   ASSERT_TRUE(start_of_line_listener.WaitUntilSatisfied());
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest,
                        NewWindow_AttachAfterOpenerDestroyed) {
   TestHelper("testNewWindowAttachAfterOpenerDestroyed",
              "web_view/newwindow",
              NEEDS_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest,
                        NewWindow_NewWindowNameTakesPrecedence) {
   TestHelper("testNewWindowNameTakesPrecedence",
              "web_view/newwindow",
              NEEDS_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest,
                        NewWindow_WebViewNameTakesPrecedence) {
   TestHelper("testNewWindowWebViewNameTakesPrecedence", "web_view/newwindow",
              NEEDS_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest, NewWindow_NoName) {
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest, NewWindow_NoName) {
   TestHelper("testNewWindowNoName",
              "web_view/newwindow",
              NEEDS_TEST_SERVER);
@@ -775,41 +780,41 @@ IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest, NewWindow_NoName) {
 #else
 #define MAYBE_NewWindow_Redirect NewWindow_Redirect
 #endif
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest,
                        MAYBE_NewWindow_Redirect) {
   TestHelper("testNewWindowRedirect",
              "web_view/newwindow",
              NEEDS_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest, NewWindow_Close) {
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest, NewWindow_Close) {
   TestHelper("testNewWindowClose",
              "web_view/newwindow",
              NEEDS_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest,
                        NewWindow_DeferredAttachment) {
   TestHelper("testNewWindowDeferredAttachment",
              "web_view/newwindow",
              NEEDS_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest,
                        NewWindow_ExecuteScript) {
   TestHelper("testNewWindowExecuteScript",
              "web_view/newwindow",
              NEEDS_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest,
                        NewWindow_DeclarativeWebRequest) {
   TestHelper("testNewWindowDeclarativeWebRequest",
              "web_view/newwindow",
              NEEDS_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest,
                        NewWindow_DiscardAfterOpenerDestroyed) {
   TestHelper("testNewWindowDiscardAfterOpenerDestroyed",
              "web_view/newwindow",
@@ -822,7 +827,7 @@ IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest,
 #else
 #define MAYBE_NewWindow_WebRequest NewWindow_WebRequest
 #endif
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest,
                        MAYBE_NewWindow_WebRequest) {
   TestHelper("testNewWindowWebRequest",
              "web_view/newwindow",
@@ -838,7 +843,7 @@ IN_PROC_BROWSER_TEST_P(WebViewInteractiveTest,
              NEEDS_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest,
                        NewWindow_WebRequestRemoveElement) {
   TestHelper("testNewWindowWebRequestRemoveElement",
              "web_view/newwindow",
@@ -877,7 +882,7 @@ IN_PROC_BROWSER_TEST_P(WebViewInteractiveTest, NewWindow_OpenInNewTab) {
 }
 #endif
 
-IN_PROC_BROWSER_TEST_F(WebViewNewWindowInteractiveTest,
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowInteractiveTest,
                        NewWindow_OpenerDestroyedWhileUnattached) {
   TestHelper("testNewWindowOpenerDestroyedWhileUnattached",
              "web_view/newwindow",

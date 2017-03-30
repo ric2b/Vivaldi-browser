@@ -17,17 +17,17 @@
 #include "mojo/public/cpp/bindings/callback.h"
 #include "mojo/public/cpp/bindings/lib/connector.h"
 #include "mojo/public/cpp/bindings/lib/filter_chain.h"
-#include "mojo/public/cpp/environment/environment.h"
 
 namespace mojo {
 namespace internal {
 
+// TODO(yzshen): Consider removing this class and use MultiplexRouter in all
+// cases. crbug.com/594244
 class Router : public MessageReceiverWithResponder {
  public:
   Router(ScopedMessagePipeHandle message_pipe,
          FilterChain filters,
-         bool expects_sync_requests,
-         const MojoAsyncWaiter* waiter = Environment::GetDefaultAsyncWaiter());
+         bool expects_sync_requests);
   ~Router() override;
 
   // Sets the receiver to handle messages read from the message pipe that do
@@ -39,14 +39,14 @@ class Router : public MessageReceiverWithResponder {
   // Sets the error handler to receive notifications when an error is
   // encountered while reading from the pipe or waiting to read from the pipe.
   void set_connection_error_handler(const Closure& error_handler) {
-    connector_.set_connection_error_handler(error_handler);
+    error_handler_ = error_handler;
   }
 
   // Returns true if an error was encountered while reading from the pipe or
   // waiting to read from the pipe.
   bool encountered_error() const {
     DCHECK(thread_checker_.CalledOnValidThread());
-    return connector_.encountered_error();
+    return encountered_error_;
   }
 
   // Is the router bound to a MessagePipe handle?
@@ -145,8 +145,9 @@ class Router : public MessageReceiverWithResponder {
 
   bool HandleIncomingMessage(Message* message);
   void HandleQueuedMessages();
-
   bool HandleMessageInternal(Message* message);
+
+  void OnConnectionError();
 
   HandleIncomingMessageThunk thunk_;
   FilterChain filters_;
@@ -160,6 +161,8 @@ class Router : public MessageReceiverWithResponder {
   // Whether a task has been posted to trigger processing of
   // |pending_messages_|.
   bool pending_task_for_messages_;
+  bool encountered_error_;
+  Closure error_handler_;
   base::ThreadChecker thread_checker_;
   base::WeakPtrFactory<Router> weak_factory_;
 };

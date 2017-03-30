@@ -41,9 +41,11 @@ public:
     // if you don't want to count metrics in private scripts. You should use
     // countDeprecationIfNotPrivateScript() in a binding layer.
     static void countDeprecationIfNotPrivateScript(v8::Isolate*, ExecutionContext*, UseCounter::Feature);
+    // Count only features if they're being used in an iframe which does not
+    // have script access into the top level document.
+    static void countDeprecationCrossOriginIframe(const LocalFrame*, UseCounter::Feature);
+    static void countDeprecationCrossOriginIframe(const Document&, UseCounter::Feature);
     static String deprecationMessage(UseCounter::Feature);
-
-    static String willBeRemoved(const char* feature, int milestone, const char* details);
 
 protected:
     void suppress(CSSPropertyID unresolvedProperty);

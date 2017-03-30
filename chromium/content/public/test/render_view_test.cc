@@ -172,7 +172,8 @@ class RendererBlinkPlatformImplTestOverrideImpl
  public:
   RendererBlinkPlatformImplTestOverrideImpl(
       scheduler::RendererScheduler* scheduler)
-      : RendererBlinkPlatformImpl(scheduler) {}
+      : RendererBlinkPlatformImpl(scheduler, nullptr) {
+  }
 
   // Get rid of the dependency to the sandbox, which is not available in
   // RenderViewTest.
@@ -249,6 +250,7 @@ void RenderViewTest::LoadHTML(const char* html) {
   // The load actually happens asynchronously, so we pump messages to process
   // the pending continuation.
   FrameLoadWaiter(view_->GetMainRenderFrame()).Wait();
+  view_->GetWebView()->updateAllLifecyclePhases();
 }
 
 void RenderViewTest::LoadHTMLWithUrlOverride(const char* html,
@@ -262,6 +264,7 @@ void RenderViewTest::LoadHTMLWithUrlOverride(const char* html,
   // The load actually happens asynchronously, so we pump messages to process
   // the pending continuation.
   FrameLoadWaiter(view_->GetMainRenderFrame()).Wait();
+  view_->GetWebView()->updateAllLifecyclePhases();
 }
 
 PageState RenderViewTest::GetCurrentPageState() {
@@ -280,12 +283,12 @@ PageState RenderViewTest::GetCurrentPageState() {
   }
 }
 
-void RenderViewTest::GoBack(const PageState& state) {
-  GoToOffset(-1, state);
+void RenderViewTest::GoBack(const GURL& url, const PageState& state) {
+  GoToOffset(-1, url, state);
 }
 
-void RenderViewTest::GoForward(const PageState& state) {
-  GoToOffset(1, state);
+void RenderViewTest::GoForward(const GURL& url, const PageState& state) {
+  GoToOffset(1, url, state);
 }
 
 void RenderViewTest::SetUp() {
@@ -367,12 +370,10 @@ void RenderViewTest::SetUp() {
   view_params.min_size = gfx::Size();
   view_params.max_size = gfx::Size();
 
-#if !defined(OS_IOS)
   InitializeMojo();
   test_io_thread_.reset(new base::TestIOThread(base::TestIOThread::kAutoStart));
   ipc_support_.reset(
       new mojo::edk::test::ScopedIPCSupport(test_io_thread_->task_runner()));
-#endif
 
   // This needs to pass the mock render thread to the view.
   RenderViewImpl* view =
@@ -440,17 +441,17 @@ void RenderViewTest::SendNativeKeyEvent(
 void RenderViewTest::SendWebKeyboardEvent(
     const blink::WebKeyboardEvent& key_event) {
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
-  impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &key_event, ui::LatencyInfo(),
-                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
+  impl->OnMessageReceived(InputMsg_HandleInputEvent(
+      0, &key_event, ui::LatencyInfo(),
+      InputEventDispatchType::DISPATCH_TYPE_BLOCKING));
 }
 
 void RenderViewTest::SendWebMouseEvent(
     const blink::WebMouseEvent& mouse_event) {
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
-  impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo(),
-                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
+  impl->OnMessageReceived(InputMsg_HandleInputEvent(
+      0, &mouse_event, ui::LatencyInfo(),
+      InputEventDispatchType::DISPATCH_TYPE_BLOCKING));
 }
 
 const char* const kGetCoordinatesScript =
@@ -516,13 +517,13 @@ void RenderViewTest::SimulatePointClick(const gfx::Point& point) {
   mouse_event.y = point.y();
   mouse_event.clickCount = 1;
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
-  impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo(),
-                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
+  impl->OnMessageReceived(InputMsg_HandleInputEvent(
+      0, &mouse_event, ui::LatencyInfo(),
+      InputEventDispatchType::DISPATCH_TYPE_BLOCKING));
   mouse_event.type = WebInputEvent::MouseUp;
-  impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo(),
-                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
+  impl->OnMessageReceived(InputMsg_HandleInputEvent(
+      0, &mouse_event, ui::LatencyInfo(),
+      InputEventDispatchType::DISPATCH_TYPE_BLOCKING));
 }
 
 
@@ -542,13 +543,13 @@ void RenderViewTest::SimulatePointRightClick(const gfx::Point& point) {
   mouse_event.y = point.y();
   mouse_event.clickCount = 1;
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
-  impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo(),
-                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
+  impl->OnMessageReceived(InputMsg_HandleInputEvent(
+      0, &mouse_event, ui::LatencyInfo(),
+      InputEventDispatchType::DISPATCH_TYPE_BLOCKING));
   mouse_event.type = WebInputEvent::MouseUp;
-  impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &mouse_event, ui::LatencyInfo(),
-                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
+  impl->OnMessageReceived(InputMsg_HandleInputEvent(
+      0, &mouse_event, ui::LatencyInfo(),
+      InputEventDispatchType::DISPATCH_TYPE_BLOCKING));
 }
 
 void RenderViewTest::SimulateRectTap(const gfx::Rect& rect) {
@@ -561,9 +562,9 @@ void RenderViewTest::SimulateRectTap(const gfx::Rect& rect) {
   gesture_event.type = WebInputEvent::GestureTap;
   gesture_event.sourceDevice = blink::WebGestureDeviceTouchpad;
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
-  impl->OnMessageReceived(
-      InputMsg_HandleInputEvent(0, &gesture_event, ui::LatencyInfo(),
-                                InputEventDispatchType::DISPATCH_TYPE_NORMAL));
+  impl->OnMessageReceived(InputMsg_HandleInputEvent(
+      0, &gesture_event, ui::LatencyInfo(),
+      InputEventDispatchType::DISPATCH_TYPE_BLOCKING));
   impl->FocusChangeComplete();
 }
 
@@ -577,13 +578,14 @@ void RenderViewTest::Reload(const GURL& url) {
       url, Referrer(), ui::PAGE_TRANSITION_LINK, FrameMsg_Navigate_Type::RELOAD,
       true, false, base::TimeTicks(),
       FrameMsg_UILoadMetricsReportType::NO_REPORT, GURL(), GURL(),
-      LOFI_UNSPECIFIED, base::TimeTicks::Now());
+      LOFI_UNSPECIFIED, base::TimeTicks::Now(), "GET");
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   TestRenderFrame* frame =
       static_cast<TestRenderFrame*>(impl->GetMainRenderFrame());
   frame->Navigate(common_params, StartNavigationParams(),
                   RequestNavigationParams());
   FrameLoadWaiter(frame).Wait();
+  view_->GetWebView()->updateAllLifecyclePhases();
 }
 
 uint32_t RenderViewTest::GetNavigationIPCType() {
@@ -672,11 +674,6 @@ void RenderViewTest::DidNavigateWithinPage(blink::WebLocalFrame* frame,
                         : blink::WebHistoryInertCommit);
 }
 
-void RenderViewTest::SendContentStateImmediately() {
-  RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
-  impl->set_send_content_state_immediately(true);
-}
-
 blink::WebWidget* RenderViewTest::GetWebWidget() {
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   return impl->webwidget();
@@ -699,7 +696,9 @@ scoped_ptr<ResizeParams> RenderViewTest::InitialSizeParams() {
   return make_scoped_ptr(new ResizeParams());
 }
 
-void RenderViewTest::GoToOffset(int offset, const PageState& state) {
+void RenderViewTest::GoToOffset(int offset,
+                                const GURL& url,
+                                const PageState& state) {
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
 
   int history_list_length = impl->historyBackListCount() +
@@ -707,10 +706,10 @@ void RenderViewTest::GoToOffset(int offset, const PageState& state) {
   int pending_offset = offset + impl->history_list_offset_;
 
   CommonNavigationParams common_params(
-      GURL(), Referrer(), ui::PAGE_TRANSITION_FORWARD_BACK,
+      url, Referrer(), ui::PAGE_TRANSITION_FORWARD_BACK,
       FrameMsg_Navigate_Type::NORMAL, true, false, base::TimeTicks(),
       FrameMsg_UILoadMetricsReportType::NO_REPORT, GURL(), GURL(),
-      LOFI_UNSPECIFIED, base::TimeTicks::Now());
+      LOFI_UNSPECIFIED, base::TimeTicks::Now(), "GET");
   RequestNavigationParams request_params;
   request_params.page_state = state;
   request_params.page_id = impl->page_id_ + offset;
@@ -726,6 +725,7 @@ void RenderViewTest::GoToOffset(int offset, const PageState& state) {
   // The load actually happens asynchronously, so we pump messages to process
   // the pending continuation.
   FrameLoadWaiter(frame).Wait();
+  view_->GetWebView()->updateAllLifecyclePhases();
 }
 
 }  // namespace content

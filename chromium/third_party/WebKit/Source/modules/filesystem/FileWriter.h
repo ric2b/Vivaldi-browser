@@ -31,6 +31,7 @@
 #ifndef FileWriter_h
 #define FileWriter_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/FileError.h"
@@ -53,11 +54,12 @@ class FileWriter final
     : public FileWriterBase
     , public EventTargetWithInlineData
 #endif
+    , public ActiveScriptWrappable
     , public ActiveDOMObject
     , public WebFileWriterClient {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(FileWriterBase);
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(FileWriter);
+    USING_GARBAGE_COLLECTED_MIXIN(FileWriter);
 public:
     static FileWriter* create(ExecutionContext*);
     ~FileWriter() override;
@@ -82,11 +84,13 @@ public:
 
     // ActiveDOMObject
     void stop() override;
-    bool hasPendingActivity() const override;
+
+    // ActiveScriptWrappable
+    bool hasPendingActivity() const final;
 
     // EventTarget
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override { return ActiveDOMObject::executionContext(); }
+    ExecutionContext* getExecutionContext() const override { return ActiveDOMObject::getExecutionContext(); }
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(writestart);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(progress);
@@ -128,7 +132,6 @@ private:
     long long m_recursionDepth;
     double m_lastProgressNotificationTimeMS;
     Member<Blob> m_blobBeingWritten;
-    int m_asyncOperationId;
 };
 
 } // namespace blink

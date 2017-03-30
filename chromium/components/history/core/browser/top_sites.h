@@ -179,6 +179,9 @@ class TopSites : public RefcountedKeyedService {
   // Remove Observer from the list.
   void RemoveObserver(TopSitesObserver* observer);
 
+  // Vivaldi: Remove thumbnail for given url.
+  virtual void RemoveThumbnailForUrl(const GURL& url) {}
+
  protected:
   void NotifyTopSitesLoaded();
   void NotifyTopSitesChanged(const TopSitesObserver::ChangeReason reason);

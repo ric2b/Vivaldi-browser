@@ -5,7 +5,9 @@
 #ifndef CONTENT_PUBLIC_COMMON_MOJO_SHELL_CONNECTION_H_
 #define CONTENT_PUBLIC_COMMON_MOJO_SHELL_CONNECTION_H_
 
+#include "base/callback_forward.h"
 #include "content/common/content_export.h"
+#include "mojo/shell/public/interfaces/shell_client.mojom.h"
 
 namespace mojo {
 class Connection;
@@ -32,6 +34,11 @@ class CONTENT_EXPORT MojoShellConnection {
     virtual ~Listener() {}
   };
 
+  using Factory = base::Closure;
+  // Sets the factory used to create the MojoShellConnection. This must be
+  // called before the MojoShellConnection has been created.
+  static void SetFactoryForTest(Factory* factory);
+
   // Will return null if no connection has been established (either because it
   // hasn't happened yet or the application was not spawned from the external
   // Mojo shell.
@@ -41,11 +48,19 @@ class CONTENT_EXPORT MojoShellConnection {
   // created on.
   static void Destroy();
 
+  // Creates the appropriate MojoShellConnection from |request|. See
+  // UsingExternalShell() for details of |is_external|.
+  static void Create(mojo::shell::mojom::ShellClientRequest request,
+                     bool is_external);
+
   virtual mojo::Connector* GetConnector() = 0;
 
   // Indicates whether the shell connection is to an external shell (true) or
   // a shell embedded in the browser process (false).
   virtual bool UsingExternalShell() const = 0;
+
+  // Sets a closure that is called when the connection is lost.
+  virtual void SetConnectionLostClosure(const base::Closure& closure) = 0;
 
   // [De]Register an impl of Listener that will be consulted when the wrapped
   // ShellConnection exposes services to inbound connections.

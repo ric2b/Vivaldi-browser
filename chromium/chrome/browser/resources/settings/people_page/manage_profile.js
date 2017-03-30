@@ -6,12 +6,11 @@
  * @fileoverview
  * 'settings-manage-profile' is the settings subpage containing controls to
  * edit a profile's name, icon, and desktop shortcut.
- *
- * @group Chrome Settings Elements
- * @element settings-manage-profile
  */
 Polymer({
   is: 'settings-manage-profile',
+
+  behaviors: [WebUIListenerBehavior],
 
   properties: {
     /**
@@ -25,28 +24,33 @@ Polymer({
     profileName: String,
 
     /**
-     * The available icons for selection. Populated by SyncPrivateApi.
-     * @type {!Array<!string>}
+     * The available icons for selection.
+     * @type {!Array<string>}
      */
     availableIconUrls: {
       type: Array,
       value: function() { return []; },
     },
+
+    /**
+     * @private {!settings.ManageProfileBrowserProxyImpl}
+     */
+    browserProxy_: {
+      type: Object,
+      value: function() {
+        return settings.ManageProfileBrowserProxyImpl.getInstance();
+      },
+    },
   },
 
   /** @override */
-  created: function() {
-    settings.SyncPrivateApi.getAvailableIcons(
-        this.handleAvailableIcons_.bind(this));
-  },
+  attached: function() {
+    var setIcons = function(iconUrls) {
+      this.availableIconUrls = iconUrls;
+    }.bind(this);
 
-  /**
-   * Handler for when the available icons are pushed from SyncPrivateApi.
-   * @private
-   * @param {!Array<!string>} iconUrls
-   */
-  handleAvailableIcons_: function(iconUrls) {
-    this.availableIconUrls = iconUrls;
+    this.addWebUIListener('available-icons-changed', setIcons);
+    this.browserProxy_.getAvailableIcons().then(setIcons);
   },
 
   /**
@@ -55,42 +59,22 @@ Polymer({
    * @param {!Event} event
    */
   onProfileNameChanged_: function(event) {
-    settings.SyncPrivateApi.setProfileIconAndName(this.profileIconUrl,
-                                                  event.target.value);
-  },
-
-  /**
-   * Handler for when the user clicks a new profile icon.
-   * @private
-   * @param {!Event} event
-   */
-  onIconTap_: function(event) {
-    var element = Polymer.dom(event).rootTarget;
-
-    var iconUrl;
-    if (element.nodeName == 'IMG')
-      iconUrl = element.src;
-    else if (element.dataset && element.dataset.iconUrl)
-      iconUrl = element.dataset.iconUrl;
-
-    if (!iconUrl)
+    if (event.target.invalid)
       return;
 
-    settings.SyncPrivateApi.setProfileIconAndName(iconUrl, this.profileName);
-
-    // Button toggle state is controlled by the selected icon URL. Prevent
-    // tap events from changing the toggle state.
-    event.preventDefault();
+    this.browserProxy_.setProfileIconAndName(this.profileIconUrl,
+                                             event.target.value);
   },
 
   /**
-   * Computed binding determining which profile icon button is toggled on.
+   * Handler for when the an image is activated.
+   * @param {!Event} event
    * @private
-   * @param {!string} iconUrl
-   * @param {!string} paramIconUrl
-   * @return {boolean}
    */
-  isActiveIcon_: function(iconUrl, profileIconUrl) {
-    return iconUrl == profileIconUrl;
+  onIconActivate_: function(event) {
+    /** @type {{iconUrl: string}} */
+    var buttonData = event.detail.item.dataset;
+    this.browserProxy_.setProfileIconAndName(buttonData.iconUrl,
+                                             this.profileName);
   },
 });

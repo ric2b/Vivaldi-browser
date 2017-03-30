@@ -87,7 +87,7 @@ class ProfileSyncServiceStartupTest : public testing::Test {
   }
 
   void CreateSyncService(
-      browser_sync::ProfileSyncServiceStartBehavior start_behavior) {
+      ProfileSyncService::StartBehavior start_behavior) {
     component_factory_ = profile_sync_service_bundle_.component_factory();
     browser_sync::ProfileSyncServiceBundle::SyncClientBuilder builder(
         &profile_sync_service_bundle_);
@@ -164,7 +164,7 @@ class ProfileSyncServiceStartupTest : public testing::Test {
 class ProfileSyncServiceStartupCrosTest : public ProfileSyncServiceStartupTest {
  public:
   ProfileSyncServiceStartupCrosTest() {
-    CreateSyncService(browser_sync::AUTO_START);
+    CreateSyncService(ProfileSyncService::AUTO_START);
     SimulateTestUserSignin(nullptr);
     EXPECT_TRUE(
         profile_sync_service_bundle_.signin_manager()->IsAuthenticated());
@@ -174,7 +174,7 @@ class ProfileSyncServiceStartupCrosTest : public ProfileSyncServiceStartupTest {
 TEST_F(ProfileSyncServiceStartupTest, StartFirstTime) {
   // We've never completed startup.
   pref_service()->ClearPref(sync_driver::prefs::kSyncFirstSetupComplete);
-  CreateSyncService(browser_sync::MANUAL_START);
+  CreateSyncService(ProfileSyncService::MANUAL_START);
   SetUpSyncBackendHost();
   DataTypeManagerMock* data_type_manager = SetUpDataTypeManager();
   EXPECT_CALL(*data_type_manager, Configure(_, _)).Times(0);
@@ -208,6 +208,7 @@ TEST_F(ProfileSyncServiceStartupTest, StartFirstTime) {
 
   // Simulate the UI telling sync it has finished setting up.
   sync_service_->SetSetupInProgress(false);
+  sync_service_->SetFirstSetupComplete();
   EXPECT_TRUE(sync_service_->IsSyncActive());
 }
 
@@ -215,7 +216,7 @@ TEST_F(ProfileSyncServiceStartupTest, StartFirstTime) {
 TEST_F(ProfileSyncServiceStartupTest, DISABLED_StartNoCredentials) {
   // We've never completed startup.
   pref_service()->ClearPref(sync_driver::prefs::kSyncFirstSetupComplete);
-  CreateSyncService(browser_sync::MANUAL_START);
+  CreateSyncService(ProfileSyncService::MANUAL_START);
 
   // Should not actually start, rather just clean things up and wait
   // to be enabled.
@@ -248,7 +249,7 @@ TEST_F(ProfileSyncServiceStartupTest, DISABLED_StartNoCredentials) {
 
 // TODO(pavely): Reenable test once android is switched to oauth2.
 TEST_F(ProfileSyncServiceStartupTest, DISABLED_StartInvalidCredentials) {
-  CreateSyncService(browser_sync::MANUAL_START);
+  CreateSyncService(ProfileSyncService::MANUAL_START);
   std::string account_id = SimulateTestUserSignin(sync_service_.get());
   SyncBackendHostMock* mock_sbh = SetUpSyncBackendHost();
 
@@ -316,7 +317,7 @@ TEST_F(ProfileSyncServiceStartupCrosTest, StartFirstTime) {
 
 TEST_F(ProfileSyncServiceStartupTest, StartNormal) {
   // Pre load the tokens
-  CreateSyncService(browser_sync::MANUAL_START);
+  CreateSyncService(ProfileSyncService::MANUAL_START);
   std::string account_id = SimulateTestUserSignin(sync_service_.get());
   sync_service_->SetFirstSetupComplete();
   SetUpSyncBackendHost();
@@ -346,7 +347,7 @@ TEST_F(ProfileSyncServiceStartupTest, StartRecoverDatatypePrefs) {
   }
 
   // Pre load the tokens
-  CreateSyncService(browser_sync::MANUAL_START);
+  CreateSyncService(ProfileSyncService::MANUAL_START);
   std::string account_id = SimulateTestUserSignin(sync_service_.get());
   sync_service_->SetFirstSetupComplete();
   SetUpSyncBackendHost();
@@ -373,7 +374,7 @@ TEST_F(ProfileSyncServiceStartupTest, StartDontRecoverDatatypePrefs) {
                              false);
 
   // Pre load the tokens
-  CreateSyncService(browser_sync::MANUAL_START);
+  CreateSyncService(ProfileSyncService::MANUAL_START);
   std::string account_id = SimulateTestUserSignin(sync_service_.get());
   sync_service_->SetFirstSetupComplete();
   SetUpSyncBackendHost();
@@ -393,7 +394,7 @@ TEST_F(ProfileSyncServiceStartupTest, StartDontRecoverDatatypePrefs) {
 TEST_F(ProfileSyncServiceStartupTest, ManagedStartup) {
   // Service should not be started by Initialize() since it's managed.
   pref_service()->SetString(prefs::kGoogleServicesAccountId, kEmail);
-  CreateSyncService(browser_sync::MANUAL_START);
+  CreateSyncService(ProfileSyncService::MANUAL_START);
 
   // Disable sync through policy.
   pref_service()->SetBoolean(sync_driver::prefs::kSyncManaged, true);
@@ -405,36 +406,42 @@ TEST_F(ProfileSyncServiceStartupTest, ManagedStartup) {
 }
 
 TEST_F(ProfileSyncServiceStartupTest, SwitchManaged) {
-  CreateSyncService(browser_sync::MANUAL_START);
+  CreateSyncService(ProfileSyncService::MANUAL_START);
   std::string account_id = SimulateTestUserSignin(sync_service_.get());
   sync_service_->SetFirstSetupComplete();
   SetUpSyncBackendHost();
   DataTypeManagerMock* data_type_manager = SetUpDataTypeManager();
   EXPECT_CALL(*data_type_manager, Configure(_, _));
+  EXPECT_CALL(*data_type_manager, state())
+      .WillRepeatedly(Return(DataTypeManager::CONFIGURED));
   EXPECT_CALL(observer_, OnStateChanged()).Times(AnyNumber());
   IssueTestTokens(account_id);
   sync_service_->Initialize();
+  EXPECT_TRUE(sync_service_->IsBackendInitialized());
+  EXPECT_TRUE(sync_service_->IsSyncActive());
 
   // The service should stop when switching to managed mode.
   Mock::VerifyAndClearExpectations(data_type_manager);
   EXPECT_CALL(*data_type_manager, state()).
       WillOnce(Return(DataTypeManager::CONFIGURED));
   EXPECT_CALL(*data_type_manager, Stop()).Times(1);
-  EXPECT_CALL(observer_, OnStateChanged()).Times(AnyNumber());
   pref_service()->SetBoolean(sync_driver::prefs::kSyncManaged, true);
+  EXPECT_FALSE(sync_service_->IsBackendInitialized());
+  // Note that PSS no longer references |data_type_manager| after stopping.
 
-  // When switching back to unmanaged, the state should change, but the service
-  // should not start up automatically (kSyncFirstSetupComplete will be
-  // false).
-  Mock::VerifyAndClearExpectations(data_type_manager);
+  // When switching back to unmanaged, the state should change and sync should
+  // start but not become active because IsFirstSetupComplete() will be false.
+  SetUpSyncBackendHost();
+  // A new DataTypeManager should not be created.
   EXPECT_CALL(*component_factory_, CreateDataTypeManager(_, _, _, _, _))
       .Times(0);
-  EXPECT_CALL(observer_, OnStateChanged()).Times(AnyNumber());
   pref_service()->ClearPref(sync_driver::prefs::kSyncManaged);
+  EXPECT_TRUE(sync_service_->IsBackendInitialized());
+  EXPECT_FALSE(sync_service_->IsSyncActive());
 }
 
 TEST_F(ProfileSyncServiceStartupTest, StartFailure) {
-  CreateSyncService(browser_sync::MANUAL_START);
+  CreateSyncService(ProfileSyncService::MANUAL_START);
   std::string account_id = SimulateTestUserSignin(sync_service_.get());
   sync_service_->SetFirstSetupComplete();
   SetUpSyncBackendHost();
@@ -461,7 +468,7 @@ TEST_F(ProfileSyncServiceStartupTest, StartFailure) {
 
 TEST_F(ProfileSyncServiceStartupTest, StartDownloadFailed) {
   // Pre load the tokens
-  CreateSyncService(browser_sync::MANUAL_START);
+  CreateSyncService(ProfileSyncService::MANUAL_START);
   std::string account_id = SimulateTestUserSignin(sync_service_.get());
   SyncBackendHostMock* mock_sbh = SetUpSyncBackendHost();
   mock_sbh->set_fail_initial_download(true);

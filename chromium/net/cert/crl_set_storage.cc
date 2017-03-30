@@ -7,6 +7,7 @@
 #include "base/base64.h"
 #include "base/format_macros.h"
 #include "base/json/json_reader.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
@@ -292,7 +293,7 @@ static bool ReadDeltaCRL(base::StringPiece* data,
 // static
 bool CRLSetStorage::Parse(base::StringPiece data,
                           scoped_refptr<CRLSet>* out_crl_set) {
-  TRACE_EVENT0("CRLSet", "Parse");
+  TRACE_EVENT0("net", "CRLSetStorage::Parse");
   // Other parts of Chrome assume that we're little endian, so we don't lose
   // anything by doing this.
 #if defined(__BYTE_ORDER)

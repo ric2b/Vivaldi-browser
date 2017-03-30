@@ -5,8 +5,9 @@
 #include "mash/example/window_type_launcher/window_type_launcher.h"
 
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "mash/shell/public/interfaces/shell.mojom.h"
+#include "mash/session/public/interfaces/session.mojom.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/shell/public/cpp/connection.h"
 #include "mojo/shell/public/cpp/connector.h"
@@ -176,6 +177,10 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
             this, base::ASCIIToUTF16("Create Pointy Bubble"))),
         lock_button_(new views::LabelButton(
             this, base::ASCIIToUTF16("Lock Screen"))),
+        logout_button_(new views::LabelButton(
+            this, base::ASCIIToUTF16("Log Out"))),
+        switch_user_button_(new views::LabelButton(
+            this, base::ASCIIToUTF16("Switch User"))),
         widgets_button_(new views::LabelButton(
             this, base::ASCIIToUTF16("Show Example Widgets"))),
         system_modal_button_(new views::LabelButton(
@@ -197,6 +202,8 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
     create_nonresizable_button_->SetStyle(views::Button::STYLE_BUTTON);
     bubble_button_->SetStyle(views::Button::STYLE_BUTTON);
     lock_button_->SetStyle(views::Button::STYLE_BUTTON);
+    logout_button_->SetStyle(views::Button::STYLE_BUTTON);
+    switch_user_button_->SetStyle(views::Button::STYLE_BUTTON);
     widgets_button_->SetStyle(views::Button::STYLE_BUTTON);
     system_modal_button_->SetStyle(views::Button::STYLE_BUTTON);
     window_modal_button_->SetStyle(views::Button::STYLE_BUTTON);
@@ -221,6 +228,8 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
     AddViewToLayout(layout, create_nonresizable_button_);
     AddViewToLayout(layout, bubble_button_);
     AddViewToLayout(layout, lock_button_);
+    AddViewToLayout(layout, logout_button_);
+    AddViewToLayout(layout, switch_user_button_);
     AddViewToLayout(layout, widgets_button_);
     AddViewToLayout(layout, system_modal_button_);
     AddViewToLayout(layout, window_modal_button_);
@@ -265,19 +274,23 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
       NOTIMPLEMENTED();
     } else if (sender == panel_button_) {
       NOTIMPLEMENTED();
-    }
-    else if (sender == create_nonresizable_button_) {
+    } else if (sender == create_nonresizable_button_) {
       NOTIMPLEMENTED();
-    }
-    else if (sender == bubble_button_) {
+    } else if (sender == bubble_button_) {
       NOTIMPLEMENTED();
-    }
-    else if (sender == lock_button_) {
-      mash::shell::mojom::ShellPtr shell;
-      connector_->ConnectToInterface("mojo:mash_shell", &shell);
-      shell->LockScreen();
-    }
-    else if (sender == widgets_button_) {
+    } else if (sender == lock_button_) {
+      mash::session::mojom::SessionPtr session;
+      connector_->ConnectToInterface("mojo:mash_session", &session);
+      session->LockScreen();
+    } else if (sender == logout_button_) {
+      mash::session::mojom::SessionPtr session;
+      connector_->ConnectToInterface("mojo:mash_session", &session);
+      session->Logout();
+    } else if (sender == switch_user_button_) {
+      mash::session::mojom::SessionPtr session;
+      connector_->ConnectToInterface("mojo:mash_session", &session);
+      session->SwitchUser();
+    } else if (sender == widgets_button_) {
       NOTIMPLEMENTED();
     }
     else if (sender == system_modal_button_) {
@@ -337,6 +350,8 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
   views::LabelButton* create_nonresizable_button_;
   views::LabelButton* bubble_button_;
   views::LabelButton* lock_button_;
+  views::LabelButton* logout_button_;
+  views::LabelButton* switch_user_button_;
   views::LabelButton* widgets_button_;
   views::LabelButton* system_modal_button_;
   views::LabelButton* window_modal_button_;
@@ -345,7 +360,7 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
   views::LabelButton* examples_button_;
   views::LabelButton* show_hide_window_button_;
   views::LabelButton* show_web_notification_;
-  scoped_ptr<views::MenuRunner> menu_runner_;
+  std::unique_ptr<views::MenuRunner> menu_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTypeLauncherView);
 };
@@ -356,8 +371,8 @@ WindowTypeLauncher::WindowTypeLauncher() {}
 WindowTypeLauncher::~WindowTypeLauncher() {}
 
 void WindowTypeLauncher::Initialize(mojo::Connector* connector,
-                                    const std::string& url,
-                                    uint32_t id, uint32_t user_id) {
+                                    const mojo::Identity& identity,
+                                    uint32_t id) {
   aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
 
   views::WindowManagerConnection::Create(connector);
@@ -367,4 +382,9 @@ void WindowTypeLauncher::Initialize(mojo::Connector* connector,
   params.delegate = new WindowTypeLauncherView(connector);
   widget->Init(params);
   widget->Show();
+}
+
+bool WindowTypeLauncher::ShellConnectionLost() {
+  base::MessageLoop::current()->QuitWhenIdle();
+  return false;
 }

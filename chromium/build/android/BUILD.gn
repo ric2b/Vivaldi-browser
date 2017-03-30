@@ -7,6 +7,14 @@ import("//third_party/ijar/ijar.gni")
 
 sun_tools_jar_path = "$root_gen_dir/sun_tools_jar/tools.jar"
 
+# Create or update the API versions cache if necessary by running a
+# functionally empty lint task. This prevents racy creation of the
+# cache while linting java targets in android_lint.
+android_lint("prepare_android_lint_cache") {
+  android_manifest = "//build/android/AndroidManifest.xml"
+  create_cache = true
+}
+
 action("find_sun_tools_jar") {
   script = "//build/android/gyp/find_sun_tools_jar.py"
   depfile = "$target_gen_dir/$target_name.d"
@@ -36,7 +44,7 @@ generate_interface_jar("android_ijar") {
 copy("cpplib_unstripped") {
   _soname = "libc++_shared.so"
   sources = [
-    "${android_libcpp_root}/libs/${android_app_abi}/${_soname}",
+    "${android_libcpp_lib_dir}/${_soname}",
   ]
   outputs = [
     "${root_out_dir}/lib.unstripped/${_soname}",
@@ -76,23 +84,25 @@ action("cpplib_stripped") {
   ]
 }
 
-group("devil_py") {
-  data = [
-    "devil_chromium.py",
-    "//third_party/catapult/catapult_base/",
-    "//third_party/catapult/dependency_manager/",
-    "//third_party/catapult/devil/",
-  ]
-}
-
 group("test_runner_py") {
-  data = [
-    "test_runner.py",
-    "pylib/",
-    "//build/util/lib/common/",
-  ]
+  _py_files = read_file("test_runner.pydeps", "list lines")
+
+  # Filter out comments.
+  set_sources_assignment_filter([ "#*" ])
+  sources = _py_files
+
+  data = sources + [
+           "devil_chromium.json",
+           "//third_party/android_tools/sdk/build-tools/23.0.1/aapt",
+           "//third_party/android_tools/sdk/build-tools/23.0.1/dexdump",
+           "//third_party/android_tools/sdk/build-tools/23.0.1/lib/libc++.so",
+           "//third_party/android_tools/sdk/build-tools/23.0.1/split-select",
+           "//third_party/android_tools/sdk/platform-tools/adb",
+           "//third_party/catapult/third_party/gsutil/",
+           "//third_party/catapult/devil/devil/devil_dependencies.json",
+         ]
   data_deps = [
-    ":devil_py",
+    "//tools/swarming_client:isolate_py",
   ]
 }
 

@@ -34,6 +34,10 @@ namespace gpu {
 struct GPUInfo;
 }
 
+namespace media {
+class MediaClientAndroid;
+}
+
 namespace sandbox {
 class TargetPolicy;
 }
@@ -43,7 +47,6 @@ namespace content {
 class ContentBrowserClient;
 class ContentClient;
 class ContentGpuClient;
-class ContentPluginClient;
 class ContentRendererClient;
 class ContentUtilityClient;
 struct PepperPluginInfo;
@@ -74,7 +77,6 @@ class CONTENT_EXPORT ContentClient {
 
   ContentBrowserClient* browser() { return browser_; }
   ContentGpuClient* gpu() { return gpu_; }
-  ContentPluginClient* plugin() { return plugin_; }
   ContentRendererClient* renderer() { return renderer_; }
   ContentUtilityClient* utility() { return utility_; }
 
@@ -125,7 +127,7 @@ class CONTENT_EXPORT ContentClient {
   // doesn't know about because they're from the embedder.
   virtual std::string GetProcessTypeNameInEnglish(int type);
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MACOSX)
   // Allows the embedder to define a new |sandbox_type| by mapping it to the
   // resource ID corresponding to the sandbox profile to use. The legal values
   // for |sandbox_type| are defined by the embedder and should start with
@@ -156,6 +158,15 @@ class CONTENT_EXPORT ContentClient {
   // model decisions.
   virtual bool IsSupplementarySiteIsolationModeEnabled();
 
+  // Returns the public key to be used for origin trials, or an empty string if
+  // origin trials are not enabled in this context.
+  virtual base::StringPiece GetOriginTrialPublicKey();
+
+#if defined(OS_ANDROID)
+  // Returns the MediaClientAndroid to be used by media code on Android.
+  virtual media::MediaClientAndroid* GetMediaClientAndroid();
+#endif  // OS_ANDROID
+
  private:
   friend class ContentClientInitializer;  // To set these pointers.
   friend class InternalTestInitializer;
@@ -164,8 +175,6 @@ class CONTENT_EXPORT ContentClient {
   ContentBrowserClient* browser_;
   // The embedder API for participating in gpu logic.
   ContentGpuClient* gpu_;
-  // The embedder API for participating in plugin logic.
-  ContentPluginClient* plugin_;
   // The embedder API for participating in renderer logic.
   ContentRendererClient* renderer_;
   // The embedder API for participating in utility logic.

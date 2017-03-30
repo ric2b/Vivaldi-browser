@@ -6,7 +6,6 @@
 #define CompositorAnimationPlayer_h
 
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "cc/animation/animation.h"
 #include "cc/animation/animation_curve.h"
 #include "cc/animation/animation_delegate.h"
@@ -14,10 +13,12 @@
 #include "platform/PlatformExport.h"
 #include "wtf/Noncopyable.h"
 
+#include <memory>
+
 namespace blink {
 
 class CompositorAnimation;
-class WebCompositorAnimationDelegate;
+class CompositorAnimationDelegate;
 class WebLayer;
 
 // A compositor representation for AnimationPlayer.
@@ -33,7 +34,7 @@ public:
     // stopped. The CompositorAnimationPlayer does not take ownership of the delegate, and it is
     // the responsibility of the client to reset the layer's delegate before
     // deleting the delegate.
-    void setAnimationDelegate(WebCompositorAnimationDelegate*);
+    void setAnimationDelegate(CompositorAnimationDelegate*);
 
     void attachLayer(WebLayer*);
     void detachLayer();
@@ -49,10 +50,10 @@ private:
     void NotifyAnimationStarted(base::TimeTicks monotonicTime, cc::TargetProperty::Type, int group) override;
     void NotifyAnimationFinished(base::TimeTicks monotonicTime, cc::TargetProperty::Type, int group) override;
     void NotifyAnimationAborted(base::TimeTicks monotonicTime, cc::TargetProperty::Type, int group) override;
-    void NotifyAnimationTakeover(base::TimeTicks monotonicTime, cc::TargetProperty::Type, double animationStartTime, scoped_ptr<cc::AnimationCurve>) override;
+    void NotifyAnimationTakeover(base::TimeTicks monotonicTime, cc::TargetProperty::Type, double animationStartTime, std::unique_ptr<cc::AnimationCurve>) override;
 
     scoped_refptr<cc::AnimationPlayer> m_animationPlayer;
-    WebCompositorAnimationDelegate* m_delegate;
+    CompositorAnimationDelegate* m_delegate;
 };
 
 } // namespace blink

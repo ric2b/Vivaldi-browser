@@ -90,7 +90,7 @@ PassOwnPtr<AXValue> createBooleanValue(bool value, const String& type)
 
 PassOwnPtr<AXRelatedNode> relatedNodeForAXObject(const AXObject* axObject, String* name = nullptr)
 {
-    Node* node = axObject->node();
+    Node* node = axObject->getNode();
     if (!node)
         return PassOwnPtr<AXRelatedNode>();
     int backendNodeId = DOMNodeIds::idForNode(node);
@@ -188,7 +188,7 @@ PassOwnPtr<AXValueSource> createValueSource(NameSource& nameSource)
         if (nameSource.attribute == aria_labelledbyAttr || nameSource.attribute == aria_labeledbyAttr) {
             OwnPtr<AXValue> attributeValue = createRelatedNodeListValue(nameSource.relatedObjects, AXValueTypeEnum::IdrefList);
             if (!nameSource.attributeValue.isNull())
-                attributeValue->setValue(protocol::StringValue::create(nameSource.attributeValue.string()).get());
+                attributeValue->setValue(protocol::StringValue::create(nameSource.attributeValue.getString()));
             valueSource->setAttributeValue(attributeValue.release());
         } else if (nameSource.attribute == QualifiedName::null()) {
             valueSource->setNativeSourceValue(createRelatedNodeListValue(nameSource.relatedObjects, AXValueTypeEnum::NodeList));
@@ -199,7 +199,7 @@ PassOwnPtr<AXValueSource> createValueSource(NameSource& nameSource)
     if (!nameSource.text.isNull())
         valueSource->setValue(createValue(nameSource.text, AXValueTypeEnum::ComputedString));
     if (nameSource.attribute != QualifiedName::null())
-        valueSource->setAttribute(nameSource.attribute.localName().string());
+        valueSource->setAttribute(nameSource.attribute.localName().getString());
     if (nameSource.superseded)
         valueSource->setSuperseded(true);
     if (nameSource.invalid)

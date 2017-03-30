@@ -12,7 +12,6 @@
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/extensions/extension_toolbar_icon_surfacing_bubble_delegate.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
@@ -21,9 +20,9 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/extensions/browser_action_drag_data.h"
 #include "chrome/browser/ui/views/extensions/extension_message_bubble_view.h"
-#include "chrome/browser/ui/views/extensions/extension_toolbar_icon_surfacing_bubble_views.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/toolbar/app_menu_button.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_actions_bar_bubble_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/extensions/command.h"
 #include "chrome/grit/generated_resources.h"
@@ -96,7 +95,6 @@ BrowserActionsContainer::BrowserActionsContainer(
       chevron_(NULL),
       suppress_chevron_(false),
       added_to_view_(false),
-      shown_bubble_(false),
       resize_starting_width_(-1),
       resize_amount_(0),
       animation_target_size_(0),
@@ -191,20 +189,6 @@ views::MenuButton* BrowserActionsContainer::GetOverflowReferenceView() {
   return chevron_ ? static_cast<views::MenuButton*>(chevron_)
                   : static_cast<views::MenuButton*>(
                         GetToolbarView(browser_)->app_menu_button());
-}
-
-void BrowserActionsContainer::OnMouseEnteredToolbarActionView() {
-  if (!shown_bubble_ && !toolbar_action_views_.empty() &&
-      toolbar_actions_bar_->show_icon_surfacing_bubble()) {
-    ExtensionToolbarIconSurfacingBubble* bubble =
-        new ExtensionToolbarIconSurfacingBubble(
-            this,
-            make_scoped_ptr(new ExtensionToolbarIconSurfacingBubbleDelegate(
-                browser_->profile())));
-    views::BubbleDelegateView::CreateBubble(bubble);
-    bubble->Show();
-  }
-  shown_bubble_ = true;
 }
 
 void BrowserActionsContainer::AddViewForAction(
@@ -321,8 +305,27 @@ int BrowserActionsContainer::GetChevronWidth() const {
       chevron_->GetPreferredSize().width() + GetChevronSpacing() : 0;
 }
 
+void BrowserActionsContainer::ShowToolbarActionBubble(
+    std::unique_ptr<ToolbarActionsBarBubbleDelegate> controller) {
+  // The container shouldn't be asked to show a bubble if it's animating.
+  DCHECK(!animating());
+  views::View* anchor_view = nullptr;
+  if (!controller->GetAnchorActionId().empty()) {
+    ToolbarActionView* action_view =
+        GetViewForId(controller->GetAnchorActionId());
+    anchor_view =
+        action_view->visible() ? action_view : GetOverflowReferenceView();
+  } else {
+    anchor_view = this;
+  }
+  ToolbarActionsBarBubbleViews* bubble =
+      new ToolbarActionsBarBubbleViews(anchor_view, std::move(controller));
+  views::BubbleDelegateView::CreateBubble(bubble);
+  bubble->Show();
+}
+
 void BrowserActionsContainer::ShowExtensionMessageBubble(
-    scoped_ptr<extensions::ExtensionMessageBubbleController> controller,
+    std::unique_ptr<extensions::ExtensionMessageBubbleController> controller,
     ToolbarActionViewController* anchor_action) {
   // The container shouldn't be asked to show a bubble if it's animating.
   DCHECK(!animating());
@@ -440,10 +443,6 @@ void BrowserActionsContainer::Layout() {
       view->SetVisible(true);
     }
   }
-}
-
-void BrowserActionsContainer::OnMouseEntered(const ui::MouseEvent& event) {
-  OnMouseEnteredToolbarActionView();
 }
 
 bool BrowserActionsContainer::GetDropFormats(

@@ -7,13 +7,17 @@
 #include "base/logging.h"
 #import "base/mac/mac_util.h"
 #import "base/mac/sdk_forward_declarations.h"
+#include "chrome/browser/themes/theme_service.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_cell.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_decoration.h"
+#include "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
 #import "chrome/browser/ui/cocoa/url_drop_target.h"
 #import "chrome/browser/ui/cocoa/view_id_util.h"
+#import "ui/base/cocoa/nsview_additions.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/scoped_ns_graphics_context_save_gstate_mac.h"
 
 namespace {
@@ -359,27 +363,72 @@ const CGFloat kAnimationDuration = 0.2;
     [nc removeObserver:self
                   name:NSWindowDidResizeNotification
                 object:[self window]];
+    [nc removeObserver:self
+                  name:NSWindowDidChangeScreenNotification
+                object:[self window]];
   }
 }
 
-- (void)viewDidMoveToWindow {
-  if ([self window]) {
-    NSNotificationCenter* nc = [NSNotificationCenter defaultCenter];
-    [nc addObserver:self
-           selector:@selector(windowDidResignKey:)
-               name:NSWindowDidResignKeyNotification
-             object:[self window]];
-    [nc addObserver:self
-           selector:@selector(windowDidResize:)
-               name:NSWindowDidResizeNotification
-             object:[self window]];
-    // Only register for drops if not in a popup window. Lazily create the
-    // drop handler when the type of window is known.
-    BrowserWindowController* windowController =
-        [BrowserWindowController browserWindowControllerForView:self];
-    if ([windowController isTabbedWindow])
-      dropHandler_.reset([[URLDropTargetHandler alloc] initWithView:self]);
+- (void)windowDidChangeScreen {
+  // Inform the AutocompleteTextFieldCell's of the coordinate system line
+  // width needed to draw a single-pixel line. This value changes as we move
+  // between Retina and non-Retina displays.
+  [[self cell] setSinglePixelLineWidth:[self cr_lineWidth]];
+  [self setNeedsDisplay];
+}
+
+- (void)updateColorsToMatchTheme {
+  if (![[self window] inIncognitoMode]) {
+    return;
   }
+
+  // Invert the textfield's colors when Material Design and Incognito and not
+  // a custom theme.
+  bool inDarkMode = [[self window] inIncognitoModeWithSystemTheme];
+  [self setBackgroundColor:
+      inDarkMode ? [NSColor colorWithCalibratedWhite:115 / 255. alpha:1]
+                 : [NSColor whiteColor]];
+  [self setTextColor:OmniboxViewMac::BaseTextColor(inDarkMode)];
+}
+
+- (void)viewDidMoveToWindow {
+  if (![self window]) {
+    return;
+  }
+
+  // Allow the ToolbarController to take action upon the
+  // AutocompleteTextField being added to the window.
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    BrowserWindowController* browserWindowController =
+        [BrowserWindowController browserWindowControllerForView:self];
+    [[browserWindowController toolbarController] locationBarWasAddedToWindow];
+
+    [self updateColorsToMatchTheme];
+  }
+
+  NSNotificationCenter* nc = [NSNotificationCenter defaultCenter];
+  [nc addObserver:self
+         selector:@selector(windowDidResignKey:)
+             name:NSWindowDidResignKeyNotification
+           object:[self window]];
+  [nc addObserver:self
+         selector:@selector(windowDidResize:)
+             name:NSWindowDidResizeNotification
+           object:[self window]];
+  [nc addObserver:self
+         selector:@selector(windowDidChangeScreen)
+             name:NSWindowDidChangeScreenNotification
+           object:[self window]];
+
+  // Make sure the cell has the current line width.
+  [[self cell] setSinglePixelLineWidth:[self cr_lineWidth]];
+
+  // Only register for drops if not in a popup window. Lazily create the
+  // drop handler when the type of window is known.
+  BrowserWindowController* windowController =
+      [BrowserWindowController browserWindowControllerForView:self];
+  if ([windowController isTabbedWindow])
+      dropHandler_.reset([[URLDropTargetHandler alloc] initWithView:self]);
 }
 
 // NSTextField becomes first responder by installing a "field editor"
@@ -485,6 +534,19 @@ const CGFloat kAnimationDuration = 0.2;
 
 - (ViewID)viewID {
   return VIEW_ID_OMNIBOX;
+}
+
+// ThemedWindowDrawing implementation.
+
+- (void)windowDidChangeTheme {
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    return;
+  }
+
+  [self updateColorsToMatchTheme];
+}
+
+- (void)windowDidChangeActive {
 }
 
 @end

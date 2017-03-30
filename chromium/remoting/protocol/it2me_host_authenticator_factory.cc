@@ -5,6 +5,7 @@
 #include "remoting/protocol/it2me_host_authenticator_factory.h"
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "remoting/base/rsa_key_pair.h"
 #include "remoting/protocol/negotiating_host_authenticator.h"
@@ -16,21 +17,19 @@ namespace protocol {
 It2MeHostAuthenticatorFactory::It2MeHostAuthenticatorFactory(
     const std::string& local_cert,
     scoped_refptr<RsaKeyPair> key_pair,
-    const std::string& shared_secret,
+    const std::string& access_code_hash,
     const std::string& required_client_domain)
     : local_cert_(local_cert),
       key_pair_(key_pair),
-      shared_secret_(shared_secret),
-      required_client_domain_(required_client_domain) {
-}
+      access_code_hash_(access_code_hash),
+      required_client_domain_(required_client_domain) {}
 
-It2MeHostAuthenticatorFactory::~It2MeHostAuthenticatorFactory() {
-}
+It2MeHostAuthenticatorFactory::~It2MeHostAuthenticatorFactory() {}
 
-scoped_ptr<Authenticator> It2MeHostAuthenticatorFactory::CreateAuthenticator(
+std::unique_ptr<Authenticator>
+It2MeHostAuthenticatorFactory::CreateAuthenticator(
     const std::string& local_jid,
-    const std::string& remote_jid,
-    const buzz::XmlElement* first_message) {
+    const std::string& remote_jid) {
   // Check the client domain policy.
   if (!required_client_domain_.empty()) {
     std::string client_username = remote_jid;
@@ -43,13 +42,13 @@ scoped_ptr<Authenticator> It2MeHostAuthenticatorFactory::CreateAuthenticator(
                         base::CompareCase::INSENSITIVE_ASCII)) {
       LOG(ERROR) << "Rejecting incoming connection from " << remote_jid
                  << ": Domain mismatch.";
-      return make_scoped_ptr(
+      return base::WrapUnique(
           new RejectingAuthenticator(Authenticator::INVALID_CREDENTIALS));
     }
   }
 
   return NegotiatingHostAuthenticator::CreateWithSharedSecret(
-      local_cert_, key_pair_, shared_secret_, AuthenticationMethod::NONE,
+      local_jid, remote_jid, local_cert_, key_pair_, access_code_hash_,
       nullptr);
 }
 

@@ -169,24 +169,13 @@ void AppMenuButton::SetTrailingMargin(int margin) {
   InvalidateLayout();
 }
 
-gfx::Point AppMenuButton::GetInkDropCenter() const {
-  // ToolbarView extends the bounds of the app button to the right in maximized
-  // mode. So instead of using the center point of local bounds, we use the
-  // center point (adjusted for RTL layouts) of the preferred size, which
-  // doesn't change in maximized mode.
-  const int visible_width = GetPreferredSize().width();
-  return gfx::Point(
-      (GetMirroredXWithWidthInView(0, visible_width) + visible_width) / 2,
-      height() / 2);
-}
-
 const char* AppMenuButton::GetClassName() const {
   return "AppMenuButton";
 }
 
-scoped_ptr<views::LabelButtonBorder> AppMenuButton::CreateDefaultBorder()
+std::unique_ptr<views::LabelButtonBorder> AppMenuButton::CreateDefaultBorder()
     const {
-  scoped_ptr<views::LabelButtonBorder> border =
+  std::unique_ptr<views::LabelButtonBorder> border =
       MenuButton::CreateDefaultBorder();
 
   // Adjust border insets to follow the margin change,

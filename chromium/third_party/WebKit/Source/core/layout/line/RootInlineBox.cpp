@@ -22,9 +22,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/StyleEngine.h"
 #include "core/layout/HitTestResult.h"
-#include "core/layout/LayoutBlockFlow.h"
-#include "core/layout/LayoutInline.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/VerticalPositionCache.h"
 #include "core/layout/api/LineLayoutBlockFlow.h"
 #include "core/layout/api/LineLayoutItem.h"
@@ -49,7 +46,7 @@ static_assert(sizeof(RootInlineBox) == sizeof(SameSizeAsRootInlineBox), "RootInl
 typedef WTF::HashMap<const RootInlineBox*, EllipsisBox*> EllipsisBoxMap;
 static EllipsisBoxMap* gEllipsisBoxMap = nullptr;
 
-RootInlineBox::RootInlineBox(LayoutBlockFlow& block)
+RootInlineBox::RootInlineBox(LineLayoutItem block)
     : InlineFlowBox(block)
     , m_lineBreakPos(0)
     , m_lineBreakObj(nullptr)
@@ -117,7 +114,7 @@ bool RootInlineBox::lineCanAccommodateEllipsis(bool ltr, int blockEdge, int line
 LayoutUnit RootInlineBox::placeEllipsis(const AtomicString& ellipsisStr,  bool ltr, LayoutUnit blockLeftEdge, LayoutUnit blockRightEdge, LayoutUnit ellipsisWidth)
 {
     // Create an ellipsis box.
-    EllipsisBox* ellipsisBox = new EllipsisBox(this, ellipsisStr, this,
+    EllipsisBox* ellipsisBox = new EllipsisBox(getLineLayoutItem(), ellipsisStr, this,
         ellipsisWidth, logicalHeight().toFloat(), x(), y(), !prevRootBox(), isHorizontal());
 
     if (!gEllipsisBoxMap)
@@ -482,7 +479,7 @@ void RootInlineBox::setLineBreakInfo(LineLayoutItem obj, unsigned breakPos, cons
     // This has security implications because if the LayoutObject does not
     // point to at least one line box, then that LayoutInline can be deleted
     // later without resetting the lineBreakObj, leading to use-after-free.
-    ASSERT_WITH_SECURITY_IMPLICATION(!obj || obj.isText() || !(obj.isLayoutInline() && obj.isBox() && !toLayoutBox(obj)->inlineBoxWrapper()));
+    ASSERT_WITH_SECURITY_IMPLICATION(!obj || obj.isText() || !(obj.isLayoutInline() && obj.isBox() && !LineLayoutBox(obj).inlineBoxWrapper()));
 
     m_lineBreakObj = obj;
     m_lineBreakPos = breakPos;
@@ -573,7 +570,7 @@ void RootInlineBox::ascentAndDescentForBox(InlineBox* box, GlyphOverflowAndFallb
     if (usedFonts && !usedFonts->isEmpty() && (box->getLineLayoutItem().style(isFirstLineStyle())->lineHeight().isNegative() && includeLeading)) {
         usedFonts->append(box->getLineLayoutItem().style(isFirstLineStyle())->font().primaryFont());
         for (size_t i = 0; i < usedFonts->size(); ++i) {
-            const FontMetrics& fontMetrics = usedFonts->at(i)->fontMetrics();
+            const FontMetrics& fontMetrics = usedFonts->at(i)->getFontMetrics();
             int usedFontAscent = fontMetrics.ascent(baselineType());
             int usedFontDescent = fontMetrics.descent(baselineType());
             int halfLeading = (fontMetrics.lineSpacing() - fontMetrics.height()) / 2;
@@ -630,45 +627,45 @@ LayoutUnit RootInlineBox::verticalPositionForBox(InlineBox* box, VerticalPositio
 
     LayoutUnit verticalPosition;
     EVerticalAlign verticalAlign = boxModel.style()->verticalAlign();
-    if (verticalAlign == TOP || verticalAlign == BOTTOM)
+    if (verticalAlign == VerticalAlignTop || verticalAlign == VerticalAlignBottom)
         return LayoutUnit();
 
     LineLayoutItem parent = boxModel.parent();
-    if (parent.isLayoutInline() && parent.style()->verticalAlign() != TOP && parent.style()->verticalAlign() != BOTTOM)
+    if (parent.isLayoutInline() && parent.style()->verticalAlign() != VerticalAlignTop && parent.style()->verticalAlign() != VerticalAlignBottom)
         verticalPosition = box->parent()->logicalTop();
 
-    if (verticalAlign != BASELINE) {
+    if (verticalAlign != VerticalAlignBaseline) {
         const Font& font = parent.style(firstLine)->font();
-        const FontMetrics& fontMetrics = font.fontMetrics();
-        int fontSize = font.fontDescription().computedPixelSize();
+        const FontMetrics& fontMetrics = font.getFontMetrics();
+        int fontSize = font.getFontDescription().computedPixelSize();
 
         LineDirectionMode lineDirection = parent.isHorizontalWritingMode() ? HorizontalLine : VerticalLine;
 
-        if (verticalAlign == SUB) {
+        if (verticalAlign == VerticalAlignSub) {
             verticalPosition += fontSize / 5 + 1;
-        } else if (verticalAlign == SUPER) {
+        } else if (verticalAlign == VerticalAlignSuper) {
             verticalPosition -= fontSize / 3 + 1;
-        } else if (verticalAlign == TEXT_TOP) {
+        } else if (verticalAlign == VerticalAlignTextTop) {
             verticalPosition += boxModel.baselinePosition(baselineType(), firstLine, lineDirection) - fontMetrics.ascent(baselineType());
-        } else if (verticalAlign == MIDDLE) {
+        } else if (verticalAlign == VerticalAlignMiddle) {
             verticalPosition = LayoutUnit((verticalPosition - LayoutUnit(fontMetrics.xHeight() / 2)
                 - boxModel.lineHeight(firstLine, lineDirection) / 2
                 + boxModel.baselinePosition(baselineType(), firstLine, lineDirection)).round());
-        } else if (verticalAlign == TEXT_BOTTOM) {
+        } else if (verticalAlign == VerticalAlignTextBottom) {
             verticalPosition += fontMetrics.descent(baselineType());
             // lineHeight - baselinePosition is always 0 for replaced elements (except inline blocks), so don't bother wasting time in that case.
             if (!boxModel.isAtomicInlineLevel() || boxModel.isInlineBlockOrInlineTable())
                 verticalPosition -= (boxModel.lineHeight(firstLine, lineDirection) - boxModel.baselinePosition(baselineType(), firstLine, lineDirection));
-        } else if (verticalAlign == BASELINE_MIDDLE) {
+        } else if (verticalAlign == VerticalAlignBaselineMiddle) {
             verticalPosition += -boxModel.lineHeight(firstLine, lineDirection) / 2 + boxModel.baselinePosition(baselineType(), firstLine, lineDirection);
-        } else if (verticalAlign == LENGTH) {
+        } else if (verticalAlign == VerticalAlignLength) {
             LayoutUnit lineHeight;
             // Per http://www.w3.org/TR/CSS21/visudet.html#propdef-vertical-align: 'Percentages: refer to the 'line-height' of the element itself'.
-            if (boxModel.style()->verticalAlignLength().hasPercent())
+            if (boxModel.style()->getVerticalAlignLength().hasPercent())
                 lineHeight = LayoutUnit(boxModel.style()->computedLineHeight());
             else
                 lineHeight = boxModel.lineHeight(firstLine, lineDirection);
-            verticalPosition -= valueForLength(boxModel.style()->verticalAlignLength(), lineHeight);
+            verticalPosition -= valueForLength(boxModel.style()->getVerticalAlignLength(), lineHeight);
         }
     }
 

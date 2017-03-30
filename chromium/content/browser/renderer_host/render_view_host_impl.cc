@@ -39,6 +39,7 @@
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_delegate.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
+#include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/browser_plugin/browser_plugin_messages.h"
 #include "content/common/content_switches_internal.h"
@@ -223,7 +224,6 @@ RenderViewHostImpl::RenderViewHostImpl(SiteInstance* instance,
       enabled_bindings_(0),
       page_id_(-1),
       is_active_(!swapped_out),
-      is_pending_deletion_(false),
       is_swapped_out_(swapped_out),
       main_frame_routing_id_(main_frame_routing_id),
       is_waiting_for_close_ack_(false),
@@ -293,12 +293,11 @@ bool RenderViewHostImpl::CreateRenderView(
   CHECK(main_frame_routing_id_ != MSG_ROUTING_NONE ||
         proxy_route_id != MSG_ROUTING_NONE);
 
-  // If swappedout:// is disabled, we should not set both main_frame_routing_id_
-  // and proxy_route_id.  Log cases that this happens (without crashing) to
-  // track down https://crbug.com/574245.
+  // We should not set both main_frame_routing_id_ and proxy_route_id.  Log
+  // cases that this happens (without crashing) to track down
+  // https://crbug.com/574245.
   // TODO(creis): Remove this once we've found the cause.
-  if (SiteIsolationPolicy::IsSwappedOutStateForbidden() &&
-      main_frame_routing_id_ != MSG_ROUTING_NONE &&
+  if (main_frame_routing_id_ != MSG_ROUTING_NONE &&
       proxy_route_id != MSG_ROUTING_NONE)
     base::debug::DumpWithoutCrashing();
 
@@ -367,7 +366,7 @@ bool RenderViewHostImpl::CreateRenderView(
     RenderFrameHostImpl::FromID(GetProcess()->GetID(), main_frame_routing_id_)
         ->SetRenderFrameCreated(true);
   }
-  GetWidget()->SendScreenRects();
+  GetWidget()->delegate()->SendScreenRects();
   PostRenderViewReady();
 
   return true;
@@ -533,10 +532,6 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
 
   GetContentClient()->browser()->OverrideWebkitPrefs(this, &prefs);
   return prefs;
-}
-
-void RenderViewHostImpl::SuppressDialogsUntilSwapOut() {
-  Send(new ViewMsg_SuppressDialogsUntilSwapOut(GetRoutingID()));
 }
 
 void RenderViewHostImpl::ClosePage() {
@@ -982,8 +977,7 @@ void RenderViewHostImpl::OnShowView(int route_id,
 
 void RenderViewHostImpl::OnShowWidget(int route_id,
                                       const gfx::Rect& initial_rect) {
-  if (is_active_)
-    delegate_->ShowCreatedWidget(route_id, initial_rect);
+  delegate_->ShowCreatedWidget(route_id, initial_rect);
   Send(new ViewMsg_Move_ACK(route_id));
 }
 

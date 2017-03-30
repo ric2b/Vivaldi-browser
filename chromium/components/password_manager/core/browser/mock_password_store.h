@@ -12,7 +12,6 @@
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "url/origin.h"
 
 namespace password_manager {
 
@@ -36,8 +35,8 @@ class MockPasswordStore : public PasswordStore {
                PasswordStoreChangeList(const autofill::PasswordForm&));
   MOCK_METHOD1(RemoveLoginImpl,
                PasswordStoreChangeList(const autofill::PasswordForm&));
-  MOCK_METHOD3(RemoveLoginsByOriginAndTimeImpl,
-               PasswordStoreChangeList(const url::Origin&,
+  MOCK_METHOD3(RemoveLoginsByURLAndTimeImpl,
+               PasswordStoreChangeList(const base::Callback<bool(const GURL&)>&,
                                        base::Time,
                                        base::Time));
   MOCK_METHOD2(RemoveLoginsCreatedBetweenImpl,
@@ -57,7 +56,7 @@ class MockPasswordStore : public PasswordStore {
                bool(ScopedVector<autofill::PasswordForm>*));
   MOCK_METHOD1(NotifyLoginsChanged, void(const PasswordStoreChangeList&));
   // GMock doesn't allow to return noncopyable types.
-  std::vector<scoped_ptr<InteractionsStats>> GetSiteStatsImpl(
+  std::vector<std::unique_ptr<InteractionsStats>> GetSiteStatsImpl(
       const GURL& origin_domain) override;
   MOCK_METHOD1(GetSiteStatsMock, std::vector<InteractionsStats*>(const GURL&));
   MOCK_METHOD1(AddSiteStatsImpl, void(const InteractionsStats&));

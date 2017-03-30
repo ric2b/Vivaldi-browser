@@ -24,7 +24,7 @@
 #include "chrome/browser/fullscreen.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/themes/theme_service.h"
@@ -260,14 +260,6 @@ void SetUpBrowserWindowCommandHandler(NSWindow* window) {
     // be big enough to hold all locks that'll ever be needed.
     barVisibilityLocks_.reset([[NSMutableSet setWithCapacity:10] retain]);
 
-    // Set the window to not have rounded corners, which prevents the resize
-    // control from being inset slightly and looking ugly. Only bother to do
-    // this on Snow Leopard; on Lion and later all windows have rounded bottom
-    // corners, and this won't work anyway.
-    if (base::mac::IsOSSnowLeopard() &&
-        [window respondsToSelector:@selector(setBottomCornerRounded:)])
-      [window setBottomCornerRounded:NO];
-
     // Lion will attempt to automagically save and restore the UI. This
     // functionality appears to be leaky (or at least interacts badly with our
     // architecture) and thus BrowserWindowController never gets released. This
@@ -347,12 +339,13 @@ void SetUpBrowserWindowCommandHandler(NSWindow* window) {
                        hasLocationBar:[self hasLocationBar]];
 
     // Create a sub-controller for the bookmark bar.
-    bookmarkBarController_.reset(
-        [[BookmarkBarController alloc]
-            initWithBrowser:browser_.get()
-               initialWidth:NSWidth([[[self window] contentView] frame])
-                   delegate:self
-             resizeDelegate:self]);
+    bookmarkBarController_.reset([[BookmarkBarController alloc]
+        initWithBrowser:browser_.get()
+           initialWidth:NSWidth([[[self window] contentView] frame])
+               delegate:self]);
+    // This call triggers an -awakeFromNib for ToolbarView.xib.
+    [[bookmarkBarController_ controlledView] setResizeDelegate:self];
+
     [bookmarkBarController_ setBookmarkBarEnabled:[self supportsBookmarkBar]];
 
     // Create the infobar container view, so we can pass it to the
@@ -414,18 +407,6 @@ void SetUpBrowserWindowCommandHandler(NSWindow* window) {
     // Create the bridge for the status bubble.
     statusBubble_ = new StatusBubbleMac([self window], self);
 
-    // Register for application hide/unhide notifications.
-    [[NSNotificationCenter defaultCenter]
-         addObserver:self
-            selector:@selector(applicationDidHide:)
-                name:NSApplicationDidHideNotification
-              object:nil];
-    [[NSNotificationCenter defaultCenter]
-         addObserver:self
-            selector:@selector(applicationDidUnhide:)
-                name:NSApplicationDidUnhideNotification
-              object:nil];
-
     // This must be done after the view is added to the window since it relies
     // on the window bounds to determine whether to show buttons or not.
     if ([self hasToolbar])  // Do not create the buttons in popups.
@@ -438,9 +419,8 @@ void SetUpBrowserWindowCommandHandler(NSWindow* window) {
             windowShim_.get()));
 
     PrefService* prefs = browser_->profile()->GetPrefs();
-    shouldHideFullscreenToolbar_ =
-        prefs->GetBoolean(prefs::kHideFullscreenToolbar);
-
+    shouldShowFullscreenToolbar_ =
+        prefs->GetBoolean(prefs::kShowFullscreenToolbar);
     blockLayoutSubviews_ = NO;
 
     // We are done initializing now.
@@ -662,62 +642,9 @@ void SetUpBrowserWindowCommandHandler(NSWindow* window) {
       ->set_registry_for_active_window(nullptr);
 }
 
-// Called when we are activated (when we gain focus).
-- (void)windowDidBecomeKey:(NSNotification*)notification {
-  // We need to activate the controls (in the "WebView"). To do this, get the
-  // selected WebContents's RenderWidgetHostView and tell it to activate.
-  if (WebContents* contents = [self webContents]) {
-    WebContents* devtools = DevToolsWindow::GetInTabWebContents(
-        contents, NULL);
-    if (devtools) {
-      RenderWidgetHostView* devtoolsView = devtools->GetRenderWidgetHostView();
-      if (devtoolsView && devtoolsView->HasFocus()) {
-        devtoolsView->SetActive(true);
-        return;
-      }
-    }
-
-    if (RenderWidgetHostView* rwhv = contents->GetRenderWidgetHostView())
-      rwhv->SetActive(true);
-  }
-}
-
-// Called when we are deactivated (when we lose focus).
-- (void)windowDidResignKey:(NSNotification*)notification {
-  // If our app is still active and we're still the key window, ignore this
-  // message, since it just means that a menu extra (on the "system status bar")
-  // was activated; we'll get another |-windowDidResignKey| if we ever really
-  // lose key window status.
-  if ([NSApp isActive] && ([NSApp keyWindow] == [self window]))
-    return;
-
-  // We need to deactivate the controls (in the "WebView"). To do this, get the
-  // selected WebContents's RenderWidgetHostView and tell it to deactivate.
-  if (WebContents* contents = [self webContents]) {
-    WebContents* devtools = DevToolsWindow::GetInTabWebContents(
-        contents, NULL);
-    if (devtools) {
-      RenderWidgetHostView* devtoolsView = devtools->GetRenderWidgetHostView();
-      if (devtoolsView && devtoolsView->HasFocus()) {
-        devtoolsView->SetActive(false);
-        return;
-      }
-    }
-
-    if (RenderWidgetHostView* rwhv = contents->GetRenderWidgetHostView())
-      rwhv->SetActive(false);
-  }
-}
-
 // Called when we have been minimized.
 - (void)windowDidMiniaturize:(NSNotification *)notification {
   [self saveWindowPositionIfNeeded];
-
-  // Let the selected RenderWidgetHostView know, so that it can tell plugins.
-  if (WebContents* contents = [self webContents]) {
-    if (RenderWidgetHostView* rwhv = contents->GetRenderWidgetHostView())
-      rwhv->SetWindowVisibility(false);
-  }
 }
 
 // Called when we have been unminimized.
@@ -725,36 +652,6 @@ void SetUpBrowserWindowCommandHandler(NSWindow* window) {
   // Make sure the window's show_state (which is now ui::SHOW_STATE_NORMAL)
   // gets saved.
   [self saveWindowPositionIfNeeded];
-
-  // Let the selected RenderWidgetHostView know, so that it can tell plugins.
-  if (WebContents* contents = [self webContents]) {
-    if (RenderWidgetHostView* rwhv = contents->GetRenderWidgetHostView())
-      rwhv->SetWindowVisibility(true);
-  }
-}
-
-// Called when the application has been hidden.
-- (void)applicationDidHide:(NSNotification *)notification {
-  // Let the selected RenderWidgetHostView know, so that it can tell plugins
-  // (unless we are minimized, in which case nothing has really changed).
-  if (![[self window] isMiniaturized]) {
-    if (WebContents* contents = [self webContents]) {
-      if (RenderWidgetHostView* rwhv = contents->GetRenderWidgetHostView())
-        rwhv->SetWindowVisibility(false);
-    }
-  }
-}
-
-// Called when the application has been unhidden.
-- (void)applicationDidUnhide:(NSNotification *)notification {
-  // Let the selected RenderWidgetHostView know, so that it can tell plugins
-  // (unless we are minimized, in which case nothing has really changed).
-  if (![[self window] isMiniaturized]) {
-    if (WebContents* contents = [self webContents]) {
-      if (RenderWidgetHostView* rwhv = contents->GetRenderWidgetHostView())
-        rwhv->SetWindowVisibility(true);
-    }
-  }
 }
 
 // Called when the user clicks the zoom button (or selects it from the Window
@@ -1226,8 +1123,9 @@ void SetUpBrowserWindowCommandHandler(NSWindow* window) {
       NSPoint tabOrigin = destinationFrame.origin;
       tabOrigin = [[dragController tabStripView] convertPoint:tabOrigin
                                                        toView:nil];
-      tabOrigin = [[dragController window] convertBaseToScreen:tabOrigin];
-      tabOrigin = [[self window] convertScreenToBase:tabOrigin];
+      tabOrigin = ui::ConvertPointFromWindowToScreen([dragController window],
+                                                     tabOrigin);
+      tabOrigin = ui::ConvertPointFromScreenToWindow([self window], tabOrigin);
       tabOrigin = [[self tabStripView] convertPoint:tabOrigin fromView:nil];
       destinationFrame.origin = tabOrigin;
 
@@ -1415,10 +1313,10 @@ void SetUpBrowserWindowCommandHandler(NSWindow* window) {
   if (browser_->profile()->IsOffTheRecord())
     return YES;
 
-  ProfileInfoCache& cache =
-      g_browser_process->profile_manager()->GetProfileInfoCache();
-  if (cache.GetIndexOfProfileWithPath(browser_->profile()->GetPath()) ==
-      std::string::npos) {
+  ProfileAttributesEntry* entry;
+  if (!g_browser_process->profile_manager()->GetProfileAttributesStorage().
+          GetProfileAttributesWithPath(browser_->profile()->GetPath(),
+                                       &entry)) {
     return NO;
   }
 
@@ -1614,8 +1512,8 @@ void SetUpBrowserWindowCommandHandler(NSWindow* window) {
 
   if (chrome::ToolkitViewsDialogsEnabled()) {
     chrome::ShowBookmarkBubbleViewsAtPoint(
-        gfx::ScreenPointFromNSPoint(
-            [[self window] convertBaseToScreen:[self bookmarkBubblePoint]]),
+        gfx::ScreenPointFromNSPoint(ui::ConvertPointFromWindowToScreen(
+            [self window], [self bookmarkBubblePoint])),
         [[self window] contentView], bookmarkBubbleObserver_.get(),
         browser_.get(), url, alreadyMarked);
   } else {
@@ -1684,13 +1582,12 @@ void SetUpBrowserWindowCommandHandler(NSWindow* window) {
   ChromeTranslateClient::GetTranslateLanguages(
       contents, &sourceLanguage, &targetLanguage);
 
-  scoped_ptr<translate::TranslateUIDelegate> uiDelegate(
+  std::unique_ptr<translate::TranslateUIDelegate> uiDelegate(
       new translate::TranslateUIDelegate(
           ChromeTranslateClient::GetManagerFromWebContents(contents)
               ->GetWeakPtr(),
-          sourceLanguage,
-          targetLanguage));
-  scoped_ptr<TranslateBubbleModel> model(
+          sourceLanguage, targetLanguage));
+  std::unique_ptr<TranslateBubbleModel> model(
       new TranslateBubbleModelImpl(step, std::move(uiDelegate)));
   translateBubbleController_ =
       [[TranslateBubbleController alloc] initWithParentWindow:self
@@ -1783,12 +1680,6 @@ void SetUpBrowserWindowCommandHandler(NSWindow* window) {
     statusBubble_->UpdateSizeAndPosition();
   }
 
-  // Let the selected RenderWidgetHostView know, so that it can tell plugins.
-  if (WebContents* contents = [self webContents]) {
-    if (RenderWidgetHostView* rwhv = contents->GetRenderWidgetHostView())
-      rwhv->WindowFrameChanged();
-  }
-
   // The FindBar needs to know its own position to properly detect overlaps
   // with find results. The position changes whenever the window is resized,
   // and |layoutSubviews| computes the FindBar's position.
@@ -1831,12 +1722,6 @@ void SetUpBrowserWindowCommandHandler(NSWindow* window) {
       (windowTopGrowth_ > 0 && NSMinY(windowFrame) != NSMinY(workarea)) ||
       (windowBottomGrowth_ > 0 && NSMaxY(windowFrame) != NSMaxY(workarea)))
     [self resetWindowGrowthState];
-
-  // Let the selected RenderWidgetHostView know, so that it can tell plugins.
-  if (WebContents* contents = [self webContents]) {
-    if (RenderWidgetHostView* rwhv = contents->GetRenderWidgetHostView())
-      rwhv->WindowFrameChanged();
-  }
 }
 
 // Delegate method called when window will be resized; not called for
@@ -1942,13 +1827,13 @@ willAnimateFromState:(BookmarkBar::State)oldState
                                                  command.accelerator());
 }
 
-- (void)setMediaState:(TabMediaState)mediaState {
+- (void)setAlertState:(TabAlertState)alertState {
   static_cast<BrowserWindowCocoa*>([self browserWindow])
-      ->UpdateMediaState(mediaState);
+      ->UpdateAlertState(alertState);
 }
 
-- (TabMediaState)mediaState {
-  return static_cast<BrowserWindowCocoa*>([self browserWindow])->media_state();
+- (TabAlertState)alertState {
+  return static_cast<BrowserWindowCocoa*>([self browserWindow])->alert_state();
 }
 
 @end  // @implementation BrowserWindowController
@@ -1998,14 +1883,14 @@ willAnimateFromState:(BookmarkBar::State)oldState
   return NO;
 }
 
-- (void)setFullscreenToolbarHidden:(BOOL)shouldHide {
-  if (shouldHideFullscreenToolbar_ == shouldHide)
+- (void)setFullscreenToolbarVisible:(BOOL)visible {
+  if (shouldShowFullscreenToolbar_ == visible)
     return;
 
   [presentationModeController_ setToolbarFraction:0.0];
-  shouldHideFullscreenToolbar_ = shouldHide;
+  shouldShowFullscreenToolbar_ = visible;
   if ([self isInAppKitFullscreen])
-    [self updateFullscreenWithToolbar:!shouldHideFullscreenToolbar_];
+    [self updateFullscreenWithToolbar:shouldShowFullscreenToolbar_];
 }
 
 - (BOOL)isInAnyFullscreenMode {
@@ -2068,8 +1953,8 @@ willAnimateFromState:(BookmarkBar::State)oldState
              fullscreen_mac::OMNIBOX_TABS_HIDDEN;
 }
 
-- (BOOL)shouldHideFullscreenToolbar {
-  return shouldHideFullscreenToolbar_;
+- (BOOL)shouldShowFullscreenToolbar {
+  return shouldShowFullscreenToolbar_;
 }
 
 - (void)exitFullscreenAnimationFinished {

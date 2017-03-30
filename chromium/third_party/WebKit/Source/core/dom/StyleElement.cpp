@@ -64,11 +64,11 @@ StyleElement::~StyleElement()
 StyleElement::ProcessingResult StyleElement::processStyleSheet(Document& document, Element* element)
 {
     TRACE_EVENT0("blink", "StyleElement::processStyleSheet");
-    ASSERT(element);
-    ASSERT(element->inDocument());
+    DCHECK(element);
+    DCHECK(element->inShadowIncludingDocument());
 
     m_registeredAsCandidate = true;
-    document.styleEngine().addStyleSheetCandidateNode(element, m_createdByParser);
+    document.styleEngine().addStyleSheetCandidateNode(element);
     if (m_createdByParser)
         return ProcessingSuccessful;
 
@@ -77,7 +77,7 @@ StyleElement::ProcessingResult StyleElement::processStyleSheet(Document& documen
 
 void StyleElement::insertedInto(Element* element, ContainerNode* insertionPoint)
 {
-    if (!insertionPoint->inDocument() || !element->isInShadowTree())
+    if (!insertionPoint->inShadowIncludingDocument() || !element->isInShadowTree())
         return;
     if (ShadowRoot* scope = element->containingShadowRoot())
         scope->registerScopedHTMLStyleChild();
@@ -85,7 +85,7 @@ void StyleElement::insertedInto(Element* element, ContainerNode* insertionPoint)
 
 void StyleElement::removedFrom(Element* element, ContainerNode* insertionPoint)
 {
-    if (!insertionPoint->inDocument())
+    if (!insertionPoint->inShadowIncludingDocument())
         return;
 
     ShadowRoot* shadowRoot = element->containingShadowRoot();
@@ -101,12 +101,12 @@ void StyleElement::removedFrom(Element* element, ContainerNode* insertionPoint)
         m_registeredAsCandidate = false;
     }
 
-    RefPtrWillBeRawPtr<StyleSheet> removedSheet = m_sheet.get();
+    RawPtr<StyleSheet> removedSheet = m_sheet.get();
 
     if (m_sheet)
         clearSheet(element);
     if (removedSheet)
-        document.removedStyleSheet(removedSheet.get(), AnalyzedStyleUpdate);
+        document.styleEngine().setNeedsActiveStyleUpdate(removedSheet.get(), AnalyzedStyleUpdate);
 }
 
 void StyleElement::clearDocumentData(Document& document, Element* element)
@@ -115,7 +115,7 @@ void StyleElement::clearDocumentData(Document& document, Element* element)
         m_sheet->clearOwnerNode();
 
     if (m_registeredAsCandidate) {
-        ASSERT(element->inDocument());
+        DCHECK(element->inShadowIncludingDocument());
         document.styleEngine().removeStyleSheetCandidateNode(element, element->treeScope());
         m_registeredAsCandidate = false;
     }
@@ -123,7 +123,7 @@ void StyleElement::clearDocumentData(Document& document, Element* element)
 
 StyleElement::ProcessingResult StyleElement::childrenChanged(Element* element)
 {
-    ASSERT(element);
+    DCHECK(element);
     if (m_createdByParser)
         return ProcessingSuccessful;
 
@@ -132,7 +132,7 @@ StyleElement::ProcessingResult StyleElement::childrenChanged(Element* element)
 
 StyleElement::ProcessingResult StyleElement::finishParsingChildren(Element* element)
 {
-    ASSERT(element);
+    DCHECK(element);
     ProcessingResult result = process(element);
     m_createdByParser = false;
     return result;
@@ -140,14 +140,14 @@ StyleElement::ProcessingResult StyleElement::finishParsingChildren(Element* elem
 
 StyleElement::ProcessingResult StyleElement::process(Element* element)
 {
-    if (!element || !element->inDocument())
+    if (!element || !element->inShadowIncludingDocument())
         return ProcessingSuccessful;
     return createSheet(element, element->textFromChildren());
 }
 
 void StyleElement::clearSheet(Element* ownerElement)
 {
-    ASSERT(m_sheet);
+    DCHECK(m_sheet);
 
     if (ownerElement && m_sheet->isLoading())
         ownerElement->document().styleEngine().removePendingSheet(ownerElement);
@@ -172,8 +172,8 @@ static bool shouldBypassMainWorldCSP(Element* element)
 
 StyleElement::ProcessingResult StyleElement::createSheet(Element* e, const String& text)
 {
-    ASSERT(e);
-    ASSERT(e->inDocument());
+    DCHECK(e);
+    DCHECK(e->inShadowIncludingDocument());
     Document& document = e->document();
 
     const ContentSecurityPolicy* csp = document.contentSecurityPolicy();
@@ -183,12 +183,12 @@ StyleElement::ProcessingResult StyleElement::createSheet(Element* e, const Strin
         || csp->allowInlineStyle(e->document().url(), m_startPosition.m_line, text);
 
     // Clearing the current sheet may remove the cache entry so create the new sheet first
-    RefPtrWillBeRawPtr<CSSStyleSheet> newSheet = nullptr;
+    RawPtr<CSSStyleSheet> newSheet = nullptr;
 
     // If type is empty or CSS, this is a CSS style sheet.
     const AtomicString& type = this->type();
     if (isCSS(e, type) && passesContentSecurityPolicyChecks) {
-        RefPtrWillBeRawPtr<MediaQuerySet> mediaQueries = MediaQuerySet::create(media());
+        RawPtr<MediaQuerySet> mediaQueries = MediaQuerySet::create(media());
 
         MediaQueryEvaluator screenEval("screen", true);
         MediaQueryEvaluator printEval("print", true);

@@ -14,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/mach_logging.h"
+#include "base/mac/mach_port_util.h"
 #include "base/mac/scoped_mach_port.h"
 #include "base/macros.h"
 #include "base/memory/shared_memory.h"
@@ -181,10 +182,6 @@ class AttachmentBrokerPrivilegedMacMultiProcessTest
 // The attachment broker inserts a right for a memory object into the
 // destination task.
 TEST_F(AttachmentBrokerPrivilegedMacMultiProcessTest, InsertRight) {
-  // Mach-based SharedMemory isn't support on OSX 10.6.
-  if (base::mac::IsOSSnowLeopard())
-    return;
-
   SetUpChild("InsertRightClient");
   mach_msg_type_number_t original_name_count = GetActiveNameCount();
   IPC::AttachmentBrokerPrivilegedMac broker(&port_provider_);
@@ -198,9 +195,10 @@ TEST_F(AttachmentBrokerPrivilegedMacMultiProcessTest, InsertRight) {
   // port.
   IncrementMachRefCount(shared_memory->handle().GetMemoryObject(),
                         MACH_PORT_RIGHT_SEND);
-  mach_port_name_t inserted_memory_object = broker.CreateIntermediateMachPort(
-      client_task_port_.get(), base::mac::ScopedMachSendRight(
-                                   shared_memory->handle().GetMemoryObject()));
+  mach_port_name_t inserted_memory_object = base::CreateIntermediateMachPort(
+      client_task_port_.get(),
+      base::mac::ScopedMachSendRight(shared_memory->handle().GetMemoryObject()),
+      nullptr);
   EXPECT_NE(inserted_memory_object,
             static_cast<mach_port_name_t>(MACH_PORT_NULL));
   SendUInt32(client_port_.get(), inserted_memory_object);
@@ -248,10 +246,6 @@ MULTIPROCESS_TEST_MAIN(InsertRightClient) {
 // The attachment broker inserts the right for a memory object into the
 // destination task twice.
 TEST_F(AttachmentBrokerPrivilegedMacMultiProcessTest, InsertSameRightTwice) {
-  // Mach-based SharedMemory isn't support on OSX 10.6.
-  if (base::mac::IsOSSnowLeopard())
-    return;
-
   SetUpChild("InsertSameRightTwiceClient");
   mach_msg_type_number_t original_name_count = GetActiveNameCount();
   IPC::AttachmentBrokerPrivilegedMac broker(&port_provider_);
@@ -266,10 +260,11 @@ TEST_F(AttachmentBrokerPrivilegedMacMultiProcessTest, InsertSameRightTwice) {
   for (int i = 0; i < 2; ++i) {
     IncrementMachRefCount(shared_memory->handle().GetMemoryObject(),
                           MACH_PORT_RIGHT_SEND);
-    mach_port_name_t inserted_memory_object = broker.CreateIntermediateMachPort(
+    mach_port_name_t inserted_memory_object = base::CreateIntermediateMachPort(
         client_task_port_.get(),
         base::mac::ScopedMachSendRight(
-            shared_memory->handle().GetMemoryObject()));
+            shared_memory->handle().GetMemoryObject()),
+        nullptr);
     EXPECT_NE(inserted_memory_object,
               static_cast<mach_port_name_t>(MACH_PORT_NULL));
     SendUInt32(client_port_.get(), inserted_memory_object);
@@ -344,10 +339,6 @@ MULTIPROCESS_TEST_MAIN(InsertSameRightTwiceClient) {
 // The attachment broker inserts the rights for two memory objects into the
 // destination task.
 TEST_F(AttachmentBrokerPrivilegedMacMultiProcessTest, InsertTwoRights) {
-  // Mach-based SharedMemory isn't support on OSX 10.6.
-  if (base::mac::IsOSSnowLeopard())
-    return;
-
   SetUpChild("InsertTwoRightsClient");
   mach_msg_type_number_t original_name_count = GetActiveNameCount();
   IPC::AttachmentBrokerPrivilegedMac broker(&port_provider_);
@@ -362,10 +353,11 @@ TEST_F(AttachmentBrokerPrivilegedMacMultiProcessTest, InsertTwoRights) {
     // port.
     IncrementMachRefCount(shared_memory->handle().GetMemoryObject(),
                           MACH_PORT_RIGHT_SEND);
-    mach_port_name_t inserted_memory_object = broker.CreateIntermediateMachPort(
+    mach_port_name_t inserted_memory_object = base::CreateIntermediateMachPort(
         client_task_port_.get(),
         base::mac::ScopedMachSendRight(
-            shared_memory->handle().GetMemoryObject()));
+            shared_memory->handle().GetMemoryObject()),
+        nullptr);
     EXPECT_NE(inserted_memory_object,
               static_cast<mach_port_name_t>(MACH_PORT_NULL));
     SendUInt32(client_port_.get(), inserted_memory_object);

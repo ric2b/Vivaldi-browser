@@ -23,6 +23,11 @@ per-file chrome_device_client*=rockot@chromium.org
 per-file chrome_elf_init_*=csharp@chromium.org
 per-file chrome_elf_init_*=robertshield@chromium.org
 
+per-file chrome_navigation_browsertest.cc=alexmos@chromium.org
+per-file chrome_navigation_browsertest.cc=creis@chromium.org
+per-file chrome_navigation_browsertest.cc=nasko@chromium.org
+per-file chrome_navigation_browsertest.cc=nick@chromium.org
+
 per-file chrome_webusb_browser_client*=juncai@chromium.org
 per-file chrome_webusb_browser_client*=reillyg@chromium.org
 per-file chrome_webusb_browser_client*=rockot@chromium.org
@@ -54,5 +59,14 @@ per-file shell_integration_win*=gab@chromium.org
 per-file shell_integration_win*=grt@chromium.org
 per-file shell_integration_linux*=erg@chromium.org
 
+per-file site_per_process_interactive_browsertest.cc=alexmos@chromium.org
+per-file site_per_process_interactive_browsertest.cc=creis@chromium.org
+per-file site_per_process_interactive_browsertest.cc=nasko@chromium.org
+per-file site_per_process_interactive_browsertest.cc=nick@chromium.org
+
 per-file PRESUBMIT.py=dbeam@chromium.org
 per-file test_presubmit.py=dbeam@chromium.org
+
+per-file web_bluetooth*=jyasskin@chromium.org
+per-file web_bluetooth*=ortuno@chromium.org
+per-file web_bluetooth*=scheib@chromium.org

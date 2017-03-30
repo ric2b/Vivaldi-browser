@@ -5,9 +5,10 @@
 #include "chrome/browser/ui/views/infobars/infobar_view.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/infobar_container_delegate.h"
 #include "chrome/browser/ui/views/bar_control_button.h"
@@ -32,6 +33,7 @@
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/label_button_border.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -75,7 +77,7 @@ SkColor GetInfobarTextColor() {
 const int InfoBarView::kButtonButtonSpacing = views::kRelatedButtonHSpacing;
 const int InfoBarView::kEndOfLabelSpacing = views::kItemLabelSpacing;
 
-InfoBarView::InfoBarView(scoped_ptr<infobars::InfoBarDelegate> delegate)
+InfoBarView::InfoBarView(std::unique_ptr<infobars::InfoBarDelegate> delegate)
     : infobars::InfoBar(std::move(delegate)),
       views::ExternalFocusTracker(this, nullptr),
       child_container_(new views::View()),
@@ -84,14 +86,14 @@ InfoBarView::InfoBarView(scoped_ptr<infobars::InfoBarDelegate> delegate)
   set_owned_by_client();  // InfoBar deletes itself at the appropriate time.
   set_background(
       new InfoBarBackground(infobars::InfoBar::delegate()->GetInfoBarType()));
-  SetEventTargeter(make_scoped_ptr(new views::ViewTargeter(this)));
+  SetEventTargeter(base::WrapUnique(new views::ViewTargeter(this)));
 
   AddChildView(child_container_);
 
-  if (ui::MaterialDesignController::IsModeMaterial()) {
-    SetPaintToLayer(true);
-    layer()->SetFillsBoundsOpaquely(false);
+  SetPaintToLayer(true);
+  layer()->SetFillsBoundsOpaquely(false);
 
+  if (ui::MaterialDesignController::IsModeMaterial()) {
     child_container_->SetPaintToLayer(true);
     child_container_->layer()->SetMasksToBounds(true);
     // Since MD doesn't use a gradient, we can set a solid bg color.
@@ -99,6 +101,12 @@ InfoBarView::InfoBarView(scoped_ptr<infobars::InfoBarDelegate> delegate)
         views::Background::CreateSolidBackground(infobars::InfoBar::GetTopColor(
             infobars::InfoBar::delegate()->GetInfoBarType())));
   }
+}
+
+const infobars::InfoBarContainer::Delegate* InfoBarView::container_delegate()
+    const {
+  const infobars::InfoBarContainer* infobar_container = container();
+  return infobar_container ? infobar_container->delegate() : NULL;
 }
 
 InfoBarView::~InfoBarView() {
@@ -129,22 +137,12 @@ views::Link* InfoBarView::CreateLink(const base::string16& text,
 }
 
 // static
-views::Button* InfoBarView::CreateTextButton(
+views::LabelButton* InfoBarView::CreateTextButton(
     views::ButtonListener* listener,
     const base::string16& text) {
-  views::LabelButton* button = CreateLabelButton(listener, text);
-  if (ui::MaterialDesignController::IsModeMaterial())
-    button->SetFontList(GetFontList());
-
-  return button;
-}
-
-// static
-views::LabelButton* InfoBarView::CreateLabelButton(
-    views::ButtonListener* listener,
-    const base::string16& text) {
+  DCHECK(!ui::MaterialDesignController::IsModeMaterial());
   views::LabelButton* button = new views::LabelButton(listener, text);
-  scoped_ptr<views::LabelButtonAssetBorder> button_border(
+  std::unique_ptr<views::LabelButtonAssetBorder> button_border(
       new views::LabelButtonAssetBorder(views::Button::STYLE_TEXTBUTTON));
   const int kNormalImageSet[] = IMAGE_GRID(IDR_INFOBARBUTTON_NORMAL);
   button_border->SetPainter(
@@ -158,14 +156,24 @@ views::LabelButton* InfoBarView::CreateLabelButton(
   button_border->SetPainter(
       false, views::Button::STATE_PRESSED,
       views::Painter::CreateImageGridPainter(kPressedImageSet));
-
   button->SetBorder(std::move(button_border));
   button->set_animate_on_state_change(false);
-  button->SetTextColor(views::Button::STATE_NORMAL, GetInfobarTextColor());
-  button->SetTextColor(views::Button::STATE_HOVERED, GetInfobarTextColor());
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   button->SetFontList(rb.GetFontList(ui::ResourceBundle::MediumFont));
   button->SetFocusable(true);
+  button->SetTextColor(views::Button::STATE_NORMAL, GetInfobarTextColor());
+  button->SetTextColor(views::Button::STATE_HOVERED, GetInfobarTextColor());
+  return button;
+}
+
+views::MdTextButton* InfoBarView::CreateMdTextButton(
+    views::ButtonListener* listener,
+    const base::string16& text) {
+  DCHECK(ui::MaterialDesignController::IsModeMaterial());
+  views::MdTextButton* button =
+      views::MdTextButton::CreateMdButton(listener, text);
+  button->SetTextColor(views::Button::STATE_NORMAL, GetInfobarTextColor());
+  button->SetTextColor(views::Button::STATE_HOVERED, GetInfobarTextColor());
   return button;
 }
 
@@ -179,12 +187,11 @@ void InfoBarView::Layout() {
   // Calculate the fill and stroke paths.  We do this here, rather than in
   // PlatformSpecificRecalculateHeight(), because this is also reached when our
   // width is changed, which affects both paths.
+  // TODO(estade): these paths aren't used for MD; remove when MD is default.
   stroke_path_.rewind();
   fill_path_.rewind();
   const infobars::InfoBarContainer::Delegate* delegate = container_delegate();
   if (delegate) {
-    static_cast<InfoBarBackground*>(background())->set_separator_color(
-        delegate->GetInfoBarSeparatorColor());
     int arrow_x;
     SkScalar arrow_fill_height = SkIntToScalar(std::max(
         arrow_height() - InfoBarContainerDelegate::kSeparatorLineHeight, 0));
@@ -238,6 +245,7 @@ void InfoBarView::Layout() {
   }
 
   int content_minimum_width = ContentMinimumWidth();
+  close_button_->SizeToPreferredSize();
   close_button_->SetPosition(gfx::Point(
       std::max(
           start_x + content_minimum_width +
@@ -279,7 +287,6 @@ void InfoBarView::ViewHierarchyChanged(
       close_button_->SetImage(views::CustomButton::STATE_PRESSED,
                               rb.GetImageNamed(IDR_CLOSE_1_P).ToImageSkia());
     }
-    close_button_->SizeToPreferredSize();
     close_button_->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_ACCNAME_CLOSE));
     close_button_->SetFocusable(true);
@@ -329,12 +336,6 @@ int InfoBarView::EndX() const {
 int InfoBarView::OffsetY(views::View* view) const {
   return std::max((bar_target_height() - view->height()) / 2, 0) -
          (bar_target_height() - bar_height());
-}
-
-const infobars::InfoBarContainer::Delegate* InfoBarView::container_delegate()
-    const {
-  const infobars::InfoBarContainer* infobar_container = container();
-  return infobar_container ? infobar_container->delegate() : NULL;
 }
 
 void InfoBarView::RunMenuAt(ui::MenuModel* menu_model,

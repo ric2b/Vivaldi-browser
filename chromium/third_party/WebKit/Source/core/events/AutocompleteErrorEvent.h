@@ -33,19 +33,19 @@ namespace blink {
 class AutocompleteErrorEvent final : public Event {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static PassRefPtrWillBeRawPtr<AutocompleteErrorEvent> create()
+    static AutocompleteErrorEvent* create()
     {
-        return adoptRefWillBeNoop(new AutocompleteErrorEvent);
+        return new AutocompleteErrorEvent;
     }
 
-    static PassRefPtrWillBeRawPtr<AutocompleteErrorEvent> create(const String& reason)
+    static AutocompleteErrorEvent* create(const String& reason)
     {
-        return adoptRefWillBeNoop(new AutocompleteErrorEvent(reason));
+        return new AutocompleteErrorEvent(reason);
     }
 
-    static PassRefPtrWillBeRawPtr<AutocompleteErrorEvent> create(const AtomicString& eventType, const AutocompleteErrorEventInit& initializer)
+    static AutocompleteErrorEvent* create(const AtomicString& eventType, const AutocompleteErrorEventInit& initializer)
     {
-        return adoptRefWillBeNoop(new AutocompleteErrorEvent(eventType, initializer));
+        return new AutocompleteErrorEvent(eventType, initializer);
     }
 
     const String& reason() const { return m_reason; }

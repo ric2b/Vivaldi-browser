@@ -43,6 +43,7 @@
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorResourceAgent.h"
 #include "core/inspector/InspectorTraceEvents.h"
@@ -56,26 +57,80 @@
 #include "core/loader/PingLoader.h"
 #include "core/loader/ProgressTracker.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
+#include "core/page/NetworkStateNotifier.h"
 #include "core/page/Page.h"
 #include "core/svg/graphics/SVGImageChromeClient.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "platform/Logging.h"
+#include "platform/TracedValue.h"
 #include "platform/mhtml/MHTMLArchive.h"
 #include "platform/network/ResourceTimingInfo.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
+#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebFrameScheduler.h"
 
 #include <algorithm>
 
 namespace blink {
 
-FrameFetchContext::FrameFetchContext(DocumentLoader* loader)
-    : m_document(nullptr)
+namespace {
+
+bool shouldDisallowFetchForMainFrameScript(const ResourceRequest& request, FetchRequest::DeferOption defer, const Document& document)
+{
+    // Only scripts inserted via document.write are candidates for having their
+    // fetch disallowed.
+    if (!document.isInDocumentWrite())
+        return false;
+
+    if (!document.settings())
+        return false;
+
+    if (!document.frame())
+        return false;
+
+    // Only block synchronously loaded (parser blocking) scripts.
+    if (defer != FetchRequest::NoDefer)
+        return false;
+
+    // Avoid blocking same origin scripts, as they may be used to render main
+    // page content, whereas cross-origin scripts inserted via document.write
+    // are likely to be third party content.
+    if (request.url().host() == document.getSecurityOrigin()->domain())
+        return false;
+
+    // Do not block scripts if it is a page reload. This is to enable pages to
+    // recover if blocking of a script is leading to a page break and the user
+    // reloads the page.
+    const FrameLoadType loadType = document.frame()->loader().loadType();
+    const bool isReload = loadType == FrameLoadTypeReload || loadType == FrameLoadTypeReloadBypassingCache || loadType == FrameLoadTypeSame;
+    if (isReload) {
+        // Recording this metric since an increase in number of reloads for pages
+        // where a script was blocked could be indicative of a page break.
+        document.loader()->didObserveLoadingBehavior(WebLoadingBehaviorFlag::WebLoadingBehaviorDocumentWriteBlockReload);
+        return false;
+    }
+
+    // Add the metadata that this page has scripts inserted via document.write
+    // that are eligible for blocking. Note that if there are multiple scripts
+    // the flag will be conveyed to the browser process only once.
+    document.loader()->didObserveLoadingBehavior(WebLoadingBehaviorFlag::WebLoadingBehaviorDocumentWriteBlock);
+
+    const bool isSlowConnection = networkStateNotifier().connectionType() == WebConnectionTypeCellular2G;
+    const bool disallowFetch = document.settings()->disallowFetchForDocWrittenScriptsInMainFrame() || (document.settings()->disallowFetchForDocWrittenScriptsInMainFrameOnSlowConnections() && isSlowConnection);
+
+    return disallowFetch;
+}
+
+} // namespace
+
+FrameFetchContext::FrameFetchContext(DocumentLoader* loader, Document* document)
+    : m_document(document)
     , m_documentLoader(loader)
     , m_imageFetched(false)
 {
+    ASSERT(frame());
 }
 
 FrameFetchContext::~FrameFetchContext()
@@ -102,10 +157,10 @@ void FrameFetchContext::addAdditionalRequestHeaders(ResourceRequest& request, Fe
         RefPtr<SecurityOrigin> outgoingOrigin;
         if (!request.didSetHTTPReferrer()) {
             ASSERT(m_document);
-            outgoingOrigin = m_document->securityOrigin();
+            outgoingOrigin = m_document->getSecurityOrigin();
             request.setHTTPReferrer(SecurityPolicy::generateReferrer(m_document->getReferrerPolicy(), request.url(), m_document->outgoingReferrer()));
         } else {
-            RELEASE_ASSERT(SecurityPolicy::generateReferrer(request.referrerPolicy(), request.url(), request.httpReferrer()).referrer == request.httpReferrer());
+            RELEASE_ASSERT(SecurityPolicy::generateReferrer(request.getReferrerPolicy(), request.url(), request.httpReferrer()).referrer == request.httpReferrer());
             outgoingOrigin = SecurityOrigin::createFromString(request.httpReferrer());
         }
 
@@ -113,7 +168,7 @@ void FrameFetchContext::addAdditionalRequestHeaders(ResourceRequest& request, Fe
     }
 
     if (m_document)
-        request.setOriginatesFromReservedIPRange(m_document->isHostedInReservedIPRange());
+        request.setExternalRequestStateFromRequestorAddressSpace(m_document->addressSpace());
 
     // The remaining modifications are only necessary for HTTP and HTTPS.
     if (!request.url().isEmpty() && !request.url().protocolIsInHTTPFamily())
@@ -140,7 +195,7 @@ CachePolicy FrameFetchContext::getCachePolicy() const
         return CachePolicyVerify;
 
     FrameLoadType loadType = frame()->loader().loadType();
-    if (loadType == FrameLoadTypeReloadFromOrigin)
+    if (loadType == FrameLoadTypeReloadBypassingCache)
         return CachePolicyReload;
 
     Frame* parentFrame = frame()->tree().parent();
@@ -153,81 +208,71 @@ CachePolicy FrameFetchContext::getCachePolicy() const
     if (loadType == FrameLoadTypeReload)
         return CachePolicyRevalidate;
 
-    if (m_documentLoader && m_documentLoader->request().getCachePolicy() == ReturnCacheDataElseLoad)
+    if (m_documentLoader && m_documentLoader->request().getCachePolicy() == WebCachePolicy::ReturnCacheDataElseLoad)
         return CachePolicyHistoryBuffer;
     return CachePolicyVerify;
-
 }
 
-static ResourceRequestCachePolicy memoryCachePolicyToResourceRequestCachePolicy(
-    const CachePolicy policy) {
+static WebCachePolicy memoryCachePolicyToResourceRequestCachePolicy(const CachePolicy policy)
+{
     if (policy == CachePolicyVerify)
-        return UseProtocolCachePolicy;
+        return WebCachePolicy::UseProtocolCachePolicy;
     if (policy == CachePolicyRevalidate)
-        return ReloadIgnoringCacheData;
+        return WebCachePolicy::ValidatingCacheData;
     if (policy == CachePolicyReload)
-        return ReloadBypassingCache;
+        return WebCachePolicy::BypassingCache;
     if (policy == CachePolicyHistoryBuffer)
-        return ReturnCacheDataElseLoad;
-    return UseProtocolCachePolicy;
+        return WebCachePolicy::ReturnCacheDataElseLoad;
+    return WebCachePolicy::UseProtocolCachePolicy;
 }
 
-ResourceRequestCachePolicy FrameFetchContext::resourceRequestCachePolicy(const ResourceRequest& request, Resource::Type type) const
+WebCachePolicy FrameFetchContext::resourceRequestCachePolicy(const ResourceRequest& request, Resource::Type type, FetchRequest::DeferOption defer) const
 {
     ASSERT(frame());
     if (type == Resource::MainResource) {
         FrameLoadType frameLoadType = frame()->loader().loadType();
         if (request.httpMethod() == "POST" && frameLoadType == FrameLoadTypeBackForward)
-            return ReturnCacheDataDontLoad;
+            return WebCachePolicy::ReturnCacheDataDontLoad;
         if (!frame()->host()->overrideEncoding().isEmpty())
-            return ReturnCacheDataElseLoad;
+            return WebCachePolicy::ReturnCacheDataElseLoad;
         if (frameLoadType == FrameLoadTypeSame || request.isConditional() || request.httpMethod() == "POST")
-            return ReloadIgnoringCacheData;
+            return WebCachePolicy::ValidatingCacheData;
 
         for (Frame* f = frame(); f; f = f->tree().parent()) {
             if (!f->isLocalFrame())
                 continue;
             frameLoadType = toLocalFrame(f)->loader().loadType();
             if (frameLoadType == FrameLoadTypeBackForward)
-                return ReturnCacheDataElseLoad;
-            if (frameLoadType == FrameLoadTypeReloadFromOrigin)
-                return ReloadBypassingCache;
+                return WebCachePolicy::ReturnCacheDataElseLoad;
+            if (frameLoadType == FrameLoadTypeReloadBypassingCache)
+                return WebCachePolicy::BypassingCache;
             if (frameLoadType == FrameLoadTypeReload)
-                return ReloadIgnoringCacheData;
+                return WebCachePolicy::ValidatingCacheData;
         }
-        return UseProtocolCachePolicy;
+        return WebCachePolicy::UseProtocolCachePolicy;
     }
 
     // For users on slow connections, we want to avoid blocking the parser in
     // the main frame on script loads inserted via document.write, since it can
     // add significant delays before page content is displayed on the screen.
-    // For now, as a prototype, we block fetches for main frame scripts
-    // inserted via document.write as long as the
-    // disallowFetchForDocWrittenScriptsInMainFrame setting is enabled. In the
-    // future, we'll extend this logic to only block if estimated network RTT
-    // is above some threshold.
-    if (type == Resource::Script && isMainFrame()) {
-        const bool isInDocumentWrite = m_document && m_document->isInDocumentWrite();
-        const bool disallowFetchForDocWriteScripts = frame()->settings() && frame()->settings()->disallowFetchForDocWrittenScriptsInMainFrame();
-        if (isInDocumentWrite && disallowFetchForDocWriteScripts)
-            return ReturnCacheDataDontLoad;
-    }
+    if (type == Resource::Script && isMainFrame() && m_document && shouldDisallowFetchForMainFrameScript(request, defer, *m_document))
+        return WebCachePolicy::ReturnCacheDataDontLoad;
 
     if (request.isConditional())
-        return ReloadIgnoringCacheData;
+        return WebCachePolicy::ValidatingCacheData;
 
     if (m_documentLoader && m_document && !m_document->loadEventFinished()) {
         // For POST requests, we mutate the main resource's cache policy to avoid form resubmission.
         // This policy should not be inherited by subresources.
-        ResourceRequestCachePolicy mainResourceCachePolicy = m_documentLoader->request().getCachePolicy();
+        WebCachePolicy mainResourceCachePolicy = m_documentLoader->request().getCachePolicy();
         if (m_documentLoader->request().httpMethod() == "POST") {
-            if (mainResourceCachePolicy == ReturnCacheDataDontLoad)
-                return ReturnCacheDataElseLoad;
-            return UseProtocolCachePolicy;
+            if (mainResourceCachePolicy == WebCachePolicy::ReturnCacheDataDontLoad)
+                return WebCachePolicy::ReturnCacheDataElseLoad;
+            return WebCachePolicy::UseProtocolCachePolicy;
         }
         return memoryCachePolicyToResourceRequestCachePolicy(getCachePolicy());
     }
-    return UseProtocolCachePolicy;
+    return WebCachePolicy::UseProtocolCachePolicy;
 }
 
 // FIXME(http://crbug.com/274173):
@@ -264,7 +309,7 @@ void FrameFetchContext::dispatchDidReceiveResponse(unsigned long identifier, con
         // When response is received with a provisional docloader, the resource haven't committed yet, and we cannot load resources, only preconnect.
         resourceLoadingPolicy = LinkLoader::DoNotLoadResources;
     }
-    LinkLoader::loadLinkFromHeader(response.httpHeaderField(HTTPNames::Link), response.url(), frame()->document(), NetworkHintsInterfaceImpl(), resourceLoadingPolicy);
+    LinkLoader::loadLinksFromHeader(response.httpHeaderField(HTTPNames::Link), response.url(), frame()->document(), NetworkHintsInterfaceImpl(), resourceLoadingPolicy, nullptr);
 
     if (response.hasMajorCertificateErrors())
         MixedContentChecker::handleCertificateError(frame(), response, frameType, requestContext);
@@ -338,8 +383,21 @@ bool FrameFetchContext::shouldLoadNewResource(Resource::Type type) const
     return m_documentLoader == frame()->loader().documentLoader();
 }
 
-void FrameFetchContext::willStartLoadingResource(ResourceRequest& request)
+static PassOwnPtr<TracedValue> loadResourceTraceData(unsigned long identifier, const KURL& url, int priority)
 {
+    String requestId = IdentifiersFactory::requestId(identifier);
+
+    OwnPtr<TracedValue> value = TracedValue::create();
+    value->setString("requestId", requestId);
+    value->setString("url", url.getString());
+    value->setInteger("priority", priority);
+    return value.release();
+}
+
+void FrameFetchContext::willStartLoadingResource(Resource* resource, ResourceRequest& request)
+{
+    TRACE_EVENT_ASYNC_BEGIN1("blink.net", "Resource", resource, "data", loadResourceTraceData(resource->identifier(), resource->url(), resource->resourceRequest().priority()));
+
     if (m_documentLoader)
         m_documentLoader->applicationCacheHost()->willStartLoadingResource(request);
 }
@@ -414,7 +472,7 @@ ResourceRequestBlockedReason FrameFetchContext::canRequestInternal(Resource::Typ
 
     SecurityOrigin* securityOrigin = options.securityOrigin.get();
     if (!securityOrigin && m_document)
-        securityOrigin = m_document->securityOrigin();
+        securityOrigin = m_document->getSecurityOrigin();
 
     if (originRestriction != FetchRequest::NoOriginRestriction && securityOrigin && !securityOrigin->canDisplay(url)) {
         if (!forPreload)
@@ -468,69 +526,24 @@ ResourceRequestBlockedReason FrameFetchContext::canRequestInternal(Resource::Typ
     // I believe it's the Resource::Raw case.
     const ContentSecurityPolicy* csp = m_document ? m_document->contentSecurityPolicy() : nullptr;
 
-    // TODO(mkwst): This would be cleaner if moved this switch into an allowFromSource()
-    // helper on this object which took a Resource::Type, then this block would
-    // collapse to about 10 lines for handling Raw and Script special cases.
-    switch (type) {
-    case Resource::XSLStyleSheet:
-        ASSERT(RuntimeEnabledFeatures::xsltEnabled());
-        ASSERT(ContentSecurityPolicy::isScriptResource(resourceRequest));
-        ASSERT(csp);
-        if (!shouldBypassMainWorldCSP && !csp->allowScriptFromSource(url, redirectStatus, cspReporting))
+    if (csp) {
+        if (!shouldBypassMainWorldCSP && !csp->allowRequest(resourceRequest.requestContext(), url, redirectStatus, cspReporting))
             return ResourceRequestBlockedReasonCSP;
-        break;
-    case Resource::Script:
-    case Resource::ImportResource:
-        ASSERT(ContentSecurityPolicy::isScriptResource(resourceRequest));
-        ASSERT(csp);
-        if (!shouldBypassMainWorldCSP && !csp->allowScriptFromSource(url, redirectStatus, cspReporting))
-            return ResourceRequestBlockedReasonCSP;
+    }
+
+    if (type == Resource::Script || type == Resource::ImportResource) {
         ASSERT(frame());
         if (!frame()->loader().client()->allowScriptFromSource(!frame()->settings() || frame()->settings()->scriptEnabled(), url)) {
             frame()->loader().client()->didNotAllowScript();
+            // TODO(estark): Use a different ResourceRequestBlockedReason
+            // here, since this check has nothing to do with
+            // CSP. https://crbug.com/600795
             return ResourceRequestBlockedReasonCSP;
         }
-        break;
-    case Resource::CSSStyleSheet:
-        ASSERT(ContentSecurityPolicy::isStyleResource(resourceRequest));
-        ASSERT(csp);
-        if (!shouldBypassMainWorldCSP && !csp->allowStyleFromSource(url, redirectStatus, cspReporting))
-            return ResourceRequestBlockedReasonCSP;
-        break;
-    case Resource::SVGDocument:
-    case Resource::Image:
-        ASSERT(ContentSecurityPolicy::isImageResource(resourceRequest));
-        ASSERT(csp);
-        if (!shouldBypassMainWorldCSP && !csp->allowImageFromSource(url, redirectStatus, cspReporting))
-            return ResourceRequestBlockedReasonCSP;
-        break;
-    case Resource::Font: {
-        ASSERT(ContentSecurityPolicy::isFontResource(resourceRequest));
-        ASSERT(csp);
-        if (!shouldBypassMainWorldCSP && !csp->allowFontFromSource(url, redirectStatus, cspReporting))
-            return ResourceRequestBlockedReasonCSP;
-        break;
-    }
-    case Resource::LinkPreload:
-        ASSERT(csp);
-        if (!shouldBypassMainWorldCSP && !csp->allowConnectToSource(url, redirectStatus, cspReporting))
-            return ResourceRequestBlockedReasonCSP;
-        break;
-    case Resource::MainResource:
-    case Resource::Raw:
-    case Resource::LinkPrefetch:
-    case Resource::Manifest:
-        break;
-    case Resource::Media:
-    case Resource::TextTrack:
-        ASSERT(ContentSecurityPolicy::isMediaResource(resourceRequest));
-        ASSERT(csp);
-        if (!shouldBypassMainWorldCSP && !csp->allowMediaFromSource(url, redirectStatus, cspReporting))
-            return ResourceRequestBlockedReasonCSP;
-
+    } else if (type == Resource::Media || type == Resource::TextTrack) {
+        ASSERT(frame());
         if (!frame()->loader().client()->allowMedia(url))
             return ResourceRequestBlockedReasonOther;
-        break;
     }
 
     // SVG Images have unique security rules that prevent all subresource requests
@@ -538,19 +551,12 @@ ResourceRequestBlockedReason FrameFetchContext::canRequestInternal(Resource::Typ
     if (type != Resource::MainResource && frame()->chromeClient().isSVGImageChromeClient() && !url.protocolIsData())
         return ResourceRequestBlockedReasonOrigin;
 
-    // FIXME: Once we use RequestContext for CSP (http://crbug.com/390497), remove this extra check.
-    if (resourceRequest.requestContext() == WebURLRequest::RequestContextManifest) {
-        ASSERT(csp);
-        if (!shouldBypassMainWorldCSP && !csp->allowManifestFromSource(url, redirectStatus, cspReporting))
-            return ResourceRequestBlockedReasonCSP;
-    }
-
     // Measure the number of legacy URL schemes ('ftp://') and the number of embedded-credential
     // ('http://user:password@...') resources embedded as subresources. in the hopes that we can
     // block them at some point in the future.
     if (resourceRequest.frameType() != WebURLRequest::FrameTypeTopLevel) {
         ASSERT(frame()->document());
-        if (SchemeRegistry::shouldTreatURLSchemeAsLegacy(url.protocol()) && !SchemeRegistry::shouldTreatURLSchemeAsLegacy(frame()->document()->securityOrigin()->protocol()))
+        if (SchemeRegistry::shouldTreatURLSchemeAsLegacy(url.protocol()) && !SchemeRegistry::shouldTreatURLSchemeAsLegacy(frame()->document()->getSecurityOrigin()->protocol()))
             UseCounter::count(frame()->document(), UseCounter::LegacyProtocolEmbeddedAsSubresource);
         if (!url.user().isEmpty() || !url.pass().isEmpty())
             UseCounter::count(frame()->document(), UseCounter::RequestedSubresourceWithEmbeddedCredentials);
@@ -643,9 +649,9 @@ void FrameFetchContext::addConsoleMessage(const String& message) const
         frame()->document()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message));
 }
 
-SecurityOrigin* FrameFetchContext::securityOrigin() const
+SecurityOrigin* FrameFetchContext::getSecurityOrigin() const
 {
-    return m_document ? m_document->securityOrigin() : nullptr;
+    return m_document ? m_document->getSecurityOrigin() : nullptr;
 }
 
 void FrameFetchContext::upgradeInsecureRequest(FetchRequest& fetchRequest)
@@ -764,14 +770,14 @@ ResourceLoadPriority FrameFetchContext::modifyPriorityForExperiments(ResourceLoa
     // though the cumulative result will depend on the interaction between them.
     // Background doc: https://docs.google.com/document/d/1bCDuq9H1ih9iNjgzyAL0gpwNFiEP4TZS-YLRp_RuMlc/edit?usp=sharing
 
-    // Increases the priorities for CSS, Scripts, Fonts and Images all by one level
+    // Increases the priorities for CSS, Scripts, XHR, Fonts and Images all by one level
     // and parser-blocking scripts and visible images by 2.
     // This is used in conjunction with logic on the Chrome side to raise the threshold
     // of "layout-blocking" resources and provide a boost to resources that are needed
     // as soon as possible for something currently on the screen.
     int modifiedPriority = static_cast<int>(priority);
     if (frame()->settings()->fetchIncreasePriorities()) {
-        if (type == Resource::CSSStyleSheet || type == Resource::Script || type == Resource::Font || type == Resource::Image)
+        if (type == Resource::CSSStyleSheet || type == Resource::Script || type == Resource::Font || type == Resource::Image || type == Resource::Raw)
             modifiedPriority++;
     }
 

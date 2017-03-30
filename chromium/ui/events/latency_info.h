@@ -15,8 +15,11 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
-#include "ipc/ipc_param_traits.h"
 #include "ui/events/events_base_export.h"
+
+#if !defined(OS_IOS)
+#include "ipc/ipc_param_traits.h"  // nogncheck
+#endif
 
 namespace ui {
 
@@ -64,6 +67,9 @@ enum LatencyComponentType {
   // Timestamp of when the gpu service began swap buffers, unlike
   // INPUT_EVENT_LATENCY_TERMINATED_FRAME_SWAP_COMPONENT which measures after.
   INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT,
+  // Timestamp of when the gesture scroll update is generated from a mouse wheel
+  // event.
+  INPUT_EVENT_LATENCY_GENERATE_SCROLL_UPDATE_FROM_MOUSE_WHEEL,
   // ---------------------------TERMINAL COMPONENT-----------------------------
   // TERMINAL COMPONENT is when we show the latency end in chrome://tracing.
   // Timestamp when the mouse event is acked from renderer and it does not
@@ -76,10 +82,10 @@ enum LatencyComponentType {
   // cause any rendering scheduled.
   INPUT_EVENT_LATENCY_TERMINATED_KEYBOARD_COMPONENT,
   // Timestamp when the touch event is acked from renderer and it does not
-  // cause any rendering schedueld and does not generate any gesture event.
+  // cause any rendering scheduled and does not generate any gesture event.
   INPUT_EVENT_LATENCY_TERMINATED_TOUCH_COMPONENT,
   // Timestamp when the gesture event is acked from renderer, and it does not
-  // cause any rendering schedueld.
+  // cause any rendering scheduled.
   INPUT_EVENT_LATENCY_TERMINATED_GESTURE_COMPONENT,
   // Timestamp when the frame is swapped (i.e. when the rendering caused by
   // input event actually takes effect).
@@ -94,7 +100,7 @@ enum LatencyComponentType {
   // but the swap failed.
   INPUT_EVENT_LATENCY_TERMINATED_SWAP_FAILED_COMPONENT,
   LATENCY_COMPONENT_TYPE_LAST =
-    INPUT_EVENT_LATENCY_TERMINATED_SWAP_FAILED_COMPONENT,
+      INPUT_EVENT_LATENCY_TERMINATED_SWAP_FAILED_COMPONENT,
 };
 
 class EVENTS_BASE_EXPORT LatencyInfo {
@@ -121,7 +127,6 @@ class EVENTS_BASE_EXPORT LatencyInfo {
   // Empirically determined constant based on a typical scroll sequence.
   enum { kTypicalMaxComponentsPerLatencyInfo = 10 };
 
-  enum { kMaxCoalescedEventTimestamps = 2 };
   enum { kMaxInputCoordinates = 2 };
 
   // Map a Latency Component (with a component-specific int64_t id) to a
@@ -193,18 +198,11 @@ class EVENTS_BASE_EXPORT LatencyInfo {
     return input_coordinates_;
   }
 
-  // Returns true if there is still room for keeping the |timestamp|,
-  // false otherwise.
-  bool AddCoalescedEventTimestamp(double timestamp);
-
-  uint32_t coalesced_events_size() const { return coalesced_events_size_; }
-  const double* timestamps_of_coalesced_events() const {
-    return timestamps_of_coalesced_events_;
-  }
-
   const LatencyMap& latency_components() const { return latency_components_; }
 
   bool terminated() const { return terminated_; }
+  void set_coalesced() { coalesced_ = true; }
+  bool coalesced() const { return coalesced_; }
   int64_t trace_id() const { return trace_id_; }
 
  private:
@@ -216,9 +214,9 @@ class EVENTS_BASE_EXPORT LatencyInfo {
                                          const char* trace_name_str);
 
   // Converts latencyinfo into format that can be dumped into trace buffer.
-  scoped_refptr<base::trace_event::ConvertableToTraceFormat> AsTraceableData();
-  scoped_refptr<base::trace_event::ConvertableToTraceFormat>
-    CoordinatesAsTraceableData();
+  scoped_ptr<base::trace_event::ConvertableToTraceFormat> AsTraceableData();
+  scoped_ptr<base::trace_event::ConvertableToTraceFormat>
+  CoordinatesAsTraceableData();
 
   // Shown as part of the name of the trace event for this LatencyInfo.
   // String is empty if no tracing is enabled.
@@ -230,15 +228,16 @@ class EVENTS_BASE_EXPORT LatencyInfo {
   uint32_t input_coordinates_size_;
   InputCoordinate input_coordinates_[kMaxInputCoordinates];
 
-  uint32_t coalesced_events_size_;
-  double timestamps_of_coalesced_events_[kMaxCoalescedEventTimestamps];
-
   // The unique id for matching the ASYNC_BEGIN/END trace event.
   int64_t trace_id_;
+  // Whether this event has been coalesced into another event.
+  bool coalesced_;
   // Whether a terminal component has been added.
   bool terminated_;
 
+#if !defined(OS_IOS)
   friend struct IPC::ParamTraits<ui::LatencyInfo>;
+#endif
 };
 
 }  // namespace ui

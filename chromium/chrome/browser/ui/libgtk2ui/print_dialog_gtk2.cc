@@ -33,11 +33,13 @@ using printing::PrintSettings;
 
 namespace {
 
+#if defined(USE_CUPS)
 // CUPS Duplex attribute and values.
 const char kCUPSDuplex[] = "cups-Duplex";
 const char kDuplexNone[] = "None";
 const char kDuplexTumble[] = "DuplexTumble";
 const char kDuplexNoTumble[] = "DuplexNoTumble";
+#endif
 
 int kPaperSizeTresholdMicrons = 100;
 int kMicronsInMm = 1000;
@@ -229,7 +231,7 @@ bool PrintDialogGtk2::UpdateSettings(printing::PrintSettings* settings) {
         gtk_print_settings_copy(g_last_used_settings.Get().settings());
   }
 
-  scoped_ptr<GtkPrinterList> printer_list(new GtkPrinterList);
+  std::unique_ptr<GtkPrinterList> printer_list(new GtkPrinterList);
   printer_ = printer_list->GetPrinterWithName(
       base::UTF16ToUTF8(settings->device_name()));
   if (printer_) {

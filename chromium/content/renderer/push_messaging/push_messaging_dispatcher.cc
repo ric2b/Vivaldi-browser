@@ -4,6 +4,7 @@
 
 #include "content/renderer/push_messaging/push_messaging_dispatcher.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/child/service_worker/web_service_worker_registration_impl.h"
 #include "content/common/push_messaging_messages.h"
@@ -44,46 +45,65 @@ void PushMessagingDispatcher::subscribe(
     blink::WebPushSubscriptionCallbacks* callbacks) {
   DCHECK(service_worker_registration);
   DCHECK(callbacks);
-  RenderFrameImpl::FromRoutingID(routing_id())
-      ->manifest_manager()
-      ->GetManifest(base::Bind(
-          &PushMessagingDispatcher::DoSubscribe, base::Unretained(this),
-          service_worker_registration, options, callbacks));
+  // If a developer provided an application server key in |options|, skip
+  // fetching the manifest.
+  if (options.applicationServerKey.isEmpty()) {
+    RenderFrameImpl::FromRoutingID(routing_id())
+        ->manifest_manager()
+        ->GetManifest(base::Bind(
+            &PushMessagingDispatcher::DidGetManifest, base::Unretained(this),
+            service_worker_registration, options, callbacks));
+  } else {
+    PushSubscriptionOptions content_options;
+    content_options.user_visible_only = options.userVisibleOnly;
+    // Just treat the server key as a string of bytes and pass it to the push
+    // service.
+    content_options.sender_info = options.applicationServerKey.latin1();
+    DoSubscribe(service_worker_registration, content_options, callbacks);
+  }
 }
 
-void PushMessagingDispatcher::DoSubscribe(
+void PushMessagingDispatcher::DidGetManifest(
     blink::WebServiceWorkerRegistration* service_worker_registration,
     const blink::WebPushSubscriptionOptions& options,
     blink::WebPushSubscriptionCallbacks* callbacks,
     const Manifest& manifest) {
+  // Get the sender_info from the manifest since it wasn't provided by
+  // the caller.
+  if (manifest.IsEmpty()) {
+    int request_id = subscription_callbacks_.Add(callbacks);
+    OnSubscribeFromDocumentError(
+        request_id, PUSH_REGISTRATION_STATUS_MANIFEST_EMPTY_OR_MISSING);
+    return;
+  }
+
+  PushSubscriptionOptions content_options;
+  content_options.user_visible_only = options.userVisibleOnly;
+  if (!manifest.gcm_sender_id.is_null()) {
+    content_options.sender_info =
+        base::UTF16ToUTF8(manifest.gcm_sender_id.string());
+  }
+
+  DoSubscribe(service_worker_registration, content_options, callbacks);
+}
+
+void PushMessagingDispatcher::DoSubscribe(
+    blink::WebServiceWorkerRegistration* service_worker_registration,
+    const PushSubscriptionOptions& options,
+    blink::WebPushSubscriptionCallbacks* callbacks) {
   int request_id = subscription_callbacks_.Add(callbacks);
   int64_t service_worker_registration_id =
       static_cast<WebServiceWorkerRegistrationImpl*>(
           service_worker_registration)
           ->registration_id();
 
-  if (manifest.IsEmpty()) {
-    OnSubscribeFromDocumentError(
-        request_id, PUSH_REGISTRATION_STATUS_MANIFEST_EMPTY_OR_MISSING);
-    return;
-  }
-
-  std::string sender_id =
-      manifest.gcm_sender_id.is_null()
-          ? std::string()
-          : base::UTF16ToUTF8(manifest.gcm_sender_id.string());
-  if (sender_id.empty()) {
+  if (options.sender_info.empty()) {
     OnSubscribeFromDocumentError(request_id,
                                  PUSH_REGISTRATION_STATUS_NO_SENDER_ID);
     return;
   }
-
   Send(new PushMessagingHostMsg_SubscribeFromDocument(
-      routing_id(), request_id,
-      manifest.gcm_sender_id.is_null()
-          ? std::string()
-          : base::UTF16ToUTF8(manifest.gcm_sender_id.string()),
-      options.userVisibleOnly, service_worker_registration_id));
+      routing_id(), request_id, options, service_worker_registration_id));
 }
 
 void PushMessagingDispatcher::OnSubscribeFromDocumentSuccess(
@@ -95,8 +115,8 @@ void PushMessagingDispatcher::OnSubscribeFromDocumentSuccess(
       subscription_callbacks_.Lookup(request_id);
   DCHECK(callbacks);
 
-  callbacks->onSuccess(blink::adoptWebPtr(
-      new blink::WebPushSubscription(endpoint, p256dh, auth)));
+  callbacks->onSuccess(
+      base::WrapUnique(new blink::WebPushSubscription(endpoint, p256dh, auth)));
 
   subscription_callbacks_.Remove(request_id);
 }

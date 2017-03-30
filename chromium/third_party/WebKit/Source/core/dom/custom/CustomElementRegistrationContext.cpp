@@ -41,7 +41,6 @@
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLUnknownElement.h"
 #include "core/svg/SVGUnknownElement.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
@@ -58,7 +57,7 @@ void CustomElementRegistrationContext::registerElement(Document* document, Custo
         return;
 
     // Upgrade elements that were waiting for this definition.
-    OwnPtrWillBeRawPtr<CustomElementUpgradeCandidateMap::ElementSet> upgradeCandidates = m_candidates->takeUpgradeCandidatesFor(definition->descriptor());
+    RawPtr<CustomElementUpgradeCandidateMap::ElementSet> upgradeCandidates = m_candidates->takeUpgradeCandidatesFor(definition->descriptor());
 
     if (!upgradeCandidates)
         return;
@@ -67,11 +66,11 @@ void CustomElementRegistrationContext::registerElement(Document* document, Custo
         CustomElement::define(candidate, definition);
 }
 
-PassRefPtrWillBeRawPtr<Element> CustomElementRegistrationContext::createCustomTagElement(Document& document, const QualifiedName& tagName)
+RawPtr<Element> CustomElementRegistrationContext::createCustomTagElement(Document& document, const QualifiedName& tagName)
 {
-    ASSERT(CustomElement::isValidName(tagName.localName()));
+    DCHECK(CustomElement::isValidName(tagName.localName()));
 
-    RefPtrWillBeRawPtr<Element> element;
+    RawPtr<Element> element;
 
     if (HTMLNames::xhtmlNamespaceURI == tagName.namespaceURI()) {
         element = HTMLElement::create(tagName, document);
@@ -99,10 +98,10 @@ void CustomElementRegistrationContext::resolveOrScheduleResolution(Element* elem
     const AtomicString& type = CustomElement::isValidName(element->localName())
         ? element->localName()
         : typeExtension;
-    ASSERT(!type.isNull());
+    DCHECK(!type.isNull());
 
     CustomElementDescriptor descriptor(type, element->namespaceURI(), element->localName());
-    ASSERT(element->customElementState() == Element::WaitingForUpgrade);
+    DCHECK_EQ(element->getCustomElementState(), Element::WaitingForUpgrade);
 
     CustomElementScheduler::resolveOrScheduleResolution(this, element, descriptor);
 }
@@ -113,15 +112,15 @@ void CustomElementRegistrationContext::resolve(Element* element, const CustomEle
     if (definition) {
         CustomElement::define(element, definition);
     } else {
-        ASSERT(element->customElementState() == Element::WaitingForUpgrade);
+        DCHECK_EQ(element->getCustomElementState(), Element::WaitingForUpgrade);
         m_candidates->add(descriptor, element);
     }
 }
 
 void CustomElementRegistrationContext::setIsAttributeAndTypeExtension(Element* element, const AtomicString& type)
 {
-    ASSERT(element);
-    ASSERT(!type.isEmpty());
+    DCHECK(element);
+    DCHECK(!type.isEmpty());
     element->setAttribute(HTMLNames::isAttr, type);
     setTypeExtension(element, type);
 }
@@ -145,7 +144,7 @@ void CustomElementRegistrationContext::setTypeExtension(Element* element, const 
     }
 
     // Custom tags take precedence over type extensions
-    ASSERT(!CustomElement::isValidName(element->localName()));
+    DCHECK(!CustomElement::isValidName(element->localName()));
 
     if (!CustomElement::isValidName(type))
         return;

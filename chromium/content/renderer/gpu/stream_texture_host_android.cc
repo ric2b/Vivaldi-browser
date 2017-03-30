@@ -4,14 +4,14 @@
 
 #include "content/renderer/gpu/stream_texture_host_android.h"
 
-#include "content/common/gpu/client/gpu_channel_host.h"
-#include "content/common/gpu/gpu_messages.h"
 #include "content/renderer/render_thread_impl.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
+#include "gpu/ipc/common/gpu_messages.h"
 #include "ipc/ipc_message_macros.h"
 
 namespace content {
 
-StreamTextureHost::StreamTextureHost(GpuChannelHost* channel)
+StreamTextureHost::StreamTextureHost(gpu::GpuChannelHost* channel)
     : stream_id_(0),
       listener_(NULL),
       channel_(channel),
@@ -42,8 +42,6 @@ bool StreamTextureHost::OnMessageReceived(const IPC::Message& message) {
   IPC_BEGIN_MESSAGE_MAP(StreamTextureHost, message)
     IPC_MESSAGE_HANDLER(GpuStreamTextureMsg_FrameAvailable,
                         OnFrameAvailable);
-    IPC_MESSAGE_HANDLER(GpuStreamTextureMsg_MatrixChanged,
-                        OnMatrixChanged);
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   DCHECK(handled);
@@ -56,14 +54,6 @@ void StreamTextureHost::OnChannelError() {
 void StreamTextureHost::OnFrameAvailable() {
   if (listener_)
     listener_->OnFrameAvailable();
-}
-
-void StreamTextureHost::OnMatrixChanged(
-    const GpuStreamTextureMsg_MatrixChanged_Params& params) {
-  static_assert(sizeof(params) == sizeof(float) * 16,
-                "bad GpuStreamTextureMsg MatrixChanged_Params format");
-  if (listener_)
-    listener_->OnMatrixChanged((const float*)&params);
 }
 
 }  // namespace content

@@ -26,10 +26,9 @@
 
 namespace blink {
 
-class RadioButtonGroup : public NoBaseWillBeGarbageCollected<RadioButtonGroup> {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(RadioButtonGroup);
+class RadioButtonGroup : public GarbageCollected<RadioButtonGroup> {
 public:
-    static PassOwnPtrWillBeRawPtr<RadioButtonGroup> create();
+    static RadioButtonGroup* create();
     bool isEmpty() const { return m_members.isEmpty(); }
     bool isRequired() const { return m_requiredCount; }
     HTMLInputElement* checkedButton() const { return m_checkedButton; }
@@ -38,6 +37,7 @@ public:
     void requiredAttributeChanged(HTMLInputElement*);
     void remove(HTMLInputElement*);
     bool contains(HTMLInputElement*) const;
+    unsigned size() const;
 
     DECLARE_TRACE();
 
@@ -48,7 +48,7 @@ private:
     void setCheckedButton(HTMLInputElement*);
 
     // The map records the 'required' state of each (button) element.
-    using Members = WillBeHeapHashMap<RawPtrWillBeMember<HTMLInputElement>, bool>;
+    using Members = HeapHashMap<Member<HTMLInputElement>, bool>;
 
 #if ENABLE(OILPAN)
     using MemberKeyValue = WTF::KeyValuePair<Member<HTMLInputElement>, bool>;
@@ -59,7 +59,7 @@ private:
     void updateRequiredButton(MemberKeyValue&, bool isRequired);
 
     Members m_members;
-    RawPtrWillBeMember<HTMLInputElement> m_checkedButton;
+    Member<HTMLInputElement> m_checkedButton;
     size_t m_requiredCount;
 };
 
@@ -69,9 +69,9 @@ RadioButtonGroup::RadioButtonGroup()
 {
 }
 
-PassOwnPtrWillBeRawPtr<RadioButtonGroup> RadioButtonGroup::create()
+RadioButtonGroup* RadioButtonGroup::create()
 {
-    return adoptPtrWillBeNoop(new RadioButtonGroup);
+    return new RadioButtonGroup;
 }
 
 inline bool RadioButtonGroup::isValid() const
@@ -180,6 +180,13 @@ void RadioButtonGroup::remove(HTMLInputElement* button)
         // valid only if the group was invalid.
         button->setNeedsValidityCheck();
     }
+
+    // Send notification to update AX attributes for AXObjects which radiobutton group has.
+    if (!m_members.isEmpty()) {
+        HTMLInputElement* input = m_members.begin()->key;
+        if (AXObjectCache* cache = input->document().existingAXObjectCache())
+            cache->radiobuttonRemovedFromGroup(input);
+    }
 }
 
 void RadioButtonGroup::setNeedsValidityCheckForAllButtons()
@@ -196,12 +203,15 @@ bool RadioButtonGroup::contains(HTMLInputElement* button) const
     return m_members.contains(button);
 }
 
+unsigned RadioButtonGroup::size() const
+{
+    return m_members.size();
+}
+
 DEFINE_TRACE(RadioButtonGroup)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_members);
     visitor->trace(m_checkedButton);
-#endif
 }
 
 // ----------------------------------------------------------------
@@ -224,9 +234,9 @@ void RadioButtonGroupScope::addButton(HTMLInputElement* element)
         return;
 
     if (!m_nameToGroupMap)
-        m_nameToGroupMap = adoptPtrWillBeNoop(new NameToGroupMap);
+        m_nameToGroupMap = new NameToGroupMap;
 
-    OwnPtrWillBeMember<RadioButtonGroup>& group = m_nameToGroupMap->add(element->name(), nullptr).storedValue->value;
+    Member<RadioButtonGroup>& group = m_nameToGroupMap->add(element->name(), nullptr).storedValue->value;
     if (!group)
         group = RadioButtonGroup::create();
     group->add(element);
@@ -277,6 +287,17 @@ bool RadioButtonGroupScope::isInRequiredGroup(HTMLInputElement* element) const
     return group && group->isRequired() && group->contains(element);
 }
 
+unsigned RadioButtonGroupScope::groupSizeFor(const HTMLInputElement* element) const
+{
+    if (!m_nameToGroupMap)
+        return 0;
+
+    RadioButtonGroup* group = m_nameToGroupMap->get(element->name());
+    if (!group)
+        return 0;
+    return group->size();
+}
+
 void RadioButtonGroupScope::removeButton(HTMLInputElement* element)
 {
     ASSERT(element->type() == InputTypeNames::radio);
@@ -299,9 +320,7 @@ void RadioButtonGroupScope::removeButton(HTMLInputElement* element)
 
 DEFINE_TRACE(RadioButtonGroupScope)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_nameToGroupMap);
-#endif
 }
 
 } // namespace blink

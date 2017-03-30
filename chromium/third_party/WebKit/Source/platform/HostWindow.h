@@ -36,9 +36,8 @@ class IntRect;
 class Widget;
 struct WebScreenInfo;
 
-class PLATFORM_EXPORT HostWindow : public NoBaseWillBeGarbageCollectedFinalized<HostWindow> {
+class PLATFORM_EXPORT HostWindow : public GarbageCollectedFinalized<HostWindow> {
     WTF_MAKE_NONCOPYABLE(HostWindow);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(HostWindow);
 public:
     HostWindow() { }
     virtual ~HostWindow() { }
@@ -48,7 +47,7 @@ public:
     virtual void invalidateRect(const IntRect& updateRect) = 0;
 
     // Converts the rect from the viewport coordinates to screen coordinates.
-    virtual IntRect viewportToScreen(const IntRect&) const = 0;
+    virtual IntRect viewportToScreen(const IntRect&, const Widget*) const = 0;
 
     // Converts the scalar value from the window coordinates to the viewport scale.
     virtual float windowToViewportScalar(const float) const = 0;

@@ -8,12 +8,12 @@
 #include <stdint.h>
 
 #include <cmath>
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "third_party/WebKit/public/web/WebArrayBuffer.h"
 #include "third_party/WebKit/public/web/WebArrayBufferConverter.h"
@@ -230,6 +230,9 @@ v8::Local<v8::Value> V8ValueConverterImpl::ToV8Array(
     const base::ListValue* val) const {
   v8::Local<v8::Array> result(v8::Array::New(isolate, val->GetSize()));
 
+  // TODO(robwu): Callers should pass in the context.
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
   for (size_t i = 0; i < val->GetSize(); ++i) {
     const base::Value* child = NULL;
     CHECK(val->Get(i, &child));
@@ -238,10 +241,10 @@ v8::Local<v8::Value> V8ValueConverterImpl::ToV8Array(
         ToV8ValueImpl(isolate, creation_context, child);
     CHECK(!child_v8.IsEmpty());
 
-    v8::TryCatch try_catch(isolate);
-    result->Set(static_cast<uint32_t>(i), child_v8);
-    if (try_catch.HasCaught())
-      LOG(ERROR) << "Setter for index " << i << " threw an exception.";
+    v8::Maybe<bool> maybe =
+        result->CreateDataProperty(context, static_cast<uint32_t>(i), child_v8);
+    if (!maybe.IsJust() || !maybe.FromJust())
+      LOG(ERROR) << "Failed to set value at index " << i;
   }
 
   return result;
@@ -253,6 +256,9 @@ v8::Local<v8::Value> V8ValueConverterImpl::ToV8Object(
     const base::DictionaryValue* val) const {
   v8::Local<v8::Object> result(v8::Object::New(isolate));
 
+  // TODO(robwu): Callers should pass in the context.
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
   for (base::DictionaryValue::Iterator iter(*val);
        !iter.IsAtEnd(); iter.Advance()) {
     const std::string& key = iter.key();
@@ -260,15 +266,13 @@ v8::Local<v8::Value> V8ValueConverterImpl::ToV8Object(
         ToV8ValueImpl(isolate, creation_context, &iter.value());
     CHECK(!child_v8.IsEmpty());
 
-    v8::TryCatch try_catch(isolate);
-    result->Set(
-        v8::String::NewFromUtf8(
-            isolate, key.c_str(), v8::String::kNormalString, key.length()),
+    v8::Maybe<bool> maybe = result->CreateDataProperty(
+        context,
+        v8::String::NewFromUtf8(isolate, key.c_str(), v8::String::kNormalString,
+                                key.length()),
         child_v8);
-    if (try_catch.HasCaught()) {
-      LOG(ERROR) << "Setter for property " << key.c_str() << " threw an "
-                 << "exception.";
-    }
+    if (!maybe.IsJust() || !maybe.FromJust())
+      LOG(ERROR) << "Failed to set property with key " << key;
   }
 
   return result;
@@ -376,7 +380,7 @@ base::Value* V8ValueConverterImpl::FromV8Array(
   if (!state->UpdateAndCheckUniqueness(val))
     return base::Value::CreateNullValue().release();
 
-  scoped_ptr<v8::Context::Scope> scope;
+  std::unique_ptr<v8::Context::Scope> scope;
   // If val was created in a different context than our current one, change to
   // that context, but change back after val is converted.
   if (!val->CreationContext().IsEmpty() &&
@@ -434,9 +438,9 @@ base::Value* V8ValueConverterImpl::FromV8ArrayBuffer(
   char* data = NULL;
   size_t length = 0;
 
-  scoped_ptr<blink::WebArrayBuffer> array_buffer(
+  std::unique_ptr<blink::WebArrayBuffer> array_buffer(
       blink::WebArrayBufferConverter::createFromV8Value(val, isolate));
-  scoped_ptr<blink::WebArrayBufferView> view;
+  std::unique_ptr<blink::WebArrayBufferView> view;
   if (array_buffer) {
     data = reinterpret_cast<char*>(array_buffer->data());
     length = array_buffer->byteLength();
@@ -461,7 +465,7 @@ base::Value* V8ValueConverterImpl::FromV8Object(
   if (!state->UpdateAndCheckUniqueness(val))
     return base::Value::CreateNullValue().release();
 
-  scoped_ptr<v8::Context::Scope> scope;
+  std::unique_ptr<v8::Context::Scope> scope;
   // If val was created in a different context than our current one, change to
   // that context, but change back after val is converted.
   if (!val->CreationContext().IsEmpty() &&
@@ -496,7 +500,7 @@ base::Value* V8ValueConverterImpl::FromV8Object(
   if (val->InternalFieldCount())
     return new base::DictionaryValue();
 
-  scoped_ptr<base::DictionaryValue> result(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
   v8::Local<v8::Array> property_names(val->GetOwnPropertyNames());
 
   for (uint32_t i = 0; i < property_names->Length(); ++i) {
@@ -521,7 +525,8 @@ base::Value* V8ValueConverterImpl::FromV8Object(
       child_v8 = v8::Null(isolate);
     }
 
-    scoped_ptr<base::Value> child(FromV8ValueImpl(state, child_v8, isolate));
+    std::unique_ptr<base::Value> child(
+        FromV8ValueImpl(state, child_v8, isolate));
     if (!child)
       // JSON.stringify skips properties whose values don't serialize, for
       // example undefined and functions. Emulate that behavior.

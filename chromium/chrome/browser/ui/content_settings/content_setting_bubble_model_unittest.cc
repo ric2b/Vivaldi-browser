@@ -43,7 +43,7 @@ class ContentSettingBubbleModelTest : public ChromeRenderViewHostTestHarness {
   void CheckGeolocationBubble(size_t expected_domains,
                               bool expect_clear_link,
                               bool expect_reload_hint) {
-    scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
         ContentSettingBubbleModel::CreateContentSettingBubbleModel(
             NULL, web_contents(), profile(),
             CONTENT_SETTINGS_TYPE_GEOLOCATION));
@@ -75,10 +75,9 @@ TEST_F(ContentSettingBubbleModelTest, ImageRadios) {
       TabSpecificContentSettings::FromWebContents(web_contents());
   content_settings->OnContentBlocked(CONTENT_SETTINGS_TYPE_IMAGES);
 
-  scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+  std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(
-         NULL, web_contents(), profile(),
-         CONTENT_SETTINGS_TYPE_IMAGES));
+          NULL, web_contents(), profile(), CONTENT_SETTINGS_TYPE_IMAGES));
   const ContentSettingBubbleModel::BubbleContent& bubble_content =
       content_setting_bubble_model->bubble_content();
   EXPECT_FALSE(bubble_content.title.empty());
@@ -93,7 +92,7 @@ TEST_F(ContentSettingBubbleModelTest, Cookies) {
       TabSpecificContentSettings::FromWebContents(web_contents());
   content_settings->OnContentBlocked(CONTENT_SETTINGS_TYPE_COOKIES);
 
-  scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+  std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(
           NULL, web_contents(), profile(), CONTENT_SETTINGS_TYPE_COOKIES));
   const ContentSettingBubbleModel::BubbleContent& bubble_content =
@@ -122,8 +121,7 @@ TEST_F(ContentSettingBubbleModelTest, Cookies) {
             l10n_util::GetStringFUTF8(
                 IDS_ALLOWED_COOKIES_BLOCK,
                 url_formatter::FormatUrlForSecurityDisplay(
-                    web_contents()->GetURL(), profile()->GetPrefs()->GetString(
-                                                  prefs::kAcceptLanguages))));
+                    web_contents()->GetURL())));
   EXPECT_FALSE(bubble_content_2.custom_link.empty());
   EXPECT_TRUE(bubble_content_2.custom_link_enabled);
   EXPECT_FALSE(bubble_content_2.manage_link.empty());
@@ -148,9 +146,9 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamMicAndCamera) {
                                                std::string(),
                                                std::string());
 
-  scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-      new ContentSettingMediaStreamBubbleModel(
-         nullptr, web_contents(), profile()));
+  std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+      new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                               profile()));
   const ContentSettingBubbleModel::BubbleContent& bubble_content =
       content_setting_bubble_model->bubble_content();
   EXPECT_EQ(bubble_content.title,
@@ -159,9 +157,7 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamMicAndCamera) {
   EXPECT_EQ(bubble_content.radio_group.radio_items[0],
             l10n_util::GetStringFUTF8(
                 IDS_ALLOWED_MEDIASTREAM_MIC_AND_CAMERA_NO_ACTION,
-                url_formatter::FormatUrlForSecurityDisplay(
-                    security_origin, profile()->GetPrefs()->GetString(
-                                         prefs::kAcceptLanguages))));
+                url_formatter::FormatUrlForSecurityDisplay(security_origin)));
   EXPECT_EQ(bubble_content.radio_group.radio_items[1],
             l10n_util::GetStringUTF8(
                 IDS_ALLOWED_MEDIASTREAM_MIC_AND_CAMERA_BLOCK));
@@ -183,21 +179,13 @@ TEST_F(ContentSettingBubbleModelTest, BlockedMediastreamMicAndCamera) {
 
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile());
-  ContentSettingsPattern primary_pattern =
-      ContentSettingsPattern::FromURL(url);
   ContentSetting setting = CONTENT_SETTING_BLOCK;
-  host_content_settings_map->SetContentSetting(
-        primary_pattern,
-        ContentSettingsPattern::Wildcard(),
-        CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
-        std::string(),
-        setting);
-  host_content_settings_map->SetContentSetting(
-        primary_pattern,
-        ContentSettingsPattern::Wildcard(),
-        CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
-        std::string(),
-        setting);
+  host_content_settings_map->SetContentSettingDefaultScope(
+      url, GURL(), CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string(),
+      setting);
+  host_content_settings_map->SetContentSettingDefaultScope(
+      url, GURL(), CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string(),
+      setting);
 
   TabSpecificContentSettings* content_settings =
       TabSpecificContentSettings::FromWebContents(web_contents());
@@ -213,9 +201,9 @@ TEST_F(ContentSettingBubbleModelTest, BlockedMediastreamMicAndCamera) {
                                                std::string(),
                                                std::string());
   {
-    scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-        new ContentSettingMediaStreamBubbleModel(
-           nullptr, web_contents(), profile()));
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+        new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                                 profile()));
     const ContentSettingBubbleModel::BubbleContent& bubble_content =
         content_setting_bubble_model->bubble_content();
     // Test if the correct radio item is selected for the blocked mediastream
@@ -238,9 +226,9 @@ TEST_F(ContentSettingBubbleModelTest, BlockedMediastreamMicAndCamera) {
                 std::string()));
 
   {
-    scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-        new ContentSettingMediaStreamBubbleModel(
-           nullptr, web_contents(), profile()));
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+        new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                                 profile()));
     // Change the radio setting.
     content_setting_bubble_model->OnRadioClicked(0);
   }
@@ -272,15 +260,10 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubble) {
 
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile());
-  ContentSettingsPattern primary_pattern =
-      ContentSettingsPattern::FromURL(url);
   ContentSetting setting = CONTENT_SETTING_BLOCK;
-  host_content_settings_map->SetContentSetting(
-        primary_pattern,
-        ContentSettingsPattern::Wildcard(),
-        CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
-        std::string(),
-        setting);
+  host_content_settings_map->SetContentSettingDefaultScope(
+      url, GURL(), CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string(),
+      setting);
 
   TabSpecificContentSettings* content_settings =
       TabSpecificContentSettings::FromWebContents(web_contents());
@@ -294,9 +277,9 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubble) {
                                                std::string(),
                                                std::string());
   {
-    scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-        new ContentSettingMediaStreamBubbleModel(
-           nullptr, web_contents(), profile()));
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+        new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                                 profile()));
     const ContentSettingBubbleModel::BubbleContent& bubble_content =
         content_setting_bubble_model->bubble_content();
     // Test if the correct radio item is selected for the blocked mediastream
@@ -314,9 +297,9 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubble) {
                 std::string()));
 
   {
-    scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-        new ContentSettingMediaStreamBubbleModel(
-           nullptr, web_contents(), profile()));
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+        new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                                 profile()));
     const ContentSettingBubbleModel::BubbleContent& bubble_content =
         content_setting_bubble_model->bubble_content();
     // Test that the reload hint is displayed.
@@ -337,9 +320,9 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubble) {
                 std::string()));
 
   {
-    scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-        new ContentSettingMediaStreamBubbleModel(
-            nullptr, web_contents(), profile()));
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+        new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                                 profile()));
     const ContentSettingBubbleModel::BubbleContent& bubble_content =
         content_setting_bubble_model->bubble_content();
     // Test that the reload hint is not displayed any more.
@@ -385,9 +368,9 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubbleMediaMenus) {
                                                std::string(),
                                                std::string());
   {
-    scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-        new ContentSettingMediaStreamBubbleModel(
-           nullptr, web_contents(), profile()));
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+        new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                                 profile()));
     const ContentSettingBubbleModel::BubbleContent& bubble_content =
         content_setting_bubble_model->bubble_content();
     EXPECT_TRUE(bubble_content.custom_link.empty());
@@ -406,9 +389,9 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubbleMediaMenus) {
         fake_audio_device2.id);
   }
   {
-    scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-        new ContentSettingMediaStreamBubbleModel(
-           nullptr, web_contents(), profile()));
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+        new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                                 profile()));
     const ContentSettingBubbleModel::BubbleContent& bubble_content =
         content_setting_bubble_model->bubble_content();
     EXPECT_EQ(1U, bubble_content.media_menus.size());
@@ -428,7 +411,7 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubbleMediaMenus) {
   scoped_refptr<MediaStreamCaptureIndicator> indicator =
       MediaCaptureDevicesDispatcher::GetInstance()->
         GetMediaStreamCaptureIndicator();
-  scoped_ptr<content::MediaStreamUI> media_stream_ui =
+  std::unique_ptr<content::MediaStreamUI> media_stream_ui =
       indicator->RegisterMediaStream(web_contents(), audio_devices);
   media_stream_ui->OnStarted(base::Closure());
   microphone_camera_state &= ~TabSpecificContentSettings::MICROPHONE_BLOCKED;
@@ -440,9 +423,9 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubbleMediaMenus) {
                                                std::string());
 
   {
-    scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-        new ContentSettingMediaStreamBubbleModel(
-           nullptr, web_contents(), profile()));
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+        new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                                 profile()));
     const ContentSettingBubbleModel::BubbleContent& bubble_content =
         content_setting_bubble_model->bubble_content();
     // Settings not changed yet, so the "settings changed" message should not be
@@ -463,9 +446,9 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubbleMediaMenus) {
   }
 
   {
-    scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-        new ContentSettingMediaStreamBubbleModel(
-            nullptr, web_contents(), profile()));
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+        new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                                 profile()));
     const ContentSettingBubbleModel::BubbleContent& bubble_content =
         content_setting_bubble_model->bubble_content();
     // Test that the reload hint is displayed.
@@ -484,9 +467,9 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubbleMediaMenus) {
                                                std::string());
 
   {
-    scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-        new ContentSettingMediaStreamBubbleModel(
-           nullptr, web_contents(), profile()));
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+        new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                                 profile()));
     const ContentSettingBubbleModel::BubbleContent& bubble_content =
         content_setting_bubble_model->bubble_content();
     // Test that the reload hint is not displayed any more, because this is a
@@ -522,9 +505,9 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamMic) {
                                                std::string(),
                                                std::string());
 
-  scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-      new ContentSettingMediaStreamBubbleModel(
-          nullptr, web_contents(), profile()));
+  std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+      new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                               profile()));
   const ContentSettingBubbleModel::BubbleContent& bubble_content =
       content_setting_bubble_model->bubble_content();
   EXPECT_EQ(bubble_content.title,
@@ -533,9 +516,7 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamMic) {
   EXPECT_EQ(bubble_content.radio_group.radio_items[0],
             l10n_util::GetStringFUTF8(
                 IDS_ALLOWED_MEDIASTREAM_MIC_NO_ACTION,
-                url_formatter::FormatUrlForSecurityDisplay(
-                    security_origin, profile()->GetPrefs()->GetString(
-                                         prefs::kAcceptLanguages))));
+                url_formatter::FormatUrlForSecurityDisplay(security_origin)));
   EXPECT_EQ(bubble_content.radio_group.radio_items[1],
             l10n_util::GetStringUTF8(
                 IDS_ALLOWED_MEDIASTREAM_MIC_BLOCK));
@@ -566,9 +547,7 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamMic) {
   EXPECT_EQ(new_bubble_content.radio_group.radio_items[0],
             l10n_util::GetStringFUTF8(
                 IDS_BLOCKED_MEDIASTREAM_MIC_ASK,
-                url_formatter::FormatUrlForSecurityDisplay(
-                    security_origin, profile()->GetPrefs()->GetString(
-                                         prefs::kAcceptLanguages))));
+                url_formatter::FormatUrlForSecurityDisplay(security_origin)));
   EXPECT_EQ(new_bubble_content.radio_group.radio_items[1],
             l10n_util::GetStringUTF8(
                 IDS_BLOCKED_MEDIASTREAM_MIC_NO_ACTION));
@@ -599,9 +578,9 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamCamera) {
                                                std::string(),
                                                std::string());
 
-  scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-      new ContentSettingMediaStreamBubbleModel(
-          nullptr, web_contents(), profile()));
+  std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+      new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                               profile()));
   const ContentSettingBubbleModel::BubbleContent& bubble_content =
       content_setting_bubble_model->bubble_content();
   EXPECT_EQ(bubble_content.title,
@@ -610,9 +589,7 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamCamera) {
   EXPECT_EQ(bubble_content.radio_group.radio_items[0],
             l10n_util::GetStringFUTF8(
                 IDS_ALLOWED_MEDIASTREAM_CAMERA_NO_ACTION,
-                url_formatter::FormatUrlForSecurityDisplay(
-                    security_origin, profile()->GetPrefs()->GetString(
-                                         prefs::kAcceptLanguages))));
+                url_formatter::FormatUrlForSecurityDisplay(security_origin)));
   EXPECT_EQ(bubble_content.radio_group.radio_items[1],
             l10n_util::GetStringUTF8(
                 IDS_ALLOWED_MEDIASTREAM_CAMERA_BLOCK));
@@ -643,9 +620,7 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamCamera) {
   EXPECT_EQ(new_bubble_content.radio_group.radio_items[0],
             l10n_util::GetStringFUTF8(
                 IDS_BLOCKED_MEDIASTREAM_CAMERA_ASK,
-                url_formatter::FormatUrlForSecurityDisplay(
-                    security_origin, profile()->GetPrefs()->GetString(
-                                         prefs::kAcceptLanguages))));
+                url_formatter::FormatUrlForSecurityDisplay(security_origin)));
   EXPECT_EQ(new_bubble_content.radio_group.radio_items[1],
             l10n_util::GetStringUTF8(
                 IDS_BLOCKED_MEDIASTREAM_CAMERA_NO_ACTION));
@@ -678,9 +653,9 @@ TEST_F(ContentSettingBubbleModelTest, AccumulateMediastreamMicAndCamera) {
                                                std::string(),
                                                std::string());
 
-  scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
-      new ContentSettingMediaStreamBubbleModel(
-          nullptr, web_contents(), profile()));
+  std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+      new ContentSettingMediaStreamBubbleModel(nullptr, web_contents(),
+                                               profile()));
   const ContentSettingBubbleModel::BubbleContent& bubble_content =
       content_setting_bubble_model->bubble_content();
   EXPECT_EQ(bubble_content.title,
@@ -689,9 +664,7 @@ TEST_F(ContentSettingBubbleModelTest, AccumulateMediastreamMicAndCamera) {
   EXPECT_EQ(bubble_content.radio_group.radio_items[0],
             l10n_util::GetStringFUTF8(
                 IDS_ALLOWED_MEDIASTREAM_MIC_NO_ACTION,
-                url_formatter::FormatUrlForSecurityDisplay(
-                    security_origin, profile()->GetPrefs()->GetString(
-                                         prefs::kAcceptLanguages))));
+                url_formatter::FormatUrlForSecurityDisplay(security_origin)));
   EXPECT_EQ(bubble_content.radio_group.radio_items[1],
             l10n_util::GetStringUTF8(
                 IDS_ALLOWED_MEDIASTREAM_MIC_BLOCK));
@@ -720,9 +693,7 @@ TEST_F(ContentSettingBubbleModelTest, AccumulateMediastreamMicAndCamera) {
   EXPECT_EQ(new_bubble_content.radio_group.radio_items[0],
             l10n_util::GetStringFUTF8(
                 IDS_ALLOWED_MEDIASTREAM_MIC_AND_CAMERA_NO_ACTION,
-                url_formatter::FormatUrlForSecurityDisplay(
-                    security_origin, profile()->GetPrefs()->GetString(
-                                         prefs::kAcceptLanguages))));
+                url_formatter::FormatUrlForSecurityDisplay(security_origin)));
   EXPECT_EQ(new_bubble_content.radio_group.radio_items[1],
             l10n_util::GetStringUTF8(
                 IDS_ALLOWED_MEDIASTREAM_MIC_AND_CAMERA_BLOCK));
@@ -738,10 +709,9 @@ TEST_F(ContentSettingBubbleModelTest, Plugins) {
   content_settings->OnContentBlockedWithDetail(CONTENT_SETTINGS_TYPE_PLUGINS,
                                                plugin_name);
 
-  scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+  std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(
-         NULL, web_contents(), profile(),
-         CONTENT_SETTINGS_TYPE_PLUGINS));
+          NULL, web_contents(), profile(), CONTENT_SETTINGS_TYPE_PLUGINS));
   const ContentSettingBubbleModel::BubbleContent& bubble_content =
       content_setting_bubble_model->bubble_content();
   EXPECT_FALSE(bubble_content.title.empty());
@@ -760,10 +730,9 @@ TEST_F(ContentSettingBubbleModelTest, PepperBroker) {
       TabSpecificContentSettings::FromWebContents(web_contents());
   content_settings->OnContentBlocked(CONTENT_SETTINGS_TYPE_PPAPI_BROKER);
 
-  scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+  std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(
-         NULL, web_contents(), profile(),
-         CONTENT_SETTINGS_TYPE_PPAPI_BROKER));
+          NULL, web_contents(), profile(), CONTENT_SETTINGS_TYPE_PPAPI_BROKER));
   const ContentSettingBubbleModel::BubbleContent& bubble_content =
       content_setting_bubble_model->bubble_content();
 
@@ -809,11 +778,8 @@ TEST_F(ContentSettingBubbleModelTest, Geolocation) {
   // Add it to the content map, should now have a clear link.
   HostContentSettingsMap* setting_map =
       HostContentSettingsMapFactory::GetForProfile(profile());
-  setting_map->SetContentSetting(
-      ContentSettingsPattern::FromURLNoWildcard(frame1_url),
-      ContentSettingsPattern::FromURLNoWildcard(page_url),
-      CONTENT_SETTINGS_TYPE_GEOLOCATION,
-      std::string(),
+  setting_map->SetContentSettingDefaultScope(
+      frame1_url, page_url, CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string(),
       CONTENT_SETTING_ALLOW);
   CheckGeolocationBubble(1, true, false);
 
@@ -837,7 +803,7 @@ TEST_F(ContentSettingBubbleModelTest, FileURL) {
   NavigateAndCommit(GURL(file_url));
   TabSpecificContentSettings::FromWebContents(web_contents())->OnContentBlocked(
       CONTENT_SETTINGS_TYPE_IMAGES);
-  scoped_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+  std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(
           nullptr, web_contents(), profile(), CONTENT_SETTINGS_TYPE_IMAGES));
   std::string title =
@@ -876,15 +842,11 @@ class FakeDelegate : public ProtocolHandlerRegistry::Delegate {
     // side effects on other tests.
   }
 
-  shell_integration::DefaultProtocolClientWorker* CreateShellWorker(
-      shell_integration::DefaultWebClientObserver* observer,
+  scoped_refptr<shell_integration::DefaultProtocolClientWorker>
+  CreateShellWorker(
+      const shell_integration::DefaultWebClientWorkerCallback& callback,
       const std::string& protocol) override {
     VLOG(1) << "CreateShellWorker";
-    return NULL;
-  }
-
-  ProtocolHandlerRegistry::DefaultClientObserver* CreateShellObserver(
-      ProtocolHandlerRegistry* registry) override {
     return NULL;
   }
 

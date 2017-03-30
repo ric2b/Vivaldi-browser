@@ -38,6 +38,7 @@
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/desktop_media_id.h"
 #include "content/public/browser/media_observer.h"
 #include "content/public/browser/media_request_state.h"
 #include "content/public/browser/render_process_host.h"
@@ -98,8 +99,8 @@ void ParseStreamType(const StreamControls& controls,
   *audio_type = MEDIA_NO_SERVICE;
   *video_type = MEDIA_NO_SERVICE;
   const bool audio_support_flag_for_desktop_share =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableAudioSupportForDesktopShare);
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableAudioSupportForDesktopShare);
   if (controls.audio.requested) {
     if (!controls.audio.stream_source.empty()) {
        // This is tab or screen capture.
@@ -282,7 +283,7 @@ class MediaStreamManager::DeviceRequest {
   }
 
   bool HasUIRequest() const { return ui_request_.get() != nullptr; }
-  scoped_ptr<MediaStreamRequest> DetachUIRequest() {
+  std::unique_ptr<MediaStreamRequest> DetachUIRequest() {
     return std::move(ui_request_);
   }
 
@@ -346,13 +347,13 @@ class MediaStreamManager::DeviceRequest {
   // Currently it is only used by |DEVICE_ACCESS| type.
   MediaStreamManager::MediaRequestResponseCallback callback;
 
-  scoped_ptr<MediaStreamUIProxy> ui_proxy;
+  std::unique_ptr<MediaStreamUIProxy> ui_proxy;
 
   std::string tab_capture_device_id;
 
  private:
   std::vector<MediaRequestState> state_;
-  scoped_ptr<MediaStreamRequest> ui_request_;
+  std::unique_ptr<MediaStreamRequest> ui_request_;
   MediaStreamType audio_type_;
   MediaStreamType video_type_;
   int target_process_id_;
@@ -1105,7 +1106,7 @@ void MediaStreamManager::DeleteRequest(const std::string& label) {
   for (DeviceRequests::iterator request_it = requests_.begin();
        request_it != requests_.end(); ++request_it) {
     if (request_it->first == label) {
-      scoped_ptr<DeviceRequest> request(request_it->second);
+      std::unique_ptr<DeviceRequest> request(request_it->second);
       requests_.erase(request_it);
       return;
     }
@@ -1154,7 +1155,10 @@ void MediaStreamManager::PostRequestToUI(
   if (IsVideoMediaType(video_type))
     request->SetState(video_type, MEDIA_REQUEST_STATE_PENDING_APPROVAL);
 
-  if (use_fake_ui_) {
+  // If using the fake UI, it will just auto-select from the available devices.
+  // The fake UI doesn't work for desktop sharing requests since we can't see
+  // its devices from here; always use the real UI for such requests.
+  if (use_fake_ui_ && request->video_type() != MEDIA_DESKTOP_VIDEO_CAPTURE) {
     if (!fake_ui_)
       fake_ui_.reset(new FakeMediaStreamUIProxy());
 
@@ -1788,7 +1792,7 @@ void MediaStreamManager::OnResume() {
 }
 
 void MediaStreamManager::UseFakeUIForTests(
-    scoped_ptr<FakeMediaStreamUIProxy> fake_ui) {
+    std::unique_ptr<FakeMediaStreamUIProxy> fake_ui) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   use_fake_ui_ = true;
   fake_ui_ = std::move(fake_ui);
@@ -1809,17 +1813,9 @@ void MediaStreamManager::UnregisterNativeLogCallback(int renderer_host_id) {
 }
 
 void MediaStreamManager::AddLogMessageOnIOThread(const std::string& message) {
-  // Get render process ids on the IO thread.
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  for (const LabeledDeviceRequest& labeled_request : requests_) {
-    DeviceRequest* const request = labeled_request.second;
-    if (request->request_type == MEDIA_GENERATE_STREAM) {
-      const auto& found = log_callbacks_.find(request->requesting_process_id);
-      if (found != log_callbacks_.end())
-        found->second.Run(message);
-    }
-  }
+  for (const auto& callback : log_callbacks_)
+    callback.second.Run(message);
 }
 
 void MediaStreamManager::HandleAccessRequestResponse(
@@ -2052,15 +2048,24 @@ void MediaStreamManager::OnMediaStreamUIWindowId(MediaStreamType video_type,
   if (video_type != MEDIA_DESKTOP_VIDEO_CAPTURE)
     return;
 
-  // Pass along for desktop screen and window capturing.
+  // Pass along for desktop screen and window capturing when
+  // DesktopCaptureDevice is used.
   for (const StreamDeviceInfo& device_info : devices) {
-    if (device_info.device.type == MEDIA_DESKTOP_VIDEO_CAPTURE &&
-        !WebContentsMediaCaptureId::IsWebContentsDeviceId(
-            device_info.device.id)) {
-      video_capture_manager_->SetDesktopCaptureWindowId(device_info.session_id,
-                                                        window_id);
-      break;
-    }
+    if (device_info.device.type != MEDIA_DESKTOP_VIDEO_CAPTURE)
+      continue;
+
+    DesktopMediaID media_id = DesktopMediaID::Parse(device_info.device.id);
+    // WebContentsVideoCaptureDevice is used for tab/webcontents.
+    if (media_id.type == DesktopMediaID::TYPE_WEB_CONTENTS)
+      continue;
+#if defined(USE_AURA)
+    // DesktopCaptureDevicAura is used when aura_id is valid.
+    if (media_id.aura_id > DesktopMediaID::kNullId)
+      continue;
+#endif
+    video_capture_manager_->SetDesktopCaptureWindowId(device_info.session_id,
+                                                      window_id);
+    break;
   }
 }
 

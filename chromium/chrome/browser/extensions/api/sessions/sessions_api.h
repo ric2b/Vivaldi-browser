@@ -35,14 +35,13 @@ class SessionsGetRecentlyClosedFunction : public ChromeSyncExtensionFunction {
                              SESSIONS_GETRECENTLYCLOSED)
 
  private:
-  scoped_ptr<api::tabs::Tab> CreateTabModel(
-      const sessions::TabRestoreService::Tab& tab,
-      int session_id,
-      int selected_index);
-  scoped_ptr<api::windows::Window> CreateWindowModel(
+  api::tabs::Tab CreateTabModel(const sessions::TabRestoreService::Tab& tab,
+                                int session_id,
+                                int selected_index);
+  std::unique_ptr<api::windows::Window> CreateWindowModel(
       const sessions::TabRestoreService::Window& window,
       int session_id);
-  scoped_ptr<api::sessions::Session> CreateSessionModel(
+  std::unique_ptr<api::sessions::Session> CreateSessionModel(
       const sessions::TabRestoreService::Entry* entry);
 };
 
@@ -53,17 +52,17 @@ class SessionsGetDevicesFunction : public ChromeSyncExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("sessions.getDevices", SESSIONS_GETDEVICES)
 
  private:
-  scoped_ptr<api::tabs::Tab> CreateTabModel(const std::string& session_tag,
-                                            const sessions::SessionTab& tab,
-                                            int tab_index,
-                                            int selected_index);
-  scoped_ptr<api::windows::Window> CreateWindowModel(
+  api::tabs::Tab CreateTabModel(const std::string& session_tag,
+                                const sessions::SessionTab& tab,
+                                int tab_index,
+                                int selected_index);
+  std::unique_ptr<api::windows::Window> CreateWindowModel(
       const sessions::SessionWindow& window,
       const std::string& session_tag);
-  scoped_ptr<api::sessions::Session> CreateSessionModel(
+  std::unique_ptr<api::sessions::Session> CreateSessionModel(
       const sessions::SessionWindow& window,
       const std::string& session_tag);
-  scoped_ptr<api::sessions::Device> CreateDeviceModel(
+  api::sessions::Device CreateDeviceModel(
       const sync_driver::SyncedSession* session);
 };
 
@@ -134,7 +133,7 @@ class SessionsAPI : public BrowserContextKeyedAPI,
   static const bool kServiceIsNULLWhileTesting = true;
 
   // Created lazily upon OnListenerAdded.
-  scoped_ptr<SessionsEventRouter> sessions_event_router_;
+  std::unique_ptr<SessionsEventRouter> sessions_event_router_;
 
   DISALLOW_COPY_AND_ASSIGN(SessionsAPI);
 };

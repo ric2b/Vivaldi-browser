@@ -57,8 +57,7 @@ class PublicURLManager;
 class SecurityOrigin;
 class ScriptCallStack;
 
-class CORE_EXPORT ExecutionContext
-    : public ContextLifecycleNotifier, public WillBeHeapSupplementable<ExecutionContext> {
+class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier, public Supplementable<ExecutionContext> {
     WTF_MAKE_NONCOPYABLE(ExecutionContext);
 public:
     DECLARE_VIRTUAL_TRACE();
@@ -78,11 +77,12 @@ public:
     virtual bool isSharedWorkerGlobalScope() const { return false; }
     virtual bool isServiceWorkerGlobalScope() const { return false; }
     virtual bool isCompositorWorkerGlobalScope() const { return false; }
+    virtual bool isPaintWorkletGlobalScope() const { return false; }
     virtual bool isJSExecutionForbidden() const { return false; }
 
     virtual bool isContextThread() const { return true; }
 
-    SecurityOrigin* securityOrigin();
+    SecurityOrigin* getSecurityOrigin();
     ContentSecurityPolicy* contentSecurityPolicy();
     const KURL& url() const;
     KURL completeURL(const String& url) const;
@@ -104,9 +104,9 @@ public:
     KURL contextCompleteURL(const String& url) const { return virtualCompleteURL(url); }
 
     bool shouldSanitizeScriptError(const String& sourceURL, AccessControlStatus);
-    void reportException(PassRefPtrWillBeRawPtr<ErrorEvent>, int scriptId, PassRefPtr<ScriptCallStack>, AccessControlStatus);
+    void reportException(RawPtr<ErrorEvent>, int scriptId, PassRefPtr<ScriptCallStack>, AccessControlStatus);
 
-    virtual void addConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>) = 0;
+    virtual void addConsoleMessage(RawPtr<ConsoleMessage>) = 0;
     virtual void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) = 0;
 
     PublicURLManager& publicURLManager();
@@ -139,11 +139,7 @@ public:
     int circularSequentialID();
 
     virtual EventTarget* errorEventTarget() = 0;
-    virtual EventQueue* eventQueue() const = 0;
-
-    void enforceSuborigin(const String& name);
-    bool hasSuborigin();
-    String suboriginName();
+    virtual EventQueue* getEventQueue() const = 0;
 
     // Methods related to window interaction. It should be used to manage window
     // focusing and window creation permission for an ExecutionContext.
@@ -156,7 +152,8 @@ public:
     virtual bool isSecureContext(String& errorMessage, const SecureContextCheck = StandardSecureContextCheck) const = 0;
     virtual bool isSecureContext(const SecureContextCheck = StandardSecureContextCheck) const;
 
-    virtual void setReferrerPolicy(ReferrerPolicy);
+    virtual String outgoingReferrer() const;
+    void setReferrerPolicy(ReferrerPolicy);
     ReferrerPolicy getReferrerPolicy() const { return m_referrerPolicy; }
 
 protected:
@@ -167,7 +164,7 @@ protected:
     virtual KURL virtualCompleteURL(const String&) const = 0;
 
 private:
-    bool dispatchErrorEvent(PassRefPtrWillBeRawPtr<ErrorEvent>, AccessControlStatus);
+    bool dispatchErrorEvent(RawPtr<ErrorEvent>, AccessControlStatus);
     void runSuspendableTasks();
 
 #if !ENABLE(OILPAN)
@@ -185,7 +182,7 @@ private:
     bool m_activeDOMObjectsAreSuspended;
     bool m_activeDOMObjectsAreStopped;
 
-    OwnPtrWillBeMember<PublicURLManager> m_publicURLManager;
+    Member<PublicURLManager> m_publicURLManager;
 
     // Counter that keeps track of how many window interaction calls are allowed
     // for this ExecutionContext. Callers are expected to call

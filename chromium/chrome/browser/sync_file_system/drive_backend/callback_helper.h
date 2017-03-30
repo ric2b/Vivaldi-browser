@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SYNC_FILE_SYSTEM_DRIVE_BACKEND_CALLBACK_HELPER_H_
 #define CHROME_BROWSER_SYNC_FILE_SYSTEM_DRIVE_BACKEND_CALLBACK_HELPER_H_
 
+#include <memory>
 #include <type_traits>
 
 #include "base/bind.h"
@@ -22,15 +23,13 @@ namespace drive_backend {
 namespace internal {
 
 template <typename T>
-typename std::enable_if<base::internal::IsMoveOnlyType<T>::value,
-                        base::internal::PassedWrapper<T>>::type
-RebindForward(T& t) {
+base::internal::PassedWrapper<std::unique_ptr<T>> RebindForward(
+    std::unique_ptr<T>& t) {
   return base::Passed(&t);
 }
 
 template <typename T>
-typename std::enable_if<!base::internal::IsMoveOnlyType<T>::value, T&>::type
-RebindForward(T& t) {
+T& RebindForward(T& t) {
   return t;
 }
 
@@ -59,7 +58,7 @@ class CallbackHolder {
  private:
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   const tracked_objects::Location from_here_;
-  scoped_ptr<base::Callback<T> > callback_;
+  std::unique_ptr<base::Callback<T>> callback_;
 
   DISALLOW_COPY_AND_ASSIGN(CallbackHolder);
 };
@@ -72,8 +71,7 @@ struct RelayToTaskRunnerHelper<void(Args...)> {
   static void Run(CallbackHolder<void(Args...)>* holder, Args... args) {
     holder->task_runner()->PostTask(
         holder->from_here(),
-        base::Bind(holder->callback(),
-                   RebindForward(args)...));
+        base::Bind(holder->callback(), RebindForward(args)...));
   }
 };
 

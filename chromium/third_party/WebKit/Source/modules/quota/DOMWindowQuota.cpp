@@ -42,8 +42,6 @@ DOMWindowQuota::DOMWindowQuota(LocalDOMWindow& window)
 {
 }
 
-DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(DOMWindowQuota);
-
 const char* DOMWindowQuota::supplementName()
 {
     return "DOMWindowQuota";
@@ -52,10 +50,10 @@ const char* DOMWindowQuota::supplementName()
 // static
 DOMWindowQuota& DOMWindowQuota::from(LocalDOMWindow& window)
 {
-    DOMWindowQuota* supplement = static_cast<DOMWindowQuota*>(WillBeHeapSupplement<LocalDOMWindow>::from(window, supplementName()));
+    DOMWindowQuota* supplement = static_cast<DOMWindowQuota*>(Supplement<LocalDOMWindow>::from(window, supplementName()));
     if (!supplement) {
         supplement = new DOMWindowQuota(window);
-        provideTo(window, supplementName(), adoptPtrWillBeNoop(supplement));
+        provideTo(window, supplementName(), supplement);
     }
     return *supplement;
 }
@@ -76,7 +74,7 @@ DeprecatedStorageInfo* DOMWindowQuota::webkitStorageInfo() const
 DEFINE_TRACE(DOMWindowQuota)
 {
     visitor->trace(m_storageInfo);
-    WillBeHeapSupplement<LocalDOMWindow>::trace(visitor);
+    Supplement<LocalDOMWindow>::trace(visitor);
     DOMWindowProperty::trace(visitor);
 }
 

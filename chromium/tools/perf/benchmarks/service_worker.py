@@ -95,6 +95,10 @@ class _ServiceWorkerMeasurement(page_test.PageTest):
     self._speed_index = speedindex.SpeedIndexMetric()
     self._page_open_times = collections.defaultdict(int)
 
+  def DidRunPage(self, platform):
+    if platform.tracing_controller.is_tracing_running:
+      platform.tracing_controller.StopTracing()
+
   def WillNavigateToPage(self, page, tab):
     self._timeline_controller.SetUp(page, tab)
     self._timeline_controller.Start(tab)
@@ -183,3 +187,8 @@ class ServiceWorkerMicroBenchmarkPerfTest(perf_benchmark.PerfBenchmark):
   @classmethod
   def Name(cls):
     return 'service_worker.service_worker_micro_benchmark'
+
+  @classmethod
+  def ShouldDisable(cls, possible_browser):  # http://crbug.com/597656
+      return (possible_browser.browser_type == 'reference' and
+              possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')

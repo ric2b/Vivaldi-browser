@@ -6,17 +6,21 @@
 
 #include <set>
 
+#include "base/memory/weak_ptr.h"
 #include "base/stl_util.h"
-#include "build/build_config.h"
 #include "base/threading/platform_thread.h"
+#include "build/build_config.h"
 #include "components/mus/common/args.h"
 #include "components/mus/gles2/gpu_impl.h"
-#include "components/mus/ws/client_connection.h"
-#include "components/mus/ws/connection_manager.h"
+#include "components/mus/ws/display.h"
+#include "components/mus/ws/display_binding.h"
+#include "components/mus/ws/display_manager.h"
+#include "components/mus/ws/user_display_manager.h"
+#include "components/mus/ws/window_server.h"
+#include "components/mus/ws/window_tree.h"
+#include "components/mus/ws/window_tree_binding.h"
 #include "components/mus/ws/window_tree_factory.h"
-#include "components/mus/ws/window_tree_host_connection.h"
-#include "components/mus/ws/window_tree_host_impl.h"
-#include "components/mus/ws/window_tree_impl.h"
+#include "components/mus/ws/window_tree_host_factory.h"
 #include "components/resource_provider/public/cpp/resource_loader.h"
 #include "mojo/public/c/system/main.h"
 #include "mojo/services/tracing/public/cpp/tracing_impl.h"
@@ -33,6 +37,8 @@
 #include "base/command_line.h"
 #include "ui/platform_window/x11/x11_window.h"
 #elif defined(USE_OZONE)
+#include "ui/events/ozone/layout/keyboard_layout_engine.h"
+#include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
@@ -53,18 +59,25 @@ const char kResourceFile200[] = "mus_app_resources_200.pak";
 
 // TODO(sky): this is a pretty typical pattern, make it easier to do.
 struct MandolineUIServicesApp::PendingRequest {
-  scoped_ptr<mojo::InterfaceRequest<mojom::DisplayManager>> dm_request;
+  mojo::Connection* connection;
   scoped_ptr<mojo::InterfaceRequest<mojom::WindowTreeFactory>> wtf_request;
 };
 
-MandolineUIServicesApp::MandolineUIServicesApp()
-    : connector_(nullptr) {}
+struct MandolineUIServicesApp::UserState {
+  scoped_ptr<ws::WindowTreeFactory> window_tree_factory;
+  scoped_ptr<ws::WindowTreeHostFactory> window_tree_host_factory;
+};
+
+MandolineUIServicesApp::MandolineUIServicesApp() {}
 
 MandolineUIServicesApp::~MandolineUIServicesApp() {
-  if (gpu_state_)
-    gpu_state_->StopThreads();
-  // Destroy |connection_manager_| first, since it depends on |event_source_|.
-  connection_manager_.reset();
+  // Destroy |window_server_| first, since it depends on |event_source_|.
+  // WindowServer (or more correctly its Displays) may have state that needs to
+  // be destroyed before GpuState as well.
+  window_server_.reset();
+
+  if (platform_display_init_params_.gpu_state)
+    platform_display_init_params_.gpu_state->StopThreads();
 }
 
 void MandolineUIServicesApp::InitializeResources(mojo::Connector* connector) {
@@ -92,12 +105,26 @@ void MandolineUIServicesApp::InitializeResources(mojo::Connector* connector) {
       resource_loader.ReleaseFile(kResourceFile200), ui::SCALE_FACTOR_200P);
 }
 
+MandolineUIServicesApp::UserState* MandolineUIServicesApp::GetUserState(
+    mojo::Connection* connection) {
+  const ws::UserId& user_id = connection->GetRemoteIdentity().user_id();
+  auto it = user_id_to_user_state_.find(user_id);
+  if (it != user_id_to_user_state_.end())
+    return it->second.get();
+  user_id_to_user_state_[user_id] = make_scoped_ptr(new UserState);
+  return user_id_to_user_state_[user_id].get();
+}
+
+void MandolineUIServicesApp::AddUserIfNecessary(mojo::Connection* connection) {
+  window_server_->user_id_tracker()->AddUserId(
+      connection->GetRemoteIdentity().user_id());
+}
+
 void MandolineUIServicesApp::Initialize(mojo::Connector* connector,
-                                        const std::string& url,
-                                        uint32_t id,
-                                        uint32_t user_id) {
-  connector_ = connector;
-  surfaces_state_ = new SurfacesState;
+                                        const mojo::Identity& identity,
+                                        uint32_t id) {
+  platform_display_init_params_.connector = connector;
+  platform_display_init_params_.surfaces_state = new SurfacesState;
 
   base::PlatformThread::SetName("mus");
 
@@ -118,6 +145,10 @@ void MandolineUIServicesApp::Initialize(mojo::Connector* connector,
   // Because GL libraries need to be initialized before entering the sandbox,
   // in MUS, |InitializeForUI| will load the GL libraries.
   ui::OzonePlatform::InitializeForUI();
+
+  // TODO(kylechar): We might not always want a US keyboard layout.
+  ui::KeyboardLayoutEngineManager::GetKeyboardLayoutEngine()
+      ->SetCurrentLayoutByName("us");
 #endif
 
 // TODO(rjkroege): Enter sandbox here before we start threads in GpuState
@@ -129,113 +160,100 @@ void MandolineUIServicesApp::Initialize(mojo::Connector* connector,
 
   // TODO(rjkroege): It is possible that we might want to generalize the
   // GpuState object.
-  gpu_state_ = new GpuState();
-  connection_manager_.reset(new ws::ConnectionManager(this, surfaces_state_));
+  platform_display_init_params_.gpu_state = new GpuState();
+  window_server_.reset(
+      new ws::WindowServer(this, platform_display_init_params_.surfaces_state));
 
-  tracing_.Initialize(connector, url);
+  tracing_.Initialize(connector, identity.name());
 }
 
 bool MandolineUIServicesApp::AcceptConnection(Connection* connection) {
   connection->AddInterface<Gpu>(this);
   connection->AddInterface<mojom::DisplayManager>(this);
+  connection->AddInterface<mojom::UserAccessManager>(this);
+  connection->AddInterface<WindowTreeHostFactory>(this);
   connection->AddInterface<mojom::WindowManagerFactoryService>(this);
   connection->AddInterface<mojom::WindowTreeFactory>(this);
-  connection->AddInterface<WindowTreeHostFactory>(this);
   return true;
 }
 
-void MandolineUIServicesApp::OnFirstRootConnectionCreated() {
+void MandolineUIServicesApp::OnFirstDisplayReady() {
   PendingRequests requests;
   requests.swap(pending_requests_);
-  for (auto& request : requests) {
-    if (request->dm_request)
-      Create(nullptr, std::move(*request->dm_request));
-    else
-      Create(nullptr, std::move(*request->wtf_request));
-  }
+  for (auto& request : requests)
+    Create(request->connection, std::move(*request->wtf_request));
 }
 
-void MandolineUIServicesApp::OnNoMoreRootConnections() {
-  base::MessageLoop::current()->QuitWhenIdle();
+void MandolineUIServicesApp::OnNoMoreDisplays() {
+  // We may get here from the destructor, in which case there is no messageloop.
+  if (base::MessageLoop::current())
+    base::MessageLoop::current()->QuitWhenIdle();
 }
 
-ws::ClientConnection*
-MandolineUIServicesApp::CreateClientConnectionForEmbedAtWindow(
-    ws::ConnectionManager* connection_manager,
-    mojo::InterfaceRequest<mojom::WindowTree> tree_request,
-    ws::ServerWindow* root,
-    uint32_t policy_bitmask,
-    mojom::WindowTreeClientPtr client) {
-  scoped_ptr<ws::WindowTreeImpl> service(
-      new ws::WindowTreeImpl(connection_manager, root, policy_bitmask));
-  return new ws::DefaultClientConnection(std::move(service), connection_manager,
-                                         std::move(tree_request),
-                                         std::move(client));
+void MandolineUIServicesApp::CreateDefaultDisplays() {
+  // Display manages its own lifetime.
+  ws::Display* host_impl =
+      new ws::Display(window_server_.get(), platform_display_init_params_);
+  host_impl->Init(nullptr);
 }
 
-void MandolineUIServicesApp::Create(
-    mojo::Connection* connection,
-    mojo::InterfaceRequest<mojom::DisplayManager> request) {
-  if (!connection_manager_->has_tree_host_connections()) {
-    scoped_ptr<PendingRequest> pending_request(new PendingRequest);
-    pending_request->dm_request.reset(
-        new mojo::InterfaceRequest<mojom::DisplayManager>(std::move(request)));
-    pending_requests_.push_back(std::move(pending_request));
-    return;
-  }
-  connection_manager_->AddDisplayManagerBinding(std::move(request));
+void MandolineUIServicesApp::Create(mojo::Connection* connection,
+                                    mojom::DisplayManagerRequest request) {
+  window_server_->display_manager()
+      ->GetUserDisplayManager(connection->GetRemoteIdentity().user_id())
+      ->AddDisplayManagerBinding(std::move(request));
+}
+
+void MandolineUIServicesApp::Create(mojo::Connection* connection,
+                                    mojom::UserAccessManagerRequest request) {
+  window_server_->user_id_tracker()->Bind(std::move(request));
 }
 
 void MandolineUIServicesApp::Create(
     mojo::Connection* connection,
-    mojo::InterfaceRequest<mojom::WindowManagerFactoryService> request) {
-  connection_manager_->CreateWindowManagerFactoryService(std::move(request));
+    mojom::WindowManagerFactoryServiceRequest request) {
+  AddUserIfNecessary(connection);
+  window_server_->window_manager_factory_registry()->Register(
+      connection->GetRemoteIdentity().user_id(), std::move(request));
 }
 
-void MandolineUIServicesApp::Create(
-    Connection* connection,
-    InterfaceRequest<mojom::WindowTreeFactory> request) {
-  if (!connection_manager_->has_tree_host_connections()) {
+void MandolineUIServicesApp::Create(Connection* connection,
+                                    mojom::WindowTreeFactoryRequest request) {
+  AddUserIfNecessary(connection);
+  if (!window_server_->display_manager()->has_displays()) {
     scoped_ptr<PendingRequest> pending_request(new PendingRequest);
+    pending_request->connection = connection;
     pending_request->wtf_request.reset(
         new mojo::InterfaceRequest<mojom::WindowTreeFactory>(
             std::move(request)));
     pending_requests_.push_back(std::move(pending_request));
     return;
   }
-  if (!window_tree_factory_) {
-    window_tree_factory_.reset(
-        new ws::WindowTreeFactory(connection_manager_.get()));
+  AddUserIfNecessary(connection);
+  UserState* user_state = GetUserState(connection);
+  if (!user_state->window_tree_factory) {
+    user_state->window_tree_factory.reset(new ws::WindowTreeFactory(
+        window_server_.get(), connection->GetRemoteIdentity().user_id()));
   }
-  window_tree_factory_->AddBinding(std::move(request));
+  user_state->window_tree_factory->AddBinding(std::move(request));
 }
 
 void MandolineUIServicesApp::Create(
     Connection* connection,
-    InterfaceRequest<WindowTreeHostFactory> request) {
-  factory_bindings_.AddBinding(this, std::move(request));
+    mojom::WindowTreeHostFactoryRequest request) {
+  UserState* user_state = GetUserState(connection);
+  if (!user_state->window_tree_host_factory) {
+    user_state->window_tree_host_factory.reset(new ws::WindowTreeHostFactory(
+        window_server_.get(), connection->GetRemoteIdentity().user_id(),
+        platform_display_init_params_));
+  }
+  user_state->window_tree_host_factory->AddBinding(std::move(request));
 }
 
 void MandolineUIServicesApp::Create(mojo::Connection* connection,
-                                    mojo::InterfaceRequest<Gpu> request) {
-  DCHECK(gpu_state_);
-  new GpuImpl(std::move(request), gpu_state_);
-}
-
-void MandolineUIServicesApp::CreateWindowTreeHost(
-    mojo::InterfaceRequest<mojom::WindowTreeHost> host,
-    mojom::WindowTreeClientPtr tree_client) {
-  DCHECK(connection_manager_);
-
-  // TODO(fsamuel): We need to make sure that only the window manager can create
-  // new roots.
-  ws::WindowTreeHostImpl* host_impl = new ws::WindowTreeHostImpl(
-      connection_manager_.get(), connector_, gpu_state_, surfaces_state_);
-
-  // WindowTreeHostConnection manages its own lifetime.
-  host_impl->Init(new ws::WindowTreeHostConnectionImpl(
-      std::move(host), make_scoped_ptr(host_impl), std::move(tree_client),
-      connection_manager_.get()));
+                                    mojom::GpuRequest request) {
+  DCHECK(platform_display_init_params_.gpu_state);
+  new GpuImpl(std::move(request), platform_display_init_params_.gpu_state);
 }
 
 }  // namespace mus

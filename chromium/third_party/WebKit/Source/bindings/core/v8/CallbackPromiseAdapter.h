@@ -33,10 +33,11 @@
 
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "public/platform/WebCallbacks.h"
-#include "public/platform/WebPassOwnPtr.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/TypeTraits.h"
+
+#include <memory>
 
 namespace blink {
 
@@ -50,7 +51,7 @@ namespace blink {
 //    CallbackPromiseAdapter<bool, void> is a subclass of
 //    WebCallbacks<bool, void>.
 //  - If a WebType is OwnPtr<T>, its corresponding type parameter on
-//    WebCallbacks is WebPassOwnPtr<T>, because WebCallbacks must be exposed to
+//    WebCallbacks is std::unique_ptr<T>, because WebCallbacks must be exposed to
 //    Chromium.
 //
 // When onSuccess is called with a S::WebType value, the value is passed to
@@ -81,7 +82,7 @@ namespace blink {
 //     }
 //     ...
 // };
-// OwnPtr<WebCallbacks<WebPassOwnPtr<WebMyClass>, const WebMyErrorClass&>>
+// OwnPtr<WebCallbacks<std::unique_ptr<WebMyClass>, const WebMyErrorClass&>>
 //     callbacks = adoptPtr(new CallbackPromiseAdapter<MyClass, MyErrorClass>(
 //     resolver));
 // ...
@@ -133,12 +134,13 @@ private:
     };
     template <typename T>
     struct WebPassTypeImpl<OwnPtr<T>> {
-        using Type = WebPassOwnPtr<T>;
+        using Type = std::unique_ptr<T>;
     };
     template <typename T> using PassType = typename PassTypeImpl<T>::Type;
     template <typename T> using WebPassType = typename WebPassTypeImpl<T>::Type;
     template <typename T> static T& adopt(T& x) { return x; }
-    template <typename T> static PassOwnPtr<T> adopt(WebPassOwnPtr<T>& x) { return x.release(); }
+    template <typename T>
+    static PassOwnPtr<T> adopt(std::unique_ptr<T>& x) { return adoptPtr(x.release()); }
     template <typename T> static PassType<T> pass(T& x) { return x; }
     template <typename T> static PassOwnPtr<T> pass(OwnPtr<T>& x) { return x.release(); }
 
@@ -160,7 +162,7 @@ private:
         {
             typename S::WebType result(adopt(r));
             ScriptPromiseResolver* resolver = this->resolver();
-            if (!resolver->executionContext() || resolver->executionContext()->activeDOMObjectsAreStopped())
+            if (!resolver->getExecutionContext() || resolver->getExecutionContext()->activeDOMObjectsAreStopped())
                 return;
             resolver->resolve(S::take(resolver, pass(result)));
         }
@@ -172,7 +174,7 @@ private:
         void onSuccess() override
         {
             ScriptPromiseResolver* resolver = this->resolver();
-            if (!resolver->executionContext() || resolver->executionContext()->activeDOMObjectsAreStopped())
+            if (!resolver->getExecutionContext() || resolver->getExecutionContext()->activeDOMObjectsAreStopped())
                 return;
             resolver->resolve();
         }
@@ -185,7 +187,7 @@ private:
         {
             typename T::WebType result(adopt(e));
             ScriptPromiseResolver* resolver = this->resolver();
-            if (!resolver->executionContext() || resolver->executionContext()->activeDOMObjectsAreStopped())
+            if (!resolver->getExecutionContext() || resolver->getExecutionContext()->activeDOMObjectsAreStopped())
                 return;
             resolver->reject(T::take(resolver, pass(result)));
         }
@@ -197,7 +199,7 @@ private:
         void onError() override
         {
             ScriptPromiseResolver* resolver = this->resolver();
-            if (!resolver->executionContext() || resolver->executionContext()->activeDOMObjectsAreStopped())
+            if (!resolver->getExecutionContext() || resolver->getExecutionContext()->activeDOMObjectsAreStopped())
                 return;
             resolver->reject();
         }

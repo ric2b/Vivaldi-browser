@@ -27,6 +27,6 @@ interface PicklePasser {
 // using StrucTraits with different variants of the Rect type from rect.mojom.
 
 interface RectService {
-  AddRect(Rect r);
-  GetLargestRect() => (Rect largest);
+  AddRect(TypemappedRect r);
+  GetLargestRect() => (TypemappedRect largest);
 };

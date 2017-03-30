@@ -28,6 +28,10 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "url/gurl.h"
 
+namespace cc {
+struct ViewportSelectionBound;
+}
+
 namespace ui {
 class WindowAndroid;
 }
@@ -141,7 +145,8 @@ class ContentViewCoreImpl : public ContentViewCore,
                               const base::android::JavaParamRef<jobject>& obj,
                               jlong time_ms,
                               jfloat x,
-                              jfloat y);
+                              jfloat y,
+                              jint tool_type);
   jboolean SendMouseWheelEvent(JNIEnv* env,
                                const base::android::JavaParamRef<jobject>& obj,
                                jlong time_ms,
@@ -315,7 +320,8 @@ class ContentViewCoreImpl : public ContentViewCore,
                        const gfx::SizeF& viewport_size,
                        const gfx::Vector2dF& controls_offset,
                        const gfx::Vector2dF& content_offset,
-                       bool is_mobile_optimized_hint);
+                       bool is_mobile_optimized_hint,
+                       const cc::ViewportSelectionBound& selection_start);
 
   void ForceUpdateImeAdapter(long native_ime_adapter);
   void UpdateImeAdapter(long native_ime_adapter,
@@ -365,6 +371,8 @@ class ContentViewCoreImpl : public ContentViewCore,
   // Returns the viewport size after accounting for the viewport offset.
   gfx::Size GetViewSize() const;
 
+  gfx::Size GetViewSizeWithOSKHidden() const;
+
   void SetAccessibilityEnabledInternal(bool enabled);
 
   bool IsFullscreenRequiredForOrientationLock() const;
@@ -388,8 +396,6 @@ class ContentViewCoreImpl : public ContentViewCore,
 
   void OnShowUnhandledTapUIIfNeeded(int x_dip, int y_dip);
 
-  // returns page density (dpi) X page scale
-  float GetScaleFactor() const;
  private:
   class ContentViewUserData;
 

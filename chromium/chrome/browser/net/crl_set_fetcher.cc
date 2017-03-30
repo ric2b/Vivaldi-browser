@@ -63,6 +63,7 @@ void CRLSetFetcher::DeleteFromDisk(const base::FilePath& path) {
 }
 
 void CRLSetFetcher::DoInitialLoadFromDisk() {
+  TRACE_EVENT0("net", "CRLSetFetcher::DoInitialLoadFromDisk");
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
   LoadFromDisk(GetCRLSetFilePath(), &crl_set_);
@@ -85,13 +86,13 @@ void CRLSetFetcher::DoInitialLoadFromDisk() {
 
 void CRLSetFetcher::LoadFromDisk(base::FilePath path,
                                  scoped_refptr<net::CRLSet>* out_crl_set) {
-  TRACE_EVENT0("CRLSetFetcher", "LoadFromDisk");
+  TRACE_EVENT0("net", "CRLSetFetcher::LoadFromDisk");
 
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
   std::string crl_set_bytes;
   {
-    TRACE_EVENT0("CRLSetFetcher", "ReadFileToString");
+    TRACE_EVENT0("net", "CRLSetFetcher::ReadFileToString");
     if (!base::ReadFileToString(path, &crl_set_bytes))
       return;
   }
@@ -144,7 +145,8 @@ void CRLSetFetcher::RegisterComponent(uint32_t sequence_of_loaded_crl) {
   component.installer = this;
   component.name = "CRLSet";
   component.version = Version(base::UintToString(sequence_of_loaded_crl));
-  component.allow_background_download = false;
+  component.allows_background_download = false;
+  component.requires_network_encryption = false;
   if (!component.version.IsValid()) {
     NOTREACHED();
     component.version = Version("0");

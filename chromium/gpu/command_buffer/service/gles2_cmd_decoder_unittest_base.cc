@@ -166,6 +166,8 @@ GLES2DecoderTestBase::InitState::InitState()
       use_native_vao(true),
       context_type(CONTEXT_TYPE_OPENGLES2) {}
 
+GLES2DecoderTestBase::InitState::InitState(const InitState& other) = default;
+
 void GLES2DecoderTestBase::InitDecoder(const InitState& init) {
   InitDecoderWithCommandLine(init, NULL);
 }
@@ -190,7 +192,8 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
   if (command_line)
     feature_info = new FeatureInfo(*command_line);
   group_ = scoped_refptr<ContextGroup>(
-      new ContextGroup(NULL, memory_tracker_, new ShaderTranslatorCache,
+      new ContextGroup(gpu_preferences_, NULL, memory_tracker_,
+                       new ShaderTranslatorCache(gpu_preferences_),
                        new FramebufferCompletenessCache, feature_info.get(),
                        new SubscriptionRefSet, new ValueStateMap,
                        normalized_init.bind_generates_resource));
@@ -344,6 +347,12 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
         .RetiresOnSaturation();
 
     EXPECT_CALL(*gl_, Enable(GL_POINT_SPRITE))
+        .Times(1)
+        .RetiresOnSaturation();
+  }
+
+  if (group_->feature_info()->gl_version_info().IsAtLeastGL(3, 2)) {
+    EXPECT_CALL(*gl_, Enable(GL_TEXTURE_CUBE_MAP_SEAMLESS))
         .Times(1)
         .RetiresOnSaturation();
   }
@@ -1971,15 +1980,6 @@ void GLES2DecoderTestBase::SetupInitStateManualExpectations(bool es3_capable) {
         .Times(1)
         .RetiresOnSaturation();
     EXPECT_CALL(*gl_, PixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0))
-        .Times(1)
-        .RetiresOnSaturation();
-    EXPECT_CALL(*gl_, PixelStorei(GL_UNPACK_SKIP_PIXELS, 0))
-        .Times(1)
-        .RetiresOnSaturation();
-    EXPECT_CALL(*gl_, PixelStorei(GL_UNPACK_SKIP_ROWS, 0))
-        .Times(1)
-        .RetiresOnSaturation();
-    EXPECT_CALL(*gl_, PixelStorei(GL_UNPACK_SKIP_IMAGES, 0))
         .Times(1)
         .RetiresOnSaturation();
   }

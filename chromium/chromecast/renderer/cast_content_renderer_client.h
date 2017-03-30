@@ -27,12 +27,9 @@ class CastContentRendererClient : public content::ContentRendererClient {
  public:
   // Creates an implementation of CastContentRendererClient. Platform should
   // link in an implementation as needed.
-  static scoped_ptr<CastContentRendererClient> Create();
+  static std::unique_ptr<CastContentRendererClient> Create();
 
   ~CastContentRendererClient() override;
-
-  // Adds any platform-specific bindings to the current frame.
-  virtual void AddRendererNativeBindings(blink::WebLocalFrame* frame);
 
   // ContentRendererClient implementation:
   void RenderThreadStarted() override;
@@ -40,7 +37,7 @@ class CastContentRendererClient : public content::ContentRendererClient {
   void AddKeySystems(
       std::vector< ::media::KeySystemInfo>* key_systems) override;
 #if !defined(OS_ANDROID)
-  scoped_ptr<::media::RendererFactory> CreateMediaRendererFactory(
+  std::unique_ptr<::media::RendererFactory> CreateMediaRendererFactory(
       content::RenderFrame* render_frame,
       ::media::GpuVideoAcceleratorFactories* gpu_factories,
       const scoped_refptr<::media::MediaLog>& media_log) override;
@@ -54,9 +51,9 @@ class CastContentRendererClient : public content::ContentRendererClient {
   CastContentRendererClient();
 
  private:
-  scoped_ptr<network_hints::PrescientNetworkingDispatcher>
+  std::unique_ptr<network_hints::PrescientNetworkingDispatcher>
       prescient_networking_dispatcher_;
-  scoped_ptr<CastRenderProcessObserver> cast_observer_;
+  std::unique_ptr<CastRenderProcessObserver> cast_observer_;
   const bool allow_hidden_media_playback_;
 
   DISALLOW_COPY_AND_ASSIGN(CastContentRendererClient);

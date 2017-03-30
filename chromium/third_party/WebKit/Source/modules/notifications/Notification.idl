@@ -40,11 +40,12 @@ enum NotificationPermission {
 // https://notifications.spec.whatwg.org/#api
 
 [
-    GarbageCollected,
-    DependentLifetime,
-    Constructor(DOMString title, optional NotificationOptions options),
+    ActiveScriptWrappable,
     ConstructorCallWith=ExecutionContext,
+    Constructor(DOMString title, optional NotificationOptions options),
+    DependentLifetime,
     Exposed=(Window,Worker),
+    GarbageCollected,
     MeasureAs=NotificationCreated,
     RaisesException=Constructor,
     RuntimeEnabled=Notifications,
@@ -66,6 +67,7 @@ enum NotificationPermission {
     readonly attribute DOMString body;
     readonly attribute DOMString tag;
     readonly attribute USVString icon;
+    [RuntimeEnabled=NotificationBadge] readonly attribute USVString badge;
 
     [RuntimeEnabled=NotificationExperimental] readonly attribute sequence<unsigned long>? vibrate;
     readonly attribute DOMTimeStamp timestamp;

@@ -80,11 +80,6 @@ NSString* const kTestNotification = @"org.chromium.bootstrap_sandbox_test";
 
 namespace sandbox {
 
-void InitializeXPCIfRequired() {
-  if (base::mac::IsOSYosemiteOrLater())
-    CHECK(InitializeXPC());
-}
-
 class BootstrapSandboxTest : public base::MultiProcessTest {
  public:
   void SetUp() override {
@@ -97,15 +92,13 @@ class BootstrapSandboxTest : public base::MultiProcessTest {
   BootstrapSandboxPolicy BaselinePolicy() {
     BootstrapSandboxPolicy policy;
     policy.rules["com.apple.cfprefsd.daemon"] = Rule(POLICY_ALLOW);
-    if (base::mac::IsOSSnowLeopard())
-      policy.rules["com.apple.SecurityServer"] = Rule(POLICY_ALLOW);
     return policy;
   }
 
   void RunChildWithPolicy(int policy_id,
                           const char* child_name,
                           base::ProcessHandle* out_pid) {
-    scoped_ptr<PreExecDelegate> pre_exec_delegate(
+    std::unique_ptr<PreExecDelegate> pre_exec_delegate(
         sandbox_->NewClient(policy_id));
 
     base::LaunchOptions options;
@@ -121,7 +114,7 @@ class BootstrapSandboxTest : public base::MultiProcessTest {
   }
 
  protected:
-  scoped_ptr<BootstrapSandbox> sandbox_;
+  std::unique_ptr<BootstrapSandbox> sandbox_;
 };
 
 const char kNotificationTestMain[] = "PostNotification";
@@ -179,8 +172,6 @@ TEST_F(BootstrapSandboxTest, DistributedNotifications_SandboxAllow) {
 }
 
 MULTIPROCESS_TEST_MAIN(PostNotification) {
-  InitializeXPCIfRequired();
-
   [[NSDistributedNotificationCenter defaultCenter]
       postNotificationName:kTestNotification
                     object:[NSString stringWithFormat:@"%d", getpid()]];
@@ -198,8 +189,6 @@ TEST_F(BootstrapSandboxTest, PolicyDenyError) {
 }
 
 MULTIPROCESS_TEST_MAIN(PolicyDenyError) {
-  InitializeXPCIfRequired();
-
   mach_port_t port = MACH_PORT_NULL;
   kern_return_t kr = bootstrap_look_up(bootstrap_port, kTestServer,
       &port);
@@ -223,8 +212,6 @@ TEST_F(BootstrapSandboxTest, PolicyDenyDummyPort) {
 }
 
 MULTIPROCESS_TEST_MAIN(PolicyDenyDummyPort) {
-  InitializeXPCIfRequired();
-
   mach_port_t port = MACH_PORT_NULL;
   kern_return_t kr = bootstrap_look_up(bootstrap_port, kTestServer,
       &port);
@@ -290,8 +277,6 @@ TEST_F(BootstrapSandboxTest, PolicySubstitutePort) {
 }
 
 MULTIPROCESS_TEST_MAIN(PolicySubstitutePort) {
-  InitializeXPCIfRequired();
-
   mach_port_t port = MACH_PORT_NULL;
   kern_return_t kr = bootstrap_look_up(bootstrap_port, kTestServer, &port);
   CHECK_EQ(KERN_SUCCESS, kr);
@@ -354,12 +339,7 @@ TEST_F(BootstrapSandboxTest, ForwardMessageInProcess) {
   send_rights = 0;
   ASSERT_EQ(KERN_SUCCESS, mach_port_get_refs(task, port, MACH_PORT_RIGHT_SEND,
       &send_rights));
-  // On 10.6, bootstrap_lookup2 may add an extra right to place it in a per-
-  // process cache.
-  if (base::mac::IsOSSnowLeopard())
-    EXPECT_TRUE(send_rights == 3u || send_rights == 2u) << send_rights;
-  else
-    EXPECT_EQ(2u, send_rights);
+  EXPECT_EQ(2u, send_rights);
 }
 
 const char kDefaultRuleTestAllow[] =
@@ -409,8 +389,6 @@ TEST_F(BootstrapSandboxTest, DefaultRuleAllow) {
 }
 
 MULTIPROCESS_TEST_MAIN(DefaultRuleAllow) {
-  InitializeXPCIfRequired();
-
   [[NSDistributedNotificationCenter defaultCenter]
       postNotificationName:kTestNotification
                     object:[NSString stringWithFormat:@"%d", getpid()]];
@@ -456,7 +434,7 @@ TEST_F(BootstrapSandboxTest, ChildOutliveSandbox) {
   sandbox_->RegisterSandboxPolicy(kTestPolicyId, policy);
 
   // Launch the child.
-  scoped_ptr<PreExecDelegate> pre_exec_delegate(
+  std::unique_ptr<PreExecDelegate> pre_exec_delegate(
       sandbox_->NewClient(kTestPolicyId));
   base::LaunchOptions options;
   options.pre_exec_delegate = pre_exec_delegate.get();
@@ -492,8 +470,6 @@ TEST_F(BootstrapSandboxTest, ChildOutliveSandbox) {
 }
 
 MULTIPROCESS_TEST_MAIN(ChildOutliveSandbox) {
-  InitializeXPCIfRequired();
-
   // Get the synchronization channel.
   mach_port_t port = MACH_PORT_NULL;
   CHECK_EQ(KERN_SUCCESS, bootstrap_look_up(bootstrap_port, "sync", &port));

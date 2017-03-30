@@ -19,13 +19,13 @@ import android.support.v7.media.MediaRouteSelector;
 import android.support.v7.media.MediaRouter;
 import android.support.v7.media.MediaRouter.RouteInfo;
 import android.support.v7.media.MediaSessionStatus;
-import android.util.Log;
 
 import com.google.android.gms.cast.CastMediaControlIntent;
 
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.CommandLine;
+import org.chromium.base.Log;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.media.remote.RemoteVideoInfo.PlayerState;
 import org.chromium.ui.widget.Toast;
@@ -78,9 +78,6 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
     private boolean mDebug;
     private String mCurrentSessionId;
     private String mCurrentItemId;
-    private long mStreamPositionTimestamp;
-    private long mLastKnownStreamPosition;
-    private long mStreamDuration;
     private boolean mSeeking;
     private final String mIntentCategory;
     private PendingIntent mSessionStatusUpdateIntent;
@@ -90,6 +87,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
 
     private String mPreferredTitle;
     private long mStartPositionMillis;
+    private final PositionExtrapolator mPositionExtrapolator = new PositionExtrapolator();
 
     private Uri mLocalVideoUri;
 
@@ -222,7 +220,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
         // Update the last known position to the current one so that we don't
         // jump back in time discarding whatever we extrapolated from the last
         // time the position was updated.
-        mLastKnownStreamPosition = getPosition();
+        mPositionExtrapolator.onPaused();
         setDisplayedPlayerState(PlayerState.PAUSED);
     }
 
@@ -234,7 +232,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
      * @param startPositionMillis from which to start playing.
      */
     private void playUri(@Nullable final String preferredTitle, final long startPositionMillis) {
-        RecordCastAction.castMediaType(MediaUrlResolver.getMediaType(mLocalVideoUri.toString()));
+        RecordCastAction.castMediaType(MediaUrlResolver.getMediaType(mLocalVideoUri));
         installBroadcastReceivers();
 
         // If the session is already started (meaning we are casting a video already), we simply
@@ -259,6 +257,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
                 configureNewSession(data);
 
                 mPreferredTitle = preferredTitle;
+                updateTitle(mPreferredTitle);
                 mStartPositionMillis = startPositionMillis;
                 // Make sure we get a session status. If the session becomes active
                 // immediately then the broadcast session status can arrive before we have
@@ -353,23 +352,12 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
 
     @Override
     public long getPosition() {
-        boolean paused = (getDisplayedPlayerState() != PlayerState.PLAYING);
-        if ((mStreamPositionTimestamp != 0) && !mSeeking && !paused
-                && (mLastKnownStreamPosition < mStreamDuration)) {
-
-            long extrapolatedStreamPosition = mLastKnownStreamPosition
-                    + (SystemClock.uptimeMillis() - mStreamPositionTimestamp);
-            if (extrapolatedStreamPosition > mStreamDuration) {
-                extrapolatedStreamPosition = mStreamDuration;
-            }
-            return extrapolatedStreamPosition;
-        }
-        return mLastKnownStreamPosition;
+        return mPositionExtrapolator.getPosition();
     }
 
     @Override
     public long getDuration() {
-        return mStreamDuration;
+        return mPositionExtrapolator.getDuration();
     }
 
     @Override
@@ -378,7 +366,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
         // Update the position now since the MRP will update it only once the video is playing
         // remotely. In particular, if the video is paused, the MRP doesn't send the command until
         // the video is resumed.
-        mLastKnownStreamPosition = msec;
+        mPositionExtrapolator.onSeek(msec);
         mSeeking = true;
         Intent intent = new Intent(MediaControlIntent.ACTION_SEEK);
         intent.addCategory(MediaControlIntent.CATEGORY_REMOTE_PLAYBACK);
@@ -452,8 +440,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
                 if (getMediaStateListener() != null) {
                     getMediaStateListener().onPlaybackStateChanged(PlayerState.FINISHED);
                 }
-                RecordCastAction.castEndedTimeRemaining(mStreamDuration,
-                        mStreamDuration - getPosition());
+                recordRemainingTimeUMA();
                 disconnect();
             }
 
@@ -507,7 +494,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
             registerRoute(route);
             clearStreamState();
         }
-        mLastKnownStreamPosition = 0;
+        mPositionExtrapolator.clear();
 
         notifyRouteSelected(route);
     }
@@ -522,7 +509,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
         if (mDebug) Log.d(TAG, "Unselected route " + route);
         // Preserve our best guess as to the final position; this is needed to reset the
         // local position while switching back to local playback.
-        mLastKnownStreamPosition = getPosition();
+        mPositionExtrapolator.onPaused();
         if (getCurrentRoute() != null && route.getId().equals(getCurrentRoute().getId())) {
             clearStreamState();
         }
@@ -577,7 +564,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
      */
     protected void onActivitiesDestroyed() {
         ApplicationStatus.unregisterApplicationStateListener(mApplicationStateListener);
-        disconnect();
+        release();
     }
 
     /**
@@ -595,8 +582,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
         // that we can reset the local stream position to match.
         super.clearItemState();
         mCurrentItemId = null;
-        mStreamPositionTimestamp = 0;
-        mStreamDuration = 0;
+        mPositionExtrapolator.clear();
         mSeeking = false;
     }
 
@@ -624,6 +610,9 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
                 if (getMediaStateListener() != null) {
                     getMediaStateListener().onPlaybackStateChanged(PlayerState.INVALIDATED);
                 }
+                // Record the remaining time UMA first, otherwise the playback state will be cleared
+                // in release().
+                recordRemainingTimeUMA();
                 // Set the current session id to null so we don't send the stop intent.
                 mCurrentSessionId = null;
                 release();
@@ -646,7 +635,7 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
         if (statusBundle.containsKey(MediaControlIntent.EXTRA_ITEM_METADATA)) {
             Bundle metadataBundle =
                     (Bundle) statusBundle.getParcelable(MediaControlIntent.EXTRA_ITEM_METADATA);
-            updateTitle(metadataBundle.getString(MediaItemMetadata.KEY_TITLE));
+            updateTitle(metadataBundle.getString(MediaItemMetadata.KEY_TITLE, mPreferredTitle));
         }
 
         // Extract the item status, if available.
@@ -659,19 +648,36 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
 
             updateState(itemStatus.getPlaybackState());
 
+            // Update the PositionExtrapolator that the playback state has changed.
+            if (itemStatus.getPlaybackState() == MediaItemStatus.PLAYBACK_STATE_PLAYING) {
+                mPositionExtrapolator.onResumed();
+            } else if (itemStatus.getPlaybackState() == MediaItemStatus.PLAYBACK_STATE_FINISHED) {
+                mPositionExtrapolator.onFinished();
+            } else {
+                mPositionExtrapolator.onPaused();
+            }
+
             if ((getRemotePlayerState() == PlayerState.PAUSED)
                     || (getRemotePlayerState() == PlayerState.PLAYING)
                     || (getRemotePlayerState() == PlayerState.LOADING)) {
                 this.mCurrentItemId = itemId;
 
-                long duration = itemStatus.getContentDuration();
                 // duration can possibly be -1 if it's unknown, so cap to 0
-                updateDuration(Math.max(duration, 0));
-
+                long duration = Math.max(itemStatus.getContentDuration(), 0);
                 // update the position using the remote player's position
-                mLastKnownStreamPosition = itemStatus.getContentPosition();
-                mStreamPositionTimestamp = itemStatus.getTimestamp();
-                updatePosition();
+                // duration can possibly be -1 if it's unknown, so cap to 0
+                long position = Math.min(Math.max(itemStatus.getContentPosition(), 0), duration);
+                // TODO(zqzhang): The GMS core currently uses SystemClock.uptimeMillis() as
+                // timestamp, which does not conform to the MediaRouter support library docs. See
+                // b/28378525 and
+                // http://developer.android.com/reference/android/support/v7/media/MediaItemStatus.html#getTimestamp().
+                // Override the timestamp with elapsedRealtime() by assuming the delay between the
+                // GMS core produces the MediaItemStatus and the code reaches here is short enough.
+                // long timestamp = itemStatus.getTimestamp();
+                long timestamp = SystemClock.elapsedRealtime();
+                notifyDurationUpdated(duration);
+                notifyPositionUpdated(position);
+                mPositionExtrapolator.onPositionInfoUpdated(duration, position, timestamp);
 
                 if (mSeeking) {
                     mSeeking = false;
@@ -763,18 +769,24 @@ public class DefaultMediaRouteController extends AbstractMediaRouteController {
         });
     }
 
-    private void updateDuration(long durationMillis) {
-        mStreamDuration = durationMillis;
-
+    private void notifyDurationUpdated(long durationMillis) {
         for (UiListener listener : getUiListeners()) {
             listener.onDurationUpdated(durationMillis);
         }
     }
 
-    private void updatePosition() {
+    private void notifyPositionUpdated(long position) {
         for (UiListener listener : getUiListeners()) {
-            listener.onPositionChanged(getPosition());
+            listener.onPositionChanged(position);
         }
+    }
+
+    private void recordRemainingTimeUMA() {
+        long duration = getDuration();
+        long remainingTime = Math.max(0, duration - getPosition());
+        // Duration has already been cleared.
+        if (getDuration() <= 0) return;
+        RecordCastAction.castEndedTimeRemaining(duration, remainingTime);
     }
 
     private void dumpIntentToLog(String prefix, Intent intent) {

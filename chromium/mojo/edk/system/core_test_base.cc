@@ -10,12 +10,12 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "mojo/edk/embedder/embedder_internal.h"
 #include "mojo/edk/system/configuration.h"
 #include "mojo/edk/system/core.h"
 #include "mojo/edk/system/dispatcher.h"
-#include "mojo/public/cpp/system/macros.h"
 
 namespace mojo {
 namespace edk {
@@ -140,7 +140,7 @@ class MockDispatcher : public Dispatcher {
 
   CoreTestBase::MockHandleInfo* const info_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(MockDispatcher);
+  DISALLOW_COPY_AND_ASSIGN(MockDispatcher);
 };
 
 }  // namespace

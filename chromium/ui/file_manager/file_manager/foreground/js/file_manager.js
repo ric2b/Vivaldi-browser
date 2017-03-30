@@ -750,9 +750,13 @@ FileManager.prototype = /** @struct */ {
     // files. But it does not work for folders (e.g., dialog for loading
     // unpacked extensions).
     if (allowedPaths === AllowedPaths.NATIVE_PATH &&
-        !DialogType.isFolderDialog(this.launchParams_.type) &&
-        this.launchParams_.type != DialogType.SELECT_SAVEAS_FILE) {
-      allowedPaths = AllowedPaths.ANY_PATH;
+        !DialogType.isFolderDialog(this.launchParams_.type)) {
+      if (this.launchParams_.type == DialogType.SELECT_SAVEAS_FILE) {
+        // Only drive can create snapshot files for saving.
+        allowedPaths = AllowedPaths.NATIVE_OR_DRIVE_PATH;
+      } else {
+        allowedPaths = AllowedPaths.ANY_PATH;
+      }
     }
 
     // VolumeManagerWrapper hides virtual file system related event and data
@@ -834,11 +838,23 @@ FileManager.prototype = /** @struct */ {
         this.volumeManager_,
         this.historyLoader_);
 
+    var singlePanel = queryRequiredElement('#single-file-details', dom);
+    SingleFileDetailsPanel.decorate(
+        assertInstanceof(singlePanel, HTMLDivElement),
+        this.metadataModel_);
+
+    var multiPanel = queryRequiredElement('#multi-file-details', dom);
+    MultiFileDetailsPanel.decorate(
+        assertInstanceof(multiPanel, HTMLDivElement),
+        this.metadataModel_);
+
     this.addHistoryObserver_();
 
     this.ui_.initAdditionalUI(
         assertInstanceof(table, FileTable),
         assertInstanceof(grid, FileGrid),
+        assertInstanceof(singlePanel, SingleFileDetailsPanel),
+        assertInstanceof(multiPanel, MultiFileDetailsPanel),
         new LocationLine(
             queryRequiredElement('#location-breadcrumbs', dom),
             this.volumeManager_));
@@ -975,6 +991,7 @@ FileManager.prototype = /** @struct */ {
     // Create metadata update controller.
     this.metadataUpdateController_ = new MetadataUpdateController(
         this.ui_.listContainer,
+        assert(this.ui_.detailsContainer),
         this.directoryModel_,
         this.metadataModel_);
 

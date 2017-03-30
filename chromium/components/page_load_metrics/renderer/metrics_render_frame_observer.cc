@@ -4,6 +4,8 @@
 
 #include "components/page_load_metrics/renderer/metrics_render_frame_observer.h"
 
+#include <string>
+
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/page_load_metrics/renderer/page_timing_metrics_sender.h"
@@ -35,6 +37,12 @@ MetricsRenderFrameObserver::~MetricsRenderFrameObserver() {}
 
 void MetricsRenderFrameObserver::DidChangePerformanceTiming() {
   SendMetrics();
+}
+
+void MetricsRenderFrameObserver::DidObserveLoadingBehavior(
+    blink::WebLoadingBehaviorFlag behavior) {
+  if (page_timing_metrics_sender_)
+    page_timing_metrics_sender_->DidObserveLoadingBehavior(behavior);
 }
 
 void MetricsRenderFrameObserver::DidCommitProvisionalLoad(
@@ -85,9 +93,6 @@ bool MetricsRenderFrameObserver::ShouldSendMetrics() const {
     return false;
 
   const blink::WebURLResponse& url_response = frame->dataSource()->response();
-  // Ignore multipart responses (e.g. MHTML).
-  if (url_response.isMultipartPayload())
-    return false;
 
   // Ignore non-HTML documents (e.g. SVG). Note that images are treated by
   // Blink as HTML documents, so to exclude images, we must perform
@@ -111,6 +116,7 @@ PageLoadTiming MetricsRenderFrameObserver::GetTiming() const {
   double start = perf.navigationStart();
   timing.navigation_start = base::Time::FromDoubleT(start);
   timing.response_start = ClampDelta(perf.responseStart(), start);
+  timing.dom_loading = ClampDelta(perf.domLoading(), start);
   timing.dom_content_loaded_event_start =
       ClampDelta(perf.domContentLoadedEventStart(), start);
   timing.load_event_start = ClampDelta(perf.loadEventStart(), start);
@@ -120,6 +126,13 @@ PageLoadTiming MetricsRenderFrameObserver::GetTiming() const {
   timing.first_image_paint = ClampDelta(perf.firstImagePaint(), start);
   timing.first_contentful_paint =
       ClampDelta(perf.firstContentfulPaint(), start);
+  timing.parse_start = ClampDelta(perf.parseStart(), start);
+  timing.parse_stop = ClampDelta(perf.parseStop(), start);
+  timing.parse_blocked_on_script_load_duration =
+      base::TimeDelta::FromSecondsD(perf.parseBlockedOnScriptLoadDuration());
+  timing.parse_blocked_on_script_load_from_document_write_duration =
+      base::TimeDelta::FromSecondsD(
+          perf.parseBlockedOnScriptLoadFromDocumentWriteDuration());
   return timing;
 }
 

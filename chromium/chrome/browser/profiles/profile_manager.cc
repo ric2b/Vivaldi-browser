@@ -42,7 +42,6 @@
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_metrics.h"
-#include "chrome/browser/profiles/profile_statistics.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/signin/account_fetcher_service_factory.h"
@@ -121,6 +120,11 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#endif
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS) && !defined(OS_CHROMEOS)
+#include "chrome/browser/profiles/profile_statistics.h"
+#include "chrome/browser/profiles/profile_statistics_factory.h"
 #endif
 
 using base::UserMetricsAction;
@@ -251,6 +255,31 @@ size_t GetEnabledAppCount(Profile* profile) {
 }
 
 #endif  // ENABLE_EXTENSIONS
+
+// Once a profile is loaded through LoadProfile this method is executed.
+// It will then run |client_callback| with the right profile or null if it was
+// unable to load it.
+// It might get called more than once with different values of
+// |status| but only once the profile is fully initialized will
+// |client_callback| be run.
+void OnProfileLoaded(
+    const ProfileManager::ProfileLoadedCallback& client_callback,
+    bool incognito,
+    Profile* profile,
+    Profile::CreateStatus status) {
+  if (status == Profile::CREATE_STATUS_CREATED) {
+    // This is an intermediate state where the profile has been created, but is
+    // not yet initialized. Ignore this and wait for the next state change.
+    return;
+  }
+  if (status != Profile::CREATE_STATUS_INITIALIZED) {
+    LOG(WARNING) << "Profile not loaded correctly";
+    client_callback.Run(nullptr);
+    return;
+  }
+  DCHECK(profile);
+  client_callback.Run(incognito ? profile->GetOffTheRecordProfile() : profile);
+}
 
 }  // namespace
 
@@ -404,6 +433,25 @@ size_t ProfileManager::GetNumberOfProfiles() {
   return GetProfileInfoCache().GetNumberOfProfiles();
 }
 
+bool ProfileManager::LoadProfile(const std::string& profile_name,
+                                 bool incognito,
+                                 const ProfileLoadedCallback& callback) {
+  const base::FilePath profile_path = user_data_dir().AppendASCII(profile_name);
+
+  ProfileAttributesEntry* entry = nullptr;
+  if (!GetProfileAttributesStorage().GetProfileAttributesWithPath(profile_path,
+                                                                  &entry)) {
+    callback.Run(nullptr);
+    LOG(ERROR) << "Loading a profile path that does not exist";
+    return false;
+  }
+  CreateProfileAsync(profile_path,
+                     base::Bind(&OnProfileLoaded, callback, incognito),
+                     base::string16() /* name */, std::string() /* icon_url */,
+                     std::string() /* supervided_user_id */);
+  return true;
+}
+
 void ProfileManager::CreateProfileAsync(
     const base::FilePath& profile_path,
     const CreateCallback& callback,
@@ -514,13 +562,21 @@ Profile* ProfileManager::GetLastUsedProfile(
     profile_dir = chromeos::ProfileHelper::Get()->GetActiveUserProfileDir();
 
     base::FilePath profile_path(user_data_dir);
-    Profile* profile = GetProfile(profile_path.Append(profile_dir));
+    Profile* profile = GetProfileByPath(profile_path.Append(profile_dir));
+    // If we get here, it means the user has logged in but the profile has not
+    // finished initializing, so treat the user as not having logged in.
+    if (!profile) {
+      DLOG(WARNING) << "Calling GetLastUsedProfile() before profile "
+                    << "initialization is completed. Returning login profile.";
+      return GetActiveUserOrOffTheRecordProfileFromPath(user_data_dir);
+    }
     return profile->IsGuestSession() ? profile->GetOffTheRecordProfile() :
                                        profile;
   }
-#endif
+#else
 
   return GetProfile(GetLastUsedProfileDir(user_data_dir));
+#endif
 }
 
 base::FilePath ProfileManager::GetLastUsedProfileDir(
@@ -553,7 +609,7 @@ std::vector<Profile*> ProfileManager::GetLastOpenedProfiles(
   if (local_state->HasPrefPath(prefs::kProfilesLastActive) &&
       local_state->GetList(prefs::kProfilesLastActive)) {
     // Make a copy because the list might change in the calls to GetProfile.
-    scoped_ptr<base::ListValue> profile_list(
+    std::unique_ptr<base::ListValue> profile_list(
         local_state->GetList(prefs::kProfilesLastActive)->DeepCopy());
     base::ListValue::const_iterator it;
     std::string profile;
@@ -1059,20 +1115,21 @@ void ProfileManager::DoFinalInit(Profile* profile, bool go_off_the_record) {
   AddProfileToCache(profile);
   DoFinalInitLogging(profile);
 
-  ProfileMetrics::LogNumberOfProfiles(this);
   content::NotificationService::current()->Notify(
       chrome::NOTIFICATION_PROFILE_ADDED,
       content::Source<Profile>(profile),
       content::NotificationService::NoDetails());
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS) && !defined(OS_CHROMEOS)
   // Record statistics to ProfileInfoCache if statistics were not recorded
   // during shutdown, i.e. the last shutdown was a system shutdown or a crash.
   if (!profile->IsGuestSession() && !profile->IsSystemProfile() &&
       !profile->IsNewProfile() && !go_off_the_record &&
       profile->GetLastSessionExitType() != Profile::EXIT_NORMAL) {
-    profiles::GatherProfileStatistics(
-        profile, profiles::ProfileStatisticsCallback(), nullptr);
+    ProfileStatisticsFactory::GetForProfile(profile)->GatherStatistics(
+        profiles::ProfileStatisticsCallback());
   }
+#endif
 }
 
 void ProfileManager::DoFinalInitForServices(Profile* profile,
@@ -1504,12 +1561,16 @@ void ProfileManager::BrowserListObserver::OnBrowserRemoved(
     // Delete if the profile is an ephemeral profile.
     g_browser_process->profile_manager()->ScheduleProfileForDeletion(
         path, ProfileManager::CreateCallback());
-  } else if (!profile->IsSystemProfile()) {
+  } else {
+#if !defined(OS_ANDROID) && !defined(OS_IOS) && !defined(OS_CHROMEOS)
     // Gather statistics and store into ProfileInfoCache. For incognito profile
     // we gather the statistics of its parent profile instead, because a window
     // of the parent profile was open.
-    profiles::GatherProfileStatistics(
-        original_profile, profiles::ProfileStatisticsCallback(), nullptr);
+    if (!profile->IsSystemProfile()) {
+      ProfileStatisticsFactory::GetForProfile(original_profile)->
+          GatherStatistics(profiles::ProfileStatisticsCallback());
+    }
+#endif
   }
 }
 

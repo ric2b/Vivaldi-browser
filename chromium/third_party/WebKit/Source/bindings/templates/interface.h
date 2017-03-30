@@ -66,14 +66,13 @@ public:
     {
         {% if gc_type == 'GarbageCollectedObject' %}
         visitor->trace(scriptWrappable->toImpl<{{cpp_class}}>());
-        {% elif gc_type == 'WillBeGarbageCollectedObject' %}
-#if ENABLE(OILPAN)
-        visitor->trace(scriptWrappable->toImpl<{{cpp_class}}>());
-#endif
         {% endif %}
     }
     {% if has_visit_dom_wrapper %}
     static void visitDOMWrapper(v8::Isolate*, ScriptWrappable*, const v8::Persistent<v8::Object>&);
+    {% endif %}
+    {% if active_scriptwrappable %}
+    static ActiveScriptWrappable* toActiveScriptWrappable(v8::Local<v8::Object>);
     {% endif %}
     {% for method in methods %}
     {% if method.is_custom %}

@@ -7,6 +7,7 @@
 #include <Carbon/Carbon.h>  // kVK_Return
 
 #include "base/mac/foundation_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -14,6 +15,8 @@
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/search/search.h"
+#include "chrome/browser/themes/theme_service.h"
+#import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #include "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_cell.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_popup_view_mac.h"
@@ -29,10 +32,14 @@
 #include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/constants.h"
+#import "skia/ext/skia_utils_mac.h"
 #import "third_party/mozilla/NSPasteboard+Utils.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/clipboard_util_mac.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect.h"
@@ -79,17 +86,29 @@ NSColor* ColorWithRGBBytes(int rr, int gg, int bb) {
                                    alpha:1.0];
 }
 
-NSColor* HostTextColor() {
-  return [NSColor blackColor];
+NSColor* HostTextColor(bool inDarkMode) {
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    return [NSColor blackColor];
+  }
+  return inDarkMode ? [NSColor whiteColor] : [NSColor blackColor];
 }
-NSColor* BaseTextColor() {
-  return [NSColor darkGrayColor];
+NSColor* SecureSchemeColor(bool inDarkMode) {
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    return ColorWithRGBBytes(0x07, 0x95, 0x00);
+  }
+  return inDarkMode ? [NSColor colorWithCalibratedWhite:1 alpha:0.5] :
+                      skia::SkColorToCalibratedNSColor(gfx::kGoogleGreen700);
 }
-NSColor* SecureSchemeColor() {
-  return ColorWithRGBBytes(0x07, 0x95, 0x00);
+NSColor* SecurityWarningSchemeColor(bool inDarkMode) {
+  return inDarkMode ? [NSColor colorWithCalibratedWhite:1 alpha:0.5] :
+                      skia::SkColorToCalibratedNSColor(gfx::kGoogleYellow700);
 }
-NSColor* SecurityErrorSchemeColor() {
-  return ColorWithRGBBytes(0xa2, 0x00, 0x00);
+NSColor* SecurityErrorSchemeColor(bool inDarkMode) {
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    return ColorWithRGBBytes(0xa2, 0x00, 0x00);
+  }
+  return inDarkMode ? [NSColor colorWithCalibratedWhite:1 alpha:0.5] :
+                      skia::SkColorToCalibratedNSColor(gfx::kGoogleRed700);
 }
 
 const char kOmniboxViewMacStateKey[] = "OmniboxViewMacState";
@@ -140,13 +159,22 @@ NSColor* OmniboxViewMac::SuggestTextColor() {
   return [NSColor colorWithCalibratedWhite:0.0 alpha:0.5];
 }
 
+// static
+NSColor* OmniboxViewMac::BaseTextColor(bool inDarkMode) {
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    return [NSColor darkGrayColor];
+  }
+  return inDarkMode ? [NSColor colorWithCalibratedWhite:1 alpha:0.5]
+                    : [NSColor colorWithCalibratedWhite:0 alpha:0.5];
+}
+
 OmniboxViewMac::OmniboxViewMac(OmniboxEditController* controller,
                                Profile* profile,
                                CommandUpdater* command_updater,
                                AutocompleteTextField* field)
     : OmniboxView(
           controller,
-          make_scoped_ptr(new ChromeOmniboxClient(controller, profile))),
+          base::WrapUnique(new ChromeOmniboxClient(controller, profile))),
       profile_(profile),
       popup_view_(new OmniboxPopupViewMac(this, model(), field)),
       field_(field),
@@ -512,6 +540,7 @@ void OmniboxViewMac::ApplyTextAttributes(
     NSMutableAttributedString* attributedString) {
   NSUInteger as_length = [attributedString length];
   NSRange as_entire_string = NSMakeRange(0, as_length);
+  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
 
   ApplyTextStyle(attributedString);
 
@@ -530,12 +559,12 @@ void OmniboxViewMac::ApplyTextAttributes(
   if (model()->CurrentTextIsURL() &&
       (host.is_nonempty() || grey_out_url)) {
     [attributedString addAttribute:NSForegroundColorAttributeName
-                             value:BaseTextColor()
+                             value:BaseTextColor(inDarkMode)
                              range:as_entire_string];
 
     if (!grey_out_url) {
       [attributedString addAttribute:NSForegroundColorAttributeName
-                               value:HostTextColor()
+                               value:HostTextColor(inDarkMode)
                                range:ComponentToNSRange(host)];
     }
   }
@@ -553,20 +582,20 @@ void OmniboxViewMac::ApplyTextAttributes(
     NSColor* color;
     if (security_level == security_state::SecurityStateModel::EV_SECURE ||
         security_level == security_state::SecurityStateModel::SECURE) {
-      color = SecureSchemeColor();
+      color = SecureSchemeColor(inDarkMode);
     } else if (security_level ==
                security_state::SecurityStateModel::SECURITY_ERROR) {
-      color = SecurityErrorSchemeColor();
+      color = SecurityErrorSchemeColor(inDarkMode);
       // Add a strikethrough through the scheme.
       [attributedString addAttribute:NSStrikethroughStyleAttributeName
                  value:[NSNumber numberWithInt:NSUnderlineStyleSingle]
                  range:ComponentToNSRange(scheme)];
     } else if (security_level ==
                security_state::SecurityStateModel::SECURITY_WARNING) {
-      color = BaseTextColor();
+      color = SecurityWarningSchemeColor(inDarkMode);
     } else {
       NOTREACHED();
-      color = BaseTextColor();
+      color = BaseTextColor(inDarkMode);
     }
     [attributedString addAttribute:NSForegroundColorAttributeName
                              value:color
@@ -899,7 +928,7 @@ bool OmniboxViewMac::CanCopy() {
   return selection.length > 0;
 }
 
-void OmniboxViewMac::CopyToPasteboard(NSPasteboard* pb) {
+base::scoped_nsobject<NSPasteboardItem> OmniboxViewMac::CreatePasteboardItem() {
   DCHECK(CanCopy());
 
   const NSRange selection = GetSelectedRange();
@@ -920,13 +949,18 @@ void OmniboxViewMac::CopyToPasteboard(NSPasteboard* pb) {
     UMA_HISTOGRAM_COUNTS(OmniboxEditModel::kCutOrCopyAllTextHistogram, 1);
 
   NSString* nstext = base::SysUTF16ToNSString(text);
-  [pb declareTypes:[NSArray arrayWithObject:NSStringPboardType] owner:nil];
-  [pb setString:nstext forType:NSStringPboardType];
-
   if (write_url) {
-    [pb declareURLPasteboardWithAdditionalTypes:[NSArray array] owner:nil];
-    [pb setDataForURL:base::SysUTF8ToNSString(url.spec()) title:nstext];
+    return ui::ClipboardUtil::PasteboardItemFromUrl(
+        base::SysUTF8ToNSString(url.spec()), nstext);
+  } else {
+    return ui::ClipboardUtil::PasteboardItemFromString(nstext);
   }
+}
+
+void OmniboxViewMac::CopyToPasteboard(NSPasteboard* pboard) {
+  [pboard clearContents];
+  base::scoped_nsobject<NSPasteboardItem> item(CreatePasteboardItem());
+  [pboard writeObjects:@[ item.get() ]];
 }
 
 void OmniboxViewMac::ShowURL() {

@@ -79,7 +79,7 @@ void WebElementTest::insertHTML(String html)
 WebElement WebElementTest::testElement()
 {
     Element* element = document().getElementById("testElement");
-    ASSERT(element);
+    DCHECK(element);
     return WebElement(element);
 }
 
@@ -115,7 +115,7 @@ TEST_F(WebElementTest, HasNonEmptyLayoutSize)
     EXPECT_TRUE(testElement().hasNonEmptyLayoutSize());
 
     insertHTML(s_emptyBlock);
-    RefPtrWillBeRawPtr<ShadowRoot> root = document().getElementById("testElement")->createShadowRootInternal(ShadowRootType::V0, ASSERT_NO_EXCEPTION);
+    ShadowRoot* root = document().getElementById("testElement")->createShadowRootInternal(ShadowRootType::V0, ASSERT_NO_EXCEPTION);
     root->setInnerHTML("<div>Hello World</div>", ASSERT_NO_EXCEPTION);
     EXPECT_TRUE(testElement().hasNonEmptyLayoutSize());
 }

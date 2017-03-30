@@ -36,6 +36,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLElement.h"
+#include "core/html/HTMLTextFormControlElement.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
 
@@ -60,7 +61,7 @@ bool InsertLineBreakCommand::shouldUseBreakElement(const Position& insertionPos)
     // the input element, and in that case we need to check the input element's
     // parent's layoutObject.
     Position p(insertionPos.parentAnchoredEquivalent());
-    return p.anchorNode()->layoutObject() && !p.anchorNode()->layoutObject()->style()->preserveNewline();
+    return isRichlyEditablePosition(p) && p.anchorNode()->layoutObject() && !p.anchorNode()->layoutObject()->style()->preserveNewline();
 }
 
 void InsertLineBreakCommand::doApply(EditingState* editingState)
@@ -86,7 +87,7 @@ void InsertLineBreakCommand::doApply(EditingState* editingState)
 
     pos = positionOutsideTabSpan(pos);
 
-    RefPtrWillBeRawPtr<Node> nodeToInsert = nullptr;
+    RawPtr<Node> nodeToInsert = nullptr;
     if (shouldUseBreakElement(pos))
         nodeToInsert = HTMLBRElement::create(document());
     else
@@ -102,9 +103,16 @@ void InsertLineBreakCommand::doApply(EditingState* editingState)
             return;
 
         if (needExtraLineBreak) {
-            insertNodeBefore(nodeToInsert->cloneNode(false), nodeToInsert, editingState);
+            RawPtr<Node> extraNode;
+            // TODO(tkent): Can we remove HTMLTextFormControlElement dependency?
+            if (HTMLTextFormControlElement* textControl = enclosingTextFormControl(nodeToInsert.get()))
+                extraNode = textControl->createPlaceholderBreakElement();
+            else
+                extraNode = nodeToInsert->cloneNode(false);
+            insertNodeAfter(extraNode.get(), nodeToInsert, editingState);
             if (editingState->isAborted())
                 return;
+            nodeToInsert = extraNode.release();
         }
 
         VisiblePosition endingPosition = createVisiblePosition(positionBeforeNode(nodeToInsert.get()));
@@ -148,10 +156,10 @@ void InsertLineBreakCommand::doApply(EditingState* editingState)
             deleteInsignificantTextDownstream(endingPosition);
             ASSERT(!textNode->layoutObject() || textNode->layoutObject()->style()->collapseWhiteSpace());
             // Deleting insignificant whitespace will remove textNode if it contains nothing but insignificant whitespace.
-            if (textNode->inDocument()) {
+            if (textNode->inShadowIncludingDocument()) {
                 insertTextIntoNode(textNode, 0, nonBreakingSpaceString());
             } else {
-                RefPtrWillBeRawPtr<Text> nbspNode = document().createTextNode(nonBreakingSpaceString());
+                RawPtr<Text> nbspNode = document().createTextNode(nonBreakingSpaceString());
                 insertNodeAt(nbspNode.get(), positionBeforeTextNode, editingState);
                 if (editingState->isAborted())
                     return;
@@ -164,7 +172,7 @@ void InsertLineBreakCommand::doApply(EditingState* editingState)
 
     // Handle the case where there is a typing style.
 
-    RefPtrWillBeRawPtr<EditingStyle> typingStyle = document().frame()->selection().typingStyle();
+    RawPtr<EditingStyle> typingStyle = document().frame()->selection().typingStyle();
 
     if (typingStyle && !typingStyle->isEmpty()) {
         // Apply the typing style to the inserted line break, so that if the selection

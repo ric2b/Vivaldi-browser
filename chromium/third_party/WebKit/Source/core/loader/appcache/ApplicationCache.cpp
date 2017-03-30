@@ -72,7 +72,7 @@ unsigned short ApplicationCache::status() const
     ApplicationCacheHost* cacheHost = applicationCacheHost();
     if (!cacheHost)
         return ApplicationCacheHost::UNCACHED;
-    return cacheHost->status();
+    return cacheHost->getStatus();
 }
 
 void ApplicationCache::update(ExceptionState& exceptionState)
@@ -103,7 +103,7 @@ const AtomicString& ApplicationCache::interfaceName() const
     return EventTargetNames::ApplicationCache;
 }
 
-ExecutionContext* ApplicationCache::executionContext() const
+ExecutionContext* ApplicationCache::getExecutionContext() const
 {
     if (m_frame)
         return m_frame->document();
@@ -146,10 +146,8 @@ void ApplicationCache::recordAPIUseType() const
 
     if (document->isSecureContext()) {
         UseCounter::count(document, UseCounter::ApplicationCacheAPISecureOrigin);
-        UseCounter::countCrossOriginIframe(*document, UseCounter::ApplicationCacheAPISecureOrigin);
     } else {
         Deprecation::countDeprecation(document, UseCounter::ApplicationCacheAPIInsecureOrigin);
-        UseCounter::countCrossOriginIframe(*document, UseCounter::ApplicationCacheAPIInsecureOrigin);
         OriginsUsingFeatures::countAnyWorld(*document, OriginsUsingFeatures::Feature::ApplicationCacheAPIInsecureOrigin);
     }
 }

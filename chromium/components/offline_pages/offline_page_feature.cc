@@ -7,12 +7,12 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "components/offline_pages/offline_page_switches.h"
-
-#if defined(OS_ANDROID)
+#include "components/version_info/version_info.h"
 
 namespace offline_pages {
 
@@ -24,6 +24,14 @@ const char kEnabledGroupName[] = "Enabled";
 const char kEnabledAsBookmarksGroupName[] = "EnabledAsBookmarks";
 const char kEnabledAsSavedPagesGroupName[] = "EnabledAsSavedPages";
 }  // namespace
+
+const base::Feature kOffliningRecentPagesFeature {
+   "offline-recent-pages", base::FEATURE_DISABLED_BY_DEFAULT
+};
+
+const base::Feature kOfflinePagesBackgroundLoadingFeature {
+   "offline-pages-background-loading", base::FEATURE_DISABLED_BY_DEFAULT
+};
 
 FeatureMode GetOfflinePageFeatureMode() {
   // Note: It's important to query the field trial state first, to ensure that
@@ -62,7 +70,10 @@ FeatureMode GetOfflinePageFeatureMode() {
                        base::CompareCase::SENSITIVE)) {
     return FeatureMode::ENABLED_AS_SAVED_PAGES;
   }
-  return FeatureMode::DISABLED;
+
+  // Enabled by default on trunk.
+  return version_info::IsOfficialBuild() ? FeatureMode::DISABLED
+                                         : FeatureMode::ENABLED_AS_BOOKMARKS;
 }
 
 bool IsOfflinePagesEnabled() {
@@ -71,6 +82,14 @@ bool IsOfflinePagesEnabled() {
          mode == FeatureMode::ENABLED_AS_SAVED_PAGES;
 }
 
-}  // namespace offline_pages
+bool IsOffliningRecentPagesEnabled() {
+  return  base::FeatureList::IsEnabled(kOffliningRecentPagesFeature) &&
+          IsOfflinePagesEnabled();
+}
 
-#endif
+bool IsOfflinePagesBackgroundLoadingEnabled() {
+  return base::FeatureList::IsEnabled(kOfflinePagesBackgroundLoadingFeature)
+      && IsOfflinePagesEnabled();
+}
+
+}  // namespace offline_pages

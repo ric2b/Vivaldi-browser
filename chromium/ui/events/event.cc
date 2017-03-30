@@ -41,6 +41,39 @@
 #include "ui/events/keycodes/platform_key_map_win.h"
 #endif
 
+// Support a collection of histograms, perhaps one for each entry in an
+// enumeration. This macro manages a block of pointers, adding to a specific
+// one by its index.
+//
+// A typical instantiation looks something like this:
+//  STATIC_HISTOGRAM_POINTER_GROUP(
+//      GetHistogramNameForIndex(histogram_index),
+//      histogram_index, MAXIMUM_HISTOGRAM_INDEX, Add(some_delta),
+//      base::Histogram::FactoryGet(
+//          GetHistogramNameForType(histogram_index),
+//          MINIMUM_SAMPLE, MAXIMUM_SAMPLE, BUCKET_COUNT,
+//          base::HistogramBase::kUmaTargetedHistogramFlag));
+//
+// Though it seems inefficient to generate the name twice, the first
+// instance will be used only for DCHECK builds and the second will
+// execute only during the first access to the given index, after which
+// the pointer is cached and the name never needed again.
+//
+// This is defined in this way so that it can be moved unchanged into
+// base/metrics/histogram_macros.h if it is useful in other files.
+#define STATIC_HISTOGRAM_POINTER_GROUP(constant_histogram_name, index,        \
+                                       constant_maximum,                      \
+                                       histogram_add_method_invocation,       \
+                                       histogram_factory_get_invocation)      \
+  do {                                                                        \
+    static base::subtle::AtomicWord atomic_histograms[constant_maximum];      \
+    DCHECK_LE(0, index);                                                      \
+    DCHECK_LT(index, constant_maximum);                                       \
+    HISTOGRAM_POINTER_USE(&atomic_histograms[index], constant_histogram_name, \
+                          histogram_add_method_invocation,                    \
+                          histogram_factory_get_invocation);                  \
+  } while (0)
+
 namespace {
 
 std::string EventTypeName(ui::EventType type) {
@@ -173,6 +206,18 @@ Event::~Event() {
     ReleaseCopiedNativeEvent(native_event_);
 }
 
+bool Event::IsMousePointerEvent() const {
+  return IsPointerEvent() &&
+         AsPointerEvent()->pointer_details().pointer_type ==
+             EventPointerType::POINTER_TYPE_MOUSE;
+}
+
+bool Event::IsTouchPointerEvent() const {
+  return IsPointerEvent() &&
+         AsPointerEvent()->pointer_details().pointer_type ==
+             EventPointerType::POINTER_TYPE_TOUCH;
+}
+
 GestureEvent* Event::AsGestureEvent() {
   CHECK(IsGestureEvent());
   return static_cast<GestureEvent*>(this);
@@ -181,6 +226,16 @@ GestureEvent* Event::AsGestureEvent() {
 const GestureEvent* Event::AsGestureEvent() const {
   CHECK(IsGestureEvent());
   return static_cast<const GestureEvent*>(this);
+}
+
+KeyEvent* Event::AsKeyEvent() {
+  CHECK(IsKeyEvent());
+  return static_cast<KeyEvent*>(this);
+}
+
+const KeyEvent* Event::AsKeyEvent() const {
+  CHECK(IsKeyEvent());
+  return static_cast<const KeyEvent*>(this);
 }
 
 MouseEvent* Event::AsMouseEvent() {
@@ -193,6 +248,16 @@ const MouseEvent* Event::AsMouseEvent() const {
   return static_cast<const MouseEvent*>(this);
 }
 
+MouseWheelEvent* Event::AsMouseWheelEvent() {
+  CHECK(IsMouseWheelEvent());
+  return static_cast<MouseWheelEvent*>(this);
+}
+
+const MouseWheelEvent* Event::AsMouseWheelEvent() const {
+  CHECK(IsMouseWheelEvent());
+  return static_cast<const MouseWheelEvent*>(this);
+}
+
 PointerEvent* Event::AsPointerEvent() {
   CHECK(IsPointerEvent());
   return static_cast<PointerEvent*>(this);
@@ -201,6 +266,16 @@ PointerEvent* Event::AsPointerEvent() {
 const PointerEvent* Event::AsPointerEvent() const {
   CHECK(IsPointerEvent());
   return static_cast<const PointerEvent*>(this);
+}
+
+ScrollEvent* Event::AsScrollEvent() {
+  CHECK(IsScrollEvent());
+  return static_cast<ScrollEvent*>(this);
+}
+
+const ScrollEvent* Event::AsScrollEvent() const {
+  CHECK(IsScrollEvent());
+  return static_cast<const ScrollEvent*>(this);
 }
 
 TouchEvent* Event::AsTouchEvent() {
@@ -270,16 +345,17 @@ Event::Event(const base::NativeEvent& native_event,
       static_cast<base::HistogramBase::Sample>(delta.InMicroseconds());
   UMA_HISTOGRAM_CUSTOM_COUNTS("Event.Latency.Browser", delta_sample, 1, 1000000,
                               100);
-  std::string name_for_event =
-      base::StringPrintf("Event.Latency.Browser.%s", name_.c_str());
-  base::HistogramBase* counter_for_type =
+
+  // Though it seems inefficient to generate the string twice, the first
+  // instance will be used only for DCHECK builds and the second won't be
+  // executed at all if the histogram was previously accessed here.
+  STATIC_HISTOGRAM_POINTER_GROUP(
+      base::StringPrintf("Event.Latency.Browser.%s", name_.c_str()),
+      type_, ET_LAST, Add(delta_sample),
       base::Histogram::FactoryGet(
-          name_for_event,
-          1,
-          1000000,
-          100,
-          base::HistogramBase::kUmaTargetedHistogramFlag);
-  counter_for_type->Add(delta_sample);
+          base::StringPrintf("Event.Latency.Browser.%s", name_.c_str()),
+          1, 1000000, 100,
+          base::HistogramBase::kUmaTargetedHistogramFlag));
 
 #if defined(USE_X11)
   if (native_event->type == GenericEvent) {
@@ -679,6 +755,24 @@ void TouchEvent::FixRotationAngle() {
 ////////////////////////////////////////////////////////////////////////////////
 // PointerEvent
 
+bool PointerEvent::CanConvertFrom(const Event& event) {
+  switch (event.type()) {
+    case ET_MOUSE_PRESSED:
+    case ET_MOUSE_DRAGGED:
+    case ET_MOUSE_MOVED:
+    case ET_MOUSE_ENTERED:
+    case ET_MOUSE_EXITED:
+    case ET_MOUSE_RELEASED:
+    case ET_TOUCH_PRESSED:
+    case ET_TOUCH_MOVED:
+    case ET_TOUCH_RELEASED:
+    case ET_TOUCH_CANCELLED:
+      return true;
+    default:
+      return false;
+  }
+}
+
 PointerEvent::PointerEvent(const PointerEvent& pointer_event)
     : LocatedEvent(pointer_event),
       pointer_id_(pointer_event.pointer_id()),
@@ -688,6 +782,7 @@ PointerEvent::PointerEvent(const MouseEvent& mouse_event)
     : LocatedEvent(mouse_event),
       pointer_id_(kMousePointerId),
       details_(mouse_event.pointer_details()) {
+  DCHECK(CanConvertFrom(mouse_event));
   switch (mouse_event.type()) {
     case ET_MOUSE_PRESSED:
       SetType(ET_POINTER_DOWN);
@@ -719,6 +814,7 @@ PointerEvent::PointerEvent(const TouchEvent& touch_event)
     : LocatedEvent(touch_event),
       pointer_id_(touch_event.touch_id()),
       details_(touch_event.pointer_details()) {
+  DCHECK(CanConvertFrom(touch_event));
   switch (touch_event.type()) {
     case ET_TOUCH_PRESSED:
       SetType(ET_POINTER_DOWN);
@@ -740,6 +836,21 @@ PointerEvent::PointerEvent(const TouchEvent& touch_event)
       NOTREACHED();
   }
 }
+
+PointerEvent::PointerEvent(EventType type,
+                           EventPointerType pointer_type,
+                           const gfx::Point& location,
+                           const gfx::Point& root_location,
+                           int flags,
+                           int pointer_id,
+                           base::TimeDelta time_stamp)
+    : LocatedEvent(type,
+                   gfx::PointF(location),
+                   gfx::PointF(location),
+                   time_stamp,
+                   flags),
+      pointer_id_(pointer_id),
+      details_(PointerDetails(pointer_type)) {}
 
 const int PointerEvent::kMousePointerId = std::numeric_limits<int32_t>::max();
 
@@ -787,6 +898,9 @@ bool KeyEvent::IsRepeated(const KeyEvent& event) {
   return false;
 }
 
+KeyEvent::KeyEvent(EventType type, base::TimeDelta time_stamp, int flags)
+    : Event(type, time_stamp, flags) {}
+
 KeyEvent::KeyEvent(const base::NativeEvent& native_event)
     : Event(native_event,
             EventTypeFromNative(native_event),
@@ -805,7 +919,7 @@ KeyEvent::KeyEvent(const base::NativeEvent& native_event)
   if (is_char_)
     key_ = DomKey::FromCharacter(native_event.wParam);
   else
-    key_ = PlatformKeyMap::DomCodeAndFlagsToDomKeyStatic(code_, flags());
+    key_ = PlatformKeyMap::DomKeyFromNative(native_event);
 #endif
 }
 

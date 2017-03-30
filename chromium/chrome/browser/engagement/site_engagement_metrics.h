@@ -22,7 +22,7 @@ class SiteEngagementMetrics {
     ENGAGEMENT_KEYPRESS,
     ENGAGEMENT_MOUSE,
     ENGAGEMENT_TOUCH_GESTURE,
-    ENGAGEMENT_WHEEL,
+    ENGAGEMENT_SCROLL,
     ENGAGEMENT_MEDIA_HIDDEN,
     ENGAGEMENT_MEDIA_VISIBLE,
     ENGAGEMENT_WEBAPP_SHORTCUT_LAUNCH,
@@ -34,7 +34,8 @@ class SiteEngagementMetrics {
   static void RecordTotalOriginsEngaged(int total_origins);
   static void RecordMeanEngagement(double mean_engagement);
   static void RecordMedianEngagement(double median_engagement);
-  static void RecordEngagementScores(std::map<GURL, double> score_map);
+  static void RecordEngagementPercentageForHTTPS(double percentage);
+  static void RecordEngagementScores(const std::map<GURL, double>& score_map);
   static void RecordOriginsWithMaxEngagement(int total_origins);
   static void RecordOriginsWithMaxDailyEngagement(int total_origins);
   static void RecordPercentOriginsWithMaxEngagement(double percentage);
@@ -53,6 +54,7 @@ class SiteEngagementMetrics {
   static const char kTotalOriginsHistogram[];
   static const char kMeanEngagementHistogram[];
   static const char kMedianEngagementHistogram[];
+  static const char kEngagementPercentageForHTTPSHistogram[];
   static const char kEngagementScoreHistogram[];
   static const char kEngagementScoreHistogramHTTP[];
   static const char kEngagementScoreHistogramHTTPS[];

@@ -57,7 +57,8 @@ WebViewPlugin::WebViewPlugin(content::RenderView* render_view,
       web_view_(WebView::create(this)),
       finished_loading_(false),
       focused_(false),
-      is_painting_(false) {
+      is_painting_(false),
+      is_resizing_(false) {
   // ApplyWebPreferences before making a WebLocalFrame so that the frame sees a
   // consistent view of our preferences.
   content::RenderView::ApplyWebPreferences(preferences, web_view_);
@@ -125,24 +126,26 @@ void WebViewPlugin::RestoreTitleText() {
 WebPluginContainer* WebViewPlugin::container() const { return container_; }
 
 bool WebViewPlugin::initialize(WebPluginContainer* container) {
+  DCHECK(container);
+  DCHECK_EQ(this, container->plugin());
   container_ = container;
-  if (container_) {
-    // We must call layout again here to ensure that the container is laid
-    // out before we next try to paint it, which is a requirement of the
-    // document life cycle in Blink. In most cases, needsLayout is set by
-    // scheduleAnimation, but due to timers controlling widget update,
-    // scheduleAnimation may be invoked before this initialize call (which
-    // comes through the widget update process). It doesn't hurt to mark
-    // for animation again, and it does help us in the race-condition situation.
-    container_->scheduleAnimation();
 
-    old_title_ = container_->element().getAttribute("title");
+  // We must call layout again here to ensure that the container is laid
+  // out before we next try to paint it, which is a requirement of the
+  // document life cycle in Blink. In most cases, needsLayout is set by
+  // scheduleAnimation, but due to timers controlling widget update,
+  // scheduleAnimation may be invoked before this initialize call (which
+  // comes through the widget update process). It doesn't hurt to mark
+  // for animation again, and it does help us in the race-condition situation.
+  container_->scheduleAnimation();
 
-    // Propagate device scale and zoom level to inner webview.
-    web_view_->setDeviceScaleFactor(container_->deviceScaleFactor());
-    web_view_->setZoomLevel(
-        blink::WebView::zoomFactorToZoomLevel(container_->pageZoomFactor()));
-  }
+  old_title_ = container_->element().getAttribute("title");
+
+  // Propagate device scale and zoom level to inner webview.
+  web_view_->setDeviceScaleFactor(container_->deviceScaleFactor());
+  web_view_->setZoomLevel(
+      blink::WebView::zoomFactorToZoomLevel(container_->pageZoomFactor()));
+
   return true;
 }
 
@@ -197,21 +200,27 @@ void WebViewPlugin::updateGeometry(const WebRect& window_rect,
                                    const WebRect& unobscured_rect,
                                    const WebVector<WebRect>& cut_outs_rects,
                                    bool is_visible) {
+  base::AutoReset<bool> is_resizing(
+        &is_resizing_, true);
+
   if (static_cast<gfx::Rect>(window_rect) != rect_) {
     rect_ = window_rect;
     WebSize newSize(window_rect.width, window_rect.height);
     web_view_->resize(newSize);
   }
 
-  if (delegate_)
+  if (delegate_) {
     delegate_->OnUnobscuredRectUpdate(gfx::Rect(unobscured_rect));
+    // The delegate may have dirtied style and layout of the WebView.
+    // See for example the resizePoster function in plugin_poster.html.
+    // Run the lifecycle now so that it is clean.
+    web_view_->updateAllLifecyclePhases();
+  }
 }
 
 void WebViewPlugin::updateFocus(bool focused, blink::WebFocusType focus_type) {
   focused_ = focused;
 }
-
-bool WebViewPlugin::acceptsInputEvents() { return true; }
 
 blink::WebInputEventResult WebViewPlugin::handleInputEvent(
     const WebInputEvent& event,
@@ -291,6 +300,14 @@ void WebViewPlugin::didChangeCursor(const WebCursorInfo& cursor) {
 }
 
 void WebViewPlugin::scheduleAnimation() {
+  // Resizes must be self-contained: any lifecycle updating must
+  // be triggerd from within the WebView or this WebViewPlugin.
+  // This is because this WebViewPlugin is contained in another
+  // Web View which may be in the middle of updating its lifecycle,
+  // but after layout is done, and it is illegal to dirty earlier
+  // lifecycle stages during later ones.
+  if (is_resizing_)
+    return;
   if (container_) {
     // This should never happen; see also crbug.com/545039 for context.
     CHECK(!is_painting_);

@@ -58,7 +58,6 @@ WebInspector.Main.prototype = {
         if (InspectorFrontendHost.isUnderTest())
             self.runtime.useTestBase();
         InspectorFrontendHost.getPreferences(this._gotPreferences.bind(this));
-        new WebInspector.FrontendWebSocketAPI();
     },
 
     /**
@@ -104,28 +103,25 @@ WebInspector.Main.prototype = {
     {
         Runtime.experiments.register("accessibilityInspection", "Accessibility Inspection");
         Runtime.experiments.register("applyCustomStylesheet", "Allow custom UI themes");
-        Runtime.experiments.register("appBanner", "App banner support", true);
         Runtime.experiments.register("blackboxJSFramesOnTimeline", "Blackbox JavaScript frames on Timeline", true);
-        Runtime.experiments.register("timelineCollapsible", "Collapsbile row groups in Timeline");
         Runtime.experiments.register("colorContrastRatio", "Contrast ratio line in color picker", true);
         Runtime.experiments.register("cpuThrottling", "CPU throttling", true);
         Runtime.experiments.register("emptySourceMapAutoStepping", "Empty sourcemap auto-stepping");
-        Runtime.experiments.register("gpuTimeline", "GPU data on timeline", true);
         Runtime.experiments.register("inputEventsOnTimelineOverview", "Input events on Timeline overview", true);
         Runtime.experiments.register("layersPanel", "Layers panel");
         Runtime.experiments.register("layoutEditor", "Layout editor", true);
         Runtime.experiments.register("inspectTooltip", "Dark inspect element tooltip");
+        Runtime.experiments.register("liveSASS", "Live SASS", true);
         Runtime.experiments.register("multipleTimelineViews", "Multiple main views on Timeline", true);
         Runtime.experiments.register("networkRequestHeadersFilterInDetailsView", "Network request headers filter in details view", true);
         Runtime.experiments.register("networkRequestsOnTimeline", "Network requests on Timeline", true);
         Runtime.experiments.register("privateScriptInspection", "Private script inspection");
-        Runtime.experiments.register("promiseTracker", "Promise inspector");
+        Runtime.experiments.register("reducedIndentation", "Reduced indentation in Elements DOM tree");
         Runtime.experiments.register("requestBlocking", "Request blocking", true);
+        Runtime.experiments.register("resolveVariableNames", "Resolve variable names", true);
         Runtime.experiments.register("timelineShowAllEvents", "Show all events on Timeline", true);
         Runtime.experiments.register("timelineLatencyInfo", "Show input latency events on the Timeline", true);
         Runtime.experiments.register("securityPanel", "Security panel");
-        Runtime.experiments.register("showPrimaryLoadWaterfallInNetworkTimeline", "Show primary load waterfall in Network timeline", true);
-        Runtime.experiments.register("stepIntoAsync", "Step into async");
         Runtime.experiments.register("timelineFlowEvents", "Timeline flow events", true);
         Runtime.experiments.register("timelineInvalidationTracking", "Timeline invalidation tracking", true);
         Runtime.experiments.register("timelineRecordingPerspectives", "Timeline recording perspectives UI");
@@ -136,8 +132,6 @@ WebInspector.Main.prototype = {
         if (InspectorFrontendHost.isUnderTest()) {
             var testPath = JSON.parse(prefs["testPath"] || "\"\"");
             // Enable experiments for testing.
-            if (testPath.indexOf("debugger/promise") !== -1)
-                Runtime.experiments.enableForTest("promiseTracker");
             if (testPath.indexOf("layers/") !== -1)
                 Runtime.experiments.enableForTest("layersPanel");
             if (testPath.indexOf("timeline/") !== -1 || testPath.indexOf("layers/") !== -1)
@@ -180,6 +174,7 @@ WebInspector.Main.prototype = {
         WebInspector.dockController = new WebInspector.DockController(canDock);
         WebInspector.multitargetConsoleModel = new WebInspector.MultitargetConsoleModel();
         WebInspector.multitargetNetworkManager = new WebInspector.MultitargetNetworkManager();
+        WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.SuspendStateChanged, this._onSuspendStateChanged.bind(this));
 
         WebInspector.shortcutsScreen = new WebInspector.ShortcutsScreen();
         // set order of some sections explicitly
@@ -319,29 +314,27 @@ WebInspector.Main.prototype = {
 
         this._mainTarget.registerInspectorDispatcher(this);
         InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.ReloadInspectedPage, this._reloadInspectedPage, this);
+        InspectorFrontendHost.events.addEventListener(InspectorFrontendHostAPI.Events.EvaluateForTestInFrontend, this._evaluateForTestInFrontend, this);
 
         if (this._mainTarget.isServiceWorker() || this._mainTarget.isPage())
             this._mainTarget.runtimeAgent().run();
 
-        this._mainTarget.inspectorAgent().enable(inspectorAgentEnableCallback);
+        this._mainTarget.inspectorAgent().enable();
+        InspectorFrontendHost.readyForTest();
 
-        function inspectorAgentEnableCallback()
-        {
-            console.timeStamp("Main.inspectorAgentEnableCallback");
-            WebInspector.notifications.dispatchEventToListeners(WebInspector.NotificationService.Events.InspectorAgentEnabledForTests);
-            // Asynchronously run the extensions.
-            setTimeout(lateInitialization, 0);
-        }
+        // Asynchronously run the extensions.
+        setTimeout(lateInitialization, 0);
 
         function lateInitialization()
         {
+            console.timeStamp("Main.lateInitialization");
             WebInspector.extensionServer.initializeExtensions();
         }
     },
 
     _registerForwardedShortcuts: function()
     {
-        /** @const */ var forwardedActions = ["main.toggle-dock", "debugger.toggle-breakpoints-active", "debugger.toggle-pause"];
+        /** @const */ var forwardedActions = ["main.toggle-dock", "debugger.toggle-breakpoints-active", "debugger.toggle-pause", "commandMenu.show"];
         var actionKeys = WebInspector.shortcutRegistry.keysForActions(forwardedActions).map(WebInspector.KeyboardShortcut.keyCodeAndModifiersFromKey);
         InspectorFrontendHost.setWhitelistedShortcuts(JSON.stringify(actionKeys));
     },
@@ -551,42 +544,6 @@ WebInspector.Main.prototype = {
 
     /**
      * @override
-     * @param {!RuntimeAgent.RemoteObject} payload
-     * @param {!Object=} hints
-     */
-    inspect: function(payload, hints)
-    {
-        var object = this._mainTarget.runtimeModel.createRemoteObject(payload);
-        if (object.isNode()) {
-            WebInspector.Revealer.revealPromise(object).then(object.release.bind(object));
-            return;
-        }
-
-        if (object.type === "function") {
-            WebInspector.RemoteFunction.objectAsFunction(object).targetFunctionDetails().then(didGetDetails);
-            return;
-        }
-
-        /**
-         * @param {?WebInspector.DebuggerModel.FunctionDetails} response
-         */
-        function didGetDetails(response)
-        {
-            object.release();
-
-            if (!response || !response.location)
-                return;
-
-            WebInspector.Revealer.reveal(WebInspector.debuggerWorkspaceBinding.rawLocationToUILocation(response.location));
-        }
-
-        if (hints.copyToClipboard)
-            InspectorFrontendHost.copyText(object.value);
-        object.release();
-    },
-
-    /**
-     * @override
      * @param {string} reason
      */
     detached: function(reason)
@@ -605,15 +562,22 @@ WebInspector.Main.prototype = {
             WebInspector.TargetCrashedScreen.show(debuggerModel);
     },
 
+    _onSuspendStateChanged: function()
+    {
+        var suspended = WebInspector.targetManager.allTargetsSuspended();
+        WebInspector.inspectorView.onSuspendStateChanged(suspended);
+    },
+
     /**
-     * @override
-     * @param {number} callId
-     * @param {string} script
+     * @param {!WebInspector.Event} event
      */
-    evaluateForTestInFrontend: function(callId, script)
+    _evaluateForTestInFrontend: function(event)
     {
         if (!InspectorFrontendHost.isUnderTest())
             return;
+
+        var callId = /** @type {number} */ (event.data["callId"]);
+        var script = /** @type {number} */ (event.data["script"]);
 
         /**
          * @suppressGlobalPropertiesCheck

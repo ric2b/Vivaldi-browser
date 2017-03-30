@@ -30,9 +30,9 @@ namespace content {
 // MediaStreamVideoRendererSink is a VideoFrameProvider designed for rendering
 // Video MediaStreamTracks [1], MediaStreamVideoRendererSink implements
 // MediaStreamVideoSink in order to render video frames provided from a
-// MediaStreamVideoTrack, to which it AddToVideoTrack()s itself when the
-// VideoFrameProvider is Start()ed and RemoveFromVideoTrack()s itself when the
-// latter is Stop()ed.
+// MediaStreamVideoTrack, to which it connects itself when the
+// VideoFrameProvider is Start()ed, and disconnects itself when the latter is
+// Stop()ed.
 //
 // [1] http://dev.w3.org/2011/webrtc/editor/getusermedia.html#mediastreamtrack
 //
@@ -89,7 +89,7 @@ class CONTENT_EXPORT MediaStreamVideoRendererSink
   const blink::WebMediaStreamTrack video_track_;
 
   // Pool of GpuMemoryBuffers and resources used to create hardware frames.
-  scoped_ptr<media::GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_;
+  std::unique_ptr<media::GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_;
   const scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
 
   base::WeakPtrFactory<MediaStreamVideoRendererSink> weak_factory_;

@@ -43,12 +43,12 @@ void EmbeddedObjectPainter::paintReplaced(const PaintInfo& paintInfo, const Layo
         return;
 
     GraphicsContext& context = paintInfo.context;
-    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(context, m_layoutEmbeddedObject, paintInfo.phase, paintOffset))
+    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(context, m_layoutEmbeddedObject, paintInfo.phase))
         return;
 
     LayoutRect contentRect(m_layoutEmbeddedObject.contentBoxRect());
     contentRect.moveBy(paintOffset);
-    LayoutObjectDrawingRecorder drawingRecorder(context, m_layoutEmbeddedObject, paintInfo.phase, contentRect, paintOffset);
+    LayoutObjectDrawingRecorder drawingRecorder(context, m_layoutEmbeddedObject, paintInfo.phase, contentRect);
     GraphicsContextStateSaver stateSaver(context);
     context.clip(pixelSnappedIntRect(contentRect));
 
@@ -59,7 +59,7 @@ void EmbeddedObjectPainter::paintReplaced(const PaintInfo& paintInfo, const Layo
     if (!font.primaryFont())
         return;
     TextRun textRun(m_layoutEmbeddedObject.unavailablePluginReplacementText());
-    FloatSize textGeometry(font.width(textRun), font.fontMetrics().height());
+    FloatSize textGeometry(font.width(textRun), font.getFontMetrics().height());
 
     LayoutRect backgroundRect(0, 0, textGeometry.width() + 2 * replacementTextRoundedRectLeftRightTextMargin, replacementTextRoundedRectHeight);
     backgroundRect.move(contentRect.center() - backgroundRect.center());
@@ -75,7 +75,7 @@ void EmbeddedObjectPainter::paintReplaced(const PaintInfo& paintInfo, const Layo
     TextRunPaintInfo runInfo(textRun);
     runInfo.bounds = floatBackgroundRect;
     context.setFillColor(scaleAlpha(Color::black, replacementTextTextOpacity));
-    context.drawBidiText(font, runInfo, textRect.location() + FloatSize(0, font.fontMetrics().ascent()));
+    context.drawBidiText(font, runInfo, textRect.location() + FloatSize(0, font.getFontMetrics().ascent()));
 }
 
 } // namespace blink

@@ -6,10 +6,10 @@
 #define COMPONENTS_AUTOFILL_CORE_COMMON_PASSWORD_FORM_H__
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "components/autofill/core/common/form_data.h"
 #include "url/gurl.h"
@@ -106,6 +106,13 @@ struct PasswordForm {
   //
   // When parsing an HTML form, this must always be set.
   GURL action;
+
+  // The web realm affiliated with the Android application, if the form is an
+  // Android credential. Otherwise, the string is empty. If there are several
+  // realms affiliated with the application, an arbitrary realm is chosen.
+  // The field is filled out in PasswordStore's InjectAffiliatedWebRealms.
+  // If there was no call of InjectAffiliatedWebRealms, the string is empty.
+  std::string affiliated_web_realm;
 
   // The name of the submit button used. Optional; only used in scoring
   // of PasswordForm results from the database to make matches as tight as
@@ -267,6 +274,9 @@ struct PasswordForm {
   // found using affiliation-based match.
   bool is_affiliation_based_match;
 
+  // If true, this form looks like SignUp form according to local heuristics.
+  bool does_look_like_signup_form;
+
   // Return true if we consider this form to be a change password form.
   // We use only client heuristics, so it could include signup forms.
   bool IsPossibleChangePasswordForm() const;
@@ -296,7 +306,7 @@ struct LessThanUniqueKey {
 };
 
 // Map username to PasswordForm* for convenience. See password_form_manager.h.
-using PasswordFormMap = std::map<base::string16, scoped_ptr<PasswordForm>>;
+using PasswordFormMap = std::map<base::string16, std::unique_ptr<PasswordForm>>;
 
 // Like PasswordFormMap, but with weak (not owned) pointers.
 using ConstPasswordFormMap = std::map<base::string16, const PasswordForm*>;

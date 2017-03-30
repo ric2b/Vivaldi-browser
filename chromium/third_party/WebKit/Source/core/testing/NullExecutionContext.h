@@ -16,8 +16,8 @@
 
 namespace blink {
 
-class NullExecutionContext final : public RefCountedWillBeGarbageCollectedFinalized<NullExecutionContext>, public SecurityContext, public ExecutionContext {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(NullExecutionContext);
+class NullExecutionContext final : public GarbageCollectedFinalized<NullExecutionContext>, public SecurityContext, public ExecutionContext {
+    USING_GARBAGE_COLLECTED_MIXIN(NullExecutionContext);
 public:
     NullExecutionContext();
 
@@ -27,7 +27,7 @@ public:
     void postTask(const WebTraceLocation&, PassOwnPtr<ExecutionContextTask>) override;
 
     EventTarget* errorEventTarget() override { return nullptr; }
-    EventQueue* eventQueue() const override { return m_queue.get(); }
+    EventQueue* getEventQueue() const override { return m_queue.get(); }
 
     bool tasksNeedSuspension() override { return m_tasksNeedSuspension; }
     void setTasksNeedSuspension(bool flag) { m_tasksNeedSuspension = flag; }
@@ -37,9 +37,10 @@ public:
     SecurityContext& securityContext() override { return *this; }
     DOMTimerCoordinator* timers() override { return nullptr; }
 
-    void addConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>) override { }
+    void addConsoleMessage(RawPtr<ConsoleMessage>) override { }
     void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) override { }
 
+    void setIsSecureContext(bool);
     bool isSecureContext(String& errorMessage, const SecureContextCheck = StandardSecureContextCheck) const override;
 
     DEFINE_INLINE_TRACE()
@@ -63,7 +64,8 @@ protected:
 
 private:
     bool m_tasksNeedSuspension;
-    OwnPtrWillBeMember<EventQueue> m_queue;
+    bool m_isSecureContext;
+    Member<EventQueue> m_queue;
 
     KURL m_dummyURL;
 };

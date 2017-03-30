@@ -5,20 +5,21 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_PEOPLE_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_PEOPLE_HANDLER_H_
 
+#include <memory>
+
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/scoped_observer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/sync/sync_startup_tracker.h"
+#include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync_driver/sync_service_observer.h"
-#include "content/public/browser/web_ui_message_handler.h"
 
 #if defined(OS_CHROMEOS)
 #include "content/public/browser/notification_observer.h"
@@ -40,7 +41,7 @@ enum class AccessPoint;
 
 namespace settings {
 
-class PeopleHandler : public content::WebUIMessageHandler,
+class PeopleHandler : public SettingsPageUIHandler,
                       public SigninManagerBase::Observer,
                       public SyncStartupTracker::Observer,
                       public LoginUIService::LoginUI,
@@ -53,7 +54,7 @@ class PeopleHandler : public content::WebUIMessageHandler,
   explicit PeopleHandler(Profile* profile);
   ~PeopleHandler() override;
 
-  // content::WebUIMessageHandler implementation.
+  // SettingsPageUIHandler implementation.
   void RegisterMessages() override;
 
   // SyncStartupTracker::Observer implementation.
@@ -99,7 +100,7 @@ class PeopleHandler : public content::WebUIMessageHandler,
 
   // Returns a newly created dictionary with a number of properties that
   // correspond to the status of sync.
-  scoped_ptr<base::DictionaryValue> GetSyncStateDictionary();
+  std::unique_ptr<base::DictionaryValue> GetSyncStateDictionary();
 
  protected:
   friend class PeopleHandlerTest;
@@ -199,7 +200,7 @@ class PeopleHandler : public content::WebUIMessageHandler,
   Profile* profile_;
 
   // Helper object used to wait for the sync backend to startup.
-  scoped_ptr<SyncStartupTracker> sync_startup_tracker_;
+  std::unique_ptr<SyncStartupTracker> sync_startup_tracker_;
 
   // Set to true whenever the sync configure UI is visible. This is used to tell
   // what stage of the setup wizard the user was in and to update the UMA
@@ -208,7 +209,7 @@ class PeopleHandler : public content::WebUIMessageHandler,
 
   // The OneShotTimer object used to timeout of starting the sync backend
   // service.
-  scoped_ptr<base::OneShotTimer> backend_start_timer_;
+  std::unique_ptr<base::OneShotTimer> backend_start_timer_;
 
   // Used to listen for pref changes to allow or disallow signin.
   PrefChangeRegistrar profile_pref_registrar_;

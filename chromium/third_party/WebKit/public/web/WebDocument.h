@@ -74,8 +74,8 @@ public:
     void assign(const WebDocument& e) { WebNode::assign(e); }
 
     BLINK_EXPORT WebURL url() const;
-    // Note: Security checks should use the securityOrigin(), not url().
-    BLINK_EXPORT WebSecurityOrigin securityOrigin() const;
+    // Note: Security checks should use the getSecurityOrigin(), not url().
+    BLINK_EXPORT WebSecurityOrigin getSecurityOrigin() const;
     BLINK_EXPORT bool isSecureContext(WebString& errorMessage) const;
 
     BLINK_EXPORT WebString encoding() const;
@@ -142,9 +142,9 @@ public:
     BLINK_EXPORT WebDistillabilityFeatures distillabilityFeatures();
 
 #if BLINK_IMPLEMENTATION
-    WebDocument(const PassRefPtrWillBeRawPtr<Document>&);
-    WebDocument& operator=(const PassRefPtrWillBeRawPtr<Document>&);
-    operator PassRefPtrWillBeRawPtr<Document>() const;
+    BLINK_EXPORT WebDocument(Document*);
+    BLINK_EXPORT WebDocument& operator=(Document*);
+    BLINK_EXPORT operator Document*() const;
 #endif
 };
 

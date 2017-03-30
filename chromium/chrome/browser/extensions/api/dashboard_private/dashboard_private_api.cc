@@ -133,7 +133,7 @@ void DashboardPrivateShowPermissionPromptForDelegatedInstallFunction::
     Release();
     return;
   }
-  scoped_ptr<ExtensionInstallPrompt::Prompt> prompt(
+  std::unique_ptr<ExtensionInstallPrompt::Prompt> prompt(
       new ExtensionInstallPrompt::Prompt(
           ExtensionInstallPrompt::DELEGATED_PERMISSIONS_PROMPT));
   prompt->set_delegated_username(details().delegated_user);
@@ -188,7 +188,7 @@ DashboardPrivateShowPermissionPromptForDelegatedInstallFunction::BuildResponse(
       CreateResults(api::dashboard_private::RESULT_EMPTY_STRING));
 }
 
-scoped_ptr<base::ListValue>
+std::unique_ptr<base::ListValue>
 DashboardPrivateShowPermissionPromptForDelegatedInstallFunction::CreateResults(
     api::dashboard_private::Result result) const {
   return ShowPermissionPromptForDelegatedInstall::Results::Create(result);
@@ -241,11 +241,11 @@ void DashboardPrivateShowPermissionPromptForDelegatedBundleInstallFunction::
   BundleInstaller::ItemList items;
   for (const auto& entry : params_->contents) {
     BundleInstaller::Item item;
-    item.id = entry->id;
-    item.manifest = entry->manifest;
-    item.localized_name = entry->localized_name;
-    if (entry->icon_url)
-      item.icon_url = source_url().Resolve(*entry->icon_url);
+    item.id = entry.id;
+    item.manifest = entry.manifest;
+    item.localized_name = entry.localized_name;
+    if (entry.icon_url)
+      item.icon_url = source_url().Resolve(*entry.icon_url);
     items.push_back(item);
   }
   if (items.empty()) {

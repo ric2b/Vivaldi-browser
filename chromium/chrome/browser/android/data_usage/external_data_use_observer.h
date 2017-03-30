@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -15,7 +16,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
@@ -82,8 +82,8 @@ class ExternalDataUseObserver : public data_usage::DataUseAggregator::Observer {
   // successfully submitted to the external data use observer by Java.
   void OnReportDataUseDone(bool success);
 
-  // Called by DataUseMatcher. |should_register| is true if |this| should
-  // register as a data use observer.
+  // Called by ExternalDataUseObserverBridge. |should_register| is true if
+  // |this| should register as a data use observer.
   void ShouldRegisterAsDataUseObserver(bool should_register);
 
   // Fetches the matching rules asynchronously.
@@ -93,6 +93,7 @@ class ExternalDataUseObserver : public data_usage::DataUseAggregator::Observer {
 
  private:
   friend class DataUseTabModelTest;
+  friend class DataUseUITabModelTest;
   friend class ExternalDataUseObserverTest;
   FRIEND_TEST_ALL_PREFIXES(ExternalDataUseObserverTest, BufferDataUseReports);
   FRIEND_TEST_ALL_PREFIXES(ExternalDataUseObserverTest, BufferSize);
@@ -218,6 +219,11 @@ class ExternalDataUseObserver : public data_usage::DataUseAggregator::Observer {
   // Aggregator that sends data use observations to |this|.
   data_usage::DataUseAggregator* data_use_aggregator_;
 
+  // |external_data_use_observer_bridge_| is owned by |this|, and interacts with
+  // the Java code. It is created on IO thread but afterwards, should only be
+  // accessed on UI thread.
+  ExternalDataUseObserverBridge* external_data_use_observer_bridge_;
+
   // Maintains tab sessions and is owned by |this|. It is created on IO thread
   // but afterwards, should only be accessed on UI thread.
   DataUseTabModel* data_use_tab_model_;
@@ -244,11 +250,6 @@ class ExternalDataUseObserver : public data_usage::DataUseAggregator::Observer {
   // Time when the matching rules were last fetched.
   base::TimeTicks last_matching_rules_fetch_time_;
 
-  // |external_data_use_observer_bridge_| is owned by |this|, and interacts with
-  // the Java code. It is created on IO thread but afterwards, should only be
-  // accessed on UI thread.
-  ExternalDataUseObserverBridge* external_data_use_observer_bridge_;
-
   // Total number of bytes transmitted or received across all the buffered
   // reports.
   int64_t total_bytes_buffered_;
@@ -267,7 +268,7 @@ class ExternalDataUseObserver : public data_usage::DataUseAggregator::Observer {
 #if defined(OS_ANDROID)
   // Listens to when Chromium gets backgrounded and submits buffered data use
   // reports.
-  scoped_ptr<base::android::ApplicationStatusListener> app_state_listener_;
+  std::unique_ptr<base::android::ApplicationStatusListener> app_state_listener_;
 #endif
 
   // True if |this| is currently registered as a data use observer.

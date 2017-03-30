@@ -7,6 +7,12 @@
 
 #include "modules/webgl/WebGLSharedPlatform3DObject.h"
 
+namespace gpu {
+namespace gles2 {
+class GLES2Interface;
+}
+}
+
 namespace blink {
 
 class WebGL2RenderingContextBase;
@@ -23,7 +29,7 @@ public:
     GLenum getTarget() const { return m_target; }
 
     void resetCachedResult();
-    void updateCachedResult(WebGraphicsContext3D*);
+    void updateCachedResult(gpu::gles2::GLES2Interface*);
 
     bool isQueryResultAvailable();
     GLuint getQueryResult();
@@ -31,7 +37,7 @@ public:
 protected:
     explicit WebGLQuery(WebGL2RenderingContextBase*);
 
-    void deleteObjectImpl(WebGraphicsContext3D*) override;
+    void deleteObjectImpl(gpu::gles2::GLES2Interface*) override;
 
 private:
     bool isQuery() const override { return true; }

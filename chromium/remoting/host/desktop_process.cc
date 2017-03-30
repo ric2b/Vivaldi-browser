@@ -97,7 +97,7 @@ void DesktopProcess::OnChannelError() {
 }
 
 bool DesktopProcess::Start(
-    scoped_ptr<DesktopEnvironmentFactory> desktop_environment_factory) {
+    std::unique_ptr<DesktopEnvironmentFactory> desktop_environment_factory) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
   DCHECK(!desktop_environment_factory_);
   DCHECK(desktop_environment_factory);
@@ -140,14 +140,12 @@ bool DesktopProcess::Start(
   }
 
   // Connect to the daemon.
-  daemon_channel_ =
-      IPC::ChannelProxy::Create(daemon_channel_name_, IPC::Channel::MODE_CLIENT,
-                                this, io_task_runner.get());
-
+  daemon_channel_.reset(new IPC::ChannelProxy(this, io_task_runner.get()));
   IPC::AttachmentBrokerUnprivileged::CreateBrokerIfNeeded();
   IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
   if (broker && !broker->IsPrivilegedBroker())
     broker->RegisterBrokerCommunicationChannel(daemon_channel_.get());
+  daemon_channel_->Init(daemon_channel_name_, IPC::Channel::MODE_CLIENT, true);
 
   // Pass |desktop_pipe| to the daemon.
   daemon_channel_->Send(

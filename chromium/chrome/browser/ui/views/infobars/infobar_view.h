@@ -26,6 +26,7 @@ class Label;
 class LabelButton;
 class Link;
 class LinkListener;
+class MdTextButton;
 class MenuButton;
 class MenuRunner;
 }  // namespace views
@@ -36,8 +37,9 @@ class InfoBarView : public infobars::InfoBar,
                     public views::ExternalFocusTracker,
                     public views::ViewTargeterDelegate {
  public:
-  explicit InfoBarView(scoped_ptr<infobars::InfoBarDelegate> delegate);
+  explicit InfoBarView(std::unique_ptr<infobars::InfoBarDelegate> delegate);
 
+  const infobars::InfoBarContainer::Delegate* container_delegate() const;
   const SkPath& fill_path() const { return fill_path_; }
   const SkPath& stroke_path() const { return stroke_path_; }
 
@@ -58,15 +60,14 @@ class InfoBarView : public infobars::InfoBar,
                           views::LinkListener* listener) const;
 
   // Creates a focusable button for use on an infobar. The appearance is
-  // customized for infobars (except in Material mode).
+  // customized for infobars. Used for pre-MD only.
   // NOTE: Subclasses must ignore button presses if we're unowned.
-  static views::Button* CreateTextButton(views::ButtonListener* listener,
-                                         const base::string16& text);
-
-  // Like CreateTextButton, but specifically creates a LabelButton.
-  // TODO(estade): remove this function when MD is default.
-  static views::LabelButton* CreateLabelButton(views::ButtonListener* listener,
-                                               const base::string16& text);
+  static views::LabelButton* CreateTextButton(views::ButtonListener* listener,
+                                              const base::string16& text);
+  // As above, but used for MD.
+  static views::MdTextButton* CreateMdTextButton(
+      views::ButtonListener* listener,
+      const base::string16& text);
 
   // Given |labels| and the total |available_width| to display them in, sets
   // each label's size so that the longest label shrinks until it reaches the
@@ -98,9 +99,6 @@ class InfoBarView : public infobars::InfoBar,
   // taking into account animation so the control "slides in" (or out) as we
   // animate open and closed.
   int OffsetY(views::View* view) const;
-
-  // Convenience getter.
-  const infobars::InfoBarContainer::Delegate* container_delegate() const;
 
   // Shows a menu at the specified position.
   // NOTE: This must not be called if we're unowned.  (Subclasses should ignore
@@ -146,12 +144,12 @@ class InfoBarView : public infobars::InfoBar,
   views::ImageButton* close_button_;
 
   // The paths for the InfoBarBackground to draw, sized according to the heights
-  // above.
+  // above. TODO(estade): remove these when MD is default.
   SkPath fill_path_;
   SkPath stroke_path_;
 
   // Used to run the menu.
-  scoped_ptr<views::MenuRunner> menu_runner_;
+  std::unique_ptr<views::MenuRunner> menu_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(InfoBarView);
 };

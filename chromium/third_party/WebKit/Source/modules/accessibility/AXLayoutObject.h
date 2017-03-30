@@ -54,9 +54,10 @@ public:
     ~AXLayoutObject() override;
 
     // Public, overridden from AXObject.
-    LayoutObject* layoutObject() const final { return m_layoutObject; }
+    LayoutObject* getLayoutObject() const final { return m_layoutObject; }
     LayoutRect elementRect() const override;
-    LayoutBoxModelObject* layoutBoxModelObject() const;
+    LayoutBoxModelObject* getLayoutBoxModelObject() const;
+    SkMatrix44 transformFromLocalParentFrame() const override;
     bool shouldNotifyActiveDescendant() const;
     ScrollableArea* getScrollableAreaIfScrollable() const final;
     AccessibilityRole determineAccessibilityRole() override;
@@ -101,12 +102,13 @@ protected:
     const AtomicString& accessKey() const override;
     RGBA32 backgroundColor() const final;
     RGBA32 color() const final;
+    String fontFamily() const final;
     // Font size is in pixels.
     float fontSize() const final;
     String text() const override;
     AccessibilityTextDirection textDirection() const final;
     int textLength() const override;
-    TextStyle textStyle() const final;
+    TextStyle getTextStyle() const final;
     KURL url() const override;
 
     // Inline text boxes.
@@ -115,7 +117,6 @@ protected:
     AXObject* previousOnLine() const override;
 
     // Properties of interactive elements.
-    String actionVerb() const override;
     String stringValue() const override;
 
     // ARIA attributes.
@@ -176,8 +177,8 @@ protected:
     double estimatedLoadingProgress() const override;
 
     // DOM and layout tree access.
-    Node* node() const override;
-    Document* document() const override;
+    Node* getNode() const override;
+    Document* getDocument() const override;
     FrameView* documentFrameView() const override;
     Element* anchorElement() const override;
 
@@ -208,7 +209,6 @@ private:
     void addTextFieldChildren();
     void addImageMapChildren();
     void addCanvasChildren();
-    void addFrameChildren();
     void addPopupChildren();
     void addRemoteSVGChildren();
     void addInlineTextBoxChildren(bool force);

@@ -34,21 +34,16 @@
 #include "core/dom/Element.h"
 #include "core/dom/custom/CustomElementProcessingStep.h"
 #include "platform/heap/Handle.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 
 namespace blink {
 
 // FIXME: Rename this because it contains resolution and upgrade as
 // well as callbacks.
-class CustomElementCallbackQueue : public NoBaseWillBeGarbageCollectedFinalized<CustomElementCallbackQueue> {
+class CustomElementCallbackQueue : public GarbageCollectedFinalized<CustomElementCallbackQueue> {
     WTF_MAKE_NONCOPYABLE(CustomElementCallbackQueue);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(CustomElementCallbackQueue);
 public:
-    static PassOwnPtrWillBeRawPtr<CustomElementCallbackQueue> create(PassRefPtrWillBeRawPtr<Element>);
+    static RawPtr<CustomElementCallbackQueue> create(RawPtr<Element>);
 
     typedef int ElementQueueId;
     ElementQueueId owner() const { return m_owner; }
@@ -57,22 +52,22 @@ public:
     {
         // ElementCallbackQueues only migrate towards the top of the
         // processing stack.
-        ASSERT(newOwner >= m_owner);
+        DCHECK_GE(newOwner, m_owner);
         m_owner = newOwner;
     }
 
     bool processInElementQueue(ElementQueueId);
 
-    void append(PassOwnPtrWillBeRawPtr<CustomElementProcessingStep> invocation) { m_queue.append(invocation); }
+    void append(RawPtr<CustomElementProcessingStep> invocation) { m_queue.append(invocation); }
     bool inCreatedCallback() const { return m_inCreatedCallback; }
 
     DECLARE_TRACE();
 
 private:
-    explicit CustomElementCallbackQueue(PassRefPtrWillBeRawPtr<Element>);
+    explicit CustomElementCallbackQueue(RawPtr<Element>);
 
-    RefPtrWillBeMember<Element> m_element;
-    WillBeHeapVector<OwnPtrWillBeMember<CustomElementProcessingStep>> m_queue;
+    Member<Element> m_element;
+    HeapVector<Member<CustomElementProcessingStep>> m_queue;
     ElementQueueId m_owner;
     size_t m_index;
     bool m_inCreatedCallback;

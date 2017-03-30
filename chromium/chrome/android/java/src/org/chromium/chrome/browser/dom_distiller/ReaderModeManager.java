@@ -7,11 +7,10 @@ package org.chromium.chrome.browser.dom_distiller;
 import android.content.Context;
 import android.text.TextUtils;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.CommandLine;
 import org.chromium.base.SysUtils;
+import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
@@ -21,6 +20,7 @@ import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.infobar.InfoBar;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.infobar.InfoBarContainer.InfoBarContainerObserver;
+import org.chromium.chrome.browser.rappor.RapporServiceBridge;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -70,7 +70,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     private boolean mIsUmaRecorded;
 
     // The per-tab state of distillation.
-    private Map<Integer, ReaderModeTabInfo> mTabStatusMap;
+    protected Map<Integer, ReaderModeTabInfo> mTabStatusMap;
 
     // The current tab ID. This will change as the user switches between tabs.
     private int mTabId;
@@ -84,11 +84,14 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     // The primary means of getting the currently active tab.
     private TabModelSelector mTabModelSelector;
 
-    private final int mHeaderBackgroundColor;
     private boolean mIsFullscreenModeEntered;
-    private boolean mIsInfoBarContainerShown;
     private boolean mIsFindToolbarShowing;
     private boolean mIsKeyboardShowing;
+
+    // InfoBar tracking.
+    private boolean mIsInfoBarContainerShown;
+    private boolean mContainerHasInfoBars;
+
 
     public ReaderModeManager(TabModelSelector selector, ChromeActivity activity) {
         super(selector);
@@ -96,10 +99,6 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
         mTabModelSelector = selector;
         mChromeActivity = activity;
         mTabStatusMap = new HashMap<>();
-        mHeaderBackgroundColor = activity != null
-                ? ApiCompatibilityUtils.getColor(
-                        activity.getResources(), R.color.reader_mode_header_bg)
-                : 0;
     }
 
     /**
@@ -146,7 +145,6 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     @Override
     public void onShown(Tab shownTab) {
         int shownTabId = shownTab.getId();
-
         Tab previousTab = mTabModelSelector.getTabById(mTabId);
         mTabId = shownTabId;
 
@@ -195,8 +193,14 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
 
     @Override
     public void onDestroyed(Tab tab) {
+        if (tab == null) return;
         if (tab.getInfoBarContainer() != null) {
             tab.getInfoBarContainer().removeObserver(this);
+        }
+        // If the panel was not shown for the previous navigation, record it now.
+        ReaderModeTabInfo info = mTabStatusMap.get(tab.getId());
+        if (info != null && !info.isPanelShowRecorded()) {
+            recordPanelVisibilityForNavigation(false);
         }
         removeTabState(tab.getId());
     }
@@ -261,8 +265,12 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
 
     @Override
     public void onAddInfoBar(InfoBarContainer container, InfoBar infoBar, boolean isFirst) {
-        // Temporarily hides the reader mode button while the infobars are shown.
-        if (isFirst) {
+        mContainerHasInfoBars = true;
+        // If the panel is opened past the peeking state, obscure the infobar.
+        if (mReaderModePanel != null && mReaderModePanel.isPanelOpened()) {
+            container.setIsObscuredByOtherView(true);
+        } else if (isFirst) {
+            // Temporarily hides the reader mode button while the infobars are shown.
             mIsInfoBarContainerShown = true;
             closeReaderPanel(StateChangeReason.INFOBAR_SHOWN, false);
         }
@@ -272,6 +280,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     public void onRemoveInfoBar(InfoBarContainer container, InfoBar infoBar, boolean isLast) {
         // Re-shows the reader mode button if necessary once the infobars are dismissed.
         if (isLast) {
+            mContainerHasInfoBars = false;
             mIsInfoBarContainerShown = false;
             requestReaderPanelShow(StateChangeReason.INFOBAR_HIDDEN);
         }
@@ -290,20 +299,6 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     // ReaderModeManagerDelegate:
 
     @Override
-    public int getReaderModeHeaderBackgroundColor() {
-        return mHeaderBackgroundColor;
-    }
-
-    @Override
-    public int getReaderModeStatus() {
-        int currentTabId = mTabModelSelector.getCurrentTabId();
-        if (currentTabId == Tab.INVALID_TAB_ID) return NOT_POSSIBLE;
-
-        if (!mTabStatusMap.containsKey(currentTabId)) return NOT_POSSIBLE;
-        return mTabStatusMap.get(currentTabId).getStatus();
-    }
-
-    @Override
     public void setReaderModePanel(ReaderModePanel panel) {
         mReaderModePanel = panel;
     }
@@ -314,11 +309,53 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     }
 
     @Override
-    public void onCloseButtonPressed() {
-        if (mReaderModePanel == null) return;
-        RecordHistogram.recordBooleanHistogram("DomDistiller.BarCloseButtonUsage",
-                mReaderModePanel.getPanelState() == PanelState.EXPANDED
-                || mReaderModePanel.getPanelState() == PanelState.MAXIMIZED);
+    public void onPanelShown() {
+        if (mTabModelSelector == null) return;
+        int tabId = mTabModelSelector.getCurrentTabId();
+
+        ReaderModeTabInfo info = mTabStatusMap.get(tabId);
+        if (info != null && !info.isPanelShowRecorded()) {
+            info.setIsPanelShowRecorded(true);
+            recordPanelVisibilityForNavigation(true);
+            if (LibraryLoader.isInitialized()) {
+                RapporServiceBridge.sampleDomainAndRegistryFromURL(
+                        "DomDistiller.PromptPanel", info.getUrl());
+            }
+        }
+    }
+
+    /**
+     * Record if the panel became visible on the current page. This can be overridden for testing.
+     * @param visible If the panel was visible at any time.
+     */
+    protected void recordPanelVisibilityForNavigation(boolean visible) {
+        RecordHistogram.recordBooleanHistogram("DomDistiller.ReaderShownForPageLoad", visible);
+    }
+
+    @Override
+    public void onClosed(StateChangeReason reason) {
+        if (mReaderModePanel == null || mTabModelSelector == null) return;
+
+        if (mContainerHasInfoBars) {
+            Tab curTab = mTabModelSelector.getCurrentTab();
+            if (curTab != null) {
+                InfoBarContainer container = curTab.getInfoBarContainer();
+                if (container != null) container.setIsObscuredByOtherView(false);
+            }
+        }
+
+        // Only dismiss the panel if the close was a result of user interaction.
+        if (reason != StateChangeReason.FLING && reason != StateChangeReason.SWIPE
+                && reason != StateChangeReason.CLOSE_BUTTON) {
+            return;
+        }
+
+        // Record close button usage.
+        if (reason == StateChangeReason.CLOSE_BUTTON) {
+            RecordHistogram.recordBooleanHistogram("DomDistiller.BarCloseButtonUsage",
+                    mReaderModePanel.getPanelState() == PanelState.EXPANDED
+                    || mReaderModePanel.getPanelState() == PanelState.MAXIMIZED);
+        }
 
         int currentTabId = mTabModelSelector.getCurrentTabId();
         if (!mTabStatusMap.containsKey(currentTabId)) return;
@@ -429,6 +466,13 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
                 // Reset closed state of reader mode in this tab once we know a navigation is
                 // happening.
                 tabInfo.setIsDismissed(false);
+
+                // If the panel was not shown for the previous navigation, record it now.
+                Tab curTab = mTabModelSelector.getTabById(readerTabId);
+                if (curTab != null && !curTab.isNativePage() && !curTab.isBeingRestored()) {
+                    recordPanelVisibilityForNavigation(false);
+                }
+                tabInfo.setIsPanelShowRecorded(false);
             }
         };
     }
@@ -454,16 +498,8 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
                 || DeviceClassManager.isAccessibilityModeEnabled(mChromeActivity)) {
             return;
         }
-        mReaderModePanel.requestPanelShow(reason);
-    }
 
-    /**
-     * Orientation change event handler. Simply close the panel.
-     */
-    public void onOrientationChange() {
-        if (mReaderModePanel != null) {
-            mReaderModePanel.onOrientationChanged();
-        }
+        mReaderModePanel.requestPanelShow(reason);
     }
 
     /**

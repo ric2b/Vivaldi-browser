@@ -14,8 +14,6 @@ component("shell_dialogs") {
     "base_shell_dialog.h",
     "base_shell_dialog_win.cc",
     "base_shell_dialog_win.h",
-    "linux_shell_dialog.cc",
-    "linux_shell_dialog.h",
     "select_file_dialog.cc",
     "select_file_dialog.h",
     "select_file_dialog_factory.cc",
@@ -28,6 +26,8 @@ component("shell_dialogs") {
     "select_file_policy.h",
     "selected_file_info.cc",
     "selected_file_info.h",
+    "shell_dialog_linux.cc",
+    "shell_dialog_linux.h",
   ]
 
   defines = [ "SHELL_DIALOGS_IMPLEMENTATION" ]
@@ -63,25 +63,21 @@ component("shell_dialogs") {
     include_dirs = [ "$root_gen_dir/ui" ]
     libs = [ "jnigraphics" ]
   }
-
-  if (is_android && use_aura) {
-    sources += [
-      "select_file_dialog_auraandroid.cc",
-      "select_file_dialog_auraandroid.h",
-    ]
-  }
 }
 
 test("shell_dialogs_unittests") {
   sources = [
+    # TODO(karandeepb) : Revisit this once gn gets mac bundle support.
+    # "select_file_dialog_mac_unittest.mm",
+    "run_all_unittests.cc",
     "select_file_dialog_win_unittest.cc",
   ]
 
   deps = [
     ":shell_dialogs",
     "//base",
-    "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//testing/gtest",
+    "//ui/base:base",
   ]
 }

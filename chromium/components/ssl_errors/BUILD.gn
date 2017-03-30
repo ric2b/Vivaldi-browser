@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# GYP version: components/ssl_errors.gyp
+# GYP version: components/ssl_errors.gypi
 source_set("ssl_errors") {
   sources = [
     "error_classification.cc",
@@ -14,6 +14,7 @@ source_set("ssl_errors") {
   deps = [
     "//base",
     "//base:i18n",
+    "//components/network_time",
     "//components/strings",
     "//components/url_formatter",
     "//net",
@@ -30,6 +31,8 @@ source_set("unit_tests") {
   deps = [
     ":ssl_errors",
     "//base",
+    "//components/network_time",
+    "//components/prefs:test_support",
     "//net:test_support",
     "//testing/gtest",
   ]

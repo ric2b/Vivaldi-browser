@@ -4,18 +4,19 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/extensions/active_script_controller.h"
 #include "chrome/browser/extensions/active_tab_permission_granter.h"
+#include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
-#include "chrome/browser/ui/login/login_prompt.h"
+#include "chrome/browser/ui/login/login_handler.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/extensions/extension_process_policy.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -458,15 +459,18 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, HostedAppRequest) {
           "/extensions/api_test/webrequest_hosted_app/index.html"));
   scoped_refptr<Extension> hosted_app =
       ExtensionBuilder()
-          .SetManifest(std::move(
+          .SetManifest(
               DictionaryBuilder()
                   .Set("name", "Some hosted app")
                   .Set("version", "1")
                   .Set("manifest_version", 2)
-                  .Set("app",
-                       std::move(DictionaryBuilder().Set(
-                           "launch", std::move(DictionaryBuilder().Set(
-                                         "web_url", hosted_app_url.spec())))))))
+                  .Set("app", DictionaryBuilder()
+                                  .Set("launch", DictionaryBuilder()
+                                                     .Set("web_url",
+                                                          hosted_app_url.spec())
+                                                     .Build())
+                                  .Build())
+                  .Build())
           .Build();
   ExtensionSystem::Get(browser()->profile())
       ->extension_service()
@@ -508,9 +512,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(web_contents);
-  ActiveScriptController* controller =
-      ActiveScriptController::GetForWebContents(web_contents);
-  ASSERT_TRUE(controller);
+  ExtensionActionRunner* runner =
+      ExtensionActionRunner::GetForWebContents(web_contents);
+  ASSERT_TRUE(runner);
 
   int port = embedded_test_server()->port();
   const std::string kXhrPath = "simple.html";
@@ -523,12 +527,23 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
 
   // Grant activeTab permission, and perform another XHR. The extension should
   // receive the event.
-  EXPECT_EQ(BLOCKED_ACTION_WEB_REQUEST,
-            controller->GetBlockedActions(extension));
-  controller->OnClicked(extension);
-  EXPECT_EQ(BLOCKED_ACTION_NONE, controller->GetBlockedActions(extension));
+  EXPECT_EQ(BLOCKED_ACTION_WEB_REQUEST, runner->GetBlockedActions(extension));
+  runner->set_default_bubble_close_action_for_testing(
+      base::WrapUnique(new ToolbarActionsBarBubbleDelegate::CloseAction(
+          ToolbarActionsBarBubbleDelegate::CLOSE_EXECUTE)));
+  runner->RunAction(extension, true);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents));
+  // The runner will have refreshed the page...
+  EXPECT_EQ(BLOCKED_ACTION_NONE, runner->GetBlockedActions(extension));
+  int xhr_count = GetWebRequestCountFromBackgroundPage(extension, profile());
+  // ... which means that we should have a non-zero xhr count.
+  EXPECT_GT(xhr_count, 0);
+  // And the extension should receive future events.
   PerformXhrInPage(web_contents, kHost, port, kXhrPath);
-  EXPECT_EQ(1, GetWebRequestCountFromBackgroundPage(extension, profile()));
+  ++xhr_count;
+  EXPECT_EQ(xhr_count,
+            GetWebRequestCountFromBackgroundPage(extension, profile()));
 
   // If we revoke the extension's tab permissions, it should no longer receive
   // webRequest events.
@@ -538,9 +553,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   granter->RevokeForTesting();
   base::RunLoop().RunUntilIdle();
   PerformXhrInPage(web_contents, kHost, port, kXhrPath);
-  EXPECT_EQ(1, GetWebRequestCountFromBackgroundPage(extension, profile()));
-  EXPECT_EQ(BLOCKED_ACTION_WEB_REQUEST,
-            controller->GetBlockedActions(extension));
+  EXPECT_EQ(xhr_count,
+            GetWebRequestCountFromBackgroundPage(extension, profile()));
+  EXPECT_EQ(BLOCKED_ACTION_WEB_REQUEST, runner->GetBlockedActions(extension));
 }
 
 }  // namespace extensions

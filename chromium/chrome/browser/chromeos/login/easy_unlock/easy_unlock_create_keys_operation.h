@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
@@ -57,7 +58,7 @@ class EasyUnlockCreateKeysOperation {
   // Index of the key to be created.
   size_t key_creation_index_;
 
-  scoped_ptr<ChallengeCreator> challenge_creator_;
+  std::unique_ptr<ChallengeCreator> challenge_creator_;
 
   base::WeakPtrFactory<EasyUnlockCreateKeysOperation> weak_ptr_factory_;
 

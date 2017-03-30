@@ -60,32 +60,41 @@ class MockDeviceClient : public media::VideoCaptureDevice::Client {
   MOCK_METHOD0(DoReserveOutputBuffer, void(void));
   MOCK_METHOD0(DoOnIncomingCapturedBuffer, void(void));
   MOCK_METHOD0(DoOnIncomingCapturedVideoFrame, void(void));
+  MOCK_METHOD0(DoResurrectLastOutputBuffer, void(void));
   MOCK_METHOD2(OnError,
                void(const tracked_objects::Location& from_here,
                     const std::string& reason));
 
-  // Trampoline methods to workaround GMOCK problems with scoped_ptr<>.
-  scoped_ptr<Buffer> ReserveOutputBuffer(
+  // Trampoline methods to workaround GMOCK problems with std::unique_ptr<>.
+  std::unique_ptr<Buffer> ReserveOutputBuffer(
       const gfx::Size& dimensions,
       media::VideoPixelFormat format,
       media::VideoPixelStorage storage) override {
     EXPECT_EQ(media::PIXEL_FORMAT_I420, format);
     EXPECT_EQ(media::PIXEL_STORAGE_CPU, storage);
     DoReserveOutputBuffer();
-    return scoped_ptr<Buffer>();
+    return std::unique_ptr<Buffer>();
   }
-  void OnIncomingCapturedBuffer(scoped_ptr<Buffer> buffer,
+  void OnIncomingCapturedBuffer(std::unique_ptr<Buffer> buffer,
                                 const media::VideoCaptureFormat& frame_format,
                                 const base::TimeTicks& timestamp) override {
     DoOnIncomingCapturedBuffer();
   }
   void OnIncomingCapturedVideoFrame(
-      scoped_ptr<Buffer> buffer,
+      std::unique_ptr<Buffer> buffer,
       const scoped_refptr<media::VideoFrame>& frame,
       const base::TimeTicks& timestamp) override {
     DoOnIncomingCapturedVideoFrame();
   }
-
+  std::unique_ptr<Buffer> ResurrectLastOutputBuffer(
+      const gfx::Size& dimensions,
+      media::VideoPixelFormat format,
+      media::VideoPixelStorage storage) override {
+    EXPECT_EQ(media::PIXEL_FORMAT_I420, format);
+    EXPECT_EQ(media::PIXEL_STORAGE_CPU, storage);
+    DoResurrectLastOutputBuffer();
+    return std::unique_ptr<Buffer>();
+  }
   double GetBufferPoolUtilization() const override { return 0.0; }
 };
 
@@ -133,21 +142,21 @@ class DesktopCaptureDeviceAuraTest : public testing::Test {
  private:
   base::MessageLoopForUI message_loop_;
   BrowserThreadImpl browser_thread_for_ui_;
-  scoped_ptr<aura::test::AuraTestHelper> helper_;
-  scoped_ptr<aura::Window> desktop_window_;
-  scoped_ptr<aura::test::TestWindowDelegate> window_delegate_;
+  std::unique_ptr<aura::test::AuraTestHelper> helper_;
+  std::unique_ptr<aura::Window> desktop_window_;
+  std::unique_ptr<aura::test::TestWindowDelegate> window_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(DesktopCaptureDeviceAuraTest);
 };
 
 TEST_F(DesktopCaptureDeviceAuraTest, StartAndStop) {
-  scoped_ptr<media::VideoCaptureDevice> capture_device =
+  std::unique_ptr<media::VideoCaptureDevice> capture_device =
       DesktopCaptureDeviceAura::Create(
           content::DesktopMediaID::RegisterAuraWindow(
               content::DesktopMediaID::TYPE_SCREEN, root_window()));
-  ASSERT_TRUE(capture_device.get());
+  ASSERT_TRUE(capture_device);
 
-  scoped_ptr<MockDeviceClient> client(new MockDeviceClient());
+  std::unique_ptr<MockDeviceClient> client(new MockDeviceClient());
   EXPECT_CALL(*client, OnError(_, _)).Times(0);
 
   media::VideoCaptureParams capture_params;

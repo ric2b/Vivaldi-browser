@@ -118,6 +118,11 @@ class PageCyclerIntlKoThVi(_PageCycler):
   def Name(cls):
     return 'page_cycler.intl_ko_th_vi'
 
+  @classmethod
+  def ShouldDisable(cls, possible_browser):  # http://crbug.com/597656
+      return (possible_browser.browser_type == 'reference' and
+              possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
+
 
 class PageCyclerMorejs(_PageCycler):
   """Page load for a variety of pages that were JavaScript heavy in 2009."""
@@ -138,38 +143,6 @@ class PageCyclerMoz(_PageCycler):
   @classmethod
   def Name(cls):
     return 'page_cycler.moz'
-
-
-# Win, mac, linux: crbug.com/353260
-# Android: crbug.com/473161
-@benchmark.Disabled('linux', 'win', 'mac', 'android')
-class PageCyclerNetsimTop10(_PageCycler):
-  """Measures load time of the top 10 sites under simulated cable network.
-
-  Recorded in June, 2013.  Pages are loaded under the simplisticly simulated
-  bandwidth and RTT constraints of a cable modem (5Mbit/s down, 1Mbit/s up,
-  28ms RTT). Contention is realistically simulated, but slow start is not.
-  DNS lookups are 'free'.
-  """
-  tag = 'netsim'
-  page_set = page_sets.Top10PageSet
-  options = {
-      'extra_wpr_args_as_string': '--shaping_type=proxy --net=cable',
-      'pageset_repeat': 6,
-  }
-  cold_load_percent = 100
-
-  @classmethod
-  def Name(cls):
-    return 'page_cycler.netsim.top_10'
-
-  def CreatePageTest(self, options):
-    return page_cycler.PageCycler(
-        page_repeat=options.page_repeat,
-        pageset_repeat=options.pageset_repeat,
-        cold_load_percent=self.cold_load_percent,
-        report_speed_index=options.report_speed_index,
-        clear_cache_before_each_run=True)
 
 
 @benchmark.Enabled('android')
@@ -215,9 +188,6 @@ class PageCyclerToughLayoutCases(_PageCycler):
     return 'page_cycler.tough_layout_cases'
 
 
-# crbug.com/273986: This test is flakey on Windows Chrome.
-@benchmark.Enabled('android', 'chromeos', 'linux', 'ios', 'mac',
-                   'mandoline-release', 'mandoline-debug')
 class PageCyclerTypical25(_PageCycler):
   """Page load time benchmark for a 25 typical web pages.
 
@@ -225,6 +195,11 @@ class PageCyclerTypical25(_PageCycler):
   sites. Runs against pages recorded in June, 2014.
   """
   options = {'pageset_repeat': 3}
+
+  @classmethod
+  def ShouldDisable(cls, possible_browser):  # http://crbug.com/597656
+    return (possible_browser.browser_type == 'reference' and
+            possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
 
   @classmethod
   def Name(cls):

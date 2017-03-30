@@ -42,9 +42,4 @@ void Navigator::OnBeginNavigation(
     scoped_refptr<ResourceRequestBody> body) {
 }
 
-void Navigator::CommitNavigation(FrameTreeNode* frame_tree_node,
-                                 ResourceResponse* response,
-                                 scoped_ptr<StreamHandle> body) {
-}
-
 }  // namespace content

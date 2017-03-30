@@ -415,7 +415,7 @@ void SpdySessionPoolTest::RunIPPoolingTest(
   // we got with host 0, and that is a different from host 2's session.
   base::WeakPtr<SpdySession> session1 =
       spdy_session_pool_->FindAvailableSession(
-          test_hosts[1].key, BoundNetLog());
+          test_hosts[1].key, GURL(test_hosts[1].url), BoundNetLog());
   EXPECT_EQ(session.get(), session1.get());
   EXPECT_NE(session2.get(), session1.get());
 
@@ -520,13 +520,13 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
   // can ignore issues of how dependencies are set.  We default to
   // setting them (when doing the appropriate protocol) since that's
   // where we're eventually headed for all HTTP/2 connections.
-  SpdyTestUtil spdy_util(GetParam(), true);
-  SpdySession::SetPriorityDependencyDefaultForTesting(true);
+  session_deps_.enable_priority_dependencies = true;
+  SpdyTestUtil spdy_util(GetParam(), /*enable_priority_dependencies*/ true);
 
   MockRead reads[] = {
       MockRead(SYNCHRONOUS, ERR_IO_PENDING)  // Stall forever.
   };
-  scoped_ptr<SpdyFrame> req(
+  scoped_ptr<SpdySerializedFrame> req(
       spdy_util.ConstructSpdyGet("http://www.a.com", 1, MEDIUM));
   MockWrite writes[] = {CreateMockWrite(*req, 1)};
 
@@ -630,7 +630,43 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
   EXPECT_TRUE(delegateB.StreamIsClosed());
   EXPECT_EQ(ERR_NETWORK_CHANGED, delegateB.WaitForClose());
 #endif  // defined(OS_ANDROID) || defined(OS_WIN) || defined(OS_IOS)
-  SpdySession::SetPriorityDependencyDefaultForTesting(false);
+}
+
+TEST_P(SpdySessionPoolTest, FindAvailableSession) {
+  SpdySessionKey key(HostPortPair("https://www.example.org", 443),
+                     ProxyServer::Direct(), PRIVACY_MODE_DISABLED);
+
+  MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING)};
+  StaticSocketDataProvider data(reads, arraysize(reads), nullptr, 0);
+  data.set_connect_data(MockConnect(SYNCHRONOUS, OK));
+  session_deps_.socket_factory->AddSocketDataProvider(&data);
+
+  SSLSocketDataProvider ssl(SYNCHRONOUS, OK);
+  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
+
+  CreateNetworkSession();
+
+  base::WeakPtr<SpdySession> session =
+      CreateInsecureSpdySession(http_session_.get(), key, BoundNetLog());
+
+  // Flush the SpdySession::OnReadComplete() task.
+  base::MessageLoop::current()->RunUntilIdle();
+
+  EXPECT_TRUE(HasSpdySession(spdy_session_pool_, key));
+
+  // FindAvailableSession should return |session| if called with empty |url|.
+  base::WeakPtr<SpdySession> session1 =
+      spdy_session_pool_->FindAvailableSession(key, GURL(), BoundNetLog());
+  EXPECT_EQ(session.get(), session1.get());
+
+  // FindAvailableSession should return |session| if called with |url| for which
+  // there is no pushed stream on any sessions owned by |spdy_session_pool_|.
+  base::WeakPtr<SpdySession> session2 =
+      spdy_session_pool_->FindAvailableSession(
+          key, GURL("http://news.example.org/foo.html"), BoundNetLog());
+  EXPECT_EQ(session.get(), session2.get());
+
+  spdy_session_pool_->CloseCurrentSessions(ERR_ABORTED);
 }
 
 }  // namespace net

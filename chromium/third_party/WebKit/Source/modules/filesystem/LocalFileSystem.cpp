@@ -74,9 +74,9 @@ private:
     OwnPtr<AsyncFileSystemCallbacks> m_callbacks;
 };
 
-PassOwnPtrWillBeRawPtr<LocalFileSystem> LocalFileSystem::create(PassOwnPtr<FileSystemClient> client)
+LocalFileSystem* LocalFileSystem::create(PassOwnPtr<FileSystemClient> client)
 {
-    return adoptPtrWillBeNoop(new LocalFileSystem(client));
+    return new LocalFileSystem(client);
 }
 
 LocalFileSystem::~LocalFileSystem()
@@ -85,7 +85,7 @@ LocalFileSystem::~LocalFileSystem()
 
 void LocalFileSystem::resolveURL(ExecutionContext* context, const KURL& fileSystemURL, PassOwnPtr<AsyncFileSystemCallbacks> callbacks)
 {
-    RefPtrWillBeRawPtr<ExecutionContext> contextPtr(context);
+    ExecutionContext* contextPtr(context);
     CallbackWrapper* wrapper = new CallbackWrapper(callbacks);
     requestFileSystemAccessInternal(context,
         bind(&LocalFileSystem::resolveURLInternal, this, contextPtr, fileSystemURL, wrapper),
@@ -94,7 +94,7 @@ void LocalFileSystem::resolveURL(ExecutionContext* context, const KURL& fileSyst
 
 void LocalFileSystem::requestFileSystem(ExecutionContext* context, FileSystemType type, long long size, PassOwnPtr<AsyncFileSystemCallbacks> callbacks)
 {
-    RefPtrWillBeRawPtr<ExecutionContext> contextPtr(context);
+    ExecutionContext* contextPtr(context);
     CallbackWrapper* wrapper = new CallbackWrapper(callbacks);
     requestFileSystemAccessInternal(context,
         bind(&LocalFileSystem::fileSystemAllowedInternal, this, contextPtr, type, wrapper),
@@ -103,7 +103,7 @@ void LocalFileSystem::requestFileSystem(ExecutionContext* context, FileSystemTyp
 
 void LocalFileSystem::deleteFileSystem(ExecutionContext* context, FileSystemType type, PassOwnPtr<AsyncFileSystemCallbacks> callbacks)
 {
-    RefPtrWillBeRawPtr<ExecutionContext> contextPtr(context);
+    ExecutionContext* contextPtr(context);
     ASSERT(context);
     ASSERT_WITH_SECURITY_IMPLICATION(context->isDocument());
 
@@ -121,7 +121,7 @@ WebFileSystem* LocalFileSystem::fileSystem() const
     return Platform::current()->fileSystem();
 }
 
-void LocalFileSystem::requestFileSystemAccessInternal(ExecutionContext* context, PassOwnPtr<Closure> allowed, PassOwnPtr<Closure> denied)
+void LocalFileSystem::requestFileSystemAccessInternal(ExecutionContext* context, PassOwnPtr<SameThreadClosure> allowed, PassOwnPtr<SameThreadClosure> denied)
 {
     if (!client()) {
         (*denied)();
@@ -139,21 +139,21 @@ void LocalFileSystem::requestFileSystemAccessInternal(ExecutionContext* context,
 }
 
 void LocalFileSystem::fileSystemNotAvailable(
-    PassRefPtrWillBeRawPtr<ExecutionContext> context,
+    ExecutionContext* context,
     CallbackWrapper* callbacks)
 {
     context->postTask(BLINK_FROM_HERE, createSameThreadTask(&reportFailure, callbacks->release(), FileError::ABORT_ERR));
 }
 
 void LocalFileSystem::fileSystemNotAllowedInternal(
-    PassRefPtrWillBeRawPtr<ExecutionContext> context,
+    ExecutionContext* context,
     CallbackWrapper* callbacks)
 {
     context->postTask(BLINK_FROM_HERE, createSameThreadTask(&reportFailure, callbacks->release(), FileError::ABORT_ERR));
 }
 
 void LocalFileSystem::fileSystemAllowedInternal(
-    PassRefPtrWillBeRawPtr<ExecutionContext> context,
+    ExecutionContext* context,
     FileSystemType type,
     CallbackWrapper* callbacks)
 {
@@ -162,12 +162,12 @@ void LocalFileSystem::fileSystemAllowedInternal(
         return;
     }
 
-    KURL storagePartition = KURL(KURL(), context->securityOrigin()->toString());
+    KURL storagePartition = KURL(KURL(), context->getSecurityOrigin()->toString());
     fileSystem()->openFileSystem(storagePartition, static_cast<WebFileSystemType>(type), callbacks->release());
 }
 
 void LocalFileSystem::resolveURLInternal(
-    PassRefPtrWillBeRawPtr<ExecutionContext> context,
+    ExecutionContext* context,
     const KURL& fileSystemURL,
     CallbackWrapper* callbacks)
 {
@@ -179,7 +179,7 @@ void LocalFileSystem::resolveURLInternal(
 }
 
 void LocalFileSystem::deleteFileSystemInternal(
-    PassRefPtrWillBeRawPtr<ExecutionContext> context,
+    ExecutionContext* context,
     FileSystemType type,
     CallbackWrapper* callbacks)
 {
@@ -187,7 +187,7 @@ void LocalFileSystem::deleteFileSystemInternal(
         fileSystemNotAvailable(context, callbacks);
         return;
     }
-    KURL storagePartition = KURL(KURL(), context->securityOrigin()->toString());
+    KURL storagePartition = KURL(KURL(), context->getSecurityOrigin()->toString());
     fileSystem()->deleteFileSystem(storagePartition, static_cast<WebFileSystemType>(type), callbacks->release());
 }
 
@@ -204,11 +204,11 @@ const char* LocalFileSystem::supplementName()
 LocalFileSystem* LocalFileSystem::from(ExecutionContext& context)
 {
     if (context.isDocument())
-        return static_cast<LocalFileSystem*>(WillBeHeapSupplement<LocalFrame>::from(toDocument(context).frame(), supplementName()));
+        return static_cast<LocalFileSystem*>(Supplement<LocalFrame>::from(toDocument(context).frame(), supplementName()));
 
     WorkerClients* clients = toWorkerGlobalScope(context).clients();
     ASSERT(clients);
-    return static_cast<LocalFileSystem*>(WillBeHeapSupplement<WorkerClients>::from(clients, supplementName()));
+    return static_cast<LocalFileSystem*>(Supplement<WorkerClients>::from(clients, supplementName()));
 }
 
 void provideLocalFileSystemTo(LocalFrame& frame, PassOwnPtr<FileSystemClient> client)

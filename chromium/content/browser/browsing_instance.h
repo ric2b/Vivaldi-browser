@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include "base/containers/hash_tables.h"
+#include "base/gtest_prod_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -18,7 +19,6 @@
 class GURL;
 
 namespace content {
-class SiteInstance;
 class SiteInstanceImpl;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -55,11 +55,19 @@ class SiteInstanceImpl;
 // site_instance_unittest.cc.
 //
 ///////////////////////////////////////////////////////////////////////////////
-class CONTENT_EXPORT BrowsingInstance
+class CONTENT_EXPORT BrowsingInstance final
     : public base::RefCounted<BrowsingInstance> {
- protected:
+ private:
+  friend class base::RefCounted<BrowsingInstance>;
+  friend class SiteInstanceImpl;
+  FRIEND_TEST_ALL_PREFIXES(SiteInstanceTest, OneSiteInstancePerSite);
+  FRIEND_TEST_ALL_PREFIXES(SiteInstanceTest,
+                           OneSiteInstancePerSiteInBrowserContext);
+
   // Create a new BrowsingInstance.
   explicit BrowsingInstance(BrowserContext* context);
+
+  ~BrowsingInstance();
 
   // Get the browser context to which this BrowsingInstance belongs.
   BrowserContext* browser_context() const { return browser_context_; }
@@ -71,17 +79,23 @@ class CONTENT_EXPORT BrowsingInstance
   // Get the SiteInstance responsible for rendering the given URL.  Should
   // create a new one if necessary, but should not create more than one
   // SiteInstance per site.
-  SiteInstance* GetSiteInstanceForURL(const GURL& url);
+  scoped_refptr<SiteInstanceImpl> GetSiteInstanceForURL(const GURL& url);
+
+  // Returns a SiteInstance that should be used for subframes when an oopif is
+  // required, but a dedicated process is not. This SiteInstance will be created
+  // if it doesn't already exist. There is at most one of these per
+  // BrowsingInstance.
+  scoped_refptr<SiteInstanceImpl> GetDefaultSubframeSiteInstance();
 
   // Adds the given SiteInstance to our map, to ensure that we do not create
   // another SiteInstance for the same site.
-  void RegisterSiteInstance(SiteInstance* site_instance);
+  void RegisterSiteInstance(SiteInstanceImpl* site_instance);
 
   // Removes the given SiteInstance from our map, after all references to it
   // have been deleted.  This means it is safe to create a new SiteInstance
   // if the user later visits a page from this site, within this
   // BrowsingInstance.
-  void UnregisterSiteInstance(SiteInstance* site_instance);
+  void UnregisterSiteInstance(SiteInstanceImpl* site_instance);
 
   // Tracks the number of WebContents currently in this BrowsingInstance.
   size_t active_contents_count() const { return active_contents_count_; }
@@ -91,18 +105,9 @@ class CONTENT_EXPORT BrowsingInstance
     active_contents_count_--;
   }
 
-  friend class SiteInstanceImpl;
-  friend class SiteInstance;
-
-  friend class base::RefCounted<BrowsingInstance>;
-
-  // Virtual to allow tests to extend it.
-  virtual ~BrowsingInstance();
-
- private:
   // Map of site to SiteInstance, to ensure we only have one SiteInstance per
   // site.
-  typedef base::hash_map<std::string, SiteInstance*> SiteInstanceMap;
+  typedef base::hash_map<std::string, SiteInstanceImpl*> SiteInstanceMap;
 
   // Common browser context to which all SiteInstances in this BrowsingInstance
   // must belong.
@@ -119,6 +124,8 @@ class CONTENT_EXPORT BrowsingInstance
 
   // Number of WebContentses currently using this BrowsingInstance.
   size_t active_contents_count_;
+
+  SiteInstanceImpl* default_subframe_site_instance_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(BrowsingInstance);
 };

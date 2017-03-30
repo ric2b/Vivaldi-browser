@@ -14,6 +14,7 @@
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/frame_host/traced_frame_tree_node.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/site_isolation_policy.h"
@@ -97,7 +98,8 @@ FrameTreeNode::FrameTreeNode(
           name,
           unique_name,
           blink::WebSandboxFlags::None,
-          false /* should enforce strict mixed content checking */),
+          false /* should enforce strict mixed content checking */,
+          false /* is a potentially trustworthy unique origin */),
       pending_sandbox_flags_(blink::WebSandboxFlags::None),
       frame_owner_properties_(frame_owner_properties),
       loading_progress_(kLoadingProgressNotStarted),
@@ -108,6 +110,12 @@ FrameTreeNode::FrameTreeNode(
       g_frame_tree_node_id_map.Get().insert(
           std::make_pair(frame_tree_node_id_, this));
   CHECK(result.second);
+
+  TRACE_EVENT_OBJECT_CREATED_WITH_ID(
+      "navigation", "FrameTreeNode",
+      TRACE_ID_WITH_SCOPE("FrameTreeNode", frame_tree_node_id_));
+  // Don't TraceSnapshot() until the RenderFrameHostManager is initialized and
+  // calls SetCurrentURL().
 }
 
 FrameTreeNode::~FrameTreeNode() {
@@ -119,6 +127,10 @@ FrameTreeNode::~FrameTreeNode() {
     opener_->RemoveObserver(opener_observer_.get());
 
   g_frame_tree_node_id_map.Get().erase(frame_tree_node_id_);
+
+  TRACE_EVENT_OBJECT_DELETED_WITH_ID(
+      "navigation", "FrameTreeNode",
+      TRACE_ID_WITH_SCOPE("FrameTreeNode", frame_tree_node_id_));
 }
 
 void FrameTreeNode::AddObserver(Observer* observer) {
@@ -175,6 +187,7 @@ void FrameTreeNode::RemoveChild(FrameTreeNode* child) {
 
 void FrameTreeNode::ResetForNewProcess() {
   current_frame_host()->set_last_committed_url(GURL());
+  TraceSnapshot();
 
   // Remove child nodes from the tree, then delete them. This destruction
   // operation will notify observers.
@@ -200,12 +213,21 @@ void FrameTreeNode::SetCurrentURL(const GURL& url) {
   if (!has_committed_real_load_ && url != GURL(url::kAboutBlankURL))
     has_committed_real_load_ = true;
   current_frame_host()->set_last_committed_url(url);
+  TraceSnapshot();
 }
 
-void FrameTreeNode::SetCurrentOrigin(const url::Origin& origin) {
-  if (!origin.IsSameOriginWith(replication_state_.origin))
-    render_manager_.OnDidUpdateOrigin(origin);
+void FrameTreeNode::SetCurrentOrigin(
+    const url::Origin& origin,
+    bool is_potentially_trustworthy_unique_origin) {
+  if (!origin.IsSameOriginWith(replication_state_.origin) ||
+      replication_state_.has_potentially_trustworthy_unique_origin !=
+          is_potentially_trustworthy_unique_origin) {
+    render_manager_.OnDidUpdateOrigin(origin,
+                                      is_potentially_trustworthy_unique_origin);
+  }
   replication_state_.origin = origin;
+  replication_state_.has_potentially_trustworthy_unique_origin =
+      is_potentially_trustworthy_unique_origin;
 }
 
 void FrameTreeNode::SetFrameName(const std::string& name,
@@ -307,7 +329,7 @@ void FrameTreeNode::CreatedNavigationRequest(
     ResetNavigationRequest(true);
 
   navigation_request_ = std::move(navigation_request);
-  render_manager()->DidCreateNavigationRequest(*navigation_request_);
+  render_manager()->DidCreateNavigationRequest(navigation_request_.get());
 
   // Force the throbber to start to keep it in sync with what is happening in
   // the UI. Blink doesn't send throb notifications for JavaScript URLs, so it
@@ -325,6 +347,8 @@ void FrameTreeNode::ResetNavigationRequest(bool keep_state) {
   if (!navigation_request_)
     return;
   bool was_renderer_initiated = !navigation_request_->browser_initiated();
+  NavigationRequest::AssociatedSiteInstanceType site_instance_type =
+      navigation_request_->associated_site_instance_type();
   navigation_request_.reset();
 
   if (keep_state)
@@ -334,6 +358,13 @@ void FrameTreeNode::ResetNavigationRequest(bool keep_state) {
   // it created for the navigation. Also register that the load stopped.
   DidStopLoading();
   render_manager_.CleanUpNavigation();
+
+  // When reusing the same SiteInstance, a pending WebUI may have been created
+  // on behalf of the navigation in the current RenderFrameHost. Clear it.
+  if (site_instance_type ==
+      NavigationRequest::AssociatedSiteInstanceType::CURRENT) {
+    current_frame_host()->ClearPendingWebUI();
+  }
 
   // If the navigation is renderer-initiated, the renderer should also be
   // informed that the navigation stopped.
@@ -452,6 +483,15 @@ void FrameTreeNode::BeforeUnloadCanceled() {
     if (pending_frame_host)
       pending_frame_host->ResetLoadingState();
   }
+}
+
+void FrameTreeNode::TraceSnapshot() const {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID(
+      "navigation", "FrameTreeNode",
+      TRACE_ID_WITH_SCOPE("FrameTreeNode", frame_tree_node_id_),
+      scoped_ptr<base::trace_event::ConvertableToTraceFormat>(
+          new TracedFrameTreeNode(*this)));
 }
 
 void FrameTreeNode::DidChangeLoadProgressExtended(double load_progress,

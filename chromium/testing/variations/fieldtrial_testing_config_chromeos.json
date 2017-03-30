@@ -38,14 +38,6 @@
             "group_name": "Enabled"
         }
     ],
-    "DataReductionProxyConfigService": [
-        {
-            "group_name": "Enabled",
-            "params": {
-                "minimum_refresh_interval_on_success_msec": "21600000"
-            }
-        }
-    ],
     "EnableGoogleCachedCopyTextExperiment": [
         {
             "group_name": "Button"
@@ -88,6 +80,9 @@
     ],
     "RenderingPipelineThrottling": [
         {
+            "enable_features": [
+                "RenderingPipelineThrottling"
+            ],
             "group_name": "Enabled"
         }
     ],
@@ -120,6 +115,11 @@
             "group_name": "DontShowAndDontSend"
         }
     ],
+    "SSLCommonNameMismatchHandling": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "SafeBrowsingUnverifiedDownloads": [
         {
             "group_name": "DisableByParameterMostSbTypes2",
@@ -140,9 +140,9 @@
             "group_name": "Enabled"
         }
     ],
-    "SpdyEnableDependencies": [
+    "SimpleCacheTrial": [
         {
-            "group_name": "Enable"
+            "group_name": "ExperimentYes"
         }
     ],
     "StrictSecureCookies": [
@@ -163,6 +163,23 @@
             "group_name": "Enabled"
         }
     ],
+    "TokenBinding": [
+        {
+            "enable_features": [
+                "token-binding"
+            ],
+            "group_name": "TokenBinding"
+        }
+    ],
+    "V8SerializeOptions": [
+        {
+            "enable_features": [
+                "V8_Serialize_Eager",
+                "V8_Serialize_Age_Code"
+            ],
+            "group_name": "SerializeEagerAndAgeCode"
+        }
+    ],
     "VarationsServiceControl": [
         {
             "group_name": "Interval_30min",
@@ -173,6 +190,14 @@
     ],
     "WebFontsIntervention": [
         {
+            "group_name": "Enabled"
+        }
+    ],
+    "WebRTC-H264WithOpenH264FFmpeg": [
+        {
+            "enable_features": [
+                "WebRTC-H264WithOpenH264FFmpeg"
+            ],
             "group_name": "Enabled"
         }
     ],

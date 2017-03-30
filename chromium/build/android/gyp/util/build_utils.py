@@ -152,7 +152,7 @@ class CalledProcessError(Exception):
 # This can be used in most cases like subprocess.check_output(). The output,
 # particularly when the command fails, better highlights the command's failure.
 # If the command fails, raises a build_utils.CalledProcessError.
-def CheckOutput(args, cwd=None,
+def CheckOutput(args, cwd=None, env=None,
                 print_stdout=False, print_stderr=True,
                 stdout_filter=None,
                 stderr_filter=None,
@@ -161,7 +161,7 @@ def CheckOutput(args, cwd=None,
     cwd = os.getcwd()
 
   child = subprocess.Popen(args,
-      stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
+      stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env)
   stdout, stderr = child.communicate()
 
   if stdout_filter is not None:
@@ -266,6 +266,12 @@ def AddToZipHermetic(zip_file, zip_path, src_path=None, data=None,
   CheckZipPath(zip_path)
   zipinfo = zipfile.ZipInfo(filename=zip_path, date_time=_HERMETIC_TIMESTAMP)
   zipinfo.external_attr = _HERMETIC_FILE_ATTR
+
+  if src_path and os.path.islink(src_path):
+    zipinfo.filename = zip_path
+    zipinfo.external_attr |= stat.S_IFLNK << 16L # mark as a symlink
+    zip_file.writestr(zipinfo, os.readlink(src_path))
+    return
 
   if src_path:
     with file(src_path) as f:
@@ -471,11 +477,18 @@ def ExpandFileArgs(args):
 def CallAndWriteDepfileIfStale(function, options, record_path=None,
                                input_paths=None, input_strings=None,
                                output_paths=None, force=False,
-                               pass_changes=False):
+                               pass_changes=False,
+                               depfile_deps=None):
   """Wraps md5_check.CallAndRecordIfStale() and also writes dep & stamp files.
 
   Depfiles and stamp files are automatically added to output_paths when present
   in the |options| argument. They are then created after |function| is called.
+
+  By default, only python dependencies are added to the depfile. If there are
+  other input paths that are not captured by GN deps, then they should be listed
+  in depfile_deps. It's important to write paths to the depfile that are already
+  captured by GN deps since GN args can cause GN deps to change, and such
+  changes are not immediately reflected in depfiles (http://crbug.com/589311).
   """
   if not output_paths:
     raise Exception('At least one output_path must be specified.')
@@ -499,7 +512,10 @@ def CallAndWriteDepfileIfStale(function, options, record_path=None,
     args = (changes,) if pass_changes else ()
     function(*args)
     if python_deps is not None:
-      WriteDepfile(options.depfile, python_deps + input_paths)
+      all_depfile_deps = list(python_deps)
+      if depfile_deps:
+        all_depfile_deps.extend(depfile_deps)
+      WriteDepfile(options.depfile, all_depfile_deps)
     if stamp_file:
       Touch(stamp_file)
 

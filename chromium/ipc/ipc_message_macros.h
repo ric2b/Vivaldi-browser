@@ -201,8 +201,9 @@
 
 #include <stdint.h>
 
+#include <tuple>
+
 #include "base/profiler/scoped_profile.h"
-#include "base/tuple.h"
 #include "ipc/export_template.h"
 #include "ipc/ipc_message_templates.h"
 #include "ipc/ipc_message_utils.h"
@@ -248,7 +249,7 @@
 #define IPC_SYNC_MESSAGE_ROUTED(msg_class, in, out) \
   IPC_MESSAGE_DECL(msg_class, ROUTED, IPC_TUPLE in, IPC_TUPLE out)
 
-#define IPC_TUPLE(...) base::Tuple<__VA_ARGS__>
+#define IPC_TUPLE(...) IPC::CheckedTuple<__VA_ARGS__>::Tuple
 
 #define IPC_MESSAGE_DECL(msg_name, kind, in_tuple, out_tuple)       \
   struct IPC_MESSAGE_EXPORT msg_name##_Meta {                       \
@@ -402,8 +403,7 @@
 }
 
 // This corresponds to an enum value from IPCMessageStart.
-#define IPC_MESSAGE_CLASS(message) \
-  IPC_MESSAGE_ID_CLASS(message.type())
+#define IPC_MESSAGE_CLASS(message) IPC_MESSAGE_ID_CLASS((message).type())
 
 // Deprecated legacy macro names.
 // TODO(mdempsky): Replace uses with generic names.

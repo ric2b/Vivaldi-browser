@@ -7,16 +7,17 @@
 #include <AclAPI.h>
 #include <stddef.h>
 
+#include <memory>
+#include <utility>
+
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "base/threading/platform_thread.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/scoped_process_information.h"
 #include "base/win/startup_information.h"
 #include "base/win/windows_version.h"
-#include "sandbox/win/src/app_container.h"
 #include "sandbox/win/src/process_mitigations.h"
 #include "sandbox/win/src/sandbox.h"
 #include "sandbox/win/src/sandbox_policy_base.h"
@@ -59,8 +60,7 @@ enum {
 // with a job object and with a policy.
 struct JobTracker {
   JobTracker(base::win::ScopedHandle job, sandbox::PolicyBase* policy)
-      : job(job.Pass()), policy(policy) {
-  }
+      : job(std::move(job)), policy(policy) {}
   ~JobTracker() {
     FreeResources();
   }
@@ -195,6 +195,7 @@ DWORD WINAPI BrokerServicesBase::TargetEventsThread(PVOID param) {
   HANDLE no_targets = broker->no_targets_.Get();
 
   int target_counter = 0;
+  int untracked_target_counter = 0;
   ::ResetEvent(no_targets);
 
   while (true) {
@@ -226,6 +227,14 @@ DWORD WINAPI BrokerServicesBase::TargetEventsThread(PVOID param) {
         }
 
         case JOB_OBJECT_MSG_NEW_PROCESS: {
+          DWORD handle = static_cast<DWORD>(reinterpret_cast<uintptr_t>(ovl));
+          {
+            AutoLock lock(&broker->lock_);
+            size_t count = broker->child_process_ids_.count(handle);
+            // Child process created from sandboxed process.
+            if (count == 0)
+              untracked_target_counter++;
+          }
           ++target_counter;
           if (1 == target_counter) {
             ::ResetEvent(no_targets);
@@ -235,10 +244,16 @@ DWORD WINAPI BrokerServicesBase::TargetEventsThread(PVOID param) {
 
         case JOB_OBJECT_MSG_EXIT_PROCESS:
         case JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS: {
+          size_t erase_result = 0;
           {
             AutoLock lock(&broker->lock_);
-            broker->child_process_ids_.erase(
+            erase_result = broker->child_process_ids_.erase(
                 static_cast<DWORD>(reinterpret_cast<uintptr_t>(ovl)));
+          }
+          if (erase_result != 1U) {
+            // The process was untracked e.g. a child process of the target.
+            --untracked_target_counter;
+            DCHECK(untracked_target_counter >= 0);
           }
           --target_counter;
           if (0 == target_counter)
@@ -249,6 +264,10 @@ DWORD WINAPI BrokerServicesBase::TargetEventsThread(PVOID param) {
         }
 
         case JOB_OBJECT_MSG_ACTIVE_PROCESS_LIMIT: {
+          // A child process attempted and failed to create a child process.
+          // Windows does not reveal the process id.
+          untracked_target_counter++;
+          target_counter++;
           break;
         }
 
@@ -308,9 +327,6 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
   // This downcast is safe as long as we control CreatePolicy()
   PolicyBase* policy_base = static_cast<PolicyBase*>(policy);
 
-  if (policy_base->GetAppContainer() && policy_base->GetLowBoxSid())
-    return SBOX_ERROR_BAD_PARAMS;
-
   // Construct the tokens and the job object that we are going to associate
   // with the soon to be created target process.
   base::win::ScopedHandle initial_token;
@@ -347,85 +363,73 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
 
   bool inherit_handles = false;
 
-  if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
-    int attribute_count = 0;
-    const AppContainerAttributes* app_container =
-        policy_base->GetAppContainer();
-    if (app_container)
-      ++attribute_count;
+  int attribute_count = 0;
 
-    size_t mitigations_size;
-    ConvertProcessMitigationsToPolicy(policy_base->GetProcessMitigations(),
-                                      &mitigations, &mitigations_size);
-    if (mitigations)
-      ++attribute_count;
+  size_t mitigations_size;
+  ConvertProcessMitigationsToPolicy(policy_base->GetProcessMitigations(),
+                                    &mitigations, &mitigations_size);
+  if (mitigations)
+    ++attribute_count;
 
-    bool restrict_child_process_creation = false;
-    if (base::win::GetVersion() >= base::win::VERSION_WIN10_TH2 &&
-        policy_base->GetJobLevel() <= JOB_LIMITED_USER) {
-      restrict_child_process_creation = true;
-      ++attribute_count;
-    }
+  bool restrict_child_process_creation = false;
+  if (base::win::GetVersion() >= base::win::VERSION_WIN10_TH2 &&
+      policy_base->GetJobLevel() <= JOB_LIMITED_USER) {
+    restrict_child_process_creation = true;
+    ++attribute_count;
+  }
 
-    HANDLE stdout_handle = policy_base->GetStdoutHandle();
-    HANDLE stderr_handle = policy_base->GetStderrHandle();
+  HANDLE stdout_handle = policy_base->GetStdoutHandle();
+  HANDLE stderr_handle = policy_base->GetStderrHandle();
 
-    if (stdout_handle != INVALID_HANDLE_VALUE)
-      inherited_handle_list.push_back(stdout_handle);
+  if (stdout_handle != INVALID_HANDLE_VALUE)
+    inherited_handle_list.push_back(stdout_handle);
 
-    // Handles in the list must be unique.
-    if (stderr_handle != stdout_handle && stderr_handle != INVALID_HANDLE_VALUE)
-      inherited_handle_list.push_back(stderr_handle);
+  // Handles in the list must be unique.
+  if (stderr_handle != stdout_handle && stderr_handle != INVALID_HANDLE_VALUE)
+    inherited_handle_list.push_back(stderr_handle);
 
-    const base::HandlesToInheritVector& policy_handle_list =
-        policy_base->GetHandlesBeingShared();
+  const base::HandlesToInheritVector& policy_handle_list =
+      policy_base->GetHandlesBeingShared();
 
-    for (HANDLE handle : policy_handle_list)
-      inherited_handle_list.push_back(handle);
+  for (HANDLE handle : policy_handle_list)
+    inherited_handle_list.push_back(handle);
 
-    if (inherited_handle_list.size())
-      ++attribute_count;
+  if (inherited_handle_list.size())
+    ++attribute_count;
 
-    if (!startup_info.InitializeProcThreadAttributeList(attribute_count))
+  if (!startup_info.InitializeProcThreadAttributeList(attribute_count))
+    return SBOX_ERROR_PROC_THREAD_ATTRIBUTES;
+
+  if (mitigations) {
+    if (!startup_info.UpdateProcThreadAttribute(
+              PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, &mitigations,
+              mitigations_size)) {
       return SBOX_ERROR_PROC_THREAD_ATTRIBUTES;
-
-    if (app_container) {
-      result = app_container->ShareForStartup(&startup_info);
-      if (SBOX_ALL_OK != result)
-        return result;
     }
+  }
 
-    if (mitigations) {
-      if (!startup_info.UpdateProcThreadAttribute(
-               PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, &mitigations,
-               mitigations_size)) {
-        return SBOX_ERROR_PROC_THREAD_ATTRIBUTES;
-      }
+  if (restrict_child_process_creation) {
+    if (!startup_info.UpdateProcThreadAttribute(
+            PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY,
+            &child_process_creation, sizeof(child_process_creation))) {
+      return SBOX_ERROR_PROC_THREAD_ATTRIBUTES;
     }
+  }
 
-    if (restrict_child_process_creation) {
-      if (!startup_info.UpdateProcThreadAttribute(
-              PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY,
-              &child_process_creation, sizeof(child_process_creation))) {
-        return SBOX_ERROR_PROC_THREAD_ATTRIBUTES;
-      }
+  if (inherited_handle_list.size()) {
+    if (!startup_info.UpdateProcThreadAttribute(
+            PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+            &inherited_handle_list[0],
+            sizeof(HANDLE) * inherited_handle_list.size())) {
+      return SBOX_ERROR_PROC_THREAD_ATTRIBUTES;
     }
-
-    if (inherited_handle_list.size()) {
-      if (!startup_info.UpdateProcThreadAttribute(
-              PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-              &inherited_handle_list[0],
-              sizeof(HANDLE) * inherited_handle_list.size())) {
-        return SBOX_ERROR_PROC_THREAD_ATTRIBUTES;
-      }
-      startup_info.startup_info()->dwFlags |= STARTF_USESTDHANDLES;
-      startup_info.startup_info()->hStdInput = INVALID_HANDLE_VALUE;
-      startup_info.startup_info()->hStdOutput = stdout_handle;
-      startup_info.startup_info()->hStdError = stderr_handle;
-      // Allowing inheritance of handles is only secure now that we
-      // have limited which handles will be inherited.
-      inherit_handles = true;
-    }
+    startup_info.startup_info()->dwFlags |= STARTF_USESTDHANDLES;
+    startup_info.startup_info()->hStdInput = INVALID_HANDLE_VALUE;
+    startup_info.startup_info()->hStdOutput = stdout_handle;
+    startup_info.startup_info()->hStdError = stderr_handle;
+    // Allowing inheritance of handles is only secure now that we
+    // have limited which handles will be inherited.
+    inherit_handles = true;
   }
 
   // Construct the thread pool here in case it is expensive.
@@ -437,8 +441,8 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
   // Brokerservices does not own the target object. It is owned by the Policy.
   base::win::ScopedProcessInformation process_info;
   TargetProcess* target =
-      new TargetProcess(initial_token.Pass(), lockdown_token.Pass(),
-                        lowbox_token.Pass(), job.Get(), thread_pool_);
+      new TargetProcess(std::move(initial_token), std::move(lockdown_token),
+                        std::move(lowbox_token), job.Get(), thread_pool_);
 
   DWORD win_result = target->Create(exe_path, command_line, inherit_handles,
                                     startup_info, &process_info);
@@ -457,7 +461,8 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
   // the job object generates notifications using the completion port.
   policy_base->AddRef();
   if (job.IsValid()) {
-    scoped_ptr<JobTracker> tracker(new JobTracker(job.Pass(), policy_base));
+    std::unique_ptr<JobTracker> tracker(
+        new JobTracker(std::move(job), policy_base));
 
     // There is no obvious recovery after failure here. Previous version with
     // SpawnCleanup() caused deletion of TargetProcess twice. crbug.com/480639
@@ -507,8 +512,8 @@ VOID CALLBACK BrokerServicesBase::RemovePeer(PVOID parameter, BOOLEAN timeout) {
 }
 
 ResultCode BrokerServicesBase::AddTargetPeer(HANDLE peer_process) {
-  scoped_ptr<PeerTracker> peer(new PeerTracker(::GetProcessId(peer_process),
-                                               job_port_.Get()));
+  std::unique_ptr<PeerTracker> peer(
+      new PeerTracker(::GetProcessId(peer_process), job_port_.Get()));
   if (!peer->id)
     return SBOX_ERROR_GENERIC;
 
@@ -534,32 +539,6 @@ ResultCode BrokerServicesBase::AddTargetPeer(HANDLE peer_process) {
   // Release the pointer since it will be cleaned up by the callback.
   ignore_result(peer.release());
   return SBOX_ALL_OK;
-}
-
-ResultCode BrokerServicesBase::InstallAppContainer(const wchar_t* sid,
-                                                   const wchar_t* name) {
-  if (base::win::OSInfo::GetInstance()->version() < base::win::VERSION_WIN8)
-    return SBOX_ERROR_UNSUPPORTED;
-
-  base::string16 old_name = LookupAppContainer(sid);
-  if (old_name.empty())
-    return CreateAppContainer(sid, name);
-
-  if (old_name != name)
-    return SBOX_ERROR_INVALID_APP_CONTAINER;
-
-  return SBOX_ALL_OK;
-}
-
-ResultCode BrokerServicesBase::UninstallAppContainer(const wchar_t* sid) {
-  if (base::win::OSInfo::GetInstance()->version() < base::win::VERSION_WIN8)
-    return SBOX_ERROR_UNSUPPORTED;
-
-  base::string16 name = LookupAppContainer(sid);
-  if (name.empty())
-    return SBOX_ERROR_INVALID_APP_CONTAINER;
-
-  return DeleteAppContainer(sid);
 }
 
 }  // namespace sandbox

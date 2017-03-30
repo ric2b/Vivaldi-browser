@@ -30,6 +30,7 @@
 #define IDC_SYSLINK_PRIVACY_POLICY      1013
 #define IDC_STATIC_INFO                 1014
 #define IDC_STATIC_WARN                 1015
+#define IDC_CHECK_REGISTER              1016
 #define IDC_STATIC                      -1
 // Next default values for new objects
 //

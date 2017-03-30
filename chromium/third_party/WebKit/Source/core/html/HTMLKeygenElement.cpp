@@ -54,9 +54,9 @@ HTMLKeygenElement::HTMLKeygenElement(Document& document, HTMLFormElement* form)
         document.frame()->loader().client()->didUseKeygen();
 }
 
-PassRefPtrWillBeRawPtr<HTMLKeygenElement> HTMLKeygenElement::create(Document& document, HTMLFormElement* form)
+RawPtr<HTMLKeygenElement> HTMLKeygenElement::create(Document& document, HTMLFormElement* form)
 {
-    RefPtrWillBeRawPtr<HTMLKeygenElement> keygen = adoptRefWillBeNoop(new HTMLKeygenElement(document, form));
+    RawPtr<HTMLKeygenElement> keygen = new HTMLKeygenElement(document, form);
     keygen->ensureUserAgentShadowRoot();
     return keygen.release();
 }
@@ -71,7 +71,7 @@ LayoutObject* HTMLKeygenElement::createLayoutObject(const ComputedStyle& style)
 
 void HTMLKeygenElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 {
-    DEFINE_STATIC_LOCAL(AtomicString, keygenSelectPseudoId, ("-webkit-keygen-select", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(AtomicString, keygenSelectPseudoId, ("-webkit-keygen-select"));
 
     Vector<String> keys;
     keys.reserveCapacity(2);
@@ -79,10 +79,10 @@ void HTMLKeygenElement::didAddUserAgentShadowRoot(ShadowRoot& root)
     keys.append(locale().queryString(WebLocalizedString::KeygenMenuMediumGradeKeySize));
 
     // Create a select element with one option element for each key size.
-    RefPtrWillBeRawPtr<HTMLSelectElement> select = HTMLSelectElement::create(document());
+    RawPtr<HTMLSelectElement> select = HTMLSelectElement::create(document());
     select->setShadowPseudoId(keygenSelectPseudoId);
     for (const String& key : keys) {
-        RefPtrWillBeRawPtr<HTMLOptionElement> option = HTMLOptionElement::create(document());
+        RawPtr<HTMLOptionElement> option = HTMLOptionElement::create(document());
         option->appendChild(Text::create(document(), key));
         select->appendChild(option);
     }
@@ -105,7 +105,7 @@ void HTMLKeygenElement::appendToFormData(FormData& formData)
     const AtomicString& keyType = fastGetAttribute(keytypeAttr);
     if (!keyType.isNull() && !equalIgnoringCase(keyType, "rsa"))
         return;
-    SecurityOrigin* topOrigin = document().frame()->tree().top()->securityContext()->securityOrigin();
+    SecurityOrigin* topOrigin = document().frame()->tree().top()->securityContext()->getSecurityOrigin();
     String value = Platform::current()->signedPublicKeyAndChallengeString(
         shadowSelect()->selectedIndex(), fastGetAttribute(challengeAttr), document().baseURL(),
         KURL(KURL(), topOrigin->toString()));
@@ -115,7 +115,7 @@ void HTMLKeygenElement::appendToFormData(FormData& formData)
 
 const AtomicString& HTMLKeygenElement::formControlType() const
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, keygen, ("keygen", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, keygen, ("keygen"));
     return keygen;
 }
 

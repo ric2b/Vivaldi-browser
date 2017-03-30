@@ -79,9 +79,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
       const device::BluetoothUUID& uuid,
       const ConnectToServiceCallback& callback,
       const ConnectToServiceErrorCallback& error_callback) override;
-  void CreateGattConnection(
-      const GattConnectionCallback& callback,
-      const ConnectErrorCallback& error_callback) override;
 
   // BluetoothDeviceMac override.
   NSDate* GetLastUpdateTime() const override;
@@ -93,9 +90,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
   void DisconnectGatt() override;
 
   // Updates information about the device.
-  virtual void Update(CBPeripheral* peripheral,
-                      NSDictionary* advertisement_data,
-                      int rssi);
+  virtual void Update(NSDictionary* advertisement_data, int rssi);
 
   static std::string GetPeripheralIdentifier(CBPeripheral* peripheral);
 
@@ -108,6 +103,16 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
  private:
   friend class BluetoothAdapterMac;
   friend class BluetoothAdapterMacTest;
+  friend class BluetoothTestMac;
+
+  // Returns the Bluetooth adapter.
+  BluetoothAdapterMac* GetMacAdapter();
+
+  // Returns the CoreBluetooth Peripheral.
+  CBPeripheral* GetPeripheral();
+
+  // Callback used when the CoreBluetooth Peripheral is disconnected.
+  void DidDisconnectPeripheral(BluetoothDevice::ConnectErrorCode error_code);
 
   // CoreBluetooth data structure.
   base::scoped_nsobject<CBPeripheral> peripheral_;

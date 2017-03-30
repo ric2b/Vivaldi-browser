@@ -22,7 +22,7 @@ void SimpleCallback(bool* called, int) {
   *called = true;
 }
 
-void CallbackWithPassed(bool* called, scoped_ptr<int>) {
+void CallbackWithPassed(bool* called, std::unique_ptr<int>) {
   ASSERT_TRUE(called);
   EXPECT_FALSE(*called);
   *called = true;
@@ -52,10 +52,9 @@ TEST(DriveBackendCallbackHelperTest, BasicTest) {
   EXPECT_TRUE(called);
 
   called = false;
-  RelayCallbackToCurrentThread(
-      FROM_HERE,
-      base::Bind(&CallbackWithPassed, &called))
-      .Run(scoped_ptr<int>(new int));
+  RelayCallbackToCurrentThread(FROM_HERE,
+                               base::Bind(&CallbackWithPassed, &called))
+      .Run(std::unique_ptr<int>(new int));
   EXPECT_FALSE(called);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
@@ -74,11 +73,10 @@ TEST(DriveBackendCallbackHelperTest, RunOnOtherThreadTest) {
   bool called = false;
   base::RunLoop run_loop;
   worker_task_runner->PostTask(
-      FROM_HERE,
-      RelayCallbackToTaskRunner(
-          ui_task_runner.get(),
-          FROM_HERE,
-          base::Bind(&VerifyCalledOnTaskRunner, ui_task_runner, &called)));
+      FROM_HERE, RelayCallbackToTaskRunner(
+                     ui_task_runner.get(), FROM_HERE,
+                     base::Bind(&VerifyCalledOnTaskRunner,
+                                base::RetainedRef(ui_task_runner), &called)));
   worker_task_runner->PostTask(
       FROM_HERE,
       RelayCallbackToTaskRunner(

@@ -30,12 +30,15 @@ FeatureList* g_instance = nullptr;
 // are any reserved characters present, returning true if the string is valid.
 // Only called in DCHECKs.
 bool IsValidFeatureOrFieldTrialName(const std::string& name) {
-  return IsStringASCII(name) && name.find_first_of(",<") == std::string::npos;
+  return IsStringASCII(name) && name.find_first_of(",<*") == std::string::npos;
 }
 
 }  // namespace
 
-FeatureList::FeatureList() : initialized_(false) {}
+FeatureList::FeatureList()
+  : initialized_(false),
+    initialized_from_command_line_(false) {
+}
 
 FeatureList::~FeatureList() {}
 
@@ -48,6 +51,8 @@ void FeatureList::InitializeFromCommandLine(
   // enabled ones (since RegisterOverride() uses insert()).
   RegisterOverridesFromCommandLine(disable_features, OVERRIDE_DISABLE_FEATURE);
   RegisterOverridesFromCommandLine(enable_features, OVERRIDE_ENABLE_FEATURE);
+
+  initialized_from_command_line_ = true;
 }
 
 bool FeatureList::IsFeatureOverriddenFromCommandLine(
@@ -99,9 +104,13 @@ void FeatureList::GetFeatureOverrides(std::string* enable_overrides,
   enable_overrides->clear();
   disable_overrides->clear();
 
+  // Note: Since |overrides_| is a std::map, iteration will be in alphabetical
+  // order. This not guaranteed to users of this function, but is useful for
+  // tests to assume the order.
   for (const auto& entry : overrides_) {
     std::string* target_list = nullptr;
     switch (entry.second.overridden_state) {
+      case OVERRIDE_USE_DEFAULT:
       case OVERRIDE_ENABLE_FEATURE:
         target_list = enable_overrides;
         break;
@@ -112,6 +121,8 @@ void FeatureList::GetFeatureOverrides(std::string* enable_overrides,
 
     if (!target_list->empty())
       target_list->push_back(',');
+    if (entry.second.overridden_state == OVERRIDE_USE_DEFAULT)
+      target_list->push_back('*');
     target_list->append(entry.first);
     if (entry.second.field_trial) {
       target_list->push_back('<');
@@ -132,10 +143,30 @@ std::vector<std::string> FeatureList::SplitFeatureListString(
 }
 
 // static
-void FeatureList::InitializeInstance() {
-  if (g_instance)
-    return;
-  SetInstance(make_scoped_ptr(new FeatureList));
+bool FeatureList::InitializeInstance(const std::string& enable_features,
+                                     const std::string& disable_features) {
+  // We want to initialize a new instance here to support command-line features
+  // in testing better. For example, we initialize a dummy instance in
+  // base/test/test_suite.cc, and override it in content/browser/
+  // browser_main_loop.cc.
+  // On the other hand, we want to avoid re-initialization from command line.
+  // For example, we initialize an instance in chrome/browser/
+  // chrome_browser_main.cc and do not override it in content/browser/
+  // browser_main_loop.cc.
+  bool instance_existed_before = false;
+  if (g_instance) {
+    if (g_instance->initialized_from_command_line_)
+      return false;
+
+    delete g_instance;
+    g_instance = nullptr;
+    instance_existed_before = true;
+  }
+
+  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
+  feature_list->InitializeFromCommandLine(enable_features, disable_features);
+  base::FeatureList::SetInstance(std::move(feature_list));
+  return !instance_existed_before;
 }
 
 // static
@@ -144,7 +175,7 @@ FeatureList* FeatureList::GetInstance() {
 }
 
 // static
-void FeatureList::SetInstance(scoped_ptr<FeatureList> instance) {
+void FeatureList::SetInstance(std::unique_ptr<FeatureList> instance) {
   DCHECK(!g_instance);
   instance->FinalizeInitialization();
 
@@ -177,7 +208,10 @@ bool FeatureList::IsFeatureEnabled(const Feature& feature) {
       entry.field_trial->group();
 
     // TODO(asvitkine) Expand this section as more support is added.
-    return entry.overridden_state == OVERRIDE_ENABLE_FEATURE;
+
+    // If marked as OVERRIDE_USE_DEFAULT, simply return the default state below.
+    if (entry.overridden_state != OVERRIDE_USE_DEFAULT)
+      return entry.overridden_state == OVERRIDE_ENABLE_FEATURE;
   }
   // Otherwise, return the default state.
   return feature.default_state == FEATURE_ENABLED_BY_DEFAULT;
@@ -209,6 +243,10 @@ void FeatureList::RegisterOverride(StringPiece feature_name,
   if (field_trial) {
     DCHECK(IsValidFeatureOrFieldTrialName(field_trial->trial_name()))
         << field_trial->trial_name();
+  }
+  if (feature_name.starts_with("*")) {
+    feature_name = feature_name.substr(1);
+    overridden_state = OVERRIDE_USE_DEFAULT;
   }
 
   // Note: The semantics of insert() is that it does not overwrite the entry if

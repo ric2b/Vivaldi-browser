@@ -116,7 +116,7 @@ TEST_F(WindowTest, DrawnAndVisible) {
   EXPECT_TRUE(w1.visible());
   EXPECT_FALSE(w1.IsDrawn());
 
-  WindowPrivate(&w1).set_drawn(true);
+  WindowPrivate(&w1).set_parent_drawn(true);
 
   TestWindow w11;
   w11.SetVisible(true);
@@ -174,7 +174,7 @@ class TestProperty {
 
  private:
   static TestProperty* last_deleted_;
-  MOJO_DISALLOW_COPY_AND_ASSIGN(TestProperty);
+  DISALLOW_COPY_AND_ASSIGN(TestProperty);
 };
 
 TestProperty* TestProperty::last_deleted_ = NULL;
@@ -246,7 +246,7 @@ class TreeChangeObserver : public WindowObserver {
   Window* observee_;
   std::vector<TreeChangeParams> received_params_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(TreeChangeObserver);
+  DISALLOW_COPY_AND_ASSIGN(TreeChangeObserver);
 };
 
 // Adds/Removes w11 to w1.
@@ -487,7 +487,7 @@ class OrderChangeObserver : public WindowObserver {
   Window* observee_;
   Changes changes_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(OrderChangeObserver);
+  DISALLOW_COPY_AND_ASSIGN(OrderChangeObserver);
 };
 
 }  // namespace
@@ -633,7 +633,7 @@ class BoundsChangeObserver : public WindowObserver {
   Window* window_;
   Changes changes_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(BoundsChangeObserver);
+  DISALLOW_COPY_AND_ASSIGN(BoundsChangeObserver);
 };
 
 }  // namespace
@@ -688,7 +688,7 @@ class VisibilityChangeObserver : public WindowObserver {
   Window* window_;
   Changes changes_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(VisibilityChangeObserver);
+  DISALLOW_COPY_AND_ASSIGN(VisibilityChangeObserver);
 };
 
 }  // namespace
@@ -762,6 +762,66 @@ TEST_F(WindowObserverTest, SetVisibleChild) {
 
 namespace {
 
+class OpacityChangeObserver : public WindowObserver {
+ public:
+  explicit OpacityChangeObserver(Window* window) : window_(window) {
+    window_->AddObserver(this);
+  }
+  ~OpacityChangeObserver() override { window_->RemoveObserver(this); }
+
+  Changes GetAndClearChanges() {
+    Changes changes;
+    changes.swap(changes_);
+    return changes;
+  }
+
+ private:
+  // WindowObserver:
+  void OnWindowOpacityChanged(Window* window,
+                              float old_opacity,
+                              float new_opacity) override {
+    changes_.push_back(base::StringPrintf(
+        "window=%s old_opacity=%.2f new_opacity=%.2f",
+        WindowIdToString(window->id()).c_str(), old_opacity, new_opacity));
+  }
+
+  Window* window_;
+  Changes changes_;
+
+  DISALLOW_COPY_AND_ASSIGN(OpacityChangeObserver);
+};
+
+}  // namespace
+
+// Tests that WindowObserver is only notified when opacity changes.
+TEST_F(WindowObserverTest, SetOpacity) {
+  TestWindow w1;
+  EXPECT_FLOAT_EQ(1.0f, w1.opacity());
+
+  // Changing the opacity should trigger a notification.
+  OpacityChangeObserver observer(&w1);
+  w1.SetOpacity(0.5f);
+  EXPECT_FLOAT_EQ(0.5f, w1.opacity());
+  Changes changes = observer.GetAndClearChanges();
+  ASSERT_EQ(1u, changes.size());
+  EXPECT_EQ("window=0,1 old_opacity=1.00 new_opacity=0.50", changes[0]);
+
+  // Setting to the same opacity should be rejected, no notification.
+  w1.SetOpacity(0.5f);
+  EXPECT_FLOAT_EQ(0.5f, w1.opacity());
+  changes = observer.GetAndClearChanges();
+  EXPECT_TRUE(changes.empty());
+
+  // Alternate sources of opacity changes should trigger a notification.
+  WindowPrivate(&w1).LocalSetOpacity(1.0f);
+  EXPECT_FLOAT_EQ(1.0f, w1.opacity());
+  changes = observer.GetAndClearChanges();
+  ASSERT_EQ(1u, changes.size());
+  EXPECT_EQ("window=0,1 old_opacity=0.50 new_opacity=1.00", changes[0]);
+}
+
+namespace {
+
 class SharedPropertyChangeObserver : public WindowObserver {
  public:
   explicit SharedPropertyChangeObserver(Window* window) : window_(window) {
@@ -791,16 +851,14 @@ class SharedPropertyChangeObserver : public WindowObserver {
   std::string VectorToString(const std::vector<uint8_t>* data) {
     if (!data)
       return "NULL";
-    gfx::Size size =
-        mojo::TypeConverter<gfx::Size, const std::vector<uint8_t>>::Convert(
-            *data);
+    gfx::Size size = mojo::ConvertTo<gfx::Size>(*data);
     return base::StringPrintf("%d,%d", size.width(), size.height());
   }
 
   Window* window_;
   Changes changes_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(SharedPropertyChangeObserver);
+  DISALLOW_COPY_AND_ASSIGN(SharedPropertyChangeObserver);
 };
 
 }  // namespace
@@ -886,7 +944,7 @@ class LocalPropertyChangeObserver : public WindowObserver {
   const void* property_key_;
   intptr_t old_property_value_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(LocalPropertyChangeObserver);
+  DISALLOW_COPY_AND_ASSIGN(LocalPropertyChangeObserver);
 };
 
 }  // namespace

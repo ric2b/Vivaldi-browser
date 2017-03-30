@@ -33,7 +33,6 @@
 #include "mojo/message_pump/message_pump_mojo.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/core.h"
-#include "mojo/shell/runner/child/child_controller.mojom.h"
 #include "mojo/shell/runner/common/switches.h"
 #include "mojo/shell/runner/host/child_process_base.h"
 #include "mojo/shell/runner/host/native_application_support.h"
@@ -43,6 +42,10 @@
 #include "base/rand_util.h"
 #include "base/sys_info.h"
 #include "mojo/shell/runner/host/linux_sandbox.h"
+#endif
+
+#if defined(OS_MACOSX)
+#include "mojo/shell/runner/host/mach_broker.h"
 #endif
 
 namespace mojo {
@@ -103,6 +106,11 @@ int ChildProcessMain() {
   base::i18n::InitializeICU();
   if (app_library)
     CallLibraryEarlyInitialization(app_library);
+
+#if defined(OS_MACOSX)
+  // Send our task port to the parent.
+  MachBroker::SendTaskPortToParent();
+#endif
 
 #if !defined(OFFICIAL_BUILD)
   // Initialize stack dumping just before initializing sandbox to make

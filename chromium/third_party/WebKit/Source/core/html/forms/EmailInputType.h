@@ -37,7 +37,7 @@ namespace blink {
 
 class EmailInputType final : public BaseTextInputType {
 public:
-    static PassRefPtrWillBeRawPtr<InputType> create(HTMLInputElement&);
+    static InputType* create(HTMLInputElement&);
 
     // They are public for unit testing.
     CORE_EXPORT static String convertEmailAddressToASCII(const String&);

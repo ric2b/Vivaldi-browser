@@ -7,7 +7,7 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/mus/public/cpp/property_type_converters.h"
-#include "mash/shell/public/interfaces/shell.mojom.h"
+#include "mash/session/public/interfaces/session.mojom.h"
 #include "mash/wm/public/interfaces/container.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/shell/public/cpp/connector.h"
@@ -59,9 +59,9 @@ class ScreenlockView : public views::WidgetDelegateView,
   // Overridden from views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
     DCHECK_EQ(sender, unlock_button_);
-    mash::shell::mojom::ShellPtr shell;
-    connector_->ConnectToInterface("mojo:mash_shell", &shell);
-    shell->UnlockScreen();
+    mash::session::mojom::SessionPtr session;
+    connector_->ConnectToInterface("mojo:mash_session", &session);
+    session->UnlockScreen();
   }
 
   mojo::Connector* connector_;
@@ -75,13 +75,14 @@ class ScreenlockView : public views::WidgetDelegateView,
 Screenlock::Screenlock() {}
 Screenlock::~Screenlock() {}
 
-void Screenlock::Initialize(mojo::Connector* connector, const std::string& url,
-                            uint32_t id, uint32_t user_id) {
-  tracing_.Initialize(connector, url);
+void Screenlock::Initialize(mojo::Connector* connector,
+                            const mojo::Identity& identity,
+                            uint32_t id) {
+  tracing_.Initialize(connector, identity.name());
 
-  mash::shell::mojom::ShellPtr mash_shell;
-  connector->ConnectToInterface("mojo:mash_shell", &mash_shell);
-  mash_shell->AddScreenlockStateListener(
+  mash::session::mojom::SessionPtr session;
+  connector->ConnectToInterface("mojo:mash_session", &session);
+  session->AddScreenlockStateListener(
       bindings_.CreateInterfacePtrAndBind(this));
 
   aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
@@ -94,7 +95,7 @@ void Screenlock::Initialize(mojo::Connector* connector, const std::string& url,
 
   std::map<std::string, std::vector<uint8_t>> properties;
   properties[mash::wm::mojom::kWindowContainer_Property] =
-      mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
+      mojo::ConvertTo<std::vector<uint8_t>>(
           static_cast<int32_t>(mash::wm::mojom::Container::LOGIN_WINDOWS));
   mus::Window* window =
       views::WindowManagerConnection::Get()->NewWindow(properties);

@@ -9,7 +9,6 @@
 #include "apps/ui/views/app_window_frame_view.h"
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/views/apps/app_window_easy_resize_window_targeter.h"
 #include "chrome/browser/ui/views/apps/shaped_app_window_targeter.h"
 #include "chrome/browser/web_applications/web_app.h"
@@ -83,13 +82,12 @@ ChromeNativeAppWindowViewsAura::CreateNonStandardAppFrame() {
   // Install an easy resize window targeter, which ensures that the root window
   // (not the app) receives mouse events on the edges.
   aura::Window* window = widget()->GetNativeWindow();
-  int resize_inside = frame->resize_inside_bounds_size();
-  gfx::Insets inset(resize_inside, resize_inside, resize_inside, resize_inside);
   // Add the AppWindowEasyResizeWindowTargeter on the window, not its root
   // window. The root window does not have a delegate, which is needed to
   // handle the event in Linux.
-  window->SetEventTargeter(scoped_ptr<ui::EventTargeter>(
-      new AppWindowEasyResizeWindowTargeter(window, inset, this)));
+  window->SetEventTargeter(
+      std::unique_ptr<ui::EventTargeter>(new AppWindowEasyResizeWindowTargeter(
+          window, gfx::Insets(frame->resize_inside_bounds_size()), this)));
 
   return frame;
 }
@@ -120,16 +118,17 @@ bool ChromeNativeAppWindowViewsAura::IsAlwaysOnTop() const {
   return widget()->IsAlwaysOnTop();
 }
 
-void ChromeNativeAppWindowViewsAura::UpdateShape(scoped_ptr<SkRegion> region) {
+void ChromeNativeAppWindowViewsAura::UpdateShape(
+    std::unique_ptr<SkRegion> region) {
   bool had_shape = !!shape();
 
   ChromeNativeAppWindowViews::UpdateShape(std::move(region));
 
   aura::Window* native_window = widget()->GetNativeWindow();
   if (shape() && !had_shape) {
-    native_window->SetEventTargeter(scoped_ptr<ui::EventTargeter>(
+    native_window->SetEventTargeter(std::unique_ptr<ui::EventTargeter>(
         new ShapedAppWindowTargeter(native_window, this)));
   } else if (!shape() && had_shape) {
-    native_window->SetEventTargeter(scoped_ptr<ui::EventTargeter>());
+    native_window->SetEventTargeter(std::unique_ptr<ui::EventTargeter>());
   }
 }

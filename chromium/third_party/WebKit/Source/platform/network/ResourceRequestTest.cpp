@@ -7,6 +7,7 @@
 #include "platform/network/EncodedFormData.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/Referrer.h"
+#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/text/AtomicString.h"
@@ -24,7 +25,7 @@ TEST(ResourceRequestTest, CrossThreadResourceRequestData)
 {
     ResourceRequest original;
     original.setURL(KURL(ParsedURLString, "http://www.example.com/test.htm"));
-    original.setCachePolicy(UseProtocolCachePolicy);
+    original.setCachePolicy(WebCachePolicy::UseProtocolCachePolicy);
     original.setTimeoutInterval(10);
     original.setFirstPartyForCookies(KURL(ParsedURLString, "http://www.example.com/first_party.htm"));
     original.setRequestorOrigin(SecurityOrigin::create(KURL(ParsedURLString, "http://www.example.com/first_party.htm")));
@@ -49,10 +50,10 @@ TEST(ResourceRequestTest, CrossThreadResourceRequestData)
     original.setFrameType(WebURLRequest::FrameTypeNested);
     original.setHTTPReferrer(Referrer("http://www.example.com/referrer.htm", ReferrerPolicyDefault));
 
-    EXPECT_STREQ("http://www.example.com/test.htm", original.url().string().utf8().data());
-    EXPECT_EQ(UseProtocolCachePolicy, original.getCachePolicy());
+    EXPECT_STREQ("http://www.example.com/test.htm", original.url().getString().utf8().data());
+    EXPECT_EQ(WebCachePolicy::UseProtocolCachePolicy, original.getCachePolicy());
     EXPECT_EQ(10, original.timeoutInterval());
-    EXPECT_STREQ("http://www.example.com/first_party.htm", original.firstPartyForCookies().string().utf8().data());
+    EXPECT_STREQ("http://www.example.com/first_party.htm", original.firstPartyForCookies().getString().utf8().data());
     EXPECT_STREQ("www.example.com", original.requestorOrigin()->host().utf8().data());
     EXPECT_STREQ("GET", original.httpMethod().utf8().data());
     EXPECT_STREQ("Bar", original.httpHeaderFields().get("Foo").utf8().data());
@@ -72,15 +73,15 @@ TEST(ResourceRequestTest, CrossThreadResourceRequestData)
     EXPECT_EQ(WebURLRequest::RequestContextAudio, original.requestContext());
     EXPECT_EQ(WebURLRequest::FrameTypeNested, original.frameType());
     EXPECT_STREQ("http://www.example.com/referrer.htm", original.httpReferrer().utf8().data());
-    EXPECT_EQ(ReferrerPolicyDefault, original.referrerPolicy());
+    EXPECT_EQ(ReferrerPolicyDefault, original.getReferrerPolicy());
 
     OwnPtr<CrossThreadResourceRequestData> data1(original.copyData());
     ResourceRequest copy1(data1.get());
 
-    EXPECT_STREQ("http://www.example.com/test.htm", copy1.url().string().utf8().data());
-    EXPECT_EQ(UseProtocolCachePolicy, copy1.getCachePolicy());
+    EXPECT_STREQ("http://www.example.com/test.htm", copy1.url().getString().utf8().data());
+    EXPECT_EQ(WebCachePolicy::UseProtocolCachePolicy, copy1.getCachePolicy());
     EXPECT_EQ(10, copy1.timeoutInterval());
-    EXPECT_STREQ("http://www.example.com/first_party.htm", copy1.firstPartyForCookies().string().utf8().data());
+    EXPECT_STREQ("http://www.example.com/first_party.htm", copy1.firstPartyForCookies().getString().utf8().data());
     EXPECT_STREQ("www.example.com", copy1.requestorOrigin()->host().utf8().data());
     EXPECT_STREQ("GET", copy1.httpMethod().utf8().data());
     EXPECT_STREQ("Bar", copy1.httpHeaderFields().get("Foo").utf8().data());
@@ -99,7 +100,7 @@ TEST(ResourceRequestTest, CrossThreadResourceRequestData)
     EXPECT_EQ(WebURLRequest::RequestContextAudio, copy1.requestContext());
     EXPECT_EQ(WebURLRequest::FrameTypeNested, copy1.frameType());
     EXPECT_STREQ("http://www.example.com/referrer.htm", copy1.httpReferrer().utf8().data());
-    EXPECT_EQ(ReferrerPolicyDefault, copy1.referrerPolicy());
+    EXPECT_EQ(ReferrerPolicyDefault, copy1.getReferrerPolicy());
 
     copy1.setAllowStoredCredentials(true);
     copy1.setReportUploadProgress(true);

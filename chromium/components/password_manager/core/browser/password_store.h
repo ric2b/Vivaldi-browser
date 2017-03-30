@@ -5,13 +5,13 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_STORE_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_STORE_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list_threadsafe.h"
 #include "base/single_thread_task_runner.h"
@@ -20,10 +20,6 @@
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "components/password_manager/core/browser/password_store_sync.h"
 #include "sync/api/syncable_service.h"
-
-namespace url {
-class Origin;
-}
 
 namespace autofill {
 struct PasswordForm;
@@ -83,7 +79,7 @@ class PasswordStore : protected PasswordStoreSync,
   // null, clears the the currently set helper if any. Unless a helper is set,
   // affiliation-based matching is disabled. The passed |helper| must already be
   // initialized if it is non-null.
-  void SetAffiliatedMatchHelper(scoped_ptr<AffiliatedMatchHelper> helper);
+  void SetAffiliatedMatchHelper(std::unique_ptr<AffiliatedMatchHelper> helper);
   AffiliatedMatchHelper* affiliated_match_helper() const {
     return affiliated_match_helper_.get();
   }
@@ -110,14 +106,16 @@ class PasswordStore : protected PasswordStoreSync,
   // Removes the matching PasswordForm from the secure password store (async).
   virtual void RemoveLogin(const autofill::PasswordForm& form);
 
-  // Remove all logins which are same-origin with the given origin and created
+  // Remove all logins whose origins match the given filter and that were
+  // created
   // in the given date range. |completion| will be posted to the
   // |main_thread_runner_| after deletions have been completed and notification
   // have been sent out.
-  void RemoveLoginsByOriginAndTime(const url::Origin& origin,
-                                   base::Time delete_begin,
-                                   base::Time delete_end,
-                                   const base::Closure& completion);
+  void RemoveLoginsByURLAndTime(
+      const base::Callback<bool(const GURL&)>& url_filter,
+      base::Time delete_begin,
+      base::Time delete_end,
+      const base::Closure& completion);
 
   // Removes all logins created in the given date range. If |completion| is not
   // null, it will be posted to the |main_thread_runner_| after deletions have
@@ -160,10 +158,20 @@ class PasswordStore : protected PasswordStoreSync,
   // The request will be cancelled if the consumer is destroyed.
   virtual void GetAutofillableLogins(PasswordStoreConsumer* consumer);
 
+  // Same as above, but also fills in |affiliated_web_realm| for Android
+  // credentials.
+  virtual void GetAutofillableLoginsWithAffiliatedRealms(
+      PasswordStoreConsumer* consumer);
+
   // Gets the complete list of PasswordForms that are blacklist entries,
   // and notify |consumer| on completion. The request will be cancelled if the
   // consumer is destroyed.
   virtual void GetBlacklistLogins(PasswordStoreConsumer* consumer);
+
+  // Same as above, but also fills in |affiliated_web_realm| for Android
+  // credentials.
+  virtual void GetBlacklistLoginsWithAffiliatedRealms(
+      PasswordStoreConsumer* consumer);
 
   // Reports usage metrics for the database. |sync_username| and
   // |custom_passphrase_sync_enabled| determine some of the UMA stats that
@@ -212,7 +220,7 @@ class PasswordStore : protected PasswordStoreSync,
         ScopedVector<autofill::PasswordForm> results);
 
     void NotifyWithSiteStatistics(
-        std::vector<scoped_ptr<InteractionsStats>> stats);
+        std::vector<std::unique_ptr<InteractionsStats>> stats);
 
     void set_ignore_logins_cutoff(base::Time cutoff) {
       ignore_logins_cutoff_ = cutoff;
@@ -241,8 +249,8 @@ class PasswordStore : protected PasswordStoreSync,
                                  bool custom_passphrase_sync_enabled) = 0;
 
   // Synchronous implementation to remove the given logins.
-  virtual PasswordStoreChangeList RemoveLoginsByOriginAndTimeImpl(
-      const url::Origin& origin,
+  virtual PasswordStoreChangeList RemoveLoginsByURLAndTimeImpl(
+      const base::Callback<bool(const GURL&)>& url_filter,
       base::Time delete_begin,
       base::Time delete_end) = 0;
 
@@ -270,7 +278,7 @@ class PasswordStore : protected PasswordStoreSync,
   // to be virtual only because asynchronous behavior in PasswordStoreWin.
   // TODO(engedy): Make this non-virtual once https://crbug.com/78830 is fixed.
   virtual void GetLoginsImpl(const autofill::PasswordForm& form,
-                             scoped_ptr<GetLoginsRequest> request);
+                             std::unique_ptr<GetLoginsRequest> request);
 
   // Synchronous implementation provided by subclasses to add the given login.
   virtual PasswordStoreChangeList AddLoginImpl(
@@ -294,7 +302,7 @@ class PasswordStore : protected PasswordStoreSync,
   // Synchronous implementation for manipulating with statistics.
   virtual void AddSiteStatsImpl(const InteractionsStats& stats) = 0;
   virtual void RemoveSiteStatsImpl(const GURL& origin_domain) = 0;
-  virtual std::vector<scoped_ptr<InteractionsStats>> GetSiteStatsImpl(
+  virtual std::vector<std::unique_ptr<InteractionsStats>> GetSiteStatsImpl(
       const GURL& origin_domain) = 0;
 
   // Log UMA stats for number of bulk deletions.
@@ -333,7 +341,7 @@ class PasswordStore : protected PasswordStoreSync,
 
   // Schedule the given |func| to be run in the PasswordStore's own thread with
   // responses delivered to |consumer| on the current thread.
-  void Schedule(void (PasswordStore::*func)(scoped_ptr<GetLoginsRequest>),
+  void Schedule(void (PasswordStore::*func)(std::unique_ptr<GetLoginsRequest>),
                 PasswordStoreConsumer* consumer);
 
   // Wrapper method called on the destination thread (DB for non-mac) that
@@ -350,10 +358,11 @@ class PasswordStore : protected PasswordStoreSync,
   void UpdateLoginWithPrimaryKeyInternal(
       const autofill::PasswordForm& new_form,
       const autofill::PasswordForm& old_primary_key);
-  void RemoveLoginsByOriginAndTimeInternal(const url::Origin& origin,
-                                           base::Time delete_begin,
-                                           base::Time delete_end,
-                                           const base::Closure& completion);
+  void RemoveLoginsByURLAndTimeInternal(
+      const base::Callback<bool(const GURL&)>& url_filter,
+      base::Time delete_begin,
+      base::Time delete_end,
+      const base::Closure& completion);
   void RemoveLoginsCreatedBetweenInternal(base::Time delete_begin,
                                           base::Time delete_end,
                                           const base::Closure& completion);
@@ -365,14 +374,30 @@ class PasswordStore : protected PasswordStoreSync,
   void DisableAutoSignInForAllLoginsInternal(const base::Closure& completion);
 
   // Finds all non-blacklist PasswordForms, and notifies the consumer.
-  void GetAutofillableLoginsImpl(scoped_ptr<GetLoginsRequest> request);
+  void GetAutofillableLoginsImpl(std::unique_ptr<GetLoginsRequest> request);
+
+  // Same as above, but also fills in |affiliated_web_realm| for Android
+  // credentials.
+  void GetAutofillableLoginsWithAffiliatedRealmsImpl(
+      std::unique_ptr<GetLoginsRequest> request);
 
   // Finds all blacklist PasswordForms, and notifies the consumer.
-  void GetBlacklistLoginsImpl(scoped_ptr<GetLoginsRequest> request);
+  void GetBlacklistLoginsImpl(std::unique_ptr<GetLoginsRequest> request);
+
+  // Same as above, but also fills in |affiliated_web_realm| for Android
+  // credentials.
+  void GetBlacklistLoginsWithAffiliatedRealmsImpl(
+      std::unique_ptr<GetLoginsRequest> request);
 
   // Notifies |request| about the stats for |origin_domain|.
   void NotifySiteStats(const GURL& origin_domain,
-                       scoped_ptr<GetLoginsRequest> request);
+                       std::unique_ptr<GetLoginsRequest> request);
+
+  // Notifies |request| about the autofillable logins with affiliated web
+  // realms for Android credentials.
+  void NotifyLoginsWithAffiliatedRealms(
+      std::unique_ptr<GetLoginsRequest> request,
+      ScopedVector<autofill::PasswordForm> obtained_forms);
 
   // Extended version of GetLoginsImpl that also returns credentials stored for
   // the specified affiliated Android applications. That is, it finds all
@@ -383,20 +408,25 @@ class PasswordStore : protected PasswordStoreSync,
   // and takes care of notifying the consumer with the results when done.
   void GetLoginsWithAffiliationsImpl(
       const autofill::PasswordForm& form,
-      scoped_ptr<GetLoginsRequest> request,
+      std::unique_ptr<GetLoginsRequest> request,
       const std::vector<std::string>& additional_android_realms);
+
+  // Retrieves and fills in |affiliated_web_realm| values for Android
+  // credentials in |forms|. Called on the main thread.
+  void InjectAffiliatedWebRealms(ScopedVector<autofill::PasswordForm> forms,
+                                 std::unique_ptr<GetLoginsRequest> request);
 
   // Schedules GetLoginsWithAffiliationsImpl() to be run on the DB thread.
   void ScheduleGetLoginsWithAffiliations(
       const autofill::PasswordForm& form,
-      scoped_ptr<GetLoginsRequest> request,
+      std::unique_ptr<GetLoginsRequest> request,
       const std::vector<std::string>& additional_android_realms);
 
   // Retrieves the currently stored form, if any, with the same primary key as
   // |form|, that is, with the same signon_realm, origin, username_element,
   // username_value and password_element attributes. To be called on the
   // background thread.
-  scoped_ptr<autofill::PasswordForm> GetLoginImpl(
+  std::unique_ptr<autofill::PasswordForm> GetLoginImpl(
       const autofill::PasswordForm& primary_key);
 
   // Called when a password is added or updated for an Android application, and
@@ -434,8 +464,8 @@ class PasswordStore : protected PasswordStoreSync,
   // The observers.
   scoped_refptr<base::ObserverListThreadSafe<Observer>> observers_;
 
-  scoped_ptr<PasswordSyncableService> syncable_service_;
-  scoped_ptr<AffiliatedMatchHelper> affiliated_match_helper_;
+  std::unique_ptr<PasswordSyncableService> syncable_service_;
+  std::unique_ptr<AffiliatedMatchHelper> affiliated_match_helper_;
   bool is_propagating_password_changes_to_web_credentials_enabled_;
 
   bool shutdown_called_;

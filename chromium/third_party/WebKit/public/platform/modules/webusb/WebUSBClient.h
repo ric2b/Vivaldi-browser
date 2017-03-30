@@ -14,8 +14,8 @@ class WebUSBDevice;
 struct WebUSBDeviceRequestOptions;
 struct WebUSBError;
 
-using WebUSBClientGetDevicesCallbacks = WebCallbacks<WebPassOwnPtr<WebVector<WebUSBDevice*>>, const WebUSBError&>;
-using WebUSBClientRequestDeviceCallbacks = WebCallbacks<WebPassOwnPtr<WebUSBDevice>, const WebUSBError&>;
+using WebUSBClientGetDevicesCallbacks = WebCallbacks<std::unique_ptr<WebVector<WebUSBDevice*>>, const WebUSBError&>;
+using WebUSBClientRequestDeviceCallbacks = WebCallbacks<std::unique_ptr<WebUSBDevice>, const WebUSBError&>;
 
 class WebUSBClient {
 public:
@@ -24,10 +24,10 @@ public:
         virtual ~Observer() { }
 
         // Called when a device is connected to the system.
-        virtual void onDeviceConnected(WebPassOwnPtr<WebUSBDevice>) = 0;
+        virtual void onDeviceConnected(std::unique_ptr<WebUSBDevice>) = 0;
 
         // Called when a device is disconnected from the system.
-        virtual void onDeviceDisconnected(WebPassOwnPtr<WebUSBDevice>) = 0;
+        virtual void onDeviceDisconnected(std::unique_ptr<WebUSBDevice>) = 0;
     };
 
     virtual ~WebUSBClient() { }
@@ -40,8 +40,11 @@ public:
     // Ownership of the WebUSBClientRequestDeviceCallbacks is transferred to the client.
     virtual void requestDevice(const WebUSBDeviceRequestOptions&, WebUSBClientRequestDeviceCallbacks*) = 0;
 
-    // Sets the observer of device changes through the WebUSBClient.
-    virtual void setObserver(Observer*) = 0;
+    // Adds an observer of device changes to the WebUSBClient.
+    virtual void addObserver(Observer*) = 0;
+
+    // Removes an observer of device changes from the WebUSBClient.
+    virtual void removeObserver(Observer*) = 0;
 };
 
 } // namespace blink

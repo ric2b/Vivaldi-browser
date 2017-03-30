@@ -14,6 +14,7 @@
 #include "base/rand_util.h"
 #include "base/sha1.h"
 #include "base/strings/string_piece.h"
+#include "base/test/histogram_tester.h"
 #include "base/values.h"
 #include "crypto/sha2.h"
 #include "net/base/host_port_pair.h"
@@ -23,6 +24,7 @@
 #include "net/cert/asn1_util.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
+#include "net/cert/ct_policy_status.h"
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_cert_types.h"
 #include "net/cert/x509_certificate.h"
@@ -46,6 +48,8 @@ const char kHost[] = "example.test";
 const char kSubdomain[] = "foo.example.test";
 const uint16_t kPort = 443;
 const char kReportUri[] = "http://report-example.test/test";
+const char kExpectCTStaticHostname[] = "preloaded-expect-ct.badssl.com";
+const char kExpectCTStaticReportURI[] = "https://report.badssl.com/expect-ct";
 
 // kGoodPath is blog.torproject.org.
 const char* const kGoodPath[] = {
@@ -87,6 +91,9 @@ class MockCertificateReportSender
     latest_report_ = report;
   }
 
+  void SetErrorCallback(
+      const base::Callback<void(const GURL&, int)>& error_callback) override {}
+
   void Clear() {
     latest_report_uri_ = GURL();
     latest_report_ = std::string();
@@ -98,6 +105,59 @@ class MockCertificateReportSender
  private:
   GURL latest_report_uri_;
   std::string latest_report_;
+};
+
+// A mock ReportSender that simulates a net error on every report sent.
+class MockFailingCertificateReportSender
+    : public TransportSecurityState::ReportSender {
+ public:
+  MockFailingCertificateReportSender() : net_error_(ERR_CONNECTION_FAILED) {}
+  ~MockFailingCertificateReportSender() override {}
+
+  int net_error() { return net_error_; }
+
+  // TransportSecurityState::ReportSender:
+  void Send(const GURL& report_uri, const std::string& report) override {
+    ASSERT_FALSE(error_callback_.is_null());
+    error_callback_.Run(report_uri, net_error_);
+  }
+
+  void SetErrorCallback(
+      const base::Callback<void(const GURL&, int)>& error_callback) override {
+    error_callback_ = error_callback;
+  }
+
+ private:
+  const int net_error_;
+  base::Callback<void(const GURL&, int)> error_callback_;
+};
+
+// A mock ExpectCTReporter that remembers the latest violation that was
+// reported and the number of violations reported.
+class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
+ public:
+  MockExpectCTReporter() : num_failures_(0) {}
+  ~MockExpectCTReporter() override {}
+
+  void OnExpectCTFailed(const HostPortPair& host_port_pair,
+                        const GURL& report_uri,
+                        const net::SSLInfo& ssl_info) override {
+    num_failures_++;
+    host_port_pair_ = host_port_pair;
+    report_uri_ = report_uri;
+    ssl_info_ = ssl_info;
+  }
+
+  const HostPortPair& host_port_pair() { return host_port_pair_; }
+  const GURL& report_uri() { return report_uri_; }
+  const SSLInfo& ssl_info() { return ssl_info_; }
+  uint32_t num_failures() { return num_failures_; }
+
+ private:
+  HostPortPair host_port_pair_;
+  GURL report_uri_;
+  SSLInfo ssl_info_;
+  uint32_t num_failures_;
 };
 
 void CompareCertificateChainWithList(
@@ -209,6 +269,12 @@ class TransportSecurityStateTest : public testing::Test {
                             TransportSecurityState::STSState* sts_result,
                             TransportSecurityState::PKPState* pkp_result) {
     return state->GetStaticDomainState(host, sts_result, pkp_result);
+  }
+
+  bool GetExpectCTState(TransportSecurityState* state,
+                        const std::string& host,
+                        TransportSecurityState::ExpectCTState* result) {
+    return state->GetStaticExpectCTState(host, result);
   }
 };
 
@@ -1242,6 +1308,52 @@ TEST_F(TransportSecurityStateTest, HPKPReporting) {
                                           good_hashes));
 }
 
+// Tests that a histogram entry is recorded when TransportSecurityState
+// fails to send an HPKP violation report.
+TEST_F(TransportSecurityStateTest, UMAOnHPKPReportingFailure) {
+  base::HistogramTester histograms;
+  const std::string histogram_name = "Net.PublicKeyPinReportSendingFailure";
+  HostPortPair host_port_pair(kHost, kPort);
+  GURL report_uri(kReportUri);
+  // Two dummy certs to use as the server-sent and validated chains. The
+  // contents don't matter.
+  scoped_refptr<X509Certificate> cert1 =
+      ImportCertFromFile(GetTestCertsDirectory(), "test_mail_google_com.pem");
+  scoped_refptr<X509Certificate> cert2 =
+      ImportCertFromFile(GetTestCertsDirectory(), "expired_cert.pem");
+  ASSERT_TRUE(cert1);
+  ASSERT_TRUE(cert2);
+
+  HashValueVector good_hashes, bad_hashes;
+
+  for (size_t i = 0; kGoodPath[i]; i++)
+    EXPECT_TRUE(AddHash(kGoodPath[i], &good_hashes));
+  for (size_t i = 0; kBadPath[i]; i++)
+    EXPECT_TRUE(AddHash(kBadPath[i], &bad_hashes));
+
+  // The histogram should start off empty.
+  histograms.ExpectTotalCount(histogram_name, 0);
+
+  TransportSecurityState state;
+  MockFailingCertificateReportSender mock_report_sender;
+  state.SetReportSender(&mock_report_sender);
+
+  const base::Time current_time = base::Time::Now();
+  const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
+  state.AddHPKP(kHost, expiry, true, good_hashes, report_uri);
+
+  std::string failure_log;
+  EXPECT_FALSE(state.CheckPublicKeyPins(
+      host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
+      TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+
+  // Check that the UMA histogram was updated when the report failed to
+  // send.
+  histograms.ExpectTotalCount(histogram_name, 1);
+  histograms.ExpectBucketCount(histogram_name, mock_report_sender.net_error(),
+                               1);
+}
+
 TEST_F(TransportSecurityStateTest, HPKPReportOnly) {
   HostPortPair host_port_pair(kHost, kPort);
   GURL report_uri(kReportUri);
@@ -1553,16 +1665,152 @@ TEST_F(TransportSecurityStateTest, HPKPReportRateLimiting) {
 
 // Tests that static (preloaded) expect CT state is read correctly.
 TEST_F(TransportSecurityStateTest, PreloadedExpectCT) {
-  const char kHostname[] = "preloaded-expect-ct.badssl.com";
   TransportSecurityState state;
   TransportSecurityStateTest::EnableStaticExpectCT(&state);
   TransportSecurityState::ExpectCTState expect_ct_state;
-  EXPECT_TRUE(state.GetStaticExpectCTState(kHostname, &expect_ct_state));
-  EXPECT_EQ(kHostname, expect_ct_state.domain);
-  EXPECT_EQ(GURL("https://report.badssl.com/expect-ct"),
-            expect_ct_state.report_uri);
-  EXPECT_FALSE(state.GetStaticExpectCTState("pinning-test.badssl.com",
-                                            &expect_ct_state));
+  EXPECT_TRUE(
+      GetExpectCTState(&state, kExpectCTStaticHostname, &expect_ct_state));
+  EXPECT_EQ(kExpectCTStaticHostname, expect_ct_state.domain);
+  EXPECT_EQ(GURL(kExpectCTStaticReportURI), expect_ct_state.report_uri);
+  EXPECT_FALSE(
+      GetExpectCTState(&state, "pinning-test.badssl.com", &expect_ct_state));
+}
+
+// Tests that the Expect CT reporter is not notified for invalid or absent
+// header values.
+TEST_F(TransportSecurityStateTest, InvalidExpectCTHeader) {
+  HostPortPair host_port(kExpectCTStaticHostname, 443);
+  SSLInfo ssl_info;
+  ssl_info.ct_compliance_details_available = true;
+  ssl_info.ct_cert_policy_compliance =
+      ct::CertPolicyCompliance::CERT_POLICY_NOT_ENOUGH_SCTS;
+  ssl_info.is_issued_by_known_root = true;
+
+  TransportSecurityState state;
+  TransportSecurityStateTest::EnableStaticExpectCT(&state);
+  MockExpectCTReporter reporter;
+  state.SetExpectCTReporter(&reporter);
+  state.ProcessExpectCTHeader("", host_port, ssl_info);
+  EXPECT_EQ(0u, reporter.num_failures());
+
+  state.ProcessExpectCTHeader("blah blah", host_port, ssl_info);
+  EXPECT_EQ(0u, reporter.num_failures());
+
+  state.ProcessExpectCTHeader("preload", host_port, ssl_info);
+  EXPECT_EQ(1u, reporter.num_failures());
+}
+
+// Tests that the Expect CT reporter is only notified about certificates
+// chaining to public roots.
+TEST_F(TransportSecurityStateTest, ExpectCTNonPublicRoot) {
+  HostPortPair host_port(kExpectCTStaticHostname, 443);
+  SSLInfo ssl_info;
+  ssl_info.ct_compliance_details_available = true;
+  ssl_info.ct_cert_policy_compliance =
+      ct::CertPolicyCompliance::CERT_POLICY_NOT_ENOUGH_SCTS;
+  ssl_info.is_issued_by_known_root = false;
+
+  TransportSecurityState state;
+  TransportSecurityStateTest::EnableStaticExpectCT(&state);
+  MockExpectCTReporter reporter;
+  state.SetExpectCTReporter(&reporter);
+  state.ProcessExpectCTHeader("preload", host_port, ssl_info);
+  EXPECT_EQ(0u, reporter.num_failures());
+
+  ssl_info.is_issued_by_known_root = true;
+  state.ProcessExpectCTHeader("preload", host_port, ssl_info);
+  EXPECT_EQ(1u, reporter.num_failures());
+}
+
+// Tests that the Expect CT reporter is not notified when compliance
+// details aren't available.
+TEST_F(TransportSecurityStateTest, ExpectCTComplianceNotAvailable) {
+  HostPortPair host_port(kExpectCTStaticHostname, 443);
+  SSLInfo ssl_info;
+  ssl_info.ct_compliance_details_available = false;
+  ssl_info.ct_cert_policy_compliance =
+      ct::CertPolicyCompliance::CERT_POLICY_NOT_ENOUGH_SCTS;
+  ssl_info.is_issued_by_known_root = true;
+
+  TransportSecurityState state;
+  TransportSecurityStateTest::EnableStaticExpectCT(&state);
+  MockExpectCTReporter reporter;
+  state.SetExpectCTReporter(&reporter);
+  state.ProcessExpectCTHeader("preload", host_port, ssl_info);
+  EXPECT_EQ(0u, reporter.num_failures());
+
+  ssl_info.ct_compliance_details_available = true;
+  state.ProcessExpectCTHeader("preload", host_port, ssl_info);
+  EXPECT_EQ(1u, reporter.num_failures());
+}
+
+// Tests that the Expect CT reporter is not notified about compliant
+// connections.
+TEST_F(TransportSecurityStateTest, ExpectCTCompliantCert) {
+  HostPortPair host_port(kExpectCTStaticHostname, 443);
+  SSLInfo ssl_info;
+  ssl_info.ct_compliance_details_available = true;
+  ssl_info.ct_cert_policy_compliance =
+      ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS;
+  ssl_info.is_issued_by_known_root = true;
+
+  TransportSecurityState state;
+  TransportSecurityStateTest::EnableStaticExpectCT(&state);
+  MockExpectCTReporter reporter;
+  state.SetExpectCTReporter(&reporter);
+  state.ProcessExpectCTHeader("preload", host_port, ssl_info);
+  EXPECT_EQ(0u, reporter.num_failures());
+
+  ssl_info.ct_cert_policy_compliance =
+      ct::CertPolicyCompliance::CERT_POLICY_NOT_DIVERSE_SCTS;
+  state.ProcessExpectCTHeader("preload", host_port, ssl_info);
+  EXPECT_EQ(1u, reporter.num_failures());
+}
+
+// Tests that the Expect CT reporter is not notified for a site that
+// isn't preloaded.
+TEST_F(TransportSecurityStateTest, ExpectCTNotPreloaded) {
+  HostPortPair host_port("not-expect-ct-preloaded.test", 443);
+  SSLInfo ssl_info;
+  ssl_info.ct_compliance_details_available = true;
+  ssl_info.ct_cert_policy_compliance =
+      ct::CertPolicyCompliance::CERT_POLICY_NOT_DIVERSE_SCTS;
+  ssl_info.is_issued_by_known_root = true;
+
+  TransportSecurityState state;
+  TransportSecurityStateTest::EnableStaticExpectCT(&state);
+  MockExpectCTReporter reporter;
+  state.SetExpectCTReporter(&reporter);
+  state.ProcessExpectCTHeader("preload", host_port, ssl_info);
+  EXPECT_EQ(0u, reporter.num_failures());
+
+  host_port.set_host(kExpectCTStaticHostname);
+  state.ProcessExpectCTHeader("preload", host_port, ssl_info);
+  EXPECT_EQ(1u, reporter.num_failures());
+}
+
+// Tests that the Expect CT reporter is notified for noncompliant
+// connections.
+TEST_F(TransportSecurityStateTest, ExpectCTReporter) {
+  HostPortPair host_port(kExpectCTStaticHostname, 443);
+  SSLInfo ssl_info;
+  ssl_info.ct_compliance_details_available = true;
+  ssl_info.ct_cert_policy_compliance =
+      ct::CertPolicyCompliance::CERT_POLICY_NOT_DIVERSE_SCTS;
+  ssl_info.is_issued_by_known_root = true;
+
+  TransportSecurityState state;
+  TransportSecurityStateTest::EnableStaticExpectCT(&state);
+  MockExpectCTReporter reporter;
+  state.SetExpectCTReporter(&reporter);
+  state.ProcessExpectCTHeader("preload", host_port, ssl_info);
+  EXPECT_EQ(1u, reporter.num_failures());
+  EXPECT_TRUE(reporter.ssl_info().ct_compliance_details_available);
+  EXPECT_EQ(ssl_info.ct_cert_policy_compliance,
+            reporter.ssl_info().ct_cert_policy_compliance);
+  EXPECT_EQ(host_port.host(), reporter.host_port_pair().host());
+  EXPECT_EQ(host_port.port(), reporter.host_port_pair().port());
+  EXPECT_EQ(GURL(kExpectCTStaticReportURI), reporter.report_uri());
 }
 
 }  // namespace net

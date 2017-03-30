@@ -24,7 +24,6 @@
 #include "content/common/navigation_gesture.h"
 #include "content/common/resize_params.h"
 #include "content/common/view_message_enums.h"
-#include "content/common/webplugin_geometry.h"
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/favicon_url.h"
 #include "content/public/common/file_chooser_file_info.h"
@@ -65,6 +64,7 @@
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
+#include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 #include "ui/gfx/range/range.h"
 
 #if defined(OS_MACOSX)
@@ -288,15 +288,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(serve_resources_only_from_cache)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(content::WebPluginGeometry)
-  IPC_STRUCT_TRAITS_MEMBER(window)
-  IPC_STRUCT_TRAITS_MEMBER(window_rect)
-  IPC_STRUCT_TRAITS_MEMBER(clip_rect)
-  IPC_STRUCT_TRAITS_MEMBER(cutout_rects)
-  IPC_STRUCT_TRAITS_MEMBER(rects_valid)
-  IPC_STRUCT_TRAITS_MEMBER(visible)
-IPC_STRUCT_TRAITS_END()
-
 IPC_STRUCT_TRAITS_BEGIN(media::MediaLogEvent)
   IPC_STRUCT_TRAITS_MEMBER(id)
   IPC_STRUCT_TRAITS_MEMBER(type)
@@ -391,6 +382,9 @@ IPC_STRUCT_BEGIN(ViewHostMsg_CreateWorker_Params)
   // RenderFrame routing id used to send messages back to the parent.
   IPC_STRUCT_MEMBER(int, render_frame_route_id)
 
+  // Address space of the context that created the worker.
+  IPC_STRUCT_MEMBER(blink::WebAddressSpace, creation_address_space)
+
   // The type (secure or nonsecure) of the context that created the worker.
   IPC_STRUCT_MEMBER(blink::WebSharedWorkerCreationContextType,
                     creation_context_type)
@@ -468,10 +462,6 @@ IPC_STRUCT_BEGIN(ViewHostMsg_UpdateRect_Params)
   // progress. If auto-resize is enabled, this should update the corresponding
   // view size.
   IPC_STRUCT_MEMBER(gfx::Size, view_size)
-
-  // New window locations for plugin child windows.
-  IPC_STRUCT_MEMBER(std::vector<content::WebPluginGeometry>,
-                    plugin_window_moves)
 
   // The following describes the various bits that may be set in flags:
   //
@@ -753,11 +743,6 @@ IPC_MESSAGE_ROUTED2(ViewMsg_EnumerateDirectoryResponse,
                     int /* request_id */,
                     std::vector<base::FilePath> /* files_in_directory */)
 
-// Tells the renderer to suppress any further modal dialogs until it receives a
-// corresponding ViewMsg_SwapOut message.  This ensures that no
-// PageGroupLoadDeferrer is on the stack for SwapOut.
-IPC_MESSAGE_ROUTED0(ViewMsg_SuppressDialogsUntilSwapOut)
-
 // Instructs the renderer to close the current page, including running the
 // onunload event handler.
 //
@@ -864,9 +849,6 @@ IPC_MESSAGE_CONTROL1(ViewMsg_PurgePluginListCache,
                      bool /* reload_pages */)
 #endif
 
-// Used to instruct the RenderView to go into "view source" mode.
-IPC_MESSAGE_ROUTED0(ViewMsg_EnableViewSourceMode)
-
 // An acknowledge to ViewHostMsg_MultipleTargetsTouched to notify the renderer
 // process to release the magnified image.
 IPC_MESSAGE_ROUTED1(ViewMsg_ReleaseDisambiguationPopupBitmap,
@@ -905,26 +887,6 @@ IPC_MESSAGE_ROUTED0(ViewMsg_ShowImeIfNeeded)
 // ViewHostMsg_SmartClipDataExtracted IPC.
 IPC_MESSAGE_ROUTED1(ViewMsg_ExtractSmartClipData,
                     gfx::Rect /* rect */)
-
-#elif defined(OS_MACOSX)
-// Let the RenderView know its window has changed visibility.
-IPC_MESSAGE_ROUTED1(ViewMsg_SetWindowVisibility,
-                    bool /* visibile */)
-
-// Let the RenderView know its window's frame has changed.
-IPC_MESSAGE_ROUTED2(ViewMsg_WindowFrameChanged,
-                    gfx::Rect /* window frame */,
-                    gfx::Rect /* content view frame */)
-
-// Message sent from the browser to the renderer when the user starts or stops
-// resizing the view.
-IPC_MESSAGE_ROUTED1(ViewMsg_SetInLiveResize,
-                    bool /* enable */)
-
-// Tell the renderer that plugin IME has completed.
-IPC_MESSAGE_ROUTED2(ViewMsg_PluginImeCompositionCompleted,
-                    base::string16 /* text */,
-                    int /* plugin_id */)
 #endif
 
 // Sent by the browser as a reply to ViewHostMsg_SwapCompositorFrame.
@@ -1078,14 +1040,6 @@ IPC_MESSAGE_ROUTED2(ViewHostMsg_FocusedNodeChanged,
                     gfx::Rect /* node_bounds */)
 
 IPC_MESSAGE_ROUTED1(ViewHostMsg_SetCursor, content::WebCursor)
-
-#if defined(OS_WIN)
-IPC_MESSAGE_ROUTED1(ViewHostMsg_WindowlessPluginDummyWindowCreated,
-                    gfx::NativeViewId /* dummy_activation_window */)
-
-IPC_MESSAGE_ROUTED1(ViewHostMsg_WindowlessPluginDummyWindowDestroyed,
-                    gfx::NativeViewId /* dummy_activation_window */)
-#endif
 
 // Get the list of proxies to use for |url|, as a semicolon delimited list
 // of "<TYPE> <HOST>:<PORT>" | "DIRECT".
@@ -1337,14 +1291,6 @@ IPC_MESSAGE_ROUTED2(ViewHostMsg_ShowUnhandledTapUIIfNeeded,
                     int /* y */)
 
 #elif defined(OS_MACOSX)
-// Informs the browser that a plugin has gained or lost focus.
-IPC_MESSAGE_ROUTED2(ViewHostMsg_PluginFocusChanged,
-                    bool, /* focused */
-                    int /* plugin_id */)
-
-// Instructs the browser to start plugin IME.
-IPC_MESSAGE_ROUTED0(ViewHostMsg_StartPluginIme)
-
 // Receives content of a web page as plain text.
 IPC_MESSAGE_ROUTED1(ViewMsg_GetRenderedTextCompleted, std::string)
 #endif

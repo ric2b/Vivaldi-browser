@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/move.h"
 #include "mojo/public/cpp/bindings/lib/array_internal.h"
 #include "mojo/public/cpp/bindings/lib/bindings_internal.h"
 #include "mojo/public/cpp/bindings/lib/template_util.h"
@@ -25,14 +26,17 @@ namespace mojo {
 // meaning that no value has been assigned to it. Null is distinct from empty.
 template <typename T>
 class Array {
-  MOJO_MOVE_ONLY_TYPE(Array)
+  MOVE_ONLY_TYPE_FOR_CPP_03(Array);
  public:
-  using Traits = internal::ArrayTraits<T, internal::IsMoveOnlyType<T>::value>;
   using ConstRefType = typename std::vector<T>::const_reference;
   using RefType = typename std::vector<T>::reference;
+  using ElementType = T;
 
   using Data_ =
       internal::Array_Data<typename internal::WrapperTraits<T>::DataType>;
+
+  using iterator = typename std::vector<T>::iterator;
+  using const_iterator = typename std::vector<T>::const_iterator;
 
   // Constructs an empty array.
   Array() : is_null_(false) {}
@@ -85,10 +89,18 @@ class Array {
   // Indicates whether the array is null (which is distinct from empty).
   bool is_null() const { return is_null_; }
 
+  // Indicates whether the array is empty (which is distinct from null).
+  bool empty() const { return vec_.empty() && !is_null_; }
+
   // Returns a reference to the first element of the array. Calling this on a
   // null or empty array causes undefined behavior.
   ConstRefType front() const { return vec_.front(); }
   RefType front() { return vec_.front(); }
+
+  iterator begin() { return vec_.begin(); }
+  const_iterator begin() const { return vec_.begin(); }
+  iterator end() { return vec_.end(); }
+  const_iterator end() const { return vec_.end(); }
 
   // Returns the size of the array, which will be zero if the array is null.
   size_t size() const { return vec_.size(); }
@@ -160,7 +172,7 @@ class Array {
   Array Clone() const {
     Array result;
     result.is_null_ = is_null_;
-    Traits::Clone(vec_, &result.vec_);
+    CloneTraits<T>::Clone(vec_, &result.vec_);
     return std::move(result);
   }
 
@@ -193,6 +205,29 @@ class Array {
   bool operator==(const Array<U>& other) const = delete;
   template <typename U>
   bool operator!=(const Array<U>& other) const = delete;
+
+  template <typename U,
+            bool is_move_only_type = internal::IsMoveOnlyType<U>::value>
+  struct CloneTraits {};
+
+  template <typename U>
+  struct CloneTraits<U, false> {
+    static inline void Clone(const std::vector<T>& src_vec,
+                             std::vector<T>* dest_vec) {
+      dest_vec->assign(src_vec.begin(), src_vec.end());
+    }
+  };
+
+  template <typename U>
+  struct CloneTraits<U, true> {
+    static inline void Clone(const std::vector<T>& src_vec,
+                             std::vector<T>* dest_vec) {
+      DCHECK(dest_vec->empty());
+      dest_vec->reserve(src_vec.size());
+      for (const auto& element : src_vec)
+        dest_vec->push_back(element.Clone());
+    }
+  };
 
   void Take(Array* other) {
     operator=(nullptr);
@@ -259,6 +294,16 @@ struct TypeConverter<std::set<E>, Array<T>> {
     return result;
   }
 };
+
+// Less than operator to allow Arrays as keys in std maps and sets.
+template <typename T>
+inline bool operator<(const Array<T>& a, const Array<T>& b) {
+  if (a.is_null())
+    return !b.is_null();
+  if (b.is_null())
+    return false;
+  return a.storage() < b.storage();
+}
 
 }  // namespace mojo
 

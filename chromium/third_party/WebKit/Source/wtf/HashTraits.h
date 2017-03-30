@@ -26,6 +26,7 @@
 #include "wtf/StdLibExtras.h"
 #include "wtf/TypeTraits.h"
 #include <limits>
+#include <memory>
 #include <string.h> // For memset.
 #include <type_traits>
 #include <utility>
@@ -66,6 +67,18 @@ template <typename T> struct GenericHashTraitsBase<false, T> {
     struct NeedsTracingLazily {
         static const bool value = NeedsTracing<T>::value;
     };
+
+    // The NeedsToForbidGCOnMove flag is used to make the hash table move
+    // operations safe when GC is enabled: if a move constructor invokes
+    // an allocation triggering the GC then it should be invoked within GC
+    // forbidden scope.
+    template <typename U = void>
+    struct NeedsToForbidGCOnMove {
+        // TODO(yutak): Consider using of std:::is_trivially_move_constructible
+        // when it is accessible.
+        static const bool value = !std::is_pod<T>::value;
+    };
+
     static const WeakHandlingFlag weakHandlingFlag = IsWeak<T>::value ? WeakHandlingInCollections : NoWeakHandlingInCollections;
 };
 
@@ -95,11 +108,13 @@ template <typename T> struct GenericHashTraits : GenericHashTraitsBase<std::is_i
     // The store function either not be called or called once to store something
     // passed in.  The value passed to the store function will be PassInType.
     typedef const T& PassInType;
-    static void store(const T& value, T& storage) { storage = value; }
+    template <typename IncomingValueType>
+    static void store(IncomingValueType&& value, T& storage) { storage = std::forward<IncomingValueType>(value); }
 
     // Type for return value of functions that transfer ownership, such as take.
     typedef T PassOutType;
-    static const T& passOut(const T& value) { return value; }
+    static T&& passOut(T& value) { return std::move(value); }
+    static T&& passOut(T&& value) { return std::move(value); }
 
     // Type for return value of functions that do not transfer ownership, such
     // as get.
@@ -138,6 +153,10 @@ template <typename P> struct HashTraits<P*> : GenericHashTraits<P*> {
 
 template <typename T> struct SimpleClassHashTraits : GenericHashTraits<T> {
     static const bool emptyValueIsZero = true;
+    template <typename U = void>
+    struct NeedsToForbidGCOnMove {
+        static const bool value = false;
+    };
     static void constructDeletedValue(T& slot, bool) { new (NotNull, &slot) T(HashTableDeletedValue); }
     static bool isDeletedValue(const T& value) { return value.isHashTableDeletedValue(); }
 };
@@ -192,6 +211,36 @@ template <typename P> struct HashTraits<RefPtr<P>> : SimpleClassHashTraits<RefPt
 };
 
 template <typename T> struct HashTraits<RawPtr<T>> : HashTraits<T*> { };
+
+template <typename T>
+struct HashTraits<std::unique_ptr<T>> : SimpleClassHashTraits<std::unique_ptr<T>> {
+    using EmptyValueType = std::nullptr_t;
+    static EmptyValueType emptyValue() { return nullptr; }
+
+    static const bool hasIsEmptyValueFunction = true;
+    static bool isEmptyValue(const std::unique_ptr<T>& value) { return !value; }
+
+    using PeekInType = T*;
+
+    using PassInType = std::unique_ptr<T>;
+    static void store(std::unique_ptr<T>&& value, std::unique_ptr<T>& storage) { storage = std::move(value); }
+
+    using PassOutType = std::unique_ptr<T>;
+    static std::unique_ptr<T>&& passOut(std::unique_ptr<T>& value) { return std::move(value); }
+    static std::unique_ptr<T> passOut(std::nullptr_t) { return nullptr; }
+
+    using PeekOutType = T*;
+    static PeekOutType peek(const std::unique_ptr<T>& value) { return value.get(); }
+    static PeekOutType peek(std::nullptr_t) { return nullptr; }
+
+    static void constructDeletedValue(std::unique_ptr<T>& slot, bool)
+    {
+        // Dirty trick: implant an invalid pointer to unique_ptr. Destructor isn't called for deleted buckets,
+        // so this is okay.
+        new (NotNull, &slot) std::unique_ptr<T>(reinterpret_cast<T*>(1u));
+    }
+    static bool isDeletedValue(const std::unique_ptr<T>& value) { return value.get() == reinterpret_cast<T*>(1u); }
+};
 
 template <> struct HashTraits<String> : SimpleClassHashTraits<String> {
     static const bool hasIsEmptyValueFunction = true;
@@ -248,16 +297,17 @@ template <typename KeyTypeArg, typename ValueTypeArg>
 struct KeyValuePair {
     typedef KeyTypeArg KeyType;
 
-    KeyValuePair(const KeyTypeArg& _key, const ValueTypeArg& _value)
-        : key(_key)
-        , value(_value)
+    template <typename IncomingKeyType, typename IncomingValueType>
+    KeyValuePair(IncomingKeyType&& key, IncomingValueType&& value)
+        : key(std::forward<IncomingKeyType>(key))
+        , value(std::forward<IncomingValueType>(value))
     {
     }
 
     template <typename OtherKeyType, typename OtherValueType>
-    KeyValuePair(const KeyValuePair<OtherKeyType, OtherValueType>& other)
-        : key(other.key)
-        , value(other.value)
+    KeyValuePair(KeyValuePair<OtherKeyType, OtherValueType>&& other)
+        : key(std::move(other.key))
+        , value(std::move(other.value))
     {
     }
 
@@ -279,6 +329,12 @@ struct KeyValuePairHashTraits : GenericHashTraits<KeyValuePair<typename KeyTrait
     struct NeedsTracingLazily {
         static const bool value = NeedsTracingTrait<KeyTraits>::value || NeedsTracingTrait<ValueTraits>::value;
     };
+
+    template <typename U = void>
+    struct NeedsToForbidGCOnMove {
+        static const bool value = KeyTraits::template NeedsToForbidGCOnMove<>::value || ValueTraits::template NeedsToForbidGCOnMove<>::value;
+    };
+
     static const WeakHandlingFlag weakHandlingFlag = (KeyTraits::weakHandlingFlag == WeakHandlingInCollections || ValueTraits::weakHandlingFlag == WeakHandlingInCollections) ? WeakHandlingInCollections : NoWeakHandlingInCollections;
 
     static const unsigned minimumTableSize = KeyTraits::minimumTableSize;

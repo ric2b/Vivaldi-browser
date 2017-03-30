@@ -8,8 +8,9 @@
 #include <shlobj.h>
 #include <wrl.h>
 
+#include <memory>
+
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "content/common/dwrite_font_proxy_messages.h"
 #include "content/common/view_messages.h"
 #include "content/test/dwrite_font_fake_sender_win.h"
@@ -47,8 +48,7 @@ class DWriteFontProxyUnitTest : public testing::Test {
     fake_collection_ = new FakeFontCollection();
     SetupFonts(fake_collection_.get());
     mswr::MakeAndInitialize<DWriteFontCollectionProxy>(
-        &collection_, factory.Get(),
-        base::Bind(&FakeFontCollection::GetTrackingSender, fake_collection_));
+        &collection_, factory.Get(), fake_collection_->GetTrackingSender());
   }
 
   ~DWriteFontProxyUnitTest() override {

@@ -8,6 +8,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/html/HTMLSlotElement.h"
@@ -329,9 +330,7 @@ void StyleInvalidator::invalidateSlotDistributedElements(HTMLSlotElement& slot, 
 
 DEFINE_TRACE(StyleInvalidator)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_pendingInvalidationMap);
-#endif
 }
 
 } // namespace blink

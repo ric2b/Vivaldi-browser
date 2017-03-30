@@ -7,8 +7,8 @@
 
 #include <stdint.h>
 
+#include "base/macros.h"
 #include "mojo/public/cpp/bindings/message.h"
-#include "mojo/public/cpp/system/macros.h"
 
 namespace mojo {
 namespace internal {
@@ -33,7 +33,7 @@ class ControlMessageHandler : public MessageReceiverWithResponderStatus {
 
   uint32_t interface_version_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ControlMessageHandler);
+  DISALLOW_COPY_AND_ASSIGN(ControlMessageHandler);
 };
 
 }  // namespace internal

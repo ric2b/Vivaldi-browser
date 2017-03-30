@@ -24,11 +24,11 @@ class SafeBrowsingApiHandler {
   static SafeBrowsingApiHandler* GetInstance();
 
   typedef base::Callback<void(SBThreatType sb_threat_type,
-                              const std::string& metadata)>
-      URLCheckCallback;
+                              const ThreatMetadata& metadata)>
+      URLCheckCallbackMeta;
 
   // Makes Native->Java call and invokes callback when check is done.
-  virtual void StartURLCheck(const URLCheckCallback& callback,
+  virtual void StartURLCheck(const URLCheckCallbackMeta& callback,
                              const GURL& url,
                              const std::vector<SBThreatType>& threat_types) = 0;
 

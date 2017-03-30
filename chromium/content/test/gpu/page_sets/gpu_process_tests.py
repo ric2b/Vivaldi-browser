@@ -143,6 +143,68 @@ class SoftwareGpuProcessPage(gpu_test_base.PageBase):
       expectations=expectations)
 
 
+class SkipGpuProcessSharedPageState(GpuProcessSharedPageState):
+  def __init__(self, test, finder_options, story_set):
+    super(SkipGpuProcessSharedPageState, self).__init__(
+      test, finder_options, story_set)
+    options = finder_options.browser_options
+
+    options.AppendExtraBrowserArgs('--disable-gpu')
+    options.AppendExtraBrowserArgs('--skip-gpu-data-loading')
+
+
+class SkipGpuProcessPage(gpu_test_base.PageBase):
+
+  def __init__(self, story_set, expectations):
+    super(SkipGpuProcessPage, self).__init__(
+      url='chrome:gpu',
+      name='GpuProcess.skip_gpu_process',
+      page_set=story_set,
+      shared_page_state_class=SkipGpuProcessSharedPageState,
+      expectations=expectations)
+
+  def Validate(self, tab, results):
+    has_gpu_process_js = 'chrome.gpuBenchmarking.hasGpuProcess()'
+    has_gpu_process = tab.EvaluateJavaScript(has_gpu_process_js)
+    if has_gpu_process:
+      raise page_test.Failure('GPU process detected')
+
+
+class DriverBugWorkaroundsSharedPageState(GpuProcessSharedPageState):
+  def __init__(self, test, finder_options, story_set):
+    super(DriverBugWorkaroundsSharedPageState, self).__init__(
+      test, finder_options, story_set)
+    options = finder_options.browser_options
+    options.AppendExtraBrowserArgs('--use_gpu_driver_workaround_for_testing')
+
+
+class DriverBugWorkaroundsInGpuProcessPage(gpu_test_base.PageBase):
+  def __init__(self, story_set, expectations):
+    super(DriverBugWorkaroundsInGpuProcessPage, self).__init__(
+      url='chrome:gpu',
+      name='GpuProcess.driver_bug_workarounds_in_gpu_process',
+      page_set=story_set,
+      shared_page_state_class=DriverBugWorkaroundsSharedPageState,
+      expectations=expectations)
+
+  def Validate(self, tab, results):
+    workaround = 'use_gpu_driver_workaround_for_testing'
+
+    browser_list = tab.EvaluateJavaScript('GetDriverBugWorkarounds()')
+    if not workaround in browser_list:
+      print 'Test failed. Printing page contents:'
+      print tab.EvaluateJavaScript('document.body.innerHTML')
+      raise page_test.Failure('%s missing in Browser process workarounds: %s' \
+        % (workaround, browser_list))
+
+    gpu_list = tab.EvaluateJavaScript( \
+      'chrome.gpuBenchmarking.getGpuDriverBugWorkarounds()')
+    if not workaround in gpu_list:
+      print 'Test failed. Printing page contents:'
+      print tab.EvaluateJavaScript('document.body.innerHTML')
+      raise page_test.Failure('%s missing in GPU process workarounds: %s' \
+        % (workaround, gpu_list))
+
 class GpuProcessTestsStorySet(story_set_module.StorySet):
 
   """ Tests that accelerated content triggers the creation of a GPU process """
@@ -167,6 +229,8 @@ class GpuProcessTestsStorySet(story_set_module.StorySet):
     self.AddStory(GpuInfoCompletePage(self, expectations))
     self.AddStory(NoGpuProcessPage(self, expectations))
     self.AddStory(SoftwareGpuProcessPage(self, expectations))
+    self.AddStory(SkipGpuProcessPage(self, expectations))
+    self.AddStory(DriverBugWorkaroundsInGpuProcessPage(self, expectations))
 
   @property
   def allow_mixed_story_states(self):

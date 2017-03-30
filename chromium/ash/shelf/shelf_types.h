@@ -11,7 +11,10 @@ enum ShelfAlignment {
   SHELF_ALIGNMENT_BOTTOM,
   SHELF_ALIGNMENT_LEFT,
   SHELF_ALIGNMENT_RIGHT,
-  SHELF_ALIGNMENT_TOP,
+  // Top has never been supported.
+
+  // The locked alignment is set temporarily and not saved to preferences.
+  SHELF_ALIGNMENT_BOTTOM_LOCKED,
 };
 
 enum ShelfAutoHideBehavior {

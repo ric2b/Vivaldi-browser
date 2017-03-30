@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/login/users/chrome_user_manager_impl.h"
 
 #include <stddef.h>
+
 #include <cstddef>
 #include <set>
 #include <utility>
@@ -16,6 +17,7 @@
 #include "base/compiler_specific.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -43,6 +45,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/session_length_limiter.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/chromeos/system/timezone_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/easy_unlock_service.h"
@@ -141,8 +144,9 @@ void ChromeUserManagerImpl::RegisterPrefs(PrefRegistrySimple* registry) {
 }
 
 // static
-scoped_ptr<ChromeUserManager> ChromeUserManagerImpl::CreateChromeUserManager() {
-  return scoped_ptr<ChromeUserManager>(new ChromeUserManagerImpl());
+std::unique_ptr<ChromeUserManager>
+ChromeUserManagerImpl::CreateChromeUserManager() {
+  return std::unique_ptr<ChromeUserManager>(new ChromeUserManagerImpl());
 }
 
 ChromeUserManagerImpl::ChromeUserManagerImpl()
@@ -492,7 +496,7 @@ void ChromeUserManagerImpl::OnExternalDataCleared(const std::string& policy,
 void ChromeUserManagerImpl::OnExternalDataFetched(
     const std::string& policy,
     const std::string& user_id,
-    scoped_ptr<std::string> data) {
+    std::unique_ptr<std::string> data) {
   const AccountId account_id =
       user_manager::known_user::GetAccountId(user_id, std::string());
   if (policy == policy::key::kUserAvatarImage)
@@ -606,7 +610,7 @@ void ChromeUserManagerImpl::PerformPostUserLoggedInActions(
 }
 
 bool ChromeUserManagerImpl::IsDemoApp(const AccountId& account_id) const {
-  return DemoAppLauncher::IsDemoAppSession(account_id.GetUserEmail());
+  return DemoAppLauncher::IsDemoAppSession(account_id);
 }
 
 bool ChromeUserManagerImpl::IsKioskApp(const AccountId& account_id) const {
@@ -687,11 +691,10 @@ void ChromeUserManagerImpl::GuestUserLoggedIn() {
   // mount point. Legacy (--login-profile) value will be used for now.
   // http://crosbug.com/230859
   active_user_->SetStubImage(
-      user_manager::UserImage(
+      base::WrapUnique(new user_manager::UserImage(
           *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-              IDR_PROFILE_PICTURE_LOADING)),
-      user_manager::User::USER_IMAGE_INVALID,
-      false);
+              IDR_PROFILE_PICTURE_LOADING))),
+      user_manager::User::USER_IMAGE_INVALID, false);
 
   // Initializes wallpaper after active_user_ is set.
   WallpaperManager::Get()->SetUserWallpaperNow(login::GuestAccountId());
@@ -797,11 +800,10 @@ void ChromeUserManagerImpl::KioskAppLoggedIn(
 
   active_user_ = user_manager::User::CreateKioskAppUser(kiosk_app_account_id);
   active_user_->SetStubImage(
-      user_manager::UserImage(
+      base::WrapUnique(new user_manager::UserImage(
           *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-              IDR_PROFILE_PICTURE_LOADING)),
-      user_manager::User::USER_IMAGE_INVALID,
-      false);
+              IDR_PROFILE_PICTURE_LOADING))),
+      user_manager::User::USER_IMAGE_INVALID, false);
 
   WallpaperManager::Get()->SetUserWallpaperNow(kiosk_app_account_id);
 
@@ -842,11 +844,10 @@ void ChromeUserManagerImpl::DemoAccountLoggedIn() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   active_user_ = user_manager::User::CreateKioskAppUser(login::DemoAccountId());
   active_user_->SetStubImage(
-      user_manager::UserImage(
+      base::WrapUnique(new user_manager::UserImage(
           *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-              IDR_PROFILE_PICTURE_LOADING)),
-      user_manager::User::USER_IMAGE_INVALID,
-      false);
+              IDR_PROFILE_PICTURE_LOADING))),
+      user_manager::User::USER_IMAGE_INVALID, false);
   WallpaperManager::Get()->SetUserWallpaperNow(login::DemoAccountId());
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -1170,13 +1171,9 @@ void ChromeUserManagerImpl::UpdateUserTimeZoneRefresher(Profile* profile) {
     g_browser_process->platform_part()->GetTimezoneResolver()->Stop();
     return;
   }
-
-  if (profile->GetPrefs()->GetBoolean(prefs::kResolveTimezoneByGeolocation) &&
-      !system::HasSystemTimezonePolicy()) {
-    g_browser_process->platform_part()->GetTimezoneResolver()->Start();
-  } else {
-    g_browser_process->platform_part()->GetTimezoneResolver()->Stop();
-  }
+  g_browser_process->platform_part()
+      ->GetTimezoneResolverManager()
+      ->UpdateTimezoneResolver();
 }
 
 void ChromeUserManagerImpl::SetUserAffiliation(
@@ -1251,7 +1248,8 @@ bool ChromeUserManagerImpl::IsFirstExecAfterBoot() const {
 void ChromeUserManagerImpl::AsyncRemoveCryptohome(
     const AccountId& account_id) const {
   cryptohome::AsyncMethodCaller::GetInstance()->AsyncRemove(
-      account_id.GetUserEmail(), base::Bind(&OnRemoveUserComplete, account_id));
+      cryptohome::Identification(account_id),
+      base::Bind(&OnRemoveUserComplete, account_id));
 }
 
 bool ChromeUserManagerImpl::IsGuestAccountId(

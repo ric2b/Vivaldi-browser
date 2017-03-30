@@ -14,7 +14,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -45,14 +44,14 @@ TEST_F(BrowserListTest, TabContentsIteratorVerifyCount) {
 
   // Create more browsers/windows.
   Browser::CreateParams native_params(profile());
-  scoped_ptr<Browser> browser2(
+  std::unique_ptr<Browser> browser2(
       chrome::CreateBrowserWithTestWindowForParams(&native_params));
   // Create browser 3 and 4 on the Ash desktop (the TabContentsIterator
   // shouldn't see the difference).
   Browser::CreateParams ash_params(profile());
-  scoped_ptr<Browser> browser3(
+  std::unique_ptr<Browser> browser3(
       chrome::CreateBrowserWithTestWindowForParams(&ash_params));
-  scoped_ptr<Browser> browser4(
+  std::unique_ptr<Browser> browser4(
       chrome::CreateBrowserWithTestWindowForParams(&ash_params));
 
   // Sanity checks.
@@ -91,12 +90,12 @@ TEST_F(BrowserListTest, TabContentsIteratorVerifyBrowser) {
 
   // Create more browsers/windows.
   Browser::CreateParams native_params(profile());
-  scoped_ptr<Browser> browser2(
+  std::unique_ptr<Browser> browser2(
       chrome::CreateBrowserWithTestWindowForParams(&native_params));
   // Create browser 3 on the Ash desktop (the TabContentsIterator shouldn't see
   // the difference).
   Browser::CreateParams ash_params(profile());
-  scoped_ptr<Browser> browser3(
+  std::unique_ptr<Browser> browser3(
       chrome::CreateBrowserWithTestWindowForParams(&ash_params));
 
   // Sanity checks.

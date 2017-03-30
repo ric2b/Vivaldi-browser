@@ -77,6 +77,10 @@ class FullscreenObserver : public WebContentsObserver {
 
 // Returns YES if the content view should be resized.
 - (BOOL)shouldResizeContentView;
+
+// Returns YES if the content view is inside a popup.
+- (BOOL)isPopup;
+
 @end
 
 // An NSView with special-case handling for when the contents view does not
@@ -87,7 +91,6 @@ class FullscreenObserver : public WebContentsObserver {
   TabContentsController* delegate_;  // weak
 }
 
-- (NSColor*)computeBackgroundColor;
 - (void)updateBackgroundColor;
 @end
 
@@ -111,35 +114,18 @@ class FullscreenObserver : public WebContentsObserver {
   delegate_ = nil;
 }
 
-- (NSColor*)computeBackgroundColor {
-  // This view is sometimes flashed into visibility (e.g, when closing
-  // windows or opening new tabs), so ensure that the flash be the theme
-  // background color in those cases.
-  NSColor* backgroundColor = nil;
-  const ui::ThemeProvider* theme = [[self window] themeProvider];
-  if (theme)
-    backgroundColor = theme->GetNSColor(ThemeProperties::COLOR_NTP_BACKGROUND);
-  if (!backgroundColor)
-    backgroundColor = [NSColor whiteColor];
-
-  // If the page is in fullscreen tab capture mode, change the background color
-  // to be a dark tint of the new tab page's background color.
-  if ([delegate_ contentsInFullscreenCaptureMode]) {
-    const float kDarknessFraction = 0.80f;
-    return [backgroundColor blendedColorWithFraction:kDarknessFraction
-                                             ofColor:[NSColor blackColor]];
-  } else {
-    return backgroundColor;
-  }
-}
-
 // Override auto-resizing logic to query the delegate for the exact frame to
 // use for the contents view.
+// TODO(spqchan): The popup check is a temporary solution to fix the regression
+// issue described in crbug.com/604288. This method doesn't really affect
+// fullscreen if the content is inside a normal browser window, but would
+// cause a flash fullscreen widget to blow up if it's inside a popup.
 - (void)resizeSubviewsWithOldSize:(NSSize)oldBoundsSize {
   NSView* const contentsView =
       [[self subviews] count] > 0 ? [[self subviews] objectAtIndex:0] : nil;
   if (!contentsView || [contentsView autoresizingMask] == NSViewNotSizable ||
-      !delegate_ || ![delegate_ shouldResizeContentView]) {
+      !delegate_ ||
+      (![delegate_ shouldResizeContentView] && [delegate_ isPopup])) {
     return;
   }
 
@@ -154,8 +140,29 @@ class FullscreenObserver : public WebContentsObserver {
 }
 
 - (void)updateBackgroundColor {
+  // This view is sometimes flashed into visibility (e.g, when closing
+  // windows or opening new tabs), so ensure that the flash be the theme
+  // background color in those cases.
+  SkColor skBackgroundColor = SK_ColorWHITE;
+  const ThemeProvider* theme = [[self window] themeProvider];
+  if (theme)
+    skBackgroundColor = theme->GetColor(ThemeProperties::COLOR_NTP_BACKGROUND);
+
+  // If the page is in fullscreen tab capture mode, change the background color
+  // to be a dark tint of the new tab page's background color.
+  if ([delegate_ contentsInFullscreenCaptureMode]) {
+    const int kBackgroundDivisor = 5;
+    skBackgroundColor = skBackgroundColor = SkColorSetARGB(
+        SkColorGetA(skBackgroundColor),
+        SkColorGetR(skBackgroundColor) / kBackgroundDivisor,
+        SkColorGetG(skBackgroundColor) / kBackgroundDivisor,
+        SkColorGetB(skBackgroundColor) / kBackgroundDivisor);
+  }
+
   ScopedCAActionDisabler disabler;
-  [[self layer] setBackgroundColor:[[self computeBackgroundColor] cr_CGColor]];
+  base::ScopedCFTypeRef<CGColorRef> cgBackgroundColor(
+      skia::CGColorCreateFromSkColor(skBackgroundColor));
+  [[self layer] setBackgroundColor:cgBackgroundColor];
 }
 
 - (ViewID)viewID {
@@ -186,10 +193,11 @@ class FullscreenObserver : public WebContentsObserver {
 @synthesize webContents = contents_;
 @synthesize blockFullscreenResize = blockFullscreenResize_;
 
-- (id)initWithContents:(WebContents*)contents {
+- (id)initWithContents:(WebContents*)contents isPopup:(BOOL)popup {
   if ((self = [super initWithNibName:nil bundle:nil])) {
     fullscreenObserver_.reset(new FullscreenObserver(self));
     [self changeWebContents:contents];
+    isPopup_ = popup;
   }
   return self;
 }
@@ -248,6 +256,17 @@ class FullscreenObserver : public WebContentsObserver {
                                           NSViewHeightSizable];
 
   [contentsContainer setNeedsDisplay:YES];
+
+  // Push the background color down to the RenderWidgetHostView, so that if
+  // there is a flash between contents appearing, it will be the theme's color,
+  // not white.
+  SkColor skBackgroundColor = SK_ColorWHITE;
+  const ThemeProvider* theme = [[[self view] window] themeProvider];
+  if (theme)
+    skBackgroundColor = theme->GetColor(ThemeProperties::COLOR_NTP_BACKGROUND);
+  content::RenderWidgetHostView* rwhv = contents_->GetRenderWidgetHostView();
+  if (rwhv)
+    rwhv->SetBackgroundColor(skBackgroundColor);
 }
 
 - (void)updateFullscreenWidgetFrame {
@@ -376,6 +395,10 @@ class FullscreenObserver : public WebContentsObserver {
 
 - (BOOL)shouldResizeContentView {
   return !isEmbeddingFullscreenWidget_ || !blockFullscreenResize_;
+}
+
+- (BOOL)isPopup {
+  return isPopup_;
 }
 
 @end

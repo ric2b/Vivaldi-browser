@@ -40,7 +40,7 @@ public class ExternalNavigationHandler {
     private static final String TAG = "UrlHandler";
     private static final String SCHEME_WTAI = "wtai://wp/";
     private static final String SCHEME_WTAI_MC = "wtai://wp/mc;";
-    private static final String SCHEME_SMS = "sms:";
+    private static final String SCHEME_SMS = "sms";
 
     @VisibleForTesting
     public static final String EXTRA_BROWSER_FALLBACK_URL = "browser_fallback_url";
@@ -317,8 +317,11 @@ public class ExternalNavigationHandler {
             intent.removeExtra(EXTRA_BROWSER_FALLBACK_URL);
         }
 
-        if (intent.getPackage() == null && params.getUrl().startsWith(SCHEME_SMS)) {
-            intent.setPackage(getDefaultSmsPackageName(resolvingInfos));
+        if (intent.getPackage() == null) {
+            final Uri uri = intent.getData();
+            if (uri != null && SCHEME_SMS.equals(uri.getScheme())) {
+                intent.setPackage(getDefaultSmsPackageName(resolvingInfos));
+            }
         }
 
         // Set the Browser application ID to us in case the user chooses Chrome
@@ -327,6 +330,7 @@ public class ExternalNavigationHandler {
         intent.putExtra(Browser.EXTRA_APPLICATION_ID, mDelegate.getPackageName());
         if (params.isOpenInNewTab()) intent.putExtra(Browser.EXTRA_CREATE_NEW_TAB, true);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        mDelegate.maybeSetWindowId(intent);
 
         if (params.getReferrerUrl() != null) {
             IntentHandler.setPendingReferrer(intent, params.getReferrerUrl());

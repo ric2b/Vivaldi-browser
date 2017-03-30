@@ -5,7 +5,10 @@
 #include "content/browser/bluetooth/bluetooth_blacklist.h"
 
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/strings/string_split.h"
 #include "content/common/bluetooth/bluetooth_scan_filter.h"
+#include "content/public/browser/content_browser_client.h"
 
 using device::BluetoothUUID;
 
@@ -13,6 +16,11 @@ namespace {
 
 static base::LazyInstance<content::BluetoothBlacklist>::Leaky g_singleton =
     LAZY_INSTANCE_INITIALIZER;
+
+void RecordUMAParsedNonEmptyString(bool success) {
+  UMA_HISTOGRAM_BOOLEAN("Bluetooth.Web.Blacklist.ParsedNonEmptyString",
+                        success);
+}
 
 }  // namespace
 
@@ -25,11 +33,48 @@ BluetoothBlacklist& BluetoothBlacklist::Get() {
   return g_singleton.Get();
 }
 
-void BluetoothBlacklist::AddOrDie(const device::BluetoothUUID& uuid,
-                                  Value value) {
+void BluetoothBlacklist::Add(const device::BluetoothUUID& uuid, Value value) {
   CHECK(uuid.IsValid());
   auto insert_result = blacklisted_uuids_.insert(std::make_pair(uuid, value));
-  CHECK(insert_result.second);
+  bool inserted = insert_result.second;
+  if (!inserted) {
+    Value& stored = insert_result.first->second;
+    if (stored != value)
+      stored = Value::EXCLUDE;
+  }
+}
+
+void BluetoothBlacklist::Add(base::StringPiece blacklist_string) {
+  if (blacklist_string.empty())
+    return;
+  base::StringPairs kv_pairs;
+  bool parsed_values = false;
+  bool invalid_values = false;
+  SplitStringIntoKeyValuePairs(blacklist_string,
+                               ':',  // Key-value delimiter
+                               ',',  // Key-value pair delimiter
+                               &kv_pairs);
+  for (const auto& pair : kv_pairs) {
+    BluetoothUUID uuid(pair.first);
+    if (uuid.IsValid() && pair.second.size() == 1u) {
+      switch (pair.second[0]) {
+        case 'e':
+          Add(uuid, Value::EXCLUDE);
+          parsed_values = true;
+          continue;
+        case 'r':
+          Add(uuid, Value::EXCLUDE_READS);
+          parsed_values = true;
+          continue;
+        case 'w':
+          Add(uuid, Value::EXCLUDE_WRITES);
+          parsed_values = true;
+          continue;
+      }
+    }
+    invalid_values = true;
+  }
+  RecordUMAParsedNonEmptyString(parsed_values && !invalid_values);
 }
 
 bool BluetoothBlacklist::IsExcluded(const BluetoothUUID& uuid) const {
@@ -83,19 +128,17 @@ void BluetoothBlacklist::RemoveExcludedUuids(
 void BluetoothBlacklist::ResetToDefaultValuesForTest() {
   blacklisted_uuids_.clear();
   PopulateWithDefaultValues();
+  PopulateWithServerProvidedValues();
 }
 
 BluetoothBlacklist::BluetoothBlacklist() {
   PopulateWithDefaultValues();
+  PopulateWithServerProvidedValues();
 }
 
 void BluetoothBlacklist::PopulateWithDefaultValues() {
   blacklisted_uuids_.clear();
 
-  // Blacklist UUIDs updated 2016-02-12 from:
-  // https://github.com/WebBluetoothCG/registries/blob/master/gatt_blacklist.txt
-  // Short UUIDs are used for readability of this list.
-  //
   // Testing from Layout Tests Note:
   //
   // Random UUIDs for object & exclude permutations that do not exist in the
@@ -110,23 +153,33 @@ void BluetoothBlacklist::PopulateWithDefaultValues() {
   // that match the specific permutations.
   DCHECK(BluetoothUUID("00001800-0000-1000-8000-00805f9b34fb") ==
          BluetoothUUID("1800"));
+
+  // Blacklist UUIDs updated 2016-04-07 from:
+  // https://github.com/WebBluetoothCG/registries/blob/master/gatt_blacklist.txt
+  // Short UUIDs are used for readability of this list.
+  //
   // Services:
-  AddOrDie(BluetoothUUID("1812"), Value::EXCLUDE);
+  Add(BluetoothUUID("1812"), Value::EXCLUDE);
+  Add(BluetoothUUID("00001530-1212-efde-1523-785feabcd123"), Value::EXCLUDE);
+  Add(BluetoothUUID("f000ffc0-0451-4000-b000-000000000000"), Value::EXCLUDE);
   // Characteristics:
-  AddOrDie(BluetoothUUID("2a02"), Value::EXCLUDE_WRITES);
-  AddOrDie(BluetoothUUID("2a03"), Value::EXCLUDE);
-  AddOrDie(BluetoothUUID("2a25"), Value::EXCLUDE);
+  Add(BluetoothUUID("2a02"), Value::EXCLUDE_WRITES);
+  Add(BluetoothUUID("2a03"), Value::EXCLUDE);
+  Add(BluetoothUUID("2a25"), Value::EXCLUDE);
   // Characteristics for Layout Tests:
-  AddOrDie(BluetoothUUID("bad1c9a2-9a5b-4015-8b60-1579bbbf2135"),
-           Value::EXCLUDE_READS);
+  Add(BluetoothUUID("bad1c9a2-9a5b-4015-8b60-1579bbbf2135"),
+      Value::EXCLUDE_READS);
   // Descriptors:
-  AddOrDie(BluetoothUUID("2902"), Value::EXCLUDE_WRITES);
-  AddOrDie(BluetoothUUID("2903"), Value::EXCLUDE_WRITES);
+  Add(BluetoothUUID("2902"), Value::EXCLUDE_WRITES);
+  Add(BluetoothUUID("2903"), Value::EXCLUDE_WRITES);
   // Descriptors for Layout Tests:
-  AddOrDie(BluetoothUUID("bad2ddcf-60db-45cd-bef9-fd72b153cf7c"),
-           Value::EXCLUDE);
-  AddOrDie(BluetoothUUID("bad3ec61-3cc3-4954-9702-7977df514114"),
-           Value::EXCLUDE_READS);
+  Add(BluetoothUUID("bad2ddcf-60db-45cd-bef9-fd72b153cf7c"), Value::EXCLUDE);
+  Add(BluetoothUUID("bad3ec61-3cc3-4954-9702-7977df514114"),
+      Value::EXCLUDE_READS);
+}
+
+void BluetoothBlacklist::PopulateWithServerProvidedValues() {
+  Add(GetContentClient()->browser()->GetWebBluetoothBlacklist());
 }
 
 }  // namespace content

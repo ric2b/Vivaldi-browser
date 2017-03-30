@@ -5,25 +5,25 @@
 #ifndef WebRemoteFrameImpl_h
 #define WebRemoteFrameImpl_h
 
-#include "core/frame/FrameOwner.h"
 #include "core/frame/RemoteFrame.h"
 #include "public/web/WebRemoteFrame.h"
 #include "public/web/WebRemoteFrameClient.h"
 #include "web/RemoteFrameClientImpl.h"
+#include "web/WebExport.h"
 #include "web/WebFrameImplBase.h"
-#include "wtf/HashMap.h"
+#include "wtf/Compiler.h"
 #include "wtf/OwnPtr.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
 class FrameHost;
 class FrameOwner;
 class RemoteFrame;
+enum class WebFrameLoadType;
 
-class WebRemoteFrameImpl final : public WebFrameImplBase, public WebRemoteFrame {
+class WEB_EXPORT WebRemoteFrameImpl final : public WebFrameImplBase, WTF_NON_EXPORTED_BASE(public WebRemoteFrame) {
 public:
-    static WebRemoteFrameImpl* create(WebTreeScopeType, WebRemoteFrameClient*);
+    static WebRemoteFrameImpl* create(WebTreeScopeType, WebRemoteFrameClient*, WebFrame* opener);
     ~WebRemoteFrameImpl() override;
 
     // WebFrame methods:
@@ -43,14 +43,10 @@ public:
     bool hasHorizontalScrollbar() const override;
     bool hasVerticalScrollbar() const override;
     WebView* view() const override;
-    void removeChild(WebFrame*) override;
     WebDocument document() const override;
     WebPerformance performance() const override;
     bool dispatchBeforeUnloadEvent() override;
     void dispatchUnloadEvent() override;
-    NPObject* windowObject() const override;
-    void bindToWindowObject(const WebString& name, NPObject*) override;
-    void bindToWindowObject(const WebString& name, NPObject*, void*) override;
     void executeScript(const WebScriptSource&) override;
     void executeScriptInIsolatedWorld(
         int worldID, const WebScriptSource* sources, unsigned numSources,
@@ -71,10 +67,10 @@ public:
         v8::Local<v8::Value> argv[]) override;
     v8::Local<v8::Context> mainWorldScriptContext() const override;
     v8::Local<v8::Context> deprecatedMainWorldScriptContext() const override;
-    void reload(bool ignoreCache) override;
-    void reloadWithOverrideURL(const WebURL& overrideUrl, bool ignoreCache) override;
+    void reload(WebFrameLoadType) override;
+    void reloadWithOverrideURL(const WebURL& overrideUrl, WebFrameLoadType) override;
     void loadRequest(const WebURLRequest&) override;
-    void loadHistoryItem(const WebHistoryItem&, WebHistoryLoadType, WebURLRequest::CachePolicy) override;
+    void loadHistoryItem(const WebHistoryItem&, WebHistoryLoadType, WebCachePolicy) override;
     void loadHTMLString(
         const WebData& html, const WebURL& baseURL, const WebURL& unreachableURL,
         bool replace) override;
@@ -145,15 +141,15 @@ public:
     void initializeCoreFrame(FrameHost*, FrameOwner*, const AtomicString& name, const AtomicString& uniqueName) override;
     RemoteFrame* frame() const override { return m_frame.get(); }
 
-    void setCoreFrame(PassRefPtrWillBeRawPtr<RemoteFrame>);
+    void setCoreFrame(RemoteFrame*);
 
     WebRemoteFrameClient* client() const { return m_client; }
 
     static WebRemoteFrameImpl* fromFrame(RemoteFrame&);
 
     // WebRemoteFrame methods:
-    WebLocalFrame* createLocalChild(WebTreeScopeType, const WebString& name, const WebString& uniqueName, WebSandboxFlags, WebFrameClient*, WebFrame* previousSibling, const WebFrameOwnerProperties&) override;
-    WebRemoteFrame* createRemoteChild(WebTreeScopeType, const WebString& name, const WebString& uniqueName, WebSandboxFlags, WebRemoteFrameClient*) override;
+    WebLocalFrame* createLocalChild(WebTreeScopeType, const WebString& name, const WebString& uniqueName, WebSandboxFlags, WebFrameClient*, WebFrame* previousSibling, const WebFrameOwnerProperties&, WebFrame* opener) override;
+    WebRemoteFrame* createRemoteChild(WebTreeScopeType, const WebString& name, const WebString& uniqueName, WebSandboxFlags, WebRemoteFrameClient*, WebFrame* opener) override;
 
     void initializeFromFrame(WebLocalFrame*) const override;
 
@@ -161,6 +157,7 @@ public:
     void setReplicatedSandboxFlags(WebSandboxFlags) const override;
     void setReplicatedName(const WebString& name, const WebString& uniqueName) const override;
     void setReplicatedShouldEnforceStrictMixedContentChecking(bool) const override;
+    void setReplicatedPotentiallyTrustworthyUniqueOrigin(bool) const override;
     void DispatchLoadEventForFrameOwner() const override;
 
     void didStartLoading() override;
@@ -182,11 +179,9 @@ private:
     bool isWebRemoteFrame() const override;
     WebRemoteFrame* toWebRemoteFrame() override;
 
-    OwnPtrWillBeMember<RemoteFrameClientImpl> m_frameClient;
-    RefPtrWillBeMember<RemoteFrame> m_frame;
+    Member<RemoteFrameClientImpl> m_frameClient;
+    Member<RemoteFrame> m_frame;
     WebRemoteFrameClient* m_client;
-
-    WillBeHeapHashMap<WebFrame*, OwnPtrWillBeMember<FrameOwner>> m_ownersForChildren;
 
 #if ENABLE(OILPAN)
     // Oilpan: WebRemoteFrameImpl must remain alive until close() is called.

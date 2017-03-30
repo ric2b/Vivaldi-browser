@@ -16,6 +16,7 @@
 #include "base/threading/worker_pool.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/extensions/wallpaper_private_api.h"
+#include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
@@ -86,7 +87,7 @@ class WallpaperFetcher : public net::URLFetcherDelegate {
     }
   }
 
-  scoped_ptr<net::URLFetcher> url_fetcher_;
+  std::unique_ptr<net::URLFetcher> url_fetcher_;
   FetchCallback callback_;
 };
 
@@ -106,11 +107,13 @@ bool WallpaperSetWallpaperFunction::RunAsync() {
   params_ = set_wallpaper::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_);
 
-  // Gets account id and username hash while at UI thread.
-  account_id_ =
-      user_manager::UserManager::Get()->GetLoggedInUser()->GetAccountId();
-  user_id_hash_ =
-      user_manager::UserManager::Get()->GetLoggedInUser()->username_hash();
+  // Gets account id and user wallpaper files id while at UI thread.
+  const user_manager::User* user =
+      user_manager::UserManager::Get()->GetLoggedInUser();
+  account_id_ = user->GetAccountId();
+  chromeos::WallpaperManager* wallpaper_manager =
+      chromeos::WallpaperManager::Get();
+  wallpaper_files_id_ = wallpaper_manager->GetFilesId(*user);
 
   if (params_->details.data) {
     StartDecode(*params_->details.data);
@@ -136,7 +139,7 @@ void WallpaperSetWallpaperFunction::OnWallpaperDecoded(
   chromeos::WallpaperManager* wallpaper_manager =
       chromeos::WallpaperManager::Get();
   base::FilePath thumbnail_path = wallpaper_manager->GetCustomWallpaperPath(
-      wallpaper::kThumbnailWallpaperSubDir, user_id_hash_,
+      wallpaper::kThumbnailWallpaperSubDir, wallpaper_files_id_,
       params_->details.filename);
 
   sequence_token_ = BrowserThread::GetBlockingPool()->GetNamedSequenceToken(
@@ -153,13 +156,15 @@ void WallpaperSetWallpaperFunction::OnWallpaperDecoded(
       account_id_ ==
       user_manager::UserManager::Get()->GetActiveUser()->GetAccountId();
   wallpaper_manager->SetCustomWallpaper(
-      account_id_, user_id_hash_, params_->details.filename, layout,
+      account_id_, wallpaper_files_id_, params_->details.filename, layout,
       user_manager::User::CUSTOMIZED, image, update_wallpaper);
   unsafe_wallpaper_decoder_ = NULL;
 
-  // Save current extenion name. It will be displayed in the component
+  // Save current extension name. It will be displayed in the component
   // wallpaper picker app. If current extension is the component wallpaper
   // picker, set an empty string.
+  // TODO(xdai): This preference is unused now. For compatiblity concern, we
+  // need to keep it until it's safe to clean it up.
   Profile* profile = Profile::FromBrowserContext(browser_context());
   if (extension()->id() == extension_misc::kWallpaperManagerId) {
     profile->GetPrefs()->SetString(prefs::kCurrentWallpaperAppName,
@@ -175,7 +180,7 @@ void WallpaperSetWallpaperFunction::OnWallpaperDecoded(
   // We need to generate thumbnail image anyway to make the current third party
   // wallpaper syncable through different devices.
   image.EnsureRepsForSupportedScales();
-  scoped_ptr<gfx::ImageSkia> deep_copy(image.DeepCopy());
+  std::unique_ptr<gfx::ImageSkia> deep_copy(image.DeepCopy());
   // Generates thumbnail before call api function callback. We can then
   // request thumbnail in the javascript callback.
   task_runner->PostTask(
@@ -185,7 +190,8 @@ void WallpaperSetWallpaperFunction::OnWallpaperDecoded(
 }
 
 void WallpaperSetWallpaperFunction::GenerateThumbnail(
-    const base::FilePath& thumbnail_path, scoped_ptr<gfx::ImageSkia> image) {
+    const base::FilePath& thumbnail_path,
+    std::unique_ptr<gfx::ImageSkia> image) {
   DCHECK(BrowserThread::GetBlockingPool()->IsRunningSequenceOnCurrentThread(
       sequence_token_));
   if (!base::PathExists(thumbnail_path.DirName()))
@@ -203,7 +209,8 @@ void WallpaperSetWallpaperFunction::GenerateThumbnail(
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(&WallpaperSetWallpaperFunction::ThumbnailGenerated, this,
-                 original_data, thumbnail_data));
+                 base::RetainedRef(original_data),
+                 base::RetainedRef(thumbnail_data)));
 }
 
 void WallpaperSetWallpaperFunction::ThumbnailGenerated(
@@ -227,13 +234,23 @@ void WallpaperSetWallpaperFunction::ThumbnailGenerated(
     Profile* profile = Profile::FromBrowserContext(browser_context());
     extensions::EventRouter* event_router =
         extensions::EventRouter::Get(profile);
-    scoped_ptr<base::ListValue> event_args(new base::ListValue());
+    std::unique_ptr<base::ListValue> event_args(new base::ListValue());
     event_args->Append(original_result);
     event_args->Append(thumbnail_result);
     event_args->Append(new base::StringValue(
         extensions::api::wallpaper::ToString(params_->details.layout)));
-    event_args->Append(new base::StringValue(extension()->name()));
-    scoped_ptr<extensions::Event> event(new extensions::Event(
+    // Setting wallpaper from right click menu in 'Files' app is a feature that
+    // was implemented in crbug.com/578935. Since 'Files' app is a built-in v1
+    // app in ChromeOS, we should treat it slightly differently with other third
+    // party apps: the wallpaper set by the 'Files' app should still be syncable
+    // and it should not appear in the wallpaper grid in the Wallpaper Picker.
+    // But we should not display the 'wallpaper-set-by-mesage' since it might
+    // introduce confusion as shown in crbug.com/599407.
+    event_args->Append(new base::StringValue(
+        (extension()->id() == file_manager::kFileManagerAppId)
+            ? std::string()
+            : extension()->name()));
+    std::unique_ptr<extensions::Event> event(new extensions::Event(
         extensions::events::WALLPAPER_PRIVATE_ON_WALLPAPER_CHANGED_BY_3RD_PARTY,
         extensions::api::wallpaper_private::OnWallpaperChangedBy3rdParty::
             kEventName,

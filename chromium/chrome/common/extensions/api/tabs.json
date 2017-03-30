@@ -60,8 +60,7 @@
           "width": {"type": "integer", "optional": true, "description": "The width of the tab in pixels."},
           "height": {"type": "integer", "optional": true, "description": "The height of the tab in pixels."},
           "sessionId": { "type": "string", "optional": true, "description": "The session ID used to uniquely identify a Tab obtained from the $(ref:sessions) API." },
-          "extData": { "type": "string", "optional": true, "description": "The ext data of the tab." },
-          "discarded": {"type": "boolean", "description": "True if the tab has been discarded. (Thrown out of memory and reloaded when activated.)"}
+          "extData": { "type": "string", "optional": true, "description": "The ext data of the tab." }
         }
       },
       {
@@ -492,11 +491,6 @@
                 "optional": true,
                 "minimum": 0,
                 "description": "The position of the tabs within their windows."
-              },
-              "discarded": {
-                "type": "boolean",
-                "optional": true,
-                "description": "If the tab has been thrown out of memory."
               }
             }
           },
@@ -977,11 +971,6 @@
                 "type": "string",
                 "optional": true,
                 "description": "The tab's new ext data."
-              },
-              "discarded": {
-                "type": "boolean",
-                "optional": true,
-                "description": "Whether the tab has been thrown out of memory."
               }
             }
           },

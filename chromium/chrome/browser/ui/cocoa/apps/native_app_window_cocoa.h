@@ -6,11 +6,12 @@
 #define CHROME_BROWSER_UI_COCOA_APPS_NATIVE_APP_WINDOW_COCOA_H_
 
 #import <Cocoa/Cocoa.h>
+
+#include <memory>
 #include <vector>
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
@@ -122,13 +123,16 @@ class NativeAppWindowCocoa : public extensions::NativeAppWindow,
 
   NSRect restored_bounds() const { return restored_bounds_; }
 
+  // Need access to WebContents() which is private.
+  content::WebContents* VivaldiWebContents() const { return WebContents(); }
+
  protected:
   // NativeAppWindow implementation.
   void SetFullscreen(int fullscreen_types) override;
   bool IsFullscreenOrPending() const override;
   void UpdateWindowIcon() override;
   void UpdateWindowTitle() override;
-  void UpdateShape(scoped_ptr<SkRegion> region) override;
+  void UpdateShape(std::unique_ptr<SkRegion> region) override;
   void UpdateDraggableRegions(
       const std::vector<extensions::DraggableRegion>& regions) override;
   SkRegion* GetDraggableRegion() override;
@@ -215,7 +219,8 @@ class NativeAppWindowCocoa : public extensions::NativeAppWindow,
 
   // The Extension Command Registry used to determine which keyboard events to
   // handle.
-  scoped_ptr<ExtensionKeybindingRegistryCocoa> extension_keybinding_registry_;
+  std::unique_ptr<ExtensionKeybindingRegistryCocoa>
+      extension_keybinding_registry_;
 
   // Tracks the last time the extension asked the window to activate.
   base::Time last_activate_;

@@ -28,13 +28,14 @@
 
 #include "core/HTMLNames.h"
 #include "core/dom/AXObjectCache.h"
+#include "core/dom/ContainerNode.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/NodeTraversal.h"
 #include "core/dom/Range.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/shadow/SlotScopedTraversal.h"
 #include "core/editing/EditingUtilities.h" // For firstPositionInOrBeforeNode
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
@@ -49,6 +50,7 @@
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLPlugInElement.h"
 #include "core/html/HTMLShadowElement.h"
+#include "core/html/HTMLSlotElement.h"
 #include "core/html/HTMLTextFormControlElement.h"
 #include "core/input/EventHandler.h"
 #include "core/page/ChromeClient.h"
@@ -69,95 +71,239 @@ inline bool isShadowInsertionPointFocusScopeOwner(Element& element)
     return isActiveShadowInsertionPoint(element) && toHTMLShadowElement(element).olderShadowRoot();
 }
 
-class FocusNavigationScope {
+class ScopedFocusNavigation {
     STACK_ALLOCATED();
 public:
-    Element* firstElement() const;
-    Element* lastElement() const;
+    Element* currentElement() const;
+    void setCurrentElement(Element*);
+    void moveToNext();
+    void moveToPrevious();
+    void moveToFirst();
+    void moveToLast();
     Element* owner() const;
-    static FocusNavigationScope focusNavigationScopeOf(const Element&);
-    static FocusNavigationScope focusNavigationScopeOfDocument(Document&);
-    static FocusNavigationScope ownedByNonFocusableFocusScopeOwner(Element&);
-    static FocusNavigationScope ownedByShadowHost(const Element&);
-    static FocusNavigationScope ownedByShadowInsertionPoint(HTMLShadowElement&);
-    static FocusNavigationScope ownedByIFrame(const HTMLFrameOwnerElement&);
+    static ScopedFocusNavigation createFor(const Element&);
+    static ScopedFocusNavigation createForDocument(Document&);
+    static ScopedFocusNavigation ownedByNonFocusableFocusScopeOwner(Element&);
+    static ScopedFocusNavigation ownedByShadowHost(const Element&);
+    static ScopedFocusNavigation ownedByShadowInsertionPoint(HTMLShadowElement&);
+    static ScopedFocusNavigation ownedByHTMLSlotElement(const HTMLSlotElement&);
+    static ScopedFocusNavigation ownedByIFrame(const HTMLFrameOwnerElement&);
+    static HTMLSlotElement* findFallbackScopeOwnerSlot(const Element&);
+    static bool isSlotFallbackScoped(const Element&);
+    static bool isSlotFallbackScopedForThisSlot(const HTMLSlotElement&, const Element&);
 
 private:
-    explicit FocusNavigationScope(TreeScope*);
-    ContainerNode& rootNode() const;
-    RawPtrWillBeMember<TreeScope> m_rootTreeScope;
+    ScopedFocusNavigation(TreeScope&, const Element*);
+    ScopedFocusNavigation(HTMLSlotElement&, const Element*);
+    Member<ContainerNode> m_rootNode;
+    Member<HTMLSlotElement> m_rootSlot;
+    Member<Element> m_current;
+    bool m_slotFallbackTraversal;
 };
 
-FocusNavigationScope::FocusNavigationScope(TreeScope* treeScope)
-    : m_rootTreeScope(treeScope)
+ScopedFocusNavigation::ScopedFocusNavigation(TreeScope& treeScope, const Element* current)
+    : m_rootNode(treeScope.rootNode())
+    , m_rootSlot(nullptr)
+    , m_current(const_cast<Element*>(current))
 {
-    ASSERT(treeScope);
 }
 
-ContainerNode& FocusNavigationScope::rootNode() const
+ScopedFocusNavigation::ScopedFocusNavigation(HTMLSlotElement& slot, const Element* current)
+    : m_rootNode(nullptr)
+    , m_rootSlot(&slot)
+    , m_current(const_cast<Element*>(current))
+    , m_slotFallbackTraversal(slot.assignedNodes().isEmpty())
 {
-    return m_rootTreeScope->rootNode();
 }
 
-Element* FocusNavigationScope::firstElement() const
+Element* ScopedFocusNavigation::currentElement() const
 {
-    ContainerNode& root = rootNode();
-    return root.isElementNode() ? &toElement(root) : ElementTraversal::next(root);
+    return m_current;
 }
 
-Element* FocusNavigationScope::lastElement() const
+void ScopedFocusNavigation::setCurrentElement(Element* element)
 {
-    return ElementTraversal::lastWithin(rootNode());
+    m_current = element;
 }
 
-Element* FocusNavigationScope::owner() const
+void ScopedFocusNavigation::moveToNext()
 {
-    ContainerNode& root = rootNode();
-    if (root.isShadowRoot()) {
-        ShadowRoot& shadowRoot = toShadowRoot(root);
+    ASSERT(m_current);
+    if (m_rootSlot) {
+        if (m_slotFallbackTraversal) {
+            m_current = ElementTraversal::next(*m_current, m_rootSlot);
+            while (m_current && !ScopedFocusNavigation::isSlotFallbackScopedForThisSlot(*m_rootSlot, *m_current))
+                m_current = ElementTraversal::next(*m_current, m_rootSlot);
+        } else {
+            m_current = SlotScopedTraversal::next(*m_current);
+        }
+    } else {
+        m_current = ElementTraversal::next(*m_current);
+        while (m_current && (SlotScopedTraversal::isSlotScoped(*m_current) || ScopedFocusNavigation::isSlotFallbackScoped(*m_current)))
+            m_current = ElementTraversal::next(*m_current);
+    }
+}
+
+void ScopedFocusNavigation::moveToPrevious()
+{
+    ASSERT(m_current);
+    if (m_rootSlot) {
+        if (m_slotFallbackTraversal) {
+            m_current = ElementTraversal::previous(*m_current, m_rootSlot);
+            if (m_current == m_rootSlot)
+                m_current = nullptr;
+            while (m_current && !ScopedFocusNavigation::isSlotFallbackScopedForThisSlot(*m_rootSlot, *m_current))
+                m_current = ElementTraversal::previous(*m_current);
+        } else {
+            m_current = SlotScopedTraversal::previous(*m_current);
+        }
+    } else {
+        m_current = ElementTraversal::previous(*m_current);
+        while (m_current && (SlotScopedTraversal::isSlotScoped(*m_current) || ScopedFocusNavigation::isSlotFallbackScoped(*m_current)))
+            m_current = ElementTraversal::previous(*m_current);
+    }
+}
+
+void ScopedFocusNavigation::moveToFirst()
+{
+    if (m_rootSlot) {
+        if (!m_slotFallbackTraversal) {
+            HeapVector<Member<Node>> assignedNodes = m_rootSlot->assignedNodes();
+            for (auto assignedNode : assignedNodes) {
+                if (assignedNode->isElementNode()) {
+                    m_current = toElement(assignedNode);
+                    break;
+                }
+            }
+        } else {
+            Element* first = ElementTraversal::firstChild(*m_rootSlot);
+            while (first && !ScopedFocusNavigation::isSlotFallbackScopedForThisSlot(*m_rootSlot, *first))
+                first = ElementTraversal::next(*first, m_rootSlot);
+            m_current = first;
+        }
+    } else {
+        Element* first = m_rootNode->isElementNode() ? &toElement(*m_rootNode) : ElementTraversal::next(*m_rootNode);
+        while (first && (SlotScopedTraversal::isSlotScoped(*first) || ScopedFocusNavigation::isSlotFallbackScoped(*first)))
+            first = ElementTraversal::next(*first, m_rootNode);
+        m_current = first;
+    }
+
+}
+
+void ScopedFocusNavigation::moveToLast()
+{
+    if (m_rootSlot) {
+        if (!m_slotFallbackTraversal) {
+            HeapVector<Member<Node>> assignedNodes = m_rootSlot->assignedNodes();
+            for (auto assignedNode = assignedNodes.rbegin(); assignedNode != assignedNodes.rend(); ++assignedNode) {
+                if ((*assignedNode)->isElementNode()) {
+                    m_current = ElementTraversal::lastWithinOrSelf(*toElement(*assignedNode));
+                    break;
+                }
+            }
+        } else {
+            Element* last = ElementTraversal::lastWithin(*m_rootSlot);
+            while (last && !ScopedFocusNavigation::isSlotFallbackScopedForThisSlot(*m_rootSlot, *last))
+                last = ElementTraversal::previous(*last, m_rootSlot);
+            m_current = last;
+        }
+    } else {
+        Element* last = ElementTraversal::lastWithin(*m_rootNode);
+        while (last && (SlotScopedTraversal::isSlotScoped(*last) || ScopedFocusNavigation::isSlotFallbackScoped(*last)))
+            last = ElementTraversal::previous(*last, m_rootNode);
+        m_current = last;
+    }
+}
+
+Element* ScopedFocusNavigation::owner() const
+{
+    if (m_rootSlot)
+        return m_rootSlot;
+    ASSERT(m_rootNode);
+    if (m_rootNode->isShadowRoot()) {
+        ShadowRoot& shadowRoot = toShadowRoot(*m_rootNode);
         return shadowRoot.isYoungest() ? shadowRoot.host() : shadowRoot.shadowInsertionPointOfYoungerShadowRoot();
     }
     // FIXME: Figure out the right thing for OOPI here.
-    if (Frame* frame = root.document().frame())
+    if (Frame* frame = m_rootNode->document().frame())
         return frame->deprecatedLocalOwner();
     return nullptr;
 }
 
-FocusNavigationScope FocusNavigationScope::focusNavigationScopeOf(const Element& element)
+ScopedFocusNavigation ScopedFocusNavigation::createFor(const Element& current)
 {
-    return FocusNavigationScope(&element.treeScope());
+    if (HTMLSlotElement* slot = SlotScopedTraversal::findScopeOwnerSlot(current))
+        return ScopedFocusNavigation(*slot, &current);
+    if (HTMLSlotElement* slot = ScopedFocusNavigation::findFallbackScopeOwnerSlot(current))
+        return ScopedFocusNavigation(*slot, &current);
+    return ScopedFocusNavigation(current.treeScope(), &current);
 }
 
-FocusNavigationScope FocusNavigationScope::focusNavigationScopeOfDocument(Document& document)
+ScopedFocusNavigation ScopedFocusNavigation::createForDocument(Document& document)
 {
-    return FocusNavigationScope(&document);
+    return ScopedFocusNavigation(document, nullptr);
 }
 
-FocusNavigationScope FocusNavigationScope::ownedByNonFocusableFocusScopeOwner(Element& element)
+ScopedFocusNavigation ScopedFocusNavigation::ownedByNonFocusableFocusScopeOwner(Element& element)
 {
     if (isShadowHost(element))
-        return FocusNavigationScope::ownedByShadowHost(element);
-    ASSERT(isShadowInsertionPointFocusScopeOwner(element));
-    return FocusNavigationScope::ownedByShadowInsertionPoint(toHTMLShadowElement(element));
+        return ScopedFocusNavigation::ownedByShadowHost(element);
+    if (isShadowInsertionPointFocusScopeOwner(element))
+        return ScopedFocusNavigation::ownedByShadowInsertionPoint(toHTMLShadowElement(element));
+    ASSERT(isHTMLSlotElement(element));
+    return ScopedFocusNavigation::ownedByHTMLSlotElement(toHTMLSlotElement(element));
 }
 
-FocusNavigationScope FocusNavigationScope::ownedByShadowHost(const Element& element)
+ScopedFocusNavigation ScopedFocusNavigation::ownedByShadowHost(const Element& element)
 {
     ASSERT(isShadowHost(element));
-    return FocusNavigationScope(&element.shadow()->youngestShadowRoot());
+    return ScopedFocusNavigation(*&element.shadow()->youngestShadowRoot(), nullptr);
 }
 
-FocusNavigationScope FocusNavigationScope::ownedByIFrame(const HTMLFrameOwnerElement& frame)
+ScopedFocusNavigation ScopedFocusNavigation::ownedByIFrame(const HTMLFrameOwnerElement& frame)
 {
     ASSERT(frame.contentFrame());
     ASSERT(frame.contentFrame()->isLocalFrame());
-    return FocusNavigationScope(toLocalFrame(frame.contentFrame())->document());
+    toLocalFrame(frame.contentFrame())->document()->updateDistribution();
+    return ScopedFocusNavigation(*toLocalFrame(frame.contentFrame())->document(), nullptr);
 }
 
-FocusNavigationScope FocusNavigationScope::ownedByShadowInsertionPoint(HTMLShadowElement& shadowInsertionPoint)
+ScopedFocusNavigation ScopedFocusNavigation::ownedByShadowInsertionPoint(HTMLShadowElement& shadowInsertionPoint)
 {
     ASSERT(isShadowInsertionPointFocusScopeOwner(shadowInsertionPoint));
-    return FocusNavigationScope(shadowInsertionPoint.olderShadowRoot());
+    return ScopedFocusNavigation(*shadowInsertionPoint.olderShadowRoot(), nullptr);
+}
+
+ScopedFocusNavigation ScopedFocusNavigation::ownedByHTMLSlotElement(const HTMLSlotElement& element)
+{
+    return ScopedFocusNavigation(const_cast<HTMLSlotElement&>(element), nullptr);
+}
+
+HTMLSlotElement* ScopedFocusNavigation::findFallbackScopeOwnerSlot(const Element& element)
+{
+    Element* parent = const_cast<Element*>(element.parentElement());
+    while (parent) {
+        if (isHTMLSlotElement(parent))
+            return toHTMLSlotElement(parent)->assignedNodes().isEmpty() ? toHTMLSlotElement(parent) : nullptr;
+        parent = parent->parentElement();
+    }
+    return nullptr;
+}
+
+bool ScopedFocusNavigation::isSlotFallbackScoped(const Element& element)
+{
+    return ScopedFocusNavigation::findFallbackScopeOwnerSlot(element);
+}
+
+bool ScopedFocusNavigation::isSlotFallbackScopedForThisSlot(const HTMLSlotElement& slot, const Element& current)
+{
+    Element* parent = current.parentElement();
+    while (parent) {
+        if (isHTMLSlotElement(parent) && toHTMLSlotElement(parent)->assignedNodes().isEmpty())
+            return !SlotScopedTraversal::isSlotScoped(current) && toHTMLSlotElement(parent) == slot;
+        parent = parent->parentElement();
+    }
+    return false;
 }
 
 inline void dispatchBlurEvent(const Document& document, Element& focusedElement)
@@ -187,9 +333,6 @@ inline void dispatchEventsOnWindowAndFocusedElement(Document* document, bool foc
     // If we have a focused element we should dispatch focus on it after we focus the window.
     // https://bugs.webkit.org/show_bug.cgi?id=27105
 
-    if (document->focusedElement() && isHTMLPlugInElement(document->focusedElement()))
-        toHTMLPlugInElement(document->focusedElement())->setPluginFocus(focused);
-
     // Do not fire events while modal dialogs are up.  See https://bugs.webkit.org/show_bug.cgi?id=33962
     if (Page* page = document->page()) {
         if (page->defersLoading())
@@ -197,7 +340,7 @@ inline void dispatchEventsOnWindowAndFocusedElement(Document* document, bool foc
     }
 
     if (!focused && document->focusedElement()) {
-        RefPtrWillBeRawPtr<Element> focusedElement(document->focusedElement());
+        Element* focusedElement = document->focusedElement();
         focusedElement->setFocus(false);
         dispatchBlurEvent(*document, *focusedElement);
     }
@@ -205,7 +348,7 @@ inline void dispatchEventsOnWindowAndFocusedElement(Document* document, bool foc
     if (LocalDOMWindow* window = document->domWindow())
         window->dispatchEvent(Event::create(focused ? EventTypeNames::focus : EventTypeNames::blur));
     if (focused && document->focusedElement()) {
-        RefPtrWillBeRawPtr<Element> focusedElement(document->focusedElement());
+        Element* focusedElement(document->focusedElement());
         focusedElement->setFocus(true);
         dispatchFocusEvent(*document, *focusedElement);
     }
@@ -230,7 +373,7 @@ inline bool isNonFocusableShadowHost(const Element& element)
 
 inline bool isNonKeyboardFocusableShadowHost(const Element& element)
 {
-    return isShadowHostWithoutCustomFocusLogic(element) && !element.isKeyboardFocusable();
+    return isShadowHostWithoutCustomFocusLogic(element) && !(element.shadowRootIfV1() ? element.isFocusable() : element.isKeyboardFocusable());
 }
 
 inline bool isKeyboardFocusableShadowHost(const Element& element)
@@ -240,7 +383,7 @@ inline bool isKeyboardFocusableShadowHost(const Element& element)
 
 inline bool isNonFocusableFocusScopeOwner(Element& element)
 {
-    return isNonKeyboardFocusableShadowHost(element) || isShadowInsertionPointFocusScopeOwner(element);
+    return isNonKeyboardFocusableShadowHost(element) || isShadowInsertionPointFocusScopeOwner(element) || isHTMLSlotElement(element);
 }
 
 inline bool isShadowHostDelegatesFocus(const Element& element)
@@ -250,7 +393,7 @@ inline bool isShadowHostDelegatesFocus(const Element& element)
 
 inline int adjustedTabIndex(Element& element)
 {
-    return isNonFocusableFocusScopeOwner(element) ? 0 : element.tabIndex();
+    return (isNonKeyboardFocusableShadowHost(element) || isShadowInsertionPointFocusScopeOwner(element)) ? 0 : element.tabIndex();
 }
 
 inline bool shouldVisit(Element& element)
@@ -258,59 +401,65 @@ inline bool shouldVisit(Element& element)
     return element.isKeyboardFocusable() || isNonFocusableFocusScopeOwner(element);
 }
 
-Element* findElementWithExactTabIndex(Element* start, int tabIndex, WebFocusType type)
+Element* findElementWithExactTabIndex(ScopedFocusNavigation& scope, int tabIndex, WebFocusType type)
 {
     // Search is inclusive of start
-    for (Element* element = start; element; element = type == WebFocusTypeForward ? ElementTraversal::next(*element) : ElementTraversal::previous(*element)) {
-        if (shouldVisit(*element) && adjustedTabIndex(*element) == tabIndex)
-            return element;
+    for (; scope.currentElement(); type == WebFocusTypeForward ? scope.moveToNext() : scope.moveToPrevious()) {
+        Element* current = scope.currentElement();
+        if (shouldVisit(*current) && adjustedTabIndex(*current) == tabIndex)
+            return current;
     }
     return nullptr;
 }
 
-Element* nextElementWithGreaterTabIndex(Element* start, int tabIndex)
+Element* nextElementWithGreaterTabIndex(ScopedFocusNavigation& scope, int tabIndex)
 {
     // Search is inclusive of start
     int winningTabIndex = std::numeric_limits<short>::max() + 1;
     Element* winner = nullptr;
-    for (Element& element : ElementTraversal::startsAt(start)) {
-        int currentTabIndex = adjustedTabIndex(element);
-        if (shouldVisit(element) && currentTabIndex > tabIndex && currentTabIndex < winningTabIndex) {
-            winner = &element;
+    for (; scope.currentElement(); scope.moveToNext()) {
+        Element* current = scope.currentElement();
+        int currentTabIndex = adjustedTabIndex(*current);
+        if (shouldVisit(*current) && currentTabIndex > tabIndex && currentTabIndex < winningTabIndex) {
+            winner = current;
             winningTabIndex = currentTabIndex;
         }
     }
     return winner;
 }
 
-Element* previousElementWithLowerTabIndex(Element* start, int tabIndex)
+Element* previousElementWithLowerTabIndex(ScopedFocusNavigation& scope, int tabIndex)
 {
     // Search is inclusive of start
     int winningTabIndex = 0;
     Element* winner = nullptr;
-    for (Element* element = start; element; element = ElementTraversal::previous(*element)) {
-        int currentTabIndex = adjustedTabIndex(*element);
-        if (shouldVisit(*element) && currentTabIndex < tabIndex && currentTabIndex > winningTabIndex) {
-            winner = element;
+    for (; scope.currentElement(); scope.moveToPrevious()) {
+        Element* current = scope.currentElement();
+        int currentTabIndex = adjustedTabIndex(*current);
+        if (shouldVisit(*current) && currentTabIndex < tabIndex && currentTabIndex > winningTabIndex) {
+            winner = current;
             winningTabIndex = currentTabIndex;
         }
     }
     return winner;
 }
 
-Element* nextFocusableElement(const FocusNavigationScope& scope, Element* start)
+Element* nextFocusableElement(ScopedFocusNavigation& scope)
 {
-    if (start) {
-        int tabIndex = adjustedTabIndex(*start);
+    Element* current = scope.currentElement();
+    if (current) {
+        int tabIndex = adjustedTabIndex(*current);
         // If an element is excluded from the normal tabbing cycle, the next focusable element is determined by tree order
         if (tabIndex < 0) {
-            for (Element& element : ElementTraversal::startsAfter(*start)) {
-                if (shouldVisit(element) && adjustedTabIndex(element) >= 0)
-                    return &element;
+            for (scope.moveToNext(); scope.currentElement(); scope.moveToNext()) {
+                current = scope.currentElement();
+                if (shouldVisit(*current) && adjustedTabIndex(*current) >= 0)
+                    return current;
             }
         } else {
             // First try to find an element with the same tabindex as start that comes after start in the scope.
-            if (Element* winner = findElementWithExactTabIndex(ElementTraversal::next(*start), tabIndex, WebFocusTypeForward))
+            scope.moveToNext();
+            if (Element* winner = findElementWithExactTabIndex(scope, tabIndex, WebFocusTypeForward))
                 return winner;
         }
         if (!tabIndex) {
@@ -322,46 +471,49 @@ Element* nextFocusableElement(const FocusNavigationScope& scope, Element* start)
     // Look for the first element in the scope that:
     // 1) has the lowest tabindex that is higher than start's tabindex (or 0, if start is null), and
     // 2) comes first in the scope, if there's a tie.
-    if (Element* winner = nextElementWithGreaterTabIndex(scope.firstElement(), start ? adjustedTabIndex(*start) : 0))
+    scope.moveToFirst();
+    if (Element* winner = nextElementWithGreaterTabIndex(scope, current ? adjustedTabIndex(*current) : 0)) {
         return winner;
+    }
 
     // There are no elements with a tabindex greater than start's tabindex,
     // so find the first element with a tabindex of 0.
-    return findElementWithExactTabIndex(scope.firstElement(), 0, WebFocusTypeForward);
+    scope.moveToFirst();
+    return findElementWithExactTabIndex(scope, 0, WebFocusTypeForward);
 }
 
-Element* previousFocusableElement(const FocusNavigationScope& scope, Element* start)
+Element* previousFocusableElement(ScopedFocusNavigation& scope)
 {
-    Element* lastElement = scope.lastElement();
-
     // First try to find the last element in the scope that comes before start and has the same tabindex as start.
     // If start is null, find the last element in the scope with a tabindex of 0.
-    Element* startElement;
-    int startTabIndex;
-    if (start) {
-        startElement = ElementTraversal::previous(*start);
-        startTabIndex = adjustedTabIndex(*start);
+    int tabIndex;
+    Element* current = scope.currentElement();
+    if (current) {
+        scope.moveToPrevious();
+        tabIndex = adjustedTabIndex(*current);
     } else {
-        startElement = lastElement;
-        startTabIndex = 0;
+        scope.moveToLast();
+        tabIndex = 0;
     }
 
     // However, if an element is excluded from the normal tabbing cycle, the previous focusable element is determined by tree order
-    if (startTabIndex < 0) {
-        for (Element* element = startElement; element; element = ElementTraversal::previous(*element)) {
-            if (shouldVisit(*element) && adjustedTabIndex(*element) >= 0)
-                return element;
+    if (tabIndex < 0) {
+        for (; scope.currentElement(); scope.moveToPrevious()) {
+            current = scope.currentElement();
+            if (shouldVisit(*current) && adjustedTabIndex(*current) >= 0)
+                return current;
         }
     } else {
-        if (Element* winner = findElementWithExactTabIndex(startElement, startTabIndex, WebFocusTypeBackward))
+        if (Element* winner = findElementWithExactTabIndex(scope, tabIndex, WebFocusTypeBackward))
             return winner;
     }
 
     // There are no elements before start with the same tabindex as start, so look for an element that:
     // 1) has the highest non-zero tabindex (that is less than start's tabindex), and
     // 2) comes last in the scope, if there's a tie.
-    startTabIndex = (start && startTabIndex) ? startTabIndex : std::numeric_limits<short>::max();
-    return previousElementWithLowerTabIndex(lastElement, startTabIndex);
+    tabIndex = (current && tabIndex) ? tabIndex : std::numeric_limits<short>::max();
+    scope.moveToLast();
+    return previousElementWithLowerTabIndex(scope, tabIndex);
 }
 
 // Searches through the given tree scope, starting from start element, for the next/previous
@@ -377,58 +529,60 @@ Element* previousFocusableElement(const FocusNavigationScope& scope, Element* st
 //
 // [1] https://html.spec.whatwg.org/multipage/interaction.html#sequential-focus-navigation
 // [2] https://w3c.github.io/webcomponents/spec/shadow/#focus-navigation
-inline Element* findFocusableElementInternal(WebFocusType type, const FocusNavigationScope& scope, Element* element)
+inline Element* findFocusableElementInternal(WebFocusType type, ScopedFocusNavigation& scope)
 {
-    Element* found = (type == WebFocusTypeForward) ? nextFocusableElement(scope, element) : previousFocusableElement(scope, element);
+    Element* found = (type == WebFocusTypeForward) ? nextFocusableElement(scope) : previousFocusableElement(scope);
     return found;
 }
 
-Element* findFocusableElementRecursivelyForward(const FocusNavigationScope& scope, Element* start)
+Element* findFocusableElementRecursivelyForward(ScopedFocusNavigation& scope)
 {
     // Starting element is exclusive.
-    Element* found = findFocusableElementInternal(WebFocusTypeForward, scope, start);
+    Element* found = findFocusableElementInternal(WebFocusTypeForward, scope);
     while (found) {
         if (isShadowHostDelegatesFocus(*found)) {
             // If tabindex is positive, find focusable element inside its shadow tree.
             if (found->tabIndex() >= 0 && isShadowHostWithoutCustomFocusLogic(*found)) {
-                FocusNavigationScope innerScope = FocusNavigationScope::ownedByShadowHost(*found);
-                if (Element* foundInInnerFocusScope = findFocusableElementRecursivelyForward(innerScope, nullptr))
+                ScopedFocusNavigation innerScope = ScopedFocusNavigation::ownedByShadowHost(*found);
+                if (Element* foundInInnerFocusScope = findFocusableElementRecursivelyForward(innerScope))
                     return foundInInnerFocusScope;
             }
             // Skip to the next element in the same scope.
-            found = findFocusableElementInternal(WebFocusTypeForward, scope, found);
+            found = findFocusableElementInternal(WebFocusTypeForward, scope);
             continue;
         }
         if (!isNonFocusableFocusScopeOwner(*found))
             return found;
 
-        // Now |found| is on a non focusable scope owner (either shadow host or <shadow>)
+        // Now |found| is on a non focusable scope owner (either shadow host or <shadow> or slot)
         // Find inside the inward scope and return it if found. Otherwise continue searching in the same
         // scope.
-        FocusNavigationScope innerScope = FocusNavigationScope::ownedByNonFocusableFocusScopeOwner(*found);
-        if (Element* foundInInnerFocusScope = findFocusableElementRecursivelyForward(innerScope, nullptr))
+        ScopedFocusNavigation innerScope = ScopedFocusNavigation::ownedByNonFocusableFocusScopeOwner(*found);
+        if (Element* foundInInnerFocusScope = findFocusableElementRecursivelyForward(innerScope))
             return foundInInnerFocusScope;
 
-        found = findFocusableElementInternal(WebFocusTypeForward, scope, found);
+        scope.setCurrentElement(found);
+        found = findFocusableElementInternal(WebFocusTypeForward, scope);
     }
     return nullptr;
 }
 
-Element* findFocusableElementRecursivelyBackward(const FocusNavigationScope& scope, Element* start)
+Element* findFocusableElementRecursivelyBackward(ScopedFocusNavigation& scope)
 {
     // Starting element is exclusive.
-    Element* found = findFocusableElementInternal(WebFocusTypeBackward, scope, start);
+    Element* found = findFocusableElementInternal(WebFocusTypeBackward, scope);
+
     while (found) {
         // Now |found| is on a focusable shadow host.
         // Find inside shadow backwards. If any focusable element is found, return it, otherwise return
         // the host itself.
         if (isKeyboardFocusableShadowHost(*found)) {
-            FocusNavigationScope innerScope = FocusNavigationScope::ownedByShadowHost(*found);
-            Element* foundInInnerFocusScope = findFocusableElementRecursivelyBackward(innerScope, nullptr);
+            ScopedFocusNavigation innerScope = ScopedFocusNavigation::ownedByShadowHost(*found);
+            Element* foundInInnerFocusScope = findFocusableElementRecursivelyBackward(innerScope);
             if (foundInInnerFocusScope)
                 return foundInInnerFocusScope;
             if (isShadowHostDelegatesFocus(*found)) {
-                found = findFocusableElementInternal(WebFocusTypeBackward, scope, found);
+                found = findFocusableElementInternal(WebFocusTypeBackward, scope);
                 continue;
             }
             return found;
@@ -437,33 +591,36 @@ Element* findFocusableElementRecursivelyBackward(const FocusNavigationScope& sco
         // If delegatesFocus is true and tabindex is negative, skip the whole shadow tree under the
         // shadow host.
         if (isShadowHostDelegatesFocus(*found) && found->tabIndex() < 0) {
-            found = findFocusableElementInternal(WebFocusTypeBackward, scope, found);
+            found = findFocusableElementInternal(WebFocusTypeBackward, scope);
             continue;
         }
 
-        // Now |found| is on a non focusable scope owner (either shadow host or <shadow>).
+        // Now |found| is on a non focusable scope owner (either shadow host or <shadow> or slot).
         // Find focusable element in descendant scope. If not found, find next focusable element within the
         // current scope.
         if (isNonFocusableFocusScopeOwner(*found)) {
-            FocusNavigationScope innerScope = FocusNavigationScope::ownedByNonFocusableFocusScopeOwner(*found);
-            Element* foundInInnerFocusScope = findFocusableElementRecursivelyBackward(innerScope, nullptr);
+            ScopedFocusNavigation innerScope = ScopedFocusNavigation::ownedByNonFocusableFocusScopeOwner(*found);
+            Element* foundInInnerFocusScope = findFocusableElementRecursivelyBackward(innerScope);
+
             if (foundInInnerFocusScope)
                 return foundInInnerFocusScope;
-            found = findFocusableElementInternal(WebFocusTypeBackward, scope, found);
+            found = findFocusableElementInternal(WebFocusTypeBackward, scope);
             continue;
         }
         if (!isShadowHostDelegatesFocus(*found))
             return found;
-        found = findFocusableElementInternal(WebFocusTypeBackward, scope, found);
+
+        scope.setCurrentElement(found);
+        found = findFocusableElementInternal(WebFocusTypeBackward, scope);
     }
     return nullptr;
 }
 
-Element* findFocusableElementRecursively(WebFocusType type, const FocusNavigationScope& scope, Element* start)
+Element* findFocusableElementRecursively(WebFocusType type, ScopedFocusNavigation& scope)
 {
     return (type == WebFocusTypeForward) ?
-        findFocusableElementRecursivelyForward(scope, start) :
-        findFocusableElementRecursivelyBackward(scope, start);
+        findFocusableElementRecursivelyForward(scope) :
+        findFocusableElementRecursivelyBackward(scope);
 }
 
 Element* findFocusableElementDescendingDownIntoFrameDocument(WebFocusType type, Element* element)
@@ -476,7 +633,8 @@ Element* findFocusableElementDescendingDownIntoFrameDocument(WebFocusType type, 
         if (!owner.contentFrame() || !owner.contentFrame()->isLocalFrame())
             break;
         toLocalFrame(owner.contentFrame())->document()->updateLayoutIgnorePendingStylesheets();
-        Element* foundElement = findFocusableElementRecursively(type, FocusNavigationScope::ownedByIFrame(owner), nullptr);
+        ScopedFocusNavigation scope = ScopedFocusNavigation::ownedByIFrame(owner);
+        Element* foundElement = findFocusableElementRecursively(type, scope);
         if (!foundElement)
             break;
         ASSERT(element != foundElement);
@@ -485,56 +643,57 @@ Element* findFocusableElementDescendingDownIntoFrameDocument(WebFocusType type, 
     return element;
 }
 
-Element* findFocusableElementAcrossFocusScopesForward(const FocusNavigationScope& scope, Element* current)
+Element* findFocusableElementAcrossFocusScopesForward(ScopedFocusNavigation& scope)
 {
+    Element* current = scope.currentElement();
     ASSERT(!current || !isNonFocusableShadowHost(*current));
     Element* found;
     if (current && isShadowHostWithoutCustomFocusLogic(*current)) {
-        FocusNavigationScope innerScope = FocusNavigationScope::ownedByShadowHost(*current);
-        Element* foundInInnerFocusScope = findFocusableElementRecursivelyForward(innerScope, nullptr);
-        found = foundInInnerFocusScope ? foundInInnerFocusScope : findFocusableElementRecursivelyForward(scope, current);
+        ScopedFocusNavigation innerScope = ScopedFocusNavigation::ownedByShadowHost(*current);
+        Element* foundInInnerFocusScope = findFocusableElementRecursivelyForward(innerScope);
+        found = foundInInnerFocusScope ? foundInInnerFocusScope : findFocusableElementRecursivelyForward(scope);
     } else {
-        found = findFocusableElementRecursivelyForward(scope, current);
+        found = findFocusableElementRecursivelyForward(scope);
     }
 
     // If there's no focusable element to advance to, move up the focus scopes until we find one.
-    FocusNavigationScope currentScope = scope;
+    ScopedFocusNavigation currentScope = scope;
     while (!found) {
         Element* owner = currentScope.owner();
         if (!owner)
             break;
-        currentScope = FocusNavigationScope::focusNavigationScopeOf(*owner);
-        found = findFocusableElementRecursivelyForward(currentScope, owner);
+        currentScope = ScopedFocusNavigation::createFor(*owner);
+        found = findFocusableElementRecursivelyForward(currentScope);
     }
     return findFocusableElementDescendingDownIntoFrameDocument(WebFocusTypeForward, found);
 }
 
-Element* findFocusableElementAcrossFocusScopesBackward(const FocusNavigationScope& scope, Element* current)
+Element* findFocusableElementAcrossFocusScopesBackward(ScopedFocusNavigation& scope)
 {
-    ASSERT(!current || !isNonFocusableShadowHost(*current));
-    Element* found = findFocusableElementRecursivelyBackward(scope, current);
+    ASSERT(!scope.currentElement() || !isNonFocusableShadowHost(*scope.currentElement()));
+    Element* found = findFocusableElementRecursivelyBackward(scope);
 
     // If there's no focusable element to advance to, move up the focus scopes until we find one.
-    FocusNavigationScope currentScope = scope;
+    ScopedFocusNavigation currentScope = scope;
     while (!found) {
         Element* owner = currentScope.owner();
         if (!owner)
             break;
-        currentScope = FocusNavigationScope::focusNavigationScopeOf(*owner);
+        currentScope = ScopedFocusNavigation::createFor(*owner);
         if (isKeyboardFocusableShadowHost(*owner) && !isShadowHostDelegatesFocus(*owner)) {
             found = owner;
             break;
         }
-        found = findFocusableElementRecursivelyBackward(currentScope, owner);
+        found = findFocusableElementRecursivelyBackward(currentScope);
     }
     return findFocusableElementDescendingDownIntoFrameDocument(WebFocusTypeBackward, found);
 }
 
-Element* findFocusableElementAcrossFocusScopes(WebFocusType type, const FocusNavigationScope& scope, Element* current)
+Element* findFocusableElementAcrossFocusScopes(WebFocusType type, ScopedFocusNavigation& scope)
 {
     return (type == WebFocusTypeForward) ?
-        findFocusableElementAcrossFocusScopesForward(scope, current) :
-        findFocusableElementAcrossFocusScopesBackward(scope, current);
+        findFocusableElementAcrossFocusScopesForward(scope) :
+        findFocusableElementAcrossFocusScopesBackward(scope);
 }
 
 inline Element* adjustToElement(Node* node, WebFocusType type)
@@ -547,6 +706,8 @@ inline Element* adjustToElement(Node* node, WebFocusType type)
     // The returned element is used as an *exclusive* start element. Thus, we should return the result of ElementTraversal::previous(*node),
     // instead of ElementTraversal::next(*node), if type == WebFocusTypeForward, and vice-versa.
     // The caller will call ElementTraversal::{next/previous} for the returned value and get the {next|previous} element of the |node|.
+
+    // TODO(yuzus) Use ScopedFocusNavigation traversal here.
     return (type == WebFocusTypeForward) ? ElementTraversal::previous(*node) : ElementTraversal::next(*node);
 }
 
@@ -560,12 +721,12 @@ FocusController::FocusController(Page* page)
 {
 }
 
-PassOwnPtrWillBeRawPtr<FocusController> FocusController::create(Page* page)
+FocusController* FocusController::create(Page* page)
 {
-    return adoptPtrWillBeNoop(new FocusController(page));
+    return new FocusController(page);
 }
 
-void FocusController::setFocusedFrame(PassRefPtrWillBeRawPtr<Frame> frame, bool notifyEmbedder)
+void FocusController::setFocusedFrame(Frame* frame, bool notifyEmbedder)
 {
     ASSERT(!frame || frame->page() == m_page);
     if (m_focusedFrame == frame || (m_isChangingFocusedFrame && frame))
@@ -573,11 +734,11 @@ void FocusController::setFocusedFrame(PassRefPtrWillBeRawPtr<Frame> frame, bool 
 
     m_isChangingFocusedFrame = true;
 
-    RefPtrWillBeRawPtr<LocalFrame> oldFrame = (m_focusedFrame && m_focusedFrame->isLocalFrame()) ? toLocalFrame(m_focusedFrame.get()) : nullptr;
+    LocalFrame* oldFrame = (m_focusedFrame && m_focusedFrame->isLocalFrame()) ? toLocalFrame(m_focusedFrame.get()) : nullptr;
 
-    RefPtrWillBeRawPtr<LocalFrame> newFrame = (frame && frame->isLocalFrame()) ? toLocalFrame(frame.get()) : nullptr;
+    LocalFrame* newFrame = (frame && frame->isLocalFrame()) ? toLocalFrame(frame) : nullptr;
 
-    m_focusedFrame = frame.get();
+    m_focusedFrame = frame;
 
     // Now that the frame is updated, fire events and update the selection focused states of both frames.
     if (oldFrame && oldFrame->view()) {
@@ -598,23 +759,23 @@ void FocusController::setFocusedFrame(PassRefPtrWillBeRawPtr<Frame> frame, bool 
         m_focusedFrame->client()->frameFocused();
 }
 
-void FocusController::focusDocumentView(PassRefPtrWillBeRawPtr<Frame> frame, bool notifyEmbedder)
+void FocusController::focusDocumentView(Frame* frame, bool notifyEmbedder)
 {
     ASSERT(!frame || frame->page() == m_page);
     if (m_focusedFrame == frame)
         return;
 
-    RefPtrWillBeRawPtr<LocalFrame> focusedFrame = (m_focusedFrame && m_focusedFrame->isLocalFrame()) ? toLocalFrame(m_focusedFrame.get()) : nullptr;
+    LocalFrame* focusedFrame = (m_focusedFrame && m_focusedFrame->isLocalFrame()) ? toLocalFrame(m_focusedFrame.get()) : nullptr;
     if (focusedFrame && focusedFrame->view()) {
-        RefPtrWillBeRawPtr<Document> document = focusedFrame->document();
+        Document* document = focusedFrame->document();
         Element* focusedElement = document ? document->focusedElement() : nullptr;
         if (focusedElement)
             dispatchBlurEvent(*document, *focusedElement);
     }
 
-    RefPtrWillBeRawPtr<LocalFrame> newFocusedFrame = (frame && frame->isLocalFrame()) ? toLocalFrame(frame.get()) : nullptr;
+    LocalFrame* newFocusedFrame = (frame && frame->isLocalFrame()) ? toLocalFrame(frame) : nullptr;
     if (newFocusedFrame && newFocusedFrame->view()) {
-        RefPtrWillBeRawPtr<Document> document = newFocusedFrame->document();
+        Document* document = newFocusedFrame->document();
         Element* focusedElement = document ? document->focusedElement() : nullptr;
         if (focusedElement)
             dispatchFocusEvent(*document, *focusedElement);
@@ -748,6 +909,7 @@ bool FocusController::advanceFocusInDocumentOrder(LocalFrame* frame, Element* st
 {
     ASSERT(frame);
     Document* document = frame->document();
+    document->updateDistribution();
 
     Element* current = start;
     if (!current && !initialFocus)
@@ -760,9 +922,8 @@ bool FocusController::advanceFocusInDocumentOrder(LocalFrame* frame, Element* st
         current = adjustToElement(frame->selection().start().anchorNode(), type);
 
     document->updateLayoutIgnorePendingStylesheets();
-
-    RefPtrWillBeRawPtr<Element> element = findFocusableElementAcrossFocusScopes(type, current ? FocusNavigationScope::focusNavigationScopeOf(*current) : FocusNavigationScope::focusNavigationScopeOfDocument(*document), current);
-
+    ScopedFocusNavigation scope = current ? ScopedFocusNavigation::createFor(*current) : ScopedFocusNavigation::createForDocument(*document);
+    Element* element = findFocusableElementAcrossFocusScopes(type, scope);
     if (!element) {
         // If there's a RemoteFrame on the ancestor chain, we need to continue
         // searching for focusable elements there.
@@ -783,8 +944,9 @@ bool FocusController::advanceFocusInDocumentOrder(LocalFrame* frame, Element* st
         }
 
         // Chrome doesn't want focus, so we should wrap focus.
-        element = findFocusableElementRecursively(type, FocusNavigationScope::focusNavigationScopeOfDocument(*toLocalFrame(m_page->mainFrame())->document()), nullptr);
-        element = findFocusableElementDescendingDownIntoFrameDocument(type, element.get());
+        ScopedFocusNavigation scope = ScopedFocusNavigation::createForDocument(*toLocalFrame(m_page->mainFrame())->document());
+        element = findFocusableElementRecursively(type, scope);
+        element = findFocusableElementDescendingDownIntoFrameDocument(type, element);
 
         if (!element)
             return false;
@@ -830,7 +992,7 @@ bool FocusController::advanceFocusInDocumentOrder(LocalFrame* frame, Element* st
     setFocusedFrame(newDocument.frame());
 
     if (caretBrowsing) {
-        Position position = firstPositionInOrBeforeNode(element.get());
+        Position position = firstPositionInOrBeforeNode(element);
         VisibleSelection newSelection(position, position);
         frame->selection().setSelection(newSelection);
     }
@@ -843,13 +1005,15 @@ Element* FocusController::findFocusableElement(WebFocusType type, Element& eleme
 {
     // FIXME: No spacial navigation code yet.
     ASSERT(type == WebFocusTypeForward || type == WebFocusTypeBackward);
-    return findFocusableElementAcrossFocusScopes(type, FocusNavigationScope::focusNavigationScopeOf(element), &element);
+    ScopedFocusNavigation scope = ScopedFocusNavigation::createFor(element);
+    return findFocusableElementAcrossFocusScopes(type, scope);
 }
 
 Element* FocusController::findFocusableElementInShadowHost(const Element& shadowHost)
 {
     ASSERT(shadowHost.authorShadowRoot());
-    return findFocusableElementAcrossFocusScopes(WebFocusTypeForward, FocusNavigationScope::ownedByShadowHost(shadowHost), nullptr);
+    ScopedFocusNavigation scope = ScopedFocusNavigation::ownedByShadowHost(shadowHost);
+    return findFocusableElementAcrossFocusScopes(WebFocusTypeForward, scope);
 }
 
 static bool relinquishesEditingFocus(const Element& element)
@@ -887,15 +1051,15 @@ static void clearSelectionIfNeeded(LocalFrame* oldFocusedFrame, LocalFrame* newF
     selection.clear();
 }
 
-bool FocusController::setFocusedElement(Element* element, PassRefPtrWillBeRawPtr<Frame> newFocusedFrame)
+bool FocusController::setFocusedElement(Element* element, Frame* newFocusedFrame)
 {
     return setFocusedElement(element, newFocusedFrame, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
 }
 
-bool FocusController::setFocusedElement(Element* element, PassRefPtrWillBeRawPtr<Frame> newFocusedFrame, const FocusParams& params)
+bool FocusController::setFocusedElement(Element* element, Frame* newFocusedFrame, const FocusParams& params)
 {
-    RefPtrWillBeRawPtr<LocalFrame> oldFocusedFrame = focusedFrame();
-    RefPtrWillBeRawPtr<Document> oldDocument = oldFocusedFrame ? oldFocusedFrame->document() : nullptr;
+    LocalFrame* oldFocusedFrame = focusedFrame();
+    Document* oldDocument = oldFocusedFrame ? oldFocusedFrame->document() : nullptr;
 
     Element* oldFocusedElement = oldDocument ? oldDocument->focusedElement() : nullptr;
     if (element && oldFocusedElement == element)
@@ -907,17 +1071,17 @@ bool FocusController::setFocusedElement(Element* element, PassRefPtrWillBeRawPtr
 
     m_page->chromeClient().willSetInputMethodState();
 
-    RefPtrWillBeRawPtr<Document> newDocument = nullptr;
+    Document* newDocument = nullptr;
     if (element)
         newDocument = &element->document();
     else if (newFocusedFrame && newFocusedFrame->isLocalFrame())
-        newDocument = toLocalFrame(newFocusedFrame.get())->document();
+        newDocument = toLocalFrame(newFocusedFrame)->document();
 
     if (newDocument && oldDocument == newDocument && newDocument->focusedElement() == element)
         return true;
 
     if (newFocusedFrame && newFocusedFrame->isLocalFrame())
-        clearSelectionIfNeeded(oldFocusedFrame.get(), toLocalFrame(newFocusedFrame.get()), element);
+        clearSelectionIfNeeded(oldFocusedFrame, toLocalFrame(newFocusedFrame), element);
 
     if (oldDocument && oldDocument != newDocument)
         oldDocument->clearFocusedElement();
@@ -928,9 +1092,6 @@ bool FocusController::setFocusedElement(Element* element, PassRefPtrWillBeRawPtr
     }
     setFocusedFrame(newFocusedFrame);
 
-    // Setting the focused element can result in losing our last reft to element when JS event handlers fire.
-    RefPtrWillBeRawPtr<Element> protect = element;
-    ALLOW_UNUSED_LOCAL(protect);
     if (newDocument) {
         bool successfullyFocused = newDocument->setFocusedElement(element, params);
         if (!successfullyFocused)

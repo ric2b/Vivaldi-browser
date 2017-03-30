@@ -29,17 +29,14 @@ static const unsigned int kNumBuffers = media::limits::kMaxVideoFrames +
     (media::limits::kMaxVideoFrames & 1u);
 
 FakeVideoDecodeAccelerator::FakeVideoDecodeAccelerator(
-    gfx::GLContext* gl,
-    gfx::Size size,
-    const base::Callback<bool(void)>& make_context_current)
+    const gfx::Size& size,
+    const MakeGLContextCurrentCallback& make_context_current_cb)
     : child_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       client_(NULL),
-      make_context_current_(make_context_current),
-      gl_(gl),
+      make_context_current_cb_(make_context_current_cb),
       frame_buffer_size_(size),
       flushing_(false),
-      weak_this_factory_(this) {
-}
+      weak_this_factory_(this) {}
 
 FakeVideoDecodeAccelerator::~FakeVideoDecodeAccelerator() {
 }
@@ -59,8 +56,7 @@ bool FakeVideoDecodeAccelerator::Initialize(const Config& config,
   // V4L2VideoDecodeAccelerator waits until first decode call to ask for buffers
   // This class asks for it on initialization instead.
   client_ = client;
-  client_->ProvidePictureBuffers(kNumBuffers,
-                                 frame_buffer_size_,
+  client_->ProvidePictureBuffers(kNumBuffers, 1, frame_buffer_size_,
                                  kDefaultTextureTarget);
   return true;
 }
@@ -103,12 +99,13 @@ void FakeVideoDecodeAccelerator::AssignPictureBuffers(
   memset(black_data.get(),
          0,
          frame_buffer_size_.width() * frame_buffer_size_.height() * 4);
-  if (!make_context_current_.Run()) {
+  if (!make_context_current_cb_.Run()) {
     LOG(ERROR) << "ReusePictureBuffer(): could not make context current";
     return;
   }
   for (size_t index = 0; index < buffers.size(); ++index) {
-    glBindTexture(GL_TEXTURE_2D, buffers[index].texture_id());
+    DCHECK_LE(1u, buffers[index].texture_ids().size());
+    glBindTexture(GL_TEXTURE_2D, buffers[index].texture_ids()[0]);
     // Every other frame white and the rest black.
     uint8_t* data = index % 2 ? white_data.get() : black_data.get();
     glTexImage2D(GL_TEXTURE_2D,
@@ -162,8 +159,10 @@ void FakeVideoDecodeAccelerator::Destroy() {
   delete this;
 }
 
-bool FakeVideoDecodeAccelerator::CanDecodeOnIOThread() {
-  return true;
+bool FakeVideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
+    const base::WeakPtr<Client>& decode_client,
+    const scoped_refptr<base::SingleThreadTaskRunner>& decode_task_runner) {
+  return false;
 }
 
 void FakeVideoDecodeAccelerator::DoPictureReady() {

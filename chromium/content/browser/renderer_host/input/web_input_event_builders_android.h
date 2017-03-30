@@ -7,6 +7,8 @@
 
 #include <jni.h>
 
+#include "base/android/scoped_java_ref.h"
+#include "content/common/content_export.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 
 namespace ui {
@@ -17,13 +19,15 @@ namespace content {
 
 class WebMouseEventBuilder {
  public:
-  static blink::WebMouseEvent Build(blink::WebInputEvent::Type type,
-                                    blink::WebMouseEvent::Button button,
-                                    double time_sec,
-                                    int window_x,
-                                    int window_y,
-                                    int modifiers,
-                                    int click_count);
+  static blink::WebMouseEvent Build(
+      blink::WebInputEvent::Type type,
+      blink::WebMouseEvent::Button button,
+      double time_sec,
+      int window_x,
+      int window_y,
+      int modifiers,
+      int click_count,
+      blink::WebPointerProperties::PointerType pointer_type);
 };
 
 class WebMouseWheelEventBuilder {
@@ -36,15 +40,18 @@ class WebMouseWheelEventBuilder {
                                          int window_y);
 };
 
-class WebKeyboardEventBuilder {
+class CONTENT_EXPORT WebKeyboardEventBuilder {
  public:
-  static blink::WebKeyboardEvent Build(blink::WebInputEvent::Type type,
-                                       int modifiers,
-                                       double time_sec,
-                                       int keycode,
-                                       int scancode,
-                                       int unicode_character,
-                                       bool is_system_key);
+  static blink::WebKeyboardEvent Build(
+      JNIEnv* env,
+      const base::android::JavaRef<jobject>& android_key_event,
+      blink::WebInputEvent::Type type,
+      int modifiers,
+      double time_sec,
+      int keycode,
+      int scancode,
+      int unicode_character,
+      bool is_system_key);
 };
 
 class WebGestureEventBuilder {

@@ -8,6 +8,7 @@
 
 import("../goma.gni")
 import("//build/config/ios/ios_sdk.gni")
+import("//build/config/mac/mac_sdk.gni")
 
 assert(host_os == "mac")
 
@@ -232,6 +233,34 @@ template("mac_toolchain") {
       description = copy_description
     }
 
+    tool("copy_bundle_data") {
+      command = "rm -rf {{output}} && " +
+                "./gyp-mac-tool copy-bundle-resource {{source}} {{output}} True"
+      description = "COPY_BUNDLE_DATA {{source}} {{output}}"
+    }
+    tool("compile_xcassets") {
+      if (is_ios) {
+        _configuration = "Release"
+        if (is_debug) {
+          _configuration = "Debug"
+        }
+
+        _compile_xcassets_env =
+            "IPHONEOS_DEPLOYMENT_TARGET=$ios_deployment_target " +
+            "CONFIGURATION=$ios_sdk_name-$_configuration " +
+            "CONTENTS_FOLDER_PATH=\$(dirname {{output}})"
+      } else {
+        _compile_xcassets_env =
+            "MACOSX_DEPLOYMENT_TARGET=$mac_deployment_target " +
+            "UNLOCALIZED_RESOURCES_FOLDER_PATH=\$(dirname {{output}})"
+      }
+
+      command = "rm -f {{output}} && " +
+                "env $_compile_xcassets_env ./gyp-mac-tool compile-xcassets " +
+                "{} {{inputs}}"
+      description = "COMPILE_XCASSETS {{output}}"
+    }
+
     toolchain_args() {
       current_cpu = invoker.toolchain_cpu
       current_os = invoker.toolchain_os
@@ -260,8 +289,35 @@ mac_toolchain("clang_arm") {
 }
 
 mac_toolchain("ios_clang_arm") {
-  # TODO(GYP): Do we need ios_clang_armv7 and ios_clang_arm64 ?
   toolchain_cpu = "arm"
+  toolchain_os = "mac"
+
+  # TODO(GYP): We need to support being able to use the version of clang
+  # shipped w/ XCode instead of the one pulled from upstream.
+  prefix = rebase_path("//third_party/llvm-build/Release+Asserts/bin",
+                       root_build_dir)
+  cc = "${goma_prefix}$prefix/clang"
+  cxx = "${goma_prefix}$prefix/clang++"
+  ld = cxx
+  is_clang = true
+}
+
+mac_toolchain("ios_clang_armv7") {
+  toolchain_cpu = "armv7"
+  toolchain_os = "mac"
+
+  # TODO(GYP): We need to support being able to use the version of clang
+  # shipped w/ XCode instead of the one pulled from upstream.
+  prefix = rebase_path("//third_party/llvm-build/Release+Asserts/bin",
+                       root_build_dir)
+  cc = "${goma_prefix}$prefix/clang"
+  cxx = "${goma_prefix}$prefix/clang++"
+  ld = cxx
+  is_clang = true
+}
+
+mac_toolchain("ios_clang_arm64") {
+  toolchain_cpu = "arm64"
   toolchain_os = "mac"
 
   # TODO(GYP): We need to support being able to use the version of clang

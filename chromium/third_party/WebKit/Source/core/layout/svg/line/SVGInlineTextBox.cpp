@@ -46,8 +46,8 @@ struct ExpectedSVGInlineTextBoxSize : public InlineTextBox {
 
 static_assert(sizeof(SVGInlineTextBox) == sizeof(ExpectedSVGInlineTextBoxSize), "SVGInlineTextBox has an unexpected size");
 
-SVGInlineTextBox::SVGInlineTextBox(LayoutObject& object, int start, unsigned short length)
-    : InlineTextBox(object, start, length)
+SVGInlineTextBox::SVGInlineTextBox(LineLayoutItem item, int start, unsigned short length)
+    : InlineTextBox(item, start, length)
     , m_logicalHeight(0)
     , m_startsNewTextChunk(false)
 {
@@ -113,7 +113,7 @@ FloatRect SVGInlineTextBox::selectionRectForTextFragment(const SVGTextFragment& 
     ASSERT(scalingFactor);
 
     const Font& scaledFont = lineLayoutItem.scaledFont();
-    const FontMetrics& scaledFontMetrics = scaledFont.fontMetrics();
+    const FontMetrics& scaledFontMetrics = scaledFont.getFontMetrics();
     FloatPoint textOrigin(fragment.x, fragment.y);
     if (scalingFactor != 1)
         textOrigin.scale(scalingFactor, scalingFactor);
@@ -233,7 +233,7 @@ LayoutRect SVGInlineTextBox::calculateBoundaries() const
     LineLayoutSVGInlineText lineLayoutItem = LineLayoutSVGInlineText(this->getLineLayoutItem());
     float scalingFactor = lineLayoutItem.scalingFactor();
     ASSERT(scalingFactor);
-    LayoutUnit baseline(lineLayoutItem.scaledFont().fontMetrics().floatAscent() / scalingFactor);
+    LayoutUnit baseline(lineLayoutItem.scaledFont().getFontMetrics().floatAscent() / scalingFactor);
 
     LayoutRect textBoundingRect;
     for (const SVGTextFragment& fragment : m_textFragments)
@@ -259,7 +259,7 @@ bool SVGInlineTextBox::nodeAtPoint(HitTestResult& result, const HitTestLocation&
             if (locationInContainer.intersects(rect)) {
                 LineLayoutSVGInlineText lineLayoutItem = LineLayoutSVGInlineText(this->getLineLayoutItem());
                 ASSERT(lineLayoutItem.scalingFactor());
-                float baseline = lineLayoutItem.scaledFont().fontMetrics().floatAscent() / lineLayoutItem.scalingFactor();
+                float baseline = lineLayoutItem.scaledFont().getFontMetrics().floatAscent() / lineLayoutItem.scalingFactor();
 
                 FloatPoint floatLocation = FloatPoint(locationInContainer.point());
                 for (const SVGTextFragment& fragment : m_textFragments) {

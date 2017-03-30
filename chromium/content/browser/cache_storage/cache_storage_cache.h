@@ -62,14 +62,16 @@ class CONTENT_EXPORT CacheStorageCache
 
   static scoped_refptr<CacheStorageCache> CreateMemoryCache(
       const GURL& origin,
-      const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
-      const scoped_refptr<storage::QuotaManagerProxy>& quota_manager_proxy,
+      const std::string& cache_name,
+      scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+      scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
       base::WeakPtr<storage::BlobStorageContext> blob_context);
   static scoped_refptr<CacheStorageCache> CreatePersistentCache(
       const GURL& origin,
+      const std::string& cache_name,
       const base::FilePath& path,
-      const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
-      const scoped_refptr<storage::QuotaManagerProxy>& quota_manager_proxy,
+      scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+      scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
       base::WeakPtr<storage::BlobStorageContext> blob_context);
 
   // Returns ERROR_TYPE_NOT_FOUND if not found.
@@ -111,7 +113,10 @@ class CONTENT_EXPORT CacheStorageCache
   void Close(const base::Closure& callback);
 
   // The size of the cache's contents. This runs in parallel with other Cache
-  // operations.
+  // operations. This is because QuotaManager is a dependency of the Put
+  // operation and QuotaManager calls Size. If the cache isn't yet initialized,
+  // runs immediately after initialization, before any pending operations in the
+  // scheduler are run.
   void Size(const SizeCallback& callback);
 
   // Gets the cache's size, closes the backend, and then runs |callback| with
@@ -149,9 +154,10 @@ class CONTENT_EXPORT CacheStorageCache
 
   CacheStorageCache(
       const GURL& origin,
+      const std::string& cache_name,
       const base::FilePath& path,
-      const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
-      const scoped_refptr<storage::QuotaManagerProxy>& quota_manager_proxy,
+      scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+      scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
       base::WeakPtr<storage::BlobStorageContext> blob_context);
 
   // Async operations in progress will cancel and not run their callbacks.
@@ -292,12 +298,14 @@ class CONTENT_EXPORT CacheStorageCache
   scoped_ptr<disk_cache::Backend> backend_;
 
   GURL origin_;
+  const std::string cache_name_;
   base::FilePath path_;
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
   scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy_;
   base::WeakPtr<storage::BlobStorageContext> blob_storage_context_;
   BackendState backend_state_ = BACKEND_UNINITIALIZED;
   scoped_ptr<CacheStorageScheduler> scheduler_;
+  std::vector<SizeCallback> pending_size_callbacks_;
   bool initializing_ = false;
   int64_t cache_size_ = 0;
 

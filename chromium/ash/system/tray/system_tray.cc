@@ -7,6 +7,7 @@
 #include "ash/ash_switches.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/shelf/shelf_layout_manager.h"
+#include "ash/shelf/shelf_util.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
 #include "ash/system/audio/tray_audio.h"
@@ -117,8 +118,8 @@ class SystemBubbleWrapper {
   bool is_persistent() const { return is_persistent_; }
 
  private:
-  scoped_ptr<SystemTrayBubble> bubble_;
-  scoped_ptr<TrayBubbleWrapper> bubble_wrapper_;
+  std::unique_ptr<SystemTrayBubble> bubble_;
+  std::unique_ptr<TrayBubbleWrapper> bubble_wrapper_;
   bool is_persistent_;
 
   DISALLOW_COPY_AND_ASSIGN(SystemBubbleWrapper);
@@ -130,11 +131,15 @@ class SystemBubbleWrapper {
 SystemTray::SystemTray(StatusAreaWidget* status_area_widget)
     : TrayBackgroundView(status_area_widget),
       items_(),
+      detailed_item_(nullptr),
       default_bubble_height_(0),
       hide_notifications_(false),
       full_system_tray_menu_(false),
-      tray_accessibility_(NULL),
-      tray_date_(NULL) {
+      tray_accessibility_(nullptr),
+      tray_cast_(nullptr),
+      tray_date_(nullptr),
+      screen_capture_tray_item_(nullptr),
+      screen_share_tray_item_(nullptr) {
   SetContentsBackground();
 }
 
@@ -307,15 +312,12 @@ void SystemTray::UpdateAfterLoginStatusChange(user::LoginStatus login_status) {
   DestroySystemBubble();
   UpdateNotificationBubble();
 
-  for (std::vector<SystemTrayItem*>::iterator it = items_.begin();
-      it != items_.end();
-      ++it) {
-    (*it)->UpdateAfterLoginStatusChange(login_status);
-  }
+  for (SystemTrayItem* item : items_)
+    item->UpdateAfterLoginStatusChange(login_status);
 
   // Items default to SHELF_ALIGNMENT_BOTTOM. Update them if the initial
   // position of the shelf differs.
-  if (shelf_alignment() != SHELF_ALIGNMENT_BOTTOM)
+  if (!IsHorizontalAlignment(shelf_alignment()))
     UpdateAfterShelfAlignmentChange(shelf_alignment());
 
   SetVisible(true);
@@ -323,11 +325,8 @@ void SystemTray::UpdateAfterLoginStatusChange(user::LoginStatus login_status) {
 }
 
 void SystemTray::UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) {
-  for (std::vector<SystemTrayItem*>::iterator it = items_.begin();
-      it != items_.end();
-      ++it) {
-    (*it)->UpdateAfterShelfAlignmentChange(alignment);
-  }
+  for (SystemTrayItem* item : items_)
+    item->UpdateAfterShelfAlignmentChange(alignment);
 }
 
 void SystemTray::SetHideNotifications(bool hide_notifications) {
@@ -418,8 +417,7 @@ base::string16 SystemTray::GetAccessibleNameForTray() {
 
 int SystemTray::GetTrayXOffset(SystemTrayItem* item) const {
   // Don't attempt to align the arrow if the shelf is on the left or right.
-  if (shelf_alignment() != SHELF_ALIGNMENT_BOTTOM &&
-      shelf_alignment() != SHELF_ALIGNMENT_TOP)
+  if (!IsHorizontalAlignment(shelf_alignment()))
     return TrayBubbleView::InitParams::kArrowDefaultOffset;
 
   std::map<SystemTrayItem*, views::View*>::const_iterator it =
@@ -599,13 +597,8 @@ void SystemTray::UpdateWebNotifications() {
         gfx::Screen::GetScreen()
             ->GetDisplayNearestWindow(bubble_view->GetWidget()->GetNativeView())
             .work_area();
-    if (GetShelfLayoutManager()->GetAlignment() != SHELF_ALIGNMENT_TOP) {
-      height = std::max(
-          0, work_area.height() - bubble_view->GetBoundsInScreen().y());
-    } else {
-      height = std::max(
-          0, bubble_view->GetBoundsInScreen().bottom() - work_area.y());
-    }
+    height =
+        std::max(0, work_area.height() - bubble_view->GetBoundsInScreen().y());
   }
   status_area_widget()->web_notification_tray()->SetSystemTrayHeight(height);
 }
@@ -719,8 +712,7 @@ bool SystemTray::PerformAction(const ui::Event& event) {
     if (event.IsMouseEvent() || event.type() == ui::ET_GESTURE_TAP) {
       const ui::LocatedEvent& located_event =
           static_cast<const ui::LocatedEvent&>(event);
-      if (shelf_alignment() == SHELF_ALIGNMENT_BOTTOM ||
-          shelf_alignment() == SHELF_ALIGNMENT_TOP) {
+      if (IsHorizontalAlignment(shelf_alignment())) {
         gfx::Point point(located_event.x(), 0);
         ConvertPointToWidget(this, &point);
         arrow_offset = point.x();

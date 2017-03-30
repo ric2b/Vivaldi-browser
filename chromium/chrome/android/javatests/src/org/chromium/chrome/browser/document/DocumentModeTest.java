@@ -19,6 +19,7 @@ import android.view.View;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -26,6 +27,7 @@ import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.incognito.IncognitoNotificationService;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -35,7 +37,6 @@ import org.chromium.chrome.browser.tabmodel.document.OffTheRecordDocumentTabMode
 import org.chromium.chrome.test.util.ActivityUtils;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.chrome.test.util.DisableInTabbedMode;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TouchCommon;
@@ -48,8 +49,8 @@ import java.util.List;
 /**
  * General tests for how Document mode Activities interact with each other.
  */
+@DisabledTest
 @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-@DisableInTabbedMode
 public class DocumentModeTest extends DocumentModeTestBase {
     /** Opens a new page with a huge URL via window.open(). */
     protected static final String HUGE_URL_PAGE = UrlUtils.encodeHtmlDataUri(
@@ -97,7 +98,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         startTabbedActivity(URL_1);
 
         // ApplicationStatus should note that the ChromeTabbedActivity isn't running anymore.
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 List<WeakReference<Activity>> activities = ApplicationStatus.getRunningActivities();
@@ -131,7 +132,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
 
         // A DocumentActivity gets started, but it should immediately call finishAndRemoveTask()
         // because of the broken Intent.
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 Activity activity = ApplicationStatus.getLastTrackedFocusedActivity();
@@ -140,7 +141,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         });
 
         // We shouldn't record that a new Tab exists.
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return selector.getCurrentModel().getCount() == 3
@@ -172,7 +173,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         // Funnily enough, Android doesn't differentiate between URIs with different queries when
         // refocusing Activities based on the Intent data.  This means we can't do a check to see
         // that the new Activity appears with URL_4 -- we just get a new instance of URL_3.
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 Activity activity = ApplicationStatus.getLastTrackedFocusedActivity();
@@ -187,7 +188,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         });
 
         // Although we get a new DocumentActivity, the old one with the same tab ID gets killed.
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return selector.getCurrentModel().getCount() == 3
@@ -217,7 +218,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         mContext.startActivity(intent);
         ApplicationTestUtils.waitUntilChromeInForeground();
 
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return lastTrackedActivity == ApplicationStatus.getLastTrackedFocusedActivity()
@@ -246,7 +247,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         ApplicationTestUtils.fireHomeScreenIntent(mContext);
         ApplicationTestUtils.launchChrome(mContext);
 
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return !selector.isIncognitoSelected() && lastTabId == selector.getCurrentTabId();
@@ -273,7 +274,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
             }
         });
 
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return !selector.isIncognitoSelected() && selector.getCurrentModel().index() == 0;
@@ -309,7 +310,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         };
         ActivityUtils.waitForActivity(getInstrumentation(), ChromeLauncherActivity.class, runnable);
         ApplicationTestUtils.waitUntilChromeInForeground();
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 Activity lastActivity = ApplicationStatus.getLastTrackedFocusedActivity();
@@ -321,7 +322,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
 
         // Create another tab.
         final int secondTabId = launchViaViewIntent(false, URL_2, "Page 2");
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return selector.getModel(false).getCount() == 2
@@ -363,7 +364,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         final DocumentTabModelSelector selector =
                 ChromeApplication.getDocumentTabModelSelector();
         final TabModel incognitoModel = selector.getModel(true);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return firstId == selector.getCurrentTabId() && selector.getTotalTabCount() == 1;
@@ -372,7 +373,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         assertEquals(incognitoModel, selector.getCurrentModel());
 
         // Make sure the URL isn't in the Intent of the first IncognitoDocumentActivity.
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return ApplicationStatus.getLastTrackedFocusedActivity()
@@ -384,7 +385,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
 
         // Launch via ChromeLauncherActivity.launchInstance().
         final int secondId = launchViaLaunchDocumentInstance(true, URL_3, "Page 3");
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return secondId == selector.getCurrentTabId() && selector.getTotalTabCount() == 2;
@@ -395,7 +396,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         assertEquals(secondId, TabModelUtils.getCurrentTabId(incognitoModel));
 
         // Make sure the URL isn't in the Intent of the second IncognitoDocumentActivity.
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return ApplicationStatus.getLastTrackedFocusedActivity()
@@ -419,7 +420,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         final DocumentTabModelSelector selector =
                 ChromeApplication.getDocumentTabModelSelector();
         final TabModel incognitoModel = selector.getModel(true);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return firstId == selector.getCurrentTabId() && selector.getTotalTabCount() == 1;
@@ -433,7 +434,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         // The context menu for links in Incognito mode lacks an "Open in new Incognito tab" option.
         // Instead, the regular "Open in new tab" option opens a new incognito tab.
         openLinkInNewTabViaContextMenu(false, true);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return firstId == selector.getCurrentTabId() && selector.getTotalTabCount() == 2;
@@ -455,7 +456,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
         assertFalse(selector.isIncognitoSelected());
 
         final int incognitoId = launchViaLaunchDocumentInstance(true, URL_2, "Page 2");
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return selector.isIncognitoSelected() && selector.getCurrentTabId() == incognitoId;
@@ -465,10 +466,10 @@ public class DocumentModeTest extends DocumentModeTestBase {
         assertEquals(1, selector.getCurrentModel().getCount());
 
         PendingIntent closeAllIntent =
-                ChromeLauncherActivity.getRemoveAllIncognitoTabsIntent(mContext);
+                IncognitoNotificationService.getRemoveAllIncognitoTabsIntent(mContext);
         closeAllIntent.send();
 
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return selector.getCurrentTabId() == regularId;
@@ -515,7 +516,7 @@ public class DocumentModeTest extends DocumentModeTestBase {
 
         // Re-open the other tab.
         TabModelUtils.setIndex(regularTabModel, 0);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return !selector.isIncognitoSelected()
@@ -674,6 +675,12 @@ public class DocumentModeTest extends DocumentModeTestBase {
         // Wait for the Activity to start up.
         final DocumentActivity newActivity = ActivityUtils.waitForActivity(
                 getInstrumentation(), DocumentActivity.class, viewIntentRunnable);
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return newActivity.getActivityTab() != null;
+            }
+        });
         ChromeTabUtils.waitForTabPageLoaded(newActivity.getActivityTab(), (String) null);
 
         TabModelSelector selector = ChromeApplication.getDocumentTabModelSelector();
@@ -695,6 +702,12 @@ public class DocumentModeTest extends DocumentModeTestBase {
         // Wait for the Activity to start up.
         final DocumentActivity newActivity = ActivityUtils.waitForActivity(
                 getInstrumentation(), DocumentActivity.class, viewIntentRunnable);
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return newActivity.getActivityTab() != null;
+            }
+        });
         ChromeTabUtils.waitForTabPageLoaded(newActivity.getActivityTab(), (String) null);
 
         TabModelSelector selector = ChromeApplication.getDocumentTabModelSelector();

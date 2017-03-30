@@ -22,8 +22,11 @@ namespace blink {
 
 void SVGRootPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
+    // Pixel-snap to match BoxPainter's alignment.
+    const IntRect adjustedRect = pixelSnappedIntRect(paintOffset, m_layoutSVGRoot.size());
+
     // An empty viewport disables rendering.
-    if (m_layoutSVGRoot.pixelSnappedBorderBoxRect().isEmpty())
+    if (adjustedRect.isEmpty())
         return;
 
     // SVG outlines are painted during PaintPhaseForeground.
@@ -46,18 +49,24 @@ void SVGRootPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintO
 
     PaintInfo paintInfoBeforeFiltering(paintInfo);
 
-    // At the HTML->SVG boundary, SVGRoot will have a paint offset transform
-    // paint property but may not have a PaintLayer, so we need to update the
-    // paint properties here since they will not be updated by PaintLayer
-    // (See: PaintPropertyTreeBuilder::createPaintOffsetTranslationIfNeeded).
-    Optional<ScopedPaintChunkProperties> paintOffsetTranslationPropertyScope;
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() && !m_layoutSVGRoot.hasLayer()) {
+    Optional<ScopedPaintChunkProperties> transformPropertyScope;
+    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
         const auto* objectProperties = m_layoutSVGRoot.objectPaintProperties();
-        if (objectProperties && objectProperties->paintOffsetTranslation()) {
-            auto& paintController = paintInfoBeforeFiltering.context.paintController();
+        if (objectProperties && objectProperties->svgLocalTransform()) {
+            auto& paintController = paintInfoBeforeFiltering.context.getPaintController();
+            PaintChunkProperties properties(paintController.currentPaintChunkProperties());
+            properties.transform = objectProperties->svgLocalTransform();
+            transformPropertyScope.emplace(paintController, properties);
+        } else if (objectProperties && objectProperties->paintOffsetTranslation() && !m_layoutSVGRoot.hasLayer()) {
+            // TODO(pdr): Always create an svgLocalTransform and remove this paint offset quirk.
+            // At the HTML->SVG boundary, SVGRoot will have a paint offset transform
+            // paint property but may not have a PaintLayer, so we need to update the
+            // paint properties here since they will not be updated by PaintLayer
+            // (See: PaintPropertyTreeBuilder::createPaintOffsetTranslationIfNeeded).
+            auto& paintController = paintInfoBeforeFiltering.context.getPaintController();
             PaintChunkProperties properties(paintController.currentPaintChunkProperties());
             properties.transform = objectProperties->paintOffsetTranslation();
-            paintOffsetTranslationPropertyScope.emplace(paintController, properties);
+            transformPropertyScope.emplace(paintController, properties);
         }
     }
 
@@ -70,8 +79,14 @@ void SVGRootPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintO
 
     // Convert from container offsets (html layoutObjects) to a relative transform (svg layoutObjects).
     // Transform from our paint container's coordinate system to our local coords.
-    IntPoint adjustedPaintOffset = roundedIntPoint(paintOffset);
-    AffineTransform paintOffsetToBorderBox = AffineTransform::translation(adjustedPaintOffset.x(), adjustedPaintOffset.y()) * m_layoutSVGRoot.localToBorderBoxTransform();
+    AffineTransform paintOffsetToBorderBox =
+        AffineTransform::translation(adjustedRect.x(), adjustedRect.y());
+    // Compensate for size snapping.
+    paintOffsetToBorderBox.scale(
+        adjustedRect.width() / m_layoutSVGRoot.size().width().toFloat(),
+        adjustedRect.height() / m_layoutSVGRoot.size().height().toFloat());
+    paintOffsetToBorderBox.multiply(m_layoutSVGRoot.localToBorderBoxTransform());
+
     paintInfoBeforeFiltering.updateCullRect(paintOffsetToBorderBox);
     TransformRecorder transformRecorder(paintInfoBeforeFiltering.context, m_layoutSVGRoot, paintOffsetToBorderBox);
 

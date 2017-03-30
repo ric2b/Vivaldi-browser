@@ -78,6 +78,7 @@ void GetSavePasswordDialogTitleTextAndLinkRange(
     PasswordTittleType dialog_type,
     base::string16* title,
     gfx::Range* title_link_range) {
+  DCHECK(!password_manager::IsValidAndroidFacetURI(form_origin_url.spec()));
   std::vector<size_t> offsets;
   std::vector<base::string16> replacements;
   int title_id = 0;
@@ -96,19 +97,14 @@ void GetSavePasswordDialogTitleTextAndLinkRange(
   // Check whether the registry controlled domains for user-visible URL (i.e.
   // the one seen in the omnibox) and the password form post-submit navigation
   // URL differs or not.
-  password_manager::FacetURI facet_uri =
-      password_manager::FacetURI::FromPotentiallyInvalidSpec(
-          form_origin_url.spec());
-  if (facet_uri.IsValidAndroidFacetURI()) {
-    title_id = IDS_SAVE_PASSWORD_TITLE;
-    replacements.push_back(
-        base::ASCIIToUTF16(GetHumanReadableOriginForAndroidUri(facet_uri)));
-  } else if (!SameDomainOrHost(user_visible_url, form_origin_url)) {
-    title_id = IDS_SAVE_PASSWORD_TITLE;
+  if (!SameDomainOrHost(user_visible_url, form_origin_url)) {
+    title_id = dialog_type == PasswordTittleType::UPDATE_PASSWORD
+                   ? IDS_UPDATE_PASSWORD_DIFFERENT_DOMAINS_TITLE
+                   : IDS_SAVE_PASSWORD_DIFFERENT_DOMAINS_TITLE;
     // TODO(palmer): Look into passing real language prefs here, not "".
     // crbug.com/498069.
-    replacements.push_back(url_formatter::FormatUrlForSecurityDisplay(
-        form_origin_url, std::string()));
+    replacements.push_back(
+        url_formatter::FormatUrlForSecurityDisplay(form_origin_url));
   }
 
   if (is_smartlock_branding_enabled) {
@@ -130,20 +126,13 @@ void GetSavePasswordDialogTitleTextAndLinkRange(
 void GetManagePasswordsDialogTitleText(const GURL& user_visible_url,
                                        const GURL& password_origin_url,
                                        base::string16* title) {
+  DCHECK(!password_manager::IsValidAndroidFacetURI(password_origin_url.spec()));
   // Check whether the registry controlled domains for user-visible URL
   // (i.e. the one seen in the omnibox) and the managed password origin URL
   // differ or not.
-  password_manager::FacetURI facet_uri =
-      password_manager::FacetURI::FromPotentiallyInvalidSpec(
-          password_origin_url.spec());
-  if (facet_uri.IsValidAndroidFacetURI()) {
-    *title = l10n_util::GetStringFUTF16(
-        IDS_MANAGE_PASSWORDS_TITLE_DIFFERENT_DOMAIN,
-        base::ASCIIToUTF16(GetHumanReadableOriginForAndroidUri(facet_uri)));
-  } else if (!SameDomainOrHost(user_visible_url, password_origin_url)) {
-    // TODO(palmer): Look into passing real language prefs here, not "".
-    base::string16 formatted_url = url_formatter::FormatUrlForSecurityDisplay(
-        password_origin_url, std::string());
+  if (!SameDomainOrHost(user_visible_url, password_origin_url)) {
+    base::string16 formatted_url =
+        url_formatter::FormatUrlForSecurityDisplay(password_origin_url);
     *title = l10n_util::GetStringFUTF16(
         IDS_MANAGE_PASSWORDS_TITLE_DIFFERENT_DOMAIN, formatted_url);
   } else {
@@ -153,11 +142,14 @@ void GetManagePasswordsDialogTitleText(const GURL& user_visible_url,
 
 void GetAccountChooserDialogTitleTextAndLinkRange(
     bool is_smartlock_branding_enabled,
+    bool many_accounts,
     base::string16* title,
     gfx::Range* title_link_range) {
+  int string_id = many_accounts
+      ? IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_TITLE_MANY_ACCOUNTS
+      : IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_TITLE_ONE_ACCOUNT;
   GetBrandedTextAndLinkRange(is_smartlock_branding_enabled,
-                             IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_TITLE,
-                             IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_TITLE,
+                             string_id, string_id,
                              title, title_link_range);
 }
 

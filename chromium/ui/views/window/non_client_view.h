@@ -42,14 +42,9 @@ class VIEWS_EXPORT NonClientFrameView : public View,
 
   ~NonClientFrameView() override;
 
-  // Sets whether the window should be rendered as active regardless of the
-  // actual active state. Used when bubbles become active to make their parent
-  // appear active. A value of true makes the window render as active always,
-  // false gives normal behavior.
-  void SetInactiveRenderingDisabled(bool disable);
-
   // Used to determine if the frame should be painted as active. Keyed off the
-  // window's actual active state and |inactive_rendering_disabled_|.
+  // window's actual active state and whether the widget should be rendered as
+  // active.
   bool ShouldPaintAsActive() const;
 
   // Helper for non-client view implementations to determine which area of the
@@ -70,6 +65,12 @@ class VIEWS_EXPORT NonClientFrameView : public View,
   virtual gfx::Rect GetWindowBoundsForClientBounds(
       const gfx::Rect& client_bounds) const = 0;
 
+  // Gets the clip mask (in this View's parent's coordinates) that should be
+  // applied to the client view. Returns false if no special clip should be
+  // used.
+  virtual bool GetClientMask(const gfx::Size& size,
+                             gfx::Path* mask) const;
+
   // This function must ask the ClientView to do a hittest.  We don't do this in
   // the parent NonClientView because that makes it more difficult to calculate
   // hittests for regions that are partially obscured by the ClientView, e.g.
@@ -89,6 +90,9 @@ class VIEWS_EXPORT NonClientFrameView : public View,
   // Whether the widget can be resized or maximized has changed.
   virtual void SizeConstraintsChanged() = 0;
 
+  // The widget's activation state has changed to |active|.
+  virtual void ActivationChanged(bool active);
+
   // View:
   void GetAccessibleState(ui::AXViewState* state) override;
   const char* GetClassName() const override;
@@ -103,10 +107,17 @@ class VIEWS_EXPORT NonClientFrameView : public View,
   // View:
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
+  void set_active_state_override(bool* active_state_override) {
+    active_state_override_ = active_state_override;
+  }
+
  private:
-  // Prevents the non-client frame view from being rendered as inactive when
-  // true.
-  bool inactive_rendering_disabled_;
+  // Used to force ShouldPaintAsActive() to treat the active state a particular
+  // way.  This is normally null; when non-null, its value will override the
+  // normal "active" value computed by the function.
+  bool* active_state_override_;
+
+  DISALLOW_COPY_AND_ASSIGN(NonClientFrameView);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,11 +184,6 @@ class VIEWS_EXPORT NonClientView : public View, public ViewTargeterDelegate {
   // Replaces the frame view with a new one. Used when switching window theme
   // or frame style.
   void UpdateFrame();
-
-  // Prevents the window from being rendered as deactivated when |disable| is
-  // true, until called with |disable| false. Used when a sub-window is to be
-  // shown that shouldn't visually de-activate the window.
-  void SetInactiveRenderingDisabled(bool disable);
 
   // Returns the bounds of the window required to display the content area at
   // the specified bounds.

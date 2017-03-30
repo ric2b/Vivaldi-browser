@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ref_counted.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -98,8 +98,8 @@ class ContentAutofillDriverBrowserTest : public InProcessBrowserTest,
       web_contents_hidden_callback_.Run();
   }
 
-  void NavigationEntryCommitted(
-      const content::LoadCommittedDetails& load_details) override {
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
     if (!nav_entry_committed_callback_.is_null())
       nav_entry_committed_callback_.Run();
   }

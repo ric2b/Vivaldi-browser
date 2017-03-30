@@ -25,8 +25,7 @@
 
 #include "core/css/CSSValueList.h"
 #include "core/css/StylePropertySet.h"
-
-#include "wtf/BitArray.h"
+#include <bitset>
 
 namespace blink {
 
@@ -82,7 +81,7 @@ private:
         bool isValid() const { return m_value; }
 
     private:
-        RawPtrWillBeMember<const CSSValue> m_value;
+        Member<const CSSValue> m_value;
         CSSPropertyID m_id;
         bool m_isImportant;
         bool m_isImplicit;
@@ -111,9 +110,9 @@ private:
         bool hasExpandedAllProperty() const { return hasAllProperty() && m_needToExpandAll; }
         bool hasAllProperty() const { return m_allIndex != -1; }
 
-        RawPtrWillBeMember<const StylePropertySet> m_propertySet;
+        Member<const StylePropertySet> m_propertySet;
         int m_allIndex;
-        BitArray<numCSSProperties> m_longhandPropertyUsed;
+        std::bitset<numCSSProperties> m_longhandPropertyUsed;
         bool m_needToExpandAll;
     };
 

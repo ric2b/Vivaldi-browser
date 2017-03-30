@@ -21,7 +21,7 @@ namespace content {
 
 NavigationURLLoaderImpl::NavigationURLLoaderImpl(
     BrowserContext* browser_context,
-    scoped_ptr<NavigationRequestInfo> request_info,
+    std::unique_ptr<NavigationRequestInfo> request_info,
     ServiceWorkerNavigationHandle* service_worker_handle,
     NavigationURLLoaderDelegate* delegate)
     : delegate_(delegate), weak_factory_(this) {
@@ -62,6 +62,15 @@ void NavigationURLLoaderImpl::FollowRedirect() {
                  base::Unretained(core_)));
 }
 
+void NavigationURLLoaderImpl::ProceedWithResponse() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&NavigationURLLoaderImplCore::ProceedWithResponse,
+                 base::Unretained(core_)));
+}
+
 void NavigationURLLoaderImpl::NotifyRequestRedirected(
     const net::RedirectInfo& redirect_info,
     const scoped_refptr<ResourceResponse>& response) {
@@ -72,7 +81,7 @@ void NavigationURLLoaderImpl::NotifyRequestRedirected(
 
 void NavigationURLLoaderImpl::NotifyResponseStarted(
     const scoped_refptr<ResourceResponse>& response,
-    scoped_ptr<StreamHandle> body) {
+    std::unique_ptr<StreamHandle> body) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   delegate_->OnResponseStarted(response, std::move(body));

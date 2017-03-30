@@ -43,7 +43,6 @@
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
-#include "wtf/MainThread.h"
 #include "wtf/StdLibExtras.h"
 
 #include <math.h>
@@ -185,11 +184,11 @@ void Image::drawTiled(GraphicsContext& ctxt, const FloatRect& dstRect, const Flo
 
 namespace {
 
-PassRefPtr<SkShader> createPatternShader(const SkImage* image, const SkMatrix& shaderMatrix,
+sk_sp<SkShader> createPatternShader(const SkImage* image, const SkMatrix& shaderMatrix,
     const SkPaint& paint, const FloatSize& spacing)
 {
     if (spacing.isZero())
-        return adoptRef(image->newShader(SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, &shaderMatrix));
+        return image->makeShader(SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, &shaderMatrix);
 
     // Arbitrary tiling is currently only supported for SkPictureShader - so we use it instead
     // of a plain bitmap shader to implement spacing.
@@ -200,10 +199,9 @@ PassRefPtr<SkShader> createPatternShader(const SkImage* image, const SkMatrix& s
     SkPictureRecorder recorder;
     SkCanvas* canvas = recorder.beginRecording(tileRect);
     canvas->drawImage(image, 0, 0, &paint);
-    RefPtr<const SkPicture> picture = adoptRef(recorder.endRecordingAsPicture());
 
-    return adoptRef(SkShader::CreatePictureShader(
-        picture.get(), SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, &shaderMatrix, nullptr));
+    return SkShader::MakePictureShader(recorder.finishRecordingAsPicture(),
+        SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, &shaderMatrix, nullptr);
 }
 
 } // anonymous namespace
@@ -249,19 +247,13 @@ void Image::drawPattern(GraphicsContext& context, const FloatRect& floatSrcRect,
         paint.setXfermodeMode(compositeOp);
         paint.setFilterQuality(context.computeFilterQuality(this, destRect, normSrcRect));
         paint.setAntiAlias(context.shouldAntialias());
-        RefPtr<SkShader> shader = createPatternShader(image.get(), localMatrix, paint,
-            FloatSize(repeatSpacing.width() / scale.width(), repeatSpacing.height() / scale.height()));
-        paint.setShader(shader.get());
+        paint.setShader(createPatternShader(image.get(), localMatrix, paint,
+            FloatSize(repeatSpacing.width() / scale.width(), repeatSpacing.height() / scale.height())));
         context.drawRect(destRect, paint);
     }
 
     if (currentFrameIsLazyDecoded())
         PlatformInstrumentation::didDrawLazyPixelRef(imageID);
-}
-
-void Image::computeIntrinsicDimensions(FloatSize& intrinsicSize, FloatSize& intrinsicRatio)
-{
-    intrinsicSize = intrinsicRatio = FloatSize(size());
 }
 
 PassRefPtr<Image> Image::imageForDefaultFrame()

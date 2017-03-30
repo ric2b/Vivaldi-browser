@@ -26,7 +26,7 @@ DeviceLocalAccountExternalPolicyLoader::
 }
 
 bool DeviceLocalAccountExternalPolicyLoader::IsCacheRunning() const {
-  return external_cache_;
+  return external_cache_ != nullptr;
 }
 
 void DeviceLocalAccountExternalPolicyLoader::StartCache(
@@ -93,7 +93,7 @@ DeviceLocalAccountExternalPolicyLoader::
 }
 
 void DeviceLocalAccountExternalPolicyLoader::UpdateExtensionListFromStore() {
-  scoped_ptr<base::DictionaryValue> prefs(new base::DictionaryValue);
+  std::unique_ptr<base::DictionaryValue> prefs(new base::DictionaryValue);
   const policy::PolicyMap& policy_map = store_->policy_map();
   // TODO(binjin): Use two policy handlers here after
   // ExtensionManagementPolicyHandler is introduced.

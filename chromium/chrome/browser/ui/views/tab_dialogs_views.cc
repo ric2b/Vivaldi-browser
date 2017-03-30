@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/tab_dialogs_views.h"
 
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/passwords/manage_passwords_bubble_model.h"
 #include "chrome/browser/ui/views/collected_cookies_views.h"
 #include "chrome/browser/ui/views/hung_renderer_view.h"
@@ -57,7 +58,7 @@ void TabDialogsViews::ShowManagePasswordsBubble(bool user_action) {
   if (ManagePasswordsBubbleView::manage_password_bubble()) {
     // The bubble is currently shown for some other tab. We should close it now
     // and open for |web_contents_|.
-    ManagePasswordsBubbleView::CloseBubble();
+    ManagePasswordsBubbleView::CloseCurrentBubble();
   }
   ManagePasswordsBubbleView::ShowBubble(
       web_contents_, user_action ? ManagePasswordsBubbleView::USER_GESTURE
@@ -70,13 +71,13 @@ void TabDialogsViews::HideManagePasswordsBubble() {
   content::WebContents* bubble_web_contents =
       ManagePasswordsBubbleView::manage_password_bubble()->web_contents();
   if (web_contents_ == bubble_web_contents)
-    ManagePasswordsBubbleView::CloseBubble();
+    ManagePasswordsBubbleView::CloseCurrentBubble();
 }
 
-scoped_ptr<ValidationMessageBubble> TabDialogsViews::ShowValidationMessage(
+std::unique_ptr<ValidationMessageBubble> TabDialogsViews::ShowValidationMessage(
     const gfx::Rect& anchor_in_root_view,
     const base::string16& main_text,
     const base::string16& sub_text) {
-  return make_scoped_ptr(new ValidationMessageBubbleView(
+  return base::WrapUnique(new ValidationMessageBubbleView(
       web_contents_, anchor_in_root_view, main_text, sub_text));
 }

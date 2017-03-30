@@ -37,7 +37,7 @@
 
 namespace blink {
 
-SVGAngleTearOff::SVGAngleTearOff(PassRefPtrWillBeRawPtr<SVGAngle> targetProperty, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName)
+SVGAngleTearOff::SVGAngleTearOff(SVGAngle* targetProperty, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName)
     : SVGPropertyTearOff<SVGAngle>(targetProperty, contextElement, propertyIsAnimVal, attributeName)
 {
 }

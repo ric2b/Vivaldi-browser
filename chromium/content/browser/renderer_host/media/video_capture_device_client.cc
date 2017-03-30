@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -47,7 +48,7 @@ class AutoReleaseBuffer : public media::VideoCaptureDevice::Client::Buffer {
   ClientBuffer AsClientBuffer(int plane) override {
     return buffer_handle_->AsClientBuffer(plane);
   }
-#if defined(OS_POSIX) && !(defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
   base::FileDescriptor AsPlatformFile() override {
     return buffer_handle_->AsPlatformFile();
   }
@@ -58,7 +59,7 @@ class AutoReleaseBuffer : public media::VideoCaptureDevice::Client::Buffer {
 
   const int id_;
   const scoped_refptr<VideoCaptureBufferPool> pool_;
-  const scoped_ptr<VideoCaptureBufferPool::BufferHandle> buffer_handle_;
+  const std::unique_ptr<VideoCaptureBufferPool::BufferHandle> buffer_handle_;
 };
 
 VideoCaptureDeviceClient::VideoCaptureDeviceClient(
@@ -133,7 +134,7 @@ void VideoCaptureDeviceClient::OnIncomingCapturedData(
       use_gpu_memory_buffers_ ? media::PIXEL_STORAGE_GPUMEMORYBUFFER
                               : media::PIXEL_STORAGE_CPU;
   uint8_t *y_plane_data, *u_plane_data, *v_plane_data;
-  scoped_ptr<Buffer> buffer(
+  std::unique_ptr<Buffer> buffer(
       ReserveI420OutputBuffer(dimensions, output_pixel_storage, &y_plane_data,
                               &u_plane_data, &v_plane_data));
   if (!buffer.get()) {
@@ -256,7 +257,7 @@ void VideoCaptureDeviceClient::OnIncomingCapturedData(
   OnIncomingCapturedBuffer(std::move(buffer), output_format, timestamp);
 }
 
-scoped_ptr<media::VideoCaptureDevice::Client::Buffer>
+std::unique_ptr<media::VideoCaptureDevice::Client::Buffer>
 VideoCaptureDeviceClient::ReserveOutputBuffer(
     const gfx::Size& frame_size,
     media::VideoPixelFormat pixel_format,
@@ -270,25 +271,21 @@ VideoCaptureDeviceClient::ReserveOutputBuffer(
   // it's a ShMem GMB or a DmaBuf GMB.
   int buffer_id_to_drop = VideoCaptureBufferPool::kInvalidId;
   const int buffer_id = buffer_pool_->ReserveForProducer(
-      pixel_format, pixel_storage, frame_size, &buffer_id_to_drop);
-  if (buffer_id == VideoCaptureBufferPool::kInvalidId)
-    return NULL;
-
-  scoped_ptr<media::VideoCaptureDevice::Client::Buffer> output_buffer(
-      new AutoReleaseBuffer(buffer_pool_, buffer_id));
-
+      frame_size, pixel_format, pixel_storage, &buffer_id_to_drop);
   if (buffer_id_to_drop != VideoCaptureBufferPool::kInvalidId) {
     BrowserThread::PostTask(BrowserThread::IO,
         FROM_HERE,
         base::Bind(&VideoCaptureController::DoBufferDestroyedOnIOThread,
                    controller_, buffer_id_to_drop));
   }
-
-  return output_buffer;
+  if (buffer_id == VideoCaptureBufferPool::kInvalidId)
+    return nullptr;
+  return base::WrapUnique<Buffer>(
+      new AutoReleaseBuffer(buffer_pool_, buffer_id));
 }
 
 void VideoCaptureDeviceClient::OnIncomingCapturedBuffer(
-    scoped_ptr<Buffer> buffer,
+    std::unique_ptr<Buffer> buffer,
     const VideoCaptureFormat& frame_format,
     const base::TimeTicks& timestamp) {
   // Currently, only I420 pixel format is supported.
@@ -326,7 +323,7 @@ void VideoCaptureDeviceClient::OnIncomingCapturedBuffer(
 }
 
 void VideoCaptureDeviceClient::OnIncomingCapturedVideoFrame(
-    scoped_ptr<Buffer> buffer,
+    std::unique_ptr<Buffer> buffer,
     const scoped_refptr<VideoFrame>& frame,
     const base::TimeTicks& timestamp) {
   BrowserThread::PostTask(
@@ -338,6 +335,19 @@ void VideoCaptureDeviceClient::OnIncomingCapturedVideoFrame(
           base::Passed(&buffer),
           frame,
           timestamp));
+}
+
+std::unique_ptr<media::VideoCaptureDevice::Client::Buffer>
+VideoCaptureDeviceClient::ResurrectLastOutputBuffer(
+    const gfx::Size& dimensions,
+    media::VideoPixelFormat format,
+    media::VideoPixelStorage storage) {
+  const int buffer_id =
+      buffer_pool_->ResurrectLastForProducer(dimensions, format, storage);
+  if (buffer_id == VideoCaptureBufferPool::kInvalidId)
+    return nullptr;
+  return base::WrapUnique<Buffer>(
+      new AutoReleaseBuffer(buffer_pool_, buffer_id));
 }
 
 void VideoCaptureDeviceClient::OnError(
@@ -367,7 +377,7 @@ double VideoCaptureDeviceClient::GetBufferPoolUtilization() const {
   return buffer_pool_->GetBufferPoolUtilization();
 }
 
-scoped_ptr<media::VideoCaptureDevice::Client::Buffer>
+std::unique_ptr<media::VideoCaptureDevice::Client::Buffer>
 VideoCaptureDeviceClient::ReserveI420OutputBuffer(
     const gfx::Size& dimensions,
     media::VideoPixelStorage storage,
@@ -380,10 +390,10 @@ VideoCaptureDeviceClient::ReserveI420OutputBuffer(
   DCHECK(dimensions.width());
 
   const media::VideoPixelFormat format = media::PIXEL_FORMAT_I420;
-  scoped_ptr<Buffer> buffer(ReserveOutputBuffer(
-      dimensions, media::PIXEL_FORMAT_I420, storage));
+  std::unique_ptr<Buffer> buffer(
+      ReserveOutputBuffer(dimensions, media::PIXEL_FORMAT_I420, storage));
   if (!buffer)
-    return scoped_ptr<Buffer>();
+    return std::unique_ptr<Buffer>();
 
   switch (storage) {
     case media::PIXEL_STORAGE_CPU:
@@ -409,7 +419,7 @@ VideoCaptureDeviceClient::ReserveI420OutputBuffer(
       return buffer;
   }
   NOTREACHED();
-  return scoped_ptr<Buffer>();
+  return std::unique_ptr<Buffer>();
 }
 
 }  // namespace content

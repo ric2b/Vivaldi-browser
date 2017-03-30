@@ -57,6 +57,16 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
     FAILED,
   };
 
+  // The SiteInstance currently associated with the navigation. Note that the
+  // final value will only be known when the response is received, or the
+  // navigation fails, as server redirects can modify the SiteInstance to use
+  // for the navigation.
+  enum class AssociatedSiteInstanceType {
+    NONE = 0,
+    CURRENT,
+    SPECULATIVE,
+  };
+
   // Creates a request for a browser-intiated navigation.
   static scoped_ptr<NavigationRequest> CreateBrowserInitiated(
       FrameTreeNode* frame_tree_node,
@@ -100,6 +110,8 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
 
   NavigationState state() const { return state_; }
 
+  FrameTreeNode* frame_tree_node() const { return frame_tree_node_; }
+
   SiteInstanceImpl* source_site_instance() const {
     return source_site_instance_.get();
   }
@@ -123,13 +135,20 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
     state_ = WAITING_FOR_RENDERER_RESPONSE;
   }
 
+  AssociatedSiteInstanceType associated_site_instance_type() const {
+    return associated_site_instance_type_;
+  }
+  void set_associated_site_instance_type(AssociatedSiteInstanceType type) {
+    associated_site_instance_type_ = type;
+  }
+
   NavigationHandleImpl* navigation_handle() const {
     return navigation_handle_.get();
   }
 
   // Creates a NavigationHandle. This should be called after any previous
   // NavigationRequest for the FrameTreeNode has been destroyed.
-  void CreateNavigationHandle();
+  void CreateNavigationHandle(int pending_nav_entry_id);
 
   // Transfers the ownership of the NavigationHandle to |render_frame_host|.
   // This should be called when the navigation is ready to commit, because the
@@ -162,6 +181,12 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // NavigationHandle.
   void OnStartChecksComplete(NavigationThrottle::ThrottleCheckResult result);
   void OnRedirectChecksComplete(NavigationThrottle::ThrottleCheckResult result);
+  void OnWillProcessResponseChecksComplete(
+      NavigationThrottle::ThrottleCheckResult result);
+
+  // Have a RenderFrameHost commit the navigation. The NavigationRequest will
+  // be destroyed after this call.
+  void CommitNavigation();
 
   // Called when the navigation is about to be sent to the IO thread.
   void InitializeServiceWorkerHandleIfNeeded();
@@ -200,7 +225,15 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   bool is_view_source_;
   int bindings_;
 
+  // The type of SiteInstance associated with this navigation.
+  AssociatedSiteInstanceType associated_site_instance_type_;
+
   scoped_ptr<NavigationHandleImpl> navigation_handle_;
+
+  // Holds the ResourceResponse and the StreamHandle for the navigation while
+  // the WillProcessResponse checks are performed by the NavigationHandle.
+  scoped_refptr<ResourceResponse> response_;
+  scoped_ptr<StreamHandle> body_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationRequest);
 };

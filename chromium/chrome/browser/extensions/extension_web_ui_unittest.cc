@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/extensions/extension_web_ui.h"
+
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/extension_web_ui.h"
 #include "chrome/browser/extensions/extension_web_ui_override_registrar.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/test/base/testing_profile.h"
@@ -27,9 +29,9 @@ namespace extensions {
 
 namespace {
 
-scoped_ptr<KeyedService> BuildOverrideRegistrar(
+std::unique_ptr<KeyedService> BuildOverrideRegistrar(
     content::BrowserContext* context) {
-  return make_scoped_ptr(new ExtensionWebUIOverrideRegistrar(context));
+  return base::WrapUnique(new ExtensionWebUIOverrideRegistrar(context));
 }
 
 }  // namespace
@@ -56,7 +58,7 @@ class ExtensionWebUITest : public testing::Test {
     message_loop_.RunUntilIdle();
   }
 
-  scoped_ptr<TestingProfile> profile_;
+  std::unique_ptr<TestingProfile> profile_;
   ExtensionService* extension_service_;
   base::MessageLoop message_loop_;
   content::TestBrowserThread ui_thread_;
@@ -77,10 +79,10 @@ TEST_F(ExtensionWebUITest, ExtensionURLOverride) {
   manifest.Set(manifest_keys::kName, "ext1")
       .Set(manifest_keys::kVersion, "0.1")
       .Set(std::string(manifest_keys::kChromeURLOverrides),
-           std::move(DictionaryBuilder().Set("bookmarks", kOverrideResource)));
+           DictionaryBuilder().Set("bookmarks", kOverrideResource).Build());
   scoped_refptr<Extension> ext_unpacked(
       ExtensionBuilder()
-          .SetManifest(std::move(manifest))
+          .SetManifest(manifest.Build())
           .SetLocation(Manifest::UNPACKED)
           .SetID("abcdefghijabcdefghijabcdefghijaa")
           .Build());
@@ -112,10 +114,10 @@ TEST_F(ExtensionWebUITest, ExtensionURLOverride) {
   manifest2.Set(manifest_keys::kName, "ext2")
       .Set(manifest_keys::kVersion, "0.1")
       .Set(std::string(manifest_keys::kChromeURLOverrides),
-           std::move(DictionaryBuilder().Set("bookmarks", kOverrideResource2)));
+           DictionaryBuilder().Set("bookmarks", kOverrideResource2).Build());
   scoped_refptr<Extension> ext_component(
       ExtensionBuilder()
-          .SetManifest(std::move(manifest2))
+          .SetManifest(manifest2.Build())
           .SetLocation(Manifest::COMPONENT)
           .SetID("bbabcdefghijabcdefghijabcdefghij")
           .Build());

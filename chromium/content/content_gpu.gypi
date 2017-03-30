@@ -5,6 +5,9 @@
 {
   'dependencies': [
     '../base/base.gyp:base',
+    '../gpu/gpu.gyp:command_buffer_traits',
+    '../gpu/gpu.gyp:gpu',
+    '../gpu/gpu.gyp:gpu_ipc_service',
     '../skia/skia.gyp:skia',
     '../ui/gl/gl.gyp:gl',
     '../mojo/mojo_base.gyp:mojo_application_base',
@@ -23,6 +26,8 @@
     'gpu/in_process_gpu_thread.cc',
     'gpu/in_process_gpu_thread.h',
     'public/gpu/content_gpu_client.h',
+    'public/gpu/gpu_video_decode_accelerator_factory.cc',
+    'public/gpu/gpu_video_decode_accelerator_factory.h',
   ],
   'include_dirs': [
     '..',
@@ -78,6 +83,10 @@
         'common/gpu/media/platform_media_pipeline.h',
         'common/gpu/media/platform_media_pipeline_mac.cc',
         'common/gpu/media/platform_media_pipeline_win.cc',
+        'common/gpu/media/propmedia_gpu_channel.cc',
+        'common/gpu/media/propmedia_gpu_channel.h',
+        'common/gpu/media/propmedia_gpu_channel_manager.cc',
+        'common/gpu/media/propmedia_gpu_channel_manager.h',
       ],
       'dependencies': [
         '../media/media.gyp:media',

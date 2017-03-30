@@ -42,18 +42,10 @@
 
 namespace blink {
 
-#if !ERROR_DISABLED
-
-#define REPORT_OVERFLOW(doesOverflow) ((void)0)
-
+#if DCHECK_IS_ON()
+#define REPORT_OVERFLOW(doesOverflow) DLOG_IF(ERROR, !(doesOverflow)) << "LayoutUnit overflow !(" << #doesOverflow << ") in " << WTF_PRETTY_FUNCTION
 #else
-
-#define REPORT_OVERFLOW(doesOverflow) do \
-    if (!(doesOverflow)) { \
-        WTFReportError(__FILE__, __LINE__, WTF_PRETTY_FUNCTION, "!(%s)", #doesOverflow); \
-    } \
-while (0)
-
+#define REPORT_OVERFLOW(doesOverflow) ((void)0)
 #endif
 
 static const int kLayoutUnitFractionalBits = 6;
@@ -70,7 +62,6 @@ class LayoutUnit {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 public:
     LayoutUnit() : m_value(0) { }
-    // TODO(leviw): All of the below constructors should be explicit. crbug.com/581254
     explicit LayoutUnit(int value) { setValue(value); }
     explicit LayoutUnit(unsigned short value) { setValue(value); }
     explicit LayoutUnit(unsigned value) { setValue(value); }
@@ -813,6 +804,11 @@ inline LayoutUnit clampToLayoutUnit(LayoutUnit value, LayoutUnit min, LayoutUnit
     if (value <= min)
         return min;
     return value;
+}
+
+inline std::ostream& operator<<(std::ostream& stream, const LayoutUnit& value)
+{
+    return stream << value.toDouble();
 }
 
 } // namespace blink

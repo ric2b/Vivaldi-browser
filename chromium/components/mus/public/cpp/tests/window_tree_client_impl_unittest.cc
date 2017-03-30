@@ -27,11 +27,17 @@
 #include "ui/events/event_utils.h"
 #include "ui/gfx/geometry/rect.h"
 
+namespace {
+
+void DoNothingBool(bool result) {}
+
+}  // namespace
+
 namespace mus {
 
 mojo::Array<uint8_t> Int32ToPropertyTransportValue(int32_t value) {
   const std::vector<uint8_t> bytes =
-      mojo::TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(value);
+      mojo::ConvertTo<std::vector<uint8_t>>(value);
   mojo::Array<uint8_t> transport_value;
   transport_value.resize(bytes.size());
   memcpy(&transport_value.front(), &(bytes.front()), bytes.size());
@@ -57,20 +63,19 @@ class WindowTreeClientImplPrivate {
       : tree_client_impl_(tree_client_impl) {}
   ~WindowTreeClientImplPrivate() {}
 
-  void Init(mojom::WindowTree* window_tree, uint32_t access_policy) {
+  void Init(mojom::WindowTree* window_tree) {
     mojom::WindowDataPtr root_data(mojom::WindowData::New());
     root_data->parent_id = 0;
     root_data->window_id = 1;
     root_data->bounds = mojo::Rect::From(gfx::Rect());
     root_data->properties.SetToEmpty();
     root_data->visible = true;
-    root_data->drawn = true;
     root_data->viewport_metrics = mojom::ViewportMetrics::New();
     root_data->viewport_metrics->size_in_pixels =
         mojo::Size::From(gfx::Size(1000, 1000));
     root_data->viewport_metrics->device_pixel_ratio = 1;
     tree_client_impl_->OnEmbedImpl(window_tree, 1, std::move(root_data), 0,
-                                   access_policy);
+                                   true);
   }
 
  private:
@@ -82,8 +87,7 @@ class WindowTreeClientImplPrivate {
 class WindowTreeSetup {
  public:
   WindowTreeSetup() : tree_client_(&window_tree_delegate_, nullptr, nullptr) {
-    WindowTreeClientImplPrivate(&tree_client_)
-        .Init(&window_tree_, mojom::WindowTree::kAccessPolicyDefault);
+    WindowTreeClientImplPrivate(&tree_client_).Init(&window_tree_);
     window_tree_.GetAndClearChangeId(nullptr);
   }
 
@@ -122,21 +126,22 @@ class TestInputEventHandler : public InputEventHandler {
   void AckEvent() {
     DCHECK(should_manually_ack_);
     DCHECK(!ack_callback_.is_null());
-    ack_callback_.Run();
-    ack_callback_ = base::Closure();
+    ack_callback_.Run(true);
+    ack_callback_ = base::Bind(&::DoNothingBool);
   }
 
   void Reset() {
     received_event_ = false;
-    ack_callback_ = base::Closure();
+    ack_callback_ = base::Bind(&::DoNothingBool);
   }
   bool received_event() const { return received_event_; }
 
  private:
   // InputEventHandler:
-  void OnWindowInputEvent(Window* target,
-                          mojom::EventPtr event,
-                          scoped_ptr<base::Closure>* ack_callback) override {
+  void OnWindowInputEvent(
+      Window* target,
+      const ui::Event& event,
+      scoped_ptr<base::Callback<void(bool)>>* ack_callback) override {
     EXPECT_FALSE(received_event_)
         << "Observer was not reset after receiving event.";
     received_event_ = true;
@@ -148,7 +153,7 @@ class TestInputEventHandler : public InputEventHandler {
 
   bool received_event_;
   bool should_manually_ack_;
-  base::Closure ack_callback_;
+  base::Callback<void(bool)> ack_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(TestInputEventHandler);
 };
@@ -333,6 +338,116 @@ TEST_F(WindowTreeClientImplTest, SetVisibleFailedWithPendingChange) {
   EXPECT_EQ(original_visible, root->visible());
 }
 
+// Verifies that local opacity is not changed if the server replied that the
+// change succeeded.
+TEST_F(WindowTreeClientImplTest, SetOpacitySucceeds) {
+  WindowTreeSetup setup;
+  Window* root = setup.GetFirstRoot();
+  ASSERT_TRUE(root);
+  const float original_opacity = root->opacity();
+  const float new_opacity = 0.5f;
+  ASSERT_NE(new_opacity, original_opacity);
+  ASSERT_NE(new_opacity, root->opacity());
+  root->SetOpacity(new_opacity);
+  uint32_t change_id;
+  ASSERT_TRUE(setup.window_tree()->GetAndClearChangeId(&change_id));
+  setup.window_tree_client()->OnChangeCompleted(change_id, true);
+  EXPECT_EQ(new_opacity, root->opacity());
+}
+
+// Verifies that opacity is reverted if the server replied that the change
+// failed.
+TEST_F(WindowTreeClientImplTest, SetOpacityFailed) {
+  WindowTreeSetup setup;
+  Window* root = setup.GetFirstRoot();
+  ASSERT_TRUE(root);
+  const float original_opacity = root->opacity();
+  const float new_opacity = 0.5f;
+  ASSERT_NE(new_opacity, root->opacity());
+  root->SetOpacity(new_opacity);
+  uint32_t change_id;
+  ASSERT_TRUE(setup.window_tree()->GetAndClearChangeId(&change_id));
+  setup.window_tree_client()->OnChangeCompleted(change_id, false);
+  EXPECT_EQ(original_opacity, root->opacity());
+}
+
+// Simulates the server changing the opacitry while there is an opacity change
+// in flight, causing the requested change to fail.
+TEST_F(WindowTreeClientImplTest, SetOpacityFailedWithPendingChange) {
+  WindowTreeSetup setup;
+  Window* root = setup.GetFirstRoot();
+  ASSERT_TRUE(root);
+  const float original_opacity = root->opacity();
+  const float new_opacity = 0.5f;
+  ASSERT_NE(new_opacity, root->opacity());
+  root->SetOpacity(new_opacity);
+  EXPECT_EQ(new_opacity, root->opacity());
+  uint32_t change_id;
+  ASSERT_TRUE(setup.window_tree()->GetAndClearChangeId(&change_id));
+
+  // Simulate the server responding with an opacity change.
+  const float server_changed_opacity = 0.75f;
+  setup.window_tree_client()->OnWindowOpacityChanged(
+      root->id(), original_opacity, server_changed_opacity);
+
+  // This shouldn't trigger opacity changing yet.
+  EXPECT_EQ(new_opacity, root->opacity());
+
+  // Tell the client the change failed, which should trigger failing to the
+  // most recent opacity from server.
+  setup.window_tree_client()->OnChangeCompleted(change_id, false);
+  EXPECT_EQ(server_changed_opacity, root->opacity());
+
+  // Simulate server changing back to original opacity. Should take immediately.
+  setup.window_tree_client()->OnWindowOpacityChanged(
+      root->id(), server_changed_opacity, original_opacity);
+  EXPECT_EQ(original_opacity, root->opacity());
+}
+
+// Tests that when there are multiple changes in flight, that failing changes
+// update the revert state of subsequent changes.
+TEST_F(WindowTreeClientImplTest, SetOpacityFailedWithMultiplePendingChange) {
+  WindowTreeSetup setup;
+  Window* root = setup.GetFirstRoot();
+  ASSERT_TRUE(root);
+  const float original_opacity = root->opacity();
+  const float new_opacity = 0.5f;
+  ASSERT_NE(new_opacity, root->opacity());
+  root->SetOpacity(new_opacity);
+  uint32_t change_id1;
+  ASSERT_TRUE(setup.window_tree()->GetAndClearChangeId(&change_id1));
+
+  const float second_new_opacity = 0.75f;
+  ASSERT_NE(second_new_opacity, root->opacity());
+  root->SetOpacity(second_new_opacity);
+  uint32_t change_id2;
+  ASSERT_TRUE(setup.window_tree()->GetAndClearChangeId(&change_id2));
+
+  // Canceling the first one, while there is another in flight, should not
+  // change the local opacity.
+  setup.window_tree_client()->OnChangeCompleted(change_id1, false);
+  EXPECT_EQ(second_new_opacity, root->opacity());
+
+  // The previous cancelation should have updated the revert value of the in
+  // flight change.
+  setup.window_tree_client()->OnChangeCompleted(change_id2, false);
+  EXPECT_EQ(original_opacity, root->opacity());
+}
+
+// Verifies |is_modal| is reverted if the server replied that the change failed.
+TEST_F(WindowTreeClientImplTest, SetModalFailed) {
+  WindowTreeSetup setup;
+  Window* root = setup.GetFirstRoot();
+  ASSERT_TRUE(root);
+  EXPECT_FALSE(root->is_modal());
+  root->SetModal();
+  uint32_t change_id;
+  ASSERT_TRUE(setup.window_tree()->GetAndClearChangeId(&change_id));
+  EXPECT_TRUE(root->is_modal());
+  setup.window_tree_client()->OnChangeCompleted(change_id, false);
+  EXPECT_FALSE(root->is_modal());
+}
+
 TEST_F(WindowTreeClientImplTest, InputEventBasic) {
   WindowTreeSetup setup;
   Window* root = setup.GetFirstRoot();
@@ -344,17 +459,15 @@ TEST_F(WindowTreeClientImplTest, InputEventBasic) {
   scoped_ptr<ui::Event> ui_event(
       new ui::MouseEvent(ui::ET_MOUSE_MOVED, gfx::Point(), gfx::Point(),
                          ui::EventTimeForNow(), ui::EF_NONE, 0));
-  mojom::EventPtr mus_event = mojom::Event::From(*ui_event);
-  setup.window_tree_client()->OnWindowInputEvent(1, root->id(),
-                                                 std::move(mus_event));
+  setup.window_tree_client()->OnWindowInputEvent(
+      1, root->id(), mojom::Event::From(*ui_event.get()));
   EXPECT_TRUE(event_handler.received_event());
   EXPECT_TRUE(setup.window_tree()->WasEventAcked(1));
   event_handler.Reset();
 
   event_handler.set_should_manually_ack();
-  mus_event = mojom::Event::From(*ui_event);
-  setup.window_tree_client()->OnWindowInputEvent(33, root->id(),
-                                                 std::move(mus_event));
+  setup.window_tree_client()->OnWindowInputEvent(
+      33, root->id(), mojom::Event::From(*ui_event.get()));
   EXPECT_TRUE(event_handler.received_event());
   EXPECT_FALSE(setup.window_tree()->WasEventAcked(33));
 
@@ -500,6 +613,7 @@ TEST_F(WindowTreeClientImplTest, NewTopLevelWindow) {
   ASSERT_TRUE(root1);
   Window* root2 = setup.window_tree_connection()->NewTopLevelWindow(nullptr);
   ASSERT_TRUE(root2);
+  EXPECT_TRUE(WindowPrivate(root2).parent_drawn());
   ASSERT_NE(root2, root1);
   EXPECT_NE(root2->id(), root1->id());
   EXPECT_EQ(2u, setup.window_tree_connection()->GetRoots().size());
@@ -514,7 +628,10 @@ TEST_F(WindowTreeClientImplTest, NewTopLevelWindow) {
   mojom::WindowDataPtr data = mojom::WindowData::New();
   data->window_id = root2->id();
   data->viewport_metrics = mojom::ViewportMetrics::New();
-  setup.window_tree_client()->OnTopLevelCreated(change_id, std::move(data));
+  setup.window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
+                                                false);
+
+  EXPECT_FALSE(WindowPrivate(root2).parent_drawn());
 
   // Should not be able to add a top level as a child of another window.
   root1->AddChild(root2);
@@ -548,8 +665,8 @@ TEST_F(WindowTreeClientImplTest, NewTopLevelWindowGetsPropertiesFromData) {
   data->viewport_metrics->size_in_pixels = mojo::Size::From(gfx::Size(1, 2));
   data->bounds = mojo::Rect::From(gfx::Rect(1, 2, 3, 4));
   data->visible = true;
-  data->drawn = true;
-  setup.window_tree_client()->OnTopLevelCreated(change_id, std::move(data));
+  setup.window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
+                                                true);
 
   // Make sure all the properties took.
   EXPECT_TRUE(root2->IsDrawn());
@@ -607,15 +724,14 @@ TEST_F(WindowTreeClientImplTest, NewTopLevelWindowGetsAllChangesInFlight) {
   data->viewport_metrics->size_in_pixels = mojo::Size::From(gfx::Size(1, 2));
   data->bounds = mojo::Rect::From(gfx::Rect(1, 2, 3, 4));
   data->visible = true;
-  data->drawn = true;
   data->properties["xx"] = mojo::Array<uint8_t>::From(std::string("server_xx"));
   data->properties["yy"] = mojo::Array<uint8_t>::From(std::string("server_yy"));
   setup.window_tree_client()->OnTopLevelCreated(new_window_in_flight_change_id,
-                                                std::move(data));
+                                                std::move(data), true);
 
   // The only value that should take effect is the property for 'yy' as it was
   // not in flight.
-  EXPECT_TRUE(WindowPrivate(root2).drawn());
+  EXPECT_TRUE(WindowPrivate(root2).parent_drawn());
   EXPECT_FALSE(root2->visible());
   EXPECT_EQ(gfx::Size(1, 2),
             root2->viewport_metrics().size_in_pixels.To<gfx::Size>());
@@ -685,7 +801,8 @@ TEST_F(WindowTreeClientImplTest, TopLevelWindowDestroyedBeforeCreateComplete) {
   root2->Destroy();
   EXPECT_EQ(1u, setup.window_tree_connection()->GetRoots().size());
 
-  setup.window_tree_client()->OnTopLevelCreated(change_id, std::move(data));
+  setup.window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
+                                                true);
   EXPECT_EQ(1u, setup.window_tree_connection()->GetRoots().size());
 }
 

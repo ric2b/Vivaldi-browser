@@ -4,6 +4,7 @@
 
 #include "content/test/test_blink_web_unit_test_support.h"
 
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -15,32 +16,23 @@
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
 #include "cc/blink/web_layer_impl.h"
-#include "cc/layers/layer_settings.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "components/scheduler/renderer/renderer_scheduler_impl.h"
 #include "components/scheduler/renderer/webthread_impl_for_renderer_scheduler.h"
 #include "components/scheduler/test/lazy_scheduler_message_loop_delegate_for_tests.h"
 #include "content/test/mock_webclipboard_impl.h"
 #include "content/test/web_gesture_curve_mock.h"
-#include "content/test/web_layer_tree_view_impl_for_testing.h"
-#include "content/test/weburl_loader_mock_factory.h"
 #include "media/base/media.h"
 #include "net/cookies/cookie_monster.h"
 #include "storage/browser/database/vfs_backend.h"
 #include "third_party/WebKit/public/platform/WebConnectionType.h"
 #include "third_party/WebKit/public/platform/WebData.h"
-#include "third_party/WebKit/public/platform/WebFileSystem.h"
 #include "third_party/WebKit/public/platform/WebPluginListBuilder.h"
-#include "third_party/WebKit/public/platform/WebStorageArea.h"
-#include "third_party/WebKit/public/platform/WebStorageNamespace.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/web/WebDatabase.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebNetworkStateNotifier.h"
 #include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
-#include "third_party/WebKit/public/web/WebSecurityPolicy.h"
-#include "third_party/WebKit/public/web/WebStorageEventDispatcher.h"
 #include "v8/include/v8.h"
 
 #if defined(OS_MACOSX)
@@ -93,7 +85,7 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport() {
   base::mac::ScopedNSAutoreleasePool autorelease_pool;
 #endif
 
-  url_loader_factory_.reset(new WebURLLoaderMockFactory());
+  url_loader_factory_ = blink::WebURLLoaderMockFactory::create();
   mock_clipboard_.reset(new MockWebClipboardImpl());
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
@@ -119,6 +111,10 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport() {
       scheduler::LazySchedulerMessageLoopDelegateForTests::Create()));
   web_thread_ = renderer_scheduler_->CreateMainThread();
 
+  // Set up a FeatureList instance, so that code using that API will not hit a
+  // an error that it's not set. Cleared by ClearInstanceForTesting() below.
+  base::FeatureList::SetInstance(make_scoped_ptr(new base::FeatureList));
+
   blink::initialize(this);
   blink::setLayoutTestMode(true);
   blink::WebRuntimeFeatures::enableApplicationCache(true);
@@ -131,15 +127,8 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport() {
       blink::WebConnectionType::WebConnectionTypeUnknown,
       std::numeric_limits<double>::infinity());
 
-  // External cc::AnimationHost is enabled for unit tests.
-  cc::LayerSettings layer_settings;
-  layer_settings.use_compositor_animation_timelines = true;
-  cc_blink::WebLayerImpl::SetLayerSettings(layer_settings);
-  blink::WebRuntimeFeatures::enableCompositorAnimationTimelines(true);
-
-  // Initialize libraries for media and enable the media player.
+  // Initialize libraries for media.
   media::InitializeMediaLibrary();
-  blink::WebRuntimeFeatures::enableMediaPlayer(true);
 
   file_utilities_.set_sandbox_enabled(false);
 
@@ -165,6 +154,9 @@ TestBlinkWebUnitTestSupport::~TestBlinkWebUnitTestSupport() {
   if (renderer_scheduler_)
     renderer_scheduler_->Shutdown();
   blink::shutdown();
+
+  // Clear the FeatureList that was registered in the constructor.
+  base::FeatureList::ClearInstanceForTesting();
 }
 
 blink::WebBlobRegistry* TestBlinkWebUnitTestSupport::blobRegistry() {
@@ -192,7 +184,7 @@ blink::WebMimeRegistry* TestBlinkWebUnitTestSupport::mimeRegistry() {
 }
 
 blink::WebURLLoader* TestBlinkWebUnitTestSupport::createURLLoader() {
-  return url_loader_factory_->CreateURLLoader(
+  return url_loader_factory_->createURLLoader(
       BlinkPlatformImpl::createURLLoader());
 }
 
@@ -301,49 +293,9 @@ blink::WebGestureCurve* TestBlinkWebUnitTestSupport::createFlingAnimationCurve(
   return new WebGestureCurveMock(velocity, cumulative_scroll);
 }
 
-blink::WebUnitTestSupport* TestBlinkWebUnitTestSupport::unitTestSupport() {
-  return this;
-}
-
-void TestBlinkWebUnitTestSupport::registerMockedURL(
-    const blink::WebURL& url,
-    const blink::WebURLResponse& response,
-    const blink::WebString& file_path) {
-  url_loader_factory_->RegisterURL(url, response, file_path);
-}
-
-void TestBlinkWebUnitTestSupport::registerMockedErrorURL(
-    const blink::WebURL& url,
-    const blink::WebURLResponse& response,
-    const blink::WebURLError& error) {
-  url_loader_factory_->RegisterErrorURL(url, response, error);
-}
-
-void TestBlinkWebUnitTestSupport::unregisterMockedURL(
-    const blink::WebURL& url) {
-  url_loader_factory_->UnregisterURL(url);
-}
-
-void TestBlinkWebUnitTestSupport::unregisterAllMockedURLs() {
-  url_loader_factory_->UnregisterAllURLs();
-}
-
-void TestBlinkWebUnitTestSupport::serveAsynchronousMockedRequests() {
-  url_loader_factory_->ServeAsynchronousRequests();
-}
-
-void TestBlinkWebUnitTestSupport::setLoaderDelegate(
-    blink::WebURLLoaderTestDelegate* delegate) {
-  url_loader_factory_->set_delegate(delegate);
-}
-
-blink::WebLayerTreeView*
-TestBlinkWebUnitTestSupport::createLayerTreeViewForTesting() {
-  scoped_ptr<WebLayerTreeViewImplForTesting> view(
-      new WebLayerTreeViewImplForTesting());
-
-  view->Initialize();
-  return view.release();
+blink::WebURLLoaderMockFactory*
+TestBlinkWebUnitTestSupport::getURLLoaderMockFactory() {
+  return url_loader_factory_.get();
 }
 
 blink::WebThread* TestBlinkWebUnitTestSupport::currentThread() {

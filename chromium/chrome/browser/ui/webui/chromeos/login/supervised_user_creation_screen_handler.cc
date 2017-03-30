@@ -13,7 +13,7 @@
 #include "chrome/browser/chromeos/login/users/supervised_user_manager.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
+#include "chrome/browser/ui/webui/chromeos/login/oobe_screen.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/audio/chromeos_sounds.h"
@@ -218,8 +218,8 @@ void SupervisedUserCreationScreenHandler::RegisterMessages() {
 void SupervisedUserCreationScreenHandler::PrepareToShow() {}
 
 void SupervisedUserCreationScreenHandler::Show() {
-  scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
-  scoped_ptr<base::ListValue> users_list(new base::ListValue());
+  std::unique_ptr<base::DictionaryValue> data(new base::DictionaryValue());
+  std::unique_ptr<base::ListValue> users_list(new base::ListValue());
   const user_manager::UserList& users =
       ChromeUserManager::Get()->GetUsersAllowedForSupervisedUsersCreation();
   std::string owner;
@@ -238,7 +238,8 @@ void SupervisedUserCreationScreenHandler::Show() {
     users_list->Append(user_dict);
   }
   data->Set("managers", users_list.release());
-  ShowScreen(OobeUI::kScreenSupervisedUserCreationFlow, data.get());
+  ShowScreenWithData(OobeScreen::SCREEN_CREATE_SUPERVISED_USER_FLOW,
+                     data.get());
 
   if (!delegate_)
     return;
@@ -407,7 +408,8 @@ void SupervisedUserCreationScreenHandler::HandleGetImages() {
   base::ListValue image_urls;
   for (int i = default_user_image::kFirstDefaultImageIndex;
        i < default_user_image::kDefaultImagesCount; ++i) {
-    scoped_ptr<base::DictionaryValue> image_data(new base::DictionaryValue);
+    std::unique_ptr<base::DictionaryValue> image_data(
+        new base::DictionaryValue);
     image_data->SetString("url", default_user_image::GetDefaultImageUrl(i));
     image_data->SetString("author",
                           l10n_util::GetStringUTF16(

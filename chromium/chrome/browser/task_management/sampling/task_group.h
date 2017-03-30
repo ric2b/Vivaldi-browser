@@ -18,7 +18,10 @@
 #include "chrome/browser/task_management/providers/task.h"
 #include "chrome/browser/task_management/sampling/task_group_sampler.h"
 #include "chrome/browser/task_management/task_manager_observer.h"
-#include "content/public/common/gpu_memory_stats.h"
+
+namespace gpu {
+struct VideoMemoryUsageStats;
+}
 
 namespace task_management {
 
@@ -29,6 +32,7 @@ class TaskGroup {
   TaskGroup(
       base::ProcessHandle proc_handle,
       base::ProcessId proc_id,
+      const base::Closure& on_background_calculations_done,
       const scoped_refptr<base::SequencedTaskRunner>& blocking_pool_runner);
   ~TaskGroup();
 
@@ -37,7 +41,7 @@ class TaskGroup {
   void AddTask(Task* task);
   void RemoveTask(Task* task);
 
-  void Refresh(const content::GPUVideoMemoryUsageStats& gpu_memory_stats,
+  void Refresh(const gpu::VideoMemoryUsageStats& gpu_memory_stats,
                base::TimeDelta update_interval,
                int64_t refresh_flags);
 
@@ -46,6 +50,15 @@ class TaskGroup {
   void AppendSortedTaskIds(TaskIdList* out_list) const;
 
   Task* GetTaskById(TaskId task_id) const;
+
+  // This is to be called after the task manager had informed its observers with
+  // OnTasksRefreshedWithBackgroundCalculations() to begin another cycle for
+  // this notification type.
+  void ClearCurrentBackgroundCalculationsFlags();
+
+  // True if all enabled background operations calculating resource usage of the
+  // process represented by this TaskGroup have completed.
+  bool AreBackgroundCalculationsDone() const;
 
   const base::ProcessHandle& process_handle() const { return process_handle_; }
   const base::ProcessId& process_id() const { return process_id_; }
@@ -57,6 +70,9 @@ class TaskGroup {
   int64_t private_bytes() const { return memory_usage_.private_bytes; }
   int64_t shared_bytes() const { return memory_usage_.shared_bytes; }
   int64_t physical_bytes() const { return memory_usage_.physical_bytes; }
+#if defined(OS_CHROMEOS)
+  int64_t swapped_bytes() const { return memory_usage_.swapped_bytes; }
+#endif
   int64_t gpu_memory() const { return gpu_memory_; }
   bool gpu_memory_has_duplicates() const { return gpu_memory_has_duplicates_; }
   int64_t per_process_network_usage() const {
@@ -82,8 +98,7 @@ class TaskGroup {
   int idle_wakeups_per_second() const { return idle_wakeups_per_second_; }
 
  private:
-  void RefreshGpuMemory(
-      const content::GPUVideoMemoryUsageStats& gpu_memory_stats);
+  void RefreshGpuMemory(const gpu::VideoMemoryUsageStats& gpu_memory_stats);
 
   void RefreshWindowsHandles();
 
@@ -102,15 +117,26 @@ class TaskGroup {
 
   void OnProcessPriorityDone(bool is_backgrounded);
 
+  void OnBackgroundRefreshTypeFinished(int64_t finished_refresh_type);
+
   // The process' handle and ID.
   base::ProcessHandle process_handle_;
   base::ProcessId process_id_;
+
+  // This is a callback into the TaskManagerImpl to inform it that the
+  // background calculations for this TaskGroup has finished.
+  const base::Closure on_background_calculations_done_;
 
   scoped_refptr<TaskGroupSampler> worker_thread_sampler_;
 
   // Maps the Tasks by their IDs.
   // Tasks are not owned by the TaskGroup. They're owned by the TaskProviders.
   std::map<TaskId, Task*> tasks_;
+
+  // Flags will be used to determine when the background calculations has
+  // completed for the enabled refresh types for this TaskGroup.
+  int64_t expected_on_bg_done_flags_;
+  int64_t current_on_bg_done_flags_;
 
   // The per process resources usages.
   double cpu_usage_;

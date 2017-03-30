@@ -139,11 +139,15 @@ void AddFadeEffect(const Rect& text_rect,
 
 // Creates a SkShader to fade the text, with |left_part| specifying the left
 // fade effect, if any, and |right_part| specifying the right fade effect.
-skia::RefPtr<SkShader> CreateFadeShader(const FontList& font_list,
-                                        const Rect& text_rect,
-                                        const Rect& left_part,
-                                        const Rect& right_part,
-                                        SkColor color) {
+sk_sp<SkShader> CreateFadeShader(const FontList& font_list,
+                                 const Rect& text_rect,
+                                 const Rect& left_part,
+                                 const Rect& right_part,
+                                 SkColor color) {
+  // The shader should only specify transparency of the fade itself, not the
+  // original transparency, which will be applied by the actual renderer.
+  DCHECK_EQ(SkColorGetA(color), static_cast<uint8_t>(0xff));
+
   // In general, fade down to 0 alpha.  But when the available width is less
   // than four characters, linearly ramp up the fade target alpha to as high as
   // 20% at zero width.  This allows the user to see the last faded characters a
@@ -174,9 +178,9 @@ skia::RefPtr<SkShader> CreateFadeShader(const FontList& font_list,
 
   const SkPoint points[2] = { PointToSkPoint(text_rect.origin()),
                               PointToSkPoint(text_rect.top_right()) };
-  return skia::AdoptRef(
-      SkGradientShader::CreateLinear(&points[0], &colors[0], &positions[0],
-                                     colors.size(), SkShader::kClamp_TileMode));
+  return
+      SkGradientShader::MakeLinear(&points[0], &colors[0], &positions[0],
+                                   colors.size(), SkShader::kClamp_TileMode);
 }
 
 // Converts a FontRenderParams::Hinting value to the corresponding
@@ -236,8 +240,8 @@ SkiaTextRenderer::SkiaTextRenderer(Canvas* canvas)
 SkiaTextRenderer::~SkiaTextRenderer() {
 }
 
-void SkiaTextRenderer::SetDrawLooper(SkDrawLooper* draw_looper) {
-  paint_.setLooper(draw_looper);
+void SkiaTextRenderer::SetDrawLooper(sk_sp<SkDrawLooper> draw_looper) {
+  paint_.setLooper(std::move(draw_looper));
 }
 
 void SkiaTextRenderer::SetFontRenderParams(const FontRenderParams& params,
@@ -269,8 +273,8 @@ void SkiaTextRenderer::SetForegroundColor(SkColor foreground) {
   paint_.setColor(foreground);
 }
 
-void SkiaTextRenderer::SetShader(SkShader* shader) {
-  paint_.setShader(shader);
+void SkiaTextRenderer::SetShader(sk_sp<SkShader> shader) {
+  paint_.setShader(std::move(shader));
 }
 
 void SkiaTextRenderer::SetUnderlineMetrics(SkScalar thickness,
@@ -1231,16 +1235,13 @@ void RenderText::ApplyFadeEffects(internal::SkiaTextRenderer* renderer) {
   text_rect.Inset(GetAlignmentOffset(0).x(), 0, 0, 0);
 
   // TODO(msw): Use the actual text colors corresponding to each faded part.
-  skia::RefPtr<SkShader> shader =
+  renderer->SetShader(
       CreateFadeShader(font_list(), text_rect, left_part, right_part,
-                       colors_.breaks().front().second);
-  if (shader)
-    renderer->SetShader(shader.get());
+                       SkColorSetA(colors_.breaks().front().second, 0xff)));
 }
 
 void RenderText::ApplyTextShadows(internal::SkiaTextRenderer* renderer) {
-  skia::RefPtr<SkDrawLooper> looper = CreateShadowDrawLooper(shadows_);
-  renderer->SetDrawLooper(looper.get());
+  renderer->SetDrawLooper(CreateShadowDrawLooper(shadows_));
 }
 
 base::i18n::TextDirection RenderText::GetTextDirection(

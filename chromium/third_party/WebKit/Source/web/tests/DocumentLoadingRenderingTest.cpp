@@ -273,12 +273,12 @@ TEST_F(DocumentLoadingRenderingTest, ShouldNotPaintIframeContentWithPendingSheet
     EXPECT_FALSE(frame2.containsText());
 
     LayoutView* iframeLayoutView = childFrame->contentDocument()->layoutView();
-    const DisplayItemList& displayItemList = iframeLayoutView->layer()->graphicsLayerBacking()->paintController().displayItemList();
+    const DisplayItemList& displayItemList = iframeLayoutView->layer()->graphicsLayerBacking()->getPaintController().getDisplayItemList();
     // Check that the DisplayItemList has no subsequene caching markers. These are not allowed in pending-style-sheets mode
     // since otherwise caching would be incorrect.
     ASSERT_EQ(2u, displayItemList.size());
-    EXPECT_EQ(DisplayItem::DocumentBackground, displayItemList[0].type());
-    EXPECT_EQ(DisplayItem::BoxDecorationBackground, displayItemList[1].type());
+    EXPECT_EQ(DisplayItem::DocumentBackground, displayItemList[0].getType());
+    EXPECT_EQ(DisplayItem::BoxDecorationBackground, displayItemList[1].getType());
 
     // 1 for the main frame background (white),
     // 1 for the iframe background (pink)

@@ -53,7 +53,7 @@ TEST_F(DisplayTest, CreateSharedMemory) {
 }
 
 #if defined(USE_OZONE)
-TEST_F(DisplayTest, CreatePrimeBuffer) {
+TEST_F(DisplayTest, CreateLinuxDMABufBuffer) {
   const gfx::Size buffer_size(256, 256);
 
   scoped_ptr<Display> display(new Display);
@@ -66,13 +66,13 @@ TEST_F(DisplayTest, CreatePrimeBuffer) {
                                gfx::BufferFormat::RGBA_8888,
                                gfx::BufferUsage::GPU_READ);
   gfx::NativePixmapHandle native_pixmap_handle = pixmap->ExportHandle();
-  scoped_ptr<Buffer> buffer1 = display->CreatePrimeBuffer(
+  scoped_ptr<Buffer> buffer1 = display->CreateLinuxDMABufBuffer(
       base::ScopedFD(native_pixmap_handle.fd.fd), buffer_size,
       gfx::BufferFormat::RGBA_8888, native_pixmap_handle.stride);
   EXPECT_TRUE(buffer1);
 
   // Creating a prime buffer using an invalid fd should fail.
-  scoped_ptr<Buffer> buffer2 = display->CreatePrimeBuffer(
+  scoped_ptr<Buffer> buffer2 = display->CreateLinuxDMABufBuffer(
       base::ScopedFD(), buffer_size, gfx::BufferFormat::RGBA_8888,
       buffer_size.width() * 4);
   EXPECT_FALSE(buffer2);
@@ -96,6 +96,29 @@ TEST_F(DisplayTest, CreateShellSurface) {
   // Create a shell surface for surface2.
   scoped_ptr<ShellSurface> shell_surface2 =
       display->CreateShellSurface(surface2.get());
+  EXPECT_TRUE(shell_surface2);
+}
+
+TEST_F(DisplayTest, CreatePopupShellSurface) {
+  scoped_ptr<Display> display(new Display);
+
+  // Create two surfaces.
+  scoped_ptr<Surface> surface1 = display->CreateSurface();
+  ASSERT_TRUE(surface1);
+  scoped_ptr<Surface> surface2 = display->CreateSurface();
+  ASSERT_TRUE(surface2);
+
+  // Create a shell surface for surface1.
+  scoped_ptr<ShellSurface> shell_surface1 =
+      display->CreateShellSurface(surface1.get());
+  EXPECT_TRUE(shell_surface1);
+
+  // Maximize shell surface to ensure it's visible.
+  shell_surface1->Maximize();
+
+  // Create a popup shell surface for surface2 with shell_surface1 as parent.
+  scoped_ptr<ShellSurface> shell_surface2 = display->CreatePopupShellSurface(
+      surface2.get(), shell_surface1.get(), gfx::Point());
   EXPECT_TRUE(shell_surface2);
 }
 

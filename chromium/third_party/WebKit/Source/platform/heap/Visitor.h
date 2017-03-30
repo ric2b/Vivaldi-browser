@@ -33,14 +33,10 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/heap/GarbageCollected.h"
-#include "platform/heap/StackFrameDepth.h"
-#include "platform/heap/ThreadState.h"
 #include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
-#include "wtf/Atomics.h"
 #include "wtf/Deque.h"
 #include "wtf/Forward.h"
-#include "wtf/HashMap.h"
 #include "wtf/HashTraits.h"
 #include "wtf/TypeTraits.h"
 
@@ -197,64 +193,6 @@ public:
         TraceTrait<T>::trace(Derived::fromHelper(this), &const_cast<T&>(t));
     }
 
-#if !ENABLE(OILPAN)
-    // These trace methods are needed to allow compiling and calling trace on
-    // transition types. We need to support calls in the non-oilpan build
-    // because a fully transitioned type (which will have its trace method
-    // called) might trace a field that is in transition. Once transition types
-    // are removed these can be removed.
-    template<typename T> void trace(const OwnPtr<T>&) { }
-    template<typename T> void trace(const RefPtr<T>&) { }
-    template<typename T> void trace(const RawPtr<T>&) { }
-    template<typename T> void trace(const WeakPtr<T>&) { }
-
-    // On non-oilpan builds, it is convenient to allow calling trace on
-    // WillBeHeap{Vector,Deque}<FooPtrWillBeMember<T>>.
-    // Forbid tracing on-heap objects in off-heap collections.
-    // This is forbidden because convservative marking cannot identify
-    // those off-heap collection backing stores.
-    template<typename T, size_t inlineCapacity> void trace(const Vector<OwnPtr<T>, inlineCapacity>& vector)
-    {
-        static_assert(!IsGarbageCollectedType<T>::value, "cannot trace garbage collected object inside Vector");
-    }
-    template<typename T, size_t inlineCapacity> void trace(const Vector<RefPtr<T>, inlineCapacity>& vector)
-    {
-        static_assert(!IsGarbageCollectedType<T>::value, "cannot trace garbage collected object inside Vector");
-    }
-    template<typename T, size_t inlineCapacity> void trace(const Vector<RawPtr<T>, inlineCapacity>& vector)
-    {
-        static_assert(!IsGarbageCollectedType<T>::value, "cannot trace garbage collected object inside Vector");
-    }
-    template<typename T, size_t inlineCapacity> void trace(const Vector<WeakPtr<T>, inlineCapacity>& vector)
-    {
-        static_assert(!IsGarbageCollectedType<T>::value, "cannot trace garbage collected object inside Vector");
-    }
-    template<typename T, size_t inlineCapacity> void trace(const Vector<T, inlineCapacity>& vector)
-    {
-        static_assert(!IsGarbageCollectedType<T>::value, "cannot trace garbage collected object inside Vector");
-    }
-    template<typename T, size_t N> void trace(const Deque<OwnPtr<T>, N>& deque)
-    {
-        static_assert(!IsGarbageCollectedType<T>::value, "cannot trace garbage collected object inside Deque");
-    }
-    template<typename T, size_t N> void trace(const Deque<RefPtr<T>, N>& deque)
-    {
-        static_assert(!IsGarbageCollectedType<T>::value, "cannot trace garbage collected object inside Deque");
-    }
-    template<typename T, size_t N> void trace(const Deque<RawPtr<T>, N>& deque)
-    {
-        static_assert(!IsGarbageCollectedType<T>::value, "cannot trace garbage collected object inside Deque");
-    }
-    template<typename T, size_t N> void trace(const Deque<WeakPtr<T>, N>& deque)
-    {
-        static_assert(!IsGarbageCollectedType<T>::value, "cannot trace garbage collected object inside Deque");
-    }
-    template<typename T, size_t N> void trace(const Deque<T, N>& deque)
-    {
-        static_assert(!IsGarbageCollectedType<T>::value, "cannot trace garbage collected object inside Deque");
-    }
-#endif
-
     void markNoTracing(const void* pointer) { Derived::fromHelper(this)->mark(pointer, reinterpret_cast<TraceCallback>(0)); }
     void markHeaderNoTracing(HeapObjectHeader* header) { Derived::fromHelper(this)->markHeader(header, reinterpret_cast<TraceCallback>(0)); }
 
@@ -317,7 +255,9 @@ public:
         WeakProcessing,
     };
 
-    virtual ~Visitor() { }
+    static PassOwnPtr<Visitor> create(ThreadState*, BlinkGC::GCType);
+
+    virtual ~Visitor();
 
     using VisitorHelper<Visitor>::mark;
 
@@ -371,32 +311,18 @@ public:
 
     virtual bool ensureMarked(const void*) = 0;
 
-    inline MarkingMode markingMode() const { return m_markingMode; }
+    inline MarkingMode getMarkingMode() const { return m_markingMode; }
 
 protected:
-    explicit Visitor(MarkingMode markingMode)
-        : m_markingMode(markingMode)
-    { }
+    Visitor(ThreadState*, MarkingMode);
 
     virtual void registerWeakCellWithCallback(void**, WeakCallback) = 0;
 
 private:
     static Visitor* fromHelper(VisitorHelper<Visitor>* helper) { return static_cast<Visitor*>(helper); }
 
-    const MarkingMode m_markingMode;
-    bool m_isGlobalMarkingVisitor;
-};
-
-class VisitorScope final {
-    STACK_ALLOCATED();
-public:
-    VisitorScope(ThreadState*, BlinkGC::GCType);
-    ~VisitorScope();
-    Visitor* visitor() const { return m_visitor.get(); }
-
-private:
     ThreadState* m_state;
-    OwnPtr<Visitor> m_visitor;
+    const MarkingMode m_markingMode;
 };
 
 } // namespace blink

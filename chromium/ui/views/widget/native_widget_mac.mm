@@ -193,8 +193,10 @@ const ui::Layer* NativeWidgetMac::GetLayer() const {
 }
 
 void NativeWidgetMac::ReorderNativeViews() {
-  if (bridge_)
+  if (bridge_) {
     bridge_->SetRootView(GetWidget()->GetRootView());
+    bridge_->ReorderChildViews();
+  }
 }
 
 void NativeWidgetMac::ViewRemoved(View* view) {
@@ -489,10 +491,6 @@ bool NativeWidgetMac::IsFullscreen() const {
 
 void NativeWidgetMac::SetOpacity(unsigned char opacity) {
   [GetNativeWindow() setAlphaValue:opacity / 255.0];
-}
-
-void NativeWidgetMac::SetUseDragFrame(bool use_drag_frame) {
-  NOTIMPLEMENTED();
 }
 
 void NativeWidgetMac::FlashFrame(bool flash_frame) {

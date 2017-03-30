@@ -270,11 +270,6 @@ class MediaGalleriesPreferences
 
   const MediaGalleriesPrefInfoMap& known_galleries() const;
 
-  // These keep track of when we last successfully completed a media scan.
-  // This is used to provide cached results when appropriate.
-  base::Time GetLastScanCompletionTime() const;
-  void SetLastScanCompletionTime(const base::Time& time);
-
   // KeyedService implementation:
   void Shutdown() override;
 
@@ -312,7 +307,7 @@ class MediaGalleriesPreferences
 
   void OnStorageMonitorInit(bool api_has_been_used);
 
-  // Handle an iPhoto, iTunes, or Picasa finder returning a device ID to us.
+  // Handle an iTunes or Picasa finder returning a device ID to us.
   void OnFinderDeviceID(const std::string& device_id);
 
   // Builds |known_galleries_| from the persistent store.

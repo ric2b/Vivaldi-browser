@@ -32,7 +32,6 @@
         ],
         'chromium_child_dependencies': [
           'child',
-          'plugin',
           'renderer',
           'utility',
           '../content/content.gyp:content_gpu',
@@ -114,7 +113,6 @@
         'chrome_dll.gypi',
         'chrome_exe.gypi',
         'chrome_installer.gypi',
-        'chrome_plugin.gypi',
         'chrome_renderer.gypi',
         'chrome_tests.gypi',
         'chrome_tests_unit.gypi',
@@ -431,6 +429,13 @@
             'common/safe_browsing/pe_image_reader_win.h',
             'tools/safe_browsing/sb_sigutil.cc',
           ],
+          'msvs_settings': {
+            'VCLinkerTool': {
+              'AdditionalDependencies': [
+                'wintrust.lib',
+              ],
+            },
+          },
         },
       ],  # 'targets'
       'includes': [
@@ -531,6 +536,7 @@
             '../base/base.gyp:base_build_config_gen',
             '../build/android/java_google_api_keys.gyp:google_api_keys_java',
             '../chrome/android/chrome_apk.gyp:custom_tabs_service_aidl',
+            '../components/components.gyp:app_restrictions_resources',
             '../components/components.gyp:autocomplete_match_java',
             '../components/components.gyp:autocomplete_match_type_java',
             '../components/components.gyp:bookmarks_java',
@@ -542,6 +548,7 @@
             '../components/components.gyp:navigation_interception_java',
             '../components/components.gyp:offline_page_feature_enums_java',
             '../components/components.gyp:offline_page_model_enums_java',
+            '../components/components.gyp:policy_java',
             '../components/components.gyp:precache_java',
             '../components/components.gyp:safe_json_java',
             '../components/components.gyp:security_state_enums_java',
@@ -553,8 +560,11 @@
             '../components/components_strings.gyp:components_strings',
             '../content/content.gyp:content_java',
             '../media/media.gyp:media_java',
+            '../mojo/mojo_public.gyp:mojo_bindings_java',
+            '../mojo/mojo_public.gyp:mojo_public_java',
             '../printing/printing.gyp:printing_java',
             '../sync/sync.gyp:sync_java',
+            '../third_party/WebKit/public/blink.gyp:android_mojo_bindings_java',
             '../third_party/android_data_chart/android_data_chart.gyp:android_data_chart_java',
             '../third_party/android_media/android_media.gyp:android_media_java',
             '../third_party/android_protobuf/android_protobuf.gyp:protobuf_nano_javalib',
@@ -593,14 +603,6 @@
               '<!@pymod_do_main(grit_info <@(grit_defines) --outputs "<(SHARED_INTERMEDIATE_DIR)/chrome" app/generated_resources.grd)',
             ],
           },
-          'conditions': [
-            ['configuration_policy == 1', {
-              'dependencies': [
-                '../components/components.gyp:app_restrictions_resources',
-                '../components/components.gyp:policy_java',
-              ],
-            }],
-          ],
           'includes': [
             '../build/java.gypi',
           ],
@@ -688,7 +690,7 @@
         'chrome_android.gypi',
       ]}, # 'includes'
     ],  # OS=="android"
-    ['configuration_policy==1 and OS!="android" and OS!="ios"', {
+    ['OS!="android" and OS!="ios"', {
       'includes': [ 'policy.gypi', ],
     }],
     ['enable_extensions==1', {

@@ -5,13 +5,14 @@
 #ifndef REMOTING_PROTOCOL_TRANSPORT_CONTEXT_H_
 #define REMOTING_PROTOCOL_TRANSPORT_CONTEXT_H_
 
+#include <array>
 #include <list>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "remoting/protocol/ice_config.h"
 #include "remoting/protocol/network_settings.h"
 #include "remoting/protocol/transport.h"
@@ -31,21 +32,32 @@ class IceConfigRequest;
 // TURN configuration.
 class TransportContext : public base::RefCountedThreadSafe<TransportContext> {
  public:
+  enum RelayMode {
+    GTURN,
+    TURN,
+
+    LAST_RELAYMODE = TURN
+  };
+  static const int kNumRelayModes = RelayMode::LAST_RELAYMODE + 1;
+
   typedef base::Callback<void(const IceConfig& ice_config)>
       GetIceConfigCallback;
 
   static scoped_refptr<TransportContext> ForTests(TransportRole role);
 
   TransportContext(SignalStrategy* signal_strategy,
-                   scoped_ptr<PortAllocatorFactory> port_allocator_factory,
-                   scoped_ptr<UrlRequestFactory> url_request_factory,
+                   std::unique_ptr<PortAllocatorFactory> port_allocator_factory,
+                   std::unique_ptr<UrlRequestFactory> url_request_factory,
                    const NetworkSettings& network_settings,
                    TransportRole role);
 
-  // Enables standard TURN servers.
-  void UseTurn(const std::string& ice_config_url) {
+  void set_ice_config_url(const std::string& ice_config_url) {
     ice_config_url_ = ice_config_url;
   }
+
+  // Sets relay mode for all future calls of GetIceConfig(). Doesn't affect
+  // previous GetIceConfig() requests.
+  void set_relay_mode(RelayMode relay_mode) { relay_mode_ = relay_mode; }
 
   // Prepares fresh JingleInfo. It may be called while connection is being
   // negotiated to minimize the chance that the following GetIceConfig() will
@@ -69,24 +81,26 @@ class TransportContext : public base::RefCountedThreadSafe<TransportContext> {
 
   ~TransportContext();
 
-  void EnsureFreshJingleInfo();
-  void OnIceConfig(const IceConfig& ice_config);
+  void EnsureFreshIceConfig();
+  void OnIceConfig(RelayMode relay_mode, const IceConfig& ice_config);
 
   SignalStrategy* signal_strategy_;
-  scoped_ptr<PortAllocatorFactory> port_allocator_factory_;
-  scoped_ptr<UrlRequestFactory> url_request_factory_;
+  std::unique_ptr<PortAllocatorFactory> port_allocator_factory_;
+  std::unique_ptr<UrlRequestFactory> url_request_factory_;
   NetworkSettings network_settings_;
   TransportRole role_;
 
   std::string ice_config_url_;
+  RelayMode relay_mode_ = RelayMode::GTURN;
 
-  scoped_ptr<IceConfigRequest> ice_config_request_;
+  std::array<std::unique_ptr<IceConfigRequest>, kNumRelayModes>
+      ice_config_request_;
+  std::array<IceConfig, kNumRelayModes> ice_config_;
 
-  IceConfig ice_config_;
-
-  // When there is an active |jingle_info_request_| stores list of callbacks to
+  // When there is an active |ice_config_request_| stores list of callbacks to
   // be called once the request is finished.
-  std::list<GetIceConfigCallback> pending_ice_config_callbacks_;
+  std::array<std::list<GetIceConfigCallback>, kNumRelayModes>
+      pending_ice_config_callbacks_;
 
   DISALLOW_COPY_AND_ASSIGN(TransportContext);
 };

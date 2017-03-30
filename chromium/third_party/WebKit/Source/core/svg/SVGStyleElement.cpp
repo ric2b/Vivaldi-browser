@@ -31,8 +31,8 @@ namespace blink {
 
 static SVGStyleEventSender& styleErrorEventSender()
 {
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<SVGStyleEventSender>, sharedErrorEventSender, (SVGStyleEventSender::create(EventTypeNames::error)));
-    return *sharedErrorEventSender;
+    DEFINE_STATIC_LOCAL(SVGStyleEventSender, sharedErrorEventSender, (SVGStyleEventSender::create(EventTypeNames::error)));
+    return sharedErrorEventSender;
 }
 
 inline SVGStyleElement::SVGStyleElement(Document& document, bool createdByParser)
@@ -50,9 +50,9 @@ SVGStyleElement::~SVGStyleElement()
 #endif
 }
 
-PassRefPtrWillBeRawPtr<SVGStyleElement> SVGStyleElement::create(Document& document, bool createdByParser)
+SVGStyleElement* SVGStyleElement::create(Document& document, bool createdByParser)
 {
-    return adoptRefWillBeNoop(new SVGStyleElement(document, createdByParser));
+    return new SVGStyleElement(document, createdByParser);
 }
 
 bool SVGStyleElement::disabled() const
@@ -71,7 +71,7 @@ void SVGStyleElement::setDisabled(bool setDisabled)
 
 const AtomicString& SVGStyleElement::type() const
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, defaultValue, ("text/css", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, defaultValue, ("text/css"));
     const AtomicString& n = getAttribute(SVGNames::typeAttr);
     return n.isNull() ? defaultValue : n;
 }

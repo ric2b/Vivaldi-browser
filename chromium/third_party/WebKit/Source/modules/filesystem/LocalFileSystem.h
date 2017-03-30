@@ -47,12 +47,11 @@ class KURL;
 class LocalFrame;
 class WebFileSystem;
 
-class LocalFileSystem final : public NoBaseWillBeGarbageCollectedFinalized<LocalFileSystem>, public WillBeHeapSupplement<LocalFrame>, public WillBeHeapSupplement<WorkerClients> {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(LocalFileSystem);
+class LocalFileSystem final : public GarbageCollectedFinalized<LocalFileSystem>, public Supplement<LocalFrame>, public Supplement<WorkerClients> {
+    USING_GARBAGE_COLLECTED_MIXIN(LocalFileSystem);
     WTF_MAKE_NONCOPYABLE(LocalFileSystem);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(LocalFileSystem);
 public:
-    static PassOwnPtrWillBeRawPtr<LocalFileSystem> create(PassOwnPtr<FileSystemClient>);
+    static LocalFileSystem* create(PassOwnPtr<FileSystemClient>);
     virtual ~LocalFileSystem();
 
     void resolveURL(ExecutionContext*, const KURL&, PassOwnPtr<AsyncFileSystemCallbacks>);
@@ -66,8 +65,8 @@ public:
 
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
-        WillBeHeapSupplement<LocalFrame>::trace(visitor);
-        WillBeHeapSupplement<WorkerClients>::trace(visitor);
+        Supplement<LocalFrame>::trace(visitor);
+        Supplement<WorkerClients>::trace(visitor);
     }
 
 protected:
@@ -75,12 +74,12 @@ protected:
 
 private:
     WebFileSystem* fileSystem() const;
-    void requestFileSystemAccessInternal(ExecutionContext*, PassOwnPtr<Closure> allowed, PassOwnPtr<Closure> denied);
-    void fileSystemNotAvailable(PassRefPtrWillBeRawPtr<ExecutionContext>, CallbackWrapper*);
-    void fileSystemNotAllowedInternal(PassRefPtrWillBeRawPtr<ExecutionContext>, CallbackWrapper*);
-    void fileSystemAllowedInternal(PassRefPtrWillBeRawPtr<ExecutionContext>, FileSystemType, CallbackWrapper*);
-    void resolveURLInternal(PassRefPtrWillBeRawPtr<ExecutionContext>, const KURL&, CallbackWrapper*);
-    void deleteFileSystemInternal(PassRefPtrWillBeRawPtr<ExecutionContext>, FileSystemType, CallbackWrapper*);
+    void requestFileSystemAccessInternal(ExecutionContext*, PassOwnPtr<SameThreadClosure> allowed, PassOwnPtr<SameThreadClosure> denied);
+    void fileSystemNotAvailable(ExecutionContext*, CallbackWrapper*);
+    void fileSystemNotAllowedInternal(ExecutionContext*, CallbackWrapper*);
+    void fileSystemAllowedInternal(ExecutionContext*, FileSystemType, CallbackWrapper*);
+    void resolveURLInternal(ExecutionContext*, const KURL&, CallbackWrapper*);
+    void deleteFileSystemInternal(ExecutionContext*, FileSystemType, CallbackWrapper*);
     OwnPtr<FileSystemClient> m_client;
 };
 

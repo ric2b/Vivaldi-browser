@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chromeos/process_proxy/process_output_watcher.h"
+
 #include <gtest/gtest.h>
 #include <stddef.h>
 
+#include <memory>
 #include <queue>
 #include <string>
 #include <vector>
@@ -18,7 +21,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread.h"
-#include "chromeos/process_proxy/process_output_watcher.h"
 
 namespace chromeos {
 
@@ -86,7 +88,7 @@ class ProcessWatcherExpectations {
   size_t received_from_out_;
 };
 
-void StopProcessOutputWatcher(scoped_ptr<ProcessOutputWatcher> watcher) {
+void StopProcessOutputWatcher(std::unique_ptr<ProcessOutputWatcher> watcher) {
   // Just deleting |watcher| if sufficient.
 }
 
@@ -148,9 +150,10 @@ class ProcessOutputWatcherTest : public testing::Test {
     int pt_pipe[2];
     ASSERT_FALSE(HANDLE_EINTR(pipe(pt_pipe)));
 
-    scoped_ptr<ProcessOutputWatcher> crosh_watcher(new ProcessOutputWatcher(
-        pt_pipe[0],
-        base::Bind(&ProcessOutputWatcherTest::OnRead, base::Unretained(this))));
+    std::unique_ptr<ProcessOutputWatcher> crosh_watcher(
+        new ProcessOutputWatcher(pt_pipe[0],
+                                 base::Bind(&ProcessOutputWatcherTest::OnRead,
+                                            base::Unretained(this))));
 
     output_watch_thread_->task_runner()->PostTask(
         FROM_HERE, base::Bind(&ProcessOutputWatcher::Start,
@@ -188,7 +191,7 @@ class ProcessOutputWatcherTest : public testing::Test {
  private:
   base::Closure test_case_done_callback_;
   base::MessageLoop message_loop_;
-  scoped_ptr<base::Thread> output_watch_thread_;
+  std::unique_ptr<base::Thread> output_watch_thread_;
   bool output_watch_thread_started_;
   bool failed_;
   ProcessWatcherExpectations expectations_;

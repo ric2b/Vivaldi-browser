@@ -32,7 +32,6 @@
 #include "platform/DragImage.h"
 #include "platform/JSONValues.h"
 #include "platform/TraceEvent.h"
-#include "platform/animation/CompositorAnimation.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/BitmapImage.h"
@@ -40,7 +39,6 @@
 #include "platform/graphics/CompositorFilterOperations.h"
 #include "platform/graphics/FirstPaintInvalidationTracking.h"
 #include "platform/graphics/GraphicsContext.h"
-#include "platform/graphics/GraphicsLayerFactory.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/LinkHighlight.h"
 #include "platform/graphics/filters/SkiaImageFilterBuilder.h"
@@ -87,9 +85,10 @@ static PaintInvalidationTrackingMap& paintInvalidationTrackingMap()
     return map;
 }
 
-PassOwnPtr<GraphicsLayer> GraphicsLayer::create(GraphicsLayerFactory* factory, GraphicsLayerClient* client)
+PassOwnPtr<GraphicsLayer> GraphicsLayer::create(GraphicsLayerClient* client)
 {
-    return factory->createGraphicsLayer(client);
+    OwnPtr<GraphicsLayer> layer = adoptPtr(new GraphicsLayer(client));
+    return layer.release();
 }
 
 GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
@@ -315,7 +314,7 @@ IntRect GraphicsLayer::interestRect()
 void GraphicsLayer::paint(const IntRect* interestRect, GraphicsContext::DisabledMode disabledMode)
 {
     if (paintWithoutCommit(interestRect, disabledMode))
-        paintController().commitNewDisplayItems(offsetFromLayoutObjectWithSubpixelAccumulation());
+        getPaintController().commitNewDisplayItems(offsetFromLayoutObjectWithSubpixelAccumulation());
 }
 
 bool GraphicsLayer::paintWithoutCommit(const IntRect* interestRect, GraphicsContext::DisabledMode disabledMode)
@@ -334,15 +333,15 @@ bool GraphicsLayer::paintWithoutCommit(const IntRect* interestRect, GraphicsCont
         interestRect = &newInterestRect;
     }
 
-    if (!paintController().subsequenceCachingIsDisabled()
-        && !m_client->needsRepaint()
-        && !paintController().cacheIsEmpty()
+    if (!getPaintController().subsequenceCachingIsDisabled()
+        && !m_client->needsRepaint(*this)
+        && !getPaintController().cacheIsEmpty()
         && m_previousInterestRect == *interestRect) {
-        ASSERT(!paintController().hasInvalidations());
+        ASSERT(!getPaintController().hasInvalidations());
         return false;
     }
 
-    GraphicsContext context(paintController(), disabledMode);
+    GraphicsContext context(getPaintController(), disabledMode);
 
 #ifndef NDEBUG
     if (contentsOpaque() && s_drawDebugRedFill) {
@@ -365,7 +364,7 @@ void GraphicsLayer::notifyFirstPaintToClient()
     if (!m_painted) {
         DisplayItemList& itemList = m_paintController->newDisplayItemList();
         for (DisplayItem& item : itemList) {
-            DisplayItem::Type type = item.type();
+            DisplayItem::Type type = item.getType();
             if (DisplayItem::isDrawingType(type) && type != DisplayItem::DocumentBackground && type != DisplayItem::DebugRedFill && static_cast<const DrawingDisplayItem&>(item).picture()) {
                 m_painted = true;
                 m_client->notifyFirstPaint();
@@ -779,14 +778,14 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
         bool debug = flags & LayerTreeIncludesDebugInfo;
         RefPtr<JSONArray> compositingReasonsJSON = JSONArray::create();
         for (size_t i = 0; i < kNumberOfCompositingReasons; ++i) {
-            if (m_debugInfo.compositingReasons() & kCompositingReasonStringMap[i].reason)
+            if (m_debugInfo.getCompositingReasons() & kCompositingReasonStringMap[i].reason)
                 compositingReasonsJSON->pushString(debug ? kCompositingReasonStringMap[i].description : kCompositingReasonStringMap[i].shortName);
         }
         json->setArray("compositingReasons", compositingReasonsJSON);
 
         RefPtr<JSONArray> squashingDisallowedReasonsJSON = JSONArray::create();
         for (size_t i = 0; i < kNumberOfSquashingDisallowedReasons; ++i) {
-            if (m_debugInfo.squashingDisallowedReasons() & kSquashingDisallowedReasonStringMap[i].reason)
+            if (m_debugInfo.getSquashingDisallowedReasons() & kSquashingDisallowedReasonStringMap[i].reason)
                 squashingDisallowedReasonsJSON->pushString(debug ? kSquashingDisallowedReasonStringMap[i].description : kSquashingDisallowedReasonStringMap[i].shortName);
         }
         json->setArray("squashingDisallowedReasons", squashingDisallowedReasonsJSON);
@@ -1055,7 +1054,7 @@ void GraphicsLayer::setNeedsDisplay()
     for (size_t i = 0; i < m_linkHighlights.size(); ++i)
         m_linkHighlights[i]->invalidate();
 
-    paintController().invalidateAll();
+    getPaintController().invalidateAll();
     if (isTrackingPaintInvalidations())
         trackPaintInvalidationObject("##ALL##");
 }
@@ -1079,7 +1078,7 @@ void GraphicsLayer::invalidateDisplayItemClient(const DisplayItemClient& display
     if (!drawsContent())
         return;
 
-    paintController().invalidate(displayItemClient);
+    getPaintController().invalidate(displayItemClient);
     if (isTrackingPaintInvalidations())
         trackPaintInvalidationObject(displayItemClient.debugName());
 }
@@ -1120,28 +1119,6 @@ void GraphicsLayer::setContentsToImage(Image* image, RespectImageOrientationEnum
     }
 
     setContentsTo(m_imageLayer ? m_imageLayer->layer() : 0);
-}
-
-bool GraphicsLayer::addAnimation(PassOwnPtr<CompositorAnimation> animation)
-{
-    ASSERT(animation);
-    platformLayer()->setAnimationDelegate(this);
-    return platformLayer()->addAnimation(animation->releaseCCAnimation());
-}
-
-void GraphicsLayer::pauseAnimation(int animationId, double timeOffset)
-{
-    platformLayer()->pauseAnimation(animationId, timeOffset);
-}
-
-void GraphicsLayer::removeAnimation(int animationId)
-{
-    platformLayer()->removeAnimation(animationId);
-}
-
-void GraphicsLayer::abortAnimation(int animationId)
-{
-    platformLayer()->abortAnimation(animationId);
 }
 
 WebLayer* GraphicsLayer::platformLayer() const
@@ -1208,24 +1185,6 @@ void GraphicsLayer::setScrollableArea(ScrollableArea* scrollableArea, bool isVie
         m_layer->layer()->setScrollClient(this);
 }
 
-void GraphicsLayer::notifyAnimationStarted(double monotonicTime, int group)
-{
-    if (m_client)
-        m_client->notifyAnimationStarted(this, monotonicTime, group);
-}
-
-void GraphicsLayer::notifyAnimationFinished(double, int group)
-{
-    if (m_scrollableArea)
-        m_scrollableArea->notifyCompositorAnimationFinished(group);
-}
-
-void GraphicsLayer::notifyAnimationAborted(double, int group)
-{
-    if (m_scrollableArea)
-        m_scrollableArea->notifyCompositorAnimationAborted(group);
-}
-
 void GraphicsLayer::didScroll()
 {
     if (m_scrollableArea) {
@@ -1237,14 +1196,14 @@ void GraphicsLayer::didScroll()
     }
 }
 
-scoped_refptr<base::trace_event::ConvertableToTraceFormat> GraphicsLayer::TakeDebugInfo(cc::Layer* layer)
+std::unique_ptr<base::trace_event::ConvertableToTraceFormat> GraphicsLayer::TakeDebugInfo(cc::Layer* layer)
 {
-    scoped_refptr<base::trace_event::TracedValue> tracedValue = m_debugInfo.asTracedValue();
+    std::unique_ptr<base::trace_event::TracedValue> tracedValue(m_debugInfo.asTracedValue());
     tracedValue->SetString("layer_name", WTF::StringUTF8Adaptor(debugName(layer)).asStringPiece());
-    return tracedValue;
+    return std::move(tracedValue);
 }
 
-PaintController& GraphicsLayer::paintController()
+PaintController& GraphicsLayer::getPaintController()
 {
     RELEASE_ASSERT(drawsContent());
     if (!m_paintController)

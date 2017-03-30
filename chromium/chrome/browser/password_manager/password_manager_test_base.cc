@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -15,7 +14,7 @@
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/passwords/passwords_model_delegate.h"
+#include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
@@ -25,7 +24,7 @@
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "components/password_manager/core/common/password_manager_features.h"
-#include "components/password_manager/core/common/password_manager_switches.h"
+#include "content/public/browser/navigation_details.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -39,6 +38,12 @@ NavigationObserver::NavigationObserver(content::WebContents* web_contents)
 NavigationObserver::~NavigationObserver() {
 }
 
+void NavigationObserver::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (quit_on_entry_committed_)
+    message_loop_runner_->Quit();
+}
+
 void NavigationObserver::DidFinishLoad(
     content::RenderFrameHost* render_frame_host,
     const GURL& validated_url) {
@@ -49,12 +54,6 @@ void NavigationObserver::DidFinishLoad(
   } else if (!render_frame_host->GetParent()) {
     message_loop_runner_->Quit();
   }
-}
-
-void NavigationObserver::NavigationEntryCommitted(
-    const content::LoadCommittedDetails& load_details) {
-  if (quit_on_entry_committed_)
-    message_loop_runner_->Quit();
 }
 
 void NavigationObserver::Wait() {
@@ -95,6 +94,10 @@ class InfoBarObserver : public PromptObserver,
   ~InfoBarObserver() override {
     if (infobar_service_)
       infobar_service_->RemoveObserver(this);
+  }
+
+  void Dismiss() const override {
+    NOTIMPLEMENTED();
   }
 
  private:
@@ -145,6 +148,17 @@ class BubbleObserver : public PromptObserver {
 
   ~BubbleObserver() override {}
 
+  void Dismiss() const override {
+    passwords_model_delegate_->OnBubbleHidden();
+    // Navigate away to reset the state to inactive.
+    static_cast<content::WebContentsObserver*>(
+        static_cast<ManagePasswordsUIController*>(passwords_model_delegate_))
+            ->DidNavigateMainFrame(content::LoadCommittedDetails(),
+                                   content::FrameNavigateParams());
+    ASSERT_EQ(password_manager::ui::INACTIVE_STATE,
+              passwords_model_delegate_->GetState());
+  }
+
  private:
   // PromptObserver:
   bool IsShowingPrompt() const override {
@@ -172,12 +186,12 @@ class BubbleObserver : public PromptObserver {
   DISALLOW_COPY_AND_ASSIGN(BubbleObserver);
 };
 
-scoped_ptr<PromptObserver> PromptObserver::Create(
+std::unique_ptr<PromptObserver> PromptObserver::Create(
     content::WebContents* web_contents) {
   if (ChromePasswordManagerClient::IsTheHotNewBubbleUIEnabled()) {
-    return scoped_ptr<PromptObserver>(new BubbleObserver(web_contents));
+    return std::unique_ptr<PromptObserver>(new BubbleObserver(web_contents));
   } else {
-    return scoped_ptr<PromptObserver>(new InfoBarObserver(web_contents));
+    return std::unique_ptr<PromptObserver>(new InfoBarObserver(web_contents));
   }
 }
 
@@ -234,7 +248,7 @@ void PasswordManagerBrowserTestBase::VerifyPasswordIsSavedAndFilled(
   NavigateToFile(filename);
 
   NavigationObserver observer(WebContents());
-  scoped_ptr<PromptObserver> prompt_observer(
+  std::unique_ptr<PromptObserver> prompt_observer(
       PromptObserver::Create(WebContents()));
   ASSERT_TRUE(content::ExecuteScript(RenderViewHost(), submission_script));
   observer.Wait();

@@ -7,6 +7,7 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/css/parser/CSSParserTokenRange.h"
 #include "core/css/parser/CSSTokenizer.h"
+#include "core/dom/Element.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/IntersectionObserverCallback.h"
@@ -19,7 +20,6 @@
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "platform/Timer.h"
-#include "wtf/MainThread.h"
 #include <algorithm>
 
 namespace blink {
@@ -53,11 +53,11 @@ static void parseRootMargin(String rootMarginParameter, Vector<Length>& rootMarg
                 rootMargin.append(Length(token.numericValue(), Percent));
                 break;
             default:
-                exceptionState.throwTypeError("rootMargin must be specified in pixels or percent.");
+                exceptionState.throwDOMException(SyntaxError, "rootMargin must be specified in pixels or percent.");
             }
             break;
         default:
-            exceptionState.throwTypeError("rootMargin must be specified in pixels or percent.");
+            exceptionState.throwDOMException(SyntaxError, "rootMargin must be specified in pixels or percent.");
         }
     }
 }
@@ -73,7 +73,7 @@ static void parseThresholds(const DoubleOrDoubleArray& thresholdParameter, Vecto
 
     for (auto thresholdValue : thresholds) {
         if (thresholdValue < 0.0 || thresholdValue > 1.0) {
-            exceptionState.throwTypeError("Threshold values must be between 0 and 1");
+            exceptionState.throwRangeError("Threshold values must be between 0 and 1");
             break;
         }
     }
@@ -83,11 +83,11 @@ static void parseThresholds(const DoubleOrDoubleArray& thresholdParameter, Vecto
 
 IntersectionObserver* IntersectionObserver::create(const IntersectionObserverInit& observerInit, IntersectionObserverCallback& callback, ExceptionState& exceptionState)
 {
-    RefPtrWillBeRawPtr<Node> root = observerInit.root();
+    RawPtr<Node> root = observerInit.root();
     if (!root) {
         // TODO(szager): Use Document instead of document element for implicit root. (crbug.com/570538)
-        ExecutionContext* context = callback.executionContext();
-        ASSERT(context->isDocument());
+        ExecutionContext* context = callback.getExecutionContext();
+        DCHECK(context->isDocument());
         Frame* mainFrame = toDocument(context)->frame()->tree().top();
         if (mainFrame && mainFrame->isLocalFrame())
             root = toLocalFrame(mainFrame)->document();
@@ -116,16 +116,13 @@ IntersectionObserver* IntersectionObserver::create(const IntersectionObserverIni
 
 IntersectionObserver::IntersectionObserver(IntersectionObserverCallback& callback, Node& root, const Vector<Length>& rootMargin, const Vector<float>& thresholds)
     : m_callback(&callback)
+    , m_root(&root)
     , m_thresholds(thresholds)
     , m_topMargin(Fixed)
     , m_rightMargin(Fixed)
     , m_bottomMargin(Fixed)
     , m_leftMargin(Fixed)
 {
-    if (root.isDocumentNode())
-        m_root = toDocument(root).ensureIntersectionObserverData().createWeakPtr(&root);
-    else
-        m_root = toElement(root).ensureIntersectionObserverData().createWeakPtr(&root);
     switch (rootMargin.size()) {
     case 0:
         break;
@@ -172,37 +169,25 @@ LayoutObject* IntersectionObserver::rootLayoutObject() const
     return toElement(node)->layoutObject();
 }
 
-void IntersectionObserver::observe(Element* target, ExceptionState& exceptionState)
+void IntersectionObserver::observe(Element* target)
 {
-    if (!m_root) {
-        exceptionState.throwDOMException(HierarchyRequestError, "Invalid observer: root element or containing document has been deleted.");
+    if (!m_root || !target || m_root.get() == target)
         return;
-    }
-    if (!target) {
-        exceptionState.throwTypeError("Observation target must be an element.");
-        return;
-    }
-    if (m_root.get() == target) {
-        exceptionState.throwDOMException(HierarchyRequestError, "Cannot use the same element for root and target.");
-        return;
-    }
-
-    // TODO(szager): Add a pointer to the spec that describes this policy.
-    bool shouldReportRootBounds = target->document().frame()->securityContext()->securityOrigin()->canAccess(rootNode()->document().frame()->securityContext()->securityOrigin());
-    if (!shouldReportRootBounds && hasPercentMargin()) {
-        exceptionState.throwDOMException(HierarchyRequestError, "Cannot observe a cross-origin target because the observer has a root margin value specified as a percent.");
-        return;
-    }
 
     if (target->ensureIntersectionObserverData().getObservationFor(*this))
         return;
 
+    bool shouldReportRootBounds = false;
+    LocalFrame* targetFrame = target->document().frame();
+    LocalFrame* rootFrame = rootNode()->document().frame();
+    if (targetFrame && rootFrame)
+        shouldReportRootBounds = targetFrame->securityContext()->getSecurityOrigin()->canAccess(rootFrame->securityContext()->getSecurityOrigin());
     IntersectionObservation* observation = new IntersectionObservation(*this, *target, shouldReportRootBounds);
     target->ensureIntersectionObserverData().addObservation(*observation);
     m_observations.add(observation);
 }
 
-void IntersectionObserver::unobserve(Element* target, ExceptionState&)
+void IntersectionObserver::unobserve(Element* target)
 {
     if (!target || !target->intersectionObserverData())
         return;
@@ -213,9 +198,7 @@ void IntersectionObserver::unobserve(Element* target, ExceptionState&)
 
 void IntersectionObserver::computeIntersectionObservations()
 {
-    if (!m_root || !m_root->inDocument())
-        return;
-    Document* callbackDocument = toDocument(m_callback->executionContext());
+    Document* callbackDocument = toDocument(m_callback->getExecutionContext());
     if (!callbackDocument)
         return;
     LocalDOMWindow* callbackDOMWindow = callbackDocument->domWindow();
@@ -248,9 +231,9 @@ HeapVector<Member<IntersectionObserverEntry>> IntersectionObserver::takeRecords(
 Element* IntersectionObserver::root() const
 {
     Node* node = rootNode();
-    if (node->isDocumentNode())
-        return nullptr;
-    return toElement(node);
+    if (node && !node->isDocumentNode())
+        return toElement(node);
+    return nullptr;
 }
 
 static void appendLength(StringBuilder& stringBuilder, const Length& length)
@@ -278,14 +261,14 @@ String IntersectionObserver::rootMargin() const
 void IntersectionObserver::enqueueIntersectionObserverEntry(IntersectionObserverEntry& entry)
 {
     m_entries.append(&entry);
-    toDocument(m_callback->executionContext())->ensureIntersectionObserverController().scheduleIntersectionObserverForDelivery(*this);
+    toDocument(m_callback->getExecutionContext())->ensureIntersectionObserverController().scheduleIntersectionObserverForDelivery(*this);
 }
 
 static LayoutUnit computeMargin(const Length& length, LayoutUnit referenceLength)
 {
     if (length.type() == Percent)
         return LayoutUnit(static_cast<int>(referenceLength.toFloat() * length.percent() / 100.0));
-    ASSERT(length.type() == Fixed);
+    DCHECK_EQ(length.type(), Fixed);
     return LayoutUnit(length.intValue());
 }
 
@@ -307,13 +290,6 @@ void IntersectionObserver::applyRootMargin(LayoutRect& rect) const
 unsigned IntersectionObserver::firstThresholdGreaterThan(float ratio) const
 {
     unsigned result = 0;
-
-    // Special handling for zero threshold, which means "any non-zero number of pixels."
-    // If the ratio is zero, then it should be treated as smaller than any threshold,
-    // even a zero threshold.
-    if (!ratio)
-        return 0;
-
     while (result < m_thresholds.size() && m_thresholds[result] <= ratio)
         ++result;
     return result;
@@ -330,19 +306,9 @@ void IntersectionObserver::deliver()
     m_callback->handleEvent(entries, *this);
 }
 
-bool IntersectionObserver::hasPercentMargin() const
-{
-    return (m_topMargin.type() == Percent
-        || m_rightMargin.type() == Percent
-        || m_bottomMargin.type() == Percent
-        || m_leftMargin.type() == Percent);
-}
-
 DEFINE_TRACE(IntersectionObserver)
 {
-#if ENABLE(OILPAN)
     visitor->template registerWeakMembers<IntersectionObserver, &IntersectionObserver::clearWeakMembers>(this);
-#endif
     visitor->trace(m_callback);
     visitor->trace(m_observations);
     visitor->trace(m_entries);

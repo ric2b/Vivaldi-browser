@@ -29,6 +29,7 @@ class HistoryMenuBridge;
 class Profile;
 @class ProfileMenuController;
 class QuitWithAppsController;
+class ScopedKeepAlive;
 
 namespace ui {
 class WorkAreaWatcherObserver;
@@ -48,9 +49,9 @@ class WorkAreaWatcherObserver;
   // build the user-data specific main menu items.
   Profile* lastProfile_;
 
-  // The ProfileObserver observes the ProfileInfoCache and gets notified
+  // The ProfileObserver observes the ProfileAttrbutesStorage and gets notified
   // when a profile has been deleted.
-  scoped_ptr<AppControllerProfileObserver> profileInfoCacheObserver_;
+  scoped_ptr<AppControllerProfileObserver> profileAttributesStorageObserver_;
 
   // Management of the bookmark menu which spans across all windows
   // (and Browser*s). |profileBookmarkMenuBridgeMap_| is a cache that owns one
@@ -107,6 +108,9 @@ class WorkAreaWatcherObserver;
 
   // This will be true after receiving a NSWorkspaceWillPowerOffNotification.
   BOOL isPoweringOff_;
+
+  // Request to keep the browser alive during that object's lifetime.
+  scoped_ptr<ScopedKeepAlive> keep_alive_;
 }
 
 @property(readonly, nonatomic) BOOL startupComplete;

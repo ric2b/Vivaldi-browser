@@ -6,6 +6,8 @@
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/shell/public/cpp/capabilities.h"
 #include "mojo/shell/public/cpp/connector.h"
 #include "mojo/shell/public/cpp/lib/connection_impl.h"
 #include "mojo/shell/public/cpp/lib/connector_impl.h"
@@ -17,46 +19,58 @@ namespace mojo {
 ////////////////////////////////////////////////////////////////////////////////
 // ShellConnection, public:
 
-ShellConnection::ShellConnection(
-    mojo::ShellClient* client,
-    InterfaceRequest<shell::mojom::ShellClient> request)
-    : client_(client),
-      binding_(this, std::move(request)),
-      weak_factory_(this) {}
+ShellConnection::ShellConnection(mojo::ShellClient* client,
+                                 shell::mojom::ShellClientRequest request)
+    : client_(client), binding_(this) {
+  shell::mojom::ConnectorPtr connector;
+  pending_connector_request_ = GetProxy(&connector);
+  connector_.reset(new ConnectorImpl(std::move(connector)));
+
+  DCHECK(request.is_pending());
+  binding_.Bind(std::move(request));
+}
 
 ShellConnection::~ShellConnection() {}
 
-void ShellConnection::WaitForInitialize() {
-  DCHECK(!connector_);
-  binding_.WaitForIncomingMethodCall();
+void ShellConnection::set_initialize_handler(const base::Closure& callback) {
+  initialize_handler_ = callback;
+}
+
+void ShellConnection::SetAppTestConnectorForTesting(
+    shell::mojom::ConnectorPtr connector) {
+  pending_connector_request_ = nullptr;
+  connector_.reset(new ConnectorImpl(std::move(connector)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // ShellConnection, shell::mojom::ShellClient implementation:
 
-void ShellConnection::Initialize(shell::mojom::ConnectorPtr connector,
-                                 const mojo::String& url,
+void ShellConnection::Initialize(shell::mojom::IdentityPtr identity,
                                  uint32_t id,
-                                 uint32_t user_id) {
-  connector_.reset(new ConnectorImpl(
-      std::move(connector),
-      base::Bind(&ShellConnection::OnConnectionError,
-                 weak_factory_.GetWeakPtr())));
-  client_->Initialize(connector_.get(), url, id, user_id);
+                                 const InitializeCallback& callback) {
+  if (!initialize_handler_.is_null())
+    initialize_handler_.Run();
+
+  callback.Run(std::move(pending_connector_request_));
+
+  DCHECK(binding_.is_bound());
+  binding_.set_connection_error_handler([this] { OnConnectionError(); });
+
+  client_->Initialize(connector_.get(), identity.To<Identity>(), id);
 }
 
 void ShellConnection::AcceptConnection(
-    const String& requestor_url,
-    uint32_t requestor_id,
-    uint32_t requestor_user_id,
+    shell::mojom::IdentityPtr source,
+    uint32_t source_id,
     shell::mojom::InterfaceProviderRequest local_interfaces,
     shell::mojom::InterfaceProviderPtr remote_interfaces,
-    Array<String> allowed_interfaces,
-    const String& url) {
+    shell::mojom::CapabilityRequestPtr allowed_capabilities,
+    const String& name) {
   scoped_ptr<Connection> registry(new internal::ConnectionImpl(
-      url, requestor_url, requestor_id, requestor_user_id,
-      std::move(remote_interfaces), std::move(local_interfaces),
-      allowed_interfaces.To<std::set<std::string>>()));
+      name, source.To<Identity>(), source_id, std::move(remote_interfaces),
+      std::move(local_interfaces),
+      allowed_capabilities.To<CapabilityRequest>(),
+      Connection::State::CONNECTED));
   if (!client_->AcceptConnection(registry.get()))
     return;
 
@@ -69,12 +83,13 @@ void ShellConnection::AcceptConnection(
 // ShellConnection, private:
 
 void ShellConnection::OnConnectionError() {
-  // We give the client notice first, since it might want to do something on
-  // shell connection errors other than immediate termination of the run
-  // loop. The application might want to continue servicing connections other
-  // than the one to the shell.
-  if (client_->ShellConnectionLost())
-    connector_.reset();
+  // Note that the ShellClient doesn't technically have to quit now, it may live
+  // on to service existing connections. All existing Connectors however are
+  // invalid.
+  if (client_->ShellConnectionLost() && !connection_lost_closure_.is_null())
+    connection_lost_closure_.Run();
+  // We don't reset the connector as clients may have taken a raw pointer to it.
+  // Connect() will return nullptr if they try to connect to anything.
 }
 
 }  // namespace mojo

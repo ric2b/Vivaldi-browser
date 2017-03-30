@@ -8,8 +8,10 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
+#include "chromecast/media/base/media_resource_tracker.h"
 #include "media/base/cdm_key_information.h"
 #include "media/base/cdm_promise.h"
 #include "media/cdm/player_tracker_impl.h"
@@ -24,13 +26,16 @@ namespace {
 template <typename... T>
 class CdmPromiseInternal : public ::media::CdmPromiseTemplate<T...> {
  public:
-  CdmPromiseInternal(scoped_ptr<::media::CdmPromiseTemplate<T...>> promise)
+  CdmPromiseInternal(std::unique_ptr<::media::CdmPromiseTemplate<T...>> promise)
       : task_runner_(base::ThreadTaskRunnerHandle::Get()),
         promise_(std::move(promise)) {}
 
   ~CdmPromiseInternal() final {
-    // Promise must be resolved or rejected before destruction.
-    DCHECK(!promise_);
+    if (IsPromiseSettled())
+      return;
+
+    DCHECK(promise_);
+    RejectPromiseOnDestruction();
   }
 
   // CdmPromiseTemplate<> implementation.
@@ -48,10 +53,12 @@ class CdmPromiseInternal : public ::media::CdmPromiseTemplate<T...> {
   }
 
  private:
+  using ::media::CdmPromiseTemplate<T...>::IsPromiseSettled;
   using ::media::CdmPromiseTemplate<T...>::MarkPromiseSettled;
+  using ::media::CdmPromiseTemplate<T...>::RejectPromiseOnDestruction;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  scoped_ptr<::media::CdmPromiseTemplate<T...>> promise_;
+  std::unique_ptr<::media::CdmPromiseTemplate<T...>> promise_;
 };
 
 template <typename... T>
@@ -65,14 +72,16 @@ void CdmPromiseInternal<T...>::resolve(const T&... result) {
 }
 
 template <typename... T>
-scoped_ptr<CdmPromiseInternal<T...>> BindPromiseToCurrentLoop(
-    scoped_ptr<::media::CdmPromiseTemplate<T...>> promise) {
-  return make_scoped_ptr(new CdmPromiseInternal<T...>(std::move(promise)));
+std::unique_ptr<CdmPromiseInternal<T...>> BindPromiseToCurrentLoop(
+    std::unique_ptr<::media::CdmPromiseTemplate<T...>> promise) {
+  return base::WrapUnique(new CdmPromiseInternal<T...>(std::move(promise)));
 }
 
 }  // namespace
 
-BrowserCdmCast::BrowserCdmCast() {
+BrowserCdmCast::BrowserCdmCast(MediaResourceTracker* media_resource_tracker)
+    : media_resource_tracker_(media_resource_tracker) {
+  DCHECK(media_resource_tracker);
   thread_checker_.DetachFromThread();
 }
 
@@ -80,6 +89,7 @@ BrowserCdmCast::~BrowserCdmCast() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(player_tracker_impl_.get());
   player_tracker_impl_->NotifyCdmUnset();
+  media_resource_tracker_->DecrementUsageCount();
 }
 
 void BrowserCdmCast::Initialize(
@@ -90,6 +100,7 @@ void BrowserCdmCast::Initialize(
     const ::media::SessionExpirationUpdateCB& session_expiration_update_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  media_resource_tracker_->IncrementUsageCount();
   player_tracker_impl_.reset(new ::media::PlayerTrackerImpl());
 
   session_message_cb_ = session_message_cb;
@@ -142,7 +153,7 @@ void BrowserCdmCast::KeyIdAndKeyPairsToInfo(
     ::media::CdmKeysInfo* keys_info) {
   DCHECK(keys_info);
   for (const std::pair<std::string, std::string>& key : keys) {
-    scoped_ptr<::media::CdmKeyInformation> cdm_key_information(
+    std::unique_ptr<::media::CdmKeyInformation> cdm_key_information(
         new ::media::CdmKeyInformation(key.first,
                                        ::media::CdmKeyInformation::USABLE, 0));
     keys_info->push_back(cdm_key_information.release());
@@ -176,7 +187,7 @@ BrowserCdmCast* BrowserCdmCastUi::browser_cdm_cast() const {
 
 void BrowserCdmCastUi::SetServerCertificate(
     const std::vector<uint8_t>& certificate,
-    scoped_ptr<::media::SimpleCdmPromise> promise) {
+    std::unique_ptr<::media::SimpleCdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
   FORWARD_ON_CDM_THREAD(
       SetServerCertificate, certificate,
@@ -187,7 +198,7 @@ void BrowserCdmCastUi::CreateSessionAndGenerateRequest(
     ::media::MediaKeys::SessionType session_type,
     ::media::EmeInitDataType init_data_type,
     const std::vector<uint8_t>& init_data,
-    scoped_ptr<::media::NewSessionCdmPromise> promise) {
+    std::unique_ptr<::media::NewSessionCdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
   FORWARD_ON_CDM_THREAD(
       CreateSessionAndGenerateRequest, session_type, init_data_type, init_data,
@@ -197,7 +208,7 @@ void BrowserCdmCastUi::CreateSessionAndGenerateRequest(
 void BrowserCdmCastUi::LoadSession(
     ::media::MediaKeys::SessionType session_type,
     const std::string& session_id,
-    scoped_ptr<::media::NewSessionCdmPromise> promise) {
+    std::unique_ptr<::media::NewSessionCdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
   FORWARD_ON_CDM_THREAD(
       LoadSession, session_type, session_id,
@@ -207,7 +218,7 @@ void BrowserCdmCastUi::LoadSession(
 void BrowserCdmCastUi::UpdateSession(
     const std::string& session_id,
     const std::vector<uint8_t>& response,
-    scoped_ptr<::media::SimpleCdmPromise> promise) {
+    std::unique_ptr<::media::SimpleCdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
   FORWARD_ON_CDM_THREAD(
       UpdateSession, session_id, response,
@@ -216,7 +227,7 @@ void BrowserCdmCastUi::UpdateSession(
 
 void BrowserCdmCastUi::CloseSession(
     const std::string& session_id,
-    scoped_ptr<::media::SimpleCdmPromise> promise) {
+    std::unique_ptr<::media::SimpleCdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
   FORWARD_ON_CDM_THREAD(
       CloseSession, session_id,
@@ -225,7 +236,7 @@ void BrowserCdmCastUi::CloseSession(
 
 void BrowserCdmCastUi::RemoveSession(
     const std::string& session_id,
-    scoped_ptr<::media::SimpleCdmPromise> promise) {
+    std::unique_ptr<::media::SimpleCdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
   FORWARD_ON_CDM_THREAD(
       RemoveSession, session_id,

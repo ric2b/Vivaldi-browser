@@ -42,7 +42,6 @@
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/input_events_blocker.h"
 #include "chrome/browser/chromeos/login/ui/keyboard_driven_oobe_key_handler.h"
-#include "chrome/browser/chromeos/login/ui/oobe_display.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
@@ -53,9 +52,11 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/system/device_disabling_manager.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
+#include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/chromeos/system/timezone_util.h"
 #include "chrome/browser/chromeos/ui/focus_ring_controller.h"
-#include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/keep_alive_types.h"
+#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
@@ -124,6 +125,12 @@ const int kLoginFadeoutTransitionDurationMs = 700;
 
 // Number of times we try to reload OOBE/login WebUI if it crashes.
 const int kCrashCountLimit = 5;
+
+// The default fade out animation time in ms.
+const int kDefaultFadeTimeMs = 200;
+
+// The fade out animation time used when adding another user into session.
+const int kUserAddFadeTimeMs = 300;
 
 // Whether to enable tnitializing WebUI in hidden state (see
 // |initialize_webui_hidden_|) by default.
@@ -198,7 +205,7 @@ struct ShowLoginWizardSwitchLanguageCallbackData {
 };
 
 void OnLanguageSwitchedCallback(
-    scoped_ptr<ShowLoginWizardSwitchLanguageCallbackData> self,
+    std::unique_ptr<ShowLoginWizardSwitchLanguageCallbackData> self,
     const chromeos::locale_util::LanguageSwitchResult& result) {
   if (!result.success)
     LOG(WARNING) << "Locale could not be found for '" << result.requested_locale
@@ -306,8 +313,9 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& background_bounds)
   DCHECK(default_host() == nullptr);
   default_host_ = this;
 
-  // Make sure chrome won't exit while we are at login/oobe screen.
-  chrome::IncrementKeepAliveCount();
+  keep_alive_.reset(
+      new ScopedKeepAlive(KeepAliveOrigin::LOGIN_DISPLAY_HOST_IMPL,
+                          KeepAliveRestartOption::DISABLED));
 
   bool is_registered = StartupUtils::IsDeviceRegistered();
   bool zero_delay_enabled = WizardController::IsZeroDelayEnabled();
@@ -396,8 +404,7 @@ LoginDisplayHostImpl::~LoginDisplayHostImpl() {
   views::FocusManager::set_arrow_key_traversal_enabled(false);
   ResetLoginWindowAndView();
 
-  // Let chrome process exit after login/oobe screen if needed.
-  chrome::DecrementKeepAliveCount();
+  keep_alive_.reset();
 
   default_host_ = nullptr;
   // TODO(tengs): This should be refactored. See crbug.com/314934.
@@ -432,9 +439,14 @@ void LoginDisplayHostImpl::BeforeSessionStart() {
 
 void LoginDisplayHostImpl::Finalize() {
   DVLOG(1) << "Session starting";
-  if (ash::Shell::HasInstance()) {
-    ash::Shell::GetInstance()->
-        desktop_background_controller()->MoveDesktopToUnlockedContainer();
+  // When adding another user into the session, we defer the background
+  // wallpaper's animation in order to prevent the flashing of the previous
+  // user's windows. See crbug.com/541864.
+  if (ash::Shell::HasInstance() &&
+      finalize_animation_type_ != ANIMATION_ADD_USER) {
+    ash::Shell::GetInstance()
+        ->desktop_background_controller()
+        ->MoveDesktopToUnlockedContainer();
   }
   if (wizard_controller_.get())
     wizard_controller_->OnSessionStart();
@@ -452,7 +464,10 @@ void LoginDisplayHostImpl::Finalize() {
     case ANIMATION_FADE_OUT:
       // Display host is deleted once animation is completed
       // since sign in screen widget has to stay alive.
-      ScheduleFadeOutAnimation();
+      ScheduleFadeOutAnimation(kDefaultFadeTimeMs);
+      break;
+    case ANIMATION_ADD_USER:
+      ScheduleFadeOutAnimation(kUserAddFadeTimeMs);
       break;
   }
 }
@@ -527,7 +542,7 @@ void LoginDisplayHostImpl::StartUserAdding(
 
   restore_path_ = RESTORE_ADD_USER_INTO_SESSION;
   completion_callback_ = completion_callback;
-  finalize_animation_type_ = ANIMATION_NONE;
+  finalize_animation_type_ = ANIMATION_ADD_USER;
   VLOG(1) << "Login WebUI >> user adding";
   if (!login_window_)
     LoadURL(GURL(kUserAddingURL));
@@ -547,9 +562,8 @@ void LoginDisplayHostImpl::StartUserAdding(
   existing_user_controller_.reset(new chromeos::ExistingUserController(this));
 
   if (!signin_screen_controller_.get()) {
-    OobeDisplay* oobe_display = GetOobeUI();
     signin_screen_controller_.reset(new SignInScreenController(
-        oobe_display, webui_login_display_->delegate()));
+        GetOobeUI(), webui_login_display_->delegate()));
   }
 
   SetOobeProgressBarVisible(oobe_progress_bar_visible_ = false);
@@ -606,9 +620,8 @@ void LoginDisplayHostImpl::StartSignInScreen(
   existing_user_controller_.reset(new chromeos::ExistingUserController(this));
 
   if (!signin_screen_controller_.get()) {
-    OobeDisplay* oobe_display = GetOobeUI();
     signin_screen_controller_.reset(new SignInScreenController(
-        oobe_display, webui_login_display_->delegate()));
+        GetOobeUI(), webui_login_display_->delegate()));
   }
 
   oobe_progress_bar_visible_ = !StartupUtils::IsDeviceRegistered();
@@ -714,8 +727,8 @@ void LoginDisplayHostImpl::StartAppLaunch(const std::string& app_id,
 
 WizardController* LoginDisplayHostImpl::CreateWizardController() {
   // TODO(altimofeev): ensure that WebUI is ready.
-  OobeDisplay* oobe_display = GetOobeUI();
-  return new WizardController(this, oobe_display);
+  OobeUI* oobe_ui = GetOobeUI();
+  return new WizardController(this, oobe_ui);
 }
 
 void LoginDisplayHostImpl::OnBrowserCreated() {
@@ -916,6 +929,13 @@ void LoginDisplayHostImpl::ShutdownDisplayHost(bool post_quit_task) {
 
   if (!completion_callback_.is_null())
     base::MessageLoop::current()->PostTask(FROM_HERE, completion_callback_);
+
+  if (ash::Shell::HasInstance() &&
+      finalize_animation_type_ == ANIMATION_ADD_USER) {
+    ash::Shell::GetInstance()
+        ->desktop_background_controller()
+        ->MoveDesktopToUnlockedContainer();
+  }
 }
 
 void LoginDisplayHostImpl::ScheduleWorkspaceAnimation() {
@@ -933,13 +953,23 @@ void LoginDisplayHostImpl::ScheduleWorkspaceAnimation() {
     ash::Shell::GetInstance()->DoInitialWorkspaceAnimation();
 }
 
-void LoginDisplayHostImpl::ScheduleFadeOutAnimation() {
+void LoginDisplayHostImpl::ScheduleFadeOutAnimation(int animation_speed_ms) {
+  // login window might have been closed by OnBrowserCreated() at this moment.
+  // This may happen when adding another user into the session, and a browser
+  // is created before session start, which triggers the close of the login
+  // window. In this case, we should shut down the display host directly.
+  if (!login_window_) {
+    ShutdownDisplayHost(false);
+    return;
+  }
   ui::Layer* layer = login_window_->GetLayer();
   ui::ScopedLayerAnimationSettings animation(layer->GetAnimator());
   animation.AddObserver(new AnimationObserver(
       base::Bind(&LoginDisplayHostImpl::ShutdownDisplayHost,
                  animation_weak_ptr_factory_.GetWeakPtr(),
                  false)));
+  animation.SetTransitionDuration(
+      base::TimeDelta::FromMilliseconds(animation_speed_ms));
   layer->SetOpacity(0);
 }
 
@@ -1108,29 +1138,6 @@ void LoginDisplayHostImpl::OnLoginPromptVisible() {
   TryToPlayStartupSound();
 }
 
-void LoginDisplayHostImpl::StartTimeZoneResolve() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kDisableTimeZoneTrackingOption)) {
-    return;
-  }
-
-  if (!g_browser_process->local_state()->GetBoolean(
-          prefs::kResolveDeviceTimezoneByGeolocation)) {
-    return;
-  }
-
-  if (system::HasSystemTimezonePolicy())
-    return;
-
-  // Do not start resolver if we are inside active user session.
-  // If user preferences permit, it will be started on preferences
-  // initialization.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kLoginUser))
-    return;
-
-  g_browser_process->platform_part()->GetTimezoneResolver()->Start();
-}
-
 // static
 void LoginDisplayHostImpl::DisableRestrictiveProxyCheckForTest() {
   static_cast<chromeos::LoginDisplayHostImpl*>(default_host())
@@ -1211,7 +1218,9 @@ void ShowLoginWizard(const std::string& first_screen_name) {
         ServicesCustomizationDocument::GetInstance()
             ->EnsureCustomizationAppliedClosure());
 
-    display_host->StartTimeZoneResolve();
+    g_browser_process->platform_part()
+        ->GetTimezoneResolverManager()
+        ->UpdateTimezoneResolver();
   }
 
   bool show_login_screen =
@@ -1257,7 +1266,7 @@ void ShowLoginWizard(const std::string& first_screen_name) {
   prefs->SetString(prefs::kApplicationLocale, locale);
   StartupUtils::SetInitialLocale(locale);
 
-  scoped_ptr<ShowLoginWizardSwitchLanguageCallbackData> data(
+  std::unique_ptr<ShowLoginWizardSwitchLanguageCallbackData> data(
       new ShowLoginWizardSwitchLanguageCallbackData(
           first_screen_name, startup_manifest, display_host));
 

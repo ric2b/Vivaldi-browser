@@ -44,7 +44,7 @@ class WebLocalFrameImpl;
 
 class FrameLoaderClientImpl final : public FrameLoaderClient {
 public:
-    static PassOwnPtrWillBeRawPtr<FrameLoaderClientImpl> create(WebLocalFrameImpl*);
+    static FrameLoaderClientImpl* create(WebLocalFrameImpl*);
 
     ~FrameLoaderClientImpl() override;
 
@@ -118,20 +118,21 @@ public:
     void didDisplayContentWithCertificateErrors(const KURL&, const CString& securityInfo, const WebURL& mainResourceUrl, const CString& mainResourceSecurityInfo) override;
     void didRunContentWithCertificateErrors(const KURL&, const CString& securityInfo, const WebURL& mainResourceUrl, const CString& mainResourceSecurityInfo) override;
     void didChangePerformanceTiming() override;
+    void didObserveLoadingBehavior(WebLoadingBehaviorFlag) override;
     void selectorMatchChanged(const Vector<String>& addedSelectors, const Vector<String>& removedSelectors) override;
-    PassRefPtrWillBeRawPtr<DocumentLoader> createDocumentLoader(LocalFrame*, const ResourceRequest&, const SubstituteData&) override;
+    DocumentLoader* createDocumentLoader(LocalFrame*, const ResourceRequest&, const SubstituteData&) override;
     WTF::String userAgent() override;
     WTF::String doNotTrackValue() override;
     void transitionToCommittedForNewPage() override;
-    PassRefPtrWillBeRawPtr<LocalFrame> createFrame(const FrameLoadRequest&, const WTF::AtomicString& name, HTMLFrameOwnerElement*) override;
+    LocalFrame* createFrame(const FrameLoadRequest&, const WTF::AtomicString& name, HTMLFrameOwnerElement*) override;
     virtual bool canCreatePluginWithoutRenderer(const String& mimeType) const;
-    PassRefPtrWillBeRawPtr<Widget> createPlugin(
+    Widget* createPlugin(
         HTMLPlugInElement*, const KURL&,
         const Vector<WTF::String>&, const Vector<WTF::String>&,
         const WTF::String&, bool loadManually, DetachedPluginPolicy) override;
-    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, WebMediaPlayer::LoadType, const WebURL&, WebMediaPlayerClient*) override;
+    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebURL&, WebMediaPlayerClient*) override;
     PassOwnPtr<WebMediaSession> createWebMediaSession() override;
-    ObjectContentType objectContentType(
+    ObjectContentType getObjectContentType(
         const KURL&, const WTF::String& mimeType, bool shouldPreferPlugInsForImages) override;
     void didChangeScrollOffset() override;
     void didUpdateCurrentHistoryItem() override;
@@ -152,6 +153,7 @@ public:
     void frameFocused() const override;
     void didChangeName(const String& name, const String& uniqueName) override;
     void didEnforceStrictMixedContentChecking() override;
+    void didUpdateToUniqueOrigin() override;
     void didChangeSandboxFlags(Frame* childFrame, SandboxFlags) override;
     void didChangeFrameOwnerProperties(HTMLFrameElementBase*) override;
 
@@ -162,7 +164,6 @@ public:
     void didRequestAutocomplete(HTMLFormElement*) override;
 
     bool allowWebGL(bool enabledPerSettings) override;
-    void didLoseWebGLContext(int arbRobustnessContextLostReason) override;
 
     void dispatchWillInsertBody() override;
 
@@ -181,8 +182,13 @@ public:
 
     void suddenTerminationDisablerChanged(bool present, SuddenTerminationDisablerType) override;
 
+    BlameContext* frameBlameContext() override;
+
+    LinkResource* createServiceWorkerLinkResource(HTMLLinkElement*) override;
+
     // VB-6063:
     void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) override;
+
 private:
     explicit FrameLoaderClientImpl(WebLocalFrameImpl*);
 
@@ -190,7 +196,9 @@ private:
 
     // The WebFrame that owns this object and manages its lifetime. Therefore,
     // the web frame object is guaranteed to exist.
-    RawPtrWillBeMember<WebLocalFrameImpl> m_webFrame;
+    Member<WebLocalFrameImpl> m_webFrame;
+
+    String m_userAgent;
 };
 
 DEFINE_TYPE_CASTS(FrameLoaderClientImpl, FrameLoaderClient, client, client->isFrameLoaderClientImpl(), client.isFrameLoaderClientImpl());

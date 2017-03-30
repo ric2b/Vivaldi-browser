@@ -7,7 +7,7 @@
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/animation_timeline.h"
 #include "platform/animation/CompositorAnimation.h"
-#include "public/platform/WebCompositorAnimationDelegate.h"
+#include "platform/animation/CompositorAnimationDelegate.h"
 #include "public/platform/WebLayer.h"
 
 namespace blink {
@@ -32,7 +32,7 @@ cc::AnimationPlayer* CompositorAnimationPlayer::animationPlayer() const
     return m_animationPlayer.get();
 }
 
-void CompositorAnimationPlayer::setAnimationDelegate(WebCompositorAnimationDelegate* delegate)
+void CompositorAnimationPlayer::setAnimationDelegate(CompositorAnimationDelegate* delegate)
 {
     m_delegate = delegate;
     m_animationPlayer->set_layer_animation_delegate(delegate ? this : nullptr);
@@ -105,7 +105,7 @@ void CompositorAnimationPlayer::NotifyAnimationTakeover(
     base::TimeTicks monotonicTime,
     cc::TargetProperty::Type,
     double animationStartTime,
-    scoped_ptr<cc::AnimationCurve> curve)
+    std::unique_ptr<cc::AnimationCurve> curve)
 {
     if (m_delegate) {
         m_delegate->notifyAnimationTakeover(

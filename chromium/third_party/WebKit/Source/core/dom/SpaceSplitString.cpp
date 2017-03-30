@@ -104,14 +104,14 @@ bool SpaceSplitString::Data::containsAll(Data& other)
 
 void SpaceSplitString::Data::add(const AtomicString& string)
 {
-    ASSERT(hasOneRef());
-    ASSERT(!contains(string));
+    DCHECK(hasOneRef());
+    DCHECK(!contains(string));
     m_vector.append(string);
 }
 
 void SpaceSplitString::Data::remove(unsigned index)
 {
-    ASSERT(hasOneRef());
+    DCHECK(hasOneRef());
     m_vector.remove(index);
 }
 
@@ -157,8 +157,8 @@ void SpaceSplitString::set(const AtomicString& inputString, CaseFolding caseFold
         return;
     }
 
-    if (caseFolding == ShouldFoldCase && hasNonASCIIOrUpper(inputString.string())) {
-        String string(inputString.string());
+    if (caseFolding == ShouldFoldCase && hasNonASCIIOrUpper(inputString.getString())) {
+        String string(inputString.getString());
         string = string.foldCase();
         m_data = Data::create(AtomicString(string));
     } else {
@@ -174,7 +174,7 @@ SpaceSplitString::Data::~Data()
 
 PassRefPtr<SpaceSplitString::Data> SpaceSplitString::Data::create(const AtomicString& string)
 {
-    Data*& data = sharedDataMap().add(string, 0).storedValue->value;
+    Data*& data = sharedDataMap().add(string, nullptr).storedValue->value;
     if (!data) {
         data = new Data(string);
         return adoptRef(data);
@@ -190,7 +190,7 @@ PassRefPtr<SpaceSplitString::Data> SpaceSplitString::Data::createUnique(const Da
 SpaceSplitString::Data::Data(const AtomicString& string)
     : m_keyString(string)
 {
-    ASSERT(!string.isNull());
+    DCHECK(!string.isNull());
     createVector(string);
 }
 

@@ -8,11 +8,13 @@
 #include <windows.h>
 
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
@@ -26,6 +28,12 @@
 namespace remoting {
 
 namespace {
+
+using protocol::ClipboardEvent;
+using protocol::KeyEvent;
+using protocol::TextEvent;
+using protocol::MouseEvent;
+using protocol::TouchEvent;
 
 // Helper used to call SendInput() API.
 void SendKeyboardInput(uint32_t flags, uint16_t scancode) {
@@ -52,11 +60,93 @@ void SendKeyboardInput(uint32_t flags, uint16_t scancode) {
     PLOG(ERROR) << "Failed to inject a key event";
 }
 
-using protocol::ClipboardEvent;
-using protocol::KeyEvent;
-using protocol::TextEvent;
-using protocol::MouseEvent;
-using protocol::TouchEvent;
+// Parse move related operations from the input MouseEvent, and insert the
+// result into output.
+void ParseMouseMoveEvent(const MouseEvent& event, std::vector<INPUT>* output) {
+  INPUT input = {0};
+  input.type = INPUT_MOUSE;
+
+  if (event.has_delta_x() && event.has_delta_y()) {
+    input.mi.dx = event.delta_x();
+    input.mi.dy = event.delta_y();
+    input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK;
+  } else if (event.has_x() && event.has_y()) {
+    int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (width > 1 && height > 1) {
+      int x = std::max(0, std::min(width, event.x()));
+      int y = std::max(0, std::min(height, event.y()));
+      input.mi.dx = static_cast<int>((x * 65535) / (width - 1));
+      input.mi.dy = static_cast<int>((y * 65535) / (height - 1));
+      input.mi.dwFlags =
+          MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
+    }
+  } else {
+    return;
+  }
+
+  output->push_back(std::move(input));
+}
+
+// Parse click related operations from the input MouseEvent, and insert the
+// result into output.
+void ParseMouseClickEvent(const MouseEvent& event, std::vector<INPUT>* output) {
+  if (event.has_button() && event.has_button_down()) {
+    INPUT input = {0};
+    input.type = INPUT_MOUSE;
+
+    MouseEvent::MouseButton button = event.button();
+    bool down = event.button_down();
+
+    // If the host is configured to swap left & right buttons, inject swapped
+    // events to un-do that re-mapping.
+    if (GetSystemMetrics(SM_SWAPBUTTON)) {
+      if (button == MouseEvent::BUTTON_LEFT) {
+        button = MouseEvent::BUTTON_RIGHT;
+      } else if (button == MouseEvent::BUTTON_RIGHT) {
+        button = MouseEvent::BUTTON_LEFT;
+      }
+    }
+
+    if (button == MouseEvent::BUTTON_MIDDLE) {
+      input.mi.dwFlags = down ? MOUSEEVENTF_MIDDLEDOWN : MOUSEEVENTF_MIDDLEUP;
+    } else if (button == MouseEvent::BUTTON_RIGHT) {
+      input.mi.dwFlags = down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP;
+    } else {
+      input.mi.dwFlags = down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
+    }
+
+    output->push_back(std::move(input));
+  }
+}
+
+// Parse wheel related operations from the input MouseEvent, and insert the
+// result into output.
+void ParseMouseWheelEvent(const MouseEvent& event, std::vector<INPUT>* output) {
+  if (event.has_wheel_delta_x()) {
+    int delta = static_cast<int>(event.wheel_delta_x());
+    if (delta != 0) {
+      INPUT input = {0};
+      input.type = INPUT_MOUSE;
+      input.mi.mouseData = delta;
+      // According to MSDN, MOUSEEVENTF_HWHELL and MOUSEEVENTF_WHEEL are both
+      // required for a horizontal wheel event.
+      input.mi.dwFlags = MOUSEEVENTF_HWHEEL | MOUSEEVENTF_WHEEL;
+      output->push_back(std::move(input));
+    }
+  }
+
+  if (event.has_wheel_delta_y()) {
+    int delta = static_cast<int>(event.wheel_delta_y());
+    if (delta != 0) {
+      INPUT input = {0};
+      input.type = INPUT_MOUSE;
+      input.mi.mouseData = delta;
+      input.mi.dwFlags = MOUSEEVENTF_WHEEL;
+      output->push_back(std::move(input));
+    }
+  }
+}
 
 // A class to generate events on Windows.
 class InputInjectorWin : public InputInjector {
@@ -76,7 +166,7 @@ class InputInjectorWin : public InputInjector {
 
   // InputInjector interface.
   void Start(
-      scoped_ptr<protocol::ClipboardStub> client_clipboard) override;
+      std::unique_ptr<protocol::ClipboardStub> client_clipboard) override;
 
  private:
   // The actual implementation resides in InputInjectorWin::Core class.
@@ -95,7 +185,7 @@ class InputInjectorWin : public InputInjector {
     void InjectTouchEvent(const TouchEvent& event);
 
     // Mirrors the InputInjector interface.
-    void Start(scoped_ptr<protocol::ClipboardStub> client_clipboard);
+    void Start(std::unique_ptr<protocol::ClipboardStub> client_clipboard);
 
     void Stop();
 
@@ -110,7 +200,7 @@ class InputInjectorWin : public InputInjector {
 
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
     scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
-    scoped_ptr<Clipboard> clipboard_;
+    std::unique_ptr<Clipboard> clipboard_;
     TouchInjectorWin touch_injector_;
 
     DISALLOW_COPY_AND_ASSIGN(Core);
@@ -152,7 +242,7 @@ void InputInjectorWin::InjectTouchEvent(const TouchEvent& event) {
 }
 
 void InputInjectorWin::Start(
-    scoped_ptr<protocol::ClipboardStub> client_clipboard) {
+    std::unique_ptr<protocol::ClipboardStub> client_clipboard) {
   core_->Start(std::move(client_clipboard));
 }
 
@@ -216,7 +306,7 @@ void InputInjectorWin::Core::InjectTouchEvent(const TouchEvent& event) {
 }
 
 void InputInjectorWin::Core::Start(
-    scoped_ptr<protocol::ClipboardStub> client_clipboard) {
+    std::unique_ptr<protocol::ClipboardStub> client_clipboard) {
   if (!ui_task_runner_->BelongsToCurrentThread()) {
     ui_task_runner_->PostTask(
         FROM_HERE,
@@ -276,72 +366,13 @@ void InputInjectorWin::Core::HandleMouse(const MouseEvent& event) {
   // Reset the system idle suspend timeout.
   SetThreadExecutionState(ES_SYSTEM_REQUIRED);
 
-  INPUT input;
-  memset(&input, 0, sizeof(input));
-  input.type = INPUT_MOUSE;
+  std::vector<INPUT> inputs;
+  ParseMouseMoveEvent(event, &inputs);
+  ParseMouseClickEvent(event, &inputs);
+  ParseMouseWheelEvent(event, &inputs);
 
-  if (event.has_delta_x() && event.has_delta_y()) {
-    input.mi.dx = event.delta_x();
-    input.mi.dy = event.delta_y();
-    input.mi.dwFlags |= MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK;
-  } else if (event.has_x() && event.has_y()) {
-    int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    if (width > 1 && height > 1) {
-      int x = std::max(0, std::min(width, event.x()));
-      int y = std::max(0, std::min(height, event.y()));
-      input.mi.dx = static_cast<int>((x * 65535) / (width - 1));
-      input.mi.dy = static_cast<int>((y * 65535) / (height - 1));
-      input.mi.dwFlags |=
-          MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
-    }
-  }
-
-  int wheel_delta_x = 0;
-  int wheel_delta_y = 0;
-  if (event.has_wheel_delta_x() && event.has_wheel_delta_y()) {
-    wheel_delta_x = static_cast<int>(event.wheel_delta_x());
-    wheel_delta_y = static_cast<int>(event.wheel_delta_y());
-  }
-
-  if (wheel_delta_x != 0 || wheel_delta_y != 0) {
-    if (wheel_delta_x != 0) {
-      input.mi.mouseData = wheel_delta_x;
-      input.mi.dwFlags |= MOUSEEVENTF_HWHEEL;
-    }
-    if (wheel_delta_y != 0) {
-      input.mi.mouseData = wheel_delta_y;
-      input.mi.dwFlags |= MOUSEEVENTF_WHEEL;
-    }
-  }
-
-  if (event.has_button() && event.has_button_down()) {
-    MouseEvent::MouseButton button = event.button();
-    bool down = event.button_down();
-
-    // If the host is configured to swap left & right buttons, inject swapped
-    // events to un-do that re-mapping.
-    if (GetSystemMetrics(SM_SWAPBUTTON)) {
-      if (button == MouseEvent::BUTTON_LEFT) {
-        button = MouseEvent::BUTTON_RIGHT;
-      } else if (button == MouseEvent::BUTTON_RIGHT) {
-        button = MouseEvent::BUTTON_LEFT;
-      }
-    }
-
-    if (button == MouseEvent::BUTTON_LEFT) {
-      input.mi.dwFlags |= down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
-    } else if (button == MouseEvent::BUTTON_MIDDLE) {
-      input.mi.dwFlags |= down ? MOUSEEVENTF_MIDDLEDOWN : MOUSEEVENTF_MIDDLEUP;
-    } else if (button == MouseEvent::BUTTON_RIGHT) {
-      input.mi.dwFlags |= down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP;
-    } else {
-      input.mi.dwFlags |= down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
-    }
-  }
-
-  if (input.mi.dwFlags) {
-    if (SendInput(1, &input, sizeof(INPUT)) == 0)
+  if (!inputs.empty()) {
+    if (SendInput(inputs.size(), inputs.data(), sizeof(INPUT)) != inputs.size())
       PLOG(ERROR) << "Failed to inject a mouse event";
   }
 }
@@ -353,16 +384,16 @@ void InputInjectorWin::Core::HandleTouch(const TouchEvent& event) {
 }  // namespace
 
 // static
-scoped_ptr<InputInjector> InputInjector::Create(
+std::unique_ptr<InputInjector> InputInjector::Create(
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner) {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new InputInjectorWin(main_task_runner, ui_task_runner));
 }
 
 // static
 bool InputInjector::SupportsTouchEvents() {
-  return TouchInjectorWinDelegate::Create();
+  return TouchInjectorWinDelegate::Create() != nullptr;
 }
 
 }  // namespace remoting

@@ -92,6 +92,9 @@ by a child template that "extends" this file.
     -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
+    {% block extra_keyset_definitions %}
+    {% endblock %}
+
     <!-- Set android:largeHeap to "true" to allow more than the default
          Java heap limit (32Mb on Nexus S, 48Mb on Xoom). -->
     <application android:name="{% block application_name %}org.chromium.chrome.browser.ChromeApplication{% endblock %}"
@@ -115,10 +118,8 @@ by a child template that "extends" this file.
         {% if channel in ['dev', 'canary', 'default'] %}
         <meta-data android:name="com.sec.android.support.multiwindow" android:value="true" />
         {% endif %}
-        {% if configuration_policy == '1' %}
         <meta-data android:name="android.content.APP_RESTRICTIONS"
             android:resource="@xml/app_restrictions"/>
-        {% endif %}
 
         <!-- Note: All activities directly or indirectly derived from ChromeActivity
              must specify android:hardwareAccelerated="false".
@@ -200,6 +201,29 @@ by a child template that "extends" this file.
             <meta-data android:name="android.app.searchable"
                 android:resource="@xml/searchable" />
         </activity-alias>
+
+        <!-- Upgrade related -->
+        <activity android:name="org.chromium.chrome.browser.upgrade.UpgradeActivity"
+            android:excludeFromRecents="true"
+            android:theme="@style/MainTheme"
+            android:windowSoftInputMode="adjustResize"
+            android:taskAffinity=""
+            android:launchMode="singleInstance"
+            android:persistableMode="persistNever"
+            android:autoRemoveFromRecents="false"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:hardwareAccelerated="false">
+        </activity>
+        <service android:name="org.chromium.chrome.browser.upgrade.UpgradeIntentService"
+            android:exported="false"/>
+        <receiver android:name="org.chromium.chrome.browser.upgrade.PackageReplacedBroadcastReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Document mode Activities. -->
         <activity android:name="org.chromium.chrome.browser.document.DocumentActivity"
             android:exported="false"
             android:theme="@style/MainTheme"
@@ -227,13 +251,25 @@ by a child template that "extends" this file.
         <activity-alias android:name="com.google.android.apps.chrome.document.IncognitoDocumentActivity"
             android:targetActivity="org.chromium.chrome.browser.document.IncognitoDocumentActivity"
             android:exported="false"/>
+
+        <!-- Custom Tabs -->
         <activity android:name="org.chromium.chrome.browser.customtabs.CustomTabActivity"
             android:theme="@style/MainTheme"
             android:exported="false"
             android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:hardwareAccelerated="false">
         </activity>
+        <activity android:name="org.chromium.chrome.browser.customtabs.SeparateTaskCustomTabActivity"
+            android:theme="@style/MainTheme"
+            android:exported="false"
+            android:taskAffinity=""
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:hardwareAccelerated="false">
+        </activity>
+
+        <!-- ChromeTabbedActivity related -->
         <activity android:name="org.chromium.chrome.browser.ChromeTabbedActivity"
              android:theme="@style/MainTheme"
              android:exported="false"
@@ -243,14 +279,25 @@ by a child template that "extends" this file.
              android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
              android:hardwareAccelerated="false">
         </activity>
+        <activity android:name="org.chromium.chrome.browser.ChromeTabbedActivity2"
+             android:theme="@style/MainTheme"
+             android:exported="false"
+             android:windowBackground="@drawable/window_background"
+             android:windowSoftInputMode="adjustResize"
+             android:taskAffinity="{{ manifest_package }}.ChromeTabbedActivity2"
+             android:launchMode="singleTask"
+             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+             android:hardwareAccelerated="false">
+        </activity>
         <activity android:name="org.chromium.chrome.browser.multiwindow.MultiInstanceChromeTabbedActivity"
             android:theme="@style/MainTheme"
             android:exported="false"
             android:windowBackground="@drawable/window_background"
             android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:hardwareAccelerated="false">
         </activity>
+
         <activity android:name="org.chromium.chrome.browser.sync.ui.PassphraseActivity"
             android:theme="@style/MainTheme"
             android:autoRemoveFromRecents="true">
@@ -260,22 +307,22 @@ by a child template that "extends" this file.
             android:label="@string/fre_label"
             android:launchMode="singleTop"
             android:windowSoftInputMode="stateHidden|adjustPan"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc">
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.signin.AccountSigninActivity"
             android:theme="@style/MainTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc">
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.preferences.Preferences"
             android:theme="@style/PreferencesTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:label="@string/preferences"
             android:exported="false">
         </activity>
         <activity android:name="org.chromium.chrome.browser.EmbedContentViewActivity"
             android:theme="@style/ThemeWithActionBar"
             android:hardwareAccelerated="false"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc">
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.prerender.PrerenderAPITestActivity"
             android:theme="@style/MainTheme"
@@ -284,12 +331,12 @@ by a child template that "extends" this file.
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkActivity"
             android:theme="@style/BookmarkDialog"
             android:windowSoftInputMode="stateAlwaysHidden"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc" >
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkAddActivity"
             android:theme="@style/BookmarkDialogWhite"
             android:windowSoftInputMode="stateHidden"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc" >
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
             <intent-filter>
                 <action android:name="{{ manifest_package }}.ADDBOOKMARK" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -298,21 +345,17 @@ by a child template that "extends" this file.
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkEditActivity"
             android:theme="@style/BookmarkDialogWhite"
             android:windowSoftInputMode="stateHidden"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc" >
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkAddEditFolderActivity"
             android:theme="@style/BookmarkDialogWhite"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc" >
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkFolderSelectActivity"
             android:theme="@style/BookmarkDialogWhite"
             android:windowSoftInputMode="stateAlwaysHidden"
             android:label="@string/bookmark_choose_folder"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc" >
-        </activity>
-        <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkSigninActivity"
-            android:theme="@style/BookmarkDialogWhite"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc" >
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
 
         <!--
@@ -340,7 +383,7 @@ by a child template that "extends" this file.
             android:windowSoftInputMode="adjustResize"
             android:persistableMode="persistNever"
             android:hardwareAccelerated="false"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc">
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity-alias android:name="com.google.android.apps.chrome.webapps.WebappActivity"
             android:targetActivity="org.chromium.chrome.browser.webapps.WebappActivity"
@@ -356,7 +399,7 @@ by a child template that "extends" this file.
             android:persistableMode="persistNever"
             android:hardwareAccelerated="false"
             android:taskAffinity="{{ manifest_package }}.webapps.WebappActivity{{ i }}"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc">
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity-alias android:name="com.google.android.apps.chrome.webapps.WebappActivity{{ i }}"
             android:targetActivity="org.chromium.chrome.browser.webapps.WebappActivity{{ i }}"
@@ -371,7 +414,7 @@ by a child template that "extends" this file.
             android:hardwareAccelerated="true"
             android:launchMode="singleTask"
             android:noHistory="true"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:excludeFromRecents="true">
         </activity>
 
@@ -404,7 +447,7 @@ by a child template that "extends" this file.
             android:label="@string/physical_web_list_urls_activity_title"
             android:theme="@style/PhysicalWebNearbyUrlsListStyle"
             android:autoRemoveFromRecents="true"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false" >
         </activity>
 
@@ -473,13 +516,9 @@ by a child template that "extends" this file.
         to some process churn, so omit them while not relevant. b/24776372
         -->
         {% if channel in ['default', 'canary', 'dev', 'beta'] %}
-        <service android:name="org.chromium.chrome.browser.precache.PrecacheService"
-            android:exported="false" />
-        <receiver android:name="org.chromium.chrome.browser.precache.PrecacheServiceLauncher">
+        <receiver android:name="org.chromium.chrome.browser.precache.PrecacheBootReceiver">
             <intent-filter>
-                <action android:name="android.intent.action.ACTION_POWER_CONNECTED"/>
-                <action android:name="android.intent.action.ACTION_POWER_DISCONNECTED"/>
-                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
         </receiver>
         {% endif %}
@@ -501,22 +540,23 @@ by a child template that "extends" this file.
             </intent-filter>
         </receiver>
 
+        <!-- Bookmarks widget -->
         <receiver android:name="com.google.android.apps.chrome.appwidget.bookmarks.BookmarkThumbnailWidgetProvider"
-            android:label="@string/bookmarks">
+            android:label="@string/bookmark_widget_title">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name=".BOOKMARK_APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/bookmark_thumbnail_widget_info" />
+                android:resource="@xml/bookmark_widget_info" />
         </receiver>
-        <service android:name="org.chromium.chrome.browser.bookmarkswidget.BookmarkThumbnailWidgetService"
+        <service android:name="org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetService"
             android:permission="android.permission.BIND_REMOTEVIEWS"
             android:exported="false" />
         <receiver android:name="org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProxy"
             android:exported="false" />
-            
+
         <!-- Receiver for GCM messages. -->
         <receiver android:name="com.google.android.gms.gcm.GcmReceiver"
             android:exported="true"
@@ -611,6 +651,9 @@ by a child template that "extends" this file.
 
         <service android:name="org.chromium.chrome.browser.omaha.OmahaClient"
             android:exported="false"/>
+        <service android:name="org.chromium.chrome.browser.incognito.IncognitoNotificationService"
+            android:exported="false"/>
+
 
         <!-- The following service entries exist in order to allow us to
              start more than one sandboxed process. -->
@@ -637,7 +680,7 @@ by a child template that "extends" this file.
             android:value="{{ num_privileged_services }}"/>
         {% for i in range(num_privileged_services) %}
         {% set privileged_process_name = ':privileged_process%d' % i %}
-        <!-- TODO(tedchoc): Omit this for release builds as MultiDex is debug only. --> 
+        <!-- TODO(tedchoc): Omit this for release builds as MultiDex is debug only. -->
         <meta-data android:name="{{ manifest_package }}{{ privileged_process_name }}.ignore_multidex"
 android:value="true" />
         <service android:name="org.chromium.content.app.PrivilegedProcessService{{ i }}"

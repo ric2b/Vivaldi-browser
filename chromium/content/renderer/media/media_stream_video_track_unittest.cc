@@ -82,6 +82,16 @@ class MediaStreamVideoTrackTest : public ::testing::Test {
     return track;
   }
 
+  void UpdateVideoSourceToRespondToRequestRefreshFrame() {
+    blink_source_.reset();
+    mock_source_ = new MockMediaStreamVideoSource(false, true);
+    blink_source_.initialize(base::UTF8ToUTF16("dummy_source_id"),
+                             blink::WebMediaStreamSource::TypeVideo,
+                             base::UTF8ToUTF16("dummy_source_name"),
+                             false /* remote */, true /* readonly */);
+    blink_source_.setExtraData(mock_source_);
+  }
+
   MockMediaStreamVideoSource* mock_source() { return mock_source_; }
   const blink::WebMediaStreamSource& blink_source() const {
     return blink_source_;
@@ -89,7 +99,7 @@ class MediaStreamVideoTrackTest : public ::testing::Test {
 
  private:
   const base::MessageLoopForUI message_loop_;
-  const scoped_ptr<ChildProcess> child_process_;
+  const std::unique_ptr<ChildProcess> child_process_;
   blink::WebMediaStreamSource blink_source_;
   // |mock_source_| is owned by |webkit_source_|.
   MockMediaStreamVideoSource* mock_source_;
@@ -99,14 +109,14 @@ class MediaStreamVideoTrackTest : public ::testing::Test {
 TEST_F(MediaStreamVideoTrackTest, AddAndRemoveSink) {
   MockMediaStreamVideoSink sink;
   blink::WebMediaStreamTrack track = CreateTrack();
-  MediaStreamVideoSink::AddToVideoTrack(&sink, sink.GetDeliverFrameCB(), track);
+  sink.ConnectToTrack(track);
 
   DeliverVideoFrameAndWaitForRenderer(&sink);
   EXPECT_EQ(1, sink.number_of_frames());
 
   DeliverVideoFrameAndWaitForRenderer(&sink);
 
-  MediaStreamVideoSink::RemoveFromVideoTrack(&sink, track);
+  sink.DisconnectFromTrack();
 
   scoped_refptr<media::VideoFrame> frame =
       media::VideoFrame::CreateBlackFrame(
@@ -150,13 +160,12 @@ TEST_F(MediaStreamVideoTrackTest, ResetCallbackOnThread) {
 
   base::RunLoop run_loop;
   bool correct = false;
-  MediaStreamVideoSink::AddToVideoTrack(
-      &sink,
-      base::Bind(
-          &CheckThreadVideoFrameReceiver,
-          base::Owned(new CheckThreadHelper(run_loop.QuitClosure(), &correct))),
-      track);
-  MediaStreamVideoSink::RemoveFromVideoTrack(&sink, track);
+  sink.ConnectToTrackWithCallback(
+      track,
+      base::Bind(&CheckThreadVideoFrameReceiver,
+                 base::Owned(new CheckThreadHelper(run_loop.QuitClosure(),
+                                                   &correct))));
+  sink.DisconnectFromTrack();
   run_loop.Run();
   EXPECT_TRUE(correct) << "Not called on correct thread.";
 }
@@ -164,7 +173,7 @@ TEST_F(MediaStreamVideoTrackTest, ResetCallbackOnThread) {
 TEST_F(MediaStreamVideoTrackTest, SetEnabled) {
   MockMediaStreamVideoSink sink;
   blink::WebMediaStreamTrack track = CreateTrack();
-  MediaStreamVideoSink::AddToVideoTrack(&sink, sink.GetDeliverFrameCB(), track);
+  sink.ConnectToTrack(track);
 
   MediaStreamVideoTrack* video_track =
       MediaStreamVideoTrack::GetVideoTrack(track);
@@ -185,34 +194,32 @@ TEST_F(MediaStreamVideoTrackTest, SetEnabled) {
   DeliverVideoFrameAndWaitForRenderer(&sink);
   EXPECT_EQ(3, sink.number_of_frames());
   EXPECT_EQ(kColorValue, *sink.last_frame()->data(media::VideoFrame::kYPlane));
-  MediaStreamVideoSink::RemoveFromVideoTrack(&sink, track);
+  sink.DisconnectFromTrack();
 }
 
 TEST_F(MediaStreamVideoTrackTest, SourceStopped) {
   MockMediaStreamVideoSink sink;
   blink::WebMediaStreamTrack track = CreateTrack();
-  MediaStreamVideoSink::AddToVideoTrack(&sink, sink.GetDeliverFrameCB(), track);
+  sink.ConnectToTrack(track);
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateLive, sink.state());
 
   mock_source()->StopSource();
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateEnded, sink.state());
-  MediaStreamVideoSink::RemoveFromVideoTrack(&sink, track);
+  sink.DisconnectFromTrack();
 }
 
 TEST_F(MediaStreamVideoTrackTest, StopLastTrack) {
   MockMediaStreamVideoSink sink1;
   blink::WebMediaStreamTrack track1 = CreateTrack();
-  MediaStreamVideoSink::AddToVideoTrack(
-      &sink1, sink1.GetDeliverFrameCB(), track1);
+  sink1.ConnectToTrack(track1);
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateLive, sink1.state());
 
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateLive,
-            blink_source().readyState());
+            blink_source().getReadyState());
 
   MockMediaStreamVideoSink sink2;
   blink::WebMediaStreamTrack track2 = CreateTrack();
-  MediaStreamVideoSink::AddToVideoTrack(
-      &sink2, sink2.GetDeliverFrameCB(), track2);
+  sink2.ConnectToTrack(track2);
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateLive, sink2.state());
 
   MediaStreamVideoTrack* const native_track1 =
@@ -220,16 +227,32 @@ TEST_F(MediaStreamVideoTrackTest, StopLastTrack) {
   native_track1->Stop();
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateEnded, sink1.state());
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateLive,
-              blink_source().readyState());
-  MediaStreamVideoSink::RemoveFromVideoTrack(&sink1, track1);
+            blink_source().getReadyState());
+  sink1.DisconnectFromTrack();
 
   MediaStreamVideoTrack* const native_track2 =
         MediaStreamVideoTrack::GetVideoTrack(track2);
   native_track2->Stop();
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateEnded, sink2.state());
   EXPECT_EQ(blink::WebMediaStreamSource::ReadyStateEnded,
-            blink_source().readyState());
-  MediaStreamVideoSink::RemoveFromVideoTrack(&sink2, track2);
+            blink_source().getReadyState());
+  sink2.DisconnectFromTrack();
+}
+
+TEST_F(MediaStreamVideoTrackTest, CheckTrackRequestsFrame) {
+  UpdateVideoSourceToRespondToRequestRefreshFrame();
+  blink::WebMediaStreamTrack track = CreateTrack();
+
+  // Add sink and expect to get a frame.
+  MockMediaStreamVideoSink sink;
+  base::RunLoop run_loop;
+  base::Closure quit_closure = run_loop.QuitClosure();
+  EXPECT_CALL(sink, OnVideoFrame()).WillOnce(RunClosure(quit_closure));
+  sink.ConnectToTrack(track);
+  run_loop.Run();
+  EXPECT_EQ(1, sink.number_of_frames());
+
+  sink.DisconnectFromTrack();
 }
 
 }  // namespace content

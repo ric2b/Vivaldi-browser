@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_CHROMEOS_POLICY_USER_CLOUD_POLICY_MANAGER_FACTORY_CHROMEOS_H_
 
 #include <map>
+#include <memory>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -56,7 +57,7 @@ class UserCloudPolicyManagerFactoryChromeOS
   //
   // If |force_immediate_load| is true, policy is loaded synchronously from
   // UserCloudPolicyStore at startup.
-  static scoped_ptr<UserCloudPolicyManagerChromeOS> CreateForProfile(
+  static std::unique_ptr<UserCloudPolicyManagerChromeOS> CreateForProfile(
       Profile* profile,
       bool force_immediate_load,
       scoped_refptr<base::SequencedTaskRunner> background_task_runner);
@@ -70,7 +71,7 @@ class UserCloudPolicyManagerFactoryChromeOS
 
   // See comments for the static versions above.
   UserCloudPolicyManagerChromeOS* GetManagerForProfile(Profile* profile);
-  scoped_ptr<UserCloudPolicyManagerChromeOS> CreateManagerForProfile(
+  std::unique_ptr<UserCloudPolicyManagerChromeOS> CreateManagerForProfile(
       Profile* profile,
       bool force_immediate_load,
       scoped_refptr<base::SequencedTaskRunner> background_task_runner);

@@ -30,16 +30,15 @@
 #ifndef ScriptBreakpoint_h
 #define ScriptBreakpoint_h
 
-#include "wtf/Allocator.h"
-#include "wtf/text/WTFString.h"
+#include "platform/inspector_protocol/Allocator.h"
+#include "platform/inspector_protocol/String16.h"
 
 namespace blink {
 
 struct ScriptBreakpoint {
-    STACK_ALLOCATED();
-    ScriptBreakpoint() : ScriptBreakpoint(0, 0, String()) { }
+    ScriptBreakpoint() : ScriptBreakpoint(0, 0, String16()) { }
 
-    ScriptBreakpoint(int lineNumber, int columnNumber, const String& condition)
+    ScriptBreakpoint(int lineNumber, int columnNumber, const String16& condition)
         : lineNumber(lineNumber)
         , columnNumber(columnNumber)
         , condition(condition)
@@ -48,7 +47,7 @@ struct ScriptBreakpoint {
 
     int lineNumber;
     int columnNumber;
-    String condition;
+    String16 condition;
 };
 
 } // namespace blink

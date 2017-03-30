@@ -5,11 +5,11 @@
 #ifndef REMOTING_CLIENT_CHROMOTING_JNI_INSTANCE_H_
 #define REMOTING_CLIENT_CHROMOTING_JNI_INSTANCE_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "remoting/client/chromoting_client.h"
@@ -33,7 +33,6 @@ class VideoRenderer;
 class ChromotingJniRuntime;
 class ClientStatusLogger;
 class JniFrameConsumer;
-class TokenFetcherProxy;
 
 // ClientUserInterface that indirectly makes and receives JNI calls.
 class ChromotingJniInstance
@@ -62,10 +61,10 @@ class ChromotingJniInstance
 
   // Requests the android app to fetch a third-party token.
   void FetchThirdPartyToken(
-      const GURL& token_url,
-      const std::string& client_id,
+      const std::string& host_public_key,
+      const std::string& token_url,
       const std::string& scope,
-      const base::WeakPtr<TokenFetcherProxy> token_fetcher_proxy);
+      const protocol::ThirdPartyTokenFetchedCallback& token_fetched_callback);
 
   // Called by the android app when the token is fetched.
   void HandleOnThirdPartyTokenFetched(const std::string& token,
@@ -109,6 +108,8 @@ class ChromotingJniInstance
   void SetCapabilities(const std::string& capabilities) override;
   void SetPairingResponse(const protocol::PairingResponse& response) override;
   void DeliverHostMessage(const protocol::ExtensionMessage& message) override;
+  void SetDesktopSize(const webrtc::DesktopSize& size,
+                      const webrtc::DesktopVector& dpi) override;
   protocol::ClipboardStub* GetClipboardStub() override;
   protocol::CursorShapeStub* GetCursorShapeStub() override;
 
@@ -148,22 +149,22 @@ class ChromotingJniInstance
   ChromotingJniRuntime* jni_runtime_;
 
   // ID of the host we are connecting to.
-  std::string host_id_;
   std::string host_jid_;
+
+  protocol::ClientAuthenticationConfig client_auth_config_;
 
   std::string flags_;
 
   // This group of variables is to be used on the network thread.
-  scoped_ptr<ClientContext> client_context_;
-  scoped_ptr<protocol::PerformanceTracker> perf_tracker_;
-  scoped_ptr<JniFrameConsumer> view_;
-  scoped_ptr<protocol::VideoRenderer> video_renderer_;
-  scoped_ptr<protocol::Authenticator> authenticator_;
-  scoped_ptr<ChromotingClient> client_;
+  std::unique_ptr<ClientContext> client_context_;
+  std::unique_ptr<protocol::PerformanceTracker> perf_tracker_;
+  std::unique_ptr<JniFrameConsumer> view_;
+  std::unique_ptr<protocol::VideoRenderer> video_renderer_;
+  std::unique_ptr<ChromotingClient> client_;
   XmppSignalStrategy::XmppServerConfig xmpp_config_;
-  scoped_ptr<XmppSignalStrategy> signaling_;  // Must outlive client_
-  scoped_ptr<ClientStatusLogger> client_status_logger_;
-  base::WeakPtr<TokenFetcherProxy> token_fetcher_proxy_;
+  std::unique_ptr<XmppSignalStrategy> signaling_;  // Must outlive client_
+  std::unique_ptr<ClientStatusLogger> client_status_logger_;
+  protocol::ThirdPartyTokenFetchedCallback third_party_token_fetched_callback_;
 
   // Pass this the user's PIN once we have it. To be assigned and accessed on
   // the UI thread, but must be posted to the network thread to call it.
@@ -173,7 +174,7 @@ class ChromotingJniInstance
   // modified in ProvideSecret(), but thereafter to be used only from the
   // network thread. (This is safe because ProvideSecret() is invoked at most
   // once per run, and always before any reference to this flag.)
-  bool create_pairing_;
+  bool create_pairing_ = false;
 
   // The device name to appear in the paired-clients list. Accessed on the
   // network thread.
@@ -181,7 +182,7 @@ class ChromotingJniInstance
 
   // If this is true, performance statistics will be periodically written to
   // the Android log. Used on the network thread.
-  bool stats_logging_enabled_;
+  bool stats_logging_enabled_ = false;
 
   // The set of capabilities supported by the client. Accessed on the network
   // thread. Once SetCapabilities() is called, this will contain the negotiated

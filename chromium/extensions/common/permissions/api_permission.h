@@ -162,7 +162,7 @@ class APIPermission {
     kPlugin,
     kPower,
     kPreferencesPrivate,
-    kPrincipalsPrivate,
+    kDeleted_PrincipalsPrivate,
     kPrinterProvider,
     kPrivacy,
     kProcesses,

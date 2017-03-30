@@ -13,13 +13,16 @@
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
 #endif
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/component_patcher_operation_out_of_process.h"
+#include "chrome/browser/google/google_brand.h"
 #include "chrome/browser/update_client/chrome_update_query_params_delegate.h"
 #include "chrome/common/channel_info.h"
 #if defined(OS_WIN)
 #include "chrome/installer/util/google_update_settings.h"
 #endif
 #include "components/component_updater/configurator_impl.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace component_updater {
@@ -41,6 +44,7 @@ class ChromeConfigurator : public update_client::Configurator {
   std::vector<GURL> PingUrl() const override;
   base::Version GetBrowserVersion() const override;
   std::string GetChannel() const override;
+  std::string GetBrand() const override;
   std::string GetLang() const override;
   std::string GetOSLongName() const override;
   std::string ExtraRequestParams() const override;
@@ -53,6 +57,7 @@ class ChromeConfigurator : public update_client::Configurator {
   bool UseCupSigning() const override;
   scoped_refptr<base::SequencedTaskRunner> GetSequencedTaskRunner()
       const override;
+  PrefService* GetPrefService() const override;
 
  private:
   friend class base::RefCountedThreadSafe<ChromeConfigurator>;
@@ -62,10 +67,13 @@ class ChromeConfigurator : public update_client::Configurator {
   ~ChromeConfigurator() override {}
 };
 
+// Allows the component updater to use non-encrypted communication with the
+// update backend. The security of the update checks is enforced using
+// a custom message signing protocol and it does not depend on using HTTPS.
 ChromeConfigurator::ChromeConfigurator(
     const base::CommandLine* cmdline,
     net::URLRequestContextGetter* url_request_getter)
-    : configurator_impl_(cmdline, url_request_getter) {}
+    : configurator_impl_(cmdline, url_request_getter, false) {}
 
 int ChromeConfigurator::InitialDelay() const {
   return configurator_impl_.InitialDelay();
@@ -101,6 +109,12 @@ base::Version ChromeConfigurator::GetBrowserVersion() const {
 
 std::string ChromeConfigurator::GetChannel() const {
   return chrome::GetChannelString();
+}
+
+std::string ChromeConfigurator::GetBrand() const {
+  std::string brand;
+  google_brand::GetBrand(&brand);
+  return brand;
 }
 
 std::string ChromeConfigurator::GetLang() const {
@@ -159,6 +173,10 @@ ChromeConfigurator::GetSequencedTaskRunner() const {
       ->GetSequencedTaskRunnerWithShutdownBehavior(
           base::SequencedWorkerPool::GetSequenceToken(),
           base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
+}
+
+PrefService* ChromeConfigurator::GetPrefService() const {
+  return g_browser_process->local_state();
 }
 
 }  // namespace

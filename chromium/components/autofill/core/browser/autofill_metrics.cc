@@ -38,6 +38,7 @@ enum FieldTypeGroupForMetrics {
   GROUP_PASSWORD,
   GROUP_ADDRESS_LINE_3,
   GROUP_USERNAME,
+  GROUP_STREET_ADDRESS,
   NUM_FIELD_TYPE_GROUPS_FOR_METRICS
 };
 
@@ -99,6 +100,8 @@ int GetFieldTypeGroupMetric(ServerFieldType field_type,
         case ADDRESS_HOME_LINE3:
           group = GROUP_ADDRESS_LINE_3;
           break;
+        case ADDRESS_HOME_STREET_ADDRESS:
+          group = GROUP_STREET_ADDRESS;
         case ADDRESS_HOME_CITY:
           group = GROUP_ADDRESS_CITY;
           break;
@@ -129,7 +132,9 @@ int GetFieldTypeGroupMetric(ServerFieldType field_type,
 
     case CREDIT_CARD:
       switch (field_type) {
-        case CREDIT_CARD_NAME:
+        case CREDIT_CARD_NAME_FULL:
+        case CREDIT_CARD_NAME_FIRST:
+        case CREDIT_CARD_NAME_LAST:
           group = GROUP_CREDIT_CARD_NAME;
           break;
         case CREDIT_CARD_NUMBER:
@@ -624,6 +629,11 @@ void AutofillMetrics::LogStoredProfileCount(size_t num_profiles) {
 }
 
 // static
+void AutofillMetrics::LogStoredLocalCreditCardCount(size_t num_local_cards) {
+  UMA_HISTOGRAM_COUNTS("Autofill.StoredLocalCreditCardCount", num_local_cards);
+}
+
+// static
 void AutofillMetrics::LogNumberOfProfilesAtAutofillableFormSubmission(
     size_t num_profiles) {
   UMA_HISTOGRAM_COUNTS(
@@ -681,6 +691,17 @@ void AutofillMetrics::LogAutofillFormSubmittedState(
     AutofillFormSubmittedState state) {
   UMA_HISTOGRAM_ENUMERATION("Autofill.FormSubmittedState", state,
                             AUTOFILL_FORM_SUBMITTED_STATE_ENUM_SIZE);
+}
+
+// static
+void AutofillMetrics::LogDetermineHeuristicTypesTiming(
+    const base::TimeDelta& duration) {
+  UMA_HISTOGRAM_TIMES("Autofill.Timing.DetermineHeuristicTypes", duration);
+}
+
+// static
+void AutofillMetrics::LogParseFormTiming(const base::TimeDelta& duration) {
+  UMA_HISTOGRAM_TIMES("Autofill.Timing.ParseForm", duration);
 }
 
 AutofillMetrics::FormEventLogger::FormEventLogger(bool is_for_credit_card)

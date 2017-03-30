@@ -19,7 +19,10 @@ import android.support.customtabs.ICustomTabsCallback;
 import android.test.InstrumentationTestCase;
 import android.test.suitebuilder.annotation.SmallTest;
 
+import org.chromium.base.PathUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.library_loader.LibraryLoader;
+import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.content_public.browser.WebContents;
 
@@ -32,6 +35,7 @@ public class CustomTabsConnectionTest extends InstrumentationTestCase {
     private static final String URL = "http://www.google.com";
     private static final String URL2 = "https://www.android.com";
     private static final String INVALID_SCHEME_URL = "intent://www.google.com";
+    private static final String PRIVATE_DATA_DIRECTORY_SUFFIX = "chrome";
 
     private Context mContext;
 
@@ -39,6 +43,10 @@ public class CustomTabsConnectionTest extends InstrumentationTestCase {
     protected void setUp() throws Exception {
         super.setUp();
         mContext = getInstrumentation().getTargetContext().getApplicationContext();
+        PathUtils.setPrivateDataDirectorySuffix(PRIVATE_DATA_DIRECTORY_SUFFIX,
+                mContext);
+        LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER)
+                .ensureInitialized(mContext);
         mCustomTabsConnection = CustomTabsTestUtils.setUpConnection((Application) mContext);
     }
 

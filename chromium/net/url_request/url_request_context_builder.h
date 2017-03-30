@@ -15,9 +15,11 @@
 #define NET_URL_REQUEST_URL_REQUEST_CONTEXT_BUILDER_H_
 
 #include <stdint.h>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -26,12 +28,14 @@
 #include "build/build_config.h"
 #include "net/base/net_export.h"
 #include "net/base/network_delegate.h"
+#include "net/base/proxy_delegate.h"
 #include "net/dns/host_resolver.h"
 #include "net/http/http_network_session.h"
 #include "net/proxy/proxy_config_service.h"
 #include "net/proxy/proxy_service.h"
 #include "net/quic/quic_protocol.h"
 #include "net/socket/next_proto.h"
+#include "net/url_request/url_request_job_factory.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -101,6 +105,7 @@ class NET_EXPORT URLRequestContextBuilder {
     bool quic_close_sessions_on_ip_change;
     bool quic_migrate_sessions_on_network_change;
     bool quic_migrate_sessions_early;
+    bool quic_disable_bidirectional_streams;
   };
 
   URLRequestContextBuilder();
@@ -153,6 +158,12 @@ class NET_EXPORT URLRequestContextBuilder {
   }
 #endif
 
+  // Sets a valid ProtocolHandler for a scheme.
+  // A ProtocolHandler already exists for |scheme| will be overwritten.
+  void SetProtocolHandler(
+      const std::string& scheme,
+      scoped_ptr<URLRequestJobFactory::ProtocolHandler> protocol_handler);
+
   // Unlike the other setters, the builder does not take ownership of the
   // NetLog.
   // TODO(mmenke):  Probably makes sense to get rid of this, and have consumers
@@ -169,6 +180,12 @@ class NET_EXPORT URLRequestContextBuilder {
   // Build is called.
   void set_network_delegate(scoped_ptr<NetworkDelegate> delegate) {
     network_delegate_ = std::move(delegate);
+  }
+
+  // Temporarily stores a ProxyDelegate. Ownership is transferred to
+  // UrlRequestContextStorage during Build.
+  void set_proxy_delegate(scoped_ptr<ProxyDelegate> delegate) {
+    proxy_delegate_ = std::move(delegate);
   }
 
   // Sets a specific HttpAuthHandlerFactory to be used by the URLRequestContext
@@ -260,6 +277,12 @@ class NET_EXPORT URLRequestContextBuilder {
         quic_migrate_sessions_early;
   }
 
+  void set_quic_disable_bidirectional_streams(
+      bool quic_disable_bidirectional_streams) {
+    http_network_session_params_.quic_disable_bidirectional_streams =
+        quic_disable_bidirectional_streams;
+  }
+
   void set_throttling_enabled(bool throttling_enabled) {
     throttling_enabled_ = throttling_enabled;
   }
@@ -274,14 +297,16 @@ class NET_EXPORT URLRequestContextBuilder {
       std::vector<scoped_ptr<URLRequestInterceptor>> url_request_interceptors);
 
   // Override the default in-memory cookie store and channel id service.
-  // |cookie_store| must not be NULL. |channel_id_service| may be NULL to
-  // disable channel id for this context.
+  // If both |cookie_store| and |channel_id_service| are NULL, CookieStore and
+  // ChannelIDService will be disabled for this context.
+  // If |cookie_store| is not NULL and |channel_id_service| is NULL,
+  // only ChannelIdService is disabled for this context.
   // Note that a persistent cookie store should not be used with an in-memory
   // channel id service, and one cookie store should not be shared between
   // multiple channel-id stores (or used both with and without a channel id
   // store).
   void SetCookieAndChannelIdStores(
-      const scoped_refptr<CookieStore>& cookie_store,
+      scoped_ptr<CookieStore> cookie_store,
       scoped_ptr<ChannelIDService> channel_id_service);
 
   // Sets the task runner used to perform file operations. If not set, one will
@@ -320,6 +345,7 @@ class NET_EXPORT URLRequestContextBuilder {
   bool throttling_enabled_;
   bool backoff_enabled_;
   bool sdch_enabled_;
+  bool cookie_store_set_by_client_;
 
   scoped_refptr<base::SingleThreadTaskRunner> file_task_runner_;
   HttpCacheParams http_cache_params_;
@@ -331,12 +357,17 @@ class NET_EXPORT URLRequestContextBuilder {
   scoped_ptr<ProxyConfigService> proxy_config_service_;
   scoped_ptr<ProxyService> proxy_service_;
   scoped_ptr<NetworkDelegate> network_delegate_;
-  scoped_refptr<CookieStore> cookie_store_;
+  scoped_ptr<ProxyDelegate> proxy_delegate_;
+  scoped_ptr<CookieStore> cookie_store_;
+#if !defined(DISABLE_FTP_SUPPORT)
   scoped_ptr<FtpTransactionFactory> ftp_transaction_factory_;
+#endif
   scoped_ptr<HttpAuthHandlerFactory> http_auth_handler_factory_;
   scoped_ptr<CertVerifier> cert_verifier_;
   std::vector<scoped_ptr<URLRequestInterceptor>> url_request_interceptors_;
   scoped_ptr<HttpServerProperties> http_server_properties_;
+  std::map<std::string, scoped_ptr<URLRequestJobFactory::ProtocolHandler>>
+      protocol_handlers_;
 
   DISALLOW_COPY_AND_ASSIGN(URLRequestContextBuilder);
 };

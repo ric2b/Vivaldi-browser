@@ -5,6 +5,8 @@
 {
   'variables': {
     'chrome_renderer_sources': [
+      'renderer/app_categorizer.h',
+      'renderer/app_categorizer.cc',
       'renderer/banners/app_banner_client.cc',
       'renderer/banners/app_banner_client.h',
       'renderer/benchmarking_extension.cc',
@@ -33,8 +35,6 @@
       'renderer/net/net_error_page_controller.h',
       'renderer/net_benchmarking_extension.cc',
       'renderer/net_benchmarking_extension.h',
-      'renderer/origin_trials/origin_trial_key_manager.cc',
-      'renderer/origin_trials/origin_trial_key_manager.h',
       'renderer/page_load_histograms.cc',
       'renderer/page_load_histograms.h',
       'renderer/plugins/non_loadable_plugin_placeholder.cc',
@@ -125,8 +125,8 @@
       'renderer/media/cast_session_delegate.h',
       'renderer/media/cast_threads.cc',
       'renderer/media/cast_threads.h',
-      'renderer/media/cast_transport_sender_ipc.cc',
-      'renderer/media/cast_transport_sender_ipc.h',
+      'renderer/media/cast_transport_ipc.cc',
+      'renderer/media/cast_transport_ipc.h',
       'renderer/media/cast_udp_transport.cc',
       'renderer/media/cast_udp_transport.h',
       'renderer/resources/extensions/app_custom_bindings.js',

@@ -22,6 +22,8 @@ static const size_t kRtcpCnameSize = 256;
 
 static const uint32_t kCast = ('C' << 24) + ('A' << 16) + ('S' << 8) + 'T';
 
+static const uint32_t kCst2 = ('C' << 24) + ('S' << 16) + ('T' << 8) + '2';
+
 static const uint8_t kReceiverLogSubtype = 2;
 
 static const size_t kRtcpMaxReceiverLogMessages = 256;
@@ -58,6 +60,8 @@ class RtcpParser {
   bool has_cast_message() const { return has_cast_message_; }
   const RtcpCastMessage& cast_message() const { return cast_message_; }
   RtcpCastMessage* mutable_cast_message() { return &cast_message_; }
+  // Return if successfully parsed the extended feedback.
+  bool has_cst2_message() const { return has_cst2_message_; }
 
   bool has_receiver_reference_time_report() const {
     return has_receiver_reference_time_report_;
@@ -67,14 +71,17 @@ class RtcpParser {
     return receiver_reference_time_report_;
   }
 
+  bool has_picture_loss_indicator() const {
+    return has_picture_loss_indicator_;
+  }
+
  private:
   bool ParseCommonHeader(base::BigEndianReader* reader,
                          RtcpCommonHeader* parsed_header);
-  bool ParseSR(base::BigEndianReader* reader,
-               const RtcpCommonHeader& header);
-  bool ParseRR(base::BigEndianReader* reader,
-               const RtcpCommonHeader& header);
+  bool ParseSR(base::BigEndianReader* reader, const RtcpCommonHeader& header);
+  bool ParseRR(base::BigEndianReader* reader, const RtcpCommonHeader& header);
   bool ParseReportBlock(base::BigEndianReader* reader);
+  bool ParsePli(base::BigEndianReader* reader, const RtcpCommonHeader& header);
   bool ParseApplicationDefined(base::BigEndianReader* reader,
                                const RtcpCommonHeader& header);
   bool ParseCastReceiverLogFrameItem(base::BigEndianReader* reader);
@@ -103,6 +110,7 @@ class RtcpParser {
 
   bool has_cast_message_;
   RtcpCastMessage cast_message_;
+  bool has_cst2_message_;
 
   bool has_receiver_reference_time_report_;
   RtcpReceiverReferenceTimeReport receiver_reference_time_report_;
@@ -111,6 +119,9 @@ class RtcpParser {
   // re-expanded into full-form.
   RtpTimeTicks last_parsed_sr_rtp_timestamp_;
   RtpTimeTicks last_parsed_frame_log_rtp_timestamp_;
+
+  // Indicates if sender received the Pli message from the receiver.
+  bool has_picture_loss_indicator_;
 
   DISALLOW_COPY_AND_ASSIGN(RtcpParser);
 };
@@ -133,6 +144,10 @@ void ConvertTimeToFractions(int64_t ntp_time_us,
 void ConvertTimeTicksToNtp(const base::TimeTicks& time,
                            uint32_t* ntp_seconds,
                            uint32_t* ntp_fractions);
+
+// Create a NTP diff from seconds and fractions of seconds; delay_fraction is
+// fractions of a second where 0x80000000 is half a second.
+uint32_t ConvertToNtpDiff(uint32_t delay_seconds, uint32_t delay_fraction);
 
 // Maps an NTP timestamp, comprised of two components, to a base::TimeTicks
 // value.

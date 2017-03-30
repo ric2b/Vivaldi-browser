@@ -36,15 +36,18 @@
 #include "core/css/CSSCustomIdentValue.h"
 #include "core/css/CSSCustomPropertyDeclaration.h"
 #include "core/css/CSSFontFaceSrcValue.h"
+#include "core/css/CSSFontFamilyValue.h"
 #include "core/css/CSSFontFeatureValue.h"
 #include "core/css/CSSFunctionValue.h"
 #include "core/css/CSSGradientValue.h"
+#include "core/css/CSSGridAutoRepeatValue.h"
 #include "core/css/CSSGridLineNamesValue.h"
 #include "core/css/CSSGridTemplateAreasValue.h"
 #include "core/css/CSSImageSetValue.h"
 #include "core/css/CSSImageValue.h"
 #include "core/css/CSSInheritedValue.h"
 #include "core/css/CSSInitialValue.h"
+#include "core/css/CSSPaintValue.h"
 #include "core/css/CSSPathValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSQuadValue.h"
@@ -62,7 +65,7 @@
 
 namespace blink {
 
-struct SameSizeAsCSSValue : public RefCountedWillBeGarbageCollectedFinalized<SameSizeAsCSSValue> {
+struct SameSizeAsCSSValue : public GarbageCollectedFinalized<SameSizeAsCSSValue> {
     uint32_t bitfields;
 };
 
@@ -117,6 +120,8 @@ bool CSSValue::equals(const CSSValue& other) const
             return compareCSSValues<CSSCursorImageValue>(*this, other);
         case FontFaceSrcClass:
             return compareCSSValues<CSSFontFaceSrcValue>(*this, other);
+        case FontFamilyClass:
+            return compareCSSValues<CSSFontFamilyValue>(*this, other);
         case FontFeatureClass:
             return compareCSSValues<CSSFontFeatureValue>(*this, other);
         case FunctionClass:
@@ -127,6 +132,8 @@ bool CSSValue::equals(const CSSValue& other) const
             return compareCSSValues<CSSRadialGradientValue>(*this, other);
         case CrossfadeClass:
             return compareCSSValues<CSSCrossfadeValue>(*this, other);
+        case PaintClass:
+            return compareCSSValues<CSSPaintValue>(*this, other);
         case CustomIdentClass:
             return compareCSSValues<CSSCustomIdentValue>(*this, other);
         case ImageClass:
@@ -137,6 +144,8 @@ bool CSSValue::equals(const CSSValue& other) const
             return compareCSSValues<CSSInitialValue>(*this, other);
         case UnsetClass:
             return compareCSSValues<CSSUnsetValue>(*this, other);
+        case GridAutoRepeatClass:
+            return compareCSSValues<CSSGridAutoRepeatValue>(*this, other);
         case GridLineNamesClass:
             return compareCSSValues<CSSGridLineNamesValue>(*this, other);
         case GridTemplateAreasClass:
@@ -203,6 +212,8 @@ String CSSValue::cssText() const
         return toCSSCursorImageValue(this)->customCSSText();
     case FontFaceSrcClass:
         return toCSSFontFaceSrcValue(this)->customCSSText();
+    case FontFamilyClass:
+        return toCSSFontFamilyValue(this)->customCSSText();
     case FontFeatureClass:
         return toCSSFontFeatureValue(this)->customCSSText();
     case FunctionClass:
@@ -213,6 +224,8 @@ String CSSValue::cssText() const
         return toCSSRadialGradientValue(this)->customCSSText();
     case CrossfadeClass:
         return toCSSCrossfadeValue(this)->customCSSText();
+    case PaintClass:
+        return toCSSPaintValue(this)->customCSSText();
     case CustomIdentClass:
         return toCSSCustomIdentValue(this)->customCSSText();
     case ImageClass:
@@ -223,6 +236,8 @@ String CSSValue::cssText() const
         return toCSSUnsetValue(this)->customCSSText();
     case InitialClass:
         return toCSSInitialValue(this)->customCSSText();
+    case GridAutoRepeatClass:
+        return toCSSGridAutoRepeatValue(this)->customCSSText();
     case GridLineNamesClass:
         return toCSSGridLineNamesValue(this)->customCSSText();
     case GridTemplateAreasClass:
@@ -296,6 +311,9 @@ void CSSValue::destroy()
     case FontFaceSrcClass:
         delete toCSSFontFaceSrcValue(this);
         return;
+    case FontFamilyClass:
+        delete toCSSFontFamilyValue(this);
+        return;
     case FontFeatureClass:
         delete toCSSFontFeatureValue(this);
         return;
@@ -311,6 +329,9 @@ void CSSValue::destroy()
     case CrossfadeClass:
         delete toCSSCrossfadeValue(this);
         return;
+    case PaintClass:
+        delete toCSSPaintValue(this);
+        return;
     case CustomIdentClass:
         delete toCSSCustomIdentValue(this);
         return;
@@ -325,6 +346,9 @@ void CSSValue::destroy()
         return;
     case UnsetClass:
         delete toCSSUnsetValue(this);
+        return;
+    case GridAutoRepeatClass:
+        delete toCSSGridAutoRepeatValue(this);
         return;
     case GridLineNamesClass:
         delete toCSSGridLineNamesValue(this);
@@ -417,6 +441,9 @@ void CSSValue::finalizeGarbageCollectedObject()
     case FontFaceSrcClass:
         toCSSFontFaceSrcValue(this)->~CSSFontFaceSrcValue();
         return;
+    case FontFamilyClass:
+        toCSSFontFamilyValue(this)->~CSSFontFamilyValue();
+        return;
     case FontFeatureClass:
         toCSSFontFeatureValue(this)->~CSSFontFeatureValue();
         return;
@@ -432,6 +459,9 @@ void CSSValue::finalizeGarbageCollectedObject()
     case CrossfadeClass:
         toCSSCrossfadeValue(this)->~CSSCrossfadeValue();
         return;
+    case PaintClass:
+        toCSSPaintValue(this)->~CSSPaintValue();
+        return;
     case CustomIdentClass:
         toCSSCustomIdentValue(this)->~CSSCustomIdentValue();
         return;
@@ -446,6 +476,9 @@ void CSSValue::finalizeGarbageCollectedObject()
         return;
     case UnsetClass:
         toCSSUnsetValue(this)->~CSSUnsetValue();
+        return;
+    case GridAutoRepeatClass:
+        toCSSGridAutoRepeatValue(this)->~CSSGridAutoRepeatValue();
         return;
     case GridLineNamesClass:
         toCSSGridLineNamesValue(this)->~CSSGridLineNamesValue();
@@ -538,6 +571,9 @@ DEFINE_TRACE(CSSValue)
     case FontFaceSrcClass:
         toCSSFontFaceSrcValue(this)->traceAfterDispatch(visitor);
         return;
+    case FontFamilyClass:
+        toCSSFontFamilyValue(this)->traceAfterDispatch(visitor);
+        return;
     case FontFeatureClass:
         toCSSFontFeatureValue(this)->traceAfterDispatch(visitor);
         return;
@@ -553,6 +589,9 @@ DEFINE_TRACE(CSSValue)
     case CrossfadeClass:
         toCSSCrossfadeValue(this)->traceAfterDispatch(visitor);
         return;
+    case PaintClass:
+        toCSSPaintValue(this)->traceAfterDispatch(visitor);
+        return;
     case CustomIdentClass:
         toCSSCustomIdentValue(this)->traceAfterDispatch(visitor);
         return;
@@ -567,6 +606,9 @@ DEFINE_TRACE(CSSValue)
         return;
     case UnsetClass:
         toCSSUnsetValue(this)->traceAfterDispatch(visitor);
+        return;
+    case GridAutoRepeatClass:
+        toCSSGridAutoRepeatValue(this)->traceAfterDispatch(visitor);
         return;
     case GridLineNamesClass:
         toCSSGridLineNamesValue(this)->traceAfterDispatch(visitor);

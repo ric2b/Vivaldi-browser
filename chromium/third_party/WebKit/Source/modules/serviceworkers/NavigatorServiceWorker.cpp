@@ -17,10 +17,6 @@ NavigatorServiceWorker::NavigatorServiceWorker(Navigator& navigator)
 {
 }
 
-NavigatorServiceWorker::~NavigatorServiceWorker()
-{
-}
-
 NavigatorServiceWorker* NavigatorServiceWorker::from(Document& document)
 {
     if (!document.frame() || !document.frame()->domWindow())
@@ -35,7 +31,7 @@ NavigatorServiceWorker& NavigatorServiceWorker::from(Navigator& navigator)
     if (!supplement) {
         supplement = new NavigatorServiceWorker(navigator);
         provideTo(navigator, supplementName(), supplement);
-        if (navigator.frame() && navigator.frame()->securityContext()->securityOrigin()->canAccessServiceWorkers()) {
+        if (navigator.frame() && navigator.frame()->securityContext()->getSecurityOrigin()->canAccessServiceWorkers()) {
             // Initialize ServiceWorkerContainer too.
             supplement->serviceWorker(ASSERT_NO_EXCEPTION);
         }
@@ -45,7 +41,7 @@ NavigatorServiceWorker& NavigatorServiceWorker::from(Navigator& navigator)
 
 NavigatorServiceWorker* NavigatorServiceWorker::toNavigatorServiceWorker(Navigator& navigator)
 {
-    return static_cast<NavigatorServiceWorker*>(HeapSupplement<Navigator>::from(navigator, supplementName()));
+    return static_cast<NavigatorServiceWorker*>(Supplement<Navigator>::from(navigator, supplementName()));
 }
 
 const char* NavigatorServiceWorker::supplementName()
@@ -55,13 +51,13 @@ const char* NavigatorServiceWorker::supplementName()
 
 ServiceWorkerContainer* NavigatorServiceWorker::serviceWorker(ExecutionContext* executionContext, Navigator& navigator, ExceptionState& exceptionState)
 {
-    ASSERT(!navigator.frame() || executionContext->securityOrigin()->canAccessCheckSuborigins(navigator.frame()->securityContext()->securityOrigin()));
+    ASSERT(!navigator.frame() || executionContext->getSecurityOrigin()->canAccessCheckSuborigins(navigator.frame()->securityContext()->getSecurityOrigin()));
     return NavigatorServiceWorker::from(navigator).serviceWorker(exceptionState);
 }
 
 ServiceWorkerContainer* NavigatorServiceWorker::serviceWorker(ExceptionState& exceptionState)
 {
-    if (frame() && !frame()->securityContext()->securityOrigin()->canAccessServiceWorkers()) {
+    if (frame() && !frame()->securityContext()->getSecurityOrigin()->canAccessServiceWorkers()) {
         if (frame()->securityContext()->isSandboxed(SandboxOrigin))
             exceptionState.throwSecurityError("Service worker is disabled because the context is sandboxed and lacks the 'allow-same-origin' flag.");
         else
@@ -70,7 +66,7 @@ ServiceWorkerContainer* NavigatorServiceWorker::serviceWorker(ExceptionState& ex
     }
     if (!m_serviceWorker && frame()) {
         ASSERT(frame()->domWindow());
-        m_serviceWorker = ServiceWorkerContainer::create(frame()->domWindow()->executionContext());
+        m_serviceWorker = ServiceWorkerContainer::create(frame()->domWindow()->getExecutionContext());
     }
     return m_serviceWorker.get();
 }
@@ -86,7 +82,7 @@ void NavigatorServiceWorker::willDetachGlobalObjectFromFrame()
 DEFINE_TRACE(NavigatorServiceWorker)
 {
     visitor->trace(m_serviceWorker);
-    HeapSupplement<Navigator>::trace(visitor);
+    Supplement<Navigator>::trace(visitor);
     DOMWindowProperty::trace(visitor);
 }
 

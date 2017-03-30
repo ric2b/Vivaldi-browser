@@ -1,9 +1,10 @@
 sadrul@chromium.org
 sky@chromium.org
+thakis@chromium.org
 
 # Mac stuff
 avi@chromium.org
-thakis@chromium.org
+ccameron@chromium.org
 
 per-file *.isolate=maruel@chromium.org
 per-file *.isolate=tandrii@chromium.org

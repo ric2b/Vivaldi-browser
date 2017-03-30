@@ -20,7 +20,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "cc/animation/animation.h"
+#include "cc/animation/target_property.h"
 #include "cc/base/cc_export.h"
 #include "cc/debug/frame_timing_tracker.h"
 #include "cc/debug/micro_benchmark.h"
@@ -30,7 +30,7 @@
 #include "cc/input/layer_selection_bound.h"
 #include "cc/input/scrollbar.h"
 #include "cc/input/top_controls_state.h"
-#include "cc/layers/layer_lists.h"
+#include "cc/layers/layer_collections.h"
 #include "cc/output/output_surface.h"
 #include "cc/output/renderer_capabilities.h"
 #include "cc/output/swap_promise.h"
@@ -39,7 +39,6 @@
 #include "cc/surfaces/surface_sequence.h"
 #include "cc/trees/compositor_mode.h"
 #include "cc/trees/layer_tree_host_client.h"
-#include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "cc/trees/mutator_host_client.h"
 #include "cc/trees/proxy.h"
@@ -182,6 +181,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   void SetNeedsDisplayOnAllLayers();
 
+  void SetOutputIsSecure(bool output_is_secure);
+
   void CollectRenderingStats(RenderingStats* stats) const;
 
   RenderingStatsInstrumentation* rendering_stats_instrumentation() const {
@@ -272,8 +273,6 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void SetVisible(bool visible);
   bool visible() const { return visible_; }
 
-  void SetThrottleFrameProduction(bool throttle);
-
   void StartPageScaleAnimation(const gfx::Vector2d& target_offset,
                                bool use_anchor,
                                float scale,
@@ -296,9 +295,6 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   Proxy* proxy() const { return proxy_.get(); }
   TaskRunnerProvider* task_runner_provider() const {
     return task_runner_provider_.get();
-  }
-  AnimationRegistrar* animation_registrar() const {
-    return animation_registrar_.get();
   }
   AnimationHost* animation_host() const { return animation_host_.get(); }
 
@@ -362,6 +358,12 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
       scoped_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events);
 
   Layer* LayerById(int id) const;
+
+  void AddLayerShouldPushProperties(Layer* layer);
+  void RemoveLayerShouldPushProperties(Layer* layer);
+  std::unordered_set<Layer*>& LayersThatShouldPushProperties();
+  bool LayerNeedsPushPropertiesForTesting(Layer* layer);
+
   void RegisterLayer(Layer* layer);
   void UnregisterLayer(Layer* layer);
   // LayerTreeMutatorsClient implementation.
@@ -401,12 +403,12 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
                                         TargetProperty::Type property) const;
   bool AnimationsPreserveAxisAlignment(const Layer* layer) const;
   bool HasAnyAnimation(const Layer* layer) const;
-  bool HasActiveAnimation(const Layer* layer) const;
+  bool HasActiveAnimationForTesting(const Layer* layer) const;
 
   // Serializes the parts of this LayerTreeHost that is needed for a commit to a
   // protobuf message. Not all members are serialized as they are not helpful
   // for remote usage.
-  void ToProtobufForCommit(proto::LayerTreeHost* proto) const;
+  void ToProtobufForCommit(proto::LayerTreeHost* proto);
 
   // Deserializes the protobuf into this LayerTreeHost before a commit. The
   // expected input is a serialized remote LayerTreeHost. After deserializing
@@ -552,7 +554,6 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   EventListenerProperties event_listener_properties_[static_cast<size_t>(
       EventListenerClass::kNumClasses)];
 
-  scoped_ptr<AnimationRegistrar> animation_registrar_;
   scoped_ptr<AnimationHost> animation_host_;
 
   scoped_ptr<PendingPageScaleAnimation> pending_page_scale_animation_;
@@ -586,6 +587,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   using LayerIdMap = std::unordered_map<int, Layer*>;
   LayerIdMap layer_id_map_;
+  // Set of layers that need to push properties.
+  std::unordered_set<Layer*> layers_that_should_push_properties_;
 
   uint32_t surface_id_namespace_;
   uint32_t next_surface_sequence_;

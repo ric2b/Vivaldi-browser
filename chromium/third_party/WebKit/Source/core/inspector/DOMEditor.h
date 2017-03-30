@@ -32,6 +32,7 @@
 #define DOMEditor_h
 
 #include "platform/heap/Handle.h"
+#include "platform/inspector_protocol/TypeBuilder.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -43,26 +44,23 @@ class InspectorHistory;
 class Node;
 class Text;
 
-typedef String ErrorString;
-
-class DOMEditor final : public NoBaseWillBeGarbageCollected<DOMEditor> {
+class DOMEditor final : public GarbageCollected<DOMEditor> {
     WTF_MAKE_NONCOPYABLE(DOMEditor);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(DOMEditor);
 public:
     explicit DOMEditor(InspectorHistory*);
 
     DECLARE_TRACE();
 
-    bool insertBefore(ContainerNode* parentNode, PassRefPtrWillBeRawPtr<Node>, Node* anchorNode, ExceptionState&);
+    bool insertBefore(ContainerNode* parentNode, RawPtr<Node>, Node* anchorNode, ExceptionState&);
     bool removeChild(ContainerNode* parentNode, Node*, ExceptionState&);
     bool setAttribute(Element*, const String& name, const String& value, ExceptionState&);
     bool removeAttribute(Element*, const String& name, ExceptionState&);
     bool setOuterHTML(Node*, const String& html, Node** newNode, ExceptionState&);
     bool replaceWholeText(Text*, const String& text, ExceptionState&);
-    bool replaceChild(ContainerNode* parentNode, PassRefPtrWillBeRawPtr<Node> newNode, Node* oldNode, ExceptionState&);
+    bool replaceChild(ContainerNode* parentNode, RawPtr<Node> newNode, Node* oldNode, ExceptionState&);
     bool setNodeValue(Node* parentNode, const String& value, ExceptionState&);
 
-    bool insertBefore(ContainerNode* parentNode, PassRefPtrWillBeRawPtr<Node>, Node* anchorNode, ErrorString*);
+    bool insertBefore(ContainerNode* parentNode, RawPtr<Node>, Node* anchorNode, ErrorString*);
     bool removeChild(ContainerNode* parentNode, Node*, ErrorString*);
     bool setAttribute(Element*, const String& name, const String& value, ErrorString*);
     bool removeAttribute(Element*, const String& name, ErrorString*);
@@ -80,7 +78,7 @@ private:
     class ReplaceChildNodeAction;
     class SetNodeValueAction;
 
-    RawPtrWillBeMember<InspectorHistory> m_history;
+    Member<InspectorHistory> m_history;
 };
 
 

@@ -18,6 +18,7 @@
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "grit/components_strings.h"
 #include "ui/aura/window_tree_host.h"
@@ -208,7 +209,7 @@ void DesktopMediaSourceView::OnGestureEvent(ui::GestureEvent* event) {
 
 DesktopMediaListView::DesktopMediaListView(
     DesktopMediaPickerDialogView* parent,
-    scoped_ptr<DesktopMediaList> media_list)
+    std::unique_ptr<DesktopMediaList> media_list)
     : parent_(parent), media_list_(std::move(media_list)), weak_factory_(this) {
   media_list_->SetThumbnailSize(gfx::Size(kThumbnailWidth, kThumbnailHeight));
   SetFocusable(true);
@@ -394,12 +395,13 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
     DesktopMediaPickerViews* parent,
     const base::string16& app_name,
     const base::string16& target_name,
-    scoped_ptr<DesktopMediaList> media_list,
+    std::unique_ptr<DesktopMediaList> media_list,
     bool request_audio)
     : parent_(parent),
       app_name_(app_name),
       description_label_(new views::Label()),
       audio_share_checkbox_(nullptr),
+      audio_share_checked_(true),
       sources_scroll_view_(views::ScrollView::CreateScrollViewWithBorder()),
       sources_list_view_(
           new DesktopMediaListView(this, std::move(media_list))) {
@@ -514,14 +516,20 @@ bool DesktopMediaPickerDialogView::Accept() {
 
   // Ok button should only be enabled when a source is selected.
   DCHECK(selection);
-
-  DesktopMediaID source;
-  if (selection)
-    source = selection->source_id();
-
+  DesktopMediaID source = selection->source_id();
   source.audio_share = audio_share_checkbox_ &&
                        audio_share_checkbox_->enabled() &&
                        audio_share_checkbox_->checked();
+
+  // If the media source is an tab, activate it.
+  if (source.type == DesktopMediaID::TYPE_WEB_CONTENTS) {
+    content::WebContents* tab = content::WebContents::FromRenderFrameHost(
+        content::RenderFrameHost::FromID(
+            source.web_contents_id.render_process_id,
+            source.web_contents_id.main_render_frame_id));
+    if (tab)
+      tab->GetDelegate()->ActivateContents(tab);
+  }
 
   if (parent_)
     parent_->NotifyDialogResult(source);
@@ -550,10 +558,17 @@ void DesktopMediaPickerDialogView::OnSelectionChanged() {
 
     if (source.type == DesktopMediaID::TYPE_SCREEN ||
         source.type == DesktopMediaID::TYPE_WEB_CONTENTS) {
-      audio_share_checkbox_->SetEnabled(true);
+      if (!audio_share_checkbox_->enabled()) {
+        audio_share_checkbox_->SetEnabled(true);
+        audio_share_checkbox_->SetChecked(audio_share_checked_);
+      }
       audio_share_checkbox_->SetTooltipText(base::string16());
     } else if (source.type == DesktopMediaID::TYPE_WINDOW) {
-      audio_share_checkbox_->SetEnabled(false);
+      if (audio_share_checkbox_->enabled()) {
+        audio_share_checkbox_->SetEnabled(false);
+        audio_share_checked_ = audio_share_checkbox_->checked();
+        audio_share_checkbox_->SetChecked(false);
+      }
       audio_share_checkbox_->SetTooltipText(l10n_util::GetStringUTF16(
           IDS_DESKTOP_MEDIA_PICKER_AUDIO_SHARE_TOOLTIP_WINDOW));
     } else {
@@ -605,7 +620,7 @@ void DesktopMediaPickerViews::Show(content::WebContents* web_contents,
                                    gfx::NativeWindow parent,
                                    const base::string16& app_name,
                                    const base::string16& target_name,
-                                   scoped_ptr<DesktopMediaList> media_list,
+                                   std::unique_ptr<DesktopMediaList> media_list,
                                    bool request_audio,
                                    const DoneCallback& done_callback) {
   callback_ = done_callback;
@@ -630,6 +645,6 @@ void DesktopMediaPickerViews::NotifyDialogResult(DesktopMediaID source) {
 }
 
 // static
-scoped_ptr<DesktopMediaPicker> DesktopMediaPicker::Create() {
-  return scoped_ptr<DesktopMediaPicker>(new DesktopMediaPickerViews());
+std::unique_ptr<DesktopMediaPicker> DesktopMediaPicker::Create() {
+  return std::unique_ptr<DesktopMediaPicker>(new DesktopMediaPickerViews());
 }

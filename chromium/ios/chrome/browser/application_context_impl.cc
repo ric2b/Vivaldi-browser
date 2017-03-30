@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
@@ -45,7 +46,6 @@
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/prefs/browser_prefs.h"
 #include "ios/chrome/browser/prefs/ios_chrome_pref_service_factory.h"
-#include "ios/chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "ios/chrome/browser/update_client/ios_chrome_update_query_params_delegate.h"
 #include "ios/chrome/browser/web_resource/web_resource_util.h"
 #include "ios/chrome/common/channel_info.h"
@@ -90,6 +90,7 @@ void ApplicationContextImpl::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kMetricsReportingWifiOnly, true);
   registry->RegisterBooleanPref(prefs::kLastSessionUsedWKWebViewControlGroup,
                                 false);
+  registry->RegisterBooleanPref(prefs::kDroppedSafeBrowsingCookies, false);
 }
 
 void ApplicationContextImpl::PreCreateThreads() {
@@ -104,13 +105,10 @@ void ApplicationContextImpl::PreMainMessageLoopRun() {
 
 void ApplicationContextImpl::StartTearDown() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  // We need to destroy the MetricsServicesManager and
-  // SafeBrowsing before the IO thread gets destroyed, since their destructors
-  // can call the URLFetcher destructor, which does a PostDelayedTask operation
-  // on the IO thread. (The IO thread will handle that URLFetcher operation
-  // before going away.)
-  if (safe_browsing_service_)
-    safe_browsing_service_->ShutDown();
+  // We need to destroy the MetricsServicesManager before the IO thread gets
+  // destroyed, since the destructor can call the URLFetcher destructor, which
+  // does a PostDelayedTask operation on the IO thread. (The IO thread will
+  // handle that URLFetcher operation before going away.)
 
   metrics_services_manager_.reset();
 
@@ -224,7 +222,7 @@ ApplicationContextImpl::GetMetricsServicesManager() {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!metrics_services_manager_) {
     metrics_services_manager_.reset(
-        new metrics_services_manager::MetricsServicesManager(make_scoped_ptr(
+        new metrics_services_manager::MetricsServicesManager(base::WrapUnique(
             new IOSChromeMetricsServicesManagerClient(GetLocalState()))));
   }
   return metrics_services_manager_.get();
@@ -255,8 +253,8 @@ ApplicationContextImpl::GetNetworkTimeTracker() {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!network_time_tracker_) {
     network_time_tracker_.reset(new network_time::NetworkTimeTracker(
-        make_scoped_ptr(new base::DefaultClock),
-        make_scoped_ptr(new base::DefaultTickClock), GetLocalState()));
+        base::WrapUnique(new base::DefaultClock),
+        base::WrapUnique(new base::DefaultTickClock), GetLocalState()));
   }
   return network_time_tracker_.get();
 }
@@ -301,17 +299,6 @@ CRLSetFetcher* ApplicationContextImpl::GetCRLSetFetcher() {
     crl_set_fetcher_ = new CRLSetFetcher;
   }
   return crl_set_fetcher_.get();
-}
-
-safe_browsing::SafeBrowsingService*
-ApplicationContextImpl::GetSafeBrowsingService() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  if (!safe_browsing_service_) {
-    safe_browsing_service_ =
-        safe_browsing::SafeBrowsingService::CreateSafeBrowsingService();
-    safe_browsing_service_->Initialize();
-  }
-  return safe_browsing_service_.get();
 }
 
 void ApplicationContextImpl::SetApplicationLocale(const std::string& locale) {
@@ -362,7 +349,7 @@ void ApplicationContextImpl::CreateGCMDriver() {
           base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
 
   gcm_driver_ = gcm::CreateGCMDriverDesktop(
-      make_scoped_ptr(new gcm::GCMClientFactory), GetLocalState(), store_path,
+      base::WrapUnique(new gcm::GCMClientFactory), GetLocalState(), store_path,
       GetSystemURLRequestContext(), ::GetChannel(),
       web::WebThread::GetTaskRunnerForThread(web::WebThread::UI),
       web::WebThread::GetTaskRunnerForThread(web::WebThread::IO),

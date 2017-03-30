@@ -45,10 +45,8 @@ public:
     typedef ItemProperty ItemPropertyType;
     typedef typename ItemPropertyType::TearOffType ItemTearOffType;
 
-    static PassRefPtrWillBeRawPtr<ItemPropertyType> getValueForInsertionFromTearOff(PassRefPtrWillBeRawPtr<ItemTearOffType> passNewItem, SVGElement* contextElement, const QualifiedName& attributeName)
+    static ItemPropertyType* getValueForInsertionFromTearOff(ItemTearOffType* newItem, SVGElement* contextElement, const QualifiedName& attributeName)
     {
-        RefPtrWillBeRawPtr<ItemTearOffType> newItem = passNewItem;
-
         // |newItem| is immutable, OR
         // |newItem| belongs to a SVGElement, but it does not belong to an animated list
         // (for example: "textElement.x.baseVal.appendItem(rectElement.width.baseVal)")
@@ -67,7 +65,7 @@ public:
         return newItem->target();
     }
 
-    static PassRefPtrWillBeRawPtr<ItemTearOffType> createTearOff(PassRefPtrWillBeRawPtr<ItemPropertyType> value, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName)
+    static ItemTearOffType* createTearOff(ItemPropertyType* value, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName)
     {
         return ItemTearOffType::create(value, contextElement, propertyIsAnimVal, attributeName);
     }
@@ -99,10 +97,8 @@ public:
         toDerived()->target()->clear();
     }
 
-    PassRefPtrWillBeRawPtr<ItemTearOffType> initialize(PassRefPtrWillBeRawPtr<ItemTearOffType> passItem, ExceptionState& exceptionState)
+    ItemTearOffType* initialize(ItemTearOffType* item, ExceptionState& exceptionState)
     {
-        RefPtrWillBeRawPtr<ItemTearOffType> item = passItem;
-
         if (toDerived()->isImmutable()) {
             exceptionState.throwDOMException(NoModificationAllowedError, "The object is read-only.");
             return nullptr;
@@ -110,22 +106,20 @@ public:
 
         ASSERT(item);
 
-        RefPtrWillBeRawPtr<ItemPropertyType> value = toDerived()->target()->initialize(getValueForInsertionFromTearOff(item));
+        ItemPropertyType* value = toDerived()->target()->initialize(getValueForInsertionFromTearOff(item));
         toDerived()->commitChange();
 
-        return createItemTearOff(value.release());
+        return createItemTearOff(value);
     }
 
-    PassRefPtrWillBeRawPtr<ItemTearOffType> getItem(unsigned long index, ExceptionState& exceptionState)
+    ItemTearOffType* getItem(unsigned long index, ExceptionState& exceptionState)
     {
-        RefPtrWillBeRawPtr<ItemPropertyType> value = toDerived()->target()->getItem(index, exceptionState);
-        return createItemTearOff(value.release());
+        ItemPropertyType* value = toDerived()->target()->getItem(index, exceptionState);
+        return createItemTearOff(value);
     }
 
-    PassRefPtrWillBeRawPtr<ItemTearOffType> insertItemBefore(PassRefPtrWillBeRawPtr<ItemTearOffType> passItem, unsigned long index, ExceptionState& exceptionState)
+    ItemTearOffType* insertItemBefore(ItemTearOffType* item, unsigned long index, ExceptionState& exceptionState)
     {
-        RefPtrWillBeRawPtr<ItemTearOffType> item = passItem;
-
         if (toDerived()->isImmutable()) {
             exceptionState.throwDOMException(NoModificationAllowedError, "The object is read-only.");
             return nullptr;
@@ -133,16 +127,14 @@ public:
 
         ASSERT(item);
 
-        RefPtrWillBeRawPtr<ItemPropertyType> value = toDerived()->target()->insertItemBefore(getValueForInsertionFromTearOff(item), index);
+        ItemPropertyType* value = toDerived()->target()->insertItemBefore(getValueForInsertionFromTearOff(item), index);
         toDerived()->commitChange();
 
-        return createItemTearOff(value.release());
+        return createItemTearOff(value);
     }
 
-    PassRefPtrWillBeRawPtr<ItemTearOffType> replaceItem(PassRefPtrWillBeRawPtr<ItemTearOffType> passItem, unsigned long index, ExceptionState& exceptionState)
+    ItemTearOffType* replaceItem(ItemTearOffType* item, unsigned long index, ExceptionState& exceptionState)
     {
-        RefPtrWillBeRawPtr<ItemTearOffType> item = passItem;
-
         if (toDerived()->isImmutable()) {
             exceptionState.throwDOMException(NoModificationAllowedError, "The object is read-only.");
             return nullptr;
@@ -150,35 +142,33 @@ public:
 
         ASSERT(item);
 
-        RefPtrWillBeRawPtr<ItemPropertyType> value = toDerived()->target()->replaceItem(getValueForInsertionFromTearOff(item), index, exceptionState);
+        ItemPropertyType* value = toDerived()->target()->replaceItem(getValueForInsertionFromTearOff(item), index, exceptionState);
         toDerived()->commitChange();
 
-        return createItemTearOff(value.release());
+        return createItemTearOff(value);
     }
 
-    bool anonymousIndexedSetter(unsigned index, PassRefPtrWillBeRawPtr<ItemTearOffType> passItem, ExceptionState& exceptionState)
+    bool anonymousIndexedSetter(unsigned index, ItemTearOffType* item, ExceptionState& exceptionState)
     {
-        replaceItem(passItem, index, exceptionState);
+        replaceItem(item, index, exceptionState);
         return true;
     }
 
-    PassRefPtrWillBeRawPtr<ItemTearOffType> removeItem(unsigned long index, ExceptionState& exceptionState)
+    ItemTearOffType* removeItem(unsigned long index, ExceptionState& exceptionState)
     {
         if (toDerived()->isImmutable()) {
             exceptionState.throwDOMException(NoModificationAllowedError, "The object is read-only.");
             return nullptr;
         }
 
-        RefPtrWillBeRawPtr<ItemPropertyType> value = toDerived()->target()->removeItem(index, exceptionState);
+        ItemPropertyType* value = toDerived()->target()->removeItem(index, exceptionState);
         toDerived()->commitChange();
 
-        return createItemTearOff(value.release());
+        return createItemTearOff(value);
     }
 
-    PassRefPtrWillBeRawPtr<ItemTearOffType> appendItem(PassRefPtrWillBeRawPtr<ItemTearOffType> passItem, ExceptionState& exceptionState)
+    ItemTearOffType* appendItem(ItemTearOffType* item, ExceptionState& exceptionState)
     {
-        RefPtrWillBeRawPtr<ItemTearOffType> item = passItem;
-
         if (toDerived()->isImmutable()) {
             exceptionState.throwDOMException(NoModificationAllowedError, "The object is read-only.");
             return nullptr;
@@ -186,24 +176,24 @@ public:
 
         ASSERT(item);
 
-        RefPtrWillBeRawPtr<ItemPropertyType> value = toDerived()->target()->appendItem(getValueForInsertionFromTearOff(item));
+        ItemPropertyType* value = toDerived()->target()->appendItem(getValueForInsertionFromTearOff(item));
         toDerived()->commitChange();
 
-        return createItemTearOff(value.release());
+        return createItemTearOff(value);
     }
 
 protected:
-    SVGListPropertyTearOffHelper(PassRefPtrWillBeRawPtr<ListPropertyType> target, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName = QualifiedName::null())
+    SVGListPropertyTearOffHelper(ListPropertyType* target, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName = QualifiedName::null())
         : SVGPropertyTearOff<ListPropertyType>(target, contextElement, propertyIsAnimVal, attributeName)
     {
     }
 
-    PassRefPtrWillBeRawPtr<ItemPropertyType> getValueForInsertionFromTearOff(PassRefPtrWillBeRawPtr<ItemTearOffType> passNewItem)
+    ItemPropertyType* getValueForInsertionFromTearOff(ItemTearOffType* newItem)
     {
-        return ItemTraits::getValueForInsertionFromTearOff(passNewItem, toDerived()->contextElement(), toDerived()->attributeName());
+        return ItemTraits::getValueForInsertionFromTearOff(newItem, toDerived()->contextElement(), toDerived()->attributeName());
     }
 
-    PassRefPtrWillBeRawPtr<ItemTearOffType> createItemTearOff(PassRefPtrWillBeRawPtr<ItemPropertyType> value)
+    ItemTearOffType* createItemTearOff(ItemPropertyType* value)
     {
         if (!value)
             return nullptr;

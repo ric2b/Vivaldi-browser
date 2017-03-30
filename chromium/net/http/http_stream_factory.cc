@@ -13,6 +13,7 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/port_util.h"
 #include "net/http/http_network_session.h"
+#include "net/http/http_response_headers.h"
 #include "net/quic/quic_protocol.h"
 #include "net/spdy/spdy_alt_svc_wire_format.h"
 #include "url/gurl.h"
@@ -31,6 +32,59 @@ HttpStreamFactory::~HttpStreamFactory() {}
 void HttpStreamFactory::ResetStaticSettingsToInit() {
   spdy_enabled_ = true;
 }
+
+void HttpStreamFactory::ProcessAlternativeServices(
+    HttpNetworkSession* session,
+    const HttpResponseHeaders* headers,
+    const HostPortPair& http_host_port_pair) {
+  if (session->params().parse_alternative_services) {
+    if (headers->HasHeader(kAlternativeServiceHeader)) {
+      std::string alternative_service_str;
+      headers->GetNormalizedHeader(kAlternativeServiceHeader,
+                                   &alternative_service_str);
+      ProcessAlternativeService(session->http_server_properties(),
+                                alternative_service_str, http_host_port_pair,
+                                *session);
+    }
+    // If "Alt-Svc" is enabled, then ignore "Alternate-Protocol".
+    return;
+  }
+
+  if (!headers->HasHeader(kAlternateProtocolHeader))
+    return;
+
+  std::vector<std::string> alternate_protocol_values;
+  size_t iter = 0;
+  std::string alternate_protocol_str;
+  while (headers->EnumerateHeader(&iter, kAlternateProtocolHeader,
+                                  &alternate_protocol_str)) {
+    base::TrimWhitespaceASCII(alternate_protocol_str, base::TRIM_ALL,
+                              &alternate_protocol_str);
+    if (!alternate_protocol_str.empty()) {
+      alternate_protocol_values.push_back(alternate_protocol_str);
+    }
+  }
+
+  ProcessAlternateProtocol(session->http_server_properties(),
+                           alternate_protocol_values, http_host_port_pair,
+                           *session);
+}
+
+GURL HttpStreamFactory::ApplyHostMappingRules(const GURL& url,
+                                              HostPortPair* endpoint) {
+  const HostMappingRules* mapping_rules = GetHostMappingRules();
+  if (mapping_rules && mapping_rules->RewriteHost(endpoint)) {
+    url::Replacements<char> replacements;
+    const std::string port_str = base::UintToString(endpoint->port());
+    replacements.SetPort(port_str.c_str(), url::Component(0, port_str.size()));
+    replacements.SetHost(endpoint->host().c_str(),
+                         url::Component(0, endpoint->host().size()));
+    return url.ReplaceComponents(replacements);
+  }
+  return url;
+}
+
+HttpStreamFactory::HttpStreamFactory() {}
 
 void HttpStreamFactory::ProcessAlternativeService(
     const base::WeakPtr<HttpServerProperties>& http_server_properties,
@@ -79,8 +133,8 @@ void HttpStreamFactory::ProcessAlternativeService(
     base::Time expiration =
         base::Time::Now() +
         base::TimeDelta::FromSeconds(alternative_service_entry.max_age);
-    AlternativeServiceInfo alternative_service_info(
-        alternative_service, alternative_service_entry.probability, expiration);
+    AlternativeServiceInfo alternative_service_info(alternative_service,
+                                                    expiration);
     alternative_service_info_vector.push_back(alternative_service_info);
   }
 
@@ -95,24 +149,14 @@ void HttpStreamFactory::ProcessAlternateProtocol(
     const HttpNetworkSession& session) {
   AlternateProtocol protocol = UNINITIALIZED_ALTERNATE_PROTOCOL;
   int port = 0;
-  double probability = 1;
   bool is_valid = true;
   for (size_t i = 0; i < alternate_protocol_values.size(); ++i) {
     base::StringPiece alternate_protocol_str = alternate_protocol_values[i];
     if (base::StartsWith(alternate_protocol_str, "p=",
                          base::CompareCase::SENSITIVE)) {
-      if (!base::StringToDouble(alternate_protocol_str.substr(2).as_string(),
-                                &probability) ||
-          probability < 0 || probability > 1) {
-        DVLOG(1) << kAlternateProtocolHeader
-                 << " header has unrecognizable probability: "
-                 << alternate_protocol_values[i];
-        is_valid = false;
-        break;
-      }
+      // Ignore deprecated probability.
       continue;
     }
-
     std::vector<base::StringPiece> port_protocol_vector =
         base::SplitStringPiece(alternate_protocol_str, ":",
                                base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
@@ -153,24 +197,8 @@ void HttpStreamFactory::ProcessAlternateProtocol(
   http_server_properties->SetAlternativeService(
       RewriteHost(http_host_port_pair),
       AlternativeService(protocol, "", static_cast<uint16_t>(port)),
-      probability, base::Time::Now() + base::TimeDelta::FromDays(30));
+      base::Time::Now() + base::TimeDelta::FromDays(30));
 }
-
-GURL HttpStreamFactory::ApplyHostMappingRules(const GURL& url,
-                                              HostPortPair* endpoint) {
-  const HostMappingRules* mapping_rules = GetHostMappingRules();
-  if (mapping_rules && mapping_rules->RewriteHost(endpoint)) {
-    url::Replacements<char> replacements;
-    const std::string port_str = base::UintToString(endpoint->port());
-    replacements.SetPort(port_str.c_str(), url::Component(0, port_str.size()));
-    replacements.SetHost(endpoint->host().c_str(),
-                         url::Component(0, endpoint->host().size()));
-    return url.ReplaceComponents(replacements);
-  }
-  return url;
-}
-
-HttpStreamFactory::HttpStreamFactory() {}
 
 HostPortPair HttpStreamFactory::RewriteHost(HostPortPair host_port_pair) {
   const HostMappingRules* mapping_rules = GetHostMappingRules();

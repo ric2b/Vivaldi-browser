@@ -61,7 +61,7 @@ public:
 
     // EventTarget interface
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
     DECLARE_VIRTUAL_TRACE();
 
@@ -70,8 +70,8 @@ private:
 
     void scheduleEvent(const AtomicString&);
 
-    RawPtrWillBeMember<ExecutionContext> m_executionContext;
-    RawPtrWillBeMember<GenericEventQueue> m_asyncEventQueue;
+    Member<ExecutionContext> m_executionContext;
+    Member<GenericEventQueue> m_asyncEventQueue;
 
     HeapVector<Member<SourceBuffer>> m_list;
 };

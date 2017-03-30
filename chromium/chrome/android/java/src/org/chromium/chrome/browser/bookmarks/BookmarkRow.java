@@ -79,7 +79,7 @@ abstract class BookmarkRow extends FrameLayout implements BookmarkUIObserver,
 
     private void clearPopup() {
         if (mPopupMenu != null) {
-            if (mPopupMenu.isShowing()) mPopupMenu.dismiss();
+            mPopupMenu.dismiss();
             mPopupMenu = null;
         }
     }
@@ -122,6 +122,9 @@ abstract class BookmarkRow extends FrameLayout implements BookmarkUIObserver,
 
                 @Override
                 public boolean isEnabled(int position) {
+                    // In some erroneous states, the popup window might hang around even if the
+                    // activity is killed (crbug.com/594213), so null check here.
+                    if (mDelegate == null || mDelegate.getModel() == null) return false;
                     if (position == MOVE_POSITION) {
                         BookmarkItem bookmark = mDelegate.getModel().getBookmarkById(mBookmarkId);
                         if (bookmark == null) return false;
@@ -161,9 +164,13 @@ abstract class BookmarkRow extends FrameLayout implements BookmarkUIObserver,
                         BookmarkFolderSelectActivity.startFolderSelectActivity(getContext(),
                                 mBookmarkId);
                     } else if (position == 3) {
-                        mDelegate.getModel().deleteBookmarks(mBookmarkId);
+                        if (mDelegate != null && mDelegate.getModel() != null) {
+                            mDelegate.getModel().deleteBookmarks(mBookmarkId);
+                        }
                     }
-                    mPopupMenu.dismiss();
+                    // Somehow the on click event can be triggered way after we dismiss the popup.
+                    // http://crbug.com/600642
+                    if (mPopupMenu != null) mPopupMenu.dismiss();
                 }
             });
         }

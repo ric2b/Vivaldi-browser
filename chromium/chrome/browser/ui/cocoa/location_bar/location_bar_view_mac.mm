@@ -67,7 +67,13 @@
 #include "skia/ext/skia_utils_mac.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/l10n/l10n_util_mac.h"
+#include "ui/base/material_design/material_design_controller.h"
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_skia_util_mac.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 
 using content::WebContents;
 
@@ -197,6 +203,8 @@ void LocationBarViewMac::UpdateSaveCreditCardIcon() {
   bool enabled = controller && controller->IsIconVisible();
   command_updater()->UpdateCommandEnabled(IDC_SAVE_CREDIT_CARD_FOR_PAGE,
                                           enabled);
+  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
+  save_credit_card_decoration_->SetIcon(inDarkMode);
   save_credit_card_decoration_->SetVisible(enabled);
   OnDecorationsChanged();
 }
@@ -332,13 +340,15 @@ void LocationBarViewMac::SetStarred(bool starred) {
   if (star_decoration_->starred() == starred)
     return;
 
-  star_decoration_->SetStarred(starred);
+  star_decoration_->SetStarred(starred,
+      [[field_ window] inIncognitoModeWithSystemTheme]);
   UpdateBookmarkStarVisibility();
   OnDecorationsChanged();
 }
 
 void LocationBarViewMac::SetTranslateIconLit(bool on) {
-  translate_decoration_->SetLit(on);
+  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
+  translate_decoration_->SetLit(on, inDarkMode);
   OnDecorationsChanged();
 }
 
@@ -446,8 +456,7 @@ void LocationBarViewMac::Layout() {
     selected_keyword_decoration_->SetVisible(true);
     selected_keyword_decoration_->SetKeyword(short_name, is_extension_keyword);
     selected_keyword_decoration_->SetImage(GetKeywordImage(keyword));
-  } else if (GetToolbarModel()->GetSecurityLevel(false) ==
-             security_state::SecurityStateModel::EV_SECURE) {
+  } else if (ShouldShowEVBubble()) {
     // Switch from location icon to show the EV bubble instead.
     location_icon_decoration_->SetVisible(false);
     ev_bubble_decoration_->SetVisible(true);
@@ -545,13 +554,75 @@ void LocationBarViewMac::UpdateWithoutTabRestore() {
   Update(nullptr);
 }
 
-void LocationBarViewMac::OnChanged() {
-  // Update the location-bar icon.
-  const int resource_id = omnibox_view_->GetIcon();
-  NSImage* image = OmniboxViewMac::ImageForResource(resource_id);
+void LocationBarViewMac::UpdateLocationIcon() {
+  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
+
+  SkColor vectorIconColor = gfx::kPlaceholderColor;
+  gfx::VectorIconId vectorIconId = gfx::VectorIconId::VECTOR_ICON_NONE;
+  const int kIconSize = 16;
+  if (ShouldShowEVBubble()) {
+    vectorIconId = gfx::VectorIconId::LOCATION_BAR_HTTPS_VALID_IN_CHIP;
+    vectorIconColor = gfx::kGoogleGreen700;
+  } else {
+    vectorIconId = omnibox_view_->GetVectorIcon(inDarkMode);
+    if (inDarkMode) {
+      vectorIconColor = SK_ColorWHITE;
+    } else {
+      NSColor* textColor = OmniboxViewMac::BaseTextColor(inDarkMode);
+      // Convert to the device color space before getting the SkColor.
+      textColor = [textColor colorUsingColorSpaceName:NSDeviceRGBColorSpace];
+      vectorIconColor = skia::NSDeviceColorToSkColor(textColor);
+    }
+  }
+
+  DCHECK(vectorIconId != gfx::VectorIconId::VECTOR_ICON_NONE);
+  NSImage* image = NSImageFromImageSkia(gfx::CreateVectorIcon(
+      vectorIconId, kIconSize, vectorIconColor));
+
   location_icon_decoration_->SetImage(image);
   ev_bubble_decoration_->SetImage(image);
+
   Layout();
+}
+
+void LocationBarViewMac::UpdateColorsToMatchTheme() {
+  if (!ui::MaterialDesignController::IsModeMaterial() ||
+      ![[field_ window] inIncognitoMode]) {
+    return;
+  }
+
+  // Update the location-bar icon.
+  UpdateLocationIcon();
+
+  // Make sure we're displaying the correct star color for Incognito mode. If
+  // the window is in Incognito mode, switching between a theme and no theme
+  // can move the window in and out of dark mode.
+  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
+  star_decoration_->SetStarred(star_decoration_->starred(), inDarkMode);
+
+  // Update the appearance of the text in the Omnibox.
+  omnibox_view_->Update();
+}
+
+void LocationBarViewMac::OnAddedToWindow() {
+  UpdateColorsToMatchTheme();
+}
+
+void LocationBarViewMac::OnThemeChanged() {
+  UpdateColorsToMatchTheme();
+}
+
+void LocationBarViewMac::OnChanged() {
+  NSImage* image = nil;
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    UpdateLocationIcon();
+  } else {
+    const int resource_id = omnibox_view_->GetIcon();
+    image = OmniboxViewMac::ImageForResource(resource_id);
+    location_icon_decoration_->SetImage(image);
+    ev_bubble_decoration_->SetImage(image);
+    Layout();
+  }
 }
 
 void LocationBarViewMac::OnSetFocus() {
@@ -575,6 +646,11 @@ WebContents* LocationBarViewMac::GetWebContents() {
   return browser_->tab_strip_model()->GetActiveWebContents();
 }
 
+bool LocationBarViewMac::ShouldShowEVBubble() const {
+  return (GetToolbarModel()->GetSecurityLevel(false) ==
+          security_state::SecurityStateModel::EV_SECURE);
+}
+
 NSImage* LocationBarViewMac::GetKeywordImage(const base::string16& keyword) {
   const TemplateURL* template_url = TemplateURLServiceFactory::GetForProfile(
       profile())->GetTemplateURLForKeyword(keyword);
@@ -584,7 +660,10 @@ NSImage* LocationBarViewMac::GetKeywordImage(const base::string16& keyword) {
         GetOmniboxIcon(template_url->GetExtensionId()).AsNSImage();
   }
 
-  return OmniboxViewMac::ImageForResource(IDR_OMNIBOX_SEARCH);
+  return ui::MaterialDesignController::IsModeMaterial()
+      ? NSImageFromImageSkia(gfx::CreateVectorIcon(
+          gfx::VectorIconId::OMNIBOX_SEARCH, 16, gfx::kGoogleBlue700))
+      : OmniboxViewMac::ImageForResource(IDR_OMNIBOX_SEARCH);
 }
 
 void LocationBarViewMac::PostNotification(NSString* notification) {
@@ -707,7 +786,8 @@ void LocationBarViewMac::UpdateTranslateDecoration() {
   bool enabled = language_state.translate_enabled();
   command_updater()->UpdateCommandEnabled(IDC_TRANSLATE_PAGE, enabled);
   translate_decoration_->SetVisible(enabled);
-  translate_decoration_->SetLit(language_state.IsPageTranslated());
+  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
+  translate_decoration_->SetLit(language_state.IsPageTranslated(), inDarkMode);
 }
 
 bool LocationBarViewMac::UpdateZoomDecoration(bool default_zoom_changed) {
@@ -715,9 +795,11 @@ bool LocationBarViewMac::UpdateZoomDecoration(bool default_zoom_changed) {
   if (!web_contents)
     return false;
 
+  bool inDarkMode = [[field_ window] inIncognitoModeWithSystemTheme];
   return zoom_decoration_->UpdateIfNecessary(
       ui_zoom::ZoomController::FromWebContents(web_contents),
-      default_zoom_changed);
+      default_zoom_changed,
+      inDarkMode);
 }
 
 void LocationBarViewMac::OnDefaultZoomLevelChanged() {

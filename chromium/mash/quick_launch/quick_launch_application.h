@@ -5,8 +5,10 @@
 #ifndef MASH_QUICK_LAUNCH_QUICK_LAUNCH_APPLICATION_H_
 #define MASH_QUICK_LAUNCH_QUICK_LAUNCH_APPLICATION_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "mojo/services/catalog/public/interfaces/catalog.mojom.h"
 #include "mojo/services/tracing/public/cpp/tracing_impl.h"
 #include "mojo/shell/public/cpp/shell_client.h"
 
@@ -25,13 +27,12 @@ class QuickLaunchApplication : public mojo::ShellClient {
  private:
   // mojo::ShellClient:
   void Initialize(mojo::Connector* connector,
-                  const std::string& url,
-                  uint32_t id,
-                  uint32_t user_id) override;
+                  const mojo::Identity& identity,
+                  uint32_t id) override;
   bool AcceptConnection(mojo::Connection* connection) override;
 
   mojo::TracingImpl tracing_;
-  scoped_ptr<views::AuraInit> aura_init_;
+  std::unique_ptr<views::AuraInit> aura_init_;
 
   DISALLOW_COPY_AND_ASSIGN(QuickLaunchApplication);
 };

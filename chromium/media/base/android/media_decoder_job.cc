@@ -457,8 +457,10 @@ void MediaDecoderJob::DecodeInternal(
     if (status == MEDIA_CODEC_OUTPUT_FORMAT_CHANGED) {
       // TODO(qinmin): instead of waiting for the next output buffer to be
       // dequeued, post a task on the UI thread to signal the format change.
-      OnOutputFormatChanged();
-      has_format_change = true;
+      if (OnOutputFormatChanged())
+        has_format_change = true;
+      else
+        status = MEDIA_CODEC_ERROR;
     }
   } while (status != MEDIA_CODEC_OK && status != MEDIA_CODEC_ERROR &&
            status != MEDIA_CODEC_DEQUEUE_OUTPUT_AGAIN_LATER);
@@ -485,12 +487,11 @@ void MediaDecoderJob::DecodeInternal(
 
   if (time_to_render > base::TimeDelta()) {
     decoder_task_runner_->PostDelayedTask(
-        FROM_HERE,
-        base::Bind(&MediaDecoderJob::ReleaseOutputBuffer,
-                   base::Unretained(this), buffer_index, offset, size,
-                   render_output,
-                   false,  // this is not a late frame
-                   presentation_timestamp, base::Bind(callback, status)),
+        FROM_HERE, base::Bind(&MediaDecoderJob::ReleaseOutputBuffer,
+                              base::Unretained(this), buffer_index, offset,
+                              size, render_output,
+                              false,  // this is not a late frame
+                              presentation_timestamp, status, callback),
         time_to_render);
     return;
   }
@@ -509,12 +510,9 @@ void MediaDecoderJob::DecodeInternal(
     presentation_timestamp = kNoTimestamp();
   }
 
-  ReleaseOutputCompletionCallback completion_callback = base::Bind(
-      callback, status);
-
   const bool is_late_frame = (time_to_render < base::TimeDelta());
   ReleaseOutputBuffer(buffer_index, offset, size, render_output, is_late_frame,
-                      presentation_timestamp, completion_callback);
+                      presentation_timestamp, status, callback);
 }
 
 void MediaDecoderJob::OnDecodeCompleted(
@@ -675,7 +673,9 @@ bool MediaDecoderJob::IsCodecReconfigureNeeded(
   return true;
 }
 
-void MediaDecoderJob::OnOutputFormatChanged() {}
+bool MediaDecoderJob::OnOutputFormatChanged() {
+  return true;
+}
 
 bool MediaDecoderJob::UpdateOutputFormat() {
   return false;

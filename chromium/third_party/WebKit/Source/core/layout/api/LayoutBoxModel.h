@@ -22,7 +22,7 @@ public:
     explicit LayoutBoxModel(const LayoutItem& item)
         : LayoutItem(item)
     {
-        ASSERT(!item || item.isBoxModelObject());
+        ASSERT_WITH_SECURITY_IMPLICATION(!item || item.isBoxModelObject());
     }
 
     explicit LayoutBoxModel(std::nullptr_t) : LayoutItem(nullptr) { }
@@ -32,6 +32,11 @@ public:
     PaintLayer* layer() const
     {
         return toBoxModel()->layer();
+    }
+
+    PaintLayerScrollableArea* getScrollableArea() const
+    {
+        return toBoxModel()->getScrollableArea();
     }
 
 private:

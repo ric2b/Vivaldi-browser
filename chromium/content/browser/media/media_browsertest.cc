@@ -27,7 +27,7 @@ void MediaBrowserTest::RunMediaTestPage(const std::string& html_page,
                                         bool http) {
   GURL gurl;
   std::string query = media::GetURLQueryString(query_params);
-  scoped_ptr<net::EmbeddedTestServer> http_test_server;
+  std::unique_ptr<net::EmbeddedTestServer> http_test_server;
   if (http) {
     http_test_server.reset(new net::EmbeddedTestServer);
     http_test_server->ServeFilesFromSourceDirectory(media::GetTestDataPath());
@@ -126,7 +126,7 @@ IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearSilentWebm) {
   PlayVideo("bear_silent.webm", GetParam());
 }
 
-#if 0 && defined(USE_PROPRIETARY_CODECS)
+#if defined(USE_PROPRIETARY_CODECS)
 IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearMp4) {
   PlayVideo("bear.mp4", GetParam());
 }
@@ -168,7 +168,7 @@ IN_PROC_BROWSER_TEST_F(MediaTest, VideoBearRotated270) {
 #endif  // defined(USE_PROPRIETARY_CODECS)
 
 #if defined(OS_CHROMEOS)
-#if 0 && defined(USE_PROPRIETARY_CODECS)
+#if defined(USE_PROPRIETARY_CODECS)
 IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearAviMp3Mpeg4) {
   PlayVideo("bear_mpeg4_mp3.avi", GetParam());
 }
@@ -254,7 +254,7 @@ IN_PROC_BROWSER_TEST_F(MediaTest, Yuv444pVp9) {
   RunColorFormatTest("yuv444p.webm", "ENDED");
 }
 
-#if 0 && defined(USE_PROPRIETARY_CODECS)
+#if defined(USE_PROPRIETARY_CODECS)
 IN_PROC_BROWSER_TEST_F(MediaTest, Yuv420pH264) {
   RunColorFormatTest("yuv420p.mp4", kEnded);
 }

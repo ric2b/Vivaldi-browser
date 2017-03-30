@@ -69,6 +69,7 @@ cvox.ChromeVoxPrefs.DEFAULT_PREFS = {
   'earcons': true,
   'focusFollowsMouse': false,
   'granularity': undefined,
+  'outputContextFirst': false,
   'position': '{}',
   'siteSpecificScriptBase':
       'https://ssl.gstatic.com/accessibility/javascript/ext/',
@@ -110,6 +111,7 @@ cvox.ChromeVoxPrefs.prototype.switchToKeyMap = function(selectedKeyMap) {
   // class to manage multiple key maps.
   localStorage['currentKeyMap'] = selectedKeyMap;
   this.keyMap_ = cvox.KeyMap.fromCurrentKeyMap();
+  cvox.ChromeVoxKbHandler.handlerKeyMap = this.keyMap_;
   this.keyMap_.toLocalStorage();
   this.keyMap_.resetModifier();
   this.sendPrefsToAllTabs(false, true);

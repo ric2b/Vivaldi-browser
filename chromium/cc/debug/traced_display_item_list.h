@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/debug/traced_value.h"
 
@@ -19,10 +20,10 @@ class DisplayItemList;
 class TracedDisplayItemList
     : public base::trace_event::ConvertableToTraceFormat {
  public:
-  static scoped_refptr<ConvertableToTraceFormat> AsTraceableDisplayItemList(
+  static scoped_ptr<ConvertableToTraceFormat> AsTraceableDisplayItemList(
       scoped_refptr<const DisplayItemList> list,
       bool include_items) {
-    return scoped_refptr<ConvertableToTraceFormat>(
+    return scoped_ptr<ConvertableToTraceFormat>(
         new TracedDisplayItemList(list, include_items));
   }
   void AppendAsTraceFormat(std::string* out) const override;

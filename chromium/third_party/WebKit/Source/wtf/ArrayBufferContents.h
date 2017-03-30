@@ -37,6 +37,8 @@
 
 namespace WTF {
 
+typedef void(*AdjustAmountOfExternalAllocatedMemoryFunction)(int size);
+
 class WTF_EXPORT ArrayBufferContents {
     WTF_MAKE_NONCOPYABLE(ArrayBufferContents);
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -76,8 +78,9 @@ public:
     static void allocateMemory(size_t, InitializationPolicy, void*&);
     static void allocateMemoryOrNull(size_t, InitializationPolicy, void*&);
     static void freeMemory(void*, size_t);
-    static void setAdjustAmoutOfExternalAllocatedMemoryFunction(AdjustAmountOfExternalAllocatedMemoryFunction function)
+    static void initialize(AdjustAmountOfExternalAllocatedMemoryFunction function)
     {
+        ASSERT(isMainThread());
         ASSERT(!s_adjustAmountOfExternalAllocatedMemoryFunction);
         s_adjustAmountOfExternalAllocatedMemoryFunction = function;
     }

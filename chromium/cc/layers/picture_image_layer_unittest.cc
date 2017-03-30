@@ -4,9 +4,10 @@
 
 #include "cc/layers/picture_image_layer.h"
 
-#include "cc/layers/layer_settings.h"
 #include "cc/playback/display_item.h"
+#include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/skia_common.h"
+#include "cc/test/test_task_graph_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -17,15 +18,19 @@ namespace cc {
 namespace {
 
 TEST(PictureImageLayerTest, PaintContentsToDisplayList) {
-  scoped_refptr<PictureImageLayer> layer =
-      PictureImageLayer::Create(LayerSettings());
+  scoped_refptr<PictureImageLayer> layer = PictureImageLayer::Create();
+  FakeLayerTreeHostClient client(FakeLayerTreeHostClient::DIRECT_3D);
+  TestTaskGraphRunner task_graph_runner;
+  scoped_ptr<FakeLayerTreeHost> host =
+      FakeLayerTreeHost::Create(&client, &task_graph_runner);
+  layer->SetLayerTreeHost(host.get());
   gfx::Rect layer_rect(200, 200);
 
   unsigned char image_pixels[4 * 200 * 200] = {0};
   SkImageInfo info =
       SkImageInfo::MakeN32Premul(layer_rect.width(), layer_rect.height());
-  skia::RefPtr<SkSurface> image_surface = skia::AdoptRef(
-      SkSurface::NewRasterDirect(info, image_pixels, info.minRowBytes()));
+  sk_sp<SkSurface> image_surface =
+      SkSurface::MakeRasterDirect(info, image_pixels, info.minRowBytes());
   SkCanvas* image_canvas = image_surface->getCanvas();
   image_canvas->clear(SK_ColorRED);
   SkPaint blue_paint;
@@ -45,6 +50,8 @@ TEST(PictureImageLayerTest, PaintContentsToDisplayList) {
   DrawDisplayList(actual_pixels, layer_rect, display_list);
 
   EXPECT_EQ(0, memcmp(actual_pixels, image_pixels, 4 * 200 * 200));
+
+  layer->SetLayerTreeHost(nullptr);
 }
 
 }  // namespace

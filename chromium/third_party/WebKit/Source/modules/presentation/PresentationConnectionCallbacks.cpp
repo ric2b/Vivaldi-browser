@@ -21,18 +21,18 @@ PresentationConnectionCallbacks::PresentationConnectionCallbacks(ScriptPromiseRe
     ASSERT(m_request);
 }
 
-void PresentationConnectionCallbacks::onSuccess(WebPassOwnPtr<WebPresentationConnectionClient> PresentationConnectionClient)
+void PresentationConnectionCallbacks::onSuccess(std::unique_ptr<WebPresentationConnectionClient> PresentationConnectionClient)
 {
-    OwnPtr<WebPresentationConnectionClient> result(PresentationConnectionClient.release());
+    OwnPtr<WebPresentationConnectionClient> result(adoptPtr(PresentationConnectionClient.release()));
 
-    if (!m_resolver->executionContext() || m_resolver->executionContext()->activeDOMObjectsAreStopped())
+    if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
         return;
     m_resolver->resolve(PresentationConnection::take(m_resolver.get(), result.release(), m_request));
 }
 
 void PresentationConnectionCallbacks::onError(const WebPresentationError& error)
 {
-    if (!m_resolver->executionContext() || m_resolver->executionContext()->activeDOMObjectsAreStopped())
+    if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
         return;
     m_resolver->reject(PresentationError::take(m_resolver.get(), error));
 }

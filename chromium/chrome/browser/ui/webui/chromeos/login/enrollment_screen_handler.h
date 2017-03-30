@@ -5,10 +5,10 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_CHROMEOS_LOGIN_ENROLLMENT_SCREEN_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_CHROMEOS_LOGIN_ENROLLMENT_SCREEN_HANDLER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "chrome/browser/chromeos/login/enrollment/enrollment_screen_actor.h"
 #include "chrome/browser/chromeos/login/enrollment/enterprise_enrollment_helper.h"
 #include "chrome/browser/chromeos/login/screens/network_error_model.h"
@@ -20,6 +20,7 @@
 namespace chromeos {
 
 class ErrorScreensHistogramHelper;
+class HelpAppLauncher;
 
 // WebUIMessageHandler implementation which handles events occurring on the
 // page, such as the user pressing the signin button.
@@ -91,9 +92,6 @@ class EnrollmentScreenHandler
   // Shows the screen.
   void DoShow();
 
-  // Returns current visible screen.
-  OobeUI::Screen GetCurrentScreen() const;
-
   // Returns true if current visible screen is the enrollment sign-in page.
   bool IsOnEnrollmentScreen() const;
 
@@ -121,7 +119,7 @@ class EnrollmentScreenHandler
 
   NetworkErrorModel* network_error_model_;
 
-  scoped_ptr<ErrorScreensHistogramHelper> histogram_helper_;
+  std::unique_ptr<ErrorScreensHistogramHelper> histogram_helper_;
 
   // Help application used for help dialogs.
   scoped_refptr<HelpAppLauncher> help_app_;

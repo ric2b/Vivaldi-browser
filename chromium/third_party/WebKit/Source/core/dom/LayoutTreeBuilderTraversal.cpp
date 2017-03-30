@@ -54,7 +54,7 @@ void ParentDetails::didTraverseInsertionPoint(const InsertionPoint* insertionPoi
 ContainerNode* parent(const Node& node, ParentDetails* details)
 {
     // TODO(hayato): Uncomment this once we can be sure LayoutTreeBuilderTraversal::parent() is used only for a node in a document.
-    // ASSERT(node.inDocument());
+    // DCHECK(node.inShadowIncludingDocument());
     return FlatTreeTraversal::parent(node, details);
 }
 
@@ -72,7 +72,7 @@ Node* nextSibling(const Node& node)
 
     Node* parent = FlatTreeTraversal::parent(node);
     if (parent && parent->isElementNode())
-        return toElement(parent)->pseudoElement(AFTER);
+        return toElement(parent)->pseudoElement(PseudoIdAfter);
 
     return 0;
 }
@@ -91,7 +91,7 @@ Node* previousSibling(const Node& node)
 
     Node* parent = FlatTreeTraversal::parent(node);
     if (parent && parent->isElementNode())
-        return toElement(parent)->pseudoElement(BEFORE);
+        return toElement(parent)->pseudoElement(PseudoIdBefore);
 
     return 0;
 }
@@ -112,7 +112,7 @@ static Node* pseudoAwarePreviousSibling(const Node& node)
                 return child;
         }
         if (!node.isBeforePseudoElement())
-            return toElement(parentNode)->pseudoElement(BEFORE);
+            return toElement(parentNode)->pseudoElement(PseudoIdBefore);
     }
     return previousNode;
 }
@@ -121,13 +121,13 @@ static Node* pseudoAwareLastChild(const Node& node)
 {
     if (node.isElementNode()) {
         const Element& currentElement = toElement(node);
-        Node* last = currentElement.pseudoElement(AFTER);
+        Node* last = currentElement.pseudoElement(PseudoIdAfter);
         if (last)
             return last;
 
         last = lastChild(currentElement);
         if (!last)
-            last = currentElement.pseudoElement(BEFORE);
+            last = currentElement.pseudoElement(PseudoIdBefore);
         return last;
     }
 
@@ -163,7 +163,7 @@ static Node* pseudoAwareNextSibling(const Node& node)
                 return child;
         }
         if (!node.isAfterPseudoElement())
-            return toElement(parentNode)->pseudoElement(AFTER);
+            return toElement(parentNode)->pseudoElement(PseudoIdAfter);
     }
     return nextNode;
 }
@@ -172,12 +172,12 @@ static Node* pseudoAwareFirstChild(const Node& node)
 {
     if (node.isElementNode()) {
         const Element& currentElement = toElement(node);
-        Node* first = currentElement.pseudoElement(BEFORE);
+        Node* first = currentElement.pseudoElement(PseudoIdBefore);
         if (first)
             return first;
         first = firstChild(currentElement);
         if (!first)
-            first = currentElement.pseudoElement(AFTER);
+            first = currentElement.pseudoElement(PseudoIdAfter);
         return first;
     }
 
@@ -186,8 +186,8 @@ static Node* pseudoAwareFirstChild(const Node& node)
 
 static Node* nextAncestorSibling(const Node& node, const Node* stayWithin)
 {
-    ASSERT(!pseudoAwareNextSibling(node));
-    ASSERT(node != stayWithin);
+    DCHECK(!pseudoAwareNextSibling(node));
+    DCHECK_NE(node, stayWithin);
     for (Node* parentNode = parent(node); parentNode; parentNode = parent(*parentNode)) {
         if (parentNode == stayWithin)
             return 0;
@@ -237,9 +237,9 @@ LayoutObject* nextInTopLayer(const Element& element)
 {
     if (!element.isInTopLayer())
         return 0;
-    const WillBeHeapVector<RefPtrWillBeMember<Element>>& topLayerElements = element.document().topLayerElements();
+    const HeapVector<Member<Element>>& topLayerElements = element.document().topLayerElements();
     size_t position = topLayerElements.find(&element);
-    ASSERT(position != kNotFound);
+    DCHECK_NE(position, kNotFound);
     for (size_t i = position + 1; i < topLayerElements.size(); ++i) {
         if (LayoutObject* layoutObject = topLayerElements[i]->layoutObject())
             return layoutObject;

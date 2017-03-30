@@ -34,10 +34,6 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "wtf/HashSet.h"
-#include "wtf/PassOwnPtr.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 
 namespace blink {
@@ -53,12 +49,12 @@ class Node;
 typedef unsigned char MutationObserverOptions;
 typedef unsigned char MutationRecordDeliveryOptions;
 
-using MutationObserverSet = WillBeHeapHashSet<RefPtrWillBeMember<MutationObserver>>;
-using MutationObserverRegistrationSet = WillBeHeapHashSet<RawPtrWillBeWeakMember<MutationObserverRegistration>>;
-using MutationObserverVector = WillBeHeapVector<RefPtrWillBeMember<MutationObserver>>;
-using MutationRecordVector = WillBeHeapVector<RefPtrWillBeMember<MutationRecord>>;
+using MutationObserverSet = HeapHashSet<Member<MutationObserver>>;
+using MutationObserverRegistrationSet = HeapHashSet<WeakMember<MutationObserverRegistration>>;
+using MutationObserverVector = HeapVector<Member<MutationObserver>>;
+using MutationRecordVector = HeapVector<Member<MutationRecord>>;
 
-class MutationObserver final : public RefCountedWillBeGarbageCollectedFinalized<MutationObserver>, public ScriptWrappable {
+class MutationObserver final : public GarbageCollectedFinalized<MutationObserver>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
     enum MutationType {
@@ -79,7 +75,7 @@ public:
         CharacterDataOldValue = 1 << 6,
     };
 
-    static PassRefPtrWillBeRawPtr<MutationObserver> create(PassOwnPtrWillBeRawPtr<MutationCallback>);
+    static RawPtr<MutationObserver> create(RawPtr<MutationCallback>);
     static void resumeSuspendedObservers();
     static void deliverMutations();
 
@@ -90,10 +86,10 @@ public:
     void disconnect();
     void observationStarted(MutationObserverRegistration*);
     void observationEnded(MutationObserverRegistration*);
-    void enqueueMutationRecord(PassRefPtrWillBeRawPtr<MutationRecord>);
+    void enqueueMutationRecord(RawPtr<MutationRecord>);
     void setHasTransientRegistration();
 
-    WillBeHeapHashSet<RawPtrWillBeMember<Node>> getObservedNodes() const;
+    HeapHashSet<Member<Node>> getObservedNodes() const;
 
     // Eagerly finalized as destructor accesses heap object members.
     EAGERLY_FINALIZE();
@@ -102,11 +98,12 @@ public:
 private:
     struct ObserverLessThan;
 
-    explicit MutationObserver(PassOwnPtrWillBeRawPtr<MutationCallback>);
+    explicit MutationObserver(RawPtr<MutationCallback>);
     void deliver();
     bool shouldBeSuspended() const;
+    void cancelInspectorAsyncTasks();
 
-    OwnPtrWillBeMember<MutationCallback> m_callback;
+    Member<MutationCallback> m_callback;
     MutationRecordVector m_records;
     MutationObserverRegistrationSet m_registrations;
     unsigned m_priority;

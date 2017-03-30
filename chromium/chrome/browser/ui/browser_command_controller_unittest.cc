@@ -51,13 +51,13 @@ TEST_F(BrowserCommandControllerTest, IsReservedCommandOrKey) {
 
   // When there are modifier keys pressed, don't reserve.
   EXPECT_FALSE(browser()->command_controller()->IsReservedCommandOrKey(
-      IDC_RELOAD_IGNORING_CACHE, content::NativeWebKeyboardEvent(ui::KeyEvent(
-                                     ui::ET_KEY_PRESSED, ui::VKEY_F3,
-                                     ui::DomCode::F3, ui::EF_SHIFT_DOWN))));
+      IDC_RELOAD_BYPASSING_CACHE, content::NativeWebKeyboardEvent(ui::KeyEvent(
+                                      ui::ET_KEY_PRESSED, ui::VKEY_F3,
+                                      ui::DomCode::F3, ui::EF_SHIFT_DOWN))));
   EXPECT_FALSE(browser()->command_controller()->IsReservedCommandOrKey(
-      IDC_RELOAD_IGNORING_CACHE, content::NativeWebKeyboardEvent(ui::KeyEvent(
-                                     ui::ET_KEY_PRESSED, ui::VKEY_F3,
-                                     ui::DomCode::F3, ui::EF_CONTROL_DOWN))));
+      IDC_RELOAD_BYPASSING_CACHE, content::NativeWebKeyboardEvent(ui::KeyEvent(
+                                      ui::ET_KEY_PRESSED, ui::VKEY_F3,
+                                      ui::DomCode::F3, ui::EF_CONTROL_DOWN))));
   EXPECT_FALSE(browser()->command_controller()->IsReservedCommandOrKey(
       IDC_FULLSCREEN, content::NativeWebKeyboardEvent(
                           ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_F4,
@@ -227,12 +227,12 @@ TEST_F(BrowserCommandControllerTest, AvatarMenuAlwaysDisabledInIncognitoMode) {
 
   // Set up a profile with an off the record profile.
   TestingProfile::Builder normal_builder;
-  scoped_ptr<TestingProfile> original_profile = normal_builder.Build();
+  std::unique_ptr<TestingProfile> original_profile = normal_builder.Build();
 
   // Create a new browser based on the off the record profile.
   Browser::CreateParams profile_params(
       original_profile->GetOffTheRecordProfile());
-  scoped_ptr<Browser> otr_browser(
+  std::unique_ptr<Browser> otr_browser(
       chrome::CreateBrowserWithTestWindowForParams(&profile_params));
 
   chrome::BrowserCommandController command_controller(otr_browser.get());
@@ -400,14 +400,14 @@ TEST_F(BrowserCommandControllerFullscreenTest,
 
 TEST_F(BrowserCommandControllerTest, IncognitoModeOnSigninAllowedPrefChange) {
   // Set up a profile with an off the record profile.
-  scoped_ptr<TestingProfile> profile1 = TestingProfile::Builder().Build();
+  std::unique_ptr<TestingProfile> profile1 = TestingProfile::Builder().Build();
   Profile* profile2 = profile1->GetOffTheRecordProfile();
 
   EXPECT_EQ(profile2->GetOriginalProfile(), profile1.get());
 
   // Create a new browser based on the off the record profile.
   Browser::CreateParams profile_params(profile1->GetOffTheRecordProfile());
-  scoped_ptr<Browser> browser2(
+  std::unique_ptr<Browser> browser2(
       chrome::CreateBrowserWithTestWindowForParams(&profile_params));
 
   chrome::BrowserCommandController command_controller(browser2.get());

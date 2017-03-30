@@ -20,6 +20,7 @@
 #include "chrome/browser/task_management/sampling/task_manager_io_thread_helper.h"
 #include "chrome/browser/task_management/task_manager_interface.h"
 #include "content/public/browser/gpu_data_manager_observer.h"
+#include "gpu/ipc/common/memory_stats.h"
 
 namespace task_management {
 
@@ -40,6 +41,7 @@ class TaskManagerImpl :
   int64_t GetPhysicalMemoryUsage(TaskId task_id) const override;
   int64_t GetPrivateMemoryUsage(TaskId task_id) const override;
   int64_t GetSharedMemoryUsage(TaskId task_id) const override;
+  int64_t GetSwappedMemoryUsage(TaskId task_id) const override;
   int64_t GetGpuMemoryUsage(TaskId task_id,
                             bool* has_duplicates) const override;
   int GetIdleWakeupsPerSecond(TaskId task_id) const override;
@@ -59,6 +61,11 @@ class TaskManagerImpl :
   const base::ProcessHandle& GetProcessHandle(TaskId task_id) const override;
   const base::ProcessId& GetProcessId(TaskId task_id) const override;
   Task::Type GetType(TaskId task_id) const override;
+  int GetTabId(TaskId task_id) const override;
+  int GetChildProcessUniqueId(TaskId task_id) const override;
+  void GetTerminationStatus(TaskId task_id,
+                            base::TerminationStatus* out_status,
+                            int* out_error_code) const override;
   int64_t GetNetworkUsage(TaskId task_id) const override;
   int64_t GetProcessTotalNetworkUsage(TaskId task_id) const override;
   int64_t GetSqliteMemoryUsed(TaskId task_id) const override;
@@ -69,15 +76,17 @@ class TaskManagerImpl :
       TaskId task_id,
       blink::WebCache::ResourceTypeStats* stats) const override;
   const TaskIdList& GetTaskIdsList() const override;
+  TaskIdList GetIdsOfTasksSharingSameProcess(TaskId task_id) const override;
   size_t GetNumberOfTasksOnSameProcess(TaskId task_id) const override;
 
   // task_management::TaskProviderObserver:
   void TaskAdded(Task* task) override;
   void TaskRemoved(Task* task) override;
+  void TaskUnresponsive(Task* task) override;
 
   // content::GpuDataManagerObserver:
   void OnVideoMemoryUsageStatsUpdate(
-      const content::GPUVideoMemoryUsageStats& gpu_memory_stats) override;
+      const gpu::VideoMemoryUsageStats& gpu_memory_stats) override;
 
   // The notification method on the UI thread when multiple bytes are read
   // from URLRequests. This will be called by the |io_thread_helper_|
@@ -103,6 +112,12 @@ class TaskManagerImpl :
   TaskGroup* GetTaskGroupByTaskId(TaskId task_id) const;
   Task* GetTaskByTaskId(TaskId task_id) const;
 
+  // Called back by a TaskGroup when the resource calculations done on the
+  // background thread has completed.
+  void OnTaskGroupBackgroundCalculationsDone();
+
+  const base::Closure on_background_data_ready_callback_;
+
   // Map TaskGroups by the IDs of the processes they represent.
   // Keys and values are unique (no duplicates).
   std::map<base::ProcessId, TaskGroup*> task_groups_by_proc_id_;
@@ -126,7 +141,7 @@ class TaskManagerImpl :
 
   // The current GPU memory usage stats that was last received from the
   // GpuDataManager.
-  content::GPUVideoMemoryUsageStats gpu_memory_stats_;
+  gpu::VideoMemoryUsageStats gpu_memory_stats_;
 
   // The specific blocking pool SequencedTaskRunner that will be used to make
   // sure TaskGroupSampler posts their refreshes serially.

@@ -32,7 +32,7 @@
 
 #include "platform/graphics/ImageBuffer.h"
 
-#include "GrContext.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "platform/MIMETypeRegistry.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -50,8 +50,12 @@
 #include "public/platform/WebExternalTextureMailbox.h"
 #include "public/platform/WebGraphicsContext3D.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
+#include "skia/ext/texture_handle.h"
 #include "third_party/skia/include/core/SkPicture.h"
+#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "wtf/ArrayBufferContents.h"
+#include "wtf/CheckedNumeric.h"
 #include "wtf/MathExtras.h"
 #include "wtf/Vector.h"
 #include "wtf/text/Base64.h"
@@ -175,7 +179,7 @@ WebLayer* ImageBuffer::platformLayer() const
     return m_surface->layer();
 }
 
-bool ImageBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, Platform3DObject texture, GLenum internalFormat, GLenum destType, GLint level, bool premultiplyAlpha, bool flipY)
+bool ImageBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, gpu::gles2::GLES2Interface* gl, Platform3DObject texture, GLenum internalFormat, GLenum destType, GLint level, bool premultiplyAlpha, bool flipY)
 {
     if (!Extensions3DUtil::canUseCopyTextureCHROMIUM(GL_TEXTURE_2D, internalFormat, destType, level))
         return false;
@@ -193,44 +197,43 @@ bool ImageBuffer::copyToPlatformTexture(WebGraphicsContext3D* context, Platform3
 
     ASSERT(textureImage->isTextureBacked()); // isAccelerated() check above should guarantee this
     // Get the texture ID, flushing pending operations if needed.
-    Platform3DObject textureId = textureImage->getTextureHandle(true);
-    if (!textureId)
+    const GrGLTextureInfo* textureInfo = skia::GrBackendObjectToGrGLTextureInfo(textureImage->getTextureHandle(true));
+    if (!textureInfo || !textureInfo->fID)
         return false;
 
     OwnPtr<WebGraphicsContext3DProvider> provider = adoptPtr(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
     if (!provider)
         return false;
-    WebGraphicsContext3D* sharedContext = provider->context3d();
-    if (!sharedContext)
-        return false;
+    gpu::gles2::GLES2Interface* sharedGL = provider->contextGL();
 
     OwnPtr<WebExternalTextureMailbox> mailbox = adoptPtr(new WebExternalTextureMailbox);
+    mailbox->textureSize = WebSize(textureImage->width(), textureImage->height());
 
     // Contexts may be in a different share group. We must transfer the texture through a mailbox first
-    sharedContext->genMailboxCHROMIUM(mailbox->name);
-    sharedContext->produceTextureDirectCHROMIUM(textureId, GL_TEXTURE_2D, mailbox->name);
-    const WGC3Duint64 sharedFenceSync = sharedContext->insertFenceSyncCHROMIUM();
-    sharedContext->flush();
+    sharedGL->GenMailboxCHROMIUM(mailbox->name);
+    sharedGL->ProduceTextureDirectCHROMIUM(textureInfo->fID, textureInfo->fTarget, mailbox->name);
+    const GLuint64 sharedFenceSync = sharedGL->InsertFenceSyncCHROMIUM();
+    sharedGL->Flush();
 
-    mailbox->validSyncToken = sharedContext->genSyncTokenCHROMIUM(sharedFenceSync, mailbox->syncToken);
-    if (mailbox->validSyncToken)
-        context->waitSyncTokenCHROMIUM(mailbox->syncToken);
+    sharedGL->GenSyncTokenCHROMIUM(sharedFenceSync, mailbox->syncToken);
+    mailbox->validSyncToken = true;
+    gl->WaitSyncTokenCHROMIUM(mailbox->syncToken);
 
-    Platform3DObject sourceTexture = context->createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox->name);
+    Platform3DObject sourceTexture = gl->CreateAndConsumeTextureCHROMIUM(textureInfo->fTarget, mailbox->name);
 
     // The canvas is stored in a premultiplied format, so unpremultiply if necessary.
     // The canvas is stored in an inverted position, so the flip semantics are reversed.
-    context->copyTextureCHROMIUM(sourceTexture, texture, internalFormat, destType, flipY ? GL_FALSE : GL_TRUE, GL_FALSE, premultiplyAlpha ? GL_FALSE : GL_TRUE);
+    gl->CopyTextureCHROMIUM(sourceTexture, texture, internalFormat, destType, flipY ? GL_FALSE : GL_TRUE, GL_FALSE, premultiplyAlpha ? GL_FALSE : GL_TRUE);
 
-    context->deleteTexture(sourceTexture);
+    gl->DeleteTextures(1, &sourceTexture);
 
-    const WGC3Duint64 contextFenceSync = context->insertFenceSyncCHROMIUM();
+    const GLuint64 contextFenceSync = gl->InsertFenceSyncCHROMIUM();
 
-    context->flush();
+    gl->Flush();
 
-    WGC3Dbyte syncToken[24];
-    if (context->genSyncTokenCHROMIUM(contextFenceSync, syncToken))
-        sharedContext->waitSyncTokenCHROMIUM(syncToken);
+    GLbyte syncToken[24];
+    gl->GenSyncTokenCHROMIUM(contextFenceSync, syncToken);
+    sharedGL->WaitSyncTokenCHROMIUM(syncToken);
 
     // Undo grContext texture binding changes introduced in this function
     provider->grContext()->resetContext(kTextureBinding_GrGLBackendState);
@@ -246,15 +249,14 @@ bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBu
     if (!provider)
         return false;
     WebGraphicsContext3D* context3D = provider->context3d();
-    if (!context3D)
-        return false;
+    gpu::gles2::GLES2Interface* gl = provider->contextGL();
     Platform3DObject textureId = m_surface->getBackingTextureHandleForOverwrite();
     if (!textureId)
         return false;
 
-    context3D->flush();
+    gl->Flush();
 
-    return drawingBuffer->copyToPlatformTexture(context3D, textureId, GL_RGBA,
+    return drawingBuffer->copyToPlatformTexture(context3D, gl, textureId, GL_RGBA,
         GL_UNSIGNED_BYTE, 0, true, false, sourceBuffer);
 }
 
@@ -283,14 +285,19 @@ void ImageBuffer::flushGpu(FlushReason reason)
 
 bool ImageBuffer::getImageData(Multiply multiplied, const IntRect& rect, WTF::ArrayBufferContents& contents) const
 {
-    Checked<int, RecordOverflow> dataSize = 4;
+    CheckedNumeric<int> dataSize = 4;
     dataSize *= rect.width();
     dataSize *= rect.height();
-    if (dataSize.hasOverflowed())
+    if (!dataSize.IsValid())
         return false;
 
     if (!isSurfaceValid()) {
-        WTF::ArrayBufferContents result(rect.width() * rect.height(), 4, WTF::ArrayBufferContents::NotShared, WTF::ArrayBufferContents::ZeroInitialize);
+        size_t allocSizeInBytes = rect.width() * rect.height() * 4;
+        void* data;
+        WTF::ArrayBufferContents::allocateMemoryOrNull(allocSizeInBytes, WTF::ArrayBufferContents::ZeroInitialize, data);
+        if (!data)
+            return false;
+        WTF::ArrayBufferContents result(data, allocSizeInBytes, WTF::ArrayBufferContents::NotShared);
         result.transfer(contents);
         return true;
     }
@@ -306,12 +313,13 @@ bool ImageBuffer::getImageData(Multiply multiplied, const IntRect& rect, WTF::Ar
         || rect.y() < 0
         || rect.maxX() > m_surface->size().width()
         || rect.maxY() > m_surface->size().height();
-    WTF::ArrayBufferContents result(
-        rect.width() * rect.height(), 4,
-        WTF::ArrayBufferContents::NotShared,
-        mayHaveStrayArea
-        ? WTF::ArrayBufferContents::ZeroInitialize
-        : WTF::ArrayBufferContents::DontInitialize);
+    size_t allocSizeInBytes = rect.width() * rect.height() * 4;
+    void* data;
+    WTF::ArrayBufferContents::InitializationPolicy initializationPolicy = mayHaveStrayArea ? WTF::ArrayBufferContents::ZeroInitialize : WTF::ArrayBufferContents::DontInitialize;
+    WTF::ArrayBufferContents::allocateMemoryOrNull(allocSizeInBytes, initializationPolicy, data);
+    if (!data)
+        return false;
+    WTF::ArrayBufferContents result(data, allocSizeInBytes, WTF::ArrayBufferContents::NotShared);
 
     SkAlphaType alphaType = (multiplied == Premultiplied) ? kPremul_SkAlphaType : kUnpremul_SkAlphaType;
     SkImageInfo info = SkImageInfo::Make(rect.width(), rect.height(), kRGBA_8888_SkColorType, alphaType);
@@ -355,12 +363,10 @@ void ImageBuffer::updateGPUMemoryUsage() const
     if (this->isAccelerated()) {
         // If image buffer is accelerated, we should keep track of GPU memory usage.
         int gpuBufferCount = 2;
-        Checked<intptr_t, RecordOverflow> checkedGPUUsage = 4 * gpuBufferCount;
+        CheckedNumeric<intptr_t> checkedGPUUsage = 4 * gpuBufferCount;
         checkedGPUUsage *= this->size().width();
         checkedGPUUsage *= this->size().height();
-        intptr_t gpuMemoryUsage;
-        if (checkedGPUUsage.safeGet(gpuMemoryUsage) == CheckedState::DidOverflow)
-            gpuMemoryUsage = std::numeric_limits<intptr_t>::max();
+        intptr_t gpuMemoryUsage = checkedGPUUsage.ValueOrDefault(std::numeric_limits<intptr_t>::max());
 
         s_globalGPUMemoryUsage += (gpuMemoryUsage - m_gpuMemoryUsage);
         m_gpuMemoryUsage = gpuMemoryUsage;

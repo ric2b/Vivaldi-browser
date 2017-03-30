@@ -23,8 +23,10 @@ void SVGContainerPainter::paint(const PaintInfo& paintInfo)
     if (!m_layoutSVGContainer.firstChild() && !m_layoutSVGContainer.selfWillPaint())
         return;
 
-    FloatRect boundingBox = m_layoutSVGContainer.paintInvalidationRectInLocalCoordinates();
-    if (!paintInfo.cullRect().intersectsCullRect(m_layoutSVGContainer.localToParentTransform(), boundingBox))
+    FloatRect boundingBox = m_layoutSVGContainer.paintInvalidationRectInLocalSVGCoordinates();
+    // LayoutSVGHiddenContainer's paint invalidation rect is always empty but we need to paint its descendants.
+    if (!m_layoutSVGContainer.isSVGHiddenContainer()
+        && !paintInfo.cullRect().intersectsCullRect(m_layoutSVGContainer.localToSVGParentTransform(), boundingBox))
         return;
 
     // Spec: An empty viewBox on the <svg> element disables rendering.
@@ -33,12 +35,12 @@ void SVGContainerPainter::paint(const PaintInfo& paintInfo)
         return;
 
     PaintInfo paintInfoBeforeFiltering(paintInfo);
-    paintInfoBeforeFiltering.updateCullRect(m_layoutSVGContainer.localToParentTransform());
-    TransformRecorder transformRecorder(paintInfoBeforeFiltering.context, m_layoutSVGContainer, m_layoutSVGContainer.localToParentTransform());
+    paintInfoBeforeFiltering.updateCullRect(m_layoutSVGContainer.localToSVGParentTransform());
+    TransformRecorder transformRecorder(paintInfoBeforeFiltering.context, m_layoutSVGContainer, m_layoutSVGContainer.localToSVGParentTransform());
     {
         Optional<FloatClipRecorder> clipRecorder;
         if (m_layoutSVGContainer.isSVGViewportContainer() && SVGLayoutSupport::isOverflowHidden(&m_layoutSVGContainer)) {
-            FloatRect viewport = m_layoutSVGContainer.localToParentTransform().inverse().mapRect(toLayoutSVGViewportContainer(m_layoutSVGContainer).viewport());
+            FloatRect viewport = m_layoutSVGContainer.localToSVGParentTransform().inverse().mapRect(toLayoutSVGViewportContainer(m_layoutSVGContainer).viewport());
             clipRecorder.emplace(paintInfoBeforeFiltering.context, m_layoutSVGContainer, paintInfoBeforeFiltering.phase, viewport);
         }
 

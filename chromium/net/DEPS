@@ -60,6 +60,10 @@ specific_include_rules = {
   "brotli_filter\.cc": [
     "+third_party/brotli",
   ],
+
+  "fuzzer_test_support.cc": [
+    "+base/i18n",
+  ],
 }
 
 skip_child_includes = [

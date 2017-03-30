@@ -35,6 +35,10 @@
 #include "media/capture/video/video_capture_device_factory.h"
 #include "media/capture/video/video_capture_device_info.h"
 
+#if defined(OS_ANDROID)
+#include "base/android/application_status_listener.h"
+#endif
+
 namespace content {
 class VideoCaptureController;
 class VideoCaptureControllerEventHandler;
@@ -47,7 +51,7 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
       void(const base::WeakPtr<VideoCaptureController>&)> DoneCB;
 
   explicit VideoCaptureManager(
-      scoped_ptr<media::VideoCaptureDeviceFactory> factory);
+      std::unique_ptr<media::VideoCaptureDeviceFactory> factory);
 
   void Unregister();
 
@@ -112,6 +116,10 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
       VideoCaptureControllerID client_id,
       VideoCaptureControllerEventHandler* client_handler);
 
+  // Called by VideoCaptureHost to request a refresh frame from the video
+  // capture device.
+  void RequestRefreshFrameForClient(VideoCaptureController* controller);
+
   // Retrieves all capture supported formats for a particular device. Returns
   // false if the |capture_session_id| is not found. The supported formats are
   // cached during device(s) enumeration, and depending on the underlying
@@ -174,7 +182,8 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   // Finds a DeviceEntry entry for the indicated session, creating a fresh one
   // if necessary. Returns NULL if the session id is invalid.
   DeviceEntry* GetOrCreateDeviceEntry(
-      media::VideoCaptureSessionId capture_session_id);
+      media::VideoCaptureSessionId capture_session_id,
+      const media::VideoCaptureParams& params);
 
   // Finds the DeviceEntry that owns a particular controller pointer.
   DeviceEntry* GetDeviceEntryForController(
@@ -190,7 +199,7 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
           on_devices_enumerated_callback,
       MediaStreamType stream_type,
       const media::VideoCaptureDeviceInfos& old_device_info_cache,
-      scoped_ptr<media::VideoCaptureDevice::Names> names_snapshot);
+      std::unique_ptr<media::VideoCaptureDevice::Names> names_snapshot);
 
   // Starting a capture device can take 1-2 seconds.
   // To avoid multiple unnecessary start/stop commands to the OS, each start
@@ -202,7 +211,7 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
                         DeviceEntry* entry,
                         const media::VideoCaptureParams& params);
   void OnDeviceStarted(int serial_id,
-                       scoped_ptr<media::VideoCaptureDevice> device);
+                       std::unique_ptr<media::VideoCaptureDevice> device);
   void DoStopDevice(DeviceEntry* entry);
   void HandleQueuedStartRequest();
 
@@ -210,24 +219,26 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   // VideoCaptureDevice is returned to the IO-thread and stored in
   // a DeviceEntry in |devices_|. Ownership of |client| passes to
   // the device.
-  scoped_ptr<media::VideoCaptureDevice> DoStartDeviceCaptureOnDeviceThread(
+  std::unique_ptr<media::VideoCaptureDevice> DoStartDeviceCaptureOnDeviceThread(
       const media::VideoCaptureDevice::Name& name,
       const media::VideoCaptureParams& params,
-      scoped_ptr<media::VideoCaptureDevice::Client> client);
+      std::unique_ptr<media::VideoCaptureDevice::Client> client);
 
-  scoped_ptr<media::VideoCaptureDevice> DoStartTabCaptureOnDeviceThread(
+  std::unique_ptr<media::VideoCaptureDevice> DoStartTabCaptureOnDeviceThread(
       const std::string& device_id,
       const media::VideoCaptureParams& params,
-      scoped_ptr<media::VideoCaptureDevice::Client> client);
+      std::unique_ptr<media::VideoCaptureDevice::Client> client);
 
-  scoped_ptr<media::VideoCaptureDevice> DoStartDesktopCaptureOnDeviceThread(
+  std::unique_ptr<media::VideoCaptureDevice>
+  DoStartDesktopCaptureOnDeviceThread(
       const std::string& device_id,
       const media::VideoCaptureParams& params,
-      scoped_ptr<media::VideoCaptureDevice::Client> client);
+      std::unique_ptr<media::VideoCaptureDevice::Client> client);
 
   // Stops and destroys the VideoCaptureDevice held in
   // |device|.
-  void DoStopDeviceOnDeviceThread(scoped_ptr<media::VideoCaptureDevice> device);
+  void DoStopDeviceOnDeviceThread(
+      std::unique_ptr<media::VideoCaptureDevice> device);
 
   media::VideoCaptureDeviceInfo* FindDeviceInfoById(
       const std::string& id,
@@ -252,10 +263,24 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   // Once initialization is done, and_then will be run on the IO thread.
   void InitializeCaptureDeviceApiOnUIThread(const base::Closure& and_then);
 
-  // Due to initialization issues with AVFoundation and QTKit on Mac, we need
+  // Due to initialization issues with AVFoundation on Mac, we need
   // to make sure we initialize the APIs on the UI thread before we can reliably
   // use them.  This variable is only checked and set on the IO thread.
   bool capture_device_api_initialized_ = false;
+#endif
+
+#if defined(OS_ANDROID)
+  // On Android, we used to stop the video device when the host tab is hidden.
+  // This caused problems on some devices when the device was stopped and
+  // restarted quickly. See http://crbug/582295.  Now instead, the device is
+  // only stopped when Chrome goes to background. When a tab is hidden, it will
+  // not receive video frames but the device is not stopped.
+  void OnApplicationStateChange(base::android::ApplicationState state);
+  void ReleaseDevices();
+  void ResumeDevices();
+
+  std::unique_ptr<base::android::ApplicationStatusListener>
+      app_status_listener_;
 #endif
 
   // The message loop of media stream device thread, where VCD's live.
@@ -283,25 +308,28 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
    public:
     DeviceEntry(MediaStreamType stream_type,
                 const std::string& id,
-                scoped_ptr<VideoCaptureController> controller);
+                std::unique_ptr<VideoCaptureController> controller,
+                const media::VideoCaptureParams& params);
     ~DeviceEntry();
 
     const int serial_id;
     const MediaStreamType stream_type;
     const std::string id;
+    const media::VideoCaptureParams parameters;
 
     VideoCaptureController* video_capture_controller();
     media::VideoCaptureDevice* video_capture_device();
 
-    void SetVideoCaptureDevice(scoped_ptr<media::VideoCaptureDevice> device);
-    scoped_ptr<media::VideoCaptureDevice> ReleaseVideoCaptureDevice();
+    void SetVideoCaptureDevice(
+        std::unique_ptr<media::VideoCaptureDevice> device);
+    std::unique_ptr<media::VideoCaptureDevice> ReleaseVideoCaptureDevice();
 
    private:
     // The controller.
-    scoped_ptr<VideoCaptureController> video_capture_controller_;
+    std::unique_ptr<VideoCaptureController> video_capture_controller_;
 
     // The capture device.
-    scoped_ptr<media::VideoCaptureDevice> video_capture_device_;
+    std::unique_ptr<media::VideoCaptureDevice> video_capture_device_;
 
     base::ThreadChecker thread_checker_;
   };
@@ -340,7 +368,8 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
 
   // Device creation factory injected on construction from MediaStreamManager or
   // from the test harness.
-  scoped_ptr<media::VideoCaptureDeviceFactory> video_capture_device_factory_;
+  std::unique_ptr<media::VideoCaptureDeviceFactory>
+      video_capture_device_factory_;
 
   // Local cache of the enumerated video capture devices' names and capture
   // supported formats. A snapshot of the current devices and their capabilities

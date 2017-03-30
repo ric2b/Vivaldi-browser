@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/message_loop/timer_slack.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
@@ -27,6 +28,7 @@
 #include "base/synchronization/lock.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_local.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/tracked_objects.h"
 #include "build/build_config.h"
 #include "components/tracing/child_trace_message_filter.h"
@@ -52,9 +54,9 @@
 #include "content/child/websocket_dispatcher.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/in_process_child_thread_params.h"
-#include "content/common/mojo/mojo_messages.h"
 #include "content/common/mojo/mojo_shell_connection_impl.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/mojo_channel_switches.h"
 #include "ipc/attachment_broker.h"
 #include "ipc/attachment_broker_unprivileged.h"
 #include "ipc/ipc_logging.h"
@@ -63,10 +65,13 @@
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/ipc_sync_message_filter.h"
 #include "ipc/mojo/ipc_channel_mojo.h"
+#include "ipc/mojo/scoped_ipc_support.h"
 #include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/platform_channel_pair.h"
 
-#if defined(USE_OZONE)
-#include "ui/ozone/public/client_native_pixmap_factory.h"
+#if defined(OS_POSIX)
+#include "base/posix/global_descriptors.h"
+#include "content/public/common/content_descriptors.h"
 #endif
 
 using tracked_objects::ThreadData;
@@ -106,7 +111,8 @@ class WaitAndExitDelegate : public base::PlatformThread::Delegate {
 };
 
 bool CreateWaitAndExitThread(base::TimeDelta duration) {
-  scoped_ptr<WaitAndExitDelegate> delegate(new WaitAndExitDelegate(duration));
+  std::unique_ptr<WaitAndExitDelegate> delegate(
+      new WaitAndExitDelegate(duration));
 
   const bool thread_created =
       base::PlatformThread::CreateNonJoinable(0, delegate.get());
@@ -166,31 +172,6 @@ class SuicideOnChannelErrorFilter : public IPC::MessageFilter {
 
 #endif  // OS(POSIX)
 
-#if defined(USE_OZONE)
-class ClientNativePixmapFactoryFilter : public IPC::MessageFilter {
- public:
-  // Overridden from IPC::MessageFilter:
-  bool OnMessageReceived(const IPC::Message& message) override {
-    bool handled = true;
-    IPC_BEGIN_MESSAGE_MAP(ClientNativePixmapFactoryFilter, message)
-      IPC_MESSAGE_HANDLER(ChildProcessMsg_InitializeClientNativePixmapFactory,
-                          OnInitializeClientNativePixmapFactory)
-      IPC_MESSAGE_UNHANDLED(handled = false)
-    IPC_END_MESSAGE_MAP()
-    return handled;
-  }
-
- protected:
-  ~ClientNativePixmapFactoryFilter() override {}
-
-  void OnInitializeClientNativePixmapFactory(
-      const base::FileDescriptor& device_fd) {
-    ui::ClientNativePixmapFactory::GetInstance()->Initialize(
-        base::ScopedFD(device_fd.fd));
-  }
-};
-#endif
-
 #if defined(OS_ANDROID)
 // A class that allows for triggering a clean shutdown from another
 // thread through draining the main thread's msg loop.
@@ -245,6 +226,23 @@ void QuitClosure::PostQuitFromNonMainThread() {
 base::LazyInstance<QuitClosure> g_quit_closure = LAZY_INSTANCE_INITIALIZER;
 #endif
 
+void InitializeMojoIPCChannel() {
+  mojo::edk::ScopedPlatformHandle platform_channel;
+#if defined(OS_WIN)
+  platform_channel =
+      mojo::edk::PlatformChannelPair::PassClientHandleFromParentProcess(
+          *base::CommandLine::ForCurrentProcess());
+#elif defined(OS_POSIX)
+  platform_channel.reset(mojo::edk::PlatformHandle(
+      base::GlobalDescriptors::GetInstance()->Get(kMojoIPCChannel)));
+#endif
+  // Mojo isn't supported on all child process types.
+  // TODO(crbug.com/604282): Support Mojo in the remaining processes.
+  if (!platform_channel.is_valid())
+    return;
+  mojo::edk::SetParentPipeHandle(std::move(platform_channel));
+}
+
 }  // namespace
 
 ChildThread* ChildThread::Get() {
@@ -270,6 +268,7 @@ ChildThreadImpl::Options::Builder::InBrowserProcess(
     const InProcessChildThreadParams& params) {
   options_.browser_process_io_runner = params.io_runner();
   options_.channel_name = params.channel_name();
+  options_.in_process_message_pipe_handle = params.handle();
   return *this;
 }
 
@@ -337,15 +336,20 @@ scoped_refptr<base::SequencedTaskRunner> ChildThreadImpl::GetIOTaskRunner() {
   return ChildProcess::current()->io_task_runner();
 }
 
-void ChildThreadImpl::ConnectChannel(bool use_mojo_channel) {
+void ChildThreadImpl::ConnectChannel(bool use_mojo_channel,
+                                     mojo::ScopedMessagePipeHandle handle) {
   bool create_pipe_now = true;
   if (use_mojo_channel) {
     VLOG(1) << "Mojo is enabled on child";
-    scoped_refptr<base::SequencedTaskRunner> io_task_runner = GetIOTaskRunner();
-    DCHECK(io_task_runner);
-    channel_->Init(
-        IPC::ChannelMojo::CreateClientFactory(io_task_runner, channel_name_),
-        create_pipe_now);
+    if (!IsInBrowserProcess()) {
+      DCHECK(!handle.is_valid());
+      handle = mojo::edk::CreateChildMessagePipe(
+          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+              switches::kMojoChannelToken));
+    }
+    DCHECK(handle.is_valid());
+    channel_->Init(IPC::ChannelMojo::CreateClientFactory(std::move(handle)),
+                   create_pipe_now);
     return;
   }
 
@@ -379,6 +383,13 @@ void ChildThreadImpl::Init(const Options& options) {
   if (!IsInBrowserProcess()) {
     // Don't double-initialize IPC support in single-process mode.
     mojo_ipc_support_.reset(new IPC::ScopedIPCSupport(GetIOTaskRunner()));
+    InitializeMojoIPCChannel();
+  }
+
+  if (MojoShellConnectionImpl::Get()) {
+    base::ElapsedTimer timer;
+    MojoShellConnectionImpl::Get()->BindToRequestFromCommandLine();
+    UMA_HISTOGRAM_TIMES("Mojo.Shell.ChildConnectionTime", timer.Elapsed());
   }
 
   mojo_application_.reset(new MojoApplication(GetIOTaskRunner()));
@@ -427,8 +438,8 @@ void ChildThreadImpl::Init(const Options& options) {
 
   // In single process mode we may already have a power monitor
   if (!base::PowerMonitor::Get()) {
-    scoped_ptr<PowerMonitorBroadcastSource> power_monitor_source(
-      new PowerMonitorBroadcastSource());
+    std::unique_ptr<PowerMonitorBroadcastSource> power_monitor_source(
+        new PowerMonitorBroadcastSource());
     channel_->AddFilter(power_monitor_source->GetMessageFilter());
 
     power_monitor_.reset(
@@ -442,19 +453,17 @@ void ChildThreadImpl::Init(const Options& options) {
     channel_->AddFilter(new SuicideOnChannelErrorFilter());
 #endif
 
-#if defined(USE_OZONE)
-  channel_->AddFilter(new ClientNativePixmapFactoryFilter());
-#endif
-
   // Add filters passed here via options.
   for (auto startup_filter : options.startup_filters) {
     channel_->AddFilter(startup_filter);
   }
 
-  ConnectChannel(options.use_mojo_channel);
   IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
   if (broker && !broker->IsPrivilegedBroker())
     broker->RegisterBrokerCommunicationChannel(channel_.get());
+  ConnectChannel(
+      options.use_mojo_channel,
+      mojo::MakeScopedHandle(options.in_process_message_pipe_handle));
 
   int connection_timeout = kConnectionTimeoutS;
   std::string connection_override =
@@ -563,17 +572,18 @@ IPC::MessageRouter* ChildThreadImpl::GetRouter() {
   return &router_;
 }
 
-scoped_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
+std::unique_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
     size_t buf_size) {
   DCHECK(base::MessageLoop::current() == message_loop());
-  return AllocateSharedMemory(buf_size, this);
+  return AllocateSharedMemory(buf_size, this, nullptr);
 }
 
 // static
-scoped_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
+std::unique_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
     size_t buf_size,
-    IPC::Sender* sender) {
-  scoped_ptr<base::SharedMemory> shared_buf;
+    IPC::Sender* sender,
+    bool* out_of_memory) {
+  std::unique_ptr<base::SharedMemory> shared_buf;
   // Ask the browser to create the shared memory, since this is blocked by the
   // sandbox on most platforms.
   base::SharedMemoryHandle shared_mem_handle;
@@ -582,11 +592,15 @@ scoped_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
     if (base::SharedMemory::IsHandleValid(shared_mem_handle)) {
       shared_buf.reset(new base::SharedMemory(shared_mem_handle, false));
     } else {
-      NOTREACHED() << "Browser failed to allocate shared memory";
+      LOG(WARNING) << "Browser failed to allocate shared memory";
+      if (out_of_memory)
+        *out_of_memory = true;
       return nullptr;
     }
   } else {
     // Send is allowed to fail during shutdown. Return null in this case.
+    if (out_of_memory)
+      *out_of_memory = false;
     return nullptr;
   }
   return shared_buf;
@@ -619,10 +633,6 @@ bool ChildThreadImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnProfilingPhaseCompleted)
     IPC_MESSAGE_HANDLER(ChildProcessMsg_SetProcessBackgrounded,
                         OnProcessBackgrounded)
-    IPC_MESSAGE_HANDLER(MojoMsg_BindExternalMojoShellHandle,
-                        OnBindExternalMojoShellHandle)
-    IPC_MESSAGE_HANDLER(ChildProcessMsg_SetMojoParentPipeHandle,
-                        OnSetMojoParentPipeHandle)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -675,27 +685,6 @@ void ChildThreadImpl::OnGetChildProfilerData(int sequence_number,
 
 void ChildThreadImpl::OnProfilingPhaseCompleted(int profiling_phase) {
   ThreadData::OnProfilingPhaseCompleted(profiling_phase);
-}
-
-void ChildThreadImpl::OnBindExternalMojoShellHandle(
-    const IPC::PlatformFileForTransit& file) {
-  if (!MojoShellConnectionImpl::Get())
-    return;
-#if defined(OS_POSIX)
-  base::PlatformFile handle = file.fd;
-#elif defined(OS_WIN)
-  base::PlatformFile handle = file;
-#endif
-  mojo::ScopedMessagePipeHandle pipe =
-      mojo_shell_channel_init_.Init(handle, GetIOTaskRunner());
-  MojoShellConnectionImpl::Get()->BindToMessagePipe(std::move(pipe));
-}
-
-void ChildThreadImpl::OnSetMojoParentPipeHandle(
-    const IPC::PlatformFileForTransit& file) {
-  mojo::edk::SetParentPipeHandle(
-      mojo::edk::ScopedPlatformHandle(mojo::edk::PlatformHandle(
-          IPC::PlatformFileForTransitToPlatformFile(file))));
 }
 
 ChildThreadImpl* ChildThreadImpl::current() {

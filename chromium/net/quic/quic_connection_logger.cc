@@ -22,6 +22,7 @@
 #include "net/quic/crypto/crypto_handshake_message.h"
 #include "net/quic/crypto/crypto_protocol.h"
 #include "net/quic/quic_address_mismatch.h"
+#include "net/quic/quic_protocol.h"
 #include "net/quic/quic_socket_address_coder.h"
 #include "net/quic/quic_time.h"
 
@@ -122,9 +123,6 @@ scoped_ptr<base::Value> NetLogQuicAckFrameCallback(
   dict->Set("missing_packets", missing);
   for (QuicPacketNumber packet : frame->missing_packets)
     missing->AppendString(base::Uint64ToString(packet));
-
-  dict->SetString("latest_revived_packet",
-                  base::Int64ToString(frame->latest_revived_packet));
 
   base::ListValue* received = new base::ListValue();
   dict->Set("received_packet_times", received);
@@ -613,6 +611,9 @@ void QuicConnectionLogger::OnBlockedFrame(const QuicBlockedFrame& frame) {
 }
 
 void QuicConnectionLogger::OnGoAwayFrame(const QuicGoAwayFrame& frame) {
+  UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.GoAwayReceivedForConnectionMigration",
+                        frame.error_code == QUIC_ERROR_MIGRATING_PORT);
+
   net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_GOAWAY_FRAME_RECEIVED,
                     base::Bind(&NetLogQuicGoAwayFrameCallback, &frame));
 }
@@ -634,14 +635,6 @@ void QuicConnectionLogger::OnVersionNegotiationPacket(
   net_log_.AddEvent(
       NetLog::TYPE_QUIC_SESSION_VERSION_NEGOTIATION_PACKET_RECEIVED,
       base::Bind(&NetLogQuicVersionNegotiationPacketCallback, &packet));
-}
-
-void QuicConnectionLogger::OnRevivedPacket(
-    const QuicPacketHeader& revived_header,
-    base::StringPiece payload) {
-  net_log_.AddEvent(
-      NetLog::TYPE_QUIC_SESSION_PACKET_HEADER_REVIVED,
-      base::Bind(&NetLogQuicPacketHeaderCallback, &revived_header));
 }
 
 void QuicConnectionLogger::OnCryptoHandshakeMessageReceived(
@@ -672,6 +665,7 @@ void QuicConnectionLogger::OnCryptoHandshakeMessageSent(
 }
 
 void QuicConnectionLogger::OnConnectionClosed(QuicErrorCode error,
+                                              const string& error_details,
                                               ConnectionCloseSource source) {
   net_log_.AddEvent(
       NetLog::TYPE_QUIC_SESSION_CLOSED,

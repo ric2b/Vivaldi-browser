@@ -18,6 +18,7 @@
 #include "base/single_thread_task_runner.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_discard_helper.h"
+#include "media/base/demuxer_stream.h"
 #include "media/base/mac/framework_type_conversions.h"
 #include "media/base/pipeline_stats.h"
 #include "media/base/platform_mime_util.h"
@@ -260,8 +261,8 @@ void ATAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
                             const DecodeCB& decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  const Status status =
-      codec_helper_->ProcessBuffer(buffer) ? kOk : kDecodeError;
+  const media::DecodeStatus status =
+      codec_helper_->ProcessBuffer(buffer) ? media::DecodeStatus::OK : media::DecodeStatus::DECODE_ERROR;
 
   task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));
 }

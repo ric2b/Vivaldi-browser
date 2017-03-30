@@ -4,8 +4,10 @@
 
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 
+#include <algorithm>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -19,6 +21,8 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_browsertest_util.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
@@ -50,6 +54,7 @@
 #include "net/url_request/url_request_interceptor.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "ui/base/models/menu_model.h"
 
 using content::WebContents;
 
@@ -449,8 +454,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenLinkInProfileEntryPresent) {
     // With two profiles (the current and another profile), no submenu is
     // created. Instead, a single item is added to the main context menu.
     ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
-    ASSERT_TRUE(menu->IsItemInRangePresent(IDC_OPEN_LINK_IN_PROFILE_FIRST,
-                                           IDC_OPEN_LINK_IN_PROFILE_LAST));
+    ASSERT_TRUE(menu->IsItemPresent(IDC_OPEN_LINK_IN_PROFILE_FIRST));
   }
 
   CreateSecondaryProfile(2);
@@ -464,17 +468,53 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenLinkInProfileEntryPresent) {
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
     // As soon as at least three profiles exist, we show all profiles in a
     // submenu.
-    ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
+    ui::MenuModel* model = NULL;
+    int index = -1;
+    ASSERT_TRUE(menu->GetMenuModelAndItemIndex(IDC_OPEN_LINK_IN_PROFILE_FIRST,
+                                               &model, &index));
+    ASSERT_EQ(2, model->GetItemCount());
     ASSERT_FALSE(menu->IsItemInRangePresent(IDC_OPEN_LINK_IN_PROFILE_FIRST,
                                             IDC_OPEN_LINK_IN_PROFILE_LAST));
   }
 }
 
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenLinkInProfile) {
-  Profile* other_profile = CreateSecondaryProfile(1);
-  profiles::FindOrCreateNewWindowForProfile(
-      other_profile, chrome::startup::IS_NOT_PROCESS_STARTUP,
-      chrome::startup::IS_NOT_FIRST_RUN, false);
+  // Create |num_profiles| extra profiles for testing.
+  const int num_profiles = 8;
+  // The following are the profile numbers that are omitted and need signin.
+  // These profiles are not added to the menu. Omitted profiles refers to
+  // supervised profiles in the process of creation.
+  std::vector<int> profiles_omit;
+  profiles_omit.push_back(4);
+
+  std::vector<int> profiles_signin_required;
+  profiles_signin_required.push_back(1);
+  profiles_signin_required.push_back(3);
+  profiles_signin_required.push_back(6);
+
+  // Create the profiles.
+  ProfileAttributesStorage& storage =
+      g_browser_process->profile_manager()->GetProfileAttributesStorage();
+  std::vector<Profile*> profiles_in_menu;
+  for (int i = 0; i < num_profiles; ++i) {
+    Profile* profile = CreateSecondaryProfile(i);
+    ProfileAttributesEntry* entry;
+    ASSERT_TRUE(storage.GetProfileAttributesWithPath(profile->GetPath(),
+                                                     &entry));
+    // Open a browser window for the profile if and only if the profile is not
+    // omitted nor needing signin.
+    if (std::binary_search(profiles_omit.begin(), profiles_omit.end(), i)) {
+      entry->SetIsOmitted(true);
+    } else if (std::binary_search(profiles_signin_required.begin(),
+                                  profiles_signin_required.end(), i)) {
+      entry->SetIsSigninRequired(true);
+    } else {
+      profiles::FindOrCreateNewWindowForProfile(
+          profile, chrome::startup::IS_NOT_PROCESS_STARTUP,
+          chrome::startup::IS_NOT_FIRST_RUN, false);
+      profiles_in_menu.push_back(profile);
+    }
+  }
 
   ui_test_utils::WindowedTabAddedNotificationObserver tab_observer(
       content::NotificationService::AllSources());
@@ -485,21 +525,28 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenLinkInProfile) {
   scoped_ptr<TestRenderViewContextMenu> menu(
       CreateContextMenuMediaTypeNone(url, url));
 
-  menu->ExecuteCommand(
-      IDC_OPEN_LINK_IN_PROFILE_FIRST +
-          g_browser_process->profile_manager()
-              ->GetProfileInfoCache()
-              .GetIndexOfProfileWithPath(other_profile->GetPath()),
-      0);
+  // Verify that the size of the menu is correct.
+  ui::MenuModel* model = NULL;
+  int index = -1;
+  ASSERT_TRUE(menu->GetMenuModelAndItemIndex(IDC_OPEN_LINK_IN_PROFILE_FIRST,
+                                             &model, &index));
+  ASSERT_EQ(static_cast<int>(profiles_in_menu.size()), model->GetItemCount());
 
-  tab_observer.Wait();
-  content::WebContents* tab = tab_observer.GetTab();
-  content::WaitForLoadStop(tab);
+  // Open the menu items. They should match their corresponding profiles in
+  // |profiles_in_menu|.
+  for (Profile* profile : profiles_in_menu) {
+    int command_id = menu->GetCommandIDByProfilePath(profile->GetPath());
+    ASSERT_NE(-1, command_id);
+    menu->ExecuteCommand(command_id, 0);
 
-  // Verify that it's the correct tab and profile.
-  ASSERT_EQ(url, tab->GetURL());
-  ASSERT_EQ(other_profile,
-            Profile::FromBrowserContext(tab->GetBrowserContext()));
+    tab_observer.Wait();
+    content::WebContents* tab = tab_observer.GetTab();
+    content::WaitForLoadStop(tab);
+
+    // Verify that it's the correct tab and profile.
+    EXPECT_EQ(url, tab->GetURL());
+    EXPECT_EQ(profile, Profile::FromBrowserContext(tab->GetBrowserContext()));
+  }
 }
 #endif  // !defined(OS_CHROMEOS)
 

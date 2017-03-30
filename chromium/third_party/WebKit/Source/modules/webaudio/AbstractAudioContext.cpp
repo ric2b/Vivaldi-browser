@@ -80,7 +80,8 @@ AbstractAudioContext* AbstractAudioContext::create(Document& document, Exception
 
 // Constructor for rendering to the audio hardware.
 AbstractAudioContext::AbstractAudioContext(Document* document)
-    : ActiveDOMObject(document)
+    : ActiveScriptWrappable(this)
+    , ActiveDOMObject(document)
     , m_destinationNode(nullptr)
     , m_isCleared(false)
     , m_isResolvingResumePromises(false)
@@ -102,7 +103,8 @@ AbstractAudioContext::AbstractAudioContext(Document* document)
 
 // Constructor for offline (non-realtime) rendering.
 AbstractAudioContext::AbstractAudioContext(Document* document, unsigned numberOfChannels, size_t numberOfFrames, float sampleRate)
-    : ActiveDOMObject(document)
+    : ActiveScriptWrappable(this)
+    , ActiveDOMObject(document)
     , m_destinationNode(nullptr)
     , m_isCleared(false)
     , m_isResolvingResumePromises(false)
@@ -746,8 +748,8 @@ void AbstractAudioContext::setContextState(AudioContextState newState)
     m_contextState = newState;
 
     // Notify context that state changed
-    if (executionContext())
-        executionContext()->postTask(BLINK_FROM_HERE, createSameThreadTask(&AbstractAudioContext::notifyStateChange, this));
+    if (getExecutionContext())
+        getExecutionContext()->postTask(BLINK_FROM_HERE, createSameThreadTask(&AbstractAudioContext::notifyStateChange, this));
 }
 
 void AbstractAudioContext::notifyStateChange()
@@ -877,7 +879,7 @@ void AbstractAudioContext::resolvePromisesForResume()
     // promises in the main thread.
     if (!m_isResolvingResumePromises && m_resumeResolvers.size() > 0) {
         m_isResolvingResumePromises = true;
-        Platform::current()->mainThread()->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&AbstractAudioContext::resolvePromisesForResumeOnMainThread, this));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&AbstractAudioContext::resolvePromisesForResumeOnMainThread, this));
     }
 }
 
@@ -904,9 +906,9 @@ const AtomicString& AbstractAudioContext::interfaceName() const
     return EventTargetNames::AudioContext;
 }
 
-ExecutionContext* AbstractAudioContext::executionContext() const
+ExecutionContext* AbstractAudioContext::getExecutionContext() const
 {
-    return ActiveDOMObject::executionContext();
+    return ActiveDOMObject::getExecutionContext();
 }
 
 void AbstractAudioContext::startRendering()
@@ -944,10 +946,10 @@ DEFINE_TRACE(AbstractAudioContext)
     ActiveDOMObject::trace(visitor);
 }
 
-SecurityOrigin* AbstractAudioContext::securityOrigin() const
+SecurityOrigin* AbstractAudioContext::getSecurityOrigin() const
 {
-    if (executionContext())
-        return executionContext()->securityOrigin();
+    if (getExecutionContext())
+        return getExecutionContext()->getSecurityOrigin();
 
     return nullptr;
 }

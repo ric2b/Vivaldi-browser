@@ -46,7 +46,7 @@ public:
         v8::Isolate* isolate = scriptState->isolate();
         v8::TryCatch tryCatch(isolate);
 
-        v8::Local<v8::Object> creationContext(scriptState->context()->Global());
+        v8::Local<v8::Object> creationContext(thisValue.v8Value().As<v8::Object>());
         v8::Local<v8::Function> v8Callback(callback.v8Value().As<v8::Function>());
         v8::Local<v8::Value> v8ThisArg(thisArg.v8Value());
         v8::Local<v8::Value> args[3];
@@ -71,7 +71,7 @@ public:
             }
 
             v8::Local<v8::Value> result;
-            if (!V8ScriptRunner::callFunction(v8Callback, scriptState->executionContext(), v8ThisArg, 3, args, isolate).ToLocal(&result)) {
+            if (!V8ScriptRunner::callFunction(v8Callback, scriptState->getExecutionContext(), v8ThisArg, 3, args, isolate).ToLocal(&result)) {
                 exceptionState.rethrowV8Exception(tryCatch.Exception());
                 return;
             }

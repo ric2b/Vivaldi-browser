@@ -34,6 +34,7 @@
 #include "core/CoreExport.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "platform/heap/Handle.h"
+#include "platform/inspector_protocol/Backend.h"
 #include "platform/inspector_protocol/Dispatcher.h"
 #include "platform/inspector_protocol/Frontend.h"
 #include "platform/inspector_protocol/TypeBuilder.h"
@@ -50,8 +51,7 @@ class LocalFrame;
 
 using protocol::Maybe;
 
-class CORE_EXPORT InspectorAgent : public NoBaseWillBeGarbageCollectedFinalized<InspectorAgent> {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(InspectorAgent);
+class CORE_EXPORT InspectorAgent : public GarbageCollectedFinalized<InspectorAgent> {
 public:
     explicit InspectorAgent(const String&);
     virtual ~InspectorAgent();
@@ -66,14 +66,14 @@ public:
     virtual void discardAgent() { }
     virtual void didCommitLoadForLocalFrame(LocalFrame*) { }
     virtual void flushPendingProtocolNotifications() { }
-    virtual void setState(PassRefPtr<protocol::DictionaryValue>);
+    virtual void setState(protocol::DictionaryValue*);
 
     String name() const { return m_name; }
     void appended(InstrumentingAgents*);
 
 protected:
-    RawPtrWillBeMember<InstrumentingAgents> m_instrumentingAgents;
-    RefPtr<protocol::DictionaryValue> m_state;
+    Member<InstrumentingAgents> m_instrumentingAgents;
+    protocol::DictionaryValue* m_state;
 
 private:
     String m_name;
@@ -84,7 +84,7 @@ class CORE_EXPORT InspectorAgentRegistry final {
     WTF_MAKE_NONCOPYABLE(InspectorAgentRegistry);
 public:
     explicit InspectorAgentRegistry(InstrumentingAgents*);
-    void append(PassOwnPtrWillBeRawPtr<InspectorAgent>);
+    void append(RawPtr<InspectorAgent>);
 
     void setFrontend(protocol::Frontend*);
     void clearFrontend();
@@ -98,9 +98,9 @@ public:
     DECLARE_TRACE();
 
 private:
-    RawPtrWillBeMember<InstrumentingAgents> m_instrumentingAgents;
-    RefPtr<protocol::DictionaryValue> m_state;
-    WillBeHeapVector<OwnPtrWillBeMember<InspectorAgent>> m_agents;
+    Member<InstrumentingAgents> m_instrumentingAgents;
+    OwnPtr<protocol::DictionaryValue> m_state;
+    HeapVector<Member<InspectorAgent>> m_agents;
 };
 
 template<typename AgentClass, typename FrontendClass>

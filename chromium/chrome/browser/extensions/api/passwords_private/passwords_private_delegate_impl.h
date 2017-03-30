@@ -8,13 +8,13 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "base/observer_list_threadsafe.h"
+#include "base/observer_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate.h"
 #include "chrome/browser/ui/passwords/password_manager_presenter.h"
@@ -56,10 +56,10 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
       const std::string& username,
       const base::string16& plaintext_password) override;
   void SetPasswordList(
-      const std::vector<scoped_ptr<autofill::PasswordForm>>& password_list,
-      bool show_passwords) override;
+      const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list)
+      override;
   void SetPasswordExceptionList(
-      const std::vector<scoped_ptr<autofill::PasswordForm>>&
+      const std::vector<std::unique_ptr<autofill::PasswordForm>>&
           password_exception_list) override;
 #if !defined(OS_ANDROID)
   gfx::NativeWindow GetNativeWindow() const override;
@@ -91,13 +91,12 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   Profile* profile_;
 
   // Used to communicate with the password store.
-  scoped_ptr<PasswordManagerPresenter> password_manager_presenter_;
+  std::unique_ptr<PasswordManagerPresenter> password_manager_presenter_;
 
   // The current list of entries/exceptions. Cached here so that when new
   // observers are added, this delegate can send the current lists without
   // having to request them from |password_manager_presenter_| again.
-  std::vector<linked_ptr<api::passwords_private::PasswordUiEntry>>
-      current_entries_;
+  std::vector<api::passwords_private::PasswordUiEntry> current_entries_;
   std::vector<std::string> current_exceptions_;
 
   // Whether SetPasswordList and SetPasswordExceptionList have been called, and
@@ -112,15 +111,12 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   // callbacks are invoked.
   std::vector<base::Callback<void()>> pre_initialization_callbacks_;
 
-  // User pref for storing accept languages.
-  std::string languages_;
-
   // The WebContents used when invoking this API. Used to fetch the
   // NativeWindow for the window where the API was called.
   content::WebContents* web_contents_;
 
   // The observers.
-  scoped_refptr<base::ObserverListThreadSafe<Observer>> observers_;
+  base::ObserverList<Observer> observers_;
 
   // Map from origin URL and username to the index of |password_list_| at which
   // the corresponding entry resides.

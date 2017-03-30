@@ -5,15 +5,21 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_TEST_RENDERING_TEST_H_
 #define ANDROID_WEBVIEW_BROWSER_TEST_RENDERING_TEST_H_
 
+#include <memory>
+
 #include "android_webview/browser/browser_view_renderer_client.h"
+#include "android_webview/browser/render_thread_manager_client.h"
 #include "android_webview/browser/test/fake_window.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
 class MessageLoop;
+}
+
+namespace cc {
+class CompositorFrame;
 }
 
 namespace content {
@@ -28,13 +34,12 @@ struct ParentCompositorDrawConstraints;
 
 class RenderingTest : public testing::Test,
                       public BrowserViewRendererClient,
+                      public RenderThreadManagerClient,
                       public WindowHooks {
  public:
   // BrowserViewRendererClient overrides.
-  bool RequestDrawGL(bool wait_for_completion) override;
   void OnNewPicture() override;
   void PostInvalidate() override;
-  void DetachFunctorFromView() override;
   gfx::Point GetLocationOnScreen() override;
   void ScrollContainerViewTo(const gfx::Vector2d& new_value) override {}
   void UpdateScrollState(const gfx::Vector2d& max_scroll_offset,
@@ -44,20 +49,25 @@ class RenderingTest : public testing::Test,
                          float max_page_scale_factor) override {}
   void DidOverscroll(const gfx::Vector2d& overscroll_delta,
                      const gfx::Vector2dF& overscroll_velocity) override {}
-  void ParentDrawConstraintsUpdated(
-      const ParentCompositorDrawConstraints& draw_constraints) override {}
+
+  // RenderThreadManagerClient overrides.
+  void OnParentDrawConstraintsUpdated() override;
+  bool RequestDrawGL(bool wait_for_completion) override;
+  void DetachFunctorFromView() override;
+
   // WindowHooks overrides.
   void WillOnDraw() override;
   void DidOnDraw(bool success) override {}
-  void WillSyncOnRT(SharedRendererState* functor) override {}
-  void DidSyncOnRT(SharedRendererState* functor) override {}
-  void WillProcessOnRT(SharedRendererState* functor) override {}
-  void DidProcessOnRT(SharedRendererState* functor) override {}
-  bool WillDrawOnRT(SharedRendererState* functor,
+  void WillSyncOnRT(RenderThreadManager* functor) override {}
+  void DidSyncOnRT(RenderThreadManager* functor) override {}
+  void WillProcessOnRT(RenderThreadManager* functor) override {}
+  void DidProcessOnRT(RenderThreadManager* functor) override {}
+  bool WillDrawOnRT(RenderThreadManager* functor,
                     AwDrawGLInfo* draw_info) override;
-  void DidDrawOnRT(SharedRendererState* functor) override {}
+  void DidDrawOnRT(RenderThreadManager* functor) override {}
 
  protected:
+
   RenderingTest();
   ~RenderingTest() override;
 
@@ -68,17 +78,18 @@ class RenderingTest : public testing::Test,
   void InitializeCompositor();
   void Attach();
   void EndTest();
-  void SetCompositorFrame();
+  std::unique_ptr<cc::CompositorFrame> ConstructEmptyFrame();
 
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
-  scoped_ptr<BrowserViewRenderer> browser_view_renderer_;
-  scoped_ptr<content::TestSynchronousCompositor> compositor_;
-  scoped_ptr<FakeWindow> window_;
+  std::unique_ptr<RenderThreadManager> render_thread_manager_;
+  std::unique_ptr<BrowserViewRenderer> browser_view_renderer_;
+  std::unique_ptr<content::TestSynchronousCompositor> compositor_;
+  std::unique_ptr<FakeWindow> window_;
 
  private:
   void QuitMessageLoop();
 
-  const scoped_ptr<base::MessageLoop> message_loop_;
+  const std::unique_ptr<base::MessageLoop> message_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderingTest);
 };

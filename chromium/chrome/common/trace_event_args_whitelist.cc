@@ -21,14 +21,15 @@ const char* const kInputLatencyAllowedArgs[] = {"data", nullptr};
 
 const WhitelistEntry kEventArgsWhitelist[] = {
     {"__metadata", "thread_name", nullptr},
-    {"ipc", "ChannelProxy::Context::OnDispatchMessage", nullptr},
     {"ipc", "SyncChannel::Send", nullptr},
     {"toplevel", "*", nullptr},
     {"latencyInfo", "*", kInputLatencyAllowedArgs},
     {nullptr, nullptr, nullptr}};
 
 const char* kMetadataWhitelist[] = {
+  "clock-domain",
   "command_line",
+  "config",
   "cpu-*",
   "field-trials",
   "gpu-*",

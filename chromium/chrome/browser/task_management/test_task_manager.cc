@@ -16,7 +16,6 @@ TestTaskManager::TestTaskManager()
 TestTaskManager::~TestTaskManager() {
 }
 
-// task_management::TaskManagerInterface:
 void TestTaskManager::ActivateTask(TaskId task_id) {
 }
 
@@ -36,6 +35,10 @@ int64_t TestTaskManager::GetPrivateMemoryUsage(TaskId task_id) const {
 }
 
 int64_t TestTaskManager::GetSharedMemoryUsage(TaskId task_id) const {
+  return -1;
+}
+
+int64_t TestTaskManager::GetSwappedMemoryUsage(TaskId task_id) const {
   return -1;
 }
 
@@ -97,6 +100,24 @@ Task::Type TestTaskManager::GetType(TaskId task_id) const {
   return Task::UNKNOWN;
 }
 
+int TestTaskManager::GetTabId(TaskId task_id) const {
+  return -1;
+}
+
+int TestTaskManager::GetChildProcessUniqueId(TaskId task_id) const {
+  return 0;
+}
+
+void TestTaskManager::GetTerminationStatus(TaskId task_id,
+                                           base::TerminationStatus* out_status,
+                                           int* out_error_code) const {
+  DCHECK(out_status);
+  DCHECK(out_error_code);
+
+  *out_status = base::TERMINATION_STATUS_STILL_RUNNING;
+  *out_error_code = 0;
+}
+
 int64_t TestTaskManager::GetNetworkUsage(TaskId task_id) const {
   return -1;
 }
@@ -123,6 +144,13 @@ bool TestTaskManager::GetWebCacheStats(
 
 const TaskIdList& TestTaskManager::GetTaskIdsList() const {
   return ids_;
+}
+
+TaskIdList TestTaskManager::GetIdsOfTasksSharingSameProcess(
+    TaskId task_id) const {
+  TaskIdList result;
+  result.push_back(task_id);
+  return result;
 }
 
 size_t TestTaskManager::GetNumberOfTasksOnSameProcess(TaskId task_id) const {

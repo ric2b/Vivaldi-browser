@@ -53,14 +53,14 @@ private:
     void paint(const PaintInfo&, const LayoutPoint&) const final;
 
     void layout() final;
-    PaintInvalidationReason invalidatePaintIfNeeded(PaintInvalidationState&, const LayoutBoxModelObject&) final;
+    PaintInvalidationReason invalidatePaintIfNeeded(const PaintInvalidationState&) final;
 
     bool isOfType(LayoutObjectType type) const override { return type == LayoutObjectEmbeddedObject || LayoutPart::isOfType(type); }
-    LayoutBox* embeddedContentBox() const final;
+    LayoutReplaced* embeddedReplacedContent() const final;
 
     PaintLayerType layerTypeRequired() const final;
 
-    ScrollResultOneDimensional scroll(ScrollDirectionPhysical, ScrollGranularity, float multiplier) final;
+    ScrollResult scroll(ScrollGranularity, const FloatSize&) final;
 
     CompositingReasons additionalCompositingReasons() const override;
 

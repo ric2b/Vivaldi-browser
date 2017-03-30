@@ -633,7 +633,7 @@ class DiskMountManagerImpl : public DiskMountManager {
   bool already_refreshed_;
   std::vector<EnsureMountInfoRefreshedCallback> refresh_callbacks_;
 
-  scoped_ptr<SuspendUnmountManager> suspend_unmount_manager_;
+  std::unique_ptr<SuspendUnmountManager> suspend_unmount_manager_;
 
   base::WeakPtrFactory<DiskMountManagerImpl> weak_ptr_factory_;
 
@@ -682,6 +682,8 @@ DiskMountManager::Disk::Disk(const std::string& device_path,
       on_boot_device_(on_boot_device),
       on_removable_device_(on_removable_device),
       is_hidden_(is_hidden) {}
+
+DiskMountManager::Disk::Disk(const Disk& other) = default;
 
 DiskMountManager::Disk::~Disk() {}
 

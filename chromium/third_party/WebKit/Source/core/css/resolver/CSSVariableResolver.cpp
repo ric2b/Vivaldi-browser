@@ -87,6 +87,32 @@ bool CSSVariableResolver::resolveVariableReference(CSSParserTokenRange range, Ve
     return true;
 }
 
+void CSSVariableResolver::resolveApplyAtRule(CSSParserTokenRange& range,
+    Vector<CSSParserToken>& result)
+{
+    ASSERT(range.peek().type() == AtKeywordToken && range.peek().valueEqualsIgnoringASCIICase("apply"));
+    range.consumeIncludingWhitespace();
+    const CSSParserToken& variableName = range.consumeIncludingWhitespace();
+    // TODO(timloh): Should we actually be consuming this?
+    if (range.peek().type() == SemicolonToken)
+        range.consume();
+
+    CSSVariableData* variableData = valueForCustomProperty(variableName.value());
+    if (!variableData)
+        return; // Invalid custom property
+
+    CSSParserTokenRange rule = variableData->tokenRange();
+    rule.consumeWhitespace();
+    if (rule.peek().type() != LeftBraceToken)
+        return;
+    CSSParserTokenRange ruleContents = rule.consumeBlock();
+    rule.consumeWhitespace();
+    if (!rule.atEnd())
+        return;
+
+    result.appendRange(ruleContents.begin(), ruleContents.end());
+}
+
 bool CSSVariableResolver::resolveTokenRange(CSSParserTokenRange range,
     Vector<CSSParserToken>& result)
 {
@@ -94,6 +120,9 @@ bool CSSVariableResolver::resolveTokenRange(CSSParserTokenRange range,
     while (!range.atEnd()) {
         if (range.peek().functionId() == CSSValueVar) {
             success &= resolveVariableReference(range.consumeBlock(), result);
+        } else if (range.peek().type() == AtKeywordToken && range.peek().valueEqualsIgnoringASCIICase("apply")
+            && RuntimeEnabledFeatures::cssApplyAtRulesEnabled()) {
+            resolveApplyAtRule(range, result);
         } else {
             result.append(range.consume());
         }
@@ -101,7 +130,7 @@ bool CSSVariableResolver::resolveTokenRange(CSSParserTokenRange range,
     return success;
 }
 
-PassRefPtrWillBeRawPtr<CSSValue> CSSVariableResolver::resolveVariableReferences(StyleVariableData* styleVariableData, CSSPropertyID id, const CSSVariableReferenceValue& value)
+CSSValue* CSSVariableResolver::resolveVariableReferences(StyleVariableData* styleVariableData, CSSPropertyID id, const CSSVariableReferenceValue& value)
 {
     ASSERT(!isShorthandProperty(id));
 
@@ -109,14 +138,10 @@ PassRefPtrWillBeRawPtr<CSSValue> CSSVariableResolver::resolveVariableReferences(
     Vector<CSSParserToken> tokens;
     if (!resolver.resolveTokenRange(value.variableDataValue()->tokens(), tokens))
         return cssValuePool().createUnsetValue();
-
-    CSSParserContext context(HTMLStandardMode, nullptr);
-    WillBeHeapVector<CSSProperty, 256> parsedProperties;
-    // TODO(timloh): This should be CSSParser::parseSingleValue and not need a vector.
-    if (!CSSPropertyParser::parseValue(id, false, CSSParserTokenRange(tokens), context, parsedProperties, StyleRule::RuleType::Style))
+    CSSValue* result = CSSPropertyParser::parseSingleValue(id, tokens, strictCSSParserContext());
+    if (!result)
         return cssValuePool().createUnsetValue();
-    ASSERT(parsedProperties.size() == 1);
-    return parsedProperties[0].value();
+    return result;
 }
 
 void CSSVariableResolver::resolveAndApplyVariableReferences(StyleResolverState& state, CSSPropertyID id, const CSSVariableReferenceValue& value)
@@ -127,8 +152,9 @@ void CSSVariableResolver::resolveAndApplyVariableReferences(StyleResolverState& 
     if (resolver.resolveTokenRange(value.variableDataValue()->tokens(), tokens)) {
         CSSParserContext context(HTMLStandardMode, 0);
 
-        WillBeHeapVector<CSSProperty, 256> parsedProperties;
+        HeapVector<CSSProperty, 256> parsedProperties;
 
+        // TODO: Non-shorthands should just call CSSPropertyParser::parseSingleValue
         if (CSSPropertyParser::parseValue(id, false, CSSParserTokenRange(tokens), context, parsedProperties, StyleRule::RuleType::Style)) {
             unsigned parsedPropertiesCount = parsedProperties.size();
             for (unsigned i = 0; i < parsedPropertiesCount; ++i)
@@ -137,15 +163,15 @@ void CSSVariableResolver::resolveAndApplyVariableReferences(StyleResolverState& 
         }
     }
 
-    RefPtrWillBeRawPtr<CSSUnsetValue> unset = cssValuePool().createUnsetValue();
+    CSSUnsetValue* unset = cssValuePool().createUnsetValue();
     if (isShorthandProperty(id)) {
         StylePropertyShorthand shorthand = shorthandForProperty(id);
         for (unsigned i = 0; i < shorthand.length(); i++)
-            StyleBuilder::applyProperty(shorthand.properties()[i], state, unset.get());
+            StyleBuilder::applyProperty(shorthand.properties()[i], state, unset);
         return;
     }
 
-    StyleBuilder::applyProperty(id, state, unset.get());
+    StyleBuilder::applyProperty(id, state, unset);
 }
 
 void CSSVariableResolver::resolveVariableDefinitions(StyleVariableData* variables)

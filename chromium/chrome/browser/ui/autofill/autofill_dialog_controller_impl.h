@@ -7,12 +7,12 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <set>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
@@ -199,12 +199,6 @@ class AutofillDialogControllerImpl
   // happens via choosing "Add a new X..." from a section's suggestion menu.
   bool IsManuallyEditingSection(DialogSection section) const;
 
-  // Shows a new credit card saved bubble and passes ownership of |new_card| and
-  // |billing_profile| to the bubble. Exposed for testing.
-  virtual void ShowNewCreditCardBubble(
-      scoped_ptr<CreditCard> new_card,
-      scoped_ptr<AutofillProfile> billing_profile);
-
   // Delays enabling submit button for a short period of time. Exposed for
   // testing.
   virtual void SubmitButtonDelayBegin();
@@ -270,7 +264,7 @@ class AutofillDialogControllerImpl
   // Creates a DataModelWrapper item for the item that's checked in the
   // suggestion model for |section|. This may represent Autofill
   // data or Wallet data, depending on whether Wallet is currently enabled.
-  scoped_ptr<DataModelWrapper> CreateWrapper(DialogSection section);
+  std::unique_ptr<DataModelWrapper> CreateWrapper(DialogSection section);
 
   // Fills in |section|-related fields in |output_| according to the state of
   // |view_|.
@@ -446,10 +440,6 @@ class AutofillDialogControllerImpl
   // interacting with this dialog.
   AutofillMetrics::DialogInitialUserStateMetric GetInitialUserState() const;
 
-  // Shows an educational bubble if a new credit card was saved or the first few
-  // times an Online Wallet fronting card was generated.
-  void MaybeShowCreditCardBubble();
-
   // Called when the delay for enabling the submit button ends.
   void OnSubmitButtonDelayEnd();
 
@@ -473,7 +463,7 @@ class AutofillDialogControllerImpl
   AutofillClient::ResultCallback callback_;
 
   // A helper to validate international address input.
-  scoped_ptr<AddressValidator> validator_;
+  std::unique_ptr<AddressValidator> validator_;
 
   // The default active instrument and shipping address object IDs as of the
   // last time Wallet items were fetched. These variables are only set
@@ -518,8 +508,8 @@ class AutofillDialogControllerImpl
   YearComboboxModel cc_exp_year_combobox_model_;
 
   // Models for country input.
-  scoped_ptr<CountryComboboxModel> billing_country_combobox_model_;
-  scoped_ptr<CountryComboboxModel> shipping_country_combobox_model_;
+  std::unique_ptr<CountryComboboxModel> billing_country_combobox_model_;
+  std::unique_ptr<CountryComboboxModel> shipping_country_combobox_model_;
 
   // Models for the suggestion views.
   SuggestionsMenuModel suggested_cc_;
@@ -564,7 +554,7 @@ class AutofillDialogControllerImpl
   // is showing.
   DialogSection popup_section_;
 
-  scoped_ptr<AutofillDialogView> view_;
+  std::unique_ptr<AutofillDialogView> view_;
 
   // A NotificationRegistrar for tracking the completion of sign-in.
   content::NotificationRegistrar signin_registrar_;
@@ -584,11 +574,6 @@ class AutofillDialogControllerImpl
   // models for that section. No entries present that don't have newly saved
   // data models.
   std::map<DialogSection, std::string> newly_saved_data_model_guids_;
-
-  // Populated if the user chose to save a newly inputted credit card. Used to
-  // show a bubble as the dialog closes to confirm a user's new card info was
-  // saved. Never populated while incognito (as nothing's actually saved).
-  scoped_ptr<CreditCard> newly_saved_card_;
 
   // The timer that delays enabling submit button for a short period of time on
   // startup.

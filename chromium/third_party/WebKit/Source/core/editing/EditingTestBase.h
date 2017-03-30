@@ -8,6 +8,7 @@
 #include "core/editing/Position.h"
 #include "wtf/Forward.h"
 #include <gtest/gtest.h>
+#include <string>
 
 namespace blink {
 
@@ -24,10 +25,10 @@ protected:
     Document& document() const;
     DummyPageHolder& dummyPageHolder() const { return *m_dummyPageHolder; }
 
-    static PassRefPtrWillBeRawPtr<ShadowRoot> createShadowRootForElementWithIDAndSetInnerHTML(TreeScope&, const char* hostElementID, const char* shadowRootContent);
+    static RawPtr<ShadowRoot> createShadowRootForElementWithIDAndSetInnerHTML(TreeScope&, const char* hostElementID, const char* shadowRootContent);
 
-    void setBodyContent(const char*);
-    PassRefPtrWillBeRawPtr<ShadowRoot> setShadowContent(const char* shadowContent, const char* shadowHostId);
+    void setBodyContent(const std::string&);
+    RawPtr<ShadowRoot> setShadowContent(const char* shadowContent, const char* shadowHostId);
     void updateLayoutAndStyleForPainting();
 
 private:

@@ -21,6 +21,7 @@ import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.dom_distiller.DomDistillerTabUtils;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeManagerDelegate;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler;
+import org.chromium.chrome.browser.rappor.RapporServiceBridge;
 import org.chromium.components.navigation_interception.NavigationParams;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.WebContents;
@@ -155,10 +156,6 @@ public class ReaderModePanel extends OverlayPanel {
             mManagerDelegate = delegate;
             if (mManagerDelegate != null) {
                 setChromeActivity(mManagerDelegate.getChromeActivity());
-                initializeUiState();
-                // TODO(mdjones): Improve the base page movement API so that the default behavior
-                // is to hide the toolbar; this function call should not be necessary here.
-                updateBasePageTargetY();
             }
         }
     }
@@ -172,7 +169,6 @@ public class ReaderModePanel extends OverlayPanel {
         super.handleBarClick(time, x, y);
         if (isCoordinateInsideCloseButton(x)) {
             closePanel(StateChangeReason.CLOSE_BUTTON, true);
-            mManagerDelegate.onCloseButtonPressed();
         } else {
             maximizePanel(StateChangeReason.SEARCH_BAR_TAP);
         }
@@ -205,8 +201,8 @@ public class ReaderModePanel extends OverlayPanel {
     }
 
     @Override
-    public boolean supportsExpandedState() {
-        return false;
+    protected boolean isSupportedState(PanelState state) {
+        return state != PanelState.EXPANDED;
     }
 
     @Override
@@ -251,9 +247,21 @@ public class ReaderModePanel extends OverlayPanel {
         if (!mTimerRunning && animatingToOpenState) {
             mStartTime = System.currentTimeMillis();
             mTimerRunning = true;
+            if (mManagerDelegate != null) {
+                String url = mManagerDelegate.getBasePageWebContents().getUrl();
+                RapporServiceBridge.sampleDomainAndRegistryFromURL(
+                        "DomDistiller.OpenPanel", url);
+            }
         } else if (mTimerRunning && !animatingToOpenState) {
             onTimerEnded();
         }
+    }
+
+    @Override
+    public void peekPanel(StateChangeReason reason) {
+        super.peekPanel(reason);
+        if (mManagerDelegate == null) return;
+        mManagerDelegate.onPanelShown();
     }
 
     @Override
@@ -262,6 +270,13 @@ public class ReaderModePanel extends OverlayPanel {
         if (mTimerRunning) {
             onTimerEnded();
         }
+    }
+
+    @Override
+    protected void onClosed(StateChangeReason reason) {
+        super.onClosed(reason);
+        if (mManagerDelegate == null) return;
+        mManagerDelegate.onClosed(reason);
     }
 
     /**
@@ -285,12 +300,6 @@ public class ReaderModePanel extends OverlayPanel {
     }
 
     @Override
-    protected float calculateBasePageTargetY(PanelState state) {
-        // In the case of reader mode the base page will always need to move the same amount.
-        return -getToolbarHeight();
-    }
-
-    @Override
     public void onSizeChanged(float width, float height) {
         super.onSizeChanged(width, height);
         if (mManagerDelegate != null) {
@@ -301,6 +310,11 @@ public class ReaderModePanel extends OverlayPanel {
         if (getPanelState() != PanelState.UNDEFINED && getPanelState() != PanelState.CLOSED) {
             resizePanelToState(getPanelState(), StateChangeReason.UNKNOWN);
         }
+    }
+
+    @Override
+    protected float calculateBasePageDesiredOffset() {
+        return -getToolbarHeight();
     }
 
     // ============================================================================================

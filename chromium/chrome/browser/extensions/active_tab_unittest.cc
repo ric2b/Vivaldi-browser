@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/compiler_specific.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -50,11 +50,12 @@ scoped_refptr<const Extension> CreateTestExtension(
   if (has_tab_capture_permission)
     permissions.Append("tabCapture");
   return ExtensionBuilder()
-      .SetManifest(std::move(DictionaryBuilder()
-                                 .Set("name", "Extension with ID " + id)
-                                 .Set("version", "1.0")
-                                 .Set("manifest_version", 2)
-                                 .Set("permissions", std::move(permissions))))
+      .SetManifest(DictionaryBuilder()
+                       .Set("name", "Extension with ID " + id)
+                       .Set("version", "1.0")
+                       .Set("manifest_version", 2)
+                       .Set("permissions", permissions.Build())
+                       .Build())
       .SetID(id)
       .Build();
 }

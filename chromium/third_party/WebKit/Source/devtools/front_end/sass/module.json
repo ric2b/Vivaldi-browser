@@ -4,6 +4,17 @@
         "SASSSupport.js",
         "ASTService.js",
         "SASSProcessor.js",
-        "ASTSourceMap.js"
+        "ASTSourceMap.js",
+        "SASSSourceMapFactory.js"
+    ],
+    "extensions": [
+        {
+            "type": "@WebInspector.SourceMapFactory",
+            "className": "WebInspector.SASSSourceMapFactory",
+            "experiment": "liveSASS",
+            "extensions": [
+                "scss"
+            ]
+        }
     ]
 }

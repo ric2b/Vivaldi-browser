@@ -50,9 +50,9 @@ MIDIController::~MIDIController()
 {
 }
 
-PassOwnPtrWillBeRawPtr<MIDIController> MIDIController::create(PassOwnPtr<MIDIClient> client)
+MIDIController* MIDIController::create(PassOwnPtr<MIDIClient> client)
 {
-    return adoptPtrWillBeNoop(new MIDIController(client));
+    return new MIDIController(client);
 }
 
 void MIDIController::requestPermission(MIDIAccessInitializer* initializer, const MIDIOptions& options)

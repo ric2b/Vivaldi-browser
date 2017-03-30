@@ -94,11 +94,11 @@ void BaseRenderingContext2D::restore()
 
 static inline void convertCanvasStyleToUnionType(CanvasStyle* style, StringOrCanvasGradientOrCanvasPattern& returnValue)
 {
-    if (CanvasGradient* gradient = style->canvasGradient()) {
+    if (CanvasGradient* gradient = style->getCanvasGradient()) {
         returnValue.setCanvasGradient(gradient);
         return;
     }
-    if (CanvasPattern* pattern = style->canvasPattern()) {
+    if (CanvasPattern* pattern = style->getCanvasPattern()) {
         returnValue.setCanvasPattern(pattern);
         return;
     }
@@ -176,7 +176,7 @@ void BaseRenderingContext2D::setFillStyle(const StringOrCanvasGradientOrCanvasPa
 
         if (originClean() && !canvasPattern->originClean())
             setOriginTainted();
-        if (canvasPattern->pattern()->isTextureBacked())
+        if (canvasPattern->getPattern()->isTextureBacked())
             disableDeferral(DisableDeferralReasonUsingTextureBackedPattern);
         canvasStyle = CanvasStyle::createFromPattern(canvasPattern);
     }
@@ -203,7 +203,7 @@ void BaseRenderingContext2D::setLineWidth(double width)
 
 String BaseRenderingContext2D::lineCap() const
 {
-    return lineCapName(state().lineCap());
+    return lineCapName(state().getLineCap());
 }
 
 void BaseRenderingContext2D::setLineCap(const String& s)
@@ -211,14 +211,14 @@ void BaseRenderingContext2D::setLineCap(const String& s)
     LineCap cap;
     if (!parseLineCap(s, cap))
         return;
-    if (state().lineCap() == cap)
+    if (state().getLineCap() == cap)
         return;
     modifiableState().setLineCap(cap);
 }
 
 String BaseRenderingContext2D::lineJoin() const
 {
-    return lineJoinName(state().lineJoin());
+    return lineJoinName(state().getLineJoin());
 }
 
 void BaseRenderingContext2D::setLineJoin(const String& s)
@@ -226,7 +226,7 @@ void BaseRenderingContext2D::setLineJoin(const String& s)
     LineJoin join;
     if (!parseLineJoin(s, join))
         return;
-    if (state().lineJoin() == join)
+    if (state().getLineJoin() == join)
         return;
     modifiableState().setLineJoin(join);
 }
@@ -376,23 +376,22 @@ void BaseRenderingContext2D::setFilter(const String& filterString)
     if (filterString == state().unparsedFilter())
         return;
 
-    RefPtrWillBeRawPtr<CSSValue> filterValue = CSSParser::parseSingleValue(CSSPropertyWebkitFilter, filterString, CSSParserContext(HTMLStandardMode, 0));
+    CSSValue* filterValue = CSSParser::parseSingleValue(CSSPropertyWebkitFilter, filterString, CSSParserContext(HTMLStandardMode, 0));
 
     if (!filterValue || filterValue->isInitialValue() || filterValue->isInheritedValue())
         return;
 
     modifiableState().setUnparsedFilter(filterString);
-    modifiableState().setFilter(filterValue.release());
+    modifiableState().setFilter(filterValue);
 }
 
-PassRefPtrWillBeRawPtr<SVGMatrixTearOff> BaseRenderingContext2D::currentTransform() const
+SVGMatrixTearOff* BaseRenderingContext2D::currentTransform() const
 {
     return SVGMatrixTearOff::create(state().transform());
 }
 
-void BaseRenderingContext2D::setCurrentTransform(PassRefPtrWillBeRawPtr<SVGMatrixTearOff> passMatrixTearOff)
+void BaseRenderingContext2D::setCurrentTransform(SVGMatrixTearOff* matrixTearOff)
 {
-    RefPtrWillBeRawPtr<SVGMatrixTearOff> matrixTearOff = passMatrixTearOff;
     const AffineTransform& transform = matrixTearOff->value();
     setTransform(transform.a(), transform.b(), transform.c(), transform.d(), transform.e(), transform.f());
 }
@@ -557,7 +556,7 @@ bool BaseRenderingContext2D::isFullCanvasCompositeMode(SkXfermode::Mode op)
 
 static bool isPathExpensive(const Path& path)
 {
-    const SkPath& skPath = path.skPath();
+    const SkPath& skPath = path.getSkPath();
     if (ExpensiveCanvasHeuristicParameters::ConcavePathsAreExpensive && !skPath.isConvex())
         return true;
 
@@ -572,7 +571,7 @@ void BaseRenderingContext2D::drawPathInternal(const Path& path, CanvasRenderingC
     if (path.isEmpty())
         return;
 
-    SkPath skPath = path.skPath();
+    SkPath skPath = path.getSkPath();
     FloatRect bounds = path.boundingRect();
     skPath.setFillType(fillType);
 
@@ -697,7 +696,7 @@ void BaseRenderingContext2D::clipInternal(const Path& path, const String& windin
         return;
     }
 
-    SkPath skPath = path.skPath();
+    SkPath skPath = path.getSkPath();
     skPath.setFillType(parseWinding(windingRuleString));
     modifiableState().clipPath(skPath, m_clipAntialiasing);
     c->clipPath(skPath, SkRegion::kIntersect_Op, m_clipAntialiasing == AntiAliased);
@@ -769,8 +768,8 @@ bool BaseRenderingContext2D::isPointInStrokeInternal(const Path& path, const dou
 
     StrokeData strokeData;
     strokeData.setThickness(state().lineWidth());
-    strokeData.setLineCap(state().lineCap());
-    strokeData.setLineJoin(state().lineJoin());
+    strokeData.setLineCap(state().getLineCap());
+    strokeData.setLineJoin(state().getLineJoin());
     strokeData.setMiterLimit(state().miterLimit());
     Vector<float> lineDash(state().lineDash().size());
     std::copy(state().lineDash().begin(), state().lineDash().end(), lineDash.begin());
@@ -842,13 +841,13 @@ static inline void clipRectsToImageRect(const FloatRect& imageRect, FloatRect* s
 static inline CanvasImageSource* toImageSourceInternal(const CanvasImageSourceUnion& value)
 {
     if (value.isHTMLImageElement())
-        return value.getAsHTMLImageElement().get();
+        return value.getAsHTMLImageElement();
     if (value.isHTMLVideoElement())
-        return value.getAsHTMLVideoElement().get();
+        return value.getAsHTMLVideoElement();
     if (value.isHTMLCanvasElement())
-        return value.getAsHTMLCanvasElement().get();
+        return value.getAsHTMLCanvasElement();
     if (value.isImageBitmap())
-        return value.getAsImageBitmap().get();
+        return value.getAsImageBitmap();
     ASSERT_NOT_REACHED();
     return nullptr;
 }
@@ -856,8 +855,9 @@ static inline CanvasImageSource* toImageSourceInternal(const CanvasImageSourceUn
 void BaseRenderingContext2D::drawImage(const CanvasImageSourceUnion& imageSource, double x, double y, ExceptionState& exceptionState)
 {
     CanvasImageSource* imageSourceInternal = toImageSourceInternal(imageSource);
-    FloatSize sourceRectSize = imageSourceInternal->elementSize();
-    FloatSize destRectSize = imageSourceInternal->defaultDestinationSize();
+    FloatSize defaultObjectSize(width(), height());
+    FloatSize sourceRectSize = imageSourceInternal->elementSize(defaultObjectSize);
+    FloatSize destRectSize = imageSourceInternal->defaultDestinationSize(defaultObjectSize);
     drawImage(imageSourceInternal, 0, 0, sourceRectSize.width(), sourceRectSize.height(), x, y, destRectSize.width(), destRectSize.height(), exceptionState);
 }
 
@@ -865,7 +865,8 @@ void BaseRenderingContext2D::drawImage(const CanvasImageSourceUnion& imageSource
     double x, double y, double width, double height, ExceptionState& exceptionState)
 {
     CanvasImageSource* imageSourceInternal = toImageSourceInternal(imageSource);
-    FloatSize sourceRectSize = imageSourceInternal->elementSize();
+    FloatSize defaultObjectSize(this->width(), this->height());
+    FloatSize sourceRectSize = imageSourceInternal->elementSize(defaultObjectSize);
     drawImage(imageSourceInternal, 0, 0, sourceRectSize.width(), sourceRectSize.height(), x, y, width, height, exceptionState);
 }
 
@@ -920,9 +921,8 @@ void BaseRenderingContext2D::drawImageInternal(SkCanvas* c, CanvasImageSource* i
         }
         SkRect bounds = dstRect;
         SkPaint layerPaint;
-        layerPaint.setXfermode(paint->getXfermode());
-        SkAutoTUnref<SkImageFilter> localFilter(paint->getImageFilter()->newWithLocalMatrix(invCtm));
-        layerPaint.setImageFilter(localFilter);
+        layerPaint.setXfermode(sk_ref_sp(paint->getXfermode()));
+        layerPaint.setImageFilter(paint->getImageFilter()->makeWithLocalMatrix(invCtm));
         c->saveLayer(&bounds, &layerPaint);
         imagePaint.setXfermodeMode(SkXfermode::kSrcOver_Mode);
         imagePaint.setImageFilter(nullptr);
@@ -971,10 +971,11 @@ void BaseRenderingContext2D::drawImage(CanvasImageSource* imageSource,
         return;
 
     RefPtr<Image> image;
+    FloatSize defaultObjectSize(width(), height());
     SourceImageStatus sourceImageStatus = InvalidSourceImageStatus;
     if (!imageSource->isVideoElement()) {
         AccelerationHint hint = imageBuffer()->isAccelerated() ? PreferAcceleration : PreferNoAcceleration;
-        image = imageSource->getSourceImageForCanvas(&sourceImageStatus, hint, SnapshotReasonDrawImage);
+        image = imageSource->getSourceImageForCanvas(&sourceImageStatus, hint, SnapshotReasonDrawImage, defaultObjectSize);
         if (sourceImageStatus == UndecodableSourceImageStatus)
             exceptionState.throwDOMException(InvalidStateError, "The HTMLImageElement provided is in the 'broken' state.");
         if (!image || !image->width() || !image->height())
@@ -991,8 +992,9 @@ void BaseRenderingContext2D::drawImage(CanvasImageSource* imageSource,
 
     FloatRect srcRect = normalizeRect(FloatRect(sx, sy, sw, sh));
     FloatRect dstRect = normalizeRect(FloatRect(dx, dy, dw, dh));
+    FloatSize imageSize = imageSource->elementSize(defaultObjectSize);
 
-    clipRectsToImageRect(FloatRect(FloatPoint(), imageSource->elementSize()), &srcRect, &dstRect);
+    clipRectsToImageRect(FloatRect(FloatPoint(), imageSize), &srcRect, &dstRect);
 
     imageSource->adjustDrawRects(&srcRect, &dstRect);
 
@@ -1023,19 +1025,13 @@ void BaseRenderingContext2D::drawImage(CanvasImageSource* imageSource,
     if (ExpensiveCanvasHeuristicParameters::SVGImageSourcesAreExpensive && imageSource->isSVGSource())
         isExpensive = true;
 
-    if (imageSource->elementSize().width() * imageSource->elementSize().height() > width() * height() * ExpensiveCanvasHeuristicParameters::ExpensiveImageSizeRatio)
+    if (imageSize.width() * imageSize.height() > width() * height() * ExpensiveCanvasHeuristicParameters::ExpensiveImageSizeRatio)
         isExpensive = true;
 
     if (isExpensive) {
         ImageBuffer* buffer = imageBuffer();
         if (buffer)
             buffer->setHasExpensiveOp();
-    }
-
-    if (imageSource->isCanvasElement() && static_cast<HTMLCanvasElement*>(imageSource)->is3D()) {
-        // WebGL to 2D canvas: must flush graphics context to prevent a race
-        // FIXME: crbug.com/516331 Fix the underlying synchronization issue so this flush can be eliminated.
-        imageBuffer()->flushGpu(FlushReasonDrawImageOfWebGL);
     }
 
     if (originClean() && wouldTaintOrigin(imageSource))
@@ -1083,13 +1079,14 @@ CanvasPattern* BaseRenderingContext2D::createPattern(const CanvasImageSourceUnio
 
     SourceImageStatus status;
     CanvasImageSource* imageSourceInternal = toImageSourceInternal(imageSource);
-    RefPtr<Image> imageForRendering = imageSourceInternal->getSourceImageForCanvas(&status, PreferNoAcceleration, SnapshotReasonCreatePattern);
+    FloatSize defaultObjectSize(width(), height());
+    RefPtr<Image> imageForRendering = imageSourceInternal->getSourceImageForCanvas(&status, PreferNoAcceleration, SnapshotReasonCreatePattern, defaultObjectSize);
 
     switch (status) {
     case NormalSourceImageStatus:
         break;
     case ZeroSizeCanvasSourceImageStatus:
-        exceptionState.throwDOMException(InvalidStateError, String::format("The canvas %s is 0.", imageSourceInternal->elementSize().width() ? "height" : "width"));
+        exceptionState.throwDOMException(InvalidStateError, String::format("The canvas %s is 0.", imageSourceInternal->elementSize(defaultObjectSize).width() ? "height" : "width"));
         return nullptr;
     case UndecodableSourceImageStatus:
         exceptionState.throwDOMException(InvalidStateError, "Source image is in the 'broken' state.");
@@ -1140,9 +1137,12 @@ bool BaseRenderingContext2D::computeDirtyRect(const FloatRect& localRect, const 
     return true;
 }
 
-ImageData* BaseRenderingContext2D::createImageData(ImageData* imageData) const
+ImageData* BaseRenderingContext2D::createImageData(ImageData* imageData, ExceptionState &exceptionState) const
 {
-    return ImageData::create(imageData->size());
+    ImageData* result = ImageData::create(imageData->size());
+    if (!result)
+        exceptionState.throwRangeError("Out of memory at ImageData creation");
+    return result;
 }
 
 ImageData* BaseRenderingContext2D::createImageData(double sw, double sh, ExceptionState& exceptionState) const
@@ -1162,7 +1162,10 @@ ImageData* BaseRenderingContext2D::createImageData(double sw, double sh, Excepti
     if (size.height() < 1)
         size.setHeight(1);
 
-    return ImageData::create(size);
+    ImageData* result = ImageData::create(size);
+    if (!result)
+        exceptionState.throwRangeError("Out of memory at ImageData creation");
+    return result;
 }
 
 ImageData* BaseRenderingContext2D::getImageData(double sx, double sy, double sw, double sh, ExceptionState& exceptionState) const
@@ -1194,12 +1197,18 @@ ImageData* BaseRenderingContext2D::getImageData(double sx, double sy, double sw,
 
     IntRect imageDataRect = enclosingIntRect(logicalRect);
     ImageBuffer* buffer = imageBuffer();
-    if (!buffer || isContextLost())
-        return ImageData::create(imageDataRect.size());
+    if (!buffer || isContextLost()) {
+        ImageData* result = ImageData::create(imageDataRect.size());
+        if (!result)
+            exceptionState.throwRangeError("Out of memory at ImageData creation");
+        return result;
+    }
 
     WTF::ArrayBufferContents contents;
-    if (!buffer->getImageData(Unmultiplied, imageDataRect, contents))
+    if (!buffer->getImageData(Unmultiplied, imageDataRect, contents)) {
+        exceptionState.throwRangeError("Out of memory at ImageData creation");
         return nullptr;
+    }
 
     RefPtr<DOMArrayBuffer> arrayBuffer = DOMArrayBuffer::create(contents);
     return ImageData::create(
@@ -1257,9 +1266,9 @@ void BaseRenderingContext2D::inflateStrokeRect(FloatRect& rect) const
     // compared to Path::strokeBoundingRect().
     static const double root2 = sqrtf(2);
     double delta = state().lineWidth() / 2;
-    if (state().lineJoin() == MiterJoin)
+    if (state().getLineJoin() == MiterJoin)
         delta *= state().miterLimit();
-    else if (state().lineCap() == SquareCap)
+    else if (state().getLineCap() == SquareCap)
         delta *= root2;
 
     rect.inflate(delta);

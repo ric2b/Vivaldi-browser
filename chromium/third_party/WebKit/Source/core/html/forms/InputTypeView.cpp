@@ -34,9 +34,9 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<InputTypeView> InputTypeView::create(HTMLInputElement& input)
+InputTypeView* InputTypeView::create(HTMLInputElement& input)
 {
-    return adoptRefWillBeNoop(new InputTypeView(input));
+    return new InputTypeView(input);
 }
 
 InputTypeView::~InputTypeView()
@@ -91,7 +91,7 @@ bool InputTypeView::shouldSubmitImplicitly(Event* event)
     return false;
 }
 
-PassRefPtrWillBeRawPtr<HTMLFormElement> InputTypeView::formForSubmission() const
+HTMLFormElement* InputTypeView::formForSubmission() const
 {
     return element().form();
 }
@@ -162,7 +162,7 @@ void InputTypeView::stepAttributeChanged()
 {
 }
 
-PassOwnPtrWillBeRawPtr<ClickHandlingState> InputTypeView::willDispatchClick()
+ClickHandlingState* InputTypeView::willDispatchClick()
 {
     return nullptr;
 }

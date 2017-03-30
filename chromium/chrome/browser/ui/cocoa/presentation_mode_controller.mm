@@ -52,7 +52,7 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   // As such, we should ignore the kMenuBarRevealEventKind event if it gives
   // us a fraction of 0.0 or 1.0, and rely on kEventMenuBarShown and
   // kEventMenuBarHidden to set these values.
-  if ([self isOnActiveSpace]) {
+  if ([self isMainWindow]) {
     if (GetEventKind(event) == kMenuBarRevealEventKind) {
       CGFloat revealFraction = 0;
       GetEventParameter(event, FOUR_CHAR_CODE('rvlf'), typeCGFloat, NULL,
@@ -260,21 +260,6 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   NSNotificationCenter* nc = [NSNotificationCenter defaultCenter];
   NSWindow* window = [browserController_ window];
 
-  // Disable these notifications on Lion as they cause crashes.
-  // TODO(rohitrao): Figure out what happens if a fullscreen window changes
-  // monitors on Lion.
-  if (base::mac::IsOSSnowLeopard()) {
-    [nc addObserver:self
-           selector:@selector(windowDidChangeScreen:)
-               name:NSWindowDidChangeScreenNotification
-             object:window];
-
-    [nc addObserver:self
-           selector:@selector(windowDidMove:)
-               name:NSWindowDidMoveNotification
-             object:window];
-  }
-
   [nc addObserver:self
          selector:@selector(windowDidBecomeMain:)
              name:NSWindowDidBecomeMainNotification
@@ -446,8 +431,8 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
              : 0;
 }
 
-- (BOOL)isOnActiveSpace {
-  return [browserController_ window].onActiveSpace;
+- (BOOL)isMainWindow {
+  return [browserController_ window].isMainWindow;
 }
 
 // Used to activate the floating bar in presentation mode.
@@ -536,8 +521,7 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
 @implementation PresentationModeController (PrivateMethods)
 
 - (void)updateMenuBarAndDockVisibility {
-  if (![[browserController_ window] isMainWindow] ||
-      ![browserController_ isInImmersiveFullscreen]) {
+  if (![self isMainWindow] || ![browserController_ isInImmersiveFullscreen]) {
     [self setSystemFullscreenModeTo:base::mac::kFullScreenModeNormal];
     return;
   }

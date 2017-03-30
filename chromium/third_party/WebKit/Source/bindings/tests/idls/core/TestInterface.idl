@@ -32,12 +32,12 @@
 // Also used as a target by TestObject
 
 [
+    ActiveScriptWrappable,
     DependentLifetime,
     Custom=LegacyCallAsFunction,
     DoNotCheckConstants,
     ImplementedAs=TestInterfaceImplementation,
     Iterable,
-    OriginTrialEnabled=OriginTrialFeatureName,
     RuntimeEnabled=FeatureName,
     SetWrapperReferenceTo(TestInterface referencedName),
     Exposed=(Worker,Window),

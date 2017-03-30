@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -17,7 +18,6 @@
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/string_search.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
@@ -25,9 +25,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/common/pref_names.h"
-#include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/download_item.h"
@@ -189,7 +186,7 @@ DownloadQuery::FilterCallback BuildRegexFilter(
     std::string (*accessor)(const DownloadItem&)) {
   std::string regex_str;
   if (!GetAs(regex_value, &regex_str)) return DownloadQuery::FilterCallback();
-  scoped_ptr<RE2> pattern(new RE2(regex_str));
+  std::unique_ptr<RE2> pattern(new RE2(regex_str));
   if (!pattern->ok()) return DownloadQuery::FilterCallback();
   return base::Bind(&FindRegex, base::Owned(pattern.release()),
                     base::Bind(accessor));
@@ -219,12 +216,8 @@ bool DownloadQuery::MatchesQuery(const std::vector<base::string16>& query_terms,
 
   base::string16 url_raw(base::UTF8ToUTF16(item.GetOriginalUrl().spec()));
   base::string16 url_formatted = url_raw;
-  if (item.GetBrowserContext()) {
-    Profile* profile = Profile::FromBrowserContext(item.GetBrowserContext());
-    url_formatted = url_formatter::FormatUrl(
-        item.GetOriginalUrl(),
-        profile->GetPrefs()->GetString(prefs::kAcceptLanguages));
-  }
+  if (item.GetBrowserContext())
+    url_formatted = url_formatter::FormatUrl(item.GetOriginalUrl());
   base::string16 path(item.GetTargetFilePath().LossyDisplayName());
 
   for (std::vector<base::string16>::const_iterator it = query_terms.begin();

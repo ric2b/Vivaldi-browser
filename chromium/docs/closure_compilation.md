@@ -2,21 +2,36 @@
 
 ## I just need to fix the compile!
 
-To locally run closure compiler like the bots, do this:
+### Pre-requisites
+
+You'll need Java 7 (preferably the OpenJDK version).  To install on Ubuntu:
 
 ```shell
-cd $CHROMIUM_SRC
-# sudo apt-get install openjdk-7-jre # may be required
-GYP_GENERATORS=ninja tools/gyp/gyp --depth . third_party/closure_compiler/compiled_resources.gyp
-ninja -C out/Default
+sudo apt-get install openjdk-7-jre
 ```
 
-To run the v2 gyp format, change the last 2 lines to:
+On Mac or Windows, visit:
+[http://www.oracle.com/technetwork/java/javase/downloads/index.html](http://www.oracle.com/technetwork/java/javase/downloads/index.html)
+
+### Using ninja to compile the code
+
+To compile the JavaScript, run this script:
 
 ```shell
-# notice the 2 in compiled_resources2.gyp
-GYP_GENERATORS=ninja tools/gyp/gyp --depth . third_party/closure_compiler/compiled_resources2.gyp
-ninja -C out/Default
+third_party/closure_compiler/run_compiler
+```
+
+The output should look something like this:
+
+```shell
+ninja: Entering directory `out/Default/'
+[30/106] ACTION Compiling chrome/browser/resources/md_history/constants.js
+```
+
+To compile only a specific target, add an argument after the script name:
+
+```shell
+third_party/closure_compiler/run_compiler people_page
 ```
 
 ## Background
@@ -39,7 +54,7 @@ See also:
 ## Assumptions
 
 A working Chrome checkout. See here:
-http://www.chromium.org/developers/how-tos/get-the-code
+https://www.chromium.org/developers/how-tos/get-the-code
 
 ## Typechecking Your Javascript
 
@@ -71,29 +86,23 @@ alert(mensa);  // '100 IQ50' instead of 150
 
 In order to check that our code acts as we'd expect, we can create a
 
-    my_project/compiled_resources.gyp
+    my_project/compiled_resources2.gyp
 
 with the contents:
 
 ```
-# Copyright 2015 The Chromium Authors. All rights reserved.
+# Copyright 2016 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 {
   'targets': [
     {
       'target_name': 'my_file',  # file name without ".js"
-
-      'variables': {  # Only use if necessary (no need to specify empty lists).
-        'depends': [
-          'other_file.js',  # or 'other_project/compiled_resources.gyp:target',
-        ],
-        'externs': [
-          '<(CLOSURE_DIR)/externs/any_needed_externs.js'  # e.g. chrome.send(), chrome.app.window, etc.
-        ],
-      },
-
-      'includes': ['../third_party/closure_compiler/compile_js.gypi'],
+      'dependencies': [  # No need to specify empty lists.
+        '../compiled_resources2.gyp:other_file',
+        '<(EXTERNS_GYP):any_needed_externs'  # e.g. chrome.send(), chrome.app.window, etc.
+      ],
+      'includes': ['../third_party/closure_compiler/compile_js2.gypi'],
     },
   ],
 }
@@ -126,7 +135,7 @@ like this:
       'target_name': 'compile_all_resources',
       'dependencies': [
          # ... other projects ...
-++       '../my_project/compiled_resources.gyp:*',
+++       '../my_project/compiled_resources2.gyp:*',
       ],
     }
   ]
@@ -144,7 +153,7 @@ Compiled JavaScript is output in
 map for use in debugging. In order to use the compiled JavaScript, we can create
 a
 
-    my_project/my_project_resources.gpy
+    my_project/my_project_resources.gyp
 
 with the contents:
 
@@ -197,6 +206,7 @@ with the contents:
 ```
 
 In your C++, the resource can be retrieved like this:
+
 ```
 base::string16 my_script =
     base::UTF8ToUTF16(
@@ -259,6 +269,7 @@ my_project/compiled_resources.gyp
 ```
 
 with contents similar to this:
+
 ```
 # Copyright 2015 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be

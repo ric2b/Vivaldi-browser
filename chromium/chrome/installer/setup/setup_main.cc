@@ -272,7 +272,12 @@ bool UncompressAndPatchChromeArchive(
   base::TimeDelta elapsed_time = base::TimeTicks::Now() - start_time;
 
   bool has_full_archive = base::PathExists(archive_helper->target());
-  UMA_HISTOGRAM_BOOLEAN("Setup.Install.HasArchivePatch", !has_full_archive);
+  if (installer_state.is_background_mode()) {
+    UMA_HISTOGRAM_BOOLEAN("Setup.Install.HasArchivePatch.background",
+                          !has_full_archive);
+  } else {
+    UMA_HISTOGRAM_BOOLEAN("Setup.Install.HasArchivePatch", !has_full_archive);
+  }
 
   // Short-circuit if uncompression produced the uncompressed archive rather
   // than a patch file.
@@ -280,13 +285,23 @@ bool UncompressAndPatchChromeArchive(
     *archive_type = installer::FULL_ARCHIVE_TYPE;
     // Uncompression alone hopefully takes less than 3 minutes even on slow
     // machines.
-    UMA_HISTOGRAM_MEDIUM_TIMES("Setup.Install.UncompressFullArchiveTime",
-                               elapsed_time);
+    if (installer_state.is_background_mode()) {
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "Setup.Install.UncompressFullArchiveTime.background", elapsed_time);
+    } else {
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "Setup.Install.UncompressFullArchiveTime", elapsed_time);
+    }
     return true;
   }
 
-  UMA_HISTOGRAM_MEDIUM_TIMES("Setup.Install.UncompressArchivePatchTime",
-                             elapsed_time);
+  if (installer_state.is_background_mode()) {
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "Setup.Install.UncompressArchivePatchTime.background", elapsed_time);
+  } else {
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "Setup.Install.UncompressArchivePatchTime", elapsed_time);
+  }
 
   // Find the installed version's archive to serve as the source for patching.
   base::FilePath patch_source(installer::FindArchiveToPatch(original_state,
@@ -305,7 +320,7 @@ bool UncompressAndPatchChromeArchive(
   // Try courgette first. Failing that, try bspatch.
   // Patch application sometimes takes a very long time, so use 100 buckets for
   // up to an hour.
-  SCOPED_UMA_HISTOGRAM_LONG_TIMER("Setup.Install.ApplyArchivePatchTime");
+  start_time = base::TimeTicks::Now();
   installer_state.UpdateStage(installer::ENSEMBLE_PATCHING);
   if (!archive_helper->EnsemblePatch()) {
     installer_state.UpdateStage(installer::BINARY_PATCHING);
@@ -315,6 +330,16 @@ bool UncompressAndPatchChromeArchive(
           *install_status, IDS_INSTALL_UNCOMPRESSION_FAILED_BASE, NULL);
       return false;
     }
+  }
+
+  // Record patch time only if it was successful.
+  elapsed_time = base::TimeTicks::Now() - start_time;
+  if (installer_state.is_background_mode()) {
+    UMA_HISTOGRAM_LONG_TIMES(
+        "Setup.Install.ApplyArchivePatchTime.background", elapsed_time);
+  } else {
+    UMA_HISTOGRAM_LONG_TIMES(
+        "Setup.Install.ApplyArchivePatchTime", elapsed_time);
   }
 
   *archive_type = installer::INCREMENTAL_ARCHIVE_TYPE;
@@ -869,6 +894,15 @@ installer::InstallStatus InstallProducts(
   // the -multifail suffix from the Google Update "ap" value.
   BrowserDistribution::GetSpecificDistribution(installer_state->state_type())->
       UpdateInstallStatus(system_install, archive_type, install_status);
+
+  // Drop to background processing mode if the process was started below the
+  // normal process priority class. This is done here because InstallProducts-
+  // Helper has read-only access to the state and because the action also
+  // affects everything else that runs below.
+  bool entered_background_mode = installer::AdjustProcessPriority();
+  installer_state->set_background_mode(entered_background_mode);
+  VLOG_IF(1, entered_background_mode) << "Entered background processing mode.";
+
   if (CheckPreInstallConditions(original_state, installer_state,
                                 &install_status)) {
     VLOG(1) << "Installing to " << installer_state->target_path().value();
@@ -1323,6 +1357,10 @@ void UninstallMultiChromeFrameIfPresent(const base::CommandLine& cmd_line,
                                         const MasterPreferences& prefs,
                                         InstallationState* original_state,
                                         InstallerState* installer_state) {
+  // Early exit if this is a Vivaldi install.
+  if (installer_state->is_vivaldi())
+    return;
+
   // Early exit if not installing or updating.
   if (installer_state->operation() == InstallerState::UNINSTALL)
     return;
@@ -1384,11 +1422,6 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
   DCHECK(archive_type);
   const bool system_install = installer_state.system_install();
   InstallStatus install_status = UNKNOWN_STATUS;
-
-  // Drop to background processing mode if the process was started below the
-  // normal process priority class.
-  bool entered_background_mode = AdjustProcessPriority();
-  VLOG_IF(1, entered_background_mode) << "Entered background processing mode.";
 
   // Create a temp folder where we will unpack Chrome archive. If it fails,
   // then we are doomed, so return immediately and no cleanup is required.
@@ -1462,8 +1495,15 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
         NULL);
     return UNPACKING_FAILED;
   }
-  UMA_HISTOGRAM_MEDIUM_TIMES("Setup.Install.UnpackFullArchiveTime",
-                             base::TimeTicks::Now() - start_time);
+
+  base::TimeDelta elapsed_time = base::TimeTicks::Now() - start_time;
+  if (installer_state.is_background_mode()) {
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "Setup.Install.UnpackFullArchiveTime.background", elapsed_time);
+  } else {
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "Setup.Install.UnpackFullArchiveTime", elapsed_time);
+  }
 
   VLOG(1) << "unpacked to " << unpack_path.value();
   base::FilePath src_path(
@@ -1891,6 +1931,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
       VLOG(1) << "Vivaldi: standalone install - install dir=" << path.value();
       break;
     }
+
+    if (dlg.GetRegisterBrowser()) {
+      cmd_line.AppendSwitch(installer::switches::kVivaldiRegisterStandalone);
+      VLOG(1) << "Vivaldi: register standalone browser.";
+    }
   }
 
   installer::VivaldiProgressDialog progress_dlg(instance);
@@ -1971,14 +2016,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   base::EnableTerminationOnOutOfMemory();
   base::win::RegisterInvalidParamHandler();
   base::win::SetupCRT(cmd_line);
-
-  //const bool is_uninstall = cmd_line.HasSwitch(installer::switches::kUninstall);
-
 #if !defined(VIVALDI_BUILD)
-  // Check to make sure current system is Win7 or later. If not, log
+  // Check to make sure current system is WinXP or later. If not, log
   // error message and get out.
   if (!InstallUtil::IsOSSupported()) {
-    LOG(ERROR) << "Chrome only supports Windows 7 or later.";
+    LOG(ERROR) << "Chrome only supports Windows XP or later.";
     installer_state.WriteInstallerResult(
         installer::OS_NOT_SUPPORTED, IDS_INSTALL_OS_NOT_SUPPORTED_BASE, NULL);
     return installer::OS_NOT_SUPPORTED;
@@ -2083,6 +2125,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   LOG_IF(ERROR,
          !InstallationValidator::ValidateInstallationType(system_install,
                                                           &installation_type));
+
+  UMA_HISTOGRAM_ENUMERATION("Setup.Install.Result", install_status,
+                            installer::MAX_INSTALL_STATUS);
 
   int return_code = 0;
   // MSI demands that custom actions always return 0 (ERROR_SUCCESS) or it will

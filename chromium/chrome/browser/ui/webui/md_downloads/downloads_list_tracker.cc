@@ -70,7 +70,7 @@ const char* GetDangerTypeString(content::DownloadDangerType danger_type) {
 
 // TODO(dbeam): if useful elsewhere, move to base/i18n/time_formatting.h?
 base::string16 TimeFormatLongDate(const base::Time& time) {
-  scoped_ptr<icu::DateFormat> formatter(
+  std::unique_ptr<icu::DateFormat> formatter(
       icu::DateFormat::createDateInstance(icu::DateFormat::kLong));
   icu::UnicodeString date_string;
   formatter->format(static_cast<UDate>(time.ToDoubleT() * 1000), date_string);
@@ -185,7 +185,8 @@ DownloadsListTracker::DownloadsListTracker(
   Init();
 }
 
-scoped_ptr<base::DictionaryValue> DownloadsListTracker::CreateDownloadItemValue(
+std::unique_ptr<base::DictionaryValue>
+DownloadsListTracker::CreateDownloadItemValue(
     content::DownloadItem* download_item) const {
   // TODO(asanka): Move towards using download_model here for getting status and
   // progress. The difference currently only matters to Drive downloads and
@@ -196,7 +197,7 @@ scoped_ptr<base::DictionaryValue> DownloadsListTracker::CreateDownloadItemValue(
   // chrome/browser/resources/downloads/downloads.js in @typedef for
   // BackendDownloadObject. Please update it whenever you add or remove
   // any keys in file_value.
-  scoped_ptr<base::DictionaryValue> file_value(new base::DictionaryValue);
+  std::unique_ptr<base::DictionaryValue> file_value(new base::DictionaryValue);
 
   file_value->SetInteger(
       "started", static_cast<int>(download_item->GetStartTime().ToTimeT()));
@@ -278,7 +279,11 @@ scoped_ptr<base::DictionaryValue> DownloadsListTracker::CreateDownloadItemValue(
       if (download_item->CanResume())
         percent = download_item->PercentComplete();
 
-      last_reason_text = download_model.GetInterruptReasonText();
+      // TODO(asanka): last_reason_text should be set via
+      // download_model.GetInterruptReasonText(). But we are using
+      // GetStatusText() as a temporary measure until the layout is fixed to
+      // accommodate the longer string. http://crbug.com/609255
+      last_reason_text = download_model.GetStatusText();
       if (content::DOWNLOAD_INTERRUPT_REASON_CRASH ==
           download_item->GetLastReason() && !download_item->CanResume()) {
         retry = true;

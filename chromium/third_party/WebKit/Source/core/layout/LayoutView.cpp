@@ -323,10 +323,8 @@ LayoutRect LayoutView::visualOverflowRect() const
     return LayoutRect(documentRect());
 }
 
-void LayoutView::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags mode, bool* wasFixed, const PaintInvalidationState* paintInvalidationState) const
+void LayoutView::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags mode) const
 {
-    ASSERT_UNUSED(wasFixed, !wasFixed || *wasFixed == static_cast<bool>(mode & IsFixed));
-
     if (!ancestor && mode & UseTransforms && shouldUseTransformFromContainer(0)) {
         TransformationMatrix t;
         getTransformFromContainer(0, LayoutSize(), t);
@@ -346,10 +344,16 @@ void LayoutView::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, Transf
 
     if (mode & TraverseDocumentBoundaries) {
         if (LayoutPart* parentDocLayoutObject = frame()->ownerLayoutObject()) {
-            transformState.move(-frame()->view()->scrollOffset());
+            if (!(mode & InputIsInFrameCoordinates)) {
+                transformState.move(-frame()->view()->scrollOffset());
+            } else {
+                // The flag applies to immediate LayoutView only.
+                mode &= ~InputIsInFrameCoordinates;
+            }
+
             transformState.move(parentDocLayoutObject->contentBoxOffset());
 
-            parentDocLayoutObject->mapLocalToAncestor(ancestor, transformState, mode, wasFixed, paintInvalidationState);
+            parentDocLayoutObject->mapLocalToAncestor(ancestor, transformState, mode);
         }
     }
 }
@@ -376,7 +380,7 @@ const LayoutObject* LayoutView::pushMappingToContainer(const LayoutBoxModelObjec
 
     // If a container was specified, and was not 0 or the LayoutView, then we
     // should have found it by now unless we're traversing to a parent document.
-    ASSERT_ARG(ancestorToStopAt, !ancestorToStopAt || ancestorToStopAt == this || container);
+    DCHECK(!ancestorToStopAt || ancestorToStopAt == this || container);
 
     if ((!ancestorToStopAt || container) && shouldUseTransformFromContainer(container)) {
         TransformationMatrix t;
@@ -389,8 +393,11 @@ const LayoutObject* LayoutView::pushMappingToContainer(const LayoutBoxModelObjec
     return container;
 }
 
-void LayoutView::mapAbsoluteToLocalPoint(MapCoordinatesFlags mode, TransformState& transformState) const
+void LayoutView::mapAncestorToLocal(const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags mode) const
 {
+    if (this == ancestor)
+        return;
+
     if (mode & IsFixed && m_frameView)
         transformState.move(toIntSize(m_frameView->scrollPosition()));
 
@@ -402,10 +409,15 @@ void LayoutView::mapAbsoluteToLocalPoint(MapCoordinatesFlags mode, TransformStat
 
     if (mode & TraverseDocumentBoundaries) {
         if (LayoutPart* parentDocLayoutObject = frame()->ownerLayoutObject()) {
-            parentDocLayoutObject->mapAbsoluteToLocalPoint(mode, transformState);
+            // A LayoutView is a containing block for fixed-position elements, so don't carry this state across frames.
+            mode &= ~IsFixed;
+
+            parentDocLayoutObject->mapAncestorToLocal(ancestor, transformState, mode);
             transformState.move(parentDocLayoutObject->contentBoxOffset());
             transformState.move(-frame()->view()->scrollOffset());
         }
+    } else {
+        ASSERT(!ancestor);
     }
 }
 
@@ -427,7 +439,7 @@ void LayoutView::paintBoxDecorationBackground(const PaintInfo& paintInfo, const 
     ViewPainter(*this).paintBoxDecorationBackground(paintInfo);
 }
 
-void LayoutView::invalidateTreeIfNeeded(PaintInvalidationState& paintInvalidationState)
+void LayoutView::invalidateTreeIfNeeded(const PaintInvalidationState& paintInvalidationState)
 {
     ASSERT(!needsLayout());
 
@@ -436,7 +448,7 @@ void LayoutView::invalidateTreeIfNeeded(PaintInvalidationState& paintInvalidatio
     LayoutRect dirtyRect = viewRect();
     if (doingFullPaintInvalidation() && !dirtyRect.isEmpty()) {
         const LayoutBoxModelObject& paintInvalidationContainer = paintInvalidationState.paintInvalidationContainer();
-        PaintLayer::mapRectToPaintInvalidationBacking(this, &paintInvalidationContainer, dirtyRect, &paintInvalidationState);
+        paintInvalidationState.mapLocalRectToPaintInvalidationBacking(dirtyRect);
         invalidatePaintUsingContainer(paintInvalidationContainer, dirtyRect, PaintInvalidationFull);
         invalidateDisplayItemClientsWithPaintInvalidationState(paintInvalidationContainer, paintInvalidationState, PaintInvalidationFull);
     }
@@ -458,7 +470,7 @@ void LayoutView::setShouldDoFullPaintInvalidationForViewAndAllDescendants()
 
 void LayoutView::invalidatePaintForViewAndCompositedLayers()
 {
-    setShouldDoFullPaintInvalidation();
+    setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
 
     // The only way we know how to hit these ASSERTS below this point is via the Chromium OS login screen.
     DisableCompositingQueryAsserts disabler;
@@ -467,26 +479,21 @@ void LayoutView::invalidatePaintForViewAndCompositedLayers()
         compositor()->fullyInvalidatePaint();
 }
 
-void LayoutView::mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, const PaintInvalidationState* invalidationState) const
+bool LayoutView::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, VisualRectFlags visualRectFlags) const
 {
-    mapToVisibleRectInAncestorSpace(ancestor, rect, IsNotFixedPosition, invalidationState);
+    return mapToVisualRectInAncestorSpace(ancestor, rect, 0, visualRectFlags);
 }
 
-void LayoutView::mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, ViewportConstrainedPosition viewportConstraint, const PaintInvalidationState* state) const
+bool LayoutView::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, MapCoordinatesFlags mode, VisualRectFlags visualRectFlags) const
 {
     if (document().printing())
-        return;
+        return true;
 
-    if (style()->isFlippedBlocksWritingMode()) {
-        // We have to flip by hand since the view's logical height has not been determined.  We
-        // can use the viewport width and height.
-        if (style()->isHorizontalWritingMode())
-            rect.setY(viewHeight() - rect.maxY());
-        else
-            rect.setX(viewWidth() - rect.maxX());
-    }
+    // Convert the rect into the physical coordinates space of this LayoutView.
+    flipForWritingMode(rect);
 
-    adjustViewportConstrainedOffset(rect, viewportConstraint);
+    if (mode & IsFixed)
+        adjustOffsetForFixedPosition(rect);
 
     // Apply our transform if we have one (because of full page zooming).
     if (!ancestor && layer() && layer()->transform())
@@ -494,33 +501,41 @@ void LayoutView::mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* anc
 
     ASSERT(ancestor);
     if (ancestor == this)
-        return;
+        return true;
 
     Element* owner = document().ownerElement();
     if (!owner)
-        return;
+        return true;
 
     if (LayoutBox* obj = owner->layoutBox()) {
-        if (!state || !state->viewClippingAndScrollOffsetDisabled()) {
+        if (!(mode & InputIsInFrameCoordinates)) {
             // Intersect the viewport with the paint invalidation rect.
             LayoutRect viewRectangle = viewRect();
-            rect.intersect(viewRectangle);
+            if (visualRectFlags & EdgeInclusive) {
+                if (!rect.inclusiveIntersect(viewRectangle))
+                    return false;
+            } else {
+                rect.intersect(viewRectangle);
+            }
 
             // Adjust for scroll offset of the view.
             rect.moveBy(-viewRectangle.location());
         }
+        // Frames are painted at rounded-int position. Since we cannot efficiently compute the subpixel offset
+        // of painting at this point in a a bottom-up walk, round to the enclosing int rect, which will enclose
+        // the actual visible rect.
+        rect = LayoutRect(enclosingIntRect(rect));
 
         // Adjust for frame border.
         rect.move(obj->contentBoxOffset());
-        obj->mapToVisibleRectInAncestorSpace(ancestor, rect, 0);
+        return obj->mapToVisualRectInAncestorSpace(ancestor, rect, visualRectFlags);
     }
+
+    return true;
 }
 
-void LayoutView::adjustViewportConstrainedOffset(LayoutRect& rect, ViewportConstrainedPosition viewportConstraint) const
+void LayoutView::adjustOffsetForFixedPosition(LayoutRect& rect) const
 {
-    if (viewportConstraint != IsFixedPosition)
-        return;
-
     if (m_frameView) {
         rect.move(toIntSize(m_frameView->scrollPosition()));
         if (hasOverflowClip())
@@ -540,10 +555,8 @@ void LayoutView::absoluteRects(Vector<IntRect>& rects, const LayoutPoint& accumu
     rects.append(pixelSnappedIntRect(accumulatedOffset, LayoutSize(layer()->size())));
 }
 
-void LayoutView::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed) const
+void LayoutView::absoluteQuads(Vector<FloatQuad>& quads) const
 {
-    if (wasFixed)
-        *wasFixed = false;
     quads.append(FloatRect(FloatPoint(), FloatSize(layer()->size())));
 }
 
@@ -1001,6 +1014,28 @@ void LayoutView::sendMediaPositionChangeNotifications(const IntRect& visibleRect
     for (auto& media : m_mediaForPositionNotification) {
         media->notifyPositionMayHaveChanged(visibleRect);
     }
+}
+
+void LayoutView::updateFromStyle()
+{
+    LayoutBlockFlow::updateFromStyle();
+
+    // LayoutView of the main frame is responsible for painting base background.
+    if (!document().ownerElement())
+        setHasBoxDecorationBackground(true);
+}
+
+bool LayoutView::allowsOverflowClip() const
+{
+    return document().settings() && document().settings()->rootLayerScrolls();
+}
+
+ScrollResult LayoutView::scroll(ScrollGranularity granularity, const FloatSize& delta)
+{
+    if (!frameView())
+        return ScrollResult();
+
+    return frame()->applyScrollDelta(granularity, delta, false);
 }
 
 } // namespace blink

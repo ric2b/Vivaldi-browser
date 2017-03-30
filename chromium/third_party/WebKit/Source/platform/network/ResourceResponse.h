@@ -172,10 +172,10 @@ public:
     bool hasMajorCertificateErrors() const { return m_hasMajorCertificateErrors; }
     void setHasMajorCertificateErrors(bool hasMajorCertificateErrors) { m_hasMajorCertificateErrors = hasMajorCertificateErrors; }
 
-    SecurityStyle securityStyle() const { return m_securityStyle; }
+    SecurityStyle getSecurityStyle() const { return m_securityStyle; }
     void setSecurityStyle(SecurityStyle securityStyle) { m_securityStyle = securityStyle; }
 
-    const SecurityDetails* securityDetails() const { return &m_securityDetails; }
+    const SecurityDetails* getSecurityDetails() const { return &m_securityDetails; }
     void setSecurityDetails(const String& protocol, const String& keyExchange, const String& cipher, const String& mac, int certId, size_t numUnknownScts, size_t numInvalidScts, size_t numValidScts);
 
     long long appCacheID() const { return m_appCacheID; }
@@ -214,8 +214,15 @@ public:
     const KURL& originalURLViaServiceWorker() const { return m_originalURLViaServiceWorker; }
     void setOriginalURLViaServiceWorker(const KURL& url) { m_originalURLViaServiceWorker = url; }
 
-    bool isMultipartPayload() const { return m_isMultipartPayload; }
-    void setIsMultipartPayload(bool value) { m_isMultipartPayload = value; }
+    const Vector<char>& multipartBoundary() const { return m_multipartBoundary; }
+    void setMultipartBoundary(const char* bytes, size_t size)
+    {
+        m_multipartBoundary.clear();
+        m_multipartBoundary.append(bytes, size);
+    }
+
+    const String& cacheStorageCacheName() const { return m_cacheStorageCacheName; }
+    void setCacheStorageCacheName(const String& cacheStorageCacheName) { m_cacheStorageCacheName = cacheStorageCacheName; }
 
     int64_t responseTime() const { return m_responseTime; }
     void setResponseTime(int64_t responseTime) { m_responseTime = responseTime; }
@@ -230,7 +237,7 @@ public:
     void setDownloadedFilePath(const String&);
 
     // Extra data associated with this response.
-    ExtraData* extraData() const { return m_extraData.get(); }
+    ExtraData* getExtraData() const { return m_extraData.get(); }
     void setExtraData(PassRefPtr<ExtraData> extraData) { m_extraData = extraData; }
 
     // The ResourceResponse subclass may "shadow" this method to provide platform-specific memory usage information
@@ -305,8 +312,8 @@ private:
     // Note: only valid for main resource responses.
     KURL m_appCacheManifestURL;
 
-    // Set to true if this is part of a multipart response.
-    bool m_isMultipartPayload;
+    // The multipart boundary of this response.
+    Vector<char> m_multipartBoundary;
 
     // Was the resource fetched over SPDY.  See http://dev.chromium.org/spdy
     bool m_wasFetchedViaSPDY;
@@ -333,6 +340,10 @@ private:
     // The original URL of the response which was fetched by the ServiceWorker.
     // This may be empty if the response was created inside the ServiceWorker.
     KURL m_originalURLViaServiceWorker;
+
+    // The cache name of the CacheStorage from where the response is served via
+    // the ServiceWorker. Null if the response isn't from the CacheStorage.
+    String m_cacheStorageCacheName;
 
     // The time at which the response headers were received.  For cached
     // responses, this time could be "far" in the past.
@@ -379,7 +390,7 @@ public:
     ResourceResponse::HTTPVersion m_httpVersion;
     long long m_appCacheID;
     KURL m_appCacheManifestURL;
-    bool m_isMultipartPayload;
+    Vector<char> m_multipartBoundary;
     bool m_wasFetchedViaSPDY;
     bool m_wasNpnNegotiated;
     bool m_wasAlternateProtocolAvailable;
@@ -388,6 +399,7 @@ public:
     bool m_wasFallbackRequiredByServiceWorker;
     WebServiceWorkerResponseType m_serviceWorkerResponseType;
     KURL m_originalURLViaServiceWorker;
+    String m_cacheStorageCacheName;
     int64_t m_responseTime;
     String m_remoteIPAddress;
     unsigned short m_remotePort;

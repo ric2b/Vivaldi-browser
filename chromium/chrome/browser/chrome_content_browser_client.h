@@ -57,6 +57,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void PostAfterStartupTask(const tracked_objects::Location& from_here,
                             const scoped_refptr<base::TaskRunner>& task_runner,
                             const base::Closure& task) override;
+  bool IsBrowserStartupComplete() override;
   std::string GetStoragePartitionIdForSite(
       content::BrowserContext* browser_context,
       const GURL& site) override;
@@ -85,16 +86,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void GetAdditionalWebUIHostsToIgnoreParititionCheck(
       std::vector<std::string>* hosts) override;
   bool LogWebUIUrl(const GURL& web_ui_url) const override;
-  net::URLRequestContextGetter* CreateRequestContext(
-      content::BrowserContext* browser_context,
-      content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors) override;
-  net::URLRequestContextGetter* CreateRequestContextForStoragePartition(
-      content::BrowserContext* browser_context,
-      const base::FilePath& partition_path,
-      bool in_memory,
-      content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors) override;
   bool IsHandledURL(const GURL& url) override;
   bool CanCommitURL(content::RenderProcessHost* process_host,
                     const GURL& url) override;
@@ -150,12 +141,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                       int render_frame_id,
                       const net::CookieOptions& options) override;
   bool AllowSaveLocalState(content::ResourceContext* context) override;
-  bool AllowWorkerDatabase(
-      const GURL& url,
-      const base::string16& name,
-      const base::string16& display_name,
-      content::ResourceContext* context,
-      const std::vector<std::pair<int, int>>& render_frames) override;
   void AllowWorkerFileSystem(
       const GURL& url,
       content::ResourceContext* context,
@@ -166,18 +151,17 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const base::string16& name,
       content::ResourceContext* context,
       const std::vector<std::pair<int, int>>& render_frames) override;
-
 #if defined(ENABLE_WEBRTC)
   bool AllowWebRTCIdentityCache(const GURL& url,
                                 const GURL& first_party_url,
                                 content::ResourceContext* context) override;
 #endif  // defined(ENABLE_WEBRTC)
-
   bool AllowKeygen(const GURL& url, content::ResourceContext* context) override;
-  bool AllowWebBluetooth(content::BrowserContext* browser_context,
-                         const url::Origin& requesting_origin,
-                         const url::Origin& embedding_origin) override;
-
+  AllowWebBluetoothResult AllowWebBluetooth(
+      content::BrowserContext* browser_context,
+      const url::Origin& requesting_origin,
+      const url::Origin& embedding_origin) override;
+  std::string GetWebBluetoothBlacklist() override;
   net::URLRequestContext* OverrideRequestContextForURL(
       const GURL& url,
       content::ResourceContext* context) override;

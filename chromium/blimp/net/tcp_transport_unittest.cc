@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "blimp/common/create_blimp_message.h"
 #include "blimp/common/proto/blimp_message.pb.h"
@@ -35,14 +35,14 @@ class TCPTransportTest : public testing::Test {
     engine_.reset(new TCPEngineTransport(local_address, nullptr));
   }
 
-  net::AddressList GetLocalAddressList() const {
+  net::IPEndPoint GetLocalEndpoint() const {
     net::IPEndPoint local_address;
-    engine_->GetLocalAddressForTesting(&local_address);
-    return net::AddressList(local_address);
+    CHECK_EQ(net::OK, engine_->GetLocalAddressForTesting(&local_address));
+    return local_address;
   }
 
   base::MessageLoopForIO message_loop_;
-  scoped_ptr<TCPEngineTransport> engine_;
+  std::unique_ptr<TCPEngineTransport> engine_;
 };
 
 TEST_F(TCPTransportTest, Connect) {
@@ -50,7 +50,7 @@ TEST_F(TCPTransportTest, Connect) {
   engine_->Connect(accept_callback.callback());
 
   net::TestCompletionCallback connect_callback;
-  TCPClientTransport client(GetLocalAddressList(), nullptr);
+  TCPClientTransport client(GetLocalEndpoint(), nullptr);
   client.Connect(connect_callback.callback());
 
   EXPECT_EQ(net::OK, connect_callback.WaitForResult());
@@ -63,11 +63,11 @@ TEST_F(TCPTransportTest, TwoClientConnections) {
   engine_->Connect(accept_callback1.callback());
 
   net::TestCompletionCallback connect_callback1;
-  TCPClientTransport client1(GetLocalAddressList(), nullptr);
+  TCPClientTransport client1(GetLocalEndpoint(), nullptr);
   client1.Connect(connect_callback1.callback());
 
   net::TestCompletionCallback connect_callback2;
-  TCPClientTransport client2(GetLocalAddressList(), nullptr);
+  TCPClientTransport client2(GetLocalEndpoint(), nullptr);
   client2.Connect(connect_callback2.callback());
 
   EXPECT_EQ(net::OK, connect_callback1.WaitForResult());
@@ -86,7 +86,7 @@ TEST_F(TCPTransportTest, ExchangeMessages) {
   net::TestCompletionCallback accept_callback;
   engine_->Connect(accept_callback.callback());
   net::TestCompletionCallback client_connect_callback;
-  TCPClientTransport client(GetLocalAddressList(), nullptr /* NetLog */);
+  TCPClientTransport client(GetLocalEndpoint(), nullptr /* NetLog */);
   client.Connect(client_connect_callback.callback());
   EXPECT_EQ(net::OK, client_connect_callback.WaitForResult());
   EXPECT_EQ(net::OK, accept_callback.WaitForResult());
@@ -96,10 +96,11 @@ TEST_F(TCPTransportTest, ExchangeMessages) {
   MockBlimpMessageProcessor engine_incoming_processor;
   MockBlimpMessageProcessor client_incoming_processor;
   net::CompletionCallback engine_process_message_cb;
-  scoped_ptr<BlimpMessage> client_message1 =
+  std::unique_ptr<BlimpMessage> client_message1 =
       CreateStartConnectionMessage("", 0);
-  scoped_ptr<BlimpMessage> client_message2 = CreateCheckpointAckMessage(5);
-  scoped_ptr<BlimpMessage> engine_message = CreateCheckpointAckMessage(10);
+  int client_message1_size = client_message1->ByteSize();
+  std::unique_ptr<BlimpMessage> client_message2 = CreateCheckpointAckMessage(5);
+  std::unique_ptr<BlimpMessage> engine_message = CreateCheckpointAckMessage(10);
   EXPECT_CALL(engine_incoming_processor,
               MockableProcessMessage(EqualsProto(*client_message1), _))
       .WillOnce(SaveArg<1>(&engine_process_message_cb));
@@ -111,8 +112,9 @@ TEST_F(TCPTransportTest, ExchangeMessages) {
       .Times(1);
 
   // Attach the ends of the connection to our mock message-processors.
-  scoped_ptr<BlimpConnection> engine_connnection = engine_->TakeConnection();
-  scoped_ptr<BlimpConnection> client_connnection = client.TakeConnection();
+  std::unique_ptr<BlimpConnection> engine_connnection =
+      engine_->TakeConnection();
+  std::unique_ptr<BlimpConnection> client_connnection = client.TakeConnection();
   engine_connnection->SetIncomingMessageProcessor(&engine_incoming_processor);
   client_connnection->SetIncomingMessageProcessor(&client_incoming_processor);
 
@@ -124,7 +126,7 @@ TEST_F(TCPTransportTest, ExchangeMessages) {
 
   // Engine finishes processing the client message.
   EXPECT_FALSE(engine_process_message_cb.is_null());
-  engine_process_message_cb.Run(net::OK);
+  engine_process_message_cb.Run(client_message1_size);
 
   // Engine sends one message.
   net::TestCompletionCallback engine_send_callback;

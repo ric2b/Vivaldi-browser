@@ -65,7 +65,7 @@ public:
 
     // WorkerReportingProxy overrides.
     void reportException(const String& errorMessage, int lineNumber, int columnNumber, const String& sourceURL, int exceptionId) override;
-    void reportConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>) override;
+    void reportConsoleMessage(ConsoleMessage*) override;
     void postMessageToPageInspector(const String&) override;
     void postWorkerConsoleAgentEnabled() override;
     void didEvaluateWorkerScript(bool success) override { }
@@ -76,7 +76,7 @@ public:
 
 protected:
     WorkerObjectProxy(WorkerMessagingProxy*);
-    virtual ExecutionContext* executionContext();
+    virtual ExecutionContext* getExecutionContext();
 
 private:
     // This object always outlives this proxy.

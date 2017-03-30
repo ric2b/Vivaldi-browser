@@ -35,6 +35,7 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/UseCounter.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLHeadElement.h"
@@ -56,9 +57,9 @@ using namespace HTMLNames;
 
 class ImageEventListener : public EventListener {
 public:
-    static PassRefPtrWillBeRawPtr<ImageEventListener> create(ImageDocument* document)
+    static RawPtr<ImageEventListener> create(ImageDocument* document)
     {
-        return adoptRefWillBeNoop(new ImageEventListener(document));
+        return new ImageEventListener(document);
     }
     static const ImageEventListener* cast(const EventListener* listener)
     {
@@ -84,14 +85,14 @@ private:
 
     virtual void handleEvent(ExecutionContext*, Event*);
 
-    RawPtrWillBeMember<ImageDocument> m_doc;
+    Member<ImageDocument> m_doc;
 };
 
 class ImageDocumentParser : public RawDataDocumentParser {
 public:
-    static PassRefPtrWillBeRawPtr<ImageDocumentParser> create(ImageDocument* document)
+    static RawPtr<ImageDocumentParser> create(ImageDocument* document)
     {
-        return adoptRefWillBeNoop(new ImageDocumentParser(document));
+        return new ImageDocumentParser(document);
     }
 
     ImageDocument* document() const
@@ -103,6 +104,7 @@ private:
     ImageDocumentParser(ImageDocument* document)
         : RawDataDocumentParser(document)
     {
+        UseCounter::count(document, UseCounter::ImageDocument);
     }
 
     void appendBytes(const char*, size_t) override;
@@ -194,14 +196,14 @@ ImageDocument::ImageDocument(const DocumentInit& initializer)
     lockCompatibilityMode();
 }
 
-PassRefPtrWillBeRawPtr<DocumentParser> ImageDocument::createParser()
+RawPtr<DocumentParser> ImageDocument::createParser()
 {
     return ImageDocumentParser::create(this);
 }
 
-void ImageDocument::createDocumentStructure(bool loadingMultipartContent)
+void ImageDocument::createDocumentStructure()
 {
-    RefPtrWillBeRawPtr<HTMLHtmlElement> rootElement = HTMLHtmlElement::create(*this);
+    RawPtr<HTMLHtmlElement> rootElement = HTMLHtmlElement::create(*this);
     appendChild(rootElement);
     rootElement->insertedByParser();
 
@@ -209,21 +211,14 @@ void ImageDocument::createDocumentStructure(bool loadingMultipartContent)
     frame()->loader().runScriptsAtDocumentElementAvailable();
     if (isStopped())
         return; // runScriptsAtDocumentElementAvailable can detach the frame.
-    // Normally, ImageDocument creates an HTMLImageElement that doesn't actually load
-    // anything, and the ImageDocument routes the main resource data into the HTMLImageElement's
-    // ImageResource. However, the main resource pipeline doesn't know how to handle multipart content.
-    // For multipart content, we instead stop streaming data through the main resource and re-request
-    // the data directly.
-    if (loadingMultipartContent)
-        loader()->stopLoading();
 
-    RefPtrWillBeRawPtr<HTMLHeadElement> head = HTMLHeadElement::create(*this);
-    RefPtrWillBeRawPtr<HTMLMetaElement> meta = HTMLMetaElement::create(*this);
+    RawPtr<HTMLHeadElement> head = HTMLHeadElement::create(*this);
+    RawPtr<HTMLMetaElement> meta = HTMLMetaElement::create(*this);
     meta->setAttribute(nameAttr, "viewport");
     meta->setAttribute(contentAttr, "width=device-width, minimum-scale=0.1");
     head->appendChild(meta);
 
-    RefPtrWillBeRawPtr<HTMLBodyElement> body = HTMLBodyElement::create(*this);
+    RawPtr<HTMLBodyElement> body = HTMLBodyElement::create(*this);
     body->setAttribute(styleAttr, "margin: 0px;");
 
     frame()->loader().client()->dispatchWillInsertBody();
@@ -237,16 +232,15 @@ void ImageDocument::createDocumentStructure(bool loadingMultipartContent)
                                              right: 0px;\
                                              bottom: 0px;\
                                              left: 0px;");
-    // If the image is multipart, we neglect to mention to the HTMLImageElement that it's in an
-    // ImageDocument, so that it requests the image normally.
-    if (!loadingMultipartContent)
-        m_imageElement->setLoadingImageDocument();
-    m_imageElement->setSrc(url().string());
+    m_imageElement->setLoadingImageDocument();
+    m_imageElement->setSrc(url().getString());
     body->appendChild(m_imageElement.get());
+    if (loader() && m_imageElement->cachedImage())
+        m_imageElement->cachedImage()->responseReceived(loader()->response(), nullptr);
 
     if (shouldShrinkToFit()) {
         // Add event listeners
-        RefPtrWillBeRawPtr<EventListener> listener = ImageEventListener::create(this);
+        RawPtr<EventListener> listener = ImageEventListener::create(this);
         if (LocalDOMWindow* domWindow = this->domWindow())
             domWindow->addEventListener("resize", listener, false);
         if (m_shrinkToFitMode == Desktop)
@@ -255,8 +249,6 @@ void ImageDocument::createDocumentStructure(bool loadingMultipartContent)
 
     rootElement->appendChild(head);
     rootElement->appendChild(body);
-    if (loadingMultipartContent)
-        finishedParsing();
 }
 
 float ImageDocument::scale() const
@@ -431,16 +423,15 @@ void ImageDocument::windowSizeChanged(ScaleType type)
 
 ImageResource* ImageDocument::cachedImage()
 {
-    bool loadingMultipartContent = loader() && loader()->loadingMultipartContent();
     if (!m_imageElement) {
-        createDocumentStructure(loadingMultipartContent);
+        createDocumentStructure();
         if (isStopped()) {
             m_imageElement = nullptr;
             return nullptr;
         }
     }
 
-    return loadingMultipartContent ? nullptr : m_imageElement->cachedImage();
+    return m_imageElement->cachedImage();
 }
 
 bool ImageDocument::shouldShrinkToFit() const

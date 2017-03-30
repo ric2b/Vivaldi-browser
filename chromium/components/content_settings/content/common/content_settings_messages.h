@@ -5,10 +5,9 @@
 // Multiply-included file, no traditional include guard.
 #include "base/strings/string16.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "content/public/common/common_param_traits.h"
-#include "content/public/common/common_param_traits_macros.h"
 #include "ipc/ipc_message_macros.h"
 #include "url/gurl.h"
+#include "url/ipc/url_param_traits.h"
 
 #define IPC_MESSAGE_START ContentSettingsMsgStart
 
@@ -32,9 +31,6 @@ IPC_MESSAGE_ROUTED0(ChromeViewMsg_ReloadFrame)
 IPC_MESSAGE_ROUTED2(ChromeViewMsg_RequestFileSystemAccessAsyncResponse,
                     int  /* request_id */,
                     bool /* allowed */)
-
-// Tells the renderer that the NPAPI cannot be used. For example Ash on windows.
-IPC_MESSAGE_ROUTED0(ChromeViewMsg_NPAPINotSupported)
 
 // Tells the render frame to load all blocked plugins with the given identifier.
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_LoadBlockedPlugins,

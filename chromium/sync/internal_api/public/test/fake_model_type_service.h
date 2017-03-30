@@ -7,32 +7,30 @@
 
 #include <string>
 
-#include "base/memory/weak_ptr.h"
 #include "sync/api/data_batch.h"
 #include "sync/api/entity_change.h"
 #include "sync/api/metadata_batch.h"
 #include "sync/api/metadata_change_list.h"
 #include "sync/api/model_type_service.h"
+#include "sync/internal_api/public/shared_model_type_processor.h"
 
 namespace syncer_v2 {
 
 // A non-functional implementation of ModelTypeService for
 // testing purposes.
-class FakeModelTypeService
-    : public ModelTypeService,
-      public base::SupportsWeakPtr<FakeModelTypeService> {
+class FakeModelTypeService : public ModelTypeService {
  public:
   FakeModelTypeService();
   ~FakeModelTypeService() override;
 
-  scoped_ptr<MetadataChangeList> CreateMetadataChangeList() override;
+  std::unique_ptr<MetadataChangeList> CreateMetadataChangeList() override;
 
   syncer::SyncError MergeSyncData(
-      scoped_ptr<MetadataChangeList> metadata_change_list,
+      std::unique_ptr<MetadataChangeList> metadata_change_list,
       EntityDataMap entity_data_map) override;
 
   syncer::SyncError ApplySyncChanges(
-      scoped_ptr<MetadataChangeList> metadata_change_list,
+      std::unique_ptr<MetadataChangeList> metadata_change_list,
       EntityChangeList entity_changes) override;
 
   void GetData(ClientTagList client_tags, DataCallback callback) override;
@@ -42,6 +40,22 @@ class FakeModelTypeService
   std::string GetClientTag(const EntityData& entity_data) override;
 
   void OnChangeProcessorSet() override;
+
+  // TODO(gangwu): remove this and use overload constructor.
+  SharedModelTypeProcessor* SetUpProcessor(ModelTypeChangeProcessor* processor);
+
+ protected:
+  // The function will create ModelTypeChangeProcessor.
+  virtual ModelTypeChangeProcessor* CreateProcessorForTest(
+      syncer::ModelType type,
+      ModelTypeService* service);
+
+ private:
+  std::unique_ptr<ModelTypeChangeProcessor> CreateProcessorForTestWrapper(
+      syncer::ModelType type,
+      ModelTypeService* service);
+
+  syncer_v2::ModelTypeChangeProcessor* processor_;
 };
 
 }  // namespace syncer_v2

@@ -33,11 +33,12 @@ namespace net {
 
 class AuthCredentials;
 class BoundNetLog;
-class BidirectionalStreamJob;
+class BidirectionalStreamImpl;
 class HostMappingRules;
 class HostPortPair;
 class HttpAuthController;
 class HttpNetworkSession;
+class HttpResponseHeaders;
 class HttpResponseInfo;
 class HttpServerProperties;
 class HttpStream;
@@ -54,6 +55,12 @@ struct SSLConfig;
 // which no callbacks will be invoked.
 class NET_EXPORT_PRIVATE HttpStreamRequest {
  public:
+  // Indicates which type of stream is requested.
+  enum StreamType {
+    BIDIRECTIONAL_STREAM,
+    HTTP_STREAM,
+  };
+
   // The HttpStreamRequest::Delegate is a set of callback methods for a
   // HttpStreamRequestJob.  Generally, only one of these methods will be
   // called as a result of a stream request.
@@ -85,10 +92,10 @@ class NET_EXPORT_PRIVATE HttpStreamRequest {
         const ProxyInfo& used_proxy_info,
         WebSocketHandshakeStreamBase* stream) = 0;
 
-    virtual void OnBidirectionalStreamJobReady(
+    virtual void OnBidirectionalStreamImplReady(
         const SSLConfig& used_ssl_config,
         const ProxyInfo& used_proxy_info,
-        BidirectionalStreamJob* stream) = 0;
+        BidirectionalStreamImpl* stream) = 0;
 
     // This is the failure to create a stream case.
     // |used_ssl_config| indicates the actual SSL configuration used for this
@@ -194,17 +201,9 @@ class NET_EXPORT HttpStreamFactory {
  public:
   virtual ~HttpStreamFactory();
 
-  void ProcessAlternativeService(
-      const base::WeakPtr<HttpServerProperties>& http_server_properties,
-      base::StringPiece alternative_service_str,
-      const HostPortPair& http_host_port_pair,
-      const HttpNetworkSession& session);
-
-  void ProcessAlternateProtocol(
-      const base::WeakPtr<HttpServerProperties>& http_server_properties,
-      const std::vector<std::string>& alternate_protocol_values,
-      const HostPortPair& http_host_port_pair,
-      const HttpNetworkSession& session);
+  void ProcessAlternativeServices(HttpNetworkSession* session,
+                                  const HttpResponseHeaders* headers,
+                                  const HostPortPair& http_host_port_pair);
 
   GURL ApplyHostMappingRules(const GURL& url, HostPortPair* endpoint);
 
@@ -232,10 +231,10 @@ class NET_EXPORT HttpStreamFactory {
       WebSocketHandshakeStreamBase::CreateHelper* create_helper,
       const BoundNetLog& net_log) = 0;
 
-  // Request a BidirectionalStreamJob.
-  // Will call delegate->OnBidirectionalStreamJobReady on successful
+  // Request a BidirectionalStreamImpl.
+  // Will call delegate->OnBidirectionalStreamImplReady on successful
   // completion.
-  virtual HttpStreamRequest* RequestBidirectionalStreamJob(
+  virtual HttpStreamRequest* RequestBidirectionalStreamImpl(
       const HttpRequestInfo& info,
       RequestPriority priority,
       const SSLConfig& server_ssl_config,
@@ -268,6 +267,18 @@ class NET_EXPORT HttpStreamFactory {
   HttpStreamFactory();
 
  private:
+  void ProcessAlternativeService(
+      const base::WeakPtr<HttpServerProperties>& http_server_properties,
+      base::StringPiece alternative_service_str,
+      const HostPortPair& http_host_port_pair,
+      const HttpNetworkSession& session);
+
+  void ProcessAlternateProtocol(
+      const base::WeakPtr<HttpServerProperties>& http_server_properties,
+      const std::vector<std::string>& alternate_protocol_values,
+      const HostPortPair& http_host_port_pair,
+      const HttpNetworkSession& session);
+
   static bool spdy_enabled_;
 
   HostPortPair RewriteHost(HostPortPair host_port_pair);

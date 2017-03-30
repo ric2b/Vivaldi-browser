@@ -23,6 +23,11 @@
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
+#if DCHECK_IS_ON()
+#include "base/single_thread_task_runner.h"
+#include "base/thread_task_runner_handle.h"
+#endif
+
 namespace cc {
 
 namespace {
@@ -112,6 +117,14 @@ class SyncTokenClientImpl : public media::VideoFrame::SyncTokenClient {
   gpu::SyncToken sync_token_;
 };
 
+#if DCHECK_IS_ON()
+void OnVideoFrameDestruct(
+    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
+    const base::Closure& task) {
+  task_runner->PostTask(FROM_HERE, task);
+}
+#endif
+
 }  // namespace
 
 VideoResourceUpdater::PlaneResource::PlaneResource(
@@ -125,6 +138,9 @@ VideoResourceUpdater::PlaneResource::PlaneResource(
       mailbox(mailbox),
       ref_count(0),
       frame_ptr(nullptr),
+#if DCHECK_IS_ON()
+      destructed(false),
+#endif
       plane_index(0u) {
 }
 
@@ -135,9 +151,17 @@ bool VideoResourceUpdater::PlaneResourceMatchesUniqueID(
     const PlaneResource& plane_resource,
     const media::VideoFrame* video_frame,
     size_t plane_index) {
-  return plane_resource.frame_ptr == video_frame &&
-         plane_resource.plane_index == plane_index &&
-         plane_resource.timestamp == video_frame->timestamp();
+  bool matched = plane_resource.frame_ptr == video_frame &&
+                 plane_resource.plane_index == plane_index &&
+                 plane_resource.timestamp == video_frame->timestamp();
+#if DCHECK_IS_ON()
+  if ((plane_index == 0) && matched) {
+    DCHECK(!plane_resource.destructed)
+        << "ERROR: reused the destructed resource."
+        << " timestamp = " << plane_resource.timestamp;
+  }
+#endif
+  return matched;
 }
 
 void VideoResourceUpdater::SetPlaneResourceUniqueId(
@@ -147,6 +171,9 @@ void VideoResourceUpdater::SetPlaneResourceUniqueId(
   plane_resource->frame_ptr = video_frame;
   plane_resource->plane_index = plane_index;
   plane_resource->timestamp = video_frame->timestamp();
+#if DCHECK_IS_ON()
+  plane_resource->destructed = false;
+#endif
 }
 
 VideoFrameExternalResources::VideoFrameExternalResources()
@@ -209,9 +236,9 @@ void VideoResourceUpdater::DeleteResource(ResourceList::iterator resource_it) {
   all_resources_.erase(resource_it);
 }
 
-VideoFrameExternalResources VideoResourceUpdater::
-    CreateExternalResourcesFromVideoFrame(
-        const scoped_refptr<media::VideoFrame>& video_frame) {
+VideoFrameExternalResources
+VideoResourceUpdater::CreateExternalResourcesFromVideoFrame(
+    scoped_refptr<media::VideoFrame> video_frame) {
 #if defined(VIDEO_HOLE)
   if (video_frame->storage_type() == media::VideoFrame::STORAGE_HOLE) {
     VideoFrameExternalResources external_resources;
@@ -223,17 +250,16 @@ VideoFrameExternalResources VideoResourceUpdater::
     return VideoFrameExternalResources();
   DCHECK(video_frame->HasTextures() || video_frame->IsMappable());
   if (video_frame->HasTextures())
-    return CreateForHardwarePlanes(video_frame);
+    return CreateForHardwarePlanes(std::move(video_frame));
   else
-    return CreateForSoftwarePlanes(video_frame);
+    return CreateForSoftwarePlanes(std::move(video_frame));
 }
 
 // For frames that we receive in software format, determine the dimensions of
 // each plane in the frame.
-static gfx::Size SoftwarePlaneDimension(
-    const scoped_refptr<media::VideoFrame>& input_frame,
-    bool software_compositor,
-    size_t plane_index) {
+static gfx::Size SoftwarePlaneDimension(media::VideoFrame* input_frame,
+                                        bool software_compositor,
+                                        size_t plane_index) {
   gfx::Size coded_size = input_frame->coded_size();
   if (software_compositor)
     return coded_size;
@@ -246,7 +272,7 @@ static gfx::Size SoftwarePlaneDimension(
 }
 
 VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
-    const scoped_refptr<media::VideoFrame>& video_frame) {
+    scoped_refptr<media::VideoFrame> video_frame) {
   TRACE_EVENT0("cc", "VideoResourceUpdater::CreateForSoftwarePlanes");
   const media::VideoPixelFormat input_frame_format = video_frame->format();
 
@@ -319,7 +345,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
   std::vector<ResourceList::iterator> plane_resources;
   for (size_t i = 0; i < output_plane_count; ++i) {
     gfx::Size output_plane_resource_size =
-        SoftwarePlaneDimension(video_frame, software_compositor, i);
+        SoftwarePlaneDimension(video_frame.get(), software_compositor, i);
     if (output_plane_resource_size.IsEmpty() ||
         output_plane_resource_size.width() > max_resource_size ||
         output_plane_resource_size.height() > max_resource_size) {
@@ -394,6 +420,14 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
       // by software.
       video_renderer_->Copy(video_frame, &canvas, media::Context3D());
       SetPlaneResourceUniqueId(video_frame.get(), 0, &plane_resource);
+#if DCHECK_IS_ON()
+      // Add VideoFrame destructor callback.
+      video_frame->AddDestructionObserver(base::Bind(
+          &OnVideoFrameDestruct, base::ThreadTaskRunnerHandle::Get(),
+          base::Bind(&VideoResourceUpdater::MarkOldResource, AsWeakPtr(),
+                     base::Unretained(video_frame.get()),
+                     video_frame->timestamp())));
+#endif
     }
 
     external_resources.software_resources.push_back(plane_resource.resource_id);
@@ -489,6 +523,16 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
       resource_provider_->CopyToResource(plane_resource.resource_id, pixels,
                                          resource_size_pixels);
       SetPlaneResourceUniqueId(video_frame.get(), i, &plane_resource);
+#if DCHECK_IS_ON()
+      // Add VideoFrame destructor callback.
+      if (i == 0) {
+        video_frame->AddDestructionObserver(base::Bind(
+            &OnVideoFrameDestruct, base::ThreadTaskRunnerHandle::Get(),
+            base::Bind(&VideoResourceUpdater::MarkOldResource, AsWeakPtr(),
+                       base::Unretained(video_frame.get()),
+                       video_frame->timestamp())));
+      }
+#endif
     }
 
     if (plane_resource.resource_format == LUMINANCE_F16) {
@@ -548,7 +592,7 @@ void VideoResourceUpdater::ReturnTexture(
 // Create a copy of a texture-backed source video frame in a new GL_TEXTURE_2D
 // texture.
 void VideoResourceUpdater::CopyPlaneTexture(
-    const scoped_refptr<media::VideoFrame>& video_frame,
+    media::VideoFrame* video_frame,
     const gpu::MailboxHolder& mailbox_holder,
     VideoFrameExternalResources* external_resources) {
   gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
@@ -611,14 +655,14 @@ void VideoResourceUpdater::CopyPlaneTexture(
 
   external_resources->mailboxes.push_back(
       TextureMailbox(resource->mailbox, sync_token, GL_TEXTURE_2D,
-                     video_frame->coded_size(), false));
+                     video_frame->coded_size(), false, false));
 
   external_resources->release_callbacks.push_back(
       base::Bind(&RecycleResource, AsWeakPtr(), resource->resource_id));
 }
 
 VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
-    const scoped_refptr<media::VideoFrame>& video_frame) {
+    scoped_refptr<media::VideoFrame> video_frame) {
   TRACE_EVENT0("cc", "VideoResourceUpdater::CreateForHardwarePlanes");
   DCHECK(video_frame->HasTextures());
   if (!context_provider_)
@@ -645,13 +689,14 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
 
     if (video_frame->metadata()->IsTrue(
             media::VideoFrameMetadata::COPY_REQUIRED)) {
-      CopyPlaneTexture(video_frame, mailbox_holder, &external_resources);
+      CopyPlaneTexture(video_frame.get(), mailbox_holder, &external_resources);
     } else {
       external_resources.mailboxes.push_back(TextureMailbox(
           mailbox_holder.mailbox, mailbox_holder.sync_token,
           mailbox_holder.texture_target, video_frame->coded_size(),
           video_frame->metadata()->IsTrue(
-              media::VideoFrameMetadata::ALLOW_OVERLAY)));
+              media::VideoFrameMetadata::ALLOW_OVERLAY),
+          false));
 
       external_resources.release_callbacks.push_back(
           base::Bind(&ReturnTexture, AsWeakPtr(), video_frame));
@@ -695,5 +740,27 @@ void VideoResourceUpdater::RecycleResource(
   --resource_it->ref_count;
   DCHECK_GE(resource_it->ref_count, 0);
 }
+
+#if DCHECK_IS_ON()
+// static
+void VideoResourceUpdater::MarkOldResource(
+    base::WeakPtr<VideoResourceUpdater> updater,
+    const media::VideoFrame* video_frame_ptr,
+    base::TimeDelta timestamp) {
+  if (!updater)
+    return;
+  const ResourceList::iterator resource_it = std::find_if(
+      updater->all_resources_.begin(), updater->all_resources_.end(),
+      [video_frame_ptr, timestamp](const PlaneResource& plane_resource) {
+        return plane_resource.frame_ptr == video_frame_ptr &&
+               plane_resource.timestamp == timestamp &&
+               plane_resource.plane_index == 0;
+      });
+  if (resource_it == updater->all_resources_.end())
+    return;
+
+  resource_it->destructed = true;
+}
+#endif
 
 }  // namespace cc

@@ -272,7 +272,7 @@ class WebContentsViewAuraTest : public ContentBrowserTest {
     controller->SetScreenshotManager(make_scoped_ptr(screenshot_manager_));
 
     frame_watcher_ = new FrameWatcher();
-    GetRenderWidgetHost()->GetProcess()->AddFilter(frame_watcher_.get());
+    frame_watcher_->AttachTo(shell()->web_contents());
   }
 
   void SetUpCommandLine(base::CommandLine* cmd) override {
@@ -957,7 +957,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
     ASSERT_EQ(INPUT_EVENT_ACK_STATE_NOT_CONSUMED, filter()->last_ack_state());
 
     blink::WebGestureEvent scroll_begin =
-        SyntheticWebGestureEventBuilder::BuildScrollBegin(1, 1);
+        SyntheticWebGestureEventBuilder::BuildScrollBegin(
+            1, 1, blink::WebGestureDeviceTouchscreen);
     GetRenderWidgetHost()->ForwardGestureEventWithLatencyInfo(
         scroll_begin, ui::LatencyInfo());
     // Scroll begin ignores ack disposition, so don't wait for the ack.

@@ -1,9 +1,11 @@
 // Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 #ifndef COMPONENTS_NTP_SNIPPETS_NTP_SNIPPET_H_
 #define COMPONENTS_NTP_SNIPPETS_NTP_SNIPPET_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
@@ -29,8 +31,10 @@ class NTPSnippet {
   // dictionary doesn't contain at least a url. The keys in the dictionary are
   // expected to be the same as the property name, with exceptions documented in
   // the property comment.
-  static scoped_ptr<NTPSnippet> NTPSnippetFromDictionary(
+  static std::unique_ptr<NTPSnippet> CreateFromDictionary(
       const base::DictionaryValue& dict);
+
+  std::unique_ptr<base::DictionaryValue> ToDictionary() const;
 
   // URL of the page described by this snippet.
   const GURL& url() const { return url_; }
@@ -54,15 +58,15 @@ class NTPSnippet {
   void set_snippet(const std::string& snippet) { snippet_ = snippet; }
 
   // Link to an image representative of the content. Do not fetch this image
-  // directly. If initialized by NTPSnippetFromDictionary() the relevant key is
-  // 'thumbnailURL'
+  // directly. If initialized by CreateFromDictionary() the relevant key is
+  // 'thumbnailUrl'
   const GURL& salient_image_url() const { return salient_image_url_; }
   void set_salient_image_url(const GURL& salient_image_url) {
     salient_image_url_ = salient_image_url;
   }
 
   // When the page pointed by this snippet was published.  If initialized by
-  // NTPSnippetFromDictionary() the relevant key is 'creationTimestampSec'
+  // CreateFromDictionary() the relevant key is 'creationTimestampSec'
   const base::Time& publish_date() const { return publish_date_; }
   void set_publish_date(const base::Time& publish_date) {
     publish_date_ = publish_date;

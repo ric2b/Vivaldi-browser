@@ -58,6 +58,16 @@ void AttachmentBroker::AddObserver(
     info.runner = runner;
     info.unique_id = ++last_unique_id_;
     observers_.push_back(info);
+
+    // Give the observer a chance to handle attachments that arrived while the
+    // observer was handling the message that caused it to register, but our
+    // mutex was not yet locked.
+    for (const auto& attachment : attachments_) {
+      info.runner->PostTask(
+          FROM_HERE,
+          base::Bind(&AttachmentBroker::NotifyObserver, base::Unretained(this),
+                     info.unique_id, attachment->GetIdentifier()));
+    }
   }
 }
 
@@ -71,7 +81,9 @@ void AttachmentBroker::RemoveObserver(AttachmentBroker::Observer* observer) {
     observers_.erase(it);
 }
 
-void AttachmentBroker::RegisterCommunicationChannel(Endpoint* endpoint) {
+void AttachmentBroker::RegisterCommunicationChannel(
+    Endpoint* endpoint,
+    scoped_refptr<base::SingleThreadTaskRunner> runner) {
   NOTREACHED();
 }
 
@@ -85,6 +97,10 @@ void AttachmentBroker::RegisterBrokerCommunicationChannel(Endpoint* endpoint) {
 
 void AttachmentBroker::DeregisterBrokerCommunicationChannel(
     Endpoint* endpoint) {
+  NOTREACHED();
+}
+
+void AttachmentBroker::ReceivedPeerPid(base::ProcessId peer_pid) {
   NOTREACHED();
 }
 

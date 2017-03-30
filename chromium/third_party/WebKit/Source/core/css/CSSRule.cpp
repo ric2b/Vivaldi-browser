@@ -24,22 +24,16 @@
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/StyleRule.h"
 #include "core/css/StyleSheetContents.h"
-#include "platform/NotImplemented.h"
 
 namespace blink {
 
-struct SameSizeAsCSSRule : public RefCountedWillBeGarbageCollectedFinalized<SameSizeAsCSSRule>, public ScriptWrappable {
+struct SameSizeAsCSSRule : public GarbageCollectedFinalized<SameSizeAsCSSRule>, public ScriptWrappable {
     virtual ~SameSizeAsCSSRule();
     unsigned char bitfields;
     void* pointerUnion;
 };
 
 static_assert(sizeof(CSSRule) == sizeof(SameSizeAsCSSRule), "CSSRule should stay small");
-
-void CSSRule::setCSSText(const String&)
-{
-    notImplemented();
-}
 
 const CSSParserContext& CSSRule::parserContext() const
 {
@@ -49,7 +43,6 @@ const CSSParserContext& CSSRule::parserContext() const
 
 DEFINE_TRACE(CSSRule)
 {
-#if ENABLE(OILPAN)
     // This makes the parent link strong, which is different from the
     // pre-oilpan world, where the parent link is mysteriously zeroed under
     // some circumstances.
@@ -57,7 +50,6 @@ DEFINE_TRACE(CSSRule)
         visitor->trace(m_parentRule);
     else
         visitor->trace(m_parentStyleSheet);
-#endif
 }
 
 } // namespace blink

@@ -12,6 +12,7 @@
 #include "platform/heap/Handle.h"
 #include "public/platform/modules/webusb/WebUSBDevice.h"
 #include "public/platform/modules/webusb/WebUSBDeviceInfo.h"
+#include "wtf/BitVector.h"
 #include "wtf/Vector.h"
 
 namespace blink {
@@ -25,31 +26,30 @@ class USBDevice
     : public GarbageCollectedFinalized<USBDevice>
     , public ContextLifecycleObserver
     , public ScriptWrappable {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(USBDevice);
+    USING_GARBAGE_COLLECTED_MIXIN(USBDevice);
     DEFINE_WRAPPERTYPEINFO();
 public:
     using WebType = OwnPtr<WebUSBDevice>;
 
-    static USBDevice* create(PassOwnPtr<WebUSBDevice> device)
+    static USBDevice* create(PassOwnPtr<WebUSBDevice> device, ExecutionContext* context)
     {
-        return new USBDevice(device);
+        return new USBDevice(device, context);
     }
 
-    static USBDevice* take(ScriptPromiseResolver*, PassOwnPtr<WebUSBDevice> device)
-    {
-        return create(device);
-    }
+    static USBDevice* take(ScriptPromiseResolver*, PassOwnPtr<WebUSBDevice>);
 
-    explicit USBDevice(PassOwnPtr<WebUSBDevice> device)
-        : ContextLifecycleObserver(nullptr)
-        , m_device(device)
-    {
-    }
-
+    explicit USBDevice(PassOwnPtr<WebUSBDevice>, ExecutionContext*);
     virtual ~USBDevice() { }
 
     const WebUSBDeviceInfo& info() const { return m_device->info(); }
+    void onDeviceOpenedOrClosed(bool);
+    void onConfigurationSelected(bool success, size_t configurationIndex);
+    void onInterfaceClaimedOrUnclaimed(bool claimed, size_t interfaceIndex);
+    void onAlternateInterfaceSelected(bool success, size_t interfaceIndex, size_t alternateIndex);
+    bool isInterfaceClaimed(size_t configurationIndex, size_t interfaceIndex) const;
+    size_t selectedAlternateInterface(size_t interfaceIndex) const;
 
+    // IDL exposed interface:
     String guid() const { return info().guid; }
     uint8_t usbVersionMajor() { return info().usbVersionMajor; }
     uint8_t usbVersionMinor() { return info().usbVersionMinor; }
@@ -65,31 +65,52 @@ public:
     String manufacturerName() const { return info().manufacturerName; }
     String productName() const { return info().productName; }
     String serialNumber() const { return info().serialNumber; }
+    USBConfiguration* configuration() const;
     HeapVector<Member<USBConfiguration>> configurations() const;
+    bool opened() const { return m_opened; }
 
     ScriptPromise open(ScriptState*);
     ScriptPromise close(ScriptState*);
-    ScriptPromise getConfiguration(ScriptState*);
-    ScriptPromise setConfiguration(ScriptState*, uint8_t configurationValue);
+    ScriptPromise selectConfiguration(ScriptState*, uint8_t configurationValue);
     ScriptPromise claimInterface(ScriptState*, uint8_t interfaceNumber);
     ScriptPromise releaseInterface(ScriptState*, uint8_t interfaceNumber);
-    ScriptPromise setInterface(ScriptState*, uint8_t interfaceNumber, uint8_t alternateSetting);
+    ScriptPromise selectAlternateInterface(ScriptState*, uint8_t interfaceNumber, uint8_t alternateSetting);
     ScriptPromise controlTransferIn(ScriptState*, const USBControlTransferParameters& setup, unsigned length);
     ScriptPromise controlTransferOut(ScriptState*, const USBControlTransferParameters& setup);
     ScriptPromise controlTransferOut(ScriptState*, const USBControlTransferParameters& setup, const ArrayBufferOrArrayBufferView& data);
-    ScriptPromise clearHalt(ScriptState*, uint8_t endpointNumber);
+    ScriptPromise clearHalt(ScriptState*, String direction, uint8_t endpointNumber);
     ScriptPromise transferIn(ScriptState*, uint8_t endpointNumber, unsigned length);
     ScriptPromise transferOut(ScriptState*, uint8_t endpointNumber, const ArrayBufferOrArrayBufferView& data);
     ScriptPromise isochronousTransferIn(ScriptState*, uint8_t endpointNumber, Vector<unsigned> packetLengths);
     ScriptPromise isochronousTransferOut(ScriptState*, uint8_t endpointNumber, const ArrayBufferOrArrayBufferView& data, Vector<unsigned> packetLengths);
     ScriptPromise reset(ScriptState*);
 
+    // ContextLifecycleObserver interface.
     void contextDestroyed() override;
 
     DECLARE_TRACE();
 
 private:
+    int findConfigurationIndex(uint8_t configurationValue) const;
+    int findInterfaceIndex(uint8_t interfaceNumber) const;
+    int findAlternateIndex(size_t interfaceIndex, uint8_t alternateSetting) const;
+    bool ensureNoDeviceOrInterfaceChangeInProgress(ScriptPromiseResolver*) const;
+    bool ensureDeviceConfigured(ScriptPromiseResolver*) const;
+    bool ensureInterfaceClaimed(uint8_t interfaceNumber, ScriptPromiseResolver*) const;
+    bool ensureEndpointAvailable(bool inTransfer, uint8_t endpointNumber, ScriptPromiseResolver*) const;
+    bool anyInterfaceChangeInProgress() const;
+    bool convertControlTransferParameters(WebUSBDevice::TransferDirection, const USBControlTransferParameters&, WebUSBDevice::ControlTransferParameters*, ScriptPromiseResolver*) const;
+    void setEndpointsForInterface(size_t interfaceIndex, bool set);
+
     OwnPtr<WebUSBDevice> m_device;
+    bool m_opened;
+    bool m_deviceStateChangeInProgress;
+    int m_configurationIndex;
+    WTF::BitVector m_claimedInterfaces;
+    WTF::BitVector m_interfaceStateChangeInProgress;
+    WTF::Vector<size_t> m_selectedAlternates;
+    WTF::BitVector m_inEndpoints;
+    WTF::BitVector m_outEndpoints;
 };
 
 } // namespace blink

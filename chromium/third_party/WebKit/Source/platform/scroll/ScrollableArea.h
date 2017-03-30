@@ -62,16 +62,7 @@ enum IncludeScrollbarsInRect {
     IncludeScrollbars,
 };
 
-#if ENABLE(OILPAN)
-// Oilpan: Using the transition type WillBeGarbageCollectedMixin is
-// problematic non-Oilpan as the type expands to DummyBase, exporting it
-// also from 'platform' as a result. Bringing about duplicate DummyBases
-// as core also exports same; with component build linking fails as a
-// result. Hence the workaround of not using a transition type.
 class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin {
-#else
-class PLATFORM_EXPORT ScrollableArea {
-#endif
     WTF_MAKE_NONCOPYABLE(ScrollableArea);
 public:
     static int pixelsPerLineStep(HostWindow*);
@@ -84,9 +75,9 @@ public:
 
     // The window that hosts the ScrollableArea. The ScrollableArea will communicate scrolls and repaints to the
     // host window in the window's coordinate space.
-    virtual HostWindow* hostWindow() const { return 0; }
+    virtual HostWindow* getHostWindow() const { return 0; }
 
-    virtual ScrollResultOneDimensional userScroll(ScrollDirectionPhysical, ScrollGranularity, float delta = 1);
+    virtual ScrollResult userScroll(ScrollGranularity, const FloatSize&);
 
     virtual void setScrollPosition(const DoublePoint&, ScrollType, ScrollBehavior = ScrollBehaviorInstant);
     virtual void scrollBy(const DoubleSize&, ScrollType, ScrollBehavior = ScrollBehaviorInstant);
@@ -99,11 +90,11 @@ public:
     // element.
     virtual LayoutRect scrollIntoView(const LayoutRect& rectInContent, const ScrollAlignment& alignX, const ScrollAlignment& alignY, ScrollType = ProgrammaticScroll);
 
-    static bool scrollBehaviorFromString(const String&, ScrollBehavior&);
+    // Returns a rect, in the space of the area's backing graphics layer, that contains the visual
+    // region of all scrollbar parts.
+    virtual LayoutRect visualRectForScrollbarParts() const = 0;
 
-    bool inLiveResize() const { return m_inLiveResize; }
-    void willStartLiveResize();
-    void willEndLiveResize();
+    static bool scrollBehaviorFromString(const String&, ScrollBehavior&);
 
     void contentAreaWillPaint() const;
     void mouseEnteredContentArea() const;
@@ -124,16 +115,18 @@ public:
     bool hasOverlayScrollbars() const;
     void setScrollbarOverlayStyle(ScrollbarOverlayStyle);
     void recalculateScrollbarOverlayStyle(Color);
-    ScrollbarOverlayStyle scrollbarOverlayStyle() const { return static_cast<ScrollbarOverlayStyle>(m_scrollbarOverlayStyle); }
+    ScrollbarOverlayStyle getScrollbarOverlayStyle() const { return static_cast<ScrollbarOverlayStyle>(m_scrollbarOverlayStyle); }
 
     // This getter will create a ScrollAnimatorBase if it doesn't already exist.
     ScrollAnimatorBase& scrollAnimator() const;
 
     // This getter will return null if the ScrollAnimatorBase hasn't been created yet.
-    ScrollAnimatorBase* existingScrollAnimator() const { return m_scrollAnimator.get(); }
+    ScrollAnimatorBase* existingScrollAnimator() const { return m_scrollAnimator; }
 
     ProgrammaticScrollAnimator& programmaticScrollAnimator() const;
-    ProgrammaticScrollAnimator* existingProgrammaticScrollAnimator() const { return m_programmaticScrollAnimator.get(); }
+    ProgrammaticScrollAnimator* existingProgrammaticScrollAnimator() const { return m_programmaticScrollAnimator; }
+
+    virtual CompositorAnimationTimeline* compositorAnimationTimeline() const { return nullptr; }
 
     const IntPoint& scrollOrigin() const { return m_scrollOrigin; }
     bool scrollOriginChanged() const { return m_scrollOriginChanged; }
@@ -220,9 +213,6 @@ public:
     virtual void registerForAnimation() { }
     virtual void deregisterForAnimation() { }
 
-    void notifyCompositorAnimationFinished(int groupId);
-    void notifyCompositorAnimationAborted(int groupId);
-
     virtual bool usesCompositedScrolling() const { return false; }
     virtual bool shouldScrollOnMainThread() const;
 
@@ -280,7 +270,7 @@ public:
     IntSize excludeScrollbars(const IntSize&) const;
 
     // Returns the widget associated with this ScrollableArea.
-    virtual Widget* widget() { return nullptr; }
+    virtual Widget* getWidget() { return nullptr; }
 
     virtual bool isFrameView() const { return false; }
     virtual bool isPaintLayerScrollableArea() const { return false; }
@@ -288,6 +278,8 @@ public:
     // Need to promptly let go of owned animator objects.
     EAGERLY_FINALIZE();
     DECLARE_VIRTUAL_TRACE();
+
+    virtual void clearScrollAnimators();
 
 protected:
     ScrollableArea();
@@ -303,8 +295,6 @@ protected:
     friend class ProgrammaticScrollAnimator;
     void scrollPositionChanged(const DoublePoint&, ScrollType);
 
-    void clearScrollAnimators();
-
     bool horizontalScrollbarNeedsPaintInvalidation() const { return m_horizontalScrollbarNeedsPaintInvalidation; }
     bool verticalScrollbarNeedsPaintInvalidation() const { return m_verticalScrollbarNeedsPaintInvalidation; }
     bool scrollCornerNeedsPaintInvalidation() const { return m_scrollCornerNeedsPaintInvalidation; }
@@ -319,28 +309,16 @@ private:
     void programmaticScrollHelper(const DoublePoint&, ScrollBehavior);
     void userScrollHelper(const DoublePoint&, ScrollBehavior);
 
-    // This function should be overriden by subclasses to perform the actual
-    // scroll of the content. By default the DoublePoint version will just
-    // call into the IntPoint version. If fractional scroll is needed, one
-    // can override the DoublePoint version to take advantage of the double
-    // precision scroll offset.
-    // FIXME: Remove the IntPoint version. And change the function to
-    // take DoubleSize. crbug.com/414283.
-    virtual void setScrollOffset(const IntPoint&, ScrollType) = 0;
-    virtual void setScrollOffset(const DoublePoint& offset, ScrollType scrollType)
-    {
-        setScrollOffset(flooredIntPoint(offset), scrollType);
-    }
+    // This function should be overriden by subclasses to perform the actual scroll of the content.
+    virtual void setScrollOffset(const DoublePoint& offset, ScrollType) = 0;
 
     virtual int lineStep(ScrollbarOrientation) const;
     virtual int pageStep(ScrollbarOrientation) const;
     virtual int documentStep(ScrollbarOrientation) const;
     virtual float pixelStep(ScrollbarOrientation) const;
 
-    mutable OwnPtrWillBeMember<ScrollAnimatorBase> m_scrollAnimator;
-    mutable OwnPtrWillBeMember<ProgrammaticScrollAnimator> m_programmaticScrollAnimator;
-
-    unsigned m_inLiveResize : 1;
+    mutable Member<ScrollAnimatorBase> m_scrollAnimator;
+    mutable Member<ProgrammaticScrollAnimator> m_programmaticScrollAnimator;
 
     unsigned m_scrollbarOverlayStyle : 2; // ScrollbarOverlayStyle
 
@@ -350,13 +328,11 @@ private:
     unsigned m_verticalScrollbarNeedsPaintInvalidation : 1;
     unsigned m_scrollCornerNeedsPaintInvalidation : 1;
 
-    // There are 8 possible combinations of writing mode and direction. Scroll origin will be non-zero in the x or y axis
+    // There are 6 possible combinations of writing mode and direction. Scroll origin will be non-zero in the x or y axis
     // if there is any reversed direction or writing-mode. The combinations are:
     // writing-mode / direction     scrollOrigin.x() set    scrollOrigin.y() set
     // horizontal-tb / ltr          NO                      NO
     // horizontal-tb / rtl          YES                     NO
-    // horizontal-bt / ltr          NO                      YES
-    // horizontal-bt / rtl          YES                     YES
     // vertical-lr / ltr            NO                      NO
     // vertical-lr / rtl            NO                      YES
     // vertical-rl / ltr            YES                     NO

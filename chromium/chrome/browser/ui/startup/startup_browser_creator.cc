@@ -6,7 +6,8 @@
 
 #include <stddef.h>
 
-#include <algorithm>   // For max().
+#include <algorithm>  // For max().
+#include <memory>
 #include <set>
 
 #include "apps/app_load_service.h"
@@ -21,7 +22,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/metrics/user_metrics.h"
@@ -45,6 +45,8 @@
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -85,6 +87,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "components/user_manager/user_manager.h"
 #endif
 
@@ -111,14 +114,6 @@ using content::BrowserThread;
 using content::ChildProcessSecurityPolicy;
 
 namespace {
-
-#if defined(OS_WIN)
-const wchar_t kSetDefaultBrowserHelpUrl[] =
-    L"https://support.google.com/chrome?p=default_browser";
-
-// Not thread-safe. Always use or modify this callback on the UI thread.
-base::Closure* g_default_browser_callback = nullptr;
-#endif  // defined(OS_WIN)
 
 // Keeps track on which profiles have been launched.
 class ProfileLaunchObserver : public content::NotificationObserver {
@@ -269,13 +264,13 @@ bool ShowUserManagerOnStartupIfNeeded(
   // ChromeOS never shows the User Manager on startup.
   return false;
 #else
-  const ProfileInfoCache& profile_info =
-      g_browser_process->profile_manager()->GetProfileInfoCache();
-  size_t profile_index = profile_info.GetIndexOfProfileWithPath(
-      last_used_profile->GetPath());
+  ProfileAttributesEntry* entry = nullptr;
+  bool has_entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(last_used_profile->GetPath(), &entry);
 
-  if (profile_index == std::string::npos ||
-      !profile_info.ProfileIsSigninRequiredAtIndex(profile_index)) {
+  if (!has_entry || !entry->IsSigninRequired()) {
     // Signin is not required. However, guest, system or locked profiles cannot
     // be re-opened on startup. The only exception is if there's already a Guest
     // window open in a separate process (for example, launching a new browser
@@ -447,14 +442,14 @@ SessionStartupPref StartupBrowserCreator::GetSessionStartupPref(
 
   // A browser starting for a profile being unlocked should always restore.
   if (!profile->IsGuestSession()) {
-    ProfileInfoCache& info_cache =
-        g_browser_process->profile_manager()->GetProfileInfoCache();
-    size_t index = info_cache.GetIndexOfProfileWithPath(profile->GetPath());
+    ProfileAttributesEntry* entry = nullptr;
+    bool has_entry =
+        g_browser_process->profile_manager()
+            ->GetProfileAttributesStorage()
+            .GetProfileAttributesWithPath(profile->GetPath(), &entry);
 
-    if (index != std::string::npos &&
-        info_cache.ProfileIsSigninRequiredAtIndex(index)) {
+    if (has_entry && entry->IsSigninRequired())
       pref.type = SessionStartupPref::LAST;
-    }
   }
 
   if (pref.type == SessionStartupPref::LAST &&
@@ -480,36 +475,9 @@ void StartupBrowserCreator::RegisterLocalStatePrefs(
   registry->RegisterStringPref(prefs::kLastWelcomedOSVersion, std::string());
   registry->RegisterBooleanPref(prefs::kWelcomePageOnOSUpgradeEnabled, true);
 #endif
+  registry->RegisterBooleanPref(prefs::kSuppressUnsupportedOSWarning, false);
   registry->RegisterBooleanPref(prefs::kWasRestarted, false);
 }
-
-
-#if defined(OS_WIN)
-// static
-bool StartupBrowserCreator::SetDefaultBrowserCallback(
-    const base::Closure& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!g_default_browser_callback) {
-    // This won't leak because the worker class invoking this function always
-    // calls ClearDefaultBrowserCallback() in its destructor.
-    g_default_browser_callback = new base::Closure(callback);
-    return true;
-  }
-  return false;
-}
-
-// static
-void StartupBrowserCreator::ClearDefaultBrowserCallback() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  delete g_default_browser_callback;
-  g_default_browser_callback = nullptr;
-}
-
-// static
-const wchar_t* StartupBrowserCreator::GetDefaultBrowserUrl() {
-  return kSetDefaultBrowserHelpUrl;
-}
-#endif  // defined(OS_WIN)
 
 // static
 std::vector<GURL> StartupBrowserCreator::GetURLsFromCommandLine(
@@ -660,7 +628,9 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
   // possible. We should instead cleanly exit and go back to the OOBE screen,
   // where we will launch again after the timeout has expired.
   if (chromeos::DemoAppLauncher::IsDemoAppSession(
-      command_line.GetSwitchValueASCII(chromeos::switches::kLoginUser))) {
+          cryptohome::Identification::FromString(
+              command_line.GetSwitchValueASCII(chromeos::switches::kLoginUser))
+              .GetAccountId())) {
     chrome::AttemptUserExit();
     return false;
   }
@@ -735,19 +705,6 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
   }
 
 #if defined(OS_WIN)
-  // Intercept a specific url when setting the default browser asynchronously.
-  // This only happens on Windows 10+.
-  if (g_default_browser_callback) {
-    base::CommandLine::StringType default_browser_url_(
-        kSetDefaultBrowserHelpUrl);
-    for (const auto& arg : command_line.GetArgs()) {
-      if (arg == default_browser_url_) {
-        g_default_browser_callback->Run();
-        return true;
-      }
-    }
-  }
-
   // Log whether this process was a result of an action in the Windows Jumplist.
   if (command_line.HasSwitch(switches::kWinJumplistAction)) {
     jumplist::LogJumplistActionFromSwitchValue(

@@ -47,7 +47,7 @@ static bool subimageIsPending(CSSValue* value)
     return false;
 }
 
-static bool subimageKnownToBeOpaque(CSSValue* value, const LayoutObject* layoutObject)
+static bool subimageKnownToBeOpaque(CSSValue* value, const LayoutObject& layoutObject)
 {
     if (value->isImageValue())
         return toCSSImageValue(value)->knownToBeOpaque(layoutObject);
@@ -66,7 +66,7 @@ static ImageResource* cachedImageForCSSValue(CSSValue* value, Document* document
         return nullptr;
 
     if (value->isImageValue()) {
-        StyleFetchedImage* styleImageResource = toCSSImageValue(value)->cacheImage(document);
+        StyleImage* styleImageResource = toCSSImageValue(value)->cacheImage(document);
         if (!styleImageResource)
             return nullptr;
 
@@ -84,14 +84,14 @@ static ImageResource* cachedImageForCSSValue(CSSValue* value, Document* document
     return nullptr;
 }
 
-static Image* renderableImageForCSSValue(CSSValue* value, const LayoutObject* layoutObject)
+static Image* renderableImageForCSSValue(CSSValue* value, const LayoutObject& layoutObject)
 {
-    ImageResource* cachedImage = cachedImageForCSSValue(value, &layoutObject->document());
+    ImageResource* cachedImage = cachedImageForCSSValue(value, &layoutObject.document());
 
-    if (!cachedImage || !cachedImage->canRender())
+    if (!cachedImage || cachedImage->errorOccurred() || cachedImage->getImage()->isNull())
         return nullptr;
 
-    return cachedImage->image();
+    return cachedImage->getImage();
 }
 
 static KURL urlForCSSValue(const CSSValue* value)
@@ -102,7 +102,7 @@ static KURL urlForCSSValue(const CSSValue* value)
     return KURL(ParsedURLString, toCSSImageValue(*value).url());
 }
 
-CSSCrossfadeValue::CSSCrossfadeValue(PassRefPtrWillBeRawPtr<CSSValue> fromValue, PassRefPtrWillBeRawPtr<CSSValue> toValue, PassRefPtrWillBeRawPtr<CSSPrimitiveValue> percentageValue)
+CSSCrossfadeValue::CSSCrossfadeValue(CSSValue* fromValue, CSSValue* toValue, CSSPrimitiveValue* percentageValue)
     : CSSImageGeneratorValue(CrossfadeClass)
     , m_fromValue(fromValue)
     , m_toValue(toValue)
@@ -126,11 +126,11 @@ CSSCrossfadeValue::~CSSCrossfadeValue()
 void CSSCrossfadeValue::dispose()
 {
     if (m_cachedFromImage) {
-        m_cachedFromImage->removeClient(&m_crossfadeSubimageObserver);
+        m_cachedFromImage->removeObserver(&m_crossfadeSubimageObserver);
         m_cachedFromImage = nullptr;
     }
     if (m_cachedToImage) {
-        m_cachedToImage->removeClient(&m_crossfadeSubimageObserver);
+        m_cachedToImage->removeObserver(&m_crossfadeSubimageObserver);
         m_cachedToImage = nullptr;
     }
 }
@@ -148,18 +148,18 @@ String CSSCrossfadeValue::customCSSText() const
     return result.toString();
 }
 
-PassRefPtrWillBeRawPtr<CSSCrossfadeValue> CSSCrossfadeValue::valueWithURLsMadeAbsolute()
+CSSCrossfadeValue* CSSCrossfadeValue::valueWithURLsMadeAbsolute()
 {
-    RefPtrWillBeRawPtr<CSSValue> fromValue = m_fromValue;
+    CSSValue* fromValue = m_fromValue;
     if (m_fromValue->isImageValue())
         fromValue = toCSSImageValue(*m_fromValue).valueWithURLMadeAbsolute();
-    RefPtrWillBeRawPtr<CSSValue> toValue = m_toValue;
+    CSSValue* toValue = m_toValue;
     if (m_toValue->isImageValue())
         toValue = toCSSImageValue(*m_toValue).valueWithURLMadeAbsolute();
-    return CSSCrossfadeValue::create(fromValue.release(), toValue.release(), m_percentageValue);
+    return CSSCrossfadeValue::create(fromValue, toValue, m_percentageValue);
 }
 
-IntSize CSSCrossfadeValue::fixedSize(const LayoutObject* layoutObject)
+IntSize CSSCrossfadeValue::fixedSize(const LayoutObject& layoutObject, const FloatSize& defaultObjectSize)
 {
     Image* fromImage = renderableImageForCSSValue(m_fromValue.get(), layoutObject);
     Image* toImage = renderableImageForCSSValue(m_toValue.get(), layoutObject);
@@ -169,6 +169,12 @@ IntSize CSSCrossfadeValue::fixedSize(const LayoutObject* layoutObject)
 
     IntSize fromImageSize = fromImage->size();
     IntSize toImageSize = toImage->size();
+
+    if (fromImage->isSVGImage())
+        fromImageSize = roundedIntSize(toSVGImage(fromImage)->concreteObjectSize(defaultObjectSize));
+
+    if (toImage->isSVGImage())
+        toImageSize = roundedIntSize(toSVGImage(toImage)->concreteObjectSize(defaultObjectSize));
 
     // Rounding issues can cause transitions between images of equal size to return
     // a different fixed size; avoid performing the interpolation if the images are the same size.
@@ -187,37 +193,37 @@ bool CSSCrossfadeValue::isPending() const
     return subimageIsPending(m_fromValue.get()) || subimageIsPending(m_toValue.get());
 }
 
-bool CSSCrossfadeValue::knownToBeOpaque(const LayoutObject* layoutObject) const
+bool CSSCrossfadeValue::knownToBeOpaque(const LayoutObject& layoutObject) const
 {
     return subimageKnownToBeOpaque(m_fromValue.get(), layoutObject) && subimageKnownToBeOpaque(m_toValue.get(), layoutObject);
 }
 
 void CSSCrossfadeValue::loadSubimages(Document* document)
 {
-    RefPtrWillBeRawPtr<ImageResource> oldCachedFromImage = m_cachedFromImage;
-    RefPtrWillBeRawPtr<ImageResource> oldCachedToImage = m_cachedToImage;
+    ImageResource* oldCachedFromImage = m_cachedFromImage;
+    ImageResource* oldCachedToImage = m_cachedToImage;
 
     m_cachedFromImage = cachedImageForCSSValue(m_fromValue.get(), document);
     m_cachedToImage = cachedImageForCSSValue(m_toValue.get(), document);
 
     if (m_cachedFromImage != oldCachedFromImage) {
         if (oldCachedFromImage)
-            oldCachedFromImage->removeClient(&m_crossfadeSubimageObserver);
+            oldCachedFromImage->removeObserver(&m_crossfadeSubimageObserver);
         if (m_cachedFromImage)
-            m_cachedFromImage->addClient(&m_crossfadeSubimageObserver);
+            m_cachedFromImage->addObserver(&m_crossfadeSubimageObserver);
     }
 
     if (m_cachedToImage != oldCachedToImage) {
         if (oldCachedToImage)
-            oldCachedToImage->removeClient(&m_crossfadeSubimageObserver);
+            oldCachedToImage->removeObserver(&m_crossfadeSubimageObserver);
         if (m_cachedToImage)
-            m_cachedToImage->addClient(&m_crossfadeSubimageObserver);
+            m_cachedToImage->addObserver(&m_crossfadeSubimageObserver);
     }
 
     m_crossfadeSubimageObserver.setReady(true);
 }
 
-PassRefPtr<Image> CSSCrossfadeValue::image(const LayoutObject* layoutObject, const IntSize& size)
+PassRefPtr<Image> CSSCrossfadeValue::image(const LayoutObject& layoutObject, const IntSize& size)
 {
     if (size.isEmpty())
         return nullptr;
@@ -237,9 +243,7 @@ PassRefPtr<Image> CSSCrossfadeValue::image(const LayoutObject* layoutObject, con
     if (toImage->isSVGImage())
         toImageRef = SVGImageForContainer::create(toSVGImage(toImage), size, 1, urlForCSSValue(m_toValue.get()));
 
-    m_generatedImage = CrossfadeGeneratedImage::create(fromImageRef, toImageRef, m_percentageValue->getFloatValue(), fixedSize(layoutObject), size);
-
-    return m_generatedImage.release();
+    return CrossfadeGeneratedImage::create(fromImageRef, toImageRef, m_percentageValue->getFloatValue(), fixedSize(layoutObject, FloatSize(size)), size);
 }
 
 void CSSCrossfadeValue::crossfadeChanged(const IntRect&)

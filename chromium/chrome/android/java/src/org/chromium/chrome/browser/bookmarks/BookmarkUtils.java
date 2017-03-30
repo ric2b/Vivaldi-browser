@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.bookmarks;
 
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -22,19 +23,15 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel.AddBookmarkCallback;
-import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
-import org.chromium.chrome.browser.offlinepages.OfflinePageFreeUpSpaceCallback;
-import org.chromium.chrome.browser.offlinepages.OfflinePageFreeUpSpaceDialog;
-import org.chromium.chrome.browser.offlinepages.OfflinePageOpenStorageSettingsDialog;
-import org.chromium.chrome.browser.offlinepages.OfflinePageStorageSpacePolicy;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.content_public.browser.WebContents;
@@ -73,6 +70,7 @@ public class BookmarkUtils {
             parent = bookmarkModel.getDefaultFolder();
         }
 
+        // The bookmark model will be destroyed in the created AddBookmarkCallback.
         bookmarkModel.addBookmarkAsync(parent, bookmarkModel.getChildCount(parent), tab.getTitle(),
                 tab.getUrl(), webContentsToSave,
                 createAddBookmarkCallback(bookmarkModel, snackbarManager, activity,
@@ -97,34 +95,10 @@ public class BookmarkUtils {
     }
 
     /**
-     * Saves an offline copy for the specified tab that is bookmarked. A snackbar will be shown to
-     * notify the user.
-     * @param id The bookmark ID for the tab.
-     * @param bookmarkModel The bookmark model.
-     * @param tab The bookmarked tab to save an offline copy.
-     * @param snackbarManager The SnackbarManager used to show the snackbar.
-     * @param activity Current activity.
+     * Shows a snackbar after a bookmark has been added.
+     *
+     * NOTE: This method calls BookmarkModel#destroy() on the BookmarkModel that is passed to it.
      */
-    public static void saveBookmarkOffline(long id, BookmarkModel bookmarkModel,
-            Tab tab, final SnackbarManager snackbarManager, Activity activity) {
-        assert id != Tab.INVALID_BOOKMARK_ID;
-        BookmarkId bookmarkId = new BookmarkId(id, BookmarkType.NORMAL);
-
-        // Bail out if the ID no longer points to a valid bookmark, which might happen if the user
-        // deleted the bookmark while the page was loading.
-        if (!bookmarkModel.doesBookmarkExist(bookmarkId)) return;
-
-        // Skip saving the offline page for the bookmark if the tab
-        // cannot be saved currently (error or sad tab being shown).
-        // TODO(sansid, petewil): Snackbar triggering for error tabs should be handled.
-        //      See: http://crbug/568310 for details.
-        if (shouldSkipSavingTabOffline(tab)) return;
-
-        bookmarkModel.saveOfflinePage(bookmarkId, tab.getWebContents(),
-                createAddBookmarkCallback(bookmarkModel, snackbarManager, activity,
-                        tab.getWebContents()));
-    }
-
     private static void showSnackbarForAddingBookmark(final BookmarkModel bookmarkModel,
             final SnackbarManager snackbarManager, final Activity activity,
             final BookmarkId bookmarkId, final int saveResult, boolean isStorageAlmostFull,
@@ -134,8 +108,8 @@ public class BookmarkUtils {
         if (offlinePageBridge == null) {
             String folderName = bookmarkModel
                     .getBookmarkTitle(bookmarkModel.getBookmarkById(bookmarkId).getParentId());
-            SnackbarController snackbarController = createSnackbarControllerForEditButton(
-                    bookmarkModel, activity, bookmarkId);
+            SnackbarController snackbarController =
+                    createSnackbarControllerForEditButton(activity, bookmarkId);
             if (getLastUsedParent(activity) == null) {
                 snackbar = Snackbar.make(activity.getString(R.string.bookmark_page_saved),
                         snackbarController, Snackbar.TYPE_ACTION);
@@ -160,8 +134,8 @@ public class BookmarkUtils {
                     : R.string.offline_pages_as_bookmarks_page_failed_to_save_storage_near_full);
                 // Show "Free up space" button.
                 buttonId = OfflinePageUtils.getStringId(R.string.offline_pages_free_up_space_title);
-                snackbarController = createSnackbarControllerForFreeUpSpaceButton(
-                        bookmarkModel, snackbarManager, activity);
+                snackbarController = OfflinePageUtils.createSnackbarControllerForFreeUpSpaceButton(
+                        offlinePageBridge, snackbarManager, activity);
             } else {
                 if (saveResult == AddBookmarkCallback.SAVED) {
                     if (getLastUsedParent(activity) == null) {
@@ -179,8 +153,7 @@ public class BookmarkUtils {
                 }
             }
             if (snackbarController == null) {
-                snackbarController = createSnackbarControllerForEditButton(
-                        bookmarkModel, activity, bookmarkId);
+                snackbarController = createSnackbarControllerForEditButton(activity, bookmarkId);
             }
             snackbar = Snackbar
                     .make(activity.getString(messageId, suffix), snackbarController,
@@ -189,8 +162,14 @@ public class BookmarkUtils {
         }
 
         snackbarManager.showSnackbar(snackbar);
+        bookmarkModel.destroy();
     }
 
+    /**
+     * Shows a snackbar if necessary after adding a bookmark.
+     *
+     * NOTE: This callback will call BookmarkModel#destroy() on the passed-in bookmark model.
+     */
     private static AddBookmarkCallback createAddBookmarkCallback(
             final BookmarkModel bookmarkModel, final SnackbarManager snackbarManager,
             final Activity activity, final WebContents webContents) {
@@ -228,67 +207,19 @@ public class BookmarkUtils {
      * created bookmark.
      */
     private static SnackbarController createSnackbarControllerForEditButton(
-            final BookmarkModel bookmarkModel, final Activity activity,
-            final BookmarkId bookmarkId) {
+            final Activity activity, final BookmarkId bookmarkId) {
         return new SnackbarController() {
 
             @Override
             public void onDismissNoAction(Object actionData) {
                 RecordUserAction.record("EnhancedBookmarks.EditAfterCreateButtonNotClicked");
                 // This method will be called only if the snackbar is dismissed by timeout.
-                bookmarkModel.destroy();
             }
 
             @Override
             public void onAction(Object actionData) {
                 RecordUserAction.record("EnhancedBookmarks.EditAfterCreateButtonClicked");
                 startEditActivity(activity, bookmarkId, (WebContents) actionData);
-                bookmarkModel.destroy();
-            }
-        };
-    }
-
-    /**
-     * Creates a snackbar controller for a case where "Free up space" button is shown to clean up
-     * space taken by the offline pages.
-     */
-    private static SnackbarController createSnackbarControllerForFreeUpSpaceButton(
-            final BookmarkModel bookmarkModel, final SnackbarManager snackbarManager,
-            final Activity activity) {
-        return new SnackbarController() {
-            @Override
-            public void onDismissNoAction(Object actionData) {
-                // This method will be called only if the snackbar is dismissed by timeout.
-                RecordUserAction.record(
-                        "OfflinePages.SaveStatusSnackbar.FreeUpSpaceButtonNotClicked");
-                bookmarkModel.destroy();
-            }
-
-            @Override
-            public void onAction(Object actionData) {
-                RecordUserAction.record("OfflinePages.SaveStatusSnackbar.FreeUpSpaceButtonClicked");
-                OfflinePageStorageSpacePolicy policy =
-                        new OfflinePageStorageSpacePolicy(bookmarkModel.getOfflinePageBridge());
-                if (policy.hasPagesToCleanUp()) {
-                    OfflinePageFreeUpSpaceCallback callback = new OfflinePageFreeUpSpaceCallback() {
-                        @Override
-                        public void onFreeUpSpaceDone() {
-                            snackbarManager.showSnackbar(
-                                    OfflinePageFreeUpSpaceDialog.createStorageClearedSnackbar(
-                                            activity));
-                            bookmarkModel.destroy();
-                        }
-                        @Override
-                        public void onFreeUpSpaceCancelled() {
-                            bookmarkModel.destroy();
-                        }
-                    };
-                    OfflinePageFreeUpSpaceDialog dialog = OfflinePageFreeUpSpaceDialog.newInstance(
-                            bookmarkModel.getOfflinePageBridge(), callback);
-                    dialog.show(activity.getFragmentManager(), null);
-                } else {
-                    OfflinePageOpenStorageSettingsDialog.showDialog(activity);
-                }
             }
         };
     }
@@ -296,8 +227,7 @@ public class BookmarkUtils {
     /**
      * Gets whether bookmark manager should load offline page initially.
      */
-    private static boolean shouldShowOfflinePageAtFirst(BookmarkModel model) {
-        OfflinePageBridge bridge = model.getOfflinePageBridge();
+    private static boolean shouldShowOfflinePageAtFirst(OfflinePageBridge bridge) {
         if (bridge == null || bridge.getAllPages().isEmpty() || OfflinePageUtils.isConnected()) {
             return false;
         }
@@ -311,10 +241,11 @@ public class BookmarkUtils {
         String url = getFirstUrlToLoad(activity);
 
         if (DeviceFormFactor.isTablet(activity)) {
-            openUrl(activity, url);
+            openUrl(activity, url, activity.getComponentName());
         } else {
             Intent intent = new Intent(activity, BookmarkActivity.class);
             intent.setData(Uri.parse(url));
+            intent.putExtra(IntentHandler.EXTRA_PARENT_COMPONENT, activity.getComponentName());
             activity.startActivity(intent);
         }
     }
@@ -325,8 +256,9 @@ public class BookmarkUtils {
      */
     private static String getFirstUrlToLoad(Activity activity) {
         BookmarkModel model = new BookmarkModel();
+        OfflinePageBridge bridge = model.getOfflinePageBridge();
         try {
-            if (shouldShowOfflinePageAtFirst(model)) {
+            if (shouldShowOfflinePageAtFirst(bridge)) {
                 return BookmarkUIState.createFilterUrl(BookmarkFilter.OFFLINE_PAGES,
                         false).toString();
             }
@@ -423,17 +355,28 @@ public class BookmarkUtils {
                     "Stars.LaunchLocation", launchLocation, BookmarkLaunchLocation.COUNT);
         }
 
-        openUrl(activity, url);
+        if (DeviceFormFactor.isTablet(activity)) {
+            // For tablets, the bookmark manager is open in a tab in the ChromeActivity. Use
+            // the ComponentName of the ChromeActivity passed into this method.
+            openUrl(activity, url, activity.getComponentName());
+        } else {
+            // For phones, the bookmark manager is a separate activity. When the activity is
+            // launched, an intent extra is set specifying the parent component.
+            ComponentName parentComponent = IntentUtils.safeGetParcelableExtra(
+                    activity.getIntent(), IntentHandler.EXTRA_PARENT_COMPONENT);
+            openUrl(activity, url, parentComponent);
+        }
+
         return true;
     }
 
-    private static void openUrl(Activity activity, String url) {
+    private static void openUrl(Activity activity, String url, ComponentName componentName) {
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-        intent.setClassName(activity.getApplicationContext().getPackageName(),
-                ChromeLauncherActivity.class.getName());
         intent.putExtra(Browser.EXTRA_APPLICATION_ID,
                 activity.getApplicationContext().getPackageName());
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.setComponent(componentName);
+
         IntentHandler.startActivityForTrustedIntent(intent, activity);
     }
 

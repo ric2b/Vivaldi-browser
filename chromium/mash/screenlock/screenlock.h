@@ -6,10 +6,10 @@
 #define MASH_SCREENLOCK_SCREENLOCK_H_
 
 #include <map>
+#include <memory>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "mash/shell/public/interfaces/shell.mojom.h"
+#include "mash/session/public/interfaces/session.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/services/tracing/public/cpp/tracing_impl.h"
 #include "mojo/shell/public/cpp/shell_client.h"
@@ -22,22 +22,23 @@ namespace mash {
 namespace screenlock {
 
 class Screenlock : public mojo::ShellClient,
-                   public shell::mojom::ScreenlockStateListener {
+                   public session::mojom::ScreenlockStateListener {
  public:
   Screenlock();
   ~Screenlock() override;
 
  private:
   // mojo::ShellClient:
-  void Initialize(mojo::Connector* connector, const std::string& url,
-                  uint32_t id, uint32_t user_id) override;
+  void Initialize(mojo::Connector* connector,
+                  const mojo::Identity& identity,
+                  uint32_t id) override;
 
-  // mash::shell::mojom::ScreenlockStateListener:
+  // session::mojom::ScreenlockStateListener:
   void ScreenlockStateChanged(bool locked) override;
 
   mojo::TracingImpl tracing_;
-  scoped_ptr<views::AuraInit> aura_init_;
-  mojo::BindingSet<mash::shell::mojom::ScreenlockStateListener> bindings_;
+  std::unique_ptr<views::AuraInit> aura_init_;
+  mojo::BindingSet<session::mojom::ScreenlockStateListener> bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(Screenlock);
 };

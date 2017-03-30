@@ -26,6 +26,7 @@
 #define LayoutImage_h
 
 #include "core/CoreExport.h"
+#include "core/fetch/ResourceClient.h"
 #include "core/layout/LayoutImageResource.h"
 #include "core/layout/LayoutReplaced.h"
 
@@ -54,7 +55,7 @@ public:
 
     static LayoutImage* createAnonymous(Document*);
 
-    void setImageResource(PassOwnPtrWillBeRawPtr<LayoutImageResource>);
+    void setImageResource(LayoutImageResource*);
 
     LayoutImageResource* imageResource() { return m_imageResource.get(); }
     const LayoutImageResource* imageResource() const { return m_imageResource.get(); }
@@ -80,7 +81,7 @@ public:
 
 protected:
     bool needsPreferredWidthsRecalculation() const final;
-    LayoutBox* embeddedContentBox() const final;
+    LayoutReplaced* embeddedReplacedContent() const final;
     void computeIntrinsicSizingInfo(IntrinsicSizingInfo&) const final;
 
     void imageChanged(WrappedImagePtr, const IntRect* = nullptr) override;
@@ -105,7 +106,7 @@ private:
 
     LayoutUnit minimumReplacedHeight() const override;
 
-    void notifyFinished(Resource*) final;
+    void imageNotifyFinished(ImageResource*) final;
     bool nodeAtPoint(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) final;
 
     bool boxShadowShouldBeAppliedToBackground(BackgroundBleedAvoidance, const InlineFlowBox*) const final;
@@ -122,7 +123,7 @@ private:
     // * For generated content, the resource is loaded during style resolution
     // and thus is stored in ComputedStyle (see ContentData::image) that gets
     // propagated to the anonymous LayoutImage in LayoutObject::createObject.
-    OwnPtrWillBePersistent<LayoutImageResource> m_imageResource;
+    Persistent<LayoutImageResource> m_imageResource;
     bool m_didIncrementVisuallyNonEmptyPixelCount;
 
     // This field stores whether this image is generated with 'content'.

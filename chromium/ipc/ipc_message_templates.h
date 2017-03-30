@@ -7,9 +7,11 @@
 
 #include <stdint.h>
 
+#include <tuple>
 #include <type_traits>
 
 #include "base/logging.h"
+#include "base/trace_event/trace_event.h"
 #include "base/tuple.h"
 #include "build/build_config.h"
 #include "ipc/ipc_message.h"
@@ -35,7 +37,7 @@ void DispatchToMethodImpl(ObjT* obj,
                           const Tuple& tuple,
                           base::IndexSequence<Ns...>) {
   // TODO(mdempsky): Apply UnwrapTraits like base::DispatchToMethod?
-  (obj->*method)(parameter, base::get<Ns>(tuple)...);
+  (obj->*method)(parameter, std::get<Ns>(tuple)...);
 }
 
 // The following function is for async IPCs which have a dispatcher with an
@@ -45,7 +47,7 @@ typename std::enable_if<sizeof...(Args) == sizeof...(Ts)>::type
 DispatchToMethod(ObjT* obj,
                  void (ObjT::*method)(P*, Args...),
                  P* parameter,
-                 const base::Tuple<Ts...>& tuple) {
+                 const std::tuple<Ts...>& tuple) {
   DispatchToMethodImpl(obj, method, parameter, tuple,
                        base::MakeIndexSequence<sizeof...(Ts)>());
 }
@@ -84,9 +86,9 @@ class MessageT;
 
 // Asynchronous message partial specialization.
 template <typename Meta, typename... Ins>
-class MessageT<Meta, base::Tuple<Ins...>, void> : public Message {
+class MessageT<Meta, std::tuple<Ins...>, void> : public Message {
  public:
-  using Param = base::Tuple<Ins...>;
+  using Param = std::tuple<Ins...>;
   enum { ID = Meta::ID };
 
   // TODO(mdempsky): Remove.  Uses of MyMessage::Schema::Param can be replaced
@@ -113,6 +115,7 @@ class MessageT<Meta, base::Tuple<Ins...>, void> : public Message {
                        S* sender,
                        P* parameter,
                        Method func) {
+    TRACE_EVENT0("ipc", Meta::kName);
     Param p;
     if (Read(msg, &p)) {
       DispatchToMethod(obj, func, parameter, p);
@@ -127,11 +130,11 @@ class MessageT<Meta, base::Tuple<Ins...>, void> : public Message {
 
 // Synchronous message partial specialization.
 template <typename Meta, typename... Ins, typename... Outs>
-class MessageT<Meta, base::Tuple<Ins...>, base::Tuple<Outs...>>
+class MessageT<Meta, std::tuple<Ins...>, std::tuple<Outs...>>
     : public SyncMessage {
  public:
-  using SendParam = base::Tuple<Ins...>;
-  using ReplyParam = base::Tuple<Outs...>;
+  using SendParam = std::tuple<Ins...>;
+  using ReplyParam = std::tuple<Outs...>;
   enum { ID = Meta::ID };
 
   // TODO(mdempsky): Remove.  Uses of MyMessage::Schema::{Send,Reply}Param can
@@ -161,6 +164,7 @@ class MessageT<Meta, base::Tuple<Ins...>, base::Tuple<Outs...>>
                        S* sender,
                        P* parameter,
                        Method func) {
+    TRACE_EVENT0("ipc", Meta::kName);
     SendParam send_params;
     bool ok = ReadSendParam(msg, &send_params);
     Message* reply = SyncMessage::GenerateReply(msg);
@@ -182,11 +186,12 @@ class MessageT<Meta, base::Tuple<Ins...>, base::Tuple<Outs...>>
                                  T* obj,
                                  P* parameter,
                                  Method func) {
+    TRACE_EVENT0("ipc", Meta::kName);
     SendParam send_params;
     bool ok = ReadSendParam(msg, &send_params);
     Message* reply = SyncMessage::GenerateReply(msg);
     if (ok) {
-      base::Tuple<Message&> t = base::MakeRefTuple(*reply);
+      std::tuple<Message&> t = std::tie(*reply);
       ConnectMessageAndReply(msg, reply);
       base::DispatchToMethod(obj, func, send_params, &t);
     } else {

@@ -27,6 +27,7 @@ class AutomaticRebootManager;
 class DeviceDisablingManager;
 class DeviceDisablingManagerDefaultDelegate;
 class SystemClock;
+class TimeZoneResolverManager;
 }
 }
 
@@ -40,6 +41,7 @@ class SessionManager;
 }
 
 class Profile;
+class ScopedKeepAlive;
 
 class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase,
                                    public base::NonThreadSafe {
@@ -70,6 +72,11 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase,
   // out-of-box or login.
   virtual session_manager::SessionManager* SessionManager();
 
+  // Used to register a KeepAlive when Ash is initialized, and release it
+  // when until Chrome starts exiting. Ensure we stay running the whole time.
+  void RegisterKeepAlive();
+  void UnregisterKeepAlive();
+
   // Returns the ProfileHelper instance that is used to identify
   // users and their profiles in Chrome OS multi user session.
   chromeos::ProfileHelper* profile_helper();
@@ -87,6 +94,8 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase,
   chromeos::system::DeviceDisablingManager* device_disabling_manager() {
     return device_disabling_manager_.get();
   }
+
+  chromeos::system::TimeZoneResolverManager* GetTimezoneResolverManager();
 
   chromeos::TimeZoneResolver* GetTimezoneResolver();
 
@@ -116,9 +125,13 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase,
   scoped_ptr<chromeos::system::DeviceDisablingManager>
       device_disabling_manager_;
 
+  scoped_ptr<chromeos::system::TimeZoneResolverManager>
+      timezone_resolver_manager_;
   scoped_ptr<chromeos::TimeZoneResolver> timezone_resolver_;
 
   scoped_ptr<chromeos::system::SystemClock> system_clock_;
+
+  scoped_ptr<ScopedKeepAlive> keep_alive_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserProcessPlatformPart);
 };

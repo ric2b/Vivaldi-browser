@@ -10,17 +10,12 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
-#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
-#include "components/sync_driver/signin_manager_wrapper.h"
 #include "components/sync_driver/sync_driver_switches.h"
 #include "components/sync_driver/sync_prefs.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace browser_sync {
-
-static const char kTestUser[] = "test@gmail.com";
-static const char kTestToken[] = "testToken";
 
 // These are coupled to the implementation of StartupController's
 // GetBackendInitializationStateString which is used by about:sync. We use it
@@ -30,138 +25,103 @@ static const char kStateStringStarted[] = "Started";
 static const char kStateStringDeferred[] = "Deferred";
 static const char kStateStringNotStarted[] = "Not started";
 
-class FakeSigninManagerWrapper : public SigninManagerWrapper {
- public:
-  FakeSigninManagerWrapper() : SigninManagerWrapper(NULL) {}
-  std::string GetEffectiveUsername() const override { return std::string(); }
-
-  std::string GetAccountIdToUse() const override { return account_id_; }
-
-  void set_account_id(const std::string& account_id) {
-    account_id_ = account_id;
-  }
-
- private:
-  std::string account_id_;
-};
-
 class StartupControllerTest : public testing::Test {
  public:
-  StartupControllerTest() : started_(false) {}
+  StartupControllerTest() : can_start_(false), started_(false) {}
 
   void SetUp() override {
     sync_driver::SyncPrefs::RegisterProfilePrefs(pref_service_.registry());
     sync_prefs_.reset(new sync_driver::SyncPrefs(&pref_service_));
-    token_service_.reset(new FakeProfileOAuth2TokenService());
-    signin_.reset(new FakeSigninManagerWrapper());
-
-    SetUpController(AUTO_START);
-  }
-
-  void TearDown() override {
-    controller_.reset();
-    signin_.reset();
-    token_service_->Shutdown();
-    token_service_.reset();
-    sync_prefs_.reset();
-    started_ = false;
-  }
-
-  void SetUpController(ProfileSyncServiceStartBehavior start_behavior) {
-    started_ = false;
-    base::Closure fake_start_backend = base::Bind(
-        &StartupControllerTest::FakeStartBackend, base::Unretained(this));
-    controller_.reset(new StartupController(start_behavior, token_service(),
-                                            sync_prefs_.get(), signin_.get(),
-                                            fake_start_backend));
+    controller_.reset(new StartupController(
+        sync_prefs_.get(),
+        base::Bind(&StartupControllerTest::CanStart, base::Unretained(this)),
+        base::Bind(&StartupControllerTest::FakeStartBackend,
+                   base::Unretained(this))));
     controller_->Reset(syncer::UserTypes());
     controller_->OverrideFallbackTimeoutForTest(
         base::TimeDelta::FromSeconds(0));
   }
 
+  bool CanStart() { return can_start_; }
+
+  void SetCanStart(bool can_start) { can_start_ = can_start; }
+
   void FakeStartBackend() {
     started_ = true;
+    sync_prefs()->SetFirstSetupComplete();
+  }
+
+  void ExpectStarted() {
+    EXPECT_TRUE(started());
+    EXPECT_EQ(kStateStringStarted,
+              controller()->GetBackendInitializationStateString());
+  }
+
+  void ExpectStartDeferred() {
+    const bool deferred_start =
+        !base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kSyncDisableDeferredStartup);
+    EXPECT_EQ(!deferred_start, started());
+    EXPECT_EQ(deferred_start ? kStateStringDeferred : kStateStringStarted,
+              controller()->GetBackendInitializationStateString());
+  }
+
+  void ExpectNotStarted() {
+    EXPECT_FALSE(started());
+    EXPECT_EQ(kStateStringNotStarted,
+              controller()->GetBackendInitializationStateString());
   }
 
   bool started() const { return started_; }
   void clear_started() { started_ = false; }
   StartupController* controller() { return controller_.get(); }
-  FakeSigninManagerWrapper* signin() { return signin_.get(); }
-  FakeProfileOAuth2TokenService* token_service() {
-    return token_service_.get();
-  }
   sync_driver::SyncPrefs* sync_prefs() { return sync_prefs_.get(); }
 
  private:
+  bool can_start_;
   bool started_;
   base::MessageLoop message_loop_;
   syncable_prefs::TestingPrefServiceSyncable pref_service_;
-  scoped_ptr<StartupController> controller_;
-  scoped_ptr<FakeSigninManagerWrapper> signin_;
-  scoped_ptr<FakeProfileOAuth2TokenService> token_service_;
   scoped_ptr<sync_driver::SyncPrefs> sync_prefs_;
+  scoped_ptr<StartupController> controller_;
 };
 
 // Test that sync doesn't start until all conditions are met.
 TEST_F(StartupControllerTest, Basic) {
   controller()->TryStart();
-  EXPECT_FALSE(started());
-  sync_prefs()->SetFirstSetupComplete();
+  ExpectNotStarted();
+
+  SetCanStart(true);
   controller()->TryStart();
-  EXPECT_FALSE(started());
-  signin()->set_account_id(kTestUser);
-  controller()->TryStart();
-  EXPECT_FALSE(started());
-  token_service()->UpdateCredentials(kTestUser, kTestToken);
-  const bool deferred_start =
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kSyncDisableDeferredStartup);
-  controller()->TryStart();
-  EXPECT_EQ(!deferred_start, started());
-  std::string state(controller()->GetBackendInitializationStateString());
-  EXPECT_TRUE(deferred_start ? state == kStateStringDeferred :
-                               state == kStateStringStarted);
+  ExpectStarted();
 }
 
-// Test that sync doesn't start when not requested even if all other
-// conditons are met.
-TEST_F(StartupControllerTest, NotRequested) {
+// Test that sync defers if first setup is complete.
+TEST_F(StartupControllerTest, DefersAfterFirstSetupComplete) {
   sync_prefs()->SetFirstSetupComplete();
-  sync_prefs()->SetSyncRequested(false);
-  signin()->set_account_id(kTestUser);
-  token_service()->UpdateCredentials(kTestUser, kTestToken);
+  SetCanStart(true);
   controller()->TryStart();
-  EXPECT_FALSE(started());
-  EXPECT_EQ(kStateStringNotStarted,
-            controller()->GetBackendInitializationStateString());
+  ExpectStartDeferred();
 }
 
-// Test that sync doesn't when managed even if all other conditons are met.
-TEST_F(StartupControllerTest, Managed) {
+// Test that a data type triggering startup starts sync immediately.
+TEST_F(StartupControllerTest, NoDeferralDataTypeTrigger) {
   sync_prefs()->SetFirstSetupComplete();
-  sync_prefs()->SetManagedForTest(true);
-  signin()->set_account_id(kTestUser);
-  token_service()->UpdateCredentials(kTestUser, kTestToken);
-  controller()->TryStart();
-  EXPECT_FALSE(started());
-  EXPECT_EQ(kStateStringNotStarted,
-            controller()->GetBackendInitializationStateString());
-}
-
-// Test that sync doesn't start until all conditions are met and a
-// data type triggers sync startup.
-TEST_F(StartupControllerTest, DataTypeTriggered) {
-  sync_prefs()->SetFirstSetupComplete();
-  signin()->set_account_id(kTestUser);
-  token_service()->UpdateCredentials(kTestUser, kTestToken);
-  controller()->TryStart();
-  EXPECT_FALSE(started());
-  EXPECT_EQ(kStateStringDeferred,
-            controller()->GetBackendInitializationStateString());
+  SetCanStart(true);
   controller()->OnDataTypeRequestsSyncStartup(syncer::SESSIONS);
-  EXPECT_TRUE(started());
-  EXPECT_EQ(kStateStringStarted,
-            controller()->GetBackendInitializationStateString());
+  ExpectStarted();
+}
+
+// Test that a data type trigger interrupts the deferral timer and starts
+// sync immediately.
+TEST_F(StartupControllerTest, DataTypeTriggerInterruptsDeferral) {
+  sync_prefs()->SetFirstSetupComplete();
+  SetCanStart(true);
+  controller()->TryStart();
+  ExpectStartDeferred();
+
+  controller()->OnDataTypeRequestsSyncStartup(syncer::SESSIONS);
+  ExpectStarted();
 
   // The fallback timer shouldn't result in another invocation of the closure
   // we passed to the StartupController.
@@ -174,12 +134,12 @@ TEST_F(StartupControllerTest, DataTypeTriggered) {
 // conditions are met and no data type requests sync.
 TEST_F(StartupControllerTest, FallbackTimer) {
   sync_prefs()->SetFirstSetupComplete();
-  signin()->set_account_id(kTestUser);
-  token_service()->UpdateCredentials(kTestUser, kTestToken);
+  SetCanStart(true);
   controller()->TryStart();
-  EXPECT_FALSE(started());
+  ExpectStartDeferred();
+
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(started());
+  ExpectStarted();
 }
 
 // Test that we start immediately if sessions is disabled.
@@ -193,70 +153,61 @@ TEST_F(StartupControllerTest, NoDeferralWithoutSessionsSync) {
   sync_prefs()->SetKeepEverythingSynced(false);
   sync_prefs()->SetPreferredDataTypes(syncer::UserTypes(), types);
   controller()->Reset(syncer::UserTypes());
+
   sync_prefs()->SetFirstSetupComplete();
-  signin()->set_account_id(kTestUser);
-  token_service()->UpdateCredentials(kTestUser, kTestToken);
+  SetCanStart(true);
   controller()->TryStart();
-  EXPECT_TRUE(started());
+  ExpectStarted();
 }
 
 // Sanity check that the fallback timer doesn't fire before startup
 // conditions are met.
 TEST_F(StartupControllerTest, FallbackTimerWaits) {
   controller()->TryStart();
-  EXPECT_FALSE(started());
+  ExpectNotStarted();
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(started());
+  ExpectNotStarted();
 }
 
-// Test that sync starts without the user having to explicitly ask for
-// setup when AUTO_START is the startup behavior requested.
-TEST_F(StartupControllerTest, FirstSetupWithAutoStart) {
-  signin()->set_account_id(kTestUser);
-  token_service()->UpdateCredentials(kTestUser, kTestToken);
-  controller()->TryStart();
-  EXPECT_TRUE(started());
-}
-
-// Test that sync starts only after user explicitly asks for setup when
-// MANUAL_START is the startup behavior requested.
-TEST_F(StartupControllerTest, FirstSetupWithManualStart) {
-  signin()->set_account_id(kTestUser);
-  token_service()->UpdateCredentials(kTestUser, kTestToken);
-  SetUpController(MANUAL_START);
-  controller()->TryStart();
-  EXPECT_FALSE(started());
-  controller()->set_setup_in_progress(true);
-  controller()->TryStart();
-  EXPECT_TRUE(started());
-}
-
-TEST_F(StartupControllerTest, Reset) {
+// Test that sync starts immediately when setup in progress is true.
+TEST_F(StartupControllerTest, NoDeferralSetupInProgressTrigger) {
   sync_prefs()->SetFirstSetupComplete();
-  signin()->set_account_id(kTestUser);
-  token_service()->UpdateCredentials(kTestUser, kTestToken);
+  SetCanStart(true);
+  controller()->SetSetupInProgress(true);
+  ExpectStarted();
+}
+
+// Test that setup in progress being set to true interrupts the deferral timer
+// and starts sync immediately.
+TEST_F(StartupControllerTest, SetupInProgressTriggerInterruptsDeferral) {
+  sync_prefs()->SetFirstSetupComplete();
+  SetCanStart(true);
   controller()->TryStart();
-  const bool deferred_start =
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kSyncDisableDeferredStartup);
-  EXPECT_EQ(!deferred_start, started());
-  controller()->OnDataTypeRequestsSyncStartup(syncer::SESSIONS);
-  EXPECT_TRUE(started());
+  ExpectStartDeferred();
+
+  controller()->SetSetupInProgress(true);
+  ExpectStarted();
+}
+
+// Test that start isn't deferred on the first start but is on restarts.
+TEST_F(StartupControllerTest, DeferralOnRestart) {
+  SetCanStart(true);
+  controller()->TryStart();
+  ExpectStarted();
+
   clear_started();
   controller()->Reset(syncer::UserTypes());
-  EXPECT_FALSE(started());
+  ExpectNotStarted();
   controller()->TryStart();
-  // Restart is not deferred.
-  EXPECT_TRUE(started());
+  ExpectStartDeferred();
 }
 
 // Test that setup-in-progress tracking is persistent across a Reset.
 TEST_F(StartupControllerTest, ResetDuringSetup) {
-  signin()->set_account_id(kTestUser);
-  token_service()->UpdateCredentials(kTestUser, kTestToken);
+  SetCanStart(true);
 
   // Simulate UI telling us setup is in progress.
-  controller()->set_setup_in_progress(true);
+  controller()->SetSetupInProgress(true);
 
   // This could happen if the UI triggers a stop-syncing permanently call.
   controller()->Reset(syncer::UserTypes());

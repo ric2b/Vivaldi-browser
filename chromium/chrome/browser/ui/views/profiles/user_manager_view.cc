@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/views/profiles/user_manager_view.h"
 
-#include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/callback.h"
+#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -22,7 +22,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/user_manager.h"
-#include "chrome/browser/ui/views/browser_dialogs.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/guest_view/browser/guest_view_manager.h"
@@ -37,7 +36,6 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_client_view.h"
-#include "ui/views/window/dialog_delegate.h"
 
 #if defined(OS_WIN)
 #include "chrome/browser/shell_integration.h"
@@ -55,7 +53,8 @@ namespace {
 
 // An open User Manager window. There can only be one open at a time. This
 // is reset to NULL when the window is closed.
-UserManagerView* instance_ = NULL;
+UserManagerView* instance_ = nullptr;
+base::Closure* user_manager_shown_callback_for_testing_ = nullptr;
 bool instance_under_construction_ = false;
 
 class ReauthDelegate : public views::DialogDelegateView,
@@ -151,7 +150,7 @@ void ReauthDelegate::CloseReauthDialog() {
   GetWidget()->Close();
 }
 
-} // namespace
+}  // namespace
 
 // UserManager -----------------------------------------------------------------
 
@@ -181,18 +180,16 @@ void UserManager::Show(
   // there to then be multiple pending operations and eventually multiple
   // User Managers.
   if (instance_under_construction_)
-      return;
+    return;
 
   // Create the system profile, if necessary, and open the user manager
   // from the system profile.
   UserManagerView* user_manager = new UserManagerView();
   user_manager->set_user_manager_started_showing(base::Time::Now());
   profiles::CreateSystemProfileForUserManager(
-      profile_path_to_focus,
-      tutorial_mode,
-      profile_open_action,
+      profile_path_to_focus, tutorial_mode, profile_open_action,
       base::Bind(&UserManagerView::OnSystemProfileCreated,
-                 base::Passed(make_scoped_ptr(user_manager)),
+                 base::Passed(base::WrapUnique(user_manager)),
                  base::Owned(new base::AutoReset<bool>(
                      &instance_under_construction_, true))));
 }
@@ -210,8 +207,16 @@ bool UserManager::IsShowing() {
 
 // static
 void UserManager::OnUserManagerShown() {
-  if (instance_)
+  if (instance_) {
     instance_->LogTimeToOpen();
+    if (user_manager_shown_callback_for_testing_) {
+      if (!user_manager_shown_callback_for_testing_->is_null())
+        user_manager_shown_callback_for_testing_->Run();
+
+      delete user_manager_shown_callback_for_testing_;
+      user_manager_shown_callback_for_testing_ = nullptr;
+    }
+  }
 }
 
 // static
@@ -230,13 +235,21 @@ void UserManager::ShowReauthDialog(content::BrowserContext* browser_context,
   delegate->GetWidget()->Show();
 }
 
+// static
+void UserManager::AddOnUserManagerShownCallbackForTesting(
+    const base::Closure& callback) {
+  DCHECK(!user_manager_shown_callback_for_testing_);
+  user_manager_shown_callback_for_testing_ = new base::Closure(callback);
+}
+
 // UserManagerView -------------------------------------------------------------
 
 UserManagerView::UserManagerView()
     : web_view_(NULL),
       user_manager_started_showing_(base::Time()) {
 #if !defined(USE_ASH)
-  keep_alive_.reset(new ScopedKeepAlive(KeepAliveOrigin::USER_MANAGER_VIEW));
+  keep_alive_.reset(new ScopedKeepAlive(KeepAliveOrigin::USER_MANAGER_VIEW,
+                                        KeepAliveRestartOption::DISABLED));
 #endif  // !defined(USE_ASH)
 }
 
@@ -245,7 +258,7 @@ UserManagerView::~UserManagerView() {
 
 // static
 void UserManagerView::OnSystemProfileCreated(
-    scoped_ptr<UserManagerView> instance,
+    std::unique_ptr<UserManagerView> instance,
     base::AutoReset<bool>* pending,
     Profile* system_profile,
     const std::string& url) {

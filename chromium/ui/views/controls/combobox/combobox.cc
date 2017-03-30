@@ -27,6 +27,7 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/native_theme/native_theme_aura.h"
 #include "ui/resources/grit/ui_resources.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/button/custom_button.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/combobox/combobox_listener.h"
@@ -38,6 +39,7 @@
 #include "ui/views/mouse_constants.h"
 #include "ui/views/painter.h"
 #include "ui/views/resources/grit/views_resources.h"
+#include "ui/views/style/platform_style.h"
 #include "ui/views/widget/widget.h"
 
 namespace views {
@@ -353,6 +355,9 @@ Combobox::Combobox(ui::ComboboxModel* model)
   ModelChanged();
   SetFocusable(true);
   UpdateBorder();
+  // set_background() takes ownership but takes a raw pointer.
+  scoped_ptr<Background> b = PlatformStyle::CreateComboboxBackground();
+  set_background(b.release());
 
   // Initialize the button images.
   Button::ButtonState button_states[] = {
@@ -454,6 +459,12 @@ void Combobox::SetInvalid(bool invalid) {
 
   UpdateBorder();
   SchedulePaint();
+}
+
+int Combobox::GetArrowButtonWidth() const {
+  return GetDisclosureArrowLeftPadding() +
+         ArrowSize().width() +
+         GetDisclosureArrowRightPadding();
 }
 
 void Combobox::Layout() {
@@ -689,7 +700,7 @@ void Combobox::ButtonPressed(Button* sender, const ui::Event& event) {
 }
 
 void Combobox::UpdateBorder() {
-  scoped_ptr<FocusableBorder> border(new FocusableBorder());
+  scoped_ptr<FocusableBorder> border(PlatformStyle::CreateComboboxBorder());
   if (style_ == STYLE_ACTION)
     border->SetInsets(5, 10, 5, 10);
   if (invalid_)
@@ -712,7 +723,8 @@ void Combobox::PaintText(gfx::Canvas* canvas) {
   int y = insets.top();
   int text_height = height() - insets.height();
   SkColor text_color = GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_LabelEnabledColor);
+      enabled() ? ui::NativeTheme::kColorId_LabelEnabledColor :
+                  ui::NativeTheme::kColorId_LabelDisabledColor);
 
   DCHECK_GE(selected_index_, 0);
   DCHECK_LT(selected_index_, model()->GetItemCount());
@@ -740,19 +752,9 @@ void Combobox::PaintText(gfx::Canvas* canvas) {
                          arrow_size.height());
   AdjustBoundsForRTLUI(&arrow_bounds);
 
-  // TODO(estade): hack alert! Remove this direct call into CommonTheme. For now
-  // STYLE_ACTION isn't properly themed so we have to override the NativeTheme
-  // behavior. See crbug.com/384071
-  if (style_ == STYLE_ACTION) {
-    ui::CommonThemePaintComboboxArrow(canvas->sk_canvas(), arrow_bounds);
-  } else {
-    ui::NativeTheme::ExtraParams ignored;
-    GetNativeTheme()->Paint(canvas->sk_canvas(),
-                            ui::NativeTheme::kComboboxArrow,
-                            ui::NativeTheme::kNormal,
-                            arrow_bounds,
-                            ignored);
-  }
+  gfx::ImageSkia arrow_image = PlatformStyle::CreateComboboxArrow(
+      enabled(), style_);
+  canvas->DrawImageInt(arrow_image, arrow_bounds.x(), arrow_bounds.y());
 }
 
 void Combobox::PaintButtons(gfx::Canvas* canvas) {
@@ -893,21 +895,7 @@ int Combobox::GetDisclosureArrowRightPadding() const {
 }
 
 gfx::Size Combobox::ArrowSize() const {
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  // TODO(estade): hack alert! This should always use GetNativeTheme(). For now
-  // STYLE_ACTION isn't properly themed so we have to override the NativeTheme
-  // behavior. See crbug.com/384071
-  const ui::NativeTheme* native_theme_for_arrow =
-      style_ == STYLE_ACTION ? ui::NativeThemeAura::instance()
-                             : GetNativeTheme();
-#else
-  const ui::NativeTheme* native_theme_for_arrow = GetNativeTheme();
-#endif
-
-  ui::NativeTheme::ExtraParams ignored;
-  return native_theme_for_arrow->GetPartSize(ui::NativeTheme::kComboboxArrow,
-                                             ui::NativeTheme::kNormal,
-                                             ignored);
+  return PlatformStyle::CreateComboboxArrow(enabled(), style_).size();
 }
 
 gfx::Size Combobox::GetContentSize() const {

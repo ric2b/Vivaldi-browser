@@ -15,12 +15,6 @@
 #include "mojo/shell/public/cpp/shell_client.h"
 #include "mojo/shell/public/cpp/shell_connection.h"
 
-namespace mojo {
-namespace shell {
-class RunnerConnection;
-}
-}
-
 namespace content {
 
 // Returns true for processes launched from an external mojo shell.
@@ -29,51 +23,45 @@ bool IsRunningInMojoShell();
 class MojoShellConnectionImpl : public MojoShellConnection,
                                 public mojo::ShellClient {
  public:
+  // Creates the MojoShellConnection using MojoShellConnection::Factory. Returns
+  // true if a factory was set and the connection was created, false otherwise.
+  static bool CreateUsingFactory();
+
   // Creates an instance of this class and stuffs it in TLS on the calling
   // thread. Retrieve it using MojoShellConnection::Get().
   static void Create();
-
-  // Like above but for initializing a connection to an embedded in-process
-  // shell implementation. Binds to |request|.
-  static void Create(mojo::shell::mojom::ShellClientRequest request);
 
   // Will return null if no connection has been established (either because it
   // hasn't happened yet or the application was not spawned from the external
   // Mojo shell).
   static MojoShellConnectionImpl* Get();
 
-  // Blocks the calling thread until calling GetApplication() will return an
-  // Initialized() application with a bound ShellPtr. This call is a no-op
-  // if the connection has already been initialized.
-  void BindToCommandLinePlatformChannel();
-
-  // Same as BindToCommandLinePlatformChannel(), but receives a |handle| instead
-  // of looking for one on the command line.
-  void BindToMessagePipe(mojo::ScopedMessagePipeHandle handle);
+  // Binds the shell connection to a ShellClientFactory request pipe from the
+  // command line. This must only be called once.
+  void BindToRequestFromCommandLine();
 
  private:
+  friend class MojoShellConnection;
+
   explicit MojoShellConnectionImpl(bool external);
   ~MojoShellConnectionImpl() override;
 
+  void WaitForShellIfNecessary();
+
   // mojo::ShellClient:
-  void Initialize(mojo::Connector* connector, const std::string& url,
-                  uint32_t id, uint32_t user_id) override;
+  void Initialize(mojo::Connector* connector,
+                  const mojo::Identity& identity,
+                  uint32_t id) override;
   bool AcceptConnection(mojo::Connection* connection) override;
 
   // MojoShellConnection:
   mojo::Connector* GetConnector() override;
   bool UsingExternalShell() const override;
+  void SetConnectionLostClosure(const base::Closure& closure) override;
   void AddListener(Listener* listener) override;
   void RemoveListener(Listener* listener) override;
 
-  // Blocks the calling thread until a connection to the spawning shell is
-  // established, an Application request from it is bound, and the Initialize()
-  // method on that application is called.
-  void WaitForShell(mojo::ScopedMessagePipeHandle handle);
-
-  bool external_;
-  bool initialized_;
-  scoped_ptr<mojo::shell::RunnerConnection> runner_connection_;
+  const bool external_;
   scoped_ptr<mojo::ShellConnection> shell_connection_;
   std::vector<Listener*> listeners_;
 

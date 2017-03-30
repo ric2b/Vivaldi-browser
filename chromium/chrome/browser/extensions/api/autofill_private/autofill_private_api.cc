@@ -67,63 +67,63 @@ void PopulateAddressComponents(
             addressinput::AddressUiComponent::HINT_LONG ||
         components[i].length_hint ==
             addressinput::AddressUiComponent::HINT_LONG) {
-      row = new autofill_private::AddressComponentRow;
-      address_components->components.push_back(make_linked_ptr(row));
+      address_components->components.push_back(
+          autofill_private::AddressComponentRow());
+      row = &address_components->components.back();
     }
 
-    scoped_ptr<autofill_private::AddressComponent>
-        component(new autofill_private::AddressComponent);
-    component->field_name = components[i].name;
+    autofill_private::AddressComponent component;
+    component.field_name = components[i].name;
 
     switch (components[i].field) {
       case i18n::addressinput::COUNTRY:
-        component->field =
+        component.field =
             autofill_private::AddressField::ADDRESS_FIELD_COUNTRY_CODE;
         break;
       case i18n::addressinput::ADMIN_AREA:
-        component->field =
+        component.field =
             autofill_private::AddressField::ADDRESS_FIELD_ADDRESS_LEVEL_1;
         break;
       case i18n::addressinput::LOCALITY:
-        component->field =
+        component.field =
             autofill_private::AddressField::ADDRESS_FIELD_ADDRESS_LEVEL_2;
         break;
       case i18n::addressinput::DEPENDENT_LOCALITY:
-        component->field =
+        component.field =
             autofill_private::AddressField::ADDRESS_FIELD_ADDRESS_LEVEL_3;
         break;
       case i18n::addressinput::SORTING_CODE:
-        component->field =
+        component.field =
             autofill_private::AddressField::ADDRESS_FIELD_SORTING_CODE;
         break;
       case i18n::addressinput::POSTAL_CODE:
-        component->field =
+        component.field =
             autofill_private::AddressField::ADDRESS_FIELD_POSTAL_CODE;
         break;
       case i18n::addressinput::STREET_ADDRESS:
-        component->field =
+        component.field =
             autofill_private::AddressField::ADDRESS_FIELD_ADDRESS_LINES;
         break;
       case i18n::addressinput::ORGANIZATION:
-        component->field =
+        component.field =
             autofill_private::AddressField::ADDRESS_FIELD_COMPANY_NAME;
         break;
       case i18n::addressinput::RECIPIENT:
-        component->field =
+        component.field =
             autofill_private::AddressField::ADDRESS_FIELD_FULL_NAME;
         break;
     }
 
     switch (components[i].length_hint) {
       case addressinput::AddressUiComponent::HINT_LONG:
-        component->is_long_field = true;
+        component.is_long_field = true;
         break;
       case addressinput::AddressUiComponent::HINT_SHORT:
-        component->is_long_field = false;
+        component.is_long_field = false;
         break;
     }
 
-    row->row.push_back(make_linked_ptr(component.release()));
+    row->row.push_back(std::move(component));
   }
 }
 
@@ -171,7 +171,7 @@ AutofillPrivateSaveAddressFunction::AutofillPrivateSaveAddressFunction()
 AutofillPrivateSaveAddressFunction::~AutofillPrivateSaveAddressFunction() {}
 
 ExtensionFunction::ResponseAction AutofillPrivateSaveAddressFunction::Run() {
-  scoped_ptr<api::autofill_private::SaveAddress::Params> parameters =
+  std::unique_ptr<api::autofill_private::SaveAddress::Params> parameters =
       api::autofill_private::SaveAddress::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
 
@@ -285,8 +285,9 @@ AutofillPrivateGetAddressComponentsFunction::
 
 ExtensionFunction::ResponseAction
     AutofillPrivateGetAddressComponentsFunction::Run() {
-  scoped_ptr<api::autofill_private::GetAddressComponents::Params> parameters =
-      api::autofill_private::GetAddressComponents::Params::Create(*args_);
+  std::unique_ptr<api::autofill_private::GetAddressComponents::Params>
+      parameters =
+          api::autofill_private::GetAddressComponents::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
 
   autofill_private::AddressComponents components;
@@ -308,7 +309,7 @@ AutofillPrivateSaveCreditCardFunction::
     ~AutofillPrivateSaveCreditCardFunction() {}
 
 ExtensionFunction::ResponseAction AutofillPrivateSaveCreditCardFunction::Run() {
-  scoped_ptr<api::autofill_private::SaveCreditCard::Params> parameters =
+  std::unique_ptr<api::autofill_private::SaveCreditCard::Params> parameters =
       api::autofill_private::SaveCreditCard::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
 
@@ -326,9 +327,8 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveCreditCardFunction::Run() {
   autofill::CreditCard credit_card(guid, kSettingsOrigin);
 
   if (card->name) {
-    credit_card.SetRawInfo(
-        autofill::CREDIT_CARD_NAME,
-        base::UTF8ToUTF16(*card->name));
+    credit_card.SetRawInfo(autofill::CREDIT_CARD_NAME_FULL,
+                           base::UTF8ToUTF16(*card->name));
   }
 
   if (card->card_number) {
@@ -368,7 +368,7 @@ AutofillPrivateRemoveEntryFunction::AutofillPrivateRemoveEntryFunction()
 AutofillPrivateRemoveEntryFunction::~AutofillPrivateRemoveEntryFunction() {}
 
 ExtensionFunction::ResponseAction AutofillPrivateRemoveEntryFunction::Run() {
-  scoped_ptr<api::autofill_private::RemoveEntry::Params> parameters =
+  std::unique_ptr<api::autofill_private::RemoveEntry::Params> parameters =
       api::autofill_private::RemoveEntry::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
 
@@ -393,14 +393,15 @@ AutofillPrivateValidatePhoneNumbersFunction::
 
 ExtensionFunction::ResponseAction
     AutofillPrivateValidatePhoneNumbersFunction::Run() {
-  scoped_ptr<api::autofill_private::ValidatePhoneNumbers::Params> parameters =
-      api::autofill_private::ValidatePhoneNumbers::Params::Create(*args_);
+  std::unique_ptr<api::autofill_private::ValidatePhoneNumbers::Params>
+      parameters =
+          api::autofill_private::ValidatePhoneNumbers::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
 
   api::autofill_private::ValidatePhoneParams* params = &parameters->params;
 
   // Extract the phone numbers into a ListValue.
-  scoped_ptr<base::ListValue> phoneNumbers(new base::ListValue);
+  std::unique_ptr<base::ListValue> phoneNumbers(new base::ListValue);
   phoneNumbers->AppendStrings(params->phone_numbers);
 
   RemoveDuplicatePhoneNumberAtIndex(
@@ -419,7 +420,7 @@ AutofillPrivateMaskCreditCardFunction::
     ~AutofillPrivateMaskCreditCardFunction() {}
 
 ExtensionFunction::ResponseAction AutofillPrivateMaskCreditCardFunction::Run() {
-  scoped_ptr<api::autofill_private::MaskCreditCard::Params> parameters =
+  std::unique_ptr<api::autofill_private::MaskCreditCard::Params> parameters =
       api::autofill_private::MaskCreditCard::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
 

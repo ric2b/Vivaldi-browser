@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
@@ -18,7 +19,6 @@
 #include "ios/chrome/browser/browser_state/browser_state_otr_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
-#include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "ios/web/public/web_thread.h"
 
@@ -58,16 +58,15 @@ void BookmarkModelFactory::RegisterBrowserStatePrefs(
   bookmarks::RegisterProfilePrefs(registry);
 }
 
-scoped_ptr<KeyedService> BookmarkModelFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService> BookmarkModelFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
-  scoped_ptr<bookmarks::BookmarkModel> bookmark_model(
+  std::unique_ptr<bookmarks::BookmarkModel> bookmark_model(
       new bookmarks::BookmarkModel(
-          make_scoped_ptr(new BookmarkClientImpl(browser_state))));
+          base::WrapUnique(new BookmarkClientImpl(browser_state))));
   bookmark_model->Load(
       browser_state->GetPrefs(),
-      browser_state->GetPrefs()->GetString(prefs::kAcceptLanguages),
       browser_state->GetStatePath(),
       ios::StartupTaskRunnerServiceFactory::GetForBrowserState(browser_state)
           ->GetBookmarkTaskRunner(),

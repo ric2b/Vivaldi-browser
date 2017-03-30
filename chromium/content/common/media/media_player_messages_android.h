@@ -9,7 +9,9 @@
 #include "content/common/content_export.h"
 #include "ipc/ipc_message_macros.h"
 #include "media/base/android/demuxer_stream_player_params.h"
+#include "media/base/decrypt_config.h"
 #include "media/blink/renderer_media_player_interface.h"
+#include "media/gpu/ipc/common/media_param_traits.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "url/gurl.h"
 
@@ -69,6 +71,7 @@ IPC_STRUCT_BEGIN(MediaPlayerHostMsg_Initialize_Params)
   IPC_STRUCT_MEMBER(GURL, frame_url)
   IPC_STRUCT_MEMBER(bool, allow_credentials)
   IPC_STRUCT_MEMBER(int, delegate_id)
+  IPC_STRUCT_MEMBER(int, media_session_id)
 IPC_STRUCT_END()
 
 // Chrome for Android seek message sequence is:
@@ -192,6 +195,10 @@ IPC_MESSAGE_ROUTED2(MediaPlayerMsg_ConnectedToRemoteDevice,
 
 // Clank has disconnected from the remote device.
 IPC_MESSAGE_ROUTED1(MediaPlayerMsg_DisconnectedFromRemoteDevice,
+                    int /* player_id */)
+
+// The remote playback device selection has been cancelled.
+IPC_MESSAGE_ROUTED1(MediaPlayerMsg_CancelledRemotePlaybackRequest,
                     int /* player_id */)
 
 // The availability of remote devices has changed

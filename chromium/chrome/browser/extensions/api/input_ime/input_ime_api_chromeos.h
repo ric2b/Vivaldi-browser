@@ -103,18 +103,6 @@ class InputImeDeleteSurroundingTextFunction : public SyncExtensionFunction {
   bool RunSync() override;
 };
 
-class InputImeSendKeyEventsFunction : public AsyncExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("input.ime.sendKeyEvents",
-                             INPUT_IME_SENDKEYEVENTS)
-
- protected:
-  ~InputImeSendKeyEventsFunction() override {}
-
-  // ExtensionFunction:
-  bool RunAsync() override;
-};
-
 class InputImeHideInputViewFunction : public AsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("input.ime.hideInputView",
@@ -125,6 +113,24 @@ class InputImeHideInputViewFunction : public AsyncExtensionFunction {
 
   // ExtensionFunction:
   bool RunAsync() override;
+};
+
+class InputMethodPrivateNotifyImeMenuItemActivatedFunction
+    : public UIThreadExtensionFunction {
+ public:
+  InputMethodPrivateNotifyImeMenuItemActivatedFunction() {}
+
+ protected:
+  ~InputMethodPrivateNotifyImeMenuItemActivatedFunction() override {}
+
+  // UIThreadExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  DECLARE_EXTENSION_FUNCTION("inputMethodPrivate.notifyImeMenuItemActivated",
+                             INPUTMETHODPRIVATE_NOTIFYIMEMENUITEMACTIVATED)
+  DISALLOW_COPY_AND_ASSIGN(
+      InputMethodPrivateNotifyImeMenuItemActivatedFunction);
 };
 
 class InputImeEventRouter : public InputImeEventRouterBase {

@@ -28,7 +28,6 @@
 #include "wtf/Allocator.h"
 #include "wtf/HashTableDeletedValueType.h"
 #include "wtf/WTFExport.h"
-#include "wtf/testing/WTFUnitTestHelpersExport.h"
 #include "wtf/text/ASCIIFastPath.h"
 #include "wtf/text/StringImpl.h"
 #include "wtf/text/StringView.h"
@@ -321,12 +320,11 @@ public:
         return *this;
     }
 
-    template<unsigned charactersCount>
-    ALWAYS_INLINE String& replaceWithLiteral(UChar a, const char (&characters)[charactersCount])
+    ALWAYS_INLINE String& replace(UChar a, const char* characters)
     {
+        ASSERT(characters);
         if (m_impl)
-            m_impl = m_impl->replace(a, characters, charactersCount - 1);
-
+            m_impl = m_impl->replace(a, characters, strlen(characters));
         return *this;
     }
 
@@ -678,8 +676,8 @@ WTF_EXPORT const String& emptyString();
 WTF_EXPORT const String& emptyString16Bit();
 WTF_EXPORT extern const String& xmlnsWithColon;
 
-// Pretty printer for gtest. Declared here to avoid ODR violations.
-WTF_UNITTEST_HELPERS_EXPORT std::ostream& operator<<(std::ostream&, const String&);
+// Pretty printer for gtest and base/logging.*.
+WTF_EXPORT std::ostream& operator<<(std::ostream&, const String&);
 
 } // namespace WTF
 

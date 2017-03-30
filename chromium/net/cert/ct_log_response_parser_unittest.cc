@@ -8,6 +8,7 @@
 
 #include "base/base64.h"
 #include "base/json/json_reader.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -93,6 +94,23 @@ TEST(CTLogResponseParserTest, FailsToParseIncorrectLengthRootHash) {
           1 /* tree_size */, 123456u /* timestamp */,
           GetSampleSTHSHA256RootHash(), too_short_hash));
   ASSERT_FALSE(FillSignedTreeHead(*too_short_hash_json.get(), &tree_head));
+}
+
+TEST(CTLogResponseParserTest, ParsesJsonSTHWithLargeTimestamp) {
+  SignedTreeHead tree_head;
+
+  scoped_ptr<base::Value> large_timestamp_json =
+      ParseJson(CreateSignedTreeHeadJsonString(
+          100, INT64_C(1) << 34, GetSampleSTHSHA256RootHash(),
+          GetSampleSTHTreeHeadSignature()));
+
+  ASSERT_TRUE(FillSignedTreeHead(*large_timestamp_json.get(), &tree_head));
+
+  base::Time expected_time =
+      base::Time::UnixEpoch() +
+      base::TimeDelta::FromMilliseconds(INT64_C(1) << 34);
+
+  EXPECT_EQ(tree_head.timestamp, expected_time);
 }
 
 TEST(CTLogResponseParserTest, ParsesConsistencyProofSuccessfully) {

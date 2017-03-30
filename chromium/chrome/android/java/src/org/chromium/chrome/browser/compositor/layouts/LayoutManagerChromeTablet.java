@@ -118,11 +118,6 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     }
 
     @Override
-    protected void tabClosed(int id, int nextId, boolean incognito) {
-        super.tabClosed(id, nextId, incognito);
-    }
-
-    @Override
     protected void tabClosureCommitted(int id, boolean incognito) {
         super.tabClosureCommitted(id, incognito);
         if (mTitleCache != null) mTitleCache.remove(id);
@@ -141,7 +136,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
             ReaderModeManagerDelegate readerModeDelegate,
             DynamicResourceLoader dynamicResourceLoader) {
         if (mTabStripLayoutHelperManager != null) {
-            mTabStripLayoutHelperManager.setTabModelSelector(selector, creator, content);
+            mTabStripLayoutHelperManager.setTabModelSelector(selector, creator);
         }
 
         super.init(selector, creator, content, androidContentContainer, contextualSearchDelegate,

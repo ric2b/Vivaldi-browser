@@ -19,8 +19,17 @@ namespace net {
 CertificateReportSender::CertificateReportSender(
     URLRequestContext* request_context,
     CookiesPreference cookies_preference)
+    : CertificateReportSender(request_context,
+                              cookies_preference,
+                              ErrorCallback()) {}
+
+CertificateReportSender::CertificateReportSender(
+    URLRequestContext* request_context,
+    CookiesPreference cookies_preference,
+    const ErrorCallback& error_callback)
     : request_context_(request_context),
-      cookies_preference_(cookies_preference) {}
+      cookies_preference_(cookies_preference),
+      error_callback_(error_callback) {}
 
 CertificateReportSender::~CertificateReportSender() {
   // Cancel all of the uncompleted requests.
@@ -51,10 +60,18 @@ void CertificateReportSender::Send(const GURL& report_uri,
   raw_url_request->Start();
 }
 
+void CertificateReportSender::SetErrorCallback(
+    const ErrorCallback& error_callback) {
+  error_callback_ = error_callback;
+}
+
 void CertificateReportSender::OnResponseStarted(URLRequest* request) {
-  // TODO(estark): call a callback so that the caller can print a
-  // warning on failure.
-  DVLOG(1) << "Failed to send certificate report for " << request->url().host();
+  if (!request->status().is_success()) {
+    DVLOG(1) << "Failed to send certificate report for "
+             << request->url().host();
+    if (!error_callback_.is_null())
+      error_callback_.Run(request->url(), request->status().error());
+  }
 
   CHECK_GT(inflight_requests_.erase(request), 0u);
   // Clean up the request, which cancels it.

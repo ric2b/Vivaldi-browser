@@ -31,17 +31,12 @@
 #include "platform/graphics/GeneratedImage.h"
 
 #include "platform/geometry/FloatRect.h"
+#include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/SkPictureBuilder.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkPicture.h"
 
 namespace blink {
-
-void GeneratedImage::computeIntrinsicDimensions(FloatSize& intrinsicSize, FloatSize& intrinsicRatio)
-{
-    Image::computeIntrinsicDimensions(intrinsicSize, intrinsicRatio);
-    intrinsicRatio = FloatSize();
-}
 
 void GeneratedImage::drawPattern(GraphicsContext& destContext, const FloatRect& srcRect, const FloatSize& scale,
     const FloatPoint& phase, SkXfermode::Mode compositeOp, const FloatRect& destRect,
@@ -53,14 +48,14 @@ void GeneratedImage::drawPattern(GraphicsContext& destContext, const FloatRect& 
     SkPictureBuilder builder(tileRect, nullptr, &destContext);
     builder.context().beginRecording(tileRect);
     drawTile(builder.context(), srcRect);
-    RefPtr<const SkPicture> tilePicture = builder.endRecording();
+    RefPtr<SkPicture> tilePicture = builder.endRecording();
 
     AffineTransform patternTransform;
     patternTransform.translate(phase.x(), phase.y());
     patternTransform.scale(scale.width(), scale.height());
     patternTransform.translate(tileRect.x(), tileRect.y());
 
-    RefPtr<Pattern> picturePattern = Pattern::createPicturePattern(tilePicture);
+    RefPtr<Pattern> picturePattern = Pattern::createPicturePattern(tilePicture.release());
     picturePattern->setPatternSpaceTransform(patternTransform);
 
     SkPaint fillPaint = destContext.fillPaint();

@@ -14,7 +14,7 @@ RemoteSecurityContext::RemoteSecurityContext()
 {
     // RemoteSecurityContext's origin is expected to stay uninitialized until
     // we set it using replicated origin data from the browser process.
-    ASSERT(!haveInitializedSecurityOrigin());
+    DCHECK(!getSecurityOrigin());
 
     // CSP will not be replicated for RemoteSecurityContexts, as it is moving
     // to the browser process.  For now, initialize CSP to a default
@@ -26,9 +26,9 @@ RemoteSecurityContext::RemoteSecurityContext()
     // grantUniversalAccess().
 }
 
-PassRefPtrWillBeRawPtr<RemoteSecurityContext> RemoteSecurityContext::create()
+RawPtr<RemoteSecurityContext> RemoteSecurityContext::create()
 {
-    return adoptRefWillBeNoop(new RemoteSecurityContext());
+    return new RemoteSecurityContext();
 }
 
 DEFINE_TRACE(RemoteSecurityContext)

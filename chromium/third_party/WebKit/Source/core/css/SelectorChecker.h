@@ -52,14 +52,16 @@ public:
     public:
         Mode mode = ResolvingStyle;
         bool isUARule = false;
+        bool isQuerySelector = false;
         ComputedStyle* elementStyle = nullptr;
-        RawPtrWillBeMember<LayoutScrollbar> scrollbar = nullptr;
+        Member<LayoutScrollbar> scrollbar = nullptr;
         ScrollbarPart scrollbarPart = NoPart;
     };
 
     explicit SelectorChecker(const Init& init)
         : m_mode(init.mode)
         , m_isUARule(init.isUARule)
+        , m_isQuerySelector(init.isQuerySelector)
         , m_elementStyle(init.elementStyle)
         , m_scrollbar(init.scrollbar)
         , m_scrollbarPart(init.scrollbarPart)
@@ -76,7 +78,7 @@ public:
             , previousElement(nullptr)
             , scope(nullptr)
             , visitedMatchType(visitedMatchType)
-            , pseudoId(NOPSEUDO)
+            , pseudoId(PseudoIdNone)
             , isSubSelector(false)
             , inRightmostCompound(true)
             , hasScrollbarPseudo(false)
@@ -86,9 +88,9 @@ public:
         }
 
         const CSSSelector* selector;
-        RawPtrWillBeMember<Element> element;
-        RawPtrWillBeMember<Element> previousElement;
-        RawPtrWillBeMember<const ContainerNode> scope;
+        Member<Element> element;
+        Member<Element> previousElement;
+        Member<const ContainerNode> scope;
         VisitedMatchType visitedMatchType;
         PseudoId pseudoId;
         bool isSubSelector;
@@ -101,7 +103,7 @@ public:
     struct MatchResult {
         STACK_ALLOCATED();
         MatchResult()
-            : dynamicPseudo(NOPSEUDO)
+            : dynamicPseudo(PseudoIdNone)
             , specificity(0) { }
 
         PseudoId dynamicPseudo;
@@ -140,8 +142,9 @@ private:
 
     Mode m_mode;
     bool m_isUARule;
+    bool m_isQuerySelector;
     ComputedStyle* m_elementStyle;
-    RawPtrWillBeMember<LayoutScrollbar> m_scrollbar;
+    Member<LayoutScrollbar> m_scrollbar;
     ScrollbarPart m_scrollbarPart;
 };
 

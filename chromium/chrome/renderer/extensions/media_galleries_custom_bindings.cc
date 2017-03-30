@@ -20,7 +20,7 @@ MediaGalleriesCustomBindings::MediaGalleriesCustomBindings(
     ScriptContext* context)
     : ObjectBackedNativeHandler(context) {
   RouteFunction(
-      "GetMediaFileSystemObject",
+      "GetMediaFileSystemObject", "mediaGalleries",
       base::Bind(&MediaGalleriesCustomBindings::GetMediaFileSystemObject,
                  base::Unretained(this)));
 }
@@ -37,8 +37,8 @@ void MediaGalleriesCustomBindings::GetMediaFileSystemObject(
 
   blink::WebLocalFrame* webframe =
       blink::WebLocalFrame::frameForCurrentContext();
-  const GURL origin =
-      blink::WebStringToGURL(webframe->document().securityOrigin().toString());
+  const GURL origin = blink::WebStringToGURL(
+      webframe->document().getSecurityOrigin().toString());
   std::string fs_name =
       storage::GetFileSystemName(origin, storage::kFileSystemTypeExternal);
   fs_name.append("_");

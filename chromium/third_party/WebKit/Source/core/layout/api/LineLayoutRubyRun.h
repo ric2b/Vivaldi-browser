@@ -7,6 +7,8 @@
 
 #include "core/layout/LayoutRubyRun.h"
 #include "core/layout/api/LineLayoutBlockFlow.h"
+#include "core/layout/api/LineLayoutRubyBase.h"
+#include "core/layout/api/LineLayoutRubyText.h"
 
 namespace blink {
 
@@ -20,7 +22,7 @@ public:
     explicit LineLayoutRubyRun(const LineLayoutItem& item)
         : LineLayoutBlockFlow(item)
     {
-        ASSERT(!item || item.isRubyRun());
+        ASSERT_WITH_SECURITY_IMPLICATION(!item || item.isRubyRun());
     }
 
     explicit LineLayoutRubyRun(std::nullptr_t) : LineLayoutBlockFlow(nullptr) { }
@@ -32,14 +34,14 @@ public:
         toRubyRun()->getOverhang(firstLine, startLayoutItem.layoutObject(), endLayoutItem.layoutObject(), startOverhang, endOverhang);
     }
 
-    LayoutRubyText* rubyText() const
+    LineLayoutRubyText rubyText() const
     {
-        return toRubyRun()->rubyText();
+        return LineLayoutRubyText(toRubyRun()->rubyText());
     }
 
-    LayoutRubyBase* rubyBase() const
+    LineLayoutRubyBase rubyBase() const
     {
-        return toRubyRun()->rubyBase();
+        return LineLayoutRubyBase(toRubyRun()->rubyBase());
     }
 
     bool canBreakBefore(const LazyLineBreakIterator& iterator) const

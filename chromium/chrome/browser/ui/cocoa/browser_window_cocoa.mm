@@ -310,11 +310,11 @@ void BrowserWindowCocoa::UpdateTitleBar() {
 }
 
 NSString* BrowserWindowCocoa::WindowTitle() {
-  if (media_state_ == TAB_MEDIA_STATE_AUDIO_PLAYING) {
+  if (alert_state_ == TabAlertState::AUDIO_PLAYING) {
     return l10n_util::GetNSStringF(IDS_WINDOW_AUDIO_PLAYING_MAC,
                                    browser_->GetWindowTitleForCurrentTab(),
                                    base::SysNSStringToUTF16(@"🔊"));
-  } else if (media_state_ == TAB_MEDIA_STATE_AUDIO_MUTING) {
+  } else if (alert_state_ == TabAlertState::AUDIO_MUTING) {
     return l10n_util::GetNSStringF(IDS_WINDOW_AUDIO_MUTING_MAC,
                                    browser_->GetWindowTitleForCurrentTab(),
                                    base::SysNSStringToUTF16(@"🔇"));
@@ -527,8 +527,8 @@ void BrowserWindowCocoa::AddFindBar(
   [controller_ addFindBar:find_bar_cocoa_controller];
 }
 
-void BrowserWindowCocoa::UpdateMediaState(TabMediaState media_state) {
-  media_state_ = media_state;
+void BrowserWindowCocoa::UpdateAlertState(TabAlertState alert_state) {
+  alert_state_ = alert_state;
   UpdateTitleBar();
 }
 
@@ -688,6 +688,10 @@ void BrowserWindowCocoa::ConfirmBrowserCloseWithPendingDownloads(
 
 void BrowserWindowCocoa::UserChangedTheme() {
   [controller_ userChangedTheme];
+  LocationBarViewMac* locationBar = [controller_ locationBarBridge];
+  if (locationBar) {
+    locationBar->OnThemeChanged();
+  }
 }
 
 void BrowserWindowCocoa::ShowWebsiteSettings(
@@ -849,4 +853,11 @@ void BrowserWindowCocoa::ExecuteExtensionCommand(
 
 ExclusiveAccessContext* BrowserWindowCocoa::GetExclusiveAccessContext() {
   return [controller_ exclusiveAccessController];
+}
+
+void BrowserWindowCocoa::ShowImeWarningBubble(
+    const extensions::Extension* extension,
+    const base::Callback<void(ImeWarningBubblePermissionStatus status)>&
+        callback) {
+  NOTREACHED() << "The IME warning bubble is unsupported on this platform.";
 }

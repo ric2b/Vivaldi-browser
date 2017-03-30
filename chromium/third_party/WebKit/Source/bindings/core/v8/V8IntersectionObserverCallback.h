@@ -14,7 +14,7 @@
 namespace blink {
 
 class V8IntersectionObserverCallback final : public IntersectionObserverCallback, public ActiveDOMCallback {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(V8IntersectionObserverCallback);
+    USING_GARBAGE_COLLECTED_MIXIN(V8IntersectionObserverCallback);
 public:
     CORE_EXPORT V8IntersectionObserverCallback(v8::Local<v8::Function>, v8::Local<v8::Object>, ScriptState*);
     ~V8IntersectionObserverCallback() override;
@@ -22,7 +22,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
     void handleEvent(const HeapVector<Member<IntersectionObserverEntry>>&, IntersectionObserver&) override;
-    ExecutionContext* executionContext() const override { return ContextLifecycleObserver::executionContext(); }
+    ExecutionContext* getExecutionContext() const override { return ContextLifecycleObserver::getExecutionContext(); }
 private:
 
     static void setWeakCallback(const v8::WeakCallbackInfo<V8IntersectionObserverCallback>&);

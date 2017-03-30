@@ -29,19 +29,14 @@ blink::WebTimeRanges ConvertToWebTimeRanges(
 
 blink::WebMediaPlayer::NetworkState PipelineErrorToNetworkState(
     PipelineStatus error) {
-  DCHECK_NE(error, PIPELINE_OK);
-
   switch (error) {
     case PIPELINE_ERROR_NETWORK:
     case PIPELINE_ERROR_READ:
+    case CHUNK_DEMUXER_ERROR_EOS_STATUS_NETWORK_ERROR:
       return blink::WebMediaPlayer::NetworkStateNetworkError;
 
-    // TODO(vrk): Because OnPipelineInitialize() directly reports the
-    // NetworkStateFormatError instead of calling OnPipelineError(), I believe
-    // this block can be deleted. Should look into it! (crbug.com/126070)
     case PIPELINE_ERROR_INITIALIZATION_FAILED:
     case PIPELINE_ERROR_COULD_NOT_RENDER:
-    case PIPELINE_ERROR_URL_NOT_FOUND:
     case DEMUXER_ERROR_COULD_NOT_OPEN:
     case DEMUXER_ERROR_COULD_NOT_PARSE:
     case DEMUXER_ERROR_NO_SUPPORTED_STREAMS:
@@ -50,8 +45,11 @@ blink::WebMediaPlayer::NetworkState PipelineErrorToNetworkState(
 
     case PIPELINE_ERROR_DECODE:
     case PIPELINE_ERROR_ABORT:
-    case PIPELINE_ERROR_OPERATION_PENDING:
     case PIPELINE_ERROR_INVALID_STATE:
+    case CHUNK_DEMUXER_ERROR_APPEND_FAILED:
+    case CHUNK_DEMUXER_ERROR_EOS_STATUS_DECODE_ERROR:
+    case AUDIO_RENDERER_ERROR:
+    case AUDIO_RENDERER_ERROR_SPLICE_FAILED:
       return blink::WebMediaPlayer::NetworkStateDecodeError;
 
     case PIPELINE_OK:
@@ -109,8 +107,6 @@ std::string LoadTypeToString(blink::WebMediaPlayer::LoadType load_type) {
 
 }  // namespace
 
-// TODO(xhwang): Call this from WebMediaPlayerMS to report metrics for
-// MediaStream as well.
 void ReportMetrics(blink::WebMediaPlayer::LoadType load_type,
                    const GURL& url,
                    const blink::WebSecurityOrigin& security_origin) {
@@ -132,8 +128,7 @@ void ReportMetrics(blink::WebMediaPlayer::LoadType load_type,
 
     // For MSE, also report usage by secure/insecure origin.
     if (load_type == blink::WebMediaPlayer::LoadTypeMediaSource) {
-      blink::WebString error_message;
-      if (security_origin.isPotentiallyTrustworthy(error_message)) {
+      if (security_origin.isPotentiallyTrustworthy()) {
         GetMediaClient()->RecordRapporURL("Media.OriginUrl.MSE.Secure",
                                           security_origin_url);
       } else {
@@ -240,7 +235,7 @@ void RunSetSinkIdCallback(const SetSinkIdCallback& callback,
 
 }  // namespace
 
-SwitchOutputDeviceCB ConvertToSwitchOutputDeviceCB(
+OutputDeviceStatusCB ConvertToOutputDeviceStatusCB(
     blink::WebSetSinkIdCallbacks* web_callbacks) {
   return media::BindToCurrentLoop(
       base::Bind(RunSetSinkIdCallback, SetSinkIdCallback(web_callbacks)));

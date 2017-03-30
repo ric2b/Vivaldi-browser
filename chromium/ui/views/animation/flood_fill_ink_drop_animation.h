@@ -15,6 +15,7 @@
 #include "ui/compositor/layer_animator.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/transform.h"
 #include "ui/views/animation/ink_drop_animation.h"
@@ -40,15 +41,15 @@ class FloodFillInkDropAnimationTestApi;
 //
 //   {All InkDropStates}      => HIDDEN
 //   HIDDEN                   => ACTION_PENDING
-//   HIDDEN, ACTION_PENDING   => QUICK_ACTION
-//   ACTION_PENDING           => SLOW_ACTION_PENDING
-//   SLOW_ACTION_PENDING      => SLOW_ACTION
+//   HIDDEN, ACTION_PENDING   => ACTION_TRIGGERED
+//   ACTION_PENDING           => ALTERNATE_ACTION_PENDING
+//   ALTERNATE_ACTION_PENDING => ALTERNATE_ACTION_TRIGGERED
 //   {All InkDropStates}      => ACTIVATED
 //   {All InkDropStates}      => DEACTIVATED
 //
 class VIEWS_EXPORT FloodFillInkDropAnimation : public InkDropAnimation {
  public:
-  FloodFillInkDropAnimation(const gfx::Size& size,
+  FloodFillInkDropAnimation(const gfx::Rect& clip_bounds,
                             const gfx::Point& center_point,
                             SkColor color);
   ~FloodFillInkDropAnimation() override;
@@ -98,11 +99,11 @@ class VIEWS_EXPORT FloodFillInkDropAnimation : public InkDropAnimation {
   // |target_radius|.
   gfx::Transform CalculateTransform(float target_radius) const;
 
-  // Returns the target Transform for the ACTIVATED animation.
-  gfx::Transform GetActivatedTargetTransform() const;
+  // Returns the target Transform for when the ink drop is fully shown.
+  gfx::Transform GetMaxSizeTargetTransform() const;
 
-  // The clip Size.
-  const gfx::Size size_;
+  // The clip bounds.
+  const gfx::Rect clip_bounds_;
 
   // The point where the Center of the ink drop's circle should be drawn.
   gfx::Point center_point_;

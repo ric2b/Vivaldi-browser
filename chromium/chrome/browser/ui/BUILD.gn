@@ -52,30 +52,67 @@ source_set("ui") {
     "//chrome/app/theme:theme_resources",
     "//chrome/common",
     "//components/app_modal",
-    "//components/auto_login_parser",
+    "//components/autofill/core/browser",
+    "//components/bookmarks/browser",
+    "//components/browser_sync/browser",
     "//components/certificate_reporting:cert_logger_proto",
     "//components/certificate_reporting:encrypted_cert_logger_proto",
+    "//components/content_settings/core/browser",
+    "//components/data_reduction_proxy/core/browser",
+    "//components/device_event_log",
+    "//components/dom_distiller/content/browser",
     "//components/dom_distiller/webui",
+    "//components/domain_reliability",
+    "//components/favicon/content",
+    "//components/favicon/core",
+    "//components/feedback",
     "//components/flags_ui",
+    "//components/gcm_driver",
+    "//components/google/core/browser",
     "//components/guest_view/browser",
     "//components/history/core/browser",
+    "//components/infobars/core",
     "//components/invalidation/impl",
     "//components/keyed_service/content",
     "//components/keyed_service/core",
-    "//components/omnibox/common",
+    "//components/metrics:profiler",
+    "//components/mime_util",
+    "//components/omnibox/browser",
     "//components/onc",
+    "//components/password_manager/content/browser",
     "//components/password_manager/core/browser",
+    "//components/pdf/browser",
+    "//components/policy",
+    "//components/pref_registry",
+    "//components/proximity_auth",
+    "//components/proxy_config",
+    "//components/query_parser",
+    "//components/rappor",
+    "//components/renderer_context_menu",
     "//components/resources",
+    "//components/search",
+    "//components/search_engines",
+    "//components/security_interstitials/core",
+    "//components/security_state",
+    "//components/signin/core/account_id",
     "//components/signin/core/browser",
+    "//components/ssl_errors",
+    "//components/startup_metric_utils/browser:lib",
     "//components/strings",
     "//components/sync_driver",
+    "//components/sync_sessions",
     "//components/toolbar",
     "//components/translate/core/browser",
     "//components/ui/zoom",
     "//components/update_client",
+    "//components/upload_list",
+    "//components/user_prefs",
     "//components/version_ui",
+    "//components/web_modal",
+    "//components/web_resource",
     "//content/public/common",
     "//crypto",
+    "//device/core",
     "//skia",
     "//third_party/cacheinvalidation",
     "//third_party/icu",
@@ -90,6 +127,7 @@ source_set("ui") {
     "//ui/message_center",
     "//ui/native_theme",
     "//ui/resources",
+    "//ui/shell_dialogs",
     "//ui/snapshot",
     "//ui/strings",
   ]
@@ -114,6 +152,7 @@ source_set("ui") {
       "//chrome/common/net",
       "//chrome/installer/util:with_no_strings",
       "//components/autofill/content/browser:risk_proto",
+      "//components/browsing_data_ui",
       "//components/bubble:bubble",
       "//components/crash/core/browser",
       "//components/net_log",
@@ -160,12 +199,7 @@ source_set("ui") {
       "//components/feedback/proto",
       "//components/proximity_auth/webui",
       "//device/bluetooth",
-      "//third_party/libusb",
     ]
-
-    if (is_android) {
-      deps -= [ "//third_party/libusb" ]
-    }
   }
 
   if (use_aura) {
@@ -180,12 +214,6 @@ source_set("ui") {
     sources +=
         rebase_path(gypi_values.chrome_browser_ui_nacl_sources, ".", "//chrome")
     deps += [ "//native_client/src/trusted/service_runtime:sel" ]
-  }
-  if (enable_configuration_policy) {
-    sources += rebase_path(gypi_values.chrome_browser_ui_policy_sources,
-                           ".",
-                           "//chrome")
-    deps += [ "//components/policy" ]
   }
   if (enable_plugins) {
     sources += rebase_path(gypi_values.chrome_browser_ui_plugin_sources,
@@ -333,6 +361,11 @@ source_set("ui") {
   if (use_nss_certs) {
     sources +=
         rebase_path(gypi_values.chrome_browser_ui_nss_sources, ".", "//chrome")
+  }
+  if (is_mac || is_win) {
+    sources += rebase_path(gypi_values.chrome_browser_ui_non_nss_sources,
+                           ".",
+                           "//chrome")
   }
   if (!enable_themes) {
     sources -= [ "webui/theme_source.cc" ]
@@ -582,8 +615,8 @@ source_set("test_support") {
     "exclusive_access/fullscreen_controller_test.cc",
     "exclusive_access/fullscreen_controller_test.h",
     "find_bar/find_bar_host_unittest_util.h",
-    "login/login_prompt_test_utils.cc",
-    "login/login_prompt_test_utils.h",
+    "login/login_handler_test_utils.cc",
+    "login/login_handler_test_utils.h",
     "passwords/manage_passwords_ui_controller_mock.cc",
     "passwords/manage_passwords_ui_controller_mock.h",
     "test/test_confirm_bubble_model.cc",

@@ -29,11 +29,16 @@ WifiAccessPoint::WifiAccessPoint()
       channel(0) {
 }
 
+WifiAccessPoint::WifiAccessPoint(const WifiAccessPoint& other) = default;
+
 WifiAccessPoint::~WifiAccessPoint() {
 }
 
 CellularScanResult::CellularScanResult() {
 }
+
+CellularScanResult::CellularScanResult(const CellularScanResult& other) =
+    default;
 
 CellularScanResult::~CellularScanResult() {
 }
@@ -147,10 +152,11 @@ bool ParseCellularScanResults(const base::ListValue& list,
   return true;
 }
 
-scoped_ptr<base::DictionaryValue> TranslateNetworkStateToONC(
+std::unique_ptr<base::DictionaryValue> TranslateNetworkStateToONC(
     const NetworkState* network) {
   // Get the properties from the NetworkState.
-  scoped_ptr<base::DictionaryValue> shill_dictionary(new base::DictionaryValue);
+  std::unique_ptr<base::DictionaryValue> shill_dictionary(
+      new base::DictionaryValue);
   network->GetStateProperties(shill_dictionary.get());
 
   // Get any Device properties required to translate state.
@@ -161,7 +167,8 @@ scoped_ptr<base::DictionaryValue> TranslateNetworkStateToONC(
         NetworkHandler::Get()->network_state_handler()->GetDeviceState(
             network->device_path());
     if (device) {
-      scoped_ptr<base::DictionaryValue> device_dict(new base::DictionaryValue);
+      std::unique_ptr<base::DictionaryValue> device_dict(
+          new base::DictionaryValue);
       device_dict->SetBooleanWithoutPathExpansion(
           shill::kProviderRequiresRoamingProperty,
           device->provider_requires_roaming());
@@ -180,13 +187,13 @@ scoped_ptr<base::DictionaryValue> TranslateNetworkStateToONC(
       ->managed_network_configuration_handler()
       ->FindPolicyByGUID(user_id_hash, network->guid(), &onc_source);
 
-  scoped_ptr<base::DictionaryValue> onc_dictionary =
+  std::unique_ptr<base::DictionaryValue> onc_dictionary =
       TranslateShillServiceToONCPart(*shill_dictionary, onc_source,
                                      &onc::kNetworkWithStateSignature, network);
   return onc_dictionary;
 }
 
-scoped_ptr<base::ListValue> TranslateNetworkListToONC(
+std::unique_ptr<base::ListValue> TranslateNetworkListToONC(
     NetworkTypePattern pattern,
     bool configured_only,
     bool visible_only,
@@ -195,9 +202,9 @@ scoped_ptr<base::ListValue> TranslateNetworkListToONC(
   NetworkHandler::Get()->network_state_handler()->GetNetworkListByType(
       pattern, configured_only, visible_only, limit, &network_states);
 
-  scoped_ptr<base::ListValue> network_properties_list(new base::ListValue);
+  std::unique_ptr<base::ListValue> network_properties_list(new base::ListValue);
   for (const NetworkState* state : network_states) {
-    scoped_ptr<base::DictionaryValue> onc_dictionary =
+    std::unique_ptr<base::DictionaryValue> onc_dictionary =
         TranslateNetworkStateToONC(state);
     network_properties_list->Append(onc_dictionary.release());
   }

@@ -4,9 +4,12 @@
 
 #include "components/leveldb/leveldb_database_impl.h"
 
+#include <map>
+#include <string>
+
 #include "base/rand_util.h"
 #include "components/leveldb/env_mojo.h"
-#include "components/leveldb/util.h"
+#include "components/leveldb/public/cpp/util.h"
 #include "mojo/common/common_type_converters.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/write_batch.h"
@@ -28,8 +31,8 @@ uint64_t GetSafeRandomId(const std::map<uint64_t, T>& m) {
 }  // namespace
 
 LevelDBDatabaseImpl::LevelDBDatabaseImpl(
-    mojo::InterfaceRequest<LevelDBDatabase> request,
-    scoped_ptr<MojoEnv> environment,
+    leveldb::LevelDBDatabaseRequest request,
+    scoped_ptr<leveldb::Env> environment,
     scoped_ptr<leveldb::DB> db)
     : binding_(this, std::move(request)),
       environment_(std::move(environment)),
@@ -107,14 +110,131 @@ void LevelDBDatabaseImpl::GetFromSnapshot(uint64_t snapshot_id,
                                           const GetCallback& callback) {
   // If the snapshot id is invalid, send back invalid argument
   auto it = snapshot_map_.find(snapshot_id);
-  if (it == snapshot_map_.end())
+  if (it == snapshot_map_.end()) {
     callback.Run(DatabaseError::INVALID_ARGUMENT, mojo::Array<uint8_t>());
+    return;
+  }
 
   std::string value;
   leveldb::ReadOptions options;
   options.snapshot = it->second;
   leveldb::Status status = db_->Get(options, GetSliceFor(key), &value);
   callback.Run(LeveldbStatusToError(status), mojo::Array<uint8_t>::From(value));
+}
+
+void LevelDBDatabaseImpl::NewIterator(const NewIteratorCallback& callback) {
+  Iterator* iterator = db_->NewIterator(leveldb::ReadOptions());
+  uint64_t new_id = GetSafeRandomId(iterator_map_);
+  iterator_map_.insert(std::make_pair(new_id, iterator));
+  callback.Run(new_id);
+}
+
+void LevelDBDatabaseImpl::NewIteratorFromSnapshot(
+    uint64_t snapshot_id,
+    const NewIteratorCallback& callback) {
+  // If the snapshot id is invalid, send back invalid argument
+  auto it = snapshot_map_.find(snapshot_id);
+  if (it == snapshot_map_.end()) {
+    callback.Run(0);
+    return;
+  }
+
+  leveldb::ReadOptions options;
+  options.snapshot = it->second;
+
+  Iterator* iterator = db_->NewIterator(options);
+  uint64_t new_id = GetSafeRandomId(iterator_map_);
+  iterator_map_.insert(std::make_pair(new_id, iterator));
+  callback.Run(new_id);
+}
+
+void LevelDBDatabaseImpl::ReleaseIterator(uint64_t iterator_id) {
+  auto it = iterator_map_.find(iterator_id);
+  if (it != iterator_map_.end()) {
+    delete it->second;
+    iterator_map_.erase(it);
+  }
+}
+
+void LevelDBDatabaseImpl::IteratorSeekToFirst(
+    uint64_t iterator_id,
+    const IteratorSeekToFirstCallback& callback) {
+  auto it = iterator_map_.find(iterator_id);
+  if (it == iterator_map_.end()) {
+    callback.Run(false, DatabaseError::INVALID_ARGUMENT, nullptr, nullptr);
+    return;
+  }
+
+  it->second->SeekToFirst();
+
+  ReplyToIteratorMessage(it->second, callback);
+}
+
+void LevelDBDatabaseImpl::IteratorSeekToLast(
+    uint64_t iterator_id,
+    const IteratorSeekToLastCallback& callback) {
+  auto it = iterator_map_.find(iterator_id);
+  if (it == iterator_map_.end()) {
+    callback.Run(false, DatabaseError::INVALID_ARGUMENT, nullptr, nullptr);
+    return;
+  }
+
+  it->second->SeekToLast();
+
+  ReplyToIteratorMessage(it->second, callback);
+}
+
+void LevelDBDatabaseImpl::IteratorSeek(
+    uint64_t iterator_id,
+    mojo::Array<uint8_t> target,
+    const IteratorSeekToLastCallback& callback) {
+  auto it = iterator_map_.find(iterator_id);
+  if (it == iterator_map_.end()) {
+    callback.Run(false, DatabaseError::INVALID_ARGUMENT, nullptr, nullptr);
+    return;
+  }
+
+  it->second->Seek(GetSliceFor(target));
+
+  ReplyToIteratorMessage(it->second, callback);
+}
+
+void LevelDBDatabaseImpl::IteratorNext(uint64_t iterator_id,
+                                       const IteratorNextCallback& callback) {
+  auto it = iterator_map_.find(iterator_id);
+  if (it == iterator_map_.end()) {
+    callback.Run(false, DatabaseError::INVALID_ARGUMENT, nullptr, nullptr);
+    return;
+  }
+
+  it->second->Next();
+
+  ReplyToIteratorMessage(it->second, callback);
+}
+
+void LevelDBDatabaseImpl::IteratorPrev(uint64_t iterator_id,
+                                       const IteratorPrevCallback& callback) {
+  auto it = iterator_map_.find(iterator_id);
+  if (it == iterator_map_.end()) {
+    callback.Run(false, DatabaseError::INVALID_ARGUMENT, nullptr, nullptr);
+    return;
+  }
+
+  it->second->Prev();
+
+  ReplyToIteratorMessage(it->second, callback);
+}
+
+void LevelDBDatabaseImpl::ReplyToIteratorMessage(
+    leveldb::Iterator* it,
+    const IteratorSeekToFirstCallback& callback) {
+  if (!it->Valid()) {
+    callback.Run(false, LeveldbStatusToError(it->status()), nullptr, nullptr);
+    return;
+  }
+
+  callback.Run(true, LeveldbStatusToError(it->status()), GetArrayFor(it->key()),
+               GetArrayFor(it->value()));
 }
 
 }  // namespace leveldb

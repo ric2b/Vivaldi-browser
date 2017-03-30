@@ -87,6 +87,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     bool ext_render_buffer_format_bgra8888;
     bool ext_multisample_compatibility;
     bool ext_blend_func_extended;
+    bool ext_read_format_bgra;
   };
 
   struct Workarounds {
@@ -193,9 +194,6 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
   bool enable_unsafe_es3_apis_switch_;
 
   bool unsafe_es3_apis_enabled_;
-
-  // Whether the command line switch kEnableGLPathRendering is passed in.
-  bool enable_gl_path_rendering_switch_;
 
   bool chromium_color_buffer_float_rgba_available_;
   bool chromium_color_buffer_float_rgb_available_;

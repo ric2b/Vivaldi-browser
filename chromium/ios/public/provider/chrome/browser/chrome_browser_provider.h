@@ -7,12 +7,13 @@
 
 #include <CoreGraphics/CoreGraphics.h>
 #include <stddef.h>
+
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "components/favicon_base/favicon_callback.h"
 
 class AutocompleteProvider;
@@ -113,17 +114,9 @@ class ChromeBrowserProvider {
   // metrics_services_manager_client.h for details on |on_update_callback|.
   virtual bool IsSafeBrowsingEnabled(const base::Closure& on_update_callback);
 
-  // Called when the IOSChromeMetricsServiceClientManager instance is
-  // destroyed.
-  virtual void OnMetricsServicesManagerClientDestroyed();
-
   // Returns the SyncedWindowDelegatesGetter implementation.
-  virtual scoped_ptr<browser_sync::SyncedWindowDelegatesGetter>
+  virtual std::unique_ptr<browser_sync::SyncedWindowDelegatesGetter>
   CreateSyncedWindowDelegatesGetter(ios::ChromeBrowserState* browser_state);
-
-  // Gets the URLRequestContextGetter used by the SafeBrowsing service. Returns
-  // null if there is no SafeBrowsing service.
-  virtual net::URLRequestContextGetter* GetSafeBrowsingURLRequestContext();
 };
 
 }  // namespace ios

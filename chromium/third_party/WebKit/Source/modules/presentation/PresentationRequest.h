@@ -5,6 +5,7 @@
 #ifndef PresentationRequest_h
 #define PresentationRequest_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/events/EventTarget.h"
@@ -18,9 +19,10 @@ namespace blink {
 // which websites can start or join presentation connections.
 class PresentationRequest final
     : public RefCountedGarbageCollectedEventTargetWithInlineData<PresentationRequest>
+    , public ActiveScriptWrappable
     , public ActiveDOMObject {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(PresentationRequest);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(PresentationRequest);
+    USING_GARBAGE_COLLECTED_MIXIN(PresentationRequest);
     DEFINE_WRAPPERTYPEINFO();
 public:
     ~PresentationRequest() = default;
@@ -29,10 +31,10 @@ public:
 
     // EventTarget implementation.
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
-    // ActiveDOMObject implementation.
-    bool hasPendingActivity() const;
+    // ActiveScriptWrappable implementation.
+    bool hasPendingActivity() const final;
 
     ScriptPromise start(ScriptState*);
     ScriptPromise reconnect(ScriptState*, const String& id);
@@ -46,7 +48,7 @@ public:
 
 protected:
     // EventTarget implementation.
-    bool addEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, const EventListenerOptions&) override;
+    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) override;
 
 private:
     PresentationRequest(ExecutionContext*, const KURL&);

@@ -11,9 +11,12 @@
 #include <stddef.h>
 #include <winioctl.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file.h"
 #include "base/location.h"
+#include "base/memory/free_deleter.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -23,10 +26,6 @@
 #include "device/hid/hid_connection_win.h"
 #include "device/hid/hid_device_info.h"
 #include "net/base/io_buffer.h"
-
-// Setup API is required to enumerate HID devices.
-#pragma comment(lib, "setupapi.lib")
-#pragma comment(lib, "hid.lib")
 
 namespace device {
 
@@ -68,7 +67,8 @@ void HidServiceWin::Connect(const HidDeviceId& device_id,
 
   task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(callback, new HidConnectionWin(device_info, file.Pass())));
+      base::Bind(callback, make_scoped_refptr(
+          new HidConnectionWin(device_info, std::move(file)))));
 }
 
 // static
@@ -295,7 +295,7 @@ base::win::ScopedHandle HidServiceWin::OpenDevice(
     file.Set(CreateFileA(device_path.c_str(), GENERIC_READ, FILE_SHARE_READ,
                          NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL));
   }
-  return file.Pass();
+  return file;
 }
 
 }  // namespace device

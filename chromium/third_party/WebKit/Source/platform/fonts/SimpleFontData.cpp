@@ -41,7 +41,7 @@
 #include "wtf/Partitions.h"
 #include "wtf/text/CharacterNames.h"
 #include "wtf/text/Unicode.h"
-#include <unicode/normlzr.h>
+#include <unicode/unorm.h>
 #include <unicode/utf16.h>
 
 namespace blink {
@@ -141,7 +141,7 @@ void SimpleFontData::platformInit()
         // of the glyph may be truncated when displayed in a 'overflow: hidden' container.
         // To avoid that, borrow 1 unit from the ascent when possible.
         // FIXME: This can be removed if sub-pixel ascent/descent is supported.
-        if (platformData().fontRenderStyle().useSubpixelPositioning && descent < SkScalarToFloat(metrics.fDescent) && ascent >= 1) {
+        if (platformData().getFontRenderStyle().useSubpixelPositioning && descent < SkScalarToFloat(metrics.fDescent) && ascent >= 1) {
             ++descent;
             --ascent;
         }
@@ -156,9 +156,9 @@ void SimpleFontData::platformInit()
     // web standard. The AppKit adjustment of 20% is too big and is
     // incorrectly added to line spacing, so we use a 15% adjustment instead
     // and add it to the ascent.
-    DEFINE_STATIC_LOCAL(AtomicString, timesName, ("Times", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(AtomicString, helveticaName, ("Helvetica", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(AtomicString, courierName, ("Courier", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(AtomicString, timesName, ("Times"));
+    DEFINE_STATIC_LOCAL(AtomicString, helveticaName, ("Helvetica"));
+    DEFINE_STATIC_LOCAL(AtomicString, courierName, ("Courier"));
     String familyName = m_platformData.fontFamilyName();
     if (familyName == timesName || familyName == helveticaName || familyName == courierName)
         ascent += floorf(((ascent + descent) * 0.15f) + 0.5f);
@@ -428,13 +428,13 @@ float SimpleFontData::platformWidthForGlyph(Glyph glyph) const
 bool SimpleFontData::fillGlyphPage(GlyphPage* pageToFill, unsigned offset, unsigned length, UChar* buffer, unsigned bufferLength) const
 {
     if (U16_IS_LEAD(buffer[bufferLength-1])) {
-        WTF_LOG_ERROR("Last UTF-16 code unit is high-surrogate.");
+        DLOG(ERROR) << "Last UTF-16 code unit is high-surrogate.";
         return false;
     }
 
     SkTypeface* typeface = platformData().typeface();
     if (!typeface) {
-        WTF_LOG_ERROR("fillGlyphPage called on an empty Skia typeface.");
+        DLOG(ERROR) << "fillGlyphPage called on an empty Skia typeface.";
         return false;
     }
 

@@ -67,7 +67,8 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
   // become ready to handle the seek request quickly.
   //
   // This function can be called on any thread.
-  void StartWaitingForSeek();
+  void StartWaitingForSeek(base::TimeDelta seek_time) override;
+  void CancelPendingSeek(base::TimeDelta seek_time) override;
 
  private:
   // Called when demuxer initiazlizes.

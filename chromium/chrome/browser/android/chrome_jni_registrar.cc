@@ -57,12 +57,12 @@
 #include "chrome/browser/android/metrics/uma_session_stats.h"
 #include "chrome/browser/android/metrics/uma_utils.h"
 #include "chrome/browser/android/metrics/variations_session.h"
-#include "chrome/browser/android/most_visited_sites.h"
+#include "chrome/browser/android/mojo/chrome_service_registrar_android.h"
 #include "chrome/browser/android/net/external_estimate_provider_android.h"
-#include "chrome/browser/android/new_tab_page_prefs.h"
-#include "chrome/browser/android/ntp_snippets_bridge.h"
-#include "chrome/browser/android/ntp_snippets_controller.h"
-#include "chrome/browser/android/ntp_snippets_launcher.h"
+#include "chrome/browser/android/ntp/most_visited_sites.h"
+#include "chrome/browser/android/ntp/new_tab_page_prefs.h"
+#include "chrome/browser/android/ntp/ntp_snippets_bridge.h"
+#include "chrome/browser/android/ntp/ntp_snippets_launcher.h"
 #include "chrome/browser/android/offline_pages/offline_page_bridge.h"
 #include "chrome/browser/android/omnibox/answers_image_bridge.h"
 #include "chrome/browser/android/omnibox/autocomplete_controller_android.h"
@@ -157,6 +157,7 @@
 #include "chrome/browser/ui/android/tab_model/single_tab_model.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_jni_bridge.h"
 #include "chrome/browser/ui/android/toolbar/toolbar_model_android.h"
+#include "chrome/browser/ui/android/usb_chooser_dialog_android.h"
 #include "chrome/browser/ui/android/website_settings_popup_android.h"
 #include "components/bookmarks/common/android/component_jni_registrar.h"
 #include "components/dom_distiller/android/component_jni_registrar.h"
@@ -244,6 +245,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"ChromeMediaRouterDialogController",
      media_router::MediaRouterDialogControllerAndroid::Register},
 #endif
+    {"ChromeServiceRegistrar", ChromeServiceRegistrarAndroid::Register},
     {"CompositorView", RegisterCompositorView},
     {"ConfirmInfoBar", RegisterConfirmInfoBar},
     {"ConnectionInfoPopupAndroid",
@@ -310,7 +312,6 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"NotificationUIManager",
      NotificationUIManagerAndroid::RegisterNotificationUIManager},
     {"NTPSnippetsBridge", NTPSnippetsBridge::Register},
-    {"NTPSnippetsController", NTPSnippetsController::Register},
     {"NTPSnippetsLauncher", NTPSnippetsLauncher::Register},
     {"OAuth2TokenServiceDelegateAndroid",
      OAuth2TokenServiceDelegateAndroid::Register},
@@ -375,6 +376,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"UmaSessionStats", RegisterUmaSessionStats},
     {"UpdatePasswordInfoBar", UpdatePasswordInfoBar::Register},
     {"UrlUtilities", RegisterUrlUtilities},
+    {"UsbChooserDialogAndroid", UsbChooserDialogAndroid::Register},
     {"Variations", variations::android::RegisterVariations},
     {"VariationsSeedBridge", variations::android::RegisterVariationsSeedBridge},
     {"VariationsSession", chrome::android::RegisterVariationsSession},

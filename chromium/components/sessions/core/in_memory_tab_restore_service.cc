@@ -86,8 +86,7 @@ void InMemoryTabRestoreService::Shutdown() {
 
 // gisli@vivaldi.com: Added RestorePreviousSession.
 std::vector<LiveTab*> InMemoryTabRestoreService::RestorePreviousSession(
-      LiveTabContext* context,
-      chrome::HostDesktopType host_desktop_type) {
+      LiveTabContext* context) {
   return  std::vector<LiveTab*>();
 };
 

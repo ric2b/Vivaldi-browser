@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 
@@ -72,8 +73,8 @@ class LocalFileSyncService
                               bool has_pending_changes)>
       HasPendingLocalChangeCallback;
 
-  static scoped_ptr<LocalFileSyncService> Create(Profile* profile);
-  static scoped_ptr<LocalFileSyncService> CreateForTesting(
+  static std::unique_ptr<LocalFileSyncService> Create(Profile* profile);
+  static std::unique_ptr<LocalFileSyncService> CreateForTesting(
       Profile* profile,
       leveldb::Env* env_override);
   ~LocalFileSyncService() override;

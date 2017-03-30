@@ -6,9 +6,9 @@
 #define CHROME_BROWSER_EXTENSIONS_EXTERNAL_INSTALL_MANAGER_H_
 
 #include <map>
+#include <memory>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/scoped_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -42,6 +42,20 @@ class ExternalInstallManager : public ExtensionRegistryObserver,
   // Given a (presumably just-installed) extension id, mark that extension as
   // acknowledged.
   void AcknowledgeExternalExtension(const std::string& extension_id);
+
+  // Notifies the manager that |external_install_error| has changed its alert
+  // visibility.
+  void DidChangeInstallAlertVisibility(
+      ExternalInstallError* external_install_error,
+      bool visible);
+
+  bool has_currently_visible_install_alert() {
+    return currently_visible_install_alert_ != nullptr;
+  }
+
+  ExternalInstallError* currently_visible_install_alert_for_testing() const {
+    return currently_visible_install_alert_;
+  }
 
   // Returns a mutable copy of the list of global errors for testing purposes.
   std::vector<ExternalInstallError*> GetErrorsForTesting();
@@ -81,9 +95,12 @@ class ExternalInstallManager : public ExtensionRegistryObserver,
   ExtensionPrefs* extension_prefs_;
 
   // The collection of ExternalInstallErrors.
-  std::map<std::string, scoped_ptr<ExternalInstallError>> errors_;
+  std::map<std::string, std::unique_ptr<ExternalInstallError>> errors_;
 
   std::set<std::string> shown_ids_;
+
+  // The error that is currently showing an alert dialog/bubble.
+  ExternalInstallError* currently_visible_install_alert_;
 
   content::NotificationRegistrar registrar_;
 

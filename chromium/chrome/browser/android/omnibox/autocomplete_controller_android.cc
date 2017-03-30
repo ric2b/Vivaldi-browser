@@ -9,6 +9,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -85,13 +86,13 @@ class ZeroSuggestPrefetcher : public AutocompleteControllerDelegate {
   // AutocompleteControllerDelegate:
   void OnResultChanged(bool default_match_changed) override;
 
-  scoped_ptr<AutocompleteController> controller_;
+  std::unique_ptr<AutocompleteController> controller_;
   base::OneShotTimer expire_timer_;
 };
 
 ZeroSuggestPrefetcher::ZeroSuggestPrefetcher(Profile* profile)
     : controller_(new AutocompleteController(
-          make_scoped_ptr(new ChromeAutocompleteProviderClient(profile)),
+          base::WrapUnique(new ChromeAutocompleteProviderClient(profile)),
           this,
           AutocompleteProvider::TYPE_ZERO_SUGGEST)) {
   // Creating an arbitrary fake_request_source to avoid passing in an invalid
@@ -126,12 +127,11 @@ void ZeroSuggestPrefetcher::OnResultChanged(bool default_match_changed) {
 
 AutocompleteControllerAndroid::AutocompleteControllerAndroid(Profile* profile)
     : autocomplete_controller_(new AutocompleteController(
-          make_scoped_ptr(new ChromeAutocompleteProviderClient(profile)),
+          base::WrapUnique(new ChromeAutocompleteProviderClient(profile)),
           this,
           kAndroidAutocompleteProviders)),
       inside_synchronous_start_(false),
-      profile_(profile) {
-}
+      profile_(profile) {}
 
 void AutocompleteControllerAndroid::Start(
     JNIEnv* env,
@@ -554,19 +554,6 @@ AutocompleteControllerAndroid::BuildOmniboxSuggestion(
       destination_url.obj(),
       bookmark_model && bookmark_model->IsBookmarked(match.destination_url),
       match.SupportsDeletion());
-}
-
-base::string16 AutocompleteControllerAndroid::FormatURLUsingAcceptLanguages(
-    GURL url) {
-  if (profile_ == NULL)
-    return base::string16();
-
-  std::string languages(
-      profile_->GetPrefs()->GetString(prefs::kAcceptLanguages));
-
-  return url_formatter::FormatUrl(
-      url, languages, url_formatter::kFormatUrlOmitAll,
-      net::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
 }
 
 ScopedJavaLocalRef<jobject>

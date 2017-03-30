@@ -27,6 +27,7 @@
 #include "base/base_paths_android.h"
 #include "base/command_line.h"
 #include "base/files/scoped_file.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/crash/content/browser/crash_micro_dump_manager_android.h"
@@ -231,30 +232,6 @@ void AwContentBrowserClient::RenderProcessWillLaunch(
   host->AddFilter(new AwPrintingMessageFilter(host->GetID()));
 }
 
-net::URLRequestContextGetter* AwContentBrowserClient::CreateRequestContext(
-    content::BrowserContext* browser_context,
-    content::ProtocolHandlerMap* protocol_handlers,
-    content::URLRequestInterceptorScopedVector request_interceptors) {
-  DCHECK_EQ(browser_context_.get(), browser_context);
-  return browser_context_->CreateRequestContext(
-      protocol_handlers, std::move(request_interceptors));
-}
-
-net::URLRequestContextGetter*
-AwContentBrowserClient::CreateRequestContextForStoragePartition(
-    content::BrowserContext* browser_context,
-    const base::FilePath& partition_path,
-    bool in_memory,
-    content::ProtocolHandlerMap* protocol_handlers,
-    content::URLRequestInterceptorScopedVector request_interceptors) {
-  DCHECK_EQ(browser_context_.get(), browser_context);
-  // TODO(mkosiba,kinuko): request_interceptors should be hooked up in the
-  // downstream. (crbug.com/350286)
-  return browser_context_->CreateRequestContextForStoragePartition(
-      partition_path, in_memory, protocol_handlers,
-      std::move(request_interceptors));
-}
-
 bool AwContentBrowserClient::IsHandledURL(const GURL& url) {
   if (!url.is_valid()) {
     // We handle error cases.
@@ -365,16 +342,6 @@ bool AwContentBrowserClient::AllowSetCookie(const GURL& url,
                                                              options);
 }
 
-bool AwContentBrowserClient::AllowWorkerDatabase(
-    const GURL& url,
-    const base::string16& name,
-    const base::string16& display_name,
-    content::ResourceContext* context,
-    const std::vector<std::pair<int, int> >& render_frames) {
-  // Android WebView does not yet support web workers.
-  return false;
-}
-
 void AwContentBrowserClient::AllowWorkerFileSystem(
     const GURL& url,
     content::ResourceContext* context,
@@ -425,7 +392,7 @@ void AwContentBrowserClient::AllowCertificateError(
 void AwContentBrowserClient::SelectClientCertificate(
     content::WebContents* web_contents,
     net::SSLCertRequestInfo* cert_request_info,
-    scoped_ptr<content::ClientCertificateDelegate> delegate) {
+    std::unique_ptr<content::ClientCertificateDelegate> delegate) {
   AwContentsClientBridgeBase* client =
       AwContentsClientBridgeBase::FromWebContents(web_contents);
   if (client)
@@ -486,8 +453,7 @@ bool AwContentBrowserClient::IsFastShutdownPossible() {
 }
 
 void AwContentBrowserClient::ClearCache(content::RenderFrameHost* rfh) {
-  RemoveHttpDiskCache(rfh->GetProcess()->GetBrowserContext(),
-                      rfh->GetProcess()->GetID());
+  RemoveHttpDiskCache(rfh->GetProcess());
 }
 
 void AwContentBrowserClient::ClearCookies(content::RenderFrameHost* rfh) {
@@ -548,8 +514,8 @@ void AwContentBrowserClient::OverrideWebkitPrefs(
     content::RenderViewHost* rvh,
     content::WebPreferences* web_prefs) {
   if (!preferences_populater_.get()) {
-    preferences_populater_ = make_scoped_ptr(native_factory_->
-        CreateWebPreferencesPopulater());
+    preferences_populater_ =
+        base::WrapUnique(native_factory_->CreateWebPreferencesPopulater());
   }
   preferences_populater_->PopulateFor(
       content::WebContents::FromRenderViewHost(rvh), web_prefs);

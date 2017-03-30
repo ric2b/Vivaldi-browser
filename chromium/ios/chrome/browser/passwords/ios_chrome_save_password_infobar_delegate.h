@@ -5,9 +5,11 @@
 #ifndef IOS_CHROME_BROWSER_PASSWORDS_IOS_CHROME_SAVE_PASSWORD_INFOBAR_DELEGATE_H_
 #define IOS_CHROME_BROWSER_PASSWORDS_IOS_CHROME_SAVE_PASSWORD_INFOBAR_DELEGATE_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
 
 namespace password_manager {
 class PasswordFormManager;
@@ -28,21 +30,14 @@ class IOSChromeSavePasswordInfoBarDelegate : public ConfirmInfoBarDelegate {
   static void Create(
       bool is_smart_lock_branding_enabled,
       infobars::InfoBarManager* infobar_manager,
-      scoped_ptr<password_manager::PasswordFormManager> form_to_save);
+      std::unique_ptr<password_manager::PasswordFormManager> form_to_save);
 
   ~IOSChromeSavePasswordInfoBarDelegate() override;
 
  private:
-  enum ResponseType {
-    NO_RESPONSE = 0,
-    REMEMBER_PASSWORD,
-    DO_NOT_REMEMBER_PASSWORD,
-    NUM_RESPONSE_TYPES,
-  };
-
   IOSChromeSavePasswordInfoBarDelegate(
       bool is_smart_lock_branding_enabled,
-      scoped_ptr<password_manager::PasswordFormManager> form_to_save);
+      std::unique_ptr<password_manager::PasswordFormManager> form_to_save);
 
   // ConfirmInfoBarDelegate implementation.
   Type GetInfoBarType() const override;
@@ -57,10 +52,10 @@ class IOSChromeSavePasswordInfoBarDelegate : public ConfirmInfoBarDelegate {
 
   // The password_manager::PasswordFormManager managing the form we're asking
   // the user about, and should update as per her decision.
-  scoped_ptr<password_manager::PasswordFormManager> form_to_save_;
+  std::unique_ptr<password_manager::PasswordFormManager> form_to_save_;
 
   // Used to track the results we get from the info bar.
-  ResponseType infobar_response_;
+  password_manager::metrics_util::UIDismissalReason infobar_response_;
 
   // Whether to show the password manager branded as Smart Lock.
   bool is_smart_lock_branding_enabled_;

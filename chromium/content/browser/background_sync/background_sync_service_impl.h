@@ -20,37 +20,31 @@ namespace content {
 class BackgroundSyncContextImpl;
 
 class CONTENT_EXPORT BackgroundSyncServiceImpl
-    : public NON_EXPORTED_BASE(BackgroundSyncService) {
+    : public NON_EXPORTED_BASE(mojom::BackgroundSyncService) {
  public:
   BackgroundSyncServiceImpl(
       BackgroundSyncContextImpl* background_sync_context,
-      mojo::InterfaceRequest<BackgroundSyncService> request);
+      mojo::InterfaceRequest<mojom::BackgroundSyncService> request);
 
   ~BackgroundSyncServiceImpl() override;
 
  private:
   friend class BackgroundSyncServiceImplTest;
 
-  // BackgroundSyncService methods:
-  void Register(content::SyncRegistrationPtr options,
+  // mojom::BackgroundSyncService methods:
+  void Register(content::mojom::SyncRegistrationPtr options,
                 int64_t sw_registration_id,
-                bool requested_from_service_worker,
                 const RegisterCallback& callback) override;
   void GetRegistrations(int64_t sw_registration_id,
                         const GetRegistrationsCallback& callback) override;
-  void DuplicateRegistrationHandle(
-      BackgroundSyncRegistrationHandle::HandleId handle_id,
-      const DuplicateRegistrationHandleCallback& callback) override;
-  void ReleaseRegistration(
-      BackgroundSyncRegistrationHandle::HandleId handle_id) override;
 
   void OnRegisterResult(const RegisterCallback& callback,
                         BackgroundSyncStatus status,
-                        scoped_ptr<BackgroundSyncRegistrationHandle> result);
+                        scoped_ptr<BackgroundSyncRegistration> result);
   void OnGetRegistrationsResult(
       const GetRegistrationsCallback& callback,
       BackgroundSyncStatus status,
-      scoped_ptr<ScopedVector<BackgroundSyncRegistrationHandle>> result);
+      scoped_ptr<ScopedVector<BackgroundSyncRegistration>> result);
 
   // Called when an error is detected on binding_.
   void OnConnectionError();
@@ -58,12 +52,7 @@ class CONTENT_EXPORT BackgroundSyncServiceImpl
   // background_sync_context_ owns this.
   BackgroundSyncContextImpl* background_sync_context_;
 
-  mojo::Binding<BackgroundSyncService> binding_;
-
-  // The registrations that the client might reference.
-  IDMap<BackgroundSyncRegistrationHandle,
-        IDMapOwnPointer,
-        BackgroundSyncRegistrationHandle::HandleId> active_handles_;
+  mojo::Binding<mojom::BackgroundSyncService> binding_;
 
   base::WeakPtrFactory<BackgroundSyncServiceImpl> weak_ptr_factory_;
 

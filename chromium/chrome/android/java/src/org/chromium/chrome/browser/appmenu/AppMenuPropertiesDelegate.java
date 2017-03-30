@@ -13,6 +13,7 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
+import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.preferences.ManagedPreferencesUtils;
@@ -22,6 +23,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.printing.PrintingController;
+import org.chromium.ui.base.DeviceFormFactor;
 
 /**
  * App Menu helper that handles hiding and showing menu items based on activity state.
@@ -68,9 +70,10 @@ public class AppMenuPropertiesDelegate {
 
         // Determine which menu to show.
         if (mActivity.isTablet()) {
-            isPageMenu = !isOverview && mActivity.getCurrentTabModel().getCount() != 0;
-            isOverviewMenu = isOverview && mActivity.getCurrentTabModel().getCount() != 0;
-            isTabletEmptyModeMenu = !isPageMenu && mActivity.getCurrentTabModel().getCount() == 0;
+            boolean hasTabs = mActivity.getCurrentTabModel().getCount() != 0;
+            isPageMenu = hasTabs && !isOverview;
+            isOverviewMenu = hasTabs && isOverview;
+            isTabletEmptyModeMenu = !hasTabs;
         } else {
             isPageMenu = !isOverview;
             isOverviewMenu = isOverview;
@@ -85,10 +88,13 @@ public class AppMenuPropertiesDelegate {
             String url = currentTab.getUrl();
             boolean isChromeScheme = url.startsWith(UrlConstants.CHROME_SCHEME)
                     || url.startsWith(UrlConstants.CHROME_NATIVE_SCHEME);
+            boolean shouldShowIconRow = !mActivity.isTablet()
+                    || mActivity.getWindow().getDecorView().getWidth()
+                            < DeviceFormFactor.getMinimumTabletWidthPx(mActivity);
 
-            // Update the icon row items (not shown on tablet).
-            menu.findItem(R.id.icon_row_menu_id).setVisible(!mActivity.isTablet());
-            if (!mActivity.isTablet()) {
+            // Update the icon row items (shown in narrow form factors).
+            menu.findItem(R.id.icon_row_menu_id).setVisible(shouldShowIconRow);
+            if (shouldShowIconRow) {
                 // Disable the "Forward" menu item if there is no page to go to.
                 MenuItem forwardMenuItem = menu.findItem(R.id.forward_menu_id);
                 forwardMenuItem.setEnabled(currentTab.canGoForward());
@@ -103,6 +109,9 @@ public class AppMenuPropertiesDelegate {
 
             menu.findItem(R.id.update_menu_id).setVisible(
                     UpdateMenuItemHelper.getInstance().shouldShowMenuItem(mActivity));
+
+            menu.findItem(R.id.move_to_other_window_menu_id).setVisible(
+                    MultiWindowUtils.getInstance().isOpenInOtherWindowSupported(mActivity));
 
             // Hide "Recent tabs" in incognito mode or when sync can't be enabled.
             MenuItem recentTabsMenuItem = menu.findItem(R.id.recent_tabs_menu_id);

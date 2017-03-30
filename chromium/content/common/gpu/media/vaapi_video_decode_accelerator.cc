@@ -14,12 +14,12 @@
 #include "base/strings/string_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/trace_event/trace_event.h"
-#include "content/common/gpu/gpu_channel.h"
 #include "content/common/gpu/media/accelerated_video_decoder.h"
 #include "content/common/gpu/media/h264_decoder.h"
 #include "content/common/gpu/media/vaapi_picture.h"
 #include "content/common/gpu/media/vp8_decoder.h"
 #include "content/common/gpu/media/vp9_decoder.h"
+#include "gpu/ipc/service/gpu_channel.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/video/picture.h"
 #include "third_party/libva/va/va_dec_vp8.h"
@@ -256,8 +256,7 @@ class VaapiVideoDecodeAccelerator::VaapiVP9Accelerator
   DISALLOW_COPY_AND_ASSIGN(VaapiVP9Accelerator);
 };
 
-VaapiVideoDecodeAccelerator::InputBuffer::InputBuffer() : id(0), size(0) {
-}
+VaapiVideoDecodeAccelerator::InputBuffer::InputBuffer() : id(0) {}
 
 VaapiVideoDecodeAccelerator::InputBuffer::~InputBuffer() {
 }
@@ -293,11 +292,9 @@ VaapiPicture* VaapiVideoDecodeAccelerator::PictureById(
 }
 
 VaapiVideoDecodeAccelerator::VaapiVideoDecodeAccelerator(
-    const base::Callback<bool(void)>& make_context_current,
-    const base::Callback<void(uint32_t, uint32_t, scoped_refptr<gl::GLImage>)>&
-        bind_image)
-    : make_context_current_(make_context_current),
-      state_(kUninitialized),
+    const MakeGLContextCurrentCallback& make_context_current_cb,
+    const BindGLImageCallback& bind_image_cb)
+    : state_(kUninitialized),
       input_ready_(&lock_),
       surfaces_available_(&lock_),
       message_loop_(base::MessageLoop::current()),
@@ -307,7 +304,8 @@ VaapiVideoDecodeAccelerator::VaapiVideoDecodeAccelerator(
       finish_flush_pending_(false),
       awaiting_va_surfaces_recycle_(false),
       requested_num_pics_(0),
-      bind_image_(bind_image),
+      make_context_current_cb_(make_context_current_cb),
+      bind_image_cb_(bind_image_cb),
       weak_this_factory_(this) {
   weak_this_ = weak_this_factory_.GetWeakPtr();
   va_surface_release_cb_ = media::BindToCurrentLoop(
@@ -321,6 +319,11 @@ VaapiVideoDecodeAccelerator::~VaapiVideoDecodeAccelerator() {
 bool VaapiVideoDecodeAccelerator::Initialize(const Config& config,
                                              Client* client) {
   DCHECK_EQ(message_loop_, base::MessageLoop::current());
+
+  if (make_context_current_cb_.is_null() || bind_image_cb_.is_null()) {
+    NOTREACHED() << "GL callbacks are required for this VDA";
+    return false;
+  }
 
   if (config.is_encrypted) {
     NOTREACHED() << "Encrypted streams are not supported for this VDA";
@@ -447,10 +450,10 @@ void VaapiVideoDecodeAccelerator::MapAndQueueNewInputBuffer(
   DVLOG(4) << "Mapping new input buffer id: " << bitstream_buffer.id()
            << " size: " << (int)bitstream_buffer.size();
 
-  scoped_ptr<base::SharedMemory> shm(
-      new base::SharedMemory(bitstream_buffer.handle(), true));
-  RETURN_AND_NOTIFY_ON_FAILURE(shm->Map(bitstream_buffer.size()),
-                              "Failed to map input buffer", UNREADABLE_INPUT,);
+  scoped_ptr<SharedMemoryRegion> shm(
+      new SharedMemoryRegion(bitstream_buffer, true));
+  RETURN_AND_NOTIFY_ON_FAILURE(shm->Map(), "Failed to map input buffer",
+                               UNREADABLE_INPUT, );
 
   base::AutoLock auto_lock(lock_);
 
@@ -458,7 +461,6 @@ void VaapiVideoDecodeAccelerator::MapAndQueueNewInputBuffer(
   linked_ptr<InputBuffer> input_buffer(new InputBuffer());
   input_buffer->shm.reset(shm.release());
   input_buffer->id = bitstream_buffer.id();
-  input_buffer->size = bitstream_buffer.size();
 
   ++num_stream_bufs_at_decoder_;
   TRACE_COUNTER1("Video Decoder", "Stream buffers at decoder",
@@ -497,13 +499,12 @@ bool VaapiVideoDecodeAccelerator::GetInputBuffer_Locked() {
       curr_input_buffer_ = input_buffers_.front();
       input_buffers_.pop();
 
-      DVLOG(4) << "New current bitstream buffer, id: "
-               << curr_input_buffer_->id
-               << " size: " << curr_input_buffer_->size;
+      DVLOG(4) << "New current bitstream buffer, id: " << curr_input_buffer_->id
+               << " size: " << curr_input_buffer_->shm->size();
 
       decoder_->SetStream(
           static_cast<uint8_t*>(curr_input_buffer_->shm->memory()),
-          curr_input_buffer_->size);
+          curr_input_buffer_->shm->size());
       return true;
 
     default:
@@ -663,7 +664,7 @@ void VaapiVideoDecodeAccelerator::TryFinishSurfaceSetChange() {
   message_loop_->PostTask(
       FROM_HERE,
       base::Bind(&Client::ProvidePictureBuffers, client_, requested_num_pics_,
-                 requested_pic_size_, VaapiPicture::GetGLTextureTarget()));
+                 1, requested_pic_size_, VaapiPicture::GetGLTextureTarget()));
 }
 
 void VaapiVideoDecodeAccelerator::Decode(
@@ -740,18 +741,22 @@ void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
   DCHECK_EQ(va_surface_ids.size(), buffers.size());
 
   for (size_t i = 0; i < buffers.size(); ++i) {
+    DCHECK_LE(1u, buffers[i].texture_ids().size());
     DVLOG(2) << "Assigning picture id: " << buffers[i].id()
-             << " to texture id: " << buffers[i].texture_id()
+             << " to texture id: " << buffers[i].texture_ids()[0]
              << " VASurfaceID: " << va_surface_ids[i];
 
     linked_ptr<VaapiPicture> picture(VaapiPicture::CreatePicture(
-        vaapi_wrapper_, make_context_current_, buffers[i].id(),
-        buffers[i].texture_id(), requested_pic_size_));
+        vaapi_wrapper_, make_context_current_cb_, buffers[i].id(),
+        buffers[i].texture_ids()[0], requested_pic_size_));
 
     scoped_refptr<gl::GLImage> image = picture->GetImageToBind();
     if (image) {
-      bind_image_.Run(buffers[i].internal_texture_id(),
-                      VaapiPicture::GetGLTextureTarget(), image);
+      DCHECK_LE(1u, buffers[i].internal_texture_ids().size());
+      RETURN_AND_NOTIFY_ON_FAILURE(
+          bind_image_cb_.Run(buffers[i].internal_texture_ids()[0],
+                             VaapiPicture::GetGLTextureTarget(), image, true),
+          "Failed to bind image", PLATFORM_FAILURE, );
     }
 
     RETURN_AND_NOTIFY_ON_FAILURE(
@@ -966,7 +971,9 @@ void VaapiVideoDecodeAccelerator::Destroy() {
   delete this;
 }
 
-bool VaapiVideoDecodeAccelerator::CanDecodeOnIOThread() {
+bool VaapiVideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
+    const base::WeakPtr<Client>& decode_client,
+    const scoped_refptr<base::SingleThreadTaskRunner>& decode_task_runner) {
   return false;
 }
 

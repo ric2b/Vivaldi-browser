@@ -6,21 +6,21 @@
 #define IntersectionObserver_h
 
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "core/dom/Element.h"
 #include "core/dom/IntersectionObservation.h"
 #include "core/dom/IntersectionObserverEntry.h"
+#include "platform/Length.h"
 #include "platform/heap/Handle.h"
 #include "wtf/HashSet.h"
-#include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
 namespace blink {
 
+class Element;
 class ExceptionState;
+class LayoutObject;
 class IntersectionObserverCallback;
 class IntersectionObserverInit;
 
-// TODO(oilpan): Switch to GarbageCollected<> after oilpan ships
 class IntersectionObserver final : public GarbageCollectedFinalized<IntersectionObserver>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 
@@ -29,16 +29,15 @@ public:
     static void resumeSuspendedObservers();
 
     // API methods
-    void observe(Element*, ExceptionState&);
-    void unobserve(Element*, ExceptionState&);
+    void observe(Element*);
+    void unobserve(Element*);
+    void disconnect();
     HeapVector<Member<IntersectionObserverEntry>> takeRecords();
     Element* root() const;
     String rootMargin() const;
-    const Vector<float>& thresholds() const { return m_thresholds; }
 
     Node* rootNode() const { return m_root.get(); }
     LayoutObject* rootLayoutObject() const;
-    bool hasPercentMargin() const;
     const Length& topMargin() const { return m_topMargin; }
     const Length& rightMargin() const { return m_rightMargin; }
     const Length& bottomMargin() const { return m_bottomMargin; }
@@ -48,7 +47,6 @@ public:
     void applyRootMargin(LayoutRect&) const;
     unsigned firstThresholdGreaterThan(float ratio) const;
     void deliver();
-    void disconnect();
     void removeObservation(IntersectionObservation&);
     bool hasEntries() const { return m_entries.size(); }
     const HeapHashSet<WeakMember<IntersectionObservation>>& observations() const { return m_observations; }
@@ -57,12 +55,10 @@ public:
 
 private:
     explicit IntersectionObserver(IntersectionObserverCallback&, Node&, const Vector<Length>& rootMargin, const Vector<float>& thresholds);
-#if ENABLE(OILPAN)
     void clearWeakMembers(Visitor*);
-#endif
 
     Member<IntersectionObserverCallback> m_callback;
-    WeakPtrWillBeWeakMember<Node> m_root;
+    WeakMember<Node> m_root;
     HeapHashSet<WeakMember<IntersectionObservation>> m_observations;
     HeapVector<Member<IntersectionObserverEntry>> m_entries;
     Vector<float> m_thresholds;

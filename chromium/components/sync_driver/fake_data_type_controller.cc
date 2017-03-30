@@ -19,9 +19,15 @@ FakeDataTypeController::FakeDataTypeController(ModelType type)
       state_(NOT_RUNNING),
       model_load_delayed_(false),
       type_(type),
-      ready_for_start_(true) {}
+      ready_for_start_(true),
+      should_load_model_before_configure_(false),
+      register_with_backend_call_count_(0) {}
 
 FakeDataTypeController::~FakeDataTypeController() {
+}
+
+bool FakeDataTypeController::ShouldLoadModelBeforeConfigure() const {
+  return should_load_model_before_configure_;
 }
 
 // NOT_RUNNING ->MODEL_LOADED |MODEL_STARTING.
@@ -42,6 +48,11 @@ void FakeDataTypeController::LoadModels(
   } else {
     state_ = MODEL_STARTING;
   }
+}
+
+void FakeDataTypeController::RegisterWithBackend(
+    BackendDataTypeConfigurer* configurer) {
+  ++register_with_backend_call_count_;
 }
 
 // MODEL_LOADED -> MODEL_STARTING.
@@ -94,13 +105,13 @@ void FakeDataTypeController::FinishStart(ConfigureResult result) {
 
 // * -> NOT_RUNNING
 void FakeDataTypeController::Stop() {
-  state_ = NOT_RUNNING;
   if (!model_load_callback_.is_null()) {
     // Real data type controllers run the callback and specify "ABORTED" as an
     // error.  We should probably find a way to use the real code and mock out
     // unnecessary pieces.
     SimulateModelLoadFinishing();
   }
+  state_ = NOT_RUNNING;
 }
 
 ModelType FakeDataTypeController::type() const {
@@ -142,11 +153,19 @@ void FakeDataTypeController::SetModelLoadError(syncer::SyncError error) {
 }
 
 void FakeDataTypeController::SimulateModelLoadFinishing() {
+  if (load_error_.IsSet())
+    state_ = DISABLED;
+  else
+    state_ = MODEL_LOADED;
   model_load_callback_.Run(type(), load_error_);
 }
 
 void FakeDataTypeController::SetReadyForStart(bool ready) {
   ready_for_start_ = ready;
+}
+
+void FakeDataTypeController::SetShouldLoadModelBeforeConfigure(bool value) {
+  should_load_model_before_configure_ = value;
 }
 
 }  // namespace sync_driver

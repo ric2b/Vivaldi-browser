@@ -24,12 +24,12 @@ namespace {
 // Parses the user image URL, which looks like
 // "chrome://userimage/serialized-user-id?key1=value1&...&key_n=value_n",
 // to user email.
-void ParseRequest(const GURL& url,
-                  std::string* email) {
+void ParseRequest(const GURL& url, std::string* email) {
   DCHECK(url.is_valid());
   const std::string serialized_account_id = net::UnescapeURLComponent(
       url.path().substr(1),
-      (net::UnescapeRule::URL_SPECIAL_CHARS | net::UnescapeRule::SPACES));
+      net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS |
+          net::UnescapeRule::PATH_SEPARATORS | net::UnescapeRule::SPACES);
   AccountId account_id(EmptyAccountId());
   const bool status =
       AccountId::Deserialize(serialized_account_id, &account_id);
@@ -52,8 +52,8 @@ base::RefCountedMemory* GetUserImageInternal(const AccountId& account_id) {
   // for device scale factors up to 4. We do not use SCALE_FACTOR_NONE, as we
   // specifically want 100% scale images to not transmit more data than needed.
   if (user) {
-    if (user->has_raw_image()) {
-      return new base::RefCountedBytes(user->raw_image());
+    if (user->has_image_bytes()) {
+      return new base::RefCountedBytes(user->image_bytes());
     } else if (user->image_is_stub()) {
       return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
           IDR_PROFILE_PICTURE_LOADING, ui::SCALE_FACTOR_100P);
@@ -63,7 +63,7 @@ base::RefCountedMemory* GetUserImageInternal(const AccountId& account_id) {
               [user->image_index()],
           ui::SCALE_FACTOR_100P);
     } else {
-      NOTREACHED() << "User with custom image missing raw data";
+      NOTREACHED() << "User with custom image missing data bytes";
     }
   }
   return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(

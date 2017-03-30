@@ -28,7 +28,6 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/Range.h"
-#include "core/editing/CaretBase.h"
 #include "core/editing/EditingStyle.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/VisiblePosition.h"
@@ -43,8 +42,10 @@
 
 namespace blink {
 
+class CaretBase;
 class CharacterData;
 class CullRect;
+class LayoutBlock;
 class LocalFrame;
 class GranularityStrategy;
 class GraphicsContext;
@@ -64,13 +65,14 @@ enum RevealExtentOption {
 
 enum class SelectionDirectionalMode { NonDirectional, Directional };
 
-class CORE_EXPORT FrameSelection final : public NoBaseWillBeGarbageCollectedFinalized<FrameSelection>, private CaretBase {
+enum class CaretVisibility;
+
+class CORE_EXPORT FrameSelection final : public GarbageCollectedFinalized<FrameSelection> {
     WTF_MAKE_NONCOPYABLE(FrameSelection);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(FrameSelection);
 public:
-    static PassOwnPtrWillBeRawPtr<FrameSelection> create(LocalFrame* frame = nullptr)
+    static RawPtr<FrameSelection> create(LocalFrame* frame = nullptr)
     {
-        return adoptPtrWillBeNoop(new FrameSelection(frame));
+        return new FrameSelection(frame);
     }
     ~FrameSelection();
 
@@ -172,9 +174,10 @@ public:
 
     // If this FrameSelection has a logical range which is still valid, this function return its clone. Otherwise,
     // the return value from underlying VisibleSelection's firstRange() is returned.
-    PassRefPtrWillBeRawPtr<Range> firstRange() const;
+    RawPtr<Range> firstRange() const;
 
     void nodeWillBeRemoved(Node&);
+    void dataWillChange(const CharacterData& node);
     void didUpdateCharacterData(CharacterData*, unsigned offset, unsigned oldLength, unsigned newLength);
     void didMergeTextNodes(const Text& oldNode, unsigned offset);
     void didSplitTextNode(const Text& oldNode);
@@ -182,7 +185,7 @@ public:
     bool isAppearanceDirty() const;
     void commitAppearanceIfNeeded(LayoutView&);
     void updateAppearance();
-    void setCaretVisible(bool caretIsVisible) { setCaretVisibility(caretIsVisible ? Visible : Hidden); }
+    void setCaretVisible(bool caretIsVisible);
     bool isCaretBoundsDirty() const { return m_caretRectDirty; }
     void setCaretRectNeedsUpdate();
     void scheduleVisualUpdate() const;
@@ -216,7 +219,7 @@ public:
     void notifyLayoutObjectOfSelectionChange(EUserTriggered);
 
     EditingStyle* typingStyle() const;
-    void setTypingStyle(PassRefPtrWillBeRawPtr<EditingStyle>);
+    void setTypingStyle(RawPtr<EditingStyle>);
     void clearTypingStyle();
 
     String selectedHTMLForClipboard() const;
@@ -229,6 +232,8 @@ public:
 
     HTMLFormElement* currentForm() const;
 
+    // TODO(tkent): This function has a bug that scrolling doesn't work well in
+    // a case of RangeSelection. crbug.com/443061
     void revealSelection(const ScrollAlignment& = ScrollAlignment::alignCenterIfNeeded, RevealExtentOption = DoNotRevealExtent);
     void setSelectionFromNone();
 
@@ -290,20 +295,20 @@ private:
     bool shouldPaintCaretForTesting() const { return m_shouldPaintCaret; }
     bool isPreviousCaretDirtyForTesting() const { return m_previousCaretNode; }
 
-    RawPtrWillBeMember<LocalFrame> m_frame;
-    const OwnPtrWillBeMember<PendingSelection> m_pendingSelection;
-    const OwnPtrWillBeMember<SelectionEditor> m_selectionEditor;
+    Member<LocalFrame> m_frame;
+    const Member<PendingSelection> m_pendingSelection;
+    const Member<SelectionEditor> m_selectionEditor;
 
     // Used to store base before the adjustment at bidi boundary
     VisiblePosition m_originalBase;
     VisiblePositionInFlatTree m_originalBaseInFlatTree;
     TextGranularity m_granularity;
 
-    RefPtrWillBeMember<Node> m_previousCaretNode; // The last node which painted the caret. Retained for clearing the old caret when it moves.
+    Member<Node> m_previousCaretNode; // The last node which painted the caret. Retained for clearing the old caret when it moves.
     LayoutRect m_previousCaretRect;
     CaretVisibility m_previousCaretVisibility;
 
-    RefPtrWillBeMember<EditingStyle> m_typingStyle;
+    Member<EditingStyle> m_typingStyle;
 
     Timer<FrameSelection> m_caretBlinkTimer;
 
@@ -315,6 +320,8 @@ private:
 
     // Controls text granularity used to adjust the selection's extent in moveRangeSelectionExtent.
     OwnPtr<GranularityStrategy> m_granularityStrategy;
+
+    OwnPtr<CaretBase> m_caretBase;
 };
 
 inline EditingStyle* FrameSelection::typingStyle() const
@@ -327,7 +334,7 @@ inline void FrameSelection::clearTypingStyle()
     m_typingStyle.clear();
 }
 
-inline void FrameSelection::setTypingStyle(PassRefPtrWillBeRawPtr<EditingStyle> style)
+inline void FrameSelection::setTypingStyle(RawPtr<EditingStyle> style)
 {
     m_typingStyle = style;
 }

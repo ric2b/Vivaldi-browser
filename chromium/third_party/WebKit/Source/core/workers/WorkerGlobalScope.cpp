@@ -71,13 +71,13 @@
 
 namespace blink {
 
-WorkerGlobalScope::WorkerGlobalScope(const KURL& url, const String& userAgent, WorkerThread* thread, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData> starterOriginPrivilageData, PassOwnPtrWillBeRawPtr<WorkerClients> workerClients)
+WorkerGlobalScope::WorkerGlobalScope(const KURL& url, const String& userAgent, WorkerThread* thread, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData> starterOriginPrivilageData, WorkerClients* workerClients)
     : m_url(url)
     , m_userAgent(userAgent)
     , m_v8CacheOptions(V8CacheOptionsDefault)
     , m_scriptController(WorkerOrWorkletScriptController::create(this, thread->isolate()))
     , m_thread(thread)
-    , m_workerInspectorController(adoptRefWillBeNoop(new WorkerInspectorController(this)))
+    , m_workerInspectorController(WorkerInspectorController::create(this))
     , m_closing(false)
     , m_eventQueue(WorkerEventQueue::create(this))
     , m_workerClients(workerClients)
@@ -88,12 +88,10 @@ WorkerGlobalScope::WorkerGlobalScope(const KURL& url, const String& userAgent, W
 {
     setSecurityOrigin(SecurityOrigin::create(url));
     if (starterOriginPrivilageData)
-        securityOrigin()->transferPrivilegesFrom(starterOriginPrivilageData);
+        getSecurityOrigin()->transferPrivilegesFrom(starterOriginPrivilageData);
 
     if (m_workerClients)
         m_workerClients->reattachThread();
-
-    m_thread->setWorkerInspectorController(m_workerInspectorController.get());
 }
 
 WorkerGlobalScope::~WorkerGlobalScope()
@@ -105,15 +103,15 @@ WorkerGlobalScope::~WorkerGlobalScope()
 void WorkerGlobalScope::applyContentSecurityPolicyFromVector(const Vector<CSPHeaderAndType>& headers)
 {
     if (!contentSecurityPolicy()) {
-        RefPtrWillBeRawPtr<ContentSecurityPolicy> csp = ContentSecurityPolicy::create();
+        ContentSecurityPolicy* csp = ContentSecurityPolicy::create();
         setContentSecurityPolicy(csp);
     }
     for (const auto& policyAndType : headers)
         contentSecurityPolicy()->didReceiveHeader(policyAndType.first, policyAndType.second, ContentSecurityPolicyHeaderSourceHTTP);
-    contentSecurityPolicy()->bindToExecutionContext(executionContext());
+    contentSecurityPolicy()->bindToExecutionContext(getExecutionContext());
 }
 
-ExecutionContext* WorkerGlobalScope::executionContext() const
+ExecutionContext* WorkerGlobalScope::getExecutionContext() const
 {
     return const_cast<WorkerGlobalScope*>(this);
 }
@@ -194,10 +192,10 @@ void WorkerGlobalScope::clearScript()
 
 void WorkerGlobalScope::clearInspector()
 {
-    ASSERT(m_workerInspectorController);
-    thread()->setWorkerInspectorController(nullptr);
-    m_workerInspectorController->dispose();
-    m_workerInspectorController.clear();
+    if (m_workerInspectorController) {
+        m_workerInspectorController->dispose();
+        m_workerInspectorController.clear();
+    }
 }
 
 void WorkerGlobalScope::dispose()
@@ -208,7 +206,7 @@ void WorkerGlobalScope::dispose()
     // Event listeners would keep DOMWrapperWorld objects alive for too long. Also, they have references to JS objects,
     // which become dangling once Heap is destroyed.
     for (auto it = m_eventListeners.begin(); it != m_eventListeners.end(); ) {
-        RefPtrWillBeRawPtr<V8AbstractEventListener> listener = *it;
+        V8AbstractEventListener* listener = *it;
         // clearListenerObject() will unregister the listener from
         // m_eventListeners, and invalidate the iterator, so we have to advance
         // it first.
@@ -227,6 +225,9 @@ void WorkerGlobalScope::dispose()
     // being carried out on the right thread. We therefore cannot clear
     // the thread field before all references to the worker global
     // scope are gone.
+    //
+    // TODO(haraken): It's nasty to keep a raw pointer to WorkerThread
+    // after disposing WorkerGlobalScope. m_thread should be cleared here.
 }
 
 void WorkerGlobalScope::didEvaluateWorkerScript()
@@ -236,9 +237,9 @@ void WorkerGlobalScope::didEvaluateWorkerScript()
 void WorkerGlobalScope::importScripts(const Vector<String>& urls, ExceptionState& exceptionState)
 {
     ASSERT(contentSecurityPolicy());
-    ASSERT(executionContext());
+    ASSERT(getExecutionContext());
 
-    ExecutionContext& executionContext = *this->executionContext();
+    ExecutionContext& executionContext = *this->getExecutionContext();
 
     Vector<KURL> completedURLs;
     for (const String& urlString : urls) {
@@ -257,7 +258,7 @@ void WorkerGlobalScope::importScripts(const Vector<String>& urls, ExceptionState
     for (const KURL& completeURL : completedURLs) {
         RefPtr<WorkerScriptLoader> scriptLoader(WorkerScriptLoader::create());
         scriptLoader->setRequestContext(WebURLRequest::RequestContextScript);
-        scriptLoader->loadSynchronously(executionContext, completeURL, AllowCrossOriginRequests);
+        scriptLoader->loadSynchronously(executionContext, completeURL, AllowCrossOriginRequests, executionContext.securityContext().addressSpace());
 
         // If the fetching attempt failed, throw a NetworkError exception and abort all these steps.
         if (scriptLoader->failed()) {
@@ -268,12 +269,12 @@ void WorkerGlobalScope::importScripts(const Vector<String>& urls, ExceptionState
         InspectorInstrumentation::scriptImported(&executionContext, scriptLoader->identifier(), scriptLoader->script());
         scriptLoaded(scriptLoader->script().length(), scriptLoader->cachedMetadata() ? scriptLoader->cachedMetadata()->size() : 0);
 
-        RefPtrWillBeRawPtr<ErrorEvent> errorEvent = nullptr;
+        ErrorEvent* errorEvent = nullptr;
         OwnPtr<Vector<char>> cachedMetaData(scriptLoader->releaseCachedMetadata());
-        OwnPtrWillBeRawPtr<CachedMetadataHandler> handler(createWorkerScriptCachedMetadataHandler(completeURL, cachedMetaData.get()));
-        m_scriptController->evaluate(ScriptSourceCode(scriptLoader->script(), scriptLoader->responseURL()), &errorEvent, handler.get(), m_v8CacheOptions);
+        CachedMetadataHandler* handler(createWorkerScriptCachedMetadataHandler(completeURL, cachedMetaData.get()));
+        m_scriptController->evaluate(ScriptSourceCode(scriptLoader->script(), scriptLoader->responseURL()), &errorEvent, handler, m_v8CacheOptions);
         if (errorEvent) {
-            m_scriptController->rethrowExceptionFromImportedScript(errorEvent.release(), exceptionState);
+            m_scriptController->rethrowExceptionFromImportedScript(errorEvent, exceptionState);
             return;
         }
     }
@@ -287,7 +288,7 @@ EventTarget* WorkerGlobalScope::errorEventTarget()
 void WorkerGlobalScope::logExceptionToConsole(const String& errorMessage, int, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack> callStack)
 {
     unsigned long exceptionId = ++m_workerExceptionUniqueIdentifier;
-    RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, columnNumber);
+    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, columnNumber);
     consoleMessage->setCallStack(callStack);
     m_pendingMessages.set(exceptionId, consoleMessage);
 
@@ -299,15 +300,15 @@ void WorkerGlobalScope::reportBlockedScriptExecutionToInspector(const String& di
     InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
 }
 
-void WorkerGlobalScope::addConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage> prpConsoleMessage)
+void WorkerGlobalScope::addConsoleMessage(RawPtr<ConsoleMessage> prpConsoleMessage)
 {
     ASSERT(isContextThread());
-    RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = prpConsoleMessage;
+    ConsoleMessage* consoleMessage = prpConsoleMessage;
     thread()->workerReportingProxy().reportConsoleMessage(consoleMessage);
-    addMessageToWorkerConsole(consoleMessage.release());
+    addMessageToWorkerConsole(consoleMessage);
 }
 
-void WorkerGlobalScope::addMessageToWorkerConsole(PassRefPtrWillBeRawPtr<ConsoleMessage> consoleMessage)
+void WorkerGlobalScope::addMessageToWorkerConsole(ConsoleMessage* consoleMessage)
 {
     ASSERT(isContextThread());
     m_messageStorage->reportMessage(this, consoleMessage);
@@ -323,7 +324,7 @@ bool WorkerGlobalScope::isJSExecutionForbidden() const
     return m_scriptController->isExecutionForbidden();
 }
 
-WorkerEventQueue* WorkerGlobalScope::eventQueue() const
+WorkerEventQueue* WorkerGlobalScope::getEventQueue() const
 {
     return m_eventQueue.get();
 }
@@ -356,8 +357,8 @@ void WorkerGlobalScope::countDeprecation(UseCounter::Feature feature) const
     if (!m_deprecationWarningBits.hasRecordedMeasurement(feature)) {
         m_deprecationWarningBits.recordMeasurement(feature);
         ASSERT(!Deprecation::deprecationMessage(feature).isEmpty());
-        ASSERT(executionContext());
-        executionContext()->addConsoleMessage(ConsoleMessage::create(DeprecationMessageSource, WarningMessageLevel, Deprecation::deprecationMessage(feature)));
+        ASSERT(getExecutionContext());
+        getExecutionContext()->addConsoleMessage(ConsoleMessage::create(DeprecationMessageSource, WarningMessageLevel, Deprecation::deprecationMessage(feature)));
     }
 }
 
@@ -368,9 +369,9 @@ ConsoleMessageStorage* WorkerGlobalScope::messageStorage()
 
 void WorkerGlobalScope::exceptionHandled(int exceptionId, bool isHandled)
 {
-    RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = m_pendingMessages.take(exceptionId);
+    ConsoleMessage* consoleMessage = m_pendingMessages.take(exceptionId);
     if (!isHandled)
-        addConsoleMessage(consoleMessage.release());
+        addConsoleMessage(consoleMessage);
 }
 
 bool WorkerGlobalScope::isSecureContext(String& errorMessage, const SecureContextCheck privilegeContextCheck) const
@@ -381,9 +382,9 @@ bool WorkerGlobalScope::isSecureContext(String& errorMessage, const SecureContex
     // |isSecureContext| check here, we can check the responsible
     // document for a privileged context at worker creation time, pass
     // it in via WorkerThreadStartupData, and check it here.
-    if (securityOrigin()->isPotentiallyTrustworthy())
+    if (getSecurityOrigin()->isPotentiallyTrustworthy())
         return true;
-    errorMessage = securityOrigin()->isPotentiallyTrustworthyErrorMessage();
+    errorMessage = getSecurityOrigin()->isPotentiallyTrustworthyErrorMessage();
     return false;
 }
 
@@ -401,19 +402,18 @@ v8::Local<v8::Object> WorkerGlobalScope::wrap(v8::Isolate*, v8::Local<v8::Object
 {
     // WorkerGlobalScope must never be wrapped with wrap method.  The global
     // object of ECMAScript environment is used as the wrapper.
-    RELEASE_ASSERT_NOT_REACHED();
+    RELEASE_NOTREACHED();
     return v8::Local<v8::Object>();
 }
 
 v8::Local<v8::Object> WorkerGlobalScope::associateWithWrapper(v8::Isolate*, const WrapperTypeInfo*, v8::Local<v8::Object> wrapper)
 {
-    RELEASE_ASSERT_NOT_REACHED(); // same as wrap method
+    RELEASE_NOTREACHED(); // same as wrap method
     return v8::Local<v8::Object>();
 }
 
 DEFINE_TRACE(WorkerGlobalScope)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_console);
     visitor->trace(m_location);
     visitor->trace(m_navigator);
@@ -425,11 +425,10 @@ DEFINE_TRACE(WorkerGlobalScope)
     visitor->trace(m_messageStorage);
     visitor->trace(m_pendingMessages);
     visitor->trace(m_eventListeners);
-    HeapSupplementable<WorkerGlobalScope>::trace(visitor);
-#endif
     ExecutionContext::trace(visitor);
     EventTargetWithInlineData::trace(visitor);
     SecurityContext::trace(visitor);
+    Supplementable<WorkerGlobalScope>::trace(visitor);
 }
 
 } // namespace blink

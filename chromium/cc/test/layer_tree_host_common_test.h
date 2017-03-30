@@ -9,8 +9,7 @@
 #include <vector>
 
 #include "base/memory/scoped_ptr.h"
-#include "cc/layers/layer_lists.h"
-#include "cc/layers/layer_settings.h"
+#include "cc/layers/layer_collections.h"
 #include "cc/test/fake_layer_tree_host_client.h"
 #include "cc/test/layer_test_common.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -143,13 +142,10 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
     return render_surface_layer_list_count_;
   }
 
-  const LayerSettings& layer_settings() { return layer_settings_; }
-
  private:
   scoped_ptr<std::vector<LayerImpl*>> render_surface_layer_list_impl_;
   LayerList update_layer_list_;
   scoped_ptr<LayerImplList> update_layer_list_impl_;
-  LayerSettings layer_settings_;
 
   int render_surface_layer_list_count_;
 };
@@ -159,6 +155,17 @@ class LayerTreeHostCommonTest : public LayerTreeHostCommonTestBase,
  public:
   LayerTreeHostCommonTest();
   explicit LayerTreeHostCommonTest(const LayerTreeSettings& settings);
+
+ protected:
+  static void SetScrollOffsetDelta(LayerImpl* layer_impl,
+                                   const gfx::Vector2dF& delta) {
+    if (layer_impl->layer_tree_impl()
+            ->property_trees()
+            ->scroll_tree.SetScrollOffsetDeltaForTesting(layer_impl->id(),
+                                                         delta))
+      layer_impl->layer_tree_impl()->DidUpdateScrollOffset(
+          layer_impl->id(), layer_impl->transform_tree_index());
+  }
 };
 
 }  // namespace cc

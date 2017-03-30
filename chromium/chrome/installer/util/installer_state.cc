@@ -73,12 +73,13 @@ InstallerState::InstallerState()
       package_type_(UNKNOWN_PACKAGE_TYPE),
       root_key_(NULL),
       msi_(false),
+      background_mode_(false),
       verbose_logging_(false),
       is_vivaldi_(false),
       is_standalone_(false),
+      register_standalone_(false),
       is_uninstall_(false),
-      install_dir_supplied_(false) {
-}
+      install_dir_supplied_(false) {}
 
 InstallerState::InstallerState(Level level)
     : operation_(UNINITIALIZED),
@@ -88,9 +89,11 @@ InstallerState::InstallerState(Level level)
       package_type_(UNKNOWN_PACKAGE_TYPE),
       root_key_(NULL),
       msi_(false),
+      background_mode_(false),
       verbose_logging_(false),
       is_vivaldi_(false),
       is_standalone_(false),
+      register_standalone_(false),
       is_uninstall_(false),
       install_dir_supplied_(false) {
   // Use set_level() so that root_key_ is updated properly.
@@ -122,6 +125,8 @@ void InstallerState::Initialize(const base::CommandLine& command_line,
 
   is_vivaldi_ = command_line.HasSwitch(switches::kVivaldi);
   is_standalone_ = command_line.HasSwitch(switches::kVivaldiStandalone);
+  register_standalone_ =
+      command_line.HasSwitch(switches::kVivaldiRegisterStandalone);
   install_dir_supplied_ = command_line.HasSwitch(switches::kVivaldiInstallDir);
 
   is_uninstall_ = command_line.HasSwitch(switches::kUninstall);
@@ -518,6 +523,7 @@ void InstallerState::Clear() {
   msi_ = false;
   is_vivaldi_ = false;
   is_standalone_ = false;
+  register_standalone_ = false;
   is_uninstall_ = false;
   install_dir_supplied_ = false;
   verbose_logging_ = false;

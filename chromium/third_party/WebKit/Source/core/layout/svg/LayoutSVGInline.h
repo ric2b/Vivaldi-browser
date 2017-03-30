@@ -42,17 +42,17 @@ public:
     // this element, since we need it for filters.
     FloatRect objectBoundingBox() const final;
     FloatRect strokeBoundingBox() const final;
-    FloatRect paintInvalidationRectInLocalCoordinates() const final;
+    FloatRect paintInvalidationRectInLocalSVGCoordinates() const final;
 
-    LayoutRect clippedOverflowRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState* = nullptr) const final;
-    void mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = nullptr, const PaintInvalidationState* = nullptr) const final;
+    LayoutRect absoluteClippedOverflowRect() const final;
+    void mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState&, MapCoordinatesFlags = ApplyContainerFlip) const final;
     const LayoutObject* pushMappingToContainer(const LayoutBoxModelObject* ancestorToStopAt, LayoutGeometryMap&) const final;
-    void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed) const final;
+    void absoluteQuads(Vector<FloatQuad>&) const final;
 
 private:
     InlineFlowBox* createInlineFlowBox() final;
 
-    void invalidateTreeIfNeeded(PaintInvalidationState&) final;
+    void invalidateTreeIfNeeded(const PaintInvalidationState&) final;
 
     void willBeDestroyed() final;
     void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) final;

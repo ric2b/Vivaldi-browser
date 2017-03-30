@@ -24,6 +24,7 @@
 #define ImageResource_h
 
 #include "core/CoreExport.h"
+#include "core/fetch/MultipartImageResourceParser.h"
 #include "core/fetch/Resource.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/IntSizeHash.h"
@@ -34,45 +35,40 @@
 
 namespace blink {
 
-class ImageResourceClient;
 class FetchRequest;
-class ResourceFetcher;
 class FloatSize;
-class Length;
+class ImageResourceObserver;
 class MemoryCache;
+class ResourceClient;
+class ResourceFetcher;
 class SecurityOrigin;
 
-class CORE_EXPORT ImageResource final : public Resource, public ImageObserver {
+class CORE_EXPORT ImageResource final : public Resource, public ImageObserver, public MultipartImageResourceParser::Client {
     friend class MemoryCache;
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(ImageResource);
+    USING_GARBAGE_COLLECTED_MIXIN(ImageResource);
 public:
-    using ClientType = ImageResourceClient;
+    using ClientType = ResourceClient;
 
-    static PassRefPtrWillBeRawPtr<ImageResource> fetch(FetchRequest&, ResourceFetcher*);
+    static ImageResource* fetch(FetchRequest&, ResourceFetcher*);
 
-    static PassRefPtrWillBeRawPtr<ImageResource> create(blink::Image* image)
+    static ImageResource* create(blink::Image* image)
     {
-        return adoptRefWillBeNoop(new ImageResource(image));
+        return new ImageResource(image, ResourceLoaderOptions());
     }
 
     // Exposed for testing
-    static PassRefPtrWillBeRawPtr<ImageResource> create(const ResourceRequest& request, blink::Image* image)
+    static ImageResource* create(const ResourceRequest& request, blink::Image* image)
     {
-        return adoptRefWillBeNoop(new ImageResource(request, image));
+        return new ImageResource(request, image, ResourceLoaderOptions());
     }
 
     ~ImageResource() override;
 
-    void load(ResourceFetcher*, const ResourceLoaderOptions&) override;
-
-    blink::Image* image(); // Returns the nullImage() if the image is not available yet.
+    blink::Image* getImage(); // Returns the nullImage() if the image is not available yet.
     bool hasImage() const { return m_image.get(); }
 
     static std::pair<blink::Image*, float> brokenImage(float deviceScaleFactor); // Returns an image and the image's resolution scale factor.
     bool willPaintBrokenImage() const;
-
-    // Assumes that image rotation or scale doesn't effect the image size being empty or not.
-    bool canRender() { return !errorOccurred() && !imageSize(DoNotRespectImageOrientation, 1).isEmpty(); }
 
     bool usesImageContainerSize() const;
     bool imageHasRelativeSize() const;
@@ -86,7 +82,6 @@ public:
     };
     // This method takes a zoom multiplier that can be used to increase the natural size of the image by the zoom.
     LayoutSize imageSize(RespectImageOrientationEnum shouldRespectImageOrientation, float multiplier, SizeType = IntrinsicSize);
-    void computeIntrinsicDimensions(FloatSize& intrinsicSize, FloatSize& intrinsicRatio);
 
     bool isAccessAllowed(SecurityOrigin*);
 
@@ -96,21 +91,23 @@ public:
     // the Lo-Fi state set to off and bypassing the cache.
     void reloadIfLoFi(ResourceFetcher*);
 
-    void didAddClient(ResourceClient*) override;
-    void didRemoveClient(ResourceClient*) override;
+    void addObserver(ImageResourceObserver*);
+    void removeObserver(ImageResourceObserver*);
+    bool hasClientsOrObservers() const override { return Resource::hasClientsOrObservers() || !m_observers.isEmpty() || !m_finishedObservers.isEmpty(); }
 
-    void allClientsRemoved() override;
+    ResourcePriority priorityFromObservers() override;
+
+    void allClientsAndObserversRemoved() override;
 
     void appendData(const char*, size_t) override;
     void error(Resource::Status) override;
     void responseReceived(const ResourceResponse&, PassOwnPtr<WebDataConsumerHandle>) override;
-    void finishOnePart() override;
+    void finish() override;
 
     // For compatibility, images keep loading even if there are HTTP errors.
     bool shouldIgnoreHTTPStatusCodeErrors() const override { return true; }
 
     bool isImage() const override { return true; }
-    bool stillNeedsLoad() const override { return !errorOccurred() && getStatus() == Unknown && !isLoading(); }
 
     // ImageObserver
     void decodedSizeChanged(const blink::Image*, int delta) override;
@@ -120,6 +117,10 @@ public:
     void animationAdvanced(const blink::Image*) override;
     void changedInRect(const blink::Image*, const IntRect&) override;
 
+    // MultipartImageResourceParser::Client
+    void onePartInMultipartReceived(const ResourceResponse&) final;
+    void multipartDataReceived(const char*, size_t) final;
+
     DECLARE_VIRTUAL_TRACE();
 
 protected:
@@ -128,35 +129,46 @@ protected:
     void destroyDecodedDataForFailedRevalidation() override;
 
 private:
-    explicit ImageResource(blink::Image*);
-    ImageResource(const ResourceRequest&, blink::Image*);
+    explicit ImageResource(blink::Image*, const ResourceLoaderOptions&);
+    ImageResource(const ResourceRequest&, blink::Image*, const ResourceLoaderOptions&);
+
+    enum class MultipartParsingState : uint8_t {
+        WaitingForFirstPart,
+        ParsingFirstPart,
+        FinishedParsingFirstPart,
+    };
 
     class ImageResourceFactory : public ResourceFactory {
     public:
         ImageResourceFactory()
             : ResourceFactory(Resource::Image) { }
 
-        PassRefPtrWillBeRawPtr<Resource> create(const ResourceRequest& request, const String&) const override
+        Resource* create(const ResourceRequest& request, const ResourceLoaderOptions& options, const String&) const override
         {
-            return adoptRefWillBeNoop(new ImageResource(request));
+            return new ImageResource(request, options);
         }
     };
-    ImageResource(const ResourceRequest&);
+    ImageResource(const ResourceRequest&, const ResourceLoaderOptions&);
 
     void clear();
 
-    void setCustomAcceptHeader();
     void createImage();
     void updateImage(bool allDataReceived);
     void clearImage();
     // If not null, changeRect is the changed part of the image.
     void notifyObservers(const IntRect* changeRect = nullptr);
-    bool loadingMultipartContent() const;
+
+    void checkNotify() override;
+    void markClientsAndObserversFinished() override;
 
     float m_devicePixelRatioHeaderValue;
 
+    Member<MultipartImageResourceParser> m_multipartParser;
     RefPtr<blink::Image> m_image;
+    MultipartParsingState m_multipartParsingState = MultipartParsingState::WaitingForFirstPart;
     bool m_hasDevicePixelRatioHeaderValue;
+    HashCountedSet<ImageResourceObserver*> m_observers;
+    HashCountedSet<ImageResourceObserver*> m_finishedObservers;
 };
 
 DEFINE_RESOURCE_TYPE_CASTS(Image);

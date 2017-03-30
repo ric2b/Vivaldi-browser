@@ -11,9 +11,11 @@ import android.net.Uri;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.contextmenu.ContextMenuItemDelegate;
+import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.Referrer;
@@ -27,6 +29,9 @@ import java.util.Locale;
  * A default {@link ContextMenuItemDelegate} that supports the context menu functionality in Tab.
  */
 public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
+    public static final String PAGESPEED_PASSTHROUGH_HEADERS =
+            "Chrome-Proxy: pass-through\nCache-Control: no-cache";
+
     private final Clipboard mClipboard;
     private final Tab mTab;
 
@@ -49,6 +54,11 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
     }
 
     @Override
+    public boolean isOpenInOtherWindowSupported() {
+        return MultiWindowUtils.getInstance().isOpenInOtherWindowSupported(mTab.getActivity());
+    }
+
+    @Override
     public boolean isDataReductionProxyEnabledForURL(String url) {
         return isSpdyProxyEnabledForUrl(url);
     }
@@ -61,6 +71,14 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
     @Override
     public void onSaveToClipboard(String text, int clipboardType) {
         mClipboard.setText(text);
+    }
+
+    @Override
+    public void onOpenInOtherWindow(String url, Referrer referrer) {
+        TabDelegate tabDelegate = new TabDelegate(mTab.isIncognito());
+        LoadUrlParams loadUrlParams = new LoadUrlParams(url);
+        loadUrlParams.setReferrer(referrer);
+        tabDelegate.createTabInOtherWindow(loadUrlParams, mTab.getActivity(), mTab.getParentId());
     }
 
     @Override
@@ -105,6 +123,16 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
         loadUrlParams.setTransitionType(PageTransition.LINK);
         loadUrlParams.setReferrer(referrer);
         mTab.loadUrl(loadUrlParams);
+    }
+
+    @Override
+    public void onOpenImageInNewTab(String url, Referrer referrer) {
+        boolean useOriginal = isSpdyProxyEnabledForUrl(url);
+        LoadUrlParams loadUrlParams = new LoadUrlParams(url);
+        loadUrlParams.setVerbatimHeaders(useOriginal ? PAGESPEED_PASSTHROUGH_HEADERS : null);
+        loadUrlParams.setReferrer(referrer);
+        mTab.getActivity().getTabModelSelector().openNewTab(loadUrlParams,
+                TabLaunchType.FROM_LONGPRESS_BACKGROUND, mTab, isIncognito());
     }
 
     @Override

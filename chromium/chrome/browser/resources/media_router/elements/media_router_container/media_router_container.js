@@ -53,7 +53,7 @@ Polymer({
     currentView_: {
       type: String,
       value: null,
-      observer: 'updateElementPositioning_',
+      observer: 'currentViewChanged_',
     },
 
     /**
@@ -184,11 +184,20 @@ Polymer({
     /**
      * The header text tooltip. This would be descriptive of the
      * source origin, whether a host name, tab URL, etc.
-     * @type {?string}
+     * @type {string}
      */
     headerTextTooltip: {
       type: String,
-      value: null,
+      value: '',
+    },
+
+    /**
+     * Whether the browser is currently incognito.
+     * @type {boolean}
+     */
+    isOffTheRecord: {
+      type: Boolean,
+      value: false,
     },
 
     /**
@@ -298,6 +307,17 @@ Polymer({
     },
 
     /**
+     * Whether the next character input should cause a filter action metric to
+     * be sent.
+     * @type {boolean}
+     * @private
+     */
+    reportFilterOnInput_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /**
      * The list of current routes.
      * @type {!Array<!media_router.Route>}
      */
@@ -314,6 +334,18 @@ Polymer({
     routeMap_: {
       type: Object,
       value: {},
+    },
+
+    /**
+     * Title text for the search button.
+     * @private {string}
+     */
+    searchButtonTitle_: {
+      type: String,
+      readOnly: true,
+      value: function() {
+        return loadTimeData.getString('searchButtonTitle');
+      },
     },
 
     /**
@@ -335,7 +367,7 @@ Polymer({
     searchInputText_: {
       type: String,
       value: '',
-      observer: 'filterSinks_',
+      observer: 'searchInputTextChanged_',
     },
 
     /**
@@ -477,6 +509,7 @@ Polymer({
   },
 
   listeners: {
+    'focus': 'onFocus_',
     'header-height-changed': 'updateElementPositioning_',
     'header-or-arrow-click': 'toggleCastModeHidden_',
     'mouseleave': 'onMouseLeave_',
@@ -489,6 +522,13 @@ Polymer({
 
   ready: function() {
     this.elementReadyTimeMs_ = performance.now();
+
+    // If this is not on a Mac platform, remove the placeholder. See
+    // onFocus_() for more details. ready() is only called once, so no need
+    // to check if the placeholder exist before removing.
+    if (!cr.isMac)
+      this.$$('#focus-placeholder').remove();
+
     document.addEventListener('keydown', this.onKeydown_.bind(this));
     this.setSearchFocusHandlers_();
     this.showSinkList_();
@@ -1007,6 +1047,19 @@ Polymer({
   },
 
   /**
+   * Computes the CSS class for #sink-search depending on whether it is the
+   * first or last item in the list, as indicated by |currentView|.
+   * @param {?media_router.MediaRouterView} currentView The current view of the
+   *     dialog.
+   * @return {string} The CSS that correctly sets the padding of #sink-search
+   *     for the current view.
+   * @private
+   */
+  computeSinkSearchClass_: function(currentView) {
+    return (currentView == media_router.MediaRouterView.FILTER) ? '' : 'bottom';
+  },
+
+  /**
    * Returns the subtext to be shown for |sink|. Only called if
    * |computeSinkSubtextHidden_| returns false for the same |sink| and
    * |sinkToRouteMap|.
@@ -1045,6 +1098,23 @@ Polymer({
    */
   computeSpinnerHidden_: function(justOpened) {
     return !justOpened;
+  },
+
+  /**
+   * Updates element positioning when the view changes and possibly triggers
+   * reporting of a user filter action. If there is no filter text, it defers
+   * the reporting until some text is entered, but otherwise it reports the
+   * filter action here.
+   * @param {?media_router.MediaRouterView} currentView The current view of the
+   *     dialog.
+   * @private
+   */
+  currentViewChanged_: function(currentView) {
+    if (currentView == media_router.MediaRouterView.FILTER) {
+      this.reportFilterOnInput_ = true;
+      this.maybeReportFilter_();
+    }
+    this.updateElementPositioning_();
   },
 
   /**
@@ -1117,6 +1187,19 @@ Polymer({
   },
 
   /**
+   * Reports a user filter action if |searchInputText_| is not empty and the
+   * filter action hasn't been reported since the view changed to the filter
+   * view.
+   * @private
+   */
+  maybeReportFilter_: function() {
+    if (this.reportFilterOnInput_ && this.searchInputText_.length != 0) {
+      this.reportFilterOnInput_ = false;
+      this.fire('report-filter');
+    }
+  },
+
+  /**
    * Updates |currentView_| if the dialog had just opened and there's
    * only one local route.
    */
@@ -1141,16 +1224,34 @@ Polymer({
   },
 
   /**
-   * Updates |currentView_| if there is a new blocking issue.
+   * Updates |currentView_| if there is a new blocking issue or a blocking
+   * issue is resolved. Clears any pending route creation properties if the
+   * issue corresponds with |pendingCreatedRouteId_|.
    *
-   * @param {?media_router.Issue} issue The new issue.
+   * @param {?media_router.Issue} issue The new issue, or null if the
+   *                              blocking issue was resolved.
    * @private
    */
   maybeShowIssueView_: function(issue) {
-    if (!!issue && issue.isBlocking)
-      this.currentView_ = media_router.MediaRouterView.ISSUE;
-    else
-      this.updateElementPositioning_();
+    if (!!issue) {
+      if (issue.isBlocking) {
+        this.currentView_ = media_router.MediaRouterView.ISSUE;
+      } else if (this.currentView_ == media_router.MediaRouterView.SINK_LIST) {
+        // Make space for the non-blocking issue in the sink list.
+        this.updateElementPositioning_();
+      }
+    } else {
+      // Switch back to the sink list if the issue was cleared. If the previous
+      // issue was non-blocking, this would be a no-op. It is expected that
+      // the only way to clear an issue is by user action; the IssueManager
+      // (C++ side) does not clear issues in the UI.
+      this.currentView_ = media_router.MediaRouterView.SINK_LIST;
+    }
+
+    if (!!this.pendingCreatedRouteId_ && !!issue &&
+        issue.routeId == this.pendingCreatedRouteId_) {
+      this.resetRouteCreationProperties_(false);
+    }
   },
 
   /**
@@ -1242,14 +1343,26 @@ Polymer({
     // The provider will handle sending an issue for a failed route request.
     if (!route) {
       this.resetRouteCreationProperties_(false);
+      this.fire('report-resolved-route', {
+        outcome: media_router.MediaRouterRouteCreationOutcome.FAILURE_NO_ROUTE
+      });
       return;
     }
 
     // Check that |sinkId| exists and corresponds to |currentLaunchingSinkId_|.
-    // TODO(apacible): Add metrics for when |route| is resolved for an invalid
-    // |sinkId|. See http://crbug.com/584993
-    if (!this.sinkMap_[sinkId] || this.currentLaunchingSinkId_ != sinkId)
+    if (!this.sinkMap_[sinkId] || this.currentLaunchingSinkId_ != sinkId) {
+      this.fire('report-resolved-route', {
+        outcome:
+            media_router.MediaRouterRouteCreationOutcome.FAILURE_INVALID_SINK
+      });
       return;
+    }
+
+    // Regardless of whether the route is for display, it was resolved
+    // successfully.
+    this.fire('report-resolved-route', {
+      outcome: media_router.MediaRouterRouteCreationOutcome.SUCCESS
+    });
 
     if (isForDisplay) {
       this.showRouteDetails_(route);
@@ -1257,6 +1370,32 @@ Polymer({
       this.resetRouteCreationProperties_(true);
     } else {
       this.pendingCreatedRouteId_ = route.id;
+    }
+  },
+
+  /**
+   * Called when a focus event is triggered.
+   *
+   * @param {!Event} event The event object.
+   * @private
+   */
+  onFocus_: function(event) {
+    // If the focus event was automatically fired by Polymer, remove focus from
+    // the element. This prevents unexpected focusing when the dialog is
+    // initially loaded. This only happens on mac.
+    if (cr.isMac && !event.sourceCapabilities) {
+      // Adding a focus placeholder element is part of the workaround for
+      // handling unexpected focusing, which only happens once on dialog open.
+      // Since the placeholder is focus-enabled as denoted by its tabindex
+      // value, the focus will not appear in other elements.
+      var placeholder = this.$$('#focus-placeholder');
+      // Check that the placeholder is the currently focused element. In some
+      // tests, other elements are non-user-triggered focused.
+      if (placeholder && this.shadowRoot.activeElement == placeholder) {
+        event.path[0].blur();
+        // Remove the placeholder since we have no more use for it.
+        placeholder.remove();
+      }
     }
   },
 
@@ -1495,6 +1634,20 @@ Polymer({
   },
 
   /**
+   * Filters the  sink list when the input text changes and shows the search
+   * results if |searchInputText| is not empty.
+   * @param {string} searchInputText The currently entered search text.
+   * @private
+   */
+  searchInputTextChanged_: function(searchInputText) {
+    this.filterSinks_(searchInputText);
+    if (searchInputText.length != 0) {
+      this.isUserSearching_ = true;
+      this.maybeReportFilter_();
+    }
+  },
+
+  /**
    * Updates the shown cast mode, and updates the header text fields
    * according to the cast mode. If |castMode| type is AUTO, then set
    * |userHasSelectedCastMode_| to false.
@@ -1507,7 +1660,7 @@ Polymer({
 
     this.shownCastModeValue_ = castMode.type;
     this.headerText = castMode.description;
-    this.headerTextTooltip = castMode.host;
+    this.headerTextTooltip = castMode.host || '';
     if (castMode.type == media_router.CastModeType.AUTO)
       this.userHasSelectedCastMode_ = false;
   },
@@ -1626,7 +1779,7 @@ Polymer({
       var searchHeight = this.$$('#sink-search').offsetHeight;
 
       this.$['container-header'].style.marginTop = firstRunFlowHeight + 'px';
-      this.$['sink-list-view'].style.marginTop =
+      this.$['content'].style.marginTop =
           firstRunFlowHeight + headerHeight + 'px';
       this.$['sink-list'].style.maxHeight =
           this.dialogHeight_ - headerHeight - firstRunFlowHeight -

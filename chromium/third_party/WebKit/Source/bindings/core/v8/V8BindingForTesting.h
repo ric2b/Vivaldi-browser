@@ -17,18 +17,18 @@ namespace blink {
 class ScriptStateForTesting : public ScriptState {
 public:
     static PassRefPtr<ScriptStateForTesting> create(v8::Local<v8::Context>, PassRefPtr<DOMWrapperWorld>);
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
     void setExecutionContext(ExecutionContext*) override;
 private:
     ScriptStateForTesting(v8::Local<v8::Context>, PassRefPtr<DOMWrapperWorld>);
-    RawPtrWillBePersistent<ExecutionContext> m_executionContext;
+    Persistent<ExecutionContext> m_executionContext;
 };
 
 class V8TestingScope {
     DISALLOW_NEW();
 public:
     explicit V8TestingScope(v8::Isolate*);
-    ScriptState* scriptState() const;
+    ScriptState* getScriptState() const;
     v8::Isolate* isolate() const;
     v8::Local<v8::Context> context() const;
     ~V8TestingScope();

@@ -24,6 +24,7 @@
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/Event.h"
 #include "core/fileapi/File.h"
@@ -54,9 +55,9 @@ inline FileInputType::FileInputType(HTMLInputElement& element)
 {
 }
 
-PassRefPtrWillBeRawPtr<InputType> FileInputType::create(HTMLInputElement& element)
+InputType* FileInputType::create(HTMLInputElement& element)
 {
-    return adoptRefWillBeNoop(new FileInputType(element));
+    return new FileInputType(element);
 }
 
 DEFINE_TRACE(FileInputType)
@@ -133,7 +134,7 @@ void FileInputType::handleDOMActivateEvent(Event* event)
     if (element().isDisabledFormControl())
         return;
 
-    if (!UserGestureIndicator::processingUserGesture())
+    if (!UserGestureIndicator::utilizeUserGesture())
         return;
 
     if (ChromeClient* chromeClient = this->chromeClient()) {
@@ -251,11 +252,11 @@ void FileInputType::countUsage()
 void FileInputType::createShadowSubtree()
 {
     ASSERT(element().shadow());
-    RefPtrWillBeRawPtr<HTMLInputElement> button = HTMLInputElement::create(element().document(), 0, false);
+    HTMLInputElement* button = HTMLInputElement::create(element().document(), 0, false);
     button->setType(InputTypeNames::button);
     button->setAttribute(valueAttr, AtomicString(locale().queryString(element().multiple() ? WebLocalizedString::FileButtonChooseMultipleFilesLabel : WebLocalizedString::FileButtonChooseFileLabel)));
-    button->setShadowPseudoId(AtomicString("-webkit-file-upload-button", AtomicString::ConstructFromLiteral));
-    element().userAgentShadowRoot()->appendChild(button.release());
+    button->setShadowPseudoId(AtomicString("-webkit-file-upload-button"));
+    element().userAgentShadowRoot()->appendChild(button);
 }
 
 void FileInputType::disabledAttributeChanged()
@@ -277,8 +278,6 @@ void FileInputType::setFiles(FileList* files)
     if (!files)
         return;
 
-    RefPtrWillBeRawPtr<HTMLInputElement> input(element());
-
     bool filesChanged = false;
     if (files->length() != m_fileList->length()) {
         filesChanged = true;
@@ -293,18 +292,18 @@ void FileInputType::setFiles(FileList* files)
 
     m_fileList = files;
 
-    input->notifyFormStateChanged();
-    input->setNeedsValidityCheck();
+    element().notifyFormStateChanged();
+    element().setNeedsValidityCheck();
 
-    if (input->layoutObject())
-        input->layoutObject()->setShouldDoFullPaintInvalidation();
+    if (element().layoutObject())
+        element().layoutObject()->setShouldDoFullPaintInvalidation();
 
     if (filesChanged) {
         // This call may cause destruction of this instance.
         // input instance is safe since it is ref-counted.
-        input->dispatchChangeEvent();
+        element().dispatchChangeEvent();
     }
-    input->setChangedSinceLastFormControlChangeEvent(false);
+    element().setChangedSinceLastFormControlChangeEvent(false);
 }
 
 void FileInputType::filesChosen(const Vector<FileChooserFileInfo>& files)

@@ -76,7 +76,7 @@ bool SharedStyleFinder::canShareStyleWithControl(Element& candidate) const
     if (candidate.isDisabledFormControl() != element().isDisabledFormControl())
         return false;
 
-    if (candidate.isDefaultButtonForForm() != element().isDefaultButtonForForm())
+    if (candidate.matchesDefaultPseudoClass() != element().matchesDefaultPseudoClass())
         return false;
 
     if (document().containsValidityStyleRules()) {
@@ -185,7 +185,7 @@ bool SharedStyleFinder::sharingCandidateCanShareHostStyles(Element& candidate) c
 
 bool SharedStyleFinder::sharingCandidateDistributedToSameInsertionPoint(Element& candidate) const
 {
-    WillBeHeapVector<RawPtrWillBeMember<InsertionPoint>, 8> insertionPoints, candidateInsertionPoints;
+    HeapVector<Member<InsertionPoint>, 8> insertionPoints, candidateInsertionPoints;
     collectDestinationInsertionPoints(element(), insertionPoints);
     collectDestinationInsertionPoints(candidate, candidateInsertionPoints);
     if (insertionPoints.size() != candidateInsertionPoints.size())

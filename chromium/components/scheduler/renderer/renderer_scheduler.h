@@ -6,6 +6,7 @@
 #define COMPONENTS_SCHEDULER_RENDERER_RENDERER_SCHEDULER_H_
 
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "components/scheduler/child/child_scheduler.h"
 #include "components/scheduler/child/single_thread_idle_task_runner.h"
@@ -13,11 +14,18 @@
 #include "components/scheduler/scheduler_export.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 
+namespace base {
+namespace trace_event {
+class BlameContext;
+}
+}
+
 namespace cc {
 struct BeginFrameArgs;
 }
 
 namespace blink {
+class WebLocalFrame;
 class WebThread;
 }
 
@@ -150,6 +158,11 @@ class SCHEDULER_EXPORT RendererScheduler : public ChildScheduler {
   // Sets whether to allow suspension of timers after the backgrounded signal is
   // received via OnRendererBackgrounded. Defaults to disabled.
   virtual void SetTimerQueueSuspensionWhenBackgroundedEnabled(bool enabled) = 0;
+
+  // Sets the default blame context to which top level work should be
+  // attributed in this renderer. |blame_context| must outlive this scheduler.
+  virtual void SetTopLevelBlameContext(
+      base::trace_event::BlameContext* blame_context) = 0;
 
  protected:
   RendererScheduler();

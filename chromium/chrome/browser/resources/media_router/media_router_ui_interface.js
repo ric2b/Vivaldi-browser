@@ -89,17 +89,20 @@ cr.define('media_router.ui', function() {
    *            userDomain: string
    *          },
    *          routes: !Array<!media_router.Route>,
-   *          castModes: !Array<!media_router.CastMode>}} data
+   *          castModes: !Array<!media_router.CastMode>,
+   *          isOffTheRecord: boolean}} data
    * Parameters in data:
    *   deviceMissingUrl - url to be opened on "Device missing?" clicked.
    *   sinksAndIdentity - list of sinks to be displayed and user identity.
    *   routes - list of routes that are associated with the sinks.
    *   castModes - list of available cast modes.
+   *   isOffTheRecord - whether or not the browser is currently incognito.
    */
   function setInitialData(data) {
     container.deviceMissingUrl = data['deviceMissingUrl'];
     container.castModeList = data['castModes'];
     this.setSinkListAndIdentity(data['sinksAndIdentity']);
+    container.isOffTheRecord = data['isOffTheRecord'];
     container.routeList = data['routes'];
     container.maybeShowRouteDetailsOnOpen();
     media_router.browserApi.onInitialDataReceived();
@@ -248,6 +251,13 @@ cr.define('media_router.browserApi', function() {
   }
 
   /**
+   * Reports that the user used the filter input.
+   */
+  function reportFilter() {
+    chrome.send('reportFilter');
+  }
+
+  /**
    * Reports the initial dialog view.
    *
    * @param {string} view
@@ -281,6 +291,15 @@ cr.define('media_router.browserApi', function() {
    */
   function reportRouteCreation(success) {
     chrome.send('reportRouteCreation', [success]);
+  }
+
+  /**
+   * Reports the outcome of a create route response.
+   *
+   * @param {number} outcome
+   */
+  function reportRouteCreationOutcome(outcome) {
+    chrome.send('reportRouteCreationOutcome', [outcome]);
   }
 
   /**
@@ -350,11 +369,13 @@ cr.define('media_router.browserApi', function() {
     onInitialDataReceived: onInitialDataReceived,
     reportBlur: reportBlur,
     reportClickedSinkIndex: reportClickedSinkIndex,
+    reportFilter: reportFilter,
     reportInitialAction: reportInitialAction,
     reportInitialState: reportInitialState,
     reportNavigateToView: reportNavigateToView,
-    reportSelectedCastMode: reportSelectedCastMode,
     reportRouteCreation: reportRouteCreation,
+    reportRouteCreationOutcome: reportRouteCreationOutcome,
+    reportSelectedCastMode: reportSelectedCastMode,
     reportSinkCount: reportSinkCount,
     reportTimeToClickSink: reportTimeToClickSink,
     reportTimeToInitialActionClose: reportTimeToInitialActionClose,

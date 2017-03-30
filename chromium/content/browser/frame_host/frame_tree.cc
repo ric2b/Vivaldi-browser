@@ -72,53 +72,16 @@ FrameTree::NodeIterator::NodeIterator(FrameTreeNode* starting_node,
       node_to_skip_(node_to_skip) {}
 
 FrameTree::NodeIterator FrameTree::NodeRange::begin() {
-  return NodeIterator(tree_->root(), node_to_skip_);
+  return NodeIterator(root_, node_to_skip_);
 }
 
 FrameTree::NodeIterator FrameTree::NodeRange::end() {
   return NodeIterator(nullptr, nullptr);
 }
 
-FrameTree::NodeRange::NodeRange(FrameTree* tree, FrameTreeNode* node_to_skip)
-    : tree_(tree), node_to_skip_(node_to_skip) {}
-
-FrameTree::ConstNodeIterator::~ConstNodeIterator() {}
-
-FrameTree::ConstNodeIterator& FrameTree::ConstNodeIterator::operator++() {
-  for (size_t i = 0; i < current_node_->child_count(); ++i) {
-    const FrameTreeNode* child = current_node_->child_at(i);
-    queue_.push(child);
-  }
-
-  if (!queue_.empty()) {
-    current_node_ = queue_.front();
-    queue_.pop();
-  } else {
-    current_node_ = nullptr;
-  }
-
-  return *this;
-}
-
-bool FrameTree::ConstNodeIterator::operator==(
-    const ConstNodeIterator& rhs) const {
-  return current_node_ == rhs.current_node_;
-}
-
-FrameTree::ConstNodeIterator::ConstNodeIterator(
-    const FrameTreeNode* starting_node)
-    : current_node_(starting_node) {}
-
-FrameTree::ConstNodeIterator FrameTree::ConstNodeRange::begin() {
-  return ConstNodeIterator(tree_->root());
-}
-
-FrameTree::ConstNodeIterator FrameTree::ConstNodeRange::end() {
-  return ConstNodeIterator(nullptr);
-}
-
-FrameTree::ConstNodeRange::ConstNodeRange(const FrameTree* tree)
-    : tree_(tree) {}
+FrameTree::NodeRange::NodeRange(FrameTreeNode* root,
+                                FrameTreeNode* node_to_skip)
+    : root_(root), node_to_skip_(node_to_skip) {}
 
 FrameTree::FrameTree(Navigator* navigator,
                      RenderFrameHostDelegate* render_frame_delegate,
@@ -193,12 +156,12 @@ FrameTree::NodeRange FrameTree::Nodes() {
   return NodesExcept(nullptr);
 }
 
-FrameTree::NodeRange FrameTree::NodesExcept(FrameTreeNode* node_to_skip) {
-  return NodeRange(this, node_to_skip);
+FrameTree::NodeRange FrameTree::SubtreeNodes(FrameTreeNode* subtree_root) {
+  return NodeRange(subtree_root, nullptr);
 }
 
-FrameTree::ConstNodeRange FrameTree::ConstNodes() const {
-  return ConstNodeRange(this);
+FrameTree::NodeRange FrameTree::NodesExcept(FrameTreeNode* node_to_skip) {
+  return NodeRange(root_, node_to_skip);
 }
 
 bool FrameTree::AddFrame(
@@ -252,18 +215,11 @@ void FrameTree::RemoveFrame(FrameTreeNode* child) {
 void FrameTree::CreateProxiesForSiteInstance(
     FrameTreeNode* source,
     SiteInstance* site_instance) {
-  // Create the swapped out RVH for the new SiteInstance. This will create
-  // a top-level swapped out RFH as well, which will then be wrapped by a
-  // RenderFrameProxyHost.
+  // Create the RenderFrameProxyHost for the new SiteInstance.
   if (!source || !source->IsMainFrame()) {
     RenderViewHostImpl* render_view_host = GetRenderViewHost(site_instance);
     if (!render_view_host) {
-      if (SiteIsolationPolicy::IsSwappedOutStateForbidden()) {
-        root()->render_manager()->CreateRenderFrameProxy(site_instance);
-      } else {
-        root()->render_manager()->CreateRenderFrame(
-            site_instance, CREATE_RF_SWAPPED_OUT | CREATE_RF_HIDDEN, nullptr);
-      }
+      root()->render_manager()->CreateRenderFrameProxy(site_instance);
     } else {
       root()->render_manager()->EnsureRenderViewInitialized(render_view_host,
                                                             site_instance);
@@ -327,6 +283,11 @@ void FrameTree::SetFocusedFrame(FrameTreeNode* node, SiteInstance* source) {
 
   focused_frame_tree_node_id_ = node->frame_tree_node_id();
   node->DidFocus();
+
+  // The accessibility tree data for the root of the frame tree keeps
+  // track of the focused frame too, so update that every time the
+  // focused frame changes.
+  root()->current_frame_host()->UpdateAXTreeData();
 }
 
 void FrameTree::SetFrameRemoveListener(
@@ -349,7 +310,7 @@ RenderViewHostImpl* FrameTree::CreateRenderViewHost(
     // SiteInstance.  Note that if swapped-out is forbidden, the
     // RenderViewHost's main frame has already been cleared, so we cannot rely
     // on checking whether the main frame is pending deletion.
-    if (iter->second->is_pending_deletion()) {
+    if (root_->render_manager()->IsViewPendingDeletion(iter->second)) {
       render_view_host_pending_shutdown_map_.insert(
           std::make_pair(site_instance->GetId(), iter->second));
       render_view_host_map_.erase(iter);
@@ -369,9 +330,12 @@ RenderViewHostImpl* FrameTree::CreateRenderViewHost(
 RenderViewHostImpl* FrameTree::GetRenderViewHost(SiteInstance* site_instance) {
   RenderViewHostMap::iterator iter =
       render_view_host_map_.find(site_instance->GetId());
-  if (iter == render_view_host_map_.end())
-    return nullptr;
-  return iter->second;
+  // Don't return the RVH if it is pending deletion.
+  if (iter != render_view_host_map_.end() &&
+      !root_->render_manager()->IsViewPendingDeletion(iter->second)) {
+    return iter->second;
+  }
+  return nullptr;
 }
 
 void FrameTree::AddRenderViewHostRef(RenderViewHostImpl* render_view_host) {
@@ -488,7 +452,7 @@ void FrameTree::ResetLoadProgress() {
 }
 
 bool FrameTree::IsLoading() const {
-  for (const FrameTreeNode* node : ConstNodes()) {
+  for (const FrameTreeNode* node : const_cast<FrameTree*>(this)->Nodes()) {
     if (node->IsLoading())
       return true;
   }

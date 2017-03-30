@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <functional>
 #include <map>
+#include <memory>
 #include <ostream>
 #include <set>
 
@@ -292,6 +293,7 @@ AutofillProfile& AutofillProfile::operator=(const AutofillProfile& profile) {
   return *this;
 }
 
+// TODO(crbug.com/589535): Disambiguate similar field types before uploading.
 void AutofillProfile::GetMatchingTypes(
     const base::string16& text,
     const std::string& app_locale,
@@ -320,7 +322,7 @@ void AutofillProfile::SetRawInfo(ServerFieldType type,
 base::string16 AutofillProfile::GetInfo(const AutofillType& type,
                                         const std::string& app_locale) const {
   if (type.html_type() == HTML_TYPE_FULL_ADDRESS) {
-    scoped_ptr<AddressData> address_data =
+    std::unique_ptr<AddressData> address_data =
         i18n::CreateAddressDataFromAutofillProfile(*this, app_locale);
     if (!addressinput::HasAllRequiredFields(*address_data))
       return base::string16();
@@ -444,7 +446,7 @@ bool AutofillProfile::IsSubsetOfForFieldSet(
     const AutofillProfile& profile,
     const std::string& app_locale,
     const ServerFieldTypeSet& types) const {
-  scoped_ptr<l10n::CaseInsensitiveCompare> compare;
+  std::unique_ptr<l10n::CaseInsensitiveCompare> compare;
 
   for (ServerFieldType type : types) {
     base::string16 value = GetRawInfo(type);
@@ -635,7 +637,8 @@ bool AutofillProfile::SaveAdditionalInfo(const AutofillProfile& profile,
       // Special case for the state to support abbreviations. Currently only the
       // US states are supported.
       if (field_type == ADDRESS_HOME_STATE) {
-        base::string16 full, abbreviation;
+        base::string16 full;
+        base::string16 abbreviation;
         state_names::GetNameAndAbbreviation(GetRawInfo(ADDRESS_HOME_STATE),
                                             &full, &abbreviation);
         if (compare.StringsEqual(profile.GetRawInfo(ADDRESS_HOME_STATE),
@@ -867,7 +870,7 @@ base::string16 AutofillProfile::ConstructInferredLabel(
     --num_fields_to_use;
   }
 
-  scoped_ptr<AddressData> address_data =
+  std::unique_ptr<AddressData> address_data =
       i18n::CreateAddressDataFromAutofillProfile(trimmed_profile, app_locale);
   std::string address_line;
   ::i18n::addressinput::GetFormattedNationalAddressLine(

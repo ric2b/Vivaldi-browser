@@ -13,6 +13,7 @@ namespace blink {
 class WebAppBannerClient;
 class WebAudioDevice;
 class WebFrame;
+class WebFrameClient;
 class WebMediaStreamCenter;
 class WebMediaStreamCenterClient;
 class WebMIDIAccessor;
@@ -28,9 +29,11 @@ namespace test_runner {
 
 class AppBannerClient;
 class TestInterfaces;
+class WebFrameTestClient;
 class WebTestDelegate;
 class WebTestProxyBase;
 class WebTestRunner;
+class WebViewTestClient;
 
 class TEST_RUNNER_EXPORT WebTestInterfaces {
  public:
@@ -44,6 +47,7 @@ class TEST_RUNNER_EXPORT WebTestInterfaces {
   void SetTestIsRunning(bool running);
   void ConfigureForTestWithURL(const blink::WebURL& test_url,
                                bool generate_pixels);
+  void SetSendWheelGestures(bool send_gestures);
 
   WebTestRunner* TestRunner();
   blink::WebThemeEngine* ThemeEngine();
@@ -59,9 +63,21 @@ class TEST_RUNNER_EXPORT WebTestInterfaces {
   blink::WebAudioDevice* CreateAudioDevice(double sample_rate);
 
   scoped_ptr<blink::WebAppBannerClient> CreateAppBannerClient();
-  AppBannerClient* GetAppBannerClient();
 
   TestInterfaces* GetTestInterfaces();
+
+  // Creates a WebFrameClient implementation providing test behavior (i.e.
+  // forwarding javascript console output to the test harness).  The caller
+  // should guarantee that the returned object won't be used beyond the lifetime
+  // of WebTestInterfaces.
+  scoped_ptr<WebFrameTestClient> CreateWebFrameTestClient();
+
+  // Creates a WebViewClient implementation providing test behavior (i.e.
+  // providing a mocked speech recognizer).  The caller should guarantee that
+  // the returned pointer won't be used beyond the lifetime of WebTestInterfaces
+  // and/or the lifetime of |web_test_proxy_base|.
+  scoped_ptr<WebViewTestClient> CreateWebViewTestClient(
+      WebTestProxyBase* web_test_proxy_base);
 
  private:
   scoped_ptr<TestInterfaces> interfaces_;

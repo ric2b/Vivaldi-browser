@@ -37,7 +37,6 @@ class TestToolbarActionViewDelegate : public ToolbarActionView::Delegate {
   views::MenuButton* GetOverflowReferenceView() override {
     return overflow_reference_view_;
   }
-  void OnMouseEnteredToolbarActionView() override {}
   void WriteDragDataForView(views::View* sender,
                             const gfx::Point& press_pt,
                             ui::OSExchangeData* data) override {}
@@ -156,7 +155,7 @@ TEST_F(ToolbarActionViewUnitTest,
   TestToolbarActionViewDelegate action_view_delegate;
 
   // Create a new toolbar action view.
-  scoped_ptr<ToolbarActionView> view(
+  std::unique_ptr<ToolbarActionView> view(
       new ToolbarActionView(&controller, &action_view_delegate));
   view->set_owned_by_client();
   view->SetBoundsRect(gfx::Rect(0, 0, 200, 20));

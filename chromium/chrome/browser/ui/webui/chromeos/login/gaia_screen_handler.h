@@ -13,7 +13,6 @@
 #include "chrome/browser/chromeos/login/screens/core_oobe_actor.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "net/base/net_errors.h"
 
@@ -107,6 +106,8 @@ class GaiaScreenHandler : public BaseScreenHandler,
 
   void HandleIdentifierEntered(const std::string& account_identifier);
 
+  void HandleAuthExtensionLoaded();
+
   // Really handles the complete login message.
   void DoCompleteLogin(const std::string& gaia_id,
                        const std::string& typed_email,
@@ -180,11 +181,6 @@ class GaiaScreenHandler : public BaseScreenHandler,
   AccountId GetAccountId(const std::string& authenticated_email,
                          const std::string& gaia_id) const;
 
-  // Returns current visible screen.
-  // TODO(jdufault): This definition exists in multiple locations. Refactor it
-  // into BaseScreenHandler.
-  OobeUI::Screen GetCurrentScreen() const;
-
   bool offline_login_is_active() const { return offline_login_is_active_; }
   void set_offline_login_is_active(bool offline_login_is_active) {
     offline_login_is_active_ = offline_login_is_active;
@@ -239,7 +235,7 @@ class GaiaScreenHandler : public BaseScreenHandler,
   NetworkPortalDetector::CaptivePortalStatus captive_portal_status_ =
       NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE;
 
-  scoped_ptr<NetworkPortalDetector> network_portal_detector_;
+  std::unique_ptr<NetworkPortalDetector> network_portal_detector_;
   bool disable_restrictive_proxy_check_for_test_ = false;
 
   // Non-owning ptr to SigninScreenHandler instance. Should not be used
@@ -250,6 +246,9 @@ class GaiaScreenHandler : public BaseScreenHandler,
 
   // True if offline GAIA is active.
   bool offline_login_is_active_ = false;
+
+  // True if the authentication extension is still loading.
+  bool auth_extension_being_loaded_ = false;
 
   base::WeakPtrFactory<GaiaScreenHandler> weak_factory_;
 

@@ -40,8 +40,8 @@ AudioMediaCodecDecoder::AudioMediaCodecDecoder(
                         waiting_for_decryption_key_cb,
                         error_cb),
       volume_(-1.0),
-      bytes_per_frame_(0),
       output_sampling_rate_(0),
+      output_num_channels_(0),
       frame_count_(0),
       update_current_time_cb_(update_current_time_cb) {}
 
@@ -65,8 +65,10 @@ void AudioMediaCodecDecoder::SetDemuxerConfigs(const DemuxerConfigs& configs) {
   DVLOG(1) << class_name() << "::" << __FUNCTION__ << " " << configs;
 
   configs_ = configs;
-  if (!media_codec_bridge_)
+  if (!media_codec_bridge_) {
     output_sampling_rate_ = configs.audio_sampling_rate;
+    output_num_channels_ = configs.audio_channels;
+  }
 }
 
 bool AudioMediaCodecDecoder::IsContentEncrypted() const {
@@ -159,7 +161,6 @@ MediaCodecDecoder::ConfigStatus AudioMediaCodecDecoder::ConfigureInternal(
 
   SetVolumeInternal();
 
-  bytes_per_frame_ = kBytesPerAudioOutputSample * configs_.audio_channels;
   frame_count_ = 0;
   ResetTimestampHelper();
 
@@ -169,19 +170,47 @@ MediaCodecDecoder::ConfigStatus AudioMediaCodecDecoder::ConfigureInternal(
   return kConfigOk;
 }
 
-void AudioMediaCodecDecoder::OnOutputFormatChanged() {
+bool AudioMediaCodecDecoder::OnOutputFormatChanged() {
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
 
   DCHECK(media_codec_bridge_);
 
-  int old_sampling_rate = output_sampling_rate_;
+  // Recreate AudioTrack if either sample rate or output channel count changed.
+  // If we cannot obtain these values we assume they did not change.
+  bool needs_recreate_audio_track = false;
+
+  const int old_sampling_rate = output_sampling_rate_;
   MediaCodecStatus status =
       media_codec_bridge_->GetOutputSamplingRate(&output_sampling_rate_);
-  if (status != MEDIA_CODEC_OK || output_sampling_rate_ != old_sampling_rate)
+
+  if (status == MEDIA_CODEC_OK && old_sampling_rate != output_sampling_rate_) {
+    DCHECK_GT(output_sampling_rate_, 0);
+    DVLOG(2) << __FUNCTION__ << ": new sampling rate " << output_sampling_rate_;
+    needs_recreate_audio_track = true;
+
     ResetTimestampHelper();
+  }
+
+  const int old_num_channels = output_num_channels_;
+  status = media_codec_bridge_->GetOutputChannelCount(&output_num_channels_);
+
+  if (status == MEDIA_CODEC_OK && old_num_channels != output_num_channels_) {
+    DCHECK_GT(output_num_channels_, 0);
+    DVLOG(2) << __FUNCTION__ << ": new channel count " << output_num_channels_;
+    needs_recreate_audio_track = true;
+  }
+
+  if (needs_recreate_audio_track &&
+      !static_cast<AudioCodecBridge*>(media_codec_bridge_.get())
+           ->CreateAudioTrack(output_sampling_rate_, output_num_channels_)) {
+    DLOG(ERROR) << __FUNCTION__ << ": cannot create AudioTrack";
+    return false;
+  }
+
+  return true;
 }
 
-void AudioMediaCodecDecoder::Render(int buffer_index,
+bool AudioMediaCodecDecoder::Render(int buffer_index,
                                     size_t offset,
                                     size_t size,
                                     RenderMode render_mode,
@@ -205,10 +234,13 @@ void AudioMediaCodecDecoder::Render(int buffer_index,
     int64_t head_position;
     MediaCodecStatus status = audio_codec->PlayOutputBuffer(
         buffer_index, size, offset, postpone, &head_position);
-    // TODO(timav,watk): This CHECK maintains the behavior of this call before
-    // we started catching CodecException and returning it as MEDIA_CODEC_ERROR.
-    // It needs to be handled some other way. http://crbug.com/585978
-    CHECK_EQ(status, MEDIA_CODEC_OK);
+
+    if (status != MEDIA_CODEC_OK) {
+      DLOG(ERROR) << class_name() << "::" << __FUNCTION__ << " pts:" << pts
+                  << " PlayOutputBuffer failed for index:" << buffer_index;
+      media_codec_bridge_->ReleaseOutputBuffer(buffer_index, false);
+      return false;
+    }
 
     base::TimeTicks current_time = base::TimeTicks::Now();
 
@@ -220,7 +252,9 @@ void AudioMediaCodecDecoder::Render(int buffer_index,
     if (postpone && !frame_count_)
       SetBaseTimestamp(pts);
 
-    size_t new_frames_count = size / bytes_per_frame_;
+    const size_t bytes_per_frame =
+        kBytesPerAudioOutputSample * output_num_channels_;
+    const size_t new_frames_count = size / bytes_per_frame;
     frame_count_ += new_frames_count;
     audio_timestamp_helper_->AddFrames(new_frames_count);
 
@@ -266,6 +300,8 @@ void AudioMediaCodecDecoder::Render(int buffer_index,
   media_codec_bridge_->ReleaseOutputBuffer(buffer_index, false);
 
   CheckLastFrame(eos_encountered, false);  // no delayed tasks
+
+  return true;
 }
 
 void AudioMediaCodecDecoder::SetVolumeInternal() {
@@ -286,7 +322,7 @@ void AudioMediaCodecDecoder::ResetTimestampHelper() {
     base_timestamp_ = audio_timestamp_helper_->GetTimestamp();
 
   audio_timestamp_helper_.reset(
-      new AudioTimestampHelper(configs_.audio_sampling_rate));
+      new AudioTimestampHelper(output_sampling_rate_));
 
   audio_timestamp_helper_->SetBaseTimestamp(base_timestamp_);
 }

@@ -97,13 +97,13 @@ public:
     void dirtyLineBoxes();
 
     void absoluteRects(Vector<IntRect>&, const LayoutPoint& accumulatedOffset) const final;
-    void absoluteRectsForRange(Vector<IntRect>&, unsigned startOffset = 0, unsigned endOffset = INT_MAX, bool useSelectionHeight = false, bool* wasFixed = nullptr);
+    void absoluteRectsForRange(Vector<IntRect>&, unsigned startOffset = 0, unsigned endOffset = INT_MAX, bool useSelectionHeight = false);
 
-    void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed) const final;
-    void absoluteQuadsForRange(Vector<FloatQuad>&, unsigned startOffset = 0, unsigned endOffset = INT_MAX, bool useSelectionHeight = false, bool* wasFixed = nullptr);
+    void absoluteQuads(Vector<FloatQuad>&) const final;
+    void absoluteQuadsForRange(Vector<FloatQuad>&, unsigned startOffset = 0, unsigned endOffset = INT_MAX, bool useSelectionHeight = false);
 
     enum ClippingOption { NoClipping, ClipToEllipsis };
-    void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed = nullptr, ClippingOption = NoClipping) const;
+    void absoluteQuads(Vector<FloatQuad>&, ClippingOption = NoClipping) const;
 
     PositionWithAffinity positionForPoint(const LayoutPoint&) override;
 
@@ -148,7 +148,7 @@ public:
 
     bool canBeSelectionLeaf() const override { return true; }
     void setSelectionState(SelectionState) final;
-    LayoutRect selectionRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer) const override;
+    LayoutRect localSelectionRect() const final;
     LayoutRect localCaretRect(InlineBox*, int caretOffset, LayoutUnit* extraWidthToEndOfLine = nullptr) override;
 
     InlineTextBox* firstTextBox() const { return m_firstTextBox; }
@@ -160,10 +160,6 @@ public:
     int caretMinOffset() const override;
     int caretMaxOffset() const override;
     unsigned resolvedTextLength() const;
-
-    int previousOffset(int current) const final;
-    int previousOffsetForBackwardDeletion(int current) const final;
-    int nextOffset(int current) const final;
 
     bool containsReversedText() const { return m_containsReversedText; }
 
@@ -222,7 +218,7 @@ private:
 
     bool isText() const = delete; // This will catch anyone doing an unnecessary check.
 
-    LayoutRect clippedOverflowRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState* = nullptr) const override;
+    LayoutRect localOverflowRectForPaintInvalidation() const override;
 
     void checkConsistency() const;
 
@@ -281,7 +277,7 @@ inline UChar32 LayoutText::codepointAt(unsigned i) const
 inline float LayoutText::hyphenWidth(const Font& font, TextDirection direction)
 {
     const ComputedStyle& style = styleRef();
-    return font.width(constructTextRun(font, style.hyphenString().string(), style, direction));
+    return font.width(constructTextRun(font, style.hyphenString().getString(), style, direction));
 }
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutText, isText());

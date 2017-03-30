@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -20,7 +21,6 @@
 #include "chrome/browser/chromeos/app_mode/startup_app_launcher.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
-#include "chrome/browser/chromeos/login/ui/oobe_display.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
@@ -29,6 +29,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -39,8 +40,37 @@ namespace chromeos {
 
 namespace {
 
+// Enum types for Kiosk.LaunchType UMA so don't change its values.
+// KioskLaunchType in histogram.xml must be updated when making changes here.
+enum KioskLaunchType {
+  KIOSK_LAUNCH_ENTERPRISE_AUTO_LAUNCH = 0,
+  KIOKS_LAUNCH_ENTERPRISE_MANUAL_LAUNCH = 1,
+  KIOSK_LAUNCH_CONSUMER_AUTO_LAUNCH = 2,
+  KIOSK_LAUNCH_CONSUMER_MANUAL_LAUNCH = 3,
+
+  KIOSK_LAUNCH_TYPE_COUNT  // This must be the last entry.
+};
+
 // Application install splash screen minimum show time in milliseconds.
 const int kAppInstallSplashScreenMinTimeMS = 3000;
+
+bool IsEnterpriseManaged() {
+  policy::BrowserPolicyConnectorChromeOS* connector =
+      g_browser_process->platform_part()->browser_policy_connector_chromeos();
+  return connector->IsEnterpriseManaged();
+}
+
+void RecordKioskLaunchUMA(bool is_auto_launch) {
+  const KioskLaunchType launch_type =
+      IsEnterpriseManaged()
+          ? (is_auto_launch ? KIOSK_LAUNCH_ENTERPRISE_AUTO_LAUNCH
+                            : KIOKS_LAUNCH_ENTERPRISE_MANUAL_LAUNCH)
+          : (is_auto_launch ? KIOSK_LAUNCH_CONSUMER_AUTO_LAUNCH
+                            : KIOSK_LAUNCH_CONSUMER_MANUAL_LAUNCH);
+
+  UMA_HISTOGRAM_ENUMERATION("Kiosk.LaunchType", launch_type,
+                            KIOSK_LAUNCH_TYPE_COUNT);
+}
 
 }  // namespace
 
@@ -105,22 +135,13 @@ class AppLaunchController::AppWindowWatcher
 AppLaunchController::AppLaunchController(const std::string& app_id,
                                          bool diagnostic_mode,
                                          LoginDisplayHost* host,
-                                         OobeDisplay* oobe_display)
-    : profile_(NULL),
-      app_id_(app_id),
+                                         OobeUI* oobe_ui)
+    : app_id_(app_id),
       diagnostic_mode_(diagnostic_mode),
       host_(host),
-      oobe_display_(oobe_display),
+      oobe_ui_(oobe_ui),
       app_launch_splash_screen_actor_(
-          oobe_display_->GetAppLaunchSplashScreenActor()),
-      webui_visible_(false),
-      launcher_ready_(false),
-      waiting_for_network_(false),
-      network_wait_timedout_(false),
-      showing_network_dialog_(false),
-      network_config_requested_(false),
-      launch_splash_start_time_(0) {
-}
+          oobe_ui_->GetAppLaunchSplashScreenActor()) {}
 
 AppLaunchController::~AppLaunchController() {
   app_launch_splash_screen_actor_->SetDelegate(NULL);
@@ -128,6 +149,8 @@ AppLaunchController::~AppLaunchController() {
 
 void AppLaunchController::StartAppLaunch(bool is_auto_launch) {
   DVLOG(1) << "Starting kiosk mode...";
+
+  RecordKioskLaunchUMA(is_auto_launch);
 
   // Ensure WebUILoginView is enabled so that bailout shortcut key works.
   host_->GetWebUILoginView()->SetUIEnabled(true);
@@ -159,9 +182,8 @@ void AppLaunchController::StartAppLaunch(bool is_auto_launch) {
     if (delay == 0)
       KioskAppManager::Get()->SetAppWasAutoLaunchedWithZeroDelay(app_id_);
   }
-
   kiosk_profile_loader_.reset(
-      new KioskProfileLoader(app.user_id, false, this));
+      new KioskProfileLoader(app.account_id, false, this));
   kiosk_profile_loader_->Start();
 }
 
@@ -200,8 +222,7 @@ void AppLaunchController::OnConfigureNetwork() {
 
   showing_network_dialog_ = true;
   if (CanConfigureNetwork() && NeedOwnerAuthToConfigureNetwork()) {
-    signin_screen_.reset(new AppLaunchSigninScreen(
-       static_cast<OobeUI*>(oobe_display_), this));
+    signin_screen_.reset(new AppLaunchSigninScreen(oobe_ui_, this));
     signin_screen_->Show();
   } else {
     // If kiosk mode was configured through enterprise policy, we may
@@ -308,9 +329,7 @@ bool AppLaunchController::CanConfigureNetwork() {
   if (can_configure_network_callback_)
     return can_configure_network_callback_->Run();
 
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  if (connector->IsEnterpriseManaged()) {
+  if (IsEnterpriseManaged()) {
     bool should_prompt;
     if (CrosSettings::Get()->GetBoolean(
             kAccountsPrefDeviceLocalAccountPromptForNetworkWhenOffline,
@@ -329,9 +348,7 @@ bool AppLaunchController::NeedOwnerAuthToConfigureNetwork() {
   if (need_owner_auth_to_configure_network_callback_)
     return need_owner_auth_to_configure_network_callback_->Run();
 
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  return !connector->IsEnterpriseManaged();
+  return !IsEnterpriseManaged();
 }
 
 void AppLaunchController::MaybeShowNetworkConfigureUI() {

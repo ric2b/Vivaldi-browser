@@ -27,13 +27,12 @@
 #include "bindings/core/v8/Iterable.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
 class Node;
 
-class CORE_EXPORT NodeList : public RefCountedWillBeGarbageCollectedFinalized<NodeList>, public ScriptWrappable, public ValueIterable<Node *> {
+class CORE_EXPORT NodeList : public GarbageCollectedFinalized<NodeList>, public ScriptWrappable, public ValueIterable<Node *> {
     DEFINE_WRAPPERTYPEINFO();
 public:
     virtual ~NodeList() { }

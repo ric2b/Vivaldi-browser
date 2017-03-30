@@ -62,14 +62,14 @@ HTMLAreaElement* HTMLMapElement::areaForPoint(LayoutPoint location, const Layout
 
 HTMLImageElement* HTMLMapElement::imageElement()
 {
-    RefPtrWillBeRawPtr<HTMLCollection> images = document().images();
+    RawPtr<HTMLCollection> images = document().images();
     for (unsigned i = 0; Element* curr = images->item(i); ++i) {
         ASSERT(isHTMLImageElement(curr));
 
         // The HTMLImageElement's useMap() value includes the '#' symbol at the beginning,
         // which has to be stripped off.
         HTMLImageElement& imageElement = toHTMLImageElement(*curr);
-        String useMapName = imageElement.getAttribute(usemapAttr).string().substring(1);
+        String useMapName = imageElement.getAttribute(usemapAttr).getString().substring(1);
         if (equalIgnoringCase(useMapName, m_name))
             return &imageElement;
     }
@@ -89,13 +89,13 @@ void HTMLMapElement::parseAttribute(const QualifiedName& name, const AtomicStrin
             if (document().isHTMLDocument())
                 return;
         }
-        if (inDocument())
+        if (inShadowIncludingDocument())
             treeScope().removeImageMap(this);
         String mapName = value;
         if (mapName[0] == '#')
             mapName = mapName.substring(1);
         m_name = AtomicString(document().isHTMLDocument() ? mapName.lower() : mapName);
-        if (inDocument())
+        if (inShadowIncludingDocument())
             treeScope().addImageMap(this);
 
         return;
@@ -104,21 +104,21 @@ void HTMLMapElement::parseAttribute(const QualifiedName& name, const AtomicStrin
     HTMLElement::parseAttribute(name, oldValue, value);
 }
 
-PassRefPtrWillBeRawPtr<HTMLCollection> HTMLMapElement::areas()
+RawPtr<HTMLCollection> HTMLMapElement::areas()
 {
     return ensureCachedCollection<HTMLCollection>(MapAreas);
 }
 
 Node::InsertionNotificationRequest HTMLMapElement::insertedInto(ContainerNode* insertionPoint)
 {
-    if (insertionPoint->inDocument())
+    if (insertionPoint->inShadowIncludingDocument())
         treeScope().addImageMap(this);
     return HTMLElement::insertedInto(insertionPoint);
 }
 
 void HTMLMapElement::removedFrom(ContainerNode* insertionPoint)
 {
-    if (insertionPoint->inDocument())
+    if (insertionPoint->inShadowIncludingDocument())
         treeScope().removeImageMap(this);
     HTMLElement::removedFrom(insertionPoint);
 }

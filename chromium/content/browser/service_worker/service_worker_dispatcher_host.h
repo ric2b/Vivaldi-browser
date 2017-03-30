@@ -21,6 +21,10 @@
 class GURL;
 struct EmbeddedWorkerHostMsg_ReportConsoleMessage_Params;
 
+namespace url {
+class Origin;
+}
+
 namespace content {
 
 class MessagePortMessageFilter;
@@ -84,7 +88,10 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost : public BrowserMessageFilter {
  private:
   friend class BrowserThread;
   friend class base::DeleteHelper<ServiceWorkerDispatcherHost>;
+  friend class ServiceWorkerDispatcherHostTest;
   friend class TestingServiceWorkerDispatcherHost;
+
+  using StatusCallback = base::Callback<void(ServiceWorkerStatusCode status)>;
 
   // IPC Message handlers
   void OnRegisterServiceWorker(int thread_id,
@@ -136,7 +143,9 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost : public BrowserMessageFilter {
   void OnDecrementRegistrationRefCount(int registration_handle_id);
   void OnPostMessageToWorker(
       int handle_id,
+      int provider_id,
       const base::string16& message,
+      const url::Origin& source_origin,
       const std::vector<TransferredMessagePort>& sent_message_ports);
 
   // TODO(nhiroki): Remove this after ExtendableMessageEvent is enabled by
@@ -147,6 +156,37 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost : public BrowserMessageFilter {
       const std::vector<TransferredMessagePort>& sent_message_ports);
 
   void OnTerminateWorker(int handle_id);
+
+  void DispatchExtendableMessageEvent(
+      scoped_refptr<ServiceWorkerVersion> worker,
+      const base::string16& message,
+      const url::Origin& source_origin,
+      const std::vector<TransferredMessagePort>& sent_message_ports,
+      ServiceWorkerProviderHost* sender_provider_host,
+      const StatusCallback& callback);
+  template <typename SourceInfo>
+  void DispatchExtendableMessageEventInternal(
+      scoped_refptr<ServiceWorkerVersion> worker,
+      const base::string16& message,
+      const url::Origin& source_origin,
+      const std::vector<TransferredMessagePort>& sent_message_ports,
+      const StatusCallback& callback,
+      const SourceInfo& source_info);
+  void DispatchExtendableMessageEventAfterStartWorker(
+      scoped_refptr<ServiceWorkerVersion> worker,
+      const base::string16& message,
+      const url::Origin& source_origin,
+      const std::vector<TransferredMessagePort>& sent_message_ports,
+      const ExtendableMessageEventSource& source,
+      const StatusCallback& callback);
+  template <typename SourceInfo>
+  void DidFailToDispatchExtendableMessageEvent(
+      const std::vector<TransferredMessagePort>& sent_message_ports,
+      const SourceInfo& source_info,
+      const StatusCallback& callback,
+      ServiceWorkerStatusCode status);
+  void ReleaseSourceInfo(const ServiceWorkerClientInfo& source_info);
+  void ReleaseSourceInfo(const ServiceWorkerObjectInfo& source_info);
 
   ServiceWorkerRegistrationHandle* FindRegistrationHandle(
       int provider_id,
@@ -165,25 +205,21 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost : public BrowserMessageFilter {
                             ServiceWorkerStatusCode status,
                             const std::string& status_message,
                             int64_t registration_id);
-
   void UpdateComplete(int thread_id,
                       int provider_id,
                       int request_id,
                       ServiceWorkerStatusCode status,
                       const std::string& status_message,
                       int64_t registration_id);
-
   void UnregistrationComplete(int thread_id,
                               int request_id,
                               ServiceWorkerStatusCode status);
-
   void GetRegistrationComplete(
       int thread_id,
       int provider_id,
       int request_id,
       ServiceWorkerStatusCode status,
       const scoped_refptr<ServiceWorkerRegistration>& registration);
-
   void GetRegistrationsComplete(
       int thread_id,
       int provider_id,
@@ -191,38 +227,15 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost : public BrowserMessageFilter {
       ServiceWorkerStatusCode status,
       const std::vector<scoped_refptr<ServiceWorkerRegistration>>&
           registrations);
-
   void GetRegistrationForReadyComplete(
       int thread_id,
       int request_id,
       base::WeakPtr<ServiceWorkerProviderHost> provider_host,
       ServiceWorkerRegistration* registration);
 
-  void SendRegistrationError(int thread_id,
-                             int request_id,
-                             ServiceWorkerStatusCode status,
-                             const std::string& status_message);
-
-  void SendUpdateError(int thread_id,
-                       int request_id,
-                       ServiceWorkerStatusCode status,
-                       const std::string& status_message);
-
-  void SendUnregistrationError(int thread_id,
-                               int request_id,
-                               ServiceWorkerStatusCode status);
-
-  void SendGetRegistrationError(int thread_id,
-                                int request_id,
-                                ServiceWorkerStatusCode status);
-
-  void SendGetRegistrationsError(int thread_id,
-                                 int request_id,
-                                 ServiceWorkerStatusCode status);
-
   ServiceWorkerContextCore* GetContext();
 
-  int render_process_id_;
+  const int render_process_id_;
   MessagePortMessageFilter* const message_port_message_filter_;
   ResourceContext* resource_context_;
   scoped_refptr<ServiceWorkerContextWrapper> context_wrapper_;

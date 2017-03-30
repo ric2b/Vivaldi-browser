@@ -8,10 +8,10 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "sync/base/sync_export.h"
 #include "sync/engine/commit_contribution.h"
 #include "sync/internal_api/public/base/model_type.h"
@@ -41,7 +41,8 @@ class Syncer;
 // PostAndProcessCommitResponse() functions.  So they ended up here.
 class SYNC_EXPORT Commit {
  public:
-  typedef std::map<ModelType, scoped_ptr<CommitContribution>> ContributionMap;
+  typedef std::map<ModelType, std::unique_ptr<CommitContribution>>
+      ContributionMap;
 
   Commit(ContributionMap contributions,
          const sync_pb::ClientToServerMessage& message,
@@ -56,6 +57,7 @@ class SYNC_EXPORT Commit {
       size_t max_entries,
       const std::string& account_name,
       const std::string& cache_guid,
+      bool cookie_jar_mismatch,
       CommitProcessor* commit_processor,
       ExtensionsActivity* extensions_activity);
 

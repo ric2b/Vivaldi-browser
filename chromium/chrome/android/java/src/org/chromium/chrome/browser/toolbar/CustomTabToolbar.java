@@ -27,6 +27,7 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.WindowDelegate;
 import org.chromium.chrome.browser.appmenu.AppMenuButtonHelper;
 import org.chromium.chrome.browser.dom_distiller.DomDistillerServiceFactory;
@@ -55,7 +56,7 @@ import java.util.List;
  */
 public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
         View.OnLongClickListener {
-    private static final int TITLE_ANIM_DELAY_MS = 200;
+    private static final int TITLE_ANIM_DELAY_MS = 800;
     private static final int STATE_DOMAIN_ONLY = 0;
     private static final int STATE_TITLE_ONLY = 1;
     private static final int STATE_DOMAIN_AND_TITLE = 2;
@@ -70,10 +71,9 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
     private ImageButton mCloseButton;
 
     // Whether dark tint should be applied to icons and text.
-    private boolean mUseDarkColors;
+    private boolean mUseDarkColors = true;
 
     private CustomTabToolbarAnimationDelegate mAnimDelegate;
-    private boolean mBackgroundColorSet;
     private long mInitializeTimeStamp;
     private int mState = STATE_DOMAIN_ONLY;
     private String mFirstUrl;
@@ -266,23 +266,18 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
             mTitleBar.setText("");
             return;
         }
+        String title = currentTab.getTitle();
 
         // It takes some time to parse the title of the webcontent, and before that Tab#getTitle
         // always return the url. We postpone the title animation until the title is authentic.
-        // TODO(yusufo): Clear the explicit references to about:blank here and for domain.
-        if (mState == STATE_DOMAIN_AND_TITLE
-                && !TextUtils.equals(currentTab.getTitle(), currentTab.getUrl())
-                && !TextUtils.equals(currentTab.getTitle(), "about:blank")) {
-            long duration = System.currentTimeMillis() - mInitializeTimeStamp;
-            if (duration >= TITLE_ANIM_DELAY_MS) {
-                mTitleAnimationStarter.run();
-            } else {
-                ThreadUtils.postOnUiThreadDelayed(mTitleAnimationStarter,
-                        TITLE_ANIM_DELAY_MS - duration);
-            }
+        if ((mState == STATE_DOMAIN_AND_TITLE || mState == STATE_TITLE_ONLY)
+                && !title.equals(currentTab.getUrl())
+                && !title.equals(UrlConstants.ABOUT_BLANK)) {
+            // Delay the title animation until security icon animation finishes.
+            ThreadUtils.postOnUiThreadDelayed(mTitleAnimationStarter, TITLE_ANIM_DELAY_MS);
         }
 
-        mTitleBar.setText(currentTab.getTitle());
+        mTitleBar.setText(title);
     }
 
     @Override
@@ -313,7 +308,7 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
         // If we have taken a pre-initialized WebContents, then the starting URL
         // is "about:blank". We should not display it.
         if (NativePageFactory.isNativePageUrl(url, getCurrentTab().isIncognito())
-                || "about:blank".equals(url)) {
+                || UrlConstants.ABOUT_BLANK.equals(url)) {
             mUrlBar.setUrl("", null);
             return;
         }
@@ -371,14 +366,13 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
         mTitleBar.setTextColor(titleTextColor);
 
         if (getProgressBar() != null) {
-            if (mBackgroundColorSet && !mUseDarkColors) {
+            if (!mUseDarkColors) {
                 getProgressBar().setBackgroundColor(ColorUtils
                         .getLightProgressbarBackground(getToolbarDataProvider().getPrimaryColor()));
                 getProgressBar().setForegroundColor(ApiCompatibilityUtils.getColor(resources,
                         R.color.progress_bar_foreground_white));
             } else {
-                int progressBarBackgroundColorResource = mUseDarkColors
-                        ? R.color.progress_bar_background : R.color.progress_bar_background_white;
+                int progressBarBackgroundColorResource = R.color.progress_bar_background;
                 getProgressBar().setBackgroundColor(ApiCompatibilityUtils.getColor(resources,
                         progressBarBackgroundColorResource));
             }
@@ -496,8 +490,6 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
      */
     @Override
     protected void onPrimaryColorChanged(boolean shouldAnimate) {
-        if (mBackgroundColorSet) return;
-        mBackgroundColorSet = true;
         int primaryColor = getToolbarDataProvider().getPrimaryColor();
         getBackground().setColor(primaryColor);
         mUseDarkColors = !ColorUtils.shoudUseLightForegroundOnBackground(primaryColor);
@@ -622,20 +614,22 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
     // Toolbar and LocationBar calls that are not relevant here.
 
     @Override
-    public void setToolbarDataProvider(ToolbarDataProvider model) { }
+    public void setToolbarDataProvider(ToolbarDataProvider model) {}
 
     @Override
-    public void onUrlPreFocusChanged(boolean gainFocus) {
-    }
+    public void onUrlPreFocusChanged(boolean gainFocus) {}
 
     @Override
-    public void setUrlFocusChangeListener(UrlFocusChangeListener listener) { }
+    public void onTextChangedForAutocomplete(boolean canInlineAutocomplete) {}
 
     @Override
-    public void setUrlBarFocus(boolean shouldBeFocused) { }
+    public void setUrlFocusChangeListener(UrlFocusChangeListener listener) {}
 
     @Override
-    public void revertChanges() { }
+    public void setUrlBarFocus(boolean shouldBeFocused) {}
+
+    @Override
+    public void revertChanges() {}
 
     @Override
     public long getFirstUrlBarFocusTime() {
@@ -643,31 +637,22 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
     }
 
     @Override
-    public void setIgnoreURLBarModification(boolean ignore) {
-    }
+    public void hideSuggestions() {}
 
     @Override
-    public void hideSuggestions() {
-    }
+    public void updateMicButtonState() {}
 
     @Override
-    public void updateMicButtonState() {
-    }
+    public void onTabLoadingNTP(NewTabPage ntp) {}
 
     @Override
-    public void onTabLoadingNTP(NewTabPage ntp) {
-    }
+    public void setAutocompleteProfile(Profile profile) {}
 
     @Override
-    public void setAutocompleteProfile(Profile profile) {
-    }
+    public void backKeyPressed() {}
 
     @Override
-    public void backKeyPressed() { }
-
-    @Override
-    public void showAppMenuUpdateBadge() {
-    }
+    public void showAppMenuUpdateBadge() {}
 
     @Override
     public boolean isShowingAppMenuUpdateBadge() {
@@ -675,12 +660,10 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
     }
 
     @Override
-    public void removeAppMenuUpdateBadge(boolean animate) {
-    }
+    public void removeAppMenuUpdateBadge(boolean animate) {}
 
     @Override
-    protected void setAppMenuUpdateBadgeToVisible(boolean animate) {
-    }
+    protected void setAppMenuUpdateBadgeToVisible(boolean animate) {}
 
     @Override
     public View getMenuButtonWrapper() {

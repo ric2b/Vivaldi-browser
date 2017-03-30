@@ -23,10 +23,12 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/bubble/bubble_delegate.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/test/native_widget_factory.h"
 #include "ui/views/test/test_views.h"
 #include "ui/views/test/test_widget_observer.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/native_widget_delegate.h"
+#include "ui/views/widget/native_widget_private.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget_deletion_observer.h"
 #include "ui/views/widget/widget_removals_observer.h"
@@ -43,7 +45,6 @@
 
 #if defined(OS_MACOSX)
 #include "base/mac/mac_util.h"
-#include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #endif
 
 namespace views {
@@ -58,15 +59,6 @@ gfx::Point ConvertPointFromWidgetToView(View* view, const gfx::Point& p) {
   gfx::Point tmp(p);
   View::ConvertPointToTarget(view->GetWidget()->GetRootView(), view, &tmp);
   return tmp;
-}
-
-// Helper function for Snow Leopard special cases to avoid #ifdef litter.
-bool IsTestingSnowLeopard() {
-#if defined(OS_MACOSX)
-  return base::mac::IsOSSnowLeopard();
-#else
-  return false;
-#endif
 }
 
 // This class can be used as a deleter for scoped_ptr<Widget>
@@ -368,44 +360,6 @@ struct OwnershipTestState {
   bool native_widget_deleted;
 };
 
-// A platform NativeWidget subclass that updates a bag of state when it is
-// destroyed.
-class OwnershipTestNativeWidget : public PlatformNativeWidget {
- public:
-  OwnershipTestNativeWidget(internal::NativeWidgetDelegate* delegate,
-                            OwnershipTestState* state)
-      : PlatformNativeWidget(delegate),
-        state_(state) {
-  }
-  ~OwnershipTestNativeWidget() override {
-    state_->native_widget_deleted = true;
-  }
-
- private:
-  OwnershipTestState* state_;
-
-  DISALLOW_COPY_AND_ASSIGN(OwnershipTestNativeWidget);
-};
-
-// A views NativeWidget subclass that updates a bag of state when it is
-// destroyed.
-class OwnershipTestNativeWidgetAura : public NativeWidgetCapture {
- public:
-  OwnershipTestNativeWidgetAura(internal::NativeWidgetDelegate* delegate,
-                                OwnershipTestState* state)
-      : NativeWidgetCapture(delegate),
-        state_(state) {
-  }
-  ~OwnershipTestNativeWidgetAura() override {
-    state_->native_widget_deleted = true;
-  }
-
- private:
-  OwnershipTestState* state_;
-
-  DISALLOW_COPY_AND_ASSIGN(OwnershipTestNativeWidgetAura);
-};
-
 // A Widget subclass that updates a bag of state when it is destroyed.
 class OwnershipTestWidget : public Widget {
  public:
@@ -418,6 +372,8 @@ class OwnershipTestWidget : public Widget {
   DISALLOW_COPY_AND_ASSIGN(OwnershipTestWidget);
 };
 
+// TODO(sky): add coverage of ownership for the desktop variants.
+
 // Widget owns its NativeWidget, part 1: NativeWidget is a platform-native
 // widget.
 TEST_F(WidgetOwnershipTest, Ownership_WidgetOwnsPlatformNativeWidget) {
@@ -425,8 +381,8 @@ TEST_F(WidgetOwnershipTest, Ownership_WidgetOwnsPlatformNativeWidget) {
 
   scoped_ptr<Widget> widget(new OwnershipTestWidget(&state));
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.native_widget =
-      new OwnershipTestNativeWidgetAura(widget.get(), &state);
+  params.native_widget = CreatePlatformNativeWidgetImpl(
+      params, widget.get(), kStubCapture, &state.native_widget_deleted);
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   widget->Init(params);
 
@@ -446,8 +402,8 @@ TEST_F(WidgetOwnershipTest, Ownership_WidgetOwnsViewsNativeWidget) {
 
   scoped_ptr<Widget> widget(new OwnershipTestWidget(&state));
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.native_widget =
-      new OwnershipTestNativeWidgetAura(widget.get(), &state);
+  params.native_widget = CreatePlatformNativeWidgetImpl(
+      params, widget.get(), kStubCapture, &state.native_widget_deleted);
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   widget->Init(params);
 
@@ -471,9 +427,9 @@ TEST_F(WidgetOwnershipTest,
 
   scoped_ptr<Widget> widget(new OwnershipTestWidget(&state));
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.native_widget =
-      new OwnershipTestNativeWidgetAura(widget.get(), &state);
   params.parent = toplevel->GetNativeView();
+  params.native_widget = CreatePlatformNativeWidgetImpl(
+      params, widget.get(), kStubCapture, &state.native_widget_deleted);
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   widget->Init(params);
 
@@ -501,8 +457,8 @@ TEST_F(WidgetOwnershipTest, Ownership_PlatformNativeWidgetOwnsWidget) {
 
   Widget* widget = new OwnershipTestWidget(&state);
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.native_widget =
-      new OwnershipTestNativeWidgetAura(widget, &state);
+  params.native_widget = CreatePlatformNativeWidgetImpl(
+      params, widget, kStubCapture, &state.native_widget_deleted);
   widget->Init(params);
 
   // Now destroy the native widget.
@@ -520,9 +476,9 @@ TEST_F(WidgetOwnershipTest, Ownership_ViewsNativeWidgetOwnsWidget) {
 
   Widget* widget = new OwnershipTestWidget(&state);
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.native_widget =
-      new OwnershipTestNativeWidgetAura(widget, &state);
   params.parent = toplevel->GetNativeView();
+  params.native_widget = CreatePlatformNativeWidgetImpl(
+      params, widget, kStubCapture, &state.native_widget_deleted);
   widget->Init(params);
 
   // Now destroy the native widget. This is achieved by closing the toplevel.
@@ -544,8 +500,8 @@ TEST_F(WidgetOwnershipTest,
 
   Widget* widget = new OwnershipTestWidget(&state);
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.native_widget =
-      new OwnershipTestNativeWidgetAura(widget, &state);
+  params.native_widget = CreatePlatformNativeWidgetImpl(
+      params, widget, kStubCapture, &state.native_widget_deleted);
   widget->Init(params);
 
   // Now simulate a destroy of the platform native widget from the OS:
@@ -565,9 +521,9 @@ TEST_F(WidgetOwnershipTest,
 
   Widget* widget = new OwnershipTestWidget(&state);
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.native_widget =
-      new OwnershipTestNativeWidgetAura(widget, &state);
   params.parent = toplevel->GetNativeView();
+  params.native_widget = CreatePlatformNativeWidgetImpl(
+      params, widget, kStubCapture, &state.native_widget_deleted);
   widget->Init(params);
 
   // Destroy the widget (achieved by closing the toplevel).
@@ -591,9 +547,9 @@ TEST_F(WidgetOwnershipTest,
 
   Widget* widget = new OwnershipTestWidget(&state);
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.native_widget =
-      new OwnershipTestNativeWidgetAura(widget, &state);
   params.parent = toplevel->GetNativeView();
+  params.native_widget = CreatePlatformNativeWidgetImpl(
+      params, widget, kStubCapture, &state.native_widget_deleted);
   widget->Init(params);
 
   // Destroy the widget.
@@ -617,8 +573,8 @@ TEST_F(WidgetOwnershipTest,
 
   scoped_ptr<Widget> widget(new OwnershipTestWidget(&state));
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.native_widget =
-      new OwnershipTestNativeWidgetAura(widget.get(), &state);
+  params.native_widget = CreatePlatformNativeWidgetImpl(
+      params, widget.get(), kStubCapture, &state.native_widget_deleted);
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.delegate = delegate_view;
   widget->Init(params);
@@ -659,7 +615,6 @@ class WidgetWithDestroyedNativeViewTest : public ViewsTestBase {
     widget->Activate();
     widget->Deactivate();
     widget->IsActive();
-    widget->DisableInactiveRendering();
     widget->SetAlwaysOnTop(true);
     widget->IsAlwaysOnTop();
     widget->Maximize();
@@ -668,7 +623,6 @@ class WidgetWithDestroyedNativeViewTest : public ViewsTestBase {
     widget->IsMaximized();
     widget->IsFullscreen();
     widget->SetOpacity(0);
-    widget->SetUseDragFrame(true);
     widget->FlashFrame(true);
     widget->IsVisible();
     widget->GetThemeProvider();
@@ -707,7 +661,8 @@ TEST_F(WidgetWithDestroyedNativeViewTest, Test) {
   {
     Widget widget;
     Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-    params.native_widget = new PlatformDesktopNativeWidget(&widget);
+    params.native_widget =
+        CreatePlatformDesktopNativeWidgetImpl(params, &widget, nullptr);
     params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
     widget.Init(params);
     widget.Show();
@@ -972,6 +927,11 @@ TEST_F(WidgetObserverTest, ClosingOnHiddenParent) {
 
 // Test behavior of NativeWidget*::GetWindowPlacement on the native desktop.
 TEST_F(WidgetTest, GetWindowPlacement) {
+  if (IsMus()) {
+    NOTIMPLEMENTED();
+    return;
+  }
+
   WidgetAutoclosePtr widget;
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   // On desktop-Linux cheat and use non-desktop widgets. On X11, minimize is
@@ -1082,10 +1042,12 @@ TEST_F(WidgetTest, MinimumSizeConstraints) {
   widget->SetSize(smaller_size);
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   // TODO(tapted): Desktop Linux ignores size constraints for SetSize. Fix it.
-  EXPECT_EQ(smaller_size, widget->GetClientAreaBoundsInScreen().size());
+  const bool use_small_size = IsMus() ? false : true;
 #else
-  EXPECT_EQ(minimum_size, widget->GetClientAreaBoundsInScreen().size());
+  const bool use_small_size = false;
 #endif
+  EXPECT_EQ(use_small_size ? smaller_size : minimum_size,
+            widget->GetClientAreaBoundsInScreen().size());
 }
 
 // Tests that SetBounds() and GetWindowBoundsInScreen() is symmetric when the
@@ -1156,10 +1118,10 @@ TEST_F(WidgetTest, GetWindowBoundsInScreen) {
 
 // Test that GetRestoredBounds() returns the original bounds of the window.
 TEST_F(WidgetTest, MAYBE_GetRestoredBounds) {
-#if defined(OS_MACOSX)
-  // Fullscreen on Mac requires an interactive UI test, fake them here.
-  ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
-#endif
+  if (IsMus()) {
+    NOTIMPLEMENTED();
+    return;
+  }
 
   WidgetAutoclosePtr toplevel(CreateNativeDesktopWidget());
   toplevel->Show();
@@ -1189,14 +1151,8 @@ TEST_F(WidgetTest, MAYBE_GetRestoredBounds) {
   toplevel->SetFullscreen(true);
   RunPendingMessages();
 
-  if (IsTestingSnowLeopard()) {
-    // Fullscreen not implemented for Snow Leopard.
-    EXPECT_EQ(toplevel->GetWindowBoundsInScreen(),
-              toplevel->GetRestoredBounds());
-  } else {
-    EXPECT_NE(toplevel->GetWindowBoundsInScreen(),
-              toplevel->GetRestoredBounds());
-  }
+  EXPECT_NE(toplevel->GetWindowBoundsInScreen(),
+            toplevel->GetRestoredBounds());
   EXPECT_EQ(bounds, toplevel->GetRestoredBounds());
 
   toplevel->SetFullscreen(false);
@@ -1240,7 +1196,8 @@ TEST_F(WidgetTest, DISABLED_FocusChangesOnBubble) {
   init_params.bounds = gfx::Rect(0, 0, 200, 200);
   init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
 #if !defined(OS_CHROMEOS)
-  init_params.native_widget = new PlatformDesktopNativeWidget(&widget);
+  init_params.native_widget =
+      CreatePlatformDesktopNativeWidgetImpl(init_params, &widget, nullptr);
 #endif
   widget.Init(init_params);
   widget.SetContentsView(contents_view);
@@ -1302,6 +1259,10 @@ TEST_F(WidgetTest, BubbleControlsResetOnInit) {
 // the case for desktop widgets on Windows. Other platforms retain the window
 // size while minimized.
 TEST_F(WidgetTest, TestViewWidthAfterMinimizingWidget) {
+  if (IsMus()) {
+    // This test is testing behavior specific to DesktopWindowTreeHostWin.
+    return;
+  }
   // Create a widget.
   Widget widget;
   Widget::InitParams init_params =
@@ -1310,7 +1271,8 @@ TEST_F(WidgetTest, TestViewWidthAfterMinimizingWidget) {
   gfx::Rect initial_bounds(0, 0, 300, 400);
   init_params.bounds = initial_bounds;
   init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  init_params.native_widget = new PlatformDesktopNativeWidget(&widget);
+  init_params.native_widget =
+      CreatePlatformDesktopNativeWidgetImpl(init_params, &widget, nullptr);
   widget.Init(init_params);
   NonClientView* non_client_view = widget.non_client_view();
   NonClientFrameView* frame_view = new MinimumSizeFrameView(&widget);
@@ -1384,7 +1346,8 @@ class DesktopAuraTestValidPaintWidget : public views::Widget {
 void DesktopAuraTestValidPaintWidget::InitForTest(InitParams init_params) {
   init_params.bounds = gfx::Rect(0, 0, 200, 200);
   init_params.ownership = InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  init_params.native_widget = new PlatformDesktopNativeWidget(this);
+  init_params.native_widget =
+      CreatePlatformDesktopNativeWidgetImpl(init_params, this, nullptr);
   Init(init_params);
 
   View* contents_view = new View;
@@ -1395,7 +1358,14 @@ void DesktopAuraTestValidPaintWidget::InitForTest(InitParams init_params) {
   Activate();
 }
 
-TEST_F(WidgetTest, DesktopNativeWidgetNoPaintAfterCloseTest) {
+#if defined(OS_LINUX)
+// Flaky on Linux rel ng: https://crbug.com/596039.
+#define MAYBE_DesktopNativeWidgetNoPaintAfterCloseTest DISABLED_DesktopNativeWidgetNoPaintAfterCloseTest
+#else
+#define MAYBE_DesktopNativeWidgetNoPaintAfterCloseTest DesktopNativeWidgetNoPaintAfterCloseTest
+#endif
+
+TEST_F(WidgetTest, MAYBE_DesktopNativeWidgetNoPaintAfterCloseTest) {
   DesktopAuraTestValidPaintWidget widget;
   widget.InitForTest(CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS));
   RunPendingMessages();
@@ -1407,7 +1377,12 @@ TEST_F(WidgetTest, DesktopNativeWidgetNoPaintAfterCloseTest) {
   EXPECT_FALSE(widget.received_paint_while_hidden());
 }
 
-TEST_F(WidgetTest, DesktopNativeWidgetNoPaintAfterHideTest) {
+#if defined(OS_LINUX)
+#define MAYBE_DesktopNativeWidgetNoPaintAfterHideTest DISABLED_DesktopNativeWidgetNoPaintAfterHideTest
+#else
+#define MAYBE_DesktopNativeWidgetNoPaintAfterHideTest DesktopNativeWidgetNoPaintAfterHideTest
+#endif
+TEST_F(WidgetTest, MAYBE_DesktopNativeWidgetNoPaintAfterHideTest) {
   DesktopAuraTestValidPaintWidget widget;
   widget.InitForTest(CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS));
   RunPendingMessages();
@@ -1431,7 +1406,8 @@ TEST_F(WidgetTest, TestWindowVisibilityAfterHide) {
   gfx::Rect initial_bounds(0, 0, 300, 400);
   init_params.bounds = initial_bounds;
   init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  init_params.native_widget = new PlatformDesktopNativeWidget(&widget);
+  init_params.native_widget =
+      CreatePlatformDesktopNativeWidgetImpl(init_params, &widget, nullptr);
   widget.Init(init_params);
   NonClientView* non_client_view = widget.non_client_view();
   NonClientFrameView* frame_view = new MinimumSizeFrameView(&widget);
@@ -1691,7 +1667,9 @@ TEST_F(WidgetTest, SynthesizeMouseMoveEvent) {
   EXPECT_EQ(0, v2->GetEventCount(ui::ET_MOUSE_MOVED));
 
   gfx::Point cursor_location(5, 5);
-  ui::test::EventGenerator generator(GetContext(), widget->GetNativeWindow());
+  ui::test::EventGenerator generator(
+      IsMus() ? widget->GetNativeWindow() : GetContext(),
+      widget->GetNativeWindow());
   generator.MoveMouseTo(cursor_location);
 
   EXPECT_EQ(1, v1->GetEventCount(ui::ET_MOUSE_MOVED));
@@ -1735,7 +1713,7 @@ class MousePressEventConsumer : public ui::EventHandler {
 // Test that mouse presses and mouse releases are dispatched normally when a
 // touch is down.
 TEST_F(WidgetTest, MouseEventDispatchWhileTouchIsDown) {
-  WidgetAutoclosePtr widget(CreateTopLevelNativeWidget());
+  Widget* widget = CreateTopLevelNativeWidget();
   widget->Show();
   widget->SetSize(gfx::Size(300, 300));
 
@@ -1746,12 +1724,17 @@ TEST_F(WidgetTest, MouseEventDispatchWhileTouchIsDown) {
   MousePressEventConsumer consumer;
   event_count_view->AddPostTargetHandler(&consumer);
 
-  ui::test::EventGenerator generator(GetContext(), widget->GetNativeWindow());
-  generator.PressTouch();
-  generator.ClickLeftButton();
+  scoped_ptr<ui::test::EventGenerator> generator(new ui::test::EventGenerator(
+      IsMus() ? widget->GetNativeWindow() : GetContext(),
+      widget->GetNativeWindow()));
+  generator->PressTouch();
+  generator->ClickLeftButton();
 
   EXPECT_EQ(1, event_count_view->GetEventCount(ui::ET_MOUSE_PRESSED));
   EXPECT_EQ(1, event_count_view->GetEventCount(ui::ET_MOUSE_RELEASED));
+
+  // For mus it's important we destroy the widget before the EventGenerator.
+  widget->CloseNow();
 }
 
 #endif  // !defined(OS_MACOSX) || defined(USE_AURA)
@@ -1772,15 +1755,16 @@ class WidgetWindowTitleTest : public WidgetTest {
     WidgetAutoclosePtr widget(new Widget());  // Destroyed by CloseNow().
     Widget::InitParams init_params =
         CreateParams(Widget::InitParams::TYPE_WINDOW);
-    widget->Init(init_params);
 
 #if !defined(OS_CHROMEOS)
     if (desktop_native_widget)
-      init_params.native_widget = new PlatformDesktopNativeWidget(widget.get());
+      init_params.native_widget = CreatePlatformDesktopNativeWidgetImpl(
+          init_params, widget.get(), nullptr);
 #else
     DCHECK(!desktop_native_widget)
         << "DesktopNativeWidget does not exist on non-Aura or on ChromeOS.";
 #endif
+    widget->Init(init_params);
 
     internal::NativeWidgetPrivate* native_widget =
         widget->native_widget_private();
@@ -1822,6 +1806,14 @@ TEST_F(WidgetWindowTitleTest, SetWindowTitleChanged_DesktopNativeWidget) {
 #endif  // !OS_CHROMEOS
 
 TEST_F(WidgetTest, WidgetDeleted_InOnMousePressed) {
+  // This test doesn't work in mus as it assumes widget and GetContext()
+  // share an aura hierarchy. Test coverage of deletion from mouse pressed is
+  // important though and should be added, hence the NOTIMPLEMENTED().
+  // http://crbug.com/594260.
+  if (IsMus()) {
+    NOTIMPLEMENTED();
+    return;
+  }
   Widget* widget = new Widget;
   Widget::InitParams params =
       CreateParams(views::Widget::InitParams::TYPE_POPUP);
@@ -1845,6 +1837,9 @@ TEST_F(WidgetTest, WidgetDeleted_InOnMousePressed) {
 #if !defined(OS_MACOSX) || defined(USE_AURA)
 
 TEST_F(WidgetTest, WidgetDeleted_InDispatchGestureEvent) {
+  // This test doesn't make sense for mus. Force NativeWidgetAura to be used.
+  DisableNativeWidgetMus();
+
   Widget* widget = new Widget;
   Widget::InitParams params =
       CreateParams(views::Widget::InitParams::TYPE_POPUP);
@@ -1896,7 +1891,8 @@ bool RunGetNativeThemeFromDestructor(const Widget::InitParams& in_params,
   params.delegate = new GetNativeThemeFromDestructorView;
 #if !defined(OS_CHROMEOS)
   if (is_first_run) {
-    params.native_widget = new PlatformDesktopNativeWidget(widget.get());
+    params.native_widget =
+        CreatePlatformDesktopNativeWidgetImpl(params, widget.get(), nullptr);
     needs_second_run = true;
   }
 #endif
@@ -1980,7 +1976,8 @@ TEST_F(WidgetTest, CloseDestroys) {
       CreateParams(views::Widget::InitParams::TYPE_MENU);
   params.opacity = Widget::InitParams::OPAQUE_WINDOW;
 #if !defined(OS_CHROMEOS)
-  params.native_widget = new PlatformDesktopNativeWidget(widget);
+  params.native_widget =
+      CreatePlatformDesktopNativeWidgetImpl(params, widget, nullptr);
 #endif
   widget->Init(params);
   widget->Show();
@@ -2907,8 +2904,10 @@ class WidgetChildDestructionTest : public WidgetTest {
     Widget::InitParams params =
         CreateParams(views::Widget::InitParams::TYPE_WINDOW);
 #if !defined(OS_CHROMEOS)
-    if (top_level_has_desktop_native_widget_aura)
-      params.native_widget = new PlatformDesktopNativeWidget(top_level);
+    if (top_level_has_desktop_native_widget_aura) {
+      params.native_widget =
+          CreatePlatformDesktopNativeWidgetImpl(params, top_level, nullptr);
+    }
 #endif
     top_level->Init(params);
     top_level->GetRootView()->AddChildView(
@@ -2920,8 +2919,10 @@ class WidgetChildDestructionTest : public WidgetTest {
         CreateParams(views::Widget::InitParams::TYPE_POPUP);
     child_params.parent = top_level->GetNativeView();
 #if !defined(OS_CHROMEOS)
-    if (child_has_desktop_native_widget_aura)
-      child_params.native_widget = new PlatformDesktopNativeWidget(child);
+    if (child_has_desktop_native_widget_aura) {
+      child_params.native_widget =
+          CreatePlatformDesktopNativeWidgetImpl(child_params, child, nullptr);
+    }
 #endif
     child->Init(child_params);
     child->GetRootView()->AddChildView(
@@ -2971,27 +2972,34 @@ TEST_F(WidgetTest, FullscreenStatePropagated) {
   init_params.bounds = gfx::Rect(0, 0, 500, 500);
   init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
 
-  {
-    Widget top_level_widget;
-    top_level_widget.Init(init_params);
-    top_level_widget.SetFullscreen(true);
-    EXPECT_EQ(top_level_widget.IsVisible(),
-              IsNativeWindowVisible(top_level_widget.GetNativeWindow()));
-    top_level_widget.CloseNow();
-  }
-#if !defined(OS_CHROMEOS)
-  {
-    Widget top_level_widget;
-    init_params.native_widget =
-        new PlatformDesktopNativeWidget(&top_level_widget);
-    top_level_widget.Init(init_params);
-    top_level_widget.SetFullscreen(true);
-    EXPECT_EQ(top_level_widget.IsVisible(),
-              IsNativeWindowVisible(top_level_widget.GetNativeWindow()));
-    top_level_widget.CloseNow();
-  }
-#endif
+  Widget top_level_widget;
+  top_level_widget.Init(init_params);
+  top_level_widget.SetFullscreen(true);
+  EXPECT_EQ(top_level_widget.IsVisible(),
+            IsNativeWindowVisible(top_level_widget.GetNativeWindow()));
+  top_level_widget.CloseNow();
 }
+
+// Verifies nativeview visbility matches that of Widget visibility when
+// SetFullscreen is invoked, for a widget provided with a desktop widget.
+#if !defined(OS_CHROMEOS)
+TEST_F(WidgetTest, FullscreenStatePropagated_DesktopWidget) {
+  Widget::InitParams init_params =
+      CreateParams(Widget::InitParams::TYPE_WINDOW);
+  init_params.show_state = ui::SHOW_STATE_NORMAL;
+  init_params.bounds = gfx::Rect(0, 0, 500, 500);
+  init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  Widget top_level_widget;
+  init_params.native_widget = CreatePlatformDesktopNativeWidgetImpl(
+      init_params, &top_level_widget, nullptr);
+
+  top_level_widget.Init(init_params);
+  top_level_widget.SetFullscreen(true);
+  EXPECT_EQ(top_level_widget.IsVisible(),
+            IsNativeWindowVisible(top_level_widget.GetNativeWindow()));
+  top_level_widget.CloseNow();
+}
+#endif
 
 namespace {
 
@@ -3046,12 +3054,7 @@ TEST_F(WidgetTest, FullscreenFrameLayout) {
   widget->Show();
   RunPendingMessages();
 
-  if (IsTestingSnowLeopard()) {
-    // Fullscreen is currently ignored on Snow Leopard.
-    EXPECT_FALSE(frame->fullscreen_layout_called());
-  } else {
-    EXPECT_TRUE(frame->fullscreen_layout_called());
-  }
+  EXPECT_TRUE(frame->fullscreen_layout_called());
 }
 
 #if !defined(OS_CHROMEOS)
@@ -3079,7 +3082,8 @@ TEST_F(WidgetTest, IsActiveFromDestroy) {
   Widget parent_widget;
   Widget::InitParams parent_params =
       CreateParams(Widget::InitParams::TYPE_POPUP);
-  parent_params.native_widget = new PlatformDesktopNativeWidget(&parent_widget);
+  parent_params.native_widget = CreatePlatformDesktopNativeWidgetImpl(
+      parent_params, &parent_widget, nullptr);
   parent_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   parent_widget.Init(parent_params);
   parent_widget.Show();
@@ -3184,31 +3188,6 @@ TEST_F(WidgetTest, NonClientWindowValidAfterInit) {
 }
 
 #if defined(OS_WIN)
-// This test validates that sending WM_CHAR/WM_SYSCHAR/WM_SYSDEADCHAR
-// messages via the WindowEventTarget interface implemented by the
-// HWNDMessageHandler class does not cause a crash due to an unprocessed
-// event
-TEST_F(WidgetTest, CharMessagesAsKeyboardMessagesDoesNotCrash) {
-  Widget widget;
-  Widget::InitParams params =
-      CreateParams(Widget::InitParams::TYPE_WINDOW);
-  params.native_widget = new PlatformDesktopNativeWidget(&widget);
-  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  widget.Init(params);
-  widget.Show();
-
-  ui::WindowEventTarget* target =
-      reinterpret_cast<ui::WindowEventTarget*>(ui::ViewProp::GetValue(
-          widget.GetNativeWindow()->GetHost()->GetAcceleratedWidget(),
-          ui::WindowEventTarget::kWin32InputEventTarget));
-  EXPECT_NE(nullptr, target);
-  bool handled = false;
-  target->HandleKeyboardMessage(WM_CHAR, 0, 0, &handled);
-  target->HandleKeyboardMessage(WM_SYSCHAR, 0, 0, &handled);
-  target->HandleKeyboardMessage(WM_SYSDEADCHAR, 0, 0, &handled);
-  widget.CloseNow();
-}
-
 // Provides functionality to subclass a window and keep track of messages
 // received.
 class SubclassWindowHelper {
@@ -3290,11 +3269,13 @@ SubclassWindowHelper* SubclassWindowHelper::instance_ = nullptr;
 // 1. Posting a WM_NCMOUSEMOVE message for a different location.
 // 2. Posting a WM_NCMOUSEMOVE message with a different hittest code.
 // 3. Posting a WM_MOUSEMOVE message.
-TEST_F(WidgetTest, SysCommandMoveOnNCLButtonDownOnCaptionAndMoveTest) {
+// Disabled because of flaky timeouts: http://crbug.com/592742
+TEST_F(WidgetTest, DISABLED_SysCommandMoveOnNCLButtonDownOnCaptionAndMoveTest) {
   Widget widget;
   Widget::InitParams params =
       CreateParams(Widget::InitParams::TYPE_WINDOW);
-  params.native_widget = new PlatformDesktopNativeWidget(&widget);
+  params.native_widget =
+      CreatePlatformDesktopNativeWidgetImpl(params, &widget, nullptr);
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   widget.Init(params);
   widget.SetBounds(gfx::Rect(0, 0, 200, 200));
@@ -3362,11 +3343,13 @@ TEST_F(WidgetTest, SysCommandMoveOnNCLButtonDownOnCaptionAndMoveTest) {
 
 // This test validates that destroying the window in the context of the
 // WM_SYSCOMMAND message with SC_MOVE does not crash.
-TEST_F(WidgetTest, DestroyInSysCommandNCLButtonDownOnCaption) {
+// Disabled because of flaky timeouts: http://crbug.com/592742
+TEST_F(WidgetTest, DISABLED_DestroyInSysCommandNCLButtonDownOnCaption) {
   Widget widget;
   Widget::InitParams params =
       CreateParams(Widget::InitParams::TYPE_WINDOW);
-  params.native_widget = new PlatformDesktopNativeWidget(&widget);
+  params.native_widget =
+      CreatePlatformDesktopNativeWidgetImpl(params, &widget, nullptr);
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   widget.Init(params);
   widget.SetBounds(gfx::Rect(0, 0, 200, 200));
@@ -3395,6 +3378,11 @@ TEST_F(WidgetTest, DestroyInSysCommandNCLButtonDownOnCaption) {
 
 // Test that SetAlwaysOnTop and IsAlwaysOnTop are consistent.
 TEST_F(WidgetTest, AlwaysOnTop) {
+  if (IsMus()) {
+    NOTIMPLEMENTED();
+    return;
+  }
+
   WidgetAutoclosePtr widget(CreateTopLevelNativeWidget());
   EXPECT_FALSE(widget->IsAlwaysOnTop());
   widget->SetAlwaysOnTop(true);
@@ -3517,6 +3505,100 @@ TEST_F(WidgetTest, WidgetRemovalsObserverCalledWhenMovingBetweenWidgets) {
 
   widget->RemoveRemovalsObserver(&removals_observer);
 }
+
+#if defined(OS_WIN)
+
+// Provides functionality to create a window modal dialog.
+class ModalDialogDelegate : public DialogDelegateView {
+public:
+  explicit ModalDialogDelegate(ui::ModalType type) : type_(type) {}
+  ~ModalDialogDelegate() override {}
+
+  // WidgetDelegate overrides.
+  ui::ModalType GetModalType() const override { return type_; }
+
+private:
+  const ui::ModalType type_;
+
+  DISALLOW_COPY_AND_ASSIGN(ModalDialogDelegate);
+};
+
+// Tests the case where an intervening owner popup window is destroyed out from
+// under the currently active modal top-level window. In this instance, the
+// remaining top-level windows should be re-enabled.
+TEST_F(WidgetTest, WindowModalOwnerDestroyedEnabledTest) {
+  // top_level_widget owns owner_dialog_widget which owns owned_dialog_widget.
+  Widget top_level_widget;
+  Widget owner_dialog_widget;
+  Widget owned_dialog_widget;
+  // Create the top level widget.
+  Widget::InitParams init_params =
+    CreateParams(Widget::InitParams::TYPE_WINDOW);
+  init_params.show_state = ui::SHOW_STATE_NORMAL;
+  gfx::Rect initial_bounds(0, 0, 500, 500);
+  init_params.bounds = initial_bounds;
+  init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  init_params.native_widget = CreatePlatformDesktopNativeWidgetImpl(
+    init_params, &top_level_widget, nullptr);
+  top_level_widget.Init(init_params);
+  top_level_widget.Show();
+
+  // Create the owner modal dialog.
+  // owner_dialog_delegate instance will be destroyed when the dialog
+  // is destroyed.
+  ModalDialogDelegate* owner_dialog_delegate =
+    new ModalDialogDelegate(ui::MODAL_TYPE_WINDOW);
+
+  init_params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  init_params.show_state = ui::SHOW_STATE_NORMAL;
+  init_params.bounds = gfx::Rect(100, 100, 200, 200);
+  init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  init_params.delegate = owner_dialog_delegate;
+  init_params.parent = top_level_widget.GetNativeView();
+  init_params.native_widget = CreatePlatformDesktopNativeWidgetImpl(
+    init_params, &owner_dialog_widget, nullptr);
+  owner_dialog_widget.Init(init_params);
+
+  HWND owner_hwnd = HWNDForWidget(&owner_dialog_widget);
+
+  owner_dialog_widget.Show();
+
+  // Create the owned modal dialog.
+  // As above, the owned_dialog_instance instance will be destroyed
+  // when the dialog is destroyed.
+  ModalDialogDelegate* owned_dialog_delegate =
+    new ModalDialogDelegate(ui::MODAL_TYPE_WINDOW);
+
+  init_params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  init_params.show_state = ui::SHOW_STATE_NORMAL;
+  init_params.bounds = gfx::Rect(150, 150, 250, 250);
+  init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  init_params.delegate = owned_dialog_delegate;
+  init_params.parent = owner_dialog_widget.GetNativeView();
+  init_params.native_widget = CreatePlatformDesktopNativeWidgetImpl(
+    init_params, &owned_dialog_widget, nullptr);
+  owned_dialog_widget.Init(init_params);
+
+  HWND owned_hwnd = HWNDForWidget(&owned_dialog_widget);
+
+  owned_dialog_widget.Show();
+
+  HWND top_hwnd = HWNDForWidget(&top_level_widget);
+
+  EXPECT_FALSE(!!IsWindowEnabled(owner_hwnd));
+  EXPECT_FALSE(!!IsWindowEnabled(top_hwnd));
+  EXPECT_TRUE(!!IsWindowEnabled(owned_hwnd));
+
+  owner_dialog_widget.CloseNow();
+
+  EXPECT_FALSE(!!IsWindow(owner_hwnd));
+  EXPECT_FALSE(!!IsWindow(owned_hwnd));
+  EXPECT_TRUE(!!IsWindowEnabled(top_hwnd));
+
+  top_level_widget.CloseNow();
+}
+
+#endif  // defined(OS_WIN)
 
 }  // namespace test
 }  // namespace views

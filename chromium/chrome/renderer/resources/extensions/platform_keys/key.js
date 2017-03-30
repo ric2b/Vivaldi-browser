@@ -9,6 +9,7 @@ var utils = require('utils');
  * @enum {string}
  */
 var KeyType = {
+  __proto__: null,
   public: 'public',
   private: 'private'
 };
@@ -18,6 +19,7 @@ var KeyType = {
  * @enum {string}
  */
 var KeyUsage = {
+  __proto__: null,
   sign: 'sign',
   verify: 'verify'
 };
@@ -32,27 +34,37 @@ var KeyUsage = {
  * @param {boolean} extractable Whether the key is extractable.
  * @constructor
  */
-var KeyImpl = function(type, publicKeySpki, algorithm, usages, extractable) {
+function KeyImpl(type, publicKeySpki, algorithm, usages, extractable) {
   this.type = type;
   this.spki = publicKeySpki;
   this.algorithm = algorithm;
   this.usages = usages;
   this.extractable = extractable;
+}
+$Object.setPrototypeOf(KeyImpl.prototype, null);
+
+/**
+ * The public base class of Key.
+ */
+function KeyBase() {}
+KeyBase.prototype = {
+  constructor: KeyBase,
+  get algorithm() {
+    return utils.deepCopy(privates(this).impl.algorithm);
+  },
 };
 
-var KeyBase = function() {};
-
-Object.defineProperty(KeyBase.prototype, 'algorithm', {
-  enumerable: true,
-  get: function() {
-    return utils.deepCopy(privates(this).impl.algorithm);
-  }
+function Key() {
+  privates(Key).constructPrivate(this, arguments);
+}
+utils.expose(Key, KeyImpl, {
+  superclass: KeyBase,
+  readonly: [
+    'extractable',
+    'type',
+    'usages',
+  ],
 });
-
-var Key = utils.expose(
-    'Key',
-    KeyImpl,
-    {superclass: KeyBase, readonly: ['extractable', 'type', 'usages']});
 
 /**
  * Returns |key|'s Subject Public Key Info. Throws an exception if |key| is not
@@ -69,7 +81,7 @@ function getSpki(key) {
   return keyImpl.spki;
 }
 
-exports.Key = Key;
-exports.KeyType = KeyType;
-exports.KeyUsage = KeyUsage;
-exports.getSpki = getSpki;
+exports.$set('Key', Key);
+exports.$set('KeyType', KeyType);
+exports.$set('KeyUsage', KeyUsage);
+exports.$set('getSpki', getSpki);

@@ -127,7 +127,7 @@ void ApplicationCacheHost::selectCacheWithManifest(const KURL& manifestURL)
         UseCounter::countCrossOriginIframe(*document, UseCounter::ApplicationCacheManifestSelectSecureOrigin);
     } else {
         Deprecation::countDeprecation(document, UseCounter::ApplicationCacheManifestSelectInsecureOrigin);
-        UseCounter::countCrossOriginIframe(*document, UseCounter::ApplicationCacheManifestSelectInsecureOrigin);
+        Deprecation::countDeprecationCrossOriginIframe(*document, UseCounter::ApplicationCacheManifestSelectInsecureOrigin);
         OriginsUsingFeatures::countAnyWorld(*document, OriginsUsingFeatures::Feature::ApplicationCacheManifestSelectInsecureOrigin);
     }
     if (m_host && !m_host->selectCacheWithManifest(manifestURL)) {
@@ -227,7 +227,6 @@ void ApplicationCacheHost::fillResourceList(ResourceInfoList* resources)
 
 void ApplicationCacheHost::stopDeferringEvents()
 {
-    RefPtrWillBeRawPtr<DocumentLoader> protect(documentLoader());
     for (unsigned i = 0; i < m_deferredEvents.size(); ++i) {
         const DeferredEvent& deferred = m_deferredEvents[i];
         dispatchDOMEvent(deferred.eventID, deferred.progressTotal, deferred.progressDone, deferred.errorReason, deferred.errorURL, deferred.errorStatus, deferred.errorMessage);
@@ -242,9 +241,9 @@ void ApplicationCacheHost::dispatchDOMEvent(EventID id, int progressTotal, int p
         return;
 
     const AtomicString& eventType = ApplicationCache::toEventType(id);
-    if (eventType.isEmpty() || !m_domApplicationCache->executionContext())
+    if (eventType.isEmpty() || !m_domApplicationCache->getExecutionContext())
         return;
-    RefPtrWillBeRawPtr<Event> event = nullptr;
+    Event* event = nullptr;
     if (id == PROGRESS_EVENT)
         event = ProgressEvent::create(eventType, true, progressDone, progressTotal);
     else if (id == ERROR_EVENT)
@@ -254,9 +253,9 @@ void ApplicationCacheHost::dispatchDOMEvent(EventID id, int progressTotal, int p
     m_domApplicationCache->dispatchEvent(event);
 }
 
-ApplicationCacheHost::Status ApplicationCacheHost::status() const
+ApplicationCacheHost::Status ApplicationCacheHost::getStatus() const
 {
-    return m_host ? static_cast<Status>(m_host->status()) : UNCACHED;
+    return m_host ? static_cast<Status>(m_host->getStatus()) : UNCACHED;
 }
 
 bool ApplicationCacheHost::update()

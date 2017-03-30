@@ -44,7 +44,7 @@ public:
     {
         return adoptRef(new AnimatableShapeValue(shape));
     }
-    ShapeValue* shapeValue() const { return m_shape.get(); }
+    ShapeValue* getShapeValue() const { return m_shape.get(); }
 
 protected:
     PassRefPtr<AnimatableValue> interpolateTo(const AnimatableValue*, double fraction) const override;
@@ -59,7 +59,7 @@ private:
     AnimatableType type() const override { return TypeShapeValue; }
     bool equalTo(const AnimatableValue*) const override;
 
-    RefPtrWillBePersistent<ShapeValue> m_shape;
+    Persistent<ShapeValue> m_shape;
 };
 
 DEFINE_ANIMATABLE_VALUE_TYPE_CASTS(AnimatableShapeValue, isShapeValue());

@@ -8,6 +8,8 @@
 #include <errno.h>
 #include <mstcpip.h>
 
+#include <utility>
+
 #include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -49,36 +51,6 @@ int SetSocketSendBufferSize(SOCKET socket, int32_t size) {
 }
 
 // Disable Nagle.
-// The Nagle implementation on windows is governed by RFC 896.  The idea
-// behind Nagle is to reduce small packets on the network.  When Nagle is
-// enabled, if a partial packet has been sent, the TCP stack will disallow
-// further *partial* packets until an ACK has been received from the other
-// side.  Good applications should always strive to send as much data as
-// possible and avoid partial-packet sends.  However, in most real world
-// applications, there are edge cases where this does not happen, and two
-// partial packets may be sent back to back.  For a browser, it is NEVER
-// a benefit to delay for an RTT before the second packet is sent.
-//
-// As a practical example in Chromium today, consider the case of a small
-// POST.  I have verified this:
-//     Client writes 649 bytes of header  (partial packet #1)
-//     Client writes 50 bytes of POST data (partial packet #2)
-// In the above example, with Nagle, a RTT delay is inserted between these
-// two sends due to nagle.  RTTs can easily be 100ms or more.  The best
-// fix is to make sure that for POSTing data, we write as much data as
-// possible and minimize partial packets.  We will fix that.  But disabling
-// Nagle also ensure we don't run into this delay in other edge cases.
-// See also:
-//    http://technet.microsoft.com/en-us/library/bb726981.aspx
-bool DisableNagle(SOCKET socket, bool disable) {
-  BOOL val = disable ? TRUE : FALSE;
-  int rv = setsockopt(socket, IPPROTO_TCP, TCP_NODELAY,
-                      reinterpret_cast<const char*>(&val),
-                      sizeof(val));
-  DCHECK(!rv) << "Could not disable nagle";
-  return rv == 0;
-}
-
 // Enable TCP Keep-Alive to prevent NAT routers from timing out TCP
 // connections. See http://crbug.com/27400 for details.
 bool SetTCPKeepAlive(SOCKET socket, BOOL enable, int delay_secs) {
@@ -579,7 +551,7 @@ int TCPSocketWin::SetDefaultOptionsForServer() {
 }
 
 void TCPSocketWin::SetDefaultOptionsForClient() {
-  DisableNagle(socket_, true);
+  SetTCPNoDelay(socket_, /*no_delay=*/true);
   SetTCPKeepAlive(socket_, true, kTCPKeepAliveSeconds);
 }
 
@@ -624,7 +596,7 @@ bool TCPSocketWin::SetKeepAlive(bool enable, int delay) {
 }
 
 bool TCPSocketWin::SetNoDelay(bool no_delay) {
-  return DisableNagle(socket_, no_delay);
+  return SetTCPNoDelay(socket_, no_delay);
 }
 
 void TCPSocketWin::Close() {
@@ -734,7 +706,7 @@ int TCPSocketWin::AcceptInternal(scoped_ptr<TCPSocketWin>* socket,
     net_log_.EndEventWithNetErrorCode(NetLog::TYPE_TCP_ACCEPT, adopt_result);
     return adopt_result;
   }
-  *socket = tcp_socket.Pass();
+  *socket = std::move(tcp_socket);
   *address = ip_end_point;
   net_log_.EndEvent(NetLog::TYPE_TCP_ACCEPT,
                     CreateNetLogIPEndPointCallback(&ip_end_point));

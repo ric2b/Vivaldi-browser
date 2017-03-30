@@ -67,6 +67,7 @@
 #include "platform/transforms/AffineTransform.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebTraceLocation.h"
+#include "wtf/CheckedNumeric.h"
 #include <math.h>
 #include <v8.h>
 
@@ -125,7 +126,7 @@ bool canCreateImageBuffer(const IntSize& size)
 PassRefPtr<Image> createTransparentImage(const IntSize& size)
 {
     ASSERT(canCreateImageBuffer(size));
-    RefPtr<SkSurface> surface = adoptRef(SkSurface::NewRasterN32Premul(size.width(), size.height()));
+    sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(size.width(), size.height());
     surface->getCanvas()->clear(SK_ColorTRANSPARENT);
     return StaticBitmapImage::create(adoptRef(surface->newImageSnapshot()));
 }
@@ -202,19 +203,10 @@ CanvasRenderingContextFactory* HTMLCanvasElement::getRenderingContextFactory(int
 
 void HTMLCanvasElement::registerRenderingContextFactory(PassOwnPtr<CanvasRenderingContextFactory> renderingContextFactory)
 {
-    CanvasRenderingContext::ContextType type = renderingContextFactory->contextType();
+    CanvasRenderingContext::ContextType type = renderingContextFactory->getContextType();
     ASSERT(type < CanvasRenderingContext::ContextTypeCount);
     ASSERT(!renderingContextFactories()[type]);
     renderingContextFactories()[type] = renderingContextFactory;
-}
-
-ScriptValue HTMLCanvasElement::getContext(ScriptState* scriptState, const String& type, const CanvasContextCreationAttributes& attributes)
-{
-    CanvasRenderingContext* context = getCanvasRenderingContext(type, attributes);
-    if (!context) {
-        return ScriptValue::createNull(scriptState);
-    }
-    return ScriptValue(scriptState, toV8(context, scriptState->context()->Global(), scriptState->isolate()));
 }
 
 CanvasRenderingContext* HTMLCanvasElement::getCanvasRenderingContext(const String& type, const CanvasContextCreationAttributes& attributes)
@@ -241,7 +233,7 @@ CanvasRenderingContext* HTMLCanvasElement::getCanvasRenderingContext(const Strin
     // seeing a dangling pointer. So for now we will disallow the context from being changed
     // once it is created.
     if (m_context) {
-        if (m_context->contextType() == contextType)
+        if (m_context->getContextType() == contextType)
             return m_context.get();
 
         factory->onError(this, "Canvas has an existing context of a different type");
@@ -424,7 +416,7 @@ void HTMLCanvasElement::notifyListenersCanvasChanged()
 
     if (listenerNeedsNewFrameCapture) {
         SourceImageStatus status;
-        RefPtr<Image> sourceImage = getSourceImageForCanvas(&status, PreferNoAcceleration, SnapshotReasonCanvasListenerCapture);
+        RefPtr<Image> sourceImage = getSourceImageForCanvas(&status, PreferNoAcceleration, SnapshotReasonCanvasListenerCapture, FloatSize());
         if (status != NormalSourceImageStatus)
             return;
         RefPtr<SkImage> image = sourceImage->imageForCurrentFrame();
@@ -501,14 +493,55 @@ void HTMLCanvasElement::setSurfaceSize(const IntSize& size)
     }
 }
 
-String HTMLCanvasElement::toEncodingMimeType(const String& mimeType)
+// This enum is used in a UMA histogram; the values should not be changed.
+enum RequestedImageMimeType {
+    RequestedImageMimeTypePng = 0,
+    RequestedImageMimeTypeJpeg = 1,
+    RequestedImageMimeTypeWebp = 2,
+    RequestedImageMimeTypeGif = 3,
+    RequestedImageMimeTypeBmp = 4,
+    RequestedImageMimeTypeIco = 5,
+    RequestedImageMimeTypeTiff = 6,
+    RequestedImageMimeTypeUnknown = 7,
+    NumberOfRequestedImageMimeTypes
+};
+
+String HTMLCanvasElement::toEncodingMimeType(const String& mimeType, const EncodeReason encodeReason)
 {
     String lowercaseMimeType = mimeType.lower();
-
-    // FIXME: Make isSupportedImageMIMETypeForEncoding threadsafe (to allow this method to be used on a worker thread).
-    if (mimeType.isNull() || !MIMETypeRegistry::isSupportedImageMIMETypeForEncoding(lowercaseMimeType))
+    if (mimeType.isNull())
         lowercaseMimeType = DefaultMimeType;
 
+    RequestedImageMimeType imageFormat;
+    if (lowercaseMimeType == "image/png") {
+        imageFormat = RequestedImageMimeTypePng;
+    } else if (lowercaseMimeType == "image/jpeg") {
+        imageFormat = RequestedImageMimeTypeJpeg;
+    } else if (lowercaseMimeType == "image/webp") {
+        imageFormat = RequestedImageMimeTypeWebp;
+    } else if (lowercaseMimeType == "image/gif") {
+        imageFormat = RequestedImageMimeTypeGif;
+    } else if (lowercaseMimeType == "image/bmp" || lowercaseMimeType == "image/x-windows-bmp") {
+        imageFormat = RequestedImageMimeTypeBmp;
+    } else if (lowercaseMimeType == "image/x-icon") {
+        imageFormat = RequestedImageMimeTypeIco;
+    } else if (lowercaseMimeType == "image/tiff" || lowercaseMimeType == "image/x-tiff") {
+        imageFormat = RequestedImageMimeTypeTiff;
+    } else {
+        imageFormat = RequestedImageMimeTypeUnknown;
+    }
+
+    if (encodeReason == EncodeReasonToDataURL) {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, toDataURLImageFormatHistogram, new EnumerationHistogram("Canvas.RequestedImageMimeTypes_toDataURL", NumberOfRequestedImageMimeTypes));
+        toDataURLImageFormatHistogram.count(imageFormat);
+    } else if (encodeReason == EncodeReasonToBlobCallback) {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, toBlobCallbackImageFormatHistogram, new EnumerationHistogram("Canvas.RequestedImageMimeTypes_toBlobCallback", NumberOfRequestedImageMimeTypes));
+        toBlobCallbackImageFormatHistogram.count(imageFormat);
+    }
+
+    // FIXME: Make isSupportedImageMIMETypeForEncoding threadsafe (to allow this method to be used on a worker thread).
+    if (!MIMETypeRegistry::isSupportedImageMIMETypeForEncoding(lowercaseMimeType))
+        lowercaseMimeType = DefaultMimeType;
     return lowercaseMimeType;
 }
 
@@ -563,7 +596,7 @@ String HTMLCanvasElement::toDataURLInternal(const String& mimeType, const double
     if (!isPaintable())
         return String("data:,");
 
-    String encodingMimeType = toEncodingMimeType(mimeType);
+    String encodingMimeType = toEncodingMimeType(mimeType, EncodeReasonToDataURL);
 
     ImageData* imageData = toImageData(sourceBuffer, SnapshotReasonToDataURL);
     ScopedDisposal<ImageData> disposer(imageData);
@@ -596,7 +629,7 @@ void HTMLCanvasElement::toBlob(BlobCallback* callback, const String& mimeType, c
 
     if (!isPaintable()) {
         // If the canvas element's bitmap has no pixels
-        Platform::current()->mainThread()->taskRunner()->postTask(BLINK_FROM_HERE, bind(&BlobCallback::handleEvent, callback, nullptr));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&BlobCallback::handleEvent, callback, nullptr));
         return;
     }
 
@@ -608,7 +641,7 @@ void HTMLCanvasElement::toBlob(BlobCallback* callback, const String& mimeType, c
         }
     }
 
-    String encodingMimeType = toEncodingMimeType(mimeType);
+    String encodingMimeType = toEncodingMimeType(mimeType, EncodeReasonToBlobCallback);
 
     ImageData* imageData = toImageData(BackBuffer, SnapshotReasonToBlob);
     // imageData unref its data, which we still keep alive for the async toBlob thread
@@ -635,9 +668,9 @@ void HTMLCanvasElement::removeListener(CanvasDrawListener* listener)
     m_listeners.remove(listener);
 }
 
-SecurityOrigin* HTMLCanvasElement::securityOrigin() const
+SecurityOrigin* HTMLCanvasElement::getSecurityOrigin() const
 {
-    return document().securityOrigin();
+    return document().getSecurityOrigin();
 }
 
 bool HTMLCanvasElement::originClean() const
@@ -836,15 +869,13 @@ void HTMLCanvasElement::updateExternallyAllocatedMemory() const
         bufferCount++;
 
     // Four bytes per pixel per buffer.
-    Checked<intptr_t, RecordOverflow> checkedExternallyAllocatedMemory = 4 * bufferCount;
+    CheckedNumeric<intptr_t> checkedExternallyAllocatedMemory = 4 * bufferCount;
     if (is3D())
         checkedExternallyAllocatedMemory += m_context->externallyAllocatedBytesPerPixel();
 
     checkedExternallyAllocatedMemory *= width();
     checkedExternallyAllocatedMemory *= height();
-    intptr_t externallyAllocatedMemory;
-    if (checkedExternallyAllocatedMemory.safeGet(externallyAllocatedMemory) == CheckedState::DidOverflow)
-        externallyAllocatedMemory = std::numeric_limits<intptr_t>::max();
+    intptr_t externallyAllocatedMemory = checkedExternallyAllocatedMemory.ValueOrDefault(std::numeric_limits<intptr_t>::max());
 
     // Subtracting two intptr_t that are known to be positive will never underflow.
     v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(externallyAllocatedMemory - m_externallyAllocatedMemory);
@@ -969,7 +1000,7 @@ void HTMLCanvasElement::didMoveToNewDocument(Document& oldDocument)
     HTMLElement::didMoveToNewDocument(oldDocument);
 }
 
-PassRefPtr<Image> HTMLCanvasElement::getSourceImageForCanvas(SourceImageStatus* status, AccelerationHint hint, SnapshotReason reason) const
+PassRefPtr<Image> HTMLCanvasElement::getSourceImageForCanvas(SourceImageStatus* status, AccelerationHint hint, SnapshotReason reason, const FloatSize&) const
 {
     if (!width() || !height()) {
         *status = ZeroSizeCanvasSourceImageStatus;
@@ -1005,7 +1036,7 @@ bool HTMLCanvasElement::wouldTaintOrigin(SecurityOrigin*) const
     return !originClean();
 }
 
-FloatSize HTMLCanvasElement::elementSize() const
+FloatSize HTMLCanvasElement::elementSize(const FloatSize&) const
 {
     return FloatSize(width(), height());
 }
@@ -1086,6 +1117,13 @@ bool HTMLCanvasElement::isSupportedInteractiveCanvasFallback(const Element& elem
         return true;
 
     return false;
+}
+
+std::pair<Element*, String> HTMLCanvasElement::getControlAndIdIfHitRegionExists(const LayoutPoint& location)
+{
+    if (m_context && m_context->is2d())
+        return m_context->getControlAndIdIfHitRegionExists(location);
+    return std::make_pair(nullptr, String());
 }
 
 } // namespace blink

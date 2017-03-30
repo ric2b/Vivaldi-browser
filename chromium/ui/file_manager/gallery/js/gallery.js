@@ -368,84 +368,76 @@ Gallery.prototype.loadInternal_ = function(entries, selectedEntries) {
   }
   this.onSelection_();
 
-  // Obtains max chank size.
-  var maxChunkSize = 20;
-  var volumeInfo = this.volumeManager_.getVolumeInfo(entries[0]);
-  if (volumeInfo) {
-    if (GalleryUtil.isOnMTPVolume(entries[0], this.volumeManager_))
-      maxChunkSize = 1;
-
-    if (volumeInfo.isReadOnly ||
-        GalleryUtil.isOnMTPVolume(entries[0], this.volumeManager_)) {
-      this.context_.readonlyDirName = volumeInfo.label;
-    }
-  }
-
   // If items are empty, stop initialization.
   if (items.length === 0) {
     this.dataModel_.splice(0, this.dataModel_.length);
     return;
   }
 
+  // Sort the selected image first
+  var containsInSelection = function(galleryItem) {
+    return selectedEntries.indexOf(galleryItem.getEntry()) >= 0;
+  };
+  var notContainsInSelection = function(galleryItem) {
+    return !containsInSelection(galleryItem);
+  };
+  items = items.filter(containsInSelection)
+      .concat(items.filter(notContainsInSelection));
+
   // Load entries.
   // Use the self variable capture-by-closure because it is faster than bind.
   var self = this;
   var thumbnailModel = new ThumbnailModel(this.metadataModel_);
-  var loadChunk = function(firstChunk) {
+  var loadNext = function(index) {
     // Extract chunk.
-    var chunk = items.splice(0, maxChunkSize);
-    if (!chunk.length)
+    if (index >= items.length)
       return;
-    var entries = chunk.map(function(chunkItem) {
-      return chunkItem.getEntry();
-    });
-    var metadataPromise = self.metadataModel_.get(
-        entries, Gallery.PREFETCH_PROPERTY_NAMES);
-    var thumbnailPromise = thumbnailModel.get(entries);
+    var item = items[index];
+    var entry = item.getEntry();
+    var metadataPromise = self.metadataModel_.get([entry],
+        Gallery.PREFETCH_PROPERTY_NAMES);
+    var thumbnailPromise = thumbnailModel.get([entry]);
     return Promise.all([metadataPromise, thumbnailPromise]).then(
         function(metadataLists) {
       // Add items to the model.
-      chunk.forEach(function(chunkItem, index) {
-        chunkItem.setMetadataItem(metadataLists[0][index]);
-        chunkItem.setThumbnailMetadataItem(metadataLists[1][index]);
+      item.setMetadataItem(metadataLists[0][0]);
+      item.setThumbnailMetadataItem(metadataLists[1][0]);
 
-        var event = new Event('content');
-        event.item = chunkItem;
-        event.oldEntry = chunkItem.getEntry();
-        event.thumbnailChanged = true;
-        self.dataModel_.dispatchEvent(event);
-      });
-
-      // Init modes after the first chunk is loaded.
-      if (firstChunk && !self.initialized_) {
-        // Determine the initial mode.
-        var shouldShowThumbnail = selectedEntries.length > 1 ||
-            (self.context_.pageState &&
-             self.context_.pageState.gallery === 'thumbnail');
-        self.setCurrentMode_(
-            shouldShowThumbnail ? self.thumbnailMode_ : self.slideMode_);
-
-        // Do the initialization for each mode.
-        if (shouldShowThumbnail) {
-          self.thumbnailMode_.show();
-          self.thumbnailMode_.focus();
-        } else {
-          self.slideMode_.enter(
-              null,
-              function() {
-                // Flash the toolbar briefly to show it is there.
-                self.dimmableUIController_.kick(Gallery.FIRST_FADE_TIMEOUT);
-              },
-              function() {});
-        }
-        self.initialized_ = true;
-      }
+      var event = new Event('content');
+      event.item = item;
+      event.oldEntry = entry;
+      event.thumbnailChanged = true;
+      self.dataModel_.dispatchEvent(event);
 
       // Continue to load chunks.
-      return loadChunk(/* firstChunk */ false);
+      return loadNext(/* index */ index + 1);
     });
   };
-  loadChunk(/* firstChunk */ true).catch(function(error) {
+  // init modes before loading images.
+  if (!this.initialized_) {
+    // Determine the initial mode.
+    var shouldShowThumbnail = selectedEntries.length > 1 ||
+        (this.context_.pageState &&
+         this.context_.pageState.gallery === 'thumbnail');
+    this.setCurrentMode_(
+        shouldShowThumbnail ? this.thumbnailMode_ : this.slideMode_);
+
+    // Do the initialization for each mode.
+    if (shouldShowThumbnail) {
+      this.thumbnailMode_.show();
+      this.thumbnailMode_.focus();
+    } else {
+      this.slideMode_.enter(
+          null,
+          function() {
+            // Flash the toolbar briefly to show it is there.
+            self.dimmableUIController_.kick(Gallery.FIRST_FADE_TIMEOUT);
+          },
+          function() {});
+    }
+    this.initialized_ = true;
+  }
+  loadNext(/* index */ 0).catch(function(error) {
     console.error(error.stack || error);
   });
 };

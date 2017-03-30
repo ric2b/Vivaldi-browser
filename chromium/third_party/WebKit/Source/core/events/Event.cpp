@@ -54,25 +54,36 @@ Event::Event()
 }
 
 Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg)
-    : Event(eventType, canBubbleArg, cancelableArg, defaultScopedFromEventType(eventType), monotonicallyIncreasingTime())
+    : Event(eventType, canBubbleArg, cancelableArg, defaultScopedFromEventType(eventType), false, monotonicallyIncreasingTime())
+{
+}
+
+Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, EventTarget* relatedTarget)
+    : Event(eventType, canBubbleArg, cancelableArg, defaultScopedFromEventType(eventType), relatedTarget ? true : false, monotonicallyIncreasingTime())
 {
 }
 
 Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, double platformTimeStamp)
-    : Event(eventType, canBubbleArg, cancelableArg, defaultScopedFromEventType(eventType), platformTimeStamp)
+    : Event(eventType, canBubbleArg, cancelableArg, defaultScopedFromEventType(eventType), false, platformTimeStamp)
+{
+}
+
+Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, EventTarget* relatedTarget, double platformTimeStamp)
+    : Event(eventType, canBubbleArg, cancelableArg, defaultScopedFromEventType(eventType), relatedTarget ? true : false, platformTimeStamp)
 {
 }
 
 Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, bool scoped)
-    : Event(eventType, canBubbleArg, cancelableArg, scoped, monotonicallyIncreasingTime())
+    : Event(eventType, canBubbleArg, cancelableArg, scoped, false, monotonicallyIncreasingTime())
 {
 }
 
-Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, bool scoped, double platformTimeStamp)
+Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, bool scoped, bool relatedTargetScoped, double platformTimeStamp)
     : m_type(eventType)
     , m_canBubble(canBubbleArg)
     , m_cancelable(cancelableArg)
     , m_scoped(scoped)
+    , m_relatedTargetScoped(relatedTargetScoped)
     , m_propagationStopped(false)
     , m_immediatePropagationStopped(false)
     , m_defaultPrevented(false)
@@ -88,7 +99,7 @@ Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableAr
 }
 
 Event::Event(const AtomicString& eventType, const EventInit& initializer)
-    : Event(eventType, initializer.bubbles(), initializer.cancelable(), initializer.scoped())
+    : Event(eventType, initializer.bubbles(), initializer.cancelable(), initializer.scoped(), initializer.relatedTargetScoped(), monotonicallyIncreasingTime())
 {
 }
 
@@ -97,6 +108,11 @@ Event::~Event()
 }
 
 void Event::initEvent(const AtomicString& eventTypeArg, bool canBubbleArg, bool cancelableArg)
+{
+    initEvent(eventTypeArg, canBubbleArg, cancelableArg, nullptr);
+}
+
+void Event::initEvent(const AtomicString& eventTypeArg, bool canBubbleArg, bool cancelableArg, EventTarget* relatedTarget)
 {
     if (dispatched())
         return;
@@ -109,6 +125,8 @@ void Event::initEvent(const AtomicString& eventTypeArg, bool canBubbleArg, bool 
     m_type = eventTypeArg;
     m_canBubble = canBubbleArg;
     m_cancelable = cancelableArg;
+
+    m_relatedTargetScoped = relatedTarget ? true : false;
 }
 
 bool Event::legacyReturnValue(ExecutionContext* executionContext) const
@@ -213,7 +231,7 @@ bool Event::isBeforeUnloadEvent() const
 void Event::preventDefault()
 {
     if (m_handlingPassive) {
-        const LocalDOMWindow* window = m_currentTarget ? m_currentTarget->toDOMWindow() : 0;
+        const LocalDOMWindow* window = m_eventPath ? m_eventPath->windowEventContext().window() : 0;
         if (window)
             window->printErrorMessage("Unable to preventDefault inside passive event listener invocation.");
         return;
@@ -223,7 +241,7 @@ void Event::preventDefault()
         m_defaultPrevented = true;
 }
 
-void Event::setTarget(PassRefPtrWillBeRawPtr<EventTarget> target)
+void Event::setTarget(EventTarget* target)
 {
     if (m_target == target)
         return;
@@ -237,10 +255,10 @@ void Event::receivedTarget()
 {
 }
 
-void Event::setUnderlyingEvent(PassRefPtrWillBeRawPtr<Event> ue)
+void Event::setUnderlyingEvent(Event* ue)
 {
     // Prohibit creation of a cycle -- just do nothing in that case.
-    for (Event* e = ue.get(); e; e = e->underlyingEvent())
+    for (Event* e = ue; e; e = e->underlyingEvent())
         if (e == this)
             return;
     m_underlyingEvent = ue;
@@ -249,23 +267,23 @@ void Event::setUnderlyingEvent(PassRefPtrWillBeRawPtr<Event> ue)
 void Event::initEventPath(Node& node)
 {
     if (!m_eventPath) {
-        m_eventPath = adoptPtrWillBeNoop(new EventPath(node, this));
+        m_eventPath = new EventPath(node, this);
     } else {
         m_eventPath->initializeWith(node, this);
     }
 }
 
-WillBeHeapVector<RefPtrWillBeMember<EventTarget>> Event::path(ScriptState* scriptState) const
+HeapVector<Member<EventTarget>> Event::path(ScriptState* scriptState) const
 {
     return pathInternal(scriptState, NonEmptyAfterDispatch);
 }
 
-WillBeHeapVector<RefPtrWillBeMember<EventTarget>> Event::deepPath(ScriptState* scriptState) const
+HeapVector<Member<EventTarget>> Event::deepPath(ScriptState* scriptState) const
 {
     return pathInternal(scriptState, EmptyAfterDispatch);
 }
 
-WillBeHeapVector<RefPtrWillBeMember<EventTarget>> Event::pathInternal(ScriptState* scriptState, EventPathMode mode) const
+HeapVector<Member<EventTarget>> Event::pathInternal(ScriptState* scriptState, EventPathMode mode) const
 {
     if (m_target)
         OriginsUsingFeatures::countOriginOrIsolatedWorldHumanReadableName(scriptState, *m_target, OriginsUsingFeatures::Feature::EventPath);
@@ -274,12 +292,12 @@ WillBeHeapVector<RefPtrWillBeMember<EventTarget>> Event::pathInternal(ScriptStat
         ASSERT(m_eventPhase == Event::NONE);
         if (!m_eventPath) {
             // Before dispatching the event
-            return WillBeHeapVector<RefPtrWillBeMember<EventTarget>>();
+            return HeapVector<Member<EventTarget>>();
         }
         ASSERT(!m_eventPath->isEmpty());
         // After dispatching the event
         if (mode == EmptyAfterDispatch)
-            return WillBeHeapVector<RefPtrWillBeMember<EventTarget>>();
+            return HeapVector<Member<EventTarget>>();
         return m_eventPath->last().treeScopeEventContext().ensureEventPath(*m_eventPath);
     }
 
@@ -297,12 +315,12 @@ WillBeHeapVector<RefPtrWillBeMember<EventTarget>> Event::pathInternal(ScriptStat
     // Returns [window] for events that are directly dispatched to the window object;
     // e.g., window.load, pageshow, etc.
     if (LocalDOMWindow* window = m_currentTarget->toDOMWindow())
-        return WillBeHeapVector<RefPtrWillBeMember<EventTarget>>(1, window);
+        return HeapVector<Member<EventTarget>>(1, window);
 
-    return WillBeHeapVector<RefPtrWillBeMember<EventTarget>>();
+    return HeapVector<Member<EventTarget>>();
 }
 
-PassRefPtrWillBeRawPtr<EventDispatchMediator> Event::createMediator()
+EventDispatchMediator* Event::createMediator()
 {
     return EventDispatchMediator::create(this);
 }

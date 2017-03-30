@@ -6,6 +6,7 @@
 
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <openssl/crypto.h>
 #include <openssl/rand.h>
 #include <pthread.h>
 #include <signal.h>
@@ -46,8 +47,10 @@
 #include "sandbox/linux/services/namespace_sandbox.h"
 #include "sandbox/linux/services/thread_helpers.h"
 #include "sandbox/linux/suid/client/setuid_sandbox_client.h"
+#include "third_party/WebKit/public/web/linux/WebFontRendering.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
 #include "third_party/skia/include/ports/SkFontConfigInterface.h"
+#include "third_party/skia/include/ports/SkFontMgr_android.h"
 
 #if defined(OS_LINUX)
 #include <sys/prctl.h>
@@ -333,6 +336,12 @@ static void ZygotePreSandboxInit() {
   // cached and there's no more need to access the file system.
   scoped_ptr<icu::TimeZone> zone(icu::TimeZone::createDefault());
 
+#if defined(ARCH_CPU_ARM_FAMILY)
+  // On ARM, BoringSSL requires access to /proc/cpuinfo to determine processor
+  // features. Query this before entering the sandbox.
+  CRYPTO_library_init();
+#endif
+
   // Pass BoringSSL a copy of the /dev/urandom file descriptor so RAND_bytes
   // will work inside the sandbox.
   RAND_set_urandom_fd(base::GetUrandomFD());
@@ -344,8 +353,32 @@ static void ZygotePreSandboxInit() {
 #if defined(ENABLE_WEBRTC)
   InitializeWebRtcModule();
 #endif
+
   SkFontConfigInterface::SetGlobal(
       new FontConfigIPC(GetSandboxFD()))->unref();
+
+  // Set the android SkFontMgr for blink. We need to ensure this is done
+  // before the sandbox is initialized to allow the font manager to access
+  // font configuration files on disk.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAndroidFontsPath)) {
+    std::string android_fonts_dir =
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+            switches::kAndroidFontsPath);
+
+    if (android_fonts_dir.size() > 0 && android_fonts_dir.back() != '/')
+      android_fonts_dir += '/';
+    std::string font_config = android_fonts_dir + "fonts.xml";
+    SkFontMgr_Android_CustomFonts custom;
+    custom.fSystemFontUse =
+        SkFontMgr_Android_CustomFonts::SystemFontUse::kOnlyCustom;
+    custom.fBasePath = android_fonts_dir.c_str();
+    custom.fFontsXml = font_config.c_str();
+    custom.fFallbackFontsXml = nullptr;
+    custom.fIsolated = true;
+
+    blink::WebFontRendering::setSkiaFontManager(SkFontMgr_New_Android(&custom));
+  }
 }
 
 static bool CreateInitProcessReaper(base::Closure* post_fork_parent_callback) {

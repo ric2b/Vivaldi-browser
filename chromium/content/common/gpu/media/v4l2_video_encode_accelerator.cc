@@ -17,8 +17,8 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
+#include "content/common/gpu/media/shared_memory_region.h"
 #include "content/common/gpu/media/v4l2_video_encode_accelerator.h"
-#include "content/public/common/content_switches.h"
 #include "media/base/bitstream_buffer.h"
 
 #define NOTIFY_ERROR(x)                        \
@@ -51,13 +51,10 @@
 namespace content {
 
 struct V4L2VideoEncodeAccelerator::BitstreamBufferRef {
-  BitstreamBufferRef(int32_t id,
-                     scoped_ptr<base::SharedMemory> shm,
-                     size_t size)
-      : id(id), shm(std::move(shm)), size(size) {}
+  BitstreamBufferRef(int32_t id, scoped_ptr<SharedMemoryRegion> shm)
+      : id(id), shm(std::move(shm)) {}
   const int32_t id;
-  const scoped_ptr<base::SharedMemory> shm;
-  const size_t size;
+  const scoped_ptr<SharedMemoryRegion> shm;
 };
 
 V4L2VideoEncodeAccelerator::InputRecord::InputRecord() : at_device(false) {
@@ -134,7 +131,7 @@ bool V4L2VideoEncodeAccelerator::Initialize(
   }
 
   if (!SetFormats(input_format, output_profile)) {
-    LOG(ERROR) << "Failed setting up formats";
+    DLOG(ERROR) << "Failed setting up formats";
     return false;
   }
 
@@ -224,15 +221,14 @@ void V4L2VideoEncodeAccelerator::UseOutputBitstreamBuffer(
     return;
   }
 
-  scoped_ptr<base::SharedMemory> shm(
-      new base::SharedMemory(buffer.handle(), false));
-  if (!shm->Map(buffer.size())) {
+  scoped_ptr<SharedMemoryRegion> shm(new SharedMemoryRegion(buffer, false));
+  if (!shm->Map()) {
     NOTIFY_ERROR(kPlatformFailureError);
     return;
   }
 
   scoped_ptr<BitstreamBufferRef> buffer_ref(
-      new BitstreamBufferRef(buffer.id(), std::move(shm), buffer.size()));
+      new BitstreamBufferRef(buffer.id(), std::move(shm)));
   encoder_thread_.message_loop()->PostTask(
       FROM_HERE,
       base::Bind(&V4L2VideoEncodeAccelerator::UseOutputBitstreamBufferTask,
@@ -311,7 +307,13 @@ V4L2VideoEncodeAccelerator::GetSupportedProfiles() {
         profiles.push_back(profile);
         break;
       case V4L2_PIX_FMT_VP9:
-        profile.profile = media::VP9PROFILE_ANY;
+        profile.profile = media::VP9PROFILE_PROFILE0;
+        profiles.push_back(profile);
+        profile.profile = media::VP9PROFILE_PROFILE1;
+        profiles.push_back(profile);
+        profile.profile = media::VP9PROFILE_PROFILE2;
+        profiles.push_back(profile);
+        profile.profile = media::VP9PROFILE_PROFILE3;
         profiles.push_back(profile);
         break;
     }
@@ -358,13 +360,21 @@ void V4L2VideoEncodeAccelerator::EncodeTask(
     std::vector<struct v4l2_ext_control> ctrls;
     struct v4l2_ext_control ctrl;
     memset(&ctrl, 0, sizeof(ctrl));
-    ctrl.id = V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE;
-    ctrl.value = V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_I_FRAME;
+    ctrl.id = V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME;
     ctrls.push_back(ctrl);
     if (!SetExtCtrls(ctrls)) {
-      LOG(ERROR) << "Failed requesting keyframe";
-      NOTIFY_ERROR(kPlatformFailureError);
-      return;
+      // Some platforms still use the old control. Fallback before they are
+      // updated.
+      ctrls.clear();
+      memset(&ctrl, 0, sizeof(ctrl));
+      ctrl.id = V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE;
+      ctrl.value = V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_I_FRAME;
+      ctrls.push_back(ctrl);
+      if (!SetExtCtrls(ctrls)) {
+        LOG(ERROR) << "Failed requesting keyframe";
+        NOTIFY_ERROR(kPlatformFailureError);
+        return;
+      }
     }
   }
 }
@@ -886,7 +896,7 @@ bool V4L2VideoEncodeAccelerator::NegotiateInputFormat(
   uint32_t input_format_fourcc =
       V4L2Device::VideoPixelFormatToV4L2PixFmt(input_format);
   if (!input_format_fourcc) {
-    LOG(ERROR) << "Unsupported input format";
+    LOG(ERROR) << "Unsupported input format" << input_format_fourcc;
     return false;
   }
 
@@ -906,8 +916,10 @@ bool V4L2VideoEncodeAccelerator::NegotiateInputFormat(
     input_format_fourcc = device_->PreferredInputFormat();
     input_format =
         V4L2Device::V4L2PixFmtToVideoPixelFormat(input_format_fourcc);
-    if (input_format == media::PIXEL_FORMAT_UNKNOWN)
+    if (input_format == media::PIXEL_FORMAT_UNKNOWN) {
+      LOG(ERROR) << "Unsupported input format" << input_format_fourcc;
       return false;
+    }
 
     input_planes_count = media::VideoFrame::NumPlanes(input_format);
     DCHECK_LE(input_planes_count, static_cast<size_t>(VIDEO_MAX_PLANES));
@@ -923,9 +935,14 @@ bool V4L2VideoEncodeAccelerator::NegotiateInputFormat(
     DCHECK_EQ(format.fmt.pix_mp.num_planes, input_planes_count);
   }
 
-  // Take device-adjusted sizes for allocated size.
+  // Take device-adjusted sizes for allocated size. If the size is adjusted
+  // down, it means the input is too big and the hardware does not support it.
   input_allocated_size_ = V4L2Device::CodedSizeFromV4L2Format(format);
-  DCHECK(gfx::Rect(input_allocated_size_).Contains(gfx::Rect(visible_size_)));
+  if (!gfx::Rect(input_allocated_size_).Contains(gfx::Rect(visible_size_))) {
+    DVLOG(1) << "Input size too big " << visible_size_.ToString()
+             << ", adjusted to " << input_allocated_size_.ToString();
+    return false;
+  }
 
   device_input_format_ = input_format;
   input_planes_count_ = input_planes_count;

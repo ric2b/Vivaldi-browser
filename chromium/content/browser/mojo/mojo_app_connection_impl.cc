@@ -9,30 +9,32 @@
 
 #include "base/bind.h"
 #include "content/browser/mojo/mojo_shell_context.h"
-#include "mojo/shell/capability_filter.h"
 
 namespace content {
 
 const char kBrowserMojoAppUrl[] = "system:content_browser";
 
 namespace {
-void OnGotInstanceID(uint32_t remote_id) {}
+void OnGotInstanceID(mojo::shell::mojom::ConnectResult result,
+                     const std::string& user_id, uint32_t remote_id) {}
 }  // namespace
 
 // static
 scoped_ptr<MojoAppConnection> MojoAppConnection::Create(
-    const GURL& url,
-    const GURL& requestor_url) {
+    const std::string& user_id,
+    const std::string& name,
+    const std::string& requestor_name) {
   return scoped_ptr<MojoAppConnection>(
-      new MojoAppConnectionImpl(url, requestor_url));
+      new MojoAppConnectionImpl(user_id, name, requestor_name));
 }
 
-MojoAppConnectionImpl::MojoAppConnectionImpl(const GURL& url,
-                                             const GURL& requestor_url) {
+MojoAppConnectionImpl::MojoAppConnectionImpl(
+    const std::string& user_id,
+    const std::string& name,
+    const std::string& requestor_name) {
   MojoShellContext::ConnectToApplication(
-      url, requestor_url, mojo::GetProxy(&interfaces_),
-      mojo::shell::mojom::InterfaceProviderPtr(),
-      base::Bind(&OnGotInstanceID));
+      user_id, name, requestor_name, mojo::GetProxy(&interfaces_),
+      mojo::shell::mojom::InterfaceProviderPtr(), base::Bind(&OnGotInstanceID));
 }
 
 MojoAppConnectionImpl::~MojoAppConnectionImpl() {

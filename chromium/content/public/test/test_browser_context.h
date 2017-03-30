@@ -30,6 +30,7 @@ class TestBrowserContext : public BrowserContext {
   base::FilePath TakePath();
 
   void SetSpecialStoragePolicy(storage::SpecialStoragePolicy* policy);
+  void SetPermissionManager(scoped_ptr<PermissionManager> permission_manager);
 
   base::FilePath GetPath() const override;
   scoped_ptr<ZoomLevelDelegate> CreateZoomLevelDelegate(
@@ -37,8 +38,6 @@ class TestBrowserContext : public BrowserContext {
   bool IsOffTheRecord() const override;
   DownloadManagerDelegate* GetDownloadManagerDelegate() override;
   net::URLRequestContextGetter* GetRequestContext() override;
-  net::URLRequestContextGetter* GetRequestContextForRenderProcess(
-      int renderer_child_id) override;
   net::URLRequestContextGetter* GetMediaRequestContext() override;
   net::URLRequestContextGetter* GetMediaRequestContextForRenderProcess(
       int renderer_child_id) override;
@@ -52,6 +51,14 @@ class TestBrowserContext : public BrowserContext {
   SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   PermissionManager* GetPermissionManager() override;
   BackgroundSyncController* GetBackgroundSyncController() override;
+  net::URLRequestContextGetter* CreateRequestContext(
+      ProtocolHandlerMap* protocol_handlers,
+      URLRequestInterceptorScopedVector request_interceptors) override;
+  net::URLRequestContextGetter* CreateRequestContextForStoragePartition(
+      const base::FilePath& partition_path,
+      bool in_memory,
+      ProtocolHandlerMap* protocol_handlers,
+      URLRequestInterceptorScopedVector request_interceptors)  override;
 
  private:
   base::ScopedTempDir browser_context_dir_;
@@ -59,6 +66,7 @@ class TestBrowserContext : public BrowserContext {
   scoped_ptr<MockResourceContext> resource_context_;
   scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy_;
   scoped_ptr<MockSSLHostStateDelegate> ssl_host_state_delegate_;
+  scoped_ptr<PermissionManager> permission_manager_;
   scoped_ptr<MockBackgroundSyncController> background_sync_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(TestBrowserContext);

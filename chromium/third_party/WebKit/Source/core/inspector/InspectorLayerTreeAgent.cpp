@@ -41,7 +41,7 @@
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/layout/LayoutPart.h"
-#include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/loader/DocumentLoader.h"
@@ -258,8 +258,8 @@ int InspectorLayerTreeAgent::idForNode(Node* node)
 
 PaintLayerCompositor* InspectorLayerTreeAgent::paintLayerCompositor()
 {
-    LayoutView* layoutView = m_inspectedFrames->root()->contentLayoutObject();
-    PaintLayerCompositor* compositor = layoutView ? layoutView->compositor() : nullptr;
+    LayoutViewItem layoutView = m_inspectedFrames->root()->contentLayoutItem();
+    PaintLayerCompositor* compositor = layoutView.isNull() ? nullptr : layoutView.compositor();
     return compositor;
 }
 
@@ -308,7 +308,7 @@ void InspectorLayerTreeAgent::compositingReasons(ErrorString* errorString, const
     const GraphicsLayer* graphicsLayer = layerById(errorString, layerId);
     if (!graphicsLayer)
         return;
-    CompositingReasons reasonsBitmask = graphicsLayer->compositingReasons();
+    CompositingReasons reasonsBitmask = graphicsLayer->getCompositingReasons();
     *reasonStrings = Array<String>::create();
     for (size_t i = 0; i < kNumberOfCompositingReasons; ++i) {
         if (!(reasonsBitmask & kCompositingReasonStringMap[i].reason))
@@ -332,9 +332,9 @@ void InspectorLayerTreeAgent::makeSnapshot(ErrorString* errorString, const Strin
     IntRect interestRect(IntPoint(0, 0), size);
     layer->paint(&interestRect);
 
-    GraphicsContext context(layer->paintController());
+    GraphicsContext context(layer->getPaintController());
     context.beginRecording(interestRect);
-    layer->paintController().paintArtifact().replay(context);
+    layer->getPaintController().paintArtifact().replay(context);
     RefPtr<PictureSnapshot> snapshot = adoptRef(new PictureSnapshot(context.endRecording()));
 
     *snapshotId = String::number(++s_lastSnapshotId);
@@ -435,14 +435,14 @@ void InspectorLayerTreeAgent::profileSnapshot(ErrorString* errorString, const St
     }
 }
 
-void InspectorLayerTreeAgent::snapshotCommandLog(ErrorString* errorString, const String& snapshotId, OwnPtr<Array<RefPtr<protocol::DictionaryValue>>>* commandLog)
+void InspectorLayerTreeAgent::snapshotCommandLog(ErrorString* errorString, const String& snapshotId, OwnPtr<Array<protocol::DictionaryValue>>* commandLog)
 {
     const PictureSnapshot* snapshot = snapshotById(errorString, snapshotId);
     if (!snapshot)
         return;
     protocol::ErrorSupport errors(errorString);
-    RefPtr<protocol::Value> logValue = protocol::parseJSON(snapshot->snapshotCommandLog()->toJSONString());
-    *commandLog = Array<RefPtr<protocol::DictionaryValue>>::parse(logValue, &errors);
+    OwnPtr<protocol::Value> logValue = protocol::parseJSON(snapshot->snapshotCommandLog()->toJSONString());
+    *commandLog = Array<protocol::DictionaryValue>::parse(logValue.get(), &errors);
 }
 
 void InspectorLayerTreeAgent::willAddPageOverlay(const GraphicsLayer* layer)

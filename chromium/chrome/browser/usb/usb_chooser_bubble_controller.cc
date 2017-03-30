@@ -8,11 +8,12 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
+#include "base/command_line.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
+#include "chrome/browser/usb/web_usb_histograms.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "components/bubble/bubble_controller.h"
 #include "content/public/browser/render_frame_host.h"
@@ -21,63 +22,14 @@
 #include "device/usb/mojo/type_converters.h"
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_device_filter.h"
+#include "device/usb/webusb_descriptors.h"
 #include "url/gurl.h"
-
-namespace {
-
-// Reasons the chooser may be closed. These are used in histograms so do not
-// remove/reorder entries. Only add at the end just before
-// WEBUSB_CHOOSER_CLOSED_MAX. Also remember to update the enum listing in
-// tools/metrics/histograms/histograms.xml.
-enum WebUsbChooserClosed {
-  // The user cancelled the permission prompt without selecting a device.
-  WEBUSB_CHOOSER_CLOSED_CANCELLED = 0,
-  // The user probably cancelled the permission prompt without selecting a
-  // device because there were no devices to select.
-  WEBUSB_CHOOSER_CLOSED_CANCELLED_NO_DEVICES,
-  // The user granted permission to access a device.
-  WEBUSB_CHOOSER_CLOSED_PERMISSION_GRANTED,
-  // The user granted permission to access a device but that permission will be
-  // revoked when the device is disconnected.
-  WEBUSB_CHOOSER_CLOSED_EPHEMERAL_PERMISSION_GRANTED,
-  // Maximum value for the enum.
-  WEBUSB_CHOOSER_CLOSED_MAX
-};
-
-void RecordChooserClosure(WebUsbChooserClosed disposition) {
-  UMA_HISTOGRAM_ENUMERATION("WebUsb.ChooserClosed", disposition,
-                            WEBUSB_CHOOSER_CLOSED_MAX);
-}
-
-// Check if the origin is allowed.
-bool FindInAllowedOrigins(const device::WebUsbAllowedOrigins* allowed_origins,
-                          const GURL& origin) {
-  if (!allowed_origins)
-    return false;
-
-  if (ContainsValue(allowed_origins->origins, origin))
-    return true;
-
-  for (const auto& config : allowed_origins->configurations) {
-    if (ContainsValue(config.origins, origin))
-      return true;
-
-    for (const auto& function : config.functions) {
-      if (ContainsValue(function.origins, origin))
-        return true;
-    }
-  }
-
-  return false;
-}
-
-}  // namespace
 
 UsbChooserBubbleController::UsbChooserBubbleController(
     content::RenderFrameHost* owner,
     mojo::Array<device::usb::DeviceFilterPtr> device_filters,
     content::RenderFrameHost* render_frame_host,
-    const webusb::WebUsbPermissionBubble::GetPermissionCallback& callback)
+    const device::usb::ChooserService::GetPermissionCallback& callback)
     : ChooserBubbleController(owner),
       render_frame_host_(render_frame_host),
       callback_(callback),
@@ -133,18 +85,19 @@ void UsbChooserBubbleController::Select(size_t index) {
   callback_.Run(std::move(device_info_ptr));
   callback_.reset();  // Reset |callback_| so that it is only run once.
 
-  RecordChooserClosure(devices_[index].first->serial_number().empty()
-                           ? WEBUSB_CHOOSER_CLOSED_EPHEMERAL_PERMISSION_GRANTED
-                           : WEBUSB_CHOOSER_CLOSED_PERMISSION_GRANTED);
+  RecordWebUsbChooserClosure(
+      devices_[index].first->serial_number().empty()
+          ? WEBUSB_CHOOSER_CLOSED_EPHEMERAL_PERMISSION_GRANTED
+          : WEBUSB_CHOOSER_CLOSED_PERMISSION_GRANTED);
 
   if (bubble_reference_)
     bubble_reference_->CloseBubble(BUBBLE_CLOSE_ACCEPTED);
 }
 
 void UsbChooserBubbleController::Cancel() {
-  RecordChooserClosure(devices_.size() == 0
-                           ? WEBUSB_CHOOSER_CLOSED_CANCELLED_NO_DEVICES
-                           : WEBUSB_CHOOSER_CLOSED_CANCELLED);
+  RecordWebUsbChooserClosure(devices_.size() == 0
+                                 ? WEBUSB_CHOOSER_CLOSED_CANCELLED_NO_DEVICES
+                                 : WEBUSB_CHOOSER_CLOSED_CANCELLED);
 
   if (bubble_reference_)
     bubble_reference_->CloseBubble(BUBBLE_CLOSE_CANCELED);
@@ -154,10 +107,7 @@ void UsbChooserBubbleController::Close() {}
 
 void UsbChooserBubbleController::OnDeviceAdded(
     scoped_refptr<device::UsbDevice> device) {
-  if (device::UsbDeviceFilter::MatchesAny(device, filters_) &&
-      FindInAllowedOrigins(
-          device->webusb_allowed_origins(),
-          render_frame_host_->GetLastCommittedURL().GetOrigin())) {
+  if (DisplayDevice(device)) {
     devices_.push_back(std::make_pair(device, device->product_string()));
     if (observer())
       observer()->OnOptionAdded(devices_.size() - 1);
@@ -181,23 +131,29 @@ void UsbChooserBubbleController::OnDeviceRemoved(
   }
 }
 
+void UsbChooserBubbleController::set_bubble_reference(
+    BubbleReference bubble_reference) {
+  bubble_reference_ = bubble_reference;
+}
+
 // Get a list of devices that can be shown in the chooser bubble UI for
 // user to grant permsssion.
 void UsbChooserBubbleController::GotUsbDeviceList(
     const std::vector<scoped_refptr<device::UsbDevice>>& devices) {
   for (const auto& device : devices) {
-    if (device::UsbDeviceFilter::MatchesAny(device, filters_) &&
-        FindInAllowedOrigins(
-            device->webusb_allowed_origins(),
-            render_frame_host_->GetLastCommittedURL().GetOrigin())) {
+    if (DisplayDevice(device))
       devices_.push_back(std::make_pair(device, device->product_string()));
-    }
   }
   if (observer())
     observer()->OnOptionsInitialized();
 }
 
-void UsbChooserBubbleController::set_bubble_reference(
-    BubbleReference bubble_reference) {
-  bubble_reference_ = bubble_reference;
+bool UsbChooserBubbleController::DisplayDevice(
+    scoped_refptr<device::UsbDevice> device) const {
+  return device::UsbDeviceFilter::MatchesAny(device, filters_) &&
+         (base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kDisableWebUsbSecurity) ||
+          device::FindInWebUsbAllowedOrigins(
+              device->webusb_allowed_origins(),
+              render_frame_host_->GetLastCommittedURL().GetOrigin()));
 }

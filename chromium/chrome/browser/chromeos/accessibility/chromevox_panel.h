@@ -31,9 +31,12 @@ class ChromeVoxPanel : public views::WidgetDelegate,
 
   void Close();
   void DidFirstVisuallyNonEmptyPaint();
+  void UpdatePanelHeight();
   void EnterFullscreen();
   void ExitFullscreen();
   void DisableSpokenFeedback();
+  void Focus();
+  void UpdateWidgetBounds();
 
   // WidgetDelegate overrides.
   const views::Widget* GetWidget() const override;
@@ -48,12 +51,10 @@ class ChromeVoxPanel : public views::WidgetDelegate,
                                uint32_t changed_metrics) override;
 
  private:
-  void UpdateWidgetBounds();
-
   views::Widget* widget_;
-  scoped_ptr<ChromeVoxPanelWebContentsObserver> web_contents_observer_;
+  std::unique_ptr<ChromeVoxPanelWebContentsObserver> web_contents_observer_;
   views::View* web_view_;
-  bool fullscreen_;
+  bool panel_fullscreen_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeVoxPanel);
 };

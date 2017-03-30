@@ -6,7 +6,6 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ReadableStreamOperations.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
 #include "bindings/core/v8/V8ArrayBufferView.h"
@@ -18,6 +17,7 @@
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/fileapi/Blob.h"
 #include "core/html/FormData.h"
+#include "core/streams/ReadableStreamOperations.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/DataConsumerHandleUtil.h"
 #include "modules/fetch/FetchBlobDataConsumerHandle.h"
@@ -45,6 +45,8 @@ FetchResponseData* createFetchResponseDataFromWebResponse(ExecutionContext* exec
     response->setURL(webResponse.url());
     response->setStatus(webResponse.status());
     response->setStatusMessage(webResponse.statusText());
+    response->setResponseTime(webResponse.responseTime());
+    response->setCacheStorageCacheName(webResponse.cacheStorageCacheName());
 
     for (HTTPHeaderMap::const_iterator i = webResponse.headers().begin(), end = webResponse.headers().end(); i != end; ++i) {
         response->headerList()->append(i->key, i->value);
@@ -69,7 +71,7 @@ FetchResponseData* createFetchResponseDataFromWebResponse(ExecutionContext* exec
     case WebServiceWorkerResponseTypeDefault:
         break;
     case WebServiceWorkerResponseTypeError:
-        ASSERT(response->type() == FetchResponseData::ErrorType);
+        ASSERT(response->getType() == FetchResponseData::ErrorType);
         break;
     }
 
@@ -107,7 +109,7 @@ bool isValidReasonPhrase(const String& statusText)
 
 Response* Response::create(ScriptState* scriptState, ExceptionState& exceptionState)
 {
-    return create(scriptState->executionContext(), nullptr, String(), ResponseInit(), exceptionState);
+    return create(scriptState->getExecutionContext(), nullptr, String(), ResponseInit(), exceptionState);
 }
 
 Response* Response::create(ScriptState* scriptState, ScriptValue bodyValue, const Dictionary& init, ExceptionState& exceptionState)
@@ -115,7 +117,7 @@ Response* Response::create(ScriptState* scriptState, ScriptValue bodyValue, cons
     v8::Local<v8::Value> body = bodyValue.v8Value();
     ScriptValue reader;
     v8::Isolate* isolate = scriptState->isolate();
-    ExecutionContext* executionContext = scriptState->executionContext();
+    ExecutionContext* executionContext = scriptState->getExecutionContext();
 
     OwnPtr<FetchDataConsumerHandle> bodyHandle;
     String contentType;
@@ -134,7 +136,7 @@ Response* Response::create(ScriptState* scriptState, ScriptValue bodyValue, cons
         RefPtr<EncodedFormData> formData = V8FormData::toImpl(body.As<v8::Object>())->encodeMultiPartFormData();
         // Here we handle formData->boundary() as a C-style string. See
         // FormDataEncoder::generateUniqueBoundaryString.
-        contentType = AtomicString("multipart/form-data; boundary=", AtomicString::ConstructFromLiteral) + formData->boundary().data();
+        contentType = AtomicString("multipart/form-data; boundary=") + formData->boundary().data();
         bodyHandle = FetchFormDataConsumerHandle::create(executionContext, formData.release());
     } else if (RuntimeEnabledFeatures::responseConstructedWithReadableStreamEnabled() && ReadableStreamOperations::isReadableStream(scriptState, bodyValue)) {
         bodyHandle = ReadableStreamDataConsumerHandle::create(scriptState, bodyValue);
@@ -290,7 +292,7 @@ Response* Response::redirect(ExecutionContext* context, const String& url, unsig
 String Response::type() const
 {
     // "The type attribute's getter must return response's type."
-    switch (m_response->type()) {
+    switch (m_response->getType()) {
     case FetchResponseData::BasicType:
         return "basic";
     case FetchResponseData::CORSType:
@@ -352,15 +354,15 @@ Response* Response::clone(ExceptionState& exceptionState)
         return nullptr;
     }
 
-    FetchResponseData* response = m_response->clone(executionContext());
+    FetchResponseData* response = m_response->clone(getExecutionContext());
     Headers* headers = Headers::create(response->headerList());
-    headers->setGuard(m_headers->guard());
-    return new Response(executionContext(), response, headers);
+    headers->setGuard(m_headers->getGuard());
+    return new Response(getExecutionContext(), response, headers);
 }
 
 bool Response::hasPendingActivity() const
 {
-    if (!executionContext() || executionContext()->activeDOMObjectsAreStopped())
+    if (!getExecutionContext() || getExecutionContext()->activeDOMObjectsAreStopped())
         return false;
     if (!internalBodyBuffer())
         return false;

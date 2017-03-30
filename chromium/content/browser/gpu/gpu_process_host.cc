@@ -31,11 +31,13 @@
 #include "content/browser/mojo/mojo_application_host.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/child_process_host_impl.h"
-#include "content/common/gpu/gpu_host_messages.h"
+#include "content/common/establish_channel_params.h"
+#include "content/common/gpu_host_messages.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/gpu_utils.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/render_widget_host_view_frame_subscriber.h"
@@ -44,6 +46,7 @@
 #include "content/public/common/result_codes.h"
 #include "content/public/common/sandbox_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
+#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_switches.h"
@@ -107,13 +110,10 @@ static const char* const kSwitchNames[] = {
 #endif
   switches::kEnableHeapProfiling,
   switches::kEnableLogging,
-  switches::kEnableShareGroupAsyncTextureUpload,
-#if defined(OS_ANDROID)
-  switches::kEnableUnifiedMediaPipeline,
-#endif
 #if defined(OS_CHROMEOS)
   switches::kDisableVaapiAcceleratedVideoEncode,
 #endif
+  switches::kGpuDriverBugWorkarounds,
   switches::kGpuStartupDialog,
   switches::kGpuSandboxAllowSysVShm,
   switches::kGpuSandboxFailuresFatal,
@@ -133,12 +133,8 @@ static const char* const kSwitchNames[] = {
   switches::kDebugVivaldi,
 #if defined(OS_MACOSX)
   switches::kDisableRemoteCoreAnimation,
-  switches::kDisableMacOverlays,
   switches::kEnableSandboxLogging,
   switches::kShowMacOverlayBorders,
-#endif
-#if defined(USE_AURA)
-  switches::kUIPrioritizeInGpuProcess,
 #endif
 #if defined(USE_OZONE)
   switches::kOzonePlatform,
@@ -387,6 +383,14 @@ void GpuProcessHost::SendOnIO(GpuProcessKind kind,
 
 GpuMainThreadFactoryFunction g_gpu_main_thread_factory = NULL;
 
+GpuProcessHost::EstablishChannelRequest::EstablishChannelRequest()
+    : client_id(0) {}
+
+GpuProcessHost::EstablishChannelRequest::EstablishChannelRequest(
+    const EstablishChannelRequest& other) = default;
+
+GpuProcessHost::EstablishChannelRequest::~EstablishChannelRequest() {}
+
 void GpuProcessHost::RegisterGpuMainThreadFactory(
     GpuMainThreadFactoryFunction create) {
   g_gpu_main_thread_factory = create;
@@ -456,11 +460,6 @@ GpuProcessHost::~GpuProcessHost() {
   if (g_gpu_process_hosts[kind_] == this)
     g_gpu_process_hosts[kind_] = NULL;
 
-  // If there are any remaining offscreen contexts at the point the
-  // GPU process exits, assume something went wrong, and block their
-  // URLs from accessing client 3D APIs without prompting.
-  BlockLiveOffscreenContexts();
-
   UMA_HISTOGRAM_COUNTS_100("GPU.AtExitSurfaceCount",
                            GpuSurfaceTracker::Get()->GetSurfaceCount());
   UMA_HISTOGRAM_BOOLEAN("GPU.AtExitReceivedMemoryStats",
@@ -478,6 +477,7 @@ GpuProcessHost::~GpuProcessHost() {
   }
 
   std::string message;
+  bool block_offscreen_contexts = true;
   if (!in_process_) {
     int exit_code;
     base::TerminationStatus status = process_->GetTerminationStatus(
@@ -495,6 +495,14 @@ GpuProcessHost::~GpuProcessHost() {
 
     switch (status) {
       case base::TERMINATION_STATUS_NORMAL_TERMINATION:
+        // Don't block offscreen contexts (and force page reload for webgl)
+        // if this was an intentional shutdown or the OOM killer on Android
+        // killed us while Chrome was in the background.
+// TODO(crbug.com/598400): Restrict this to Android for now, since other
+// platforms might fall through here for the 'exit_on_context_lost' workaround.
+#if defined(OS_ANDROID)
+        block_offscreen_contexts = false;
+#endif
         message = "The GPU process exited normally. Everything is okay.";
         break;
       case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
@@ -521,6 +529,12 @@ GpuProcessHost::~GpuProcessHost() {
     }
   }
 
+  // If there are any remaining offscreen contexts at the point the
+  // GPU process exits, assume something went wrong, and block their
+  // URLs from accessing client 3D APIs without prompting.
+  if (block_offscreen_contexts)
+    BlockLiveOffscreenContexts();
+
   BrowserThread::PostTask(BrowserThread::UI,
                           FROM_HERE,
                           base::Bind(&GpuProcessHostUIShim::Destroy,
@@ -540,12 +554,14 @@ bool GpuProcessHost::Init() {
   if (!SetupMojo())
     return false;
 
+  gpu::GpuPreferences gpu_preferences = GetGpuPreferencesFromCommandLine();
   if (in_process_) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     DCHECK(g_gpu_main_thread_factory);
     in_process_gpu_thread_.reset(
         g_gpu_main_thread_factory(InProcessChildThreadParams(
-            channel_id, base::MessageLoop::current()->task_runner())));
+            channel_id, base::MessageLoop::current()->task_runner()),
+            gpu_preferences));
     base::Thread::Options options;
 #if defined(OS_WIN)
     // WGL needs to create its own window and pump messages on it.
@@ -557,11 +573,11 @@ bool GpuProcessHost::Init() {
     in_process_gpu_thread_->StartWithOptions(options);
 
     OnProcessLaunched();  // Fake a callback that the process is ready.
-  } else if (!LaunchGpuProcess(channel_id)) {
+  } else if (!LaunchGpuProcess(channel_id, &gpu_preferences)) {
     return false;
   }
 
-  if (!Send(new GpuMsg_Initialize()))
+  if (!Send(new GpuMsg_Initialize(gpu_preferences)))
     return false;
 
   return true;
@@ -635,8 +651,8 @@ bool GpuProcessHost::OnMessageReceived(const IPC::Message& message) {
 
 #if defined(OS_WIN)
 void GpuProcessHost::OnAcceleratedSurfaceCreatedChildWindow(
-    const gfx::PluginWindowHandle& parent_handle,
-    const gfx::PluginWindowHandle& window_handle) {
+    gpu::SurfaceHandle parent_handle,
+    gpu::SurfaceHandle window_handle) {
   if (!in_process_) {
     DCHECK(process_);
     {
@@ -739,7 +755,11 @@ void GpuProcessHost::EstablishGpuChannelInternal(
   params.allow_view_command_buffers = allow_view_command_buffers;
   params.allow_real_time_streams = allow_real_time_streams;
   if (Send(new GpuMsg_EstablishChannel(params))) {
-    channel_requests_.push(std::make_pair(callback, ignore_disallowed_gpu));
+    EstablishChannelRequest request;
+    request.client_id = client_id;
+    request.callback = callback;
+    request.ignore_disallowed_gpu = ignore_disallowed_gpu;
+    channel_requests_.push(request);
   } else {
     DVLOG(1) << "Failed to send GpuMsg_EstablishChannel.";
     callback.Run(IPC::ChannelHandle(), gpu::GPUInfo());
@@ -770,7 +790,9 @@ void GpuProcessHost::CreateGpuMemoryBuffer(
   params.usage = usage;
   params.client_id = client_id;
   params.surface_handle =
-      GpuSurfaceTracker::GetInstance()->GetSurfaceHandle(surface_id).handle;
+      surface_id
+          ? GpuSurfaceTracker::GetInstance()->GetSurfaceHandle(surface_id)
+          : gpu::kNullSurfaceHandle;
   if (Send(new GpuMsg_CreateGpuMemoryBuffer(params))) {
     create_gpu_memory_buffer_requests_.push(callback);
   } else {
@@ -834,23 +856,22 @@ void GpuProcessHost::OnChannelEstablished(
         "Received a ChannelEstablished message but no requests in queue."));
     return;
   }
-  EstablishChannelCallback callback = channel_requests_.front().first;
-  bool ignore_disallowed_gpu = channel_requests_.front().second;
+  EstablishChannelRequest request = channel_requests_.front();
   channel_requests_.pop();
 
   // Currently if any of the GPU features are blacklisted, we don't establish a
   // GPU channel.
-  if (!ignore_disallowed_gpu && !channel_handle.name.empty() &&
+  if (!request.ignore_disallowed_gpu && !channel_handle.name.empty() &&
       !GpuDataManagerImpl::GetInstance()->GpuAccessAllowed(NULL)) {
-    Send(new GpuMsg_CloseChannel(channel_handle));
-    callback.Run(IPC::ChannelHandle(), gpu::GPUInfo());
+    Send(new GpuMsg_CloseChannel(request.client_id));
+    request.callback.Run(IPC::ChannelHandle(), gpu::GPUInfo());
     RouteOnUIThread(
         GpuHostMsg_OnLogMessage(logging::LOG_WARNING, "WARNING",
                                 "Hardware acceleration is unavailable."));
     return;
   }
 
-  callback.Run(channel_handle, gpu_info_);
+  request.callback.Run(channel_handle, gpu_info_);
 }
 
 void GpuProcessHost::OnGpuMemoryBufferCreated(
@@ -912,7 +933,7 @@ void GpuProcessHost::OnDidDestroyOffscreenContext(const GURL& url) {
 }
 
 void GpuProcessHost::OnGpuMemoryUmaStatsReceived(
-    const GPUMemoryUmaStats& stats) {
+    const gpu::GPUMemoryUmaStats& stats) {
   TRACE_EVENT0("gpu", "GpuProcessHost::OnGpuMemoryUmaStatsReceived");
   uma_memory_stats_received_ = true;
   uma_memory_stats_ = stats;
@@ -970,7 +991,8 @@ void GpuProcessHost::StopGpuProcess() {
   Send(new GpuMsg_Finalize());
 }
 
-bool GpuProcessHost::LaunchGpuProcess(const std::string& channel_id) {
+bool GpuProcessHost::LaunchGpuProcess(const std::string& channel_id,
+                                      gpu::GpuPreferences* gpu_preferences) {
   if (!(gpu_enabled_ &&
       GpuDataManagerImpl::GetInstance()->ShouldUseSwiftShader()) &&
       !hardware_gpu_enabled_) {
@@ -1004,6 +1026,7 @@ bool GpuProcessHost::LaunchGpuProcess(const std::string& channel_id) {
 
   base::CommandLine* cmd_line = new base::CommandLine(exe_path);
 #endif
+  BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(cmd_line);
   cmd_line->AppendSwitchASCII(switches::kProcessType, switches::kGpuProcess);
   cmd_line->AppendSwitchASCII(switches::kProcessChannelID, channel_id);
 
@@ -1015,12 +1038,12 @@ bool GpuProcessHost::LaunchGpuProcess(const std::string& channel_id) {
   if (kind_ == GPU_PROCESS_KIND_UNSANDBOXED)
     cmd_line->AppendSwitch(switches::kDisableGpuSandbox);
 
+  // TODO(penghuang): Replace all GPU related switches with GpuPreferences.
+  // https://crbug.com/590825
   // If you want a browser command-line switch passed to the GPU process
   // you need to add it to |kSwitchNames| at the beginning of this file.
   cmd_line->CopySwitchesFrom(browser_command_line, kSwitchNames,
                              arraysize(kSwitchNames));
-  cmd_line->CopySwitchesFrom(
-      browser_command_line, switches::kGpuSwitches, switches::kNumGpuSwitches);
   cmd_line->CopySwitchesFrom(
       browser_command_line, switches::kGLSwitchesCopiedFromGpuProcessHost,
       switches::kGLSwitchesCopiedFromGpuProcessHostNumSwitches);
@@ -1028,8 +1051,8 @@ bool GpuProcessHost::LaunchGpuProcess(const std::string& channel_id) {
   GetContentClient()->browser()->AppendExtraCommandLineSwitches(
       cmd_line, process_->GetData().id);
 
-  GpuDataManagerImpl::GetInstance()->AppendGpuCommandLine(cmd_line);
-
+  GpuDataManagerImpl::GetInstance()->AppendGpuCommandLine(cmd_line,
+                                                          gpu_preferences);
   if (cmd_line->HasSwitch(switches::kUseGL)) {
     swiftshader_rendering_ =
         (cmd_line->GetSwitchValueASCII(switches::kUseGL) == "swiftshader");
@@ -1058,9 +1081,9 @@ void GpuProcessHost::SendOutstandingReplies() {
   valid_ = false;
   // First send empty channel handles for all EstablishChannel requests.
   while (!channel_requests_.empty()) {
-    EstablishChannelCallback callback = channel_requests_.front().first;
+    EstablishChannelRequest request = channel_requests_.front();
     channel_requests_.pop();
-    callback.Run(IPC::ChannelHandle(), gpu::GPUInfo());
+    request.callback.Run(IPC::ChannelHandle(), gpu::GPUInfo());
   }
 
   while (!create_gpu_memory_buffer_requests_.empty()) {

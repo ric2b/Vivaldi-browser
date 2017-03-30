@@ -1,4 +1,4 @@
-<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <dom-module name="issue-banner">
@@ -15,12 +15,12 @@
       </div>
       <div id="buttons">
         <paper-button flat id="opt-button" class="button"
-            on-click="onClickOptAction_"
+            on-tap="onClickOptAction_"
             hidden$="[[computeOptionalActionHidden_(issue)]]">
           <span>[[secondaryActionButtonText_]]</span>
         </paper-button>
         <paper-button flat id="default-button"
-            class="button action" on-click="onClickDefaultAction_">
+            class="button action" on-tap="onClickDefaultAction_">
           <span>[[defaultActionButtonText_]]</span>
         </paper-button>
       </div>

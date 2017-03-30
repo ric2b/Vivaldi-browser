@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <cmath>
+
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -20,8 +22,7 @@
 #import "testing/gtest_mac.h"
 #include "testing/platform_test.h"
 #include "ui/base/cocoa/animation_utils.h"
-
-#include <cmath>
+#include "ui/base/cocoa/cocoa_base_utils.h"
 
 using base::ASCIIToUTF16;
 using bookmarks::BookmarkModel;
@@ -169,12 +170,10 @@ class BookmarkBarFolderControllerTest : public CocoaProfileTest {
     model->AddURL(folderB, folderB->child_count(), ASCIIToUTF16("t"),
                   GURL("http://www.google.com/c"));
 
-    bar_.reset(
-      [[BookmarkBarControllerChildFolderRedirect alloc]
-          initWithBrowser:browser()
-             initialWidth:300
-                 delegate:nil
-           resizeDelegate:nil]);
+    bar_.reset([[BookmarkBarControllerChildFolderRedirect alloc]
+        initWithBrowser:browser()
+           initialWidth:300
+               delegate:nil]);
     [bar_ loaded:model];
     // Make parent frame for bookmark bar then open it.
     NSRect frame = [[test_window() contentView] frame];
@@ -269,8 +268,8 @@ TEST_F(BookmarkBarFolderControllerTest, BasicPosition) {
   NSPoint buttonOriginInWindow =
       [parentButton convertRect:[parentButton bounds]
                          toView:nil].origin;
-  NSPoint buttonOriginInScreen =
-      [[parentButton window] convertBaseToScreen:buttonOriginInWindow];
+  NSPoint buttonOriginInScreen = ui::ConvertPointFromWindowToScreen(
+      [parentButton window], buttonOriginInWindow);
   // Within margin
   EXPECT_LE(std::abs(pt.x - buttonOriginInScreen.x),
             bookmarks::kBookmarkMenuOverlap + 1);
@@ -722,16 +721,15 @@ class BookmarkBarFolderControllerMenuTest : public CocoaProfileTest {
     parent_view_.reset([[NSView alloc] initWithFrame:parent_frame]);
     [parent_view_ setHidden:YES];
     bar_.reset([[BookmarkBarController alloc]
-                initWithBrowser:browser()
-                   initialWidth:NSWidth(parent_frame)
-                       delegate:nil
-                 resizeDelegate:resizeDelegate_.get()]);
+        initWithBrowser:browser()
+           initialWidth:NSWidth(parent_frame)
+               delegate:nil]);
     InstallAndToggleBar(bar_.get());
   }
 
   void InstallAndToggleBar(BookmarkBarController* bar) {
-    // Force loading of the nib.
-    [bar view];
+    // Forces loading of the nib.
+    [[bar controlledView] setResizeDelegate:resizeDelegate_];
     // Awkwardness to look like we've been installed.
     [parent_view_ addSubview:[bar view]];
     NSRect frame = [[[bar view] superview] frame];
@@ -1627,10 +1625,9 @@ class BookmarkBarFolderControllerClosingTest : public
     ASSERT_TRUE(browser());
 
     bar_.reset([[BookmarkBarControllerNoDelete alloc]
-                initWithBrowser:browser()
-                   initialWidth:NSWidth([parent_view_ frame])
-                       delegate:nil
-                 resizeDelegate:resizeDelegate_.get()]);
+        initWithBrowser:browser()
+           initialWidth:NSWidth([parent_view_ frame])
+               delegate:nil]);
     InstallAndToggleBar(bar_.get());
   }
 };

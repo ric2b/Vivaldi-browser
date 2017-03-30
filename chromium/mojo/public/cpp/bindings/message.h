@@ -96,7 +96,7 @@ class Message {
   scoped_ptr<internal::PickleBuffer> buffer_;
   std::vector<Handle> handles_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(Message);
+  DISALLOW_COPY_AND_ASSIGN(Message);
 };
 
 class MessageReceiver {
@@ -106,7 +106,7 @@ class MessageReceiver {
   // The receiver may mutate the given message.  Returns true if the message
   // was accepted and false otherwise, indicating that the message was invalid
   // or malformed.
-  virtual bool Accept(Message* message) MOJO_WARN_UNUSED_RESULT = 0;
+  virtual bool Accept(Message* message) WARN_UNUSED_RESULT = 0;
 };
 
 class MessageReceiverWithResponder : public MessageReceiver {
@@ -124,7 +124,7 @@ class MessageReceiverWithResponder : public MessageReceiver {
   //
   // TODO(yzshen): consider changing |responder| to scoped_ptr<MessageReceiver>.
   virtual bool AcceptWithResponder(Message* message, MessageReceiver* responder)
-      MOJO_WARN_UNUSED_RESULT = 0;
+      WARN_UNUSED_RESULT = 0;
 };
 
 // A MessageReceiver that is also able to provide status about the state
@@ -137,6 +137,11 @@ class MessageReceiverWithStatus : public MessageReceiver {
   // Returns |true| if this MessageReceiver is currently bound to a MessagePipe,
   // the pipe has not been closed, and the pipe has not encountered an error.
   virtual bool IsValid() = 0;
+
+  // DCHECKs if this MessageReceiver is currently bound to a MessagePipe, the
+  // pipe has not been closed, and the pipe has not encountered an error.
+  // This function may be called on any thread.
+  virtual void DCheckInvalid(const std::string& message) = 0;
 };
 
 // An alternative to MessageReceiverWithResponder for cases in which it
@@ -158,7 +163,7 @@ class MessageReceiverWithResponderStatus : public MessageReceiver {
   // TODO(yzshen): consider changing |responder| to scoped_ptr<MessageReceiver>.
   virtual bool AcceptWithResponder(Message* message,
                                    MessageReceiverWithStatus* responder)
-      MOJO_WARN_UNUSED_RESULT = 0;
+      WARN_UNUSED_RESULT = 0;
 };
 
 // Read a single message from the pipe. The caller should have created the

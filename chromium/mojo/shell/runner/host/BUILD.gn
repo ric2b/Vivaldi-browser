@@ -15,10 +15,6 @@ group("host") {
   ]
 }
 
-config("native_application_support_with_gles2") {
-  defines = [ "NATIVE_APPLICATION_USE_GLES2_IMPL" ]
-}
-
 source_set("native_application_support") {
   sources = [
     "native_application_support.cc",
@@ -30,11 +26,6 @@ source_set("native_application_support") {
     "//mojo/platform_handle:platform_handle_impl",
     "//mojo/shell",
   ]
-
-  if (!is_mac) {
-    configs += [ ":native_application_support_with_gles2" ]
-    deps += [ "//mojo/gles2" ]
-  }
 
   # This target has to include the public thunk headers, which generally
   # shouldn't be included without picking an implementation. We are providing
@@ -57,8 +48,8 @@ source_set("child_process_base") {
     "//mojo/message_pump",
     "//mojo/platform_handle:platform_handle_impl",
     "//mojo/shell",
+    "//mojo/shell/public/interfaces",
     "//mojo/shell/runner:init",
-    "//mojo/shell/runner/child:interfaces",
     "//mojo/shell/runner/common",
   ]
 }
@@ -78,16 +69,21 @@ source_set("lib") {
   deps = [
     ":child_process_base",
     ":native_application_support",
-    "//base",
     "//base:base_static",
     "//base:i18n",
-    "//mojo/edk/system",
     "//mojo/message_pump",
     "//mojo/platform_handle:platform_handle_impl",
-    "//mojo/shell",
+    "//mojo/shell/public/cpp:sources",
     "//mojo/shell/runner:init",
-    "//mojo/shell/runner/child:interfaces",
     "//mojo/shell/runner/common",
+  ]
+
+  public_deps = [
+    "//base",
+    "//mojo/edk/system",
+    "//mojo/public/cpp/system",
+    "//mojo/shell",
+    "//mojo/shell/public/interfaces",
   ]
 
   if (is_linux && !is_android) {
@@ -101,6 +97,13 @@ source_set("lib") {
       "//sandbox/linux:sandbox_services",
       "//sandbox/linux:seccomp_bpf",
       "//sandbox/linux:seccomp_bpf_helpers",
+    ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "mach_broker.cc",
+      "mach_broker.h",
     ]
   }
 }

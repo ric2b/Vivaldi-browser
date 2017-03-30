@@ -24,10 +24,10 @@
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
-#include "content/common/gpu/gpu_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/browser_plugin_guest_mode.h"
+#include "gpu/ipc/common/gpu_messages.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
 
@@ -43,10 +43,7 @@ RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
       frame_connector_(nullptr),
       weak_factory_(this) {
   id_allocator_ = CreateSurfaceIdAllocator();
-  if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
-    host_->delegate()->GetInputEventRouter()->AddSurfaceIdNamespaceOwner(
-        GetSurfaceIdNamespace(), this);
-  }
+  RegisterSurfaceNamespaceId();
 
   host_->SetView(this);
 }
@@ -71,6 +68,11 @@ void RenderWidgetHostViewChildFrame::SetSize(const gfx::Size& size) {
 
 void RenderWidgetHostViewChildFrame::SetBounds(const gfx::Rect& rect) {
   SetSize(rect.size());
+
+  if (rect != last_screen_rect_) {
+    last_screen_rect_ = rect;
+    host_->SendScreenRects();
+  }
 }
 
 void RenderWidgetHostViewChildFrame::Focus() {
@@ -104,9 +106,40 @@ bool RenderWidgetHostViewChildFrame::IsShowing() {
 
 gfx::Rect RenderWidgetHostViewChildFrame::GetViewBounds() const {
   gfx::Rect rect;
-  if (frame_connector_)
+  if (frame_connector_) {
     rect = frame_connector_->ChildFrameRect();
+
+    RenderWidgetHostView* parent_view =
+        frame_connector_->GetParentRenderWidgetHostView();
+
+    // The parent_view can be null in tests when using a TestWebContents.
+    if (parent_view) {
+      // Translate frame_rect by the parent's RenderWidgetHostView offset.
+      rect.Offset(parent_view->GetViewBounds().OffsetFromOrigin());
+    }
+  }
   return rect;
+}
+
+gfx::Size RenderWidgetHostViewChildFrame::GetVisibleViewportSize() const {
+  // For subframes, the visual viewport corresponds to the main frame size, so
+  // this bubbles up to the parent until it hits the main frame's
+  // RenderWidgetHostView.
+  //
+  // Currently this excludes webview guests, since they expect the visual
+  // viewport to return the guest's size rather than the page's; one reason why
+  // is that Blink ends up using the visual viewport to calculate things like
+  // window.innerWidth/innerHeight for main frames, and a guest is considered
+  // to be a main frame.  This should be cleaned up eventually.
+  bool is_guest = BrowserPluginGuest::IsGuest(RenderViewHostImpl::From(host_));
+  if (frame_connector_ && !is_guest) {
+    RenderWidgetHostView* parent_view =
+        frame_connector_->GetParentRenderWidgetHostView();
+    // The parent_view can be null in unit tests when using a TestWebContents.
+    if (parent_view)
+      return parent_view->GetVisibleViewportSize();
+  }
+  return GetViewBounds().size();
 }
 
 gfx::Vector2dF RenderWidgetHostViewChildFrame::GetLastScrollOffset() const {
@@ -165,11 +198,6 @@ void RenderWidgetHostViewChildFrame::ImeCompositionRangeChanged(
   // TODO(kenrb): Fix OOPIF Ime.
 }
 
-void RenderWidgetHostViewChildFrame::MovePluginWindows(
-    const std::vector<WebPluginGeometry>& moves,
-    const int owner_view_id) {
-}
-
 void RenderWidgetHostViewChildFrame::UpdateCursor(const WebCursor& cursor) {
   if (frame_connector_)
     frame_connector_->UpdateCursor(cursor);
@@ -204,15 +232,18 @@ void RenderWidgetHostViewChildFrame::RenderProcessGone(
 }
 
 void RenderWidgetHostViewChildFrame::Destroy() {
+  // SurfaceIdNamespaces registered with RenderWidgetHostInputEventRouter
+  // have already been cleared when RenderWidgetHostViewBase notified its
+  // observers of our impending destruction.
   if (frame_connector_) {
     frame_connector_->set_view(NULL);
     frame_connector_ = NULL;
   }
 
-  if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
-    host_->delegate()->GetInputEventRouter()->RemoveSurfaceIdNamespaceOwner(
-        GetSurfaceIdNamespace());
-  }
+  // We notify our observers about shutdown here since we are about to release
+  // host_ and do not want any event calls coming from
+  // RenderWidgetHostInputEventRouter afterwards.
+  NotifyObserversAboutShutdown();
 
   host_->SetView(NULL);
   host_ = NULL;
@@ -241,6 +272,24 @@ void RenderWidgetHostViewChildFrame::UnlockCompositingSurface() {
   NOTIMPLEMENTED();
 }
 
+void RenderWidgetHostViewChildFrame::RegisterSurfaceNamespaceId() {
+  DCHECK(host_);
+  if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
+    RenderWidgetHostInputEventRouter* router =
+        host_->delegate()->GetInputEventRouter();
+    if (!router->is_registered(GetSurfaceIdNamespace()))
+      router->AddSurfaceIdNamespaceOwner(GetSurfaceIdNamespace(), this);
+  }
+}
+
+void RenderWidgetHostViewChildFrame::UnregisterSurfaceNamespaceId() {
+  DCHECK(host_);
+  if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
+    host_->delegate()->GetInputEventRouter()->RemoveSurfaceIdNamespaceOwner(
+        GetSurfaceIdNamespace());
+  }
+}
+
 void RenderWidgetHostViewChildFrame::SurfaceDrawn(uint32_t output_surface_id,
                                                   cc::SurfaceDrawStatus drawn) {
   cc::CompositorFrameAck ack;
@@ -257,6 +306,9 @@ void RenderWidgetHostViewChildFrame::SurfaceDrawn(uint32_t output_surface_id,
 void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
     uint32_t output_surface_id,
     scoped_ptr<cc::CompositorFrame> frame) {
+  TRACE_EVENT0("content",
+               "RenderWidgetHostViewChildFrame::OnSwapCompositorFrame");
+
   last_scroll_offset_ = frame->metadata.root_scroll_offset;
 
   if (!frame_connector_)
@@ -340,16 +392,26 @@ bool RenderWidgetHostViewChildFrame::GetScreenColorProfile(
 }
 
 gfx::Rect RenderWidgetHostViewChildFrame::GetBoundsInRootWindow() {
-  // We do not have any root window specific parts in this view.
-  return GetViewBounds();
+  gfx::Rect rect;
+  if (frame_connector_) {
+    RenderWidgetHostViewBase* root_view =
+        frame_connector_->GetRootRenderWidgetHostView();
+
+    // The root_view can be null in tests when using a TestWebContents.
+    if (root_view)
+      rect = root_view->GetBoundsInRootWindow();
+  }
+  return rect;
 }
 
-#if defined(USE_AURA)
 void RenderWidgetHostViewChildFrame::ProcessAckedTouchEvent(
     const TouchEventWithLatencyInfo& touch,
     InputEventAckState ack_result) {
+  if (!frame_connector_)
+    return;
+
+  frame_connector_->ForwardProcessAckedTouchEvent(touch, ack_result);
 }
-#endif  // defined(USE_AURA)
 
 bool RenderWidgetHostViewChildFrame::LockMouse() {
   return false;
@@ -364,27 +426,35 @@ uint32_t RenderWidgetHostViewChildFrame::GetSurfaceIdNamespace() {
 
 void RenderWidgetHostViewChildFrame::ProcessKeyboardEvent(
     const NativeWebKeyboardEvent& event) {
-  if (!host_)
-    return;
-
   host_->ForwardKeyboardEvent(event);
 }
 
 void RenderWidgetHostViewChildFrame::ProcessMouseEvent(
     const blink::WebMouseEvent& event) {
-  if (!host_)
-    return;
-
   host_->ForwardMouseEvent(event);
 }
 
 void RenderWidgetHostViewChildFrame::ProcessMouseWheelEvent(
     const blink::WebMouseWheelEvent& event) {
-  if (!host_)
-    return;
-
   if (event.deltaX != 0 || event.deltaY != 0)
     host_->ForwardWheelEvent(event);
+}
+
+void RenderWidgetHostViewChildFrame::ProcessTouchEvent(
+    const blink::WebTouchEvent& event,
+    const ui::LatencyInfo& latency) {
+  if (event.type == blink::WebInputEvent::TouchStart &&
+   frame_connector_ && !frame_connector_->HasFocus()) {
+    frame_connector_->FocusRootView();
+  }
+
+  host_->ForwardTouchEventWithLatencyInfo(event, latency);
+}
+
+void RenderWidgetHostViewChildFrame::ProcessGestureEvent(
+    const blink::WebGestureEvent& event,
+    const ui::LatencyInfo& latency) {
+  host_->ForwardGestureEventWithLatencyInfo(event, latency);
 }
 
 gfx::Point RenderWidgetHostViewChildFrame::TransformPointToRootCoordSpace(
@@ -397,12 +467,6 @@ gfx::Point RenderWidgetHostViewChildFrame::TransformPointToRootCoordSpace(
 
 #if defined(OS_MACOSX)
 void RenderWidgetHostViewChildFrame::SetActive(bool active) {
-}
-
-void RenderWidgetHostViewChildFrame::SetWindowVisibility(bool visible) {
-}
-
-void RenderWidgetHostViewChildFrame::WindowFrameChanged() {
 }
 
 void RenderWidgetHostViewChildFrame::ShowDefinitionForSelection() {
@@ -420,11 +484,6 @@ bool RenderWidgetHostViewChildFrame::IsSpeaking() const {
 }
 
 void RenderWidgetHostViewChildFrame::StopSpeaking() {
-}
-
-bool RenderWidgetHostViewChildFrame::PostProcessEventForPluginIme(
-      const NativeWebKeyboardEvent& event) {
-  return false;
 }
 #endif  // defined(OS_MACOSX)
 
@@ -485,17 +544,6 @@ bool RenderWidgetHostViewChildFrame::HasAcceleratedSurface(
   return false;
 }
 
-#if defined(OS_WIN)
-void RenderWidgetHostViewChildFrame::SetParentNativeViewAccessible(
-    gfx::NativeViewAccessible accessible_parent) {
-}
-
-gfx::NativeViewId RenderWidgetHostViewChildFrame::GetParentForWindowlessPlugin()
-    const {
-  return NULL;
-}
-#endif  // defined(OS_WIN)
-
 // cc::SurfaceFactoryClient implementation.
 void RenderWidgetHostViewChildFrame::ReturnResources(
     const cc::ReturnedResourceArray& resources) {
@@ -516,14 +564,13 @@ void RenderWidgetHostViewChildFrame::ReturnResources(
 }
 
 void RenderWidgetHostViewChildFrame::SetBeginFrameSource(
-    cc::SurfaceId surface_id,
     cc::BeginFrameSource* begin_frame_source) {
   // TODO(tansell): Hook this up.
 }
 
 BrowserAccessibilityManager*
 RenderWidgetHostViewChildFrame::CreateBrowserAccessibilityManager(
-    BrowserAccessibilityDelegate* delegate) {
+    BrowserAccessibilityDelegate* delegate, bool for_root_frame) {
   return BrowserAccessibilityManager::Create(
       BrowserAccessibilityManager::GetEmptyDocument(), delegate);
 }
@@ -532,6 +579,10 @@ void RenderWidgetHostViewChildFrame::ClearCompositorSurfaceIfNecessary() {
   if (surface_factory_ && !surface_id_.is_null())
     surface_factory_->Destroy(surface_id_);
   surface_id_ = cc::SurfaceId();
+}
+
+bool RenderWidgetHostViewChildFrame::IsChildFrameForTesting() const {
+  return true;
 }
 
 cc::SurfaceId RenderWidgetHostViewChildFrame::SurfaceIdForTesting() const {

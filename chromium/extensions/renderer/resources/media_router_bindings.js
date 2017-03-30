@@ -7,8 +7,8 @@ var mediaRouter;
 define('media_router_bindings', [
     'mojo/public/js/bindings',
     'mojo/public/js/core',
-    'content/public/renderer/service_provider',
-    'chrome/browser/media/router/media_router.mojom',
+    'content/public/renderer/frame_service_registry',
+    'chrome/browser/media/router/mojo/media_router.mojom',
     'extensions/common/mojo/keep_alive.mojom',
     'mojo/public/js/connection',
     'mojo/public/js/router',
@@ -478,6 +478,11 @@ define('media_router_bindings', [
      * @type {function()}
      */
     this.enableMdnsDiscovery = null;
+
+    /**
+     * @type {function()}
+     */
+    this.updateMediaSinks = null;
   };
 
   /**
@@ -527,6 +532,7 @@ define('media_router_bindings', [
       'startObservingMediaRoutes',
       'connectRouteByRouteId',
       'enableMdnsDiscovery',
+      'updateMediaSinks',
     ];
     requiredHandlers.forEach(function(nextHandler) {
       if (handlers[nextHandler] === undefined) {
@@ -630,15 +636,18 @@ define('media_router_bindings', [
    * @param {!number} timeoutMillis If positive, the timeout duration for the
    *     request, measured in seconds. Otherwise, the default duration will be
    *     used.
+   * @param {!boolean} offTheRecord If true, the route is being requested by
+   *     an off the record (incognito) profile.
    * @return {!Promise.<!Object>} A Promise resolving to an object describing
    *     the newly created media route, or rejecting with an error message on
    *     failure.
    */
   MediaRouteProvider.prototype.connectRouteByRouteId =
       function(sourceUrn, routeId, presentationId, origin, tabId,
-          timeoutMillis) {
+               timeoutMillis, offTheRecord) {
     return this.handlers_.connectRouteByRouteId(
-        sourceUrn, routeId, presentationId, origin, tabId, timeoutMillis)
+        sourceUrn, routeId, presentationId, origin, tabId, timeoutMillis,
+        offTheRecord)
         .then(function(route) {
           return toSuccessRouteResponse_(route);
         },
@@ -748,6 +757,14 @@ define('media_router_bindings', [
    */
   MediaRouteProvider.prototype.enableMdnsDiscovery = function() {
     this.handlers_.enableMdnsDiscovery();
+  };
+
+  /**
+   * Requests that the provider manager update media sinks.
+   * @param {!string} sourceUrn
+   */
+  MediaRouteProvider.prototype.updateMediaSinks = function(sourceUrn) {
+    this.handlers_.updateMediaSinks(sourceUrn);
   };
 
   mediaRouter = new MediaRouter(connector.bindHandleToProxy(

@@ -56,8 +56,8 @@ public:
     bool isNull() const { return m_private.isNull(); }
 
 #if BLINK_IMPLEMENTATION
-    WebDOMEvent(const PassRefPtrWillBeRawPtr<Event>&);
-    operator PassRefPtrWillBeRawPtr<Event>() const;
+    WebDOMEvent(Event*);
+    operator Event*() const;
 #endif
 
     template<typename T> T to()
@@ -76,7 +76,7 @@ public:
 
 protected:
 #if BLINK_IMPLEMENTATION
-    void assign(const PassRefPtrWillBeRawPtr<Event>&);
+    void assign(Event*);
 
     template<typename T> T* unwrap()
     {

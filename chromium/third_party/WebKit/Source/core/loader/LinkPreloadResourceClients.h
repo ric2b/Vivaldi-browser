@@ -8,7 +8,6 @@
 #include "core/fetch/CSSStyleSheetResource.h"
 #include "core/fetch/FontResource.h"
 #include "core/fetch/ImageResource.h"
-#include "core/fetch/ImageResourceClient.h"
 #include "core/fetch/RawResource.h"
 #include "core/fetch/ResourceLoader.h"
 #include "core/fetch/ResourceOwner.h"
@@ -19,7 +18,7 @@ namespace blink {
 
 class LinkLoader;
 
-class LinkPreloadResourceClient : public NoBaseWillBeGarbageCollectedFinalized<LinkPreloadResourceClient> {
+class LinkPreloadResourceClient : public GarbageCollectedFinalized<LinkPreloadResourceClient> {
 public:
     virtual ~LinkPreloadResourceClient() { }
 
@@ -39,16 +38,15 @@ protected:
     }
 
 private:
-    RawPtrWillBeMember<LinkLoader> m_loader;
+    Member<LinkLoader> m_loader;
 };
 
 class LinkPreloadScriptResourceClient: public LinkPreloadResourceClient, public ResourceOwner<ScriptResource, ScriptResourceClient> {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(LinkPreloadScriptResourceClient);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(LinkPreloadScriptResourceClient);
+    USING_GARBAGE_COLLECTED_MIXIN(LinkPreloadScriptResourceClient);
 public:
-    static PassOwnPtrWillBeRawPtr<LinkPreloadScriptResourceClient> create(LinkLoader* loader, PassRefPtrWillBeRawPtr<ScriptResource> resource)
+    static LinkPreloadScriptResourceClient* create(LinkLoader* loader, ScriptResource* resource)
     {
-        return adoptPtrWillBeNoop(new LinkPreloadScriptResourceClient(loader, resource));
+        return new LinkPreloadScriptResourceClient(loader, resource);
     }
 
     virtual String debugName() const { return "LinkPreloadScript"; }
@@ -69,7 +67,7 @@ public:
     }
 
 private:
-    LinkPreloadScriptResourceClient(LinkLoader* loader, PassRefPtrWillBeRawPtr<ScriptResource> resource)
+    LinkPreloadScriptResourceClient(LinkLoader* loader, ScriptResource* resource)
         : LinkPreloadResourceClient(loader)
     {
         setResource(resource);
@@ -77,12 +75,11 @@ private:
 };
 
 class LinkPreloadStyleResourceClient: public LinkPreloadResourceClient, public ResourceOwner<CSSStyleSheetResource, StyleSheetResourceClient> {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(LinkPreloadStyleResourceClient);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(LinkPreloadStyleResourceClient);
+    USING_GARBAGE_COLLECTED_MIXIN(LinkPreloadStyleResourceClient);
 public:
-    static PassOwnPtrWillBeRawPtr<LinkPreloadStyleResourceClient> create(LinkLoader* loader, PassRefPtrWillBeRawPtr<CSSStyleSheetResource> resource)
+    static LinkPreloadStyleResourceClient* create(LinkLoader* loader, CSSStyleSheetResource* resource)
     {
-        return adoptPtrWillBeNoop(new LinkPreloadStyleResourceClient(loader, resource));
+        return new LinkPreloadStyleResourceClient(loader, resource);
     }
 
     virtual String debugName() const { return "LinkPreloadStyle"; }
@@ -103,20 +100,19 @@ public:
     }
 
 private:
-    LinkPreloadStyleResourceClient(LinkLoader* loader, PassRefPtrWillBeRawPtr<CSSStyleSheetResource> resource)
+    LinkPreloadStyleResourceClient(LinkLoader* loader, CSSStyleSheetResource* resource)
         : LinkPreloadResourceClient(loader)
     {
         setResource(resource);
     }
 };
 
-class LinkPreloadImageResourceClient: public LinkPreloadResourceClient, public ResourceOwner<ImageResource, ImageResourceClient> {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(LinkPreloadImageResourceClient);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(LinkPreloadImageResourceClient);
+class LinkPreloadImageResourceClient: public LinkPreloadResourceClient, public ResourceOwner<ImageResource> {
+    USING_GARBAGE_COLLECTED_MIXIN(LinkPreloadImageResourceClient);
 public:
-    static PassOwnPtrWillBeRawPtr<LinkPreloadImageResourceClient> create(LinkLoader* loader, PassRefPtrWillBeRawPtr<ImageResource> resource)
+    static LinkPreloadImageResourceClient* create(LinkLoader* loader, ImageResource* resource)
     {
-        return adoptPtrWillBeNoop(new LinkPreloadImageResourceClient(loader, resource));
+        return new LinkPreloadImageResourceClient(loader, resource);
     }
 
     virtual String debugName() const { return "LinkPreloadImage"; }
@@ -133,11 +129,11 @@ public:
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
         LinkPreloadResourceClient::trace(visitor);
-        ResourceOwner<ImageResource, ImageResourceClient>::trace(visitor);
+        ResourceOwner<ImageResource>::trace(visitor);
     }
 
 private:
-    LinkPreloadImageResourceClient(LinkLoader* loader, PassRefPtrWillBeRawPtr<ImageResource> resource)
+    LinkPreloadImageResourceClient(LinkLoader* loader, ImageResource* resource)
         : LinkPreloadResourceClient(loader)
     {
         setResource(resource);
@@ -145,12 +141,11 @@ private:
 };
 
 class LinkPreloadFontResourceClient: public LinkPreloadResourceClient, public ResourceOwner<FontResource, FontResourceClient> {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(LinkPreloadFontResourceClient);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(LinkPreloadFontResourceClient);
+    USING_GARBAGE_COLLECTED_MIXIN(LinkPreloadFontResourceClient);
 public:
-    static PassOwnPtrWillBeRawPtr<LinkPreloadFontResourceClient> create(LinkLoader* loader, PassRefPtrWillBeRawPtr<FontResource> resource)
+    static LinkPreloadFontResourceClient* create(LinkLoader* loader, FontResource* resource)
     {
-        return adoptPtrWillBeNoop(new LinkPreloadFontResourceClient(loader, resource));
+        return new LinkPreloadFontResourceClient(loader, resource);
     }
 
     virtual String debugName() const { return "LinkPreloadFont"; }
@@ -171,7 +166,7 @@ public:
     }
 
 private:
-    LinkPreloadFontResourceClient(LinkLoader* loader, PassRefPtrWillBeRawPtr<FontResource> resource)
+    LinkPreloadFontResourceClient(LinkLoader* loader, FontResource* resource)
         : LinkPreloadResourceClient(loader)
     {
         setResource(resource);
@@ -179,12 +174,11 @@ private:
 };
 
 class LinkPreloadRawResourceClient: public LinkPreloadResourceClient, public ResourceOwner<RawResource, RawResourceClient> {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(LinkPreloadRawResourceClient);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(LinkPreloadRawResourceClient);
+    USING_GARBAGE_COLLECTED_MIXIN(LinkPreloadRawResourceClient);
 public:
-    static PassOwnPtrWillBeRawPtr<LinkPreloadRawResourceClient> create(LinkLoader* loader, PassRefPtrWillBeRawPtr<RawResource> resource)
+    static LinkPreloadRawResourceClient* create(LinkLoader* loader, RawResource* resource)
     {
-        return adoptPtrWillBeNoop(new LinkPreloadRawResourceClient(loader, resource));
+        return new LinkPreloadRawResourceClient(loader, resource);
     }
 
     virtual String debugName() const { return "LinkPreloadRaw"; }
@@ -205,7 +199,7 @@ public:
     }
 
 private:
-    LinkPreloadRawResourceClient(LinkLoader* loader, PassRefPtrWillBeRawPtr<RawResource> resource)
+    LinkPreloadRawResourceClient(LinkLoader* loader, RawResource* resource)
         : LinkPreloadResourceClient(loader)
     {
         setResource(resource);

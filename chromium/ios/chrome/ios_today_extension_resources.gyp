@@ -52,25 +52,28 @@
         {
           'action_name': 'repack_ios_today_extension_locales',
           'variables': {
-            'repack_locales_path': 'tools/build/ios_repack_today_extension_locales.py',
+            'repack_locales_path': 'tools/build/ios_repack_extension_locales.py',
           },
           'inputs': [
-            'tools/build/ios_repack_today_extension_locales.py',
-            '<!@pymod_do_main(ios_repack_today_extension_locales -i '
+            'tools/build/ios_repack_extension_locales.py',
+            '<!@pymod_do_main(ios_repack_extension_locales -i '
+              '-n today_extension '
               '-s <(SHARED_INTERMEDIATE_DIR) '
               '-x <(SHARED_INTERMEDIATE_DIR)/repack_today_extension '
               '-b <(branding_path_component) '
               '<(locales))'
           ],
           'outputs': [
-            '<!@pymod_do_main(ios_repack_today_extension_locales -o '
+            '<!@pymod_do_main(ios_repack_extension_locales -o '
+              '-n today_extension '
               '-s <(SHARED_INTERMEDIATE_DIR) '
               '-x <(SHARED_INTERMEDIATE_DIR)/repack_today_extension '
               '<(locales))'
           ],
           'action': [
             'python',
-            'tools/build/ios_repack_today_extension_locales.py',
+            'tools/build/ios_repack_extension_locales.py',
+            '-n', 'today_extension',
             '-x', '<(SHARED_INTERMEDIATE_DIR)/repack_today_extension',
             '-s', '<(SHARED_INTERMEDIATE_DIR)',
             '-b', '<(branding_path_component)',

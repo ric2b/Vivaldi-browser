@@ -54,6 +54,9 @@ class TestWindowTree : public mojom::WindowTree {
                          uint32_t window_id,
                          const mojo::String& name,
                          mojo::Array<uint8_t> value) override;
+  void SetWindowOpacity(uint32_t change_id,
+                        uint32_t window_id,
+                        float opacity) override;
   void AttachSurface(uint32_t window_id,
                      mojom::SurfaceType type,
                      mojo::InterfaceRequest<mojom::Surface> surface,
@@ -65,6 +68,7 @@ class TestWindowTree : public mojom::WindowTree {
                           uint32_t transient_window_id) override;
   void RemoveTransientWindowFromParent(uint32_t change_id,
                                        uint32_t window_id) override;
+  void SetModal(uint32_t change_id, uint32_t window_id) override;
   void ReorderWindow(uint32_t change_id,
                      uint32_t window_id,
                      uint32_t relative_window_id,
@@ -75,7 +79,6 @@ class TestWindowTree : public mojom::WindowTree {
   void ReleaseCapture(uint32_t change_id, uint32_t window_id) override;
   void Embed(uint32_t window_id,
              mojom::WindowTreeClientPtr client,
-             uint32_t policy_bitmask,
              const EmbedCallback& callback) override;
   void SetFocus(uint32_t change_id, uint32_t window_id) override;
   void SetCanFocus(uint32_t window_id, bool can_focus) override;
@@ -87,7 +90,7 @@ class TestWindowTree : public mojom::WindowTree {
   void SetImeVisibility(uint32_t window_id,
                         bool visible,
                         mojo::TextInputStatePtr state) override;
-  void OnWindowInputEventAck(uint32_t event_id) override;
+  void OnWindowInputEventAck(uint32_t event_id, bool handled) override;
   void GetWindowManagerClient(
       mojo::AssociatedInterfaceRequest<mojom::WindowManagerClient> internal)
       override;

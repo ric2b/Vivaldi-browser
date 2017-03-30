@@ -88,6 +88,8 @@ enum InstallStatus {
   REENABLE_UPDATES_FAILED = 56,  // Autoupdates could not be enabled.
   UNPACKING_FAILED     = 57,  // Unpacking the (possibly patched) uncompressed
                               // archive failed.
+
+  MAX_INSTALL_STATUS = 58,    // Bump this out to make space for new results.
 };
 
 // The type of an update archive.
@@ -189,6 +191,7 @@ extern const char kVivaldiStandalone[];
 extern const char kVivaldiForceLaunch[];
 extern const char kVivaldiUpdate[];
 extern const char kVivaldiCrashLogging[];
+extern const char kVivaldiRegisterStandalone[];
 }  // namespace switches
 
 namespace env_vars {
@@ -207,7 +210,6 @@ extern const wchar_t kChromeFrameHelperDll[];
 extern const wchar_t kChromeFrameHelperExe[];
 extern const wchar_t kChromeFrameHelperWndClass[];
 extern const wchar_t kChromeLauncherExe[];
-extern const wchar_t kChromeMetroDll[];
 extern const wchar_t kChromeNewExe[];
 extern const wchar_t kChromeOldExe[];
 extern const wchar_t kCmdOnOsUpgrade[];
@@ -242,6 +244,7 @@ extern const wchar_t kVivaldiPinToTaskbarValue[];
 extern const wchar_t kVivaldiInstallerDestinationFolder[];
 extern const wchar_t kVivaldiInstallerInstallType[];
 extern const wchar_t kVivaldiInstallerDefaultBrowser[];
+extern const wchar_t kVivaldiInstallerRegisterBrowser[];
 
 // Product options.
 extern const wchar_t kOptionMultiInstall[];

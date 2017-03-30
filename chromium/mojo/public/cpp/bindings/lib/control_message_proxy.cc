@@ -8,9 +8,9 @@
 #include <stdint.h>
 #include <utility>
 
+#include "base/macros.h"
 #include "mojo/public/cpp/bindings/lib/message_builder.h"
 #include "mojo/public/cpp/bindings/message.h"
-#include "mojo/public/cpp/system/macros.h"
 #include "mojo/public/interfaces/bindings/interface_control_messages.mojom.h"
 
 namespace mojo {
@@ -28,7 +28,7 @@ class RunResponseForwardToCallback : public MessageReceiver {
 
  private:
   RunCallback callback_;
-  MOJO_DISALLOW_COPY_AND_ASSIGN(RunResponseForwardToCallback);
+  DISALLOW_COPY_AND_ASSIGN(RunResponseForwardToCallback);
 };
 
 bool RunResponseForwardToCallback::Accept(Message* message) {
@@ -52,11 +52,11 @@ void SendRunMessage(MessageReceiverWithResponder* receiver,
   params_ptr->reserved1 = 0u;
   params_ptr->query_version = std::move(query_version);
 
-  size_t size = GetSerializedSize_(params_ptr);
+  size_t size = GetSerializedSize_(params_ptr, nullptr);
   RequestMessageBuilder builder(kRunMessageId, size);
 
   RunMessageParams_Data* params = nullptr;
-  Serialize_(std::move(params_ptr), builder.buffer(), &params);
+  Serialize_(std::move(params_ptr), builder.buffer(), &params, nullptr);
   params->EncodePointersAndHandles(builder.message()->mutable_handles());
   MessageReceiver* responder = new RunResponseForwardToCallback(callback);
   if (!receiver->AcceptWithResponder(builder.message(), responder))
@@ -70,14 +70,14 @@ void SendRunOrClosePipeMessage(MessageReceiverWithResponder* receiver,
   params_ptr->reserved1 = 0u;
   params_ptr->require_version = std::move(require_version);
 
-  size_t size = GetSerializedSize_(params_ptr);
+  size_t size = GetSerializedSize_(params_ptr, nullptr);
   MessageBuilder builder(kRunOrClosePipeMessageId, size);
 
   RunOrClosePipeMessageParams_Data* params = nullptr;
-  Serialize_(std::move(params_ptr), builder.buffer(), &params);
+  Serialize_(std::move(params_ptr), builder.buffer(), &params, nullptr);
   params->EncodePointersAndHandles(builder.message()->mutable_handles());
   bool ok = receiver->Accept(builder.message());
-  MOJO_ALLOW_UNUSED_LOCAL(ok);
+  ALLOW_UNUSED_LOCAL(ok);
 }
 
 }  // namespace

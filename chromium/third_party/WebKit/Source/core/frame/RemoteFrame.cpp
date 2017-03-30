@@ -33,9 +33,9 @@ inline RemoteFrame::RemoteFrame(RemoteFrameClient* client, FrameHost* host, Fram
 {
 }
 
-PassRefPtrWillBeRawPtr<RemoteFrame> RemoteFrame::create(RemoteFrameClient* client, FrameHost* host, FrameOwner* owner)
+RemoteFrame* RemoteFrame::create(RemoteFrameClient* client, FrameHost* host, FrameOwner* owner)
 {
-    return adoptRefWillBeNoop(new RemoteFrame(client, host, owner));
+    return new RemoteFrame(client, host, owner);
 }
 
 RemoteFrame::~RemoteFrame()
@@ -89,10 +89,6 @@ void RemoteFrame::reload(FrameLoadType frameLoadType, ClientRedirectPolicy clien
 void RemoteFrame::detach(FrameDetachType type)
 {
     PluginScriptForbiddenScope forbidPluginDestructorScripting;
-    // Frame::detach() requires the caller to keep a reference to this, since
-    // otherwise it may clear the last reference to this, causing it to be
-    // deleted, which can cause a use-after-free.
-    RefPtrWillBeRawPtr<RemoteFrame> protect(this);
     detachChildren();
     if (!client())
         return;
@@ -104,6 +100,8 @@ void RemoteFrame::detach(FrameDetachType type)
     client()->willBeDetached();
     m_windowProxyManager->clearForClose();
     setView(nullptr);
+    if (m_remotePlatformLayer)
+        setRemotePlatformLayer(nullptr);
     Frame::detach(type);
 }
 
@@ -116,16 +114,6 @@ bool RemoteFrame::prepareForCommit()
 RemoteSecurityContext* RemoteFrame::securityContext() const
 {
     return m_securityContext.get();
-}
-
-void RemoteFrame::disconnectOwnerElement()
-{
-    // The RemotePlatformLayer needs to be cleared in disconnectOwnerElement()
-    // because it must happen on WebFrame::swap() and Frame::detach().
-    if (m_remotePlatformLayer)
-        setRemotePlatformLayer(nullptr);
-
-    Frame::disconnectOwnerElement();
 }
 
 bool RemoteFrame::shouldClose()
@@ -151,7 +139,7 @@ void RemoteFrame::visibilityChanged(bool visible)
         remoteFrameClient()->visibilityChanged(visible);
 }
 
-void RemoteFrame::setView(PassRefPtrWillBeRawPtr<RemoteFrameView> view)
+void RemoteFrame::setView(RemoteFrameView* view)
 {
     // Oilpan: as RemoteFrameView performs no finalization actions,
     // no explicit dispose() of it needed here. (cf. FrameView::dispose().)

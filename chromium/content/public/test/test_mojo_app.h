@@ -10,17 +10,16 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/shell/public/cpp/interface_factory.h"
 #include "mojo/shell/public/cpp/shell_client.h"
-#include "url/gurl.h"
 
 namespace content {
 
 extern const char kTestMojoAppUrl[];
 
-// Simple Mojo app which provides a TestMojoService impl. The app terminates
-// itself after its TestService fulfills a single DoSomething call.
+// Simple Mojo app which provides a mojom::TestMojoService impl. The app
+// terminates itself after its TestService fulfills a single DoSomething call.
 class TestMojoApp : public mojo::ShellClient,
-                    public mojo::InterfaceFactory<TestMojoService>,
-                    public TestMojoService {
+                    public mojo::InterfaceFactory<mojom::TestMojoService>,
+                    public mojom::TestMojoService {
  public:
   TestMojoApp();
   ~TestMojoApp() override;
@@ -29,18 +28,18 @@ class TestMojoApp : public mojo::ShellClient,
   // mojo::ShellClient:
   bool AcceptConnection(mojo::Connection* connection) override;
 
-  // mojo::InterfaceFactory<TestMojoService>:
+  // mojo::InterfaceFactory<mojom::TestMojoService>:
   void Create(mojo::Connection* connection,
-              mojo::InterfaceRequest<TestMojoService> request) override;
+              mojo::InterfaceRequest<mojom::TestMojoService> request) override;
 
   // TestMojoService:
   void DoSomething(const DoSomethingCallback& callback) override;
-  void GetRequestorURL(const GetRequestorURLCallback& callback) override;
+  void GetRequestorName(const GetRequestorNameCallback& callback) override;
 
-  mojo::Binding<TestMojoService> service_binding_;
+  mojo::Binding<mojom::TestMojoService> service_binding_;
 
-  // The URL of the app connecting to us.
-  GURL requestor_url_;
+  // The name of the app connecting to us.
+  std::string requestor_name_;
 
   DISALLOW_COPY_AND_ASSIGN(TestMojoApp);
 };

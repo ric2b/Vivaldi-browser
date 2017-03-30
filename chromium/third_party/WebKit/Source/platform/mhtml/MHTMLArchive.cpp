@@ -71,18 +71,18 @@ MHTMLArchive::~MHTMLArchive()
 {
 }
 
-PassRefPtrWillBeRawPtr<MHTMLArchive> MHTMLArchive::create(const KURL& url, SharedBuffer* data)
+MHTMLArchive* MHTMLArchive::create(const KURL& url, SharedBuffer* data)
 {
     // For security reasons we only load MHTML pages from local URLs.
     if (!SchemeRegistry::shouldTreatURLSchemeAsLocal(url.protocol()))
         return nullptr;
 
     MHTMLParser parser(data);
-    WillBeHeapVector<RefPtrWillBeMember<ArchiveResource>> resources = parser.parseArchive();
+    HeapVector<Member<ArchiveResource>> resources = parser.parseArchive();
     if (resources.isEmpty())
         return nullptr; // Invalid MHTML file.
 
-    RefPtrWillBeRawPtr<MHTMLArchive> archive = adoptRefWillBeNoop(new MHTMLArchive);
+    MHTMLArchive* archive = new MHTMLArchive;
     // The first document suitable resource is the main resource of the top frame.
     for (size_t i = 0; i < resources.size(); ++i) {
         const AtomicString& mimeType = resources[i]->mimeType();
@@ -91,7 +91,7 @@ PassRefPtrWillBeRawPtr<MHTMLArchive> MHTMLArchive::create(const KURL& url, Share
         else
             archive->setMainResource(resources[i].get());
     }
-    return archive.release();
+    return archive;
 }
 
 void MHTMLArchive::generateMHTMLHeader(
@@ -220,7 +220,7 @@ void MHTMLArchive::generateMHTMLFooter(
     outputBuffer.append(asciiString.data(), asciiString.length());
 }
 
-void MHTMLArchive::setMainResource(PassRefPtrWillBeRawPtr<ArchiveResource> mainResource)
+void MHTMLArchive::setMainResource(ArchiveResource* mainResource)
 {
     m_mainResource = mainResource;
 }
@@ -236,15 +236,13 @@ void MHTMLArchive::addSubresource(ArchiveResource* resource)
 
 ArchiveResource* MHTMLArchive::subresourceForURL(const KURL& url) const
 {
-    return m_subresources.get(url.string());
+    return m_subresources.get(url.getString());
 }
 
 DEFINE_TRACE(MHTMLArchive)
 {
     visitor->trace(m_mainResource);
-#if ENABLE(OILPAN)
     visitor->trace(m_subresources);
-#endif
 }
 
 } // namespace blink

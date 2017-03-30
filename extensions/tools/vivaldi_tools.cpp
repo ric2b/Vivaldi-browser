@@ -6,7 +6,6 @@
 
 #include "components/google/core/browser/google_util.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "url/gurl.h"
 
 using namespace google_util;

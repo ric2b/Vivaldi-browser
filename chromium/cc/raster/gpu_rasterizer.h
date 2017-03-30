@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "cc/base/cc_export.h"
+#include "cc/playback/raster_source.h"
 #include "cc/resources/resource_pool.h"
 #include "cc/tiles/tile.h"
 #include "third_party/skia/include/core/SkMultiPictureDraw.h"
@@ -16,7 +17,7 @@
 namespace cc {
 
 class ContextProvider;
-class DisplayListRasterSource;
+class RasterSource;
 class ResourceProvider;
 
 class CC_EXPORT GpuRasterizer {
@@ -24,10 +25,11 @@ class CC_EXPORT GpuRasterizer {
   ~GpuRasterizer();
 
   void RasterizeSource(ResourceProvider::ScopedWriteLockGr* write_lock,
-                       const DisplayListRasterSource* raster_source,
+                       const RasterSource* raster_source,
                        const gfx::Rect& raster_full_rect,
                        const gfx::Rect& playback_rect,
-                       float scale);
+                       float scale,
+                       const RasterSource::PlaybackSettings& playback_settings);
 
   ResourceProvider* resource_provider() { return resource_provider_; }
 

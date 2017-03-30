@@ -56,6 +56,7 @@ const char* const kKnownSettings[] = {
     kAccountsPrefTransferSAMLCookies,
     kAccountsPrefUsers,
     kAccountsPrefLoginScreenDomainAutoComplete,
+    kAllowBluetooth,
     kAllowRedeemChromeOsRegistrationOffers,
     kAllowedConnectionTypesForUpdate,
     kAttestationForContentProtectionEnabled,
@@ -63,11 +64,12 @@ const char* const kKnownSettings[] = {
     kDeviceDisabled,
     kDeviceDisabledMessage,
     kDeviceOwner,
+    kDeviceQuirksDownloadEnabled,
     kDisplayRotationDefault,
     kExtensionCacheSize,
     kHeartbeatEnabled,
     kHeartbeatFrequency,
-    kSystemLogUploadEnabled,
+    kLoginAuthenticationBehavior,
     kPolicyMissingMitigationMode,
     kRebootOnShutdown,
     kReleaseChannel,
@@ -85,6 +87,7 @@ const char* const kKnownSettings[] = {
     kSignedDataRoamingEnabled,
     kStartUpFlags,
     kStatsReportingPref,
+    kSystemLogUploadEnabled,
     kSystemTimezonePolicy,
     kSystemUse24HourClock,
     kUpdateDisabled,
@@ -159,7 +162,7 @@ void DecodeLoginPolicies(
       policy.ephemeral_users_enabled().has_ephemeral_users_enabled() &&
       policy.ephemeral_users_enabled().ephemeral_users_enabled());
 
-  scoped_ptr<base::ListValue> list(new base::ListValue());
+  std::unique_ptr<base::ListValue> list(new base::ListValue());
   const em::UserWhitelistProto& whitelist_proto = policy.user_whitelist();
   const RepeatedPtrField<std::string>& whitelist =
       whitelist_proto.user_whitelist();
@@ -169,14 +172,15 @@ void DecodeLoginPolicies(
   }
   new_values_cache->SetValue(kAccountsPrefUsers, std::move(list));
 
-  scoped_ptr<base::ListValue> account_list(new base::ListValue());
+  std::unique_ptr<base::ListValue> account_list(new base::ListValue());
   const em::DeviceLocalAccountsProto device_local_accounts_proto =
       policy.device_local_accounts();
   const RepeatedPtrField<em::DeviceLocalAccountInfoProto>& accounts =
       device_local_accounts_proto.account();
   RepeatedPtrField<em::DeviceLocalAccountInfoProto>::const_iterator entry;
   for (entry = accounts.begin(); entry != accounts.end(); ++entry) {
-    scoped_ptr<base::DictionaryValue> entry_dict(new base::DictionaryValue());
+    std::unique_ptr<base::DictionaryValue> entry_dict(
+        new base::DictionaryValue());
     if (entry->has_type()) {
       if (entry->has_account_id()) {
         entry_dict->SetStringWithoutPathExpansion(
@@ -229,7 +233,7 @@ void DecodeLoginPolicies(
       policy.device_local_accounts().prompt_for_network_when_offline());
 
   if (policy.has_start_up_flags()) {
-    scoped_ptr<base::ListValue> list(new base::ListValue());
+    std::unique_ptr<base::ListValue> list(new base::ListValue());
     const em::StartUpFlagsProto& flags_proto = policy.start_up_flags();
     const RepeatedPtrField<std::string>& flags = flags_proto.flags();
     for (RepeatedPtrField<std::string>::const_iterator it = flags.begin();
@@ -258,6 +262,14 @@ void DecodeLoginPolicies(
                                 policy.login_screen_domain_auto_complete()
                                     .login_screen_domain_auto_complete());
   }
+
+  if (policy.has_login_authentication_behavior() &&
+      policy.login_authentication_behavior()
+          .has_login_authentication_behavior()) {
+    new_values_cache->SetInteger(
+        kLoginAuthenticationBehavior,
+        policy.login_authentication_behavior().login_authentication_behavior());
+  }
 }
 
 void DecodeNetworkPolicies(
@@ -283,7 +295,7 @@ void DecodeAutoUpdatePolicies(
     }
     const RepeatedField<int>& allowed_connection_types =
         au_settings_proto.allowed_connection_types();
-    scoped_ptr<base::ListValue> list(new base::ListValue());
+    std::unique_ptr<base::ListValue> list(new base::ListValue());
     for (RepeatedField<int>::const_iterator i(allowed_connection_types.begin());
          i != allowed_connection_types.end(); ++i) {
       list->Append(new base::FundamentalValue(*i));
@@ -444,6 +456,18 @@ void DecodeGenericPolicies(
         kDisplayRotationDefault,
         policy.display_rotation_default().display_rotation_default());
   }
+
+  new_values_cache->SetBoolean(
+      kAllowBluetooth, policy.has_allow_bluetooth() &&
+                           policy.allow_bluetooth().has_allow_bluetooth() &&
+                           policy.allow_bluetooth().allow_bluetooth());
+
+  if (policy.has_quirks_download_enabled() &&
+      policy.quirks_download_enabled().has_quirks_download_enabled()) {
+    new_values_cache->SetBoolean(
+        kDeviceQuirksDownloadEnabled,
+        policy.quirks_download_enabled().quirks_download_enabled());
+  }
 }
 
 void DecodeLogUploadPolicies(const em::ChromeDeviceSettingsProto& policy,
@@ -580,7 +604,7 @@ void DeviceSettingsProvider::OwnershipStatusChanged() {
       device_settings_.Swap(&new_settings);
     }
 
-    scoped_ptr<em::PolicyData> policy(new em::PolicyData());
+    std::unique_ptr<em::PolicyData> policy(new em::PolicyData());
     policy->set_username(device_settings_service_->GetUsername());
     CHECK(device_settings_.SerializeToString(policy->mutable_policy_value()));
     if (!device_settings_service_->GetOwnerSettingsService()

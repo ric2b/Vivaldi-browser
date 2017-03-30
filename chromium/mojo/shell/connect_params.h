@@ -11,10 +11,9 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "mojo/shell/identity.h"
+#include "mojo/shell/public/cpp/identity.h"
+#include "mojo/shell/public/interfaces/connector.mojom.h"
 #include "mojo/shell/public/interfaces/interface_provider.mojom.h"
-#include "mojo/shell/public/interfaces/shell.mojom.h"
-#include "url/gurl.h"
 
 namespace mojo {
 namespace shell {
@@ -23,8 +22,8 @@ namespace shell {
 // application.
 class ConnectParams {
  public:
-   ConnectParams();
-   ~ConnectParams();
+  ConnectParams();
+  ~ConnectParams();
 
   void set_source(const Identity& source) { source_ = source;  }
   const Identity& source() const { return source_; }
@@ -45,6 +44,14 @@ class ConnectParams {
     return std::move(local_interfaces_);
   }
 
+  void set_client_process_connection(
+      shell::mojom::ClientProcessConnectionPtr client_process_connection) {
+    client_process_connection_ = std::move(client_process_connection);
+  }
+  shell::mojom::ClientProcessConnectionPtr TakeClientProcessConnection() {
+    return std::move(client_process_connection_);
+  }
+
   void set_connect_callback(
       const shell::mojom::Connector::ConnectCallback& value) {
     connect_callback_ = value;
@@ -62,6 +69,7 @@ class ConnectParams {
 
   shell::mojom::InterfaceProviderRequest remote_interfaces_;
   shell::mojom::InterfaceProviderPtr local_interfaces_;
+  shell::mojom::ClientProcessConnectionPtr client_process_connection_;
   shell::mojom::Connector::ConnectCallback connect_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(ConnectParams);

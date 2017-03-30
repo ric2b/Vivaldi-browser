@@ -282,8 +282,8 @@ private:
 
 class CountingVisitor : public Visitor {
 public:
-    CountingVisitor()
-        : Visitor(Visitor::ThreadLocalMarking)
+    explicit CountingVisitor(ThreadState* state)
+        : Visitor(state, Visitor::ThreadLocalMarking)
         , m_count(0)
     {
     }
@@ -461,7 +461,7 @@ protected:
         Vector<OwnPtr<WebThread>, numberOfThreads> m_threads;
         for (int i = 0; i < numberOfThreads; i++) {
             m_threads.append(adoptPtr(Platform::current()->createThread("blink gc testing thread")));
-            m_threads.last()->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(threadFunc, AllowCrossThreadAccess(tester)));
+            m_threads.last()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(threadFunc, AllowCrossThreadAccess(tester)));
         }
         while (tester->m_threadsToFinish) {
             SafePointScope scope(BlinkGC::NoHeapPointersOnStack);
@@ -775,7 +775,8 @@ public:
     void* operator new(size_t size)
     {
         ThreadState* state = ThreadState::current();
-        return Heap::allocateOnHeapIndex(state, size, BlinkGC::NodeHeapIndex, GCInfoTrait<IntNode>::index());
+        const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(IntNode);
+        return Heap::allocateOnArenaIndex(state, size, BlinkGC::NodeArenaIndex, GCInfoTrait<IntNode>::index(), typeName);
     }
 
     static IntNode* create(int i)
@@ -1033,8 +1034,9 @@ int RefCountedAndGarbageCollected2::s_destructorCalls = 0;
 
 class RefCountedGarbageCollectedVisitor : public CountingVisitor {
 public:
-    RefCountedGarbageCollectedVisitor(int expected, void** objects)
-        : m_count(0)
+    RefCountedGarbageCollectedVisitor(ThreadState* state, int expected, void** objects)
+        : CountingVisitor(state)
+        , m_count(0)
         , m_expectedCount(expected)
         , m_expectedObjects(objects)
     {
@@ -1358,11 +1360,11 @@ Persistent<FinalizationObserverWithHashMap::ObserverMap>* FinalizationObserverWi
 
 class SuperClass;
 
-class PointsBack : public RefCountedWillBeGarbageCollectedFinalized<PointsBack> {
+class PointsBack : public GarbageCollectedFinalized<PointsBack> {
 public:
-    static PassRefPtrWillBeRawPtr<PointsBack> create()
+    static PointsBack* create()
     {
-        return adoptRefWillBeNoop(new PointsBack());
+        return new PointsBack;
     }
 
     ~PointsBack()
@@ -1389,31 +1391,27 @@ private:
         ++s_aliveCount;
     }
 
-    RawPtrWillBeWeakMember<SuperClass> m_backPointer;
+    WeakMember<SuperClass> m_backPointer;
 };
 
 int PointsBack::s_aliveCount = 0;
 
-class SuperClass : public RefCountedWillBeGarbageCollectedFinalized<SuperClass> {
+class SuperClass : public GarbageCollectedFinalized<SuperClass> {
 public:
-    static PassRefPtrWillBeRawPtr<SuperClass> create(PassRefPtrWillBeRawPtr<PointsBack> pointsBack)
+    static SuperClass* create(PointsBack* pointsBack)
     {
-        return adoptRefWillBeNoop(new SuperClass(pointsBack));
+        return new SuperClass(pointsBack);
     }
 
     virtual ~SuperClass()
     {
-#if !ENABLE(OILPAN)
-        m_pointsBack->setBackPointer(0);
-#endif
         --s_aliveCount;
     }
 
-    void doStuff(PassRefPtrWillBeRawPtr<SuperClass> targetPass, PointsBack* pointsBack, int superClassCount)
+    void doStuff(SuperClass* target, PointsBack* pointsBack, int superClassCount)
     {
-        RefPtrWillBeRawPtr<SuperClass> target = targetPass;
         conservativelyCollectGarbage();
-        EXPECT_EQ(pointsBack, target->pointsBack());
+        EXPECT_EQ(pointsBack, target->getPointsBack());
         EXPECT_EQ(superClassCount, SuperClass::s_aliveCount);
     }
 
@@ -1422,11 +1420,11 @@ public:
         visitor->trace(m_pointsBack);
     }
 
-    PointsBack* pointsBack() const { return m_pointsBack.get(); }
+    PointsBack* getPointsBack() const { return m_pointsBack.get(); }
 
     static int s_aliveCount;
 protected:
-    explicit SuperClass(PassRefPtrWillBeRawPtr<PointsBack> pointsBack)
+    explicit SuperClass(PointsBack* pointsBack)
         : m_pointsBack(pointsBack)
     {
         m_pointsBack->setBackPointer(this);
@@ -1434,11 +1432,11 @@ protected:
     }
 
 private:
-    RefPtrWillBeMember<PointsBack> m_pointsBack;
+    Member<PointsBack> m_pointsBack;
 };
 
 int SuperClass::s_aliveCount = 0;
-class SubData : public NoBaseWillBeGarbageCollectedFinalized<SubData> {
+class SubData : public GarbageCollectedFinalized<SubData> {
 public:
     SubData() { ++s_aliveCount; }
     ~SubData() { --s_aliveCount; }
@@ -1452,9 +1450,9 @@ int SubData::s_aliveCount = 0;
 
 class SubClass : public SuperClass {
 public:
-    static PassRefPtrWillBeRawPtr<SubClass> create(PassRefPtrWillBeRawPtr<PointsBack> pointsBack)
+    static SubClass* create(PointsBack* pointsBack)
     {
-        return adoptRefWillBeNoop(new SubClass(pointsBack));
+        return new SubClass(pointsBack);
     }
 
     ~SubClass() override
@@ -1470,24 +1468,24 @@ public:
 
     static int s_aliveCount;
 private:
-    explicit SubClass(PassRefPtrWillBeRawPtr<PointsBack> pointsBack)
+    explicit SubClass(PointsBack* pointsBack)
         : SuperClass(pointsBack)
-        , m_data(adoptPtrWillBeNoop(new SubData()))
+        , m_data(new SubData)
     {
         ++s_aliveCount;
     }
 
 private:
-    OwnPtrWillBeMember<SubData> m_data;
+    Member<SubData> m_data;
 };
 
 int SubClass::s_aliveCount = 0;
 
-class TransitionRefCounted : public RefCountedWillBeRefCountedGarbageCollected<TransitionRefCounted> {
+class TransitionRefCounted : public RefCountedGarbageCollected<TransitionRefCounted> {
 public:
-    static PassRefPtrWillBeRawPtr<TransitionRefCounted> create()
+    static TransitionRefCounted* create()
     {
-        return adoptRefWillBeNoop(new TransitionRefCounted());
+        return new TransitionRefCounted;
     }
 
     ~TransitionRefCounted()
@@ -1537,6 +1535,8 @@ public:
 private:
     UseMixin()
     {
+        // Verify that WTF::IsGarbageCollectedType<> works as expected for mixins.
+        static_assert(WTF::IsGarbageCollectedType<UseMixin>::value, "IsGarbageCollectedType<> sanity check failed for GC mixin.");
         s_traceCount = 0;
     }
 };
@@ -1688,7 +1688,7 @@ private:
 TEST(HeapTest, Transition)
 {
     {
-        RefPtrWillBePersistent<TransitionRefCounted> refCounted = TransitionRefCounted::create();
+        Persistent<TransitionRefCounted> refCounted = TransitionRefCounted::create();
         EXPECT_EQ(1, TransitionRefCounted::s_aliveCount);
         preciselyCollectGarbage();
         EXPECT_EQ(1, TransitionRefCounted::s_aliveCount);
@@ -1696,10 +1696,10 @@ TEST(HeapTest, Transition)
     preciselyCollectGarbage();
     EXPECT_EQ(0, TransitionRefCounted::s_aliveCount);
 
-    RefPtrWillBePersistent<PointsBack> pointsBack1 = PointsBack::create();
-    RefPtrWillBePersistent<PointsBack> pointsBack2 = PointsBack::create();
-    RefPtrWillBePersistent<SuperClass> superClass = SuperClass::create(pointsBack1);
-    RefPtrWillBePersistent<SubClass> subClass = SubClass::create(pointsBack2);
+    Persistent<PointsBack> pointsBack1 = PointsBack::create();
+    Persistent<PointsBack> pointsBack2 = PointsBack::create();
+    Persistent<SuperClass> superClass = SuperClass::create(pointsBack1);
+    Persistent<SubClass> subClass = SubClass::create(pointsBack2);
     EXPECT_EQ(2, PointsBack::s_aliveCount);
     EXPECT_EQ(2, SuperClass::s_aliveCount);
     EXPECT_EQ(1, SubClass::s_aliveCount);
@@ -1772,7 +1772,7 @@ TEST(HeapTest, BasicFunctionality)
         size_t baseLevel = initialObjectPayloadSize;
         bool testPagesAllocated = !baseLevel;
         if (testPagesAllocated)
-            EXPECT_EQ(Heap::allocatedSpace(), 0ul);
+            EXPECT_EQ(Heap::heapStats().allocatedSpace(), 0ul);
 
         // This allocates objects on the general heap which should add a page of memory.
         DynamicallySizedObject* alloc32 = DynamicallySizedObject::create(32);
@@ -1786,7 +1786,7 @@ TEST(HeapTest, BasicFunctionality)
 
         CheckWithSlack(baseLevel + total, Heap::objectPayloadSizeForTesting(), slack);
         if (testPagesAllocated)
-            EXPECT_EQ(Heap::allocatedSpace(), blinkPageSize * 2);
+            EXPECT_EQ(Heap::heapStats().allocatedSpace(), blinkPageSize * 2);
 
         EXPECT_EQ(alloc32->get(0), 40);
         EXPECT_EQ(alloc32->get(31), 40);
@@ -1807,7 +1807,7 @@ TEST(HeapTest, BasicFunctionality)
     size_t baseLevel = Heap::objectPayloadSizeForTesting();
     bool testPagesAllocated = !baseLevel;
     if (testPagesAllocated)
-        EXPECT_EQ(Heap::allocatedSpace(), 0ul);
+        EXPECT_EQ(Heap::heapStats().allocatedSpace(), 0ul);
 
     size_t big = 1008;
     Persistent<DynamicallySizedObject> bigArea = DynamicallySizedObject::create(big);
@@ -1825,7 +1825,7 @@ TEST(HeapTest, BasicFunctionality)
         slack += 4;
         CheckWithSlack(baseLevel + total, Heap::objectPayloadSizeForTesting(), slack);
         if (testPagesAllocated)
-            EXPECT_EQ(0ul, Heap::allocatedSpace() & (blinkPageSize - 1));
+            EXPECT_EQ(0ul, Heap::heapStats().allocatedSpace() & (blinkPageSize - 1));
     }
 
     {
@@ -1840,14 +1840,14 @@ TEST(HeapTest, BasicFunctionality)
         total += 96;
         CheckWithSlack(baseLevel + total, Heap::objectPayloadSizeForTesting(), slack);
         if (testPagesAllocated)
-            EXPECT_EQ(0ul, Heap::allocatedSpace() & (blinkPageSize - 1));
+            EXPECT_EQ(0ul, Heap::heapStats().allocatedSpace() & (blinkPageSize - 1));
     }
 
     clearOutOldGarbage();
     total -= 96;
     slack -= 8;
     if (testPagesAllocated)
-        EXPECT_EQ(0ul, Heap::allocatedSpace() & (blinkPageSize - 1));
+        EXPECT_EQ(0ul, Heap::heapStats().allocatedSpace() & (blinkPageSize - 1));
 
     // Clear the persistent, so that the big area will be garbage collected.
     bigArea.release();
@@ -1857,11 +1857,11 @@ TEST(HeapTest, BasicFunctionality)
     slack -= 4;
     CheckWithSlack(baseLevel + total, Heap::objectPayloadSizeForTesting(), slack);
     if (testPagesAllocated)
-        EXPECT_EQ(0ul, Heap::allocatedSpace() & (blinkPageSize - 1));
+        EXPECT_EQ(0ul, Heap::heapStats().allocatedSpace() & (blinkPageSize - 1));
 
     CheckWithSlack(baseLevel + total, Heap::objectPayloadSizeForTesting(), slack);
     if (testPagesAllocated)
-        EXPECT_EQ(0ul, Heap::allocatedSpace() & (blinkPageSize - 1));
+        EXPECT_EQ(0ul, Heap::heapStats().allocatedSpace() & (blinkPageSize - 1));
 
     for (size_t i = 0; i < persistentCount; i++) {
         delete persistents[i];
@@ -2106,7 +2106,7 @@ TEST(HeapTest, Finalization)
     EXPECT_EQ(3, HeapTestSuperClass::s_destructorCalls);
 }
 
-TEST(HeapTest, TypedHeapSanity)
+TEST(HeapTest, TypedArenaSanity)
 {
     // We use TraceCounter for allocating an object on the general heap.
     Persistent<TraceCounter> generalHeapObject = TraceCounter::create();
@@ -2324,7 +2324,7 @@ TEST(HeapTest, LargeHeapObjects)
 {
     clearOutOldGarbage();
     size_t initialObjectPayloadSize = Heap::objectPayloadSizeForTesting();
-    size_t initialAllocatedSpace = Heap::allocatedSpace();
+    size_t initialAllocatedSpace = Heap::heapStats().allocatedSpace();
     IntWrapper::s_destructorCalls = 0;
     LargeHeapObject::s_destructorCalls = 0;
     {
@@ -2333,7 +2333,7 @@ TEST(HeapTest, LargeHeapObjects)
         ASSERT(ThreadState::current()->findPageFromAddress(object));
         ASSERT(ThreadState::current()->findPageFromAddress(reinterpret_cast<char*>(object.get()) + sizeof(LargeHeapObject) - 1));
         clearOutOldGarbage();
-        size_t afterAllocation = Heap::allocatedSpace();
+        size_t afterAllocation = Heap::heapStats().allocatedSpace();
         {
             object->set(0, 'a');
             EXPECT_EQ('a', object->get(0));
@@ -2357,13 +2357,13 @@ TEST(HeapTest, LargeHeapObjects)
                 object = LargeHeapObject::create();
         }
         clearOutOldGarbage();
-        EXPECT_TRUE(Heap::allocatedSpace() == afterAllocation);
+        EXPECT_TRUE(Heap::heapStats().allocatedSpace() == afterAllocation);
         EXPECT_EQ(10, IntWrapper::s_destructorCalls);
         EXPECT_EQ(10, LargeHeapObject::s_destructorCalls);
     }
     clearOutOldGarbage();
     EXPECT_TRUE(initialObjectPayloadSize == Heap::objectPayloadSizeForTesting());
-    EXPECT_TRUE(initialAllocatedSpace == Heap::allocatedSpace());
+    EXPECT_TRUE(initialAllocatedSpace == Heap::heapStats().allocatedSpace());
     EXPECT_EQ(11, IntWrapper::s_destructorCalls);
     EXPECT_EQ(11, LargeHeapObject::s_destructorCalls);
     preciselyCollectGarbage();
@@ -2408,18 +2408,6 @@ struct NeedsTracingTrait {
     explicit NeedsTracingTrait(IntWrapper* wrapper) : m_wrapper(wrapper) { }
     DEFINE_INLINE_TRACE() { visitor->trace(m_wrapper); }
     Member<IntWrapper> m_wrapper;
-};
-
-// These class definitions test compile-time asserts with transition
-// types. They are therefore unused in test code and just need to
-// compile. This is intentional; do not delete the A and B classes below.
-class A : public WillBeGarbageCollectedMixin {
-};
-
-class B : public NoBaseWillBeGarbageCollected<B>, public A {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(B);
-public:
-    DEFINE_INLINE_TRACE() { }
 };
 
 TEST(HeapTest, HeapVectorFilledWithValue)
@@ -3596,37 +3584,38 @@ TEST(HeapTest, RefCountedGarbageCollectedWithStackPointers)
             pointer1 = object1.get();
             pointer2 = object2.get();
             void* objects[2] = { object1.get(), object2.get() };
-            RefCountedGarbageCollectedVisitor visitor(2, objects);
+            RefCountedGarbageCollectedVisitor visitor(ThreadState::current(), 2, objects);
             ThreadState::current()->visitPersistents(&visitor);
             EXPECT_TRUE(visitor.validate());
-
-            conservativelyCollectGarbage();
-            EXPECT_EQ(0, RefCountedAndGarbageCollected::s_destructorCalls);
-            EXPECT_EQ(0, RefCountedAndGarbageCollected2::s_destructorCalls);
         }
         conservativelyCollectGarbage();
         EXPECT_EQ(0, RefCountedAndGarbageCollected::s_destructorCalls);
         EXPECT_EQ(0, RefCountedAndGarbageCollected2::s_destructorCalls);
 
-        // At this point, the reference counts of object1 and object2 are 0.
-        // Only pointer1 and pointer2 keep references to object1 and object2.
-        void* objects[] = { 0 };
-        RefCountedGarbageCollectedVisitor visitor(0, objects);
-        ThreadState::current()->visitPersistents(&visitor);
-        EXPECT_TRUE(visitor.validate());
+        conservativelyCollectGarbage();
+        EXPECT_EQ(0, RefCountedAndGarbageCollected::s_destructorCalls);
+        EXPECT_EQ(0, RefCountedAndGarbageCollected2::s_destructorCalls);
+
+        {
+            // At this point, the reference counts of object1 and object2 are 0.
+            // Only pointer1 and pointer2 keep references to object1 and object2.
+            void* objects[] = { 0 };
+            RefCountedGarbageCollectedVisitor visitor(ThreadState::current(), 0, objects);
+            ThreadState::current()->visitPersistents(&visitor);
+            EXPECT_TRUE(visitor.validate());
+        }
 
         {
             Persistent<RefCountedAndGarbageCollected> object1(pointer1);
             Persistent<RefCountedAndGarbageCollected2> object2(pointer2);
             void* objects[2] = { object1.get(), object2.get() };
-            RefCountedGarbageCollectedVisitor visitor(2, objects);
+            RefCountedGarbageCollectedVisitor visitor(ThreadState::current(), 2, objects);
             ThreadState::current()->visitPersistents(&visitor);
             EXPECT_TRUE(visitor.validate());
-
-            conservativelyCollectGarbage();
-            EXPECT_EQ(0, RefCountedAndGarbageCollected::s_destructorCalls);
-            EXPECT_EQ(0, RefCountedAndGarbageCollected2::s_destructorCalls);
         }
+        conservativelyCollectGarbage();
+        EXPECT_EQ(0, RefCountedAndGarbageCollected::s_destructorCalls);
+        EXPECT_EQ(0, RefCountedAndGarbageCollected2::s_destructorCalls);
 
         conservativelyCollectGarbage();
         EXPECT_EQ(0, RefCountedAndGarbageCollected::s_destructorCalls);
@@ -3769,7 +3758,6 @@ TEST(HeapTest, CheckAndMarkPointer)
     Vector<Address> endAddresses;
     Address largeObjectAddress;
     Address largeObjectEndAddress;
-    CountingVisitor visitor;
     for (int i = 0; i < 10; i++) {
         SimpleObject* object = SimpleObject::create();
         Address objectAddress = reinterpret_cast<Address>(object);
@@ -3789,6 +3777,7 @@ TEST(HeapTest, CheckAndMarkPointer)
     // checkAndMarkPointer tests.
     {
         TestGCScope scope(BlinkGC::HeapPointersOnStack);
+        CountingVisitor visitor(ThreadState::current());
         EXPECT_TRUE(scope.allThreadsParked()); // Fail the test if we could not park all threads.
         Heap::flushHeapDoesNotContainCache();
         for (size_t i = 0; i < objectAddresses.size(); i++) {
@@ -3808,6 +3797,7 @@ TEST(HeapTest, CheckAndMarkPointer)
     clearOutOldGarbage();
     {
         TestGCScope scope(BlinkGC::HeapPointersOnStack);
+        CountingVisitor visitor(ThreadState::current());
         EXPECT_TRUE(scope.allThreadsParked());
         Heap::flushHeapDoesNotContainCache();
         for (size_t i = 0; i < objectAddresses.size(); i++) {
@@ -4703,7 +4693,7 @@ public:
     static void test()
     {
         OwnPtr<WebThread> sleepingThread = adoptPtr(Platform::current()->createThread("SleepingThread"));
-        sleepingThread->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(sleeperMainFunc));
+        sleepingThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(sleeperMainFunc));
 
         // Wait for the sleeper to run.
         while (!s_sleeperRunning) {
@@ -4991,21 +4981,21 @@ TEST(HeapTest, RegressNullIsStrongified)
 
 TEST(HeapTest, Bind)
 {
-    OwnPtr<Closure> closure = bind(static_cast<void (Bar::*)(Visitor*)>(&Bar::trace), Bar::create(), static_cast<Visitor*>(0));
+    OwnPtr<SameThreadClosure> closure = bind(static_cast<void (Bar::*)(Visitor*)>(&Bar::trace), Bar::create(), static_cast<Visitor*>(0));
     preciselyCollectGarbage();
     // The closure should have a persistent handle to the Bar.
     EXPECT_EQ(1u, Bar::s_live);
 
-    OwnPtr<Closure> closure2 = bind(static_cast<void (Bar::*)(Visitor*)>(&Bar::trace), RawPtr<Bar>(Bar::create()), static_cast<Visitor*>(0));
+    OwnPtr<SameThreadClosure> closure2 = bind(static_cast<void (Bar::*)(Visitor*)>(&Bar::trace), RawPtr<Bar>(Bar::create()), static_cast<Visitor*>(0));
     preciselyCollectGarbage();
     // The closure should have a persistent handle to the Bar.
     EXPECT_EQ(2u, Bar::s_live);
     // RawPtr<OffHeapInt> should not make Persistent.
-    OwnPtr<Closure> closure3 = bind(&OffHeapInt::voidFunction, RawPtr<OffHeapInt>(OffHeapInt::create(1).get()));
+    OwnPtr<SameThreadClosure> closure3 = bind(&OffHeapInt::voidFunction, RawPtr<OffHeapInt>(OffHeapInt::create(1).get()));
 
     UseMixin::s_traceCount = 0;
     Mixin* mixin = UseMixin::create();
-    OwnPtr<Closure> mixinClosure = bind(static_cast<void (Mixin::*)(Visitor*)>(&Mixin::trace), mixin, static_cast<Visitor*>(0));
+    OwnPtr<SameThreadClosure> mixinClosure = bind(static_cast<void (Mixin::*)(Visitor*)>(&Mixin::trace), mixin, static_cast<Visitor*>(0));
     preciselyCollectGarbage();
     // The closure should have a persistent handle to the mixin.
     EXPECT_EQ(1, UseMixin::s_traceCount);
@@ -5149,7 +5139,7 @@ public:
     }
 
     typedef HeapHashMap<WeakMember<IntWrapper>, Member<EphemeronWrapper>> Map;
-    Map& map() { return m_map; }
+    Map& getMap() { return m_map; }
 
 private:
     Map m_map;
@@ -5165,21 +5155,21 @@ TEST(HeapTest, EphemeronsPointToEphemerons)
         EphemeronWrapper* oldHead = chain;
         chain = new EphemeronWrapper();
         if (i == 50)
-            chain->map().add(key2, oldHead);
+            chain->getMap().add(key2, oldHead);
         else
-            chain->map().add(key, oldHead);
-        chain->map().add(IntWrapper::create(103), new EphemeronWrapper());
+            chain->getMap().add(key, oldHead);
+        chain->getMap().add(IntWrapper::create(103), new EphemeronWrapper());
     }
 
     preciselyCollectGarbage();
 
     EphemeronWrapper* wrapper = chain;
     for (int i = 0; i< 100; i++) {
-        EXPECT_EQ(1u, wrapper->map().size());
+        EXPECT_EQ(1u, wrapper->getMap().size());
         if (i == 49)
-            wrapper = wrapper->map().get(key2);
+            wrapper = wrapper->getMap().get(key2);
         else
-            wrapper = wrapper->map().get(key);
+            wrapper = wrapper->getMap().get(key);
     }
     EXPECT_EQ(nullptr, wrapper);
 
@@ -5188,14 +5178,14 @@ TEST(HeapTest, EphemeronsPointToEphemerons)
 
     wrapper = chain;
     for (int i = 0; i < 50; i++) {
-        EXPECT_EQ(i == 49 ? 0u : 1u, wrapper->map().size());
-        wrapper = wrapper->map().get(key);
+        EXPECT_EQ(i == 49 ? 0u : 1u, wrapper->getMap().size());
+        wrapper = wrapper->getMap().get(key);
     }
     EXPECT_EQ(nullptr, wrapper);
 
     key.clear();
     preciselyCollectGarbage();
-    EXPECT_EQ(0u, chain->map().size());
+    EXPECT_EQ(0u, chain->getMap().size());
 }
 
 TEST(HeapTest, Ephemeron)
@@ -5373,7 +5363,7 @@ public:
 
         MutexLocker locker(mainThreadMutex());
         OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
-        workerThread->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
+        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
 
         // Wait for the worker thread to have done its initialization,
         // IE. the worker allocates an object and then throw aways any
@@ -5476,7 +5466,7 @@ public:
 
         MutexLocker locker(mainThreadMutex());
         OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
-        workerThread->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
+        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
 
         // Wait for the worker thread initialization. The worker
         // allocates a weak collection where both collection and
@@ -5679,7 +5669,7 @@ public:
 
         MutexLocker locker(mainThreadMutex());
         OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
-        workerThread->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
+        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
 
         // Park the main thread until the worker thread has initialized.
         parkMainThread();
@@ -5698,7 +5688,7 @@ public:
             EXPECT_EQ(0, DestructorLockingObject::s_destructorCalls);
         }
         // At this point the main thread releases the global lock and the worker
-        // can acquire it and do its sweep of its heaps. Just wait for the worker
+        // can acquire it and do its sweep of its arenas. Just wait for the worker
         // to complete its sweep and check the result.
         parkMainThread();
         EXPECT_EQ(1, DestructorLockingObject::s_destructorCalls);
@@ -5747,54 +5737,6 @@ TEST(HeapTest, RecursiveMutex)
     RecursiveLockingTester::test();
 }
 
-class CrossThreadPersistentOnMainThreadTester {
-public:
-    static void test()
-    {
-        MutexLocker locker(mainThreadMutex());
-        OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
-        workerThread->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
-
-        parkMainThread();
-
-        // (Temporarily) detach main thread and wake the worker thread, so that it
-        // can do its detach().
-        ThreadState::detachMainThread();
-        wakeWorkerThread();
-
-        parkMainThread();
-        ThreadState::attachMainThread();
-    }
-
-private:
-
-    static void workerThreadMain()
-    {
-        MutexLocker locker(workerThreadMutex());
-
-        // Start up a worker thread and have it detach after the main thread has.
-        // Do this to verify that CrossThreadPersistent<>s referring to objects
-        // on one of the main thread's heaps does not upset the CTP invalidation
-        // pass that ThreadState::detach() performs.
-        ThreadState::attach();
-
-        CrossThreadPersistent<IntWrapper> persistent(IntWrapper::create(43));
-
-        // Wait for the main thread to detach.
-        wakeMainThread();
-        parkWorkerThread();
-
-        ThreadState::detach();
-        wakeMainThread();
-    }
-};
-
-TEST(HeapTest, CrossThreadPersistentOnMainThread)
-{
-    CrossThreadPersistent<IntWrapper> persistent(IntWrapper::create(42));
-    CrossThreadPersistentOnMainThreadTester::test();
-}
-
 template<typename T>
 class TraceIfNeededTester : public GarbageCollectedFinalized<TraceIfNeededTester<T>> {
 public:
@@ -5820,7 +5762,7 @@ private:
 
 TEST(HeapTest, TraceIfNeeded)
 {
-    CountingVisitor visitor;
+    CountingVisitor visitor(ThreadState::current());
 
     {
         TraceIfNeededTester<RefPtr<OffHeapInt>>* m_offHeap = TraceIfNeededTester<RefPtr<OffHeapInt>>::create(OffHeapInt::create(42));
@@ -5876,7 +5818,8 @@ public:
 
     AllocatesOnAssignment(const AllocatesOnAssignment& other)
     {
-        conservativelyCollectGarbage();
+        if (!ThreadState::current()->isGCForbidden())
+            conservativelyCollectGarbage();
         m_value = new IntWrapper(other.m_value->value());
     }
 
@@ -6472,7 +6415,7 @@ TEST(HeapTest, CrossThreadWeakPersistent)
     MutexLocker mainThreadMutexLocker(mainThreadMutex());
     OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
     DestructorLockingObject* object = nullptr;
-    workerThread->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMainForCrossThreadWeakPersistentTest, AllowCrossThreadAccessWrapper<DestructorLockingObject**>(&object)));
+    workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMainForCrossThreadWeakPersistentTest, AllowCrossThreadAccessWrapper<DestructorLockingObject**>(&object)));
     parkMainThread();
 
     // Step 3: Set up a CrossThreadWeakPersistent.
@@ -6530,6 +6473,27 @@ TEST(HeapTest, TestPersistentHeapVectorWithUnusedSlots)
     EXPECT_EQ(16u, vector1.capacity());
     EXPECT_EQ(16u, vector2.capacity());
 #endif
+}
+
+TEST(HeapTest, TestStaticLocals)
+{
+    // Sanity check DEFINE_STATIC_LOCAL()s over heap allocated objects and collections.
+
+    DEFINE_STATIC_LOCAL(IntWrapper, intWrapper, (new IntWrapper(33)));
+    DEFINE_STATIC_LOCAL(PersistentHeapVector<Member<IntWrapper>>, persistentHeapVectorIntWrapper, ());
+    DEFINE_STATIC_LOCAL(HeapVector<Member<IntWrapper>>, heapVectorIntWrapper, (new HeapVector<Member<IntWrapper>>));
+
+    EXPECT_EQ(33, intWrapper.value());
+    EXPECT_EQ(0u, persistentHeapVectorIntWrapper.size());
+    EXPECT_EQ(0u, heapVectorIntWrapper.size());
+
+    persistentHeapVectorIntWrapper.append(&intWrapper);
+    heapVectorIntWrapper.append(&intWrapper);
+    EXPECT_EQ(1u, persistentHeapVectorIntWrapper.size());
+    EXPECT_EQ(1u, heapVectorIntWrapper.size());
+
+    EXPECT_EQ(persistentHeapVectorIntWrapper[0], heapVectorIntWrapper[0]);
+    EXPECT_EQ(33, heapVectorIntWrapper[0]->value());
 }
 
 } // namespace blink

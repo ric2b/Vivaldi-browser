@@ -34,7 +34,6 @@
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/autofill/save_card_icon_view.h"
-#include "chrome/browser/ui/views/browser_dialogs.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/background_with_1_px_border.h"
 #include "chrome/browser/ui/views/location_bar/content_setting_image_view.h"
@@ -184,7 +183,7 @@ void LocationBarView::Init() {
   if (ui::MaterialDesignController::IsModeMaterial()) {
     // Make sure children with layers are clipped. See http://crbug.com/589497
     SetPaintToLayer(true);
-    SetFillsBoundsOpaquely(false);
+    layer()->SetFillsBoundsOpaquely(false);
     layer()->SetMasksToBounds(true);
   } else if (is_popup_mode_) {
     const int kOmniboxPopupBorderImages[] =
@@ -193,7 +192,7 @@ void LocationBarView::Init() {
         views::Painter::CreateImageGridPainter(kOmniboxPopupBorderImages));
   } else {
     ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-    const gfx::Insets omnibox_border_insets(14, 9, 14, 9);
+    const gfx::Insets omnibox_border_insets(14, 9);
     border_painter_.reset(views::Painter::CreateImagePainter(
         *rb.GetImageSkiaNamed(IDR_OMNIBOX_BORDER), omnibox_border_insets));
   }
@@ -984,7 +983,7 @@ bool LocationBarView::RefreshZoomView() {
   const bool was_visible = zoom_view_->visible();
   zoom_view_->Update(ui_zoom::ZoomController::FromWebContents(web_contents));
   if (!zoom_view_->visible())
-    ZoomBubbleView::CloseBubble();
+    ZoomBubbleView::CloseCurrentBubble();
   return was_visible != zoom_view_->visible();
 }
 
@@ -1019,7 +1018,7 @@ void LocationBarView::RefreshTranslateIcon() {
   command_updater()->UpdateCommandEnabled(IDC_TRANSLATE_PAGE, enabled);
   translate_icon_view_->SetVisible(enabled);
   if (!enabled)
-    TranslateBubbleView::CloseBubble();
+    TranslateBubbleView::CloseCurrentBubble();
 }
 
 bool LocationBarView::RefreshManagePasswordsIconView() {

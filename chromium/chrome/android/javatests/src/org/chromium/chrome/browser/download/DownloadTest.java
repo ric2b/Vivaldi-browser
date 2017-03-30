@@ -27,6 +27,7 @@ import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.io.File;
+import java.util.concurrent.Callable;
 
 /**
  * Tests Chrome download feature by attempting to download some files.
@@ -123,17 +124,20 @@ public class DownloadTest extends DownloadTestBase {
         assertEquals(mTestServer.getURL("/chrome/test/data/android/download/test.gzip"),
                 callbackHelper.getDownloadInfo().getUrl());
 
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return getActivity().getCurrentTabModel().getCount() == initialTabCount;
-            }
-        });
+        CriteriaHelper.pollUiThread(
+                Criteria.equals(initialTabCount, new Callable<Integer>() {
+                    @Override
+                    public Integer call() {
+                        return getActivity().getCurrentTabModel().getCount();
+                    }
+                }));
     }
 
     @MediumTest
     @Feature({"Downloads"})
     public void testDuplicateHttpPostDownload_Overwrite() throws Exception {
+        // Snackbar overlaps the infobar which is clicked in this test.
+        getActivity().getSnackbarManager().disableForTesting();
         // Download a file.
         loadUrl(mTestServer.getURL("/chrome/test/data/android/download/post.html"));
         waitForFocus();
@@ -160,8 +164,12 @@ public class DownloadTest extends DownloadTestBase {
                 hasDownload("superbo (1).txt", SUPERBO_CONTENTS));
     }
 
-    @MediumTest
-    @Feature({"Downloads"})
+    /**
+    * Bug http://crbug/597230
+    * @MediumTest
+    * @Feature({"Downloads"})
+    */
+    @DisabledTest
     public void testDuplicateHttpPostDownload_CreateNew() throws Exception {
         // Download a file.
         loadUrl(mTestServer.getURL("/chrome/test/data/android/download/post.html"));
@@ -221,8 +229,12 @@ public class DownloadTest extends DownloadTestBase {
                 hasDownload("superbo (1).txt", SUPERBO_CONTENTS));
     }
 
-    @MediumTest
-    @Feature({"Downloads"})
+    /**
+    * Bug http://crbug/597230
+    * @MediumTest
+    * @Feature({"Downloads"})
+    */
+    @DisabledTest
     public void testDuplicateHttpPostDownload_AllowMultipleInfoBars() throws Exception {
         assertFalse(hasDownload("superbo.txt", SUPERBO_CONTENTS));
         // Download a file.
@@ -277,7 +289,7 @@ public class DownloadTest extends DownloadTestBase {
             }
         });
 
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return getActivity().getActivityTab() == model.getTabAt(count - 1)
@@ -291,7 +303,7 @@ public class DownloadTest extends DownloadTestBase {
         // Wait until we have a new tab first. This should be called before checking the active
         // layout because the active layout changes StaticLayout --> SimpleAnimationLayout
         // --> (tab added) --> StaticLayout.
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 updateFailureReason(
@@ -302,7 +314,7 @@ public class DownloadTest extends DownloadTestBase {
 
         // Now wait until the new tab animation finishes. Something wonky happens
         // if we try to go to the new tab before this.
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 CompositorViewHolder compositorViewHolder =
@@ -385,7 +397,7 @@ public class DownloadTest extends DownloadTestBase {
      */
     private void assertPollForInfoBarSize(final int size) throws InterruptedException {
         final InfoBarContainer container = getActivity().getActivityTab().getInfoBarContainer();
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 updateFailureReason("There should be " + size + " infobar but there are "

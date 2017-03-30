@@ -10,7 +10,7 @@
 
 #include "base/macros.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/playback/display_list_raster_source.h"
+#include "cc/playback/raster_source.h"
 #include "cc/raster/gpu_rasterizer.h"
 #include "cc/raster/raster_buffer.h"
 #include "cc/raster/scoped_gpu_raster.h"
@@ -37,15 +37,16 @@ class RasterBufferImpl : public RasterBuffer {
   }
 
   // Overridden from RasterBuffer:
-  void Playback(const DisplayListRasterSource* raster_source,
-                const gfx::Rect& raster_full_rect,
-                const gfx::Rect& raster_dirty_rect,
-                uint64_t new_content_id,
-                float scale,
-                bool include_images) override {
+  void Playback(
+      const RasterSource* raster_source,
+      const gfx::Rect& raster_full_rect,
+      const gfx::Rect& raster_dirty_rect,
+      uint64_t new_content_id,
+      float scale,
+      const RasterSource::PlaybackSettings& playback_settings) override {
     TRACE_EVENT0("cc", "RasterBufferImpl::Playback");
     // GPU raster doesn't do low res tiles, so should always include images.
-    DCHECK(include_images);
+    DCHECK(!playback_settings.skip_images);
     ContextProvider* context_provider = rasterizer_->resource_provider()
                                             ->output_surface()
                                             ->worker_context_provider();
@@ -63,7 +64,7 @@ class RasterBufferImpl : public RasterBuffer {
     // TODO(danakj): Implement partial raster with raster_dirty_rect.
     // Rasterize source into resource.
     rasterizer_->RasterizeSource(&lock_, raster_source, raster_full_rect,
-                                 playback_rect, scale);
+                                 playback_rect, scale, playback_settings);
 
     gpu::gles2::GLES2Interface* gl = scoped_context.ContextGL();
     const uint64_t fence_sync = gl->InsertFenceSyncCHROMIUM();

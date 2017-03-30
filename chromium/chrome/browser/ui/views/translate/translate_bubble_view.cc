@@ -110,27 +110,25 @@ views::Widget* TranslateBubbleView::ShowBubble(
   ChromeTranslateClient::GetTranslateLanguages(
       web_contents, &source_language, &target_language);
 
-  scoped_ptr<translate::TranslateUIDelegate> ui_delegate(
+  std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
       new translate::TranslateUIDelegate(
           ChromeTranslateClient::GetManagerFromWebContents(web_contents)
               ->GetWeakPtr(),
-          source_language,
-          target_language));
-  scoped_ptr<TranslateBubbleModel> model(
+          source_language, target_language));
+  std::unique_ptr<TranslateBubbleModel> model(
       new TranslateBubbleModelImpl(step, std::move(ui_delegate)));
   TranslateBubbleView* view = new TranslateBubbleView(
       anchor_view, std::move(model), error_type, web_contents);
-  views::Widget* bubble_widget = views::BubbleDelegateView::CreateBubble(view);
+  views::Widget* bubble_widget =
+      views::BubbleDialogDelegateView::CreateBubble(view);
   view->ShowForReason(reason);
   return bubble_widget;
 }
 
 // static
-void TranslateBubbleView::CloseBubble() {
-  if (!translate_bubble_view_)
-    return;
-
-  translate_bubble_view_->GetWidget()->Close();
+void TranslateBubbleView::CloseCurrentBubble() {
+  if (translate_bubble_view_)
+    translate_bubble_view_->CloseBubble();
 }
 
 // static
@@ -174,8 +172,8 @@ void TranslateBubbleView::WindowClosing() {
   // while the TranslateBubbleViewModel(Impl) is still alive. Instead,
   // TranslateBubbleViewModel should take a reference of a WebContents at each
   // method. (crbug/320497)
-  if (!translate_executed_ && web_contents())
-    model_->TranslationDeclined(denial_button_clicked_);
+  if (web_contents())
+    model_->OnBubbleClosing();
 
   // We have to reset |translate_bubble_view_| here, not in our destructor,
   // because we'll be destroyed asynchronously and the shown state will be
@@ -213,7 +211,7 @@ bool TranslateBubbleView::AcceleratorPressed(
       break;
     }
   }
-  return BubbleDelegateView::AcceleratorPressed(accelerator);
+  return BubbleDialogDelegateView::AcceleratorPressed(accelerator);
 }
 
 gfx::Size TranslateBubbleView::GetPreferredSize() const {
@@ -244,7 +242,7 @@ TranslateBubbleModel::ViewState TranslateBubbleView::GetViewState() const {
 
 TranslateBubbleView::TranslateBubbleView(
     views::View* anchor_view,
-    scoped_ptr<TranslateBubbleModel> model,
+    std::unique_ptr<TranslateBubbleModel> model,
     translate::TranslateErrors::Type error_type,
     content::WebContents* web_contents)
     : LocationBarBubbleDelegateView(anchor_view, web_contents),
@@ -263,15 +261,7 @@ TranslateBubbleView::TranslateBubbleView(
       model_(std::move(model)),
       error_type_(error_type),
       is_in_incognito_window_(
-          web_contents ? web_contents->GetBrowserContext()->IsOffTheRecord()
-                       : false),
-      translate_executed_(false),
-      denial_button_clicked_(false) {
-  if (model_->GetViewState() !=
-      TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE) {
-    translate_executed_ = true;
-  }
-
+          web_contents && web_contents->GetBrowserContext()->IsOffTheRecord()) {
   translate_bubble_view_ = this;
 }
 
@@ -296,7 +286,6 @@ void TranslateBubbleView::HandleButtonPressed(
     TranslateBubbleView::ButtonID sender_id) {
   switch (sender_id) {
     case BUTTON_ID_TRANSLATE: {
-      translate_executed_ = true;
       model_->Translate();
       break;
     }
@@ -308,7 +297,6 @@ void TranslateBubbleView::HandleButtonPressed(
         UpdateChildVisibilities();
         SizeToContents();
       } else {
-        translate_executed_ = true;
         model_->Translate();
         SwitchView(TranslateBubbleModel::VIEW_STATE_TRANSLATING);
       }
@@ -321,7 +309,6 @@ void TranslateBubbleView::HandleButtonPressed(
       break;
     }
     case BUTTON_ID_TRY_AGAIN: {
-      translate_executed_ = true;
       model_->Translate();
       break;
     }
@@ -362,7 +349,7 @@ void TranslateBubbleView::HandleComboboxPerformAction(
     TranslateBubbleView::ComboboxID sender_id) {
   switch (sender_id) {
     case COMBOBOX_ID_DENIAL: {
-      denial_button_clicked_ = true;
+      model_->DeclineTranslation();
       DenialComboboxIndex index =
           static_cast<DenialComboboxIndex>(denial_combobox_->selected_index());
       switch (index) {

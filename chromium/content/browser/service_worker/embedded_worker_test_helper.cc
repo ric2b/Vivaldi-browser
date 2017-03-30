@@ -51,10 +51,11 @@ class MockMessagePortMessageFilter : public MessagePortMessageFilter {
 }  // namespace
 
 class EmbeddedWorkerTestHelper::MockEmbeddedWorkerSetup
-    : public EmbeddedWorkerSetup {
+    : public mojom::EmbeddedWorkerSetup {
  public:
-  static void Create(const base::WeakPtr<EmbeddedWorkerTestHelper>& helper,
-                     mojo::InterfaceRequest<EmbeddedWorkerSetup> request) {
+  static void Create(
+      const base::WeakPtr<EmbeddedWorkerTestHelper>& helper,
+      mojo::InterfaceRequest<mojom::EmbeddedWorkerSetup> request) {
     new MockEmbeddedWorkerSetup(helper, std::move(request));
   }
 
@@ -69,12 +70,13 @@ class EmbeddedWorkerTestHelper::MockEmbeddedWorkerSetup
   }
 
  private:
-  MockEmbeddedWorkerSetup(const base::WeakPtr<EmbeddedWorkerTestHelper>& helper,
-                          mojo::InterfaceRequest<EmbeddedWorkerSetup> request)
+  MockEmbeddedWorkerSetup(
+      const base::WeakPtr<EmbeddedWorkerTestHelper>& helper,
+      mojo::InterfaceRequest<mojom::EmbeddedWorkerSetup> request)
       : helper_(helper), binding_(this, std::move(request)) {}
 
   base::WeakPtr<EmbeddedWorkerTestHelper> helper_;
-  mojo::StrongBinding<EmbeddedWorkerSetup> binding_;
+  mojo::StrongBinding<mojom::EmbeddedWorkerSetup> binding_;
 };
 
 EmbeddedWorkerTestHelper::EmbeddedWorkerTestHelper(
@@ -187,6 +189,8 @@ bool EmbeddedWorkerTestHelper::OnMessageToWorker(
   current_embedded_worker_id_ = embedded_worker_id;
   IPC_BEGIN_MESSAGE_MAP(EmbeddedWorkerTestHelper, message)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_ActivateEvent, OnActivateEventStub)
+    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_ExtendableMessageEvent,
+                        OnExtendableMessageEventStub)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_InstallEvent, OnInstallEventStub)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_FetchEvent, OnFetchEventStub)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_PushEvent, OnPushEventStub)
@@ -205,6 +209,13 @@ void EmbeddedWorkerTestHelper::OnActivateEvent(int embedded_worker_id,
       new ServiceWorkerHostMsg_ActivateEventFinished(
           embedded_worker_id, request_id,
           blink::WebServiceWorkerEventResultCompleted));
+}
+
+void EmbeddedWorkerTestHelper::OnExtendableMessageEvent(int embedded_worker_id,
+                                                        int request_id) {
+  SimulateSend(new ServiceWorkerHostMsg_ExtendableMessageEventFinished(
+      embedded_worker_id, request_id,
+      blink::WebServiceWorkerEventResultCompleted));
 }
 
 void EmbeddedWorkerTestHelper::OnInstallEvent(int embedded_worker_id,
@@ -228,7 +239,9 @@ void EmbeddedWorkerTestHelper::OnFetchEvent(
       ServiceWorkerResponse(GURL(), 200, "OK",
                             blink::WebServiceWorkerResponseTypeDefault,
                             ServiceWorkerHeaderMap(), std::string(), 0, GURL(),
-                            blink::WebServiceWorkerResponseErrorUnknown)));
+                            blink::WebServiceWorkerResponseErrorUnknown,
+                            base::Time(), false /* is_in_cache_storage */,
+                            std::string() /* cache_storage_cache_name */)));
 }
 
 void EmbeddedWorkerTestHelper::OnPushEvent(int embedded_worker_id,
@@ -362,11 +375,18 @@ void EmbeddedWorkerTestHelper::OnMessageToWorkerStub(
 
 void EmbeddedWorkerTestHelper::OnActivateEventStub(int request_id) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(&EmbeddedWorkerTestHelper::OnActivateEvent,
-                 weak_factory_.GetWeakPtr(),
-                 current_embedded_worker_id_,
-                 request_id));
+      FROM_HERE, base::Bind(&EmbeddedWorkerTestHelper::OnActivateEvent,
+                            weak_factory_.GetWeakPtr(),
+                            current_embedded_worker_id_, request_id));
+}
+
+void EmbeddedWorkerTestHelper::OnExtendableMessageEventStub(
+    int request_id,
+    const ServiceWorkerMsg_ExtendableMessageEvent_Params& params) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&EmbeddedWorkerTestHelper::OnExtendableMessageEvent,
+                            weak_factory_.GetWeakPtr(),
+                            current_embedded_worker_id_, request_id));
 }
 
 void EmbeddedWorkerTestHelper::OnInstallEventStub(int request_id) {

@@ -129,7 +129,7 @@ public:
         Remove
     };
 
-    Type type() const { return m_type; }
+    Type getType() const { return m_type; }
 
     const Persistent<ContentDecryptionModuleResult> result() const
     {
@@ -302,13 +302,14 @@ private:
 
 MediaKeySession* MediaKeySession::create(ScriptState* scriptState, MediaKeys* mediaKeys, WebEncryptedMediaSessionType sessionType)
 {
-    RefPtrWillBeRawPtr<MediaKeySession> session = new MediaKeySession(scriptState, mediaKeys, sessionType);
+    MediaKeySession* session = new MediaKeySession(scriptState, mediaKeys, sessionType);
     session->suspendIfNeeded();
-    return session.get();
+    return session;
 }
 
 MediaKeySession::MediaKeySession(ScriptState* scriptState, MediaKeys* mediaKeys, WebEncryptedMediaSessionType sessionType)
-    : ActiveDOMObject(scriptState->executionContext())
+    : ActiveScriptWrappable(this)
+    , ActiveDOMObject(scriptState->getExecutionContext())
     , m_asyncEventQueue(GenericEventQueue::create(this))
     , m_mediaKeys(mediaKeys)
     , m_sessionType(sessionType)
@@ -317,7 +318,7 @@ MediaKeySession::MediaKeySession(ScriptState* scriptState, MediaKeys* mediaKeys,
     , m_isUninitialized(true)
     , m_isCallable(false)
     , m_isClosed(false)
-    , m_closedPromise(new ClosedPromise(scriptState->executionContext(), this, ClosedPromise::Closed))
+    , m_closedPromise(new ClosedPromise(scriptState->getExecutionContext(), this, ClosedPromise::Closed))
     , m_actionTimer(this, &MediaKeySession::actionTimerFired)
 {
     WTF_LOG(Media, "MediaKeySession(%p)::MediaKeySession", this);
@@ -489,7 +490,7 @@ ScriptPromise MediaKeySession::load(ScriptState* scriptState, const String& sess
     // FIXME: Implement this (http://crbug.com/448922).
 
     // 6. Let origin be the origin of this object's Document.
-    //    (Available as executionContext()->securityOrigin() anytime.)
+    //    (Available as getExecutionContext()->getSecurityOrigin() anytime.)
 
     // 7. Let promise be a new promise.
     LoadSessionResultPromise* result = new LoadSessionResultPromise(scriptState, this);
@@ -632,7 +633,7 @@ void MediaKeySession::actionTimerFired(Timer<MediaKeySession>*)
     while (!pendingActions.isEmpty()) {
         PendingAction* action = pendingActions.takeFirst();
 
-        switch (action->type()) {
+        switch (action->getType()) {
         case PendingAction::GenerateRequest:
             // NOTE: Continue step 9 of MediaKeySession::generateRequest().
             WTF_LOG(Media, "MediaKeySession(%p)::actionTimerFired: GenerateRequest", this);
@@ -800,9 +801,9 @@ void MediaKeySession::message(MessageType messageType, const unsigned char* mess
     }
     init.setMessage(DOMArrayBuffer::create(static_cast<const void*>(message), messageLength));
 
-    RefPtrWillBeRawPtr<MediaKeyMessageEvent> event = MediaKeyMessageEvent::create(EventTypeNames::message, init);
+    MediaKeyMessageEvent* event = MediaKeyMessageEvent::create(EventTypeNames::message, init);
     event->setTarget(this);
-    m_asyncEventQueue->enqueueEvent(event.release());
+    m_asyncEventQueue->enqueueEvent(event);
 }
 
 void MediaKeySession::close()
@@ -844,7 +845,7 @@ void MediaKeySession::expirationChanged(double updatedExpiryTimeInMS)
 
 void MediaKeySession::keysStatusesChange(const WebVector<WebEncryptedMediaKeyInformation>& keys, bool hasAdditionalUsableKey)
 {
-    WTF_LOG(Media, "MediaKeySession(%p)::keysStatusesChange with %zu keys and usable key: %d", this, keys.size(), hasAdditionalUsableKey);
+    WTF_LOG(Media, "MediaKeySession(%p)::keysStatusesChange with %zu keys and hasAdditionalUsableKey is %s", this, keys.size(), hasAdditionalUsableKey ? "true" : "false");
 
     // From https://w3c.github.io/encrypted-media/#update-key-statuses:
     // The following steps are run:
@@ -868,9 +869,9 @@ void MediaKeySession::keysStatusesChange(const WebVector<WebEncryptedMediaKeyInf
 
     // 5. Queue a task to fire a simple event named keystatuseschange
     //    at the session.
-    RefPtrWillBeRawPtr<Event> event = Event::create(EventTypeNames::keystatuseschange);
+    Event* event = Event::create(EventTypeNames::keystatuseschange);
     event->setTarget(this);
-    m_asyncEventQueue->enqueueEvent(event.release());
+    m_asyncEventQueue->enqueueEvent(event);
 
     // 6. Queue a task to run the attempt to resume playback if necessary
     //    algorithm on each of the media element(s) whose mediaKeys attribute
@@ -885,23 +886,21 @@ const AtomicString& MediaKeySession::interfaceName() const
     return EventTargetNames::MediaKeySession;
 }
 
-ExecutionContext* MediaKeySession::executionContext() const
+ExecutionContext* MediaKeySession::getExecutionContext() const
 {
-    return ActiveDOMObject::executionContext();
+    return ActiveDOMObject::getExecutionContext();
 }
 
 bool MediaKeySession::hasPendingActivity() const
 {
     // Remain around if there are pending events or MediaKeys is still around
     // and we're not closed.
-    WTF_LOG(Media, "MediaKeySession(%p)::hasPendingActivity %s%s%s%s", this,
-        ScriptWrappable::hasPendingActivity() ? " ScriptWrappable::hasPendingActivity()" : "",
+    WTF_LOG(Media, "MediaKeySession(%p)::hasPendingActivity %s%s%s", this,
         !m_pendingActions.isEmpty() ? " !m_pendingActions.isEmpty()" : "",
         m_asyncEventQueue->hasPendingEvents() ? " m_asyncEventQueue->hasPendingEvents()" : "",
         (m_mediaKeys && !m_isClosed) ? " m_mediaKeys && !m_isClosed" : "");
 
-    return ScriptWrappable::hasPendingActivity()
-        || !m_pendingActions.isEmpty()
+    return !m_pendingActions.isEmpty()
         || m_asyncEventQueue->hasPendingEvents()
         || (m_mediaKeys && !m_isClosed);
 }

@@ -114,11 +114,6 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
                              int x,
                              int y);
 
-  // Creates and opens the front-end API channel to applicable front-end in a
-  // form of devtools agent host.
-  static content::DevToolsExternalAgentProxyDelegate*
-      CreateWebSocketAPIChannel(const std::string& path);
-
   // Sets closure to be called after load is done. If already loaded, calls
   // closure immediately.
   void SetLoadCompletedCallback(const base::Closure& closure);
@@ -129,7 +124,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   // Reloads inspected web contents as if it was triggered from DevTools.
   // Returns true if it has successfully handled reload, false if the caller
   // is to proceed reload without DevTools interception.
-  bool ReloadInspectedWebContents(bool ignore_cache);
+  bool ReloadInspectedWebContents(bool bypass_cache);
 
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,
@@ -210,6 +205,8 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   // Notify devtools window that closing of |contents| was cancelled
   // by user.
   static void OnPageCloseCanceled(content::WebContents* contents);
+
+  content::WebContents* GetInspectedWebContents();
 
  private:
   friend class DevToolsWindowTesting;
@@ -312,6 +309,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   void SetWhitelistedShortcuts(const std::string& message) override;
   void InspectedContentsClosing() override;
   void OnLoadCompleted() override;
+  void ReadyForTest() override;
   InfoBarService* GetInfoBarService() override;
   void RenderProcessGone(bool crashed) override;
 
@@ -323,7 +321,6 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   void LoadCompleted();
   void UpdateBrowserToolbar();
   void UpdateBrowserWindow();
-  content::WebContents* GetInspectedWebContents();
 
   scoped_ptr<ObserverWithAccessor> inspected_contents_observer_;
 
@@ -342,6 +339,8 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   bool intercepted_page_beforeunload_;
   base::Closure load_completed_callback_;
   base::Closure close_callback_;
+  bool ready_for_test_;
+  base::Closure ready_for_test_callback_;
 
   base::TimeTicks inspect_element_start_time_;
   scoped_ptr<DevToolsEventForwarder> event_forwarder_;

@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/task_runner_util.h"
 #include "ppapi/cpp/completion_callback.h"
@@ -120,17 +121,18 @@ protocol::FrameConsumer* PepperVideoRenderer2D::GetFrameConsumer() {
   return software_video_renderer_->GetFrameConsumer();
 }
 
-scoped_ptr<webrtc::DesktopFrame> PepperVideoRenderer2D::AllocateFrame(
+std::unique_ptr<webrtc::DesktopFrame> PepperVideoRenderer2D::AllocateFrame(
     const webrtc::DesktopSize& size) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   pp::ImageData buffer_data(instance_, PP_IMAGEDATAFORMAT_BGRA_PREMUL,
                             pp::Size(size.width(), size.height()), false);
-  return make_scoped_ptr(new PepperDesktopFrame(buffer_data));
+  return base::WrapUnique(new PepperDesktopFrame(buffer_data));
 }
 
-void PepperVideoRenderer2D::DrawFrame(scoped_ptr<webrtc::DesktopFrame> frame,
-                                      const base::Closure& done) {
+void PepperVideoRenderer2D::DrawFrame(
+    std::unique_ptr<webrtc::DesktopFrame> frame,
+    const base::Closure& done) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!frame_received_) {
@@ -149,25 +151,6 @@ void PepperVideoRenderer2D::DrawFrame(scoped_ptr<webrtc::DesktopFrame> frame,
                          source_size_.width());
     bool result = instance_->BindGraphics(graphics2d_);
     DCHECK(result) << "Couldn't bind the device context.";
-  }
-
-
-  if (size_changed || !source_dpi_.equals(frame->dpi())) {
-    source_dpi_ = frame->dpi();
-
-    // Notify JavaScript of the change in source size.
-    event_handler_->OnVideoSize(source_size_, source_dpi_);
-  }
-
-  const webrtc::DesktopRegion* shape = frame->shape();
-  if (shape) {
-    if (!source_shape_ || !source_shape_->Equals(*shape)) {
-      source_shape_ = make_scoped_ptr(new webrtc::DesktopRegion(*shape));
-      event_handler_->OnVideoShape(source_shape_.get());
-    }
-  } else if (source_shape_) {
-    source_shape_ = nullptr;
-    event_handler_->OnVideoShape(nullptr);
   }
 
   // If Debug dirty region is enabled then emit it.

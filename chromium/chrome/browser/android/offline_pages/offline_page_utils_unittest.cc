@@ -22,6 +22,7 @@
 #include "components/offline_pages/offline_page_switches.h"
 #include "components/offline_pages/offline_page_test_archiver.h"
 #include "components/offline_pages/offline_page_test_store.h"
+#include "components/offline_pages/proto/offline_pages.pb.h"
 #include "net/base/filename_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -32,9 +33,11 @@ namespace {
 const GURL kTestPage1Url("http://test.org/page1");
 const GURL kTestPage2Url("http://test.org/page2");
 const GURL kTestPage3Url("http://test.org/page3");
+const int64_t kTestFileSize = 876543LL;
+const char* kTestPage1ClientId = "1234";
+const char* kTestPage2ClientId = "5678";
 const int64_t kTestPage1BookmarkId = 1234;
 const int64_t kTestPage2BookmarkId = 5678;
-const int64_t kTestFileSize = 876543LL;
 
 }  // namespace
 
@@ -50,7 +53,8 @@ class OfflinePageUtilsTest
   void RunUntilIdle();
 
   // Necessary callbacks for the offline page model.
-  void OnSavePageDone(OfflinePageModel::SavePageResult result);
+  void OnSavePageDone(OfflinePageModel::SavePageResult result,
+                      int64_t offlineId);
   void OnClearAllDone();
 
   // OfflinePageTestArchiver::Observer implementation:
@@ -65,15 +69,19 @@ class OfflinePageUtilsTest
 
   TestingProfile* profile() { return &profile_; }
 
+  int64_t offline_id() const { return offline_id_; }
+
  private:
   void CreateOfflinePages();
-  scoped_ptr<OfflinePageTestArchiver> BuildArchiver(
+  std::unique_ptr<OfflinePageTestArchiver> BuildArchiver(
       const GURL& url,
       const base::FilePath& file_name);
 
   GURL offline_url_page_1_;
   GURL offline_url_page_2_;
   GURL offline_url_missing_;
+
+  int64_t offline_id_;
 
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   base::ThreadTaskRunnerHandle task_runner_handle_;
@@ -87,7 +95,8 @@ OfflinePageUtilsTest::OfflinePageUtilsTest()
 OfflinePageUtilsTest::~OfflinePageUtilsTest() {}
 
 void OfflinePageUtilsTest::SetUp() {
-  // Enable offline pages feature.
+  // Enables offline pages feature.
+  // TODO(jianli): Remove this once the feature is completely enabled.
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kEnableOfflinePages);
 
@@ -106,8 +115,9 @@ void OfflinePageUtilsTest::RunUntilIdle() {
 }
 
 void OfflinePageUtilsTest::OnSavePageDone(
-    OfflinePageModel::SavePageResult result) {
-  // Result ignored here.
+    OfflinePageModel::SavePageResult result,
+    int64_t offline_id) {
+  offline_id_ = offline_id;
 }
 
 void OfflinePageUtilsTest::OnClearAllDone() {
@@ -122,26 +132,30 @@ void OfflinePageUtilsTest::CreateOfflinePages() {
       OfflinePageModelFactory::GetForBrowserContext(profile());
 
   // Create page 1.
-  scoped_ptr<OfflinePageTestArchiver> archiver(BuildArchiver(
+  std::unique_ptr<OfflinePageTestArchiver> archiver(BuildArchiver(
       kTestPage1Url, base::FilePath(FILE_PATH_LITERAL("page1.mhtml"))));
+  offline_pages::ClientId client_id;
+  client_id.name_space = BOOKMARK_NAMESPACE;
+  client_id.id = kTestPage1ClientId;
   model->SavePage(
-      kTestPage1Url, kTestPage1BookmarkId, std::move(archiver),
+      kTestPage1Url, client_id, std::move(archiver),
       base::Bind(&OfflinePageUtilsTest::OnSavePageDone, AsWeakPtr()));
   RunUntilIdle();
+  int64_t offline1 = offline_id();
 
+  client_id.id = kTestPage2ClientId;
   // Create page 2.
   archiver = BuildArchiver(kTestPage2Url,
                            base::FilePath(FILE_PATH_LITERAL("page2.mhtml")));
   model->SavePage(
-      kTestPage2Url, kTestPage2BookmarkId, std::move(archiver),
+      kTestPage2Url, client_id, std::move(archiver),
       base::Bind(&OfflinePageUtilsTest::OnSavePageDone, AsWeakPtr()));
   RunUntilIdle();
+  int64_t offline2 = offline_id();
 
   // Make a copy of local paths of the two pages stored in the model.
-  offline_url_page_1_ =
-      model->GetPageByBookmarkId(kTestPage1BookmarkId)->GetOfflineURL();
-  offline_url_page_2_ =
-      model->GetPageByBookmarkId(kTestPage2BookmarkId)->GetOfflineURL();
+  offline_url_page_1_ = model->GetPageByOfflineId(offline1)->GetOfflineURL();
+  offline_url_page_2_ = model->GetPageByOfflineId(offline2)->GetOfflineURL();
   // Create a file path that is not associated with any offline page.
   offline_url_missing_ = net::FilePathToFileURL(
       profile()
@@ -150,10 +164,10 @@ void OfflinePageUtilsTest::CreateOfflinePages() {
           .Append(FILE_PATH_LITERAL("missing_file.mhtml")));
 }
 
-scoped_ptr<OfflinePageTestArchiver> OfflinePageUtilsTest::BuildArchiver(
+std::unique_ptr<OfflinePageTestArchiver> OfflinePageUtilsTest::BuildArchiver(
     const GURL& url,
     const base::FilePath& file_name) {
-  scoped_ptr<OfflinePageTestArchiver> archiver(new OfflinePageTestArchiver(
+  std::unique_ptr<OfflinePageTestArchiver> archiver(new OfflinePageTestArchiver(
       this, url, OfflinePageArchiver::ArchiverResult::SUCCESSFULLY_CREATED,
       kTestFileSize, base::ThreadTaskRunnerHandle::Get()));
   archiver->set_filename(file_name);

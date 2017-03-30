@@ -189,6 +189,23 @@ public:
         ScrollLockOn     = 1 << 19,
     };
 
+    // Indicates whether the browser needs to block on the ACK result for
+    // this event, and if not why note (for metrics/diagnostics purposes).
+    // These values are direct mappings of the values in PlatformEvent
+    // so the values can be cast between the enumerations. static_asserts
+    // checking this are in web/WebInputEventConversion.cpp.
+    enum DispatchType {
+        // Event can be canceled.
+        Blocking,
+        // Event can not be canceled.
+        EventNonBlocking,
+        // All listeners are passive; not cancelable.
+        ListenersNonBlockingPassive,
+        // This value represents a state which would have normally blocking
+        // but was forced to be non-blocking; not cancelable.
+        ListenersForcedNonBlockingPassive,
+    };
+
     // The rail mode for a wheel event specifies the axis on which scrolling is
     // expected to stick. If this axis is set to Free, then scrolling is not
     // stuck to any axis.
@@ -431,6 +448,10 @@ public:
 
     RailsMode railsMode;
 
+    // Whether the event is blocking, non-blocking, all event
+    // listeners were passive or was forced to be non-blocking.
+    DispatchType dispatchType;
+
     WebMouseWheelEvent()
         : WebMouseEvent(sizeof(WebMouseWheelEvent))
         , deltaX(0.0f)
@@ -448,6 +469,7 @@ public:
         , hasPreciseScrollingDeltas(false)
         , canScroll(true)
         , railsMode(RailsModeFree)
+        , dispatchType(Blocking)
     {
     }
 };
@@ -513,6 +535,14 @@ public:
             // If true, this event will skip hit testing to find a scroll
             // target and instead just scroll the viewport.
             bool targetViewport;
+            // If true, this event comes after a non-inertial gesture
+            // scroll sequence; OSX has unique phases for normal and
+            // momentum scroll events. Should always be false for touch based
+            // input as it generates GestureFlingStart instead.
+            bool inertial;
+            // True if this event was synthesized in order to force a hit test; avoiding scroll
+            // latching behavior until crbug.com/526463 is fully implemented.
+            bool synthetic;
         } scrollBegin;
 
         struct {
@@ -536,6 +566,16 @@ public:
             // The original delta units the scrollBegin and scrollUpdates
             // were sent as.
             ScrollUnits deltaUnits;
+            // If true, this event comes after an inertial gesture
+            // scroll sequence; OSX has unique phases for normal and
+            // momentum scroll events. Should always be false for touch based
+            // input as it generates GestureFlingStart instead.
+            bool inertial;
+            // True if this event was synthesized in order to generate the proper
+            // GSB/GSU/GSE matching sequences. This is a temporary so that a future
+            // GSB will generate a hit test so latching behavior is avoided
+            // until crbug.com/526463 is fully implemented.
+            bool synthetic;
         } scrollEnd;
 
         struct {
@@ -584,9 +624,9 @@ public:
     // List of all touches, regardless of state.
     WebTouchPoint touches[touchesLengthCap];
 
-    // Whether the event can be canceled (with preventDefault). If true then the browser
-    // must wait for an ACK for this event. If false then no ACK IPC is expected.
-    bool cancelable;
+    // Whether the event is blocking, non-blocking, all event
+    // listeners were passive or was forced to be non-blocking.
+    DispatchType dispatchType;
 
     // For a single touch, this is true after the touch-point has moved beyond
     // the platform slop region. For a multitouch, this is true after any
@@ -599,7 +639,7 @@ public:
     WebTouchEvent()
         : WebInputEvent(sizeof(WebTouchEvent))
         , touchesLength(0)
-        , cancelable(true)
+        , dispatchType(Blocking)
         , movedBeyondSlopRegion(false)
         , uniqueTouchEventId(0)
     {

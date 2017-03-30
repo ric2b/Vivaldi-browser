@@ -35,22 +35,6 @@ using content::PermissionType;
 
 namespace {
 
-// Enum for UMA purposes, make sure you update histograms.xml if you add new
-// permission actions. Never delete or reorder an entry; only add new entries
-// immediately before PERMISSION_NUM
-enum PermissionAction {
-  GRANTED = 0,
-  DENIED = 1,
-  DISMISSED = 2,
-  IGNORED = 3,
-  REVOKED = 4,
-  REENABLED = 5,
-  REQUESTED = 6,
-
-  // Always keep this at the end.
-  PERMISSION_ACTION_NUM,
-};
-
 // Deprecated. This method is used for the single-dimensional RAPPOR metrics
 // that are being replaced by the multi-dimensional ones.
 const std::string GetRapporMetric(PermissionType permission,
@@ -149,7 +133,10 @@ void RecordPermissionAction(PermissionType permission,
         UMA_HISTOGRAM_ENUMERATION("Permissions.Action.VideoCapture", action,
                                   PERMISSION_ACTION_NUM);
         break;
+    // The user is not prompted for these permissions, thus there is no
+    // permission action recorded for them.
     case PermissionType::MIDI:
+    case PermissionType::BACKGROUND_SYNC:
     case PermissionType::NUM:
       NOTREACHED() << "PERMISSION "
                    << PermissionUtil::GetPermissionString(permission)
@@ -178,8 +165,7 @@ void RecordPermissionAction(PermissionType permission,
   sample->SetStringField("Port", requesting_origin.port());
   sample->SetStringField("Domain",
       rappor::GetDomainAndRegistrySampleFromGURL(requesting_origin));
-  sample->SetFlagsField("Actions",
-                        1 << action,
+  sample->SetFlagsField("Actions", static_cast<uint64_t>(1) << action,
                         PermissionAction::PERMISSION_ACTION_NUM);
   rappor_service->RecordSampleObj("Permissions.Action." + permission_str,
                                   std::move(sample));
@@ -226,15 +212,15 @@ void RecordPermissionRequest(PermissionType permission,
     content::PermissionManager* manager = profile->GetPermissionManager();
     if (!manager)
       return;
-    content::PermissionStatus embedding_permission_status =
+    blink::mojom::PermissionStatus embedding_permission_status =
         manager->GetPermissionStatus(permission, embedding_origin,
                                      embedding_origin);
 
     base::HistogramBase* histogram = base::LinearHistogram::FactoryGet(
         "Permissions.Requested.CrossOrigin_" +
             PermissionUtil::GetPermissionString(permission),
-        1, static_cast<int>(content::PermissionStatus::LAST),
-        static_cast<int>(content::PermissionStatus::LAST) + 1,
+        1, static_cast<int>(blink::mojom::PermissionStatus::LAST),
+        static_cast<int>(blink::mojom::PermissionStatus::LAST) + 1,
         base::HistogramBase::kUmaTargetedHistogramFlag);
     histogram->Add(static_cast<int>(embedding_permission_status));
   } else {
@@ -245,7 +231,7 @@ void RecordPermissionRequest(PermissionType permission,
   }
 }
 
-} // namespace
+}  // anonymous namespace
 
 // Make sure you update histograms.xml permission histogram_suffix if you
 // add new permission

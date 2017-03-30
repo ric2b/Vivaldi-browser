@@ -26,12 +26,14 @@
 #include "net/cert/x509_certificate.h"
 #include "url/url_canon.h"
 
-#if defined(USE_NSS_CERTS) || defined(OS_IOS)
+#if defined(USE_NSS_VERIFIER)
 #include "net/cert/cert_verify_proc_nss.h"
 #elif defined(USE_OPENSSL_CERTS) && !defined(OS_ANDROID)
 #include "net/cert/cert_verify_proc_openssl.h"
 #elif defined(OS_ANDROID)
 #include "net/cert/cert_verify_proc_android.h"
+#elif defined(OS_IOS)
+#include "net/cert/cert_verify_proc_ios.h"
 #elif defined(OS_MACOSX)
 #include "net/cert/cert_verify_proc_mac.h"
 #elif defined(OS_WIN)
@@ -203,12 +205,14 @@ struct HashToArrayComparator {
 
 // static
 CertVerifyProc* CertVerifyProc::CreateDefault() {
-#if defined(USE_NSS_CERTS) || defined(OS_IOS)
+#if defined(USE_NSS_VERIFIER)
   return new CertVerifyProcNSS();
 #elif defined(USE_OPENSSL_CERTS) && !defined(OS_ANDROID)
   return new CertVerifyProcOpenSSL();
 #elif defined(OS_ANDROID)
   return new CertVerifyProcAndroid();
+#elif defined(OS_IOS)
+  return new CertVerifyProcIOS();
 #elif defined(OS_MACOSX)
   return new CertVerifyProcMac();
 #elif defined(OS_WIN)

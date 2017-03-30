@@ -20,6 +20,7 @@
 #include "ui/display/util/x11/edid_parser_x11.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/display.h"
+#include "ui/gfx/font_render_params.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/native_widget_types.h"
@@ -38,9 +39,12 @@ const int64_t kConfigureDelayMs = 500;
 
 double GetDeviceScaleFactor() {
   float device_scale_factor = 1.0f;
-  if (views::LinuxUI::instance())
+  if (views::LinuxUI::instance()) {
     device_scale_factor =
       views::LinuxUI::instance()->GetDeviceScaleFactor();
+  } else if (gfx::Display::HasForceDeviceScaleFactor()) {
+    device_scale_factor = gfx::Display::GetForcedDeviceScaleFactor();
+  }
   return device_scale_factor;
 }
 
@@ -104,9 +108,9 @@ DesktopScreenX11::DesktopScreenX11()
                    RROutputChangeNotifyMask |
                    RRCrtcChangeNotifyMask);
 
-    displays_ = BuildDisplaysFromXRandRInfo();
+    SetDisplaysInternal(BuildDisplaysFromXRandRInfo());
   } else {
-    displays_ = GetFallbackDisplayList();
+    SetDisplaysInternal(GetFallbackDisplayList());
   }
 }
 
@@ -365,9 +369,15 @@ std::vector<gfx::Display> DesktopScreenX11::BuildDisplaysFromXRandRInfo() {
 
 void DesktopScreenX11::ConfigureTimerFired() {
   std::vector<gfx::Display> old_displays = displays_;
-  displays_ = BuildDisplaysFromXRandRInfo();
-
+  SetDisplaysInternal(BuildDisplaysFromXRandRInfo());
   change_notifier_.NotifyDisplaysChanged(old_displays, displays_);
+}
+
+void DesktopScreenX11::SetDisplaysInternal(
+    const std::vector<gfx::Display>& displays) {
+  displays_ = displays;
+  gfx::SetFontRenderParamsDeviceScaleFactor(
+      GetPrimaryDisplay().device_scale_factor());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

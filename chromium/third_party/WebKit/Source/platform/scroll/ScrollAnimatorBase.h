@@ -48,18 +48,19 @@ class Scrollbar;
 
 class PLATFORM_EXPORT ScrollAnimatorBase : public ScrollAnimatorCompositorCoordinator {
 public:
-    static PassOwnPtrWillBeRawPtr<ScrollAnimatorBase> create(ScrollableArea*);
+    static ScrollAnimatorBase* create(ScrollableArea*);
 
     virtual ~ScrollAnimatorBase();
 
     virtual void dispose() { }
 
-    // Computes a scroll destination for the given parameters.  The returned
-    // ScrollResultOneDimensional will have didScroll set to false if already at
-    // the destination.  Otherwise, starts scrolling towards the destination and
-    // didScroll is true.  Scrolling may be immediate or animated. The base
-    // class implementation always scrolls immediately, never animates.
-    virtual ScrollResultOneDimensional userScroll(ScrollbarOrientation, ScrollGranularity, float step, float delta);
+    // A possibly animated scroll. The base class implementation always scrolls
+    // immediately, never animates. If the scroll is animated and currently the
+    // animator has an in-progress animation, the ScrollResult will always return
+    // no unusedDelta and didScroll=true, i.e. fully consuming the scroll request.
+    // This makes animations latch to a single scroller. Note, the semantics are
+    // currently somewhat different on Mac - see ScrollAnimatorMac.mm.
+    virtual ScrollResult userScroll(ScrollGranularity, const FloatSize& delta);
 
     virtual void scrollToOffsetWithoutAnimation(const FloatPoint&);
 
@@ -73,11 +74,11 @@ public:
 
     // Returns how much of pixelDelta will be used by the underlying scrollable
     // area.
-    virtual float computeDeltaToConsume(ScrollbarOrientation, float pixelDelta) const;
+    virtual FloatSize computeDeltaToConsume(const FloatSize& delta) const;
 
 
     // ScrollAnimatorCompositorCoordinator implementation.
-    ScrollableArea* scrollableArea() const override { return m_scrollableArea; }
+    ScrollableArea* getScrollableArea() const override { return m_scrollableArea; }
     void tickAnimation(double monotonicTime) override { };
     void cancelAnimation() override { }
     void takeoverCompositorAnimation() override { }
@@ -92,10 +93,8 @@ public:
     virtual void mouseMovedInContentArea() const { }
     virtual void mouseEnteredScrollbar(Scrollbar&) const { }
     virtual void mouseExitedScrollbar(Scrollbar&) const { }
-    virtual void willStartLiveResize() { }
     virtual void updateAfterLayout() { }
     virtual void contentsResized() const { }
-    virtual void willEndLiveResize() { }
     virtual void contentAreaDidShow() const { }
     virtual void contentAreaDidHide() const { }
 
@@ -119,11 +118,9 @@ protected:
 
     virtual void notifyPositionChanged();
 
-    float clampScrollPosition(ScrollbarOrientation, float) const;
+    Member<ScrollableArea> m_scrollableArea;
 
-    RawPtrWillBeMember<ScrollableArea> m_scrollableArea;
-    float m_currentPosX; // We avoid using a FloatPoint in order to reduce
-    float m_currentPosY; // subclass code complexity.
+    FloatPoint m_currentPos;
 };
 
 } // namespace blink

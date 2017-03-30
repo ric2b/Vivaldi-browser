@@ -34,9 +34,9 @@
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<PublicURLManager> PublicURLManager::create(ExecutionContext* context)
+RawPtr<PublicURLManager> PublicURLManager::create(ExecutionContext* context)
 {
-    OwnPtrWillBeRawPtr<PublicURLManager> publicURLManager = adoptPtrWillBeNoop(new PublicURLManager(context));
+    RawPtr<PublicURLManager> publicURLManager = new PublicURLManager(context);
     publicURLManager->suspendIfNeeded();
     return publicURLManager.release();
 }
@@ -54,15 +54,15 @@ void PublicURLManager::registerURL(SecurityOrigin* origin, const KURL& url, URLR
 
     RegistryURLMap::ValueType* found = m_registryToURL.add(&registrable->registry(), URLMap()).storedValue;
     found->key->registerURL(origin, url, registrable);
-    found->value.add(url.string(), uuid);
+    found->value.add(url.getString(), uuid);
 }
 
 void PublicURLManager::revoke(const KURL& url)
 {
     for (auto& registryUrl : m_registryToURL) {
-        if (registryUrl.value.contains(url.string())) {
+        if (registryUrl.value.contains(url.getString())) {
             registryUrl.key->unregisterURL(url);
-            registryUrl.value.remove(url.string());
+            registryUrl.value.remove(url.getString());
             break;
         }
     }
@@ -78,7 +78,7 @@ void PublicURLManager::revoke(const String& uuid)
         for (auto& registeredUrl : registeredURLs) {
             if (uuid == registeredUrl.value) {
                 KURL url(ParsedURLString, registeredUrl.key);
-                executionContext()->removeURLFromMemoryCache(url);
+                getExecutionContext()->removeURLFromMemoryCache(url);
                 registry->unregisterURL(url);
                 urlsToRemove.append(registeredUrl.key);
             }

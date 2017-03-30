@@ -36,7 +36,6 @@
 #include "platform/weborigin/SecurityPolicy.h"
 #include "url/url_canon_ip.h"
 #include "wtf/HexNumber.h"
-#include "wtf/MainThread.h"
 #include "wtf/NotFound.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
@@ -126,11 +125,12 @@ SecurityOrigin::SecurityOrigin(const KURL& url)
     , m_universalAccess(false)
     , m_domainWasSetInDOM(false)
     , m_blockLocalAccessFromLocalOrigin(false)
+    , m_isUniqueOriginPotentiallyTrustworthy(false)
 {
     // Suborigins are serialized into the host, so extract it if necessary.
     String suboriginName;
     if (deserializeSuboriginAndHost(m_host, suboriginName, m_host))
-        addSuborigin(suboriginName);
+        m_suborigin.setName(suboriginName);
 
     // document.domain starts as m_host, but can be set by the DOM.
     m_domain = m_host;
@@ -146,7 +146,6 @@ SecurityOrigin::SecurityOrigin()
     : m_protocol("")
     , m_host("")
     , m_domain("")
-    , m_suboriginName(WTF::String())
     , m_port(InvalidPort)
     , m_effectivePort(InvalidPort)
     , m_isUnique(true)
@@ -154,6 +153,7 @@ SecurityOrigin::SecurityOrigin()
     , m_domainWasSetInDOM(false)
     , m_canLoadLocalResources(false)
     , m_blockLocalAccessFromLocalOrigin(false)
+    , m_isUniqueOriginPotentiallyTrustworthy(false)
 {
 }
 
@@ -161,7 +161,7 @@ SecurityOrigin::SecurityOrigin(const SecurityOrigin* other)
     : m_protocol(other->m_protocol.isolatedCopy())
     , m_host(other->m_host.isolatedCopy())
     , m_domain(other->m_domain.isolatedCopy())
-    , m_suboriginName(other->m_suboriginName.isolatedCopy())
+    , m_suborigin(other->m_suborigin)
     , m_port(other->m_port)
     , m_effectivePort(other->m_effectivePort)
     , m_isUnique(other->m_isUnique)
@@ -169,6 +169,7 @@ SecurityOrigin::SecurityOrigin(const SecurityOrigin* other)
     , m_domainWasSetInDOM(other->m_domainWasSetInDOM)
     , m_canLoadLocalResources(other->m_canLoadLocalResources)
     , m_blockLocalAccessFromLocalOrigin(other->m_blockLocalAccessFromLocalOrigin)
+    , m_isUniqueOriginPotentiallyTrustworthy(other->m_isUniqueOriginPotentiallyTrustworthy)
 {
 }
 
@@ -193,16 +194,6 @@ PassRefPtr<SecurityOrigin> SecurityOrigin::createUnique()
     RefPtr<SecurityOrigin> origin = adoptRef(new SecurityOrigin());
     ASSERT(origin->isUnique());
     return origin.release();
-}
-
-void SecurityOrigin::addSuborigin(const String& suborigin)
-{
-    ASSERT(RuntimeEnabledFeatures::suboriginsEnabled());
-    // Changing suborigins midstream is bad. Very bad. It should not happen.
-    // This is, in fact, one of the very basic invariants that makes suborigins
-    // an effective security tool.
-    RELEASE_ASSERT(m_suboriginName.isNull() || m_suboriginName == suborigin);
-    m_suboriginName = suborigin;
 }
 
 PassRefPtr<SecurityOrigin> SecurityOrigin::isolatedCopy() const
@@ -272,7 +263,7 @@ bool SecurityOrigin::canAccessCheckSuborigins(const SecurityOrigin* other) const
     if (hasSuborigin() != other->hasSuborigin())
         return false;
 
-    if (hasSuborigin() && suboriginName() != other->suboriginName())
+    if (hasSuborigin() && suborigin()->name() != other->suborigin()->name())
         return false;
 
     return canAccess(other);
@@ -356,6 +347,9 @@ bool SecurityOrigin::canDisplay(const KURL& url) const
 bool SecurityOrigin::isPotentiallyTrustworthy() const
 {
     ASSERT(m_protocol != "data");
+    if (isUnique())
+        return m_isUniqueOriginPotentiallyTrustworthy;
+
     if (SchemeRegistry::shouldTreatURLSchemeAsSecure(m_protocol) || isLocal() || isLocalhost())
         return true;
 
@@ -383,6 +377,16 @@ void SecurityOrigin::grantLoadLocalResources()
 void SecurityOrigin::grantUniversalAccess()
 {
     m_universalAccess = true;
+}
+
+void SecurityOrigin::addSuborigin(const Suborigin& suborigin)
+{
+    ASSERT(RuntimeEnabledFeatures::suboriginsEnabled());
+    // Changing suborigins midstream is bad. Very bad. It should not happen.
+    // This is, in fact,  one of the very basic invariants that makes
+    // suborigins an effective security tool.
+    RELEASE_ASSERT(m_suborigin.name().isNull() || (m_suborigin.name() == suborigin.name()));
+    m_suborigin.setTo(suborigin);
 }
 
 void SecurityOrigin::blockLocalAccessFromLocalOrigin()
@@ -431,10 +435,19 @@ String SecurityOrigin::toString() const
 AtomicString SecurityOrigin::toAtomicString() const
 {
     if (isUnique())
-        return AtomicString("null", AtomicString::ConstructFromLiteral);
+        return AtomicString("null");
     if (isLocal() && m_blockLocalAccessFromLocalOrigin)
-        return AtomicString("null", AtomicString::ConstructFromLiteral);
+        return AtomicString("null");
     return toRawAtomicString();
+}
+
+String SecurityOrigin::toPhysicalOriginString() const
+{
+    if (isUnique())
+        return "null";
+    if (isLocal() && m_blockLocalAccessFromLocalOrigin)
+        return "null";
+    return toRawStringIgnoreSuborigin();
 }
 
 String SecurityOrigin::toRawString() const
@@ -443,7 +456,17 @@ String SecurityOrigin::toRawString() const
         return "file://";
 
     StringBuilder result;
-    buildRawString(result);
+    buildRawString(result, true);
+    return result.toString();
+}
+
+String SecurityOrigin::toRawStringIgnoreSuborigin() const
+{
+    if (m_protocol == "file")
+        return "file://";
+
+    StringBuilder result;
+    buildRawString(result, false);
     return result.toString();
 }
 
@@ -469,19 +492,19 @@ bool SecurityOrigin::deserializeSuboriginAndHost(const String& oldHost, String& 
 AtomicString SecurityOrigin::toRawAtomicString() const
 {
     if (m_protocol == "file")
-        return AtomicString("file://", AtomicString::ConstructFromLiteral);
+        return AtomicString("file://");
 
     StringBuilder result;
-    buildRawString(result);
+    buildRawString(result, true);
     return result.toAtomicString();
 }
 
-void SecurityOrigin::buildRawString(StringBuilder& builder) const
+void SecurityOrigin::buildRawString(StringBuilder& builder, bool includeSuborigin) const
 {
     builder.append(m_protocol);
     builder.appendLiteral("://");
-    if (hasSuborigin()) {
-        builder.append(m_suboriginName);
+    if (includeSuborigin && hasSuborigin()) {
+        builder.append(m_suborigin.name());
         builder.appendLiteral("_");
     }
     builder.append(m_host);
@@ -525,7 +548,8 @@ bool SecurityOrigin::isSameSchemeHostPort(const SecurityOrigin* other) const
 
 bool SecurityOrigin::isSameSchemeHostPortAndSuborigin(const SecurityOrigin* other) const
 {
-    return isSameSchemeHostPort(other) && (suboriginName() == other->suboriginName());
+    bool sameSuborigins = (hasSuborigin() == other->hasSuborigin()) && (!hasSuborigin() || (suborigin()->name() == other->suborigin()->name()));
+    return isSameSchemeHostPort(other) && sameSuborigins;
 }
 
 const KURL& SecurityOrigin::urlWithUniqueSecurityOrigin()
@@ -549,6 +573,12 @@ void SecurityOrigin::transferPrivilegesFrom(PassOwnPtr<PrivilegeData> privilegeD
     m_universalAccess = privilegeData->m_universalAccess;
     m_canLoadLocalResources = privilegeData->m_canLoadLocalResources;
     m_blockLocalAccessFromLocalOrigin = privilegeData->m_blockLocalAccessFromLocalOrigin;
+}
+
+void SecurityOrigin::setUniqueOriginIsPotentiallyTrustworthy(bool isUniqueOriginPotentiallyTrustworthy)
+{
+    ASSERT(!isUniqueOriginPotentiallyTrustworthy || isUnique());
+    m_isUniqueOriginPotentiallyTrustworthy = isUniqueOriginPotentiallyTrustworthy;
 }
 
 } // namespace blink

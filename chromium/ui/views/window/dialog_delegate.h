@@ -16,6 +16,7 @@
 namespace views {
 
 class DialogClientView;
+class LabelButton;
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -56,11 +57,6 @@ class VIEWS_EXPORT DialogDelegate : public ui::DialogModel,
   // If a custom padding should be used, returns true and populates |padding|.
   virtual bool GetExtraViewPadding(int* padding);
 
-  // Override this function to display an extra view in the titlebar.
-  // Overrides may construct the view; this will only be called once per dialog.
-  // Note: this only works for new style dialogs.
-  virtual View* CreateTitlebarExtraView();
-
   // Override this function to display a footnote view below the buttons.
   // Overrides may construct the view; this will only be called once per dialog.
   virtual View* CreateFootnoteView();
@@ -76,10 +72,6 @@ class VIEWS_EXPORT DialogDelegate : public ui::DialogModel,
   // or the Enter key. It can also be called on a close action if |Close|
   // has not been overridden. This function should return true if the window
   // can be closed after it returns, or false if it must remain open.
-  // If |window_closing| is true, it means that this handler is
-  // being called because the window is being closed (e.g.  by Window::Close)
-  // and there is no Cancel handler, so Accept is being called instead.
-  virtual bool Accept(bool window_closing);
   virtual bool Accept();
 
   // Called when the user closes the window without selecting an option,
@@ -89,8 +81,12 @@ class VIEWS_EXPORT DialogDelegate : public ui::DialogModel,
   // window can be closed after it returns, or false if it must remain open.
   virtual bool Close();
 
+  // Updates the properties and appearance of |button| which has been created
+  // for type |type|. Override to do special initialization above and beyond
+  // the typical.
+  virtual void UpdateButton(LabelButton* button, ui::DialogButton type);
+
   // Overridden from ui::DialogModel:
-  base::string16 GetDialogTitle() const override;
   int GetDialogButtons() const override;
   int GetDefaultDialogButton() const override;
   bool ShouldDefaultButtonBeBlue() const override;

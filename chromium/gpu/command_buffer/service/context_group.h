@@ -18,11 +18,13 @@
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/framebuffer_completeness_cache.h"
+#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/shader_translator_cache.h"
 #include "gpu/gpu_export.h"
 
 namespace gpu {
 
+struct GpuPreferences;
 class TransferBufferManager;
 class ValueStateMap;
 
@@ -49,6 +51,7 @@ struct DisallowedFeatures;
 class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
  public:
   ContextGroup(
+      const GpuPreferences& gpu_preferences,
       const scoped_refptr<MailboxManager>& mailbox_manager,
       const scoped_refptr<MemoryTracker>& memory_tracker,
       const scoped_refptr<ShaderTranslatorCache>& shader_translator_cache,
@@ -118,8 +121,24 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
     return max_dual_source_draw_buffers_;
   }
 
+  uint32_t max_vertex_output_components() const {
+    return max_vertex_output_components_;
+  }
+
+  uint32_t max_fragment_input_components() const {
+    return max_fragment_input_components_;
+  }
+
+  int32_t min_program_texel_offset() const { return min_program_texel_offset_; }
+
+  int32_t max_program_texel_offset() const { return max_program_texel_offset_; }
+
   FeatureInfo* feature_info() {
     return feature_info_.get();
+  }
+
+  const GpuPreferences& gpu_preferences() const {
+    return gpu_preferences_;
   }
 
   BufferManager* buffer_manager() const {
@@ -232,6 +251,7 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
   bool QueryGLFeatureU(GLenum pname, GLint min_required, uint32_t* v);
   bool HaveContexts();
 
+  const GpuPreferences& gpu_preferences_;
   scoped_refptr<MailboxManager> mailbox_manager_;
   scoped_refptr<MemoryTracker> memory_tracker_;
   scoped_refptr<ShaderTranslatorCache> shader_translator_cache_;
@@ -253,6 +273,11 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
   uint32_t max_color_attachments_;
   uint32_t max_draw_buffers_;
   uint32_t max_dual_source_draw_buffers_;
+
+  uint32_t max_vertex_output_components_;
+  uint32_t max_fragment_input_components_;
+  int32_t min_program_texel_offset_;
+  int32_t max_program_texel_offset_;
 
   ProgramCache* program_cache_;
 

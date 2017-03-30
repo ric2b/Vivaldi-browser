@@ -29,58 +29,11 @@
 
 #include "core/paint/PaintLayerFilterInfo.h"
 
-#include "core/fetch/DocumentResourceReference.h"
-#include "core/layout/svg/LayoutSVGResourceContainer.h"
-#include "core/layout/svg/ReferenceFilterBuilder.h"
 #include "core/paint/FilterEffectBuilder.h"
 #include "core/paint/PaintLayer.h"
-#include "core/svg/SVGFilterElement.h"
+#include "platform/graphics/filters/FilterOperations.h"
 
 namespace blink {
-
-PaintLayerFilterInfoMap* PaintLayerFilterInfo::s_filterMap = 0;
-
-PaintLayerFilterInfo* PaintLayerFilterInfo::filterInfoForLayer(const PaintLayer* layer)
-{
-    if (!s_filterMap)
-        return 0;
-    PaintLayerFilterInfoMap::iterator iter = s_filterMap->find(layer);
-    return (iter != s_filterMap->end()) ? iter->value : 0;
-}
-
-PaintLayerFilterInfo* PaintLayerFilterInfo::createFilterInfoForLayerIfNeeded(PaintLayer* layer)
-{
-    if (!s_filterMap)
-        s_filterMap = new PaintLayerFilterInfoMap();
-
-    PaintLayerFilterInfoMap::iterator iter = s_filterMap->find(layer);
-    if (iter != s_filterMap->end()) {
-        ASSERT(layer->hasFilterInfo());
-        return iter->value;
-    }
-
-    PaintLayerFilterInfo* filter = new PaintLayerFilterInfo(layer);
-    s_filterMap->set(layer, filter);
-    layer->setHasFilterInfo(true);
-    return filter;
-}
-
-void PaintLayerFilterInfo::removeFilterInfoForLayer(PaintLayer* layer)
-{
-    if (!s_filterMap)
-        return;
-    PaintLayerFilterInfo* filter = s_filterMap->take(layer);
-    if (s_filterMap->isEmpty()) {
-        delete s_filterMap;
-        s_filterMap = 0;
-    }
-    if (!filter) {
-        ASSERT(!layer->hasFilterInfo());
-        return;
-    }
-    layer->setHasFilterInfo(false);
-    delete filter;
-}
 
 PaintLayerFilterInfo::PaintLayerFilterInfo(PaintLayer* layer)
     : m_layer(layer)
@@ -89,51 +42,18 @@ PaintLayerFilterInfo::PaintLayerFilterInfo(PaintLayer* layer)
 
 PaintLayerFilterInfo::~PaintLayerFilterInfo()
 {
-    removeReferenceFilterClients();
+    clearFilterReferences();
 }
 
-void PaintLayerFilterInfo::setBuilder(PassRefPtrWillBeRawPtr<FilterEffectBuilder> builder)
+void PaintLayerFilterInfo::setBuilder(FilterEffectBuilder* builder)
 {
     m_builder = builder;
 }
 
-void PaintLayerFilterInfo::notifyFinished(Resource*)
-{
-    m_layer->filterNeedsPaintInvalidation();
-}
-
 void PaintLayerFilterInfo::updateReferenceFilterClients(const FilterOperations& operations)
 {
-    removeReferenceFilterClients();
-    for (size_t i = 0; i < operations.size(); ++i) {
-        RefPtrWillBeRawPtr<FilterOperation> filterOperation = operations.operations().at(i);
-        if (filterOperation->type() != FilterOperation::REFERENCE)
-            continue;
-        ReferenceFilterOperation* referenceFilterOperation = toReferenceFilterOperation(filterOperation.get());
-        DocumentResourceReference* documentReference = ReferenceFilterBuilder::documentResourceReference(referenceFilterOperation);
-        DocumentResource* cachedSVGDocument = documentReference ? documentReference->document() : 0;
-
-        if (cachedSVGDocument) {
-            // Reference is external; wait for notifyFinished().
-            cachedSVGDocument->addClient(this);
-            m_externalSVGReferences.append(cachedSVGDocument);
-        } else {
-            // Reference is internal; add layer as a client so we can trigger
-            // filter paint invalidation on SVG attribute change.
-            Element* filter = m_layer->layoutObject()->document().getElementById(referenceFilterOperation->fragment());
-            if (!isSVGFilterElement(filter))
-                continue;
-            addFilterReference(toSVGFilterElement(filter));
-        }
-    }
-}
-
-void PaintLayerFilterInfo::removeReferenceFilterClients()
-{
-    for (size_t i = 0; i < m_externalSVGReferences.size(); ++i)
-        m_externalSVGReferences.at(i)->removeClient(this);
-    m_externalSVGReferences.clear();
     clearFilterReferences();
+    addFilterReferences(operations, m_layer->layoutObject()->document());
 }
 
 void PaintLayerFilterInfo::filterNeedsInvalidation()

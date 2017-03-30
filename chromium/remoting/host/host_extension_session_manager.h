@@ -5,11 +5,11 @@
 #ifndef REMOTING_HOST_HOST_EXTENSION_SESSION_MANAGER_H_
 #define REMOTING_HOST_HOST_EXTENSION_SESSION_MANAGER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 
 namespace webrtc {
@@ -42,13 +42,6 @@ class HostExtensionSessionManager {
 
   // Returns the union of all capabilities supported by registered extensions.
   std::string GetCapabilities() const;
-
-  // Calls the corresponding hook functions for each extension, to allow them
-  // to wrap or replace video pipeline components. Only extensions which return
-  // true from ModifiesVideoPipeline() will be called.
-  // The order in which extensions are called is undefined.
-  void OnCreateVideoCapturer(scoped_ptr<webrtc::DesktopCapturer>* capturer);
-  void OnCreateVideoEncoder(scoped_ptr<VideoEncoder>* encoder);
 
   // Handles completion of authentication and capabilities negotiation, creating
   // the set of HostExtensionSessions to match the client's capabilities.

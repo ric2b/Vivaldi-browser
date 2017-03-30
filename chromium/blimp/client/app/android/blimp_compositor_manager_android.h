@@ -32,7 +32,7 @@ class BlimpCompositorManagerAndroid : public BlimpCompositorManager {
   // |real_size| is the total display area including system decorations (see
   // android.view.Display.getRealSize()).  |size| is the total display
   // area not including system decorations (see android.view.Display.getSize()).
-  static scoped_ptr<BlimpCompositorManagerAndroid> Create(
+  static std::unique_ptr<BlimpCompositorManagerAndroid> Create(
       const gfx::Size& real_size,
       const gfx::Size& size,
       RenderWidgetFeature* render_widget_feature);
@@ -49,7 +49,7 @@ class BlimpCompositorManagerAndroid : public BlimpCompositorManager {
                          RenderWidgetFeature* render_widget_feature);
 
   // BlimpCompositor implementation.
-  void GenerateLayerTreeSettings(cc::LayerTreeSettings* settings);
+  void GenerateLayerTreeSettings(cc::LayerTreeSettings* settings) override;
 
  private:
   // Used to determine tile size for the compositor's rastered tiles. For a

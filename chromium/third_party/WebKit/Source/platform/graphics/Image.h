@@ -93,11 +93,6 @@ public:
     virtual bool usesContainerSize() const { return false; }
     virtual bool hasRelativeSize() const { return false; }
 
-    // Computes (extracts) the intrinsic dimensions and ratio from the Image. The intrinsic ratio
-    // will be the 'viewport' of the image. (Same as the dimensions for a raster image. For SVG
-    // images it can be the dimensions defined by the 'viewBox'.)
-    virtual void computeIntrinsicDimensions(FloatSize& intrinsicSize, FloatSize& intrinsicRatio);
-
     virtual IntSize size() const = 0;
     IntRect rect() const { return IntRect(IntPoint(), size()); }
     int width() const { return size().width(); }
@@ -134,7 +129,7 @@ public:
     virtual void advanceAnimationForTesting() { }
 
     // Typically the ImageResource that owns us.
-    ImageObserver* imageObserver() const { return m_imageObserver; }
+    ImageObserver* getImageObserver() const { return m_imageObserver; }
     void setImageObserver(ImageObserver* observer) { m_imageObserver = observer; }
 
     enum TileRule { StretchTile, RoundTile, SpaceTile, RepeatTile };
@@ -167,7 +162,7 @@ private:
     //
     // The observer (an ImageResource) is an untraced member, with the ImageResource
     // being responsible of clearing itself out.
-    RawPtrWillBeUntracedMember<ImageObserver> m_imageObserver;
+    UntracedMember<ImageObserver> m_imageObserver;
 };
 
 #define DEFINE_IMAGE_TYPE_CASTS(typeName) \

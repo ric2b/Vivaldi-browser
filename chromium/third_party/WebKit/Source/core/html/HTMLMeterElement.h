@@ -26,13 +26,12 @@
 
 namespace blink {
 
-class MeterValueElement;
-class LayoutMeter;
+class HTMLDivElement;
 
 class CORE_EXPORT HTMLMeterElement final : public LabelableElement {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static PassRefPtrWillBeRawPtr<HTMLMeterElement> create(Document&);
+    static RawPtr<HTMLMeterElement> create(Document&);
 
     enum GaugeRegion {
         GaugeRegionOptimum,
@@ -59,7 +58,7 @@ public:
     void setOptimum(double);
 
     double valueRatio() const;
-    GaugeRegion gaugeRegion() const;
+    GaugeRegion getGaugeRegion() const;
 
     bool canContainRangeEndPoint() const override { return false; }
 
@@ -70,8 +69,6 @@ private:
     ~HTMLMeterElement() override;
 
     bool areAuthorShadowsAllowed() const override { return false; }
-    void willAddFirstAuthorShadowRoot() override;
-    LayoutMeter* layoutMeter() const;
 
     bool supportLabels() const override { return true; }
 
@@ -79,9 +76,10 @@ private:
     void parseAttribute(const QualifiedName&, const AtomicString&, const AtomicString&) override;
 
     void didElementStateChange();
+    void updateValueAppearance(double percentage);
     void didAddUserAgentShadowRoot(ShadowRoot&) override;
 
-    RefPtrWillBeMember<MeterValueElement> m_value;
+    Member<HTMLDivElement> m_value;
 };
 
 } // namespace blink

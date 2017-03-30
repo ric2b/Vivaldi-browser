@@ -69,7 +69,7 @@ namespace {
 Length animatableValueToLengthWithZoom(const AnimatableValue* value, float zoom, ValueRange range = ValueRangeAll)
 {
     if (value->isLength())
-        return toAnimatableLength(value)->length(zoom, range);
+        return toAnimatableLength(value)->getLength(zoom, range);
     ASSERT(toAnimatableUnknown(value)->toCSSValueID() == CSSValueAuto);
     return Length(Auto);
 }
@@ -87,7 +87,7 @@ UnzoomedLength animatableValueToUnzoomedLength(const AnimatableValue* value, con
 BorderImageLength animatableValueToBorderImageLength(const AnimatableValue* value, const StyleResolverState& state)
 {
     if (value->isLength())
-        return BorderImageLength(toAnimatableLength(value)->length(state.style()->effectiveZoom(), ValueRangeNonNegative));
+        return BorderImageLength(toAnimatableLength(value)->getLength(state.style()->effectiveZoom(), ValueRangeNonNegative));
     if (value->isDouble())
         return BorderImageLength(clampTo<double>(toAnimatableDouble(value)->toDouble(), 0));
     ASSERT(toAnimatableUnknown(value)->toCSSValueID() == CSSValueAuto);
@@ -287,7 +287,7 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property, StyleResolverSt
 {
     ASSERT(CSSPropertyMetadata::isInterpolableProperty(property));
     if (value->isUnknown()) {
-        StyleBuilder::applyProperty(property, state, toAnimatableUnknown(value)->toCSSValue().get());
+        StyleBuilder::applyProperty(property, state, toAnimatableUnknown(value)->toCSSValue());
         return;
     }
     ComputedStyle* style = state.style();
@@ -369,7 +369,7 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property, StyleResolverSt
         style->setBottom(animatableValueToLength(value, state));
         return;
     case CSSPropertyBoxShadow:
-        style->setBoxShadow(toAnimatableShadow(value)->shadowList());
+        style->setBoxShadow(toAnimatableShadow(value)->getShadowList());
         return;
     case CSSPropertyClip:
         style->setClip(animatableValueToLengthBox(value, state));
@@ -531,7 +531,7 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property, StyleResolverSt
         style->setTextIndent(animatableValueToLength(value, state));
         return;
     case CSSPropertyTextShadow:
-        style->setTextShadow(toAnimatableShadow(value)->shadowList());
+        style->setTextShadow(toAnimatableShadow(value)->getShadowList());
         return;
     case CSSPropertyTop:
         style->setTop(animatableValueToLength(value, state));
@@ -543,7 +543,7 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property, StyleResolverSt
         style->setVerticalBorderSpacing(animatableValueClampTo<unsigned short>(value));
         return;
     case CSSPropertyWebkitClipPath:
-        style->setClipPath(toAnimatableClipPathOperation(value)->clipPathOperation());
+        style->setClipPath(toAnimatableClipPathOperation(value)->getClipPathOperation());
         return;
     case CSSPropertyColumnCount:
         style->setColumnCount(clampTo<unsigned short>(round(toAnimatableDouble(value)->toDouble()), 1));
@@ -599,7 +599,7 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property, StyleResolverSt
         style->setPerspectiveOrigin(animatableValueToLengthPoint(value, state));
         return;
     case CSSPropertyShapeOutside:
-        style->setShapeOutside(toAnimatableShapeValue(value)->shapeValue());
+        style->setShapeOutside(toAnimatableShapeValue(value)->getShapeValue());
         return;
     case CSSPropertyShapeMargin:
         style->setShapeMargin(animatableValueToLength(value, state, ValueRangeNonNegative));

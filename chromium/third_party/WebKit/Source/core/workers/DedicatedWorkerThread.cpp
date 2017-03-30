@@ -36,9 +36,9 @@
 
 namespace blink {
 
-PassRefPtr<DedicatedWorkerThread> DedicatedWorkerThread::create(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, WorkerObjectProxy& workerObjectProxy, double timeOrigin)
+PassOwnPtr<DedicatedWorkerThread> DedicatedWorkerThread::create(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, WorkerObjectProxy& workerObjectProxy, double timeOrigin)
 {
-    return adoptRef(new DedicatedWorkerThread(workerLoaderProxy, workerObjectProxy, timeOrigin));
+    return adoptPtr(new DedicatedWorkerThread(workerLoaderProxy, workerObjectProxy, timeOrigin));
 }
 
 DedicatedWorkerThread::DedicatedWorkerThread(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, WorkerObjectProxy& workerObjectProxy, double timeOrigin)
@@ -52,7 +52,7 @@ DedicatedWorkerThread::~DedicatedWorkerThread()
 {
 }
 
-PassRefPtrWillBeRawPtr<WorkerGlobalScope> DedicatedWorkerThread::createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData> startupData)
+WorkerGlobalScope* DedicatedWorkerThread::createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData> startupData)
 {
     return DedicatedWorkerGlobalScope::create(this, startupData, m_timeOrigin);
 }
@@ -68,7 +68,7 @@ void DedicatedWorkerThread::postInitialize()
 {
     // Notify the parent object of our current active state before the event
     // loop starts processing tasks.
-    m_workerObjectProxy.reportPendingActivity(workerGlobalScope()->hasPendingActivity());
+    m_workerObjectProxy.reportPendingActivity(false);
 }
 
 } // namespace blink

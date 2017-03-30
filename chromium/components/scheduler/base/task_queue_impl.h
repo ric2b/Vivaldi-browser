@@ -10,6 +10,7 @@
 #include <set>
 
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/pending_task.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/trace_event.h"
@@ -105,6 +106,7 @@ class SCHEDULER_EXPORT TaskQueueImpl final : public TaskQueue {
       base::MessageLoop::TaskObserver* task_observer) override;
   void SetTimeDomain(TimeDomain* time_domain) override;
   TimeDomain* GetTimeDomain() const override;
+  void SetBlameContext(base::trace_event::BlameContext* blame_context) override;
 
   void UpdateImmediateWorkQueue(bool should_trigger_wakeup,
                                 const Task* previous_task);
@@ -203,6 +205,7 @@ class SCHEDULER_EXPORT TaskQueueImpl final : public TaskQueue {
     base::ObserverList<base::MessageLoop::TaskObserver> task_observers;
     size_t set_index;
     bool is_enabled;
+    base::trace_event::BlameContext* blame_context;  // Not owned.
   };
 
   ~TaskQueueImpl() override;

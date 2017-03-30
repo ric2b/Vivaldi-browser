@@ -10,7 +10,6 @@
 <translation id="1073391069195728457">Chrome - การแจ้งเตือน</translation>
 <translation id="1104959162601287462">เกี่ยวกับ &amp;Chrome OS</translation>
 <translation id="110877069173485804">นี่คือ Chrome ของคุณ</translation>
-<translation id="1225016890511909183">Chrome จะเก็บข้อมูลของคุณอย่างปลอดภัยเพื่อให้คุณไม่จำเป็นต้องพิมพ์ข้อมูลนั้นอีกครั้ง แต่คุณจะยังคงต้องยืนยันรหัสรักษาความปลอดภัยของบัตรของคุณสำหรับการชำระเงินในอนาคต</translation>
 <translation id="123620459398936149">Chrome OS ไม่สามารถซิงค์ข้อมูลของคุณ โปรดอัปเดตข้อความรหัสผ่านสำหรับการซิงค์</translation>
 <translation id="127345590676626841">Chrome ทำการอัปเดตโดยอัตโนมัติเพื่อให้คุณมีเวอร์ชันใหม่ล่าสุดเสมอ เมื่อดาวน์โหลดเสร็จ Chrome จะรีสตาร์ท และคุณจะสามารถใช้งานได้ทันที</translation>
 <translation id="1302523850133262269">โปรดรอขณะที่ Chrome ติดตั้งการอัปเดตระบบล่าสุด</translation>
@@ -33,6 +32,7 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">รับความช่วยเหลือเกี่ยวกับการใช้ Chrome OS</translation>
 <translation id="1818142563254268765">Chrome ไม่สามารถอัปเดตตัวเองเป็นเวอร์ชันล่าสุดได้ คุณกำลังพลาดคุณลักษณะเจ๋งๆ และการปรับปรุงความปลอดภัย คุณจำเป็นต้องอัปเดต Chrome</translation>
+<translation id="1864458292167284385">เครื่องเรียกใช้งานแอป Chrome จะเลิกใช้งานในเร็วๆ นี้</translation>
 <translation id="1877026089748256423">Chrome ล้าสมัย</translation>
 <translation id="2077129598763517140">ใช้การเร่งฮาร์ดแวร์เมื่อสามารถใช้ได้</translation>
 <translation id="2084710999043359739">เพิ่มลงใน Chrome</translation>
@@ -88,6 +88,7 @@
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3881912906674381083">Chrome ยืนยันว่า <ph name="ISSUER" /> ได้ออกใบรับรองของเว็บไซต์นี้ และเซิร์ฟเวอร์ได้ให้ข้อมูลความโปร่งใสของใบรับรองแล้ว แต่ Chrome ไม่รู้จักบันทึกความโปร่งใสของใบรับรอง</translation>
 <translation id="3889417619312448367">ยกเลิกการติดตั้ง Google Chrome</translation>
+<translation id="396182988103551265">ใช้ทางลัด <ph name="APPS_ICON_IMAGE" /> ในแถบบุ๊กมาร์กของ Chrome เพื่อเข้าถึงแอปของคุณต่อไป</translation>
 <translation id="4042449298237264661">คอมพิวเตอร์เครื่องนี้จะไม่ได้รับการอัปเดต Google Chrome อีกต่อไปเพราะระบบไม่รองรับ Windows XP และ Windows Vista แล้ว</translation>
 <translation id="4050175100176540509">การปรับปรุงด้านความปลอดภัยที่สำคัญและคุณลักษณะใหม่ๆ พร้อมให้บริการในเวอร์ชันล่าสุด</translation>
 <translation id="4053720452172726777">กำหนดค่าและควบคุม Google Chrome</translation>
@@ -103,7 +104,6 @@
 <translation id="4407807842708586359">ระบบปฏิบัติการ Google Chrome</translation>
 <translation id="4458285410772214805">โปรดออกจากระบบ และลงชื่อเข้าใช้อีกครั้งเพื่อให้การเปลี่ยนแปลงนี้มีผล</translation>
 <translation id="4480040274068703980">Chrome OS ไม่สามารถซิงค์ข้อมูลของคุณเนื่องจากเกิดข้อผิดพลาดในการลงชื่อเข้าใช้</translation>
-<translation id="4513711165509885787">รายละเอียดการเรียกเก็บเงินของคุณได้ถูกบันทึกไว้ใน Chrome</translation>
 <translation id="4561051373932531560">Google Chrome ทำให้คุณสามารถคลิกที่หมายเลขโทรศัพท์บนเว็บแล้วโทรหาด้วย Skype!</translation>
 <translation id="4567424176335768812">คุณกำลังลงชื่อเข้าใช้เป็น <ph name="USER_EMAIL_ADDRESS" /> ตอนนี้คุณสามารถเข้าถึงบุ๊กมาร์ก ประวัติการเข้าชม และการตั้งค่าอื่นๆ บนอุปกรณ์ทั้งหมดที่ลงชื่อเข้าใช้</translation>
 <translation id="4631713731678262610">ซ่อนในเมนู Chrome</translation>
@@ -206,12 +206,14 @@
 <translation id="7808348361785373670">นำออกจาก Chrome...</translation>
 <translation id="7825851276765848807">การติดตั้งล้มเหลวเนื่องจากเกิดข้อผิดพลาดที่ไม่ระบุ โปรดดาวน์โหลด Google Chrome อีกครั้ง</translation>
 <translation id="7890208801193284374">ถ้าคุณให้ผู้อื่นใช้คอมพิวเตอร์ร่วมด้วย เพื่อนๆ และครอบครัวของคุณสามารถท่องเว็บแยกกันได้และตั้งค่า Chrome ได้ตามที่พวกเขาต้องการ</translation>
+<translation id="8000275528373650868">Google Chrome ต้องใช้ Windows Vista หรือ Windows XP พร้อม SP2 หรือที่สูงกว่า</translation>
 <translation id="8005540215158006229">Chrome ใกล้จะใช้งานได้แล้ว</translation>
 <translation id="8008534537613507642">ติดตั้ง Chrome ใหม่</translation>
 <translation id="8030318113982266900">กำลังอัปเดตอุปกรณ์ของคุณไปยังช่อง <ph name="CHANNEL_NAME" />...</translation>
 <translation id="8032142183999901390">เมื่อลบบัญชีของคุณออกจาก Chrome แล้ว คุณต้องโหลดแท็บที่เปิดอยู่ซ้ำเพื่อให้มีผล</translation>
 <translation id="8037887340639533879">ไม่พบการติดตั้ง Google Chrome ที่จะอัปเดต</translation>
 <translation id="8129812357326543296">เกี่ยวกับ &amp;Google Chrome</translation>
+<translation id="8183957050892517584">Chrome จะเก็บรายละเอียดส่วนตัวของคุณอย่างปลอดภัย คุณจึงไม่จำเป็นต้องพิมพ์รายละเอียดเหล่านั้นอีกครั้ง</translation>
 <translation id="8205111949707227942">ไม่บังคับ: ช่วยปรับปรุงระบบปฏิบัติการ Chrome ให้ดีขึ้นโดยส่งสถิติการใช้งานและรายงานปัญหาไปยัง Google โดยอัตโนมัติ</translation>
 <translation id="8227755444512189073">Google Chrome จำเป็นต้องเรียกแอปพลิเคชันภายนอกเพื่อเปิดลิงก์ <ph name="SCHEME" /> ลิงก์ที่ขอคือ <ph name="PROTOLINK" /></translation>
 <translation id="8255190535488645436">Google Chrome ใช้กล้องและไมโครโฟนของคุณอยู่</translation>
@@ -234,7 +236,6 @@
 <translation id="8851136666856101339">หลัก</translation>
 <translation id="8862326446509486874">คุณไม่มีสิทธิ์ในการติดตั้งระดับระบบ ทดลองใช้งานโปรแกรมติดตั้งอีกครั้งโดยกำหนดให้เป็นผู้ดูแลระบบ</translation>
 <translation id="9026991721384951619">Chrome OS ไม่สามารถซิงค์ข้อมูลของคุณเนื่องจากรายละเอียดการลงชื่อเข้าใช้บัญชีของคุณล้าสมัย</translation>
-<translation id="9067395829937117663">Google Chrome ต้องใช้ Windows 7 ขึ้นไป</translation>
 <translation id="9102715433345326100">ไฟล์นี้เป็นอันตรายและ Chrome ได้บล็อกไฟล์ดังกล่าวไว้</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />คำเตือน:<ph name="END_BOLD" /> Google Chrome ไม่สามารถป้องกันส่วนขยายจากการบันทึกประวัติการเรียกดู หากต้องการปิดใช้งานส่วนขยายนี้ในโหมดไม่ระบุตัวตน ให้ยกเลิกการเลือกตัวเลือกนี้</translation>
 <translation id="911206726377975832">ลบข้อมูลการท่องเว็บด้วยหรือไม่</translation>

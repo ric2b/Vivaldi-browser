@@ -906,7 +906,7 @@ template("java_strings_grd_prebuilt") {
 #   enable_errorprone: If true, enables the errorprone compiler.
 #   enable_incremental_javac: Overrides the global enable_incremental_javac.
 #   main_class: When specified, a wrapper script is created within
-#     $target_out_dir/bin to launch the binary with the given class as the
+#     $root_build_dir/bin to launch the binary with the given class as the
 #     entrypoint.
 #   wrapper_script_args: List of additional arguments for the wrapper script.
 #
@@ -1000,9 +1000,6 @@ template("junit_binary") {
 #     will be added to java_files and be included in this library.
 #   srcjars: List of srcjars to be included in this library, together with the
 #     ones obtained from srcjar_deps.
-#   DEPRECATED_java_in_dir: Directory containing java files. All .java files in
-#     this directory will be included in the library. This is only supported to
-#     ease the gyp->gn conversion and will be removed in the future.
 #
 #   chromium_code: If true, extra analysis warning/errors will be enabled.
 #   enable_errorprone: If true, enables the errorprone compiler.
@@ -1092,9 +1089,6 @@ template("java_prebuilt") {
 #     will be added to java_files and be included in this library.
 #   srcjars: List of srcjars to be included in this library, together with the
 #     ones obtained from srcjar_deps.
-#   DEPRECATED_java_in_dir: Directory containing java files. All .java files in
-#     this directory will be included in the library. This is only supported to
-#     ease the gyp->gn conversion and will be removed in the future.
 #
 #   chromium_code: If true, extra analysis warning/errors will be enabled.
 #   enable_errorprone: If true, enables the errorprone compiler.
@@ -1270,10 +1264,7 @@ template("android_java_prebuilt") {
 #   requires_sdk_api_level_23: If defined and true, the apk is intended for
 #     installation only on Android M or later. In these releases the system
 #     linker does relocation unpacking, so we can enable it unconditionally.
-#
-#   DEPRECATED_java_in_dir: Directory containing java files. All .java files in
-#     this directory will be included in the library. This is only supported to
-#     ease the gyp->gn conversion and will be removed in the future.
+#   secondary_native_libs: the path of native libraries for secondary app abi.
 #
 # Example
 #   android_apk("foo_apk") {
@@ -1458,6 +1449,11 @@ template("android_apk") {
       has_alternative_locale_resource = true
     }
 
+    # Added emma to the target's classpath via its .build_config.
+    if (emma_coverage && !_emma_never_instrument) {
+      deps += [ "//third_party/android_tools:emma_device" ]
+    }
+
     proguard_enabled = _proguard_enabled
     if (_proguard_enabled) {
       proguard_info = "$_proguard_jar_path.info"
@@ -1566,8 +1562,6 @@ template("android_apk") {
 
     if (defined(invoker.java_files)) {
       java_files = invoker.java_files
-    } else if (defined(invoker.DEPRECATED_java_in_dir)) {
-      DEPRECATED_java_in_dir = invoker.DEPRECATED_java_in_dir
     } else {
       java_files = []
     }
@@ -1605,12 +1599,8 @@ template("android_apk") {
         rebase_path(depfile, root_build_dir),
         "--output",
         rebase_path("${_dist_ijar_path}", root_build_dir),
-        "--use-ijars",
-        "--inputs=@FileArg($_rebased_build_config:dist_jar:dependency_jars)",
+        "--inputs=@FileArg($_rebased_build_config:dist_jar:all_interface_jars)",
       ]
-      inputs += [ _jar_path ]
-      _rebased_jar_path = rebase_path([ _jar_path ], root_build_dir)
-      args += [ "--inputs=$_rebased_jar_path" ]
       deps = [
         ":$build_config_target",  # Generates the build config file.
         ":$java_target",  # Generates the jar file.
@@ -1683,11 +1673,6 @@ template("android_apk") {
         _dex_arg_key = "${_rebased_build_config}:final_dex:dependency_dex_files"
       }
       args = [ "--inputs=@FileArg($_dex_arg_key)" ]
-    }
-
-    if (emma_coverage && !_emma_never_instrument) {
-      no_locals = true
-      sources += [ "$android_sdk_root/tools/lib/emma_device.jar" ]
     }
   }
 
@@ -1774,6 +1759,7 @@ template("android_apk") {
                              "language_splits",
                              "page_align_shared_libraries",
                              "public_deps",
+                             "secondary_native_libs",
                              "shared_resources",
                              "uncompress_shared_libraries",
                              "write_asset_list",
@@ -1933,12 +1919,20 @@ template("android_apk") {
   }
 
   group(target_name) {
-    forward_variables_from(invoker, [ "data_deps" ])
+    forward_variables_from(invoker,
+                           [
+                             "data",
+                             "data_deps",
+                           ])
     public_deps = _final_deps
   }
   group("${target_name}_incremental") {
     data_deps = []
-    forward_variables_from(invoker, [ "data_deps" ])
+    forward_variables_from(invoker,
+                           [
+                             "data",
+                             "data_deps",
+                           ])
 
     # device/commands is used by the installer script to push files via .zip.
     data_deps += [ "//build/android/pylib/device/commands" ] +
@@ -1980,10 +1974,6 @@ template("android_apk") {
 #     also be included in the apk.
 #   apk_under_test: The apk being tested.
 #   isolate_file: Isolate file containing the list of test data dependencies.
-#
-#   DEPRECATED_java_in_dir: Directory containing java files. All .java files in
-#     this directory will be included in the library. This is only supported to
-#     ease the gyp->gn conversion and will be removed in the future.
 #
 # Example
 #   instrumentation_test_apk("foo_test_apk") {
@@ -2045,9 +2035,8 @@ template("instrumentation_test_apk") {
     }
 
     create_dist_ijar = true
-    run_findbugs =
-        defined(invoker.run_findbugs) && invoker.run_findbugs &&
-        (defined(invoker.java_files) || defined(invoker.DEPRECATED_java_in_dir))
+    run_findbugs = defined(invoker.run_findbugs) && invoker.run_findbugs &&
+                   defined(invoker.java_files)
   }
 
   group(target_name) {
@@ -2241,7 +2230,7 @@ template("android_aidl") {
 #   dist_dir: Directory for the exe and libraries. Everything in this directory
 #     will be deleted before copying in the exe and libraries.
 #   binary: Path to (stripped) executable.
-#   include_main_binary: Whether |binary| should be copied to |dist_dir|.
+#   extra_files: List of extra files to copy in (optional).
 #
 # Example
 #   create_native_executable_dist("foo_dist") {
@@ -2250,34 +2239,27 @@ template("android_aidl") {
 #     deps = [ ":the_thing_that_makes_foo" ]
 #   }
 template("create_native_executable_dist") {
-  set_sources_assignment_filter([])
   forward_variables_from(invoker, [ "testonly" ])
 
-  dist_dir = invoker.dist_dir
-  binary = invoker.binary
-  template_name = target_name
+  _libraries_list = "${target_gen_dir}/${target_name}_library_dependencies.list"
 
-  libraries_list =
-      "${target_gen_dir}/${template_name}_library_dependencies.list"
+  _find_deps_target_name = "${target_name}__find_library_dependencies"
 
-  find_deps_target_name = "${template_name}__find_library_dependencies"
-  copy_target_name = "${template_name}__copy_libraries_and_exe"
-
-  action(find_deps_target_name) {
+  # TODO(agrieve): Extract dependent libs from GN rather than readelf.
+  action(_find_deps_target_name) {
     forward_variables_from(invoker, [ "deps" ])
-    visibility = [ ":$copy_target_name" ]
 
     script = "//build/android/gyp/write_ordered_libraries.py"
     depfile = "$target_gen_dir/$target_name.d"
     inputs = [
-      binary,
+      invoker.binary,
       android_readelf,
     ]
     outputs = [
       depfile,
-      libraries_list,
+      _libraries_list,
     ]
-    rebased_binaries = rebase_path([ binary ], root_build_dir)
+    rebased_binaries = rebase_path([ invoker.binary ], root_build_dir)
     args = [
       "--depfile",
       rebase_path(depfile, root_build_dir),
@@ -2285,46 +2267,39 @@ template("create_native_executable_dist") {
       "--libraries-dir",
       rebase_path(root_shlib_dir, root_build_dir),
       "--output",
-      rebase_path(libraries_list, root_build_dir),
+      rebase_path(_libraries_list, root_build_dir),
       "--readelf",
       rebase_path(android_readelf, root_build_dir),
     ]
   }
 
-  copy_ex(copy_target_name) {
-    visibility = [ ":$template_name" ]
-
+  copy_ex(target_name) {
     clear_dir = true
 
     inputs = [
-      libraries_list,
+      _libraries_list,
+      invoker.binary,
     ]
-    if (defined(invoker.include_main_binary) && invoker.include_main_binary) {
-      inputs += [ binary ]
-    }
 
-    dest = dist_dir
+    dest = invoker.dist_dir
 
-    rebased_libraries_list = rebase_path(libraries_list, root_build_dir)
-    args = [ "--files=@FileArg($rebased_libraries_list:lib_paths)" ]
-    if (defined(invoker.include_main_binary) && invoker.include_main_binary) {
-      rebased_binaries_list = rebase_path([ binary ], root_build_dir)
-      args += [ "--files=$rebased_binaries_list" ]
+    _rebased_libraries_list = rebase_path(_libraries_list, root_build_dir)
+    _rebased_binaries_list = rebase_path([ invoker.binary ], root_build_dir)
+    args = [
+      "--files=@FileArg($_rebased_libraries_list:lib_paths)",
+      "--files=$_rebased_binaries_list",
+    ]
+    if (defined(invoker.extra_files)) {
+      _rebased_extra_files = rebase_path(invoker.extra_files, root_build_dir)
+      args += [ "--files=$_rebased_extra_files" ]
     }
 
     deps = [
-      ":$find_deps_target_name",
+      ":$_find_deps_target_name",
     ]
     if (defined(invoker.deps)) {
       deps += invoker.deps
     }
-  }
-
-  group(template_name) {
-    forward_variables_from(invoker, [ "visibility" ])
-    public_deps = [
-      ":$copy_target_name",
-    ]
   }
 }
 

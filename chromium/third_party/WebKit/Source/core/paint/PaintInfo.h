@@ -73,7 +73,6 @@ struct CORE_EXPORT PaintInfo {
 
     // Creates a PaintInfo for painting descendants. See comments about the paint phases
     // in PaintPhase.h for details.
-    // TODO(wangxianzhu): Actually use this method.
     PaintInfo forDescendants() const
     {
         PaintInfo result(*this);
@@ -95,7 +94,7 @@ struct CORE_EXPORT PaintInfo {
 
     const LayoutBoxModelObject* paintContainer() const { return m_paintContainer; }
 
-    GlobalPaintFlags globalPaintFlags() const { return m_globalPaintFlags; }
+    GlobalPaintFlags getGlobalPaintFlags() const { return m_globalPaintFlags; }
 
     PaintLayerFlags paintFlags() const { return m_paintFlags; }
 

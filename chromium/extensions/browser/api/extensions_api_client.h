@@ -38,16 +38,16 @@ class ExtensionOptionsGuestDelegate;
 class ManagementAPIDelegate;
 class MimeHandlerViewGuest;
 class MimeHandlerViewGuestDelegate;
+class RulesCacheDelegate;
+class SettingsObserver;
+class ValueStoreCache;
+class ValueStoreFactory;
+class VirtualKeyboardDelegate;
+class WebRequestEventRouterDelegate;
 class WebViewGuest;
 class WebViewGuestDelegate;
 class WebViewPermissionHelper;
 class WebViewPermissionHelperDelegate;
-class WebRequestEventRouterDelegate;
-class RulesCacheDelegate;
-class SettingsObserver;
-class SettingsStorageFactory;
-class ValueStoreCache;
-class VirtualKeyboardDelegate;
 
 // Allows the embedder of the extensions module to customize its support for
 // API features. The embedder must create a single instance in the browser
@@ -69,7 +69,7 @@ class ExtensionsAPIClient {
   // to |caches|. By default adds nothing.
   virtual void AddAdditionalValueStoreCaches(
       content::BrowserContext* context,
-      const scoped_refptr<SettingsStorageFactory>& factory,
+      const scoped_refptr<ValueStoreFactory>& factory,
       const scoped_refptr<base::ObserverListThreadSafe<SettingsObserver>>&
           observers,
       std::map<settings_namespace::Namespace, ValueStoreCache*>* caches);
@@ -97,14 +97,14 @@ class ExtensionsAPIClient {
 
   // Returns a delegate for some of WebViewGuest's behavior. The caller owns the
   // returned WebViewGuestDelegate.
-  virtual WebViewGuestDelegate* CreateWebViewGuestDelegate (
+  virtual WebViewGuestDelegate* CreateWebViewGuestDelegate(
       WebViewGuest* web_view_guest) const;
 
   // Returns a delegate for some of WebViewPermissionHelper's behavior. The
   // caller owns the returned WebViewPermissionHelperDelegate.
   virtual WebViewPermissionHelperDelegate*
-      CreateWebViewPermissionHelperDelegate (
-          WebViewPermissionHelper* web_view_permission_helper) const;
+  CreateWebViewPermissionHelperDelegate(
+      WebViewPermissionHelper* web_view_permission_helper) const;
 
   // Creates a delegate for WebRequestEventRouter.
   virtual WebRequestEventRouterDelegate* CreateWebRequestEventRouterDelegate()

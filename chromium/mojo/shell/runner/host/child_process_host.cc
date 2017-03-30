@@ -16,12 +16,14 @@
 #include "base/message_loop/message_loop.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
+#include "base/synchronization/lock.h"
 #include "base/task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/public/cpp/bindings/interface_ptr_info.h"
 #include "mojo/public/cpp/system/core.h"
 #include "mojo/shell/native_runner_delegate.h"
+#include "mojo/shell/runner/common/client_util.h"
 #include "mojo/shell/runner/common/switches.h"
 
 #if defined(OS_LINUX) && !defined(OS_ANDROID)
@@ -30,6 +32,10 @@
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
+#endif
+
+#if defined(OS_MACOSX)
+#include "mojo/shell/runner/host/mach_broker.h"
 #endif
 
 namespace mojo {
@@ -47,90 +53,21 @@ ChildProcessHost::ChildProcessHost(base::TaskRunner* launch_process_runner,
       app_path_(app_path),
       start_child_process_event_(false, false),
       weak_factory_(this) {
-  node_channel_.reset(new edk::PlatformChannelPair);
-  primordial_pipe_token_ = edk::GenerateRandomToken();
-  controller_.Bind(
-      InterfacePtrInfo<mojom::ChildController>(
-          edk::CreateParentMessagePipe(primordial_pipe_token_), 0u));
-}
-
-ChildProcessHost::ChildProcessHost(ScopedHandle channel)
-    : launch_process_runner_(nullptr),
-      delegate_(nullptr),
-      start_sandboxed_(false),
-      start_child_process_event_(false, false),
-      weak_factory_(this) {
-  CHECK(channel.is_valid());
-  ScopedMessagePipeHandle handle(MessagePipeHandle(channel.release().value()));
-  controller_.Bind(
-      InterfacePtrInfo<mojom::ChildController>(std::move(handle), 0u));
 }
 
 ChildProcessHost::~ChildProcessHost() {
-  if (!app_path_.empty())
-    CHECK(!controller_) << "Destroying ChildProcessHost before calling Join";
+  if (!app_path_.empty()) {
+    CHECK(!mojo_ipc_channel_)
+        << "Destroying ChildProcessHost before calling Join";
+  }
 }
 
-void ChildProcessHost::Start(const ProcessReadyCallback& callback) {
+mojom::ShellClientPtr ChildProcessHost::Start(
+    const Identity& target,
+    const ProcessReadyCallback& callback,
+    const base::Closure& quit_closure) {
   DCHECK(!child_process_.IsValid());
-  launch_process_runner_->PostTaskAndReply(
-      FROM_HERE,
-      base::Bind(&ChildProcessHost::DoLaunch, base::Unretained(this)),
-      base::Bind(&ChildProcessHost::DidStart,
-                 weak_factory_.GetWeakPtr(), callback));
-}
 
-int ChildProcessHost::Join() {
-  if (controller_)  // We use this as a signal that Start was called.
-    start_child_process_event_.Wait();
-
-  controller_ = mojom::ChildControllerPtr();
-  // This host may be hosting a child process whose lifetime is controlled
-  // elsewhere. In this case we have no known process handle to wait on.
-  if (child_process_.IsValid()) {
-    int rv = -1;
-    LOG_IF(ERROR, !child_process_.WaitForExit(&rv))
-        << "Failed to wait for child process";
-
-    child_process_.Close();
-    return rv;
-  }
-
-  return 0;
-}
-
-void ChildProcessHost::StartApp(
-    InterfaceRequest<mojom::ShellClient> request,
-    const mojom::ChildController::StartAppCallback& on_app_complete) {
-  DCHECK(controller_);
-
-  // In this case the process must have already been launched.
-  start_child_process_event_.Signal();
-
-  on_app_complete_ = on_app_complete;
-  controller_->StartApp(
-      std::move(request),
-      base::Bind(&ChildProcessHost::AppCompleted, weak_factory_.GetWeakPtr()));
-}
-
-void ChildProcessHost::ExitNow(int32_t exit_code) {
-  DCHECK(controller_);
-
-  controller_->ExitNow(exit_code);
-}
-
-void ChildProcessHost::DidStart(const ProcessReadyCallback& callback) {
-  DVLOG(2) << "ChildProcessHost::DidStart()";
-
-  if (child_process_.IsValid()) {
-    callback.Run(child_process_.Pid());
-  } else {
-    LOG(ERROR) << "Failed to start child process";
-    AppCompleted(MOJO_RESULT_UNKNOWN);
-  }
-}
-
-void ChildProcessHost::DoLaunch() {
   const base::CommandLine* parent_command_line =
       base::CommandLine::ForCurrentProcess();
   base::FilePath target_path = parent_command_line->GetProgram();
@@ -140,38 +77,72 @@ void ChildProcessHost::DoLaunch() {
     target_path = app_path_;
   }
 
-  base::CommandLine child_command_line(target_path);
-  child_command_line.AppendArguments(*parent_command_line, false);
+  scoped_ptr<base::CommandLine> child_command_line(
+      new base::CommandLine(target_path));
+
+  child_command_line->AppendArguments(*parent_command_line, false);
+
+#ifndef NDEBUG
+  child_command_line->AppendSwitchASCII("n", target.name());
+  child_command_line->AppendSwitchASCII("u", target.user_id());
+#endif
 
   if (target_path != app_path_)
-    child_command_line.AppendSwitchPath(switches::kChildProcess, app_path_);
+    child_command_line->AppendSwitchPath(switches::kChildProcess, app_path_);
 
   if (start_sandboxed_)
-    child_command_line.AppendSwitch(switches::kEnableSandbox);
+    child_command_line->AppendSwitch(switches::kEnableSandbox);
 
-  if (node_channel_.get()) {
-    node_channel_->PrepareToPassClientHandleToChildProcess(
-        &child_command_line, &handle_passing_info_);
+  mojo_ipc_channel_.reset(new edk::PlatformChannelPair);
+  mojo_ipc_channel_->PrepareToPassClientHandleToChildProcess(
+      child_command_line.get(), &handle_passing_info_);
+
+  mojom::ShellClientPtr client =
+      PassShellClientRequestOnCommandLine(child_command_line.get());
+  launch_process_runner_->PostTaskAndReply(
+      FROM_HERE,
+      base::Bind(&ChildProcessHost::DoLaunch, base::Unretained(this),
+                 base::Passed(&child_command_line)),
+      base::Bind(&ChildProcessHost::DidStart,
+                 weak_factory_.GetWeakPtr(), callback));
+  return client;
+}
+
+void ChildProcessHost::Join() {
+  if (mojo_ipc_channel_)
+    start_child_process_event_.Wait();
+  mojo_ipc_channel_.reset();
+  if (child_process_.IsValid()) {
+    int rv = -1;
+    LOG_IF(ERROR, !child_process_.WaitForExit(&rv))
+        << "Failed to wait for child process";
+    child_process_.Close();
   }
+}
 
-  child_command_line.AppendSwitchASCII(switches::kPrimordialPipeToken,
-                                       primordial_pipe_token_);
+void ChildProcessHost::DidStart(const ProcessReadyCallback& callback) {
+  if (child_process_.IsValid()) {
+    callback.Run(child_process_.Pid());
+  } else {
+    LOG(ERROR) << "Failed to start child process";
+    mojo_ipc_channel_.reset();
+  }
+}
 
+void ChildProcessHost::DoLaunch(
+    scoped_ptr<base::CommandLine> child_command_line) {
   if (delegate_) {
     delegate_->AdjustCommandLineArgumentsForTarget(target_,
-                                                   &child_command_line);
+                                                   child_command_line.get());
   }
 
   base::LaunchOptions options;
 #if defined(OS_WIN)
-  if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
-    options.handles_to_inherit = &handle_passing_info_;
-  } else {
+  options.handles_to_inherit = &handle_passing_info_;
 #if defined(OFFICIAL_BUILD)
-    CHECK(false) << "Launching mojo process with inherit_handles is insecure!";
+  CHECK(false) << "Launching mojo process with inherit_handles is insecure!";
 #endif
-    options.inherit_handles = true;
-  }
+  options.inherit_handles = true;
   options.stdin_handle = INVALID_HANDLE_VALUE;
   options.stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
   options.stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
@@ -202,38 +173,39 @@ void ChildProcessHost::DoLaunch() {
   options.fds_to_remap = &handle_passing_info_;
 #endif
   DVLOG(2) << "Launching child with command line: "
-           << child_command_line.GetCommandLineString();
+           << child_command_line->GetCommandLineString();
 #if defined(OS_LINUX) && !defined(OS_ANDROID)
   if (start_sandboxed_) {
     child_process_ =
-        sandbox::NamespaceSandbox::LaunchProcess(child_command_line, options);
+        sandbox::NamespaceSandbox::LaunchProcess(*child_command_line, options);
     if (!child_process_.IsValid()) {
       LOG(ERROR) << "Starting the process with a sandbox failed. Missing kernel"
                  << " support.";
     }
   } else
 #endif
-    child_process_ = base::LaunchProcess(child_command_line, options);
+  {
+#if defined(OS_MACOSX)
+    MachBroker* mach_broker = MachBroker::GetInstance();
+    base::AutoLock locker(mach_broker->GetLock());
+#endif
+    LOG(WARNING) << "PATH: " << app_path_.value();
+    child_process_ = base::LaunchProcess(*child_command_line, options);
+#if defined(OS_MACOSX)
+    mach_broker->ExpectPid(child_process_.Handle());
+#endif
+  }
 
   if (child_process_.IsValid()) {
-    platform_channel_pair_.ChildProcessLaunched();
-    if (node_channel_.get()) {
-      node_channel_->ChildProcessLaunched();
+    if (mojo_ipc_channel_.get()) {
+      mojo_ipc_channel_->ChildProcessLaunched();
       mojo::edk::ChildProcessLaunched(
           child_process_.Handle(),
           mojo::edk::ScopedPlatformHandle(mojo::edk::PlatformHandle(
-              node_channel_->PassServerHandle().release().handle)));
+              mojo_ipc_channel_->PassServerHandle().release().handle)));
     }
   }
   start_child_process_event_.Signal();
-}
-
-void ChildProcessHost::AppCompleted(int32_t result) {
-  if (!on_app_complete_.is_null()) {
-    auto on_app_complete = on_app_complete_;
-    on_app_complete_.reset();
-    on_app_complete.Run(result);
-  }
 }
 
 }  // namespace shell

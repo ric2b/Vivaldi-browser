@@ -205,47 +205,20 @@ static ImageOrientation readImageOrientation(jpeg_decompress_struct* info)
     return ImageOrientation();
 }
 
-#if USE(QCMSLIB)
-static void readColorProfile(jpeg_decompress_struct* info, ColorProfile& colorProfile)
+static IntSize computeYUVSize(const jpeg_decompress_struct* info, int component)
 {
-#if USE(ICCJPEG)
-    JOCTET* profile;
-    unsigned profileLength;
-
-    if (!read_icc_profile(info, &profile, &profileLength))
-        return;
-
-    // Only accept RGB color profiles from input class devices.
-    bool ignoreProfile = false;
-    char* profileData = reinterpret_cast_ptr<char*>(profile);
-    if (profileLength < ImageDecoder::iccColorProfileHeaderLength)
-        ignoreProfile = true;
-    else if (!ImageDecoder::rgbColorProfile(profileData, profileLength))
-        ignoreProfile = true;
-    else if (!ImageDecoder::inputDeviceColorProfile(profileData, profileLength))
-        ignoreProfile = true;
-
-    ASSERT(colorProfile.isEmpty());
-    if (!ignoreProfile)
-        colorProfile.append(profileData, profileLength);
-    free(profile);
-#endif
-}
-#endif
-
-static IntSize computeYUVSize(const jpeg_decompress_struct* info, int component, ImageDecoder::SizeType sizeType)
-{
-    if (sizeType == ImageDecoder::SizeForMemoryAllocation) {
-        return IntSize(info->cur_comp_info[component]->width_in_blocks * DCTSIZE, info->cur_comp_info[component]->height_in_blocks * DCTSIZE);
-    }
     return IntSize(info->cur_comp_info[component]->downsampled_width, info->cur_comp_info[component]->downsampled_height);
+}
+
+static size_t computeYUVWidthBytes(const jpeg_decompress_struct* info, int component)
+{
+    return info->cur_comp_info[component]->width_in_blocks * DCTSIZE;
 }
 
 static yuv_subsampling yuvSubsampling(const jpeg_decompress_struct& info)
 {
     if ((DCTSIZE == 8)
         && (info.num_components == 3)
-        && (info.comps_in_scan >= info.num_components)
         && (info.scale_denom <= 8)
         && (info.cur_comp_info[0])
         && (info.cur_comp_info[1])
@@ -302,9 +275,6 @@ public:
         , m_lastSetByte(nullptr)
         , m_state(JPEG_HEADER)
         , m_samples(nullptr)
-#if USE(QCMSLIB)
-        , m_transform(0)
-#endif
     {
         memset(&m_info, 0, sizeof(jpeg_decompress_struct));
 
@@ -337,9 +307,6 @@ public:
 
     ~JPEGImageReader()
     {
-#if USE(QCMSLIB)
-        clearColorTransform();
-#endif
         jpeg_destroy_decompress(&m_info);
     }
 
@@ -477,24 +444,28 @@ public:
 #if USE(QCMSLIB)
             // Allow color management of the decoded RGBA pixels if possible.
             if (!m_decoder->ignoresGammaAndColorProfile()) {
-                ColorProfile colorProfile;
-                readColorProfile(info(), colorProfile);
-                createColorTransform(colorProfile, colorSpaceHasAlpha(m_info.out_color_space));
-                if (m_transform) {
+#if USE(ICCJPEG)
+                JOCTET* profile = nullptr;
+                unsigned profileLength = 0;
+                if (read_icc_profile(info(), &profile, &profileLength)) {
+                    decoder()->setColorProfileAndTransform(reinterpret_cast<char*>(profile), profileLength, colorSpaceHasAlpha(info()->out_color_space), false /* useSRGB */);
+                    free(profile);
+                }
+#endif // USE(ICCJPEG)
+                if (decoder()->colorTransform()) {
                     overrideColorSpace = JCS_UNKNOWN;
 #if defined(TURBO_JPEG_RGB_SWIZZLE)
                     // Input RGBA data to qcms. Note: restored to BGRA on output.
                     if (m_info.out_color_space == JCS_EXT_BGRA)
                         m_info.out_color_space = JCS_EXT_RGBA;
-#endif
+#endif // defined(TURBO_JPEG_RGB_SWIZZLE)
                 }
-                m_decoder->setHasColorProfile(!!m_transform);
             }
-#endif
+#endif // USE(QCMSLIB)
             if (overrideColorSpace == JCS_YCbCr) {
                 m_info.out_color_space = JCS_YCbCr;
                 m_info.raw_data_out = TRUE;
-                m_uvSize = computeYUVSize(&m_info, 1, ImageDecoder::SizeForMemoryAllocation); // U size and V size have to be the same if we got here
+                m_uvSize = computeYUVSize(&m_info, 1); // U size and V size have to be the same if we got here
             }
 
             // Don't allocate a giant and superfluous memory buffer when the
@@ -627,44 +598,6 @@ public:
     JSAMPARRAY samples() const { return m_samples; }
     JPEGImageDecoder* decoder() { return m_decoder; }
     IntSize uvSize() const { return m_uvSize; }
-#if USE(QCMSLIB)
-    qcms_transform* colorTransform() const { return m_transform; }
-
-    void clearColorTransform()
-    {
-        if (m_transform)
-            qcms_transform_release(m_transform);
-        m_transform = 0;
-    }
-
-    void createColorTransform(const ColorProfile& colorProfile, bool hasAlpha)
-    {
-        clearColorTransform();
-
-        if (colorProfile.isEmpty())
-            return;
-        qcms_profile* deviceProfile = ImageDecoder::qcmsOutputDeviceProfile();
-        if (!deviceProfile)
-            return;
-        qcms_profile* inputProfile = qcms_profile_from_memory(colorProfile.data(), colorProfile.size());
-        if (!inputProfile)
-            return;
-
-        // We currently only support color profiles for RGB profiled images.
-        ASSERT(rgbData == qcms_profile_get_color_space(inputProfile));
-
-        if (qcms_profile_match(inputProfile, deviceProfile)) {
-            qcms_profile_release(inputProfile);
-            return;
-        }
-
-        // FIXME: Don't force perceptual intent if the image profile contains an intent.
-        qcms_data_type dataFormat = hasAlpha ? QCMS_DATA_RGBA_8 : QCMS_DATA_RGB_8;
-        m_transform = qcms_transform_create(inputProfile, dataFormat, deviceProfile, dataFormat, QCMS_INTENT_PERCEPTUAL);
-
-        qcms_profile_release(inputProfile);
-    }
-#endif
 
 private:
     JSAMPARRAY allocateSampleArray()
@@ -674,14 +607,18 @@ private:
         if (turboSwizzled(m_info.out_color_space))
             return nullptr;
 #endif
-        int width;
 
-        if (m_info.out_color_space == JCS_YCbCr)
-            width = computeYUVSize(&m_info, 0, ImageDecoder::SizeForMemoryAllocation).width();
-        else
-            width = m_info.output_width;
+        if (m_info.out_color_space != JCS_YCbCr)
+            return (*m_info.mem->alloc_sarray)(reinterpret_cast_ptr<j_common_ptr>(&m_info), JPOOL_IMAGE, 4 * m_info.output_width, 1);
 
-        return (*m_info.mem->alloc_sarray)(reinterpret_cast_ptr<j_common_ptr>(&m_info), JPOOL_IMAGE, width * 4, 1);
+        // Compute the width of the Y plane in bytes.  This may be larger than the output
+        // width, since the jpeg library requires that the allocated width be a multiple of
+        // DCTSIZE.  Note that this buffer will be used as garbage memory for rows that
+        // extend below the actual height of the image.  We can reuse the same memory for
+        // the U and V planes, since we are guaranteed that the Y plane width is at least
+        // as large as the U and V plane widths.
+        int widthBytes = computeYUVWidthBytes(&m_info, 0);
+        return (*m_info.mem->alloc_sarray)(reinterpret_cast_ptr<j_common_ptr>(&m_info), JPOOL_IMAGE, widthBytes, 1);
     }
 
     void updateRestartPosition()
@@ -722,10 +659,6 @@ private:
 
     JSAMPARRAY m_samples;
     IntSize m_uvSize;
-
-#if USE(QCMSLIB)
-    qcms_transform* m_transform;
-#endif
 };
 
 void error_exit(j_common_ptr cinfo) // Decoding failed: return control to the setjmp point.
@@ -771,7 +704,6 @@ void term_source(j_decompress_ptr jd)
 
 JPEGImageDecoder::JPEGImageDecoder(AlphaOption alphaOption, GammaAndColorProfileOption colorOptions, size_t maxDecodedBytes)
     : ImageDecoder(alphaOption, colorOptions, maxDecodedBytes)
-    , m_hasColorProfile(false)
 {
 }
 
@@ -802,13 +734,22 @@ void JPEGImageDecoder::setDecodedSize(unsigned width, unsigned height)
     m_decodedSize = IntSize(width, height);
 }
 
-IntSize JPEGImageDecoder::decodedYUVSize(int component, ImageDecoder::SizeType sizeType) const
+IntSize JPEGImageDecoder::decodedYUVSize(int component) const
 {
     ASSERT((component >= 0) && (component <= 2) && m_reader);
     const jpeg_decompress_struct* info = m_reader->info();
 
     ASSERT(info->out_color_space == JCS_YCbCr);
-    return computeYUVSize(info, component, sizeType);
+    return computeYUVSize(info, component);
+}
+
+size_t JPEGImageDecoder::decodedYUVWidthBytes(int component) const
+{
+    ASSERT((component >= 0) && (component <= 2) && m_reader);
+    const jpeg_decompress_struct* info = m_reader->info();
+
+    ASSERT(info->out_color_space == JCS_YCbCr);
+    return computeYUVWidthBytes(info, component);
 }
 
 unsigned JPEGImageDecoder::desiredScaleNumerator() const
@@ -891,8 +832,8 @@ template <J_COLOR_SPACE colorSpace> bool outputRows(JPEGImageReader* reader, Ima
         if (jpeg_read_scanlines(info, samples, 1) != 1)
             return false;
 #if USE(QCMSLIB)
-        if (reader->colorTransform() && colorSpace == JCS_RGB)
-            qcms_transform_data(reader->colorTransform(), *samples, *samples, width);
+        if (reader->decoder()->colorTransform() && colorSpace == JCS_RGB)
+            qcms_transform_data(reader->decoder()->colorTransform(), *samples, *samples, width);
 #endif
         ImageFrame::PixelData* pixel = buffer.getAddr(0, y);
         for (int x = 0; x < width; ++pixel, ++x)
@@ -913,12 +854,10 @@ static bool outputRawData(JPEGImageReader* reader, ImagePlanes* imagePlanes)
     bufferraw[0] = &bufferraw2[0]; // Y channel rows (8 or 16)
     bufferraw[1] = &bufferraw2[16]; // U channel rows (8)
     bufferraw[2] = &bufferraw2[24]; // V channel rows (8)
-    int yWidth = info->output_width;
     int yHeight = info->output_height;
-    int yMaxH = yHeight - 1;
-    int v = info->cur_comp_info[0]->v_samp_factor;
+    int v = info->comp_info[0].v_samp_factor;
     IntSize uvSize = reader->uvSize();
-    int uvMaxH = uvSize.height() - 1;
+    int uvHeight = uvSize.height();
     JSAMPROW outputY = static_cast<JSAMPROW>(imagePlanes->plane(0));
     JSAMPROW outputU = static_cast<JSAMPROW>(imagePlanes->plane(1));
     JSAMPROW outputV = static_cast<JSAMPROW>(imagePlanes->plane(2));
@@ -928,38 +867,25 @@ static bool outputRawData(JPEGImageReader* reader, ImagePlanes* imagePlanes)
 
     // Request 8 or 16 scanlines: returns 0 or more scanlines.
     int yScanlinesToRead = DCTSIZE * v;
-    JSAMPROW yLastRow = *samples;
-    JSAMPROW uLastRow = yLastRow + rowBytesY;
-    JSAMPROW vLastRow = uLastRow + rowBytesY;
-    JSAMPROW dummyRow = vLastRow + rowBytesY;
-
+    JSAMPROW dummyRow = *samples;
     while (info->output_scanline < info->output_height) {
         // Assign 8 or 16 rows of memory to read the Y channel.
-        bool hasYLastRow = false;
         for (int i = 0; i < yScanlinesToRead; ++i) {
             int scanline = info->output_scanline + i;
-            if (scanline < yMaxH) {
+            if (scanline < yHeight) {
                 bufferraw2[i] = &outputY[scanline * rowBytesY];
-            } else if (scanline == yMaxH) {
-                bufferraw2[i] = yLastRow;
-                hasYLastRow = true;
             } else {
                 bufferraw2[i] = dummyRow;
             }
         }
 
         // Assign 8 rows of memory to read the U and V channels.
-        bool hasUVLastRow = false;
         int scaledScanline = info->output_scanline / v;
         for (int i = 0; i < 8; ++i) {
             int scanline = scaledScanline + i;
-            if (scanline < uvMaxH) {
+            if (scanline < uvHeight) {
                 bufferraw2[16 + i] = &outputU[scanline * rowBytesU];
                 bufferraw2[24 + i] = &outputV[scanline * rowBytesV];
-            } else if (scanline == uvMaxH) {
-                bufferraw2[16 + i] = uLastRow;
-                bufferraw2[24 + i] = vLastRow;
-                hasUVLastRow = true;
             } else {
                 bufferraw2[16 + i] = dummyRow;
                 bufferraw2[24 + i] = dummyRow;
@@ -969,14 +895,6 @@ static bool outputRawData(JPEGImageReader* reader, ImagePlanes* imagePlanes)
         JDIMENSION scanlinesRead = jpeg_read_raw_data(info, bufferraw, yScanlinesToRead);
         if (!scanlinesRead)
             return false;
-
-        if (hasYLastRow)
-            memcpy(&outputY[yMaxH * rowBytesY], yLastRow, yWidth);
-
-        if (hasUVLastRow) {
-            memcpy(&outputU[uvMaxH * rowBytesU], uLastRow, uvSize.width());
-            memcpy(&outputV[uvMaxH * rowBytesV], vLastRow, uvSize.width());
-        }
     }
 
     info->output_scanline = std::min(info->output_scanline, info->output_height);
@@ -995,7 +913,7 @@ bool JPEGImageDecoder::outputScanlines()
 
     // Initialize the framebuffer if needed.
     ImageFrame& buffer = m_frameBufferCache[0];
-    if (buffer.status() == ImageFrame::FrameEmpty) {
+    if (buffer.getStatus() == ImageFrame::FrameEmpty) {
         ASSERT(info->output_width == static_cast<JDIMENSION>(m_decodedSize.width()));
         ASSERT(info->output_height == static_cast<JDIMENSION>(m_decodedSize.height()));
 
@@ -1018,7 +936,7 @@ bool JPEGImageDecoder::outputScanlines()
             if (jpeg_read_scanlines(info, &row, 1) != 1)
                 return false;
 #if USE(QCMSLIB)
-            if (qcms_transform* transform = m_reader->colorTransform())
+            if (qcms_transform* transform = colorTransform())
                 qcms_transform_data_type(transform, row, row, info->output_width, rgbOutputColorSpace() == JCS_EXT_BGRA ? QCMS_OUTPUT_BGRX : QCMS_OUTPUT_RGBX);
 #endif
         }

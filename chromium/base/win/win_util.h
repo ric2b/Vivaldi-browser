@@ -123,6 +123,10 @@ BASE_EXPORT bool ShouldCrashOnProcessDetach();
 // process is aborted.
 BASE_EXPORT void SetAbortBehaviorForCrashReporting();
 
+// Checks whether the supplied |hwnd| is in Windows 10 tablet mode. Will return
+// false on versions below 10.
+BASE_EXPORT bool IsWindows10TabletMode(HWND hwnd);
+
 // A tablet is a device that is touch enabled and also is being used
 // "like a tablet". This is used by the following:-
 // 1. Metrics:- To gain insight into how users use Chrome.
@@ -173,6 +177,12 @@ BASE_EXPORT bool IsUser32AndGdi32Available();
 // the PROCESS_QUERY_INFORMATION and PROCESS_VM_READ permissions.
 BASE_EXPORT bool GetLoadedModulesSnapshot(HANDLE process,
                                           std::vector<HMODULE>* snapshot);
+
+// Adds or removes the MICROSOFT_TABLETPENSERVICE_PROPERTY property with the
+// TABLET_DISABLE_FLICKS & TABLET_DISABLE_FLICKFALLBACKKEYS flags in order to
+// disable pen flick gestures for the given HWND.
+BASE_EXPORT void EnableFlicks(HWND hwnd);
+BASE_EXPORT void DisableFlicks(HWND hwnd);
 
 }  // namespace win
 }  // namespace base

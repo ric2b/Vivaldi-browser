@@ -267,6 +267,11 @@ void ChannelWin::HandleInternalMessage(const Message& msg) {
   listener()->OnChannelConnected(claimed_pid);
 
   FlushPrelimQueue();
+
+  if (IsAttachmentBrokerEndpoint() &&
+      AttachmentBroker::GetGlobal()->IsPrivilegedBroker()) {
+    AttachmentBroker::GetGlobal()->ReceivedPeerPid(claimed_pid);
+  }
 }
 
 base::ProcessId ChannelWin::GetSenderPID() {
@@ -392,6 +397,8 @@ bool ChannelWin::CreatePipe(const IPC::ChannelHandle &channel_handle,
 }
 
 bool ChannelWin::Connect() {
+  WillConnect();
+
   DLOG_IF(WARNING, thread_check_.get()) << "Connect called more than once";
 
   if (!thread_check_.get())

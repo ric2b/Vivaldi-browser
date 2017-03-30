@@ -44,7 +44,6 @@ class NATIVE_THEME_EXPORT NativeTheme {
  public:
   // The part to be painted / sized.
   enum Part {
-    kComboboxArrow,
     kCheckbox,
     kInnerSpinButton,
     kMenuList,
@@ -199,6 +198,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
 
   union NATIVE_THEME_EXPORT ExtraParams {
     ExtraParams();
+    ExtraParams(const ExtraParams& other);
 
     ButtonExtraParams button;
     InnerSpinButtonExtraParams inner_spin;
@@ -265,8 +265,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_BlueButtonHoverColor,
     kColorId_BlueButtonShadowColor,
     kColorId_CallToActionColor,
-    kColorId_MdTextButtonEnabledColor,
-    kColorId_MdTextButtonDisabledColor,
+    kColorId_TextOnCallToActionColor,
     // MenuItem
     kColorId_EnabledMenuItemForegroundColor,
     kColorId_DisabledMenuItemForegroundColor,

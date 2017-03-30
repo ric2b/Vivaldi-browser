@@ -91,6 +91,22 @@ extern const char kAssertNoDeps[];
 extern const char kAssertNoDeps_HelpShort[];
 extern const char kAssertNoDeps_Help[];
 
+extern const char kBundleRootDir[];
+extern const char kBundleRootDir_HelpShort[];
+extern const char kBundleRootDir_Help[];
+
+extern const char kBundleResourcesDir[];
+extern const char kBundleResourcesDir_HelpShort[];
+extern const char kBundleResourcesDir_Help[];
+
+extern const char kBundleExecutableDir[];
+extern const char kBundleExecutableDir_HelpShort[];
+extern const char kBundleExecutableDir_Help[];
+
+extern const char kBundlePlugInsDir[];
+extern const char kBundlePlugInsDir_HelpShort[];
+extern const char kBundlePlugInsDir_Help[];
+
 extern const char kCflags[];
 extern const char kCflags_HelpShort[];
 extern const char* kCflags_Help;
@@ -175,6 +191,10 @@ extern const char kOutputName[];
 extern const char kOutputName_HelpShort[];
 extern const char kOutputName_Help[];
 
+extern const char kOutputPrefixOverride[];
+extern const char kOutputPrefixOverride_HelpShort[];
+extern const char kOutputPrefixOverride_Help[];
+
 extern const char kOutputs[];
 extern const char kOutputs_HelpShort[];
 extern const char kOutputs_Help[];
@@ -218,6 +238,10 @@ extern const char kTestonly_Help[];
 extern const char kVisibility[];
 extern const char kVisibility_HelpShort[];
 extern const char kVisibility_Help[];
+
+extern const char kWriteRuntimeDeps[];
+extern const char kWriteRuntimeDeps_HelpShort[];
+extern const char kWriteRuntimeDeps_Help[];
 
 // -----------------------------------------------------------------------------
 

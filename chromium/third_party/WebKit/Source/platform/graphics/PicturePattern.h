@@ -11,17 +11,17 @@ namespace blink {
 
 class PLATFORM_EXPORT PicturePattern final : public Pattern {
 public:
-    static PassRefPtr<PicturePattern> create(PassRefPtr<const SkPicture>, RepeatMode);
+    static PassRefPtr<PicturePattern> create(PassRefPtr<SkPicture>, RepeatMode);
 
     ~PicturePattern() override;
 
 protected:
-    PassRefPtr<SkShader> createShader() override;
+    sk_sp<SkShader> createShader() const override;
 
 private:
-    PicturePattern(PassRefPtr<const SkPicture>, RepeatMode);
+    PicturePattern(PassRefPtr<SkPicture>, RepeatMode);
 
-    RefPtr<const SkPicture> m_tilePicture;
+    sk_sp<SkPicture> m_tilePicture;
 };
 
 } // namespace blink

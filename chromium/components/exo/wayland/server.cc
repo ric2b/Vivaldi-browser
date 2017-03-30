@@ -4,8 +4,10 @@
 
 #include "components/exo/wayland/server.h"
 
+#include <grp.h>
 #include <linux/input.h>
 #include <scaler-server-protocol.h>
+#include <secure-output-unstable-v1-server-protocol.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <wayland-server-core.h>
@@ -13,14 +15,20 @@
 #include <xdg-shell-unstable-v5-server-protocol.h>
 
 #include <algorithm>
+#include <iterator>
+#include <string>
 #include <utility>
 
 #include "ash/display/display_info.h"
 #include "ash/display/display_manager.h"
+#include "ash/display/screen_ash.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/cancelable_callback.h"
+#include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/memory/free_deleter.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/exo/buffer.h"
 #include "components/exo/display.h"
@@ -34,11 +42,18 @@
 #include "components/exo/surface.h"
 #include "components/exo/touch.h"
 #include "components/exo/touch_delegate.h"
+#include "ipc/unix_domain_socket_util.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/window_property.h"
+#include "ui/base/hit_test.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/gfx/display_observer.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_observer.h"
 
 #if defined(USE_OZONE)
+#include <drm_fourcc.h>
+#include <linux-dmabuf-unstable-v1-server-protocol.h>
 #include <wayland-drm-server-protocol.h>
 #endif
 
@@ -52,6 +67,12 @@ DECLARE_WINDOW_PROPERTY_TYPE(wl_resource*);
 namespace exo {
 namespace wayland {
 namespace {
+
+// Default wayland socket name.
+const base::FilePath::CharType kSocketName[] = FILE_PATH_LITERAL("wayland-0");
+
+// Group used for wayland socket.
+const char kWaylandSocketGroup[] = "wayland";
 
 template <class T>
 T* GetUserDataAs(wl_resource* resource) {
@@ -85,6 +106,10 @@ DEFINE_WINDOW_PROPERTY_KEY(wl_resource*, kSurfaceResourceKey, nullptr);
 // A property key containing a boolean set to true if a viewport is associated
 // with window.
 DEFINE_WINDOW_PROPERTY_KEY(bool, kSurfaceHasViewportKey, false);
+
+// A property key containing a boolean set to true if a security object is
+// associated with window.
+DEFINE_WINDOW_PROPERTY_KEY(bool, kSurfaceHasSecurityKey, false);
 
 ////////////////////////////////////////////////////////////////////////////////
 // wl_buffer_interface:
@@ -462,9 +487,9 @@ void drm_create_prime_buffer(wl_client* client,
   }
 
   scoped_ptr<Buffer> buffer =
-      GetUserDataAs<Display>(resource)
-          ->CreatePrimeBuffer(base::ScopedFD(name), gfx::Size(width, height),
-                              supported_format->buffer_format, stride0);
+      GetUserDataAs<Display>(resource)->CreateLinuxDMABufBuffer(
+          base::ScopedFD(name), gfx::Size(width, height),
+          supported_format->buffer_format, stride0);
   if (!buffer) {
     wl_resource_post_no_memory(resource);
     return;
@@ -497,6 +522,163 @@ void bind_drm(wl_client* client, void* data, uint32_t version, uint32_t id) {
   for (const auto& supported_format : drm_supported_formats)
     wl_drm_send_format(resource, supported_format.drm_format);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// linux_buffer_params_interface:
+
+const struct dmabuf_supported_format {
+  uint32_t dmabuf_format;
+  gfx::BufferFormat buffer_format;
+} dmabuf_supported_formats[] = {
+    {DRM_FORMAT_XBGR8888, gfx::BufferFormat::RGBX_8888},
+    {DRM_FORMAT_ABGR8888, gfx::BufferFormat::RGBA_8888},
+    {DRM_FORMAT_XRGB8888, gfx::BufferFormat::BGRX_8888},
+    {DRM_FORMAT_ARGB8888, gfx::BufferFormat::BGRA_8888}};
+
+struct LinuxBufferParams {
+  explicit LinuxBufferParams(Display* display)
+      : display(display), stride(0), offset(0) {}
+
+  Display* const display;
+  base::ScopedFD fd;
+  uint32_t stride;
+  uint32_t offset;
+};
+
+void linux_buffer_params_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void linux_buffer_params_add(wl_client* client,
+                             wl_resource* resource,
+                             int32_t fd,
+                             uint32_t plane_idx,
+                             uint32_t offset,
+                             uint32_t stride,
+                             uint32_t modifier_hi,
+                             uint32_t modifier_lo) {
+  if (plane_idx) {
+    wl_resource_post_error(resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_IDX,
+                           "plane_idx too large");
+    return;
+  }
+
+  LinuxBufferParams* linux_buffer_params =
+      GetUserDataAs<LinuxBufferParams>(resource);
+  if (linux_buffer_params->fd.is_valid()) {
+    wl_resource_post_error(resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_SET,
+                           "plane already set");
+    return;
+  }
+
+  linux_buffer_params->fd.reset(fd);
+  linux_buffer_params->stride = stride;
+  linux_buffer_params->offset = offset;
+}
+
+void linux_buffer_params_create(wl_client* client,
+                                wl_resource* resource,
+                                int32_t width,
+                                int32_t height,
+                                uint32_t format,
+                                uint32_t flags) {
+  if (width <= 0 || height <= 0) {
+    wl_resource_post_error(resource,
+                           ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_DIMENSIONS,
+                           "invalid width or height");
+    return;
+  }
+
+  const auto* supported_format = std::find_if(
+      std::begin(dmabuf_supported_formats), std::end(dmabuf_supported_formats),
+      [format](const dmabuf_supported_format& supported_format) {
+        return supported_format.dmabuf_format == format;
+      });
+  if (supported_format == std::end(dmabuf_supported_formats)) {
+    wl_resource_post_error(resource,
+                           ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_FORMAT,
+                           "format not supported");
+    return;
+  }
+
+  if (flags & (ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT |
+               ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_INTERLACED)) {
+    wl_resource_post_error(resource,
+                           ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,
+                           "flags not supported");
+    return;
+  }
+
+  LinuxBufferParams* linux_buffer_params =
+      GetUserDataAs<LinuxBufferParams>(resource);
+  if (linux_buffer_params->offset) {
+    wl_resource_post_error(resource,
+                           ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_OUT_OF_BOUNDS,
+                           "offset not supported");
+    return;
+  }
+
+  scoped_ptr<Buffer> buffer =
+      linux_buffer_params->display->CreateLinuxDMABufBuffer(
+          std::move(linux_buffer_params->fd), gfx::Size(width, height),
+          supported_format->buffer_format, linux_buffer_params->stride);
+  if (!buffer) {
+    zwp_linux_buffer_params_v1_send_failed(resource);
+    return;
+  }
+
+  wl_resource* buffer_resource =
+      wl_resource_create(client, &wl_buffer_interface, 1, 0);
+
+  buffer->set_release_callback(base::Bind(&HandleBufferReleaseCallback,
+                                          base::Unretained(buffer_resource)));
+
+  zwp_linux_buffer_params_v1_send_created(resource, buffer_resource);
+}
+
+const struct zwp_linux_buffer_params_v1_interface
+    linux_buffer_params_implementation = {linux_buffer_params_destroy,
+                                          linux_buffer_params_add,
+                                          linux_buffer_params_create};
+
+////////////////////////////////////////////////////////////////////////////////
+// linux_dmabuf_interface:
+
+void linux_dmabuf_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void linux_dmabuf_create_params(wl_client* client,
+                                wl_resource* resource,
+                                uint32_t id) {
+  scoped_ptr<LinuxBufferParams> linux_buffer_params =
+      make_scoped_ptr(new LinuxBufferParams(GetUserDataAs<Display>(resource)));
+
+  wl_resource* linux_buffer_params_resource =
+      wl_resource_create(client, &zwp_linux_buffer_params_v1_interface, 1, id);
+
+  SetImplementation(linux_buffer_params_resource,
+                    &linux_buffer_params_implementation,
+                    std::move(linux_buffer_params));
+}
+
+const struct zwp_linux_dmabuf_v1_interface linux_dmabuf_implementation = {
+    linux_dmabuf_destroy, linux_dmabuf_create_params};
+
+void bind_linux_dmabuf(wl_client* client,
+                       void* data,
+                       uint32_t version,
+                       uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &zwp_linux_dmabuf_v1_interface, 1, id);
+
+  wl_resource_set_implementation(resource, &linux_dmabuf_implementation, data,
+                                 nullptr);
+
+  for (const auto& supported_format : dmabuf_supported_formats)
+    zwp_linux_dmabuf_v1_send_format(resource, supported_format.dmabuf_format);
+}
+
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -584,6 +766,37 @@ void bind_subcompositor(wl_client* client,
 ////////////////////////////////////////////////////////////////////////////////
 // wl_shell_surface_interface:
 
+class ShellSurfaceSizeObserver : public views::WidgetObserver {
+ public:
+  ShellSurfaceSizeObserver(wl_resource* shell_surface_resource,
+                           const gfx::Size& initial_size)
+      : shell_surface_resource_(shell_surface_resource),
+        old_size_(initial_size) {
+    wl_shell_surface_send_configure(shell_surface_resource,
+                                    WL_SHELL_SURFACE_RESIZE_NONE,
+                                    old_size_.width(), old_size_.height());
+  }
+
+  // Overridden from view::WidgetObserver:
+  void OnWidgetDestroyed(views::Widget* widget) override { delete this; }
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& new_bounds) override {
+    if (old_size_ == new_bounds.size())
+      return;
+
+    wl_shell_surface_send_configure(shell_surface_resource_,
+                                    WL_SHELL_SURFACE_RESIZE_NONE,
+                                    new_bounds.width(), new_bounds.height());
+    old_size_ = new_bounds.size();
+  }
+
+ private:
+  wl_resource* shell_surface_resource_;
+  gfx::Size old_size_;
+
+  DISALLOW_COPY_AND_ASSIGN(ShellSurfaceSizeObserver);
+};
+
 void shell_surface_pong(wl_client* client,
                         wl_resource* resource,
                         uint32_t serial) {
@@ -623,8 +836,16 @@ void shell_surface_set_fullscreen(wl_client* client,
                                   uint32_t method,
                                   uint32_t framerate,
                                   wl_resource* output_resource) {
-  GetUserDataAs<ShellSurface>(resource)->SetEnabled(true);
-  GetUserDataAs<ShellSurface>(resource)->SetFullscreen(true);
+  ShellSurface* shell_surface = GetUserDataAs<ShellSurface>(resource);
+  if (shell_surface->enabled())
+    return;
+
+  shell_surface->SetEnabled(true);
+  shell_surface->SetFullscreen(true);
+
+  views::Widget* widget = shell_surface->GetWidget();
+  widget->AddObserver(new ShellSurfaceSizeObserver(
+      resource, widget->GetWindowBoundsInScreen().size()));
 }
 
 void shell_surface_set_popup(wl_client* client,
@@ -641,8 +862,16 @@ void shell_surface_set_popup(wl_client* client,
 void shell_surface_set_maximized(wl_client* client,
                                  wl_resource* resource,
                                  wl_resource* output_resource) {
-  GetUserDataAs<ShellSurface>(resource)->SetEnabled(true);
-  GetUserDataAs<ShellSurface>(resource)->Maximize();
+  ShellSurface* shell_surface = GetUserDataAs<ShellSurface>(resource);
+  if (shell_surface->enabled())
+    return;
+
+  shell_surface->SetEnabled(true);
+  shell_surface->Maximize();
+
+  views::Widget* widget = shell_surface->GetWidget();
+  widget->AddObserver(new ShellSurfaceSizeObserver(
+      resource, widget->GetWindowBoundsInScreen().size()));
 }
 
 void shell_surface_set_title(wl_client* client,
@@ -668,15 +897,6 @@ const struct wl_shell_surface_interface shell_surface_implementation = {
 ////////////////////////////////////////////////////////////////////////////////
 // wl_shell_interface:
 
-void HandleShellSurfaceConfigureCallback(wl_resource* resource,
-                                         const gfx::Size& size,
-                                         ash::wm::WindowStateType state_type,
-                                         bool activated) {
-  wl_shell_surface_send_configure(resource, WL_SHELL_SURFACE_RESIZE_NONE,
-                                  size.width(), size.height());
-  wl_client_flush(wl_resource_get_client(resource));
-}
-
 void shell_get_shell_surface(wl_client* client,
                              wl_resource* resource,
                              uint32_t id,
@@ -700,10 +920,6 @@ void shell_get_shell_surface(wl_client* client,
   shell_surface->set_surface_destroyed_callback(base::Bind(
       &wl_resource_destroy, base::Unretained(shell_surface_resource)));
 
-  shell_surface->set_configure_callback(
-      base::Bind(&HandleShellSurfaceConfigureCallback,
-                 base::Unretained(shell_surface_resource)));
-
   SetImplementation(shell_surface_resource, &shell_surface_implementation,
                     std::move(shell_surface));
 }
@@ -722,47 +938,132 @@ void bind_shell(wl_client* client, void* data, uint32_t version, uint32_t id) {
 ////////////////////////////////////////////////////////////////////////////////
 // wl_output_interface:
 
+wl_output_transform OutputTransform(gfx::Display::Rotation rotation) {
+  switch (rotation) {
+    case gfx::Display::ROTATE_0:
+      return WL_OUTPUT_TRANSFORM_NORMAL;
+    case gfx::Display::ROTATE_90:
+      return WL_OUTPUT_TRANSFORM_90;
+    case gfx::Display::ROTATE_180:
+      return WL_OUTPUT_TRANSFORM_180;
+    case gfx::Display::ROTATE_270:
+      return WL_OUTPUT_TRANSFORM_270;
+  }
+  NOTREACHED();
+  return WL_OUTPUT_TRANSFORM_NORMAL;
+}
+
+class WaylandDisplayObserver : public gfx::DisplayObserver {
+ public:
+  WaylandDisplayObserver(const gfx::Display& display,
+                         wl_resource* output_resource)
+      : display_id_(display.id()), output_resource_(output_resource) {
+    gfx::Screen::GetScreen()->AddObserver(this);
+    SendDisplayMetrics(display);
+  }
+  ~WaylandDisplayObserver() override {
+    gfx::Screen::GetScreen()->RemoveObserver(this);
+  }
+
+  // Overridden from gfx::DisplayObserver:
+  void OnDisplayAdded(const gfx::Display& new_display) override {}
+  void OnDisplayRemoved(const gfx::Display& new_display) override {}
+  void OnDisplayMetricsChanged(const gfx::Display& display,
+                               uint32_t changed_metrics) override {
+    if (display.id() != display_id_)
+      return;
+
+    if (changed_metrics &
+        (DISPLAY_METRIC_BOUNDS | DISPLAY_METRIC_DEVICE_SCALE_FACTOR |
+         DISPLAY_METRIC_ROTATION)) {
+      SendDisplayMetrics(display);
+    }
+  }
+
+ private:
+  void SendDisplayMetrics(const gfx::Display& display) {
+    const ash::DisplayInfo& info =
+        ash::Shell::GetInstance()->display_manager()->GetDisplayInfo(
+            display.id());
+
+    const float kInchInMm = 25.4f;
+    const char* kUnknownMake = "unknown";
+    const char* kUnknownModel = "unknown";
+
+    gfx::Rect bounds = info.bounds_in_native();
+    wl_output_send_geometry(
+        output_resource_, bounds.x(), bounds.y(),
+        static_cast<int>(kInchInMm * bounds.width() / info.device_dpi()),
+        static_cast<int>(kInchInMm * bounds.height() / info.device_dpi()),
+        WL_OUTPUT_SUBPIXEL_UNKNOWN, kUnknownMake, kUnknownModel,
+        OutputTransform(display.rotation()));
+
+    if (wl_resource_get_version(output_resource_) >=
+        WL_OUTPUT_SCALE_SINCE_VERSION) {
+      wl_output_send_scale(output_resource_, display.device_scale_factor());
+    }
+
+    // TODO(reveman): Send real list of modes.
+    wl_output_send_mode(
+        output_resource_, WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED,
+        bounds.width(), bounds.height(), static_cast<int>(60000));
+
+    if (wl_resource_get_version(output_resource_) >=
+        WL_OUTPUT_DONE_SINCE_VERSION) {
+      wl_output_send_done(output_resource_);
+    }
+  }
+
+  // The identifier associated with the observed display.
+  int64_t display_id_;
+
+  // The output resource associated with the display.
+  wl_resource* const output_resource_;
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandDisplayObserver);
+};
+
 const uint32_t output_version = 2;
 
 void bind_output(wl_client* client, void* data, uint32_t version, uint32_t id) {
   wl_resource* resource = wl_resource_create(
       client, &wl_output_interface, std::min(version, output_version), id);
 
-  // TODO(reveman): Watch for display changes and report them.
   // TODO(reveman): Multi-display support.
-  ash::DisplayManager* display_manager =
-      ash::Shell::GetInstance()->display_manager();
-  const gfx::Display& primary = display_manager->GetPrimaryDisplayCandidate();
+  const gfx::Display& display = ash::Shell::GetInstance()
+                                    ->display_manager()
+                                    ->GetPrimaryDisplayCandidate();
 
-  const ash::DisplayInfo& info = display_manager->GetDisplayInfo(primary.id());
-  const float kInchInMm = 25.4f;
-  const char* kUnknownMake = "unknown";
-  const char* kUnknownModel = "unknown";
-  gfx::Rect bounds = info.bounds_in_native();
-  // TODO(reveman): Send the actual active device rotation.
-  wl_output_send_geometry(
-      resource, bounds.x(), bounds.y(),
-      static_cast<int>(kInchInMm * bounds.width() / info.device_dpi()),
-      static_cast<int>(kInchInMm * bounds.height() / info.device_dpi()),
-      WL_OUTPUT_SUBPIXEL_UNKNOWN, kUnknownMake, kUnknownModel,
-      WL_OUTPUT_TRANSFORM_NORMAL);
-
-  // TODO(reveman): Send correct device scale factor when surface API respects
-  // scale.
-  if (version >= WL_OUTPUT_SCALE_SINCE_VERSION)
-    wl_output_send_scale(resource, primary.device_scale_factor());
-
-  // TODO(reveman): Send real list of modes after adding multi-display support.
-  wl_output_send_mode(resource,
-                      WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED,
-                      bounds.width(), bounds.height(), static_cast<int>(60000));
-
-  if (version >= WL_OUTPUT_DONE_SINCE_VERSION)
-    wl_output_send_done(resource);
+  SetImplementation(
+      resource, nullptr,
+      make_scoped_ptr(new WaylandDisplayObserver(display, resource)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // xdg_surface_interface:
+
+int XdgResizeComponent(uint32_t edges) {
+  switch (edges) {
+    case XDG_SURFACE_RESIZE_EDGE_TOP:
+      return HTTOP;
+    case XDG_SURFACE_RESIZE_EDGE_BOTTOM:
+      return HTBOTTOM;
+    case XDG_SURFACE_RESIZE_EDGE_LEFT:
+      return HTLEFT;
+    case XDG_SURFACE_RESIZE_EDGE_TOP_LEFT:
+      return HTTOPLEFT;
+    case XDG_SURFACE_RESIZE_EDGE_BOTTOM_LEFT:
+      return HTBOTTOMLEFT;
+    case XDG_SURFACE_RESIZE_EDGE_RIGHT:
+      return HTRIGHT;
+    case XDG_SURFACE_RESIZE_EDGE_TOP_RIGHT:
+      return HTTOPRIGHT;
+    case XDG_SURFACE_RESIZE_EDGE_BOTTOM_RIGHT:
+      return HTBOTTOMRIGHT;
+    default:
+      return HTBOTTOMRIGHT;
+  }
+}
 
 void xdg_surface_destroy(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
@@ -771,7 +1072,15 @@ void xdg_surface_destroy(wl_client* client, wl_resource* resource) {
 void xdg_surface_set_parent(wl_client* client,
                             wl_resource* resource,
                             wl_resource* parent) {
-  NOTIMPLEMENTED();
+  if (!parent) {
+    GetUserDataAs<ShellSurface>(resource)->SetParent(nullptr);
+    return;
+  }
+
+  // This is a noop if parent has not been mapped.
+  ShellSurface* shell_surface = GetUserDataAs<ShellSurface>(parent);
+  if (shell_surface->GetWidget())
+    GetUserDataAs<ShellSurface>(resource)->SetParent(shell_surface);
 }
 
 void xdg_surface_set_title(wl_client* client,
@@ -808,13 +1117,15 @@ void xdg_surface_resize(wl_client* client,
                         wl_resource* seat,
                         uint32_t serial,
                         uint32_t edges) {
-  NOTIMPLEMENTED();
+  int component = XdgResizeComponent(edges);
+  if (component != HTNOWHERE)
+    GetUserDataAs<ShellSurface>(resource)->Resize(component);
 }
 
 void xdg_surface_ack_configure(wl_client* client,
                                wl_resource* resource,
                                uint32_t serial) {
-  NOTIMPLEMENTED();
+  GetUserDataAs<ShellSurface>(resource)->AcknowledgeConfigure(serial);
 }
 
 void xdg_surface_set_window_geometry(wl_client* client,
@@ -866,6 +1177,15 @@ const struct xdg_surface_interface xdg_surface_implementation = {
     xdg_surface_set_minimized};
 
 ////////////////////////////////////////////////////////////////////////////////
+// xdg_popup_interface:
+
+void xdg_popup_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+const struct xdg_popup_interface xdg_popup_implementation = {xdg_popup_destroy};
+
+////////////////////////////////////////////////////////////////////////////////
 // xdg_shell_interface:
 
 void xdg_shell_destroy(wl_client* client, wl_resource* resource) {
@@ -891,36 +1211,35 @@ void HandleXdgSurfaceCloseCallback(wl_resource* resource) {
   wl_client_flush(wl_resource_get_client(resource));
 }
 
-void HandleXdgSurfaceConfigureCallback(wl_resource* resource,
-                                       const gfx::Size& size,
-                                       ash::wm::WindowStateType state_type,
-                                       bool activated) {
-  // TODO(reveman): Implement XDG_SURFACE_STATE_RESIZING.
+void AddXdgSurfaceState(wl_array* states, xdg_surface_state state) {
+  xdg_surface_state* value = static_cast<xdg_surface_state*>(
+      wl_array_add(states, sizeof(xdg_surface_state)));
+  DCHECK(value);
+  *value = state;
+}
+
+uint32_t HandleXdgSurfaceConfigureCallback(wl_resource* resource,
+                                           const gfx::Size& size,
+                                           ash::wm::WindowStateType state_type,
+                                           bool resizing,
+                                           bool activated) {
   wl_array states;
   wl_array_init(&states);
-  if (state_type == ash::wm::WINDOW_STATE_TYPE_MAXIMIZED) {
-    xdg_surface_state* value = static_cast<xdg_surface_state*>(
-        wl_array_add(&states, sizeof(xdg_surface_state)));
-    DCHECK(value);
-    *value = XDG_SURFACE_STATE_MAXIMIZED;
-  }
-  if (state_type == ash::wm::WINDOW_STATE_TYPE_FULLSCREEN) {
-    xdg_surface_state* value = static_cast<xdg_surface_state*>(
-        wl_array_add(&states, sizeof(xdg_surface_state)));
-    DCHECK(value);
-    *value = XDG_SURFACE_STATE_FULLSCREEN;
-  }
-  if (activated) {
-    xdg_surface_state* value = static_cast<xdg_surface_state*>(
-        wl_array_add(&states, sizeof(xdg_surface_state)));
-    DCHECK(value);
-    *value = XDG_SURFACE_STATE_ACTIVATED;
-  }
+  if (state_type == ash::wm::WINDOW_STATE_TYPE_MAXIMIZED)
+    AddXdgSurfaceState(&states, XDG_SURFACE_STATE_MAXIMIZED);
+  if (state_type == ash::wm::WINDOW_STATE_TYPE_FULLSCREEN)
+    AddXdgSurfaceState(&states, XDG_SURFACE_STATE_FULLSCREEN);
+  if (resizing)
+    AddXdgSurfaceState(&states, XDG_SURFACE_STATE_RESIZING);
+  if (activated)
+    AddXdgSurfaceState(&states, XDG_SURFACE_STATE_ACTIVATED);
+  uint32_t serial = wl_display_next_serial(
+      wl_client_get_display(wl_resource_get_client(resource)));
   xdg_surface_send_configure(resource, size.width(), size.height(), &states,
-                             wl_display_next_serial(wl_client_get_display(
-                                 wl_resource_get_client(resource))));
+                             serial);
   wl_client_flush(wl_resource_get_client(resource));
   wl_array_release(&states);
+  return serial;
 }
 
 void xdg_shell_get_xdg_surface(wl_client* client,
@@ -950,6 +1269,11 @@ void xdg_shell_get_xdg_surface(wl_client* client,
                     std::move(shell_surface));
 }
 
+void HandleXdgPopupCloseCallback(wl_resource* resource) {
+  xdg_popup_send_popup_done(resource);
+  wl_client_flush(wl_resource_get_client(resource));
+}
+
 void xdg_shell_get_xdg_popup(wl_client* client,
                              wl_resource* resource,
                              uint32_t id,
@@ -959,7 +1283,49 @@ void xdg_shell_get_xdg_popup(wl_client* client,
                              uint32_t serial,
                              int32_t x,
                              int32_t y) {
-  NOTIMPLEMENTED();
+  // Parent widget can be found by locating the closest ancestor with a widget.
+  views::Widget* parent_widget = nullptr;
+  aura::Window* parent_window = GetUserDataAs<Surface>(parent);
+  while (parent_window) {
+    parent_widget = views::Widget::GetWidgetForNativeWindow(parent_window);
+    if (parent_widget)
+      break;
+    parent_window = parent_window->parent();
+  }
+
+  // Early out if parent widget was not found or is not associated with a
+  // shell surface.
+  if (!parent_widget ||
+      !ShellSurface::GetMainSurface(parent_widget->GetNativeWindow())) {
+    wl_resource_post_error(resource, XDG_SHELL_ERROR_INVALID_POPUP_PARENT,
+                           "invalid popup parent surface");
+    return;
+  }
+
+  // TODO(reveman): Automatically close popup when clicking outside the
+  // popup window.
+  scoped_ptr<ShellSurface> shell_surface =
+      GetUserDataAs<Display>(resource)->CreatePopupShellSurface(
+          GetUserDataAs<Surface>(surface),
+          // Shell surface widget delegate implementation of GetContentsView()
+          // returns a pointer to the shell surface instance.
+          static_cast<ShellSurface*>(
+              parent_widget->widget_delegate()->GetContentsView()),
+          gfx::Point(x, y));
+  if (!shell_surface) {
+    wl_resource_post_error(resource, XDG_SHELL_ERROR_ROLE,
+                           "surface has already been assigned a role");
+    return;
+  }
+
+  wl_resource* xdg_popup_resource =
+      wl_resource_create(client, &xdg_popup_interface, 1, id);
+
+  shell_surface->set_close_callback(base::Bind(
+      &HandleXdgPopupCloseCallback, base::Unretained(xdg_popup_resource)));
+
+  SetImplementation(xdg_popup_resource, &xdg_popup_implementation,
+                    std::move(shell_surface));
 }
 
 void xdg_shell_pong(wl_client* client, wl_resource* resource, uint32_t serial) {
@@ -1068,20 +1434,17 @@ class WaylandPointerDelegate : public PointerDelegate {
     wl_pointer_send_enter(pointer_resource_, next_serial(), surface_resource,
                           wl_fixed_from_int(location.x()),
                           wl_fixed_from_int(location.y()));
-    wl_client_flush(client());
   }
   void OnPointerLeave(Surface* surface) override {
     wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
     DCHECK(surface_resource);
     wl_pointer_send_leave(pointer_resource_, next_serial(), surface_resource);
-    wl_client_flush(client());
   }
   void OnPointerMotion(base::TimeDelta time_stamp,
                        const gfx::Point& location) override {
     wl_pointer_send_motion(pointer_resource_, time_stamp.InMilliseconds(),
                            wl_fixed_from_int(location.x()),
                            wl_fixed_from_int(location.y()));
-    wl_client_flush(client());
   }
   void OnPointerButton(base::TimeDelta time_stamp,
                        int button_flags,
@@ -1105,24 +1468,53 @@ class WaylandPointerDelegate : public PointerDelegate {
                                        : WL_POINTER_BUTTON_STATE_RELEASED);
       }
     }
-    wl_client_flush(client());
   }
-  void OnPointerWheel(base::TimeDelta time_stamp,
-                      const gfx::Vector2d& offset) override {
+
+  void OnPointerScroll(base::TimeDelta time_stamp,
+                       const gfx::Vector2dF& offset,
+                       bool discrete) override {
     // Same as Weston, the reference compositor.
     const double kAxisStepDistance = 10.0 / ui::MouseWheelEvent::kWheelDelta;
 
-    double x_value = offset.x() * kAxisStepDistance;
-    if (x_value) {
-      wl_pointer_send_axis(pointer_resource_, time_stamp.InMilliseconds(),
-                           WL_POINTER_AXIS_HORIZONTAL_SCROLL,
-                           wl_fixed_from_double(-x_value));
+    if (wl_resource_get_version(pointer_resource_) >=
+        WL_POINTER_AXIS_SOURCE_SINCE_VERSION) {
+      int32_t axis_source = discrete ? WL_POINTER_AXIS_SOURCE_WHEEL
+                                     : WL_POINTER_AXIS_SOURCE_FINGER;
+      wl_pointer_send_axis_source(pointer_resource_, axis_source);
     }
+
+    double x_value = offset.x() * kAxisStepDistance;
+    wl_pointer_send_axis(pointer_resource_, time_stamp.InMilliseconds(),
+                         WL_POINTER_AXIS_HORIZONTAL_SCROLL,
+                         wl_fixed_from_double(-x_value));
+
     double y_value = offset.y() * kAxisStepDistance;
-    if (y_value) {
-      wl_pointer_send_axis(pointer_resource_, time_stamp.InMilliseconds(),
-                           WL_POINTER_AXIS_VERTICAL_SCROLL,
-                           wl_fixed_from_double(-y_value));
+    wl_pointer_send_axis(pointer_resource_, time_stamp.InMilliseconds(),
+                         WL_POINTER_AXIS_VERTICAL_SCROLL,
+                         wl_fixed_from_double(-y_value));
+  }
+
+  void OnPointerScrollCancel(base::TimeDelta time_stamp) override {
+    // Wayland doesn't know the concept of a canceling kinetic scrolling.
+    // But we can send a 0 distance scroll to emulate this behavior.
+    OnPointerScroll(time_stamp, gfx::Vector2dF(0, 0), false);
+    OnPointerScrollStop(time_stamp);
+  }
+
+  void OnPointerScrollStop(base::TimeDelta time_stamp) override {
+    if (wl_resource_get_version(pointer_resource_) >=
+        WL_POINTER_AXIS_STOP_SINCE_VERSION) {
+      wl_pointer_send_axis_stop(pointer_resource_, time_stamp.InMilliseconds(),
+                                WL_POINTER_AXIS_HORIZONTAL_SCROLL);
+      wl_pointer_send_axis_stop(pointer_resource_, time_stamp.InMilliseconds(),
+                                WL_POINTER_AXIS_VERTICAL_SCROLL);
+    }
+  }
+
+  void OnPointerFrame() override {
+    if (wl_resource_get_version(pointer_resource_) >=
+        WL_POINTER_FRAME_SINCE_VERSION) {
+      wl_pointer_send_frame(pointer_resource_);
     }
     wl_client_flush(client());
   }
@@ -1423,10 +1815,14 @@ void seat_get_touch(wl_client* client, wl_resource* resource, uint32_t id) {
       make_scoped_ptr(new Touch(new WaylandTouchDelegate(touch_resource))));
 }
 
-const struct wl_seat_interface seat_implementation = {
-    seat_get_pointer, seat_get_keyboard, seat_get_touch};
+void seat_release(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
 
-const uint32_t seat_version = 4;
+const struct wl_seat_interface seat_implementation = {
+    seat_get_pointer, seat_get_keyboard, seat_get_touch, seat_release};
+
+const uint32_t seat_version = 5;
 
 void bind_seat(wl_client* client, void* data, uint32_t version, uint32_t id) {
   wl_resource* resource = wl_resource_create(
@@ -1545,10 +1941,6 @@ void scaler_get_viewport(wl_client* client,
 
   wl_resource* viewport_resource = wl_resource_create(
       client, &wl_viewport_interface, wl_resource_get_version(resource), id);
-  if (!viewport_resource) {
-    wl_resource_post_no_memory(resource);
-    return;
-  }
 
   SetImplementation(viewport_resource, &viewport_implementation,
                     make_scoped_ptr(new Viewport(surface)));
@@ -1562,11 +1954,93 @@ const uint32_t scaler_version = 2;
 void bind_scaler(wl_client* client, void* data, uint32_t version, uint32_t id) {
   wl_resource* resource = wl_resource_create(
       client, &wl_scaler_interface, std::min(version, scaler_version), id);
-  if (!resource) {
-    wl_client_post_no_memory(client);
+
+  wl_resource_set_implementation(resource, &scaler_implementation, data,
+                                 nullptr);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// security_interface:
+
+class Security : public SurfaceObserver {
+ public:
+  explicit Security(Surface* surface) : surface_(surface) {
+    surface_->AddSurfaceObserver(this);
+    surface_->SetProperty(kSurfaceHasSecurityKey, true);
+  }
+  ~Security() override {
+    if (surface_) {
+      surface_->RemoveSurfaceObserver(this);
+      surface_->SetOnlyVisibleOnSecureOutput(false);
+      surface_->SetProperty(kSurfaceHasSecurityKey, false);
+    }
+  }
+
+  void OnlyVisibleOnSecureOutput() {
+    if (surface_)
+      surface_->SetOnlyVisibleOnSecureOutput(true);
+  }
+
+  // Overridden from SurfaceObserver:
+  void OnSurfaceDestroying(Surface* surface) override {
+    surface->RemoveSurfaceObserver(this);
+    surface_ = nullptr;
+  }
+
+ private:
+  Surface* surface_;
+
+  DISALLOW_COPY_AND_ASSIGN(Security);
+};
+
+void security_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void security_only_visible_on_secure_output(wl_client* client,
+                                            wl_resource* resource) {
+  GetUserDataAs<Security>(resource)->OnlyVisibleOnSecureOutput();
+}
+
+const struct zwp_security_v1_interface security_implementation = {
+    security_destroy, security_only_visible_on_secure_output};
+
+////////////////////////////////////////////////////////////////////////////////
+// secure_output_interface:
+
+void secure_output_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void secure_output_get_security(wl_client* client,
+                                wl_resource* resource,
+                                uint32_t id,
+                                wl_resource* surface_resource) {
+  Surface* surface = GetUserDataAs<Surface>(surface_resource);
+  if (surface->GetProperty(kSurfaceHasSecurityKey)) {
+    wl_resource_post_error(resource, ZWP_SECURE_OUTPUT_V1_ERROR_SECURITY_EXISTS,
+                           "a security object for that surface already exists");
     return;
   }
-  wl_resource_set_implementation(resource, &scaler_implementation, data,
+
+  wl_resource* security_resource =
+      wl_resource_create(client, &zwp_security_v1_interface, 1, id);
+
+  SetImplementation(security_resource, &security_implementation,
+                    make_scoped_ptr(new Security(surface)));
+}
+
+const struct zwp_secure_output_v1_interface secure_output_implementation = {
+    secure_output_destroy, secure_output_get_security};
+
+void bind_secure_output(wl_client* client,
+                        void* data,
+                        uint32_t version,
+                        uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &zwp_secure_output_v1_interface, 1, id);
+
+  wl_resource_set_implementation(resource, &secure_output_implementation, data,
                                  nullptr);
 }
 
@@ -1583,6 +2057,8 @@ Server::Server(Display* display)
 #if defined(USE_OZONE)
   wl_global_create(wl_display_.get(), &wl_drm_interface, drm_version, display_,
                    bind_drm);
+  wl_global_create(wl_display_.get(), &zwp_linux_dmabuf_v1_interface, 1,
+                   display_, bind_linux_dmabuf);
 #endif
   wl_global_create(wl_display_.get(), &wl_subcompositor_interface, 1, display_,
                    bind_subcompositor);
@@ -1598,6 +2074,8 @@ Server::Server(Display* display)
                    display_, bind_seat);
   wl_global_create(wl_display_.get(), &wl_scaler_interface, scaler_version,
                    display_, bind_scaler);
+  wl_global_create(wl_display_.get(), &zwp_secure_output_v1_interface, 1,
+                   display_, bind_secure_output);
 }
 
 Server::~Server() {}
@@ -1605,8 +2083,44 @@ Server::~Server() {}
 // static
 scoped_ptr<Server> Server::Create(Display* display) {
   scoped_ptr<Server> server(new Server(display));
-  int rv = wl_display_add_socket(server->wl_display_.get(), nullptr);
-  DCHECK_EQ(rv, 0) << "wl_display_add_socket failed: " << rv;
+
+  char* runtime_dir = getenv("XDG_RUNTIME_DIR");
+  if (!runtime_dir) {
+    LOG(ERROR) << "XDG_RUNTIME_DIR not set in the environment";
+    return nullptr;
+  }
+
+  if (!server->AddSocket(kSocketName)) {
+    LOG(ERROR) << "Failed to add socket: " << kSocketName;
+    return nullptr;
+  }
+
+  base::FilePath socket_path = base::FilePath(runtime_dir).Append(kSocketName);
+
+  // Change permissions on the socket.
+  struct group wayland_group;
+  struct group* wayland_group_res = nullptr;
+  char buf[10000];
+  if (HANDLE_EINTR(getgrnam_r(kWaylandSocketGroup, &wayland_group, buf,
+                              sizeof(buf), &wayland_group_res)) < 0) {
+    PLOG(ERROR) << "getgrnam_r";
+    return nullptr;
+  }
+  if (wayland_group_res) {
+    if (HANDLE_EINTR(chown(socket_path.MaybeAsASCII().c_str(), -1,
+                           wayland_group.gr_gid)) < 0) {
+      PLOG(ERROR) << "chown";
+      return nullptr;
+    }
+  } else {
+    LOG(WARNING) << "Group '" << kWaylandSocketGroup << "' not found";
+  }
+
+  if (!base::SetPosixFilePermissions(socket_path, 0660)) {
+    PLOG(ERROR) << "Could not set permissions: " << socket_path.value();
+    return nullptr;
+  }
+
   return server;
 }
 

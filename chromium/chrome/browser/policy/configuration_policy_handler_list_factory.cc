@@ -116,9 +116,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kPasswordManagerEnabled,
     password_manager::prefs::kPasswordManagerSavingEnabled,
     base::Value::TYPE_BOOLEAN },
-  { key::kPasswordManagerAllowShowPasswords,
-    password_manager::prefs::kPasswordManagerAllowShowPasswords,
-    base::Value::TYPE_BOOLEAN },
   { key::kPrintingEnabled,
     prefs::kPrintingEnabled,
     base::Value::TYPE_BOOLEAN },
@@ -502,6 +499,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kUnifiedDesktopEnabledByDefault,
     prefs::kUnifiedDesktopEnabledByDefault,
     base::Value::TYPE_BOOLEAN },
+  { key::kArcEnabled,
+    prefs::kArcEnabled,
+    base::Value::TYPE_BOOLEAN },
 #endif  // defined(OS_CHROMEOS)
 
 // Metrics reporting is controlled by a platform specific policy for ChromeOS
@@ -547,6 +547,18 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     prefs::kWelcomePageOnOSUpgradeEnabled,
     base::Value::TYPE_BOOLEAN },
 #endif  // OS_WIN
+
+#if !defined(OS_ANDROID)
+  { key::kSuppressUnsupportedOSWarning,
+    prefs::kSuppressUnsupportedOSWarning,
+    base::Value::TYPE_BOOLEAN },
+#endif  // !OS_ANDROID
+
+#if defined(OS_CHROMEOS)
+  { key::kSystemTimezoneAutomaticDetection,
+    prefs::kSystemTimezoneAutomaticDetectionPolicy,
+    base::Value::TYPE_INTEGER },
+#endif
 };
 
 class ForceSafeSearchPolicyHandler : public TypeCheckingPolicyHandler {

@@ -634,6 +634,9 @@ class AutofillMetrics {
   // This should be called each time a new profile is launched.
   static void LogStoredProfileCount(size_t num_profiles);
 
+  // This should be called each time a new profile is launched.
+  static void LogStoredLocalCreditCardCount(size_t num_local_cards);
+
   // Log the number of profiles available when an autofillable form is
   // submitted.
   static void LogNumberOfProfilesAtAutofillableFormSubmission(
@@ -666,6 +669,13 @@ class AutofillMetrics {
   // This should be called at each form submission to indicate the autofilled
   // state of the form.
   static void LogAutofillFormSubmittedState(AutofillFormSubmittedState state);
+
+  // This should be called when determining the heuristic types for a form's
+  // fields.
+  static void LogDetermineHeuristicTypesTiming(const base::TimeDelta& duration);
+
+  // This should be called when parsing each form.
+  static void LogParseFormTiming(const base::TimeDelta& duration);
 
   // Utility to autofill form events in the relevant histograms depending on
   // the presence of server and/or local data.

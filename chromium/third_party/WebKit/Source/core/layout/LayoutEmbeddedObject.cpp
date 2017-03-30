@@ -133,22 +133,15 @@ void LayoutEmbeddedObject::layout()
     updateLayerTransformAfterLayout();
 
     Widget* widget = this->widget();
-    if (widget) {
-        // TODO(chrishtr): remove this code. It's now called in FrameView::updateStyleAndLayoutIfNeededRecursive.
-        if (widget->isPluginView())
-            toPluginView(widget)->updateAllLifecyclePhases();
-    } else if (frameView()) {
+    if (!widget && frameView())
         frameView()->addPartToUpdate(*this);
-    }
 
     clearNeedsLayout();
 }
 
-PaintInvalidationReason LayoutEmbeddedObject::invalidatePaintIfNeeded(
-    PaintInvalidationState& paintInvalidationState, const LayoutBoxModelObject& newPaintInvalidationContainer)
+PaintInvalidationReason LayoutEmbeddedObject::invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState)
 {
-    PaintInvalidationReason reason =
-        LayoutPart::invalidatePaintIfNeeded(paintInvalidationState, newPaintInvalidationContainer);
+    PaintInvalidationReason reason = LayoutPart::invalidatePaintIfNeeded(paintInvalidationState);
 
     Widget* widget = this->widget();
     if (widget && widget->isPluginView())
@@ -157,9 +150,9 @@ PaintInvalidationReason LayoutEmbeddedObject::invalidatePaintIfNeeded(
     return reason;
 }
 
-ScrollResultOneDimensional LayoutEmbeddedObject::scroll(ScrollDirectionPhysical direction, ScrollGranularity granularity, float)
+ScrollResult LayoutEmbeddedObject::scroll(ScrollGranularity granularity, const FloatSize&)
 {
-    return ScrollResultOneDimensional(false);
+    return ScrollResult();
 }
 
 CompositingReasons LayoutEmbeddedObject::additionalCompositingReasons() const
@@ -169,11 +162,11 @@ CompositingReasons LayoutEmbeddedObject::additionalCompositingReasons() const
     return CompositingReasonNone;
 }
 
-LayoutBox* LayoutEmbeddedObject::embeddedContentBox() const
+LayoutReplaced* LayoutEmbeddedObject::embeddedReplacedContent() const
 {
     if (!node() || !widget() || !widget()->isFrameView())
         return nullptr;
-    return toFrameView(widget())->embeddedContentBox();
+    return toFrameView(widget())->embeddedReplacedContent();
 }
 
 } // namespace blink

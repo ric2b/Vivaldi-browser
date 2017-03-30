@@ -109,7 +109,7 @@ InterpolationValue CSSVisibilityInterpolationType::maybeConvertNeutral(const Int
     return createVisibilityValue(underlyingVisibility);
 }
 
-InterpolationValue CSSVisibilityInterpolationType::maybeConvertInitial() const
+InterpolationValue CSSVisibilityInterpolationType::maybeConvertInitial(const StyleResolverState&) const
 {
     return createVisibilityValue(VISIBLE);
 }
@@ -146,7 +146,7 @@ InterpolationValue CSSVisibilityInterpolationType::maybeConvertUnderlyingValue(c
     return createVisibilityValue(environment.state().style()->visibility());
 }
 
-PairwiseInterpolationValue CSSVisibilityInterpolationType::mergeSingleConversions(InterpolationValue& start, InterpolationValue& end) const
+PairwiseInterpolationValue CSSVisibilityInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
 {
     return PairwiseInterpolationValue(
         InterpolableNumber::create(0),
@@ -156,7 +156,7 @@ PairwiseInterpolationValue CSSVisibilityInterpolationType::mergeSingleConversion
             toCSSVisibilityNonInterpolableValue(*end.nonInterpolableValue).visibility()));
 }
 
-void CSSVisibilityInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value) const
+void CSSVisibilityInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const
 {
     underlyingValueOwner.set(*this, value);
 }

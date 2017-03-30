@@ -18,7 +18,6 @@
 #include "content/browser/geofencing/geofencing_manager.h"
 #include "content/browser/gpu/shader_disk_cache.h"
 #include "content/browser/host_zoom_map_impl.h"
-#include "content/browser/navigator_connect/navigator_connect_context_impl.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "content/public/browser/browser_context.h"
@@ -349,7 +348,6 @@ StoragePartitionImpl::StoragePartitionImpl(
     storage::SpecialStoragePolicy* special_storage_policy,
     GeofencingManager* geofencing_manager,
     HostZoomLevelContext* host_zoom_level_context,
-    NavigatorConnectContextImpl* navigator_connect_context,
     PlatformNotificationContextImpl* platform_notification_context,
     BackgroundSyncContextImpl* background_sync_context)
     : partition_path_(partition_path),
@@ -365,7 +363,6 @@ StoragePartitionImpl::StoragePartitionImpl(
       special_storage_policy_(special_storage_policy),
       geofencing_manager_(geofencing_manager),
       host_zoom_level_context_(host_zoom_level_context),
-      navigator_connect_context_(navigator_connect_context),
       platform_notification_context_(platform_notification_context),
       background_sync_context_(background_sync_context),
       browser_context_(browser_context) {
@@ -408,11 +405,14 @@ StoragePartitionImpl::~StoragePartitionImpl() {
 StoragePartitionImpl* StoragePartitionImpl::Create(
     BrowserContext* context,
     bool in_memory,
-    const base::FilePath& partition_path) {
+    const base::FilePath& relative_partition_path) {
   // Ensure that these methods are called on the UI thread, except for
   // unittests where a UI thread might not have been created.
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI) ||
          !BrowserThread::IsMessageLoopValid(BrowserThread::UI));
+
+  base::FilePath partition_path =
+      context->GetPath().Append(relative_partition_path);
 
   // All of the clients have to be created and registered with the
   // QuotaManager prior to the QuotaManger being used. We do them
@@ -440,9 +440,11 @@ StoragePartitionImpl* StoragePartitionImpl::Create(
                                    BrowserThread::GetMessageLoopProxyForThread(
                                        BrowserThread::FILE).get());
 
-  base::FilePath path = in_memory ? base::FilePath() : partition_path;
   scoped_refptr<DOMStorageContextWrapper> dom_storage_context =
-      new DOMStorageContextWrapper(path, context->GetSpecialStoragePolicy());
+      new DOMStorageContextWrapper(
+          BrowserContext::GetMojoUserIdFor(context),
+          in_memory ? base::FilePath() : context->GetPath(),
+          relative_partition_path, context->GetSpecialStoragePolicy());
 
   // BrowserMainLoop may not be initialized in unit tests. Tests will
   // need to inject their own task runner into the IndexedDBContext.
@@ -454,6 +456,8 @@ StoragePartitionImpl* StoragePartitionImpl::Create(
                 ->task_runner()
                 .get()
           : NULL;
+
+  base::FilePath path = in_memory ? base::FilePath() : partition_path;
   scoped_refptr<IndexedDBContextImpl> indexed_db_context =
       new IndexedDBContextImpl(path,
                                context->GetSpecialStoragePolicy(),
@@ -462,8 +466,7 @@ StoragePartitionImpl* StoragePartitionImpl::Create(
 
   scoped_refptr<CacheStorageContextImpl> cache_storage_context =
       new CacheStorageContextImpl(context);
-  cache_storage_context->Init(path, quota_manager->proxy(),
-                              context->GetSpecialStoragePolicy());
+  cache_storage_context->Init(path, make_scoped_refptr(quota_manager->proxy()));
 
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context =
       new ServiceWorkerContextWrapper(context);
@@ -487,9 +490,6 @@ StoragePartitionImpl* StoragePartitionImpl::Create(
       new HostZoomLevelContext(
           context->CreateZoomLevelDelegate(partition_path)));
 
-  scoped_refptr<NavigatorConnectContextImpl> navigator_connect_context =
-      new NavigatorConnectContextImpl(service_worker_context);
-
   scoped_refptr<PlatformNotificationContextImpl> platform_notification_context =
       new PlatformNotificationContextImpl(path, context,
                                           service_worker_context);
@@ -506,8 +506,7 @@ StoragePartitionImpl* StoragePartitionImpl::Create(
       cache_storage_context.get(), service_worker_context.get(),
       webrtc_identity_store.get(), special_storage_policy.get(),
       geofencing_manager.get(), host_zoom_level_context.get(),
-      navigator_connect_context.get(), platform_notification_context.get(),
-      background_sync_context.get());
+      platform_notification_context.get(), background_sync_context.get());
 
   service_worker_context->set_storage_partition(storage_partition);
 
@@ -577,11 +576,6 @@ ZoomLevelDelegate* StoragePartitionImpl::GetZoomLevelDelegate() {
   return host_zoom_level_context_->GetZoomLevelDelegate();
 }
 
-NavigatorConnectContextImpl*
-StoragePartitionImpl::GetNavigatorConnectContext() {
-  return navigator_connect_context_.get();
-}
-
 PlatformNotificationContextImpl*
 StoragePartitionImpl::GetPlatformNotificationContext() {
   return platform_notification_context_.get();
@@ -592,11 +586,11 @@ BackgroundSyncContextImpl* StoragePartitionImpl::GetBackgroundSyncContext() {
 }
 
 void StoragePartitionImpl::OpenLocalStorage(
-    const mojo::String& origin,
-    LevelDBObserverPtr observer,
-    mojo::InterfaceRequest<LevelDBWrapper> request) {
-  dom_storage_context_->OpenLocalStorage(origin, std::move(observer),
-                                         std::move(request));
+    const url::Origin& origin,
+    mojom::LevelDBObserverPtr observer,
+    mojo::InterfaceRequest<mojom::LevelDBWrapper> request) {
+  dom_storage_context_->OpenLocalStorage(
+      origin, std::move(observer), std::move(request));
 }
 
 void StoragePartitionImpl::ClearDataImpl(
@@ -660,42 +654,30 @@ void StoragePartitionImpl::QuotaManagedDataDeletionHelper::ClearDataOnIOThread(
     // within the user-specified timeframe, and deal with the resulting set in
     // ClearQuotaManagedOriginsOnIOThread().
     quota_manager->GetOriginsModifiedSince(
-        storage::kStorageTypePersistent,
-        begin,
+        storage::kStorageTypePersistent, begin,
         base::Bind(&QuotaManagedDataDeletionHelper::ClearOriginsOnIOThread,
-                   base::Unretained(this),
-                   quota_manager,
-                   special_storage_policy,
-                   origin_matcher,
-                   decrement_callback));
+                   base::Unretained(this), base::RetainedRef(quota_manager),
+                   special_storage_policy, origin_matcher, decrement_callback));
   }
 
   // Do the same for temporary quota.
   if (quota_storage_remove_mask & QUOTA_MANAGED_STORAGE_MASK_TEMPORARY) {
     IncrementTaskCountOnIO();
     quota_manager->GetOriginsModifiedSince(
-        storage::kStorageTypeTemporary,
-        begin,
+        storage::kStorageTypeTemporary, begin,
         base::Bind(&QuotaManagedDataDeletionHelper::ClearOriginsOnIOThread,
-                   base::Unretained(this),
-                   quota_manager,
-                   special_storage_policy,
-                   origin_matcher,
-                   decrement_callback));
+                   base::Unretained(this), base::RetainedRef(quota_manager),
+                   special_storage_policy, origin_matcher, decrement_callback));
   }
 
   // Do the same for syncable quota.
   if (quota_storage_remove_mask & QUOTA_MANAGED_STORAGE_MASK_SYNCABLE) {
     IncrementTaskCountOnIO();
     quota_manager->GetOriginsModifiedSince(
-        storage::kStorageTypeSyncable,
-        begin,
+        storage::kStorageTypeSyncable, begin,
         base::Bind(&QuotaManagedDataDeletionHelper::ClearOriginsOnIOThread,
-                   base::Unretained(this),
-                   quota_manager,
-                   special_storage_policy,
-                   origin_matcher,
-                   decrement_callback));
+                   base::Unretained(this), base::RetainedRef(quota_manager),
+                   special_storage_policy, origin_matcher, decrement_callback));
   }
 
   DecrementTaskCountOnIO();
@@ -901,7 +883,7 @@ BrowserContext* StoragePartitionImpl::browser_context() const {
 }
 
 void StoragePartitionImpl::Bind(
-    mojo::InterfaceRequest<StoragePartitionService> request) {
+    mojo::InterfaceRequest<mojom::StoragePartitionService> request) {
   bindings_.AddBinding(this, std::move(request));
 }
 

@@ -10,6 +10,7 @@ import android.animation.AnimatorSet;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
@@ -28,6 +29,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.appmenu.AppMenuButtonHelper;
 import org.chromium.chrome.browser.compositor.Invalidator;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
+import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.omnibox.LocationBar;
@@ -37,6 +39,8 @@ import org.chromium.chrome.browser.widget.TintedImageButton;
 import org.chromium.chrome.browser.widget.ToolbarProgressBar;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.widget.Toast;
+
+import javax.annotation.Nullable;
 
 /**
  * Layout class that contains the base shared logic for manipulating the toolbar component. For
@@ -63,6 +67,7 @@ abstract class ToolbarLayout extends FrameLayout implements Toolbar {
 
     private ToolbarDataProvider mToolbarDataProvider;
     private ToolbarTabController mToolbarTabController;
+    @Nullable
     private ToolbarProgressBar mProgressBar;
 
     private boolean mNativeLibraryReady;
@@ -182,10 +187,15 @@ abstract class ToolbarLayout extends FrameLayout implements Toolbar {
             @Override
             @SuppressLint("ClickableViewAccessibility")
             public boolean onTouch(View v, MotionEvent event) {
-                return mAppMenuButtonHelper.onTouch(v, event);
+                return onMenuButtonTouchEvent(v, event);
             }
         });
         mAppMenuButtonHelper = appMenuButtonHelper;
+    }
+
+    /** @return Whether or not the event is handled. */
+    protected boolean onMenuButtonTouchEvent(View v, MotionEvent event) {
+        return mAppMenuButtonHelper.onTouch(v, event);
     }
 
     /**
@@ -310,6 +320,16 @@ abstract class ToolbarLayout extends FrameLayout implements Toolbar {
     }
 
     /**
+     * Cleans up any code as necessary.
+     */
+    public void destroy() { }
+
+    /**
+     * Sets the FullscreenManager, which controls when the toolbar is shown.
+     */
+    public void setFullscreenManager(FullscreenManager manager) { }
+
+    /**
      * Sets the OnClickListener that will be notified when the TabSwitcher button is pressed.
      * @param listener The callback that will be notified when the TabSwitcher button is pressed.
      */
@@ -408,7 +428,9 @@ abstract class ToolbarLayout extends FrameLayout implements Toolbar {
      */
     protected void onTabOrModelChanged() {
         NewTabPage ntp = getToolbarDataProvider().getNewTabPageForCurrentTab();
-        if (ntp != null) getLocationBar().onTabLoadingNTP(ntp);
+        if (ntp != null) {
+            getLocationBar().onTabLoadingNTP(ntp);
+        }
 
         getLocationBar().updateMicButtonState();
     }
@@ -584,6 +606,13 @@ abstract class ToolbarLayout extends FrameLayout implements Toolbar {
         if (mProgressBar != null) {
             mProgressBar.finish(delayed);
         }
+    }
+
+    /**
+     * @return True if the progress bar is started.
+     */
+    protected boolean isProgressStarted() {
+        return mProgressBar != null ? mProgressBar.isStarted() : false;
     }
 
     /**

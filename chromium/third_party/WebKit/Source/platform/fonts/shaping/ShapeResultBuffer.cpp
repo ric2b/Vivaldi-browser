@@ -4,11 +4,12 @@
 
 #include "platform/fonts/shaping/ShapeResultBuffer.h"
 
-#include "platform/fonts/Character.h"
+#include "platform/fonts/CharacterRange.h"
 #include "platform/fonts/GlyphBuffer.h"
 #include "platform/fonts/SimpleFontData.h"
 #include "platform/fonts/shaping/ShapeResultInlineHeaders.h"
 #include "platform/geometry/FloatPoint.h"
+#include "platform/text/Character.h"
 #include "platform/text/TextBreakIterator.h"
 #include "platform/text/TextDirection.h"
 
@@ -258,8 +259,8 @@ float ShapeResultBuffer::fillGlyphBufferForTextEmphasis(GlyphBuffer* glyphBuffer
     return advance;
 }
 
-FloatRect ShapeResultBuffer::selectionRect(TextDirection direction, float totalWidth,
-    const FloatPoint& point, int height, unsigned absoluteFrom, unsigned absoluteTo) const
+CharacterRange ShapeResultBuffer::getCharacterRange(TextDirection direction,
+    float totalWidth, unsigned absoluteFrom, unsigned absoluteTo) const
 {
     float currentX = 0;
     float fromX = 0;
@@ -334,8 +335,48 @@ FloatRect ShapeResultBuffer::selectionRect(TextDirection direction, float totalW
     if (!foundToX && !foundFromX)
         fromX = toX = 0;
     if (fromX < toX)
-        return FloatRect(point.x() + fromX, point.y(), toX - fromX, height);
-    return FloatRect(point.x() + toX, point.y(), fromX - toX, height);
+        return CharacterRange(fromX, toX);
+    return CharacterRange(toX, fromX);
+}
+
+void ShapeResultBuffer::addRunInfoRanges(const ShapeResult::RunInfo& runInfo,
+    float offset, Vector<CharacterRange>& ranges)
+{
+    Vector<float> characterWidths(runInfo.m_numCharacters);
+    for (const auto& glyph : runInfo.m_glyphData)
+        characterWidths[glyph.characterIndex] += glyph.advance;
+
+    for (unsigned characterIndex = 0; characterIndex < runInfo.m_numCharacters; characterIndex++) {
+        float start = offset;
+        offset += characterWidths[characterIndex];
+        float end = offset;
+
+        // To match getCharacterRange we flip ranges to ensure start <= end.
+        if (end < start)
+            ranges.append(CharacterRange(end, start));
+        else
+            ranges.append(CharacterRange(start, end));
+    }
+}
+
+Vector<CharacterRange> ShapeResultBuffer::individualCharacterRanges(
+    TextDirection direction, float totalWidth) const
+{
+    Vector<CharacterRange> ranges;
+    float currentX = direction == RTL ? totalWidth : 0;
+    for (const RefPtr<ShapeResult> result : m_results) {
+        if (direction == RTL)
+            currentX -= result->width();
+        unsigned runCount = result->m_runs.size();
+        for (unsigned index = 0; index < runCount; index++) {
+            unsigned runIndex = direction == RTL ? runCount - 1 - index : index;
+            addRunInfoRanges(*result->m_runs[runIndex], currentX, ranges);
+            currentX += result->m_runs[runIndex]->m_width;
+        }
+        if (direction == RTL)
+            currentX -= result->width();
+    }
+    return ranges;
 }
 
 int ShapeResultBuffer::offsetForPosition(const TextRun& run, float targetX) const

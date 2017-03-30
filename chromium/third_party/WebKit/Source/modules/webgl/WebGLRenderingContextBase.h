@@ -35,7 +35,6 @@
 #include "core/dom/TypedFlexibleArrayBufferView.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/layout/LayoutBoxModelObject.h"
-#include "core/page/Page.h"
 #include "modules/webgl/WebGLContextAttributes.h"
 #include "modules/webgl/WebGLExtensionName.h"
 #include "modules/webgl/WebGLTexture.h"
@@ -54,6 +53,12 @@
 
 namespace blink {
 class WebLayer;
+}
+
+namespace gpu {
+namespace gles2 {
+class GLES2Interface;
+}
 }
 
 namespace blink {
@@ -136,8 +141,7 @@ private:
     Member<WebGLFramebuffer> m_readFramebufferBinding;
 };
 
-class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext, public Page::MultisamplingChangedObserver {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(WebGLRenderingContextBase);
+class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext {
 public:
     ~WebGLRenderingContextBase() override;
 
@@ -149,7 +153,7 @@ public:
 
     static unsigned getWebGLVersion(const CanvasRenderingContext*);
 
-    static PassOwnPtr<WebGraphicsContext3D> createWebGraphicsContext3D(HTMLCanvasElement*, WebGLContextAttributes, unsigned webGLVersion);
+    static PassOwnPtr<WebGraphicsContext3DProvider> createWebGraphicsContext3DProvider(HTMLCanvasElement*, WebGLContextAttributes, unsigned webGLVersion);
     static void forceNextWebGLContextCreationToFail();
 
     int drawingBufferWidth() const;
@@ -288,7 +292,7 @@ public:
     void texImage2D(GLenum target, GLint level, GLint internalformat,
         GLenum format, GLenum type, HTMLVideoElement*, ExceptionState&);
     void texImage2D(GLenum target, GLint level, GLint internalformat,
-        GLenum format, GLenum type, PassRefPtrWillBeRawPtr<ImageBitmap>, ExceptionState&);
+        GLenum format, GLenum type, ImageBitmap*, ExceptionState&);
 
     void texParameterf(GLenum target, GLenum pname, GLfloat param);
     void texParameteri(GLenum target, GLenum pname, GLint param);
@@ -305,7 +309,7 @@ public:
     void texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
         GLenum format, GLenum type, HTMLVideoElement*, ExceptionState&);
     void texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
-        GLenum format, GLenum type, PassRefPtrWillBeRawPtr<ImageBitmap>, ExceptionState&);
+        GLenum format, GLenum type, ImageBitmap*, ExceptionState&);
 
     void uniform1f(const WebGLUniformLocation*, GLfloat x);
     void uniform1fv(const WebGLUniformLocation*, const FlexibleFloat32ArrayView&);
@@ -368,7 +372,8 @@ public:
         // Restore when resources are available.
         WhenAvailable,
 
-        // Restore as soon as possible.
+        // Restore as soon as possible, but only when
+        // the canvas is visible.
         Auto
     };
     void loseContext(LostContextMode) override;
@@ -377,6 +382,7 @@ public:
     void loseContextImpl(LostContextMode, AutoRecoveryMethod);
 
     WebGraphicsContext3D* webContext() const { return drawingBuffer()->context(); }
+    gpu::gles2::GLES2Interface* contextGL() const { return drawingBuffer()->contextGL(); }
     WebGLContextGroup* contextGroup() const { return m_contextGroup.get(); }
     Extensions3DUtil* extensionsUtil();
 
@@ -403,6 +409,7 @@ public:
     // to (first) be able to detach its WebGLContextObjects, before
     // they're later swept and finalized.
     EAGERLY_FINALIZE();
+    DECLARE_EAGER_FINALIZATION_OPERATOR_NEW();
     DECLARE_VIRTUAL_TRACE();
 
     // Returns approximate gpu memory allocated per pixel.
@@ -440,8 +447,8 @@ protected:
     friend class ScopedTexture2DRestorer;
     friend class ScopedFramebufferRestorer;
 
-    WebGLRenderingContextBase(HTMLCanvasElement*, PassOwnPtr<WebGraphicsContext3D>, const WebGLContextAttributes&);
-    PassRefPtr<DrawingBuffer> createDrawingBuffer(PassOwnPtr<WebGraphicsContext3D>);
+    WebGLRenderingContextBase(HTMLCanvasElement*, PassOwnPtr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
+    PassRefPtr<DrawingBuffer> createDrawingBuffer(PassOwnPtr<WebGraphicsContext3DProvider>);
     void setupFlags();
 
     // CanvasRenderingContext implementation.
@@ -493,6 +500,7 @@ protected:
 
     RefPtr<WebGLContextGroup> m_contextGroup;
 
+    bool m_isHidden;
     LostContextMode m_contextLostMode;
     AutoRecoveryMethod m_autoRecoveryMethod;
     // Dispatches a context lost event once it is determined that one is needed.
@@ -516,14 +524,13 @@ protected:
     HashSet<UntracedMember<WebGLContextObject>> m_contextObjects;
 #endif
 
-    PersistentWillBeMember<WebGLRenderingContextLostCallback> m_contextLostCallbackAdapter;
-    PersistentWillBeMember<WebGLRenderingContextErrorMessageCallback> m_errorMessageCallbackAdapter;
+    Member<WebGLRenderingContextErrorMessageCallback> m_errorMessageCallbackAdapter;
 
     // List of bound VBO's. Used to maintain info about sizes for ARRAY_BUFFER and stored values for ELEMENT_ARRAY_BUFFER
-    PersistentWillBeMember<WebGLBuffer> m_boundArrayBuffer;
+    Member<WebGLBuffer> m_boundArrayBuffer;
 
-    PersistentWillBeMember<WebGLVertexArrayObjectBase> m_defaultVertexArrayObject;
-    PersistentWillBeMember<WebGLVertexArrayObjectBase> m_boundVertexArrayObject;
+    Member<WebGLVertexArrayObjectBase> m_defaultVertexArrayObject;
+    Member<WebGLVertexArrayObjectBase> m_boundVertexArrayObject;
     bool m_preservedDefaultVAOObjectWrapper;
     void setBoundVertexArrayObject(ScriptState*, WebGLVertexArrayObjectBase*);
 
@@ -537,12 +544,12 @@ protected:
     unsigned m_maxVertexAttribs;
     void setVertexAttribType(GLuint index, VertexAttribValueType);
 
-    PersistentWillBeMember<WebGLProgram> m_currentProgram;
-    PersistentWillBeMember<WebGLFramebuffer> m_framebufferBinding;
-    PersistentWillBeMember<WebGLRenderbuffer> m_renderbufferBinding;
-    PersistentWillBeMember<CHROMIUMValuebuffer> m_valuebufferBinding;
+    Member<WebGLProgram> m_currentProgram;
+    Member<WebGLFramebuffer> m_framebufferBinding;
+    Member<WebGLRenderbuffer> m_renderbufferBinding;
+    Member<CHROMIUMValuebuffer> m_valuebufferBinding;
 
-    PersistentHeapVectorWillBeHeapVector<TextureUnitState> m_textureUnits;
+    HeapVector<TextureUnitState> m_textureUnits;
     unsigned long m_activeTextureUnit;
 
     Vector<GLenum> m_compressedTextureFormats;
@@ -602,9 +609,6 @@ protected:
     bool m_synthesizedErrorsToConsole;
     int m_numGLErrorsToConsoleAllowed;
 
-    bool m_multisamplingAllowed;
-    bool m_multisamplingObserverRegistered;
-
     unsigned long m_onePlusMaxNonDefaultTextureUnit;
 
     OwnPtr<Extensions3DUtil> m_extensionsUtil;
@@ -646,7 +650,7 @@ protected:
     template <typename T>
     class TypedExtensionTracker final : public ExtensionTracker {
     public:
-        static TypedExtensionTracker<T>* create(PersistentWillBeMember<T>& extensionField, ExtensionFlags flags, const char* const* prefixes)
+        static TypedExtensionTracker<T>* create(Member<T>& extensionField, ExtensionFlags flags, const char* const* prefixes)
         {
             return new TypedExtensionTracker<T>(extensionField, flags, prefixes);
         }
@@ -687,24 +691,24 @@ protected:
         }
 
     private:
-        TypedExtensionTracker(PersistentWillBeMember<T>& extensionField, ExtensionFlags flags, const char* const* prefixes)
+        TypedExtensionTracker(Member<T>& extensionField, ExtensionFlags flags, const char* const* prefixes)
             : ExtensionTracker(flags, prefixes)
             , m_extensionField(extensionField)
         {
         }
 
         GC_PLUGIN_IGNORE("http://crbug.com/519953")
-        PersistentWillBeMember<T>& m_extensionField;
+        Member<T>& m_extensionField;
         // ExtensionTracker holds it's own reference to the extension to ensure
         // that it is not deleted before this object's destructor is called
         Member<T> m_extension;
     };
 
     bool m_extensionEnabled[WebGLExtensionNameCount];
-    PersistentHeapVectorWillBeHeapVector<Member<ExtensionTracker>> m_extensions;
+    HeapVector<Member<ExtensionTracker>> m_extensions;
 
     template <typename T>
-    void registerExtension(PersistentWillBeMember<T>& extensionPtr, ExtensionFlags flags = ApprovedExtension, const char* const* prefixes = nullptr)
+    void registerExtension(Member<T>& extensionPtr, ExtensionFlags flags = ApprovedExtension, const char* const* prefixes = nullptr)
     {
         m_extensions.append(TypedExtensionTracker<T>::create(extensionPtr, flags, prefixes));
     }
@@ -745,6 +749,8 @@ protected:
 
     // Errors raised by synthesizeGLError() while the context is lost.
     Vector<GLenum> m_lostContextErrors;
+    // Other errors raised by synthesizeGLError().
+    Vector<GLenum> m_syntheticErrors;
 
     bool m_isWebGL2FormatsTypesAdded;
     bool m_isWebGL2InternalFormatsCopyTexImageAdded;
@@ -804,13 +810,17 @@ protected:
         TexSubImage2DByGPU,
         TexSubImage3DByGPU
     };
+    enum TexImageDimension {
+        Tex2D,
+        Tex3D
+    };
     // Copy from the canvas element directly to the texture via the GPU, without a read-back to system memory.
     void texImageCanvasByGPU(TexImageByGPUType, WebGLTexture*, GLenum target, GLint level,
         GLint internalformat, GLenum type, GLint xoffset, GLint yoffset, GLint zoffset, HTMLCanvasElement*);
     bool canUseTexImageCanvasByGPU(GLint internalformat, GLenum type);
 
     virtual WebGLImageConversion::PixelStoreParams getPackPixelStoreParams();
-    virtual WebGLImageConversion::PixelStoreParams getUnpackPixelStoreParams();
+    virtual WebGLImageConversion::PixelStoreParams getUnpackPixelStoreParams(TexImageDimension);
 
     // Helper function for copyTex{Sub}Image, check whether the internalformat
     // and the color buffer format of the current bound framebuffer combination
@@ -898,7 +908,7 @@ protected:
     // Helper function to validate that the given ArrayBufferView
     // is of the correct type and contains enough data for the texImage call.
     // Generates GL error and returns false if parameters are invalid.
-    bool validateTexFuncData(const char* functionName, GLint level, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, DOMArrayBufferView* pixels, NullDisposition);
+    bool validateTexFuncData(const char* functionName, TexImageDimension, GLint level, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, DOMArrayBufferView* pixels, NullDisposition);
 
     // Helper function to validate a given texture format is settable as in
     // you can supply data to texImage2D, or call texImage2D, copyTexImage2D and
@@ -992,10 +1002,10 @@ protected:
     bool validateImageBitmap(const char* functionName, ImageBitmap*, ExceptionState&);
 
     // Helper function to validate drawArrays(Instanced) calls
-    bool validateDrawArrays(const char* functionName, GLenum mode, GLint first, GLsizei count);
+    bool validateDrawArrays(const char* functionName);
 
     // Helper function to validate drawElements(Instanced) calls
-    bool validateDrawElements(const char* functionName, GLenum mode, GLsizei count, GLenum type, long long offset);
+    bool validateDrawElements(const char* functionName, GLenum type, long long offset);
 
     // Helper functions to bufferData() and bufferSubData().
     void bufferDataImpl(GLenum target, long long size, const void* data, GLenum usage);
@@ -1046,8 +1056,6 @@ protected:
 
     virtual void restoreCurrentFramebuffer();
     void restoreCurrentTexture2D();
-
-    void multisamplingChanged(bool) override;
 
     void findNewMaxNonDefaultTextureUnit();
 

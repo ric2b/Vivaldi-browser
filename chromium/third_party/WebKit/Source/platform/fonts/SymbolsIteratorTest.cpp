@@ -28,13 +28,6 @@ struct ExpectedRun {
 
 class SymbolsIteratorTest : public testing::Test {
 protected:
-#if !LOG_DISABLED
-    static void SetUpTestCase()
-    {
-        LogFonts = { WTFLogChannelOn };
-    }
-#endif
-
     void CheckRuns(const Vector<TestRun>& runs)
     {
         String text(emptyString16Bit());
@@ -59,7 +52,6 @@ protected:
             ASSERT_EQ(expect[runCount].fontFallbackPriority, fontFallbackPriority);
             ++runCount;
         }
-        WTF_LOG(Fonts, "Expected %zu runs, got %lu ", expect.size(), runCount);
         ASSERT_EQ(expect.size(), runCount);
     }
 };
@@ -173,6 +165,11 @@ TEST_F(SymbolsIteratorTest, EyeSpeechBubble)
 TEST_F(SymbolsIteratorTest, Modifier)
 {
     CHECK_RUNS({ { "👶🏿", FontFallbackPriority::EmojiEmoji } });
+}
+
+TEST_F(SymbolsIteratorTest, DingbatsMiscSymbolsModifier)
+{
+    CHECK_RUNS({ { "⛹🏻✍🏻✊🏼", FontFallbackPriority::EmojiEmoji } });
 }
 
 TEST_F(SymbolsIteratorTest, ExtraZWJPrefix)

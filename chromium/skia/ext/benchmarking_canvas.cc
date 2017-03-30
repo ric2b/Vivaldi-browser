@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
@@ -470,7 +471,7 @@ public:
       DCHECK(canvas->overdraw_xfermode_);
 
       paint_ = paint ? filtered_paint_.set(*paint) : filtered_paint_.init();
-      filtered_paint_.get()->setXfermode(canvas->overdraw_xfermode_.get());
+      filtered_paint_.get()->setXfermode(canvas->overdraw_xfermode_);
       filtered_paint_.get()->setAntiAlias(false);
     }
 
@@ -510,7 +511,7 @@ BenchmarkingCanvas::BenchmarkingCanvas(SkCanvas* canvas, unsigned flags)
   addCanvas(canvas);
 
   if (flags & kOverdrawVisualization_Flag)
-    overdraw_xfermode_ = AdoptRef(new OverdrawXfermode);
+    overdraw_xfermode_ = sk_make_sp<OverdrawXfermode>();
 }
 
 BenchmarkingCanvas::~BenchmarkingCanvas() {

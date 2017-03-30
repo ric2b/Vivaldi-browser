@@ -97,8 +97,16 @@ INSTANTIATE_TEST_CASE_P(
                     ui::MaterialDesignController::MATERIAL_HYBRID));
 
 TEST_P(InkDropAnimationControllerFactoryTest,
-       VerifyAllInkDropLayersRemovedAfterDestruction) {
+       VerifyInkDropLayersRemovedAfterDestructionWhenRippleIsActive) {
   ink_drop_animation_controller_->AnimateToState(InkDropState::ACTION_PENDING);
+  ink_drop_animation_controller_.reset();
+  EXPECT_EQ(0, test_ink_drop_host_.num_ink_drop_layers());
+}
+
+TEST_P(InkDropAnimationControllerFactoryTest,
+       VerifyInkDropLayersRemovedAfterDestructionWhenHoverIsActive) {
+  test_ink_drop_host_.set_should_show_hover(true);
+  ink_drop_animation_controller_->SetHovered(true);
   ink_drop_animation_controller_.reset();
   EXPECT_EQ(0, test_ink_drop_host_.num_ink_drop_layers());
 }
@@ -110,7 +118,8 @@ TEST_P(InkDropAnimationControllerFactoryTest, StateIsHiddenInitially) {
 
 TEST_P(InkDropAnimationControllerFactoryTest, TypicalQuickAction) {
   ink_drop_animation_controller_->AnimateToState(InkDropState::ACTION_PENDING);
-  ink_drop_animation_controller_->AnimateToState(InkDropState::QUICK_ACTION);
+  ink_drop_animation_controller_->AnimateToState(
+      InkDropState::ACTION_TRIGGERED);
   EXPECT_EQ(InkDropState::HIDDEN,
             ink_drop_animation_controller_->GetTargetInkDropState());
 }
@@ -125,8 +134,9 @@ TEST_P(InkDropAnimationControllerFactoryTest, CancelQuickAction) {
 TEST_P(InkDropAnimationControllerFactoryTest, TypicalSlowAction) {
   ink_drop_animation_controller_->AnimateToState(InkDropState::ACTION_PENDING);
   ink_drop_animation_controller_->AnimateToState(
-      InkDropState::SLOW_ACTION_PENDING);
-  ink_drop_animation_controller_->AnimateToState(InkDropState::SLOW_ACTION);
+      InkDropState::ALTERNATE_ACTION_PENDING);
+  ink_drop_animation_controller_->AnimateToState(
+      InkDropState::ALTERNATE_ACTION_TRIGGERED);
   EXPECT_EQ(InkDropState::HIDDEN,
             ink_drop_animation_controller_->GetTargetInkDropState());
 }
@@ -134,7 +144,7 @@ TEST_P(InkDropAnimationControllerFactoryTest, TypicalSlowAction) {
 TEST_P(InkDropAnimationControllerFactoryTest, CancelSlowAction) {
   ink_drop_animation_controller_->AnimateToState(InkDropState::ACTION_PENDING);
   ink_drop_animation_controller_->AnimateToState(
-      InkDropState::SLOW_ACTION_PENDING);
+      InkDropState::ALTERNATE_ACTION_PENDING);
   ink_drop_animation_controller_->AnimateToState(InkDropState::HIDDEN);
   EXPECT_EQ(InkDropState::HIDDEN,
             ink_drop_animation_controller_->GetTargetInkDropState());
@@ -151,7 +161,7 @@ TEST_P(InkDropAnimationControllerFactoryTest, TypicalQuickActivated) {
 TEST_P(InkDropAnimationControllerFactoryTest, TypicalSlowActivated) {
   ink_drop_animation_controller_->AnimateToState(InkDropState::ACTION_PENDING);
   ink_drop_animation_controller_->AnimateToState(
-      InkDropState::SLOW_ACTION_PENDING);
+      InkDropState::ALTERNATE_ACTION_PENDING);
   ink_drop_animation_controller_->AnimateToState(InkDropState::ACTIVATED);
   ink_drop_animation_controller_->AnimateToState(InkDropState::DEACTIVATED);
   EXPECT_EQ(InkDropState::HIDDEN,

@@ -11,7 +11,7 @@
 #include "base/command_line.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/trace_event/trace_event.h"
-#include "content/common/gpu/gpu_command_buffer_stub.h"
+#include "gpu/ipc/service/gpu_command_buffer_stub.h"
 #include "content/common/gpu/media/ipc_data_source_impl.h"
 #include "content/common/gpu/media/platform_media_pipeline.h"
 #include "content/common/media/media_pipeline_messages.h"
@@ -31,7 +31,7 @@ static_assert(arraysize(kDecodedDataReadTraceEventNames) ==
               "Incorrect number of defined tracing event names.");
 
 bool MakeDecoderContextCurrent(
-    const base::WeakPtr<content::GpuCommandBufferStub>& command_buffer) {
+    const base::WeakPtr<gpu::GpuCommandBufferStub>& command_buffer) {
   if (!command_buffer) {
     DLOG(ERROR) << "Command buffer missing, can't make GL context current.";
     return false;
@@ -51,7 +51,7 @@ namespace content {
 
 IPCMediaPipeline::IPCMediaPipeline(IPC::Sender* channel,
                                    int32_t routing_id,
-                                   GpuCommandBufferStub* command_buffer)
+                                   gpu::GpuCommandBufferStub* command_buffer)
     : state_(CONSTRUCTED),
       channel_(channel),
       routing_id_(routing_id),

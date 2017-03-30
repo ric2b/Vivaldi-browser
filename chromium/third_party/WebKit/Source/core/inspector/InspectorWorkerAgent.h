@@ -38,83 +38,51 @@
 #include "wtf/HashMap.h"
 
 namespace blink {
+class InspectedFrames;
 class PageConsoleAgent;
 class KURL;
 class WorkerInspectorProxy;
 
-using ErrorString = String;
-
-class CORE_EXPORT InspectorWorkerAgent final : public InspectorBaseAgent<InspectorWorkerAgent, protocol::Frontend::Worker>, public protocol::Dispatcher::WorkerCommandHandler {
+class CORE_EXPORT InspectorWorkerAgent final
+    : public InspectorBaseAgent<InspectorWorkerAgent, protocol::Frontend::Worker>
+    , public protocol::Backend::Worker
+    , public WorkerInspectorProxy::PageInspector {
     WTF_MAKE_NONCOPYABLE(InspectorWorkerAgent);
 public:
-    static PassOwnPtrWillBeRawPtr<InspectorWorkerAgent> create(PageConsoleAgent*);
+    static RawPtr<InspectorWorkerAgent> create(InspectedFrames*, PageConsoleAgent*);
     ~InspectorWorkerAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
-    void init() override;
     void disable(ErrorString*) override;
     void restore() override;
+    void didCommitLoadForLocalFrame(LocalFrame*) override;
 
     // Called from InspectorInstrumentation
-    bool shouldPauseDedicatedWorkerOnStart();
-    void didStartWorker(WorkerInspectorProxy*, const KURL&);
+    bool shouldWaitForDebuggerOnWorkerStart();
+    void didStartWorker(WorkerInspectorProxy*, bool waitingForDebugger);
     void workerTerminated(WorkerInspectorProxy*);
 
     // Called from Dispatcher
     void enable(ErrorString*) override;
-    void connectToWorker(ErrorString*, const String& workerId) override;
-    void disconnectFromWorker(ErrorString*, const String& workerId) override;
     void sendMessageToWorker(ErrorString*, const String& workerId, const String& message) override;
-    void setAutoconnectToWorkers(ErrorString*, bool value) override;
+    void setWaitForDebuggerOnStart(ErrorString*, bool value) override;
 
     void setTracingSessionId(const String&);
 
-    class WorkerAgentClient final : public WorkerInspectorProxy::PageInspector {
-        USING_FAST_MALLOC_WILL_BE_REMOVED(InspectorWorkerAgent::WorkerAgentClient);
-    public:
-        static PassOwnPtrWillBeRawPtr<WorkerAgentClient> create(protocol::Frontend::Worker*, WorkerInspectorProxy*, const String& id, PageConsoleAgent*);
-        WorkerAgentClient(protocol::Frontend::Worker*, WorkerInspectorProxy*, const String& id, PageConsoleAgent*);
-        ~WorkerAgentClient() override;
-        DECLARE_VIRTUAL_TRACE();
-
-        String id() const { return m_id; }
-        WorkerInspectorProxy* proxy() const { return m_proxy; }
-
-        void connectToWorker();
-        void dispose();
-
-    private:
-        // WorkerInspectorProxy::PageInspector implementation
-        void dispatchMessageFromWorker(const String& message) override;
-        void workerConsoleAgentEnabled(WorkerGlobalScopeProxy*) override;
-
-        protocol::Frontend::Worker* m_frontend;
-        RawPtrWillBeMember<WorkerInspectorProxy> m_proxy;
-        String m_id;
-        bool m_connected;
-        RawPtrWillBeMember<PageConsoleAgent> m_consoleAgent;
-    };
-
 private:
-    InspectorWorkerAgent(PageConsoleAgent*);
-    void createWorkerAgentClientsForExistingWorkers();
-    void createWorkerAgentClient(WorkerInspectorProxy*, const String& url, const String& id);
-    void destroyWorkerAgentClients();
+    InspectorWorkerAgent(InspectedFrames*, PageConsoleAgent*);
+    bool enabled();
+    void connectToAllProxies();
+    void connectToProxy(WorkerInspectorProxy*, bool waitingForDebugger);
 
-    class WorkerInfo {
-    public:
-        WorkerInfo() { }
-        WorkerInfo(const String& url, const String& id) : url(url), id(id) { }
-        String url;
-        String id;
-    };
+    // WorkerInspectorProxy::PageInspector implementation.
+    void dispatchMessageFromWorker(WorkerInspectorProxy*, const String& message) override;
+    void workerConsoleAgentEnabled(WorkerInspectorProxy*) override;
 
-    using WorkerClients = WillBeHeapHashMap<String, OwnPtrWillBeMember<WorkerAgentClient>>;
-    WorkerClients m_idToClient;
-    using WorkerInfos = WillBeHeapHashMap<RawPtrWillBeMember<WorkerInspectorProxy>, WorkerInfo>;
-    WorkerInfos m_workerInfos;
+    Member<InspectedFrames> m_inspectedFrames;
+    HeapHashMap<String, Member<WorkerInspectorProxy>> m_connectedProxies;
     String m_tracingSessionId;
-    RawPtrWillBeMember<PageConsoleAgent> m_consoleAgent;
+    Member<PageConsoleAgent> m_consoleAgent;
 };
 
 } // namespace blink

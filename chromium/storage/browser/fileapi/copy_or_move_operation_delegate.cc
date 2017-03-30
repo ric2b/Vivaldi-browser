@@ -5,6 +5,9 @@
 #include "storage/browser/fileapi/copy_or_move_operation_delegate.h"
 
 #include <stdint.h>
+
+#include <memory>
+#include <tuple>
 #include <utility>
 
 #include "base/bind.h"
@@ -346,7 +349,7 @@ class SnapshotCopyOrMoveImpl
 
   CopyOrMoveOperationDelegate::CopyOrMoveOption option_;
   CopyOrMoveFileValidatorFactory* validator_factory_;
-  scoped_ptr<CopyOrMoveFileValidator> validator_;
+  std::unique_ptr<CopyOrMoveFileValidator> validator_;
   FileSystemOperation::CopyFileProgressCallback file_progress_callback_;
   bool cancel_requested_;
   base::WeakPtrFactory<SnapshotCopyOrMoveImpl> weak_factory_;
@@ -373,8 +376,8 @@ class StreamCopyOrMoveImpl
       const FileSystemURL& src_url,
       const FileSystemURL& dest_url,
       CopyOrMoveOperationDelegate::CopyOrMoveOption option,
-      scoped_ptr<storage::FileStreamReader> reader,
-      scoped_ptr<FileStreamWriter> writer,
+      std::unique_ptr<storage::FileStreamReader> reader,
+      std::unique_ptr<FileStreamWriter> writer,
       const FileSystemOperation::CopyFileProgressCallback&
           file_progress_callback)
       : operation_runner_(operation_runner),
@@ -411,21 +414,21 @@ class StreamCopyOrMoveImpl
   void NotifyOnStartUpdate(const FileSystemURL& url) {
     if (file_system_context_->GetUpdateObservers(url.type())) {
       file_system_context_->GetUpdateObservers(url.type())
-          ->Notify(&FileUpdateObserver::OnStartUpdate, base::MakeTuple(url));
+          ->Notify(&FileUpdateObserver::OnStartUpdate, std::make_tuple(url));
     }
   }
 
   void NotifyOnModifyFile(const FileSystemURL& url) {
     if (file_system_context_->GetChangeObservers(url.type())) {
       file_system_context_->GetChangeObservers(url.type())
-          ->Notify(&FileChangeObserver::OnModifyFile, base::MakeTuple(url));
+          ->Notify(&FileChangeObserver::OnModifyFile, std::make_tuple(url));
     }
   }
 
   void NotifyOnEndUpdate(const FileSystemURL& url) {
     if (file_system_context_->GetUpdateObservers(url.type())) {
       file_system_context_->GetUpdateObservers(url.type())
-          ->Notify(&FileUpdateObserver::OnEndUpdate, base::MakeTuple(url));
+          ->Notify(&FileUpdateObserver::OnEndUpdate, std::make_tuple(url));
     }
   }
 
@@ -577,10 +580,10 @@ class StreamCopyOrMoveImpl
   FileSystemURL src_url_;
   FileSystemURL dest_url_;
   CopyOrMoveOperationDelegate::CopyOrMoveOption option_;
-  scoped_ptr<storage::FileStreamReader> reader_;
-  scoped_ptr<FileStreamWriter> writer_;
+  std::unique_ptr<storage::FileStreamReader> reader_;
+  std::unique_ptr<FileStreamWriter> writer_;
   FileSystemOperation::CopyFileProgressCallback file_progress_callback_;
-  scoped_ptr<CopyOrMoveOperationDelegate::StreamCopyHelper> copy_helper_;
+  std::unique_ptr<CopyOrMoveOperationDelegate::StreamCopyHelper> copy_helper_;
   bool cancel_requested_;
   base::WeakPtrFactory<StreamCopyOrMoveImpl> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(StreamCopyOrMoveImpl);
@@ -589,8 +592,8 @@ class StreamCopyOrMoveImpl
 }  // namespace
 
 CopyOrMoveOperationDelegate::StreamCopyHelper::StreamCopyHelper(
-    scoped_ptr<storage::FileStreamReader> reader,
-    scoped_ptr<FileStreamWriter> writer,
+    std::unique_ptr<storage::FileStreamReader> reader,
+    std::unique_ptr<FileStreamWriter> writer,
     storage::FlushPolicy flush_policy,
     int buffer_size,
     const FileSystemOperation::CopyFileProgressCallback& file_progress_callback,
@@ -818,10 +821,10 @@ void CopyOrMoveOperationDelegate::ProcessFile(
     }
 
     if (!validator_factory) {
-      scoped_ptr<storage::FileStreamReader> reader =
+      std::unique_ptr<storage::FileStreamReader> reader =
           file_system_context()->CreateFileStreamReader(
               src_url, 0 /* offset */, storage::kMaximumLength, base::Time());
-      scoped_ptr<FileStreamWriter> writer =
+      std::unique_ptr<FileStreamWriter> writer =
           file_system_context()->CreateFileStreamWriter(dest_url, 0);
       if (reader && writer) {
         impl = new StreamCopyOrMoveImpl(

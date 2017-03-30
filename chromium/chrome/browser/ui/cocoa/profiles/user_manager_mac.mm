@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/cocoa/profiles/user_manager_mac.h"
 
+#include "base/callback.h"
 #include "base/mac/foundation_util.h"
-#include "base/macros.h"
 #include "chrome/app/chrome_command_ids.h"
 #import "chrome/browser/app_controller_mac.h"
 #include "chrome/browser/browser_process.h"
@@ -50,7 +50,8 @@ void ChangeAppControllerForProfile(Profile* profile,
 
 // An open User Manager window. There can only be one open at a time. This
 // is reset to NULL when the window is closed.
-UserManagerMac* instance_ = NULL;  // Weak.
+UserManagerMac* instance_ = nullptr;  // Weak.
+std::vector<base::Closure>* user_manager_shown_callbacks_for_testing_ = nullptr;
 BOOL instance_under_construction_ = NO;
 
 void CloseInstanceReauthDialog() {
@@ -106,7 +107,7 @@ class UserManagerModalManagerDelegate :
 
    ~UserManagerModalManagerDelegate() override {}
  protected:
-  scoped_ptr<UserManagerModalHost> modal_host_;
+  std::unique_ptr<UserManagerModalHost> modal_host_;
 };
 
 // Custom WebContentsDelegate that allows handling of hotkeys.
@@ -126,10 +127,7 @@ class UserManagerWebContentsDelegate : public content::WebContentsDelegate {
     int chromeCommandId = [BrowserWindowUtils getCommandId:event];
 
     // Check for Cmd+A and Cmd+V events that could come from a password field.
-    bool isTextEditingCommand =
-        (event.modifiers & blink::WebInputEvent::MetaKey) &&
-        (event.windowsKeyCode == ui::VKEY_A ||
-         event.windowsKeyCode == ui::VKEY_V);
+    BOOL isTextEditingCommand = [BrowserWindowUtils isTextEditingEvent:event];
 
     // Only handle close window Chrome accelerators and text editing ones.
     if (chromeCommandId == IDC_CLOSE_WINDOW || chromeCommandId == IDC_EXIT ||
@@ -166,9 +164,9 @@ class ReauthDialogDelegate : public UserManager::ReauthDialogObserver,
  @private
   std::string emailAddress_;
   content::WebContents* webContents_;
-  scoped_ptr<ReauthDialogDelegate> webContentsDelegate_;
-  scoped_ptr<ConstrainedWindowMac> constrained_window_;
-  scoped_ptr<content::WebContents> reauthWebContents_;
+  std::unique_ptr<ReauthDialogDelegate> webContentsDelegate_;
+  std::unique_ptr<ConstrainedWindowMac> constrained_window_;
+  std::unique_ptr<content::WebContents> reauthWebContents_;
 }
 - (id)initWithProfile:(Profile*)profile
                 email:(std::string)email
@@ -247,10 +245,10 @@ class ReauthDialogDelegate : public UserManager::ReauthDialogObserver,
 // Window controller for the User Manager view.
 @interface UserManagerWindowController : NSWindowController <NSWindowDelegate> {
  @private
-  scoped_ptr<content::WebContents> webContents_;
-  scoped_ptr<UserManagerWebContentsDelegate> webContentsDelegate_;
+  std::unique_ptr<content::WebContents> webContents_;
+  std::unique_ptr<UserManagerWebContentsDelegate> webContentsDelegate_;
   UserManagerMac* userManagerObserver_;  // Weak.
-  scoped_ptr<UserManagerModalManagerDelegate> modal_manager_delegate_;
+  std::unique_ptr<UserManagerModalManagerDelegate> modal_manager_delegate_;
   base::scoped_nsobject<ReauthDialogWindowController> reauth_window_controller_;
 }
 - (void)windowWillClose:(NSNotification*)notification;
@@ -427,8 +425,18 @@ bool UserManager::IsShowing() {
 
 // static
 void UserManager::OnUserManagerShown() {
-  if (instance_)
+  if (instance_) {
     instance_->LogTimeToOpen();
+    if (user_manager_shown_callbacks_for_testing_) {
+      for (const auto& callback : *user_manager_shown_callbacks_for_testing_) {
+        if (!callback.is_null())
+          callback.Run();
+      }
+      // Delete the callback list after calling.
+      delete user_manager_shown_callbacks_for_testing_;
+      user_manager_shown_callbacks_for_testing_ = nullptr;
+    }
+  }
 }
 
 // static
@@ -436,6 +444,14 @@ void UserManager::ShowReauthDialog(content::BrowserContext* browser_context,
                                    const std::string& email) {
   DCHECK(instance_);
   instance_->ShowReauthDialog(browser_context, email);
+}
+
+// static
+void UserManager::AddOnUserManagerShownCallbackForTesting(
+    const base::Closure& callback) {
+  if (!user_manager_shown_callbacks_for_testing_)
+    user_manager_shown_callbacks_for_testing_ = new std::vector<base::Closure>;
+  user_manager_shown_callbacks_for_testing_->push_back(callback);
 }
 
 void UserManagerMac::ShowReauthDialog(content::BrowserContext* browser_context,

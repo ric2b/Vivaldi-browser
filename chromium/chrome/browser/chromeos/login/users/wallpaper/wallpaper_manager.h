@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <deque>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -15,7 +16,6 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -80,13 +80,13 @@ class WallpaperManager
   // of the JPEG |data| with a callback to SetPolicyControlledWallpaper().
   void OnPolicyFetched(const std::string& policy,
                        const AccountId& account_id,
-                       scoped_ptr<std::string> data) override;
+                       std::unique_ptr<std::string> data) override;
 
   // Saves custom wallpaper to file, post task to generate thumbnail and updates
   // local state preferences. If |update_wallpaper| is false, don't change
   // wallpaper but only update cache.
   void SetCustomWallpaper(const AccountId& account_id,
-                          const std::string& user_id_hash,
+                          const wallpaper::WallpaperFilesId& wallpaper_files_id,
                           const std::string& file,
                           wallpaper::WallpaperLayout layout,
                           user_manager::User::WallpaperType type,
@@ -128,6 +128,10 @@ class WallpaperManager
   // Returns queue size.
   size_t GetPendingListSizeForTesting() const override;
 
+  // Returns wallpaper files id for the user.
+  wallpaper::WallpaperFilesId GetFilesId(
+      const user_manager::User& user) const override;
+
   // Overridden from user_manager::UserManager::UserSessionStateObserver:
   void UserChangedChildStatus(user_manager::User* user) override;
 
@@ -149,25 +153,29 @@ class WallpaperManager
 
   // Set wallpaper to |user_image| controlled by policy.  (Takes a UserImage
   // because that's the callback interface provided by UserImageLoader.)
-  void SetPolicyControlledWallpaper(const AccountId& account_id,
-                                    const user_manager::UserImage& user_image);
+  void SetPolicyControlledWallpaper(
+      const AccountId& account_id,
+      std::unique_ptr<user_manager::UserImage> user_image);
 
-  // Calls SetCustomWallpaper() with |user_id_hash| received from cryptohome.
-  void SetCustomWallpaperOnSanitizedUsername(const AccountId& account_id,
-                                             const gfx::ImageSkia& image,
-                                             bool update_wallpaper,
-                                             bool cryptohome_success,
-                                             const std::string& user_id_hash);
+  // Calls SetCustomWallpaper() with |wallpaper_files_id_str| received from
+  // cryptohome.
+  void SetCustomWallpaperOnSanitizedUsername(
+      const AccountId& account_id,
+      const gfx::ImageSkia& image,
+      bool update_wallpaper,
+      bool cryptohome_success,
+      const std::string& wallpaper_files_id_str);
 
   // WallpaperManagerBase overrides:
   void InitializeRegisteredDeviceWallpaper() override;
   bool GetUserWallpaperInfo(const AccountId& account_id,
                             wallpaper::WallpaperInfo* info) const override;
-  void OnWallpaperDecoded(const AccountId& account_id,
-                          wallpaper::WallpaperLayout layout,
-                          bool update_wallpaper,
-                          wallpaper::MovableOnDestroyCallbackHolder on_finish,
-                          const user_manager::UserImage& user_image) override;
+  void OnWallpaperDecoded(
+      const AccountId& account_id,
+      wallpaper::WallpaperLayout layout,
+      bool update_wallpaper,
+      wallpaper::MovableOnDestroyCallbackHolder on_finish,
+      std::unique_ptr<user_manager::UserImage> user_image) override;
   void StartLoad(const AccountId& account_id,
                  const wallpaper::WallpaperInfo& info,
                  bool update_wallpaper,
@@ -176,33 +184,34 @@ class WallpaperManager
   void SetCustomizedDefaultWallpaperAfterCheck(
       const GURL& wallpaper_url,
       const base::FilePath& downloaded_file,
-      scoped_ptr<CustomizedWallpaperRescaledFiles> rescaled_files) override;
+      std::unique_ptr<CustomizedWallpaperRescaledFiles> rescaled_files)
+      override;
   void OnCustomizedDefaultWallpaperResized(
       const GURL& wallpaper_url,
-      scoped_ptr<CustomizedWallpaperRescaledFiles> rescaled_files,
-      scoped_ptr<bool> success,
-      scoped_ptr<gfx::ImageSkia> small_wallpaper_image,
-      scoped_ptr<gfx::ImageSkia> large_wallpaper_image) override;
+      std::unique_ptr<CustomizedWallpaperRescaledFiles> rescaled_files,
+      std::unique_ptr<bool> success,
+      std::unique_ptr<gfx::ImageSkia> small_wallpaper_image,
+      std::unique_ptr<gfx::ImageSkia> large_wallpaper_image) override;
   void SetDefaultWallpaperPathsFromCommandLine(
       base::CommandLine* command_line) override;
   void OnDefaultWallpaperDecoded(
       const base::FilePath& path,
       const wallpaper::WallpaperLayout layout,
-      scoped_ptr<user_manager::UserImage>* result,
+      std::unique_ptr<user_manager::UserImage>* result,
       wallpaper::MovableOnDestroyCallbackHolder on_finish,
-      const user_manager::UserImage& user_image) override;
+      std::unique_ptr<user_manager::UserImage> user_image) override;
   void StartLoadAndSetDefaultWallpaper(
       const base::FilePath& path,
       const wallpaper::WallpaperLayout layout,
       wallpaper::MovableOnDestroyCallbackHolder on_finish,
-      scoped_ptr<user_manager::UserImage>* result_out) override;
+      std::unique_ptr<user_manager::UserImage>* result_out) override;
   void SetDefaultWallpaperPath(
       const base::FilePath& customized_default_wallpaper_file_small,
-      scoped_ptr<gfx::ImageSkia> small_wallpaper_image,
+      std::unique_ptr<gfx::ImageSkia> small_wallpaper_image,
       const base::FilePath& customized_default_wallpaper_file_large,
-      scoped_ptr<gfx::ImageSkia> large_wallpaper_image) override;
+      std::unique_ptr<gfx::ImageSkia> large_wallpaper_image) override;
 
-  scoped_ptr<CrosSettings::ObserverSubscription>
+  std::unique_ptr<CrosSettings::ObserverSubscription>
       show_user_name_on_signin_subscription_;
 
   // Pointer to last inactive (waiting) entry of 'loading_' list.

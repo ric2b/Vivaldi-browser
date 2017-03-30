@@ -7,11 +7,14 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
+#include "base/containers/hash_tables.h"
 #include "chromeos/chromeos_export.h"
+
+class AccountId;
 
 namespace cryptohome {
 
@@ -25,12 +28,28 @@ enum AuthKeyPrivileges {
 };
 
 // Identification of the user calling cryptohome method.
-struct CHROMEOS_EXPORT Identification {
-  explicit Identification(const std::string& user_id);
+class CHROMEOS_EXPORT Identification {
+ public:
+  Identification();
+
+  explicit Identification(const AccountId& account_id);
 
   bool operator==(const Identification& other) const;
 
-  std::string user_id;
+  // This method should be used for migration purpose only.
+  static Identification FromString(const std::string& id);
+
+  // Look up known user and return its AccountId.
+  AccountId GetAccountId() const;
+
+  const std::string& id() const { return id_; }
+
+  bool operator<(const Identification& right) const;
+
+ private:
+  explicit Identification(const std::string&);
+
+  std::string id_;
 };
 
 // Definition of the key (e.g. password) for the cryptohome.
@@ -68,6 +87,7 @@ struct CHROMEOS_EXPORT KeyDefinition {
     AuthorizationData(bool encrypt,
                       bool sign,
                       const std::string& symmetric_key);
+    AuthorizationData(const AuthorizationData& other);
     ~AuthorizationData();
 
     bool operator==(const AuthorizationData& other) const;
@@ -94,14 +114,15 @@ struct CHROMEOS_EXPORT KeyDefinition {
     bool operator==(const ProviderData& other) const;
 
     std::string name;
-    scoped_ptr<int64_t> number;
-    scoped_ptr<std::string> bytes;
+    std::unique_ptr<int64_t> number;
+    std::unique_ptr<std::string> bytes;
   };
 
   KeyDefinition();
   KeyDefinition(const std::string& secret,
                 const std::string& label,
                 int privileges);
+  KeyDefinition(const KeyDefinition& other);
   ~KeyDefinition();
 
   bool operator==(const KeyDefinition& other) const;
@@ -132,6 +153,7 @@ struct CHROMEOS_EXPORT Authorization {
 class CHROMEOS_EXPORT MountParameters {
  public:
   explicit MountParameters(bool ephemeral);
+  MountParameters(const MountParameters& other);
   ~MountParameters();
 
   bool operator==(const MountParameters& other) const;
@@ -145,6 +167,25 @@ class CHROMEOS_EXPORT MountParameters {
   std::vector<KeyDefinition> create_keys;
 };
 
+// This function returns true if cryptohome of |account_id| is migrated to
+// gaiaId-based identifier (AccountId::GetGaiaIdKey()).
+bool GetGaiaIdMigrationStatus(const AccountId& account_id);
+
+// This function marks |account_id| cryptohome migrated to gaiaId-based
+// identifier (AccountId::GetGaiaIdKey()).
+void SetGaiaIdMigrationStatusDone(const AccountId& account_id);
+
 }  // namespace cryptohome
+
+namespace BASE_HASH_NAMESPACE {
+
+// Implement hashing of cryptohome::Identification, so it can be used as a key
+// in STL containers.
+template <>
+struct hash<cryptohome::Identification> {
+  std::size_t operator()(const cryptohome::Identification& cryptohome_id) const;
+};
+
+}  // namespace BASE_HASH_NAMESPACE
 
 #endif  // CHROMEOS_CRYPTOHOME_CRYPTOHOME_PARAMETERS_H_

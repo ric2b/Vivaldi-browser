@@ -50,28 +50,28 @@ class Dictionary;
 class ElementAnimation {
     STATIC_ONLY(ElementAnimation);
 public:
-    static Animation* animate(Element& element, const EffectModelOrDictionarySequenceOrDictionary& effectInput, double duration, ExceptionState& exceptionState)
+    static Animation* animate(ExecutionContext* executionContext, Element& element, const EffectModelOrDictionarySequenceOrDictionary& effectInput, double duration, ExceptionState& exceptionState)
     {
-        EffectModel* effect = EffectInput::convert(&element, effectInput, exceptionState);
+        EffectModel* effect = EffectInput::convert(&element, effectInput, executionContext, exceptionState);
         if (exceptionState.hadException())
             return 0;
         return animateInternal(element, effect, TimingInput::convert(duration));
     }
 
-    static Animation* animate(Element& element, const EffectModelOrDictionarySequenceOrDictionary& effectInput, const KeyframeEffectOptions& options, ExceptionState& exceptionState)
+    static Animation* animate(ExecutionContext* executionContext, Element& element, const EffectModelOrDictionarySequenceOrDictionary& effectInput, const KeyframeEffectOptions& options, ExceptionState& exceptionState)
     {
-        EffectModel* effect = EffectInput::convert(&element, effectInput, exceptionState);
+        EffectModel* effect = EffectInput::convert(&element, effectInput, executionContext, exceptionState);
         if (exceptionState.hadException())
             return 0;
 
-        Animation* animation = animateInternal(element, effect, TimingInput::convert(options));
+        Animation* animation = animateInternal(element, effect, TimingInput::convert(options, &element.document()));
         animation->setId(options.id());
         return animation;
     }
 
-    static Animation* animate(Element& element, const EffectModelOrDictionarySequenceOrDictionary& effectInput, ExceptionState& exceptionState)
+    static Animation* animate(ExecutionContext* executionContext, Element& element, const EffectModelOrDictionarySequenceOrDictionary& effectInput, ExceptionState& exceptionState)
     {
-        EffectModel* effect = EffectInput::convert(&element, effectInput, exceptionState);
+        EffectModel* effect = EffectInput::convert(&element, effectInput, executionContext, exceptionState);
         if (exceptionState.hadException())
             return 0;
         return animateInternal(element, effect, Timing());

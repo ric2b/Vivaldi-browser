@@ -46,14 +46,14 @@ public:
     // destructed (possibly on the calling thread or on the thread of
     // |executionContext|) when |executionContext| is stopped or
     // CrossThreadHolder is destructed.
-    void postTask(PassOwnPtr<WTF::Function<void(T*, ExecutionContext*)>> task)
+    void postTask(PassOwnPtr<WTF::Function<void(T*, ExecutionContext*), WTF::CrossThreadAffinity>> task)
     {
         MutexLocker locker(m_mutex->mutex());
         if (!m_bridge) {
             // The bridge has already disappeared.
             return;
         }
-        m_bridge->executionContext()->postTask(BLINK_FROM_HERE, createCrossThreadTask(&Bridge::runTask, m_bridge.get(), task));
+        m_bridge->getExecutionContext()->postTask(BLINK_FROM_HERE, createCrossThreadTask(&Bridge::runTask, m_bridge.get(), task));
     }
 
     ~CrossThreadHolder()
@@ -91,7 +91,7 @@ private:
     class Bridge
         : public GarbageCollectedFinalized<Bridge>
         , public ActiveDOMObject {
-        WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(Bridge);
+        USING_GARBAGE_COLLECTED_MIXIN(Bridge);
     public:
         Bridge(ExecutionContext* executionContext, PassOwnPtr<T> obj, PassRefPtr<MutexWrapper> mutex, CrossThreadHolder* holder)
             : ActiveDOMObject(executionContext)
@@ -119,18 +119,18 @@ private:
             m_holder = nullptr;
         }
 
-        void runTask(PassOwnPtr<WTF::Function<void(T*, ExecutionContext*)>> task)
+        void runTask(PassOwnPtr<WTF::Function<void(T*, ExecutionContext*), WTF::CrossThreadAffinity>> task)
         {
-            ASSERT(executionContext()->isContextThread());
+            ASSERT(getExecutionContext()->isContextThread());
             if (m_obj)
-                (*task)(m_obj.get(), executionContext());
+                (*task)(m_obj.get(), getExecutionContext());
         }
 
     private:
         // ActiveDOMObject
         void stop() override
         {
-            ASSERT(executionContext()->isContextThread());
+            ASSERT(getExecutionContext()->isContextThread());
             {
                 MutexLocker locker(m_mutex->mutex());
                 if (m_holder)

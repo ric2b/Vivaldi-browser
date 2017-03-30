@@ -19,7 +19,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/shell_integration.h"
-#include "chrome/browser/ui/host_desktop.h"
 
 class BackgroundModeManager;
 class CRLSetFetcher;
@@ -182,12 +181,12 @@ class BrowserProcess {
 
   virtual GpuModeManager* gpu_mode_manager() = 0;
 
+  // Create and bind remote debugging server to a given |ip| and |port|.
+  // Passing empty |ip| results in binding to localhost:
+  // 127.0.0.1 or ::1 depending on the environment.
   virtual void CreateDevToolsHttpProtocolHandler(const std::string& ip,
                                                  uint16_t port) = 0;
   virtual void CreateDevToolsAutoOpener() = 0;
-
-  virtual unsigned int AddRefModule() = 0;
-  virtual unsigned int ReleaseModule() = 0;
 
   virtual bool IsShuttingDown() = 0;
 

@@ -331,18 +331,13 @@ TEST_F(ExtensionSpecialStoragePolicyTest, HasSessionOnlyOrigins) {
   EXPECT_FALSE(policy_->HasSessionOnlyOrigins());
 
   // Or the session-onlyness can affect individual origins.
-  ContentSettingsPattern pattern =
-      ContentSettingsPattern::FromString("pattern.com");
-
-  cookie_settings->SetCookieSetting(pattern,
-                                    ContentSettingsPattern::Wildcard(),
-                                    CONTENT_SETTING_SESSION_ONLY);
+  GURL url("http://pattern.com");
+  cookie_settings->SetCookieSetting(url, CONTENT_SETTING_SESSION_ONLY);
 
   EXPECT_TRUE(policy_->HasSessionOnlyOrigins());
 
   // Clearing an origin-specific rule.
-  cookie_settings->ResetCookieSetting(pattern,
-                                      ContentSettingsPattern::Wildcard());
+  cookie_settings->ResetCookieSetting(url);
 
   EXPECT_FALSE(policy_->HasSessionOnlyOrigins());
 }
@@ -358,10 +353,9 @@ TEST_F(ExtensionSpecialStoragePolicyTest, IsStorageDurableTest) {
 
   HostContentSettingsMap* content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(&profile);
-  content_settings_map->SetContentSetting(
-      ContentSettingsPattern::FromString("foo.com"),
-      ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_DURABLE_STORAGE,
-      std::string(), CONTENT_SETTING_ALLOW);
+  content_settings_map->SetContentSettingDefaultScope(
+      kHttpUrl, GURL(), CONTENT_SETTINGS_TYPE_DURABLE_STORAGE, std::string(),
+      CONTENT_SETTING_ALLOW);
 
   EXPECT_TRUE(policy_->IsStorageDurable(kHttpUrl));
 }

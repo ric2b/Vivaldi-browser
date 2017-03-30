@@ -13,8 +13,8 @@
 #include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/ui/browser.h"
 #import "chrome/browser/ui/cocoa/window_size_autosaver.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
@@ -174,10 +174,6 @@ class SortHelper {
 
   [tableView_ reloadData];
   [self adjustSelectionAndEndProcessButton];
-}
-
-- (IBAction)statsLinkClicked:(id)sender {
-  TaskManager::GetInstance()->OpenAboutMemory();
 }
 
 - (IBAction)killSelectedProcesses:(id)sender {

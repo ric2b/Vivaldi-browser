@@ -83,6 +83,7 @@ bool EnsureFileIsGeneratedByDependency(const Target* target,
                                        const OutputFile& file,
                                        bool check_private_deps,
                                        bool consider_object_files,
+                                       bool check_data_deps,
                                        std::set<const Target*>* seen_targets) {
   if (seen_targets->find(target) != seen_targets->end())
     return false;  // Already checked this one and it's not found.
@@ -95,6 +96,9 @@ bool EnsureFileIsGeneratedByDependency(const Target* target,
     if (file == cur)
       return true;
   }
+
+  if (file == target->write_runtime_deps_output())
+    return true;
 
   // Check binary target intermediate files if requested.
   if (consider_object_files && target->IsBinary()) {
@@ -109,11 +113,22 @@ bool EnsureFileIsGeneratedByDependency(const Target* target,
     }
   }
 
+  if (check_data_deps) {
+    check_data_deps = false;  // Consider only direct data_deps.
+    for (const auto& pair : target->data_deps()) {
+      if (EnsureFileIsGeneratedByDependency(pair.ptr, file, false,
+                                            consider_object_files,
+                                            check_data_deps, seen_targets))
+        return true;  // Found a path.
+    }
+  }
+
   // Check all public dependencies (don't do data ones since those are
   // runtime-only).
   for (const auto& pair : target->public_deps()) {
     if (EnsureFileIsGeneratedByDependency(pair.ptr, file, false,
-                                          consider_object_files, seen_targets))
+                                          consider_object_files,
+                                          check_data_deps, seen_targets))
       return true;  // Found a path.
   }
 
@@ -122,8 +137,16 @@ bool EnsureFileIsGeneratedByDependency(const Target* target,
     for (const auto& pair : target->private_deps()) {
       if (EnsureFileIsGeneratedByDependency(pair.ptr, file, false,
                                             consider_object_files,
-                                            seen_targets))
+                                            check_data_deps, seen_targets))
         return true;  // Found a path.
+    }
+    if (target->output_type() == Target::CREATE_BUNDLE) {
+      for (const auto& dep : target->bundle_data().bundle_deps()) {
+        if (EnsureFileIsGeneratedByDependency(dep, file, false,
+                                              consider_object_files,
+                                              check_data_deps, seen_targets))
+          return true;  // Found a path.
+      }
     }
   }
   return false;
@@ -189,6 +212,8 @@ bool RecursiveCheckAssertNoDeps(const Target* target,
 Target::Target(const Settings* settings, const Label& label)
     : Item(settings, label),
       output_type_(UNKNOWN),
+      output_prefix_override_(false),
+      output_extension_set_(false),
       all_headers_public_(true),
       check_includes_(true),
       complete_static_lib_(false),
@@ -222,6 +247,10 @@ const char* Target::GetStringForOutputType(OutputType type) {
       return "Action";
     case ACTION_FOREACH:
       return "ActionForEach";
+    case BUNDLE_DATA:
+      return "Bundle data";
+    case CREATE_BUNDLE:
+      return "Create bundle";
     default:
       return "";
   }
@@ -275,6 +304,7 @@ bool Target::OnResolved(Err* err) {
     all_libs_.append(cur.libs().begin(), cur.libs().end());
   }
 
+  PullRecursiveBundleData();
   PullDependentTargetLibs();
   PullRecursiveHardDeps();
   if (!ResolvePrecompiledHeaders(err))
@@ -316,6 +346,7 @@ bool Target::IsFinal() const {
          output_type_ == ACTION ||
          output_type_ == ACTION_FOREACH ||
          output_type_ == COPY_FILES ||
+         output_type_ == CREATE_BUNDLE ||
          (output_type_ == STATIC_LIBRARY && complete_static_lib_);
 }
 
@@ -329,7 +360,7 @@ DepsIteratorRange Target::GetDeps(DepsIterationType type) const {
       &public_deps_, &private_deps_, &data_deps_));
 }
 
-std::string Target::GetComputedOutputName(bool include_prefix) const {
+std::string Target::GetComputedOutputName() const {
   DCHECK(toolchain_)
       << "Toolchain must be specified before getting the computed output name.";
 
@@ -337,14 +368,14 @@ std::string Target::GetComputedOutputName(bool include_prefix) const {
                                                  : output_name_;
 
   std::string result;
-  if (include_prefix) {
-    const Tool* tool = toolchain_->GetToolForTargetFinalOutput(this);
-    if (tool) {
-      // Only add the prefix if the name doesn't already have it.
-      if (!base::StartsWith(name, tool->output_prefix(),
-                            base::CompareCase::SENSITIVE))
-        result = tool->output_prefix();
-    }
+  const Tool* tool = toolchain_->GetToolForTargetFinalOutput(this);
+  if (tool) {
+    // Only add the prefix if the name doesn't already have it and it's not
+    // being overridden.
+    if (!output_prefix_override_ &&
+        !base::StartsWith(name, tool->output_prefix(),
+                          base::CompareCase::SENSITIVE))
+      result = tool->output_prefix();
   }
   result.append(name);
   return result;
@@ -474,11 +505,31 @@ void Target::PullRecursiveHardDeps() {
   }
 }
 
+void Target::PullRecursiveBundleData() {
+  for (const auto& pair : GetDeps(DEPS_LINKED)) {
+    // Don't propagate bundle_data once they are added to a bundle.
+    if (pair.ptr->output_type() == CREATE_BUNDLE)
+      continue;
+
+    // Direct dependency on a bundle_data target.
+    if (pair.ptr->output_type() == BUNDLE_DATA)
+      bundle_data_.AddBundleData(pair.ptr);
+
+    // Recursive bundle_data informations from all dependencies.
+    for (const auto& target : pair.ptr->bundle_data().bundle_deps())
+      bundle_data_.AddBundleData(target);
+  }
+
+  bundle_data_.OnTargetResolved(this);
+}
+
 void Target::FillOutputFiles() {
   const Tool* tool = toolchain_->GetToolForTargetFinalOutput(this);
   bool check_tool_outputs = false;
   switch (output_type_) {
     case GROUP:
+    case BUNDLE_DATA:
+    case CREATE_BUNDLE:
     case SOURCE_SET:
     case COPY_FILES:
     case ACTION:
@@ -487,7 +538,7 @@ void Target::FillOutputFiles() {
       // entry in the outputs. These stamps are named
       // "<target_out_dir>/<targetname>.stamp".
       dependency_output_file_ = GetTargetOutputDirAsOutputFile(this);
-      dependency_output_file_.value().append(GetComputedOutputName(true));
+      dependency_output_file_.value().append(GetComputedOutputName());
       dependency_output_file_.value().append(".stamp");
       break;
     }
@@ -543,6 +594,10 @@ void Target::FillOutputFiles() {
     default:
       NOTREACHED();
   }
+
+  // Count anything generated from bundle_data dependencies.
+  if (output_type_ == CREATE_BUNDLE)
+    bundle_data_.GetOutputFiles(settings(), &computed_outputs_);
 
   // Count all outputs from this tool as something generated by this target.
   if (check_tool_outputs) {
@@ -714,13 +769,20 @@ void Target::CheckSourceGenerated(const SourceFile& source) const {
   // can be filtered out of this list.
   OutputFile out_file(settings()->build_settings(), source);
   std::set<const Target*> seen_targets;
-  if (!EnsureFileIsGeneratedByDependency(this, out_file, true, false,
+  bool check_data_deps = false;
+  bool consider_object_files = false;
+  if (!EnsureFileIsGeneratedByDependency(this, out_file, true,
+                                         consider_object_files, check_data_deps,
                                          &seen_targets)) {
+    seen_targets.clear();
+    // Allow dependency to be through data_deps for files generated by gn.
+    check_data_deps = g_scheduler->IsFileGeneratedByWriteRuntimeDeps(out_file);
     // Check object files (much slower and very rare) only if the "normal"
     // output check failed.
-    seen_targets.clear();
-    if (!EnsureFileIsGeneratedByDependency(this, out_file, true, true,
-                                           &seen_targets))
+    consider_object_files = !check_data_deps;
+    if (!EnsureFileIsGeneratedByDependency(this, out_file, true,
+                                           consider_object_files,
+                                           check_data_deps, &seen_targets))
       g_scheduler->AddUnknownGeneratedInput(this, source);
   }
 }

@@ -110,7 +110,7 @@ public:
     bool isSizeSet() const { return m_sizeType != SizeNone; }
     bool isMaskSourceTypeSet() const { return m_maskSourceTypeSet; }
 
-    void setImage(PassRefPtrWillBeRawPtr<StyleImage> i) { m_image = i; m_imageSet = true; }
+    void setImage(StyleImage* i) { m_image = i; m_imageSet = true; }
     void setXPosition(const Length& position) { m_xPosition = position; m_xPosSet = true; m_backgroundXOriginSet = false; m_backgroundXOrigin = LeftEdge; }
     void setYPosition(const Length& position) { m_yPosition = position; m_yPosSet = true; m_backgroundYOriginSet = false; m_backgroundYOrigin = TopEdge; }
     void setBackgroundXOrigin(BackgroundEdgeOrigin origin) { m_backgroundXOrigin = origin; m_backgroundXOriginSet = true; }
@@ -124,7 +124,7 @@ public:
     void setBlendMode(WebBlendMode b) { m_blendMode = b; m_blendModeSet = true; }
     void setSizeType(EFillSizeType b) { m_sizeType = b; }
     void setSizeLength(const LengthSize& length) { m_sizeLength = length; }
-    void setSize(FillSize f) { m_sizeType = f.type; m_sizeLength = f.size; }
+    void setSize(const FillSize& f) { m_sizeType = f.type; m_sizeLength = f.size; }
     void setMaskSourceType(EMaskSourceType m) { m_maskSourceType = m; m_maskSourceTypeSet = true; }
 
     void clearImage() { m_image.clear(); m_imageSet = false; }
@@ -175,7 +175,7 @@ public:
         return m_next ? m_next->hasFixedImage() : false;
     }
 
-    bool hasOpaqueImage(const LayoutObject*) const;
+    bool imageOccludesNextLayers(const LayoutObject&) const;
     bool hasRepeatXY() const;
     bool clipOccludesNextLayers() const;
 
@@ -211,9 +211,12 @@ private:
 
     FillLayer() { }
 
+    bool imageIsOpaque(const LayoutObject&) const;
+    bool imageTilesLayer() const;
+
     FillLayer* m_next;
 
-    RefPtrWillBePersistent<StyleImage> m_image;
+    Persistent<StyleImage> m_image;
 
     Length m_xPosition;
     Length m_yPosition;

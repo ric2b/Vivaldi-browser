@@ -7,8 +7,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+#include <utility>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/free_deleter.h"
 #include "base/win/pe_image.h"
 #include "base/win/startup_information.h"
 #include "base/win/windows_version.h"
@@ -75,9 +78,9 @@ TargetProcess::TargetProcess(base::win::ScopedHandle initial_token,
     // This object owns everything initialized here except thread_pool and
     // the job_ handle. The Job handle is closed by BrokerServices and results
     // eventually in a call to our dtor.
-    : lockdown_token_(lockdown_token.Pass()),
-      initial_token_(initial_token.Pass()),
-      lowbox_token_(lowbox_token.Pass()),
+    : lockdown_token_(std::move(lockdown_token)),
+      initial_token_(std::move(initial_token)),
+      lowbox_token_(std::move(lowbox_token)),
       job_(job),
       thread_pool_(thread_pool),
       base_address_(NULL) {}
@@ -130,7 +133,7 @@ DWORD TargetProcess::Create(const wchar_t* exe_path,
   exe_name_.reset(_wcsdup(exe_path));
 
   // the command line needs to be writable by CreateProcess().
-  scoped_ptr<wchar_t, base::FreeDeleter> cmd_line(_wcsdup(command_line));
+  std::unique_ptr<wchar_t, base::FreeDeleter> cmd_line(_wcsdup(command_line));
 
   // Start the target process suspended.
   DWORD flags =

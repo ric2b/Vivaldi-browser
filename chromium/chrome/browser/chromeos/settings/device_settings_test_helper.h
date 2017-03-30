@@ -6,13 +6,13 @@
 #define CHROME_BROWSER_CHROMEOS_SETTINGS_DEVICE_SETTINGS_TEST_HELPER_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -89,7 +89,7 @@ class DeviceSettingsTestHelper : public SessionManagerClient {
   bool IsScreenLocked() const override;
   void EmitLoginPromptVisible() override;
   void RestartJob(const std::vector<std::string>& argv) override;
-  void StartSession(const std::string& user_email) override;
+  void StartSession(const cryptohome::Identification& cryptohome_id) override;
   void StopSession() override;
   void NotifySupervisedUserCreationStarted() override;
   void NotifySupervisedUserCreationFinished() override;
@@ -99,23 +99,23 @@ class DeviceSettingsTestHelper : public SessionManagerClient {
   void NotifyLockScreenDismissed() override;
   void RetrieveActiveSessions(const ActiveSessionsCallback& callback) override;
   void RetrieveDevicePolicy(const RetrievePolicyCallback& callback) override;
-  void RetrievePolicyForUser(const std::string& username,
+  void RetrievePolicyForUser(const cryptohome::Identification& cryptohome_id,
                              const RetrievePolicyCallback& callback) override;
   std::string BlockingRetrievePolicyForUser(
-      const std::string& username) override;
+      const cryptohome::Identification& cryptohome_id) override;
   void RetrieveDeviceLocalAccountPolicy(
       const std::string& account_id,
       const RetrievePolicyCallback& callback) override;
   void StoreDevicePolicy(const std::string& policy_blob,
                          const StorePolicyCallback& callback) override;
-  void StorePolicyForUser(const std::string& username,
+  void StorePolicyForUser(const cryptohome::Identification& cryptohome_id,
                           const std::string& policy_blob,
                           const StorePolicyCallback& callback) override;
   void StoreDeviceLocalAccountPolicy(
       const std::string& account_id,
       const std::string& policy_blob,
       const StorePolicyCallback& callback) override;
-  void SetFlagsForUser(const std::string& account_id,
+  void SetFlagsForUser(const cryptohome::Identification& cryptohome_id,
                        const std::vector<std::string>& flags) override;
   void GetServerBackedStateKeys(const StateKeysCallback& callback) override;
 
@@ -132,6 +132,7 @@ class DeviceSettingsTestHelper : public SessionManagerClient {
     std::vector<RetrievePolicyCallback> retrieve_callbacks_;
 
     PolicyState();
+    PolicyState(const PolicyState& other);
     ~PolicyState();
 
     bool HasPendingOperations() const {
@@ -190,9 +191,9 @@ class DeviceSettingsTestBase : public testing::Test {
   // Local DeviceSettingsService instance for tests. Avoid using in combination
   // with the global instance (DeviceSettingsService::Get()).
   DeviceSettingsService device_settings_service_;
-  scoped_ptr<TestingProfile> profile_;
+  std::unique_ptr<TestingProfile> profile_;
 
-  scoped_ptr<DBusThreadManagerSetter> dbus_setter_;
+  std::unique_ptr<DBusThreadManagerSetter> dbus_setter_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(DeviceSettingsTestBase);

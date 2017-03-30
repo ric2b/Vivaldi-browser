@@ -65,8 +65,9 @@ class MEDIA_EXPORT GpuVideoDecoder
   int GetMaxDecodeRequests() const override;
 
   // VideoDecodeAccelerator::Client implementation.
-  void NotifyCdmAttached(bool success) override;
+  void NotifyInitializationComplete(bool success) override;
   void ProvidePictureBuffers(uint32_t count,
+                             uint32_t textures_per_buffer,
                              const gfx::Size& size,
                              uint32_t texture_target) override;
   void DismissPictureBuffer(int32_t id) override;
@@ -117,7 +118,7 @@ class MEDIA_EXPORT GpuVideoDecoder
   static void ReleaseMailbox(base::WeakPtr<GpuVideoDecoder> decoder,
                              media::GpuVideoAcceleratorFactories* factories,
                              int64_t picture_buffer_id,
-                             uint32_t texture_id,
+                             PictureBuffer::TextureIds ids,
                              const gpu::SyncToken& release_sync_token);
   // Indicate the picture buffer can be reused by the decoder.
   void ReusePictureBuffer(int64_t picture_buffer_id);
@@ -142,11 +143,12 @@ class MEDIA_EXPORT GpuVideoDecoder
   void DestroyPictureBuffers(PictureBufferMap* buffers);
 
   // Returns true if the video decoder with |capabilities| can support
-  // |profile| and |coded_size|.
+  // |profile|, |coded_size|, and |is_encrypted|.
   bool IsProfileSupported(
       const VideoDecodeAccelerator::Capabilities& capabilities,
       VideoCodecProfile profile,
-      const gfx::Size& coded_size);
+      const gfx::Size& coded_size,
+      bool is_encrypted);
 
   // Assert the contract that this class is operated on the right thread.
   void DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent() const;
@@ -185,7 +187,8 @@ class MEDIA_EXPORT GpuVideoDecoder
   // PictureBuffers given to us by VDA via PictureReady, which we sent forward
   // as VideoFrames to be rendered via decode_cb_, and which will be returned
   // to us via ReusePictureBuffer.
-  typedef std::map<int32_t /* picture_buffer_id */, uint32_t /* texture_id */>
+  typedef std::map<int32_t /* picture_buffer_id */,
+                   PictureBuffer::TextureIds /* texture_id */>
       PictureBufferTextureMap;
   PictureBufferTextureMap picture_buffers_at_display_;
 
@@ -219,6 +222,11 @@ class MEDIA_EXPORT GpuVideoDecoder
   // VDA. In other words, the VDA may require all PictureBuffers to be able to
   // proceed with decoding the next frame.
   bool needs_all_picture_buffers_to_decode_;
+
+  // If true, then the VDA supports deferred initialization via
+  // NotifyInitializationComplete.  Otherwise, it will return initialization
+  // status synchronously from VDA::Initialize.
+  bool supports_deferred_initialization_;
 
   // Bound to factories_->GetMessageLoop().
   // NOTE: Weak pointers must be invalidated before all other member variables.

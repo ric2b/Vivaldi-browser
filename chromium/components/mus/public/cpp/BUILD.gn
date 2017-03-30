@@ -41,7 +41,6 @@ source_set("cpp") {
 
   public_deps = [
     "../interfaces",
-    "//mojo/services/network/public/interfaces",
   ]
 
   deps = [
@@ -49,16 +48,17 @@ source_set("cpp") {
     "//cc",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
-    "//components/mus/common",
+    "//components/mus/common:mus_common",
     "//mojo/converters/geometry",
+    "//mojo/converters/input_events",
     "//mojo/converters/surfaces",
-    "//mojo/gles2:headers",
+    "//mojo/gles2",
     "//mojo/gpu:mojo_gles2_implementation",
     "//mojo/public/cpp/bindings:bindings",
-    "//mojo/public/cpp/environment",
     "//mojo/public/cpp/system",
     "//mojo/shell/public/cpp",
     "//mojo/shell/public/interfaces",
+    "//ui/events",
     "//ui/gfx/geometry",
     "//ui/mojo/geometry:interfaces",
   ]

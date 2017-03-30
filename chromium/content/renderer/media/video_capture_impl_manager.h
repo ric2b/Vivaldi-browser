@@ -6,11 +6,11 @@
 #define CONTENT_RENDERER_MEDIA_VIDEO_CAPTURE_IMPL_MANAGER_H_
 
 #include <map>
+#include <memory>
 
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
@@ -72,6 +72,10 @@ class CONTENT_EXPORT VideoCaptureImplManager {
       const media::VideoCaptureParams& params,
       const VideoCaptureStateUpdateCB& state_update_cb,
       const VideoCaptureDeliverFrameCB& deliver_frame_cb);
+
+  // Requests that the video capturer send a frame "soon" (e.g., to resolve
+  // picture loss or quality issues).
+  void RequestRefreshFrame(media::VideoCaptureSessionId id);
 
   // Get supported formats supported by the device for the given session
   // ID. |callback| will be called on the IO thread.

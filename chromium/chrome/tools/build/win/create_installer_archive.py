@@ -16,6 +16,7 @@ import ConfigParser
 import glob
 import optparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -308,7 +309,9 @@ def CreateArchiveFile(options, staging_dir, current_version, prev_version):
     with open(options.depfile, 'wb') as f:
       f.write(path_fixup(os.path.relpath(archive_file, options.build_dir)) +
               ': \\\n')
-      f.write('  ' + ' \\\n  '.join(path_fixup(x) for x in g_archive_inputs))
+      f.write('  ' + ' \\\n  '.join(path_fixup(x if os.path.isabs(x) and
+              os.path.splitdrive(x) != os.path.splitdrive(options.build_dir) else
+                  os.path.relpath(x, options.build_dir)) for x in g_archive_inputs))
 
   cmd = [lzma_exec,
          'a',
@@ -492,14 +495,52 @@ def CopyIfChanged(src, target_dir):
     shutil.copyfile(src, dest)
 
 
+# Taken and modified from:
+# third_party\WebKit\Tools\Scripts\webkitpy\layout_tests\port\factory.py
+def _read_configuration_from_gn(build_dir):
+  """Return the configuration to used based on args.gn, if possible."""
+  path = os.path.join(build_dir, 'args.gn')
+  if not os.path.exists(path):
+    path = os.path.join(build_dir, 'toolchain.ninja')
+    if not os.path.exists(path):
+      # This does not appear to be a GN-based build directory, so we don't
+      # know how to interpret it.
+      return None
+
+    # toolchain.ninja exists, but args.gn does not; this can happen when
+    # `gn gen` is run with no --args.
+    return 'Debug'
+
+  args = open(path).read()
+  for l in args.splitlines():
+    # See the original of this function and then gn documentation for why this
+    # regular expression is correct:
+    # https://chromium.googlesource.com/chromium/src/+/master/tools/gn/docs/reference.md#GN-build-language-grammar
+    m = re.match('^\s*is_debug\s*=\s*false(\s*$|\s*#.*$)', l)
+    if m:
+      return 'Release'
+
+  # if is_debug is set to anything other than false, or if it
+  # does not exist at all, we should use the default value (True).
+  return 'Debug'
+
+
 # Copy the relevant CRT DLLs to |build_dir|. We copy DLLs from all versions
 # of VS installed to make sure we have the correct CRT version, unused DLLs
 # should not conflict with the others anyways.
 def CopyVisualStudioRuntimeDLLs(target_arch, build_dir):
   is_debug = os.path.basename(build_dir).startswith('Debug')
   if not is_debug and not os.path.basename(build_dir).startswith('Release'):
-    print ("Warning: could not determine build configuration from "
-           "output directory, assuming Release build.")
+    gn_type = _read_configuration_from_gn(build_dir)
+    if gn_type == 'Debug':
+      is_debug = True
+    elif gn_type == 'Release':
+      is_debug = False
+    else:
+      print ("Warning: could not determine build configuration from "
+             "output directory or args.gn, assuming Release build. If "
+             "setup.exe fails to launch, please check that your build "
+             "configuration is Release.")
 
   crt_dlls = []
   sys_dll_dir = None
@@ -567,15 +608,31 @@ def DoComponentBuildTasks(staging_dir, build_dir, target_arch, current_version):
 
   # Explicitly list the component DLLs setup.exe depends on (this list may
   # contain wildcards). These will be copied to |installer_dir| in the archive.
-  setup_component_dll_globs = [ 'base.dll',
+  # The use of source sets in gn builds means that references to some extra
+  # DLLs get pulled in to setup.exe (base_i18n.dll, ipc.dll, etc.). Unpacking
+  # these to |installer_dir| is simpler and more robust than switching setup.exe
+  # to use libraries instead of source sets.
+  setup_component_dll_globs = [ #'api-ms-win-*.dll',
+                                'base.dll',
                                 'boringssl.dll',
                                 'crcrypto.dll',
                                 'icui18n.dll',
                                 'icuuc.dll',
-                                'msvc*.dll' ]
+                                'msvc*.dll',
+                                #'vcruntime*.dll',
+                                # DLLs needed due to source sets.
+                                'base_i18n.dll',
+                                'ipc.dll',
+                                'net.dll',
+                                'prefs.dll',
+                                'protobuf_lite.dll',
+                                'url_lib.dll' ]
   for setup_component_dll_glob in setup_component_dll_globs:
     setup_component_dlls = glob.glob(os.path.join(build_dir,
                                                   setup_component_dll_glob))
+    if len(setup_component_dlls) == 0:
+      raise Exception('Error: missing expected DLL for component build '
+                      'mini_installer: "%s"' % setup_component_dll_glob)
     for setup_component_dll in setup_component_dlls:
       g_archive_inputs.append(setup_component_dll)
       shutil.copy(setup_component_dll, installer_dir)

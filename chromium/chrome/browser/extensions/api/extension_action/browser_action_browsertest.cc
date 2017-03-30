@@ -26,7 +26,7 @@ const char kBrowserActionStorageKey[] = "browser_action";
 const char kExtensionName[] = "Default Persistence Test Extension";
 
 void QuitMessageLoop(content::MessageLoopRunner* runner,
-                     scoped_ptr<base::Value> value) {
+                     std::unique_ptr<base::Value> value) {
   runner->Quit();
 }
 
@@ -37,9 +37,8 @@ void WaitForStateStore(Profile* profile, const std::string& extension_id) {
   scoped_refptr<content::MessageLoopRunner> runner =
       new content::MessageLoopRunner;
   ExtensionSystem::Get(profile)->state_store()->GetExtensionValue(
-      extension_id,
-      kBrowserActionStorageKey,
-      base::Bind(&QuitMessageLoop, runner));
+      extension_id, kBrowserActionStorageKey,
+      base::Bind(&QuitMessageLoop, base::RetainedRef(runner)));
   runner->Run();
 }
 

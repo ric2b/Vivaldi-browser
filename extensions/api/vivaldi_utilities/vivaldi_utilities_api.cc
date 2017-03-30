@@ -139,7 +139,8 @@ bool UtilitiesIsUrlValidFunction::RunSync() {
   result.scheme_valid = URLPattern::IsValidSchemeForExtensions(url.scheme()) ||
                         url.SchemeIs(url::kJavaScriptScheme) ||
                         url.SchemeIs(url::kDataScheme) ||
-                        url.SchemeIs(url::kMailToScheme);
+                        url.SchemeIs(url::kMailToScheme) ||
+                        url.spec() == url::kAboutBlankURL;
 
   results_ = vivaldi::utilities::IsUrlValid::Results::Create(result);
 
@@ -180,7 +181,7 @@ bool UtilitiesGetAvailablePageEncodingsFunction::RunSync() {
   DCHECK(encodings);
   DCHECK(!encodings->empty());
 
-  std::vector<linked_ptr<vivaldi::utilities::EncodingItem>> encodingItems;
+  std::vector<vivaldi::utilities::EncodingItem> encodingItems;
 
   std::vector<CharacterEncoding::EncodingInfo>::const_iterator it;
   for (it = encodings->begin(); it != encodings->end(); ++it) {
@@ -192,8 +193,7 @@ bool UtilitiesGetAvailablePageEncodingsFunction::RunSync() {
           CharacterEncoding::GetCanonicalEncodingNameByCommandId(cmd_id);
       encodingItem->name = base::UTF16ToUTF8(it->encoding_display_name);
       encodingItem->encoding = encoding;
-      linked_ptr<vivaldi::utilities::EncodingItem> new_node(encodingItem);
-      encodingItems.push_back(new_node);
+      encodingItems.push_back(std::move(*encodingItem));
     }
   }
 

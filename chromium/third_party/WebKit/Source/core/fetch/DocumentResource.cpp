@@ -30,15 +30,15 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<DocumentResource> DocumentResource::fetchSVGDocument(FetchRequest& request, ResourceFetcher* fetcher)
+DocumentResource* DocumentResource::fetchSVGDocument(FetchRequest& request, ResourceFetcher* fetcher)
 {
     ASSERT(request.resourceRequest().frameType() == WebURLRequest::FrameTypeNone);
     request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextImage);
     return toDocumentResource(fetcher->requestResource(request, SVGDocumentResourceFactory()));
 }
 
-DocumentResource::DocumentResource(const ResourceRequest& request, Type type)
-    : Resource(request, type)
+DocumentResource::DocumentResource(const ResourceRequest& request, Type type, const ResourceLoaderOptions& options)
+    : Resource(request, type, options)
     , m_decoder(TextResourceDecoder::create("application/xml"))
 {
     // FIXME: We'll support more types to support HTMLImports.
@@ -90,7 +90,7 @@ bool DocumentResource::mimeTypeAllowed() const
         || mimeType == "application/xhtml+xml";
 }
 
-PassRefPtrWillBeRawPtr<Document> DocumentResource::createDocument(const KURL& url)
+Document* DocumentResource::createDocument(const KURL& url)
 {
     switch (getType()) {
     case SVGDocument:

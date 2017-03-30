@@ -11,7 +11,7 @@
 
 namespace blink {
 
-ExecutionContext* RemoteDOMWindow::executionContext() const
+ExecutionContext* RemoteDOMWindow::getExecutionContext() const
 {
     return nullptr;
 }
@@ -287,19 +287,19 @@ void RemoteDOMWindow::resizeTo(int width, int height) const
     ASSERT_NOT_REACHED();
 }
 
-PassRefPtrWillBeRawPtr<MediaQueryList> RemoteDOMWindow::matchMedia(const String&)
+MediaQueryList* RemoteDOMWindow::matchMedia(const String&)
 {
     ASSERT_NOT_REACHED();
     return nullptr;
 }
 
-PassRefPtrWillBeRawPtr<CSSStyleDeclaration> RemoteDOMWindow::getComputedStyle(Element*, const String& pseudoElt) const
+CSSStyleDeclaration* RemoteDOMWindow::getComputedStyle(Element*, const String& pseudoElt) const
 {
     ASSERT_NOT_REACHED();
     return nullptr;
 }
 
-PassRefPtrWillBeRawPtr<CSSRuleList> RemoteDOMWindow::getMatchedCSSRules(Element*, const String& pseudoElt) const
+CSSRuleList* RemoteDOMWindow::getMatchedCSSRules(Element*, const String& pseudoElt) const
 {
     ASSERT_NOT_REACHED();
     return nullptr;
@@ -331,6 +331,12 @@ int RemoteDOMWindow::requestIdleCallback(IdleRequestCallback*, const IdleRequest
 void RemoteDOMWindow::cancelIdleCallback(int id)
 {
     ASSERT_NOT_REACHED();
+}
+
+CustomElementsRegistry* RemoteDOMWindow::customElements() const
+{
+    ASSERT_NOT_REACHED();
+    return nullptr;
 }
 
 RemoteDOMWindow::RemoteDOMWindow(RemoteFrame& frame)

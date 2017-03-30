@@ -32,6 +32,7 @@
 
 #include "core/animation/AnimationClock.h"
 #include "core/animation/AnimationEffect.h"
+#include "core/animation/CompositorPendingAnimations.h"
 #include "core/animation/KeyframeEffect.h"
 #include "core/animation/KeyframeEffectModel.h"
 #include "core/dom/Document.h"
@@ -75,9 +76,7 @@ protected:
         document.release();
         element.release();
         timeline.release();
-#if ENABLE(OILPAN)
         Heap::collectAllGarbage();
-#endif
     }
 
     void updateClockAndService(double time)
@@ -89,8 +88,8 @@ protected:
     }
 
     OwnPtr<DummyPageHolder> pageHolder;
-    RefPtrWillBePersistent<Document> document;
-    RefPtrWillBePersistent<Element> element;
+    Persistent<Document> document;
+    Persistent<Element> element;
     Persistent<AnimationTimeline> timeline;
     Timing timing;
     Persistent<MockPlatformTiming> platformTiming;

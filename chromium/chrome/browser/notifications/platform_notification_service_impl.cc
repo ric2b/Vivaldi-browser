@@ -102,21 +102,13 @@ void ProfileLoadedCallback(
     const GURL& origin,
     int64_t persistent_notification_id,
     int action_index,
-    bool incognito,
-    Profile* profile,
-    Profile::CreateStatus status) {
-  if (status == Profile::CREATE_STATUS_CREATED) {
-    // This is an intermediate state, we will be also called
-    // again with CREATE_STATUS_INITIALIZED once everything is ready
-    // so ignore it.
-    return;
-  }
-  if (status != Profile::CREATE_STATUS_INITIALIZED) {
+    Profile* profile) {
+  if (!profile) {
+    // TODO(miguelg): Add UMA for this condition.
+    // Perhaps propagate this through PersistentNotificationStatus.
     LOG(WARNING) << "Profile not loaded correctly";
     return;
   }
-  DCHECK(profile);
-  profile = incognito ? profile->GetOffTheRecordProfile() : profile;
 
   switch (operation) {
     case PlatformNotificationServiceImpl::NOTIFICATION_CLICK:
@@ -161,25 +153,10 @@ void PlatformNotificationServiceImpl::ProcessPersistentNotificationOperation(
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   DCHECK(profile_manager);
 
-  // ProfileManager does not offer a good interface to load a profile or
-  // fail. Instead it offers a method to create the profile and simply load it
-  // if it already exist. We therefore check first that the profile is there
-  // and fail early otherwise.
-  const base::FilePath profile_path =
-      profile_manager->user_data_dir().AppendASCII(profile_id);
-
-  ProfileAttributesEntry* entry = nullptr;
-  if (!profile_manager->GetProfileAttributesStorage().
-      GetProfileAttributesWithPath(profile_path, &entry)) {
-    LOG(ERROR) << "Loading a path that does not exist";
-    return;
-  }
-
-  profile_manager->CreateProfileAsync(
-      profile_path,
+  profile_manager->LoadProfile(
+      profile_id, incognito,
       base::Bind(&ProfileLoadedCallback, operation, origin,
-                 persistent_notification_id, action_index, incognito),
-      base::string16(), std::string(), std::string());
+                 persistent_notification_id, action_index));
 }
 
 void PlatformNotificationServiceImpl::OnPersistentNotificationClick(
@@ -447,12 +424,8 @@ bool PlatformNotificationServiceImpl::GetDisplayedPersistentNotifications(
   if (!profile || profile->AsTestingProfile())
     return false;  // Tests will not have a message center.
 
-  // There may not be a notification ui manager when another feature erroneously
-  // instantiates a storage partition when the browser process is shutting down.
-  // TODO(peter): Remove in favor of a DCHECK when crbug.com/546745 is fixed.
   NotificationUIManager* ui_manager = GetNotificationUIManager();
-  if (!ui_manager)
-    return false;
+  DCHECK(ui_manager);
 
   // TODO(peter): Filter for persistent notifications only.
   *displayed_notifications = ui_manager->GetAllIdsByProfile(
@@ -491,6 +464,11 @@ Notification PlatformNotificationServiceImpl::CreateNotificationFromData(
   notification.set_timestamp(notification_data.timestamp);
   notification.set_renotify(notification_data.renotify);
   notification.set_silent(notification_data.silent);
+
+  // TODO(peter): Handle different screen densities instead of always using the
+  // 1x bitmap - crbug.com/585815.
+  notification.set_small_image(
+      gfx::Image::CreateFrom1xBitmap(notification_resources.badge));
 
   // Developer supplied action buttons.
   std::vector<message_center::ButtonInfo> buttons;

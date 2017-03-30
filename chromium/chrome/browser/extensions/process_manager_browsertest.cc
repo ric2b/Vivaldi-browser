@@ -2,14 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "extensions/browser/process_manager.h"
-
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "chrome/browser/extensions/browser_action_test_util.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
@@ -21,9 +20,11 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "extensions/browser/process_manager.h"
 #include "extensions/common/value_builder.h"
 #include "extensions/test/background_page_watcher.h"
 #include "net/dns/mock_host_resolver.h"
@@ -95,7 +96,7 @@ class ProcessManagerBrowserTest : public ExtensionBrowserTest {
   // page.
   const Extension* CreateExtension(const std::string& name,
                                    bool has_background_process) {
-    scoped_ptr<TestExtensionDir> dir(new TestExtensionDir());
+    std::unique_ptr<TestExtensionDir> dir(new TestExtensionDir());
 
     DictionaryBuilder manifest;
     manifest.Set("name", name)
@@ -105,13 +106,14 @@ class ProcessManagerBrowserTest : public ExtensionBrowserTest {
         .Set("content_security_policy",
              "script-src 'self' 'unsafe-eval'; object-src 'self'")
         .Set("sandbox",
-             std::move(DictionaryBuilder().Set(
-                 "pages", std::move(ListBuilder().Append("sandboxed.html")))))
-        .Set("web_accessible_resources", std::move(ListBuilder().Append("*")));
+             DictionaryBuilder()
+                 .Set("pages", ListBuilder().Append("sandboxed.html").Build())
+                 .Build())
+        .Set("web_accessible_resources", ListBuilder().Append("*").Build());
 
     if (has_background_process) {
       manifest.Set("background",
-                   std::move(DictionaryBuilder().Set("page", "bg.html")));
+                   DictionaryBuilder().Set("page", "bg.html").Build());
       dir->WriteFile(FILE_PATH_LITERAL("bg.html"),
                      "<iframe id='bgframe' src='empty.html'></iframe>");
     }
@@ -163,7 +165,7 @@ class ProcessManagerBrowserTest : public ExtensionBrowserTest {
   }
 
  private:
-  std::vector<scoped_ptr<TestExtensionDir>> temp_dirs_;
+  std::vector<std::unique_ptr<TestExtensionDir>> temp_dirs_;
 };
 
 // Test that basic extension loading creates the appropriate ExtensionHosts
@@ -524,6 +526,55 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest, KeepaliveOnNetworkRequest) {
   // in keepalive decrement.
   pm->OnNetworkRequestDone(frame_host, 2);
   EXPECT_EQ(baseline_keepalive, pm->GetLazyKeepaliveCount(extension.get()));
+}
+
+IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest, ExtensionProcessReuse) {
+  const size_t kNumExtensions = 3;
+  content::RenderProcessHost::SetMaxRendererProcessCount(kNumExtensions - 1);
+  ProcessManager* pm = ProcessManager::Get(profile());
+
+  std::set<int> processes;
+  std::set<const Extension*> installed_extensions;
+
+  // Create 3 extensions, which is more than the process limit.
+  for (int i = 1; i <= static_cast<int>(kNumExtensions); ++i) {
+    const Extension* extension =
+        CreateExtension(base::StringPrintf("Extension %d", i), true);
+    installed_extensions.insert(extension);
+    ExtensionHost* extension_host =
+        pm->GetBackgroundHostForExtension(extension->id());
+
+    EXPECT_EQ(extension->url(),
+              extension_host->host_contents()->GetSiteInstance()->GetSiteURL());
+
+    processes.insert(extension_host->render_process_host()->GetID());
+  }
+
+  EXPECT_EQ(kNumExtensions, installed_extensions.size());
+
+  if (content::AreAllSitesIsolatedForTesting()) {
+    EXPECT_EQ(kNumExtensions, processes.size()) << "Extension process reuse is "
+                                                   "expected to be disabled in "
+                                                   "--site-per-process.";
+  } else {
+    EXPECT_LT(processes.size(), kNumExtensions)
+        << "Expected extension process reuse, but none happened.";
+  }
+
+  // Interact with each extension background page by setting and reading back
+  // the cookie. This would fail for one of the two extensions in a shared
+  // process, if that process is locked to a single origin. This is a regression
+  // test for http://crbug.com/600441.
+  for (const Extension* extension : installed_extensions) {
+    content::DOMMessageQueue queue;
+    ExecuteScriptInBackgroundPageNoWait(
+        extension->id(),
+        "document.cookie = 'extension_cookie';"
+        "window.domAutomationController.send(document.cookie);");
+    std::string message;
+    ASSERT_TRUE(queue.WaitForMessage(&message));
+    EXPECT_EQ(message, "\"extension_cookie\"");
+  }
 }
 
 }  // namespace extensions

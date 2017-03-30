@@ -201,6 +201,22 @@
       ['OS=="win" and vivaldi_use_compilecache',{
         'defines': ['VIVALDI_WIN_COMPILE_CACHE'],
       }],
+      ['OS=="win"',{
+        'msvs_system_include_dirs': [
+          '<(windows_sdk_path)/Include/10.0.10586.0/shared',
+          '<(windows_sdk_path)/Include/10.0.10586.0/um',
+          '<(windows_sdk_path)/Include/10.0.10586.0/winrt',
+          '$(VSInstallDir)/VC/atlmfc/include',
+        ],
+        # Disable warning about "/DELAYLOAD:foo.dll ignored; no imports found from foo.dll"
+        'msvs_settings': {
+          'VCLinkerTool': {
+            'AdditionalOptions': [
+              '/ignore:4199',
+            ],
+          },
+        },
+      }],
     ],
     'target_conditions' : [
       ['_target_build_file in vivaldi_disabled_gyp', {

@@ -549,6 +549,11 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   // Vivaldi and other bundled extensions.
   void SetUpPrefsForComponentExtension(const Extension* extension);
 
+  // Vivaldi addition. We should add the Vivaldi extension id to the prefs map
+  // to get access to the extension preferences api. This without appearing in
+  // the extension list in vivaldi://extensions
+  void RegisterExtensionForPrefs(std::string extension_id);
+
  private:
   friend class ExtensionPrefsBlacklistedExtensions;  // Unit test.
   friend class ExtensionPrefsComponentExtension;     // Unit test.

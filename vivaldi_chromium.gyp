@@ -74,6 +74,9 @@
         'ui/webgui/vivaldi_web_ui_controller_factory.h',
         'ui/views/vivaldi_pin_shortcut.cpp',
         'ui/views/vivaldi_pin_shortcut.h',
+        'prefs/native_settings_observer.h',
+        'prefs/native_settings_observer.cc',
+        'prefs/native_settings_observer_delegate.h',
         'prefs/vivaldi_tab_zoom_pref.h',
         'prefs/vivaldi_tab_zoom_pref.cc',
       ],
@@ -87,6 +90,8 @@
             'importer/viv_importer_util_linux.cpp',
             'importer/chromium_importer_util_linux.cpp',
             'importer/chromium_profile_lock_posix.cpp',
+            'prefs/native_settings_observer_linux.h',
+            'prefs/native_settings_observer_linux.cc',
           ],
         }],
         ['OS=="win"', {
@@ -97,14 +102,20 @@
             'importer/viv_importer_util_win.cpp',
             'importer/chrome_importer_util_win.cpp',
             'importer/chromium_profile_lock_win.cpp',
+            'prefs/native_settings_observer_win.h',
+            'prefs/native_settings_observer_win.cc',
           ],
         }],
         ['OS=="mac"', {
           "sources":[
+            'browser/vivaldi_app_observer.h',
+            'browser/vivaldi_app_observer.mm',
             'extraparts/vivaldi_browser_main_extra_parts_mac.mm',
             'importer/viv_importer_util_mac.mm',
             'importer/chromium_importer_util_mac.mm',
             'importer/chromium_profile_lock_mac.mm',
+            'prefs/native_settings_observer_mac.h',
+            'prefs/native_settings_observer_mac.mm',
           ],
         }, { #'OS!="mac"
           "dependencies":[

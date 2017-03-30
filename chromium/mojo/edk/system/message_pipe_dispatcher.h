@@ -39,9 +39,18 @@ class MessagePipeDispatcher : public Dispatcher {
                         uint64_t pipe_id,
                         int endpoint);
 
+  // Fuses this pipe with |other|. Returns |true| on success or |false| on
+  // failure. Regardless of the return value, both dispatchers are closed by
+  // this call.
+  bool Fuse(MessagePipeDispatcher* other);
+
   // Dispatcher:
   Type GetType() const override;
   MojoResult Close() override;
+  MojoResult Watch(MojoHandleSignals signals,
+                   const Watcher::WatchCallback& callback,
+                   uintptr_t context) override;
+  MojoResult CancelWatch(uintptr_t context) override;
   MojoResult WriteMessage(const void* bytes,
                           uint32_t num_bytes,
                           const DispatcherInTransit* dispatchers,

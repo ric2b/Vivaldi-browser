@@ -21,27 +21,10 @@ WebGLContextAttributes toWebGLContextAttributes(const CanvasContextCreationAttri
     return result;
 }
 
-WebGraphicsContext3D::Attributes toWebGraphicsContext3DAttributes(const WebGLContextAttributes& attrs, const WebString& topDocumentURL, Settings* settings, unsigned webGLVersion)
+Platform::ContextAttributes toPlatformContextAttributes(const WebGLContextAttributes& attrs, unsigned webGLVersion)
 {
-    WebGraphicsContext3D::Attributes result;
-    result.alpha = attrs.alpha();
-    result.depth = attrs.depth();
-    result.stencil = attrs.stencil();
-    result.antialias = attrs.antialias();
-    if (attrs.antialias()) {
-        if (settings && !settings->openGLMultisamplingEnabled())
-            result.antialias = false;
-    }
-    result.premultipliedAlpha = attrs.premultipliedAlpha();
+    Platform::ContextAttributes result;
     result.failIfMajorPerformanceCaveat = attrs.failIfMajorPerformanceCaveat();
-
-    result.noExtensions = true;
-    result.shareResources = false;
-    result.preferDiscreteGPU = true;
-
-    result.topDocumentURL = topDocumentURL;
-
-    result.webGL = true;
     result.webGLVersion = webGLVersion;
     return result;
 }

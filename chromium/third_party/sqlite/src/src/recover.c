@@ -210,20 +210,24 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-/* Internal SQLite things that are used:
- * u32, u64, i64 types.
- * Btree, Pager, and DbPage structs.
- * DbPage.pData, .pPager, and .pgno
- * sqlite3 struct.
- * sqlite3BtreePager() and sqlite3BtreeGetPageSize()
- * sqlite3BtreeGetOptimalReserve()
- * sqlite3PagerGet() and sqlite3PagerUnref()
- * getVarint().
- */
-#include "sqliteInt.h"
+#include "sqlite3.h"
+
+/* Some SQLite internals use, cribbed from fts5int.h. */
+#ifndef SQLITE_AMALGAMATION
+typedef uint8_t u8;
+typedef uint32_t u32;
+typedef sqlite3_int64 i64;
+typedef sqlite3_uint64 u64;
+
+#define ArraySize(x) (sizeof(x) / sizeof(x[0]))
+#endif
+
+/* From recover_varint.c. */
+u8 recoverGetVarint(const unsigned char *p, u64 *v);
 
 /* For debugging. */
 #if 0
@@ -248,10 +252,10 @@ enum { knHeaderSize = 100};
 
 /* From section 1.5. */
 static const unsigned kiPageTypeOffset = 0;
-static const unsigned kiPageFreeBlockOffset = 1;
+/* static const unsigned kiPageFreeBlockOffset = 1; */
 static const unsigned kiPageCellCountOffset = 3;
-static const unsigned kiPageCellContentOffset = 5;
-static const unsigned kiPageFragmentedBytesOffset = 7;
+/* static const unsigned kiPageCellContentOffset = 5; */
+/* static const unsigned kiPageFragmentedBytesOffset = 7; */
 static const unsigned knPageLeafHeaderBytes = 8;
 /* Interior pages contain an additional field. */
 static const unsigned kiPageRightChildOffset = 8;
@@ -420,7 +424,7 @@ static int pagerCreate(sqlite3_file *pSqliteFile, u32 nPageSize,
 const int kExcessSpace = 128;
 typedef struct RecoverPage RecoverPage;
 struct RecoverPage {
-  Pgno pgno;                     /* Page number for this page */
+  u32 pgno;                      /* Page number for this page */
   void *pData;                   /* Page data for pgno */
   RecoverPager *pPager;          /* The pager this page is part of */
 };
@@ -697,8 +701,6 @@ static int getRootPage(sqlite3 *db, const char *zDb, const char *zTable,
  * interiorCursorDestroy - release all resources associated with the
  *                         cursor and any parent cursors.
  * interiorCursorCreate - create a cursor with the given parent and page.
- * interiorCursorEOF - returns true if neither the cursor nor the
- *                     parent cursors can return any more data.
  * interiorCursorNextPage - fetch the next child page from the cursor.
  *
  * Logically, interiorCursorNextPage() returns the next child page
@@ -715,11 +717,6 @@ static int getRootPage(sqlite3 *db, const char *zDb, const char *zTable,
  * Note that while interiorCursorNextPage() will refuse to follow
  * loops, it does not keep track of pages returned for purposes of
  * preventing duplication.
- *
- * Note that interiorCursorEOF() could return false (not at EOF), and
- * interiorCursorNextPage() could still return SQLITE_DONE.  This
- * could happen if there are more cells to iterate in an interior
- * page, but those cells refer to invalid pages.
  */
 typedef struct RecoverInteriorCursor RecoverInteriorCursor;
 struct RecoverInteriorCursor {
@@ -833,14 +830,6 @@ static unsigned interiorCursorChildPage(RecoverInteriorCursor *pCursor){
 
   /* If the offset is broken, return an invalid page number. */
   return 0;
-}
-
-static int interiorCursorEOF(RecoverInteriorCursor *pCursor){
-  /* Find a parent with remaining children.  EOF if none found. */
-  while( pCursor && pCursor->iChild>=pCursor->nChildren ){
-    pCursor = pCursor->pParent;
-  }
-  return pCursor==NULL;
 }
 
 /* Internal helper.  Used to detect if iPage would cause a loop. */
@@ -1458,11 +1447,11 @@ static int leafCursorCellDecode(RecoverLeafCursor *pCursor){
     return ValidateError();
   }
 
-  nRead = getVarint(pCell, &nRecordBytes);
+  nRead = recoverGetVarint(pCell, &nRecordBytes);
   assert( iCellOffset+nRead<=pCursor->nPageSize );
   pCursor->nRecordBytes = nRecordBytes;
 
-  nRead += getVarint(pCell + nRead, &iRowid);
+  nRead += recoverGetVarint(pCell + nRead, &iRowid);
   assert( iCellOffset+nRead<=pCursor->nPageSize );
   pCursor->iRowid = (i64)iRowid;
 
@@ -1488,7 +1477,7 @@ static int leafCursorCellDecode(RecoverLeafCursor *pCursor){
     }
   }
 
-  nRecordHeaderRead = getVarint(pCell + nRead, &nRecordHeaderBytes);
+  nRecordHeaderRead = recoverGetVarint(pCell + nRead, &nRecordHeaderBytes);
   assert( nRecordHeaderBytes<=nRecordBytes );
   pCursor->nRecordHeaderBytes = nRecordHeaderBytes;
 
@@ -1510,8 +1499,8 @@ static int leafCursorCellDecode(RecoverLeafCursor *pCursor){
                      nRecordHeaderBytes - nRecordHeaderRead) ){
       return ValidateError();
     }
-    nRecordHeaderRead += getVarint(pCursor->pRecordHeader + nRecordHeaderRead,
-                                   &iSerialType);
+    nRecordHeaderRead += recoverGetVarint(
+        pCursor->pRecordHeader + nRecordHeaderRead, &iSerialType);
     if( iSerialType==10 || iSerialType==11 ){
       return ValidateError();
     }
@@ -1577,7 +1566,7 @@ static int leafCursorCellColInfo(RecoverLeafCursor *pCursor,
   /* Rather than caching the header size and how many bytes it took,
    * decode it every time.
    */
-  nRead = getVarint(pRecordHeader, &nRecordHeaderBytes);
+  nRead = recoverGetVarint(pRecordHeader, &nRecordHeaderBytes);
   assert( nRecordHeaderBytes==pCursor->nRecordHeaderBytes );
 
   /* Scan forward to the indicated column.  Scans to _after_ column
@@ -1596,7 +1585,7 @@ static int leafCursorCellColInfo(RecoverLeafCursor *pCursor,
     if( !checkVarint(pRecordHeader + nRead, nRecordHeaderBytes - nRead) ){
       return SQLITE_CORRUPT;
     }
-    nRead += getVarint(pRecordHeader + nRead, &iSerialType);
+    nRead += recoverGetVarint(pRecordHeader + nRead, &iSerialType);
     iColEndOffset += SerialTypeLength(iSerialType);
     nColsSkipped++;
   }
@@ -1991,7 +1980,7 @@ static sqlite3_module recoverModule = {
   0,                         /* xRename - rename the table */
 };
 
-CHROMIUM_SQLITE_API
+SQLITE_API
 int recoverVtableInit(sqlite3 *db){
   return sqlite3_create_module_v2(db, "recover", &recoverModule, NULL, 0);
 }
@@ -2229,7 +2218,7 @@ static int recoverInit(
   /* Parse out db.table, assuming main if no dot. */
   zDot = strchr(argv[3], '.');
   if( !zDot ){
-    pRecover->zDb = sqlite3_strdup(db->aDb[0].zName);
+    pRecover->zDb = sqlite3_strdup("main");
     pRecover->zTable = sqlite3_strdup(argv[3]);
   }else if( zDot>argv[3] && zDot[1]!='\0' ){
     pRecover->zDb = sqlite3_strndup(argv[3], zDot - argv[3]);

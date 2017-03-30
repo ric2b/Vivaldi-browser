@@ -22,7 +22,7 @@ class ThemeProperties {
   // The int values of OverwritableByUserThemeProperties, Alignment, and Tiling
   // are used as a key to store the property in the browser theme pack. If you
   // modify any of these enums, increment the version number in
-  // browser_theme_pack.h
+  // browser_theme_pack.cc.
 
   enum OverwritableByUserThemeProperty {
     COLOR_FRAME,
@@ -95,8 +95,10 @@ class ThemeProperties {
 
     // The color of the line separating the top of the toolbar from the region
     // above. For a tabbed browser window, this is the line along the bottom
-    // edge of the tabstrip.
+    // edge of the tabstrip, the stroke around the tabs, and the new tab button
+    // stroke/shadow color.
     COLOR_TOOLBAR_TOP_SEPARATOR,
+    COLOR_TOOLBAR_TOP_SEPARATOR_INACTIVE,
 
     // The color of a background tab, as well as the new tab button.
     COLOR_BACKGROUND_TAB,
@@ -125,12 +127,15 @@ class ThemeProperties {
     COLOR_SUPERVISED_USER_LABEL_BORDER,
 #endif
 
-    COLOR_STATUS_BAR_TEXT,
-
 #if defined(OS_MACOSX)
+    COLOR_FRAME_VIBRANCY_OVERLAY,
+    COLOR_TOOLBAR_INACTIVE,
+    COLOR_BACKGROUND_TAB_INACTIVE,
     COLOR_TOOLBAR_BEZEL,
     COLOR_TOOLBAR_STROKE,
     COLOR_TOOLBAR_STROKE_INACTIVE,
+    COLOR_TOOLBAR_STROKE_THEME,
+    COLOR_TOOLBAR_STROKE_THEME_INACTIVE,
     // The color of a toolbar button's border.
     COLOR_TOOLBAR_BUTTON_STROKE,
     COLOR_TOOLBAR_BUTTON_STROKE_INACTIVE,

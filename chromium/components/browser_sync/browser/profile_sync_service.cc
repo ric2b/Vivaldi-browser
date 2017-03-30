@@ -44,6 +44,9 @@
 #include "components/sync_driver/change_processor.h"
 #include "components/sync_driver/data_type_controller.h"
 #include "components/sync_driver/device_info.h"
+#include "components/sync_driver/device_info_service.h"
+#include "components/sync_driver/device_info_sync_service.h"
+#include "components/sync_driver/device_info_tracker.h"
 #include "components/sync_driver/glue/chrome_report_unrecoverable_error.h"
 #include "components/sync_driver/glue/sync_backend_host.h"
 #include "components/sync_driver/glue/sync_backend_host_impl.h"
@@ -66,6 +69,7 @@
 #include "components/version_info/version_info_values.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "sync/api/model_type_store.h"
 #include "sync/api/sync_error.h"
 #include "sync/internal_api/public/base/stop_source.h"
 #include "sync/internal_api/public/configure_reason.h"
@@ -73,6 +77,7 @@
 #include "sync/internal_api/public/network_resources.h"
 #include "sync/internal_api/public/sessions/model_neutral_state.h"
 #include "sync/internal_api/public/sessions/type_debug_info_observer.h"
+#include "sync/internal_api/public/shared_model_type_processor.h"
 #include "sync/internal_api/public/shutdown_reason.h"
 #include "sync/internal_api/public/sync_encryption_handler.h"
 #include "sync/internal_api/public/util/experiments.h"
@@ -89,7 +94,6 @@
 #include "sync/internal_api/public/read_transaction.h"
 #endif
 
-using browser_sync::ProfileSyncServiceStartBehavior;
 using browser_sync::SessionsSyncManager;
 using browser_sync::SyncBackendHost;
 using sync_driver::ChangeProcessor;
@@ -97,6 +101,7 @@ using sync_driver::DataTypeController;
 using sync_driver::DataTypeManager;
 using sync_driver::DataTypeStatusTable;
 using sync_driver::DeviceInfoSyncService;
+using sync_driver_v2::DeviceInfoService;
 using syncer::ModelType;
 using syncer::ModelTypeSet;
 using syncer::JsBackend;
@@ -107,6 +112,8 @@ using syncer::ModelSafeRoutingInfo;
 using syncer::SyncCredentials;
 using syncer::SyncProtocolError;
 using syncer::WeakHandle;
+using syncer_v2::ModelTypeStore;
+using syncer_v2::SharedModelTypeProcessor;
 
 typedef GoogleServiceAuthError AuthError;
 
@@ -143,6 +150,8 @@ const net::BackoffEntry::Policy kRequestAccessTokenBackoffPolicy = {
 
 static const base::FilePath::CharType kSyncDataFolderName[] =
     FILE_PATH_LITERAL("Sync Data");
+static const base::FilePath::CharType kLevelDBFolderName[] =
+    FILE_PATH_LITERAL("LevelDB");
 
 namespace {
 
@@ -171,6 +180,7 @@ ProfileSyncService::InitParams::InitParams(InitParams&& other)  // NOLINT
     : sync_client(std::move(other.sync_client)),
       signin_wrapper(std::move(other.signin_wrapper)),
       oauth2_token_service(other.oauth2_token_service),
+      gaia_cookie_manager_service(other.gaia_cookie_manager_service),
       start_behavior(other.start_behavior),
       network_time_update_callback(
           std::move(other.network_time_update_callback)),
@@ -216,8 +226,11 @@ ProfileSyncService::ProfileSyncService(InitParams init_params)
       request_access_token_backoff_(&kRequestAccessTokenBackoffPolicy),
       connection_status_(syncer::CONNECTION_NOT_ATTEMPTED),
       last_get_token_error_(GoogleServiceAuthError::AuthErrorNone()),
+      gaia_cookie_manager_service_(init_params.gaia_cookie_manager_service),
       network_resources_(new syncer::HttpBridgeNetworkResources),
       start_behavior_(init_params.start_behavior),
+      directory_path_(
+          base_directory_.Append(base::FilePath(kSyncDataFolderName))),
       catch_up_configure_in_progress_(false),
       passphrase_prompt_triggered_by_version_(false),
       weak_factory_(this),
@@ -237,6 +250,8 @@ ProfileSyncService::ProfileSyncService(InitParams init_params)
 }
 
 ProfileSyncService::~ProfileSyncService() {
+  if (gaia_cookie_manager_service_)
+    gaia_cookie_manager_service_->RemoveObserver(this);
   sync_prefs_.RemoveSyncPrefObserver(this);
   // Shutdown() should have been called before destruction.
   CHECK(!backend_initialized_);
@@ -250,7 +265,8 @@ void ProfileSyncService::Initialize() {
   sync_client_->Initialize();
 
   startup_controller_.reset(new browser_sync::StartupController(
-      start_behavior_, oauth2_token_service_, &sync_prefs_, signin_.get(),
+      &sync_prefs_,
+      base::Bind(&ProfileSyncService::CanBackendStart, base::Unretained(this)),
       base::Bind(&ProfileSyncService::StartUpSlowBackendComponents,
                  startup_controller_weak_factory_.GetWeakPtr())));
   scoped_ptr<browser_sync::LocalSessionEventRouter> router(
@@ -269,14 +285,37 @@ void ProfileSyncService::Initialize() {
       base::Bind(&ProfileSyncService::TriggerRefresh,
                  weak_factory_.GetWeakPtr(),
                  syncer::ModelTypeSet(syncer::SESSIONS))));
-  device_info_sync_service_.reset(
-      new DeviceInfoSyncService(local_device_.get()));
+
+  if (channel_ == version_info::Channel::UNKNOWN &&
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kSyncEnableUSSDeviceInfo)) {
+    scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
+        blocking_pool_->GetSequencedTaskRunnerWithShutdownBehavior(
+            blocking_pool_->GetSequenceToken(),
+            base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
+    // TODO(skym): Stop creating leveldb files when signed out.
+    // TODO(skym): Verify using AsUTF8Unsafe is okay here. Should work as long
+    // as the Local State file is guaranteed to be UTF-8.
+    device_info_service_.reset(new DeviceInfoService(
+        local_device_.get(),
+        base::Bind(&ModelTypeStore::CreateStore,
+                   directory_path_.Append(base::FilePath(kLevelDBFolderName))
+                       .AsUTF8Unsafe(),
+                   blocking_task_runner),
+        base::Bind(&SharedModelTypeProcessor::CreateAsChangeProcessor)));
+  } else {
+    device_info_sync_service_.reset(
+        new DeviceInfoSyncService(local_device_.get()));
+  }
 
   sync_driver::SyncApiComponentFactory::RegisterDataTypesMethod
       register_platform_types_callback =
           sync_client_->GetRegisterPlatformTypesCallback();
   sync_client_->GetSyncApiComponentFactory()->RegisterDataTypes(
       this, register_platform_types_callback);
+
+  if (gaia_cookie_manager_service_)
+    gaia_cookie_manager_service_->AddObserver(this);
 
   // We clear this here (vs Shutdown) because we want to remember that an error
   // happened on shutdown so we can display details (message, location) about it
@@ -428,7 +467,12 @@ browser_sync::FaviconCache* ProfileSyncService::GetFaviconCache() {
 
 sync_driver::DeviceInfoTracker* ProfileSyncService::GetDeviceInfoTracker()
     const {
-  return device_info_sync_service_.get();
+  // One of the two should always be non-null after initialization is done.
+  if (device_info_service_) {
+    return device_info_service_.get();
+  } else {
+    return device_info_sync_service_.get();
+  }
 }
 
 sync_driver::LocalDeviceInfoProvider*
@@ -576,12 +620,8 @@ void ProfileSyncService::OnDataTypeRequestsSyncStartup(
 }
 
 void ProfileSyncService::StartUpSlowBackendComponents() {
-  base::FilePath sync_folder = base::FilePath(kSyncDataFolderName);
-
   invalidation::InvalidationService* invalidator =
       sync_client_->GetInvalidationService();
-
-  directory_path_ = base_directory_.Append(sync_folder);
 
   backend_.reset(
       sync_client_->GetSyncApiComponentFactory()->CreateSyncBackendHost(
@@ -815,6 +855,9 @@ bool ProfileSyncService::IsFirstSetupComplete() const {
 
 void ProfileSyncService::SetFirstSetupComplete() {
   sync_prefs_.SetFirstSetupComplete();
+  if (IsBackendInitialized()) {
+    ReconfigureDatatypeManager();
+  }
 }
 
 void ProfileSyncService::UpdateLastSyncedTime() {
@@ -932,20 +975,20 @@ void ProfileSyncService::PostBackendInitialization() {
     UpdateLastSyncedTime();
   }
 
-  if (startup_controller_->auto_start_enabled() && !IsFirstSetupInProgress()) {
-    // Backend is initialized but we're not in sync setup, so this must be an
-    // autostart - mark our sync setup as completed and we'll start syncing
-    // below.
+  // Auto-start means IsFirstSetupComplete gets set automatically.
+  if (start_behavior_ == AUTO_START && !IsFirstSetupComplete()) {
+    // This will trigger a configure if it completes setup.
     SetFirstSetupComplete();
+  } else if (CanConfigureDataTypes()) {
+    ConfigureDataTypeManager();
   }
 
-  // Check IsFirstSetupComplete() before NotifyObservers() to avoid spurious
-  // data type configuration because observer may flag setup as complete and
-  // trigger data type configuration.
-  if (IsFirstSetupComplete()) {
-    ConfigureDataTypeManager();
-  } else {
-    DCHECK(IsFirstSetupInProgress());
+  // Check for a cookie jar mismatch.
+  std::vector<gaia::ListedAccount> accounts;
+  GoogleServiceAuthError error(GoogleServiceAuthError::NONE);
+  if (gaia_cookie_manager_service_ &&
+      gaia_cookie_manager_service_->ListAccounts(&accounts)) {
+    OnGaiaAccountsInCookieUpdated(accounts, error);
   }
 
   NotifyObservers();
@@ -1024,9 +1067,6 @@ void ProfileSyncService::OnExperimentsChanged(
   sync_client_->GetPrefService()->SetBoolean(
       invalidation::prefs::kInvalidationServiceUseGCMChannel,
       experiments.gcm_invalidations_enabled);
-  sync_client_->GetPrefService()->SetBoolean(
-      autofill::prefs::kAutofillWalletSyncExperimentEnabled,
-      experiments.wallet_sync_enabled);
 }
 
 void ProfileSyncService::UpdateAuthErrorState(const AuthError& error) {
@@ -1237,15 +1277,11 @@ void ProfileSyncService::OnActionableError(const SyncProtocolError& error) {
                                   syncer::STOP_SOURCE_LIMIT);
       }
       RequestStop(CLEAR_DATA);
-#if !defined(OS_CHROMEOS)
-      // On desktop Chrome, sign out the user after a dashboard clear.
-      // Skip sign out on ChromeOS/Android.
-      if (!startup_controller_->auto_start_enabled()) {
-        SigninManager* signin_manager =
-            static_cast<SigninManager*>(signin_->GetOriginal());
-        signin_manager->SignOut(signin_metrics::SERVER_FORCED_DISABLE,
-                                signin_metrics::SignoutDelete::IGNORE_METRIC);
-      }
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+      // On desktop and iOS, sign out the user after a dashboard clear.
+      static_cast<SigninManager*>(signin_->GetOriginal())
+          ->SignOut(signin_metrics::SERVER_FORCED_DISABLE,
+                    signin_metrics::SignoutDelete::IGNORE_METRIC);
 #endif
       break;
     case syncer::STOP_SYNC_FOR_DISABLED_ACCOUNT:
@@ -1455,10 +1491,6 @@ std::string ProfileSyncService::GetBackendInitializationStateString() const {
   return startup_controller_->GetBackendInitializationStateString();
 }
 
-bool ProfileSyncService::auto_start_enabled() const {
-  return startup_controller_->auto_start_enabled();
-}
-
 bool ProfileSyncService::IsSetupInProgress() const {
   return startup_controller_->IsSetupInProgress();
 }
@@ -1480,6 +1512,10 @@ const AuthError& ProfileSyncService::GetAuthError() const {
   return last_auth_error_;
 }
 
+bool ProfileSyncService::CanConfigureDataTypes() const {
+  return IsFirstSetupComplete() && !IsSetupInProgress();
+}
+
 bool ProfileSyncService::IsFirstSetupInProgress() const {
   return !IsFirstSetupComplete() && startup_controller_->IsSetupInProgress();
 }
@@ -1489,7 +1525,7 @@ void ProfileSyncService::SetSetupInProgress(bool setup_in_progress) {
   if (startup_controller_->IsSetupInProgress() == setup_in_progress)
     return;
 
-  startup_controller_->set_setup_in_progress(setup_in_progress);
+  startup_controller_->SetSetupInProgress(setup_in_progress);
   if (!setup_in_progress && IsBackendInitialized())
     ReconfigureDatatypeManager();
   NotifyObservers();
@@ -1512,6 +1548,12 @@ void ProfileSyncService::TriggerRefresh(const syncer::ModelTypeSet& types) {
 bool ProfileSyncService::IsSignedIn() const {
   // Sync is logged in if there is a non-empty effective account id.
   return !signin_->GetAccountIdToUse().empty();
+}
+
+bool ProfileSyncService::CanBackendStart() const {
+  return CanSyncStart() && oauth2_token_service_ &&
+         oauth2_token_service_->RefreshTokenIsAvailable(
+             signin_->GetAccountIdToUse());
 }
 
 bool ProfileSyncService::IsBackendInitialized() const {
@@ -1738,7 +1780,7 @@ void ProfileSyncService::ConfigureDataTypeManager() {
   // start syncing data until the user is done configuring encryption options,
   // etc. ReconfigureDatatypeManager() will get called again once the UI calls
   // SetSetupInProgress(false).
-  if (startup_controller_->IsSetupInProgress())
+  if (!CanConfigureDataTypes())
     return;
 
   bool restart = false;
@@ -2074,6 +2116,27 @@ void ProfileSyncService::GoogleSignedOut(const std::string& account_id,
   RequestStop(CLEAR_DATA);
 }
 
+void ProfileSyncService::OnGaiaAccountsInCookieUpdated(
+    const std::vector<gaia::ListedAccount>& accounts,
+    const GoogleServiceAuthError& error) {
+  if (!IsBackendInitialized())
+    return;
+
+  bool cookie_mismatch = true;
+  std::string account_id = signin_->GetAccountIdToUse();
+
+  // Iterate through list of accounts, looking for current sync account.
+  for (const auto& account : accounts) {
+    if (account.gaia_id == account_id) {
+      cookie_mismatch = false;
+      break;
+    }
+  }
+
+  DVLOG(1) << "Cookie jar mismatch: " << cookie_mismatch;
+  backend_->OnCookieJarChanged(cookie_mismatch);
+}
+
 void ProfileSyncService::AddObserver(
     sync_driver::SyncServiceObserver* observer) {
   observers_.AddObserver(observer);
@@ -2353,6 +2416,10 @@ syncer::SyncableService* ProfileSyncService::GetSessionsSyncableService() {
 
 syncer::SyncableService* ProfileSyncService::GetDeviceInfoSyncableService() {
   return device_info_sync_service_.get();
+}
+
+syncer_v2::ModelTypeService* ProfileSyncService::GetDeviceInfoService() {
+  return device_info_service_.get();
 }
 
 sync_driver::SyncService::SyncTokenStatus

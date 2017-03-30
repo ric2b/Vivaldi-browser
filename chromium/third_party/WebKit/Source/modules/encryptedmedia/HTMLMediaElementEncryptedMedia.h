@@ -24,9 +24,8 @@ class ScriptState;
 class WebContentDecryptionModule;
 class WebMediaPlayer;
 
-class MODULES_EXPORT HTMLMediaElementEncryptedMedia final : public NoBaseWillBeGarbageCollectedFinalized<HTMLMediaElementEncryptedMedia>, public WillBeHeapSupplement<HTMLMediaElement>, public WebMediaPlayerEncryptedMediaClient {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(HTMLMediaElementEncryptedMedia);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(HTMLMediaElementEncryptedMedia);
+class MODULES_EXPORT HTMLMediaElementEncryptedMedia final : public GarbageCollectedFinalized<HTMLMediaElementEncryptedMedia>, public Supplement<HTMLMediaElement>, public WebMediaPlayerEncryptedMediaClient {
+    USING_GARBAGE_COLLECTED_MIXIN(HTMLMediaElementEncryptedMedia);
 public:
     static MediaKeys* mediaKeys(HTMLMediaElement&);
     static ScriptPromise setMediaKeys(ScriptState*, HTMLMediaElement&, MediaKeys*);
@@ -51,14 +50,20 @@ private:
     HTMLMediaElementEncryptedMedia(HTMLMediaElement&);
 
     // EventTarget
-    bool setAttributeEventListener(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>);
+    bool setAttributeEventListener(const AtomicString& eventType, EventListener*);
     EventListener* getAttributeEventListener(const AtomicString& eventType);
 
-    RawPtrWillBeMember<HTMLMediaElement> m_mediaElement;
+    Member<HTMLMediaElement> m_mediaElement;
 
+    // Internal values specified by the EME spec:
+    // http://w3c.github.io/encrypted-media/#idl-def-HTMLMediaElement
+    // The following internal values are added to the HTMLMediaElement:
+    // - waiting for key, which shall have a boolean value
+    // - attaching media keys, which shall have a boolean value
     bool m_isWaitingForKey;
+    bool m_isAttachingMediaKeys;
 
-    PersistentWillBeMember<MediaKeys> m_mediaKeys;
+    Member<MediaKeys> m_mediaKeys;
 };
 
 } // namespace blink

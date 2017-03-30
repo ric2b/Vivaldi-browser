@@ -35,7 +35,6 @@
 #include "extensions/renderer/v8_helpers.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebScopedMicrotaskSuppression.h"
 #include "third_party/WebKit/public/web/WebScopedUserGesture.h"
 #include "third_party/WebKit/public/web/WebScopedWindowFocusAllowedIndicator.h"
 #include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
@@ -449,15 +448,16 @@ void MessagingBindings::DispatchOnConnect(
     const ExtensionMsg_ExternalConnectionInfo& info,
     const std::string& tls_channel_id,
     content::RenderFrame* restrict_to_render_frame) {
+  int routing_id = restrict_to_render_frame
+                       ? restrict_to_render_frame->GetRoutingID()
+                       : MSG_ROUTING_NONE;
   bool port_created = false;
   context_set.ForEach(
       info.target_id, restrict_to_render_frame,
       base::Bind(&DispatchOnConnectToScriptContext, target_port_id,
                  channel_name, &source, info, tls_channel_id, &port_created));
+  // Note: |restrict_to_render_frame| may have been deleted at this point!
 
-  int routing_id = restrict_to_render_frame
-                       ? restrict_to_render_frame->GetRoutingID()
-                       : MSG_ROUTING_NONE;
   if (port_created) {
     content::RenderThread::Get()->Send(
         new ExtensionHostMsg_OpenMessagePort(routing_id, target_port_id));

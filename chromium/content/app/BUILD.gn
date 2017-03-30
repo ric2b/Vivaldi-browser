@@ -31,6 +31,8 @@ content_app_deps = [
   "//content/public/common:common_sources",
   "//content/public/common:mojo_bindings",
   "//crypto",
+  "//mojo/shell/public/interfaces",
+  "//mojo/edk/system",
   "//ui/base",
   "//ui/gfx",
   "//ui/gfx/geometry",
@@ -42,24 +44,11 @@ if (is_win) {
   content_app_sources -= [ "content_main.cc" ]
   content_app_deps += [
     "//content/public/android:jni",
+    "//device/usb",
     "//device/vibration",
     "//skia",
     "//third_party/android_tools:cpu_features",
     "//ui/android",
-  ]
-}
-
-if (is_ios) {
-  content_app_sources -= [
-    "content_main.cc",
-    "mojo/mojo_init.cc",
-    "mojo/mojo_init.h",
-  ]
-} else {
-  content_app_deps += [
-    "//mojo/shell/public/interfaces",
-    "//mojo/edk/system",
-    "//mojo/environment:chromium",
   ]
 }
 
@@ -78,11 +67,24 @@ if (!is_multi_dll_chrome) {
 source_set("both") {
   # Only the public target should depend on this. All other targets (even
   # internal content ones) should depend on the public one.
-  visibility = [ "//content/public/app:*" ]
+  visibility = [
+    ":both_for_content_tests",  # See top of //content/BUILD.gn for why.
+    "//content/public/app:*",
+  ]
 
   sources = content_app_sources
   configs += content_app_extra_configs
   deps = content_app_deps
+}
+
+# See comment at the top of //content/BUILD.gn for how this works.
+group("both_for_content_tests") {
+  visibility = [ "//content/test/*" ]
+  if (!is_component_build) {
+    public_deps = [
+      ":both",
+    ]
+  }
 }
 
 if (is_multi_dll_chrome) {

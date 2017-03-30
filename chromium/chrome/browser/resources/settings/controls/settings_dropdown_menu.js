@@ -25,9 +25,6 @@ var DropdownMenuOptionList;
  *
  *   <settings-dropdown-menu pref="{{prefs.foo}}">
  *   </settings-dropdown-menu>
- *
- * @group Chrome Settings Elements
- * @element settings-dropdown-menu
  */
 Polymer({
   is: 'settings-dropdown-menu',
@@ -43,15 +40,6 @@ Polymer({
     menuOptions: {
       type: Array,
       value: function() { return []; },
-    },
-
-    /**
-     * A single Preference object being tracked.
-     * @type {!chrome.settingsPrivate.PrefObject|undefined}
-     */
-    pref: {
-      type: Object,
-      notify: true,
     },
 
     /** Whether the dropdown menu should be disabled. */
@@ -88,6 +76,7 @@ Polymer({
 
   behaviors: [
     I18nBehavior,
+    PrefControlBehavior,
   ],
 
   observers: [

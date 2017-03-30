@@ -4,10 +4,10 @@
 
 #include "chrome/browser/extensions/api/activity_log_private/activity_log_private_api.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/activity_log/activity_action_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -27,7 +27,7 @@ using api::activity_log_private::ExtensionActivity;
 typedef testing::Test ActivityLogApiUnitTest;
 
 TEST_F(ActivityLogApiUnitTest, ConvertChromeApiAction) {
-  scoped_ptr<base::ListValue> args(new base::ListValue());
+  std::unique_ptr<base::ListValue> args(new base::ListValue());
   args->Set(0, new base::StringValue("hello"));
   args->Set(1, new base::StringValue("world"));
   scoped_refptr<Action> action(new Action(kExtensionId,
@@ -35,17 +35,17 @@ TEST_F(ActivityLogApiUnitTest, ConvertChromeApiAction) {
                                           Action::ACTION_API_CALL,
                                           kApiCall));
   action->set_args(std::move(args));
-  scoped_ptr<ExtensionActivity> result = action->ConvertToExtensionActivity();
+  ExtensionActivity result = action->ConvertToExtensionActivity();
   ASSERT_EQ(api::activity_log_private::EXTENSION_ACTIVITY_TYPE_API_CALL,
-            result->activity_type);
-  ASSERT_EQ(kExtensionId, *(result->extension_id.get()));
-  ASSERT_EQ(kApiCall, *(result->api_call.get()));
-  ASSERT_EQ(kArgs, *(result->args.get()));
-  ASSERT_EQ(NULL, result->activity_id.get());
+            result.activity_type);
+  ASSERT_EQ(kExtensionId, *(result.extension_id.get()));
+  ASSERT_EQ(kApiCall, *(result.api_call.get()));
+  ASSERT_EQ(kArgs, *(result.args.get()));
+  ASSERT_EQ(NULL, result.activity_id.get());
 }
 
 TEST_F(ActivityLogApiUnitTest, ConvertDomAction) {
-  scoped_ptr<base::ListValue> args(new base::ListValue());
+  std::unique_ptr<base::ListValue> args(new base::ListValue());
   args->Set(0, new base::StringValue("hello"));
   args->Set(1, new base::StringValue("world"));
   scoped_refptr<Action> action(new Action(kExtensionId,
@@ -60,17 +60,17 @@ TEST_F(ActivityLogApiUnitTest, ConvertDomAction) {
                                       DomActionType::INSERTED);
   action->mutable_other()->SetBoolean(activity_log_constants::kActionPrerender,
                                       false);
-  scoped_ptr<ExtensionActivity> result = action->ConvertToExtensionActivity();
-  ASSERT_EQ(kExtensionId, *(result->extension_id.get()));
-  ASSERT_EQ("http://www.google.com/", *(result->page_url.get()));
-  ASSERT_EQ("Title", *(result->page_title.get()));
-  ASSERT_EQ(kApiCall, *(result->api_call.get()));
-  ASSERT_EQ(kArgs, *(result->args.get()));
-  scoped_ptr<ExtensionActivity::Other> other(std::move(result->other));
+  ExtensionActivity result = action->ConvertToExtensionActivity();
+  ASSERT_EQ(kExtensionId, *(result.extension_id.get()));
+  ASSERT_EQ("http://www.google.com/", *(result.page_url.get()));
+  ASSERT_EQ("Title", *(result.page_title.get()));
+  ASSERT_EQ(kApiCall, *(result.api_call.get()));
+  ASSERT_EQ(kArgs, *(result.args.get()));
+  std::unique_ptr<ExtensionActivity::Other> other(std::move(result.other));
   ASSERT_EQ(api::activity_log_private::EXTENSION_ACTIVITY_DOM_VERB_INSERTED,
             other->dom_verb);
   ASSERT_TRUE(other->prerender.get());
-  ASSERT_EQ("12345", *(result->activity_id.get()));
+  ASSERT_EQ("12345", *(result.activity_id.get()));
 }
 
 }  // namespace extensions

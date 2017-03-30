@@ -97,9 +97,9 @@ public:
         FetchInitiatorInfo initiatorInfo;
         initiatorInfo.name = FetchInitiatorTypeNames::beacon;
 
-        // Leak the loader, since it will kill itself as soon as it receives a response.
-        RefPtrWillBeRawPtr<BeaconLoader> loader = adoptRefWillBeNoop(new BeaconLoader(frame, request, initiatorInfo, AllowStoredCredentials));
-        loader->ref();
+        // The loader keeps itself alive until it receives a response and disposes itself.
+        BeaconLoader* loader = new BeaconLoader(frame, request, initiatorInfo, AllowStoredCredentials);
+        ASSERT_UNUSED(loader, loader);
         return true;
     }
 };
@@ -130,7 +130,7 @@ bool BeaconLoader::sendBeacon(LocalFrame* frame, int allowance, const KURL& beac
 
 BeaconLoader::BeaconLoader(LocalFrame* frame, ResourceRequest& request, const FetchInitiatorInfo& initiatorInfo, StoredCredentials credentialsAllowed)
     : PingLoader(frame, request, initiatorInfo, credentialsAllowed)
-    , m_beaconOrigin(frame->document()->securityOrigin())
+    , m_beaconOrigin(frame->document()->getSecurityOrigin())
 {
 }
 
@@ -229,7 +229,7 @@ bool Beacon::serialize(FormData* data, ResourceRequest& request, int allowance, 
     if (allowance > 0 && static_cast<unsigned long long>(allowance) < entitySize)
         return false;
 
-    AtomicString contentType = AtomicString("multipart/form-data; boundary=", AtomicString::ConstructFromLiteral) + entityBody->boundary().data();
+    AtomicString contentType = AtomicString("multipart/form-data; boundary=") + entityBody->boundary().data();
     request.setHTTPBody(entityBody.release());
     request.setHTTPContentType(contentType);
 

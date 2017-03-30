@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/webui/options/password_manager_handler.h"
 
 #include "base/bind.h"
-#include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -32,7 +32,7 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/origin_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -45,9 +45,10 @@ namespace options {
 namespace {
 // The following constants should be synchronized with the constants in
 // chrome/browser/resources/options/password_manager_list.js.
-const char kOriginField[] = "origin";
-const char kShownUrlField[] = "shownUrl";
+const char kUrlField[] = "url";
+const char kShownOriginField[] = "shownOrigin";
 const char kIsAndroidUriField[] = "isAndroidUri";
+const char kIsClickable[] = "isClickable";
 const char kIsSecureField[] = "isSecure";
 const char kUsernameField[] = "username";
 const char kPasswordField[] = "password";
@@ -56,18 +57,22 @@ const char kFederationField[] = "federation";
 // Copies from |form| to |entry| the origin, shown origin, whether the origin is
 // Android URI, and whether the origin is secure.
 void CopyOriginInfoOfPasswordForm(const autofill::PasswordForm& form,
-                                  const std::string& languages,
                                   base::DictionaryValue* entry) {
-  entry->SetString(
-      kOriginField,
-      url_formatter::FormatUrl(
-          form.origin, languages, url_formatter::kFormatUrlOmitNothing,
-          net::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
   bool is_android_uri = false;
-  entry->SetString(kShownUrlField, password_manager::GetShownOrigin(
-                                       form, languages, &is_android_uri));
+  bool origin_is_clickable = false;
+  GURL link_url;
+  entry->SetString(
+      kShownOriginField,
+      password_manager::GetShownOriginAndLinkUrl(
+          form, &is_android_uri, &link_url, &origin_is_clickable));
+  DCHECK(link_url.is_valid());
+  entry->SetString(
+      kUrlField, url_formatter::FormatUrl(
+                     link_url, url_formatter::kFormatUrlOmitNothing,
+                     net::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
   entry->SetBoolean(kIsAndroidUriField, is_android_uri);
-  entry->SetBoolean(kIsSecureField, content::IsOriginSecure(form.origin));
+  entry->SetBoolean(kIsClickable, origin_is_clickable);
+  entry->SetBoolean(kIsSecureField, content::IsOriginSecure(link_url));
 }
 
 }  // namespace
@@ -92,6 +97,7 @@ void PasswordManagerHandler::GetLocalizedValues(
   DCHECK(localized_strings);
 
   static const OptionsStringResource resources[] = {
+      {"androidUriSuffix", IDS_PASSWORDS_ANDROID_URI_SUFFIX},
       {"autoSigninTitle", IDS_PASSWORDS_AUTO_SIGNIN_TITLE},
       {"autoSigninDescription", IDS_PASSWORDS_AUTO_SIGNIN_DESCRIPTION},
       {"savedPasswordsTitle", IDS_PASSWORD_MANAGER_SHOW_PASSWORDS_TAB_TITLE},
@@ -149,8 +155,7 @@ void PasswordManagerHandler::GetLocalizedValues(
   localized_strings->SetBoolean("disableShowPasswords", disable_show_passwords);
   localized_strings->SetBoolean(
       "enableCredentialManagerAPI",
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableCredentialManagerAPI));
+      base::FeatureList::IsEnabled(features::kCredentialManagementAPI));
 }
 
 void PasswordManagerHandler::RegisterMessages() {
@@ -222,24 +227,18 @@ void PasswordManagerHandler::HandleUpdatePasswordLists(
 }
 
 void PasswordManagerHandler::SetPasswordList(
-    const std::vector<scoped_ptr<autofill::PasswordForm>>& password_list,
-    bool show_passwords) {
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list) {
   base::ListValue entries;
-  languages_ = GetProfile()->GetPrefs()->GetString(prefs::kAcceptLanguages);
   base::string16 placeholder(base::ASCIIToUTF16("        "));
   for (const auto& saved_password : password_list) {
-    scoped_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
-    CopyOriginInfoOfPasswordForm(*saved_password, languages_, entry.get());
+    std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
+    CopyOriginInfoOfPasswordForm(*saved_password, entry.get());
 
     entry->SetString(kUsernameField, saved_password->username_value);
-    if (show_passwords) {
-      entry->SetString(kPasswordField, saved_password->password_value);
-    } else {
-      // Use a placeholder value with the same length as the password.
-      entry->SetString(
-          kPasswordField,
-          base::string16(saved_password->password_value.length(), ' '));
-    }
+    // Use a placeholder value with the same length as the password.
+    entry->SetString(
+        kPasswordField,
+        base::string16(saved_password->password_value.length(), ' '));
     if (!saved_password->federation_origin.unique()) {
       entry->SetString(
           kFederationField,
@@ -256,12 +255,12 @@ void PasswordManagerHandler::SetPasswordList(
 }
 
 void PasswordManagerHandler::SetPasswordExceptionList(
-    const std::vector<scoped_ptr<autofill::PasswordForm>>&
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>&
         password_exception_list) {
   base::ListValue entries;
   for (const auto& exception : password_exception_list) {
-    scoped_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
-    CopyOriginInfoOfPasswordForm(*exception, languages_, entry.get());
+    std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
+    CopyOriginInfoOfPasswordForm(*exception,  entry.get());
     entries.Append(entry.release());
   }
 

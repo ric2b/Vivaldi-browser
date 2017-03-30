@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/values.h"
@@ -27,8 +26,6 @@
 #include "content/public/common/window_container_type.h"
 #include "net/base/mime_util.h"
 #include "net/cookies/canonical_cookie.h"
-#include "net/url_request/url_request_interceptor.h"
-#include "net/url_request/url_request_job_factory.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "ui/base/window_open_disposition.h"
@@ -110,8 +107,6 @@ class ExternalVideoSurfaceContainer;
 class LocationProvider;
 class MediaObserver;
 class NavigationHandle;
-class NavigatorConnectContext;
-class NavigatorConnectServiceFactory;
 class PlatformNotificationService;
 class PresentationServiceDelegate;
 class QuotaPermissionContext;
@@ -129,16 +124,6 @@ struct MainFunctionParams;
 struct OpenURLParams;
 struct Referrer;
 struct WebPreferences;
-
-// A mapping from the scheme name to the protocol handler that services its
-// content.
-typedef std::map<
-  std::string, linked_ptr<net::URLRequestJobFactory::ProtocolHandler> >
-    ProtocolHandlerMap;
-
-// A scoped vector of protocol interceptors.
-typedef ScopedVector<net::URLRequestInterceptor>
-    URLRequestInterceptorScopedVector;
 
 // Embedder API (or SPI) for participating in browser logic, to be implemented
 // by the client of the content browser. See ChromeContentBrowserClient for the
@@ -167,6 +152,12 @@ class CONTENT_EXPORT ContentBrowserClient {
       const tracked_objects::Location& from_here,
       const scoped_refptr<base::TaskRunner>& task_runner,
       const base::Closure& task);
+
+  // Allows the embedder to indicate whether it considers startup to be
+  // complete. May be called on any thread. This should be called on a one-off
+  // basis; if you need to poll this function constantly, use the above
+  // PostAfterStartupTask() API instead.
+  virtual bool IsBrowserStartupComplete();
 
   // If content creates the WebContentsView implementation, it will ask the
   // embedder to return an (optional) delegate to customize it. The view will
@@ -230,24 +221,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // chrome://downloads used more than chrome://bookmarks?). Only internal (e.g.
   // chrome://) URLs are logged. Returns whether the URL was actually logged.
   virtual bool LogWebUIUrl(const GURL& web_ui_url) const;
-
-  // Creates the main net::URLRequestContextGetter. Should only be called once
-  // per ContentBrowserClient object.
-  // TODO(ajwong): Remove once http://crbug.com/159193 is resolved.
-  virtual net::URLRequestContextGetter* CreateRequestContext(
-      BrowserContext* browser_context,
-      ProtocolHandlerMap* protocol_handlers,
-      URLRequestInterceptorScopedVector request_interceptors);
-
-  // Creates the net::URLRequestContextGetter for a StoragePartition. Should
-  // only be called once per partition_path per ContentBrowserClient object.
-  // TODO(ajwong): Remove once http://crbug.com/159193 is resolved.
-  virtual net::URLRequestContextGetter* CreateRequestContextForStoragePartition(
-      BrowserContext* browser_context,
-      const base::FilePath& partition_path,
-      bool in_memory,
-      ProtocolHandlerMap* protocol_handlers,
-      URLRequestInterceptorScopedVector request_interceptors);
 
   // Returns whether a specified URL is handled by the embedder's internal
   // protocol handlers.
@@ -375,17 +348,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // This is called on the IO thread.
   virtual bool AllowSaveLocalState(ResourceContext* context);
 
-  // Allow the embedder to control if access to web database by a shared worker
-  // is allowed. |render_frame| is a vector of pairs of
-  // RenderProcessID/RenderFrameID of RenderFrame that are using this worker.
-  // This is called on the IO thread.
-  virtual bool AllowWorkerDatabase(
-      const GURL& url,
-      const base::string16& name,
-      const base::string16& display_name,
-      ResourceContext* context,
-      const std::vector<std::pair<int, int> >& render_frames);
-
   // Allow the embedder to control if access to file system by a shared worker
   // is allowed.
   // This is called on the IO thread.
@@ -418,9 +380,30 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Allow the embedder to control whether we can use Web Bluetooth.
   // TODO(crbug.com/589228): Replace this with a use of the permission system.
-  virtual bool AllowWebBluetooth(content::BrowserContext* browser_context,
-                                 const url::Origin& requesting_origin,
-                                 const url::Origin& embedding_origin);
+  enum class AllowWebBluetoothResult {
+    ALLOW,
+    BLOCK_POLICY,
+    BLOCK_GLOBALLY_DISABLED,
+  };
+  virtual AllowWebBluetoothResult AllowWebBluetooth(
+      content::BrowserContext* browser_context,
+      const url::Origin& requesting_origin,
+      const url::Origin& embedding_origin);
+
+  // Returns a blacklist of UUIDs that have restrictions when accessed
+  // via Web Bluetooth. Parsed by BluetoothBlacklist::Add().
+  //
+  // The blacklist string must be a comma-separated list of UUID:exclusion
+  // pairs. The pairs may be separated by whitespace. Pair components are
+  // colon-separated and must not have whitespace around the colon.
+  //
+  // UUIDs are a string that BluetoothUUID can parse (See BluetoothUUID
+  // constructor comment). Exclusion values are a single lower case character
+  // string "e", "r", or "w" for EXCLUDE, EXCLUDE_READS, or EXCLUDE_WRITES.
+  //
+  // Example:
+  // "1812:e, 00001800-0000-1000-8000-00805f9b34fb:w, ignored:1, alsoignored."
+  virtual std::string GetWebBluetoothBlacklist();
 
   // Allow the embedder to override the request context based on the URL for
   // certain operations, like cookie access. Returns nullptr to indicate the
@@ -639,9 +622,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // It's valid to return nullptr.
   virtual TracingDelegate* GetTracingDelegate();
 
-  // Returns true if NPAPI plugins are enabled.
-  virtual bool IsNPAPIEnabled();
-
   // Returns true if plugin referred to by the url can use
   // pp::FileIO::RequestOSFileHandle.
   virtual bool IsPluginAllowedToCallRequestOSFileHandle(
@@ -670,14 +650,14 @@ class CONTENT_EXPORT ContentBrowserClient {
       RenderFrameHost* render_frame_host) {}
 
   using StaticMojoApplicationMap =
-      std::map<GURL, base::Callback<scoped_ptr<mojo::ShellClient>()>>;
+      std::map<std::string, base::Callback<scoped_ptr<mojo::ShellClient>()>>;
 
   // Registers Mojo applications to be loaded in the browser process by the
   // browser's global Mojo shell.
   virtual void RegisterInProcessMojoApplications(
       StaticMojoApplicationMap* apps) {}
 
-  using OutOfProcessMojoApplicationMap = std::map<GURL, base::string16>;
+  using OutOfProcessMojoApplicationMap = std::map<std::string, base::string16>;
 
   // Registers Mojo applications to be loaded out of the browser process, in a
   // sandboxed utility process. The value of each map entry should be the
@@ -694,11 +674,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // use this method when that approach does not work.
   virtual void RegisterUnsandboxedOutOfProcessMojoApplications(
       OutOfProcessMojoApplicationMap* apps) {}
-
-  // Registers additional navigator.connect service factories available in a
-  // particular NavigatorConnectContext.
-  virtual void GetAdditionalNavigatorConnectServices(
-      const scoped_refptr<NavigatorConnectContext>& context) {}
 
   // Allows to override the visibility state of a RenderFrameHost.
   // |visibility_state| should not be null. It will only be set if needed.

@@ -8,6 +8,7 @@
 #include "core/dom/SecurityContext.h"
 #include "core/dom/SpaceSplitString.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "platform/Crypto.h"
 #include "platform/ParsingUtilities.h"
@@ -47,19 +48,19 @@ CSPDirectiveList::CSPDirectiveList(ContentSecurityPolicy* policy, ContentSecurit
     , m_headerSource(source)
     , m_reportOnly(false)
     , m_hasSandboxPolicy(false)
-    , m_hasSuboriginPolicy(false)
     , m_reflectedXSSDisposition(ReflectedXSSUnset)
     , m_didSetReferrerPolicy(false)
     , m_referrerPolicy(ReferrerPolicyDefault)
     , m_strictMixedContentCheckingEnforced(false)
     , m_upgradeInsecureRequests(false)
+    , m_treatAsPublicAddress(false)
 {
     m_reportOnly = type == ContentSecurityPolicyHeaderTypeReport;
 }
 
-PassOwnPtr<CSPDirectiveList> CSPDirectiveList::create(ContentSecurityPolicy* policy, const UChar* begin, const UChar* end, ContentSecurityPolicyHeaderType type, ContentSecurityPolicyHeaderSource source)
+CSPDirectiveList* CSPDirectiveList::create(ContentSecurityPolicy* policy, const UChar* begin, const UChar* end, ContentSecurityPolicyHeaderType type, ContentSecurityPolicyHeaderSource source)
 {
-    OwnPtr<CSPDirectiveList> directives = adoptPtr(new CSPDirectiveList(policy, type, source));
+    CSPDirectiveList* directives = new CSPDirectiveList(policy, type, source);
     directives->parse(begin, end);
 
     if (!directives->checkEval(directives->operativeDirective(directives->m_scriptSrc.get()))) {
@@ -67,10 +68,10 @@ PassOwnPtr<CSPDirectiveList> CSPDirectiveList::create(ContentSecurityPolicy* pol
         directives->setEvalDisabledErrorMessage(message);
     }
 
-    if (directives->isReportOnly() && directives->reportEndpoints().isEmpty())
+    if (directives->isReportOnly() && source != ContentSecurityPolicyHeaderSourceMeta && directives->reportEndpoints().isEmpty())
         policy->reportMissingReportURI(String(begin, end - begin));
 
-    return directives.release();
+    return directives;
 }
 
 void CSPDirectiveList::reportViolation(const String& directiveText, const String& effectiveDirective, const String& consoleMessage, const KURL& blockedURL) const
@@ -102,9 +103,9 @@ void CSPDirectiveList::reportViolationWithState(const String& directiveText, con
     // never get thrown in report-only mode because the caller won't see
     // a violation.)
     if (m_reportOnly || exceptionStatus == ContentSecurityPolicy::WillNotThrowException) {
-        RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, reportMessage);
+        ConsoleMessage* consoleMessage = ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, reportMessage);
         consoleMessage->setScriptState(scriptState);
-        m_policy->logToConsole(consoleMessage.release());
+        m_policy->logToConsole(consoleMessage);
     }
     m_policy->reportViolation(directiveText, effectiveDirective, message, blockedURL, m_reportEndpoints, m_header, ContentSecurityPolicy::EvalViolation);
 }
@@ -156,7 +157,7 @@ bool CSPDirectiveList::checkAncestors(SourceListDirective* directive, LocalFrame
         //
         // TODO(mkwst): Move this check up into the browser process.  See
         // https://crbug.com/555418.
-        KURL url(KURL(), current->securityContext()->securityOrigin()->toString());
+        KURL url(KURL(), current->securityContext()->getSecurityOrigin()->toString());
         if (!directive->allows(url, ContentSecurityPolicy::DidNotRedirect))
             return false;
     }
@@ -541,6 +542,13 @@ void CSPDirectiveList::parseReportURI(const String& name, const String& value)
         return;
     }
 
+    // Remove report-uri in meta policies, per https://www.w3.org/TR/CSP2/#delivery-html-meta-element.
+    if (m_headerSource == ContentSecurityPolicyHeaderSourceMeta) {
+        UseCounter::count(m_policy->document(), UseCounter::InvalidReportUriDirectiveInMetaCSP);
+        m_policy->reportInvalidDirectiveInMeta(name);
+        return;
+    }
+
     Vector<UChar> characters;
     value.appendTo(characters);
 
@@ -562,17 +570,31 @@ void CSPDirectiveList::parseReportURI(const String& name, const String& value)
 
 
 template<class CSPDirectiveType>
-void CSPDirectiveList::setCSPDirective(const String& name, const String& value, OwnPtr<CSPDirectiveType>& directive)
+void CSPDirectiveList::setCSPDirective(const String& name, const String& value, Member<CSPDirectiveType>& directive)
 {
     if (directive) {
         m_policy->reportDuplicateDirective(name);
         return;
     }
-    directive = adoptPtr(new CSPDirectiveType(name, value, m_policy));
+
+    // Remove frame-ancestors directives in meta policies, per https://www.w3.org/TR/CSP2/#delivery-html-meta-element.
+    if (m_headerSource == ContentSecurityPolicyHeaderSourceMeta && name == ContentSecurityPolicy::FrameAncestors) {
+        UseCounter::count(m_policy->document(), UseCounter::InvalidFrameAncestorsDirectiveInMetaCSP);
+        m_policy->reportInvalidDirectiveInMeta(name);
+        return;
+    }
+
+    directive = new CSPDirectiveType(name, value, m_policy);
 }
 
 void CSPDirectiveList::applySandboxPolicy(const String& name, const String& sandboxPolicy)
 {
+    // Remove sandbox directives in meta policies, per https://www.w3.org/TR/CSP2/#delivery-html-meta-element.
+    if (m_headerSource == ContentSecurityPolicyHeaderSourceMeta) {
+        UseCounter::count(m_policy->document(), UseCounter::InvalidSandboxDirectiveInMetaCSP);
+        m_policy->reportInvalidDirectiveInMeta(name);
+        return;
+    }
     if (m_reportOnly) {
         m_policy->reportInvalidInReportOnly(name);
         return;
@@ -587,6 +609,22 @@ void CSPDirectiveList::applySandboxPolicy(const String& name, const String& sand
     m_policy->enforceSandboxFlags(parseSandboxPolicy(policyTokens, invalidTokens));
     if (!invalidTokens.isNull())
         m_policy->reportInvalidSandboxFlags(invalidTokens);
+}
+
+void CSPDirectiveList::treatAsPublicAddress(const String& name, const String& value)
+{
+    if (m_reportOnly) {
+        m_policy->reportInvalidInReportOnly(name);
+        return;
+    }
+    if (m_treatAsPublicAddress) {
+        m_policy->reportDuplicateDirective(name);
+        return;
+    }
+    m_treatAsPublicAddress = true;
+    m_policy->treatAsPublicAddress();
+    if (!value.isEmpty())
+        m_policy->reportValueForEmptyDirective(name, value);
 }
 
 void CSPDirectiveList::enforceStrictMixedContentChecking(const String& name, const String& value)
@@ -620,24 +658,6 @@ void CSPDirectiveList::enableInsecureRequestsUpgrade(const String& name, const S
     m_policy->setInsecureRequestsPolicy(SecurityContext::InsecureRequestsUpgrade);
     if (!value.isEmpty())
         m_policy->reportValueForEmptyDirective(name, value);
-}
-
-void CSPDirectiveList::applySuboriginPolicy(const String& name, const String& suboriginPolicy)
-{
-    ASSERT(RuntimeEnabledFeatures::suboriginsEnabled());
-    if (m_headerSource == ContentSecurityPolicyHeaderSourceMeta) {
-        m_policy->reportSuboriginInMeta(suboriginPolicy);
-        return;
-    }
-
-    if (m_hasSuboriginPolicy) {
-        m_policy->reportDuplicateDirective(name);
-        return;
-    }
-    m_hasSuboriginPolicy = true;
-    String suboriginName = parseSuboriginName(suboriginPolicy);
-    if (!suboriginName.isNull())
-        m_policy->enforceSuborigin(suboriginName);
 }
 
 void CSPDirectiveList::parseReflectedXSS(const String& name, const String& value)
@@ -734,38 +754,6 @@ void CSPDirectiveList::parseReferrer(const String& name, const String& value)
     m_policy->reportInvalidReferrer(value);
 }
 
-String CSPDirectiveList::parseSuboriginName(const String& policy)
-{
-    Vector<UChar> characters;
-    policy.appendTo(characters);
-
-    const UChar* position = characters.data();
-    const UChar* end = position + characters.size();
-
-    // Parse the name of the suborigin (no spaces, single string)
-    skipWhile<UChar, isASCIISpace>(position, end);
-    if (position == end) {
-        m_policy->reportInvalidSuboriginFlags("No suborigin name specified.");
-        return String();
-    }
-
-    const UChar* begin = position;
-
-    skipWhile<UChar, isASCIIAlphanumericOrHyphen>(position, end);
-    if (position != end && !isASCIISpace(*position)) {
-        m_policy->reportInvalidSuboriginFlags("Invalid character \'" + String(position, 1) + "\' in suborigin.");
-        return String();
-    }
-    size_t length = position - begin;
-    skipWhile<UChar, isASCIISpace>(position, end);
-    if (position != end) {
-        m_policy->reportInvalidSuboriginFlags("Whitespace is not allowed in suborigin names.");
-        return String();
-    }
-
-    return String(begin, length);
-}
-
 void CSPDirectiveList::addDirective(const String& name, const String& value)
 {
     ASSERT(!name.isEmpty());
@@ -819,11 +807,31 @@ void CSPDirectiveList::addDirective(const String& name, const String& value)
         enforceStrictMixedContentChecking(name, value);
     } else if (equalIgnoringCase(name, ContentSecurityPolicy::ManifestSrc)) {
         setCSPDirective<SourceListDirective>(name, value, m_manifestSrc);
-    } else if (RuntimeEnabledFeatures::suboriginsEnabled() && equalIgnoringCase(name, ContentSecurityPolicy::Suborigin)) {
-        applySuboriginPolicy(name, value);
+    } else if (equalIgnoringCase(name, ContentSecurityPolicy::TreatAsPublicAddress)) {
+        treatAsPublicAddress(name, value);
     } else {
         m_policy->reportUnsupportedDirective(name);
     }
+}
+
+DEFINE_TRACE(CSPDirectiveList)
+{
+    visitor->trace(m_policy);
+    visitor->trace(m_pluginTypes);
+    visitor->trace(m_baseURI);
+    visitor->trace(m_childSrc);
+    visitor->trace(m_connectSrc);
+    visitor->trace(m_defaultSrc);
+    visitor->trace(m_fontSrc);
+    visitor->trace(m_formAction);
+    visitor->trace(m_frameAncestors);
+    visitor->trace(m_frameSrc);
+    visitor->trace(m_imgSrc);
+    visitor->trace(m_mediaSrc);
+    visitor->trace(m_manifestSrc);
+    visitor->trace(m_objectSrc);
+    visitor->trace(m_scriptSrc);
+    visitor->trace(m_styleSrc);
 }
 
 

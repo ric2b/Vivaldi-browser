@@ -13,6 +13,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/free_deleter.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -33,10 +34,15 @@ typedef base::Callback<void(const std::string&,
                             scoped_ptr<char, base::FreeDeleter>)>
     LoadKeymapCallback;
 
-KeyboardCode AlphanumericKeyboardCode(base::char16 character) {
+KeyboardCode AlphanumericKeyboardCode(xkb_keysym_t xkb_keysym,
+                                      base::char16 character) {
   // Plain ASCII letters and digits map directly to VKEY values.
-  if ((character >= '0') && (character <= '9'))
-    return static_cast<KeyboardCode>(VKEY_0 + character - '0');
+  if ((character >= '0') && (character <= '9')) {
+    int zero = ((xkb_keysym >= XKB_KEY_KP_0) && (xkb_keysym <= XKB_KEY_KP_9))
+                   ? VKEY_NUMPAD0
+                   : VKEY_0;
+    return static_cast<KeyboardCode>(zero + character - '0');
+  }
   if ((character >= 'a') && (character <= 'z'))
     return static_cast<KeyboardCode>(VKEY_A + character - 'a');
   if ((character >= 'A') && (character <= 'Z'))
@@ -686,8 +692,15 @@ bool XkbKeyboardLayoutEngine::SetCurrentLayoutByName(
       true);
   return true;
 #else
-  // NOTIMPLEMENTED();
-  return false;
+  // Required by ozone-wayland (at least) for non ChromeOS builds. See
+  // http://xkbcommon.org/doc/current/md_doc_quick-guide.html for further info.
+  xkb_keymap* keymap = xkb_keymap_new_from_string(
+      xkb_context_.get(), layout_name.c_str(), XKB_KEYMAP_FORMAT_TEXT_V1,
+      XKB_KEYMAP_COMPILE_NO_FLAGS);
+  if (!keymap)
+    return false;
+  SetKeymap(keymap);
+  return true;
 #endif  // defined(OS_CHROMEOS)
 }
 
@@ -776,7 +789,7 @@ bool XkbKeyboardLayoutEngine::Lookup(DomCode dom_code,
   }
 
   *dom_key = DomKey::FromCharacter(character);
-  *key_code = AlphanumericKeyboardCode(character);
+  *key_code = AlphanumericKeyboardCode(xkb_keysym, character);
   if (*key_code == VKEY_UNKNOWN) {
     *key_code = DifficultKeyboardCode(dom_code, flags, xkb_keycode, xkb_flags,
                                       xkb_keysym, character);
@@ -877,7 +890,7 @@ KeyboardCode XkbKeyboardLayoutEngine::DifficultKeyboardCode(
     return NonPrintableDomKeyToKeyboardCode(plain_key);
 
   // Plain ASCII letters and digits map directly to VKEY values.
-  KeyboardCode key_code = AlphanumericKeyboardCode(plain_character);
+  KeyboardCode key_code = AlphanumericKeyboardCode(xkb_keysym, plain_character);
   if (key_code != VKEY_UNKNOWN)
     return key_code;
 

@@ -261,8 +261,6 @@ BASE_EXPORT extern NSString* const
     NSWindowDidChangeBackingPropertiesNotification;
 BASE_EXPORT extern NSString* const CBAdvertisementDataServiceDataKey;
 BASE_EXPORT extern NSString* const CBAdvertisementDataServiceUUIDsKey;
-BASE_EXPORT extern NSString* const
-    NSPreferredScrollerStyleDidChangeNotification;
 #endif  // MAC_OS_X_VERSION_10_7
 
 #if !defined(MAC_OS_X_VERSION_10_9) || \
@@ -276,6 +274,7 @@ BASE_EXPORT extern NSString* const CBAdvertisementDataIsConnectable;
     MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_10
 BASE_EXPORT extern NSString* const NSUserActivityTypeBrowsingWeb;
 BASE_EXPORT extern NSString* const NSAppearanceNameVibrantDark;
+BASE_EXPORT extern NSString* const NSAppearanceNameVibrantLight;
 #endif  // MAC_OS_X_VERSION_10_10
 }  // extern "C"
 
@@ -292,7 +291,6 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantDark;
     MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_7
 
 @interface NSEvent (LionSDK)
-@property(readonly) NSInteger stage;
 + (BOOL)isSwipeTrackingFromScrollEventsEnabled;
 - (NSEventPhase)momentumPhase;
 - (NSEventPhase)phase;
@@ -346,6 +344,10 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantDark;
 @interface NSView (LionSDK)
 - (NSSize)convertSizeFromBacking:(NSSize)size;
 - (void)setWantsBestResolutionOpenGLSurface:(BOOL)flag;
+- (NSDraggingSession*)beginDraggingSessionWithItems:(NSArray*)items
+                                              event:(NSEvent*)event
+                                             source:
+                                                 (id<NSDraggingSource>)source;
 @end
 
 @interface NSObject (ICCameraDeviceDelegateLionSDK)
@@ -354,10 +356,6 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantDark;
                   error:(NSError*)error
                 options:(NSDictionary*)options
             contextInfo:(void*)contextInfo;
-@end
-
-@interface NSScroller (LionSDK)
-+ (NSInteger)preferredScrollerStyle;
 @end
 
 @interface CWInterface (LionSDK)
@@ -481,6 +479,7 @@ BASE_EXPORT extern "C" void NSAccessibilityPostNotificationWithUserInfo(
 
 @interface NSView (MavericksSDK)
 - (void)setCanDrawSubviewsIntoLayer:(BOOL)flag;
+- (void)setAppearance:(NSAppearance*)appearance;
 - (NSAppearance*)effectiveAppearance;
 @end
 
@@ -495,6 +494,12 @@ BASE_EXPORT extern "C" void NSAccessibilityPostNotificationWithUserInfo(
 @interface CBPeripheral (MavericksSDK)
 @property(readonly, nonatomic) NSUUID* identifier;
 @end
+
+@interface NSVisualEffectView (MavericksSDK)
+- (void)setState:(NSVisualEffectState)state;
+@end
+
+@class NSVisualEffectView;
 
 #endif  // MAC_OS_X_VERSION_10_9
 
@@ -523,6 +528,14 @@ BASE_EXPORT extern "C" void NSAccessibilityPostNotificationWithUserInfo(
 - (void)viewDidLoad;
 @end
 
+@interface NSWindow (YosemiteSDK)
+- (void)setTitlebarAppearsTransparent:(BOOL)flag;
+@end
+
+@interface NSProcessInfo (YosemiteSDK)
+@property(readonly) NSOperatingSystemVersion operatingSystemVersion;
+@end
+
 #endif  // MAC_OS_X_VERSION_10_10
 
 // Once Chrome no longer supports OSX 10.10.2, everything within this
@@ -530,39 +543,15 @@ BASE_EXPORT extern "C" void NSAccessibilityPostNotificationWithUserInfo(
 #if !defined(MAC_OS_X_VERSION_10_10_3) || \
     MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_10_3
 
+@interface NSEvent (YosemiteSDK)
+@property(readonly) NSInteger stage;
+@end
+
 @interface NSView (YosemiteSDK)
 - (void)setPressureConfiguration:(NSPressureConfiguration*)aConfiguration;
 @end
 
 #endif  // MAC_OS_X_VERSION_10_10
-
-// ----------------------------------------------------------------------------
-// Chrome uses -[CWNetwork securityMode] and -[CWNetwork rssi] on OSX 10.6. The
-// former method relies on the enum CWSecurityMode which was removed in the OSX
-// 10.9 SDK. In order for Chrome to compile against an OSX 10.9+ SDK, Chrome
-// must define this enum. Chrome must also declare these methods.
-//
-// These declarations and definitions will not be necessary once Chrome no
-// longer runs on OSX 10.6.
-// ----------------------------------------------------------------------------
-#if defined(MAC_OS_X_VERSION_10_9) && \
-    MAC_OS_X_VERSION_MIN_REQUIRED <= MAC_OS_X_VERSION_10_6
-typedef enum {
-  kCWSecurityModeOpen = 0,
-  kCWSecurityModeWEP,
-  kCWSecurityModeWPA_PSK,
-  kCWSecurityModeWPA2_PSK,
-  kCWSecurityModeWPA_Enterprise,
-  kCWSecurityModeWPA2_Enterprise,
-  kCWSecurityModeWPS,
-  kCWSecurityModeDynamicWEP
-} CWSecurityMode;
-
-@interface CWNetwork (SnowLeopardSDK)
-@property(readonly) NSNumber* rssi;
-@property(readonly) NSNumber* securityMode;
-@end
-#endif
 
 // ----------------------------------------------------------------------------
 // The symbol for kCWSSIDDidChangeNotification is available in the

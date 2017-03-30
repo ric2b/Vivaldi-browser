@@ -29,6 +29,9 @@ const struct QuicErrorMapping {
   { net::QUIC_INVALID_STREAM_DATA, "quic.invalid.stream_data" },
   // STREAM frame data is not encrypted.
   { net::QUIC_UNENCRYPTED_STREAM_DATA, "quic.unencrypted.stream_data" },
+  // Attempt to send unencrypted STREAM frame.
+  { net::QUIC_ATTEMPT_TO_SEND_UNENCRYPTED_STREAM_DATA,
+    "quic.attempt.to.unencrypted.stream.data" },
   // FEC frame data is not encrypted.
   { net::QUIC_UNENCRYPTED_FEC_DATA, "quic.unencrypted.fec.data" },
   // RST_STREAM frame data is malformed.
@@ -87,14 +90,16 @@ const struct QuicErrorMapping {
   // We hit our overall connection timeout
   { net::QUIC_HANDSHAKE_TIMEOUT,
    "quic.connection.handshake_timed_out" },
-  // There was an error encountered migrating addresses
+  // There was an error encountered migrating addresses.
   { net::QUIC_ERROR_MIGRATING_ADDRESS, "quic.error_migrating_address" },
+  // There was an error encountered migrating port only.
+  { net::QUIC_ERROR_MIGRATING_PORT, "quic.error_migrating_port" },
   // There was an error while writing to the socket.
   { net::QUIC_PACKET_WRITE_ERROR, "quic.packet.write_error" },
   // There was an error while reading from the socket.
   { net::QUIC_PACKET_READ_ERROR, "quic.packet.read_error" },
   // We received a STREAM_FRAME with no data and no fin flag set.
-  { net::QUIC_INVALID_STREAM_FRAME, "quic.invalid_stream_frame" },
+  { net::QUIC_EMPTY_STREAM_FRAME_NO_FIN, "quic.empty_stream_frame_no_fin" },
   // We received invalid data on the headers stream.
   { net::QUIC_INVALID_HEADERS_STREAM_DATA, "quic.invalid_headers_stream_data" },
   // The peer received too much data, violating flow control.
@@ -124,7 +129,8 @@ const struct QuicErrorMapping {
   { net::QUIC_TIMEOUTS_WITH_OPEN_STREAMS, "quic.timeouts_with_open_streams" },
   // Closed because we failed to serialize a packet.
   { net::QUIC_FAILED_TO_SERIALIZE_PACKET, "quic.failed_to_serialize_packet" },
-
+  // QUIC timed out after too many RTOs.
+  { net::QUIC_TOO_MANY_RTOS, "quic.too_many_rtos" },
   // Crypto errors.
 
   // Hanshake failed.
@@ -213,6 +219,12 @@ const struct QuicErrorMapping {
   // migrate to.
   { net::QUIC_CONNECTION_MIGRATION_NO_NEW_NETWORK,
     "quic.connection_migration_no_new_network" },
+  // Network changed, but connection had one or more non-migratable streams.
+  { net::QUIC_CONNECTION_MIGRATION_NON_MIGRATABLE_STREAM,
+    "quic.connection_migration_non_migratable_stream" },
+  // Stream frame overlaps with buffered data.
+  { net::QUIC_OVERLAPPING_STREAM_DATA,
+    "quic.overlapping_stream_data" },
 
   // No error. Used as bound while iterating.
   { net::QUIC_LAST_ERROR, "quic.last_error"}

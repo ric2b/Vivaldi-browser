@@ -49,6 +49,9 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
 
   static bool IsSupported(const std::string& content_type, const GURL& url);
 
+  void StartWaitingForSeek(base::TimeDelta seek_time) override;
+  void CancelPendingSeek(base::TimeDelta seek_time) override;
+
  private:
   // Creates and configures DemuxerStream with Audio stream if it is possible.
   CoreAudioDemuxerStream* CreateAudioDemuxerStream();

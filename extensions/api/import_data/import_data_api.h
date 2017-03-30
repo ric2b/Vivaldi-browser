@@ -187,8 +187,7 @@ class ImportDataStartImportFunction : public ImporterApiFunction,
 
 
 class ImportDataSetVivaldiAsDefaultBrowserFunction :
-    public ChromeAsyncExtensionFunction ,
-    public shell_integration::DefaultWebClientObserver {
+    public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.setVivaldiAsDefaultBrowser",
                               IMPORTDATA_SETVIVALDIDEFAULT)
@@ -199,20 +198,22 @@ class ImportDataSetVivaldiAsDefaultBrowserFunction :
   scoped_refptr<shell_integration::DefaultBrowserWorker>
       default_browser_worker_;
 
-  // shell_integration::DefaultWebClientObserver implementation.
-  void SetDefaultWebClientUIState(
-    shell_integration::DefaultWebClientUIState state) override;
+  void OnDefaultBrowserWorkerFinished(
+    shell_integration::DefaultWebClientState state);
 
   // ExtensionFunction:
   bool RunAsync() override;
 
  private:
+  // Used to get WeakPtr to self for use on the UI thread.
+  base::WeakPtrFactory<ImportDataSetVivaldiAsDefaultBrowserFunction>
+        weak_ptr_factory_;
+
   DISALLOW_COPY_AND_ASSIGN(ImportDataSetVivaldiAsDefaultBrowserFunction);
 };
 
 class ImportDataIsVivaldiDefaultBrowserFunction
-    : public ChromeAsyncExtensionFunction,
-      public shell_integration::DefaultWebClientObserver {
+    : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.isVivaldiDefaultBrowser",
                               IMPORTDATA_ISVIVALDIDEFAULT)
@@ -224,14 +225,17 @@ class ImportDataIsVivaldiDefaultBrowserFunction
   scoped_refptr<shell_integration::DefaultBrowserWorker>
       default_browser_worker_;
 
-  // shell_integration::DefaultWebClientObserver implementation.
-  void SetDefaultWebClientUIState(
-     shell_integration::DefaultWebClientUIState state) override;
+  void OnDefaultBrowserWorkerFinished(
+    shell_integration::DefaultWebClientState state);
 
   // ExtensionFunction:
   bool RunAsync() override;
 
  private:
+  // Used to get WeakPtr to self for use on the UI thread.
+  base::WeakPtrFactory<ImportDataIsVivaldiDefaultBrowserFunction>
+        weak_ptr_factory_;
+
   DISALLOW_COPY_AND_ASSIGN(ImportDataIsVivaldiDefaultBrowserFunction);
 };
 

@@ -4,8 +4,6 @@
 
 #include "net/base/network_interfaces_win.h"
 
-#pragma comment(lib, "iphlpapi.lib")
-
 #include <algorithm>
 
 #include "base/files/file_path.h"
@@ -54,20 +52,20 @@ GetConnectionAttributes() {
   scoped_ptr<WLAN_CONNECTION_ATTRIBUTES, internal::WlanApiDeleter>
       wlan_connection_attributes;
   if (!wlanapi.initialized)
-    return wlan_connection_attributes.Pass();
+    return wlan_connection_attributes;
 
   internal::WlanHandle client;
   DWORD cur_version = 0;
   const DWORD kMaxClientVersion = 2;
   DWORD result = wlanapi.OpenHandle(kMaxClientVersion, &cur_version, &client);
   if (result != ERROR_SUCCESS)
-    return wlan_connection_attributes.Pass();
+    return wlan_connection_attributes;
 
   WLAN_INTERFACE_INFO_LIST* interface_list_ptr = NULL;
   result =
       wlanapi.enum_interfaces_func(client.Get(), NULL, &interface_list_ptr);
   if (result != ERROR_SUCCESS)
-    return wlan_connection_attributes.Pass();
+    return wlan_connection_attributes;
   scoped_ptr<WLAN_INTERFACE_INFO_LIST, internal::WlanApiDeleter> interface_list(
       interface_list_ptr);
 
@@ -82,7 +80,7 @@ GetConnectionAttributes() {
   }
 
   if (info == NULL)
-    return wlan_connection_attributes.Pass();
+    return wlan_connection_attributes;
 
   WLAN_CONNECTION_ATTRIBUTES* conn_info_ptr = nullptr;
   DWORD conn_info_size = 0;
@@ -96,7 +94,7 @@ GetConnectionAttributes() {
     DCHECK(conn_info_ptr);
   else
     wlan_connection_attributes.reset();
-  return wlan_connection_attributes.Pass();
+  return wlan_connection_attributes;
 }
 
 }  // namespace
@@ -182,9 +180,9 @@ bool GetNetworkListImpl(NetworkInterfaceList* networks,
                   network_endpoint.FromSockAddr(
                       prefix->Address.lpSockaddr,
                       prefix->Address.iSockaddrLength) &&
-                  IPNumberMatchesPrefix(endpoint.address().bytes(),
-                                        network_endpoint.address().bytes(),
-                                        prefix->PrefixLength)) {
+                  IPAddressMatchesPrefix(endpoint.address(),
+                                         network_endpoint.address(),
+                                         prefix->PrefixLength)) {
                 prefix_length =
                     std::max<size_t>(prefix_length, prefix->PrefixLength);
               }
@@ -214,12 +212,11 @@ bool GetNetworkListImpl(NetworkInterfaceList* networks,
               ip_address_attributes |= IP_ADDRESS_ATTRIBUTE_DEPRECATED;
             }
           }
-          networks->push_back(
-              NetworkInterface(adapter->AdapterName,
-                               base::SysWideToNativeMB(adapter->FriendlyName),
-                               index, GetNetworkInterfaceType(adapter->IfType),
-                               endpoint.address().bytes(), prefix_length,
-                               ip_address_attributes));
+          networks->push_back(NetworkInterface(
+              adapter->AdapterName,
+              base::SysWideToNativeMB(adapter->FriendlyName), index,
+              GetNetworkInterfaceType(adapter->IfType), endpoint.address(),
+              prefix_length, ip_address_attributes));
         }
       }
     }

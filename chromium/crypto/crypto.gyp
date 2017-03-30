@@ -48,11 +48,6 @@
             'mock_apple_keychain.h',
           ],
         }],
-        [ 'OS == "android"', {
-          'dependencies': [
-            '../build/android/ndk.gyp:cpu_features',
-          ],
-        }],
         [ 'os_bsd==1', {
           'link_settings': {
             'libraries': [
@@ -128,6 +123,7 @@
             'sources!': [
               'aead_openssl.cc',
               'aead_openssl.h',
+              'auto_cbb.h',
               'curve25519_openssl.cc',
               'ec_private_key_openssl.cc',
               'ec_signature_creator_openssl.cc',

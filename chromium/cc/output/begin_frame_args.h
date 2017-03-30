@@ -7,6 +7,7 @@
 
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "cc/base/cc_export.h"
@@ -82,7 +83,7 @@ struct CC_EXPORT BeginFrameArgs {
 
   bool IsValid() const { return interval >= base::TimeDelta(); }
 
-  scoped_refptr<base::trace_event::ConvertableToTraceFormat> AsValue() const;
+  scoped_ptr<base::trace_event::ConvertableToTraceFormat> AsValue() const;
   void AsValueInto(base::trace_event::TracedValue* dict) const;
 
   void ToProtobuf(proto::BeginFrameArgs* proto) const;

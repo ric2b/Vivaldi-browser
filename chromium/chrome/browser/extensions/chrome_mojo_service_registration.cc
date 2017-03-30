@@ -15,7 +15,7 @@
 
 #if defined(ENABLE_MEDIA_ROUTER)
 #include "chrome/browser/media/router/media_router_feature.h"
-#include "chrome/browser/media/router/media_router_mojo_impl.h"
+#include "chrome/browser/media/router/mojo/media_router_mojo_impl.h"
 #endif
 
 namespace extensions {
@@ -33,7 +33,7 @@ void RegisterChromeServicesForFrame(content::RenderFrameHost* render_frame_host,
             APIPermission::kMediaRouterPrivate)) {
       render_frame_host->GetServiceRegistry()->AddService(
           base::Bind(media_router::MediaRouterMojoImpl::BindToRequest,
-                     extension->id(), context));
+                     extension, context));
     }
   }
 #endif  // defined(ENABLE_MEDIA_ROUTER)

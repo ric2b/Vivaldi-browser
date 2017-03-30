@@ -8,6 +8,8 @@
 from datetime import datetime
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -19,6 +21,7 @@ _SRC_DIR = os.path.abspath(os.path.join(
 sys.path.append(os.path.join(_SRC_DIR, 'build', 'android'))
 from pylib import constants
 
+import device_setup
 import options
 
 
@@ -35,6 +38,26 @@ OUT_DIRECTORY = os.getenv('CR_OUT_FULL', os.path.join(
 # Default cachetool binary location.
 CACHETOOL_BIN_PATH = os.path.join(OUT_DIRECTORY, 'cachetool')
 
+# Default content_decoder_tool binary location.
+CONTENT_DECODER_TOOL_BIN_PATH = os.path.join(OUT_DIRECTORY,
+                                             'content_decoder_tool')
+
+# Regex used to parse HTTP headers line by line.
+HEADER_PARSING_REGEX = re.compile(r'^(?P<header>\S+):(?P<value>.*)$')
+
+
+def _EnsureCleanCacheDirectory(directory_dest_path):
+  """Ensure that a cache directory is created and clean.
+
+  Args:
+    directory_dest_path: Path of the cache directory to ensure cleanliness.
+  """
+  if os.path.isdir(directory_dest_path):
+    shutil.rmtree(directory_dest_path)
+  elif not os.path.isdir(os.path.dirname(directory_dest_path)):
+    os.makedirs(os.path.dirname(directory_dest_path))
+  assert not os.path.exists(directory_dest_path)
+
 
 def _RemoteCacheDirectory():
   """Returns the path of the cache directory's on the remote device."""
@@ -42,19 +65,8 @@ def _RemoteCacheDirectory():
       constants.PACKAGE_INFO[OPTIONS.chrome_package_name].package)
 
 
-def _UpdateTimestampFromAdbStat(filename, stat):
-  os.utime(filename, (stat.st_time, stat.st_time))
-
-
 def _AdbShell(adb, cmd):
   adb.Shell(subprocess.list2cmdline(cmd))
-
-
-def _AdbUtime(adb, filename, timestamp):
-  """Adb equivalent of os.utime(filename, (timestamp, timestamp))
-  """
-  touch_stamp = datetime.fromtimestamp(timestamp).strftime('%Y%m%d.%H%M%S')
-  _AdbShell(adb, ['touch', '-t', touch_stamp, filename])
 
 
 def PullBrowserCache(device):
@@ -70,8 +82,16 @@ def PullBrowserCache(device):
   _REAL_INDEX_FILE_NAME = 'the-real-index'
 
   remote_cache_directory = _RemoteCacheDirectory()
-  print remote_cache_directory
   save_target = tempfile.mkdtemp(suffix='.cache')
+
+  # Pull the cache recursively.
+  device.adb.Pull(remote_cache_directory, save_target)
+
+  # Update the modification time stamp on the local cache copy.
+  def _UpdateTimestampFromAdbStat(filename, stat):
+    assert os.path.exists(filename)
+    os.utime(filename, (stat.st_time, stat.st_time))
+
   for filename, stat in device.adb.Ls(remote_cache_directory):
     if filename == '..':
       continue
@@ -80,7 +100,6 @@ def PullBrowserCache(device):
       continue
     original_file = os.path.join(remote_cache_directory, filename)
     saved_file = os.path.join(save_target, filename)
-    device.adb.Pull(original_file, saved_file)
     _UpdateTimestampFromAdbStat(saved_file, stat)
     if filename == _INDEX_DIRECTORY_NAME:
       # The directory containing the index was pulled recursively, update the
@@ -118,11 +137,16 @@ def PushBrowserCache(device, local_cache_path):
   # Push cache content.
   device.adb.Push(local_cache_path, remote_cache_directory)
 
+  # Command queue to touch all files with correct timestamp.
+  command_queue = []
+
   # Walk through the local cache to update mtime on the device.
   def MirrorMtime(local_path):
     cache_relative_path = os.path.relpath(local_path, start=local_cache_path)
     remote_path = os.path.join(remote_cache_directory, cache_relative_path)
-    _AdbUtime(device.adb, remote_path, os.stat(local_path).st_mtime)
+    timestamp = os.stat(local_path).st_mtime
+    touch_stamp = datetime.fromtimestamp(timestamp).strftime('%Y%m%d.%H%M%S')
+    command_queue.append(['touch', '-t', touch_stamp, remote_path])
 
   for local_directory_path, dirnames, filenames in os.walk(
         local_cache_path, topdown=False):
@@ -131,6 +155,8 @@ def PushBrowserCache(device, local_cache_path):
     for dirname in dirnames:
       MirrorMtime(os.path.join(local_directory_path, dirname))
   MirrorMtime(local_cache_path)
+
+  device_setup.DeviceSubmitShellCommandQueue(device, command_queue)
 
 
 def ZipDirectoryContent(root_directory_path, archive_dest_path):
@@ -177,9 +203,7 @@ def UnzipDirectoryContent(archive_path, directory_dest_path):
     archive_path: Archive's path to unzip.
     directory_dest_path: Directory destination path.
   """
-  if not os.path.exists(directory_dest_path):
-    os.makedirs(directory_dest_path)
-
+  _EnsureCleanCacheDirectory(directory_dest_path)
   with zipfile.ZipFile(archive_path) as zip_input:
     timestamps = None
     for file_archive_name in zip_input.namelist():
@@ -200,6 +224,19 @@ def UnzipDirectoryContent(archive_path, directory_dest_path):
       if not os.path.exists(output_path):
         os.makedirs(output_path)
       os.utime(output_path, (stats['atime'], stats['mtime']))
+
+
+def CopyCacheDirectory(directory_src_path, directory_dest_path):
+  """Copies a cache directory recursively with all the directories'
+  timestamps preserved.
+
+  Args:
+    directory_src_path: Path of the cache directory source.
+    directory_dest_path: Path of the cache directory destination.
+  """
+  assert os.path.isdir(directory_src_path)
+  _EnsureCleanCacheDirectory(directory_dest_path)
+  shutil.copytree(directory_src_path, directory_dest_path)
 
 
 class CacheBackend(object):
@@ -277,19 +314,96 @@ class CacheBackend(object):
     assert process.returncode == 0
     return stdout_data
 
+  def GetDecodedContentForKey(self, key):
+    """Gets a key's decoded content.
 
-if __name__ == '__main__':
+    HTTP cache is storing into key's index stream 1 the transport layer resource
+    binary. However, the resources might be encoded using a compression
+    algorithm specified in the Content-Encoding response header. This method
+    takes care of returning decoded binary content of the resource.
+
+    Args:
+      key: The key to access the decoded content.
+
+    Returns:
+      String holding binary content.
+    """
+    response_headers = self.GetStreamForKey(key, 0)
+    content_encoding = None
+    for response_header_line in response_headers.split('\n'):
+      match = HEADER_PARSING_REGEX.match(response_header_line)
+      if not match:
+        continue
+      if match.group('header').lower() == 'content-encoding':
+        content_encoding = match.group('value')
+        break
+    encoded_content = self.GetStreamForKey(key, 1)
+    if content_encoding == None:
+      return encoded_content
+
+    cmd = [CONTENT_DECODER_TOOL_BIN_PATH]
+    cmd.extend([s.strip() for s in content_encoding.split(',')])
+    process = subprocess.Popen(cmd,
+                               stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE)
+    decoded_content, _ = process.communicate(input=encoded_content)
+    assert process.returncode == 0
+    return decoded_content
+
+
+def ApplyUrlWhitelistToCacheArchive(cache_archive_path,
+                                    whitelisted_urls,
+                                    output_cache_archive_path):
+  """Generate a new cache archive containing only whitelisted urls.
+
+  Args:
+    cache_archive_path: Path of the cache archive to apply the white listing.
+    whitelisted_urls: Set of url to keep in cache.
+    output_cache_archive_path: Destination path of cache archive containing only
+      white-listed urls.
+  """
+  cache_temp_directory = tempfile.mkdtemp(suffix='.cache')
+  try:
+    UnzipDirectoryContent(cache_archive_path, cache_temp_directory)
+    backend = CacheBackend(cache_temp_directory, 'simple')
+    cached_urls = backend.ListKeys()
+    for cached_url in cached_urls:
+      if cached_url not in whitelisted_urls:
+        backend.DeleteKey(cached_url)
+    for cached_url in backend.ListKeys():
+      assert cached_url in whitelisted_urls
+    ZipDirectoryContent(cache_temp_directory, output_cache_archive_path)
+  finally:
+    shutil.rmtree(cache_temp_directory)
+
+
+def ManualTestMain():
   import argparse
   parser = argparse.ArgumentParser(description='Tests cache back-end.')
-  parser.add_argument('cache_path', type=str)
+  parser.add_argument('cache_archive_path', type=str)
   parser.add_argument('backend_type', type=str, choices=BACKEND_TYPES)
   command_line_args = parser.parse_args()
 
+  cache_path = tempfile.mkdtemp()
+  UnzipDirectoryContent(command_line_args.cache_archive_path, cache_path)
+
   cache_backend = CacheBackend(
-      cache_directory_path=command_line_args.cache_path,
+      cache_directory_path=cache_path,
       cache_backend_type=command_line_args.backend_type)
-  keys = cache_backend.ListKeys()
-  print '{}\'s HTTP response header:'.format(keys[0])
-  print cache_backend.GetStreamForKey(keys[0], 0)
+  keys = sorted(cache_backend.ListKeys())
+  selected_key = None
+  for key in keys:
+    if key.endswith('.js'):
+      selected_key = key
+      break
+  assert selected_key
+  print '{}\'s HTTP response header:'.format(selected_key)
+  print cache_backend.GetStreamForKey(selected_key, 0)
+  print cache_backend.GetDecodedContentForKey(selected_key)
   cache_backend.DeleteKey(keys[1])
   assert keys[1] not in cache_backend.ListKeys()
+  shutil.rmtree(cache_path)
+
+
+if __name__ == '__main__':
+  ManualTestMain()

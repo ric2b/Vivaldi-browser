@@ -44,6 +44,8 @@ WebInspector.ElementsTreeOutline = function(domModel, omitRootDOMNode, selectEna
 
     this._shadowRoot = WebInspector.createShadowRootWithCoreStyles(element, "elements/elementsTreeOutline.css");
     var outlineDisclosureElement = this._shadowRoot.createChild("div", "elements-disclosure");
+    if (Runtime.experiments.isEnabled("reducedIndentation"))
+        outlineDisclosureElement.classList.add("elements-reduced-indentation");
 
     TreeOutline.call(this);
     this._element = this.element;
@@ -71,7 +73,7 @@ WebInspector.ElementsTreeOutline = function(domModel, omitRootDOMNode, selectEna
     this._visible = false;
 
     this._popoverHelper = new WebInspector.PopoverHelper(this._element, this._getPopoverAnchor.bind(this), this._showPopover.bind(this));
-    this._popoverHelper.setTimeout(0);
+    this._popoverHelper.setTimeout(0, 100);
 
     /** @type {!Map<!WebInspector.DOMNode, !WebInspector.ElementsTreeOutline.UpdateRecord>} */
     this._updateRecords = new Map();
@@ -1321,11 +1323,13 @@ WebInspector.ElementsTreeOutline.prototype = {
     {
         var visibleChildren = WebInspector.ElementsTreeElement.visibleShadowRoots(node);
 
-        if (node.importedDocument())
-            visibleChildren.push(node.importedDocument());
+        var importedDocument = node.importedDocument();
+        if (importedDocument)
+            visibleChildren.push(importedDocument);
 
-        if (node.templateContent())
-            visibleChildren.push(node.templateContent());
+        var templateContent = node.templateContent();
+        if (templateContent)
+            visibleChildren.push(templateContent);
 
         var beforePseudoElement = node.beforePseudoElement();
         if (beforePseudoElement)

@@ -84,7 +84,7 @@ public:
     bool opened();
     bool isNew() const { return m_new; }
 
-    SecurityOrigin* securityOrigin() const;
+    SecurityOrigin* getSecurityOrigin() const;
     String stringIdentifier() const;
     String displayName() const;
     unsigned long estimatedSize() const;
@@ -108,8 +108,8 @@ public:
     void closeImmediately();
     void closeDatabase();
 
-    DatabaseContext* databaseContext() const { return m_databaseContext.get(); }
-    ExecutionContext* executionContext() const;
+    DatabaseContext* getDatabaseContext() const { return m_databaseContext.get(); }
+    ExecutionContext* getExecutionContext() const;
 
 private:
     class DatabaseOpenTask;
@@ -146,9 +146,7 @@ private:
     void reportVacuumDatabaseResult(int sqliteErrorCode);
     void logErrorMessage(const String&);
     static const char* databaseInfoTableName();
-#if !LOG_DISABLED || !ERROR_DISABLED
     String databaseDebugName() const { return m_contextThreadSecurityOrigin->toString() + "::" + m_name; }
-#endif
 
     RefPtr<SecurityOrigin> m_contextThreadSecurityOrigin;
     RefPtr<SecurityOrigin> m_databaseThreadSecurityOrigin;

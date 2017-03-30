@@ -112,11 +112,46 @@ SettingsPasswordSectionBrowserTest.prototype = {
     passwordsSection.savedPasswords = passwordList;
     passwordsSection.passwordExceptions = exceptionList;
     document.body.appendChild(passwordsSection);
-
-    // Allow polymer binding to finish.
-    Polymer.dom.flush();
-
+    this.flushPasswordSection_(passwordsSection);
     return passwordsSection;
+  },
+
+  /**
+   * Helper method used to create a password editing dialog.
+   * @param {!chrome.passwordsPrivate.PasswordUiEntry} passwordItem
+   * @return {!Object}
+   * @private
+   */
+  createPasswordDialog_: function(passwordItem) {
+    var passwordDialog = document.createElement('password-edit-dialog');
+    passwordDialog.item = passwordItem;
+    document.body.appendChild(passwordDialog);
+    Polymer.dom.flush();
+    return passwordDialog;
+  },
+
+  /**
+   * Helper method used to test for a url in a list of passwords.
+   * @param {!Array<!chrome.passwordsPrivate.PasswordUiEntry>} passwordList
+   * @param {!string} url The URL that is being searched for.
+   */
+  listContainsUrl(passwordList, url) {
+    for (var i = 0; i < passwordList.length; ++i) {
+      if (passwordList[i].loginPair.originUrl == url)
+        return true;
+    }
+    return false;
+  },
+
+  /**
+   * Allow the iron-list to be sized properly.
+   * @param {!Object} passwordsSection
+   * @private
+   */
+  flushPasswordSection_: function(passwordsSection) {
+    passwordsSection.$.passwordList.notifyResize();
+    passwordsSection.$.passwordExceptionsList.notifyResize();
+    Polymer.dom.flush();
   },
 };
 
@@ -128,23 +163,100 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
 
   suite('PasswordsSection', function() {
     test('verifySavedPasswordLength', function() {
-      assertEquals(self.browsePreload, document.location.href)
+      assertEquals(self.browsePreload, document.location.href);
 
+      var passwordList = [
+        self.createPasswordItem_('site1.com', 'luigi', 1),
+        self.createPasswordItem_('longwebsite.com', 'peach', 7),
+        self.createPasswordItem_('site2.com', 'mario', 70),
+        self.createPasswordItem_('site1.com', 'peach', 11),
+        self.createPasswordItem_('google.com', 'mario', 7),
+        self.createPasswordItem_('site2.com', 'luigi', 8),
+      ];
+
+      var passwordsSection = self.createPasswordsSection_(passwordList, []);
+
+      // Assert that the data is passed into the iron list. If this fails,
+      // then other expectations will also fail.
+      assertEquals(passwordList, passwordsSection.$.passwordList.items);
+
+      self.validatePasswordList(
+          self.getIronListChildren_(passwordsSection.$.passwordList),
+          passwordList);
+    });
+
+    // Test verifies that removing a password will update the elements.
+    test('verifyPasswordListRemove', function() {
       var passwordList = [
         self.createPasswordItem_('anotherwebsite.com', 'luigi', 1),
         self.createPasswordItem_('longwebsite.com', 'peach', 7),
         self.createPasswordItem_('website.com', 'mario', 70)
       ];
 
-      var passwordSection = self.createPasswordsSection_(passwordList, []);
-
-      // Assert that the data is passed into the iron list. If this fails,
-      // then other expectations will also fail.
-      assertEquals(passwordList, passwordSection.$.passwordList.items);
+      var passwordsSection = self.createPasswordsSection_(passwordList, []);
 
       self.validatePasswordList(
-          self.getIronListChildren_(passwordSection.$.passwordList),
+          self.getIronListChildren_(passwordsSection.$.passwordList),
           passwordList);
+      // Simulate 'longwebsite.com' being removed from the list.
+      passwordsSection.splice('savedPasswords', 1, 1);
+      self.flushPasswordSection_(passwordsSection);
+
+      assertFalse(self.listContainsUrl(passwordsSection.savedPasswords,
+                                       'longwebsite.com'));
+      assertFalse(self.listContainsUrl(passwordList, 'longwebsite.com'));
+
+      self.validatePasswordList(
+          self.getIronListChildren_(passwordsSection.$.passwordList),
+          passwordList);
+    });
+
+    // Test verifies that pressing the 'remove' button will trigger a remove
+    // event. Does not actually remove any passwords.
+    test('verifyPasswordItemRemoveButton', function(done) {
+      var passwordList = [
+        self.createPasswordItem_('one', 'six', 5),
+        self.createPasswordItem_('two', 'five', 3),
+        self.createPasswordItem_('three', 'four', 1),
+        self.createPasswordItem_('four', 'three', 2),
+        self.createPasswordItem_('five', 'two', 4),
+        self.createPasswordItem_('six', 'one', 6),
+      ];
+
+      var passwordsSection = self.createPasswordsSection_(passwordList, []);
+
+      var passwords =
+          self.getIronListChildren_(passwordsSection.$.passwordList);
+
+      // The index of the button currently being checked.
+      var index = 0;
+
+      var clickRemoveButton = function() {
+        MockInteractions.tap(passwords[index].querySelector('#passwordMenu'));
+        MockInteractions.tap(passwordsSection.$.menuRemovePassword);
+      };
+
+      // Listen for the remove event. If this event isn't received, the test
+      // will time out and fail.
+      passwordsSection.addEventListener('remove-saved-password',
+                                        function(event) {
+        // Verify that the event matches the expected value.
+        assertTrue(index < passwordList.length);
+        assertEquals(passwordList[index].loginPair.originUrl,
+                     event.detail.originUrl);
+        assertEquals(passwordList[index].loginPair.username,
+                     event.detail.username);
+
+        if (++index < passwordList.length) {
+          // Click 'remove' on all passwords, one by one.
+          window.setTimeout(clickRemoveButton, 0);
+        } else {
+          done();
+        }
+      });
+
+      // Start removing.
+      clickRemoveButton();
     });
 
     test('verifyPasswordExceptions', function() {
@@ -190,7 +302,7 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
       passwordsSection.splice('passwordExceptions', 1, 1);
       assertEquals(-1, passwordsSection.passwordExceptions.indexOf('mail.com'));
       assertEquals(-1, exceptionList.indexOf('mail.com'));
-      Polymer.dom.flush();
+      self.flushPasswordSection_(passwordsSection);
 
       self.validateExceptionList_(
           self.getIronListChildren_(passwordsSection.$.passwordExceptionsList),
@@ -199,7 +311,7 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
 
     // Test verifies that pressing the 'remove' button will trigger a remove
     // event. Does not actually remove any exceptions.
-    test('verifyPasswordRemoveButton', function(done) {
+    test('verifyPasswordExceptionRemoveButton', function(done) {
       var exceptionList = [
         'docs.google.com',
         'mail.com',
@@ -218,7 +330,8 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
       var index = 0;
 
       var clickRemoveButton = function() {
-        exceptions[index].querySelector('#removeButton').click();
+        MockInteractions.tap(
+            exceptions[index].querySelector('#removeExceptionButton'));
       };
 
       // Listen for the remove event. If this event isn't received, the test
@@ -237,6 +350,84 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
 
       // Start removing.
       clickRemoveButton();
+    });
+
+    test('usePasswordDialogTwice', function() {
+      var BLANK_PASSWORD = '       ';
+      var item = self.createPasswordItem_('google.com', 'homer',
+                                          BLANK_PASSWORD.length);
+      var passwordDialog = self.createPasswordDialog_(item);
+
+      passwordDialog.open();
+      Polymer.dom.flush();
+
+      assertEquals(item.loginPair.originUrl,
+                   passwordDialog.$.websiteInput.value);
+      assertEquals(item.loginPair.username,
+                   passwordDialog.$.usernameInput.value);
+      assertEquals(BLANK_PASSWORD,
+                   passwordDialog.$.passwordInput.value);
+      // Password should NOT be visible.
+      assertEquals('password',
+                   passwordDialog.$.passwordInput.type);
+
+      passwordDialog.close();
+      Polymer.dom.flush();
+
+      var blankPassword2 = ' '.repeat(17);
+      var item2 = self.createPasswordItem_('drive.google.com', 'marge',
+                                           blankPassword2.length);
+
+      passwordDialog.item = item2;
+      passwordDialog.open();
+      Polymer.dom.flush();
+
+      assertEquals(item2.loginPair.originUrl,
+                   passwordDialog.$.websiteInput.value);
+      assertEquals(item2.loginPair.username,
+                   passwordDialog.$.usernameInput.value);
+      assertEquals(blankPassword2,
+                   passwordDialog.$.passwordInput.value);
+      // Password should NOT be visible.
+      assertEquals('password',
+                   passwordDialog.$.passwordInput.type);
+    });
+
+    test('showSavedPassword', function() {
+      var PASSWORD = 'bAn@n@5';
+      var item = self.createPasswordItem_('goo.gl', 'bart', PASSWORD.length);
+      var passwordDialog = self.createPasswordDialog_(item);
+
+      passwordDialog.open();
+      Polymer.dom.flush();
+
+      passwordDialog.password = PASSWORD;
+      passwordDialog.showPassword = true;
+
+      Polymer.dom.flush();
+
+      assertEquals(PASSWORD,
+                   passwordDialog.$.passwordInput.value);
+      // Password should be visible.
+      assertEquals('text',
+                   passwordDialog.$.passwordInput.type);
+    });
+
+    // Test will timeout if event is not received.
+    test('onShowSavedPassword', function(done) {
+      var item = self.createPasswordItem_('goo.gl', 'bart', 1);
+      var passwordDialog = self.createPasswordDialog_(item);
+
+      passwordDialog.open();
+      Polymer.dom.flush();
+
+      passwordDialog.addEventListener('show-password', function(event) {
+        assertEquals(item.loginPair.originUrl, event.detail.originUrl);
+        assertEquals(item.loginPair.username, event.detail.username);
+        done();
+      });
+
+      MockInteractions.tap(passwordDialog.$.showPasswordButton);
     });
   });
 

@@ -13,7 +13,6 @@
 #include "base/command_line.h"
 #include "base/i18n/case_conversion.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
@@ -56,7 +55,7 @@ const int kNumberOfMismatchesThreshold = 3;
 // which prepend prefixes such as "ctl01$ctl00$MainContentRegion$" on all
 // fields.
 const int kCommonNamePrefixRemovalFieldThreshold = 3;
-const int kMinCommonNamePrefixLength = 15;
+const int kMinCommonNamePrefixLength = 16;
 
 // Maximum number of characters in the field label to be encoded in a proto.
 const int kMaxFieldLabelNumChars = 200;
@@ -209,7 +208,13 @@ HtmlFieldType FieldTypeFromAutocompleteAttributeValue(
   }
 
   if (autocomplete_attribute_value == "cc-name")
-    return HTML_TYPE_CREDIT_CARD_NAME;
+    return HTML_TYPE_CREDIT_CARD_NAME_FULL;
+
+  if (autocomplete_attribute_value == "cc-given-name")
+    return HTML_TYPE_CREDIT_CARD_NAME_FIRST;
+
+  if (autocomplete_attribute_value == "cc-family-name")
+    return HTML_TYPE_CREDIT_CARD_NAME_LAST;
 
   if (autocomplete_attribute_value == "cc-number")
     return HTML_TYPE_CREDIT_CARD_NUMBER;
@@ -267,6 +272,9 @@ HtmlFieldType FieldTypeFromAutocompleteAttributeValue(
 
   if (autocomplete_attribute_value == "tel-local-suffix")
     return HTML_TYPE_TEL_LOCAL_SUFFIX;
+
+  if (autocomplete_attribute_value == "tel-extension")
+    return HTML_TYPE_TEL_EXTENSION;
 
   if (autocomplete_attribute_value == "email")
     return HTML_TYPE_EMAIL;
@@ -341,6 +349,8 @@ FormStructure::FormStructure(const FormData& form)
 FormStructure::~FormStructure() {}
 
 void FormStructure::DetermineHeuristicTypes() {
+  const auto determine_heuristic_types_start_time = base::TimeTicks::Now();
+
   // First, try to detect field types based on each field's |autocomplete|
   // attribute value.
   if (!was_parsed_for_autocomplete_attributes_)
@@ -371,6 +381,9 @@ void FormStructure::DetermineHeuristicTypes() {
           AutofillMetrics::FILLABLE_FORM_CONTAINS_TYPE_HINTS);
     }
   }
+
+  AutofillMetrics::LogDetermineHeuristicTypesTiming(
+      base::TimeTicks::Now() - determine_heuristic_types_start_time);
 }
 
 bool FormStructure::EncodeUploadRequest(
@@ -638,6 +651,7 @@ void FormStructure::UpdateFromCache(const FormStructure& cached_form) {
                          cached_field->second->html_mode());
       field->set_previously_autofilled(
           cached_field->second->previously_autofilled());
+      field->set_section(cached_field->second->section());
     }
   }
 

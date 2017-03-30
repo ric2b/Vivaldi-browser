@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "ash/display/display_layout.h"
+#include "ui/display/manager/display_layout.h"
 
 namespace gfx {
 class Display;
@@ -63,7 +63,8 @@ ASH_EXPORT bool SetDisplayUIScale(int64_t display_id, float scale);
 bool HasDisplayModeForUIScale(const DisplayInfo& info, float ui_scale);
 
 // Computes the bounds that defines the bounds between two displays.
-void ComputeBoundary(const gfx::Display& primary_display,
+// Returns false if two displays do not intersect.
+bool ComputeBoundary(const gfx::Display& primary_display,
                      const gfx::Display& secondary_display,
                      gfx::Rect* primary_edge_in_screen,
                      gfx::Rect* secondary_edge_in_screen);
@@ -88,7 +89,7 @@ ASH_EXPORT int FindDisplayIndexContainingPoint(
     const gfx::Point& point_in_screen);
 
 // Sorts id list using |CompareDisplayIds| below.
-ASH_EXPORT void SortDisplayIdList(DisplayIdList* list);
+ASH_EXPORT void SortDisplayIdList(display::DisplayIdList* list);
 
 // Default id generator.
 class DefaultDisplayIdGenerator {
@@ -96,12 +97,13 @@ class DefaultDisplayIdGenerator {
   int64_t operator()(int64_t id) { return id; }
 };
 
-// Generate sorted DisplayIdList from iterators.
+// Generate sorted display::DisplayIdList from iterators.
 template <class ForwardIterator, class Generator = DefaultDisplayIdGenerator>
-DisplayIdList GenerateDisplayIdList(ForwardIterator first,
-                                    ForwardIterator last,
-                                    Generator generator = Generator()) {
-  DisplayIdList list;
+display::DisplayIdList GenerateDisplayIdList(
+    ForwardIterator first,
+    ForwardIterator last,
+    Generator generator = Generator()) {
+  display::DisplayIdList list;
   while (first != last) {
     list.push_back(generator(*first));
     ++first;
@@ -110,10 +112,12 @@ DisplayIdList GenerateDisplayIdList(ForwardIterator first,
   return list;
 }
 
-// Creates sorted DisplayIdList.
-ASH_EXPORT DisplayIdList CreateDisplayIdList(const DisplayList& list);
+// Creates sorted display::DisplayIdList.
+ASH_EXPORT display::DisplayIdList CreateDisplayIdList(
+    const display::DisplayList& list);
 
-ASH_EXPORT std::string DisplayIdListToString(const DisplayIdList& list);
+ASH_EXPORT std::string DisplayIdListToString(
+    const display::DisplayIdList& list);
 
 // Returns true if one of following conditinos is met.
 // 1) id1 is internal.

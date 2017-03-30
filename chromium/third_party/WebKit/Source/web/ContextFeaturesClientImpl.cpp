@@ -38,8 +38,8 @@
 
 namespace blink {
 
-class ContextFeaturesCache final : public NoBaseWillBeGarbageCollectedFinalized<ContextFeaturesCache>, public WillBeHeapSupplement<Document> {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(ContextFeaturesCache);
+class ContextFeaturesCache final : public GarbageCollectedFinalized<ContextFeaturesCache>, public Supplement<Document> {
+    USING_GARBAGE_COLLECTED_MIXIN(ContextFeaturesCache);
 public:
     class Entry {
     public:
@@ -56,7 +56,7 @@ public:
 
         bool isEnabled() const
         {
-            ASSERT(m_value != NeedsRefresh);
+            DCHECK_NE(m_value, NeedsRefresh);
             return m_value == IsEnabled;
         }
 
@@ -90,7 +90,7 @@ public:
 
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
-        WillBeHeapSupplement<Document>::trace(visitor);
+        Supplement<Document>::trace(visitor);
     }
 
 private:
@@ -105,10 +105,10 @@ const char* ContextFeaturesCache::supplementName()
 
 ContextFeaturesCache& ContextFeaturesCache::from(Document& document)
 {
-    ContextFeaturesCache* cache = static_cast<ContextFeaturesCache*>(WillBeHeapSupplement<Document>::from(document, supplementName()));
+    ContextFeaturesCache* cache = static_cast<ContextFeaturesCache*>(Supplement<Document>::from(document, supplementName()));
     if (!cache) {
         cache = new ContextFeaturesCache();
-        WillBeHeapSupplement<Document>::provideTo(document, supplementName(), adoptPtrWillBeNoop(cache));
+        Supplement<Document>::provideTo(document, supplementName(), cache);
     }
 
     return *cache;
@@ -116,7 +116,7 @@ ContextFeaturesCache& ContextFeaturesCache::from(Document& document)
 
 void ContextFeaturesCache::validateAgainst(Document* document)
 {
-    String currentDomain = document->securityOrigin()->domain();
+    String currentDomain = document->getSecurityOrigin()->domain();
     if (currentDomain == m_domain)
         return;
     m_domain = currentDomain;
@@ -126,7 +126,7 @@ void ContextFeaturesCache::validateAgainst(Document* document)
 
 bool ContextFeaturesClientImpl::isEnabled(Document* document, ContextFeatures::FeatureType type, bool defaultValue)
 {
-    ASSERT(document);
+    DCHECK(document);
     ContextFeaturesCache::Entry& cache = ContextFeaturesCache::from(*document).entryFor(type);
     if (cache.needsRefresh(defaultValue))
         cache.set(askIfIsEnabled(document, type, defaultValue), defaultValue);
@@ -135,7 +135,7 @@ bool ContextFeaturesClientImpl::isEnabled(Document* document, ContextFeatures::F
 
 void ContextFeaturesClientImpl::urlDidChange(Document* document)
 {
-    ASSERT(document);
+    DCHECK(document);
     ContextFeaturesCache::from(*document).validateAgainst(document);
 }
 

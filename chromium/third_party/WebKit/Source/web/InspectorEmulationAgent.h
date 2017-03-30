@@ -12,9 +12,7 @@ namespace blink {
 class WebLocalFrameImpl;
 class WebViewImpl;
 
-using ErrorString = String;
-
-class InspectorEmulationAgent final : public InspectorBaseAgent<InspectorEmulationAgent, protocol::Frontend::Emulation>, public protocol::Dispatcher::EmulationCommandHandler {
+class InspectorEmulationAgent final : public InspectorBaseAgent<InspectorEmulationAgent, protocol::Frontend::Emulation>, public protocol::Backend::Emulation {
     WTF_MAKE_NONCOPYABLE(InspectorEmulationAgent);
 public:
     class Client {
@@ -24,7 +22,7 @@ public:
         virtual void setCPUThrottlingRate(double rate) {}
     };
 
-    static PassOwnPtrWillBeRawPtr<InspectorEmulationAgent> create(WebLocalFrameImpl*, Client*);
+    static InspectorEmulationAgent* create(WebLocalFrameImpl*, Client*);
     ~InspectorEmulationAgent() override;
 
     // protocol::Dispatcher::EmulationCommandHandler implementation.
@@ -45,7 +43,7 @@ private:
     InspectorEmulationAgent(WebLocalFrameImpl*, Client*);
     WebViewImpl* webViewImpl();
 
-    RawPtrWillBeMember<WebLocalFrameImpl> m_webLocalFrameImpl;
+    Member<WebLocalFrameImpl> m_webLocalFrameImpl;
     Client* m_client;
 };
 

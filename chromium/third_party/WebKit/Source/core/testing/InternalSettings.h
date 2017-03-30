@@ -47,12 +47,8 @@ class LocalFrame;
 class Page;
 class Settings;
 
-#if ENABLE(OILPAN)
-class InternalSettings final : public InternalSettingsGenerated, public HeapSupplement<Page> {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(InternalSettings);
-#else
-class InternalSettings final : public InternalSettingsGenerated {
-#endif
+class InternalSettings final : public InternalSettingsGenerated, public Supplement<Page> {
+    USING_GARBAGE_COLLECTED_MIXIN(InternalSettings);
     DEFINE_WRAPPERTYPEINFO();
 public:
     class Backup {
@@ -61,7 +57,6 @@ public:
         explicit Backup(Settings*);
         void restoreTo(Settings*);
 
-        bool m_originalAuthorShadowDOMForAnyElementEnabled;
         bool m_originalCSP;
         bool m_originalCSSStickyPositionEnabled;
         bool m_originalOverlayScrollbarsEnabled;
@@ -83,15 +78,11 @@ public:
         bool m_originalCompositorWorkerEnabled;
     };
 
-    static PassRefPtrWillBeRawPtr<InternalSettings> create(Page& page)
+    static InternalSettings* create(Page& page)
     {
-        return adoptRefWillBeNoop(new InternalSettings(page));
+        return new InternalSettings(page);
     }
     static InternalSettings* from(Page&);
-
-#if !ENABLE(OILPAN)
-    void hostDestroyed() { m_page = nullptr; }
-#endif
 
     ~InternalSettings() override;
     void resetToConsistentState();
@@ -122,7 +113,6 @@ public:
     // FIXME: The following are RuntimeEnabledFeatures and likely
     // cannot be changed after process start. These setters should
     // be removed or moved onto internals.runtimeFlags:
-    void setAuthorShadowDOMForAnyElementEnabled(bool);
     void setCSSStickyPositionEnabled(bool);
     void setLangAttributeAwareFormControlUIEnabled(bool);
     void setOverlayScrollbarsEnabled(bool);
@@ -148,7 +138,7 @@ private:
     Page* page() const { return m_page; }
     static const char* supplementName();
 
-    RawPtrWillBeWeakMember<Page> m_page;
+    WeakMember<Page> m_page;
     Backup m_backup;
 };
 

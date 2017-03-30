@@ -30,7 +30,7 @@
 
 #include "bindings/core/v8/V8GCController.h"
 
-#include "bindings/core/v8/NPV8Object.h"
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/RetainedDOMInfo.h"
 #include "bindings/core/v8/V8AbstractEventListener.h"
 #include "bindings/core/v8/V8Binding.h"
@@ -44,13 +44,14 @@
 #include "core/dom/TemplateContentDocumentFragment.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
-#include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLTemplateElement.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/svg/SVGElement.h"
 #include "platform/Histogram.h"
 #include "platform/TraceEvent.h"
+#include "public/platform/BlameContext.h"
+#include "public/platform/Platform.h"
 #include "wtf/Partitions.h"
 #include "wtf/Vector.h"
 #include <algorithm>
@@ -77,10 +78,7 @@ static void addReferencesForNodeWithEventListeners(v8::Isolate* isolate, Node* n
 Node* V8GCController::opaqueRootForGC(v8::Isolate*, Node* node)
 {
     ASSERT(node);
-    // FIXME: Remove the special handling for image elements.
-    // Maybe should image elements be active DOM nodes?
-    // See https://code.google.com/p/chromium/issues/detail?id=164882
-    if (node->inDocument() || (isHTMLImageElement(*node) && toHTMLImageElement(*node).hasPendingActivity())) {
+    if (node->inShadowIncludingDocument()) {
         Document& document = node->document();
         if (HTMLImportsController* controller = document.importsController())
             return controller->master();
@@ -122,8 +120,7 @@ public:
 
         v8::Local<v8::Object> wrapper = v8::Local<v8::Object>::New(m_isolate, v8::Persistent<v8::Object>::Cast(*value));
         ASSERT(V8DOMWrapper::hasInternalFieldsSet(wrapper));
-        const WrapperTypeInfo* type = toWrapperTypeInfo(wrapper);
-        if (type != npObjectTypeInfo() && toScriptWrappable(wrapper)->hasPendingActivity()) {
+        if (toWrapperTypeInfo(wrapper)->hasPendingActivity(wrapper)) {
             v8::Persistent<v8::Object>::Cast(*value).MarkActive();
             return;
         }
@@ -132,14 +129,6 @@ public:
             ASSERT(V8Node::hasInstance(wrapper, m_isolate));
             Node* node = V8Node::toImpl(wrapper);
             if (node->hasEventListeners()) {
-                v8::Persistent<v8::Object>::Cast(*value).MarkActive();
-                return;
-            }
-            // FIXME: Remove the special handling for image elements.
-            // The same special handling is in V8GCController::opaqueRootForGC().
-            // Maybe should image elements be active DOM nodes?
-            // See https://code.google.com/p/chromium/issues/detail?id=164882
-            if (isHTMLImageElement(*node) && toHTMLImageElement(*node).hasPendingActivity()) {
                 v8::Persistent<v8::Object>::Cast(*value).MarkActive();
                 return;
             }
@@ -176,7 +165,7 @@ public:
         ASSERT(V8DOMWrapper::hasInternalFieldsSet(wrapper));
 
         const WrapperTypeInfo* type = toWrapperTypeInfo(wrapper);
-        if (type != npObjectTypeInfo() && toScriptWrappable(wrapper)->hasPendingActivity()) {
+        if (type->hasPendingActivity(wrapper)) {
             // If you hit this assert, you'll need to add a [DependentiLifetime]
             // extended attribute to the DOM interface. A DOM interface that
             // overrides hasPendingActivity must be marked as [DependentiLifetime].
@@ -240,7 +229,7 @@ private:
     // v8 guarantees that Blink will not regain control while a v8 GC runs
     // (=> no Oilpan GCs will be triggered), hence raw, untraced members
     // can safely be kept here.
-    Vector<RawPtrWillBeUntracedMember<Node>> m_groupsWhichNeedRetainerInfo;
+    Vector<UntracedMember<Node>> m_groupsWhichNeedRetainerInfo;
     int m_domObjectsWithPendingActivity;
     bool m_liveRootGroupIdSet;
     bool m_constructRetainedObjectInfos;
@@ -279,6 +268,11 @@ void V8GCController::gcPrologue(v8::Isolate* isolate, v8::GCType type, v8::GCCal
 {
     if (isMainThread())
         ScriptForbiddenScope::enter();
+
+    // Attribute garbage collection to the all frames instead of a specific
+    // frame.
+    if (BlameContext* blameContext = Platform::current()->topLevelBlameContext())
+        blameContext->Enter();
 
     // TODO(haraken): A GC callback is not allowed to re-enter V8. This means
     // that it's unsafe to run Oilpan's GC in the GC callback because it may
@@ -344,6 +338,9 @@ void V8GCController::gcEpilogue(v8::Isolate* isolate, v8::GCType type, v8::GCCal
     if (isMainThread())
         ScriptForbiddenScope::exit();
 
+    if (BlameContext* blameContext = Platform::current()->topLevelBlameContext())
+        blameContext->Leave();
+
     // v8::kGCCallbackFlagForced forces a Blink heap garbage collection
     // when a garbage collection was forced from V8. This is either used
     // for tests that force GCs from JavaScript to verify that objects die
@@ -399,25 +396,6 @@ void V8GCController::collectAllGarbageForTesting(v8::Isolate* isolate)
         isolate->RequestGarbageCollectionForTesting(v8::Isolate::kFullGarbageCollection);
 }
 
-void V8GCController::reportDOMMemoryUsageToV8(v8::Isolate* isolate)
-{
-    // TODO(haraken): Oilpan should report the amount of memory used
-    // by DOM nodes as well. Currently Partitions::currentDOMMemoryUsage()
-    // just returns 0.
-#if !ENABLE(OILPAN)
-    if (!isMainThread())
-        return;
-
-    static size_t lastUsageReportedToV8 = 0;
-
-    size_t currentUsage = WTF::Partitions::currentDOMMemoryUsage();
-    int64_t diff = static_cast<int64_t>(currentUsage) - static_cast<int64_t>(lastUsageReportedToV8);
-    isolate->AdjustAmountOfExternalAllocatedMemory(diff);
-
-    lastUsageReportedToV8 = currentUsage;
-#endif
-}
-
 class DOMWrapperTracer : public v8::PersistentHandleVisitor {
 public:
     explicit DOMWrapperTracer(Visitor* visitor)
@@ -448,8 +426,9 @@ void V8GCController::traceDOMWrappers(v8::Isolate* isolate, Visitor* visitor)
 
 class PendingActivityVisitor : public v8::PersistentHandleVisitor {
 public:
-    explicit PendingActivityVisitor(ExecutionContext* executionContext)
-        : m_executionContext(executionContext)
+    PendingActivityVisitor(v8::Isolate* isolate, ExecutionContext* executionContext)
+        : m_isolate(isolate)
+        , m_executionContext(executionContext)
         , m_pendingActivityFound(false)
     {
     }
@@ -464,11 +443,10 @@ public:
         if (classId != WrapperTypeInfo::NodeClassId && classId != WrapperTypeInfo::ObjectClassId)
             return;
 
-        const v8::Persistent<v8::Object>& wrapper = v8::Persistent<v8::Object>::Cast(*value);
-        const WrapperTypeInfo* type = toWrapperTypeInfo(wrapper);
+        v8::Local<v8::Object> wrapper = v8::Local<v8::Object>::New(m_isolate, v8::Persistent<v8::Object>::Cast(*value));
+        ASSERT(V8DOMWrapper::hasInternalFieldsSet(wrapper));
         // The ExecutionContext check is heavy, so it should be done at the last.
-        if (type != npObjectTypeInfo()
-            && toScriptWrappable(wrapper)->hasPendingActivity()
+        if (toWrapperTypeInfo(wrapper)->hasPendingActivity(wrapper)
             // TODO(haraken): Currently we don't have a way to get a creation
             // context from a wrapper. We should implement the way and enable
             // the following condition.
@@ -488,11 +466,12 @@ public:
     bool pendingActivityFound() const { return m_pendingActivityFound; }
 
 private:
-    RawPtrWillBePersistent<ExecutionContext> m_executionContext;
+    v8::Isolate* m_isolate;
+    Persistent<ExecutionContext> m_executionContext;
     bool m_pendingActivityFound;
 };
 
-bool V8GCController::hasPendingActivity(ExecutionContext* executionContext)
+bool V8GCController::hasPendingActivity(v8::Isolate* isolate, ExecutionContext* executionContext)
 {
     // V8GCController::hasPendingActivity is used only when a worker checks if
     // the worker contains any wrapper that has pending activities.
@@ -500,7 +479,8 @@ bool V8GCController::hasPendingActivity(ExecutionContext* executionContext)
 
     DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scanPendingActivityHistogram, new CustomCountHistogram("Blink.ScanPendingActivityDuration", 1, 1000, 50));
     double startTime = WTF::currentTimeMS();
-    PendingActivityVisitor visitor(executionContext);
+    v8::HandleScope scope(isolate);
+    PendingActivityVisitor visitor(isolate, executionContext);
     toIsolate(executionContext)->VisitHandlesWithClassIds(&visitor);
     scanPendingActivityHistogram.count(static_cast<int>(WTF::currentTimeMS() - startTime));
     return visitor.pendingActivityFound();

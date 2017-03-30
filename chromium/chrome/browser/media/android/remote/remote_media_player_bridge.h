@@ -82,6 +82,9 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
                        const base::android::JavaParamRef<jobject>& obj);
   void OnError(JNIEnv *env,
                const base::android::JavaParamRef<jobject>& obj);
+  void OnCancelledRemotePlaybackRequest(
+      JNIEnv *env,
+      const base::android::JavaParamRef<jobject>& obj);
 
   // Wrappers for calls to Java used by the remote media player manager
   void RequestRemotePlayback();
@@ -140,7 +143,7 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
   const std::string user_agent_;
 
   base::android::ScopedJavaGlobalRef<jobject> java_bridge_;
-  scoped_ptr<std::string> casting_message_;
+  std::unique_ptr<std::string> casting_message_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<RemoteMediaPlayerBridge> weak_factory_;

@@ -20,6 +20,7 @@
 #include "net/base/address_family.h"
 #include "net/base/address_list.h"
 #include "net/base/auth.h"
+#include "net/base/ip_address.h"
 #include "net/base/load_timing_info.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_headers.h"
@@ -123,15 +124,11 @@ void DumpMockReadWrite(const MockReadWrite<type>& r) {
 }  // namespace
 
 MockConnect::MockConnect() : mode(ASYNC), result(OK) {
-  IPAddressNumber ip;
-  CHECK(ParseIPLiteralToNumber("192.0.2.33", &ip));
-  peer_addr = IPEndPoint(ip, 0);
+  peer_addr = IPEndPoint(IPAddress(192, 0, 2, 33), 0);
 }
 
 MockConnect::MockConnect(IoMode io_mode, int r) : mode(io_mode), result(r) {
-  IPAddressNumber ip;
-  CHECK(ParseIPLiteralToNumber("192.0.2.33", &ip));
-  peer_addr = IPEndPoint(ip, 0);
+  peer_addr = IPEndPoint(IPAddress(192, 0, 2, 33), 0);
 }
 
 MockConnect::MockConnect(IoMode io_mode, int r, IPEndPoint addr) :
@@ -141,6 +138,8 @@ MockConnect::MockConnect(IoMode io_mode, int r, IPEndPoint addr) :
 }
 
 MockConnect::~MockConnect() {}
+
+void SocketDataProvider::OnEnableTCPFastOpenIfSupported() {}
 
 bool SocketDataProvider::IsIdle() const {
   return true;
@@ -295,6 +294,9 @@ SSLSocketDataProvider::SSLSocketDataProvider(IoMode mode, int result)
   SSLConnectionStatusSetCipherSuite(0xcc14, &connection_status);
 }
 
+SSLSocketDataProvider::SSLSocketDataProvider(
+    const SSLSocketDataProvider& other) = default;
+
 SSLSocketDataProvider::~SSLSocketDataProvider() {
 }
 
@@ -312,6 +314,7 @@ SequencedSocketData::SequencedSocketData(MockRead* reads,
       read_state_(IDLE),
       write_state_(IDLE),
       busy_before_sync_reads_(false),
+      is_using_tcp_fast_open_(false),
       weak_factory_(this) {
   // Check that reads and writes have a contiguous set of sequence numbers
   // starting from 0 and working their way up, with no repeats and skipping
@@ -490,6 +493,10 @@ bool SequencedSocketData::AllWriteDataConsumed() const {
   return helper_.AllWriteDataConsumed();
 }
 
+void SequencedSocketData::OnEnableTCPFastOpenIfSupported() {
+  is_using_tcp_fast_open_ = true;
+}
+
 bool SequencedSocketData::IsIdle() const {
   // If |busy_before_sync_reads_| is not set, always considered idle.  If
   // no reads left, or the next operation is a write, also consider it idle.
@@ -585,6 +592,10 @@ void SequencedSocketData::MaybePostReadCompleteTask() {
   read_state_ = COMPLETING;
 }
 
+bool SequencedSocketData::IsUsingTCPFastOpen() const {
+  return is_using_tcp_fast_open_;
+}
+
 void SequencedSocketData::MaybePostWriteCompleteTask() {
   NET_TRACE(1, " ****** ") << " current: " << sequence_number_;
   // Only trigger the next write to complete if there is already a write pending
@@ -617,6 +628,7 @@ void SequencedSocketData::Reset() {
   sequence_number_ = 0;
   read_state_ = IDLE;
   write_state_ = IDLE;
+  is_using_tcp_fast_open_ = false;
   weak_factory_.InvalidateWeakPtrs();
 }
 
@@ -745,15 +757,11 @@ scoped_ptr<SSLClientSocket> MockClientSocketFactory::CreateSSLClientSocket(
 void MockClientSocketFactory::ClearSSLSessionCache() {
 }
 
-const char MockClientSocket::kTlsUnique[] = "MOCK_TLSUNIQ";
-
 MockClientSocket::MockClientSocket(const BoundNetLog& net_log)
     : connected_(false),
       net_log_(net_log),
       weak_factory_(this) {
-  IPAddressNumber ip;
-  CHECK(ParseIPLiteralToNumber("192.0.2.33", &ip));
-  peer_addr_ = IPEndPoint(ip, 0);
+  peer_addr_ = IPEndPoint(IPAddress(192, 0, 2, 33), 0);
 }
 
 int MockClientSocket::SetReceiveBufferSize(int32_t size) {
@@ -784,10 +792,7 @@ int MockClientSocket::GetPeerAddress(IPEndPoint* address) const {
 }
 
 int MockClientSocket::GetLocalAddress(IPEndPoint* address) const {
-  IPAddressNumber ip;
-  bool rv = ParseIPLiteralToNumber("192.0.2.33", &ip);
-  CHECK(rv);
-  *address = IPEndPoint(ip, 123);
+  *address = IPEndPoint(IPAddress(192, 0, 2, 33), 123);
   return OK;
 }
 
@@ -814,11 +819,6 @@ int MockClientSocket::ExportKeyingMaterial(const base::StringPiece& label,
                                            unsigned char* out,
                                            unsigned int outlen) {
   memset(out, 'A', outlen);
-  return OK;
-}
-
-int MockClientSocket::GetTLSUniqueChannelBinding(std::string* out) {
-  out->assign(MockClientSocket::kTlsUnique);
   return OK;
 }
 
@@ -1025,8 +1025,10 @@ bool MockTCPClientSocket::WasEverUsed() const {
   return was_used_to_convey_data_;
 }
 
-bool MockTCPClientSocket::UsingTCPFastOpen() const {
-  return false;
+void MockTCPClientSocket::EnableTCPFastOpenIfSupported() {
+  EXPECT_FALSE(IsConnected()) << "Can't enable fast open after connect.";
+
+  data_->OnEnableTCPFastOpenIfSupported();
 }
 
 bool MockTCPClientSocket::WasNpnNegotiated() const {
@@ -1197,10 +1199,6 @@ bool MockSSLClientSocket::WasEverUsed() const {
   return transport_->socket()->WasEverUsed();
 }
 
-bool MockSSLClientSocket::UsingTCPFastOpen() const {
-  return transport_->socket()->UsingTCPFastOpen();
-}
-
 int MockSSLClientSocket::GetPeerAddress(IPEndPoint* address) const {
   return transport_->socket()->GetPeerAddress(address);
 }
@@ -1351,31 +1349,12 @@ int MockUDPClientSocket::GetPeerAddress(IPEndPoint* address) const {
 }
 
 int MockUDPClientSocket::GetLocalAddress(IPEndPoint* address) const {
-  IPAddressNumber ip;
-  bool rv = ParseIPLiteralToNumber("192.0.2.33", &ip);
-  CHECK(rv);
-  *address = IPEndPoint(ip, source_port_);
+  *address = IPEndPoint(IPAddress(192, 0, 2, 33), source_port_);
   return OK;
 }
 
 const BoundNetLog& MockUDPClientSocket::NetLog() const {
   return net_log_;
-}
-
-int MockUDPClientSocket::BindToNetwork(
-    NetworkChangeNotifier::NetworkHandle network) {
-  network_ = network;
-  return OK;
-}
-
-int MockUDPClientSocket::BindToDefaultNetwork() {
-  network_ = kDefaultNetworkForTests;
-  return OK;
-}
-
-NetworkChangeNotifier::NetworkHandle MockUDPClientSocket::GetBoundNetwork()
-    const {
-  return network_;
 }
 
 int MockUDPClientSocket::Connect(const IPEndPoint& address) {
@@ -1384,6 +1363,33 @@ int MockUDPClientSocket::Connect(const IPEndPoint& address) {
   connected_ = true;
   peer_addr_ = address;
   return data_->connect_data().result;
+}
+
+int MockUDPClientSocket::ConnectUsingNetwork(
+    NetworkChangeNotifier::NetworkHandle network,
+    const IPEndPoint& address) {
+  DCHECK(!connected_);
+  if (!data_)
+    return ERR_UNEXPECTED;
+  network_ = network;
+  connected_ = true;
+  peer_addr_ = address;
+  return data_->connect_data().result;
+}
+
+int MockUDPClientSocket::ConnectUsingDefaultNetwork(const IPEndPoint& address) {
+  DCHECK(!connected_);
+  if (!data_)
+    return ERR_UNEXPECTED;
+  network_ = kDefaultNetworkForTests;
+  connected_ = true;
+  peer_addr_ = address;
+  return data_->connect_data().result;
+}
+
+NetworkChangeNotifier::NetworkHandle MockUDPClientSocket::GetBoundNetwork()
+    const {
+  return network_;
 }
 
 void MockUDPClientSocket::OnReadComplete(const MockRead& data) {

@@ -33,9 +33,14 @@ class CustomStreamSession : public QuicSimpleServerSession {
       QuicConnection* connection,
       QuicServerSessionVisitor* visitor,
       const QuicCryptoServerConfig* crypto_config,
+      QuicCompressedCertsCache* compressed_certs_cache,
       QuicTestServer::StreamFactory* factory,
       QuicTestServer::CryptoStreamFactory* crypto_stream_factory)
-      : QuicSimpleServerSession(config, connection, visitor, crypto_config),
+      : QuicSimpleServerSession(config,
+                                connection,
+                                visitor,
+                                crypto_config,
+                                compressed_certs_cache),
         stream_factory_(factory),
         crypto_stream_factory_(crypto_stream_factory) {}
 
@@ -44,17 +49,21 @@ class CustomStreamSession : public QuicSimpleServerSession {
       return nullptr;
     }
     if (stream_factory_) {
-      return stream_factory_->CreateStream(id, this);
+      QuicSpdyStream* stream = stream_factory_->CreateStream(id, this);
+      ActivateStream(stream);
+      return stream;
     }
     return QuicSimpleServerSession::CreateIncomingDynamicStream(id);
   }
 
   QuicCryptoServerStreamBase* CreateQuicCryptoServerStream(
-      const QuicCryptoServerConfig* crypto_config) override {
+      const QuicCryptoServerConfig* crypto_config,
+      QuicCompressedCertsCache* compressed_certs_cache) override {
     if (crypto_stream_factory_) {
       return crypto_stream_factory_->CreateCryptoStream(crypto_config, this);
     }
-    return QuicSimpleServerSession::CreateQuicCryptoServerStream(crypto_config);
+    return QuicSimpleServerSession::CreateQuicCryptoServerStream(
+        crypto_config, compressed_certs_cache);
   }
 
  private:
@@ -86,12 +95,13 @@ class QuicTestDispatcher : public QuicDispatcher {
 
     QuicServerSessionBase* session = nullptr;
     if (stream_factory_ != nullptr || crypto_stream_factory_ != nullptr) {
-      session =
-          new CustomStreamSession(config(), connection, this, crypto_config(),
-                                  stream_factory_, crypto_stream_factory_);
+      session = new CustomStreamSession(
+          config(), connection, this, crypto_config(), compressed_certs_cache(),
+          stream_factory_, crypto_stream_factory_);
     } else {
       session = session_factory_->CreateSession(config(), connection, this,
-                                                crypto_config());
+                                                crypto_config(),
+                                                compressed_certs_cache());
     }
     session->Initialize();
     return session;
@@ -132,12 +142,16 @@ QuicTestServer::QuicTestServer(ProofSource* proof_source)
 QuicTestServer::QuicTestServer(ProofSource* proof_source,
                                const QuicConfig& config,
                                const QuicVersionVector& supported_versions)
-    : QuicServer(proof_source, config, supported_versions) {}
+    : QuicServer(proof_source,
+                 config,
+                 QuicCryptoServerConfig::ConfigOptions(),
+                 supported_versions) {}
 
 QuicDispatcher* QuicTestServer::CreateQuicDispatcher() {
-  return new QuicTestDispatcher(config(), &crypto_config(),
-                                supported_versions(),
-                                new QuicEpollConnectionHelper(epoll_server()));
+  return new QuicTestDispatcher(
+      config(), &crypto_config(), supported_versions(),
+      new QuicEpollConnectionHelper(epoll_server(),
+                                    QuicAllocator::BUFFER_POOL));
 }
 
 void QuicTestServer::SetSessionFactory(SessionFactory* factory) {
@@ -160,8 +174,13 @@ ImmediateGoAwaySession::ImmediateGoAwaySession(
     const QuicConfig& config,
     QuicConnection* connection,
     QuicServerSessionVisitor* visitor,
-    const QuicCryptoServerConfig* crypto_config)
-    : QuicSimpleServerSession(config, connection, visitor, crypto_config) {
+    const QuicCryptoServerConfig* crypto_config,
+    QuicCompressedCertsCache* compressed_certs_cache)
+    : QuicSimpleServerSession(config,
+                              connection,
+                              visitor,
+                              crypto_config,
+                              compressed_certs_cache) {
   SendGoAway(QUIC_PEER_GOING_AWAY, "");
 }
 

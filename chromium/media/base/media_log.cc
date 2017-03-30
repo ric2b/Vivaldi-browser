@@ -91,8 +91,6 @@ std::string MediaLog::PipelineStatusToString(PipelineStatus status) {
   switch (status) {
     case PIPELINE_OK:
       return "pipeline: ok";
-    case PIPELINE_ERROR_URL_NOT_FOUND:
-      return "pipeline: url not found";
     case PIPELINE_ERROR_NETWORK:
       return "pipeline: network error";
     case PIPELINE_ERROR_DECODE:
@@ -105,8 +103,6 @@ std::string MediaLog::PipelineStatusToString(PipelineStatus status) {
       return "pipeline: could not render";
     case PIPELINE_ERROR_READ:
       return "pipeline: read error";
-    case PIPELINE_ERROR_OPERATION_PENDING:
-      return "pipeline: operation pending";
     case PIPELINE_ERROR_INVALID_STATE:
       return "pipeline: invalid state";
     case DEMUXER_ERROR_COULD_NOT_OPEN:
@@ -117,6 +113,16 @@ std::string MediaLog::PipelineStatusToString(PipelineStatus status) {
       return "demuxer: no supported streams";
     case DECODER_ERROR_NOT_SUPPORTED:
       return "decoder: not supported";
+    case CHUNK_DEMUXER_ERROR_APPEND_FAILED:
+      return "chunk demuxer: append failed";
+    case CHUNK_DEMUXER_ERROR_EOS_STATUS_DECODE_ERROR:
+      return "chunk demuxer: application requested decode error on eos";
+    case CHUNK_DEMUXER_ERROR_EOS_STATUS_NETWORK_ERROR:
+      return "chunk demuxer: application requested network error on eos";
+    case AUDIO_RENDERER_ERROR:
+      return "audio renderer: output device reported an error";
+    case AUDIO_RENDERER_ERROR_SPLICE_FAILED:
+      return "audio renderer: post-decode audio splicing failed";
   }
   NOTREACHED();
   return NULL;
@@ -143,6 +149,10 @@ MediaLog::MediaLog() : id_(g_media_log_count.GetNext()) {}
 MediaLog::~MediaLog() {}
 
 void MediaLog::AddEvent(scoped_ptr<MediaLogEvent> event) {}
+
+std::string MediaLog::GetLastErrorMessage() {
+  return "";
+}
 
 scoped_ptr<MediaLogEvent> MediaLog::CreateEvent(MediaLogEvent::Type type) {
   scoped_ptr<MediaLogEvent> event(new MediaLogEvent);
@@ -245,13 +255,6 @@ void MediaLog::SetStringProperty(
   AddEvent(std::move(event));
 }
 
-void MediaLog::SetIntegerProperty(
-    const std::string& key, int value) {
-  scoped_ptr<MediaLogEvent> event(CreateEvent(MediaLogEvent::PROPERTY_CHANGE));
-  event->params.SetInteger(key, value);
-  AddEvent(std::move(event));
-}
-
 void MediaLog::SetDoubleProperty(
     const std::string& key, double value) {
   scoped_ptr<MediaLogEvent> event(CreateEvent(MediaLogEvent::PROPERTY_CHANGE));
@@ -263,16 +266,6 @@ void MediaLog::SetBooleanProperty(
     const std::string& key, bool value) {
   scoped_ptr<MediaLogEvent> event(CreateEvent(MediaLogEvent::PROPERTY_CHANGE));
   event->params.SetBoolean(key, value);
-  AddEvent(std::move(event));
-}
-
-void MediaLog::SetTimeProperty(
-    const std::string& key, base::TimeDelta value) {
-  scoped_ptr<MediaLogEvent> event(CreateEvent(MediaLogEvent::PROPERTY_CHANGE));
-  if (value.is_max())
-    event->params.SetString(key, "unknown");
-  else
-    event->params.SetDouble(key, value.InSecondsF());
   AddEvent(std::move(event));
 }
 

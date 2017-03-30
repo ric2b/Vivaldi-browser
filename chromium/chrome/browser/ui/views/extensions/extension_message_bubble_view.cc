@@ -11,6 +11,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "chrome/browser/extensions/extension_message_bubble_controller.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/grit/locale_settings.h"
 #include "ui/accessibility/ax_view_state.h"
@@ -43,7 +44,7 @@ namespace extensions {
 ExtensionMessageBubbleView::ExtensionMessageBubbleView(
     views::View* anchor_view,
     views::BubbleBorder::Arrow arrow_location,
-    scoped_ptr<extensions::ExtensionMessageBubbleController> controller)
+    std::unique_ptr<extensions::ExtensionMessageBubbleController> controller)
     : BubbleDelegateView(anchor_view, arrow_location),
       controller_(std::move(controller)),
       anchor_view_(anchor_view),
@@ -58,7 +59,8 @@ ExtensionMessageBubbleView::ExtensionMessageBubbleView(
   set_close_on_esc(true);
 
   // Compensate for built-in vertical padding in the anchor view's image.
-  set_anchor_view_insets(gfx::Insets(5, 0, 5, 0));
+  set_anchor_view_insets(gfx::Insets(
+      GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
 }
 
 void ExtensionMessageBubbleView::Show() {
@@ -208,7 +210,7 @@ void ExtensionMessageBubbleView::ButtonPressed(views::Button* sender,
     controller_->OnBubbleAction();
   } else {
     DCHECK_EQ(dismiss_button_, sender);
-    controller_->OnBubbleDismiss(false /* not closed by deactivation */ );
+    controller_->OnBubbleDismiss(false);  // Not closed by deactivation.
   }
   GetWidget()->Close();
 }

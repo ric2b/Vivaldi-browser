@@ -199,26 +199,19 @@ TEST(BeginFrameSourceBaseTest, DetectAsValueIntoLoop) {
   obs.source_ = &source;
   source.AddObserver(&obs);
 
-  scoped_refptr<base::trace_event::TracedValue> state =
-      new base::trace_event::TracedValue();
+  scoped_ptr<base::trace_event::TracedValue> state(
+      new base::trace_event::TracedValue());
   source.AsValueInto(state.get());
 }
 
 // BackToBackBeginFrameSource testing -----------------------------------------
 class TestBackToBackBeginFrameSource : public BackToBackBeginFrameSource {
  public:
-  static scoped_ptr<TestBackToBackBeginFrameSource> Create(
-      base::SimpleTestTickClock* now_src,
-      base::SingleThreadTaskRunner* task_runner) {
-    return make_scoped_ptr(
-        new TestBackToBackBeginFrameSource(now_src, task_runner));
-  }
-
- protected:
   TestBackToBackBeginFrameSource(base::SimpleTestTickClock* now_src,
                                  base::SingleThreadTaskRunner* task_runner)
       : BackToBackBeginFrameSource(task_runner), now_src_(now_src) {}
 
+ protected:
   base::TimeTicks Now() override { return now_src_->NowTicks(); }
 
   // Not owned.
@@ -240,8 +233,8 @@ class BackToBackBeginFrameSourceTest : public ::testing::Test {
     now_src_->Advance(base::TimeDelta::FromMicroseconds(1000));
     task_runner_ =
         make_scoped_refptr(new OrderedSimpleTaskRunner(now_src_.get(), false));
-    source_ = TestBackToBackBeginFrameSource::Create(now_src_.get(),
-                                                     task_runner_.get());
+    source_.reset(
+        new TestBackToBackBeginFrameSource(now_src_.get(), task_runner_.get()));
     obs_ = make_scoped_ptr(new ::testing::StrictMock<MockBeginFrameObserver>());
   }
 
@@ -419,9 +412,9 @@ class SyntheticBeginFrameSourceTest : public ::testing::Test {
     now_src_->Advance(base::TimeDelta::FromMicroseconds(1000));
     task_runner_ =
         make_scoped_refptr(new OrderedSimpleTaskRunner(now_src_.get(), false));
-    source_ = TestSyntheticBeginFrameSource::Create(
+    source_.reset(new TestSyntheticBeginFrameSource(
         now_src_.get(), task_runner_.get(),
-        base::TimeDelta::FromMicroseconds(10000));
+        base::TimeDelta::FromMicroseconds(10000)));
     obs_ = make_scoped_ptr(new MockBeginFrameObserver());
   }
 
@@ -564,343 +557,6 @@ TEST_F(SyntheticBeginFrameSourceTest, DoubleTickMissedFrame) {
   EXPECT_BEGIN_FRAME_USED_MISSED(obs, 10000, 20000, 10000);
   source_->AddObserver(&obs);
   source_->RemoveObserver(&obs);
-}
-
-// BeginFrameSourceMultiplexer testing -----------------------------------
-class BeginFrameSourceMultiplexerTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    mux_ = BeginFrameSourceMultiplexer::Create();
-
-    source1_store_ = make_scoped_ptr(new FakeBeginFrameSource());
-    source2_store_ = make_scoped_ptr(new FakeBeginFrameSource());
-    source3_store_ = make_scoped_ptr(new FakeBeginFrameSource());
-
-    source1_ = source1_store_.get();
-    source2_ = source2_store_.get();
-    source3_ = source3_store_.get();
-  }
-
-  void TearDown() override {
-    // Make sure the mux is torn down before the sources.
-    mux_.reset();
-  }
-
-  scoped_ptr<BeginFrameSourceMultiplexer> mux_;
-  FakeBeginFrameSource* source1_;
-  FakeBeginFrameSource* source2_;
-  FakeBeginFrameSource* source3_;
-
- private:
-  scoped_ptr<FakeBeginFrameSource> source1_store_;
-  scoped_ptr<FakeBeginFrameSource> source2_store_;
-  scoped_ptr<FakeBeginFrameSource> source3_store_;
-};
-
-TEST_F(BeginFrameSourceMultiplexerTest, SourcesManipulation) {
-  EXPECT_EQ(NULL, mux_->ActiveSource());
-
-  mux_->AddSource(source1_);
-  EXPECT_EQ(source1_, mux_->ActiveSource());
-
-  mux_->SetActiveSource(NULL);
-  EXPECT_EQ(NULL, mux_->ActiveSource());
-
-  mux_->SetActiveSource(source1_);
-
-#ifndef NDEBUG
-  // Setting a source which isn't in the mux as active should DCHECK fail.
-  EXPECT_DEATH({ mux_->SetActiveSource(source2_); }, "");
-
-  // Adding a source which is already added should DCHECK fail.
-  EXPECT_DEATH({ mux_->AddSource(source1_); }, "");
-
-  // Removing a source which isn't in the mux should DCHECK fail.
-  EXPECT_DEATH({ mux_->RemoveSource(source2_); }, "");
-
-  // Removing the active source fails
-  EXPECT_DEATH({ mux_->RemoveSource(source1_); }, "");
-#endif
-
-  // Test manipulation doesn't segfault.
-  mux_->AddSource(source2_);
-  mux_->RemoveSource(source2_);
-
-  mux_->AddSource(source2_);
-  mux_->SetActiveSource(source2_);
-  EXPECT_EQ(source2_, mux_->ActiveSource());
-
-  mux_->RemoveSource(source1_);
-}
-
-TEST_F(BeginFrameSourceMultiplexerTest, SwitchActiveSource) {
-  mux_->AddSource(source1_);
-  mux_->AddSource(source2_);
-
-  EXPECT_FALSE(source1_->has_observers());
-  EXPECT_FALSE(source2_->has_observers());
-
-  MockBeginFrameObserver obs;
-  mux_->AddObserver(&obs);
-
-  mux_->SetActiveSource(source1_);
-  EXPECT_TRUE(source1_->has_observers());
-  EXPECT_FALSE(source2_->has_observers());
-
-  mux_->SetActiveSource(source2_);
-  EXPECT_FALSE(source1_->has_observers());
-  EXPECT_TRUE(source2_->has_observers());
-}
-
-TEST_F(BeginFrameSourceMultiplexerTest, SingleObserver) {
-  mux_->AddSource(source1_);
-  mux_->AddSource(source2_);
-  mux_->SetActiveSource(source1_);
-
-  EXPECT_FALSE(source1_->has_observers());
-  EXPECT_FALSE(source2_->has_observers());
-
-  MockBeginFrameObserver obs;
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
-  mux_->AddObserver(&obs);
-  EXPECT_TRUE(source1_->has_observers());
-  EXPECT_FALSE(source2_->has_observers());
-
-  EXPECT_BEGIN_FRAME_USED(obs, 100, 200, 100);
-  SEND_BEGIN_FRAME_USED(*source1_, 100, 200, 100);
-  SEND_BEGIN_FRAME_DROP(*source2_, 150, 250, 100);
-
-  mux_->RemoveObserver(&obs);
-  EXPECT_FALSE(source1_->has_observers());
-  EXPECT_FALSE(source2_->has_observers());
-}
-
-TEST_F(BeginFrameSourceMultiplexerTest, MultipleObservers) {
-  mux_->AddSource(source1_);
-  mux_->AddSource(source2_);
-  mux_->SetActiveSource(source1_);
-
-  EXPECT_FALSE(source1_->has_observers());
-  EXPECT_FALSE(source2_->has_observers());
-
-  StrictMock<MockBeginFrameObserver> obs1, obs2;
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs1, false);
-  mux_->AddObserver(&obs1);
-  EXPECT_TRUE(source1_->has_observers());
-  EXPECT_FALSE(source2_->has_observers());
-
-  EXPECT_BEGIN_FRAME_USED(obs1, 100, 200, 100);
-  SEND_BEGIN_FRAME_USED(*source1_, 100, 200, 100);
-  SEND_BEGIN_FRAME_DROP(*source2_, 200, 300, 100);
-
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs2, false);
-  mux_->AddObserver(&obs2);
-
-  EXPECT_BEGIN_FRAME_USED(obs1, 300, 400, 100);
-  EXPECT_BEGIN_FRAME_USED(obs2, 300, 400, 100);
-  SEND_BEGIN_FRAME_USED(*source1_, 300, 400, 100);
-  SEND_BEGIN_FRAME_DROP(*source2_, 400, 500, 100);
-
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs1, true);
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs2, true);
-  source1_->SetBeginFrameSourcePaused(true);
-
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs1, false);
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs2, false);
-  mux_->SetActiveSource(source2_);
-  EXPECT_FALSE(source1_->has_observers());
-  EXPECT_TRUE(source2_->has_observers());
-
-  EXPECT_BEGIN_FRAME_USED(obs1, 600, 700, 100);
-  EXPECT_BEGIN_FRAME_USED(obs2, 600, 700, 100);
-  SEND_BEGIN_FRAME_DROP(*source1_, 500, 600, 100);
-  SEND_BEGIN_FRAME_USED(*source2_, 600, 700, 100);
-
-  mux_->RemoveObserver(&obs1);
-  EXPECT_FALSE(source1_->has_observers());
-  EXPECT_TRUE(source2_->has_observers());
-
-  EXPECT_BEGIN_FRAME_USED(obs2, 800, 900, 100);
-  SEND_BEGIN_FRAME_DROP(*source1_, 700, 800, 100);
-  SEND_BEGIN_FRAME_USED(*source2_, 800, 900, 100);
-
-  mux_->RemoveObserver(&obs2);
-  EXPECT_FALSE(source1_->has_observers());
-  EXPECT_FALSE(source2_->has_observers());
-}
-
-TEST_F(BeginFrameSourceMultiplexerTest, BeginFramesSimple) {
-  mux_->AddSource(source1_);
-  mux_->AddSource(source2_);
-  mux_->SetActiveSource(source1_);
-
-  MockBeginFrameObserver obs;
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
-  mux_->AddObserver(&obs);
-  EXPECT_BEGIN_FRAME_USED(obs, 100, 200, 300);
-  EXPECT_BEGIN_FRAME_USED(obs, 400, 600, 300);
-
-  mux_->SetActiveSource(source1_);
-
-  SEND_BEGIN_FRAME_USED(*source1_, 100, 200, 300);
-  SEND_BEGIN_FRAME_DROP(*source2_, 200, 500, 300);
-
-  mux_->SetActiveSource(source2_);
-  SEND_BEGIN_FRAME_USED(*source2_, 400, 600, 300);
-  SEND_BEGIN_FRAME_DROP(*source1_, 500, 700, 300);
-}
-
-TEST_F(BeginFrameSourceMultiplexerTest, BeginFramesBackwardsProtection) {
-  mux_->AddSource(source1_);
-  mux_->AddSource(source2_);
-
-  MockBeginFrameObserver obs;
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
-  mux_->AddObserver(&obs);
-  EXPECT_BEGIN_FRAME_USED(obs, 400, 600, 300);
-  EXPECT_BEGIN_FRAME_USED(obs, 700, 900, 300);
-  EXPECT_BEGIN_FRAME_USED(obs, 1000, 1200, 300);
-  EXPECT_BEGIN_FRAME_USED(obs, 1001, 1201, 301);
-
-  mux_->SetActiveSource(source1_);
-  SEND_BEGIN_FRAME_USED(*source1_, 400, 600, 300);
-  SEND_BEGIN_FRAME_USED(*source1_, 700, 900, 300);
-
-  mux_->SetActiveSource(source2_);
-  SEND_BEGIN_FRAME_DROP(*source2_, 699, 899, 300);
-  SEND_BEGIN_FRAME_USED(*source2_, 1000, 1200, 300);
-
-  mux_->SetActiveSource(source1_);
-  SEND_BEGIN_FRAME_USED(*source1_, 1001, 1201, 301);
-}
-
-TEST_F(BeginFrameSourceMultiplexerTest, MinimumIntervalNegativeFails) {
-#ifndef NDEBUG
-  EXPECT_DEATH(
-      { mux_->SetMinimumInterval(base::TimeDelta::FromInternalValue(-100)); },
-      "");
-#endif
-}
-
-TEST_F(BeginFrameSourceMultiplexerTest, MinimumIntervalZero) {
-  mux_->SetMinimumInterval(base::TimeDelta());
-  mux_->AddSource(source1_);
-
-  MockBeginFrameObserver obs;
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
-  mux_->AddObserver(&obs);
-  EXPECT_BEGIN_FRAME_USED(obs, 100, 200, 300);
-  EXPECT_BEGIN_FRAME_USED(obs, 400, 600, 300);
-  EXPECT_BEGIN_FRAME_USED(obs, 700, 900, 300);
-
-  SEND_BEGIN_FRAME_USED(*source1_, 100, 200, 300);
-  SEND_BEGIN_FRAME_USED(*source1_, 400, 600, 300);
-  SEND_BEGIN_FRAME_USED(*source1_, 700, 900, 300);
-}
-
-TEST_F(BeginFrameSourceMultiplexerTest, MinimumIntervalBasic) {
-  mux_->SetMinimumInterval(base::TimeDelta::FromInternalValue(600));
-  mux_->AddSource(source1_);
-
-  MockBeginFrameObserver obs;
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
-  mux_->AddObserver(&obs);
-  EXPECT_BEGIN_FRAME_USED(obs, 100, 200, 300);
-  EXPECT_BEGIN_FRAME_USED(obs, 700, 900, 300);
-
-  SEND_BEGIN_FRAME_USED(*source1_, 100, 200, 300);
-  SEND_BEGIN_FRAME_DROP(*source1_, 400, 600, 300);
-  SEND_BEGIN_FRAME_USED(*source1_, 700, 900, 300);
-}
-
-TEST_F(BeginFrameSourceMultiplexerTest, MinimumIntervalWithMultipleSources) {
-  mux_->SetMinimumInterval(base::TimeDelta::FromMicroseconds(150));
-  mux_->AddSource(source1_);
-  mux_->AddSource(source2_);
-
-  MockBeginFrameObserver obs;
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
-  mux_->AddObserver(&obs);
-  EXPECT_BEGIN_FRAME_USED(obs, 400, 600, 300);
-  EXPECT_BEGIN_FRAME_USED(obs, 700, 900, 300);
-  EXPECT_BEGIN_FRAME_USED(obs, 1050, 1250, 300);
-
-  mux_->SetActiveSource(source1_);
-  SEND_BEGIN_FRAME_USED(*source1_, 400, 600, 300);
-  SEND_BEGIN_FRAME_USED(*source1_, 700, 900, 300);
-
-  mux_->SetActiveSource(source2_);
-  SEND_BEGIN_FRAME_DROP(*source2_, 750, 1050, 300);
-  SEND_BEGIN_FRAME_USED(*source2_, 1050, 1250, 300);
-
-  mux_->SetActiveSource(source1_);
-  SEND_BEGIN_FRAME_DROP(*source2_, 1100, 1400, 300);
-}
-
-TEST_F(BeginFrameSourceMultiplexerTest, BeginFrameSourcePaused) {
-  mux_->AddSource(source1_);
-  mux_->AddSource(source2_);
-  mux_->SetActiveSource(source1_);
-
-  MockBeginFrameObserver obs;
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
-  mux_->AddObserver(&obs);
-  Mock::VerifyAndClearExpectations(&obs);
-
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, true);
-  source1_->SetBeginFrameSourcePaused(true);
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
-  source1_->SetBeginFrameSourcePaused(false);
-  Mock::VerifyAndClearExpectations(&obs);
-
-  mux_->SetActiveSource(source2_);
-  Mock::VerifyAndClearExpectations(&obs);
-
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, true);
-  source2_->SetBeginFrameSourcePaused(true);
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
-  source2_->SetBeginFrameSourcePaused(false);
-}
-
-TEST_F(BeginFrameSourceMultiplexerTest,
-       BeginFrameSourcePausedUpdateOnSourceTransition) {
-  mux_->AddSource(source1_);
-  mux_->AddSource(source2_);
-  source1_->SetBeginFrameSourcePaused(true);
-  source2_->SetBeginFrameSourcePaused(false);
-  mux_->SetActiveSource(source1_);
-
-  MockBeginFrameObserver obs;
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, true);
-  mux_->AddObserver(&obs);
-  Mock::VerifyAndClearExpectations(&obs);
-
-  // Paused to not paused.
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
-  mux_->SetActiveSource(source2_);
-  Mock::VerifyAndClearExpectations(&obs);
-
-  // Not paused to paused.
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, true);
-  mux_->SetActiveSource(source1_);
-  Mock::VerifyAndClearExpectations(&obs);
-
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, false);
-  source1_->SetBeginFrameSourcePaused(false);
-  Mock::VerifyAndClearExpectations(&obs);
-
-  // Not paused to not paused.
-  mux_->SetActiveSource(source2_);
-  Mock::VerifyAndClearExpectations(&obs);
-
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(obs, true);
-  source2_->SetBeginFrameSourcePaused(true);
-  Mock::VerifyAndClearExpectations(&obs);
-  source1_->SetBeginFrameSourcePaused(true);
-
-  // Paused to paused.
-  mux_->SetActiveSource(source1_);
-  Mock::VerifyAndClearExpectations(&obs);
 }
 
 }  // namespace

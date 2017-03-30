@@ -29,6 +29,7 @@
 #include "platform/PlatformEvent.h"
 #include "platform/geometry/IntPoint.h"
 #include "public/platform/WebPointerProperties.h"
+#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -56,7 +57,7 @@ public:
     {
     }
 
-    PlatformMouseEvent(const IntPoint& position, const IntPoint& globalPosition, MouseButton button, PlatformEvent::Type type, int clickCount, Modifiers modifiers, double timestamp)
+    PlatformMouseEvent(const IntPoint& position, const IntPoint& globalPosition, MouseButton button, EventType type, int clickCount, Modifiers modifiers, double timestamp)
         : PlatformEvent(type, modifiers, timestamp)
         , m_position(position)
         , m_globalPosition(globalPosition)
@@ -66,7 +67,7 @@ public:
     {
     }
 
-    PlatformMouseEvent(const IntPoint& position, const IntPoint& globalPosition, MouseButton button, PlatformEvent::Type type, int clickCount, Modifiers modifiers, SyntheticEventType synthesized, double timestamp, WebPointerProperties::PointerType pointerType = WebPointerProperties::PointerType::Unknown)
+    PlatformMouseEvent(const IntPoint& position, const IntPoint& globalPosition, MouseButton button, EventType type, int clickCount, Modifiers modifiers, SyntheticEventType synthesized, double timestamp, WebPointerProperties::PointerType pointerType = WebPointerProperties::PointerType::Unknown)
         : PlatformEvent(type, modifiers, timestamp)
         , m_position(position)
         , m_globalPosition(globalPosition)
@@ -85,7 +86,10 @@ public:
     MouseButton button() const { return m_button; }
     int clickCount() const { return m_clickCount; }
     bool fromTouch() const { return m_synthesized == FromTouch; }
-    SyntheticEventType syntheticEventType() const { return m_synthesized; }
+    SyntheticEventType getSyntheticEventType() const { return m_synthesized; }
+
+    const String& region() const { return m_region; }
+    void setRegion(const String& region) { m_region = region; }
 
 protected:
     WebPointerProperties m_pointerProperties;
@@ -101,6 +105,12 @@ protected:
     MouseButton m_button;
     int m_clickCount;
     SyntheticEventType m_synthesized;
+
+    // For canvas hit region.
+    // TODO(zino): This might make more sense to put in HitTestResults or
+    // some other part of MouseEventWithHitTestResults, but for now it's
+    // most convenient to stash it here. Please see: http://crbug.com/592947.
+    String m_region;
 };
 
 } // namespace blink

@@ -30,18 +30,10 @@ function createFileSystemObjectsAndUpdateMetadata(response) {
 binding.registerCustomHook(function(bindingsAPI, extensionId) {
   var apiFunctions = bindingsAPI.apiFunctions;
 
-  // getMediaFileSystems, addUserSelectedFolder, and addScanResults use a
-  // custom callback so that they can instantiate and return an array of file
-  // system objects.
+  // getMediaFileSystems and addUserSelectedFolder use a custom callback so that
+  // they can instantiate and return an array of file system objects.
   apiFunctions.setCustomCallback('getMediaFileSystems',
                                  function(name, request, callback, response) {
-    var result = createFileSystemObjectsAndUpdateMetadata(response);
-    if (callback)
-      callback(result);
-  });
-
-  apiFunctions.setCustomCallback('addScanResults',
-      function(name, request, callback, response) {
     var result = createFileSystemObjectsAndUpdateMetadata(response);
     if (callback)
       callback(result);
@@ -62,22 +54,6 @@ binding.registerCustomHook(function(bindingsAPI, extensionId) {
     }
     if (callback)
       callback(fileSystems, selectedFileSystemName);
-  });
-
-  apiFunctions.setCustomCallback('dropPermissionForMediaFileSystem',
-      function(name, request, callback, response) {
-    var galleryId = response;
-
-    if (galleryId) {
-      for (var key in mediaGalleriesMetadata) {
-        if (mediaGalleriesMetadata[key].galleryId == galleryId) {
-          delete mediaGalleriesMetadata[key];
-          break;
-        }
-      }
-    }
-    if (callback)
-      callback();
   });
 
   apiFunctions.setHandleRequest('getMediaFileSystemMetadata',
@@ -126,4 +102,4 @@ binding.registerCustomHook(function(bindingsAPI, extensionId) {
   });
 });
 
-exports.binding = binding.generate();
+exports.$set('binding', binding.generate());

@@ -307,13 +307,13 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
         chrome::FindBrowserWithWebContents(web_contents())->profile();
 
     if (request.audio_type != content::MEDIA_NO_SERVICE) {
-      HostContentSettingsMapFactory::GetForProfile(profile)->SetContentSetting(
+      HostContentSettingsMapFactory::GetForProfile(profile)->SetContentSettingCustomScope(
           primary_pattern, ContentSettingsPattern::Wildcard(),
           CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string(),
           allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
     }
     if (request.video_type  != content::MEDIA_NO_SERVICE) {
-      HostContentSettingsMapFactory::GetForProfile(profile)->SetContentSetting(
+      HostContentSettingsMapFactory::GetForProfile(profile)->SetContentSettingCustomScope(
           primary_pattern, ContentSettingsPattern::Wildcard(),
           CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string(),
           allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);

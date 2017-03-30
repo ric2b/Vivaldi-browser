@@ -22,6 +22,7 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.UserManager;
@@ -34,7 +35,10 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Pair;
 
+import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.childaccounts.ChildAccountService;
 import org.chromium.chrome.browser.preferences.ChromeBasePreference;
 import org.chromium.chrome.browser.preferences.ManagedPreferenceDelegate;
@@ -106,6 +110,7 @@ public class AccountManagementFragment extends PreferenceFragment
     public static final String PREF_PARENT_ACCOUNTS = "parent_accounts";
     public static final String PREF_CHILD_CONTENT = "child_content";
     public static final String PREF_CHILD_SAFE_SITES = "child_safe_sites";
+    public static final String PREF_GOOGLE_ACTIVITY_CONTROLS = "google_activity_controls";
     public static final String PREF_SYNC_SETTINGS = "sync_settings";
 
     private int mGaiaServiceType;
@@ -115,6 +120,13 @@ public class AccountManagementFragment extends PreferenceFragment
     @Override
     public void onCreate(Bundle savedState) {
         super.onCreate(savedState);
+
+        // Prevent sync from starting if it hasn't already to give the user a chance to change
+        // their sync settings.
+        ProfileSyncService syncService = ProfileSyncService.get();
+        if (syncService != null) {
+            syncService.setSetupInProgress(true);
+        }
 
         mGaiaServiceType = AccountManagementScreenHelper.GAIA_SERVICE_TYPE_NONE;
         if (getArguments() != null) {
@@ -150,6 +162,17 @@ public class AccountManagementFragment extends PreferenceFragment
         ProfileSyncService syncService = ProfileSyncService.get();
         if (syncService != null) {
             syncService.removeSyncStateChangedListener(this);
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+
+        // Allow sync to begin syncing if it hasn't yet.
+        ProfileSyncService syncService = ProfileSyncService.get();
+        if (syncService != null) {
+            syncService.setSetupInProgress(false);
         }
     }
 
@@ -196,6 +219,7 @@ public class AccountManagementFragment extends PreferenceFragment
         configureAddAccountPreference();
         configureChildAccountPreferences();
         configureSyncSettings();
+        configureGoogleActivityControls();
 
         updateAccountsList();
     }
@@ -247,6 +271,13 @@ public class AccountManagementFragment extends PreferenceFragment
 
     private void configureSyncSettings() {
         SyncPreference pref = (SyncPreference) findPreference(PREF_SYNC_SETTINGS);
+        // Sets preference icon and tints it to blue.
+        Drawable icon = ApiCompatibilityUtils.getDrawable(
+                getResources(), R.drawable.permission_background_sync);
+        icon.setColorFilter(
+                ApiCompatibilityUtils.getColor(getResources(), R.color.light_active_color),
+                PorterDuff.Mode.SRC_IN);
+        pref.setIcon(icon);
         final Preferences preferences = (Preferences) getActivity();
         final Account account = ChromeSigninController.get(getActivity()).getSignedInUser();
 
@@ -265,6 +296,22 @@ public class AccountManagementFragment extends PreferenceFragment
                     openSyncSettingsPage(preferences);
                 }
 
+                return true;
+            }
+        });
+    }
+
+    private void configureGoogleActivityControls() {
+        Preference pref = (Preference) findPreference(PREF_GOOGLE_ACTIVITY_CONTROLS);
+        pref.setOnPreferenceClickListener(new OnPreferenceClickListener() {
+            @Override
+            public boolean onPreferenceClick(Preference preference) {
+                Activity activity = getActivity();
+                ((ChromeApplication) (activity.getApplicationContext()))
+                        .createGoogleActivityController()
+                        .openWebAndAppActivitySettings(activity,
+                                ChromeSigninController.get(activity).getSignedInAccountName());
+                RecordUserAction.record("Signin_AccountSettings_GoogleActivityControlsClicked");
                 return true;
             }
         });
@@ -468,7 +515,9 @@ public class AccountManagementFragment extends PreferenceFragment
     @Override
     public void syncStateChanged() {
         SyncPreference pref = (SyncPreference) findPreference(PREF_SYNC_SETTINGS);
-        pref.updateSyncSummary();
+        if (pref != null) {
+            pref.updateSyncSummary();
+        }
 
         // TODO(crbug/557784): Show notification for sync error
     }

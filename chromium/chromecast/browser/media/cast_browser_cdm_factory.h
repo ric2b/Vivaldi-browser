@@ -7,8 +7,13 @@
 
 #include "base/macros.h"
 #include "chromecast/media/base/key_systems_common.h"
+#include "chromecast/media/base/media_resource_tracker.h"
 #include "media/base/cdm_factory.h"
 #include "media/base/media_keys.h"
+
+namespace base {
+class SingleThreadTaskRunner;
+}  // namespace base
 
 namespace chromecast {
 namespace media {
@@ -17,8 +22,10 @@ class BrowserCdmCast;
 
 class CastBrowserCdmFactory : public ::media::CdmFactory {
  public:
-  CastBrowserCdmFactory() {}
-  ~CastBrowserCdmFactory() override {};
+  // CDM factory will use |task_runner| to initialize the CDM.
+  CastBrowserCdmFactory(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+                        MediaResourceTracker* media_resource_tracker);
+  ~CastBrowserCdmFactory() override;
 
   // ::media::CdmFactory implementation:
   void Create(
@@ -36,7 +43,11 @@ class CastBrowserCdmFactory : public ::media::CdmFactory {
   virtual scoped_refptr<BrowserCdmCast> CreatePlatformBrowserCdm(
       const CastKeySystem& cast_key_system);
 
+ protected:
+  MediaResourceTracker* media_resource_tracker_;
+
  private:
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   DISALLOW_COPY_AND_ASSIGN(CastBrowserCdmFactory);
 };
 

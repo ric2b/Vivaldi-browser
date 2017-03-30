@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chromecast/browser/media/media_pipeline_backend_factory.h"
 #include "media/base/renderer.h"
 
 namespace base {
@@ -17,12 +18,11 @@ class TaskRunnerImpl;
 
 namespace media {
 class BalancedMediaTaskRunnerFactory;
-class CmaMediaPipelineClient;
 class MediaPipelineImpl;
 
 class CastRenderer : public ::media::Renderer {
  public:
-  CastRenderer(const scoped_refptr<CmaMediaPipelineClient> pipeline_client,
+  CastRenderer(const CreateMediaPipelineBackendCB& create_backend_cb,
                const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
   ~CastRenderer() final;
 
@@ -45,11 +45,16 @@ class CastRenderer : public ::media::Renderer {
   bool HasVideo() final;
 
  private:
-  scoped_refptr<CmaMediaPipelineClient> pipeline_client_;
+  enum Stream { STREAM_AUDIO, STREAM_VIDEO };
+  void OnEos(Stream stream);
+
+  const CreateMediaPipelineBackendCB create_backend_cb_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   scoped_refptr<BalancedMediaTaskRunnerFactory> media_task_runner_factory_;
-  scoped_ptr<TaskRunnerImpl> backend_task_runner_;
-  scoped_ptr<MediaPipelineImpl> pipeline_;
+  std::unique_ptr<TaskRunnerImpl> backend_task_runner_;
+  std::unique_ptr<MediaPipelineImpl> pipeline_;
+  bool eos_[2];
+  base::Closure ended_cb_;
   DISALLOW_COPY_AND_ASSIGN(CastRenderer);
 };
 

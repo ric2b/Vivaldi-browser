@@ -101,13 +101,13 @@ void RotationViewportAnchor::setAnchor()
     // FIXME: Scroll offsets are now fractional (DoublePoint and FloatPoint for the FrameView and VisualViewport
     //        respectively. This path should be rewritten without pixel snapping.
     IntRect outerViewRect = m_rootFrameView->layoutViewportScrollableArea()->visibleContentRect(IncludeScrollbars);
-    IntRect innerViewRect = enclosedIntRect(m_rootFrameView->scrollableArea()->visibleContentRectDouble());
+    IntRect innerViewRect = enclosedIntRect(m_rootFrameView->getScrollableArea()->visibleContentRectDouble());
 
     m_oldPageScaleFactor = m_visualViewport->scale();
     m_oldMinimumPageScaleFactor = m_pageScaleConstraintsSet.finalConstraints().minimumScale;
 
     // Save the absolute location in case we won't find the anchor node, we'll fall back to that.
-    m_visualViewportInDocument = FloatPoint(m_rootFrameView->scrollableArea()->visibleContentRectDouble().location());
+    m_visualViewportInDocument = FloatPoint(m_rootFrameView->getScrollableArea()->visibleContentRectDouble().location());
 
     m_anchorNode.clear();
     m_anchorNodeBounds = LayoutRect();
@@ -122,10 +122,10 @@ void RotationViewportAnchor::setAnchor()
         return;
 
     // Inner rectangle should be within the outer one.
-    ASSERT(outerViewRect.contains(innerViewRect));
+    DCHECK(outerViewRect.contains(innerViewRect));
 
     // Outer rectangle is used as a scale, we need positive width and height.
-    ASSERT(!outerViewRect.isEmpty());
+    DCHECK(!outerViewRect.isEmpty());
 
     m_normalizedVisualViewportOffset = FloatSize(innerViewRect.location() - outerViewRect.location());
 
@@ -192,7 +192,7 @@ void RotationViewportAnchor::computeOrigins(const FloatSize& innerSize, IntPoint
 
 FloatPoint RotationViewportAnchor::getInnerOrigin(const FloatSize& innerSize) const
 {
-    if (!m_anchorNode || !m_anchorNode->inDocument())
+    if (!m_anchorNode || !m_anchorNode->inShadowIncludingDocument())
         return m_visualViewportInDocument;
 
     const LayoutRect currentNodeBounds = m_anchorNode->boundingBox();

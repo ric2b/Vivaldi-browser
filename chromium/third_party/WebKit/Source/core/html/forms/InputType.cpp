@@ -78,7 +78,7 @@ namespace blink {
 using blink::WebLocalizedString;
 using namespace HTMLNames;
 
-using InputTypeFactoryFunction = PassRefPtrWillBeRawPtr<InputType> (*)(HTMLInputElement&);
+using InputTypeFactoryFunction = InputType* (*)(HTMLInputElement&);
 using InputTypeFactoryMap = HashMap<AtomicString, InputTypeFactoryFunction, CaseFoldingHash>;
 
 static PassOwnPtr<InputTypeFactoryMap> createInputTypeFactoryMap()
@@ -115,7 +115,7 @@ static const InputTypeFactoryMap* factoryMap()
     return factoryMap;
 }
 
-PassRefPtrWillBeRawPtr<InputType> InputType::create(HTMLInputElement& element, const AtomicString& typeName)
+InputType* InputType::create(HTMLInputElement& element, const AtomicString& typeName)
 {
     InputTypeFactoryFunction factory = typeName.isEmpty() ? 0 : factoryMap()->get(typeName);
     if (!factory)
@@ -123,7 +123,7 @@ PassRefPtrWillBeRawPtr<InputType> InputType::create(HTMLInputElement& element, c
     return factory(element);
 }
 
-PassRefPtrWillBeRawPtr<InputType> InputType::createText(HTMLInputElement& element)
+InputType* InputType::createText(HTMLInputElement& element)
 {
     return TextInputType::create(element);
 }
@@ -386,7 +386,7 @@ std::pair<String, String> InputType::validationMessage() const
         //   should include a title attribute to give a description of the
         //   pattern. User agents may use the contents of this attribute, if it
         //   is present, when informing the user that the pattern is not matched
-        return std::make_pair(locale().queryString(WebLocalizedString::ValidationPatternMismatch), element().fastGetAttribute(titleAttr).string());
+        return std::make_pair(locale().queryString(WebLocalizedString::ValidationPatternMismatch), element().fastGetAttribute(titleAttr).getString());
     }
 
     if (element().tooLong())
@@ -514,6 +514,11 @@ void InputType::sanitizeValueInResponseToMinOrMaxAttributeChange()
 }
 
 bool InputType::canBeSuccessfulSubmitButton()
+{
+    return false;
+}
+
+bool InputType::matchesDefaultPseudoClass()
 {
     return false;
 }
@@ -648,11 +653,6 @@ bool InputType::isTextButton() const
     return false;
 }
 
-bool InputType::isImage() const
-{
-    return false;
-}
-
 bool InputType::isInteractiveContent() const
 {
     return true;
@@ -732,7 +732,7 @@ bool InputType::supportsAutocapitalize() const
 
 const AtomicString& InputType::defaultAutocapitalize() const
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, none, ("none", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, none, ("none"));
     return none;
 }
 

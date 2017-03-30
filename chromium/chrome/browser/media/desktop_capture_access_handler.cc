@@ -88,10 +88,81 @@ base::string16 GetApplicationTitle(content::WebContents* web_contents,
   return base::UTF8ToUTF16(title);
 }
 
+base::string16 GetStopSharingUIString(
+    const base::string16& application_title,
+    const base::string16& registered_extension_name,
+    bool capture_audio,
+    content::DesktopMediaID::Type capture_type) {
+  if (!capture_audio) {
+    if (application_title == registered_extension_name) {
+      switch (capture_type) {
+        case content::DesktopMediaID::TYPE_SCREEN:
+          return l10n_util::GetStringFUTF16(
+              IDS_MEDIA_SCREEN_CAPTURE_NOTIFICATION_TEXT, application_title);
+        case content::DesktopMediaID::TYPE_WINDOW:
+          return l10n_util::GetStringFUTF16(
+              IDS_MEDIA_WINDOW_CAPTURE_NOTIFICATION_TEXT, application_title);
+        case content::DesktopMediaID::TYPE_WEB_CONTENTS:
+          return l10n_util::GetStringFUTF16(
+              IDS_MEDIA_TAB_CAPTURE_NOTIFICATION_TEXT, application_title);
+        case content::DesktopMediaID::TYPE_NONE:
+          NOTREACHED();
+      }
+    } else {
+      switch (capture_type) {
+        case content::DesktopMediaID::TYPE_SCREEN:
+          return l10n_util::GetStringFUTF16(
+              IDS_MEDIA_SCREEN_CAPTURE_NOTIFICATION_TEXT_DELEGATED,
+              registered_extension_name, application_title);
+        case content::DesktopMediaID::TYPE_WINDOW:
+          return l10n_util::GetStringFUTF16(
+              IDS_MEDIA_WINDOW_CAPTURE_NOTIFICATION_TEXT_DELEGATED,
+              registered_extension_name, application_title);
+        case content::DesktopMediaID::TYPE_WEB_CONTENTS:
+          return l10n_util::GetStringFUTF16(
+              IDS_MEDIA_TAB_CAPTURE_NOTIFICATION_TEXT_DELEGATED,
+              registered_extension_name, application_title);
+        case content::DesktopMediaID::TYPE_NONE:
+          NOTREACHED();
+      }
+    }
+  } else {  // The case with audio
+    if (application_title == registered_extension_name) {
+      switch (capture_type) {
+        case content::DesktopMediaID::TYPE_SCREEN:
+          return l10n_util::GetStringFUTF16(
+              IDS_MEDIA_SCREEN_CAPTURE_WITH_AUDIO_NOTIFICATION_TEXT,
+              application_title);
+        case content::DesktopMediaID::TYPE_WEB_CONTENTS:
+          return l10n_util::GetStringFUTF16(
+              IDS_MEDIA_TAB_CAPTURE_WITH_AUDIO_NOTIFICATION_TEXT,
+              application_title);
+        case content::DesktopMediaID::TYPE_NONE:
+        case content::DesktopMediaID::TYPE_WINDOW:
+          NOTREACHED();
+      }
+    } else {
+      switch (capture_type) {
+        case content::DesktopMediaID::TYPE_SCREEN:
+          return l10n_util::GetStringFUTF16(
+              IDS_MEDIA_SCREEN_CAPTURE_WITH_AUDIO_NOTIFICATION_TEXT_DELEGATED,
+              registered_extension_name, application_title);
+        case content::DesktopMediaID::TYPE_WEB_CONTENTS:
+          return l10n_util::GetStringFUTF16(
+              IDS_MEDIA_TAB_CAPTURE_WITH_AUDIO_NOTIFICATION_TEXT_DELEGATED,
+              registered_extension_name, application_title);
+        case content::DesktopMediaID::TYPE_NONE:
+        case content::DesktopMediaID::TYPE_WINDOW:
+          NOTREACHED();
+      }
+    }
+  }
+  return base::string16();
+}
 // Helper to get list of media stream devices for desktop capture in |devices|.
 // Registers to display notification if |display_notification| is true.
 // Returns an instance of MediaStreamUI to be passed to content layer.
-scoped_ptr<content::MediaStreamUI> GetDevicesForDesktopCapture(
+std::unique_ptr<content::MediaStreamUI> GetDevicesForDesktopCapture(
     content::MediaStreamDevices* devices,
     content::DesktopMediaID media_id,
     bool capture_audio,
@@ -99,7 +170,7 @@ scoped_ptr<content::MediaStreamUI> GetDevicesForDesktopCapture(
     const base::string16& application_title,
     const base::string16& registered_extension_name) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  scoped_ptr<content::MediaStreamUI> ui;
+  std::unique_ptr<content::MediaStreamUI> ui;
 
   // Add selected desktop source to the list.
   devices->push_back(content::MediaStreamDevice(
@@ -118,16 +189,13 @@ scoped_ptr<content::MediaStreamUI> GetDevicesForDesktopCapture(
   }
 
   // If required, register to display the notification for stream capture.
-  if (display_notification) {
-    if (application_title == registered_extension_name) {
-      ui = ScreenCaptureNotificationUI::Create(l10n_util::GetStringFUTF16(
-          IDS_MEDIA_SCREEN_CAPTURE_NOTIFICATION_TEXT, application_title));
-    } else {
-      ui = ScreenCaptureNotificationUI::Create(l10n_util::GetStringFUTF16(
-          IDS_MEDIA_SCREEN_CAPTURE_NOTIFICATION_TEXT_DELEGATED,
-          registered_extension_name, application_title));
-    }
+  if (!display_notification) {
+    return ui;
   }
+
+  ui = ScreenCaptureNotificationUI::Create(GetStopSharingUIString(
+      application_title, registered_extension_name, capture_audio,
+      media_id.type));
 
   return ui;
 }
@@ -168,7 +236,7 @@ void DesktopCaptureAccessHandler::ProcessScreenCaptureAccessRequest(
     const content::MediaResponseCallback& callback,
     const extensions::Extension* extension) {
   content::MediaStreamDevices devices;
-  scoped_ptr<content::MediaStreamUI> ui;
+  std::unique_ptr<content::MediaStreamUI> ui;
 
   DCHECK_EQ(request.video_type, content::MEDIA_DESKTOP_VIDEO_CAPTURE);
 
@@ -209,9 +277,9 @@ void DesktopCaptureAccessHandler::ProcessScreenCaptureAccessRequest(
   //  2. Request comes from a page with a secure origin or from an extension.
   if (screen_capture_enabled && origin_is_secure) {
     // Get title of the calling application prior to showing the message box.
-    // chrome::ShowMessageBox() starts a nested message loop which may allow
-    // |web_contents| to be destroyed on the UI thread before the message box
-    // is closed. See http://crbug.com/326690.
+    // chrome::ShowQuestionMessageBox() starts a nested message loop which may
+    // allow |web_contents| to be destroyed on the UI thread before the messag
+    // box is closed. See http://crbug.com/326690.
     base::string16 application_title =
         GetApplicationTitle(web_contents, extension);
 #if !defined(OS_ANDROID)
@@ -237,11 +305,11 @@ void DesktopCaptureAccessHandler::ProcessScreenCaptureAccessRequest(
               ? IDS_MEDIA_SCREEN_CAPTURE_CONFIRMATION_TEXT
               : IDS_MEDIA_SCREEN_AND_AUDIO_CAPTURE_CONFIRMATION_TEXT,
           application_name);
-      chrome::MessageBoxResult result = chrome::ShowMessageBox(
+      chrome::MessageBoxResult result = chrome::ShowQuestionMessageBox(
           parent_window,
           l10n_util::GetStringFUTF16(
               IDS_MEDIA_SCREEN_CAPTURE_CONFIRMATION_TITLE, application_name),
-          confirmation_text, chrome::MESSAGE_BOX_TYPE_QUESTION);
+          confirmation_text);
       user_approved = (result == chrome::MESSAGE_BOX_RESULT_YES);
     }
 
@@ -300,7 +368,7 @@ void DesktopCaptureAccessHandler::HandleRequest(
     const content::MediaResponseCallback& callback,
     const extensions::Extension* extension) {
   content::MediaStreamDevices devices;
-  scoped_ptr<content::MediaStreamUI> ui;
+  std::unique_ptr<content::MediaStreamUI> ui;
 
   if (request.video_type != content::MEDIA_DESKTOP_VIDEO_CAPTURE) {
     callback.Run(devices, content::MEDIA_DEVICE_INVALID_STATE, std::move(ui));
@@ -366,10 +434,12 @@ void DesktopCaptureAccessHandler::HandleRequest(
        loopback_audio_supported) ||
       media_id.type == content::DesktopMediaID::TYPE_WEB_CONTENTS;
 
-  const bool has_flag = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      extensions::switches::kEnableDesktopCaptureAudio);
+  const bool check_audio_permission =
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          extensions::switches::kDisableDesktopCaptureAudio);
   const bool capture_audio =
-      (has_flag ? audio_permitted : true) && audio_requested && audio_supported;
+      (check_audio_permission ? audio_permitted : true) && audio_requested &&
+      audio_supported;
 
   ui = GetDevicesForDesktopCapture(&devices, media_id, capture_audio, true,
                                    GetApplicationTitle(web_contents, extension),

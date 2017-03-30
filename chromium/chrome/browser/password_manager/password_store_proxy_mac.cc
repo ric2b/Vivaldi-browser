@@ -18,8 +18,8 @@ using password_manager::PasswordStoreChangeList;
 
 PasswordStoreProxyMac::PasswordStoreProxyMac(
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner,
-    scoped_ptr<crypto::AppleKeychain> keychain,
-    scoped_ptr<password_manager::LoginDatabase> login_db,
+    std::unique_ptr<crypto::AppleKeychain> keychain,
+    std::unique_ptr<password_manager::LoginDatabase> login_db,
     PrefService* prefs)
     : PasswordStore(main_thread_runner, nullptr),
       login_metadata_db_(std::move(login_db)) {
@@ -169,12 +169,12 @@ PasswordStoreChangeList PasswordStoreProxyMac::RemoveLoginImpl(
   return GetBackend()->RemoveLoginImpl(form);
 }
 
-PasswordStoreChangeList PasswordStoreProxyMac::RemoveLoginsByOriginAndTimeImpl(
-    const url::Origin& origin,
+PasswordStoreChangeList PasswordStoreProxyMac::RemoveLoginsByURLAndTimeImpl(
+    const base::Callback<bool(const GURL&)>& url_filter,
     base::Time delete_begin,
     base::Time delete_end) {
-  return GetBackend()->RemoveLoginsByOriginAndTimeImpl(origin, delete_begin,
-                                                       delete_end);
+  return GetBackend()->RemoveLoginsByURLAndTimeImpl(url_filter, delete_begin,
+                                                    delete_end);
 }
 
 PasswordStoreChangeList PasswordStoreProxyMac::RemoveLoginsCreatedBetweenImpl(
@@ -225,7 +225,7 @@ void PasswordStoreProxyMac::RemoveSiteStatsImpl(const GURL& origin_domain) {
   GetBackend()->RemoveSiteStatsImpl(origin_domain);
 }
 
-std::vector<scoped_ptr<password_manager::InteractionsStats>>
+std::vector<std::unique_ptr<password_manager::InteractionsStats>>
 PasswordStoreProxyMac::GetSiteStatsImpl(const GURL& origin_domain) {
   return GetBackend()->GetSiteStatsImpl(origin_domain);
 }

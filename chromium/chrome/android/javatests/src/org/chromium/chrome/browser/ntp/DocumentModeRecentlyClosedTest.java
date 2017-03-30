@@ -10,6 +10,7 @@ import android.test.suitebuilder.annotation.MediumTest;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.document.DocumentActivity;
@@ -23,7 +24,6 @@ import org.chromium.chrome.browser.tabmodel.document.DocumentTabModel.Entry;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
 import org.chromium.chrome.test.util.ActivityUtils;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
-import org.chromium.chrome.test.util.DisableInTabbedMode;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.ui.WindowOpenDisposition;
@@ -34,8 +34,8 @@ import java.util.concurrent.Callable;
 /**
  * Tests that the "Recently closed" list of Tabs in the "Recent Tabs" menu is updated properly.
  */
+@DisabledTest
 @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-@DisableInTabbedMode
 public class DocumentModeRecentlyClosedTest extends DocumentModeTestBase {
 
     /** Used to report that a fake Task is sitting in Android's Overview menu. */
@@ -106,7 +106,7 @@ public class DocumentModeRecentlyClosedTest extends DocumentModeTestBase {
         // DocumentTabModel update.
         activityDelegate.mExtraRegularTask = null;
         ApplicationTestUtils.launchChrome(mContext);
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 Activity lastActivity = ApplicationStatus.getLastTrackedFocusedActivity();
@@ -115,12 +115,12 @@ public class DocumentModeRecentlyClosedTest extends DocumentModeTestBase {
         });
 
         // Wait until the DocumentTabModel updates and shows a single tab.
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(Criteria.equals(1, new Callable<Integer>() {
             @Override
-            public boolean isSatisfied() {
-                return selector.getTotalTabCount() == 1;
+            public Integer call() {
+                return selector.getTotalTabCount();
             }
-        });
+        }));
 
         // Check recently closed, make sure it shows one open and one closed tab.
         DocumentActivity activity =
@@ -165,12 +165,12 @@ public class DocumentModeRecentlyClosedTest extends DocumentModeTestBase {
                     selector.getModel(false).closeTabAt(0);
                 }
         });
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(Criteria.equals(2, new Callable<Integer>() {
                 @Override
-                public boolean isSatisfied() {
-                    return selector.getTotalTabCount() == 2;
+                public Integer call() {
+                    return selector.getTotalTabCount();
                 }
-        });
+        }));
 
         // Check that the right things appear in Recent Tabs.
         List<CurrentlyOpenTab> afterOpenTabs = recentTabsManager.getCurrentlyOpenTabs();
@@ -239,12 +239,12 @@ public class DocumentModeRecentlyClosedTest extends DocumentModeTestBase {
         ActivityDelegate delegate =
                 new ActivityDelegateImpl(DocumentActivity.class, IncognitoDocumentActivity.class);
         delegate.finishAndRemoveTask(false, tabIds[0]);
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(Criteria.equals(2, new Callable<Integer>() {
             @Override
-            public boolean isSatisfied() {
-                return selector.getTotalTabCount() == 2;
+            public Integer call() {
+                return selector.getTotalTabCount();
             }
-        });
+        }));
 
         // Check that the Tab shows up under Recently closed.
         final DocumentRecentTabsManager recentTabsManager = getRecentTabsManager(thirdActivity);

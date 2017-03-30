@@ -84,9 +84,9 @@ TEST_F(QuicCryptoClientStreamTest, ConnectedAfterSHLO) {
 TEST_F(QuicCryptoClientStreamTest, MessageAfterHandshake) {
   CompleteCryptoHandshake();
 
-  EXPECT_CALL(*connection_,
-              SendConnectionCloseWithDetails(
-                  QUIC_CRYPTO_MESSAGE_AFTER_HANDSHAKE_COMPLETE, _));
+  EXPECT_CALL(
+      *connection_,
+      CloseConnection(QUIC_CRYPTO_MESSAGE_AFTER_HANDSHAKE_COMPLETE, _, _));
   message_.set_tag(kCHLO);
   ConstructHandshakeMessage();
   stream()->OnStreamFrame(QuicStreamFrame(kCryptoStreamId, /*fin=*/false,
@@ -100,16 +100,14 @@ TEST_F(QuicCryptoClientStreamTest, BadMessageType) {
   message_.set_tag(kCHLO);
   ConstructHandshakeMessage();
 
-  EXPECT_CALL(*connection_,
-              SendConnectionCloseWithDetails(QUIC_INVALID_CRYPTO_MESSAGE_TYPE,
-                                             "Expected REJ"));
+  EXPECT_CALL(*connection_, CloseConnection(QUIC_INVALID_CRYPTO_MESSAGE_TYPE,
+                                            "Expected REJ", _));
   stream()->OnStreamFrame(QuicStreamFrame(kCryptoStreamId, /*fin=*/false,
                                           /*offset=*/0,
                                           message_data_->AsStringPiece()));
 }
 
 TEST_F(QuicCryptoClientStreamTest, NegotiatedParameters) {
-  FLAGS_quic_use_rfc7539 = true;
   CompleteCryptoHandshake();
 
   const QuicConfig* config = session_->config();
@@ -153,7 +151,8 @@ TEST_F(QuicCryptoClientStreamTest, InvalidCachedServerConfig) {
   vector<string> certs = state->certs();
   string cert_sct = state->cert_sct();
   string signature = state->signature();
-  state->SetProof(certs, cert_sct, signature + signature);
+  string chlo_hash = state->chlo_hash();
+  state->SetProof(certs, cert_sct, chlo_hash, signature + signature);
 
   stream()->CryptoConnect();
   // Check that a client hello was sent.
@@ -209,9 +208,9 @@ TEST_F(QuicCryptoClientStreamTest, ServerConfigUpdate) {
 }
 
 TEST_F(QuicCryptoClientStreamTest, ServerConfigUpdateBeforeHandshake) {
-  EXPECT_CALL(*connection_,
-              SendConnectionCloseWithDetails(
-                  QUIC_CRYPTO_UPDATE_BEFORE_HANDSHAKE_COMPLETE, _));
+  EXPECT_CALL(
+      *connection_,
+      CloseConnection(QUIC_CRYPTO_UPDATE_BEFORE_HANDSHAKE_COMPLETE, _, _));
   CryptoHandshakeMessage server_config_update;
   server_config_update.set_tag(kSCUP);
   scoped_ptr<QuicData> data(
@@ -263,6 +262,8 @@ class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
         server_crypto_config_(QuicCryptoServerConfig::TESTING,
                               QuicRandom::GetInstance(),
                               CryptoTestUtils::ProofSourceForTesting()),
+        server_compressed_certs_cache_(
+            QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
         server_id_(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED) {
     TestQuicSpdyClientSession* client_session = nullptr;
     CreateClientSessionForTest(
@@ -288,10 +289,10 @@ class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
   // Initializes the server_stream_ for stateless rejects.
   void InitializeFakeStatelessRejectServer() {
     TestQuicSpdyServerSession* server_session = nullptr;
-    CreateServerSessionForTest(server_id_, QuicTime::Delta::FromSeconds(100000),
-                               QuicSupportedVersions(), &helper_,
-                               &server_crypto_config_, &server_connection_,
-                               &server_session);
+    CreateServerSessionForTest(
+        server_id_, QuicTime::Delta::FromSeconds(100000),
+        QuicSupportedVersions(), &helper_, &server_crypto_config_,
+        &server_compressed_certs_cache_, &server_connection_, &server_session);
     CHECK(server_session);
     server_session_.reset(server_session);
     CryptoTestUtils::FakeServerOptions options;
@@ -312,6 +313,7 @@ class QuicCryptoClientStreamStatelessTest : public ::testing::Test {
   PacketSavingConnection* server_connection_;
   scoped_ptr<TestQuicSpdyServerSession> server_session_;
   QuicCryptoServerConfig server_crypto_config_;
+  QuicCompressedCertsCache server_compressed_certs_cache_;
   QuicServerId server_id_;
 };
 

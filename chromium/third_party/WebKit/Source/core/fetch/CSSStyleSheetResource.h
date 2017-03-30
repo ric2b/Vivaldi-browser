@@ -42,8 +42,8 @@ class CORE_EXPORT CSSStyleSheetResource final : public StyleSheetResource {
 public:
     enum class MIMETypeCheck { Strict, Lax };
 
-    static PassRefPtrWillBeRawPtr<CSSStyleSheetResource> fetch(FetchRequest&, ResourceFetcher*);
-    static PassRefPtrWillBeRawPtr<CSSStyleSheetResource> createForTest(const ResourceRequest&, const String& charset);
+    static CSSStyleSheetResource* fetch(FetchRequest&, ResourceFetcher*);
+    static CSSStyleSheetResource* createForTest(const ResourceRequest&, const String& charset);
 
     ~CSSStyleSheetResource() override;
     DECLARE_VIRTUAL_TRACE();
@@ -52,8 +52,8 @@ public:
 
     void didAddClient(ResourceClient*) override;
 
-    PassRefPtrWillBeRawPtr<StyleSheetContents> restoreParsedStyleSheet(const CSSParserContext&);
-    void saveParsedStyleSheet(PassRefPtrWillBeRawPtr<StyleSheetContents>);
+    StyleSheetContents* restoreParsedStyleSheet(const CSSParserContext&);
+    void saveParsedStyleSheet(StyleSheetContents*);
 
 protected:
     bool isSafeToUnlock() const override;
@@ -66,12 +66,12 @@ private:
         CSSStyleSheetResourceFactory()
             : ResourceFactory(Resource::CSSStyleSheet) { }
 
-        PassRefPtrWillBeRawPtr<Resource> create(const ResourceRequest& request, const String& charset) const override
+        Resource* create(const ResourceRequest& request, const ResourceLoaderOptions& options, const String& charset) const override
         {
-            return adoptRefWillBeNoop(new CSSStyleSheetResource(request, charset));
+            return new CSSStyleSheetResource(request, options, charset);
         }
     };
-    CSSStyleSheetResource(const ResourceRequest&, const String& charset);
+    CSSStyleSheetResource(const ResourceRequest&, const ResourceLoaderOptions&, const String& charset);
 
     bool canUseSheet(MIMETypeCheck) const;
     void removedFromMemoryCache() override;
@@ -79,7 +79,7 @@ private:
 
     String m_decodedSheetText;
 
-    RefPtrWillBeMember<StyleSheetContents> m_parsedStyleSheetCache;
+    Member<StyleSheetContents> m_parsedStyleSheetCache;
 };
 
 DEFINE_RESOURCE_TYPE_CASTS(CSSStyleSheet);

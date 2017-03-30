@@ -90,7 +90,7 @@ static bool checkShapeImageOrigin(Document& document, const StyleImage& styleIma
 
     ASSERT(styleImage.cachedImage());
     ImageResource& imageResource = *(styleImage.cachedImage());
-    if (imageResource.isAccessAllowed(document.securityOrigin()))
+    if (imageResource.isAccessAllowed(document.getSecurityOrigin()))
         return true;
 
     const KURL& url = imageResource.url();
@@ -121,7 +121,7 @@ static bool isValidRasterShapeRect(const LayoutRect& rect)
 
 PassOwnPtr<Shape> ShapeOutsideInfo::createShapeForImage(StyleImage* styleImage, float shapeImageThreshold, WritingMode writingMode, float margin) const
 {
-    const LayoutSize& imageSize = m_layoutBox.calculateImageIntrinsicDimensions(styleImage, m_referenceBoxLogicalSize, LayoutImage::ScaleByEffectiveZoom);
+    const LayoutSize& imageSize = styleImage->imageSize(m_layoutBox, m_layoutBox.style()->effectiveZoom(), m_referenceBoxLogicalSize);
 
     const LayoutRect& marginRect = getShapeImageMarginRect(m_layoutBox, m_referenceBoxLogicalSize);
     const LayoutRect& imageRect = (m_layoutBox.isLayoutImage())
@@ -134,7 +134,7 @@ PassOwnPtr<Shape> ShapeOutsideInfo::createShapeForImage(StyleImage* styleImage, 
     }
 
     ASSERT(!styleImage->isPendingImage());
-    RefPtr<Image> image = styleImage->image(const_cast<LayoutBox*>(&m_layoutBox), flooredIntSize(imageSize), m_layoutBox.style()->effectiveZoom());
+    RefPtr<Image> image = styleImage->image(m_layoutBox, flooredIntSize(imageSize), m_layoutBox.style()->effectiveZoom());
 
     return Shape::createRasterShape(image.get(), shapeImageThreshold, imageRect, marginRect, writingMode, margin);
 }
@@ -150,7 +150,7 @@ const Shape& ShapeOutsideInfo::computedShape() const
     ASSERT(m_layoutBox.containingBlock());
     const ComputedStyle& containingBlockStyle = *m_layoutBox.containingBlock()->style();
 
-    WritingMode writingMode = containingBlockStyle.writingMode();
+    WritingMode writingMode = containingBlockStyle.getWritingMode();
     // Make sure contentWidth is not negative. This can happen when containing block has a vertical scrollbar and
     // its content is smaller than the scrollbar width.
     LayoutUnit maximumValue = m_layoutBox.containingBlock() ? std::max(LayoutUnit(), m_layoutBox.containingBlock()->contentWidth()) : LayoutUnit();
@@ -209,8 +209,8 @@ LayoutUnit ShapeOutsideInfo::logicalTopOffset() const
     switch (referenceBox(*m_layoutBox.style()->shapeOutside())) {
     case MarginBox: return -m_layoutBox.marginBefore(m_layoutBox.containingBlock()->style());
     case BorderBox: return LayoutUnit();
-    case PaddingBox: return borderBeforeInWritingMode(m_layoutBox, m_layoutBox.containingBlock()->style()->writingMode());
-    case ContentBox: return borderAndPaddingBeforeInWritingMode(m_layoutBox, m_layoutBox.containingBlock()->style()->writingMode());
+    case PaddingBox: return borderBeforeInWritingMode(m_layoutBox, m_layoutBox.containingBlock()->style()->getWritingMode());
+    case ContentBox: return borderAndPaddingBeforeInWritingMode(m_layoutBox, m_layoutBox.containingBlock()->style()->getWritingMode());
     case BoxMissing: break;
     }
 

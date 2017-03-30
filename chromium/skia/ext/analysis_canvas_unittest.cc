@@ -330,8 +330,7 @@ TEST(AnalysisCanvasTest, EarlyOutNotSolid) {
   SkPictureRecorder recorder;
 
   // Create a picture with 3 commands, last of which is non-solid.
-  skia::RefPtr<SkCanvas> record_canvas =
-      skia::SharePtr(recorder.beginRecording(256, 256, &factory));
+  sk_sp<SkCanvas> record_canvas = sk_ref_sp(recorder.beginRecording(256, 256, &factory));
 
   std::string text = "text";
   SkPoint point = SkPoint::Make(SkIntToScalar(25), SkIntToScalar(25));
@@ -345,8 +344,7 @@ TEST(AnalysisCanvasTest, EarlyOutNotSolid) {
   record_canvas->drawText(
       text.c_str(), text.length(), point.fX, point.fY, paint);
 
-  skia::RefPtr<SkPicture> picture =
-      skia::AdoptRef(recorder.endRecordingAsPicture());
+  sk_sp<SkPicture> picture = recorder.finishRecordingAsPicture();
 
   // Draw the picture into the analysis canvas, using the canvas as a callback
   // as well.

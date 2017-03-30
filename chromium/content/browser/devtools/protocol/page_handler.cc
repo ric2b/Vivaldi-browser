@@ -200,7 +200,7 @@ Response PageHandler::Disable() {
   return Response::FallThrough();
 }
 
-Response PageHandler::Reload(const bool* ignoreCache,
+Response PageHandler::Reload(const bool* bypassCache,
                              const std::string* script_to_evaluate_on_load,
                              const std::string* script_preprocessor) {
   WebContentsImpl* web_contents = GetWebContents();
@@ -210,7 +210,10 @@ Response PageHandler::Reload(const bool* ignoreCache,
   if (web_contents->IsCrashed() ||
       (web_contents->GetController().GetVisibleEntry() &&
        web_contents->GetController().GetVisibleEntry()->IsViewSourceMode())) {
-    web_contents->GetController().Reload(false);
+    if (bypassCache && *bypassCache)
+      web_contents->GetController().ReloadBypassingCache(false);
+    else
+      web_contents->GetController().Reload(false);
     return Response::OK();
   } else {
     // Handle reload in renderer except for crashed and view source mode.
@@ -357,11 +360,11 @@ Response PageHandler::SetColorPickerEnabled(bool enabled) {
   return Response::OK();
 }
 
-Response PageHandler::RequestAppBanner(bool* result) {
+Response PageHandler::RequestAppBanner() {
   WebContentsImpl* web_contents = GetWebContents();
   if (!web_contents)
     return Response::InternalError("Could not connect to view");
-  *result = web_contents->GetDelegate()->RequestAppBanner(web_contents);
+  web_contents->GetDelegate()->RequestAppBannerFromDevTools(web_contents);
   return Response::OK();
 }
 

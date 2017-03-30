@@ -25,6 +25,7 @@
 
 #include "modules/webgl/WebGLDrawBuffers.h"
 
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/webgl/WebGLFramebuffer.h"
 
 namespace blink {
@@ -80,7 +81,7 @@ void WebGLDrawBuffers::drawBuffersWEBGL(const Vector<GLenum>& buffers)
         }
         // Because the backbuffer is simulated on all current WebKit ports, we need to change BACK to COLOR_ATTACHMENT0.
         GLenum value = (bufs[0] == GL_BACK) ? GL_COLOR_ATTACHMENT0 : GL_NONE;
-        scoped.context()->webContext()->drawBuffersEXT(1, &value);
+        scoped.context()->contextGL()->DrawBuffersEXT(1, &value);
         scoped.context()->setBackDrawBuffer(bufs[0]);
     } else {
         if (n > scoped.context()->maxDrawBuffers()) {
@@ -100,19 +101,20 @@ void WebGLDrawBuffers::drawBuffersWEBGL(const Vector<GLenum>& buffers)
 // static
 bool WebGLDrawBuffers::satisfiesWebGLRequirements(WebGLRenderingContextBase* webglContext)
 {
-    WebGraphicsContext3D* context = webglContext->webContext();
+    gpu::gles2::GLES2Interface* gl = webglContext->contextGL();
     Extensions3DUtil* extensionsUtil = webglContext->extensionsUtil();
 
     // This is called after we make sure GL_EXT_draw_buffers is supported.
     GLint maxDrawBuffers = 0;
     GLint maxColorAttachments = 0;
-    context->getIntegerv(GL_MAX_DRAW_BUFFERS_EXT, &maxDrawBuffers);
-    context->getIntegerv(GL_MAX_COLOR_ATTACHMENTS_EXT, &maxColorAttachments);
+    gl->GetIntegerv(GL_MAX_DRAW_BUFFERS_EXT, &maxDrawBuffers);
+    gl->GetIntegerv(GL_MAX_COLOR_ATTACHMENTS_EXT, &maxColorAttachments);
     if (maxDrawBuffers < 4 || maxColorAttachments < 4)
         return false;
 
-    Platform3DObject fbo = context->createFramebuffer();
-    context->bindFramebuffer(GL_FRAMEBUFFER, fbo);
+    GLuint fbo;
+    gl->GenFramebuffers(1, &fbo);
+    gl->BindFramebuffer(GL_FRAMEBUFFER, fbo);
 
     const unsigned char* buffer = 0; // Chromium doesn't allow init data for depth/stencil tetxures.
     bool supportsDepth = (extensionsUtil->supportsExtension("GL_CHROMIUM_depth_texture")
@@ -120,61 +122,63 @@ bool WebGLDrawBuffers::satisfiesWebGLRequirements(WebGLRenderingContextBase* web
         || extensionsUtil->supportsExtension("GL_ARB_depth_texture"));
     bool supportsDepthStencil = (extensionsUtil->supportsExtension("GL_EXT_packed_depth_stencil")
         || extensionsUtil->supportsExtension("GL_OES_packed_depth_stencil"));
-    Platform3DObject depthStencil = 0;
+    GLuint depthStencil = 0;
     if (supportsDepthStencil) {
-        depthStencil = context->createTexture();
-        context->bindTexture(GL_TEXTURE_2D, depthStencil);
-        context->texImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL_OES, 1, 1, 0, GL_DEPTH_STENCIL_OES, GL_UNSIGNED_INT_24_8_OES, buffer);
+        gl->GenTextures(1, &depthStencil);
+        gl->BindTexture(GL_TEXTURE_2D, depthStencil);
+        gl->TexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL_OES, 1, 1, 0, GL_DEPTH_STENCIL_OES, GL_UNSIGNED_INT_24_8_OES, buffer);
     }
-    Platform3DObject depth = 0;
+    GLuint depth = 0;
     if (supportsDepth) {
-        depth = context->createTexture();
-        context->bindTexture(GL_TEXTURE_2D, depth);
-        context->texImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1, 1, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, buffer);
+        gl->GenTextures(1, &depth);
+        gl->BindTexture(GL_TEXTURE_2D, depth);
+        gl->TexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1, 1, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, buffer);
     }
 
     Vector<Platform3DObject> colors;
     bool ok = true;
     GLint maxAllowedBuffers = std::min(maxDrawBuffers, maxColorAttachments);
     for (GLint i = 0; i < maxAllowedBuffers; ++i) {
-        Platform3DObject color = context->createTexture();
+        GLuint color;
+
+        gl->GenTextures(1, &color);
         colors.append(color);
-        context->bindTexture(GL_TEXTURE_2D, color);
-        context->texImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
-        context->framebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, color, 0);
-        if (context->checkFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        gl->BindTexture(GL_TEXTURE_2D, color);
+        gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+        gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, color, 0);
+        if (gl->CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
             ok = false;
             break;
         }
         if (supportsDepth) {
-            context->framebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth, 0);
-            if (context->checkFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth, 0);
+            if (gl->CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
                 ok = false;
                 break;
             }
-            context->framebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+            gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
         }
         if (supportsDepthStencil) {
             // For ES 2.0 contexts DEPTH_STENCIL is not available natively, so we emulate it
             // at the command buffer level for WebGL contexts.
-            context->framebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, depthStencil, 0);
-            if (context->checkFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, depthStencil, 0);
+            if (gl->CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
                 ok = false;
                 break;
             }
-            context->framebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+            gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
         }
     }
 
     webglContext->restoreCurrentFramebuffer();
-    context->deleteFramebuffer(fbo);
+    gl->DeleteFramebuffers(1, &fbo);
     webglContext->restoreCurrentTexture2D();
     if (supportsDepth)
-        context->deleteTexture(depth);
+        gl->DeleteTextures(1, &depth);
     if (supportsDepthStencil)
-        context->deleteTexture(depthStencil);
-    for (size_t i = 0; i < colors.size(); ++i)
-        context->deleteTexture(colors[i]);
+        gl->DeleteTextures(1, &depthStencil);
+    gl->DeleteTextures(colors.size(), colors.data());
+
     return ok;
 }
 

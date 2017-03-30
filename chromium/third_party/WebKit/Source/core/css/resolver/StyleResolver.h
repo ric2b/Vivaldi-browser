@@ -72,16 +72,16 @@ enum RuleMatchingBehavior {
 
 const unsigned styleSharingListSize = 15;
 const unsigned styleSharingMaxDepth = 32;
-using StyleSharingList = WillBeHeapDeque<RawPtrWillBeMember<Element>, styleSharingListSize>;
+using StyleSharingList = HeapDeque<Member<Element>, styleSharingListSize>;
 using ActiveInterpolationsMap = HashMap<PropertyHandle, Vector<RefPtr<Interpolation>, 1>>;
 
 // This class selects a ComputedStyle for a given element based on a collection of stylesheets.
-class CORE_EXPORT StyleResolver final : public NoBaseWillBeGarbageCollectedFinalized<StyleResolver> {
-    WTF_MAKE_NONCOPYABLE(StyleResolver); USING_FAST_MALLOC_WILL_BE_REMOVED(StyleResolver);
+class CORE_EXPORT StyleResolver final : public GarbageCollectedFinalized<StyleResolver> {
+    WTF_MAKE_NONCOPYABLE(StyleResolver);
 public:
-    static PassOwnPtrWillBeRawPtr<StyleResolver> create(Document& document)
+    static StyleResolver* create(Document& document)
     {
-        return adoptPtrWillBeNoop(new StyleResolver(document));
+        return new StyleResolver(document);
     }
     ~StyleResolver();
     void dispose();
@@ -101,12 +101,13 @@ public:
 
     // FIXME: It could be better to call appendAuthorStyleSheets() directly after we factor StyleResolver further.
     // https://bugs.webkit.org/show_bug.cgi?id=108890
-    void appendAuthorStyleSheets(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet>>&);
+    void appendAuthorStyleSheets(const HeapVector<Member<CSSStyleSheet>>&);
     void resetAuthorStyle(TreeScope&);
+    void resetRuleFeatures();
     void finishAppendAuthorStyleSheets();
 
-    void lazyAppendAuthorStyleSheets(unsigned firstNew, const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet>>&);
-    void removePendingAuthorStyleSheets(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet>>&);
+    void lazyAppendAuthorStyleSheets(unsigned firstNew, const HeapVector<Member<CSSStyleSheet>>&);
+    void removePendingAuthorStyleSheets(const HeapVector<Member<CSSStyleSheet>>&);
     void appendPendingAuthorStyleSheets();
     bool hasPendingAuthorStyleSheets() const { return m_pendingStyleSheets.size() > 0 || m_needCollectFeatures; }
 
@@ -125,9 +126,9 @@ public:
         AllButEmptyCSSRules = UAAndUserCSSRules | AuthorCSSRules | CrossOriginCSSRules,
         AllCSSRules         = AllButEmptyCSSRules | EmptyCSSRules,
     };
-    PassRefPtrWillBeRawPtr<CSSRuleList> cssRulesForElement(Element*, unsigned rulesToInclude = AllButEmptyCSSRules);
-    PassRefPtrWillBeRawPtr<CSSRuleList> pseudoCSSRulesForElement(Element*, PseudoId, unsigned rulesToInclude = AllButEmptyCSSRules);
-    PassRefPtrWillBeRawPtr<StyleRuleList> styleRulesForElement(Element*, unsigned rulesToInclude);
+    CSSRuleList* cssRulesForElement(Element*, unsigned rulesToInclude = AllButEmptyCSSRules);
+    CSSRuleList* pseudoCSSRulesForElement(Element*, PseudoId, unsigned rulesToInclude = AllButEmptyCSSRules);
+    StyleRuleList* styleRulesForElement(Element*, unsigned rulesToInclude);
 
     void computeFont(ComputedStyle*, const StylePropertySet&);
 
@@ -162,6 +163,7 @@ public:
     StyleSharingList& styleSharingList();
 
     bool hasRulesForId(const AtomicString&) const;
+    bool hasFullscreenUAStyle() const { return m_hasFullscreenUAStyle; }
 
     void addToStyleSharingList(Element&);
     void clearStyleSharingList();
@@ -169,18 +171,17 @@ public:
     void increaseStyleSharingDepth() { ++m_styleSharingDepth; }
     void decreaseStyleSharingDepth() { --m_styleSharingDepth; }
 
-    PassRefPtrWillBeRawPtr<PseudoElement> createPseudoElementIfNeeded(Element& parent, PseudoId);
+    PseudoElement* createPseudoElementIfNeeded(Element& parent, PseudoId);
 
     DECLARE_TRACE();
 
     void addTreeBoundaryCrossingScope(ContainerNode& scope);
+    void initWatchedSelectorRules();
 
 private:
     explicit StyleResolver(Document&);
 
     PassRefPtr<ComputedStyle> initialStyleForElement();
-
-    void initWatchedSelectorRules();
 
     // FIXME: This should probably go away, folded into FontBuilder.
     void updateFont(StyleResolverState&);
@@ -193,11 +194,12 @@ private:
     void collectPseudoRulesForElement(const Element&, ElementRuleCollector&, PseudoId, unsigned rulesToInclude);
     void matchRuleSet(ElementRuleCollector&, RuleSet*);
     void matchUARules(ElementRuleCollector&);
+    void matchScopedRules(const Element&, ElementRuleCollector&);
     void matchAuthorRules(const Element&, ElementRuleCollector&);
+    void matchAuthorRulesV0(const Element&, ElementRuleCollector&);
     void matchAllRules(StyleResolverState&, ElementRuleCollector&, bool includeSMILProperties);
     void collectFeatures();
     void collectTreeBoundaryCrossingRules(const Element&, ElementRuleCollector&);
-    void resetRuleFeatures();
 
     void applyMatchedProperties(StyleResolverState&, const MatchResult&);
     bool applyAnimatedProperties(StyleResolverState&, const Element* animatingElement);
@@ -211,12 +213,14 @@ private:
     void applyAnimatedProperties(StyleResolverState&, const ActiveInterpolationsMap&);
     template <CSSPropertyPriority priority>
     void applyAllProperty(StyleResolverState&, CSSValue*, bool inheritedOnly, PropertyWhitelistType);
+    template <CSSPropertyPriority priority>
+    void applyPropertiesForApplyAtRule(StyleResolverState&, const CSSValue*, bool isImportant, bool inheritedOnly, PropertyWhitelistType);
 
     bool pseudoStyleForElementInternal(Element&, const PseudoStyleRequest&, const ComputedStyle* parentStyle, StyleResolverState&);
     bool hasAuthorBackground(const StyleResolverState&);
     bool hasAuthorBorder(const StyleResolverState&);
 
-    PassRefPtrWillBeRawPtr<PseudoElement> createPseudoElement(Element* parent, PseudoId);
+    PseudoElement* createPseudoElement(Element* parent, PseudoId);
 
     Document& document() { return *m_document; }
 
@@ -224,31 +228,32 @@ private:
 
     MatchedPropertiesCache m_matchedPropertiesCache;
 
-    OwnPtrWillBeMember<MediaQueryEvaluator> m_medium;
+    Member<MediaQueryEvaluator> m_medium;
     MediaQueryResultList m_viewportDependentMediaQueryResults;
     MediaQueryResultList m_deviceDependentMediaQueryResults;
 
-    RawPtrWillBeMember<Document> m_document;
+    Member<Document> m_document;
     SelectorFilter m_selectorFilter;
 
-    OwnPtrWillBeMember<ViewportStyleResolver> m_viewportStyleResolver;
+    Member<ViewportStyleResolver> m_viewportStyleResolver;
 
-    WillBeHeapListHashSet<RawPtrWillBeMember<CSSStyleSheet>, 16> m_pendingStyleSheets;
+    HeapListHashSet<Member<CSSStyleSheet>, 16> m_pendingStyleSheets;
 
     // FIXME: The entire logic of collecting features on StyleResolver, as well as transferring them
     // between various parts of machinery smells wrong. This needs to be better somehow.
     RuleFeatureSet m_features;
-    OwnPtrWillBeMember<RuleSet> m_siblingRuleSet;
-    OwnPtrWillBeMember<RuleSet> m_uncommonAttributeRuleSet;
-    OwnPtrWillBeMember<RuleSet> m_watchedSelectorsRules;
+    Member<RuleSet> m_siblingRuleSet;
+    Member<RuleSet> m_uncommonAttributeRuleSet;
+    Member<RuleSet> m_watchedSelectorsRules;
 
     DocumentOrderedList m_treeBoundaryCrossingScopes;
 
     bool m_needCollectFeatures;
     bool m_printMediaType;
+    bool m_hasFullscreenUAStyle = false;
 
     unsigned m_styleSharingDepth;
-    WillBeHeapVector<OwnPtrWillBeMember<StyleSharingList>, styleSharingMaxDepth> m_styleSharingLists;
+    HeapVector<Member<StyleSharingList>, styleSharingMaxDepth> m_styleSharingLists;
 };
 
 } // namespace blink

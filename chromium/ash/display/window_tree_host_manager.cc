@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <memory>
 #include <utility>
 
 #include "ash/ash_switches.h"
@@ -44,6 +45,7 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/input_method_factory.h"
 #include "ui/compositor/compositor.h"
+#include "ui/display/manager/display_layout.h"
 #include "ui/gfx/display.h"
 #include "ui/gfx/screen.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -51,7 +53,7 @@
 
 #if defined(USE_X11)
 #include "ui/base/x/x11_util.h"
-#include "ui/gfx/x/x11_types.h"
+#include "ui/gfx/x/x11_types.h"  // nogncheck
 
 // Including this at the bottom to avoid other
 // potential conflict with chrome headers.
@@ -132,7 +134,7 @@ void SetDisplayPropertiesOnHost(AshWindowTreeHost* ash_host,
       host->GetAcceleratedWidget(), info.GetActiveRotation(), scale);
 #endif
 #endif
-  scoped_ptr<RootWindowTransformer> transformer(
+  std::unique_ptr<RootWindowTransformer> transformer(
       CreateRootWindowTransformerForDisplay(host->window(), display));
   ash_host->SetRootWindowTransformer(std::move(transformer));
 
@@ -439,15 +441,16 @@ void WindowTreeHostManager::SetPrimaryDisplayId(int64_t id) {
   GetRootWindowSettings(GetWindow(non_primary_host))->display_id =
       old_primary_display.id();
 
-  const DisplayLayout& layout = GetDisplayManager()->GetCurrentDisplayLayout();
+  const display::DisplayLayout& layout =
+      GetDisplayManager()->GetCurrentDisplayLayout();
   // The requested primary id can be same as one in the stored layout
   // when the primary id is set after new displays are connected.
   // Only update the layout if it is requested to swap primary display.
   if (layout.primary_id != new_primary_display.id()) {
-    scoped_ptr<DisplayLayout> swapped_layout(layout.Copy());
-    swapped_layout->placement_list[0]->Swap();
+    std::unique_ptr<display::DisplayLayout> swapped_layout(layout.Copy());
+    swapped_layout->placement_list[0].Swap();
     swapped_layout->primary_id = new_primary_display.id();
-    DisplayIdList list = display_manager->GetCurrentDisplayIdList();
+    display::DisplayIdList list = display_manager->GetCurrentDisplayIdList();
     GetDisplayManager()->layout_store()->RegisterLayoutForDisplayIdList(
         list, std::move(swapped_layout));
   }
@@ -764,8 +767,8 @@ void WindowTreeHostManager::PostDisplayConfigurationChange() {
   DisplayManager* display_manager = GetDisplayManager();
   DisplayLayoutStore* layout_store = display_manager->layout_store();
   if (display_manager->num_connected_displays() > 1) {
-    DisplayIdList list = display_manager->GetCurrentDisplayIdList();
-    const DisplayLayout& layout =
+    display::DisplayIdList list = display_manager->GetCurrentDisplayIdList();
+    const display::DisplayLayout& layout =
         layout_store->GetRegisteredDisplayLayout(list);
     layout_store->UpdateMultiDisplayState(
         list, display_manager->IsInMirrorMode(), layout.default_unified);
@@ -775,6 +778,16 @@ void WindowTreeHostManager::PostDisplayConfigurationChange() {
                               : layout.primary_id);
     }
   }
+
+  for (const gfx::Display& display : display_manager->active_display_list()) {
+    bool output_is_secure =
+        !display_manager->IsInMirrorMode() && display.IsInternal();
+    GetAshWindowTreeHostForDisplayId(display.id())
+        ->AsWindowTreeHost()
+        ->compositor()
+        ->SetOutputIsSecure(output_is_secure);
+  }
+
   FOR_EACH_OBSERVER(Observer, observers_, OnDisplayConfigurationChanged());
   UpdateMouseLocationAfterDisplayChange();
 }

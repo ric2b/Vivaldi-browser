@@ -7,8 +7,12 @@
 #if defined(ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "content/common/mojo/static_application_loader.h"
+#include "content/common/mojo/static_loader.h"
+#include "content/public/common/content_client.h"
 #include "media/mojo/services/mojo_media_application_factory.h"
+#if defined(OS_ANDROID)
+#include "media/base/android/media_client_android.h"
+#endif
 #endif
 
 namespace content {
@@ -17,13 +21,17 @@ GpuProcessControlImpl::GpuProcessControlImpl() {}
 
 GpuProcessControlImpl::~GpuProcessControlImpl() {}
 
-void GpuProcessControlImpl::RegisterApplicationLoaders(
-    URLToLoaderMap* url_to_loader_map) {
+void GpuProcessControlImpl::RegisterLoaders(
+    NameToLoaderMap* name_to_loader_map) {
 #if defined(ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
-  (*url_to_loader_map)[GURL("mojo:media")] =
-    new StaticApplicationLoader(
-    base::Bind(&media::CreateMojoMediaApplication),
-          base::Bind(&base::DoNothing));
+#if defined(OS_ANDROID)
+  // Only set once per process instance.
+  media::SetMediaClientAndroid(GetContentClient()->GetMediaClientAndroid());
+#endif
+
+  (*name_to_loader_map)["mojo:media"] = new StaticLoader(
+      base::Bind(&media::CreateMojoMediaApplication),
+      base::Bind(&base::DoNothing));
 #endif
 }
 

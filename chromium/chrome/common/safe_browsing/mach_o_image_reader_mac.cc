@@ -73,6 +73,8 @@ class ByteSlice {
 
 MachOImageReader::LoadCommand::LoadCommand() {}
 
+MachOImageReader::LoadCommand::LoadCommand(const LoadCommand& other) = default;
+
 MachOImageReader::LoadCommand::~LoadCommand() {}
 
 // static
@@ -121,6 +123,11 @@ bool MachOImageReader::Initialize(const uint8_t* image, size_t image_size) {
 
       uint32_t arch_offset = do_swap ? OSSwapInt32(arch->offset) : arch->offset;
       uint32_t arch_size = do_swap ? OSSwapInt32(arch->size) : arch->size;
+
+      // Cannot refer back to headers of previous arches to cause
+      // recursive processing.
+      if (arch_offset < offset)
+        return false;
 
       ByteSlice slice = data_->Slice(arch_offset, arch_size);
       if (!slice.IsValid())

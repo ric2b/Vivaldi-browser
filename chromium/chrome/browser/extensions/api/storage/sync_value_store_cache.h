@@ -5,10 +5,11 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_STORAGE_SYNC_VALUE_STORE_CACHE_H_
 #define CHROME_BROWSER_EXTENSIONS_API_STORAGE_SYNC_VALUE_STORE_CACHE_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "extensions/browser/api/storage/settings_observer.h"
 #include "extensions/browser/api/storage/value_store_cache.h"
 #include "sync/api/syncable_service.h"
@@ -23,17 +24,16 @@ class SyncableService;
 
 namespace extensions {
 
-class SettingsStorageFactory;
 class SyncStorageBackend;
+class ValueStoreFactory;
 
 // ValueStoreCache for the SYNC namespace. It owns a backend for apps and
 // another for extensions. Each backend takes care of persistence and syncing.
 class SyncValueStoreCache : public ValueStoreCache {
  public:
-  SyncValueStoreCache(
-      const scoped_refptr<SettingsStorageFactory>& factory,
-      const scoped_refptr<SettingsObserverList>& observers,
-      const base::FilePath& profile_path);
+  SyncValueStoreCache(const scoped_refptr<ValueStoreFactory>& factory,
+                      const scoped_refptr<SettingsObserverList>& observers,
+                      const base::FilePath& profile_path);
   ~SyncValueStoreCache() override;
 
   syncer::SyncableService* GetSyncableService(syncer::ModelType type) const;
@@ -45,13 +45,13 @@ class SyncValueStoreCache : public ValueStoreCache {
   void DeleteStorageSoon(const std::string& extension_id) override;
 
  private:
-  void InitOnFileThread(const scoped_refptr<SettingsStorageFactory>& factory,
+  void InitOnFileThread(const scoped_refptr<ValueStoreFactory>& factory,
                         const scoped_refptr<SettingsObserverList>& observers,
                         const base::FilePath& profile_path);
 
   bool initialized_;
-  scoped_ptr<SyncStorageBackend> app_backend_;
-  scoped_ptr<SyncStorageBackend> extension_backend_;
+  std::unique_ptr<SyncStorageBackend> app_backend_;
+  std::unique_ptr<SyncStorageBackend> extension_backend_;
 
   DISALLOW_COPY_AND_ASSIGN(SyncValueStoreCache);
 };

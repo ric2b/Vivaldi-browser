@@ -58,9 +58,6 @@ DragDestinationAction DragClientImpl::actionMaskForDrag(DragData*)
 
 void DragClientImpl::startDrag(DragImage* dragImage, const IntPoint& dragImageOrigin, const IntPoint& eventPos, DataTransfer* dataTransfer, LocalFrame* frame, bool isLinkDrag)
 {
-    // Add a ref to the frame just in case a load occurs mid-drag.
-    RefPtrWillBeRawPtr<LocalFrame> frameProtector(frame);
-
     WebDragData dragData = dataTransfer->dataObject()->toWebDragData();
     WebDragOperationsMask dragOperationMask = static_cast<WebDragOperationsMask>(dataTransfer->sourceOperation());
     WebImage image;
@@ -72,7 +69,7 @@ void DragClientImpl::startDrag(DragImage* dragImage, const IntPoint& dragImageOr
         float deviceScaleFactor =
             m_webView->client()->screenInfo().deviceScaleFactor;
         if (deviceScaleFactor != resolutionScale) {
-            ASSERT(resolutionScale > 0);
+            DCHECK_GT(resolutionScale, 0);
             float scale = deviceScaleFactor / resolutionScale;
             dragImage->scale(scale, scale);
         }

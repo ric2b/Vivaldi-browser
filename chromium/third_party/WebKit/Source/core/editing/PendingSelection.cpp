@@ -44,13 +44,13 @@ const VisibleSelection& PendingSelection::visibleSelection() const
 static bool isSelectionInDocument(const VisibleSelectionInFlatTree& visibleSelection, const Document& document)
 {
     const PositionInFlatTree& start = visibleSelection.start();
-    if (start.isNotNull() && (!start.inDocument() || start.document() != document))
+    if (start.isNotNull() && (!start.inShadowIncludingDocument() || start.document() != document))
         return false;
     const PositionInFlatTree& end = visibleSelection.end();
-    if (end.isNotNull() && (!end.inDocument() || end.document() != document))
+    if (end.isNotNull() && (!end.inShadowIncludingDocument() || end.document() != document))
         return false;
     const PositionInFlatTree extent = visibleSelection.extent();
-    if (extent.isNotNull() && (!extent.inDocument() || extent.document() != document))
+    if (extent.isNotNull() && (!extent.inShadowIncludingDocument() || extent.document() != document))
         return false;
     return true;
 }
@@ -65,9 +65,9 @@ VisibleSelectionInFlatTree PendingSelection::calcVisibleSelection(const VisibleS
     bool paintBlockCursor = m_frameSelection->shouldShowBlockCursor() && selectionType == SelectionType::CaretSelection && !isLogicalEndOfLine(createVisiblePosition(end, affinity));
     VisibleSelectionInFlatTree selection;
     if (enclosingTextFormControl(start.computeContainerNode())) {
-        // TODO(yosin) We should use |PositionMoveType::Character| to avoid
+        // TODO(yosin) We should use |PositionMoveType::CodePoint| to avoid
         // ending paint at middle of character.
-        PositionInFlatTree endPosition = paintBlockCursor ? nextPositionOf(originalSelection.extent(), PositionMoveType::CodePoint) : end;
+        PositionInFlatTree endPosition = paintBlockCursor ? nextPositionOf(originalSelection.extent(), PositionMoveType::CodeUnit) : end;
         selection.setWithoutValidation(start, endPosition);
         return selection;
     }

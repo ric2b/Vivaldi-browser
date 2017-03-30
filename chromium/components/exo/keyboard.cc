@@ -19,7 +19,7 @@ namespace exo {
 
 Keyboard::Keyboard(KeyboardDelegate* delegate)
     : delegate_(delegate), focus_(nullptr), modifier_flags_(0) {
-  ash::Shell::GetInstance()->AddPreTargetHandler(this);
+  ash::Shell::GetInstance()->AddPostTargetHandler(this);
   aura::client::FocusClient* focus_client =
       aura::client::GetFocusClient(ash::Shell::GetPrimaryRootWindow());
   focus_client->AddObserver(this);
@@ -32,7 +32,7 @@ Keyboard::~Keyboard() {
     focus_->RemoveSurfaceObserver(this);
   aura::client::GetFocusClient(ash::Shell::GetPrimaryRootWindow())
       ->RemoveObserver(this);
-  ash::Shell::GetInstance()->RemovePreTargetHandler(this);
+  ash::Shell::GetInstance()->RemovePostTargetHandler(this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -52,12 +52,18 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
       delegate_->OnKeyboardModifiers(modifier_flags_);
   }
 
+  // When IME ate a key event, it re-sends the event after masking |key_code|
+  // by VKEY_PROCESSKEY. Although such events can be used to track the key
+  // states, they should not be sent as unmasked key events. Otherwise they are
+  // handled in two places (IME and client) and cause undesired behavior.
+  bool consumed_by_ime = (event->key_code() == ui::VKEY_PROCESSKEY);
+
   switch (event->type()) {
     case ui::ET_KEY_PRESSED: {
       auto it =
           std::find(pressed_keys_.begin(), pressed_keys_.end(), event->code());
       if (it == pressed_keys_.end()) {
-        if (focus_)
+        if (focus_ && !consumed_by_ime)
           delegate_->OnKeyboardKey(event->time_stamp(), event->code(), true);
 
         pressed_keys_.push_back(event->code());
@@ -67,7 +73,7 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
       auto it =
           std::find(pressed_keys_.begin(), pressed_keys_.end(), event->code());
       if (it != pressed_keys_.end()) {
-        if (focus_)
+        if (focus_ && !consumed_by_ime)
           delegate_->OnKeyboardKey(event->time_stamp(), event->code(), false);
 
         pressed_keys_.erase(it);

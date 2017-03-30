@@ -51,6 +51,9 @@ void PersistentRegion::ensurePersistentNodeSlots(void* self, TraceCallback trace
 // list of PersistentNodes.
 void PersistentRegion::tracePersistentNodes(Visitor* visitor)
 {
+    size_t debugMarkedObjectSize = ProcessHeap::totalMarkedObjectSize();
+    base::debug::Alias(&debugMarkedObjectSize);
+
     m_freeListHead = nullptr;
     int persistentCount = 0;
     PersistentNodeSlots** prevNext = &m_slots;
@@ -70,6 +73,7 @@ void PersistentRegion::tracePersistentNodes(Visitor* visitor)
             } else {
                 node->tracePersistentNode(visitor);
                 ++persistentCount;
+                debugMarkedObjectSize = ProcessHeap::totalMarkedObjectSize();
             }
         }
         if (freeCount == PersistentNodeSlots::slotCount) {
@@ -126,7 +130,7 @@ void CrossThreadPersistentRegion::prepareForThreadStateTermination(ThreadState* 
             // but not invalidate its CrossThreadPersistent<>s.
             if (page->orphaned())
                 continue;
-            if (page->heap()->threadState() == threadState)
+            if (page->arena()->getThreadState() == threadState)
                 persistent->clear();
         }
         slots = slots->m_next;

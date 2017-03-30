@@ -41,7 +41,6 @@ class CC_EXPORT LayerTreeSettings {
   bool use_external_begin_frame_source;
   bool main_frame_before_activation_enabled;
   bool using_synchronous_renderer_compositor;
-  bool accelerated_animation_enabled;
   bool can_use_lcd_text;
   bool use_distance_field_text;
   bool gpu_rasterization_enabled;
@@ -75,7 +74,6 @@ class CC_EXPORT LayerTreeSettings {
   float skewport_target_time_in_seconds;
   int skewport_extrapolation_limit_in_content_pixels;
   size_t max_memory_for_prepaint_percentage;
-  bool strict_layer_property_change_checking;
   bool use_zero_copy;
   bool use_partial_raster;
   bool enable_elastic_overscroll;
@@ -85,11 +83,15 @@ class CC_EXPORT LayerTreeSettings {
   size_t scheduled_raster_task_limit;
   bool use_occlusion_for_tile_prioritization;
   bool image_decode_tasks_enabled;
-  bool use_compositor_animation_timelines;
   bool wait_for_beginframe_interval;
+  bool abort_commit_before_output_surface_creation;
   bool use_mouse_wheel_gestures;
   int max_staging_buffer_usage_in_bytes;
   ManagedMemoryPolicy memory_policy_;
+
+  // If set to true, the display item list will internally cache a SkPicture for
+  // raster rather than directly using the display items.
+  bool use_cached_picture_raster;
 
   LayerTreeDebugState initial_debug_state;
 };

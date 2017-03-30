@@ -6,10 +6,12 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <unordered_map>
+
+#include <map>
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "sync/engine/commit_queue.h"
@@ -32,11 +34,39 @@ static const syncer::ModelType kModelType = syncer::PREFERENCES;
 
 namespace {
 
+const std::string kTag1 = "tag1";
+const std::string kTag2 = "tag2";
+const std::string kTag3 = "tag3";
+const std::string kValue1 = "value1";
+const std::string kValue2 = "value2";
+const std::string kValue3 = "value3";
+
+std::string GenerateTagHash(const std::string& tag) {
+  return syncer::syncable::GenerateSyncableHash(kModelType, tag);
+}
+
+sync_pb::EntitySpecifics GenerateSpecifics(const std::string& tag,
+                                           const std::string& value) {
+  sync_pb::EntitySpecifics specifics;
+  specifics.mutable_preference()->set_name(tag);
+  specifics.mutable_preference()->set_value(value);
+  return specifics;
+}
+
+std::unique_ptr<EntityData> GenerateEntityData(const std::string& tag,
+                                               const std::string& value) {
+  std::unique_ptr<EntityData> entity_data = base::WrapUnique(new EntityData());
+  entity_data->client_tag_hash = GenerateTagHash(tag);
+  entity_data->specifics = GenerateSpecifics(tag, value);
+  entity_data->non_unique_name = tag;
+  return entity_data;
+}
+
 // It is intentionally very difficult to copy an EntityData, as in normal code
 // we never want to. However, since we store the data as an EntityData for the
 // test code here, this function is needed to manually copy it.
-scoped_ptr<EntityData> CopyEntityData(const EntityData& old_data) {
-  scoped_ptr<EntityData> new_data(new EntityData());
+std::unique_ptr<EntityData> CopyEntityData(const EntityData& old_data) {
+  std::unique_ptr<EntityData> new_data(new EntityData());
   new_data->id = old_data.id;
   new_data->client_tag_hash = old_data.client_tag_hash;
   new_data->non_unique_name = old_data.non_unique_name;
@@ -52,16 +82,25 @@ scoped_ptr<EntityData> CopyEntityData(const EntityData& old_data) {
 class SimpleStore {
  public:
   void PutData(const std::string& tag, const EntityData& data) {
+    data_change_count_++;
     data_store_[tag] = CopyEntityData(data);
   }
 
   void PutMetadata(const std::string& tag,
                    const sync_pb::EntityMetadata& metadata) {
+    metadata_change_count_++;
     metadata_store_[tag] = metadata;
   }
 
-  void RemoveData(const std::string& tag) { data_store_.erase(tag); }
-  void RemoveMetadata(const std::string& tag) { metadata_store_.erase(tag); }
+  void RemoveData(const std::string& tag) {
+    data_change_count_++;
+    data_store_.erase(tag);
+  }
+
+  void RemoveMetadata(const std::string& tag) {
+    metadata_change_count_++;
+    metadata_store_.erase(tag);
+  }
 
   bool HasData(const std::string& tag) const {
     return data_store_.find(tag) != data_store_.end();
@@ -71,13 +110,16 @@ class SimpleStore {
     return metadata_store_.find(tag) != metadata_store_.end();
   }
 
-  const std::unordered_map<std::string, scoped_ptr<EntityData>>& GetAllData()
-      const {
+  const std::map<std::string, std::unique_ptr<EntityData>>& GetAllData() const {
     return data_store_;
   }
 
   const EntityData& GetData(const std::string& tag) const {
     return *data_store_.find(tag)->second;
+  }
+
+  const std::string& GetValue(const std::string& tag) const {
+    return GetData(tag).specifics.preference().value();
   }
 
   const sync_pb::EntityMetadata& GetMetadata(const std::string& tag) const {
@@ -87,6 +129,9 @@ class SimpleStore {
   size_t DataCount() const { return data_store_.size(); }
   size_t MetadataCount() const { return metadata_store_.size(); }
 
+  size_t DataChangeCount() const { return data_change_count_; }
+  size_t MetadataChangeCount() const { return metadata_change_count_; }
+
   const sync_pb::DataTypeState& data_type_state() const {
     return data_type_state_;
   }
@@ -95,8 +140,8 @@ class SimpleStore {
     data_type_state_ = data_type_state;
   }
 
-  scoped_ptr<MetadataBatch> CreateMetadataBatch() const {
-    scoped_ptr<MetadataBatch> metadata_batch(new MetadataBatch());
+  std::unique_ptr<MetadataBatch> CreateMetadataBatch() const {
+    std::unique_ptr<MetadataBatch> metadata_batch(new MetadataBatch());
     metadata_batch->SetDataTypeState(data_type_state_);
     for (auto it = metadata_store_.begin(); it != metadata_store_.end(); it++) {
       metadata_batch->AddMetadata(it->first, it->second);
@@ -105,14 +150,18 @@ class SimpleStore {
   }
 
   void Reset() {
+    data_change_count_ = 0;
+    metadata_change_count_ = 0;
     data_store_.clear();
     metadata_store_.clear();
     data_type_state_.Clear();
   }
 
  private:
-  std::unordered_map<std::string, scoped_ptr<EntityData>> data_store_;
-  std::unordered_map<std::string, sync_pb::EntityMetadata> metadata_store_;
+  size_t data_change_count_ = 0;
+  size_t metadata_change_count_ = 0;
+  std::map<std::string, std::unique_ptr<EntityData>> data_store_;
+  std::map<std::string, sync_pb::EntityMetadata> metadata_store_;
   sync_pb::DataTypeState data_type_state_;
 };
 
@@ -126,7 +175,7 @@ class SimpleStore {
 // performing the initial merge, etc) as well as normal functionality:
 //
 // - Initialization before the initial sync and merge correctly performs a merge
-//   and initializes the metadata in storage. TODO(maxbogue): crbug.com/569675.
+//   and initializes the metadata in storage.
 // - Initialization after the initial sync correctly loads metadata and queues
 //   any pending commits.
 // - Put and Delete calls from the service result in the correct metadata in
@@ -140,14 +189,8 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
 
   ~SharedModelTypeProcessorTest() override {}
 
-  void CreateProcessor() {
-    ASSERT_FALSE(type_processor());
-    set_change_processor(
-        make_scoped_ptr(new SharedModelTypeProcessor(kModelType, this)));
-  }
-
   void InitializeToMetadataLoaded() {
-    CreateProcessor();
+    ASSERT_TRUE(GetOrCreateChangeProcessor());
     sync_pb::DataTypeState data_type_state(db_.data_type_state());
     data_type_state.set_initial_sync_done(true);
     db_.set_data_type_state(data_type_state);
@@ -197,10 +240,11 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
   }
 
   // Overloaded form to allow passing of custom entity data.
-  void WriteItem(const std::string& tag, scoped_ptr<EntityData> entity_data) {
+  void WriteItem(const std::string& tag,
+                 std::unique_ptr<EntityData> entity_data) {
     db_.PutData(tag, *entity_data);
     if (type_processor()) {
-      scoped_ptr<MetadataChangeList> change_list(
+      std::unique_ptr<MetadataChangeList> change_list(
           new SimpleMetadataChangeList());
       type_processor()->Put(tag, std::move(entity_data), change_list.get());
       ApplyMetadataChangeList(std::move(change_list));
@@ -217,11 +261,24 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
   void DeleteItem(const std::string& tag) {
     db_.RemoveData(tag);
     if (type_processor()) {
-      scoped_ptr<MetadataChangeList> change_list(
+      std::unique_ptr<MetadataChangeList> change_list(
           new SimpleMetadataChangeList());
       type_processor()->Delete(tag, change_list.get());
       ApplyMetadataChangeList(std::move(change_list));
     }
+  }
+
+  // Wipes existing DB and simulates one commited item.
+  void ResetStateWriteAckedItem(const std::string& tag,
+                                const std::string& value) {
+    clear_change_processor();
+    db_.Reset();
+    InitializeToReadyState();
+    EXPECT_EQ(0U, ProcessorEntityCount());
+    WriteItemAndAck(tag, "acked-value");
+    WriteItem(tag, value);
+    EXPECT_EQ(1U, ProcessorEntityCount());
+    clear_change_processor();
   }
 
   // Wipes existing DB and simulates one uncommited item.
@@ -326,8 +383,8 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
   void UpdateDesiredEncryptionKey(const std::string& key_name) {
     sync_pb::DataTypeState data_type_state(db_.data_type_state());
     data_type_state.set_encryption_key_name(key_name);
-    type_processor()->OnUpdateReceived(
-        data_type_state, UpdateResponseDataList());
+    type_processor()->OnUpdateReceived(data_type_state,
+                                       UpdateResponseDataList());
   }
 
   // Sets the key_name that the mock CommitQueue will claim is in use
@@ -364,6 +421,12 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
     }
   }
 
+  // Store a resolution for the next call to ResolveConflict. Note that if this
+  // is a USE_NEW resolution, the data will only exist for one resolve call.
+  void SetConflictResolution(ConflictResolution resolution) {
+    conflict_resolution_.reset(new ConflictResolution(std::move(resolution)));
+  }
+
   const SimpleStore& db() const { return db_; }
 
   MockCommitQueue* mock_queue() { return mock_queue_; }
@@ -372,44 +435,17 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
     return static_cast<SharedModelTypeProcessor*>(change_processor());
   }
 
+ protected:
+  syncer_v2::ModelTypeChangeProcessor* CreateProcessorForTest(
+      syncer::ModelType type,
+      ModelTypeService* service) override {
+    return new SharedModelTypeProcessor(kModelType, service);
+  }
+
  private:
-  static std::string GenerateTagHash(const std::string& tag) {
-    return syncer::syncable::GenerateSyncableHash(kModelType, tag);
-  }
-
-  static sync_pb::EntitySpecifics GenerateSpecifics(const std::string& tag,
-                                                    const std::string& value) {
-    sync_pb::EntitySpecifics specifics;
-    specifics.mutable_preference()->set_name(tag);
-    specifics.mutable_preference()->set_value(value);
-    return specifics;
-  }
-
-  // These tests never decrypt anything, so we can get away with faking the
-  // encryption for now.
-  static sync_pb::EntitySpecifics GenerateEncryptedSpecifics(
-      const std::string& tag,
-      const std::string& value,
-      const std::string& key_name) {
-    sync_pb::EntitySpecifics specifics;
-    syncer::AddDefaultFieldValue(kModelType, &specifics);
-    specifics.mutable_encrypted()->set_key_name(key_name);
-    specifics.mutable_encrypted()->set_blob("BLOB" + key_name);
-    return specifics;
-  }
-
-  static scoped_ptr<EntityData> GenerateEntityData(const std::string& tag,
-                                                   const std::string& value) {
-    scoped_ptr<EntityData> entity_data = make_scoped_ptr(new EntityData());
-    entity_data->client_tag_hash = GenerateTagHash(tag);
-    entity_data->specifics = GenerateSpecifics(tag, value);
-    entity_data->non_unique_name = tag;
-    return entity_data;
-  }
-
   void OnReadyToConnect(syncer::SyncError error,
-                        scoped_ptr<ActivationContext> context) {
-    scoped_ptr<MockCommitQueue> commit_queue(new MockCommitQueue());
+                        std::unique_ptr<ActivationContext> context) {
+    std::unique_ptr<MockCommitQueue> commit_queue(new MockCommitQueue());
     // Keep an unsafe pointer to the commit queue the processor will use.
     mock_queue_ = commit_queue.get();
     context->type_processor->ConnectSync(std::move(commit_queue));
@@ -424,12 +460,12 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
     return entity_data.specifics.preference().name();
   }
 
-  scoped_ptr<MetadataChangeList> CreateMetadataChangeList() override {
-    return scoped_ptr<MetadataChangeList>(new SimpleMetadataChangeList());
+  std::unique_ptr<MetadataChangeList> CreateMetadataChangeList() override {
+    return std::unique_ptr<MetadataChangeList>(new SimpleMetadataChangeList());
   }
 
   syncer::SyncError MergeSyncData(
-      scoped_ptr<MetadataChangeList> metadata_changes,
+      std::unique_ptr<MetadataChangeList> metadata_changes,
       EntityDataMap data_map) override {
     // Commit any local entities that aren't being overwritten by the server.
     const auto& local_data = db_.GetAllData();
@@ -448,7 +484,7 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
   }
 
   syncer::SyncError ApplySyncChanges(
-      scoped_ptr<MetadataChangeList> metadata_changes,
+      std::unique_ptr<MetadataChangeList> metadata_changes,
       EntityChangeList entity_changes) override {
     for (const EntityChange& change : entity_changes) {
       switch (change.type()) {
@@ -470,7 +506,8 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
     return syncer::SyncError();
   }
 
-  void ApplyMetadataChangeList(scoped_ptr<MetadataChangeList> change_list) {
+  void ApplyMetadataChangeList(
+      std::unique_ptr<MetadataChangeList> change_list) {
     DCHECK(change_list);
     SimpleMetadataChangeList* changes =
         static_cast<SimpleMetadataChangeList*>(change_list.get());
@@ -482,6 +519,7 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
           db_.PutMetadata(it->first, it->second.metadata);
           break;
         case SimpleMetadataChangeList::CLEAR:
+          EXPECT_TRUE(db_.HasMetadata(it->first));
           db_.RemoveMetadata(it->first);
           break;
       }
@@ -501,13 +539,22 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
   }
 
   void GetData(ClientTagList tags, DataCallback callback) override {
-    scoped_ptr<DataBatchImpl> batch(new DataBatchImpl());
+    std::unique_ptr<DataBatchImpl> batch(new DataBatchImpl());
     for (const std::string& tag : tags) {
       batch->Put(tag, CopyEntityData(db_.GetData(tag)));
     }
     data_callback_ =
         base::Bind(callback, syncer::SyncError(), base::Passed(&batch));
   }
+
+  ConflictResolution ResolveConflict(
+      const EntityData& local_data,
+      const EntityData& remote_data) const override {
+    DCHECK(conflict_resolution_);
+    return std::move(*conflict_resolution_);
+  }
+
+  std::unique_ptr<ConflictResolution> conflict_resolution_;
 
   // This sets ThreadTaskRunnerHandle on the current thread, which the type
   // processor will pick up as the sync task runner.
@@ -525,12 +572,12 @@ class SharedModelTypeProcessorTest : public ::testing::Test,
 
 // Test that an initial sync handles local and remote items properly.
 TEST_F(SharedModelTypeProcessorTest, InitialSync) {
-  CreateProcessor();
+  GetOrCreateChangeProcessor();
   OnMetadataLoaded();
   OnSyncStarting();
 
   // Local write before initial sync.
-  WriteItem("tag1", "value1");
+  WriteItem(kTag1, kValue1);
 
   // Has data, but no metadata, entity in the processor, or commit request.
   EXPECT_EQ(1U, db().DataCount());
@@ -539,21 +586,22 @@ TEST_F(SharedModelTypeProcessorTest, InitialSync) {
   EXPECT_EQ(0U, GetNumCommitRequestLists());
 
   // Initial sync with one server item.
-  OnInitialSyncDone("tag2", "value2");
+  OnInitialSyncDone(kTag2, kValue2);
 
   // Now have data and metadata for both items, as well as a commit request for
   // the local item.
   EXPECT_EQ(2U, db().DataCount());
   EXPECT_EQ(2U, db().MetadataCount());
   EXPECT_EQ(2U, ProcessorEntityCount());
-  EXPECT_EQ(1, db().GetMetadata("tag1").sequence_number());
-  EXPECT_EQ(0, db().GetMetadata("tag2").sequence_number());
-  ExpectCommitRequests({"tag1"});
+  EXPECT_EQ(1, db().GetMetadata(kTag1).sequence_number());
+  EXPECT_EQ(0, db().GetMetadata(kTag2).sequence_number());
+  ExpectCommitRequests({kTag1});
 }
 
 // This test covers race conditions during loading pending data. All cases
-// start with no processor and one item with a pending commit. There are three
-// different events that can occur in any order once metadata is loaded:
+// start with no processor and one acked (committed to the server) item with a
+// pending commit. There are three different events that can occur in any order
+// once metadata is loaded:
 //
 // - Pending commit data is loaded.
 // - Sync gets connected.
@@ -562,137 +610,137 @@ TEST_F(SharedModelTypeProcessorTest, InitialSync) {
 // This results in 2 + 12 = 14 orderings of the events.
 TEST_F(SharedModelTypeProcessorTest, LoadPendingCommit) {
   // Data, connect.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnDataLoaded();
   OnSyncStarting();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "value1");
+  ExpectNthCommitRequestList(0, kTag1, kValue1);
 
   // Connect, data.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnSyncStarting();
   EXPECT_EQ(0U, GetNumCommitRequestLists());
   OnDataLoaded();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "value1");
+  ExpectNthCommitRequestList(0, kTag1, kValue1);
 
   // Data, connect, put.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnDataLoaded();
   OnSyncStarting();
-  WriteItem("tag1", "value2");
+  WriteItem(kTag1, kValue2);
   EXPECT_EQ(2U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "value1");
-  ExpectNthCommitRequestList(1, "tag1", "value2");
+  ExpectNthCommitRequestList(0, kTag1, kValue1);
+  ExpectNthCommitRequestList(1, kTag1, kValue2);
 
   // Data, put, connect.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnDataLoaded();
-  WriteItem("tag1", "value2");
+  WriteItem(kTag1, kValue2);
   OnSyncStarting();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "value2");
+  ExpectNthCommitRequestList(0, kTag1, kValue2);
 
   // Connect, data, put.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnSyncStarting();
   OnDataLoaded();
-  WriteItem("tag1", "value2");
+  WriteItem(kTag1, kValue2);
   EXPECT_EQ(2U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "value1");
-  ExpectNthCommitRequestList(1, "tag1", "value2");
+  ExpectNthCommitRequestList(0, kTag1, kValue1);
+  ExpectNthCommitRequestList(1, kTag1, kValue2);
 
   // Connect, put, data.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnSyncStarting();
-  WriteItem("tag1", "value2");
+  WriteItem(kTag1, kValue2);
   EXPECT_EQ(0U, GetNumCommitRequestLists());
   OnDataLoaded();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "value2");
+  ExpectNthCommitRequestList(0, kTag1, kValue2);
 
   // Put, data, connect.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
-  WriteItem("tag1", "value2");
+  WriteItem(kTag1, kValue2);
   OnDataLoaded();
   OnSyncStarting();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "value2");
+  ExpectNthCommitRequestList(0, kTag1, kValue2);
 
   // Put, connect, data.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
-  WriteItem("tag1", "value2");
+  WriteItem(kTag1, kValue2);
   OnSyncStarting();
   EXPECT_EQ(0U, GetNumCommitRequestLists());
   OnDataLoaded();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "value2");
+  ExpectNthCommitRequestList(0, kTag1, kValue2);
 
   // Data, connect, delete.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnDataLoaded();
   OnSyncStarting();
-  DeleteItem("tag1");
+  DeleteItem(kTag1);
   EXPECT_EQ(2U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "value1");
-  ExpectNthCommitRequestList(1, "tag1", "");
+  ExpectNthCommitRequestList(0, kTag1, kValue1);
+  ExpectNthCommitRequestList(1, kTag1, "");
 
   // Data, delete, connect.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnDataLoaded();
-  DeleteItem("tag1");
+  DeleteItem(kTag1);
   OnSyncStarting();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "");
+  ExpectNthCommitRequestList(0, kTag1, "");
 
   // Connect, data, delete.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnSyncStarting();
   OnDataLoaded();
-  DeleteItem("tag1");
+  DeleteItem(kTag1);
   EXPECT_EQ(2U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "value1");
-  ExpectNthCommitRequestList(1, "tag1", "");
+  ExpectNthCommitRequestList(0, kTag1, kValue1);
+  ExpectNthCommitRequestList(1, kTag1, "");
 
   // Connect, delete, data.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnSyncStarting();
-  DeleteItem("tag1");
+  DeleteItem(kTag1);
   EXPECT_EQ(0U, GetNumCommitRequestLists());
   OnDataLoaded();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "");
+  ExpectNthCommitRequestList(0, kTag1, "");
 
   // Delete, data, connect.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
-  DeleteItem("tag1");
+  DeleteItem(kTag1);
   OnDataLoaded();
   OnSyncStarting();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "");
+  ExpectNthCommitRequestList(0, kTag1, "");
 
   // Delete, connect, data.
-  ResetStateWriteItem("tag1", "value1");
+  ResetStateWriteAckedItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
-  DeleteItem("tag1");
+  DeleteItem(kTag1);
   OnSyncStarting();
   EXPECT_EQ(0U, GetNumCommitRequestLists());
   OnDataLoaded();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "");
+  ExpectNthCommitRequestList(0, kTag1, "");
 }
 
 // This test covers race conditions during loading a pending delete. All cases
@@ -707,56 +755,53 @@ TEST_F(SharedModelTypeProcessorTest, LoadPendingCommit) {
 // This results in 1 + 4 = 5 orderings of the events.
 TEST_F(SharedModelTypeProcessorTest, LoadPendingDelete) {
   // Connect.
-  ResetStateDeleteItem("tag1", "value1");
+  ResetStateDeleteItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnSyncStarting();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "");
+  ExpectNthCommitRequestList(0, kTag1, "");
 
   // Connect, put.
-  ResetStateDeleteItem("tag1", "value1");
+  ResetStateDeleteItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnSyncStarting();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  WriteItem("tag1", "value2");
+  WriteItem(kTag1, kValue2);
   EXPECT_EQ(2U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "");
-  ExpectNthCommitRequestList(1, "tag1", "value2");
+  ExpectNthCommitRequestList(0, kTag1, "");
+  ExpectNthCommitRequestList(1, kTag1, kValue2);
 
   // Put, connect.
-  ResetStateDeleteItem("tag1", "value1");
+  ResetStateDeleteItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
-  WriteItem("tag1", "value2");
+  WriteItem(kTag1, kValue2);
   OnSyncStarting();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "value2");
+  ExpectNthCommitRequestList(0, kTag1, kValue2);
 
   // Connect, delete.
-  ResetStateDeleteItem("tag1", "value1");
+  ResetStateDeleteItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
   OnSyncStarting();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  DeleteItem("tag1");
+  DeleteItem(kTag1);
   EXPECT_EQ(2U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "");
-  ExpectNthCommitRequestList(1, "tag1", "");
+  ExpectNthCommitRequestList(0, kTag1, "");
+  ExpectNthCommitRequestList(1, kTag1, "");
 
   // Delete, connect.
-  ResetStateDeleteItem("tag1", "value1");
+  ResetStateDeleteItem(kTag1, kValue1);
   InitializeToMetadataLoaded();
-  DeleteItem("tag1");
+  DeleteItem(kTag1);
   OnSyncStarting();
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ExpectNthCommitRequestList(0, "tag1", "");
+  ExpectNthCommitRequestList(0, kTag1, "");
 }
 
 // Test that loading a committed item does not queue another commit.
 TEST_F(SharedModelTypeProcessorTest, LoadCommited) {
   InitializeToReadyState();
-  WriteItem("tag1", "value1");
-  // Complete the commit.
-  EXPECT_TRUE(HasCommitRequestForTag("tag1"));
-  SuccessfulCommitResponse(GetLatestCommitRequestForTag("tag1"));
+  WriteItemAndAck(kTag1, kValue1);
   clear_change_processor();
 
   // Test that a new processor loads the metadata without committing.
@@ -767,29 +812,29 @@ TEST_F(SharedModelTypeProcessorTest, LoadCommited) {
 
 // Creates a new item locally.
 // Thoroughly tests the data generated by a local item creation.
-TEST_F(SharedModelTypeProcessorTest, CreateLocalItem) {
+TEST_F(SharedModelTypeProcessorTest, LocalCreateItem) {
   InitializeToReadyState();
   EXPECT_EQ(0U, GetNumCommitRequestLists());
 
-  WriteItem("tag1", "value1");
+  WriteItem(kTag1, kValue1);
 
   // Verify the commit request this operation has triggered.
-  ExpectCommitRequests({"tag1"});
+  ExpectCommitRequests({kTag1});
   const CommitRequestData& tag1_request_data =
-      GetLatestCommitRequestForTag("tag1");
+      GetLatestCommitRequestForTag(kTag1);
   const EntityData& tag1_data = tag1_request_data.entity.value();
 
   EXPECT_EQ(kUncommittedVersion, tag1_request_data.base_version);
   EXPECT_TRUE(tag1_data.id.empty());
   EXPECT_FALSE(tag1_data.creation_time.is_null());
   EXPECT_FALSE(tag1_data.modification_time.is_null());
-  EXPECT_EQ("tag1", tag1_data.non_unique_name);
+  EXPECT_EQ(kTag1, tag1_data.non_unique_name);
   EXPECT_FALSE(tag1_data.is_deleted());
-  EXPECT_EQ("tag1", tag1_data.specifics.preference().name());
-  EXPECT_EQ("value1", tag1_data.specifics.preference().value());
+  EXPECT_EQ(kTag1, tag1_data.specifics.preference().name());
+  EXPECT_EQ(kValue1, tag1_data.specifics.preference().value());
 
   EXPECT_EQ(1U, db().MetadataCount());
-  const sync_pb::EntityMetadata metadata = db().GetMetadata("tag1");
+  const sync_pb::EntityMetadata metadata = db().GetMetadata(kTag1);
   EXPECT_TRUE(metadata.has_client_tag_hash());
   EXPECT_FALSE(metadata.has_server_id());
   EXPECT_FALSE(metadata.is_deleted());
@@ -803,54 +848,60 @@ TEST_F(SharedModelTypeProcessorTest, CreateLocalItem) {
 
 // The purpose of this test case is to test setting |client_tag_hash| and |id|
 // on the EntityData object as we pass it into the Put method of the processor.
-TEST_F(SharedModelTypeProcessorTest, CreateAndModifyWithOverrides) {
+TEST_F(SharedModelTypeProcessorTest, LocalUpdateItemWithOverrides) {
+  const std::string kId1 = "cid1";
+  const std::string kId2 = "cid2";
+  const std::string kName1 = "name1";
+  const std::string kName2 = "name2";
+  const std::string kHash = "hash";
+
   InitializeToReadyState();
   EXPECT_EQ(0U, GetNumCommitRequestLists());
 
-  scoped_ptr<EntityData> entity_data = make_scoped_ptr(new EntityData());
-  entity_data->specifics.mutable_preference()->set_name("name1");
-  entity_data->specifics.mutable_preference()->set_value("value1");
+  std::unique_ptr<EntityData> entity_data = base::WrapUnique(new EntityData());
+  entity_data->specifics.mutable_preference()->set_name(kName1);
+  entity_data->specifics.mutable_preference()->set_value(kValue1);
 
-  entity_data->non_unique_name = "name1";
-  entity_data->client_tag_hash = "hash";
-  entity_data->id = "cid1";
-  WriteItem("tag1", std::move(entity_data));
+  entity_data->non_unique_name = kName1;
+  entity_data->client_tag_hash = kHash;
+  entity_data->id = kId1;
+  WriteItem(kTag1, std::move(entity_data));
 
   EXPECT_EQ(1U, GetNumCommitRequestLists());
-  ASSERT_FALSE(mock_queue()->HasCommitRequestForTagHash("hash"));
-  ASSERT_TRUE(HasCommitRequestForTag("tag1"));
+  ASSERT_FALSE(mock_queue()->HasCommitRequestForTagHash(kHash));
+  ASSERT_TRUE(HasCommitRequestForTag(kTag1));
   EXPECT_EQ(1U, db().MetadataCount());
   const EntityData& out_entity1 =
-      GetLatestCommitRequestForTag("tag1").entity.value();
-  const sync_pb::EntityMetadata metadata_v1 = db().GetMetadata("tag1");
+      GetLatestCommitRequestForTag(kTag1).entity.value();
+  const sync_pb::EntityMetadata metadata_v1 = db().GetMetadata(kTag1);
 
-  EXPECT_EQ("cid1", out_entity1.id);
-  EXPECT_NE("hash", out_entity1.client_tag_hash);
-  EXPECT_EQ("value1", out_entity1.specifics.preference().value());
-  EXPECT_EQ("cid1", metadata_v1.server_id());
+  EXPECT_EQ(kId1, out_entity1.id);
+  EXPECT_NE(kHash, out_entity1.client_tag_hash);
+  EXPECT_EQ(kValue1, out_entity1.specifics.preference().value());
+  EXPECT_EQ(kId1, metadata_v1.server_id());
   EXPECT_EQ(metadata_v1.client_tag_hash(), out_entity1.client_tag_hash);
 
   entity_data.reset(new EntityData());
-  entity_data->specifics.mutable_preference()->set_name("name2");
-  entity_data->specifics.mutable_preference()->set_value("value2");
-  entity_data->non_unique_name = "name2";
-  entity_data->client_tag_hash = "hash";
+  entity_data->specifics.mutable_preference()->set_name(kName2);
+  entity_data->specifics.mutable_preference()->set_value(kValue2);
+  entity_data->non_unique_name = kName2;
+  entity_data->client_tag_hash = kHash;
   // Make sure ID isn't overwritten either.
-  entity_data->id = "cid2";
-  WriteItem("tag1", std::move(entity_data));
+  entity_data->id = kId2;
+  WriteItem(kTag1, std::move(entity_data));
 
   EXPECT_EQ(2U, GetNumCommitRequestLists());
-  ASSERT_FALSE(mock_queue()->HasCommitRequestForTagHash("hash"));
-  ASSERT_TRUE(HasCommitRequestForTag("tag1"));
+  ASSERT_FALSE(mock_queue()->HasCommitRequestForTagHash(kHash));
+  ASSERT_TRUE(HasCommitRequestForTag(kTag1));
   EXPECT_EQ(1U, db().MetadataCount());
   const EntityData& out_entity2 =
-      GetLatestCommitRequestForTag("tag1").entity.value();
-  const sync_pb::EntityMetadata metadata_v2 = db().GetMetadata("tag1");
+      GetLatestCommitRequestForTag(kTag1).entity.value();
+  const sync_pb::EntityMetadata metadata_v2 = db().GetMetadata(kTag1);
 
-  EXPECT_EQ("value2", out_entity2.specifics.preference().value());
+  EXPECT_EQ(kValue2, out_entity2.specifics.preference().value());
   // Should still see old cid1 value, override is not respected on update.
-  EXPECT_EQ("cid1", out_entity2.id);
-  EXPECT_EQ("cid1", metadata_v2.server_id());
+  EXPECT_EQ(kId1, out_entity2.id);
+  EXPECT_EQ(kId1, metadata_v2.server_id());
   EXPECT_EQ(metadata_v2.client_tag_hash(), out_entity2.client_tag_hash);
 
   // Specifics have changed so the hashes should not match.
@@ -859,40 +910,40 @@ TEST_F(SharedModelTypeProcessorTest, CreateAndModifyWithOverrides) {
 
 // Creates a new local item then modifies it.
 // Thoroughly tests data generated by modification of server-unknown item.
-TEST_F(SharedModelTypeProcessorTest, CreateAndModifyLocalItem) {
+TEST_F(SharedModelTypeProcessorTest, LocalUpdateItem) {
   InitializeToReadyState();
 
-  WriteItem("tag1", "value1");
+  WriteItem(kTag1, kValue1);
   EXPECT_EQ(1U, db().MetadataCount());
-  ExpectCommitRequests({"tag1"});
+  ExpectCommitRequests({kTag1});
 
   const CommitRequestData& request_data_v1 =
-      GetLatestCommitRequestForTag("tag1");
+      GetLatestCommitRequestForTag(kTag1);
   const EntityData& data_v1 = request_data_v1.entity.value();
-  const sync_pb::EntityMetadata metadata_v1 = db().GetMetadata("tag1");
+  const sync_pb::EntityMetadata metadata_v1 = db().GetMetadata(kTag1);
 
-  WriteItem("tag1", "value2");
+  WriteItem(kTag1, kValue2);
   EXPECT_EQ(1U, db().MetadataCount());
-  ExpectCommitRequests({"tag1", "tag1"});
+  ExpectCommitRequests({kTag1, kTag1});
 
   const CommitRequestData& request_data_v2 =
-      GetLatestCommitRequestForTag("tag1");
+      GetLatestCommitRequestForTag(kTag1);
   const EntityData& data_v2 = request_data_v2.entity.value();
-  const sync_pb::EntityMetadata metadata_v2 = db().GetMetadata("tag1");
+  const sync_pb::EntityMetadata metadata_v2 = db().GetMetadata(kTag1);
 
   // Test some of the relations between old and new commit requests.
   EXPECT_GT(request_data_v2.sequence_number, request_data_v1.sequence_number);
-  EXPECT_EQ(data_v1.specifics.preference().value(), "value1");
+  EXPECT_EQ(data_v1.specifics.preference().value(), kValue1);
 
   // Perform a thorough examination of the update-generated request.
   EXPECT_EQ(kUncommittedVersion, request_data_v2.base_version);
   EXPECT_TRUE(data_v2.id.empty());
   EXPECT_FALSE(data_v2.creation_time.is_null());
   EXPECT_FALSE(data_v2.modification_time.is_null());
-  EXPECT_EQ("tag1", data_v2.non_unique_name);
+  EXPECT_EQ(kTag1, data_v2.non_unique_name);
   EXPECT_FALSE(data_v2.is_deleted());
-  EXPECT_EQ("tag1", data_v2.specifics.preference().name());
-  EXPECT_EQ("value2", data_v2.specifics.preference().value());
+  EXPECT_EQ(kTag1, data_v2.specifics.preference().name());
+  EXPECT_EQ(kValue2, data_v2.specifics.preference().value());
 
   EXPECT_FALSE(metadata_v1.has_server_id());
   EXPECT_FALSE(metadata_v1.is_deleted());
@@ -910,108 +961,185 @@ TEST_F(SharedModelTypeProcessorTest, CreateAndModifyLocalItem) {
   EXPECT_NE(metadata_v1.specifics_hash(), metadata_v2.specifics_hash());
 }
 
-// Deletes an item we've never seen before.
-// Should have no effect and not crash.
-TEST_F(SharedModelTypeProcessorTest, DeleteUnknown) {
+// Tests that a local update that doesn't change specifics doesn't generate a
+// commit request.
+TEST_F(SharedModelTypeProcessorTest, LocalUpdateItemRedundant) {
   InitializeToReadyState();
-  DeleteItem("tag1");
-  EXPECT_EQ(0U, GetNumCommitRequestLists());
-  EXPECT_EQ(0U, db().MetadataCount());
+  WriteItem(kTag1, kValue1);
+  EXPECT_EQ(1U, db().MetadataCount());
+  ExpectCommitRequests({kTag1});
+
+  WriteItem(kTag1, kValue1);
+  ExpectCommitRequests({kTag1});
 }
 
-// Creates an item locally then deletes it.
-//
-// In this test, no commit responses are received, so the deleted item is
-// server-unknown as far as the model thread is concerned.  That behavior
-// is race-dependent; other tests are used to test other races.
-TEST_F(SharedModelTypeProcessorTest, DeleteServerUnknown) {
+// Thoroughly tests the data generated by a server item creation.
+TEST_F(SharedModelTypeProcessorTest, ServerCreateItem) {
+  InitializeToReadyState();
+  UpdateFromServer(5, kTag1, kValue1);
+  EXPECT_EQ(1U, db().DataCount());
+  EXPECT_EQ(1U, db().MetadataCount());
+  EXPECT_EQ(1U, ProcessorEntityCount());
+  EXPECT_EQ(0U, GetNumCommitRequestLists());
+
+  const EntityData& data = db().GetData(kTag1);
+  EXPECT_FALSE(data.id.empty());
+  EXPECT_EQ(kTag1, data.specifics.preference().name());
+  EXPECT_EQ(kValue1, data.specifics.preference().value());
+  EXPECT_FALSE(data.creation_time.is_null());
+  EXPECT_FALSE(data.modification_time.is_null());
+  EXPECT_EQ(kTag1, data.non_unique_name);
+  EXPECT_FALSE(data.is_deleted());
+
+  const sync_pb::EntityMetadata metadata = db().GetMetadata(kTag1);
+  EXPECT_TRUE(metadata.has_client_tag_hash());
+  EXPECT_TRUE(metadata.has_server_id());
+  EXPECT_FALSE(metadata.is_deleted());
+  EXPECT_EQ(0, metadata.sequence_number());
+  EXPECT_EQ(0, metadata.acked_sequence_number());
+  EXPECT_EQ(5, metadata.server_version());
+  EXPECT_TRUE(metadata.has_creation_time());
+  EXPECT_TRUE(metadata.has_modification_time());
+  EXPECT_TRUE(metadata.has_specifics_hash());
+}
+
+// Thoroughly tests the data generated by a server item creation.
+TEST_F(SharedModelTypeProcessorTest, ServerUpdateItem) {
   InitializeToReadyState();
 
-  // TODO(stanisc): crbug.com/573333: Review this case. If the flush of
-  // all locally modified items was scheduled to run on a separate task, than
-  // the correct behavior would be to commit just the detele, or perhaps no
-  // commit at all.
+  // Local add writes data and metadata; ack writes metadata again.
+  WriteItemAndAck(kTag1, kValue1);
+  EXPECT_EQ(1U, db().DataChangeCount());
+  EXPECT_EQ(2U, db().MetadataChangeCount());
 
-  WriteItem("tag1", "value1");
+  // Redundant update from server doesn't write data but updates metadata.
+  UpdateFromServer(5, kTag1, kValue1);
+  EXPECT_EQ(1U, db().DataChangeCount());
+  EXPECT_EQ(3U, db().MetadataChangeCount());
+
+  // A reflection (update already received) is ignored completely.
+  UpdateFromServer(0 /* version_offset */, kTag1, kValue1);
+  EXPECT_EQ(1U, db().DataChangeCount());
+  EXPECT_EQ(3U, db().MetadataChangeCount());
+}
+
+// Tests locally deleting an acknowledged item.
+TEST_F(SharedModelTypeProcessorTest, LocalDeleteItem) {
+  InitializeToReadyState();
+  WriteItemAndAck(kTag1, kValue1);
+  ExpectCommitRequests({kTag1});
+
+  const sync_pb::EntityMetadata metadata_v1 = db().GetMetadata(kTag1);
+  EXPECT_FALSE(metadata_v1.is_deleted());
+  EXPECT_EQ(1, metadata_v1.sequence_number());
+  EXPECT_EQ(1, metadata_v1.acked_sequence_number());
+  EXPECT_EQ(1, metadata_v1.server_version());
+
+  DeleteItem(kTag1);
+  EXPECT_EQ(0U, db().DataCount());
+  // Metadata is not removed until the commit response comes back.
   EXPECT_EQ(1U, db().MetadataCount());
-  ExpectCommitRequests({"tag1"});
-  const CommitRequestData& data_v1 = GetLatestCommitRequestForTag("tag1");
-  const sync_pb::EntityMetadata metadata_v1 = db().GetMetadata("tag1");
+  EXPECT_EQ(1U, ProcessorEntityCount());
+  ExpectCommitRequests({kTag1, kTag1});
 
-  DeleteItem("tag1");
-  EXPECT_EQ(1U, db().MetadataCount());
-  ExpectCommitRequests({"tag1", "tag1"});
-  const CommitRequestData& data_v2 = GetLatestCommitRequestForTag("tag1");
-  const sync_pb::EntityMetadata metadata_v2 = db().GetMetadata("tag1");
+  const sync_pb::EntityMetadata metadata_v2 = db().GetMetadata(kTag1);
+  EXPECT_TRUE(metadata_v2.is_deleted());
+  EXPECT_EQ(2, metadata_v2.sequence_number());
+  EXPECT_EQ(1, metadata_v2.acked_sequence_number());
+  EXPECT_EQ(1, metadata_v2.server_version());
 
-  EXPECT_GT(data_v2.sequence_number, data_v1.sequence_number);
+  // Ack the delete and check that the metadata is cleared.
+  SuccessfulCommitResponse(GetLatestCommitRequestForTag(kTag1));
+  EXPECT_EQ(0U, db().MetadataCount());
+  EXPECT_EQ(0U, ProcessorEntityCount());
+}
 
-  EXPECT_TRUE(data_v2.entity->id.empty());
-  EXPECT_EQ(kUncommittedVersion, data_v2.base_version);
-  EXPECT_TRUE(data_v2.entity->is_deleted());
+// Tests creating and deleting an item locally before receiving a commit
+// response, then getting the commit responses.
+TEST_F(SharedModelTypeProcessorTest, LocalDeleteItemInterleaved) {
+  InitializeToReadyState();
+  WriteItem(kTag1, kValue1);
+  ExpectCommitRequests({kTag1});
+  const CommitRequestData& data_v1 = GetLatestCommitRequestForTag(kTag1);
 
+  const sync_pb::EntityMetadata metadata_v1 = db().GetMetadata(kTag1);
   EXPECT_FALSE(metadata_v1.is_deleted());
   EXPECT_EQ(1, metadata_v1.sequence_number());
   EXPECT_EQ(0, metadata_v1.acked_sequence_number());
   EXPECT_EQ(kUncommittedVersion, metadata_v1.server_version());
 
-  // TODO(stanisc): crbug.com/573333: Review this case. Depending on the
-  // implementation the second action performed on metadata change list might
-  // be CLEAR_METADATA. For a real implementation of MetadataChangeList this
-  // might also mean that the change list wouldn't contain any metadata
-  // records at all - the first call would create an entry and the second would
-  // remove it.
+  DeleteItem(kTag1);
+  EXPECT_EQ(0U, db().DataCount());
+  EXPECT_EQ(1U, db().MetadataCount());
+  EXPECT_EQ(1U, ProcessorEntityCount());
+  ExpectCommitRequests({kTag1, kTag1});
 
+  const CommitRequestData& data_v2 = GetLatestCommitRequestForTag(kTag1);
+  EXPECT_GT(data_v2.sequence_number, data_v1.sequence_number);
+  EXPECT_TRUE(data_v2.entity->id.empty());
+  EXPECT_EQ(kUncommittedVersion, data_v2.base_version);
+  EXPECT_TRUE(data_v2.entity->is_deleted());
+
+  const sync_pb::EntityMetadata metadata_v2 = db().GetMetadata(kTag1);
   EXPECT_TRUE(metadata_v2.is_deleted());
   EXPECT_EQ(2, metadata_v2.sequence_number());
   EXPECT_EQ(0, metadata_v2.acked_sequence_number());
   EXPECT_EQ(kUncommittedVersion, metadata_v2.server_version());
-}
 
-// Creates an item locally then deletes it.
-//
-// The item is created locally then enqueued for commit.  The sync thread
-// successfully commits it, but, before the commit response is picked up
-// by the model thread, the item is deleted by the model thread.
-TEST_F(SharedModelTypeProcessorTest, DeleteServerUnknown_RacyCommitResponse) {
-  InitializeToReadyState();
-
-  WriteItem("tag1", "value1");
-  EXPECT_EQ(1U, db().DataCount());
-  EXPECT_EQ(1U, db().MetadataCount());
-  ExpectCommitRequests({"tag1"});
-  const CommitRequestData& data_v1 = GetLatestCommitRequestForTag("tag1");
-  EXPECT_FALSE(db().GetMetadata("tag1").is_deleted());
-
-  DeleteItem("tag1");
-  EXPECT_EQ(0U, db().DataCount());
-  EXPECT_EQ(1U, db().MetadataCount());
-  ExpectCommitRequests({"tag1", "tag1"});
-  EXPECT_TRUE(db().GetMetadata("tag1").is_deleted());
-
-  // This commit happened while the deletion was in progress, but the commit
-  // response didn't arrive on our thread until after the delete was issued to
-  // the sync thread.  It will update some metadata, but won't do much else.
+  // A response for the first commit doesn't change much.
   SuccessfulCommitResponse(data_v1);
   EXPECT_EQ(0U, db().DataCount());
   EXPECT_EQ(1U, db().MetadataCount());
+  EXPECT_EQ(1U, ProcessorEntityCount());
 
-  // In reality the change list used to commit local changes should never
-  // overlap with the changelist used to deliver commit confirmation. In this
-  // test setup the two change lists are isolated - one is on the stack and
-  // another is the class member.
+  const sync_pb::EntityMetadata metadata_v3 = db().GetMetadata(kTag1);
+  EXPECT_TRUE(metadata_v3.is_deleted());
+  EXPECT_EQ(2, metadata_v3.sequence_number());
+  EXPECT_EQ(1, metadata_v3.acked_sequence_number());
+  EXPECT_EQ(1, metadata_v3.server_version());
 
-  const sync_pb::EntityMetadata metadata_v2 = db().GetMetadata("tag1");
-  // Deleted from the second local modification.
-  EXPECT_TRUE(metadata_v2.is_deleted());
-  // sequence_number = 2 from the second local modification.
-  EXPECT_EQ(2, metadata_v2.sequence_number());
-  // acked_sequence_number = 1 from the first commit response.
-  EXPECT_EQ(1, metadata_v2.acked_sequence_number());
+  SuccessfulCommitResponse(data_v2);
+  // The delete was acked so the metadata should now be cleared.
+  EXPECT_EQ(0U, db().MetadataCount());
+  EXPECT_EQ(0U, ProcessorEntityCount());
+}
 
-  // TODO(rlarocque): Verify the state of the item is correct once we get
-  // storage hooked up in these tests.  For example, verify the item is still
-  // marked as deleted.
+TEST_F(SharedModelTypeProcessorTest, ServerDeleteItem) {
+  InitializeToReadyState();
+  WriteItemAndAck(kTag1, kValue1);
+  EXPECT_EQ(1U, ProcessorEntityCount());
+  EXPECT_EQ(1U, db().MetadataCount());
+  EXPECT_EQ(1U, db().DataCount());
+  EXPECT_EQ(1U, GetNumCommitRequestLists());
+
+  TombstoneFromServer(5, kTag1);
+  // Delete from server should clear the data and all the metadata.
+  EXPECT_EQ(0U, db().DataCount());
+  EXPECT_EQ(0U, db().MetadataCount());
+  EXPECT_EQ(0U, ProcessorEntityCount());
+  EXPECT_EQ(1U, GetNumCommitRequestLists());
+}
+
+// Deletes an item we've never seen before.
+// Should have no effect and not crash.
+TEST_F(SharedModelTypeProcessorTest, LocalDeleteUnknown) {
+  InitializeToReadyState();
+  DeleteItem(kTag1);
+  EXPECT_EQ(0U, db().DataCount());
+  EXPECT_EQ(0U, db().MetadataCount());
+  EXPECT_EQ(0U, ProcessorEntityCount());
+  EXPECT_EQ(0U, GetNumCommitRequestLists());
+}
+
+// Deletes an item we've never seen before.
+// Should have no effect and not crash.
+TEST_F(SharedModelTypeProcessorTest, ServerDeleteUnknown) {
+  InitializeToReadyState();
+  TombstoneFromServer(5, kTag1);
+  EXPECT_EQ(0U, db().DataCount());
+  EXPECT_EQ(0U, db().MetadataCount());
+  EXPECT_EQ(0U, ProcessorEntityCount());
+  EXPECT_EQ(0U, GetNumCommitRequestLists());
 }
 
 // Creates two different sync items.
@@ -1020,21 +1148,21 @@ TEST_F(SharedModelTypeProcessorTest, TwoIndependentItems) {
   InitializeToReadyState();
   EXPECT_EQ(0U, GetNumCommitRequestLists());
 
-  WriteItem("tag1", "value1");
+  WriteItem(kTag1, kValue1);
   EXPECT_EQ(1U, db().DataCount());
   EXPECT_EQ(1U, db().MetadataCount());
-  const sync_pb::EntityMetadata metadata1 = db().GetMetadata("tag1");
+  const sync_pb::EntityMetadata metadata1 = db().GetMetadata(kTag1);
 
   // There should be one commit request for this item only.
-  ExpectCommitRequests({"tag1"});
+  ExpectCommitRequests({kTag1});
 
-  WriteItem("tag2", "value2");
+  WriteItem(kTag2, kValue2);
   EXPECT_EQ(2U, db().DataCount());
   EXPECT_EQ(2U, db().MetadataCount());
-  const sync_pb::EntityMetadata metadata2 = db().GetMetadata("tag2");
+  const sync_pb::EntityMetadata metadata2 = db().GetMetadata(kTag2);
 
   // The second write should trigger another single-item commit request.
-  ExpectCommitRequests({"tag1", "tag2"});
+  ExpectCommitRequests({kTag1, kTag2});
 
   EXPECT_FALSE(metadata1.is_deleted());
   EXPECT_EQ(1, metadata1.sequence_number());
@@ -1047,6 +1175,69 @@ TEST_F(SharedModelTypeProcessorTest, TwoIndependentItems) {
   EXPECT_EQ(kUncommittedVersion, metadata2.server_version());
 }
 
+TEST_F(SharedModelTypeProcessorTest, ConflictResolutionChangesMatch) {
+  InitializeToReadyState();
+  WriteItem(kTag1, kValue1);
+  EXPECT_EQ(1U, db().DataChangeCount());
+  EXPECT_EQ(kValue1, db().GetValue(kTag1));
+  EXPECT_EQ(1U, db().MetadataChangeCount());
+  EXPECT_EQ(kUncommittedVersion, db().GetMetadata(kTag1).server_version());
+  ExpectCommitRequests({kTag1});
+  ExpectNthCommitRequestList(0, kTag1, kValue1);
+
+  // Changes match doesn't call ResolveConflict.
+  UpdateFromServer(5, kTag1, kValue1);
+
+  // Updated metadata but not data; no new commit request.
+  EXPECT_EQ(1U, db().DataChangeCount());
+  EXPECT_EQ(5, db().GetMetadata(kTag1).server_version());
+  ExpectCommitRequests({kTag1});
+}
+
+TEST_F(SharedModelTypeProcessorTest, ConflictResolutionUseLocal) {
+  InitializeToReadyState();
+  WriteItem(kTag1, kValue1);
+  SetConflictResolution(ConflictResolution::UseLocal());
+
+  UpdateFromServer(5, kTag1, kValue2);
+
+  // Updated metadata but not data; new commit request.
+  EXPECT_EQ(1U, db().DataChangeCount());
+  EXPECT_EQ(2U, db().MetadataChangeCount());
+  EXPECT_EQ(5, db().GetMetadata(kTag1).server_version());
+  ExpectCommitRequests({kTag1, kTag1});
+  ExpectNthCommitRequestList(1, kTag1, kValue1);
+}
+
+TEST_F(SharedModelTypeProcessorTest, ConflictResolutionUseRemote) {
+  InitializeToReadyState();
+  WriteItem(kTag1, kValue1);
+  SetConflictResolution(ConflictResolution::UseRemote());
+  UpdateFromServer(5, kTag1, kValue2);
+
+  // Updated client data and metadata; no new commit request.
+  EXPECT_EQ(2U, db().DataChangeCount());
+  EXPECT_EQ(kValue2, db().GetValue(kTag1));
+  EXPECT_EQ(2U, db().MetadataChangeCount());
+  EXPECT_EQ(5, db().GetMetadata(kTag1).server_version());
+  ExpectCommitRequests({kTag1});
+}
+
+TEST_F(SharedModelTypeProcessorTest, ConflictResolutionUseNew) {
+  InitializeToReadyState();
+  WriteItem(kTag1, kValue1);
+  SetConflictResolution(
+      ConflictResolution::UseNew(GenerateEntityData(kTag1, kValue3)));
+
+  UpdateFromServer(5, kTag1, kValue2);
+  EXPECT_EQ(2U, db().DataChangeCount());
+  EXPECT_EQ(kValue3, db().GetValue(kTag1));
+  EXPECT_EQ(2U, db().MetadataChangeCount());
+  EXPECT_EQ(5, db().GetMetadata(kTag1).server_version());
+  ExpectCommitRequests({kTag1, kTag1});
+  ExpectNthCommitRequestList(1, kTag1, kValue3);
+}
+
 // Test proper handling of disconnect and reconnect.
 //
 // Creates items in various states of commit and verifies they re-attempt to
@@ -1055,16 +1246,16 @@ TEST_F(SharedModelTypeProcessorTest, Disconnect) {
   InitializeToReadyState();
 
   // The first item is fully committed.
-  WriteItemAndAck("tag1", "value1");
+  WriteItemAndAck(kTag1, kValue1);
 
   // The second item has a commit request in progress.
-  WriteItem("tag2", "value2");
-  EXPECT_TRUE(HasCommitRequestForTag("tag2"));
+  WriteItem(kTag2, kValue2);
+  EXPECT_TRUE(HasCommitRequestForTag(kTag2));
 
   DisconnectSync();
 
   // The third item is added after stopping.
-  WriteItem("tag3", "value3");
+  WriteItem(kTag3, kValue3);
 
   // Reconnect.
   OnSyncStarting();
@@ -1073,58 +1264,54 @@ TEST_F(SharedModelTypeProcessorTest, Disconnect) {
   EXPECT_EQ(2U, GetNthCommitRequestList(0).size());
 
   // The first item was already in sync.
-  EXPECT_FALSE(HasCommitRequestForTag("tag1"));
+  EXPECT_FALSE(HasCommitRequestForTag(kTag1));
 
   // The second item's commit was interrupted and should be retried.
-  EXPECT_TRUE(HasCommitRequestForTag("tag2"));
+  EXPECT_TRUE(HasCommitRequestForTag(kTag2));
 
   // The third item's commit was not started until the reconnect.
-  EXPECT_TRUE(HasCommitRequestForTag("tag3"));
+  EXPECT_TRUE(HasCommitRequestForTag(kTag3));
 }
 
 // Test proper handling of disable and re-enable.
 //
 // Creates items in various states of commit and verifies they re-attempt to
 // commit on re-enable.
-TEST_F(SharedModelTypeProcessorTest, DISABLED_Disable) {
+TEST_F(SharedModelTypeProcessorTest, Disable) {
   InitializeToReadyState();
 
   // The first item is fully committed.
-  WriteItemAndAck("tag1", "value1");
+  WriteItemAndAck(kTag1, kValue1);
 
   // The second item has a commit request in progress.
-  WriteItem("tag2", "value2");
-  EXPECT_TRUE(HasCommitRequestForTag("tag2"));
+  WriteItem(kTag2, kValue2);
+  EXPECT_TRUE(HasCommitRequestForTag(kTag2));
 
   Disable();
 
   // The third item is added after disable.
-  WriteItem("tag3", "value3");
+  WriteItem(kTag3, kValue3);
 
   // Now we re-enable.
-  InitializeToReadyState();
+  GetOrCreateChangeProcessor();
+  OnMetadataLoaded();
+  OnSyncStarting();
+  OnInitialSyncDone();
 
   // Once we're ready to commit, all three local items should consider
   // themselves uncommitted and pending for commit.
-  // TODO(maxbogue): crbug.com/569645: Fix when data is loaded.
-  EXPECT_EQ(1U, GetNumCommitRequestLists());
-  EXPECT_EQ(3U, GetNthCommitRequestList(0).size());
-  EXPECT_TRUE(HasCommitRequestForTag("tag1"));
-  EXPECT_TRUE(HasCommitRequestForTag("tag2"));
-  EXPECT_TRUE(HasCommitRequestForTag("tag3"));
+  ExpectCommitRequests({kTag1, kTag2, kTag3});
 }
 
 // Test re-encrypt everything when desired encryption key changes.
-// TODO(stanisc): crbug/561814: Disabled due to data caching changes in
-// ModelTypeEntity. Revisit the test once fetching of data is implemented.
 TEST_F(SharedModelTypeProcessorTest, DISABLED_ReEncryptCommitsWithNewKey) {
   InitializeToReadyState();
 
   // Commit an item.
-  WriteItemAndAck("tag1", "value1");
+  WriteItemAndAck(kTag1, kValue1);
 
   // Create another item and don't wait for its commit response.
-  WriteItem("tag2", "value2");
+  WriteItem(kTag2, kValue2);
 
   ASSERT_EQ(2U, GetNumCommitRequestLists());
 
@@ -1135,8 +1322,8 @@ TEST_F(SharedModelTypeProcessorTest, DISABLED_ReEncryptCommitsWithNewKey) {
   ASSERT_EQ(3U, GetNumCommitRequestLists());
   EXPECT_EQ(2U, GetNthCommitRequestList(2).size());
 
-  const CommitRequestData& tag1_enc = GetLatestCommitRequestForTag("tag1");
-  const CommitRequestData& tag2_enc = GetLatestCommitRequestForTag("tag2");
+  const CommitRequestData& tag1_enc = GetLatestCommitRequestForTag(kTag1);
+  const CommitRequestData& tag2_enc = GetLatestCommitRequestForTag(kTag2);
 
   SuccessfulCommitResponse(tag1_enc);
   SuccessfulCommitResponse(tag2_enc);
@@ -1147,12 +1334,13 @@ TEST_F(SharedModelTypeProcessorTest, DISABLED_ReEncryptCommitsWithNewKey) {
 
 // Test receipt of updates with new and old keys.
 // TODO(stanisc): crbug/561814: Disabled due to data caching changes in
-// ModelTypeEntity. Revisit the test once fetching of data is implemented.
+// ProcessorEntityTracker. Revisit the test once fetching of data is
+// implemented.
 TEST_F(SharedModelTypeProcessorTest, DISABLED_ReEncryptUpdatesWithNewKey) {
   InitializeToReadyState();
 
-  // Receive an unencrpted update.
-  UpdateFromServer(5, "no_enc", "value1");
+  // Receive an unencrypted update.
+  UpdateFromServer(5, "no_enc", kValue1);
 
   ASSERT_EQ(0U, GetNumCommitRequestLists());
 
@@ -1165,7 +1353,7 @@ TEST_F(SharedModelTypeProcessorTest, DISABLED_ReEncryptUpdatesWithNewKey) {
 
   // Receive an update that was encrypted with key k1.
   SetServerEncryptionKey("k1");
-  UpdateFromServer(10, "enc_k1", "value1");
+  UpdateFromServer(10, "enc_k1", kValue1);
 
   // Receipt of updates encrypted with old key also forces a re-encrypt commit.
   ASSERT_EQ(2U, GetNumCommitRequestLists());
@@ -1174,7 +1362,7 @@ TEST_F(SharedModelTypeProcessorTest, DISABLED_ReEncryptUpdatesWithNewKey) {
 
   // Receive an update that was encrypted with key k2.
   SetServerEncryptionKey("k2");
-  UpdateFromServer(15, "enc_k2", "value1");
+  UpdateFromServer(15, "enc_k2", kValue1);
 
   // That was the correct key, so no re-encryption is required.
   EXPECT_EQ(2U, GetNumCommitRequestLists());

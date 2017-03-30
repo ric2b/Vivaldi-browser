@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/strings/utf_string_conversions.h"
@@ -22,7 +23,8 @@ PasswordsPrivateEventRouter::PasswordsPrivateEventRouter(
     content::BrowserContext* context)
     : context_(context),
       event_router_(nullptr),
-      listening_(false) {
+      listening_(false),
+      ignore_updates_(false) {
   // Register with the event router so we know when renderers are listening to
   // our events. We first check and see if there *is* an event router, because
   // some unit tests try to create all context services, but don't initialize
@@ -59,7 +61,13 @@ void PasswordsPrivateEventRouter::OnListenerAdded(
     const EventListenerInfo& details) {
   // Start listening to change events and propagate the original lists to
   // listeners.
-  StartOrStopListeningForChanges();
+  {
+    // Some delegates will immediately update observers. Since we dispatch the
+    // events again below, we want to ignore this here.
+    // TODO(stevenjb): Fix this. crbug.com/598826.
+    base::AutoReset<bool> ignore_updates(&ignore_updates_, true);
+    StartOrStopListeningForChanges();
+  }
   SendSavedPasswordListToListeners();
   SendPasswordExceptionListToListeners();
 }
@@ -71,19 +79,18 @@ void PasswordsPrivateEventRouter::OnListenerRemoved(
 }
 
 void PasswordsPrivateEventRouter::OnSavedPasswordsListChanged(
-    const std::vector<linked_ptr<
-        api::passwords_private::PasswordUiEntry>>& entries) {
+    const std::vector<api::passwords_private::PasswordUiEntry>& entries) {
   cached_saved_password_parameters_ =
       api::passwords_private::OnSavedPasswordsListChanged::Create(entries);
   SendSavedPasswordListToListeners();
 }
 
 void PasswordsPrivateEventRouter::SendSavedPasswordListToListeners() {
-  if (!cached_saved_password_parameters_.get())
+  if (!cached_saved_password_parameters_.get() || ignore_updates_)
     // If there is nothing to send, return early.
     return;
 
-  scoped_ptr<Event> extension_event(
+  std::unique_ptr<Event> extension_event(
       new Event(events::PASSWORDS_PRIVATE_ON_SAVED_PASSWORDS_LIST_CHANGED,
                 api::passwords_private::OnSavedPasswordsListChanged::kEventName,
                 cached_saved_password_parameters_->CreateDeepCopy()));
@@ -99,11 +106,11 @@ void PasswordsPrivateEventRouter::OnPasswordExceptionsListChanged(
 }
 
 void PasswordsPrivateEventRouter::SendPasswordExceptionListToListeners() {
-  if (!cached_password_exception_parameters_.get())
+  if (!cached_password_exception_parameters_.get() || ignore_updates_)
     // If there is nothing to send, return early.
     return;
 
-  scoped_ptr<Event> extension_event(new Event(
+  std::unique_ptr<Event> extension_event(new Event(
       events::PASSWORDS_PRIVATE_ON_PASSWORD_EXCEPTIONS_LIST_CHANGED,
       api::passwords_private::OnPasswordExceptionsListChanged::kEventName,
       cached_password_exception_parameters_->CreateDeepCopy()));
@@ -119,10 +126,10 @@ void PasswordsPrivateEventRouter::OnPlaintextPasswordFetched(
   params.login_pair.username = username;
   params.plaintext_password = plaintext_password;
 
-  scoped_ptr<base::ListValue> event_value(new base::ListValue);
+  std::unique_ptr<base::ListValue> event_value(new base::ListValue);
   event_value->Append(params.ToValue());
 
-  scoped_ptr<Event> extension_event(new Event(
+  std::unique_ptr<Event> extension_event(new Event(
       events::PASSWORDS_PRIVATE_ON_PLAINTEXT_PASSWORD_RETRIEVED,
       api::passwords_private::OnPlaintextPasswordRetrieved::kEventName,
       std::move(event_value)));

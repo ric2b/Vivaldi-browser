@@ -65,10 +65,10 @@ NSColor* DimTextColor() {
   return [NSColor darkGrayColor];
 }
 NSColor* PositiveTextColor() {
-  return skia::SkColorToCalibratedNSColor(SkColorSetRGB(0x0b, 0x80, 0x43));
+  return skia::SkColorToCalibratedNSColor(SkColorSetRGB(0x3d, 0x94, 0x00));
 }
 NSColor* NegativeTextColor() {
-  return skia::SkColorToCalibratedNSColor(SkColorSetRGB(0xc5, 0x39, 0x29));
+  return skia::SkColorToCalibratedNSColor(SkColorSetRGB(0xdd, 0x4b, 0x39));
 }
 NSColor* URLTextColor() {
   return [NSColor colorWithCalibratedRed:0.0 green:0.55 blue:0.0 alpha:1.0];
@@ -180,6 +180,36 @@ NSAttributedString* CreateAnswerStringHelper(const base::string16& text,
     case SuggestionAnswer::PERSONALIZED_SUGGESTION:
       answer_style = @{
         NSForegroundColorAttributeName : ContentTextColor(),
+        NSFontAttributeName : FieldFont()
+      };
+      break;
+    case SuggestionAnswer::ANSWER_TEXT_MEDIUM:
+      answer_style = @{
+        NSForegroundColorAttributeName : ContentTextColor(),
+        NSFontAttributeName : FieldFont()
+      };
+      break;
+    case SuggestionAnswer::ANSWER_TEXT_LARGE:
+      answer_style = @{
+        NSForegroundColorAttributeName : ContentTextColor(),
+        NSFontAttributeName : LargeFont()
+      };
+      break;
+    case SuggestionAnswer::SUGGESTION_SECONDARY_TEXT_SMALL:
+      answer_style = @{
+        NSForegroundColorAttributeName : DimTextColor(),
+        NSFontAttributeName : SmallFont()
+      };
+      break;
+    case SuggestionAnswer::SUGGESTION_SECONDARY_TEXT_MEDIUM:
+      answer_style = @{
+        NSForegroundColorAttributeName : DimTextColor(),
+        NSFontAttributeName : FieldFont()
+      };
+      break;
+    default:
+      answer_style = @{
+        NSForegroundColorAttributeName : ContentTextColor (),
         NSFontAttributeName : FieldFont()
       };
       break;
@@ -388,7 +418,7 @@ NSAttributedString* CreateClassifiedAttributedString(
                                     kACMatchPropertyContentsPrefix)),
                                 ContentTextColor(), textAlignment) retain];
 
-    isAnswer_ = match.answer;
+    isAnswer_ = !!match.answer;
     if (isAnswer_) {
       contents_ = [CreateAnswerLine(match.answer->first_line()) retain];
       description_ = [CreateAnswerLine(match.answer->second_line()) retain];
@@ -446,7 +476,9 @@ NSAttributedString* CreateClassifiedAttributedString(
   OmniboxPopupModel::ComputeMatchMaxWidths(
       ceilf(contentsWidth), ceilf(separatorWidth), ceilf(descriptionWidth),
       ceilf(remainingWidth),
-      !AutocompleteMatch::IsSearchType([cellData matchType]), &contentsMaxWidth,
+      [cellData isAnswer],
+      !AutocompleteMatch::IsSearchType([cellData matchType]),
+      &contentsMaxWidth,
       &descriptionMaxWidth);
 
   NSRect imageRect = cellFrame;

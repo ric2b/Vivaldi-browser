@@ -27,6 +27,7 @@
 #include "core/html/shadow/TextControlInnerElements.h"
 
 #include "core/HTMLNames.h"
+#include "core/css/resolver/StyleAdjuster.h"
 #include "core/dom/Document.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/events/MouseEvent.h"
@@ -50,9 +51,9 @@ TextControlInnerContainer::TextControlInnerContainer(Document& document)
 {
 }
 
-PassRefPtrWillBeRawPtr<TextControlInnerContainer> TextControlInnerContainer::create(Document& document)
+RawPtr<TextControlInnerContainer> TextControlInnerContainer::create(Document& document)
 {
-    RefPtrWillBeRawPtr<TextControlInnerContainer> element = adoptRefWillBeNoop(new TextControlInnerContainer(document));
+    RawPtr<TextControlInnerContainer> element = new TextControlInnerContainer(document);
     element->setAttribute(idAttr, ShadowElementNames::textFieldContainer());
     return element.release();
 }
@@ -70,9 +71,9 @@ EditingViewPortElement::EditingViewPortElement(Document& document)
     setHasCustomStyleCallbacks();
 }
 
-PassRefPtrWillBeRawPtr<EditingViewPortElement> EditingViewPortElement::create(Document& document)
+RawPtr<EditingViewPortElement> EditingViewPortElement::create(Document& document)
 {
-    RefPtrWillBeRawPtr<EditingViewPortElement> element = adoptRefWillBeNoop(new EditingViewPortElement(document));
+    RawPtr<EditingViewPortElement> element = new EditingViewPortElement(document);
     element->setAttribute(idAttr, ShadowElementNames::editingViewPort());
     return element.release();
 }
@@ -105,9 +106,9 @@ inline TextControlInnerEditorElement::TextControlInnerEditorElement(Document& do
     setHasCustomStyleCallbacks();
 }
 
-PassRefPtrWillBeRawPtr<TextControlInnerEditorElement> TextControlInnerEditorElement::create(Document& document)
+RawPtr<TextControlInnerEditorElement> TextControlInnerEditorElement::create(Document& document)
 {
-    RefPtrWillBeRawPtr<TextControlInnerEditorElement> element = adoptRefWillBeNoop(new TextControlInnerEditorElement(document));
+    RawPtr<TextControlInnerEditorElement> element = new TextControlInnerEditorElement(document);
     element->setAttribute(idAttr, ShadowElementNames::innerEditor());
     return element.release();
 }
@@ -142,7 +143,11 @@ PassRefPtr<ComputedStyle> TextControlInnerEditorElement::customStyleForLayoutObj
     if (!parentLayoutObject || !parentLayoutObject->isTextControl())
         return originalStyleForLayoutObject();
     LayoutTextControlItem textControlLayoutItem = LayoutTextControlItem(toLayoutTextControl(parentLayoutObject));
-    return textControlLayoutItem.createInnerEditorStyle(textControlLayoutItem.styleRef());
+    RefPtr<ComputedStyle> innerEditorStyle = textControlLayoutItem.createInnerEditorStyle(textControlLayoutItem.styleRef());
+    // Using StyleAdjuster::adjustComputedStyle updates unwanted style. We'd like
+    // to apply only editing-related.
+    StyleAdjuster::adjustStyleForEditing(*innerEditorStyle);
+    return innerEditorStyle.release();
 }
 
 // ----------------------------
@@ -152,17 +157,17 @@ inline SearchFieldDecorationElement::SearchFieldDecorationElement(Document& docu
 {
 }
 
-PassRefPtrWillBeRawPtr<SearchFieldDecorationElement> SearchFieldDecorationElement::create(Document& document)
+RawPtr<SearchFieldDecorationElement> SearchFieldDecorationElement::create(Document& document)
 {
-    RefPtrWillBeRawPtr<SearchFieldDecorationElement> element = adoptRefWillBeNoop(new SearchFieldDecorationElement(document));
+    RawPtr<SearchFieldDecorationElement> element = new SearchFieldDecorationElement(document);
     element->setAttribute(idAttr, ShadowElementNames::searchDecoration());
     return element.release();
 }
 
 const AtomicString& SearchFieldDecorationElement::shadowPseudoId() const
 {
-    DEFINE_STATIC_LOCAL(AtomicString, resultsDecorationId, ("-webkit-search-results-decoration", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(AtomicString, decorationId, ("-webkit-search-decoration", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(AtomicString, resultsDecorationId, ("-webkit-search-results-decoration"));
+    DEFINE_STATIC_LOCAL(AtomicString, decorationId, ("-webkit-search-decoration"));
     Element* host = shadowHost();
     if (!host)
         return resultsDecorationId;
@@ -201,10 +206,10 @@ inline SearchFieldCancelButtonElement::SearchFieldCancelButtonElement(Document& 
 {
 }
 
-PassRefPtrWillBeRawPtr<SearchFieldCancelButtonElement> SearchFieldCancelButtonElement::create(Document& document)
+RawPtr<SearchFieldCancelButtonElement> SearchFieldCancelButtonElement::create(Document& document)
 {
-    RefPtrWillBeRawPtr<SearchFieldCancelButtonElement> element = adoptRefWillBeNoop(new SearchFieldCancelButtonElement(document));
-    element->setShadowPseudoId(AtomicString("-webkit-search-cancel-button", AtomicString::ConstructFromLiteral));
+    RawPtr<SearchFieldCancelButtonElement> element = new SearchFieldCancelButtonElement(document);
+    element->setShadowPseudoId(AtomicString("-webkit-search-cancel-button"));
     element->setAttribute(idAttr, ShadowElementNames::clearButton());
     return element.release();
 }
@@ -222,7 +227,7 @@ void SearchFieldCancelButtonElement::detach(const AttachContext& context)
 void SearchFieldCancelButtonElement::defaultEventHandler(Event* event)
 {
     // If the element is visible, on mouseup, clear the value, and set selection
-    RefPtrWillBeRawPtr<HTMLInputElement> input(toHTMLInputElement(shadowHost()));
+    RawPtr<HTMLInputElement> input(toHTMLInputElement(shadowHost()));
     if (!input || input->isDisabledOrReadOnly()) {
         if (!event->defaultHandled())
             HTMLDivElement::defaultEventHandler(event);

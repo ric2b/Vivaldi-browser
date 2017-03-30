@@ -107,6 +107,11 @@ void DevToolsAgent::sendProtocolMessage(int session_id,
                                         int call_id,
                                         const blink::WebString& message,
                                         const blink::WebString& state_cookie) {
+  if (!send_protocol_message_callback_for_test_.is_null()) {
+    send_protocol_message_callback_for_test_.Run(
+        session_id, call_id, message.utf8(), state_cookie.utf8());
+    return;
+  }
   SendChunkedProtocolMessage(this, routing_id(), session_id, call_id,
                              message.utf8(), state_cookie.utf8());
 }
@@ -207,60 +212,42 @@ void DevToolsAgent::SendChunkedProtocolMessage(IPC::Sender* sender,
 }
 
 void DevToolsAgent::OnAttach(const std::string& host_id, int session_id) {
-  WebDevToolsAgent* web_agent = GetWebAgent();
-  if (web_agent) {
-    web_agent->attach(WebString::fromUTF8(host_id), session_id);
-    is_attached_ = true;
-  }
+  GetWebAgent()->attach(WebString::fromUTF8(host_id), session_id);
+  is_attached_ = true;
 }
 
 void DevToolsAgent::OnReattach(const std::string& host_id,
                                int session_id,
                                const std::string& agent_state) {
-  WebDevToolsAgent* web_agent = GetWebAgent();
-  if (web_agent) {
-    web_agent->reattach(WebString::fromUTF8(host_id), session_id,
-                        WebString::fromUTF8(agent_state));
-    is_attached_ = true;
-  }
+  GetWebAgent()->reattach(WebString::fromUTF8(host_id), session_id,
+                          WebString::fromUTF8(agent_state));
+  is_attached_ = true;
 }
 
 void DevToolsAgent::OnDetach() {
-  WebDevToolsAgent* web_agent = GetWebAgent();
-  if (web_agent) {
-    web_agent->detach();
-    is_attached_ = false;
-  }
+  GetWebAgent()->detach();
+  is_attached_ = false;
 }
 
 void DevToolsAgent::OnDispatchOnInspectorBackend(int session_id,
                                                  const std::string& message) {
   TRACE_EVENT0("devtools", "DevToolsAgent::OnDispatchOnInspectorBackend");
-  WebDevToolsAgent* web_agent = GetWebAgent();
-  if (web_agent)
-    web_agent->dispatchOnInspectorBackend(session_id,
-                                          WebString::fromUTF8(message));
+  GetWebAgent()->dispatchOnInspectorBackend(session_id,
+                                            WebString::fromUTF8(message));
 }
 
 void DevToolsAgent::OnInspectElement(int x, int y) {
-  WebDevToolsAgent* web_agent = GetWebAgent();
-  if (web_agent) {
-    DCHECK(is_attached_);
-    web_agent->inspectElementAt(WebPoint(x, y));
-  }
+  GetWebAgent()->inspectElementAt(WebPoint(x, y));
 }
 
 void DevToolsAgent::OnRequestNewWindowACK(bool success) {
-  WebDevToolsAgent* web_agent = GetWebAgent();
-  if (web_agent && !success)
-    web_agent->failedToRequestDevTools();
+  if (!success)
+    GetWebAgent()->failedToRequestDevTools();
 }
 
 void DevToolsAgent::AddMessageToConsole(ConsoleMessageLevel level,
                                         const std::string& message) {
   WebLocalFrame* web_frame = frame_->GetWebFrame();
-  if (!web_frame)
-    return;
 
   WebConsoleMessage::Level target_level = WebConsoleMessage::LevelLog;
   switch (level) {
@@ -282,15 +269,13 @@ void DevToolsAgent::AddMessageToConsole(ConsoleMessageLevel level,
 }
 
 void DevToolsAgent::ContinueProgram() {
-  WebDevToolsAgent* web_agent = GetWebAgent();
-  if (web_agent)
-    web_agent->continueProgram();
+  GetWebAgent()->continueProgram();
 }
 
 void DevToolsAgent::OnSetupDevToolsClient(
     const std::string& compatibility_script) {
   // We only want to register once; and only in main frame.
-  DCHECK(!frame_->GetWebFrame() || !frame_->GetWebFrame()->parent());
+  DCHECK(!frame_->GetWebFrame()->parent());
   if (is_devtools_client_)
     return;
   is_devtools_client_ = true;
@@ -298,8 +283,7 @@ void DevToolsAgent::OnSetupDevToolsClient(
 }
 
 WebDevToolsAgent* DevToolsAgent::GetWebAgent() {
-  WebLocalFrame* web_frame = frame_->GetWebFrame();
-  return web_frame ? web_frame->devToolsAgent() : nullptr;
+  return frame_->GetWebFrame()->devToolsAgent();
 }
 
 bool DevToolsAgent::IsAttached() {

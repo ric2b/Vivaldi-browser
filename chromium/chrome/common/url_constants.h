@@ -55,8 +55,6 @@ extern const char kChromeUIInstantURL[];
 extern const char kChromeUIInterstitialURL[];
 extern const char kChromeUIInvalidationsURL[];
 extern const char kChromeUILargeIconURL[];
-extern const char kChromeUIMemoryRedirectURL[];
-extern const char kChromeUIMemoryURL[];
 extern const char kChromeUIMdPolicyURL[];
 extern const char kChromeUINaClURL[];
 extern const char kChromeUINetInternalsURL[];
@@ -67,6 +65,7 @@ extern const char kChromeUIPasswordManagerInternalsHost[];
 extern const char kChromeUIPluginsURL[];
 extern const char kChromeUIPolicyURL[];
 extern const char kChromeUIProfileSigninConfirmationURL[];
+extern const char kChromeUIMdUserManagerUrl[];
 extern const char kChromeUIUserManagerURL[];
 extern const char kChromeUIPrintURL[];
 extern const char kChromeUIQuitURL[];
@@ -193,9 +192,6 @@ extern const char kChromeUIInvalidationsHost[];
 extern const char kChromeUIKillHost[];
 extern const char kChromeUILargeIconHost[];
 extern const char kChromeUILocalStateHost[];
-extern const char kChromeUIMemoryHost[];
-extern const char kChromeUIMemoryInternalsHost[];
-extern const char kChromeUIMemoryRedirectHost[];
 extern const char kChromeUIMdPolicyHost[];
 extern const char kChromeUIMdSettingsHost[];
 extern const char kChromeUINaClHost[];
@@ -208,6 +204,7 @@ extern const char kChromeUIComponentsHost[];
 extern const char kChromeUIPolicyHost[];
 extern const char kChromeUIProfileSigninConfirmationHost[];
 extern const char kChromeUIUserManagerHost[];
+extern const char kChromeUIMdUserManagerHost[];
 extern const char kChromeUIPredictorsHost[];
 extern const char kChromeUIProfilerHost[];
 extern const char kChromeUIQuotaInternalsHost[];
@@ -343,6 +340,9 @@ extern const char kExtensionInvalidRequestURL[];
 extern const char kExtensionResourceInvalidRequestURL[];
 
 extern const char kSyncGoogleDashboardURL[];
+
+// URL of the 'Activity controls' section of the privacy settings page.
+extern const char kGoogleAccountActivityControlsURL[];
 
 extern const char kPasswordManagerLearnMoreURL[];
 extern const char kUpgradeHelpCenterBaseURL[];

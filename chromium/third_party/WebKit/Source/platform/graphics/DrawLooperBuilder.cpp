@@ -54,7 +54,7 @@ PassOwnPtr<DrawLooperBuilder> DrawLooperBuilder::create()
 
 PassRefPtr<SkDrawLooper> DrawLooperBuilder::detachDrawLooper()
 {
-    return adoptRef(m_skDrawLooperBuilder.detachLooper());
+    return fromSkSp(m_skDrawLooperBuilder.detach());
 }
 
 void DrawLooperBuilder::addUnmodifiedContent()
@@ -104,8 +104,7 @@ void DrawLooperBuilder::addShadow(const FloatSize& offset, float blur, const Col
         paint->setMaskFilter(mf.get());
     }
 
-    RefPtr<SkColorFilter> cf = adoptRef(SkColorFilter::CreateModeFilter(skColor, SkXfermode::kSrcIn_Mode));
-    paint->setColorFilter(cf.get());
+    paint->setColorFilter(SkColorFilter::MakeModeFilter(skColor, SkXfermode::kSrcIn_Mode));
 }
 
 } // namespace blink

@@ -22,6 +22,7 @@
 #include "core/css/resolver/StyleResolverState.h"
 
 #include "core/animation/css/CSSAnimations.h"
+#include "core/css/StylePropertySet.h"
 #include "core/dom/Node.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/frame/FrameHost.h"
@@ -55,6 +56,34 @@ StyleResolverState::StyleResolverState(Document& document, Element* element, con
 
 StyleResolverState::~StyleResolverState()
 {
+    // For performance reasons, explicitly clear HeapVectors and
+    // HeapHashMaps to avoid giving a pressure on Oilpan's GC.
+    m_animationUpdate.clear();
+}
+
+CSSToLengthConversionData StyleResolverState::fontSizeConversionData() const
+{
+    float em = parentStyle()->specifiedFontSize();
+    float rem = rootElementStyle() ? rootElementStyle()->specifiedFontSize() : 1;
+    CSSToLengthConversionData::FontSizes fontSizes(em, rem, &parentStyle()->font());
+    CSSToLengthConversionData::ViewportSize viewportSize(document().layoutView());
+
+    return CSSToLengthConversionData(style(), fontSizes, viewportSize, 1);
+}
+
+void StyleResolverState::loadPendingResources()
+{
+    m_elementStyleResources.loadPendingResources(style());
+}
+
+void StyleResolverState::setCustomPropertySetForApplyAtRule(const String& string, StylePropertySet* customPropertySet)
+{
+    m_customPropertySetsForApplyAtRule.set(string, customPropertySet);
+}
+
+StylePropertySet* StyleResolverState::customPropertySetForApplyAtRule(const String& string)
+{
+    return m_customPropertySetsForApplyAtRule.get(string);
 }
 
 } // namespace blink

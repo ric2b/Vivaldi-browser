@@ -17,7 +17,7 @@
 #include "remoting/protocol/port_allocator_factory.h"
 #include "remoting/protocol/transport_context.h"
 #include "third_party/webrtc/base/network.h"
-#include "third_party/webrtc/p2p/base/constants.h"
+#include "third_party/webrtc/p2p/base/p2pconstants.h"
 #include "third_party/webrtc/p2p/base/p2ptransportchannel.h"
 #include "third_party/webrtc/p2p/base/port.h"
 #include "third_party/webrtc/p2p/client/httpportallocator.h"
@@ -88,7 +88,7 @@ void IceTransportChannel::Connect(const std::string& name,
   // Create P2PTransportChannel, attach signal handlers and connect it.
   // TODO(sergeyu): Specify correct component ID for the channel.
   channel_.reset(new cricket::P2PTransportChannel(
-      std::string(), 0, nullptr, port_allocator_.get()));
+      std::string(), 0, port_allocator_.get()));
   std::string ice_password = rtc::CreateRandomString(cricket::ICE_PWD_LENGTH);
   channel_->SetIceProtocolType(cricket::ICEPROTO_RFC5245);
   channel_->SetIceRole((transport_context_->role() == TransportRole::CLIENT)
@@ -134,7 +134,7 @@ void IceTransportChannel::Connect(const std::string& name,
 
 void IceTransportChannel::NotifyConnected() {
   // Create P2PDatagramSocket adapter for the P2PTransportChannel.
-  scoped_ptr<TransportChannelSocketAdapter> socket(
+  std::unique_ptr<TransportChannelSocketAdapter> socket(
       new TransportChannelSocketAdapter(channel_.get()));
   socket->SetOnDestroyedCallback(base::Bind(
       &IceTransportChannel::OnChannelDestroyed, base::Unretained(this)));

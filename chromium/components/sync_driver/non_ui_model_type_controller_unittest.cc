@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -43,18 +44,11 @@ class TestNonUIModelTypeController : public NonUIModelTypeController {
                                  sync_client),
         model_task_runner_(model_task_runner) {}
 
-  base::WeakPtr<syncer_v2::SharedModelTypeProcessor> get_type_processor()
-      const {
-    return type_processor();
-  }
-
   bool RunOnModelThread(const tracked_objects::Location& from_here,
                         const base::Closure& task) override {
     DCHECK(model_task_runner_);
     return model_task_runner_->PostTask(from_here, task);
   }
-
-  void InitializeProcessorInTest() { InitializeProcessor(); }
 
  private:
   ~TestNonUIModelTypeController() override {}
@@ -167,7 +161,6 @@ class NonUIModelTypeControllerTest : public testing::Test,
     controller_ = new TestNonUIModelTypeController(
         ui_loop_.task_runner(), model_thread_runner_, base::Closure(),
         syncer::DICTIONARY, this);
-    controller_->InitializeProcessorInTest();
     InitializeTypeProcessor();
   }
 
@@ -177,16 +170,19 @@ class NonUIModelTypeControllerTest : public testing::Test,
     RunQueuedUIThreadTasks();
   }
 
-  base::WeakPtr<syncer_v2::ModelTypeService> GetModelTypeServiceForType(
+  syncer_v2::ModelTypeService* GetModelTypeServiceForType(
       syncer::ModelType type) override {
-    return service_->AsWeakPtr();
+    return service_.get();
   }
 
  protected:
   void InitializeTypeProcessor() {
     if (!model_thread_runner_ ||
         model_thread_runner_->BelongsToCurrentThread()) {
-      type_processor_ = controller_->get_type_processor();
+      // TODO(crbug.com/543407): Move the processor stuff out.
+      type_processor_ =
+          service_->SetUpProcessor(new syncer_v2::SharedModelTypeProcessor(
+              syncer::DICTIONARY, service_.get()));
     } else {
       model_thread_runner_->PostTask(
           FROM_HERE,
@@ -272,20 +268,19 @@ class NonUIModelTypeControllerTest : public testing::Test,
     }
   }
 
+  void RegisterWithBackend() {
+    controller_->RegisterWithBackend(&configurer_);
+    if (auto_run_tasks_) {
+      RunAllTasks();
+    }
+  }
+
   void StartAssociating() {
     controller_->StartAssociating(
         base::Bind(&NonUIModelTypeControllerTest::AssociationDone,
                    base::Unretained(this)));
     // The callback is expected to be promptly called.
     EXPECT_TRUE(association_callback_called_);
-  }
-
-  void ActivateDataType() {
-    DCHECK(association_callback_called_);
-    controller_->ActivateDataType(&configurer_);
-    if (auto_run_tasks_) {
-      RunAllTasks();
-    }
   }
 
   void DeactivateDataTypeAndStop() {
@@ -336,7 +331,7 @@ class NonUIModelTypeControllerTest : public testing::Test,
     association_callback_called_ = true;
   }
 
-  base::WeakPtr<syncer_v2::SharedModelTypeProcessor> type_processor_;
+  syncer_v2::SharedModelTypeProcessor* type_processor_;
   scoped_refptr<TestNonUIModelTypeController> controller_;
 
   bool auto_run_tasks_;
@@ -385,23 +380,22 @@ TEST_F(NonUIModelTypeControllerTest, ActivateDataTypeOnBackendThread) {
   LoadModels();
   EXPECT_EQ(sync_driver::DataTypeController::MODEL_LOADED,
             controller_->state());
+  RegisterWithBackend();
+  TestTypeProcessor(true, true);  // enabled, connected.
 
   StartAssociating();
   EXPECT_EQ(sync_driver::DataTypeController::RUNNING, controller_->state());
-
-  ActivateDataType();
-  TestTypeProcessor(true, true);  // enabled, connected.
 }
 
 TEST_F(NonUIModelTypeControllerTest, Stop) {
   LoadModels();
-  StartAssociating();
-  ActivateDataType();
+  RegisterWithBackend();
   TestTypeProcessor(true, true);  // enabled, connected.
+
+  StartAssociating();
 
   DeactivateDataTypeAndStop();
   EXPECT_EQ(sync_driver::DataTypeController::NOT_RUNNING, controller_->state());
-  TestTypeProcessor(true, false);  // enabled, not connected.
 }
 
 }  // namespace sync_driver_v2

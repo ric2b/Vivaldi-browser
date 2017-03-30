@@ -18,7 +18,7 @@
 #include "net/http/bidirectional_stream.h"
 
 namespace net {
-class BidirectionalStreamRequestInfo;
+struct BidirectionalStreamRequestInfo;
 class SpdyHeaderBlock;
 }  // namespace net
 
@@ -120,6 +120,9 @@ class CronetBidirectionalStreamAdapter
   scoped_refptr<IOBufferWithByteBuffer> read_buffer_;
   scoped_refptr<IOBufferWithByteBuffer> write_buffer_;
   scoped_ptr<net::BidirectionalStream> bidi_stream_;
+
+  // Whether BidirectionalStream::Delegate::OnFailed callback is invoked.
+  bool stream_failed_;
 
   DISALLOW_COPY_AND_ASSIGN(CronetBidirectionalStreamAdapter);
 };

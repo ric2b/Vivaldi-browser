@@ -6,7 +6,6 @@
 
 #include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
-#include "cc/test/layer_tree_settings_for_testing.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/trees/layer_tree_impl.h"
 
@@ -16,7 +15,7 @@ FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(
     TaskRunnerProvider* task_runner_provider,
     SharedBitmapManager* manager,
     TaskGraphRunner* task_graph_runner)
-    : FakeLayerTreeHostImpl(LayerTreeSettingsForTesting(),
+    : FakeLayerTreeHostImpl(LayerTreeSettings(),
                             task_runner_provider,
                             manager,
                             task_graph_runner,
@@ -87,7 +86,7 @@ int FakeLayerTreeHostImpl::RecursiveUpdateNumChildren(LayerImpl* layer) {
   int num_children_that_draw_content = 0;
   for (size_t i = 0; i < layer->children().size(); ++i) {
     num_children_that_draw_content +=
-        RecursiveUpdateNumChildren(layer->children()[i].get());
+        RecursiveUpdateNumChildren(layer->children()[i]);
   }
   layer->SetNumDescendantsThatDrawContent(num_children_that_draw_content);
   return num_children_that_draw_content + (layer->DrawsContent() ? 1 : 0);

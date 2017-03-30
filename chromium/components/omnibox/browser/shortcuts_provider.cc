@@ -19,6 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/omnibox/browser/autocomplete_i18n.h"
@@ -53,7 +54,6 @@ const int ShortcutsProvider::kShortcutsProviderDefaultMaxRelevance = 1199;
 ShortcutsProvider::ShortcutsProvider(AutocompleteProviderClient* client)
     : AutocompleteProvider(AutocompleteProvider::TYPE_SHORTCUTS),
       client_(client),
-      languages_(client_->GetAcceptLanguages()),
       initialized_(false) {
   scoped_refptr<ShortcutsBackend> backend = client_->GetShortcutsBackend();
   if (backend.get()) {
@@ -65,6 +65,7 @@ ShortcutsProvider::ShortcutsProvider(AutocompleteProviderClient* client)
 
 void ShortcutsProvider::Start(const AutocompleteInput& input,
                               bool minimal_changes) {
+  TRACE_EVENT0("omnibox", "ShortcutsProvider::Start");
   matches_.clear();
 
   if (input.from_omnibox_focus() ||
@@ -147,8 +148,8 @@ void ShortcutsProvider::GetMatches(const AutocompleteInput& input) {
     if (relevance) {
       matches_.push_back(
           ShortcutToACMatch(it->second, relevance, input, fixed_up_input));
-      matches_.back().ComputeStrippedDestinationURL(
-          input, client_->GetAcceptLanguages(), template_url_service);
+      matches_.back().ComputeStrippedDestinationURL(input,
+                                                    template_url_service);
     }
   }
   // Remove duplicates.  This is important because it's common to have multiple
@@ -245,7 +246,6 @@ AutocompleteMatch ShortcutsProvider::ShortcutToACMatch(
     }
   }
   match.EnsureUWYTIsAllowedToBeDefault(input,
-                                       client_->GetAcceptLanguages(),
                                        client_->GetTemplateURLService());
 
   // Try to mark pieces of the contents and description as matches if they

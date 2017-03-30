@@ -4,21 +4,21 @@
 
 #include "chrome/browser/android/compositor/compositor_view.h"
 
-#include <vector>
-
 #include <android/bitmap.h>
 #include <android/native_window_jni.h>
+
+#include <memory>
+#include <vector>
 
 #include "base/android/build_info.h"
 #include "base/android/jni_android.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/id_map.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/rand_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/layers/layer.h"
-#include "cc/layers/layer_lists.h"
+#include "cc/layers/layer_collections.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/texture_layer.h"
 #include "chrome/browser/android/compositor/layer/toolbar_layer.h"
@@ -82,8 +82,7 @@ CompositorView::CompositorView(JNIEnv* env,
                                TabContentManager* tab_content_manager)
     : layer_title_cache_(layer_title_cache),
       tab_content_manager_(tab_content_manager),
-      root_layer_(
-          cc::SolidColorLayer::Create(content::Compositor::LayerSettings())),
+      root_layer_(cc::SolidColorLayer::Create()),
       scene_layer_(nullptr),
       current_surface_format_(0),
       content_width_(0),
@@ -214,9 +213,12 @@ void CompositorView::SetSceneLayer(JNIEnv* env,
   SceneLayer* scene_layer = SceneLayer::FromJavaObject(env, jscene_layer);
 
   if (scene_layer_ != scene_layer) {
-    // Old tree provider is being detached.
-    if (scene_layer_ != nullptr)
+    // The old tree should be detached only if it is not the cached layer or
+    // the cached layer is not somewhere in the new root.
+    if (scene_layer_ != nullptr
+        && !scene_layer_->layer()->HasAncestor(scene_layer->layer().get())) {
       scene_layer_->OnDetach();
+    }
 
     scene_layer_ = scene_layer;
 

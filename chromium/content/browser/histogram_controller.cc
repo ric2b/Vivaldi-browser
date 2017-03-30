@@ -75,8 +75,7 @@ void HistogramController::GetHistogramDataFromChildProcesses(
   for (BrowserChildProcessHostIterator iter; !iter.Done(); ++iter) {
     const ChildProcessData& data = iter.GetData();
     int type = data.process_type;
-    if (type != PROCESS_TYPE_PLUGIN &&
-        type != PROCESS_TYPE_GPU &&
+    if (type != PROCESS_TYPE_GPU &&
         type != PROCESS_TYPE_PPAPI_PLUGIN &&
         type != PROCESS_TYPE_PPAPI_BROKER) {
       continue;
@@ -90,8 +89,10 @@ void HistogramController::GetHistogramDataFromChildProcesses(
       continue;
 
     ++pending_processes;
-    if (!iter.Send(new ChildProcessMsg_GetChildHistogramData(sequence_number)))
+    if (!iter.Send(new ChildProcessMsg_GetChildNonPersistentHistogramData(
+            sequence_number))) {
       --pending_processes;
+    }
   }
 
   BrowserThread::PostTask(
@@ -113,7 +114,8 @@ void HistogramController::GetHistogramData(int sequence_number) {
        !it.IsAtEnd(); it.Advance()) {
     ++pending_processes;
     if (!it.GetCurrentValue()->Send(
-            new ChildProcessMsg_GetChildHistogramData(sequence_number))) {
+            new ChildProcessMsg_GetChildNonPersistentHistogramData(
+                sequence_number))) {
       --pending_processes;
     }
   }

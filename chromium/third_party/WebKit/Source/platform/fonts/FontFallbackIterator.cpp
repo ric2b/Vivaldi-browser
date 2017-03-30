@@ -13,17 +13,24 @@
 
 namespace blink {
 
-PassRefPtr<FontFallbackIterator> FontFallbackIterator::create(const FontDescription& description, PassRefPtr<FontFallbackList> fallbackList)
+PassRefPtr<FontFallbackIterator> FontFallbackIterator::create(
+    const FontDescription& description,
+    PassRefPtr<FontFallbackList> fallbackList,
+    FontFallbackPriority fontFallbackPriority)
 {
-    return adoptRef(new FontFallbackIterator(description, fallbackList));
+    return adoptRef(new FontFallbackIterator(
+        description, fallbackList, fontFallbackPriority));
 }
 
-FontFallbackIterator::FontFallbackIterator(const FontDescription& description, PassRefPtr<FontFallbackList> fallbackList)
+FontFallbackIterator::FontFallbackIterator(const FontDescription& description,
+    PassRefPtr<FontFallbackList> fallbackList,
+    FontFallbackPriority fontFallbackPriority)
     : m_fontDescription(description)
     , m_fontFallbackList(fallbackList)
     , m_currentFontDataIndex(0)
-    , m_segmentedIndex(0)
+    , m_segmentedFaceIndex(0)
     , m_fallbackStage(FontGroupFonts)
+    , m_fontFallbackPriority(fontFallbackPriority)
 {
 }
 
@@ -39,17 +46,17 @@ bool FontFallbackIterator::needsHintList() const
 
 bool FontFallbackIterator::alreadyLoadingRangeForHintChar(UChar32 hintChar)
 {
-    for (auto it = m_loadingCustomFontForRanges.begin(); it != m_loadingCustomFontForRanges.end(); ++it) {
+    for (auto it = m_trackedLoadingRangeSets.begin(); it != m_trackedLoadingRangeSets.end(); ++it) {
         if (it->contains(hintChar))
             return true;
     }
     return false;
 }
 
-bool FontFallbackIterator::rangeContributesForHint(const Vector<UChar32> hintList, const FontDataRange& fontDataRange)
+bool FontFallbackIterator::rangeSetContributesForHint(const Vector<UChar32> hintList, const FontDataForRangeSet& segmentedFace)
 {
     for (auto it = hintList.begin(); it != hintList.end(); ++it) {
-        if (*it >= fontDataRange.from() && *it <= fontDataRange.to()) {
+        if (segmentedFace.contains(*it)) {
             if (!alreadyLoadingRangeForHintChar(*it))
                 return true;
         }
@@ -57,31 +64,36 @@ bool FontFallbackIterator::rangeContributesForHint(const Vector<UChar32> hintLis
     return false;
 }
 
-void FontFallbackIterator::willUseRange(const AtomicString& family, const FontDataRange& range)
+void FontFallbackIterator::willUseRange(const AtomicString& family, const FontDataForRangeSet& rangeSet)
 {
-    FontSelector* selector = m_fontFallbackList->fontSelector();
+    FontSelector* selector = m_fontFallbackList->getFontSelector();
     if (!selector)
         return;
 
-    selector->willUseRange(m_fontDescription, family, range);
+    selector->willUseRange(m_fontDescription, family, rangeSet);
 }
 
-const FontDataRange FontFallbackIterator::next(const Vector<UChar32>& hintList)
+const FontDataForRangeSet FontFallbackIterator::next(const Vector<UChar32>& hintList)
 {
     if (m_fallbackStage == OutOfLuck)
-        return FontDataRange();
+        return FontDataForRangeSet();
 
-    const FontData* fontData = m_fontFallbackList->fontDataAt(m_fontDescription, m_currentFontDataIndex);
-
-    // If there is no fontData coming from the fallback list, it means
-    // we have reached the system fallback stage.
-    if (!fontData) {
+    if (m_fallbackStage == FallbackPriorityFonts) {
+        // Only try one fallback priority font,
+        // then proceed to regular system fallback.
         m_fallbackStage = SystemFonts;
+        FontDataForRangeSet fallbackPriorityFontRange(fallbackPriorityFont(hintList[0]));
+        if (fallbackPriorityFontRange.hasFontData())
+            return fallbackPriorityFontRange;
+        return next(hintList);
+    }
+
+    if (m_fallbackStage == SystemFonts) {
         // We've reached pref + system fallback.
         ASSERT(hintList.size());
         RefPtr<SimpleFontData> systemFont = uniqueSystemFontForHint(hintList[0]);
         if (systemFont)
-            return FontDataRange(systemFont);
+            return FontDataForRangeSet(systemFont);
 
         // If we don't have options from the system fallback anymore or had
         // previously returned them, we only have the last resort font left.
@@ -92,7 +104,22 @@ const FontDataRange FontFallbackIterator::next(const Vector<UChar32>& hintList)
         m_fallbackStage = OutOfLuck;
         RefPtr<SimpleFontData> lastResort = fontCache->getLastResortFallbackFont(m_fontDescription).get();
         RELEASE_ASSERT(lastResort);
-        return FontDataRange(lastResort);
+        return FontDataForRangeSet(lastResort);
+    }
+
+    ASSERT(m_fallbackStage == FontGroupFonts
+        || m_fallbackStage == SegmentedFace);
+    const FontData* fontData = m_fontFallbackList->fontDataAt(
+        m_fontDescription, m_currentFontDataIndex);
+
+    if (!fontData) {
+        // If there is no fontData coming from the fallback list, it means
+        // we are now looking at system fonts, either for prioritized symbol
+        // or emoji fonts or by calling system fallback API.
+        m_fallbackStage = isNonTextFallbackPriority(m_fontFallbackPriority)
+            ? FallbackPriorityFonts
+            : SystemFonts;
+        return next(hintList);
     }
 
     // Otherwise we've received a fontData from the font-family: set of fonts,
@@ -102,7 +129,7 @@ const FontDataRange FontFallbackIterator::next(const Vector<UChar32>& hintList)
         m_currentFontDataIndex++;
         if (!fontData->isLoading()) {
             RefPtr<SimpleFontData> nonSegmented = const_cast<SimpleFontData*>(toSimpleFontData(fontData));
-            return FontDataRange(nonSegmented);
+            return FontDataForRangeSet(nonSegmented);
         }
         return next(hintList);
     }
@@ -111,30 +138,40 @@ const FontDataRange FontFallbackIterator::next(const Vector<UChar32>& hintList)
 
     const SegmentedFontData* segmented = toSegmentedFontData(fontData);
     if (m_fallbackStage != SegmentedFace) {
-        m_segmentedIndex = 0;
+        m_segmentedFaceIndex = 0;
         m_fallbackStage = SegmentedFace;
     }
 
-    ASSERT(m_segmentedIndex < segmented->numRanges());
-    FontDataRange currentRange = segmented->rangeAt(m_segmentedIndex);
-    m_segmentedIndex++;
+    ASSERT(m_segmentedFaceIndex < segmented->numFaces());
+    FontDataForRangeSet currentSegmentedFace = segmented->faceAt(m_segmentedFaceIndex);
+    m_segmentedFaceIndex++;
 
-    if (m_segmentedIndex == segmented->numRanges()) {
+    if (m_segmentedFaceIndex == segmented->numFaces()) {
         // Switch from iterating over a segmented face to the next family from
         // the font-family: group of fonts.
         m_fallbackStage = FontGroupFonts;
         m_currentFontDataIndex++;
     }
 
-    if (rangeContributesForHint(hintList, currentRange)) {
-        if (currentRange.fontData()->customFontData())
-            currentRange.fontData()->customFontData()->beginLoadIfNeeded();
-        if (!currentRange.fontData()->isLoading())
-            return currentRange;
-        m_loadingCustomFontForRanges.append(currentRange);
+    if (rangeSetContributesForHint(hintList, currentSegmentedFace)) {
+        if (currentSegmentedFace.fontData()->customFontData())
+            currentSegmentedFace.fontData()->customFontData()->beginLoadIfNeeded();
+        if (!currentSegmentedFace.fontData()->isLoading())
+            return currentSegmentedFace;
+        m_trackedLoadingRangeSets.append(currentSegmentedFace);
     }
 
     return next(hintList);
+}
+
+const PassRefPtr<SimpleFontData> FontFallbackIterator::fallbackPriorityFont(
+    UChar32 hint)
+{
+    return FontCache::fontCache()->fallbackFontForCharacter(
+        m_fontDescription,
+        hint,
+        m_fontFallbackList->primarySimpleFontData(m_fontDescription),
+        m_fontFallbackPriority);
 }
 
 const PassRefPtr<SimpleFontData> FontFallbackIterator::uniqueSystemFontForHint(UChar32 hint)

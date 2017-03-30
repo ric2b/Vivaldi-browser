@@ -2,10 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import json
 import os
 import re
 import shutil
 import sys
+import urlparse
 import unittest
 
 SRC = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir)
@@ -370,12 +372,15 @@ class BisectPerfRegressionTest(unittest.TestCase):
         'try_job_id': 1234,
     })
     opts = bisect_perf_regression.BisectOptions.FromDict(options_dict)
+    bisect_instance = _GetBisectPerformanceMetricsInstance(options_dict)
     results = _SampleBisecResult(opts)
-    bisect_perf_regression._PostBisectResults(results, opts, os.getcwd())
+    bisect_instance.PostBisectResults(results)
 
     call_args = _GetMockCallArg(mock_urlopen, 0)
     self.assertIsNotNone(call_args)
-    self.assertIn('"try_job_id": 1234', call_args[1])
+    called_data = urlparse.parse_qs(call_args[1])
+    results_data = json.loads(called_data['data'][0])
+    self.assertEqual(1234, results_data['try_job_id'])
 
   def _CheckAbortsEarly(self, results, **extra_opts):
     """Returns True if the bisect job would abort early."""

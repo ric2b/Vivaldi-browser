@@ -47,7 +47,7 @@ namespace blink {
 class Scrollbar;
 
 class PLATFORM_EXPORT ScrollAnimatorMac : public ScrollAnimatorBase {
-    WILL_BE_USING_PRE_FINALIZER(ScrollAnimatorMac, dispose);
+    USING_PRE_FINALIZER(ScrollAnimatorMac, dispose);
 public:
     ScrollAnimatorMac(ScrollableArea*);
     ~ScrollAnimatorMac() override;
@@ -66,8 +66,6 @@ public:
     void sendContentAreaScrolledSoon(const FloatSize& scrollDelta);
 
     void setVisibleScrollerThumbRect(const IntRect&);
-
-    static bool canUseCoordinatedScrollbar();
 
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
@@ -91,7 +89,7 @@ private:
     OwnPtr<WebTaskRunner> m_taskRunner;
     FloatSize m_contentAreaScrolledTimerScrollDelta;
 
-    ScrollResultOneDimensional userScroll(ScrollbarOrientation, ScrollGranularity, float step, float delta) override;
+    ScrollResult userScroll(ScrollGranularity, const FloatSize& delta) override;
     void scrollToOffsetWithoutAnimation(const FloatPoint&) override;
 
     void handleWheelEventPhase(PlatformWheelEventPhase) override;
@@ -104,9 +102,7 @@ private:
     void mouseMovedInContentArea() const override;
     void mouseEnteredScrollbar(Scrollbar&) const override;
     void mouseExitedScrollbar(Scrollbar&) const override;
-    void willStartLiveResize() override;
     void contentsResized() const override;
-    void willEndLiveResize() override;
     void contentAreaDidShow() const override;
     void contentAreaDidHide() const override;
     void didBeginScrollGesture() const;

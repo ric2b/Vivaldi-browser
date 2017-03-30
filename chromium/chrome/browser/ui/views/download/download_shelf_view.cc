@@ -36,7 +36,7 @@
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
-#include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/mouse_watcher_view_host.h"
@@ -105,7 +105,11 @@ int GetBetweenItemPadding() {
   return ui::MaterialDesignController::IsModeMaterial() ? 0 : kDownloadPadding;
 }
 
-int GetTopBottomPadding() {
+int GetTopPadding() {
+  return ui::MaterialDesignController::IsModeMaterial() ? 1 : kTopBottomPadding;
+}
+
+int GetBottomPadding() {
   return ui::MaterialDesignController::IsModeMaterial() ? 0 : kTopBottomPadding;
 }
 
@@ -119,7 +123,7 @@ void AdjustSize(views::View* view, gfx::Size* size) {
 }
 
 int CenterPosition(int size, int target_size) {
-  return std::max((target_size - size) / 2, GetTopBottomPadding());
+  return std::max((target_size - size) / 2, GetTopPadding());
 }
 
 }  // namespace
@@ -165,10 +169,9 @@ DownloadShelfView::DownloadShelfView(Browser* browser, BrowserView* parent)
     close_button_->SetImage(views::CustomButton::STATE_PRESSED,
                             rb.GetImageSkiaNamed(IDR_CLOSE_1_P));
   } else {
-    views::LabelButton* show_all_view = new views::LabelButton(
-        this, l10n_util::GetStringUTF16(IDS_SHOW_ALL_DOWNLOADS_MD));
-    show_all_view->SetFocusable(true);
-    show_all_view->SetStyle(views::Button::STYLE_BUTTON);
+    views::LabelButton* show_all_view =
+        views::MdTextButton::CreateStandardButton(
+            this, l10n_util::GetStringUTF16(IDS_SHOW_ALL_DOWNLOADS_MD));
     show_all_view_ = show_all_view;
 
     BarControlButton* close_button = new BarControlButton(this);
@@ -262,7 +265,7 @@ gfx::Size DownloadShelfView::GetPreferredSize() const {
     AdjustSize(*download_views_.begin(), &prefsize);
     prefsize.Enlarge(GetBetweenItemPadding(), 0);
   }
-  prefsize.Enlarge(0, 2 * GetTopBottomPadding());
+  prefsize.Enlarge(0, GetTopPadding() + GetBottomPadding());
   if (shelf_animation_.is_animating()) {
     prefsize.set_height(
         static_cast<int>(static_cast<double>(prefsize.height()) *
@@ -327,13 +330,9 @@ void DownloadShelfView::Layout() {
                             show_all_size.width(),
                             show_all_size.height());
   next_x += show_all_size.width() + GetCloseAndLinkPadding();
-  // If the window is maximized, we want to expand the hitbox of the close
-  // button to the right and bottom to make it easier to click.
-  bool is_maximized = browser_->window()->IsMaximized();
-  int y = CenterPosition(close_button_size.height(), height());
-  close_button_->SetBounds(next_x, y,
-      is_maximized ? width() - next_x : close_button_size.width(),
-      is_maximized ? height() - y : close_button_size.height());
+  close_button_->SizeToPreferredSize();
+  close_button_->SetPosition(
+      gfx::Point(next_x, CenterPosition(close_button_->height(), height())));
   if (show_link_only) {
     // Let's hide all the items.
     for (auto ri = download_views_.rbegin(); ri != download_views_.rend(); ++ri)

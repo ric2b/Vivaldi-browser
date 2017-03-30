@@ -7,6 +7,7 @@
 #include <errno.h>
 
 #include "base/macros.h"
+#include "base/memory/free_deleter.h"
 #include "base/message_loop/message_loop.h"
 #include "base/sys_info.h"
 #include "build/build_config.h"
@@ -39,7 +40,7 @@ class BrlapiConnectionImpl : public BrlapiConnection,
 
   ConnectResult Connect(const OnDataReadyCallback& on_data_ready) override;
   void Disconnect() override;
-  bool Connected() override { return handle_; }
+  bool Connected() override { return handle_ != nullptr; }
   brlapi_error_t* BrlapiError() override;
   std::string BrlapiStrError() override;
   bool GetDisplaySize(size_t* size) override;
@@ -56,7 +57,7 @@ class BrlapiConnectionImpl : public BrlapiConnection,
   ConnectResult ConnectResultForError();
 
   LibBrlapiLoader* libbrlapi_loader_;
-  scoped_ptr<brlapi_handle_t, base::FreeDeleter> handle_;
+  std::unique_ptr<brlapi_handle_t, base::FreeDeleter> handle_;
   MessageLoopForIO::FileDescriptorWatcher fd_controller_;
   OnDataReadyCallback on_data_ready_;
 
@@ -69,10 +70,10 @@ BrlapiConnection::BrlapiConnection() {
 BrlapiConnection::~BrlapiConnection() {
 }
 
-scoped_ptr<BrlapiConnection> BrlapiConnection::Create(
+std::unique_ptr<BrlapiConnection> BrlapiConnection::Create(
     LibBrlapiLoader* loader) {
   DCHECK(loader->loaded());
-  return scoped_ptr<BrlapiConnection>(new BrlapiConnectionImpl(loader));
+  return std::unique_ptr<BrlapiConnection>(new BrlapiConnectionImpl(loader));
 }
 
 BrlapiConnection::ConnectResult BrlapiConnectionImpl::Connect(

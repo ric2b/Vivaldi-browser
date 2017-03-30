@@ -789,13 +789,11 @@ void SimpleEntryImpl::CloseInternal() {
   }
 
   if (synchronous_entry_) {
-    Closure task =
-        base::Bind(&SimpleSynchronousEntry::Close,
-                   base::Unretained(synchronous_entry_),
-                   SimpleEntryStat(last_used_, last_modified_, data_size_,
-                                   sparse_data_size_),
-                   base::Passed(&crc32s_to_write),
-                   stream_0_data_);
+    Closure task = base::Bind(
+        &SimpleSynchronousEntry::Close, base::Unretained(synchronous_entry_),
+        SimpleEntryStat(last_used_, last_modified_, data_size_,
+                        sparse_data_size_),
+        base::Passed(&crc32s_to_write), base::RetainedRef(stream_0_data_));
     Closure reply = base::Bind(&SimpleEntryImpl::CloseOperationComplete, this);
     synchronous_entry_ = NULL;
     worker_pool_->PostTaskAndReply(FROM_HERE, task, reply);
@@ -876,13 +874,9 @@ void SimpleEntryImpl::ReadDataInternal(int stream_index,
       new SimpleEntryStat(last_used_, last_modified_, data_size_,
                           sparse_data_size_));
   Closure task = base::Bind(
-      &SimpleSynchronousEntry::ReadData,
-      base::Unretained(synchronous_entry_),
+      &SimpleSynchronousEntry::ReadData, base::Unretained(synchronous_entry_),
       SimpleSynchronousEntry::EntryOperationData(stream_index, offset, buf_len),
-      make_scoped_refptr(buf),
-      read_crc32.get(),
-      entry_stat.get(),
-      result.get());
+      base::RetainedRef(buf), read_crc32.get(), entry_stat.get(), result.get());
   Closure reply = base::Bind(&SimpleEntryImpl::ReadOperationComplete,
                              this,
                              stream_index,
@@ -977,14 +971,11 @@ void SimpleEntryImpl::WriteDataInternal(int stream_index,
     have_written_[0] = true;
 
   scoped_ptr<int> result(new int());
-  Closure task = base::Bind(&SimpleSynchronousEntry::WriteData,
-                            base::Unretained(synchronous_entry_),
-                            SimpleSynchronousEntry::EntryOperationData(
-                                stream_index, offset, buf_len, truncate,
-                                doomed_),
-                            make_scoped_refptr(buf),
-                            entry_stat.get(),
-                            result.get());
+  Closure task = base::Bind(
+      &SimpleSynchronousEntry::WriteData, base::Unretained(synchronous_entry_),
+      SimpleSynchronousEntry::EntryOperationData(stream_index, offset, buf_len,
+                                                 truncate, doomed_),
+      base::RetainedRef(buf), entry_stat.get(), result.get());
   Closure reply = base::Bind(&SimpleEntryImpl::WriteOperationComplete,
                              this,
                              stream_index,
@@ -1013,13 +1004,11 @@ void SimpleEntryImpl::ReadSparseDataInternal(
 
   scoped_ptr<int> result(new int());
   scoped_ptr<base::Time> last_used(new base::Time());
-  Closure task = base::Bind(&SimpleSynchronousEntry::ReadSparseData,
-                            base::Unretained(synchronous_entry_),
-                            SimpleSynchronousEntry::EntryOperationData(
-                                sparse_offset, buf_len),
-                            make_scoped_refptr(buf),
-                            last_used.get(),
-                            result.get());
+  Closure task = base::Bind(
+      &SimpleSynchronousEntry::ReadSparseData,
+      base::Unretained(synchronous_entry_),
+      SimpleSynchronousEntry::EntryOperationData(sparse_offset, buf_len),
+      base::RetainedRef(buf), last_used.get(), result.get());
   Closure reply = base::Bind(&SimpleEntryImpl::ReadSparseOperationComplete,
                              this,
                              callback,
@@ -1058,14 +1047,12 @@ void SimpleEntryImpl::WriteSparseDataInternal(
   last_used_ = last_modified_ = base::Time::Now();
 
   scoped_ptr<int> result(new int());
-  Closure task = base::Bind(&SimpleSynchronousEntry::WriteSparseData,
-                            base::Unretained(synchronous_entry_),
-                            SimpleSynchronousEntry::EntryOperationData(
-                                sparse_offset, buf_len),
-                            make_scoped_refptr(buf),
-                            max_sparse_data_size,
-                            entry_stat.get(),
-                            result.get());
+  Closure task = base::Bind(
+      &SimpleSynchronousEntry::WriteSparseData,
+      base::Unretained(synchronous_entry_),
+      SimpleSynchronousEntry::EntryOperationData(sparse_offset, buf_len),
+      base::RetainedRef(buf), max_sparse_data_size, entry_stat.get(),
+      result.get());
   Closure reply = base::Bind(&SimpleEntryImpl::WriteSparseOperationComplete,
                              this,
                              callback,
@@ -1101,6 +1088,25 @@ void SimpleEntryImpl::GetAvailableRangeInternal(
 }
 
 void SimpleEntryImpl::DoomEntryInternal(const CompletionCallback& callback) {
+  if (!backend_) {
+    // If there's no backend, we want to truncate the files rather than delete
+    // them. Removing files will update the entry directory's mtime, which will
+    // likely force a full index rebuild on the next startup; this is clearly an
+    // undesirable cost. Instead, the lesser evil is to set the entry files to
+    // length zero, leaving the invalid entry in the index. On the next attempt
+    // to open the entry, it will fail asynchronously (since the magic numbers
+    // will not be found), and the files will actually be removed.
+    PostTaskAndReplyWithResult(
+        worker_pool_.get(), FROM_HERE,
+        base::Bind(&SimpleSynchronousEntry::TruncateEntryFiles, path_,
+                   entry_hash_),
+        base::Bind(&SimpleEntryImpl::DoomOperationComplete, this, callback,
+                   // Return to STATE_FAILURE after dooming, since no operation
+                   // can succeed on the truncated entry files.
+                   STATE_FAILURE));
+    state_ = STATE_IO_PENDING;
+    return;
+  }
   PostTaskAndReplyWithResult(
       worker_pool_.get(),
       FROM_HERE,

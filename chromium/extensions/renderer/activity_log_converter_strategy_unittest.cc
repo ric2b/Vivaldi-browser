@@ -117,11 +117,13 @@ TEST_F(ActivityLogConverterStrategyTest, ConversionTest) {
         "empty_dictionary: {},"
         "list: [ \"monkey\", \"balls\" ],"
         "empty_list: [],"
-        "function: function() {},"
+        "function: (0, function() {}),"  // ensure function is anonymous
         "named_function: foo"
       "};"
       "})();";
 
+  v8::MicrotasksScope microtasks(
+      isolate_, v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::Local<v8::Script> script(
       v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
   v8::Local<v8::Object> v8_object = script->Run().As<v8::Object>();

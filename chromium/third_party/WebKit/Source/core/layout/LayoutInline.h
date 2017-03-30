@@ -138,9 +138,9 @@ public:
     LayoutUnit marginUnder() const final;
 
     void absoluteRects(Vector<IntRect>&, const LayoutPoint& accumulatedOffset) const final;
-    void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed) const override;
+    void absoluteQuads(Vector<FloatQuad>&) const override;
 
-    LayoutSize offsetFromContainer(const LayoutObject*, const LayoutPoint&, bool* offsetDependsOnPoint = nullptr) const final;
+    LayoutSize offsetFromContainer(const LayoutObject*) const final;
 
     IntRect linesBoundingBox() const;
     LayoutRect visualOverflowRect() const final;
@@ -236,12 +236,12 @@ private:
     LayoutUnit offsetHeight() const final { return LayoutUnit(linesBoundingBox().height()); }
 
     LayoutRect absoluteClippedOverflowRect() const override;
-    LayoutRect clippedOverflowRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState* = nullptr) const override;
-    void mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, const PaintInvalidationState*) const final;
 
-    // This method differs from clippedOverflowRectForPaintInvalidation in that it includes
-    // the rects for culled inline boxes, which aren't necessary for paint invalidation.
-    LayoutRect clippedOverflowRect(const LayoutBoxModelObject*, const PaintInvalidationState* = nullptr) const;
+    // This method differs from visualOverflowRect in that it doesn't include the rects
+    // for culled inline boxes, which aren't necessary for paint invalidation.
+    LayoutRect localOverflowRectForPaintInvalidation() const override;
+
+    bool mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, VisualRectFlags = DefaultVisualRectFlags) const final;
 
     PositionWithAffinity positionForPoint(const LayoutPoint&) final;
 

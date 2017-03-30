@@ -30,14 +30,15 @@ enum {
   FILTERING_BEHAVIOR_BLOCK_SAFESITES,
   FILTERING_BEHAVIOR_BLOCK_MANUAL,
   FILTERING_BEHAVIOR_BLOCK_DEFAULT,
-  FILTERING_BEHAVIOR_MAX = FILTERING_BEHAVIOR_BLOCK_DEFAULT
+  FILTERING_BEHAVIOR_ALLOW_WHITELIST,
+  FILTERING_BEHAVIOR_MAX = FILTERING_BEHAVIOR_ALLOW_WHITELIST
 };
 const int kHistogramFilteringBehaviorSpacing = 100;
 const int kHistogramPageTransitionMaxKnownValue =
     static_cast<int>(ui::PAGE_TRANSITION_KEYWORD_GENERATED);
 const int kHistogramPageTransitionFallbackValue =
     kHistogramFilteringBehaviorSpacing - 1;
-const int kHistogramMax = 700;
+const int kHistogramMax = 800;
 
 static_assert(kHistogramPageTransitionMaxKnownValue <
                   kHistogramPageTransitionFallbackValue,
@@ -48,25 +49,27 @@ static_assert(FILTERING_BEHAVIOR_MAX * kHistogramFilteringBehaviorSpacing +
 
 int GetHistogramValueForFilteringBehavior(
     SupervisedUserURLFilter::FilteringBehavior behavior,
-    SupervisedUserURLFilter::FilteringBehaviorReason reason,
+    supervised_user_error_page::FilteringBehaviorReason reason,
     bool uncertain) {
   switch (behavior) {
     case SupervisedUserURLFilter::ALLOW:
     case SupervisedUserURLFilter::WARN:
+      if (reason == supervised_user_error_page::WHITELIST)
+        return FILTERING_BEHAVIOR_ALLOW_WHITELIST;
       return uncertain ? FILTERING_BEHAVIOR_ALLOW_UNCERTAIN
                        : FILTERING_BEHAVIOR_ALLOW;
     case SupervisedUserURLFilter::BLOCK:
       switch (reason) {
-        case SupervisedUserURLFilter::BLACKLIST:
+        case supervised_user_error_page::BLACKLIST:
           return FILTERING_BEHAVIOR_BLOCK_BLACKLIST;
-        case SupervisedUserURLFilter::ASYNC_CHECKER:
+        case supervised_user_error_page::ASYNC_CHECKER:
           return FILTERING_BEHAVIOR_BLOCK_SAFESITES;
-        case SupervisedUserURLFilter::WHITELIST:
+        case supervised_user_error_page::WHITELIST:
           NOTREACHED();
           break;
-        case SupervisedUserURLFilter::MANUAL:
+        case supervised_user_error_page::MANUAL:
           return FILTERING_BEHAVIOR_BLOCK_MANUAL;
-        case SupervisedUserURLFilter::DEFAULT:
+        case supervised_user_error_page::DEFAULT:
           return FILTERING_BEHAVIOR_BLOCK_DEFAULT;
       }
     case SupervisedUserURLFilter::INVALID:
@@ -87,7 +90,7 @@ int GetHistogramValueForTransitionType(ui::PageTransition transition_type) {
 void RecordFilterResultEvent(
     bool safesites_histogram,
     SupervisedUserURLFilter::FilteringBehavior behavior,
-    SupervisedUserURLFilter::FilteringBehaviorReason reason,
+    supervised_user_error_page::FilteringBehaviorReason reason,
     bool uncertain,
     ui::PageTransition transition_type) {
   int value =
@@ -142,7 +145,7 @@ void SupervisedUserResourceThrottle::ShowInterstitialIfNeeded(bool is_redirect,
 
 void SupervisedUserResourceThrottle::ShowInterstitial(
     const GURL& url,
-    SupervisedUserURLFilter::FilteringBehaviorReason reason) {
+    supervised_user_error_page::FilteringBehaviorReason reason) {
   const content::ResourceRequestInfo* info =
       content::ResourceRequestInfo::ForRequest(request_);
   BrowserThread::PostTask(
@@ -171,7 +174,7 @@ const char* SupervisedUserResourceThrottle::GetNameForLogging() const {
 void SupervisedUserResourceThrottle::OnCheckDone(
     const GURL& url,
     SupervisedUserURLFilter::FilteringBehavior behavior,
-    SupervisedUserURLFilter::FilteringBehaviorReason reason,
+    supervised_user_error_page::FilteringBehaviorReason reason,
     bool uncertain) {
   DCHECK_EQ(SupervisedUserURLFilter::INVALID, behavior_);
   // If we got a result synchronously, pass it back to ShowInterstitialIfNeeded.
@@ -186,8 +189,8 @@ void SupervisedUserResourceThrottle::OnCheckDone(
   // If both the static blacklist and the async checker are enabled, also record
   // SafeSites-only UMA events.
   if (url_filter_->HasBlacklist() && url_filter_->HasAsyncURLChecker() &&
-      (reason == SupervisedUserURLFilter::ASYNC_CHECKER ||
-       reason == SupervisedUserURLFilter::BLACKLIST)) {
+      (reason == supervised_user_error_page::ASYNC_CHECKER ||
+       reason == supervised_user_error_page::BLACKLIST)) {
     RecordFilterResultEvent(true, behavior, reason, uncertain, transition);
   }
 

@@ -12,7 +12,6 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebScriptBindings.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
 namespace extensions {
@@ -49,9 +48,14 @@ void ContentWatcher::OnWatchPages(
         : css_selectors_(css_selectors) {}
 
     bool Visit(content::RenderView* view) override {
+      // TODO(dcheng): This should be rewritten to be frame-oriented. It
+      // probably breaks declarative content for OOPI.
       for (blink::WebFrame* frame = view->GetWebView()->mainFrame(); frame;
-           frame = frame->traverseNext(/*wrap=*/false))
-        frame->document().watchCSSSelectors(css_selectors_);
+           frame = frame->traverseNext(/*wrap=*/false)) {
+        if (frame->isWebRemoteFrame())
+          continue;
+        frame->toWebLocalFrame()->document().watchCSSSelectors(css_selectors_);
+      }
 
       return true;  // Continue visiting.
     }
@@ -85,10 +89,10 @@ void ContentWatcher::DidMatchCSS(
 void ContentWatcher::NotifyBrowserOfChange(
     blink::WebLocalFrame* changed_frame) const {
   blink::WebFrame* const top_frame = changed_frame->top();
-  const blink::WebSecurityOrigin top_origin = top_frame->securityOrigin();
+  const blink::WebSecurityOrigin top_origin = top_frame->getSecurityOrigin();
   // Want to aggregate matched selectors from all frames where an
   // extension with access to top_origin could run on the frame.
-  if (!top_origin.canAccess(changed_frame->document().securityOrigin())) {
+  if (!top_origin.canAccess(changed_frame->document().getSecurityOrigin())) {
     // If the changed frame can't be accessed by the top frame, then
     // no change in it could affect the set of selectors we'd send back.
     return;
@@ -97,7 +101,7 @@ void ContentWatcher::NotifyBrowserOfChange(
   std::set<base::StringPiece> transitive_selectors;
   for (blink::WebFrame* frame = top_frame; frame;
        frame = frame->traverseNext(/*wrap=*/false)) {
-    if (top_origin.canAccess(frame->securityOrigin())) {
+    if (top_origin.canAccess(frame->getSecurityOrigin())) {
       std::map<blink::WebFrame*, std::set<std::string> >::const_iterator
           frame_selectors = matching_selectors_.find(frame);
       if (frame_selectors != matching_selectors_.end()) {

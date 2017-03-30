@@ -29,8 +29,6 @@
 
 #include "platform/heap/Handle.h"
 #include "wtf/HashMap.h"
-#include "wtf/PassOwnPtr.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
@@ -77,7 +75,7 @@ private:
     void clearFlags(Element*, unsigned);
     bool hasFlags(const Element*, unsigned flags) const;
 
-    typedef WillBeHeapHashMap<RefPtrWillBeMember<Element>, unsigned> ElementFlagMap;
+    typedef HeapHashMap<Member<Element>, unsigned> ElementFlagMap;
     ElementFlagMap m_elements;
 };
 

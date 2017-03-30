@@ -17,11 +17,11 @@ public:
     {
     }
 
-    virtual PassRefPtrWillBeRawPtr<SVGPropertyBase> cloneForAnimation(const String& value) const
+    virtual SVGPropertyBase* cloneForAnimation(const String& value) const
     {
-        RefPtrWillBeRawPtr<Derived> property = Derived::create();
+        Derived* property = Derived::create();
         property->setValueAsString(value);
-        return property.release();
+        return property;
     }
 };
 

@@ -92,14 +92,6 @@
             "group_name": "Enabled"
         }
     ],
-    "DataReductionProxyConfigService": [
-        {
-            "group_name": "Enabled",
-            "params": {
-                "minimum_refresh_interval_on_success_msec": "21600000"
-            }
-        }
-    ],
     "DataReductionProxyFREPromo": [
         {
             "group_name": "Enabled"
@@ -116,6 +108,14 @@
             "params": {
                 "disable_auto_hiding_toolbar_threshold": "800"
             }
+        }
+    ],
+    "DocumentWriteEvaluator": [
+        {
+            "enable_features": [
+                "DocumentWriteEvaluator"
+            ],
+            "group_name": "Enabled"
         }
     ],
     "EnableMediaThreadForMediaPlayback": [
@@ -163,12 +163,17 @@
             }
         }
     ],
+    "ModerateBindingOnBackgroundTabCreation": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "NTPPopularSites": [
         {
-            "group_name": "Enabled",
+            "group_name": "Enabled5",
             "params": {
                 "country": "IN",
-                "version": "4"
+                "version": "5"
             }
         }
     ],
@@ -203,6 +208,9 @@
     ],
     "OfflinePages": [
         {
+            "enable_features": [
+                "NTPOfflinePages"
+            ],
             "group_name": "EnabledAsBookmarks"
         }
     ],
@@ -218,6 +226,9 @@
     ],
     "PhysicalWeb": [
         {
+            "enable_features": [
+                "PhysicalWeb"
+            ],
             "group_name": "Enabled"
         }
     ],
@@ -249,6 +260,9 @@
     ],
     "RenderingPipelineThrottling": [
         {
+            "enable_features": [
+                "RenderingPipelineThrottling"
+            ],
             "group_name": "Enabled"
         }
     ],
@@ -279,6 +293,14 @@
         },
         {
             "group_name": "DontShowAndDontSend"
+        }
+    ],
+    "ResourcePriorities": [
+        {
+            "group_name": "AllExceptAsyncScripts_11011_1_1_10"
+        },
+        {
+            "group_name": "Control"
         }
     ],
     "SafeBrowsingAndroid": [
@@ -312,11 +334,6 @@
     "SdchPersistence": [
         {
             "group_name": "Enabled"
-        }
-    ],
-    "SpdyEnableDependencies": [
-        {
-            "group_name": "Enable"
         }
     ],
     "SpeculativeResourcePrefetching": [
@@ -360,6 +377,14 @@
             "group_name": "Enabled"
         }
     ],
+    "TokenBinding": [
+        {
+            "enable_features": [
+                "token-binding"
+            ],
+            "group_name": "TokenBinding"
+        }
+    ],
     "UMA_EnableCellularLogUpload": [
         {
             "group_name": "Enabled_wo_sampling",
@@ -368,6 +393,11 @@
                 "Optimize": "true",
                 "Sample_Probability": "100"
             }
+        }
+    ],
+    "UnifiedMediaPipelineTrial": [
+        {
+            "group_name": "Enabled"
         }
     ],
     "UpdateMenuItem": [
@@ -412,6 +442,15 @@
             "params": {
                 "enable_update_menu_item": "false"
             }
+        }
+    ],
+    "V8SerializeOptions": [
+        {
+            "enable_features": [
+                "V8_Serialize_Eager",
+                "V8_Serialize_Age_Code"
+            ],
+            "group_name": "SerializeEagerAndAgeCode"
         }
     ],
     "VarationsServiceControl": [

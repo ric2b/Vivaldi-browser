@@ -45,6 +45,7 @@ struct GPU_EXPORT Capabilities {
   };
 
   Capabilities();
+  Capabilities(const Capabilities& other);
 
   template <typename T>
   void VisitStagePrecisions(unsigned stage,
@@ -142,6 +143,7 @@ struct GPU_EXPORT Capabilities {
   bool timer_queries;
   bool surfaceless;
   bool flips_vertically;
+  bool msaa_is_slow;
 
   int major_version;
   int minor_version;

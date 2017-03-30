@@ -14,7 +14,11 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "cc/base/cc_export.h"
-#include "cc/layers/layer_lists.h"
+#include "cc/layers/layer.h"
+#include "cc/layers/layer_collections.h"
+#include "cc/layers/layer_impl.h"
+#include "cc/trees/layer_tree_host.h"
+#include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/property_tree.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
@@ -32,27 +36,34 @@ class Layer;
 class SwapPromise;
 class PropertyTrees;
 
+enum CallFunctionLayerType : uint32_t {
+  BASIC_LAYER = 0,
+  MASK_LAYER = 1,
+  REPLICA_LAYER = 2,
+  ALL_LAYERS = MASK_LAYER | REPLICA_LAYER
+};
+
 class CC_EXPORT LayerTreeHostCommon {
  public:
   static gfx::Rect CalculateVisibleRect(const gfx::Rect& target_surface_rect,
                                         const gfx::Rect& layer_bound_rect,
                                         const gfx::Transform& transform);
 
-  struct CC_EXPORT CalcDrawPropsMainInputs {
+  struct CC_EXPORT CalcDrawPropsMainInputsForTesting {
    public:
-    CalcDrawPropsMainInputs(Layer* root_layer,
-                            const gfx::Size& device_viewport_size,
-                            const gfx::Transform& device_transform,
-                            float device_scale_factor,
-                            float page_scale_factor,
-                            const Layer* page_scale_layer,
-                            const Layer* inner_viewport_scroll_layer,
-                            const Layer* outer_viewport_scroll_layer);
-    CalcDrawPropsMainInputs(Layer* root_layer,
-                            const gfx::Size& device_viewport_size,
-                            const gfx::Transform& device_transform);
-    CalcDrawPropsMainInputs(Layer* root_layer,
-                            const gfx::Size& device_viewport_size);
+    CalcDrawPropsMainInputsForTesting(Layer* root_layer,
+                                      const gfx::Size& device_viewport_size,
+                                      const gfx::Transform& device_transform,
+                                      float device_scale_factor,
+                                      float page_scale_factor,
+                                      const Layer* page_scale_layer,
+                                      const Layer* inner_viewport_scroll_layer,
+                                      const Layer* outer_viewport_scroll_layer);
+    CalcDrawPropsMainInputsForTesting(Layer* root_layer,
+                                      const gfx::Size& device_viewport_size,
+                                      const gfx::Transform& device_transform);
+    CalcDrawPropsMainInputsForTesting(Layer* root_layer,
+                                      const gfx::Size& device_viewport_size);
     Layer* root_layer;
     gfx::Size device_viewport_size;
     gfx::Transform device_transform;
@@ -118,8 +129,9 @@ class CC_EXPORT LayerTreeHostCommon {
                                       int current_render_surface_layer_list_id);
   };
 
-  static int CalculateFrameJitter(LayerImpl* scrolling_layer);
-  static void CalculateDrawProperties(CalcDrawPropsMainInputs* inputs);
+  static int CalculateLayerJitter(LayerImpl* scrolling_layer);
+  static void CalculateDrawPropertiesForTesting(
+      CalcDrawPropsMainInputsForTesting* inputs);
   static void PreCalculateMetaInformation(Layer* root_layer);
   static void PreCalculateMetaInformationForTesting(LayerImpl* root_layer);
   static void PreCalculateMetaInformationForTesting(Layer* root_layer);
@@ -132,21 +144,17 @@ class CC_EXPORT LayerTreeHostCommon {
   static bool RenderSurfaceContributesToTarget(LayerType*,
                                                int target_surface_layer_id);
 
-  template <typename LayerType, typename Function>
-  static void CallFunctionForSubtree(LayerType* layer,
-                                     const Function& function);
+  template <typename Function>
+  static void CallFunctionForEveryLayer(LayerTreeHost* layer,
+                                        const Function& function,
+                                        const CallFunctionLayerType& type);
 
-  // Returns a layer with the given id if one exists in the subtree starting
-  // from the given root layer (including mask and replica layers).
-  template <typename LayerType>
-  static LayerType* FindLayerInSubtree(LayerType* root_layer, int layer_id);
+  template <typename Function>
+  static void CallFunctionForEveryLayer(LayerTreeImpl* layer,
+                                        const Function& function,
+                                        const CallFunctionLayerType& type);
 
   static Layer* get_layer_as_raw_ptr(const LayerList& layers, size_t index) {
-    return layers[index].get();
-  }
-
-  static LayerImpl* get_layer_as_raw_ptr(const OwnedLayerImplList& layers,
-                                         size_t index) {
     return layers[index].get();
   }
 
@@ -203,47 +211,52 @@ bool LayerTreeHostCommon::RenderSurfaceContributesToTarget(
          layer->id() != target_surface_layer_id;
 }
 
-template <typename LayerType>
-LayerType* LayerTreeHostCommon::FindLayerInSubtree(LayerType* root_layer,
-                                                   int layer_id) {
-  if (!root_layer)
-    return NULL;
-
-  if (root_layer->id() == layer_id)
-    return root_layer;
-
-  if (root_layer->mask_layer() && root_layer->mask_layer()->id() == layer_id)
-    return root_layer->mask_layer();
-
-  if (root_layer->replica_layer() &&
-      root_layer->replica_layer()->id() == layer_id)
-    return root_layer->replica_layer();
-
-  for (size_t i = 0; i < root_layer->children().size(); ++i) {
-    if (LayerType* found = FindLayerInSubtree(
-            get_layer_as_raw_ptr(root_layer->children(), i), layer_id))
-      return found;
-  }
-  return NULL;
-}
-
 template <typename LayerType, typename Function>
-void LayerTreeHostCommon::CallFunctionForSubtree(LayerType* layer,
-                                                 const Function& function) {
+static void CallFunctionForLayer(LayerType* layer,
+                                 const Function& function,
+                                 const CallFunctionLayerType& type) {
   function(layer);
 
-  if (LayerType* mask_layer = layer->mask_layer())
+  LayerType* mask_layer = layer->mask_layer();
+  if ((type & CallFunctionLayerType::MASK_LAYER) && mask_layer)
     function(mask_layer);
-  if (LayerType* replica_layer = layer->replica_layer()) {
+  LayerType* replica_layer = layer->replica_layer();
+  if ((type & CallFunctionLayerType::REPLICA_LAYER) && replica_layer) {
     function(replica_layer);
-    if (LayerType* mask_layer = replica_layer->mask_layer())
+    mask_layer = replica_layer->mask_layer();
+    if ((type & CallFunctionLayerType::MASK_LAYER) && mask_layer)
       function(mask_layer);
   }
+}
+
+template <typename Function>
+static void CallFunctionForEveryLayerInternal(
+    Layer* layer,
+    const Function& function,
+    const CallFunctionLayerType& type) {
+  CallFunctionForLayer(layer, function, type);
 
   for (size_t i = 0; i < layer->children().size(); ++i) {
-    CallFunctionForSubtree(get_layer_as_raw_ptr(layer->children(), i),
-                           function);
+    CallFunctionForEveryLayerInternal(layer->children()[i].get(), function,
+                                      type);
   }
+}
+
+template <typename Function>
+void LayerTreeHostCommon::CallFunctionForEveryLayer(
+    LayerTreeHost* host,
+    const Function& function,
+    const CallFunctionLayerType& type) {
+  CallFunctionForEveryLayerInternal(host->root_layer(), function, type);
+}
+
+template <typename Function>
+void LayerTreeHostCommon::CallFunctionForEveryLayer(
+    LayerTreeImpl* host_impl,
+    const Function& function,
+    const CallFunctionLayerType& type) {
+  for (auto* layer : *host_impl)
+    CallFunctionForLayer(layer, function, type);
 }
 
 CC_EXPORT PropertyTrees* GetPropertyTrees(Layer* layer);

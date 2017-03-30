@@ -41,7 +41,6 @@ class SkMatrix44;
 class SkImageFilter;
 
 namespace cc {
-class Animation;
 class Layer;
 class LayerClient;
 class FilterOperations;
@@ -49,7 +48,6 @@ class FilterOperations;
 
 namespace blink {
 
-class WebCompositorAnimationDelegate;
 class WebLayerScrollClient;
 struct WebFloatPoint;
 struct WebLayerPositionConstraint;
@@ -141,30 +139,8 @@ public:
     // TODO(loyso): This should use CompositorFilterOperation. crbug.com/584551
     virtual void setBackgroundFilters(const cc::FilterOperations&) = 0;
 
-    // An animation delegate is notified when animations are started and
-    // stopped. The WebLayer does not take ownership of the delegate, and it is
-    // the responsibility of the client to reset the layer's delegate before
-    // deleting the delegate.
-    virtual void setAnimationDelegate(WebCompositorAnimationDelegate*) = 0;
-
-    // Returns false if the animation cannot be added.
-    // Takes ownership of the cc::Animation object.
-    // TODO(loyso): Erase it. crbug.com/575041
-    virtual bool addAnimation(cc::Animation*) = 0;
-
-    // Removes all animations with the given id.
-    virtual void removeAnimation(int animationId) = 0;
-
-    // Pauses all animations with the given id.
-    virtual void pauseAnimation(int animationId, double timeOffset) = 0;
-
-    // Aborts all animations with the given id. Different from removeAnimation
-    // in that aborting an animation stops it from affecting both the pending
-    // and active tree.
-    virtual void abortAnimation(int animationId) = 0;
-
     // Returns true if this layer has any active animations - useful for tests.
-    virtual bool hasActiveAnimation() = 0;
+    virtual bool hasActiveAnimationForTesting() = 0;
 
     // If a scroll parent is set, this layer will inherit its parent's scroll
     // delta and offset even though it will not be a descendant of the scroll
@@ -179,18 +155,6 @@ public:
     // Scrolling
     virtual void setScrollPositionDouble(WebDoublePoint) = 0;
     virtual WebDoublePoint scrollPositionDouble() const = 0;
-    // Blink tells cc the scroll offset through setScrollPositionDouble() using
-    // floating precision but it currently can only position cc layers at integer
-    // boundary. So Blink needs to also call setScrollCompensationAdjustment()
-    // to tell cc what's the part of the scroll offset that Blink doesn't handle
-    // but cc needs to take into consideration, e.g. compensating
-    // for fixed-position layer that's positioned in Blink using only integer scroll
-    // offset.
-    // We make this call explicit, instead of letting cc to infer the fractional part
-    // from the scroll offset, to be clear that this is Blink's limitation. Once
-    // Blink can fully handle fractional scroll offset, it can stop calling
-    // this function and cc side would just work.
-    virtual void setScrollCompensationAdjustment(WebDoublePoint) = 0;
 
     // To set a WebLayer as scrollable we must specify the corresponding clip layer.
     virtual void setScrollClipLayer(WebLayer*) = 0;
@@ -240,6 +204,7 @@ public:
 
     // Gets the underlying cc layer.
     virtual const cc::Layer* ccLayer() const = 0;
+    virtual cc::Layer* ccLayer() = 0;
 
     virtual void setElementId(uint64_t) = 0;
     virtual uint64_t elementId() const = 0;

@@ -63,16 +63,16 @@ protected:
     CursorDirective getCursor(const LayoutPoint&, Cursor&) const final;
 
     // Overridden to invalidate the child frame if any.
-    void invalidatePaintOfSubtreesIfNeeded(PaintInvalidationState&) override;
+    void invalidatePaintOfSubtreesIfNeeded(const PaintInvalidationState&) override;
 
 private:
-    bool updateWidgetGeometryInternal();
+    void updateWidgetGeometryInternal();
     CompositingReasons additionalCompositingReasons() const override;
 
     void willBeDestroyed() final;
     void destroy() final;
 
-    bool setWidgetGeometry(const LayoutRect&);
+    void setWidgetGeometry(const LayoutRect&);
 
     bool nodeAtPointOverWidget(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction);
 

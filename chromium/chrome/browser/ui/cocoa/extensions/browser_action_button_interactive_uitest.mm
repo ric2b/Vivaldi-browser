@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#import "chrome/browser/ui/cocoa/extensions/browser_action_button.h"
+
 #import <Cocoa/Cocoa.h>
+
+#include <memory>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -16,12 +19,11 @@
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/ui/browser_window.h"
-#import "chrome/browser/ui/cocoa/run_loop_testing.h"
 #import "chrome/browser/ui/cocoa/app_menu/app_menu_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
-#import "chrome/browser/ui/cocoa/extensions/browser_action_button.h"
 #import "chrome/browser/ui/cocoa/extensions/browser_actions_container_view.h"
 #import "chrome/browser/ui/cocoa/extensions/browser_actions_controller.h"
+#import "chrome/browser/ui/cocoa/run_loop_testing.h"
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
 #include "chrome/browser/ui/global_error/global_error.h"
 #include "chrome/browser/ui/global_error/global_error_service.h"
@@ -30,6 +32,7 @@
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "extensions/common/feature_switch.h"
+#include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/events/test/cocoa_test_event_utils.h"
 
 namespace {
@@ -75,7 +78,7 @@ NSPoint GetCenterPoint(NSView* view) {
   NSRect bounds = [view bounds];
   NSPoint center = NSMakePoint(NSMidX(bounds), NSMidY(bounds));
   center = [view convertPoint:center toView:nil];
-  center = [window convertBaseToScreen:center];
+  center = ui::ConvertPointFromWindowToScreen(window, center);
   return NSMakePoint(center.x, [screen frame].size.height - center.y);
 }
 
@@ -226,7 +229,7 @@ class BrowserActionButtonUiTest : public ExtensionBrowserTest {
   NSView* appMenuButton() { return [toolbarController_ appMenuButton]; }
 
  private:
-  scoped_ptr<extensions::FeatureSwitch::ScopedOverride> enable_redesign_;
+  std::unique_ptr<extensions::FeatureSwitch::ScopedOverride> enable_redesign_;
 
   ToolbarController* toolbarController_ = nil;
   AppMenuController* appMenuController_ = nil;
@@ -529,4 +532,61 @@ IN_PROC_BROWSER_TEST_F(BrowserActionButtonUiTest,
   ui_controls::SendMouseEvents(ui_controls::LEFT,
                                ui_controls::DOWN | ui_controls::UP);
   runLoop.Run();
+}
+
+// Test that activating an action that doesn't want to run on the page via the
+// mouse and the keyboard works.
+IN_PROC_BROWSER_TEST_F(BrowserActionButtonUiTest,
+                       OpenMenuOnDisabledActionWithMouseOrKeyboard) {
+  // Add an extension with a page action.
+  scoped_refptr<const extensions::Extension> extension =
+      extensions::extension_action_test_util::CreateActionExtension(
+          "page action", extensions::extension_action_test_util::PAGE_ACTION);
+  extension_service()->AddExtension(extension.get());
+  ASSERT_EQ(1u, model()->toolbar_items().size());
+
+  BrowserActionsController* actionsController =
+      [toolbarController() browserActionsController];
+  BrowserActionButton* actionButton = [actionsController buttonWithIndex:0];
+  ASSERT_TRUE(actionButton);
+
+  // Stub out the action button's normal context menu with a fake one so we
+  // can track when it opens.
+  base::scoped_nsobject<NSMenu> testContextMenu(
+      [[NSMenu alloc] initWithTitle:@""]);
+  base::scoped_nsobject<MenuHelper> menuHelper([[MenuHelper alloc] init]);
+  [testContextMenu setDelegate:menuHelper.get()];
+  [actionButton setTestContextMenu:testContextMenu.get()];
+
+  // The button should be attached.
+  EXPECT_TRUE([actionButton superview]);
+
+  // Move the mouse and click on the button. The menu should open.
+  MoveMouseToCenter(actionButton);
+  {
+    EXPECT_FALSE([menuHelper menuOpened]);
+    base::RunLoop runLoop;
+    ui_controls::SendMouseEventsNotifyWhenDone(
+        ui_controls::LEFT, ui_controls::DOWN | ui_controls::UP,
+        runLoop.QuitClosure());
+    runLoop.Run();
+    EXPECT_TRUE([menuHelper menuOpened]);
+  }
+
+  // Reset the menu helper so we can use it again.
+  [menuHelper setMenuOpened:NO];
+
+  // Send the 'space' key to the button with it as the first responder. The menu
+  // should open.
+  [[actionButton window] makeFirstResponder:actionButton];
+  EXPECT_TRUE([[actionButton window] firstResponder] == actionButton);
+  {
+    EXPECT_FALSE([menuHelper menuOpened]);
+    base::RunLoop runLoop;
+    ui_controls::SendKeyPressNotifyWhenDone([actionButton window],
+                                            ui::VKEY_SPACE, false, false, false,
+                                            false, runLoop.QuitClosure());
+    runLoop.Run();
+    EXPECT_TRUE([menuHelper menuOpened]);
+  }
 }

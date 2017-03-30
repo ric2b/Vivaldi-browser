@@ -196,6 +196,52 @@ static bool CompareVotes(const std::pair<std::string, int>& a,
   return a.second < b.second;
 }
 
+// Returns whether the |suggestion| is valid considering the
+// |field_contents_canon|, the |type| and |is_masked_server_card|. Assigns true
+// to |is_prefix_matched| if the |field_contents_canon| is a prefix to
+// |suggestion|, assigns false otherwise.
+bool IsValidSuggestionForFieldContents(base::string16 suggestion_canon,
+                                       base::string16 field_contents_canon,
+                                       const AutofillType& type,
+                                       bool is_masked_server_card,
+                                       bool* is_prefix_matched) {
+  *is_prefix_matched = true;
+
+  // Phones should do a substring match because they can be trimmed to remove
+  // the first parts (e.g. country code or prefix). It is still considered a
+  // prefix match in order to put it at the top of the suggestions.
+  if ((type.group() == PHONE_HOME || type.group() == PHONE_BILLING) &&
+      suggestion_canon.find(field_contents_canon) != base::string16::npos) {
+    return true;
+  }
+
+  // For card number fields, suggest the card if:
+  // - the number matches any part of the card, or
+  // - it's a masked card and there are 6 or fewers typed so far.
+  if (type.GetStorableType() == CREDIT_CARD_NUMBER) {
+    if (suggestion_canon.find(field_contents_canon) == base::string16::npos &&
+        (!is_masked_server_card || field_contents_canon.size() >= 6)) {
+      return false;
+    }
+    return true;
+  }
+
+  if (base::StartsWith(suggestion_canon, field_contents_canon,
+                       base::CompareCase::SENSITIVE)) {
+    return true;
+  }
+
+  if (IsFeatureSubstringMatchEnabled() &&
+      suggestion_canon.length() >= field_contents_canon.length() &&
+      GetTextSelectionStart(suggestion_canon, field_contents_canon, false) !=
+          base::string16::npos) {
+    *is_prefix_matched = false;
+    return true;
+  }
+
+  return false;
+}
+
 }  // namespace
 
 const char kFrecencyFieldTrialName[] = "AutofillProfileOrderByFrecency";
@@ -212,7 +258,8 @@ PersonalDataManager::PersonalDataManager(const std::string& app_locale)
       pref_service_(NULL),
       account_tracker_(NULL),
       is_off_the_record_(false),
-      has_logged_profile_count_(false) {}
+      has_logged_profile_count_(false),
+      has_logged_credit_card_count_(false) {}
 
 void PersonalDataManager::Init(scoped_refptr<AutofillWebDataService> database,
                                PrefService* pref_service,
@@ -296,6 +343,7 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
       if (h == pending_creditcards_query_) {
         ReceiveLoadedDbValues(h, result, &pending_creditcards_query_,
                               &local_credit_cards_);
+        LogLocalCreditCardCount();
       } else {
         ReceiveLoadedDbValues(h, result, &pending_server_creditcards_query_,
                               &server_credit_cards_);
@@ -336,15 +384,16 @@ void PersonalDataManager::RemoveObserver(
 bool PersonalDataManager::ImportFormData(
     const FormStructure& form,
     bool should_return_local_card,
-    scoped_ptr<CreditCard>* imported_credit_card) {
+    std::unique_ptr<CreditCard>* imported_credit_card) {
   // We try the same |form| for both credit card and address import/update.
   // - ImportCreditCard may update an existing card, or fill
   //   |imported_credit_card| with an extracted card. See .h for details of
   //   |should_return_local_card|.
   bool cc_import =
       ImportCreditCard(form, should_return_local_card, imported_credit_card);
-  // - ImportAddressProfile may eventually save or update an address profile.
-  bool address_import = ImportAddressProfile(form);
+  // - ImportAddressProfiles may eventually save or update one or more address
+  //   profiles.
+  bool address_import = ImportAddressProfiles(form);
   if (cc_import || address_import)
     return true;
 
@@ -621,8 +670,7 @@ const std::vector<CreditCard*>& PersonalDataManager::GetCreditCards() const {
   credit_cards_.clear();
   credit_cards_.insert(credit_cards_.end(), local_credit_cards_.begin(),
                        local_credit_cards_.end());
-  if (IsExperimentalWalletIntegrationEnabled() &&
-      pref_service_->GetBoolean(prefs::kAutofillWalletImportEnabled)) {
+  if (pref_service_->GetBoolean(prefs::kAutofillWalletImportEnabled)) {
     credit_cards_.insert(credit_cards_.end(), server_credit_cards_.begin(),
                          server_credit_cards_.end());
   }
@@ -666,13 +714,13 @@ std::vector<Suggestion> PersonalDataManager::GetProfileSuggestions(
     base::string16 value = GetInfoInOneLine(profile, type, app_locale_);
     if (value.empty())
       continue;
-    base::string16 value_canon =
+
+    bool prefix_matched_suggestion;
+    base::string16 suggestion_canon =
         AutofillProfile::CanonicalizeProfileString(value);
-    bool prefix_matched_suggestion = base::StartsWith(
-        value_canon, field_contents_canon, base::CompareCase::SENSITIVE);
-    if (prefix_matched_suggestion ||
-        FieldIsSuggestionSubstringStartingOnTokenBoundary(value, field_contents,
-                                                          false)) {
+    if (IsValidSuggestionForFieldContents(
+            suggestion_canon, field_contents_canon, type,
+            /* is_masked_server_card= */ false, &prefix_matched_suggestion)) {
       matched_profiles.push_back(profile);
       suggestions.push_back(Suggestion(value));
       suggestions.back().backend_id = profile->guid();
@@ -748,94 +796,28 @@ std::vector<Suggestion> PersonalDataManager::GetCreditCardSuggestions(
   if (IsInAutofillSuggestionsDisabledExperiment())
     return std::vector<Suggestion>();
 
-  std::list<const CreditCard*> cards_to_suggest;
-  std::list<const CreditCard*> substring_matched_cards;
-  base::string16 field_contents_lower = base::i18n::ToLower(field_contents);
-  for (const CreditCard* credit_card : GetCreditCards()) {
-    // The value of the stored data for this field type in the |credit_card|.
-    base::string16 creditcard_field_value =
-        credit_card->GetInfo(type, app_locale_);
-    if (creditcard_field_value.empty())
-      continue;
-    base::string16 creditcard_field_lower =
-        base::i18n::ToLower(creditcard_field_value);
+  const std::vector<CreditCard*> credit_cards = GetCreditCards();
+  std::list<const CreditCard*> cards_to_suggest(credit_cards.begin(),
+                                                credit_cards.end());
 
-    // For card number fields, suggest the card if:
-    // - the number matches any part of the card, or
-    // - it's a masked card and there are 6 or fewers typed so far.
-    // For other fields, require that the field contents match the beginning of
-    // the stored data.
-    if (type.GetStorableType() == CREDIT_CARD_NUMBER) {
-      if (creditcard_field_lower.find(field_contents_lower) ==
-              base::string16::npos &&
-          (credit_card->record_type() != CreditCard::MASKED_SERVER_CARD ||
-           field_contents.size() >= 6)) {
-        continue;
-      }
-      cards_to_suggest.push_back(credit_card);
-    } else if (base::StartsWith(creditcard_field_lower, field_contents_lower,
-                                base::CompareCase::SENSITIVE)) {
-      cards_to_suggest.push_back(credit_card);
-    } else if (FieldIsSuggestionSubstringStartingOnTokenBoundary(
-                   creditcard_field_lower, field_contents_lower, true)) {
-      substring_matched_cards.push_back(credit_card);
-    }
-  }
+  DedupeCreditCardToSuggest(&cards_to_suggest);
 
-  // Rank the suggestions by frecency (see AutofillDataModel for details).
+  // Rank the cards by frecency (see AutofillDataModel for details). All expired
+  // cards should be suggested last, also by frecency.
   base::Time comparison_time = base::Time::Now();
-  cards_to_suggest.sort([comparison_time](const AutofillDataModel* a,
-                                          const AutofillDataModel* b) {
-    return a->CompareFrecency(b, comparison_time);
-  });
+  cards_to_suggest.sort(
+      [comparison_time](const CreditCard* a, const CreditCard* b) {
+        bool a_has_valid_expiration = IsValidCreditCardExpirationDate(
+            a->expiration_year(), a->expiration_month(), comparison_time);
+        if (a_has_valid_expiration !=
+            IsValidCreditCardExpirationDate(
+                b->expiration_year(), b->expiration_month(), comparison_time))
+          return a_has_valid_expiration;
 
-  // Prefix matches should precede other token matches.
-  if (IsFeatureSubstringMatchEnabled()) {
-    substring_matched_cards.sort([comparison_time](const AutofillDataModel* a,
-                                                   const AutofillDataModel* b) {
-      return a->CompareFrecency(b, comparison_time);
-    });
-    cards_to_suggest.insert(cards_to_suggest.end(),
-                            substring_matched_cards.begin(),
-                            substring_matched_cards.end());
-  }
+        return a->CompareFrecency(b, comparison_time);
+      });
 
-  DedupeCreditCardSuggestions(&cards_to_suggest);
-
-  std::vector<Suggestion> suggestions;
-  for (const CreditCard* credit_card : cards_to_suggest) {
-    // Make a new suggestion.
-    suggestions.push_back(Suggestion());
-    Suggestion* suggestion = &suggestions.back();
-
-    suggestion->value = credit_card->GetInfo(type, app_locale_);
-    suggestion->icon = base::UTF8ToUTF16(credit_card->type());
-    suggestion->backend_id = credit_card->guid();
-
-    // If the value is the card number, the label is the expiration date.
-    // Otherwise the label is the card number, or if that is empty the
-    // cardholder name. The label should never repeat the value.
-    if (type.GetStorableType() == CREDIT_CARD_NUMBER) {
-      suggestion->value = credit_card->TypeAndLastFourDigits();
-      suggestion->label = credit_card->GetInfo(
-          AutofillType(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR), app_locale_);
-    } else if (credit_card->number().empty()) {
-      if (type.GetStorableType() != CREDIT_CARD_NAME) {
-        suggestion->label =
-            credit_card->GetInfo(AutofillType(CREDIT_CARD_NAME), app_locale_);
-      }
-    } else {
-#if defined(OS_ANDROID)
-      // Since Android places the label on its own row, there's more horizontal
-      // space to work with. Show "Amex - 1234" rather than desktop's "*1234".
-      suggestion->label = credit_card->TypeAndLastFourDigits();
-#else
-      suggestion->label = base::ASCIIToUTF16("*");
-      suggestion->label.append(credit_card->LastFourDigits());
-#endif
-    }
-  }
-  return suggestions;
+  return GetSuggestionsForCards(type, field_contents, cards_to_suggest);
 }
 
 bool PersonalDataManager::IsAutofillEnabled() const {
@@ -981,12 +963,8 @@ const std::string& PersonalDataManager::GetDefaultCountryCodeForNewAddress()
   return default_country_code_;
 }
 
-bool PersonalDataManager::IsExperimentalWalletIntegrationEnabled() const {
-  return pref_service_->GetBoolean(prefs::kAutofillWalletSyncExperimentEnabled);
-}
-
 // static
-void PersonalDataManager::DedupeCreditCardSuggestions(
+void PersonalDataManager::DedupeCreditCardToSuggest(
     std::list<const CreditCard*>* cards_to_suggest) {
   for (auto outer_it = cards_to_suggest->begin();
        outer_it != cards_to_suggest->end(); ++outer_it) {
@@ -1198,6 +1176,13 @@ void PersonalDataManager::LogProfileCount() const {
   }
 }
 
+void PersonalDataManager::LogLocalCreditCardCount() const {
+  if (!has_logged_credit_card_count_) {
+    AutofillMetrics::LogStoredLocalCreditCardCount(local_credit_cards_.size());
+    has_logged_credit_card_count_ = true;
+  }
+}
+
 std::string PersonalDataManager::MostCommonCountryCodeFromProfiles() const {
   if (!IsAutofillEnabled())
     return std::string();
@@ -1240,7 +1225,35 @@ void PersonalDataManager::EnabledPrefChanged() {
   NotifyPersonalDataChanged();
 }
 
-bool PersonalDataManager::ImportAddressProfile(const FormStructure& form) {
+bool PersonalDataManager::ImportAddressProfiles(const FormStructure& form) {
+  if (!form.field_count())
+    return false;
+
+  // Relevant sections for address fields.
+  std::set<std::string> sections;
+  for (const AutofillField* field : form) {
+    if (field->Type().group() != CREDIT_CARD)
+      sections.insert(field->section());
+  }
+
+  // We save a maximum of 2 profiles per submitted form (e.g. for shipping and
+  // billing).
+  static const size_t kMaxNumAddressProfilesSaved = 2;
+  size_t num_saved_profiles = 0;
+  for (const std::string& section : sections) {
+    if (num_saved_profiles == kMaxNumAddressProfilesSaved)
+      break;
+
+    if (ImportAddressProfileForSection(form, section))
+      num_saved_profiles++;
+  }
+
+  return num_saved_profiles > 0;
+}
+
+bool PersonalDataManager::ImportAddressProfileForSection(
+    const FormStructure& form,
+    const std::string& section) {
   // The candidate for profile import. There are many ways for the candidate to
   // be rejected (see everywhere this function returns false).
   AutofillProfile candidate_profile;
@@ -1256,12 +1269,17 @@ bool PersonalDataManager::ImportAddressProfile(const FormStructure& form) {
 
   // Go through each |form| field and attempt to constitute a valid profile.
   for (const AutofillField* field : form) {
+    // Reject fields that are not within the specified |section|.
+    if (field->section() != section)
+      continue;
+
     base::string16 value;
     base::TrimWhitespace(field->value, base::TRIM_ALL, &value);
 
     // If we don't know the type of the field, or the user hasn't entered any
-    // information into the field, then skip it.
-    if (!field->IsFieldFillable() || value.empty())
+    // information into the field, or the field is non-focusable (hidden), then
+    // skip it.
+    if (!field->IsFieldFillable() || !field->is_focusable || value.empty())
       continue;
 
     AutofillType field_type = field->Type();
@@ -1321,7 +1339,7 @@ bool PersonalDataManager::ImportAddressProfile(const FormStructure& form) {
 bool PersonalDataManager::ImportCreditCard(
     const FormStructure& form,
     bool should_return_local_card,
-    scoped_ptr<CreditCard>* imported_credit_card) {
+    std::unique_ptr<CreditCard>* imported_credit_card) {
   DCHECK(!imported_credit_card->get());
 
   // The candidate for credit card import. There are many ways for the candidate
@@ -1335,8 +1353,9 @@ bool PersonalDataManager::ImportCreditCard(
     base::TrimWhitespace(field->value, base::TRIM_ALL, &value);
 
     // If we don't know the type of the field, or the user hasn't entered any
-    // information into the field, then skip it.
-    if (!field->IsFieldFillable() || value.empty())
+    // information into the field, or the field is non-focusable (hidden), then
+    // skip it.
+    if (!field->IsFieldFillable() || !field->is_focusable || value.empty())
       continue;
 
     AutofillType field_type = field->Type();
@@ -1377,7 +1396,7 @@ bool PersonalDataManager::ImportCreditCard(
 
   // Reject the credit card if we did not detect enough filled credit card
   // fields (such as valid number, month, year).
-  if (!candidate_credit_card.IsComplete())
+  if (!candidate_credit_card.IsValid())
     return false;
 
   // Attempt to merge with an existing credit card. Don't present a prompt if we
@@ -1420,12 +1439,80 @@ const std::vector<AutofillProfile*>& PersonalDataManager::GetProfiles(
   profiles_.clear();
   profiles_.insert(profiles_.end(), web_profiles().begin(),
                    web_profiles().end());
-  if (IsExperimentalWalletIntegrationEnabled() &&
-      pref_service_->GetBoolean(prefs::kAutofillWalletImportEnabled)) {
+  if (pref_service_->GetBoolean(prefs::kAutofillWalletImportEnabled)) {
     profiles_.insert(
         profiles_.end(), server_profiles_.begin(), server_profiles_.end());
   }
   return profiles_;
+}
+
+std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
+    const AutofillType& type,
+    const base::string16& field_contents,
+    const std::list<const CreditCard*>& cards_to_suggest) const {
+  std::vector<Suggestion> suggestions;
+  std::list<const CreditCard*> substring_matched_cards;
+  base::string16 field_contents_lower = base::i18n::ToLower(field_contents);
+  for (const CreditCard* credit_card : cards_to_suggest) {
+    // The value of the stored data for this field type in the |credit_card|.
+    base::string16 creditcard_field_value =
+        credit_card->GetInfo(type, app_locale_);
+    if (creditcard_field_value.empty())
+      continue;
+    base::string16 creditcard_field_lower =
+        base::i18n::ToLower(creditcard_field_value);
+
+    bool prefix_matched_suggestion;
+    if (IsValidSuggestionForFieldContents(
+            creditcard_field_lower, field_contents_lower, type,
+            credit_card->record_type() == CreditCard::MASKED_SERVER_CARD,
+            &prefix_matched_suggestion)) {
+      // Make a new suggestion.
+      suggestions.push_back(Suggestion());
+      Suggestion* suggestion = &suggestions.back();
+
+      suggestion->value = credit_card->GetInfo(type, app_locale_);
+      suggestion->icon = base::UTF8ToUTF16(credit_card->type());
+      suggestion->backend_id = credit_card->guid();
+      suggestion->match = prefix_matched_suggestion
+                              ? Suggestion::PREFIX_MATCH
+                              : Suggestion::SUBSTRING_MATCH;
+
+      // If the value is the card number, the label is the expiration date.
+      // Otherwise the label is the card number, or if that is empty the
+      // cardholder name. The label should never repeat the value.
+      if (type.GetStorableType() == CREDIT_CARD_NUMBER) {
+        suggestion->value = credit_card->TypeAndLastFourDigits();
+        suggestion->label = credit_card->GetInfo(
+            AutofillType(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR), app_locale_);
+      } else if (credit_card->number().empty()) {
+        if (type.GetStorableType() != CREDIT_CARD_NAME_FULL) {
+          suggestion->label = credit_card->GetInfo(
+              AutofillType(CREDIT_CARD_NAME_FULL), app_locale_);
+        }
+      } else {
+#if defined(OS_ANDROID)
+        // Since Android places the label on its own row, there's more
+        // horizontal
+        // space to work with. Show "Amex - 1234" rather than desktop's "*1234".
+        suggestion->label = credit_card->TypeAndLastFourDigits();
+#else
+        suggestion->label = base::ASCIIToUTF16("*");
+        suggestion->label.append(credit_card->LastFourDigits());
+#endif
+      }
+    }
+  }
+
+  // Prefix matches should precede other token matches.
+  if (IsFeatureSubstringMatchEnabled()) {
+    std::stable_sort(suggestions.begin(), suggestions.end(),
+                     [](const Suggestion& a, const Suggestion& b) {
+                       return a.match < b.match;
+                     });
+  }
+
+  return suggestions;
 }
 
 }  // namespace autofill

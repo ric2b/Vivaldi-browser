@@ -5,14 +5,15 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_BOOKMARKS_BOOKMARK_BUBBLE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_BOOKMARKS_BOOKMARK_BUBBLE_VIEW_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/bookmarks/recently_used_folders_combo_model.h"
 #include "chrome/browser/ui/sync/bubble_sync_promo_delegate.h"
-#include "ui/views/bubble/bubble_delegate.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_bubble_delegate_view.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/combobox/combobox_listener.h"
 #include "url/gurl.h"
@@ -32,7 +33,7 @@ class Textfield;
 // Bubble. BookmarkBubbleView provides views for unstarring and editing the
 // bookmark it is created with. Don't create a BookmarkBubbleView directly,
 // instead use the static Show method.
-class BookmarkBubbleView : public views::BubbleDelegateView,
+class BookmarkBubbleView : public LocationBarBubbleDelegateView,
                            public views::ButtonListener,
                            public views::ComboboxListener {
  public:
@@ -40,14 +41,15 @@ class BookmarkBubbleView : public views::BubbleDelegateView,
   // |parent_window| is used to ensure the bubble closes if the parent closes.
   // Returns the newly created bubble's Widget or nullptr in case when the
   // bubble already exists.
-  static views::Widget* ShowBubble(views::View* anchor_view,
-                                   const gfx::Rect& anchor_rect,
-                                   gfx::NativeView parent_window,
-                                   bookmarks::BookmarkBubbleObserver* observer,
-                                   scoped_ptr<BubbleSyncPromoDelegate> delegate,
-                                   Profile* profile,
-                                   const GURL& url,
-                                   bool already_bookmarked);
+  static views::Widget* ShowBubble(
+      views::View* anchor_view,
+      const gfx::Rect& anchor_rect,
+      gfx::NativeView parent_window,
+      bookmarks::BookmarkBubbleObserver* observer,
+      std::unique_ptr<BubbleSyncPromoDelegate> delegate,
+      Profile* profile,
+      const GURL& url,
+      bool already_bookmarked);
 
   static void Hide();
 
@@ -71,13 +73,13 @@ class BookmarkBubbleView : public views::BubbleDelegateView,
 
   // views::BubbleDelegateView:
   const char* GetClassName() const override;
-  views::View* GetInitiallyFocusedView() override;
-  scoped_ptr<views::View> CreateFootnoteView() override;
+  View* GetInitiallyFocusedView() override;
+  View* CreateFootnoteView() override;
 
   // Creates a BookmarkBubbleView.
   BookmarkBubbleView(views::View* anchor_view,
                      bookmarks::BookmarkBubbleObserver* observer,
-                     scoped_ptr<BubbleSyncPromoDelegate> delegate,
+                     std::unique_ptr<BubbleSyncPromoDelegate> delegate,
                      Profile* profile,
                      const GURL& url,
                      bool newly_bookmarked);
@@ -111,7 +113,7 @@ class BookmarkBubbleView : public views::BubbleDelegateView,
   bookmarks::BookmarkBubbleObserver* observer_;
 
   // Delegate, to handle clicks on the sign in link.
-  scoped_ptr<BubbleSyncPromoDelegate> delegate_;
+  std::unique_ptr<BubbleSyncPromoDelegate> delegate_;
 
   // The profile.
   Profile* profile_;

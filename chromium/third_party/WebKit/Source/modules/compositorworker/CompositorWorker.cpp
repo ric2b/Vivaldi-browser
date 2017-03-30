@@ -10,7 +10,6 @@
 #include "core/workers/WorkerClients.h"
 #include "modules/EventTargetModules.h"
 #include "modules/compositorworker/CompositorWorkerMessagingProxy.h"
-#include "wtf/MainThread.h"
 
 namespace blink {
 
@@ -45,7 +44,7 @@ const AtomicString& CompositorWorker::interfaceName() const
 
 WorkerGlobalScopeProxy* CompositorWorker::createWorkerGlobalScopeProxy(ExecutionContext* worker)
 {
-    ASSERT(executionContext()->isDocument());
+    ASSERT(getExecutionContext()->isDocument());
     return new CompositorWorkerMessagingProxy(this);
 }
 

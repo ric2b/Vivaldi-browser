@@ -9,6 +9,7 @@ import android.util.Pair;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
+import org.chromium.chrome.browser.contextualsearch.ContextualSearchBlacklist.BlacklistReason;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 
 import java.util.Collections;
@@ -199,6 +200,11 @@ public class ContextualSearchUma {
     private static final int ICON_SPRITE_NOT_ANIMATED_RESULTS_SEEN_FROM_LONG_PRESS = 6;
     private static final int ICON_SPRITE_NOT_ANIMATED_RESULTS_NOT_SEEN_FROM_LONG_PRESS = 7;
     private static final int ICON_SPRITE_BOUNDARY = 8;
+
+    // Constants used to log UMA "enum" histograms for any kind of Tap suppression.
+    private static final int TAP_SUPPRESSED = 0;
+    private static final int NOT_TAP_SUPPRESSED = 1;
+    private static final int TAP_SUPPRESSED_BOUNDARY = 2;
 
     /**
      * Key used in maps from {state, reason} to state entry (exit) logging code.
@@ -649,17 +655,26 @@ public class ContextualSearchUma {
     }
 
     /**
-     * Logs the outcome of the promo (first run flow).
+     * Logs the outcome of the Promo.
      * Logs multiple histograms; with and without the originating gesture.
      * @param wasTap Whether the gesture that originally caused the panel to show was a Tap.
+     * @param wasMandatory Whether the Promo was mandatory.
      */
-    public static void logPromoOutcome(boolean wasTap) {
+    public static void logPromoOutcome(boolean wasTap, boolean wasMandatory) {
         int preferenceCode = getPreferenceValue();
         RecordHistogram.recordEnumeratedHistogram("Search.ContextualSearchFirstRunFlowOutcome",
                 preferenceCode, PREFERENCE_HISTOGRAM_BOUNDARY);
+
         int preferenceByGestureCode = getPromoByGestureStateCode(preferenceCode, wasTap);
-        RecordHistogram.recordEnumeratedHistogram("Search.ContextualSearchPromoOutcomeByGesture",
-                preferenceByGestureCode, PROMO_BY_GESTURE_BOUNDARY);
+        if (wasMandatory) {
+            RecordHistogram.recordEnumeratedHistogram(
+                    "Search.ContextualSearchMandatoryPromoOutcomeByGesture",
+                    preferenceByGestureCode, PROMO_BY_GESTURE_BOUNDARY);
+        } else {
+            RecordHistogram.recordEnumeratedHistogram(
+                    "Search.ContextualSearchPromoOutcomeByGesture",
+                    preferenceByGestureCode, PROMO_BY_GESTURE_BOUNDARY);
+        }
     }
 
     /**
@@ -706,6 +721,37 @@ public class ContextualSearchUma {
     }
 
     /**
+     * Logs the duration from starting a search until the Search Term is resolved.
+     * @param durationMs The duration to record.
+     */
+    public static void logSearchTermResolutionDuration(long durationMs) {
+        RecordHistogram.recordMediumTimesHistogram(
+                "Search.ContextualSearchResolutionDuration", durationMs, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Logs the duration from starting a prefetched search until the panel navigates to the results
+     * and they start becoming viewable. Should be called only for searches that are prefetched.
+     * @param durationMs The duration to record.
+     * @param didResolve Whether a Search Term resolution was required as part of the loading.
+     */
+    public static void logPrefetchedSearchNavigatedDuration(long durationMs, boolean didResolve) {
+        String histogramName = didResolve ? "Search.ContextualSearchResolvedSearchDuration"
+                                          : "Search.ContextualSearchLiteralSearchDuration";
+        RecordHistogram.recordMediumTimesHistogram(
+                histogramName, durationMs, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Logs the duration from opening the panel beyond peek until the panel is closed.
+     * @param durationMs The duration to record.
+     */
+    public static void logPanelOpenDuration(long durationMs) {
+        RecordHistogram.recordMediumTimesHistogram(
+                "Search.ContextualSearchPanelOpenDuration", durationMs, TimeUnit.MILLISECONDS);
+    }
+
+    /**
      * Logs whether the promo was seen.
      * Logs multiple histograms, with and without the original triggering gesture.
      * @param wasPanelSeen Whether the panel was seen.
@@ -727,6 +773,21 @@ public class ContextualSearchUma {
         RecordHistogram.recordEnumeratedHistogram("Search.ContextualSearchResultsSeen",
                 wasPanelSeen ? RESULTS_SEEN : RESULTS_NOT_SEEN, RESULTS_SEEN_BOUNDARY);
         logHistogramByGesture(wasPanelSeen, wasTap, "Search.ContextualSearchResultsSeenByGesture");
+    }
+
+    /**
+     * Logs whether search results were seen when the selection was part of a URL.
+     * Unlike ContextualSearchResultsSeen, this histogram is logged for both decided and undecided
+     * users.
+     * @param wasPanelSeen Whether the panel was seen.
+     * @param wasTap Whether the gesture that originally caused the panel to show was a Tap.
+     */
+    public static void logResultsSeenSelectionIsUrl(boolean wasPanelSeen, boolean wasTap) {
+        int result = wasPanelSeen ? (wasTap ? RESULTS_SEEN_FROM_TAP : RESULTS_SEEN_FROM_LONG_PRESS)
+                : (wasTap ? RESULTS_NOT_SEEN_FROM_TAP : RESULTS_NOT_SEEN_FROM_LONG_PRESS);
+        RecordHistogram.recordEnumeratedHistogram(
+                "Search.ContextualSearchResultsSeenSelectionWasUrl", result,
+                RESULTS_BY_GESTURE_BOUNDARY);
     }
 
     /**
@@ -791,6 +852,28 @@ public class ContextualSearchUma {
     public static void logSerpLoadedOnClose(boolean fullyLoaded) {
         RecordHistogram.recordEnumeratedHistogram("Search.ContextualSearchSerpLoadedOnClose",
                 fullyLoaded ? FULLY_LOADED : PARTIALLY_LOADED, LOADED_BOUNDARY);
+    }
+
+    /**
+     * Logs the duration since a recent scroll.
+     * @param durationSinceRecentScrollMs The amount of time since the most recent scroll.
+     */
+    public static void logRecentScrollDuration(
+            int durationSinceRecentScrollMs, boolean wasSearchContentViewSeen) {
+        String histogram = wasSearchContentViewSeen ? "Search.ContextualSearchRecentScrollSeen"
+                                                    : "Search.ContextualSearchRecentScrollNotSeen";
+        if (durationSinceRecentScrollMs < 1000) {
+            RecordHistogram.recordCount1000Histogram(histogram, durationSinceRecentScrollMs);
+        }
+    }
+
+    /**
+     * Log whether the UX was suppressed by a recent scroll.
+     * @param wasSuppressed Whether showing the UX was suppressed by a recent scroll.
+     */
+    public static void logRecentScrollSuppression(boolean wasSuppressed) {
+        RecordHistogram.recordEnumeratedHistogram("Search.ContextualSearchRecentScrollSuppression",
+                wasSuppressed ? TAP_SUPPRESSED : NOT_TAP_SUPPRESSED, TAP_SUPPRESSED_BOUNDARY);
     }
 
     /**
@@ -885,6 +968,20 @@ public class ContextualSearchUma {
         int code = didForceTranslate ? DID_FORCE_TRANSLATE : WOULD_FORCE_TRANSLATE;
         RecordHistogram.recordEnumeratedHistogram(
                 "Search.ContextualSearchShouldTranslate", code, FORCE_TRANSLATE_BOUNDARY);
+    }
+
+    /**
+     * Logs whether a certain category of a blacklisted term resulted in the search results
+     * being seen.
+     * @param reason The given reason.
+     * @param wasSeen Whether the search results were seen.
+     */
+    public static void logBlacklistSeen(BlacklistReason reason, boolean wasSeen) {
+        if (reason == null) reason = BlacklistReason.NONE;
+        int code = ContextualSearchBlacklist.getBlacklistMetricsCode(reason, wasSeen);
+        RecordHistogram.recordEnumeratedHistogram("Search.ContextualSearchBlacklistSeen",
+                code, ContextualSearchBlacklist.BLACKLIST_BOUNDARY);
+
     }
 
     /**

@@ -77,7 +77,7 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
   // Implementation of BrowserAccessibilityManager.
   void NotifyAccessibilityEvent(ui::AXEvent event_type,
                                 BrowserAccessibility* node) override;
-  void OnLocationChanges(
+  void SendLocationChangeEvents(
       const std::vector<AccessibilityHostMsg_LocationChangeParams>& params)
           override;
 
@@ -218,6 +218,8 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
               jint id,
               int direction);
 
+  JavaObjectWeakGlobalRef& java_ref() { return java_ref_; }
+
  protected:
   // AXTreeDelegate overrides.
   void OnAtomicUpdateFinished(
@@ -228,6 +230,10 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
   bool UseRootScrollOffsetsWhenComputingBounds() override;
 
  private:
+  BrowserAccessibilityAndroid* GetFromUniqueID(int32_t unique_id);
+
+   base::android::ScopedJavaLocalRef<jobject> GetJavaRefFromRootManager();
+
   // This gives BrowserAccessibilityManager::Create access to the class
   // constructor.
   friend class BrowserAccessibilityManager;

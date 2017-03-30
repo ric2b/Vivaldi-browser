@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
@@ -21,9 +22,8 @@ class MockFrameProvider : public CodedFrameProvider {
   MockFrameProvider();
   ~MockFrameProvider() override;
 
-  void Configure(
-      const std::vector<bool>& delayed_task_pattern,
-      scoped_ptr<FrameGeneratorForTest> frame_generator);
+  void Configure(const std::vector<bool>& delayed_task_pattern,
+                 std::unique_ptr<FrameGeneratorForTest> frame_generator);
   void SetDelayFlush(bool delay_flush);
 
   // CodedFrameProvider implementation.
@@ -44,7 +44,7 @@ class MockFrameProvider : public CodedFrameProvider {
   size_t pattern_idx_;
   bool delay_flush_;
 
-  scoped_ptr<FrameGeneratorForTest> frame_generator_;
+  std::unique_ptr<FrameGeneratorForTest> frame_generator_;
 
   DISALLOW_COPY_AND_ASSIGN(MockFrameProvider);
 };

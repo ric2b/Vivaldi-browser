@@ -14,7 +14,6 @@
 
 #include "base/time/time.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "cc/debug/debug_colors.h"
 #include "cc/debug/micro_benchmark_impl.h"
@@ -60,12 +59,10 @@ const int kTileMinimalAlignment = 4;
 
 namespace cc {
 
-PictureLayerImpl::PictureLayerImpl(
-    LayerTreeImpl* tree_impl,
-    int id,
-    bool is_mask,
-    scoped_refptr<SyncedScrollOffset> scroll_offset)
-    : LayerImpl(tree_impl, id, scroll_offset),
+PictureLayerImpl::PictureLayerImpl(LayerTreeImpl* tree_impl,
+                                   int id,
+                                   bool is_mask)
+    : LayerImpl(tree_impl, id),
       twin_layer_(nullptr),
       tilings_(CreatePictureLayerTilingSet()),
       ideal_page_scale_(0.f),
@@ -97,8 +94,7 @@ const char* PictureLayerImpl::LayerTypeAsString() const {
 
 scoped_ptr<LayerImpl> PictureLayerImpl::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
-  return PictureLayerImpl::Create(tree_impl, id(), is_mask_,
-                                  synced_scroll_offset());
+  return PictureLayerImpl::Create(tree_impl, id(), is_mask_);
 }
 
 void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
@@ -145,7 +141,7 @@ void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
   // We always need to push properties.
   // See http://crbug.com/303943
   // TODO(danakj): Stop always pushing properties since we don't swap tilings.
-  needs_push_properties_ = true;
+  layer_tree_impl()->AddLayerShouldPushProperties(this);
 }
 
 void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
@@ -235,6 +231,9 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
         } else if (mode == TileDrawInfo::OOM_MODE) {
           color = DebugColors::OOMTileBorderColor();
           width = DebugColors::OOMTileBorderWidth(layer_tree_impl());
+        } else if (iter->draw_info().has_compressed_resource()) {
+          color = DebugColors::CompressedTileBorderColor();
+          width = DebugColors::CompressedTileBorderWidth(layer_tree_impl());
         } else if (iter.resolution() == HIGH_RESOLUTION) {
           color = DebugColors::HighResTileBorderColor();
           width = DebugColors::HighResTileBorderWidth(layer_tree_impl());
@@ -355,14 +354,6 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
       if (geometry_rect.Intersects(scaled_viewport_for_tile_priority)) {
         append_quads_data->num_missing_tiles++;
         ++missing_tile_count;
-        // We only keep track of discardable images if we're using raster tasks,
-        // so we only gather stats in this case.
-        if (layer_tree_impl()->settings().image_decode_tasks_enabled) {
-          if (raster_source_->HasDiscardableImageInRect(geometry_rect))
-            append_quads_data->num_missing_tiles_some_image_content++;
-          else
-            append_quads_data->num_missing_tiles_no_image_content++;
-        }
       }
       int64_t checkerboarded_area =
           visible_geometry_rect.width() * visible_geometry_rect.height();
@@ -536,7 +527,7 @@ PictureLayerImpl* PictureLayerImpl::GetPendingOrActiveTwinLayer() const {
 }
 
 void PictureLayerImpl::UpdateRasterSource(
-    scoped_refptr<DisplayListRasterSource> raster_source,
+    scoped_refptr<RasterSource> raster_source,
     Region* new_invalidation,
     const PictureLayerTilingSet* pending_set) {
   // The bounds and the pile size may differ if the pile wasn't updated (ie.
@@ -554,7 +545,7 @@ void PictureLayerImpl::UpdateRasterSource(
   // Only set the image decode controller when we're committing.
   if (!pending_set) {
     raster_source_->SetImageDecodeController(
-        layer_tree_impl()->tile_manager()->GetImageDecodeController());
+        layer_tree_impl()->image_decode_controller());
   }
 
   // The |new_invalidation| must be cleared before updating tilings since they
@@ -603,7 +594,7 @@ void PictureLayerImpl::UpdateCanUseLCDTextAfterCommit() {
 
   // Raster sources are considered const, so in order to update the state
   // a new one must be created and all tiles recreated.
-  scoped_refptr<DisplayListRasterSource> new_raster_source =
+  scoped_refptr<RasterSource> new_raster_source =
       raster_source_->CreateCloneWithoutLCDText();
   raster_source_.swap(new_raster_source);
 
@@ -648,15 +639,15 @@ void PictureLayerImpl::ReleaseResources() {
 
 void PictureLayerImpl::RecreateResources() {
   tilings_ = CreatePictureLayerTilingSet();
+  if (raster_source_) {
+    raster_source_->SetImageDecodeController(
+        layer_tree_impl()->image_decode_controller());
+  }
 
   // To avoid an edge case after lost context where the tree is up to date but
   // the tilings have not been managed, request an update draw properties
   // to force tilings to get managed.
   layer_tree_impl()->set_needs_update_draw_properties();
-}
-
-skia::RefPtr<SkPicture> PictureLayerImpl::GetPicture() {
-  return raster_source_->GetFlattenedPicture();
 }
 
 Region PictureLayerImpl::GetInvalidationRegionForDebugging() {

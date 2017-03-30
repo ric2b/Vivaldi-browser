@@ -8,7 +8,6 @@
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
@@ -29,7 +28,7 @@ public:
 
 private:
     IncrementLoadEventDelayCount(Document&);
-    RefPtrWillBePersistent<Document> m_document;
+    Persistent<Document> m_document;
 };
 } // namespace blink
 

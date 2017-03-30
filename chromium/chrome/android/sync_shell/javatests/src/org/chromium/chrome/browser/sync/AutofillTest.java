@@ -19,6 +19,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 /**
  * Test suite for the autofill profile sync data type.
@@ -103,7 +104,7 @@ public class AutofillTest extends SyncTestBase {
         specifics.autofillProfile.addressHomeCity = MODIFIED_CITY;
         mFakeServerHelper.modifyEntitySpecifics(autofill.id, specifics);
         SyncTestUtil.triggerSync();
-        pollForCriteria(new ClientAutofillCriteria() {
+        pollInstrumentationThread(new ClientAutofillCriteria() {
             @Override
             public boolean isSatisfied(List<Autofill> autofills) {
                 Autofill modifiedAutofill = autofills.get(0);
@@ -181,23 +182,18 @@ public class AutofillTest extends SyncTestBase {
                         count, ModelType.AUTOFILL_PROFILE, name));
     }
 
-    private void waitForClientAutofillProfileCount(final int count) throws InterruptedException {
-        CriteriaHelper.pollForCriteria(new Criteria(
-                "Expected " + count + " local autofill profiles.") {
+    private void waitForClientAutofillProfileCount(int count) throws InterruptedException {
+        CriteriaHelper.pollInstrumentationThread(Criteria.equals(count, new Callable<Integer>() {
             @Override
-            public boolean isSatisfied() {
-                try {
-                    return SyncTestUtil.getLocalData(mContext, AUTOFILL_TYPE).size() == count;
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
+            public Integer call() throws Exception {
+                return SyncTestUtil.getLocalData(mContext, AUTOFILL_TYPE).size();
             }
-        }, SyncTestUtil.TIMEOUT_MS, SyncTestUtil.INTERVAL_MS);
+        }), SyncTestUtil.TIMEOUT_MS, SyncTestUtil.INTERVAL_MS);
     }
 
     private void waitForServerAutofillProfileCountWithName(final int count, final String name)
             throws InterruptedException {
-        CriteriaHelper.pollForCriteria(new Criteria(
+        CriteriaHelper.pollInstrumentationThread(new Criteria(
                 "Expected " + count + " server autofill profiles with name " + name + ".") {
             @Override
             public boolean isSatisfied() {

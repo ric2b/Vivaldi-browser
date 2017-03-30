@@ -25,10 +25,10 @@
 
 #include "modules/webgl/WebGLFramebuffer.h"
 
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/webgl/WebGLRenderbuffer.h"
 #include "modules/webgl/WebGLRenderingContextBase.h"
 #include "modules/webgl/WebGLTexture.h"
-#include "platform/NotImplemented.h"
 
 namespace blink {
 
@@ -47,9 +47,9 @@ private:
     WebGLSharedObject* object() const override;
     bool isSharedObject(WebGLSharedObject*) const override;
     bool valid() const override;
-    void onDetached(WebGraphicsContext3D*) override;
-    void attach(WebGraphicsContext3D*, GLenum target, GLenum attachment) override;
-    void unattach(WebGraphicsContext3D*, GLenum target, GLenum attachment) override;
+    void onDetached(gpu::gles2::GLES2Interface*) override;
+    void attach(gpu::gles2::GLES2Interface*, GLenum target, GLenum attachment) override;
+    void unattach(gpu::gles2::GLES2Interface*, GLenum target, GLenum attachment) override;
 
     Member<WebGLRenderbuffer> m_renderbuffer;
 };
@@ -85,20 +85,20 @@ bool WebGLRenderbufferAttachment::valid() const
     return m_renderbuffer->object();
 }
 
-void WebGLRenderbufferAttachment::onDetached(WebGraphicsContext3D* context)
+void WebGLRenderbufferAttachment::onDetached(gpu::gles2::GLES2Interface* gl)
 {
-    m_renderbuffer->onDetached(context);
+    m_renderbuffer->onDetached(gl);
 }
 
-void WebGLRenderbufferAttachment::attach(WebGraphicsContext3D* context, GLenum target, GLenum attachment)
+void WebGLRenderbufferAttachment::attach(gpu::gles2::GLES2Interface* gl, GLenum target, GLenum attachment)
 {
     Platform3DObject object = objectOrZero(m_renderbuffer.get());
-    context->framebufferRenderbuffer(target, attachment, GL_RENDERBUFFER, object);
+    gl->FramebufferRenderbuffer(target, attachment, GL_RENDERBUFFER, object);
 }
 
-void WebGLRenderbufferAttachment::unattach(WebGraphicsContext3D* context, GLenum target, GLenum attachment)
+void WebGLRenderbufferAttachment::unattach(gpu::gles2::GLES2Interface* gl, GLenum target, GLenum attachment)
 {
-    context->framebufferRenderbuffer(target, attachment, GL_RENDERBUFFER, 0);
+    gl->FramebufferRenderbuffer(target, attachment, GL_RENDERBUFFER, 0);
 }
 
 class WebGLTextureAttachment final : public WebGLFramebuffer::WebGLAttachment {
@@ -114,9 +114,9 @@ private:
     WebGLSharedObject* object() const override;
     bool isSharedObject(WebGLSharedObject*) const override;
     bool valid() const override;
-    void onDetached(WebGraphicsContext3D*) override;
-    void attach(WebGraphicsContext3D*, GLenum target, GLenum attachment) override;
-    void unattach(WebGraphicsContext3D*, GLenum target, GLenum attachment) override;
+    void onDetached(gpu::gles2::GLES2Interface*) override;
+    void attach(gpu::gles2::GLES2Interface*, GLenum target, GLenum attachment) override;
+    void unattach(gpu::gles2::GLES2Interface*, GLenum target, GLenum attachment) override;
 
     Member<WebGLTexture> m_texture;
     GLenum m_target;
@@ -158,28 +158,28 @@ bool WebGLTextureAttachment::valid() const
     return m_texture->object();
 }
 
-void WebGLTextureAttachment::onDetached(WebGraphicsContext3D* context)
+void WebGLTextureAttachment::onDetached(gpu::gles2::GLES2Interface* gl)
 {
-    m_texture->onDetached(context);
+    m_texture->onDetached(gl);
 }
 
-void WebGLTextureAttachment::attach(WebGraphicsContext3D* context, GLenum target, GLenum attachment)
+void WebGLTextureAttachment::attach(gpu::gles2::GLES2Interface* gl, GLenum target, GLenum attachment)
 {
     Platform3DObject object = objectOrZero(m_texture.get());
     if (m_target == GL_TEXTURE_3D || m_target == GL_TEXTURE_2D_ARRAY) {
-        context->framebufferTextureLayer(target, attachment, object, m_level, m_layer);
+        gl->FramebufferTextureLayer(target, attachment, object, m_level, m_layer);
     } else {
-        context->framebufferTexture2D(target, attachment, m_target, object, m_level);
+        gl->FramebufferTexture2D(target, attachment, m_target, object, m_level);
     }
 }
 
-void WebGLTextureAttachment::unattach(WebGraphicsContext3D* context, GLenum target, GLenum attachment)
+void WebGLTextureAttachment::unattach(gpu::gles2::GLES2Interface* gl, GLenum target, GLenum attachment)
 {
     // GL_DEPTH_STENCIL_ATTACHMENT attachment is valid in ES3.
     if (m_target == GL_TEXTURE_3D || m_target == GL_TEXTURE_2D_ARRAY) {
-        context->framebufferTextureLayer(target, attachment, 0, m_level, m_layer);
+        gl->FramebufferTextureLayer(target, attachment, 0, m_level, m_layer);
     } else {
-        context->framebufferTexture2D(target, attachment, m_target, 0, m_level);
+        gl->FramebufferTexture2D(target, attachment, m_target, 0, m_level);
     }
 }
 
@@ -200,11 +200,12 @@ WebGLFramebuffer* WebGLFramebuffer::create(WebGLRenderingContextBase* ctx)
 
 WebGLFramebuffer::WebGLFramebuffer(WebGLRenderingContextBase* ctx)
     : WebGLContextObject(ctx)
-    , m_object(ctx->webContext()->createFramebuffer())
+    , m_object(0)
     , m_destructionInProgress(false)
     , m_hasEverBeenBound(false)
     , m_readBuffer(GL_COLOR_ATTACHMENT0)
 {
+    ctx->contextGL()->GenFramebuffers(1, &m_object);
 }
 
 WebGLFramebuffer::~WebGLFramebuffer()
@@ -249,7 +250,7 @@ void WebGLFramebuffer::attach(GLenum target, GLenum attachment, GLenum attachmen
     ASSERT(isBound(target));
     WebGLAttachment* attachmentObject = getAttachment(attachment);
     if (attachmentObject)
-        attachmentObject->attach(context()->webContext(), target, attachmentPoint);
+        attachmentObject->attach(context()->contextGL(), target, attachmentPoint);
 }
 
 WebGLSharedObject* WebGLFramebuffer::getAttachmentObject(GLenum attachment) const
@@ -274,7 +275,7 @@ void WebGLFramebuffer::removeAttachmentFromBoundFramebuffer(GLenum target, GLenu
 
     WebGLAttachment* attachmentObject = getAttachment(attachment);
     if (attachmentObject) {
-        attachmentObject->onDetached(context()->webContext());
+        attachmentObject->onDetached(context()->contextGL());
         m_attachments.remove(attachment);
         drawBuffersIfNecessary(false);
         switch (attachment) {
@@ -305,7 +306,7 @@ void WebGLFramebuffer::removeAttachmentFromBoundFramebuffer(GLenum target, WebGL
             WebGLAttachment* attachmentObject = it.value.get();
             if (attachmentObject->isSharedObject(attachment)) {
                 GLenum attachmentType = it.key;
-                attachmentObject->unattach(context()->webContext(), target, attachmentType);
+                attachmentObject->unattach(context()->contextGL(), target, attachmentType);
                 removeAttachmentFromBoundFramebuffer(target, attachmentType);
                 checkMore = true;
                 break;
@@ -354,7 +355,7 @@ bool WebGLFramebuffer::hasStencilBuffer() const
     return attachment && attachment->valid();
 }
 
-void WebGLFramebuffer::deleteObjectImpl(WebGraphicsContext3D* context3d)
+void WebGLFramebuffer::deleteObjectImpl(gpu::gles2::GLES2Interface* gl)
 {
     // Both the AttachmentMap and its WebGLAttachment objects are GCed
     // objects and cannot be accessed after the destructor has been
@@ -363,10 +364,10 @@ void WebGLFramebuffer::deleteObjectImpl(WebGraphicsContext3D* context3d)
     // destroyed once their JavaScript wrappers are collected.
     if (!m_destructionInProgress) {
         for (const auto& attachment : m_attachments)
-            attachment.value->onDetached(context3d);
+            attachment.value->onDetached(gl);
     }
 
-    context3d->deleteFramebuffer(m_object);
+    gl->DeleteFramebuffers(1, &m_object);
     m_object = 0;
 }
 
@@ -404,7 +405,7 @@ void WebGLFramebuffer::drawBuffersIfNecessary(bool force)
             }
         }
         if (reset) {
-            context()->webContext()->drawBuffersEXT(
+            context()->contextGL()->DrawBuffersEXT(
                 m_filteredDrawBuffers.size(), m_filteredDrawBuffers.data());
         }
     }

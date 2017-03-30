@@ -160,8 +160,8 @@ class BrowserTabStripController::TabContextMenuContents
   }
 
  private:
-  scoped_ptr<TabMenuModel> model_;
-  scoped_ptr<views::MenuRunner> menu_runner_;
+  std::unique_ptr<TabMenuModel> model_;
+  std::unique_ptr<views::MenuRunner> menu_runner_;
 
   // The tab we're showing a menu for.
   Tab* tab_;
@@ -265,15 +265,6 @@ bool BrowserTabStripController::IsTabPinned(int model_index) const {
   return model_->ContainsIndex(model_index) && model_->IsTabPinned(model_index);
 }
 
-bool BrowserTabStripController::IsNewTabPage(int model_index) const {
-  if (!model_->ContainsIndex(model_index))
-    return false;
-
-  const WebContents* contents = model_->GetWebContentsAt(model_index);
-  return contents && (contents->GetURL() == GURL(chrome::kChromeUINewTabURL) ||
-                      search::IsInstantNTP(contents));
-}
-
 void BrowserTabStripController::SelectTab(int model_index) {
   model_->ActivateTabAt(model_index, true);
 }
@@ -304,7 +295,7 @@ void BrowserTabStripController::CloseTab(int model_index,
 void BrowserTabStripController::ToggleTabAudioMute(int model_index) {
   content::WebContents* const contents = model_->GetWebContentsAt(model_index);
   chrome::SetTabAudioMuted(contents, !contents->IsAudioMuted(),
-                           TAB_MUTED_REASON_AUDIO_INDICATOR, std::string());
+                           TabMutedReason::AUDIO_INDICATOR, std::string());
 }
 
 void BrowserTabStripController::ShowContextMenuForTab(
@@ -383,7 +374,7 @@ void BrowserTabStripController::CreateNewTabWithLocation(
 }
 
 bool BrowserTabStripController::IsIncognito() {
-  return browser_->profile()->IsOffTheRecord();
+  return browser_->profile()->GetProfileType() == Profile::INCOGNITO_PROFILE;
 }
 
 void BrowserTabStripController::StackedLayoutMaybeChanged() {
@@ -422,6 +413,11 @@ void BrowserTabStripController::CheckFileSupported(const GURL& url) {
       base::Bind(&BrowserTabStripController::OnFindURLMimeTypeCompleted,
                  weak_ptr_factory_.GetWeakPtr(),
                  url));
+}
+
+SkColor BrowserTabStripController::GetToolbarTopSeparatorColor() const {
+  return BrowserView::GetBrowserViewForBrowser(browser_)->frame()
+      ->GetFrameView()->GetToolbarTopSeparatorColor();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -509,7 +505,7 @@ void BrowserTabStripController::SetTabRendererDataFromModel(
   data->show_icon = data->pinned || favicon::ShouldDisplayFavicon(contents);
   data->blocked = model_->IsTabBlocked(model_index);
   data->app = extensions::TabHelper::FromWebContents(contents)->is_app();
-  data->media_state = chrome::GetTabMediaStateForContents(contents);
+  data->alert_state = chrome::GetTabAlertStateForContents(contents);
 }
 
 void BrowserTabStripController::SetTabDataAt(content::WebContents* web_contents,

@@ -43,9 +43,9 @@ class SVGPointList final : public SVGListPropertyHelper<SVGPointList, SVGPoint> 
 public:
     typedef SVGPointListTearOff TearOffType;
 
-    static PassRefPtrWillBeRawPtr<SVGPointList> create()
+    static SVGPointList* create()
     {
-        return adoptRefWillBeNoop(new SVGPointList());
+        return new SVGPointList();
     }
 
     ~SVGPointList() override;
@@ -55,9 +55,9 @@ public:
     // SVGPropertyBase:
     String valueAsString() const override;
 
-    void add(PassRefPtrWillBeRawPtr<SVGPropertyBase>, SVGElement*) override;
-    void calculateAnimatedValue(SVGAnimationElement*, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> fromValue, PassRefPtrWillBeRawPtr<SVGPropertyBase> toValue, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDurationValue, SVGElement*) override;
-    float calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> to, SVGElement*) override;
+    void add(SVGPropertyBase*, SVGElement*) override;
+    void calculateAnimatedValue(SVGAnimationElement*, float percentage, unsigned repeatCount, SVGPropertyBase* fromValue, SVGPropertyBase* toValue, SVGPropertyBase* toAtEndOfDurationValue, SVGElement*) override;
+    float calculateDistance(SVGPropertyBase* to, SVGElement*) override;
 
     static AnimatedPropertyType classType() { return AnimatedPoints; }
 

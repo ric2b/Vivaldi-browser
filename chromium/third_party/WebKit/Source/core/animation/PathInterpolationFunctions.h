@@ -10,6 +10,8 @@
 
 namespace blink {
 
+class StylePath;
+
 class PathInterpolationFunctions {
 public:
     static PassOwnPtr<SVGPathByteStream> appliedValue(const InterpolableValue&, const NonInterpolableValue*);
@@ -18,9 +20,11 @@ public:
 
     static InterpolationValue convertValue(const SVGPathByteStream&);
 
+    static InterpolationValue convertValue(const StylePath*);
+
     static InterpolationValue maybeConvertNeutral(const InterpolationValue& underlying, InterpolationType::ConversionCheckers&);
 
-    static PairwiseInterpolationValue mergeSingleConversions(InterpolationValue& start, InterpolationValue& end);
+    static PairwiseInterpolationValue mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end);
 };
 
 } // namespace blink

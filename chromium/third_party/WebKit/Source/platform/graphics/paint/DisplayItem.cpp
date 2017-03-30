@@ -98,11 +98,10 @@ static WTF::String specialDrawingTypeAsDebugString(DisplayItem::Type type)
         DEBUG_STRING_CASE(ScrollbarForwardButtonEnd);
         DEBUG_STRING_CASE(ScrollbarForwardButtonStart);
         DEBUG_STRING_CASE(ScrollbarForwardTrack);
-        DEBUG_STRING_CASE(ScrollbarHorizontal);
         DEBUG_STRING_CASE(ScrollbarThumb);
         DEBUG_STRING_CASE(ScrollbarTickmarks);
         DEBUG_STRING_CASE(ScrollbarTrackBackground);
-        DEBUG_STRING_CASE(ScrollbarVertical);
+        DEBUG_STRING_CASE(ScrollbarCompositedScrollbar);
         DEBUG_STRING_CASE(SelectionTint);
         DEBUG_STRING_CASE(TableCellBackgroundFromColumnGroup);
         DEBUG_STRING_CASE(TableCellBackgroundFromColumn);
@@ -120,6 +119,14 @@ static WTF::String drawingTypeAsDebugString(DisplayItem::Type type)
 {
     PAINT_PHASE_BASED_DEBUG_STRINGS(Drawing);
     return "Drawing" + specialDrawingTypeAsDebugString(type);
+}
+
+static String foreignLayerTypeAsDebugString(DisplayItem::Type type)
+{
+    switch (type) {
+        DEBUG_STRING_CASE(ForeignLayerPlugin);
+        DEFAULT_CASE;
+    }
 }
 
 static WTF::String clipTypeAsDebugString(DisplayItem::Type type)
@@ -171,6 +178,10 @@ WTF::String DisplayItem::typeAsDebugString(Type type)
         return drawingTypeAsDebugString(type);
     if (isCachedDrawingType(type))
         return "Cached" + drawingTypeAsDebugString(cachedDrawingTypeToDrawingType(type));
+
+    if (isForeignLayerType(type))
+        return foreignLayerTypeAsDebugString(type);
+
     if (isClipType(type))
         return clipTypeAsDebugString(type);
     if (isEndClipType(type))
@@ -234,7 +245,7 @@ void DisplayItem::dumpPropertiesAsDebugString(WTF::StringBuilder& stringBuilder)
         stringBuilder.append(clientDebugString());
     }
     stringBuilder.append("\", type: \"");
-    stringBuilder.append(typeAsDebugString(type()));
+    stringBuilder.append(typeAsDebugString(getType()));
     stringBuilder.append('"');
     if (m_skippedCache)
         stringBuilder.append(", skippedCache: true");

@@ -52,21 +52,21 @@ Attr::Attr(Document& document, const QualifiedName& name, const AtomicString& st
 {
 }
 
-PassRefPtrWillBeRawPtr<Attr> Attr::create(Element& element, const QualifiedName& name)
+RawPtr<Attr> Attr::create(Element& element, const QualifiedName& name)
 {
-    return adoptRefWillBeNoop(new Attr(element, name));
+    return new Attr(element, name);
 }
 
-PassRefPtrWillBeRawPtr<Attr> Attr::create(Document& document, const QualifiedName& name, const AtomicString& value)
+RawPtr<Attr> Attr::create(Document& document, const QualifiedName& name, const AtomicString& value)
 {
-    return adoptRefWillBeNoop(new Attr(document, name, value));
+    return new Attr(document, name, value);
 }
 
 Attr::~Attr()
 {
 }
 
-const QualifiedName Attr::qualifiedName() const
+const QualifiedName Attr::getQualifiedName() const
 {
     if (m_element && !m_standaloneValueOrAttachedLocalName.isNull()) {
         // In the unlikely case the Element attribute has a local name
@@ -82,14 +82,14 @@ const QualifiedName Attr::qualifiedName() const
 const AtomicString& Attr::value() const
 {
     if (m_element)
-        return m_element->getAttribute(qualifiedName());
+        return m_element->getAttribute(getQualifiedName());
     return m_standaloneValueOrAttachedLocalName;
 }
 
 void Attr::setValue(const AtomicString& value)
 {
     if (m_element)
-        m_element->setAttribute(qualifiedName(), value);
+        m_element->setAttribute(getQualifiedName(), value);
     else
         m_standaloneValueOrAttachedLocalName = value;
 }
@@ -115,22 +115,22 @@ void Attr::setNodeValue(const String& v)
     setValue(AtomicString(v));
 }
 
-PassRefPtrWillBeRawPtr<Node> Attr::cloneNode(bool /*deep*/)
+RawPtr<Node> Attr::cloneNode(bool /*deep*/)
 {
     UseCounter::count(document(), UseCounter::AttrCloneNode);
-    return adoptRefWillBeNoop(new Attr(document(), m_name, value()));
+    return new Attr(document(), m_name, value());
 }
 
 void Attr::detachFromElementWithValue(const AtomicString& value)
 {
-    ASSERT(m_element);
+    DCHECK(m_element);
     m_standaloneValueOrAttachedLocalName = value;
     m_element = nullptr;
 }
 
 void Attr::attachToElement(Element* element, const AtomicString& attachedLocalName)
 {
-    ASSERT(!m_element);
+    DCHECK(!m_element);
     m_element = element;
     m_standaloneValueOrAttachedLocalName = attachedLocalName;
 }

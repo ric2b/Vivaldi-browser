@@ -57,7 +57,7 @@ typedef HeapVector<Member<MessagePort>, 1> MessagePortArray;
 typedef Vector<RefPtr<DOMArrayBufferBase>, 1> ArrayBufferArray;
 typedef HashMap<String, RefPtr<BlobDataHandle>> BlobDataHandleMap;
 typedef Vector<WebBlobInfo> WebBlobInfoArray;
-typedef WillBeHeapVector<RefPtrWillBeMember<ImageBitmap>, 1> ImageBitmapArray;
+typedef HeapVector<Member<ImageBitmap>, 1> ImageBitmapArray;
 
 class CORE_EXPORT SerializedScriptValue : public ThreadSafeRefCounted<SerializedScriptValue> {
 public:
@@ -120,8 +120,8 @@ private:
     void setData(const String& data) { m_data = data; }
     void transferArrayBuffers(v8::Isolate*, ArrayBufferArray&, ExceptionState&);
     void transferImageBitmaps(v8::Isolate*, ImageBitmapArray&, ExceptionState&);
-    ArrayBufferContentsArray* arrayBufferContentsArray() { return m_arrayBufferContentsArray.get(); }
-    ImageBitmapContentsArray* imageBitmapContentsArray() { return m_imageBitmapContentsArray.get(); }
+    ArrayBufferContentsArray* getArrayBufferContentsArray() { return m_arrayBufferContentsArray.get(); }
+    ImageBitmapContentsArray* getImageBitmapContentsArray() { return m_imageBitmapContentsArray.get(); }
 
     static PassOwnPtr<ArrayBufferContentsArray> createArrayBuffers(v8::Isolate*, ArrayBufferArray&, ExceptionState&);
     static PassOwnPtr<ImageBitmapContentsArray> createImageBitmaps(v8::Isolate*, ImageBitmapArray&, ExceptionState&);

@@ -19,6 +19,7 @@ source_set("bindings") {
     "lib/array_internal.cc",
     "lib/array_internal.h",
     "lib/array_serialization.h",
+    "lib/array_serialization_traits.h",
     "lib/associated_group.cc",
     "lib/associated_interface_ptr_state.h",
     "lib/binding_state.h",
@@ -40,8 +41,10 @@ source_set("bindings") {
     "lib/fixed_buffer.h",
     "lib/interface_endpoint_client.cc",
     "lib/interface_endpoint_client.h",
+    "lib/interface_endpoint_controller.h",
     "lib/interface_id.h",
     "lib/interface_ptr_state.h",
+    "lib/macros.h",
     "lib/map_data_internal.h",
     "lib/map_internal.h",
     "lib/map_serialization.h",
@@ -66,8 +69,12 @@ source_set("bindings") {
     "lib/router.h",
     "lib/scoped_interface_endpoint_handle.cc",
     "lib/scoped_interface_endpoint_handle.h",
+    "lib/serialization.h",
+    "lib/serialization_forward.h",
     "lib/string_serialization.cc",
     "lib/string_serialization.h",
+    "lib/sync_handle_registry.cc",
+    "lib/sync_handle_registry.h",
     "lib/sync_handle_watcher.cc",
     "lib/sync_handle_watcher.h",
     "lib/union_accessor.h",
@@ -77,6 +84,10 @@ source_set("bindings") {
     "lib/validation_util.cc",
     "lib/validation_util.h",
     "lib/value_traits.h",
+
+    # Include the .h but not the .cc file. The .h file is used by
+    # serialization_forward.h.
+    "lib/wtf_string_serialization.h",
     "map.h",
     "message.h",
     "message_filter.h",
@@ -98,7 +109,6 @@ source_set("bindings") {
 
   deps = [
     "//base",
-    "//mojo/public/cpp/environment",
     "//mojo/public/interfaces/bindings:bindings_cpp_sources",
   ]
 }
@@ -116,4 +126,21 @@ source_set("callback") {
     "//base",
     "//mojo/public/cpp/system",
   ]
+}
+
+source_set("wtf_support") {
+  sources = [
+    "lib/wtf_array_serialization.h",
+    "lib/wtf_serialization.h",
+    "lib/wtf_string_serialization.cc",
+    "lib/wtf_string_serialization.h",
+    "wtf_array.h",
+  ]
+
+  public_deps = [
+    ":bindings",
+    "//third_party/WebKit/Source/wtf",
+  ]
+
+  public_configs = [ "//third_party/WebKit/Source:config" ]
 }

@@ -26,6 +26,7 @@
 #include "ui/gfx/skbitmap_operations.h"
 #include "url/url_constants.h"
 
+using blink::WebCachePolicy;
 using blink::WebFrame;
 using blink::WebVector;
 using blink::WebURL;
@@ -176,8 +177,8 @@ bool ImageDownloaderImpl::FetchImage(const GURL& image_url,
   image_fetchers_.push_back(new MultiResolutionImageResourceFetcher(
       image_url, frame, 0, is_favicon ? WebURLRequest::RequestContextFavicon
                                       : WebURLRequest::RequestContextImage,
-      bypass_cache ? WebURLRequest::ReloadBypassingCache
-                   : WebURLRequest::UseProtocolCachePolicy,
+      bypass_cache ? WebCachePolicy::BypassingCache
+                   : WebCachePolicy::UseProtocolCachePolicy,
       base::Bind(&ImageDownloaderImpl::DidFetchImage, base::Unretained(this),
                  max_image_size, callback)));
   return true;
@@ -212,7 +213,7 @@ void ImageDownloaderImpl::ReplyDownloadResult(
     const std::vector<gfx::Size>& result_original_image_sizes,
     const DownloadImageCallback& callback) {
   callback.Run(http_status_code,
-               mojo::Array<skia::BitmapPtr>::From(result_images),
+               mojo::Array<skia::mojom::BitmapPtr>::From(result_images),
                mojo::Array<mojo::SizePtr>::From(result_original_image_sizes));
 }
 

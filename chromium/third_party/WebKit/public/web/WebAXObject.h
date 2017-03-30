@@ -42,6 +42,8 @@
 namespace WTF { template <typename T> class PassRefPtr; }
 #endif
 
+class SkMatrix44;
+
 namespace blink {
 
 class AXObject;
@@ -142,6 +144,7 @@ public:
     BLINK_EXPORT bool isRichlyEditable() const;
     BLINK_EXPORT bool ariaOwns(WebVector<WebAXObject>& ownsElements) const;
     BLINK_EXPORT WebRect boundingBoxRect() const;
+    BLINK_EXPORT WebString fontFamily() const;
     BLINK_EXPORT float fontSize() const;
     BLINK_EXPORT bool canvasHasFallbackContent() const;
     BLINK_EXPORT WebPoint clickPoint() const;
@@ -280,6 +283,9 @@ public:
     BLINK_EXPORT WebPoint minimumScrollOffset() const;
     BLINK_EXPORT WebPoint maximumScrollOffset() const;
     BLINK_EXPORT void setScrollOffset(const WebPoint&) const;
+
+    // Transformation relative to the parent frame, if local (otherwise returns identity).
+    BLINK_EXPORT SkMatrix44 transformFromLocalParentFrame() const;
 
     // Make this object visible by scrolling as many nested scrollable views as needed.
     BLINK_EXPORT void scrollToMakeVisible() const;

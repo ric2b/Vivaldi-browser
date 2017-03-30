@@ -7,6 +7,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
+#include "ui/gfx/transform.h"
 
 namespace content {
 
@@ -39,12 +40,23 @@ void AccessibilityTreeFormatterBlink::AddProperties(
     base::DictionaryValue* dict) {
   dict->SetInteger("id", node.GetId());
 
-  dict->SetString("role", ui::ToString(node.GetData().role));
+  dict->SetString("internalRole", ui::ToString(node.GetData().role));
 
-  dict->SetInteger("boundsX", node.GetData().location.x());
-  dict->SetInteger("boundsY", node.GetData().location.y());
-  dict->SetInteger("boundsWidth", node.GetData().location.width());
-  dict->SetInteger("boundsHeight", node.GetData().location.height());
+  gfx::Rect bounds = node.GetData().location;
+  dict->SetInteger("boundsX", bounds.x());
+  dict->SetInteger("boundsY", bounds.y());
+  dict->SetInteger("boundsWidth", bounds.width());
+  dict->SetInteger("boundsHeight", bounds.height());
+
+  gfx::Rect page_bounds = node.GetLocalBoundsRect();
+  dict->SetInteger("pageBoundsX", page_bounds.x());
+  dict->SetInteger("pageBoundsY", page_bounds.y());
+  dict->SetInteger("pageBoundsWidth", page_bounds.width());
+  dict->SetInteger("pageBoundsHeight", page_bounds.height());
+
+  dict->SetBoolean("transform",
+                   node.GetData().transform &&
+                   !node.GetData().transform->IsIdentity());
 
   for (int state_index = ui::AX_STATE_NONE;
        state_index <= ui::AX_STATE_LAST;
@@ -112,7 +124,7 @@ base::string16 AccessibilityTreeFormatterBlink::ToString(
   }
 
   base::string16 role_value;
-  dict.GetString("role", &role_value);
+  dict.GetString("internalRole", &role_value);
   WriteAttribute(true, base::UTF16ToUTF8(role_value), &line);
 
   for (int state_index = ui::AX_STATE_NONE;
@@ -132,6 +144,19 @@ base::string16 AccessibilityTreeFormatterBlink::ToString(
   WriteAttribute(false,
                  FormatCoordinates("size", "boundsWidth", "boundsHeight", dict),
                  &line);
+
+  WriteAttribute(false,
+                 FormatCoordinates("pageLocation",
+                                   "pageBoundsX", "pageBoundsY", dict),
+                 &line);
+  WriteAttribute(false,
+                 FormatCoordinates("pageSize",
+                                   "pageBoundsWidth", "pageBoundsHeight", dict),
+                 &line);
+
+  bool transform;
+  if (dict.GetBoolean("transform", &transform) && transform)
+    WriteAttribute(false, "transform", &line);
 
   for (int attr_index = ui::AX_STRING_ATTRIBUTE_NONE;
        attr_index <= ui::AX_STRING_ATTRIBUTE_LAST;

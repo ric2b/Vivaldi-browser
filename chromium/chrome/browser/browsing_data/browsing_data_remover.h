@@ -25,7 +25,6 @@
 #include "components/search_engines/template_url_service.h"
 #include "storage/common/quota/quota_types.h"
 #include "url/gurl.h"
-#include "url/origin.h"
 
 #if defined(ENABLE_PLUGINS)
 #include "chrome/browser/pepper_flash_settings_manager.h"
@@ -52,6 +51,10 @@ class StoragePartition;
 namespace net {
 class URLRequestContextGetter;
 }
+
+#if BUILDFLAG(ANDROID_JAVA_UI)
+class WebappRegistry;
+#endif
 
 // BrowsingDataRemover is responsible for removing data related to browsing:
 // visits in url database, downloads, cookies ...
@@ -254,6 +257,11 @@ class BrowsingDataRemover : public KeyedService
   void OverrideStoragePartitionForTesting(
       content::StoragePartition* storage_partition);
 
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  void OverrideWebappRegistryForTesting(
+      scoped_ptr<WebappRegistry> webapp_registry);
+#endif
+
  private:
   // The clear API needs to be able to toggle removing_ in order to test that
   // only one BrowsingDataRemover instance can be called at a time.
@@ -385,6 +393,9 @@ class BrowsingDataRemover : public KeyedService
   // Callback on UI thread when the webapp data has been cleared.
   void OnClearedWebappData();
 
+  // Callback on UI thread when the webapp history has been cleared.
+  void OnClearedWebappHistory();
+
   // Callback on UI thread when the offline page data has been cleared.
   void OnClearedOfflinePageData();
 #endif
@@ -449,6 +460,7 @@ class BrowsingDataRemover : public KeyedService
 #if BUILDFLAG(ANDROID_JAVA_UI)
   bool waiting_for_clear_precache_history_ = false;
   bool waiting_for_clear_webapp_data_ = false;
+  bool waiting_for_clear_webapp_history_ = false;
   bool waiting_for_clear_offline_page_data_ = false;
 #endif
   bool waiting_for_clear_storage_partition_data_ = false;
@@ -472,6 +484,12 @@ class BrowsingDataRemover : public KeyedService
 
   // We do not own this.
   content::StoragePartition* storage_partition_for_testing_ = nullptr;
+
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  // WebappRegistry makes calls across the JNI. In unit tests, the Java side is
+  // not initialised, so the registry must be mocked out.
+  scoped_ptr<WebappRegistry> webapp_registry_;
+#endif
 
   base::WeakPtrFactory<BrowsingDataRemover> weak_ptr_factory_;
 

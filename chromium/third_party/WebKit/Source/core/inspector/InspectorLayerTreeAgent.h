@@ -50,14 +50,12 @@ class PictureSnapshot;
 class PaintLayer;
 class PaintLayerCompositor;
 
-typedef String ErrorString;
-
-class CORE_EXPORT InspectorLayerTreeAgent final : public InspectorBaseAgent<InspectorLayerTreeAgent, protocol::Frontend::LayerTree>, public protocol::Dispatcher::LayerTreeCommandHandler {
+class CORE_EXPORT InspectorLayerTreeAgent final : public InspectorBaseAgent<InspectorLayerTreeAgent, protocol::Frontend::LayerTree>, public protocol::Backend::LayerTree {
     WTF_MAKE_NONCOPYABLE(InspectorLayerTreeAgent);
 public:
-    static PassOwnPtrWillBeRawPtr<InspectorLayerTreeAgent> create(InspectedFrames* inspectedFrames)
+    static RawPtr<InspectorLayerTreeAgent> create(InspectedFrames* inspectedFrames)
     {
-        return adoptPtrWillBeNoop(new InspectorLayerTreeAgent(inspectedFrames));
+        return new InspectorLayerTreeAgent(inspectedFrames);
     }
     ~InspectorLayerTreeAgent() override;
     DECLARE_VIRTUAL_TRACE();
@@ -81,7 +79,7 @@ public:
     void releaseSnapshot(ErrorString*, const String& snapshotId) override;
     void profileSnapshot(ErrorString*, const String& snapshotId, const Maybe<int>& minRepeatCount, const Maybe<double>& minDuration, const Maybe<protocol::DOM::Rect>& clipRect, OwnPtr<protocol::Array<protocol::Array<double>>>* timings) override;
     void replaySnapshot(ErrorString*, const String& snapshotId, const Maybe<int>& fromStep, const Maybe<int>& toStep, const Maybe<double>& scale, String* dataURL) override;
-    void snapshotCommandLog(ErrorString*, const String& snapshotId, OwnPtr<protocol::Array<RefPtr<protocol::DictionaryValue>>>* commandLog) override;
+    void snapshotCommandLog(ErrorString*, const String& snapshotId, OwnPtr<protocol::Array<protocol::DictionaryValue>>* commandLog) override;
 
     // Called by other agents.
     PassOwnPtr<protocol::Array<protocol::LayerTree::Layer>> buildLayerTree();
@@ -102,7 +100,7 @@ private:
     void gatherGraphicsLayers(GraphicsLayer*, HashMap<int, int>& layerIdToNodeIdMap, OwnPtr<protocol::Array<protocol::LayerTree::Layer>>&, bool hasWheelEventHandlers, int scrollingRootLayerId);
     int idForNode(Node*);
 
-    RawPtrWillBeMember<InspectedFrames> m_inspectedFrames;
+    Member<InspectedFrames> m_inspectedFrames;
     Vector<int, 2> m_pageOverlayLayerIds;
 
     typedef HashMap<String, RefPtr<PictureSnapshot>> SnapshotById;

@@ -214,10 +214,7 @@ class TracingTrackTestCase(unittest.TestCase):
           event.tracing_event, deserialized_event.tracing_event)
 
   def testTracingTrackSerialization(self):
-    events = self._MIXED_EVENTS
-    self.track.Handle('Tracing.dataCollected',
-                      {'params': {'value': [self.EventToMicroseconds(e)
-                                            for e in events]}})
+    self._HandleEvents(self._MIXED_EVENTS)
     json_dict = self.track.ToJsonDict()
     self.assertTrue('events' in json_dict)
     deserialized_track = TracingTrack.FromJsonDict(json_dict)
@@ -227,9 +224,7 @@ class TracingTrackTestCase(unittest.TestCase):
       self.assertEquals(e1.tracing_event, e2.tracing_event)
 
   def testEventsEndingBetween(self):
-    self.track.Handle(
-        'Tracing.dataCollected', {'params': {'value': [
-            self.EventToMicroseconds(e) for e in self._EVENTS]}})
+    self._HandleEvents(self._EVENTS)
     self.assertEqual(set('ABCDEF'),
                      set([e.args['name']
                           for e in self.track.EventsEndingBetween(0, 100)]))
@@ -242,9 +237,7 @@ class TracingTrackTestCase(unittest.TestCase):
                           for e in self.track.EventsEndingBetween(3, 6)]))
 
   def testOverlappingEvents(self):
-    self.track.Handle(
-        'Tracing.dataCollected', {'params': {'value': [
-            self.EventToMicroseconds(e) for e in self._EVENTS]}})
+    self._HandleEvents(self._EVENTS)
     self.assertEqual(set('ABCDEF'),
                      set([e.args['name']
                           for e in self.track.OverlappingEvents(0, 100)]))
@@ -257,15 +250,75 @@ class TracingTrackTestCase(unittest.TestCase):
                      set([e.args['name']
                           for e in self.track.OverlappingEvents(6, 10.1)]))
 
-  def testTracingTrackForThread(self):
-    self.track.Handle(
-        'Tracing.dataCollected', {'params': {'value': [
-            self.EventToMicroseconds(e) for e in self._EVENTS]}})
-    tracing_track = self.track.TracingTrackForThread((2, 1))
+  def testEventFromStep(self):
+    events = [
+        {'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 2, 'tid': 1, 'id': '0x123',
+         'name': 'B'},
+        {'ts': 5, 'ph': 'X', 'dur': 2, 'pid': 2, 'tid': 1, 'id': '0x12343',
+        'name': 'A'}]
+    step_events = [{'ts': 6, 'ph': 'T', 'pid': 2, 'tid': 1, 'id': '0x123',
+                    'name': 'B', 'args': {'step': 'Bla'}},
+                   {'ts': 4, 'ph': 'T', 'pid': 2, 'tid': 1, 'id': '0x123',
+                    'name': 'B', 'args': {'step': 'Bla'}},
+                   {'ts': 6, 'ph': 'T', 'pid': 12, 'tid': 1, 'id': '0x123',
+                    'name': 'B', 'args': {'step': 'Bla'}},
+                   {'ts': 6, 'ph': 'T', 'pid': 2, 'tid': 1, 'id': '0x1234',
+                    'name': 'B', 'args': {'step': 'Bla'}},
+                   {'ts': 6, 'ph': 'T', 'pid': 2, 'tid': 1, 'id': '0x123',
+                    'name': 'A', 'args': {'step': 'Bla'}},
+                   {'ts': 6, 'ph': 'n', 'pid': 2, 'tid': 1, 'id': '0x123',
+                    'name': 'B', 'args': {'step': 'Bla'}},
+                   {'ts': 6, 'ph': 'n', 'pid': 2, 'tid': 1, 'id': '0x123',
+                    'name': 'B', 'args': {}}]
+    self._HandleEvents(events + step_events)
+    trace_events = self.track.GetEvents()
+    self.assertEquals(9, len(trace_events))
+    # pylint: disable=unbalanced-tuple-unpacking
+    (event, _, step_event, outside, wrong_pid, wrong_id, wrong_name,
+     wrong_phase, no_step) = trace_events
+    self.assertEquals(event, self.track.EventFromStep(step_event))
+    self.assertIsNone(self.track.EventFromStep(outside))
+    self.assertIsNone(self.track.EventFromStep(wrong_pid))
+    self.assertIsNone(self.track.EventFromStep(wrong_id))
+    self.assertIsNone(self.track.EventFromStep(wrong_name))
+    # Invalid events
+    with self.assertRaises(AssertionError):
+      self.track.EventFromStep(wrong_phase)
+    with self.assertRaises(AssertionError):
+      self.track.EventFromStep(no_step)
+
+  def testFilterPidTid(self):
+    self._HandleEvents(self._EVENTS)
+    tracing_track = self.track.Filter(2, 1)
     self.assertTrue(tracing_track is not self.track)
     self.assertEquals(4, len(tracing_track.GetEvents()))
-    tracing_track = self.track.TracingTrackForThread((2, 42))
+    tracing_track = self.track.Filter(2, 42)
     self.assertEquals(0, len(tracing_track.GetEvents()))
+
+  def testFilterCategories(self):
+    events = [
+        {'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 2, 'tid': 1, 'cat': 'A'},
+        {'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 2, 'tid': 1, 'cat': 'B'},
+        {'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 2, 'tid': 1, 'cat': 'C,D'},
+        {'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 2, 'tid': 1, 'cat': 'A,B,C,D'}]
+    self._HandleEvents(events)
+    tracing_events = self.track.GetEvents()
+    self.assertEquals(4, len(tracing_events))
+    filtered_events = self.track.Filter(categories=None).GetEvents()
+    self.assertListEqual(tracing_events, filtered_events)
+    filtered_events = self.track.Filter(categories=set(['A'])).GetEvents()
+    self.assertEquals(2, len(filtered_events))
+    self.assertListEqual([tracing_events[0], tracing_events[3]],
+                         filtered_events)
+    filtered_events = self.track.Filter(categories=set(['Z'])).GetEvents()
+    self.assertEquals(0, len(filtered_events))
+    filtered_events = self.track.Filter(categories=set(['B', 'C'])).GetEvents()
+    self.assertEquals(3, len(filtered_events))
+    self.assertListEqual(tracing_events[1:], filtered_events)
+
+  def _HandleEvents(self, events):
+    self.track.Handle('Tracing.dataCollected', {'params': {'value': [
+        self.EventToMicroseconds(e) for e in events]}})
 
 
 class IntervalTreeTestCase(unittest.TestCase):
@@ -329,6 +382,23 @@ class IntervalTreeTestCase(unittest.TestCase):
     self.assertEquals(3 + 10, len(tree.OverlappingEvents(450, 550)))
     self.assertEquals(8 + 10, len(tree.OverlappingEvents(450, 800)))
 
+  def testEventMatches(self):
+    event = Event({'name': 'foo',
+                   'cat': 'bar',
+                   'ph': 'X',
+                   'ts': 0, 'dur': 0})
+    self.assertTrue(event.Matches('bar', 'foo'))
+    self.assertFalse(event.Matches('bar', 'biz'))
+    self.assertFalse(event.Matches('biz', 'foo'))
+
+    event = Event({'name': 'foo',
+                   'cat': 'bar,baz,bizbiz',
+                   'ph': 'X',
+                   'ts': 0, 'dur': 0})
+    self.assertTrue(event.Matches('bar', 'foo'))
+    self.assertTrue(event.Matches('baz', 'foo'))
+    self.assertFalse(event.Matches('bar', 'biz'))
+    self.assertFalse(event.Matches('biz', 'foo'))
 
 if __name__ == '__main__':
   unittest.main()

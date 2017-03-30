@@ -33,7 +33,6 @@
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/scroll/ScrollbarThemeClient.h"
 #include "wtf/MathExtras.h"
-#include "wtf/PassRefPtr.h"
 
 namespace blink {
 
@@ -48,10 +47,16 @@ class ScrollbarTheme;
 
 class PLATFORM_EXPORT Scrollbar : public Widget, public ScrollbarThemeClient {
 public:
-    static PassRefPtrWillBeRawPtr<Scrollbar> create(ScrollableArea*, ScrollbarOrientation, ScrollbarControlSize, HostWindow*);
+    static Scrollbar* create(ScrollableArea* scrollableArea, ScrollbarOrientation orientation, ScrollbarControlSize size, HostWindow* hostWindow)
+    {
+        return new Scrollbar(scrollableArea, orientation, size, hostWindow);
+    }
 
     // Theme object ownership remains with the caller and it must outlive the scrollbar.
-    static PassRefPtrWillBeRawPtr<Scrollbar> createForTesting(ScrollableArea*, ScrollbarOrientation, ScrollbarControlSize, ScrollbarTheme*);
+    static Scrollbar* createForTesting(ScrollableArea* scrollableArea, ScrollbarOrientation orientation, ScrollbarControlSize size, ScrollbarTheme* theme)
+    {
+        return new Scrollbar(scrollableArea, orientation, size, nullptr, theme);
+    }
 
     ~Scrollbar() override;
 
@@ -69,7 +74,7 @@ public:
     void setFrameRect(const IntRect&) override;
     IntRect frameRect() const override { return Widget::frameRect(); }
 
-    ScrollbarOverlayStyle scrollbarOverlayStyle() const override;
+    ScrollbarOverlayStyle getScrollbarOverlayStyle() const override;
     void getTickmarks(Vector<IntRect>&) const override;
     bool isScrollableAreaActive() const override;
 
@@ -101,7 +106,7 @@ public:
     void offsetDidChange();
 
     void disconnectFromScrollableArea();
-    ScrollableArea* scrollableArea() const { return m_scrollableArea; }
+    ScrollableArea* getScrollableArea() const { return m_scrollableArea; }
 
     int pressedPos() const { return m_pressedPos; }
 
@@ -116,10 +121,12 @@ public:
     bool isOverlayScrollbar() const override;
     bool shouldParticipateInHitTesting();
 
-    void windowActiveChangedForSnowLeopardOnly();
     bool isWindowActive() const;
 
-    bool gestureEvent(const PlatformGestureEvent&);
+    // Return if the gesture event was handled. |shouldUpdateCapture|
+    // will be set to true if the handler should update the capture
+    // state for this scrollbar.
+    bool gestureEvent(const PlatformGestureEvent&, bool* shouldUpdateCapture);
 
     // These methods are used for platform scrollbars to give :hover feedback.  They will not get called
     // when the mouse went down in a scrollbar, since it is assumed the scrollbar will start
@@ -157,8 +164,7 @@ public:
 
     // DisplayItemClient methods.
     String debugName() const final { return m_orientation == HorizontalScrollbar ? "HorizontalScrollbar" : "VerticalScrollbar"; }
-    // TODO(chrishtr): fix this.
-    LayoutRect visualRect() const override { return LayoutRect(); }
+    LayoutRect visualRect() const override;
 
     // Marks the scrollbar as needing to be redrawn.
     //
@@ -175,9 +181,7 @@ public:
 
     // Promptly unregister from the theme manager + run finalizers of derived Scrollbars.
     EAGERLY_FINALIZE();
-#if ENABLE(OILPAN)
     DECLARE_EAGER_FINALIZATION_OPERATOR_NEW();
-#endif
     DECLARE_VIRTUAL_TRACE();
 
 protected:
@@ -190,11 +194,11 @@ protected:
     ScrollDirectionPhysical pressedPartScrollDirectionPhysical();
     ScrollGranularity pressedPartScrollGranularity();
 
-    RawPtrWillBeMember<ScrollableArea> m_scrollableArea;
+    Member<ScrollableArea> m_scrollableArea;
     ScrollbarOrientation m_orientation;
     ScrollbarControlSize m_controlSize;
     ScrollbarTheme& m_theme;
-    RawPtrWillBeMember<HostWindow> m_hostWindow;
+    Member<HostWindow> m_hostWindow;
 
     int m_visibleSize;
     int m_totalSize;

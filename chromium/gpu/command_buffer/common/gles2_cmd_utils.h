@@ -155,6 +155,8 @@ class GLES2_UTILS_EXPORT GLES2Util {
   // For example, GL_FLOAT_MAT3 returns 9.
   static uint32_t GetElementCountForUniformType(int type);
 
+  static size_t GetGLTypeSizeForTextures(uint32_t type);
+
   static size_t GetGLTypeSizeForBuffers(uint32_t type);
 
   static size_t GetGroupSizeForBufferType(uint32_t count, uint32_t type);
@@ -175,8 +177,9 @@ class GLES2_UTILS_EXPORT GLES2Util {
 
   static size_t GLTargetToFaceIndex(uint32_t target);
 
-  static uint32_t GetGLReadPixelsImplementationFormat(
-      uint32_t internal_format);
+  static uint32_t GetGLReadPixelsImplementationFormat(uint32_t internal_format,
+                                                      uint32_t texture_type,
+                                                      bool supports_bgra);
 
   static uint32_t GetGLReadPixelsImplementationType(
       uint32_t internal_format, uint32_t texture_type);
@@ -269,6 +272,7 @@ enum ContextType {
 
 struct GLES2_UTILS_EXPORT ContextCreationAttribHelper {
   ContextCreationAttribHelper();
+  ContextCreationAttribHelper(const ContextCreationAttribHelper& other);
 
   void Serialize(std::vector<int32_t>* attribs) const;
   bool Parse(const std::vector<int32_t>& attribs);

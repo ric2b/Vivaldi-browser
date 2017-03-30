@@ -36,12 +36,12 @@ namespace blink {
 
 // Maps elements to the observer watching them. At most one per
 // element at a time.
-typedef WillBeHeapHashMap<RawPtrWillBeWeakMember<Element>, RawPtrWillBeMember<CustomElementObserver>> ElementObserverMap;
+typedef HeapHashMap<WeakMember<Element>, Member<CustomElementObserver>> ElementObserverMap;
 
 static ElementObserverMap& elementObservers()
 {
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<ElementObserverMap>, map, (adoptPtrWillBeNoop(new ElementObserverMap())));
-    return *map;
+    DEFINE_STATIC_LOCAL(ElementObserverMap, map, (new ElementObserverMap));
+    return map;
 }
 
 void CustomElementObserver::notifyElementWasDestroyed(Element* element)

@@ -9,9 +9,9 @@
 #include <utility>
 
 #include "mojo/public/cpp/bindings/array.h"
-#include "mojo/public/cpp/bindings/lib/array_serialization.h"
 #include "mojo/public/cpp/bindings/lib/bindings_internal.h"
 #include "mojo/public/cpp/bindings/lib/fixed_buffer.h"
+#include "mojo/public/cpp/bindings/lib/serialization.h"
 #include "mojo/public/cpp/bindings/lib/validate_params.h"
 #include "mojo/public/cpp/bindings/string.h"
 #include "mojo/public/cpp/bindings/tests/container_test_util.h"
@@ -41,6 +41,23 @@ struct StringIntData {
 const size_t kStringIntDataSize = 4;
 
 using MapTest = testing::Test;
+
+// Tests null and empty maps.
+TEST_F(MapTest, NullAndEmpty) {
+  Map<char, char> map0;
+  EXPECT_TRUE(map0.empty());
+  EXPECT_FALSE(map0.is_null());
+  map0 = nullptr;
+  EXPECT_TRUE(map0.is_null());
+  EXPECT_FALSE(map0.empty());
+
+  Map<char, char> map1(nullptr);
+  EXPECT_TRUE(map1.is_null());
+  EXPECT_FALSE(map1.empty());
+  map1.SetToEmpty();
+  EXPECT_TRUE(map1.empty());
+  EXPECT_FALSE(map1.is_null());
+}
 
 // Tests that basic Map operations work.
 TEST_F(MapTest, InsertWorks) {
@@ -276,12 +293,12 @@ TEST_F(MapTest, ArrayOfMap) {
     Array<Map<int32_t, int8_t>> array(1);
     array[0].insert(1, 42);
 
-    size_t size = GetSerializedSize_(array);
+    size_t size = GetSerializedSize_(array, nullptr);
     FixedBufferForTesting buf(size);
     Array_Data<Map_Data<int32_t, int8_t>*>* data;
     ArrayValidateParams validate_params(
         0, false, new ArrayValidateParams(0, false, nullptr));
-    SerializeArray_(std::move(array), &buf, &data, &validate_params);
+    SerializeArray_(std::move(array), &buf, &data, &validate_params, nullptr);
 
     Array<Map<int32_t, int8_t>> deserialized_array;
     Deserialize_(data, &deserialized_array, nullptr);
@@ -298,13 +315,13 @@ TEST_F(MapTest, ArrayOfMap) {
     map_value[1] = true;
     array[0].insert("hello world", std::move(map_value));
 
-    size_t size = GetSerializedSize_(array);
+    size_t size = GetSerializedSize_(array, nullptr);
     FixedBufferForTesting buf(size);
     Array_Data<Map_Data<String_Data*, Array_Data<bool>*>*>* data;
     ArrayValidateParams validate_params(
         0, false, new ArrayValidateParams(
                       0, false, new ArrayValidateParams(0, false, nullptr)));
-    SerializeArray_(std::move(array), &buf, &data, &validate_params);
+    SerializeArray_(std::move(array), &buf, &data, &validate_params, nullptr);
 
     Array<Map<String, Array<bool>>> deserialized_array;
     Deserialize_(data, &deserialized_array, nullptr);

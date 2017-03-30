@@ -75,7 +75,7 @@ public class SyncAccountSwitcher
                 SigninManager.get(mActivity).clearLastSignedInUser();
 
                 if (wipeData) {
-                    SyncUserDataWiper.wipeSyncUserData(mActivity, new Runnable() {
+                    SyncUserDataWiper.wipeSyncUserData(new Runnable() {
                         @Override
                         public void run() {
                             SigninManager.get(mActivity)

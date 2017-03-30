@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//testing/test.gni")
+import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
 
 group("headless") {
@@ -20,6 +21,7 @@ repack("pak") {
     "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
     "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
     "$root_gen_dir/content/content_resources.pak",
+    "$root_gen_dir/headless/headless_lib_resources.pak",
     "$root_gen_dir/net/net_resources.pak",
     "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
     "$root_gen_dir/ui/resources/webui_resources.pak",
@@ -28,6 +30,7 @@ repack("pak") {
   ]
 
   deps = [
+    ":headless_lib_resources_grit",
     "//content:resources",
     "//content/app/resources",
     "//content/app/strings",
@@ -41,6 +44,14 @@ repack("pak") {
   ]
 
   output = "$root_out_dir/headless_lib.pak"
+}
+
+grit("headless_lib_resources_grit") {
+  source = "lib/resources/headless_lib_resources.grd"
+  outputs = [
+    "grit/headless_lib_resources.h",
+    "$root_gen_dir/headless/headless_lib_resources.pak",
+  ]
 }
 
 static_library("headless_lib") {
@@ -73,13 +84,16 @@ static_library("headless_lib") {
     "public/headless_browser.h",
     "public/headless_export.h",
     "public/headless_web_contents.h",
+    "public/util/maybe.h",
   ]
 
   deps = [
     ":pak",
     "//base",
     "//components/devtools_http_handler",
+    "//content/public/app:both",
     "//content/public/browser",
+    "//content/public/child",
     "//content/public/common",
     "//content/public/renderer",
     "//content/public/utility",
@@ -97,6 +111,19 @@ group("headless_tests") {
 
   deps = [
     ":headless_browsertests",
+    ":headless_unittests",
+  ]
+}
+
+test("headless_unittests") {
+  sources = [
+    "public/util/maybe_unittest.cc",
+  ]
+
+  deps = [
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//testing/gtest",
   ]
 }
 
@@ -126,6 +153,8 @@ executable("headless_shell") {
 
   sources = [
     "app/headless_shell.cc",
+    "app/headless_shell_switches.cc",
+    "app/headless_shell_switches.h",
   ]
 
   deps = [

@@ -51,6 +51,10 @@ struct ViewHostMsg_SelectionBounds_Params;
 struct ViewHostMsg_TextInputState_Params;
 struct ViewHostMsg_UpdateRect_Params;
 
+namespace base {
+class RefCountedBytes;
+}
+
 namespace blink {
 class WebInputEvent;
 #if defined(OS_ANDROID)
@@ -290,7 +294,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // when it has received a message.
   void ForwardGestureEventWithLatencyInfo(
       const blink::WebGestureEvent& gesture_event,
-      const ui::LatencyInfo& ui_latency);
+      const ui::LatencyInfo& ui_latency) override;
   void ForwardTouchEventWithLatencyInfo(
       const blink::WebTouchEvent& touch_event,
       const ui::LatencyInfo& ui_latency);
@@ -471,10 +475,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   void RejectMouseLockOrUnlockIfNecessary();
 
-#if defined(OS_WIN)
-  gfx::NativeViewAccessible GetParentNativeViewAccessible();
-#endif
-
   void set_renderer_initialized(bool renderer_initialized) {
     renderer_initialized_ = renderer_initialized;
   }
@@ -585,12 +585,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void OnShowDisambiguationPopup(const gfx::Rect& rect_pixels,
                                  const gfx::Size& size,
                                  const cc::SharedBitmapId& id);
-#if defined(OS_WIN)
-  void OnWindowlessPluginDummyWindowCreated(
-      gfx::NativeViewId dummy_activation_window);
-  void OnWindowlessPluginDummyWindowDestroyed(
-      gfx::NativeViewId dummy_activation_window);
-#endif
   void OnSelectionChanged(const base::string16& text,
                           uint32_t offset,
                           const gfx::Range& range);
@@ -775,7 +769,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // TODO(wjmaclean) Remove the code for supporting resending gesture events
   // when WebView transitions to OOPIF and BrowserPlugin is removed.
   // http://crbug.com/533069
-  bool is_in_gesture_scroll_;
+  bool is_in_touchpad_gesture_scroll_;
+  bool is_in_touchscreen_gesture_scroll_;
 
   scoped_ptr<SyntheticGestureController> synthetic_gesture_controller_;
 
@@ -799,10 +794,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // receipt of those messages (unless FirstPaintAfterLoad is prevented from
   // being sent, in which case the timer should fire).
   bool received_paint_after_load_;
-
-#if defined(OS_WIN)
-  std::list<HWND> dummy_windows_for_activation_;
-#endif
 
   RenderWidgetHostLatencyTracker latency_tracker_;
 
@@ -830,12 +821,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // This value indicates how long to wait for a new compositor frame from a
   // renderer process before clearing any previously displayed content.
   base::TimeDelta new_content_rendering_delay_;
-
-  // Timer used to batch together mouse wheel events for the delegate
-  // OnUserInteraction method. A wheel event is only dispatched when a wheel
-  // event has not been seen for kMouseWheelCoalesceInterval seconds prior.
-  // TODO(dominickn): remove this when GestureScrollBegin has landed.
-  scoped_ptr<base::ElapsedTimer> mouse_wheel_coalesce_timer_;
 
   base::WeakPtrFactory<RenderWidgetHostImpl> weak_factory_;
 

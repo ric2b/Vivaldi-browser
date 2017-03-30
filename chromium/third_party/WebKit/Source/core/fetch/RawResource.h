@@ -28,6 +28,7 @@
 #include "core/fetch/ResourceClient.h"
 #include "public/platform/WebDataConsumerHandle.h"
 #include "wtf/PassOwnPtr.h"
+#include "wtf/WeakPtr.h"
 
 namespace blink {
 class FetchRequest;
@@ -39,18 +40,18 @@ class CORE_EXPORT RawResource final : public Resource {
 public:
     using ClientType = RawResourceClient;
 
-    static PassRefPtrWillBeRawPtr<Resource> fetchSynchronously(FetchRequest&, ResourceFetcher*);
-    static PassRefPtrWillBeRawPtr<RawResource> fetch(FetchRequest&, ResourceFetcher*);
-    static PassRefPtrWillBeRawPtr<RawResource> fetchMainResource(FetchRequest&, ResourceFetcher*, const SubstituteData&);
-    static PassRefPtrWillBeRawPtr<RawResource> fetchImport(FetchRequest&, ResourceFetcher*);
-    static PassRefPtrWillBeRawPtr<RawResource> fetchMedia(FetchRequest&, ResourceFetcher*);
-    static PassRefPtrWillBeRawPtr<RawResource> fetchTextTrack(FetchRequest&, ResourceFetcher*);
-    static PassRefPtrWillBeRawPtr<RawResource> fetchManifest(FetchRequest&, ResourceFetcher*);
+    static Resource* fetchSynchronously(FetchRequest&, ResourceFetcher*);
+    static RawResource* fetch(FetchRequest&, ResourceFetcher*);
+    static RawResource* fetchMainResource(FetchRequest&, ResourceFetcher*, const SubstituteData&);
+    static RawResource* fetchImport(FetchRequest&, ResourceFetcher*);
+    static RawResource* fetchMedia(FetchRequest&, ResourceFetcher*);
+    static RawResource* fetchTextTrack(FetchRequest&, ResourceFetcher*);
+    static RawResource* fetchManifest(FetchRequest&, ResourceFetcher*);
 
     // Exposed for testing
-    static RefPtrWillBeRawPtr<RawResource> create(const ResourceRequest& request, Type type)
+    static RawResource* create(const ResourceRequest& request, Type type)
     {
-        return adoptRefWillBeNoop(new RawResource(request, type));
+        return new RawResource(request, type, ResourceLoaderOptions());
     }
 
     // FIXME: AssociatedURLLoader shouldn't be a DocumentThreadableLoader and therefore shouldn't
@@ -66,13 +67,13 @@ private:
         RawResourceFactory(Resource::Type type)
             : ResourceFactory(type) { }
 
-        PassRefPtrWillBeRawPtr<Resource> create(const ResourceRequest& request, const String& charset) const override
+        Resource* create(const ResourceRequest& request, const ResourceLoaderOptions& options, const String& charset) const override
         {
-            return adoptRefWillBeNoop(new RawResource(request, m_type));
+            return new RawResource(request, m_type, options);
         }
     };
 
-    RawResource(const ResourceRequest&, Type);
+    RawResource(const ResourceRequest&, Type, const ResourceLoaderOptions&);
 
     void didAddClient(ResourceClient*) override;
     void appendData(const char*, size_t) override;
@@ -80,7 +81,7 @@ private:
     bool shouldIgnoreHTTPStatusCodeErrors() const override { return !isLinkPreload(); }
 
     void willFollowRedirect(ResourceRequest&, const ResourceResponse&) override;
-    void updateRequest(const ResourceRequest&) override;
+    void willNotFollowRedirect() override;
     void responseReceived(const ResourceResponse&, PassOwnPtr<WebDataConsumerHandle>) override;
     void setSerializedCachedMetadata(const char*, size_t) override;
     void didSendData(unsigned long long bytesSent, unsigned long long totalBytesToBeSent) override;
@@ -95,14 +96,17 @@ inline bool isRawResource(const Resource& resource)
     return type == Resource::MainResource || type == Resource::Raw || type == Resource::TextTrack || type == Resource::Media || type == Resource::Manifest || type == Resource::ImportResource;
 }
 #endif
-inline PassRefPtrWillBeRawPtr<RawResource> toRawResource(const PassRefPtrWillBeRawPtr<Resource>& resource)
+inline RawResource* toRawResource(Resource* resource)
 {
-    ASSERT_WITH_SECURITY_IMPLICATION(!resource || isRawResource(*resource.get()));
-    return static_cast<RawResource*>(resource.get());
+    ASSERT_WITH_SECURITY_IMPLICATION(!resource || isRawResource(*resource));
+    return static_cast<RawResource*>(resource);
 }
 
 class CORE_EXPORT RawResourceClient : public ResourceClient {
 public:
+    RawResourceClient()
+        : m_weakFactory(this) { }
+    WeakPtr<RawResourceClient> createWeakPtr() { return m_weakFactory.createWeakPtr(); }
     ~RawResourceClient() override {}
     static bool isExpectedType(ResourceClient* client) { return client->getResourceClientType() == RawResourceType; }
     ResourceClientType getResourceClientType() const final { return RawResourceType; }
@@ -112,9 +116,12 @@ public:
     virtual void setSerializedCachedMetadata(Resource*, const char*, size_t) { }
     virtual void dataReceived(Resource*, const char* /* data */, size_t /* length */) { }
     virtual void redirectReceived(Resource*, ResourceRequest&, const ResourceResponse&) { }
-    virtual void updateRequest(Resource*, const ResourceRequest&) { }
+    virtual void redirectBlocked() {}
     virtual void dataDownloaded(Resource*, int) { }
     virtual void didReceiveResourceTiming(Resource*, const ResourceTimingInfo&) { }
+
+private:
+    WeakPtrFactory<RawResourceClient> m_weakFactory;
 };
 
 } // namespace blink

@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "chromeos/attestation/mock_attestation_flow.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/cryptohome/mock_async_method_caller.h"
 #include "chromeos/dbus/mock_cryptohome_client.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -89,7 +91,7 @@ TEST_F(AttestationFlowTest, GetCertificate) {
       .Times(1)
       .InSequence(flow_order);
 
-  scoped_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
+  std::unique_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
   proxy->DeferToFake(true);
   EXPECT_CALL(*proxy, GetType()).WillRepeatedly(DoDefault());
   EXPECT_CALL(*proxy, SendEnrollRequest(
@@ -105,13 +107,13 @@ TEST_F(AttestationFlowTest, GetCertificate) {
       .Times(1)
       .InSequence(flow_order);
 
-  EXPECT_CALL(
-      async_caller,
-      AsyncTpmAttestationCreateCertRequest(_,
-                                           PROFILE_ENTERPRISE_USER_CERTIFICATE,
-                                           "fake@test.com", "fake_origin", _))
-          .Times(1)
-          .InSequence(flow_order);
+  const AccountId account_id = AccountId::FromUserEmail("fake@test.com");
+  EXPECT_CALL(async_caller,
+              AsyncTpmAttestationCreateCertRequest(
+                  _, PROFILE_ENTERPRISE_USER_CERTIFICATE,
+                  cryptohome::Identification(account_id), "fake_origin", _))
+      .Times(1)
+      .InSequence(flow_order);
 
   EXPECT_CALL(*proxy, SendCertificateRequest(
       cryptohome::MockAsyncMethodCaller::kFakeAttestationCertRequest,
@@ -121,12 +123,10 @@ TEST_F(AttestationFlowTest, GetCertificate) {
   std::string fake_cert_response =
       cryptohome::MockAsyncMethodCaller::kFakeAttestationCertRequest;
   fake_cert_response += "_response";
-  EXPECT_CALL(async_caller,
-              AsyncTpmAttestationFinishCertRequest(fake_cert_response,
-                                                   KEY_USER,
-                                                   "fake@test.com",
-                                                   kEnterpriseUserKey,
-                                                   _))
+  EXPECT_CALL(async_caller, AsyncTpmAttestationFinishCertRequest(
+                                fake_cert_response, KEY_USER,
+                                cryptohome::Identification(account_id),
+                                kEnterpriseUserKey, _))
       .Times(1)
       .InSequence(flow_order);
 
@@ -140,9 +140,9 @@ TEST_F(AttestationFlowTest, GetCertificate) {
       &MockObserver::MockCertificateCallback,
       base::Unretained(&observer));
 
-  scoped_ptr<ServerProxy> proxy_interface(proxy.release());
+  std::unique_ptr<ServerProxy> proxy_interface(proxy.release());
   AttestationFlow flow(&async_caller, &client, std::move(proxy_interface));
-  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, "fake@test.com",
+  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, account_id,
                       "fake_origin", true, mock_callback);
   Run();
 }
@@ -158,7 +158,7 @@ TEST_F(AttestationFlowTest, GetCertificate_NoEK) {
       .WillRepeatedly(Invoke(DBusCallbackFalse));
 
   // We're not expecting any server calls in this case; StrictMock will verify.
-  scoped_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
+  std::unique_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
   EXPECT_CALL(*proxy, GetType()).WillRepeatedly(DoDefault());
 
   StrictMock<MockObserver> observer;
@@ -168,10 +168,10 @@ TEST_F(AttestationFlowTest, GetCertificate_NoEK) {
       &MockObserver::MockCertificateCallback,
       base::Unretained(&observer));
 
-  scoped_ptr<ServerProxy> proxy_interface(proxy.release());
+  std::unique_ptr<ServerProxy> proxy_interface(proxy.release());
   AttestationFlow flow(&async_caller, &client, std::move(proxy_interface));
-  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, "", "", true,
-                      mock_callback);
+  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, EmptyAccountId(), "",
+                      true, mock_callback);
   Run();
 }
 
@@ -185,7 +185,7 @@ TEST_F(AttestationFlowTest, GetCertificate_EKRejected) {
   EXPECT_CALL(client, TpmAttestationIsEnrolled(_))
       .WillRepeatedly(Invoke(DBusCallbackFalse));
 
-  scoped_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
+  std::unique_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
   proxy->DeferToFake(false);
   EXPECT_CALL(*proxy, GetType()).WillRepeatedly(DoDefault());
   EXPECT_CALL(*proxy, SendEnrollRequest(
@@ -199,10 +199,10 @@ TEST_F(AttestationFlowTest, GetCertificate_EKRejected) {
       &MockObserver::MockCertificateCallback,
       base::Unretained(&observer));
 
-  scoped_ptr<ServerProxy> proxy_interface(proxy.release());
+  std::unique_ptr<ServerProxy> proxy_interface(proxy.release());
   AttestationFlow flow(&async_caller, &client, std::move(proxy_interface));
-  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, "", "", true,
-                      mock_callback);
+  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, EmptyAccountId(), "",
+                      true, mock_callback);
   Run();
 }
 
@@ -222,7 +222,7 @@ TEST_F(AttestationFlowTest, GetCertificate_FailEnroll) {
   EXPECT_CALL(client, TpmAttestationIsEnrolled(_))
       .WillRepeatedly(Invoke(DBusCallbackFalse));
 
-  scoped_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
+  std::unique_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
   proxy->DeferToFake(true);
   EXPECT_CALL(*proxy, GetType()).WillRepeatedly(DoDefault());
   EXPECT_CALL(*proxy, SendEnrollRequest(
@@ -235,36 +235,34 @@ TEST_F(AttestationFlowTest, GetCertificate_FailEnroll) {
       &MockObserver::MockCertificateCallback,
       base::Unretained(&observer));
 
-  scoped_ptr<ServerProxy> proxy_interface(proxy.release());
+  std::unique_ptr<ServerProxy> proxy_interface(proxy.release());
   AttestationFlow flow(&async_caller, &client, std::move(proxy_interface));
-  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, "", "", true,
-                      mock_callback);
+  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, EmptyAccountId(), "",
+                      true, mock_callback);
   Run();
 }
 
 TEST_F(AttestationFlowTest, GetMachineCertificateAlreadyEnrolled) {
   StrictMock<cryptohome::MockAsyncMethodCaller> async_caller;
   async_caller.SetUp(true, cryptohome::MOUNT_ERROR_NONE);
-  EXPECT_CALL(async_caller,
-              AsyncTpmAttestationCreateCertRequest(
-                  _, PROFILE_ENTERPRISE_MACHINE_CERTIFICATE, "", "", _))
+  EXPECT_CALL(async_caller, AsyncTpmAttestationCreateCertRequest(
+                                _, PROFILE_ENTERPRISE_MACHINE_CERTIFICATE,
+                                cryptohome::Identification(), "", _))
       .Times(1);
   std::string fake_cert_response =
       cryptohome::MockAsyncMethodCaller::kFakeAttestationCertRequest;
   fake_cert_response += "_response";
   EXPECT_CALL(async_caller,
-              AsyncTpmAttestationFinishCertRequest(fake_cert_response,
-                                                   KEY_DEVICE,
-                                                   "",
-                                                   kEnterpriseMachineKey,
-                                                   _))
+              AsyncTpmAttestationFinishCertRequest(
+                  fake_cert_response, KEY_DEVICE, cryptohome::Identification(),
+                  kEnterpriseMachineKey, _))
       .Times(1);
 
   chromeos::MockCryptohomeClient client;
   EXPECT_CALL(client, TpmAttestationIsEnrolled(_))
       .WillRepeatedly(Invoke(DBusCallbackTrue));
 
-  scoped_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
+  std::unique_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
   proxy->DeferToFake(true);
   EXPECT_CALL(*proxy, GetType()).WillRepeatedly(DoDefault());
   EXPECT_CALL(*proxy, SendCertificateRequest(
@@ -279,19 +277,19 @@ TEST_F(AttestationFlowTest, GetMachineCertificateAlreadyEnrolled) {
       &MockObserver::MockCertificateCallback,
       base::Unretained(&observer));
 
-  scoped_ptr<ServerProxy> proxy_interface(proxy.release());
+  std::unique_ptr<ServerProxy> proxy_interface(proxy.release());
   AttestationFlow flow(&async_caller, &client, std::move(proxy_interface));
-  flow.GetCertificate(PROFILE_ENTERPRISE_MACHINE_CERTIFICATE, "", "", true,
-                      mock_callback);
+  flow.GetCertificate(PROFILE_ENTERPRISE_MACHINE_CERTIFICATE, EmptyAccountId(),
+                      "", true, mock_callback);
   Run();
 }
 
 TEST_F(AttestationFlowTest, GetCertificate_FailCreateCertRequest) {
   StrictMock<cryptohome::MockAsyncMethodCaller> async_caller;
   async_caller.SetUp(false, cryptohome::MOUNT_ERROR_NONE);
-  EXPECT_CALL(async_caller,
-              AsyncTpmAttestationCreateCertRequest(
-                  _, PROFILE_ENTERPRISE_USER_CERTIFICATE, "", "", _))
+  EXPECT_CALL(async_caller, AsyncTpmAttestationCreateCertRequest(
+                                _, PROFILE_ENTERPRISE_USER_CERTIFICATE,
+                                cryptohome::Identification(), "", _))
       .Times(1);
 
   chromeos::MockCryptohomeClient client;
@@ -299,7 +297,7 @@ TEST_F(AttestationFlowTest, GetCertificate_FailCreateCertRequest) {
       .WillRepeatedly(Invoke(DBusCallbackTrue));
 
   // We're not expecting any server calls in this case; StrictMock will verify.
-  scoped_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
+  std::unique_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
   EXPECT_CALL(*proxy, GetType()).WillRepeatedly(DoDefault());
 
   StrictMock<MockObserver> observer;
@@ -308,26 +306,26 @@ TEST_F(AttestationFlowTest, GetCertificate_FailCreateCertRequest) {
       &MockObserver::MockCertificateCallback,
       base::Unretained(&observer));
 
-  scoped_ptr<ServerProxy> proxy_interface(proxy.release());
+  std::unique_ptr<ServerProxy> proxy_interface(proxy.release());
   AttestationFlow flow(&async_caller, &client, std::move(proxy_interface));
-  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, "", "", true,
-                      mock_callback);
+  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, EmptyAccountId(), "",
+                      true, mock_callback);
   Run();
 }
 
 TEST_F(AttestationFlowTest, GetCertificate_CertRequestRejected) {
   StrictMock<cryptohome::MockAsyncMethodCaller> async_caller;
   async_caller.SetUp(true, cryptohome::MOUNT_ERROR_NONE);
-  EXPECT_CALL(async_caller,
-              AsyncTpmAttestationCreateCertRequest(
-                  _, PROFILE_ENTERPRISE_USER_CERTIFICATE, "", "", _))
+  EXPECT_CALL(async_caller, AsyncTpmAttestationCreateCertRequest(
+                                _, PROFILE_ENTERPRISE_USER_CERTIFICATE,
+                                cryptohome::Identification(), "", _))
       .Times(1);
 
   chromeos::MockCryptohomeClient client;
   EXPECT_CALL(client, TpmAttestationIsEnrolled(_))
       .WillRepeatedly(Invoke(DBusCallbackTrue));
 
-  scoped_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
+  std::unique_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
   proxy->DeferToFake(false);
   EXPECT_CALL(*proxy, GetType()).WillRepeatedly(DoDefault());
   EXPECT_CALL(*proxy, SendCertificateRequest(
@@ -340,10 +338,10 @@ TEST_F(AttestationFlowTest, GetCertificate_CertRequestRejected) {
       &MockObserver::MockCertificateCallback,
       base::Unretained(&observer));
 
-  scoped_ptr<ServerProxy> proxy_interface(proxy.release());
+  std::unique_ptr<ServerProxy> proxy_interface(proxy.release());
   AttestationFlow flow(&async_caller, &client, std::move(proxy_interface));
-  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, "", "", true,
-                      mock_callback);
+  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, EmptyAccountId(), "",
+                      true, mock_callback);
   Run();
 }
 
@@ -356,7 +354,7 @@ TEST_F(AttestationFlowTest, GetCertificate_FailIsEnrolled) {
       .WillRepeatedly(Invoke(DBusCallbackFail));
 
   // We're not expecting any server calls in this case; StrictMock will verify.
-  scoped_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
+  std::unique_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
   EXPECT_CALL(*proxy, GetType()).WillRepeatedly(DoDefault());
 
   StrictMock<MockObserver> observer;
@@ -365,39 +363,38 @@ TEST_F(AttestationFlowTest, GetCertificate_FailIsEnrolled) {
       &MockObserver::MockCertificateCallback,
       base::Unretained(&observer));
 
-  scoped_ptr<ServerProxy> proxy_interface(proxy.release());
+  std::unique_ptr<ServerProxy> proxy_interface(proxy.release());
   AttestationFlow flow(&async_caller, &client, std::move(proxy_interface));
-  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, "", "", true,
-                      mock_callback);
+  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, EmptyAccountId(), "",
+                      true, mock_callback);
   Run();
 }
 
 TEST_F(AttestationFlowTest, GetCertificate_CheckExisting) {
   StrictMock<cryptohome::MockAsyncMethodCaller> async_caller;
   async_caller.SetUp(true, cryptohome::MOUNT_ERROR_NONE);
-  EXPECT_CALL(async_caller,
-              AsyncTpmAttestationCreateCertRequest(
-                  _, PROFILE_ENTERPRISE_USER_CERTIFICATE, "", "", _))
+  EXPECT_CALL(async_caller, AsyncTpmAttestationCreateCertRequest(
+                                _, PROFILE_ENTERPRISE_USER_CERTIFICATE,
+                                cryptohome::Identification(), "", _))
       .Times(1);
   std::string fake_cert_response =
       cryptohome::MockAsyncMethodCaller::kFakeAttestationCertRequest;
   fake_cert_response += "_response";
   EXPECT_CALL(async_caller,
-              AsyncTpmAttestationFinishCertRequest(fake_cert_response,
-                                                   KEY_USER,
-                                                   "",
-                                                   kEnterpriseUserKey,
-                                                   _))
+              AsyncTpmAttestationFinishCertRequest(fake_cert_response, KEY_USER,
+                                                   cryptohome::Identification(),
+                                                   kEnterpriseUserKey, _))
       .Times(1);
 
   chromeos::MockCryptohomeClient client;
   EXPECT_CALL(client, TpmAttestationIsEnrolled(_))
       .WillRepeatedly(Invoke(DBusCallbackTrue));
   EXPECT_CALL(client,
-              TpmAttestationDoesKeyExist(KEY_USER, "", kEnterpriseUserKey, _))
+              TpmAttestationDoesKeyExist(KEY_USER, cryptohome::Identification(),
+                                         kEnterpriseUserKey, _))
       .WillRepeatedly(WithArgs<3>(Invoke(DBusCallbackFalse)));
 
-  scoped_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
+  std::unique_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
   proxy->DeferToFake(true);
   EXPECT_CALL(*proxy, GetType()).WillRepeatedly(DoDefault());
   EXPECT_CALL(*proxy, SendCertificateRequest(
@@ -412,10 +409,10 @@ TEST_F(AttestationFlowTest, GetCertificate_CheckExisting) {
       &MockObserver::MockCertificateCallback,
       base::Unretained(&observer));
 
-  scoped_ptr<ServerProxy> proxy_interface(proxy.release());
+  std::unique_ptr<ServerProxy> proxy_interface(proxy.release());
   AttestationFlow flow(&async_caller, &client, std::move(proxy_interface));
-  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, "", "", false,
-                      mock_callback);
+  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, EmptyAccountId(), "",
+                      false, mock_callback);
   Run();
 }
 
@@ -427,14 +424,16 @@ TEST_F(AttestationFlowTest, GetCertificate_AlreadyExists) {
   EXPECT_CALL(client, TpmAttestationIsEnrolled(_))
       .WillRepeatedly(Invoke(DBusCallbackTrue));
   EXPECT_CALL(client,
-              TpmAttestationDoesKeyExist(KEY_USER, "", kEnterpriseUserKey, _))
+              TpmAttestationDoesKeyExist(KEY_USER, cryptohome::Identification(),
+                                         kEnterpriseUserKey, _))
       .WillRepeatedly(WithArgs<3>(Invoke(DBusCallbackTrue)));
-  EXPECT_CALL(client,
-              TpmAttestationGetCertificate(KEY_USER, "", kEnterpriseUserKey, _))
+  EXPECT_CALL(client, TpmAttestationGetCertificate(KEY_USER,
+                                                   cryptohome::Identification(),
+                                                   kEnterpriseUserKey, _))
       .WillRepeatedly(WithArgs<3>(Invoke(FakeDBusData("fake_cert"))));
 
   // We're not expecting any server calls in this case; StrictMock will verify.
-  scoped_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
+  std::unique_ptr<MockServerProxy> proxy(new StrictMock<MockServerProxy>());
   EXPECT_CALL(*proxy, GetType()).WillRepeatedly(DoDefault());
 
   StrictMock<MockObserver> observer;
@@ -443,17 +442,17 @@ TEST_F(AttestationFlowTest, GetCertificate_AlreadyExists) {
       &MockObserver::MockCertificateCallback,
       base::Unretained(&observer));
 
-  scoped_ptr<ServerProxy> proxy_interface(proxy.release());
+  std::unique_ptr<ServerProxy> proxy_interface(proxy.release());
   AttestationFlow flow(&async_caller, &client, std::move(proxy_interface));
-  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, "", "", false,
-                      mock_callback);
+  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, EmptyAccountId(), "",
+                      false, mock_callback);
   Run();
 }
 
 TEST_F(AttestationFlowTest, AlternatePCA) {
   // Strategy: Create a ServerProxy mock which reports ALTERNATE_PCA and check
   // that all calls to the AsyncMethodCaller reflect this PCA type.
-  scoped_ptr<MockServerProxy> proxy(new NiceMock<MockServerProxy>());
+  std::unique_ptr<MockServerProxy> proxy(new NiceMock<MockServerProxy>());
   proxy->DeferToFake(true);
   EXPECT_CALL(*proxy, GetType()).WillRepeatedly(Return(ALTERNATE_PCA));
 
@@ -478,10 +477,10 @@ TEST_F(AttestationFlowTest, AlternatePCA) {
       &MockObserver::MockCertificateCallback,
       base::Unretained(&observer));
 
-  scoped_ptr<ServerProxy> proxy_interface(proxy.release());
+  std::unique_ptr<ServerProxy> proxy_interface(proxy.release());
   AttestationFlow flow(&async_caller, &client, std::move(proxy_interface));
-  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, "", "", true,
-                      mock_callback);
+  flow.GetCertificate(PROFILE_ENTERPRISE_USER_CERTIFICATE, EmptyAccountId(), "",
+                      true, mock_callback);
   Run();
 }
 

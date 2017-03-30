@@ -30,7 +30,7 @@ void ReplacedPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paint
 
     LayoutRect borderRect(adjustedPaintOffset, m_layoutReplaced.size());
 
-    if (m_layoutReplaced.hasBoxDecorationBackground() && (paintInfo.phase == PaintPhaseForeground || paintInfo.phase == PaintPhaseSelection))
+    if (m_layoutReplaced.style()->visibility() == VISIBLE && m_layoutReplaced.hasBoxDecorationBackground() && (paintInfo.phase == PaintPhaseForeground || paintInfo.phase == PaintPhaseSelection))
         m_layoutReplaced.paintBoxDecorationBackground(paintInfo, adjustedPaintOffset);
 
     if (paintInfo.phase == PaintPhaseMask) {
@@ -85,12 +85,12 @@ void ReplacedPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paint
     // The selection tint never gets clipped by border-radius rounding, since we want it to run right up to the edges of
     // surrounding content.
     bool drawSelectionTint = paintInfo.phase == PaintPhaseForeground && m_layoutReplaced.getSelectionState() != SelectionNone && !paintInfo.isPrinting();
-    if (drawSelectionTint && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutReplaced, DisplayItem::SelectionTint, adjustedPaintOffset)) {
+    if (drawSelectionTint && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutReplaced, DisplayItem::SelectionTint)) {
         LayoutRect selectionPaintingRect = m_layoutReplaced.localSelectionRect();
         selectionPaintingRect.moveBy(adjustedPaintOffset);
         IntRect selectionPaintingIntRect = pixelSnappedIntRect(selectionPaintingRect);
 
-        LayoutObjectDrawingRecorder drawingRecorder(paintInfo.context, m_layoutReplaced, DisplayItem::SelectionTint, selectionPaintingIntRect, adjustedPaintOffset);
+        LayoutObjectDrawingRecorder drawingRecorder(paintInfo.context, m_layoutReplaced, DisplayItem::SelectionTint, selectionPaintingIntRect);
         paintInfo.context.fillRect(selectionPaintingIntRect, m_layoutReplaced.selectionBackgroundColor());
     }
 }
@@ -102,7 +102,8 @@ bool ReplacedPainter::shouldPaint(const PaintInfo& paintInfo, const LayoutPoint&
         return false;
 
     // If we're invisible or haven't received a layout yet, just bail.
-    if (m_layoutReplaced.style()->visibility() != VISIBLE)
+    // But if it's an SVG root, there can be children, so we'll check visibility later.
+    if (!m_layoutReplaced.isSVGRoot() && m_layoutReplaced.style()->visibility() != VISIBLE)
         return false;
 
     LayoutRect paintRect(m_layoutReplaced.visualOverflowRect());

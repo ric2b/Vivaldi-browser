@@ -7,12 +7,14 @@
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/serializers/Serialization.h"
+#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutTreeAsText.h"
-#include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebLocalFrame.h"
+#include "public/web/WebView.h"
 #include "web/WebLocalFrameImpl.h"
 #include "wtf/text/WTFString.h"
 
@@ -24,7 +26,7 @@ static void frameContentAsPlainText(size_t maxChars, LocalFrame* frame, StringBu
     if (!document)
         return;
 
-    if (!frame->view())
+    if (!frame->view() || frame->view()->shouldThrottleRendering())
         return;
 
     // Select the document body.
@@ -53,10 +55,10 @@ static void frameContentAsPlainText(size_t maxChars, LocalFrame* frame, StringBu
             continue;
         LocalFrame* curLocalChild = toLocalFrame(curChild);
         // Ignore the text of non-visible frames.
-        LayoutView* contentLayoutObject = curLocalChild->contentLayoutObject();
+        LayoutViewItem contentLayoutItem = curLocalChild->contentLayoutItem();
         LayoutPart* ownerLayoutObject = curLocalChild->ownerLayoutObject();
-        if (!contentLayoutObject || !contentLayoutObject->size().width() || !contentLayoutObject->size().height()
-            || (contentLayoutObject->location().x() + contentLayoutObject->size().width() <= 0) || (contentLayoutObject->location().y() + contentLayoutObject->size().height() <= 0)
+        if (contentLayoutItem.isNull() || !contentLayoutItem.size().width() || !contentLayoutItem.size().height()
+            || (contentLayoutItem.location().x() + contentLayoutItem.size().width() <= 0) || (contentLayoutItem.location().y() + contentLayoutItem.size().height() <= 0)
             || (ownerLayoutObject && ownerLayoutObject->style() && ownerLayoutObject->style()->visibility() != VISIBLE)) {
             continue;
         }
@@ -76,13 +78,20 @@ static void frameContentAsPlainText(size_t maxChars, LocalFrame* frame, StringBu
     }
 }
 
-WebString WebFrameContentDumper::dumpFrameTreeAsText(WebLocalFrame* frame, size_t maxChars)
+WebString WebFrameContentDumper::deprecatedDumpFrameTreeAsText(WebLocalFrame* frame, size_t maxChars)
 {
     if (!frame)
         return WebString();
     StringBuilder text;
     frameContentAsPlainText(maxChars, toWebLocalFrameImpl(frame)->frame(), text);
     return text.toString();
+}
+
+WebString WebFrameContentDumper::dumpWebViewAsText(WebView* webView, size_t maxChars)
+{
+    ASSERT(webView);
+    webView->updateAllLifecyclePhases();
+    return WebFrameContentDumper::deprecatedDumpFrameTreeAsText(webView->mainFrame()->toWebLocalFrame(), maxChars);
 }
 
 WebString WebFrameContentDumper::dumpAsMarkup(WebLocalFrame* frame)

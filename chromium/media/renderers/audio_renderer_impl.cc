@@ -14,7 +14,6 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/default_tick_clock.h"
 #include "build/build_config.h"
@@ -31,21 +30,6 @@
 #include "media/filters/decrypting_demuxer_stream.h"
 
 namespace media {
-
-namespace {
-
-enum AudioRendererEvent {
-  INITIALIZED,
-  RENDER_ERROR,
-  RENDER_EVENT_MAX = RENDER_ERROR,
-};
-
-void HistogramRendererEvent(AudioRendererEvent event) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "Media.AudioRendererEvents", event, RENDER_EVENT_MAX + 1);
-}
-
-}  // namespace
 
 AudioRendererImpl::AudioRendererImpl(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
@@ -161,20 +145,36 @@ void AudioRendererImpl::SetMediaTime(base::TimeDelta time) {
   ended_timestamp_ = kInfiniteDuration();
   last_render_time_ = stop_rendering_time_ = base::TimeTicks();
   first_packet_timestamp_ = kNoTimestamp();
+  last_media_timestamp_ = base::TimeDelta();
   audio_clock_.reset(new AudioClock(time, audio_parameters_.sample_rate()));
 }
 
 base::TimeDelta AudioRendererImpl::CurrentMediaTime() {
-  // In practice the Render() method is called with a high enough frequency
-  // that returning only the front timestamp is good enough and also prevents
-  // returning values that go backwards in time.
-  base::TimeDelta current_media_time;
-  {
-    base::AutoLock auto_lock(lock_);
-    current_media_time = audio_clock_->front_timestamp();
+  base::AutoLock auto_lock(lock_);
+
+  // Return the current time based on the known extents of the rendered audio
+  // data plus an estimate based on the last time those values were calculated.
+  base::TimeDelta current_media_time = audio_clock_->front_timestamp();
+  if (!last_render_time_.is_null()) {
+    current_media_time += tick_clock_->NowTicks() - last_render_time_;
+    if (current_media_time > audio_clock_->back_timestamp())
+      current_media_time = audio_clock_->back_timestamp();
+  }
+
+  // Clamp current media time to the last reported value, this prevents higher
+  // level clients from seeing time go backwards based on inaccurate or spurious
+  // delay values reported to the AudioClock.
+  //
+  // It is expected that such events are transient and will be recovered as
+  // rendering continues over time.
+  if (current_media_time < last_media_timestamp_) {
+    DVLOG(2) << __FUNCTION__ << ": " << last_media_timestamp_
+             << " (clamped), actual: " << current_media_time;
+    return last_media_timestamp_;
   }
 
   DVLOG(2) << __FUNCTION__ << ": " << current_media_time;
+  last_media_timestamp_ = current_media_time;
   return current_media_time;
 }
 
@@ -464,8 +464,6 @@ void AudioRendererImpl::OnAudioBufferStreamInitialized(bool success) {
 
   ChangeState_Locked(kFlushed);
 
-  HistogramRendererEvent(INITIALIZED);
-
   {
     base::AutoUnlock auto_unlock(lock_);
     sink_->Initialize(audio_parameters_, this);
@@ -499,12 +497,12 @@ void AudioRendererImpl::DecodedAudioReady(
 
   if (status == AudioBufferStream::ABORTED ||
       status == AudioBufferStream::DEMUXER_READ_ABORTED) {
-    HandleAbortedReadOrDecodeError(false);
+    HandleAbortedReadOrDecodeError(PIPELINE_OK);
     return;
   }
 
   if (status == AudioBufferStream::DECODE_ERROR) {
-    HandleAbortedReadOrDecodeError(true);
+    HandleAbortedReadOrDecodeError(PIPELINE_ERROR_DECODE);
     return;
   }
 
@@ -532,7 +530,7 @@ void AudioRendererImpl::DecodedAudioReady(
     buffer_converter_->AddInput(buffer);
     while (buffer_converter_->HasNextBuffer()) {
       if (!splicer_->AddInput(buffer_converter_->GetNextBuffer())) {
-        HandleAbortedReadOrDecodeError(true);
+        HandleAbortedReadOrDecodeError(AUDIO_RENDERER_ERROR_SPLICE_FAILED);
         return;
       }
     }
@@ -553,12 +551,12 @@ void AudioRendererImpl::DecodedAudioReady(
           << audio_parameters_.sample_rate()
           << ", Channels: " << buffer->channel_count() << " vs "
           << audio_parameters_.channels();
-      HandleAbortedReadOrDecodeError(true);
+      HandleAbortedReadOrDecodeError(PIPELINE_ERROR_DECODE);
       return;
     }
 
     if (!splicer_->AddInput(buffer)) {
-      HandleAbortedReadOrDecodeError(true);
+      HandleAbortedReadOrDecodeError(AUDIO_RENDERER_ERROR_SPLICE_FAILED);
       return;
     }
   }
@@ -834,24 +832,17 @@ int AudioRendererImpl::Render(AudioBus* audio_bus,
 }
 
 void AudioRendererImpl::OnRenderError() {
-  // UMA data tells us this happens ~0.01% of the time. Trigger an error instead
-  // of trying to gracefully fall back to a fake sink. It's very likely
-  // OnRenderError() should be removed and the audio stack handle errors without
-  // notifying clients. See http://crbug.com/234708 for details.
-  HistogramRendererEvent(RENDER_ERROR);
-
   MEDIA_LOG(ERROR, media_log_) << "audio render error";
 
   // Post to |task_runner_| as this is called on the audio callback thread.
   task_runner_->PostTask(FROM_HERE,
-                         base::Bind(error_cb_, PIPELINE_ERROR_DECODE));
+                         base::Bind(error_cb_, AUDIO_RENDERER_ERROR));
 }
 
-void AudioRendererImpl::HandleAbortedReadOrDecodeError(bool is_decode_error) {
+void AudioRendererImpl::HandleAbortedReadOrDecodeError(PipelineStatus status) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   lock_.AssertAcquired();
 
-  PipelineStatus status = is_decode_error ? PIPELINE_ERROR_DECODE : PIPELINE_OK;
   switch (state_) {
     case kUninitialized:
     case kInitializing:
@@ -864,7 +855,8 @@ void AudioRendererImpl::HandleAbortedReadOrDecodeError(bool is_decode_error) {
         return;
       }
 
-      MEDIA_LOG(ERROR, media_log_) << "audio decode error during flushing";
+      MEDIA_LOG(ERROR, media_log_) << "audio error during flushing, status: "
+                                   << MediaLog::PipelineStatusToString(status);
       error_cb_.Run(status);
       base::ResetAndReturn(&flush_cb_).Run();
       return;
@@ -872,7 +864,9 @@ void AudioRendererImpl::HandleAbortedReadOrDecodeError(bool is_decode_error) {
     case kFlushed:
     case kPlaying:
       if (status != PIPELINE_OK) {
-        MEDIA_LOG(ERROR, media_log_) << "audio decode error during playing";
+        MEDIA_LOG(ERROR, media_log_)
+            << "audio error during playing, status: "
+            << MediaLog::PipelineStatusToString(status);
         error_cb_.Run(status);
       }
       return;

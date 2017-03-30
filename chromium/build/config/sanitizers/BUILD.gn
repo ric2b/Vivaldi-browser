@@ -33,7 +33,9 @@ group("deps") {
 }
 
 config("sanitizer_options_link_helper") {
-  ldflags = [ "-Wl,-u_sanitizer_options_link_helper" ]
+  if (!is_win) {
+    ldflags = [ "-Wl,-u_sanitizer_options_link_helper" ]
+  }
 }
 
 source_set("options_sources") {
@@ -86,42 +88,19 @@ config("default_sanitizer_ldflags") {
     if (is_msan) {
       ldflags += [ "-fsanitize=memory" ]
     }
-    if (is_ubsan) {
+    if (is_ubsan || is_ubsan_security) {
       ldflags += [ "-fsanitize=undefined" ]
     }
     if (is_ubsan_vptr) {
       ldflags += [ "-fsanitize=vptr" ]
     }
-    if (is_lto && !is_nacl) {
-      ldflags += [ "-flto" ]
 
-      # Apply a lower LTO optimization level as the default is too slow.
-      if (is_linux) {
-        ldflags += [ "-Wl,-plugin-opt,O1" ]
-      } else if (is_mac) {
-        ldflags += [ "-Wl,-mllvm,-O1" ]
-      }
-
-      # Work-around for http://openradar.appspot.com/20356002
-      if (is_mac) {
-        ldflags += [ "-Wl,-all_load" ]
-      }
-
-      # Without this flag, LTO produces a .text section that is larger
-      # than the maximum call displacement, preventing the linker from
-      # relocating calls (http://llvm.org/PR22999).
-      if (current_cpu == "arm") {
-        ldflags += [ "-Wl,-plugin-opt,-function-sections" ]
-      }
-
-      if (is_cfi) {
-        ldflags += [
-          "-fsanitize=cfi-vcall",
-          "-fsanitize=cfi-derived-cast",
-          "-fsanitize=cfi-unrelated-cast",
-        ]
-      }
-
+    if (is_cfi && !is_nacl) {
+      ldflags += [
+        "-fsanitize=cfi-vcall",
+        "-fsanitize=cfi-derived-cast",
+        "-fsanitize=cfi-unrelated-cast",
+      ]
       if (use_cfi_diag) {
         ldflags += [
           "-fno-sanitize-trap=cfi",
@@ -145,144 +124,173 @@ config("default_sanitizer_flags") {
   defines = []
   configs = [ ":default_sanitizer_ldflags" ]
 
-  # Only works on Posix-like platforms.
-  # FIXME: this is not true, remove the conditional.
-  if (is_posix) {
-    # Common options for AddressSanitizer, LeakSanitizer, ThreadSanitizer,
-    # MemorySanitizer and non-official CFI builds.
-    if (using_sanitizer || (is_lto && !is_official_build)) {
-      cflags += [
-        "-fno-omit-frame-pointer",
-        "-gline-tables-only",
-      ]
-    }
-    if (is_asan) {
-      asan_blacklist_path =
-          rebase_path("//tools/memory/asan/blacklist.txt", root_build_dir)
-      cflags += [
-        "-fsanitize=address",
-        "-fsanitize-blacklist=$asan_blacklist_path",
-      ]
-      if (is_android) {
-        # Android build relies on -Wl,--gc-sections removing unreachable code.
-        # ASan instrumentation for globals inhibits this and results in a
-        # library with unresolvable relocations.
-        # TODO(eugenis): find a way to reenable this.
-        cflags += [
-          "-mllvm",
-          "-asan-globals=0",
-        ]
-      } else if (is_mac) {
-        # http://crbug.com/352073
-        cflags += [
-          "-mllvm",
-          "-asan-globals=0",
-        ]
-        # TODO(GYP): deal with mac_bundles.
-      }
-    }
-    if (is_lsan) {
-      cflags += [ "-fsanitize=leak" ]
-    }
-    if (is_tsan) {
-      tsan_blacklist_path =
-          rebase_path("//tools/memory/tsan_v2/ignores.txt", root_build_dir)
-      cflags += [
-        "-fsanitize=thread",
-        "-fsanitize-blacklist=$tsan_blacklist_path",
-      ]
-    }
-    if (is_msan) {
-      msan_blacklist_path =
-          rebase_path("//tools/msan/blacklist.txt", root_build_dir)
-      cflags += [
-        "-fsanitize=memory",
-        "-fsanitize-memory-track-origins=$msan_track_origins",
-        "-fsanitize-blacklist=$msan_blacklist_path",
-      ]
-    }
-    if (is_ubsan) {
-      ubsan_blacklist_path =
-          rebase_path("//tools/ubsan/blacklist.txt", root_build_dir)
-      cflags += [
-        # Yasm dies with an "Illegal instruction" error when bounds checking is
-        # enabled. See http://crbug.com/489901
-        # "-fsanitize=bounds",
-        "-fsanitize=float-divide-by-zero",
-        "-fsanitize=integer-divide-by-zero",
-        "-fsanitize=null",
-        "-fsanitize=object-size",
-        "-fsanitize=return",
-        "-fsanitize=returns-nonnull-attribute",
-        "-fsanitize=shift-exponent",
-        "-fsanitize=signed-integer-overflow",
-        "-fsanitize=unreachable",
-        "-fsanitize=vla-bound",
-        "-fsanitize-blacklist=$ubsan_blacklist_path",
-      ]
+  # Sanitizers need line table info for stack traces. They don't need type info
+  # or variable info, so we can leave that out to speed up the build.
+  if (using_sanitizer) {
+    assert(is_clang, "sanitizers only supported with clang")
+    cflags += [ "-gline-tables-only" ]
+  }
 
-      # Chromecast ubsan builds fail to compile with these
-      # experimental flags, so only add them to non-chromecast ubsan builds.
-      if (!is_chromecast) {
-        cflags += [
-          # Employ the experimental PBQP register allocator to avoid slow
-          # compilation on files with too many basic blocks.
-          # See http://crbug.com/426271.
-          "-mllvm",
-          "-regalloc=pbqp",
-
-          # Speculatively use coalescing to slightly improve the code generated
-          # by PBQP regallocator. May increase compile time.
-          "-mllvm",
-          "-pbqp-coalescing",
-        ]
-      }
+  # Common options for AddressSanitizer, LeakSanitizer, ThreadSanitizer,
+  # MemorySanitizer and non-official CFI builds.
+  if (using_sanitizer || (is_cfi && !is_official_build)) {
+    if (is_posix) {
+      cflags += [ "-fno-omit-frame-pointer" ]
+    } else {
+      cflags += [ "/Oy-" ]
     }
-    if (is_ubsan_vptr) {
-      ubsan_vptr_blacklist_path =
-          rebase_path("//tools/ubsan/vptr_blacklist.txt", root_build_dir)
+  }
+  if (is_asan) {
+    cflags += [ "-fsanitize=address" ]
+    if (is_win) {
+      cflags += [ "-fsanitize-blacklist=" +
+                  rebase_path("//tools/memory/asan/blacklist_win.txt",
+                              root_build_dir) ]
+    } else {
+      # TODO(rnk): Remove this as discussed in http://crbug.com/427202.
+      cflags +=
+          [ "-fsanitize-blacklist=" +
+            rebase_path("//tools/memory/asan/blacklist.txt", root_build_dir) ]
+    }
+    if (is_android) {
+      # Android build relies on -Wl,--gc-sections removing unreachable code.
+      # ASan instrumentation for globals inhibits this and results in a
+      # library with unresolvable relocations.
+      # TODO(eugenis): find a way to reenable this.
       cflags += [
-        "-fsanitize=vptr",
-        "-fsanitize-blacklist=$ubsan_vptr_blacklist_path",
+        "-mllvm",
+        "-asan-globals=0",
       ]
-    }
-    if (is_lto && !is_nacl) {
-      cflags += [ "-flto" ]
+    } else if (is_mac) {
+      # http://crbug.com/352073
+      cflags += [
+        "-mllvm",
+        "-asan-globals=0",
+      ]
+      libs = [ "clang_rt.asan_osx_dynamic" ]
 
-      if (is_cfi) {
-        cfi_blacklist_path =
-            rebase_path("//tools/cfi/blacklist.txt", root_build_dir)
-        cflags += [
-          "-fsanitize=cfi-vcall",
-          "-fsanitize=cfi-derived-cast",
-          "-fsanitize=cfi-unrelated-cast",
-          "-fsanitize-blacklist=$cfi_blacklist_path",
-        ]
-      }
-
-      if (use_cfi_diag) {
-        cflags += [
-          "-fno-sanitize-trap=cfi",
-          "-fsanitize-recover=cfi",
-          "-fno-inline-functions",
-          "-fno-inline",
-          "-fno-omit-frame-pointer",
-          "-O1",
+      # TODO(GYP): deal with mac_bundles.
+    } else if (is_win) {
+      assert(target_cpu == "x86", "WinASan is 32-bit only currently")
+      if (is_component_build) {
+        libs = [
+          "clang_rt.asan_dynamic-i386.lib",
+          "clang_rt.asan_dynamic_runtime_thunk-i386.lib",
         ]
       } else {
-        defines += [ "CFI_ENFORCEMENT" ]
+        # TODO(rnk): DLLs in the non-component build should link against
+        # clang_rt.asan_dll_thunk-i386.lib instead.
+        libs = [ "clang_rt.asan-i386.lib" ]
       }
     }
+  }
+  if (is_lsan) {
+    cflags += [ "-fsanitize=leak" ]
+  }
+  if (is_tsan) {
+    assert(is_linux, "tsan only supported on linux x86_64")
+    tsan_blacklist_path =
+        rebase_path("//tools/memory/tsan_v2/ignores.txt", root_build_dir)
+    cflags += [
+      "-fsanitize=thread",
+      "-fsanitize-blacklist=$tsan_blacklist_path",
+    ]
+  }
+  if (is_msan) {
+    assert(is_linux, "msan only supported on linux x86_64")
+    msan_blacklist_path =
+        rebase_path("//tools/msan/blacklist.txt", root_build_dir)
+    cflags += [
+      "-fsanitize=memory",
+      "-fsanitize-memory-track-origins=$msan_track_origins",
+      "-fsanitize-blacklist=$msan_blacklist_path",
+    ]
+  }
+  if (is_ubsan) {
+    ubsan_blacklist_path =
+        rebase_path("//tools/ubsan/blacklist.txt", root_build_dir)
+    cflags += [
+      # Yasm dies with an "Illegal instruction" error when bounds checking is
+      # enabled. See http://crbug.com/489901
+      # "-fsanitize=bounds",
+      "-fsanitize=float-divide-by-zero",
+      "-fsanitize=integer-divide-by-zero",
+      "-fsanitize=null",
+      "-fsanitize=object-size",
+      "-fsanitize=return",
+      "-fsanitize=returns-nonnull-attribute",
+      "-fsanitize=shift-exponent",
+      "-fsanitize=signed-integer-overflow",
+      "-fsanitize=unreachable",
+      "-fsanitize=vla-bound",
+      "-fsanitize-blacklist=$ubsan_blacklist_path",
+    ]
 
-    if (use_custom_libcxx) {
-      prefix = "//buildtools/third_party"
-      include = "trunk/include"
-      cflags_cc += [
-        "-nostdinc++",
-        "-isystem" + rebase_path("$prefix/libc++/$include", root_build_dir),
-        "-isystem" + rebase_path("$prefix/libc++abi/$include", root_build_dir),
+    # Chromecast ubsan builds fail to compile with these
+    # experimental flags, so only add them to non-chromecast ubsan builds.
+    if (!is_chromecast) {
+      cflags += [
+        # Employ the experimental PBQP register allocator to avoid slow
+        # compilation on files with too many basic blocks.
+        # See http://crbug.com/426271.
+        "-mllvm",
+        "-regalloc=pbqp",
+
+        # Speculatively use coalescing to slightly improve the code generated
+        # by PBQP regallocator. May increase compile time.
+        "-mllvm",
+        "-pbqp-coalescing",
       ]
     }
+  }
+  if (is_ubsan_vptr) {
+    ubsan_vptr_blacklist_path =
+        rebase_path("//tools/ubsan/vptr_blacklist.txt", root_build_dir)
+    cflags += [
+      "-fsanitize=vptr",
+      "-fsanitize-blacklist=$ubsan_vptr_blacklist_path",
+    ]
+  }
+  if (is_ubsan_security) {
+    ubsan_blacklist_path =
+        rebase_path("//tools/ubsan/blacklist.txt", root_build_dir)
+    cflags += [
+      "-fsanitize=signed-integer-overflow",
+      "-fsanitize-blacklist=$ubsan_blacklist_path",
+    ]
+  }
+  if (is_cfi && !is_nacl) {
+    cfi_blacklist_path =
+        rebase_path("//tools/cfi/blacklist.txt", root_build_dir)
+    cflags += [
+      "-fsanitize=cfi-vcall",
+      "-fsanitize=cfi-derived-cast",
+      "-fsanitize=cfi-unrelated-cast",
+      "-fsanitize-blacklist=$cfi_blacklist_path",
+    ]
+
+    if (use_cfi_diag) {
+      cflags += [
+        "-fno-sanitize-trap=cfi",
+        "-fsanitize-recover=cfi",
+        "-fno-inline-functions",
+        "-fno-inline",
+        "-fno-omit-frame-pointer",
+        "-O1",
+      ]
+    } else {
+      defines += [ "CFI_ENFORCEMENT" ]
+    }
+  }
+
+  if (use_custom_libcxx) {
+    prefix = "//buildtools/third_party"
+    include = "trunk/include"
+    cflags_cc += [
+      "-nostdinc++",
+      "-isystem" + rebase_path("$prefix/libc++/$include", root_build_dir),
+      "-isystem" + rebase_path("$prefix/libc++abi/$include", root_build_dir),
+    ]
   }
 }
 
@@ -290,8 +298,18 @@ config("default_sanitizer_coverage_flags") {
   cflags = []
 
   if (use_sanitizer_coverage) {
-    # FIXME: make this configurable.
-    cflags +=
-        [ "-fsanitize-coverage=edge,indirect-calls,8bit-counters,trace-cmp" ]
+    cflags += [
+      "-fsanitize-coverage=$sanitizer_coverage_flags",
+      "-mllvm",
+      "-sanitizer-coverage-prune-blocks=1",
+    ]
+    if (target_cpu == "arm") {
+      # http://crbug.com/517105
+      cflags += [
+        "-mllvm",
+        "-sanitizer-coverage-block-threshold=0",
+      ]
+    }
+    defines = [ "SANITIZER_COVERAGE" ]
   }
 }

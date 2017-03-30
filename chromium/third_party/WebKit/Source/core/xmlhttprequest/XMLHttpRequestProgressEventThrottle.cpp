@@ -36,6 +36,8 @@
 
 namespace blink {
 
+static const double kMinimumProgressEventDispatchingIntervalInSeconds = .05; // 50 ms per specification.
+
 XMLHttpRequestProgressEventThrottle::DeferredEvent::DeferredEvent()
 {
     clear();
@@ -59,16 +61,14 @@ void XMLHttpRequestProgressEventThrottle::DeferredEvent::clear()
     m_total = 0;
 }
 
-PassRefPtrWillBeRawPtr<Event> XMLHttpRequestProgressEventThrottle::DeferredEvent::take()
+Event* XMLHttpRequestProgressEventThrottle::DeferredEvent::take()
 {
     ASSERT(m_isSet);
 
-    RefPtrWillBeRawPtr<Event> event = ProgressEvent::create(EventTypeNames::progress, m_lengthComputable, m_loaded, m_total);
+    Event* event = ProgressEvent::create(EventTypeNames::progress, m_lengthComputable, m_loaded, m_total);
     clear();
-    return event.release();
+    return event;
 }
-
-const double XMLHttpRequestProgressEventThrottle::minimumProgressEventDispatchingIntervalInSeconds = .05; // 50 ms per specification.
 
 XMLHttpRequestProgressEventThrottle::XMLHttpRequestProgressEventThrottle(XMLHttpRequest* target)
     : m_target(target)
@@ -94,11 +94,11 @@ void XMLHttpRequestProgressEventThrottle::dispatchProgressEvent(const AtomicStri
         m_deferred.set(lengthComputable, loaded, total);
     } else {
         dispatchProgressProgressEvent(ProgressEvent::create(EventTypeNames::progress, lengthComputable, loaded, total));
-        startOneShot(minimumProgressEventDispatchingIntervalInSeconds, BLINK_FROM_HERE);
+        startOneShot(kMinimumProgressEventDispatchingIntervalInSeconds, BLINK_FROM_HERE);
     }
 }
 
-void XMLHttpRequestProgressEventThrottle::dispatchReadyStateChangeEvent(PassRefPtrWillBeRawPtr<Event> event, DeferredEventAction action)
+void XMLHttpRequestProgressEventThrottle::dispatchReadyStateChangeEvent(Event* event, DeferredEventAction action)
 {
     XMLHttpRequest::State state = m_target->readyState();
     // Given that ResourceDispatcher doesn't deliver an event when suspended,
@@ -119,15 +119,17 @@ void XMLHttpRequestProgressEventThrottle::dispatchReadyStateChangeEvent(PassRefP
         // the previously dispatched event changes the readyState (e.g. when
         // the event handler calls xhr.abort()). In such cases a
         // readystatechange should have been already dispatched if necessary.
+        InspectorInstrumentation::AsyncTask asyncTask(m_target->getExecutionContext(), m_target, m_target->isAsync());
         m_target->dispatchEvent(event);
     }
 }
 
-void XMLHttpRequestProgressEventThrottle::dispatchProgressProgressEvent(PassRefPtrWillBeRawPtr<Event> progressEvent)
+void XMLHttpRequestProgressEventThrottle::dispatchProgressProgressEvent(Event* progressEvent)
 {
     XMLHttpRequest::State state = m_target->readyState();
     if (m_target->readyState() == XMLHttpRequest::LOADING && m_hasDispatchedProgressProgressEvent) {
-        TRACE_EVENT1("devtools.timeline", "XHRReadyStateChange", "data", InspectorXhrReadyStateChangeEvent::data(m_target->executionContext(), m_target));
+        TRACE_EVENT1("devtools.timeline", "XHRReadyStateChange", "data", InspectorXhrReadyStateChangeEvent::data(m_target->getExecutionContext(), m_target));
+        InspectorInstrumentation::AsyncTask asyncTask(m_target->getExecutionContext(), m_target, m_target->isAsync());
         m_target->dispatchEvent(Event::create(EventTypeNames::readystatechange));
         TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateCounters", TRACE_EVENT_SCOPE_THREAD, "data", InspectorUpdateCountersEvent::data());
     }
@@ -136,6 +138,7 @@ void XMLHttpRequestProgressEventThrottle::dispatchProgressProgressEvent(PassRefP
         return;
 
     m_hasDispatchedProgressProgressEvent = true;
+    InspectorInstrumentation::AsyncTask asyncTask(m_target->getExecutionContext(), m_target, m_target->isAsync());
     m_target->dispatchEvent(progressEvent);
 }
 
@@ -150,7 +153,7 @@ void XMLHttpRequestProgressEventThrottle::fired()
     dispatchProgressProgressEvent(m_deferred.take());
 
     // Watch if another "progress" ProgressEvent arrives in the next 50ms.
-    startOneShot(minimumProgressEventDispatchingIntervalInSeconds, BLINK_FROM_HERE);
+    startOneShot(kMinimumProgressEventDispatchingIntervalInSeconds, BLINK_FROM_HERE);
 }
 
 void XMLHttpRequestProgressEventThrottle::suspend()

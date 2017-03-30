@@ -6,12 +6,12 @@
 #define CHROME_BROWSER_EXTENSIONS_API_PASSWORDS_PRIVATE_PASSWORDS_PRIVATE_DELEGATE_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list_threadsafe.h"
 #include "chrome/browser/ui/passwords/password_manager_presenter.h"
 #include "chrome/browser/ui/passwords/password_ui_view.h"
@@ -44,8 +44,8 @@ class PasswordsPrivateDelegate : public KeyedService {
   // PasswordsPrivateDelegate::AddObserver().
   class Observer {
    public:
-    virtual void OnSavedPasswordsListChanged(const std::vector<linked_ptr<
-        api::passwords_private::PasswordUiEntry>>& entries) {}
+    virtual void OnSavedPasswordsListChanged(
+        const std::vector<api::passwords_private::PasswordUiEntry>& entries) {}
     virtual void OnPasswordExceptionsListChanged(
         const std::vector<std::string>& exceptions) {}
     virtual void OnPlaintextPasswordFetched(

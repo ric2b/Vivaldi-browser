@@ -11,9 +11,6 @@
 #include "remoting/protocol/pairing_registry.h"
 
 namespace remoting {
-
-class RsaKeyPair;
-
 namespace protocol {
 
 class PairingRegistry;
@@ -22,37 +19,38 @@ class PairingHostAuthenticator : public PairingAuthenticatorBase {
  public:
   PairingHostAuthenticator(
       scoped_refptr<PairingRegistry> pairing_registry,
-      const std::string& local_cert,
-      scoped_refptr<RsaKeyPair> key_pair,
+      const CreateBaseAuthenticatorCallback& create_base_authenticator_callback,
       const std::string& pin);
   ~PairingHostAuthenticator() override;
+
+  // Initialize the authenticator with the given |client_id| in
+  // |preferred_initial_state|.
+  void Initialize(const std::string& client_id,
+                  Authenticator::State preferred_initial_state,
+                  const base::Closure& resume_callback);
 
   // Authenticator interface.
   State state() const override;
   RejectionReason rejection_reason() const override;
-  void ProcessMessage(const buzz::XmlElement* message,
-                      const base::Closure& resume_callback) override;
 
  private:
-  // PairingAuthenticatorBase interface.
-  void CreateV2AuthenticatorWithPIN(
+  // PairingAuthenticatorBase overrides.
+  void CreateSpakeAuthenticatorWithPin(
       State initial_state,
-      const SetAuthenticatorCallback& callback) override;
-  void AddPairingElements(buzz::XmlElement* message) override;
+      const base::Closure& resume_callback) override;
 
-  // Continue processing a protocol message once the pairing information for
-  // the client id has been received.
-  void ProcessMessageWithPairing(const buzz::XmlElement* message,
-                                 const base::Closure& resume_callback,
-                                 PairingRegistry::Pairing pairing);
+  // Continue initializing once the pairing information for the client id has
+  // been received.
+  void InitializeWithPairing(Authenticator::State preferred_initial_state,
+                             const base::Closure& resume_callback,
+                             PairingRegistry::Pairing pairing);
 
   // Protocol state.
   scoped_refptr<PairingRegistry> pairing_registry_;
-  std::string local_cert_;
-  scoped_refptr<RsaKeyPair> key_pair_;
-  const std::string& pin_;
-  bool protocol_error_;
-  bool waiting_for_paired_secret_;
+  CreateBaseAuthenticatorCallback create_base_authenticator_callback_;
+  std::string pin_;
+  bool protocol_error_ = false;
+  bool waiting_for_paired_secret_ = false;
 
   base::WeakPtrFactory<PairingHostAuthenticator> weak_factory_;
 

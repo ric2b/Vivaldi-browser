@@ -20,6 +20,7 @@
 namespace blink {
 class WebFrame;
 class WebMediaConstraints;
+class WebRTCAnswerOptions;
 class WebRTCICECandidate;
 class WebRTCOfferOptions;
 class WebString;
@@ -32,7 +33,6 @@ class DataChannelInterface;
 }  // namespace webrtc
 
 namespace content {
-class RTCMediaConstraints;
 class RTCPeerConnectionHandler;
 class RenderThread;
 
@@ -93,6 +93,8 @@ class CONTENT_EXPORT PeerConnectionTracker
   virtual void TrackCreateOffer(RTCPeerConnectionHandler* pc_handler,
                                 const blink::WebMediaConstraints& options);
   virtual void TrackCreateAnswer(RTCPeerConnectionHandler* pc_handler,
+                                 const blink::WebRTCAnswerOptions& options);
+  virtual void TrackCreateAnswer(RTCPeerConnectionHandler* pc_handler,
                                  const blink::WebMediaConstraints& constraints);
 
   // Sends an update when setLocalDescription or setRemoteDescription is called.
@@ -103,8 +105,7 @@ class CONTENT_EXPORT PeerConnectionTracker
   // Sends an update when Ice candidates are updated.
   virtual void TrackUpdateIce(
       RTCPeerConnectionHandler* pc_handler,
-      const webrtc::PeerConnectionInterface::RTCConfiguration& config,
-      const blink::WebMediaConstraints& options);
+      const webrtc::PeerConnectionInterface::RTCConfiguration& config);
 
   // Sends an update when an Ice candidate is added.
   virtual void TrackAddIceCandidate(

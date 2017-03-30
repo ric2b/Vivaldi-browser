@@ -84,19 +84,28 @@ WebInspector.TabbedPane.prototype = {
     },
 
     /**
+     * @return {!Array.<string>}
+     */
+    tabIds: function()
+    {
+        return this._tabs.map(tab => tab._id);
+    },
+
+    /**
      * @return {!Array.<!WebInspector.Widget>}
      */
     tabViews: function()
     {
-        /**
-         * @param {!WebInspector.TabbedPaneTab} tab
-         * @return {!WebInspector.Widget}
-         */
-        function tabToView(tab)
-        {
-            return tab.view;
-        }
-        return this._tabs.map(tabToView);
+        return this._tabs.map(tab => tab.view);
+    },
+
+    /**
+     * @param {string} tabId
+     * @return {?WebInspector.Widget}
+     */
+    tabView: function(tabId)
+    {
+        return this._tabsById[tabId] ? this._tabsById[tabId].view : null;
     },
 
     /**
@@ -363,6 +372,16 @@ WebInspector.TabbedPane.prototype = {
 
     /**
      * @param {string} id
+     * @param {boolean} enabled
+     */
+    setTabEnabled: function(id, enabled)
+    {
+        var tab = this._tabsById[id];
+        tab.tabElement.classList.toggle("disabled", !enabled);
+    },
+
+    /**
+     * @param {string} id
      * @param {string} className
      * @param {boolean=} force
      */
@@ -624,10 +643,8 @@ WebInspector.TabbedPane.prototype = {
         var maxWidth = this._shrinkableTabs ? this._calculateMaxWidth(measuredWidths.slice(), this._totalWidth()) : Number.MAX_VALUE;
 
         var i = 0;
-        for (var tabId in this._tabs) {
-            var tab = this._tabs[tabId];
+        for (var tab of this._tabs)
             tab.setWidth(this._verticalTabLayout ? -1 : Math.min(maxWidth, measuredWidths[i++]));
-        }
     },
 
     _measureWidths: function()
@@ -635,8 +652,7 @@ WebInspector.TabbedPane.prototype = {
         // Add all elements to measure into this._tabsElement
         this._tabsElement.style.setProperty("width", "2000px");
         var measuringTabElements = [];
-        for (var tabId in this._tabs) {
-            var tab = this._tabs[tabId];
+        for (var tab of this._tabs) {
             if (typeof tab._measuredWidth === "number")
                 continue;
             var measuringTabElement = tab._createTabElement(true);
@@ -657,8 +673,8 @@ WebInspector.TabbedPane.prototype = {
 
         // Combine the results.
         var measuredWidths = [];
-        for (var tabId in this._tabs)
-            measuredWidths.push(this._tabs[tabId]._measuredWidth);
+        for (var tab of this._tabs)
+            measuredWidths.push(tab._measuredWidth);
         this._tabsElement.style.removeProperty("width");
 
         return measuredWidths;

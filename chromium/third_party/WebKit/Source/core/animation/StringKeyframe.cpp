@@ -5,16 +5,9 @@
 #include "core/animation/StringKeyframe.h"
 
 #include "core/StylePropertyShorthand.h"
-#include "core/animation/ConstantStyleInterpolation.h"
 #include "core/animation/DeferredLegacyStyleInterpolation.h"
-#include "core/animation/DoubleStyleInterpolation.h"
-#include "core/animation/FilterStyleInterpolation.h"
-#include "core/animation/ImageSliceStyleInterpolation.h"
 #include "core/animation/InvalidatableInterpolation.h"
 #include "core/animation/LegacyStyleInterpolation.h"
-#include "core/animation/LengthBoxStyleInterpolation.h"
-#include "core/animation/LengthStyleInterpolation.h"
-#include "core/animation/ListStyleInterpolation.h"
 #include "core/animation/PropertyInterpolationTypesMapping.h"
 #include "core/animation/css/CSSAnimations.h"
 #include "core/css/CSSPropertyMetadata.h"
@@ -40,7 +33,7 @@ void StringKeyframe::setCSSPropertyValue(CSSPropertyID property, const String& v
         m_cssPropertyMap->setProperty(property, value, false, styleSheetContents);
 }
 
-void StringKeyframe::setCSSPropertyValue(CSSPropertyID property, PassRefPtrWillBeRawPtr<CSSValue> value)
+void StringKeyframe::setCSSPropertyValue(CSSPropertyID property, CSSValue* value)
 {
     ASSERT(property != CSSPropertyInvalid);
     ASSERT(CSSAnimations::isAnimatableProperty(property));
@@ -66,9 +59,9 @@ PropertyHandleSet StringKeyframe::properties() const
     PropertyHandleSet properties;
     for (unsigned i = 0; i < m_cssPropertyMap->propertyCount(); ++i) {
         StylePropertySet::PropertyReference propertyReference = m_cssPropertyMap->propertyAt(i);
-        ASSERT_WITH_MESSAGE(
-            !isShorthandProperty(propertyReference.id()) || propertyReference.value()->isVariableReferenceValue(),
-            "Web Animations: Encountered unexpanded shorthand CSS property (%d).", propertyReference.id());
+        DCHECK(
+            !isShorthandProperty(propertyReference.id()) || propertyReference.value()->isVariableReferenceValue())
+            << "Web Animations: Encountered unexpanded shorthand CSS property (" << propertyReference.id() << ").";
         properties.add(PropertyHandle(propertyReference.id(), false));
     }
 
@@ -138,100 +131,12 @@ PassRefPtr<Interpolation> StringKeyframe::CSSPropertySpecificKeyframe::maybeCrea
     CSSPropertyID property = propertyHandle.isCSSProperty() ? propertyHandle.cssProperty() : propertyHandle.presentationAttribute();
     CSSValue* fromCSSValue = m_value.get();
     CSSValue* toCSSValue = toCSSPropertySpecificKeyframe(end).value();
-    InterpolationRange range = RangeAll;
-
-    // FIXME: Remove this flag once we can rely on legacy's behaviour being correct.
-    bool forceDefaultInterpolation = false;
 
     // FIXME: Remove this check once neutral keyframes are implemented in StringKeyframes.
     if (!fromCSSValue || !toCSSValue)
         return DeferredLegacyStyleInterpolation::create(fromCSSValue, toCSSValue, property);
 
-    ASSERT(fromCSSValue && toCSSValue);
-
-    if (!CSSPropertyMetadata::isInterpolableProperty(property)) {
-        if (fromCSSValue == toCSSValue)
-            return ConstantStyleInterpolation::create(fromCSSValue, property);
-
-        return nullptr;
-    }
-
-    if (fromCSSValue->isCSSWideKeyword() || toCSSValue->isCSSWideKeyword())
-        return createLegacyStyleInterpolation(property, end, element, baseStyle);
-
-    switch (property) {
-    case CSSPropertyFontSize:
-        if (LengthStyleInterpolation::canCreateFrom(*fromCSSValue) && LengthStyleInterpolation::canCreateFrom(*toCSSValue))
-            return LengthStyleInterpolation::create(*fromCSSValue, *toCSSValue, property, RangeNonNegative);
-
-        // FIXME: Handle keywords e.g. 'smaller', 'larger'.
-        if (property == CSSPropertyFontSize)
-            return createLegacyStyleInterpolation(property, end, element, baseStyle);
-
-        // FIXME: Handle keywords e.g. 'baseline', 'sub'.
-        if (property == CSSPropertyBaselineShift)
-            return createLegacyStyleInterpolation(property, end, element, baseStyle);
-
-        break;
-
-    case CSSPropertyTransformOrigin: {
-        RefPtr<Interpolation> interpolation = ListStyleInterpolation<LengthStyleInterpolation>::maybeCreateFromList(*fromCSSValue, *toCSSValue, property, range);
-        if (interpolation)
-            return interpolation.release();
-
-        // FIXME: Handle keywords: top, right, left, center, bottom
-        return createLegacyStyleInterpolation(property, end, element, baseStyle);
-    }
-
-    case CSSPropertyClip: {
-        if (LengthBoxStyleInterpolation::usesDefaultInterpolation(*fromCSSValue, *toCSSValue)) {
-            forceDefaultInterpolation = true;
-            break;
-        }
-        RefPtr<Interpolation> interpolation = LengthBoxStyleInterpolation::maybeCreateFrom(*fromCSSValue, *toCSSValue, property);
-        if (interpolation)
-            return interpolation.release();
-        break;
-    }
-
-    case CSSPropertyBorderImageSlice:
-    case CSSPropertyWebkitMaskBoxImageSlice: {
-        RefPtr<Interpolation> interpolation = ImageSliceStyleInterpolation::maybeCreate(*fromCSSValue, *toCSSValue, property);
-        if (interpolation)
-            return interpolation.release();
-        if (ImageSliceStyleInterpolation::usesDefaultInterpolation(*fromCSSValue, *toCSSValue))
-            forceDefaultInterpolation = true;
-
-        break;
-    }
-
-    case CSSPropertyScale: {
-        RefPtr<Interpolation> interpolation = ListStyleInterpolation<DoubleStyleInterpolation>::maybeCreateFromList(*fromCSSValue, *toCSSValue, property, range);
-        if (interpolation)
-            return interpolation.release();
-
-        // TODO(soonm): Legacy mode is used when from and to cssvaluelist length does not match.
-        return createLegacyStyleInterpolation(property, end, element, baseStyle);
-        break;
-    }
-
-    default:
-        // Fall back to LegacyStyleInterpolation.
-        return createLegacyStyleInterpolation(property, end, element, baseStyle);
-        break;
-    }
-
-    if (fromCSSValue == toCSSValue)
-        return ConstantStyleInterpolation::create(fromCSSValue, property);
-
-    if (!forceDefaultInterpolation) {
-        ASSERT(AnimatableValue::usesDefaultInterpolation(
-            StyleResolver::createAnimatableValueSnapshot(*element, baseStyle, property, fromCSSValue).get(),
-            StyleResolver::createAnimatableValueSnapshot(*element, baseStyle, property, toCSSValue).get()));
-    }
-
-    return nullptr;
-
+    return createLegacyStyleInterpolation(property, end, element, baseStyle);
 }
 
 PassRefPtr<Keyframe::PropertySpecificKeyframe> StringKeyframe::CSSPropertySpecificKeyframe::neutralKeyframe(double offset, PassRefPtr<TimingFunction> easing) const

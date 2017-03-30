@@ -192,7 +192,7 @@ SelectorChecker::Match SelectorChecker::matchSelector(const SelectorCheckingCont
     if (!checkOne(context, subResult))
         return SelectorFailsLocally;
 
-    if (subResult.dynamicPseudo != NOPSEUDO)
+    if (subResult.dynamicPseudo != PseudoIdNone)
         result.dynamicPseudo = subResult.dynamicPseudo;
 
     if (context.selector->isLastInTagHistory()) {
@@ -208,10 +208,10 @@ SelectorChecker::Match SelectorChecker::matchSelector(const SelectorCheckingCont
         if (nextSelectorExceedsScope(context))
             return SelectorFailsCompletely;
 
-        if (context.pseudoId != NOPSEUDO && context.pseudoId != result.dynamicPseudo)
+        if (context.pseudoId != PseudoIdNone && context.pseudoId != result.dynamicPseudo)
             return SelectorFailsCompletely;
 
-        TemporaryChange<PseudoId> dynamicPseudoScope(result.dynamicPseudo, NOPSEUDO);
+        TemporaryChange<PseudoId> dynamicPseudoScope(result.dynamicPseudo, PseudoIdNone);
         match = matchForRelation(context, result);
     } else {
         match = matchForSubSelector(context, result);
@@ -234,8 +234,8 @@ SelectorChecker::Match SelectorChecker::matchForSubSelector(const SelectorChecki
     SelectorCheckingContext nextContext = prepareNextContextForRelation(context);
 
     PseudoId dynamicPseudo = result.dynamicPseudo;
-    nextContext.hasScrollbarPseudo = dynamicPseudo != NOPSEUDO && (m_scrollbar || dynamicPseudo == SCROLLBAR_CORNER || dynamicPseudo == RESIZER);
-    nextContext.hasSelectionPseudo = dynamicPseudo == SELECTION;
+    nextContext.hasScrollbarPseudo = dynamicPseudo != PseudoIdNone && (m_scrollbar || dynamicPseudo == PseudoIdScrollbarCorner || dynamicPseudo == PseudoIdResizer);
+    nextContext.hasSelectionPseudo = dynamicPseudo == PseudoIdSelection;
     nextContext.isSubSelector = true;
     return matchSelector(nextContext, result);
 }
@@ -276,7 +276,7 @@ SelectorChecker::Match SelectorChecker::matchForRelation(const SelectorCheckingC
     nextContext.inRightmostCompound = false;
     nextContext.isSubSelector = false;
     nextContext.previousElement = context.element;
-    nextContext.pseudoId = NOPSEUDO;
+    nextContext.pseudoId = PseudoIdNone;
 
     switch (relation) {
     case CSSSelector::Descendant:
@@ -345,7 +345,7 @@ SelectorChecker::Match SelectorChecker::matchForRelation(const SelectorCheckingC
 
     case CSSSelector::ShadowPseudo:
         {
-            if (!m_isUARule && context.selector->getPseudoType() == CSSSelector::PseudoShadow)
+            if (!m_isUARule && !m_isQuerySelector && context.selector->getPseudoType() == CSSSelector::PseudoShadow)
                 Deprecation::countDeprecation(context.element->document(), UseCounter::CSSSelectorPseudoShadow);
             // If we're in the same tree-scope as the scoping element, then following a shadow descendant combinator would escape that and thus the scope.
             if (context.scope && context.scope->shadowHost() && context.scope->shadowHost()->treeScope() == context.element->treeScope())
@@ -360,7 +360,7 @@ SelectorChecker::Match SelectorChecker::matchForRelation(const SelectorCheckingC
 
     case CSSSelector::ShadowDeep:
         {
-            if (!m_isUARule)
+            if (!m_isUARule && !m_isQuerySelector)
                 Deprecation::countDeprecation(context.element->document(), UseCounter::CSSDeepCombinator);
             if (ShadowRoot* root = context.element->containingShadowRoot()) {
                 if (root->type() == ShadowRootType::UserAgent)
@@ -406,7 +406,7 @@ SelectorChecker::Match SelectorChecker::matchForRelation(const SelectorCheckingC
 
 SelectorChecker::Match SelectorChecker::matchForPseudoContent(const SelectorCheckingContext& context, const Element& element, MatchResult& result) const
 {
-    WillBeHeapVector<RawPtrWillBeMember<InsertionPoint>, 8> insertionPoints;
+    HeapVector<Member<InsertionPoint>, 8> insertionPoints;
     collectDestinationInsertionPoints(element, insertionPoints);
     SelectorCheckingContext nextContext(context);
     for (const auto& insertionPoint : insertionPoints) {
@@ -831,7 +831,7 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context, M
     case CSSSelector::PseudoFullPageMedia:
         return element.document().isMediaDocument();
     case CSSSelector::PseudoDefault:
-        return element.isDefaultButtonForForm();
+        return element.matchesDefaultPseudoClass();
     case CSSSelector::PseudoDisabled:
         // TODO(esprehn): Why not just always return isDisabledFormControl()?
         // Can it be true for elements not in the list below?
@@ -995,7 +995,7 @@ bool SelectorChecker::checkPseudoElement(const SelectorCheckingContext& context,
             return true;
         ASSERT(m_mode != QueryingRules);
         result.dynamicPseudo = CSSSelector::pseudoId(selector.getPseudoType());
-        ASSERT(result.dynamicPseudo != NOPSEUDO);
+        ASSERT(result.dynamicPseudo != PseudoIdNone);
         return true;
     }
 }
@@ -1136,7 +1136,7 @@ bool SelectorChecker::checkScrollbarPseudoClass(const SelectorCheckingContext& c
             return false;
         }
     case CSSSelector::PseudoCornerPresent:
-        return m_scrollbar->scrollableArea() && m_scrollbar->scrollableArea()->isScrollCornerVisible();
+        return m_scrollbar->getScrollableArea() && m_scrollbar->getScrollableArea()->isScrollCornerVisible();
     default:
         return false;
     }

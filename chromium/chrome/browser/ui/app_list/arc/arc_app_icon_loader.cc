@@ -33,12 +33,11 @@ void ArcAppIconLoader::FetchImage(const std::string& app_id) {
 
   // Note, ARC icon is available only for 48x48 dips. In case |icon_size_|
   // differs from this size, re-scale is required.
-  scoped_ptr<ArcAppIcon> icon(new ArcAppIcon(profile(),
-                                             app_id,
-                                             app_list::kGridIconDimension,
-                                             this));
+  std::unique_ptr<ArcAppIcon> icon(
+      new ArcAppIcon(profile(), app_id, app_list::kGridIconDimension, this));
   icon->image_skia().EnsureRepsForSupportedScales();
   icon_map_[app_id] = std::move(icon);
+  UpdateImage(app_id);
 }
 
 void ArcAppIconLoader::ClearImage(const std::string& app_id) {
@@ -50,7 +49,7 @@ void ArcAppIconLoader::UpdateImage(const std::string& app_id) {
   if (it == icon_map_.end())
     return;
 
-  scoped_ptr<ArcAppListPrefs::AppInfo> app_info =
+  std::unique_ptr<ArcAppListPrefs::AppInfo> app_info =
       ArcAppListPrefs::Get(profile())->GetApp(app_id);
   if (!app_info || !app_info->ready) {
     delegate()->OnAppImageUpdated(app_id,

@@ -40,9 +40,9 @@ RemoteFrameClientImpl::RemoteFrameClientImpl(WebRemoteFrameImpl* webFrame)
 {
 }
 
-PassOwnPtrWillBeRawPtr<RemoteFrameClientImpl> RemoteFrameClientImpl::create(WebRemoteFrameImpl* webFrame)
+RemoteFrameClientImpl* RemoteFrameClientImpl::create(WebRemoteFrameImpl* webFrame)
 {
-    return adoptPtrWillBeNoop(new RemoteFrameClientImpl(webFrame));
+    return new RemoteFrameClientImpl(webFrame);
 }
 
 DEFINE_TRACE(RemoteFrameClientImpl)
@@ -63,8 +63,6 @@ void RemoteFrameClientImpl::willBeDetached()
 void RemoteFrameClientImpl::detached(FrameDetachType type)
 {
     // Alert the client that the frame is being detached.
-    RefPtrWillBeRawPtr<WebRemoteFrameImpl> protector(m_webFrame.get());
-
     WebRemoteFrameClient* client = m_webFrame->client();
     if (!client)
         return;
@@ -140,8 +138,9 @@ void RemoteFrameClientImpl::navigate(const ResourceRequest& request, bool should
 
 void RemoteFrameClientImpl::reload(FrameLoadType loadType, ClientRedirectPolicy clientRedirectPolicy)
 {
+    ASSERT(loadType == FrameLoadTypeReload || loadType == FrameLoadTypeReloadBypassingCache);
     if (m_webFrame->client())
-        m_webFrame->client()->reload(loadType == FrameLoadTypeReloadFromOrigin, clientRedirectPolicy == ClientRedirect);
+        m_webFrame->client()->reload(static_cast<WebFrameLoadType>(loadType), static_cast<WebClientRedirectPolicy>(clientRedirectPolicy));
 }
 
 unsigned RemoteFrameClientImpl::backForwardLength()

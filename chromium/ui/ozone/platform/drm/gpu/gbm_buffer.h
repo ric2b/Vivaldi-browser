@@ -26,27 +26,39 @@ class GbmBuffer : public GbmBufferBase {
       gfx::BufferFormat format,
       const gfx::Size& size,
       gfx::BufferUsage usage);
+  static scoped_refptr<GbmBuffer> CreateBufferFromFD(
+      const scoped_refptr<GbmDevice>& gbm,
+      gfx::BufferFormat format,
+      const gfx::Size& size,
+      base::ScopedFD fd,
+      int stride);
   gfx::BufferFormat GetFormat() const { return format_; }
   gfx::BufferUsage GetUsage() const { return usage_; }
+  int GetFd() const;
+  int GetStride() const;
 
  private:
   GbmBuffer(const scoped_refptr<GbmDevice>& gbm,
             gbm_bo* bo,
             gfx::BufferFormat format,
-            gfx::BufferUsage usage);
+            gfx::BufferUsage usage,
+            base::ScopedFD fd,
+            int stride);
   ~GbmBuffer() override;
 
   gfx::BufferFormat format_;
   gfx::BufferUsage usage_;
+  base::ScopedFD fd_;
+  int stride_;
 
   DISALLOW_COPY_AND_ASSIGN(GbmBuffer);
 };
 
 class GbmPixmap : public NativePixmap {
  public:
-  explicit GbmPixmap(GbmSurfaceFactory* surface_manager);
-  void Initialize(base::ScopedFD dma_buf, int dma_buf_pitch);
-  bool InitializeFromBuffer(const scoped_refptr<GbmBuffer>& buffer);
+  GbmPixmap(GbmSurfaceFactory* surface_manager,
+            const scoped_refptr<GbmBuffer>& buffer);
+
   void SetProcessingCallback(
       const ProcessingCallback& processing_callback) override;
 
@@ -70,11 +82,8 @@ class GbmPixmap : public NativePixmap {
   scoped_refptr<ScanoutBuffer> ProcessBuffer(const gfx::Size& size,
                                              uint32_t format);
 
-  scoped_refptr<GbmBuffer> buffer_;
-  base::ScopedFD dma_buf_;
-  int dma_buf_pitch_ = -1;
-
   GbmSurfaceFactory* surface_manager_;
+  scoped_refptr<GbmBuffer> buffer_;
 
   // OverlayValidator can request scaling or format conversions as needed for
   // this Pixmap. This holds the processed buffer.

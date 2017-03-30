@@ -39,9 +39,9 @@
 // backwards compatibility for legacy applications using the library.
 #define VPX_CODEC_DISABLE_COMPAT 1
 extern "C" {
-#include "third_party/libvpx_new/source/libvpx/vpx/vp8dx.h"
-#include "third_party/libvpx_new/source/libvpx/vpx/vpx_decoder.h"
-#include "third_party/libvpx_new/source/libvpx/vpx/vpx_frame_buffer.h"
+#include "third_party/libvpx/source/libvpx/vpx/vp8dx.h"
+#include "third_party/libvpx/source/libvpx/vpx/vpx_decoder.h"
+#include "third_party/libvpx/source/libvpx/vpx/vpx_frame_buffer.h"
 }
 
 #include "third_party/libyuv/include/libyuv/convert.h"
@@ -391,7 +391,7 @@ void VpxVideoDecoder::Initialize(const VideoDecoderConfig& config,
   // Success!
   config_ = config;
   state_ = kNormal;
-  output_cb_ = BindToCurrentLoop(output_cb);
+  output_cb_ = offload_task_runner_ ? BindToCurrentLoop(output_cb) : output_cb;
   bound_init_cb.Run(true);
 }
 
@@ -401,25 +401,25 @@ void VpxVideoDecoder::DecodeBuffer(const scoped_refptr<DecoderBuffer>& buffer,
       << "Called Decode() before successful Initialize()";
 
   if (state_ == kError) {
-    bound_decode_cb.Run(kDecodeError);
+    bound_decode_cb.Run(DecodeStatus::DECODE_ERROR);
     return;
   }
 
   if (state_ == kDecodeFinished) {
-    bound_decode_cb.Run(kOk);
+    bound_decode_cb.Run(DecodeStatus::OK);
     return;
   }
 
   if (state_ == kNormal && buffer->end_of_stream()) {
     state_ = kDecodeFinished;
-    bound_decode_cb.Run(kOk);
+    bound_decode_cb.Run(DecodeStatus::OK);
     return;
   }
 
   scoped_refptr<VideoFrame> video_frame;
   if (!VpxDecode(buffer, &video_frame)) {
     state_ = kError;
-    bound_decode_cb.Run(kDecodeError);
+    bound_decode_cb.Run(DecodeStatus::DECODE_ERROR);
     return;
   }
 
@@ -432,7 +432,7 @@ void VpxVideoDecoder::DecodeBuffer(const scoped_refptr<DecoderBuffer>& buffer,
   }
 
   // VideoDecoderShim expects |decode_cb| call after |output_cb_|.
-  bound_decode_cb.Run(kOk);
+  bound_decode_cb.Run(DecodeStatus::OK);
 }
 
 void VpxVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,

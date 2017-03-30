@@ -14,6 +14,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -21,6 +22,13 @@
 #include "prefs/vivaldi_browser_prefs.h"
 #include "prefs/vivaldi_pref_names.h"
 
+namespace vivaldi {
+
+NativeSettingsObserverDelegate::~NativeSettingsObserverDelegate() {
+
+}
+
+} // namespace vivaldi
 
 namespace extensions {
 
@@ -39,6 +47,7 @@ struct PrefsMapping kPrefsValues[] {
   { prefs::kSearchSuggestEnabled, booleanPreftype },
   { prefs::kWebKitMinimumFontSize, integerPreftype },
   { prefs::kDefaultCharset, stringPreftype },
+  { password_manager::prefs::kPasswordManagerSavingEnabled, booleanPreftype },
 
   // Download preferences
   { prefs::kDownloadDefaultDirectory, stringPreftype },
@@ -49,6 +58,7 @@ struct PrefsMapping kPrefsValues[] {
   { vivaldiprefs::kSmoothScrollingEnabled, booleanPreftype },
   // Controls if zoom values are re-used in tab when navigating between hosts
   { vivaldiprefs::kVivaldiTabZoom, booleanPreftype },
+  { vivaldiprefs::kVivaldiHomepage, stringPreftype },
 
   // Control if tab only cycles input fields and tab index fields or not.
   { vivaldiprefs::kVivaldiTabsToLinks, booleanPreftype },
@@ -174,7 +184,8 @@ void VivaldiSettingsApiNotification::OnChanged(
 }
 
 VivaldiSettingsApiNotification::VivaldiSettingsApiNotification(Profile* profile)
-    : profile_(profile), weak_ptr_factory_(this) {
+    : profile_(profile),
+      weak_ptr_factory_(this) {
   prefs_registrar_.Init(profile->GetPrefs());
   for (size_t i = 0; i < arraysize(kPrefsValues); i++) {
     prefs_registrar_.Add(
@@ -182,6 +193,8 @@ VivaldiSettingsApiNotification::VivaldiSettingsApiNotification(Profile* profile)
         base::Bind(&VivaldiSettingsApiNotification::OnChanged,
                    base::Unretained(this)));
   }
+  native_settings_observer_.reset(
+      ::vivaldi::NativeSettingsObserver::Create(this));
 }
 
 VivaldiSettingsApiNotification::VivaldiSettingsApiNotification()
@@ -191,6 +204,19 @@ VivaldiSettingsApiNotification::VivaldiSettingsApiNotification()
 VivaldiSettingsApiNotification::~VivaldiSettingsApiNotification() {
 }
 
+// NativeSettingsObserverDelegate
+void VivaldiSettingsApiNotification::SetPref(const char* name,
+                                             const int value) {
+  profile_->GetPrefs()->SetInteger(name, value);
+}
+void VivaldiSettingsApiNotification::SetPref(const char* name,
+                                             const std::string& value) {
+  profile_->GetPrefs()->SetString(name, value);
+}
+void VivaldiSettingsApiNotification::SetPref(const char* name,
+                                             const bool value) {
+  profile_->GetPrefs()->SetBoolean(name, value);
+}
 
 VivaldiSettingsApiNotification*
 VivaldiSettingsApiNotificationFactory::GetForProfile(Profile* profile) {
@@ -249,6 +275,10 @@ void VivaldiSettingsApiNotificationFactory::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(vivaldiprefs::kVivaldiTabZoom, false,
     user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterStringPref(vivaldiprefs::kVivaldiHomepage,
+                               "https://vivaldi.com",
+                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
 
@@ -387,15 +417,13 @@ SettingsGetAllPreferencesFunction::SettingsGetAllPreferencesFunction() {
 }
 
 bool SettingsGetAllPreferencesFunction::RunAsync() {
-  std::vector<linked_ptr<vivaldi::settings::PreferenceItem> > nodes;
+  std::vector<vivaldi::settings::PreferenceItem> nodes;
   Profile* profile = GetProfile();
 
   for (size_t i = 0; i < arraysize(kPrefsValues); i++) {
     scoped_ptr<vivaldi::settings::PreferenceItem> item(GetPref(
         profile, kPrefsValues[i].prefs_name, kPrefsValues[i].prefs_type));
-    // Quirky workaround for type incompatibility.
-    linked_ptr<vivaldi::settings::PreferenceItem> linked_item(item.release());
-    nodes.push_back(linked_item);
+    nodes.push_back(std::move(*item));
   }
   results_ = vivaldi::settings::GetAllPreferences::Results::Create(nodes);
   SendResponse(true);

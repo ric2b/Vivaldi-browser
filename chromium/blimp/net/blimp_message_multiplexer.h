@@ -5,6 +5,8 @@
 #ifndef BLIMP_NET_BLIMP_MESSAGE_MULTIPLEXER_H_
 #define BLIMP_NET_BLIMP_MESSAGE_MULTIPLEXER_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "blimp/common/proto/blimp_message.pb.h"
@@ -17,6 +19,8 @@ class BlimpMessageProcessor;
 
 // Creates MessageProcessors that receive outgoing messages and put them
 // onto a multiplexed message stream.
+// BlimpMessageMultiplexer is created on the UI thread, and then used and
+// destroyed on the IO thread.
 class BLIMP_NET_EXPORT BlimpMessageMultiplexer {
  public:
   // |output_processor|: A pointer to the MessageProcessor that will receive the
@@ -27,7 +31,7 @@ class BLIMP_NET_EXPORT BlimpMessageMultiplexer {
 
   // Creates a BlimpMessageProcessor object for sending messages of type |type|.
   // Any number of senders can be created at a time for a given type.
-  scoped_ptr<BlimpMessageProcessor> CreateSenderForType(
+  std::unique_ptr<BlimpMessageProcessor> CreateSenderForType(
       BlimpMessage::Type type);
 
  private:

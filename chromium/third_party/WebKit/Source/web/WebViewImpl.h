@@ -61,6 +61,8 @@
 #include "web/PageWidgetDelegate.h"
 #include "web/SpellCheckerClientImpl.h"
 #include "web/StorageClientImpl.h"
+#include "web/WebExport.h"
+#include "wtf/Compiler.h"
 #include "wtf/HashSet.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/RefCounted.h"
@@ -93,9 +95,9 @@ class WebSelection;
 class WebSettingsImpl;
 class WebViewScheduler;
 
-class WebViewImpl final : public WebView
+class WEB_EXPORT WebViewImpl final : WTF_NON_EXPORTED_BASE(public WebView)
     , public RefCounted<WebViewImpl>
-    , public WebGestureCurveTarget
+    , WTF_NON_EXPORTED_BASE(public WebGestureCurveTarget)
     , public PageWidgetEventHandler {
 public:
     static WebViewImpl* create(WebViewClient*);
@@ -104,10 +106,8 @@ public:
     // WebWidget methods:
     void close() override;
     WebSize size() override;
-    void willStartLiveResize() override;
     void resize(const WebSize&) override;
     void resizeVisualViewport(const WebSize&) override;
-    void willEndLiveResize() override;
     void didEnterFullScreen() override;
     void didExitFullScreen() override;
 
@@ -280,10 +280,6 @@ public:
     void setShowScrollBottleneckRects(bool) override;
     void acceptLanguagesChanged() override;
 
-    // WebViewImpl
-    void enableViewport();
-    void disableViewport();
-
     float defaultMinimumPageScaleFactor() const;
     float defaultMaximumPageScaleFactor() const;
     float minimumPageScaleFactor() const;
@@ -370,7 +366,7 @@ public:
     // Keyboard event to the Right Mouse button down event.
     WebInputEventResult sendContextMenuEvent(const WebKeyboardEvent&);
 
-    void showContextMenuAtPoint(float x, float y, PassRefPtrWillBeRawPtr<ContextMenuProvider>);
+    void showContextMenuAtPoint(float x, float y, ContextMenuProvider*);
 
     void showContextMenuForElement(WebElement);
 
@@ -440,9 +436,7 @@ public:
 
     GraphicsLayer* rootGraphicsLayer();
     void setRootGraphicsLayer(GraphicsLayer*);
-    GraphicsLayerFactory* graphicsLayerFactory() const;
     PaintLayerCompositor* compositor() const;
-    void registerForAnimations(WebLayer*);
     void scheduleAnimation();
     void attachCompositorAnimationTimeline(CompositorAnimationTimeline*);
     void detachCompositorAnimationTimeline(CompositorAnimationTimeline*);
@@ -468,7 +462,7 @@ public:
     void computeScaleAndScrollForBlockRect(const WebPoint& hitPoint, const WebRect& blockRect, float padding, float defaultScaleWhenAlreadyLegible, float& scale, WebPoint& scroll);
     Node* bestTapNode(const GestureEventWithHitTestResults& targetedTapEvent);
     void enableTapHighlightAtPoint(const GestureEventWithHitTestResults& targetedTapEvent);
-    void enableTapHighlights(WillBeHeapVector<RawPtrWillBeMember<Node>>&);
+    void enableTapHighlights(HeapVector<Member<Node>>&);
     void computeScaleAndScrollForFocusedNode(Node* focusedNode, bool zoomInToLegibleScale, float& scale, IntPoint& scroll, bool& needAnimation);
 
     void animateDoubleTapZoom(const IntPoint&);
@@ -500,7 +494,7 @@ public:
 
     // Exposed for tests.
     unsigned numLinkHighlights() { return m_linkHighlights.size(); }
-    LinkHighlightImpl* linkHighlight(int i) { return m_linkHighlights[i].get(); }
+    LinkHighlightImpl* getLinkHighlight(int i) { return m_linkHighlights[i].get(); }
 
     WebSettingsImpl* settingsImpl();
 
@@ -537,7 +531,7 @@ public:
     void detachPaintArtifactCompositor();
 
     // Use in Slimming Paint v2 to update the layer tree for the content.
-    PaintArtifactCompositor& paintArtifactCompositor() { return m_paintArtifactCompositor; }
+    PaintArtifactCompositor& getPaintArtifactCompositor() { return m_paintArtifactCompositor; }
 
     bool isTransparent() const;
     void setIsTransparent(bool value);
@@ -625,6 +619,8 @@ private:
 
     WebPlugin* focusedPluginIfInputMethodSupported(LocalFrame*);
 
+    WebGestureEvent createGestureScrollEventFromFling(WebInputEvent::Type, WebGestureDevice) const;
+
     void enablePopupMouseWheelEventListener();
     void disablePopupMouseWheelEventListener();
 
@@ -636,7 +632,7 @@ private:
     WebViewClient* m_client; // Can be 0 (e.g. unittests, shared workers, etc.)
     WebSpellCheckClient* m_spellCheckClient;
 
-    OwnPtrWillBePersistent<ChromeClientImpl> m_chromeClientImpl;
+    Persistent<ChromeClientImpl> m_chromeClientImpl;
     ContextMenuClientImpl m_contextMenuClientImpl;
     DragClientImpl m_dragClientImpl;
     EditorClientImpl m_editorClientImpl;
@@ -651,7 +647,7 @@ private:
     // The upper bound on the size when auto-resizing.
     IntSize m_maxAutoSize;
 
-    OwnPtrWillBePersistent<Page> m_page;
+    Persistent<Page> m_page;
 
     // An object that can be used to manipulate m_page->settings() without linking
     // against WebCore. This is lazily allocated the first time GetWebSettings()
@@ -724,7 +720,7 @@ private:
     // The popup associated with an input/select element.
     RefPtr<WebPagePopupImpl> m_pagePopup;
 
-    OwnPtrWillBePersistent<DevToolsEmulator> m_devToolsEmulator;
+    Persistent<DevToolsEmulator> m_devToolsEmulator;
     OwnPtr<PageOverlay> m_pageColorOverlay;
 
     // Whether the webview is rendering transparently.
@@ -734,7 +730,7 @@ private:
     bool m_tabsToLinks;
 
     // If set, the (plugin) node which has mouse capture.
-    RefPtrWillBePersistent<Node> m_mouseCaptureNode;
+    Persistent<Node> m_mouseCaptureNode;
     RefPtr<UserGestureToken> m_mouseCaptureGestureToken;
 
     RefPtr<UserGestureToken> m_pointerLockGestureToken;
@@ -742,7 +738,6 @@ private:
     WebLayerTreeView* m_layerTreeView;
     WebLayer* m_rootLayer;
     GraphicsLayer* m_rootGraphicsLayer;
-    OwnPtr<GraphicsLayerFactory> m_graphicsLayerFactory;
     bool m_matchesHeuristicsForGpuRasterization;
     static const WebInputEvent* m_currentInputEvent;
 
@@ -754,7 +749,7 @@ private:
     WebGestureDevice m_flingSourceDevice;
     Vector<OwnPtr<LinkHighlightImpl>> m_linkHighlights;
     OwnPtr<CompositorAnimationTimeline> m_linkHighlightsTimeline;
-    OwnPtrWillBePersistent<FullscreenController> m_fullscreenController;
+    Persistent<FullscreenController> m_fullscreenController;
 
     bool m_showFPSCounter;
     WebColor m_baseBackgroundColor;
@@ -769,7 +764,7 @@ private:
 
     FloatSize m_elasticOverscroll;
 
-    RefPtrWillBePersistent<EventListener> m_popupMouseWheelEventListener;
+    Persistent<EventListener> m_popupMouseWheelEventListener;
 
     WebPageImportanceSignals m_pageImportanceSignals;
 

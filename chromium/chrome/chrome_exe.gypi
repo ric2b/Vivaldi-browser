@@ -445,11 +445,11 @@
             '../components/components.gyp:crash_component',
             '../components/components.gyp:crash_core_common',
             '../components/components.gyp:flags_ui_switches',
+            '../components/components.gyp:policy',
             '../components/components.gyp:startup_metric_utils_common',
             '../sandbox/sandbox.gyp:sandbox',
             '../third_party/kasko/kasko.gyp:kasko_features',
             '../ui/gfx/gfx.gyp:gfx',
-            '../win8/delegate_execute/delegate_execute.gyp:*',
             '../win8/win8.gyp:visual_elements_resources',
           ],
           'sources': [
@@ -487,13 +487,6 @@
               ],
             },
           },
-          'conditions': [
-            ['configuration_policy==1', {
-              'dependencies': [
-                '<(DEPTH)/components/components.gyp:policy',
-              ],
-            }],
-          ],
           'actions': [
             {
               'action_name': 'first_run',
@@ -574,6 +567,7 @@
                 '../components/components.gyp:breakpad_win64',
                 '../components/components.gyp:crash_core_common_win64',
                 '../components/components.gyp:flags_ui_switches_win64',
+                '../components/components.gyp:policy_win64',
                 '../chrome/common_constants.gyp:common_constants_win64',
                 '../components/nacl.gyp:nacl_win64',
                 '../crypto/crypto.gyp:crypto_nacl_win64',
@@ -599,13 +593,6 @@
                   'msvs_target_platform': 'x64',
                 },
               },
-              'conditions': [
-                ['configuration_policy==1', {
-                  'dependencies': [
-                    '<(DEPTH)/components/components.gyp:policy_win64',
-                  ],
-                }],
-              ],
             },
           ],
         }, {  # else (disable_nacl==1)

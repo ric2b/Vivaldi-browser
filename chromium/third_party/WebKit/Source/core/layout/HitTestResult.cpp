@@ -22,6 +22,7 @@
 #include "core/layout/HitTestResult.h"
 
 #include "core/HTMLNames.h"
+#include "core/InputTypeNames.h"
 #include "core/dom/PseudoElement.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
@@ -96,7 +97,7 @@ HitTestResult::HitTestResult(const HitTestResult& other)
     , m_isOverWidget(other.isOverWidget())
 {
     // Only copy the NodeSet in case of list hit test.
-    m_listBasedTestResult = adoptPtrWillBeNoop(other.m_listBasedTestResult ? new NodeSet(*other.m_listBasedTestResult) : 0);
+    m_listBasedTestResult = other.m_listBasedTestResult ? new NodeSet(*other.m_listBasedTestResult) : nullptr;
 }
 
 HitTestResult::~HitTestResult()
@@ -142,7 +143,7 @@ void HitTestResult::populateFromCachedResult(const HitTestResult& other)
     m_cacheable = other.m_cacheable;
 
     // Only copy the NodeSet in case of list hit test.
-    m_listBasedTestResult = adoptPtrWillBeNoop(other.m_listBasedTestResult ? new NodeSet(*other.m_listBasedTestResult) : 0);
+    m_listBasedTestResult = other.m_listBasedTestResult ? new NodeSet(*other.m_listBasedTestResult) : nullptr;
 }
 
 DEFINE_TRACE(HitTestResult)
@@ -151,9 +152,7 @@ DEFINE_TRACE(HitTestResult)
     visitor->trace(m_innerPossiblyPseudoNode);
     visitor->trace(m_innerURLElement);
     visitor->trace(m_scrollbar);
-#if ENABLE(OILPAN)
     visitor->trace(m_listBasedTestResult);
-#endif
 }
 
 PositionWithAffinity HitTestResult::position() const
@@ -163,7 +162,7 @@ PositionWithAffinity HitTestResult::position() const
     LayoutObject* layoutObject = this->layoutObject();
     if (!layoutObject)
         return PositionWithAffinity();
-    if (m_innerPossiblyPseudoNode->isPseudoElement() && m_innerPossiblyPseudoNode->getPseudoId() == BEFORE)
+    if (m_innerPossiblyPseudoNode->isPseudoElement() && m_innerPossiblyPseudoNode->getPseudoId() == PseudoIdBefore)
         return mostForwardCaretPosition(Position(m_innerNode, PositionAnchorType::BeforeChildren));
     return layoutObject->positionForPoint(localPoint());
 }
@@ -317,7 +316,7 @@ Image* HitTestResult::image() const
     if (layoutObject && layoutObject->isImage()) {
         LayoutImage* image = toLayoutImage(layoutObject);
         if (image->cachedImage() && !image->cachedImage()->errorOccurred())
-            return image->cachedImage()->image();
+            return image->cachedImage()->getImage();
     }
 
     return nullptr;
@@ -341,7 +340,7 @@ KURL HitTestResult::absoluteImageURL() const
     // don't have a LayoutImage (e.g. because the image didn't load and we are using an alt container).
     // For other elements we don't create alt containers so ensure they contain a loaded image.
     if (isHTMLImageElement(*innerNodeOrImageMapImage)
-        || (isHTMLInputElement(*innerNodeOrImageMapImage) && toHTMLInputElement(innerNodeOrImageMapImage)->isImage()))
+        || (isHTMLInputElement(*innerNodeOrImageMapImage) && toHTMLInputElement(innerNodeOrImageMapImage)->type() == InputTypeNames::image))
         urlString = toElement(*innerNodeOrImageMapImage).imageSourceURL();
     else if ((innerNodeOrImageMapImage->layoutObject() && innerNodeOrImageMapImage->layoutObject()->isImage())
         && (isHTMLEmbedElement(*innerNodeOrImageMapImage)
@@ -492,14 +491,14 @@ void HitTestResult::append(const HitTestResult& other)
 const HitTestResult::NodeSet& HitTestResult::listBasedTestResult() const
 {
     if (!m_listBasedTestResult)
-        m_listBasedTestResult = adoptPtrWillBeNoop(new NodeSet);
+        m_listBasedTestResult = new NodeSet;
     return *m_listBasedTestResult;
 }
 
 HitTestResult::NodeSet& HitTestResult::mutableListBasedTestResult()
 {
     if (!m_listBasedTestResult)
-        m_listBasedTestResult = adoptPtrWillBeNoop(new NodeSet);
+        m_listBasedTestResult = new NodeSet;
     return *m_listBasedTestResult;
 }
 

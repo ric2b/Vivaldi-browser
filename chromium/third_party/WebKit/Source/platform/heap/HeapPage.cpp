@@ -47,7 +47,6 @@
 #include "wtf/ContainerAnnotations.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/LeakAnnotations.h"
-#include "wtf/MainThread.h"
 #include "wtf/PageAllocator.h"
 #include "wtf/Partitions.h"
 #include "wtf/PassOwnPtr.h"
@@ -63,7 +62,7 @@
     do {                                                                              \
         BasePage* page = pageFromObject(object);                                      \
         ASSERT(page);                                                                 \
-        bool isContainer = ThreadState::isVectorHeapIndex(page->heap()->heapIndex()); \
+        bool isContainer = ThreadState::isVectorArenaIndex(page->arena()->arenaIndex()); \
         if (!isContainer && page->isLargeObjectPage())                                \
             isContainer = static_cast<LargeObjectPage*>(page)->isVectorBackingPage(); \
         if (isContainer)                                                              \
@@ -73,8 +72,8 @@
 // A vector backing store represented by a large object is marked
 // so that when it is finalized, its ASan annotation will be
 // correctly retired.
-#define ASAN_MARK_LARGE_VECTOR_CONTAINER(heap, largeObject)                 \
-    if (ThreadState::isVectorHeapIndex(heap->heapIndex())) {                \
+#define ASAN_MARK_LARGE_VECTOR_CONTAINER(arena, largeObject)                 \
+    if (ThreadState::isVectorArenaIndex(arena->arenaIndex())) {                \
         BasePage* largePage = pageFromObject(largeObject);                  \
         ASSERT(largePage->isLargeObjectPage());                             \
         static_cast<LargeObjectPage*>(largePage)->setIsVectorBackingPage(); \
@@ -82,7 +81,7 @@
 #else
 #define ENABLE_ASAN_CONTAINER_ANNOTATIONS 0
 #define ASAN_RETIRE_CONTAINER_ANNOTATION(payload, payloadSize)
-#define ASAN_MARK_LARGE_VECTOR_CONTAINER(heap, largeObject)
+#define ASAN_MARK_LARGE_VECTOR_CONTAINER(arena, largeObject)
 #endif
 
 namespace blink {
@@ -106,7 +105,7 @@ void HeapObjectHeader::finalize(Address object, size_t objectSize)
     ASAN_RETIRE_CONTAINER_ANNOTATION(object, objectSize);
 }
 
-BaseHeap::BaseHeap(ThreadState* state, int index)
+BaseArena::BaseArena(ThreadState* state, int index)
     : m_firstPage(nullptr)
     , m_firstUnsweptPage(nullptr)
     , m_threadState(state)
@@ -114,26 +113,26 @@ BaseHeap::BaseHeap(ThreadState* state, int index)
 {
 }
 
-BaseHeap::~BaseHeap()
+BaseArena::~BaseArena()
 {
     ASSERT(!m_firstPage);
     ASSERT(!m_firstUnsweptPage);
 }
 
-void BaseHeap::cleanupPages()
+void BaseArena::cleanupPages()
 {
     clearFreeLists();
 
     ASSERT(!m_firstUnsweptPage);
-    // Add the BaseHeap's pages to the orphanedPagePool.
+    // Add the BaseArena's pages to the orphanedPagePool.
     for (BasePage* page = m_firstPage; page; page = page->next()) {
-        Heap::decreaseAllocatedSpace(page->size());
-        Heap::orphanedPagePool()->addOrphanedPage(heapIndex(), page);
+        Heap::heapStats().decreaseAllocatedSpace(page->size());
+        Heap::getOrphanedPagePool()->addOrphanedPage(arenaIndex(), page);
     }
     m_firstPage = nullptr;
 }
 
-void BaseHeap::takeSnapshot(const String& dumpBaseName, ThreadState::GCSnapshotInfo& info)
+void BaseArena::takeSnapshot(const String& dumpBaseName, ThreadState::GCSnapshotInfo& info)
 {
     // |dumpBaseName| at this point is "blink_gc/thread_X/heaps/HeapName"
     WebMemoryAllocatorDump* allocatorDump = BlinkGCMemoryDumpProvider::instance()->createMemoryAllocatorDumpForCurrentGC(dumpBaseName);
@@ -156,7 +155,7 @@ void BaseHeap::takeSnapshot(const String& dumpBaseName, ThreadState::GCSnapshotI
 }
 
 #if ENABLE(ASSERT)
-BasePage* BaseHeap::findPageFromAddress(Address address)
+BasePage* BaseArena::findPageFromAddress(Address address)
 {
     for (BasePage* page = m_firstPage; page; page = page->next()) {
         if (page->contains(address))
@@ -170,7 +169,7 @@ BasePage* BaseHeap::findPageFromAddress(Address address)
 }
 #endif
 
-void BaseHeap::makeConsistentForGC()
+void BaseArena::makeConsistentForGC()
 {
     clearFreeLists();
     ASSERT(isConsistentForGC());
@@ -201,7 +200,7 @@ void BaseHeap::makeConsistentForGC()
     ASSERT(!m_firstUnsweptPage);
 }
 
-void BaseHeap::makeConsistentForMutator()
+void BaseArena::makeConsistentForMutator()
 {
     clearFreeLists();
     ASSERT(isConsistentForGC());
@@ -224,7 +223,7 @@ void BaseHeap::makeConsistentForMutator()
     ASSERT(!m_firstUnsweptPage);
 }
 
-size_t BaseHeap::objectPayloadSizeForTesting()
+size_t BaseArena::objectPayloadSizeForTesting()
 {
     ASSERT(isConsistentForGC());
     ASSERT(!m_firstUnsweptPage);
@@ -235,7 +234,7 @@ size_t BaseHeap::objectPayloadSizeForTesting()
     return objectPayloadSize;
 }
 
-void BaseHeap::prepareHeapForTermination()
+void BaseArena::prepareHeapForTermination()
 {
     ASSERT(!m_firstUnsweptPage);
     for (BasePage* page = m_firstPage; page; page = page->next()) {
@@ -243,9 +242,9 @@ void BaseHeap::prepareHeapForTermination()
     }
 }
 
-void BaseHeap::prepareForSweep()
+void BaseArena::prepareForSweep()
 {
-    ASSERT(threadState()->isInGC());
+    ASSERT(getThreadState()->isInGC());
     ASSERT(!m_firstUnsweptPage);
 
     // Move all pages to a list of unswept pages.
@@ -254,59 +253,41 @@ void BaseHeap::prepareForSweep()
 }
 
 #if defined(ADDRESS_SANITIZER)
-void BaseHeap::poisonHeap(BlinkGC::ObjectsToPoison objectsToPoison, BlinkGC::Poisoning poisoning)
+void BaseArena::poisonArena()
 {
-    // TODO(sof): support complete poisoning of all heaps.
-    ASSERT(objectsToPoison != BlinkGC::MarkedAndUnmarked || heapIndex() == BlinkGC::EagerSweepHeapIndex);
-
-    // This method may either be called to poison (SetPoison) heap
-    // object payloads prior to sweeping, or it may be called at
-    // the completion of a sweep to unpoison (ClearPoison) the
-    // objects remaining in the heap. Those will all be live and unmarked.
-    //
-    // Poisoning may be limited to unmarked objects only, or apply to all.
-    if (poisoning == BlinkGC::SetPoison) {
-        for (BasePage* page = m_firstUnsweptPage; page; page = page->next())
-            page->poisonObjects(objectsToPoison, poisoning);
-        return;
-    }
-    // Support clearing of poisoning after sweeping has completed,
-    // in which case the pages of the live objects are reachable
-    // via m_firstPage.
-    ASSERT(!m_firstUnsweptPage);
-    for (BasePage* page = m_firstPage; page; page = page->next())
-        page->poisonObjects(objectsToPoison, poisoning);
+    for (BasePage* page = m_firstUnsweptPage; page; page = page->next())
+        page->poisonUnmarkedObjects();
 }
 #endif
 
-Address BaseHeap::lazySweep(size_t allocationSize, size_t gcInfoIndex)
+Address BaseArena::lazySweep(size_t allocationSize, size_t gcInfoIndex)
 {
     // If there are no pages to be swept, return immediately.
     if (!m_firstUnsweptPage)
         return nullptr;
 
-    RELEASE_ASSERT(threadState()->isSweepingInProgress());
+    RELEASE_ASSERT(getThreadState()->isSweepingInProgress());
 
     // lazySweepPages() can be called recursively if finalizers invoked in
     // page->sweep() allocate memory and the allocation triggers
     // lazySweepPages(). This check prevents the sweeping from being executed
     // recursively.
-    if (threadState()->sweepForbidden())
+    if (getThreadState()->sweepForbidden())
         return nullptr;
 
-    TRACE_EVENT0("blink_gc", "BaseHeap::lazySweepPages");
-    ThreadState::SweepForbiddenScope sweepForbidden(threadState());
+    TRACE_EVENT0("blink_gc", "BaseArena::lazySweepPages");
+    ThreadState::SweepForbiddenScope sweepForbidden(getThreadState());
     ScriptForbiddenIfMainThreadScope scriptForbidden;
 
     double startTime = WTF::currentTimeMS();
     Address result = lazySweepPages(allocationSize, gcInfoIndex);
-    threadState()->accumulateSweepingTime(WTF::currentTimeMS() - startTime);
+    getThreadState()->accumulateSweepingTime(WTF::currentTimeMS() - startTime);
     Heap::reportMemoryUsageForTracing();
 
     return result;
 }
 
-void BaseHeap::sweepUnsweptPage()
+void BaseArena::sweepUnsweptPage()
 {
     BasePage* page = m_firstUnsweptPage;
     if (page->isEmpty()) {
@@ -322,16 +303,16 @@ void BaseHeap::sweepUnsweptPage()
     }
 }
 
-bool BaseHeap::lazySweepWithDeadline(double deadlineSeconds)
+bool BaseArena::lazySweepWithDeadline(double deadlineSeconds)
 {
     // It might be heavy to call Platform::current()->monotonicallyIncreasingTimeSeconds()
     // per page (i.e., 128 KB sweep or one LargeObject sweep), so we check
     // the deadline per 10 pages.
     static const int deadlineCheckInterval = 10;
 
-    RELEASE_ASSERT(threadState()->isSweepingInProgress());
-    ASSERT(threadState()->sweepForbidden());
-    ASSERT(!threadState()->isMainThread() || ScriptForbiddenScope::isScriptForbidden());
+    RELEASE_ASSERT(getThreadState()->isSweepingInProgress());
+    ASSERT(getThreadState()->sweepForbidden());
+    ASSERT(!getThreadState()->isMainThread() || ScriptForbiddenScope::isScriptForbidden());
 
     int pageCount = 1;
     while (m_firstUnsweptPage) {
@@ -349,11 +330,11 @@ bool BaseHeap::lazySweepWithDeadline(double deadlineSeconds)
     return true;
 }
 
-void BaseHeap::completeSweep()
+void BaseArena::completeSweep()
 {
-    RELEASE_ASSERT(threadState()->isSweepingInProgress());
-    ASSERT(threadState()->sweepForbidden());
-    ASSERT(!threadState()->isMainThread() || ScriptForbiddenScope::isScriptForbidden());
+    RELEASE_ASSERT(getThreadState()->isSweepingInProgress());
+    ASSERT(getThreadState()->sweepForbidden());
+    ASSERT(!getThreadState()->isMainThread() || ScriptForbiddenScope::isScriptForbidden());
 
     while (m_firstUnsweptPage) {
         sweepUnsweptPage();
@@ -361,8 +342,8 @@ void BaseHeap::completeSweep()
     Heap::reportMemoryUsageForTracing();
 }
 
-NormalPageHeap::NormalPageHeap(ThreadState* state, int index)
-    : BaseHeap(state, index)
+NormalPageArena::NormalPageArena(ThreadState* state, int index)
+    : BaseArena(state, index)
     , m_currentAllocationPoint(nullptr)
     , m_remainingAllocationSize(0)
     , m_lastRemainingAllocationSize(0)
@@ -371,20 +352,20 @@ NormalPageHeap::NormalPageHeap(ThreadState* state, int index)
     clearFreeLists();
 }
 
-void NormalPageHeap::clearFreeLists()
+void NormalPageArena::clearFreeLists()
 {
     setAllocationPoint(nullptr, 0);
     m_freeList.clear();
 }
 
 #if ENABLE(ASSERT)
-bool NormalPageHeap::isConsistentForGC()
+bool NormalPageArena::isConsistentForGC()
 {
     // A thread heap is consistent for sweeping if none of the pages to be swept
     // contain a freelist block or the current allocation point.
     for (size_t i = 0; i < blinkPageSizeLog2; ++i) {
         for (FreeListEntry* freeListEntry = m_freeList.m_freeLists[i]; freeListEntry; freeListEntry = freeListEntry->next()) {
-            if (pagesToBeSweptContains(freeListEntry->address()))
+            if (pagesToBeSweptContains(freeListEntry->getAddress()))
                 return false;
         }
     }
@@ -395,7 +376,7 @@ bool NormalPageHeap::isConsistentForGC()
     return true;
 }
 
-bool NormalPageHeap::pagesToBeSweptContains(Address address)
+bool NormalPageArena::pagesToBeSweptContains(Address address)
 {
     for (BasePage* page = m_firstUnsweptPage; page; page = page->next()) {
         if (page->contains(address))
@@ -405,7 +386,7 @@ bool NormalPageHeap::pagesToBeSweptContains(Address address)
 }
 #endif
 
-void NormalPageHeap::takeFreelistSnapshot(const String& dumpName)
+void NormalPageArena::takeFreelistSnapshot(const String& dumpName)
 {
     if (m_freeList.takeSnapshot(dumpName)) {
         WebMemoryAllocatorDump* bucketsDump = BlinkGCMemoryDumpProvider::instance()->createMemoryAllocatorDumpForCurrentGC(dumpName + "/buckets");
@@ -414,10 +395,10 @@ void NormalPageHeap::takeFreelistSnapshot(const String& dumpName)
     }
 }
 
-void NormalPageHeap::allocatePage()
+void NormalPageArena::allocatePage()
 {
-    threadState()->shouldFlushHeapDoesNotContainCache();
-    PageMemory* pageMemory = Heap::freePagePool()->takeFreePage(heapIndex());
+    getThreadState()->shouldFlushHeapDoesNotContainCache();
+    PageMemory* pageMemory = Heap::getFreePagePool()->takeFreePage(arenaIndex());
 
     if (!pageMemory) {
         // Allocate a memory region for blinkPagesPerRegion pages that
@@ -425,7 +406,7 @@ void NormalPageHeap::allocatePage()
         //
         //    [ guard os page | ... payload ... | guard os page ]
         //    ^---{ aligned to blink page size }
-        PageMemoryRegion* region = PageMemoryRegion::allocateNormalPages();
+        PageMemoryRegion* region = PageMemoryRegion::allocateNormalPages(Heap::getRegionTree());
 
         // Setup the PageMemory object for each of the pages in the region.
         for (size_t i = 0; i < blinkPagesPerRegion; ++i) {
@@ -440,7 +421,7 @@ void NormalPageHeap::allocatePage()
                 RELEASE_ASSERT(result);
                 pageMemory = memory;
             } else {
-                Heap::freePagePool()->addFreePage(heapIndex(), memory);
+                Heap::getFreePagePool()->addFreePage(arenaIndex(), memory);
             }
         }
     }
@@ -448,7 +429,7 @@ void NormalPageHeap::allocatePage()
     NormalPage* page = new (pageMemory->writableStart()) NormalPage(pageMemory, this);
     page->link(&m_firstPage);
 
-    Heap::increaseAllocatedSpace(page->size());
+    Heap::heapStats().increaseAllocatedSpace(page->size());
 #if ENABLE(ASSERT) || defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER)
     // Allow the following addToFreeList() to add the newly allocated memory
     // to the free list.
@@ -461,9 +442,9 @@ void NormalPageHeap::allocatePage()
     addToFreeList(page->payload(), page->payloadSize());
 }
 
-void NormalPageHeap::freePage(NormalPage* page)
+void NormalPageArena::freePage(NormalPage* page)
 {
-    Heap::decreaseAllocatedSpace(page->size());
+    Heap::heapStats().decreaseAllocatedSpace(page->size());
 
     if (page->terminating()) {
         // The thread is shutting down and this page is being removed as a part
@@ -474,17 +455,17 @@ void NormalPageHeap::freePage(NormalPage* page)
         // ensures that tracing the dangling pointer in the next global GC just
         // crashes instead of causing use-after-frees.  After the next global
         // GC, the orphaned pages are removed.
-        Heap::orphanedPagePool()->addOrphanedPage(heapIndex(), page);
+        Heap::getOrphanedPagePool()->addOrphanedPage(arenaIndex(), page);
     } else {
         PageMemory* memory = page->storage();
         page->~NormalPage();
-        Heap::freePagePool()->addFreePage(heapIndex(), memory);
+        Heap::getFreePagePool()->addFreePage(arenaIndex(), memory);
     }
 }
 
-bool NormalPageHeap::coalesce()
+bool NormalPageArena::coalesce()
 {
-    // Don't coalesce heaps if there are not enough promptly freed entries
+    // Don't coalesce arenas if there are not enough promptly freed entries
     // to be coalesced.
     //
     // FIXME: This threshold is determined just to optimize blink_perf
@@ -493,11 +474,11 @@ bool NormalPageHeap::coalesce()
     if (m_promptlyFreedSize < 1024 * 1024)
         return false;
 
-    if (threadState()->sweepForbidden())
+    if (getThreadState()->sweepForbidden())
         return false;
 
     ASSERT(!hasCurrentAllocationArea());
-    TRACE_EVENT0("blink_gc", "BaseHeap::coalesce");
+    TRACE_EVENT0("blink_gc", "BaseArena::coalesce");
 
     // Rebuild free lists.
     m_freeList.clear();
@@ -543,15 +524,15 @@ bool NormalPageHeap::coalesce()
         if (startOfGap != page->payloadEnd())
             addToFreeList(startOfGap, page->payloadEnd() - startOfGap);
     }
-    threadState()->decreaseAllocatedObjectSize(freedSize);
+    getThreadState()->decreaseAllocatedObjectSize(freedSize);
     ASSERT(m_promptlyFreedSize == freedSize);
     m_promptlyFreedSize = 0;
     return true;
 }
 
-void NormalPageHeap::promptlyFreeObject(HeapObjectHeader* header)
+void NormalPageArena::promptlyFreeObject(HeapObjectHeader* header)
 {
-    ASSERT(!threadState()->sweepForbidden());
+    ASSERT(!getThreadState()->sweepForbidden());
     ASSERT(header->checkHeader());
     Address address = reinterpret_cast<Address>(header);
     Address payload = header->payload();
@@ -561,7 +542,7 @@ void NormalPageHeap::promptlyFreeObject(HeapObjectHeader* header)
     ASSERT(pageFromObject(address) == findPageFromAddress(address));
 
     {
-        ThreadState::SweepForbiddenScope forbiddenScope(threadState());
+        ThreadState::SweepForbiddenScope forbiddenScope(getThreadState());
         header->finalize(payload, payloadSize);
         if (address + size == m_currentAllocationPoint) {
             m_currentAllocationPoint = address;
@@ -576,7 +557,7 @@ void NormalPageHeap::promptlyFreeObject(HeapObjectHeader* header)
     m_promptlyFreedSize += size;
 }
 
-bool NormalPageHeap::expandObject(HeapObjectHeader* header, size_t newSize)
+bool NormalPageArena::expandObject(HeapObjectHeader* header, size_t newSize)
 {
     // It's possible that Vector requests a smaller expanded size because
     // Vector::shrinkCapacity can set a capacity smaller than the actual payload
@@ -600,7 +581,7 @@ bool NormalPageHeap::expandObject(HeapObjectHeader* header, size_t newSize)
     return false;
 }
 
-bool NormalPageHeap::shrinkObject(HeapObjectHeader* header, size_t newSize)
+bool NormalPageArena::shrinkObject(HeapObjectHeader* header, size_t newSize)
 {
     ASSERT(header->checkHeader());
     ASSERT(header->payloadSize() > newSize);
@@ -626,7 +607,7 @@ bool NormalPageHeap::shrinkObject(HeapObjectHeader* header, size_t newSize)
     return false;
 }
 
-Address NormalPageHeap::lazySweepPages(size_t allocationSize, size_t gcInfoIndex)
+Address NormalPageArena::lazySweepPages(size_t allocationSize, size_t gcInfoIndex)
 {
     ASSERT(!hasCurrentAllocationArea());
     Address result = nullptr;
@@ -653,7 +634,7 @@ Address NormalPageHeap::lazySweepPages(size_t allocationSize, size_t gcInfoIndex
     return result;
 }
 
-void NormalPageHeap::setRemainingAllocationSize(size_t newRemainingAllocationSize)
+void NormalPageArena::setRemainingAllocationSize(size_t newRemainingAllocationSize)
 {
     m_remainingAllocationSize = newRemainingAllocationSize;
 
@@ -661,22 +642,22 @@ void NormalPageHeap::setRemainingAllocationSize(size_t newRemainingAllocationSiz
     //  - if previous alloc checkpoint is larger, allocation size has increased.
     //  - if smaller, a net reduction in size since last call to updateRemainingAllocationSize().
     if (m_lastRemainingAllocationSize > m_remainingAllocationSize)
-        threadState()->increaseAllocatedObjectSize(m_lastRemainingAllocationSize - m_remainingAllocationSize);
+        getThreadState()->increaseAllocatedObjectSize(m_lastRemainingAllocationSize - m_remainingAllocationSize);
     else if (m_lastRemainingAllocationSize != m_remainingAllocationSize)
-        threadState()->decreaseAllocatedObjectSize(m_remainingAllocationSize - m_lastRemainingAllocationSize);
+        getThreadState()->decreaseAllocatedObjectSize(m_remainingAllocationSize - m_lastRemainingAllocationSize);
     m_lastRemainingAllocationSize = m_remainingAllocationSize;
 }
 
-void NormalPageHeap::updateRemainingAllocationSize()
+void NormalPageArena::updateRemainingAllocationSize()
 {
     if (m_lastRemainingAllocationSize > remainingAllocationSize()) {
-        threadState()->increaseAllocatedObjectSize(m_lastRemainingAllocationSize - remainingAllocationSize());
+        getThreadState()->increaseAllocatedObjectSize(m_lastRemainingAllocationSize - remainingAllocationSize());
         m_lastRemainingAllocationSize = remainingAllocationSize();
     }
     ASSERT(m_lastRemainingAllocationSize == remainingAllocationSize());
 }
 
-void NormalPageHeap::setAllocationPoint(Address point, size_t size)
+void NormalPageArena::setAllocationPoint(Address point, size_t size)
 {
 #if ENABLE(ASSERT)
     if (point) {
@@ -694,7 +675,7 @@ void NormalPageHeap::setAllocationPoint(Address point, size_t size)
     m_lastRemainingAllocationSize = m_remainingAllocationSize = size;
 }
 
-Address NormalPageHeap::outOfLineAllocate(size_t allocationSize, size_t gcInfoIndex)
+Address NormalPageArena::outOfLineAllocate(size_t allocationSize, size_t gcInfoIndex)
 {
     ASSERT(allocationSize > remainingAllocationSize());
     ASSERT(allocationSize >= allocationGranularity);
@@ -702,9 +683,9 @@ Address NormalPageHeap::outOfLineAllocate(size_t allocationSize, size_t gcInfoIn
     // 1. If this allocation is big enough, allocate a large object.
     if (allocationSize >= largeObjectSizeThreshold) {
         // TODO(sof): support eagerly finalized large objects, if ever needed.
-        RELEASE_ASSERT(heapIndex() != BlinkGC::EagerSweepHeapIndex);
-        LargeObjectHeap* largeObjectHeap = static_cast<LargeObjectHeap*>(threadState()->heap(BlinkGC::LargeObjectHeapIndex));
-        Address largeObject = largeObjectHeap->allocateLargeObjectPage(allocationSize, gcInfoIndex);
+        RELEASE_ASSERT(arenaIndex() != BlinkGC::EagerSweepArenaIndex);
+        LargeObjectArena* largeObjectArena = static_cast<LargeObjectArena*>(getThreadState()->arena(BlinkGC::LargeObjectArenaIndex));
+        Address largeObject = largeObjectArena->allocateLargeObjectPage(allocationSize, gcInfoIndex);
         ASAN_MARK_LARGE_VECTOR_CONTAINER(this, largeObject);
         return largeObject;
     }
@@ -733,10 +714,10 @@ Address NormalPageHeap::outOfLineAllocate(size_t allocationSize, size_t gcInfoIn
     }
 
     // 6. Complete sweeping.
-    threadState()->completeSweep();
+    getThreadState()->completeSweep();
 
     // 7. Check if we should trigger a GC.
-    threadState()->scheduleGCIfNeeded();
+    getThreadState()->scheduleGCIfNeeded();
 
     // 8. Add a new page to this heap.
     allocatePage();
@@ -747,7 +728,7 @@ Address NormalPageHeap::outOfLineAllocate(size_t allocationSize, size_t gcInfoIn
     return result;
 }
 
-Address NormalPageHeap::allocateFromFreeList(size_t allocationSize, size_t gcInfoIndex)
+Address NormalPageArena::allocateFromFreeList(size_t allocationSize, size_t gcInfoIndex)
 {
     // Try reusing a block from the largest bin. The underlying reasoning
     // being that we want to amortize this slow allocation call by carving
@@ -767,7 +748,7 @@ Address NormalPageHeap::allocateFromFreeList(size_t allocationSize, size_t gcInf
         }
         if (entry) {
             entry->unlink(&m_freeList.m_freeLists[index]);
-            setAllocationPoint(entry->address(), entry->size());
+            setAllocationPoint(entry->getAddress(), entry->size());
             ASSERT(hasCurrentAllocationArea());
             ASSERT(remainingAllocationSize() >= allocationSize);
             m_freeList.m_biggestFreeListIndex = index;
@@ -778,12 +759,12 @@ Address NormalPageHeap::allocateFromFreeList(size_t allocationSize, size_t gcInf
     return nullptr;
 }
 
-LargeObjectHeap::LargeObjectHeap(ThreadState* state, int index)
-    : BaseHeap(state, index)
+LargeObjectArena::LargeObjectArena(ThreadState* state, int index)
+    : BaseArena(state, index)
 {
 }
 
-Address LargeObjectHeap::allocateLargeObjectPage(size_t allocationSize, size_t gcInfoIndex)
+Address LargeObjectArena::allocateLargeObjectPage(size_t allocationSize, size_t gcInfoIndex)
 {
     // Caller already added space for object header and rounded up to allocation
     // alignment
@@ -797,15 +778,15 @@ Address LargeObjectHeap::allocateLargeObjectPage(size_t allocationSize, size_t g
 
     // 2. If we have failed in sweeping allocationSize bytes,
     // we complete sweeping before allocating this large object.
-    threadState()->completeSweep();
+    getThreadState()->completeSweep();
 
     // 3. Check if we should trigger a GC.
-    threadState()->scheduleGCIfNeeded();
+    getThreadState()->scheduleGCIfNeeded();
 
     return doAllocateLargeObjectPage(allocationSize, gcInfoIndex);
 }
 
-Address LargeObjectHeap::doAllocateLargeObjectPage(size_t allocationSize, size_t gcInfoIndex)
+Address LargeObjectArena::doAllocateLargeObjectPage(size_t allocationSize, size_t gcInfoIndex)
 {
     size_t largeObjectSize = LargeObjectPage::pageHeaderSize() + allocationSize;
     // If ASan is supported we add allocationGranularity bytes to the allocated
@@ -814,8 +795,8 @@ Address LargeObjectHeap::doAllocateLargeObjectPage(size_t allocationSize, size_t
     largeObjectSize += allocationGranularity;
 #endif
 
-    threadState()->shouldFlushHeapDoesNotContainCache();
-    PageMemory* pageMemory = PageMemory::allocate(largeObjectSize);
+    getThreadState()->shouldFlushHeapDoesNotContainCache();
+    PageMemory* pageMemory = PageMemory::allocate(largeObjectSize, Heap::getRegionTree());
     Address largeObjectAddress = pageMemory->writableStart();
     Address headerAddress = largeObjectAddress + LargeObjectPage::pageHeaderSize();
 #if ENABLE(ASSERT)
@@ -832,25 +813,25 @@ Address LargeObjectHeap::doAllocateLargeObjectPage(size_t allocationSize, size_t
 
     // Poison the object header and allocationGranularity bytes after the object
     ASAN_POISON_MEMORY_REGION(header, sizeof(*header));
-    ASAN_POISON_MEMORY_REGION(largeObject->address() + largeObject->size(), allocationGranularity);
+    ASAN_POISON_MEMORY_REGION(largeObject->getAddress() + largeObject->size(), allocationGranularity);
 
     largeObject->link(&m_firstPage);
 
-    Heap::increaseAllocatedSpace(largeObject->size());
-    threadState()->increaseAllocatedObjectSize(largeObject->size());
+    Heap::heapStats().increaseAllocatedSpace(largeObject->size());
+    getThreadState()->increaseAllocatedObjectSize(largeObject->size());
     return result;
 }
 
-void LargeObjectHeap::freeLargeObjectPage(LargeObjectPage* object)
+void LargeObjectArena::freeLargeObjectPage(LargeObjectPage* object)
 {
     ASAN_UNPOISON_MEMORY_REGION(object->payload(), object->payloadSize());
     object->heapObjectHeader()->finalize(object->payload(), object->payloadSize());
-    Heap::decreaseAllocatedSpace(object->size());
+    Heap::heapStats().decreaseAllocatedSpace(object->size());
 
     // Unpoison the object header and allocationGranularity bytes after the
     // object before freeing.
     ASAN_UNPOISON_MEMORY_REGION(object->heapObjectHeader(), sizeof(HeapObjectHeader));
-    ASAN_UNPOISON_MEMORY_REGION(object->address() + object->size(), allocationGranularity);
+    ASAN_UNPOISON_MEMORY_REGION(object->getAddress() + object->size(), allocationGranularity);
 
     if (object->terminating()) {
         ASSERT(ThreadState::current()->isTerminating());
@@ -862,7 +843,7 @@ void LargeObjectHeap::freeLargeObjectPage(LargeObjectPage* object)
         // ensures that tracing the dangling pointer in the next global GC just
         // crashes instead of causing use-after-frees.  After the next global
         // GC, the orphaned pages are removed.
-        Heap::orphanedPagePool()->addOrphanedPage(heapIndex(), object);
+        Heap::getOrphanedPagePool()->addOrphanedPage(arenaIndex(), object);
     } else {
         ASSERT(!ThreadState::current()->isTerminating());
         PageMemory* memory = object->storage();
@@ -871,7 +852,7 @@ void LargeObjectHeap::freeLargeObjectPage(LargeObjectPage* object)
     }
 }
 
-Address LargeObjectHeap::lazySweepPages(size_t allocationSize, size_t gcInfoIndex)
+Address LargeObjectArena::lazySweepPages(size_t allocationSize, size_t gcInfoIndex)
 {
     Address result = nullptr;
     size_t sweptSize = 0;
@@ -1046,9 +1027,9 @@ bool FreeList::takeSnapshot(const String& dumpBaseName)
     return didDumpBucketStats;
 }
 
-BasePage::BasePage(PageMemory* storage, BaseHeap* heap)
+BasePage::BasePage(PageMemory* storage, BaseArena* arena)
     : m_storage(storage)
-    , m_heap(heap)
+    , m_arena(arena)
     , m_next(nullptr)
     , m_terminating(false)
     , m_swept(true)
@@ -1058,15 +1039,15 @@ BasePage::BasePage(PageMemory* storage, BaseHeap* heap)
 
 void BasePage::markOrphaned()
 {
-    m_heap = nullptr;
+    m_arena = nullptr;
     m_terminating = false;
     // Since we zap the page payload for orphaned pages we need to mark it as
     // unused so a conservative pointer won't interpret the object headers.
     storage()->markUnused();
 }
 
-NormalPage::NormalPage(PageMemory* storage, BaseHeap* heap)
-    : BasePage(storage, heap)
+NormalPage::NormalPage(PageMemory* storage, BaseArena* arena)
+    : BasePage(storage, arena)
     , m_objectStartBitMapComputed(false)
 {
     ASSERT(isPageHeaderAddress(reinterpret_cast<Address>(this)));
@@ -1099,7 +1080,7 @@ bool NormalPage::isEmpty()
 
 void NormalPage::removeFromHeap()
 {
-    heapForNormalPage()->freePage(this);
+    arenaForNormalPage()->freePage(this);
 }
 
 #if !ENABLE(ASSERT) && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
@@ -1116,7 +1097,7 @@ void NormalPage::sweep()
 {
     size_t markedObjectSize = 0;
     Address startOfGap = payload();
-    NormalPageHeap* pageHeap = heapForNormalPage();
+    NormalPageArena* pageArena = arenaForNormalPage();
     for (Address headerAddress = startOfGap; headerAddress < payloadEnd(); ) {
         HeapObjectHeader* header = reinterpret_cast<HeapObjectHeader*>(headerAddress);
         size_t size = header->size();
@@ -1124,7 +1105,7 @@ void NormalPage::sweep()
         ASSERT(size < blinkPagePayloadSize());
 
         if (header->isPromptlyFreed())
-            pageHeap->decreasePromptlyFreedSize(size);
+            pageArena->decreasePromptlyFreedSize(size);
         if (header->isFree()) {
             // Zero the memory in the free list header to maintain the
             // invariant that memory on the free list is zero filled.
@@ -1155,11 +1136,11 @@ void NormalPage::sweep()
             continue;
         }
         if (startOfGap != headerAddress) {
-            pageHeap->addToFreeList(startOfGap, headerAddress - startOfGap);
+            pageArena->addToFreeList(startOfGap, headerAddress - startOfGap);
 #if !ENABLE(ASSERT) && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
             // Discarding pages increases page faults and may regress performance.
             // So we enable this only on low-RAM devices.
-            if (Heap::isLowEndDevice())
+            if (ProcessHeap::isLowEndDevice())
                 discardPages(startOfGap + sizeof(FreeListEntry), headerAddress);
 #endif
         }
@@ -1169,15 +1150,15 @@ void NormalPage::sweep()
         startOfGap = headerAddress;
     }
     if (startOfGap != payloadEnd()) {
-        pageHeap->addToFreeList(startOfGap, payloadEnd() - startOfGap);
+        pageArena->addToFreeList(startOfGap, payloadEnd() - startOfGap);
 #if !ENABLE(ASSERT) && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
-        if (Heap::isLowEndDevice())
+        if (ProcessHeap::isLowEndDevice())
             discardPages(startOfGap + sizeof(FreeListEntry), payloadEnd());
 #endif
     }
 
     if (markedObjectSize)
-        pageHeap->threadState()->increaseMarkedObjectSize(markedObjectSize);
+        pageArena->getThreadState()->increaseMarkedObjectSize(markedObjectSize);
 }
 
 void NormalPage::makeConsistentForGC()
@@ -1202,7 +1183,7 @@ void NormalPage::makeConsistentForGC()
         headerAddress += header->size();
     }
     if (markedObjectSize)
-        heapForNormalPage()->threadState()->increaseMarkedObjectSize(markedObjectSize);
+        arenaForNormalPage()->getThreadState()->increaseMarkedObjectSize(markedObjectSize);
 }
 
 void NormalPage::makeConsistentForMutator()
@@ -1213,7 +1194,7 @@ void NormalPage::makeConsistentForMutator()
         size_t size = header->size();
         ASSERT(size < blinkPagePayloadSize());
         if (header->isPromptlyFreed())
-            heapForNormalPage()->decreasePromptlyFreedSize(size);
+            arenaForNormalPage()->decreasePromptlyFreedSize(size);
         if (header->isFree()) {
             // Zero the memory in the free list header to maintain the
             // invariant that memory on the free list is zero filled.
@@ -1227,7 +1208,7 @@ void NormalPage::makeConsistentForMutator()
         ASSERT(header->checkHeader());
 
         if (startOfGap != headerAddress)
-            heapForNormalPage()->addToFreeList(startOfGap, headerAddress - startOfGap);
+            arenaForNormalPage()->addToFreeList(startOfGap, headerAddress - startOfGap);
         if (header->isMarked())
             header->unmark();
         headerAddress += size;
@@ -1235,11 +1216,11 @@ void NormalPage::makeConsistentForMutator()
         ASSERT(headerAddress <= payloadEnd());
     }
     if (startOfGap != payloadEnd())
-        heapForNormalPage()->addToFreeList(startOfGap, payloadEnd() - startOfGap);
+        arenaForNormalPage()->addToFreeList(startOfGap, payloadEnd() - startOfGap);
 }
 
 #if defined(ADDRESS_SANITIZER)
-void NormalPage::poisonObjects(BlinkGC::ObjectsToPoison objectsToPoison, BlinkGC::Poisoning poisoning)
+void NormalPage::poisonUnmarkedObjects()
 {
     for (Address headerAddress = payload(); headerAddress < payloadEnd();) {
         HeapObjectHeader* header = reinterpret_cast<HeapObjectHeader*>(headerAddress);
@@ -1251,12 +1232,8 @@ void NormalPage::poisonObjects(BlinkGC::ObjectsToPoison objectsToPoison, BlinkGC
             continue;
         }
         ASSERT(header->checkHeader());
-        if (objectsToPoison == BlinkGC::MarkedAndUnmarked || !header->isMarked()) {
-            if (poisoning == BlinkGC::SetPoison)
-                ASAN_POISON_MEMORY_REGION(header->payload(), header->payloadSize());
-            else
-                ASAN_UNPOISON_MEMORY_REGION(header->payload(), header->payloadSize());
-        }
+        if (!header->isMarked())
+            ASAN_POISON_MEMORY_REGION(header->payload(), header->payloadSize());
         headerAddress += header->size();
     }
 }
@@ -1427,19 +1404,19 @@ void NormalPage::takeSnapshot(WebMemoryAllocatorDump* pageDump, ThreadState::GCS
 #if ENABLE(ASSERT)
 bool NormalPage::contains(Address addr)
 {
-    Address blinkPageStart = roundToBlinkPageStart(address());
-    ASSERT(blinkPageStart == address() - blinkGuardPageSize); // Page is at aligned address plus guard page size.
+    Address blinkPageStart = roundToBlinkPageStart(getAddress());
+    ASSERT(blinkPageStart == getAddress() - blinkGuardPageSize); // Page is at aligned address plus guard page size.
     return blinkPageStart <= addr && addr < blinkPageStart + blinkPageSize;
 }
 #endif
 
-NormalPageHeap* NormalPage::heapForNormalPage()
+NormalPageArena* NormalPage::arenaForNormalPage()
 {
-    return static_cast<NormalPageHeap*>(heap());
+    return static_cast<NormalPageArena*>(arena());
 }
 
-LargeObjectPage::LargeObjectPage(PageMemory* storage, BaseHeap* heap, size_t payloadSize)
-    : BasePage(storage, heap)
+LargeObjectPage::LargeObjectPage(PageMemory* storage, BaseArena* arena, size_t payloadSize)
+    : BasePage(storage, arena)
     , m_payloadSize(payloadSize)
 #if ENABLE(ASAN_CONTAINER_ANNOTATIONS)
     , m_isVectorBackingPage(false)
@@ -1460,13 +1437,13 @@ bool LargeObjectPage::isEmpty()
 
 void LargeObjectPage::removeFromHeap()
 {
-    static_cast<LargeObjectHeap*>(heap())->freeLargeObjectPage(this);
+    static_cast<LargeObjectArena*>(arena())->freeLargeObjectPage(this);
 }
 
 void LargeObjectPage::sweep()
 {
     heapObjectHeader()->unmark();
-    heap()->threadState()->increaseMarkedObjectSize(size());
+    arena()->getThreadState()->increaseMarkedObjectSize(size());
 }
 
 void LargeObjectPage::makeConsistentForGC()
@@ -1474,7 +1451,7 @@ void LargeObjectPage::makeConsistentForGC()
     HeapObjectHeader* header = heapObjectHeader();
     if (header->isMarked()) {
         header->unmark();
-        heap()->threadState()->increaseMarkedObjectSize(size());
+        arena()->getThreadState()->increaseMarkedObjectSize(size());
     } else {
         header->markDead();
     }
@@ -1488,15 +1465,11 @@ void LargeObjectPage::makeConsistentForMutator()
 }
 
 #if defined(ADDRESS_SANITIZER)
-void LargeObjectPage::poisonObjects(BlinkGC::ObjectsToPoison objectsToPoison, BlinkGC::Poisoning poisoning)
+void LargeObjectPage::poisonUnmarkedObjects()
 {
     HeapObjectHeader* header = heapObjectHeader();
-    if (objectsToPoison == BlinkGC::MarkedAndUnmarked || !header->isMarked()) {
-        if (poisoning == BlinkGC::SetPoison)
-            ASAN_POISON_MEMORY_REGION(header->payload(), header->payloadSize());
-        else
-            ASAN_UNPOISON_MEMORY_REGION(header->payload(), header->payloadSize());
-    }
+    if (!header->isMarked())
+        ASAN_POISON_MEMORY_REGION(header->payload(), header->payloadSize());
 }
 #endif
 
@@ -1546,7 +1519,7 @@ void LargeObjectPage::takeSnapshot(WebMemoryAllocatorDump* pageDump, ThreadState
 #if ENABLE(ASSERT)
 bool LargeObjectPage::contains(Address object)
 {
-    return roundToBlinkPageStart(address()) <= object && object < roundToBlinkPageEnd(address() + size());
+    return roundToBlinkPageStart(getAddress()) <= object && object < roundToBlinkPageEnd(getAddress() + size());
 }
 #endif
 

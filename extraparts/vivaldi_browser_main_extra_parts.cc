@@ -17,6 +17,7 @@
 #include "notes/notes_model_loaded_observer.h"
 #include "prefs/vivaldi_pref_names.h"
 
+#include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/notes/notes_api.h"
 #include "extensions/api/import_data/import_data_api.h"
@@ -58,6 +59,7 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
 
 void VivaldiBrowserMainExtraParts::
      EnsureBrowserContextKeyedServiceFactoriesBuilt() {
+  extensions::VivaldiBookmarksAPI::GetFactoryInstance();
   extensions::ExtensionActionUtilFactory::GetInstance();
   extensions::ImportDataAPI::GetFactoryInstance();
   extensions::NotesAPI::GetFactoryInstance();
@@ -70,6 +72,10 @@ void VivaldiBrowserMainExtraParts::
 
 void VivaldiBrowserMainExtraParts::PreProfileInit() {
   EnsureBrowserContextKeyedServiceFactoriesBuilt();
+
+#if defined(OS_MACOSX)
+  PreProfileInitMac();
+#endif
 }
 
 void VivaldiBrowserMainExtraParts::PostProfileInit() {

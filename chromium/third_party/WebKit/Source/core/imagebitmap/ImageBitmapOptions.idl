@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// https://html.spec.whatwg.org/#imagebitmapoptions
+
 [RuntimeEnabled=ExperimentalCanvasFeatures] enum ImageOrientation { "none", "flipY" };
-[RuntimeEnabled=ExperimentalCanvasFeatures] enum PremultiplyAlpha { "none", "default" };
+[RuntimeEnabled=ExperimentalCanvasFeatures] enum PremultiplyAlpha { "none", "premultiply", "default" };
+[RuntimeEnabled=ExperimentalCanvasFeatures] enum ColorspaceConversion { "none", "default" };
 dictionary ImageBitmapOptions {
-    [RuntimeEnabled=ExperimentalCanvasFeatures] PremultiplyAlpha premultiplyAlpha = "default";
     [RuntimeEnabled=ExperimentalCanvasFeatures] ImageOrientation imageOrientation = "none";
+    [RuntimeEnabled=ExperimentalCanvasFeatures] PremultiplyAlpha premultiplyAlpha = "default";
+    [RuntimeEnabled=ExperimentalCanvasFeatures] ColorspaceConversion colorspaceConversion = "default";
 };

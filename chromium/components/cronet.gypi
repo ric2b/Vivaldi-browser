@@ -3,9 +3,6 @@
 # found in the LICENSE file.
 
 {
-  'variables': {
-    'enable_bidirectional_stream%': 0,
-  },
   'conditions': [
     ['OS=="android"', {
       'targets': [
@@ -68,7 +65,7 @@
             # variable that contains at least one java file.
             'java_in_dir': 'cronet/android/api',
             'java_in_dir_suffix': '/src_dummy',
-            'run_findbugs': 1,
+            'never_lint': 1,
           },
           'dependencies': [
             'url_request_error_java',
@@ -222,17 +219,6 @@
           'includes': [ 'cronet/cronet_static.gypi' ],
         },
         {
-          # GN version: //cronet:features
-          'target_name': 'cronet_features',
-          'includes': [ '../build/buildflag_header.gypi' ],
-          'variables': {
-             'buildflag_header_path': 'components/cronet/cronet_features.h',
-             'buildflag_flags': [
-               'ENABLE_BIDIRECTIONAL_STREAM=<(enable_bidirectional_stream)',
-            ],
-          },
-        },
-        {
           'target_name': 'libcronet',
           'type': 'shared_library',
           'sources': [
@@ -243,6 +229,18 @@
             '../base/base.gyp:base',
             '../net/net.gyp:net_small',
           ],
+          'ldflags': [
+            '-Wl,--version-script=<!(cd <(DEPTH) && pwd -P)/components/cronet/android/only_jni_exports.lst',
+          ],
+          'variables': {
+            # libcronet doesn't really use native JNI exports, but it does use
+            # its own linker version script. The ARM64 linker appears to not
+            # work with multiple version scripts with anonymous version tags,
+            # so enable use_native_jni_exports which avoids adding another
+            # version sript (android_no_jni_exports.lst) so we don't run afoul
+            # of this ARM64 linker limitation.
+            'use_native_jni_exports': 1,
+          },
         },
         { # cronet_api.jar defines Cronet API and provides implementation of
           # legacy api using HttpUrlConnection (not the Chromium stack).
@@ -345,14 +343,23 @@
             'cronet_sample_apk_java',
             'cronet_api',
             '../base/base.gyp:base_java_test_support',
+            '../net/net.gyp:net_java_test_support',
+            '../net/net.gyp:require_net_test_support_apk',
           ],
           'variables': {
             'apk_name': 'CronetSampleTest',
             'java_in_dir': 'cronet/android/sample/javatests',
             'is_test_apk': 1,
             'run_findbugs': 1,
+            'test_type': 'instrumentation',
+            'additional_apks': [
+              '<(PRODUCT_DIR)/apks/ChromiumNetTestSupport.apk',
+            ],
           },
-          'includes': [ '../build/java_apk.gypi' ],
+          'includes': [
+            '../build/java_apk.gypi',
+            '../build/android/test_runner.gypi',
+          ],
         },
         {
           'target_name': 'cronet_tests_jni_headers',
@@ -408,6 +415,18 @@
             '../third_party/icu/icu.gyp:icui18n',
             '../third_party/icu/icu.gyp:icuuc',
           ],
+          'ldflags': [
+            '-Wl,--version-script=<!(cd <(DEPTH) && pwd -P)/components/cronet/android/only_jni_exports.lst',
+          ],
+          'variables': {
+            # libcronet doesn't really use native JNI exports, but it does use
+            # its own linker version script. The ARM64 linker appears to not
+            # work with multiple version scripts with anonymous version tags,
+            # so enable use_native_jni_exports which avoids adding another
+            # version sript (android_no_jni_exports.lst) so we don't run afoul
+            # of this ARM64 linker limitation.
+            'use_native_jni_exports': 1,
+          },
           'conditions': [
             ['enable_data_reduction_proxy_support==1',
               {
@@ -455,7 +474,7 @@
             'resource_dir': 'cronet/android/test/res',
             'asset_location': 'cronet/android/test/assets',
             'native_lib_target': 'libcronet_tests',
-            'run_findbugs': 1,
+            'never_lint': 1,
             'additional_bundled_libs': [
               '>(netty_tcnative_so_file_location)',
             ],
@@ -481,6 +500,8 @@
           'dependencies': [
             'cronet_test_apk_java',
             '../base/base.gyp:base_java_test_support',
+            '../net/net.gyp:net_java_test_support',
+            '../net/net.gyp:require_net_test_support_apk',
           ],
           'variables': {
             'apk_name': 'CronetTestInstrumentation',
@@ -488,18 +509,16 @@
             'resource_dir': 'cronet/android/test/res',
             'is_test_apk': 1,
             'run_findbugs': 1,
+            'test_type': 'instrumentation',
+            'isolate_file': 'cronet/android/cronet_test_instrumentation_apk.isolate',
+            'additional_apks': [
+              '<(PRODUCT_DIR)/apks/ChromiumNetTestSupport.apk',
+            ],
           },
-          'conditions': [
-            ['enable_bidirectional_stream==0', {
-              'variables' : {
-                'jar_excluded_classes': [
-                  '**/BidirectionalStreamTest*',
-                  '**/TestBidirectionalStreamCallback*',
-                ],
-              },
-            },],
+          'includes': [
+            '../build/java_apk.gypi',
+            '../build/android/test_runner.gypi',
           ],
-          'includes': [ '../build/java_apk.gypi' ],
         },
         {
           'target_name': 'cronet_perf_test_apk',

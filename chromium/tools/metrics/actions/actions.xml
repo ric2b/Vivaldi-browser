@@ -826,6 +826,63 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="AlertIndicatorButton_Dragged">
+  <owner>miu@chromium.org</owner>
+  <description>
+    User dragged the tab alert indicator button; perhaps meant to drag the tab.
+  </description>
+</action>
+
+<action name="AlertIndicatorButton_Mute">
+  <owner>miu@chromium.org</owner>
+  <description>
+    User clicked the tab alert indicator button to mute the tab.
+  </description>
+</action>
+
+<action name="AlertIndicatorButton_Unmute">
+  <owner>miu@chromium.org</owner>
+  <description>
+    User clicked the tab alert indicator button to unmute the tab.
+  </description>
+</action>
+
+<action name="Android.MultiWindowMode.Enter">
+  <owner>twellington@chromium.org</owner>
+  <description>The activity entered Android N multi-window mode.</description>
+</action>
+
+<action name="Android.MultiWindowMode.Enter-SecondInstance">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The second activity instance (ChromeTabbedActivity2) entered Android N
+    multi-window mode. Recorded separately from Android.MultiWindowMode.Enter to
+    avoid double counting when two instances are running.
+  </description>
+</action>
+
+<action name="Android.MultiWindowMode.Exit">
+  <owner>twellington@chromium.org</owner>
+  <description>The activity exited Android N multi-window mode.</description>
+</action>
+
+<action name="Android.MultiWindowMode.Exit-SecondInstance">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    The second activity instance (ChromeTabbedActivity2) exited Android N
+    multi-window mode. Recorded separately from Android.MultiWindowMode.Exit to
+    avoid double counting when two instances are running.
+  </description>
+</action>
+
+<action name="Android.MultiWindowMode.MultiInstance.Enter">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    A second activity instance (ChromeTabbedActivity2) has been created in
+    Android N multi-window mode.
+  </description>
+</action>
+
 <action name="AppCloseButton_Clk">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -2340,11 +2397,19 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="CloseTab_NoAlertIndicator">
+  <owner>miu@chromium.org</owner>
+  <description>
+    User clicked the close tab button; the media indicator was not showing.
+  </description>
+</action>
+
 <action name="CloseTab_NoMediaIndicator">
   <owner>miu@chromium.org</owner>
   <description>
     User clicked the close tab button; the media indicator was not showing.
   </description>
+  <obsolete>Replaced with &quot;CloseTab_NoAlertIndicator&quot;.</obsolete>
 </action>
 
 <action name="CloseTab_RecordingIndicator">
@@ -2553,6 +2618,18 @@ should be able to be added at any place in this file.
   <description>Please enter the description of the metric.</description>
 </action>
 
+<action name="CustomTabsRemoteViewsShown">
+  <owner>ianwen@chromium.org</owner>
+  <description>A RemoteViews based bottom bar was shown.</description>
+</action>
+
+<action name="CustomTabsRemoteViewsUpdated">
+  <owner>ianwen@chromium.org</owner>
+  <description>
+    A RemoteViews based bottom bar was updated through service API.
+  </description>
+</action>
+
 <action name="Cut">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -2624,11 +2701,26 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="DefaultBrowserInfoBar_Cancel">
+  <owner>pmonette@chromium.org</owner>
+  <description>
+    The user clicked &quot;Don't ask again&quot; on the info bar.
+  </description>
+</action>
+
+<action name="DefaultBrowserInfoBar_Dismiss">
+  <owner>pmonette@chromium.org</owner>
+  <description>
+    The user dismissed the default browser info bar via the 'x'.
+  </description>
+</action>
+
 <action name="DefaultBrowserInfoBar_DontAskAgain">
   <owner>pmonette@chromium.org</owner>
   <description>
     The user clicked &quot;Don't ask again&quot; on the info bar.
   </description>
+  <obsolete>Renamed to DefaultBrowserInfoBar_Cancel in M52.</obsolete>
 </action>
 
 <action name="Delete">
@@ -2905,16 +2997,19 @@ should be able to be added at any place in this file.
 <action name="DocumentActivity_OptOutShownOnHome">
   <owner>mariakhomenko@chromium.org</owner>
   <description>User was presented with the opt out promo.</description>
+  <obsolete>Removed in M51.</obsolete>
 </action>
 
 <action name="DocumentActivity_UserOptIn">
   <owner>mariakhomenko@chromium.org</owner>
   <description>User opted in to document mode through settings.</description>
+  <obsolete>Removed in M51.</obsolete>
 </action>
 
 <action name="DocumentActivity_UserOptOut">
   <owner>mariakhomenko@chromium.org</owner>
   <description>User opted out of document mode through settings.</description>
+  <obsolete>Removed in M51.</obsolete>
 </action>
 
 <action name="DomDistiller_DistilledPageOpened">
@@ -7791,6 +7886,93 @@ should be able to be added at any place in this file.
   <description>A tab is no longer audible.</description>
 </action>
 
+<action name="Media.Controls.Cast">
+  <owner>mlamouri@chromium.org</owner>
+  <description>The user clicked on the cast controls button.</description>
+</action>
+
+<action name="Media.Controls.CastOverlay">
+  <owner>mlamouri@chromium.org</owner>
+  <description>The user clicked on the cast overlay button.</description>
+</action>
+
+<action name="Media.Controls.ClosedCaptionHide">
+  <owner>mlamouri@chromium.org</owner>
+  <description>The user hid the closed caption from the controls.</description>
+</action>
+
+<action name="Media.Controls.ClosedCaptionShow">
+  <owner>mlamouri@chromium.org</owner>
+  <description>
+    The user showed the closed caption from the controls.
+  </description>
+</action>
+
+<action name="Media.Controls.EnterFullscreen">
+  <owner>mlamouri@chromium.org</owner>
+  <description>The user entered fullscreen mode from the controls.</description>
+</action>
+
+<action name="Media.Controls.ExitFullscreen">
+  <owner>mlamouri@chromium.org</owner>
+  <description>The user left fullscreen mode from the controls.</description>
+</action>
+
+<action name="Media.Controls.Mute">
+  <owner>mlamouri@chromium.org</owner>
+  <description>The user muted a media element from the controls.</description>
+</action>
+
+<action name="Media.Controls.Pause">
+  <owner>mlamouri@chromium.org</owner>
+  <description>The user paused a media element from the controls.</description>
+</action>
+
+<action name="Media.Controls.Play">
+  <owner>mlamouri@chromium.org</owner>
+  <description>The user played a media element from the controls.</description>
+</action>
+
+<action name="Media.Controls.PlayOverlay">
+  <owner>mlamouri@chromium.org</owner>
+  <description>
+    The user played a media element from the play overlay button.
+  </description>
+</action>
+
+<action name="Media.Controls.ScrubbingBegin">
+  <owner>mlamouri@chromium.org</owner>
+  <description>
+    The user started to interact with the control's scrubber.
+  </description>
+</action>
+
+<action name="Media.Controls.ScrubbingEnd">
+  <owner>mlamouri@chromium.org</owner>
+  <description>
+    The user stopped interacting with the control's scrubber.
+  </description>
+</action>
+
+<action name="Media.Controls.Unmute">
+  <owner>mlamouri@chromium.org</owner>
+  <description>The user unmuted a media element from the controls.</description>
+</action>
+
+<action name="Media.Controls.VolumeChangeBegin">
+  <owner>mlamouri@chromium.org</owner>
+  <description>
+    The user started to interact with the control's volume slider.
+  </description>
+</action>
+
+<action name="Media.Controls.VolumeChangeEnd">
+  <owner>mlamouri@chromium.org</owner>
+  <description>
+    The user stopped interacting with the control's volume slider.
+  </description>
+</action>
+
 <action name="MediaContextMenu_Controls">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -7826,6 +8008,7 @@ should be able to be added at any place in this file.
   <description>
     User dragged the tab media indicator button; perhaps meant to drag the tab.
   </description>
+  <obsolete>Replaced with &quot;AlertIndicatorButton_Dragged&quot;.</obsolete>
 </action>
 
 <action name="MediaIndicatorButton_Mute">
@@ -7833,6 +8016,7 @@ should be able to be added at any place in this file.
   <description>
     User clicked the tab media indicator button to mute the tab.
   </description>
+  <obsolete>Replaced with &quot;AlertIndicatorButton_Mute&quot;.</obsolete>
 </action>
 
 <action name="MediaIndicatorButton_Unmute">
@@ -7840,6 +8024,7 @@ should be able to be added at any place in this file.
   <description>
     User clicked the tab media indicator button to unmute the tab.
   </description>
+  <obsolete>Replaced with &quot;AlertIndicatorButton_Unmute&quot;.</obsolete>
 </action>
 
 <action name="MediaRouter_Icon_Click">
@@ -7847,6 +8032,19 @@ should be able to be added at any place in this file.
   <description>
     User clicked the MediaRouterAction icon, also known as Cast icon, to open
     the Media Router dialog.
+  </description>
+</action>
+
+<action name="MediaRouter_Ui_Action_Filter">
+  <owner>btolsch@chromium.org</owner>
+  <description>
+    User typed text into the filter input to filter the sink list. This is
+    triggered at most once each time the user enters the filter view of the
+    Media Router WebUI. As long as the user stays in the filter view, additional
+    actions will not be recorded for typing more text, deleting text, clearing
+    the field and entering new text, etc. Additionally, if the user leaves text
+    in the search input but leaves the filter view, entering the filter view
+    again will trigger the action again.
   </description>
 </action>
 
@@ -8014,6 +8212,30 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="MobileComeToForeground">
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    Chrome has come to the foreground.  Only emitted if the foreground content
+    is an Activity that views web content, e.g., not settings.  This will be
+    emitted everytime the Activity goes from entirely hidden to at least
+    partially visible.  Partially visible means that at least some portion of
+    the Activity is visible, but the Activity is not interactable, e.g. being
+    covered by the share dialog, javascript alert dialogs, the voice input
+    dialog, etc.
+
+    Please note, this has the potential to be called many times for a given
+    session.  For further details, see the Android activity concept of onPause
+    and onResume for a better understanding of what circumstances can trigger
+    this.
+
+    Session tracking is based on the same visibility concept, but a session can
+    span multiple live Android Activities, while this metric will be logged when
+    each applicable Activity goes to the foreground (per above).  Since session
+    tracking uses onPause and onResume, this metric is also tied to that to
+    ensure we capture the event.
+  </description>
+</action>
+
 <action name="MobileContextMenuCopyImageLinkAddress">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -8176,6 +8398,30 @@ should be able to be added at any place in this file.
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
   <obsolete>Deprecated as of 5/2015</obsolete>
+</action>
+
+<action name="MobileGoToBackground">
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    Chrome has gone to the background.  Only emitted if the previously
+    foregrounded content was an Activity that views web content, e.g., not
+    settings.  Chrome may be partially visible at this point, but is not
+    directly in the foreground/interactable.  Partially visible means that at
+    least some portion of the Activity is visible, but the Activity is not
+    interactable, e.g. being covered by the share dialog, javascript alert
+    dialogs, the voice input dialog, etc.
+
+    Please note, this has the potential to be called many times for a given
+    session.  For further details, see the Android activity concept of onPause
+    and onResume for a better understanding of what circumstances can trigger
+    this.
+
+    Session tracking is based on the same visibility concept, but a session can
+    span multiple live Android Activities, while this metric will be logged when
+    each applicable Activity goes to the background (per above).  Since session
+    tracking uses onPause and onResume, this metric is also tied to that to
+    ensure we capture the event.
+  </description>
 </action>
 
 <action name="MobileMWSession">
@@ -8346,6 +8592,7 @@ should be able to be added at any place in this file.
   <description>
     Android: User clicked on a snippet card to hide the bigger summary.
   </description>
+  <obsolete>Deprecated as of 4/2016</obsolete>
 </action>
 
 <action name="MobileNTP.Snippets.ShowMore">
@@ -8353,6 +8600,7 @@ should be able to be added at any place in this file.
   <description>
     Android: User clicked on a snippet card to reveal a bigger summary.
   </description>
+  <obsolete>Deprecated as of 4/2016</obsolete>
 </action>
 
 <action name="MobileNTPBookmark">
@@ -9331,6 +9579,38 @@ should be able to be added at any place in this file.
   <description>Settings: About Chrome</description>
 </action>
 
+<action name="Options_AccessibilityCaretHighlight_Disable">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>Settings: Accessibility: Disable caret highlighting</description>
+</action>
+
+<action name="Options_AccessibilityCaretHighlight_Enable">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>Settings: Accessibility: Enable caret highlighting</description>
+</action>
+
+<action name="Options_AccessibilityCursorHighlight_Disable">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>
+    Settings: Accessibility: Disable cursor highlighting
+  </description>
+</action>
+
+<action name="Options_AccessibilityCursorHighlight_Enable">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>Settings: Accessibility: Enable cursor highlighting</description>
+</action>
+
+<action name="Options_AccessibilityFocusHighlight_Disable">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>Settings: Accessibility: Disable focus highlighting</description>
+</action>
+
+<action name="Options_AccessibilityFocusHighlight_Enable">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>Settings: Accessibility: Enable focus highlighting</description>
+</action>
+
 <action name="Options_AccessibilityHighContrastMode">
   <owner>stevenjb@chromium.org</owner>
   <description>Settings: Accessibility: Toggle high contrast mode</description>
@@ -9397,6 +9677,16 @@ should be able to be added at any place in this file.
   <description>Settings: Accessibility: Enable screen magnifier</description>
 </action>
 
+<action name="Options_AccessibilitySelectToSpeak_Disable">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>Settings: Accessibility: Disable select-to-speak</description>
+</action>
+
+<action name="Options_AccessibilitySelectToSpeak_Enable">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>Settings: Accessibility: Enable select-to-speak</description>
+</action>
+
 <action name="Options_AccessibilitySpokenFeedback_Disable">
   <owner>stevenjb@chromium.org</owner>
   <description>Settings: Accessibility: Disable ChromeVox</description>
@@ -9415,6 +9705,16 @@ should be able to be added at any place in this file.
 <action name="Options_AccessibilityStickyKeys_Enable">
   <owner>stevenjb@chromium.org</owner>
   <description>Settings: Accessibility: Enable sticky keys</description>
+</action>
+
+<action name="Options_AccessibilitySwitchAccess_Disable">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>Settings: Accessibility: Disable switch access</description>
+</action>
+
+<action name="Options_AccessibilitySwitchAccess_Enable">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>Settings: Accessibility: Enable switch access</description>
 </action>
 
 <action name="Options_AccessibilitySystemMenu_Disable">
@@ -9695,6 +9995,14 @@ should be able to be added at any place in this file.
 <action name="Options_CustomFrame_Enable">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="Options_DefaultBackgroundSyncSettingChanged">
+  <owner>nsatragno@chromium.org</owner>
+  <owner>peter@chromium.org</owner>
+  <description>
+    Triggers when the default content setting for Background Sync is changed.
+  </description>
 </action>
 
 <action name="Options_DefaultCookieSettingChanged">
@@ -11386,6 +11694,7 @@ should be able to be added at any place in this file.
   <description>
     A notification advertising nearby Physical Web URLs was pressed.
   </description>
+  <obsolete>Replaced by the histogram PhysicalWeb.ActivityReferral</obsolete>
 </action>
 
 <action name="PhysicalWeb.OptIn.DeclineButtonPressed">
@@ -11655,9 +11964,15 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="ReloadBypassingCache">
+  <owner>toyoshim@chromium.org</owner>
+  <description>The user triggers Shift-reload operation.</description>
+</action>
+
 <action name="ReloadIgnoringCache">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>toyoshim@chromium.org</owner>
+  <description>The user triggers Shift-reload operation.</description>
+  <obsolete>This is replaced with ReloadBypassingCache.</obsolete>
 </action>
 
 <action name="RemoveFormat">
@@ -12278,6 +12593,22 @@ should be able to be added at any place in this file.
 <action name="Shutdown">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="Signin_Abort_Signin">
+  <owner>mahmadi@chromium.org</owner>
+  <description>
+    Recorded when the user closes the tab or exits the browser without choosing
+    any of the other options on the sync confirmation modal.
+  </description>
+</action>
+
+<action name="Signin_AccountSettings_GoogleActivityControlsClicked">
+  <owner>mahmadi@chromium.org</owner>
+  <description>
+    Recorded when the user clicks the &quot;Google Activity Controls&quot; link
+    in the account settings page.
+  </description>
 </action>
 
 <action name="Signin_AddAccountToDevice">
@@ -13063,6 +13394,13 @@ should be able to be added at any place in this file.
   </obsolete>
 </action>
 
+<action name="TabAlertIndicator_Clicked">
+  <owner>miu@chromium.org</owner>
+  <description>
+    User clicked the tab alert indicator; this will have no effect.
+  </description>
+</action>
+
 <action name="TabContextMenu_BookmarkAllTabs">
   <owner>wittman@chromium.org</owner>
   <description>
@@ -13164,6 +13502,7 @@ should be able to be added at any place in this file.
   <description>
     User clicked the tab media indicator; this will have no effect.
   </description>
+  <obsolete>Replaced with &quot;TabAlertIndicator_Clicked&quot;.</obsolete>
 </action>
 
 <action name="TabOverview_DetachCell">

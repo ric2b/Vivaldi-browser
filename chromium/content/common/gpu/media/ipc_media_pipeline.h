@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "content/common/gpu/media/platform_media_pipeline.h"
+#include "gpu/ipc/service/gpu_command_buffer_stub.h"
 #include "ipc/ipc_listener.h"
 #include "media/filters/platform_media_pipeline_types.h"
 
@@ -43,7 +44,7 @@ class IPCMediaPipeline : public IPC::Listener {
  public:
   IPCMediaPipeline(IPC::Sender* channel,
                    int32_t routing_id,
-                   GpuCommandBufferStub* command_buffer);
+                   gpu::GpuCommandBufferStub* command_buffer);
   ~IPCMediaPipeline() override;
 
   // IPC::Listener implementation.
@@ -125,7 +126,7 @@ class IPCMediaPipeline : public IPC::Listener {
   base::ThreadChecker thread_checker_;
 
   media::PlatformVideoConfig video_config_;
-  GpuCommandBufferStub* command_buffer_;
+  gpu::GpuCommandBufferStub* command_buffer_;
   // Maps texture ID used in renderer process to one used in GPU process.
   std::map<uint32_t, uint32_t> known_picture_buffers_;
 

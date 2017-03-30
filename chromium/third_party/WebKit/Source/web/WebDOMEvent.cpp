@@ -45,17 +45,17 @@ void WebDOMEvent::assign(const WebDOMEvent& other)
     m_private = other.m_private;
 }
 
-void WebDOMEvent::assign(const PassRefPtrWillBeRawPtr<Event>& event)
+void WebDOMEvent::assign(Event* event)
 {
     m_private = event;
 }
 
-WebDOMEvent::WebDOMEvent(const PassRefPtrWillBeRawPtr<Event>& event)
+WebDOMEvent::WebDOMEvent(Event* event)
     : m_private(event)
 {
 }
 
-WebDOMEvent::operator PassRefPtrWillBeRawPtr<Event>() const
+WebDOMEvent::operator Event*() const
 {
     return m_private.get();
 }

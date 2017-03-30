@@ -36,14 +36,12 @@ namespace blink {
 
 using namespace XPath;
 
-DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(XPathResult);
-
 XPathResult::XPathResult(EvaluationContext& context, const Value& value)
     : m_value(value)
     , m_nodeSetPosition(0)
     , m_domTreeVersion(0)
 {
-    switch (m_value.type()) {
+    switch (m_value.getType()) {
     case Value::BooleanValue:
         m_resultType = BOOLEAN_TYPE;
         return;

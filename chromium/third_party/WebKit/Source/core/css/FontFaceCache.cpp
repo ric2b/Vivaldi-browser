@@ -47,21 +47,18 @@ FontFaceCache::FontFaceCache()
 {
 }
 
-void FontFaceCache::add(CSSFontSelector* cssFontSelector, const StyleRuleFontFace* fontFaceRule, PassRefPtrWillBeRawPtr<FontFace> prpFontFace)
+void FontFaceCache::add(CSSFontSelector* cssFontSelector, const StyleRuleFontFace* fontFaceRule, FontFace* fontFace)
 {
-    RefPtrWillBeRawPtr<FontFace> fontFace = prpFontFace;
     if (!m_styleRuleToFontFace.add(fontFaceRule, fontFace).isNewEntry)
         return;
     addFontFace(cssFontSelector, fontFace, true);
 }
 
-void FontFaceCache::addFontFace(CSSFontSelector* cssFontSelector, PassRefPtrWillBeRawPtr<FontFace> prpFontFace, bool cssConnected)
+void FontFaceCache::addFontFace(CSSFontSelector* cssFontSelector, FontFace* fontFace, bool cssConnected)
 {
-    RefPtrWillBeRawPtr<FontFace> fontFace = prpFontFace;
-
     FamilyToTraitsMap::AddResult traitsResult = m_fontFaces.add(fontFace->family(), nullptr);
     if (!traitsResult.storedValue->value)
-        traitsResult.storedValue->value = adoptPtrWillBeNoop(new TraitsMap);
+        traitsResult.storedValue->value = new TraitsMap;
 
     TraitsMap::AddResult segmentedFontFaceResult = traitsResult.storedValue->value->add(fontFace->traits().bitfield(), nullptr);
     if (!segmentedFontFaceResult.storedValue->value)
@@ -94,7 +91,7 @@ void FontFaceCache::removeFontFace(FontFace* fontFace, bool cssConnected)
     TraitsMap::iterator familyFontFacesIter = familyFontFaces->find(fontFace->traits().bitfield());
     if (familyFontFacesIter == familyFontFaces->end())
         return;
-    RefPtrWillBeRawPtr<CSSSegmentedFontFace> segmentedFontFace = familyFontFacesIter->value;
+    CSSSegmentedFontFace* segmentedFontFace = familyFontFacesIter->value;
 
     segmentedFontFace->removeFontFace(fontFace);
     if (segmentedFontFace->isEmpty()) {
@@ -136,7 +133,7 @@ CSSSegmentedFontFace* FontFaceCache::get(const FontDescription& fontDescription,
 
     FamilyToTraitsMap::AddResult traitsResult = m_fonts.add(family, nullptr);
     if (!traitsResult.storedValue->value)
-        traitsResult.storedValue->value = adoptPtrWillBeNoop(new TraitsMap);
+        traitsResult.storedValue->value = new TraitsMap;
 
     FontTraits traits = fontDescription.traits();
     TraitsMap::AddResult faceResult = traitsResult.storedValue->value->add(traits.bitfield(), nullptr);
@@ -153,12 +150,10 @@ CSSSegmentedFontFace* FontFaceCache::get(const FontDescription& fontDescription,
 
 DEFINE_TRACE(FontFaceCache)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_fontFaces);
     visitor->trace(m_fonts);
     visitor->trace(m_styleRuleToFontFace);
     visitor->trace(m_cssConnectedFontFaces);
-#endif
 }
 
 } // namespace blink

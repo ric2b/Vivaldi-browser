@@ -2003,4 +2003,12 @@ void ExtensionPrefs::SetUpPrefsForComponentExtension(const Extension* extension)
   }
 }
 
+void ExtensionPrefs::RegisterExtensionForPrefs(std::string extension_id) {
+  bool is_enabled = true;
+  bool is_incognito_enabled = IsIncognitoEnabled(extension_id);
+  const base::Time install_time = GetInstallTime(extension_id);
+  extension_pref_value_map_->RegisterExtension(
+      extension_id, install_time, is_enabled, is_incognito_enabled);
+}
+
 }  // namespace extensions

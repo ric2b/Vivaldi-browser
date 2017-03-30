@@ -2,13 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/webui/media_router/media_router_ui.h"
+
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/media/router/media_route.h"
 #include "chrome/browser/media/router/mock_media_router.h"
 #include "chrome/browser/media/router/route_request_result.h"
+#include "chrome/browser/media/router/test_helper.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
-#include "chrome/browser/ui/webui/media_router/media_router_ui.h"
 #include "chrome/browser/ui/webui/media_router/media_router_webui_message_handler.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_web_ui.h"
@@ -19,6 +24,7 @@
 #include "extensions/common/value_builder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/l10n/l10n_util.h"
 
 using testing::_;
 using testing::AnyNumber;
@@ -66,39 +72,70 @@ class MediaRouterUITest : public ::testing::Test {
   MockMediaRouter mock_router_;
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
-  scoped_ptr<content::WebContents> initiator_;
+  std::unique_ptr<content::WebContents> initiator_;
   content::TestWebUI web_ui_;
-  scoped_ptr<content::WebContents> web_contents_;
-  scoped_ptr<MediaRouterUI> media_router_ui_;
-  scoped_ptr<MediaRouterWebUIMessageHandler> message_handler_;
+  std::unique_ptr<content::WebContents> web_contents_;
+  std::unique_ptr<MediaRouterUI> media_router_ui_;
+  std::unique_ptr<MediaRouterWebUIMessageHandler> message_handler_;
 };
 
 TEST_F(MediaRouterUITest, RouteCreationTimeoutForTab) {
   CreateMediaRouterUI(&profile_);
+  std::vector<MediaRouteResponseCallback> callbacks;
   EXPECT_CALL(
       mock_router_,
-      CreateRoute(_, _, _, _, _, base::TimeDelta::FromSeconds(60), false));
+      CreateRoute(_, _, _, _, _, base::TimeDelta::FromSeconds(60), false))
+      .WillOnce(SaveArg<4>(&callbacks));
   media_router_ui_->CreateRoute("sinkId", MediaCastMode::TAB_MIRROR);
+
+  std::string expected_title = l10n_util::GetStringUTF8(
+      IDS_MEDIA_ROUTER_ISSUE_CREATE_ROUTE_TIMEOUT_FOR_TAB);
+  EXPECT_CALL(mock_router_, AddIssue(IssueTitleEquals(expected_title)));
+  std::unique_ptr<RouteRequestResult> result =
+      RouteRequestResult::FromError("Timed out", RouteRequestResult::TIMED_OUT);
+  for (const auto& callback : callbacks)
+    callback.Run(*result);
 }
 
 TEST_F(MediaRouterUITest, RouteCreationTimeoutForDesktop) {
   CreateMediaRouterUI(&profile_);
+  std::vector<MediaRouteResponseCallback> callbacks;
   EXPECT_CALL(
       mock_router_,
-      CreateRoute(_, _, _, _, _, base::TimeDelta::FromSeconds(120), false));
+      CreateRoute(_, _, _, _, _, base::TimeDelta::FromSeconds(120), false))
+      .WillOnce(SaveArg<4>(&callbacks));
   media_router_ui_->CreateRoute("sinkId", MediaCastMode::DESKTOP_MIRROR);
+
+  std::string expected_title = l10n_util::GetStringUTF8(
+      IDS_MEDIA_ROUTER_ISSUE_CREATE_ROUTE_TIMEOUT_FOR_DESKTOP);
+  EXPECT_CALL(mock_router_, AddIssue(IssueTitleEquals(expected_title)));
+  std::unique_ptr<RouteRequestResult> result =
+      RouteRequestResult::FromError("Timed out", RouteRequestResult::TIMED_OUT);
+  for (const auto& callback : callbacks)
+    callback.Run(*result);
 }
 
 TEST_F(MediaRouterUITest, RouteCreationTimeoutForPresentation) {
   CreateMediaRouterUI(&profile_);
-  PresentationRequest presentation_request(
-      RenderFrameHostId(0, 0), "https://fooUrl", GURL("https://frameUrl"));
+  PresentationRequest presentation_request(RenderFrameHostId(0, 0),
+                                           "https://presentationurl.fakeurl",
+                                           GURL("https://frameurl.fakeurl"));
   media_router_ui_->OnDefaultPresentationChanged(presentation_request);
-
+  std::vector<MediaRouteResponseCallback> callbacks;
   EXPECT_CALL(
       mock_router_,
-      CreateRoute(_, _, _, _, _, base::TimeDelta::FromSeconds(20), false));
+      CreateRoute(_, _, _, _, _, base::TimeDelta::FromSeconds(20), false))
+      .WillOnce(SaveArg<4>(&callbacks));
   media_router_ui_->CreateRoute("sinkId", MediaCastMode::DEFAULT);
+
+  std::string expected_title =
+      l10n_util::GetStringFUTF8(IDS_MEDIA_ROUTER_ISSUE_CREATE_ROUTE_TIMEOUT,
+                                base::UTF8ToUTF16("frameurl.fakeurl"));
+  EXPECT_CALL(mock_router_, AddIssue(IssueTitleEquals(expected_title)));
+  std::unique_ptr<RouteRequestResult> result =
+      RouteRequestResult::FromError("Timed out", RouteRequestResult::TIMED_OUT);
+  for (const auto& callback : callbacks)
+    callback.Run(*result);
 }
 
 TEST_F(MediaRouterUITest, RouteRequestFromIncognito) {
@@ -147,7 +184,7 @@ TEST_F(MediaRouterUITest, UIMediaRoutesObserverFiltersNonDisplayRoutes) {
   EXPECT_CALL(mock_router_, RegisterMediaRoutesObserver(_)).Times(1);
   MediaSource media_source("mediaSource");
   MockRoutesUpdatedCallback mock_callback;
-  scoped_ptr<MediaRouterUI::UIMediaRoutesObserver> observer(
+  std::unique_ptr<MediaRouterUI::UIMediaRoutesObserver> observer(
       new MediaRouterUI::UIMediaRoutesObserver(
           &mock_router_, media_source.id(),
           base::Bind(&MockRoutesUpdatedCallback::OnRoutesUpdated,
@@ -185,7 +222,7 @@ TEST_F(MediaRouterUITest,
   EXPECT_CALL(mock_router_, RegisterMediaRoutesObserver(_)).Times(1);
   MediaSource media_source("mediaSource");
   MockRoutesUpdatedCallback mock_callback;
-  scoped_ptr<MediaRouterUI::UIMediaRoutesObserver> observer(
+  std::unique_ptr<MediaRouterUI::UIMediaRoutesObserver> observer(
       new MediaRouterUI::UIMediaRoutesObserver(
           &mock_router_, media_source.id(),
           base::Bind(&MockRoutesUpdatedCallback::OnRoutesUpdated,
@@ -225,12 +262,13 @@ TEST_F(MediaRouterUITest,
 TEST_F(MediaRouterUITest, GetExtensionNameExtensionPresent) {
   std::string id = "extensionid";
   GURL url = GURL("chrome-extension://" + id);
-  scoped_ptr<extensions::ExtensionRegistry> registry =
-      make_scoped_ptr(new extensions::ExtensionRegistry(nullptr));
+  std::unique_ptr<extensions::ExtensionRegistry> registry =
+      base::WrapUnique(new extensions::ExtensionRegistry(nullptr));
   scoped_refptr<extensions::Extension> app =
       extensions::test_util::BuildApp(extensions::ExtensionBuilder())
-          .MergeManifest(
-              extensions::DictionaryBuilder().Set("name", "test app name"))
+          .MergeManifest(extensions::DictionaryBuilder()
+                             .Set("name", "test app name")
+                             .Build())
           .SetID(id)
           .Build();
 
@@ -242,16 +280,16 @@ TEST_F(MediaRouterUITest, GetExtensionNameExtensionPresent) {
 TEST_F(MediaRouterUITest, GetExtensionNameEmptyWhenNotInstalled) {
   std::string id = "extensionid";
   GURL url = GURL("chrome-extension://" + id);
-  scoped_ptr<extensions::ExtensionRegistry> registry =
-      make_scoped_ptr(new extensions::ExtensionRegistry(nullptr));
+  std::unique_ptr<extensions::ExtensionRegistry> registry =
+      base::WrapUnique(new extensions::ExtensionRegistry(nullptr));
 
   EXPECT_EQ("", MediaRouterUI::GetExtensionName(url, registry.get()));
 }
 
 TEST_F(MediaRouterUITest, GetExtensionNameEmptyWhenNotExtensionURL) {
   GURL url = GURL("https://www.google.com");
-  scoped_ptr<extensions::ExtensionRegistry> registry =
-      make_scoped_ptr(new extensions::ExtensionRegistry(nullptr));
+  std::unique_ptr<extensions::ExtensionRegistry> registry =
+      base::WrapUnique(new extensions::ExtensionRegistry(nullptr));
 
   EXPECT_EQ("", MediaRouterUI::GetExtensionName(url, registry.get()));
 }

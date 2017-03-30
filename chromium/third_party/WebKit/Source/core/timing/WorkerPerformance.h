@@ -45,14 +45,14 @@ class WorkerGlobalScope;
 
 class WorkerPerformance final : public PerformanceBase, public ContextLifecycleObserver {
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(WorkerPerformance);
+    USING_GARBAGE_COLLECTED_MIXIN(WorkerPerformance);
 public:
     static WorkerPerformance* create(WorkerGlobalScope* context)
     {
         return new WorkerPerformance(context);
     }
 
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
     MemoryInfo* memory();
 

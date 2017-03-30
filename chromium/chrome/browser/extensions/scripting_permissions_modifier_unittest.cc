@@ -42,20 +42,20 @@ scoped_refptr<const Extension> CreateExtensionWithPermissions(
   }
 
   DictionaryBuilder script;
-  script.Set("matches", std::move(scriptable_host_list))
-      .Set("js", std::move(ListBuilder().Append("foo.js")));
+  script.Set("matches", scriptable_host_list.Build())
+      .Set("js", ListBuilder().Append("foo.js").Build());
 
   return ExtensionBuilder()
       .SetLocation(location)
-      .SetManifest(
-          std::move(DictionaryBuilder()
-                        .Set("name", name)
-                        .Set("description", "foo")
-                        .Set("manifest_version", 2)
-                        .Set("version", "0.1.2.3")
-                        .Set("content_scripts",
-                             std::move(ListBuilder().Append(std::move(script))))
-                        .Set("permissions", std::move(explicit_host_list))))
+      .SetManifest(DictionaryBuilder()
+                       .Set("name", name)
+                       .Set("description", "foo")
+                       .Set("manifest_version", 2)
+                       .Set("version", "0.1.2.3")
+                       .Set("content_scripts",
+                            ListBuilder().Append(script.Build()).Build())
+                       .Set("permissions", explicit_host_list.Build())
+                       .Build())
       .SetID(crx_file::id_util::GenerateId(name))
       .Build();
 }
@@ -92,7 +92,7 @@ TEST_F(ScriptingPermissionsModifierUnitTest, WithholdAllHosts) {
   InitializeEmptyExtensionService();
 
   // Permissions are only withheld with the appropriate switch turned on.
-  scoped_ptr<FeatureSwitch::ScopedOverride> switch_override(
+  std::unique_ptr<FeatureSwitch::ScopedOverride> switch_override(
       new FeatureSwitch::ScopedOverride(FeatureSwitch::scripts_require_action(),
                                         FeatureSwitch::OVERRIDE_ENABLED));
 
@@ -242,7 +242,7 @@ TEST_F(ScriptingPermissionsModifierUnitTest,
   EXPECT_TRUE(util::AllowedScriptingOnAllUrls(extension_a->id(), profile()));
 
   // Enable the switch, and re-init permission for the extension.
-  scoped_ptr<FeatureSwitch::ScopedOverride> switch_override(
+  std::unique_ptr<FeatureSwitch::ScopedOverride> switch_override(
       new FeatureSwitch::ScopedOverride(FeatureSwitch::scripts_require_action(),
                                         FeatureSwitch::OVERRIDE_ENABLED));
   updater.InitializePermissions(extension_a.get());
@@ -289,7 +289,7 @@ TEST_F(ScriptingPermissionsModifierUnitTest, GrantHostPermission) {
   InitializeEmptyExtensionService();
 
   // Permissions are only withheld with the appropriate switch turned on.
-  scoped_ptr<FeatureSwitch::ScopedOverride> switch_override(
+  std::unique_ptr<FeatureSwitch::ScopedOverride> switch_override(
       new FeatureSwitch::ScopedOverride(FeatureSwitch::scripts_require_action(),
                                         FeatureSwitch::OVERRIDE_ENABLED));
 

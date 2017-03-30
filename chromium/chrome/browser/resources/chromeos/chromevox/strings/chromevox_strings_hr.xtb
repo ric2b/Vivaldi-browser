@@ -440,7 +440,7 @@
 <translation id="549602578321198708">Riječ</translation>
 <translation id="5500932716852106146">Nema prethodnog tekstualnog polja koje je moguće urediti.</translation>
 <translation id="5502713021410870035">rujan</translation>
-<translation id="5507663321906818013">Usporedna analiza za uklanjanje pogrešaka</translation>
+<translation id="5507663321906818013">Usporedna analiza za otklanjanje pogrešaka</translation>
 <translation id="5518443085409638729">Postavi pokazivač između znakova prilikom uređivanja teksta (kao u sustavu Mac OS X).</translation>
 <translation id="552195134157544755">Izborni gumb</translation>
 <translation id="5534303576632885660">zglvlj</translation>
@@ -610,6 +610,7 @@
 <translation id="739763518212184081">Prethodni redak</translation>
 <translation id="7400575256015741911">Otkrivena pravopisna pogreška</translation>
 <translation id="7408482676469142474">tbl</translation>
+<translation id="7420313809195758138">Prikaži kontekst stavke prije drugih informacija (kao što je naziv).</translation>
 <translation id="7425395583360211003">natrag</translation>
 <translation id="7434509671034404296">Razvojni programer</translation>
 <translation id="7439060726180460871">Direktorij</translation>

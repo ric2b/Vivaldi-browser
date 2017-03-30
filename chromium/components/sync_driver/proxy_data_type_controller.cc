@@ -20,11 +20,18 @@ ProxyDataTypeController::ProxyDataTypeController(
 ProxyDataTypeController::~ProxyDataTypeController() {
 }
 
+bool ProxyDataTypeController::ShouldLoadModelBeforeConfigure() const {
+  return false;
+}
+
 void ProxyDataTypeController::LoadModels(
     const ModelLoadCallback& model_load_callback) {
   state_ = MODEL_LOADED;
   model_load_callback.Run(type(), syncer::SyncError());
 }
+
+void ProxyDataTypeController::RegisterWithBackend(
+    BackendDataTypeConfigurer* configurer) {}
 
 void ProxyDataTypeController::StartAssociating(
     const StartCallback& start_callback) {

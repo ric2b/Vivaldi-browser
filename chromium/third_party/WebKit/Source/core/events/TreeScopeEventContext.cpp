@@ -56,12 +56,12 @@ bool TreeScopeEventContext::isUnclosedTreeOf(const TreeScopeEventContext& other)
     return false;
 }
 
-WillBeHeapVector<RefPtrWillBeMember<EventTarget>>& TreeScopeEventContext::ensureEventPath(EventPath& path)
+HeapVector<Member<EventTarget>>& TreeScopeEventContext::ensureEventPath(EventPath& path)
 {
     if (m_eventPath)
         return *m_eventPath;
 
-    m_eventPath = adoptPtrWillBeNoop(new WillBeHeapVector<RefPtrWillBeMember<EventTarget>>());
+    m_eventPath = new HeapVector<Member<EventTarget>>();
     LocalDOMWindow* window = path.windowEventContext().window();
     m_eventPath->reserveCapacity(path.size() + (window ? 1 : 0));
 
@@ -81,9 +81,9 @@ TouchEventContext* TreeScopeEventContext::ensureTouchEventContext()
     return m_touchEventContext.get();
 }
 
-PassRefPtrWillBeRawPtr<TreeScopeEventContext> TreeScopeEventContext::create(TreeScope& treeScope)
+TreeScopeEventContext* TreeScopeEventContext::create(TreeScope& treeScope)
 {
-    return adoptRefWillBeNoop(new TreeScopeEventContext(treeScope));
+    return new TreeScopeEventContext(treeScope);
 }
 
 TreeScopeEventContext::TreeScopeEventContext(TreeScope& treeScope)
@@ -95,8 +95,6 @@ TreeScopeEventContext::TreeScopeEventContext(TreeScope& treeScope)
 {
 }
 
-DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(TreeScopeEventContext)
-
 DEFINE_TRACE(TreeScopeEventContext)
 {
     visitor->trace(m_treeScope);
@@ -106,9 +104,7 @@ DEFINE_TRACE(TreeScopeEventContext)
     visitor->trace(m_eventPath);
     visitor->trace(m_touchEventContext);
     visitor->trace(m_containingClosedShadowTree);
-#if ENABLE(OILPAN)
     visitor->trace(m_children);
-#endif
 }
 
 int TreeScopeEventContext::calculateTreeOrderAndSetNearestAncestorClosedTree(int orderNumber, TreeScopeEventContext* nearestAncestorClosedTreeScopeEventContext)

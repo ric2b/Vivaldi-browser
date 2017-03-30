@@ -7,6 +7,8 @@
 #include <xdg-shell-unstable-v5-client-protocol.h>
 
 #include "base/strings/utf_string_conversions.h"
+#include "ui/events/event.h"
+#include "ui/events/ozone/events_ozone.h"
 #include "ui/ozone/platform/wayland/wayland_display.h"
 #include "ui/platform_window/platform_window_delegate.h"
 
@@ -19,8 +21,15 @@ WaylandWindow::WaylandWindow(PlatformWindowDelegate* delegate,
 
 WaylandWindow::~WaylandWindow() {
   if (xdg_surface_) {
-    display_->RemoveWindow(this);
+    PlatformEventSource::GetInstance()->RemovePlatformEventDispatcher(this);
+    display_->RemoveWindow(surface_.id());
   }
+}
+
+// static
+WaylandWindow* WaylandWindow::FromSurface(wl_surface* surface) {
+  return static_cast<WaylandWindow*>(
+      wl_proxy_get_user_data(reinterpret_cast<wl_proxy*>(surface)));
 }
 
 bool WaylandWindow::Initialize() {
@@ -41,21 +50,13 @@ bool WaylandWindow::Initialize() {
     return false;
   }
   xdg_surface_add_listener(xdg_surface_.get(), &xdg_surface_listener, this);
+  display_->ScheduleFlush();
 
-  display_->AddWindow(this);
+  display_->AddWindow(surface_.id(), this);
+  PlatformEventSource::GetInstance()->AddPlatformEventDispatcher(this);
   delegate_->OnAcceleratedWidgetAvailable(surface_.id(), 1.f);
 
   return true;
-}
-
-wl_surface* WaylandWindow::GetSurface() {
-  DCHECK(surface_);
-  return surface_.get();
-}
-
-gfx::AcceleratedWidget WaylandWindow::GetWidget() {
-  DCHECK(surface_);
-  return surface_.id();
 }
 
 void WaylandWindow::ApplyPendingBounds() {
@@ -66,6 +67,7 @@ void WaylandWindow::ApplyPendingBounds() {
   DCHECK(xdg_surface_);
   xdg_surface_ack_configure(xdg_surface_.get(), pending_configure_serial_);
   pending_bounds_ = gfx::Rect();
+  display_->ScheduleFlush();
 }
 
 void WaylandWindow::Show() {}
@@ -92,6 +94,7 @@ gfx::Rect WaylandWindow::GetBounds() {
 void WaylandWindow::SetTitle(const base::string16& title) {
   DCHECK(xdg_surface_);
   xdg_surface_set_title(xdg_surface_.get(), UTF16ToUTF8(title).c_str());
+  display_->ScheduleFlush();
 }
 
 void WaylandWindow::SetCapture() {
@@ -109,16 +112,19 @@ void WaylandWindow::ToggleFullscreen() {
 void WaylandWindow::Maximize() {
   DCHECK(xdg_surface_);
   xdg_surface_set_maximized(xdg_surface_.get());
+  display_->ScheduleFlush();
 }
 
 void WaylandWindow::Minimize() {
   DCHECK(xdg_surface_);
   xdg_surface_set_minimized(xdg_surface_.get());
+  display_->ScheduleFlush();
 }
 
 void WaylandWindow::Restore() {
   DCHECK(xdg_surface_);
   xdg_surface_unset_maximized(xdg_surface_.get());
+  display_->ScheduleFlush();
 }
 
 void WaylandWindow::SetCursor(PlatformCursor cursor) {
@@ -138,6 +144,21 @@ PlatformImeController* WaylandWindow::GetPlatformImeController() {
   return nullptr;
 }
 
+bool WaylandWindow::CanDispatchEvent(const PlatformEvent& native_event) {
+  Event* event = static_cast<Event*>(native_event);
+  if (event->IsMouseEvent())
+    return has_pointer_focus_;
+  return false;
+}
+
+uint32_t WaylandWindow::DispatchEvent(const PlatformEvent& native_event) {
+  DispatchEventFromNativeUiEvent(
+      native_event, base::Bind(&PlatformWindowDelegate::DispatchEvent,
+                               base::Unretained(delegate_)));
+  return POST_DISPATCH_STOP_PROPAGATION;
+}
+
+// static
 void WaylandWindow::Configure(void* data,
                               xdg_surface* obj,
                               int32_t width,
@@ -154,6 +175,7 @@ void WaylandWindow::Configure(void* data,
   window->pending_configure_serial_ = serial;
 }
 
+// static
 void WaylandWindow::Close(void* data, xdg_surface* obj) {
   NOTIMPLEMENTED();
 }

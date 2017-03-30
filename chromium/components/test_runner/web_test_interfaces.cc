@@ -7,12 +7,15 @@
 #include <utility>
 
 #include "components/test_runner/app_banner_client.h"
+#include "components/test_runner/event_sender.h"
 #include "components/test_runner/mock_web_audio_device.h"
 #include "components/test_runner/mock_web_media_stream_center.h"
 #include "components/test_runner/mock_web_midi_accessor.h"
 #include "components/test_runner/mock_webrtc_peer_connection_handler.h"
 #include "components/test_runner/test_interfaces.h"
 #include "components/test_runner/test_runner.h"
+#include "components/test_runner/web_frame_test_client.h"
+#include "components/test_runner/web_view_test_client.h"
 
 using namespace blink;
 
@@ -49,6 +52,10 @@ void WebTestInterfaces::ConfigureForTestWithURL(const WebURL& test_url,
   interfaces_->ConfigureForTestWithURL(test_url, generate_pixels);
 }
 
+void WebTestInterfaces::SetSendWheelGestures(bool send_gestures) {
+  interfaces_->GetEventSender()->set_send_wheel_gestures(send_gestures);
+}
+
 WebTestRunner* WebTestInterfaces::TestRunner() {
   return interfaces_->GetTestRunner();
 }
@@ -63,7 +70,7 @@ TestInterfaces* WebTestInterfaces::GetTestInterfaces() {
 
 WebMediaStreamCenter* WebTestInterfaces::CreateMediaStreamCenter(
     WebMediaStreamCenterClient* client) {
-  return new MockWebMediaStreamCenter(client, interfaces_.get());
+  return new MockWebMediaStreamCenter();
 }
 
 WebRTCPeerConnectionHandler*
@@ -88,8 +95,19 @@ WebTestInterfaces::CreateAppBannerClient() {
   return std::move(client);
 }
 
-AppBannerClient* WebTestInterfaces::GetAppBannerClient() {
-  return interfaces_->GetAppBannerClient();
+scoped_ptr<WebFrameTestClient> WebTestInterfaces::CreateWebFrameTestClient() {
+  return make_scoped_ptr(new WebFrameTestClient(
+        interfaces_->GetTestRunner(),
+        interfaces_->GetDelegate(),
+        interfaces_->GetAccessibilityController(),
+        interfaces_->GetEventSender()));
+}
+
+scoped_ptr<WebViewTestClient> WebTestInterfaces::CreateWebViewTestClient(
+    WebTestProxyBase* web_test_proxy_base) {
+  return make_scoped_ptr(new WebViewTestClient(
+        interfaces_->GetTestRunner(), interfaces_->GetDelegate(),
+        interfaces_->GetEventSender(), web_test_proxy_base));
 }
 
 }  // namespace test_runner

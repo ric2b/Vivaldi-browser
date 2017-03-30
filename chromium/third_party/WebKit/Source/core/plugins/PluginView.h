@@ -27,6 +27,7 @@
 #ifndef PluginView_h
 #define PluginView_h
 
+#include "core/CoreExport.h"
 #include "platform/Widget.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "wtf/text/WTFString.h"
@@ -39,13 +40,12 @@ namespace blink {
 class ResourceError;
 class ResourceResponse;
 
-class PluginView : public Widget {
+class CORE_EXPORT PluginView : public Widget {
 public:
     bool isPluginView() const final { return true; }
 
     virtual WebLayer* platformLayer() const { return 0; }
     virtual v8::Local<v8::Object> scriptableObject(v8::Isolate*) { return v8::Local<v8::Object>(); }
-    virtual bool getFormValue(String&) { return false; }
     virtual bool wantsWheelEvents() { return false; }
     virtual bool supportsKeyboardFocus() const { return false; }
     virtual bool supportsInputMethod() const { return false; }

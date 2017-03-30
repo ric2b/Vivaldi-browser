@@ -9,16 +9,14 @@ namespace mojo {
 ShellClient::ShellClient() {}
 ShellClient::~ShellClient() {}
 
-void ShellClient::Initialize(Connector* connector, const std::string& url,
-                             uint32_t id, uint32_t user_id) {
+void ShellClient::Initialize(Connector* connector, const Identity& identity,
+                             uint32_t id) {
 }
 
 bool ShellClient::AcceptConnection(Connection* connection) {
   return false;
 }
 
-bool ShellClient::ShellConnectionLost() {
-  return true;
-}
+bool ShellClient::ShellConnectionLost() { return true; }
 
 }  // namespace mojo

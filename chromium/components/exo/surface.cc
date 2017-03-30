@@ -26,6 +26,7 @@
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/transform_util.h"
+#include "ui/views/widget/widget.h"
 
 DECLARE_WINDOW_PROPERTY_TYPE(exo::Surface*);
 
@@ -84,6 +85,15 @@ class CustomWindowDelegate : public aura::WindowDelegate {
   void GetHitTestMask(gfx::Path* mask) const override {
     surface_->GetHitTestMask(mask);
   }
+  void OnKeyEvent(ui::KeyEvent* event) override {
+    // Propagates the key event upto the top-level views Widget so that we can
+    // trigger proper events in the views/ash level there. Event handling for
+    // Surfaces is done in a post event handler in keyboard.cc.
+    views::Widget* widget =
+        views::Widget::GetTopLevelWidgetForNativeView(surface_);
+    if (widget)
+      widget->OnKeyEvent(event);
+  }
 
  private:
   Surface* const surface_;
@@ -124,6 +134,7 @@ Surface::Surface()
       has_pending_contents_(false),
       pending_input_region_(SkIRect::MakeLargest()),
       pending_buffer_scale_(1.0f),
+      pending_only_visible_on_secure_output_(false),
       input_region_(SkIRect::MakeLargest()),
       needs_commit_surface_hierarchy_(false),
       update_contents_after_successful_compositing_(false),
@@ -295,6 +306,13 @@ void Surface::SetViewport(const gfx::Size& viewport) {
   pending_viewport_ = viewport;
 }
 
+void Surface::SetOnlyVisibleOnSecureOutput(bool only_visible_on_secure_output) {
+  TRACE_EVENT1("exo", "Surface::SetOnlyVisibleOnSecureOutput",
+               "only_visible_on_secure_output", only_visible_on_secure_output);
+
+  pending_only_visible_on_secure_output_ = only_visible_on_secure_output;
+}
+
 void Surface::Commit() {
   TRACE_EVENT0("exo", "Surface::Commit");
 
@@ -317,11 +335,17 @@ void Surface::CommitSurfaceHierarchy() {
     current_buffer_ = pending_buffer_;
     pending_buffer_.reset();
 
+    // TODO(dcastagna): Make secure_output_only a layer property instead of a
+    // texture mailbox flag so this can be changed without have to provide
+    // new contents.
+    bool secure_output_only = pending_only_visible_on_secure_output_;
+    pending_only_visible_on_secure_output_ = false;
+
     cc::TextureMailbox texture_mailbox;
     scoped_ptr<cc::SingleReleaseCallback> texture_mailbox_release_callback;
     if (current_buffer_) {
-      texture_mailbox_release_callback =
-          current_buffer_->ProduceTextureMailbox(&texture_mailbox, false);
+      texture_mailbox_release_callback = current_buffer_->ProduceTextureMailbox(
+          &texture_mailbox, secure_output_only, false);
     }
 
     if (texture_mailbox_release_callback) {
@@ -443,9 +467,9 @@ bool Surface::HasSurfaceObserver(const SurfaceObserver* observer) const {
   return observers_.HasObserver(observer);
 }
 
-scoped_refptr<base::trace_event::TracedValue> Surface::AsTracedValue() const {
-  scoped_refptr<base::trace_event::TracedValue> value =
-      new base::trace_event::TracedValue;
+scoped_ptr<base::trace_event::TracedValue> Surface::AsTracedValue() const {
+  scoped_ptr<base::trace_event::TracedValue> value(
+      new base::trace_event::TracedValue());
   value->SetString("name", layer()->name());
   return value;
 }
@@ -497,10 +521,15 @@ void Surface::OnCompositingEnded(ui::Compositor* compositor) {
   if (!current_buffer_)
     return;
 
+  // TODO(dcastagna): Make secure_output_only a layer property instead of a
+  // texture mailbox flag.
+  bool secure_output_only = false;
+
   // Update contents by producing a new texture mailbox for the current buffer.
   cc::TextureMailbox texture_mailbox;
   scoped_ptr<cc::SingleReleaseCallback> texture_mailbox_release_callback =
-      current_buffer_->ProduceTextureMailbox(&texture_mailbox, true);
+      current_buffer_->ProduceTextureMailbox(&texture_mailbox,
+                                             secure_output_only, true);
   if (texture_mailbox_release_callback) {
     layer()->SetTextureMailbox(texture_mailbox,
                                std::move(texture_mailbox_release_callback),

@@ -18,6 +18,7 @@ group("utility") {
 }
 
 source_set("utility_sources") {
+  # External code should depend on via ":utility" above.
   visibility = [ "//content/*" ]
 
   sources = rebase_path(content_utility_gypi_values.public_utility_sources,
@@ -29,6 +30,7 @@ source_set("utility_sources") {
   deps = [
     "//base",
     "//content:export",
+    "//content/public/child:child_sources",
     "//content/public/common:common_sources",
     "//content/utility",
     "//ipc",

@@ -26,6 +26,7 @@
 #ifndef IDBTransaction_h
 #define IDBTransaction_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/events/EventListener.h"
@@ -50,9 +51,10 @@ struct IDBObjectStoreMetadata;
 
 class MODULES_EXPORT IDBTransaction final
     : public RefCountedGarbageCollectedEventTargetWithInlineData<IDBTransaction>
+    , public ActiveScriptWrappable
     , public ActiveDOMObject {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(IDBTransaction);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(IDBTransaction);
+    USING_GARBAGE_COLLECTED_MIXIN(IDBTransaction);
     DEFINE_WRAPPERTYPEINFO();
 public:
     static IDBTransaction* create(ScriptState*, int64_t, const HashSet<String>& objectStoreNames, WebIDBTransactionMode, IDBDatabase*);
@@ -74,7 +76,7 @@ public:
 
     // Implement the IDBTransaction IDL
     const String& mode() const;
-    PassRefPtrWillBeRawPtr<DOMStringList> objectStoreNames() const;
+    DOMStringList* objectStoreNames() const;
     IDBDatabase* db() const { return m_database.get(); }
     DOMException* error() const { return m_error; }
     IDBObjectStore* objectStore(const String& name, ExceptionState&);
@@ -96,20 +98,22 @@ public:
 
     // EventTarget
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
+
+    // ActiveScriptWrappable
+    bool hasPendingActivity() const final;
 
     // ActiveDOMObject
-    bool hasPendingActivity() const override;
     void stop() override;
 
 protected:
     // EventTarget
-    DispatchEventResult dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) override;
+    DispatchEventResult dispatchEventInternal(Event*) override;
 
 private:
     IDBTransaction(ScriptState*, int64_t, const HashSet<String>&, WebIDBTransactionMode, IDBDatabase*, IDBOpenDBRequest*, const IDBDatabaseMetadata&);
 
-    void enqueueEvent(PassRefPtrWillBeRawPtr<Event>);
+    void enqueueEvent(Event*);
 
     enum State {
         Inactive, // Created or started, but not in an event callback
@@ -133,7 +137,16 @@ private:
     typedef HeapHashMap<String, Member<IDBObjectStore>> IDBObjectStoreMap;
     IDBObjectStoreMap m_objectStoreMap;
 
+    // Used to mark stores created in an aborted upgrade transaction as
+    // deleted.
+    HeapHashSet<Member<IDBObjectStore>> m_createdObjectStores;
+
+    // Used to notify object stores (which are no longer in m_objectStoreMap)
+    // when the transaction is finished.
     HeapHashSet<Member<IDBObjectStore>> m_deletedObjectStores;
+
+    // Holds stores created, deleted, or used during upgrade transactions to
+    // reset metadata in case of abort.
     HeapHashMap<Member<IDBObjectStore>, IDBObjectStoreMetadata> m_objectStoreCleanupMap;
     IDBDatabaseMetadata m_previousMetadata;
 };

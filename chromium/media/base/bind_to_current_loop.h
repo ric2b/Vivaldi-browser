@@ -7,6 +7,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -26,7 +27,7 @@
 
 namespace media {
 
-// Mimic base::internal::CallbackForward, replacing p.Pass() with
+// Mimic base::internal::CallbackForward, replacing std::move(p) with
 // base::Passed(&p) to account for the extra layer of indirection.
 namespace internal {
 template <typename T>

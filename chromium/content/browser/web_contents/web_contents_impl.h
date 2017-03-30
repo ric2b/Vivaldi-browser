@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -118,12 +119,6 @@ class CONTENT_EXPORT WebContentsImpl
   static WebContentsImpl* FromFrameTreeNode(FrameTreeNode* frame_tree_node);
   static WebContents* FromRenderFrameHostID(int render_process_host_id,
                                             int render_frame_host_id);
-
-  // Creates a swapped out RenderView. This is used by the browser plugin to
-  // create a swapped out RenderView in the embedder render process for the
-  // guest, to expose the guest's window object to the embedder.
-  // This returns the routing ID of the newly created swapped out RenderView.
-  int CreateSwappedOutRenderView(SiteInstance* instance);
 
   // Complex initialization here. Specifically needed to avoid having
   // members call back into our virtual functions in the constructor.
@@ -265,10 +260,6 @@ class CONTENT_EXPORT WebContentsImpl
   void SetExtData(const std::string& ext_data) override;
   const std::string& GetExtData() const override;
 
-#if defined(OS_WIN)
-  void SetParentNativeViewAccessible(
-      gfx::NativeViewAccessible accessible_parent) override;
-#endif
   const PageImportanceSignals& GetPageImportanceSignals() const override;
   const base::string16& GetTitle() const override;
   int32_t GetMaxPageID() override;
@@ -289,9 +280,13 @@ class CONTENT_EXPORT WebContentsImpl
   int GetCapturerCount() const override;
   bool IsAudioMuted() const override;
   void SetAudioMuted(bool mute) override;
+  void IncrementBluetoothConnectedDeviceCount();
+  void DecrementBluetoothConnectedDeviceCount();
+  bool IsConnectedToBluetoothDevice() const override;
   bool IsCrashed() const override;
   void SetIsCrashed(base::TerminationStatus status, int error_code) override;
   base::TerminationStatus GetCrashedStatus() const override;
+  int GetCrashedErrorCode() const override;
   bool IsBeingDestroyed() const override;
   void NotifyNavigationStateChanged(InvalidateTypes changed_flags) override;
   base::TimeTicks GetLastActiveTime() const override;
@@ -305,7 +300,7 @@ class CONTENT_EXPORT WebContentsImpl
       RenderFrameHost* outer_contents_frame) override;
   void Stop() override;
   WebContents* Clone() override;
-  void ReloadFocusedFrame(bool ignore_cache) override;
+  void ReloadFocusedFrame(bool bypass_cache) override;
   void Undo() override;
   void Redo() override;
   void Cut() override;
@@ -385,12 +380,12 @@ class CONTENT_EXPORT WebContentsImpl
   void HasManifest(const HasManifestCallback& callback) override;
   void ExitFullscreen(bool will_cause_resize) override;
   void ResumeLoadingCreatedWebContents() override;
-#if defined(OS_ANDROID)
   void OnMediaSessionStateChanged();
   void ResumeMediaSession() override;
   void SuspendMediaSession() override;
   void StopMediaSession() override;
 
+#if defined(OS_ANDROID)
   base::android::ScopedJavaLocalRef<jobject> GetJavaWebContents() override;
   virtual WebContentsAndroid* GetWebContentsAndroid();
 #elif defined(OS_MACOSX)
@@ -420,7 +415,6 @@ class CONTENT_EXPORT WebContentsImpl
                             JavaScriptMessageType type,
                             IPC::Message* reply_msg) override;
   void RunBeforeUnloadConfirm(RenderFrameHost* render_frame_host,
-                              const base::string16& message,
                               bool is_reload,
                               IPC::Message* reply_msg) override;
   void DidAccessInitialDocument() override;
@@ -452,9 +446,6 @@ class CONTENT_EXPORT WebContentsImpl
       SiteInstance* source_site_instance) const override;
   void EnsureOpenerProxiesExist(RenderFrameHost* source_rfh) override;
   scoped_ptr<WebUIImpl> CreateWebUIForRenderFrameHost(const GURL& url) override;
-#if defined(OS_WIN)
-  gfx::NativeViewAccessible GetParentNativeViewAccessible() override;
-#endif
 
   // RenderViewHostDelegate ----------------------------------------------------
   RenderViewHostDelegateView* GetDelegateView() override;
@@ -587,7 +578,6 @@ class CONTENT_EXPORT WebContentsImpl
   void HandleKeyboardEvent(const NativeWebKeyboardEvent& event) override;
   bool HandleWheelEvent(const blink::WebMouseWheelEvent& event) override;
   bool PreHandleGestureEvent(const blink::WebGestureEvent& event) override;
-  void DidSendScreenRects(RenderWidgetHostImpl* rwh) override;
   BrowserAccessibilityManager* GetRootBrowserAccessibilityManager() override;
   BrowserAccessibilityManager* GetOrCreateRootBrowserAccessibilityManager()
       override;
@@ -620,6 +610,7 @@ class CONTENT_EXPORT WebContentsImpl
   void ForwardCompositorProto(RenderWidgetHostImpl* render_widget_host,
                               const std::vector<uint8_t>& proto) override;
   void OnRenderFrameProxyVisibilityChanged(bool visible) override;
+  void SendScreenRects() override;
 
   // RenderFrameHostManager::Delegate ------------------------------------------
 
@@ -736,8 +727,11 @@ class CONTENT_EXPORT WebContentsImpl
     return media_web_contents_observer_.get();
   }
 
+  // Update the web contents visibility.
+  void UpdateWebContentsVisibility(bool visible);
+
   // Note(andre@vivaldi.com): Getter making sure it is freed after reading.
-  scoped_ptr<std::string> delayed_open_url() override;
+  std::unique_ptr<std::string> delayed_open_url() override;
 
   void set_delayed_open_url(std::string* url) override;
 
@@ -765,6 +759,8 @@ class CONTENT_EXPORT WebContentsImpl
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest, CrossSiteIframe);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessAccessibilityBrowserTest,
                            CrossSiteIframeAccessibility);
+  FRIEND_TEST_ALL_PREFIXES(WebContentsImplBrowserTest,
+                           JavaScriptDialogsInMainAndSubframes);
 
   // So InterstitialPageImpl can access SetIsLoading.
   friend class InterstitialPageImpl;
@@ -836,7 +832,7 @@ class CONTENT_EXPORT WebContentsImpl
                           int id,
                           const GURL& image_url,
                           int32_t http_status_code,
-                          mojo::Array<skia::BitmapPtr> images,
+                          mojo::Array<skia::mojom::BitmapPtr> images,
                           mojo::Array<mojo::SizePtr> original_image_sizes);
 
   // Callback function when showing JavaScript dialogs.  Takes in a routing ID
@@ -990,6 +986,9 @@ class CONTENT_EXPORT WebContentsImpl
   // called once as this call also removes it from the internal map.
   WebContentsImpl* GetCreatedWindow(int route_id);
 
+  // Sends a Page message IPC.
+  void SendPageMessage(IPC::Message* msg);
+
   // Tracking loading progress -------------------------------------------------
 
   // Resets the tracking state of the current load progress.
@@ -1086,10 +1085,6 @@ class CONTENT_EXPORT WebContentsImpl
   // True if this tab was opened by another tab. This is not unset if the opener
   // is closed.
   bool created_with_opener_;
-
-#if defined(OS_WIN)
-  gfx::NativeViewAccessible accessible_parent_;
-#endif
 
   // Vivaldi specific, needed because we can call |Init()| multiple times.
   bool notifications_is_registred_;
@@ -1193,6 +1188,12 @@ class CONTENT_EXPORT WebContentsImpl
 
   // Tracks whether RWHV should be visible once capturer_count_ becomes zero.
   bool should_normally_be_visible_;
+
+  // Tracks whether this WebContents was ever set to be visible. Used to
+  // facilitate WebContents being loaded in the background by setting
+  // |should_normally_be_visible_|. Ensures WasShown() will trigger when first
+  // becoming visible to the user, and prevents premature unloading.
+  bool did_first_set_visible_;
 
   // See getter above.
   bool is_being_destroyed_;
@@ -1335,6 +1336,8 @@ class CONTENT_EXPORT WebContentsImpl
 
   // Created on-demand to mute all audio output from this WebContents.
   scoped_ptr<WebContentsAudioMuter> audio_muter_;
+
+  size_t bluetooth_connected_device_count_;
 
   bool virtual_keyboard_requested_;
 

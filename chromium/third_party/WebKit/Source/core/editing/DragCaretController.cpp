@@ -32,13 +32,13 @@
 namespace blink {
 
 DragCaretController::DragCaretController()
-    : CaretBase(Visible)
+    : CaretBase(CaretVisibility::Visible)
 {
 }
 
-PassOwnPtrWillBeRawPtr<DragCaretController> DragCaretController::create()
+RawPtr<DragCaretController> DragCaretController::create()
 {
-    return adoptPtrWillBeNoop(new DragCaretController);
+    return new DragCaretController;
 }
 
 bool DragCaretController::isContentRichlyEditable() const
@@ -81,7 +81,7 @@ static bool removingNodeRemovesPosition(Node& node, const Position& position)
         return false;
 
     Element& element = toElement(node);
-    return element.containsIncludingShadowDOM(position.anchorNode());
+    return element.isShadowIncludingInclusiveAncestorOf(position.anchorNode());
 }
 
 void DragCaretController::nodeWillBeRemoved(Node& node)

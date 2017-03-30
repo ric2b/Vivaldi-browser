@@ -7,17 +7,14 @@
 
 #include "platform/heap/Handle.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
 
 namespace blink {
 
 class CustomElementCallbackQueue;
 
-class CustomElementMicrotaskDispatcher final : public NoBaseWillBeGarbageCollected<CustomElementMicrotaskDispatcher> {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(CustomElementMicrotaskDispatcher);
+class CustomElementMicrotaskDispatcher final : public GarbageCollected<CustomElementMicrotaskDispatcher> {
     WTF_MAKE_NONCOPYABLE(CustomElementMicrotaskDispatcher);
-    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(CustomElementMicrotaskDispatcher);
 public:
     static CustomElementMicrotaskDispatcher& instance();
 
@@ -43,7 +40,7 @@ private:
         DispatchingCallbacks
     } m_phase;
 
-    WillBeHeapVector<RawPtrWillBeMember<CustomElementCallbackQueue>> m_elements;
+    HeapVector<Member<CustomElementCallbackQueue>> m_elements;
 };
 
 } // namespace blink

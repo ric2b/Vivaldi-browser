@@ -10,11 +10,9 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/win/current_module.h"
 #include "base/win/scoped_co_mem.h"
 #include "base/win/windows_version.h"
-
-// http://blogs.msdn.com/oldnewthing/archive/2004/10/25/247180.aspx
-extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 using base::FilePath;
 
@@ -39,8 +37,7 @@ bool PathProviderWin(int key, FilePath* result) {
     case base::FILE_MODULE: {
       // the resource containing module is assumed to be the one that
       // this code lives in, whether that's a dll or exe
-      HMODULE this_module = reinterpret_cast<HMODULE>(&__ImageBase);
-      if (GetModuleFileName(this_module, system_buffer, MAX_PATH) == 0)
+      if (GetModuleFileName(CURRENT_MODULE(), system_buffer, MAX_PATH) == 0)
         return false;
       cur = FilePath(system_buffer);
       break;
@@ -73,7 +70,7 @@ bool PathProviderWin(int key, FilePath* result) {
 #if !defined(_WIN64)
       if (base::win::OSInfo::GetInstance()->wow64_status() ==
           base::win::OSInfo::WOW64_ENABLED) {
-        scoped_ptr<base::Environment> env(base::Environment::Create());
+        std::unique_ptr<base::Environment> env(base::Environment::Create());
         std::string programfiles_w6432;
         // 32-bit process running in WOW64 sets ProgramW6432 environment
         // variable. See

@@ -30,7 +30,8 @@ import unittest
 
 from webkitpy.common.system.systemhost_mock import MockSystemHost
 
-from webkitpy.layout_tests.port import Port, Driver, DriverOutput
+from webkitpy.layout_tests.port.base import Port
+from webkitpy.layout_tests.port.driver import Driver, DriverOutput
 from webkitpy.layout_tests.port.server_process_mock import MockServerProcess
 
 # FIXME: remove the dependency on TestWebKitPort
@@ -40,6 +41,7 @@ from webkitpy.tool.mocktool import MockOptions
 
 
 class DriverTest(unittest.TestCase):
+
     def make_port(self):
         port = Port(MockSystemHost(), 'test', MockOptions(configuration='Release'))
         port._config.build_directory = lambda configuration: '/mock-checkout/out/' + configuration
@@ -141,6 +143,7 @@ class DriverTest(unittest.TestCase):
         driver = Driver(port, 0, pixel_tests=True)
 
         class FakeServerProcess(object):
+
             def __init__(self, crashed):
                 self.crashed = crashed
 

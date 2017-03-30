@@ -5,11 +5,11 @@
 #ifndef CHROME_BROWSER_UI_PASSWORDS_MANAGE_PASSWORDS_STATE_H_
 #define CHROME_BROWSER_UI_PASSWORDS_MANAGE_PASSWORDS_STATE_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/password_store_change.h"
@@ -18,7 +18,6 @@
 #include "url/gurl.h"
 
 namespace password_manager {
-struct CredentialInfo;
 class PasswordFormManager;
 class PasswordManagerClient;
 }
@@ -29,7 +28,7 @@ class PasswordManagerClient;
 class ManagePasswordsState {
  public:
   using CredentialsCallback =
-      base::Callback<void(const password_manager::CredentialInfo&)>;
+      base::Callback<void(const autofill::PasswordForm*)>;
 
   ManagePasswordsState();
   ~ManagePasswordsState();
@@ -44,11 +43,11 @@ class ManagePasswordsState {
 
   // Move to PENDING_PASSWORD_STATE.
   void OnPendingPassword(
-      scoped_ptr<password_manager::PasswordFormManager> form_manager);
+      std::unique_ptr<password_manager::PasswordFormManager> form_manager);
 
   // Move to PENDING_PASSWORD_UPDATE_STATE.
   void OnUpdatePassword(
-      scoped_ptr<password_manager::PasswordFormManager> form_manager);
+      std::unique_ptr<password_manager::PasswordFormManager> form_manager);
 
   // Move to CREDENTIAL_REQUEST_STATE.
   void OnRequestCredentials(
@@ -57,11 +56,12 @@ class ManagePasswordsState {
       const GURL& origin);
 
   // Move to AUTO_SIGNIN_STATE. |local_forms| can't be empty.
-  void OnAutoSignin(ScopedVector<autofill::PasswordForm> local_forms);
+  void OnAutoSignin(ScopedVector<autofill::PasswordForm> local_forms,
+                    const GURL& origin);
 
   // Move to CONFIRMATION_STATE.
   void OnAutomaticPasswordSave(
-      scoped_ptr<password_manager::PasswordFormManager> form_manager);
+      std::unique_ptr<password_manager::PasswordFormManager> form_manager);
 
   // Move to MANAGE_STATE or INACTIVE_STATE for PSL matched passwords.
   // |password_form_map| contains best matches from the password store for the
@@ -71,7 +71,8 @@ class ManagePasswordsState {
   void OnPasswordAutofilled(
       const autofill::PasswordFormMap& password_form_map,
       const GURL& origin,
-      const std::vector<scoped_ptr<autofill::PasswordForm>>* federated_matches);
+      const std::vector<std::unique_ptr<autofill::PasswordForm>>*
+          federated_matches);
 
   // Move to INACTIVE_STATE.
   void OnInactive();
@@ -84,12 +85,10 @@ class ManagePasswordsState {
   void ProcessLoginsChanged(
       const password_manager::PasswordStoreChangeList& changes);
 
-  // Called when the user chooses a credential. Using data from |form| and
-  // |credential_type| it constructs the object which next is passed to the
+  // Called when the user chooses a credential. |form| is passed to the
   // credentials callback. Method should be called in the
   // CREDENTIAL_REQUEST_STATE state.
-  void ChooseCredential(const autofill::PasswordForm& form,
-                        password_manager::CredentialType credential_type);
+  void ChooseCredential(const autofill::PasswordForm* form);
 
   password_manager::ui::State state() const { return state_; }
   const GURL& origin() const { return origin_; }
@@ -127,12 +126,12 @@ class ManagePasswordsState {
 
   void SetState(password_manager::ui::State state);
 
-  // The origin of the current page. It's used to determine which PasswordStore
-  // changes are applicable to the internal state.
+  // The origin of the current page for which the state is stored. It's used to
+  // determine which PasswordStore changes are applicable to the internal state.
   GURL origin_;
 
   // Contains the password that was submitted.
-  scoped_ptr<password_manager::PasswordFormManager> form_manager_;
+  std::unique_ptr<password_manager::PasswordFormManager> form_manager_;
 
   // Weak references to the passwords for the current status. The hard pointers
   // are scattered between |form_manager_| and |local_credentials_forms_|. If

@@ -148,7 +148,7 @@ public:
         UResolution,
         UOther
     };
-    static UnitCategory unitCategory(UnitType);
+    static UnitCategory unitTypeToUnitCategory(UnitType);
     static float clampToCSSLengthRange(double);
 
     static void initUnitTable();
@@ -200,22 +200,22 @@ public:
     bool isValueID() const { return type() == UnitType::ValueID; }
     bool colorIsDerivedFromElement() const;
 
-    static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> createIdentifier(CSSValueID valueID)
+    static CSSPrimitiveValue* createIdentifier(CSSValueID valueID)
     {
-        return adoptRefWillBeNoop(new CSSPrimitiveValue(valueID));
+        return new CSSPrimitiveValue(valueID);
     }
-    static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> create(double value, UnitType type)
+    static CSSPrimitiveValue* create(double value, UnitType type)
     {
-        return adoptRefWillBeNoop(new CSSPrimitiveValue(value, type));
+        return new CSSPrimitiveValue(value, type);
     }
-    static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> create(const Length& value, float zoom)
+    static CSSPrimitiveValue* create(const Length& value, float zoom)
     {
-        return adoptRefWillBeNoop(new CSSPrimitiveValue(value, zoom));
+        return new CSSPrimitiveValue(value, zoom);
     }
-    template<typename T> static PassRefPtrWillBeRawPtr<CSSPrimitiveValue> create(T value)
+    template<typename T> static CSSPrimitiveValue* create(T value)
     {
         static_assert(!std::is_same<T, CSSValueID>::value, "Do not call create() with a CSSValueID; call createIdentifier() instead");
-        return adoptRefWillBeNoop(new CSSPrimitiveValue(value));
+        return new CSSPrimitiveValue(value);
     }
 
     ~CSSPrimitiveValue();
@@ -262,13 +262,8 @@ private:
     CSSPrimitiveValue(double, UnitType);
 
     template<typename T> CSSPrimitiveValue(T); // Defined in CSSPrimitiveValueMappings.h
-    template<typename T> CSSPrimitiveValue(T* val)
-        : CSSValue(PrimitiveClass)
-    {
-        init(PassRefPtrWillBeRawPtr<T>(val));
-    }
 
-    template<typename T> CSSPrimitiveValue(PassRefPtrWillBeRawPtr<T> val)
+    template<typename T> CSSPrimitiveValue(T* val)
         : CSSValue(PrimitiveClass)
     {
         init(val);
@@ -280,7 +275,7 @@ private:
 
     void init(UnitType);
     void init(const Length&);
-    void init(PassRefPtrWillBeRawPtr<CSSCalcValue>);
+    void init(CSSCalcValue*);
 
     double computeLengthDouble(const CSSToLengthConversionData&) const;
 

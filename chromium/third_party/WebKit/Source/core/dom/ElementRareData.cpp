@@ -39,20 +39,20 @@ struct SameSizeAsElementRareData : NodeRareData {
     LayoutSize sizeForResizing;
     IntSize scrollOffset;
     void* pointers[13];
-    PersistentWillBeMember<void*> persistentMember[2];
+    Member<void*> persistentMember[2];
 };
 
 CSSStyleDeclaration& ElementRareData::ensureInlineCSSStyleDeclaration(Element* ownerElement)
 {
     if (!m_cssomWrapper)
-        m_cssomWrapper = adoptPtrWillBeNoop(new InlineCSSStyleDeclaration(ownerElement));
+        m_cssomWrapper = new InlineCSSStyleDeclaration(ownerElement);
     return *m_cssomWrapper;
 }
 
 AttrNodeList& ElementRareData::ensureAttrNodeList()
 {
     if (!m_attrNodeList)
-        m_attrNodeList = adoptPtrWillBeNoop(new AttrNodeList);
+        m_attrNodeList = new AttrNodeList;
     return *m_attrNodeList;
 }
 
@@ -62,9 +62,7 @@ DEFINE_TRACE_AFTER_DISPATCH(ElementRareData)
     visitor->trace(m_classList);
     visitor->trace(m_shadow);
     visitor->trace(m_attributeMap);
-#if ENABLE(OILPAN)
     visitor->trace(m_attrNodeList);
-#endif
     visitor->trace(m_elementAnimations);
     visitor->trace(m_cssomWrapper);
     visitor->trace(m_customElementDefinition);

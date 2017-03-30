@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_UI_EXCLUSIVE_ACCESS_EXCLUSIVE_ACCESS_MANAGER_H_
 #define CHROME_BROWSER_UI_EXCLUSIVE_ACCESS_EXCLUSIVE_ACCESS_MANAGER_H_
 
+#include <memory>
+
 #include "base/feature_list.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_type.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/exclusive_access/mouse_lock_controller.h"
@@ -27,10 +29,6 @@ class WebContents;
 // the exit bubble to reflect the combined state.
 class ExclusiveAccessManager {
  public:
-  // A new user experience for transitioning into fullscreen and mouse pointer
-  // lock states.
-  static const base::Feature kSimplifiedUIFeature;
-
   explicit ExclusiveAccessManager(
       ExclusiveAccessContext* exclusive_access_context);
   ~ExclusiveAccessManager();
@@ -50,6 +48,7 @@ class ExclusiveAccessManager {
 
   GURL GetExclusiveAccessBubbleURL() const;
 
+  static bool IsExperimentalKeyboardLockUIEnabled();
   static bool IsSimplifiedFullscreenUIEnabled();
 
   // Callbacks ////////////////////////////////////////////////////////////////
@@ -76,9 +75,13 @@ class ExclusiveAccessManager {
   void RecordBubbleReshownUMA(ExclusiveAccessBubbleType type);
 
  private:
+  // Called when the user has held down Escape.
+  void HandleUserHeldEscape();
+
   ExclusiveAccessContext* const exclusive_access_context_;
   FullscreenController fullscreen_controller_;
   MouseLockController mouse_lock_controller_;
+  base::OneShotTimer hold_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ExclusiveAccessManager);
 };

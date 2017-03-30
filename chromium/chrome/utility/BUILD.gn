@@ -30,6 +30,7 @@ static_library("utility") {
     "//chrome:resources",
     "//chrome:strings",
     "//chrome/common",
+    "//chrome/common:mojo_bindings",
     "//components/safe_json:safe_json_parser_message_filter",
     "//components/search_engines",
     "//components/strings",
@@ -41,6 +42,7 @@ static_library("utility") {
     "//media",
     "//net:net_with_v8",
     "//skia",
+    "//skia/public",
     "//sql",
     "//third_party/libxml",
   ]
@@ -84,19 +86,6 @@ static_library("utility") {
       deps += [ "//components/wifi" ]
     } else {
       sources += [ "image_writer/image_writer_stub.cc" ]
-    }
-
-    if (is_mac) {
-      sources +=
-          rebase_path(gypi_values.chrome_utility_mac_media_gallery_sources,
-                      ".",
-                      "..")
-    }
-
-    # Linux should use system libexif
-    if (!is_linux || is_chromeos) {
-      # TODO(thestig): Properly support building on Linux and ChromeOS.
-      deps += [ "//third_party/libexif" ]
     }
   }
 

@@ -45,9 +45,8 @@ import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.preferences.datareduction.DataReductionPreferences;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionPromoScreen;
-import org.chromium.chrome.browser.signin.SigninPromoScreen;
+import org.chromium.chrome.browser.signin.SigninPromoUtil;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabUma.TabCreationState;
@@ -55,6 +54,7 @@ import org.chromium.chrome.browser.tabmodel.AsyncTabParams;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
 import org.chromium.chrome.browser.tabmodel.SingleTabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.TabReparentingParams;
 import org.chromium.chrome.browser.tabmodel.document.ActivityDelegate;
 import org.chromium.chrome.browser.tabmodel.document.AsyncTabCreationParams;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModel;
@@ -230,8 +230,30 @@ public class DocumentActivity extends ChromeActivity {
 
     @Override
     protected boolean isStartedUpCorrectly(Intent intent) {
-        int tabId = ActivityDelegate.getTabIdFromIntent(getIntent());
         boolean isDocumentMode = FeatureUtilities.isDocumentMode(this);
+        int tabId = ActivityDelegate.getTabIdFromIntent(getIntent());
+
+        if (!isDocumentMode) {
+            // Fire a MAIN Intent to send the user back through ChromeLauncherActivity.
+            Log.e(TAG, "User is not in document mode.  Sending back to ChromeLauncherActivity.");
+
+            // Try to bring this tab forward after migration.
+            Intent tabbedIntent = null;
+            if (tabId != Tab.INVALID_TAB_ID) tabbedIntent = Tab.createBringTabToFrontIntent(tabId);
+
+            if (tabbedIntent == null) {
+                tabbedIntent = new Intent(Intent.ACTION_MAIN);
+                tabbedIntent.setPackage(getPackageName());
+            }
+
+            // Launch the other Activity in its own task so it stays when this one finishes.
+            tabbedIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            tabbedIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+
+            startActivity(tabbedIntent);
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+        }
+
         boolean isStartedUpCorrectly = tabId != Tab.INVALID_TAB_ID && isDocumentMode;
         if (!isStartedUpCorrectly) {
             Log.e(TAG, "Discarding Intent: Tab = " + tabId + ", Document mode = " + isDocumentMode);
@@ -318,7 +340,7 @@ public class DocumentActivity extends ChromeActivity {
             if (preferenceManager.getPromosSkippedOnFirstStart()) {
                 // Data reduction promo should be temporarily suppressed if the sign in promo is
                 // shown to avoid nagging users too much.
-                if (!SigninPromoScreen.launchSigninPromoIfNeeded(this)) {
+                if (!SigninPromoUtil.launchSigninPromoIfNeeded(this)) {
                     DataReductionPromoScreen.launchDataReductionPromo(this);
                 }
             } else {
@@ -590,7 +612,8 @@ public class DocumentActivity extends ChromeActivity {
 
         if (params != null && params.getTabToReparent() != null) {
             mTab = params.getTabToReparent();
-            mTab.reparentToActivity(this, new DocumentTabDelegateFactory());
+            mTab.attachAndFinishReparenting(this, new DocumentTabDelegateFactory(),
+                    (TabReparentingParams) params);
         } else {
             mTab = createActivityTab(asyncParams);
         }
@@ -697,9 +720,8 @@ public class DocumentActivity extends ChromeActivity {
         initializeCompositorContent(layoutDriver, findViewById(R.id.url_bar),
                 (ViewGroup) findViewById(android.R.id.content), controlContainer);
 
-        mFindToolbarManager = new FindToolbarManager(this, getTabModelSelector(),
-                getToolbarManager().getActionModeController()
-                        .getActionModeCallback());
+        mFindToolbarManager = new FindToolbarManager(this,
+                getToolbarManager().getActionModeController().getActionModeCallback());
 
         if (getContextualSearchManager() != null) {
             getContextualSearchManager().setFindToolbarManager(mFindToolbarManager);
@@ -714,11 +736,6 @@ public class DocumentActivity extends ChromeActivity {
         mTab.addObserver(new DocumentTabObserver());
 
         removeWindowBackground();
-
-        if (mTab != null) {
-            DataReductionPreferences.launchDataReductionSSLInfoBar(
-                    DocumentActivity.this, mTab.getWebContents());
-        }
     }
 
     private void resetIcon() {

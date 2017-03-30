@@ -54,7 +54,6 @@ class AudioRendererHost;
 class BluetoothDispatcherHost;
 class BrowserCdmManager;
 class BrowserDemuxerAndroid;
-class GpuMessageFilter;
 class InProcessChildThreadParams;
 class MessagePortMessageFilter;
 class MojoApplicationHost;
@@ -71,7 +70,10 @@ class RenderWidgetHostImpl;
 class RenderWidgetHostViewFrameSubscriber;
 class StoragePartition;
 class StoragePartitionImpl;
+
+namespace mojom {
 class StoragePartitionService;
+}
 
 typedef base::Thread* (*RendererMainThreadFactoryFunction)(
     const InProcessChildThreadParams& params);
@@ -148,6 +150,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void DisableEventLogRecordings() override;
   void SetWebRtcLogMessageCallback(
       base::Callback<void(const std::string&)> callback) override;
+  void ClearWebRtcLogMessageCallback() override;
   WebRtcStopRtpDumpCallback StartRtpDump(
       bool incoming,
       bool outgoing,
@@ -156,6 +159,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void ResumeDeferredNavigation(const GlobalRequestID& request_id) override;
   void NotifyTimezoneChange(const std::string& timezone) override;
   ServiceRegistry* GetServiceRegistry() override;
+  scoped_ptr<base::SharedPersistentMemoryAllocator> TakeMetricsAllocator()
+      override;
   const base::TimeTicks& GetInitTimeForNavigationMetrics() const override;
   bool SubscribeUniformEnabled() const override;
   void OnAddSubscription(unsigned int target) override;
@@ -305,7 +310,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void RegisterMojoServices();
 
   void CreateStoragePartitionService(
-      mojo::InterfaceRequest<StoragePartitionService> request);
+      mojo::InterfaceRequest<mojom::StoragePartitionService> request);
 
   // Control message handlers.
   void OnShutdownRequest();
@@ -328,6 +333,12 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // appropriate. Should be called after any of the involved data members
   // change.
   void UpdateProcessPriority();
+
+  // Creates a PersistentMemoryAllocator and shares it with the renderer
+  // process for it to store histograms from that process. The allocator is
+  // available for extraction by a SubprocesMetricsProvider in order to
+  // report those histograms to UMA.
+  void CreateSharedRendererHistogramAllocator();
 
   // Handle termination of our process.
   void ProcessDied(bool already_dead, RendererClosedDetails* known_details);
@@ -357,6 +368,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
   base::FilePath GetEventLogFilePathWithExtensions(const base::FilePath& file);
 #endif
 
+  // The token to be passed to the child process and exchanged for a message
+  // pipe to the shell.
+  std::string shell_pipe_token_;
+
   scoped_ptr<MojoApplicationHost> mojo_application_host_;
 
   // The registered IPC listener objects. When this list is empty, we should
@@ -375,14 +390,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Used to allow a RenderWidgetHost to intercept various messages on the
   // IO thread.
   scoped_refptr<RenderWidgetHelper> widget_helper_;
-
-  // The filter for GPU-related messages coming from the renderer.
-  // Thread safety note: this field is to be accessed from the UI thread.
-  // We don't keep a reference to it, to avoid it being destroyed on the UI
-  // thread, but we clear this field when we clear channel_. When channel_ goes
-  // away, it posts a task to the IO thread to destroy it there, so we know that
-  // it's valid if non-NULL.
-  GpuMessageFilter* gpu_message_filter_;
 
   // The filter for MessagePort messages coming from the renderer.
   scoped_refptr<MessagePortMessageFilter> message_port_message_filter_;
@@ -493,7 +500,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // for UMA.
   int max_worker_count_;
 
-  // Context shared for each PermissionService instance created for this RPH.
+  // Context shared for each mojom::PermissionService instance created for this
+  // RPH.
   scoped_ptr<PermissionServiceContext> permission_service_context_;
 
   // This is a set of all subscription targets valuebuffers in the GPU process
@@ -510,6 +518,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Whether or not the CHROMIUM_subscribe_uniform WebGL extension is enabled
   bool subscribe_uniform_enabled_;
 
+  // The memory allocator, if any, in which the renderer will write its metrics.
+  scoped_ptr<base::SharedPersistentMemoryAllocator> metrics_allocator_;
+
   bool channel_connected_;
   bool sent_render_process_ready_;
 
@@ -521,6 +532,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // ignore this problem.
   base::WaitableEvent never_signaled_;
 #endif
+
+  std::string mojo_channel_token_;
+  mojo::ScopedMessagePipeHandle in_process_renderer_handle_;
 
   base::WeakPtrFactory<RenderProcessHostImpl> weak_factory_;
 

@@ -69,6 +69,29 @@ class RtcpBuilderTest : public ::testing::Test {
     return RtpTimeTicks().Expand(kRtpTimestamp);
   }
 
+  PacketRef BuildRtcpFromReceiver(
+      const RtcpReportBlock* report_block,
+      const RtcpReceiverReferenceTimeReport* rrtr,
+      const RtcpCastMessage* cast_message,
+      const RtcpPliMessage* pli_message,
+      const ReceiverRtcpEventSubscriber::RtcpEvents* rtcp_events,
+      base::TimeDelta target_delay) {
+    DCHECK(rtcp_builder_);
+
+    rtcp_builder_->Start();
+    if (report_block)
+      rtcp_builder_->AddRR(report_block);
+    if (rrtr)
+      rtcp_builder_->AddRrtr(*rrtr);
+    if (cast_message)
+      rtcp_builder_->AddCast(*cast_message, target_delay);
+    if (pli_message)
+      rtcp_builder_->AddPli(*pli_message);
+    if (rtcp_events)
+      rtcp_builder_->AddReceiverLog(*rtcp_events);
+    return rtcp_builder_->Finish();
+  }
+
   scoped_ptr<RtcpBuilder> rtcp_builder_;
 
   DISALLOW_COPY_AND_ASSIGN(RtcpBuilderTest);
@@ -83,8 +106,8 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReport) {
   RtcpReportBlock report_block = GetReportBlock();
 
   ExpectPacketEQ(p2.GetPacket(),
-                 rtcp_builder_->BuildRtcpFromReceiver(&report_block, NULL, NULL,
-                                                      NULL, kDefaultDelay));
+                 BuildRtcpFromReceiver(&report_block, nullptr, nullptr, nullptr,
+                                       nullptr, kDefaultDelay));
 }
 
 TEST_F(RtcpBuilderTest, RtcpReceiverReportWithRrtr) {
@@ -102,8 +125,8 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportWithRrtr) {
   rrtr.ntp_fraction = kNtpLow;
 
   ExpectPacketEQ(p.GetPacket(),
-                 rtcp_builder_->BuildRtcpFromReceiver(
-                     &report_block, &rrtr, NULL, NULL, kDefaultDelay));
+                 BuildRtcpFromReceiver(&report_block, &rrtr, nullptr, nullptr,
+                                       nullptr, kDefaultDelay));
 }
 
 TEST_F(RtcpBuilderTest, RtcpReceiverReportWithCast) {
@@ -127,8 +150,8 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportWithCast) {
       missing_packets;
 
   ExpectPacketEQ(p.GetPacket(),
-                 rtcp_builder_->BuildRtcpFromReceiver(
-                     &report_block, NULL, &cast_message, NULL, kDefaultDelay));
+                 BuildRtcpFromReceiver(&report_block, nullptr, &cast_message,
+                                       nullptr, nullptr, kDefaultDelay));
 }
 
 TEST_F(RtcpBuilderTest, RtcpReceiverReportWithRrtraAndCastMessage) {
@@ -157,8 +180,8 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportWithRrtraAndCastMessage) {
       missing_packets;
 
   ExpectPacketEQ(p.GetPacket(),
-                 rtcp_builder_->BuildRtcpFromReceiver(
-                     &report_block, &rrtr, &cast_message, NULL, kDefaultDelay));
+                 BuildRtcpFromReceiver(&report_block, &rrtr, &cast_message,
+                                       nullptr, nullptr, kDefaultDelay));
 }
 
 TEST_F(RtcpBuilderTest, RtcpReceiverReportWithRrtrCastMessageAndLog) {
@@ -192,9 +215,9 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportWithRrtrCastMessageAndLog) {
   ReceiverRtcpEventSubscriber event_subscriber(500, VIDEO_EVENT);
   ReceiverRtcpEventSubscriber::RtcpEvents rtcp_events;
 
-  ExpectPacketEQ(p.GetPacket(), rtcp_builder_->BuildRtcpFromReceiver(
-                                    &report_block, &rrtr, &cast_message,
-                                    &rtcp_events, kDefaultDelay));
+  ExpectPacketEQ(p.GetPacket(),
+                 BuildRtcpFromReceiver(&report_block, &rrtr, &cast_message,
+                                       nullptr, &rtcp_events, kDefaultDelay));
 
   base::SimpleTestTickClock testing_clock;
   testing_clock.Advance(base::TimeDelta::FromMilliseconds(kTimeBaseMs));
@@ -222,9 +245,9 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportWithRrtrCastMessageAndLog) {
   event_subscriber.GetRtcpEventsWithRedundancy(&rtcp_events);
   EXPECT_EQ(2u, rtcp_events.size());
 
-  ExpectPacketEQ(p.GetPacket(), rtcp_builder_->BuildRtcpFromReceiver(
-                                    &report_block, &rrtr, &cast_message,
-                                    &rtcp_events, kDefaultDelay));
+  ExpectPacketEQ(p.GetPacket(),
+                 BuildRtcpFromReceiver(&report_block, &rrtr, &cast_message,
+                                       nullptr, &rtcp_events, kDefaultDelay));
 }
 
 TEST_F(RtcpBuilderTest, RtcpReceiverReportWithOversizedFrameLog) {
@@ -273,8 +296,8 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportWithOversizedFrameLog) {
   event_subscriber.GetRtcpEventsWithRedundancy(&rtcp_events);
 
   ExpectPacketEQ(p.GetPacket(),
-                 rtcp_builder_->BuildRtcpFromReceiver(
-                     &report_block, NULL, NULL, &rtcp_events, kDefaultDelay));
+                 BuildRtcpFromReceiver(&report_block, nullptr, nullptr, nullptr,
+                                       &rtcp_events, kDefaultDelay));
 }
 
 TEST_F(RtcpBuilderTest, RtcpReceiverReportWithTooManyLogFrames) {
@@ -318,8 +341,8 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportWithTooManyLogFrames) {
   event_subscriber.GetRtcpEventsWithRedundancy(&rtcp_events);
 
   ExpectPacketEQ(p.GetPacket(),
-                 rtcp_builder_->BuildRtcpFromReceiver(
-                     &report_block, NULL, NULL, &rtcp_events, kDefaultDelay));
+                 BuildRtcpFromReceiver(&report_block, nullptr, nullptr, nullptr,
+                                       &rtcp_events, kDefaultDelay));
 }
 
 TEST_F(RtcpBuilderTest, RtcpReceiverReportWithOldLogFrames) {
@@ -362,8 +385,8 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportWithOldLogFrames) {
   event_subscriber.GetRtcpEventsWithRedundancy(&rtcp_events);
 
   ExpectPacketEQ(p.GetPacket(),
-                 rtcp_builder_->BuildRtcpFromReceiver(
-                     &report_block, NULL, NULL, &rtcp_events, kDefaultDelay));
+                 BuildRtcpFromReceiver(&report_block, nullptr, nullptr, nullptr,
+                                       &rtcp_events, kDefaultDelay));
 }
 
 TEST_F(RtcpBuilderTest, RtcpReceiverReportRedundancy) {
@@ -406,8 +429,8 @@ TEST_F(RtcpBuilderTest, RtcpReceiverReportRedundancy) {
     event_subscriber.GetRtcpEventsWithRedundancy(&rtcp_events);
 
     ExpectPacketEQ(p.GetPacket(),
-                   rtcp_builder_->BuildRtcpFromReceiver(
-                       &report_block, NULL, NULL, &rtcp_events, kDefaultDelay));
+                   BuildRtcpFromReceiver(&report_block, nullptr, nullptr,
+                                         nullptr, &rtcp_events, kDefaultDelay));
 
     testing_clock.Advance(
         base::TimeDelta::FromMilliseconds(kTimeBetweenEventsMs));

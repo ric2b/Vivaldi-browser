@@ -31,112 +31,93 @@
 #ifndef InjectedScript_h
 #define InjectedScript_h
 
+#include "platform/inspector_protocol/Allocator.h"
 #include "platform/inspector_protocol/TypeBuilder.h"
-#include "platform/v8_inspector/InjectedScriptManager.h"
 #include "platform/v8_inspector/InjectedScriptNative.h"
-#include "wtf/Allocator.h"
-#include "wtf/Forward.h"
+#include "platform/v8_inspector/InspectedContext.h"
+#include "wtf/PassOwnPtr.h"
+
 #include <v8.h>
 
 namespace blink {
 
-class InjectedScriptManager;
+class InjectedScriptHost;
 class RemoteObjectId;
 class V8FunctionCall;
-class V8DebuggerClient;
 
 namespace protocol {
 class DictionaryValue;
 }
 
-typedef String ErrorString;
-
 using protocol::Maybe;
 
 class InjectedScript final {
-    USING_FAST_MALLOC(InjectedScript);
+    PROTOCOL_DISALLOW_COPY(InjectedScript);
 public:
+    static PassOwnPtr<InjectedScript> create(InspectedContext*, InjectedScriptHost*);
     ~InjectedScript();
 
-    void evaluate(
-        ErrorString*,
-        const String& expression,
-        const String& objectGroup,
-        bool includeCommandLineAPI,
-        bool returnByValue,
-        bool generatePreview,
-        OwnPtr<protocol::Runtime::RemoteObject>* result,
-        Maybe<bool>* wasThrown,
-        Maybe<protocol::Runtime::ExceptionDetails>*);
-    void callFunctionOn(
-        ErrorString*,
-        const String& objectId,
-        const String& expression,
-        const String& arguments,
-        bool returnByValue,
-        bool generatePreview,
-        OwnPtr<protocol::Runtime::RemoteObject>* result,
-        Maybe<bool>* wasThrown);
-    void evaluateOnCallFrame(
-        ErrorString*,
-        v8::Local<v8::Object> callFrames,
-        bool isAsyncCallStack,
-        const String& callFrameId,
-        const String& expression,
-        const String& objectGroup,
-        bool includeCommandLineAPI,
-        bool returnByValue,
-        bool generatePreview,
-        OwnPtr<protocol::Runtime::RemoteObject>* result,
-        Maybe<bool>* wasThrown,
-        Maybe<protocol::Runtime::ExceptionDetails>*);
-    void restartFrame(ErrorString*, v8::Local<v8::Object> callFrames, const String& callFrameId);
-    void getStepInPositions(ErrorString*, v8::Local<v8::Object> callFrames, const String& callFrameId, Maybe<protocol::Array<protocol::Debugger::Location>>* positions);
-    void setVariableValue(ErrorString*, v8::Local<v8::Object> callFrames, const Maybe<String>& callFrameIdOpt, const Maybe<String>& functionObjectIdOpt, int scopeNumber, const String& variableName, const String& newValueStr);
-    void getFunctionDetails(ErrorString*, const String& functionId, OwnPtr<protocol::Debugger::FunctionDetails>* result);
-    void getGeneratorObjectDetails(ErrorString*, const String& functionId, OwnPtr<protocol::Debugger::GeneratorObjectDetails>* result);
-    void getCollectionEntries(ErrorString*, const String& objectId, OwnPtr<protocol::Array<protocol::Debugger::CollectionEntry>>* result);
-    void getProperties(ErrorString*, const String& objectId, bool ownProperties, bool accessorPropertiesOnly, bool generatePreview, OwnPtr<protocol::Array<protocol::Runtime::PropertyDescriptor>>* result, Maybe<protocol::Runtime::ExceptionDetails>*);
-    void getInternalProperties(ErrorString*, const String& objectId, Maybe<protocol::Array<protocol::Runtime::InternalPropertyDescriptor>>* result, Maybe<protocol::Runtime::ExceptionDetails>*);
-    void releaseObject(const String& objectId);
-    v8::MaybeLocal<v8::Value> runCompiledScript(v8::Local<v8::Script>, bool includeCommandLineAPI);
+    void getProperties(ErrorString*, v8::Local<v8::Object>, const String16& groupName, bool ownProperties, bool accessorPropertiesOnly, bool generatePreview, OwnPtr<protocol::Array<protocol::Runtime::PropertyDescriptor>>* result, Maybe<protocol::Runtime::ExceptionDetails>*);
+    void releaseObject(const String16& objectId);
 
-    PassOwnPtr<protocol::Array<protocol::Debugger::CallFrame>> wrapCallFrames(v8::Local<v8::Object>, int asyncOrdinal);
+    PassOwnPtr<protocol::Runtime::RemoteObject> wrapObject(ErrorString*, v8::Local<v8::Value>, const String16& groupName, bool forceValueType = false, bool generatePreview = false) const;
+    bool wrapObjectProperty(ErrorString*, v8::Local<v8::Object>, v8::Local<v8::Value> key, const String16& groupName, bool forceValueType = false, bool generatePreview = false) const;
+    bool wrapPropertyInArray(ErrorString*, v8::Local<v8::Array>, v8::Local<v8::String> property, const String16& groupName, bool forceValueType = false, bool generatePreview = false) const;
+    bool wrapObjectsInArray(ErrorString*, v8::Local<v8::Array>, const String16& groupName, bool forceValueType = false, bool generatePreview = false) const;
 
-    PassOwnPtr<protocol::Runtime::RemoteObject> wrapObject(v8::Local<v8::Value>, const String& groupName, bool generatePreview = false) const;
     PassOwnPtr<protocol::Runtime::RemoteObject> wrapTable(v8::Local<v8::Value> table, v8::Local<v8::Value> columns) const;
-    v8::Local<v8::Value> findObject(const RemoteObjectId&) const;
-    String objectGroupName(const RemoteObjectId&) const;
-    void releaseObjectGroup(const String&);
+    bool findObject(ErrorString*, const RemoteObjectId&, v8::Local<v8::Value>*) const;
+    String16 objectGroupName(const RemoteObjectId&) const;
+    void releaseObjectGroup(const String16&);
 
     void setCustomObjectFormatterEnabled(bool);
-    int contextId() { return m_contextId; }
-    String origin() const { return m_origin; }
-    void setOrigin(const String& origin) { m_origin = origin; }
 
-    v8::Isolate* isolate() { return m_isolate; }
-    v8::Local<v8::Context> context() const;
-    void dispose();
+    InspectedContext* context() const { return m_context; }
+    v8::Isolate* isolate() const;
+    bool canAccessInspectedWindow() const;
+
+    bool setLastEvaluationResult(ErrorString*, v8::Local<v8::Value>);
+    v8::MaybeLocal<v8::Value> resolveCallArgument(ErrorString*, protocol::Runtime::CallArgument*);
+
+    v8::MaybeLocal<v8::Object> commandLineAPI(ErrorString*) const;
+    v8::MaybeLocal<v8::Object> remoteObjectAPI(ErrorString*, const String16& groupName) const;
+
+    PassOwnPtr<protocol::Runtime::ExceptionDetails> createExceptionDetails(v8::Local<v8::Message>);
+    void wrapEvaluateResult(ErrorString*,
+        v8::MaybeLocal<v8::Value> maybeResultValue,
+        const v8::TryCatch&,
+        const String16& objectGroup,
+        bool returnByValue,
+        bool generatePreview,
+        OwnPtr<protocol::Runtime::RemoteObject>* result,
+        Maybe<bool>* wasThrown,
+        Maybe<protocol::Runtime::ExceptionDetails>*);
+
+    class ScopedGlobalObjectExtension {
+        PROTOCOL_DISALLOW_COPY(ScopedGlobalObjectExtension);
+    public:
+        ScopedGlobalObjectExtension(InjectedScript* current, v8::MaybeLocal<v8::Object> extension);
+        ~ScopedGlobalObjectExtension();
+
+    private:
+        v8::Local<v8::Symbol> m_symbol;
+        v8::Local<v8::Context> m_context;
+        v8::MaybeLocal<v8::Object> m_global;
+    };
 
 private:
-    friend InjectedScript* InjectedScriptManager::injectedScriptFor(v8::Local<v8::Context>);
-    InjectedScript(InjectedScriptManager*, v8::Local<v8::Context>, v8::Local<v8::Object>, V8DebuggerClient*, PassRefPtr<InjectedScriptNative>, int contextId);
+    InjectedScript(InspectedContext*, v8::Local<v8::Object>, PassOwnPtr<InjectedScriptNative>);
 
-    bool canAccessInspectedWindow() const;
     v8::Local<v8::Value> v8Value() const;
     v8::Local<v8::Value> callFunctionWithEvalEnabled(V8FunctionCall&, bool& hadException) const;
-    void makeCall(V8FunctionCall&, RefPtr<protocol::Value>* result);
-    void makeEvalCall(ErrorString*, V8FunctionCall&, OwnPtr<protocol::Runtime::RemoteObject>* result, Maybe<bool>* wasThrown, Maybe<protocol::Runtime::ExceptionDetails>* = 0);
-    void makeCallWithExceptionDetails(V8FunctionCall&, RefPtr<protocol::Value>* result, Maybe<protocol::Runtime::ExceptionDetails>*);
+    PassOwnPtr<protocol::Value> makeCall(V8FunctionCall&);
+    PassOwnPtr<protocol::Value> makeCallWithExceptionDetails(V8FunctionCall&, Maybe<protocol::Runtime::ExceptionDetails>*);
+    v8::MaybeLocal<v8::Value> wrapValue(ErrorString*, v8::Local<v8::Value>, const String16& groupName, bool forceValueType, bool generatePreview) const;
+    v8::MaybeLocal<v8::Object> callFunctionReturnObject(ErrorString*, V8FunctionCall&) const;
 
-    InjectedScriptManager* m_manager;
-    v8::Isolate* m_isolate;
-    v8::Global<v8::Context> m_context;
+    InspectedContext* m_context;
     v8::Global<v8::Value> m_value;
-    V8DebuggerClient* m_client;
-    RefPtr<InjectedScriptNative> m_native;
-    int m_contextId;
-    String m_origin;
+    OwnPtr<InjectedScriptNative> m_native;
 };
 
 } // namespace blink

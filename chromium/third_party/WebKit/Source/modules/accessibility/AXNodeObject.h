@@ -62,7 +62,7 @@ protected:
     const AXObject* inheritsPresentationalRoleFrom() const override;
     virtual AccessibilityRole determineAccessibilityRole();
     virtual AccessibilityRole nativeAccessibilityRoleIgnoringAria() const;
-    String accessibilityDescriptionForElements(WillBeHeapVector<RawPtrWillBeMember<Element>> &elements) const;
+    String accessibilityDescriptionForElements(HeapVector<Member<Element>> &elements) const;
     void alterSliderValue(bool increase);
     String ariaAccessibilityDescription() const;
     String ariaAutoComplete() const;
@@ -114,7 +114,7 @@ protected:
     bool isNonNativeTextControl() const final;
     bool isPasswordField() const final;
     bool isProgressIndicator() const override;
-    bool isRichlyEditable() const override { return hasContentEditableAttributeSet(); }
+    bool isRichlyEditable() const override;
     bool isSlider() const override;
     bool isNativeSlider() const override;
 
@@ -141,7 +141,7 @@ protected:
 
     // Properties of interactive elements.
     AccessibilityButtonState checkboxOrRadioValue() const final;
-    InvalidState invalidState() const final;
+    InvalidState getInvalidState() const final;
     // Only used when invalidState() returns InvalidStateOther.
     String ariaInvalidValue() const final;
     String valueDescription() const override;
@@ -180,8 +180,8 @@ protected:
     // DOM and Render tree access.
     Element* actionElement() const override;
     Element* anchorElement() const override;
-    Document* document() const override;
-    Node* node() const override { return m_node; }
+    Document* getDocument() const override;
+    Node* getNode() const override { return m_node; }
 
     // Modify or take an action on an object.
     void setFocused(bool) final;
@@ -202,7 +202,7 @@ protected:
     void computeAriaOwnsChildren(HeapVector<Member<AXObject>>& ownedChildren) const;
 
 private:
-    RawPtrWillBeMember<Node> m_node;
+    Member<Node> m_node;
 
     bool isNativeCheckboxInMixedState() const;
     String textFromDescendants(AXObjectSet& visited, bool recursive) const override;

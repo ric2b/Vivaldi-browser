@@ -12,6 +12,9 @@
 #include "content/public/browser/permission_manager.h"
 #include "content/public/browser/permission_type.h"
 
+using blink::mojom::PermissionName;
+using blink::mojom::PermissionStatus;
+
 namespace content {
 
 namespace {
@@ -36,6 +39,8 @@ PermissionType PermissionNameToPermissionType(PermissionName name) {
       return PermissionType::AUDIO_CAPTURE;
     case PermissionName::VIDEO_CAPTURE:
       return PermissionType::VIDEO_CAPTURE;
+    case PermissionName::BACKGROUND_SYNC:
+      return PermissionType::BACKGROUND_SYNC;
   }
 
   NOTREACHED();
@@ -88,7 +93,7 @@ PermissionServiceImpl::PendingSubscription::~PendingSubscription() {
 
 PermissionServiceImpl::PermissionServiceImpl(
     PermissionServiceContext* context,
-    mojo::InterfaceRequest<PermissionService> request)
+    mojo::InterfaceRequest<blink::mojom::PermissionService> request)
     : context_(context),
       binding_(this, std::move(request)),
       weak_factory_(this) {
@@ -148,7 +153,7 @@ void PermissionServiceImpl::OnRequestPermissionResponse(
     int pending_request_id,
     PermissionStatus status) {
   OnRequestPermissionsResponse(pending_request_id,
-      std::vector<PermissionStatus>(1, status));
+                               std::vector<PermissionStatus>(1, status));
 }
 
 void PermissionServiceImpl::RequestPermissions(
@@ -254,8 +259,8 @@ void PermissionServiceImpl::RevokePermission(
     const PermissionStatusCallback& callback) {
   GURL origin_url(origin.get());
   PermissionType permission_type = PermissionNameToPermissionType(permission);
-  PermissionStatus status = GetPermissionStatusFromType(permission_type,
-                                                        origin_url);
+  PermissionStatus status =
+      GetPermissionStatusFromType(permission_type, origin_url);
 
   // Resetting the permission should only be possible if the permission is
   // already granted.
@@ -311,13 +316,15 @@ void PermissionServiceImpl::GetNextPermissionChange(
 }
 
 PermissionStatus PermissionServiceImpl::GetPermissionStatusFromName(
-    PermissionName permission, const GURL& origin) {
+    PermissionName permission,
+    const GURL& origin) {
   return GetPermissionStatusFromType(PermissionNameToPermissionType(permission),
                                      origin);
 }
 
 PermissionStatus PermissionServiceImpl::GetPermissionStatusFromType(
-    PermissionType type, const GURL& origin) {
+    PermissionType type,
+    const GURL& origin) {
   BrowserContext* browser_context = context_->GetBrowserContext();
   DCHECK(browser_context);
   if (!browser_context->GetPermissionManager())

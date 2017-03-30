@@ -4,6 +4,7 @@
 
 {
   'variables': {
+    'disable_display%': 0,
     'internal_ozone_platform_deps': [
       'ozone_platform_cast',
     ],
@@ -29,6 +30,11 @@
       ],
       'include_dirs': [
         '<(DEPTH)/third_party/khronos',
+      ],
+      'conditions': [
+        ['disable_display==1', {
+          'defines': ['DISABLE_DISPLAY'],
+        }],
       ],
 
       'sources': [

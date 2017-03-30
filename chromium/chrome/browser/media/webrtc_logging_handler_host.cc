@@ -34,8 +34,7 @@
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/render_process_host.h"
 #include "gpu/config/gpu_info.h"
-#include "net/base/address_family.h"
-#include "net/base/ip_address_number.h"
+#include "net/base/ip_address.h"
 #include "net/url_request/url_request_context_getter.h"
 
 #if defined(OS_LINUX)
@@ -63,12 +62,12 @@ const char kLogNotStoppedOrNoLogOpen[] =
 // octet for IPv4 and last 80 bits (5 groups) for IPv6. String will be
 // "1.2.3.x" and "1.2.3::" respectively. For debug builds, the string is
 // not stripped.
-std::string IPAddressToSensitiveString(const net::IPAddressNumber& address) {
+std::string IPAddressToSensitiveString(const net::IPAddress& address) {
 #if defined(NDEBUG)
   std::string sensitive_address;
-  switch (net::GetAddressFamily(address)) {
-    case net::ADDRESS_FAMILY_IPV4: {
-      sensitive_address = net::IPAddressToString(address);
+  switch (address.size()) {
+    case net::IPAddress::kIPv4AddressSize: {
+      sensitive_address = address.ToString();
       size_t find_pos = sensitive_address.rfind('.');
       if (find_pos == std::string::npos)
         return std::string();
@@ -76,22 +75,20 @@ std::string IPAddressToSensitiveString(const net::IPAddressNumber& address) {
       sensitive_address += ".x";
       break;
     }
-    case net::ADDRESS_FAMILY_IPV6: {
+    case net::IPAddress::kIPv6AddressSize: {
       // TODO(grunell): Create a string of format "1:2:3:x:x:x:x:x" to clarify
       // that the end has been stripped out.
-      net::IPAddressNumber sensitive_address_number = address;
-      sensitive_address_number.resize(net::kIPv6AddressSize - 10);
-      sensitive_address_number.resize(net::kIPv6AddressSize, 0);
-      sensitive_address = net::IPAddressToString(sensitive_address_number);
+      std::vector<uint8_t> bytes = address.bytes();
+      std::fill(bytes.begin() + 6, bytes.end(), 0);
+      net::IPAddress stripped_address(bytes);
+      sensitive_address = stripped_address.ToString();
       break;
     }
-    case net::ADDRESS_FAMILY_UNSPECIFIED: {
-      break;
-    }
+    default: { break; }
   }
   return sensitive_address;
 #else
-  return net::IPAddressToString(address);
+  return address.ToString();
 #endif
 }
 
@@ -151,6 +148,7 @@ void WebRtcLogBuffer::SetComplete() {
 }
 
 WebRtcLoggingHandlerHost::WebRtcLoggingHandlerHost(
+    int render_process_id,
     Profile* profile,
     WebRtcLogUploader* log_uploader)
     : BrowserMessageFilter(WebRtcLoggingMsgStart),
@@ -159,7 +157,8 @@ WebRtcLoggingHandlerHost::WebRtcLoggingHandlerHost(
       upload_log_on_render_close_(false),
       log_uploader_(log_uploader),
       is_audio_debug_recordings_in_progress_(false),
-      current_audio_debug_recordings_id_(0) {
+      current_audio_debug_recordings_id_(0),
+      render_process_id_(render_process_id) {
   DCHECK(profile_);
   DCHECK(log_uploader_);
 }
@@ -171,7 +170,7 @@ WebRtcLoggingHandlerHost::~WebRtcLoggingHandlerHost() {
 }
 
 void WebRtcLoggingHandlerHost::SetMetaData(
-    scoped_ptr<MetaDataMap> meta_data,
+    std::unique_ptr<MetaDataMap> meta_data,
     const GenericDoneCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(!callback.is_null());
@@ -237,7 +236,14 @@ void WebRtcLoggingHandlerHost::StopLogging(
 
   stop_callback_ = callback;
   logging_state_ = STOPPING;
+
   Send(new WebRtcLoggingMsg_StopLogging());
+
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(
+          &WebRtcLoggingHandlerHost::DisableBrowserProcessLoggingOnUIThread,
+          this));
 }
 
 void WebRtcLoggingHandlerHost::UploadLog(const UploadDoneCallback& callback) {
@@ -341,7 +347,7 @@ void WebRtcLoggingHandlerHost::StoreLogContinue(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(!callback.is_null());
 
-  scoped_ptr<WebRtcLogPaths> log_paths(new WebRtcLogPaths());
+  std::unique_ptr<WebRtcLogPaths> log_paths(new WebRtcLogPaths());
   ReleaseRtpDumps(log_paths.get());
 
   content::BrowserThread::PostTaskAndReplyWithResult(
@@ -410,10 +416,11 @@ void WebRtcLoggingHandlerHost::StopRtpDump(
   rtp_dump_handler_->StopDump(type, callback);
 }
 
-void WebRtcLoggingHandlerHost::OnRtpPacket(scoped_ptr<uint8_t[]> packet_header,
-                                           size_t header_length,
-                                           size_t packet_length,
-                                           bool incoming) {
+void WebRtcLoggingHandlerHost::OnRtpPacket(
+    std::unique_ptr<uint8_t[]> packet_header,
+    size_t header_length,
+    size_t packet_length,
+    bool incoming) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   BrowserThread::PostTask(
@@ -428,7 +435,7 @@ void WebRtcLoggingHandlerHost::OnRtpPacket(scoped_ptr<uint8_t[]> packet_header,
 }
 
 void WebRtcLoggingHandlerHost::DumpRtpPacketOnIOThread(
-    scoped_ptr<uint8_t[]> packet_header,
+    std::unique_ptr<uint8_t[]> packet_header,
     size_t header_length,
     size_t packet_length,
     bool incoming) {
@@ -558,6 +565,16 @@ void WebRtcLoggingHandlerHost::LogInitialInfoOnIOThread(
     return;
   }
 
+  // Tell the renderer and the browser to enable logging. Log messages are
+  // recevied on the IO thread, so the initial info will finish to be written
+  // first.
+  Send(new WebRtcLoggingMsg_StartLogging());
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(
+          &WebRtcLoggingHandlerHost::EnableBrowserProcessLoggingOnUIThread,
+          this));
+
   // Log start time (current time). We don't use base/i18n/time_formatting.h
   // here because we don't want the format of the current locale.
   base::Time::Exploded now = {0};
@@ -635,10 +652,27 @@ void WebRtcLoggingHandlerHost::LogInitialInfoOnIOThread(
         net::NetworkChangeNotifier::ConnectionTypeToString(it->type));
   }
 
-  Send(new WebRtcLoggingMsg_StartLogging());
   logging_started_time_ = base::Time::Now();
   logging_state_ = STARTED;
   FireGenericDoneCallback(callback, true, "");
+}
+
+void WebRtcLoggingHandlerHost::EnableBrowserProcessLoggingOnUIThread() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  content::RenderProcessHost* host =
+      content::RenderProcessHost::FromID(render_process_id_);
+  if (host) {
+    host->SetWebRtcLogMessageCallback(
+        base::Bind(&WebRtcLoggingHandlerHost::LogMessage, this));
+  }
+}
+
+void WebRtcLoggingHandlerHost::DisableBrowserProcessLoggingOnUIThread() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  content::RenderProcessHost* host =
+      content::RenderProcessHost::FromID(render_process_id_);
+  if (host)
+    host->ClearWebRtcLogMessageCallback();
 }
 
 void WebRtcLoggingHandlerHost::LogToCircularBuffer(const std::string& message) {
@@ -683,7 +717,7 @@ void WebRtcLoggingHandlerHost::TriggerUpload(
 
 void WebRtcLoggingHandlerHost::StoreLogInDirectory(
     const std::string& log_id,
-    scoped_ptr<WebRtcLogPaths> log_paths,
+    std::unique_ptr<WebRtcLogPaths> log_paths,
     const GenericDoneCallback& done_callback,
     const base::FilePath& directory) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);

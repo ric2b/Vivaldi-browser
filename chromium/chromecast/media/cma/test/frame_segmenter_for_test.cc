@@ -15,6 +15,7 @@
 #include "media/base/decoder_buffer.h"
 #include "media/base/demuxer.h"
 #include "media/base/media_log.h"
+#include "media/base/media_tracks.h"
 #include "media/base/test_helpers.h"
 #include "media/filters/ffmpeg_demuxer.h"
 #include "media/filters/file_data_source.h"
@@ -138,7 +139,7 @@ BufferList H264SegmenterForTest(const uint8_t* data, size_t data_size) {
   int prev_pic_order_cnt_lsb = 0;
   int pic_order_cnt_msb = 0;
 
-  scoped_ptr< ::media::H264Parser> h264_parser(new ::media::H264Parser());
+  std::unique_ptr<::media::H264Parser> h264_parser(new ::media::H264Parser());
   h264_parser->SetStream(data, data_size);
 
   while (true) {
@@ -269,6 +270,8 @@ void OnEncryptedMediaInitData(::media::EmeInitDataType init_data_type,
   LOG(FATAL) << "Unexpected test failure: file is encrypted.";
 }
 
+void OnMediaTracksUpdated(std::unique_ptr<::media::MediaTracks> tracks) {}
+
 void OnNewBuffer(BufferList* buffer_list,
                  const base::Closure& finished_cb,
                  ::media::DemuxerStream::Status status,
@@ -299,6 +302,8 @@ class FakeDemuxerHost : public ::media::DemuxerHost {
 DemuxResult::DemuxResult() {
 }
 
+DemuxResult::DemuxResult(const DemuxResult& other) = default;
+
 DemuxResult::~DemuxResult() {
 }
 
@@ -310,7 +315,8 @@ DemuxResult FFmpegDemuxForTest(const base::FilePath& filepath,
 
   ::media::FFmpegDemuxer demuxer(
       base::ThreadTaskRunnerHandle::Get(), &data_source,
-      base::Bind(&OnEncryptedMediaInitData), new ::media::MediaLog());
+      base::Bind(&OnEncryptedMediaInitData), base::Bind(&OnMediaTracksUpdated),
+      new ::media::MediaLog());
   ::media::WaitableMessageLoopEvent init_event;
   demuxer.Initialize(&fake_demuxer_host,
                      init_event.GetPipelineStatusCB(),

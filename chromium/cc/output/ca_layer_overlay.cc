@@ -83,6 +83,11 @@ CALayerResult FromTextureQuad(ResourceProvider* resource_provider,
   unsigned resource_id = quad->resource_id();
   if (!resource_provider->IsOverlayCandidate(resource_id))
     return CA_LAYER_FAILED_TEXTURE_NOT_CANDIDATE;
+  // The filter has not yet been plumbed through the CoreAnimation compositor,
+  // so we can't use it for non-default minification/magnification filters.
+  // https://crbug.com/602103
+  if (quad->nearest_neighbor)
+    return CA_LAYER_FAILED_TEXTURE_NOT_CANDIDATE;
   if (quad->y_flipped) {
     // The anchor point is at the bottom-left corner of the CALayer. The
     // transformation that flips the contents of the layer without changing its

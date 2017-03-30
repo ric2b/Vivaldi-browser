@@ -23,8 +23,8 @@ FrameRequestCallbackCollection::CallbackId FrameRequestCallbackCollection::regis
     m_callbacks.append(callback);
 
     TRACE_EVENT_INSTANT1("devtools.timeline", "RequestAnimationFrame", TRACE_EVENT_SCOPE_THREAD, "data", InspectorAnimationFrameEvent::data(m_context, id));
-    InspectorInstrumentation::didRequestAnimationFrame(m_context, id);
-
+    InspectorInstrumentation::asyncTaskScheduled(m_context, "requestAnimationFrame", callback);
+    InspectorInstrumentation::allowNativeBreakpoint(m_context, "requestAnimationFrame", true);
     return id;
 }
 
@@ -32,16 +32,18 @@ void FrameRequestCallbackCollection::cancelCallback(CallbackId id)
 {
     for (size_t i = 0; i < m_callbacks.size(); ++i) {
         if (m_callbacks[i]->m_id == id) {
+            InspectorInstrumentation::asyncTaskCanceled(m_context, m_callbacks[i]);
+            InspectorInstrumentation::allowNativeBreakpoint(m_context, "cancelAnimationFrame", true);
             m_callbacks.remove(i);
             TRACE_EVENT_INSTANT1("devtools.timeline", "CancelAnimationFrame", TRACE_EVENT_SCOPE_THREAD, "data", InspectorAnimationFrameEvent::data(m_context, id));
-            InspectorInstrumentation::didCancelAnimationFrame(m_context, id);
             return;
         }
     }
     for (size_t i = 0; i < m_callbacksToInvoke.size(); ++i) {
         if (m_callbacksToInvoke[i]->m_id == id) {
+            InspectorInstrumentation::asyncTaskCanceled(m_context, m_callbacksToInvoke[i]);
+            InspectorInstrumentation::allowNativeBreakpoint(m_context, "cancelAnimationFrame", true);
             TRACE_EVENT_INSTANT1("devtools.timeline", "CancelAnimationFrame", TRACE_EVENT_SCOPE_THREAD, "data", InspectorAnimationFrameEvent::data(m_context, id));
-            InspectorInstrumentation::didCancelAnimationFrame(m_context, id);
             m_callbacksToInvoke[i]->m_cancelled = true;
             // will be removed at the end of executeCallbacks()
             return;
@@ -53,19 +55,19 @@ void FrameRequestCallbackCollection::executeCallbacks(double highResNowMs, doubl
 {
     // First, generate a list of callbacks to consider.  Callbacks registered from this point
     // on are considered only for the "next" frame, not this one.
-    ASSERT(m_callbacksToInvoke.isEmpty());
+    DCHECK(m_callbacksToInvoke.isEmpty());
     m_callbacksToInvoke.swap(m_callbacks);
 
     for (size_t i = 0; i < m_callbacksToInvoke.size(); ++i) {
         FrameRequestCallback* callback = m_callbacksToInvoke[i].get();
         if (!callback->m_cancelled) {
             TRACE_EVENT1("devtools.timeline", "FireAnimationFrame", "data", InspectorAnimationFrameEvent::data(m_context, callback->m_id));
-            InspectorInstrumentationCookie cookie = InspectorInstrumentation::willFireAnimationFrame(m_context, callback->m_id);
+            InspectorInstrumentation::allowNativeBreakpoint(m_context, "animationFrameFired", false);
+            InspectorInstrumentation::AsyncTask asyncTask(m_context, callback);
             if (callback->m_useLegacyTimeBase)
                 callback->handleEvent(highResNowMsLegacy);
             else
                 callback->handleEvent(highResNowMs);
-            InspectorInstrumentation::didFireAnimationFrame(cookie);
             TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateCounters", TRACE_EVENT_SCOPE_THREAD, "data", InspectorUpdateCountersEvent::data());
         }
     }
@@ -75,11 +77,9 @@ void FrameRequestCallbackCollection::executeCallbacks(double highResNowMs, doubl
 
 DEFINE_TRACE(FrameRequestCallbackCollection)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_callbacks);
     visitor->trace(m_callbacksToInvoke);
     visitor->trace(m_context);
-#endif
 }
 
 } // namespace blink

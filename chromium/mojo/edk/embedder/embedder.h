@@ -20,6 +20,10 @@
 #include "mojo/edk/system/system_impl_export.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
+namespace base {
+class PortProvider;
+}
+
 namespace mojo {
 namespace edk {
 
@@ -48,6 +52,10 @@ MOJO_SYSTEM_IMPL_EXPORT void ChildProcessLaunched(
 // that the parent received from ChildProcessLaunched.
 MOJO_SYSTEM_IMPL_EXPORT void SetParentPipeHandle(ScopedPlatformHandle pipe);
 
+// Same as above but extracts the pipe handle from the command line. See
+// PlatformChannelPair for details.
+MOJO_SYSTEM_IMPL_EXPORT void SetParentPipeHandleFromCommandLine();
+
 // Must be called first, or just after setting configuration parameters, to
 // initialize the (global, singleton) system.
 MOJO_SYSTEM_IMPL_EXPORT void Init();
@@ -75,8 +83,8 @@ CreatePlatformHandleWrapper(ScopedPlatformHandle platform_handle,
                             MojoHandle* platform_handle_wrapper_handle);
 
 // Retrieves the |PlatformHandle| that was wrapped into a |MojoHandle| (using
-// |CreatePlatformHandleWrapper()| above). Note that the |MojoHandle| must still
-// be closed separately.
+// |CreatePlatformHandleWrapper()| above). Note that the |MojoHandle| is closed
+// on success.
 MOJO_SYSTEM_IMPL_EXPORT MojoResult
 PassWrappedPlatformHandle(MojoHandle platform_handle_wrapper_handle,
                           ScopedPlatformHandle* platform_handle);
@@ -86,8 +94,6 @@ PassWrappedPlatformHandle(MojoHandle platform_handle_wrapper_handle,
 // |read_only| is whether the handle is a read-only handle to shared memory.
 // This |MojoHandle| is a Mojo shared buffer and can be manipulated using the
 // shared buffer functions and transferred over a message pipe.
-// TODO(crbug.com/556587): Support read-only handles. Currently, |read_only|
-// must be false.
 MOJO_SYSTEM_IMPL_EXPORT MojoResult
 CreateSharedBufferWrapper(base::SharedMemoryHandle shared_memory_handle,
                           size_t num_bytes,
@@ -101,8 +107,6 @@ CreateSharedBufferWrapper(base::SharedMemoryHandle shared_memory_handle,
 // Note: The value of |shared_memory_handle| may be
 // base::SharedMemory::NULLHandle(), even if this function returns success.
 // Callers should perform appropriate checks.
-// TODO(crbug.com/556587): Support read-only handles. Currently, |read_only|
-// will always return |false|.
 MOJO_SYSTEM_IMPL_EXPORT MojoResult
 PassSharedMemoryHandle(MojoHandle mojo_handle,
                        base::SharedMemoryHandle* shared_memory_handle,
@@ -133,6 +137,13 @@ MOJO_SYSTEM_IMPL_EXPORT void InitIPCSupport(
 // the system was initialized. Upon completion the ProcessDelegate's
 // |OnShutdownComplete()| method is invoked.
 MOJO_SYSTEM_IMPL_EXPORT void ShutdownIPCSupport();
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+// Set the |base::PortProvider| for this process. Can be called on any thread,
+// but must be set in the root process before any Mach ports can be transferred.
+MOJO_SYSTEM_IMPL_EXPORT void SetMachPortProvider(
+    base::PortProvider* port_provider);
+#endif
 
 // Creates a message pipe over an arbitrary platform channel. The other end of
 // the channel must also be passed to this function. Either endpoint can be in

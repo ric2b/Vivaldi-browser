@@ -98,7 +98,7 @@ class NET_EXPORT_PRIVATE SpdyFramerVisitorInterface {
  public:
   virtual ~SpdyFramerVisitorInterface() {}
 
-  // Called if an error is detected in the SpdyFrame protocol.
+  // Called if an error is detected in the SpdySerializedFrame protocol.
   virtual void OnError(SpdyFramer* framer) = 0;
 
   // Called when a data frame header is received. The frame's data
@@ -118,6 +118,10 @@ class NET_EXPORT_PRIVATE SpdyFramerVisitorInterface {
                                  const char* data,
                                  size_t len,
                                  bool fin) = 0;
+
+  // Called when the other side has finished sending data on this stream.
+  // |stream_id| The stream that was receivin data.
+  virtual void OnStreamEnd(SpdyStreamId stream_id) = 0;
 
   // Called when padding is received (padding length field or padding octets).
   // |stream_id| The stream receiving data.
@@ -336,6 +340,7 @@ class NET_EXPORT_PRIVATE SpdyFramer {
     SPDY_INVALID_DATA_FRAME_FLAGS,     // Data frame has invalid flags.
     SPDY_INVALID_CONTROL_FRAME_FLAGS,  // Control frame has invalid flags.
     SPDY_UNEXPECTED_FRAME,             // Frame received out of order.
+    SPDY_INVALID_CONTROL_FRAME_SIZE,   // Control frame not sized to spec
 
     LAST_ERROR,  // Must be the last entry in the enum.
   };
@@ -348,10 +353,9 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   // purposes.)
   static const size_t kHeaderDataChunkMaxSize;
 
-  // Serializes a SpdyHeaderBlock.
-  static void WriteHeaderBlock(SpdyFrameBuilder* frame,
-                               const SpdyMajorVersion spdy_version,
-                               const SpdyHeaderBlock* headers);
+  void SerializeHeaderBlockWithoutCompression(
+      SpdyFrameBuilder* builder,
+      const SpdyHeaderBlock& header_block) const;
 
   // Retrieve serialized length of SpdyHeaderBlock.
   // TODO(hkhalil): Remove, or move to quic code.
@@ -410,55 +414,55 @@ class NET_EXPORT_PRIVATE SpdyFramer {
                                 SpdyHeaderBlock* block) const;
 
   // Serialize a data frame.
-  SpdySerializedFrame* SerializeData(const SpdyDataIR& data) const;
+  SpdySerializedFrame SerializeData(const SpdyDataIR& data) const;
   // Serializes the data frame header and optionally padding length fields,
   // excluding actual data payload and padding.
-  SpdySerializedFrame* SerializeDataFrameHeaderWithPaddingLengthField(
+  SpdySerializedFrame SerializeDataFrameHeaderWithPaddingLengthField(
       const SpdyDataIR& data) const;
 
   // Serializes a SYN_STREAM frame.
-  SpdySerializedFrame* SerializeSynStream(const SpdySynStreamIR& syn_stream);
+  SpdySerializedFrame SerializeSynStream(const SpdySynStreamIR& syn_stream);
 
-  // Serialize a SYN_REPLY SpdyFrame.
-  SpdySerializedFrame* SerializeSynReply(const SpdySynReplyIR& syn_reply);
+  // Serialize a SYN_REPLY frame.
+  SpdySerializedFrame SerializeSynReply(const SpdySynReplyIR& syn_reply);
 
-  SpdySerializedFrame* SerializeRstStream(
+  SpdySerializedFrame SerializeRstStream(
       const SpdyRstStreamIR& rst_stream) const;
 
   // Serializes a SETTINGS frame. The SETTINGS frame is
   // used to communicate name/value pairs relevant to the communication channel.
-  SpdySerializedFrame* SerializeSettings(const SpdySettingsIR& settings) const;
+  SpdySerializedFrame SerializeSettings(const SpdySettingsIR& settings) const;
 
   // Serializes a PING frame. The unique_id is used to
   // identify the ping request/response.
-  SpdySerializedFrame* SerializePing(const SpdyPingIR& ping) const;
+  SpdySerializedFrame SerializePing(const SpdyPingIR& ping) const;
 
   // Serializes a GOAWAY frame. The GOAWAY frame is used
   // prior to the shutting down of the TCP connection, and includes the
   // stream_id of the last stream the sender of the frame is willing to process
   // to completion.
-  SpdySerializedFrame* SerializeGoAway(const SpdyGoAwayIR& goaway) const;
+  SpdySerializedFrame SerializeGoAway(const SpdyGoAwayIR& goaway) const;
 
   // Serializes a HEADERS frame. The HEADERS frame is used
   // for sending additional headers outside of a SYN_STREAM/SYN_REPLY.
-  SpdySerializedFrame* SerializeHeaders(const SpdyHeadersIR& headers);
+  SpdySerializedFrame SerializeHeaders(const SpdyHeadersIR& headers);
 
   // Serializes a WINDOW_UPDATE frame. The WINDOW_UPDATE
   // frame is used to implement per stream flow control in SPDY.
-  SpdySerializedFrame* SerializeWindowUpdate(
+  SpdySerializedFrame SerializeWindowUpdate(
       const SpdyWindowUpdateIR& window_update) const;
 
   // Serializes a BLOCKED frame. The BLOCKED frame is used to
   // indicate to the remote endpoint that this endpoint believes itself to be
   // flow-control blocked but otherwise ready to send data. The BLOCKED frame
   // is purely advisory and optional.
-  SpdySerializedFrame* SerializeBlocked(const SpdyBlockedIR& blocked) const;
+  SpdySerializedFrame SerializeBlocked(const SpdyBlockedIR& blocked) const;
 
   // Serializes a PUSH_PROMISE frame. The PUSH_PROMISE frame is used
   // to inform the client that it will be receiving an additional stream
   // in response to the original request. The frame includes synthesized
   // headers to explain the upcoming data.
-  SpdySerializedFrame* SerializePushPromise(
+  SpdySerializedFrame SerializePushPromise(
       const SpdyPushPromiseIR& push_promise);
 
   // Serializes a CONTINUATION frame. The CONTINUATION frame is used
@@ -466,19 +470,19 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   // TODO(jgraettinger): This implementation is incorrect. The continuation
   // frame continues a previously-begun HPACK encoding; it doesn't begin a
   // new one. Figure out whether it makes sense to keep SerializeContinuation().
-  SpdySerializedFrame* SerializeContinuation(
+  SpdySerializedFrame SerializeContinuation(
       const SpdyContinuationIR& continuation);
 
   // Serializes an ALTSVC frame. The ALTSVC frame advertises the
   // availability of an alternative service to the client.
-  SpdySerializedFrame* SerializeAltSvc(const SpdyAltSvcIR& altsvc);
+  SpdySerializedFrame SerializeAltSvc(const SpdyAltSvcIR& altsvc);
 
   // Serializes a PRIORITY frame. The PRIORITY frame advises a change in
   // the relative priority of the given stream.
-  SpdySerializedFrame* SerializePriority(const SpdyPriorityIR& priority) const;
+  SpdySerializedFrame SerializePriority(const SpdyPriorityIR& priority) const;
 
   // Serialize a frame of unknown type.
-  SpdySerializedFrame* SerializeFrame(const SpdyFrameIR& frame);
+  SpdySerializedFrame SerializeFrame(const SpdyFrameIR& frame);
 
   // NOTES about frame compression.
   // We want spdy to compress headers across the entire session.  As long as
@@ -490,13 +494,6 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   // compression.  We don't know of any good compression protocol which does
   // not build its state in a serial (stream based) manner....  For now, we're
   // using zlib anyway.
-
-  // Compresses a SpdyFrame.
-  // On success, returns a new SpdyFrame with the payload compressed.
-  // Compression state is maintained as part of the SpdyFramer.
-  // Returned frame must be freed with "delete".
-  // On failure, returns NULL.
-  SpdyFrame* CompressFrame(const SpdyFrame& frame);
 
   // For ease of testing and experimentation we can tweak compression on/off.
   void set_enable_compression(bool value) {
@@ -687,10 +684,6 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   void WriteHeaderBlockToZ(const SpdyHeaderBlock* headers,
                            z_stream* out) const;
 
-  void SerializeHeaderBlockWithoutCompression(
-      SpdyFrameBuilder* builder,
-      const SpdyHeaderBlock& header_block) const;
-
   // Compresses automatically according to enable_compression_.
   void SerializeHeaderBlock(SpdyFrameBuilder* builder,
                             const SpdyFrameWithHeaderBlockIR& frame);
@@ -796,6 +789,11 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   // If true, then ProcessInput returns after processing a full frame,
   // rather than reading all available input.
   bool process_single_input_frame_ = false;
+
+  // Latched value of --FLAGS_spdy_on_stream_end.
+  // If true, OnStreamEnd will be called instead of the sentinel call of
+  // OnStreamFrameData(stream_id, nullptr, 0, true)
+  bool spdy_on_stream_end_;
 };
 
 }  // namespace net

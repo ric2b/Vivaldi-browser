@@ -57,7 +57,7 @@
 
 namespace blink {
 
-ScriptLoader::ScriptLoader(Element* element, bool parserInserted, bool alreadyStarted)
+ScriptLoader::ScriptLoader(Element* element, bool parserInserted, bool alreadyStarted, bool createdDuringDocumentWrite)
     : m_element(element)
     , m_startLineNumber(WTF::OrdinalNumber::beforeFirst())
     , m_parserInserted(parserInserted)
@@ -69,8 +69,9 @@ ScriptLoader::ScriptLoader(Element* element, bool parserInserted, bool alreadySt
     , m_willExecuteInOrder(false)
     , m_willExecuteWhenDocumentFinishedParsing(false)
     , m_forceAsync(!parserInserted)
+    , m_createdDuringDocumentWrite(createdDuringDocumentWrite)
 {
-    ASSERT(m_element);
+    DCHECK(m_element);
     if (parserInserted && element->document().scriptableDocumentParser() && !element->document().isInDocumentWrite())
         m_startLineNumber = element->document().scriptableDocumentParser()->lineNumber();
 }
@@ -94,7 +95,7 @@ void ScriptLoader::didNotifySubtreeInsertionsToDocument()
 
 void ScriptLoader::childrenChanged()
 {
-    if (!m_parserInserted && m_element->inDocument())
+    if (!m_parserInserted && m_element->inShadowIncludingDocument())
         prepareScript(); // FIXME: Provide a real starting line number here.
 }
 
@@ -175,6 +176,8 @@ bool ScriptLoader::isScriptTypeSupported(LegacyTypeSupport supportLegacyTypes) c
         type = "text/" + language.lower();
         if (MIMETypeRegistry::isSupportedJavaScriptMIMEType(type) || isLegacySupportedJavaScriptLanguage(language))
             return true;
+    } else if (RuntimeEnabledFeatures::moduleScriptsEnabled() && type == "module") {
+        return true;
     } else if (MIMETypeRegistry::isSupportedJavaScriptMIMEType(type.stripWhiteSpace()) || (supportLegacyTypes == AllowLegacyTypeInTypeAttribute && isLegacySupportedJavaScriptLanguage(type))) {
         return true;
     }
@@ -205,7 +208,7 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition, Legacy
     if (!client->hasSourceAttribute() && !m_element->hasChildren())
         return false;
 
-    if (!m_element->inDocument())
+    if (!m_element->inShadowIncludingDocument())
         return false;
 
     if (!isScriptTypeSupported(supportLegacyTypes))
@@ -281,26 +284,33 @@ bool ScriptLoader::prepareScript(const TextPosition& scriptStartPosition, Legacy
 
 bool ScriptLoader::fetchScript(const String& sourceUrl, FetchRequest::DeferOption defer)
 {
-    ASSERT(m_element);
+    DCHECK(m_element);
 
-    RefPtrWillBeRawPtr<Document> elementDocument(m_element->document());
-    if (!m_element->inDocument() || m_element->document() != elementDocument)
+    RawPtr<Document> elementDocument(m_element->document());
+    if (!m_element->inShadowIncludingDocument() || m_element->document() != elementDocument)
         return false;
 
-    ASSERT(!m_resource);
+    DCHECK(!m_resource);
     if (!stripLeadingAndTrailingHTMLSpaces(sourceUrl).isEmpty()) {
         FetchRequest request(ResourceRequest(elementDocument->completeURL(sourceUrl)), m_element->localName());
 
         CrossOriginAttributeValue crossOrigin = crossOriginAttributeValue(m_element->fastGetAttribute(HTMLNames::crossoriginAttr));
         if (crossOrigin != CrossOriginAttributeNotSet)
-            request.setCrossOriginAccessControl(elementDocument->securityOrigin(), crossOrigin);
+            request.setCrossOriginAccessControl(elementDocument->getSecurityOrigin(), crossOrigin);
         request.setCharset(scriptCharset());
 
         // Skip fetch-related CSP checks if the script element has a valid nonce, or if dynamically
         // injected script is whitelisted and this script is not parser-inserted.
-        bool scriptPassesCSP = elementDocument->contentSecurityPolicy()->allowScriptWithNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr)) || (!isParserInserted() && elementDocument->contentSecurityPolicy()->allowDynamic());
+        bool scriptPassesCSPDynamic = (!isParserInserted() && elementDocument->contentSecurityPolicy()->allowDynamic());
+        bool scriptPassesCSPNonce = elementDocument->contentSecurityPolicy()->allowScriptWithNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr));
 
-        if (scriptPassesCSP)
+        if (scriptPassesCSPDynamic)
+            UseCounter::count(elementDocument->frame(), UseCounter::ScriptPassesCSPDynamic);
+
+        if (scriptPassesCSPNonce)
+            UseCounter::count(elementDocument->frame(), UseCounter::ScriptPassesCSPNonce);
+
+        if (scriptPassesCSPDynamic || scriptPassesCSPNonce)
             request.setContentSecurityCheck(DoNotCheckContentSecurityPolicy);
         request.setDefer(defer);
 
@@ -325,13 +335,13 @@ bool ScriptLoader::fetchScript(const String& sourceUrl, FetchRequest::DeferOptio
 
 bool isHTMLScriptLoader(Element* element)
 {
-    ASSERT(element);
+    DCHECK(element);
     return isHTMLScriptElement(*element);
 }
 
 bool isSVGScriptLoader(Element* element)
 {
-    ASSERT(element);
+    DCHECK(element);
     return isSVGScriptElement(*element);
 }
 
@@ -340,7 +350,7 @@ void ScriptLoader::logScriptMimetype(ScriptResource* resource, LocalFrame* frame
     bool text = mimetype.lower().startsWith("text/");
     bool application = mimetype.lower().startsWith("application/");
     bool expectedJs = MIMETypeRegistry::isSupportedJavaScriptMIMEType(mimetype) || (text && isLegacySupportedJavaScriptLanguage(mimetype.substring(5)));
-    bool sameOrigin = m_element->document().securityOrigin()->canRequest(m_resource->url());
+    bool sameOrigin = m_element->document().getSecurityOrigin()->canRequest(m_resource->url());
     if (expectedJs) {
         return;
     }
@@ -350,13 +360,13 @@ void ScriptLoader::logScriptMimetype(ScriptResource* resource, LocalFrame* frame
 
 bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* compilationFinishTime)
 {
-    ASSERT(m_alreadyStarted);
+    DCHECK(m_alreadyStarted);
 
     if (sourceCode.isEmpty())
         return true;
 
-    RefPtrWillBeRawPtr<Document> elementDocument(m_element->document());
-    RefPtrWillBeRawPtr<Document> contextDocument = elementDocument->contextDocument().get();
+    RawPtr<Document> elementDocument(m_element->document());
+    RawPtr<Document> contextDocument = elementDocument->contextDocument().get();
     if (!contextDocument)
         return true;
 
@@ -405,7 +415,7 @@ bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* com
                 accessControlStatus = OpaqueResource;
             else
                 accessControlStatus = SharableCrossOrigin;
-        } else if (sourceCode.resource()->passesAccessControlCheck(m_element->document().securityOrigin())) {
+        } else if (sourceCode.resource()->passesAccessControlCheck(m_element->document().getSecurityOrigin())) {
             accessControlStatus = SharableCrossOrigin;
         }
     }
@@ -424,7 +434,7 @@ bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* com
     frame->script().executeScriptInMainWorld(sourceCode, accessControlStatus, compilationFinishTime);
 
     if (isHTMLScriptLoader(m_element)) {
-        ASSERT(contextDocument->currentScript() == m_element);
+        DCHECK(contextDocument->currentScript() == m_element);
         contextDocument->popCurrentScript();
     }
 
@@ -433,11 +443,11 @@ bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* com
 
 void ScriptLoader::execute()
 {
-    ASSERT(!m_willBeParserExecuted);
-    ASSERT(m_pendingScript->resource());
+    DCHECK(!m_willBeParserExecuted);
+    DCHECK(m_pendingScript->resource());
     bool errorOccurred = false;
     ScriptSourceCode source = m_pendingScript->getSource(KURL(), errorOccurred);
-    RefPtrWillBeRawPtr<Element> element = m_pendingScript->releaseElementAndClear();
+    RawPtr<Element> element = m_pendingScript->releaseElementAndClear();
     ALLOW_UNUSED_LOCAL(element);
     if (errorOccurred) {
         dispatchErrorEvent();
@@ -452,10 +462,10 @@ void ScriptLoader::execute()
 
 void ScriptLoader::notifyFinished(Resource* resource)
 {
-    ASSERT(!m_willBeParserExecuted);
+    DCHECK(!m_willBeParserExecuted);
 
-    RefPtrWillBeRawPtr<Document> elementDocument(m_element->document());
-    RefPtrWillBeRawPtr<Document> contextDocument = elementDocument->contextDocument().get();
+    RawPtr<Document> elementDocument(m_element->document());
+    RawPtr<Document> contextDocument = elementDocument->contextDocument().get();
     if (!contextDocument)
         return;
 
@@ -474,7 +484,7 @@ void ScriptLoader::notifyFinished(Resource* resource)
 
 bool ScriptLoader::ignoresLoadRequest() const
 {
-    return m_alreadyStarted || m_isExternalScript || m_parserInserted || !element() || !element()->inDocument();
+    return m_alreadyStarted || m_isExternalScript || m_parserInserted || !element() || !element()->inShadowIncludingDocument();
 }
 
 bool ScriptLoader::isScriptForEventSupported() const

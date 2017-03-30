@@ -171,11 +171,6 @@ bool TestRenderWidgetHostView::IsSpeaking() const {
 void TestRenderWidgetHostView::StopSpeaking() {
 }
 
-bool TestRenderWidgetHostView::PostProcessEventForPluginIme(
-    const NativeWebKeyboardEvent& event) {
-  return false;
-}
-
 #endif
 
 bool TestRenderWidgetHostView::GetScreenColorProfile(
@@ -200,17 +195,6 @@ bool TestRenderWidgetHostView::LockMouse() {
 
 void TestRenderWidgetHostView::UnlockMouse() {
 }
-
-#if defined(OS_WIN)
-void TestRenderWidgetHostView::SetParentNativeViewAccessible(
-    gfx::NativeViewAccessible accessible_parent) {
-}
-
-gfx::NativeViewId TestRenderWidgetHostView::GetParentForWindowlessPlugin()
-    const {
-  return 0;
-}
-#endif
 
 TestRenderViewHost::TestRenderViewHost(SiteInstance* instance,
                                        scoped_ptr<RenderWidgetHostImpl> widget,

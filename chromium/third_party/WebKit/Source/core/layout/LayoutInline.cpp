@@ -209,18 +209,18 @@ void LayoutInline::updateAlwaysCreateLineBoxes(bool fullLayout)
     LayoutInline* parentLayoutInline = parent()->isLayoutInline() ? toLayoutInline(parent()) : 0;
     bool checkFonts = document().inNoQuirksMode();
     bool alwaysCreateLineBoxesNew = (parentLayoutInline && parentLayoutInline->alwaysCreateLineBoxes())
-        || (parentLayoutInline && parentStyle.verticalAlign() != BASELINE)
-        || style()->verticalAlign() != BASELINE
-        || style()->textEmphasisMark() != TextEmphasisMarkNone
-        || (checkFonts && (!parentStyle.font().fontMetrics().hasIdenticalAscentDescentAndLineGap(style()->font().fontMetrics())
+        || (parentLayoutInline && parentStyle.verticalAlign() != VerticalAlignBaseline)
+        || style()->verticalAlign() != VerticalAlignBaseline
+        || style()->getTextEmphasisMark() != TextEmphasisMarkNone
+        || (checkFonts && (!parentStyle.font().getFontMetrics().hasIdenticalAscentDescentAndLineGap(style()->font().getFontMetrics())
         || parentStyle.lineHeight() != style()->lineHeight()));
 
     if (!alwaysCreateLineBoxesNew && checkFonts && document().styleEngine().usesFirstLineRules()) {
         // Have to check the first line style as well.
         const ComputedStyle& firstLineParentStyle = parent()->styleRef(true);
         const ComputedStyle& childStyle = styleRef(true);
-        alwaysCreateLineBoxesNew = !firstLineParentStyle.font().fontMetrics().hasIdenticalAscentDescentAndLineGap(childStyle.font().fontMetrics())
-        || childStyle.verticalAlign() != BASELINE
+        alwaysCreateLineBoxesNew = !firstLineParentStyle.font().getFontMetrics().hasIdenticalAscentDescentAndLineGap(childStyle.font().getFontMetrics())
+        || childStyle.verticalAlign() != VerticalAlignBaseline
         || firstLineParentStyle.lineHeight() != childStyle.lineHeight();
     }
 
@@ -564,8 +564,8 @@ void LayoutInline::generateCulledLineBoxRects(GeneratorContext& yield, const Lay
             LayoutBox* currBox = toLayoutBox(curr);
             if (currBox->inlineBoxWrapper()) {
                 RootInlineBox& rootBox = currBox->inlineBoxWrapper()->root();
-                LayoutUnit logicalTop = rootBox.logicalTop() + (rootBox.getLineLayoutItem().style(rootBox.isFirstLineStyle())->font().fontMetrics().ascent() - container->style(rootBox.isFirstLineStyle())->font().fontMetrics().ascent());
-                LayoutUnit logicalHeight(container->style(rootBox.isFirstLineStyle())->font().fontMetrics().height());
+                LayoutUnit logicalTop = rootBox.logicalTop() + (rootBox.getLineLayoutItem().style(rootBox.isFirstLineStyle())->font().getFontMetrics().ascent() - container->style(rootBox.isFirstLineStyle())->font().getFontMetrics().ascent());
+                LayoutUnit logicalHeight(container->style(rootBox.isFirstLineStyle())->font().getFontMetrics().height());
                 if (isHorizontal) {
                     yield(LayoutRect(LayoutUnit(currBox->inlineBoxWrapper()->x() - currBox->marginLeft()), LayoutUnit(logicalTop),
                         LayoutUnit(currBox->size().width() + currBox->marginWidth()), LayoutUnit(logicalHeight)));
@@ -582,8 +582,8 @@ void LayoutInline::generateCulledLineBoxRects(GeneratorContext& yield, const Lay
             } else {
                 for (InlineFlowBox* childLine = currInline->firstLineBox(); childLine; childLine = childLine->nextLineBox()) {
                     RootInlineBox& rootBox = childLine->root();
-                    LayoutUnit logicalTop = rootBox.logicalTop() + (rootBox.getLineLayoutItem().style(rootBox.isFirstLineStyle())->font().fontMetrics().ascent() - container->style(rootBox.isFirstLineStyle())->font().fontMetrics().ascent());
-                    LayoutUnit logicalHeight(container->style(rootBox.isFirstLineStyle())->font().fontMetrics().height());
+                    LayoutUnit logicalTop = rootBox.logicalTop() + (rootBox.getLineLayoutItem().style(rootBox.isFirstLineStyle())->font().getFontMetrics().ascent() - container->style(rootBox.isFirstLineStyle())->font().getFontMetrics().ascent());
+                    LayoutUnit logicalHeight(container->style(rootBox.isFirstLineStyle())->font().getFontMetrics().height());
                     if (isHorizontal) {
                         yield(LayoutRect(LayoutUnit(childLine->x() - childLine->marginLogicalLeft()),
                             logicalTop,
@@ -602,9 +602,9 @@ void LayoutInline::generateCulledLineBoxRects(GeneratorContext& yield, const Lay
             for (InlineTextBox* childText = currText->firstTextBox(); childText; childText = childText->nextTextBox()) {
                 RootInlineBox& rootBox = childText->root();
                 LayoutUnit logicalTop = LayoutUnit(rootBox.logicalTop()
-                    + (rootBox.getLineLayoutItem().style(rootBox.isFirstLineStyle())->font().fontMetrics().ascent()
-                    - container->style(rootBox.isFirstLineStyle())->font().fontMetrics().ascent()));
-                LayoutUnit logicalHeight(container->style(rootBox.isFirstLineStyle())->font().fontMetrics().height());
+                    + (rootBox.getLineLayoutItem().style(rootBox.isFirstLineStyle())->font().getFontMetrics().ascent()
+                    - container->style(rootBox.isFirstLineStyle())->font().getFontMetrics().ascent()));
+                LayoutUnit logicalHeight(container->style(rootBox.isFirstLineStyle())->font().getFontMetrics().height());
                 if (isHorizontal)
                     yield(LayoutRect(childText->x(), logicalTop, childText->logicalWidth(), logicalHeight));
                 else
@@ -679,7 +679,7 @@ private:
 
 } // unnamed namespace
 
-void LayoutInline::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed) const
+void LayoutInline::absoluteQuads(Vector<FloatQuad>& quads) const
 {
     AbsoluteQuadsGeneratorContext context(this, quads);
     generateLineBoxRects(context);
@@ -687,7 +687,7 @@ void LayoutInline::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed) const
         context(FloatRect());
 
     if (const LayoutBoxModelObject* continuation = this->continuation())
-        continuation->absoluteQuads(quads, wasFixed);
+        continuation->absoluteQuads(quads);
 }
 
 LayoutUnit LayoutInline::offsetLeft() const
@@ -1021,8 +1021,11 @@ LayoutRect LayoutInline::linesVisualOverflowBoundingBox() const
 
 LayoutRect LayoutInline::absoluteClippedOverflowRect() const
 {
-    if (!continuation())
-        return clippedOverflowRect(view());
+    if (!continuation()) {
+        LayoutRect rect = visualOverflowRect();
+        mapToVisualRectInAncestorSpace(view(), rect);
+        return rect;
+    }
 
     FloatRect floatResult;
     LinesBoundingBoxGeneratorContext context(floatResult);
@@ -1033,34 +1036,28 @@ LayoutRect LayoutInline::absoluteClippedOverflowRect() const
 
     for (LayoutBlock* currBlock = containingBlock(); currBlock && currBlock->isAnonymousBlock(); currBlock = toLayoutBlock(currBlock->nextSibling())) {
         for (LayoutObject* curr = currBlock->firstChild(); curr; curr = curr->nextSibling()) {
-            LayoutRect rect(curr->clippedOverflowRectForPaintInvalidation(view()));
+            LayoutRect rect(curr->localOverflowRectForPaintInvalidation());
             context(FloatRect(rect));
-            if (curr == endContinuation)
-                return LayoutRect(enclosingIntRect(floatResult));
+            if (curr == endContinuation) {
+                LayoutRect rect(enclosingIntRect(floatResult));
+                mapToVisualRectInAncestorSpace(view(), rect);
+                return rect;
+            }
         }
     }
     return LayoutRect();
 }
 
-LayoutRect LayoutInline::clippedOverflowRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState* paintInvalidationState) const
+LayoutRect LayoutInline::localOverflowRectForPaintInvalidation() const
 {
     // If we don't create line boxes, we don't have any invalidations to do.
     if (!alwaysCreateLineBoxes())
         return LayoutRect();
-    return clippedOverflowRect(paintInvalidationContainer);
-}
 
-LayoutRect LayoutInline::clippedOverflowRect(const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState* paintInvalidationState) const
-{
     if (style()->visibility() != VISIBLE)
         return LayoutRect();
 
-    LayoutRect overflowRect(visualOverflowRect());
-    if (overflowRect.isEmpty())
-        return overflowRect;
-
-    mapToVisibleRectInAncestorSpace(paintInvalidationContainer, overflowRect, paintInvalidationState);
-    return overflowRect;
+    return visualOverflowRect();
 }
 
 LayoutRect LayoutInline::visualOverflowRect() const
@@ -1081,24 +1078,15 @@ LayoutRect LayoutInline::visualOverflowRect() const
     return overflowRect;
 }
 
-void LayoutInline::mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, const PaintInvalidationState* paintInvalidationState) const
+bool LayoutInline::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, VisualRectFlags visualRectFlags) const
 {
-    if (paintInvalidationState && paintInvalidationState->canMapToContainer(ancestor)) {
-        if (style()->hasInFlowPosition() && layer())
-            rect.move(layer()->offsetForInFlowPosition());
-        rect.move(paintInvalidationState->paintOffset());
-        if (paintInvalidationState->isClipped())
-            rect.intersect(paintInvalidationState->clipRect());
-        return;
-    }
-
     if (ancestor == this)
-        return;
+        return true;
 
     bool ancestorSkipped;
     LayoutObject* container = this->container(ancestor, &ancestorSkipped);
     if (!container)
-        return;
+        return true;
 
     LayoutPoint topLeft = rect.location();
 
@@ -1113,26 +1101,21 @@ void LayoutInline::mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* a
     // FIXME: We ignore the lightweight clipping rect that controls use, since if |o| is in mid-layout,
     // its controlClipRect will be wrong. For overflow clip we use the values cached by the layer.
     rect.setLocation(topLeft);
-    if (container->hasOverflowClip()) {
-        LayoutBox* containerBox = toLayoutBox(container);
-        containerBox->mapScrollingContentsRectToBoxSpace(rect);
-        if (container != ancestor)
-            containerBox->applyOverflowClip(rect);
-        if (rect.isEmpty())
-            return;
-    }
+
+    if (container->isBox() && !toLayoutBox(container)->mapScrollingContentsRectToBoxSpace(rect, container == ancestor ? ApplyNonScrollOverflowClip : ApplyOverflowClip, visualRectFlags))
+        return false;
 
     if (ancestorSkipped) {
         // If the paintInvalidationContainer is below o, then we need to map the rect into paintInvalidationContainer's coordinates.
         LayoutSize containerOffset = ancestor->offsetFromAncestorContainer(container);
         rect.move(-containerOffset);
-        return;
+        return true;
     }
 
-    container->mapToVisibleRectInAncestorSpace(ancestor, rect, paintInvalidationState);
+    return container->mapToVisualRectInAncestorSpace(ancestor, rect, visualRectFlags);
 }
 
-LayoutSize LayoutInline::offsetFromContainer(const LayoutObject* container, const LayoutPoint& point, bool* offsetDependsOnPoint) const
+LayoutSize LayoutInline::offsetFromContainer(const LayoutObject* container) const
 {
     ASSERT(container == this->container());
 
@@ -1140,13 +1123,8 @@ LayoutSize LayoutInline::offsetFromContainer(const LayoutObject* container, cons
     if (isInFlowPositioned())
         offset += offsetForInFlowPosition();
 
-    offset += container->columnOffset(point);
-
     if (container->hasOverflowClip())
         offset -= toLayoutBox(container)->scrolledContentOffset();
-
-    if (offsetDependsOnPoint)
-        *offsetDependsOnPoint = (container->isBox() && container->style()->isFlippedBlocksWritingMode()) || container->isLayoutFlowThread();
 
     return offset;
 }
@@ -1232,7 +1210,7 @@ void LayoutInline::dirtyLineBoxes(bool fullLayout)
 
 InlineFlowBox* LayoutInline::createInlineFlowBox()
 {
-    return new InlineFlowBox(*this);
+    return new InlineFlowBox(LineLayoutItem(this));
 }
 
 InlineFlowBox* LayoutInline::createAndAppendInlineFlowBox()
@@ -1257,7 +1235,7 @@ LayoutUnit LayoutInline::lineHeight(bool firstLine, LineDirectionMode /*directio
 int LayoutInline::baselinePosition(FontBaseline baselineType, bool firstLine, LineDirectionMode direction, LinePositionMode linePositionMode) const
 {
     ASSERT(linePositionMode == PositionOnContainingLine);
-    const FontMetrics& fontMetrics = style(firstLine)->fontMetrics();
+    const FontMetrics& fontMetrics = style(firstLine)->getFontMetrics();
     return fontMetrics.ascent(baselineType) + (lineHeight(firstLine, direction, linePositionMode) - fontMetrics.height()) / 2;
 }
 

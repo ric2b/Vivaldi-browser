@@ -10,7 +10,7 @@ namespace blink {
 class C {
  public:
   // Make sure initializers are updated to use the new names.
-  C() : m_flagField(~0), m_fieldMentioningHTTPAndHTTPS(1) {}
+  C() : m_flagField(~0), m_fieldMentioningHTTPAndHTTPS(1), m_shouldRename(0) {}
 
   int method() {
     // Test that references to fields are updated correctly.
@@ -31,6 +31,13 @@ class C {
   int m_fieldMentioningHTTPAndHTTPS;
   // Already Google style, should not change.
   int already_google_style_;
+
+  union {
+    // Anonymous union members should be renamed, as should contructor
+    // initializers of them.
+    char* m_shouldRename;
+    int* m_doesRename;
+  };
 };
 
 struct Derived : public C {
@@ -57,6 +64,16 @@ union U {
 
 }  // namespace blink
 
+namespace WTF {
+
+struct TypeTrait {
+  // WTF has structs for things like type traits, which we don't want to
+  // capitalize.
+  static const bool value = true;
+};
+
+};  // namespace WTF
+
 void F() {
   // Test that references to a static field are correctly rewritten.
   blink::C::instanceCount++;
@@ -64,4 +81,6 @@ void F() {
   // initializers for synthesized functions don't cause weird rewrites.
   blink::C c;
   blink::C c2 = c;
+
+  bool b = WTF::TypeTrait::value;
 }

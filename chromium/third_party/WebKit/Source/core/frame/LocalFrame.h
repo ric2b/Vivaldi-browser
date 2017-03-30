@@ -62,6 +62,7 @@ class InputMethodController;
 class IntPoint;
 class IntSize;
 class InstrumentingAgents;
+class LayoutViewItem;
 class LocalDOMWindow;
 class NavigationScheduler;
 class Node;
@@ -70,19 +71,20 @@ class Range;
 class LayoutView;
 class TreeScope;
 class ScriptController;
+class ServiceRegistry;
 class SpellChecker;
 class TreeScope;
 class WebFrameHostScheduler;
 class WebFrameScheduler;
 template <typename Strategy> class PositionWithAffinityTemplate;
 
-class CORE_EXPORT LocalFrame : public Frame, public LocalFrameLifecycleNotifier, public WillBeHeapSupplementable<LocalFrame>, public DisplayItemClient {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(LocalFrame);
+class CORE_EXPORT LocalFrame : public Frame, public LocalFrameLifecycleNotifier, public Supplementable<LocalFrame>, public DisplayItemClient {
+    USING_GARBAGE_COLLECTED_MIXIN(LocalFrame);
 public:
-    static PassRefPtrWillBeRawPtr<LocalFrame> create(FrameLoaderClient*, FrameHost*, FrameOwner*);
+    static LocalFrame* create(FrameLoaderClient*, FrameHost*, FrameOwner*, ServiceRegistry* = nullptr);
 
     void init();
-    void setView(PassRefPtrWillBeRawPtr<FrameView>);
+    void setView(FrameView*);
     void createView(const IntSize&, const Color&, bool,
         ScrollbarMode = ScrollbarAuto, bool horizontalLock = false,
         ScrollbarMode = ScrollbarAuto, bool verticalLock = false);
@@ -97,7 +99,6 @@ public:
     void navigate(const FrameLoadRequest&) override;
     void reload(FrameLoadType, ClientRedirectPolicy) override;
     void detach(FrameDetachType) override;
-    void disconnectOwnerElement() override;
     bool shouldClose() override;
     SecurityContext* securityContext() const override;
     void printNavigationErrorMessage(const Frame&, const char* reason) override;
@@ -106,13 +107,14 @@ public:
     void willDetachFrameHost();
 
     LocalDOMWindow* localDOMWindow() const;
-    void setDOMWindow(PassRefPtrWillBeRawPtr<LocalDOMWindow>);
+    void setDOMWindow(LocalDOMWindow*);
     FrameView* view() const;
     Document* document() const;
     void setPagePopupOwner(Element&);
     Element* pagePopupOwner() const { return m_pagePopupOwner.get(); }
 
     LayoutView* contentLayoutObject() const; // Root of the layout tree for the document contained in this frame.
+    LayoutViewItem contentLayoutItem() const;
 
     Editor& editor() const;
     EventHandler& eventHandler() const;
@@ -172,7 +174,6 @@ public:
     // FIXME: once scroll customization is enabled everywhere
     // (crbug.com/416862), this should take a ScrollState object.
     ScrollResult applyScrollDelta(ScrollGranularity, const FloatSize& delta, bool isScrollBegin);
-    bool shouldScrollTopControls(const FloatSize& delta) const;
 
     // DisplayItemClient methods
     String debugName() const final { return "LocalFrame"; }
@@ -185,17 +186,19 @@ public:
     WebFrameScheduler* frameScheduler();
     void scheduleVisualUpdateUnlessThrottled();
 
-    void updateSecurityOrigin(SecurityOrigin*);
-
     bool isNavigationAllowed() const { return m_navigationDisableCount == 0; }
+
+    ServiceRegistry* serviceRegistry() { return m_serviceRegistry; }
 
 private:
     friend class FrameNavigationDisabler;
 
-    LocalFrame(FrameLoaderClient*, FrameHost*, FrameOwner*);
+    LocalFrame(FrameLoaderClient*, FrameHost*, FrameOwner*, ServiceRegistry*);
+
+    bool shouldScrollTopControls(ScrollGranularity, const FloatSize& delta) const;
 
     // Internal Frame helper overrides:
-    WindowProxyManager* windowProxyManager() const override;
+    WindowProxyManager* getWindowProxyManager() const override;
 
     String localLayerTreeAsText(unsigned flags) const;
 
@@ -203,20 +206,20 @@ private:
     void disableNavigation() { ++m_navigationDisableCount; }
 
     mutable FrameLoader m_loader;
-    OwnPtrWillBeMember<NavigationScheduler> m_navigationScheduler;
+    Member<NavigationScheduler> m_navigationScheduler;
 
-    RefPtrWillBeMember<FrameView> m_view;
-    RefPtrWillBeMember<LocalDOMWindow> m_domWindow;
+    Member<FrameView> m_view;
+    Member<LocalDOMWindow> m_domWindow;
     // Usually 0. Non-null if this is the top frame of PagePopup.
-    RefPtrWillBeMember<Element> m_pagePopupOwner;
+    Member<Element> m_pagePopupOwner;
 
-    const OwnPtrWillBeMember<ScriptController> m_script;
-    const OwnPtrWillBeMember<Editor> m_editor;
-    const OwnPtrWillBeMember<SpellChecker> m_spellChecker;
-    const OwnPtrWillBeMember<FrameSelection> m_selection;
-    const OwnPtrWillBeMember<EventHandler> m_eventHandler;
-    const OwnPtrWillBeMember<FrameConsole> m_console;
-    const OwnPtrWillBeMember<InputMethodController> m_inputMethodController;
+    const Member<ScriptController> m_script;
+    const Member<Editor> m_editor;
+    const Member<SpellChecker> m_spellChecker;
+    const Member<FrameSelection> m_selection;
+    const Member<EventHandler> m_eventHandler;
+    const Member<FrameConsole> m_console;
+    const Member<InputMethodController> m_inputMethodController;
     OwnPtr<WebFrameScheduler> m_frameScheduler;
 
     int m_navigationDisableCount;
@@ -226,7 +229,9 @@ private:
 
     bool m_inViewSourceMode;
 
-    RefPtrWillBeMember<InstrumentingAgents> m_instrumentingAgents;
+    Member<InstrumentingAgents> m_instrumentingAgents;
+
+    ServiceRegistry* const m_serviceRegistry;
 };
 
 inline void LocalFrame::init()
@@ -313,7 +318,7 @@ public:
     ~FrameNavigationDisabler();
 
 private:
-    RawPtrWillBeMember<LocalFrame> m_frame;
+    Member<LocalFrame> m_frame;
 };
 
 } // namespace blink

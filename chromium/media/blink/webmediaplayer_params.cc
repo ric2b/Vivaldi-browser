@@ -13,7 +13,7 @@ namespace media {
 
 WebMediaPlayerParams::WebMediaPlayerParams(
     const DeferLoadCB& defer_load_cb,
-    const scoped_refptr<RestartableAudioRendererSink>& audio_renderer_sink,
+    const scoped_refptr<SwitchableAudioRendererSink>& audio_renderer_sink,
     const scoped_refptr<MediaLog>& media_log,
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
     const IPCMediaPipelineHost::Creator& ipc_media_pipeline_host_creator,

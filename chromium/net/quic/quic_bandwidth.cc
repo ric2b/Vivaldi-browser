@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "base/logging.h"
+#include "net/quic/quic_bug_tracker.h"
 #include "net/quic/quic_time.h"
 #include "net/quic/quic_types.h"
 
@@ -55,7 +56,12 @@ QuicBandwidth QuicBandwidth::FromBytesAndTimeDelta(QuicByteCount bytes,
 
 QuicBandwidth::QuicBandwidth(int64_t bits_per_second)
     : bits_per_second_(bits_per_second) {
-  DCHECK_GE(bits_per_second, 0);
+  if (bits_per_second < 0) {
+    QUIC_BUG << "Can't set negative bandwidth " << bits_per_second;
+    bits_per_second_ = 0;
+    return;
+  }
+  bits_per_second_ = bits_per_second;
 }
 
 int64_t QuicBandwidth::ToBitsPerSecond() const {
@@ -89,11 +95,11 @@ bool QuicBandwidth::IsZero() const {
   return (bits_per_second_ == 0);
 }
 
-QuicBandwidth QuicBandwidth::Add(const QuicBandwidth& delta) const {
+QuicBandwidth QuicBandwidth::Add(QuicBandwidth delta) const {
   return QuicBandwidth(bits_per_second_ + delta.bits_per_second_);
 }
 
-QuicBandwidth QuicBandwidth::Subtract(const QuicBandwidth& delta) const {
+QuicBandwidth QuicBandwidth::Subtract(QuicBandwidth delta) const {
   return QuicBandwidth(bits_per_second_ - delta.bits_per_second_);
 }
 

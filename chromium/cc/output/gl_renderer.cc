@@ -45,6 +45,7 @@
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
+#include "skia/ext/texture_handle.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
@@ -54,6 +55,7 @@
 #include "third_party/skia/include/gpu/GrTexture.h"
 #include "third_party/skia/include/gpu/GrTextureProvider.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
+#include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/skia_util.h"
@@ -62,16 +64,6 @@ using gpu::gles2::GLES2Interface;
 
 namespace cc {
 namespace {
-
-bool NeedsIOSurfaceReadbackWorkaround() {
-#if defined(OS_MACOSX)
-  // This isn't strictly required in DumpRenderTree-mode when Mesa is used,
-  // but it doesn't seem to hurt.
-  return true;
-#else
-  return false;
-#endif
-}
 
 Float4 UVTransform(const TextureDrawQuad* quad) {
   gfx::PointF uv0 = quad->uv_top_left;
@@ -371,7 +363,13 @@ GLRenderer::GLRenderer(RendererClient* client,
       context_caps.gpu.discard_framebuffer;
 
   capabilities_.allow_rasterize_on_demand = true;
-  capabilities_.max_msaa_samples = context_caps.gpu.max_samples;
+
+  // If MSAA is slow, we want this renderer to behave as though MSAA is not
+  // available. Set samples to 0 to achieve this.
+  if (context_caps.gpu.msaa_is_slow)
+    capabilities_.max_msaa_samples = 0;
+  else
+    capabilities_.max_msaa_samples = context_caps.gpu.max_samples;
 
   use_sync_query_ = context_caps.gpu.sync_query;
   use_blend_equation_advanced_ = context_caps.gpu.blend_equation_advanced;
@@ -618,11 +616,15 @@ static skia::RefPtr<SkImage> ApplyImageFilter(
 
   // Wrap the source texture in a Ganesh platform texture.
   GrBackendTextureDesc backend_texture_description;
+  GrGLTextureInfo texture_info;
+  texture_info.fTarget = lock.target();
+  texture_info.fID = lock.texture_id();
   backend_texture_description.fWidth = source_texture_resource->size().width();
   backend_texture_description.fHeight =
       source_texture_resource->size().height();
   backend_texture_description.fConfig = kSkia8888_GrPixelConfig;
-  backend_texture_description.fTextureHandle = lock.texture_id();
+  backend_texture_description.fTextureHandle =
+      skia::GrGLTextureInfoToGrBackendObject(texture_info);
   backend_texture_description.fOrigin = kBottomLeft_GrSurfaceOrigin;
 
   skia::RefPtr<SkImage> srcImage = skia::AdoptRef(SkImage::NewFromTexture(
@@ -637,8 +639,8 @@ static skia::RefPtr<SkImage> ApplyImageFilter(
   // Create surface to draw into.
   SkImageInfo dst_info =
       SkImageInfo::MakeN32Premul(dst_rect.width(), dst_rect.height());
-  skia::RefPtr<SkSurface> surface = skia::AdoptRef(SkSurface::NewRenderTarget(
-      use_gr_context->context(), SkSurface::kYes_Budgeted, dst_info, 0));
+  sk_sp<SkSurface> surface = SkSurface::MakeRenderTarget(
+      use_gr_context->context(), SkBudgeted::kYes, dst_info);
   if (!surface) {
     TRACE_EVENT_INSTANT0("cc", "ApplyImageFilter surface allocation failed",
                          TRACE_EVENT_SCOPE_THREAD);
@@ -647,11 +649,9 @@ static skia::RefPtr<SkImage> ApplyImageFilter(
 
   SkMatrix local_matrix;
   local_matrix.setScale(scale.x(), scale.y());
-  skia::RefPtr<SkImageFilter> filter_with_local_scale =
-      skia::AdoptRef(filter->newWithLocalMatrix(local_matrix));
 
   SkPaint paint;
-  paint.setImageFilter(filter_with_local_scale.get());
+  paint.setImageFilter(filter->makeWithLocalMatrix(local_matrix));
   surface->getCanvas()->translate(-dst_rect.x(), -dst_rect.y());
   surface->getCanvas()->drawImage(srcImage.get(), src_rect.x(), src_rect.y(),
                                   &paint);
@@ -955,7 +955,9 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
         background_image = ApplyBackgroundFilters(
             frame, quad, background_texture.get(), gfx::RectF(background_rect));
         if (background_image)
-          background_image_id = background_image->getTextureHandle(true);
+          background_image_id = skia::GrBackendObjectToGrGLTextureInfo(
+                                    background_image->getTextureHandle(true))
+                                    ->fID;
         DCHECK(background_image_id);
       }
     }
@@ -995,13 +997,9 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
     skia::RefPtr<SkImageFilter> filter = RenderSurfaceFilters::BuildImageFilter(
         quad->filters, gfx::SizeF(contents_texture->size()));
     if (filter) {
-      skia::RefPtr<SkColorFilter> cf;
-
-      {
-        SkColorFilter* colorfilter_rawptr = NULL;
-        filter->asColorFilter(&colorfilter_rawptr);
-        cf = skia::AdoptRef(colorfilter_rawptr);
-      }
+      SkColorFilter* colorfilter_rawptr = NULL;
+      filter->asColorFilter(&colorfilter_rawptr);
+      sk_sp<SkColorFilter> cf(colorfilter_rawptr);
 
       if (cf && cf->asColorMatrix(color_matrix) && !filter->getInput(0)) {
         // We have a single color matrix as a filter; apply it locally
@@ -1011,10 +1009,9 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
         gfx::Vector2dF scale = quad->filters_scale;
         SkMatrix scale_matrix;
         scale_matrix.setScale(scale.x(), scale.y());
-        SkIRect result_rect;
-        filter->filterBounds(gfx::RectToSkIRect(quad->rect), scale_matrix,
-                             &result_rect,
-                             SkImageFilter::kForward_MapDirection);
+        SkIRect result_rect =
+            filter->filterBounds(gfx::RectToSkIRect(quad->rect), scale_matrix,
+                                 SkImageFilter::kForward_MapDirection);
         gfx::RectF dst_rect = gfx::SkRectToRectF(SkRect::Make(result_rect));
         gfx::Rect clip_rect = quad->shared_quad_state->clip_rect;
         if (clip_rect.IsEmpty()) {
@@ -1034,7 +1031,9 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
                                         resource_provider_, rect, dst_rect,
                                         scale, filter.get(), contents_texture);
         if (filter_image) {
-          filter_image_id = filter_image->getTextureHandle(true);
+          filter_image_id = skia::GrBackendObjectToGrGLTextureInfo(
+                                filter_image->getTextureHandle(true))
+                                ->fID;
           DCHECK(filter_image_id);
           rect = dst_rect;
         }
@@ -2805,38 +2804,6 @@ void GLRenderer::GetFramebufferPixelsAsync(
   pending_async_read_pixels_.insert(pending_async_read_pixels_.begin(),
                                     std::move(pending_read));
 
-  bool do_workaround = NeedsIOSurfaceReadbackWorkaround();
-
-  unsigned temporary_texture = 0;
-  unsigned temporary_fbo = 0;
-
-  if (do_workaround) {
-    // On Mac OS X, calling glReadPixels() against an FBO whose color attachment
-    // is an IOSurface-backed texture causes corruption of future glReadPixels()
-    // calls, even those on different OpenGL contexts. It is believed that this
-    // is the root cause of top crasher
-    // http://crbug.com/99393. <rdar://problem/10949687>
-
-    gl_->GenTextures(1, &temporary_texture);
-    gl_->BindTexture(GL_TEXTURE_2D, temporary_texture);
-    gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    gl_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    // Copy the contents of the current (IOSurface-backed) framebuffer into a
-    // temporary texture.
-    GetFramebufferTexture(
-        temporary_texture, RGBA_8888, gfx::Rect(current_surface_size_));
-    gl_->GenFramebuffers(1, &temporary_fbo);
-    // Attach this texture to an FBO, and perform the readback from that FBO.
-    gl_->BindFramebuffer(GL_FRAMEBUFFER, temporary_fbo);
-    gl_->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                              GL_TEXTURE_2D, temporary_texture, 0);
-
-    DCHECK_EQ(static_cast<unsigned>(GL_FRAMEBUFFER_COMPLETE),
-              gl_->CheckFramebufferStatus(GL_FRAMEBUFFER));
-  }
-
   GLuint buffer = 0;
   gl_->GenBuffers(1, &buffer);
   gl_->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, buffer);
@@ -2851,14 +2818,6 @@ void GLRenderer::GetFramebufferPixelsAsync(
                   window_rect.height(), GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 
   gl_->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, 0);
-
-  if (do_workaround) {
-    // Clean up.
-    gl_->BindFramebuffer(GL_FRAMEBUFFER, 0);
-    gl_->BindTexture(GL_TEXTURE_2D, 0);
-    gl_->DeleteFramebuffers(1, &temporary_fbo);
-    gl_->DeleteTextures(1, &temporary_texture);
-  }
 
   base::Closure finished_callback = base::Bind(&GLRenderer::FinishedReadback,
                                                base::Unretained(this),

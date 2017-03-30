@@ -5,8 +5,9 @@
 #ifndef RemoteObjectId_h
 #define RemoteObjectId_h
 
-#include "wtf/Allocator.h"
-#include "wtf/Forward.h"
+#include "platform/inspector_protocol/String16.h"
+#include "platform/inspector_protocol/TypeBuilder.h"
+#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
@@ -15,7 +16,6 @@ class DictionaryValue;
 }
 
 class RemoteObjectIdBase {
-    USING_FAST_MALLOC(RemoteObjectIdBase);
 public:
     int contextId() const { return m_injectedScriptId; }
 
@@ -23,14 +23,14 @@ protected:
     RemoteObjectIdBase();
     ~RemoteObjectIdBase() { }
 
-    PassRefPtr<protocol::DictionaryValue> parseInjectedScriptId(const String&);
+    PassOwnPtr<protocol::DictionaryValue> parseInjectedScriptId(const String16&);
 
     int m_injectedScriptId;
 };
 
 class RemoteObjectId final : public RemoteObjectIdBase {
 public:
-    static PassOwnPtr<RemoteObjectId> parse(const String&);
+    static PassOwnPtr<RemoteObjectId> parse(ErrorString*, const String16&);
     ~RemoteObjectId() { }
     int id() const { return m_id; }
 
@@ -42,17 +42,16 @@ private:
 
 class RemoteCallFrameId final : public RemoteObjectIdBase {
 public:
-    static PassOwnPtr<RemoteCallFrameId> parse(const String&);
+    static PassOwnPtr<RemoteCallFrameId> parse(ErrorString*, const String16&);
     ~RemoteCallFrameId() { }
 
     int frameOrdinal() const { return m_frameOrdinal; }
-    int asyncStackOrdinal() const { return m_asyncStackOrdinal; }
 
+    static String16 serialize(int injectedScriptId, int frameOrdinal);
 private:
     RemoteCallFrameId();
 
     int m_frameOrdinal;
-    int m_asyncStackOrdinal;
 };
 
 } // namespace blink

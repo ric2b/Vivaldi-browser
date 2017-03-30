@@ -4,6 +4,8 @@
 
 #include "headless/lib/browser/headless_browser_context.h"
 
+#include <memory>
+
 #include "base/path_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_context.h"
@@ -74,12 +76,13 @@ HeadlessBrowserContext::~HeadlessBrowserContext() {
 void HeadlessBrowserContext::InitWhileIOAllowed() {
   // TODO(skyostil): Allow the embedder to override this.
   PathService::Get(base::DIR_EXE, &path_);
+  BrowserContext::Initialize(this, path_);
 }
 
-scoped_ptr<content::ZoomLevelDelegate>
+std::unique_ptr<content::ZoomLevelDelegate>
 HeadlessBrowserContext::CreateZoomLevelDelegate(
     const base::FilePath& partition_path) {
-  return scoped_ptr<content::ZoomLevelDelegate>();
+  return std::unique_ptr<content::ZoomLevelDelegate>();
 }
 
 base::FilePath HeadlessBrowserContext::GetPath() const {
@@ -92,12 +95,6 @@ bool HeadlessBrowserContext::IsOffTheRecord() const {
 
 net::URLRequestContextGetter* HeadlessBrowserContext::GetRequestContext() {
   return GetDefaultStoragePartition(this)->GetURLRequestContext();
-}
-
-net::URLRequestContextGetter*
-HeadlessBrowserContext::GetRequestContextForRenderProcess(
-    int renderer_child_id) {
-  return GetRequestContext();
 }
 
 net::URLRequestContextGetter* HeadlessBrowserContext::GetMediaRequestContext() {
@@ -155,9 +152,34 @@ HeadlessBrowserContext::GetBackgroundSyncController() {
   return nullptr;
 }
 
-void HeadlessBrowserContext::SetURLRequestContextGetter(
-    scoped_refptr<net::URLRequestContextGetter> url_request_context_getter) {
+net::URLRequestContextGetter* HeadlessBrowserContext::CreateRequestContext(
+    content::ProtocolHandlerMap* protocol_handlers,
+    content::URLRequestInterceptorScopedVector request_interceptors) {
+  scoped_refptr<HeadlessURLRequestContextGetter> url_request_context_getter(
+      new HeadlessURLRequestContextGetter(
+          false /* ignore_certificate_errors */, GetPath(),
+          content::BrowserThread::GetMessageLoopProxyForThread(
+              content::BrowserThread::IO),
+          content::BrowserThread::GetMessageLoopProxyForThread(
+              content::BrowserThread::FILE),
+          protocol_handlers, std::move(request_interceptors),
+          nullptr /* net_log */, options()));
   resource_context_->set_url_request_context_getter(url_request_context_getter);
+  return url_request_context_getter.get();
+}
+
+net::URLRequestContextGetter*
+HeadlessBrowserContext::CreateRequestContextForStoragePartition(
+    const base::FilePath& partition_path,
+    bool in_memory,
+    content::ProtocolHandlerMap* protocol_handlers,
+    content::URLRequestInterceptorScopedVector request_interceptors) {
+  return nullptr;
+}
+
+void HeadlessBrowserContext::SetOptionsForTesting(
+    const HeadlessBrowser::Options& options) {
+  options_ = options;
 }
 
 }  // namespace headless

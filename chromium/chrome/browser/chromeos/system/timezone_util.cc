@@ -19,7 +19,7 @@
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/common/pref_names.h"
+#include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/settings/timezone_settings.h"
 #include "chromeos/timezone/timezone_request.h"
@@ -68,7 +68,7 @@ base::string16 GetExemplarCity(const icu::TimeZone& zone) {
 
   // Resource keys for timezones use ':' in place of '/'.
   base::ReplaceSubstringsAfterOffset(&zone_id_str, 0, "/", ":");
-  scoped_ptr<UResourceBundle, UResClose> zone_item(
+  std::unique_ptr<UResourceBundle, UResClose> zone_item(
       ures_getByKey(zone_strings, zone_id_str.c_str(), NULL, &status));
   icu::UnicodeString city;
   if (!U_FAILURE(status)) {
@@ -145,10 +145,10 @@ namespace chromeos {
 namespace system {
 
 // Creates a list of pairs of each timezone's ID and name.
-scoped_ptr<base::ListValue> GetTimezoneList() {
+std::unique_ptr<base::ListValue> GetTimezoneList() {
   const std::vector<icu::TimeZone*> &timezones =
       chromeos::system::TimezoneSettings::GetInstance()->GetTimezoneList();
-  scoped_ptr<base::ListValue> timezoneList(new base::ListValue());
+  std::unique_ptr<base::ListValue> timezoneList(new base::ListValue());
   for (std::vector<icu::TimeZone*>::const_iterator iter = timezones.begin();
        iter != timezones.end(); ++iter) {
     const icu::TimeZone* timezone = *iter;
@@ -179,21 +179,10 @@ bool HasSystemTimezonePolicy() {
 }
 
 void ApplyTimeZone(const TimeZoneResponseData* timezone) {
-  if (HasSystemTimezonePolicy())
+  if (!g_browser_process->platform_part()
+           ->GetTimezoneResolverManager()
+           ->ShouldApplyResolvedTimezone()) {
     return;
-
-  const user_manager::User* primary_user =
-      user_manager::UserManager::Get()->GetPrimaryUser();
-  if (primary_user) {
-    if (!primary_user->is_profile_created())
-      return;
-
-    Profile* profile =
-        chromeos::ProfileHelper::Get()->GetProfileByUser(primary_user);
-    if (!profile->GetPrefs()->GetBoolean(
-            prefs::kResolveTimezoneByGeolocation)) {
-      return;
-    }
   }
 
   if (!timezone->timeZoneId.empty()) {

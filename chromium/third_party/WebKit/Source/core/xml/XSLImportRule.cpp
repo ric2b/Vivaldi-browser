@@ -41,10 +41,6 @@ XSLImportRule::XSLImportRule(XSLStyleSheet* parent, const String& href)
 
 XSLImportRule::~XSLImportRule()
 {
-#if !ENABLE(OILPAN)
-    if (m_styleSheet)
-        m_styleSheet->setParentStyleSheet(0);
-#endif
 }
 
 void XSLImportRule::setXSLStyleSheet(const String& href, const KURL& baseURL, const String& sheet)
@@ -87,20 +83,20 @@ void XSLImportRule::loadSheet()
     XSLStyleSheet* parentSheet = parentStyleSheet();
     if (!parentSheet->baseURL().isNull()) {
         // Use parent styleheet's URL as the base URL
-        absHref = KURL(parentSheet->baseURL(), m_strHref).string();
+        absHref = KURL(parentSheet->baseURL(), m_strHref).getString();
     }
 
     // Check for a cycle in our import chain. If we encounter a stylesheet in
     // our parent chain with the same URL, then just bail.
     for (XSLStyleSheet* parentSheet = parentStyleSheet(); parentSheet; parentSheet = parentSheet->parentStyleSheet()) {
-        if (absHref == parentSheet->baseURL().string())
+        if (absHref == parentSheet->baseURL().getString())
             return;
     }
 
     ResourceLoaderOptions fetchOptions(ResourceFetcher::defaultResourceOptions());
     FetchRequest request(ResourceRequest(ownerDocument->completeURL(absHref)), FetchInitiatorTypeNames::xml, fetchOptions);
     request.setOriginRestriction(FetchRequest::RestrictToSameOrigin);
-    RefPtrWillBeRawPtr<XSLStyleSheetResource> resource = XSLStyleSheetResource::fetchSynchronously(request, ownerDocument->fetcher());
+    RawPtr<XSLStyleSheetResource> resource = XSLStyleSheetResource::fetchSynchronously(request, ownerDocument->fetcher());
     if (!resource || !resource->sheet())
         return;
 

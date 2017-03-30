@@ -14,7 +14,9 @@
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_controller_delegate.h"
 #include "components/omnibox/browser/bookmark_provider.h"
@@ -239,6 +241,8 @@ AutocompleteController::~AutocompleteController() {
 }
 
 void AutocompleteController::Start(const AutocompleteInput& input) {
+  TRACE_EVENT1("omnibox", "AutocompleteController::Start",
+               "text", base::UTF16ToUTF8(input.text()));
   const base::string16 old_input_text(input_.text());
   const bool old_want_asynchronous_matches = input_.want_asynchronous_matches();
   const bool old_from_omnibox_focus = input_.from_omnibox_focus();
@@ -403,6 +407,7 @@ void AutocompleteController::UpdateMatchDestinationURL(
 void AutocompleteController::UpdateResult(
     bool regenerate_result,
     bool force_notify_default_match_changed) {
+  TRACE_EVENT0("omnibox", "AutocompleteController::UpdateResult");
   const bool last_default_was_valid = result_.default_match() != result_.end();
   // The following three variables are only set and used if
   // |last_default_was_valid|.
@@ -427,8 +432,7 @@ void AutocompleteController::UpdateResult(
     result_.AppendMatches(input_, (*i)->matches());
 
   // Sort the matches and trim to a small number of "best" matches.
-  result_.SortAndCull(input_, provider_client_->GetAcceptLanguages(),
-                      template_url_service_);
+  result_.SortAndCull(input_, template_url_service_);
 
   // Need to validate before invoking CopyOldMatches as the old matches are not
   // valid against the current input.
@@ -439,8 +443,7 @@ void AutocompleteController::UpdateResult(
   if (!done_) {
     // This conditional needs to match the conditional in Start that invokes
     // StartExpireTimer.
-    result_.CopyOldMatches(input_, provider_client_->GetAcceptLanguages(),
-                           last_result, template_url_service_);
+    result_.CopyOldMatches(input_, last_result, template_url_service_);
   }
 
   UpdateKeywordDescriptions(&result_);

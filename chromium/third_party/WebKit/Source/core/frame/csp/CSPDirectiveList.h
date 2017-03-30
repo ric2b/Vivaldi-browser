@@ -22,11 +22,10 @@ namespace blink {
 
 class ContentSecurityPolicy;
 
-class CSPDirectiveList {
-    USING_FAST_MALLOC(CSPDirectiveList);
+class CORE_EXPORT CSPDirectiveList : public GarbageCollectedFinalized<CSPDirectiveList> {
     WTF_MAKE_NONCOPYABLE(CSPDirectiveList);
 public:
-    static PassOwnPtr<CSPDirectiveList> create(ContentSecurityPolicy*, const UChar* begin, const UChar* end, ContentSecurityPolicyHeaderType, ContentSecurityPolicyHeaderSource);
+    static CSPDirectiveList* create(ContentSecurityPolicy*, const UChar* begin, const UChar* end, ContentSecurityPolicyHeaderType, ContentSecurityPolicyHeaderSource);
 
     void parse(const UChar* begin, const UChar* end);
 
@@ -81,6 +80,8 @@ public:
 
     bool shouldSendCSPHeader(Resource::Type) const;
 
+    DECLARE_TRACE();
+
 private:
     CSPDirectiveList(ContentSecurityPolicy*, ContentSecurityPolicyHeaderType, ContentSecurityPolicyHeaderSource);
 
@@ -89,15 +90,14 @@ private:
     void parsePluginTypes(const String& name, const String& value);
     void parseReflectedXSS(const String& name, const String& value);
     void parseReferrer(const String& name, const String& value);
-    String parseSuboriginName(const String& policy);
     void addDirective(const String& name, const String& value);
     void applySandboxPolicy(const String& name, const String& sandboxPolicy);
-    void applySuboriginPolicy(const String& name, const String& suboriginPolicy);
     void enforceStrictMixedContentChecking(const String& name, const String& value);
     void enableInsecureRequestsUpgrade(const String& name, const String& value);
+    void treatAsPublicAddress(const String& name, const String& value);
 
     template <class CSPDirectiveType>
-    void setCSPDirective(const String& name, const String& value, OwnPtr<CSPDirectiveType>&);
+    void setCSPDirective(const String& name, const String& value, Member<CSPDirectiveType>&);
 
     SourceListDirective* operativeDirective(SourceListDirective*) const;
     SourceListDirective* operativeDirective(SourceListDirective*, SourceListDirective* override) const;
@@ -126,8 +126,7 @@ private:
 
     bool denyIfEnforcingPolicy() const { return m_reportOnly; }
 
-    // TODO(Oilpan): consider moving ContentSecurityPolicy auxilliary objects to the heap.
-    RawPtrWillBeUntracedMember<ContentSecurityPolicy> m_policy;
+    Member<ContentSecurityPolicy> m_policy;
 
     String m_header;
     ContentSecurityPolicyHeaderType m_headerType;
@@ -135,7 +134,6 @@ private:
 
     bool m_reportOnly;
     bool m_hasSandboxPolicy;
-    bool m_hasSuboriginPolicy;
     ReflectedXSSDisposition m_reflectedXSSDisposition;
 
     bool m_didSetReferrerPolicy;
@@ -144,22 +142,23 @@ private:
     bool m_strictMixedContentCheckingEnforced;
 
     bool m_upgradeInsecureRequests;
+    bool m_treatAsPublicAddress;
 
-    OwnPtr<MediaListDirective> m_pluginTypes;
-    OwnPtr<SourceListDirective> m_baseURI;
-    OwnPtr<SourceListDirective> m_childSrc;
-    OwnPtr<SourceListDirective> m_connectSrc;
-    OwnPtr<SourceListDirective> m_defaultSrc;
-    OwnPtr<SourceListDirective> m_fontSrc;
-    OwnPtr<SourceListDirective> m_formAction;
-    OwnPtr<SourceListDirective> m_frameAncestors;
-    OwnPtr<SourceListDirective> m_frameSrc;
-    OwnPtr<SourceListDirective> m_imgSrc;
-    OwnPtr<SourceListDirective> m_mediaSrc;
-    OwnPtr<SourceListDirective> m_manifestSrc;
-    OwnPtr<SourceListDirective> m_objectSrc;
-    OwnPtr<SourceListDirective> m_scriptSrc;
-    OwnPtr<SourceListDirective> m_styleSrc;
+    Member<MediaListDirective> m_pluginTypes;
+    Member<SourceListDirective> m_baseURI;
+    Member<SourceListDirective> m_childSrc;
+    Member<SourceListDirective> m_connectSrc;
+    Member<SourceListDirective> m_defaultSrc;
+    Member<SourceListDirective> m_fontSrc;
+    Member<SourceListDirective> m_formAction;
+    Member<SourceListDirective> m_frameAncestors;
+    Member<SourceListDirective> m_frameSrc;
+    Member<SourceListDirective> m_imgSrc;
+    Member<SourceListDirective> m_mediaSrc;
+    Member<SourceListDirective> m_manifestSrc;
+    Member<SourceListDirective> m_objectSrc;
+    Member<SourceListDirective> m_scriptSrc;
+    Member<SourceListDirective> m_styleSrc;
 
     Vector<String> m_reportEndpoints;
 

@@ -45,7 +45,6 @@
 
 #if OS(MACOSX)
 #include <AvailabilityMacros.h>
-#include <CoreFoundation/CFString.h>
 #if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1080
 #define WTF_USE_APPLE_SYSTEM_LOG 1
 #include <asl.h>
@@ -73,43 +72,11 @@
 WTF_ATTRIBUTE_PRINTF(1, 0)
 static void vprintf_stderr_common(const char* format, va_list args)
 {
-#if OS(MACOSX)
-    if (strstr(format, "%@")) {
-        CFStringRef cfFormat = CFStringCreateWithCString(nullptr, format, kCFStringEncodingUTF8);
-
-#if COMPILER(CLANG)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wformat-nonliteral"
-#endif
-        CFStringRef str = CFStringCreateWithFormatAndArguments(nullptr, nullptr, cfFormat, args);
-#if COMPILER(CLANG)
-#pragma clang diagnostic pop
-#endif
-        CFIndex length = CFStringGetMaximumSizeForEncoding(CFStringGetLength(str), kCFStringEncodingUTF8);
-        char* buffer = (char*)malloc(length + 1);
-
-        CFStringGetCString(str, buffer, length, kCFStringEncodingUTF8);
-
-#if USE(APPLE_SYSTEM_LOG)
-        asl_log(0, 0, ASL_LEVEL_NOTICE, "%s", buffer);
-#endif
-        fputs(buffer, stderr);
-
-        free(buffer);
-        CFRelease(str);
-        CFRelease(cfFormat);
-        return;
-    }
-
-#if USE(APPLE_SYSTEM_LOG)
+#if OS(MACOSX) && USE(APPLE_SYSTEM_LOG)
     va_list copyOfArgs;
     va_copy(copyOfArgs, args);
     asl_vlog(0, 0, ASL_LEVEL_NOTICE, format, copyOfArgs);
     va_end(copyOfArgs);
-#endif
-
-    // Fall through to write to stderr in the same manner as other platforms.
-
 #elif OS(ANDROID)
     __android_log_vprint(ANDROID_LOG_WARN, "WebKit", format, args);
 #elif OS(WIN)
@@ -139,18 +106,6 @@ static void vprintf_stderr_common(const char* format, va_list args)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"
 #endif
-
-static void vprintf_stderr_with_prefix(const char* prefix, const char* format, va_list args)
-{
-    size_t prefixLength = strlen(prefix);
-    size_t formatLength = strlen(format);
-    OwnPtr<char[]> formatWithPrefix = adoptArrayPtr(new char[prefixLength + formatLength + 1]);
-    memcpy(formatWithPrefix.get(), prefix, prefixLength);
-    memcpy(formatWithPrefix.get() + prefixLength, format, formatLength);
-    formatWithPrefix[prefixLength + formatLength] = 0;
-
-    vprintf_stderr_common(formatWithPrefix.get(), args);
-}
 
 static void vprintf_stderr_with_trailing_newline(const char* format, va_list args)
 {
@@ -202,22 +157,6 @@ void WTFReportAssertionFailure(const char* file, int line, const char* function,
     printCallSite(file, line, function);
 }
 
-void WTFReportAssertionFailureWithMessage(const char* file, int line, const char* function, const char* assertion, const char* format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    vprintf_stderr_with_prefix("ASSERTION FAILED: ", format, args);
-    va_end(args);
-    printf_stderr_common("\n%s\n", assertion);
-    printCallSite(file, line, function);
-}
-
-void WTFReportArgumentAssertionFailure(const char* file, int line, const char* function, const char* argName, const char* assertion)
-{
-    printf_stderr_common("ARGUMENT BAD: %s, %s\n", argName, assertion);
-    printCallSite(file, line, function);
-}
-
 void WTFGetBacktrace(void** stack, int* size)
 {
 #if OS(MACOSX) || (OS(LINUX) && !defined(__UCLIBC__))
@@ -254,6 +193,19 @@ void WTFReportBacktrace(int framesToShow)
     WTFPrintBacktrace(samples + framesToSkip, frames - framesToSkip);
 }
 
+namespace {
+
+class FrameToNameScope {
+public:
+    explicit FrameToNameScope(void*);
+    ~FrameToNameScope();
+    const char* nullableName() { return m_name; }
+
+private:
+    const char* m_name;
+    char* m_cxaDemangled;
+};
+
 FrameToNameScope::FrameToNameScope(void* addr)
     : m_name(0)
     , m_cxaDemangled(0)
@@ -277,7 +229,10 @@ FrameToNameScope::~FrameToNameScope()
     free(m_cxaDemangled);
 }
 
-static const char kScopedLoggerIndent[] = "  ";
+} // anonymous namespace
+
+#if !LOG_DISABLED
+namespace WTF {
 
 ScopedLogger::ScopedLogger(bool condition, const char* format, ...)
     : m_parent(condition ? current() : 0)
@@ -326,7 +281,7 @@ void ScopedLogger::indent()
 {
     if (m_parent) {
         m_parent->indent();
-        print(kScopedLoggerIndent);
+        printIndent();
     }
 }
 
@@ -340,7 +295,7 @@ void ScopedLogger::log(const char* format, ...)
 
     writeNewlineIfNeeded();
     indent();
-    print(kScopedLoggerIndent);
+    printIndent();
     m_printFunc(format, args);
     print("\n");
 
@@ -355,6 +310,11 @@ void ScopedLogger::print(const char* format, ...)
     va_end(args);
 }
 
+void ScopedLogger::printIndent()
+{
+    print("  ");
+}
+
 ScopedLogger*& ScopedLogger::current()
 {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<ScopedLogger*>, ref, new ThreadSpecific<ScopedLogger*>);
@@ -362,6 +322,9 @@ ScopedLogger*& ScopedLogger::current()
 }
 
 ScopedLogger::PrintFunctionPtr ScopedLogger::m_printFunc = vprintf_stderr_common;
+
+} // namespace WTF
+#endif // !LOG_DISABLED
 
 void WTFPrintBacktrace(void** stack, int size)
 {
@@ -375,26 +338,6 @@ void WTFPrintBacktrace(void** stack, int size)
     }
 }
 
-void WTFReportFatalError(const char* file, int line, const char* function, const char* format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    vprintf_stderr_with_prefix("FATAL ERROR: ", format, args);
-    va_end(args);
-    printf_stderr_common("\n");
-    printCallSite(file, line, function);
-}
-
-void WTFReportError(const char* file, int line, const char* function, const char* format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    vprintf_stderr_with_prefix("ERROR: ", format, args);
-    va_end(args);
-    printf_stderr_common("\n");
-    printCallSite(file, line, function);
-}
-
 void WTFLog(WTFLogChannel* channel, const char* format, ...)
 {
     if (channel->state != WTFLogChannelOn)
@@ -404,19 +347,6 @@ void WTFLog(WTFLogChannel* channel, const char* format, ...)
     va_start(args, format);
     vprintf_stderr_with_trailing_newline(format, args);
     va_end(args);
-}
-
-void WTFLogVerbose(const char* file, int line, const char* function, WTFLogChannel* channel, const char* format, ...)
-{
-    if (channel->state != WTFLogChannelOn)
-        return;
-
-    va_list args;
-    va_start(args, format);
-    vprintf_stderr_with_trailing_newline(format, args);
-    va_end(args);
-
-    printCallSite(file, line, function);
 }
 
 void WTFLogAlways(const char* format, ...)

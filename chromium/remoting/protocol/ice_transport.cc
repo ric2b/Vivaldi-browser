@@ -29,6 +29,7 @@ IceTransport::IceTransport(scoped_refptr<TransportContext> transport_context,
     : transport_context_(transport_context),
       event_handler_(event_handler),
       weak_factory_(this) {
+  transport_context_->set_relay_mode(TransportContext::RelayMode::GTURN);
   transport_context->Prepare();
 }
 
@@ -102,7 +103,7 @@ void IceTransport::CreateChannel(const std::string& name,
                                  const ChannelCreatedCallback& callback) {
   DCHECK(!channels_[name]);
 
-  scoped_ptr<IceTransportChannel> channel(
+  std::unique_ptr<IceTransportChannel> channel(
       new IceTransportChannel(transport_context_));
   channel->Connect(name, this, callback);
   AddPendingRemoteTransportInfo(channel.get());
@@ -192,7 +193,7 @@ void IceTransport::EnsurePendingTransportInfoMessage() {
 void IceTransport::SendTransportInfo() {
   DCHECK(pending_transport_info_message_);
 
-  scoped_ptr<buzz::XmlElement> transport_info_xml =
+  std::unique_ptr<buzz::XmlElement> transport_info_xml =
       pending_transport_info_message_->ToXml();
   pending_transport_info_message_.reset();
   send_transport_info_callback_.Run(std::move(transport_info_xml));

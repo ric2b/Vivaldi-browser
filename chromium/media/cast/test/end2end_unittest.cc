@@ -26,17 +26,17 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "media/base/audio_bus.h"
+#include "media/base/fake_single_thread_task_runner.h"
 #include "media/base/video_frame.h"
 #include "media/cast/cast_config.h"
 #include "media/cast/cast_environment.h"
 #include "media/cast/cast_receiver.h"
 #include "media/cast/cast_sender.h"
 #include "media/cast/logging/simple_event_subscriber.h"
+#include "media/cast/net/cast_transport.h"
 #include "media/cast/net/cast_transport_config.h"
 #include "media/cast/net/cast_transport_defines.h"
-#include "media/cast/net/cast_transport_sender.h"
-#include "media/cast/net/cast_transport_sender_impl.h"
-#include "media/cast/test/fake_single_thread_task_runner.h"
+#include "media/cast/net/cast_transport_impl.h"
 #include "media/cast/test/skewed_single_thread_task_runner.h"
 #include "media/cast/test/skewed_tick_clock.h"
 #include "media/cast/test/utility/audio_utility.h"
@@ -166,7 +166,7 @@ class LoopBackPacketPipe : public test::PacketPipe {
 // media/cast/test/loopback_transport.*.  It's roughly the same class and has
 // exactly the same name (and when it was outside of the anonymous namespace bad
 // things happened when linking on Android!).
-class LoopBackTransport : public PacketSender {
+class LoopBackTransport : public PacketTransport {
  public:
   explicit LoopBackTransport(scoped_refptr<CastEnvironment> cast_environment)
       : send_packets_(true),
@@ -404,7 +404,7 @@ class End2EndTest : public ::testing::Test {
  protected:
   End2EndTest()
       : start_time_(),
-        task_runner_(new test::FakeSingleThreadTaskRunner(&testing_clock_)),
+        task_runner_(new FakeSingleThreadTaskRunner(&testing_clock_)),
         testing_clock_sender_(new test::SkewedTickClock(&testing_clock_)),
         task_runner_sender_(
             new test::SkewedSingleThreadTaskRunner(task_runner_)),
@@ -840,7 +840,7 @@ class End2EndTest : public ::testing::Test {
 
   // These run in "test time"
   base::SimpleTestTickClock testing_clock_;
-  scoped_refptr<test::FakeSingleThreadTaskRunner> task_runner_;
+  scoped_refptr<FakeSingleThreadTaskRunner> task_runner_;
 
   // These run on the sender timeline.
   test::SkewedTickClock* testing_clock_sender_;
@@ -859,11 +859,11 @@ class End2EndTest : public ::testing::Test {
   scoped_refptr<CastEnvironment> cast_environment_sender_;
   scoped_refptr<CastEnvironment> cast_environment_receiver_;
 
-  LoopBackTransport* receiver_to_sender_;  // Owned by CastTransportSender.
-  LoopBackTransport* sender_to_receiver_;  // Owned by CastTransportSender.
+  LoopBackTransport* receiver_to_sender_;  // Owned by CastTransport.
+  LoopBackTransport* sender_to_receiver_;  // Owned by CastTransport.
 
-  scoped_ptr<CastTransportSenderImpl> transport_sender_;
-  scoped_ptr<CastTransportSenderImpl> transport_receiver_;
+  scoped_ptr<CastTransportImpl> transport_sender_;
+  scoped_ptr<CastTransportImpl> transport_receiver_;
 
   scoped_ptr<CastReceiver> cast_receiver_;
   scoped_ptr<CastSender> cast_sender_;
@@ -886,7 +886,7 @@ class End2EndTest : public ::testing::Test {
 
 namespace {
 
-class TransportClient : public CastTransportSender::Client {
+class TransportClient : public CastTransport::Client {
  public:
   TransportClient(LogEventDispatcher* log_event_dispatcher,
                   End2EndTest* e2e_test)
@@ -918,13 +918,13 @@ class TransportClient : public CastTransportSender::Client {
 }  // namespace
 
 void End2EndTest::Create() {
-  transport_sender_.reset(new CastTransportSenderImpl(
+  transport_sender_.reset(new CastTransportImpl(
       testing_clock_sender_, base::TimeDelta::FromMilliseconds(1),
       make_scoped_ptr(
           new TransportClient(cast_environment_sender_->logger(), nullptr)),
       make_scoped_ptr(sender_to_receiver_), task_runner_sender_));
 
-  transport_receiver_.reset(new CastTransportSenderImpl(
+  transport_receiver_.reset(new CastTransportImpl(
       testing_clock_sender_, base::TimeDelta::FromMilliseconds(1),
       make_scoped_ptr(
           new TransportClient(cast_environment_receiver_->logger(), this)),

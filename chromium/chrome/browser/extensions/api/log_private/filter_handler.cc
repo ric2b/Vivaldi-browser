@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/api/log_private/filter_handler.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -23,7 +24,7 @@ bool IsValidField(const std::vector<T>& filter, const T& field) {
 }  // namespace
 
 FilterHandler::FilterHandler(const api::log_private::Filter& filter) {
-  scoped_ptr<base::DictionaryValue> filter_value = filter.ToValue();
+  std::unique_ptr<base::DictionaryValue> filter_value = filter.ToValue();
   api::log_private::Filter::Populate(*filter_value, &filter_);
 }
 

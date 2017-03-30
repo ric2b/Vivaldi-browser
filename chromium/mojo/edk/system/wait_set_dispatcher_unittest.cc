@@ -14,9 +14,9 @@
 #include "mojo/edk/embedder/embedder_internal.h"
 #include "mojo/edk/system/core.h"
 #include "mojo/edk/system/message_pipe_dispatcher.h"
+#include "mojo/edk/system/request_context.h"
 #include "mojo/edk/system/test_utils.h"
 #include "mojo/edk/system/waiter.h"
-#include "mojo/public/cpp/system/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace mojo {
@@ -79,6 +79,10 @@ class WaitSetDispatcherTest : public ::testing::Test {
   scoped_refptr<MessagePipeDispatcher> dispatcher1_;
 
  private:
+  // We keep an active RequestContext for the duration of each test. It's unused
+  // since these tests don't rely on the MojoWatch API.
+  const RequestContext request_context_;
+
   static uint64_t pipe_id_generator_;
   DispatcherVector dispatchers_to_close_;
 

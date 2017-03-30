@@ -29,6 +29,7 @@
 #include "modules/accessibility/AXObjectCacheImpl.h"
 
 #include "core/HTMLNames.h"
+#include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -47,6 +48,7 @@
 #include "core/layout/LayoutTableCell.h"
 #include "core/layout/LayoutTableRow.h"
 #include "core/layout/LayoutView.h"
+#include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/layout/line/AbstractInlineTextBox.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/FocusController.h"
@@ -65,6 +67,7 @@
 #include "modules/accessibility/AXMenuListOption.h"
 #include "modules/accessibility/AXMenuListPopup.h"
 #include "modules/accessibility/AXProgressIndicator.h"
+#include "modules/accessibility/AXRadioInput.h"
 #include "modules/accessibility/AXSVGRoot.h"
 #include "modules/accessibility/AXSlider.h"
 #include "modules/accessibility/AXSpinButton.h"
@@ -154,28 +157,19 @@ AXObject* AXObjectCacheImpl::focusedObject()
     if (!accessibilityEnabled())
         return 0;
 
-    // We don't have to return anything if the focused frame is not local;
-    // the remote frame will have its own AXObjectCacheImpl and the focused
-    // object will be sorted out by the browser process.
-    Page* page = m_document->page();
-    if (!page->focusController().focusedFrame())
-        return 0;
-
-    // Get the focused node in the page.
-    Document* focusedDocument = page->focusController().focusedFrame()->document();
-    Node* focusedNode = focusedDocument->focusedElement();
+    Node* focusedNode = m_document->focusedElement();
     if (!focusedNode)
-        focusedNode = focusedDocument;
+        focusedNode = m_document;
 
     // If it's an image map, get the focused link within the image map.
     if (isHTMLAreaElement(focusedNode))
         return focusedImageMapUIElement(toHTMLAreaElement(focusedNode));
 
     // See if there's a page popup, for example a calendar picker.
-    Element* adjustedFocusedElement = focusedDocument->adjustedFocusedElement();
+    Element* adjustedFocusedElement = m_document->adjustedFocusedElement();
     if (isHTMLInputElement(adjustedFocusedElement)) {
         if (AXObject* axPopup = toHTMLInputElement(adjustedFocusedElement)->popupRootAXObject()) {
-            if (Element* focusedElementInPopup = axPopup->document()->focusedElement())
+            if (Element* focusedElementInPopup = axPopup->getDocument()->focusedElement())
                 focusedNode = focusedElementInPopup;
         }
 
@@ -304,6 +298,9 @@ AXObject* AXObjectCacheImpl::createFromRenderer(LayoutObject* layoutObject)
 
     if (isHTMLOptionElement(node))
         return AXListBoxOption::create(layoutObject, *this);
+
+    if (isHTMLInputElement(node) && toHTMLInputElement(node)->type() == InputTypeNames::radio)
+        return AXRadioInput::create(layoutObject, *this);
 
     if (layoutObject->isSVGRoot())
         return AXSVGRoot::create(layoutObject, *this);
@@ -656,8 +653,6 @@ void AXObjectCacheImpl::childrenChanged(AXObject* obj)
 
 void AXObjectCacheImpl::notificationPostTimerFired(Timer<AXObjectCacheImpl>*)
 {
-    RefPtrWillBeRawPtr<Document> protectorForCacheOwner(m_document.get());
-
     m_notificationPostTimer.stop();
 
     unsigned i = 0, count = m_notificationsToPost.size();
@@ -675,7 +670,7 @@ void AXObjectCacheImpl::notificationPostTimerFired(Timer<AXObjectCacheImpl>*)
         // Notifications should only be sent after the layoutObject has finished
         if (obj->isAXLayoutObject()) {
             AXLayoutObject* layoutObj = toAXLayoutObject(obj);
-            LayoutObject* layoutObject = layoutObj->layoutObject();
+            LayoutObject* layoutObject = layoutObj->getLayoutObject();
             if (layoutObject && layoutObject->view())
                 ASSERT(!layoutObject->view()->layoutState());
         }
@@ -773,7 +768,7 @@ void AXObjectCacheImpl::updateAriaOwns(const AXObject* owner, const Vector<Strin
     //
 
     // Figure out the children that are owned by this object and are in the tree.
-    TreeScope& scope = owner->node()->treeScope();
+    TreeScope& scope = owner->getNode()->treeScope();
     Vector<AXID> newChildAXIDs;
     for (const String& idName : idVector) {
         Element* element = scope.getElementById(AtomicString(idName));
@@ -932,6 +927,24 @@ void AXObjectCacheImpl::listboxActiveIndexChanged(HTMLSelectElement* select)
     toAXListBox(obj)->activeIndexChanged();
 }
 
+void AXObjectCacheImpl::radiobuttonRemovedFromGroup(HTMLInputElement* groupMember)
+{
+    AXObject* obj = get(groupMember);
+    if (!obj || !obj->isAXRadioInput())
+        return;
+
+    // The 'posInSet' and 'setSize' attributes should be updated from the first node,
+    // as the removed node is already detached from tree.
+    HTMLInputElement* firstRadio = toAXRadioInput(obj)->findFirstRadioButtonInGroup(groupMember);
+    AXObject* firstObj = get(firstRadio);
+    if (!firstObj || !firstObj->isAXRadioInput())
+        return;
+
+    toAXRadioInput(firstObj)->updatePosAndSetSize(1);
+    postNotification(firstObj, AXAriaAttributeChanged);
+    toAXRadioInput(firstObj)->requestUpdateToNextNode(true);
+}
+
 void AXObjectCacheImpl::handleLayoutComplete(LayoutObject* layoutObject)
 {
     if (!layoutObject)
@@ -1027,10 +1040,12 @@ void AXObjectCacheImpl::labelChanged(Element* element)
     textChanged(toHTMLLabelElement(element)->control());
 }
 
-void AXObjectCacheImpl::inlineTextBoxesUpdated(LayoutObject* layoutObject)
+void AXObjectCacheImpl::inlineTextBoxesUpdated(LineLayoutItem lineLayoutItem)
 {
     if (!inlineTextBoxAccessibilityEnabled())
         return;
+
+    LayoutObject* layoutObject = LineLayoutAPIShim::layoutObjectFrom(lineLayoutItem);
 
     // Only update if the accessibility object already exists and it's
     // not already marked as dirty.
@@ -1119,17 +1134,17 @@ bool isNodeAriaVisible(Node* node)
 
 void AXObjectCacheImpl::postPlatformNotification(AXObject* obj, AXNotification notification)
 {
-    if (!obj || !obj->document() || !obj->documentFrameView() || !obj->documentFrameView()->frame().page())
+    if (!obj || !obj->getDocument() || !obj->documentFrameView() || !obj->documentFrameView()->frame().page())
         return;
 
-    ChromeClient& client = obj->document()->axObjectCacheOwner().page()->chromeClient();
+    ChromeClient& client = obj->getDocument()->axObjectCacheOwner().page()->chromeClient();
 
     if (notification == AXActiveDescendantChanged
-        && obj->document()->focusedElement()
-        && obj->node() == obj->document()->focusedElement()) {
+        && obj->getDocument()->focusedElement()
+        && obj->getNode() == obj->getDocument()->focusedElement()) {
         // Calling handleFocusedUIElementChanged will focus the new active
         // descendant and send the AXFocusedUIElementChanged notification.
-        handleFocusedUIElementChanged(0, obj->document()->focusedElement());
+        handleFocusedUIElementChanged(0, obj->getDocument()->focusedElement());
     }
 
     client.postAccessibilityNotification(obj, notification);
@@ -1267,10 +1282,8 @@ void AXObjectCacheImpl::setCanvasObjectBounds(Element* element, const LayoutRect
 
 DEFINE_TRACE(AXObjectCacheImpl)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_document);
     visitor->trace(m_nodeObjectMapping);
-#endif
 
     visitor->trace(m_objects);
     visitor->trace(m_notificationsToPost);

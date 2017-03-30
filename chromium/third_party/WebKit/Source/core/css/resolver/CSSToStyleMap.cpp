@@ -222,7 +222,7 @@ void CSSToStyleMap::mapFillXPosition(StyleResolverState& state, FillLayer* layer
     if (value.isValuePair())
         length = toCSSPrimitiveValue(toCSSValuePair(value).second()).convertToLength(state.cssToLengthConversionData());
     else
-        length = toCSSPrimitiveValue(value).convertToLength(state.cssToLengthConversionData());
+        length = StyleBuilderConverter::convertPositionLength<CSSValueLeft, CSSValueRight>(state, toCSSPrimitiveValue(value));
 
     layer->setXPosition(length);
     if (value.isValuePair())
@@ -243,7 +243,7 @@ void CSSToStyleMap::mapFillYPosition(StyleResolverState& state, FillLayer* layer
     if (value.isValuePair())
         length = toCSSPrimitiveValue(toCSSValuePair(value).second()).convertToLength(state.cssToLengthConversionData());
     else
-        length = toCSSPrimitiveValue(value).convertToLength(state.cssToLengthConversionData());
+        length = StyleBuilderConverter::convertPositionLength<CSSValueTop, CSSValueBottom>(state, toCSSPrimitiveValue(value));
 
     layer->setYPosition(length);
     if (value.isValuePair())
@@ -418,9 +418,9 @@ PassRefPtr<TimingFunction> CSSToStyleMap::mapAnimationTimingFunction(const CSSVa
         return CSSTimingData::initialTimingFunction();
 
     const CSSStepsTimingFunctionValue& stepsTimingFunction = toCSSStepsTimingFunctionValue(value);
-    if (stepsTimingFunction.stepAtPosition() == StepsTimingFunction::Middle && !allowStepMiddle)
+    if (stepsTimingFunction.getStepAtPosition() == StepsTimingFunction::Middle && !allowStepMiddle)
         return CSSTimingData::initialTimingFunction();
-    return StepsTimingFunction::create(stepsTimingFunction.numberOfSteps(), stepsTimingFunction.stepAtPosition());
+    return StepsTimingFunction::create(stepsTimingFunction.numberOfSteps(), stepsTimingFunction.getStepAtPosition());
 }
 
 void CSSToStyleMap::mapNinePieceImage(StyleResolverState& state, CSSPropertyID property, const CSSValue& value, NinePieceImage& image)
@@ -500,15 +500,15 @@ void CSSToStyleMap::mapNinePieceImageSlice(StyleResolverState&, const CSSValue& 
 
     // Set up a length box to represent our image slices.
     LengthBox box;
-    CSSQuadValue* slices = borderImageSlice.slices();
-    box.m_top = convertBorderImageSliceSide(*slices->top());
-    box.m_bottom = convertBorderImageSliceSide(*slices->bottom());
-    box.m_left = convertBorderImageSliceSide(*slices->left());
-    box.m_right = convertBorderImageSliceSide(*slices->right());
+    const CSSQuadValue& slices = borderImageSlice.slices();
+    box.m_top = convertBorderImageSliceSide(*slices.top());
+    box.m_bottom = convertBorderImageSliceSide(*slices.bottom());
+    box.m_left = convertBorderImageSliceSide(*slices.left());
+    box.m_right = convertBorderImageSliceSide(*slices.right());
     image.setImageSlices(box);
 
     // Set our fill mode.
-    image.setFill(borderImageSlice.m_fill);
+    image.setFill(borderImageSlice.fill());
 }
 
 static BorderImageLength toBorderImageLength(CSSPrimitiveValue& value, const CSSToLengthConversionData& conversionData)

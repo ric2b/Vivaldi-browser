@@ -39,11 +39,10 @@ class FrameSelection;
 class HitTestResult;
 class LocalFrame;
 
-class SelectionController final : public NoBaseWillBeGarbageCollected<SelectionController> {
+class SelectionController final : public GarbageCollected<SelectionController> {
     WTF_MAKE_NONCOPYABLE(SelectionController);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(SelectionController);
 public:
-    static PassOwnPtrWillBeRawPtr<SelectionController> create(LocalFrame&);
+    static RawPtr<SelectionController> create(LocalFrame&);
     DECLARE_TRACE();
 
     void handleMousePressEvent(const MouseEventWithHitTestResults&);
@@ -65,13 +64,15 @@ public:
     bool mouseDownMayStartSelect() const;
     bool mouseDownWasSingleClickInSelection() const;
     void notifySelectionChanged();
+    bool hasExtendedSelection() const { return m_selectionState == SelectionState::ExtendedSelection; }
 
 private:
     explicit SelectionController(LocalFrame&);
 
     enum class AppendTrailingWhitespace { ShouldAppend, DontAppend };
+    enum class SelectInputEventType { GestureLongPress, Mouse };
 
-    void selectClosestWordFromHitTestResult(const HitTestResult&, AppendTrailingWhitespace);
+    void selectClosestWordFromHitTestResult(const HitTestResult&, AppendTrailingWhitespace, SelectInputEventType);
     void selectClosestMisspellingFromHitTestResult(const HitTestResult&, AppendTrailingWhitespace);
     void selectClosestWordFromMouseEvent(const MouseEventWithHitTestResults&);
     void selectClosestMisspellingFromMouseEvent(const MouseEventWithHitTestResults&);
@@ -80,13 +81,15 @@ private:
 
     FrameSelection& selection() const;
 
-    RawPtrWillBeMember<LocalFrame> const m_frame;
+    Member<LocalFrame> const m_frame;
     bool m_mouseDownMayStartSelect;
     bool m_mouseDownWasSingleClickInSelection;
     bool m_mouseDownAllowsMultiClick;
     enum class SelectionState { HaveNotStartedSelection, PlacedCaret, ExtendedSelection };
     SelectionState m_selectionState;
 };
+
+bool isLinkSelection(const MouseEventWithHitTestResults&);
 
 } // namespace blink
 

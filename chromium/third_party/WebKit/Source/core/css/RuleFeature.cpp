@@ -326,8 +326,7 @@ InvalidationSet* RuleFeatureSet::invalidationSetForSelector(const CSSSelector& s
         case CSSSelector::PseudoActive:
         case CSSSelector::PseudoChecked:
         case CSSSelector::PseudoEnabled:
-        // TODO(rune@opera.com): crbug.com/557683 :default is currently not updated dynamically.
-        // case CSSSelector::Default:
+        case CSSSelector::PseudoDefault:
         case CSSSelector::PseudoDisabled:
         case CSSSelector::PseudoOptional:
         case CSSSelector::PseudoPlaceholderShown:
@@ -339,6 +338,8 @@ InvalidationSet* RuleFeatureSet::invalidationSetForSelector(const CSSSelector& s
         case CSSSelector::PseudoIndeterminate:
         case CSSSelector::PseudoTarget:
         case CSSSelector::PseudoLang:
+        case CSSSelector::PseudoFullScreen:
+        case CSSSelector::PseudoFullScreenAncestor:
         case CSSSelector::PseudoInRange:
         case CSSSelector::PseudoOutOfRange:
         case CSSSelector::PseudoUnresolved:
@@ -781,10 +782,8 @@ void RuleFeatureSet::collectInvalidationSetsForPseudoClass(InvalidationLists& in
 
 DEFINE_TRACE(RuleFeatureSet)
 {
-#if ENABLE(OILPAN)
     visitor->trace(siblingRules);
     visitor->trace(uncommonAttributeRules);
-#endif
 }
 
 } // namespace blink

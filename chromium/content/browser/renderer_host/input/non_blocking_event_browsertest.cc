@@ -33,6 +33,11 @@ using blink::WebInputEvent;
 
 namespace {
 
+// This value has to be larger than the height of the device this test is
+// executed on, otherwise the device will be unable to scroll thus failing
+// tests.
+const int kWebsiteHeight = 10000;
+
 const char kNonBlockingEventDataURL[] =
     "data:text/html;charset=utf-8,"
     "<!DOCTYPE html>"
@@ -41,7 +46,7 @@ const char kNonBlockingEventDataURL[] =
     "html, body {"
     "  margin: 0;"
     "}"
-    ".spacer { height: 1000px; }"
+    ".spacer { height: 10000px; }"
     "</style>"
     "<div class=spacer></div>"
     "<script>"
@@ -49,6 +54,24 @@ const char kNonBlockingEventDataURL[] =
     "{'passive': true});"
     "  document.addEventListener('touchstart', function(e) { while(true) {} }, "
     "{'passive': true});"
+    "  document.title='ready';"
+    "</script>";
+
+const char kPassiveTouchStartBlockingTouchEndDataURL[] =
+    "data:text/html;charset=utf-8,"
+    "<!DOCTYPE html>"
+    "<meta name='viewport' content='width=device-width'/>"
+    "<style>"
+    "html, body {"
+    "  margin: 0;"
+    "}"
+    ".spacer { height: 10000px; }"
+    "</style>"
+    "<div class=spacer></div>"
+    "<script>"
+    "  document.addEventListener('touchstart', function(e) { while(true) {} }, "
+    "{'passive': true});"
+    "  document.addEventListener('touchend', function(e) { while(true) {} });"
     "  document.title='ready';"
     "</script>";
 
@@ -71,8 +94,8 @@ class NonBlockingEventBrowserTest : public ContentBrowserTest {
   }
 
  protected:
-  void LoadURL() {
-    const GURL data_url(kNonBlockingEventDataURL);
+  void LoadURL(const char* page_data) {
+    const GURL data_url(page_data);
     NavigateToURL(shell(), data_url);
 
     RenderWidgetHostImpl* host = GetWidgetHost();
@@ -110,10 +133,10 @@ class NonBlockingEventBrowserTest : public ContentBrowserTest {
 
     int scrollHeight =
         ExecuteScriptAndExtractInt("document.documentElement.scrollHeight");
-    EXPECT_EQ(1000, scrollHeight);
+    EXPECT_EQ(kWebsiteHeight, scrollHeight);
 
     scoped_refptr<FrameWatcher> frame_watcher(new FrameWatcher());
-    GetWidgetHost()->GetProcess()->AddFilter(frame_watcher.get());
+    frame_watcher->AttachTo(shell()->web_contents());
     scoped_refptr<InputMsgWatcher> input_msg_watcher(
         new InputMsgWatcher(GetWidgetHost(), blink::WebInputEvent::MouseWheel));
 
@@ -123,11 +146,11 @@ class NonBlockingEventBrowserTest : public ContentBrowserTest {
     // Runs until we get the InputMsgAck callback
     EXPECT_EQ(INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING,
               input_msg_watcher->WaitForAck());
-    frame_watcher->WaitFrames(1);
 
     // Expect that the compositor scrolled at least one pixel while the
     // main thread was in a busy loop.
-    EXPECT_LT(0, frame_watcher->LastMetadata().root_scroll_offset.y());
+    while (frame_watcher->LastMetadata().root_scroll_offset.y() <= 0)
+      frame_watcher->WaitFrames(1);
   }
 
   void DoTouchScroll() {
@@ -135,10 +158,10 @@ class NonBlockingEventBrowserTest : public ContentBrowserTest {
 
     int scrollHeight =
         ExecuteScriptAndExtractInt("document.documentElement.scrollHeight");
-    EXPECT_EQ(1000, scrollHeight);
+    EXPECT_EQ(kWebsiteHeight, scrollHeight);
 
     scoped_refptr<FrameWatcher> frame_watcher(new FrameWatcher());
-    GetWidgetHost()->GetProcess()->AddFilter(frame_watcher.get());
+    frame_watcher->AttachTo(shell()->web_contents());
 
     SyntheticSmoothScrollGestureParams params;
     params.gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
@@ -162,20 +185,8 @@ class NonBlockingEventBrowserTest : public ContentBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(NonBlockingEventBrowserTest);
 };
 
-// Disabled on MacOS because it doesn't support wheel gestures
-// just yet.
-#if defined(OS_MACOSX)
-#define MAYBE_MouseWheel DISABLED_MouseWheel
-#else
-// Also appears to be flaky under TSan. crbug.com/588199
-#if defined(THREAD_SANITIZER)
-#define MAYBE_MouseWheel DISABLED_MouseWheel
-#else
-#define MAYBE_MouseWheel MouseWheel
-#endif
-#endif
-IN_PROC_BROWSER_TEST_F(NonBlockingEventBrowserTest, MAYBE_MouseWheel) {
-  LoadURL();
+IN_PROC_BROWSER_TEST_F(NonBlockingEventBrowserTest, MouseWheel) {
+  LoadURL(kNonBlockingEventDataURL);
   DoWheelScroll();
 }
 
@@ -186,7 +197,21 @@ IN_PROC_BROWSER_TEST_F(NonBlockingEventBrowserTest, MAYBE_MouseWheel) {
 #define MAYBE_TouchStart TouchStart
 #endif
 IN_PROC_BROWSER_TEST_F(NonBlockingEventBrowserTest, MAYBE_TouchStart) {
-  LoadURL();
+  LoadURL(kNonBlockingEventDataURL);
+  DoTouchScroll();
+}
+
+// Disabled on MacOS because it doesn't support touch input.
+#if defined(OS_MACOSX)
+#define MAYBE_PassiveTouchStartBlockingTouchEnd \
+  DISABLED_PassiveTouchStartBlockingTouchEnd
+#else
+#define MAYBE_PassiveTouchStartBlockingTouchEnd \
+  PassiveTouchStartBlockingTouchEnd
+#endif
+IN_PROC_BROWSER_TEST_F(NonBlockingEventBrowserTest,
+                       MAYBE_PassiveTouchStartBlockingTouchEnd) {
+  LoadURL(kPassiveTouchStartBlockingTouchEndDataURL);
   DoTouchScroll();
 }
 

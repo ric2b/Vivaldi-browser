@@ -5,37 +5,16 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_MD_SETTINGS_UI_H_
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_MD_SETTINGS_UI_H_
 
-#include <string>
-#include <vector>
+#include <unordered_set>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
-#include "base/values.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui_controller.h"
-#include "content/public/browser/web_ui_message_handler.h"
 
 namespace settings {
 
-// The base class handler of Javascript messages of settings pages.
-class SettingsPageUIHandler : public content::WebUIMessageHandler {
- public:
-  SettingsPageUIHandler();
-  ~SettingsPageUIHandler() override;
-
-  // WebUIMessageHandler implementation.
-  void RegisterMessages() override {}
-
- protected:
-  // Helper method for responding to JS requests initiated with
-  // cr.sendWithPromise().
-  void CallJavascriptCallback(const base::Value& callback_id,
-                              const base::Value& response);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SettingsPageUIHandler);
-};
+class SettingsPageUIHandler;
 
 // The WebUI handler for chrome://md-settings.
 class MdSettingsUI : public content::WebUIController,
@@ -44,7 +23,10 @@ class MdSettingsUI : public content::WebUIController,
   explicit MdSettingsUI(content::WebUI* web_ui);
   ~MdSettingsUI() override;
 
-  // Overridden from content::WebContentsObserver:
+  // content::WebUIController:
+  void RenderViewReused(content::RenderViewHost* render_view_host) override;
+
+  // content::WebContentsObserver:
   void DidStartProvisionalLoadForFrame(
       content::RenderFrameHost* render_frame_host,
       const GURL& validated_url,
@@ -55,7 +37,10 @@ class MdSettingsUI : public content::WebUIController,
   void DocumentOnLoadCompletedInMainFrame() override;
 
  private:
-  void AddSettingsPageUIHandler(content::WebUIMessageHandler* handler);
+  void AddSettingsPageUIHandler(SettingsPageUIHandler* handler);
+
+  // Weak references; all |handlers_| are owned by |web_ui()|.
+  std::unordered_set<SettingsPageUIHandler*> handlers_;
 
   base::Time load_start_time_;
 

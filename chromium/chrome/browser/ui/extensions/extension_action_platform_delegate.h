@@ -19,7 +19,7 @@ class ExtensionActionPlatformDelegate {
 
   // Returns a created ExtensionActionPlatformDelegate. This is defined in the
   // platform-specific implementation for the class.
-  static scoped_ptr<ExtensionActionPlatformDelegate> Create(
+  static std::unique_ptr<ExtensionActionPlatformDelegate> Create(
       ExtensionActionViewController* controller);
 
   // The following are forwarded from ToolbarActionViewController. See that
@@ -33,12 +33,15 @@ class ExtensionActionPlatformDelegate {
   // permissions should be given to the extension; this is only true if the
   // popup is opened through a user action.
   virtual void ShowPopup(
-      scoped_ptr<extensions::ExtensionViewHost> host,
+      std::unique_ptr<extensions::ExtensionViewHost> host,
       bool grant_tab_permissions,
       ExtensionActionViewController::PopupShowAction show_action) = 0;
 
   // Closes the overflow menu, if it was open.
   virtual void CloseOverflowMenu() = 0;
+
+  // Shows the context menu for the extension.
+  virtual void ShowContextMenu() = 0;
 };
 
 #endif  // CHROME_BROWSER_UI_EXTENSIONS_EXTENSION_ACTION_PLATFORM_DELEGATE_H_

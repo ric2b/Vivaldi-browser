@@ -8,6 +8,7 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/search_engines/util.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -20,7 +21,6 @@
 #include "ui/views/widget/widget.h"
 
 namespace {
-const int kAnchorVerticalInset = 5;
 const int kTopInset = 1;
 const int kLeftInset = 2;
 const int kBottomInset = 7;
@@ -33,7 +33,7 @@ FirstRunBubble* FirstRunBubble::ShowBubble(Browser* browser,
   first_run::LogFirstRunMetric(first_run::FIRST_RUN_BUBBLE_SHOWN);
 
   FirstRunBubble* delegate = new FirstRunBubble(browser, anchor_view);
-  views::BubbleDelegateView::CreateBubble(delegate)->ShowInactive();
+  views::BubbleDialogDelegateView::CreateBubble(delegate)->ShowInactive();
   return delegate;
 }
 
@@ -80,12 +80,17 @@ void FirstRunBubble::Init() {
 }
 
 FirstRunBubble::FirstRunBubble(Browser* browser, views::View* anchor_view)
-    : views::BubbleDelegateView(anchor_view, views::BubbleBorder::TOP_LEFT),
+    : views::BubbleDialogDelegateView(anchor_view,
+                                      views::BubbleBorder::TOP_LEFT),
       browser_(browser),
       bubble_closer_(this, anchor_view) {
   // Compensate for built-in vertical padding in the anchor view's image.
-  set_anchor_view_insets(
-      gfx::Insets(kAnchorVerticalInset, 0, kAnchorVerticalInset, 0));
+  set_anchor_view_insets(gfx::Insets(
+      GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
+}
+
+int FirstRunBubble::GetDialogButtons() const {
+  return ui::DIALOG_BUTTON_NONE;
 }
 
 FirstRunBubble::~FirstRunBubble() {

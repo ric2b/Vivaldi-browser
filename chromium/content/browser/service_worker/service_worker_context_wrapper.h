@@ -111,11 +111,13 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   void StopAllServiceWorkersForOrigin(const GURL& origin) override;
   void ClearAllServiceWorkersForTest(const base::Closure& callback) override;
 
+  // These methods must only be called from the IO thread.
   ServiceWorkerRegistration* GetLiveRegistration(int64_t registration_id);
   ServiceWorkerVersion* GetLiveVersion(int64_t version_id);
   std::vector<ServiceWorkerRegistrationInfo> GetAllLiveRegistrationInfo();
   std::vector<ServiceWorkerVersionInfo> GetAllLiveVersionInfo();
 
+  // Must be called from the IO thread.
   void HasMainFrameProviderHost(const GURL& origin,
                                 const BoolCallback& callback) const;
 
@@ -128,6 +130,8 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   //  - If the registration does not have the active version but has the waiting
   //    version, activates the waiting version and runs |callback| when it is
   //    activated.
+  //
+  // Must be called from the IO thread.
   void FindReadyRegistrationForDocument(
       const GURL& document_url,
       const FindRegistrationCallback& callback);
@@ -141,10 +145,13 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   //  - If the registration does not have the active version but has the waiting
   //    version, activates the waiting version and runs |callback| when it is
   //    activated.
+  //
+  // Must be called from the IO thread.
   void FindReadyRegistrationForId(int64_t registration_id,
                                   const GURL& origin,
                                   const FindRegistrationCallback& callback);
 
+  // All these methods must be called from the IO thread.
   void GetAllRegistrations(const GetRegistrationsInfosCallback& callback);
   void GetRegistrationUserData(int64_t registration_id,
                                const std::string& key,
@@ -161,15 +168,19 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       const std::string& key,
       const GetUserDataForAllRegistrationsCallback& callback);
 
+  // This function can be called from any thread, but the callback will always
+  // be called on the UI thread.
   void StartServiceWorker(const GURL& pattern, const StatusCallback& callback);
+
+  // These methods can be called from any thread.
   void UpdateRegistration(const GURL& pattern);
-  void SetForceUpdateOnPageLoad(int64_t registration_id,
-                                bool force_update_on_page_load);
+  void SetForceUpdateOnPageLoad(bool force_update_on_page_load);
   void AddObserver(ServiceWorkerContextObserver* observer);
   void RemoveObserver(ServiceWorkerContextObserver* observer);
 
   bool is_incognito() const { return is_incognito_; }
 
+  // Must be called from the IO thread.
   bool OriginHasForeignFetchRegistrations(const GURL& origin);
 
  private:

@@ -47,17 +47,17 @@ class Document;
 class LayoutListItem;
 class LayoutListMarker;
 class LayoutBlock;
+class SubtreeLayoutScope;
 
 // Single-pass text autosizer. Documentation at:
 // http://tinyurl.com/TextAutosizer
 
-class CORE_EXPORT TextAutosizer final : public NoBaseWillBeGarbageCollectedFinalized<TextAutosizer> {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(TextAutosizer);
+class CORE_EXPORT TextAutosizer final : public GarbageCollectedFinalized<TextAutosizer> {
     WTF_MAKE_NONCOPYABLE(TextAutosizer);
 public:
-    static PassOwnPtrWillBeRawPtr<TextAutosizer> create(const Document* document)
+    static TextAutosizer* create(const Document* document)
     {
-        return adoptPtrWillBeNoop(new TextAutosizer(document));
+        return new TextAutosizer(document);
     }
     static float computeAutosizedFontSize(float specifiedSize, float multiplier);
 
@@ -73,10 +73,12 @@ public:
     class LayoutScope {
         STACK_ALLOCATED();
     public:
-        explicit LayoutScope(LayoutBlock*);
+        // TODO(kojii): SubtreeLayoutScope should not be optional once all
+        // callers are fixed.
+        explicit LayoutScope(LayoutBlock*, SubtreeLayoutScope* = nullptr);
         ~LayoutScope();
     protected:
-        RawPtrWillBeMember<TextAutosizer> m_textAutosizer;
+        Member<TextAutosizer> m_textAutosizer;
         LayoutBlock* m_block;
     };
 
@@ -92,7 +94,7 @@ public:
         explicit DeferUpdatePageInfo(Page*);
         ~DeferUpdatePageInfo();
     private:
-        RefPtrWillBeMember<LocalFrame> m_mainFrame;
+        Member<LocalFrame> m_mainFrame;
     };
 
 private:
@@ -262,10 +264,10 @@ private:
 
     explicit TextAutosizer(const Document*);
 
-    void beginLayout(LayoutBlock*);
+    void beginLayout(LayoutBlock*, SubtreeLayoutScope*);
     void endLayout(LayoutBlock*);
     void inflateAutoTable(LayoutTable*);
-    float inflate(LayoutObject*, InflateBehavior = ThisBlockOnly, float multiplier = 0);
+    float inflate(LayoutObject*, SubtreeLayoutScope*, InflateBehavior = ThisBlockOnly, float multiplier = 0);
     bool shouldHandleLayout() const;
     IntSize windowSize() const;
     void setAllTextNeedsLayout();
@@ -290,7 +292,7 @@ private:
     // block's width otherwise.
     float widthFromBlock(const LayoutBlock*) const;
     float multiplierFromBlock(const LayoutBlock*);
-    void applyMultiplier(LayoutObject*, float, RelayoutBehavior = AlreadyInLayout);
+    void applyMultiplier(LayoutObject*, float, SubtreeLayoutScope*, RelayoutBehavior = AlreadyInLayout);
     bool isWiderOrNarrowerDescendant(Cluster*);
     Cluster* currentCluster() const;
     const LayoutBlock* deepestBlockContainingAllText(Cluster*);
@@ -304,7 +306,7 @@ private:
     void writeClusterDebugInfo(Cluster*);
 #endif
 
-    RawPtrWillBeMember<const Document> m_document;
+    Member<const Document> m_document;
     const LayoutBlock* m_firstBlockToBeginLayout;
 #if ENABLE(ASSERT)
     BlockSet m_blocksThatHaveBegunLayout; // Used to ensure we don't compute properties of a block before beginLayout() is called on it.

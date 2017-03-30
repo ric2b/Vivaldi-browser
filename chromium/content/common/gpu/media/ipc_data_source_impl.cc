@@ -8,6 +8,7 @@
 
 #include <algorithm>
 
+#include "base/memory/scoped_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "content/common/media/media_pipeline_messages.h"
 #include "ipc/ipc_sender.h"

@@ -34,12 +34,12 @@
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<CustomElementCallbackQueue> CustomElementCallbackQueue::create(PassRefPtrWillBeRawPtr<Element> element)
+RawPtr<CustomElementCallbackQueue> CustomElementCallbackQueue::create(RawPtr<Element> element)
 {
-    return adoptPtrWillBeNoop(new CustomElementCallbackQueue(element));
+    return new CustomElementCallbackQueue(element);
 }
 
-CustomElementCallbackQueue::CustomElementCallbackQueue(PassRefPtrWillBeRawPtr<Element> element)
+CustomElementCallbackQueue::CustomElementCallbackQueue(RawPtr<Element> element)
     : m_element(element)
     , m_owner(-1)
     , m_index(0)
@@ -49,7 +49,7 @@ CustomElementCallbackQueue::CustomElementCallbackQueue(PassRefPtrWillBeRawPtr<El
 
 bool CustomElementCallbackQueue::processInElementQueue(ElementQueueId caller)
 {
-    ASSERT(!m_inCreatedCallback);
+    DCHECK(!m_inCreatedCallback);
     bool didWork = false;
 
     // Never run custom element callbacks in UA shadow roots since that would

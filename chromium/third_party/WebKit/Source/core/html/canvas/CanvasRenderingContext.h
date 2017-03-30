@@ -28,7 +28,6 @@
 
 #include "core/CoreExport.h"
 #include "core/html/HTMLCanvasElement.h"
-#include "platform/heap/Handle.h"
 #include "wtf/HashSet.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/text/StringHash.h"
@@ -43,9 +42,8 @@ class CanvasImageSource;
 class HTMLCanvasElement;
 class ImageData;
 
-class CORE_EXPORT CanvasRenderingContext : public NoBaseWillBeGarbageCollectedFinalized<CanvasRenderingContext>, public ScriptWrappable {
+class CORE_EXPORT CanvasRenderingContext : public GarbageCollectedFinalized<CanvasRenderingContext>, public ScriptWrappable {
     WTF_MAKE_NONCOPYABLE(CanvasRenderingContext);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(CanvasRenderingContext);
 public:
     virtual ~CanvasRenderingContext() { }
 
@@ -73,11 +71,12 @@ public:
 
     HTMLCanvasElement* canvas() const { return m_canvas; }
 
-    virtual ContextType contextType() const = 0;
+    virtual ContextType getContextType() const = 0;
     virtual bool isAccelerated() const { return false; }
     virtual bool hasAlpha() const { return true; }
     virtual void setIsHidden(bool) = 0;
     virtual bool isContextLost() const { return true; }
+    virtual void setCanvasGetContextResult(RenderingContext&) = 0;
 
     // Return true if the content is updated.
     virtual bool paintRenderingResultsToCanvas(SourceDrawingBuffer) { return false; }
@@ -108,6 +107,7 @@ public:
     virtual unsigned hitRegionsCount() const { return 0; }
     virtual void setFont(const String&) { }
     virtual void styleDidChange(const ComputedStyle* oldStyle, const ComputedStyle& newStyle) { }
+    virtual std::pair<Element*, String> getControlAndIdIfHitRegionExists(const LayoutPoint& location) { ASSERT_NOT_REACHED(); return std::make_pair(nullptr, String()); }
 
     // WebGL-specific interface
     virtual bool is3d() const { return false; }
@@ -126,11 +126,10 @@ public:
 protected:
     CanvasRenderingContext(HTMLCanvasElement*);
     DECLARE_VIRTUAL_TRACE();
-
     virtual void stop() = 0;
 
 private:
-    RawPtrWillBeMember<HTMLCanvasElement> m_canvas;
+    Member<HTMLCanvasElement> m_canvas;
     HashSet<String> m_cleanURLs;
     HashSet<String> m_dirtyURLs;
 };

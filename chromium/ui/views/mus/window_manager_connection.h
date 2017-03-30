@@ -39,6 +39,7 @@ class VIEWS_MUS_EXPORT WindowManagerConnection
  public:
   static void Create(mojo::Connector* connector);
   static WindowManagerConnection* Get();
+  static bool Exists();
 
   // Destroys the singleton instance.
   static void Reset();
@@ -63,7 +64,6 @@ class VIEWS_MUS_EXPORT WindowManagerConnection
 
   // ScreenMusDelegate:
   void OnWindowManagerFrameValuesChanged() override;
-
 
   mojo::Connector* connector_;
   scoped_ptr<ScreenMus> screen_;

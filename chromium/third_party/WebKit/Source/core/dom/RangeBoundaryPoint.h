@@ -35,11 +35,11 @@ namespace blink {
 class RangeBoundaryPoint {
     DISALLOW_NEW();
 public:
-    explicit RangeBoundaryPoint(PassRefPtrWillBeRawPtr<Node> container);
+    explicit RangeBoundaryPoint(RawPtr<Node> container);
 
     explicit RangeBoundaryPoint(const RangeBoundaryPoint&);
 
-    bool inDocument() const;
+    bool inShadowIncludingDocument() const;
     const Position toPosition() const;
 
     Node* container() const;
@@ -48,7 +48,7 @@ public:
 
     void clear();
 
-    void set(PassRefPtrWillBeRawPtr<Node> container, int offset, Node* childBefore);
+    void set(RawPtr<Node> container, int offset, Node* childBefore);
     void setOffset(int);
 
     void setToBeforeChild(Node&);
@@ -68,17 +68,17 @@ public:
 private:
     static const int invalidOffset = -1;
 
-    RefPtrWillBeMember<Node> m_containerNode;
+    Member<Node> m_containerNode;
     mutable int m_offsetInContainer;
-    RefPtrWillBeMember<Node> m_childBeforeBoundary;
+    Member<Node> m_childBeforeBoundary;
 };
 
-inline RangeBoundaryPoint::RangeBoundaryPoint(PassRefPtrWillBeRawPtr<Node> container)
+inline RangeBoundaryPoint::RangeBoundaryPoint(RawPtr<Node> container)
     : m_containerNode(container)
     , m_offsetInContainer(0)
     , m_childBeforeBoundary(nullptr)
 {
-    ASSERT(m_containerNode);
+    DCHECK(m_containerNode);
 }
 
 inline RangeBoundaryPoint::RangeBoundaryPoint(const RangeBoundaryPoint& other)
@@ -103,13 +103,13 @@ inline void RangeBoundaryPoint::ensureOffsetIsValid() const
     if (m_offsetInContainer >= 0)
         return;
 
-    ASSERT(m_childBeforeBoundary);
+    DCHECK(m_childBeforeBoundary);
     m_offsetInContainer = m_childBeforeBoundary->nodeIndex() + 1;
 }
 
-inline bool RangeBoundaryPoint::inDocument() const
+inline bool RangeBoundaryPoint::inShadowIncludingDocument() const
 {
-    return m_containerNode && m_containerNode->inDocument();
+    return m_containerNode && m_containerNode->inShadowIncludingDocument();
 }
 
 inline const Position RangeBoundaryPoint::toPosition() const
@@ -131,11 +131,11 @@ inline void RangeBoundaryPoint::clear()
     m_childBeforeBoundary = nullptr;
 }
 
-inline void RangeBoundaryPoint::set(PassRefPtrWillBeRawPtr<Node> container, int offset, Node* childBefore)
+inline void RangeBoundaryPoint::set(RawPtr<Node> container, int offset, Node* childBefore)
 {
-    ASSERT(container);
-    ASSERT(offset >= 0);
-    ASSERT(childBefore == (offset ? NodeTraversal::childAt(*container, offset - 1) : 0));
+    DCHECK(container);
+    DCHECK_GE(offset, 0);
+    DCHECK_EQ(childBefore, offset ? NodeTraversal::childAt(*container, offset - 1) : 0);
     m_containerNode = container;
     m_offsetInContainer = offset;
     m_childBeforeBoundary = childBefore;
@@ -143,16 +143,16 @@ inline void RangeBoundaryPoint::set(PassRefPtrWillBeRawPtr<Node> container, int 
 
 inline void RangeBoundaryPoint::setOffset(int offset)
 {
-    ASSERT(m_containerNode);
-    ASSERT(m_containerNode->offsetInCharacters());
-    ASSERT(m_offsetInContainer >= 0);
-    ASSERT(!m_childBeforeBoundary);
+    DCHECK(m_containerNode);
+    DCHECK(m_containerNode->offsetInCharacters());
+    DCHECK_GE(m_offsetInContainer, 0);
+    DCHECK(!m_childBeforeBoundary);
     m_offsetInContainer = offset;
 }
 
 inline void RangeBoundaryPoint::setToBeforeChild(Node& child)
 {
-    ASSERT(child.parentNode());
+    DCHECK(child.parentNode());
     m_childBeforeBoundary = child.previousSibling();
     m_containerNode = child.parentNode();
     m_offsetInContainer = m_childBeforeBoundary ? invalidOffset : 0;
@@ -179,7 +179,7 @@ inline void RangeBoundaryPoint::setToEndOfNode(Node& container)
 
 inline void RangeBoundaryPoint::childBeforeWillBeRemoved()
 {
-    ASSERT(m_offsetInContainer);
+    DCHECK(m_offsetInContainer);
     m_childBeforeBoundary = m_childBeforeBoundary->previousSibling();
     if (!m_childBeforeBoundary)
         m_offsetInContainer = 0;

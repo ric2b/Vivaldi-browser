@@ -4,6 +4,8 @@
 
 #include "content/renderer/media/render_media_log.h"
 
+#include <sstream>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -39,46 +41,59 @@ namespace content {
 RenderMediaLog::RenderMediaLog()
     : task_runner_(base::ThreadTaskRunnerHandle::Get()),
       tick_clock_(new base::DefaultTickClock()),
-      last_ipc_send_time_(tick_clock_->NowTicks()) {
+      last_ipc_send_time_(tick_clock_->NowTicks()),
+      ipc_send_pending_(false) {
   DCHECK(RenderThread::Get())
       << "RenderMediaLog must be constructed on the render thread";
 }
 
-void RenderMediaLog::AddEvent(scoped_ptr<media::MediaLogEvent> event) {
+void RenderMediaLog::AddEvent(std::unique_ptr<media::MediaLogEvent> event) {
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   media::pipeline_stats::SerializeInto(&event->params);
 #endif
-  // Always post to preserve the correct order of events.
-  // TODO(xhwang): Consider using sorted containers to keep the order and
-  // avoid extra posting.
-  task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&RenderMediaLog::AddEventInternal, this,
-                                    base::Passed(&event)));
-}
-
-void RenderMediaLog::AddEventInternal(scoped_ptr<media::MediaLogEvent> event) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-
   Log(event.get());
 
-  // If there is an event waiting to be sent, there must be a send task pending.
-  const bool delayed_ipc_send_pending =
-      !queued_media_events_.empty() || last_buffered_extents_changed_event_;
+  // For enforcing delay until it's been a second since the last ipc message was
+  // sent.
+  base::TimeDelta delay_for_next_ipc_send;
 
-  // Keep track of the latest buffered extents properties to avoid sending
-  // thousands of events over IPC. See http://crbug.com/352585 for details.
-  if (event->type == media::MediaLogEvent::BUFFERED_EXTENTS_CHANGED)
-    last_buffered_extents_changed_event_.swap(event);
-  else
-    queued_media_events_.push_back(*event);
+  {
+    base::AutoLock auto_lock(lock_);
 
-  if (delayed_ipc_send_pending)
-    return;
+    switch (event->type) {
+      case media::MediaLogEvent::BUFFERED_EXTENTS_CHANGED:
+        // Keep track of the latest buffered extents properties to avoid sending
+        // thousands of events over IPC. See http://crbug.com/352585 for
+        // details.
+        last_buffered_extents_changed_event_.swap(event);
+        // SendQueuedMediaEvents() will enqueue the most recent event of this
+        // kind, if any, prior to sending the event batch.
+        break;
 
-  // Delay until it's been a second since the last ipc message was sent.
-  base::TimeDelta delay_for_next_ipc_send =
-      base::TimeDelta::FromSeconds(1) -
-      (tick_clock_->NowTicks() - last_ipc_send_time_);
+      // Hold onto the most recent PIPELINE_ERROR and MEDIA_LOG_ERROR_ENTRY for
+      // use in GetLastErrorMessage().
+      case media::MediaLogEvent::PIPELINE_ERROR:
+        queued_media_events_.push_back(*event);
+        last_pipeline_error_.swap(event);
+        break;
+      case media::MediaLogEvent::MEDIA_ERROR_LOG_ENTRY:
+        queued_media_events_.push_back(*event);
+        last_media_error_log_entry_.swap(event);
+        break;
+
+      // Just enqueue all other event types for throttled transmission.
+      default:
+        queued_media_events_.push_back(*event);
+    }
+
+    if (ipc_send_pending_)
+      return;
+
+    ipc_send_pending_ = true;
+    delay_for_next_ipc_send = base::TimeDelta::FromSeconds(1) -
+                              (tick_clock_->NowTicks() - last_ipc_send_time_);
+  }
+
   if (delay_for_next_ipc_send > base::TimeDelta()) {
     task_runner_->PostDelayedTask(
         FROM_HERE, base::Bind(&RenderMediaLog::SendQueuedMediaEvents, this),
@@ -86,29 +101,58 @@ void RenderMediaLog::AddEventInternal(scoped_ptr<media::MediaLogEvent> event) {
     return;
   }
 
-  // It's been more than a second so send now.
-  SendQueuedMediaEvents();
+  // It's been more than a second so send ASAP.
+  if (task_runner_->BelongsToCurrentThread()) {
+    SendQueuedMediaEvents();
+    return;
+  }
+  task_runner_->PostTask(
+      FROM_HERE, base::Bind(&RenderMediaLog::SendQueuedMediaEvents, this));
+}
+
+std::string RenderMediaLog::GetLastErrorMessage() {
+  base::AutoLock auto_lock(lock_);
+
+  // Return the conditional concatenation of the last pipeline error and the
+  // last media error log.
+  std::stringstream result;
+  if (last_pipeline_error_) {
+    result << MediaEventToLogString(*last_pipeline_error_)
+           << (last_media_error_log_entry_ ? ", " : "");
+  }
+  if (last_media_error_log_entry_)
+    result << MediaEventToLogString(*last_media_error_log_entry_);
+  return result.str();
 }
 
 void RenderMediaLog::SendQueuedMediaEvents() {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  if (last_buffered_extents_changed_event_) {
-    queued_media_events_.push_back(*last_buffered_extents_changed_event_);
-    last_buffered_extents_changed_event_.reset();
+  std::vector<media::MediaLogEvent> events_to_send;
+  {
+    base::AutoLock auto_lock(lock_);
+
+    DCHECK(ipc_send_pending_);
+    ipc_send_pending_ = false;
+
+    if (last_buffered_extents_changed_event_) {
+      queued_media_events_.push_back(*last_buffered_extents_changed_event_);
+      last_buffered_extents_changed_event_.reset();
+    }
+
+    queued_media_events_.swap(events_to_send);
+    last_ipc_send_time_ = tick_clock_->NowTicks();
   }
 
-  RenderThread::Get()->Send(
-      new ViewHostMsg_MediaLogEvents(queued_media_events_));
-  queued_media_events_.clear();
-  last_ipc_send_time_ = tick_clock_->NowTicks();
+  RenderThread::Get()->Send(new ViewHostMsg_MediaLogEvents(events_to_send));
 }
 
 RenderMediaLog::~RenderMediaLog() {
 }
 
 void RenderMediaLog::SetTickClockForTesting(
-    scoped_ptr<base::TickClock> tick_clock) {
+    std::unique_ptr<base::TickClock> tick_clock) {
+  base::AutoLock auto_lock(lock_);
   tick_clock_.swap(tick_clock);
   last_ipc_send_time_ = tick_clock_->NowTicks();
 }

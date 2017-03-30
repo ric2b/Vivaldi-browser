@@ -8,16 +8,18 @@
 #include "base/macros.h"
 #include "content/public/renderer/render_frame_observer.h"
 
-namespace test_runner {
-struct LayoutDumpFlags;
-}
-
 namespace IPC {
 class Message;
 }  // namespace IPC
 
+namespace base {
+class DictionaryValue;
+}  // namespace
+
 namespace content {
+struct ShellTestConfiguration;
 class RenderFrame;
+struct ShellTestConfiguration;
 
 class LayoutTestRenderFrameObserver : public RenderFrameObserver {
  public:
@@ -27,8 +29,14 @@ class LayoutTestRenderFrameObserver : public RenderFrameObserver {
   bool OnMessageReceived(const IPC::Message& message) override;
 
  private:
-  void OnLayoutDumpRequest(
-      const test_runner::LayoutDumpFlags& layout_dump_flags);
+  void OnLayoutDumpRequest();
+  void OnReplicateLayoutTestRuntimeFlagsChanges(
+      const base::DictionaryValue& changed_layout_test_runtime_flags);
+  void OnSetTestConfiguration(const ShellTestConfiguration& test_config);
+  void OnReplicateTestConfiguration(
+      const ShellTestConfiguration& test_config,
+      const base::DictionaryValue&
+          accumulated_layout_test_runtime_flags_changes);
 
   DISALLOW_COPY_AND_ASSIGN(LayoutTestRenderFrameObserver);
 };

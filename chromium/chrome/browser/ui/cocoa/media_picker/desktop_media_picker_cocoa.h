@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_COCOA_MEDIA_PICKER_DESKTOP_MEDIA_PICKER_COCOA_H_
 #define CHROME_BROWSER_UI_COCOA_MEDIA_PICKER_DESKTOP_MEDIA_PICKER_COCOA_H_
 
+#include <memory>
+
 #import "base/mac/scoped_nsobject.h"
 #include "chrome/browser/media/desktop_media_picker.h"
 
@@ -22,7 +24,7 @@ class DesktopMediaPickerCocoa : public DesktopMediaPicker {
             gfx::NativeWindow parent,
             const base::string16& app_name,
             const base::string16& target_name,
-            scoped_ptr<DesktopMediaList> media_list,
+            std::unique_ptr<DesktopMediaList> media_list,
             bool request_audio,
             const DoneCallback& done_callback) override;
 

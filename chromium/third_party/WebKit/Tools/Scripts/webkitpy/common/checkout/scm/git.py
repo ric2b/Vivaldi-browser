@@ -41,6 +41,7 @@ _log = logging.getLogger(__name__)
 
 
 class AmbiguousCommitError(Exception):
+
     def __init__(self, num_local_commits, has_working_directory_changes):
         Exception.__init__(self, "Found %s local commits and the working directory is %s" % (
             num_local_commits, ["clean", "not clean"][has_working_directory_changes]))
@@ -164,7 +165,8 @@ class Git(SCM):
 
     def changed_files(self, git_commit=None):
         # FIXME: --diff-filter could be used to avoid the "extract_filenames" step.
-        status_command = [self.executable_name, 'diff', '-r', '--name-status', "--no-renames", "--no-ext-diff", "--full-index", self._merge_base(git_commit)]
+        status_command = [self.executable_name, 'diff', '-r', '--name-status',
+                          "--no-renames", "--no-ext-diff", "--full-index", self._merge_base(git_commit)]
         # FIXME: I'm not sure we're returning the same set of files that SVN.changed_files is.
         # Added (A), Copied (C), Deleted (D), Modified (M), Renamed (R)
         return self._run_status_and_extract_filenames(status_command, self._status_regexp("ADM"))
@@ -212,7 +214,8 @@ class Git(SCM):
                                                int(match.group(4)), int(match.group(5)), int(match.group(6)), 0)
 
         sign = 1 if match.group(7) == '+' else -1
-        time_without_timezone = time_with_timezone - datetime.timedelta(hours=sign * int(match.group(8)), minutes=int(match.group(9)))
+        time_without_timezone = time_with_timezone - \
+            datetime.timedelta(hours=sign * int(match.group(8)), minutes=int(match.group(9)))
         return time_without_timezone.strftime('%Y-%m-%dT%H:%M:%SZ')
 
     def create_patch(self, git_commit=None, changed_files=None):
@@ -228,7 +231,8 @@ class Git(SCM):
         if self._filesystem.exists(order_file):
             order = "-O%s" % order_file
 
-        command = [self.executable_name, 'diff', '--binary', '--no-color', "--no-ext-diff", "--full-index", "--no-renames", order, self._merge_base(git_commit), "--"]
+        command = [self.executable_name, 'diff', '--binary', '--no-color', "--no-ext-diff",
+                   "--full-index", "--no-renames", order, self._merge_base(git_commit), "--"]
         if changed_files:
             command += changed_files
         return self._run(command, decode_output=False, cwd=self.checkout_root)
@@ -265,10 +269,8 @@ class Git(SCM):
             raise ScriptError(message="Can't find a branch to diff against. %s does not exist" % remote_master_ref)
         return remote_master_ref
 
-    def commit_locally_with_message(self, message, commit_all_working_directory_changes=True):
-        command = ['commit', '-F', '-']
-        if commit_all_working_directory_changes:
-            command.insert(1, '--all')
+    def commit_locally_with_message(self, message):
+        command = ['commit', '--all', '-F', '-']
         self._run_git(command, input=message)
 
     # These methods are git specific and are meant to provide support for the Git oriented workflow

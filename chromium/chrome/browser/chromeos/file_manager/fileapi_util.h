@@ -7,6 +7,7 @@
 #ifndef CHROME_BROWSER_CHROMEOS_FILE_MANAGER_FILEAPI_UTIL_H_
 #define CHROME_BROWSER_CHROMEOS_FILE_MANAGER_FILEAPI_UTIL_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback_forward.h"
@@ -44,6 +45,7 @@ struct FileDefinition {
 // Contains all information needed to create an Entry object in custom bindings.
 struct EntryDefinition {
   EntryDefinition();
+  EntryDefinition(const EntryDefinition& other);
   ~EntryDefinition();
 
   std::string file_system_root_url;  // Used to create DOMFileSystem.
@@ -67,8 +69,9 @@ typedef base::Callback<void(const EntryDefinition& entry_definition)>
 
 // The callback used by ConvertFileDefinitionListToEntryDefinitionList. Returns
 // the result of the conversion as a list.
-typedef base::Callback<void(scoped_ptr<
-    EntryDefinitionList> entry_definition_list)> EntryDefinitionListCallback;
+typedef base::Callback<void(
+    std::unique_ptr<EntryDefinitionList> entry_definition_list)>
+    EntryDefinitionListCallback;
 
 // The callback used by
 // ConvertFileSelectedInfoListToFileChooserFileInfoList. Returns the result of

@@ -84,6 +84,13 @@ public class IntentHandler {
     public static final String EXTRA_PARENT_INTENT = "com.android.chrome.parent_intent";
 
     /**
+     * ComponentName of the parent Activity. Can be used by an Activity launched on top of another
+     * Activity (e.g. BookmarkActivity) to intent back into the Activity it sits on top of.
+     */
+    public static final String EXTRA_PARENT_COMPONENT =
+            "org.chromium.chrome.browser.parent_component";
+
+    /**
      * Transition type is only set internally by a first-party app and has to be signed.
      */
     public static final String EXTRA_PAGE_TRANSITION_TYPE = "com.google.chrome.transition_type";
@@ -118,6 +125,11 @@ public class IntentHandler {
      * Key to associate a timestamp with an intent.
      */
     private static final String EXTRA_TIMESTAMP_MS = "org.chromium.chrome.browser.timestamp";
+
+    /**
+     * For multi-window, passes the id of the window.
+     */
+    public static final String EXTRA_WINDOW_ID = "org.chromium.chrome.browser.window_id";
 
     /**
      * Fake ComponentName used in constructing TRUSTED_APPLICATION_CODE_EXTRA.
@@ -168,9 +180,6 @@ public class IntentHandler {
 
         return sFakeComponentName;
     }
-
-    // Intent extra used by QSB to send extra HTTP headers.
-    private static final String EXTRA_BROWSER_HEADERS = "com.android.browser.headers";
 
     /** Intent extra to open an incognito tab. */
     public static final String EXTRA_OPEN_NEW_INCOGNITO_TAB =
@@ -805,6 +814,7 @@ public class IntentHandler {
 
         String url = getUrlFromVoiceSearchResult(intent);
         if (url == null) url = ActivityDelegate.getInitialUrlForDocument(intent);
+        if (url == null) url = getUrlForCustomTab(intent);
         if (url == null) url = intent.getDataString();
         if (url == null) return null;
 
@@ -813,6 +823,13 @@ public class IntentHandler {
             url = getUrlFromGoogleChromeSchemeUrl(url);
         }
         return TextUtils.isEmpty(url) ? null : url;
+    }
+
+    private static String getUrlForCustomTab(Intent intent) {
+        if (intent == null || intent.getData() == null) return null;
+        Uri data = intent.getData();
+        return TextUtils.equals(data.getScheme(), UrlConstants.CUSTOM_TAB_SCHEME)
+                ? data.getQuery() : null;
     }
 
     /**

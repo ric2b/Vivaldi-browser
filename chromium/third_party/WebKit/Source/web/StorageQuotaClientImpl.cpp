@@ -59,7 +59,7 @@ StorageQuotaClientImpl::~StorageQuotaClientImpl()
 
 void StorageQuotaClientImpl::requestQuota(ExecutionContext* executionContext, WebStorageQuotaType storageType, unsigned long long newQuotaInBytes, StorageQuotaCallback* successCallback, StorageErrorCallback* errorCallback)
 {
-    ASSERT(executionContext);
+    DCHECK(executionContext);
 
     if (executionContext->isDocument()) {
         Document* document = toDocument(executionContext);
@@ -77,8 +77,8 @@ ScriptPromise StorageQuotaClientImpl::requestPersistentQuota(ScriptState* script
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
 
-    if (scriptState->executionContext()->isDocument()) {
-        Document* document = toDocument(scriptState->executionContext());
+    if (scriptState->getExecutionContext()->isDocument()) {
+        Document* document = toDocument(scriptState->getExecutionContext());
         WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(document->frame());
         StorageQuotaCallbacks* callbacks = StorageQuotaCallbacksImpl::create(resolver);
         webFrame->client()->requestStorageQuota(WebStorageQuotaTypePersistent, newQuotaInBytes, callbacks);

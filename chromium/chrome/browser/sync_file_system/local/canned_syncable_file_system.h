@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -144,7 +145,7 @@ class CannedSyncableFileSystem
   // Returns the # of bytes written (>=0) or an error code (<0).
   int64_t Write(net::URLRequestContext* url_request_context,
                 const storage::FileSystemURL& url,
-                scoped_ptr<storage::BlobDataHandle> blob_data_handle);
+                std::unique_ptr<storage::BlobDataHandle> blob_data_handle);
   int64_t WriteString(const storage::FileSystemURL& url,
                       const std::string& data);
 
@@ -206,7 +207,7 @@ class CannedSyncableFileSystem
                        const StatusCallback& callback);
   void DoWrite(net::URLRequestContext* url_request_context,
                const storage::FileSystemURL& url,
-               scoped_ptr<storage::BlobDataHandle> blob_data_handle,
+               std::unique_ptr<storage::BlobDataHandle> blob_data_handle,
                const WriteCallback& callback);
   void DoWriteString(const storage::FileSystemURL& url,
                      const std::string& data,

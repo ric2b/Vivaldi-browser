@@ -11,6 +11,7 @@
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
 #include "base/sys_byteorder.h"
+#include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_interfaces.h"
 #include "net/dns/dns_protocol.h"
@@ -42,8 +43,7 @@ void GetNetworkListOnFileThread(
     }
   }
 
-  net::IPAddressNumber localhost_prefix(4, 0);
-  localhost_prefix[0] = 127;
+  net::IPAddress localhost_prefix(127, 0, 0, 0);
   ip4_networks.push_back(
       net::NetworkInterface("lo",
                             "lo",
@@ -133,21 +133,21 @@ int PrivetTrafficDetector::Bind() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   socket_.reset(new net::UDPServerSocket(NULL, net::NetLog::Source()));
   net::IPEndPoint multicast_addr = net::GetMDnsIPEndPoint(address_family_);
-  net::IPAddressNumber address_any(multicast_addr.address().size());
-  net::IPEndPoint bind_endpoint(address_any, multicast_addr.port());
+  net::IPEndPoint bind_endpoint(
+      net::IPAddress::AllZeros(multicast_addr.address().size()),
+      multicast_addr.port());
   socket_->AllowAddressReuse();
   int rv = socket_->Listen(bind_endpoint);
   if (rv < net::OK)
     return rv;
   socket_->SetMulticastLoopbackMode(false);
-  return socket_->JoinGroup(multicast_addr.address().bytes());
+  return socket_->JoinGroup(multicast_addr.address());
 }
 
 bool PrivetTrafficDetector::IsSourceAcceptable() const {
   for (size_t i = 0; i < networks_.size(); ++i) {
-    if (net::IPNumberMatchesPrefix(recv_addr_.address().bytes(),
-                                   networks_[i].address,
-                                   networks_[i].prefix_length)) {
+    if (net::IPAddressMatchesPrefix(recv_addr_.address(), networks_[i].address,
+                                    networks_[i].prefix_length)) {
       return true;
     }
   }

@@ -23,9 +23,11 @@ class CompositorScrollOffsetAnimationCurve;
 // CSSOM View scroll APIs.
 class ProgrammaticScrollAnimator : public ScrollAnimatorCompositorCoordinator {
     WTF_MAKE_NONCOPYABLE(ProgrammaticScrollAnimator);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(ProgrammaticScrollAnimator);
 public:
-    static PassOwnPtrWillBeRawPtr<ProgrammaticScrollAnimator> create(ScrollableArea*);
+    static ProgrammaticScrollAnimator* create(ScrollableArea* scrollableArea)
+    {
+        return new ProgrammaticScrollAnimator(scrollableArea);
+    }
 
     virtual ~ProgrammaticScrollAnimator();
 
@@ -36,7 +38,7 @@ public:
     void resetAnimationState() override;
     void cancelAnimation() override;
     void takeoverCompositorAnimation() override { };
-    ScrollableArea* scrollableArea() const override { return m_scrollableArea; }
+    ScrollableArea* getScrollableArea() const override { return m_scrollableArea; }
     void tickAnimation(double monotonicTime) override;
     void updateCompositorAnimations() override;
     void notifyCompositorAnimationFinished(int groupId) override;
@@ -50,7 +52,7 @@ private:
 
     void notifyPositionChanged(const DoublePoint&);
 
-    RawPtrWillBeMember<ScrollableArea> m_scrollableArea;
+    Member<ScrollableArea> m_scrollableArea;
     OwnPtr<CompositorScrollOffsetAnimationCurve> m_animationCurve;
     FloatPoint m_targetOffset;
     double m_startTime;

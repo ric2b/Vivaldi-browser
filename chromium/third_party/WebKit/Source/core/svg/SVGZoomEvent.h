@@ -32,21 +32,21 @@ namespace blink {
 class SVGZoomEvent final : public UIEvent {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static PassRefPtrWillBeRawPtr<SVGZoomEvent> create()
+    static SVGZoomEvent* create()
     {
-        return adoptRefWillBeNoop(new SVGZoomEvent);
+        return new SVGZoomEvent;
     }
 
     // 'SVGZoomEvent' functions
-    PassRefPtrWillBeRawPtr<SVGRectTearOff> zoomRectScreen() const;
+    SVGRectTearOff* zoomRectScreen() const;
 
     float previousScale() const;
 
-    PassRefPtrWillBeRawPtr<SVGPointTearOff> previousTranslate() const;
+    SVGPointTearOff* previousTranslate() const;
 
     float newScale() const;
 
-    PassRefPtrWillBeRawPtr<SVGPointTearOff> newTranslate() const;
+    SVGPointTearOff* newTranslate() const;
 
     const AtomicString& interfaceName() const override;
 

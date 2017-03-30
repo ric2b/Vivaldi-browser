@@ -171,7 +171,11 @@ source_set("audio") {
       "win/waveout_output_win.h",
     ]
 
-    libs += [ "dxguid.lib" ]
+    libs += [
+      "dxguid.lib",
+      "setupapi.lib",
+      "winmm.lib",
+    ]
   }
 
   if (is_android) {
@@ -184,6 +188,8 @@ source_set("audio") {
       "android/opensles_input.h",
       "android/opensles_output.cc",
       "android/opensles_output.h",
+      "android/opensles_util.cc",
+      "android/opensles_util.h",
       "android/opensles_wrapper.cc",
     ]
     deps += [ "//media/base/android:media_jni_headers" ]

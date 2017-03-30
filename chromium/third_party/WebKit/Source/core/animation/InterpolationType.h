@@ -28,7 +28,7 @@ class InterpolationType {
 public:
     virtual ~InterpolationType() { ASSERT_NOT_REACHED(); }
 
-    PropertyHandle property() const { return m_property; }
+    PropertyHandle getProperty() const { return m_property; }
 
     // ConversionCheckers are returned from calls to maybeConvertPairwise() and maybeConvertSingle() to enable the caller to check
     // whether the result is still valid given changes in the InterpolationEnvironment and underlying InterpolationValue.
@@ -56,14 +56,14 @@ public:
         InterpolationValue end = maybeConvertSingle(endKeyframe, environment, underlying, conversionCheckers);
         if (!end)
             return nullptr;
-        return mergeSingleConversions(start, end);
+        return mergeSingleConversions(std::move(start), std::move(end));
     }
 
     virtual InterpolationValue maybeConvertSingle(const PropertySpecificKeyframe&, const InterpolationEnvironment&, const InterpolationValue& underlying, ConversionCheckers&) const = 0;
 
     virtual InterpolationValue maybeConvertUnderlyingValue(const InterpolationEnvironment&) const = 0;
 
-    virtual void composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value) const
+    virtual void composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const
     {
         ASSERT(!underlyingValueOwner.value().nonInterpolableValue);
         ASSERT(!value.nonInterpolableValue);
@@ -81,7 +81,7 @@ protected:
         : m_property(property)
     { }
 
-    virtual PairwiseInterpolationValue mergeSingleConversions(InterpolationValue& start, InterpolationValue& end) const
+    virtual PairwiseInterpolationValue mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
     {
         ASSERT(!start.nonInterpolableValue);
         ASSERT(!end.nonInterpolableValue);

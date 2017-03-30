@@ -30,19 +30,17 @@
 
 #include "core/inspector/WorkerDebuggerAgent.h"
 
-#include "core/inspector/WorkerThreadDebugger.h"
 #include "core/workers/WorkerGlobalScope.h"
-#include "platform/v8_inspector/public/V8Debugger.h"
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<WorkerDebuggerAgent> WorkerDebuggerAgent::create(V8Debugger* debugger, WorkerGlobalScope* inspectedWorkerGlobalScope, V8RuntimeAgent* runtimeAgent)
+RawPtr<WorkerDebuggerAgent> WorkerDebuggerAgent::create(V8DebuggerAgent* agent, WorkerGlobalScope* inspectedWorkerGlobalScope)
 {
-    return adoptPtrWillBeNoop(new WorkerDebuggerAgent(debugger, inspectedWorkerGlobalScope, runtimeAgent));
+    return new WorkerDebuggerAgent(agent, inspectedWorkerGlobalScope);
 }
 
-WorkerDebuggerAgent::WorkerDebuggerAgent(V8Debugger* debugger, WorkerGlobalScope* inspectedWorkerGlobalScope, V8RuntimeAgent* runtimeAgent)
-    : InspectorDebuggerAgent(runtimeAgent, debugger, WorkerThreadDebugger::contextGroupId())
+WorkerDebuggerAgent::WorkerDebuggerAgent(V8DebuggerAgent* agent, WorkerGlobalScope* inspectedWorkerGlobalScope)
+    : InspectorDebuggerAgent(agent)
     , m_inspectedWorkerGlobalScope(inspectedWorkerGlobalScope)
 {
 }
@@ -55,16 +53,6 @@ DEFINE_TRACE(WorkerDebuggerAgent)
 {
     visitor->trace(m_inspectedWorkerGlobalScope);
     InspectorDebuggerAgent::trace(visitor);
-}
-
-void WorkerDebuggerAgent::muteConsole()
-{
-    // We don't need to mute console for workers.
-}
-
-void WorkerDebuggerAgent::unmuteConsole()
-{
-    // We don't need to mute console for workers.
 }
 
 } // namespace blink

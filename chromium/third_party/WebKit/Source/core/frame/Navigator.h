@@ -37,14 +37,14 @@ class LocalFrame;
 typedef int ExceptionCode;
 
 class Navigator final
-    : public GarbageCollectedFinalized<Navigator>
+    : public GarbageCollected<Navigator>
     , public NavigatorCPU
     , public NavigatorID
     , public NavigatorLanguage
     , public NavigatorOnLine
     , public ScriptWrappable
     , public DOMWindowProperty
-    , public HeapSupplementable<Navigator> {
+    , public Supplementable<Navigator> {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(Navigator);
 public:
@@ -52,8 +52,6 @@ public:
     {
         return new Navigator(frame);
     }
-
-    virtual ~Navigator();
 
     bool cookieEnabled() const;
 

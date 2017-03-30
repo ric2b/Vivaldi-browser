@@ -64,7 +64,6 @@ ContentUtilityClient* SetUtilityClientForTesting(ContentUtilityClient* u) {
 ContentClient::ContentClient()
     : browser_(NULL),
       gpu_(NULL),
-      plugin_(NULL),
       renderer_(NULL),
       utility_(NULL) {}
 
@@ -108,7 +107,7 @@ std::string ContentClient::GetProcessTypeNameInEnglish(int type) {
   return std::string();
 }
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MACOSX)
 bool ContentClient::GetSandboxProfileForSandboxType(
     int sandbox_type,
     int* sandbox_profile_resource_id) const {
@@ -119,5 +118,15 @@ bool ContentClient::GetSandboxProfileForSandboxType(
 bool ContentClient::IsSupplementarySiteIsolationModeEnabled() {
   return false;
 }
+
+base::StringPiece ContentClient::GetOriginTrialPublicKey() {
+  return base::StringPiece();
+}
+
+#if defined(OS_ANDROID)
+media::MediaClientAndroid* ContentClient::GetMediaClientAndroid() {
+  return nullptr;
+}
+#endif  // OS_ANDROID
 
 }  // namespace content

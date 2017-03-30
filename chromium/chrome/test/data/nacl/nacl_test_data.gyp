@@ -156,12 +156,11 @@
         'build_pnacl_newlib': 1,
         'nexe_destination_dir': 'nacl_test_data',
         'sources': [
-          # TODO(ncbray) move these files once SCons no longer depends on them.
-          '../../../../ppapi/native_client/tests/ppapi_test_lib/get_browser_interface.cc',
-          '../../../../ppapi/native_client/tests/ppapi_test_lib/internal_utils.cc',
-          '../../../../ppapi/native_client/tests/ppapi_test_lib/module_instance.cc',
-          '../../../../ppapi/native_client/tests/ppapi_test_lib/test_interface.cc',
-          '../../../../ppapi/native_client/tests/ppapi_test_lib/testable_callback.cc',
+          'ppapi_test_lib/get_browser_interface.cc',
+          'ppapi_test_lib/internal_utils.cc',
+          'ppapi_test_lib/module_instance.cc',
+          'ppapi_test_lib/test_interface.cc',
+          'ppapi_test_lib/testable_callback.cc',
         ]
       },
     },
@@ -701,6 +700,25 @@
       },
     },
     {
+      'target_name': 'pnacl_url_loader_test',
+      'type': 'none',
+      'variables': {
+        'nexe_target': 'pnacl_url_loader',
+        'build_pnacl_newlib': 1,
+        'nexe_destination_dir': 'nacl_test_data',
+        'generate_nmf': 1,
+        'link_flags': [
+          '-lppapi',
+        ],
+        'sources': [
+          'pnacl_url_loader/pnacl_url_loader.cc',
+        ],
+        'test_files': [
+          'pnacl_url_loader/pnacl_url_loader.html',
+        ],
+      },
+    },
+    {
       'target_name': 'pnacl_dyncode_syscall_disabled_test',
       'type': 'none',
       'variables': {
@@ -876,18 +894,6 @@
             'nexe_destination_dir': 'nacl_test_data',
             'sources': [
               '<(DEPTH)/native_client/tests/stubout_mode/partly_invalid.c',
-            ],
-            'conditions': [
-              ['target_arch=="mipsel"', {
-                'compile_flags': [
-                  '--pnacl-mips-bias',
-                  '-arch', 'mips32',
-                  '--pnacl-allow-translate',
-                ],
-                'link_flags': [
-                  '--pnacl-allow-native',
-                ],
-              }],
             ],
           },
         },

@@ -14,7 +14,7 @@
 namespace blink {
 
 class V8PerformanceObserverCallback final : public PerformanceObserverCallback, public ActiveDOMCallback {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(V8PerformanceObserverCallback);
+    USING_GARBAGE_COLLECTED_MIXIN(V8PerformanceObserverCallback);
 public:
     static V8PerformanceObserverCallback* create(v8::Local<v8::Function> callback, v8::Local<v8::Object> owner, ScriptState* scriptState)
     {
@@ -26,7 +26,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
     void handleEvent(PerformanceObserverEntryList*, PerformanceObserver*) override;
-    ExecutionContext* executionContext() const override { return ContextLifecycleObserver::executionContext(); }
+    ExecutionContext* getExecutionContext() const override { return ContextLifecycleObserver::getExecutionContext(); }
 private:
     CORE_EXPORT V8PerformanceObserverCallback(v8::Local<v8::Function>, v8::Local<v8::Object>, ScriptState*);
 

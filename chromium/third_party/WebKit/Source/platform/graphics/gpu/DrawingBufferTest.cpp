@@ -30,6 +30,7 @@
 
 #include "platform/graphics/gpu/DrawingBuffer.h"
 
+#include "gpu/command_buffer/client/gles2_interface_stub.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
@@ -37,6 +38,9 @@
 #include "platform/graphics/test/MockWebGraphicsContext3D.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebExternalTextureMailbox.h"
+#include "public/platform/WebGraphicsContext3D.h"
+#include "public/platform/WebGraphicsContext3DProvider.h"
+#include "public/platform/callback/WebClosure.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/RefPtr.h"
@@ -49,7 +53,7 @@ namespace blink {
 namespace {
 
 // The target to use when binding a texture to a Chromium image.
-WGC3Denum imageTextureTarget()
+GLenum imageTextureTarget()
 {
 #if OS(MACOSX)
     return GC3D_TEXTURE_RECTANGLE_ARB;
@@ -59,7 +63,7 @@ WGC3Denum imageTextureTarget()
 }
 
 // The target to use when preparing a mailbox texture.
-WGC3Denum drawingBufferTextureTarget(bool allowImageChromium)
+GLenum drawingBufferTextureTarget(bool allowImageChromium)
 {
     if (RuntimeEnabledFeatures::webGLImageChromiumEnabled() && allowImageChromium)
         return imageTextureTarget();
@@ -68,20 +72,9 @@ WGC3Denum drawingBufferTextureTarget(bool allowImageChromium)
 
 } // namespace
 
-class WebGraphicsContext3DForTests : public MockWebGraphicsContext3D {
+class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub {
 public:
-    WebGraphicsContext3DForTests()
-        : MockWebGraphicsContext3D()
-        , m_boundTexture(0)
-        , m_boundTextureTarget(0)
-        , m_currentMailboxByte(0)
-        , m_mostRecentlyWaitedSyncToken(0)
-        , m_currentImageId(1)
-        , m_allowImageChromium(true)
-    {
-    }
-
-    void bindTexture(WGC3Denum target, WebGLId texture) override
+    void BindTexture(GLenum target, GLuint texture) override
     {
         if (target != m_boundTextureTarget && texture == 0)
             return;
@@ -92,50 +85,50 @@ public:
         m_boundTexture = texture;
     }
 
-    void texImage2D(WGC3Denum target, WGC3Dint level, WGC3Denum internalformat, WGC3Dsizei width, WGC3Dsizei height, WGC3Dint border, WGC3Denum format, WGC3Denum type, const void* pixels) override
+    GLuint64 InsertFenceSyncCHROMIUM() override
     {
-        if (target == GL_TEXTURE_2D && !level) {
-            m_textureSizes.set(m_boundTexture, IntSize(width, height));
-        }
+        static GLuint64 syncPointGenerator = 0;
+        return ++syncPointGenerator;
     }
 
-    void genMailboxCHROMIUM(WGC3Dbyte* mailbox) override
+    void WaitSyncTokenCHROMIUM(const GLbyte* syncToken) override
+    {
+        memcpy(&m_mostRecentlyWaitedSyncToken, syncToken, sizeof(m_mostRecentlyWaitedSyncToken));
+    }
+
+    GLenum CheckFramebufferStatus(GLenum target) override
+    {
+        return GL_FRAMEBUFFER_COMPLETE;
+    }
+
+    void GetIntegerv(GLenum pname, GLint* value) override
+    {
+        if (pname == GL_MAX_TEXTURE_SIZE)
+            *value = 1024;
+    }
+
+    void GenMailboxCHROMIUM(GLbyte* mailbox) override
     {
         ++m_currentMailboxByte;
         WebExternalTextureMailbox temp;
         memset(mailbox, m_currentMailboxByte, sizeof(temp.name));
     }
 
-    void produceTextureDirectCHROMIUM(WebGLId texture, WGC3Denum target, const WGC3Dbyte* mailbox) override
+    void ProduceTextureDirectCHROMIUM(GLuint texture, GLenum target, const GLbyte* mailbox) override
     {
         ASSERT_EQ(target, drawingBufferTextureTarget(m_allowImageChromium));
         ASSERT_TRUE(m_textureSizes.contains(texture));
         m_mostRecentlyProducedSize = m_textureSizes.get(texture);
     }
 
-    IntSize mostRecentlyProducedSize()
+    void TexImage2D(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels) override
     {
-        return m_mostRecentlyProducedSize;
+        if (target == GL_TEXTURE_2D && !level) {
+            m_textureSizes.set(m_boundTexture, IntSize(width, height));
+        }
     }
 
-    WGC3Duint64 insertFenceSyncCHROMIUM() override
-    {
-        static WGC3Duint64 syncPointGenerator = 0;
-        return ++syncPointGenerator;
-    }
-
-    bool genSyncTokenCHROMIUM(WGC3Duint64 fenceSync, WGC3Dbyte* syncToken) override
-    {
-        memcpy(syncToken, &fenceSync, sizeof(fenceSync));
-        return true;
-    }
-
-    void waitSyncTokenCHROMIUM(const WGC3Dbyte* syncToken) override
-    {
-        memcpy(&m_mostRecentlyWaitedSyncToken, syncToken, sizeof(m_mostRecentlyWaitedSyncToken));
-    }
-
-    WGC3Duint createGpuMemoryBufferImageCHROMIUM(WGC3Dsizei width, WGC3Dsizei height, WGC3Denum internalformat, WGC3Denum usage) override
+    GLuint CreateGpuMemoryBufferImageCHROMIUM(GLsizei width, GLsizei height, GLenum internalformat, GLenum usage) override
     {
         if (!m_allowImageChromium)
             return false;
@@ -143,62 +136,95 @@ public:
         return m_currentImageId++;
     }
 
-    MOCK_METHOD1(destroyImageMock, void(WGC3Duint imageId));
-    void destroyImageCHROMIUM(WGC3Duint imageId)
+    MOCK_METHOD1(DestroyImageMock, void(GLuint imageId));
+    void DestroyImageCHROMIUM(GLuint imageId)
     {
         m_imageSizes.remove(imageId);
         // No textures should be bound to this.
         ASSERT(m_imageToTextureMap.find(imageId) == m_imageToTextureMap.end());
         m_imageSizes.remove(imageId);
-        destroyImageMock(imageId);
+        DestroyImageMock(imageId);
     }
 
-    MOCK_METHOD1(bindTexImage2DMock, void(WGC3Dint imageId));
-    void bindTexImage2DCHROMIUM(WGC3Denum target, WGC3Dint imageId)
+    MOCK_METHOD1(BindTexImage2DMock, void(GLint imageId));
+    void BindTexImage2DCHROMIUM(GLenum target, GLint imageId)
     {
         if (target == imageTextureTarget()) {
             m_textureSizes.set(m_boundTexture, m_imageSizes.find(imageId)->value);
             m_imageToTextureMap.set(imageId, m_boundTexture);
-            bindTexImage2DMock(imageId);
+            BindTexImage2DMock(imageId);
         }
     }
 
-    MOCK_METHOD1(releaseTexImage2DMock, void(WGC3Dint imageId));
-    void releaseTexImage2DCHROMIUM(WGC3Denum target, WGC3Dint imageId)
+    MOCK_METHOD1(ReleaseTexImage2DMock, void(GLint imageId));
+    void ReleaseTexImage2DCHROMIUM(GLenum target, GLint imageId)
     {
         if (target == imageTextureTarget()) {
             m_imageSizes.set(m_currentImageId, IntSize());
             m_imageToTextureMap.remove(imageId);
-            releaseTexImage2DMock(imageId);
+            ReleaseTexImage2DMock(imageId);
         }
     }
 
-    WGC3Duint mostRecentlyWaitedSyncToken()
+    void GenSyncTokenCHROMIUM(GLuint64 fenceSync, GLbyte* syncToken) override
     {
-        return m_mostRecentlyWaitedSyncToken;
+        memcpy(syncToken, &fenceSync, sizeof(fenceSync));
     }
 
-    WGC3Duint nextImageIdToBeCreated()
+    void GenTextures(GLsizei n, GLuint* textures) override
     {
-        return m_currentImageId;
+        static GLuint id = 1;
+        for (GLsizei i = 0; i < n; ++i)
+            textures[i] = id++;
     }
 
-    void setAllowImageChromium(bool allow)
+    GLuint boundTexture() const { return m_boundTexture; }
+    GLuint boundTextureTarget() const { return m_boundTextureTarget; }
+    GLuint mostRecentlyWaitedSyncToken() const { return m_mostRecentlyWaitedSyncToken; }
+    GLuint currentImageId() const { return m_currentImageId; }
+    IntSize mostRecentlyProducedSize() const { return m_mostRecentlyProducedSize; }
+    bool allowImageChromium() const { return m_allowImageChromium; }
+
+    void setAllowImageChromium(bool allow) { m_allowImageChromium = allow; }
+
+private:
+    GLuint m_boundTexture = 0;
+    GLuint m_boundTextureTarget = 0;
+    GLuint m_mostRecentlyWaitedSyncToken = 0;
+    GLbyte m_currentMailboxByte = 0;
+    IntSize m_mostRecentlyProducedSize;
+    bool m_allowImageChromium = true;
+    GLuint m_currentImageId = 1;
+    HashMap<GLuint, IntSize> m_textureSizes;
+    HashMap<GLuint, IntSize> m_imageSizes;
+    HashMap<GLuint, GLuint> m_imageToTextureMap;
+};
+
+class WebGraphicsContext3DForTests : public MockWebGraphicsContext3D {
+public:
+    WebGraphicsContext3DForTests(GLES2InterfaceForTests* contextGL)
+        : m_contextGL(contextGL)
     {
-        m_allowImageChromium = allow;
+    }
+
+    GLuint mostRecentlyWaitedSyncToken()
+    {
+        return m_contextGL->mostRecentlyWaitedSyncToken();
+    }
+
+    IntSize mostRecentlyProducedSize()
+    {
+        return m_contextGL->mostRecentlyProducedSize();
+    }
+
+
+    GLuint nextImageIdToBeCreated()
+    {
+        return m_contextGL->currentImageId();
     }
 
 private:
-    WebGLId m_boundTexture;
-    WGC3Denum m_boundTextureTarget;
-    HashMap<WebGLId, IntSize> m_textureSizes;
-    WGC3Dbyte m_currentMailboxByte;
-    IntSize m_mostRecentlyProducedSize;
-    WGC3Duint m_mostRecentlyWaitedSyncToken;
-    WGC3Duint m_currentImageId;
-    HashMap<WGC3Duint, IntSize> m_imageSizes;
-    HashMap<WGC3Duint, WebGLId> m_imageToTextureMap;
-    bool m_allowImageChromium;
+    GLES2InterfaceForTests* m_contextGL;
 };
 
 static const int initialWidth = 100;
@@ -207,23 +233,22 @@ static const int alternateHeight = 50;
 
 class DrawingBufferForTests : public DrawingBuffer {
 public:
-    static PassRefPtr<DrawingBufferForTests> create(PassOwnPtr<WebGraphicsContext3D> context,
-        const IntSize& size, PreserveDrawingBuffer preserve)
+    static PassRefPtr<DrawingBufferForTests> create(PassOwnPtr<WebGraphicsContext3DProvider> contextProvider, const IntSize& size, PreserveDrawingBuffer preserve)
     {
-        OwnPtr<Extensions3DUtil> extensionsUtil = Extensions3DUtil::create(context.get());
-        RefPtr<DrawingBufferForTests> drawingBuffer =
-            adoptRef(new DrawingBufferForTests(context, extensionsUtil.release(), preserve));
-        if (!drawingBuffer->initialize(size)) {
+        OwnPtr<Extensions3DUtil> extensionsUtil = Extensions3DUtil::create(contextProvider->contextGL());
+        RefPtr<DrawingBufferForTests> drawingBuffer = adoptRef(new DrawingBufferForTests(contextProvider, extensionsUtil.release(), preserve));
+        bool wantDepthBuffer = false;
+        bool wantStencilBuffer = false;
+        bool multisampleExtensionSupported = false;
+        if (!drawingBuffer->initialize(size, wantDepthBuffer, wantStencilBuffer, multisampleExtensionSupported)) {
             drawingBuffer->beginDestruction();
-            return PassRefPtr<DrawingBufferForTests>();
+            return nullptr;
         }
         return drawingBuffer.release();
     }
 
-    DrawingBufferForTests(PassOwnPtr<WebGraphicsContext3D> context,
-        PassOwnPtr<Extensions3DUtil> extensionsUtil,
-        PreserveDrawingBuffer preserve)
-        : DrawingBuffer(context, extensionsUtil, false /* multisampleExtensionSupported */, false /* discardFramebufferSupported */, preserve, WebGraphicsContext3D::Attributes())
+    DrawingBufferForTests(PassOwnPtr<WebGraphicsContext3DProvider> contextProvider, PassOwnPtr<Extensions3DUtil> extensionsUtil, PreserveDrawingBuffer preserve)
+        : DrawingBuffer(contextProvider, extensionsUtil, false /* discardFramebufferSupported */, true /* wantAlphaChannel */, false /* premultipliedAlpha */, preserve)
         , m_live(0)
     { }
 
@@ -236,14 +261,36 @@ public:
     bool* m_live;
 };
 
+class WebGraphicsContext3DProviderForTests : public WebGraphicsContext3DProvider {
+public:
+    WebGraphicsContext3DProviderForTests(PassOwnPtr<WebGraphicsContext3D> context, PassOwnPtr<gpu::gles2::GLES2Interface> gl)
+        : m_context(std::move(context))
+        , m_gl(std::move(gl))
+    {
+    }
+
+    WebGraphicsContext3D* context3d() override { return m_context.get(); }
+    gpu::gles2::GLES2Interface* contextGL() override { return m_gl.get(); }
+    // Not used by WebGL code.
+    GrContext* grContext() override { return nullptr; }
+    void setLostContextCallback(WebClosure) {}
+
+private:
+    OwnPtr<WebGraphicsContext3D> m_context;
+    OwnPtr<gpu::gles2::GLES2Interface> m_gl;
+};
+
 class DrawingBufferTest : public Test {
 protected:
     void SetUp() override
     {
-        OwnPtr<WebGraphicsContext3DForTests> context = adoptPtr(new WebGraphicsContext3DForTests);
+        OwnPtr<GLES2InterfaceForTests> gl = adoptPtr(new GLES2InterfaceForTests);
+        m_gl = gl.get();
+        OwnPtr<WebGraphicsContext3DForTests> context = adoptPtr(new WebGraphicsContext3DForTests(m_gl));
         m_context = context.get();
-        m_drawingBuffer = DrawingBufferForTests::create(context.release(),
-            IntSize(initialWidth, initialHeight), DrawingBuffer::Preserve);
+        OwnPtr<WebGraphicsContext3DProviderForTests> provider = adoptPtr(new WebGraphicsContext3DProviderForTests(context.release(), gl.release()));
+        m_drawingBuffer = DrawingBufferForTests::create(provider.release(), IntSize(initialWidth, initialHeight), DrawingBuffer::Preserve);
+        CHECK(m_drawingBuffer);
     }
 
     WebGraphicsContext3DForTests* webContext()
@@ -252,6 +299,7 @@ protected:
     }
 
     WebGraphicsContext3DForTests* m_context;
+    GLES2InterfaceForTests* m_gl;
     RefPtr<DrawingBufferForTests> m_drawingBuffer;
 };
 
@@ -268,7 +316,7 @@ TEST_F(DrawingBufferTest, verifyResizingProperlyAffectsMailboxes)
     EXPECT_EQ(initialSize, webContext()->mostRecentlyProducedSize());
 
     // Resize to 100x50.
-    m_drawingBuffer->reset(IntSize(initialWidth, alternateHeight));
+    m_drawingBuffer->reset(IntSize(initialWidth, alternateHeight), false);
     m_drawingBuffer->mailboxReleased(mailbox, false);
 
     // Produce a mailbox at this size.
@@ -277,7 +325,7 @@ TEST_F(DrawingBufferTest, verifyResizingProperlyAffectsMailboxes)
     EXPECT_EQ(alternateSize, webContext()->mostRecentlyProducedSize());
 
     // Reset to initial size.
-    m_drawingBuffer->reset(IntSize(initialWidth, initialHeight));
+    m_drawingBuffer->reset(IntSize(initialWidth, initialHeight), false);
     m_drawingBuffer->mailboxReleased(mailbox, false);
 
     // Prepare another mailbox and verify that it's the correct size.
@@ -440,8 +488,8 @@ TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncTokenCorrectly)
     // prepareMailbox() does not wait for any sync point.
     EXPECT_EQ(0u, webContext()->mostRecentlyWaitedSyncToken());
 
-    WGC3Duint64 waitSyncToken = 0;
-    webContext()->genSyncTokenCHROMIUM(webContext()->insertFenceSyncCHROMIUM(), reinterpret_cast<WGC3Dbyte*>(&waitSyncToken));
+    GLuint64 waitSyncToken = 0;
+    m_gl->GenSyncTokenCHROMIUM(m_gl->InsertFenceSyncCHROMIUM(), reinterpret_cast<GLbyte*>(&waitSyncToken));
     memcpy(mailbox.syncToken, &waitSyncToken, sizeof(waitSyncToken));
     mailbox.validSyncToken = true;
     m_drawingBuffer->mailboxReleased(mailbox, false);
@@ -454,7 +502,7 @@ TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncTokenCorrectly)
     EXPECT_EQ(waitSyncToken, webContext()->mostRecentlyWaitedSyncToken());
 
     m_drawingBuffer->beginDestruction();
-    webContext()->genSyncTokenCHROMIUM(webContext()->insertFenceSyncCHROMIUM(), reinterpret_cast<WGC3Dbyte*>(&waitSyncToken));
+    m_gl->GenSyncTokenCHROMIUM(m_gl->InsertFenceSyncCHROMIUM(), reinterpret_cast<GLbyte*>(&waitSyncToken));
     memcpy(mailbox.syncToken, &waitSyncToken, sizeof(waitSyncToken));
     mailbox.validSyncToken = true;
     m_drawingBuffer->mailboxReleased(mailbox, false);
@@ -466,13 +514,17 @@ class DrawingBufferImageChromiumTest : public DrawingBufferTest {
 protected:
     void SetUp() override
     {
-        OwnPtr<WebGraphicsContext3DForTests> context = adoptPtr(new WebGraphicsContext3DForTests);
+        OwnPtr<GLES2InterfaceForTests> gl = adoptPtr(new GLES2InterfaceForTests);
+        m_gl = gl.get();
+        OwnPtr<WebGraphicsContext3DForTests> context = adoptPtr(new WebGraphicsContext3DForTests(m_gl));
         m_context = context.get();
+        OwnPtr<WebGraphicsContext3DProviderForTests> provider = adoptPtr(new WebGraphicsContext3DProviderForTests(context.release(), gl.release()));
         RuntimeEnabledFeatures::setWebGLImageChromiumEnabled(true);
         m_imageId0 = webContext()->nextImageIdToBeCreated();
-        EXPECT_CALL(*webContext(), bindTexImage2DMock(m_imageId0)).Times(1);
-        m_drawingBuffer = DrawingBufferForTests::create(context.release(),
+        EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId0)).Times(1);
+        m_drawingBuffer = DrawingBufferForTests::create(provider.release(),
             IntSize(initialWidth, initialHeight), DrawingBuffer::Preserve);
+        CHECK(m_drawingBuffer);
         testing::Mock::VerifyAndClearExpectations(webContext());
     }
 
@@ -480,7 +532,8 @@ protected:
     {
         RuntimeEnabledFeatures::setWebGLImageChromiumEnabled(false);
     }
-    WGC3Duint m_imageId0;
+
+    GLuint m_imageId0;
 };
 
 TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages)
@@ -490,8 +543,8 @@ TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages)
     IntSize initialSize(initialWidth, initialHeight);
     IntSize alternateSize(initialWidth, alternateHeight);
 
-    WGC3Duint m_imageId1 = webContext()->nextImageIdToBeCreated();
-    EXPECT_CALL(*webContext(), bindTexImage2DMock(m_imageId1)).Times(1);
+    GLuint m_imageId1 = webContext()->nextImageIdToBeCreated();
+    EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId1)).Times(1);
     // Produce one mailbox at size 100x100.
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
@@ -499,19 +552,19 @@ TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages)
     EXPECT_TRUE(mailbox.allowOverlay);
     testing::Mock::VerifyAndClearExpectations(webContext());
 
-    WGC3Duint m_imageId2 = webContext()->nextImageIdToBeCreated();
-    EXPECT_CALL(*webContext(), bindTexImage2DMock(m_imageId2)).Times(1);
-    EXPECT_CALL(*webContext(), destroyImageMock(m_imageId0)).Times(1);
-    EXPECT_CALL(*webContext(), releaseTexImage2DMock(m_imageId0)).Times(1);
+    GLuint m_imageId2 = webContext()->nextImageIdToBeCreated();
+    EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId2)).Times(1);
+    EXPECT_CALL(*m_gl, DestroyImageMock(m_imageId0)).Times(1);
+    EXPECT_CALL(*m_gl, ReleaseTexImage2DMock(m_imageId0)).Times(1);
     // Resize to 100x50.
-    m_drawingBuffer->reset(IntSize(initialWidth, alternateHeight));
+    m_drawingBuffer->reset(IntSize(initialWidth, alternateHeight), false);
     m_drawingBuffer->mailboxReleased(mailbox, false);
     testing::Mock::VerifyAndClearExpectations(webContext());
 
-    WGC3Duint m_imageId3 = webContext()->nextImageIdToBeCreated();
-    EXPECT_CALL(*webContext(), bindTexImage2DMock(m_imageId3)).Times(1);
-    EXPECT_CALL(*webContext(), destroyImageMock(m_imageId1)).Times(1);
-    EXPECT_CALL(*webContext(), releaseTexImage2DMock(m_imageId1)).Times(1);
+    GLuint m_imageId3 = webContext()->nextImageIdToBeCreated();
+    EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId3)).Times(1);
+    EXPECT_CALL(*m_gl, DestroyImageMock(m_imageId1)).Times(1);
+    EXPECT_CALL(*m_gl, ReleaseTexImage2DMock(m_imageId1)).Times(1);
     // Produce a mailbox at this size.
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
@@ -519,19 +572,19 @@ TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages)
     EXPECT_TRUE(mailbox.allowOverlay);
     testing::Mock::VerifyAndClearExpectations(webContext());
 
-    WGC3Duint m_imageId4 = webContext()->nextImageIdToBeCreated();
-    EXPECT_CALL(*webContext(), bindTexImage2DMock(m_imageId4)).Times(1);
-    EXPECT_CALL(*webContext(), destroyImageMock(m_imageId2)).Times(1);
-    EXPECT_CALL(*webContext(), releaseTexImage2DMock(m_imageId2)).Times(1);
+    GLuint m_imageId4 = webContext()->nextImageIdToBeCreated();
+    EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId4)).Times(1);
+    EXPECT_CALL(*m_gl, DestroyImageMock(m_imageId2)).Times(1);
+    EXPECT_CALL(*m_gl, ReleaseTexImage2DMock(m_imageId2)).Times(1);
     // Reset to initial size.
-    m_drawingBuffer->reset(IntSize(initialWidth, initialHeight));
+    m_drawingBuffer->reset(IntSize(initialWidth, initialHeight), false);
     m_drawingBuffer->mailboxReleased(mailbox, false);
     testing::Mock::VerifyAndClearExpectations(webContext());
 
-    WGC3Duint m_imageId5 = webContext()->nextImageIdToBeCreated();
-    EXPECT_CALL(*webContext(), bindTexImage2DMock(m_imageId5)).Times(1);
-    EXPECT_CALL(*webContext(), destroyImageMock(m_imageId3)).Times(1);
-    EXPECT_CALL(*webContext(), releaseTexImage2DMock(m_imageId3)).Times(1);
+    GLuint m_imageId5 = webContext()->nextImageIdToBeCreated();
+    EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId5)).Times(1);
+    EXPECT_CALL(*m_gl, DestroyImageMock(m_imageId3)).Times(1);
+    EXPECT_CALL(*m_gl, ReleaseTexImage2DMock(m_imageId3)).Times(1);
     // Prepare another mailbox and verify that it's the correct size.
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
@@ -547,42 +600,17 @@ TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages)
     EXPECT_TRUE(mailbox.allowOverlay);
     m_drawingBuffer->mailboxReleased(mailbox, false);
 
-    EXPECT_CALL(*webContext(), destroyImageMock(m_imageId5)).Times(1);
-    EXPECT_CALL(*webContext(), releaseTexImage2DMock(m_imageId5)).Times(1);
-    EXPECT_CALL(*webContext(), destroyImageMock(m_imageId4)).Times(1);
-    EXPECT_CALL(*webContext(), releaseTexImage2DMock(m_imageId4)).Times(1);
+    EXPECT_CALL(*m_gl, DestroyImageMock(m_imageId5)).Times(1);
+    EXPECT_CALL(*m_gl, ReleaseTexImage2DMock(m_imageId5)).Times(1);
+    EXPECT_CALL(*m_gl, DestroyImageMock(m_imageId4)).Times(1);
+    EXPECT_CALL(*m_gl, ReleaseTexImage2DMock(m_imageId4)).Times(1);
     m_drawingBuffer->beginDestruction();
     testing::Mock::VerifyAndClearExpectations(webContext());
 }
 
-class DepthStencilTrackingContext : public MockWebGraphicsContext3D {
+class DepthStencilTrackingGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
 public:
-    DepthStencilTrackingContext()
-        : m_nextRenderBufferId(1)
-        , m_stencilAttachment(0)
-        , m_depthAttachment(0)
-        , m_depthStencilAttachment(0) {}
-    ~DepthStencilTrackingContext() override {}
-
-    int numAllocatedRenderBuffer() const { return m_nextRenderBufferId - 1; }
-    WebGLId stencilAttachment() const { return m_stencilAttachment; }
-    WebGLId depthAttachment() const { return m_depthAttachment; }
-    WebGLId depthStencilAttachment() const { return m_depthStencilAttachment; }
-
-    WebString getString(WGC3Denum type) override
-    {
-        if (type == GL_EXTENSIONS) {
-            return WebString::fromUTF8("GL_OES_packed_depth_stencil");
-        }
-        return WebString();
-    }
-
-    WebGLId createRenderbuffer() override
-    {
-        return ++m_nextRenderBufferId;
-    }
-
-    void framebufferRenderbuffer(WGC3Denum target, WGC3Denum attachment, WGC3Denum renderbuffertarget, WebGLId renderbuffer) override
+    void FramebufferRenderbuffer(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer) override
     {
         switch (attachment) {
         case GL_DEPTH_ATTACHMENT:
@@ -600,24 +628,60 @@ public:
         }
     }
 
-    void getIntegerv(WGC3Denum ptype, WGC3Dint* value) override
+    GLenum CheckFramebufferStatus(GLenum target) override
     {
-        switch (ptype) {
-        case GL_DEPTH_BITS:
-            *value = (m_depthAttachment || m_depthStencilAttachment) ? 24 : 0;
-            return;
-        case GL_STENCIL_BITS:
-            *value = (m_stencilAttachment || m_depthStencilAttachment) ? 8 : 0;
-            return;
-        }
-        MockWebGraphicsContext3D::getIntegerv(ptype, value);
+        return GL_FRAMEBUFFER_COMPLETE;
     }
 
+    void GetIntegerv(GLenum ptype, GLint* value) override
+    {
+        switch (ptype) {
+        case GL_MAX_TEXTURE_SIZE:
+            *value = 1024;
+            return;
+        }
+    }
+
+    const GLubyte* GetString(GLenum type) override
+    {
+        if (type == GL_EXTENSIONS)
+            return reinterpret_cast<const GLubyte*>("GL_OES_packed_depth_stencil");
+        return reinterpret_cast<const GLubyte*>("");
+    }
+
+    void GenRenderbuffers(GLsizei n, GLuint* renderbuffers) override
+    {
+        for (GLsizei i = 0; i < n; ++i)
+            renderbuffers[i] = m_nextGenRenderbufferId++;
+    }
+
+    GLuint stencilAttachment() const { return m_stencilAttachment; }
+    GLuint depthAttachment() const { return m_depthAttachment; }
+    GLuint depthStencilAttachment() const { return m_depthStencilAttachment; }
+    size_t numAllocatedRenderBuffer() const { return m_nextGenRenderbufferId - 1; }
+
 private:
-    WebGLId m_nextRenderBufferId;
-    WebGLId m_stencilAttachment;
-    WebGLId m_depthAttachment;
-    WebGLId m_depthStencilAttachment;
+    GLuint m_nextGenRenderbufferId = 1;
+    GLuint m_depthAttachment = 0;
+    GLuint m_stencilAttachment = 0;
+    GLuint m_depthStencilAttachment = 0;
+};
+
+class DepthStencilTrackingContext : public MockWebGraphicsContext3D {
+public:
+    DepthStencilTrackingContext(DepthStencilTrackingGLES2Interface* gl)
+        : m_contextGL(gl)
+    {
+    }
+    ~DepthStencilTrackingContext() override {}
+
+    size_t numAllocatedRenderBuffer() const { return m_contextGL->numAllocatedRenderBuffer(); }
+    GLuint stencilAttachment() const { return m_contextGL->stencilAttachment(); }
+    GLuint depthAttachment() const { return m_contextGL->depthAttachment(); }
+    GLuint depthStencilAttachment() const { return m_contextGL->depthStencilAttachment(); }
+
+private:
+    DepthStencilTrackingGLES2Interface* m_contextGL;
 };
 
 struct DepthStencilTestCase {
@@ -629,7 +693,7 @@ struct DepthStencilTestCase {
 
     bool requestStencil;
     bool requestDepth;
-    int expectedRenderBuffers;
+    size_t expectedRenderBuffers;
     const char* const testCaseName;
 };
 
@@ -649,17 +713,31 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported)
 
     for (size_t i = 0; i < WTF_ARRAY_LENGTH(cases); i++) {
         SCOPED_TRACE(cases[i].testCaseName);
-        OwnPtr<DepthStencilTrackingContext> context = adoptPtr(new DepthStencilTrackingContext);
+        OwnPtr<DepthStencilTrackingGLES2Interface> gl = adoptPtr(new DepthStencilTrackingGLES2Interface);
+        DepthStencilTrackingGLES2Interface* trackingGL = gl.get();
+        OwnPtr<DepthStencilTrackingContext> context = adoptPtr(new DepthStencilTrackingContext(trackingGL));
         DepthStencilTrackingContext* trackingContext = context.get();
+        OwnPtr<WebGraphicsContext3DProviderForTests> provider = adoptPtr(new WebGraphicsContext3DProviderForTests(context.release(), gl.release()));
         DrawingBuffer::PreserveDrawingBuffer preserve = DrawingBuffer::Preserve;
 
-        WebGraphicsContext3D::Attributes requestedAttributes;
-        requestedAttributes.stencil = cases[i].requestStencil;
-        requestedAttributes.depth = cases[i].requestDepth;
-        RefPtr<DrawingBuffer> drawingBuffer = DrawingBuffer::create(context.release(), IntSize(10, 10), preserve, requestedAttributes);
+        bool premultipliedAlpha = false;
+        bool wantAlphaChannel = true;
+        bool wantDepthBuffer = cases[i].requestDepth;
+        bool wantStencilBuffer = cases[i].requestStencil;
+        bool wantAntialiasing = false;
+        RefPtr<DrawingBuffer> drawingBuffer = DrawingBuffer::create(
+            provider.release(),
+            IntSize(10, 10),
+            premultipliedAlpha,
+            wantAlphaChannel,
+            wantDepthBuffer,
+            wantStencilBuffer,
+            wantAntialiasing,
+            preserve);
 
-        EXPECT_EQ(cases[i].requestDepth, drawingBuffer->getActualAttributes().depth);
-        EXPECT_EQ(cases[i].requestStencil, drawingBuffer->getActualAttributes().stencil);
+        // When we request a depth or a stencil buffer, we will get both.
+        EXPECT_EQ(cases[i].requestDepth || cases[i].requestStencil, drawingBuffer->hasDepthBuffer());
+        EXPECT_EQ(cases[i].requestDepth || cases[i].requestStencil, drawingBuffer->hasStencilBuffer());
         EXPECT_EQ(cases[i].expectedRenderBuffers, trackingContext->numAllocatedRenderBuffer());
         if (cases[i].requestDepth || cases[i].requestStencil) {
             EXPECT_NE(0u, trackingContext->depthStencilAttachment());
@@ -671,9 +749,9 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported)
             EXPECT_EQ(0u, trackingContext->stencilAttachment());
         }
 
-        drawingBuffer->reset(IntSize(10, 20));
-        EXPECT_EQ(cases[i].requestDepth, drawingBuffer->getActualAttributes().depth);
-        EXPECT_EQ(cases[i].requestStencil, drawingBuffer->getActualAttributes().stencil);
+        drawingBuffer->reset(IntSize(10, 20), false);
+        EXPECT_EQ(cases[i].requestDepth || cases[i].requestStencil, drawingBuffer->hasDepthBuffer());
+        EXPECT_EQ(cases[i].requestDepth || cases[i].requestStencil, drawingBuffer->hasStencilBuffer());
         EXPECT_EQ(cases[i].expectedRenderBuffers, trackingContext->numAllocatedRenderBuffer());
         if (cases[i].requestDepth || cases[i].requestStencil) {
             EXPECT_NE(0u, trackingContext->depthStencilAttachment());
@@ -697,12 +775,13 @@ TEST_F(DrawingBufferTest, verifySetIsHiddenProperlyAffectsMailboxes)
     m_drawingBuffer->markContentsChanged();
     EXPECT_TRUE(m_drawingBuffer->prepareMailbox(&mailbox, 0));
 
-    mailbox.validSyncToken = webContext()->genSyncTokenCHROMIUM(webContext()->insertFenceSyncCHROMIUM(), mailbox.syncToken);
+    m_gl->GenSyncTokenCHROMIUM(m_gl->InsertFenceSyncCHROMIUM(), mailbox.syncToken);
+    mailbox.validSyncToken = true;
     m_drawingBuffer->setIsHidden(true);
     m_drawingBuffer->mailboxReleased(mailbox);
     // m_drawingBuffer deletes mailbox immediately when hidden.
 
-    WGC3Duint waitSyncToken = 0;
+    GLuint waitSyncToken = 0;
     memcpy(&waitSyncToken, mailbox.syncToken, sizeof(waitSyncToken));
     EXPECT_EQ(waitSyncToken, webContext()->mostRecentlyWaitedSyncToken());
 
@@ -713,11 +792,14 @@ class DrawingBufferImageChromiumFallbackTest : public DrawingBufferTest {
 protected:
     void SetUp() override
     {
-        OwnPtr<WebGraphicsContext3DForTests> context = adoptPtr(new WebGraphicsContext3DForTests);
-        context->setAllowImageChromium(false);
+        OwnPtr<GLES2InterfaceForTests> gl = adoptPtr(new GLES2InterfaceForTests);
+        gl->setAllowImageChromium(false);
+        m_gl = gl.get();
+        OwnPtr<WebGraphicsContext3DForTests> context = adoptPtr(new WebGraphicsContext3DForTests(m_gl));
         m_context = context.get();
+        OwnPtr<WebGraphicsContext3DProviderForTests> provider = adoptPtr(new WebGraphicsContext3DProviderForTests(context.release(), gl.release()));
         RuntimeEnabledFeatures::setWebGLImageChromiumEnabled(true);
-        m_drawingBuffer = DrawingBufferForTests::create(context.release(),
+        m_drawingBuffer = DrawingBufferForTests::create(provider.release(),
             IntSize(initialWidth, initialHeight), DrawingBuffer::Preserve);
     }
 

@@ -40,14 +40,14 @@ PointerLockController::PointerLockController(Page* page)
 {
 }
 
-PassOwnPtrWillBeRawPtr<PointerLockController> PointerLockController::create(Page* page)
+PointerLockController* PointerLockController::create(Page* page)
 {
-    return adoptPtrWillBeNoop(new PointerLockController(page));
+    return new PointerLockController(page);
 }
 
 void PointerLockController::requestPointerLock(Element* target)
 {
-    if (!target || !target->inDocument() || m_documentOfRemovedElementWhileWaitingForUnlock) {
+    if (!target || !target->inShadowIncludingDocument() || m_documentOfRemovedElementWhileWaitingForUnlock) {
         enqueueEvent(EventTypeNames::pointerlockerror, target);
         return;
     }

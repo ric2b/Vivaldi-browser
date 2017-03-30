@@ -17,9 +17,12 @@
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/permission_type.h"
 #include "content/public/test/background_sync_test_util.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/test/mock_permission_manager.h"
+#include "content/test/test_background_sync_context_impl.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "net/base/network_change_notifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -27,6 +30,8 @@
 namespace content {
 
 namespace {
+
+using ::testing::_;
 
 const char kServiceWorkerPattern[] = "https://example.com/a";
 const char kServiceWorkerScript[] = "https://example.com/a/script.js";
@@ -52,11 +57,12 @@ void FindServiceWorkerRegistrationCallback(
 
 // Callbacks from BackgroundSyncServiceImpl methods
 
-void ErrorAndRegistrationCallback(bool* called,
-                                  BackgroundSyncError* out_error,
-                                  SyncRegistrationPtr* out_registration,
-                                  BackgroundSyncError error,
-                                  const SyncRegistrationPtr& registration) {
+void ErrorAndRegistrationCallback(
+    bool* called,
+    mojom::BackgroundSyncError* out_error,
+    mojom::SyncRegistrationPtr* out_registration,
+    mojom::BackgroundSyncError error,
+    const mojom::SyncRegistrationPtr& registration) {
   *called = true;
   *out_error = error;
   *out_registration = registration.Clone();
@@ -64,13 +70,13 @@ void ErrorAndRegistrationCallback(bool* called,
 
 void ErrorAndRegistrationListCallback(
     bool* called,
-    BackgroundSyncError* out_error,
+    mojom::BackgroundSyncError* out_error,
     unsigned long* out_array_size,
-    BackgroundSyncError error,
-    mojo::Array<content::SyncRegistrationPtr> registrations) {
+    mojom::BackgroundSyncError error,
+    mojo::Array<content::mojom::SyncRegistrationPtr> registrations) {
   *called = true;
   *out_error = error;
-  if (error == BackgroundSyncError::NONE)
+  if (error == mojom::BackgroundSyncError::NONE)
     *out_array_size = registrations.size();
 }
 
@@ -82,7 +88,7 @@ class BackgroundSyncServiceImplTest : public testing::Test {
       : thread_bundle_(
             new TestBrowserThreadBundle(TestBrowserThreadBundle::IO_MAINLOOP)),
         network_change_notifier_(net::NetworkChangeNotifier::CreateMock()) {
-    default_sync_registration_ = SyncRegistration::New();
+    default_sync_registration_ = mojom::SyncRegistration::New();
   }
 
   void SetUp() override {
@@ -112,6 +118,14 @@ class BackgroundSyncServiceImplTest : public testing::Test {
   void CreateTestHelper() {
     embedded_worker_helper_.reset(
         new EmbeddedWorkerTestHelper(base::FilePath()));
+    scoped_ptr<MockPermissionManager> mock_permission_manager(
+        new testing::NiceMock<MockPermissionManager>());
+    ON_CALL(*mock_permission_manager,
+            GetPermissionStatus(PermissionType::BACKGROUND_SYNC, _, _))
+        .WillByDefault(
+            testing::Return(blink::mojom::PermissionStatus::GRANTED));
+    embedded_worker_helper_->browser_context()->SetPermissionManager(
+        std::move(mock_permission_manager));
   }
 
   void CreateStoragePartition() {
@@ -120,13 +134,15 @@ class BackgroundSyncServiceImplTest : public testing::Test {
     storage_partition_impl_.reset(new StoragePartitionImpl(
         embedded_worker_helper_->browser_context(), base::FilePath(), nullptr,
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr));
+        nullptr, nullptr, nullptr, nullptr, nullptr));
     embedded_worker_helper_->context_wrapper()->set_storage_partition(
         storage_partition_impl_.get());
   }
 
   void CreateBackgroundSyncContext() {
-    background_sync_context_ = new BackgroundSyncContextImpl();
+    // Registering for background sync includes a check for having a same-origin
+    // main frame. Use a test context that allows control over that check.
+    background_sync_context_ = new TestBackgroundSyncContextImpl();
     background_sync_context_->Init(embedded_worker_helper_->context_wrapper());
 
     // Tests do not expect the sync event to fire immediately after
@@ -162,10 +178,10 @@ class BackgroundSyncServiceImplTest : public testing::Test {
 
   void CreateBackgroundSyncServiceImpl() {
     // Create a dummy mojo channel so that the BackgroundSyncServiceImpl can be
-    // instantiated
-    mojo::InterfaceRequest<BackgroundSyncService> service_request =
+    // instantiated.
+    mojo::InterfaceRequest<mojom::BackgroundSyncService> service_request =
         mojo::GetProxy(&service_ptr_);
-    // Create a new BackgroundSyncServiceImpl bound to the dummy channel
+    // Create a new BackgroundSyncServiceImpl bound to the dummy channel.
     background_sync_context_->CreateService(std::move(service_request));
     base::RunLoop().RunUntilIdle();
 
@@ -174,16 +190,15 @@ class BackgroundSyncServiceImplTest : public testing::Test {
   }
 
   // Helpers for testing BackgroundSyncServiceImpl methods
-  void Register(SyncRegistrationPtr sync,
-                const BackgroundSyncService::RegisterCallback& callback) {
-    service_impl_->Register(std::move(sync), sw_registration_id_,
-                            false /* requested_from_service_worker */,
-                            callback);
+  void Register(
+      mojom::SyncRegistrationPtr sync,
+      const mojom::BackgroundSyncService::RegisterCallback& callback) {
+    service_impl_->Register(std::move(sync), sw_registration_id_, callback);
     base::RunLoop().RunUntilIdle();
   }
 
   void GetRegistrations(
-      const BackgroundSyncService::GetRegistrationsCallback& callback) {
+      const mojom::BackgroundSyncService::GetRegistrationsCallback& callback) {
     service_impl_->GetRegistrations(sw_registration_id_, callback);
     base::RunLoop().RunUntilIdle();
   }
@@ -195,53 +210,53 @@ class BackgroundSyncServiceImplTest : public testing::Test {
   scoped_refptr<BackgroundSyncContextImpl> background_sync_context_;
   int64_t sw_registration_id_;
   scoped_refptr<ServiceWorkerRegistration> sw_registration_;
-  BackgroundSyncServicePtr service_ptr_;
+  mojom::BackgroundSyncServicePtr service_ptr_;
   BackgroundSyncServiceImpl*
       service_impl_;  // Owned by background_sync_context_
-  SyncRegistrationPtr default_sync_registration_;
+  mojom::SyncRegistrationPtr default_sync_registration_;
 };
 
 // Tests
 
 TEST_F(BackgroundSyncServiceImplTest, Register) {
   bool called = false;
-  BackgroundSyncError error;
-  SyncRegistrationPtr reg;
+  mojom::BackgroundSyncError error;
+  mojom::SyncRegistrationPtr reg;
   Register(default_sync_registration_.Clone(),
            base::Bind(&ErrorAndRegistrationCallback, &called, &error, &reg));
   EXPECT_TRUE(called);
-  EXPECT_EQ(BackgroundSyncError::NONE, error);
+  EXPECT_EQ(mojom::BackgroundSyncError::NONE, error);
   EXPECT_EQ("", reg->tag);
 }
 
 TEST_F(BackgroundSyncServiceImplTest, GetRegistrations) {
   bool called = false;
-  BackgroundSyncError error;
+  mojom::BackgroundSyncError error;
   unsigned long array_size = 0UL;
   GetRegistrations(base::Bind(&ErrorAndRegistrationListCallback, &called,
                               &error, &array_size));
   EXPECT_TRUE(called);
-  EXPECT_EQ(BackgroundSyncError::NONE, error);
+  EXPECT_EQ(mojom::BackgroundSyncError::NONE, error);
   EXPECT_EQ(0UL, array_size);
 }
 
 TEST_F(BackgroundSyncServiceImplTest, GetRegistrationsWithRegisteredSync) {
   bool register_called = false;
   bool getregistrations_called = false;
-  BackgroundSyncError register_error;
-  BackgroundSyncError getregistrations_error;
-  SyncRegistrationPtr register_reg;
+  mojom::BackgroundSyncError register_error;
+  mojom::BackgroundSyncError getregistrations_error;
+  mojom::SyncRegistrationPtr register_reg;
   unsigned long array_size = 0UL;
   Register(default_sync_registration_.Clone(),
            base::Bind(&ErrorAndRegistrationCallback, &register_called,
                       &register_error, &register_reg));
   EXPECT_TRUE(register_called);
-  EXPECT_EQ(BackgroundSyncError::NONE, register_error);
+  EXPECT_EQ(mojom::BackgroundSyncError::NONE, register_error);
   GetRegistrations(base::Bind(&ErrorAndRegistrationListCallback,
                               &getregistrations_called, &getregistrations_error,
                               &array_size));
   EXPECT_TRUE(getregistrations_called);
-  EXPECT_EQ(BackgroundSyncError::NONE, getregistrations_error);
+  EXPECT_EQ(mojom::BackgroundSyncError::NONE, getregistrations_error);
   EXPECT_EQ(1UL, array_size);
 }
 

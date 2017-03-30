@@ -67,6 +67,7 @@ DEFINE_TRACE(IDBObjectStore)
 {
     visitor->trace(m_transaction);
     visitor->trace(m_indexMap);
+    visitor->trace(m_createdIndexes);
 }
 
 ScriptValue IDBObjectStore::keyPath(ScriptState* scriptState) const
@@ -74,14 +75,14 @@ ScriptValue IDBObjectStore::keyPath(ScriptState* scriptState) const
     return ScriptValue::from(scriptState, m_metadata.keyPath);
 }
 
-PassRefPtrWillBeRawPtr<DOMStringList> IDBObjectStore::indexNames() const
+DOMStringList* IDBObjectStore::indexNames() const
 {
     IDB_TRACE("IDBObjectStore::indexNames");
-    RefPtrWillBeRawPtr<DOMStringList> indexNames = DOMStringList::create(DOMStringList::IndexedDB);
+    DOMStringList* indexNames = DOMStringList::create(DOMStringList::IndexedDB);
     for (const auto& it : m_metadata.indexes)
         indexNames->append(it.value.name);
     indexNames->sort();
-    return indexNames.release();
+    return indexNames;
 }
 
 IDBRequest* IDBObjectStore::get(ScriptState* scriptState, const ScriptValue& key, ExceptionState& exceptionState)
@@ -99,7 +100,7 @@ IDBRequest* IDBObjectStore::get(ScriptState* scriptState, const ScriptValue& key
         exceptionState.throwDOMException(TransactionInactiveError, IDBDatabase::transactionInactiveErrorMessage);
         return nullptr;
     }
-    IDBKeyRange* keyRange = IDBKeyRange::fromScriptValue(scriptState->executionContext(), key, exceptionState);
+    IDBKeyRange* keyRange = IDBKeyRange::fromScriptValue(scriptState->getExecutionContext(), key, exceptionState);
     if (exceptionState.hadException())
         return nullptr;
     if (!keyRange) {
@@ -139,7 +140,7 @@ IDBRequest* IDBObjectStore::getAll(ScriptState* scriptState, const ScriptValue& 
         exceptionState.throwDOMException(TransactionInactiveError, IDBDatabase::transactionInactiveErrorMessage);
         return nullptr;
     }
-    IDBKeyRange* range = IDBKeyRange::fromScriptValue(scriptState->executionContext(), keyRange, exceptionState);
+    IDBKeyRange* range = IDBKeyRange::fromScriptValue(scriptState->getExecutionContext(), keyRange, exceptionState);
     if (exceptionState.hadException())
         return nullptr;
     if (!backendDB()) {
@@ -175,7 +176,7 @@ IDBRequest* IDBObjectStore::getAllKeys(ScriptState* scriptState, const ScriptVal
         exceptionState.throwDOMException(TransactionInactiveError, IDBDatabase::transactionInactiveErrorMessage);
         return nullptr;
     }
-    IDBKeyRange* range = IDBKeyRange::fromScriptValue(scriptState->executionContext(), keyRange, exceptionState);
+    IDBKeyRange* range = IDBKeyRange::fromScriptValue(scriptState->getExecutionContext(), keyRange, exceptionState);
     if (exceptionState.hadException())
         return nullptr;
     if (!backendDB()) {
@@ -197,14 +198,14 @@ static void generateIndexKeysForValue(v8::Isolate* isolate, const IDBIndexMetada
     if (!indexKey)
         return;
 
-    if (!indexMetadata.multiEntry || indexKey->type() != IDBKey::ArrayType) {
+    if (!indexMetadata.multiEntry || indexKey->getType() != IDBKey::ArrayType) {
         if (!indexKey->isValid())
             return;
 
         indexKeys->append(indexKey);
     } else {
         ASSERT(indexMetadata.multiEntry);
-        ASSERT(indexKey->type() == IDBKey::ArrayType);
+        ASSERT(indexKey->getType() == IDBKey::ArrayType);
         indexKey = IDBKey::createMultiEntryArray(indexKey->array());
 
         for (size_t i = 0; i < indexKey->array().size(); ++i)
@@ -361,7 +362,7 @@ IDBRequest* IDBObjectStore::deleteFunction(ScriptState* scriptState, const Scrip
         return nullptr;
     }
 
-    IDBKeyRange* keyRange = IDBKeyRange::fromScriptValue(scriptState->executionContext(), key, exceptionState);
+    IDBKeyRange* keyRange = IDBKeyRange::fromScriptValue(scriptState->getExecutionContext(), key, exceptionState);
     if (exceptionState.hadException())
         return nullptr;
     if (!keyRange) {
@@ -415,9 +416,9 @@ namespace {
 // cursor success handlers are kept alive.
 class IndexPopulator final : public EventListener {
 public:
-    static PassRefPtrWillBeRawPtr<IndexPopulator> create(ScriptState* scriptState, IDBDatabase* database, int64_t transactionId, int64_t objectStoreId, const IDBIndexMetadata& indexMetadata)
+    static IndexPopulator* create(ScriptState* scriptState, IDBDatabase* database, int64_t transactionId, int64_t objectStoreId, const IDBIndexMetadata& indexMetadata)
     {
-        return adoptRefWillBeNoop(new IndexPopulator(scriptState, database, transactionId, objectStoreId, indexMetadata));
+        return new IndexPopulator(scriptState, database, transactionId, objectStoreId, indexMetadata);
     }
 
     bool operator==(const EventListener& other) const override
@@ -444,7 +445,7 @@ private:
 
     void handleEvent(ExecutionContext* executionContext, Event* event) override
     {
-        ASSERT(m_scriptState->executionContext() == executionContext);
+        ASSERT(m_scriptState->getExecutionContext() == executionContext);
         ASSERT(event->type() == EventTypeNames::success);
         EventTarget* target = event->target();
         IDBRequest* request = static_cast<IDBRequest*>(target);
@@ -454,7 +455,7 @@ private:
 
         IDBAny* cursorAny = request->resultAsAny();
         IDBCursorWithValue* cursor = nullptr;
-        if (cursorAny->type() == IDBAny::IDBCursorWithValueType)
+        if (cursorAny->getType() == IDBAny::IDBCursorWithValueType)
             cursor = cursorAny->idbCursorWithValue();
 
         Vector<int64_t> indexIds;
@@ -482,7 +483,7 @@ private:
     }
 
     RefPtr<ScriptState> m_scriptState;
-    PersistentWillBeMember<IDBDatabase> m_database;
+    Member<IDBDatabase> m_database;
     const int64_t m_transactionId;
     const int64_t m_objectStoreId;
     const IDBIndexMetadata m_indexMetadata;
@@ -517,7 +518,7 @@ IDBIndex* IDBObjectStore::createIndex(ScriptState* scriptState, const String& na
         return nullptr;
     }
 
-    if (keyPath.type() == IDBKeyPath::ArrayType && options.multiEntry()) {
+    if (keyPath.getType() == IDBKeyPath::ArrayType && options.multiEntry()) {
         exceptionState.throwDOMException(InvalidAccessError, "The keyPath argument was an array and the multiEntry option is true.");
         return nullptr;
     }
@@ -534,6 +535,7 @@ IDBIndex* IDBObjectStore::createIndex(ScriptState* scriptState, const String& na
     IDBIndexMetadata metadata(name, indexId, keyPath, options.unique(), options.multiEntry());
     IDBIndex* index = IDBIndex::create(metadata, this, m_transaction.get());
     m_indexMap.set(name, index);
+    m_createdIndexes.add(index);
     m_metadata.indexes.set(indexId, metadata);
     m_transaction->db()->indexCreated(id(), metadata);
 
@@ -545,7 +547,7 @@ IDBIndex* IDBObjectStore::createIndex(ScriptState* scriptState, const String& na
     indexRequest->preventPropagation();
 
     // This is kept alive by being the success handler of the request, which is in turn kept alive by the owning transaction.
-    RefPtrWillBeRawPtr<IndexPopulator> indexPopulator = IndexPopulator::create(scriptState, transaction()->db(), m_transaction->id(), id(), metadata);
+    IndexPopulator* indexPopulator = IndexPopulator::create(scriptState, transaction()->db(), m_transaction->id(), id(), metadata);
     indexRequest->setOnsuccess(indexPopulator);
     return index;
 }
@@ -644,7 +646,7 @@ IDBRequest* IDBObjectStore::openCursor(ScriptState* scriptState, const ScriptVal
     }
 
     WebIDBCursorDirection direction = IDBCursor::stringToDirection(directionString);
-    IDBKeyRange* keyRange = IDBKeyRange::fromScriptValue(scriptState->executionContext(), range, exceptionState);
+    IDBKeyRange* keyRange = IDBKeyRange::fromScriptValue(scriptState->getExecutionContext(), range, exceptionState);
     if (exceptionState.hadException())
         return nullptr;
 
@@ -682,7 +684,7 @@ IDBRequest* IDBObjectStore::openKeyCursor(ScriptState* scriptState, const Script
     }
 
     WebIDBCursorDirection direction = IDBCursor::stringToDirection(directionString);
-    IDBKeyRange* keyRange = IDBKeyRange::fromScriptValue(scriptState->executionContext(), range, exceptionState);
+    IDBKeyRange* keyRange = IDBKeyRange::fromScriptValue(scriptState->getExecutionContext(), range, exceptionState);
     if (exceptionState.hadException())
         return nullptr;
 
@@ -714,7 +716,7 @@ IDBRequest* IDBObjectStore::count(ScriptState* scriptState, const ScriptValue& r
         return nullptr;
     }
 
-    IDBKeyRange* keyRange = IDBKeyRange::fromScriptValue(scriptState->executionContext(), range, exceptionState);
+    IDBKeyRange* keyRange = IDBKeyRange::fromScriptValue(scriptState->getExecutionContext(), range, exceptionState);
     if (exceptionState.hadException())
         return nullptr;
 
@@ -728,12 +730,20 @@ IDBRequest* IDBObjectStore::count(ScriptState* scriptState, const ScriptValue& r
     return request;
 }
 
+void IDBObjectStore::abort()
+{
+    for (auto& index : m_createdIndexes)
+        index->markDeleted();
+}
+
 void IDBObjectStore::transactionFinished()
 {
     ASSERT(m_transaction->isFinished());
 
     // Break reference cycles.
+    // TODO(jsbell): This can be removed c/o Oilpan.
     m_indexMap.clear();
+    m_createdIndexes.clear();
 }
 
 int64_t IDBObjectStore::findIndexId(const String& name) const

@@ -28,7 +28,9 @@ namespace blink {
 
 enum CSSPropertyID {
     CSSPropertyInvalid = 0,
-    CSSPropertyVariable = 1,
+    // This isn't a property, but we need to know the position of @apply rules in style rules
+    CSSPropertyApplyAtRule = 1,
+    CSSPropertyVariable = 2,
 %(property_enums)s
 };
 
@@ -45,7 +47,7 @@ WTF::String getJSPropertyName(CSSPropertyID);
 
 inline CSSPropertyID convertToCSSPropertyID(int value)
 {
-    ASSERT((value >= firstCSSProperty && value <= lastCSSProperty) || value == CSSPropertyInvalid || value == CSSPropertyVariable);
+    ASSERT(value >= CSSPropertyInvalid && value <= lastCSSProperty);
     return static_cast<CSSPropertyID>(value);
 }
 
@@ -137,17 +139,15 @@ const AtomicString& getPropertyNameAtomicString(CSSPropertyID id)
     int index = id - firstCSSProperty;
     static AtomicString* propertyStrings = new AtomicString[lastUnresolvedCSSProperty]; // Intentionally never destroyed.
     AtomicString& propertyString = propertyStrings[index];
-    if (propertyString.isNull()) {
-        const char* propertyName = propertyNameStringsPool + propertyNameStringsOffsets[index];
-        propertyString = AtomicString(propertyName, strlen(propertyName), AtomicString::ConstructFromLiteral);
-    }
+    if (propertyString.isNull())
+        propertyString = AtomicString(propertyNameStringsPool + propertyNameStringsOffsets[index]);
     return propertyString;
 }
 
 String getPropertyNameString(CSSPropertyID id)
 {
     // We share the StringImpl with the AtomicStrings.
-    return getPropertyNameAtomicString(id).string();
+    return getPropertyNameAtomicString(id).getString();
 }
 
 String getJSPropertyName(CSSPropertyID id)

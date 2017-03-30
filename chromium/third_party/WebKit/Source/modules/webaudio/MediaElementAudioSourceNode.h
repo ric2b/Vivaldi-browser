@@ -72,7 +72,7 @@ private:
     // This Persistent doesn't make a reference cycle. The reference from
     // HTMLMediaElement to AudioSourceProvideClient, which
     // MediaElementAudioSourceNode implements, is weak.
-    RefPtrWillBePersistent<HTMLMediaElement> m_mediaElement;
+    Persistent<HTMLMediaElement> m_mediaElement;
     Mutex m_processLock;
 
     unsigned m_sourceNumberOfChannels;
@@ -81,7 +81,7 @@ private:
     OwnPtr<MultiChannelResampler> m_multiChannelResampler;
 
     // |m_passesCurrentSrcCORSAccessCheck| holds the value of
-    // context()->securityOrigin() && context()->securityOrigin()->canRequest(mediaElement()->currentSrc()),
+    // context()->getSecurityOrigin() && context()->getSecurityOrigin()->canRequest(mediaElement()->currentSrc()),
     // updated in the ctor and onCurrentSrcChanged() on the main thread and
     // used in passesCORSAccessCheck() on the audio thread,
     // protected by |m_processLock|.

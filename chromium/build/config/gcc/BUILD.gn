@@ -60,7 +60,7 @@ config("rpath_for_built_shared_libraries") {
   }
 }
 
-# Settings for executables and shared libraries.
+# Settings for executables.
 config("executable_ldconfig") {
   if (is_android) {
     ldflags = [
@@ -93,6 +93,9 @@ config("executable_ldconfig") {
       # and the new DT_RUNPATH doesn't work without --no-as-needed flag.
       "-Wl,--disable-new-dtags",
     ]
+    if (current_cpu == "mipsel") {
+      ldflags += [ "-pie" ]
+    }
   }
 }
 

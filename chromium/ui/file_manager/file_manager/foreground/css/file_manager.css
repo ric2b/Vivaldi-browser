@@ -124,6 +124,129 @@ a:focus {
   flex-direction: column;
 }
 
+/* Details pane */
+.details-container {
+  background-color: rgb(250, 250, 250);
+  display: flex;
+  flex: none;
+  max-width: 30%;
+  min-width: 100px;
+  overflow: hidden;
+  position: relative;
+  width: 240px;
+}
+
+#list-details-splitter:not([activated]) {
+  display: none;
+}
+
+.details-container:not([activated]) {
+  display: none;
+}
+
+.details-container > div:not([activated]) {
+  display: none !important;
+}
+
+/* Filetype icons in details panel */
+
+.details-container .thumbnail-container {
+  box-sizing: border-box;
+  padding: 6px;
+  position: relative;
+  width: 100%;
+}
+
+.details-container .thumbnail-container:before {
+  content: "";
+  display: block;
+  padding-top: 100%;
+}
+
+.details-container .thumbnail-container > .thumbnail {
+  background-color: rgb(230, 230, 230);
+  background-position: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+}
+
+/* File thumbnails/quick previews in details panel */
+
+.details-container .thumbnail > img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.details-container .thumbnail > video {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.details-container .thumbnail > audio {
+  bottom: 0px;
+  left: 0px;
+  height: auto;
+  position: absolute;
+  width: 100%;
+}
+
+/* Details panel for single file */
+
+.details-container > #single-file-details {
+  display: flex;
+  flex: auto;
+  flex-direction: column;
+  width: 100%;
+}
+
+#single-file-details > .filename-container {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  height: 40px;
+  padding: 0 6px;
+  width: 100%;
+}
+
+#single-file-details > .filename-container > .filename {
+  -webkit-padding-end: 6px;
+  flex: auto;
+  font-weight: 500;
+  overflow: hidden;
+}
+
+#single-file-details > .thumbnail-container > .thumbnail.loaded {
+  background-image: none;
+}
+
+#single-file-details > .details-list {
+  flex: auto;
+  width: 100%;
+}
+
+#single-file-details > .details-list > li:not(.available) {
+  display: none;
+}
+
+/* Filetype icon of details panel for multiple files */
+
+.details-container > #multi-file-details {
+  display: flex;
+  flex: auto;
+  flex-direction: column;
+  width: 100%;
+}
+
+#multi-file-details > .details-list {
+  flex: auto;
+  width: 100%;
+}
+
 /* Directory tree at the left. */
 .dialog-navigation-list {
   -webkit-border-end: 1px solid rgba(0, 0, 0, 0.15);
@@ -449,6 +572,24 @@ body.check-select #sort-button {
   display: none;
 }
 
+#details-button {
+  /**
+   * TODO(ryoh): This should be removed after we finally implement details
+   *     panel.
+   */
+  display: none;
+}
+
+#details-button > .icon {
+  background-image: -webkit-image-set(
+      url(../images/files/ui/info_white.png) 1x,
+      url(../images/files/ui/2x/info_white.png) 2x);
+}
+
+body.check-select #details-button {
+  display: none;
+}
+
 #gear-button > .icon {
   background-image: -webkit-image-set(
       url(../images/files/ui/menu_white.png) 1x,
@@ -513,7 +654,7 @@ html[dir='rtl'] #cloud-import-details {
 }
 
 #cloud-import-details.hidden {
-  -webkit-transform: translateY(-10px);
+  transform: translateY(-10px);
   opacity: 0;
 }
 
@@ -698,7 +839,7 @@ body.check-select #search-box {
 
 #search-box.has-cursor input,
 #search-box.has-text input {
-  width: 218px;
+  width: 202px;
 }
 
 #search-box .clear {
@@ -710,9 +851,9 @@ body.check-select #search-box {
   display: none;
   height: 16px;
   margin: 0;
-  position: absolute;
+  position: relative;
   right: 0;
-  top: 7px;
+  top: 2px;
   visibility: hidden;
   width: 16px;
 }
@@ -985,7 +1126,7 @@ body.check-select .breadcrumbs {
 }
 
 html[dir='rtl'] .breadcrumbs .separator {
-  -webkit-transform: scaleX(-1);
+  transform: scaleX(-1);
 }
 
 .filelist-panel {

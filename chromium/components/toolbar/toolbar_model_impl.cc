@@ -44,9 +44,6 @@ base::string16 ToolbarModelImpl::GetText() const {
 }
 
 base::string16 ToolbarModelImpl::GetFormattedURL(size_t* prefix_end) const {
-  // May be empty during initialization.
-  std::string languages = delegate_->GetAcceptLanguages();
-
   GURL url(GetURL());
   // Note that we can't unescape spaces here, because if the user copies this
   // and pastes it into another program, that program may think the URL ends at
@@ -54,7 +51,7 @@ base::string16 ToolbarModelImpl::GetFormattedURL(size_t* prefix_end) const {
   const base::string16 formatted_text =
       delegate_->FormattedStringWithEquivalentMeaning(
           url, url_formatter::FormatUrl(
-                   url, languages, url_formatter::kFormatUrlOmitAll,
+                   url, url_formatter::kFormatUrlOmitAll,
                    net::UnescapeRule::NORMAL, nullptr, prefix_end, nullptr));
   if (formatted_text.length() <= max_url_display_chars_)
     return formatted_text;
@@ -128,7 +125,7 @@ int ToolbarModelImpl::GetIcon() const {
 }
 
 gfx::VectorIconId ToolbarModelImpl::GetVectorIcon() const {
-#if !defined(OS_ANDROID) && !defined(OS_MACOSX) && !defined(OS_IOS)
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
   switch (GetSecurityLevel(false)) {
     case SecurityStateModel::NONE:
       return gfx::VectorIconId::LOCATION_BAR_HTTP;

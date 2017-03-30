@@ -190,12 +190,32 @@ double WebPerformance::firstContentfulPaint() const
     return millisecondsToSeconds(m_private->timing()->firstContentfulPaint());
 }
 
-WebPerformance::WebPerformance(const PassRefPtrWillBeRawPtr<Performance>& performance)
+double WebPerformance::parseStart() const
+{
+    return millisecondsToSeconds(m_private->timing()->parseStart());
+}
+
+double WebPerformance::parseStop() const
+{
+    return millisecondsToSeconds(m_private->timing()->parseStop());
+}
+
+double WebPerformance::parseBlockedOnScriptLoadDuration() const
+{
+    return millisecondsToSeconds(m_private->timing()->parseBlockedOnScriptLoadDuration());
+}
+
+double WebPerformance::parseBlockedOnScriptLoadFromDocumentWriteDuration() const
+{
+    return millisecondsToSeconds(m_private->timing()->parseBlockedOnScriptLoadFromDocumentWriteDuration());
+}
+
+WebPerformance::WebPerformance(Performance* performance)
     : m_private(performance)
 {
 }
 
-WebPerformance& WebPerformance::operator=(const PassRefPtrWillBeRawPtr<Performance>& performance)
+WebPerformance& WebPerformance::operator=(Performance*performance)
 {
     m_private = performance;
     return *this;

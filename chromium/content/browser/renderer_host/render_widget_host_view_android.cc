@@ -38,6 +38,7 @@
 #include "content/browser/android/overscroll_controller_android.h"
 #include "content/browser/android/popup_touch_handle_drawable.h"
 #include "content/browser/android/synchronous_compositor_base.h"
+#include "content/browser/compositor/gl_helper.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
 #include "content/browser/gpu/compositor_util.h"
@@ -54,10 +55,9 @@
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/common/gpu/client/gl_helper.h"
 #include "content/common/gpu/client/webgraphicscontext3d_command_buffer_impl.h"
-#include "content/common/gpu/gpu_host_messages.h"
-#include "content/common/gpu/gpu_process_launch_causes.h"
+#include "content/common/gpu_host_messages.h"
+#include "content/common/gpu_process_launch_causes.h"
 #include "content/common/input/did_overscroll_params.h"
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
@@ -116,25 +116,23 @@ const int kUndefinedOutputSurfaceId = -1;
 
 static const char kAsyncReadBackString[] = "Compositing.CopyFromSurfaceTime";
 
-class GLHelperHolder
-    : public blink::WebGraphicsContext3D::WebGraphicsContextLostCallback {
+class GLHelperHolder {
  public:
   static GLHelperHolder* Create();
-  ~GLHelperHolder() override;
 
-  void Initialize();
-
-  // WebGraphicsContextLostCallback implementation.
-  void onContextLost() override;
-
-  GLHelper* GetGLHelper() { return gl_helper_.get(); }
-  bool IsLost() { return !context_.get() || context_->isContextLost(); }
+  GLHelper* gl_helper() { return gl_helper_.get(); }
+  bool IsLost() {
+    if (!gl_helper_)
+      return true;
+    return provider_->ContextGL()->GetGraphicsResetStatusKHR() != GL_NO_ERROR;
+  }
 
  private:
-  GLHelperHolder();
-  static scoped_ptr<WebGraphicsContext3DCommandBufferImpl> CreateContext3D();
+  GLHelperHolder() = default;
+  void Initialize();
+  void OnContextLost();
 
-  scoped_ptr<WebGraphicsContext3DCommandBufferImpl> context_;
+  scoped_refptr<ContextProviderCommandBuffer> provider_;
   scoped_ptr<GLHelper> gl_helper_;
 
   DISALLOW_COPY_AND_ASSIGN(GLHelperHolder);
@@ -143,49 +141,28 @@ class GLHelperHolder
 GLHelperHolder* GLHelperHolder::Create() {
   GLHelperHolder* holder = new GLHelperHolder;
   holder->Initialize();
-
   return holder;
 }
 
-GLHelperHolder::GLHelperHolder() {
-}
-
-GLHelperHolder::~GLHelperHolder() {
-}
-
 void GLHelperHolder::Initialize() {
-  context_ = CreateContext3D();
-  if (context_) {
-    context_->setContextLostCallback(this);
-    gl_helper_.reset(new GLHelper(context_->GetImplementation(),
-                                  context_->GetContextSupport()));
-  }
-}
+  auto* factory = BrowserGpuChannelHostFactory::instance();
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(factory->GetGpuChannel());
 
-void GLHelperHolder::onContextLost() {
-  // Need to post a task because the command buffer client cannot be deleted
-  // from within this callback.
-  LOG(ERROR) << "Context lost.";
-  base::MessageLoop::current()->PostTask(
-      FROM_HERE,
-      base::Bind(&RenderWidgetHostViewAndroid::OnContextLost));
-}
+  // The Browser Compositor is in charge of reestablishing the channel if its
+  // missing.
+  if (!gpu_channel_host)
+    return;
 
-scoped_ptr<WebGraphicsContext3DCommandBufferImpl>
-GLHelperHolder::CreateContext3D() {
-  BrowserGpuChannelHostFactory* factory =
-      BrowserGpuChannelHostFactory::instance();
-  scoped_refptr<GpuChannelHost> gpu_channel_host(factory->GetGpuChannel());
-  // GLHelper can only be used in asynchronous APIs for postprocessing after
-  // Browser Compositor operations (i.e. readback).
-  if (!gpu_channel_host.get()) {
-    // The Browser Compositor is in charge of reestablishing the channel.
-    return scoped_ptr<WebGraphicsContext3DCommandBufferImpl>();
-  }
+  // This is for an offscreen context, so we don't need the default framebuffer
+  // to have alpha, stencil, depth, antialiasing.
+  gpu::gles2::ContextCreationAttribHelper attributes;
+  attributes.alpha_size = -1;
+  attributes.stencil_size = 0;
+  attributes.depth_size = 0;
+  attributes.samples = 0;
+  attributes.sample_buffers = 0;
+  attributes.bind_generates_resource = false;
 
-  blink::WebGraphicsContext3D::Attributes attrs;
-  attrs.shareResources = true;
-  GURL url("chrome://gpu/RenderWidgetHostViewAndroid");
   static const size_t kBytesPerPixel = 4;
   gfx::DeviceDisplayInfo display_info;
   size_t full_screen_texture_size_in_bytes = display_info.GetDisplayHeight() *
@@ -199,23 +176,37 @@ GLHelperHolder::CreateContext3D() {
       3 * full_screen_texture_size_in_bytes, kDefaultMaxTransferBufferSize);
   limits.mapped_memory_reclaim_limit =
       WebGraphicsContext3DCommandBufferImpl::kNoLimit;
-  bool lose_context_when_out_of_memory = false;
+
+  bool share_resources = true;
+  // TODO(danakj): This should be false probably, it is for the main thread
+  // context which is used for GLHelper.
+  bool automatic_flushes = true;
+  GURL url("chrome://gpu/RenderWidgetHostViewAndroid");
+
   scoped_ptr<WebGraphicsContext3DCommandBufferImpl> context(
       new WebGraphicsContext3DCommandBufferImpl(
-          0,  // offscreen
-          url, gpu_channel_host.get(), attrs, lose_context_when_out_of_memory,
-          limits, nullptr));
-  context->SetContextType(BROWSER_OFFSCREEN_MAINTHREAD_CONTEXT);
-  if (context->InitializeOnCurrentThread()) {
-    context->traceBeginCHROMIUM(
-        "gpu_toplevel",
-        base::StringPrintf("CmdBufferImageTransportFactory-%p",
-                           context.get()).c_str());
-  } else {
-    context.reset();
-  }
+          gpu::kNullSurfaceHandle,  // offscreen
+          url, gpu_channel_host.get(), attributes, gfx::PreferIntegratedGpu,
+          share_resources, automatic_flushes, limits, nullptr));
+  provider_ = ContextProviderCommandBuffer::Create(
+      std::move(context), BROWSER_OFFSCREEN_MAINTHREAD_CONTEXT);
+  if (!provider_->BindToCurrentThread())
+    return;
+  provider_->ContextGL()->TraceBeginCHROMIUM(
+      "gpu_toplevel",
+      base::StringPrintf("CmdBufferImageTransportFactory-%p", provider_.get())
+          .c_str());
+  provider_->SetLostContextCallback(
+      base::Bind(&GLHelperHolder::OnContextLost, base::Unretained(this)));
+  gl_helper_.reset(
+      new GLHelper(provider_->ContextGL(), provider_->ContextSupport()));
+}
 
-  return context;
+void GLHelperHolder::OnContextLost() {
+  // Need to post a task because the command buffer client cannot be deleted
+  // from within this callback.
+  base::MessageLoop::current()->PostTask(
+      FROM_HERE, base::Bind(&RenderWidgetHostViewAndroid::OnContextLost));
 }
 
 // This can only be used for readback postprocessing. It may return null if the
@@ -231,7 +222,7 @@ GLHelper* GetPostReadbackGLHelper() {
   if (!g_readback_helper_holder)
     g_readback_helper_holder = GLHelperHolder::Create();
 
-  return g_readback_helper_holder->GetGLHelper();
+  return g_readback_helper_holder->gl_helper();
 }
 
 void CopyFromCompositingSurfaceFinished(
@@ -445,7 +436,6 @@ scoped_refptr<cc::Layer> RenderWidgetHostViewAndroid::CreateDelegatedLayer()
   DCHECK(manager);
   // manager must outlive compositors using it.
   scoped_refptr<cc::SurfaceLayer> surface_layer = cc::SurfaceLayer::Create(
-      Compositor::LayerSettings(),
       base::Bind(&SatisfyCallback, base::Unretained(manager)),
       base::Bind(&RequireCallback, base::Unretained(manager)));
   surface_layer->SetSurfaceId(surface_id_, 1.f, texture_size_in_layer_);
@@ -489,14 +479,6 @@ gfx::NativeViewAccessible
 RenderWidgetHostViewAndroid::GetNativeViewAccessible() {
   NOTIMPLEMENTED();
   return NULL;
-}
-
-void RenderWidgetHostViewAndroid::MovePluginWindows(
-    const std::vector<WebPluginGeometry>& moves,
-    const int owner_widget_id) {
-  // We don't have plugin windows on Android. Do nothing. Note: this is called
-  // from RenderWidgetHost::OnUpdateRect which is itself invoked while
-  // processing the corresponding message from Renderer.
 }
 
 void RenderWidgetHostViewAndroid::Focus() {
@@ -619,7 +601,18 @@ gfx::Rect RenderWidgetHostViewAndroid::GetViewBounds() const {
   if (!content_view_core_)
     return gfx::Rect(default_size_);
 
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableOSKOverscroll))
+    return gfx::Rect(content_view_core_->GetViewSizeWithOSKHidden());
+
   return gfx::Rect(content_view_core_->GetViewSize());
+}
+
+gfx::Size RenderWidgetHostViewAndroid::GetVisibleViewportSize() const {
+  if (!content_view_core_)
+    return gfx::Rect(default_size_).size();
+
+  return gfx::Rect(content_view_core_->GetViewSize()).size();
 }
 
 gfx::Size RenderWidgetHostViewAndroid::GetPhysicalBackingSize() const {
@@ -792,7 +785,11 @@ void RenderWidgetHostViewAndroid::ImeCancelComposition() {
 void RenderWidgetHostViewAndroid::ImeCompositionRangeChanged(
     const gfx::Range& range,
     const std::vector<gfx::Rect>& character_bounds) {
-  // TODO(yukawa): Implement this.
+  std::vector<gfx::RectF> character_bounds_float;
+  for (const gfx::Rect& rect : character_bounds) {
+    character_bounds_float.emplace_back(rect);
+  }
+  ime_adapter_android_.SetCharacterBounds(character_bounds_float);
 }
 
 void RenderWidgetHostViewAndroid::FocusedNodeChanged(bool is_editable_node) {
@@ -895,8 +892,6 @@ void RenderWidgetHostViewAndroid::CopyFromCompositingSurface(
     return;
   }
 
-  scoped_ptr<cc::CopyOutputRequest> request;
-  scoped_refptr<cc::Layer> readback_layer;
   if (!content_view_core_ || !(content_view_core_->GetWindowAndroid())) {
     callback.Run(SkBitmap(), READBACK_FAILED);
     return;
@@ -905,20 +900,14 @@ void RenderWidgetHostViewAndroid::CopyFromCompositingSurface(
       content_view_core_->GetWindowAndroid()->GetCompositor();
   DCHECK(compositor);
   DCHECK(!surface_id_.is_null());
-  scoped_refptr<cc::Layer> layer = CreateDelegatedLayer();
-  DCHECK(layer);
-  layer->SetHideLayerAndSubtree(true);
-  compositor->AttachLayerForReadback(layer);
-
-  readback_layer = layer;
-  request = cc::CopyOutputRequest::CreateRequest(
-      base::Bind(&RenderWidgetHostViewAndroid::
-                     PrepareTextureCopyOutputResultForDelegatedReadback,
-                 dst_size_in_pixel, preferred_color_type, start_time,
-                 readback_layer, callback));
+  scoped_ptr<cc::CopyOutputRequest> request =
+      cc::CopyOutputRequest::CreateRequest(
+          base::Bind(&PrepareTextureCopyOutputResult,
+                     dst_size_in_pixel, preferred_color_type, start_time,
+                     callback));
   if (!src_subrect_in_pixel.IsEmpty())
     request->set_area(src_subrect_in_pixel);
-  readback_layer->RequestCopyOfOutput(std::move(request));
+  layer_->RequestCopyOfOutput(std::move(request));
 }
 
 void RenderWidgetHostViewAndroid::CopyFromCompositingSurfaceToVideoFrame(
@@ -979,7 +968,6 @@ void RenderWidgetHostViewAndroid::ReturnResources(
 }
 
 void RenderWidgetHostViewAndroid::SetBeginFrameSource(
-    cc::SurfaceId surface_id,
     cc::BeginFrameSource* begin_frame_source) {
   // TODO(tansell): Hook this up.
 }
@@ -1321,7 +1309,8 @@ void RenderWidgetHostViewAndroid::OnFrameMetadataUpdated(
       frame_metadata.scrollable_viewport_size,
       frame_metadata.location_bar_offset,
       frame_metadata.location_bar_content_translation,
-      is_mobile_optimized);
+      is_mobile_optimized,
+      frame_metadata.selection.start);
 #if defined(VIDEO_HOLE)
   if (host_) {
     WebContents* web_contents =
@@ -1621,22 +1610,12 @@ void RenderWidgetHostViewAndroid::OnSetNeedsFlushInput() {
 
 BrowserAccessibilityManager*
     RenderWidgetHostViewAndroid::CreateBrowserAccessibilityManager(
-        BrowserAccessibilityDelegate* delegate) {
-  // TODO(dmazzoni): Currently there can only be one
-  // BrowserAccessibilityManager per ContentViewCore, so return NULL
-  // if there's already a BrowserAccessibilityManager for the main
-  // frame.  Eventually, in order to support cross-process iframes on
-  // Android we'll need to add support for a
-  // BrowserAccessibilityManager for a child frame.
-  // http://crbug.com/423846
-  if (!host_ || host_->GetRootBrowserAccessibilityManager())
-    return NULL;
-
-  base::android::ScopedJavaLocalRef<jobject> obj;
-  if (content_view_core_)
-    obj = content_view_core_->GetJavaObject();
+        BrowserAccessibilityDelegate* delegate, bool for_root_frame) {
+  base::android::ScopedJavaLocalRef<jobject> content_view_core_obj;
+  if (for_root_frame && host_ && content_view_core_)
+    content_view_core_obj = content_view_core_->GetJavaObject();
   return new BrowserAccessibilityManagerAndroid(
-      obj,
+      content_view_core_obj,
       BrowserAccessibilityManagerAndroid::GetEmptyDocument(),
       delegate);
 }
@@ -1733,6 +1712,9 @@ SkColor RenderWidgetHostViewAndroid::GetCachedBackgroundColor() const {
 
 void RenderWidgetHostViewAndroid::DidOverscroll(
     const DidOverscrollParams& params) {
+  if (sync_compositor_)
+    sync_compositor_->DidOverscroll(params);
+
   if (!content_view_core_ || !layer_.get() || !is_showing_)
     return;
 
@@ -1931,20 +1913,6 @@ void RenderWidgetHostViewAndroid::OnLostResources() {
   if (layer_.get())
     DestroyDelegatedContent();
   DCHECK(ack_callbacks_.empty());
-}
-
-// static
-void RenderWidgetHostViewAndroid::
-    PrepareTextureCopyOutputResultForDelegatedReadback(
-        const gfx::Size& dst_size_in_pixel,
-        SkColorType color_type,
-        const base::TimeTicks& start_time,
-        scoped_refptr<cc::Layer> readback_layer,
-        const ReadbackRequestCallback& callback,
-        scoped_ptr<cc::CopyOutputResult> result) {
-  readback_layer->RemoveFromParent();
-  PrepareTextureCopyOutputResult(dst_size_in_pixel, color_type, start_time,
-                                 callback, std::move(result));
 }
 
 // TODO(wjmaclean): There is significant overlap between

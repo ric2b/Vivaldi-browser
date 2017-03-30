@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_CHROMEOS_LOGIN_WIZARD_CONTROLLER_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
@@ -13,7 +14,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -46,7 +46,7 @@ class ErrorScreen;
 struct Geoposition;
 class LoginDisplayHost;
 class LoginScreenContext;
-class OobeDisplay;
+class OobeUI;
 class SimpleGeolocationProvider;
 class SupervisedUserCreationScreen;
 class TimeZoneProvider;
@@ -74,7 +74,7 @@ class WizardController : public BaseScreenDelegate,
     virtual void OnSessionStart() = 0;
   };
 
-  WizardController(LoginDisplayHost* host, OobeDisplay* oobe_display);
+  WizardController(LoginDisplayHost* host, OobeUI* oobe_ui);
   ~WizardController() override;
 
   // Returns the default wizard controller if it has been created.
@@ -298,7 +298,7 @@ class WizardController : public BaseScreenDelegate,
   TimeZoneProvider* GetTimezoneProvider();
 
   // TimeZoneRequest::TimeZoneResponseCallback implementation.
-  void OnTimezoneResolved(scoped_ptr<TimeZoneResponseData> timezone,
+  void OnTimezoneResolved(std::unique_ptr<TimeZoneResponseData> timezone,
                           bool server_error);
 
   // Called from SimpleGeolocationProvider when location is resolved.
@@ -321,8 +321,8 @@ class WizardController : public BaseScreenDelegate,
 
   // Called when a connection to controller has been established. Wizard
   // controller takes the ownership of |pairing_controller| after that call.
-  void OnSharkConnected(
-      scoped_ptr<pairing_chromeos::HostPairingController> pairing_controller);
+  void OnSharkConnected(std::unique_ptr<pairing_chromeos::HostPairingController>
+                            pairing_controller);
 
   // Callback function for AddNetworkRequested().
   void OnSetHostNetworkFailed();
@@ -364,7 +364,7 @@ class WizardController : public BaseScreenDelegate,
 
   base::OneShotTimer smooth_show_timer_;
 
-  OobeDisplay* oobe_display_ = nullptr;
+  OobeUI* oobe_ui_ = nullptr;
 
   // State of Usage stat/error reporting checkbox on EULA screen
   // during wizard lifetime.
@@ -410,16 +410,17 @@ class WizardController : public BaseScreenDelegate,
   friend class WizardInProcessBrowserTest;
   friend class WizardControllerBrokenLocalStateTest;
 
-  scoped_ptr<AccessibilityStatusSubscription> accessibility_subscription_;
+  std::unique_ptr<AccessibilityStatusSubscription> accessibility_subscription_;
 
-  scoped_ptr<SimpleGeolocationProvider> geolocation_provider_;
-  scoped_ptr<TimeZoneProvider> timezone_provider_;
+  std::unique_ptr<SimpleGeolocationProvider> geolocation_provider_;
+  std::unique_ptr<TimeZoneProvider> timezone_provider_;
 
   // Pairing controller for shark devices.
-  scoped_ptr<pairing_chromeos::ControllerPairingController> shark_controller_;
+  std::unique_ptr<pairing_chromeos::ControllerPairingController>
+      shark_controller_;
 
   // Pairing controller for remora devices.
-  scoped_ptr<pairing_chromeos::HostPairingController> remora_controller_;
+  std::unique_ptr<pairing_chromeos::HostPairingController> remora_controller_;
 
   // Maps screen ids to last time of their shows.
   base::hash_map<std::string, base::Time> screen_show_times_;
@@ -431,7 +432,7 @@ class WizardController : public BaseScreenDelegate,
   // Listens for incoming connection from a shark controller if a regular (not
   // pairing) remora OOBE is active. If connection is established, wizard
   // conroller swithces to a pairing OOBE.
-  scoped_ptr<pairing_chromeos::SharkConnectionListener>
+  std::unique_ptr<pairing_chromeos::SharkConnectionListener>
       shark_connection_listener_;
 
   BaseScreen* hid_screen_ = nullptr;

@@ -8,20 +8,19 @@
 #include "base/callback.h"
 #include "base/threading/thread_checker.h"
 #include "mojo/shell/public/cpp/connector.h"
-#include "mojo/shell/public/interfaces/shell.mojom.h"
+#include "mojo/shell/public/interfaces/connector.mojom.h"
 
 namespace mojo {
 
 class ConnectorImpl : public Connector {
  public:
   explicit ConnectorImpl(shell::mojom::ConnectorPtrInfo unbound_state);
-  ConnectorImpl(shell::mojom::ConnectorPtr connector,
-                const base::Closure& connection_error_closure);
+  explicit ConnectorImpl(shell::mojom::ConnectorPtr connector);
   ~ConnectorImpl() override;
 
  private:
   // Connector:
-  scoped_ptr<Connection> Connect(const std::string& url) override;
+  scoped_ptr<Connection> Connect(const std::string& name) override;
   scoped_ptr<Connection> Connect(ConnectParams* params) override;
   scoped_ptr<Connector> Clone() override;
 

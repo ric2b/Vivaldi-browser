@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/numerics/safe_conversions.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/core/SkColorPriv.h"
@@ -90,14 +91,14 @@ void TransformToFlattenedSkMatrix(const gfx::Transform& transform,
   flattened->set(8, SkMScalarToScalar(transform.matrix().get(3, 3)));
 }
 
-skia::RefPtr<SkShader> CreateImageRepShader(const gfx::ImageSkiaRep& image_rep,
+sk_sp<SkShader> CreateImageRepShader(const gfx::ImageSkiaRep& image_rep,
                                             SkShader::TileMode tile_mode,
                                             const SkMatrix& local_matrix) {
   return CreateImageRepShaderForScale(image_rep, tile_mode, local_matrix,
                                       image_rep.scale());
 }
 
-skia::RefPtr<SkShader> CreateImageRepShaderForScale(
+sk_sp<SkShader> CreateImageRepShaderForScale(
     const gfx::ImageSkiaRep& image_rep,
     SkShader::TileMode tile_mode,
     const SkMatrix& local_matrix,
@@ -114,12 +115,11 @@ skia::RefPtr<SkShader> CreateImageRepShaderForScale(
   shader_scale.setScaleX(local_matrix.getScaleX() / scale);
   shader_scale.setScaleY(local_matrix.getScaleY() / scale);
 
-  skia::RefPtr<SkShader> shader = skia::AdoptRef(SkShader::CreateBitmapShader(
-      image_rep.sk_bitmap(), tile_mode, tile_mode, &shader_scale));
-  return shader;
+  return SkShader::MakeBitmapShader(
+      image_rep.sk_bitmap(), tile_mode, tile_mode, &shader_scale);
 }
 
-skia::RefPtr<SkShader> CreateGradientShader(int start_point,
+sk_sp<SkShader> CreateGradientShader(int start_point,
                                             int end_point,
                                             SkColor start_color,
                                             SkColor end_color) {
@@ -128,8 +128,8 @@ skia::RefPtr<SkShader> CreateGradientShader(int start_point,
   grad_points[0].iset(0, start_point);
   grad_points[1].iset(0, end_point);
 
-  return skia::AdoptRef(SkGradientShader::CreateLinear(
-      grad_points, grad_colors, NULL, 2, SkShader::kRepeat_TileMode));
+  return SkGradientShader::MakeLinear(
+      grad_points, grad_colors, NULL, 2, SkShader::kClamp_TileMode);
 }
 
 static SkScalar RadiusToSigma(double radius) {
@@ -138,10 +138,10 @@ static SkScalar RadiusToSigma(double radius) {
   return radius > 0 ? SkDoubleToScalar(0.57735f * radius + 0.5) : 0;
 }
 
-skia::RefPtr<SkDrawLooper> CreateShadowDrawLooper(
+sk_sp<SkDrawLooper> CreateShadowDrawLooper(
     const std::vector<ShadowValue>& shadows) {
   if (shadows.empty())
-    return skia::RefPtr<SkDrawLooper>();
+    return nullptr;
 
   SkLayerDrawLooper::Builder looper_builder;
 
@@ -164,16 +164,15 @@ skia::RefPtr<SkDrawLooper> CreateShadowDrawLooper(
         SkBlurMaskFilter::Create(kNormal_SkBlurStyle,
                                  RadiusToSigma(shadow.blur() / 2),
                                  SkBlurMaskFilter::kHighQuality_BlurFlag));
-    skia::RefPtr<SkColorFilter> color_filter = skia::AdoptRef(
-        SkColorFilter::CreateModeFilter(shadow.color(),
-                                        SkXfermode::kSrcIn_Mode));
 
     SkPaint* paint = looper_builder.addLayer(layer_info);
     paint->setMaskFilter(blur_mask.get());
-    paint->setColorFilter(color_filter.get());
+    paint->setColorFilter(
+        SkColorFilter::MakeModeFilter(shadow.color(),
+                                      SkXfermode::kSrcIn_Mode));
   }
 
-  return skia::AdoptRef<SkDrawLooper>(looper_builder.detachLooper());
+  return looper_builder.detach();
 }
 
 bool BitmapsAreEqual(const SkBitmap& bitmap1, const SkBitmap& bitmap2) {
@@ -224,6 +223,23 @@ void QuadFToSkPoints(const gfx::QuadF& quad, SkPoint points[4]) {
   points[1] = PointFToSkPoint(quad.p2());
   points[2] = PointFToSkPoint(quad.p3());
   points[3] = PointFToSkPoint(quad.p4());
+}
+
+// We treat HarfBuzz ints as 16.16 fixed-point.
+static const int kHbUnit1 = 1 << 16;
+
+int SkiaScalarToHarfBuzzUnits(SkScalar value) {
+  return base::saturated_cast<int>(value * kHbUnit1);
+}
+
+SkScalar HarfBuzzUnitsToSkiaScalar(int value) {
+  static const SkScalar kSkToHbRatio = SK_Scalar1 / kHbUnit1;
+  return kSkToHbRatio * value;
+}
+
+float HarfBuzzUnitsToFloat(int value) {
+  static const float kFloatToHbRatio = 1.0f / kHbUnit1;
+  return kFloatToHbRatio * value;
 }
 
 }  // namespace gfx

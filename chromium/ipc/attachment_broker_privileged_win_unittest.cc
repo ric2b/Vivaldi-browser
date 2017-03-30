@@ -6,6 +6,8 @@
 
 #include <windows.h>
 
+#include <tuple>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -76,7 +78,7 @@ ScopedHandle GetHandleFromTestHandleWinMsg(const IPC::Message& message) {
     return ScopedHandle(nullptr);
   }
 
-  IPC::HandleWin handle_win = base::get<1>(p);
+  IPC::HandleWin handle_win = std::get<1>(p);
   return ScopedHandle(handle_win.get_handle());
 }
 
@@ -97,7 +99,7 @@ scoped_ptr<base::SharedMemory> GetSharedMemoryFromSharedMemoryHandleMsg1(
     return nullptr;
   }
 
-  base::SharedMemoryHandle handle = base::get<0>(p);
+  base::SharedMemoryHandle handle = std::get<0>(p);
   scoped_ptr<base::SharedMemory> shared_memory(
       new base::SharedMemory(handle, false));
 
@@ -123,9 +125,9 @@ bool GetHandleFromTestTwoHandleWinMsg(const IPC::Message& message,
     return false;
   }
 
-  IPC::HandleWin handle_win = base::get<0>(p);
+  IPC::HandleWin handle_win = std::get<0>(p);
   *h1 = handle_win.get_handle();
-  handle_win = base::get<1>(p);
+  handle_win = std::get<1>(p);
   *h2 = handle_win.get_handle();
   return true;
 }
@@ -263,11 +265,21 @@ class IPCAttachmentBrokerPrivilegedWinTest : public IPCTestBase {
   }
 
   void CommonSetUp() {
+    PreConnectSetUp();
+    PostConnectSetUp();
+  }
+
+  // All of setup before the channel is connected.
+  void PreConnectSetUp() {
     if (!broker_.get())
       set_broker(new IPC::AttachmentBrokerUnprivilegedWin);
     broker_->AddObserver(&observer_, task_runner());
     CreateChannel(&proxy_listener_);
     broker_->RegisterBrokerCommunicationChannel(channel());
+  }
+
+  // All of setup including the connection and everything after.
+  void PostConnectSetUp() {
     ASSERT_TRUE(ConnectChannel());
     ASSERT_TRUE(StartClient());
 
@@ -388,10 +400,12 @@ TEST_F(IPCAttachmentBrokerPrivilegedWinTest, SendHandleToSelf) {
   Init("SendHandleToSelf");
 
   set_broker(new MockBroker);
-  CommonSetUp();
+
+  PreConnectSetUp();
   // Technically, the channel is an endpoint, but we need the proxy listener to
   // receive the messages so that it can quit the message loop.
   channel()->SetAttachmentBrokerEndpoint(false);
+  PostConnectSetUp();
   get_proxy_listener()->set_listener(get_broker());
 
   HANDLE h = CreateTempFile();
@@ -504,7 +518,7 @@ int CommonPrivilegedProcessMain(OnMessageReceivedCallback callback,
   IPC::AttachmentBrokerPrivilegedWin broker;
   scoped_ptr<IPC::Channel> channel(IPC::Channel::CreateClient(
       IPCTestBase::GetChannelName(channel_name), &listener));
-  broker.RegisterCommunicationChannel(channel.get());
+  broker.RegisterCommunicationChannel(channel.get(), nullptr);
   CHECK(channel->Connect());
 
   while (true) {

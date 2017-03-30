@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/files/scoped_temp_dir.h"
@@ -217,7 +219,7 @@ class Operation : public base::RefCountedThreadSafe<Operation> {
   // Zip reader for unzip operations. The reason for using a pointer is that we
   // don't want to include zip_reader.h here which can mangle definitions in
   // jni.h when included in the same file. See crbug.com/554199.
-  scoped_ptr<zip::ZipReader> zip_reader_;
+  std::unique_ptr<zip::ZipReader> zip_reader_;
 
   // CleanUp operations that must be run.  All these functions are run on the
   // FILE thread.

@@ -21,12 +21,13 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/screenlock_private/screenlock_private_api.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
-#include "chrome/browser/profiles/profile_info_cache_observer.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profile_statistics.h"
+#include "chrome/browser/profiles/profile_statistics_factory.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/local_auth.h"
@@ -39,6 +40,7 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/user_manager.h"
+#include "chrome/browser/ui/webui/profile_helper.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -100,16 +102,6 @@ const size_t kAvatarIconSize = 180;
 const int kMaxOAuthRetries = 3;
 
 void HandleAndDoNothing(const base::ListValue* args) {
-}
-
-// This callback is run if the only profile has been deleted, and a new
-// profile has been created to replace it.
-void OpenNewWindowForProfile(Profile* profile, Profile::CreateStatus status) {
-  if (status != Profile::CREATE_STATUS_INITIALIZED)
-    return;
-  profiles::FindOrCreateNewWindowForProfile(
-      profile, chrome::startup::IS_PROCESS_STARTUP,
-      chrome::startup::IS_FIRST_RUN, false);
 }
 
 std::string GetAvatarImage(const ProfileAttributesEntry* entry) {
@@ -209,8 +201,6 @@ void UrlHashHelper::ExecuteUrlHash() {
     chrome::ShowAboutChrome(target_browser);
   else if (hash_ == profiles::kUserManagerSelectProfileChromeSettings)
     chrome::ShowSettings(target_browser);
-  else if (hash_ == profiles::kUserManagerSelectProfileChromeMemory)
-    chrome::ShowMemory(target_browser);
 }
 
 void HandleLogRemoveUserWarningShown(const base::ListValue* args) {
@@ -313,7 +303,8 @@ void UserManagerScreenHandler::ShowUserPodCustomIcon(
     const AccountId& account_id,
     const proximity_auth::ScreenlockBridge::UserPodCustomIconOptions&
         icon_options) {
-  scoped_ptr<base::DictionaryValue> icon = icon_options.ToDictionaryValue();
+  std::unique_ptr<base::DictionaryValue> icon =
+      icon_options.ToDictionaryValue();
   if (!icon || icon->empty())
     return;
   web_ui()->CallJavascriptFunction(
@@ -380,7 +371,7 @@ void UserManagerScreenHandler::HandleInitialize(const base::ListValue* args) {
   args->GetString(0, &url_hash_);
 
   SendUserList();
-  web_ui()->CallJavascriptFunction("cr.ui.Oobe.showUserManagerScreen",
+  web_ui()->CallJavascriptFunction("cr.ui.UserManager.showUserManagerScreen",
       base::FundamentalValue(IsGuestModeEnabled()),
       base::FundamentalValue(IsAddPersonEnabled()));
 
@@ -475,8 +466,10 @@ void UserManagerScreenHandler::HandleRemoveUser(const base::ListValue* args) {
     return;
   }
 
+  // The callback is run if the only profile has been deleted, and a new
+  // profile has been created to replace it.
   g_browser_process->profile_manager()->ScheduleProfileForDeletion(
-      profile_path, base::Bind(&OpenNewWindowForProfile));
+      profile_path, base::Bind(&webui::OpenNewWindowForProfile));
   ProfileMetrics::LogProfileDeleteUser(
       ProfileMetrics::DELETE_PROFILE_USER_MANAGER);
 }
@@ -573,10 +566,11 @@ void UserManagerScreenHandler::HandleRemoveUserWarningLoadStats(
     // statistics are queried instead.
     base::DictionaryValue return_value;
     profiles::ProfileCategoryStats stats =
-        profiles::GetProfileStatisticsFromCache(profile_path);
+        ProfileStatistics::GetProfileStatisticsFromAttributesStorage(
+            profile_path);
     bool stats_success = true;
     for (const auto& item : stats) {
-      scoped_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
+      std::unique_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
       stat->SetIntegerWithoutPathExpansion("count", item.count);
       stat->SetBooleanWithoutPathExpansion("success", item.success);
       return_value.SetWithoutPathExpansion(item.category, std::move(stat));
@@ -590,12 +584,10 @@ void UserManagerScreenHandler::HandleRemoveUserWarningLoadStats(
     }
   }
 
-  profiles::GatherProfileStatistics(
-      profile,
+  ProfileStatisticsFactory::GetForProfile(profile)->GatherStatistics(
       base::Bind(
           &UserManagerScreenHandler::RemoveUserDialogLoadStatsCallback,
-          weak_ptr_factory_.GetWeakPtr(), profile_path),
-      &tracker_);
+          weak_ptr_factory_.GetWeakPtr(), profile_path));
 }
 
 void UserManagerScreenHandler::RemoveUserDialogLoadStatsCallback(
@@ -604,7 +596,7 @@ void UserManagerScreenHandler::RemoveUserDialogLoadStatsCallback(
   // Copy result into return_value.
   base::DictionaryValue return_value;
   for (const auto& item : result) {
-    scoped_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
+    std::unique_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
     stat->SetIntegerWithoutPathExpansion("count", item.count);
     stat->SetBooleanWithoutPathExpansion("success", item.success);
     return_value.SetWithoutPathExpansion(item.category, std::move(stat));
@@ -649,7 +641,7 @@ void UserManagerScreenHandler::HandleGetRemoveWarningDialogMessage(
 }
 
 void UserManagerScreenHandler::OnGetTokenInfoResponse(
-    scoped_ptr<base::DictionaryValue> token_info) {
+    std::unique_ptr<base::DictionaryValue> token_info) {
   // Password is unchanged so user just mistyped it.  Ask again.
   ReportAuthenticationResult(false, ProfileMetrics::AUTH_FAILED);
 }
@@ -879,10 +871,12 @@ void UserManagerScreenHandler::SendUserList() {
     profile_value->SetString(kKeyAvatarUrl, GetAvatarImage(entry));
 
     profiles::ProfileCategoryStats stats =
-        profiles::GetProfileStatisticsFromCache(profile_path);
-    scoped_ptr<base::DictionaryValue> stats_dict(new base::DictionaryValue);
+        ProfileStatistics::GetProfileStatisticsFromAttributesStorage(
+            profile_path);
+    std::unique_ptr<base::DictionaryValue> stats_dict(
+        new base::DictionaryValue);
     for (const auto& item : stats) {
-      scoped_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
+      std::unique_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
       stat->SetIntegerWithoutPathExpansion("count", item.count);
       stat->SetBooleanWithoutPathExpansion("success", item.success);
       stats_dict->SetWithoutPathExpansion(item.category, std::move(stat));
@@ -922,7 +916,7 @@ void UserManagerScreenHandler::ReportAuthenticationResult(
         ProfileMetrics::SWITCH_PROFILE_UNLOCK);
   } else {
     web_ui()->CallJavascriptFunction(
-        "cr.ui.Oobe.showSignInError",
+        "cr.ui.UserManager.showSignInError",
         base::FundamentalValue(0),
         base::StringValue(l10n_util::GetStringUTF8(
             auth == ProfileMetrics::AUTH_FAILED_OFFLINE ?

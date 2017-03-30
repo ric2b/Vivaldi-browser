@@ -69,11 +69,8 @@ FrameConsole::FrameConsole(LocalFrame& frame)
 {
 }
 
-DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(FrameConsole);
-
-void FrameConsole::addMessage(PassRefPtrWillBeRawPtr<ConsoleMessage> prpConsoleMessage)
+void FrameConsole::addMessage(ConsoleMessage* consoleMessage)
 {
-    RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = prpConsoleMessage;
     if (muteCount && consoleMessage->source() != ConsoleAPIMessageSource)
         return;
 
@@ -130,9 +127,9 @@ void FrameConsole::reportResourceResponseReceived(DocumentLoader* loader, unsign
     if (response.wasFallbackRequiredByServiceWorker())
         return;
     String message = "Failed to load resource: the server responded with a status of " + String::number(response.httpStatusCode()) + " (" + response.httpStatusText() + ')';
-    RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(NetworkMessageSource, ErrorMessageLevel, message, response.url().string());
+    ConsoleMessage* consoleMessage = ConsoleMessage::create(NetworkMessageSource, ErrorMessageLevel, message, response.url().getString());
     consoleMessage->setRequestIdentifier(requestIdentifier);
-    addMessage(consoleMessage.release());
+    addMessage(consoleMessage);
 }
 
 void FrameConsole::mute()
@@ -160,7 +157,7 @@ void FrameConsole::clearMessages()
         storage->clear(m_frame->document());
 }
 
-void FrameConsole::adoptWorkerMessagesAfterTermination(WorkerGlobalScopeProxy* proxy)
+void FrameConsole::adoptWorkerMessagesAfterTermination(WorkerInspectorProxy* proxy)
 {
     ConsoleMessageStorage* storage = messageStorage();
     if (storage)
@@ -180,9 +177,9 @@ void FrameConsole::didFailLoading(unsigned long requestIdentifier, const Resourc
         message.appendLiteral(": ");
         message.append(error.localizedDescription());
     }
-    RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(NetworkMessageSource, ErrorMessageLevel, message.toString(), error.failingURL());
+    ConsoleMessage* consoleMessage = ConsoleMessage::create(NetworkMessageSource, ErrorMessageLevel, message.toString(), error.failingURL());
     consoleMessage->setRequestIdentifier(requestIdentifier);
-    storage->reportMessage(m_frame->document(), consoleMessage.release());
+    storage->reportMessage(m_frame->document(), consoleMessage);
 }
 
 DEFINE_TRACE(FrameConsole)

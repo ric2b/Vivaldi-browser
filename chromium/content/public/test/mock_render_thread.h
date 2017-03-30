@@ -63,7 +63,6 @@ class MockRenderThread : public RenderThread {
   void RemoveObserver(RenderProcessObserver* observer) override;
   void SetResourceDispatcherDelegate(
       ResourceDispatcherDelegate* delegate) override;
-  void EnsureWebKitInitialized() override;
   void RecordAction(const base::UserMetricsAction& action) override;
   void RecordComputedAction(const std::string& action) override;
   scoped_ptr<base::SharedMemory> HostAllocateSharedMemoryBuffer(
@@ -159,6 +158,7 @@ class MockRenderThread : public RenderThread {
   base::ObserverList<RenderProcessObserver> observers_;
 
   cc::TestSharedBitmapManager shared_bitmap_manager_;
+  scoped_ptr<ServiceRegistry> service_registry_;
 };
 
 }  // namespace content

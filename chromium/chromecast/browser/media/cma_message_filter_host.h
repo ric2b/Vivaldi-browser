@@ -13,7 +13,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
+#include "chromecast/browser/media/media_pipeline_backend_factory.h"
 #include "chromecast/common/media/cma_ipc_common.h"
+#include "chromecast/media/base/media_resource_tracker.h"
 #include "chromecast/media/cma/pipeline/load_type.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_thread.h"
@@ -38,20 +40,16 @@ class VideoDecoderConfig;
 namespace chromecast {
 namespace media {
 
-class MediaPipelineBackend;
-struct MediaPipelineDeviceParams;
+class BrowserCdmCast;
 class MediaPipelineHost;
-class CmaMediaPipelineClient;
 
 class CmaMessageFilterHost
     : public content::BrowserMessageFilter {
  public:
-  // Factory method to create a MediaPipelineBackend
-  typedef base::Callback<scoped_ptr<MediaPipelineBackend>(
-      const MediaPipelineDeviceParams&)> CreateBackendCB;
-
   CmaMessageFilterHost(int render_process_id,
-                       scoped_refptr<CmaMediaPipelineClient> client);
+                       const CreateMediaPipelineBackendCB& create_backend_cb,
+                       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+                       MediaResourceTracker* resource_tracker);
 
   // content::BrowserMessageFilter implementation:
   void OnChannelClosing() override;
@@ -76,7 +74,7 @@ class CmaMessageFilterHost
   void OnAvPipeSet(int media_id,
                    TrackId track_id,
                    base::SharedMemoryHandle foreign_memory_handle,
-                   scoped_ptr<base::CancelableSyncSocket> foreign_socket);
+                   std::unique_ptr<base::CancelableSyncSocket> foreign_socket);
   void AudioInitialize(int media_id,
                        TrackId track_id,
                        const ::media::AudioDecoderConfig& config);
@@ -117,12 +115,13 @@ class CmaMessageFilterHost
   const int process_id_;
 
   // Factory function for media pipeline backend.
-  CreateBackendCB create_backend_cb_;
-  scoped_refptr<CmaMediaPipelineClient> client_;
+  CreateMediaPipelineBackendCB create_backend_cb_;
 
   // List of media pipeline and message loop media pipelines are running on.
   MediaPipelineMap media_pipelines_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+
+  MediaResourceTracker* resource_tracker_;
 
   base::WeakPtr<CmaMessageFilterHost> weak_this_;
   base::WeakPtrFactory<CmaMessageFilterHost> weak_factory_;

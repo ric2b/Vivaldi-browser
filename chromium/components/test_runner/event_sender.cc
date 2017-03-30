@@ -6,6 +6,9 @@
 
 #include <stddef.h>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
@@ -15,11 +18,13 @@
 #include "build/build_config.h"
 #include "components/test_runner/mock_spell_check.h"
 #include "components/test_runner/test_interfaces.h"
+#include "components/test_runner/web_task.h"
 #include "components/test_runner/web_test_delegate.h"
 #include "components/test_runner/web_test_proxy.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/wrappable.h"
+#include "third_party/WebKit/public/platform/WebPointerProperties.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
@@ -45,6 +50,7 @@ using blink::WebMouseEvent;
 using blink::WebMouseWheelEvent;
 using blink::WebPagePopup;
 using blink::WebPoint;
+using blink::WebPointerProperties;
 using blink::WebString;
 using blink::WebTouchEvent;
 using blink::WebTouchPoint;
@@ -111,6 +117,19 @@ void InitMouseEvent(WebInputEvent::Type t,
   e->pointerType = blink::WebPointerProperties::PointerType::Mouse;
   e->timeStampSeconds = time_stamp;
   e->clickCount = click_count;
+}
+
+void InitGestureEventFromMouseWheel(WebInputEvent::Type type,
+                                    double time_stamp,
+                                    const WebMouseWheelEvent& wheel_event,
+                                    WebGestureEvent* gesture_event) {
+  gesture_event->type = type;
+  gesture_event->sourceDevice = blink::WebGestureDeviceTouchpad;
+  gesture_event->x = wheel_event.x;
+  gesture_event->y = wheel_event.y;
+  gesture_event->globalX = wheel_event.globalX;
+  gesture_event->globalY = wheel_event.globalY;
+  gesture_event->timeStampSeconds = time_stamp;
 }
 
 int GetKeyModifier(const std::string& modifier_name) {
@@ -309,55 +328,6 @@ std::vector<std::string> MakeMenuItemStringsFor(
 // WebKit impl and layout test results.
 const float kScrollbarPixelsPerTick = 40.0f;
 
-class MouseDownTask : public WebMethodTask<EventSender> {
- public:
-  MouseDownTask(EventSender* obj, int button_number, int modifiers)
-      : WebMethodTask<EventSender>(obj),
-        button_number_(button_number),
-        modifiers_(modifiers) {}
-
-  void RunIfValid() override { object_->MouseDown(button_number_, modifiers_); }
-
- private:
-  int button_number_;
-  int modifiers_;
-};
-
-class MouseUpTask : public WebMethodTask<EventSender> {
- public:
-  MouseUpTask(EventSender* obj, int button_number, int modifiers)
-      : WebMethodTask<EventSender>(obj),
-        button_number_(button_number),
-        modifiers_(modifiers) {}
-
-  void RunIfValid() override { object_->MouseUp(button_number_, modifiers_); }
-
- private:
-  int button_number_;
-  int modifiers_;
-};
-
-class KeyDownTask : public WebMethodTask<EventSender> {
- public:
-  KeyDownTask(EventSender* obj,
-              const std::string code_str,
-              int modifiers,
-              KeyLocationCode location)
-      : WebMethodTask<EventSender>(obj),
-        code_str_(code_str),
-        modifiers_(modifiers),
-        location_(location) {}
-
-  void RunIfValid() override {
-    object_->KeyDown(code_str_, modifiers_, location_);
-  }
-
- private:
-  std::string code_str_;
-  int modifiers_;
-  KeyLocationCode location_;
-};
-
 bool NeedsShiftModifier(int keyCode) {
   // If code is an uppercase letter, assign a SHIFT key to eventDown.modifier.
   return (keyCode & 0xFF) >= 'A' && (keyCode & 0xFF) <= 'Z';
@@ -498,8 +468,6 @@ class EventSenderBindings : public gin::Wrappable<EventSenderBindings> {
   double LastEventTimestamp();
   void BeginDragWithFiles(const std::vector<std::string>& files);
   void AddTouchPoint(double x, double y, gin::Arguments* args);
-  void MouseDragBegin();
-  void MouseDragEnd();
   void GestureScrollBegin(gin::Arguments* args);
   void GestureScrollEnd(gin::Arguments* args);
   void GestureScrollUpdate(gin::Arguments* args);
@@ -516,9 +484,6 @@ class EventSenderBindings : public gin::Wrappable<EventSenderBindings> {
   void ContinuousMouseScrollBy(gin::Arguments* args);
   void MouseMoveTo(gin::Arguments* args);
   void MouseLeave();
-  void TrackpadScrollBegin();
-  void TrackpadScroll(gin::Arguments* args);
-  void TrackpadScrollEnd();
   void MouseScrollBy(gin::Arguments* args);
   void ScheduleAsynchronousClick(gin::Arguments* args);
   void ScheduleAsynchronousKeyDown(gin::Arguments* args);
@@ -628,8 +593,6 @@ EventSenderBindings::GetObjectTemplateBuilder(v8::Isolate* isolate) {
       .SetMethod("lastEventTimestamp", &EventSenderBindings::LastEventTimestamp)
       .SetMethod("beginDragWithFiles", &EventSenderBindings::BeginDragWithFiles)
       .SetMethod("addTouchPoint", &EventSenderBindings::AddTouchPoint)
-      .SetMethod("mouseDragBegin", &EventSenderBindings::MouseDragBegin)
-      .SetMethod("mouseDragEnd", &EventSenderBindings::MouseDragEnd)
       .SetMethod("gestureScrollBegin", &EventSenderBindings::GestureScrollBegin)
       .SetMethod("gestureScrollEnd", &EventSenderBindings::GestureScrollEnd)
       .SetMethod("gestureScrollUpdate",
@@ -651,10 +614,6 @@ EventSenderBindings::GetObjectTemplateBuilder(v8::Isolate* isolate) {
       .SetMethod("mouseDown", &EventSenderBindings::MouseDown)
       .SetMethod("mouseMoveTo", &EventSenderBindings::MouseMoveTo)
       .SetMethod("mouseLeave", &EventSenderBindings::MouseLeave)
-      .SetMethod("trackpadScrollBegin",
-                 &EventSenderBindings::TrackpadScrollBegin)
-      .SetMethod("trackpadScroll", &EventSenderBindings::TrackpadScroll)
-      .SetMethod("trackpadScrollEnd", &EventSenderBindings::TrackpadScrollEnd)
       .SetMethod("mouseScrollBy", &EventSenderBindings::MouseScrollBy)
       .SetMethod("mouseUp", &EventSenderBindings::MouseUp)
       .SetMethod("setMouseButtonState",
@@ -849,16 +808,6 @@ void EventSenderBindings::AddTouchPoint(double x,
     sender_->AddTouchPoint(static_cast<float>(x), static_cast<float>(y), args);
 }
 
-void EventSenderBindings::MouseDragBegin() {
-  if (sender_)
-    sender_->MouseDragBegin();
-}
-
-void EventSenderBindings::MouseDragEnd() {
-  if (sender_)
-    sender_->MouseDragEnd();
-}
-
 void EventSenderBindings::GestureScrollBegin(gin::Arguments* args) {
   if (sender_)
     sender_->GestureScrollBegin(args);
@@ -926,7 +875,7 @@ void EventSenderBindings::GestureTwoFingerTap(gin::Arguments* args) {
 
 void EventSenderBindings::ContinuousMouseScrollBy(gin::Arguments* args) {
   if (sender_)
-    sender_->ContinuousMouseScrollBy(args);
+    sender_->MouseScrollBy(args, EventSender::MouseScrollType::PIXEL);
 }
 
 void EventSenderBindings::MouseMoveTo(gin::Arguments* args) {
@@ -939,24 +888,9 @@ void EventSenderBindings::MouseLeave() {
     sender_->MouseLeave();
 }
 
-void EventSenderBindings::TrackpadScrollBegin() {
-  if (sender_)
-    sender_->TrackpadScrollBegin();
-}
-
-void EventSenderBindings::TrackpadScroll(gin::Arguments* args) {
-  if (sender_)
-    sender_->TrackpadScroll(args);
-}
-
-void EventSenderBindings::TrackpadScrollEnd() {
-  if (sender_)
-    sender_->TrackpadScrollEnd();
-}
-
 void EventSenderBindings::MouseScrollBy(gin::Arguments* args) {
   if (sender_)
-    sender_->MouseScrollBy(args);
+    sender_->MouseScrollBy(args, EventSender::MouseScrollType::TICK);
 }
 
 void EventSenderBindings::ScheduleAsynchronousClick(gin::Arguments* args) {
@@ -1200,6 +1134,7 @@ EventSender::EventSender(TestInterfaces* interfaces)
       interfaces_(interfaces),
       delegate_(NULL),
       view_(NULL),
+      send_wheel_gestures_(false),
       force_layout_on_events_(false),
       is_drag_mode_(true),
       touch_modifiers_(0),
@@ -1245,7 +1180,7 @@ void EventSender::Reset() {
   last_button_type_ = WebMouseEvent::ButtonNone;
   touch_points_.clear();
   last_context_menu_data_.reset();
-  task_list_.RevokeAll();
+  weak_factory_.InvalidateWeakPtrs();
   current_gesture_location_ = WebPoint(0, 0);
   mouse_event_queue_.clear();
 
@@ -1662,8 +1597,8 @@ void EventSender::ZoomPageIn() {
       interfaces_->GetWindowList();
 
   for (size_t i = 0; i < window_list.size(); ++i) {
-    window_list.at(i)->GetWebView()->setZoomLevel(
-        window_list.at(i)->GetWebView()->zoomLevel() + 1);
+    window_list.at(i)->web_view()->setZoomLevel(
+        window_list.at(i)->web_view()->zoomLevel() + 1);
   }
 }
 
@@ -1672,8 +1607,8 @@ void EventSender::ZoomPageOut() {
       interfaces_->GetWindowList();
 
   for (size_t i = 0; i < window_list.size(); ++i) {
-    window_list.at(i)->GetWebView()->setZoomLevel(
-        window_list.at(i)->GetWebView()->zoomLevel() - 1);
+    window_list.at(i)->web_view()->setZoomLevel(
+        window_list.at(i)->web_view()->zoomLevel() - 1);
   }
 }
 
@@ -1682,8 +1617,8 @@ void EventSender::SetPageZoomFactor(double zoom_factor) {
       interfaces_->GetWindowList();
 
   for (size_t i = 0; i < window_list.size(); ++i) {
-    window_list.at(i)->GetWebView()->setZoomLevel(
-        std::log(zoom_factor) / std::log(1.2));
+    window_list.at(i)->web_view()->setZoomLevel(std::log(zoom_factor) /
+                                                std::log(1.2));
   }
 }
 
@@ -1897,6 +1832,7 @@ void EventSender::BeginDragWithFiles(const std::vector<std::string>& files) {
 
 void EventSender::AddTouchPoint(float x, float y, gin::Arguments* args) {
   WebTouchPoint touch_point;
+  touch_point.pointerType = WebPointerProperties::PointerType::Touch;
   touch_point.state = WebTouchPoint::StatePressed;
   touch_point.position = WebFloatPoint(x, y);
   touch_point.screenPosition = touch_point.position;
@@ -1916,36 +1852,6 @@ void EventSender::AddTouchPoint(float x, float y, gin::Arguments* args) {
       touch_point.force = 0.0;
 
   touch_points_.push_back(touch_point);
-}
-
-void EventSender::MouseDragBegin() {
-  WebMouseWheelEvent event;
-  InitMouseEvent(WebInputEvent::MouseWheel,
-                 WebMouseEvent::ButtonNone,
-                 0,
-                 last_mouse_pos_,
-                 GetCurrentEventTimeSec(),
-                 click_count_,
-                 0,
-                 &event);
-  event.phase = WebMouseWheelEvent::PhaseBegan;
-  event.hasPreciseScrollingDeltas = true;
-  HandleInputEventOnViewOrPopup(event);
-}
-
-void EventSender::MouseDragEnd() {
-  WebMouseWheelEvent event;
-  InitMouseEvent(WebInputEvent::MouseWheel,
-                 WebMouseEvent::ButtonNone,
-                 0,
-                 last_mouse_pos_,
-                 GetCurrentEventTimeSec(),
-                 click_count_,
-                 0,
-                 &event);
-  event.phase = WebMouseWheelEvent::PhaseEnded;
-  event.hasPreciseScrollingDeltas = true;
-  HandleInputEventOnViewOrPopup(event);
 }
 
 void EventSender::GestureScrollBegin(gin::Arguments* args) {
@@ -2000,10 +1906,19 @@ void EventSender::GestureTwoFingerTap(gin::Arguments* args) {
   GestureEvent(WebInputEvent::GestureTwoFingerTap, args);
 }
 
-void EventSender::ContinuousMouseScrollBy(gin::Arguments* args) {
-  WebMouseWheelEvent event;
-  InitMouseWheelEvent(args, true, &event);
-  HandleInputEventOnViewOrPopup(event);
+void EventSender::MouseScrollBy(gin::Arguments* args,
+                                MouseScrollType scroll_type) {
+  WebMouseWheelEvent wheel_event;
+  // TODO(dtapuska): Gestures really should be sent by the MouseWheelEventQueue
+  // class in the browser. But since the event doesn't propogate up into
+  // the browser generate the events here. See crbug.com/596095.
+  bool send_gestures = false;
+  InitMouseWheelEvent(args, scroll_type, &wheel_event, &send_gestures);
+  if (HandleInputEventOnViewOrPopup(wheel_event) ==
+          WebInputEventResult::NotHandled &&
+      send_gestures) {
+    SendGesturesForMouseWheelEvent(wheel_event);
+  }
 }
 
 void EventSender::MouseMoveTo(gin::Arguments* args) {
@@ -2060,59 +1975,21 @@ void EventSender::MouseLeave() {
 }
 
 
-void EventSender::TrackpadScrollBegin() {
-  WebMouseWheelEvent event;
-  InitMouseEvent(WebInputEvent::MouseWheel,
-                 WebMouseEvent::ButtonNone,
-                 0,
-                 last_mouse_pos_,
-                 GetCurrentEventTimeSec(),
-                 click_count_,
-                 0,
-                 &event);
-  event.phase = blink::WebMouseWheelEvent::PhaseBegan;
-  event.hasPreciseScrollingDeltas = true;
-  HandleInputEventOnViewOrPopup(event);
-}
-
-void EventSender::TrackpadScroll(gin::Arguments* args) {
-  WebMouseWheelEvent event;
-  InitMouseWheelEvent(args, true, &event);
-  event.phase = blink::WebMouseWheelEvent::PhaseChanged;
-  event.hasPreciseScrollingDeltas = true;
-  HandleInputEventOnViewOrPopup(event);
-}
-
-void EventSender::TrackpadScrollEnd() {
-  WebMouseWheelEvent event;
-  InitMouseEvent(WebInputEvent::MouseWheel,
-                 WebMouseEvent::ButtonNone,
-                 0,
-                 last_mouse_pos_,
-                 GetCurrentEventTimeSec(),
-                 click_count_,
-                 0,
-                 &event);
-  event.phase = WebMouseWheelEvent::PhaseEnded;
-  event.hasPreciseScrollingDeltas = true;
-  HandleInputEventOnViewOrPopup(event);
-}
-
-void EventSender::MouseScrollBy(gin::Arguments* args) {
-  WebMouseWheelEvent event;
-  InitMouseWheelEvent(args, false, &event);
-  HandleInputEventOnViewOrPopup(event);
-}
-
 void EventSender::ScheduleAsynchronousClick(int button_number, int modifiers) {
-  delegate_->PostTask(new MouseDownTask(this, button_number, modifiers));
-  delegate_->PostTask(new MouseUpTask(this, button_number, modifiers));
+  delegate_->PostTask(new WebCallbackTask(
+      base::Bind(&EventSender::MouseDown, weak_factory_.GetWeakPtr(),
+                 button_number, modifiers)));
+  delegate_->PostTask(new WebCallbackTask(
+      base::Bind(&EventSender::MouseUp, weak_factory_.GetWeakPtr(),
+                 button_number, modifiers)));
 }
 
 void EventSender::ScheduleAsynchronousKeyDown(const std::string& code_str,
                                               int modifiers,
                                               KeyLocationCode location) {
-  delegate_->PostTask(new KeyDownTask(this, code_str, modifiers, location));
+  delegate_->PostTask(new WebCallbackTask(
+      base::Bind(&EventSender::KeyDown, weak_factory_.GetWeakPtr(), code_str,
+                 modifiers, location)));
 }
 
 double EventSender::GetCurrentEventTimeSec() {
@@ -2134,7 +2011,9 @@ void EventSender::SendCurrentTouchEvent(WebInputEvent::Type type,
   WebTouchEvent touch_event;
   touch_event.type = type;
   touch_event.modifiers = touch_modifiers_;
-  touch_event.cancelable = touch_cancelable_;
+  touch_event.dispatchType = touch_cancelable_
+                                 ? WebInputEvent::Blocking
+                                 : WebInputEvent::EventNonBlocking;
   touch_event.timeStampSeconds = GetCurrentEventTimeSec();
   touch_event.movedBeyondSlopRegion = movedBeyondSlopRegion;
   touch_event.touchesLength = touch_points_.size();
@@ -2437,8 +2316,9 @@ void EventSender::UpdateClickCountForButton(
 }
 
 void EventSender::InitMouseWheelEvent(gin::Arguments* args,
-                                      bool continuous,
-                                      WebMouseWheelEvent* event) {
+                                      MouseScrollType scroll_type,
+                                      WebMouseWheelEvent* event,
+                                      bool* send_gestures) {
   // Force a layout here just to make sure every position has been
   // determined before we send events (as well as all the other methods
   // that send an event do).
@@ -2468,10 +2348,15 @@ void EventSender::InitMouseWheelEvent(gin::Arguments* args,
         v8::Local<v8::Value> value;
         args->GetNext(&value);
         modifiers = GetKeyModifiersFromV8(args->isolate(), value);
-        if (!args->PeekNext().IsEmpty())
+        if (!args->PeekNext().IsEmpty()) {
           args->GetNext(&can_scroll);
+        }
       }
     }
+  }
+  if (can_scroll && send_wheel_gestures_) {
+    can_scroll = false;
+    *send_gestures = true;
   }
 
   InitMouseEvent(WebInputEvent::MouseWheel,
@@ -2489,7 +2374,7 @@ void EventSender::InitMouseWheelEvent(gin::Arguments* args,
   event->scrollByPage = paged;
   event->hasPreciseScrollingDeltas = has_precise_scrolling_deltas;
   event->canScroll = can_scroll;
-  if (continuous) {
+  if (scroll_type == MouseScrollType::PIXEL) {
     event->wheelTicksX /= kScrollbarPixelsPerTick;
     event->wheelTicksY /= kScrollbarPixelsPerTick;
   } else {
@@ -2679,6 +2564,63 @@ WebInputEventResult EventSender::HandleInputEventOnViewOrPopup(
       return popup->handleInputEvent(event);
   }
   return view_->handleInputEvent(event);
+}
+
+void EventSender::SendGesturesForMouseWheelEvent(
+    const WebMouseWheelEvent wheel_event) {
+  WebGestureEvent begin_event;
+  InitGestureEventFromMouseWheel(WebInputEvent::GestureScrollBegin,
+                                 GetCurrentEventTimeSec(), wheel_event,
+                                 &begin_event);
+  begin_event.data.scrollBegin.deltaXHint = wheel_event.deltaX;
+  begin_event.data.scrollBegin.deltaYHint = wheel_event.deltaY;
+  if (wheel_event.scrollByPage) {
+    begin_event.data.scrollBegin.deltaHintUnits = blink::WebGestureEvent::Page;
+    if (begin_event.data.scrollBegin.deltaXHint) {
+      begin_event.data.scrollBegin.deltaXHint =
+          begin_event.data.scrollBegin.deltaXHint > 0 ? 1 : -1;
+    }
+    if (begin_event.data.scrollBegin.deltaYHint) {
+      begin_event.data.scrollBegin.deltaYHint =
+          begin_event.data.scrollBegin.deltaYHint > 0 ? 1 : -1;
+    }
+  } else {
+    begin_event.data.scrollBegin.deltaHintUnits =
+        wheel_event.hasPreciseScrollingDeltas
+            ? blink::WebGestureEvent::PrecisePixels
+            : blink::WebGestureEvent::Pixels;
+  }
+
+  if (force_layout_on_events_)
+    view_->updateAllLifecyclePhases();
+
+  HandleInputEventOnViewOrPopup(begin_event);
+
+  WebGestureEvent update_event;
+  InitGestureEventFromMouseWheel(WebInputEvent::GestureScrollUpdate,
+                                 GetCurrentEventTimeSec(), wheel_event,
+                                 &update_event);
+  update_event.data.scrollUpdate.deltaX =
+      begin_event.data.scrollBegin.deltaXHint;
+  update_event.data.scrollUpdate.deltaY =
+      begin_event.data.scrollBegin.deltaYHint;
+  update_event.data.scrollUpdate.deltaUnits =
+      begin_event.data.scrollBegin.deltaHintUnits;
+
+  if (force_layout_on_events_)
+    view_->updateAllLifecyclePhases();
+  HandleInputEventOnViewOrPopup(update_event);
+
+  WebGestureEvent end_event;
+  InitGestureEventFromMouseWheel(WebInputEvent::GestureScrollEnd,
+                                 GetCurrentEventTimeSec(), wheel_event,
+                                 &end_event);
+  end_event.data.scrollEnd.deltaUnits =
+      begin_event.data.scrollBegin.deltaHintUnits;
+
+  if (force_layout_on_events_)
+    view_->updateAllLifecyclePhases();
+  HandleInputEventOnViewOrPopup(end_event);
 }
 
 }  // namespace test_runner

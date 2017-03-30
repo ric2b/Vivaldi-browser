@@ -54,36 +54,35 @@ AccessibilityTreeFormatterWin::AccessibilityTreeFormatterWin() {
 AccessibilityTreeFormatterWin::~AccessibilityTreeFormatterWin() {
 }
 
-const char* ALL_ATTRIBUTES[] = {
-    "name",
-    "value",
-    "states",
-    "attributes",
-    "role_name",
-    "ia2_hypertext",
-    "currentValue",
-    "minimumValue",
-    "maximumValue",
-    "description",
-    "default_action",
-    "keyboard_shortcut",
-    "location",
-    "size",
-    "index_in_parent",
-    "n_relations",
-    "group_level",
-    "similar_items_in_group",
-    "position_in_group",
-    "table_rows",
-    "table_columns",
-    "row_index",
-    "column_index",
-    "n_characters",
-    "caret_offset",
-    "n_selections",
-    "selection_start",
-    "selection_end"
-};
+const char* ALL_ATTRIBUTES[] = {"name",
+                                "value",
+                                "states",
+                                "attributes",
+                                "text_attributes",
+                                "role_name",
+                                "ia2_hypertext",
+                                "currentValue",
+                                "minimumValue",
+                                "maximumValue",
+                                "description",
+                                "default_action",
+                                "keyboard_shortcut",
+                                "location",
+                                "size",
+                                "index_in_parent",
+                                "n_relations",
+                                "group_level",
+                                "similar_items_in_group",
+                                "position_in_group",
+                                "table_rows",
+                                "table_columns",
+                                "row_index",
+                                "column_index",
+                                "n_characters",
+                                "caret_offset",
+                                "n_selections",
+                                "selection_start",
+                                "selection_end"};
 
 namespace {
 
@@ -157,7 +156,7 @@ void AccessibilityTreeFormatterWin::AddProperties(
     const BrowserAccessibility& node, base::DictionaryValue* dict) {
   dict->SetInteger("id", node.GetId());
   BrowserAccessibilityWin* ax_object =
-      const_cast<BrowserAccessibility*>(&node)->ToBrowserAccessibilityWin();
+      ToBrowserAccessibilityWin(const_cast<BrowserAccessibility*>(&node));
   DCHECK(ax_object);
 
   VARIANT variant_self;
@@ -190,17 +189,29 @@ void AccessibilityTreeFormatterWin::AddProperties(
 
   IAccessibleStateToStringVector(ia_state, &state_strings);
   IAccessible2StateToStringVector(ax_object->ia2_state(), &state_strings);
-  base::ListValue* states = new base::ListValue;
-  for (const auto& state_string : state_strings)
+  scoped_ptr<base::ListValue> states(new base::ListValue());
+  for (const base::string16& state_string : state_strings)
     states->AppendString(base::UTF16ToUTF8(state_string));
-  dict->Set("states", states);
+  dict->Set("states", std::move(states));
 
   const std::vector<base::string16>& ia2_attributes =
       ax_object->ia2_attributes();
-  base::ListValue* attributes = new base::ListValue;
-  for (const auto& ia2_attribute : ia2_attributes)
+  scoped_ptr<base::ListValue> attributes(new base::ListValue());
+  for (const base::string16& ia2_attribute : ia2_attributes)
     attributes->AppendString(base::UTF16ToUTF8(ia2_attribute));
-  dict->Set("attributes", attributes);
+  dict->Set("attributes", std::move(attributes));
+
+  ax_object->ComputeStylesIfNeeded();
+  const std::map<int, std::vector<base::string16>>& ia2_text_attributes =
+      ax_object->offset_to_text_attributes();
+  scoped_ptr<base::ListValue> text_attributes(new base::ListValue());
+  for (const auto& style_span : ia2_text_attributes) {
+    int start_offset = style_span.first;
+    text_attributes->AppendString("offset:" + base::IntToString(start_offset));
+    for (const base::string16& text_attribute : style_span.second)
+      text_attributes->AppendString(base::UTF16ToUTF8(text_attribute));
+  }
+  dict->Set("text_attributes", std::move(text_attributes));
 
   dict->SetString("role_name", ax_object->role_name());
   dict->SetString("ia2_hypertext", GetIA2Hypertext(*ax_object));
@@ -247,7 +258,7 @@ void AccessibilityTreeFormatterWin::AddProperties(
   LONG root_left, root_top, root_width, root_height;
   if (SUCCEEDED(ax_object->accLocation(
           &left, &top, &width, &height, variant_self)) &&
-      SUCCEEDED(root->ToBrowserAccessibilityWin()->accLocation(
+      SUCCEEDED(ToBrowserAccessibilityWin(root)->accLocation(
           &root_left, &root_top, &root_width, &root_height, variant_self))) {
     base::DictionaryValue* location = new base::DictionaryValue;
     location->SetInteger("x", left - root_left);
@@ -345,7 +356,7 @@ base::string16 AccessibilityTreeFormatterWin::ToString(
         break;
       }
       case base::Value::TYPE_INTEGER: {
-        int int_value;
+        int int_value = 0;
         value->GetAsInteger(&int_value);
         WriteAttribute(false,
                        base::StringPrintf(L"%ls=%d",
@@ -356,7 +367,7 @@ base::string16 AccessibilityTreeFormatterWin::ToString(
         break;
       }
       case base::Value::TYPE_DOUBLE: {
-        double double_value;
+        double double_value = 0.0;
         value->GetAsDouble(&double_value);
         WriteAttribute(false,
                        base::StringPrintf(L"%ls=%.2f",

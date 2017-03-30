@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/frame/glass_browser_frame_view.h"
 
+#include <utility>
+
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/windows_version.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -89,8 +91,6 @@ GlassBrowserFrameView::GlassBrowserFrameView(BrowserFrame* frame,
       throbber_frame_(0) {
   if (browser_view->ShouldShowWindowIcon())
     InitThrobberIcons();
-
-  UpdateAvatar();
 }
 
 GlassBrowserFrameView::~GlassBrowserFrameView() {
@@ -382,9 +382,8 @@ void GlassBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) const {
     canvas->sk_canvas()->clipRect(gfx::RectToSkRect(tabstrip_bounds),
                                   SkRegion::kDifference_Op);
     separator_rect.set_y(tabstrip_bounds.bottom());
-    BrowserView::Paint1pxHorizontalLine(
-        canvas, tp->GetColor(ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR),
-        separator_rect, true);
+    BrowserView::Paint1pxHorizontalLine(canvas, GetToolbarTopSeparatorColor(),
+                                        separator_rect, true);
 
     // Toolbar/content separator.
     toolbar_bounds.Inset(kClientEdgeThickness, 0);
@@ -527,15 +526,7 @@ void GlassBrowserFrameView::LayoutNewStyleAvatar() {
 void GlassBrowserFrameView::LayoutIncognitoIcon() {
   const bool md = ui::MaterialDesignController::IsModeMaterial();
   const gfx::Insets insets(GetLayoutInsets(AVATAR_ICON));
-  gfx::Size size;
-  // During startup it's possible to reach here before the browser view has been
-  // added to the view hierarchy.  In this case it won't have a widget and thus
-  // can't access the theme provider, which is required to get the incognito
-  // icon.  Use an empty size in this case, which will still place the tabstrip
-  // at the correct coordinates for a non-incognito window.  We should get
-  // another layout call after the browser view has a widget anyway.
-  if (browser_view()->GetWidget())
-    size = browser_view()->GetOTRAvatarIcon().size();
+  const gfx::Size size(GetOTRAvatarIcon().size());
   int x = NonClientBorderThickness(false);
   // In RTL, the icon needs to start after the caption buttons.
   if (base::i18n::IsRTL()) {
@@ -608,18 +599,14 @@ void GlassBrowserFrameView::StopThrobber() {
       gfx::ImageSkia icon = browser_view()->GetWindowIcon();
       if (!icon.isNull()) {
         // Keep previous icons alive as long as they are referenced by the HWND.
-        previous_small_icon = small_window_icon_.Pass();
-        previous_big_icon = big_window_icon_.Pass();
+        previous_small_icon = std::move(small_window_icon_);
+        previous_big_icon = std::move(big_window_icon_);
 
         // Take responsibility for eventually destroying the created icons.
-        small_window_icon_ =
-            CreateHICONFromSkBitmapSizedTo(icon, GetSystemMetrics(SM_CXSMICON),
-                                           GetSystemMetrics(SM_CYSMICON))
-                .Pass();
-        big_window_icon_ =
-            CreateHICONFromSkBitmapSizedTo(icon, GetSystemMetrics(SM_CXICON),
-                                           GetSystemMetrics(SM_CYICON))
-                .Pass();
+        small_window_icon_ = CreateHICONFromSkBitmapSizedTo(
+            icon, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
+        big_window_icon_ = CreateHICONFromSkBitmapSizedTo(
+            icon, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
 
         small_icon = small_window_icon_.get();
         big_icon = big_window_icon_.get();

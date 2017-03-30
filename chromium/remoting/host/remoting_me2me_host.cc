@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -17,7 +18,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -42,7 +43,6 @@
 #include "remoting/base/constants.h"
 #include "remoting/base/logging.h"
 #include "remoting/base/rsa_key_pair.h"
-#include "remoting/base/service_urls.h"
 #include "remoting/base/util.h"
 #include "remoting/host/branding.h"
 #include "remoting/host/chromoting_host.h"
@@ -69,9 +69,11 @@
 #include "remoting/host/me2me_desktop_environment.h"
 #include "remoting/host/oauth_token_getter_impl.h"
 #include "remoting/host/pairing_registry_delegate.h"
+#include "remoting/host/pin_hash.h"
 #include "remoting/host/policy_watcher.h"
 #include "remoting/host/security_key/gnubby_auth_handler.h"
 #include "remoting/host/security_key/gnubby_extension.h"
+#include "remoting/host/service_urls.h"
 #include "remoting/host/shutdown_watchdog.h"
 #include "remoting/host/signaling_connector.h"
 #include "remoting/host/single_window_desktop_environment.h"
@@ -80,7 +82,6 @@
 #include "remoting/host/token_validator_factory_impl.h"
 #include "remoting/host/usage_stats_consent.h"
 #include "remoting/host/username.h"
-#include "remoting/host/video_frame_recorder_host_extension.h"
 #include "remoting/protocol/authenticator.h"
 #include "remoting/protocol/channel_authenticator.h"
 #include "remoting/protocol/chromium_port_allocator_factory.h"
@@ -111,8 +112,10 @@
 #if defined(OS_LINUX)
 #include <gtk/gtk.h>
 #include <X11/Xlib.h>
+#undef Status  // Xlib.h #defines this, which breaks protobuf headers.
 #include <base/linux_util.h>
 #include "remoting/host/audio_capturer_linux.h"
+#include "remoting/host/linux/certificate_watcher.h"
 #endif  // defined(OS_LINUX)
 
 #if defined(OS_WIN)
@@ -158,13 +161,7 @@ const char kSignalParentSwitchName[] = "signal-parent";
 // Command line switch used to enable VP9 encoding.
 const char kEnableVp9SwitchName[] = "enable-vp9";
 
-// Command line switch used to enable and configure the frame-recorder.
-const char kFrameRecorderBufferKbName[] = "frame-recorder-buffer-kb";
-
 const char kWindowIdSwitchName[] = "window-id";
-
-// Command line switch used to enable WebRTC-based protocol.
-const char kEnableWebrtcSwitchName[] = "enable-webrtc";
 
 // Command line switch used to enable WebRTC-based protocol.
 const char kDisableAuthenticationSwitchName[] = "disable-authentication";
@@ -207,12 +204,12 @@ class NoopAuthenticator : public protocol::Authenticator {
     done_ = true;
     resume_callback.Run();
   }
-  scoped_ptr<buzz::XmlElement> GetNextMessage() override {
+  std::unique_ptr<buzz::XmlElement> GetNextMessage() override {
     NOTREACHED();
     return nullptr;
   }
   const std::string& GetAuthKey() const override { return auth_key_; }
-  scoped_ptr<protocol::ChannelAuthenticator> CreateChannelAuthenticator()
+  std::unique_ptr<protocol::ChannelAuthenticator> CreateChannelAuthenticator()
       const override {
     NOTREACHED();
     return nullptr;
@@ -229,11 +226,10 @@ class NoopAuthenticatorFactory : public protocol::AuthenticatorFactory {
   NoopAuthenticatorFactory() {}
   ~NoopAuthenticatorFactory() override {}
 
-  scoped_ptr<protocol::Authenticator> CreateAuthenticator(
+  std::unique_ptr<protocol::Authenticator> CreateAuthenticator(
       const std::string& local_jid,
-      const std::string& remote_jid,
-      const buzz::XmlElement* first_message) override {
-    return make_scoped_ptr(new NoopAuthenticator());
+      const std::string& remote_jid) override {
+    return base::WrapUnique(new NoopAuthenticator());
   }
 };
 
@@ -247,7 +243,7 @@ class HostProcess : public ConfigWatcher::Delegate,
   // |shutdown_watchdog| is armed when shutdown is started, and should be kept
   // alive as long as possible until the process exits (since destroying the
   // watchdog disarms it).
-  HostProcess(scoped_ptr<ChromotingHostContext> context,
+  HostProcess(std::unique_ptr<ChromotingHostContext> context,
               int* exit_code_out,
               ShutdownWatchdog* shutdown_watchdog);
 
@@ -336,7 +332,7 @@ class HostProcess : public ConfigWatcher::Delegate,
   bool ApplyConfig(const base::DictionaryValue& config);
 
   // Handles policy updates, by calling On*PolicyUpdate methods.
-  void OnPolicyUpdate(scoped_ptr<base::DictionaryValue> policies);
+  void OnPolicyUpdate(std::unique_ptr<base::DictionaryValue> policies);
   void OnPolicyError();
   void ReportPolicyErrorAndRestartHost();
   void ApplyHostDomainPolicy();
@@ -387,7 +383,12 @@ class HostProcess : public ConfigWatcher::Delegate,
                const std::string& file_name,
                const int& line_number);
 
-  scoped_ptr<ChromotingHostContext> context_;
+  std::unique_ptr<ChromotingHostContext> context_;
+
+#if defined(OS_LINUX)
+  // Watch for certificate changes and kill the host when changes occur
+  scoped_ptr<CertificateWatcher> cert_watcher_;
+#endif
 
   // XMPP server/remoting bot configuration (initialized from the command line).
   XmppSignalStrategy::XmppServerConfig xmpp_server_config_;
@@ -396,80 +397,80 @@ class HostProcess : public ConfigWatcher::Delegate,
   // Created on the UI thread but used from the network thread.
   base::FilePath host_config_path_;
   std::string host_config_;
-  scoped_ptr<DesktopEnvironmentFactory> desktop_environment_factory_;
+  std::unique_ptr<DesktopEnvironmentFactory> desktop_environment_factory_;
 
   // Accessed on the network thread.
-  HostState state_;
+  HostState state_ = HOST_STARTING;
 
-  scoped_ptr<ConfigWatcher> config_watcher_;
+  std::unique_ptr<ConfigWatcher> config_watcher_;
 
   std::string host_id_;
-  protocol::SharedSecretHash host_secret_hash_;
+  std::string pin_hash_;
   scoped_refptr<RsaKeyPair> key_pair_;
   std::string oauth_refresh_token_;
   std::string serialized_config_;
   std::string host_owner_;
   std::string host_owner_email_;
-  bool use_service_account_;
-  bool enable_vp9_;
-  int64_t frame_recorder_buffer_size_;
+  bool use_service_account_ = false;
+  bool enable_vp9_ = false;
 
-  scoped_ptr<PolicyWatcher> policy_watcher_;
-  PolicyState policy_state_;
+  std::unique_ptr<PolicyWatcher> policy_watcher_;
+  PolicyState policy_state_ = POLICY_INITIALIZING;
   std::string client_domain_;
   std::string host_domain_;
-  bool host_username_match_required_;
-  bool allow_nat_traversal_;
-  bool allow_relay_;
+  bool host_username_match_required_ = false;
+  bool allow_nat_traversal_ = true;
+  bool allow_relay_ = true;
   PortRange udp_port_range_;
   std::string talkgadget_prefix_;
-  bool allow_pairing_;
+  bool allow_pairing_ = true;
 
-  bool curtain_required_;
+  bool curtain_required_ = false;
   ThirdPartyAuthConfig third_party_auth_config_;
-  bool gnubby_auth_policy_enabled_;
-  bool gnubby_extension_supported_;
+  bool gnubby_auth_policy_enabled_ = false;
+  bool gnubby_extension_supported_ = false;
 
   // Boolean to change flow, where necessary, if we're
   // capturing a window instead of the entire desktop.
-  bool enable_window_capture_;
+  bool enable_window_capture_ = false;
 
   // Used to specify which window to stream, if enabled.
-  webrtc::WindowId window_id_;
+  webrtc::WindowId window_id_ = 0;
 
   // Must outlive |gcd_state_updater_| and |signaling_connector_|.
-  scoped_ptr<OAuthTokenGetter> oauth_token_getter_;
+  std::unique_ptr<OAuthTokenGetter> oauth_token_getter_;
 
   // Must outlive |signaling_connector_|, |gcd_subscriber_|, and
   // |heartbeat_sender_|.
-  scoped_ptr<SignalStrategy> signal_strategy_;
+  std::unique_ptr<SignalStrategy> signal_strategy_;
 
-  scoped_ptr<SignalingConnector> signaling_connector_;
-  scoped_ptr<HeartbeatSender> heartbeat_sender_;
+  std::unique_ptr<SignalingConnector> signaling_connector_;
+  std::unique_ptr<HeartbeatSender> heartbeat_sender_;
 #if defined(USE_GCD)
-  scoped_ptr<GcdStateUpdater> gcd_state_updater_;
-  scoped_ptr<PushNotificationSubscriber> gcd_subscriber_;
+  std::unique_ptr<GcdStateUpdater> gcd_state_updater_;
+  std::unique_ptr<PushNotificationSubscriber> gcd_subscriber_;
 #endif  // defined(USE_GCD)
 
-  scoped_ptr<HostChangeNotificationListener> host_change_notification_listener_;
-  scoped_ptr<HostStatusLogger> host_status_logger_;
-  scoped_ptr<HostEventLogger> host_event_logger_;
+  std::unique_ptr<HostChangeNotificationListener>
+      host_change_notification_listener_;
+  std::unique_ptr<HostStatusLogger> host_status_logger_;
+  std::unique_ptr<HostEventLogger> host_event_logger_;
 
-  scoped_ptr<ChromotingHost> host_;
+  std::unique_ptr<ChromotingHost> host_;
 
   // Used to keep this HostProcess alive until it is shutdown.
   scoped_refptr<HostProcess> self_;
 
 #if defined(REMOTING_MULTI_PROCESS)
   // Accessed on the UI thread.
-  scoped_ptr<IPC::ChannelProxy> daemon_channel_;
+  std::unique_ptr<IPC::ChannelProxy> daemon_channel_;
 
   // Owned as |desktop_environment_factory_|.
   DesktopSessionConnector* desktop_session_connector_ = nullptr;
 #endif  // defined(REMOTING_MULTI_PROCESS)
 
   int* exit_code_out_;
-  bool signal_parent_;
+  bool signal_parent_ = false;
 
   scoped_refptr<PairingRegistry> pairing_registry_;
 
@@ -478,27 +479,12 @@ class HostProcess : public ConfigWatcher::Delegate,
   DISALLOW_COPY_AND_ASSIGN(HostProcess);
 };
 
-HostProcess::HostProcess(scoped_ptr<ChromotingHostContext> context,
+HostProcess::HostProcess(std::unique_ptr<ChromotingHostContext> context,
                          int* exit_code_out,
                          ShutdownWatchdog* shutdown_watchdog)
     : context_(std::move(context)),
-      state_(HOST_STARTING),
-      use_service_account_(false),
-      enable_vp9_(false),
-      frame_recorder_buffer_size_(0),
-      policy_state_(POLICY_INITIALIZING),
-      host_username_match_required_(false),
-      allow_nat_traversal_(true),
-      allow_relay_(true),
-      allow_pairing_(true),
-      curtain_required_(false),
-      gnubby_auth_policy_enabled_(false),
-      gnubby_extension_supported_(false),
-      enable_window_capture_(false),
-      window_id_(0),
       self_(this),
       exit_code_out_(exit_code_out),
-      signal_parent_(false),
       shutdown_watchdog_(shutdown_watchdog) {
   StartOnUiThread();
 }
@@ -541,15 +527,13 @@ bool HostProcess::InitWithCommandLine(const base::CommandLine* cmd_line) {
 #endif  // defined(OS_POSIX)
 
   // Connect to the daemon process.
-  daemon_channel_ = IPC::ChannelProxy::Create(channel_handle,
-                                              IPC::Channel::MODE_CLIENT,
-                                              this,
-                                              context_->network_task_runner());
-
+  daemon_channel_.reset(
+      new IPC::ChannelProxy(this, context_->network_task_runner()));
   IPC::AttachmentBrokerUnprivileged::CreateBrokerIfNeeded();
   IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
   if (broker && !broker->IsPrivilegedBroker())
     broker->RegisterBrokerCommunicationChannel(daemon_channel_.get());
+  daemon_channel_->Init(channel_handle, IPC::Channel::MODE_CLIENT, true);
 
 #else  // !defined(REMOTING_MULTI_PROCESS)
   if (cmd_line->HasSwitch(kHostConfigSwitchName)) {
@@ -558,7 +542,7 @@ bool HostProcess::InitWithCommandLine(const base::CommandLine* cmd_line) {
     // Read config from stdin if necessary.
     if (host_config_path_ == base::FilePath(kStdinConfigPath)) {
       const size_t kBufferSize = 4096;
-      scoped_ptr<char[]> buf(new char[kBufferSize]);
+      std::unique_ptr<char[]> buf(new char[kBufferSize]);
       size_t len;
       while ((len = fread(buf.get(), 1, kBufferSize, stdin)) > 0) {
         host_config_.append(buf.get(), len);
@@ -633,7 +617,7 @@ void HostProcess::OnConfigUpdated(
   HOST_LOG << "Processing new host configuration.";
 
   serialized_config_ = serialized_config;
-  scoped_ptr<base::DictionaryValue> config(
+  std::unique_ptr<base::DictionaryValue> config(
       HostConfigFromJson(serialized_config));
   if (!config) {
     LOG(ERROR) << "Invalid configuration.";
@@ -762,7 +746,7 @@ void HostProcess::CreateAuthenticatorFactory() {
     ShutdownHost(kInitializationFailed);
 #else  // defined(NDEBUG)
     host_->SetAuthenticatorFactory(
-        make_scoped_ptr(new NoopAuthenticatorFactory()));
+        base::WrapUnique(new NoopAuthenticatorFactory()));
 #endif  // !defined(NDEBUG)
     return;
   }
@@ -774,7 +758,7 @@ void HostProcess::CreateAuthenticatorFactory() {
     return;
   }
 
-  scoped_ptr<protocol::AuthenticatorFactory> factory;
+  std::unique_ptr<protocol::AuthenticatorFactory> factory;
 
   if (third_party_auth_config_.is_null()) {
     scoped_refptr<PairingRegistry> pairing_registry;
@@ -783,7 +767,7 @@ void HostProcess::CreateAuthenticatorFactory() {
       // InitializePairingRegistry().
 #if !defined(OS_WIN)
       if (!pairing_registry_) {
-        scoped_ptr<PairingRegistry::Delegate> delegate =
+        std::unique_ptr<PairingRegistry::Delegate> delegate =
             CreatePairingRegistryDelegate();
 
         if (delegate)
@@ -795,22 +779,33 @@ void HostProcess::CreateAuthenticatorFactory() {
       pairing_registry = pairing_registry_;
     }
 
-    factory = protocol::Me2MeHostAuthenticatorFactory::CreateWithSharedSecret(
+    factory = protocol::Me2MeHostAuthenticatorFactory::CreateWithPin(
         use_service_account_, host_owner_, local_certificate, key_pair_,
-        client_domain_, host_secret_hash_, pairing_registry);
+        client_domain_, pin_hash_, pairing_registry);
 
     host_->set_pairing_registry(pairing_registry);
   } else {
+    // ThirdPartyAuthConfig::Parse() leaves the config in a valid state, so
+    // these URLs are both valid.
     DCHECK(third_party_auth_config_.token_url.is_valid());
     DCHECK(third_party_auth_config_.token_validation_url.is_valid());
 
-    scoped_ptr<protocol::TokenValidatorFactory> token_validator_factory(
-        new TokenValidatorFactoryImpl(
-            third_party_auth_config_,
-            key_pair_, context_->url_request_context_getter()));
+#if defined(OS_LINUX)
+    if (!cert_watcher_) {
+      cert_watcher_.reset(new CertificateWatcher(
+          base::Bind(&HostProcess::ShutdownHost, this, kSuccessExitCode),
+          context_->file_task_runner()));
+      cert_watcher_->Start();
+    }
+    cert_watcher_->SetMonitor(host_->AsWeakPtr());
+#endif
+
+    scoped_refptr<protocol::TokenValidatorFactory> token_validator_factory =
+        new TokenValidatorFactoryImpl(third_party_auth_config_, key_pair_,
+                                      context_->url_request_context_getter());
     factory = protocol::Me2MeHostAuthenticatorFactory::CreateWithThirdPartyAuth(
         use_service_account_, host_owner_, local_certificate, key_pair_,
-        client_domain_, std::move(token_validator_factory));
+        client_domain_, token_validator_factory);
   }
 
 #if defined(OS_POSIX)
@@ -988,7 +983,7 @@ void HostProcess::InitializePairingRegistry(
     IPC::PlatformFileForTransit unprivileged_key) {
   DCHECK(context_->network_task_runner()->BelongsToCurrentThread());
   // |privileged_key| can be nullptr but not |unprivileged_key|.
-  DCHECK(unprivileged_key);
+  DCHECK(unprivileged_key.IsValid());
   // |pairing_registry_| should only be initialized once.
   DCHECK(!pairing_registry_);
 
@@ -997,7 +992,7 @@ void HostProcess::InitializePairingRegistry(
   HKEY unprivileged_hkey = reinterpret_cast<HKEY>(
       IPC::PlatformFileForTransitToPlatformFile(unprivileged_key));
 
-  scoped_ptr<PairingRegistryDelegateWin> delegate(
+  std::unique_ptr<PairingRegistryDelegateWin> delegate(
       new PairingRegistryDelegateWin());
   delegate->SetRootKeys(privileged_hkey, unprivileged_hkey);
 
@@ -1032,13 +1027,9 @@ bool HostProcess::ApplyConfig(const base::DictionaryValue& config) {
   }
 
   std::string host_secret_hash_string;
-  if (!config.GetString(kHostSecretHashConfigPath,
-                        &host_secret_hash_string)) {
-    host_secret_hash_string = "plain:";
-  }
-
-  if (!host_secret_hash_.Parse(host_secret_hash_string)) {
-    LOG(ERROR) << "Invalid host_secret_hash.";
+  if (!config.GetString(kHostSecretHashConfigPath, &host_secret_hash_string) ||
+      !ParsePinHashFromConfig(host_secret_hash_string, host_id_, &pin_hash_)) {
+    LOG(ERROR) << "Cannot parse host_secret_hash configuration value.";
     return false;
   }
 
@@ -1072,26 +1063,11 @@ bool HostProcess::ApplyConfig(const base::DictionaryValue& config) {
     config.GetBoolean(kEnableVp9ConfigPath, &enable_vp9_);
   }
 
-  // Allow the command-line to override the size of the frame recorder buffer.
-  int frame_recorder_buffer_kb = 0;
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          kFrameRecorderBufferKbName)) {
-    std::string switch_value =
-        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-            kFrameRecorderBufferKbName);
-    base::StringToInt(switch_value, &frame_recorder_buffer_kb);
-  } else {
-    config.GetInteger(kFrameRecorderBufferKbConfigPath,
-                      &frame_recorder_buffer_kb);
-  }
-  if (frame_recorder_buffer_kb > 0) {
-    frame_recorder_buffer_size_ = 1024LL * frame_recorder_buffer_kb;
-  }
-
   return true;
 }
 
-void HostProcess::OnPolicyUpdate(scoped_ptr<base::DictionaryValue> policies) {
+void HostProcess::OnPolicyUpdate(
+    std::unique_ptr<base::DictionaryValue> policies) {
   if (!context_->network_task_runner()->BelongsToCurrentThread()) {
     context_->network_task_runner()->PostTask(
         FROM_HERE, base::Bind(&HostProcess::OnPolicyUpdate, this,
@@ -1372,6 +1348,9 @@ bool HostProcess::OnHostTokenUrlPolicyUpdate(base::DictionaryValue* policies) {
       return true;
     case ThirdPartyAuthConfig::InvalidPolicy:
     default:
+      // Unreachable, because PolicyWatcher::OnPolicyUpdated() enforces that
+      // the policy is well-formed (including checks specific to
+      // ThirdPartyAuthConfig), before notifying of policy updates.
       NOTREACHED();
       return false;
   }
@@ -1429,9 +1408,10 @@ void HostProcess::InitializeSignaling() {
   signal_strategy_.reset(xmpp_signal_strategy);
 
   // Create SignalingConnector.
-  scoped_ptr<DnsBlackholeChecker> dns_blackhole_checker(new DnsBlackholeChecker(
-      context_->url_request_context_getter(), talkgadget_prefix_));
-  scoped_ptr<OAuthTokenGetter::OAuthCredentials> oauth_credentials(
+  std::unique_ptr<DnsBlackholeChecker> dns_blackhole_checker(
+      new DnsBlackholeChecker(context_->url_request_context_getter(),
+                              talkgadget_prefix_));
+  std::unique_ptr<OAuthTokenGetter::OAuthCredentials> oauth_credentials(
       new OAuthTokenGetter::OAuthCredentials(xmpp_server_config_.username,
                                              oauth_refresh_token_,
                                              use_service_account_));
@@ -1446,7 +1426,7 @@ void HostProcess::InitializeSignaling() {
 #if defined(USE_GCD)
   // Create objects to manage GCD state.
   ServiceUrls* service_urls = ServiceUrls::GetInstance();
-  scoped_ptr<GcdRestClient> gcd_rest_client(new GcdRestClient(
+  std::unique_ptr<GcdRestClient> gcd_rest_client(new GcdRestClient(
       service_urls->gcd_base_url(), host_id_,
       context_->url_request_context_getter(), oauth_token_getter_.get()));
   gcd_state_updater_.reset(new GcdStateUpdater(
@@ -1513,24 +1493,23 @@ void HostProcess::StartHost() {
   scoped_refptr<protocol::TransportContext> transport_context =
       new protocol::TransportContext(
           signal_strategy_.get(),
-          make_scoped_ptr(new protocol::ChromiumPortAllocatorFactory()),
-          make_scoped_ptr(new ChromiumUrlRequestFactory(
+          base::WrapUnique(new protocol::ChromiumPortAllocatorFactory()),
+          base::WrapUnique(new ChromiumUrlRequestFactory(
               context_->url_request_context_getter())),
           network_settings, protocol::TransportRole::SERVER);
+  transport_context->set_ice_config_url(
+      ServiceUrls::GetInstance()->ice_config_url());
 
-  scoped_ptr<protocol::SessionManager> session_manager(
+  std::unique_ptr<protocol::SessionManager> session_manager(
       new protocol::JingleSessionManager(signal_strategy_.get()));
 
-  scoped_ptr<protocol::CandidateSessionConfig> protocol_config =
+  std::unique_ptr<protocol::CandidateSessionConfig> protocol_config =
       protocol::CandidateSessionConfig::CreateDefault();
   if (!desktop_environment_factory_->SupportsAudioCapture())
     protocol_config->DisableAudioChannel();
   if (enable_vp9_)
     protocol_config->set_vp9_experiment_enabled(true);
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          kEnableWebrtcSwitchName)) {
-    protocol_config->set_webrtc_supported(true);
-  }
+  protocol_config->set_webrtc_supported(true);
   session_manager->set_protocol_config(std::move(protocol_config));
 
   host_.reset(new ChromotingHost(desktop_environment_factory_.get(),
@@ -1539,14 +1518,7 @@ void HostProcess::StartHost() {
                                  context_->video_encode_task_runner()));
 
   if (gnubby_auth_policy_enabled_ && gnubby_extension_supported_) {
-    host_->AddExtension(make_scoped_ptr(new GnubbyExtension()));
-  }
-
-  if (frame_recorder_buffer_size_ > 0) {
-    scoped_ptr<VideoFrameRecorderHostExtension> frame_recorder_extension(
-        new VideoFrameRecorderHostExtension());
-    frame_recorder_extension->SetMaxContentBytes(frame_recorder_buffer_size_);
-    host_->AddExtension(std::move(frame_recorder_extension));
+    host_->AddExtension(base::WrapUnique(new GnubbyExtension()));
   }
 
   // TODO(simonmorris): Get the maximum session duration from a policy.
@@ -1725,14 +1697,15 @@ int HostProcessMain() {
 
   // Create the main message loop and start helper threads.
   base::MessageLoopForUI message_loop;
-  scoped_ptr<ChromotingHostContext> context = ChromotingHostContext::Create(
-      new AutoThreadTaskRunner(message_loop.task_runner(),
-                               base::MessageLoop::QuitWhenIdleClosure()));
+  std::unique_ptr<ChromotingHostContext> context =
+      ChromotingHostContext::Create(
+          new AutoThreadTaskRunner(message_loop.task_runner(),
+                                   base::MessageLoop::QuitWhenIdleClosure()));
   if (!context)
     return kInitializationFailed;
 
   // NetworkChangeNotifier must be initialized after MessageLoop.
-  scoped_ptr<net::NetworkChangeNotifier> network_change_notifier(
+  std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier(
       net::NetworkChangeNotifier::Create());
 
   // Create & start the HostProcess using these threads.

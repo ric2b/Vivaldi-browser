@@ -25,6 +25,7 @@ import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.notifications.NotificationConstants;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxy;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxyImpl;
@@ -55,6 +56,8 @@ class UrlManager {
     private static final String PREFS_VERSION_KEY = "physicalweb_version";
     private static final String PREFS_NEARBY_URLS_KEY = "physicalweb_nearby_urls";
     private static final String PREFS_RESOLVED_URLS_KEY = "physicalweb_resolved_urls";
+    private static final String PREFS_NOTIFICATION_UPDATE_TIMESTAMP =
+            "physicalweb_notification_update_timestamp";
     private static final int PREFS_VERSION = 3;
     private static final long STALE_NOTIFICATION_TIMEOUT_MILLIS = 30 * 60 * 1000;
     private static UrlManager sInstance = null;
@@ -267,7 +270,7 @@ class UrlManager {
             protected Void doInBackground(Void... params) {
                 SharedPreferences oldPrefs =
                         mContext.getSharedPreferences(DEPRECATED_PREFS_NAME, Context.MODE_PRIVATE);
-                oldPrefs.edit().clear().commit();
+                oldPrefs.edit().clear().apply();
                 return null;
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
@@ -343,10 +346,35 @@ class UrlManager {
         });
     }
 
+    /**
+     * Gets the time since the last notification update.
+     * @return the elapsed realtime since the most recent notification update.
+     */
+    public long getTimeSinceNotificationUpdate() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+        long timestamp = prefs.getLong(PREFS_NOTIFICATION_UPDATE_TIMESTAMP, 0);
+        return SystemClock.elapsedRealtime() - timestamp;
+    }
+
     private void updateNotification(boolean isUrlListEmptyBefore, boolean isUrlListEmptyAfter) {
+        // Record a timestamp.
+        // This is useful for tracking whether a notification is pressed soon after an update or
+        // much later.
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.putLong(PREFS_NOTIFICATION_UPDATE_TIMESTAMP, SystemClock.elapsedRealtime());
+        editor.apply();
+
         if (isUrlListEmptyAfter) {
             clearNotification();
             cancelClearNotificationAlarm();
+            return;
+        }
+
+        // We should only show notifications if there's no other notification-based client.
+        if (PhysicalWebEnvironment
+                .getInstance((ChromeApplication) mContext.getApplicationContext())
+                .hasNotificationBasedClient()) {
             return;
         }
 

@@ -15,12 +15,12 @@
 
 namespace blink {
 
-class CORE_EXPORT ScrollState final : public RefCountedWillBeGarbageCollectedFinalized<ScrollState>, public ScriptWrappable {
+class CORE_EXPORT ScrollState final : public GarbageCollectedFinalized<ScrollState>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 
 public:
-    static PassRefPtrWillBeRawPtr<ScrollState> create(ScrollStateInit);
-    static PassRefPtrWillBeRawPtr<ScrollState> create(PassOwnPtr<ScrollStateData>);
+    static ScrollState* create(ScrollStateInit);
+    static ScrollState* create(PassOwnPtr<ScrollStateData>);
 
     ~ScrollState()
     {

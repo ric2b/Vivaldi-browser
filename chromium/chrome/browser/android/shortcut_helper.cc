@@ -10,6 +10,8 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/bind.h"
+#include "base/callback.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/manifest/manifest_icon_downloader.h"
@@ -62,7 +64,8 @@ void GetHomescreenIconAndSplashImageSizes() {
 void ShortcutHelper::AddShortcutInBackgroundWithSkBitmap(
     const ShortcutInfo& info,
     const std::string& webapp_id,
-    const SkBitmap& icon_bitmap) {
+    const SkBitmap& icon_bitmap,
+    const base::Closure& splash_image_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   // Send the data to the Java side to create the shortcut.
@@ -81,6 +84,19 @@ void ShortcutHelper::AddShortcutInBackgroundWithSkBitmap(
   if (icon_bitmap.getSize())
     java_bitmap = gfx::ConvertToJavaBitmap(&icon_bitmap);
 
+  uintptr_t callback_pointer = 0;
+  bool is_webapp_capable = info.display == blink::WebDisplayModeStandalone;
+
+  if (is_webapp_capable) {
+    // The callback will need to be run after shortcut creation completes in
+    // order to download the splash image and save it to the WebappDataStorage.
+    // Create a copy of the callback here and send the pointer to Java, which
+    // will send it back once the asynchronous shortcut creation process
+    // finishes.
+    callback_pointer =
+        reinterpret_cast<uintptr_t>(new base::Closure(splash_image_callback));
+  }
+
   Java_ShortcutHelper_addShortcut(
       env,
       base::android::GetApplicationContext(),
@@ -90,12 +106,13 @@ void ShortcutHelper::AddShortcutInBackgroundWithSkBitmap(
       java_name.obj(),
       java_short_name.obj(),
       java_bitmap.obj(),
-      info.display == blink::WebDisplayModeStandalone,
+      is_webapp_capable,
       info.orientation,
       info.source,
       info.theme_color,
       info.background_color,
-      info.is_icon_generated);
+      info.is_icon_generated,
+      callback_pointer);
 }
 
 int ShortcutHelper::GetIdealHomescreenIconSizeInDp() {
@@ -132,15 +149,13 @@ void ShortcutHelper::FetchSplashScreenImage(
   // This is a fire and forget task. It is not vital for the splash screen image
   // to be downloaded so if the downloader returns false there is no fallback.
   ManifestIconDownloader::Download(
-      web_contents,
-      image_url,
-      ideal_splash_image_size_in_dp,
+      web_contents, image_url, ideal_splash_image_size_in_dp,
       minimum_splash_image_size_in_dp,
-      base::Bind(&ShortcutHelper::StoreWebappData, webapp_id));
+      base::Bind(&ShortcutHelper::StoreWebappSplashImage, webapp_id));
 }
 
 // static
-void ShortcutHelper::StoreWebappData(
+void ShortcutHelper::StoreWebappSplashImage(
     const std::string& webapp_id,
     const SkBitmap& splash_image) {
   if (splash_image.drawsNothing())
@@ -152,7 +167,7 @@ void ShortcutHelper::StoreWebappData(
   ScopedJavaLocalRef<jobject> java_splash_image =
       gfx::ConvertToJavaBitmap(&splash_image);
 
-  Java_ShortcutHelper_storeWebappData(
+  Java_ShortcutHelper_storeWebappSplashImage(
       env,
       base::android::GetApplicationContext(),
       java_webapp_id.obj(),
@@ -197,6 +212,23 @@ SkBitmap ShortcutHelper::FinalizeLauncherIcon(const SkBitmap& bitmap,
   }
 
   return gfx::CreateSkBitmapFromJavaBitmap(gfx::JavaBitmap(result.obj()));
+}
+
+// Callback used by Java when the shortcut has been created.
+// |splash_image_callback| is a pointer to a base::Closure allocated in
+// AddShortcutInBackgroundWithSkBitmap, so reinterpret_cast it back and run it.
+//
+// This callback should only ever be called when the shortcut was for a
+// webapp-capable site; otherwise, |splash_image_callback| will have never been
+// allocated and doesn't need to be run or deleted.
+void OnWebappDataStored(JNIEnv* env,
+                        const JavaParamRef<jclass>& clazz,
+                        jlong jsplash_image_callback) {
+  DCHECK(jsplash_image_callback);
+  base::Closure* splash_image_callback =
+      reinterpret_cast<base::Closure*>(jsplash_image_callback);
+  splash_image_callback->Run();
+  delete splash_image_callback;
 }
 
 bool ShortcutHelper::RegisterShortcutHelper(JNIEnv* env) {

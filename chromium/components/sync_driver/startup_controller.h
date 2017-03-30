@@ -10,35 +10,19 @@
 #include "base/time/time.h"
 #include "sync/internal_api/public/base/model_type.h"
 
-class ProfileOAuth2TokenService;
-class SigninManagerWrapper;
-
 namespace sync_driver {
 class SyncPrefs;
 }
 
 namespace browser_sync {
 
-// Defines the type of behavior the sync engine should use. If configured for
-// AUTO_START, the sync engine will automatically call SetFirstSetupComplete()
-// and start downloading data types as soon as sync credentials are available.
-// If configured for MANUAL_START, sync will not start until the user
-// completes sync setup, at which point the UI makes an explicit call to
-// complete sync setup.
-enum ProfileSyncServiceStartBehavior {
-  AUTO_START,
-  MANUAL_START,
-};
-
 // This class is used by ProfileSyncService to manage all logic and state
 // pertaining to initialization of the SyncBackendHost (colloquially referred
 // to as "the backend").
 class StartupController {
  public:
-  StartupController(ProfileSyncServiceStartBehavior start_behavior,
-                    const ProfileOAuth2TokenService* token_service,
-                    const sync_driver::SyncPrefs* sync_prefs,
-                    const SigninManagerWrapper* signin,
+  StartupController(const sync_driver::SyncPrefs* sync_prefs,
+                    base::Callback<bool()> can_start,
                     base::Closure start_backend);
   ~StartupController();
 
@@ -62,9 +46,10 @@ class StartupController {
   // See setup_in_progress_.
   void Reset(const syncer::ModelTypeSet registered_types);
 
-  void set_setup_in_progress(bool in_progress);
+  // Sets the setup in progress flag and tries to start sync if it's true.
+  void SetSetupInProgress(bool setup_in_progress);
+
   bool IsSetupInProgress() const { return setup_in_progress_; }
-  bool auto_start_enabled() const { return auto_start_enabled_; }
   base::Time start_backend_time() const { return start_backend_time_; }
   std::string GetBackendInitializationStateString() const;
 
@@ -95,20 +80,14 @@ class StartupController {
   // data types.
   // Note: this is explicitly controlled by higher layers (UI) and is meant to
   // reflect what the UI claims the setup state to be. Therefore, only set this
-  // due to explicit requests to do so via set_setup_in_progress.
+  // due to explicit requests to do so via SetSetupInProgress.
   bool setup_in_progress_;
-
-  // If true, we want to automatically start sync signin whenever we have
-  // credentials (user doesn't need to go through the startup flow). This is
-  // typically enabled on platforms (like ChromeOS) that have their own
-  // distinct signin flow.
-  const bool auto_start_enabled_;
 
   const sync_driver::SyncPrefs* sync_prefs_;
 
-  const ProfileOAuth2TokenService* token_service_;
-
-  const SigninManagerWrapper* signin_;
+  // A function that can be invoked repeatedly to determine whether sync can be
+  // started. |start_backend_| should not be invoked unless this returns true.
+  base::Callback<bool()> can_start_;
 
   // The callback we invoke when it's time to call expensive
   // startup routines for the sync backend.
@@ -121,9 +100,6 @@ class StartupController {
 
   // Used to compute preferred_types from SyncPrefs as-needed.
   syncer::ModelTypeSet registered_types_;
-
-  // True before calling |start_backend_| for the first time. False after that.
-  bool first_start_;
 
   base::WeakPtrFactory<StartupController> weak_factory_;
 };

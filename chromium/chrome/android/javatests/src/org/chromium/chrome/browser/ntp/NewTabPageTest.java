@@ -13,6 +13,7 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
@@ -48,6 +49,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
     private static final String TEST_PAGE = "/chrome/test/data/android/navigate/simple.html";
 
     private static final String[] FAKE_MOST_VISITED_TITLES = new String[] { "Simple" };
+    private static final String[] FAKE_MOST_VISITED_WHITELIST_ICON_PATHS = new String[] { "" };
 
     private Tab mTab;
     private NewTabPage mNtp;
@@ -82,8 +84,9 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
                 public void run() {
                     // Create FakeMostVisitedSites after starting the activity, since it depends on
                     // native code.
-                    mFakeMostVisitedSites = new FakeMostVisitedSites(mTab.getProfile(),
-                            FAKE_MOST_VISITED_TITLES, mFakeMostVisitedUrls);
+                    mFakeMostVisitedSites =
+                            new FakeMostVisitedSites(mTab.getProfile(), FAKE_MOST_VISITED_TITLES,
+                                    mFakeMostVisitedUrls, FAKE_MOST_VISITED_WHITELIST_ICON_PATHS);
                 }
             });
         } catch (Throwable t) {
@@ -128,6 +131,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
      */
     @SmallTest
     @Feature({"NewTabPage"})
+    @DisableIf.Build(sdk_is_greater_than = 22, message = "crbug.com/593007")
     public void testSearchFromFakebox() throws InterruptedException {
         singleClickView(mFakebox);
         waitForFakeboxFocusAnimationComplete(mNtp);
@@ -297,18 +301,18 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
         });
     }
 
-    private void waitForUrlFocusAnimationsDisabledState(final boolean disabled)
+    private void waitForUrlFocusAnimationsDisabledState(boolean disabled)
             throws InterruptedException {
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(Criteria.equals(disabled, new Callable<Boolean>() {
             @Override
-            public boolean isSatisfied() {
-                return getUrlFocusAnimatonsDisabled() == disabled;
+            public Boolean call() {
+                return getUrlFocusAnimatonsDisabled();
             }
-        });
+        }));
     }
 
     private void waitForTabLoading() throws InterruptedException {
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return mTab.isLoading();
@@ -320,14 +324,14 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
         waitForUrlFocusPercent(ntp, 1f);
     }
 
-    private void waitForUrlFocusPercent(final NewTabPage ntp, final float percent)
+    private void waitForUrlFocusPercent(final NewTabPage ntp, float percent)
             throws InterruptedException {
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(Criteria.equals(percent, new Callable<Float>() {
             @Override
-            public boolean isSatisfied() {
-                return ntp.getNewTabPageView().getUrlFocusChangeAnimationPercent() == percent;
+            public Float call() {
+                return ntp.getNewTabPageView().getUrlFocusChangeAnimationPercent();
             }
-        });
+        }));
     }
 
     private void clickFakebox() {
@@ -353,13 +357,13 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
     /**
      * Waits until the top of the fakebox reaches the given position.
      */
-    private void waitForFakeboxTopPosition(final NewTabPage ntp, final int position)
+    private void waitForFakeboxTopPosition(final NewTabPage ntp, int position)
             throws InterruptedException {
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(Criteria.equals(position, new Callable<Integer>() {
             @Override
-            public boolean isSatisfied() {
-                return getFakeboxTop(ntp) == position;
+            public Integer call() {
+                return getFakeboxTop(ntp);
             }
-        });
+        }));
     }
 }

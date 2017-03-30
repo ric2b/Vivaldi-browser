@@ -201,7 +201,7 @@ no-repeat
 // round
 // space
 //
-// -webkit-background-composite
+// -webkit-mask-composite
 //
 clear
 copy
@@ -642,10 +642,6 @@ searchfield-decoration
 searchfield-results-decoration
 searchfield-cancel-button
 textfield
-relevancy-level-indicator
-continuous-capacity-level-indicator
-discrete-capacity-level-indicator
-rating-level-indicator
 textarea
 // An appearance value that should not be accepted by the parser:
 caps-lock-indicator
@@ -977,6 +973,7 @@ linear-gradient
 radial-gradient
 repeating-linear-gradient
 repeating-radial-gradient
+paint
 -webkit-cross-fade
 -webkit-gradient
 -webkit-linear-gradient

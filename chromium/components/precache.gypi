@@ -18,6 +18,7 @@
         '..',
       ],
       'sources': [
+        'precache/core/fetcher_pool.h',
         'precache/core/precache_database.cc',
         'precache/core/precache_database.h',
         'precache/core/precache_fetcher.cc',
@@ -57,6 +58,7 @@
           'type': 'static_library',
           'dependencies': [
             'precache_core',
+            'precache_core_proto',
             '../base/base.gyp:base',
             '../components/components.gyp:sync_driver',
             '../content/content.gyp:content_browser',

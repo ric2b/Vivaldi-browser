@@ -298,7 +298,11 @@ media::VideoCaptureFormat GetBestCaptureFormat(
 // static
 MediaStreamVideoSource* MediaStreamVideoSource::GetVideoSource(
     const blink::WebMediaStreamSource& source) {
-  return static_cast<MediaStreamVideoSource*>(source.extraData());
+  if (source.isNull() ||
+      source.getType() != blink::WebMediaStreamSource::TypeVideo) {
+    return nullptr;
+  }
+  return static_cast<MediaStreamVideoSource*>(source.getExtraData());
 }
 
 // static, deprecated
@@ -399,6 +403,14 @@ void MediaStreamVideoSource::RemoveTrack(MediaStreamVideoTrack* video_track) {
 base::SingleThreadTaskRunner* MediaStreamVideoSource::io_task_runner() const {
   DCHECK(CalledOnValidThread());
   return track_adapter_->io_task_runner();
+}
+
+const media::VideoCaptureFormat*
+    MediaStreamVideoSource::GetCurrentFormat() const {
+  DCHECK(CalledOnValidThread());
+  if (state_ == STARTING || state_ == STARTED)
+    return &current_format_;
+  return nullptr;
 }
 
 void MediaStreamVideoSource::DoStopSource() {

@@ -6,22 +6,19 @@
  * @fileoverview
  * `settings-input` is a single-line text field for user input associated
  * with a pref value.
- *
- * @element settings-input
  */
 Polymer({
   is: 'settings-input',
 
-  behaviors: [CrPolicyPrefBehavior],
+  behaviors: [CrPolicyPrefBehavior, PrefControlBehavior],
 
   properties: {
     /**
      * The preference object to control.
      * @type {!chrome.settingsPrivate.PrefObject|undefined}
+     * @override
      */
     pref: {
-      type: Object,
-      notify: true,
       observer: 'prefChanged_'
     },
 

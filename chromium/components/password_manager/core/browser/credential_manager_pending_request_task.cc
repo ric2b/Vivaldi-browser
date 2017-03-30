@@ -107,7 +107,8 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
                         local_results[0]->federation_origin.unique()
                             ? CredentialType::CREDENTIAL_TYPE_PASSWORD
                             : CredentialType::CREDENTIAL_TYPE_FEDERATED);
-    delegate_->client()->NotifyUserAutoSignin(std::move(local_results));
+    delegate_->client()->NotifyUserAutoSignin(std::move(local_results),
+                                              origin_);
     delegate_->SendCredential(id_, info);
     return;
   }
@@ -115,13 +116,13 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
   // Otherwise, return an empty credential if we're in zero-click-only mode
   // or if the user chooses not to return a credential, and the credential the
   // user chooses if they pick one.
-  scoped_ptr<autofill::PasswordForm> potential_autosignin_form(
+  std::unique_ptr<autofill::PasswordForm> potential_autosignin_form(
       new autofill::PasswordForm(*local_results[0]));
   if (zero_click_only_ ||
       !delegate_->client()->PromptUserToChooseCredentials(
           std::move(local_results), std::move(federated_results), origin_,
           base::Bind(
-              &CredentialManagerPendingRequestTaskDelegate::SendCredential,
+              &CredentialManagerPendingRequestTaskDelegate::SendPasswordForm,
               base::Unretained(delegate_), id_))) {
     if (can_use_autosignin) {
       // The user had credentials, but either chose not to share them with the

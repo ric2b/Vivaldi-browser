@@ -11,7 +11,6 @@
 #include "modules/EventTargetModules.h"
 #include "modules/mediarecorder/BlobEvent.h"
 #include "platform/ContentType.h"
-#include "platform/NotImplemented.h"
 #include "platform/blob/BlobData.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebMediaStream.h"
@@ -39,7 +38,7 @@ String stateToString(MediaRecorder::State state)
         return "paused";
     }
 
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return String();
 }
 
@@ -89,7 +88,7 @@ void AllocateVideoAndAudioBitrates(ExceptionState& exceptionState, ExecutionCont
                 audioBps = kSmallestPossibleOpusBitRate;
             }
         } else {
-            ASSERT(!audioBps);
+            DCHECK(!audioBps);
         }
     }
 
@@ -104,7 +103,7 @@ void AllocateVideoAndAudioBitrates(ExceptionState& exceptionState, ExecutionCont
                 videoBps = kSmallestPossibleVpxBitRate;
             }
         } else {
-            ASSERT(!videoBps);
+            DCHECK(!videoBps);
         }
     }
 
@@ -132,7 +131,8 @@ MediaRecorder* MediaRecorder::create(ExecutionContext* context, MediaStream* str
 }
 
 MediaRecorder::MediaRecorder(ExecutionContext* context, MediaStream* stream, const MediaRecorderOptions& options, ExceptionState& exceptionState)
-    : ActiveDOMObject(context)
+    : ActiveScriptWrappable(this)
+    , ActiveDOMObject(context)
     , m_stream(stream)
     , m_streamAmountOfTracks(stream->getTracks().size())
     , m_mimeType(options.mimeType())
@@ -143,10 +143,10 @@ MediaRecorder::MediaRecorder(ExecutionContext* context, MediaStream* stream, con
     , m_state(State::Inactive)
     , m_dispatchScheduledEventRunner(AsyncMethodRunner<MediaRecorder>::create(this, &MediaRecorder::dispatchScheduledEvent))
 {
-    ASSERT(m_stream->getTracks().size());
+    DCHECK(m_stream->getTracks().size());
 
     m_recorderHandler = adoptPtr(Platform::current()->createMediaRecorderHandler());
-    ASSERT(m_recorderHandler);
+    DCHECK(m_recorderHandler);
 
     if (!m_recorderHandler) {
         exceptionState.throwDOMException(NotSupportedError, "No MediaRecorder handler can be created.");
@@ -240,7 +240,7 @@ void MediaRecorder::requestData(ExceptionState& exceptionState)
 
 bool MediaRecorder::isTypeSupported(const String& type)
 {
-    RawPtr<WebMediaRecorderHandler> handler = Platform::current()->createMediaRecorderHandler();
+    WebMediaRecorderHandler* handler = Platform::current()->createMediaRecorderHandler();
     if (!handler)
         return false;
 
@@ -258,9 +258,9 @@ const AtomicString& MediaRecorder::interfaceName() const
     return EventTargetNames::MediaRecorder;
 }
 
-ExecutionContext* MediaRecorder::executionContext() const
+ExecutionContext* MediaRecorder::getExecutionContext() const
 {
-    return ActiveDOMObject::executionContext();
+    return ActiveDOMObject::getExecutionContext();
 }
 
 void MediaRecorder::suspend()
@@ -323,7 +323,7 @@ void MediaRecorder::createBlobEvent(Blob* blob)
 
 void MediaRecorder::stopRecording()
 {
-    ASSERT(m_state != State::Inactive);
+    DCHECK(m_state != State::Inactive);
     m_state = State::Inactive;
 
     m_recorderHandler->stop();
@@ -332,7 +332,7 @@ void MediaRecorder::stopRecording()
     scheduleDispatchEvent(Event::create(EventTypeNames::stop));
 }
 
-void MediaRecorder::scheduleDispatchEvent(PassRefPtrWillBeRawPtr<Event> event)
+void MediaRecorder::scheduleDispatchEvent(Event* event)
 {
     m_scheduledEvents.append(event);
 
@@ -341,7 +341,7 @@ void MediaRecorder::scheduleDispatchEvent(PassRefPtrWillBeRawPtr<Event> event)
 
 void MediaRecorder::dispatchScheduledEvent()
 {
-    WillBeHeapVector<RefPtrWillBeMember<Event>> events;
+    HeapVector<Member<Event>> events;
     events.swap(m_scheduledEvents);
 
     for (const auto& event : events)

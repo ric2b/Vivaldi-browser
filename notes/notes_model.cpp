@@ -62,8 +62,8 @@ void Notes_Model::Load(
   }
 
   // Load the notes. NotesStorage notifies us when done.
-  store_ = new NotesStorage(profile_, this, task_runner.get());
-  store_->LoadNotes(CreateLoadDetails());
+  store_.reset(new NotesStorage(profile_, this, task_runner.get()));
+  store_->LoadNotes(make_scoped_ptr(CreateLoadDetails()));
 }
 
 void Notes_Model::DoneLoading(NotesLoadDetails *details_delete_me) {

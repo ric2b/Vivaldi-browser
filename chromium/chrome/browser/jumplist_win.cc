@@ -52,6 +52,7 @@
 #include "app/vivaldi_constants.h"
 
 using content::BrowserThread;
+using JumpListData = JumpList::JumpListData;
 
 namespace {
 
@@ -91,6 +92,18 @@ bool CreateIconFile(const SkBitmap& bitmap,
   // The IShellLink::SetIcon() function needs the absolute path to an icon.
   *icon_path = path;
   return true;
+}
+
+// Helper method for RunUpdate to create icon files for the asynchrounously
+// loaded icons.
+void CreateIconFiles(const base::FilePath& icon_dir,
+                     const ShellLinkItemList& item_list) {
+  for (ShellLinkItemList::const_iterator item = item_list.begin();
+      item != item_list.end(); ++item) {
+    base::FilePath icon_path;
+    if (CreateIconFile((*item)->icon_data(), icon_dir, &icon_path))
+      (*item)->set_icon(icon_path.value(), 0);
+  }
 }
 
 // Updates the "Tasks" category of the JumpList.
@@ -216,12 +229,68 @@ bool UpdateJumpList(const wchar_t* app_id,
   return true;
 }
 
+// Updates the jumplist, once all the data has been fetched.
+void RunUpdateOnFileThread(
+    IncognitoModePrefs::Availability incognito_availability,
+    const std::wstring& app_id,
+    const base::FilePath& icon_dir,
+    base::RefCountedData<JumpListData>* ref_counted_data) {
+  JumpListData* data = &ref_counted_data->data;
+  ShellLinkItemList local_most_visited_pages;
+  ShellLinkItemList local_recently_closed_pages;
+  ShellLinkItemList local_speed_dials;
+
+  {
+    base::AutoLock auto_lock(data->list_lock_);
+    // Make sure we are not out of date: if icon_urls_ is not empty, then
+    // another notification has been received since we processed this one
+    if (!data->icon_urls_.empty())
+      return;
+
+    // Make local copies of lists so we can release the lock.
+    local_most_visited_pages = data->most_visited_pages_;
+    local_recently_closed_pages = data->recently_closed_pages_;
+    local_speed_dials = data->speed_dials_;
+  }
+
+  // Delete the directory which contains old icon files, rename the current
+  // icon directory, and create a new directory which contains new JumpList
+  // icon files.
+  base::FilePath icon_dir_old(icon_dir.value() + L"Old");
+  if (base::PathExists(icon_dir_old))
+    base::DeleteFile(icon_dir_old, true);
+  base::Move(icon_dir, icon_dir_old);
+  base::CreateDirectory(icon_dir);
+
+  // Create temporary icon files for shortcuts in the "Most Visited" category.
+  CreateIconFiles(icon_dir, local_most_visited_pages);
+
+  // Create temporary icon files for shortcuts in the "Recently Closed"
+  // category.
+  CreateIconFiles(icon_dir, local_recently_closed_pages);
+
+  // Create temporary icon files for shortcuts in the "Speed Dials" category.
+  CreateIconFiles(icon_dir, local_speed_dials);
+
+  // We finished collecting all resources needed for updating an application
+  // JumpList. So, create a new JumpList and replace the current JumpList
+  // with it.
+  UpdateJumpList(app_id.c_str(),
+                 local_speed_dials,
+                 local_most_visited_pages,
+                 local_recently_closed_pages,
+                 incognito_availability);
+}
+
 }  // namespace
 
+JumpList::JumpListData::JumpListData() {}
 
+JumpList::JumpListData::~JumpListData() {}
 
 JumpList::JumpList(Profile* profile)
     : profile_(profile),
+      jumplist_data_(new base::RefCountedData<JumpListData>),
       task_id_(base::CancelableTaskTracker::kBadTaskId),
       weak_ptr_factory_(this) {
   DCHECK(Enabled());
@@ -273,6 +342,7 @@ JumpList::JumpList(Profile* profile)
 }
 
 JumpList::~JumpList() {
+  DCHECK(CalledOnValidThread());
   Terminate();
 }
 
@@ -287,7 +357,7 @@ bool JumpList::IsVivaldi() {
 }
 
 void JumpList::OnUpdateVivaldiSpeedDials(
-    const std::vector<linked_ptr<SpeedDialInfo>>& speed_dials) {
+    const std::vector<SpeedDialInfo>& speed_dials) {
   if (!JumpListUpdater::IsEnabled())
     return;
 
@@ -297,17 +367,18 @@ void JumpList::OnUpdateVivaldiSpeedDials(
   CancelPendingUpdate();
 
   {
-    base::AutoLock auto_lock(list_lock_);
-    speed_dials_.clear();
+    JumpListData* data = &jumplist_data_->data;
+    base::AutoLock auto_lock(data->list_lock_);
+    data->speed_dials_.clear();
     for (size_t i = 0; i < speed_dials.size(); i++) {
       scoped_refptr<ShellLinkItem> link = JumpList::CreateShellLink();
-      std::string url_string = speed_dials[i]->url;
+      std::string url_string = speed_dials[i].url;
       std::wstring url_string_wide = base::UTF8ToWide(url_string);
       link->GetCommandLine()->AppendArgNative(url_string_wide);
-      std::wstring title_wide = base::UTF8ToWide(speed_dials[i]->title);
+      std::wstring title_wide = base::UTF8ToWide(speed_dials[i].title);
       link->set_title(!title_wide.empty() ? title_wide : url_string_wide);
-      speed_dials_.push_back(link);
-      icon_urls_.push_back(make_pair(url_string, link));
+      data->speed_dials_.push_back(std::move(link));
+      data->icon_urls_.push_back(std::move(make_pair(url_string, link)));
     }
   }
   // Send a query that retrieves the first favicon.
@@ -337,12 +408,14 @@ extensions::AppWindow* JumpList::GetAppWindow(Profile* profile) {
 void JumpList::Observe(int type,
                        const content::NotificationSource& source,
                        const content::NotificationDetails& details) {
+  DCHECK(CalledOnValidThread());
   DCHECK_EQ(type, chrome::NOTIFICATION_PROFILE_DESTROYED);
   // Profile was destroyed, do clean-up.
   Terminate();
 }
 
 void JumpList::CancelPendingUpdate() {
+  DCHECK(CalledOnValidThread());
   if (task_id_ != base::CancelableTaskTracker::kBadTaskId) {
     cancelable_task_tracker_.TryCancel(task_id_);
     task_id_ = base::CancelableTaskTracker::kBadTaskId;
@@ -350,6 +423,7 @@ void JumpList::CancelPendingUpdate() {
 }
 
 void JumpList::Terminate() {
+  DCHECK(CalledOnValidThread());
   CancelPendingUpdate();
   if (profile_) {
     sessions::TabRestoreService* tab_restore_service =
@@ -367,24 +441,26 @@ void JumpList::Terminate() {
 }
 
 void JumpList::OnMostVisitedURLsAvailable(
-    const history::MostVisitedURLList& data) {
+    const history::MostVisitedURLList& urls) {
+  DCHECK(CalledOnValidThread());
   // If we have a pending favicon request, cancel it here (it is out of date).
   CancelPendingUpdate();
 
   {
-    base::AutoLock auto_lock(list_lock_);
-    most_visited_pages_.clear();
-    for (size_t i = 0; i < data.size(); i++) {
-      const history::MostVisitedURL& url = data[i];
+    JumpListData* data = &jumplist_data_->data;
+    base::AutoLock auto_lock(data->list_lock_);
+    data->most_visited_pages_.clear();
+    for (size_t i = 0; i < urls.size(); i++) {
+      const history::MostVisitedURL& url = urls[i];
       scoped_refptr<ShellLinkItem> link = CreateShellLink();
       std::string url_string = url.url.spec();
       std::wstring url_string_wide = base::UTF8ToWide(url_string);
       link->GetCommandLine()->AppendArgNative(url_string_wide);
       link->GetCommandLine()->AppendSwitchASCII(
           switches::kWinJumplistAction, jumplist::kMostVisitedCategory);
-      link->set_title(!url.title.empty()? url.title : url_string_wide);
-      most_visited_pages_.push_back(link);
-      icon_urls_.push_back(make_pair(url_string, link));
+      link->set_title(!url.title.empty() ? url.title : url_string_wide);
+      data->most_visited_pages_.push_back(link);
+      data->icon_urls_.push_back(make_pair(url_string, link));
     }
   }
 
@@ -393,6 +469,7 @@ void JumpList::OnMostVisitedURLsAvailable(
 }
 
 void JumpList::TabRestoreServiceChanged(sessions::TabRestoreService* service) {
+  DCHECK(CalledOnValidThread());
   // if we have a pending handle request, cancel it here (it is out of date).
   CancelPendingUpdate();
 
@@ -429,8 +506,9 @@ void JumpList::TabRestoreServiceChanged(sessions::TabRestoreService* service) {
   }
   // Lock recently_closed_pages and copy temp_list into it.
   {
-    base::AutoLock auto_lock(list_lock_);
-    recently_closed_pages_ = temp_list;
+    JumpListData* data = &jumplist_data_->data;
+    base::AutoLock auto_lock(data->list_lock_);
+    data->recently_closed_pages_ = temp_list;
   }
 
   // Send a query that retrieves the first favicon.
@@ -443,6 +521,8 @@ void JumpList::TabRestoreServiceDestroyed(
 bool JumpList::AddTab(const sessions::TabRestoreService::Tab* tab,
                       ShellLinkItemList* list,
                       size_t max_items) {
+  DCHECK(CalledOnValidThread());
+
   // This code adds the URL and the title strings of the given tab to the
   // specified list.
   if (list->size() >= max_items)
@@ -457,13 +537,19 @@ bool JumpList::AddTab(const sessions::TabRestoreService::Tab* tab,
       switches::kWinJumplistAction, jumplist::kRecentlyClosedCategory);
   link->set_title(current_navigation.title());
   list->push_back(link);
-  icon_urls_.push_back(make_pair(url, link));
+  {
+    JumpListData* data = &jumplist_data_->data;
+    base::AutoLock auto_lock(data->list_lock_);
+    data->icon_urls_.push_back(std::make_pair(std::move(url), std::move(link)));
+  }
   return true;
 }
 
 void JumpList::AddWindow(const sessions::TabRestoreService::Window* window,
                          ShellLinkItemList* list,
                          size_t max_items) {
+  DCHECK(CalledOnValidThread());
+
   // This code enumerates al the tabs in the given window object and add their
   // URLs and titles to the list.
   DCHECK(!window->tabs.empty());
@@ -475,15 +561,18 @@ void JumpList::AddWindow(const sessions::TabRestoreService::Window* window,
 }
 
 void JumpList::StartLoadingFavicon() {
+  DCHECK(CalledOnValidThread());
+
   GURL url;
   bool waiting_for_icons = true;
   {
-    base::AutoLock auto_lock(list_lock_);
-    waiting_for_icons = !icon_urls_.empty();
+    JumpListData* data = &jumplist_data_->data;
+    base::AutoLock auto_lock(data->list_lock_);
+    waiting_for_icons = !data->icon_urls_.empty();
     if (waiting_for_icons) {
       // Ask FaviconService if it has a favicon of a URL.
       // When FaviconService has one, it will call OnFaviconDataAvailable().
-      url = GURL(icon_urls_.front().first);
+      url = GURL(data->icon_urls_.front().first);
     }
   }
 
@@ -505,31 +594,38 @@ void JumpList::StartLoadingFavicon() {
 
 void JumpList::OnFaviconDataAvailable(
     const favicon_base::FaviconImageResult& image_result) {
+  DCHECK(CalledOnValidThread());
+
   // If there is currently a favicon request in progress, it is now outdated,
   // as we have received another, so nullify the handle from the old request.
   task_id_ = base::CancelableTaskTracker::kBadTaskId;
   // Lock the list to set icon data and pop the url.
   {
-    base::AutoLock auto_lock(list_lock_);
+    JumpListData* data = &jumplist_data_->data;
+    base::AutoLock auto_lock(data->list_lock_);
     // Attach the received data to the ShellLinkItem object.
     // This data will be decoded by the RunUpdateOnFileThread method.
     if (!image_result.image.IsEmpty()) {
-      if (!icon_urls_.empty() && icon_urls_.front().second.get())
-        icon_urls_.front().second->set_icon_data(image_result.image.AsBitmap());
+      if (!data->icon_urls_.empty() && data->icon_urls_.front().second.get())
+        data->icon_urls_.front().second->set_icon_data(
+            image_result.image.AsBitmap());
     }
 
-    if (!icon_urls_.empty())
-      icon_urls_.pop_front();
+    if (!data->icon_urls_.empty())
+      data->icon_urls_.pop_front();
   }
   // Check whether we need to load more favicons.
   StartLoadingFavicon();
 }
 
 void JumpList::OnIncognitoAvailabilityChanged() {
+  DCHECK(CalledOnValidThread());
+
   bool waiting_for_icons = true;
   {
-    base::AutoLock auto_lock(list_lock_);
-    waiting_for_icons = !icon_urls_.empty();
+    JumpListData* data = &jumplist_data_->data;
+    base::AutoLock auto_lock(data->list_lock_);
+    waiting_for_icons = !data->icon_urls_.empty();
   }
   if (!waiting_for_icons)
     PostRunUpdate();
@@ -538,6 +634,8 @@ void JumpList::OnIncognitoAvailabilityChanged() {
 }
 
 void JumpList::PostRunUpdate() {
+  DCHECK(CalledOnValidThread());
+
   TRACE_EVENT0("browser", "JumpList::PostRunUpdate");
   // Initialize the one-shot timer to update the jumplists in a while.
   // If there is already a request queued then cancel it and post the new
@@ -554,6 +652,8 @@ void JumpList::PostRunUpdate() {
 }
 
 void JumpList::DeferredRunUpdate() {
+  DCHECK(CalledOnValidThread());
+
   TRACE_EVENT0("browser", "JumpList::DeferredRunUpdate");
   // Check if incognito windows (or normal windows) are disabled by policy.
   IncognitoModePrefs::Availability incognito_availability =
@@ -562,66 +662,11 @@ void JumpList::DeferredRunUpdate() {
 
   BrowserThread::PostTask(
       BrowserThread::FILE, FROM_HERE,
-      base::Bind(&JumpList::RunUpdateOnFileThread,
-                 this,
-                 incognito_availability));
-}
-
-void JumpList::RunUpdateOnFileThread(
-    IncognitoModePrefs::Availability incognito_availability) {
-  ShellLinkItemList local_speed_dials;
-  ShellLinkItemList local_most_visited_pages;
-  ShellLinkItemList local_recently_closed_pages;
-
-  {
-    base::AutoLock auto_lock(list_lock_);
-    // Make sure we are not out of date: if icon_urls_ is not empty, then
-    // another notification has been received since we processed this one
-    if (!icon_urls_.empty())
-      return;
-
-    // Make local copies of lists so we can release the lock.
-    local_speed_dials = speed_dials_;
-    local_most_visited_pages = most_visited_pages_;
-    local_recently_closed_pages = recently_closed_pages_;
-  }
-
-  // Delete the directory which contains old icon files, rename the current
-  // icon directory, and create a new directory which contains new JumpList
-  // icon files.
-  base::FilePath icon_dir_old(icon_dir_.value() + L"Old");
-  if (base::PathExists(icon_dir_old))
-    base::DeleteFile(icon_dir_old, true);
-  base::Move(icon_dir_, icon_dir_old);
-  base::CreateDirectory(icon_dir_);
-
-  // Create temporary icon files for shortcuts in the "Speed Dials" category.
-  CreateIconFiles(local_speed_dials);
-
-  // Create temporary icon files for shortcuts in the "Most Visited" category.
-  CreateIconFiles(local_most_visited_pages);
-
-  // Create temporary icon files for shortcuts in the "Recently Closed"
-  // category.
-  CreateIconFiles(local_recently_closed_pages);
-
-  // We finished collecting all resources needed for updating an application
-  // JumpList. So, create a new JumpList and replace the current JumpList
-  // with it.
-  UpdateJumpList(app_id_.c_str(),
-                 local_speed_dials,
-                 local_most_visited_pages,
-                 local_recently_closed_pages,
-                 incognito_availability);
-}
-
-void JumpList::CreateIconFiles(const ShellLinkItemList& item_list) {
-  for (ShellLinkItemList::const_iterator item = item_list.begin();
-      item != item_list.end(); ++item) {
-    base::FilePath icon_path;
-    if (CreateIconFile((*item)->icon_data(), icon_dir_, &icon_path))
-      (*item)->set_icon(icon_path.value(), 0);
-  }
+      base::Bind(&RunUpdateOnFileThread,
+                 incognito_availability,
+                 app_id_,
+                 icon_dir_,
+                 base::RetainedRef(jumplist_data_)));
 }
 
 void JumpList::TopSitesLoaded(history::TopSites* top_sites) {

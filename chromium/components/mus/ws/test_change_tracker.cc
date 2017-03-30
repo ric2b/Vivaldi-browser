@@ -34,10 +34,19 @@ std::string DirectionToString(mojom::OrderDirection direction) {
   return direction == mojom::OrderDirection::ABOVE ? "above" : "below";
 }
 
-std::string ChangeToDescription1(const Change& change) {
+enum class ChangeDescriptionType {
+  ONE,
+  TWO,
+};
+
+std::string ChangeToDescription(const Change& change,
+                                ChangeDescriptionType type) {
   switch (change.type) {
     case CHANGE_TYPE_EMBED:
-      return "OnEmbed";
+      if (type == ChangeDescriptionType::ONE)
+        return "OnEmbed";
+      return base::StringPrintf("OnEmbed drawn=%s",
+                                change.bool_value ? "true" : "false");
 
     case CHANGE_TYPE_EMBEDDED_APP_DISCONNECTED:
       return base::StringPrintf("OnEmbeddedAppDisconnected window=%s",
@@ -125,11 +134,27 @@ std::string ChangeToDescription1(const Change& change) {
                                 change.bool_value ? "true" : "false");
 
     case CHANGE_TYPE_ON_TOP_LEVEL_CREATED:
-      return base::StringPrintf("TopLevelCreated id=%d window_id=%s",
+      return base::StringPrintf("TopLevelCreated id=%d window_id=%s drawn=%s",
                                 change.change_id,
-                                WindowIdToString(change.window_id).c_str());
+                                WindowIdToString(change.window_id).c_str(),
+                                change.bool_value ? "true" : "false");
+    case CHANGE_TYPE_OPACITY:
+      return base::StringPrintf("OpacityChanged window_id=%s opacity=%.2f",
+                                WindowIdToString(change.window_id).c_str(),
+                                change.float_value);
   }
   return std::string();
+}
+
+std::string SingleChangeToDescriptionImpl(const std::vector<Change>& changes,
+                                          ChangeDescriptionType change_type) {
+  std::string result;
+  for (auto& change : changes) {
+    if (!result.empty())
+      result += "\n";
+    result += ChangeToDescription(change, change_type);
+  }
+  return result;
 }
 
 }  // namespace
@@ -138,18 +163,16 @@ std::vector<std::string> ChangesToDescription1(
     const std::vector<Change>& changes) {
   std::vector<std::string> strings(changes.size());
   for (size_t i = 0; i < changes.size(); ++i)
-    strings[i] = ChangeToDescription1(changes[i]);
+    strings[i] = ChangeToDescription(changes[i], ChangeDescriptionType::ONE);
   return strings;
 }
 
 std::string SingleChangeToDescription(const std::vector<Change>& changes) {
-  std::string result;
-  for (auto& change : changes) {
-    if (!result.empty())
-      result += "\n";
-    result += ChangeToDescription1(change);
-  }
-  return result;
+  return SingleChangeToDescriptionImpl(changes, ChangeDescriptionType::ONE);
+}
+
+std::string SingleChangeToDescription2(const std::vector<Change>& changes) {
+  return SingleChangeToDescriptionImpl(changes, ChangeDescriptionType::TWO);
 }
 
 std::string SingleWindowDescription(const std::vector<TestWindow>& windows) {
@@ -175,7 +198,6 @@ TestWindow WindowDataToTestWindow(const mojom::WindowDataPtr& data) {
   window.parent_id = data->parent_id;
   window.window_id = data->window_id;
   window.visible = data->visible;
-  window.drawn = data->drawn;
   window.properties =
       data->properties.To<std::map<std::string, std::vector<uint8_t>>>();
   return window;
@@ -198,6 +220,8 @@ Change::Change()
       bool_value(false),
       change_id(0u) {}
 
+Change::Change(const Change& other) = default;
+
 Change::~Change() {}
 
 TestChangeTracker::TestChangeTracker() : delegate_(NULL) {}
@@ -205,10 +229,12 @@ TestChangeTracker::TestChangeTracker() : delegate_(NULL) {}
 TestChangeTracker::~TestChangeTracker() {}
 
 void TestChangeTracker::OnEmbed(ConnectionSpecificId connection_id,
-                                mojom::WindowDataPtr root) {
+                                mojom::WindowDataPtr root,
+                                bool drawn) {
   Change change;
   change.type = CHANGE_TYPE_EMBED;
   change.connection_id = connection_id;
+  change.bool_value = drawn;
   change.windows.push_back(WindowDataToTestWindow(root));
   AddChange(change);
 }
@@ -318,7 +344,16 @@ void TestChangeTracker::OnWindowVisibilityChanged(Id window_id, bool visible) {
   AddChange(change);
 }
 
-void TestChangeTracker::OnWindowDrawnStateChanged(Id window_id, bool drawn) {
+void TestChangeTracker::OnWindowOpacityChanged(Id window_id, float opacity) {
+  Change change;
+  change.type = CHANGE_TYPE_OPACITY;
+  change.window_id = window_id;
+  change.float_value = opacity;
+  AddChange(change);
+}
+
+void TestChangeTracker::OnWindowParentDrawnStateChanged(Id window_id,
+                                                        bool drawn) {
   Change change;
   change.type = CHANGE_TYPE_NODE_DRAWN_STATE_CHANGED;
   change.window_id = window_id;
@@ -375,11 +410,13 @@ void TestChangeTracker::OnChangeCompleted(uint32_t change_id, bool success) {
 }
 
 void TestChangeTracker::OnTopLevelCreated(uint32_t change_id,
-                                          mojom::WindowDataPtr window_data) {
+                                          mojom::WindowDataPtr window_data,
+                                          bool drawn) {
   Change change;
   change.type = CHANGE_TYPE_ON_TOP_LEVEL_CREATED;
   change.change_id = change_id;
   change.window_id = window_data->window_id;
+  change.bool_value = drawn;
   AddChange(change);
 }
 
@@ -391,6 +428,8 @@ void TestChangeTracker::AddChange(const Change& change) {
 
 TestWindow::TestWindow() {}
 
+TestWindow::TestWindow(const TestWindow& other) = default;
+
 TestWindow::~TestWindow() {}
 
 std::string TestWindow::ToString() const {
@@ -401,9 +440,8 @@ std::string TestWindow::ToString() const {
 
 std::string TestWindow::ToString2() const {
   return base::StringPrintf(
-      "window=%s parent=%s visible=%s drawn=%s",
-      WindowIdToString(window_id).c_str(), WindowIdToString(parent_id).c_str(),
-      visible ? "true" : "false", drawn ? "true" : "false");
+      "window=%s parent=%s visible=%s", WindowIdToString(window_id).c_str(),
+      WindowIdToString(parent_id).c_str(), visible ? "true" : "false");
 }
 
 }  // namespace ws

@@ -455,7 +455,7 @@ void HTMLMetaElement::didNotifySubtreeInsertionsToDocument()
 
 static bool inDocumentHead(HTMLMetaElement* element)
 {
-    if (!element->inDocument())
+    if (!element->inShadowIncludingDocument())
         return false;
 
     return Traversal<HTMLHeadElement>::firstAncestor(*element);
@@ -463,7 +463,7 @@ static bool inDocumentHead(HTMLMetaElement* element)
 
 void HTMLMetaElement::process()
 {
-    if (!inDocument())
+    if (!inShadowIncludingDocument())
         return;
 
     // All below situations require a content attribute (which can be the empty string).
@@ -500,7 +500,7 @@ WTF::TextEncoding HTMLMetaElement::computeEncoding() const
 {
     HTMLAttributeList attributeList;
     for (const Attribute& attr : attributes())
-        attributeList.append(std::make_pair(attr.name().localName(), attr.value().string()));
+        attributeList.append(std::make_pair(attr.name().localName(), attr.value().getString()));
     return encodingFromMetaAttributes(attributeList);
 }
 

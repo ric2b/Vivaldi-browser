@@ -69,13 +69,11 @@ namespace protocol {
 class DictionaryValue;
 }
 
-typedef String ErrorString;
-
-class CORE_EXPORT InspectorResourceAgent final : public InspectorBaseAgent<InspectorResourceAgent, protocol::Frontend::Network>, public protocol::Dispatcher::NetworkCommandHandler {
+class CORE_EXPORT InspectorResourceAgent final : public InspectorBaseAgent<InspectorResourceAgent, protocol::Frontend::Network>, public protocol::Backend::Network {
 public:
-    static PassOwnPtrWillBeRawPtr<InspectorResourceAgent> create(InspectedFrames* inspectedFrames)
+    static RawPtr<InspectorResourceAgent> create(InspectedFrames* inspectedFrames)
     {
-        return adoptPtrWillBeNoop(new InspectorResourceAgent(inspectedFrames));
+        return new InspectorResourceAgent(inspectedFrames);
     }
 
     void restore() override;
@@ -133,11 +131,11 @@ public:
     void didReceiveWebSocketFrameError(unsigned long identifier, const String&);
 
     // Called from frontend
-    void enable(ErrorString*) override;
+    void enable(ErrorString*, const Maybe<int>& totalBufferSize, const Maybe<int>& resourceBufferSize) override;
     void disable(ErrorString*) override;
     void setUserAgentOverride(ErrorString*, const String& userAgent) override;
     void setExtraHTTPHeaders(ErrorString*, PassOwnPtr<protocol::Network::Headers>) override;
-    void getResponseBody(ErrorString*, const String& requestId, PassRefPtr<GetResponseBodyCallback>) override;
+    void getResponseBody(ErrorString*, const String& requestId, PassOwnPtr<GetResponseBodyCallback>) override;
     void addBlockedURL(ErrorString*, const String& url) override;
     void removeBlockedURL(ErrorString*, const String& url) override;
     void replayXHR(ErrorString*, const String& requestId) override;
@@ -156,18 +154,19 @@ public:
 private:
     explicit InspectorResourceAgent(InspectedFrames*);
 
-    void enable();
+    void enable(int totalBufferSize, int resourceBufferSize);
     void willSendRequestInternal(LocalFrame*, unsigned long identifier, DocumentLoader*, const ResourceRequest&, const ResourceResponse& redirectResponse, const FetchInitiatorInfo&);
     void delayedRemoveReplayXHR(XMLHttpRequest*);
     void removeFinishedReplayXHRFired(Timer<InspectorResourceAgent>*);
     void didFinishXHRInternal(ExecutionContext*, XMLHttpRequest*, ThreadableLoaderClient*, const AtomicString&, const String&, bool);
 
-    bool getResponseBodyBlob(const String& requestId, PassRefPtr<GetResponseBodyCallback>);
+    bool canGetResponseBodyBlob(const String& requestId);
+    void getResponseBodyBlob(const String& requestId, PassOwnPtr<GetResponseBodyCallback>);
 
-    RawPtrWillBeMember<InspectedFrames> m_inspectedFrames;
+    Member<InspectedFrames> m_inspectedFrames;
     String m_userAgentOverride;
     String m_hostId;
-    OwnPtrWillBeMember<NetworkResourcesData> m_resourcesData;
+    Member<NetworkResourcesData> m_resourcesData;
 
     typedef HashMap<ThreadableLoaderClient*, unsigned long> ThreadableLoaderClientRequestIdMap;
 
@@ -178,7 +177,7 @@ private:
     InspectorPageAgent::ResourceType m_pendingRequestType;
     ThreadableLoaderClientRequestIdMap m_knownRequestIdMap;
 
-    RefPtrWillBeMember<XHRReplayData> m_pendingXHRReplayData;
+    Member<XHRReplayData> m_pendingXHRReplayData;
 
     typedef HashMap<String, OwnPtr<protocol::Network::Initiator>> FrameNavigationInitiatorMap;
     FrameNavigationInitiatorMap m_frameNavigationInitiatorMap;
@@ -187,8 +186,8 @@ private:
     OwnPtr<protocol::Network::Initiator> m_styleRecalculationInitiator;
     bool m_isRecalculatingStyle;
 
-    PersistentHeapHashSetWillBeHeapHashSet<Member<XMLHttpRequest>> m_replayXHRs;
-    PersistentHeapHashSetWillBeHeapHashSet<Member<XMLHttpRequest>> m_replayXHRsToBeDeleted;
+    HeapHashSet<Member<XMLHttpRequest>> m_replayXHRs;
+    HeapHashSet<Member<XMLHttpRequest>> m_replayXHRsToBeDeleted;
     Timer<InspectorResourceAgent> m_removeFinishedReplayXHRTimer;
 };
 

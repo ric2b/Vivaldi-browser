@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <vector>
 
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "blimp/common/proto/blimp_message.pb.h"
 #include "blimp/common/proto/input.pb.h"
 #include "blimp/net/blimp_message_processor.h"
@@ -22,12 +22,12 @@ void ValidateWebGestureEventRoundTripping(const blink::WebGestureEvent& event) {
   InputMessageGenerator generator;
   InputMessageConverter processor;
 
-  scoped_ptr<BlimpMessage> proto = generator.GenerateMessage(event);
+  std::unique_ptr<BlimpMessage> proto = generator.GenerateMessage(event);
   EXPECT_NE(nullptr, proto.get());
   EXPECT_TRUE(proto->has_input());
   EXPECT_EQ(BlimpMessage::INPUT, proto->type());
 
-  scoped_ptr<blink::WebGestureEvent> new_event =
+  std::unique_ptr<blink::WebGestureEvent> new_event =
       processor.ProcessMessage(proto->input());
   EXPECT_NE(nullptr, new_event.get());
 
@@ -128,6 +128,15 @@ TEST(InputMessageTest, TestUnsupportedInputEventSerializationFails) {
   event.type = blink::WebInputEvent::Type::MouseWheel;
   InputMessageGenerator generator;
   EXPECT_EQ(nullptr, generator.GenerateMessage(event).get());
+}
+
+TEST(InputMessageConverterTest, TestTextInputTypeToProtoConversion) {
+  for (size_t i = ui::TextInputType::TEXT_INPUT_TYPE_TEXT;
+       i < ui::TextInputType::TEXT_INPUT_TYPE_MAX; i++) {
+    ui::TextInputType type = static_cast<ui::TextInputType>(i);
+    EXPECT_EQ(type, InputMessageConverter::TextInputTypeFromProto(
+                        InputMessageConverter::TextInputTypeToProto(type)));
+  }
 }
 
 }  // namespace blimp

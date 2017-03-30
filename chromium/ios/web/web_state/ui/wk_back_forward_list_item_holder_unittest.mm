@@ -8,7 +8,6 @@
 
 #include "ios/web/navigation/navigation_item_impl.h"
 #include "ios/web/public/navigation_item.h"
-#include "ios/web/public/test/web_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -21,8 +20,7 @@ typedef PlatformTest WKBackForwardListItemHolderTest;
 // Tests that FromNavigationItem returns the same holder for the same
 // NavigationItem.
 TEST_F(WKBackForwardListItemHolderTest, GetHolderFromNavigationItem) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-  scoped_ptr<web::NavigationItem> item(NavigationItem::Create());
+  std::unique_ptr<web::NavigationItem> item(NavigationItem::Create());
   WKBackForwardListItemHolder* holder1 =
       WKBackForwardListItemHolder::FromNavigationItem(item.get());
   WKBackForwardListItemHolder* holder2 =
@@ -33,10 +31,9 @@ TEST_F(WKBackForwardListItemHolderTest, GetHolderFromNavigationItem) {
 // Tests that FromNavigationItem returns different holders for different
 // NavigationItem objects.
 TEST_F(WKBackForwardListItemHolderTest, GetHolderFromDifferentNavigationItem) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
   // Create two NavigationItem objects.
-  scoped_ptr<web::NavigationItem> item1(NavigationItem::Create());
-  scoped_ptr<web::NavigationItem> item2(NavigationItem::Create());
+  std::unique_ptr<web::NavigationItem> item1(NavigationItem::Create());
+  std::unique_ptr<web::NavigationItem> item2(NavigationItem::Create());
   EXPECT_NE(item1.get(), item2.get());
 
   // Verify that the two objects have different holders.
@@ -52,8 +49,7 @@ TEST_F(WKBackForwardListItemHolderTest, GetHolderFromDifferentNavigationItem) {
 // because WKBackForwardListItem alloc/release is not designed to be called
 // directly and will crash.
 TEST_F(WKBackForwardListItemHolderTest, GetBackForwardListItemFromHolder) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-  scoped_ptr<web::NavigationItem> item(NavigationItem::Create());
+  std::unique_ptr<web::NavigationItem> item(NavigationItem::Create());
   base::scoped_nsobject<NSObject> input([[NSObject alloc] init]);
   WKBackForwardListItemHolder* holder =
       WKBackForwardListItemHolder::FromNavigationItem(item.get());
@@ -65,8 +61,7 @@ TEST_F(WKBackForwardListItemHolderTest, GetBackForwardListItemFromHolder) {
 
 // Tests that acessors for navigation type work as expected.
 TEST_F(WKBackForwardListItemHolderTest, GetNavigationTypeFromHolder) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-  scoped_ptr<web::NavigationItem> item(NavigationItem::Create());
+  std::unique_ptr<web::NavigationItem> item(NavigationItem::Create());
   WKBackForwardListItemHolder* holder =
       WKBackForwardListItemHolder::FromNavigationItem(item.get());
 
@@ -112,8 +107,7 @@ TEST_F(WKBackForwardListItemHolderTest, GetNavigationTypeFromHolder) {
 // instead of WKBackForwardListItem because WKBackForwardListItem alloc/
 // release is not designed to be called directly and will crash.
 TEST_F(WKBackForwardListItemHolderTest, GetNilBackForwardListItemFromHolder) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-  scoped_ptr<web::NavigationItem> item(NavigationItem::Create());
+  std::unique_ptr<web::NavigationItem> item(NavigationItem::Create());
   WKBackForwardListItemHolder* holder =
       WKBackForwardListItemHolder::FromNavigationItem(item.get());
 

@@ -70,17 +70,21 @@ const char kScript[] =
     "saveBuiltin(Object,\n"
     "            ['hasOwnProperty'],\n"
     "            ['create', 'defineProperty', 'freeze',\n"
-    "             'getOwnPropertyDescriptor', 'getPrototypeOf', 'keys']);\n"
+    "             'getOwnPropertyDescriptor', 'getPrototypeOf', 'keys',\n"
+    "             'assign', 'setPrototypeOf']);\n"
     "saveBuiltin(Function,\n"
     "            ['apply', 'bind', 'call']);\n"
     "saveBuiltin(Array,\n"
     "            ['concat', 'forEach', 'indexOf', 'join', 'push', 'slice',\n"
-    "             'splice', 'map', 'filter']);\n"
+    "             'splice', 'map', 'filter', 'unshift', 'pop', 'reverse'],\n"
+    "            ['isArray']);\n"
     "saveBuiltin(String,\n"
     "            ['indexOf', 'slice', 'split', 'substr', 'toUpperCase',\n"
     "             'replace']);\n"
+    "// Use exec rather than test to defend against clobbering in the\n"
+    "// presence of ES2015 semantics, which read RegExp.prototype.exec.\n"
     "saveBuiltin(RegExp,\n"
-    "            ['test']);\n"
+    "            ['exec']);\n"
     "saveBuiltin(Error,\n"
     "            [],\n"
     "            ['captureStackTrace']);\n"
@@ -200,6 +204,8 @@ class ExtensionImpl : public v8::Extension {
         return;
     }
 
+    v8::MicrotasksScope microtasks(
+        info.GetIsolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
     v8::Local<v8::Value> return_value;
     if (function->Call(context, recv, argc, argv.get()).ToLocal(&return_value))
       info.GetReturnValue().Set(return_value);

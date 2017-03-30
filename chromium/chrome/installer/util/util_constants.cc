@@ -193,6 +193,7 @@ const char kVivaldiStandalone[] = "vivaldi-standalone";
 const char kVivaldiForceLaunch[] = "vivaldi-force-launch";
 const char kVivaldiUpdate[] = "vivaldi-update";
 const char kVivaldiCrashLogging[] = "vivaldi-crash-logging";
+const char kVivaldiRegisterStandalone[] = "vivaldi-register-standalone";
 
 }  // namespace switches
 
@@ -257,6 +258,7 @@ const wchar_t kVivaldiPinToTaskbarValue[] = L"EnablePinToTaskbar";
 const wchar_t kVivaldiInstallerDestinationFolder[] = L"DestinationFolder";
 const wchar_t kVivaldiInstallerInstallType[] = L"InstallType";
 const wchar_t kVivaldiInstallerDefaultBrowser[] = L"DefaultBrowser";
+const wchar_t kVivaldiInstallerRegisterBrowser[] = L"RegisterBrowser";
 
 const wchar_t kOptionMultiInstall[] = L"multi-install";
 

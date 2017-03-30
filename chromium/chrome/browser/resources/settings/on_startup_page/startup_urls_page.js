@@ -22,12 +22,11 @@ var StartupPageInfo;
  *      </settings-startup-urls-page>
  *      ... other pages ...
  *    </neon-animated-pages>
- *
- * @group Chrome Settings Elements
- * @element settings-startup-urls-page
  */
 Polymer({
   is: 'settings-startup-urls-page',
+
+  behaviors: [WebUIListenerBehavior],
 
   properties: {
     /**
@@ -38,8 +37,19 @@ Polymer({
       notify: true,
     },
 
-    newUrl: {
+    /** @type {settings.StartupUrlsPageBrowserProxy} */
+    browserProxy_: Object,
+
+    /** @private {string} */
+    newUrl_: {
+      observer: 'newUrlChanged_',
       type: String,
+      value: '',
+    },
+
+    isNewUrlValid_: {
+      type: Boolean,
+      value: false,
     },
 
     /**
@@ -49,16 +59,23 @@ Polymer({
     startupPages_: Array,
   },
 
+  created: function() {
+    this.browserProxy_ = settings.StartupUrlsPageBrowserProxyImpl.getInstance();
+  },
+
   attached: function() {
-    var self = this;
-    cr.define('Settings', function() {
-      return {
-        updateStartupPages: function() {
-          return self.updateStartupPages_.apply(self, arguments);
-        },
-      };
-    });
-    chrome.send('onStartupPrefsPageLoad');
+    this.addWebUIListener('update-startup-pages',
+                          this.updateStartupPages_.bind(this));
+    this.browserProxy_.loadStartupPages();
+  },
+
+  /**
+   * @param {string} url Location of an image to get a set of icons fors.
+   * @return {string} A set of icon URLs.
+   * @private
+   */
+  getIconSet_: function(url) {
+    return getFaviconImageSet(url);
   },
 
   /** @private */
@@ -68,12 +85,13 @@ Polymer({
 
   /** @private */
   onAddPageTap_: function() {
+    this.newUrl_ = '';
     this.$.addUrlDialog.open();
   },
 
   /** @private */
   onUseCurrentPagesTap_: function() {
-    chrome.send('setStartupPagesToCurrentPages');
+    this.browserProxy_.useCurrentPages();
   },
 
   /** @private */
@@ -81,13 +99,29 @@ Polymer({
     this.$.addUrlDialog.close();
   },
 
+  /**
+   * @param {string} newUrl
+   * @private
+   */
+  newUrlChanged_: function(newUrl) {
+    if (this.validationResolver_)
+      this.validationResolver_.reject(false);
+
+    /** @type {?PromiseResolver<boolean>} */
+    this.validationResolver_ = this.browserProxy_.validateStartupPage(newUrl);
+
+    this.validationResolver_.promise.then(function(isValid) {
+      this.isNewUrlValid_ = isValid;
+      this.validationResolver_ = null;
+    }.bind(this), function() {
+      // Squelchs console errors.
+    });
+  },
+
   /** @private */
-  onOkTap_: function() {
-    var value = this.newUrl && this.newUrl.trim();
-    if (!value)
-      return;
-    chrome.send('addStartupPage', [value]);
-    this.newUrl = '';
+  onAddTap_: function() {
+    assert(this.isNewUrlValid_);
+    this.browserProxy_.addStartupPage(this.newUrl_);
     this.$.addUrlDialog.close();
   },
 
@@ -96,6 +130,6 @@ Polymer({
    * @private
    */
   onRemoveUrlTap_: function(e) {
-    chrome.send('removeStartupPage', [e.model.index]);
+    this.browserProxy_.removeStartupPage(e.model.index);
   },
 });

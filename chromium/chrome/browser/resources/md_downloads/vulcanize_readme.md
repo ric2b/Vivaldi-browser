@@ -8,21 +8,30 @@ files to combine them and reduce blocking load/parse time.
 
 Vulcanization currently requires:
 
-- node.js: v0.10.25 (can be found with `node --version`)
-- npm: 1.3.10 (can be found with `npm --version`)
-- vulcanize: 1.12.3 (can be found with `vulcanize --version`)
-- crisper: 1.0.7 (can be found with `npm info crisper`)
+- node.js: >= v4.4.2 (can be found with `node --version`)
+- npm: >= 1.3.10 (can be found with `npm --version`)
+- vulcanize: 1.14.8 (can be found with `vulcanize --version`)
+- crisper: 2.0.1 (can be found with `npm list -g crisper`)
 
 ## Installing required software
 
 For instructions on installing node and npm, see
 [here](https://docs.npmjs.com/getting-started/installing-node).
 
-Once you've installed npm, you can get `crisper` and `vulcanize` via:
+We recommend telling npm where to store downloaded modules:
 
 ```bash
-$ sudo npm install -g crisper vulcanize
+$ npm config set -g prefix "$HOME/node_modules"
 ```
+
+Then install `crisper` and `vulcanize` like this:
+
+```bash
+$ npm install -g crisper vulcanize
+```
+
+Ultimately, all that is required to run this script is that `crisper` and
+`vulcanize` are on your `$PATH`.
 
 ## Combining resources with vulcanize
 
@@ -41,5 +50,5 @@ This should overwrite the following files:
 
 ## Testing downloads without vulcanizing
 
-If you're locally working on the downloads page, you can simply load this URL to
-bypass the vulcanized version: `chrome://downloads/dev.html`
+Build with "use_vulcanize=0" in your GYP_DEFINES to build downloads without
+vulcanizing.

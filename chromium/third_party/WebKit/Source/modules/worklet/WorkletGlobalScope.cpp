@@ -5,19 +5,16 @@
 #include "modules/worklet/WorkletGlobalScope.h"
 
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
+#include "core/frame/FrameConsole.h"
+#include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/MainThreadDebugger.h"
+#include "modules/worklet/WorkletConsole.h"
 
 namespace blink {
 
-// static
-PassRefPtrWillBeRawPtr<WorkletGlobalScope> WorkletGlobalScope::create(const KURL& url, const String& userAgent, PassRefPtr<SecurityOrigin> securityOrigin, v8::Isolate* isolate)
-{
-    RefPtrWillBeRawPtr<WorkletGlobalScope> workletGlobalScope = adoptRefWillBeNoop(new WorkletGlobalScope(url, userAgent, securityOrigin, isolate));
-    workletGlobalScope->scriptController()->initializeContextIfNeeded();
-    return workletGlobalScope.release();
-}
-
-WorkletGlobalScope::WorkletGlobalScope(const KURL& url, const String& userAgent, PassRefPtr<SecurityOrigin> securityOrigin, v8::Isolate* isolate)
-    : m_url(url)
+WorkletGlobalScope::WorkletGlobalScope(LocalFrame* frame, const KURL& url, const String& userAgent, PassRefPtr<SecurityOrigin> securityOrigin, v8::Isolate* isolate)
+    : MainThreadWorkletGlobalScope(frame)
+    , m_url(url)
     , m_userAgent(userAgent)
     , m_scriptController(WorkerOrWorkletScriptController::create(this, isolate))
 {
@@ -28,17 +25,34 @@ WorkletGlobalScope::~WorkletGlobalScope()
 {
 }
 
+void WorkletGlobalScope::dispose()
+{
+    stopActiveDOMObjects();
+
+    ASSERT(m_scriptController);
+    m_scriptController->willScheduleExecutionTermination();
+    m_scriptController->dispose();
+    m_scriptController.clear();
+}
+
+WorkletConsole* WorkletGlobalScope::console()
+{
+    if (!m_console)
+        m_console = WorkletConsole::create(this);
+    return m_console.get();
+}
+
 v8::Local<v8::Object> WorkletGlobalScope::wrap(v8::Isolate*, v8::Local<v8::Object> creationContext)
 {
     // WorkletGlobalScope must never be wrapped with wrap method. The global
     // object of ECMAScript environment is used as the wrapper.
-    RELEASE_ASSERT_NOT_REACHED();
+    RELEASE_NOTREACHED();
     return v8::Local<v8::Object>();
 }
 
 v8::Local<v8::Object> WorkletGlobalScope::associateWithWrapper(v8::Isolate*, const WrapperTypeInfo*, v8::Local<v8::Object> wrapper)
 {
-    RELEASE_ASSERT_NOT_REACHED(); // Same as wrap method.
+    RELEASE_NOTREACHED(); // Same as wrap method.
     return v8::Local<v8::Object>();
 }
 
@@ -52,10 +66,29 @@ bool WorkletGlobalScope::isSecureContext(String& errorMessage, const SecureConte
     // Until there are APIs that are available in worklets and that
     // require a privileged context test that checks ancestors, just do
     // a simple check here.
-    if (securityOrigin()->isPotentiallyTrustworthy())
+    if (getSecurityOrigin()->isPotentiallyTrustworthy())
         return true;
-    errorMessage = securityOrigin()->isPotentiallyTrustworthyErrorMessage();
+    errorMessage = getSecurityOrigin()->isPotentiallyTrustworthyErrorMessage();
     return false;
+}
+
+void WorkletGlobalScope::reportBlockedScriptExecutionToInspector(const String& directiveText)
+{
+    InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
+}
+
+void WorkletGlobalScope::addConsoleMessage(RawPtr<ConsoleMessage> prpConsoleMessage)
+{
+    RawPtr<ConsoleMessage> consoleMessage = prpConsoleMessage;
+    frame()->console().addMessage(consoleMessage.release());
+}
+
+void WorkletGlobalScope::logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack> callStack)
+{
+    RawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, columnNumber);
+    consoleMessage->setScriptId(scriptId);
+    consoleMessage->setCallStack(callStack);
+    addConsoleMessage(consoleMessage.release());
 }
 
 KURL WorkletGlobalScope::virtualCompleteURL(const String& url) const
@@ -72,8 +105,10 @@ KURL WorkletGlobalScope::virtualCompleteURL(const String& url) const
 DEFINE_TRACE(WorkletGlobalScope)
 {
     visitor->trace(m_scriptController);
+    visitor->trace(m_console);
     ExecutionContext::trace(visitor);
     SecurityContext::trace(visitor);
+    MainThreadWorkletGlobalScope::trace(visitor);
 }
 
 } // namespace blink

@@ -24,7 +24,6 @@ ShellJavaScriptDialogManager::~ShellJavaScriptDialogManager() {
 void ShellJavaScriptDialogManager::RunJavaScriptDialog(
     WebContents* web_contents,
     const GURL& origin_url,
-    const std::string& accept_lang,
     JavaScriptMessageType javascript_message_type,
     const base::string16& message_text,
     const base::string16& default_prompt_text,
@@ -47,7 +46,7 @@ void ShellJavaScriptDialogManager::RunJavaScriptDialog(
   }
 
   base::string16 new_message_text =
-      url_formatter::FormatUrl(origin_url, accept_lang) +
+      url_formatter::FormatUrl(origin_url) +
       base::ASCIIToUTF16("\n\n") + message_text;
   gfx::NativeWindow parent_window = web_contents->GetTopLevelNativeWindow();
 
@@ -66,7 +65,6 @@ void ShellJavaScriptDialogManager::RunJavaScriptDialog(
 
 void ShellJavaScriptDialogManager::RunBeforeUnloadDialog(
     WebContents* web_contents,
-    const base::string16& message_text,
     bool is_reload,
     const DialogClosedCallback& callback) {
   // During tests, if the BeforeUnload should not proceed automatically, store
@@ -88,16 +86,15 @@ void ShellJavaScriptDialogManager::RunBeforeUnloadDialog(
     return;
   }
 
-  base::string16 new_message_text =
-      message_text +
-      base::ASCIIToUTF16("\n\nIs it OK to leave/reload this page?");
+  base::string16 message_text =
+      base::ASCIIToUTF16("Is it OK to leave/reload this page?");
 
   gfx::NativeWindow parent_window = web_contents->GetTopLevelNativeWindow();
 
   dialog_.reset(new ShellJavaScriptDialog(this,
                                           parent_window,
                                           JAVASCRIPT_MESSAGE_TYPE_CONFIRM,
-                                          new_message_text,
+                                          message_text,
                                           base::string16(),  // default
                                           callback));
 #else

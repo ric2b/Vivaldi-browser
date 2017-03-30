@@ -4,6 +4,8 @@
 
 #include "base/test/launcher/test_launcher.h"
 
+#include <memory>
+
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -17,7 +19,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
@@ -170,7 +171,7 @@ class SignalFDWatcher : public MessageLoopForIO::Watcher {
 // true.  If it is set, unsets it then converts it to Int32 before
 // returning it in |result|.  Returns true on success.
 bool TakeInt32FromEnvironment(const char* const var, int32_t* result) {
-  scoped_ptr<Environment> env(Environment::Create());
+  std::unique_ptr<Environment> env(Environment::Create());
   std::string str_val;
 
   if (!env->GetVar(var, &str_val))
@@ -192,7 +193,7 @@ bool TakeInt32FromEnvironment(const char* const var, int32_t* result) {
 // Unsets the environment variable |name| and returns true on success.
 // Also returns true if the variable just doesn't exist.
 bool UnsetEnvironmentVariableIfExists(const std::string& name) {
-  scoped_ptr<Environment> env(Environment::Create());
+  std::unique_ptr<Environment> env(Environment::Create());
   std::string str_val;
 
   if (!env->GetVar(name.c_str(), &str_val))
@@ -205,7 +206,7 @@ bool UnsetEnvironmentVariableIfExists(const std::string& name) {
 // for continuous integration bots. This way developers don't have to remember
 // special command-line flags.
 bool BotModeEnabled() {
-  scoped_ptr<Environment> env(Environment::Create());
+  std::unique_ptr<Environment> env(Environment::Create());
   return CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kTestLauncherBotMode) ||
       env->HasVar("CHROMIUM_TEST_LAUNCHER_BOT_MODE");
@@ -245,11 +246,13 @@ CommandLine PrepareCommandLineForGTest(const CommandLine& command_line,
 // Launches a child process using |command_line|. If the child process is still
 // running after |timeout|, it is terminated and |*was_timeout| is set to true.
 // Returns exit code of the process.
-int LaunchChildTestProcessWithOptions(const CommandLine& command_line,
-                                      const LaunchOptions& options,
-                                      int flags,
-                                      TimeDelta timeout,
-                                      bool* was_timeout) {
+int LaunchChildTestProcessWithOptions(
+    const CommandLine& command_line,
+    const LaunchOptions& options,
+    int flags,
+    TimeDelta timeout,
+    const TestLauncher::GTestProcessLaunchedCallback& launched_callback,
+    bool* was_timeout) {
 #if defined(OS_POSIX)
   // Make sure an option we rely on is present - see LaunchChildGTestProcess.
   DCHECK(options.new_process_group);
@@ -310,6 +313,9 @@ int LaunchChildTestProcessWithOptions(const CommandLine& command_line,
                                                  command_line));
   }
 
+  if (!launched_callback.is_null())
+    launched_callback.Run(process.Handle(), process.Pid());
+
   int exit_code = 0;
   if (!process.WaitForExitWithTimeout(timeout, &exit_code)) {
     *was_timeout = true;
@@ -341,22 +347,22 @@ int LaunchChildTestProcessWithOptions(const CommandLine& command_line,
   return exit_code;
 }
 
-void RunCallback(
-    const TestLauncher::LaunchChildGTestProcessCallback& callback,
-    int exit_code,
-    const TimeDelta& elapsed_time,
-    bool was_timeout,
-    const std::string& output) {
+void RunCallback(const TestLauncher::GTestProcessCompletedCallback& callback,
+                 int exit_code,
+                 const TimeDelta& elapsed_time,
+                 bool was_timeout,
+                 const std::string& output) {
   callback.Run(exit_code, elapsed_time, was_timeout, output);
 }
 
 void DoLaunchChildTestProcess(
     const CommandLine& command_line,
     TimeDelta timeout,
-    int flags,
+    const TestLauncher::LaunchOptions& test_launch_options,
     bool redirect_stdio,
     SingleThreadTaskRunner* task_runner,
-    const TestLauncher::LaunchChildGTestProcessCallback& callback) {
+    const TestLauncher::GTestProcessCompletedCallback& completed_callback,
+    const TestLauncher::GTestProcessLaunchedCallback& launched_callback) {
   TimeTicks start_time = TimeTicks::Now();
 
   // Redirect child process output to a file.
@@ -387,6 +393,18 @@ void DoLaunchChildTestProcess(
     options.stdout_handle = handle.Get();
     options.stderr_handle = handle.Get();
   }
+
+  if (test_launch_options.inherit_handles) {
+    if (!options.inherit_handles) {
+      options.inherit_handles = true;
+      options.stdin_handle = nullptr;
+      options.stdout_handle = nullptr;
+      options.stderr_handle = nullptr;
+    }
+    DCHECK(!options.handles_to_inherit);
+    options.handles_to_inherit = test_launch_options.handles_to_inherit;
+  }
+
 #elif defined(OS_POSIX)
   options.new_process_group = true;
 #if defined(OS_LINUX)
@@ -404,11 +422,18 @@ void DoLaunchChildTestProcess(
     fds_mapping.push_back(std::make_pair(output_file_fd.get(), STDERR_FILENO));
     options.fds_to_remap = &fds_mapping;
   }
+  if (test_launch_options.fds_to_remap) {
+    fds_mapping.insert(fds_mapping.end(),
+                       test_launch_options.fds_to_remap->begin(),
+                       test_launch_options.fds_to_remap->end());
+    options.fds_to_remap = &fds_mapping;
+  }
 #endif
 
   bool was_timeout = false;
   int exit_code = LaunchChildTestProcessWithOptions(
-      command_line, options, flags, timeout, &was_timeout);
+      command_line, options, test_launch_options.flags, timeout,
+      launched_callback, &was_timeout);
 
   if (redirect_stdio) {
 #if defined(OS_WIN)
@@ -429,9 +454,10 @@ void DoLaunchChildTestProcess(
 
   // Run target callback on the thread it was originating from, not on
   // a worker pool thread.
-  task_runner->PostTask(FROM_HERE, Bind(&RunCallback, callback, exit_code,
-                                        TimeTicks::Now() - start_time,
-                                        was_timeout, output_file_contents));
+  task_runner->PostTask(
+      FROM_HERE,
+      Bind(&RunCallback, completed_callback, exit_code,
+           TimeTicks::Now() - start_time, was_timeout, output_file_contents));
 }
 
 }  // namespace
@@ -523,8 +549,9 @@ void TestLauncher::LaunchChildGTestProcess(
     const CommandLine& command_line,
     const std::string& wrapper,
     TimeDelta timeout,
-    int flags,
-    const LaunchChildGTestProcessCallback& callback) {
+    const LaunchOptions& options,
+    const GTestProcessCompletedCallback& completed_callback,
+    const GTestProcessLaunchedCallback& launched_callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   // Record the exact command line used to launch the child.
@@ -537,10 +564,12 @@ void TestLauncher::LaunchChildGTestProcess(
   bool redirect_stdio = (parallel_jobs_ > 1) || BotModeEnabled();
 
   worker_pool_owner_->pool()->PostWorkerTask(
-      FROM_HERE, Bind(&DoLaunchChildTestProcess, new_command_line, timeout,
-                      flags, redirect_stdio, ThreadTaskRunnerHandle::Get(),
-                      Bind(&TestLauncher::OnLaunchTestProcessFinished,
-                           Unretained(this), callback)));
+      FROM_HERE,
+      Bind(&DoLaunchChildTestProcess, new_command_line, timeout, options,
+           redirect_stdio, RetainedRef(ThreadTaskRunnerHandle::Get()),
+           Bind(&TestLauncher::OnLaunchTestProcessFinished, Unretained(this),
+                completed_callback),
+           launched_callback));
 }
 
 void TestLauncher::OnTestFinished(const TestResult& result) {
@@ -1011,7 +1040,7 @@ void TestLauncher::MaybeSaveSummaryAsJSON() {
 }
 
 void TestLauncher::OnLaunchTestProcessFinished(
-    const LaunchChildGTestProcessCallback& callback,
+    const GTestProcessCompletedCallback& callback,
     int exit_code,
     const TimeDelta& elapsed_time,
     bool was_timeout,

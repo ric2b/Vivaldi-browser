@@ -58,7 +58,6 @@ public:
         return *this;
     }
 
-    BLINK_PLATFORM_EXPORT static WebSecurityOrigin createFromDatabaseIdentifier(const WebString& databaseIdentifier);
     BLINK_PLATFORM_EXPORT static WebSecurityOrigin createFromString(const WebString&);
     BLINK_PLATFORM_EXPORT static WebSecurityOrigin create(const WebURL&);
     BLINK_PLATFORM_EXPORT static WebSecurityOrigin createUnique();
@@ -95,16 +94,12 @@ public:
     // machine or over the network from a
     // cryptographically-authenticated origin, as described in
     // https://w3c.github.io/webappsec/specs/powerfulfeatures/#is-origin-trustworthy.
-    BLINK_PLATFORM_EXPORT bool isPotentiallyTrustworthy(WebString& errorMessage) const;
+    BLINK_PLATFORM_EXPORT bool isPotentiallyTrustworthy() const;
 
     // Returns a string representation of the WebSecurityOrigin.  The empty
     // WebSecurityOrigin is represented by "null".  The representation of a
     // non-empty WebSecurityOrigin resembles a standard URL.
     BLINK_PLATFORM_EXPORT WebString toString() const;
-
-    // Returns a string representation of this WebSecurityOrigin that can
-    // be used as a file.  Should be used in storage APIs only.
-    BLINK_PLATFORM_EXPORT WebString databaseIdentifier() const;
 
     // Returns true if this WebSecurityOrigin can access usernames and
     // passwords stored in password manager.

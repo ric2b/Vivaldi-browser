@@ -89,11 +89,10 @@ public:
         ScrollbarForwardButtonEnd,
         ScrollbarForwardButtonStart,
         ScrollbarForwardTrack,
-        ScrollbarHorizontal, // For ScrollbarThemeMacNonOverlayAPI only.
         ScrollbarThumb,
         ScrollbarTickmarks,
         ScrollbarTrackBackground,
-        ScrollbarVertical, // For ScrollbarThemeMacNonOverlayAPI only.
+        ScrollbarCompositedScrollbar,
         SelectionTint,
         TableCellBackgroundFromColumnGroup,
         TableCellBackgroundFromColumn,
@@ -112,6 +111,10 @@ public:
 
         CachedDrawingFirst,
         CachedDrawingLast = CachedDrawingFirst + DrawingLast - DrawingFirst,
+
+        ForeignLayerFirst,
+        ForeignLayerPlugin = ForeignLayerFirst,
+        ForeignLayerLast = ForeignLayerPlugin,
 
         ClipFirst,
         ClipBoxPaintPhaseFirst = ClipFirst,
@@ -248,7 +251,7 @@ public:
     virtual void replay(GraphicsContext&) const { }
 
     const DisplayItemClient& client() const { ASSERT(m_client); return *m_client; }
-    Type type() const { return m_type; }
+    Type getType() const { return m_type; }
 
     void setScope(unsigned scope) { m_scope = scope; }
     unsigned scope() { return m_scope; }
@@ -268,7 +271,7 @@ public:
     // See comments of enum Type for usage of the following macros.
 #define DEFINE_CATEGORY_METHODS(Category) \
     static bool is##Category##Type(Type type) { return type >= Category##First && type <= Category##Last; } \
-    bool is##Category() const { return is##Category##Type(type()); }
+    bool is##Category() const { return is##Category##Type(getType()); }
 
 #define DEFINE_CONVERSION_METHODS(Category1, category1, Category2, category2) \
     static Type category1##TypeTo##Category2##Type(Type type) \
@@ -301,6 +304,8 @@ public:
     DEFINE_PAINT_PHASE_CONVERSION_METHOD(Drawing)
     DEFINE_CATEGORY_METHODS(CachedDrawing)
     DEFINE_CONVERSION_METHODS(Drawing, drawing, CachedDrawing, cachedDrawing)
+
+    DEFINE_CATEGORY_METHODS(ForeignLayer)
 
     DEFINE_PAIRED_CATEGORY_METHODS(Clip, clip)
     DEFINE_PAINT_PHASE_CONVERSION_METHOD(ClipLayerFragment)

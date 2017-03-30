@@ -50,6 +50,7 @@ class ResourceResponse;
 class ResourceRequest;
 class ResourceTimingInfo;
 class WebTaskRunner;
+enum class WebCachePolicy;
 
 enum FetchResourceType {
     FetchMainResource,
@@ -72,7 +73,7 @@ public:
     virtual void addAdditionalRequestHeaders(ResourceRequest&, FetchResourceType);
     virtual void setFirstPartyForCookies(ResourceRequest&);
     virtual CachePolicy getCachePolicy() const;
-    virtual ResourceRequestCachePolicy resourceRequestCachePolicy(const ResourceRequest&, Resource::Type) const;
+    virtual WebCachePolicy resourceRequestCachePolicy(const ResourceRequest&, Resource::Type, FetchRequest::DeferOption) const;
 
     virtual void dispatchDidChangeResourcePriority(unsigned long identifier, ResourceLoadPriority, int intraPriorityValue);
     virtual void dispatchWillSendRequest(unsigned long identifier, ResourceRequest&, const ResourceResponse& redirectResponse, const FetchInitiatorInfo& = FetchInitiatorInfo());
@@ -84,7 +85,7 @@ public:
     virtual void dispatchDidFail(unsigned long identifier, const ResourceError&, bool isInternalRequest);
 
     virtual bool shouldLoadNewResource(Resource::Type) const { return false; }
-    virtual void willStartLoadingResource(ResourceRequest&);
+    virtual void willStartLoadingResource(Resource*, ResourceRequest&);
     virtual void didLoadResource(Resource*);
 
     virtual void addResourceTiming(const ResourceTimingInfo&);
@@ -102,7 +103,7 @@ public:
     virtual bool updateTimingInfoForIFrameNavigation(ResourceTimingInfo*) { return false; }
     virtual void sendImagePing(const KURL&);
     virtual void addConsoleMessage(const String&) const;
-    virtual SecurityOrigin* securityOrigin() const { return nullptr; }
+    virtual SecurityOrigin* getSecurityOrigin() const { return nullptr; }
     virtual void upgradeInsecureRequest(FetchRequest&);
     virtual void addClientHintsIfNecessary(FetchRequest&);
     virtual void addCSPHeaderIfNecessary(Resource::Type, FetchRequest&);

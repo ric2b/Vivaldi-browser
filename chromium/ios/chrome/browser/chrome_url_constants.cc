@@ -69,3 +69,20 @@ const char kDoNotTrackLearnMoreURL[] =
 
 const char kSyncEncryptionHelpURL[] =
     "https://support.google.com/chrome/answer/1181035?p=settings_encryption";
+
+const char kClearBrowsingDataLearnMoreURL[] =
+    "https://support.google.com/chrome/answer/2392709";
+
+const char kClearBrowsingDataMyActivityUrlInFooterURL[] =
+    "https://history.google.com/history/?utm_source=chrome_cbd";
+
+const char kClearBrowsingDataMyActivityUrlInDialogURL[] =
+    "https://history.google.com/history/?utm_source=chrome_n";
+
+const char kHistoryMyActivityURL[] =
+    "https://history.google.com/history/?utm_source=chrome_h";
+
+const char kGoogleHistoryURL[] = "https://history.google.com";
+
+const char kGoogleMyAccountURL[] =
+    "https://myaccount.google.com/privacy#activitycontrols";

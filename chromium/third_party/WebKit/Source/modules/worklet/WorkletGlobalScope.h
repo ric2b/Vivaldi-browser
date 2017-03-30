@@ -11,33 +11,37 @@
 #include "core/dom/ExecutionContextTask.h"
 #include "core/dom/SecurityContext.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
+#include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
 class EventQueue;
+class LocalFrame;
 class WorkerOrWorkletScriptController;
+class WorkletConsole;
 
-class WorkletGlobalScope : public RefCountedWillBeGarbageCollectedFinalized<WorkletGlobalScope>, public SecurityContext, public WorkerOrWorkletGlobalScope, public ScriptWrappable {
+class MODULES_EXPORT WorkletGlobalScope : public GarbageCollectedFinalized<WorkletGlobalScope>, public SecurityContext, public MainThreadWorkletGlobalScope, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(WorkletGlobalScope);
+    USING_GARBAGE_COLLECTED_MIXIN(WorkletGlobalScope);
 public:
 #if !ENABLE(OILPAN)
     using RefCounted<WorkletGlobalScope>::ref;
     using RefCounted<WorkletGlobalScope>::deref;
 #endif
 
-    // The url, userAgent and securityOrigin arguments are inherited from the
-    // parent ExecutionContext for Worklets.
-    static PassRefPtrWillBeRawPtr<WorkletGlobalScope> create(const KURL&, const String& userAgent, PassRefPtr<SecurityOrigin>, v8::Isolate*);
     ~WorkletGlobalScope() override;
+    virtual void dispose();
 
     bool isWorkletGlobalScope() const final { return true; }
 
+    // WorkletGlobalScope
+    WorkletConsole* console();
 
     // WorkerOrWorkletGlobalScope
-    ScriptWrappable* scriptWrappable() const final { return const_cast<WorkletGlobalScope*>(this); }
+    ScriptWrappable* getScriptWrappable() const final { return const_cast<WorkletGlobalScope*>(this); }
     WorkerOrWorkletScriptController* scriptController() final { return m_scriptController.get(); }
 
     // ScriptWrappable
@@ -48,10 +52,10 @@ public:
     void disableEval(const String& errorMessage) final;
     String userAgent() const final { return m_userAgent; }
     SecurityContext& securityContext() final { return *this; }
-    EventQueue* eventQueue() const final { ASSERT_NOT_REACHED(); return nullptr; } // WorkletGlobalScopes don't have an event queue.
+    EventQueue* getEventQueue() const final { ASSERT_NOT_REACHED(); return nullptr; } // WorkletGlobalScopes don't have an event queue.
     bool isSecureContext(String& errorMessage, const SecureContextCheck = StandardSecureContextCheck) const final;
 
-    using SecurityContext::securityOrigin;
+    using SecurityContext::getSecurityOrigin;
     using SecurityContext::contentSecurityPolicy;
 
     DOMTimerCoordinator* timers() final { ASSERT_NOT_REACHED(); return nullptr; } // WorkletGlobalScopes don't have timers.
@@ -61,12 +65,16 @@ public:
         ASSERT_NOT_REACHED();
     }
 
-    // TODO(ikilpatrick): implement when we implement devtools support.
-    void reportBlockedScriptExecutionToInspector(const String& directiveText) final { }
-    void addConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>) final { }
-    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) final { }
+    void reportBlockedScriptExecutionToInspector(const String& directiveText) final;
+    void addConsoleMessage(RawPtr<ConsoleMessage>) final;
+    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) final;
 
     DECLARE_VIRTUAL_TRACE();
+
+protected:
+    // The url, userAgent and securityOrigin arguments are inherited from the
+    // parent ExecutionContext for Worklets.
+    WorkletGlobalScope(LocalFrame*, const KURL&, const String& userAgent, PassRefPtr<SecurityOrigin>, v8::Isolate*);
 
 private:
 #if !ENABLE(OILPAN)
@@ -74,17 +82,17 @@ private:
     void derefExecutionContext() final { deref(); }
 #endif
 
-    WorkletGlobalScope(const KURL&, const String& userAgent, PassRefPtr<SecurityOrigin>, v8::Isolate*);
-
     const KURL& virtualURL() const final { return m_url; }
     KURL virtualCompleteURL(const String&) const final;
 
     EventTarget* errorEventTarget() final { return nullptr; }
     void didUpdateSecurityOrigin() final { }
 
+    mutable Member<WorkletConsole> m_console;
+
     KURL m_url;
     String m_userAgent;
-    OwnPtrWillBeMember<WorkerOrWorkletScriptController> m_scriptController;
+    Member<WorkerOrWorkletScriptController> m_scriptController;
 };
 
 DEFINE_TYPE_CASTS(WorkletGlobalScope, ExecutionContext, context, context->isWorkletGlobalScope(), context.isWorkletGlobalScope());

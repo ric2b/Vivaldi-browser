@@ -39,7 +39,7 @@ public:
     void execute() const { moveTreeToNewScope(*m_toAdopt); }
     bool needsScopeChange() const { return m_oldScope != m_newScope; }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     static void ensureDidMoveToNewDocumentWasCalled(Document&);
 #else
     static void ensureDidMoveToNewDocumentWasCalled(Document&) { }
@@ -53,9 +53,9 @@ private:
     TreeScope& oldScope() const { return *m_oldScope; }
     TreeScope& newScope() const { return *m_newScope; }
 
-    RawPtrWillBeMember<Node> m_toAdopt;
-    RawPtrWillBeMember<TreeScope> m_newScope;
-    RawPtrWillBeMember<TreeScope> m_oldScope;
+    Member<Node> m_toAdopt;
+    Member<TreeScope> m_newScope;
+    Member<TreeScope> m_oldScope;
 };
 
 inline TreeScopeAdopter::TreeScopeAdopter(Node& toAdopt, TreeScope& newScope)

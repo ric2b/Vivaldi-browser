@@ -63,10 +63,35 @@ using extensions::vivaldi::bookmarks_private::SpeedDialInfo;
 class JumpList : public sessions::TabRestoreServiceObserver,
                  public content::NotificationObserver,
                  public history::TopSitesObserver,
-                 public base::RefCountedThreadSafe<
-                     JumpList,
-                     content::BrowserThread::DeleteOnUIThread> {
+                 public base::NonThreadSafe,
+                 public base::RefCounted<JumpList> {
  public:
+  struct JumpListData {
+    JumpListData();
+    ~JumpListData();
+
+    // Lock for most_visited_pages_, recently_closed_pages_, icon_urls_
+    // as they may be used by up to 2 threads.
+    base::Lock list_lock_;
+
+    // A list of URLs we need to retrieve their favicons,
+    // protected by the list_lock_.
+    typedef std::pair<std::string, scoped_refptr<ShellLinkItem> > URLPair;
+    std::list<URLPair> icon_urls_;
+
+    // Items in the "Most Visited" category of the application JumpList,
+    // protected by the list_lock_.
+    ShellLinkItemList most_visited_pages_;
+
+    // Items in the "Recently Closed" category of the application JumpList,
+    // protected by the list_lock_.
+    ShellLinkItemList recently_closed_pages_;
+
+    // Items in the "Speed Dial" category of the application JumpList,
+    // protected by the list_lock_.
+    ShellLinkItemList speed_dials_;
+  };
+
   explicit JumpList(Profile* profile);
 
   // NotificationObserver implementation.
@@ -101,15 +126,13 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   // Vivaldi speeddials:
   // Update the jumplist's speeddial list.
   void OnUpdateVivaldiSpeedDials(
-      const std::vector<linked_ptr<SpeedDialInfo>> &speed_dials);
+      const std::vector<SpeedDialInfo> &speed_dials);
 
   // Create a ShellLinkItem preloaded with common switches.
   static scoped_refptr<ShellLinkItem> CreateShellLink();
 
  private:
-  friend struct content::BrowserThread::DeleteOnThread<
-      content::BrowserThread::UI>;
-  friend class base::DeleteHelper<JumpList>;
+  friend class base::RefCounted<JumpList>;
   ~JumpList() override;
 
   // Creates a ShellLinkItem object from a tab (or a window) and add it to the
@@ -153,15 +176,6 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   // have subsided.
   void DeferredRunUpdate();
 
-  // Runnable method that updates the jumplist, once all the data
-  // has been fetched.
-  void RunUpdateOnFileThread(
-      IncognitoModePrefs::Availability incognito_availability);
-
-  // Helper method for RunUpdate to create icon files for the asynchrounously
-  // loaded icons.
-  void CreateIconFiles(const ShellLinkItemList& item_list);
-
   extensions::AppWindow* GetAppWindow(Profile* profile);
 
   // history::TopSitesObserver implementation.
@@ -185,33 +199,15 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   // The directory which contains JumpList icons.
   base::FilePath icon_dir_;
 
-  // Items in the "Speed Dial" category of the application JumpList,
-  // protected by the list_lock_.
-  ShellLinkItemList speed_dials_;
-
-  // Items in the "Most Visited" category of the application JumpList,
-  // protected by the list_lock_.
-  ShellLinkItemList most_visited_pages_;
-
-  // Items in the "Recently Closed" category of the application JumpList,
-  // protected by the list_lock_.
-  ShellLinkItemList recently_closed_pages_;
-
   // Timer for requesting delayed updates of the jumplist.
   base::OneShotTimer timer_;
 
-  // A list of URLs we need to retrieve their favicons,
-  // protected by the list_lock_.
-  typedef std::pair<std::string, scoped_refptr<ShellLinkItem> > URLPair;
-  std::list<URLPair> icon_urls_;
+  // Holds data that can be accessed from multiple threads.
+  scoped_refptr<base::RefCountedData<JumpListData>> jumplist_data_;
 
   // Id of last favicon task. It's used to cancel current task if a new one
   // comes in before it finishes.
   base::CancelableTaskTracker::TaskId task_id_;
-
-  // Lock for most_visited_pages_, recently_closed_pages_, icon_urls_
-  // as they may be used by up to 3 threads.
-  base::Lock list_lock_;
 
   // For callbacks may be run after destruction.
   base::WeakPtrFactory<JumpList> weak_ptr_factory_;

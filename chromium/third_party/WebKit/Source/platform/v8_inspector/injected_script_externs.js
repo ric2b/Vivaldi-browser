@@ -48,18 +48,6 @@ InjectedScriptHostClass.prototype.isTypedArray = function(obj) {}
 InjectedScriptHostClass.prototype.subtype = function(obj) {}
 
 /**
- * @param {!Function} obj
- * @return {*}
- */
-InjectedScriptHostClass.prototype.functionDetails = function(obj) {}
-
-/**
- * @param {!Object} obj
- * @return {?Object}
- */
-InjectedScriptHostClass.prototype.generatorObjectDetails = function(obj) {}
-
-/**
  * @param {!Object} obj
  * @return {?Array.<*>}
  */
@@ -73,22 +61,9 @@ InjectedScriptHostClass.prototype.getInternalProperties = function(obj) {}
 
 /**
  * @param {!EventTarget} target
- * @return {!Array.<*>}
+ * @return {!Object|undefined}
  */
 InjectedScriptHostClass.prototype.getEventListeners = function(target) {}
-
-/**
- * @param {string} text
- * @return {*}
- */
-InjectedScriptHostClass.prototype.eval = function(text) {}
-
-/**
- * @param {string} text
- * @param {!Object=} commandLineAPI
- * @return {*}
- */
-InjectedScriptHostClass.prototype.evaluateWithExceptionDetails = function(text, commandLineAPI) {}
 
 /**
  * @param {*} fn
@@ -134,97 +109,14 @@ InjectedScriptHostClass.prototype.suppressWarningsAndCallFunction = function(fn,
 InjectedScriptHostClass.prototype.setNonEnumProperty = function(obj, key, value) {}
 
 /**
- * @param {!Function} functionObject
- * @param {number} scopeIndex
- * @param {string} variableName
- * @param {*} newValue
- * @return {*}
- */
-InjectedScriptHostClass.prototype.setFunctionVariableValue = function(functionObject, scopeIndex, variableName, newValue) {}
-
-/**
  * @param {*} value
  * @param {string} groupName
  * @return {number}
  */
 InjectedScriptHostClass.prototype.bind = function(value, groupName) {}
 
-/**
- * @param {number} id
- * @return {*}
- */
-InjectedScriptHostClass.prototype.objectForId = function(id) {}
-
-/**
- * @param {number} id
- * @return {string}
- */
-InjectedScriptHostClass.prototype.idToObjectGroupName = function(id) {}
-
 /** @type {!InjectedScriptHostClass} */
 var InjectedScriptHost;
-
-/** @interface */
-function JavaScriptCallFrame()
-{
-    /** @type {!JavaScriptCallFrame} */
-    this.caller;
-    /** @type {number} */
-    this.sourceID;
-    /** @type {number} */
-    this.line;
-    /** @type {number} */
-    this.column;
-    /** @type {!Array.<!Object>} */
-    this.scopeChain;
-    /** @type {!Object} */
-    this.thisObject;
-    /** @type {string} */
-    this.stepInPositions;
-    /** @type {string} */
-    this.functionName;
-    /** @type {number} */
-    this.functionLine;
-    /** @type {number} */
-    this.functionColumn;
-    /** @type {boolean} */
-    this.isAtReturn;
-    /** @type {*} */
-    this.returnValue;
-}
-
-/**
- * @param {string} script
- * @param {!Object=} scopeExtension
- * @return {*}
- */
-JavaScriptCallFrame.prototype.evaluateWithExceptionDetails = function(script, scopeExtension) {}
-
-/**
- * @return {*}
- */
-JavaScriptCallFrame.prototype.restart = function() {}
-
-/**
- * @param {number=} scopeIndex
- * @param {?string=} variableName
- * @param {*=} newValue
- * @return {*}
- */
-JavaScriptCallFrame.prototype.setVariableValue = function(scopeIndex, variableName, newValue) {}
-
-/**
- * @param {number} scopeIndex
- * @return {number}
- */
-JavaScriptCallFrame.prototype.scopeType = function(scopeIndex) {}
-
-/**
- * @param {number} scopeIndex
- * @return {string}
- */
-JavaScriptCallFrame.prototype.scopeName = function(scopeIndex) {}
-
 /** @type {!Window} */
 var inspectedGlobalObject;
 /** @type {number} */

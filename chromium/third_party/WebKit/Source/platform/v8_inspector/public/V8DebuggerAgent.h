@@ -13,34 +13,31 @@ namespace blink {
 
 class V8RuntimeAgent;
 
-class PLATFORM_EXPORT V8DebuggerAgent : public protocol::Dispatcher::DebuggerCommandHandler, public V8Debugger::Agent<protocol::Frontend::Debugger> {
+class PLATFORM_EXPORT V8DebuggerAgent : public protocol::Backend::Debugger, public V8Debugger::Agent<protocol::Frontend::Debugger> {
 public:
     static const char backtraceObjectGroup[];
 
-    static PassOwnPtr<V8DebuggerAgent> create(V8RuntimeAgent*, int contextGroupId);
     virtual ~V8DebuggerAgent() { }
 
     // API for the embedder to report native activities.
-    virtual void schedulePauseOnNextStatement(const String& breakReason, PassRefPtr<protocol::DictionaryValue> data) = 0;
+    virtual void schedulePauseOnNextStatement(const String16& breakReason, PassOwnPtr<protocol::DictionaryValue> data) = 0;
     virtual void cancelPauseOnNextStatement() = 0;
     virtual bool canBreakProgram() = 0;
-    virtual void breakProgram(const String& breakReason, PassRefPtr<protocol::DictionaryValue> data) = 0;
-    virtual void breakProgramOnException(const String& breakReason, PassRefPtr<protocol::DictionaryValue> data) = 0;
+    virtual void breakProgram(const String16& breakReason, PassOwnPtr<protocol::DictionaryValue> data) = 0;
+    virtual void breakProgramOnException(const String16& breakReason, PassOwnPtr<protocol::DictionaryValue> data) = 0;
     virtual void willExecuteScript(int scriptId) = 0;
     virtual void didExecuteScript() = 0;
-    virtual void reset() = 0;
 
     virtual bool isPaused() = 0;
     virtual bool enabled() = 0;
     virtual V8Debugger& debugger() = 0;
 
-    // Async call stacks implementation
-    static const int unknownAsyncOperationId;
-    virtual int traceAsyncOperationStarting(const String& description) = 0;
-    virtual void traceAsyncCallbackStarting(int operationId) = 0;
-    virtual void traceAsyncCallbackCompleted() = 0;
-    virtual void traceAsyncOperationCompleted(int operationId) = 0;
-    virtual bool trackingAsyncCalls() const = 0;
+    // Async call stacks implementation.
+    virtual void asyncTaskScheduled(const String16& taskName, void* task, bool recurring) = 0;
+    virtual void asyncTaskCanceled(void* task) = 0;
+    virtual void asyncTaskStarted(void* task) = 0;
+    virtual void asyncTaskFinished(void* task) = 0;
+    virtual void allAsyncTasksCanceled() = 0;
 };
 
 } // namespace blink

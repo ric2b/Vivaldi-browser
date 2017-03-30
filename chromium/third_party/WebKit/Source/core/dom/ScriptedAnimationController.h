@@ -29,8 +29,6 @@
 #include "core/dom/FrameRequestCallbackCollection.h"
 #include "platform/heap/Handle.h"
 #include "wtf/ListHashSet.h"
-#include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/StringImpl.h"
@@ -43,12 +41,11 @@ class EventTarget;
 class FrameRequestCallback;
 class MediaQueryListListener;
 
-class ScriptedAnimationController : public RefCountedWillBeGarbageCollected<ScriptedAnimationController> {
-    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(ScriptedAnimationController);
+class ScriptedAnimationController : public GarbageCollected<ScriptedAnimationController> {
 public:
-    static PassRefPtrWillBeRawPtr<ScriptedAnimationController> create(Document* document)
+    static RawPtr<ScriptedAnimationController> create(Document* document)
     {
-        return adoptRefWillBeNoop(new ScriptedAnimationController(document));
+        return new ScriptedAnimationController(document);
     }
 
     DECLARE_TRACE();
@@ -60,9 +57,9 @@ public:
     void cancelCallback(CallbackId);
     void serviceScriptedAnimations(double monotonicTimeNow);
 
-    void enqueueEvent(PassRefPtrWillBeRawPtr<Event>);
-    void enqueuePerFrameEvent(PassRefPtrWillBeRawPtr<Event>);
-    void enqueueMediaQueryChangeListeners(WillBeHeapVector<RefPtrWillBeMember<MediaQueryListListener>>&);
+    void enqueueEvent(Event*);
+    void enqueuePerFrameEvent(RawPtr<Event>);
+    void enqueueMediaQueryChangeListeners(HeapVector<Member<MediaQueryListListener>>&);
 
     void suspend();
     void resume();
@@ -79,12 +76,12 @@ private:
 
     bool hasScheduledItems() const;
 
-    RawPtrWillBeMember<Document> m_document;
+    Member<Document> m_document;
     FrameRequestCallbackCollection m_callbackCollection;
     int m_suspendCount;
-    WillBeHeapVector<RefPtrWillBeMember<Event>> m_eventQueue;
-    WillBeHeapListHashSet<std::pair<RawPtrWillBeMember<const EventTarget>, const StringImpl*>> m_perFrameEvents;
-    using MediaQueryListListeners = WillBeHeapListHashSet<RefPtrWillBeMember<MediaQueryListListener>>;
+    HeapVector<Member<Event>> m_eventQueue;
+    HeapListHashSet<std::pair<Member<const EventTarget>, const StringImpl*>> m_perFrameEvents;
+    using MediaQueryListListeners = HeapListHashSet<Member<MediaQueryListListener>>;
     MediaQueryListListeners m_mediaQueryListListeners;
 };
 

@@ -5,19 +5,18 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_OPTIONS_BROWSER_OPTIONS_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_OPTIONS_BROWSER_OPTIONS_HANDLER_H_
 
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
-#include "chrome/browser/shell_integration.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "components/policy/core/common/policy_service.h"
@@ -36,7 +35,9 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/policy/consumer_management_service.h"
 #include "chrome/browser/chromeos/system/pointer_device_observer.h"
-#endif  // defined(OS_CHROMEOS)
+#else  // defined(OS_CHROMEOS)
+#include "chrome/browser/shell_integration.h"
+#endif  // !defined(OS_CHROMEOS)
 
 class AutocompleteController;
 class CloudPrintSetupHandler;
@@ -60,7 +61,6 @@ class BrowserOptionsHandler
       public sync_driver::SyncServiceObserver,
       public SigninManagerBase::Observer,
       public ui::SelectFileDialog::Listener,
-      public shell_integration::DefaultWebClientObserver,
 #if defined(OS_CHROMEOS)
       public chromeos::system::PointerDeviceObserver::Observer,
       public policy::ConsumerManagementService::Observer,
@@ -90,10 +90,6 @@ class BrowserOptionsHandler
                              const std::string& password) override;
   void GoogleSignedOut(const std::string& account_id,
                        const std::string& username) override;
-
-  // shell_integration::DefaultWebClientObserver implementation.
-  void SetDefaultWebClientUIState(
-      shell_integration::DefaultWebClientUIState state) override;
 
   // TemplateURLServiceObserver implementation.
   void OnTemplateURLServiceChanged() override;
@@ -158,14 +154,8 @@ class BrowserOptionsHandler
   // Will be called when the kSigninAllowed pref has changed.
   void OnSigninAllowedPrefChange();
 
-  // Makes this the default browser. Called from WebUI.
-  void BecomeDefaultBrowser(const base::ListValue* args);
-
   // Sets the search engine at the given index to be default. Called from WebUI.
   void SetDefaultSearchEngine(const base::ListValue* args);
-
-  // Returns the string ID for the given default browser state.
-  int StatusStringIdForState(shell_integration::DefaultWebClientState state);
 
   // Returns if the "make Chrome default browser" button should be shown.
   bool ShouldShowSetDefaultBrowser();
@@ -176,12 +166,21 @@ class BrowserOptionsHandler
   // Returns if access to advanced settings should be allowed.
   bool ShouldAllowAdvancedSettings();
 
+#if !defined(OS_CHROMEOS)
   // Gets the current default browser state, and asynchronously reports it to
   // the WebUI page.
   void UpdateDefaultBrowserState();
 
+  // Makes this the default browser. Called from WebUI.
+  void BecomeDefaultBrowser(const base::ListValue* args);
+
+  // Receives the default browser state when the worker is done.
+  void OnDefaultBrowserWorkerFinished(
+      shell_integration::DefaultWebClientState state);
+
   // Updates the UI with the given state for the default browser.
   void SetDefaultBrowserUIString(int status_string_id);
+#endif  // !defined(OS_CHROMEOS)
 
   // Loads the possible default search engine list and reports it to the WebUI.
   void AddTemplateUrlServiceObserver();
@@ -193,7 +192,7 @@ class BrowserOptionsHandler
   //     filePath: "/path/to/profile/data/on/disk",
   //     isCurrentProfile: false
   //   };
-  scoped_ptr<base::ListValue> GetProfilesInfoList();
+  std::unique_ptr<base::ListValue> GetProfilesInfoList();
 
   // Sends an array of Profile objects to javascript.
   void SendProfilesInfo();
@@ -225,6 +224,12 @@ class BrowserOptionsHandler
   // kSystemTimezonePolicy is set, and preventing the user from changing the
   // system time zone if kSystemTimezonePolicy is not set.
   void OnSystemTimezonePolicyChanged();
+
+  // Updates the UI, preventing the user from changing timezone or timezone
+  // detection settings if kSystemTimezoneAutomaticDetectionPolicy is set, and
+  // allowing the user to update these settings if
+  // kSystemTimezoneAutomaticDetectionPolicy is not set.
+  void OnSystemTimezoneAutomaticDetectionPolicyChanged();
 #endif
 
   // Callback for the "selectDownloadLocation" message. This will prompt the
@@ -370,19 +375,21 @@ class BrowserOptionsHandler
 
   // Returns a newly created dictionary with a number of properties that
   // correspond to the status of sync.
-  scoped_ptr<base::DictionaryValue> GetSyncStateDictionary();
+  std::unique_ptr<base::DictionaryValue> GetSyncStateDictionary();
 
   // Checks whether on Chrome OS the current user is the device owner. Returns
   // true on other platforms.
   bool IsDeviceOwnerProfile();
 
+#if !defined(OS_CHROMEOS)
   scoped_refptr<shell_integration::DefaultBrowserWorker>
       default_browser_worker_;
+  BooleanPrefMember default_browser_policy_;
+#endif
 
   bool page_initialized_;
 
   StringPrefMember homepage_;
-  BooleanPrefMember default_browser_policy_;
 
   TemplateURLService* template_url_service_;  // Weak.
 
@@ -392,15 +399,17 @@ class BrowserOptionsHandler
 
   StringPrefMember auto_open_files_;
 
-  scoped_ptr<ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
+  std::unique_ptr<ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
       default_zoom_level_subscription_;
 
   PrefChangeRegistrar profile_pref_registrar_;
 #if defined(OS_CHROMEOS)
-  scoped_ptr<policy::PolicyChangeRegistrar> policy_registrar_;
+  std::unique_ptr<policy::PolicyChangeRegistrar> policy_registrar_;
 
   // Whether factory reset can be performed.
   bool enable_factory_reset_;
+
+  PrefChangeRegistrar local_state_pref_change_registrar_;
 #endif
 
   ScopedObserver<SigninManagerBase, SigninManagerBase::Observer>

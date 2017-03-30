@@ -36,7 +36,8 @@
 #include "public/platform/WebContentLayer.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebSize.h"
-#include "public/platform/WebUnitTestSupport.h"
+#include "public/platform/WebURLLoaderMockFactory.h"
+#include "public/web/WebCache.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebInputEvent.h"
@@ -86,14 +87,14 @@ TEST(LinkHighlightImplTest, verifyWebViewImplIntegration)
     // Shouldn't crash.
     webViewImpl->enableTapHighlightAtPoint(getTargetedEvent(webViewImpl, touchEvent));
 
-    EXPECT_TRUE(webViewImpl->linkHighlight(0));
-    EXPECT_TRUE(webViewImpl->linkHighlight(0)->contentLayer());
-    EXPECT_TRUE(webViewImpl->linkHighlight(0)->clipLayer());
+    EXPECT_TRUE(webViewImpl->getLinkHighlight(0));
+    EXPECT_TRUE(webViewImpl->getLinkHighlight(0)->contentLayer());
+    EXPECT_TRUE(webViewImpl->getLinkHighlight(0)->clipLayer());
 
     // Find a target inside a scrollable div
     touchEvent.y = 100;
     webViewImpl->enableTapHighlightAtPoint(getTargetedEvent(webViewImpl, touchEvent));
-    ASSERT_TRUE(webViewImpl->linkHighlight(0));
+    ASSERT_TRUE(webViewImpl->getLinkHighlight(0));
 
     // Don't highlight if no "hand cursor"
     touchEvent.y = 220; // An A-link with cross-hair cursor.
@@ -104,18 +105,15 @@ TEST(LinkHighlightImplTest, verifyWebViewImplIntegration)
     webViewImpl->enableTapHighlightAtPoint(getTargetedEvent(webViewImpl, touchEvent));
     ASSERT_EQ(0U, webViewImpl->numLinkHighlights());
 
-    Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
+    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+    WebCache::clear();
 }
 
 namespace {
 
-class FakeWebFrameClient : public WebFrameClient {
-    // To make the destructor public.
-};
-
 class FakeCompositingWebViewClient : public FrameTestHelpers::TestWebViewClient {
 public:
-    FakeWebFrameClient m_fakeWebFrameClient;
+    FrameTestHelpers::TestWebFrameClient m_fakeWebFrameClient;
 };
 
 FakeCompositingWebViewClient* compositingWebViewClient()
@@ -151,17 +149,18 @@ TEST(LinkHighlightImplTest, resetDuringNodeRemoval)
     ASSERT_TRUE(touchNode);
 
     webViewImpl->enableTapHighlightAtPoint(targetedEvent);
-    ASSERT_TRUE(webViewImpl->linkHighlight(0));
+    ASSERT_TRUE(webViewImpl->getLinkHighlight(0));
 
-    GraphicsLayer* highlightLayer = webViewImpl->linkHighlight(0)->currentGraphicsLayerForTesting();
+    GraphicsLayer* highlightLayer = webViewImpl->getLinkHighlight(0)->currentGraphicsLayerForTesting();
     ASSERT_TRUE(highlightLayer);
-    EXPECT_TRUE(highlightLayer->linkHighlight(0));
+    EXPECT_TRUE(highlightLayer->getLinkHighlight(0));
 
     touchNode->remove(IGNORE_EXCEPTION);
     webViewImpl->updateAllLifecyclePhases();
     ASSERT_EQ(0U, highlightLayer->numLinkHighlights());
 
-    Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
+    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+    WebCache::clear();
 }
 
 // A lifetime test: delete LayerTreeView while running LinkHighlights.
@@ -192,17 +191,18 @@ TEST(LinkHighlightImplTest, resetLayerTreeView)
     ASSERT_TRUE(touchNode);
 
     webViewImpl->enableTapHighlightAtPoint(targetedEvent);
-    ASSERT_TRUE(webViewImpl->linkHighlight(0));
+    ASSERT_TRUE(webViewImpl->getLinkHighlight(0));
 
-    GraphicsLayer* highlightLayer = webViewImpl->linkHighlight(0)->currentGraphicsLayerForTesting();
+    GraphicsLayer* highlightLayer = webViewImpl->getLinkHighlight(0)->currentGraphicsLayerForTesting();
     ASSERT_TRUE(highlightLayer);
-    EXPECT_TRUE(highlightLayer->linkHighlight(0));
+    EXPECT_TRUE(highlightLayer->getLinkHighlight(0));
 
     // Mimic the logic from RenderWidget::Close:
     webViewImpl->willCloseLayerTreeView();
     webViewHelper.reset();
 
-    Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
+    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+    WebCache::clear();
 }
 
 TEST(LinkHighlightImplTest, multipleHighlights)
@@ -226,14 +226,15 @@ TEST(LinkHighlightImplTest, multipleHighlights)
     touchEvent.data.tap.height = 30;
 
     Vector<IntRect> goodTargets;
-    WillBeHeapVector<RawPtrWillBeMember<Node>> highlightNodes;
+    HeapVector<Member<Node>> highlightNodes;
     IntRect boundingBox(touchEvent.x - touchEvent.data.tap.width / 2, touchEvent.y - touchEvent.data.tap.height / 2, touchEvent.data.tap.width, touchEvent.data.tap.height);
     findGoodTouchTargets(boundingBox, webViewImpl->mainFrameImpl()->frame(), goodTargets, highlightNodes);
 
     webViewImpl->enableTapHighlights(highlightNodes);
     EXPECT_EQ(2U, webViewImpl->numLinkHighlights());
 
-    Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
+    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+    WebCache::clear();
 }
 
 } // namespace blink

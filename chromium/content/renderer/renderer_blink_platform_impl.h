@@ -16,7 +16,8 @@
 #include "cc/blink/web_compositor_support_impl.h"
 #include "content/child/blink_platform_impl.h"
 #include "content/common/content_export.h"
-#include "content/renderer/origin_trials/trial_token_validator.h"
+#include "content/renderer/origin_trials/web_trial_token_validator_impl.h"
+#include "content/renderer/top_level_blame_context.h"
 #include "content/renderer/webpublicsuffixlist_impl.h"
 #include "device/vibration/vibration_manager.mojom.h"
 #include "third_party/WebKit/public/platform/WebGraphicsContext3D.h"
@@ -49,13 +50,16 @@ class WebThreadImplForRendererScheduler;
 }
 
 namespace content {
+class BlinkServiceRegistryImpl;
 class DeviceLightEventPump;
 class DeviceMotionEventPump;
 class DeviceOrientationEventPump;
+class LocalStorageCachedAreas;
 class PlatformEventObserverBase;
 class QuotaMessageFilter;
 class RendererClipboardDelegate;
 class RenderView;
+class ServiceRegistry;
 class ThreadSafeSender;
 class WebClipboardImpl;
 class WebDatabaseObserverImpl;
@@ -63,8 +67,8 @@ class WebFileSystemImpl;
 
 class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
  public:
-  explicit RendererBlinkPlatformImpl(
-      scheduler::RendererScheduler* renderer_scheduler);
+  RendererBlinkPlatformImpl(scheduler::RendererScheduler* renderer_scheduler,
+                            base::WeakPtr<ServiceRegistry> service_registry);
   ~RendererBlinkPlatformImpl() override;
 
   // Shutdown must be called just prior to shutting down blink.
@@ -105,9 +109,12 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       const blink::WebString& vfs_file_name) override;
   long long databaseGetFileSize(const blink::WebString& vfs_file_name) override;
   long long databaseGetSpaceAvailableForOrigin(
-      const blink::WebString& origin_identifier) override;
+      const blink::WebSecurityOrigin& origin) override;
   bool databaseSetFileSize(const blink::WebString& vfs_file_name,
                            long long size) override;
+  blink::WebString databaseCreateOriginIdentifier(
+      const blink::WebSecurityOrigin& origin) override;
+
   blink::WebString signedPublicKeyAndChallengeString(
       unsigned key_size_index,
       const blink::WebString& challenge,
@@ -120,8 +127,11 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   blink::WebScrollbarBehavior* scrollbarBehavior() override;
   blink::WebIDBFactory* idbFactory() override;
   blink::WebServiceWorkerCacheStorage* cacheStorage(
-      const blink::WebString& origin_identifier) override;
+      const blink::WebSecurityOrigin& security_origin) override;
   blink::WebFileSystem* fileSystem() override;
+  blink::WebString fileSystemCreateOriginIdentifier(
+      const blink::WebSecurityOrigin& origin) override;
+
   bool canAccelerate2dCanvas() override;
   bool isThreadedCompositingEnabled() override;
   bool isThreadedAnimationEnabled() override;
@@ -161,23 +171,16 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   void createHTMLVideoElementCapturer(
       blink::WebMediaStream* web_media_stream,
       blink::WebMediaPlayer* web_media_player) override;
-  blink::WebGraphicsContext3D* createOffscreenGraphicsContext3D(
-      const blink::WebGraphicsContext3D::Attributes& attributes) override;
-  blink::WebGraphicsContext3D* createOffscreenGraphicsContext3D(
-      const blink::WebGraphicsContext3D::Attributes& attributes,
-      blink::WebGraphicsContext3D* share_context) override;
-  blink::WebGraphicsContext3D* createOffscreenGraphicsContext3D(
-      const blink::WebGraphicsContext3D::Attributes& attributes,
-      blink::WebGraphicsContext3D* share_context,
-      blink::WebGraphicsContext3D::WebGraphicsInfo* gl_info) override;
+  blink::WebGraphicsContext3DProvider* createOffscreenGraphicsContext3DProvider(
+      const blink::Platform::ContextAttributes& attributes,
+      const blink::WebURL& top_document_web_url,
+      blink::WebGraphicsContext3DProvider* share_provider,
+      blink::Platform::GraphicsInfo* gl_info) override;
   blink::WebGraphicsContext3DProvider*
   createSharedOffscreenGraphicsContext3DProvider() override;
   blink::WebCompositorSupport* compositorSupport() override;
-  blink::WebString convertIDNToUnicode(
-      const blink::WebString& host,
-      const blink::WebString& languages) override;
-  void connectToRemoteService(const char* name,
-                              mojo::ScopedMessagePipeHandle handle) override;
+  blink::WebString convertIDNToUnicode(const blink::WebString& host) override;
+  blink::ServiceRegistry* serviceRegistry() override;
   void startListening(blink::WebPlatformEventType,
                       blink::WebPlatformEventListener*) override;
   void stopListening(blink::WebPlatformEventType) override;
@@ -187,6 +190,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   void vibrate(unsigned int milliseconds) override;
   void cancelVibration() override;
   blink::WebThread* currentThread() override;
+  blink::BlameContext* topLevelBlameContext() override;
   void recordRappor(const char* metric,
                     const blink::WebString& sample) override;
   void recordRapporURL(const char* metric, const blink::WebURL& url) override;
@@ -292,8 +296,13 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   IDMap<PlatformEventObserverBase, IDMapOwnPointer> platform_event_observers_;
 
   scheduler::RendererScheduler* renderer_scheduler_;  // NOT OWNED
+  TopLevelBlameContext top_level_blame_context_;
 
-  TrialTokenValidator trial_token_validator_;
+  WebTrialTokenValidatorImpl trial_token_validator_;
+
+  scoped_ptr<LocalStorageCachedAreas> local_storage_cached_areas_;
+
+  scoped_ptr<BlinkServiceRegistryImpl> blink_service_registry_;
 
   DISALLOW_COPY_AND_ASSIGN(RendererBlinkPlatformImpl);
 };

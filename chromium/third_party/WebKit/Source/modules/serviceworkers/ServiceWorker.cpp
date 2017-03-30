@@ -36,7 +36,9 @@
 #include "core/events/Event.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/EventTargetModules.h"
+#include "modules/serviceworkers/ServiceWorkerContainerClient.h"
 #include "public/platform/WebMessagePortChannel.h"
+#include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebString.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerState.h"
 
@@ -49,6 +51,12 @@ const AtomicString& ServiceWorker::interfaceName() const
 
 void ServiceWorker::postMessage(ExecutionContext* context, PassRefPtr<SerializedScriptValue> message, const MessagePortArray* ports, ExceptionState& exceptionState)
 {
+    ServiceWorkerContainerClient* client = ServiceWorkerContainerClient::from(getExecutionContext());
+    if (!client || !client->provider()) {
+        exceptionState.throwDOMException(InvalidStateError, "Failed to post a message: No associated provider is available.");
+        return;
+    }
+
     // Disentangle the port in preparation for sending it to the remote context.
     OwnPtr<MessagePortChannelArray> channels = MessagePort::disentanglePorts(context, ports, exceptionState);
     if (exceptionState.hadException())
@@ -63,7 +71,7 @@ void ServiceWorker::postMessage(ExecutionContext* context, PassRefPtr<Serialized
 
     WebString messageString = message->toWireString();
     OwnPtr<WebMessagePortChannelArray> webChannels = MessagePort::toWebMessagePortChannelArray(channels.release());
-    m_handle->serviceWorker()->postMessage(messageString, webChannels.leakPtr());
+    m_handle->serviceWorker()->postMessage(client->provider(), messageString, WebSecurityOrigin(getExecutionContext()->getSecurityOrigin()), webChannels.leakPtr());
 }
 
 void ServiceWorker::internalsTerminate()
@@ -111,8 +119,6 @@ ServiceWorker* ServiceWorker::from(ExecutionContext* executionContext, PassOwnPt
 
 bool ServiceWorker::hasPendingActivity() const
 {
-    if (AbstractWorker::hasPendingActivity())
-        return true;
     if (m_wasStopped)
         return false;
     return m_handle->serviceWorker()->state() != WebServiceWorkerStateRedundant;
@@ -130,7 +136,7 @@ ServiceWorker* ServiceWorker::getOrCreate(ExecutionContext* executionContext, Pa
 
     ServiceWorker* existingWorker = static_cast<ServiceWorker*>(handle->serviceWorker()->proxy());
     if (existingWorker) {
-        ASSERT(existingWorker->executionContext() == executionContext);
+        ASSERT(existingWorker->getExecutionContext() == executionContext);
         return existingWorker;
     }
 
@@ -141,6 +147,7 @@ ServiceWorker* ServiceWorker::getOrCreate(ExecutionContext* executionContext, Pa
 
 ServiceWorker::ServiceWorker(ExecutionContext* executionContext, PassOwnPtr<WebServiceWorker::Handle> handle)
     : AbstractWorker(executionContext)
+    , ActiveScriptWrappable(this)
     , m_handle(handle)
     , m_wasStopped(false)
 {

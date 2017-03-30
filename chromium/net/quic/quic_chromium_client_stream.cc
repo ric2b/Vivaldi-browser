@@ -10,6 +10,7 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/quic/quic_chromium_client_session.h"
+#include "net/quic/quic_http_utils.h"
 #include "net/quic/quic_spdy_session.h"
 #include "net/quic/quic_write_blocked_list.h"
 #include "net/quic/spdy_utils.h"
@@ -25,6 +26,7 @@ QuicChromiumClientStream::QuicChromiumClientStream(
       delegate_(nullptr),
       headers_delivered_(false),
       session_(session),
+      can_migrate_(true),
       weak_factory_(this) {}
 
 QuicChromiumClientStream::~QuicChromiumClientStream() {
@@ -35,19 +37,27 @@ QuicChromiumClientStream::~QuicChromiumClientStream() {
 void QuicChromiumClientStream::OnStreamHeadersComplete(bool fin,
                                                        size_t frame_len) {
   QuicSpdyStream::OnStreamHeadersComplete(fin, frame_len);
-  size_t headers_len = decompressed_headers().length();
-  SpdyHeaderBlock headers;
-  SpdyFramer framer(HTTP2);
-  if (!framer.ParseHeaderBlockInBuffer(decompressed_headers().data(),
-                                       headers_len, &headers)) {
-    DLOG(WARNING) << "Invalid headers";
-    Reset(QUIC_BAD_APPLICATION_PAYLOAD);
-    return;
+  if (decompressed_headers().empty() && !decompressed_trailers().empty()) {
+    DCHECK(trailers_decompressed());
+    // The delegate will read the trailers via a posted task.
+    NotifyDelegateOfHeadersCompleteLater(received_trailers(), frame_len);
+  } else {
+    DCHECK(!headers_delivered_);
+    SpdyHeaderBlock headers;
+    SpdyFramer framer(HTTP2);
+    size_t headers_len = decompressed_headers().length();
+    const char* header_data = decompressed_headers().data();
+    if (!framer.ParseHeaderBlockInBuffer(header_data, headers_len, &headers)) {
+      DLOG(WARNING) << "Invalid headers";
+      Reset(QUIC_BAD_APPLICATION_PAYLOAD);
+      return;
+    }
+    MarkHeadersConsumed(headers_len);
+    session_->OnInitialHeadersComplete(id(), headers);
+
+    // The delegate will read the headers via a posted task.
+    NotifyDelegateOfHeadersCompleteLater(headers, frame_len);
   }
-  MarkHeadersConsumed(headers_len);
-  session_->OnInitialHeadersComplete(id(), headers);
-  // The delegate will read the headers via a posted task.
-  NotifyDelegateOfHeadersCompleteLater(headers, frame_len);
 }
 
 void QuicChromiumClientStream::OnPromiseHeadersComplete(
@@ -64,7 +74,7 @@ void QuicChromiumClientStream::OnPromiseHeadersComplete(
   }
   MarkHeadersConsumed(headers_len);
 
-  session_->HandlePromised(promised_id, headers);
+  session_->HandlePromised(id(), promised_id, headers);
 }
 
 void QuicChromiumClientStream::OnDataAvailable() {
@@ -93,6 +103,17 @@ void QuicChromiumClientStream::OnCanWrite() {
   if (!HasBufferedData() && !callback_.is_null()) {
     base::ResetAndReturn(&callback_).Run(OK);
   }
+}
+
+size_t QuicChromiumClientStream::WriteHeaders(
+    const SpdyHeaderBlock& header_block,
+    bool fin,
+    QuicAckListenerInterface* ack_notifier_delegate) {
+  net_log_.AddEvent(
+      NetLog::TYPE_QUIC_CHROMIUM_CLIENT_STREAM_SEND_REQUEST_HEADERS,
+      base::Bind(&QuicRequestNetLogCallback, id(), &header_block,
+                 QuicSpdyStream::priority()));
+  return QuicSpdyStream::WriteHeaders(header_block, fin, ack_notifier_delegate);
 }
 
 SpdyPriority QuicChromiumClientStream::priority() const {
@@ -177,8 +198,19 @@ void QuicChromiumClientStream::NotifyDelegateOfHeadersComplete(
     size_t frame_len) {
   if (!delegate_)
     return;
+  // Only mark trailers consumed when we are about to notify delegate.
+  if (headers_delivered_) {
+    MarkTrailersConsumed(decompressed_trailers().length());
+    net_log_.AddEvent(
+        NetLog::TYPE_QUIC_CHROMIUM_CLIENT_STREAM_READ_RESPONSE_TRAILERS,
+        base::Bind(&SpdyHeaderBlockNetLogCallback, &headers));
+  } else {
+    headers_delivered_ = true;
+    net_log_.AddEvent(
+        NetLog::TYPE_QUIC_CHROMIUM_CLIENT_STREAM_READ_RESPONSE_HEADERS,
+        base::Bind(&SpdyHeaderBlockNetLogCallback, &headers));
+  }
 
-  headers_delivered_ = true;
   delegate_->OnHeadersAvailable(headers, frame_len);
 }
 
@@ -199,6 +231,10 @@ void QuicChromiumClientStream::RunOrBuffer(base::Closure closure) {
   } else {
     delegate_tasks_.push_back(closure);
   }
+}
+
+void QuicChromiumClientStream::DisableConnectionMigration() {
+  can_migrate_ = false;
 }
 
 }  // namespace net

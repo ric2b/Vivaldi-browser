@@ -5,6 +5,7 @@
 package com.android.webview.chromium;
 
 import android.graphics.Canvas;
+import android.os.Build;
 import android.view.View;
 
 import com.android.webview.chromium.WebViewDelegateFactory.WebViewDelegate;
@@ -15,8 +16,7 @@ import org.chromium.content.common.CleanupReference;
  * Simple Java abstraction and wrapper for the native DrawGLFunctor flow.
  * An instance of this class can be constructed, bound to a single view context (i.e. AwContennts)
  * and then drawn and detached from the view tree any number of times (using requestDrawGL and
- * detach respectively). Then when finished with, it can be explicitly released by calling
- * destroy() or will clean itself up as required via finalizer / CleanupReference.
+ * detach respectively).
  */
 class DrawGLFunctor {
     private static final String TAG = DrawGLFunctor.class.getSimpleName();
@@ -35,24 +35,16 @@ class DrawGLFunctor {
         mWebViewDelegate = webViewDelegate;
     }
 
-    public void destroy() {
-        detach();
-        if (mCleanupReference != null) {
-            mCleanupReference.cleanupNow();
-            mCleanupReference = null;
-            mDestroyRunnable = null;
-            mWebViewDelegate = null;
-            mContainerView = null;
-        }
-    }
-
     public void detach() {
         if (mWebViewDelegate != null && mContainerView != null) {
             mWebViewDelegate.detachDrawGlFunctor(mContainerView, mNativeDrawGLFunctor);
         }
     }
 
-    public boolean requestDrawGL(Canvas canvas, View containerView, boolean waitForCompletion) {
+    private static final boolean sSupportFunctorReleasedCallback =
+            (Build.VERSION.SDK_INT > Build.VERSION_CODES.M) || Build.VERSION.CODENAME.equals("N");
+    public boolean requestDrawGL(Canvas canvas, View containerView, boolean waitForCompletion,
+            Runnable releasedCallback) {
         if (mDestroyRunnable.mNativeDrawGLFunctor == 0) {
             throw new RuntimeException("requested DrawGL on already destroyed DrawGLFunctor");
         }
@@ -69,13 +61,25 @@ class DrawGLFunctor {
         mContainerView = containerView;
 
         if (canvas == null) {
+            assert releasedCallback == null;
             mWebViewDelegate.invokeDrawGlFunctor(
                     containerView, mDestroyRunnable.mNativeDrawGLFunctor, waitForCompletion);
             return true;
         }
 
-        mWebViewDelegate.callDrawGlFunction(canvas, mDestroyRunnable.mNativeDrawGLFunctor);
+        if (sSupportFunctorReleasedCallback) {
+            assert releasedCallback != null;
+            mWebViewDelegate.callDrawGlFunction(
+                    canvas, mDestroyRunnable.mNativeDrawGLFunctor, releasedCallback);
+        } else {
+            assert releasedCallback == null;
+            mWebViewDelegate.callDrawGlFunction(canvas, mDestroyRunnable.mNativeDrawGLFunctor);
+        }
         return true;
+    }
+
+    public static boolean supportsDrawGLFunctorReleasedCallback() {
+        return sSupportFunctorReleasedCallback;
     }
 
     public static void setChromiumAwDrawGLFunction(long functionPointer) {

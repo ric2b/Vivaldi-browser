@@ -71,44 +71,6 @@ namespace net {
 
 namespace {
 
-void ProcessAlternativeServices(HttpNetworkSession* session,
-                                const HttpResponseHeaders& headers,
-                                const HostPortPair& http_host_port_pair) {
-  if (session->params().parse_alternative_services) {
-    if (headers.HasHeader(kAlternativeServiceHeader)) {
-      std::string alternative_service_str;
-      headers.GetNormalizedHeader(kAlternativeServiceHeader,
-                                  &alternative_service_str);
-      session->http_stream_factory()->ProcessAlternativeService(
-          session->http_server_properties(), alternative_service_str,
-          http_host_port_pair, *session);
-    }
-    // If "Alt-Svc" is enabled, then ignore "Alternate-Protocol".
-    return;
-  }
-
-  if (!headers.HasHeader(kAlternateProtocolHeader))
-    return;
-
-  std::vector<std::string> alternate_protocol_values;
-  size_t iter = 0;
-  std::string alternate_protocol_str;
-  while (headers.EnumerateHeader(&iter, kAlternateProtocolHeader,
-                                 &alternate_protocol_str)) {
-    base::TrimWhitespaceASCII(alternate_protocol_str, base::TRIM_ALL,
-                              &alternate_protocol_str);
-    if (!alternate_protocol_str.empty()) {
-      alternate_protocol_values.push_back(alternate_protocol_str);
-    }
-  }
-
-  session->http_stream_factory()->ProcessAlternateProtocol(
-      session->http_server_properties(),
-      alternate_protocol_values,
-      http_host_port_pair,
-      *session);
-}
-
 scoped_ptr<base::Value> NetLogSSLVersionFallbackCallback(
     const GURL* url,
     int net_error,
@@ -201,11 +163,10 @@ int HttpNetworkTransaction::Start(const HttpRequestInfo* request_info,
     response_.unused_since_prefetch = true;
 
   // Channel ID is disabled if privacy mode is enabled for this request.
-  if (request_->privacy_mode == PRIVACY_MODE_ENABLED)
+  if (request_->privacy_mode == PRIVACY_MODE_ENABLED) {
     server_ssl_config_.channel_id_enabled = false;
-
-  if (session_->params().enable_token_binding &&
-      session_->params().channel_id_service) {
+  } else if (session_->params().enable_token_binding &&
+             session_->params().channel_id_service) {
     server_ssl_config_.token_binding_params.push_back(TB_PARAM_ECDSAP256);
   }
 
@@ -533,10 +494,10 @@ void HttpNetworkTransaction::OnStreamReady(const SSLConfig& used_ssl_config,
   OnIOComplete(OK);
 }
 
-void HttpNetworkTransaction::OnBidirectionalStreamJobReady(
+void HttpNetworkTransaction::OnBidirectionalStreamImplReady(
     const SSLConfig& used_ssl_config,
     const ProxyInfo& used_proxy_info,
-    BidirectionalStreamJob* stream_job) {
+    BidirectionalStreamImpl* stream) {
   NOTREACHED();
 }
 
@@ -745,12 +706,19 @@ int HttpNetworkTransaction::DoLoop(int result) {
       case STATE_GENERATE_SERVER_AUTH_TOKEN_COMPLETE:
         rv = DoGenerateServerAuthTokenComplete(rv);
         break;
-      case STATE_GET_TOKEN_BINDING_KEY:
+      case STATE_GET_PROVIDED_TOKEN_BINDING_KEY:
         DCHECK_EQ(OK, rv);
-        rv = DoGetTokenBindingKey();
+        rv = DoGetProvidedTokenBindingKey();
         break;
-      case STATE_GET_TOKEN_BINDING_KEY_COMPLETE:
-        rv = DoGetTokenBindingKeyComplete(rv);
+      case STATE_GET_PROVIDED_TOKEN_BINDING_KEY_COMPLETE:
+        rv = DoGetProvidedTokenBindingKeyComplete(rv);
+        break;
+      case STATE_GET_REFERRED_TOKEN_BINDING_KEY:
+        DCHECK_EQ(OK, rv);
+        rv = DoGetReferredTokenBindingKey();
+        break;
+      case STATE_GET_REFERRED_TOKEN_BINDING_KEY_COMPLETE:
+        rv = DoGetReferredTokenBindingKeyComplete(rv);
         break;
       case STATE_INIT_REQUEST_BODY:
         DCHECK_EQ(OK, rv);
@@ -967,30 +935,54 @@ int HttpNetworkTransaction::DoGenerateServerAuthToken() {
 int HttpNetworkTransaction::DoGenerateServerAuthTokenComplete(int rv) {
   DCHECK_NE(ERR_IO_PENDING, rv);
   if (rv == OK)
-    next_state_ = STATE_GET_TOKEN_BINDING_KEY;
+    next_state_ = STATE_GET_PROVIDED_TOKEN_BINDING_KEY;
   return rv;
 }
 
-int HttpNetworkTransaction::DoGetTokenBindingKey() {
-  next_state_ = STATE_GET_TOKEN_BINDING_KEY_COMPLETE;
+int HttpNetworkTransaction::DoGetProvidedTokenBindingKey() {
+  next_state_ = STATE_GET_PROVIDED_TOKEN_BINDING_KEY_COMPLETE;
   if (!IsTokenBindingEnabled())
     return OK;
 
   net_log_.BeginEvent(NetLog::TYPE_HTTP_TRANSACTION_GET_TOKEN_BINDING_KEY);
   ChannelIDService* channel_id_service = session_->params().channel_id_service;
   return channel_id_service->GetOrCreateChannelID(
-      request_->url.host(), &token_binding_key_, io_callback_,
+      request_->url.host(), &provided_token_binding_key_, io_callback_,
       &token_binding_request_);
 }
 
-int HttpNetworkTransaction::DoGetTokenBindingKeyComplete(int rv) {
+int HttpNetworkTransaction::DoGetProvidedTokenBindingKeyComplete(int rv) {
   DCHECK_NE(ERR_IO_PENDING, rv);
-  next_state_ = STATE_INIT_REQUEST_BODY;
-  if (!IsTokenBindingEnabled())
+  if (IsTokenBindingEnabled()) {
+    net_log_.EndEventWithNetErrorCode(
+        NetLog::TYPE_HTTP_TRANSACTION_GET_TOKEN_BINDING_KEY, rv);
+  }
+
+  if (rv == OK)
+    next_state_ = STATE_GET_REFERRED_TOKEN_BINDING_KEY;
+  return rv;
+}
+
+int HttpNetworkTransaction::DoGetReferredTokenBindingKey() {
+  next_state_ = STATE_GET_REFERRED_TOKEN_BINDING_KEY_COMPLETE;
+  if (!IsTokenBindingEnabled() || request_->token_binding_referrer.empty())
     return OK;
 
-  net_log_.EndEventWithNetErrorCode(
-      NetLog::TYPE_HTTP_TRANSACTION_GET_TOKEN_BINDING_KEY, rv);
+  net_log_.BeginEvent(NetLog::TYPE_HTTP_TRANSACTION_GET_TOKEN_BINDING_KEY);
+  ChannelIDService* channel_id_service = session_->params().channel_id_service;
+  return channel_id_service->GetOrCreateChannelID(
+      request_->token_binding_referrer, &referred_token_binding_key_,
+      io_callback_, &token_binding_request_);
+}
+
+int HttpNetworkTransaction::DoGetReferredTokenBindingKeyComplete(int rv) {
+  DCHECK_NE(ERR_IO_PENDING, rv);
+  if (IsTokenBindingEnabled() && !request_->token_binding_referrer.empty()) {
+    net_log_.EndEventWithNetErrorCode(
+        NetLog::TYPE_HTTP_TRANSACTION_GET_TOKEN_BINDING_KEY, rv);
+  }
+  if (rv == OK)
+    next_state_ = STATE_INIT_REQUEST_BODY;
   return rv;
 }
 
@@ -1028,7 +1020,7 @@ int HttpNetworkTransaction::BuildRequestHeaders(
   }
 
   RecordTokenBindingSupport();
-  if (token_binding_key_) {
+  if (provided_token_binding_key_) {
     std::string token_binding_header;
     int rv = BuildTokenBindingHeader(&token_binding_header);
     if (rv != OK)
@@ -1065,24 +1057,47 @@ int HttpNetworkTransaction::BuildRequestHeaders(
 }
 
 int HttpNetworkTransaction::BuildTokenBindingHeader(std::string* out) {
+  base::TimeTicks start = base::TimeTicks::Now();
   std::vector<uint8_t> signed_ekm;
-  int rv = stream_->GetSignedEKMForTokenBinding(token_binding_key_.get(),
-                                                &signed_ekm);
+  int rv = stream_->GetSignedEKMForTokenBinding(
+      provided_token_binding_key_.get(), &signed_ekm);
   if (rv != OK)
     return rv;
   std::string provided_token_binding;
-  rv = BuildProvidedTokenBinding(token_binding_key_.get(), signed_ekm,
-                                 &provided_token_binding);
+  rv = BuildTokenBinding(TokenBindingType::PROVIDED,
+                         provided_token_binding_key_.get(), signed_ekm,
+                         &provided_token_binding);
   if (rv != OK)
     return rv;
+
   std::vector<base::StringPiece> token_bindings;
   token_bindings.push_back(provided_token_binding);
+
+  std::string referred_token_binding;
+  if (referred_token_binding_key_) {
+    std::vector<uint8_t> referred_signed_ekm;
+    int rv = stream_->GetSignedEKMForTokenBinding(
+        referred_token_binding_key_.get(), &referred_signed_ekm);
+    if (rv != OK)
+      return rv;
+    rv = BuildTokenBinding(TokenBindingType::REFERRED,
+                           referred_token_binding_key_.get(),
+                           referred_signed_ekm, &referred_token_binding);
+    if (rv != OK)
+      return rv;
+    token_bindings.push_back(referred_token_binding);
+  }
   std::string header;
   rv = BuildTokenBindingMessageFromTokenBindings(token_bindings, &header);
   if (rv != OK)
     return rv;
   base::Base64UrlEncode(header, base::Base64UrlEncodePolicy::INCLUDE_PADDING,
                         out);
+  base::TimeDelta header_creation_time = base::TimeTicks::Now() - start;
+  UMA_HISTOGRAM_CUSTOM_TIMES("Net.TokenBinding.HeaderCreationTime",
+                             header_creation_time,
+                             base::TimeDelta::FromMilliseconds(1),
+                             base::TimeDelta::FromMinutes(1), 50);
   return OK;
 }
 
@@ -1232,15 +1247,15 @@ int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
     return OK;
   }
 
-  ProcessAlternativeServices(session_, *response_.headers.get(),
-                             HostPortPair::FromURL(request_->url));
+  session_->http_stream_factory()->ProcessAlternativeServices(
+      session_, response_.headers.get(), HostPortPair::FromURL(request_->url));
+
+  if (IsSecureRequest())
+    stream_->GetSSLInfo(&response_.ssl_info);
 
   int rv = HandleAuthChallenge();
   if (rv != OK)
     return rv;
-
-  if (IsSecureRequest())
-    stream_->GetSSLInfo(&response_.ssl_info);
 
   headers_valid_ = true;
   return OK;
@@ -1563,7 +1578,8 @@ void HttpNetworkTransaction::ResetStateForAuthRestart() {
   remote_endpoint_ = IPEndPoint();
   net_error_details_.quic_broken = false;
   net_error_details_.quic_connection_error = QUIC_NO_ERROR;
-  token_binding_key_.reset();
+  provided_token_binding_key_.reset();
+  referred_token_binding_key_.reset();
 }
 
 void HttpNetworkTransaction::CacheNetErrorDetailsAndResetStream() {
@@ -1697,10 +1713,11 @@ int HttpNetworkTransaction::HandleAuthChallenge() {
     return ERR_UNEXPECTED_PROXY_AUTH;
 
   int rv = auth_controllers_[target]->HandleAuthChallenge(
-      headers, (request_->load_flags & LOAD_DO_NOT_SEND_AUTH_DATA) != 0, false,
+      headers, response_.ssl_info,
+      (request_->load_flags & LOAD_DO_NOT_SEND_AUTH_DATA) != 0, false,
       net_log_);
   if (auth_controllers_[target]->HaveAuthHandler())
-      pending_auth_target_ = target;
+    pending_auth_target_ = target;
 
   scoped_refptr<AuthChallengeInfo> auth_info =
       auth_controllers_[target]->auth_info();

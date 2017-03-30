@@ -4,6 +4,8 @@
 
 #include "ui/arc/notification/arc_notification_manager.h"
 
+#include "ash/shell.h"
+#include "ash/system/toast/toast_manager.h"
 #include "base/stl_util.h"
 #include "ui/arc/notification/arc_notification_item.h"
 
@@ -11,8 +13,17 @@ namespace arc {
 
 ArcNotificationManager::ArcNotificationManager(ArcBridgeService* bridge_service,
                                                const AccountId& main_profile_id)
+    : ArcNotificationManager(bridge_service,
+                             main_profile_id,
+                             message_center::MessageCenter::Get()) {}
+
+ArcNotificationManager::ArcNotificationManager(
+    ArcBridgeService* bridge_service,
+    const AccountId& main_profile_id,
+    message_center::MessageCenter* message_center)
     : ArcService(bridge_service),
       main_profile_id_(main_profile_id),
+      message_center_(message_center),
       binding_(this) {
   arc_bridge_service()->AddObserver(this);
 }
@@ -37,40 +48,46 @@ void ArcNotificationManager::OnNotificationsInstanceReady() {
 void ArcNotificationManager::OnNotificationsInstanceClosed() {
   DCHECK(ready_);
   while (!items_.empty()) {
-    auto item = items_.begin();
-    item->second->OnClosedFromAndroid(false /* by_user */);
-    items_.erase(item);
+    auto it = items_.begin();
+    scoped_ptr<ArcNotificationItem> item = std::move(it->second);
+    items_.erase(it);
+    item->OnClosedFromAndroid(false /* by_user */);
   }
   ready_ = false;
 }
 
 void ArcNotificationManager::OnNotificationPosted(ArcNotificationDataPtr data) {
-  ArcNotificationItem* item = items_.get(data->key);
-  if (!item) {
+  const std::string& key = data->key;
+  auto it = items_.find(key);
+  if (it == items_.end()) {
     // Show a notification on the primary loged-in user's desktop.
     // TODO(yoshiki): Reconsider when ARC supports multi-user.
-    item = new ArcNotificationItem(this, message_center::MessageCenter::Get(),
-                                   data->key, main_profile_id_);
-    items_.set(data->key, make_scoped_ptr(item));
+    ArcNotificationItem* item =
+        new ArcNotificationItem(this, message_center_, key, main_profile_id_);
+    // TODO(yoshiki): Use emplacement for performance when it's available.
+    auto result = items_.insert(std::make_pair(key, make_scoped_ptr(item)));
+    DCHECK(result.second);
+    it = result.first;
   }
-  item->UpdateWithArcNotificationData(*data);
+  it->second->UpdateWithArcNotificationData(*data);
 }
 
 void ArcNotificationManager::OnNotificationRemoved(const mojo::String& key) {
-  ItemMap::iterator it = items_.find(key.get());
+  auto it = items_.find(key.get());
   if (it == items_.end()) {
     VLOG(3) << "Android requests to remove a notification (key: " << key
             << "), but it is already gone.";
     return;
   }
 
-  scoped_ptr<ArcNotificationItem> item(items_.take_and_erase(it));
+  scoped_ptr<ArcNotificationItem> item = std::move(it->second);
+  items_.erase(it);
   item->OnClosedFromAndroid(true /* by_user */);
 }
 
 void ArcNotificationManager::SendNotificationRemovedFromChrome(
     const std::string& key) {
-  ItemMap::iterator it = items_.find(key);
+  auto it = items_.find(key);
   if (it == items_.end()) {
     VLOG(3) << "Chrome requests to remove a notification (key: " << key
             << "), but it is already gone.";
@@ -79,7 +96,8 @@ void ArcNotificationManager::SendNotificationRemovedFromChrome(
 
   // The removed ArcNotificationItem needs to live in this scope, since the
   // given argument |key| may be a part of the removed item.
-  scoped_ptr<ArcNotificationItem> item(items_.take_and_erase(it));
+  scoped_ptr<ArcNotificationItem> item = std::move(it->second);
+  items_.erase(it);
 
   auto notifications_instance = arc_bridge_service()->notifications_instance();
 
@@ -96,7 +114,7 @@ void ArcNotificationManager::SendNotificationRemovedFromChrome(
 
 void ArcNotificationManager::SendNotificationClickedOnChrome(
     const std::string& key) {
-  if (!items_.contains(key)) {
+  if (items_.find(key) == items_.end()) {
     VLOG(3) << "Chrome requests to fire a click event on notification (key: "
             << key << "), but it is gone.";
     return;
@@ -117,7 +135,7 @@ void ArcNotificationManager::SendNotificationClickedOnChrome(
 
 void ArcNotificationManager::SendNotificationButtonClickedOnChrome(
     const std::string& key, int button_index) {
-  if (!items_.contains(key)) {
+  if (items_.find(key) == items_.end()) {
     VLOG(3) << "Chrome requests to fire a click event on notification (key: "
             << key << "), but it is gone.";
     return;
@@ -135,19 +153,19 @@ void ArcNotificationManager::SendNotificationButtonClickedOnChrome(
   arc::ArcNotificationEvent command;
   switch (button_index) {
     case 0:
-      command = ArcNotificationEvent::BUTTON1_CLICKED;
+      command = ArcNotificationEvent::BUTTON_1_CLICKED;
       break;
     case 1:
-      command = ArcNotificationEvent::BUTTON2_CLICKED;
+      command = ArcNotificationEvent::BUTTON_2_CLICKED;
       break;
     case 2:
-      command = ArcNotificationEvent::BUTTON3_CLICKED;
+      command = ArcNotificationEvent::BUTTON_3_CLICKED;
       break;
     case 3:
-      command = ArcNotificationEvent::BUTTON4_CLICKED;
+      command = ArcNotificationEvent::BUTTON_4_CLICKED;
       break;
     case 4:
-      command = ArcNotificationEvent::BUTTON5_CLICKED;
+      command = ArcNotificationEvent::BUTTON_5_CLICKED;
       break;
     default:
       VLOG(3) << "Invalid button index (key: " << key << ", index: " <<
@@ -156,6 +174,14 @@ void ArcNotificationManager::SendNotificationButtonClickedOnChrome(
   }
 
   notifications_instance->SendNotificationEventToAndroid(key, command);
+}
+
+void ArcNotificationManager::OnToastPosted(ArcToastDataPtr data) {
+  ash::Shell::GetInstance()->toast_manager()->Show(data->text, data->duration);
+}
+
+void ArcNotificationManager::OnToastCancelled(ArcToastDataPtr data) {
+  // TODO(yoshiki): Implement cancel.
 }
 
 }  // namespace arc

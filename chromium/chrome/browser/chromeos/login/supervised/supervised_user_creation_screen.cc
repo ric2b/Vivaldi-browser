@@ -30,6 +30,7 @@
 #include "chrome/browser/supervised_user/legacy/supervised_user_sync_service.h"
 #include "chrome/browser/supervised_user/legacy/supervised_user_sync_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
+#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
@@ -530,7 +531,7 @@ void SupervisedUserCreationScreen::OnCameraPresenceCheckDone(
 void SupervisedUserCreationScreen::OnGetSupervisedUsers(
     const base::DictionaryValue* users) {
   // Copy for passing to WebUI, contains only id, name and avatar URL.
-  scoped_ptr<base::ListValue> ui_users(new base::ListValue());
+  std::unique_ptr<base::ListValue> ui_users(new base::ListValue());
   SupervisedUserManager* supervised_user_manager =
       ChromeUserManager::Get()->GetSupervisedUserManager();
 

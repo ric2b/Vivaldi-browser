@@ -18,6 +18,7 @@
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_view_impl.h"
+#include "content/renderer/web_frame_utils.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -138,12 +139,12 @@ AXContentTreeData BlinkAXTreeSource::GetTreeData() const {
   blink::WebDocument document = BlinkAXTreeSource::GetMainDocument();
   const blink::WebAXObject& root = GetRoot();
 
-  tree_data.title = document.title().utf8();
-  tree_data.url = document.url().string().utf8();
-  tree_data.mimetype = document.isXHTMLDocument() ? "text/xhtml" : "text/html";
+  tree_data.doctype = "html";
   tree_data.loaded = root.isLoaded();
   tree_data.loading_progress = root.estimatedLoadingProgress();
-  tree_data.doctype = "html";
+  tree_data.mimetype = document.isXHTMLDocument() ? "text/xhtml" : "text/html";
+  tree_data.title = document.title().utf8();
+  tree_data.url = document.url().string().utf8();
 
   WebAXObject focus = document.focusedAccessibilityObject();
   if (!focus.isNull())
@@ -162,19 +163,17 @@ AXContentTreeData BlinkAXTreeSource::GetTreeData() const {
     tree_data.sel_focus_offset = focus_offset;
   }
 
-  // Get the tree ID for this frame and possibly the parent frame.
+  // Get the tree ID for this frame and the parent frame.
   WebLocalFrame* web_frame = document.frame();
   if (web_frame) {
     RenderFrame* render_frame = RenderFrame::FromWebFrame(web_frame);
     tree_data.routing_id = render_frame->GetRoutingID();
 
-    // Get the tree ID for the parent frame, if it's remote.
-    // (If it's local, it's already part of this same tree.)
+    // Get the tree ID for the parent frame.
     blink::WebFrame* parent_web_frame = web_frame->parent();
-    if (parent_web_frame && parent_web_frame->isWebRemoteFrame()) {
-      RenderFrameProxy* parent_render_frame_proxy =
-          RenderFrameProxy::FromWebFrame(parent_web_frame);
-      tree_data.parent_routing_id = parent_render_frame_proxy->routing_id();
+    if (parent_web_frame) {
+      tree_data.parent_routing_id =
+          GetRoutingIdForFrameOrProxy(parent_web_frame);
     }
   }
 
@@ -309,6 +308,12 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
   if (src.color())
     dst->AddIntAttribute(ui::AX_ATTR_COLOR, src.color());
 
+  if (src.fontFamily().length()) {
+    WebAXObject parent = src.parentObject();
+    if (parent.isNull() || parent.fontFamily() != src.fontFamily())
+      dst->AddStringAttribute(ui::AX_ATTR_FONT_FAMILY, src.fontFamily().utf8());
+  }
+
   // Font size is in pixels.
   if (src.fontSize())
     dst->AddFloatAttribute(ui::AX_ATTR_FONT_SIZE, src.fontSize());
@@ -317,7 +322,8 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
     dst->AddIntAttribute(ui::AX_ATTR_INVALID_STATE,
                          AXInvalidStateFromBlink(src.invalidState()));
   }
-  if (src.invalidState() == blink::WebAXInvalidStateOther) {
+  if (src.invalidState() == blink::WebAXInvalidStateOther &&
+      src.ariaInvalidValue().length()) {
     dst->AddStringAttribute(
         ui::AX_ATTR_ARIA_INVALID_VALUE, src.ariaInvalidValue().utf8());
   }
@@ -364,25 +370,39 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
   if (src.actionVerb().length()) {
     dst->AddStringAttribute(ui::AX_ATTR_ACTION, src.actionVerb().utf8());
   }
-  if (src.ariaAutoComplete().length())
+
+  if (src.ariaAutoComplete().length()) {
     dst->AddStringAttribute(
         ui::AX_ATTR_AUTO_COMPLETE,
         src.ariaAutoComplete().utf8());
+  }
+
   if (src.isAriaReadOnly())
     dst->AddBoolAttribute(ui::AX_ATTR_ARIA_READONLY, true);
+
   if (src.isButtonStateMixed())
     dst->AddBoolAttribute(ui::AX_ATTR_STATE_MIXED, true);
+
   if (src.canSetValueAttribute())
     dst->AddBoolAttribute(ui::AX_ATTR_CAN_SET_VALUE, true);
+
   if (src.hasComputedStyle()) {
     dst->AddStringAttribute(
         ui::AX_ATTR_DISPLAY, src.computedStyleDisplay().utf8());
   }
+
+  if (src.language().length()) {
+    WebAXObject parent = src.parentObject();
+    if (parent.isNull() || parent.language() != src.language())
+      dst->AddStringAttribute(ui::AX_ATTR_LANGUAGE, src.language().utf8());
+  }
+
   if (src.keyboardShortcut().length()) {
     dst->AddStringAttribute(
         ui::AX_ATTR_SHORTCUT,
         src.keyboardShortcut().utf8());
   }
+
   if (!src.ariaActiveDescendant().isDetached()) {
     dst->AddIntAttribute(ui::AX_ATTR_ACTIVEDESCENDANT_ID,
                          src.ariaActiveDescendant().axID());
@@ -465,17 +485,13 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
           browser_plugin->browser_plugin_instance_id());
     }
 
-    // Out-of-process iframe.
+    // Iframe.
     if (is_iframe) {
       WebFrame* frame = WebFrame::fromFrameOwnerElement(element);
-
-      if (frame && frame->isWebRemoteFrame()) {
-        RenderFrameProxy* render_frame_proxy =
-            RenderFrameProxy::FromWebFrame(frame);
-        DCHECK(render_frame_proxy);
+      if (frame) {
         dst->AddContentIntAttribute(
             AX_CONTENT_ATTR_CHILD_ROUTING_ID,
-            render_frame_proxy->routing_id());
+            GetRoutingIdForFrameOrProxy(frame));
       }
     }
   }
@@ -517,8 +533,11 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
                            src.minValueForRange());
   }
 
-  if (dst->role == ui::AX_ROLE_WEB_AREA)
+  if (dst->role == ui::AX_ROLE_WEB_AREA) {
     dst->AddStringAttribute(ui::AX_ATTR_HTML_TAG, "#document");
+    dst->transform.reset(
+        new gfx::Transform(src.transformFromLocalParentFrame()));
+  }
 
   if (dst->role == ui::AX_ROLE_TABLE) {
     int column_count = src.columnCount();

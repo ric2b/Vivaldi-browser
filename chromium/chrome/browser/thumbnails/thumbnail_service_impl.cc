@@ -77,8 +77,7 @@ bool ThumbnailServiceImpl::GetPageThumbnail(
   // we want to reuse the base thumbnail regardless of what
   // params are put in.  This allow us to use multiple urls for the same
   // thumbnail (for example use param to indicate update).
-  prefix_match = (!url.host().compare("tab_thumbnail") ||
-    !url.host().compare("bookmark_thumbnail")) 
+  prefix_match = !url.host().compare("bookmark_thumbnail")
     ? true : prefix_match;
 
   return local_ptr->GetPageThumbnail(url, prefix_match, bytes);

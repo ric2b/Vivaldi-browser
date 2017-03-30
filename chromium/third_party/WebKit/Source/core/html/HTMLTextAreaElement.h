@@ -24,6 +24,7 @@
 #ifndef HTMLTextAreaElement_h
 #define HTMLTextAreaElement_h
 
+#include "base/gtest_prod_util.h"
 #include "core/CoreExport.h"
 #include "core/html/HTMLTextFormControlElement.h"
 
@@ -35,7 +36,7 @@ class ExceptionState;
 class CORE_EXPORT HTMLTextAreaElement final : public HTMLTextFormControlElement {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static PassRefPtrWillBeRawPtr<HTMLTextAreaElement> create(Document&, HTMLFormElement*);
+    static RawPtr<HTMLTextAreaElement> create(Document&, HTMLFormElement*);
 
     unsigned cols() const { return m_cols; }
     unsigned rows() const { return m_rows; }
@@ -66,6 +67,7 @@ public:
     void setRows(unsigned);
 
 private:
+    FRIEND_TEST_ALL_PREFIXES(HTMLTextAreaElementTest, SanitizeUserInputValue);
     HTMLTextAreaElement(Document&, HTMLFormElement*);
 
     enum WrapMethod { NoWrap, SoftWrap, HardWrap };

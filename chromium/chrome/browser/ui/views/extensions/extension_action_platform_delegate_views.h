@@ -34,10 +34,11 @@ class ExtensionActionPlatformDelegateViews
   // ExtensionActionPlatformDelegate:
   void RegisterCommand() override;
   void ShowPopup(
-      scoped_ptr<extensions::ExtensionViewHost> host,
+      std::unique_ptr<extensions::ExtensionViewHost> host,
       bool grant_tab_permissions,
       ExtensionActionViewController::PopupShowAction show_action) override;
   void CloseOverflowMenu() override;
+  void ShowContextMenu() override;
 
   // content::NotificationObserver:
   void Observe(int type,
@@ -60,7 +61,7 @@ class ExtensionActionPlatformDelegateViews
 
   // The extension key binding accelerator this extension action is listening
   // for (to show the popup).
-  scoped_ptr<ui::Accelerator> action_keybinding_;
+  std::unique_ptr<ui::Accelerator> action_keybinding_;
 
   content::NotificationRegistrar registrar_;
 

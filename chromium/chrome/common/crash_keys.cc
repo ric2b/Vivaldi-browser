@@ -139,7 +139,6 @@ size_t RegisterChromeCrashKeys() {
     { "remove_route_bt", kMediumSize },
     { "rwhvm_window", kMediumSize },
     // media/:
-    { "VideoCaptureDeviceQTKit", kSmallSize },
 #endif
 #if BUILDFLAG(ENABLE_KASKO)
     { kKaskoGuid, kSmallSize },
@@ -174,6 +173,16 @@ size_t RegisterChromeCrashKeys() {
     { "initrf_view_id", kSmallSize },
     { "initrf_main_frame_id", kSmallSize },
     { "initrf_view_is_live", kSmallSize },
+
+    // Temporary for https://crbug.com/591478.
+    { "initrf_parent_proxy_exists", kSmallSize },
+    { "initrf_render_view_is_live", kSmallSize },
+    { "initrf_parent_is_in_same_site_instance", kSmallSize},
+    { "initrf_parent_process_is_live", kSmallSize},
+    { "initrf_root_is_in_same_site_instance", kSmallSize},
+    { "initrf_root_is_in_same_site_instance_as_parent", kSmallSize},
+    { "initrf_root_process_is_live", kSmallSize},
+    { "initrf_root_proxy_is_live", kSmallSize},
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering
@@ -234,7 +243,6 @@ static bool IsBoringSwitch(const std::string& flag) {
     switches::kVModule,
 #if defined(OS_WIN)
     switches::kForceFieldTrials,
-    switches::kPluginPath,
 #elif defined(OS_MACOSX)
     switches::kMetricsClientID,
 #elif defined(OS_CHROMEOS)

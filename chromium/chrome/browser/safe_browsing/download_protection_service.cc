@@ -192,6 +192,7 @@ class DownloadSBClient
     hit_report.threat_type = threat_type;
     // TODO(nparker) Replace this with database_manager_->GetThreatSource();
     hit_report.threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;
+    // TODO(nparker) Populate hit_report.population_id once Pver4 is used here.
     hit_report.post_data = post_data;
     hit_report.is_extended_reporting = is_extended_reporting_;
     hit_report.is_metrics_reporting_active =
@@ -340,31 +341,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
                item_->GetTargetFilePath().MatchesExtension(
                    FILE_PATH_LITERAL(".iso")) ||
                item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".smi")) ||
-               item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".cdr")) ||
-               item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".dart")) ||
-               item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".dc42")) ||
-               item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".diskcopy42")) ||
-               item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".dmgpart")) ||
-               item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".dvdr")) ||
-               item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".imgpart")) ||
-               item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".ndif")) ||
-               item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".sparsebundle")) ||
-               item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".sparseimage")) ||
-               item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".toast")) ||
-               item_->GetTargetFilePath().MatchesExtension(
-                   FILE_PATH_LITERAL(".udif"))) {
+                   FILE_PATH_LITERAL(".smi"))) {
       StartExtractDmgFeatures();
 #endif
     } else {
@@ -654,6 +631,8 @@ class DownloadProtectionService::CheckClientDownloadRequest
   }
 
 #if defined(OS_MACOSX)
+  // This is called for .DMGs and other files that can be parsed by
+  // SandboxedDMGAnalyzer.
   void StartExtractDmgFeatures() {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     DCHECK(item_);
@@ -680,9 +659,26 @@ class DownloadProtectionService::CheckClientDownloadRequest
              << ", has_executable=" << results.has_executable
              << ", success=" << results.success;
 
-    UMA_HISTOGRAM_BOOLEAN("SBClientDownload.DmgFileSuccess", results.success);
-    UMA_HISTOGRAM_BOOLEAN("SBClientDownload.DmgFileHasExecutable",
-                          archived_executable_);
+    int uma_file_type =
+        download_protection_util::GetSBClientDownloadExtensionValueForUMA(
+            item_->GetTargetFilePath());
+
+    if (results.success) {
+      UMA_HISTOGRAM_SPARSE_SLOWLY("SBClientDownload.DmgFileSuccessByType",
+                                  uma_file_type);
+    } else {
+      UMA_HISTOGRAM_SPARSE_SLOWLY("SBClientDownload.DmgFileFailureByType",
+                                  uma_file_type);
+    }
+
+    if (archived_executable_) {
+      UMA_HISTOGRAM_SPARSE_SLOWLY("SBClientDownload.DmgFileHasExecutableByType",
+                                  uma_file_type);
+    } else {
+      UMA_HISTOGRAM_SPARSE_SLOWLY(
+          "SBClientDownload.DmgFileHasNoExecutableByType", uma_file_type);
+    }
+
     UMA_HISTOGRAM_TIMES("SBClientDownload.ExtractDmgFeaturesTime",
                         base::TimeTicks::Now() - dmg_analysis_start_time_);
 

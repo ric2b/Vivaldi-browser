@@ -13,8 +13,8 @@ namespace {
 // SiteEngagementService.EngagementScoreBucket_* histogram. If these bases
 // change, the EngagementScoreBuckets suffix in histograms.xml should be
 // updated.
-const int kEngagementBucketHistogramBuckets[] = {0,  10, 20, 30, 40,
-                                                 50, 60, 70, 80, 90};
+const int kEngagementBucketHistogramBuckets[] = {0,  10, 20, 30, 40, 50,
+                                                 60, 70, 80, 90, 100};
 
 }  // namespace
 
@@ -29,6 +29,9 @@ const char SiteEngagementMetrics::kMeanEngagementHistogram[] =
 
 const char SiteEngagementMetrics::kMedianEngagementHistogram[] =
     "SiteEngagementService.MedianEngagement";
+
+const char SiteEngagementMetrics::kEngagementPercentageForHTTPSHistogram[] =
+    "SiteEngagementService.EngagementPercentageForHTTPS";
 
 const char SiteEngagementMetrics::kEngagementScoreHistogram[] =
     "SiteEngagementService.EngagementScore";
@@ -80,22 +83,35 @@ void SiteEngagementMetrics::RecordMedianEngagement(double median_engagement) {
 }
 
 void SiteEngagementMetrics::RecordEngagementScores(
-    std::map<GURL, double> score_map) {
+    const std::map<GURL, double>& score_map) {
   if (score_map.size() == 0)
     return;
 
+  // Total up all HTTP and HTTPS engagement so we can log the percentage of
+  // engagement to HTTPS origins.
+  double total_http_https_engagement = 0;
+  double https_engagement = 0;
   std::map<int, int> score_buckets;
   for (size_t i = 0; i < arraysize(kEngagementBucketHistogramBuckets); ++i)
     score_buckets[kEngagementBucketHistogramBuckets[i]] = 0;
 
   for (const auto& value : score_map) {
-    UMA_HISTOGRAM_COUNTS_100(kEngagementScoreHistogram, value.second);
-    score_buckets.lower_bound(value.second)->second++;
+    double score = value.second;
+    UMA_HISTOGRAM_COUNTS_100(kEngagementScoreHistogram, score);
+    if (value.first.SchemeIs(url::kHttpsScheme)) {
+      UMA_HISTOGRAM_COUNTS_100(kEngagementScoreHistogramHTTPS, score);
+      https_engagement += score;
+      total_http_https_engagement += score;
+    } else if (value.first.SchemeIs(url::kHttpScheme)) {
+      UMA_HISTOGRAM_COUNTS_100(kEngagementScoreHistogramHTTP, score);
+      total_http_https_engagement += score;
+    }
 
-    if (value.first.SchemeIs(url::kHttpsScheme))
-      UMA_HISTOGRAM_COUNTS_100(kEngagementScoreHistogramHTTPS, value.second);
-    else if (value.first.SchemeIs(url::kHttpScheme))
-      UMA_HISTOGRAM_COUNTS_100(kEngagementScoreHistogramHTTP, value.second);
+    auto bucket = score_buckets.lower_bound(score);
+    if (bucket == score_buckets.end())
+      continue;
+
+    bucket->second++;
   }
 
   for (const auto& b : score_buckets) {
@@ -107,6 +123,11 @@ void SiteEngagementMetrics::RecordEngagementScores(
         base::HistogramBase::kUmaTargetedHistogramFlag)
         ->Add(b.second * 100 / score_map.size());
   }
+
+  double percentage = 0;
+  if (total_http_https_engagement > 0)
+    percentage = (https_engagement / total_http_https_engagement) * 100;
+  UMA_HISTOGRAM_PERCENTAGE(kEngagementPercentageForHTTPSHistogram, percentage);
 }
 
 void SiteEngagementMetrics::RecordOriginsWithMaxEngagement(int total_origins) {

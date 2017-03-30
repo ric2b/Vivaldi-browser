@@ -12,6 +12,7 @@ from devil.android import device_temp_file
 from devil.android import ports
 from devil.utils import reraiser_thread
 from pylib import constants
+from pylib.base import base_test_result
 from pylib.gtest import gtest_test_instance
 from pylib.local import local_test_server_spawner
 from pylib.local.device import local_device_environment
@@ -160,26 +161,18 @@ class _ApkDelegate(object):
 
 
 class _ExeDelegate(object):
-  def __init__(self, tr, exe):
-    self._exe_host_path = exe
-    self._exe_file_name = os.path.split(exe)[-1]
-    self._exe_device_path = '%s/%s' % (
-        constants.TEST_EXECUTABLE_DIR, self._exe_file_name)
-    deps_host_path = self._exe_host_path + '_deps'
-    if os.path.exists(deps_host_path):
-      self._deps_host_path = deps_host_path
-      self._deps_device_path = self._exe_device_path + '_deps'
-    else:
-      self._deps_host_path = None
+  def __init__(self, tr, dist_dir):
+    self._host_dist_dir = dist_dir
+    self._exe_file_name = os.path.basename(dist_dir)[:-len('__dist')]
+    self._device_dist_dir = posixpath.join(
+        constants.TEST_EXECUTABLE_DIR, os.path.basename(dist_dir))
     self._test_run = tr
 
   def Install(self, device):
     # TODO(jbudorick): Look into merging this with normal data deps pushing if
     # executables become supported on nonlocal environments.
-    host_device_tuples = [(self._exe_host_path, self._exe_device_path)]
-    if self._deps_host_path:
-      host_device_tuples.append((self._deps_host_path, self._deps_device_path))
-    device.PushChangedFiles(host_device_tuples)
+    device.PushChangedFiles([(self._host_dist_dir, self._device_dist_dir)],
+                            delete_device_stale=True)
 
   def Run(self, test, device, flags=None, **kwargs):
     tool = self._test_run.GetTool(device).GetTestWrapper()
@@ -187,17 +180,17 @@ class _ExeDelegate(object):
       cmd = [tool]
     else:
       cmd = []
-    cmd.append(self._exe_device_path)
+    cmd.append(posixpath.join(self._device_dist_dir, self._exe_file_name))
 
     if test:
       cmd.append('--gtest_filter=%s' % ':'.join(test))
     if flags:
+      # TODO(agrieve): This won't work if multiple flags are passed.
       cmd.append(flags)
     cwd = constants.TEST_EXECUTABLE_DIR
 
     env = {
-      'LD_LIBRARY_PATH':
-          '%s/%s_deps' % (constants.TEST_EXECUTABLE_DIR, self._exe_file_name),
+      'LD_LIBRARY_PATH': self._device_dist_dir
     }
     try:
       gcov_strip_depth = os.environ['NATIVE_COVERAGE_DEPTH_STRIP']
@@ -227,9 +220,9 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
 
     if self._test_instance.apk:
       self._delegate = _ApkDelegate(self._test_instance)
-    elif self._test_instance.exe:
-      self._delegate = _ExeDelegate(self, self._test_instance.exe)
-
+    elif self._test_instance.exe_dist_dir:
+      self._delegate = _ExeDelegate(self, self._test_instance.exe_dist_dir)
+    self._crashes = set()
     self._servers = collections.defaultdict(list)
 
   #override
@@ -283,8 +276,19 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
 
   #override
   def _CreateShards(self, tests):
+    # _crashes are tests that might crash and make the tests in the same shard
+    # following the crashed testcase not run.
+    # Thus we need to create separate shards for each crashed testcase,
+    # so that other tests can be run.
     device_count = len(self._env.devices)
     shards = []
+
+    # Add shards with only one suspect testcase.
+    shards += [[crash] for crash in self._crashes if crash in tests]
+
+    # Delete suspect testcase from tests.
+    tests = [test for test in tests if not test in self._crashes]
+
     for i in xrange(0, device_count):
       unbounded_shard = tests[i::device_count]
       shards += [unbounded_shard[j:j+_MAX_SHARD_SIZE]
@@ -315,8 +319,11 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
 
     # Query all devices in case one fails.
     test_lists = self._env.parallel_devices.pMap(list_tests).pGet(None)
-    # TODO(agrieve): Make this fail rather than return an empty list when
-    #     all devices fail.
+
+    # If all devices failed to list tests, raise an exception.
+    if all([tl is None for tl in test_lists]):
+      raise device_errors.CommandFailedError(
+          'Failed to list tests on any device')
     return list(sorted(set().union(*[set(tl) for tl in test_lists if tl])))
 
   #override
@@ -338,6 +345,10 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
     # Parse the output.
     # TODO(jbudorick): Transition test scripts away from parsing stdout.
     results = self._test_instance.ParseGTestOutput(output)
+
+    # Check whether there are any crashed testcases.
+    self._crashes.update(r.GetName() for r in results
+                         if r.GetType() == base_test_result.ResultType.CRASH)
     return results
 
   #override

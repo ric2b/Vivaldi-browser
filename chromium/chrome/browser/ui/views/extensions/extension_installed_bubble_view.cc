@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/profiles/profile.h"
@@ -178,13 +179,13 @@ void ExtensionInstalledBubbleView::UpdateAnchorView() {
   SetAnchorView(reference_view);
 }
 
-scoped_ptr<views::View> ExtensionInstalledBubbleView::CreateFootnoteView() {
+views::View* ExtensionInstalledBubbleView::CreateFootnoteView() {
   if (!(bubble_->options() & ExtensionInstalledBubble::SIGN_IN_PROMO))
     return nullptr;
 
-  return scoped_ptr<views::View>(
-      new BubbleSyncPromoView(this, IDS_EXTENSION_INSTALLED_SYNC_PROMO_LINK_NEW,
-                              IDS_EXTENSION_INSTALLED_SYNC_PROMO_NEW));
+  return new BubbleSyncPromoView(this,
+                                 IDS_EXTENSION_INSTALLED_SYNC_PROMO_LINK_NEW,
+                                 IDS_EXTENSION_INSTALLED_SYNC_PROMO_NEW);
 }
 
 void ExtensionInstalledBubbleView::WindowClosing() {
@@ -394,8 +395,8 @@ class ExtensionInstalledBubbleUi : public BubbleUi {
 };
 
 // Implemented here to create the platform specific instance of the BubbleUi.
-scoped_ptr<BubbleUi> ExtensionInstalledBubble::BuildBubbleUi() {
-  return make_scoped_ptr(new ExtensionInstalledBubbleUi(this));
+std::unique_ptr<BubbleUi> ExtensionInstalledBubble::BuildBubbleUi() {
+  return base::WrapUnique(new ExtensionInstalledBubbleUi(this));
 }
 
 ExtensionInstalledBubbleUi::ExtensionInstalledBubbleUi(

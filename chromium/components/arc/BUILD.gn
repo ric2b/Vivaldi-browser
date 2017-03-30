@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
 
 static_library("arc") {
   sources = [
@@ -16,17 +17,31 @@ static_library("arc") {
     "arc_service.h",
     "arc_service_manager.cc",
     "arc_service_manager.h",
-    "auth/arc_auth_fetcher.cc",
-    "auth/arc_auth_fetcher.h",
+    "audio/arc_audio_bridge.cc",
+    "audio/arc_audio_bridge.h",
+    "bluetooth/arc_bluetooth_bridge.cc",
+    "bluetooth/arc_bluetooth_bridge.h",
+    "bluetooth/bluetooth_type_converters.cc",
+    "bluetooth/bluetooth_type_converters.h",
     "clipboard/arc_clipboard_bridge.cc",
     "clipboard/arc_clipboard_bridge.h",
-    "ime/arc_ime_bridge.cc",
+    "crash_collector/arc_crash_collector_bridge.cc",
+    "crash_collector/arc_crash_collector_bridge.h",
     "ime/arc_ime_bridge.h",
-    "ime/arc_ime_ipc_host.h",
-    "ime/arc_ime_ipc_host_impl.cc",
-    "ime/arc_ime_ipc_host_impl.h",
+    "ime/arc_ime_bridge_impl.cc",
+    "ime/arc_ime_bridge_impl.h",
+    "ime/arc_ime_service.cc",
+    "ime/arc_ime_service.h",
     "input/arc_input_bridge.cc",
     "input/arc_input_bridge.h",
+    "intent_helper/arc_intent_helper_bridge.cc",
+    "intent_helper/arc_intent_helper_bridge.h",
+    "intent_helper/font_size_util.cc",
+    "intent_helper/font_size_util.h",
+    "metrics/arc_low_memory_killer_monitor.cc",
+    "metrics/arc_low_memory_killer_monitor.h",
+    "metrics/arc_metrics_service.cc",
+    "metrics/arc_metrics_service.h",
     "net/arc_net_host_impl.cc",
     "net/arc_net_host_impl.h",
     "power/arc_power_bridge.cc",
@@ -42,10 +57,12 @@ static_library("arc") {
     "//components/onc",
     "//components/prefs",
     "//components/signin/core/account_id",
+    "//device/bluetooth",
     "//google_apis",
     "//ipc:ipc",
     "//ipc/mojo:mojo",
     "//mojo/edk/system",
+    "//third_party/re2:re2",
     "//ui/arc",
     "//ui/aura",
     "//ui/base:base",
@@ -53,6 +70,7 @@ static_library("arc") {
     "//ui/display:display",
     "//ui/events",
     "//ui/events:dom_keycode_converter",
+    "//url:url",
   ]
 
   public_deps = [
@@ -64,13 +82,17 @@ mojom("arc_bindings") {
   sources = [
     "common/app.mojom",
     "common/arc_bridge.mojom",
+    "common/audio.mojom",
     "common/auth.mojom",
+    "common/bluetooth.mojom",
     "common/clipboard.mojom",
+    "common/crash_collector.mojom",
     "common/ime.mojom",
     "common/input.mojom",
     "common/intent_helper.mojom",
     "common/net.mojom",
     "common/notifications.mojom",
+    "common/policy.mojom",
     "common/power.mojom",
     "common/process.mojom",
     "common/video.mojom",
@@ -82,10 +104,14 @@ static_library("arc_test_support") {
   sources = [
     "test/fake_app_instance.cc",
     "test/fake_app_instance.h",
+    "test/fake_arc_bridge_bootstrap.cc",
+    "test/fake_arc_bridge_bootstrap.h",
     "test/fake_arc_bridge_instance.cc",
     "test/fake_arc_bridge_instance.h",
     "test/fake_arc_bridge_service.cc",
     "test/fake_arc_bridge_service.h",
+    "test/fake_notifications_instance.cc",
+    "test/fake_notifications_instance.h",
   ]
 
   deps = [
@@ -100,7 +126,8 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "arc_bridge_service_unittest.cc",
-    "ime/arc_ime_bridge_unittest.cc",
+    "ime/arc_ime_service_unittest.cc",
+    "intent_helper/font_size_util_unittest.cc",
   ]
 
   deps = [
@@ -110,7 +137,6 @@ source_set("unit_tests") {
     "//base",
     "//chromeos",
     "//ipc/mojo:mojo",
-    "//mojo/public/cpp/environment:environment",
     "//mojo/public/cpp/system:system",
     "//testing/gtest",
     "//ui/aura",
@@ -118,5 +144,59 @@ source_set("unit_tests") {
     "//ui/base/ime",
     "//ui/events",
     "//ui/events:dom_keycode_converter",
+  ]
+}
+
+static_library("arc_standalone_service") {
+  sources = [
+    "standalone/service_helper.cc",
+    "standalone/service_helper.h",
+  ]
+
+  deps = [
+    "//base",
+  ]
+}
+
+static_library("arc_standalone") {
+  sources = [
+    "standalone/arc_standalone_bridge_runner.cc",
+    "standalone/arc_standalone_bridge_runner.h",
+  ]
+
+  deps = [
+    ":arc",
+    ":arc_standalone_service",
+    "//base",
+    "//ipc:ipc",
+    "//ipc/mojo:mojo",
+    "//mojo/edk/system",
+  ]
+}
+
+test("arc_standalone_service_unittests") {
+  sources = [
+    "standalone/service_helper_unittest.cc",
+  ]
+
+  deps = [
+    ":arc_standalone_service",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+}
+
+executable("arc_standalone_bridge") {
+  sources = [
+    "standalone/arc_standalone_bridge_main.cc",
+  ]
+
+  deps = [
+    ":arc_standalone",
+    ":arc_standalone_service",
+    "//base",
+    "//ipc:ipc",
+    "//ipc/mojo:mojo",
+    "//mojo/edk/system",
   ]
 }

@@ -167,8 +167,7 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
       }
       break;
     case IDC_VIV_CONTENT_CONTEXT_ADDSEARCHENGINE: {
-      base::string16 keyword(TemplateURL::GenerateKeyword(
-          params.page_url, prefs::kAcceptLanguages));
+      base::string16 keyword(TemplateURL::GenerateKeyword(params.page_url));
       WebViewGuest *vivGuestView =
           WebViewGuest::FromWebContents(source_web_contents);
       base::ListValue *args = new base::ListValue;

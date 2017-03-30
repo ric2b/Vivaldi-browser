@@ -7,6 +7,7 @@ package org.chromium.net;
 import android.os.ConditionVariable;
 import android.test.suitebuilder.annotation.SmallTest;
 
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.net.CronetTestBase.OnlyRunNativeCronet;
 import org.chromium.net.TestBidirectionalStreamCallback.FailureType;
@@ -550,6 +551,8 @@ public class BidirectionalStreamTest extends CronetTestBase {
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunNativeCronet
+    // Disabled due to timeout. See crbug.com/591112
+    @DisabledTest
     public void testReadAndWrite() throws Exception {
         String url = Http2TestServer.getEchoStreamUrl();
         TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback() {
@@ -808,8 +811,8 @@ public class BidirectionalStreamTest extends CronetTestBase {
         assertEquals("GET", callback.mResponseAsString);
     }
 
-    private void throwOrCancel(FailureType failureType, ResponseStep failureStep,
-            boolean expectResponseInfo, boolean expectError) {
+    private void throwOrCancel(
+            FailureType failureType, ResponseStep failureStep, boolean expectError) {
         TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
         callback.setFailure(failureType, failureStep);
         BidirectionalStream.Builder builder =
@@ -820,7 +823,13 @@ public class BidirectionalStreamTest extends CronetTestBase {
         callback.blockForDone();
         // assertEquals(callback.mResponseStep, failureStep);
         assertTrue(stream.isDone());
-        assertEquals(expectResponseInfo, callback.mResponseInfo != null);
+        // Cancellation when request headers are sent does not guarantee that
+        // mResponseInfo is null because there might be a
+        // onResponseHeadersReceived already queued in the executor.
+        // See crbug.com/594432.
+        if (failureStep != ResponseStep.ON_REQUEST_HEADERS_SENT) {
+            assertNotNull(callback.mResponseInfo);
+        }
         assertEquals(expectError, callback.mError != null);
         assertEquals(expectError, callback.mOnErrorCalled);
         assertEquals(failureType == FailureType.CANCEL_SYNC
@@ -833,23 +842,23 @@ public class BidirectionalStreamTest extends CronetTestBase {
     @Feature({"Cronet"})
     @OnlyRunNativeCronet
     public void testFailures() throws Exception {
-        throwOrCancel(FailureType.CANCEL_SYNC, ResponseStep.ON_REQUEST_HEADERS_SENT, false, false);
-        throwOrCancel(FailureType.CANCEL_ASYNC, ResponseStep.ON_REQUEST_HEADERS_SENT, false, false);
+        throwOrCancel(FailureType.CANCEL_SYNC, ResponseStep.ON_REQUEST_HEADERS_SENT, false);
+        throwOrCancel(FailureType.CANCEL_ASYNC, ResponseStep.ON_REQUEST_HEADERS_SENT, false);
         throwOrCancel(FailureType.CANCEL_ASYNC_WITHOUT_PAUSE, ResponseStep.ON_REQUEST_HEADERS_SENT,
-                false, false);
-        throwOrCancel(FailureType.THROW_SYNC, ResponseStep.ON_REQUEST_HEADERS_SENT, false, true);
-
-        throwOrCancel(FailureType.CANCEL_SYNC, ResponseStep.ON_RESPONSE_STARTED, true, false);
-        throwOrCancel(FailureType.CANCEL_ASYNC, ResponseStep.ON_RESPONSE_STARTED, true, false);
-        throwOrCancel(FailureType.CANCEL_ASYNC_WITHOUT_PAUSE, ResponseStep.ON_RESPONSE_STARTED,
-                true, false);
-        throwOrCancel(FailureType.THROW_SYNC, ResponseStep.ON_RESPONSE_STARTED, true, true);
-
-        throwOrCancel(FailureType.CANCEL_SYNC, ResponseStep.ON_READ_COMPLETED, true, false);
-        throwOrCancel(FailureType.CANCEL_ASYNC, ResponseStep.ON_READ_COMPLETED, true, false);
-        throwOrCancel(FailureType.CANCEL_ASYNC_WITHOUT_PAUSE, ResponseStep.ON_READ_COMPLETED, true,
                 false);
-        throwOrCancel(FailureType.THROW_SYNC, ResponseStep.ON_READ_COMPLETED, true, true);
+        throwOrCancel(FailureType.THROW_SYNC, ResponseStep.ON_REQUEST_HEADERS_SENT, true);
+
+        throwOrCancel(FailureType.CANCEL_SYNC, ResponseStep.ON_RESPONSE_STARTED, false);
+        throwOrCancel(FailureType.CANCEL_ASYNC, ResponseStep.ON_RESPONSE_STARTED, false);
+        throwOrCancel(
+                FailureType.CANCEL_ASYNC_WITHOUT_PAUSE, ResponseStep.ON_RESPONSE_STARTED, false);
+        throwOrCancel(FailureType.THROW_SYNC, ResponseStep.ON_RESPONSE_STARTED, true);
+
+        throwOrCancel(FailureType.CANCEL_SYNC, ResponseStep.ON_READ_COMPLETED, false);
+        throwOrCancel(FailureType.CANCEL_ASYNC, ResponseStep.ON_READ_COMPLETED, false);
+        throwOrCancel(
+                FailureType.CANCEL_ASYNC_WITHOUT_PAUSE, ResponseStep.ON_READ_COMPLETED, false);
+        throwOrCancel(FailureType.THROW_SYNC, ResponseStep.ON_READ_COMPLETED, true);
     }
 
     @SmallTest

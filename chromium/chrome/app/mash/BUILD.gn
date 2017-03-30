@@ -10,8 +10,6 @@ source_set("mash") {
     "mash_runner.h",
   ]
   deps = [
-    ":chrome_manifest",
-    ":manifest",
     "//ash/mus:lib",
     "//ash/resources",
     "//base:i18n",
@@ -19,9 +17,9 @@ source_set("mash") {
     "//components/resource_provider:lib",
     "//content/public/common",
     "//mash/quick_launch:lib",
-    "//mash/shell:lib",
+    "//mash/session:lib",
+    "//mash/task_viewer:lib",
     "//mash/wm:lib",
-    "//mojo/common:mojo_scheme_register",
     "//mojo/shell",
     "//mojo/shell/background:lib",
     "//mojo/shell/public/cpp",
@@ -30,6 +28,9 @@ source_set("mash") {
     "//mojo/shell/runner/host:child_process_base",
     "//mojo/shell/runner/host:lib",
     "//url",
+  ]
+  data_deps = [
+    ":manifest",
   ]
 
   if (is_linux && !is_android) {
@@ -46,26 +47,22 @@ mojo_application_manifest("manifest") {
     "//components/mus:manifest",
     "//components/resource_provider:manifest",
     "//mash/quick_launch:manifest",
-    "//mash/shell:manifest",
+    "//mash/session:manifest",
+    "//mash/task_viewer:manifest",
     "//mash/wm:manifest",
   ]
   packaged_applications = [
     "ash_sysui",
     "desktop_wm",
-    "mash_shell",
+    "mash_session",
     "mus",
     "quick_launch",
     "resource_provider",
+    "task_viewer",
   ]
 
   if (is_linux && !is_android) {
     deps += [ "//components/font_service:manifest" ]
     packaged_applications += [ "font_service" ]
   }
-}
-
-mojo_application_manifest("chrome_manifest") {
-  type = "exe"
-  application_name = "chrome"
-  source = "chrome_manifest.json"
 }

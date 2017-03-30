@@ -108,9 +108,9 @@ SharedModuleService::ImportStatus SharedModuleService::SatisfyImports(
   return status;
 }
 
-scoped_ptr<ExtensionSet> SharedModuleService::GetDependentExtensions(
+std::unique_ptr<ExtensionSet> SharedModuleService::GetDependentExtensions(
     const Extension* extension) {
-  scoped_ptr<ExtensionSet> dependents(new ExtensionSet());
+  std::unique_ptr<ExtensionSet> dependents(new ExtensionSet());
 
   if (SharedModuleInfo::IsSharedModule(extension)) {
     ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context_);
@@ -187,6 +187,11 @@ void SharedModuleService::OnExtensionUninstalled(
     content::BrowserContext* browser_context,
     const Extension* extension,
     extensions::UninstallReason reason) {
+  // Do not call PruneSharedModules() for an uninstall that we were responsible
+  // for.
+  if (reason == extensions::UNINSTALL_REASON_ORPHANED_SHARED_MODULE)
+    return;
+
   PruneSharedModules();
 }
 

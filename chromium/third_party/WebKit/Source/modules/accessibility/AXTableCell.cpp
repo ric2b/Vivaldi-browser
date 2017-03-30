@@ -52,7 +52,7 @@ AXTableCell* AXTableCell::create(LayoutObject* layoutObject, AXObjectCacheImpl& 
 
 bool AXTableCell::isTableHeaderCell() const
 {
-    return node() && node()->hasTagName(thTag);
+    return getNode() && getNode()->hasTagName(thTag);
 }
 
 bool AXTableCell::isRowHeaderCell() const
@@ -197,7 +197,7 @@ void AXTableCell::columnIndexRange(std::pair<unsigned, unsigned>& columnRange)
     columnRange.second = cell->table()->absoluteColumnToEffectiveColumn(cell->absoluteColumnIndex() + cell->colSpan()) - columnRange.first;
 }
 
-SortDirection AXTableCell::sortDirection() const
+SortDirection AXTableCell::getSortDirection() const
 {
     if (roleValue() != RowHeaderRole
         && roleValue() != ColumnHeaderRole)

@@ -9,6 +9,7 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -46,9 +47,9 @@ const char kId1[] = "iccfkkhkfiphcjdakkmcjmkfboccmndk";
 const char kId2[] = "ajjhifimiemdpmophmkkkcijegphclbl";
 const char kId3[] = "ioibbbfddncmmabjmpokikkeiofalaek";
 
-scoped_ptr<KeyedService> BuildOverrideRegistrar(
+std::unique_ptr<KeyedService> BuildOverrideRegistrar(
     content::BrowserContext* context) {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new extensions::ExtensionWebUIOverrideRegistrar(context));
 }
 
@@ -150,11 +151,11 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
                                                 const std::string& id,
                                                 Manifest::Location location) {
     ExtensionBuilder builder;
-    builder.SetManifest(
-        std::move(DictionaryBuilder()
-                      .Set("name", std::string("Extension " + index))
-                      .Set("version", "1.0")
-                      .Set("manifest_version", 2)));
+    builder.SetManifest(DictionaryBuilder()
+                            .Set("name", std::string("Extension " + index))
+                            .Set("version", "1.0")
+                            .Set("manifest_version", 2)
+                            .Build());
     builder.SetLocation(location);
     builder.SetID(id);
     service_->AddExtension(builder.Build().get());
@@ -169,13 +170,15 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
       const std::string& id,
       Manifest::Location location) {
     ExtensionBuilder builder;
-    builder.SetManifest(std::move(
+    builder.SetManifest(
         DictionaryBuilder()
             .Set("name", std::string("Extension " + index))
             .Set("version", "1.0")
             .Set("manifest_version", 2)
-            .Set("browser_action", std::move(DictionaryBuilder().Set(
-                                       "default_title", "Default title")))));
+            .Set("browser_action", DictionaryBuilder()
+                                       .Set("default_title", "Default title")
+                                       .Build())
+            .Build());
     builder.SetLocation(location);
     builder.SetID(id);
     service_->AddExtension(builder.Build().get());
@@ -190,14 +193,15 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
       const std::string& id,
       Manifest::Location location) {
     ExtensionBuilder builder;
-    builder.SetManifest(
-        std::move(DictionaryBuilder()
-                      .Set("name", std::string("Extension " + index))
-                      .Set("version", "1.0")
-                      .Set("manifest_version", 2)
-                      .Set("chrome_settings_overrides",
-                           std::move(DictionaryBuilder().Set(
-                               "homepage", "http://www.google.com")))));
+    builder.SetManifest(DictionaryBuilder()
+                            .Set("name", std::string("Extension " + index))
+                            .Set("version", "1.0")
+                            .Set("manifest_version", 2)
+                            .Set("chrome_settings_overrides",
+                                 DictionaryBuilder()
+                                     .Set("homepage", "http://www.google.com")
+                                     .Build())
+                            .Build());
     builder.SetLocation(location);
     builder.SetID(id);
     service_->AddExtension(builder.Build().get());
@@ -212,15 +216,17 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
       const std::string& id,
       Manifest::Location location) {
     ExtensionBuilder builder;
-    builder.SetManifest(std::move(
+    builder.SetManifest(
         DictionaryBuilder()
             .Set("name", std::string("Extension " + index))
             .Set("version", "1.0")
             .Set("manifest_version", 2)
             .Set("chrome_settings_overrides",
-                 std::move(DictionaryBuilder().Set(
-                     "startup_pages", std::move(ListBuilder().Append(
-                                          "http://www.google.com")))))));
+                 DictionaryBuilder()
+                     .Set("startup_pages",
+                          ListBuilder().Append("http://www.google.com").Build())
+                     .Build())
+            .Build());
     builder.SetLocation(location);
     builder.SetID(id);
     service_->AddExtension(builder.Build().get());
@@ -235,13 +241,14 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
       const std::string& id,
       Manifest::Location location) {
     ExtensionBuilder builder;
-    builder.SetManifest(std::move(
+    builder.SetManifest(
         DictionaryBuilder()
             .Set("name", std::string("Extension " + index))
             .Set("version", "1.0")
             .Set("manifest_version", 2)
-            .Set("chrome_url_overrides", std::move(DictionaryBuilder().Set(
-                                             "newtab", "Default.html")))));
+            .Set("chrome_url_overrides",
+                 DictionaryBuilder().Set("newtab", "Default.html").Build())
+            .Build());
 
     builder.SetLocation(location);
     builder.SetID(id);
@@ -257,12 +264,13 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
       const std::string& id,
       Manifest::Location location) {
     ExtensionBuilder builder;
-    builder.SetManifest(std::move(
+    builder.SetManifest(
         DictionaryBuilder()
             .Set("name", std::string("Extension " + index))
             .Set("version", "1.0")
             .Set("manifest_version", 2)
-            .Set("permissions", std::move(ListBuilder().Append("proxy")))));
+            .Set("permissions", ListBuilder().Append("proxy").Build())
+            .Build());
 
     builder.SetLocation(location);
     builder.SetID(id);
@@ -323,7 +331,7 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
       Manifest::Location location,
       const std::string& data,
       const std::string& id) {
-    scoped_ptr<base::DictionaryValue> parsed_manifest(
+    std::unique_ptr<base::DictionaryValue> parsed_manifest(
         api_test_utils::ParseDictionary(data));
     return api_test_utils::CreateExtension(location, parsed_manifest.get(), id);
   }
@@ -331,7 +339,7 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
   ExtensionService* service_;
 
  private:
-  scoped_ptr<base::CommandLine> command_line_;
+  std::unique_ptr<base::CommandLine> command_line_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionMessageBubbleTest);
 };
@@ -341,7 +349,7 @@ TEST_F(ExtensionMessageBubbleTest, BubbleReshowsOnDeactivationDismissal) {
 
   ASSERT_TRUE(LoadExtensionOverridingNtp("1", kId1, Manifest::INTERNAL));
   ASSERT_TRUE(LoadExtensionOverridingNtp("2", kId2, Manifest::INTERNAL));
-  scoped_ptr<TestExtensionMessageBubbleController> controller(
+  std::unique_ptr<TestExtensionMessageBubbleController> controller(
       new TestExtensionMessageBubbleController(
           new NtpOverriddenBubbleDelegate(browser()->profile()), browser()));
 
@@ -410,7 +418,7 @@ TEST_F(ExtensionMessageBubbleTest, WipeoutControllerTest) {
   ASSERT_TRUE(LoadGenericExtension("2", kId2, Manifest::UNPACKED));
   ASSERT_TRUE(LoadGenericExtension("3", kId3, Manifest::EXTERNAL_POLICY));
 
-  scoped_ptr<TestExtensionMessageBubbleController> controller(
+  std::unique_ptr<TestExtensionMessageBubbleController> controller(
       new TestExtensionMessageBubbleController(
           new SuspiciousExtensionBubbleDelegate(browser()->profile()),
           browser()));
@@ -489,10 +497,9 @@ TEST_F(ExtensionMessageBubbleTest, DevModeControllerTest) {
   ASSERT_TRUE(LoadGenericExtension("2", kId2, Manifest::UNPACKED));
   ASSERT_TRUE(LoadGenericExtension("3", kId3, Manifest::EXTERNAL_POLICY));
 
-  scoped_ptr<TestExtensionMessageBubbleController> controller(
+  std::unique_ptr<TestExtensionMessageBubbleController> controller(
       new TestExtensionMessageBubbleController(
-          new DevModeBubbleDelegate(browser()->profile()),
-          browser()));
+          new DevModeBubbleDelegate(browser()->profile()), browser()));
 
   // The list will contain one enabled unpacked extension.
   EXPECT_TRUE(controller->ShouldShow());
@@ -623,7 +630,7 @@ TEST_F(ExtensionMessageBubbleTest, MAYBE_SettingsApiControllerTest) {
     }
 
     SettingsApiOverrideType type = static_cast<SettingsApiOverrideType>(i);
-    scoped_ptr<TestExtensionMessageBubbleController> controller(
+    std::unique_ptr<TestExtensionMessageBubbleController> controller(
         new TestExtensionMessageBubbleController(
             new SettingsApiBubbleDelegate(browser()->profile(), type),
             browser()));
@@ -734,10 +741,9 @@ TEST_F(ExtensionMessageBubbleTest, NtpOverriddenControllerTest) {
   ASSERT_TRUE(LoadExtensionOverridingNtp("2", kId2, Manifest::UNPACKED));
   ASSERT_TRUE(LoadExtensionOverridingStart("3", kId3, Manifest::UNPACKED));
 
-  scoped_ptr<TestExtensionMessageBubbleController> controller(
+  std::unique_ptr<TestExtensionMessageBubbleController> controller(
       new TestExtensionMessageBubbleController(
-          new NtpOverriddenBubbleDelegate(browser()->profile()),
-          browser()));
+          new NtpOverriddenBubbleDelegate(browser()->profile()), browser()));
 
   // The list will contain one enabled unpacked extension (ext 2).
   EXPECT_TRUE(controller->ShouldShow());
@@ -870,10 +876,9 @@ TEST_F(ExtensionMessageBubbleTest, MAYBE_ProxyOverriddenControllerTest) {
   SetInstallTime(kId2, base::Time::Now(), prefs);
   SetInstallTime(kId3, old_enough, prefs);
 
-  scoped_ptr<TestExtensionMessageBubbleController> controller(
+  std::unique_ptr<TestExtensionMessageBubbleController> controller(
       new TestExtensionMessageBubbleController(
-          new ProxyOverriddenBubbleDelegate(browser()->profile()),
-          browser()));
+          new ProxyOverriddenBubbleDelegate(browser()->profile()), browser()));
 
   // The second extension is too new to warn about.
   EXPECT_FALSE(controller->ShouldShow());

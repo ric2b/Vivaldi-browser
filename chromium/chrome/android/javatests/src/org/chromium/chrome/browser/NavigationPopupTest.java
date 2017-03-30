@@ -126,7 +126,7 @@ public class NavigationPopupTest extends ChromeActivityTestCaseBase<ChromeActivi
         }
 
         @Override
-        public void reloadIgnoringCache(boolean checkForRepost) {
+        public void reloadBypassingCache(boolean checkForRepost) {
         }
 
         @Override
@@ -237,7 +237,7 @@ public class NavigationPopupTest extends ChromeActivityTestCaseBase<ChromeActivi
             }
         });
 
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria("All favicons did not get updated.") {
+        CriteriaHelper.pollUiThread(new Criteria("All favicons did not get updated.") {
             @Override
             public boolean isSatisfied() {
                 NavigationHistory history = controller.mHistory;

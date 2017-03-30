@@ -21,6 +21,7 @@
 
 #include "core/loader/ImageLoader.h"
 
+#include "bindings/core/v8/Microtask.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8Binding.h"
@@ -28,7 +29,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/IncrementLoadEventDelayCount.h"
-#include "core/dom/Microtask.h"
 #include "core/events/Event.h"
 #include "core/events/EventSender.h"
 #include "core/fetch/FetchRequest.h"
@@ -46,23 +46,23 @@
 #include "core/layout/svg/LayoutSVGImage.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "platform/Logging.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
+#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
 
 namespace blink {
 
 static ImageEventSender& loadEventSender()
 {
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<ImageEventSender>, sender, (ImageEventSender::create(EventTypeNames::load)));
-    return *sender;
+    DEFINE_STATIC_LOCAL(ImageEventSender, sender, (ImageEventSender::create(EventTypeNames::load)));
+    return sender;
 }
 
 static ImageEventSender& errorEventSender()
 {
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<ImageEventSender>, sender, (ImageEventSender::create(EventTypeNames::error)));
-    return *sender;
+    DEFINE_STATIC_LOCAL(ImageEventSender, sender, (ImageEventSender::create(EventTypeNames::error)));
+    return sender;
 }
 
 static inline bool pageIsBeingDismissed(Document* document)
@@ -94,7 +94,7 @@ public:
         , m_referrerPolicy(referrerPolicy)
     {
         ExecutionContext& context = m_loader->element()->document();
-        m_operationId = InspectorInstrumentation::traceAsyncOperationStarting(&context, "Load image");
+        InspectorInstrumentation::asyncTaskScheduled(&context, "Image", this);
         v8::Isolate* isolate = V8PerIsolateData::mainThreadIsolate();
         v8::HandleScope scope(isolate);
         // If we're invoked from C++ without a V8 context on the stack, we should
@@ -116,14 +116,13 @@ public:
         if (!m_loader)
             return;
         ExecutionContext& context = m_loader->element()->document();
-        InspectorInstrumentationCookie cookie = InspectorInstrumentation::traceAsyncOperationCompletedCallbackStarting(&context, m_operationId);
+        InspectorInstrumentation::AsyncTask asyncTask(&context, this);
         if (m_scriptState->contextIsValid()) {
             ScriptState::Scope scope(m_scriptState.get());
             m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP, m_updateBehavior, m_referrerPolicy);
         } else {
             m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP, m_updateBehavior, m_referrerPolicy);
         }
-        InspectorInstrumentation::traceAsyncCallbackCompleted(cookie);
     }
 
     void clearLoader()
@@ -138,13 +137,12 @@ public:
     }
 
 private:
-    RawPtrWillBeWeakPersistent<ImageLoader> m_loader;
+    WeakPersistent<ImageLoader> m_loader;
     BypassMainWorldBehavior m_shouldBypassMainWorldCSP;
     UpdateFromElementBehavior m_updateBehavior;
     RefPtr<ScriptState> m_scriptState;
     WeakPtrFactory<Task> m_weakFactory;
     ReferrerPolicy m_referrerPolicy;
-    int m_operationId;
 };
 
 ImageLoader::ImageLoader(Element* element)
@@ -158,16 +156,11 @@ ImageLoader::ImageLoader(Element* element)
     , m_suppressErrorEvents(false)
 {
     WTF_LOG(Timers, "new ImageLoader %p", this);
-#if ENABLE(OILPAN)
     ThreadState::current()->registerPreFinalizer(this);
-#endif
 }
 
 ImageLoader::~ImageLoader()
 {
-#if !ENABLE(OILPAN)
-    dispose();
-#endif
 }
 
 void ImageLoader::dispose()
@@ -175,25 +168,10 @@ void ImageLoader::dispose()
     WTF_LOG(Timers, "~ImageLoader %p; m_hasPendingLoadEvent=%d, m_hasPendingErrorEvent=%d",
         this, m_hasPendingLoadEvent, m_hasPendingErrorEvent);
 
-#if !ENABLE(OILPAN)
-    if (m_pendingTask)
-        m_pendingTask->clearLoader();
-#endif
-
     if (m_image) {
-        m_image->removeClient(this);
+        m_image->removeObserver(this);
         m_image = nullptr;
     }
-
-#if !ENABLE(OILPAN)
-    ASSERT(m_hasPendingLoadEvent || !loadEventSender().hasPendingEvents(this));
-    if (m_hasPendingLoadEvent)
-        loadEventSender().cancelEvent(this);
-
-    ASSERT(m_hasPendingErrorEvent || !errorEventSender().hasPendingEvents(this));
-    if (m_hasPendingErrorEvent)
-        errorEventSender().cancelEvent(this);
-#endif
 }
 
 DEFINE_TRACE(ImageLoader)
@@ -226,10 +204,12 @@ void ImageLoader::setImageWithoutConsideringPendingLoadEvent(ImageResource* newI
             m_hasPendingErrorEvent = false;
         }
         m_imageComplete = true;
-        if (newImage)
-            newImage->addClient(this);
-        if (oldImage)
-            oldImage->removeClient(this);
+        if (newImage) {
+            newImage->addObserver(this);
+        }
+        if (oldImage) {
+            oldImage->removeObserver(this);
+        }
     }
 
     if (LayoutImageResource* imageResource = layoutImageResource())
@@ -243,7 +223,7 @@ static void configureRequest(FetchRequest& request, ImageLoader::BypassMainWorld
 
     CrossOriginAttributeValue crossOrigin = crossOriginAttributeValue(element.fastGetAttribute(HTMLNames::crossoriginAttr));
     if (crossOrigin != CrossOriginAttributeNotSet)
-        request.setCrossOriginAccessControl(element.document().securityOrigin(), crossOrigin);
+        request.setCrossOriginAccessControl(element.document().getSecurityOrigin(), crossOrigin);
 
     if (clientHintsPreferences.shouldSendResourceWidth() && isHTMLImageElement(element))
         request.setResourceWidth(toHTMLImageElement(element).getResourceWidth());
@@ -294,22 +274,20 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
 
     AtomicString imageSourceURL = m_element->imageSourceURL();
     KURL url = imageSourceToKURL(imageSourceURL);
-    RefPtrWillBeRawPtr<ImageResource> newImage = nullptr;
-    RefPtrWillBeRawPtr<Element> protectElement(m_element.get());
+    ImageResource* newImage = nullptr;
     if (!url.isNull()) {
         // Unlike raw <img>, we block mixed content inside of <picture> or <img srcset>.
         ResourceLoaderOptions resourceLoaderOptions = ResourceFetcher::defaultResourceOptions();
         ResourceRequest resourceRequest(url);
-        resourceRequest.setFetchCredentialsMode(WebURLRequest::FetchCredentialsModeSameOrigin);
         if (updateBehavior == UpdateForcedReload) {
-            resourceRequest.setCachePolicy(ResourceRequestCachePolicy::ReloadBypassingCache);
+            resourceRequest.setCachePolicy(WebCachePolicy::BypassingCache);
             resourceRequest.setLoFiState(WebURLRequest::LoFiOff);
             // ImageLoader defers the load of images when in an ImageDocument.
             // Don't defer this load on a forced reload.
             m_loadingImageDocument = false;
         }
 
-        if (RuntimeEnabledFeatures::referrerPolicyAttributeEnabled() && referrerPolicy != ReferrerPolicyDefault)
+        if (referrerPolicy != ReferrerPolicyDefault)
             resourceRequest.setHTTPReferrer(SecurityPolicy::generateReferrer(referrerPolicy, url, document.outgoingReferrer()));
 
         if (isHTMLPictureElement(element()->parentNode()) || !element()->fastGetAttribute(HTMLNames::srcsetAttr).isNull())
@@ -328,7 +306,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
 
         newImage = ImageResource::fetch(request, document.fetcher());
         if (m_loadingImageDocument && newImage)
-            newImage->setLoading(true);
+            newImage->setStatus(Resource::Pending);
 
         if (!newImage && !pageIsBeingDismissed(&document)) {
             crossSiteOrCSPViolationOccurred(imageSourceURL);
@@ -344,7 +322,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
         noImageResourceToLoad();
     }
 
-    RefPtrWillBeRawPtr<ImageResource> oldImage = m_image.get();
+    ImageResource* oldImage = m_image.get();
     if (updateBehavior == UpdateSizeChanged && m_element->layoutObject() && m_element->layoutObject()->isImage() && newImage == oldImage) {
         toLayoutImage(m_element->layoutObject())->intrinsicSizeChanged();
     } else {
@@ -367,13 +345,14 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
         m_imageComplete = !newImage;
 
         updateLayoutObject();
-        // If newImage exists and is cached, addClient() will result in the load event
+        // If newImage exists and is cached, addObserver() will result in the load event
         // being queued to fire. Ensure this happens after beforeload is dispatched.
-        if (newImage)
-            newImage->addClient(this);
-
-        if (oldImage)
-            oldImage->removeClient(this);
+        if (newImage) {
+            newImage->addObserver(this);
+        }
+        if (oldImage) {
+            oldImage->removeObserver(this);
+        }
     }
 
     if (LayoutImageResource* imageResource = layoutImageResource())
@@ -411,8 +390,9 @@ void ImageLoader::updateFromElement(UpdateFromElementBehavior updateBehavior, Re
     // an asynchronous load completes.
     if (imageSourceURL.isEmpty()) {
         ImageResource* image = m_image.get();
-        if (image)
-            image->removeClient(this);
+        if (image) {
+            image->removeObserver(this);
+        }
         m_image = nullptr;
     }
 
@@ -455,9 +435,9 @@ bool ImageLoader::shouldLoadImmediately(const KURL& url) const
     return (m_loadingImageDocument || isHTMLObjectElement(m_element) || isHTMLEmbedElement(m_element) || url.protocolIsData());
 }
 
-void ImageLoader::notifyFinished(Resource* resource)
+void ImageLoader::imageNotifyFinished(ImageResource* resource)
 {
-    WTF_LOG(Timers, "ImageLoader::notifyFinished %p; m_hasPendingLoadEvent=%d",
+    WTF_LOG(Timers, "ImageLoader::imageNotifyFinished %p; m_hasPendingLoadEvent=%d",
         this, m_hasPendingLoadEvent);
 
     ASSERT(m_failedLoadURL.isEmpty());
@@ -471,8 +451,8 @@ void ImageLoader::notifyFinished(Resource* resource)
 
     updateLayoutObject();
 
-    if (m_image && m_image->image() && m_image->image()->isSVGImage())
-        toSVGImage(m_image->image())->updateUseCounters(element()->document());
+    if (m_image && m_image->getImage() && m_image->getImage()->isSVGImage())
+        toSVGImage(m_image->getImage())->updateUseCounters(element()->document());
 
     if (!m_hasPendingLoadEvent)
         return;
@@ -607,7 +587,7 @@ void ImageLoader::dispatchPendingErrorEvent()
     updatedHasPendingEvent();
 }
 
-bool ImageLoader::getImageAnimationPolicy(ImageResource*, ImageAnimationPolicy& policy)
+bool ImageLoader::getImageAnimationPolicy(ImageAnimationPolicy& policy)
 {
     if (!element()->document().settings())
         return false;

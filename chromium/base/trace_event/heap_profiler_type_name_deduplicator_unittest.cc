@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <string>
 
 #include "base/json/json_reader.h"
-#include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/trace_event/heap_profiler_type_name_deduplicator.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
 namespace trace_event {
+
+namespace {
 
 // Define all strings once, because the deduplicator requires pointer equality,
 // and string interning is unreliable.
@@ -21,11 +22,43 @@ const char kBool[] = "bool";
 const char kString[] = "string";
 const char kNeedsEscape[] = "\"quotes\"";
 
-scoped_ptr<Value> DumpAndReadBack(const ConvertableToTraceFormat& convertable) {
+#if defined(OS_POSIX)
+const char kTaskFileName[] = "../../base/trace_event/trace_log.cc";
+const char kTaskPath[] = "base/trace_event";
+#else
+const char kTaskFileName[] = "..\\..\\base\\memory\\memory_win.cc";
+const char kTaskPath[] = "base\\memory";
+#endif
+
+std::unique_ptr<Value> DumpAndReadBack(
+    const TypeNameDeduplicator& deduplicator) {
   std::string json;
-  convertable.AppendAsTraceFormat(&json);
+  deduplicator.AppendAsTraceFormat(&json);
   return JSONReader::Read(json);
 }
+
+// Inserts a single type name into a new TypeNameDeduplicator instance and
+// checks if the value gets inserted and the exported value for |type_name| is
+// the same as |expected_value|.
+void TestInsertTypeAndReadback(const char* type_name,
+                               const char* expected_value) {
+  std::unique_ptr<TypeNameDeduplicator> dedup(new TypeNameDeduplicator);
+  ASSERT_EQ(1, dedup->Insert(type_name));
+
+  std::unique_ptr<Value> type_names = DumpAndReadBack(*dedup);
+  ASSERT_NE(nullptr, type_names);
+
+  const DictionaryValue* dictionary;
+  ASSERT_TRUE(type_names->GetAsDictionary(&dictionary));
+
+  // When the type name was inserted, it got ID 1. The exported key "1"
+  // should be equal to |expected_value|.
+  std::string value;
+  ASSERT_TRUE(dictionary->GetString("1", &value));
+  ASSERT_EQ(expected_value, value);
+}
+
+}  // namespace
 
 TEST(TypeNameDeduplicatorTest, Deduplication) {
   // The type IDs should be like this:
@@ -34,7 +67,7 @@ TEST(TypeNameDeduplicatorTest, Deduplication) {
   // 2: bool
   // 3: string
 
-  scoped_refptr<TypeNameDeduplicator> dedup = new TypeNameDeduplicator;
+  std::unique_ptr<TypeNameDeduplicator> dedup(new TypeNameDeduplicator);
   ASSERT_EQ(1, dedup->Insert(kInt));
   ASSERT_EQ(2, dedup->Insert(kBool));
   ASSERT_EQ(3, dedup->Insert(kString));
@@ -49,22 +82,14 @@ TEST(TypeNameDeduplicatorTest, Deduplication) {
 }
 
 TEST(TypeNameDeduplicatorTest, EscapeTypeName) {
-  scoped_refptr<TypeNameDeduplicator> dedup = new TypeNameDeduplicator;
-  ASSERT_EQ(1, dedup->Insert(kNeedsEscape));
-
   // Reading json should not fail, because the type name should have been
-  // escaped properly.
-  scoped_ptr<Value> type_names = DumpAndReadBack(*dedup);
-  ASSERT_NE(nullptr, type_names);
+  // escaped properly and exported value should contain quotes.
+  TestInsertTypeAndReadback(kNeedsEscape, kNeedsEscape);
+}
 
-  const DictionaryValue* dictionary;
-  ASSERT_TRUE(type_names->GetAsDictionary(&dictionary));
-
-  // When the type name was inserted, it got ID 1. The exported key "1"
-  // should contain the name, with quotes.
-  std::string type_name;
-  ASSERT_TRUE(dictionary->GetString("1", &type_name));
-  ASSERT_EQ("\"quotes\"", type_name);
+TEST(TypeNameDeduplicatorTest, TestExtractFileName) {
+  // The exported value for passed file name should be the folders in the path.
+  TestInsertTypeAndReadback(kTaskFileName, kTaskPath);
 }
 
 }  // namespace trace_event

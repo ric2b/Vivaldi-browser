@@ -7,9 +7,15 @@
 
 #import "ios/web/web_state/ui/crw_web_controller.h"
 
+#import <WebKit/WebKit.h>
+
+#include <memory>
+
 #include "base/mac/scoped_nsobject.h"
+#import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/referrer.h"
 #include "ios/web/public/web_state/page_display_state.h"
+#import "ios/web/web_state/crw_pass_kit_downloader.h"
 
 @class CRWSessionController;
 namespace web {
@@ -18,13 +24,6 @@ class NavigationItem;
 }  // namespace web
 
 namespace web {
-// Separator between window href and name.
-extern const char* kWindowNameSeparator;
-// Key for user interaction data in JavaScript message context.
-extern NSString* const kUserIsInteractingKey;
-// Key for origin URL data in JavaScript message context.
-extern NSString* const kOriginURLKey;
-
 // Values of the UMA |Web.URLVerificationFailure| histogram.
 enum WebViewDocumentType {
   // Generic contents (e.g. PDF documents).
@@ -35,33 +34,25 @@ enum WebViewDocumentType {
   WEB_VIEW_DOCUMENT_TYPE_UNKNOWN,
   WEB_VIEW_DOCUMENT_TYPE_COUNT,
 };
-
-// A guess for how likely a page change is to happen very soon.
-// TODO(stuartmorgan): Eliminate this, or at least move to the UIWebView
-// subclass.
-enum PageChangeProbability {
-  // No expectation that the page will be changing.
-  PAGE_CHANGE_PROBABILITY_LOW,
-  // Reasonably high expectation that the page will be changing (e.g., the
-  // user just tapped a link).
-  PAGE_CHANGE_PROBABILITY_HIGH,
-  // Very high expectation that the page will be changing (e.g., window.unload
-  // fired).
-  PAGE_CHANGE_PROBABILITY_VERY_HIGH,
-};
-
-struct NewWindowInfo {
-  GURL url;
-  base::scoped_nsobject<NSString> window_name;
-  web::ReferrerPolicy referrer_policy;
-  bool user_is_interacting;
-  NewWindowInfo(GURL url,
-                NSString* window_name,
-                web::ReferrerPolicy referrer_policy,
-                bool user_is_interacting);
-  ~NewWindowInfo();
-};
 }  // namespace web
+
+using web::NavigationManager;
+namespace {
+// Constants for storing the source of NSErrors received by WKWebViews:
+// - Errors received by |-webView:didFailProvisionalNavigation:withError:| are
+//   recorded using WKWebViewErrorSource::PROVISIONAL_LOAD.  These should be
+//   cancelled.
+// - Errors received by |-webView:didFailNavigation:withError:| are recorded
+//   using WKWebViewsource::NAVIGATION.  These errors should not be cancelled,
+//   as the WKWebView will automatically retry the load.
+static NSString* const kWKWebViewErrorSourceKey = @"ErrorSource";
+typedef enum { NONE = 0, PROVISIONAL_LOAD, NAVIGATION } WKWebViewErrorSource;
+}  // namespace
+
+// URL scheme for messages sent from javascript for asynchronous processing.
+static NSString* const kScriptMessageName = @"crwebinvoke";
+// URL scheme for messages sent from javascript for immediate processing.
+static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 
 // Category for methods used or implemented by implementation subclasses of
 // CRWWebController.
@@ -72,16 +63,10 @@ struct NewWindowInfo {
 
 // If |contentView_| contains a web view, this is the web view it contains.
 // If not, it's nil.
-@property(nonatomic, readonly) UIView* webView;
+@property(nonatomic, readonly) WKWebView* webView;
 
 // The scroll view of |webView|.
 @property(nonatomic, readonly) UIScrollView* webScrollView;
-
-// Whether or not to ignore URL verification failures. This may return YES in
-// very limited situations where the URL can't be verified but there is no
-// security impact to ignoring the failure (i.e., it's safe not to show the
-// spoofing error).
-@property(nonatomic, readonly) BOOL ignoreURLVerificationFailures;
 
 // The title of the page.
 @property(nonatomic, readonly) NSString* title;
@@ -89,14 +74,15 @@ struct NewWindowInfo {
 // Referrer for the current page; does not include the fragment.
 @property(nonatomic, readonly) NSString* currentReferrerString;
 
-// This public property should be implemented by subclasses.
-// TODO(stuartmorgan): See if we can get rid of this (it looks like it may only
-// be fallback code for autocomplete that's necessarily used). If not, file a
-// Radar since WKWebView doesn't appear to have this property.
-// @property(nonatomic, assign) BOOL keyboardDisplayRequiresUserAction;
+// A set of script managers whose scripts have been injected into the current
+// page.
+@property(nonatomic, readonly) NSMutableSet* injectedScriptManagers;
+
+// Downloader for PassKit files. Lazy initialized.
+@property(nonatomic, readonly) CRWPassKitDownloader* passKitDownloader;
 
 // Designated initializer.
-- (instancetype)initWithWebState:(scoped_ptr<web::WebStateImpl>)webState;
+- (instancetype)initWithWebState:(std::unique_ptr<web::WebStateImpl>)webState;
 
 // Creates a web view if it's not yet created.
 - (void)ensureWebViewCreated;
@@ -115,20 +101,7 @@ struct NewWindowInfo {
 // Returns the type of document object loaded in the web view.
 - (web::WebViewDocumentType)webViewDocumentType;
 
-// Loads the given HTML in the web view.
-- (void)loadWebHTMLString:(NSString*)html forURL:(const GURL&)URL;
-
-// These public methods should be implemented by subclasses.
-//- (void)evaluateJavaScript:(NSString*)script
-//       stringResultHandler:(web::JavaScriptCompletion)handler;
-//- (BOOL)scriptHasBeenInjectedForClass:(Class)jsInjectionManagerClass
-//                       presenceBeacon:(NSString*)beacon;
 //- (void)loadRequest:(NSMutableURLRequest*)request;
-// Subclasses must call super's implementation.
-//- (void)injectScript:(NSString*)script
-//            forClass:(Class)jsInjectionManagerClass;
-//- (web::WebViewType)webViewType;
-//- (void)evaluateUserJavaScript:(NSString*)script;
 
 // Called before loading current URL in WebView.
 - (void)willLoadCurrentURLInWebView;
@@ -139,41 +112,18 @@ struct NewWindowInfo {
 // going back and forward through the history stack).
 - (void)loadRequestForCurrentNavigationItem;
 
-// Indicates whether or not there's an indication that the page is probably
-// about to change. This is called as a hint to the UIWebView-based subclass to
-// change polling behavior.
-// TODO(stuartmorgan): Remove once the hook points are driven from the subclass.
-- (void)setPageChangeProbability:(web::PageChangeProbability)probability;
-
 // Cancels any load in progress in the web view.
 - (void)abortWebLoad;
-
-// Called whenever any in-progress-load state should be reset.
-// TODO(stuartmorgan): Remove this; it should be tracked internally to each
-// subclass, since the existing logic is somewhat UIWebView-guesswork-based.
-- (void)resetLoadState;
-
-// Evaluates given JavaScript to suppress the dialogs. Subclasses should prefer
-// synchronous execution.
-- (void)setSuppressDialogsWithHelperScript:(NSString*)script;
-
-// Called when CRWWebController believes that web page title has been changed.
-- (void)titleDidChange;
-
-// Returns selector to handle JavaScript message with command property
-// |command|. Subclasses may override to handle class-specific messages.
-- (SEL)selectorToHandleJavaScriptCommand:(const std::string&)command;
 
 // Sets zoom scale value for webview scroll view from |zoomState|.
 - (void)applyWebViewScrollZoomScaleFromZoomState:
     (const web::PageZoomState&)zoomState;
 
-// Handles cancelled load in WKWebView (error with NSURLErrorCancelled code).
-- (void)handleCancelledError:(NSError*)error;
+// Creates a web view with given |config|. No-op if web view is already created.
+- (void)ensureWebViewCreatedWithConfiguration:(WKWebViewConfiguration*)config;
 
-// Called when a load completes, to perform any final actions before informing
-// delegates.
-- (void)loadCompletedForURL:(const GURL&)loadedURL;
+// Called when web controller receives a new message from the web page.
+- (void)didReceiveScriptMessage:(WKScriptMessage*)message;
 
 #pragma mark - Optional methods for subclasses
 // Subclasses may overwrite methods in this section.
@@ -254,6 +204,10 @@ struct NewWindowInfo {
 // YES if a user interaction has been registered at any time since the page has
 // loaded.
 @property(nonatomic, readwrite) BOOL userInteractionRegistered;
+
+// Whether the web page is currently performing window.history.pushState or
+// window.history.replaceState
+@property(nonatomic, readonly) BOOL changingHistoryState;
 
 // Returns the current window id.
 @property(nonatomic, readonly) NSString* windowId;
@@ -340,6 +294,11 @@ struct NewWindowInfo {
 // may be called multiple times and thus must be idempotent.
 - (void)loadCompleteWithSuccess:(BOOL)loadSuccess;
 
+// Adds an activity indicator tasks for this web controller.
+- (void)addActivityIndicatorTask;
+// Clears all activity indicator tasks for this web controller.
+- (void)clearActivityIndicatorTasks;
+
 // Creates a new opened by DOM window and returns its autoreleased web
 // controller.
 - (CRWWebController*)createChildWebController;
@@ -349,6 +308,10 @@ struct NewWindowInfo {
 // loading, or when other page load mechanics are completed on a
 // non-document-changing URL change.
 - (void)didFinishNavigation;
+
+// Called when a JavaScript dialog, HTTP authentication dialog or window.open
+// call has been suppressed.
+- (void)didSuppressDialog;
 
 // Returns the referrer policy for the given referrer policy string (as reported
 // from JS).
@@ -373,9 +336,6 @@ struct NewWindowInfo {
 // Asynchronously determines window size of the web page. |handler| cannot
 // be nil.
 - (void)fetchWebPageSizeWithCompletionHandler:(void (^)(CGSize))handler;
-
-// Tries to open a popup with the given new window information.
-- (void)openPopupWithInfo:(const web::NewWindowInfo&)windowInfo;
 
 // Returns the current entry from the underlying session controller.
 // TODO(stuartmorgan): Audit all calls to these methods; these are just wrappers

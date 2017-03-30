@@ -41,6 +41,9 @@
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/serializers/HTMLInterchange.h"
+#include "core/editing/state_machines/BackspaceStateMachine.h"
+#include "core/editing/state_machines/BackwardGraphemeBoundaryStateMachine.h"
+#include "core/editing/state_machines/ForwardGraphemeBoundaryStateMachine.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLBRElement.h"
@@ -55,10 +58,24 @@
 #include "wtf/Assertions.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
+#include "wtf/text/Unicode.h"
 
 namespace blink {
 
 using namespace HTMLNames;
+
+namespace {
+std::ostream& operator<<(std::ostream& os, PositionMoveType type)
+{
+    static const char* const texts[] = {
+        "CodeUnit", "BackwardDeletion", "GraphemeCluster"
+    };
+    const auto& it = std::begin(texts) + static_cast<size_t>(type);
+    DCHECK_GE(it, std::begin(texts)) << "Unknown PositionMoveType value";
+    DCHECK_LT(it, std::end(texts)) << "Unknown PositionMoveType value";
+    return os << *it;
+}
+} // namespace
 
 // Atomic means that the node has no children, or has children which are ignored for the
 // purposes of editing.
@@ -542,19 +559,68 @@ PositionInFlatTree lastEditablePositionBeforePositionInRoot(const PositionInFlat
     return lastEditablePositionBeforePositionInRootAlgorithm<EditingInFlatTreeStrategy>(position, highestRoot);
 }
 
-int uncheckedPreviousOffset(const Node* n, int current)
+template<typename StateMachine>
+int findNextBoundaryOffset(const String& str, int current)
 {
-    return n->layoutObject() ? n->layoutObject()->previousOffset(current) : current - 1;
+    StateMachine machine;
+    TextSegmentationMachineState state = TextSegmentationMachineState::Invalid;
+
+    for (int i = current - 1; i >= 0; --i) {
+        state = machine.feedPrecedingCodeUnit(str[i]);
+        if (state != TextSegmentationMachineState::NeedMoreCodeUnit)
+            break;
+    }
+    if (current == 0 || state == TextSegmentationMachineState::NeedMoreCodeUnit)
+        state = machine.tellEndOfPrecedingText();
+    if (state == TextSegmentationMachineState::Finished)
+        return current + machine.finalizeAndGetBoundaryOffset();
+    const int length = str.length();
+    DCHECK_EQ(TextSegmentationMachineState::NeedFollowingCodeUnit, state);
+    for (int i = current; i < length; ++i) {
+        state = machine.feedFollowingCodeUnit(str[i]);
+        if (state != TextSegmentationMachineState::NeedMoreCodeUnit)
+            break;
+    }
+    return current + machine.finalizeAndGetBoundaryOffset();
 }
 
-static int uncheckedPreviousOffsetForBackwardDeletion(const Node* n, int current)
+int previousGraphemeBoundaryOf(const Node* node, int current)
 {
-    return n->layoutObject() ? n->layoutObject()->previousOffsetForBackwardDeletion(current) : current - 1;
+    // TODO(yosin): Need to support grapheme crossing |Node| boundary.
+    DCHECK_GE(current, 0);
+    if (current <= 1 || !node->isTextNode())
+        return current - 1;
+    const String& text = toText(node)->data();
+    // TODO(yosin): Replace with DCHECK for out-of-range request.
+    if (static_cast<unsigned>(current) > text.length())
+        return current - 1;
+    return findNextBoundaryOffset<BackwardGraphemeBoundaryStateMachine>(text, current);
 }
 
-int uncheckedNextOffset(const Node* n, int current)
+static int previousBackwardDeletionOffsetOf(const Node* node, int current)
 {
-    return n->layoutObject() ? n->layoutObject()->nextOffset(current) : current + 1;
+    DCHECK_GE(current, 0);
+    if (current <= 1)
+        return 0;
+    if (!node->isTextNode())
+        return current - 1;
+
+    const String& text = toText(node)->data();
+    DCHECK_LT(static_cast<unsigned>(current - 1), text.length());
+    return findNextBoundaryOffset<BackspaceStateMachine>(text, current);
+}
+
+int nextGraphemeBoundaryOf(const Node* node, int current)
+{
+    // TODO(yosin): Need to support grapheme crossing |Node| boundary.
+    if (!node->isTextNode())
+        return current + 1;
+    const String& text = toText(node)->data();
+    const int length = text.length();
+    DCHECK_LE(current, length);
+    if (current >= length - 1)
+        return current + 1;
+    return findNextBoundaryOffset<ForwardGraphemeBoundaryStateMachine>(text, current);
 }
 
 template <typename Strategy>
@@ -579,12 +645,14 @@ PositionTemplate<Strategy> previousPositionOfAlgorithm(const PositionTemplate<St
         //   2) The old offset was a bogus offset like (<br>, 1), and there is
         //      no child. Going from 1 to 0 is correct.
         switch (moveType) {
-        case PositionMoveType::CodePoint:
+        case PositionMoveType::CodeUnit:
             return PositionTemplate<Strategy>(node, offset - 1);
-        case PositionMoveType::Character:
-            return PositionTemplate<Strategy>(node, uncheckedPreviousOffset(node, offset));
         case PositionMoveType::BackwardDeletion:
-            return PositionTemplate<Strategy>(node, uncheckedPreviousOffsetForBackwardDeletion(node, offset));
+            return PositionTemplate<Strategy>(node, previousBackwardDeletionOffsetOf(node, offset));
+        case PositionMoveType::GraphemeCluster:
+            return PositionTemplate<Strategy>(node, previousGraphemeBoundaryOf(node, offset));
+        default:
+            NOTREACHED() << "Unhandled moveType: " << moveType;
         }
     }
 
@@ -631,7 +699,19 @@ PositionTemplate<Strategy> nextPositionOfAlgorithm(const PositionTemplate<Strate
         //      is correct.
         //   2) The new offset is a bogus offset like (<br>, 1), and there is no
         //      child. Going from 0 to 1 is correct.
-        return PositionTemplate<Strategy>::editingPositionOf(node, (moveType == PositionMoveType::Character) ? uncheckedNextOffset(node, offset) : offset + 1);
+        switch (moveType) {
+        case PositionMoveType::CodeUnit:
+            return PositionTemplate<Strategy>::editingPositionOf(node, offset + 1);
+        case PositionMoveType::BackwardDeletion:
+            NOTREACHED()
+                << "BackwardDeletion is only available for prevPositionOf "
+                << "functions.";
+            return PositionTemplate<Strategy>::editingPositionOf(node, offset + 1);
+        case PositionMoveType::GraphemeCluster:
+            return PositionTemplate<Strategy>::editingPositionOf(node, nextGraphemeBoundaryOf(node, offset));
+        default:
+            NOTREACHED() << "Unhandled moveType: " << moveType;
+        }
     }
 
     if (ContainerNode* parent = Strategy::parent(*node))
@@ -687,21 +767,16 @@ Element* enclosingBlock(const PositionInFlatTree& position, EditingBoundaryCross
     return enclosingBlockAlgorithm<EditingInFlatTreeStrategy>(position, rule);
 }
 
-Element* enclosingBlockFlowElement(Node& node)
+Element* enclosingBlockFlowElement(const Node& node)
 {
     if (isBlockFlowElement(node))
-        return &toElement(node);
+        return const_cast<Element*>(&toElement(node));
 
     for (Node* n = node.parentNode(); n; n = n->parentNode()) {
         if (isBlockFlowElement(*n) || isHTMLBodyElement(*n))
             return toElement(n);
     }
-    return 0;
-}
-
-bool inSameContainingBlockFlowElement(Node* a, Node* b)
-{
-    return a && b && enclosingBlockFlowElement(*a) == enclosingBlockFlowElement(*b);
+    return nullptr;
 }
 
 bool nodeIsUserSelectAll(const Node* node)
@@ -1231,7 +1306,7 @@ bool isEmptyTableCell(const Node* node)
     return !childLayoutObject->nextSibling();
 }
 
-PassRefPtrWillBeRawPtr<HTMLElement> createDefaultParagraphElement(Document& document)
+RawPtr<HTMLElement> createDefaultParagraphElement(Document& document)
 {
     switch (document.frame()->editor().defaultParagraphSeparator()) {
     case EditorParagraphSeparatorIsDiv:
@@ -1244,7 +1319,7 @@ PassRefPtrWillBeRawPtr<HTMLElement> createDefaultParagraphElement(Document& docu
     return nullptr;
 }
 
-PassRefPtrWillBeRawPtr<HTMLElement> createHTMLElement(Document& document, const QualifiedName& name)
+RawPtr<HTMLElement> createHTMLElement(Document& document, const QualifiedName& name)
 {
     return HTMLElementFactory::createHTMLElement(name.localName(), document, 0, false);
 }
@@ -1267,12 +1342,12 @@ HTMLSpanElement* tabSpanElement(const Node* node)
     return isTabHTMLSpanElementTextNode(node) ? toHTMLSpanElement(node->parentNode()) : 0;
 }
 
-static PassRefPtrWillBeRawPtr<HTMLSpanElement> createTabSpanElement(Document& document, PassRefPtrWillBeRawPtr<Text> prpTabTextNode)
+static RawPtr<HTMLSpanElement> createTabSpanElement(Document& document, RawPtr<Text> prpTabTextNode)
 {
-    RefPtrWillBeRawPtr<Text> tabTextNode = prpTabTextNode;
+    RawPtr<Text> tabTextNode = prpTabTextNode;
 
     // Make the span to hold the tab.
-    RefPtrWillBeRawPtr<HTMLSpanElement> spanElement = HTMLSpanElement::create(document);
+    RawPtr<HTMLSpanElement> spanElement = HTMLSpanElement::create(document);
     spanElement->setAttribute(classAttr, AppleTabSpanClass);
     spanElement->setAttribute(styleAttr, "white-space:pre");
 
@@ -1285,14 +1360,14 @@ static PassRefPtrWillBeRawPtr<HTMLSpanElement> createTabSpanElement(Document& do
     return spanElement.release();
 }
 
-PassRefPtrWillBeRawPtr<HTMLSpanElement> createTabSpanElement(Document& document, const String& tabText)
+RawPtr<HTMLSpanElement> createTabSpanElement(Document& document, const String& tabText)
 {
     return createTabSpanElement(document, document.createTextNode(tabText));
 }
 
-PassRefPtrWillBeRawPtr<HTMLSpanElement> createTabSpanElement(Document& document)
+RawPtr<HTMLSpanElement> createTabSpanElement(Document& document)
 {
-    return createTabSpanElement(document, PassRefPtrWillBeRawPtr<Text>(nullptr));
+    return createTabSpanElement(document, RawPtr<Text>(nullptr));
 }
 
 bool isNodeRendered(const Node& node)
@@ -1320,7 +1395,7 @@ static Position previousCharacterPosition(const Position& position, TextAffinity
         // TODO(yosin) When we use |previousCharacterPosition()| other than
         // finding leading whitespace, we should use |Character| instead of
         // |CodePoint|.
-        currentPos = previousPositionOf(currentPos, PositionMoveType::CodePoint);
+        currentPos = previousPositionOf(currentPos, PositionMoveType::CodeUnit);
 
         if (currentPos.anchorNode()->rootEditableElement() != fromRootEditableElement)
             return position;
@@ -1346,16 +1421,22 @@ Position leadingWhitespacePosition(const Position& position, TextAffinity affini
     if (isHTMLBRElement(*mostBackwardCaretPosition(position).anchorNode()))
         return Position();
 
-    Position prev = previousCharacterPosition(position, affinity);
-    if (prev != position && inSameContainingBlockFlowElement(prev.anchorNode(), position.anchorNode()) && prev.anchorNode()->isTextNode()) {
-        String string = toText(prev.anchorNode())->data();
-        UChar previousCharacter = string[prev.computeOffsetInContainerNode()];
-        bool isSpace = option == ConsiderNonCollapsibleWhitespace ? (isSpaceOrNewline(previousCharacter) || previousCharacter == noBreakSpaceCharacter) : isCollapsibleWhitespace(previousCharacter);
-        if (isSpace && isEditablePosition(prev))
-            return prev;
-    }
-
-    return Position();
+    const Position& prev = previousCharacterPosition(position, affinity);
+    if (prev == position)
+        return Position();
+    const Node* const anchorNode = prev.anchorNode();
+    if (!anchorNode || !anchorNode->isTextNode())
+        return Position();
+    if (enclosingBlockFlowElement(*anchorNode) != enclosingBlockFlowElement(*position.anchorNode()))
+        return Position();
+    if (option == NotConsiderNonCollapsibleWhitespace && anchorNode->layoutObject() && !anchorNode->layoutObject()->style()->collapseWhiteSpace())
+        return Position();
+    const String& string = toText(anchorNode)->data();
+    const UChar previousCharacter = string[prev.computeOffsetInContainerNode()];
+    const bool isSpace = option == ConsiderNonCollapsibleWhitespace ? (isSpaceOrNewline(previousCharacter) || previousCharacter == noBreakSpaceCharacter) : isCollapsibleWhitespace(previousCharacter);
+    if (!isSpace || !isEditablePosition(prev))
+        return Position();
+    return prev;
 }
 
 // This assumes that it starts in editable content.
@@ -1390,25 +1471,25 @@ void updatePositionForNodeRemoval(Position& position, Node& node)
         return;
     switch (position.anchorType()) {
     case PositionAnchorType::BeforeChildren:
-        if (node.containsIncludingShadowDOM(position.computeContainerNode()))
+        if (node.isShadowIncludingInclusiveAncestorOf(position.computeContainerNode()))
             position = positionInParentBeforeNode(node);
         break;
     case PositionAnchorType::AfterChildren:
-        if (node.containsIncludingShadowDOM(position.computeContainerNode()))
+        if (node.isShadowIncludingInclusiveAncestorOf(position.computeContainerNode()))
             position = positionInParentAfterNode(node);
         break;
     case PositionAnchorType::OffsetInAnchor:
         if (position.computeContainerNode() == node.parentNode() && static_cast<unsigned>(position.offsetInContainerNode()) > node.nodeIndex())
             position = Position(position.computeContainerNode(), position.offsetInContainerNode() - 1);
-        else if (node.containsIncludingShadowDOM(position.computeContainerNode()))
+        else if (node.isShadowIncludingInclusiveAncestorOf(position.computeContainerNode()))
             position = positionInParentBeforeNode(node);
         break;
     case PositionAnchorType::AfterAnchor:
-        if (node.containsIncludingShadowDOM(position.anchorNode()))
+        if (node.isShadowIncludingInclusiveAncestorOf(position.anchorNode()))
             position = positionInParentAfterNode(node);
         break;
     case PositionAnchorType::BeforeAnchor:
-        if (node.containsIncludingShadowDOM(position.anchorNode()))
+        if (node.isShadowIncludingInclusiveAncestorOf(position.anchorNode()))
             position = positionInParentBeforeNode(node);
         break;
     }
@@ -1483,7 +1564,7 @@ VisibleSelection selectionForParagraphIteration(const VisibleSelection& original
 // opertion is unreliable. TextIterator's TextIteratorEmitsCharactersBetweenAllVisiblePositions mode needs to be fixed,
 // or these functions need to be changed to iterate using actual VisiblePositions.
 // FIXME: Deploy these functions everywhere that TextIterators are used to convert between VisiblePositions and indices.
-int indexForVisiblePosition(const VisiblePosition& visiblePosition, RefPtrWillBeRawPtr<ContainerNode>& scope)
+int indexForVisiblePosition(const VisiblePosition& visiblePosition, RawPtr<ContainerNode>& scope)
 {
     if (visiblePosition.isNull())
         return 0;
@@ -1497,7 +1578,7 @@ int indexForVisiblePosition(const VisiblePosition& visiblePosition, RefPtrWillBe
     else
         scope = document.documentElement();
 
-    RefPtrWillBeRawPtr<Range> range = Range::create(document, firstPositionInNode(scope.get()), p.parentAnchoredEquivalent());
+    RawPtr<Range> range = Range::create(document, firstPositionInNode(scope.get()), p.parentAnchoredEquivalent());
 
     return TextIterator::rangeLength(range->startPosition(), range->endPosition(), true);
 }

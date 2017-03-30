@@ -16,6 +16,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/render_view.h"
@@ -203,14 +204,13 @@ IN_PROC_BROWSER_TEST_F(RenderViewBrowserTest, ConfirmCacheInformationPlumbed) {
 
   // Reload same URL after forcing an error from the the network layer;
   // confirm that the error page is told the cached copy exists.
-  int renderer_id =
-      shell()->web_contents()->GetMainFrame()->GetProcess()->GetID();
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter =
-      ShellContentBrowserClient::Get()->browser_context()->
-          GetRequestContextForRenderProcess(renderer_id);
+      shell()->web_contents()->GetRenderProcessHost()->GetStoragePartition()->
+          GetURLRequestContext();
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&InterceptNetworkTransactions, url_request_context_getter,
+      base::Bind(&InterceptNetworkTransactions,
+                 base::RetainedRef(url_request_context_getter),
                  net::ERR_FAILED));
 
   // An error results in one completed navigation.
@@ -226,7 +226,7 @@ IN_PROC_BROWSER_TEST_F(RenderViewBrowserTest, ConfirmCacheInformationPlumbed) {
   scoped_refptr<MessageLoopRunner> runner = new MessageLoopRunner;
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&ClearCache, url_request_context_getter,
+      base::Bind(&ClearCache, base::RetainedRef(url_request_context_getter),
                  runner->QuitClosure()));
   runner->Run();
 

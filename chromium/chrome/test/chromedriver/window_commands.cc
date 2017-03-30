@@ -347,7 +347,7 @@ Status ExecuteSwitchToFrame(
         "  return document.evaluate(xpath, document, null, "
         "      XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;"
         "}";
-    std::string xpath = "(/html/body//iframe|/html/frameset/frame)";
+    std::string xpath = "(/html/body//iframe|/html/frameset//frame)";
     std::string id_string;
     int id_int;
     if (id->GetAsString(&id_string)) {
@@ -852,11 +852,11 @@ Status ExecuteScreenshot(
     if (status.IsError())
       return status;
     status = extension->CaptureScreenshot(&screenshot);
-    if (status.IsError()) {
-      LOG(WARNING) << "screenshot failed with extension, fallback to DevTools";
-      status = web_view->CaptureScreenshot(&screenshot);
-    }
   } else {
+    status = web_view->CaptureScreenshot(&screenshot);
+  }
+  if (status.IsError()) {
+    LOG(WARNING) << "screenshot failed, retrying";
     status = web_view->CaptureScreenshot(&screenshot);
   }
   if (status.IsError())

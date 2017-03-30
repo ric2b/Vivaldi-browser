@@ -31,15 +31,14 @@
 #include "core/dom/MutationObserver.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/Microtask.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/Microtask.h"
 #include "core/dom/MutationCallback.h"
 #include "core/dom/MutationObserverInit.h"
 #include "core/dom/MutationObserverRegistration.h"
 #include "core/dom/MutationRecord.h"
 #include "core/dom/Node.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "wtf/MainThread.h"
 #include <algorithm>
 
 namespace blink {
@@ -47,19 +46,19 @@ namespace blink {
 static unsigned s_observerPriority = 0;
 
 struct MutationObserver::ObserverLessThan {
-    bool operator()(const RefPtrWillBeMember<MutationObserver>& lhs, const RefPtrWillBeMember<MutationObserver>& rhs)
+    bool operator()(const Member<MutationObserver>& lhs, const Member<MutationObserver>& rhs)
     {
         return lhs->m_priority < rhs->m_priority;
     }
 };
 
-PassRefPtrWillBeRawPtr<MutationObserver> MutationObserver::create(PassOwnPtrWillBeRawPtr<MutationCallback> callback)
+RawPtr<MutationObserver> MutationObserver::create(RawPtr<MutationCallback> callback)
 {
-    ASSERT(isMainThread());
-    return adoptRefWillBeNoop(new MutationObserver(callback));
+    DCHECK(isMainThread());
+    return new MutationObserver(callback);
 }
 
-MutationObserver::MutationObserver(PassOwnPtrWillBeRawPtr<MutationCallback> callback)
+MutationObserver::MutationObserver(RawPtr<MutationCallback> callback)
     : m_callback(callback)
     , m_priority(s_observerPriority++)
 {
@@ -68,15 +67,14 @@ MutationObserver::MutationObserver(PassOwnPtrWillBeRawPtr<MutationCallback> call
 MutationObserver::~MutationObserver()
 {
 #if !ENABLE(OILPAN)
-    ASSERT(m_registrations.isEmpty());
+    DCHECK(m_registrations.isEmpty());
 #endif
-    if (!m_records.isEmpty())
-        InspectorInstrumentation::didClearAllMutationRecords(m_callback->executionContext(), this);
+    cancelInspectorAsyncTasks();
 }
 
 void MutationObserver::observe(Node* node, const MutationObserverInit& observerInit, ExceptionState& exceptionState)
 {
-    ASSERT(node);
+    DCHECK(node);
 
     MutationObserverOptions options = 0;
 
@@ -134,15 +132,15 @@ void MutationObserver::observe(Node* node, const MutationObserverInit& observerI
 MutationRecordVector MutationObserver::takeRecords()
 {
     MutationRecordVector records;
+    cancelInspectorAsyncTasks();
     records.swap(m_records);
-    InspectorInstrumentation::didClearAllMutationRecords(m_callback->executionContext(), this);
     return records;
 }
 
 void MutationObserver::disconnect()
 {
+    cancelInspectorAsyncTasks();
     m_records.clear();
-    InspectorInstrumentation::didClearAllMutationRecords(m_callback->executionContext(), this);
     MutationObserverRegistrationSet registrations(m_registrations);
     for (auto& registration : registrations) {
         // The registration may be already unregistered while iteration.
@@ -150,34 +148,34 @@ void MutationObserver::disconnect()
         if (m_registrations.contains(registration))
             registration->unregister();
     }
-    ASSERT(m_registrations.isEmpty());
+    DCHECK(m_registrations.isEmpty());
 }
 
 void MutationObserver::observationStarted(MutationObserverRegistration* registration)
 {
-    ASSERT(!m_registrations.contains(registration));
+    DCHECK(!m_registrations.contains(registration));
     m_registrations.add(registration);
 }
 
 void MutationObserver::observationEnded(MutationObserverRegistration* registration)
 {
-    ASSERT(m_registrations.contains(registration));
+    DCHECK(m_registrations.contains(registration));
     m_registrations.remove(registration);
 }
 
 static MutationObserverSet& activeMutationObservers()
 {
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<MutationObserverSet>, activeObservers, (adoptPtrWillBeNoop(new MutationObserverSet())));
-    return *activeObservers;
+    DEFINE_STATIC_LOCAL(MutationObserverSet, activeObservers, (new MutationObserverSet));
+    return activeObservers;
 }
 
 static MutationObserverSet& suspendedMutationObservers()
 {
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<MutationObserverSet>, suspendedObservers, (adoptPtrWillBeNoop(new MutationObserverSet())));
-    return *suspendedObservers;
+    DEFINE_STATIC_LOCAL(MutationObserverSet, suspendedObservers, (new MutationObserverSet));
+    return suspendedObservers;
 }
 
-static void activateObserver(PassRefPtrWillBeRawPtr<MutationObserver> observer)
+static void activateObserver(RawPtr<MutationObserver> observer)
 {
     if (activeMutationObservers().isEmpty())
         Microtask::enqueueMicrotask(WTF::bind(&MutationObserver::deliverMutations));
@@ -185,23 +183,23 @@ static void activateObserver(PassRefPtrWillBeRawPtr<MutationObserver> observer)
     activeMutationObservers().add(observer);
 }
 
-void MutationObserver::enqueueMutationRecord(PassRefPtrWillBeRawPtr<MutationRecord> mutation)
+void MutationObserver::enqueueMutationRecord(RawPtr<MutationRecord> mutation)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     m_records.append(mutation);
     activateObserver(this);
-    InspectorInstrumentation::didEnqueueMutationRecord(m_callback->executionContext(), this);
+    InspectorInstrumentation::asyncTaskScheduled(m_callback->getExecutionContext(), mutation->type(), mutation);
 }
 
 void MutationObserver::setHasTransientRegistration()
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     activateObserver(this);
 }
 
-WillBeHeapHashSet<RawPtrWillBeMember<Node>> MutationObserver::getObservedNodes() const
+HeapHashSet<Member<Node>> MutationObserver::getObservedNodes() const
 {
-    WillBeHeapHashSet<RawPtrWillBeMember<Node>> observedNodes;
+    HeapHashSet<Member<Node>> observedNodes;
     for (const auto& registration : m_registrations)
         registration->addRegistrationNodesToSet(observedNodes);
     return observedNodes;
@@ -209,16 +207,22 @@ WillBeHeapHashSet<RawPtrWillBeMember<Node>> MutationObserver::getObservedNodes()
 
 bool MutationObserver::shouldBeSuspended() const
 {
-    return m_callback->executionContext() && m_callback->executionContext()->activeDOMObjectsAreSuspended();
+    return m_callback->getExecutionContext() && m_callback->getExecutionContext()->activeDOMObjectsAreSuspended();
+}
+
+void MutationObserver::cancelInspectorAsyncTasks()
+{
+    for (auto& record : m_records)
+        InspectorInstrumentation::asyncTaskCanceled(m_callback->getExecutionContext(), record);
 }
 
 void MutationObserver::deliver()
 {
-    ASSERT(!shouldBeSuspended());
+    DCHECK(!shouldBeSuspended());
 
     // Calling clearTransientRegistrations() can modify m_registrations, so it's necessary
     // to make a copy of the transient registrations before operating on them.
-    WillBeHeapVector<RawPtrWillBeMember<MutationObserverRegistration>, 1> transientRegistrations;
+    HeapVector<Member<MutationObserverRegistration>, 1> transientRegistrations;
     for (auto& registration : m_registrations) {
         if (registration->hasTransientRegistrations())
             transientRegistrations.append(registration);
@@ -232,14 +236,14 @@ void MutationObserver::deliver()
     MutationRecordVector records;
     records.swap(m_records);
 
-    InspectorInstrumentation::willDeliverMutationRecords(m_callback->executionContext(), this);
+    // Report the first (earliest) stack as the async cause.
+    InspectorInstrumentation::AsyncTask asyncTask(m_callback->getExecutionContext(), records.first());
     m_callback->call(records, this);
-    InspectorInstrumentation::didDeliverMutationRecords(m_callback->executionContext());
 }
 
 void MutationObserver::resumeSuspendedObservers()
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     if (suspendedMutationObservers().isEmpty())
         return;
 
@@ -255,7 +259,7 @@ void MutationObserver::resumeSuspendedObservers()
 
 void MutationObserver::deliverMutations()
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     MutationObserverVector observers;
     copyToVector(activeMutationObservers(), observers);
     activeMutationObservers().clear();
@@ -270,12 +274,10 @@ void MutationObserver::deliverMutations()
 
 DEFINE_TRACE(MutationObserver)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_callback);
     visitor->trace(m_records);
     visitor->trace(m_registrations);
     visitor->trace(m_callback);
-#endif
 }
 
 } // namespace blink

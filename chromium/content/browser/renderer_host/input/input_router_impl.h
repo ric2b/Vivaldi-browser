@@ -18,6 +18,7 @@
 #include "content/browser/renderer_host/input/touch_action_filter.h"
 #include "content/browser/renderer_host/input/touch_event_queue.h"
 #include "content/browser/renderer_host/input/touchpad_tap_suppression_controller.h"
+#include "content/common/input/input_event_dispatch_type.h"
 #include "content/common/input/input_event_stream_validator.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 
@@ -105,6 +106,9 @@ class CONTENT_EXPORT InputRouterImpl
       const MouseWheelEventWithLatencyInfo& touch_event) override;
   void OnMouseWheelEventAck(const MouseWheelEventWithLatencyInfo& event,
                             InputEventAckState ack_result) override;
+  void ForwardGestureEventWithLatencyInfo(
+      const blink::WebGestureEvent& gesture_event,
+      const ui::LatencyInfo& latency_info) override;
 
   bool SendMoveCaret(scoped_ptr<IPC::Message> message);
   bool SendSelectMessage(scoped_ptr<IPC::Message> message);
@@ -127,7 +131,8 @@ class CONTENT_EXPORT InputRouterImpl
   // Returns true if |input_event| was successfully sent to the renderer
   // as an async IPC Message.
   bool OfferToRenderer(const blink::WebInputEvent& input_event,
-                       const ui::LatencyInfo& latency_info);
+                       const ui::LatencyInfo& latency_info,
+                       InputEventDispatchType dispatch_type);
 
   // IPC message handlers
   void OnInputEventAck(const InputEventAck& ack);

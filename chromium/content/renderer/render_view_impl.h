@@ -42,6 +42,7 @@
 #include "content/renderer/mouse_lock_dispatcher.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_widget.h"
+#include "content/renderer/render_widget_owner_delegate.h"
 #include "content/renderer/stats_collection_observer.h"
 #include "ipc/ipc_platform_file.h"
 #include "third_party/WebKit/public/platform/WebGraphicsContext3D.h"
@@ -154,6 +155,7 @@ class WebMediaPlayerProxyAndroid;
 class CONTENT_EXPORT RenderViewImpl
     : public RenderWidget,
       NON_EXPORTED_BASE(public blink::WebViewClient),
+      public RenderWidgetOwnerDelegate,
       public RenderView,
       public base::SupportsWeakPtr<RenderViewImpl> {
  public:
@@ -256,16 +258,6 @@ class CONTENT_EXPORT RenderViewImpl
     pepper_last_mouse_event_target_ = plugin;
   }
 
-#if defined(OS_MACOSX) || defined(OS_WIN)
-  // Informs the render view that the given plugin has gained or lost focus.
-  void PluginFocusChanged(bool focused, int plugin_id);
-#endif
-
-#if defined(OS_MACOSX)
-  // Starts plugin IME.
-  void StartPluginIme();
-#endif
-
   // Indicates that the given instance has been created.
   void PepperInstanceCreated(PepperPluginInstanceImpl* instance);
 
@@ -276,9 +268,6 @@ class CONTENT_EXPORT RenderViewImpl
 
   // Notification that the given plugin is focused or unfocused.
   void PepperFocusChanged(PepperPluginInstanceImpl* instance, bool focused);
-
-  void RegisterPluginDelegate(WebPluginDelegateProxy* delegate);
-  void UnregisterPluginDelegate(WebPluginDelegateProxy* delegate);
 #endif  // ENABLE_PLUGINS
 
   void TransferActiveWheelFlingAnimation(
@@ -305,10 +294,6 @@ class CONTENT_EXPORT RenderViewImpl
   // Change the device scale factor and force the compositor to resize.
   void SetDeviceScaleFactorForTesting(float factor);
 
-  // Change the device ICC color profile while running a layout test.
-  void SetDeviceColorProfileForTesting(const std::vector<char>& color_profile);
-  void ResetDeviceColorProfileForTesting() override;
-
   // Used to force the size of a window when running layout tests.
   void ForceResizeForTesting(const gfx::Size& new_size);
 
@@ -318,15 +303,6 @@ class CONTENT_EXPORT RenderViewImpl
   void EnableAutoResizeForTesting(const gfx::Size& min_size,
                                   const gfx::Size& max_size);
   void DisableAutoResizeForTesting(const gfx::Size& new_size);
-
-  // RenderWidgetInputHandlerDelegate implementation ---------------------------
-
-  // Most methods are handled by RenderWidget
-  void FocusChangeComplete() override;
-  bool HasTouchEventHandlersAt(const gfx::Point& point) const override;
-  void OnDidHandleKeyEvent() override;
-  bool WillHandleGestureEvent(const blink::WebGestureEvent& event) override;
-  bool WillHandleMouseEvent(const blink::WebMouseEvent& event) override;
 
   // IPC::Listener implementation ----------------------------------------------
 
@@ -429,6 +405,7 @@ class CONTENT_EXPORT RenderViewImpl
   // RenderView implementation -------------------------------------------------
 
   bool Send(IPC::Message* message) override;
+  RenderWidget* GetWidget() const override;
   RenderFrameImpl* GetMainRenderFrame() override;
   int GetRoutingID() const override;
   gfx::Size GetSize() const override;
@@ -454,7 +431,7 @@ class CONTENT_EXPORT RenderViewImpl
                               TopControlsState current,
                               bool animate) override;
 #endif
-  void convertViewportToWindow(blink::WebRect* rect) override;
+  void ConvertViewportToWindowViaWidget(blink::WebRect* rect) override;
   gfx::RectF ElementBoundsInWindow(const blink::WebElement& element) override;
   float GetDeviceScaleFactorForTest() const override;
 
@@ -471,9 +448,6 @@ class CONTENT_EXPORT RenderViewImpl
   void CloseForFrame() override;
   void Close() override;
   void OnResize(const ResizeParams& params) override;
-  void DidInitiatePaint() override;
-  void DidFlushPaint() override;
-  gfx::Vector2d GetScrollOffset() override;
   void OnSetFocus(bool enable) override;
   void OnWasHidden() override;
   void OnWasShown(bool needs_repainting,
@@ -488,7 +462,6 @@ class CONTENT_EXPORT RenderViewImpl
   void OnImeConfirmComposition(const base::string16& text,
                                const gfx::Range& replacement_range,
                                bool keep_selection) override;
-  bool SetDeviceColorProfile(const std::vector<char>& color_profile) override;
   void OnOrientationChange() override;
   ui::TextInputType GetTextInputType() override;
   void GetSelectionBounds(gfx::Rect* start, gfx::Rect* end) override;
@@ -583,6 +556,21 @@ class CONTENT_EXPORT RenderViewImpl
     CONNECTION_ERROR,
   };
 
+  // RenderWidgetOwnerDelegate implementation ----------------------------------
+
+  void RenderWidgetDidSetColorProfile(
+      const std::vector<char>& color_profile) override;
+  void RenderWidgetFocusChangeComplete() override;
+  bool DoesRenderWidgetHaveTouchEventHandlersAt(
+      const gfx::Point& point) const override;
+  void RenderWidgetDidHandleKeyEvent() override;
+  bool RenderWidgetWillHandleGestureEvent(
+      const blink::WebGestureEvent& event) override;
+  bool RenderWidgetWillHandleMouseEvent(
+      const blink::WebMouseEvent& event) override;
+  void RenderWidgetDidCommitAndDrawCompositorFrame() override;
+  void RenderWidgetDidFlushPaint() override;
+
   // Old WebFrameClient implementations ----------------------------------------
 
   // RenderViewImpl used to be a WebFrameClient, but now RenderFrameImpl is the
@@ -602,9 +590,6 @@ class CONTENT_EXPORT RenderViewImpl
   void ApplyWebPreferencesInternal(const WebPreferences& prefs,
                                    blink::WebView* web_view,
                                    CompositorDependencies* compositor_deps);
-
-  // Sends a message and runs a nested message loop.
-  bool SendAndRunNestedMessageLoop(IPC::SyncMessage* message);
 
   // IPC message handlers ------------------------------------------------------
   //
@@ -670,13 +655,11 @@ class CONTENT_EXPORT RenderViewImpl
   void OnSetWebUIProperty(const std::string& name, const std::string& value);
   void OnSetZoomLevelForLoadingURL(const GURL& url, double zoom_level);
   void OnSetZoomLevelForView(bool uses_temporary_zoom_level, double level);
-  void OnSuppressDialogsUntilSwapOut();
   void OnThemeChanged();
   void OnUpdateTargetURLAck();
   void OnUpdateWebPreferences(const WebPreferences& prefs);
   void OnSetPageScale(float page_scale_factor);
   void OnZoom(PageZoom zoom);
-  void OnEnableViewSourceMode();
   void OnForceRedraw(int request_id);
   void OnSelectWordAroundCaret();
 #if defined(OS_ANDROID)
@@ -687,13 +670,10 @@ class CONTENT_EXPORT RenderViewImpl
   void OnExtractSmartClipData(const gfx::Rect& rect);
 #elif defined(OS_MACOSX)
   void OnGetRenderedText();
-  void OnPluginImeCompositionCompleted(const base::string16& text,
-                                       int plugin_id);
-  void OnSetInLiveResize(bool in_live_resize);
-  void OnSetWindowVisibility(bool visible);
-  void OnWindowFrameChanged(const gfx::Rect& window_frame,
-                            const gfx::Rect& view_frame);
 #endif
+
+  // Page message handlers -----------------------------------------------------
+  void OnUpdateWindowScreenRect(gfx::Rect window_screen_rect);
 
   void ApplyVivaldiSpecificPreferences();
 
@@ -745,12 +725,6 @@ class CONTENT_EXPORT RenderViewImpl
   // specific, so they don't belong in RenderFrameImpl and should remain in
   // this object.
   base::ObserverList<RenderViewObserver>& observers() { return observers_; }
-
-  // TODO(nasko): Remove this method when we move to frame proxy objects, since
-  // the concept of swapped out will be eliminated.
-  void set_is_swapped_out(bool swapped_out) {
-    is_swapped_out_ = swapped_out;
-  }
 
   NavigationGesture navigation_gesture() {
     return navigation_gesture_;
@@ -811,11 +785,6 @@ class CONTENT_EXPORT RenderViewImpl
 
   // Used for popups.
   bool opened_by_user_gesture_;
-
-  // Whether we must stop creating nested message loops for modal dialogs until
-  // OnSwapOut is called.  This is necessary because modal dialogs have a
-  // PageGroupLoadDeferrer on the stack that interferes with swapping out.
-  bool suppress_dialogs_until_swap_out_;
 
   // Timer used to delay the updating of nav state (see
   // StartNavStateSyncTimerIfNecessary).
@@ -942,17 +911,6 @@ class CONTENT_EXPORT RenderViewImpl
 #endif
 
   // Plugins -------------------------------------------------------------------
-
-  // All the currently active plugin delegates for this RenderView; kept so
-  // that we can enumerate them to send updates about things like window
-  // location or tab focus and visibily. These are non-owning references.
-  std::set<WebPluginDelegateProxy*> plugin_delegates_;
-
-#if defined(OS_WIN)
-  // The ID of the focused NPAPI plugin.
-  int focused_plugin_id_;
-#endif
-
 #if defined(ENABLE_PLUGINS)
   typedef std::set<PepperPluginInstanceImpl*> PepperPluginSet;
   PepperPluginSet active_pepper_instances_;

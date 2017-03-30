@@ -81,7 +81,7 @@ void CSSFontSelector::dispatchInvalidationCallbacks()
 {
     m_fontFaceCache.incrementVersion();
 
-    WillBeHeapVector<RawPtrWillBeMember<CSSFontSelectorClient>> clients;
+    HeapVector<Member<CSSFontSelectorClient>> clients;
     copyToVector(m_clients, clients);
     for (auto& client : clients)
         client->fontsNeedUpdate(this);
@@ -147,11 +147,11 @@ void CSSFontSelector::willUseFontData(const FontDescription& fontDescription, co
         face->willUseFontData(fontDescription, character);
 }
 
-void CSSFontSelector::willUseRange(const FontDescription& fontDescription, const AtomicString& family, const FontDataRange& range)
+void CSSFontSelector::willUseRange(const FontDescription& fontDescription, const AtomicString& family, const FontDataForRangeSet& rangeSet)
 {
     CSSSegmentedFontFace* face = m_fontFaceCache.get(fontDescription, family);
     if (face)
-        face->willUseRange(fontDescription, range);
+        face->willUseRange(fontDescription, rangeSet);
 }
 
 bool CSSFontSelector::isPlatformFontAvailable(const FontDescription& fontDescription, const AtomicString& passedFamily)
@@ -176,18 +176,15 @@ void CSSFontSelector::updateGenericFontFamilySettings(Document& document)
     if (!document.settings())
         return;
     m_genericFontFamilySettings = document.settings()->genericFontFamilySettings();
-    // Need to increment FontFaceCache version to update ComputedStyles.
-    m_fontFaceCache.incrementVersion();
+    fontCacheInvalidated();
 }
 
 DEFINE_TRACE(CSSFontSelector)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_document);
     visitor->trace(m_fontFaceCache);
     visitor->trace(m_clients);
     visitor->trace(m_fontLoader);
-#endif
     FontSelector::trace(visitor);
 }
 

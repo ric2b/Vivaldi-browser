@@ -17,16 +17,21 @@
 #include "content/public/common/page_state.h"
 #include "content/public/renderer/render_view_observer.h"
 #include "content/public/renderer/render_view_observer_tracker.h"
+#include "content/shell/common/layout_test/layout_test_bluetooth_fake_adapter_setter.mojom.h"
 #include "content/shell/common/shell_test_configuration.h"
-#include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
 #include "v8/include/v8.h"
 
 class SkBitmap;
 class SkCanvas;
 
+namespace base {
+class DictionaryValue;
+}
+
 namespace blink {
 class WebDeviceMotionData;
 class WebDeviceOrientationData;
+class WebView;
 struct WebRect;
 }
 
@@ -67,13 +72,9 @@ class BlinkTestRunner : public RenderViewObserver,
   void SetDeviceMotionData(const blink::WebDeviceMotionData& data) override;
   void SetDeviceOrientationData(
       const blink::WebDeviceOrientationData& data) override;
-  void SetScreenOrientation(
-      const blink::WebScreenOrientationType& orientation) override;
-  void DisableMockScreenOrientation() override;
-  void ResetScreenOrientation() override;
   void PrintMessage(const std::string& message) override;
-  void PostTask(test_runner::WebTask* task) override;
-  void PostDelayedTask(test_runner::WebTask* task, long long ms) override;
+  void PostTask(blink::WebTaskRunner::Task* task) override;
+  void PostDelayedTask(blink::WebTaskRunner::Task* task, long long ms) override;
   blink::WebString RegisterIsolatedFileSystem(
       const blink::WebVector<blink::WebString>& absolute_filenames) override;
   long long GetCurrentTimeInMillisecond() override;
@@ -92,7 +93,7 @@ class BlinkTestRunner : public RenderViewObserver,
   void ShowDevTools(const std::string& settings,
                     const std::string& frontend_url) override;
   void CloseDevTools() override;
-  void EvaluateInWebInspector(long call_id, const std::string& script) override;
+  void EvaluateInWebInspector(int call_id, const std::string& script) override;
   std::string EvaluateInWebInspectorOverlay(const std::string& script) override;
   void ClearAllDatabases() override;
   void SetDatabaseQuota(int quota) override;
@@ -103,8 +104,9 @@ class BlinkTestRunner : public RenderViewObserver,
   void SetDeviceScaleFactor(float factor) override;
   void SetDeviceColorProfile(const std::string& name) override;
   void EnableUseZoomForDSF() override;
-  void SetBluetoothMockDataSet(const std::string& name) override;
-  void SetBluetoothManualChooser() override;
+  void SetBluetoothFakeAdapter(const std::string& adapter_name,
+                               const base::Closure& callback) override;
+  void SetBluetoothManualChooser(bool enable) override;
   void GetBluetoothManualChooserEvents(
       const base::Callback<void(const std::vector<std::string>&)>& callback)
       override;
@@ -113,10 +115,12 @@ class BlinkTestRunner : public RenderViewObserver,
   void SetGeofencingMockProvider(bool service_available) override;
   void ClearGeofencingMockProvider() override;
   void SetGeofencingMockPosition(double latitude, double longitude) override;
-  void SetFocus(test_runner::WebTestProxyBase* proxy, bool focus) override;
+  void SetFocus(blink::WebView* web_view, bool focus) override;
   void SetAcceptAllCookies(bool accept) override;
   std::string PathToLocalResource(const std::string& resource) override;
   void SetLocale(const std::string& locale) override;
+  void OnLayoutTestRuntimeFlagsChanged(
+      const base::DictionaryValue& changed_values) override;
   void TestFinished() override;
   void CloseRemainingWindows() override;
   void DeleteAllCookies() override;
@@ -147,26 +151,29 @@ class BlinkTestRunner : public RenderViewObserver,
       int request_id,
       const std::vector<std::string>& event_platforms,
       const base::Callback<void(bool)>& callback) override;
-  void ResolveBeforeInstallPromptPromise(
-      int request_id,
-      const std::string& platform) override;
   blink::WebPlugin* CreatePluginPlaceholder(
     blink::WebLocalFrame* frame,
     const blink::WebPluginParams& params) override;
-  void OnWebTestProxyBaseDestroy(test_runner::WebTestProxyBase* proxy) override;
-  blink::WebPoint ConvertDIPToNative(
-      const blink::WebPoint& point_in_dip) const override;
+  float GetDeviceScaleFactorForTest() const override;
 
-  void Reset();
+  // Resets a RenderView to a known state for layout tests. It is used both when
+  // a RenderView is created and when reusing an existing RenderView for the
+  // next test case.
+  // When reusing an existing RenderView, |for_new_test| should be true, which
+  // also resets additional state, like the main frame's name and opener.
+  void Reset(bool for_new_test);
 
   void set_proxy(test_runner::WebTestProxyBase* proxy) { proxy_ = proxy; }
   test_runner::WebTestProxyBase* proxy() const { return proxy_; }
 
   void ReportLeakDetectionResult(const LeakDetectionResult& result);
 
+  // Message handlers forwarded by LayoutTestRenderFrameObserver.
+  void OnSetTestConfiguration(const ShellTestConfiguration& params);
+  void OnReplicateTestConfiguration(const ShellTestConfiguration& params);
+
  private:
   // Message handlers.
-  void OnSetTestConfiguration(const ShellTestConfiguration& params);
   void OnSessionHistory(
       const std::vector<int>& routing_ids,
       const std::vector<std::vector<PageState> >& session_histories,
@@ -184,6 +191,10 @@ class BlinkTestRunner : public RenderViewObserver,
   void CaptureDumpContinued();
   void OnPixelsDumpCompleted(const SkBitmap& snapshot);
   void CaptureDumpComplete();
+
+  mojom::LayoutTestBluetoothFakeAdapterSetter&
+  GetBluetoothFakeAdapterSetter();
+  mojom::LayoutTestBluetoothFakeAdapterSetterPtr bluetooth_fake_adapter_setter_;
 
   test_runner::WebTestProxyBase* proxy_;
 

@@ -203,6 +203,9 @@
   "ios/chrome/app/theme/ios_theme_resources.grd": {
     "structures": [25870],
   },
+  "ios/chrome/share_extension/strings/ios_share_extension_strings.grd": {
+    "messages": [26325],
+  },
   "ios/chrome/today_extension/strings/ios_today_extension_strings.grd": {
     "messages": [26335],
   },
@@ -239,9 +242,6 @@
   },
   "extensions/shell/app_shell_resources.grd": {
     "includes": [26350],
-  },
-  "chrome/browser/resources/memory_internals_resources.grd": {
-    "includes": [26450],
   },
   "chrome/browser/resources/password_manager_internals_resources.grd": {
     "includes": [26650],
@@ -301,6 +301,9 @@
   },
   "chrome/browser/resources/settings/settings_resources.grd": {
     "structures": [30920],
+  },
+  "headless/lib/resources/headless_lib_resources.grd": {
+    "includes": [30940],
   },
 
   # Resource ids starting at 31000 are reserved for projects built on Chromium.

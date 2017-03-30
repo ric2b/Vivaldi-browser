@@ -6,13 +6,11 @@
 
 #include "platform/v8_inspector/public/V8DebuggerClient.h"
 
-#include "wtf/RefPtr.h"
-
 #include <v8-debug.h>
 
 namespace blink {
 
-v8::Local<v8::FunctionTemplate> InspectorWrapperBase::createWrapperTemplate(v8::Isolate* isolate, const char* className, const Vector<V8MethodConfiguration>& methods, const Vector<V8AttributeConfiguration>& attributes)
+v8::Local<v8::FunctionTemplate> InspectorWrapperBase::createWrapperTemplate(v8::Isolate* isolate, const char* className, const protocol::Vector<V8MethodConfiguration>& methods, const protocol::Vector<V8AttributeConfiguration>& attributes)
 {
     v8::Local<v8::FunctionTemplate> functionTemplate = v8::FunctionTemplate::New(isolate);
 
@@ -34,14 +32,15 @@ v8::Local<v8::FunctionTemplate> InspectorWrapperBase::createWrapperTemplate(v8::
     return functionTemplate;
 }
 
-v8::Local<v8::Object> InspectorWrapperBase::createWrapper(V8DebuggerClient* client, v8::Local<v8::FunctionTemplate> constructorTemplate, v8::Local<v8::Context> context)
+v8::Local<v8::Object> InspectorWrapperBase::createWrapper(v8::Local<v8::FunctionTemplate> constructorTemplate, v8::Local<v8::Context> context)
 {
+    v8::MicrotasksScope microtasks(context->GetIsolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
     v8::Local<v8::Function> function;
     if (!constructorTemplate->GetFunction(context).ToLocal(&function))
         return v8::Local<v8::Object>();
 
     v8::Local<v8::Object> result;
-    if (!client->instantiateObject(function).ToLocal(&result))
+    if (!function->NewInstance(context).ToLocal(&result))
         return v8::Local<v8::Object>();
     return result;
 }

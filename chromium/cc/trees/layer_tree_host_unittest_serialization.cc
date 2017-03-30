@@ -6,7 +6,6 @@
 
 #include "cc/layers/heads_up_display_layer.h"
 #include "cc/layers/layer.h"
-#include "cc/layers/layer_settings.h"
 #include "cc/proto/layer.pb.h"
 #include "cc/proto/layer_tree_host.pb.h"
 #include "cc/test/fake_layer_tree_host.h"
@@ -41,15 +40,26 @@ class LayerTreeHostSerializationTest : public testing::Test {
     layer_tree_host_src_->in_paint_layer_contents_ = false;
     layer_tree_host_dst_->in_paint_layer_contents_ = false;
 
-    // Need to reset root layer and LayerTreeHost pointers before tear down.
-    layer_tree_host_src_->SetRootLayer(nullptr);
+    // Need to reset LayerTreeHost pointers before tear down.
     layer_tree_host_src_ = nullptr;
-    layer_tree_host_dst_->SetRootLayer(nullptr);
     layer_tree_host_dst_ = nullptr;
+  }
+
+  void VerifyHostHasAllExpectedLayersInTree(Layer* root_layer) {
+    LayerTreeHostCommon::CallFunctionForEveryLayer(
+        root_layer->layer_tree_host(),
+        [root_layer](Layer* layer) {
+          DCHECK(layer->layer_tree_host());
+          EXPECT_EQ(layer, layer->layer_tree_host()->LayerById(layer->id()));
+        },
+        CallFunctionLayerType::ALL_LAYERS);
   }
 
   void VerifySerializationAndDeserialization() {
     proto::LayerTreeHost proto;
+
+    std::unordered_set<Layer*> layers_that_should_push_properties_src =
+        layer_tree_host_src_->LayersThatShouldPushProperties();
     layer_tree_host_src_->ToProtobufForCommit(&proto);
     layer_tree_host_dst_->FromProtobufForCommit(proto);
 
@@ -103,6 +113,10 @@ class LayerTreeHostSerializationTest : public testing::Test {
     EXPECT_EQ(layer_tree_host_src_->id_, layer_tree_host_dst_->id_);
     EXPECT_EQ(layer_tree_host_src_->next_commit_forces_redraw_,
               layer_tree_host_dst_->next_commit_forces_redraw_);
+    for (auto layer : layers_that_should_push_properties_src) {
+      EXPECT_TRUE(layer_tree_host_dst_->LayerNeedsPushPropertiesForTesting(
+          layer_tree_host_dst_->LayerById(layer->id())));
+    }
 
     if (layer_tree_host_src_->hud_layer_) {
       EXPECT_EQ(layer_tree_host_src_->hud_layer_->id(),
@@ -159,10 +173,12 @@ class LayerTreeHostSerializationTest : public testing::Test {
     // All layers must have a property tree index that matches PropertyTrees.
     if (layer_tree_host_dst_->property_trees_.sequence_number) {
       int seq_num = layer_tree_host_dst_->property_trees_.sequence_number;
-      LayerTreeHostCommon::CallFunctionForSubtree(
-          layer_tree_host_dst_->root_layer_.get(), [seq_num](Layer* layer) {
+      LayerTreeHostCommon::CallFunctionForEveryLayer(
+          layer_tree_host_dst_.get(),
+          [seq_num](Layer* layer) {
             EXPECT_EQ(seq_num, layer->property_tree_sequence_number());
-          });
+          },
+          CallFunctionLayerType::ALL_LAYERS);
     }
   }
 
@@ -175,9 +191,9 @@ class LayerTreeHostSerializationTest : public testing::Test {
     layer_tree_host_src_->meta_information_sequence_number_ *= 3;
 
     // Just fake setup a layer for both source and dest.
-    scoped_refptr<Layer> root_layer_src = Layer::Create(LayerSettings());
+    scoped_refptr<Layer> root_layer_src = Layer::Create();
     layer_tree_host_src_->SetRootLayer(root_layer_src);
-    layer_tree_host_dst_->SetRootLayer(Layer::Create(LayerSettings()));
+    layer_tree_host_dst_->SetRootLayer(Layer::Create());
     root_layer_src->SetDoubleSided(!root_layer_src->double_sided());
 
     layer_tree_host_src_->debug_state_.show_replica_screen_space_rects =
@@ -211,21 +227,17 @@ class LayerTreeHostSerializationTest : public testing::Test {
     layer_tree_host_src_->next_commit_forces_redraw_ =
         !layer_tree_host_src_->next_commit_forces_redraw_;
 
-    layer_tree_host_src_->hud_layer_ =
-        HeadsUpDisplayLayer::Create(LayerSettings());
+    layer_tree_host_src_->hud_layer_ = HeadsUpDisplayLayer::Create();
     root_layer_src->AddChild(layer_tree_host_src_->hud_layer_);
-    layer_tree_host_src_->overscroll_elasticity_layer_ =
-        Layer::Create(LayerSettings());
+    layer_tree_host_src_->overscroll_elasticity_layer_ = Layer::Create();
     root_layer_src->AddChild(
         layer_tree_host_src_->overscroll_elasticity_layer_);
-    layer_tree_host_src_->page_scale_layer_ = Layer::Create(LayerSettings());
+    layer_tree_host_src_->page_scale_layer_ = Layer::Create();
     root_layer_src->AddChild(layer_tree_host_src_->page_scale_layer_);
-    layer_tree_host_src_->inner_viewport_scroll_layer_ =
-        Layer::Create(LayerSettings());
+    layer_tree_host_src_->inner_viewport_scroll_layer_ = Layer::Create();
     root_layer_src->AddChild(
         layer_tree_host_src_->inner_viewport_scroll_layer_);
-    layer_tree_host_src_->outer_viewport_scroll_layer_ =
-        Layer::Create(LayerSettings());
+    layer_tree_host_src_->outer_viewport_scroll_layer_ = Layer::Create();
     root_layer_src->AddChild(
         layer_tree_host_src_->outer_viewport_scroll_layer_);
 
@@ -253,45 +265,40 @@ class LayerTreeHostSerializationTest : public testing::Test {
 
   void RunLayersChangedTest() {
     // Just fake setup a layer for both source and dest.
-    scoped_refptr<Layer> root_layer_src = Layer::Create(LayerSettings());
+    scoped_refptr<Layer> root_layer_src = Layer::Create();
     layer_tree_host_src_->SetRootLayer(root_layer_src);
-    layer_tree_host_dst_->SetRootLayer(Layer::Create(LayerSettings()));
+    layer_tree_host_dst_->SetRootLayer(Layer::Create());
     root_layer_src->SetDoubleSided(!root_layer_src->double_sided());
 
     // No HUD layer or |overscroll_elasticity_layer_|, or the inner/outer
     // viewport scroll layers.
-    layer_tree_host_src_->overscroll_elasticity_layer_ =
-        Layer::Create(LayerSettings());
+    layer_tree_host_src_->overscroll_elasticity_layer_ = Layer::Create();
     root_layer_src->AddChild(
         layer_tree_host_src_->overscroll_elasticity_layer_);
 
     VerifySerializationAndDeserialization();
   }
 
-  void LayersChangedMultipleSerializations() {
+  void RunLayersChangedMultipleSerializations() {
     // Just fake setup a layer for both source and dest.
-    scoped_refptr<Layer> root_layer_src = Layer::Create(LayerSettings());
+    scoped_refptr<Layer> root_layer_src = Layer::Create();
     layer_tree_host_src_->SetRootLayer(root_layer_src);
-    layer_tree_host_dst_->SetRootLayer(Layer::Create(LayerSettings()));
+    layer_tree_host_dst_->SetRootLayer(Layer::Create());
     root_layer_src->SetDoubleSided(!root_layer_src->double_sided());
 
     // Ensure that all the layers work correctly for multiple rounds of
     // serialization and deserialization.
-    layer_tree_host_src_->hud_layer_ =
-        HeadsUpDisplayLayer::Create(LayerSettings());
+    layer_tree_host_src_->hud_layer_ = HeadsUpDisplayLayer::Create();
     root_layer_src->AddChild(layer_tree_host_src_->hud_layer_);
-    layer_tree_host_src_->overscroll_elasticity_layer_ =
-        Layer::Create(LayerSettings());
+    layer_tree_host_src_->overscroll_elasticity_layer_ = Layer::Create();
     root_layer_src->AddChild(
         layer_tree_host_src_->overscroll_elasticity_layer_);
-    layer_tree_host_src_->page_scale_layer_ = Layer::Create(LayerSettings());
+    layer_tree_host_src_->page_scale_layer_ = Layer::Create();
     root_layer_src->AddChild(layer_tree_host_src_->page_scale_layer_);
-    layer_tree_host_src_->inner_viewport_scroll_layer_ =
-        Layer::Create(LayerSettings());
+    layer_tree_host_src_->inner_viewport_scroll_layer_ = Layer::Create();
     root_layer_src->AddChild(
         layer_tree_host_src_->inner_viewport_scroll_layer_);
-    layer_tree_host_src_->outer_viewport_scroll_layer_ =
-        Layer::Create(LayerSettings());
+    layer_tree_host_src_->outer_viewport_scroll_layer_ = Layer::Create();
     root_layer_src->AddChild(
         layer_tree_host_src_->outer_viewport_scroll_layer_);
 
@@ -308,6 +315,39 @@ class LayerTreeHostSerializationTest : public testing::Test {
     VerifySerializationAndDeserialization();
     layer_tree_host_src_->outer_viewport_scroll_layer_ = nullptr;
     VerifySerializationAndDeserialization();
+  }
+
+  void RunAddAndRemoveNodeFromLayerTree() {
+    /* Testing serialization when the tree hierarchy changes like this:
+         root                  root
+        /    \                /    \
+       a      b        =>    a      c
+               \                     \
+                c                     d
+    */
+    scoped_refptr<Layer> layer_src_root = Layer::Create();
+    layer_tree_host_src_->SetRootLayer(layer_src_root);
+
+    scoped_refptr<Layer> layer_src_a = Layer::Create();
+    scoped_refptr<Layer> layer_src_b = Layer::Create();
+    scoped_refptr<Layer> layer_src_c = Layer::Create();
+    scoped_refptr<Layer> layer_src_d = Layer::Create();
+
+    layer_src_root->AddChild(layer_src_a);
+    layer_src_root->AddChild(layer_src_b);
+    layer_src_b->AddChild(layer_src_c);
+
+    VerifySerializationAndDeserialization();
+    VerifyHostHasAllExpectedLayersInTree(layer_tree_host_dst_->root_layer());
+
+    // Now change the Layer Hierarchy
+    layer_src_c->RemoveFromParent();
+    layer_src_b->RemoveFromParent();
+    layer_src_root->AddChild(layer_src_c);
+    layer_src_c->AddChild(layer_src_d);
+
+    VerifySerializationAndDeserialization();
+    VerifyHostHasAllExpectedLayersInTree(layer_tree_host_dst_->root_layer());
   }
 
  private:
@@ -329,7 +369,11 @@ TEST_F(LayerTreeHostSerializationTest, LayersChanged) {
 }
 
 TEST_F(LayerTreeHostSerializationTest, LayersChangedMultipleSerializations) {
-  LayersChangedMultipleSerializations();
+  RunLayersChangedMultipleSerializations();
+}
+
+TEST_F(LayerTreeHostSerializationTest, AddAndRemoveNodeFromLayerTree) {
+  RunAddAndRemoveNodeFromLayerTree();
 }
 
 }  // namespace cc

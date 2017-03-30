@@ -192,7 +192,7 @@ void V8Window::postMessageMethodCustom(const v8::FunctionCallbackInfo<v8::Value>
     //   postMessage(message, targetOrigin, {sequence of transferrables})
     // Legacy non-standard implementations in webkit allowed:
     //   postMessage(message, {sequence of transferrables}, targetOrigin);
-    OwnPtrWillBeRawPtr<MessagePortArray> portArray = adoptPtrWillBeNoop(new MessagePortArray);
+    RawPtr<MessagePortArray> portArray = new MessagePortArray;
     ArrayBufferArray arrayBufferArray;
     ImageBitmapArray imageBitmapArray;
     int targetOriginArgIndex = 1;
@@ -239,7 +239,7 @@ void V8Window::openMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
 
     // |impl| has to be a LocalDOMWindow, since RemoteDOMWindows wouldn't have
     // passed the BindingSecurity check above.
-    RefPtrWillBeRawPtr<DOMWindow> openedWindow = toLocalDOMWindow(impl)->open(urlString, frameName, windowFeaturesString, callingDOMWindow(info.GetIsolate()), enteredDOMWindow(info.GetIsolate()));
+    RawPtr<DOMWindow> openedWindow = toLocalDOMWindow(impl)->open(urlString, frameName, windowFeaturesString, callingDOMWindow(info.GetIsolate()), enteredDOMWindow(info.GetIsolate()));
     if (!openedWindow)
         return;
 
@@ -283,33 +283,45 @@ static bool installTestInterfaceIfNeeded(LocalFrame& frame, v8::Local<v8::String
     return false;
 }
 
-static bool installCommandLineAPIIfNeeded(v8::Local<v8::Name> name, const AtomicString& nameString, const v8::PropertyCallbackInfo<v8::Value>& info)
+static bool namedPropertyFromDebuggerScopeExtension(v8::Local<v8::Name> name, const AtomicString& nameString, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
     if (!InspectorInstrumentation::hasFrontends())
         return false;
 
-    if (!V8Debugger::isCommandLineAPIMethod(nameString))
+    bool isGetter = V8Debugger::isCommandLineAPIGetter(nameString);
+    bool isMethod = !isGetter && (V8Debugger::isCommandLineAPIMethod(nameString) || V8Debugger::isRemoteObjectAPIMethod(nameString));
+    if (!isGetter && !isMethod)
         return false;
 
     v8::Isolate* isolate = info.GetIsolate();
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
     v8::Local<v8::Object> global = context->Global();
-    v8::Local<v8::Value> commandLineAPI;
+    v8::Local<v8::Value> scopeExtensionValue;
 
-    if (v8Call(global->Get(context, V8Debugger::commandLineAPISymbol(isolate)), commandLineAPI)) {
+    if (v8Call(global->Get(context, V8Debugger::scopeExtensionSymbol(isolate)), scopeExtensionValue)) {
         v8::Local<v8::Value> value;
-        if (commandLineAPI->IsObject() && v8Call(commandLineAPI->ToObject(isolate)->Get(context, name), value)) {
-            v8SetReturnValue(info, value);
-            return true;
+        if (scopeExtensionValue->IsObject() && v8Call(scopeExtensionValue->ToObject(isolate)->Get(context, name), value)) {
+            if (isMethod) {
+                v8SetReturnValue(info, value);
+                return true;
+            }
+            if (isGetter && value->IsFunction()) {
+                v8::Local<v8::Function> getterFunction = v8::Local<v8::Function>::Cast(value);
+                v8::MicrotasksScope microtasks(isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+                if (getterFunction->Call(context, scopeExtensionValue, 0, nullptr).ToLocal(&value)) {
+                    v8SetReturnValue(info, value);
+                    return true;
+                }
+            }
         }
     }
-
     return false;
 }
 
 void V8Window::namedPropertyGetterCustom(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
+    if (!name->IsString())
+        return;
     auto nameString = name.As<v8::String>();
     DOMWindow* window = V8Window::toImpl(info.Holder());
     if (!window)
@@ -338,7 +350,7 @@ void V8Window::namedPropertyGetterCustom(v8::Local<v8::Name> name, const v8::Pro
     if (installTestInterfaceIfNeeded(toLocalFrame(*frame), nameString, info))
         return;
 
-    if (installCommandLineAPIIfNeeded(name, propName, info))
+    if (namedPropertyFromDebuggerScopeExtension(name, propName, info))
         return;
 
     // Search named items in the document.
@@ -361,7 +373,7 @@ void V8Window::namedPropertyGetterCustom(v8::Local<v8::Name> name, const v8::Pro
         return;
     }
 
-    RefPtrWillBeRawPtr<HTMLCollection> items = doc->windowNamedItems(propName);
+    RawPtr<HTMLCollection> items = doc->windowNamedItems(propName);
     if (!items->isEmpty()) {
         // TODO(esprehn): Firefox doesn't return an HTMLCollection here if there's
         // multiple with the same name, but Chrome and Safari does. What's the

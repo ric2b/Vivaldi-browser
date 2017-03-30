@@ -26,7 +26,7 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public class PhysicalWebUma {
     private static final String TAG = "PhysicalWeb";
-    private static final String NOTIFICATION_PRESS_COUNT = "PhysicalWeb.NotificationPressed";
+    private static final String HAS_DEFERRED_METRICS_KEY = "PhysicalWeb.HasDeferredMetrics";
     private static final String OPT_IN_DECLINE_BUTTON_PRESS_COUNT =
             "PhysicalWeb.OptIn.DeclineButtonPressed";
     private static final String OPT_IN_ENABLE_BUTTON_PRESS_COUNT =
@@ -43,19 +43,28 @@ public class PhysicalWebUma {
     private static final String PREFS_LOCATION_GRANTED_COUNT = "PhysicalWeb.Prefs.LocationGranted";
     private static final String PWS_BACKGROUND_RESOLVE_TIMES = "PhysicalWeb.ResolveTime.Background";
     private static final String PWS_FOREGROUND_RESOLVE_TIMES = "PhysicalWeb.ResolveTime.Foreground";
+    private static final String OPT_IN_NOTIFICATION_PRESS_DELAYS =
+            "PhysicalWeb.ReferralDelay.OptInNotification";
+    private static final String STANDARD_NOTIFICATION_PRESS_DELAYS =
+            "PhysicalWeb.ReferralDelay.StandardNotification";
     private static final String URL_SELECTED_COUNT = "PhysicalWeb.UrlSelected";
     private static final String TOTAL_URLS_INITIAL_COUNTS =
             "PhysicalWeb.TotalUrls.OnInitialDisplay";
     private static final String TOTAL_URLS_REFRESH_COUNTS =
             "PhysicalWeb.TotalUrls.OnRefresh";
+    private static final String ACTIVITY_REFERRALS = "PhysicalWeb.ActivityReferral";
+    private static final String PHYSICAL_WEB_STATE = "PhysicalWeb.State";
+    private static final String CHROME_START = "ChromeStart";
+    private static final String LAUNCH_FROM_PREFERENCES = "LaunchFromPreferences";
+    private static final String LAUNCH_FROM_DIAGNOSTICS = "LaunchFromDiagnostics";
+    private static final String BLUETOOTH = "Bluetooth";
+    private static final String DATA_CONNECTION = "DataConnection";
+    private static final String LOCATION_PERMISSION = "LocationPermission";
+    private static final String LOCATION_SERVICES = "LocationServices";
+    private static final String PREFERENCE = "Preference";
+    private static final int BOOLEAN_BOUNDARY = 2;
+    private static final int TRISTATE_BOUNDARY = 3;
     private static boolean sUploadAllowed = false;
-
-    /**
-     * Records a notification press.
-     */
-    public static void onNotificationPressed(Context context) {
-        handleAction(context, NOTIFICATION_PRESS_COUNT);
-    }
 
     /**
      * Records a URL selection.
@@ -99,7 +108,7 @@ public class PhysicalWebUma {
         handleAction(context, OPT_IN_NOTIFICATION_PRESS_COUNT);
     }
 
-    /*
+    /**
      * Records when the user disables the Physical Web fetaure.
      */
     public static void onPrefsFeatureDisabled(Context context) {
@@ -170,6 +179,68 @@ public class PhysicalWebUma {
     }
 
     /**
+     * Records a ListUrlActivity referral.
+     * @param refer The type of referral.  This enum is listed as PhysicalWebActivityReferer in
+     *     histograms.xml.
+     */
+    public static void onActivityReferral(Context context, int referer) {
+        handleEnum(context, ACTIVITY_REFERRALS, referer, ListUrlsActivity.REFERER_BOUNDARY);
+        switch (referer) {
+            case ListUrlsActivity.NOTIFICATION_REFERER:
+                handleTime(context, STANDARD_NOTIFICATION_PRESS_DELAYS,
+                        UrlManager.getInstance(context).getTimeSinceNotificationUpdate(),
+                        TimeUnit.MILLISECONDS);
+                break;
+            case ListUrlsActivity.OPTIN_REFERER:
+                handleTime(context, OPT_IN_NOTIFICATION_PRESS_DELAYS,
+                        UrlManager.getInstance(context).getTimeSinceNotificationUpdate(),
+                        TimeUnit.MILLISECONDS);
+                break;
+            case ListUrlsActivity.PREFERENCE_REFERER:
+                recordPhysicalWebState(context, LAUNCH_FROM_PREFERENCES);
+                break;
+            case ListUrlsActivity.DIAGNOSTICS_REFERER:
+                recordPhysicalWebState(context, LAUNCH_FROM_DIAGNOSTICS);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Records the Physical Web state on Chrome startup.
+     */
+    public static void onChromeStart(Context context) {
+        recordPhysicalWebState(context, CHROME_START);
+    }
+
+    /**
+     * Calculate a Physical Web state.
+     * The Physical Web state includes:
+     * - The location provider
+     * - The location permission
+     * - The bluetooth status
+     * - The data connection status
+     * - The Physical Web preference status
+     */
+    public static void recordPhysicalWebState(Context context, String actionName) {
+        handleEnum(context, createStateString(LOCATION_SERVICES, actionName),
+                Utils.isLocationServicesEnabled(context) ? 1 : 0, BOOLEAN_BOUNDARY);
+        handleEnum(context, createStateString(LOCATION_PERMISSION, actionName),
+                Utils.isLocationPermissionGranted(context) ? 1 : 0, BOOLEAN_BOUNDARY);
+        handleEnum(context, createStateString(BLUETOOTH, actionName),
+                Utils.getBluetoothEnabledStatus(context), TRISTATE_BOUNDARY);
+        handleEnum(context, createStateString(DATA_CONNECTION, actionName),
+                Utils.isDataConnectionActive(context) ? 1 : 0, BOOLEAN_BOUNDARY);
+        int preferenceState = 2;
+        if (!PhysicalWeb.isOnboarding(context)) {
+            preferenceState = PhysicalWeb.isPhysicalWebPreferenceEnabled(context) ? 1 : 0;
+        }
+        handleEnum(context, createStateString(PREFERENCE, actionName),
+                preferenceState, TRISTATE_BOUNDARY);
+    }
+
+    /**
      * Uploads metrics that we have deferred for uploading.
      * Additionally, this method will cause future stat records not to be deferred and instead
      * uploaded immediately.
@@ -179,59 +250,23 @@ public class PhysicalWebUma {
         sUploadAllowed = true;
 
         // Read the metrics.
-        UmaUploader uploader = new UmaUploader();
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-        uploader.notificationPressCount = prefs.getInt(NOTIFICATION_PRESS_COUNT, 0);
-        uploader.urlSelectedCount = prefs.getInt(URL_SELECTED_COUNT, 0);
-        uploader.optInDeclineButtonTapCount = prefs.getInt(OPT_IN_DECLINE_BUTTON_PRESS_COUNT, 0);
-        uploader.optInEnableButtonTapCount = prefs.getInt(OPT_IN_ENABLE_BUTTON_PRESS_COUNT, 0);
-        uploader.optInHighPriorityNotificationCount =
-                prefs.getInt(OPT_IN_HIGH_PRIORITY_NOTIFICATION_COUNT, 0);
-        uploader.optInMinPriorityNotificationCount =
-                prefs.getInt(OPT_IN_MIN_PRIORITY_NOTIFICATION_COUNT, 0);
-        uploader.optInNotificationPressCount = prefs.getInt(OPT_IN_NOTIFICATION_PRESS_COUNT, 0);
-        uploader.prefsFeatureDisabledCount = prefs.getInt(PREFS_FEATURE_DISABLED_COUNT, 0);
-        uploader.prefsFeatureEnabledCount = prefs.getInt(PREFS_FEATURE_ENABLED_COUNT, 0);
-        uploader.prefsLocationDeniedCount = prefs.getInt(PREFS_LOCATION_DENIED_COUNT, 0);
-        uploader.prefsLocationGrantedCount = prefs.getInt(PREFS_LOCATION_GRANTED_COUNT, 0);
-        uploader.pwsBackgroundResolveTimes = prefs.getString(PWS_BACKGROUND_RESOLVE_TIMES, "[]");
-        uploader.pwsForegroundResolveTimes = prefs.getString(PWS_FOREGROUND_RESOLVE_TIMES, "[]");
-        uploader.totalUrlsInitialCounts = prefs.getString(TOTAL_URLS_INITIAL_COUNTS, "[]");
-        uploader.totalUrlsRefreshCounts = prefs.getString(TOTAL_URLS_REFRESH_COUNTS, "[]");
-
-        // If the metrics are empty, we are done.
-        if (uploader.isEmpty()) {
-            return;
+        if (prefs.getBoolean(HAS_DEFERRED_METRICS_KEY, false)) {
+            AsyncTask.THREAD_POOL_EXECUTOR.execute(new UmaUploader(prefs));
         }
+    }
 
-        // Clear out the stored deferred metrics that we are about to upload.
-        prefs.edit()
-                .remove(NOTIFICATION_PRESS_COUNT)
-                .remove(URL_SELECTED_COUNT)
-                .remove(OPT_IN_DECLINE_BUTTON_PRESS_COUNT)
-                .remove(OPT_IN_ENABLE_BUTTON_PRESS_COUNT)
-                .remove(OPT_IN_HIGH_PRIORITY_NOTIFICATION_COUNT)
-                .remove(OPT_IN_MIN_PRIORITY_NOTIFICATION_COUNT)
-                .remove(OPT_IN_NOTIFICATION_PRESS_COUNT)
-                .remove(PREFS_FEATURE_DISABLED_COUNT)
-                .remove(PREFS_FEATURE_ENABLED_COUNT)
-                .remove(PREFS_LOCATION_DENIED_COUNT)
-                .remove(PREFS_LOCATION_GRANTED_COUNT)
-                .remove(PWS_BACKGROUND_RESOLVE_TIMES)
-                .remove(PWS_FOREGROUND_RESOLVE_TIMES)
-                .remove(TOTAL_URLS_INITIAL_COUNTS)
-                .remove(TOTAL_URLS_REFRESH_COUNTS)
-                .apply();
-
-        // Finally, upload the metrics.
-        AsyncTask.THREAD_POOL_EXECUTOR.execute(uploader);
+    private static String createStateString(String stateName, String actionName) {
+        return PHYSICAL_WEB_STATE + "." + stateName + "." + actionName;
     }
 
     private static void storeAction(Context context, String key) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-        SharedPreferences.Editor prefsEditor = prefs.edit();
         int count = prefs.getInt(key, 0);
-        prefsEditor.putInt(key, count + 1).apply();
+        prefs.edit()
+                .putBoolean(HAS_DEFERRED_METRICS_KEY, true)
+                .putInt(key, count + 1)
+                .apply();
     }
 
     private static void storeValue(Context context, String key, Object value) {
@@ -241,6 +276,10 @@ public class PhysicalWebUma {
         try {
             values = new JSONArray(prefs.getString(key, "[]"));
             values.put(value);
+            prefsEditor
+                    .putBoolean(HAS_DEFERRED_METRICS_KEY, true)
+                    .putString(key, values.toString())
+                    .apply();
         } catch (JSONException e) {
             Log.e(TAG, "JSONException when storing " + key + " stats", e);
             prefsEditor.remove(key).apply();
@@ -265,71 +304,68 @@ public class PhysicalWebUma {
         }
     }
 
-    private static class UmaUploader implements Runnable {
-        public int notificationPressCount;
-        public int urlSelectedCount;
-        public int optInDeclineButtonTapCount;
-        public int optInEnableButtonTapCount;
-        public int optInHighPriorityNotificationCount;
-        public int optInMinPriorityNotificationCount;
-        public int optInNotificationPressCount;
-        public int prefsFeatureDisabledCount;
-        public int prefsFeatureEnabledCount;
-        public int prefsLocationDeniedCount;
-        public int prefsLocationGrantedCount;
-        public String pwsBackgroundResolveTimes;
-        public String pwsForegroundResolveTimes;
-        public String totalUrlsInitialCounts;
-        public String totalUrlsRefreshCounts;
-
-        public boolean isEmpty() {
-            return notificationPressCount == 0
-                    && urlSelectedCount == 0
-                    && optInDeclineButtonTapCount == 0
-                    && optInEnableButtonTapCount == 0
-                    && optInHighPriorityNotificationCount == 0
-                    && optInMinPriorityNotificationCount == 0
-                    && optInNotificationPressCount == 0
-                    && prefsFeatureDisabledCount == 0
-                    && prefsFeatureEnabledCount == 0
-                    && prefsLocationDeniedCount == 0
-                    && prefsLocationGrantedCount == 0
-                    && pwsBackgroundResolveTimes.equals("[]")
-                    && pwsForegroundResolveTimes.equals("[]")
-                    && totalUrlsInitialCounts.equals("[]")
-                    && totalUrlsRefreshCounts.equals("[]");
+    private static void handleEnum(Context context, String key, int value, int boundary) {
+        if (sUploadAllowed) {
+            RecordHistogram.recordEnumeratedHistogram(key, value, boundary);
+        } else {
+            storeValue(context, key, value);
         }
+    }
 
-        UmaUploader() {
+    private static class UmaUploader implements Runnable {
+        SharedPreferences mPrefs;
+
+        UmaUploader(SharedPreferences prefs) {
+            mPrefs = prefs;
         }
 
         @Override
         public void run() {
-            uploadActions(notificationPressCount, NOTIFICATION_PRESS_COUNT);
-            uploadActions(urlSelectedCount, URL_SELECTED_COUNT);
-            uploadActions(optInDeclineButtonTapCount, OPT_IN_DECLINE_BUTTON_PRESS_COUNT);
-            uploadActions(optInEnableButtonTapCount, OPT_IN_ENABLE_BUTTON_PRESS_COUNT);
-            uploadActions(optInHighPriorityNotificationCount,
-                    OPT_IN_HIGH_PRIORITY_NOTIFICATION_COUNT);
-            uploadActions(optInMinPriorityNotificationCount,
-                    OPT_IN_MIN_PRIORITY_NOTIFICATION_COUNT);
-            uploadActions(optInNotificationPressCount, OPT_IN_NOTIFICATION_PRESS_COUNT);
-            uploadActions(prefsFeatureDisabledCount, PREFS_FEATURE_DISABLED_COUNT);
-            uploadActions(prefsFeatureEnabledCount, PREFS_FEATURE_ENABLED_COUNT);
-            uploadActions(prefsLocationDeniedCount, PREFS_LOCATION_DENIED_COUNT);
-            uploadActions(prefsLocationGrantedCount, PREFS_LOCATION_GRANTED_COUNT);
-            uploadTimes(pwsBackgroundResolveTimes, PWS_BACKGROUND_RESOLVE_TIMES,
-                    TimeUnit.MILLISECONDS);
-            uploadTimes(pwsForegroundResolveTimes, PWS_FOREGROUND_RESOLVE_TIMES,
-                    TimeUnit.MILLISECONDS);
-            uploadCounts(totalUrlsInitialCounts, TOTAL_URLS_INITIAL_COUNTS);
-            uploadCounts(totalUrlsRefreshCounts, TOTAL_URLS_REFRESH_COUNTS);
+            uploadActions(URL_SELECTED_COUNT);
+            uploadActions(OPT_IN_DECLINE_BUTTON_PRESS_COUNT);
+            uploadActions(OPT_IN_ENABLE_BUTTON_PRESS_COUNT);
+            uploadActions(OPT_IN_HIGH_PRIORITY_NOTIFICATION_COUNT);
+            uploadActions(OPT_IN_MIN_PRIORITY_NOTIFICATION_COUNT);
+            uploadActions(OPT_IN_NOTIFICATION_PRESS_COUNT);
+            uploadActions(PREFS_FEATURE_DISABLED_COUNT);
+            uploadActions(PREFS_FEATURE_ENABLED_COUNT);
+            uploadActions(PREFS_LOCATION_DENIED_COUNT);
+            uploadActions(PREFS_LOCATION_GRANTED_COUNT);
+            uploadTimes(PWS_BACKGROUND_RESOLVE_TIMES, TimeUnit.MILLISECONDS);
+            uploadTimes(PWS_FOREGROUND_RESOLVE_TIMES, TimeUnit.MILLISECONDS);
+            uploadTimes(STANDARD_NOTIFICATION_PRESS_DELAYS, TimeUnit.MILLISECONDS);
+            uploadTimes(OPT_IN_NOTIFICATION_PRESS_DELAYS, TimeUnit.MILLISECONDS);
+            uploadCounts(TOTAL_URLS_INITIAL_COUNTS);
+            uploadCounts(TOTAL_URLS_REFRESH_COUNTS);
+            uploadEnums(ACTIVITY_REFERRALS, ListUrlsActivity.REFERER_BOUNDARY);
+            uploadEnums(createStateString(LOCATION_SERVICES, CHROME_START), BOOLEAN_BOUNDARY);
+            uploadEnums(createStateString(LOCATION_PERMISSION, CHROME_START), BOOLEAN_BOUNDARY);
+            uploadEnums(createStateString(BLUETOOTH, CHROME_START), TRISTATE_BOUNDARY);
+            uploadEnums(createStateString(DATA_CONNECTION, CHROME_START), BOOLEAN_BOUNDARY);
+            uploadEnums(createStateString(PREFERENCE, CHROME_START), TRISTATE_BOUNDARY);
+            uploadEnums(createStateString(LOCATION_SERVICES, LAUNCH_FROM_DIAGNOSTICS),
+                    BOOLEAN_BOUNDARY);
+            uploadEnums(createStateString(LOCATION_PERMISSION, LAUNCH_FROM_DIAGNOSTICS),
+                    BOOLEAN_BOUNDARY);
+            uploadEnums(createStateString(BLUETOOTH, LAUNCH_FROM_DIAGNOSTICS), TRISTATE_BOUNDARY);
+            uploadEnums(createStateString(DATA_CONNECTION, LAUNCH_FROM_DIAGNOSTICS),
+                    BOOLEAN_BOUNDARY);
+            uploadEnums(createStateString(PREFERENCE, LAUNCH_FROM_DIAGNOSTICS), TRISTATE_BOUNDARY);
+            uploadEnums(createStateString(LOCATION_SERVICES, LAUNCH_FROM_PREFERENCES),
+                    BOOLEAN_BOUNDARY);
+            uploadEnums(createStateString(LOCATION_PERMISSION, LAUNCH_FROM_PREFERENCES),
+                    BOOLEAN_BOUNDARY);
+            uploadEnums(createStateString(BLUETOOTH, LAUNCH_FROM_PREFERENCES), TRISTATE_BOUNDARY);
+            uploadEnums(createStateString(DATA_CONNECTION, LAUNCH_FROM_PREFERENCES),
+                    BOOLEAN_BOUNDARY);
+            uploadEnums(createStateString(PREFERENCE, LAUNCH_FROM_PREFERENCES), TRISTATE_BOUNDARY);
+            removePref(HAS_DEFERRED_METRICS_KEY);
         }
 
-        private static void uploadActions(int count, String key) {
-            for (int i = 0; i < count; i++) {
-                RecordUserAction.record(key);
-            }
+        private void removePref(String key) {
+            mPrefs.edit()
+                    .remove(key)
+                    .apply();
         }
 
         private static Number[] parseJsonNumberArray(String jsonArrayStr) {
@@ -373,7 +409,17 @@ public class PhysicalWebUma {
             return array;
         }
 
-        private static void uploadTimes(String jsonTimesStr, final String key, final TimeUnit tu) {
+        private void uploadActions(String key) {
+            int count = mPrefs.getInt(key, 0);
+            removePref(key);
+            for (int i = 0; i < count; i++) {
+                RecordUserAction.record(key);
+            }
+        }
+
+        private void uploadTimes(final String key, final TimeUnit tu) {
+            String jsonTimesStr = mPrefs.getString(key, "[]");
+            removePref(key);
             Long[] times = parseJsonLongArray(jsonTimesStr);
             if (times == null) {
                 Log.e(TAG, "Error reporting " + key + " with values: " + jsonTimesStr);
@@ -384,7 +430,9 @@ public class PhysicalWebUma {
             }
         }
 
-        private static void uploadCounts(String jsonCountsStr, final String key) {
+        private void uploadCounts(final String key) {
+            String jsonCountsStr = mPrefs.getString(key, "[]");
+            removePref(key);
             Integer[] counts = parseJsonIntegerArray(jsonCountsStr);
             if (counts == null) {
                 Log.e(TAG, "Error reporting " + key + " with values: " + jsonCountsStr);
@@ -392,6 +440,19 @@ public class PhysicalWebUma {
             }
             for (Integer count: counts) {
                 RecordHistogram.recordCountHistogram(key, count);
+            }
+        }
+
+        private void uploadEnums(final String key, int boundary) {
+            String jsonEnumsStr = mPrefs.getString(key, "[]");
+            removePref(key);
+            Integer[] values = parseJsonIntegerArray(jsonEnumsStr);
+            if (values == null) {
+                Log.e(TAG, "Error reporting " + key + " with values: " + jsonEnumsStr);
+                return;
+            }
+            for (Integer value: values) {
+                RecordHistogram.recordEnumeratedHistogram(key, value, boundary);
             }
         }
     }

@@ -97,9 +97,6 @@ public:
     CompositorAnimationTimeline* compositorTimeline() const { return m_compositorTimeline.get(); }
 
     Document* document() { return m_document.get(); }
-#if !ENABLE(OILPAN)
-    void detachFromDocument();
-#endif
     void wake();
     void resetForTesting();
 
@@ -109,7 +106,7 @@ protected:
     AnimationTimeline(Document*, PlatformTiming*);
 
 private:
-    RawPtrWillBeMember<Document> m_document;
+    Member<Document> m_document;
     double m_zeroTime;
     bool m_zeroTimeInitialized;
     unsigned m_outdatedAnimationCount;

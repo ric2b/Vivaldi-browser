@@ -159,7 +159,7 @@ void PolicyUITest::VerifyPolicies(
   std::string json;
   ASSERT_TRUE(content::ExecuteScriptAndExtractString(contents, javascript,
                                                      &json));
-  scoped_ptr<base::Value> value_ptr = base::JSONReader::Read(json);
+  std::unique_ptr<base::Value> value_ptr = base::JSONReader::Read(json);
   const base::ListValue* actual_policies = NULL;
   ASSERT_TRUE(value_ptr.get());
   ASSERT_TRUE(value_ptr->GetAsList(&actual_policies));
@@ -312,11 +312,11 @@ IN_PROC_BROWSER_TEST_F(PolicyUITest, ExtensionLoadAndSendPolicy) {
   manifest.Set("name", "test")
       .Set("version", "1")
       .Set("manifest_version", 2)
-      .Set("storage", std::move(storage));
+      .Set("storage", storage.Build());
 
   extensions::ExtensionBuilder builder;
   builder.SetPath(temp_dir_.path());
-  builder.SetManifest(std::move(manifest));
+  builder.SetManifest(manifest.Build());
 
   // Install extension.
   ExtensionService* service = extensions::ExtensionSystem::Get(

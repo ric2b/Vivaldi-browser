@@ -25,6 +25,8 @@
 #include "platform/graphics/Image.h"
 
 #include "platform/graphics/GraphicsLayer.h"
+#include "platform/testing/FakeGraphicsLayer.h"
+#include "platform/testing/FakeGraphicsLayerClient.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -33,13 +35,6 @@
 namespace blink {
 
 namespace {
-
-class MockGraphicsLayerClient : public GraphicsLayerClient {
-public:
-    IntRect computeInterestRect(const GraphicsLayer*, const IntRect&) const { return IntRect(); }
-    void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect&) const override { }
-    String debugName(const GraphicsLayer*) const override { return String(); }
-};
 
 class TestImage : public Image {
 public:
@@ -78,7 +73,7 @@ private:
         : Image(0)
         , m_size(size)
     {
-        RefPtr<SkSurface> surface = adoptRef(createSkSurface(size, opaque));
+        sk_sp<SkSurface> surface = createSkSurface(size, opaque);
         if (!surface)
             return;
 
@@ -86,29 +81,21 @@ private:
         m_image = adoptRef(surface->newImageSnapshot());
     }
 
-    static SkSurface* createSkSurface(IntSize size, bool opaque)
+    static sk_sp<SkSurface> createSkSurface(IntSize size, bool opaque)
     {
-        return SkSurface::NewRaster(SkImageInfo::MakeN32(size.width(), size.height(), opaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType));
+        return SkSurface::MakeRaster(SkImageInfo::MakeN32(size.width(), size.height(), opaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType));
     }
 
     IntSize m_size;
     RefPtr<SkImage> m_image;
 };
 
-class GraphicsLayerForTesting : public GraphicsLayer {
-public:
-    explicit GraphicsLayerForTesting(GraphicsLayerClient* client)
-        : GraphicsLayer(client)
-    {
-    }
-};
-
 } // anonymous namespace
 
 TEST(ImageLayerChromiumTest, imageLayerContentReset)
 {
-    MockGraphicsLayerClient client;
-    OwnPtr<GraphicsLayerForTesting> graphicsLayer = adoptPtr(new GraphicsLayerForTesting(&client));
+    FakeGraphicsLayerClient client;
+    OwnPtr<FakeGraphicsLayer> graphicsLayer = adoptPtr(new FakeGraphicsLayer(&client));
     ASSERT_TRUE(graphicsLayer.get());
 
     ASSERT_FALSE(graphicsLayer->hasContentsLayer());
@@ -129,8 +116,8 @@ TEST(ImageLayerChromiumTest, imageLayerContentReset)
 
 TEST(ImageLayerChromiumTest, opaqueImages)
 {
-    MockGraphicsLayerClient client;
-    OwnPtr<GraphicsLayerForTesting> graphicsLayer = adoptPtr(new GraphicsLayerForTesting(&client));
+    FakeGraphicsLayerClient client;
+    OwnPtr<FakeGraphicsLayer> graphicsLayer = adoptPtr(new FakeGraphicsLayer(&client));
     ASSERT_TRUE(graphicsLayer.get());
 
     bool opaque = true;

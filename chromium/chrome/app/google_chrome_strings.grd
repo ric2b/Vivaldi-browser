@@ -421,7 +421,7 @@ Google Chrome is unable to recover your settings.
           Installation failed due to unspecified error. Please download Google Chrome again.
         </message>
         <message name="IDS_INSTALL_OS_NOT_SUPPORTED" desc="Error displayed if OS is not supported">
-          Google Chrome requires Windows 7 or higher.
+          Google Chrome requires Windows Vista or Windows XP with SP2 or higher.
         </message>
         <message name="IDS_INSTALL_OS_ERROR" desc="Error displayed when any Windows API call fails and we do not have more specific information.">
           An operating system error occurred during installation. Please download Google Chrome again.
@@ -570,22 +570,6 @@ Google Chrome is unable to recover your settings.
       <message name="IDS_MISSING_GOOGLE_API_KEYS" desc="Message shown when Google API keys are missing. This message is followed by a 'Learn more' link.">
         Google API keys are missing. Some functionality of Google Chrome will be disabled.
       </message>
-
-      <!-- about:memory -->
-      <if expr="not is_android">
-        <message name="IDS_MEMORY_USAGE_SUMMARY_DESC" desc="Describes the browser summary table in the about memory page, which shows memory usage for Google Chrome and any other active browsers." translateable="false">
-Summary of memory used by currently active browsers. For browsers which use multiple processes, memory reflects aggregate memory used across all browser processes.
-
-For Google Chrome, processes used to display diagnostics information (such as this "about:memory") are excluded.
-        </message>
-      </if>
-      <if expr="is_android">
-        <message name="IDS_MEMORY_USAGE_SUMMARY_DESC" desc="Describes the browser summary table in the about memory page, which shows memory usage for Google Chrome." translateable="false">
-Summary of memory used by Google Chrome. Since Google Chrome uses multiple processes, memory reflects aggregate memory used across all browser processes.
-
-For Google Chrome, processes used to display diagnostics information (such as this "about:memory") are excluded.
-        </message>
-      </if>
 
       <!-- About Chrome page -->
       <if expr="not chromeos">
@@ -853,10 +837,7 @@ Signing in anyway will merge Chrome information like bookmarks, history, and oth
         Save details in Chrome
       </message>
       <message name="IDS_AUTOFILL_DIALOG_SAVE_LOCALLY_TOOLTIP" desc="Tooltip which explains function of checkbox that controls whether info the user types into the autofill dialog is saved by chrome.">
-        Chrome will securely store your information so you don't need to type it in again, but you will still need to verify your card's security code for future payments.
-      </message>
-      <message name="IDS_AUTOFILL_NEW_CREDIT_CARD_BUBBLE_TITLE" desc="Title text of the new credit card bubble informing a user their billing information has been saved in chrome.">
-        Your billing details have been saved in Chrome.
+        Chrome will securely store your personal details so you don't need to type them again.
       </message>
       <message name="IDS_AUTOFILL_DESCRIBE_LOCAL_COPY" desc="Text label that described a Wallet credit card which has been copied to the local Chrome instance.">
         Copied to Chrome
@@ -893,6 +874,14 @@ Signing in anyway will merge Chrome information like bookmarks, history, and oth
         <if expr="use_titlecase">
           <message name="IDS_APP_LIST_EXTENSIONS_UNINSTALL" desc="In Title Case: Title text for the context menu item of a non-platform-app app list item that removes the app.">
             Remove From Chrome...
+          </message>
+        </if>
+        <if expr="not chromeos">
+          <message name="IDS_APP_LIST_MESSAGE_TITLE" desc="Title given to the message displayed in the app launcher to say it is going away">
+            The Chrome App Launcher is going away.
+          </message>
+          <message name="IDS_APP_LIST_MESSAGE_TEXT" desc="The message body text displayed in the app launcher to say it is going away">
+            Use the <ph name="APPS_ICON_IMAGE">$1<ex>Apps</ex></ph> shortcut in the Chrome bookmarks bar to continue accessing your apps.
           </message>
         </if>
       </if>

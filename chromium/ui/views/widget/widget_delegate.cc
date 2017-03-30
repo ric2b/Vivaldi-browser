@@ -32,15 +32,19 @@ void WidgetDelegate::OnWorkAreaChanged() {
 }
 
 View* WidgetDelegate::GetInitiallyFocusedView() {
-  return NULL;
+  return nullptr;
 }
 
 BubbleDelegateView* WidgetDelegate::AsBubbleDelegate() {
-  return NULL;
+  return nullptr;
+}
+
+BubbleDialogDelegateView* WidgetDelegate::AsBubbleDialogDelegate() {
+  return nullptr;
 }
 
 DialogDelegate* WidgetDelegate::AsDialogDelegate() {
-  return NULL;
+  return nullptr;
 }
 
 bool WidgetDelegate::CanResize() const {
@@ -80,7 +84,11 @@ bool WidgetDelegate::ShouldShowWindowTitle() const {
 }
 
 bool WidgetDelegate::ShouldShowCloseButton() const {
+#if defined(OS_MACOSX)
+  return false;
+#else
   return true;
+#endif
 }
 
 bool WidgetDelegate::ShouldHandleSystemCommands() const {

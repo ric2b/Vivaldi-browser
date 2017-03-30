@@ -28,7 +28,6 @@
 #include "modules/webaudio/OfflineAudioContext.h"
 #include "platform/ThreadSafeFunctional.h"
 #include "public/platform/Platform.h"
-#include "wtf/MainThread.h"
 
 namespace blink {
 
@@ -60,11 +59,11 @@ void DeferredTaskHandler::unlock()
 
 void DeferredTaskHandler::offlineLock()
 {
-    // RELEASE_ASSERT is here to make sure to explicitly crash if this is called
-    // from other than the offline render thread, which is considered as the
-    // audio thread in OfflineAudioContext.
-    RELEASE_ASSERT_WITH_MESSAGE(isAudioThread(),
-        "DeferredTaskHandler::offlineLock() must be called within the offline audio thread.");
+    // CHECK is here to make sure to explicitly crash if this is called from
+    // other than the offline render thread, which is considered as the audio
+    // thread in OfflineAudioContext.
+    CHECK(isAudioThread())
+        << "DeferredTaskHandler::offlineLock() must be called within the offline audio thread.";
 
     m_contextGraphMutex.lock();
 }
@@ -262,7 +261,7 @@ void DeferredTaskHandler::requestToDeleteHandlersOnMainThread()
         return;
     m_deletableOrphanHandlers.appendVector(m_renderingOrphanHandlers);
     m_renderingOrphanHandlers.clear();
-    Platform::current()->mainThread()->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&DeferredTaskHandler::deleteHandlersOnMainThread, PassRefPtr<DeferredTaskHandler>(this)));
+    Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&DeferredTaskHandler::deleteHandlersOnMainThread, PassRefPtr<DeferredTaskHandler>(this)));
 }
 
 void DeferredTaskHandler::deleteHandlersOnMainThread()

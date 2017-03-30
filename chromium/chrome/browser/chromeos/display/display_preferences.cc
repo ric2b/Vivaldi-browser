@@ -10,6 +10,7 @@
 #include "ash/display/display_manager.h"
 #include "ash/display/display_pref_util.h"
 #include "ash/display/display_util.h"
+#include "ash/display/json_converter.h"
 #include "ash/shell.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -117,8 +118,8 @@ void LoadDisplayLayouts() {
       prefs::kSecondaryDisplays);
   for (base::DictionaryValue::Iterator it(*layouts);
        !it.IsAtEnd(); it.Advance()) {
-    scoped_ptr<ash::DisplayLayout> layout(new ash::DisplayLayout);
-    if (!ash::DisplayLayout::ConvertFromValue(it.value(), layout.get())) {
+    std::unique_ptr<display::DisplayLayout> layout(new display::DisplayLayout);
+    if (!ash::JsonToDisplayLayout(it.value(), layout.get())) {
       LOG(WARNING) << "Invalid preference value for " << it.key();
       continue;
     }
@@ -126,17 +127,15 @@ void LoadDisplayLayouts() {
     if (it.key().find(",") != std::string::npos) {
       std::vector<std::string> ids_str = base::SplitString(
           it.key(), ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-      int64_t id1 = gfx::Display::kInvalidDisplayID;
-      int64_t id2 = gfx::Display::kInvalidDisplayID;
-      if (!base::StringToInt64(ids_str[0], &id1) ||
-          !base::StringToInt64(ids_str[1], &id2) ||
-          id1 == gfx::Display::kInvalidDisplayID ||
-          id2 == gfx::Display::kInvalidDisplayID) {
-        continue;
+      std::vector<int64_t> ids;
+      for (std::string id_str : ids_str) {
+        int64_t id;
+        if (!base::StringToInt64(id_str, &id))
+          continue;
+        ids.push_back(id);
       }
-      int64_t ids[] = {id1, id2};
-      ash::DisplayIdList list =
-          ash::GenerateDisplayIdList(std::begin(ids), std::end(ids));
+      display::DisplayIdList list =
+          ash::GenerateDisplayIdList(ids.begin(), ids.end());
       layout_store->RegisterLayoutForDisplayIdList(list, std::move(layout));
     }
   }
@@ -213,20 +212,20 @@ void LoadDisplayRotationState() {
       static_cast<gfx::Display::Rotation>(rotation));
 }
 
-void StoreDisplayLayoutPref(const ash::DisplayIdList& list,
-                            const ash::DisplayLayout& display_layout) {
+void StoreDisplayLayoutPref(const display::DisplayIdList& list,
+                            const display::DisplayLayout& display_layout) {
   std::string name = ash::DisplayIdListToString(list);
 
   PrefService* local_state = g_browser_process->local_state();
   DictionaryPrefUpdate update(local_state, prefs::kSecondaryDisplays);
   base::DictionaryValue* pref_data = update.Get();
-  scoped_ptr<base::Value> layout_value(new base::DictionaryValue());
+  std::unique_ptr<base::Value> layout_value(new base::DictionaryValue());
   if (pref_data->HasKey(name)) {
     base::Value* value = nullptr;
     if (pref_data->Get(name, &value) && value != nullptr)
       layout_value.reset(value->DeepCopy());
   }
-  if (ash::DisplayLayout::ConvertToValue(display_layout, layout_value.get()))
+  if (ash::DisplayLayoutToJson(display_layout, layout_value.get()))
     pref_data->Set(name, layout_value.release());
 }
 
@@ -237,8 +236,8 @@ void StoreCurrentDisplayLayoutPrefs() {
     return;
   }
 
-  ash::DisplayIdList list = display_manager->GetCurrentDisplayIdList();
-  const ash::DisplayLayout& display_layout =
+  display::DisplayIdList list = display_manager->GetCurrentDisplayIdList();
+  const display::DisplayLayout& display_layout =
       display_manager->layout_store()->GetRegisteredDisplayLayout(list);
   StoreDisplayLayoutPref(list, display_layout);
 }
@@ -256,7 +255,7 @@ void StoreCurrentDisplayProperties() {
     int64_t id = display.id();
     ash::DisplayInfo info = display_manager->GetDisplayInfo(id);
 
-    scoped_ptr<base::DictionaryValue> property_value(
+    std::unique_ptr<base::DictionaryValue> property_value(
         new base::DictionaryValue());
     // Don't save the display preference in unified mode because its
     // size and modes can change depending on the combination of displays.
@@ -392,8 +391,8 @@ void LoadDisplayPreferences(bool first_run_after_boot) {
 }
 
 // Stores the display layout for given display pairs.
-void StoreDisplayLayoutPrefForTest(const ash::DisplayIdList& list,
-                                   const ash::DisplayLayout& layout) {
+void StoreDisplayLayoutPrefForTest(const display::DisplayIdList& list,
+                                   const display::DisplayLayout& layout) {
   StoreDisplayLayoutPref(list, layout);
 }
 

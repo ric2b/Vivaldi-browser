@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
+#include "media/base/media_tracks.h"
 #include "media/base/pipeline_impl.h"
 #include "media/base/renderer_factory.h"
 #include "media/base/surface_manager.h"
@@ -30,6 +31,7 @@
 #include "media/blink/webmediaplayer_delegate.h"
 #include "media/blink/webmediaplayer_params.h"
 #include "media/blink/webmediaplayer_util.h"
+#include "media/filters/pipeline_controller.h"
 #include "media/renderers/skcanvas_video_renderer.h"
 #include "third_party/WebKit/public/platform/WebAudioSourceProvider.h"
 #include "third_party/WebKit/public/platform/WebContentDecryptionModuleResult.h"
@@ -47,7 +49,6 @@
 #endif
 
 namespace blink {
-class WebGraphicsContext3D;
 class WebLocalFrame;
 class WebMediaPlayerClient;
 class WebMediaPlayerEncryptedMediaClient;
@@ -60,6 +61,12 @@ class TaskRunner;
 
 namespace cc_blink {
 class WebLayerImpl;
+}
+
+namespace gpu {
+namespace gles2 {
+class GLES2Interface;
+}
 }
 
 namespace media {
@@ -142,6 +149,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   blink::WebMediaPlayer::NetworkState getNetworkState() const override;
   blink::WebMediaPlayer::ReadyState getReadyState() const override;
 
+  blink::WebString getErrorMessage() override;
   bool didLoadingProgress() override;
 
   bool hasSingleSecurityOrigin() const override;
@@ -151,39 +159,30 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   unsigned decodedFrameCount() const override;
   unsigned droppedFrameCount() const override;
-  unsigned audioDecodedByteCount() const override;
-  unsigned videoDecodedByteCount() const override;
+  size_t audioDecodedByteCount() const override;
+  size_t videoDecodedByteCount() const override;
 
-  bool copyVideoTextureToPlatformTexture(
-      blink::WebGraphicsContext3D* web_graphics_context,
-      unsigned int texture,
-      unsigned int internal_format,
-      unsigned int type,
-      bool premultiply_alpha,
-      bool flip_y) override;
+  bool copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface* gl,
+                                         unsigned int texture,
+                                         unsigned int internal_format,
+                                         unsigned int type,
+                                         bool premultiply_alpha,
+                                         bool flip_y) override;
 
-  blink::WebAudioSourceProvider* audioSourceProvider() override;
+  blink::WebAudioSourceProvider* getAudioSourceProvider() override;
 
   void setContentDecryptionModule(
       blink::WebContentDecryptionModule* cdm,
       blink::WebContentDecryptionModuleResult result) override;
 
+  bool supportsOverlayFullscreenVideo() override;
   void enteredFullscreen() override;
   void exitedFullscreen() override;
 
-  void OnPipelineSeeked(bool time_changed, PipelineStatus status);
-  void OnPipelineSuspended(PipelineStatus status);
-  void OnPipelineEnded();
-  void OnPipelineError(PipelineStatus error);
-  void OnPipelineMetadata(PipelineMetadata metadata);
-  void OnPipelineBufferingStateChanged(BufferingState buffering_state);
-  void OnDemuxerOpened();
-  void OnAddTextTrack(const TextTrackConfig& config,
-                      const AddTextTrackDoneCB& done_cb);
-
   // WebMediaPlayerDelegate::Observer implementation.
-  void OnHidden(bool must_suspend) override;
+  void OnHidden() override;
   void OnShown() override;
+  void OnSuspendRequested(bool must_suspend) override;
   void OnPlay() override;
   void OnPause() override;
   void OnVolumeMultiplierUpdate(double multiplier) override;
@@ -204,20 +203,44 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void SetDeviceScaleFactor(float scale_factor);
 #endif
 
+  // Called from WebMediaPlayerCast.
+  // TODO(hubbe): WMPI_CAST make private.
+  void OnPipelineSeeked(bool time_updated);
+
+  // Distinct states that |delegate_| can be in.
+  // TODO(sandersd): This should move into WebMediaPlayerDelegate.
+  // (Public for testing.)
+  enum class DelegateState {
+    GONE,
+    PLAYING,
+    PAUSED,
+    PAUSED_BUT_NOT_IDLE,
+    ENDED,
+  };
+
+  // Playback state variables computed together in UpdatePlayState().
+  // (Public for testing.)
+  struct PlayState {
+    DelegateState delegate_state;
+    bool is_memory_reporting_enabled;
+    bool is_suspended;
+  };
+
  private:
-  // Ask for the pipeline to be suspended, will call Suspend() when ready.
-  // (Possibly immediately.)
-  void ScheduleSuspend();
+  friend class WebMediaPlayerImplTest;
 
-  // Initiate suspending the pipeline.
-  void Suspend();
+  void OnPipelineSuspended();
+  void OnPipelineEnded();
+  void OnPipelineError(PipelineStatus error);
+  void OnPipelineMetadata(PipelineMetadata metadata);
+  void OnPipelineBufferingStateChanged(BufferingState buffering_state);
+  void OnDemuxerOpened();
+  void OnAddTextTrack(const TextTrackConfig& config,
+                      const AddTextTrackDoneCB& done_cb);
 
-  // Ask for the pipeline to be resumed, will call Resume() when ready.
-  // (Possibly immediately.)
-  void ScheduleResume();
-
-  // Initiate resuming the pipeline.
-  void Resume();
+  // Actually seek. Avoids causing |should_notify_time_changed_| to be set when
+  // |time_updated| is false.
+  void DoSeek(base::TimeDelta time, bool time_updated);
 
   // Ask for the renderer to be restarted (destructed and recreated).
   void ScheduleRestart();
@@ -237,9 +260,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void OnSurfaceRequested(const SurfaceCreatedCB& surface_created_cb);
 
   // Creates a Renderer via the |renderer_factory_|.
-  scoped_ptr<Renderer> CreateRenderer(
-      bool use_platform_media_pipeline,
-      bool platform_pipeline_enlarges_buffers_on_underflow);
+  scoped_ptr<Renderer> CreateRenderer();
 
   // Finishes starting the pipeline due to a call to load().
   void StartPipeline();
@@ -274,6 +295,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void OnEncryptedMediaInitData(EmeInitDataType init_data_type,
                                 const std::vector<uint8_t>& init_data);
 
+  // Called when the FFmpegDemuxer encounters new media tracks. This is only
+  // invoked when using FFmpegDemuxer, since MSE/ChunkDemuxer handle media
+  // tracks separately in WebSourceBufferImpl.
+  void OnFFmpegMediaTracksUpdated(scoped_ptr<MediaTracks> tracks);
+
   // Called when a decoder detects that the key needed to decrypt the stream
   // is not available.
   void OnWaitingForDecryptionKey();
@@ -285,14 +311,28 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Called when a CDM has been attached to the |pipeline_|.
   void OnCdmAttached(bool success);
 
-  // Updates |paused_time_| to the current media time with consideration for the
-  // |ended_| state by clamping current time to duration upon |ended_|.
-  void UpdatePausedTime();
+  // Inspects the current playback state and:
+  //   - notifies |delegate_|,
+  //   - toggles the memory usage reporting timer, and
+  //   - toggles suspend/resume as necessary.
+  //
+  // This method should be called any time its dependent values change. These
+  // are:
+  //   - isRemote(),
+  //   - hasVideo(),
+  //   - delegate_->IsHidden(),
+  //   - network_state_, ready_state_,
+  //   - is_idle_, must_suspend_,
+  //   - paused_, ended_,
+  //   - pending_suspend_resume_cycle_.
+  void UpdatePlayState();
 
-  // Notifies |delegate_| that playback has started or was paused; also starts
-  // or stops the memory usage reporting timer respectively.
-  void NotifyPlaybackStarted();
-  void NotifyPlaybackPaused();
+  // Methods internal to UpdatePlayState().
+  PlayState UpdatePlayState_ComputePlayState(bool is_remote,
+                                             bool is_backgrounded);
+  void SetDelegateState(DelegateState new_state);
+  void SetMemoryReportingState(bool is_memory_reporting_enabled);
+  void SetSuspendState(bool is_suspended);
 
   // Called at low frequency to tell external observers how much memory we're
   // using for video playback.  Called by |memory_usage_reporting_timer_|.
@@ -303,9 +343,19 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   blink::WebLocalFrame* frame_;
 
-  // TODO(hclam): get rid of these members and read from the pipeline directly.
+  // The playback state last reported to |delegate_|, to avoid setting duplicate
+  // states. (Which can have undesired effects like resetting the idle timer.)
+  DelegateState delegate_state_;
+
+  // Set when OnSuspendRequested() is called with |must_suspend| unset.
+  bool is_idle_;
+
+  // Set when OnSuspendRequested() is called with |must_suspend| set.
+  bool must_suspend_;
+
   blink::WebMediaPlayer::NetworkState network_state_;
   blink::WebMediaPlayer::ReadyState ready_state_;
+  blink::WebMediaPlayer::ReadyState highest_ready_state_;
 
   // Preload state for when |data_source_| is created after setPreload().
   BufferedDataSource::Preload preload_;
@@ -321,7 +371,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
   scoped_refptr<base::TaskRunner> worker_task_runner_;
   scoped_refptr<MediaLog> media_log_;
+
+  // |pipeline_controller_| references |pipeline_| and therefore must be
+  // constructed after and destructed before |pipeline_|.
   PipelineImpl pipeline_;
+  PipelineController pipeline_controller_;
 
   // The LoadType passed in the |load_type| parameter of the load() call.
   LoadType load_type_;
@@ -345,31 +399,15 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // clock can creep forward a little bit while the asynchronous
   // SetPlaybackRate(0) is being executed.
   double playback_rate_;
+
+  // Set while paused. |paused_time_| is only valid when |paused_| is true.
   bool paused_;
   base::TimeDelta paused_time_;
+
+  // Set when starting, seeking, and resuming (all of which require a Pipeline
+  // seek). |seek_time_| is only valid when |seeking_| is true.
   bool seeking_;
-
-  // Set when seeking (|seeking_| is true) or resuming.
   base::TimeDelta seek_time_;
-
-  // Set when a suspend is required but another suspend or seek is in progress.
-  bool pending_suspend_;
-
-  // Set when suspending immediately after a seek. The time change will happen
-  // after Resume().
-  bool pending_time_change_;
-
-  // Set when a resume is required but suspending is in progress.
-  bool pending_resume_;
-
-  // Set for the entire period between suspend starting and resume completing.
-  bool suspending_;
-
-  // Set while suspending to detect double-suspend.
-  bool suspended_;
-
-  // Set while resuming to detect double-resume.
-  bool resuming_;
 
   // Set when doing a restart (a suspend and resume in sequence) of the pipeline
   // in order to destruct and reinitialize the decoders. This is separate from
@@ -382,14 +420,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // see http://crbug.com/409280
   bool ended_;
 
-  // Indicates that a seek is queued after the current seek completes or, if the
-  // pipeline is suspended, after it resumes. Only the last queued seek will
-  // have any effect.
-  bool pending_seek_;
-
-  // |pending_seek_time_| is meaningless when |pending_seek_| is false.
-  base::TimeDelta pending_seek_time_;
-
   // Tracks whether to issue time changed notifications during buffering state
   // changes.
   bool should_notify_time_changed_;
@@ -398,6 +428,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Whether the current decoder requires a restart on fullscreen transitions.
   bool decoder_requires_restart_for_fullscreen_;
+
+  // What to return from supportsOverlayFullscreenVideo(). This is usually
+  // equal to |decoder_requires_restart_for_fullscreen_| except that it doesn't
+  // change while we're in fullscreen. See supportsOverlayFullscreenVideo().
+  bool supports_overlay_fullscreen_video_;
 
   blink::WebMediaPlayerClient* client_;
   blink::WebMediaPlayerEncryptedMediaClient* encrypted_client_;
@@ -484,6 +519,13 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // started; prevents us from spuriously logging errors that are transient or
   // unimportant.
   bool suppress_destruction_errors_;
+
+  // State indicating if it's okay to suspend or not. Updated on the first time
+  // OnSuspendRequested() is called. If the state is UNKNOWN, the current frame
+  // from the compositor will be queried to see if suspend is supported; the
+  // state will be set to YES or NO respectively if a frame is available.
+  enum class CanSuspendState { UNKNOWN, YES, NO };
+  CanSuspendState can_suspend_state_;
 
   DISALLOW_COPY_AND_ASSIGN(WebMediaPlayerImpl);
 };

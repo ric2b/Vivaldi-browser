@@ -14,6 +14,7 @@
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/service/feature_info.h"
+#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
@@ -32,7 +33,7 @@ class GLSurface;
 namespace gpu {
 
 class CommandBufferService;
-class GpuScheduler;
+class CommandExecutor;
 class SyncPointClient;
 class SyncPointOrderData;
 class SyncPointManager;
@@ -77,7 +78,7 @@ class GLManager : private GpuControl {
   GLManager();
   ~GLManager() override;
 
-  static scoped_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBuffer(
+  scoped_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBuffer(
       const gfx::Size& size,
       gfx::BufferFormat format);
 
@@ -91,6 +92,10 @@ class GLManager : private GpuControl {
   void MakeCurrent();
 
   void SetSurface(gfx::GLSurface* surface);
+
+  void set_use_iosurface_memory_buffers(bool use_iosurface_memory_buffers) {
+    use_iosurface_memory_buffers_ = use_iosurface_memory_buffers;
+  }
 
   void SetCommandsPaused(bool paused) { pause_commands_ = paused; }
 
@@ -151,6 +156,8 @@ class GLManager : private GpuControl {
                        gpu::CommandBufferId command_buffer_id,
                        uint64_t release);
 
+  gpu::GpuPreferences gpu_preferences_;
+
   SyncPointManager* sync_point_manager_;  // Non-owning.
 
   scoped_refptr<SyncPointOrderData> sync_point_order_data_;
@@ -159,7 +166,7 @@ class GLManager : private GpuControl {
   scoped_refptr<gfx::GLShareGroup> share_group_;
   scoped_ptr<CommandBufferService> command_buffer_;
   scoped_ptr<gles2::GLES2Decoder> decoder_;
-  scoped_ptr<GpuScheduler> gpu_scheduler_;
+  scoped_ptr<CommandExecutor> executor_;
   scoped_refptr<gfx::GLSurface> surface_;
   scoped_refptr<gfx::GLContext> context_;
   scoped_ptr<gles2::GLES2CmdHelper> gles2_helper_;
@@ -171,6 +178,8 @@ class GLManager : private GpuControl {
 
   const CommandBufferId command_buffer_id_;
   uint64_t next_fence_sync_release_;
+
+  bool use_iosurface_memory_buffers_ = false;
 
   // Used on Android to virtualize GL for all contexts.
   static int use_count_;

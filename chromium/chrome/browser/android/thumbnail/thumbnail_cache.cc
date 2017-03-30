@@ -14,6 +14,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/worker_pool.h"
 #include "base/time/time.h"
@@ -168,7 +169,7 @@ void ThumbnailCache::Put(TabId tab_id,
   DCHECK(thumbnail_meta_data_.find(tab_id) != thumbnail_meta_data_.end());
 
   base::Time time_stamp = thumbnail_meta_data_[tab_id].capture_time();
-  scoped_ptr<Thumbnail> thumbnail = Thumbnail::Create(
+  std::unique_ptr<Thumbnail> thumbnail = Thumbnail::Create(
       tab_id, time_stamp, thumbnail_scale, ui_resource_provider_, this);
   thumbnail->SetBitmap(bitmap);
 
@@ -179,7 +180,7 @@ void ThumbnailCache::Put(TabId tab_id,
   if (use_approximation_thumbnail_) {
     std::pair<SkBitmap, float> approximation =
         CreateApproximation(bitmap, thumbnail_scale);
-    scoped_ptr<Thumbnail> approx_thumbnail = Thumbnail::Create(
+    std::unique_ptr<Thumbnail> approx_thumbnail = Thumbnail::Create(
         tab_id, time_stamp, approximation.second, ui_resource_provider_, this);
     approx_thumbnail->SetBitmap(approximation.first);
     approximation_cache_.Put(tab_id, std::move(approx_thumbnail));
@@ -205,10 +206,8 @@ Thumbnail* ThumbnailCache::Get(TabId tab_id,
   }
 
   if (force_disk_read &&
-      std::find(visible_ids_.begin(), visible_ids_.end(), tab_id) !=
-          visible_ids_.end() &&
-      std::find(read_queue_.begin(), read_queue_.end(), tab_id) ==
-          read_queue_.end()) {
+      ContainsValue(visible_ids_, tab_id) &&
+      !ContainsValue(read_queue_, tab_id)) {
     read_queue_.push_back(tab_id);
     ReadNextThumbnail();
   }
@@ -222,14 +221,6 @@ Thumbnail* ThumbnailCache::Get(TabId tab_id,
   }
 
   return NULL;
-}
-
-void ThumbnailCache::RemoveFromDiskAtAndAboveId(TabId min_id) {
-  base::Closure remove_task =
-      base::Bind(&ThumbnailCache::RemoveFromDiskAtAndAboveIdTask,
-                 min_id);
-  content::BrowserThread::PostTask(
-      content::BrowserThread::FILE, FROM_HERE, remove_task);
 }
 
 void ThumbnailCache::InvalidateThumbnailIfChanged(TabId tab_id,
@@ -305,10 +296,8 @@ void ThumbnailCache::UpdateVisibleIds(const TabIdList& priority) {
     TabId tab_id = *iter;
     visible_ids_.push_back(tab_id);
     if (!cache_.Get(tab_id) &&
-        std::find(read_queue_.begin(), read_queue_.end(), tab_id) ==
-            read_queue_.end()) {
+        !ContainsValue(read_queue_, tab_id))
       read_queue_.push_back(tab_id);
-    }
     iter++;
     count++;
   }
@@ -341,21 +330,6 @@ void ThumbnailCache::RemoveFromDiskTask(TabId tab_id) {
   base::FilePath file_path = GetFilePath(tab_id);
   if (base::PathExists(file_path))
     base::DeleteFile(file_path, false);
-}
-
-void ThumbnailCache::RemoveFromDiskAtAndAboveIdTask(TabId min_id) {
-  base::FilePath dir_path = GetCacheDirectory();
-  base::FileEnumerator enumerator(dir_path, false, base::FileEnumerator::FILES);
-  while (true) {
-    base::FilePath path = enumerator.Next();
-    if (path.empty())
-      break;
-    base::FileEnumerator::FileInfo info = enumerator.GetInfo();
-    TabId tab_id;
-    bool success = base::StringToInt(info.GetName().value(), &tab_id);
-    if (success && tab_id >= min_id)
-      base::DeleteFile(path, false);
-  }
 }
 
 void ThumbnailCache::WriteThumbnailIfNecessary(
@@ -430,8 +404,7 @@ void ThumbnailCache::ReadNextThumbnail() {
 
 void ThumbnailCache::MakeSpaceForNewItemIfNecessary(TabId tab_id) {
   if (cache_.Get(tab_id) ||
-      std::find(visible_ids_.begin(), visible_ids_.end(), tab_id) ==
-          visible_ids_.end() ||
+      !ContainsValue(visible_ids_, tab_id) ||
       cache_.size() < cache_.MaximumCacheSize()) {
     return;
   }
@@ -443,8 +416,7 @@ void ThumbnailCache::MakeSpaceForNewItemIfNecessary(TabId tab_id) {
   for (ExpiringThumbnailCache::iterator iter = cache_.begin();
        iter != cache_.end();
        iter++) {
-    if (std::find(visible_ids_.begin(), visible_ids_.end(), iter->first) ==
-        visible_ids_.end()) {
+    if (!ContainsValue(visible_ids_, iter->first)) {
       key_to_remove = iter->first;
       found_key_to_remove = true;
       break;
@@ -818,7 +790,7 @@ void ThumbnailCache::PostReadTask(TabId tab_id,
       time_stamp = meta_iter->second.capture_time();
 
     MakeSpaceForNewItemIfNecessary(tab_id);
-    scoped_ptr<Thumbnail> thumbnail = Thumbnail::Create(
+    std::unique_ptr<Thumbnail> thumbnail = Thumbnail::Create(
         tab_id, time_stamp, scale, ui_resource_provider_, this);
     thumbnail->SetCompressedBitmap(compressed_data,
                                    content_size);

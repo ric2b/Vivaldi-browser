@@ -20,24 +20,11 @@ WEBKIT_BASE_URL = ('http://commondatastorage.googleapis.com'
 ASAN_BASE_URL = ('http://commondatastorage.googleapis.com'
                  '/chromium-browser-asan')
 
-# GS bucket name.
-GS_BUCKET_NAME = 'chrome-unsigned/desktop-W15K3Y'
-
-# Base URL for downloading official builds.
-GOOGLE_APIS_URL = 'commondatastorage.googleapis.com'
-
-# The base URL for official builds.
-OFFICIAL_BASE_URL = 'http://%s/%s' % (GOOGLE_APIS_URL, GS_BUCKET_NAME)
-
 # URL template for viewing changelogs between revisions.
 CHANGELOG_URL = ('https://chromium.googlesource.com/chromium/src/+log/%s..%s')
 
 # URL to convert SVN revision to git hash.
 CRREV_URL = ('https://cr-rev.appspot.com/_ah/api/crrev/v1/redirect/')
-
-# URL template for viewing changelogs between official versions.
-OFFICIAL_CHANGELOG_URL = ('https://chromium.googlesource.com/chromium/'
-                          'src/+log/%s..%s?pretty=full')
 
 # DEPS file URL.
 DEPS_FILE_OLD = ('http://src.chromium.org/viewvc/chrome/trunk/src/'
@@ -108,14 +95,13 @@ class PathContext(object):
   """A PathContext is used to carry the information used to construct URLs and
   paths when dealing with the storage server and archives."""
   def __init__(self, base_url, platform, good_revision, bad_revision,
-               is_official, is_asan, use_local_cache, flash_path = None):
+               is_asan, use_local_cache, flash_path = None):
     super(PathContext, self).__init__()
     # Store off the input parameters.
     self.base_url = base_url
     self.platform = platform  # What's passed in to the '-a/--archive' option.
     self.good_revision = good_revision
     self.bad_revision = bad_revision
-    self.is_official = is_official
     self.is_asan = is_asan
     self.build_type = 'release'
     self.flash_path = flash_path
@@ -157,47 +143,22 @@ class PathContext(object):
     else:
       raise Exception('Invalid platform: %s' % self.platform)
 
-    if is_official:
+    if self.platform in ('linux', 'linux64', 'linux-arm', 'chromeos'):
+      self.archive_name = 'chrome-linux.zip'
+      self._archive_extract_dir = 'chrome-linux'
       if self.platform == 'linux':
-        self._listing_platform_dir = 'precise32/'
-        self.archive_name = 'chrome-precise32.zip'
-        self._archive_extract_dir = 'chrome-precise32'
+        self._listing_platform_dir = 'Linux/'
       elif self.platform == 'linux64':
-        self._listing_platform_dir = 'precise64/'
-        self.archive_name = 'chrome-precise64.zip'
-        self._archive_extract_dir = 'chrome-precise64'
-      elif self.platform == 'mac':
-        self._listing_platform_dir = 'mac/'
-        self._binary_name = 'Google Chrome.app/Contents/MacOS/Google Chrome'
-      elif self.platform == 'mac64':
-        self._listing_platform_dir = 'mac64/'
-        self._binary_name = 'Google Chrome.app/Contents/MacOS/Google Chrome'
-      elif self.platform == 'win':
-        self._listing_platform_dir = 'win/'
-        self.archive_name = 'chrome-win.zip'
-        self._archive_extract_dir = 'chrome-win'
-      elif self.platform == 'win64':
-        self._listing_platform_dir = 'win64/'
-        self.archive_name = 'chrome-win64.zip'
-        self._archive_extract_dir = 'chrome-win64'
-    else:
-      if self.platform in ('linux', 'linux64', 'linux-arm', 'chromeos'):
-        self.archive_name = 'chrome-linux.zip'
-        self._archive_extract_dir = 'chrome-linux'
-        if self.platform == 'linux':
-          self._listing_platform_dir = 'Linux/'
-        elif self.platform == 'linux64':
-          self._listing_platform_dir = 'Linux_x64/'
-        elif self.platform == 'linux-arm':
-          self._listing_platform_dir = 'Linux_ARM_Cross-Compile/'
-        elif self.platform == 'chromeos':
-          self._listing_platform_dir = 'Linux_ChromiumOS_Full/'
-      # There is no 64-bit distinction for non-official mac builds.
-      elif self.platform in ('mac', 'mac64'):
-        self._listing_platform_dir = 'Mac/'
-        self._binary_name = 'Chromium.app/Contents/MacOS/Chromium'
-      elif self.platform == 'win':
-        self._listing_platform_dir = 'Win/'
+        self._listing_platform_dir = 'Linux_x64/'
+      elif self.platform == 'linux-arm':
+        self._listing_platform_dir = 'Linux_ARM_Cross-Compile/'
+      elif self.platform == 'chromeos':
+        self._listing_platform_dir = 'Linux_ChromiumOS_Full/'
+    elif self.platform in ('mac', 'mac64'):
+      self._listing_platform_dir = 'Mac/'
+      self._binary_name = 'Chromium.app/Contents/MacOS/Chromium'
+    elif self.platform == 'win':
+      self._listing_platform_dir = 'Win/'
 
   def GetASANPlatformDir(self):
     """ASAN builds are in directories like "linux-release", or have filenames
@@ -226,15 +187,10 @@ class PathContext(object):
       return '%s/%s-%s/%s-%d.zip' % (
           ASAN_BASE_URL, self.GetASANPlatformDir(), self.build_type,
           self.GetASANBaseName(), revision)
-    if self.is_official:
-      return '%s/%s/%s%s' % (
-          OFFICIAL_BASE_URL, revision, self._listing_platform_dir,
-          self.archive_name)
-    else:
-      if str(revision) in self.githash_svn_dict:
-        revision = self.githash_svn_dict[str(revision)]
-      return '%s/%s%s/%s' % (self.base_url, self._listing_platform_dir,
-                             revision, self.archive_name)
+    if str(revision) in self.githash_svn_dict:
+      revision = self.githash_svn_dict[str(revision)]
+    return '%s/%s%s/%s' % (self.base_url, self._listing_platform_dir,
+                           revision, self.archive_name)
 
   def GetLastChangeURL(self):
     """Returns a URL to the LAST_CHANGE file."""
@@ -316,21 +272,12 @@ class PathContext(object):
         for prefix in all_prefixes:
           revnum = prefix.text[prefix_len:-1]
           try:
-            if not revnum.isdigit():
-              # During the svn-git migration, some items were stored by hash.
-              # These items may appear anywhere in the list of items.
-              # If |last_known_rev| is set, assume that the full list has been
-              # retrieved before (including the hashes), so we can safely skip
-              # all git hashes and focus on the numeric revision numbers.
-              if last_known_rev:
-                revnum = None
-              else:
-                git_hash = revnum
-                revnum = self.GetSVNRevisionFromGitHash(git_hash)
-                githash_svn_dict[revnum] = git_hash
-            if revnum is not None:
-              revnum = int(revnum)
-              revisions.append(revnum)
+            revnum = int(revnum)
+            revisions.append(revnum)
+          # Notes:
+          # Ignore hash in chromium-browser-snapshots as they are invalid
+          # Resulting in 404 error in fetching pages:
+          # https://chromium.googlesource.com/chromium/src/+/[rev_hash]
           except ValueError:
             pass
       return (revisions, next_marker, githash_svn_dict)
@@ -505,72 +452,6 @@ class PathContext(object):
                                                    self.bad_revision)
     return revlist
 
-  def GetOfficialBuildsList(self):
-    """Gets the list of official build numbers between self.good_revision and
-    self.bad_revision."""
-
-    def CheckDepotToolsInPath():
-      delimiter = ';' if sys.platform.startswith('win') else ':'
-      path_list = os.environ['PATH'].split(delimiter)
-      for path in path_list:
-        if path.rstrip(os.path.sep).endswith('depot_tools'):
-          return path
-      return None
-
-    def RunGsutilCommand(args):
-      gsutil_path = CheckDepotToolsInPath()
-      if gsutil_path is None:
-        print ('Follow the instructions in this document '
-               'http://dev.chromium.org/developers/how-tos/install-depot-tools'
-               ' to install depot_tools and then try again.')
-        sys.exit(1)
-      gsutil_path = os.path.join(gsutil_path, 'third_party', 'gsutil', 'gsutil')
-      gsutil = subprocess.Popen([sys.executable, gsutil_path] + args,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                env=None)
-      stdout, stderr = gsutil.communicate()
-      if gsutil.returncode:
-        if (re.findall(r'status[ |=]40[1|3]', stderr) or
-            stderr.startswith(CREDENTIAL_ERROR_MESSAGE)):
-          print ('Follow these steps to configure your credentials and try'
-                 ' running the bisect-builds.py again.:\n'
-                 '  1. Run "python %s config" and follow its instructions.\n'
-                 '  2. If you have a @google.com account, use that account.\n'
-                 '  3. For the project-id, just enter 0.' % gsutil_path)
-          sys.exit(1)
-        else:
-          raise Exception('Error running the gsutil command: %s' % stderr)
-      return stdout
-
-    def GsutilList(bucket):
-      query = 'gs://%s/' % bucket
-      stdout = RunGsutilCommand(['ls', query])
-      return [url[len(query):].strip('/') for url in stdout.splitlines()]
-
-    # Download the revlist and filter for just the range between good and bad.
-    minrev = min(self.good_revision, self.bad_revision)
-    maxrev = max(self.good_revision, self.bad_revision)
-    build_numbers = GsutilList(GS_BUCKET_NAME)
-    revision_re = re.compile(r'(\d\d\.\d\.\d{4}\.\d+)')
-    build_numbers = filter(lambda b: revision_re.search(b), build_numbers)
-    final_list = []
-    parsed_build_numbers = [LooseVersion(x) for x in build_numbers]
-    connection = httplib.HTTPConnection(GOOGLE_APIS_URL)
-    for build_number in sorted(parsed_build_numbers):
-      if build_number > maxrev:
-        break
-      if build_number < minrev:
-        continue
-      path = ('/' + GS_BUCKET_NAME + '/' + str(build_number) + '/' +
-              self._listing_platform_dir + self.archive_name)
-      connection.request('HEAD', path)
-      response = connection.getresponse()
-      if response.status == 200:
-        final_list.append(str(build_number))
-      response.read()
-    connection.close()
-    return final_list
-
 def UnzipFilenameToDir(filename, directory):
   """Unzip |filename| to |directory|."""
   cwd = os.getcwd()
@@ -657,8 +538,7 @@ def RunRevision(context, revision, zip_file, profile, num_runs, command, args):
   # Run the build as many times as specified.
   testargs = ['--user-data-dir=%s' % profile] + args
   # The sandbox must be run as root on Official Chrome, so bypass it.
-  if ((context.is_official or context.flash_path) and
-      context.platform.startswith('linux')):
+  if (context.flash_path and context.platform.startswith('linux')):
     testargs.append('--no-sandbox')
   if context.flash_path:
     testargs.append('--ppapi-flash-path=%s' % context.flash_path)
@@ -696,11 +576,11 @@ def RunRevision(context, revision, zip_file, profile, num_runs, command, args):
   return results[0]
 
 
-# The arguments official_builds, status, stdout and stderr are unused.
+# The arguments status, stdout and stderr are unused.
 # They are present here because this function is passed to Bisect which then
 # calls it with 5 arguments.
 # pylint: disable=W0613
-def AskIsGoodBuild(rev, official_builds, status, stdout, stderr):
+def AskIsGoodBuild(rev, exit_status, stdout, stderr):
   """Asks the user whether build |rev| is good or bad."""
   # Loop until we get a response that we can parse.
   while True:
@@ -716,7 +596,7 @@ def AskIsGoodBuild(rev, official_builds, status, stdout, stderr):
       print stderr
 
 
-def IsGoodASANBuild(rev, official_builds, status, stdout, stderr):
+def IsGoodASANBuild(rev, exit_status, stdout, stderr):
   """Determine if an ASAN build |rev| is good or bad
 
   Will examine stderr looking for the error message emitted by ASAN. If not
@@ -730,7 +610,17 @@ def IsGoodASANBuild(rev, official_builds, status, stdout, stderr):
     if bad_count > 0:
       print 'Revision %d determined to be bad.' % rev
       return 'b'
-  return AskIsGoodBuild(rev, official_builds, status, stdout, stderr)
+  return AskIsGoodBuild(rev, exit_status, stdout, stderr)
+
+
+def DidCommandSucceed(rev, exit_status, stdout, stderr):
+  if exit_status:
+    print 'Bad revision: %s' % rev
+    return 'b'
+  else:
+    print 'Good revision: %s' % rev
+    return 'g'
+
 
 class DownloadJob(object):
   """DownloadJob represents a task to download a given Chromium revision."""
@@ -781,13 +671,26 @@ class DownloadJob(object):
       raise
 
 
+def VerifyEndpoint(fetch, context, rev, profile, num_runs, command, try_args,
+                   evaluate, expected_answer):
+  fetch.WaitFor()
+  try:
+    (exit_status, stdout, stderr) = RunRevision(
+        context, rev, fetch.zip_file, profile, num_runs, command, try_args)
+  except Exception, e:
+    print >> sys.stderr, e
+  if (evaluate(rev, exit_status, stdout, stderr) != expected_answer):
+    print 'Unexpected result at a range boundary! Your range is not correct.'
+    raise SystemExit
+
+
 def Bisect(context,
            num_runs=1,
            command='%p %a',
            try_args=(),
            profile=None,
-           interactive=True,
-           evaluate=AskIsGoodBuild):
+           evaluate=AskIsGoodBuild,
+           verify_range=False):
   """Given known good and known bad revisions, run a binary search on all
   archived revisions to determine the last known good revision.
 
@@ -795,10 +698,10 @@ def Bisect(context,
   @param num_runs Number of times to run each build for asking good/bad.
   @param try_args A tuple of arguments to pass to the test application.
   @param profile The name of the user profile to run with.
-  @param interactive If it is false, use command exit code for good or bad
-                     judgment of the argument build.
   @param evaluate A function which returns 'g' if the argument build is good,
                   'b' if it's bad or 'u' if unknown.
+  @param verify_range If true, tests the first and last revisions in the range
+                      before proceeding with the bisect.
 
   Threading is used to fetch Chromium revisions in the background, speeding up
   the user's experience. For example, suppose the bounds of the search are
@@ -823,16 +726,13 @@ def Bisect(context,
   cwd = os.getcwd()
 
   print 'Downloading list of known revisions...',
-  if not context.use_local_cache and not context.is_official:
+  if not context.use_local_cache:
     print '(use --use-local-cache to cache and re-use the list of revisions)'
   else:
     print
   _GetDownloadPath = lambda rev: os.path.join(cwd,
       '%s-%s' % (str(rev), context.archive_name))
-  if context.is_official:
-    revlist = context.GetOfficialBuildsList()
-  else:
-    revlist = context.GetRevList()
+  revlist = context.GetRevList()
 
   # Get a list of revisions to bisect across.
   if len(revlist) < 2:  # Don't have enough builds to bisect.
@@ -844,9 +744,31 @@ def Bisect(context,
   maxrev = len(revlist) - 1
   pivot = maxrev / 2
   rev = revlist[pivot]
-  zip_file = _GetDownloadPath(rev)
-  fetch = DownloadJob(context, 'initial_fetch', rev, zip_file)
+  fetch = DownloadJob(context, 'initial_fetch', rev, _GetDownloadPath(rev))
   fetch.Start()
+
+  if verify_range:
+    minrev_fetch = DownloadJob(
+        context, 'minrev_fetch', revlist[minrev],
+        _GetDownloadPath(revlist[minrev]))
+    maxrev_fetch = DownloadJob(
+        context, 'maxrev_fetch', revlist[maxrev],
+        _GetDownloadPath(revlist[maxrev]))
+    minrev_fetch.Start()
+    maxrev_fetch.Start()
+    try:
+      VerifyEndpoint(minrev_fetch, context, revlist[minrev], profile, num_runs,
+          command, try_args, evaluate, 'b' if bad_rev < good_rev else 'g')
+      VerifyEndpoint(maxrev_fetch, context, revlist[maxrev], profile, num_runs,
+          command, try_args, evaluate, 'g' if bad_rev < good_rev else 'b')
+    except (KeyboardInterrupt, SystemExit):
+      print 'Cleaning up...'
+      fetch.Stop()
+      sys.exit(0)
+    finally:
+      minrev_fetch.Stop()
+      maxrev_fetch.Stop()
+
   fetch.WaitFor()
 
   # Binary search time!
@@ -880,17 +802,12 @@ def Bisect(context,
       up_fetch.Start()
 
     # Run test on the pivot revision.
-    status = None
+    exit_status = None
     stdout = None
     stderr = None
     try:
-      (status, stdout, stderr) = RunRevision(context,
-                                             rev,
-                                             fetch.zip_file,
-                                             profile,
-                                             num_runs,
-                                             command,
-                                             try_args)
+      (exit_status, stdout, stderr) = RunRevision(
+          context, rev, fetch.zip_file, profile, num_runs, command, try_args)
     except Exception, e:
       print >> sys.stderr, e
 
@@ -898,15 +815,7 @@ def Bisect(context,
     # On that basis, kill one of the background downloads and complete the
     # other, as described in the comments above.
     try:
-      if not interactive:
-        if status:
-          answer = 'b'
-          print 'Bad revision: %s' % rev
-        else:
-          answer = 'g'
-          print 'Good revision: %s' % rev
-      else:
-        answer = evaluate(rev, context.is_official, status, stdout, stderr)
+      answer = evaluate(rev, exit_status, stdout, stderr)
       if ((answer == 'g' and good_rev < bad_rev)
           or (answer == 'b' and bad_rev < good_rev)):
         fetch.Stop()
@@ -954,7 +863,6 @@ def Bisect(context,
             pivot = up_pivot - 1  # Subtracts 1 because revlist was resized.
           else:
             pivot = down_pivot
-          zip_file = fetch.zip_file
 
         if down_fetch and fetch != down_fetch:
           down_fetch.Stop()
@@ -962,9 +870,10 @@ def Bisect(context,
           up_fetch.Stop()
       else:
         assert False, 'Unexpected return value from evaluate(): ' + answer
-    except SystemExit:
+    except (KeyboardInterrupt, SystemExit):
       print 'Cleaning up...'
-      for f in [_GetDownloadPath(revlist[down_pivot]),
+      for f in [_GetDownloadPath(rev),
+                _GetDownloadPath(revlist[down_pivot]),
                 _GetDownloadPath(revlist[up_pivot])]:
         try:
           os.unlink(f)
@@ -1087,7 +996,6 @@ def main():
            'the bad one.\n'
            '\n'
            'Revision numbers should use\n'
-           '  Official versions (e.g. 1.0.1000.0) for official builds. (-o)\n'
            '  SVN revisions (e.g. 123456) for chromium builds, from trunk.\n'
            '    Use base_trunk_revision from http://omahaproxy.appspot.com/\n'
            '    for earlier revs.\n'
@@ -1103,11 +1011,6 @@ def main():
                     choices=choices,
                     help='The buildbot archive to bisect [%s].' %
                          '|'.join(choices))
-  parser.add_option('-o',
-                    action='store_true',
-                    dest='official_builds',
-                    help='Bisect across official Chrome builds (internal '
-                         'only) instead of Chromium archives.')
   parser.add_option('-b', '--bad',
                     type='str',
                     help='A bad revision to start bisection. '
@@ -1162,6 +1065,12 @@ def main():
                     help='Use a local file in the current directory to cache '
                          'a list of known revisions to speed up the '
                          'initialization of this script.')
+  parser.add_option('--verify-range',
+                    dest='verify_range',
+                    action='store_true',
+                    default=False,
+                    help='Test the first and last revisions in the range ' +
+                         'before proceeding with the bisect.')
 
   (opts, args) = parser.parse_args()
 
@@ -1177,9 +1086,6 @@ def main():
       print 'Error: ASAN bisecting only supported on these platforms: [%s].' % (
             '|'.join(supported_platforms))
       return 1
-    if opts.official_builds:
-      print 'Error: Do not yet support bisecting official ASAN builds.'
-      return 1
 
   if opts.asan:
     base_url = ASAN_BASE_URL
@@ -1190,7 +1096,7 @@ def main():
 
   # Create the context. Initialize 0 for the revisions as they are set below.
   context = PathContext(base_url, opts.archive, opts.good, opts.bad,
-                        opts.official_builds, opts.asan, opts.use_local_cache,
+                        opts.asan, opts.use_local_cache,
                         opts.flash_path)
 
   # Pick a starting point, try to get HEAD for this.
@@ -1201,18 +1107,14 @@ def main():
 
   # Find out when we were good.
   if not opts.good:
-    context.good_revision = '0.0.0.0' if opts.official_builds else 0
+    context.good_revision = 0
 
   if opts.flash_path:
     msg = 'Could not find Flash binary at %s' % opts.flash_path
     assert os.path.exists(opts.flash_path), msg
 
-  if opts.official_builds:
-    context.good_revision = LooseVersion(context.good_revision)
-    context.bad_revision = LooseVersion(context.bad_revision)
-  else:
-    context.good_revision = int(context.good_revision)
-    context.bad_revision = int(context.bad_revision)
+  context.good_revision = int(context.good_revision)
+  context.bad_revision = int(context.bad_revision)
 
   if opts.times < 1:
     print('Number of times to run (%d) must be greater than or equal to 1.' %
@@ -1220,7 +1122,9 @@ def main():
     parser.print_help()
     return 1
 
-  if opts.asan:
+  if opts.not_interactive:
+    evaluator = DidCommandSucceed
+  elif opts.asan:
     evaluator = IsGoodASANBuild
   else:
     evaluator = AskIsGoodBuild
@@ -1232,7 +1136,7 @@ def main():
 
   (min_chromium_rev, max_chromium_rev, context) = Bisect(
       context, opts.times, opts.command, args, opts.profile,
-      not opts.not_interactive, evaluator)
+      evaluator, opts.verify_range)
 
   # Get corresponding blink revisions.
   try:
@@ -1267,10 +1171,7 @@ def main():
              'you might also want to do a Blink bisect.')
 
     print 'CHANGELOG URL:'
-    if opts.official_builds:
-      print OFFICIAL_CHANGELOG_URL % (min_chromium_rev, max_chromium_rev)
-    else:
-      PrintChangeLog(min_chromium_rev, max_chromium_rev)
+    PrintChangeLog(min_chromium_rev, max_chromium_rev)
 
 
 if __name__ == '__main__':

@@ -45,9 +45,9 @@ WebPresentationClient* presentationClient(ExecutionContext* executionContext)
 
 const AtomicString& connectionStateToString(WebPresentationConnectionState state)
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, connectedValue, ("connected", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, closedValue, ("closed", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, terminatedValue, ("terminated", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, connectedValue, ("connected"));
+    DEFINE_STATIC_LOCAL(const AtomicString, closedValue, ("closed"));
+    DEFINE_STATIC_LOCAL(const AtomicString, terminatedValue, ("terminated"));
 
     switch (state) {
     case WebPresentationConnectionState::Connected:
@@ -64,9 +64,9 @@ const AtomicString& connectionStateToString(WebPresentationConnectionState state
 
 const AtomicString& connectionCloseReasonToString(WebPresentationConnectionCloseReason reason)
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, errorValue, ("error", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, closedValue, ("closed", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, wentAwayValue, ("wentaway", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, errorValue, ("error"));
+    DEFINE_STATIC_LOCAL(const AtomicString, closedValue, ("closed"));
+    DEFINE_STATIC_LOCAL(const AtomicString, wentAwayValue, ("wentaway"));
 
     switch (reason) {
     case WebPresentationConnectionCloseReason::Error:
@@ -94,7 +94,7 @@ public:
         : m_PresentationConnection(PresentationConnection)
         , m_loader(FileReaderLoader::ReadAsArrayBuffer, this)
     {
-        m_loader.start(m_PresentationConnection->executionContext(), blobDataHandle);
+        m_loader.start(m_PresentationConnection->getExecutionContext(), blobDataHandle);
     }
     ~BlobLoader() override { }
 
@@ -145,9 +145,9 @@ PresentationConnection* PresentationConnection::take(ScriptPromiseResolver* reso
     ASSERT(resolver);
     ASSERT(client);
     ASSERT(request);
-    ASSERT(resolver->executionContext()->isDocument());
+    ASSERT(resolver->getExecutionContext()->isDocument());
 
-    Document* document = toDocument(resolver->executionContext());
+    Document* document = toDocument(resolver->getExecutionContext());
     if (!document->frame())
         return nullptr;
 
@@ -176,25 +176,23 @@ const AtomicString& PresentationConnection::interfaceName() const
     return EventTargetNames::PresentationConnection;
 }
 
-ExecutionContext* PresentationConnection::executionContext() const
+ExecutionContext* PresentationConnection::getExecutionContext() const
 {
     if (!frame())
         return nullptr;
     return frame()->document();
 }
 
-bool PresentationConnection::addEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener> listener, const EventListenerOptions& options)
+bool PresentationConnection::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const EventListenerOptions& options)
 {
-    if (eventType == EventTypeNames::statechange)
-        Deprecation::countDeprecation(executionContext(), UseCounter::PresentationConnectionStateChangeEventListener);
-    else if (eventType == EventTypeNames::connect)
-        UseCounter::count(executionContext(), UseCounter::PresentationConnectionConnectEventListener);
+    if (eventType == EventTypeNames::connect)
+        UseCounter::count(getExecutionContext(), UseCounter::PresentationConnectionConnectEventListener);
     else if (eventType == EventTypeNames::close)
-        UseCounter::count(executionContext(), UseCounter::PresentationConnectionCloseEventListener);
+        UseCounter::count(getExecutionContext(), UseCounter::PresentationConnectionCloseEventListener);
     else if (eventType == EventTypeNames::terminate)
-        UseCounter::count(executionContext(), UseCounter::PresentationConnectionTerminateEventListener);
+        UseCounter::count(getExecutionContext(), UseCounter::PresentationConnectionTerminateEventListener);
     else if (eventType == EventTypeNames::message)
-        UseCounter::count(executionContext(), UseCounter::PresentationConnectionMessageEventListener);
+        UseCounter::count(getExecutionContext(), UseCounter::PresentationConnectionMessageEventListener);
 
     return EventTarget::addEventListenerInternal(eventType, listener, options);
 }
@@ -258,12 +256,12 @@ bool PresentationConnection::canSendMessage(ExceptionState& exceptionState)
     }
 
     // The connection can send a message if there is a client available.
-    return !!presentationClient(executionContext());
+    return !!presentationClient(getExecutionContext());
 }
 
 void PresentationConnection::handleMessageQueue()
 {
-    WebPresentationClient* client = presentationClient(executionContext());
+    WebPresentationClient* client = presentationClient(getExecutionContext());
     if (!client)
         return;
 
@@ -344,7 +342,7 @@ void PresentationConnection::close()
 {
     if (m_state != WebPresentationConnectionState::Connected)
         return;
-    WebPresentationClient* client = presentationClient(executionContext());
+    WebPresentationClient* client = presentationClient(getExecutionContext());
     if (client)
         client->closeSession(m_url, m_id);
 
@@ -355,7 +353,7 @@ void PresentationConnection::terminate()
 {
     if (m_state != WebPresentationConnectionState::Connected)
         return;
-    WebPresentationClient* client = presentationClient(executionContext());
+    WebPresentationClient* client = presentationClient(getExecutionContext());
     if (client)
         client->terminateSession(m_url, m_id);
 
@@ -373,7 +371,6 @@ void PresentationConnection::didChangeState(WebPresentationConnectionState state
         return;
 
     m_state = state;
-    dispatchEvent(Event::create(EventTypeNames::statechange));
     switch (m_state) {
     case WebPresentationConnectionState::Connected:
         dispatchEvent(Event::create(EventTypeNames::connect));
@@ -402,7 +399,7 @@ void PresentationConnection::didFinishLoadingBlob(PassRefPtr<DOMArrayBuffer> buf
     ASSERT(!m_messages.isEmpty() && m_messages.first()->type == MessageTypeBlob);
     ASSERT(buffer && buffer->buffer());
     // Send the loaded blob immediately here and continue processing the queue.
-    WebPresentationClient* client = presentationClient(executionContext());
+    WebPresentationClient* client = presentationClient(getExecutionContext());
     if (client)
         client->sendBlobData(m_url, m_id, static_cast<const uint8_t*>(buffer->data()), buffer->byteLength());
 

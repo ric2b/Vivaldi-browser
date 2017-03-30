@@ -314,10 +314,9 @@ bool LayoutListItem::updateMarkerLocation()
     if (markerParent != lineBoxParent) {
         m_marker->remove();
         lineBoxParent->addChild(m_marker, firstNonMarkerChild(lineBoxParent));
+        // TODO(rhogan): lineBoxParent and markerParent may be deleted by addChild, so they are not safe to reference here.
+        // Once we have a safe way of referencing them delete markerParent if it is an empty anonymous block.
         m_marker->updateMarginsAndContent();
-        // If markerParent is an anonymous block with no children, destroy it.
-        if (markerParent && markerParent->isAnonymousBlock() && !toLayoutBlock(markerParent)->firstChild() && !toLayoutBlock(markerParent)->continuation())
-            markerParent->destroy();
         return true;
     }
 
@@ -435,7 +434,7 @@ const String& LayoutListItem::markerText() const
 {
     if (m_marker)
         return m_marker->text();
-    return nullAtom.string();
+    return nullAtom.getString();
 }
 
 void LayoutListItem::explicitValueChanged()

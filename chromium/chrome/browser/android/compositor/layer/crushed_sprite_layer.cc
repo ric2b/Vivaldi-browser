@@ -115,8 +115,7 @@ void CrushedSpriteLayer::DrawRectanglesForFrame(
 }
 
 CrushedSpriteLayer::CrushedSpriteLayer()
-    : layer_(
-          cc::UIResourceLayer::Create(content::Compositor::LayerSettings())),
+    : layer_(cc::UIResourceLayer::Create()),
       frame_count_(-1),
       previous_frame_(-1) {
   layer_->SetIsDrawable(true);

@@ -162,9 +162,27 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_SHORTCUT_ENTER" desc="[Enter] key name to use in shortcuts descriptions. Shouldn't be translated in many languages actually.">
     Enter
   </message>
+  <message name="IDS_FILE_BROWSER_SHORTCUT_BACKSPACE" desc="[Backspace] key name to use in shortcuts descriptions. Shouldn't be translated in many languages actually.">
+    Backspace
+  </message>
 
   <message name="IDS_FILE_BROWSER_STATUS_COLUMN_LABEL" desc="Status column label.  This column reflects the cloud import status of files.  The status is an icon depicting whether a file has been imported, and if so, where to - for example, a Drive icon if a file has been imported to Google Drive.  For unimported files, this column is blank. ">
     Status
+  </message>
+  <message name="IDS_FILE_BROWSER_TOTAL_FILE_COUNT_LABEL" desc="Total count of files that user selects in Files app">
+    Total file count
+  </message>
+  <message name="IDS_FILE_BROWSER_TOTAL_FILE_SIZE_LABEL" desc="Total size of files that user selects in Files app">
+    Total file size
+  </message>
+  <message name="IDS_FILE_BROWSER_IMAGE_RESOLUTION_COLUMN_LABEL" desc="Image resolution of a file that user selects in Files app">
+    Image resolution
+  </message>
+  <message name="IDS_FILE_BROWSER_MEDIA_TITLE_COLUMN_LABEL" desc="Artist of a music file that user selects in Files app">
+    Title
+  </message>
+  <message name="IDS_FILE_BROWSER_MEDIA_ARTIST_COLUMN_LABEL" desc="Title of a music file that user selects in Files app">
+    Artist
   </message>
   <message name="IDS_FILE_BROWSER_TYPE_COLUMN_LABEL" desc="Type column label.">
     Type
@@ -998,6 +1016,9 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_SORT_BUTTON_TOOLTIP" desc="Tooltip for the button which provides sort options in Files.app.">
     Sort options
   </message>
+  <message name="IDS_FILE_BROWSER_DETAIL_BUTTON_TOOLTIP" desc="Tooltip for the detals button to show the details panel which provides information of selected files in Files.app.">
+    View details
+  </message>
   <message name="IDS_FILE_BROWSER_GEAR_BUTTON_TOOLTIP" desc="Tooltip for the gear button in Files.app.">
     Settings
   </message>
@@ -1087,6 +1108,12 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_VIDEO_PLAYER_EXIT_FULL_SCREEN_BUTTON_LABEL" desc="Label for a button which is used to exit full screen mode in video player.">
     Exit full screen
+  </message>
+  <message name="IDS_VIDEO_PLAYER_ENABLE_SUBTITLES_BUTTON_LABEL" desc="Label for a button which is used to enable subtitles in video player.">
+    Enable subtitles
+  </message>
+  <message name="IDS_VIDEO_PLAYER_DISABLE_SUBTITLES_BUTTON_LABEL" desc="Label for a button which is used to disable subtitles in video player.">
+    Disable subtitles
   </message>
 
 <!-- Imageburn Strings -->
@@ -1220,6 +1247,12 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_FLAGS_DISPLAY_COLOR_CALIBRATION_DESCRIPTION" desc="Description for the flag for the color calibration of the display.">
     Allow color calibration of the display if the display supports the feature.
+  </message>
+  <message name="IDS_FLAGS_DISABLE_QUIRKS_CLIENT_NAME" desc="Name for the flag to disable the Quirks Client for calibration of the display and other hardware.">
+    Disable Quirks Client for display calibration.
+  </message>
+  <message name="IDS_FLAGS_DISABLE_QUIRKS_CLIENT_DESCRIPTION" desc="Description for the flag to disable the Quirks Client for calibration of the display and other hardware.">
+    Disable retrieval of icc display files from Quirks Server for display color calibration.
   </message>
   <message name="IDS_FLAGS_MEMORY_PRESSURE_THRESHOLD_NAME" desc="Name for the flag which specifies which memory pressure strategy should be used on ChromeOS.">
     Memory discard strategy for advanced pressure handling
@@ -1579,14 +1612,21 @@ Press any key to continue exploring.
   <message name="IDS_LOGIN_PREVIOUS_PASSWORD" desc="Password field text on the password changed dialog">
     Previous password
   </message>
-  <message name="IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_MESSAGE" desc="Message text for the fatal cryptohome error dialog box">
-    We're very sorry, but a serious error has occurred and your profile will need to be recreated to continue. Don't worry, your account is safe, but unfortunately, your local data and files on this device may have been lost.
+  <message name="IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_TITLE" desc="Title for the fatal cryptohome error dialog box">
+    Can't sign in
+  </message>
+  <message name="IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_MESSAGE" desc="Message for the fatal cryptohome error dialog box">
+    We're sorry. We can't access your profile. Files and data stored on this device may have been lost.<ph name="BR">&lt;br&gt;</ph>
+    <ph name="BR">&lt;br&gt;</ph>
+    You'll have to set up your profile again.<ph name="BR">&lt;br&gt;</ph>
+    <ph name="BR">&lt;br&gt;</ph>
+    On the next screen, please send feedback to help us fix the issue.
   </message>
   <message name="IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_CONTINUE" desc="Label of the button to continue with re-creating cryptohome for the fatal cryptohome error dialog box">
     Continue
   </message>
-  <message name="IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_SEND_FEEDBACK" desc="Label of the checkbox to send feedback for the fatal cryptohome error dialog box">
-    Send anonymized system information to help us fix this issue
+  <message name="IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_WAIT_MESSAGE" desc="Message to show when the fatal cryptohome error dialog box is waiting for user profile re-creation to be closed.">
+    Re-creating profile, please wait...
   </message>
   <message name="IDS_LOGIN_SAML_NOTICE" desc="Text message displayed above SAML portal to early indicate that the user is being redirected to another sign-in provider. This is the version of the string used in the GAIA flow.">
     This sign-in service is hosted by <ph name="SAML_DOMAIN">$1<ex>saml.com</ex></ph>
@@ -1609,6 +1649,9 @@ Press any key to continue exploring.
   <message name="IDS_LOGIN_ACCOUNT_SETUP_CANCEL_DIALOG_YES" desc="Text to show on button to accept cancelation.">
     Yes
   </message>
+  <message name="IDS_LOGIN_DEVICE_MANAGED_BY_NOTICE" desc="Text for notifications showing that this is managed device.">
+    Managed by <ph name="DOMAIN">$1<ex>acmecorp.com</ex></ph>
+  </message>
   <message name="IDS_LOGIN_FATAL_ERROR_NO_ACCOUNT_DETAILS" desc="Message to show when the authentication could not be completed because the user's account details could not be retrieved.">
     Sign-in failed because your account details could not be retrieved. Please contact your administrator or try again.
   </message>
@@ -1624,11 +1667,19 @@ Press any key to continue exploring.
   <message name="IDS_LOGIN_FATAL_ERROR_TRY_AGAIN_BUTTON" desc="Label for a button which starts sign-in from the beginning after fatal error.">
     Try again
   </message>
-  <message name="IDS_OFFLINE_LOGIN_WELCOME" desc="Message shown during the GAIA flow in the beginning of the offline login.">
-    Sign in to your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
+  <message name="IDS_LOGIN_SAML_INTERSTITIAL_MESSAGE" desc="Message to show on the SAML interstitial page to tell the user to continue signing in using his enterprise account.">
+    This device is managed by <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="DOMAIN">$1<ex>acmecorp.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph>.
+    <ph name="LINE_BREAK">&lt;br/&gt;</ph>
+    Please click "Next" to continue signing in to your <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="DOMAIN">$1<ex>acmecorp.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> account.
   </message>
-  <message name="IDS_OFFLINE_LOGIN_DEVICE_MANAGED_BY_NOTICE" desc="Text for notifications showing that this is managed device.">
-    Managed by <ph name="DOMAIN">$1<ex>acmecorp.com</ex></ph>
+  <message name="IDS_LOGIN_SAML_INTERSTITIAL_CHANGE_ACCOUNT_LINK_TEXT" desc="Text of the link that allows the user to change the login account.">
+    Sign in with a different account
+  </message>
+  <message name="IDS_LOGIN_SAML_INTERSTITIAL_NEXT_BUTTON_TEXT" desc="Text shown on the Next button.">
+    Next
+  </message>
+  <message name="IDS_LOGIN_WELCOME_MESSAGE" desc="Message shown at the header of the login screens.">
+    Sign in to your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
   </message>
   <message name="IDS_OFFLINE_LOGIN_EMAIL" desc="Email field text on the offline login screen. Note: should be the same as the one used on the Gaia sign-in page.">
     Enter your email
@@ -2295,6 +2346,33 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_AUTOCLICK_DELAY_VERY_LONG" desc="Label for a very long autoclick delay option in the settings.">
     very long
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_CARET_HIGHLIGHT_DESCRIPTION" desc="In the settings tab, the text next to the checkbox to highlight the caret (the text insertion point) to make it easier to see.">
+    Highlight the caret (when editing text)
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_CURSOR_HIGHLIGHT_DESCRIPTION" desc="In the settings tab, the text next to the checkbox to highlight the mouse cursor to make it easier to see.">
+    Highlight the mouse cursor
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_FOCUS_HIGHLIGHT_DESCRIPTION" desc="In the settings tab, the text next to the checkbox to highlight the focused object to make it easier to see.">
+    Highlight the object with keyboard focus
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DESCRIPTION" desc="In the settings tab, the text next to the checkbox to enable an option to hold a key and click to speak any on-screen text out loud.">
+    Select-to-speak: Hold down Search and click or drag to speak anything
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SWITCH_ACCESS_DESCRIPTION" desc="In the settings tab, the text next to the checkbox to enable switch access (for users with limited motor control).">
+    Switch access (control the computer with just one or two switches)
+  </message>
+  <message name="IDS_FLAGS_EXPERIMENTAL_ACCESSIBILITY_FEATURES_NAME" desc="Name of the about:flag option for experimental accessibility features.">
+    Experimental acecssibility features
+  </message>
+  <message name="IDS_FLAGS_EXPERIMENTAL_ACCESSIBILITY_FEATURES_DESCRIPTION" desc="Description of the about:flag option for experimental accessibility features.">
+    Enable additional accessibility features in the Settings page.
+  </message>
+  <message name="IDS_FLAGS_ENABLE_SYSTEM_TIMEZONE_AUTOMATIC_DETECTION_NAME" desc="Name of the about:flag option for enabling EnableSystemTimezoneAutomaticDetection policy.">
+    SystemTimezoneAutomaticDetection policy support
+  </message>
+  <message name="IDS_FLAGS_ENABLE_SYSTEM_TIMEZONE_AUTOMATIC_DETECTION_DESCRIPTION" desc="Description of the about:flag option for enabling EnableSystemTimezoneAutomaticDetection policy.">
+    Enable system timezone automatic detection device policy.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_DISPLAY_OPTIONS_BUTTON_LABEL" desc="Label for the button opening display settings tab.">
     Display settings
@@ -3581,8 +3659,8 @@ Press any key to continue exploring.
     This language doesn't have any input methods
   </message>
   <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_ACTIVATE_IME_MENU"
-           desc="The label for activating IME menu on the shelf.">
-    Show the input method menu on the shelf.
+           desc="The label for showing expanded IME menu in the shelf.">
+    Show expanded input options in the shelf.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_ACTIVATE_IME_MENU_DESCRIPTION"
            desc="The label for the description of showing input method menu.">
@@ -4658,8 +4736,8 @@ Battery full
   <message name="IDS_KEYBOARD_OVERLAY_RELOAD_CURRENT_PAGE" desc="The text in the keyboard overlay to explain the shortcut.">
     Reload
   </message>
-  <message name="IDS_KEYBOARD_OVERLAY_RELOAD_IGNORING_CACHE" desc="The text in the keyboard overlay to explain the shortcut.">
-    Reload ignoring cache
+  <message name="IDS_KEYBOARD_OVERLAY_RELOAD_BYPASSING_CACHE" desc="The text in the keyboard overlay to explain the shortcut.">
+    Reload bypassing cache
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_REOPEN_LAST_CLOSED_TAB" desc="The text in the keyboard overlay to explain the shortcut.">
     Reopen last-closed tab
@@ -5430,7 +5508,7 @@ Battery full
     Can't access network library
   </message>
   <message name="IDS_LOGIN_ERROR_KEYBOARD_SWITCH_HINT" desc="A hint text for the login and lock screens about layout switching">
-    Hit Shift-Alt to switch keyboard layout.
+    Hit Control-Shift-Space to switch keyboard layout.
   </message>
   <message name="IDS_LOGIN_ERROR_CAPS_LOCK_HINT" desc="A hint text for the login and lock screens that Caps Lock is on">
     Caps Lock is on.
@@ -5654,13 +5732,7 @@ Battery full
 
   <!-- Platform verification UI -->
   <message name="IDS_PLATFORM_VERIFICATION_DIALOG_HEADLINE" desc="The label to describe what the dialog wants to confirm.">
-    <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires your device's identity to be verified, by Google, to determine eligibility for enhanced playback of protected media. <ph name="LEARN_MORE">$2<ex>Learn more</ex></ph>.
-  </message>
-  <message name="IDS_PLATFORM_VERIFICATION_DIALOG_ALLOW" desc="The button label to allow access of HD playback.">
-    OK, I got it
-  </message>
-  <message name="IDS_PLATFORM_VERIFICATION_DIALOG_DENY" desc="The button label to deny access of HD playback.">
-    Disable on <ph name="DOMAIN">$1<ex>example.com</ex></ph>
+    <ph name="DOMAIN">$1<ex>example.com</ex></ph> wants your device's identity to be verified, by Google, to determine eligibility for enhanced playback of protected media. <ph name="LEARN_MORE">$2<ex>Learn more</ex></ph>.
   </message>
 
   <!-- Multi-profiles mode -->
@@ -6360,7 +6432,7 @@ All users must sign out to continue.
   <message name="IDS_OPTIONS_RESOLVE_TIMEZONE_BY_GEOLOCATION_DESCRIPTION" desc="Label for checkbox to allow automatic timezone update by user geolocation.">
     Set time zone automatically using your location
   </message>
-  <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_TITLE" desc="Title of a prompt dialog for granting permissions to a volume (eg. USB drive, SD card, MTP device) with the specified name.">
+  <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_TITLE" desc="Title of a prompt dialog for granting permissions to a volume (eg. USB drive, SD card, MTP device) with the specified name. Only used for screen readers (a11y); not visible.">
     Permission requested
   </message>
   <message name="IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_MESSAGE" desc="Message in a prompt dialog for granting read-only permissions to a volume (eg. USB drive, SD card, MTP device) with the specified name to the extension.">
@@ -6436,5 +6508,67 @@ All users must sign out to continue.
   <message name="IDS_OPTIONS_ARC_ENABLE" desc="Label for the checkbox that enables Android apps.">
     Enable Android Apps to run on your Chromebook.
   </message>
-
+  <message name="IDS_ARC_NOTIFICATION_TITLE" desc="Title of the first-run notification that enables Android apps.">
+    Google Play Store
+  </message>
+  <message name="IDS_ARC_NOTIFICATION_MESSAGE" desc="Description message of the first-run notification that enables Android apps.">
+    Over a million apps and games now avaialble on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
+  </message>
+  <message name="IDS_ARC_OPEN_PLAY_STORE_NOTIFICATION_BUTTON" desc="Label for the button in the first-run notification that enables Android apps.">
+    Open Play Store
+  </message>
+  <message name="IDS_ARC_CANCEL_NOTIFICATION_BUTTON" desc="Label for the button in the first-run notification that cancel running Android apps.">
+    Cancel
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_HEADER" desc="Title of the opt-in dialog for Android apps.">
+    Google Play store now on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_DESCRIPTION" desc="Description of the opt-in dialog for Android apps.">
+    Choose from over a million apps and games on Google Play to install and use on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_LEGACY" desc="Legacy text of the opt-in dialog for Android apps.">
+    By proceeding, you're agreeing to the <ph name="BEGIN_LINK">&lt;a class="link" href="https://www.google.com/policies/terms/" target="_blank"&gt;</ph>Google Terms of Service<ph name="END_LINK">&lt;/a&gt;</ph> and <ph name="BEGIN_LINK">&lt;a class="link" href="https://www.google.com/policies/privacy/" target="_blank"&gt;</ph>Privacy Policy<ph name="END_LINK">&lt;/a&gt;</ph>.
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_GET_STARTED" desc="Get started button of the opt-in dialog for Android apps.">
+    Get Started
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_BUTTON_RETRY" desc="Retry button of the opt-in dialog for Android apps.">
+    Retry
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_PROGRESS_LSO" desc="Name of LSO loading progress of the opt-in dialog for Android apps.">
+    Just a sec...
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_PROGRESS_ANDROID" desc="Name of Android loading progress of the opt-in dialog for Android apps.">
+    This may take up to a minute or so
+  </message>
+  <message name="IDS_ARC_OPT_IN_DIALOG_AUTHORIZATION_FAILED" desc="Error message shown in case when auth code is not returned by server.">
+    Athorization failed
+  </message>
+  <message name="IDS_ARC_SIGN_IN_NETWORK_ERROR" desc="Android sign-in error because of network error">
+    Network error
+  </message>
+  <message name="IDS_ARC_SIGN_IN_SERVICE_UNAVAILABLE_ERROR" desc="Android sign-in error because of service is unavailable">
+    Service unavailable
+  </message>
+  <message name="IDS_ARC_SIGN_IN_BAD_AUTHENTICATION_ERROR" desc="Android sign-in error because of bad authentification">
+    Bad authentication
+  </message>
+  <message name="IDS_ARC_SIGN_IN_GMS_NOT_AVAILABLE_ERROR" desc="Android sign-in error because of GMS services are unavailable">
+    GMS services are unavailable
+  </message>
+  <message name="IDS_ARC_SIGN_IN_CLOUD_PROVISION_FLOW_FAIL_ERROR" desc="Android sign-in error because of cloud provision flow failed">
+    Cloud provision flow failed
+  </message>
+  <message name="IDS_ARC_SIGN_IN_UNKNOWN_ERROR" desc="Android sign-in error because of unknown error">
+    Unknown error
+  </message>
+  <message name="IDS_ARC_SERVER_COMMUNICATION_ERROR" desc="Android sign-in error because of server communication error">
+    Server communication error
+  </message>
+  <message name="IDS_FLAGS_ENABLE_IME_MENU_NAME" desc="Name of the about: flag for enabling opt-in IME menu.">
+    Enable opt-in IME menu
+    </message>
+  <message name="IDS_FLAGS_ENABLE_IME_MENU_DESCRIPTION" desc="Description of the about: flag for enabling opt-in IME menu.">
+    Enable access to the new IME menu in the Language Settings page.
+  </message>
 </grit-part>

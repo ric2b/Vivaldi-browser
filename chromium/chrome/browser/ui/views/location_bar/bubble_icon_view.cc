@@ -14,7 +14,7 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/button_ink_drop_delegate.h"
 #include "ui/views/animation/ink_drop_hover.h"
-#include "ui/views/bubble/bubble_delegate.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 
 BubbleIconView::BubbleIconView(CommandUpdater* command_updater, int command_id)
     : image_(new views::ImageView()),
@@ -35,7 +35,7 @@ BubbleIconView::~BubbleIconView() {
 bool BubbleIconView::IsBubbleShowing() const {
   // If the bubble is being destroyed, it's considered showing though it may be
   // already invisible currently.
-  return GetBubble() != NULL;
+  return GetBubble() != nullptr;
 }
 
 void BubbleIconView::SetImage(const gfx::ImageSkia* image_skia) {
@@ -99,10 +99,21 @@ void BubbleIconView::OnMouseReleased(const ui::MouseEvent& event) {
 }
 
 bool BubbleIconView::OnKeyPressed(const ui::KeyEvent& event) {
-  if (event.key_code() != ui::VKEY_SPACE && event.key_code() != ui::VKEY_RETURN)
+  if (event.key_code() != ui::VKEY_RETURN && event.key_code() != ui::VKEY_SPACE)
     return false;
 
   ink_drop_delegate_->OnAction(views::InkDropState::ACTIVATED);
+  // As with CustomButton, return activates on key down and space activates on
+  // key up.
+  if (event.key_code() == ui::VKEY_RETURN)
+    ExecuteCommand(EXECUTE_SOURCE_KEYBOARD);
+  return true;
+}
+
+bool BubbleIconView::OnKeyReleased(const ui::KeyEvent& event) {
+  if (event.key_code() != ui::VKEY_SPACE)
+    return false;
+
   ExecuteCommand(EXECUTE_SOURCE_KEYBOARD);
   return true;
 }
@@ -120,7 +131,7 @@ void BubbleIconView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
 
 void BubbleIconView::AddInkDropLayer(ui::Layer* ink_drop_layer) {
   image_->SetPaintToLayer(true);
-  image_->SetFillsBoundsOpaquely(false);
+  image_->layer()->SetFillsBoundsOpaquely(false);
   views::InkDropHostView::AddInkDropLayer(ink_drop_layer);
 }
 
@@ -129,7 +140,8 @@ void BubbleIconView::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
   image_->SetPaintToLayer(false);
 }
 
-scoped_ptr<views::InkDropHover> BubbleIconView::CreateInkDropHover() const {
+std::unique_ptr<views::InkDropHover> BubbleIconView::CreateInkDropHover()
+    const {
   // BubbleIconView views don't show hover effect.
   return nullptr;
 }
@@ -173,7 +185,7 @@ bool BubbleIconView::SetRasterIcon() {
 }
 
 void BubbleIconView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
-  views::BubbleDelegateView* bubble = GetBubble();
+  views::BubbleDialogDelegateView* bubble = GetBubble();
   if (bubble)
     bubble->OnAnchorBoundsChanged();
 }

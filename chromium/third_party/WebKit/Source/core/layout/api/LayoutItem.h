@@ -54,6 +54,11 @@ public:
         return m_layoutObject->isBox();
     }
 
+    bool isBR() const
+    {
+        return m_layoutObject->isBR();
+    }
+
     bool isLayoutBlock() const
     {
         return m_layoutObject->isLayoutBlock();
@@ -72,6 +77,51 @@ public:
     bool isLayoutPart() const
     {
         return m_layoutObject->isLayoutPart();
+    }
+
+    bool isEmbeddedObject() const
+    {
+        return m_layoutObject->isEmbeddedObject();
+    }
+
+    bool isImage() const
+    {
+        return m_layoutObject->isImage();
+    }
+
+    bool isLayoutFullScreen() const
+    {
+        return m_layoutObject->isLayoutFullScreen();
+    }
+
+    bool isListItem() const
+    {
+        return m_layoutObject->isListItem();
+    }
+
+    bool isMedia() const
+    {
+        return m_layoutObject->isMedia();
+    }
+
+    bool isMenuList() const
+    {
+        return m_layoutObject->isMenuList();
+    }
+
+    bool isProgress() const
+    {
+        return m_layoutObject->isProgress();
+    }
+
+    bool isSlider() const
+    {
+        return m_layoutObject->isSlider();
+    }
+
+    bool isLayoutView() const
+    {
+        return m_layoutObject->isLayoutView();
     }
 
     bool needsLayout()
@@ -94,9 +144,9 @@ public:
         return m_layoutObject->styleRef();
     }
 
-    LayoutSize offsetFromContainer(const LayoutItem& item, const LayoutPoint& point, bool* offsetDependsOnPoint = nullptr) const
+    LayoutSize offsetFromContainer(const LayoutItem& item) const
     {
-        return m_layoutObject->offsetFromContainer(item.layoutObject(), point, offsetDependsOnPoint);
+        return m_layoutObject->offsetFromContainer(item.layoutObject());
     }
 
     FrameView* frameView() const

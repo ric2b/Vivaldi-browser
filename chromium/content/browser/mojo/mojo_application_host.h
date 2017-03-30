@@ -16,7 +16,7 @@
 #include "mojo/public/cpp/system/message_pipe.h"
 
 #if defined(OS_ANDROID)
-#include "content/browser/mojo/service_registry_android.h"
+#include "content/public/browser/android/service_registry_android.h"
 #endif
 
 namespace IPC {
@@ -58,7 +58,7 @@ class CONTENT_EXPORT MojoApplicationHost {
 
   bool did_activate_;
 
-  scoped_ptr<ApplicationSetup> application_setup_;
+  scoped_ptr<mojom::ApplicationSetup> application_setup_;
   ServiceRegistryImpl service_registry_;
 
   scoped_refptr<base::TaskRunner> io_task_runner_override_;

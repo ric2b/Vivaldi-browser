@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_model.h"
 #include "ash/shelf/shelf_util.h"
 #include "ash/shell.h"
@@ -125,9 +124,7 @@ void BrowserShortcutLauncherItemController::SetShelfIDForBrowserWindowContents(
     content::WebContents* web_contents) {
   // We need to call SetShelfIDForWindow for V1 applications since they are
   // content which might change and as such change the application type.
-  if (!browser ||
-      !launcher_controller()->IsBrowserFromActiveUser(browser) ||
-      browser->host_desktop_type() != chrome::HOST_DESKTOP_TYPE_ASH ||
+  if (!browser || !launcher_controller()->IsBrowserFromActiveUser(browser) ||
       IsSettingsBrowser(browser))
     return;
 
@@ -255,13 +252,6 @@ base::string16 BrowserShortcutLauncherItemController::GetTitle() {
   return l10n_util::GetStringUTF16(IDS_PRODUCT_NAME);
 }
 
-ui::MenuModel* BrowserShortcutLauncherItemController::CreateContextMenu(
-    aura::Window* root_window) {
-  ash::ShelfItem item =
-      *(launcher_controller()->model()->ItemByID(shelf_id()));
-  return new LauncherContextMenu(launcher_controller(), &item, root_window);
-}
-
 ash::ShelfMenuModel*
 BrowserShortcutLauncherItemController::CreateApplicationMenu(int event_flags) {
   return new LauncherApplicationMenuItemModel(GetApplicationList(event_flags));
@@ -354,9 +344,7 @@ BrowserShortcutLauncherItemController::ActivateOrAdvanceToNextBrowser() {
 bool BrowserShortcutLauncherItemController::IsBrowserRepresentedInBrowserList(
     Browser* browser) {
   // Only Ash desktop browser windows for the active user are represented.
-  if (!browser ||
-      !launcher_controller()->IsBrowserFromActiveUser(browser) ||
-      browser->host_desktop_type() != chrome::HOST_DESKTOP_TYPE_ASH)
+  if (!browser || !launcher_controller()->IsBrowserFromActiveUser(browser))
     return false;
 
   // v1 App popup windows with a valid app id have their own icon.

@@ -7,6 +7,7 @@
 
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ui_base_types.h"
 
 class GURL;
@@ -48,9 +49,6 @@ class TabStripController {
 
   // Returns true if the selected index is pinned.
   virtual bool IsTabPinned(int index) const = 0;
-
-  // Returns true if the selected index is the new tab page.
-  virtual bool IsNewTabPage(int index) const = 0;
 
   // Select the tab at the specified index in the model.
   virtual void SelectTab(int index) = 0;
@@ -102,7 +100,9 @@ class TabStripController {
   // search-result page for |location|.
   virtual void CreateNewTabWithLocation(const base::string16& location) = 0;
 
-  // Returns true if the tab strip is in an incognito window.
+  // Returns true if the tab strip is in an incognito window.  This is used to
+  // determining which theme may have applied to it, so this determination
+  // should match the one in ThemeService::GetThemeProviderForProfile().
   virtual bool IsIncognito() = 0;
 
   // Invoked if the stacked layout (on or off) might have changed.
@@ -119,6 +119,10 @@ class TabStripController {
   // Determines if the file type of the URL is supported. Should invoke
   // TabStrip::FileSupported to report the result.
   virtual void CheckFileSupported(const GURL& url) = 0;
+
+  // Returns COLOR_TOOLBAR_TOP_SEPARATOR[,_INACTIVE] depending on the activation
+  // state of the window.
+  virtual SkColor GetToolbarTopSeparatorColor() const = 0;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TABS_TAB_STRIP_CONTROLLER_H_

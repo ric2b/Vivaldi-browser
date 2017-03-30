@@ -21,6 +21,7 @@
 
 #include "core/layout/LayoutTextControl.h"
 
+#include "core/dom/StyleChangeReason.h"
 #include "core/html/HTMLTextFormControlElement.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutTheme.h"
@@ -122,8 +123,8 @@ void LayoutTextControl::computeLogicalHeight(LayoutUnit logicalHeight, LayoutUni
         logicalHeight = computeControlLogicalHeight(innerEditorBox->lineHeight(true, HorizontalLine, PositionOfInteriorLineBoxes), nonContentHeight);
 
         // We are able to have a horizontal scrollbar if the overflow style is scroll, or if its auto and there's no word wrap.
-        if ((isHorizontalWritingMode() && (style()->overflowX() == OSCROLL ||  (style()->overflowX() == OAUTO && innerEditor->layoutObject()->style()->overflowWrap() == NormalOverflowWrap)))
-            || (!isHorizontalWritingMode() && (style()->overflowY() == OSCROLL ||  (style()->overflowY() == OAUTO && innerEditor->layoutObject()->style()->overflowWrap() == NormalOverflowWrap))))
+        if ((isHorizontalWritingMode() && (style()->overflowX() == OverflowScroll ||  (style()->overflowX() == OverflowAuto && innerEditor->layoutObject()->style()->overflowWrap() == NormalOverflowWrap)))
+            || (!isHorizontalWritingMode() && (style()->overflowY() == OverflowScroll ||  (style()->overflowY() == OverflowAuto && innerEditor->layoutObject()->style()->overflowWrap() == NormalOverflowWrap))))
             logicalHeight += scrollbarThickness();
 
         // FIXME: The logical height of the inner text box should have been added before calling computeLogicalHeight to
@@ -226,13 +227,13 @@ float LayoutTextControl::scaleEmToUnits(int x) const
 {
     // This matches the unitsPerEm value for MS Shell Dlg and Courier New from the "head" font table.
     float unitsPerEm = 2048.0f;
-    return roundf(style()->font().fontDescription().computedSize() * x / unitsPerEm);
+    return roundf(style()->font().getFontDescription().computedSize() * x / unitsPerEm);
 }
 
 void LayoutTextControl::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const
 {
     // Use average character width. Matches IE.
-    AtomicString family = style()->font().fontDescription().family().family();
+    AtomicString family = style()->font().getFontDescription().family().family();
     maxLogicalWidth = preferredContentLogicalWidth(const_cast<LayoutTextControl*>(this)->getAvgCharWidth(family));
     if (LayoutBox* innerEditorLayoutBox = innerEditorElement()->layoutBox())
         maxLogicalWidth += innerEditorLayoutBox->paddingStart() + innerEditorLayoutBox->paddingEnd();

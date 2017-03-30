@@ -4,6 +4,7 @@
 
 #include "platform/fonts/shaping/CachingWordShaper.h"
 
+#include "platform/fonts/CharacterRange.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/GlyphBuffer.h"
 #include "platform/fonts/shaping/CachingWordShapeIterator.h"
@@ -174,9 +175,8 @@ TEST_F(CachingWordShaperTest, SubRunWithZeroGlyphs)
     GlyphBuffer glyphBuffer;
     shaper.fillGlyphBuffer(&font, textRun, fallbackFonts, &glyphBuffer, 0, 8);
 
-    FloatPoint point;
-    int height = 16;
-    shaper.selectionRect(&font, textRun, point, height, 0, 8);
+
+    shaper.getCharacterRange(&font, textRun, 0, 8);
 }
 
 TEST_F(CachingWordShaperTest, SegmentCJKByCharacter)
@@ -351,6 +351,25 @@ TEST_F(CachingWordShaperTest, SegmentEmojiHeartZWJSequence)
     ASSERT_FALSE(iterator.next(&wordResult));
 }
 
+TEST_F(CachingWordShaperTest, SegmentEmojiSignsOfHornsModifier)
+{
+    // A Sign of the Horns emoji, followed by a fitzpatrick modifer
+    const UChar str[] = {
+        0xD83E, 0xDD18,
+        0xD83C, 0xDFFB,
+        0x0
+    };
+    TextRun textRun(str, 4);
+
+    RefPtr<ShapeResult> wordResult;
+    CachingWordShapeIterator iterator(cache.get(), textRun, &font);
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(4u, wordResult->numCharacters());
+
+    ASSERT_FALSE(iterator.next(&wordResult));
+}
+
 TEST_F(CachingWordShaperTest, SegmentEmojiExtraZWJPrefix)
 {
     // A ZWJ, followed by a family and a heart-kiss sequence.
@@ -419,6 +438,42 @@ TEST_F(CachingWordShaperTest, SegmentCJKCommonAndNonCJK)
 
     ASSERT_TRUE(iterator.next(&wordResult));
     EXPECT_EQ(1u, wordResult->numCharacters());
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(2u, wordResult->numCharacters());
+
+    ASSERT_FALSE(iterator.next(&wordResult));
+}
+
+TEST_F(CachingWordShaperTest, SegmentCJKSmallFormVariants)
+{
+    const UChar str[] = {
+        0x5916, // CJK UNIFIED IDEOGRPAH
+        0xFE50, // SMALL COMMA
+        0x0
+    };
+    TextRun textRun(str, 2);
+
+    RefPtr<ShapeResult> wordResult;
+    CachingWordShapeIterator iterator(cache.get(), textRun, &font);
+
+    ASSERT_TRUE(iterator.next(&wordResult));
+    EXPECT_EQ(2u, wordResult->numCharacters());
+
+    ASSERT_FALSE(iterator.next(&wordResult));
+}
+
+TEST_F(CachingWordShaperTest, SegmentHangulToneMark)
+{
+    const UChar str[] = {
+        0xC740, // HANGUL SYLLABLE EUN
+        0x302E, // HANGUL SINGLE DOT TONE MARK
+        0x0
+    };
+    TextRun textRun(str, 2);
+
+    RefPtr<ShapeResult> wordResult;
+    CachingWordShapeIterator iterator(cache.get(), textRun, &font);
 
     ASSERT_TRUE(iterator.next(&wordResult));
     EXPECT_EQ(2u, wordResult->numCharacters());

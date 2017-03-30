@@ -44,16 +44,6 @@ bool g_tcp_fastopen_user_enabled = false;
 // True if TCP FastOpen connect-with-write has failed at least once.
 bool g_tcp_fastopen_has_failed = false;
 
-// SetTCPNoDelay turns on/off buffering in the kernel. By default, TCP sockets
-// will wait up to 200ms for more data to complete a packet before transmitting.
-// After calling this function, the kernel will not wait. See TCP_NODELAY in
-// `man 7 tcp`.
-bool SetTCPNoDelay(int fd, bool no_delay) {
-  int on = no_delay ? 1 : 0;
-  int error = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
-  return error == 0;
-}
-
 // SetTCPKeepAlive sets SO_KEEPALIVE.
 bool SetTCPKeepAlive(int fd, bool enable, int delay) {
   // Enabling TCP keepalives is the same on all platforms.
@@ -443,10 +433,6 @@ void TCPSocketPosix::Close() {
   tcp_fastopen_status_ = TCP_FASTOPEN_STATUS_UNKNOWN;
 }
 
-bool TCPSocketPosix::UsingTCPFastOpen() const {
-  return use_tcp_fastopen_;
-}
-
 void TCPSocketPosix::EnableTCPFastOpenIfSupported() {
   if (!IsTCPFastOpenSupported())
     return;
@@ -455,7 +441,7 @@ void TCPSocketPosix::EnableTCPFastOpenIfSupported() {
   // This check conservatively avoids middleboxes that may blackhole
   // TCP FastOpen SYN+Data packets; on such a failure, subsequent sockets
   // should not use TCP FastOpen.
-  if(!g_tcp_fastopen_has_failed)
+  if (!g_tcp_fastopen_has_failed)
     use_tcp_fastopen_ = true;
   else
     tcp_fastopen_status_ = TCP_FASTOPEN_PREVIOUSLY_FAILED;

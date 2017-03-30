@@ -46,10 +46,6 @@ extern const char kOsPasswordLastChanged[];
 extern const char kKeychainMigrationStatus[];
 #endif
 
-// Boolean controlling whether the password manager allows to retrieve passwords
-// in clear text.
-extern const char kPasswordManagerAllowShowPasswords[];
-
 // Boolean that is true if password saving is on (will record new
 // passwords and fill in known passwords). When it is false, it doesn't
 // ask if you want to save passwords but will continue to fill passwords.
@@ -58,12 +54,6 @@ extern const char kPasswordManagerAllowShowPasswords[];
 // change.
 // See http://crbug.com/392387
 extern const char kPasswordManagerSavingEnabled[];
-
-// A list of numbers. Each number corresponds to one of the domains monitored
-// for save-password-prompt breakages. That number is a random index into
-// the array of groups containing the monitored domain. That group should be
-// used for reporting that domain.
-extern const char kPasswordManagerGroupsForDomains[];
 
 // Boolean that indicated whether first run experience for the auto sign-in
 // prompt was shown or not.

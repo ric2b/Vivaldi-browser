@@ -4,6 +4,7 @@
 
 #include "modules/webgl/WebGLTimerQueryEXT.h"
 
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/webgl/WebGLRenderingContextBase.h"
 #include "public/platform/Platform.h"
 
@@ -31,7 +32,7 @@ WebGLTimerQueryEXT::WebGLTimerQueryEXT(WebGLRenderingContextBase* ctx)
     , m_queryResultAvailable(false)
     , m_queryResult(0)
 {
-    m_queryId = context()->webContext()->createQueryEXT();
+    context()->contextGL()->GenQueriesEXT(1, &m_queryId);
 }
 
 void WebGLTimerQueryEXT::resetCachedResult()
@@ -45,7 +46,7 @@ void WebGLTimerQueryEXT::resetCachedResult()
     registerTaskObserver();
 }
 
-void WebGLTimerQueryEXT::updateCachedResult(WebGraphicsContext3D* ctx)
+void WebGLTimerQueryEXT::updateCachedResult(gpu::gles2::GLES2Interface* gl)
 {
     if (m_queryResultAvailable)
         return;
@@ -56,14 +57,21 @@ void WebGLTimerQueryEXT::updateCachedResult(WebGraphicsContext3D* ctx)
     if (!hasTarget())
         return;
 
+    // If this is a timestamp query, set the result to 0 and make it available as we don't support timestamps in WebGL due to very poor driver support for them
+    if (m_target == GL_TIMESTAMP_EXT) {
+        m_queryResult = 0;
+        m_queryResultAvailable = true;
+        return;
+    }
+
     // We can only update the cached result when control returns to the browser.
     m_canUpdateAvailability = false;
     GLuint available = 0;
-    ctx->getQueryObjectuivEXT(object(), GL_QUERY_RESULT_AVAILABLE_EXT, &available);
+    gl->GetQueryObjectuivEXT(object(), GL_QUERY_RESULT_AVAILABLE_EXT, &available);
     m_queryResultAvailable = !!available;
     if (m_queryResultAvailable) {
         GLuint64 result = 0;
-        ctx->getQueryObjectui64vEXT(object(), GL_QUERY_RESULT_EXT, &result);
+        gl->GetQueryObjectui64vEXT(object(), GL_QUERY_RESULT_EXT, &result);
         m_queryResult = result;
         unregisterTaskObserver();
     }
@@ -79,9 +87,9 @@ GLuint64 WebGLTimerQueryEXT::getQueryResult()
     return m_queryResult;
 }
 
-void WebGLTimerQueryEXT::deleteObjectImpl(WebGraphicsContext3D* context3d)
+void WebGLTimerQueryEXT::deleteObjectImpl(gpu::gles2::GLES2Interface* gl)
 {
-    context3d->deleteQueryEXT(m_queryId);
+    gl->DeleteQueriesEXT(1, &m_queryId);
     m_queryId = 0;
 }
 

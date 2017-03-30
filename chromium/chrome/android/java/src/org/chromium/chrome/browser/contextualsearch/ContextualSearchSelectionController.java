@@ -9,11 +9,13 @@ import android.os.Handler;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
+import org.chromium.chrome.browser.contextualsearch.ContextualSearchBlacklist.BlacklistReason;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.ui.touch_selection.SelectionEventType;
 
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -35,13 +37,19 @@ public class ContextualSearchSelectionController {
     // a new selection in time.  This is because selectWordAroundCaret doesn't always select.
     // TODO(donnd): Fix in Blink, crbug.com/435778.
     private static final int INVALID_IF_NO_SELECTION_CHANGE_AFTER_TAP_MS = 50;
-    private static final double RETAP_DISTANCE_SQUARED_DP = Math.pow(75, 2);
 
     // The default navigation-detection-delay in milliseconds.
     private static final int TAP_NAVIGATION_DETECTION_DELAY = 16;
 
     private static final String CONTAINS_WORD_PATTERN = "(\\w|\\p{L}|\\p{N})+";
-    private static final String SINGLE_DIGIT_PATTERN = "^\\d$";
+    // A URL is:
+    //   0-1:  schema://
+    //   1+:   any word char, _ or -
+    //   1+:   . followed by 1+ of any word char, _ or -
+    //   0-1:  0+ of any word char or .,@?^=%&:/~#- followed by any word char or @?^-%&/~+#-
+    // TODO(twellington): expand accepted schemas? Require a schema?
+    private static final Pattern URL_PATTERN = Pattern.compile("((http|https|file)://)?"
+            + "([\\w_-]+(?:(?:\\.[\\w_-]+)+))([\\w.,@?^=%&:/~+#-]*[\\w@?^=%&/~+#-])?");
 
     // Max selection length must be limited or the entire request URL can go past the 2K limit.
     private static final int MAX_SELECTION_LENGTH = 100;
@@ -52,11 +60,11 @@ public class ContextualSearchSelectionController {
     private final Handler mRunnableHandler;
     private final float mPxToDp;
     private final Pattern mContainsWordPattern;
-    private final Pattern mSingleDigitPattern;
 
     private String mSelectedText;
     private SelectionType mSelectionType;
     private boolean mWasTapGestureDetected;
+    // Reflects whether the last tap was valid and whether we still have a tap-based selection.
     private boolean mWasLastTapValid;
     private boolean mIsWaitingForInvalidTapDetection;
     private boolean mIsSelectionEstablished;
@@ -66,10 +74,25 @@ public class ContextualSearchSelectionController {
     private float mX;
     private float mY;
 
+    // The time of the most last scroll activity, or 0 if none.
+    private long mLastScrollTimeNs;
+
     private class ContextualSearchGestureStateListener extends GestureStateListener {
         @Override
         public void onScrollStarted(int scrollOffsetY, int scrollExtentY) {
             mHandler.handleScroll();
+        }
+
+        @Override
+        public void onScrollEnded(int scrollOffsetY, int scrollExtentY) {
+            mLastScrollTimeNs = System.nanoTime();
+        }
+
+        @Override
+        public void onScrollUpdateGestureConsumed() {
+            // The onScrollEnded notification is unreliable, so mark time during scroll updates too.
+            // See crbug.com/600863.
+            mLastScrollTimeNs = System.nanoTime();
         }
 
         // TODO(donnd): Remove this once we get notification of the selection changing
@@ -109,7 +132,6 @@ public class ContextualSearchSelectionController {
         };
 
         mContainsWordPattern = Pattern.compile(CONTAINS_WORD_PATTERN);
-        mSingleDigitPattern = Pattern.compile(SINGLE_DIGIT_PATTERN);
     }
 
     /**
@@ -162,6 +184,41 @@ public class ContextualSearchSelectionController {
     }
 
     /**
+     * @return Whether the last Tap was valid (and the tap-selection still in place).
+     */
+    boolean getWasLastTapValid() {
+        return mWasLastTapValid;
+    }
+
+    /**
+     * @return The last X coordinate;
+     */
+    float getLastX() {
+        return mX;
+    }
+
+    /**
+     * @return The last Y coordinate;
+     */
+    float getLastY() {
+        return mY;
+    }
+
+    /**
+     * @return The Pixel to Device independent Pixel ratio.
+     */
+    float getPxToDp() {
+        return mPxToDp;
+    }
+
+    /**
+     * @return The time of the most recent scroll, or 0 if none.
+     */
+    long getLastScrollTime() {
+        return mLastScrollTimeNs;
+    }
+
+    /**
      * Clears the selection.
      */
     void clearSelection() {
@@ -204,7 +261,8 @@ public class ContextualSearchSelectionController {
             handleSelection(selection, mSelectionType);
             mWasTapGestureDetected = false;
         } else {
-            mHandler.handleSelectionModification(selection, isValidSelection(selection), mX, mY);
+            boolean isValidSelection = validateSelectionSuppression(selection);
+            mHandler.handleSelectionModification(selection, isValidSelection, mX, mY);
         }
     }
 
@@ -262,7 +320,8 @@ public class ContextualSearchSelectionController {
      */
     private void handleSelection(String selection, SelectionType type) {
         mShouldHandleSelectionModification = true;
-        mHandler.handleSelection(selection, isValidSelection(selection), type, mX, mY);
+        boolean isValidSelection = validateSelectionSuppression(selection);
+        mHandler.handleSelection(selection, isValidSelection, type, mX, mY);
     }
 
     /**
@@ -271,6 +330,7 @@ public class ContextualSearchSelectionController {
     private void resetAllStates() {
         resetSelectionStates();
         mWasLastTapValid = false;
+        mLastScrollTimeNs = 0;
     }
 
     /**
@@ -288,22 +348,33 @@ public class ContextualSearchSelectionController {
      */
     void handleShowUnhandledTapUIIfNeeded(int x, int y) {
         mWasTapGestureDetected = false;
-        if (mSelectionType != SelectionType.LONG_PRESS && shouldHandleTap(x, y)) {
+        // TODO(donnd): shouldn't we check == TAP here instead of LONG_PRESS?
+        // TODO(donnd): refactor to avoid needing a new handler API method as suggested by Pedro.
+        if (mSelectionType != SelectionType.LONG_PRESS) {
+            mWasTapGestureDetected = true;
+            TapSuppressionHeuristics tapHeuristics = new TapSuppressionHeuristics(this, x, y);
+            tapHeuristics.logConditionState();
+            // Tell the manager what it needs in order to log metrics on whether the tap would have
+            // been suppressed if each of the heuristics were satisfied.
+            mHandler.handleMetricsForWouldSuppressTap(tapHeuristics);
             mX = x;
             mY = y;
-            mWasLastTapValid = true;
-            mWasTapGestureDetected = true;
-            // TODO(donnd): Find a better way to determine that a navigation will be triggered
-            // by the tap, or merge with other time-consuming actions like gathering surrounding
-            // text or detecting page mutations.
-            new Handler().postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    mHandler.handleValidTap();
-                }
-            }, TAP_NAVIGATION_DETECTION_DELAY);
-        }
-        if (!mWasTapGestureDetected) {
+            if (tapHeuristics.shouldSuppressTap()) {
+                mWasLastTapValid = false;
+                mHandler.handleSuppressedTap();
+            } else {
+                mWasLastTapValid = true;
+                // TODO(donnd): Find a better way to determine that a navigation will be triggered
+                // by the tap, or merge with other time-consuming actions like gathering surrounding
+                // text or detecting page mutations.
+                new Handler().postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        mHandler.handleValidTap();
+                    }
+                }, TAP_NAVIGATION_DETECTION_DELAY);
+            }
+        } else {
             mWasLastTapValid = false;
             mHandler.handleInvalidTap();
         }
@@ -335,24 +406,6 @@ public class ContextualSearchSelectionController {
             basePageContentView.getWebContents().adjustSelectionByCharacterOffset(
                     selectionStartAdjust, selectionEndAdjust);
         }
-    }
-
-    /**
-     * @return whether a tap at the given coordinates should be handled or not.
-     */
-    private boolean shouldHandleTap(int x, int y) {
-        return !mWasLastTapValid || wasTapCloseToPreviousTap(x, y);
-    }
-
-    /**
-     * Determines whether a tap at the given coordinates is considered "close" to the previous
-     * tap.
-     */
-    private boolean wasTapCloseToPreviousTap(int x, int y) {
-        float deltaXDp = (mX - x) * mPxToDp;
-        float deltaYDp = (mY - y) * mPxToDp;
-        float distanceSquaredDp =  deltaXDp * deltaXDp + deltaYDp * deltaYDp;
-        return distanceSquaredDp <= RETAP_DISTANCE_SQUARED_DP;
     }
 
     /**
@@ -427,6 +480,34 @@ public class ContextualSearchSelectionController {
         return mIsSelectionEstablished;
     }
 
+    /**
+     * Evaluates whether the given selection is valid and notifies the handler about potential
+     * selection suppression.
+     * TODO(pedrosimonetti): substitute this once the system supports suppressing selections.
+     * @param selection The given selection.
+     * @return Whether the selection is valid.
+     */
+    private boolean validateSelectionSuppression(String selection) {
+        boolean isValid = isValidSelection(selection);
+
+        if (mSelectionType == SelectionType.TAP) {
+            BlacklistReason reason =
+                    ContextualSearchBlacklist.findReasonToSuppressSelection(selection);
+
+            mHandler.handleSelectionSuppression(reason);
+
+            // Only really suppress if enabled by field trial. Currently we can't prevent a
+            // selection from being issued, so we end up clearing the selection immediately
+            // afterwards, which does not look great.
+            // TODO(pedrosimonetti): actually suppress selection once the system supports it.
+            if (ContextualSearchFieldTrial.isBlacklistEnabled() && reason != BlacklistReason.NONE) {
+                isValid = false;
+            }
+        }
+
+        return isValid;
+    }
+
     /** Determines if the given selection is valid or not.
      * @param selection The selection portion of the context.
      * @return whether the given selection is considered a valid target for a search.
@@ -449,11 +530,6 @@ public class ContextualSearchSelectionController {
             return false;
         }
 
-        if (ContextualSearchFieldTrial.isDigitBlacklistEnabled()
-                && isBlacklistedWord(selection)) {
-            return false;
-        }
-
         return true;
     }
 
@@ -468,10 +544,26 @@ public class ContextualSearchSelectionController {
     }
 
     /**
-     * @param word A given word.
-     * @return Whether the given word is blacklisted.
+     * @param selectionContext The String including the surrounding text and the selection.
+     * @param startOffset The offset to the start of the selection (inclusive).
+     * @param endOffset The offset to the end of the selection (non-inclusive).
+     * @return Whether the selection is part of URL. A valid URL is:
+     *         0-1:  schema://
+     *         1+:   any word char, _ or -
+     *         1+:   . followed by 1+ of any word char, _ or -
+     *         0-1:  0+ of any word char or .,@?^=%&:/~#- followed by any word char or @?^-%&/~+#-
      */
-    private boolean isBlacklistedWord(String word) {
-        return mSingleDigitPattern.matcher(word).find();
+    public static boolean isSelectionPartOfUrl(String selectionContext, int startOffset,
+            int endOffset) {
+        Matcher matcher = URL_PATTERN.matcher(selectionContext);
+
+        // Starts are inclusive and ends are non-inclusive for both GSAContext & matcher.
+        while (matcher.find()) {
+            if (startOffset >= matcher.start() && endOffset <= matcher.end()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

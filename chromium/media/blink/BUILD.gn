@@ -138,12 +138,12 @@ test("media_blink_unittests") {
     "multibuffer_data_source_unittest.cc",
     "multibuffer_unittest.cc",
     "run_all_unittests.cc",
-    "test_random.h",
     "test_response_generator.cc",
     "test_response_generator.h",
     "url_index_unittest.cc",
     "video_frame_compositor_unittest.cc",
     "webaudiosourceprovider_impl_unittest.cc",
+    "webmediaplayer_impl_unittest.cc",
   ]
 
   if (is_android) {

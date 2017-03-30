@@ -14,10 +14,10 @@ class CORE_EXPORT DedicatedWorkerMessagingProxy final : public WorkerMessagingPr
     WTF_MAKE_NONCOPYABLE(DedicatedWorkerMessagingProxy);
     USING_FAST_MALLOC(WorkerMessagingProxy);
 public:
-    DedicatedWorkerMessagingProxy(InProcessWorkerBase*, PassOwnPtrWillBeRawPtr<WorkerClients>);
+    DedicatedWorkerMessagingProxy(InProcessWorkerBase*, WorkerClients*);
     ~DedicatedWorkerMessagingProxy() override;
 
-    PassRefPtr<WorkerThread> createWorkerThread(double originTime) override;
+    PassOwnPtr<WorkerThread> createWorkerThread(double originTime) override;
 };
 
 } // namespace blink

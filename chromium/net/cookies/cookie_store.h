@@ -12,7 +12,7 @@
 
 #include "base/callback.h"
 #include "base/callback_list.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "net/base/net_export.h"
 #include "net/cookies/canonical_cookie.h"
@@ -24,13 +24,14 @@ namespace net {
 
 class CookieMonster;
 
-// An interface for storing and retrieving cookies. Implementations need to
-// be thread safe as its methods can be accessed from IO as well as UI threads.
+// An interface for storing and retrieving cookies. Implementations are not
+// thread safe, as with most other net classes. All methods must be invoked on
+// the network thread, and all callbacks will be calle there.
 //
-// All async functions may either invoke the callback asynchronously on the same
-// thread, or they may be invoked immediately (prior to return of the
-// asynchronous function).
-class NET_EXPORT CookieStore : public base::RefCountedThreadSafe<CookieStore> {
+// All async functions may either invoke the callback asynchronously, or they
+// may be invoked immediately (prior to return of the asynchronous function).
+// Destroying the CookieStore will cancel pending async callbacks.
+class NET_EXPORT CookieStore {
  public:
   // Callback definitions.
   typedef base::Callback<void(const CookieList& cookies)> GetCookieListCallback;
@@ -42,6 +43,8 @@ class NET_EXPORT CookieStore : public base::RefCountedThreadSafe<CookieStore> {
   typedef base::CallbackList<void(const CanonicalCookie& cookie, bool removed)>
       CookieChangedCallbackList;
   typedef CookieChangedCallbackList::Subscription CookieChangedSubscription;
+
+  virtual ~CookieStore();
 
   // Returns the cookie line (e.g. "cookie1=value1; cookie2=value2") represented
   // by |cookies|. The string is built in the same order as the given list.
@@ -88,7 +91,7 @@ class NET_EXPORT CookieStore : public base::RefCountedThreadSafe<CookieStore> {
       base::Time last_access_time,
       bool secure,
       bool http_only,
-      bool same_site,
+      CookieSameSite same_site,
       bool enforce_strict_secure,
       CookiePriority priority,
       const SetCookiesCallback& callback) = 0;
@@ -171,13 +174,6 @@ class NET_EXPORT CookieStore : public base::RefCountedThreadSafe<CookieStore> {
 
   // Flush the backing store (if any) to disk and post the given callback when
   // done.
-  // WARNING: THE CALLBACK WILL RUN ON A RANDOM THREAD. IT MUST BE THREAD SAFE.
-  // It may be posted to the current thread, or it may run on the thread that
-  // actually does the flushing. Your Task should generally post a notification
-  // to the thread you actually want to be notified on.
-  // TODO(mmenke):  Once this class is no longer thread-safe, this will always
-  // be invoked on the CookieStore's thread, and this comment can be removed.
-  // https://crbug.com/46185
   virtual void FlushStore(const base::Closure& callback) = 0;
 
   // Protects session cookies from deletion on shutdown, if the underlying
@@ -206,10 +202,16 @@ class NET_EXPORT CookieStore : public base::RefCountedThreadSafe<CookieStore> {
       const std::string& name,
       const CookieChangedCallback& callback) = 0;
 
+  // Returns true if this cookie store is ephemeral, and false if it is backed
+  // by some sort of persistence layer.
+  // TODO(nharper): Remove this method once crbug.com/548423 has been closed.
+  virtual bool IsEphemeral() = 0;
+  void SetChannelIDServiceID(int id);
+  int GetChannelIDServiceID();
+
  protected:
-  friend class base::RefCountedThreadSafe<CookieStore>;
   CookieStore();
-  virtual ~CookieStore();
+  int channel_id_service_id_;
 };
 
 }  // namespace net

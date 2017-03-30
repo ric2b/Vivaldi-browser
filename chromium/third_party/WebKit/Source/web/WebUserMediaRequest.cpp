@@ -49,6 +49,12 @@ WebUserMediaRequest::WebUserMediaRequest(UserMediaRequest* request)
 {
 }
 
+WebUserMediaRequest WebUserMediaRequest::createForTesting(const WebMediaConstraints& audio, const WebMediaConstraints& video)
+{
+    UserMediaRequest* request = UserMediaRequest::createForTesting(audio, video);
+    return WebUserMediaRequest(request);
+}
+
 void WebUserMediaRequest::reset()
 {
     m_private.reset();
@@ -56,61 +62,64 @@ void WebUserMediaRequest::reset()
 
 bool WebUserMediaRequest::audio() const
 {
-    ASSERT(!isNull());
+    DCHECK(!isNull());
     return m_private->audio();
 }
 
 bool WebUserMediaRequest::video() const
 {
-    ASSERT(!isNull());
+    DCHECK(!isNull());
     return m_private->video();
 }
 
 WebMediaConstraints WebUserMediaRequest::audioConstraints() const
 {
-    ASSERT(!isNull());
+    DCHECK(!isNull());
     return m_private->audioConstraints();
 }
 
 WebMediaConstraints WebUserMediaRequest::videoConstraints() const
 {
-    ASSERT(!isNull());
+    DCHECK(!isNull());
     return m_private->videoConstraints();
 }
 
-WebSecurityOrigin WebUserMediaRequest::securityOrigin() const
+WebSecurityOrigin WebUserMediaRequest::getSecurityOrigin() const
 {
-    ASSERT(!isNull() && m_private->executionContext());
-    return WebSecurityOrigin(m_private->executionContext()->securityOrigin());
+    DCHECK(!isNull());
+    if (!m_private->getExecutionContext())
+        return WebSecurityOrigin::createFromString("test://test");
+    return WebSecurityOrigin(m_private->getExecutionContext()->getSecurityOrigin());
 }
 
 WebDocument WebUserMediaRequest::ownerDocument() const
 {
-    ASSERT(!isNull());
+    DCHECK(!isNull());
     return WebDocument(m_private->ownerDocument());
 }
 
 void WebUserMediaRequest::requestSucceeded(const WebMediaStream& streamDescriptor)
 {
-    ASSERT(!isNull() && !streamDescriptor.isNull());
+    DCHECK(!isNull());
+    DCHECK(!streamDescriptor.isNull());
     m_private->succeed(streamDescriptor);
 }
 
 void WebUserMediaRequest::requestDenied(const WebString& description)
 {
-    ASSERT(!isNull());
+    DCHECK(!isNull());
     m_private->failPermissionDenied(description);
 }
 
 void WebUserMediaRequest::requestFailedConstraint(const WebString& constraintName, const WebString& description)
 {
-    ASSERT(!isNull());
+    DCHECK(!isNull());
     m_private->failConstraint(constraintName, description);
 }
 
 void WebUserMediaRequest::requestFailedUASpecific(const WebString& name, const WebString& constraintName, const WebString& description)
 {
-    ASSERT(!isNull());
+    DCHECK(!isNull());
     m_private->failUASpecific(name, constraintName, description);
 }
 

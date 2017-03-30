@@ -122,10 +122,10 @@ std::string GetVertexShaderSource() {
       uniform vec2 u_vertex_dest_add;\n\
       uniform vec2 u_vertex_source_mult;\n\
       uniform vec2 u_vertex_source_add;\n\
-      ATTRIBUTE vec4 a_position;\n\
+      ATTRIBUTE vec2 a_position;\n\
       VARYING TexCoordPrecision vec2 v_uv;\n\
       void main(void) {\n\
-        gl_Position = a_position;\n\
+        gl_Position = vec4(0, 0, 0, 1);\n\
         gl_Position.xy = a_position.xy * u_vertex_dest_mult + \
                          u_vertex_dest_add;\n\
         v_uv = a_position.xy * u_vertex_source_mult + u_vertex_source_add;\n\
@@ -368,9 +368,9 @@ void CopyTextureCHROMIUMResourceManager::Initialize(
   if (vertex_array_object_id_) {
     glEnableVertexAttribArray(kVertexPositionAttrib);
     glVertexAttribPointer(kVertexPositionAttrib, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    decoder->RestoreAllAttributes();
   }
 
+  decoder->RestoreAllAttributes();
   decoder->RestoreBufferBindings();
 
   initialized_ = true;
@@ -487,10 +487,39 @@ void CopyTextureCHROMIUMResourceManager::DoCopySubTexture(
     return;
   }
 
+  DoCopySubTextureWithTransform(
+      decoder, source_target, source_id, source_internal_format, dest_target,
+      dest_id, dest_internal_format, xoffset, yoffset, x, y, width, height,
+      dest_width, dest_height, source_width, source_height, flip_y,
+      premultiply_alpha, unpremultiply_alpha, kIdentityMatrix);
+}
+
+void CopyTextureCHROMIUMResourceManager::DoCopySubTextureWithTransform(
+    const gles2::GLES2Decoder* decoder,
+    GLenum source_target,
+    GLuint source_id,
+    GLenum source_internal_format,
+    GLenum dest_target,
+    GLuint dest_id,
+    GLenum dest_internal_format,
+    GLint xoffset,
+    GLint yoffset,
+    GLint x,
+    GLint y,
+    GLsizei width,
+    GLsizei height,
+    GLsizei dest_width,
+    GLsizei dest_height,
+    GLsizei source_width,
+    GLsizei source_height,
+    bool flip_y,
+    bool premultiply_alpha,
+    bool unpremultiply_alpha,
+    const GLfloat transform_matrix[16]) {
   DoCopyTextureInternal(decoder, source_target, source_id, dest_target, dest_id,
       xoffset, yoffset, x, y, width, height, dest_width, dest_height,
       source_width, source_height, flip_y, premultiply_alpha,
-      unpremultiply_alpha, kIdentityMatrix);
+      unpremultiply_alpha, transform_matrix);
 }
 
 void CopyTextureCHROMIUMResourceManager::DoCopyTextureWithTransform(

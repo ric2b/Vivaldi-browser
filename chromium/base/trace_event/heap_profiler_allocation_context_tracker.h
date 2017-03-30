@@ -43,26 +43,45 @@ class BASE_EXPORT AllocationContextTracker {
     return subtle::Acquire_Load(&capture_enabled_) != 0;
   }
 
+  // Returns the thread-local instance, creating one if necessary. Returns
+  // always a valid instance, unless it is called re-entrantly, in which case
+  // returns nullptr in the nested calls.
+  static AllocationContextTracker* GetInstanceForCurrentThread();
+
+  // Set the thread name in the AllocationContextTracker of the current thread
+  // if capture is enabled.
+  static void SetCurrentThreadName(const char* name);
+
   // Pushes a frame onto the thread-local pseudo stack.
-  static void PushPseudoStackFrame(StackFrame frame);
+  void PushPseudoStackFrame(StackFrame frame);
 
   // Pops a frame from the thread-local pseudo stack.
-  static void PopPseudoStackFrame(StackFrame frame);
+  void PopPseudoStackFrame(StackFrame frame);
+
+  // Push and pop current task's context. A stack is used to support nested
+  // tasks and the top of the stack will be used in allocation context.
+  void PushCurrentTaskContext(const char* context);
+  void PopCurrentTaskContext(const char* context);
 
   // Returns a snapshot of the current thread-local context.
-  static AllocationContext GetContextSnapshot();
+  AllocationContext GetContextSnapshot();
 
   ~AllocationContextTracker();
 
  private:
   AllocationContextTracker();
 
-  static AllocationContextTracker* GetThreadLocalTracker();
-
   static subtle::Atomic32 capture_enabled_;
 
   // The pseudo stack where frames are |TRACE_EVENT| names.
   std::vector<StackFrame> pseudo_stack_;
+
+  // The thread name is used as the first entry in the pseudo stack.
+  const char* thread_name_;
+
+  // Stack of tasks' contexts. Context serves as a different dimension than
+  // pseudo stack to cluster allocations.
+  std::vector<const char*> task_contexts_;
 
   DISALLOW_COPY_AND_ASSIGN(AllocationContextTracker);
 };

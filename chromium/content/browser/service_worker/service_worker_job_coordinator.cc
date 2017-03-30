@@ -131,7 +131,6 @@ void ServiceWorkerJobCoordinator::Update(
     ServiceWorkerRegistration* registration,
     bool force_bypass_cache) {
   DCHECK(registration);
-  DCHECK(registration->GetNewestVersion());
   job_queues_[registration->pattern()].Push(
       make_scoped_ptr<ServiceWorkerRegisterJobBase>(
           new ServiceWorkerRegisterJob(context_, registration,
@@ -146,7 +145,6 @@ void ServiceWorkerJobCoordinator::Update(
     ServiceWorkerProviderHost* provider_host,
     const ServiceWorkerRegisterJob::RegistrationCallback& callback) {
   DCHECK(registration);
-  DCHECK(registration->GetNewestVersion());
   ServiceWorkerRegisterJob* queued_job = static_cast<ServiceWorkerRegisterJob*>(
       job_queues_[registration->pattern()].Push(
           make_scoped_ptr<ServiceWorkerRegisterJobBase>(

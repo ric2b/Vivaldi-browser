@@ -9,7 +9,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "mojo/shell/public/interfaces/shell.mojom.h"
+#include "mojo/shell/public/interfaces/connector.mojom.h"
 
 namespace content {
 
@@ -29,10 +29,10 @@ class FrameMojoShell : public mojo::shell::mojom::Connector {
  private:
   // mojo::Connector:
   void Connect(
-      const mojo::String& application_url,
-      uint32_t user_id,
+      mojo::shell::mojom::IdentityPtr target,
       mojo::shell::mojom::InterfaceProviderRequest services,
       mojo::shell::mojom::InterfaceProviderPtr exposed_services,
+      mojo::shell::mojom::ClientProcessConnectionPtr client_process_connection,
       const mojo::shell::mojom::Connector::ConnectCallback& callback) override;
   void Clone(mojo::shell::mojom::ConnectorRequest request) override;
 

@@ -27,10 +27,11 @@
 #include "chrome/renderer/media/cast_session.h"
 #include "chrome/renderer/media/cast_udp_transport.h"
 #include "content/public/child/v8_value_converter.h"
-#include "content/public/renderer/media_stream_api.h"
+#include "content/public/renderer/media_stream_utils.h"
 #include "extensions/renderer/script_context.h"
 #include "media/audio/audio_parameters.h"
 #include "net/base/host_port_pair.h"
+#include "net/base/ip_address.h"
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
@@ -124,7 +125,7 @@ bool ToCastRtpPayloadParamsOrThrow(v8::Isolate* isolate,
   }
   for (size_t i = 0; i < ext_params.codec_specific_params.size(); ++i) {
     CastCodecSpecificParams cast_codec_params;
-    ToCastCodecSpecificParams(*ext_params.codec_specific_params[i],
+    ToCastCodecSpecificParams(ext_params.codec_specific_params[i],
                               &cast_codec_params);
     cast_params->codec_specific_params.push_back(cast_codec_params);
   }
@@ -151,11 +152,10 @@ void FromCastRtpPayloadParams(const CastRtpPayloadParams& cast_params,
   if (cast_params.max_frame_rate > 0.0)
     ext_params->max_frame_rate.reset(new double(cast_params.max_frame_rate));
   for (size_t i = 0; i < cast_params.codec_specific_params.size(); ++i) {
-    linked_ptr<CodecSpecificParams> ext_codec_params(
-        new CodecSpecificParams());
+    CodecSpecificParams ext_codec_params;
     FromCastCodecSpecificParams(cast_params.codec_specific_params[i],
-                                ext_codec_params.get());
-    ext_params->codec_specific_params.push_back(ext_codec_params);
+                                &ext_codec_params);
+    ext_params->codec_specific_params.push_back(std::move(ext_codec_params));
   }
 }
 
@@ -187,42 +187,43 @@ CastStreamingNativeHandler::CastStreamingNativeHandler(ScriptContext* context)
     : ObjectBackedNativeHandler(context),
       last_transport_id_(1),
       weak_factory_(this) {
-  RouteFunction("CreateSession",
+  RouteFunction("CreateSession", "cast.streaming.session",
                 base::Bind(&CastStreamingNativeHandler::CreateCastSession,
                            weak_factory_.GetWeakPtr()));
-  RouteFunction("DestroyCastRtpStream",
+  RouteFunction("DestroyCastRtpStream", "cast.streaming.rtpStream",
                 base::Bind(&CastStreamingNativeHandler::DestroyCastRtpStream,
                            weak_factory_.GetWeakPtr()));
   RouteFunction(
-      "GetSupportedParamsCastRtpStream",
+      "GetSupportedParamsCastRtpStream", "cast.streaming.rtpStream",
       base::Bind(&CastStreamingNativeHandler::GetSupportedParamsCastRtpStream,
                  weak_factory_.GetWeakPtr()));
-  RouteFunction("StartCastRtpStream",
+  RouteFunction("StartCastRtpStream", "cast.streaming.rtpStream",
                 base::Bind(&CastStreamingNativeHandler::StartCastRtpStream,
                            weak_factory_.GetWeakPtr()));
-  RouteFunction("StopCastRtpStream",
+  RouteFunction("StopCastRtpStream", "cast.streaming.rtpStream",
                 base::Bind(&CastStreamingNativeHandler::StopCastRtpStream,
                            weak_factory_.GetWeakPtr()));
-  RouteFunction("DestroyCastUdpTransport",
+  RouteFunction("DestroyCastUdpTransport", "cast.streaming.udpTransport",
                 base::Bind(&CastStreamingNativeHandler::DestroyCastUdpTransport,
                            weak_factory_.GetWeakPtr()));
   RouteFunction(
-      "SetDestinationCastUdpTransport",
+      "SetDestinationCastUdpTransport", "cast.streaming.udpTransport",
       base::Bind(&CastStreamingNativeHandler::SetDestinationCastUdpTransport,
                  weak_factory_.GetWeakPtr()));
   RouteFunction(
-      "SetOptionsCastUdpTransport",
+      "SetOptionsCastUdpTransport", "cast.streaming.udpTransport",
       base::Bind(&CastStreamingNativeHandler::SetOptionsCastUdpTransport,
                  weak_factory_.GetWeakPtr()));
-  RouteFunction("ToggleLogging",
+  RouteFunction("ToggleLogging", "cast.streaming.rtpStream",
                 base::Bind(&CastStreamingNativeHandler::ToggleLogging,
                            weak_factory_.GetWeakPtr()));
-  RouteFunction("GetRawEvents",
+  RouteFunction("GetRawEvents", "cast.streaming.rtpStream",
                 base::Bind(&CastStreamingNativeHandler::GetRawEvents,
                            weak_factory_.GetWeakPtr()));
-  RouteFunction("GetStats", base::Bind(&CastStreamingNativeHandler::GetStats,
-                                       weak_factory_.GetWeakPtr()));
-  RouteFunction("StartCastRtpReceiver",
+  RouteFunction("GetStats", "cast.streaming.rtpStream",
+                base::Bind(&CastStreamingNativeHandler::GetStats,
+                           weak_factory_.GetWeakPtr()));
+  RouteFunction("StartCastRtpReceiver", "cast.streaming.receiverSession",
                 base::Bind(&CastStreamingNativeHandler::StartCastRtpReceiver,
                            weak_factory_.GetWeakPtr()));
 }
@@ -734,8 +735,8 @@ bool CastStreamingNativeHandler::IPEndPointFromArg(
         v8::String::NewFromUtf8(isolate, kInvalidDestination)));
     return false;
   }
-  net::IPAddressNumber ip;
-  if (!net::ParseIPLiteralToNumber(destination->address, &ip)) {
+  net::IPAddress ip;
+  if (!ip.AssignFromIPLiteral(destination->address)) {
     isolate->ThrowException(v8::Exception::TypeError(
         v8::String::NewFromUtf8(isolate, kInvalidDestination)));
     return false;
@@ -802,10 +803,9 @@ void CastStreamingNativeHandler::StartCastRtpReceiver(
 
   media::AudioParameters params(
       media::AudioParameters::AUDIO_PCM_LINEAR,
-      media::CHANNEL_LAYOUT_STEREO,
+      media::GuessChannelLayout(audio_config.channels),
       audio_config.rtp_timebase,  // sampling rate
-      16,
-      audio_config.rtp_timebase / audio_config.target_frame_rate);
+      16, audio_config.rtp_timebase / audio_config.target_frame_rate);
 
   if (!params.IsValid()) {
     args.GetIsolate()->ThrowException(v8::Exception::TypeError(
@@ -863,8 +863,24 @@ void CastStreamingNativeHandler::AddTracksToMediaStream(
     const media::AudioParameters& params,
     scoped_refptr<media::AudioCapturerSource> audio,
     scoped_ptr<media::VideoCapturerSource> video) {
-  content::AddAudioTrackToMediaStream(audio, params, true, true, url);
-  content::AddVideoTrackToMediaStream(std::move(video), true, true, url);
+  blink::WebMediaStream web_stream =
+      blink::WebMediaStreamRegistry::lookupMediaStreamDescriptor(GURL(url));
+  if (web_stream.isNull()) {
+    LOG(DFATAL) << "Stream not found.";
+    return;
+  }
+  if (!content::AddAudioTrackToMediaStream(
+          audio, params.sample_rate(), params.channel_layout(),
+          params.frames_per_buffer(), true,  // is_remote
+          true,                              // is_readonly
+          &web_stream)) {
+    LOG(ERROR) << "Failed to add Cast audio track to media stream.";
+  }
+  if (!content::AddVideoTrackToMediaStream(std::move(video), true,  // is_remote
+                                           true,  // is_readonly
+                                           &web_stream)) {
+    LOG(ERROR) << "Failed to add Cast video track to media stream.";
+  }
 }
 
 }  // namespace extensions

@@ -349,7 +349,8 @@ bool AppWindowCreateFunction::RunAsync() {
 
   AppWindow* app_window =
       AppWindowClient::Get()->CreateAppWindow(browser_context(), extension());
-  app_window->Init(url, new AppWindowContentsImpl(app_window), create_params);
+  app_window->Init(url, new AppWindowContentsImpl(app_window),
+                   render_frame_host(), create_params);
 
   if (ExtensionsBrowserClient::Get()->IsRunningInForcedAppMode() &&
       !app_window->is_ime_window()) {

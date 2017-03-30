@@ -6,21 +6,18 @@
 
 namespace media {
 
-BitstreamBuffer::BitstreamBuffer(int32_t id,
-                                 base::SharedMemoryHandle handle,
-                                 size_t size)
-    : id_(id),
-      handle_(handle),
-      size_(size),
-      presentation_timestamp_(kNoTimestamp()) {}
+BitstreamBuffer::BitstreamBuffer()
+    : BitstreamBuffer(-1, base::SharedMemoryHandle(), 0) {}
 
 BitstreamBuffer::BitstreamBuffer(int32_t id,
                                  base::SharedMemoryHandle handle,
                                  size_t size,
+                                 off_t offset,
                                  base::TimeDelta presentation_timestamp)
     : id_(id),
       handle_(handle),
       size_(size),
+      offset_(offset),
       presentation_timestamp_(presentation_timestamp) {}
 
 BitstreamBuffer::BitstreamBuffer(const BitstreamBuffer& other) = default;

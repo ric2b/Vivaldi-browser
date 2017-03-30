@@ -210,7 +210,7 @@
       'outputs': [
         # Also note that chrome.packed.7z is defined as an output in a
         # conditional above.
-        '<(output_dir)/chrome.7z',
+        '<(output_dir)/vivaldi.7z',
         '<(output_dir)/setup.ex_',
         '<(INTERMEDIATE_DIR)/packed_files.rc',
       ],

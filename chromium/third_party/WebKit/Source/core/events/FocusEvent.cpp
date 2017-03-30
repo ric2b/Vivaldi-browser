@@ -44,8 +44,8 @@ FocusEvent::FocusEvent()
 {
 }
 
-FocusEvent::FocusEvent(const AtomicString& type, bool canBubble, bool cancelable, PassRefPtrWillBeRawPtr<AbstractView> view, int detail, EventTarget* relatedTarget, InputDeviceCapabilities* sourceCapabilities)
-    : UIEvent(type, canBubble, cancelable, view, detail, sourceCapabilities)
+FocusEvent::FocusEvent(const AtomicString& type, bool canBubble, bool cancelable, AbstractView* view, int detail, EventTarget* relatedTarget, InputDeviceCapabilities* sourceCapabilities)
+    : UIEvent(type, canBubble, cancelable, relatedTarget, view, detail, sourceCapabilities)
     , m_relatedTarget(relatedTarget)
 {
 }
@@ -57,7 +57,7 @@ FocusEvent::FocusEvent(const AtomicString& type, const FocusEventInit& initializ
         m_relatedTarget = initializer.relatedTarget();
 }
 
-PassRefPtrWillBeRawPtr<EventDispatchMediator> FocusEvent::createMediator()
+EventDispatchMediator* FocusEvent::createMediator()
 {
     return FocusEventDispatchMediator::create(this);
 }
@@ -68,19 +68,20 @@ DEFINE_TRACE(FocusEvent)
     UIEvent::trace(visitor);
 }
 
-PassRefPtrWillBeRawPtr<FocusEventDispatchMediator> FocusEventDispatchMediator::create(PassRefPtrWillBeRawPtr<FocusEvent> focusEvent)
+FocusEventDispatchMediator* FocusEventDispatchMediator::create(FocusEvent* focusEvent)
 {
-    return adoptRefWillBeNoop(new FocusEventDispatchMediator(focusEvent));
+    return new FocusEventDispatchMediator(focusEvent);
 }
 
-FocusEventDispatchMediator::FocusEventDispatchMediator(PassRefPtrWillBeRawPtr<FocusEvent> focusEvent)
+FocusEventDispatchMediator::FocusEventDispatchMediator(FocusEvent* focusEvent)
     : EventDispatchMediator(focusEvent)
 {
 }
 
 DispatchEventResult FocusEventDispatchMediator::dispatchEvent(EventDispatcher& dispatcher) const
 {
-    event().eventPath().adjustForRelatedTarget(dispatcher.node(), event().relatedTarget());
+    if (event().relatedTargetScoped())
+        event().eventPath().adjustForRelatedTarget(dispatcher.node(), event().relatedTarget());
     return EventDispatchMediator::dispatchEvent(dispatcher);
 }
 

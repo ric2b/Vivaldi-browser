@@ -25,7 +25,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/extensions/api/notifications.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -351,8 +350,17 @@ void MessageCenterSettingsController::SetNotifierEnabled(
                    << notifier.notifier_id.url.spec();
       }
 
-      if (pattern.IsValid())
-        DesktopNotificationProfileUtil::ClearSetting(profile, pattern);
+      if (pattern.IsValid()) {
+        // Note that we don't use DesktopNotificationProfileUtil::ClearSetting()
+        // here because pattern might be from user manual input and not match
+        // the default one used by ClearSetting().
+        HostContentSettingsMapFactory::GetForProfile(profile)
+            ->SetContentSettingCustomScope(
+                pattern, ContentSettingsPattern::Wildcard(),
+                CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+                content_settings::ResourceIdentifier(),
+                CONTENT_SETTING_DEFAULT);
+      }
     }
   } else {
     NotifierStateTrackerFactory::GetForProfile(profile)

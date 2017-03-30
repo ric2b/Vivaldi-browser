@@ -35,6 +35,8 @@ import org.chromium.content.browser.test.util.KeyUtils;
 import org.chromium.content.browser.test.util.UiUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
+import java.util.concurrent.Callable;
+
 /**
  * Find in page tests.
  */
@@ -59,16 +61,17 @@ public class FindTest extends ChromeTabbedActivityTestBase {
     /**
      * Returns the FindResults text.
      */
-    private String waitForFindResults(final String expectedResult) throws InterruptedException {
+    private String waitForFindResults(String expectedResult) throws InterruptedException {
         final TextView findResults = (TextView) getActivity().findViewById(R.id.find_status);
         assertNotNull(expectedResult);
         assertNotNull(findResults);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
-                @Override
-                public boolean isSatisfied() {
-                    return expectedResult.equals(findResults.getText());
-                }
-            });
+        CriteriaHelper.pollUiThread(
+                Criteria.equals(expectedResult, new Callable<CharSequence>() {
+                        @Override
+                        public CharSequence call() {
+                            return findResults.getText();
+                        }
+                    }));
         return findResults.getText().toString();
     }
 
@@ -85,7 +88,7 @@ public class FindTest extends ChromeTabbedActivityTestBase {
     }
 
     private void waitForFindInPageVisibility(final boolean visible) throws InterruptedException {
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 FindToolbar findToolbar = (FindToolbar) getActivity().findViewById(

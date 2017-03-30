@@ -5,10 +5,11 @@
 #ifndef REMOTING_PROTOCOL_TOKEN_VALIDATOR_H_
 #define REMOTING_PROTOCOL_TOKEN_VALIDATOR_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ref_counted.h"
 #include "url/gurl.h"
 
 namespace remoting {
@@ -48,15 +49,19 @@ class TokenValidator {
 };
 
 // Factory for |TokenValidator|.
-class TokenValidatorFactory {
+class TokenValidatorFactory
+    : public base::RefCountedThreadSafe<TokenValidatorFactory> {
  public:
-  virtual ~TokenValidatorFactory() {}
-
   // Creates a TokenValidator. |local_jid| and |remote_jid| are used to create
   // a token scope that is restricted to the current connection's JIDs.
-  virtual scoped_ptr<TokenValidator> CreateTokenValidator(
+  virtual std::unique_ptr<TokenValidator> CreateTokenValidator(
       const std::string& local_jid,
       const std::string& remote_jid) = 0;
+
+ protected:
+  friend class base::RefCountedThreadSafe<TokenValidatorFactory>;
+
+  virtual ~TokenValidatorFactory() {}
 };
 
 }  // namespace protocol

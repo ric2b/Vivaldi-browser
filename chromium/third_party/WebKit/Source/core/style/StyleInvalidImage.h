@@ -12,28 +12,27 @@ namespace blink {
 
 class StyleInvalidImage final : public StyleImage {
 public:
-    static PassRefPtrWillBeRawPtr<StyleInvalidImage> create(const String& url)
+    static StyleInvalidImage* create(const String& url)
     {
-        return adoptRefWillBeNoop(new StyleInvalidImage(url));
+        return new StyleInvalidImage(url);
     }
 
     WrappedImagePtr data() const override { return m_url.impl(); }
 
-    PassRefPtrWillBeRawPtr<CSSValue> cssValue() const override { return CSSImageValue::create(AtomicString(m_url)); }
+    CSSValue* cssValue() const override { return CSSImageValue::create(AtomicString(m_url)); }
 
-    PassRefPtrWillBeRawPtr<CSSValue> computedCSSValue() const override { return cssValue(); }
+    CSSValue* computedCSSValue() const override { return cssValue(); }
 
-    LayoutSize imageSize(const LayoutObject*, float /*multiplier*/) const override { return LayoutSize(); }
+    LayoutSize imageSize(const LayoutObject&, float /*multiplier*/, const LayoutSize& /*defaultObjectSize*/) const override { return LayoutSize(); }
     bool imageHasRelativeSize() const override { return false; }
-    void computeIntrinsicDimensions(const LayoutObject*, FloatSize& /* intrinsicSize */, FloatSize& /* intrinsicRatio */) override { }
     bool usesImageContainerSize() const override { return false; }
     void addClient(LayoutObject*) override { }
     void removeClient(LayoutObject*) override { }
-    PassRefPtr<Image> image(const LayoutObject*, const IntSize&, float) const override
+    PassRefPtr<Image> image(const LayoutObject&, const IntSize&, float) const override
     {
         return nullptr;
     }
-    bool knownToBeOpaque(const LayoutObject*) const override { return false; }
+    bool knownToBeOpaque(const LayoutObject&) const override { return false; }
 
     DEFINE_INLINE_VIRTUAL_TRACE()
     {

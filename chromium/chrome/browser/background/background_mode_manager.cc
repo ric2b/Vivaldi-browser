@@ -29,6 +29,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/keep_alive_registry.h"
 #include "chrome/browser/lifetime/keep_alive_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -43,7 +44,6 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
@@ -311,7 +311,8 @@ BackgroundModeManager::BackgroundModeManager(
   // there are background apps) or exit if there are none.
   if (command_line.HasSwitch(switches::kNoStartupWindow)) {
     keep_alive_for_startup_.reset(
-        new ScopedKeepAlive(KeepAliveOrigin::BACKGROUND_MODE_MANAGER));
+        new ScopedKeepAlive(KeepAliveOrigin::BACKGROUND_MODE_MANAGER_STARTUP,
+                            KeepAliveRestartOption::DISABLED));
   } else {
     // Otherwise, start with background mode suspended in case we're launching
     // in a mode that doesn't open a browser window. It will be resumed when the
@@ -393,8 +394,8 @@ void BackgroundModeManager::RegisterProfile(Profile* profile) {
 void BackgroundModeManager::LaunchBackgroundApplication(
     Profile* profile,
     const Extension* extension) {
-  OpenApplication(AppLaunchParams(profile, extension, NEW_FOREGROUND_TAB,
-                                  extensions::SOURCE_BACKGROUND));
+  OpenApplication(CreateAppLaunchParamsUserContainer(
+      profile, extension, NEW_FOREGROUND_TAB, extensions::SOURCE_BACKGROUND));
 }
 
 // static
@@ -647,7 +648,7 @@ void BackgroundModeManager::ExecuteCommand(int command_id, int event_flags) {
       // Background mode must already be enabled (as otherwise this menu would
       // not be visible).
       DCHECK(IsBackgroundModePrefEnabled());
-      DCHECK(chrome::WillKeepAlive());
+      DCHECK(KeepAliveRegistry::GetInstance()->IsKeepingAlive());
 
       RecordMenuItemClick(MENU_ITEM_KEEP_RUNNING);
 
@@ -767,7 +768,8 @@ void BackgroundModeManager::UpdateKeepAliveAndTrayIcon() {
   if (in_background_mode_ && !background_mode_suspended_) {
     if (!keep_alive_) {
       keep_alive_.reset(
-          new ScopedKeepAlive(KeepAliveOrigin::BACKGROUND_MODE_MANAGER));
+          new ScopedKeepAlive(KeepAliveOrigin::BACKGROUND_MODE_MANAGER,
+                              KeepAliveRestartOption::ENABLED));
     }
     CreateStatusTrayIcon();
     return;

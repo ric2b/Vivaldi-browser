@@ -9,12 +9,9 @@
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
 #include "base/debug/leak_annotations.h"
-#include "base/debug/stack_trace.h"
-#include "base/feature_list.h"
 #include "base/i18n/rtl.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/pending_task.h"
 #include "base/strings/string_util.h"
@@ -156,24 +153,6 @@ int RendererMain(const MainFunctionParams& parameters) {
   base::android::RecordChromiumAndroidLinkerRendererHistogram();
 #endif
 
-  // Initialize statistical testing infrastructure.  We set the entropy provider
-  // to NULL to disallow the renderer process from creating its own one-time
-  // randomized trials; they should be created in the browser process.
-  base::FieldTrialList field_trial_list(NULL);
-  // Ensure any field trials in browser are reflected into renderer.
-  if (parsed_command_line.HasSwitch(switches::kForceFieldTrials)) {
-    bool result = base::FieldTrialList::CreateTrialsFromString(
-        parsed_command_line.GetSwitchValueASCII(switches::kForceFieldTrials),
-        std::set<std::string>());
-    DCHECK(result);
-  }
-
-  scoped_ptr<base::FeatureList> feature_list(new base::FeatureList);
-  feature_list->InitializeFromCommandLine(
-      parsed_command_line.GetSwitchValueASCII(switches::kEnableFeatures),
-      parsed_command_line.GetSwitchValueASCII(switches::kDisableFeatures));
-  base::FeatureList::SetInstance(std::move(feature_list));
-
   scoped_ptr<scheduler::RendererScheduler> renderer_scheduler(
       scheduler::RendererScheduler::Create());
 
@@ -201,17 +180,8 @@ int RendererMain(const MainFunctionParams& parameters) {
                              std::move(renderer_scheduler));
 #endif
     bool run_loop = true;
-    if (!no_sandbox) {
+    if (!no_sandbox)
       run_loop = platform.EnableSandbox();
-    } else {
-      LOG(ERROR) << "Running without renderer sandbox";
-#if !defined(NDEBUG) || (defined(CFI_ENFORCEMENT) && !defined(OFFICIAL_BUILD))
-      // For convenience, we print the stack traces for crashes.  When sandb
-      // is enabled, the in-process stack dumping is enabled as part of the
-      // EnableSandbox() call.
-      base::debug::EnableInProcessStackDumping();
-#endif
-    }
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
     RenderProcessImpl render_process;
     RenderThreadImpl::Create(std::move(main_message_loop),

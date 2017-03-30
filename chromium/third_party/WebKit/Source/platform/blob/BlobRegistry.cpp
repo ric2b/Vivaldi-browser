@@ -43,7 +43,6 @@
 #include "public/platform/WebTraceLocation.h"
 #include "wtf/Assertions.h"
 #include "wtf/HashMap.h"
-#include "wtf/MainThread.h"
 #include "wtf/RefPtr.h"
 #include "wtf/ThreadSpecific.h"
 #include "wtf/Threading.h"
@@ -80,13 +79,13 @@ static void saveToOriginMap(SecurityOrigin* origin, const KURL& url)
     // security origin or file URL, save the mapping between url and origin so
     // that the origin can be retrived when doing security origin check.
     if (origin && BlobURL::getOrigin(url) == "null")
-        originMap()->add(url.string(), origin);
+        originMap()->add(url.getString(), origin);
 }
 
 static void removeFromOriginMap(const KURL& url)
 {
     if (BlobURL::getOrigin(url) == "null")
-        originMap()->remove(url.string());
+        originMap()->remove(url.getString());
 }
 
 void BlobRegistry::registerBlobData(const String& uuid, PassOwnPtr<BlobData> data)
@@ -127,7 +126,7 @@ void BlobRegistry::registerStreamURL(const KURL& url, const String& type)
     if (isMainThread())
         registerStreamURLTask(url, type);
     else
-        Platform::current()->mainThread()->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&registerStreamURLTask, url, type));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&registerStreamURLTask, url, type));
 }
 
 static void registerStreamURLFromTask(const KURL& url, const KURL& srcURL)
@@ -143,7 +142,7 @@ void BlobRegistry::registerStreamURL(SecurityOrigin* origin, const KURL& url, co
     if (isMainThread())
         registerStreamURLFromTask(url, srcURL);
     else
-        Platform::current()->mainThread()->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&registerStreamURLFromTask, url, srcURL));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&registerStreamURLFromTask, url, srcURL));
 }
 
 static void addDataToStreamTask(const KURL& url, PassRefPtr<RawData> streamData)
@@ -157,7 +156,7 @@ void BlobRegistry::addDataToStream(const KURL& url, PassRefPtr<RawData> streamDa
     if (isMainThread())
         addDataToStreamTask(url, streamData);
     else
-        Platform::current()->mainThread()->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&addDataToStreamTask, url, streamData));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&addDataToStreamTask, url, streamData));
 }
 
 static void flushStreamTask(const KURL& url)
@@ -171,7 +170,7 @@ void BlobRegistry::flushStream(const KURL& url)
     if (isMainThread())
         flushStreamTask(url);
     else
-        Platform::current()->mainThread()->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&flushStreamTask, url));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&flushStreamTask, url));
 }
 
 static void finalizeStreamTask(const KURL& url)
@@ -185,7 +184,7 @@ void BlobRegistry::finalizeStream(const KURL& url)
     if (isMainThread())
         finalizeStreamTask(url);
     else
-        Platform::current()->mainThread()->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&finalizeStreamTask, url));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&finalizeStreamTask, url));
 }
 
 static void abortStreamTask(const KURL& url)
@@ -199,7 +198,7 @@ void BlobRegistry::abortStream(const KURL& url)
     if (isMainThread())
         abortStreamTask(url);
     else
-        Platform::current()->mainThread()->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&abortStreamTask, url));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&abortStreamTask, url));
 }
 
 static void unregisterStreamURLTask(const KURL& url)
@@ -215,7 +214,7 @@ void BlobRegistry::unregisterStreamURL(const KURL& url)
     if (isMainThread())
         unregisterStreamURLTask(url);
     else
-        Platform::current()->mainThread()->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&unregisterStreamURLTask, url));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&unregisterStreamURLTask, url));
 }
 
 BlobOriginCache::BlobOriginCache()
@@ -226,7 +225,7 @@ BlobOriginCache::BlobOriginCache()
 SecurityOrigin* BlobOriginCache::cachedOrigin(const KURL& url)
 {
     if (url.protocolIs("blob"))
-        return originMap()->get(url.string());
+        return originMap()->get(url.getString());
     return 0;
 }
 

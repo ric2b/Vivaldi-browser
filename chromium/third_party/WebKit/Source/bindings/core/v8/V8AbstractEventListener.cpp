@@ -88,7 +88,7 @@ void V8AbstractEventListener::handleEvent(ScriptState* scriptState, Event* event
 {
     // The callback function on XMLHttpRequest can clear the event listener and destroys 'this' object. Keep a local reference to it.
     // See issue 889829.
-    RefPtrWillBeRawPtr<V8AbstractEventListener> protect(this);
+    RawPtr<V8AbstractEventListener> protect(this);
 
     ScriptState::Scope scope(scriptState);
 
@@ -102,18 +102,14 @@ void V8AbstractEventListener::handleEvent(ScriptState* scriptState, Event* event
 void V8AbstractEventListener::setListenerObject(v8::Local<v8::Object> listener)
 {
     ASSERT(m_listener.isEmpty());
-    // Balanced in secondWeakCallback xor clearListenerObject.
+    // Balanced in wrapperCleared xor clearListenerObject.
     if (m_workerGlobalScope) {
         m_workerGlobalScope->registerEventListener(this);
     } else {
-#if ENABLE(OILPAN)
         m_keepAlive = this;
-#else
-        ref();
-#endif
     }
     m_listener.set(isolate(), listener);
-    m_listener.setWeak(this, &setWeakCallback);
+    m_listener.setWeak(this, &wrapperCleared);
 }
 
 void V8AbstractEventListener::invokeEventHandler(ScriptState* scriptState, Event* event, v8::Local<v8::Value> jsEvent)
@@ -140,8 +136,8 @@ void V8AbstractEventListener::invokeEventHandler(ScriptState* scriptState, Event
             event->target()->uncaughtExceptionInEventHandler();
 
         if (!tryCatch.CanContinue()) { // Result of TerminateExecution().
-            if (scriptState->executionContext()->isWorkerGlobalScope())
-                toWorkerGlobalScope(scriptState->executionContext())->scriptController()->forbidExecution();
+            if (scriptState->getExecutionContext()->isWorkerGlobalScope())
+                toWorkerGlobalScope(scriptState->getExecutionContext())->scriptController()->forbidExecution();
             return;
         }
         tryCatch.Reset();
@@ -199,38 +195,18 @@ void V8AbstractEventListener::clearListenerObject()
     if (m_workerGlobalScope) {
         m_workerGlobalScope->deregisterEventListener(this);
     } else {
-#if ENABLE(OILPAN)
         m_keepAlive.clear();
-#else
-        deref();
-#endif
     }
 }
 
-void V8AbstractEventListener::setWeakCallback(const v8::WeakCallbackInfo<V8AbstractEventListener>& data)
+void V8AbstractEventListener::wrapperCleared(const v8::WeakCallbackInfo<V8AbstractEventListener>& data)
 {
-    data.GetParameter()->m_listener.clear();
-    data.SetSecondPassCallback(secondWeakCallback);
-}
-
-void V8AbstractEventListener::secondWeakCallback(const v8::WeakCallbackInfo<V8AbstractEventListener>& data)
-{
-    if (data.GetParameter()->m_workerGlobalScope) {
-        data.GetParameter()->m_workerGlobalScope->deregisterEventListener(data.GetParameter());
-    } else {
-#if ENABLE(OILPAN)
-        data.GetParameter()->m_keepAlive.clear();
-#else
-        data.GetParameter()->deref();
-#endif
-    }
+    data.GetParameter()->clearListenerObject();
 }
 
 DEFINE_TRACE(V8AbstractEventListener)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_workerGlobalScope);
-#endif
     EventListener::trace(visitor);
 }
 

@@ -15,6 +15,8 @@ namespace favicon {
 
 namespace extensions {
 
+content::WebContents* GetWebContentsFromTabStrip(int tab_id, Profile* profile);
+
 class VivaldiTabsPrivateApiNotification;
 
 // Tab contents observer that forward private settings to any new renderer.
@@ -42,6 +44,8 @@ class VivaldiPrivateTabObserver
   bool show_images() { return show_images_; }
   bool load_from_cache_only() { return load_from_cache_only_; }
   bool enable_plugins() { return enable_plugins_; }
+
+  void OnTabDiscarded(content::WebContents* contents, bool discarded);
 
   // Commit setting to the active RenderViewHost
   void CommitSettings();
@@ -119,6 +123,22 @@ class TabsPrivateGetFunction: public ChromeAsyncExtensionFunction {
   bool RunAsync() override;
 
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateGetFunction);
+};
+
+class TabsPrivateDiscardFunction: public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.discard", TABSSPRIVATE_DISCARD);
+
+  TabsPrivateDiscardFunction();
+
+ protected:
+  ~TabsPrivateDiscardFunction() override;
+
+ private:
+  // BookmarksFunction:
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(TabsPrivateDiscardFunction);
 };
 
 }  // namespace extensions

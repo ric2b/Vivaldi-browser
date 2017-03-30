@@ -270,30 +270,32 @@ TEST(Target, GetComputedOutputName) {
   // no prefix) or output name.
   TestTarget basic(setup, "//foo:bar", Target::EXECUTABLE);
   ASSERT_TRUE(basic.OnResolved(&err));
-  EXPECT_EQ("bar", basic.GetComputedOutputName(false));
-  EXPECT_EQ("bar", basic.GetComputedOutputName(true));
+  EXPECT_EQ("bar", basic.GetComputedOutputName());
 
   // Target with no prefix but an output name.
   TestTarget with_name(setup, "//foo:bar", Target::EXECUTABLE);
   with_name.set_output_name("myoutput");
   ASSERT_TRUE(with_name.OnResolved(&err));
-  EXPECT_EQ("myoutput", with_name.GetComputedOutputName(false));
-  EXPECT_EQ("myoutput", with_name.GetComputedOutputName(true));
+  EXPECT_EQ("myoutput", with_name.GetComputedOutputName());
 
   // Target with a "lib" prefix (the static library tool in the TestWithScope
   // should specify a "lib" output prefix).
   TestTarget with_prefix(setup, "//foo:bar", Target::STATIC_LIBRARY);
   ASSERT_TRUE(with_prefix.OnResolved(&err));
-  EXPECT_EQ("bar", with_prefix.GetComputedOutputName(false));
-  EXPECT_EQ("libbar", with_prefix.GetComputedOutputName(true));
+  EXPECT_EQ("libbar", with_prefix.GetComputedOutputName());
 
   // Target with a "lib" prefix that already has it applied. The prefix should
   // not duplicate something already in the target name.
   TestTarget dup_prefix(setup, "//foo:bar", Target::STATIC_LIBRARY);
   dup_prefix.set_output_name("libbar");
   ASSERT_TRUE(dup_prefix.OnResolved(&err));
-  EXPECT_EQ("libbar", dup_prefix.GetComputedOutputName(false));
-  EXPECT_EQ("libbar", dup_prefix.GetComputedOutputName(true));
+  EXPECT_EQ("libbar", dup_prefix.GetComputedOutputName());
+
+  // Target with an output prefix override should not have a prefix.
+  TestTarget override_prefix(setup, "//foo:bar", Target::SHARED_LIBRARY);
+  override_prefix.set_output_prefix_override(true);
+  ASSERT_TRUE(dup_prefix.OnResolved(&err));
+  EXPECT_EQ("bar", override_prefix.GetComputedOutputName());
 }
 
 // Test visibility failure case.
@@ -429,7 +431,7 @@ TEST(Target, LinkAndDepOutputs) {
 
   Toolchain toolchain(setup.settings(), Label(SourceDir("//tc/"), "tc"));
 
-  scoped_ptr<Tool> solink_tool(new Tool());
+  std::unique_ptr<Tool> solink_tool(new Tool());
   solink_tool->set_output_prefix("lib");
   solink_tool->set_default_output_extension(".so");
 
@@ -468,7 +470,7 @@ TEST(Target, RuntimeLinkOuput) {
 
   Toolchain toolchain(setup.settings(), Label(SourceDir("//tc/"), "tc"));
 
-  scoped_ptr<Tool> solink_tool(new Tool());
+  std::unique_ptr<Tool> solink_tool(new Tool());
   solink_tool->set_output_prefix("");
   solink_tool->set_default_output_extension(".dll");
 
@@ -627,6 +629,53 @@ TEST(Target, WriteFileGeneratedInputs) {
   EXPECT_TRUE(scheduler.GetUnknownGeneratedInputs().empty());
 }
 
+TEST(Target, WriteRuntimeDepsGeneratedInputs) {
+  Scheduler scheduler;
+  TestWithScope setup;
+  Err err;
+
+  SourceFile source_file("//out/Debug/generated.runtime_deps");
+  OutputFile output_file(setup.build_settings(), source_file);
+
+  TestTarget generator(setup, "//foo:generator", Target::EXECUTABLE);
+  generator.set_write_runtime_deps_output(output_file);
+  g_scheduler->AddWriteRuntimeDepsTarget(&generator);
+
+  TestTarget middle_data_dep(setup, "//foo:middle", Target::EXECUTABLE);
+  middle_data_dep.data_deps().push_back(LabelTargetPair(&generator));
+
+  // This target has a generated input and no dependency makes it.
+  TestTarget dep_missing(setup, "//foo:no_dep", Target::EXECUTABLE);
+  dep_missing.sources().push_back(source_file);
+  EXPECT_TRUE(dep_missing.OnResolved(&err));
+  AssertSchedulerHasOneUnknownFileMatching(&dep_missing, source_file);
+  scheduler.ClearUnknownGeneratedInputsAndWrittenFiles();
+
+  // This target has a generated file and we've directly dependended on it.
+  TestTarget dep_present(setup, "//foo:with_dep", Target::EXECUTABLE);
+  dep_present.sources().push_back(source_file);
+  dep_present.private_deps().push_back(LabelTargetPair(&generator));
+  EXPECT_TRUE(dep_present.OnResolved(&err));
+  EXPECT_TRUE(scheduler.GetUnknownGeneratedInputs().empty());
+
+  // This target has a generated file and we've indirectly dependended on it
+  // via data_deps.
+  TestTarget dep_indirect(setup, "//foo:with_dep", Target::EXECUTABLE);
+  dep_indirect.sources().push_back(source_file);
+  dep_indirect.data_deps().push_back(LabelTargetPair(&middle_data_dep));
+  EXPECT_TRUE(dep_indirect.OnResolved(&err));
+  AssertSchedulerHasOneUnknownFileMatching(&dep_indirect, source_file);
+  scheduler.ClearUnknownGeneratedInputsAndWrittenFiles();
+
+  // This target has a generated file and we've directly dependended on it
+  // via data_deps.
+  TestTarget data_dep_present(setup, "//foo:with_dep", Target::EXECUTABLE);
+  data_dep_present.sources().push_back(source_file);
+  data_dep_present.data_deps().push_back(LabelTargetPair(&generator));
+  EXPECT_TRUE(data_dep_present.OnResolved(&err));
+  EXPECT_TRUE(scheduler.GetUnknownGeneratedInputs().empty());
+}
+
 // Tests that intermediate object files generated by binary targets are also
 // considered generated for the purposes of input checking. Above, we tested
 // the failure cases for generated inputs, so here only test .o files that are
@@ -762,4 +811,75 @@ TEST(Target, AssertNoDeps) {
   TestTarget a2(setup, "//a:a2", Target::EXECUTABLE);
   a2.assert_no_deps().push_back(disallow_a);
   ASSERT_TRUE(a2.OnResolved(&err));
+}
+
+TEST(Target, PullRecursiveBundleData) {
+  TestWithScope setup;
+  Err err;
+
+  // We have the following dependency graph:
+  // A (create_bundle) -> B (bundle_data)
+  //                  \-> C (create_bundle) -> D (bundle_data)
+  //                  \-> E (group) -> F (bundle_data)
+  //                               \-> B (bundle_data)
+  TestTarget a(setup, "//foo:a", Target::CREATE_BUNDLE);
+  TestTarget b(setup, "//foo:b", Target::BUNDLE_DATA);
+  TestTarget c(setup, "//foo:c", Target::CREATE_BUNDLE);
+  TestTarget d(setup, "//foo:d", Target::BUNDLE_DATA);
+  TestTarget e(setup, "//foo:e", Target::GROUP);
+  TestTarget f(setup, "//foo:f", Target::BUNDLE_DATA);
+  a.public_deps().push_back(LabelTargetPair(&b));
+  a.public_deps().push_back(LabelTargetPair(&c));
+  a.public_deps().push_back(LabelTargetPair(&e));
+  c.public_deps().push_back(LabelTargetPair(&d));
+  e.public_deps().push_back(LabelTargetPair(&f));
+  e.public_deps().push_back(LabelTargetPair(&b));
+
+  b.sources().push_back(SourceFile("//foo/b1.txt"));
+  b.sources().push_back(SourceFile("//foo/b2.txt"));
+  b.action_values().outputs() = SubstitutionList::MakeForTest(
+      "{{bundle_resources_dir}}/{{source_file_part}}");
+  ASSERT_TRUE(b.OnResolved(&err));
+
+  d.sources().push_back(SourceFile("//foo/d.txt"));
+  d.action_values().outputs() = SubstitutionList::MakeForTest(
+      "{{bundle_resources_dir}}/{{source_file_part}}");
+  ASSERT_TRUE(d.OnResolved(&err));
+
+  f.sources().push_back(SourceFile("//foo/f1.txt"));
+  f.sources().push_back(SourceFile("//foo/f2.txt"));
+  f.sources().push_back(SourceFile("//foo/f3.txt"));
+  f.sources().push_back(
+      SourceFile("//foo/Foo.xcassets/foo.imageset/Contents.json"));
+  f.sources().push_back(
+      SourceFile("//foo/Foo.xcassets/foo.imageset/FooEmpty-29.png"));
+  f.sources().push_back(
+      SourceFile("//foo/Foo.xcassets/foo.imageset/FooEmpty-29@2x.png"));
+  f.sources().push_back(
+      SourceFile("//foo/Foo.xcassets/foo.imageset/FooEmpty-29@3x.png"));
+  f.action_values().outputs() = SubstitutionList::MakeForTest(
+      "{{bundle_resources_dir}}/{{source_file_part}}");
+  ASSERT_TRUE(f.OnResolved(&err));
+
+  ASSERT_TRUE(e.OnResolved(&err));
+  ASSERT_TRUE(c.OnResolved(&err));
+  ASSERT_TRUE(a.OnResolved(&err));
+
+  // A gets its data from B and F.
+  ASSERT_EQ(a.bundle_data().file_rules().size(), 2u);
+  ASSERT_EQ(a.bundle_data().file_rules()[0].sources().size(), 2u);
+  ASSERT_EQ(a.bundle_data().file_rules()[1].sources().size(), 3u);
+  ASSERT_EQ(a.bundle_data().asset_catalog_sources().size(), 4u);
+  ASSERT_EQ(a.bundle_data().bundle_deps().size(), 2u);
+
+  // C gets its data from D.
+  ASSERT_EQ(c.bundle_data().file_rules().size(), 1u);
+  ASSERT_EQ(c.bundle_data().file_rules()[0].sources().size(), 1u);
+  ASSERT_EQ(c.bundle_data().bundle_deps().size(), 1u);
+
+  // E does not have any bundle_data information but gets a list of
+  // bundle_deps to propagate them during target resolution.
+  ASSERT_TRUE(e.bundle_data().file_rules().empty());
+  ASSERT_TRUE(e.bundle_data().asset_catalog_sources().empty());
+  ASSERT_EQ(e.bundle_data().bundle_deps().size(), 2u);
 }

@@ -15,8 +15,6 @@
         'sources': [
             'src/acl.cc',
             'src/acl.h',
-            'src/app_container.cc',
-            'src/app_container.h',
             'src/broker_services.cc',
             'src/broker_services.h',
             'src/crosscall_client.h',
@@ -148,7 +146,6 @@
               'src/interceptors_64.h',
               'src/resolver_64.cc',
               'src/service_resolver_64.cc',
-              'src/Wow64_64.cc',
             ],
           }],
           ['target_arch=="ia32"', {
@@ -164,8 +161,6 @@
               'src/sidestep\mini_disassembler.h',
               'src/sidestep\preamble_patcher_with_stub.cpp',
               'src/sidestep\preamble_patcher.h',
-              'src/Wow64.cc',
-              'src/Wow64.h',
             ],
           }],
         ],
@@ -227,6 +222,7 @@
         'src/process_mitigations_test.cc',
         'src/process_policy_test.cc',
         'src/registry_policy_test.cc',
+        'src/restricted_token_test.cc',
         'src/sync_policy_test.cc',
         'src/sync_policy_test.h',
         'src/unload_dll_test.cc',
@@ -253,6 +249,11 @@
         'tests/validation_tests/commands.h',
         'tests/validation_tests/suite.cc',
       ],
+      'link_settings': {
+        'libraries': [
+          '-lshlwapi.lib',
+        ],
+      },
     },
     {
       'target_name': 'sbox_unittests',
@@ -263,7 +264,6 @@
         '../testing/gtest.gyp:gtest',
       ],
       'sources': [
-        'src/app_container_unittest.cc',
         'src/interception_unittest.cc',
         'src/service_resolver_unittest.cc',
         'src/restricted_token_unittest.cc',

@@ -82,7 +82,7 @@ FileReaderLoader::~FileReaderLoader()
 void FileReaderLoader::startInternal(ExecutionContext& executionContext, const Stream* stream, PassRefPtr<BlobDataHandle> blobData)
 {
     // The blob is read by routing through the request handling layer given a temporary public url.
-    m_urlForReading = BlobURL::createPublicURL(executionContext.securityOrigin());
+    m_urlForReading = BlobURL::createPublicURL(executionContext.getSecurityOrigin());
     if (m_urlForReading.isEmpty()) {
         failed(FileError::SECURITY_ERR);
         return;
@@ -90,14 +90,15 @@ void FileReaderLoader::startInternal(ExecutionContext& executionContext, const S
 
     if (blobData) {
         ASSERT(!stream);
-        BlobRegistry::registerPublicBlobURL(executionContext.securityOrigin(), m_urlForReading, blobData);
+        BlobRegistry::registerPublicBlobURL(executionContext.getSecurityOrigin(), m_urlForReading, blobData);
     } else {
         ASSERT(stream);
-        BlobRegistry::registerStreamURL(executionContext.securityOrigin(), m_urlForReading, stream->url());
+        BlobRegistry::registerStreamURL(executionContext.getSecurityOrigin(), m_urlForReading, stream->url());
     }
 
     // Construct and load the request.
     ResourceRequest request(m_urlForReading);
+    request.setExternalRequestStateFromRequestorAddressSpace(executionContext.securityContext().addressSpace());
 
     // FIXME: Should this really be 'internal'? Do we know anything about the actual request that generated this fetch?
     request.setRequestContext(WebURLRequest::RequestContextInternal);

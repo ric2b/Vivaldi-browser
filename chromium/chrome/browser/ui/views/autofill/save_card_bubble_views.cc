@@ -32,19 +32,10 @@ namespace {
 // Fixed width of the bubble.
 const int kBubbleWidth = 395;
 
-// TODO(bondd): BubbleManager will eventually move this logic somewhere else,
-// and then kIsOkButtonOnLeftSide can be removed from here and
-// dialog_client_view.cc.
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
-const bool kIsOkButtonOnLeftSide = true;
-#else
-const bool kIsOkButtonOnLeftSide = false;
-#endif
-
-scoped_ptr<views::StyledLabel> CreateLegalMessageLineLabel(
+std::unique_ptr<views::StyledLabel> CreateLegalMessageLineLabel(
     const LegalMessageLine& line,
     views::StyledLabelListener* listener) {
-  scoped_ptr<views::StyledLabel> label(
+  std::unique_ptr<views::StyledLabel> label(
       new views::StyledLabel(line.text(), listener));
   for (const LegalMessageLine::Link& link : line.links()) {
     label->AddStyleRange(link.range,
@@ -60,11 +51,9 @@ SaveCardBubbleViews::SaveCardBubbleViews(views::View* anchor_view,
                                          SaveCardBubbleController* controller)
     : LocationBarBubbleDelegateView(anchor_view, web_contents),
       controller_(controller),
-      save_button_(nullptr),
-      cancel_button_(nullptr),
       learn_more_link_(nullptr) {
   DCHECK(controller);
-  views::BubbleDelegateView::CreateBubble(this);
+  views::BubbleDialogDelegateView::CreateBubble(this);
 }
 
 SaveCardBubbleViews::~SaveCardBubbleViews() {}
@@ -75,15 +64,23 @@ void SaveCardBubbleViews::Show(DisplayReason reason) {
 
 void SaveCardBubbleViews::Hide() {
   controller_ = nullptr;
-  Close();
+  CloseBubble();
 }
 
-scoped_ptr<views::View> SaveCardBubbleViews::CreateFootnoteView() {
+views::View* SaveCardBubbleViews::CreateExtraView() {
+  DCHECK(!learn_more_link_);
+  learn_more_link_ = new views::Link(l10n_util::GetStringUTF16(IDS_LEARN_MORE));
+  learn_more_link_->SetUnderline(false);
+  learn_more_link_->set_listener(this);
+  return learn_more_link_;
+}
+
+views::View* SaveCardBubbleViews::CreateFootnoteView() {
   if (controller_->GetLegalMessageLines().empty())
     return nullptr;
 
   // Use BoxLayout to provide insets around the label.
-  scoped_ptr<View> view(new View());
+  View* view = new View();
   view->SetLayoutManager(
       new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0));
 
@@ -94,12 +91,42 @@ scoped_ptr<views::View> SaveCardBubbleViews::CreateFootnoteView() {
   return view;
 }
 
-gfx::Size SaveCardBubbleViews::GetPreferredSize() const {
-  return gfx::Size(kBubbleWidth, GetHeightForWidth(kBubbleWidth));
+bool SaveCardBubbleViews::Accept() {
+  controller_->OnSaveButton();
+  return true;
 }
 
-views::View* SaveCardBubbleViews::GetInitiallyFocusedView() {
-  return save_button_;
+bool SaveCardBubbleViews::Cancel() {
+  if (controller_)
+    controller_->OnCancelButton();
+  return true;
+}
+
+bool SaveCardBubbleViews::Close() {
+  // Override to prevent Cancel from being called when the bubble is hidden.
+  // Return true to indicate that the bubble can be closed.
+  return true;
+}
+
+int SaveCardBubbleViews::GetDialogButtons() const {
+  // This is the default for BubbleDialogDelegateView, but it's not the default
+  // for LocationBarBubbleDelegateView.
+  return ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL;
+}
+
+base::string16 SaveCardBubbleViews::GetDialogButtonLabel(
+    ui::DialogButton button) const {
+  return l10n_util::GetStringUTF16(button == ui::DIALOG_BUTTON_OK
+                                       ? IDS_AUTOFILL_SAVE_CARD_PROMPT_ACCEPT
+                                       : IDS_AUTOFILL_SAVE_CARD_PROMPT_DENY);
+}
+
+bool SaveCardBubbleViews::ShouldDefaultButtonBeBlue() const {
+  return true;
+}
+
+gfx::Size SaveCardBubbleViews::GetPreferredSize() const {
+  return gfx::Size(kBubbleWidth, GetHeightForWidth(kBubbleWidth));
 }
 
 base::string16 SaveCardBubbleViews::GetWindowTitle() const {
@@ -109,17 +136,6 @@ base::string16 SaveCardBubbleViews::GetWindowTitle() const {
 void SaveCardBubbleViews::WindowClosing() {
   if (controller_)
     controller_->OnBubbleClosed();
-}
-
-void SaveCardBubbleViews::ButtonPressed(views::Button* sender,
-                                        const ui::Event& event) {
-  if (sender == save_button_) {
-    controller_->OnSaveButton();
-  } else {
-    DCHECK_EQ(sender, cancel_button_);
-    controller_->OnCancelButton();
-  }
-  Close();
 }
 
 void SaveCardBubbleViews::LinkClicked(views::Link* source, int event_flags) {
@@ -151,8 +167,8 @@ void SaveCardBubbleViews::StyledLabelLinkClicked(views::StyledLabel* label,
 }
 
 // Create view containing everything except for the footnote.
-scoped_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
-  scoped_ptr<View> view(new View());
+std::unique_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
+  std::unique_ptr<View> view(new View());
   view->SetLayoutManager(
       new views::BoxLayout(views::BoxLayout::kVertical, 0, 0,
                            views::kUnrelatedControlVerticalSpacing));
@@ -174,9 +190,8 @@ scoped_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
       views::Border::CreateSolidBorder(1, kSubtleBorderColor));
   description_view->AddChildView(card_type_icon);
 
-  // Midline horizontal ellipsis follwed by last four digits:
   description_view->AddChildView(new views::Label(
-      base::UTF8ToUTF16("\xE2\x8B\xAF") + card.LastFourDigits()));
+      base::string16(kMidlineEllipsis) + card.LastFourDigits()));
   description_view->AddChildView(
       new views::Label(card.AbbreviatedExpirationDateForDisplay()));
 
@@ -187,36 +202,6 @@ scoped_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
     explanation_label->SetMultiLine(true);
     explanation_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     view->AddChildView(explanation_label);
-  }
-
-  // Add "learn more" link and accept/cancel buttons.
-  views::View* button_view = new views::View();
-  views::BoxLayout* button_view_layout = new views::BoxLayout(
-      views::BoxLayout::kHorizontal, 0, 0, views::kRelatedButtonHSpacing);
-  button_view->SetLayoutManager(button_view_layout);
-  view->AddChildView(button_view);
-
-  learn_more_link_ = new views::Link(l10n_util::GetStringUTF16(IDS_LEARN_MORE));
-  learn_more_link_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  learn_more_link_->SetUnderline(false);
-  learn_more_link_->set_listener(this);
-  button_view->AddChildView(learn_more_link_);
-  button_view_layout->SetFlexForView(learn_more_link_, 1);
-
-  save_button_ = new views::BlueButton(
-      this, l10n_util::GetStringUTF16(IDS_AUTOFILL_SAVE_CARD_PROMPT_ACCEPT));
-  save_button_->SetIsDefault(true);
-
-  cancel_button_ = new views::LabelButton(
-      this, l10n_util::GetStringUTF16(IDS_AUTOFILL_SAVE_CARD_PROMPT_DENY));
-  cancel_button_->SetStyle(views::Button::STYLE_BUTTON);
-
-  if (kIsOkButtonOnLeftSide) {
-    button_view->AddChildView(save_button_);
-    button_view->AddChildView(cancel_button_);
-  } else {
-    button_view->AddChildView(cancel_button_);
-    button_view->AddChildView(save_button_);
   }
 
   return view;

@@ -5,10 +5,10 @@
 #ifndef REMOTING_PROTOCOL_AUTHENTICATOR_H_
 #define REMOTING_PROTOCOL_AUTHENTICATOR_H_
 
+#include <memory>
 #include <string>
 
-#include "base/callback.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/callback_forward.h"
 
 namespace buzz {
 class XmlElement;
@@ -17,26 +17,20 @@ class XmlElement;
 namespace remoting {
 namespace protocol {
 
+class Authenticator;
 class ChannelAuthenticator;
 
-typedef base::Callback<void(const std::string& secret)> SecretFetchedCallback;
-typedef base::Callback<void(
-    bool pairing_supported,
-    const SecretFetchedCallback& secret_fetched_callback)> FetchSecretCallback;
-
 // Authenticator is an abstract interface for authentication protocol
-// implementations. Different implementations of this interface may be
-// used on each side of the connection depending of type of the auth
-// protocol. Client and host will repeatedly call their Authenticators
-// and deliver the messages they generate, until successful
-// authentication is reported.
+// implementations. Different implementations of this interface may be used on
+// each side of the connection depending of type of the auth protocol. Client
+// and host will repeatedly call their Authenticators and deliver the messages
+// they generate, until successful authentication is reported.
 //
-// Authenticator may exchange multiple messages before session is
-// authenticated. Each message sent/received by an Authenticator is
-// delivered either in a session description inside session-initiate
-// and session-accept messages or in a session-info
-// message. Session-info messages are used only if authenticators need
-// to exchange more than one message.
+// Authenticator may exchange multiple messages before session is authenticated.
+// Each message sent/received by an Authenticator is delivered either in a
+// session description inside session-initiate and session-accept messages or in
+// a session-info message. Session-info messages are used only if authenticators
+// need to exchange more than one message.
 class Authenticator {
  public:
   // Allowed state transitions:
@@ -46,7 +40,9 @@ class Authenticator {
   //    WAITING_MESSAGE -> REJECTED
   //    WAITING_MESSAGE -> PROCESSING_MESSAGE
   // After asynchronous message processing finishes:
-  ///   PROCESSING_MESSAGE -> MESSAGE_READY
+  //    PROCESSING_MESSAGE -> MESSAGE_READY
+  //    PROCESSING_MESSAGE -> ACCEPTED
+  //    PROCESSING_MESSAGE -> REJECTED
   // When GetNextMessage() is called:
   //    MESSAGE_READY -> WAITING_MESSAGE
   //    MESSAGE_READY -> ACCEPTED
@@ -72,11 +68,19 @@ class Authenticator {
     PROTOCOL_ERROR,
   };
 
+  // Callback used for layered Authenticator implementations, particularly
+  // third-party and pairing authenticators. They use this callback to create
+  // base SPAKE2 authenticators.
+  typedef base::Callback<std::unique_ptr<Authenticator>(
+      const std::string& shared_secret,
+      Authenticator::State initial_state)>
+      CreateBaseAuthenticatorCallback;
+
   // Returns true if |message| is an Authenticator message.
   static bool IsAuthenticatorMessage(const buzz::XmlElement* message);
 
   // Creates an empty Authenticator message, owned by the caller.
-  static scoped_ptr<buzz::XmlElement> CreateEmptyAuthenticatorMessage();
+  static std::unique_ptr<buzz::XmlElement> CreateEmptyAuthenticatorMessage();
 
   // Finds Authenticator message among child elements of |message|, or
   // returns nullptr otherwise.
@@ -90,7 +94,7 @@ class Authenticator {
   virtual State state() const = 0;
 
   // Returns whether authentication has started. The chromoting host uses this
-  // method to starts the back off process to prevent malicious clients from
+  // method to start the back off process to prevent malicious clients from
   // guessing the PIN by spamming the host with auth requests.
   virtual bool started() const = 0;
 
@@ -107,15 +111,15 @@ class Authenticator {
 
   // Must be called when in MESSAGE_READY state. Returns next
   // authentication message that needs to be sent to the peer.
-  virtual scoped_ptr<buzz::XmlElement> GetNextMessage() = 0;
+  virtual std::unique_ptr<buzz::XmlElement> GetNextMessage() = 0;
 
   // Returns the auth key received as result of the authentication handshake.
   virtual const std::string& GetAuthKey() const = 0;
 
   // Creates new authenticator for a channel. Can be called only in
   // the ACCEPTED state.
-  virtual scoped_ptr<ChannelAuthenticator>
-      CreateChannelAuthenticator() const = 0;
+  virtual std::unique_ptr<ChannelAuthenticator> CreateChannelAuthenticator()
+      const = 0;
 };
 
 // Factory for Authenticator instances.
@@ -132,10 +136,9 @@ class AuthenticatorFactory {
   // if the |first_message| is invalid and the session should be
   // rejected. ProcessMessage() should be called with |first_message|
   // for the result of this method.
-  virtual scoped_ptr<Authenticator> CreateAuthenticator(
+  virtual std::unique_ptr<Authenticator> CreateAuthenticator(
       const std::string& local_jid,
-      const std::string& remote_jid,
-      const buzz::XmlElement* first_message) = 0;
+      const std::string& remote_jid) = 0;
 };
 
 }  // namespace protocol

@@ -50,8 +50,8 @@ class TestPasswordStore : public PasswordStore {
   // Unused portions of PasswordStore interface
   void ReportMetricsImpl(const std::string& sync_username,
                          bool custom_passphrase_sync_enabled) override;
-  PasswordStoreChangeList RemoveLoginsByOriginAndTimeImpl(
-      const url::Origin& origin,
+  PasswordStoreChangeList RemoveLoginsByURLAndTimeImpl(
+      const base::Callback<bool(const GURL&)>& url_filter,
       base::Time begin,
       base::Time end) override;
   PasswordStoreChangeList RemoveLoginsCreatedBetweenImpl(
@@ -69,7 +69,7 @@ class TestPasswordStore : public PasswordStore {
       ScopedVector<autofill::PasswordForm>* forms) override;
   void AddSiteStatsImpl(const InteractionsStats& stats) override;
   void RemoveSiteStatsImpl(const GURL& origin_domain) override;
-  std::vector<scoped_ptr<InteractionsStats>> GetSiteStatsImpl(
+  std::vector<std::unique_ptr<InteractionsStats>> GetSiteStatsImpl(
       const GURL& origin_domain) override;
 
  private:

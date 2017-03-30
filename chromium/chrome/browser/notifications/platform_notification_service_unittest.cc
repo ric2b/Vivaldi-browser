@@ -300,11 +300,12 @@ TEST_F(PlatformNotificationServiceTest, DisplayNameForContextMessage) {
   scoped_refptr<extensions::Extension> extension =
       extensions::ExtensionBuilder()
           .SetID("honijodknafkokifofgiaalefdiedpko")
-          .SetManifest(std::move(extensions::DictionaryBuilder()
-                                     .Set("name", "NotificationTest")
-                                     .Set("version", "1.0")
-                                     .Set("manifest_version", 2)
-                                     .Set("description", "Test Extension")))
+          .SetManifest(extensions::DictionaryBuilder()
+                           .Set("name", "NotificationTest")
+                           .Set("version", "1.0")
+                           .Set("manifest_version", 2)
+                           .Set("description", "Test Extension")
+                           .Build())
           .Build();
 
   extensions::ExtensionRegistry* registry =
@@ -339,14 +340,15 @@ TEST_F(PlatformNotificationServiceTest, ExtensionPermissionChecks) {
   scoped_refptr<extensions::Extension> extension =
       extensions::ExtensionBuilder()
           .SetManifest(
-              std::move(extensions::DictionaryBuilder()
-                            .Set("name", "NotificationTest")
-                            .Set("version", "1.0")
-                            .Set("manifest_version", 2)
-                            .Set("description", "Test Extension")
-                            .Set("permissions",
-                                 std::move(extensions::ListBuilder().Append(
-                                     "notifications")))))
+              extensions::DictionaryBuilder()
+                  .Set("name", "NotificationTest")
+                  .Set("version", "1.0")
+                  .Set("manifest_version", 2)
+                  .Set("description", "Test Extension")
+                  .Set(
+                      "permissions",
+                      extensions::ListBuilder().Append("notifications").Build())
+                  .Build())
           .Build();
 
   // Install the extension on the faked extension service, and verify that it
@@ -388,11 +390,12 @@ TEST_F(PlatformNotificationServiceTest, CreateNotificationFromData) {
   scoped_refptr<extensions::Extension> extension =
       extensions::ExtensionBuilder()
           .SetID("honijodknafkokifofgiaalefdiedpko")
-          .SetManifest(std::move(extensions::DictionaryBuilder()
-                                     .Set("name", "NotificationTest")
-                                     .Set("version", "1.0")
-                                     .Set("manifest_version", 2)
-                                     .Set("description", "Test Extension")))
+          .SetManifest(extensions::DictionaryBuilder()
+                           .Set("name", "NotificationTest")
+                           .Set("version", "1.0")
+                           .Set("manifest_version", 2)
+                           .Set("description", "Test Extension")
+                           .Build())
           .Build();
 
   extensions::ExtensionRegistry* registry =

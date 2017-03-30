@@ -5,10 +5,10 @@
 #ifndef MOJO_SHELL_PUBLIC_CPP_APPLICATION_TEST_BASE_H_
 #define MOJO_SHELL_PUBLIC_CPP_APPLICATION_TEST_BASE_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "mojo/public/cpp/bindings/array.h"
 #include "mojo/public/cpp/bindings/string.h"
-#include "mojo/public/cpp/system/macros.h"
 #include "mojo/shell/public/cpp/connector.h"
 #include "mojo/shell/public/cpp/shell_client.h"
 #include "mojo/shell/public/cpp/shell_connection.h"
@@ -34,7 +34,9 @@ class TestHelper {
   ~TestHelper();
 
   Connector* connector() { return shell_connection_->connector(); }
-  std::string test_url() { return url_; }
+  const std::string& test_name() { return name_; }
+  const std::string& test_userid() { return userid_; }
+  uint32_t test_instance_id() { return instance_id_; }
 
  private:
   // The application delegate used if GetShellClient is not overridden.
@@ -43,9 +45,11 @@ class TestHelper {
   // The application implementation instance, reconstructed for each test.
   scoped_ptr<ShellConnection> shell_connection_;
 
-  std::string url_;
+  std::string name_;
+  std::string userid_;
+  uint32_t instance_id_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(TestHelper);
+  DISALLOW_COPY_AND_ASSIGN(TestHelper);
 };
 
 // A GTEST base class for application testing executed in mojo_shell.
@@ -58,8 +62,15 @@ class ApplicationTestBase : public testing::Test {
   Connector* connector() {
     return test_helper_ ? test_helper_->connector() : nullptr;
   }
-  std::string test_url() const {
-    return test_helper_ ? test_helper_->test_url() : std::string();
+  const std::string& test_name() const {
+    return test_helper_ ? test_helper_->test_name() : empty_;
+  }
+  const std::string& test_userid() const {
+    return test_helper_ ? test_helper_->test_userid() : inherit_user_id_;
+  }
+  uint32_t test_instance_id() const {
+    return test_helper_ ? test_helper_->test_instance_id() :
+        shell::mojom::kInvalidInstanceID;
   }
 
   // Get the ShellClient for the application to be tested.
@@ -76,8 +87,10 @@ class ApplicationTestBase : public testing::Test {
 
  private:
   scoped_ptr<TestHelper> test_helper_;
+  std::string empty_;
+  std::string inherit_user_id_ = shell::mojom::kInheritUserID;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ApplicationTestBase);
+  DISALLOW_COPY_AND_ASSIGN(ApplicationTestBase);
 };
 
 }  // namespace test

@@ -22,6 +22,12 @@
       "test": "app_list_unittests"
     },
     {
+      "swarming": {
+        "can_use_on_swarming_builders": true
+      },
+      "test": "app_list_shower_unittests"
+    },
+    {
       "chromium_configs": [
         "chromium_chromeos",
         "chromium_chromeos_clang",
@@ -136,6 +142,17 @@
     },
     "device_unittests",
     {
+      "chromium_configs": [
+        "chromium_chromeos",
+        "chromium_chromeos_clang",
+        "chromium_chromeos_ozone"
+      ],
+      "swarming": {
+        "can_use_on_swarming_builders": true
+      },
+      "test": "display_unittests"
+    },
+    {
       "swarming": {
         "can_use_on_swarming_builders": true
       },
@@ -223,9 +240,7 @@
     },
     "mojo_common_unittests",
     "mojo_public_bindings_unittests",
-    "mojo_public_environment_unittests",
     "mojo_public_system_unittests",
-    "mojo_public_utility_unittests",
     "mojo_system_unittests",
     {
       "platforms": [
@@ -299,6 +314,17 @@
         "linux"
       ],
       "test": "ui_chromeos_unittests"
+    },
+    {
+      "chromium_configs": [
+        "chromium_chromeos",
+        "chromium_chromeos_clang",
+        "chromium_chromeos_ozone"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "test": "ui_arc_unittests"
     },
     "url_unittests",
     "skia_unittests",

@@ -44,7 +44,6 @@
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/RefCountedLeakCounter.h"
 
 namespace blink {
 
@@ -60,23 +59,12 @@ int64_t generateFrameID()
     return ++next;
 }
 
-#ifndef NDEBUG
-WTF::RefCountedLeakCounter& frameCounter()
-{
-    DEFINE_STATIC_LOCAL(WTF::RefCountedLeakCounter, staticFrameCounter, ("Frame"));
-    return staticFrameCounter;
-}
-#endif
-
 } // namespace
 
 Frame::~Frame()
 {
     InstanceCounters::decrementCounter(InstanceCounters::FrameCounter);
     ASSERT(!m_owner);
-#ifndef NDEBUG
-    frameCounter().decrement();
-#endif
 }
 
 DEFINE_TRACE(Frame)
@@ -102,7 +90,7 @@ void Frame::detach(FrameDetachType type)
 
 void Frame::detachChildren()
 {
-    typedef WillBeHeapVector<RefPtrWillBeMember<Frame>> FrameVector;
+    typedef HeapVector<Member<Frame>> FrameVector;
     FrameVector childrenToDetach;
     childrenToDetach.reserveCapacity(tree().childCount());
     for (Frame* child = tree().firstChild(); child; child = child->tree().nextSibling())
@@ -114,10 +102,9 @@ void Frame::detachChildren()
 void Frame::disconnectOwnerElement()
 {
     if (m_owner) {
-        if (m_owner->isLocal())
-            toHTMLFrameOwnerElement(m_owner)->clearContentFrame();
+        m_owner->clearContentFrame();
+        m_owner = nullptr;
     }
-    m_owner = nullptr;
 }
 
 Page* Frame::page() const
@@ -155,8 +142,8 @@ HTMLFrameOwnerElement* Frame::deprecatedLocalOwner() const
 
 static ChromeClient& emptyChromeClient()
 {
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<EmptyChromeClient>, client, (EmptyChromeClient::create()));
-    return *client;
+    DEFINE_STATIC_LOCAL(EmptyChromeClient, client, (EmptyChromeClient::create()));
+    return client;
 }
 
 ChromeClient& Frame::chromeClient() const
@@ -183,7 +170,7 @@ static bool canAccessAncestor(const SecurityOrigin& activeSecurityOrigin, const 
 
     const bool isLocalActiveOrigin = activeSecurityOrigin.isLocal();
     for (const Frame* ancestorFrame = targetFrame; ancestorFrame; ancestorFrame = ancestorFrame->tree().parent()) {
-        const SecurityOrigin* ancestorSecurityOrigin = ancestorFrame->securityContext()->securityOrigin();
+        const SecurityOrigin* ancestorSecurityOrigin = ancestorFrame->securityContext()->getSecurityOrigin();
         if (activeSecurityOrigin.canAccess(ancestorSecurityOrigin))
             return true;
 
@@ -221,8 +208,8 @@ bool Frame::canNavigate(const Frame& targetFrame)
         return false;
     }
 
-    ASSERT(securityContext()->securityOrigin());
-    SecurityOrigin& origin = *securityContext()->securityOrigin();
+    ASSERT(securityContext()->getSecurityOrigin());
+    SecurityOrigin& origin = *securityContext()->getSecurityOrigin();
 
     // This is the normal case. A document can navigate its decendant frames,
     // or, more generally, a document can navigate a frame if the document is
@@ -262,7 +249,7 @@ Frame* Frame::findUnsafeParentScrollPropagationBoundary()
     Frame* ancestorFrame = tree().parent();
 
     while (ancestorFrame) {
-        if (!ancestorFrame->securityContext()->securityOrigin()->canAccess(securityContext()->securityOrigin()))
+        if (!ancestorFrame->securityContext()->getSecurityOrigin()->canAccess(securityContext()->getSecurityOrigin()))
             return currentFrame;
         currentFrame = ancestorFrame;
         ancestorFrame = ancestorFrame->tree().parent();
@@ -305,16 +292,10 @@ Frame::Frame(FrameClient* client, FrameHost* host, FrameOwner* owner)
 
     ASSERT(page());
 
-#ifndef NDEBUG
-    frameCounter().increment();
-#endif
-
-    if (m_owner) {
-        if (m_owner->isLocal())
-            toHTMLFrameOwnerElement(m_owner)->setContentFrame(*this);
-    } else {
+    if (m_owner)
+        m_owner->setContentFrame(*this);
+    else
         page()->setMainFrame(this);
-    }
 }
 
 } // namespace blink

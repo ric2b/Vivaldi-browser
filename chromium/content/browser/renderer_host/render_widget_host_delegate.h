@@ -78,11 +78,10 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // the event itself.
   virtual bool HandleWheelEvent(const blink::WebMouseWheelEvent& event);
 
-  // Notification the user has performed a direct interaction (mouse down, mouse
-  // wheel, raw key down, gesture tap, or browser-initiated navigation) while
+  // Notification the user has performed a direct interaction (mouse down,
+  // scroll, raw key down, gesture tap, or browser-initiated navigation) while
   // focus was on the page. Informs the delegate that a user is interacting with
-  // a site. Only the first mouse wheel event during a scroll will trigger this
-  // method.
+  // a site.
   virtual void OnUserInteraction(RenderWidgetHostImpl* render_widget_host,
                                  const blink::WebInputEvent::Type type) {}
 
@@ -168,10 +167,6 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Notification that the widget has lost the mouse lock.
   virtual void LostMouseLock(RenderWidgetHostImpl* render_widget_host) {}
 
-#if defined(OS_WIN)
-  virtual gfx::NativeViewAccessible GetParentNativeViewAccessible();
-#endif
-
   // Called when the widget has sent a compositor proto.  This is used in Btlimp
   // mode with the RemoteChannel compositor.
   virtual void ForwardCompositorProto(RenderWidgetHostImpl* render_widget_host,
@@ -182,6 +177,9 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // will eventually notify all the RenderWidgetHostViews belonging to that
   // WebContents.
   virtual void OnRenderFrameProxyVisibilityChanged(bool visible) {}
+
+  // Update the renderer's cache of the screen rect of the view and window.
+  virtual void SendScreenRects() {}
 
  protected:
   virtual ~RenderWidgetHostDelegate() {}

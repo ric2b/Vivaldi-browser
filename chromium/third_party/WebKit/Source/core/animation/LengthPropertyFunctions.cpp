@@ -10,7 +10,7 @@ namespace blink {
 
 // TODO(alancutter): Generate these functions.
 
-ValueRange LengthPropertyFunctions::valueRange(CSSPropertyID property)
+ValueRange LengthPropertyFunctions::getValueRange(CSSPropertyID property)
 {
     switch (property) {
     case CSSPropertyBorderBottomWidth:
@@ -120,7 +120,7 @@ bool LengthPropertyFunctions::getInitialLength(CSSPropertyID property, Length& r
         return true;
 
     default:
-        return getLength(property, *ComputedStyle::initialStyle(), result);
+        return getLength(property, ComputedStyle::initialStyle(), result);
     }
 }
 
@@ -291,9 +291,9 @@ bool LengthPropertyFunctions::getLength(CSSPropertyID property, const ComputedSt
         result = style.strokeWidth().length();
         return true;
     case CSSPropertyVerticalAlign:
-        if (style.verticalAlign() != LENGTH)
+        if (style.verticalAlign() != VerticalAlignLength)
             return false;
-        result = style.verticalAlignLength();
+        result = style.getVerticalAlignLength();
         return true;
     case CSSPropertyColumnWidth:
         if (style.hasAutoColumnWidth())

@@ -53,7 +53,7 @@ class BASE_EXPORT StackTrace {
   // Creates a stacktrace for an exception.
   // Note: this function will throw an import not found (StackWalk64) exception
   // on system without dbghelp 5.1.
-  StackTrace(const _EXCEPTION_POINTERS* exception_pointers);
+  StackTrace(_EXCEPTION_POINTERS* exception_pointers);
   StackTrace(const _CONTEXT* context);
 #endif
 

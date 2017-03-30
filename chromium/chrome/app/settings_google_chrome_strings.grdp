@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Settings-specific Google Chrome strings (included from google_chrome_strings.grd). -->
 <grit-part>
+  <!-- About Page -->
+  <if expr="chromeos">
+    <message name="IDS_SETTINGS_ABOUT_PROGRAM" desc="Menu title for the About Chrome OS page.">
+      About Chrome OS
+    </message>
+  </if>
+  <if expr="not chromeos">
+    <message name="IDS_SETTINGS_ABOUT_PROGRAM" desc="Menu title for the About Chrome page.">
+      About Chrome
+    </message>
+  </if>
+
   <!-- Default Browser Page -->
   <if expr="not chromeos">
     <message name="IDS_SETTINGS_DEFAULT_BROWSER_DEFAULT" desc="The text displayed when Chrome is not the default browser">
@@ -57,6 +69,13 @@
     </message>
     <message name="IDS_SETTINGS_LANGUAGES_DISPLAY_IN_THIS_LANGUAGE" desc="The label used for a button that changes the UI language.">
       Display Google Chrome in this language
+    </message>
+  </if>
+
+  <!-- System Page -->
+  <if expr="not chromeos">
+    <message name="IDS_SETTINGS_SYSTEM_BACKGROUND_APPS_LABEL" desc="Label for the checkbox to allow apps to run in the background, when Chrome is closed.">
+      Continue running background apps when Google Chrome is closed
     </message>
   </if>
 </grit-part>

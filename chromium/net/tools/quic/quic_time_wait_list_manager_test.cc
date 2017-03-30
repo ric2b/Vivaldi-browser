@@ -94,7 +94,7 @@ class MockFakeTimeEpollServer : public FakeTimeEpollServer {
 class QuicTimeWaitListManagerTest : public ::testing::Test {
  protected:
   QuicTimeWaitListManagerTest()
-      : helper_(&epoll_server_),
+      : helper_(&epoll_server_, QuicAllocator::BUFFER_POOL),
         time_wait_list_manager_(&writer_, &visitor_, &helper_),
         connection_id_(45),
         client_address_(net::test::TestPeerIPAddress(), kTestPort),
@@ -218,6 +218,21 @@ TEST_F(QuicTimeWaitListManagerTest, CheckStatelessConnectionIdInTimeWait) {
   EXPECT_TRUE(IsConnectionIdInTimeWait(connection_id_));
 }
 
+TEST_F(QuicTimeWaitListManagerTest, SendVersionNegotiationPacket) {
+  scoped_ptr<QuicEncryptedPacket> packet(
+      QuicFramer::BuildVersionNegotiationPacket(connection_id_,
+                                                QuicSupportedVersions()));
+  EXPECT_CALL(writer_,
+              WritePacket(_, packet->length(), server_address_.address(),
+                          client_address_, _))
+      .WillOnce(Return(WriteResult(WRITE_STATUS_OK, 1)));
+
+  time_wait_list_manager_.SendVersionNegotiationPacket(
+      connection_id_, QuicSupportedVersions(), server_address_,
+      client_address_);
+  EXPECT_EQ(0u, time_wait_list_manager_.num_connections());
+}
+
 TEST_F(QuicTimeWaitListManagerTest, SendConnectionClose) {
   const size_t kConnectionCloseLength = 100;
   EXPECT_CALL(visitor_, OnConnectionAddedToTimeWaitList(connection_id_));
@@ -263,8 +278,7 @@ TEST_F(QuicTimeWaitListManagerTest, SendPublicReset) {
   const int kRandomSequenceNumber = 1;
   EXPECT_CALL(writer_,
               WritePacket(_, _, server_address_.address(), client_address_, _))
-      .With(Args<0, 1>(
-          PublicResetPacketEq(connection_id_, kRandomSequenceNumber)))
+      .With(Args<0, 1>(PublicResetPacketEq(connection_id_, 0)))
       .WillOnce(Return(WriteResult(WRITE_STATUS_OK, 0)));
 
   ProcessPacket(connection_id_, kRandomSequenceNumber);
@@ -365,14 +379,14 @@ TEST_F(QuicTimeWaitListManagerTest, SendQueuedPackets) {
   // Let first write through.
   EXPECT_CALL(writer_,
               WritePacket(_, _, server_address_.address(), client_address_, _))
-      .With(Args<0, 1>(PublicResetPacketEq(connection_id, packet_number)))
+      .With(Args<0, 1>(PublicResetPacketEq(connection_id, 0)))
       .WillOnce(Return(WriteResult(WRITE_STATUS_OK, packet->length())));
   ProcessPacket(connection_id, packet_number);
 
   // write block for the next packet.
   EXPECT_CALL(writer_,
               WritePacket(_, _, server_address_.address(), client_address_, _))
-      .With(Args<0, 1>(PublicResetPacketEq(connection_id, packet_number)))
+      .With(Args<0, 1>(PublicResetPacketEq(connection_id, 0)))
       .WillOnce(DoAll(Assign(&writer_is_blocked_, true),
                       Return(WriteResult(WRITE_STATUS_BLOCKED, EAGAIN))));
   EXPECT_CALL(visitor_, OnWriteBlocked(&time_wait_list_manager_));
@@ -397,12 +411,11 @@ TEST_F(QuicTimeWaitListManagerTest, SendQueuedPackets) {
   writer_is_blocked_ = false;
   EXPECT_CALL(writer_,
               WritePacket(_, _, server_address_.address(), client_address_, _))
-      .With(Args<0, 1>(PublicResetPacketEq(connection_id, packet_number)))
+      .With(Args<0, 1>(PublicResetPacketEq(connection_id, 0)))
       .WillOnce(Return(WriteResult(WRITE_STATUS_OK, packet->length())));
   EXPECT_CALL(writer_,
               WritePacket(_, _, server_address_.address(), client_address_, _))
-      .With(Args<0, 1>(
-          PublicResetPacketEq(other_connection_id, other_packet_number)))
+      .With(Args<0, 1>(PublicResetPacketEq(other_connection_id, 0)))
       .WillOnce(Return(WriteResult(WRITE_STATUS_OK, other_packet->length())));
   time_wait_list_manager_.OnCanWrite();
 }

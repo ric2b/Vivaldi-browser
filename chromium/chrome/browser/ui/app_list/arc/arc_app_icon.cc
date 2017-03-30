@@ -10,18 +10,21 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/task_runner_util.h"
 #include "chrome/browser/image_decoder.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/grit/extensions_browser_resources.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_skia_source.h"
 
 namespace {
 
-bool g_disable_decoding = false;
+bool disable_safe_decoding = false;
 
 }  // namespace
 
@@ -59,7 +62,7 @@ struct ArcAppIcon::ReadResult {
 
 class ArcAppIcon::Source : public gfx::ImageSkiaSource {
  public:
-  explicit Source(const base::WeakPtr<ArcAppIcon>& host);
+  Source(const base::WeakPtr<ArcAppIcon>& host, int resource_size_in_dip);
   ~Source() override;
 
  private:
@@ -70,11 +73,15 @@ class ArcAppIcon::Source : public gfx::ImageSkiaSource {
   // destroyed.
   base::WeakPtr<ArcAppIcon> host_;
 
+  const int resource_size_in_dip_;
+
   DISALLOW_COPY_AND_ASSIGN(Source);
 };
 
-ArcAppIcon::Source::Source(const base::WeakPtr<ArcAppIcon>& host)
-    : host_(host) {
+ArcAppIcon::Source::Source(const base::WeakPtr<ArcAppIcon>& host,
+                           int resource_size_in_dip)
+    : host_(host),
+      resource_size_in_dip_(resource_size_in_dip) {
 }
 
 ArcAppIcon::Source::~Source() {
@@ -88,8 +95,11 @@ gfx::ImageSkiaRep ArcAppIcon::Source::GetImageForScale(float scale) {
   const gfx::ImageSkia* default_image = ResourceBundle::GetSharedInstance().
       GetImageSkiaNamed(IDR_APP_DEFAULT_ICON);
   CHECK(default_image);
-
-  return default_image->GetRepresentation(scale);
+  return gfx::ImageSkiaOperations::CreateResizedImage(
+      *default_image,
+      skia::ImageOperations::RESIZE_BEST,
+      gfx::Size(resource_size_in_dip_, resource_size_in_dip_)).
+          GetRepresentation(scale);
 }
 
 class ArcAppIcon::DecodeRequest : public ImageDecoder::ImageRequest {
@@ -162,8 +172,8 @@ void ArcAppIcon::DecodeRequest::OnDecodeImageFailed() {
 // ArcAppIcon
 
 // static
-void ArcAppIcon::DisableDecodingForTesting() {
-  g_disable_decoding = true;
+void ArcAppIcon::DisableSafeDecodingForTesting() {
+  disable_safe_decoding = true;
 }
 
 ArcAppIcon::ArcAppIcon(content::BrowserContext* context,
@@ -176,7 +186,7 @@ ArcAppIcon::ArcAppIcon(content::BrowserContext* context,
       observer_(observer),
       weak_ptr_factory_(this) {
   CHECK(observer_ != nullptr);
-  source_ = new Source(weak_ptr_factory_.GetWeakPtr());
+  source_ = new Source(weak_ptr_factory_.GetWeakPtr(), resource_size_in_dip);
   gfx::Size resource_size(resource_size_in_dip, resource_size_in_dip);
   image_skia_ = gfx::ImageSkia(source_, resource_size);
 }
@@ -211,38 +221,51 @@ void ArcAppIcon::RequestIcon(ui::ScaleFactor scale_factor) {
 }
 
 // static
-scoped_ptr<ArcAppIcon::ReadResult> ArcAppIcon::ReadOnFileThread(
+std::unique_ptr<ArcAppIcon::ReadResult> ArcAppIcon::ReadOnFileThread(
     ui::ScaleFactor scale_factor,
     const base::FilePath& path) {
   DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
   DCHECK(!path.empty());
 
   if (!base::PathExists(path))
-    return make_scoped_ptr(new ArcAppIcon::ReadResult(
+    return base::WrapUnique(new ArcAppIcon::ReadResult(
         ArcAppIcon::ReadResult::Status::REQUEST_TO_INSTALL, scale_factor));
 
   // Read the file from disk.
   std::string unsafe_icon_data;
   if (!base::ReadFileToString(path, &unsafe_icon_data)) {
     VLOG(2) << "Failed to read an ARC icon from file " << path.MaybeAsASCII();
-    return make_scoped_ptr(new ArcAppIcon::ReadResult(
+    return base::WrapUnique(new ArcAppIcon::ReadResult(
         ArcAppIcon::ReadResult::Status::FAIL, scale_factor));
   }
 
-  return make_scoped_ptr(new ArcAppIcon::ReadResult(scale_factor,
-                                                    unsafe_icon_data));
+  return base::WrapUnique(
+      new ArcAppIcon::ReadResult(scale_factor, unsafe_icon_data));
 }
 
-void ArcAppIcon::OnIconRead(scoped_ptr<ArcAppIcon::ReadResult> read_result) {
+void ArcAppIcon::OnIconRead(
+    std::unique_ptr<ArcAppIcon::ReadResult> read_result) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   switch (read_result->status) {
   case ReadResult::Status::OK:
-    if (!g_disable_decoding) {
-      decode_requests_.push_back(
-          new DecodeRequest(weak_ptr_factory_.GetWeakPtr(),
-                            resource_size_in_dip_,
-                            read_result->scale_factor));
+    decode_requests_.push_back(
+        new DecodeRequest(weak_ptr_factory_.GetWeakPtr(),
+                          resource_size_in_dip_,
+                          read_result->scale_factor));
+    if (disable_safe_decoding) {
+      SkBitmap bitmap;
+      if (!read_result->unsafe_icon_data.empty() &&
+          gfx::PNGCodec::Decode(
+              reinterpret_cast<const unsigned char*>(
+                  &read_result->unsafe_icon_data.front()),
+              read_result->unsafe_icon_data.length(),
+              &bitmap)) {
+        decode_requests_.back()->OnImageDecoded(bitmap);
+      } else {
+        decode_requests_.back()->OnDecodeImageFailed();
+     }
+    } else {
       ImageDecoder::Start(decode_requests_.back(),
                           read_result->unsafe_icon_data);
     }

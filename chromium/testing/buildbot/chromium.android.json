@@ -21,30 +21,6 @@
             }
           ]
         },
-        "test": "android_webview_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "base_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
         "test": "breakpad_unittests"
       },
       {
@@ -57,223 +33,7 @@
             }
           ]
         },
-        "test": "cc_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "components_browsertests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "components_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
         "test": "content_browsertests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "content_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "device_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "events_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "gl_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "gl_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "gpu_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "ipc_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "media_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "net_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "sql_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "sync_unit_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "ui_android_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "ui_base_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "ui_touch_selection_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ]
-        },
-        "test": "unit_tests"
       }
     ]
   },
@@ -402,6 +162,15 @@
         ],
         "test": "blimp_test_apk",
         "test_apk": "BlimpTest.apk"
+      },
+      {
+        "test": "chrome_public_test_apk"
+      },
+      {
+        "test": "chrome_sync_shell_test_apk"
+      },
+      {
+        "test": "content_shell_test_apk"
       }
     ]
   },
@@ -524,12 +293,24 @@
     ],
     "instrumentation_tests": [
       {
+        "test": "android_webview_test_apk"
+      },
+      {
         "apk_under_test": "Blimp.apk",
         "override_compile_targets": [
           "blimp_test_apk"
         ],
         "test": "blimp_test_apk",
         "test_apk": "BlimpTest.apk"
+      },
+      {
+        "test": "chrome_public_test_apk"
+      },
+      {
+        "test": "chrome_sync_shell_test_apk"
+      },
+      {
+        "test": "content_shell_test_apk"
       }
     ]
   },
@@ -652,12 +433,24 @@
     ],
     "instrumentation_tests": [
       {
+        "test": "android_webview_test_apk"
+      },
+      {
         "apk_under_test": "Blimp.apk",
         "override_compile_targets": [
           "blimp_test_apk"
         ],
         "test": "blimp_test_apk",
         "test_apk": "BlimpTest.apk"
+      },
+      {
+        "test": "chrome_public_test_apk"
+      },
+      {
+        "test": "chrome_sync_shell_test_apk"
+      },
+      {
+        "test": "content_shell_test_apk"
       }
     ]
   },
@@ -780,12 +573,24 @@
     ],
     "instrumentation_tests": [
       {
+        "test": "android_webview_test_apk"
+      },
+      {
         "apk_under_test": "Blimp.apk",
         "override_compile_targets": [
           "blimp_test_apk"
         ],
         "test": "blimp_test_apk",
         "test_apk": "BlimpTest.apk"
+      },
+      {
+        "test": "chrome_public_test_apk"
+      },
+      {
+        "test": "chrome_sync_shell_test_apk"
+      },
+      {
+        "test": "content_shell_test_apk"
       }
     ]
   },
@@ -908,12 +713,24 @@
     ],
     "instrumentation_tests": [
       {
+        "test": "android_webview_test_apk"
+      },
+      {
         "apk_under_test": "Blimp.apk",
         "override_compile_targets": [
           "blimp_test_apk"
         ],
         "test": "blimp_test_apk",
         "test_apk": "BlimpTest.apk"
+      },
+      {
+        "test": "chrome_public_test_apk"
+      },
+      {
+        "test": "chrome_sync_shell_test_apk"
+      },
+      {
+        "test": "content_shell_test_apk"
       }
     ]
   },
@@ -1036,12 +853,24 @@
     ],
     "instrumentation_tests": [
       {
+        "test": "android_webview_test_apk"
+      },
+      {
         "apk_under_test": "Blimp.apk",
         "override_compile_targets": [
           "blimp_test_apk"
         ],
         "test": "blimp_test_apk",
         "test_apk": "BlimpTest.apk"
+      },
+      {
+        "test": "chrome_public_test_apk"
+      },
+      {
+        "test": "chrome_sync_shell_test_apk"
+      },
+      {
+        "test": "content_shell_test_apk"
       }
     ]
   },
@@ -1066,6 +895,9 @@
         "test": "blink_heap_unittests"
       },
       {
+        "args": [
+          "--isolate_file_path=src/third_party/WebKit/Source/platform/blink_platform_unittests.isolate"
+        ],
         "test": "blink_platform_unittests"
       },
       {
@@ -1173,12 +1005,24 @@
     ],
     "instrumentation_tests": [
       {
+        "test": "android_webview_test_apk"
+      },
+      {
         "apk_under_test": "Blimp.apk",
         "override_compile_targets": [
           "blimp_test_apk"
         ],
         "test": "blimp_test_apk",
         "test_apk": "BlimpTest.apk"
+      },
+      {
+        "test": "chrome_public_test_apk"
+      },
+      {
+        "test": "chrome_sync_shell_test_apk"
+      },
+      {
+        "test": "content_shell_test_apk"
       }
     ]
   },
@@ -1301,12 +1145,24 @@
     ],
     "instrumentation_tests": [
       {
+        "test": "android_webview_test_apk"
+      },
+      {
         "apk_under_test": "Blimp.apk",
         "override_compile_targets": [
           "blimp_test_apk"
         ],
         "test": "blimp_test_apk",
         "test_apk": "BlimpTest.apk"
+      },
+      {
+        "test": "chrome_public_test_apk"
+      },
+      {
+        "test": "chrome_sync_shell_test_apk"
+      },
+      {
+        "test": "content_shell_test_apk"
       }
     ]
   }

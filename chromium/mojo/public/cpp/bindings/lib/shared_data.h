@@ -5,10 +5,9 @@
 #ifndef MOJO_PUBLIC_CPP_BINDINGS_LIB_SHARED_DATA_H_
 #define MOJO_PUBLIC_CPP_BINDINGS_LIB_SHARED_DATA_H_
 
-#include <assert.h>
-
+#include "base/logging.h"
+#include "base/macros.h"
 #include "base/threading/thread_checker.h"
-#include "mojo/public/cpp/system/macros.h"
 
 namespace mojo {
 namespace internal {
@@ -82,11 +81,11 @@ class SharedData {
     Holder(const T& value) : value(value), ref_count_(1) {}
 
     void Retain() {
-      assert(thread_checker_.CalledOnValidThread());
+      DCHECK(thread_checker_.CalledOnValidThread());
       ++ref_count_;
     }
     void Release() {
-      assert(thread_checker_.CalledOnValidThread());
+      DCHECK(thread_checker_.CalledOnValidThread());
       if (--ref_count_ == 0)
         delete this;
     }
@@ -96,7 +95,7 @@ class SharedData {
    private:
     int ref_count_;
     base::ThreadChecker thread_checker_;
-    MOJO_DISALLOW_COPY_AND_ASSIGN(Holder);
+    DISALLOW_COPY_AND_ASSIGN(Holder);
   };
 
   void LazyInit() const {

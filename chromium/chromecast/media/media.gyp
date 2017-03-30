@@ -35,6 +35,7 @@
       'type': '<(component)',
       'dependencies': [
         '../../media/media.gyp:media',
+        'cma_backend_manager',
       ],
       'sources': [
         'audio/cast_audio_manager.cc',
@@ -67,6 +68,8 @@
         'base/media_codec_support.h',
         'base/media_message_loop.cc',
         'base/media_message_loop.h',
+        'base/media_resource_tracker.cc',
+        'base/media_resource_tracker.h',
         'base/video_plane_controller.cc',
         'base/video_plane_controller.h',
       ],
@@ -95,14 +98,6 @@
         'cdm/browser_cdm_cast.h',
         'cdm/chromecast_init_data.cc',
         'cdm/chromecast_init_data.h',
-      ],
-      'conditions': [
-        ['use_playready==1', {
-          'sources': [
-            'cdm/playready_drm_delegate_android.cc',
-            'cdm/playready_drm_delegate_android.h',
-          ],
-        }],
       ],
     },
     {
@@ -163,6 +158,24 @@
       ],
     },
     {
+      'target_name': 'cma_backend_manager',
+      'type': '<(component)',
+      'dependencies': [
+        '../../base/base.gyp:base',
+      ],
+      'include_dirs': [
+        '../..',
+      ],
+      'sources': [
+        'cma/backend/audio_decoder_wrapper.cc',
+        'cma/backend/audio_decoder_wrapper.h',
+        'cma/backend/media_pipeline_backend_manager.cc',
+        'cma/backend/media_pipeline_backend_manager.h',
+        'cma/backend/media_pipeline_backend_wrapper.cc',
+        'cma/backend/media_pipeline_backend_wrapper.h',
+      ],
+    },
+    {
       'target_name': 'cma_decoder',
       'type': '<(component)',
       'dependencies': [
@@ -210,6 +223,8 @@
         'cma/ipc_streamer/decoder_buffer_base_marshaller.h',
         'cma/ipc_streamer/decrypt_config_marshaller.cc',
         'cma/ipc_streamer/decrypt_config_marshaller.h',
+        'cma/ipc_streamer/encryption_scheme_marshaller.cc',
+        'cma/ipc_streamer/encryption_scheme_marshaller.h',
         'cma/ipc_streamer/video_decoder_config_marshaller.cc',
         'cma/ipc_streamer/video_decoder_config_marshaller.h',
       ],
@@ -280,6 +295,7 @@
       ],
       'sources': [
         'audio/cast_audio_output_stream_unittest.cc',
+        'base/media_resource_tracker_unittest.cc',
         'cdm/chromecast_init_data_unittest.cc',
         'cma/backend/audio_video_pipeline_device_unittest.cc',
         'cma/base/balanced_media_task_runner_unittest.cc',
@@ -301,6 +317,33 @@
         'cma/test/mock_frame_consumer.h',
         'cma/test/mock_frame_provider.cc',
         'cma/test/mock_frame_provider.h',
+        'cma/test/run_all_unittests.cc',
+      ],
+      'conditions': [
+        ['chromecast_branding=="public"', {
+          'dependencies': [
+            # Link default libcast_media_1.0 statically not to link dummy one
+            # dynamically for public unittests.
+            'libcast_media_1.0_default_core',
+          ],
+        }],
+      ],
+    },
+    {
+      'target_name': 'cast_multizone_backend_unittests',
+      'type': '<(gtest_target_type)',
+      'dependencies': [
+        'cast_media',
+        '../../base/base.gyp:base',
+        '../../base/base.gyp:test_support_base',
+        '../../chromecast/chromecast.gyp:cast_metrics_test_support',
+        '../../media/media.gyp:media_test_support',
+        '../../testing/gmock.gyp:gmock',
+        '../../testing/gtest.gyp:gtest',
+        '../../testing/gtest.gyp:gtest_main',
+      ],
+      'sources': [
+        'cma/backend/multizone_backend_unittest.cc',
         'cma/test/run_all_unittests.cc',
       ],
       'conditions': [

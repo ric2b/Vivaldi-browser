@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/metrics/statistics_recorder.h"
+
 #include <stddef.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/json/json_reader.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/histogram_persistence.h"
+#include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/sparse_histogram.h"
-#include "base/metrics/statistics_recorder.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -23,7 +24,7 @@ class StatisticsRecorderTest : public testing::Test {
   void SetUp() override {
     // Get this first so it never gets created in persistent storage and will
     // not appear in the StatisticsRecorder after it is re-initialized.
-    GetCreateHistogramResultHistogram();
+    PersistentHistogramAllocator::GetCreateHistogramResultHistogram();
     // Each test will have a clean state (no Histogram / BucketRanges
     // registered).
     InitializeStatisticsRecorder();
@@ -31,16 +32,18 @@ class StatisticsRecorderTest : public testing::Test {
 
   void TearDown() override {
     UninitializeStatisticsRecorder();
-    delete ReleasePersistentHistogramMemoryAllocatorForTesting();
+    GlobalHistogramAllocator::ReleaseForTesting();
   }
 
   void InitializeStatisticsRecorder() {
-    statistics_recorder_ = new StatisticsRecorder();
+    DCHECK(!statistics_recorder_);
+    StatisticsRecorder::UninitializeForTesting();
+    statistics_recorder_.reset(new StatisticsRecorder());
   }
 
   void UninitializeStatisticsRecorder() {
-    delete statistics_recorder_;
-    statistics_recorder_ = NULL;
+    statistics_recorder_.reset();
+    StatisticsRecorder::UninitializeForTesting();
   }
 
   Histogram* CreateHistogram(const std::string& name,
@@ -58,7 +61,7 @@ class StatisticsRecorderTest : public testing::Test {
     delete histogram;
   }
 
-  StatisticsRecorder* statistics_recorder_;
+  std::unique_ptr<StatisticsRecorder> statistics_recorder_;
 };
 
 TEST_F(StatisticsRecorderTest, NotInitialized) {
@@ -272,7 +275,7 @@ TEST_F(StatisticsRecorderTest, ToJSON) {
   std::string json(StatisticsRecorder::ToJSON(std::string()));
 
   // Check for valid JSON.
-  scoped_ptr<Value> root = JSONReader::Read(json);
+  std::unique_ptr<Value> root = JSONReader::Read(json);
   ASSERT_TRUE(root.get());
 
   DictionaryValue* root_dict = NULL;
@@ -325,8 +328,7 @@ TEST_F(StatisticsRecorderTest, ToJSON) {
 TEST_F(StatisticsRecorderTest, IterationTest) {
   StatisticsRecorder::Histograms registered_histograms;
   LOCAL_HISTOGRAM_COUNTS("TestHistogram.IterationTest1", 30);
-  SetPersistentHistogramMemoryAllocator(
-      new LocalPersistentMemoryAllocator(64 << 10, 0, std::string()));
+  GlobalHistogramAllocator::CreateWithLocalMemory(64 << 10 /* 64 KiB */, 0, "");
   LOCAL_HISTOGRAM_COUNTS("TestHistogram.IterationTest2", 30);
 
   StatisticsRecorder::HistogramIterator i1 = StatisticsRecorder::begin(true);

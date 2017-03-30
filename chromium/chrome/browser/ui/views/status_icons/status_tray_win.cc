@@ -6,6 +6,8 @@
 
 #include <commctrl.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -229,8 +231,8 @@ UINT StatusTrayWin::NextIconId() {
 }
 
 void StatusTrayWin::SetStatusTrayStateChangerProxyForTest(
-    scoped_ptr<StatusTrayStateChangerProxy> proxy) {
-  state_changer_proxy_ = proxy.Pass();
+    std::unique_ptr<StatusTrayStateChangerProxy> proxy) {
+  state_changer_proxy_ = std::move(proxy);
 }
 
 StatusTray* StatusTray::Create() {

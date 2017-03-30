@@ -26,8 +26,8 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<CSSValueList> createBorderImageValue(PassRefPtrWillBeRawPtr<CSSValue> image, PassRefPtrWillBeRawPtr<CSSValue> imageSlice, PassRefPtrWillBeRawPtr<CSSValue> borderSlice,
-    PassRefPtrWillBeRawPtr<CSSValue> outset, PassRefPtrWillBeRawPtr<CSSValue> repeat);
+CSSValueList* createBorderImageValue(CSSValue* image, CSSValue* imageSlice, CSSValue* borderSlice,
+    CSSValue* outset, CSSValue* repeat);
 
 } // namespace blink
 

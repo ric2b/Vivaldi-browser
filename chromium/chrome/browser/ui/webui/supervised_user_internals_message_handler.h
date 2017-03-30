@@ -10,6 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/supervised_user/supervised_user_service_observer.h"
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
+#include "components/supervised_user_error_page/supervised_user_error_page.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
 namespace base {
@@ -44,18 +45,20 @@ class SupervisedUserInternalsMessageHandler
   void SendBasicInfo();
   void SendSupervisedUserSettings(const base::DictionaryValue* settings);
 
-  void OnTryURLResult(const std::map<std::string, base::string16>& whitelists,
-                      SupervisedUserURLFilter::FilteringBehavior behavior,
-                      SupervisedUserURLFilter::FilteringBehaviorReason reason,
-                      bool uncertain);
+  void OnTryURLResult(
+      const std::map<std::string, base::string16>& whitelists,
+      SupervisedUserURLFilter::FilteringBehavior behavior,
+      supervised_user_error_page::FilteringBehaviorReason reason,
+      bool uncertain);
 
   void OnURLChecked(const GURL& url,
                     SupervisedUserURLFilter::FilteringBehavior behavior,
-                    SupervisedUserURLFilter::FilteringBehaviorReason reason,
+                    supervised_user_error_page::FilteringBehaviorReason reason,
                     bool uncertain);
 
-  scoped_ptr<base::CallbackList<void(
-      const base::DictionaryValue*)>::Subscription> user_settings_subscription_;
+  std::unique_ptr<
+      base::CallbackList<void(const base::DictionaryValue*)>::Subscription>
+      user_settings_subscription_;
 
   scoped_refptr<IOThreadHelper> io_thread_helper_;
 

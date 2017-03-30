@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/test/base/test_browser_window.h"
 #include "extensions/browser/api/management/management_api.h"
 #include "extensions/browser/api/management/management_api_constants.h"
@@ -29,12 +30,14 @@ namespace extensions {
 
 namespace {
 
-scoped_ptr<KeyedService> BuildManagementApi(content::BrowserContext* context) {
-  return make_scoped_ptr(new ManagementAPI(context));
+std::unique_ptr<KeyedService> BuildManagementApi(
+    content::BrowserContext* context) {
+  return base::WrapUnique(new ManagementAPI(context));
 }
 
-scoped_ptr<KeyedService> BuildEventRouter(content::BrowserContext* profile) {
-  return make_scoped_ptr(
+std::unique_ptr<KeyedService> BuildEventRouter(
+    content::BrowserContext* profile) {
+  return base::WrapUnique(
       new extensions::EventRouter(profile, ExtensionPrefs::Get(profile)));
 }
 
@@ -62,8 +65,8 @@ class ManagementApiUnitTest : public ExtensionServiceTestBase {
   void TearDown() override;
 
   // The browser (and accompanying window).
-  scoped_ptr<TestBrowserWindow> browser_window_;
-  scoped_ptr<Browser> browser_;
+  std::unique_ptr<TestBrowserWindow> browser_window_;
+  std::unique_ptr<Browser> browser_;
 
   DISALLOW_COPY_AND_ASSIGN(ManagementApiUnitTest);
 };
@@ -72,9 +75,7 @@ bool ManagementApiUnitTest::RunFunction(
     const scoped_refptr<UIThreadExtensionFunction>& function,
     const base::ListValue& args) {
   return extension_function_test_utils::RunFunction(
-      function.get(),
-      make_scoped_ptr(args.DeepCopy()),
-      browser(),
+      function.get(), base::WrapUnique(args.DeepCopy()), browser(),
       extension_function_test_utils::NONE);
 }
 
@@ -199,7 +200,7 @@ TEST_F(ManagementApiUnitTest, DISABLED_ManagementUninstall) {
               function->GetError());
 
     // Try again, using showConfirmDialog: false.
-    scoped_ptr<base::DictionaryValue> options(new base::DictionaryValue());
+    std::unique_ptr<base::DictionaryValue> options(new base::DictionaryValue());
     options->SetBoolean("showConfirmDialog", false);
     uninstall_args.Append(options.release());
     function = new ManagementUninstallFunction();

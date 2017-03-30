@@ -57,7 +57,6 @@ const char kZoomSettingsScope[] = "scope";
 const char kExtDataKey[] = "extData";
 const char kLastActiveTimeKey[] = "lastActiveTime";
 const char kWindowExtDataKey[] = "extData";
-const char kDiscardedKey[] = "discarded";
 
 const char kShowStateValueNormal[] = "normal";
 const char kShowStateValueMinimized[] = "minimized";

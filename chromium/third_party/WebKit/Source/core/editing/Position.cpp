@@ -30,15 +30,14 @@
 #include "core/editing/TextAffinity.h"
 #include "wtf/text/CString.h"
 #include <stdio.h>
+#include <ostream> // NOLINT
 
 namespace blink {
 
 #if ENABLE(ASSERT)
 static bool canBeAnchorNode(Node* node)
 {
-    if (!node || node->isFirstLetterPseudoElement())
-        return true;
-    return !node->isPseudoElement();
+    return !node || !node->isPseudoElement();
 }
 #endif
 
@@ -52,7 +51,7 @@ const TreeScope* PositionTemplate<Strategy>::commonAncestorTreeScope(const Posit
 
 
 template <typename Strategy>
-PositionTemplate<Strategy> PositionTemplate<Strategy>::editingPositionOf(PassRefPtrWillBeRawPtr<Node> anchorNode, int offset)
+PositionTemplate<Strategy> PositionTemplate<Strategy>::editingPositionOf(RawPtr<Node> anchorNode, int offset)
 {
     if (!anchorNode || anchorNode->isTextNode())
         return PositionTemplate<Strategy>(anchorNode, offset);
@@ -70,7 +69,7 @@ PositionTemplate<Strategy> PositionTemplate<Strategy>::editingPositionOf(PassRef
 }
 
 template <typename Strategy>
-PositionTemplate<Strategy>::PositionTemplate(PassRefPtrWillBeRawPtr<Node> anchorNode, PositionAnchorType anchorType)
+PositionTemplate<Strategy>::PositionTemplate(RawPtr<Node> anchorNode, PositionAnchorType anchorType)
     : m_anchorNode(anchorNode)
     , m_offset(0)
     , m_anchorType(anchorType)
@@ -83,12 +82,18 @@ PositionTemplate<Strategy>::PositionTemplate(PassRefPtrWillBeRawPtr<Node> anchor
         ASSERT(m_anchorType == PositionAnchorType::BeforeAnchor || m_anchorType == PositionAnchorType::AfterAnchor);
         return;
     }
+    if (m_anchorNode->isDocumentNode()) {
+        // Since |RangeBoundaryPoint| can't represent before/after Document, we
+        // should not use them.
+        DCHECK(isBeforeChildren() || isAfterChildren()) << m_anchorType;
+        return;
+    }
     ASSERT(canBeAnchorNode(m_anchorNode.get()));
     ASSERT(m_anchorType != PositionAnchorType::OffsetInAnchor);
 }
 
 template <typename Strategy>
-PositionTemplate<Strategy>::PositionTemplate(PassRefPtrWillBeRawPtr<Node> anchorNode, int offset)
+PositionTemplate<Strategy>::PositionTemplate(RawPtr<Node> anchorNode, int offset)
     : m_anchorNode(anchorNode)
     , m_offset(offset)
     , m_anchorType(PositionAnchorType::OffsetInAnchor)
@@ -524,6 +529,45 @@ void PositionTemplate<Strategy>::showTreeForThisInFlatTree() const
 }
 
 #endif
+
+template <typename PositionType>
+static std::ostream& printPosition(std::ostream& ostream, const PositionType& position)
+{
+    if (position.isNull())
+        return ostream << "null";
+    ostream << position.anchorNode() << "@";
+    if (position.isOffsetInAnchor())
+        return ostream << position.offsetInContainerNode();
+    return ostream << position.anchorType();
+}
+
+std::ostream& operator<<(std::ostream& ostream, PositionAnchorType anchorType)
+{
+    switch (anchorType) {
+    case PositionAnchorType::AfterAnchor:
+        return ostream << "afterAnchor";
+    case PositionAnchorType::AfterChildren:
+        return ostream << "afterChildren";
+    case PositionAnchorType::BeforeAnchor:
+        return ostream << "beforeAnchor";
+    case PositionAnchorType::BeforeChildren:
+        return ostream << "beforeChildren";
+    case PositionAnchorType::OffsetInAnchor:
+        return ostream << "offsetInAnchor";
+    }
+    NOTREACHED();
+    return ostream << "anchorType=" << static_cast<int>(anchorType);
+}
+
+std::ostream& operator<<(std::ostream& ostream, const Position& position)
+{
+    return printPosition(ostream, position);
+}
+
+std::ostream& operator<<(std::ostream& ostream, const PositionInFlatTree& position)
+{
+    return printPosition(ostream, position);
+}
 
 template class CORE_TEMPLATE_EXPORT PositionTemplate<EditingStrategy>;
 template class CORE_TEMPLATE_EXPORT PositionTemplate<EditingInFlatTreeStrategy>;

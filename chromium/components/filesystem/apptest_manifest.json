@@ -1,5 +1,0 @@
-{
-  "url": "mojo://filesystem_apptests/",
-  "name": "File System Service Apptests",
-  "capabilities": { "*": [ "*" ] }
-}

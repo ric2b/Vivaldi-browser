@@ -26,14 +26,13 @@
 #include "bindings/core/v8/SharedPersistent.h"
 #include "core/CoreExport.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include <v8.h>
+#include "core/layout/api/LayoutEmbeddedItem.h"
 
-struct NPObject;
+#include <v8.h>
 
 namespace blink {
 
 class HTMLImageLoader;
-class LayoutEmbeddedObject;
 class LayoutPart;
 class Widget;
 
@@ -48,10 +47,10 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
     void resetInstance();
+    // TODO(dcheng): Consider removing this, since HTMLEmbedElementLegacyCall
+    // and HTMLObjectElementLegacyCall usage is extremely low.
     SharedPersistent<v8::Object>* pluginWrapper();
     Widget* pluginWidget() const;
-    NPObject* getNPObject();
-    void setPluginFocus(bool focused);
     bool canProcessDrag() const;
     const String& url() const { return m_url; }
 
@@ -85,7 +84,7 @@ protected:
 
     bool isImageType();
     bool shouldPreferPlugInsForImages() const { return m_shouldPreferPlugInsForImages; }
-    LayoutEmbeddedObject* layoutEmbeddedObject() const;
+    LayoutEmbeddedItem layoutEmbeddedItem() const;
     bool allowedToLoadFrameURL(const String& url);
     bool requestObject(const String& url, const String& mimeType, const Vector<String>& paramNames, const Vector<String>& paramValues);
     bool shouldUsePlugin(const KURL&, const String& mimeType, bool hasFallback, bool& useFallback);
@@ -96,7 +95,7 @@ protected:
     String m_serviceType;
     String m_url;
     KURL m_loadedUrl;
-    OwnPtrWillBeMember<HTMLImageLoader> m_imageLoader;
+    Member<HTMLImageLoader> m_imageLoader;
     bool m_isDelayingLoadEvent;
 
 private:
@@ -139,7 +138,6 @@ private:
     void setPersistedPluginWidget(Widget*);
 
     mutable RefPtr<SharedPersistent<v8::Object>> m_pluginWrapper;
-    NPObject* m_NPObject;
     bool m_needsWidgetUpdate;
     bool m_shouldPreferPlugInsForImages;
 
@@ -148,7 +146,7 @@ private:
     // prevent confusing code which may assume that widget() != null
     // means the frame is active, we save off m_widget here while
     // the plugin is persisting but not being displayed.
-    RefPtrWillBeMember<Widget> m_persistedPluginWidget;
+    Member<Widget> m_persistedPluginWidget;
 };
 
 inline bool isHTMLPlugInElement(const HTMLElement& element)

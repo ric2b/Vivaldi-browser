@@ -7,11 +7,11 @@
 #include <utility>
 
 #include "base/base64.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #import "base/test/ios/wait_util.h"
 #import "ios/testing/ocmock_complex_type_helper.h"
 #import "ios/web/navigation/crw_session_controller.h"
-#import "ios/web/net/crw_url_verifying_protocol_handler.h"
 #include "ios/web/public/active_state_manager.h"
 #include "ios/web/public/referrer.h"
 #import "ios/web/public/web_state/ui/crw_web_delegate.h"
@@ -37,7 +37,7 @@ namespace web {
 
 #pragma mark -
 
-WebTest::WebTest() : web_client_(make_scoped_ptr(new TestWebClient)) {}
+WebTest::WebTest() : web_client_(base::WrapUnique(new TestWebClient)) {}
 WebTest::~WebTest() {}
 
 void WebTest::SetUp() {
@@ -54,6 +54,10 @@ TestWebClient* WebTest::GetWebClient() {
   return static_cast<TestWebClient*>(web_client_.Get());
 }
 
+BrowserState* WebTest::GetBrowserState() {
+  return &browser_state_;
+}
+
 #pragma mark -
 
 WebTestWithWebController::WebTestWithWebController() {}
@@ -64,9 +68,6 @@ static int s_html_load_count;
 
 void WebTestWithWebController::SetUp() {
   WebTest::SetUp();
-  BOOL success =
-      [NSURLProtocol registerClass:[CRWURLVerifyingProtocolHandler class]];
-  DCHECK(success);
   webController_.reset(this->CreateWebController());
 
   [webController_ setWebUsageEnabled:YES];
@@ -77,7 +78,6 @@ void WebTestWithWebController::SetUp() {
 
 void WebTestWithWebController::TearDown() {
   [webController_ close];
-  [NSURLProtocol unregisterClass:[CRWURLVerifyingProtocolHandler class]];
   WebTest::TearDown();
 }
 
@@ -224,7 +224,8 @@ NSString* WebTestWithWebController::RunJavaScript(NSString* script) {
 }
 
 CRWWebController* WebTestWithWebController::CreateWebController() {
-  scoped_ptr<WebStateImpl> web_state_impl(new WebStateImpl(GetBrowserState()));
+  std::unique_ptr<WebStateImpl> web_state_impl(
+      new WebStateImpl(GetBrowserState()));
   return [[CRWWKWebViewWebController alloc]
       initWithWebState:std::move(web_state_impl)];
 }

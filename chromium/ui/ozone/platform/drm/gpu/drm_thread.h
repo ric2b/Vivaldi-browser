@@ -58,6 +58,11 @@ class DrmThread : public base::Thread {
                     gfx::BufferFormat format,
                     gfx::BufferUsage usage,
                     scoped_refptr<GbmBuffer>* buffer);
+  void CreateBufferFromFD(const gfx::Size& size,
+                          gfx::BufferFormat format,
+                          base::ScopedFD fd,
+                          int stride,
+                          scoped_refptr<GbmBuffer>* buffer);
 
   void GetScanoutFormats(gfx::AcceleratedWidget widget,
                          std::vector<gfx::BufferFormat>* scanout_formats);
@@ -104,7 +109,10 @@ class DrmThread : public base::Thread {
   void SetHDCPState(int64_t display_id,
                     HDCPState state,
                     const base::Callback<void(int64_t, bool)>& callback);
-  void SetGammaRamp(int64_t id, const std::vector<GammaRampRGBEntry>& lut);
+  void SetColorCorrection(int64_t display_id,
+                          const std::vector<GammaRampRGBEntry>& degamma_lut,
+                          const std::vector<GammaRampRGBEntry>& gamma_lut,
+                          const std::vector<float>& correction_matrix);
 
   // base::Thread:
   void Init() override;

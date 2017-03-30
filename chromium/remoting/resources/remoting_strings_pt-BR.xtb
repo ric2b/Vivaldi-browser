@@ -24,11 +24,9 @@ Para ver mais informações sobre privacidade, consulte a Política de Privacida
 <translation id="1546934824884762070">Ocorreu um erro inesperado. Informe este problema aos desenvolvedores.</translation>
 <translation id="1619813076098775562">A conexão com o dispositivo de transmissão foi encerrada.</translation>
 <translation id="1643640058022401035">Abandonar esta página encerrará sua sessão de Chromoting.</translation>
-<translation id="1646994964686260497">Não há nada para se conectar.</translation>
 <translation id="1654128982815600832">Permitindo conexões remotas a este computador...</translation>
 <translation id="170207782578677537">Falha ao registrar este computador.</translation>
 <translation id="1704090719919187045">Preferências do host do Chromoting</translation>
-<translation id="1738759452976856405">Parar gravação</translation>
 <translation id="174018511426417793">Você não tem computadores cadastrados. Para ativar conexões remotas a um computador, instale a Área de trabalho remota do Google Chrome no computador desejado e clique em "<ph name="BUTTON_NAME" />".</translation>
 <translation id="1742469581923031760">Conectando...</translation>
 <translation id="1770394049404108959">Não consigo abrir o aplicativo.</translation>
@@ -124,7 +122,6 @@ Chromoting</translation>
 <translation id="3950820424414687140">Fazer login</translation>
 <translation id="3989511127559254552">Para continuar, é necessário conceder permissões de acesso estendidas ao seu computador. Você só precisará fazer isso uma vez.</translation>
 <translation id="4006787130661126000">Ative conexões remotas se desejar usar a Área de trabalho remota do Google Chrome para acessar este computador.</translation>
-<translation id="401121182145179743">Primeiro, é necessário configurar seu computador para acesso remoto.</translation>
 <translation id="4028465833180158312">• Atualizações da IU material de design.
 • Créditos de licenciamento de terceiros.
 • Informações exibidas para computadores remotos que estão off-line.</translation>
@@ -168,6 +165,7 @@ remota do Google Chrome</translation>
 <translation id="4918086044614829423">Aceitar</translation>
 <translation id="492843737083352574">Meu teclado ou mouse estão com problemas.</translation>
 <translation id="4973800994433240357">Ao fazer o download do instalador do host do Chromoting, você concorda com os <ph name="LINK_BEGIN" />Termos de Serviço<ph name="LINK_END" /> do Google.</translation>
+<translation id="4985296110227979402">Primeiro, é necessário configurar seu computador para acesso remoto.</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (off-line)</translation>
 <translation id="5070121137485264635">O host remoto requer a autenticação em um website de terceiros. Para continuar, você deve conceder à Área de trabalho remota do Google Chrome acesso a permissões adicionais para acessar este endereço:</translation>
 <translation id="5156271271724754543">Digite o mesmo PIN nas duas caixas.</translation>
@@ -177,6 +175,7 @@ remota do Google Chrome</translation>
 <translation id="5222676887888702881">Sair</translation>
 <translation id="5254120496627797685">Abandonar esta página encerrará sua sessão na Área de trabalho remota do Google Chrome.</translation>
 <translation id="5308380583665731573">Conectar-se</translation>
+<translation id="533625276787323658">Não há nenhum computador para conexão</translation>
 <translation id="5363265567587775042">Peça ao usuário do computador que você deseja acessar que clique em "<ph name="SHARE" />" e forneça o código de acesso para você.</translation>
 <translation id="5379087427956679853">A Área de trabalho remota do Google Chrome permite que você compartilhe seu computador com segurança através da Web. Para isso, é preciso que os usuários executem simultaneamente o aplicativo da Área de trabalho remota do Google Chrome, disponível em <ph name="URL" />.</translation>
 <translation id="5394895745784982830">Para Mac (OS X 10.6 e acima)</translation>
@@ -237,7 +236,6 @@ remota do Google Chrome</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Tem certeza de que deseja desativar conexões remotas para <ph name="HOSTNAME" />? Se mudar de idéia, precisará visitar este computador para reativar as conexões.</translation>
 <translation id="6998989275928107238">Para</translation>
-<translation id="7017806586333792422">Começar a gravar</translation>
 <translation id="7019153418965365059">Erro de host não reconhecido: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Assistência remota</translation>
 <translation id="7038683108611689168">Ajude-nos a melhorar o Chromoting por meio da coleta de estatísticas de uso e de relatórios de falhas.</translation>

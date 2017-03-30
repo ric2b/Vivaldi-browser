@@ -31,14 +31,16 @@
    *
    *   <settings-appearance-fonts-page prefs="{{prefs}}">
    *   </settings-appearance-fonts-page>
-   *
-   * @group Chrome Settings Elements
-   * @element settings-appearance-fonts-page
    */
   Polymer({
     is: 'settings-appearance-fonts-page',
 
+    behaviors: [I18nBehavior],
+
     properties: {
+      /** @private {!settings.FontsBrowserProxy} */
+      browserProxy_: Object,
+
       /**
        * The font size used by default.
        * @private
@@ -80,6 +82,7 @@
        * @private
        */
       immediateMinimumSizeIndex_: {
+        observer: 'immediateMinimumSizeIndexChanged_',
         type: Number,
       },
 
@@ -88,6 +91,7 @@
        * @private
        */
       immediateSizeIndex_: {
+        observer: 'immediateSizeIndexChanged_',
         type: Number,
       },
 
@@ -142,16 +146,14 @@
     ],
 
     /** @override */
+    created: function() {
+      this.browserProxy_ = settings.FontsBrowserProxyImpl.getInstance();
+    },
+
+    /** @override */
     ready: function() {
-      var self = this;
-      cr.define('Settings', function() {
-        return {
-          setFontsData: function() {
-            return self.setFontsData_.apply(self, arguments);
-          },
-        };
-      });
-      chrome.send('fetchFontsData');
+      this.browserProxy_.fetchFontsData().then(
+          this.setFontsData_.bind(this));
     },
 
     /**
@@ -173,26 +175,28 @@
     },
 
     /**
-     * @param {!Array<{0: string, 1: (string|undefined),
-     *     2: (string|undefined)}>}
-     *   fontList The font menu options.
-     * @param {!Array<{0: string, 1: string}>} encodingList The encoding menu
-     *   options.
+     * @param {!FontsData} response A list of fonts and encodings.
      * @private
      */
-    setFontsData_: function(fontList, encodingList) {
+    setFontsData_: function(response) {
       var fontMenuOptions = [];
-      for (var i = 0; i < fontList.length; ++i)
-        fontMenuOptions.push({value: fontList[i][0], name: fontList[i][1]});
+      for (var i = 0; i < response.fontList.length; ++i) {
+        fontMenuOptions.push({
+          value: response.fontList[i][0],
+          name: response.fontList[i][1]
+        });
+      }
       this.$.standardFont.menuOptions = fontMenuOptions;
       this.$.serifFont.menuOptions = fontMenuOptions;
       this.$.sansSerifFont.menuOptions = fontMenuOptions;
       this.$.fixedFont.menuOptions = fontMenuOptions;
 
       var encodingMenuOptions = [];
-      for (var i = 0; i < encodingList.length; ++i) {
+      for (i = 0; i < response.encodingList.length; ++i) {
         encodingMenuOptions.push({
-            value: encodingList[i][0], name: encodingList[i][1]});
+          value: response.encodingList[i][0],
+          name: response.encodingList[i][1]
+        });
       }
       this.$.encoding.menuOptions = encodingMenuOptions;
     },

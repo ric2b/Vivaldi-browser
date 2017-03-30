@@ -20,7 +20,7 @@ class FakeChannelAuthenticator : public ChannelAuthenticator {
   ~FakeChannelAuthenticator() override;
 
   // ChannelAuthenticator interface.
-  void SecureAndAuthenticate(scoped_ptr<P2PStreamSocket> socket,
+  void SecureAndAuthenticate(std::unique_ptr<P2PStreamSocket> socket,
                              const DoneCallback& done_callback) override;
 
  private:
@@ -29,14 +29,14 @@ class FakeChannelAuthenticator : public ChannelAuthenticator {
 
   void CallDoneCallback();
 
-  int result_;
-  bool async_;
+  const int result_;
+  const bool async_;
 
-  scoped_ptr<P2PStreamSocket> socket_;
+  std::unique_ptr<P2PStreamSocket> socket_;
   DoneCallback done_callback_;
 
-  bool did_read_bytes_;
-  bool did_write_bytes_;
+  bool did_read_bytes_ = false;
+  bool did_write_bytes_ = false;
 
   base::WeakPtrFactory<FakeChannelAuthenticator> weak_factory_;
 
@@ -64,27 +64,32 @@ class FakeAuthenticator : public Authenticator {
   // started() returns true.  Default to 0.
   void set_messages_till_started(int messages);
 
+  // Sets auth key to be returned by GetAuthKey(). Must be called when
+  // |round_trips| is set to 0.
+  void set_auth_key(const std::string& auth_key) { auth_key_ = auth_key; }
+
   // Authenticator interface.
   State state() const override;
   bool started() const override;
   RejectionReason rejection_reason() const override;
   void ProcessMessage(const buzz::XmlElement* message,
                       const base::Closure& resume_callback) override;
-  scoped_ptr<buzz::XmlElement> GetNextMessage() override;
+  std::unique_ptr<buzz::XmlElement> GetNextMessage() override;
   const std::string& GetAuthKey() const override;
-  scoped_ptr<ChannelAuthenticator> CreateChannelAuthenticator() const override;
+  std::unique_ptr<ChannelAuthenticator> CreateChannelAuthenticator()
+      const override;
 
  protected:
-  Type type_;
-  int round_trips_;
-  Action action_;
-  bool async_;
+  const Type type_;
+  const int round_trips_;
+  const Action action_;
+  const bool async_;
 
   // Total number of messages that have been processed.
-  int messages_;
+  int messages_ = 0;
   // Number of messages that the authenticator needs to process before started()
   // returns true.  Default to 0.
-  int messages_till_started_;
+  int messages_till_started_ = 0;
 
   std::string auth_key_;
 
@@ -99,16 +104,15 @@ class FakeHostAuthenticatorFactory : public AuthenticatorFactory {
   ~FakeHostAuthenticatorFactory() override;
 
   // AuthenticatorFactory interface.
-  scoped_ptr<Authenticator> CreateAuthenticator(
+  std::unique_ptr<Authenticator> CreateAuthenticator(
       const std::string& local_jid,
-      const std::string& remote_jid,
-      const buzz::XmlElement* first_message) override;
+      const std::string& remote_jid) override;
 
  private:
-  int round_trips_;
-  int messages_till_started_;
-  FakeAuthenticator::Action action_;
-  bool async_;
+  const int round_trips_;
+  const int messages_till_started_;
+  const FakeAuthenticator::Action action_;
+  const bool async_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeHostAuthenticatorFactory);
 };

@@ -33,7 +33,6 @@
 #include "platform/audio/AudioUtilities.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/Locker.h"
-#include "wtf/MainThread.h"
 
 namespace blink {
 
@@ -44,7 +43,7 @@ MediaElementAudioSourceHandler::MediaElementAudioSourceHandler(AudioNode& node, 
     , m_sourceSampleRate(0)
     , m_passesCurrentSrcCORSAccessCheck(passesCurrentSrcCORSAccessCheck(mediaElement.currentSrc()))
     , m_maybePrintCORSMessage(!m_passesCurrentSrcCORSAccessCheck)
-    , m_currentSrcString(mediaElement.currentSrc().string())
+    , m_currentSrcString(mediaElement.currentSrc().getString())
 {
     ASSERT(isMainThread());
     // Default to stereo. This could change depending on what the media element
@@ -129,19 +128,19 @@ void MediaElementAudioSourceHandler::onCurrentSrcChanged(const KURL& currentSrc)
     // message.  Need to wait until later to print the message in case HTMLMediaElement allows
     // access.
     m_maybePrintCORSMessage = !m_passesCurrentSrcCORSAccessCheck;
-    m_currentSrcString = currentSrc.string();
+    m_currentSrcString = currentSrc.getString();
 }
 
 bool MediaElementAudioSourceHandler::passesCurrentSrcCORSAccessCheck(const KURL& currentSrc)
 {
     ASSERT(isMainThread());
-    return context()->securityOrigin() && context()->securityOrigin()->canRequest(currentSrc);
+    return context()->getSecurityOrigin() && context()->getSecurityOrigin()->canRequest(currentSrc);
 }
 
 void MediaElementAudioSourceHandler::printCORSMessage(const String& message)
 {
-    if (context()->executionContext()) {
-        context()->executionContext()->addConsoleMessage(
+    if (context()->getExecutionContext()) {
+        context()->getExecutionContext()->addConsoleMessage(
             ConsoleMessage::create(SecurityMessageSource, InfoMessageLevel,
                 "MediaElementAudioSource outputs zeroes due to CORS access restrictions for " + message));
     }
@@ -160,7 +159,7 @@ void MediaElementAudioSourceHandler::process(size_t numberOfFrames)
             outputBus->zero();
             return;
         }
-        AudioSourceProvider& provider = mediaElement()->audioSourceProvider();
+        AudioSourceProvider& provider = mediaElement()->getAudioSourceProvider();
         // Grab data from the provider so that the element continues to make progress, even if
         // we're going to output silence anyway.
         if (m_multiChannelResampler.get()) {
@@ -177,8 +176,8 @@ void MediaElementAudioSourceHandler::process(size_t numberOfFrames)
                 // Print a CORS message, but just once for each change in the current media
                 // element source, and only if we have a document to print to.
                 m_maybePrintCORSMessage = false;
-                if (context()->executionContext()) {
-                    context()->executionContext()->postTask(BLINK_FROM_HERE,
+                if (context()->getExecutionContext()) {
+                    context()->getExecutionContext()->postTask(BLINK_FROM_HERE,
                         createCrossThreadTask(&MediaElementAudioSourceHandler::printCORSMessage,
                             this,
                             m_currentSrcString));

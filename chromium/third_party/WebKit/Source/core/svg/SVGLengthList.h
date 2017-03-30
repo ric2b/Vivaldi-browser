@@ -43,9 +43,9 @@ class SVGLengthList final : public SVGListPropertyHelper<SVGLengthList, SVGLengt
 public:
     typedef SVGLengthListTearOff TearOffType;
 
-    static PassRefPtrWillBeRawPtr<SVGLengthList> create(SVGLengthMode mode = SVGLengthMode::Other)
+    static SVGLengthList* create(SVGLengthMode mode = SVGLengthMode::Other)
     {
-        return adoptRefWillBeNoop(new SVGLengthList(mode));
+        return new SVGLengthList(mode);
     }
 
     ~SVGLengthList() override;
@@ -53,14 +53,14 @@ public:
     SVGParsingError setValueAsString(const String&);
 
     // SVGPropertyBase:
-    PassRefPtrWillBeRawPtr<SVGPropertyBase> cloneForAnimation(const String&) const override;
-    PassRefPtrWillBeRawPtr<SVGLengthList> clone() override;
+    SVGPropertyBase* cloneForAnimation(const String&) const override;
+    SVGLengthList* clone() override;
     String valueAsString() const override;
     SVGLengthMode unitMode() const { return m_mode; }
 
-    void add(PassRefPtrWillBeRawPtr<SVGPropertyBase>, SVGElement*) override;
-    void calculateAnimatedValue(SVGAnimationElement*, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> fromValue, PassRefPtrWillBeRawPtr<SVGPropertyBase> toValue, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDurationValue, SVGElement*) override;
-    float calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> to, SVGElement*) override;
+    void add(SVGPropertyBase*, SVGElement*) override;
+    void calculateAnimatedValue(SVGAnimationElement*, float percentage, unsigned repeatCount, SVGPropertyBase* fromValue, SVGPropertyBase* toValue, SVGPropertyBase* toAtEndOfDurationValue, SVGElement*) override;
+    float calculateDistance(SVGPropertyBase* to, SVGElement*) override;
 
     static AnimatedPropertyType classType() { return AnimatedLengthList; }
 
@@ -69,7 +69,7 @@ private:
 
     // Create SVGLength items used to adjust the list length
     // when animation from/to lists are longer than this list.
-    PassRefPtrWillBeRawPtr<SVGLength> createPaddingItem() const override;
+    SVGLength* createPaddingItem() const override;
 
     template <typename CharType>
     SVGParsingError parseInternal(const CharType*& ptr, const CharType* end);

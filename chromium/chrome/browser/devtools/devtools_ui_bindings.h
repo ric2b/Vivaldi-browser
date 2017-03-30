@@ -42,8 +42,6 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
  public:
   static DevToolsUIBindings* ForWebContents(
       content::WebContents* web_contents);
-  static content::DevToolsExternalAgentProxyDelegate*
-      CreateWebSocketAPIChannel();
 
   class Delegate {
    public:
@@ -58,6 +56,7 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
 
     virtual void InspectedContentsClosing() = 0;
     virtual void OnLoadCompleted() = 0;
+    virtual void ReadyForTest() = 0;
     virtual InfoBarService* GetInfoBarService() = 0;
     virtual void RenderProcessGone(bool crashed) = 0;
   };
@@ -81,8 +80,6 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
   bool IsAttachedTo(content::DevToolsAgentHost* agent_host);
 
  private:
-  friend class WebSocketAPIChannel;
-
   void HandleMessageFromDevToolsFrontend(const std::string& message);
 
   // content::DevToolsAgentHostClient implementation.
@@ -141,12 +138,12 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
   void SendJsonRequest(const DispatchCallback& callback,
                        const std::string& browser_id,
                        const std::string& url) override;
-  void SendFrontendAPINotification(const std::string& message) override;
   void GetPreferences(const DispatchCallback& callback) override;
   void SetPreference(const std::string& name,
                      const std::string& value) override;
   void RemovePreference(const std::string& name) override;
   void ClearPreferences() override;
+  void ReadyForTest() override;
 
   // net::URLFetcherDelegate overrides.
   void OnURLFetchComplete(const net::URLFetcher* source) override;

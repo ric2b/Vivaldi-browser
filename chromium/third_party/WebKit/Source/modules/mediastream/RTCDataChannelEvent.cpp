@@ -26,14 +26,14 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<RTCDataChannelEvent> RTCDataChannelEvent::create()
+RTCDataChannelEvent* RTCDataChannelEvent::create()
 {
-    return adoptRefWillBeNoop(new RTCDataChannelEvent);
+    return new RTCDataChannelEvent;
 }
 
-PassRefPtrWillBeRawPtr<RTCDataChannelEvent> RTCDataChannelEvent::create(const AtomicString& type, bool canBubble, bool cancelable, RTCDataChannel* channel)
+RTCDataChannelEvent* RTCDataChannelEvent::create(const AtomicString& type, bool canBubble, bool cancelable, RTCDataChannel* channel)
 {
-    return adoptRefWillBeNoop(new RTCDataChannelEvent(type, canBubble, cancelable, channel));
+    return new RTCDataChannelEvent(type, canBubble, cancelable, channel);
 }
 
 

@@ -58,14 +58,14 @@ public class ImeTest extends ContentShellTestBase {
             + "<br/><p><span id=\"plain_text\">This is Plain Text One</span></p>"
             + "</form></body></html>");
 
-    private ChromiumBaseInputConnection mConnection;
+    protected ChromiumBaseInputConnection mConnection;
     private TestInputConnectionFactory mConnectionFactory;
     private ImeAdapter mImeAdapter;
 
     private ContentViewCore mContentViewCore;
     private WebContents mWebContents;
     private TestCallbackHelperContainer mCallbackContainer;
-    private TestInputMethodManagerWrapper mInputMethodManagerWrapper;
+    protected TestInputMethodManagerWrapper mInputMethodManagerWrapper;
 
     @Override
     public void setUp() throws Exception {
@@ -212,7 +212,7 @@ public class ImeTest extends ContentShellTestBase {
 
         // When input connection is null, we still need to set flags to prevent InputMethodService
         // from entering fullscreen mode and from opening custom UI.
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return getInputConnection() == null;
@@ -272,14 +272,12 @@ public class ImeTest extends ContentShellTestBase {
     private void waitForKeyboardStates(int show, int hide, int restart, Integer[] history)
             throws InterruptedException {
         final String expected = stringifyKeyboardStates(show, hide, restart, history);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(Criteria.equals(expected, new Callable<String>() {
             @Override
-            public boolean isSatisfied() {
-                updateFailureReason(
-                        "Expected: {" + expected + "}, Actual: {" + getKeyboardStates() + "}");
-                return expected.equals(getKeyboardStates());
+            public String call() {
+                return getKeyboardStates();
             }
-        });
+        }));
     }
 
     private void resetAllStates() {
@@ -306,19 +304,16 @@ public class ImeTest extends ContentShellTestBase {
         commitText("Sample Text", 1);
         waitAndVerifyUpdateSelection(0, 11, 11, -1, -1);
 
-        // This will select 'Text' part.
-        DOMUtils.clickNode(this, mContentViewCore, "input_text");
-        assertWaitForKeyboardStatus(true);
+        // Select 'text' part.
+        DOMUtils.longPressNode(this, mContentViewCore, "input_text");
 
-        // Wait until selection popup shows before long press. Otherwise view
-        // position may change during sleep in longPressNode implementation.
         assertWaitForSelectActionBarStatus(true);
 
-        DOMUtils.longPressNode(this, mContentViewCore, "input_text");
         selectAll();
         copy();
-        assertWaitForKeyboardStatus(true);
+        assertClipboardContents(getActivity(), "Sample Text");
         assertEquals(11, mInputMethodManagerWrapper.getSelection().end());
+        assertWaitForKeyboardStatus(true);
     }
 
     @SmallTest
@@ -392,12 +387,12 @@ public class ImeTest extends ContentShellTestBase {
         // hide status of IME, so we will just check whether showIme() has been triggered.
         DOMUtils.longPressNode(this, mContentViewCore, "input_text");
         final int newCount = showCount + 2;
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(Criteria.equals(newCount, new Callable<Integer>() {
             @Override
-            public boolean isSatisfied() {
-                return newCount == mInputMethodManagerWrapper.getShowSoftInputCounter();
+            public Integer call() {
+                return mInputMethodManagerWrapper.getShowSoftInputCounter();
             }
-        });
+        }));
     }
 
     private void attachPhysicalKeyboard() {
@@ -455,7 +450,7 @@ public class ImeTest extends ContentShellTestBase {
 
         try {
             // We should not show soft keyboard here because focus has been lost.
-            CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+            CriteriaHelper.pollUiThread(new Criteria() {
                 @Override
                 public boolean isSatisfied() {
                     return mInputMethodManagerWrapper.isShowWithoutHideOutstanding();
@@ -939,14 +934,12 @@ public class ImeTest extends ContentShellTestBase {
 
     private void waitUntilGetCharacterBeforeCursorBecomes(final String expectedText)
             throws InterruptedException {
-        pollForCriteriaOnThread(new Criteria() {
+        pollForCriteriaOnThread(Criteria.equals(expectedText, new Callable<String>() {
             @Override
-            public boolean isSatisfied() {
-                String actualText = (String) mConnection.getTextBeforeCursor(1, 0);
-                updateFailureReason("actualText: " + actualText);
-                return expectedText.equals(actualText);
+            public String call() {
+                return (String) mConnection.getTextBeforeCursor(1, 0);
             }
-        });
+        }));
     }
 
     private void pollForCriteriaOnThread(final Criteria criteria) throws InterruptedException {
@@ -956,7 +949,7 @@ public class ImeTest extends ContentShellTestBase {
                 return criteria.isSatisfied();
             }
         };
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 try {
@@ -990,18 +983,15 @@ public class ImeTest extends ContentShellTestBase {
         assertTextsAroundCursor("", "", "");
 
         DOMUtils.longPressNode(this, mContentViewCore, "input_text");
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return mContentViewCore.isPastePopupShowing();
             }
         });
 
-        DOMUtils.clickNode(this, mContentViewCore, "input_text");
-        assertWaitForKeyboardStatus(true);
-        DOMUtils.longPressNode(this, mContentViewCore, "input_text");
         setComposingText("h", 1);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return !mContentViewCore.isPastePopupShowing();
@@ -1015,10 +1005,6 @@ public class ImeTest extends ContentShellTestBase {
     public void testSelectionClearedOnKeyEvent() throws Throwable {
         commitText("hello", 1);
         waitAndVerifyUpdateSelection(0, 5, 5, -1, -1);
-
-        DOMUtils.clickNode(this, mContentViewCore, "input_text");
-        assertWaitForKeyboardStatus(true);
-        assertWaitForSelectActionBarStatus(true);
 
         DOMUtils.longPressNode(this, mContentViewCore, "input_text");
         assertWaitForSelectActionBarStatus(true);
@@ -1088,7 +1074,7 @@ public class ImeTest extends ContentShellTestBase {
     }
 
     private void assertWaitForKeyboardStatus(final boolean show) throws InterruptedException {
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 // We do not check the other way around: in some cases we need to keep
@@ -1105,19 +1091,19 @@ public class ImeTest extends ContentShellTestBase {
 
     private void assertWaitForSelectActionBarStatus(
             final boolean show) throws InterruptedException {
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(Criteria.equals(show, new Callable<Boolean>() {
             @Override
-            public boolean isSatisfied() {
-                return show == mContentViewCore.isSelectActionBarShowing();
+            public Boolean call() {
+                return mContentViewCore.isSelectActionBarShowing();
             }
-        });
+        }));
     }
 
     private void waitAndVerifyUpdateSelection(final int index, final int selectionStart,
             final int selectionEnd, final int compositionStart, final int compositionEnd)
             throws InterruptedException {
         final List<Pair<Range, Range>> states = mInputMethodManagerWrapper.getUpdateSelectionList();
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return states.size() > index;
@@ -1136,7 +1122,7 @@ public class ImeTest extends ContentShellTestBase {
 
     private void assertClipboardContents(final Activity activity, final String expectedContents)
             throws InterruptedException {
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 ClipboardManager clipboardManager =
@@ -1261,7 +1247,7 @@ public class ImeTest extends ContentShellTestBase {
         });
     }
 
-    private boolean setComposingText(final CharSequence text, final int newCursorPosition)
+    protected boolean setComposingText(final CharSequence text, final int newCursorPosition)
             throws Exception {
         final ChromiumBaseInputConnection connection = mConnection;
         return runBlockingOnImeThread(new Callable<Boolean>() {
@@ -1350,16 +1336,12 @@ public class ImeTest extends ContentShellTestBase {
             throws InterruptedException, TimeoutException {
         DOMUtils.focusNode(mWebContents, id);
         assertWaitForKeyboardStatus(shouldShowKeyboard);
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(Criteria.equals(id, new Callable<String>() {
             @Override
-            public boolean isSatisfied() {
-                try {
-                    return id.equals(DOMUtils.getFocusedNode(mWebContents));
-                } catch (Exception e) {
-                    return false;
-                }
+            public String call() throws Exception {
+                return DOMUtils.getFocusedNode(mWebContents);
             }
-        });
+        }));
         // When we focus another element, the connection may be recreated.
         mConnection = getInputConnection();
     }

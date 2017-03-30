@@ -66,7 +66,14 @@ BackgroundTest.prototype = {
       <option>grape</option>
       <option> banana</option>
     </select>
-  */}
+  */},
+
+  iframesDoc: function() {/*!
+    <p>start</p>
+    <button>Before</button>
+    <iframe srcdoc="<button>Inside</button>"></iframe>
+    <button>After</button>
+  */},
 };
 
 /** Tests that ChromeVox classic is in this context. */
@@ -101,14 +108,14 @@ TEST_F('BackgroundTest', 'ForwardBackwardNavigation', function() {
         .expectSpeech('beta', 'Link')
         .expectBraille('beta lnk');
     mockFeedback.call(doCmd('nextHeading'))
-        .expectSpeech('Heading 1', 'charlie')
-        .expectBraille('h1 charlie');
+        .expectSpeech('charlie', 'Heading 1')
+        .expectBraille('charlie h1');
     mockFeedback.call(doCmd('nextHeading'))
-        .expectSpeech('Heading 2', 'foxtraut')
-        .expectBraille('h2 foxtraut');
+        .expectSpeech('foxtraut', 'Heading 2')
+        .expectBraille('foxtraut h2');
     mockFeedback.call(doCmd('previousHeading'))
-        .expectSpeech('Heading 1', 'charlie')
-        .expectBraille('h1 charlie');
+        .expectSpeech('charlie', 'Heading 1')
+        .expectBraille('charlie h1');
 
     mockFeedback.call(doCmd('nextObject'))
         .expectSpeech('delta', 'Link')
@@ -117,14 +124,14 @@ TEST_F('BackgroundTest', 'ForwardBackwardNavigation', function() {
         .expectSpeech('echo', 'Link')
         .expectBraille('echo lnk');
     mockFeedback.call(doCmd('nextObject'))
-        .expectSpeech('Heading 2', 'foxtraut')
-        .expectBraille('h2 foxtraut');
+        .expectSpeech('foxtraut', 'Heading 2')
+        .expectBraille('foxtraut h2');
     mockFeedback.call(doCmd('nextObject'))
         .expectSpeech('end')
         .expectBraille('end');
     mockFeedback.call(doCmd('previousObject'))
-        .expectSpeech('Heading 2', 'foxtraut')
-        .expectBraille('h2 foxtraut');
+        .expectSpeech('foxtraut', 'Heading 2')
+        .expectBraille('foxtraut h2');
     mockFeedback.call(doCmd('nextLine'))
         .expectSpeech('end', 'of test')
         .expectBraille('end of test');
@@ -156,13 +163,13 @@ TEST_F('BackgroundTest', 'CaretNavigation', function() {
     mockFeedback.call(doCmd('nextWord'))
         .expectSpeech('beta', 'Link');
     mockFeedback.call(doCmd('nextWord'))
-        .expectSpeech('Heading 1', 'charlie');
+        .expectSpeech('charlie', 'Heading 1');
     mockFeedback.call(doCmd('nextLine'))
         .expectSpeech('delta', 'Link');
     mockFeedback.call(doCmd('nextLine'))
         .expectSpeech('echo', 'Link');
     mockFeedback.call(doCmd('nextLine'))
-        .expectSpeech('Heading 2', 'foxtraut');
+        .expectSpeech('foxtraut', 'Heading 2');
     mockFeedback.call(doCmd('nextLine'))
         .expectSpeech('end', 'of test');
     mockFeedback.call(doCmd('nextCharacter'))
@@ -170,13 +177,13 @@ TEST_F('BackgroundTest', 'CaretNavigation', function() {
     mockFeedback.call(doCmd('previousCharacter'))
         .expectSpeech('e');
     mockFeedback.call(doCmd('previousCharacter'))
-        .expectSpeech('Heading 2', 't');
+        .expectSpeech('t', 'Heading 2');
     mockFeedback.call(doCmd('previousWord'))
         .expectSpeech('foxtraut');
     mockFeedback.call(doCmd('previousWord'))
         .expectSpeech('echo', 'Link');
     mockFeedback.call(doCmd('previousCharacter'))
-        .expectSpeech('Link', 'a');
+        .expectSpeech('a', 'Link');
     mockFeedback.call(doCmd('previousCharacter'))
         .expectSpeech('t');
     mockFeedback.call(doCmd('nextWord'))
@@ -211,7 +218,7 @@ TEST_F('BackgroundTest', 'ContinuousRead', function() {
             'start',
             'alpha', 'Link',
             'beta', 'Link',
-            'Heading 1', 'charlie');
+            'charlie', 'Heading 1');
     mockFeedback.replay();
   });
 });
@@ -555,4 +562,71 @@ TEST_F('BackgroundTest', 'NoisySlider', function() {
         .expectSpeech('noisy')
         .replay();
   }.bind(this));
+});
+
+TEST_F('BackgroundTest', 'Checkbox', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function() {/*!
+    <div id="go" role="checkbox">go</div>
+    <script>
+      var go = document.getElementById('go');
+      var isChecked = true;
+      go.addEventListener('click', function(e) {
+        if (isChecked)
+          go.setAttribute('aria-checked', true);
+        else
+          go.removeAttribute('aria-checked');
+        isChecked = !isChecked;
+      });
+    </script>
+  */}, function(root) {
+    var cbx = root.find({role: 'checkBox'});
+    var click = cbx.doDefault.bind(cbx);
+    mockFeedback.call(click)
+        .expectSpeech('go')
+        .expectSpeech('Check box')
+        .expectSpeech('checked')
+        .call(click)
+        .expectSpeech('go')
+        .expectSpeech('Check box')
+        .expectSpeech('not checked')
+        .replay();
+  });
+});
+
+/** Tests navigating into and out of iframes.. */
+TEST_F('BackgroundTest', 'DISABLED_ForwardNavigationThroughIframes', function() {
+  var mockFeedback = this.createMockFeedback();
+
+  var runTestIfIframeIsLoaded = function(rootNode) {
+    // Return if the iframe hasn't loaded yet.
+    var iframe = rootNode.find({role: 'iframe'});
+    var childDoc = iframe.firstChild;
+    if (childDoc && childDoc.children.length == 0) {
+      return;
+    }
+
+    var doCmd = this.doCmd.bind(this);
+
+    mockFeedback.expectSpeech('start').expectBraille('start');
+
+    mockFeedback.call(doCmd('nextButton'))
+        .expectSpeech('Before', 'Button');
+    mockFeedback.call(doCmd('nextButton'))
+        .expectSpeech('Inside', 'Button');
+    mockFeedback.call(doCmd('nextButton'))
+        .expectSpeech('After', 'Button');
+
+    mockFeedback.replay();
+  }.bind(this);
+
+  this.runWithLoadedTree(this.iframesDoc, function(rootNode) {
+    chrome.automation.getDesktop(function(desktopNode) {
+      runTestIfIframeIsLoaded(rootNode);
+
+      desktopNode.addEventListener('loadComplete', function(evt) {
+        runTestIfIframeIsLoaded(rootNode);
+      }, true);      
+    });
+  });
 });

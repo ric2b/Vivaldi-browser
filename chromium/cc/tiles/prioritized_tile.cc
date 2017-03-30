@@ -9,18 +9,18 @@
 
 namespace cc {
 
-PrioritizedTile::PrioritizedTile()
-    : tile_(nullptr), raster_source_(nullptr), is_occluded_(false) {
-}
+PrioritizedTile::PrioritizedTile() : tile_(nullptr), is_occluded_(false) {}
 
 PrioritizedTile::PrioritizedTile(Tile* tile,
-                                 DisplayListRasterSource* raster_source,
+                                 scoped_refptr<RasterSource> raster_source,
                                  const TilePriority priority,
                                  bool is_occluded)
     : tile_(tile),
-      raster_source_(raster_source),
+      raster_source_(std::move(raster_source)),
       priority_(priority),
       is_occluded_(is_occluded) {}
+
+PrioritizedTile::PrioritizedTile(const PrioritizedTile& other) = default;
 
 PrioritizedTile::~PrioritizedTile() {
 }
@@ -28,7 +28,7 @@ PrioritizedTile::~PrioritizedTile() {
 void PrioritizedTile::AsValueInto(base::trace_event::TracedValue* value) const {
   tile_->AsValueInto(value);
 
-  TracedValue::SetIDRef(raster_source(), value, "picture_pile");
+  TracedValue::SetIDRef(raster_source().get(), value, "picture_pile");
 
   value->BeginDictionary("combined_priority");
   priority().AsValueInto(value);

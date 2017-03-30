@@ -60,10 +60,16 @@ void ArcBridgeService::AddObserver(Observer* observer) {
   // them explicitly now to avoid a race.
   if (app_instance())
     observer->OnAppInstanceReady();
+  if (audio_instance())
+    observer->OnAudioInstanceReady();
   if (auth_instance())
     observer->OnAuthInstanceReady();
+  if (bluetooth_instance())
+    observer->OnBluetoothInstanceReady();
   if (clipboard_instance())
     observer->OnClipboardInstanceReady();
+  if (crash_collector_instance())
+    observer->OnCrashCollectorInstanceReady();
   if (ime_instance())
     observer->OnImeInstanceReady();
   if (input_instance())
@@ -72,6 +78,8 @@ void ArcBridgeService::AddObserver(Observer* observer) {
     observer->OnNetInstanceReady();
   if (notifications_instance())
     observer->OnNotificationsInstanceReady();
+  if (policy_instance())
+    observer->OnPolicyInstanceReady();
   if (power_instance())
     observer->OnPowerInstanceReady();
   if (process_instance())
@@ -109,6 +117,29 @@ void ArcBridgeService::CloseAppChannel() {
   FOR_EACH_OBSERVER(Observer, observer_list(), OnAppInstanceClosed());
 }
 
+void ArcBridgeService::OnAudioInstanceReady(AudioInstancePtr audio_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_audio_ptr_ = std::move(audio_ptr);
+  temporary_audio_ptr_.QueryVersion(base::Bind(
+      &ArcBridgeService::OnAudioVersionReady, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnAudioVersionReady(int32_t version) {
+  DCHECK(CalledOnValidThread());
+  audio_ptr_ = std::move(temporary_audio_ptr_);
+  audio_ptr_.set_connection_error_handler(base::Bind(
+      &ArcBridgeService::CloseAudioChannel, weak_factory_.GetWeakPtr()));
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnAudioInstanceReady());
+}
+
+void ArcBridgeService::CloseAudioChannel() {
+  if (!audio_ptr_)
+    return;
+
+  audio_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnAudioInstanceClosed());
+}
+
 void ArcBridgeService::OnAuthInstanceReady(AuthInstancePtr auth_ptr) {
   DCHECK(CalledOnValidThread());
   temporary_auth_ptr_ = std::move(auth_ptr);
@@ -131,6 +162,31 @@ void ArcBridgeService::CloseAuthChannel() {
 
   auth_ptr_.reset();
   FOR_EACH_OBSERVER(Observer, observer_list(), OnAuthInstanceClosed());
+}
+
+void ArcBridgeService::OnBluetoothInstanceReady(
+    BluetoothInstancePtr bluetooth_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_bluetooth_ptr_ = std::move(bluetooth_ptr);
+  temporary_bluetooth_ptr_.QueryVersion(base::Bind(
+      &ArcBridgeService::OnBluetoothVersionReady, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnBluetoothVersionReady(int32_t version) {
+  DCHECK(CalledOnValidThread());
+  bluetooth_ptr_ = std::move(temporary_bluetooth_ptr_);
+  bluetooth_ptr_.set_connection_error_handler(base::Bind(
+      &ArcBridgeService::CloseBluetoothChannel, weak_factory_.GetWeakPtr()));
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnBluetoothInstanceReady());
+}
+
+void ArcBridgeService::CloseBluetoothChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!bluetooth_ptr_)
+    return;
+
+  bluetooth_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnBluetoothInstanceClosed());
 }
 
 void ArcBridgeService::OnClipboardInstanceReady(
@@ -156,6 +212,34 @@ void ArcBridgeService::CloseClipboardChannel() {
 
   clipboard_ptr_.reset();
   FOR_EACH_OBSERVER(Observer, observer_list(), OnClipboardInstanceClosed());
+}
+
+void ArcBridgeService::OnCrashCollectorInstanceReady(
+    CrashCollectorInstancePtr crash_collector_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_crash_collector_ptr_ = std::move(crash_collector_ptr);
+  temporary_crash_collector_ptr_.QueryVersion(
+      base::Bind(&ArcBridgeService::OnCrashCollectorVersionReady,
+                 weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnCrashCollectorVersionReady(int32_t version) {
+  DCHECK(CalledOnValidThread());
+  crash_collector_ptr_ = std::move(temporary_crash_collector_ptr_);
+  crash_collector_ptr_.set_connection_error_handler(
+      base::Bind(&ArcBridgeService::CloseCrashCollectorChannel,
+                 weak_factory_.GetWeakPtr()));
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnCrashCollectorInstanceReady());
+}
+
+void ArcBridgeService::CloseCrashCollectorChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!crash_collector_ptr_)
+    return;
+
+  crash_collector_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(),
+                    OnCrashCollectorInstanceClosed());
 }
 
 void ArcBridgeService::OnImeInstanceReady(ImeInstancePtr ime_ptr) {
@@ -283,6 +367,30 @@ void ArcBridgeService::CloseNotificationsChannel() {
   FOR_EACH_OBSERVER(Observer, observer_list(), OnNotificationsInstanceClosed());
 }
 
+void ArcBridgeService::OnPolicyInstanceReady(PolicyInstancePtr policy_ptr) {
+  DCHECK(CalledOnValidThread());
+  temporary_policy_ptr_ = std::move(policy_ptr);
+  temporary_policy_ptr_.QueryVersion(base::Bind(
+      &ArcBridgeService::OnPolicyVersionReady, weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeService::OnPolicyVersionReady(int32_t version) {
+  DCHECK(CalledOnValidThread());
+  policy_ptr_ = std::move(temporary_policy_ptr_);
+  policy_ptr_.set_connection_error_handler(base::Bind(
+      &ArcBridgeService::ClosePolicyChannel, weak_factory_.GetWeakPtr()));
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnPolicyInstanceReady());
+}
+
+void ArcBridgeService::ClosePolicyChannel() {
+  DCHECK(CalledOnValidThread());
+  if (!policy_ptr_)
+    return;
+
+  policy_ptr_.reset();
+  FOR_EACH_OBSERVER(Observer, observer_list(), OnPolicyInstanceClosed());
+}
+
 void ArcBridgeService::OnPowerInstanceReady(PowerInstancePtr power_ptr) {
   DCHECK(CalledOnValidThread());
   temporary_power_ptr_ = std::move(power_ptr);
@@ -378,13 +486,17 @@ void ArcBridgeService::CloseAllChannels() {
   // Call all the error handlers of all the channels to both close the channel
   // and notify any observers that the channel is closed.
   CloseAppChannel();
+  CloseAudioChannel();
   CloseAuthChannel();
+  CloseBluetoothChannel();
   CloseClipboardChannel();
+  CloseCrashCollectorChannel();
   CloseImeChannel();
   CloseInputChannel();
   CloseIntentHelperChannel();
   CloseNetChannel();
   CloseNotificationsChannel();
+  ClosePolicyChannel();
   ClosePowerChannel();
   CloseProcessChannel();
   CloseVideoChannel();

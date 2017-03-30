@@ -35,12 +35,14 @@
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/modules/v8/UnionTypesModules.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/StyleEngine.h"
 #include "core/events/Event.h"
+#include "core/events/MouseEvent.h"
 #include "core/frame/Settings.h"
 #include "core/html/TextMetrics.h"
 #include "core/html/canvas/CanvasFontCache.h"
@@ -60,7 +62,6 @@
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageFilter.h"
 #include "wtf/ArrayBufferContents.h"
-#include "wtf/CheckedArithmetic.h"
 #include "wtf/MathExtras.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/text/StringBuilder.h"
@@ -104,7 +105,7 @@ public:
         m_context->validateStateStack();
     }
 private:
-    RawPtrWillBeMember<CanvasRenderingContext2D> m_context;
+    Member<CanvasRenderingContext2D> m_context;
     int m_saveCount;
 };
 
@@ -125,6 +126,11 @@ CanvasRenderingContext2D::CanvasRenderingContext2D(HTMLCanvasElement* canvas, co
 #if ENABLE(OILPAN)
     ThreadState::current()->registerPreFinalizer(this);
 #endif
+}
+
+void CanvasRenderingContext2D::setCanvasGetContextResult(RenderingContext& result)
+{
+    result.setCanvasRenderingContext2D(this);
 }
 
 void CanvasRenderingContext2D::unwindStateStack()
@@ -222,7 +228,7 @@ DEFINE_TRACE(CanvasRenderingContext2D)
 void CanvasRenderingContext2D::dispatchContextLostEvent(Timer<CanvasRenderingContext2D>*)
 {
     if (contextLostRestoredEventsEnabled()) {
-        RefPtrWillBeRawPtr<Event> event = Event::createCancelable(EventTypeNames::contextlost);
+        Event* event = Event::createCancelable(EventTypeNames::contextlost);
         canvas()->dispatchEvent(event);
         if (event->defaultPrevented()) {
             m_contextRestorable = false;
@@ -267,7 +273,7 @@ void CanvasRenderingContext2D::dispatchContextRestoredEvent(Timer<CanvasRenderin
     reset();
     m_contextLostMode = NotLostContext;
     if (contextLostRestoredEventsEnabled()) {
-        RefPtrWillBeRawPtr<Event> event(Event::create(EventTypeNames::contextrestored));
+        Event* event(Event::create(EventTypeNames::contextrestored));
         canvas()->dispatchEvent(event);
     }
 }
@@ -291,7 +297,7 @@ void CanvasRenderingContext2D::restoreCanvasMatrixClipStack(SkCanvas* c) const
 {
     if (!c)
         return;
-    WillBeHeapVector<OwnPtrWillBeMember<CanvasRenderingContext2DState>>::const_iterator currState;
+    HeapVector<Member<CanvasRenderingContext2DState>>::const_iterator currState;
     ASSERT(m_stateStack.begin() < m_stateStack.end());
     for (currState = m_stateStack.begin(); currState < m_stateStack.end(); currState++) {
         c->setMatrix(SkMatrix::I());
@@ -409,7 +415,7 @@ String CanvasRenderingContext2D::font() const
 
     canvas()->document().canvasFontCache()->willUseCurrentFont();
     StringBuilder serializedFont;
-    const FontDescription& fontDescription = state().font().fontDescription();
+    const FontDescription& fontDescription = state().font().getFontDescription();
 
     if (fontDescription.style() == FontStyleItalic)
         serializedFont.appendLiteral("italic ");
@@ -473,11 +479,11 @@ void CanvasRenderingContext2D::setFont(const String& newFont)
             if (!parsedStyle)
                 return;
             fontStyle = ComputedStyle::create();
-            FontDescription elementFontDescription(computedStyle->fontDescription());
+            FontDescription elementFontDescription(computedStyle->getFontDescription());
             // Reset the computed size to avoid inheriting the zoom factor from the <canvas> element.
             elementFontDescription.setComputedSize(elementFontDescription.specifiedSize());
             fontStyle->setFontDescription(elementFontDescription);
-            fontStyle->font().update(fontStyle->font().fontSelector());
+            fontStyle->font().update(fontStyle->font().getFontSelector());
             canvas()->document().ensureStyleResolver().computeFont(fontStyle.get(), *parsedStyle);
             m_fontsResolvedUsingCurrentStyle.add(newFont, fontStyle->font());
             ASSERT(!m_fontLRUList.contains(newFont));
@@ -578,9 +584,30 @@ bool CanvasRenderingContext2D::parseColorOrCurrentColor(Color& color, const Stri
     return ::blink::parseColorOrCurrentColor(color, colorString, canvas());
 }
 
+std::pair<Element*, String> CanvasRenderingContext2D::getControlAndIdIfHitRegionExists(const LayoutPoint& location)
+{
+    if (hitRegionsCount() <= 0)
+        return std::make_pair(nullptr, String());
+
+    LayoutBox* box = canvas()->layoutBox();
+    FloatPoint localPos = box->absoluteToLocal(FloatPoint(location), UseTransforms);
+    if (box->hasBorderOrPadding())
+        localPos.move(-box->contentBoxOffset());
+    localPos.scale(canvas()->width() / box->contentWidth(), canvas()->height() / box->contentHeight());
+
+    HitRegion* hitRegion = hitRegionAtPoint(localPos);
+    if (hitRegion) {
+        Element* control = hitRegion->control();
+        if (control && canvas()->isSupportedInteractiveCanvasFallback(*control))
+            return std::make_pair(hitRegion->control(), hitRegion->id());
+        return std::make_pair(nullptr, hitRegion->id());
+    }
+    return std::make_pair(nullptr, String());
+}
+
 String CanvasRenderingContext2D::textAlign() const
 {
-    return textAlignName(state().textAlign());
+    return textAlignName(state().getTextAlign());
 }
 
 void CanvasRenderingContext2D::setTextAlign(const String& s)
@@ -588,14 +615,14 @@ void CanvasRenderingContext2D::setTextAlign(const String& s)
     TextAlign align;
     if (!parseTextAlign(s, align))
         return;
-    if (state().textAlign() == align)
+    if (state().getTextAlign() == align)
         return;
     modifiableState().setTextAlign(align);
 }
 
 String CanvasRenderingContext2D::textBaseline() const
 {
-    return textBaselineName(state().textBaseline());
+    return textBaselineName(state().getTextBaseline());
 }
 
 void CanvasRenderingContext2D::setTextBaseline(const String& s)
@@ -603,7 +630,7 @@ void CanvasRenderingContext2D::setTextBaseline(const String& s)
     TextBaseline baseline;
     if (!parseTextBaseline(s, baseline))
         return;
-    if (state().textBaseline() == baseline)
+    if (state().getTextBaseline() == baseline)
         return;
     modifiableState().setTextBaseline(baseline);
 }
@@ -627,9 +654,9 @@ static inline TextDirection toTextDirection(CanvasRenderingContext2DState::Direc
 
 String CanvasRenderingContext2D::direction() const
 {
-    if (state().direction() == CanvasRenderingContext2DState::DirectionInherit)
+    if (state().getDirection() == CanvasRenderingContext2DState::DirectionInherit)
         canvas()->document().updateLayoutTreeForNode(canvas());
-    return toTextDirection(state().direction(), canvas()) == RTL ? rtl : ltr;
+    return toTextDirection(state().getDirection(), canvas()) == RTL ? rtl : ltr;
 }
 
 void CanvasRenderingContext2D::setDirection(const String& directionString)
@@ -644,7 +671,7 @@ void CanvasRenderingContext2D::setDirection(const String& directionString)
     else
         return;
 
-    if (state().direction() == direction)
+    if (state().getDirection() == direction)
         return;
 
     modifiableState().setDirection(direction);
@@ -682,13 +709,13 @@ TextMetrics* CanvasRenderingContext2D::measureText(const String& text)
     const Font& font = accessFont();
 
     TextDirection direction;
-    if (state().direction() == CanvasRenderingContext2DState::DirectionInherit)
+    if (state().getDirection() == CanvasRenderingContext2DState::DirectionInherit)
         direction = determineDirectionality(text);
     else
-        direction = toTextDirection(state().direction(), canvas());
+        direction = toTextDirection(state().getDirection(), canvas());
     TextRun textRun(text, 0, 0, TextRun::AllowTrailingExpansion | TextRun::ForbidLeadingExpansion, direction, false);
     textRun.setNormalizeSpace(true);
-    FloatRect textBounds = font.selectionRectForText(textRun, FloatPoint(), font.fontDescription().computedSize(), 0, -1, true);
+    FloatRect textBounds = font.selectionRectForText(textRun, FloatPoint(), font.getFontDescription().computedSize(), 0, -1, true);
 
     // x direction
     metrics->setWidth(font.width(textRun));
@@ -696,7 +723,7 @@ TextMetrics* CanvasRenderingContext2D::measureText(const String& text)
     metrics->setActualBoundingBoxRight(textBounds.maxX());
 
     // y direction
-    const FontMetrics& fontMetrics = font.fontMetrics();
+    const FontMetrics& fontMetrics = font.getFontMetrics();
     const float ascent = fontMetrics.floatAscent();
     const float descent = fontMetrics.floatDescent();
     const float baselineY = getFontBaseline(fontMetrics);
@@ -748,12 +775,12 @@ void CanvasRenderingContext2D::drawTextInternal(const String& text, double x, do
     if (!font.primaryFont())
         return;
 
-    const FontMetrics& fontMetrics = font.fontMetrics();
+    const FontMetrics& fontMetrics = font.getFontMetrics();
 
     // FIXME: Need to turn off font smoothing.
 
     const ComputedStyle* computedStyle = 0;
-    TextDirection direction = toTextDirection(state().direction(), canvas(), &computedStyle);
+    TextDirection direction = toTextDirection(state().getDirection(), canvas(), &computedStyle);
     bool isRTL = direction == RTL;
     bool override = computedStyle ? isOverride(computedStyle->unicodeBidi()) : false;
 
@@ -766,7 +793,7 @@ void CanvasRenderingContext2D::drawTextInternal(const String& text, double x, do
     bool useMaxWidth = (maxWidth && *maxWidth < fontWidth);
     double width = useMaxWidth ? *maxWidth : fontWidth;
 
-    TextAlign align = state().textAlign();
+    TextAlign align = state().getTextAlign();
     if (align == StartTextAlign)
         align = isRTL ? RightTextAlign : LeftTextAlign;
     else if (align == EndTextAlign)
@@ -823,7 +850,7 @@ const Font& CanvasRenderingContext2D::accessFont()
 
 int CanvasRenderingContext2D::getFontBaseline(const FontMetrics& fontMetrics) const
 {
-    switch (state().textBaseline()) {
+    switch (state().getTextBaseline()) {
     case TopTextBaseline:
         return fontMetrics.ascent();
     case HangingTextBaseline:
@@ -915,7 +942,7 @@ void CanvasRenderingContext2D::drawFocusRing(const Path& path)
     SkColor color = LayoutTheme::theme().focusRingColor().rgb();
     const int focusRingWidth = 5;
 
-    drawPlatformFocusRing(path.skPath(), drawingCanvas(), color, focusRingWidth);
+    drawPlatformFocusRing(path.getSkPath(), drawingCanvas(), color, focusRingWidth);
 
     // We need to add focusRingWidth to dirtyRect.
     StrokeData strokeData;
@@ -984,13 +1011,13 @@ void CanvasRenderingContext2D::addHitRegion(const HitRegionOptions& options, Exc
 
     // Remove previous region (with id or control)
     m_hitRegionManager->removeHitRegionById(options.id());
-    m_hitRegionManager->removeHitRegionByControl(options.control().get());
+    m_hitRegionManager->removeHitRegionByControl(options.control());
 
-    RefPtrWillBeRawPtr<HitRegion> hitRegion = HitRegion::create(hitRegionPath, options);
+    HitRegion* hitRegion = HitRegion::create(hitRegionPath, options);
     Element* element = hitRegion->control();
     if (element && element->isDescendantOf(canvas()))
         updateElementAccessibility(hitRegion->path(), hitRegion->control());
-    m_hitRegionManager->addHitRegion(hitRegion.release());
+    m_hitRegionManager->addHitRegion(hitRegion);
 }
 
 void CanvasRenderingContext2D::removeHitRegion(const String& id)

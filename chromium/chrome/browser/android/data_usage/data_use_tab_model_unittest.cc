@@ -6,10 +6,10 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -19,6 +19,7 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/data_usage/data_use_matcher.h"
+#include "chrome/browser/android/data_usage/external_data_use_observer_bridge.h"
 #include "chrome/browser/android/data_usage/tab_data_use_entry.h"
 #include "components/data_usage/core/data_use_aggregator.h"
 #include "components/data_usage/core/data_use_amortizer.h"
@@ -65,6 +66,15 @@ class MockTabDataUseObserver
  public:
   MOCK_METHOD1(NotifyTrackingStarting, void(SessionID::id_type tab_id));
   MOCK_METHOD1(NotifyTrackingEnding, void(SessionID::id_type tab_id));
+  MOCK_METHOD0(OnDataUseTabModelReady, void());
+};
+
+class TestExternalDataUseObserverBridge
+    : public chrome::android::ExternalDataUseObserverBridge {
+ public:
+  TestExternalDataUseObserverBridge() {}
+  void FetchMatchingRules() const override {}
+  void ShouldRegisterAsDataUseObserver(bool should_register) const override{};
 };
 
 }  // namespace
@@ -73,21 +83,19 @@ namespace chrome {
 
 namespace android {
 
-class ExternalDataUseObserver;
-
 class DataUseTabModelTest : public testing::Test {
  public:
   DataUseTabModelTest()
-      : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP) {}
+      : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
+        external_data_use_observer_bridge_(
+            new TestExternalDataUseObserverBridge()) {}
 
  protected:
   void SetUp() override {
     base::RunLoop().RunUntilIdle();
     data_use_tab_model_.reset(new DataUseTabModel());
     data_use_tab_model_->InitOnUIThread(
-        content::BrowserThread::GetMessageLoopProxyForThread(
-            content::BrowserThread::IO),
-        base::WeakPtr<ExternalDataUseObserver>());
+        external_data_use_observer_bridge_.get());
 
     tick_clock_ = new base::SimpleTestTickClock();
 
@@ -185,10 +193,12 @@ class DataUseTabModelTest : public testing::Test {
   // Pointer to the tick clock owned by |data_use_tab_model_|.
   base::SimpleTestTickClock* tick_clock_;
 
-  scoped_ptr<DataUseTabModel> data_use_tab_model_;
+  std::unique_ptr<DataUseTabModel> data_use_tab_model_;
 
  private:
   content::TestBrowserThreadBundle thread_bundle_;
+  std::unique_ptr<ExternalDataUseObserverBridge>
+      external_data_use_observer_bridge_;
 
   DISALLOW_COPY_AND_ASSIGN(DataUseTabModelTest);
 };
@@ -910,6 +920,56 @@ TEST_F(DataUseTabModelTest, MatchingRuleClearedOnControlAppUninstall) {
 
   EXPECT_FALSE(IsTrackingDataUse(kTabID1));
   EXPECT_FALSE(data_use_tab_model_->data_use_matcher_->HasValidRules());
+}
+
+// Tests that |OnDataUseTabModelReady| is sent to observers when the external
+// control app not installed callback was received.
+TEST_F(DataUseTabModelTest, ReadyForNavigationEventWhenControlAppNotInstalled) {
+  MockTabDataUseObserver mock_observer;
+  data_use_tab_model_->AddObserver(&mock_observer);
+
+  EXPECT_FALSE(data_use_tab_model_->is_ready_for_navigation_event());
+  EXPECT_CALL(mock_observer, OnDataUseTabModelReady()).Times(1);
+
+  data_use_tab_model_->OnControlAppInstallStateChange(false);
+  EXPECT_TRUE(data_use_tab_model_->is_ready_for_navigation_event());
+  testing::Mock::VerifyAndClearExpectations(&mock_observer);
+
+  // Subsequent install and uninstall of the control app does not trigger the
+  // event.
+  EXPECT_CALL(mock_observer, OnDataUseTabModelReady()).Times(0);
+  data_use_tab_model_->OnControlAppInstallStateChange(true);
+  data_use_tab_model_->OnControlAppInstallStateChange(false);
+  testing::Mock::VerifyAndClearExpectations(&mock_observer);
+  EXPECT_TRUE(data_use_tab_model_->is_ready_for_navigation_event());
+}
+
+// Tests that |OnDataUseTabModelReady| is sent to observers when the first rule
+// fetch is complete.
+TEST_F(DataUseTabModelTest, ReadyForNavigationEventAfterRuleFetch) {
+  MockTabDataUseObserver mock_observer;
+  std::vector<std::string> app_package_names, domain_regexes, labels;
+
+  app_package_names.push_back(kPackageFoo);
+  domain_regexes.push_back(kURLFoo);
+  labels.push_back(kTestLabel1);
+  data_use_tab_model_->AddObserver(&mock_observer);
+
+  EXPECT_FALSE(data_use_tab_model_->is_ready_for_navigation_event());
+  EXPECT_CALL(mock_observer, OnDataUseTabModelReady()).Times(1);
+
+  // First rule fetch triggers the event.
+  RegisterURLRegexes(app_package_names, domain_regexes, labels);
+  testing::Mock::VerifyAndClearExpectations(&mock_observer);
+
+  // Subsequent rule fetches, uninstall and install of the control app does not
+  // trigger the event.
+  EXPECT_CALL(mock_observer, OnDataUseTabModelReady()).Times(0);
+  RegisterURLRegexes(app_package_names, domain_regexes, labels);
+  data_use_tab_model_->OnControlAppInstallStateChange(false);
+  data_use_tab_model_->OnControlAppInstallStateChange(true);
+  testing::Mock::VerifyAndClearExpectations(&mock_observer);
+  EXPECT_TRUE(data_use_tab_model_->is_ready_for_navigation_event());
 }
 
 }  // namespace android

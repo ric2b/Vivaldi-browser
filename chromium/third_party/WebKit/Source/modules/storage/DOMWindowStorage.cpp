@@ -23,14 +23,12 @@ DOMWindowStorage::DOMWindowStorage(LocalDOMWindow& window)
 {
 }
 
-DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(DOMWindowStorage);
-
 DEFINE_TRACE(DOMWindowStorage)
 {
     visitor->trace(m_window);
     visitor->trace(m_sessionStorage);
     visitor->trace(m_localStorage);
-    WillBeHeapSupplement<LocalDOMWindow>::trace(visitor);
+    Supplement<LocalDOMWindow>::trace(visitor);
     DOMWindowProperty::trace(visitor);
 }
 
@@ -43,10 +41,10 @@ const char* DOMWindowStorage::supplementName()
 // static
 DOMWindowStorage& DOMWindowStorage::from(LocalDOMWindow& window)
 {
-    DOMWindowStorage* supplement = static_cast<DOMWindowStorage*>(WillBeHeapSupplement<LocalDOMWindow>::from(window, supplementName()));
+    DOMWindowStorage* supplement = static_cast<DOMWindowStorage*>(Supplement<LocalDOMWindow>::from(window, supplementName()));
     if (!supplement) {
         supplement = new DOMWindowStorage(window);
-        provideTo(window, supplementName(), adoptPtrWillBeNoop(supplement));
+        provideTo(window, supplementName(), supplement);
     }
     return *supplement;
 }
@@ -73,7 +71,7 @@ Storage* DOMWindowStorage::sessionStorage(ExceptionState& exceptionState) const
         return nullptr;
 
     String accessDeniedMessage = "Access is denied for this document.";
-    if (!document->securityOrigin()->canAccessLocalStorage()) {
+    if (!document->getSecurityOrigin()->canAccessLocalStorage()) {
         if (document->isSandboxed(SandboxOrigin))
             exceptionState.throwSecurityError("The document is sandboxed and lacks the 'allow-same-origin' flag.");
         else if (document->url().protocolIs("data"))
@@ -95,7 +93,7 @@ Storage* DOMWindowStorage::sessionStorage(ExceptionState& exceptionState) const
     if (!page)
         return nullptr;
 
-    StorageArea* storageArea = StorageNamespaceController::from(page)->sessionStorage()->storageArea(document->securityOrigin());
+    StorageArea* storageArea = StorageNamespaceController::from(page)->sessionStorage()->storageArea(document->getSecurityOrigin());
     if (!storageArea->canAccessStorage(m_window->frame())) {
         exceptionState.throwSecurityError(accessDeniedMessage);
         return nullptr;
@@ -113,7 +111,7 @@ Storage* DOMWindowStorage::localStorage(ExceptionState& exceptionState) const
     if (!document)
         return nullptr;
     String accessDeniedMessage = "Access is denied for this document.";
-    if (!document->securityOrigin()->canAccessLocalStorage()) {
+    if (!document->getSecurityOrigin()->canAccessLocalStorage()) {
         if (document->isSandboxed(SandboxOrigin))
             exceptionState.throwSecurityError("The document is sandboxed and lacks the 'allow-same-origin' flag.");
         else if (document->url().protocolIs("data"))
@@ -133,7 +131,7 @@ Storage* DOMWindowStorage::localStorage(ExceptionState& exceptionState) const
     FrameHost* host = document->frameHost();
     if (!host || !host->settings().localStorageEnabled())
         return nullptr;
-    StorageArea* storageArea = StorageNamespace::localStorageArea(document->securityOrigin());
+    StorageArea* storageArea = StorageNamespace::localStorageArea(document->getSecurityOrigin());
     if (!storageArea->canAccessStorage(m_window->frame())) {
         exceptionState.throwSecurityError(accessDeniedMessage);
         return nullptr;

@@ -4,13 +4,13 @@
 
 #include "chrome/browser/extensions/api/signed_in_devices/signed_in_devices_manager.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/lazy_instance.h"
 #include "base/memory/linked_ptr.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/signed_in_devices/signed_in_devices_api.h"
@@ -65,20 +65,16 @@ void SignedInDevicesChangeObserver::OnDeviceInfoChange() {
   ScopedVector<DeviceInfo> devices = GetAllSignedInDevices(extension_id_,
                                                            profile_);
 
-  std::vector<linked_ptr<api::signed_in_devices::DeviceInfo> > args;
-
-  for (ScopedVector<DeviceInfo>::const_iterator it = devices.begin();
-       it != devices.end();
-       ++it) {
-    linked_ptr<api::signed_in_devices::DeviceInfo> api_device =
-        make_linked_ptr(new api::signed_in_devices::DeviceInfo);
-    FillDeviceInfo(*(*it), api_device.get());
-    args.push_back(api_device);
+  std::vector<api::signed_in_devices::DeviceInfo> args;
+  for (const DeviceInfo* info : devices) {
+    api::signed_in_devices::DeviceInfo api_device;
+    FillDeviceInfo(*info, &api_device);
+    args.push_back(std::move(api_device));
   }
 
-  scoped_ptr<base::ListValue> result =
+  std::unique_ptr<base::ListValue> result =
       api::signed_in_devices::OnDeviceInfoChange::Create(args);
-  scoped_ptr<Event> event(
+  std::unique_ptr<Event> event(
       new Event(events::SIGNED_IN_DEVICES_ON_DEVICE_INFO_CHANGE,
                 api::signed_in_devices::OnDeviceInfoChange::kEventName,
                 std::move(result)));

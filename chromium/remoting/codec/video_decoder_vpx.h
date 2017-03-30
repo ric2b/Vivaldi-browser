@@ -5,27 +5,23 @@
 #ifndef REMOTING_CODEC_VIDEO_DECODER_VPX_H_
 #define REMOTING_CODEC_VIDEO_DECODER_VPX_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "remoting/codec/scoped_vpx_codec.h"
 #include "remoting/codec/video_decoder.h"
 
 typedef const struct vpx_codec_iface vpx_codec_iface_t;
 typedef struct vpx_image vpx_image_t;
 
-namespace webrtc {
-class DesktopRect;
-class DesktopRegion;
-}  // namespace webrtc
-
 namespace remoting {
 
 class VideoDecoderVpx : public VideoDecoder {
  public:
   // Create decoders for the specified protocol.
-  static scoped_ptr<VideoDecoderVpx> CreateForVP8();
-  static scoped_ptr<VideoDecoderVpx> CreateForVP9();
+  static std::unique_ptr<VideoDecoderVpx> CreateForVP8();
+  static std::unique_ptr<VideoDecoderVpx> CreateForVP9();
 
   ~VideoDecoderVpx() override;
 
@@ -37,9 +33,6 @@ class VideoDecoderVpx : public VideoDecoder {
   explicit VideoDecoderVpx(vpx_codec_iface_t* codec);
 
   ScopedVpxCodec codec_;
-
-  // The shape of the most-recent frame, if any.
-  scoped_ptr<webrtc::DesktopRegion> desktop_shape_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoDecoderVpx);
 };

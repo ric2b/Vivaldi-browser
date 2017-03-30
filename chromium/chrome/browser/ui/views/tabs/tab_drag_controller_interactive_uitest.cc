@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
@@ -21,13 +22,13 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/native_browser_frame_factory.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_drag_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
+#include "chrome/browser/ui/views/tabs/window_finder.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -190,6 +191,13 @@ Browser* TabDragControllerTest::CreateAnotherWindowBrowserAndRelayout() {
       work_area.x() + half_size.width(), work_area.y(),
       half_size.width(), half_size.height()));
   return browser2;
+}
+
+void TabDragControllerTest::SetWindowFinderForTabStrip(
+    TabStrip* tab_strip,
+    std::unique_ptr<WindowFinder> window_finder) {
+  ASSERT_TRUE(tab_strip->drag_controller_.get());
+  tab_strip->drag_controller_->window_finder_ = std::move(window_finder);
 }
 
 namespace {
@@ -531,7 +539,7 @@ class DetachToBrowserTabDragControllerTest
 
  private:
 #if defined(OS_CHROMEOS)
-  scoped_ptr<ui::test::EventGenerator> event_generator_;
+  std::unique_ptr<ui::test::EventGenerator> event_generator_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(DetachToBrowserTabDragControllerTest);
@@ -603,11 +611,11 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
       gfx::Rect(bounds.width() - 10, 0, 10, bounds.height()));
   gfx::Rect test(bounds);
   masked_window_delegate.set_can_focus(false);
-  scoped_ptr<aura::Window> masked_window(
+  std::unique_ptr<aura::Window> masked_window(
       aura::test::CreateTestWindowWithDelegate(&masked_window_delegate, 10,
                                                test, browser_window->parent()));
   masked_window->SetEventTargeter(
-      scoped_ptr<ui::EventTargeter>(new MaskedWindowTargeter()));
+      std::unique_ptr<ui::EventTargeter>(new MaskedWindowTargeter()));
 
   ASSERT_FALSE(masked_window->GetEventHandlerForPoint(
       gfx::Point(bounds.width() - 11, 0)));
@@ -699,6 +707,59 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   // mouse/touch was released.
   EXPECT_FALSE(tab_strip->GetWidget()->HasCapture());
   EXPECT_FALSE(tab_strip2->GetWidget()->HasCapture());
+}
+
+namespace {
+
+// WindowFinder that calls OnMouseCaptureLost() from
+// GetLocalProcessWindowAtPoint().
+class CaptureLoseWindowFinder : public WindowFinder {
+ public:
+  explicit CaptureLoseWindowFinder(TabStrip* tab_strip)
+      : tab_strip_(tab_strip) {}
+  ~CaptureLoseWindowFinder() override {}
+
+  // WindowFinder:
+  gfx::NativeWindow GetLocalProcessWindowAtPoint(
+      const gfx::Point& screen_point,
+      const std::set<gfx::NativeWindow>& ignore) override {
+    static_cast<views::View*>(tab_strip_)->OnMouseCaptureLost();
+    return nullptr;
+  }
+
+ private:
+  TabStrip* tab_strip_;
+
+  DISALLOW_COPY_AND_ASSIGN(CaptureLoseWindowFinder);
+};
+
+}  // namespace
+
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+// TODO(sky,sad): Disabled as it fails due to resize locks with a real
+// compositor. crbug.com/331924
+#define MAYBE_CaptureLostDuringDrag DISABLED_CaptureLostDuringDrag
+#else
+#define MAYBE_CaptureLostDuringDrag CaptureLostDuringDrag
+#endif
+// Calls OnMouseCaptureLost() from WindowFinder::GetLocalProcessWindowAtPoint()
+// and verifies we don't crash. This simulates a crash seen on windows.
+IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
+                       MAYBE_CaptureLostDuringDrag) {
+  TabStrip* tab_strip = GetTabStripForBrowser(browser());
+
+  // Add another tab to browser().
+  AddTabAndResetBrowser(browser());
+
+  // Press on first tab so drag is active. Reset WindowFinder to one that causes
+  // capture to be lost from within GetLocalProcessWindowAtPoint(), then
+  // continue drag. The capture lost should trigger the drag to cancel.
+  ASSERT_TRUE(PressInput(GetCenterInScreenCoordinates(tab_strip->tab_at(0))));
+  ASSERT_TRUE(tab_strip->IsDragSessionActive());
+  SetWindowFinderForTabStrip(
+      tab_strip, base::WrapUnique(new CaptureLoseWindowFinder(tab_strip)));
+  ASSERT_TRUE(DragInputTo(GetCenterInScreenCoordinates(tab_strip->tab_at(1))));
+  ASSERT_FALSE(tab_strip->IsDragSessionActive());
 }
 
 namespace {
@@ -1024,6 +1085,64 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   ASSERT_FALSE(TabDragController::IsActive());
 
   EXPECT_EQ("1", IDString(browser()->tab_strip_model()));
+
+  EXPECT_FALSE(GetIsDragged(browser()));
+}
+
+namespace {
+
+void CloseTabsWhileDetachedStep2(const BrowserList* browser_list) {
+  ASSERT_EQ(2u, browser_list->size());
+  Browser* old_browser = browser_list->get(0);
+  EXPECT_EQ("0 3", IDString(old_browser->tab_strip_model()));
+  Browser* new_browser = browser_list->get(1);
+  EXPECT_EQ("1 2", IDString(new_browser->tab_strip_model()));
+  chrome::CloseTab(new_browser);
+}
+
+}  // namespace
+
+#if defined(OS_CHROMEOS)
+// TODO(sky,sad): Disabled as it fails due to resize locks with a real
+// compositor. crbug.com/331924
+#define MAYBE_DeleteTabsWhileDetached DISABLED_DeleteTabsWhileDetached
+#else
+#define MAYBE_DeleteTabsWhileDetached DeleteTabsWhileDetached
+#endif
+// Selects 2 tabs out of 4, drags them out and closes the new browser window
+// while dragging tabs.
+IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
+                       MAYBE_DeleteTabsWhileDetached) {
+  // Add 3 tabs for a total of 4 tabs.
+  AddTabAndResetBrowser(browser());
+  AddTabAndResetBrowser(browser());
+  AddTabAndResetBrowser(browser());
+  TabStrip* tab_strip = GetTabStripForBrowser(browser());
+  EXPECT_EQ("0 1 2 3", IDString(browser()->tab_strip_model()));
+
+  // Click the first tab and select two middle tabs.
+  gfx::Point tab_1_center(GetCenterInScreenCoordinates(tab_strip->tab_at(1)));
+  gfx::Point tab_2_center(GetCenterInScreenCoordinates(tab_strip->tab_at(2)));
+  ASSERT_TRUE(PressInput(tab_1_center));
+  ASSERT_TRUE(ReleaseInput());
+  browser()->tab_strip_model()->AddTabAtToSelection(1);
+  browser()->tab_strip_model()->AddTabAtToSelection(2);
+  // Press mouse button in the second tab and drag it enough to detach.
+  ASSERT_TRUE(PressInput(tab_2_center));
+  ASSERT_TRUE(DragInputToNotifyWhenDone(
+      tab_2_center.x(), tab_2_center.y() + GetDetachY(tab_strip),
+      base::Bind(&CloseTabsWhileDetachedStep2, browser_list)));
+  QuitWhenNotDragging();
+
+  // Should not be dragging.
+  ASSERT_EQ(1u, browser_list->size());
+  ASSERT_FALSE(tab_strip->IsDragSessionActive());
+  ASSERT_FALSE(TabDragController::IsActive());
+
+  // Only tab "1" gets closed; tab "2" which was also selected gets restored.
+  // TODO(varkha): fix this expectation once closing a tab while dragging
+  // stops the drag and causes all selected tabs to get closed.
+  EXPECT_EQ("0 3 2", IDString(browser()->tab_strip_model()));
 
   EXPECT_FALSE(GetIsDragged(browser()));
 }
@@ -2255,8 +2374,6 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTestTouch,
   ASSERT_TRUE(ReleaseInput2());
 }
 
-#if defined(OS_CHROMEOS)
-
 namespace {
 
 void DetachToDockedWindowNextStep(
@@ -2342,9 +2459,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
 
 #endif  // OS_CHROMEOS
 
-#endif
-
-#if defined(USE_ASH) && defined(OS_CHROMEOS)  // TODO(win_ash,linux_ash)
+#if defined(USE_ASH)
 INSTANTIATE_TEST_CASE_P(TabDragging,
                         DetachToBrowserInSeparateDisplayTabDragControllerTest,
                         ::testing::Values("mouse", "touch"));
@@ -2357,7 +2472,7 @@ INSTANTIATE_TEST_CASE_P(TabDragging,
 INSTANTIATE_TEST_CASE_P(TabDragging,
                         DetachToBrowserTabDragControllerTestTouch,
                         ::testing::Values("touch"));
-#elif defined(USE_ASH)
+#else
 INSTANTIATE_TEST_CASE_P(TabDragging,
                         DetachToBrowserTabDragControllerTest,
                         ::testing::Values("mouse"));

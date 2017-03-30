@@ -31,6 +31,7 @@
 #ifndef WrapperTypeInfo_h
 #define WrapperTypeInfo_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "gin/public/wrapper_info.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
@@ -54,6 +55,7 @@ typedef v8::Local<v8::FunctionTemplate> (*DomTemplateFunction)(v8::Isolate*);
 typedef void (*RefObjectFunction)(ScriptWrappable*);
 typedef void (*DerefObjectFunction)(ScriptWrappable*);
 typedef void (*TraceFunction)(Visitor*, ScriptWrappable*);
+typedef ActiveScriptWrappable* (*ToActiveScriptWrappableFunction)(v8::Local<v8::Object>);
 typedef void (*ResolveWrapperReachabilityFunction)(v8::Isolate*, ScriptWrappable*, const v8::Persistent<v8::Object>&);
 typedef void (*PreparePrototypeAndInterfaceObjectFunction)(v8::Local<v8::Context>, v8::Local<v8::Object>, v8::Local<v8::Function>, v8::Local<v8::FunctionTemplate>);
 typedef void (*InstallConditionallyEnabledPropertiesFunction)(v8::Local<v8::Object>, v8::Isolate*);
@@ -90,7 +92,8 @@ struct WrapperTypeInfo {
 
     enum GCType {
         GarbageCollectedObject,
-        WillBeGarbageCollectedObject,
+        // TODO(haraken): Remove RefCountedObject. All DOM objects that inherit
+        // from ScriptWrappable must be moved to Oilpan's heap.
         RefCountedObject,
     };
 
@@ -128,17 +131,13 @@ struct WrapperTypeInfo {
 
     bool isGarbageCollected() const
     {
-        return (gcType == GarbageCollectedObject
-#if ENABLE(OILPAN)
-                || gcType == WillBeGarbageCollectedObject
-#endif
-                );
+        return gcType == GarbageCollectedObject;
     }
 
     void refObject(ScriptWrappable* scriptWrappable) const
     {
         if (isGarbageCollected()) {
-            Heap::increaseWrapperCount(1);
+            Heap::heapStats().increaseWrapperCount(1);
         } else {
             ASSERT(refObjectFunction);
             refObjectFunction(scriptWrappable);
@@ -148,8 +147,9 @@ struct WrapperTypeInfo {
     void derefObject(ScriptWrappable* scriptWrappable) const
     {
         if (isGarbageCollected()) {
-            Heap::decreaseWrapperCount(1);
-            Heap::increaseCollectedWrapperCount(1);
+            ThreadHeapStats& heapStats = Heap::heapStats();
+            heapStats.decreaseWrapperCount(1);
+            heapStats.increaseCollectedWrapperCount(1);
         } else {
             ASSERT(derefObjectFunction);
             derefObjectFunction(scriptWrappable);
@@ -159,8 +159,9 @@ struct WrapperTypeInfo {
     void derefObject() const
     {
         ASSERT(isGarbageCollected());
-        Heap::decreaseWrapperCount(1);
-        Heap::increaseCollectedWrapperCount(1);
+        ThreadHeapStats& heapStats = Heap::heapStats();
+        heapStats.decreaseWrapperCount(1);
+        heapStats.increaseCollectedWrapperCount(1);
     }
 
     void trace(Visitor* visitor, ScriptWrappable* scriptWrappable) const
@@ -181,6 +182,18 @@ struct WrapperTypeInfo {
             installConditionallyEnabledPropertiesFunction(prototypeObject, isolate);
     }
 
+    ActiveScriptWrappable* toActiveScriptWrappable(v8::Local<v8::Object> object) const
+    {
+        if (!toActiveScriptWrappableFunction)
+            return nullptr;
+        return toActiveScriptWrappableFunction(object);
+    }
+
+    bool hasPendingActivity(v8::Local<v8::Object> object) const
+    {
+        return !toActiveScriptWrappableFunction ? false : toActiveScriptWrappableFunction(object)->hasPendingActivity();
+    }
+
     EventTarget* toEventTarget(v8::Local<v8::Object>) const;
 
     void visitDOMWrapper(v8::Isolate* isolate, ScriptWrappable* scriptWrappable, const v8::Persistent<v8::Object>& wrapper) const
@@ -198,6 +211,7 @@ struct WrapperTypeInfo {
     const RefObjectFunction refObjectFunction;
     const DerefObjectFunction derefObjectFunction;
     const TraceFunction traceFunction;
+    const ToActiveScriptWrappableFunction toActiveScriptWrappableFunction;
     const ResolveWrapperReachabilityFunction visitDOMWrapperFunction;
     PreparePrototypeAndInterfaceObjectFunction preparePrototypeAndInterfaceObjectFunction;
     const InstallConditionallyEnabledPropertiesFunction installConditionallyEnabledPropertiesFunction;

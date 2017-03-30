@@ -7,9 +7,10 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "content/browser/media/media_web_contents_observer.h"
 #include "content/common/content_export.h"
 
@@ -19,7 +20,6 @@ class BrowserCdmManager;
 class BrowserMediaPlayerManager;
 class BrowserMediaSessionManager;
 class BrowserSurfaceViewManager;
-class MediaSessionController;
 
 // This class adds Android specific extensions to the MediaWebContentsObserver.
 class CONTENT_EXPORT MediaWebContentsObserverAndroid
@@ -58,6 +58,9 @@ class CONTENT_EXPORT MediaWebContentsObserverAndroid
                    bool is_remote,
                    base::TimeDelta duration);
 
+  void DisconnectMediaSession(RenderFrameHost* render_frame_host,
+                              int delegate_id);
+
 #if defined(VIDEO_HOLE)
   void OnFrameInfoUpdated();
 #endif  // defined(VIDEO_HOLE)
@@ -68,21 +71,6 @@ class CONTENT_EXPORT MediaWebContentsObserverAndroid
                          RenderFrameHost* render_frame_host) override;
 
  private:
-  // Handles messages from the WebMediaPlayerDelegate; does not modify the
-  // handled state since the superclass needs to handle these as well.
-  void OnMediaPlayerDelegateMessageReceived(const IPC::Message& msg,
-                                            RenderFrameHost* render_frame_host);
-  void OnMediaDestroyed(RenderFrameHost* render_frame_host, int delegate_id);
-  void OnMediaPaused(RenderFrameHost* render_frame_host,
-                     int delegate_id,
-                     bool reached_end_of_stream);
-  void OnMediaPlaying(RenderFrameHost* render_frame_host,
-                      int delegate_id,
-                      bool has_video,
-                      bool has_audio,
-                      bool is_remote,
-                      base::TimeDelta duration);
-
   // Helper functions to handle media player IPC messages. Returns whether the
   // |message| is handled in the function.
   bool OnMediaPlayerMessageReceived(const IPC::Message& message,
@@ -102,23 +90,18 @@ class CONTENT_EXPORT MediaWebContentsObserverAndroid
   // Map from RenderFrameHost* to BrowserMediaPlayerManager.
   using MediaPlayerManagerMap =
       base::ScopedPtrHashMap<RenderFrameHost*,
-                             scoped_ptr<BrowserMediaPlayerManager>>;
+                             std::unique_ptr<BrowserMediaPlayerManager>>;
   MediaPlayerManagerMap media_player_managers_;
 
   // Map from RenderFrameHost* to BrowserMediaSessionManager.
   using MediaSessionManagerMap =
       base::ScopedPtrHashMap<RenderFrameHost*,
-                             scoped_ptr<BrowserMediaSessionManager>>;
+                             std::unique_ptr<BrowserMediaSessionManager>>;
   MediaSessionManagerMap media_session_managers_;
-
-  // Map of renderer process media players to session controllers.
-  using MediaSessionMap =
-      std::map<MediaPlayerId, scoped_ptr<MediaSessionController>>;
-  MediaSessionMap media_session_map_;
 
   using SurfaceViewManagerMap =
       base::ScopedPtrHashMap<RenderFrameHost*,
-                             scoped_ptr<BrowserSurfaceViewManager>>;
+                             std::unique_ptr<BrowserSurfaceViewManager>>;
   SurfaceViewManagerMap surface_view_managers_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaWebContentsObserverAndroid);

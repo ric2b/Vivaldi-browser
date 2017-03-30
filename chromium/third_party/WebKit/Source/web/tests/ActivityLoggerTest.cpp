@@ -17,7 +17,7 @@
 namespace blink {
 
 using blink::FrameTestHelpers::WebViewHelper;
-using blink::FrameTestHelpers::pumpPendingRequestsDoNotUse;
+using blink::FrameTestHelpers::pumpPendingRequestsForFrameToLoad;
 
 class TestActivityLogger : public V8DOMActivityLogger {
 public:
@@ -51,7 +51,14 @@ public:
     }
 
     void clear() { m_loggedActivities.clear(); }
-    bool verifyActivities(const Vector<String>& activities) const { return m_loggedActivities == activities; }
+    bool verifyActivities(const Vector<String>& expected) const
+    {
+        EXPECT_EQ(expected.size(), m_loggedActivities.size());
+        for (size_t i = 0; i < std::min(expected.size(), m_loggedActivities.size()); ++i) {
+            EXPECT_STREQ(expected[i].utf8().data(), m_loggedActivities[i].utf8().data());
+        }
+        return m_loggedActivities == expected;
+    }
 
 private:
     Vector<String> m_loggedActivities;
@@ -77,17 +84,17 @@ protected:
     {
         v8::HandleScope scope(v8::Isolate::GetCurrent());
         m_scriptController->executeScriptInMainWorld(script);
-        pumpPendingRequestsDoNotUse(m_webViewHelper.webViewImpl()->mainFrame());
+        pumpPendingRequestsForFrameToLoad(m_webViewHelper.webViewImpl()->mainFrame());
     }
 
     void executeScriptInIsolatedWorld(const String& script) const
     {
         v8::HandleScope scope(v8::Isolate::GetCurrent());
-        WillBeHeapVector<ScriptSourceCode> sources;
+        HeapVector<ScriptSourceCode> sources;
         sources.append(ScriptSourceCode(script));
         Vector<v8::Local<v8::Value>> results;
         m_scriptController->executeScriptInIsolatedWorld(isolatedWorldId, sources, extensionGroup, 0);
-        pumpPendingRequestsDoNotUse(m_webViewHelper.webViewImpl()->mainFrame());
+        pumpPendingRequestsForFrameToLoad(m_webViewHelper.webViewImpl()->mainFrame());
     }
 
     bool verifyActivities(const String& activities)
@@ -102,7 +109,7 @@ private:
     static const int extensionGroup = 0;
 
     WebViewHelper m_webViewHelper;
-    RawPtrWillBePersistent<ScriptController> m_scriptController;
+    Persistent<ScriptController> m_scriptController;
     // TestActivityLogger is owned by a static table within V8DOMActivityLogger
     // and should be alive as long as not overwritten.
     TestActivityLogger* m_activityLogger;

@@ -73,8 +73,6 @@ class ManagePasswordsBubbleModel : public content::WebContentsObserver {
   void OnPasswordAction(const autofill::PasswordForm& password_form,
                         PasswordAction action);
 
-  GURL origin() const { return origin_; }
-
   password_manager::ui::State state() const { return state_; }
 
   const base::string16& title() const { return title_; }
@@ -113,7 +111,9 @@ class ManagePasswordsBubbleModel : public content::WebContentsObserver {
     return dismissal_reason_;
   }
 
-  void set_clock(scoped_ptr<base::Clock> clock) { clock_ = std::move(clock); }
+  void set_clock(std::unique_ptr<base::Clock> clock) {
+    clock_ = std::move(clock);
+  }
 #endif
 
  private:
@@ -151,7 +151,7 @@ class ManagePasswordsBubbleModel : public content::WebContentsObserver {
   password_manager::InteractionsStats interaction_stats_;
 
   // Used to retrieve the current time, in base::Time units.
-  scoped_ptr<base::Clock> clock_;
+  std::unique_ptr<base::Clock> clock_;
 
   DISALLOW_COPY_AND_ASSIGN(ManagePasswordsBubbleModel);
 };

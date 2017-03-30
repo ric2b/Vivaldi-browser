@@ -42,6 +42,8 @@
 #include "core/testing/DummyPageHolder.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/KURL.h"
+#include "public/platform/WebAddressSpace.h"
+#include "public/platform/WebCachePolicy.h"
 #include "testing/gmock/include/gmock/gmock-generated-function-mockers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -49,9 +51,9 @@ namespace blink {
 
 class StubFrameLoaderClientWithParent final : public EmptyFrameLoaderClient {
 public:
-    static PassOwnPtrWillBeRawPtr<StubFrameLoaderClientWithParent> create(Frame* parent)
+    static StubFrameLoaderClientWithParent* create(Frame* parent)
     {
-        return adoptPtrWillBeNoop(new StubFrameLoaderClientWithParent(parent));
+        return new StubFrameLoaderClientWithParent(parent);
     }
 
     DEFINE_INLINE_VIRTUAL_TRACE()
@@ -68,26 +70,7 @@ private:
     {
     }
 
-    RawPtrWillBeMember<Frame> m_parent;
-};
-
-class StubFrameOwner : public NoBaseWillBeGarbageCollectedFinalized<StubFrameOwner>, public FrameOwner {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(StubFrameOwner);
-public:
-    static PassOwnPtrWillBeRawPtr<StubFrameOwner> create()
-    {
-        return adoptPtrWillBeNoop(new StubFrameOwner);
-    }
-
-    DEFINE_INLINE_VIRTUAL_TRACE() { FrameOwner::trace(visitor); }
-
-    bool isLocal() const override { return false; }
-    SandboxFlags getSandboxFlags() const override { return SandboxNone; }
-    void dispatchLoad() override { }
-    void renderFallbackContent() override { }
-    ScrollbarMode scrollingMode() const override { return ScrollbarAuto; }
-    int marginWidth() const override { return -1; }
-    int marginHeight() const override { return -1; }
+    Member<Frame> m_parent;
 };
 
 class MockFrameLoaderClient : public EmptyFrameLoaderClient {
@@ -108,7 +91,7 @@ protected:
         documentLoader = DocumentLoader::create(&dummyPageHolder->frame(), ResourceRequest("http://www.example.com"), SubstituteData());
         document = toHTMLDocument(&dummyPageHolder->document());
         fetchContext = static_cast<FrameFetchContext*>(&documentLoader->fetcher()->context());
-        owner = StubFrameOwner::create();
+        owner = DummyFrameOwner::create();
         FrameFetchContext::provideDocumentToContext(*fetchContext, document.get());
     }
 
@@ -140,15 +123,15 @@ protected:
     OwnPtr<DummyPageHolder> dummyPageHolder;
     // We don't use the DocumentLoader directly in any tests, but need to keep it around as long
     // as the ResourceFetcher and Document live due to indirect usage.
-    RefPtrWillBePersistent<DocumentLoader> documentLoader;
-    RefPtrWillBePersistent<Document> document;
+    Persistent<DocumentLoader> documentLoader;
+    Persistent<Document> document;
     Persistent<FrameFetchContext> fetchContext;
 
-    OwnPtrWillBePersistent<StubFrameLoaderClientWithParent> childClient;
-    RefPtrWillBePersistent<LocalFrame> childFrame;
-    RefPtrWillBePersistent<DocumentLoader> childDocumentLoader;
-    RefPtrWillBePersistent<Document> childDocument;
-    OwnPtrWillBePersistent<StubFrameOwner> owner;
+    Persistent<StubFrameLoaderClientWithParent> childClient;
+    Persistent<LocalFrame> childFrame;
+    Persistent<DocumentLoader> childDocumentLoader;
+    Persistent<Document> childDocument;
+    Persistent<DummyFrameOwner> owner;
 };
 
 // This test class sets up a mock frame loader client that expects a
@@ -162,13 +145,13 @@ protected:
         mainResourceUrl = KURL(KURL(), "https://www.example.test");
         MockFrameLoaderClient* client = new MockFrameLoaderClient;
         EXPECT_CALL(*client, didDisplayContentWithCertificateErrors(url, securityInfo, WebURL(mainResourceUrl), CString()));
-        dummyPageHolder = DummyPageHolder::create(IntSize(500, 500), nullptr, adoptPtrWillBeNoop(client));
+        dummyPageHolder = DummyPageHolder::create(IntSize(500, 500), nullptr, client);
         dummyPageHolder->page().setDeviceScaleFactor(1.0);
         documentLoader = DocumentLoader::create(&dummyPageHolder->frame(), ResourceRequest(mainResourceUrl), SubstituteData());
         document = toHTMLDocument(&dummyPageHolder->document());
         document->setURL(mainResourceUrl);
         fetchContext = static_cast<FrameFetchContext*>(&documentLoader->fetcher()->context());
-        owner = StubFrameOwner::create();
+        owner = DummyFrameOwner::create();
         FrameFetchContext::provideDocumentToContext(*fetchContext, document.get());
     }
 
@@ -202,7 +185,7 @@ protected:
 
         fetchContext->upgradeInsecureRequest(fetchRequest);
 
-        EXPECT_STREQ(expectedURL.string().utf8().data(), fetchRequest.resourceRequest().url().string().utf8().data());
+        EXPECT_STREQ(expectedURL.getString().utf8().data(), fetchRequest.resourceRequest().url().getString().utf8().data());
         EXPECT_EQ(expectedURL.protocol(), fetchRequest.resourceRequest().url().protocol());
         EXPECT_EQ(expectedURL.host(), fetchRequest.resourceRequest().url().host());
         EXPECT_EQ(expectedURL.port(), fetchRequest.resourceRequest().url().port());
@@ -413,47 +396,47 @@ TEST_F(FrameFetchContextTest, MainResource)
 {
     // Default case
     ResourceRequest request("http://www.example.com");
-    EXPECT_EQ(UseProtocolCachePolicy, fetchContext->resourceRequestCachePolicy(request, Resource::MainResource));
+    EXPECT_EQ(WebCachePolicy::UseProtocolCachePolicy, fetchContext->resourceRequestCachePolicy(request, Resource::MainResource, FetchRequest::NoDefer));
 
     // Post
     ResourceRequest postRequest("http://www.example.com");
     postRequest.setHTTPMethod("POST");
-    EXPECT_EQ(ReloadIgnoringCacheData, fetchContext->resourceRequestCachePolicy(postRequest, Resource::MainResource));
+    EXPECT_EQ(WebCachePolicy::ValidatingCacheData, fetchContext->resourceRequestCachePolicy(postRequest, Resource::MainResource, FetchRequest::NoDefer));
 
     // Re-post
     document->frame()->loader().setLoadType(FrameLoadTypeBackForward);
-    EXPECT_EQ(ReturnCacheDataDontLoad, fetchContext->resourceRequestCachePolicy(postRequest, Resource::MainResource));
+    EXPECT_EQ(WebCachePolicy::ReturnCacheDataDontLoad, fetchContext->resourceRequestCachePolicy(postRequest, Resource::MainResource, FetchRequest::NoDefer));
 
     // Enconding overriden
     document->frame()->loader().setLoadType(FrameLoadTypeStandard);
     document->frame()->host()->setOverrideEncoding("foo");
-    EXPECT_EQ(ReturnCacheDataElseLoad, fetchContext->resourceRequestCachePolicy(request, Resource::MainResource));
+    EXPECT_EQ(WebCachePolicy::ReturnCacheDataElseLoad, fetchContext->resourceRequestCachePolicy(request, Resource::MainResource, FetchRequest::NoDefer));
     document->frame()->host()->setOverrideEncoding(AtomicString());
 
     // FrameLoadTypeSame
     document->frame()->loader().setLoadType(FrameLoadTypeSame);
-    EXPECT_EQ(ReloadIgnoringCacheData, fetchContext->resourceRequestCachePolicy(request, Resource::MainResource));
+    EXPECT_EQ(WebCachePolicy::ValidatingCacheData, fetchContext->resourceRequestCachePolicy(request, Resource::MainResource, FetchRequest::NoDefer));
 
     // Conditional request
     document->frame()->loader().setLoadType(FrameLoadTypeStandard);
     ResourceRequest conditional("http://www.example.com");
     conditional.setHTTPHeaderField(HTTPNames::If_Modified_Since, "foo");
-    EXPECT_EQ(ReloadIgnoringCacheData, fetchContext->resourceRequestCachePolicy(conditional, Resource::MainResource));
+    EXPECT_EQ(WebCachePolicy::ValidatingCacheData, fetchContext->resourceRequestCachePolicy(conditional, Resource::MainResource, FetchRequest::NoDefer));
 
     // Set up a child frame
     FrameFetchContext* childFetchContext = createChildFrame();
 
     // Child frame as part of back/forward
     document->frame()->loader().setLoadType(FrameLoadTypeBackForward);
-    EXPECT_EQ(ReturnCacheDataElseLoad, childFetchContext->resourceRequestCachePolicy(request, Resource::MainResource));
+    EXPECT_EQ(WebCachePolicy::ReturnCacheDataElseLoad, childFetchContext->resourceRequestCachePolicy(request, Resource::MainResource, FetchRequest::NoDefer));
 
     // Child frame as part of reload
     document->frame()->loader().setLoadType(FrameLoadTypeReload);
-    EXPECT_EQ(ReloadIgnoringCacheData, childFetchContext->resourceRequestCachePolicy(request, Resource::MainResource));
+    EXPECT_EQ(WebCachePolicy::ValidatingCacheData, childFetchContext->resourceRequestCachePolicy(request, Resource::MainResource, FetchRequest::NoDefer));
 
-    // Child frame as part of end to end reload
-    document->frame()->loader().setLoadType(FrameLoadTypeReloadFromOrigin);
-    EXPECT_EQ(ReloadBypassingCache, childFetchContext->resourceRequestCachePolicy(request, Resource::MainResource));
+    // Child frame as part of reload bypassing cache
+    document->frame()->loader().setLoadType(FrameLoadTypeReloadBypassingCache);
+    EXPECT_EQ(WebCachePolicy::BypassingCache, childFetchContext->resourceRequestCachePolicy(request, Resource::MainResource, FetchRequest::NoDefer));
 }
 
 TEST_F(FrameFetchContextTest, ModifyPriorityForExperiments)
@@ -475,6 +458,9 @@ TEST_F(FrameFetchContextTest, ModifyPriorityForExperiments)
 
     // Base case, no priority change. Note that this triggers m_imageFetched, which will matter for setFetchDeferLateScripts() case below.
     EXPECT_EQ(ResourceLoadPriorityVeryLow, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryLow, Resource::Image, request, ResourcePriority::NotVisible));
+
+    // RAW (XHR/Fetch) should default to Medium with no experiments running
+    EXPECT_EQ(ResourceLoadPriorityMedium, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Raw, request, ResourcePriority::NotVisible));
 
     // Image visibility should increase priority
     EXPECT_EQ(ResourceLoadPriorityLow, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryLow, Resource::Image, request, ResourcePriority::Visible));
@@ -503,6 +489,9 @@ TEST_F(FrameFetchContextTest, ModifyPriorityForExperiments)
     // Re-test image priority based on visibility with increased priorities
     EXPECT_EQ(ResourceLoadPriorityLow, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryLow, Resource::Image, request, ResourcePriority::NotVisible));
     EXPECT_EQ(ResourceLoadPriorityHigh, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryLow, Resource::Image, request, ResourcePriority::Visible));
+
+    // Re-test RAW (XHR/Fetch) with increased priorities
+    EXPECT_EQ(ResourceLoadPriorityHigh, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Raw, request, ResourcePriority::NotVisible));
 
     // Re-test font priority with increased prioriries
     settings->setFEtchIncreaseFontPriority(false);
@@ -580,9 +569,151 @@ TEST_F(FrameFetchContextDisplayedCertificateErrorsTest, MemoryCacheCertificateEr
     response.setURL(url);
     response.setSecurityInfo(securityInfo);
     response.setHasMajorCertificateErrors(true);
-    RefPtrWillBeRawPtr<Resource> resource = Resource::create(resourceRequest, Resource::Image);
+    Resource* resource = Resource::create(resourceRequest, Resource::Image);
     resource->setResponse(response);
-    fetchContext->dispatchDidLoadResourceFromMemoryCache(resource.get(), WebURLRequest::FrameTypeNone, WebURLRequest::RequestContextImage);
+    fetchContext->dispatchDidLoadResourceFromMemoryCache(resource, WebURLRequest::FrameTypeNone, WebURLRequest::RequestContextImage);
+}
+
+TEST_F(FrameFetchContextTest, SetIsExternalRequestForPublicDocument)
+{
+    EXPECT_EQ(WebAddressSpacePublic, document->addressSpace());
+
+    struct TestCase {
+        const char* url;
+        bool isExternalExpectation;
+    } cases[] = {
+        { "data:text/html,whatever", false },
+        { "file:///etc/passwd", false },
+        { "blob:http://example.com/", false },
+
+        { "http://example.com/", false },
+        { "https://example.com/", false },
+
+        { "http://192.168.1.1:8000/", true },
+        { "http://10.1.1.1:8000/", true },
+
+        { "http://localhost/", true },
+        { "http://127.0.0.1/", true },
+        { "http://127.0.0.1:8000/", true }
+    };
+    RuntimeEnabledFeatures::setCorsRFC1918Enabled(false);
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.url);
+        ResourceRequest mainRequest(test.url);
+        fetchContext->addAdditionalRequestHeaders(mainRequest, FetchMainResource);
+        EXPECT_FALSE(mainRequest.isExternalRequest());
+
+        ResourceRequest subRequest(test.url);
+        fetchContext->addAdditionalRequestHeaders(subRequest, FetchSubresource);
+        EXPECT_FALSE(subRequest.isExternalRequest());
+    }
+
+    RuntimeEnabledFeatures::setCorsRFC1918Enabled(true);
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.url);
+        ResourceRequest mainRequest(test.url);
+        fetchContext->addAdditionalRequestHeaders(mainRequest, FetchMainResource);
+        EXPECT_EQ(mainRequest.isExternalRequest(), test.isExternalExpectation);
+
+        ResourceRequest subRequest(test.url);
+        fetchContext->addAdditionalRequestHeaders(subRequest, FetchSubresource);
+        EXPECT_EQ(subRequest.isExternalRequest(), test.isExternalExpectation);
+    }
+}
+
+TEST_F(FrameFetchContextTest, SetIsExternalRequestForPrivateDocument)
+{
+    document->setAddressSpace(WebAddressSpacePrivate);
+    EXPECT_EQ(WebAddressSpacePrivate, document->addressSpace());
+
+    struct TestCase {
+        const char* url;
+        bool isExternalExpectation;
+    } cases[] = {
+        { "data:text/html,whatever", false },
+        { "file:///etc/passwd", false },
+        { "blob:http://example.com/", false },
+
+        { "http://example.com/", false },
+        { "https://example.com/", false },
+
+        { "http://192.168.1.1:8000/", false },
+        { "http://10.1.1.1:8000/", false },
+
+        { "http://localhost/", true },
+        { "http://127.0.0.1/", true },
+        { "http://127.0.0.1:8000/", true }
+    };
+    RuntimeEnabledFeatures::setCorsRFC1918Enabled(false);
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.url);
+        ResourceRequest mainRequest(test.url);
+        fetchContext->addAdditionalRequestHeaders(mainRequest, FetchMainResource);
+        EXPECT_FALSE(mainRequest.isExternalRequest());
+
+        ResourceRequest subRequest(test.url);
+        fetchContext->addAdditionalRequestHeaders(subRequest, FetchSubresource);
+        EXPECT_FALSE(subRequest.isExternalRequest());
+    }
+
+    RuntimeEnabledFeatures::setCorsRFC1918Enabled(true);
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.url);
+        ResourceRequest mainRequest(test.url);
+        fetchContext->addAdditionalRequestHeaders(mainRequest, FetchMainResource);
+        EXPECT_EQ(mainRequest.isExternalRequest(), test.isExternalExpectation);
+
+        ResourceRequest subRequest(test.url);
+        fetchContext->addAdditionalRequestHeaders(subRequest, FetchSubresource);
+        EXPECT_EQ(subRequest.isExternalRequest(), test.isExternalExpectation);
+    }
+}
+
+TEST_F(FrameFetchContextTest, SetIsExternalRequestForLocalDocument)
+{
+    document->setAddressSpace(WebAddressSpaceLocal);
+    EXPECT_EQ(WebAddressSpaceLocal, document->addressSpace());
+
+    struct TestCase {
+        const char* url;
+        bool isExternalExpectation;
+    } cases[] = {
+        { "data:text/html,whatever", false },
+        { "file:///etc/passwd", false },
+        { "blob:http://example.com/", false },
+
+        { "http://example.com/", false },
+        { "https://example.com/", false },
+
+        { "http://192.168.1.1:8000/", false },
+        { "http://10.1.1.1:8000/", false },
+
+        { "http://localhost/", false },
+        { "http://127.0.0.1/", false },
+        { "http://127.0.0.1:8000/", false }
+    };
+
+    RuntimeEnabledFeatures::setCorsRFC1918Enabled(false);
+    for (const auto& test : cases) {
+        ResourceRequest mainRequest(test.url);
+        fetchContext->addAdditionalRequestHeaders(mainRequest, FetchMainResource);
+        EXPECT_FALSE(mainRequest.isExternalRequest());
+
+        ResourceRequest subRequest(test.url);
+        fetchContext->addAdditionalRequestHeaders(subRequest, FetchSubresource);
+        EXPECT_FALSE(subRequest.isExternalRequest());
+    }
+
+    RuntimeEnabledFeatures::setCorsRFC1918Enabled(true);
+    for (const auto& test : cases) {
+        ResourceRequest mainRequest(test.url);
+        fetchContext->addAdditionalRequestHeaders(mainRequest, FetchMainResource);
+        EXPECT_EQ(mainRequest.isExternalRequest(), test.isExternalExpectation);
+
+        ResourceRequest subRequest(test.url);
+        fetchContext->addAdditionalRequestHeaders(subRequest, FetchSubresource);
+        EXPECT_EQ(subRequest.isExternalRequest(), test.isExternalExpectation);
+    }
 }
 
 } // namespace blink

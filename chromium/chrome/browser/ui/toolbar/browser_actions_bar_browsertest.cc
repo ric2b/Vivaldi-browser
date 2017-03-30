@@ -45,9 +45,9 @@ scoped_refptr<const extensions::Extension> CreateExtension(
            Set("manifest_version", 2).
            Set("version", "1.0");
   if (has_browser_action)
-    manifest.Set("browser_action", extensions::DictionaryBuilder());
+    manifest.Set("browser_action", extensions::DictionaryBuilder().Build());
   return extensions::ExtensionBuilder()
-      .SetManifest(std::move(manifest))
+      .SetManifest(manifest.Build())
       .SetID(crx_file::id_util::GenerateId(name))
       .Build();
 }
@@ -405,7 +405,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(BrowserActionsBarRedesignBrowserTest,
                        OverflowedBrowserActionPopupTest) {
-  scoped_ptr<BrowserActionTestUtil> overflow_bar =
+  std::unique_ptr<BrowserActionTestUtil> overflow_bar =
       browser_actions_bar()->CreateOverflowBar();
 
   // Load up two extensions that have browser action popups.
@@ -507,23 +507,4 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarRedesignBrowserTest,
   browser_actions_bar()->HidePopup();
   content::RunAllBlockingPoolTasksUntilIdle();
   EXPECT_FALSE(browser_actions_bar()->HasPopup());
-}
-
-// Tests that the browser actions container correctly highlights for displaying
-// the icon surfacing bubble.
-IN_PROC_BROWSER_TEST_F(BrowserActionsBarRedesignBrowserTest,
-                       PRE_HighlightsForExtensionIconSurfacingBubble) {
-  // Add a new extension and clear the pref for the bubble being acknowledged.
-  base::FilePath path = PackExtension(test_data_dir_.AppendASCII("api_test")
-                                          .AppendASCII("page_action")
-                                          .AppendASCII("simple"));
-  InstallExtensionFromWebstore(path, 1);
-  profile()->GetPrefs()->ClearPref(
-      prefs::kToolbarIconSurfacingBubbleAcknowledged);
-}
-
-IN_PROC_BROWSER_TEST_F(BrowserActionsBarRedesignBrowserTest,
-                       HighlightsForExtensionIconSurfacingBubble) {
-  // The toolbar should be highlighting for the bubble.
-  EXPECT_TRUE(browser_actions_bar()->IsHighlightingForSurfacingBubble());
 }

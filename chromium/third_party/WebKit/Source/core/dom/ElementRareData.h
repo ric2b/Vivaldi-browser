@@ -52,7 +52,7 @@ public:
 
     ~ElementRareData();
 
-    void setPseudoElement(PseudoId, PassRefPtrWillBeRawPtr<PseudoElement>);
+    void setPseudoElement(PseudoId, RawPtr<PseudoElement>);
     PseudoElement* pseudoElement(PseudoId) const;
 
     short tabIndex() const { return m_tabindex; }
@@ -81,14 +81,14 @@ public:
     }
 
     NamedNodeMap* attributeMap() const { return m_attributeMap.get(); }
-    void setAttributeMap(PassOwnPtrWillBeRawPtr<NamedNodeMap> attributeMap) { m_attributeMap = attributeMap; }
+    void setAttributeMap(RawPtr<NamedNodeMap> attributeMap) { m_attributeMap = attributeMap; }
 
     ComputedStyle* ensureComputedStyle() const { return m_computedStyle.get(); }
     void setComputedStyle(PassRefPtr<ComputedStyle> computedStyle) { m_computedStyle = computedStyle; }
     void clearComputedStyle() { m_computedStyle = nullptr; }
 
     ClassList* classList() const { return m_classList.get(); }
-    void setClassList(PassRefPtrWillBeRawPtr<ClassList> classList) { m_classList = classList.leakRef(); }
+    void setClassList(RawPtr<ClassList> classList) { m_classList = classList.leakRef(); }
     void clearClassListValueForQuirksMode()
     {
         if (!m_classList)
@@ -97,7 +97,7 @@ public:
     }
 
     DatasetDOMStringMap* dataset() const { return m_dataset.get(); }
-    void setDataset(PassOwnPtrWillBeRawPtr<DatasetDOMStringMap> dataset) { m_dataset = dataset; }
+    void setDataset(RawPtr<DatasetDOMStringMap> dataset) { m_dataset = dataset; }
 
     LayoutSize minimumSizeForResizing() const { return m_minimumSizeForResizing; }
     void setMinimumSizeForResizing(LayoutSize size) { m_minimumSizeForResizing = size; }
@@ -118,7 +118,7 @@ public:
     void decrementCompositorProxiedProperties(uint32_t properties);
     CompositorProxiedPropertySet* proxiedPropertyCounts() const { return m_proxiedProperties.get(); }
 
-    void setCustomElementDefinition(PassRefPtrWillBeRawPtr<CustomElementDefinition> definition) { m_customElementDefinition = definition; }
+    void setCustomElementDefinition(RawPtr<CustomElementDefinition> definition) { m_customElementDefinition = definition; }
     CustomElementDefinition* customElementDefinition() const { return m_customElementDefinition.get(); }
 
     AttrNodeList& ensureAttrNodeList();
@@ -144,24 +144,24 @@ private:
     LayoutSize m_minimumSizeForResizing;
     IntSize m_savedLayerScrollOffset;
 
-    OwnPtrWillBeMember<DatasetDOMStringMap> m_dataset;
-    OwnPtrWillBeMember<ElementShadow> m_shadow;
-    RawPtrWillBeMember<ClassList> m_classList;
-    OwnPtrWillBeMember<NamedNodeMap> m_attributeMap;
-    OwnPtrWillBeMember<AttrNodeList> m_attrNodeList;
-    OwnPtrWillBeMember<InlineCSSStyleDeclaration> m_cssomWrapper;
+    Member<DatasetDOMStringMap> m_dataset;
+    Member<ElementShadow> m_shadow;
+    Member<ClassList> m_classList;
+    Member<NamedNodeMap> m_attributeMap;
+    Member<AttrNodeList> m_attrNodeList;
+    Member<InlineCSSStyleDeclaration> m_cssomWrapper;
     OwnPtr<CompositorProxiedPropertySet> m_proxiedProperties;
 
-    PersistentWillBeMember<ElementAnimations> m_elementAnimations;
-    PersistentWillBeMember<NodeIntersectionObserverData> m_intersectionObserverData;
+    Member<ElementAnimations> m_elementAnimations;
+    Member<NodeIntersectionObserverData> m_intersectionObserverData;
 
     RefPtr<ComputedStyle> m_computedStyle;
-    RefPtrWillBeMember<CustomElementDefinition> m_customElementDefinition;
+    Member<CustomElementDefinition> m_customElementDefinition;
 
-    RefPtrWillBeMember<PseudoElement> m_generatedBefore;
-    RefPtrWillBeMember<PseudoElement> m_generatedAfter;
-    RefPtrWillBeMember<PseudoElement> m_generatedFirstLetter;
-    RefPtrWillBeMember<PseudoElement> m_backdrop;
+    Member<PseudoElement> m_generatedBefore;
+    Member<PseudoElement> m_generatedAfter;
+    Member<PseudoElement> m_generatedFirstLetter;
+    Member<PseudoElement> m_backdrop;
 
     explicit ElementRareData(LayoutObject*);
 };
@@ -187,12 +187,12 @@ inline ElementRareData::~ElementRareData()
         m_elementAnimations->dispose();
     if (m_intersectionObserverData)
         m_intersectionObserverData->dispose();
-    ASSERT(!m_shadow);
+    DCHECK(!m_shadow);
 #endif
-    ASSERT(!m_generatedBefore);
-    ASSERT(!m_generatedAfter);
-    ASSERT(!m_generatedFirstLetter);
-    ASSERT(!m_backdrop);
+    DCHECK(!m_generatedBefore);
+    DCHECK(!m_generatedAfter);
+    DCHECK(!m_generatedFirstLetter);
+    DCHECK(!m_backdrop);
 }
 
 inline bool ElementRareData::hasPseudoElements() const
@@ -202,31 +202,31 @@ inline bool ElementRareData::hasPseudoElements() const
 
 inline void ElementRareData::clearPseudoElements()
 {
-    setPseudoElement(BEFORE, nullptr);
-    setPseudoElement(AFTER, nullptr);
-    setPseudoElement(BACKDROP, nullptr);
-    setPseudoElement(FIRST_LETTER, nullptr);
+    setPseudoElement(PseudoIdBefore, nullptr);
+    setPseudoElement(PseudoIdAfter, nullptr);
+    setPseudoElement(PseudoIdBackdrop, nullptr);
+    setPseudoElement(PseudoIdFirstLetter, nullptr);
 }
 
-inline void ElementRareData::setPseudoElement(PseudoId pseudoId, PassRefPtrWillBeRawPtr<PseudoElement> element)
+inline void ElementRareData::setPseudoElement(PseudoId pseudoId, RawPtr<PseudoElement> element)
 {
     switch (pseudoId) {
-    case BEFORE:
+    case PseudoIdBefore:
         if (m_generatedBefore)
             m_generatedBefore->dispose();
         m_generatedBefore = element;
         break;
-    case AFTER:
+    case PseudoIdAfter:
         if (m_generatedAfter)
             m_generatedAfter->dispose();
         m_generatedAfter = element;
         break;
-    case BACKDROP:
+    case PseudoIdBackdrop:
         if (m_backdrop)
             m_backdrop->dispose();
         m_backdrop = element;
         break;
-    case FIRST_LETTER:
+    case PseudoIdFirstLetter:
         if (m_generatedFirstLetter)
             m_generatedFirstLetter->dispose();
         m_generatedFirstLetter = element;
@@ -239,13 +239,13 @@ inline void ElementRareData::setPseudoElement(PseudoId pseudoId, PassRefPtrWillB
 inline PseudoElement* ElementRareData::pseudoElement(PseudoId pseudoId) const
 {
     switch (pseudoId) {
-    case BEFORE:
+    case PseudoIdBefore:
         return m_generatedBefore.get();
-    case AFTER:
+    case PseudoIdAfter:
         return m_generatedAfter.get();
-    case BACKDROP:
+    case PseudoIdBackdrop:
         return m_backdrop.get();
-    case FIRST_LETTER:
+    case PseudoIdFirstLetter:
         return m_generatedFirstLetter.get();
     default:
         return 0;

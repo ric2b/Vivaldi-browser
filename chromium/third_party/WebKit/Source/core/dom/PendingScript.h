@@ -31,8 +31,6 @@
 #include "core/fetch/ResourceOwner.h"
 #include "core/fetch/ScriptResource.h"
 #include "platform/heap/Handle.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefPtr.h"
 #include "wtf/text/TextPosition.h"
 
 namespace blink {
@@ -42,27 +40,33 @@ class ScriptSourceCode;
 
 // A container for an external script which may be loaded and executed.
 //
+// TODO(kochi): The comment below is from pre-oilpan age and may not be correct now.
 // A RefPtr alone does not prevent the underlying Resource
 // from purging its data buffer. This class holds a dummy client open for its
 // lifetime in order to guarantee that the data buffer will not be purged.
-class CORE_EXPORT PendingScript final : public NoBaseWillBeGarbageCollectedFinalized<PendingScript>, public ResourceOwner<ScriptResource> {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(PendingScript);
-    WILL_BE_USING_PRE_FINALIZER(PendingScript, dispose);
+class CORE_EXPORT PendingScript final : public GarbageCollectedFinalized<PendingScript>, public ResourceOwner<ScriptResource> {
+    USING_GARBAGE_COLLECTED_MIXIN(PendingScript);
+    USING_PRE_FINALIZER(PendingScript, dispose);
 public:
-    static PassOwnPtrWillBeRawPtr<PendingScript> create(Element*, ScriptResource*);
+    static RawPtr<PendingScript> create(Element*, ScriptResource*);
     ~PendingScript() override;
 
     PendingScript& operator=(const PendingScript&);
 
     TextPosition startingPosition() const { return m_startingPosition; }
     void setStartingPosition(const TextPosition& position) { m_startingPosition = position; }
+    void markParserBlockingLoadStartTime();
+    // Returns the time the load of this script started blocking the parser, or
+    // zero if this script hasn't yet blocked the parser, in
+    // monotonicallyIncreasingTime.
+    double parserBlockingLoadStartTime() const { return m_parserBlockingLoadStartTime; }
 
     void watchForLoad(ScriptResourceClient*);
     void stopWatchingForLoad();
 
     Element* element() const { return m_element.get(); }
     void setElement(Element*);
-    PassRefPtrWillBeRawPtr<Element> releaseElementAndClear();
+    RawPtr<Element> releaseElementAndClear();
 
     void setScriptResource(ScriptResource*);
 
@@ -74,10 +78,11 @@ public:
 
     ScriptSourceCode getSource(const KURL& documentURL, bool& errorOccurred) const;
 
-    void setStreamer(PassRefPtrWillBeRawPtr<ScriptStreamer>);
+    void setStreamer(RawPtr<ScriptStreamer>);
     void streamingFinished();
 
     bool isReady() const;
+    bool errorOccurred() const;
 
     void dispose();
 
@@ -85,11 +90,12 @@ private:
     PendingScript(Element*, ScriptResource*);
 
     bool m_watchingForLoad;
-    RefPtrWillBeMember<Element> m_element;
+    Member<Element> m_element;
     TextPosition m_startingPosition; // Only used for inline script tags.
     bool m_integrityFailure;
+    double m_parserBlockingLoadStartTime;
 
-    RefPtrWillBeMember<ScriptStreamer> m_streamer;
+    Member<ScriptStreamer> m_streamer;
     ScriptResourceClient* m_client;
 };
 

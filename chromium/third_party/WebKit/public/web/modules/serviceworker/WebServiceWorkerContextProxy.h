@@ -33,18 +33,18 @@
 
 #include "public/platform/WebGeofencingEventType.h"
 #include "public/platform/WebMessagePortChannel.h"
-#include "public/platform/WebPassOwnPtr.h"
-#include "public/platform/modules/navigator_services/WebServicePortCallbacks.h"
+#include "public/platform/modules/serviceworker/WebServiceWorker.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerRegistration.h"
+
+#include <memory>
 
 namespace blink {
 
-struct WebCircularGeofencingRegion;
-struct WebCrossOriginServiceWorkerClient;
-struct WebNotificationData;
 class WebServiceWorkerRequest;
 class WebString;
-struct WebSyncRegistration;
+struct WebCircularGeofencingRegion;
+struct WebNotificationData;
+struct WebServiceWorkerClientInfo;
 
 // A proxy interface to talk to the worker's GlobalScope implementation.
 // All methods of this class must be called on the worker thread.
@@ -52,10 +52,11 @@ class WebServiceWorkerContextProxy {
 public:
     virtual ~WebServiceWorkerContextProxy() { }
 
-    virtual void setRegistration(WebPassOwnPtr<WebServiceWorkerRegistration::Handle>) = 0;
+    virtual void setRegistration(std::unique_ptr<WebServiceWorkerRegistration::Handle>) = 0;
 
     virtual void dispatchActivateEvent(int eventID) = 0;
-    virtual void dispatchExtendableMessageEvent(int eventID, const WebString& message, const WebMessagePortChannelArray&) = 0;
+    virtual void dispatchExtendableMessageEvent(int eventID, const WebString& message, const WebSecurityOrigin& sourceOrigin, const WebMessagePortChannelArray&, const WebServiceWorkerClientInfo&) = 0;
+    virtual void dispatchExtendableMessageEvent(int eventID, const WebString& message, const WebSecurityOrigin& sourceOrigin, const WebMessagePortChannelArray&, std::unique_ptr<WebServiceWorker::Handle>) = 0;
     virtual void dispatchInstallEvent(int eventID) = 0;
     virtual void dispatchFetchEvent(int eventID, const WebServiceWorkerRequest& webRequest) = 0;
     virtual void dispatchForeignFetchEvent(int eventID, const WebServiceWorkerRequest& webRequest) = 0;
@@ -68,10 +69,6 @@ public:
     virtual void dispatchNotificationClickEvent(int eventID, int64_t notificationID, const WebNotificationData&, int actionIndex) = 0;
     virtual void dispatchNotificationCloseEvent(int eventID, int64_t notificationID, const WebNotificationData&) = 0;
     virtual void dispatchPushEvent(int eventID, const WebString& data) = 0;
-    virtual void dispatchCrossOriginMessageEvent(const WebCrossOriginServiceWorkerClient&, const WebString& message, const WebMessagePortChannelArray&) = 0;
-
-    // Passes ownership of the callbacks.
-    virtual void dispatchServicePortConnectEvent(WebServicePortConnectEventCallbacks*, const WebURL& targetURL, const WebString& origin, WebServicePortID) = 0;
 
     enum LastChanceOption {
         IsNotLastChance,
@@ -80,7 +77,7 @@ public:
 
     // Once the ServiceWorker has finished handling the sync event,
     // didHandleSyncEvent is called on the context client.
-    virtual void dispatchSyncEvent(int syncEventID, const WebSyncRegistration&, LastChanceOption) = 0;
+    virtual void dispatchSyncEvent(int syncEventID, const WebString& tag, LastChanceOption) = 0;
 };
 
 } // namespace blink

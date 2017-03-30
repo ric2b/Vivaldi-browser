@@ -51,14 +51,14 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<KeyboardEvent> createKeyboardEventWithLocation(KeyboardEvent::KeyLocationCode location)
+KeyboardEvent* createKeyboardEventWithLocation(KeyboardEvent::KeyLocationCode location)
 {
     return KeyboardEvent::create("keydown", true, true, 0, "", "", "", location, PlatformEvent::NoModifiers, 0);
 }
 
 int getModifiersForKeyLocationCode(KeyboardEvent::KeyLocationCode location)
 {
-    RefPtrWillBeRawPtr<KeyboardEvent> event = createKeyboardEventWithLocation(location);
+    KeyboardEvent* event = createKeyboardEventWithLocation(location);
     WebKeyboardEventBuilder convertedEvent(*event);
     return convertedEvent.modifiers;
 }
@@ -84,7 +84,7 @@ TEST(WebInputEventConversionTest, WebKeyboardEventBuilder)
 
 TEST(WebInputEventConversionTest, WebMouseEventBuilder)
 {
-    RefPtrWillBeRawPtr<TouchEvent> event = TouchEvent::create();
+    TouchEvent* event = TouchEvent::create();
     WebMouseEventBuilder mouse(0, 0, *event);
     EXPECT_EQ(WebInputEvent::Undefined, mouse.type);
 }
@@ -102,7 +102,7 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder)
     webViewImpl->resize(WebSize(pageWidth, pageHeight));
     webViewImpl->updateAllLifecyclePhases();
 
-    RefPtrWillBeRawPtr<Document> document = toLocalFrame(webViewImpl->page()->mainFrame())->document();
+    Document* document = toLocalFrame(webViewImpl->page()->mainFrame())->document();
     LocalDOMWindow* domWindow = document->domWindow();
     LayoutView* documentLayoutView = document->layoutView();
 
@@ -118,14 +118,14 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder)
     p0.rotationAngle = p1.rotationAngle = 1.f;
     p0.force = p1.force = 25.f;
 
-    RefPtrWillBeRawPtr<Touch> touch0 = Touch::create(toLocalFrame(webViewImpl->page()->mainFrame()), document.get(), p0.id, p0.screenPosition, p0.position, FloatSize(p0.radiusX, p0.radiusY), p0.rotationAngle, p0.force);
-    RefPtrWillBeRawPtr<Touch> touch1 = Touch::create(toLocalFrame(webViewImpl->page()->mainFrame()), document.get(), p1.id, p1.screenPosition, p1.position, FloatSize(p1.radiusX, p1.radiusY), p1.rotationAngle, p1.force);
+    Touch* touch0 = Touch::create(toLocalFrame(webViewImpl->page()->mainFrame()), document, p0.id, p0.screenPosition, p0.position, FloatSize(p0.radiusX, p0.radiusY), p0.rotationAngle, p0.force, String());
+    Touch* touch1 = Touch::create(toLocalFrame(webViewImpl->page()->mainFrame()), document, p1.id, p1.screenPosition, p1.position, FloatSize(p1.radiusX, p1.radiusY), p1.rotationAngle, p1.force, String());
 
     // Test touchstart.
     {
-        RefPtrWillBeRawPtr<TouchList> touchList = TouchList::create();
+        TouchList* touchList = TouchList::create();
         touchList->append(touch0);
-        RefPtrWillBeRawPtr<TouchEvent> touchEvent = TouchEvent::create(touchList.get(), touchList.get(), touchList.get(), EventTypeNames::touchstart, domWindow, PlatformEvent::NoModifiers, false, false, 0);
+        TouchEvent* touchEvent = TouchEvent::create(touchList, touchList, touchList, EventTypeNames::touchstart, domWindow, PlatformEvent::NoModifiers, false, false, 0);
 
         WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
         ASSERT_EQ(1u, webTouchBuilder.touchesLength);
@@ -139,16 +139,27 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder)
         EXPECT_FLOAT_EQ(p0.radiusY, webTouchBuilder.touches[0].radiusY);
         EXPECT_FLOAT_EQ(p0.rotationAngle, webTouchBuilder.touches[0].rotationAngle);
         EXPECT_FLOAT_EQ(p0.force, webTouchBuilder.touches[0].force);
+        EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
+    }
+
+    // Test cancelable touchstart.
+    {
+        TouchList* touchList = TouchList::create();
+        touchList->append(touch0);
+        TouchEvent* touchEvent = TouchEvent::create(touchList, touchList, touchList, EventTypeNames::touchstart, domWindow, PlatformEvent::NoModifiers, true, false, 0);
+
+        WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
+        EXPECT_EQ(WebInputEvent::Blocking, webTouchBuilder.dispatchType);
     }
 
     // Test touchmove.
     {
-        RefPtrWillBeRawPtr<TouchList> activeTouchList = TouchList::create();
-        RefPtrWillBeRawPtr<TouchList> movedTouchList = TouchList::create();
+        TouchList* activeTouchList = TouchList::create();
+        TouchList* movedTouchList = TouchList::create();
         activeTouchList->append(touch0);
         activeTouchList->append(touch1);
         movedTouchList->append(touch0);
-        RefPtrWillBeRawPtr<TouchEvent> touchEvent = TouchEvent::create(activeTouchList.get(), activeTouchList.get(), movedTouchList.get(), EventTypeNames::touchmove, domWindow, PlatformEvent::NoModifiers, false, false, 0);
+        TouchEvent* touchEvent = TouchEvent::create(activeTouchList, activeTouchList, movedTouchList, EventTypeNames::touchmove, domWindow, PlatformEvent::NoModifiers, false, false, 0);
 
         WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
         ASSERT_EQ(2u, webTouchBuilder.touchesLength);
@@ -157,16 +168,17 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder)
         EXPECT_EQ(WebTouchPoint::StateStationary, webTouchBuilder.touches[1].state);
         EXPECT_EQ(p0.id, webTouchBuilder.touches[0].id);
         EXPECT_EQ(p1.id, webTouchBuilder.touches[1].id);
+        EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
     }
 
     // Test touchmove, different point yields same ordering.
     {
-        RefPtrWillBeRawPtr<TouchList> activeTouchList = TouchList::create();
-        RefPtrWillBeRawPtr<TouchList> movedTouchList = TouchList::create();
+        TouchList* activeTouchList = TouchList::create();
+        TouchList* movedTouchList = TouchList::create();
         activeTouchList->append(touch0);
         activeTouchList->append(touch1);
         movedTouchList->append(touch1);
-        RefPtrWillBeRawPtr<TouchEvent> touchEvent = TouchEvent::create(activeTouchList.get(), activeTouchList.get(), movedTouchList.get(), EventTypeNames::touchmove, domWindow, PlatformEvent::NoModifiers, false, false, 0);
+        TouchEvent* touchEvent = TouchEvent::create(activeTouchList, activeTouchList, movedTouchList, EventTypeNames::touchmove, domWindow, PlatformEvent::NoModifiers, false, false, 0);
 
         WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
         ASSERT_EQ(2u, webTouchBuilder.touchesLength);
@@ -175,15 +187,16 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder)
         EXPECT_EQ(WebTouchPoint::StateMoved, webTouchBuilder.touches[1].state);
         EXPECT_EQ(p0.id, webTouchBuilder.touches[0].id);
         EXPECT_EQ(p1.id, webTouchBuilder.touches[1].id);
+        EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
     }
 
     // Test touchend.
     {
-        RefPtrWillBeRawPtr<TouchList> activeTouchList = TouchList::create();
-        RefPtrWillBeRawPtr<TouchList> releasedTouchList = TouchList::create();
+        TouchList* activeTouchList = TouchList::create();
+        TouchList* releasedTouchList = TouchList::create();
         activeTouchList->append(touch0);
         releasedTouchList->append(touch1);
-        RefPtrWillBeRawPtr<TouchEvent> touchEvent = TouchEvent::create(activeTouchList.get(), activeTouchList.get(), releasedTouchList.get(), EventTypeNames::touchend, domWindow, PlatformEvent::NoModifiers, false, false, 0);
+        TouchEvent* touchEvent = TouchEvent::create(activeTouchList, activeTouchList, releasedTouchList, EventTypeNames::touchend, domWindow, PlatformEvent::NoModifiers, false, false, 0);
 
         WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
         ASSERT_EQ(2u, webTouchBuilder.touchesLength);
@@ -192,15 +205,16 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder)
         EXPECT_EQ(WebTouchPoint::StateReleased, webTouchBuilder.touches[1].state);
         EXPECT_EQ(p0.id, webTouchBuilder.touches[0].id);
         EXPECT_EQ(p1.id, webTouchBuilder.touches[1].id);
+        EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
     }
 
     // Test touchcancel.
     {
-        RefPtrWillBeRawPtr<TouchList> activeTouchList = TouchList::create();
-        RefPtrWillBeRawPtr<TouchList> cancelledTouchList = TouchList::create();
+        TouchList* activeTouchList = TouchList::create();
+        TouchList* cancelledTouchList = TouchList::create();
         cancelledTouchList->append(touch0);
         cancelledTouchList->append(touch1);
-        RefPtrWillBeRawPtr<TouchEvent> touchEvent = TouchEvent::create(activeTouchList.get(), activeTouchList.get(), cancelledTouchList.get(), EventTypeNames::touchcancel, domWindow, PlatformEvent::NoModifiers, false, false, 0);
+        TouchEvent* touchEvent = TouchEvent::create(activeTouchList, activeTouchList, cancelledTouchList, EventTypeNames::touchcancel, domWindow, PlatformEvent::NoModifiers, false, false, 0);
 
         WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
         ASSERT_EQ(2u, webTouchBuilder.touchesLength);
@@ -209,18 +223,19 @@ TEST(WebInputEventConversionTest, WebTouchEventBuilder)
         EXPECT_EQ(WebTouchPoint::StateCancelled, webTouchBuilder.touches[1].state);
         EXPECT_EQ(p0.id, webTouchBuilder.touches[0].id);
         EXPECT_EQ(p1.id, webTouchBuilder.touches[1].id);
+        EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
     }
 
     // Test max point limit.
     {
-        RefPtrWillBeRawPtr<TouchList> touchList = TouchList::create();
-        RefPtrWillBeRawPtr<TouchList> changedTouchList = TouchList::create();
+        TouchList* touchList = TouchList::create();
+        TouchList* changedTouchList = TouchList::create();
         for (int i = 0; i <= static_cast<int>(WebTouchEvent::touchesLengthCap) * 2; ++i) {
-            RefPtrWillBeRawPtr<Touch> touch = Touch::create(toLocalFrame(webViewImpl->page()->mainFrame()), document.get(), i, p0.screenPosition, p0.position, FloatSize(p0.radiusX, p0.radiusY), p0.rotationAngle, p0.force);
+            Touch* touch = Touch::create(toLocalFrame(webViewImpl->page()->mainFrame()), document, i, p0.screenPosition, p0.position, FloatSize(p0.radiusX, p0.radiusY), p0.rotationAngle, p0.force, String());
             touchList->append(touch);
             changedTouchList->append(touch);
         }
-        RefPtrWillBeRawPtr<TouchEvent> touchEvent = TouchEvent::create(touchList.get(), touchList.get(), touchList.get(), EventTypeNames::touchstart, domWindow, PlatformEvent::NoModifiers, false, false, 0);
+        TouchEvent* touchEvent = TouchEvent::create(touchList, touchList, touchList, EventTypeNames::touchstart, domWindow, PlatformEvent::NoModifiers, false, false, 0);
 
         WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
         ASSERT_EQ(static_cast<unsigned>(WebTouchEvent::touchesLengthCap), webTouchBuilder.touchesLength);
@@ -244,7 +259,7 @@ TEST(WebInputEventConversionTest, InputEventsScaling)
     webViewImpl->setPageScaleFactor(2);
 
     FrameView* view = toLocalFrame(webViewImpl->page()->mainFrame())->view();
-    RefPtrWillBeRawPtr<Document> document = toLocalFrame(webViewImpl->page()->mainFrame())->document();
+    Document* document = toLocalFrame(webViewImpl->page()->mainFrame())->document();
     LocalDOMWindow* domWindow = document->domWindow();
     LayoutView* documentLayoutView = document->layoutView();
 
@@ -420,7 +435,7 @@ TEST(WebInputEventConversionTest, InputEventsScaling)
     // which expect CSS pixel coordinates.
     {
         PlatformMouseEvent platformMouseEvent(IntPoint(10, 10), IntPoint(10, 10), LeftButton, PlatformEvent::MouseMoved, 1, PlatformEvent::NoModifiers, PlatformMouseEvent::RealOrIndistinguishable, 0);
-        RefPtrWillBeRawPtr<MouseEvent> mouseEvent = MouseEvent::create(EventTypeNames::mousemove, domWindow, platformMouseEvent, 0, document);
+        MouseEvent* mouseEvent = MouseEvent::create(EventTypeNames::mousemove, domWindow, platformMouseEvent, 0, document);
         WebMouseEventBuilder webMouseBuilder(view, documentLayoutView, *mouseEvent);
 
         EXPECT_EQ(10, webMouseBuilder.x);
@@ -433,7 +448,7 @@ TEST(WebInputEventConversionTest, InputEventsScaling)
 
     {
         PlatformMouseEvent platformMouseEvent(IntPoint(10, 10), IntPoint(10, 10), NoButton, PlatformEvent::MouseMoved, 1, PlatformEvent::NoModifiers, PlatformMouseEvent::RealOrIndistinguishable, 0);
-        RefPtrWillBeRawPtr<MouseEvent> mouseEvent = MouseEvent::create(EventTypeNames::mousemove, domWindow, platformMouseEvent, 0, document);
+        MouseEvent* mouseEvent = MouseEvent::create(EventTypeNames::mousemove, domWindow, platformMouseEvent, 0, document);
         WebMouseEventBuilder webMouseBuilder(view, documentLayoutView, *mouseEvent);
         EXPECT_EQ(WebMouseEvent::ButtonNone, webMouseBuilder.button);
     }
@@ -447,7 +462,7 @@ TEST(WebInputEventConversionTest, InputEventsScaling)
         // coordinates (x, y, deltaX, deltaY) to the page scale. This
         // may lead to unexpected bugs if a PlatformGestureEvent is
         // transformed into WebGestureEvent and back.
-        RefPtrWillBeRawPtr<GestureEvent> gestureEvent = GestureEvent::create(domWindow, platformGestureEvent);
+        GestureEvent* gestureEvent = GestureEvent::create(domWindow, platformGestureEvent);
         WebGestureEventBuilder webGestureBuilder(documentLayoutView, *gestureEvent);
 
         EXPECT_EQ(10, webGestureBuilder.x);
@@ -464,10 +479,10 @@ TEST(WebInputEventConversionTest, InputEventsScaling)
     }
 
     {
-        RefPtrWillBeRawPtr<Touch> touch = Touch::create(toLocalFrame(webViewImpl->page()->mainFrame()), document.get(), 0, FloatPoint(10, 9.5), FloatPoint(3.5, 2), FloatSize(4, 4.5), 0, 0);
-        RefPtrWillBeRawPtr<TouchList> touchList = TouchList::create();
+        Touch* touch = Touch::create(toLocalFrame(webViewImpl->page()->mainFrame()), document, 0, FloatPoint(10, 9.5), FloatPoint(3.5, 2), FloatSize(4, 4.5), 0, 0, String());
+        TouchList* touchList = TouchList::create();
         touchList->append(touch);
-        RefPtrWillBeRawPtr<TouchEvent> touchEvent = TouchEvent::create(touchList.get(), touchList.get(), touchList.get(), EventTypeNames::touchmove, domWindow, PlatformEvent::NoModifiers, false, false, 0);
+        TouchEvent* touchEvent = TouchEvent::create(touchList, touchList, touchList, EventTypeNames::touchmove, domWindow, PlatformEvent::NoModifiers, false, false, 0);
 
         WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
         ASSERT_EQ(1u, webTouchBuilder.touchesLength);
@@ -477,7 +492,7 @@ TEST(WebInputEventConversionTest, InputEventsScaling)
         EXPECT_FLOAT_EQ(2, webTouchBuilder.touches[0].position.y);
         EXPECT_FLOAT_EQ(4, webTouchBuilder.touches[0].radiusX);
         EXPECT_FLOAT_EQ(4.5, webTouchBuilder.touches[0].radiusY);
-        EXPECT_FALSE(webTouchBuilder.cancelable);
+        EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
     }
 }
 
@@ -649,7 +664,7 @@ TEST(WebInputEventConversionTest, InputEventsConversions)
     webViewImpl->updateAllLifecyclePhases();
 
     FrameView* view = toLocalFrame(webViewImpl->page()->mainFrame())->view();
-    RefPtrWillBeRawPtr<Document> document = toLocalFrame(webViewImpl->page()->mainFrame())->document();
+    Document* document = toLocalFrame(webViewImpl->page()->mainFrame())->document();
     LocalDOMWindow* domWindow = document->domWindow();
     LayoutView* documentLayoutView = document->layoutView();
 
@@ -672,7 +687,7 @@ TEST(WebInputEventConversionTest, InputEventsConversions)
         EXPECT_EQ(10.f, platformGestureBuilder.globalPosition().y());
         EXPECT_EQ(1, platformGestureBuilder.tapCount());
 
-        RefPtrWillBeRawPtr<GestureEvent> coreGestureEvent = GestureEvent::create(domWindow, platformGestureBuilder);
+        GestureEvent* coreGestureEvent = GestureEvent::create(domWindow, platformGestureBuilder);
         WebGestureEventBuilder recreatedWebGestureEvent(documentLayoutView, *coreGestureEvent);
         EXPECT_EQ(webGestureEvent.type, recreatedWebGestureEvent.type);
         EXPECT_EQ(webGestureEvent.x, recreatedWebGestureEvent.x);
@@ -888,24 +903,36 @@ TEST(WebInputEventConversionTest, WebMouseWheelEventBuilder)
     webViewImpl->resize(WebSize(pageWidth, pageHeight));
     webViewImpl->updateAllLifecyclePhases();
 
-    RefPtrWillBeRawPtr<Document> document = toLocalFrame(webViewImpl->page()->mainFrame())->document();
-    RefPtrWillBeRawPtr<WheelEvent> event = WheelEvent::create(FloatPoint(1, 3), FloatPoint(5, 10),
-        WheelEvent::DOM_DELTA_PAGE, document.get()->domWindow(), IntPoint(2, 6), IntPoint(10, 30),
-        PlatformEvent::CtrlKey, 0, 0, true, -1 /* null plugin id */, true /* hasPreciseScrollingDeltas */, Event::RailsModeHorizontal);
-    WebMouseWheelEventBuilder webMouseWheel(toLocalFrame(webViewImpl->page()->mainFrame())->view(), document.get()->layoutView(), *event);
-    EXPECT_EQ(1, webMouseWheel.wheelTicksX);
-    EXPECT_EQ(3, webMouseWheel.wheelTicksY);
-    EXPECT_EQ(5, webMouseWheel.deltaX);
-    EXPECT_EQ(10, webMouseWheel.deltaY);
-    EXPECT_EQ(2, webMouseWheel.globalX);
-    EXPECT_EQ(6, webMouseWheel.globalY);
-    EXPECT_EQ(10, webMouseWheel.windowX);
-    EXPECT_EQ(30, webMouseWheel.windowY);
-    EXPECT_TRUE(webMouseWheel.scrollByPage);
-    EXPECT_EQ(WebInputEvent::ControlKey, webMouseWheel.modifiers);
-    EXPECT_TRUE(webMouseWheel.canScroll);
-    EXPECT_EQ(WebInputEvent::RailsModeHorizontal, webMouseWheel.railsMode);
-    EXPECT_TRUE(webMouseWheel.hasPreciseScrollingDeltas);
+    Document* document = toLocalFrame(webViewImpl->page()->mainFrame())->document();
+    {
+        WheelEvent* event = WheelEvent::create(FloatPoint(1, 3), FloatPoint(5, 10),
+            WheelEvent::DOM_DELTA_PAGE, document->domWindow(), IntPoint(2, 6), IntPoint(10, 30),
+            PlatformEvent::CtrlKey, 0, 0, true, -1 /* null plugin id */,
+            true /* hasPreciseScrollingDeltas */, Event::RailsModeHorizontal, true /*cancelable*/);
+        WebMouseWheelEventBuilder webMouseWheel(toLocalFrame(webViewImpl->page()->mainFrame())->view(), document->layoutView(), *event);
+        EXPECT_EQ(1, webMouseWheel.wheelTicksX);
+        EXPECT_EQ(3, webMouseWheel.wheelTicksY);
+        EXPECT_EQ(5, webMouseWheel.deltaX);
+        EXPECT_EQ(10, webMouseWheel.deltaY);
+        EXPECT_EQ(2, webMouseWheel.globalX);
+        EXPECT_EQ(6, webMouseWheel.globalY);
+        EXPECT_EQ(10, webMouseWheel.windowX);
+        EXPECT_EQ(30, webMouseWheel.windowY);
+        EXPECT_TRUE(webMouseWheel.scrollByPage);
+        EXPECT_EQ(WebInputEvent::ControlKey, webMouseWheel.modifiers);
+        EXPECT_TRUE(webMouseWheel.canScroll);
+        EXPECT_EQ(WebInputEvent::RailsModeHorizontal, webMouseWheel.railsMode);
+        EXPECT_TRUE(webMouseWheel.hasPreciseScrollingDeltas);
+        EXPECT_EQ(WebInputEvent::Blocking, webMouseWheel.dispatchType);
+    }
+
+    {
+        WheelEvent* event = WheelEvent::create(FloatPoint(1, 3), FloatPoint(5, 10),
+            WheelEvent::DOM_DELTA_PAGE, document->domWindow(), IntPoint(2, 6), IntPoint(10, 30),
+            PlatformEvent::CtrlKey, 0, 0, true, -1 /* null plugin id */, true /* hasPreciseScrollingDeltas */, Event::RailsModeHorizontal, false);
+        WebMouseWheelEventBuilder webMouseWheel(toLocalFrame(webViewImpl->page()->mainFrame())->view(), document->layoutView(), *event);
+        EXPECT_EQ(WebInputEvent::EventNonBlocking, webMouseWheel.dispatchType);
+    }
 }
 
 TEST(WebInputEventConversionTest, PlatformWheelEventBuilder)
@@ -940,7 +967,7 @@ TEST(WebInputEventConversionTest, PlatformWheelEventBuilder)
         EXPECT_EQ(5, platformWheelBuilder.position().y());
         EXPECT_EQ(10, platformWheelBuilder.deltaX());
         EXPECT_EQ(15, platformWheelBuilder.deltaY());
-        EXPECT_EQ(PlatformEvent::CtrlKey, platformWheelBuilder.modifiers());
+        EXPECT_EQ(PlatformEvent::CtrlKey, platformWheelBuilder.getModifiers());
         EXPECT_TRUE(platformWheelBuilder.hasPreciseScrollingDeltas());
         EXPECT_TRUE(platformWheelBuilder.canScroll());
         EXPECT_EQ(platformWheelBuilder.getRailsMode(), PlatformEvent::RailsModeHorizontal);
@@ -963,7 +990,7 @@ TEST(WebInputEventConversionTest, PlatformWheelEventBuilder)
         EXPECT_EQ(0, platformWheelBuilder.position().y());
         EXPECT_EQ(15, platformWheelBuilder.deltaX());
         EXPECT_EQ(10, platformWheelBuilder.deltaY());
-        EXPECT_EQ(PlatformEvent::ShiftKey, platformWheelBuilder.modifiers());
+        EXPECT_EQ(PlatformEvent::ShiftKey, platformWheelBuilder.getModifiers());
         EXPECT_FALSE(platformWheelBuilder.hasPreciseScrollingDeltas());
         EXPECT_FALSE(platformWheelBuilder.canScroll());
         EXPECT_EQ(platformWheelBuilder.getRailsMode(), PlatformEvent::RailsModeFree);
@@ -986,10 +1013,80 @@ TEST(WebInputEventConversionTest, PlatformWheelEventBuilder)
         EXPECT_EQ(0, platformWheelBuilder.position().y());
         EXPECT_EQ(15, platformWheelBuilder.deltaX());
         EXPECT_EQ(10, platformWheelBuilder.deltaY());
-        EXPECT_EQ(PlatformEvent::AltKey, platformWheelBuilder.modifiers());
+        EXPECT_EQ(PlatformEvent::AltKey, platformWheelBuilder.getModifiers());
         EXPECT_TRUE(platformWheelBuilder.hasPreciseScrollingDeltas());
         EXPECT_FALSE(platformWheelBuilder.canScroll());
         EXPECT_EQ(platformWheelBuilder.getRailsMode(), PlatformEvent::RailsModeVertical);
+    }
+}
+
+TEST(WebInputEventConversionTest, PlatformGestureEventBuilder)
+{
+    const std::string baseURL("http://www.test8.com/");
+    const std::string fileName("fixed_layout.html");
+
+    URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(baseURL.c_str()), WebString::fromUTF8("fixed_layout.html"));
+    FrameTestHelpers::WebViewHelper webViewHelper;
+    WebViewImpl* webViewImpl = webViewHelper.initializeAndLoad(baseURL + fileName, true);
+    int pageWidth = 640;
+    int pageHeight = 480;
+    webViewImpl->resize(WebSize(pageWidth, pageHeight));
+    webViewImpl->updateAllLifecyclePhases();
+
+    FrameView* view = toLocalFrame(webViewImpl->page()->mainFrame())->view();
+
+    {
+        WebGestureEvent webGestureEvent;
+        webGestureEvent.type = WebInputEvent::GestureScrollBegin;
+        webGestureEvent.x = 0;
+        webGestureEvent.y = 5;
+        webGestureEvent.globalX = 10;
+        webGestureEvent.globalY = 15;
+        webGestureEvent.sourceDevice = WebGestureDeviceTouchpad;
+        webGestureEvent.resendingPluginId = 2;
+        webGestureEvent.data.scrollBegin.inertial = true;
+        webGestureEvent.data.scrollBegin.synthetic = true;
+        webGestureEvent.data.scrollBegin.deltaXHint = 100;
+        webGestureEvent.data.scrollBegin.deltaYHint = 10;
+        webGestureEvent.data.scrollBegin.deltaHintUnits = WebGestureEvent::Pixels;
+
+        PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
+        EXPECT_EQ(PlatformGestureSourceTouchpad, platformGestureBuilder.source());
+        EXPECT_EQ(2, platformGestureBuilder.resendingPluginId());
+        EXPECT_EQ(0, platformGestureBuilder.position().x());
+        EXPECT_EQ(5, platformGestureBuilder.position().y());
+        EXPECT_EQ(10, platformGestureBuilder.globalPosition().x());
+        EXPECT_EQ(15, platformGestureBuilder.globalPosition().y());
+        EXPECT_TRUE(platformGestureBuilder.inertial());
+        EXPECT_TRUE(platformGestureBuilder.synthetic());
+        EXPECT_EQ(100, platformGestureBuilder.deltaX());
+        EXPECT_EQ(10, platformGestureBuilder.deltaY());
+        EXPECT_EQ(ScrollGranularity::ScrollByPixel, platformGestureBuilder.deltaUnits());
+    }
+
+    {
+        WebGestureEvent webGestureEvent;
+        webGestureEvent.type = WebInputEvent::GestureScrollEnd;
+        webGestureEvent.x = 0;
+        webGestureEvent.y = 5;
+        webGestureEvent.globalX = 10;
+        webGestureEvent.globalY = 15;
+        webGestureEvent.sourceDevice = WebGestureDeviceTouchpad;
+        webGestureEvent.resendingPluginId = 2;
+        webGestureEvent.data.scrollEnd.inertial = false;
+        webGestureEvent.data.scrollEnd.synthetic = true;
+        webGestureEvent.data.scrollEnd.deltaUnits = WebGestureEvent::Page;
+
+        PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
+        EXPECT_EQ(PlatformGestureSourceTouchpad, platformGestureBuilder.source());
+        EXPECT_EQ(2, platformGestureBuilder.resendingPluginId());
+        EXPECT_EQ(0, platformGestureBuilder.position().x());
+        EXPECT_EQ(5, platformGestureBuilder.position().y());
+        EXPECT_EQ(10, platformGestureBuilder.globalPosition().x());
+        EXPECT_EQ(15, platformGestureBuilder.globalPosition().y());
+        EXPECT_FALSE(platformGestureBuilder.inertial());
+        EXPECT_TRUE(platformGestureBuilder.synthetic());
+        EXPECT_EQ(ScrollGranularity::ScrollByPage, platformGestureBuilder.deltaUnits());
     }
 }
 

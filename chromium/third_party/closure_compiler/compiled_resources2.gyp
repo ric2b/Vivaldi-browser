@@ -11,11 +11,19 @@
 {
   'targets': [
     {
-      'target_name': 'compile_all_resources',
+      'target_name': 'compiled_resources2',
       'type': 'none',
       'dependencies': [
+        '<(DEPTH)/chrome/browser/resources/chromeos/braille_ime/compiled_resources2.gyp:*',
+        '<(DEPTH)/chrome/browser/resources/chromeos/network_ui/compiled_resources2.gyp:*',
+        '<(DEPTH)/chrome/browser/resources/history/compiled_resources2.gyp:*',
         '<(DEPTH)/chrome/browser/resources/md_downloads/compiled_resources2.gyp:*',
+        '<(DEPTH)/chrome/browser/resources/md_history/compiled_resources2.gyp:*',
+        '<(DEPTH)/chrome/browser/resources/md_user_manager/compiled_resources2.gyp:*',
         '<(DEPTH)/chrome/browser/resources/settings/compiled_resources2.gyp:*',
+        '<(DEPTH)/chrome/browser/resources/uber/compiled_resources2.gyp:*',
+        '<(DEPTH)/ui/webui/resources/cr_elements/compiled_resources2.gyp:*',
+        '<(DEPTH)/ui/webui/resources/js/chromeos/compiled_resources2.gyp:*',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:*',
         '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:*',
       ],

@@ -23,6 +23,7 @@ class TestToolbarActionsBarBubbleDelegate::DelegateImpl
   base::string16 GetLearnMoreButtonText() override {
     return parent_->learn_more_;
   }
+  std::string GetAnchorActionId() override { return std::string(); }
   void OnBubbleShown() override {
     CHECK(!parent_->shown_);
     parent_->shown_ = true;
@@ -54,7 +55,8 @@ TestToolbarActionsBarBubbleDelegate::~TestToolbarActionsBarBubbleDelegate() {
   CHECK(close_action_);
 }
 
-scoped_ptr<ToolbarActionsBarBubbleDelegate>
+std::unique_ptr<ToolbarActionsBarBubbleDelegate>
 TestToolbarActionsBarBubbleDelegate::GetDelegate() {
-  return scoped_ptr<ToolbarActionsBarBubbleDelegate>(new DelegateImpl(this));
+  return std::unique_ptr<ToolbarActionsBarBubbleDelegate>(
+      new DelegateImpl(this));
 }

@@ -13,9 +13,9 @@ class Document;
 
 class MediaValuesDynamic final : public MediaValues {
 public:
-    static PassRefPtrWillBeRawPtr<MediaValues> create(Document&);
-    static PassRefPtrWillBeRawPtr<MediaValues> create(LocalFrame*);
-    PassRefPtrWillBeRawPtr<MediaValues> copy() const override;
+    static MediaValues* create(Document&);
+    static MediaValues* create(LocalFrame*);
+    MediaValues* copy() const override;
     bool computeLength(double value, CSSPrimitiveValue::UnitType, int& result) const override;
     bool computeLength(double value, CSSPrimitiveValue::UnitType, double& result) const override;
 
@@ -36,15 +36,20 @@ public:
     WebDisplayMode displayMode() const override;
     Document* document() const override;
     bool hasValues() const override;
+    void overrideViewportDimensions(double width, double height) override;
 
     DECLARE_VIRTUAL_TRACE();
 
 protected:
     MediaValuesDynamic(LocalFrame*);
+    MediaValuesDynamic(LocalFrame*, bool overriddenViewportDimensions, double viewportWidth, double viewportHeight);
 
     // This raw ptr is safe, as MediaValues would not outlive MediaQueryEvaluator, and
     // MediaQueryEvaluator is reset on |Document::detach|.
-    RawPtrWillBeMember<LocalFrame> m_frame;
+    Member<LocalFrame> m_frame;
+    bool m_viewportDimensionsOverridden;
+    double m_viewportWidthOverride;
+    double m_viewportHeightOverride;
 };
 
 } // namespace blink

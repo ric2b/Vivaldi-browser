@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/json/json_reader.h"
 #include "base/mac/scoped_aedesc.h"
 #include "base/macros.h"
@@ -234,7 +236,8 @@ TEST_F(AppleEventUtilTest, ValueToAppleEventDescriptor) {
   };
 
   for (size_t i = 0; i < arraysize(cases); ++i) {
-    scoped_ptr<base::Value> value = base::JSONReader::Read(cases[i].json_input);
+    std::unique_ptr<base::Value> value =
+        base::JSONReader::Read(cases[i].json_input);
     NSAppleEventDescriptor* descriptor =
         chrome::mac::ValueToAppleEventDescriptor(value.get());
 

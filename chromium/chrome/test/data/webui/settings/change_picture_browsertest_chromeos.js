@@ -21,17 +21,10 @@ SettingsChangePictureBrowserTest.prototype = {
 
   /** @override */
   preLoad: function() {
-    cr.define('settings_test', function() {
-      var changePictureOptions = {
-        /**
-         * True if property changes should fire events for testing purposes.
-         * @type {boolean}
-         */
-        notifyPropertyChangesForTest: true,
-      };
-      return {changePictureOptions: changePictureOptions};
-    });
-  }
+    SettingsPageBrowserTest.prototype.preLoad.call(this);
+
+    cr.exportPath('settings_test').changePictureNotifyForTest = true;
+  },
 };
 
 // Times out on debug builders and may time out on memory bots because
@@ -85,13 +78,13 @@ TEST_F('SettingsChangePictureBrowserTest', 'MAYBE_ChangePicture', function() {
       assertTrue(!!cameraIcon);
 
       // Force the camera to be absent, even if it's actually present.
-      settings.ChangePicturePage.receiveCameraPresence(false);
+      cr.webUIListenerCallback('camera-presence-changed', false);
       Polymer.dom.flush();
 
       expectTrue(cameraIcon.hidden);
       expectFalse(settingsCamera.cameraActive);
 
-      settings.ChangePicturePage.receiveCameraPresence(true);
+      cr.webUIListenerCallback('camera-presence-changed', true);
       Polymer.dom.flush();
 
       expectFalse(cameraIcon.hidden);
@@ -127,7 +120,7 @@ TEST_F('SettingsChangePictureBrowserTest', 'MAYBE_ChangePicture', function() {
       assertTrue(oldImage.hidden);
 
       return runAndResolveWhenSelectedItemChanged(function() {
-        settings.ChangePicturePage.receiveOldImage('fake-old-image.jpg');
+        cr.webUIListenerCallback('old-image-changed', 'fake-old-image.jpg');
       }).then(function() {
         Polymer.dom.flush();
 
@@ -172,7 +165,7 @@ TEST_F('SettingsChangePictureBrowserTest', 'MAYBE_ChangePicture', function() {
 
       function injectAndVerifyOldImage() {
         return runAndResolveWhenSelectedItemChanged(function() {
-          settings.ChangePicturePage.receiveOldImage('fake-old-image.jpg');
+          cr.webUIListenerCallback('old-image-changed', 'fake-old-image.jpg');
         }).then(function() {
           Polymer.dom.flush();
           expectEquals('old', changePicture.selectedItem_.dataset.type);

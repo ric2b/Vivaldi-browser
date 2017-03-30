@@ -13,7 +13,6 @@
     'internal_ozone_platforms': [
       'gbm',
     ],
-    'use_mesa_platform_null%': 0,
     'use_drm_atomic%': 0,
   },
   'targets': [
@@ -60,6 +59,8 @@
       'sources': [
         'client_native_pixmap_factory_gbm.cc',
         'client_native_pixmap_factory_gbm.h',
+        'common/client_native_pixmap_dmabuf.cc',
+        'common/client_native_pixmap_dmabuf.h',
         'common/drm_util.cc',
         'common/drm_util.h',
         'common/scoped_drm_types.cc',
@@ -147,19 +148,12 @@
         'host/drm_window_host_manager.h',
         'host/gpu_thread_adapter.h',
         'host/gpu_thread_observer.h',
+        'mus_thread_proxy.cc',
+        'mus_thread_proxy.h',
         'ozone_platform_gbm.cc',
         'ozone_platform_gbm.h',
       ],
       'conditions': [
-        ['use_vgem_map==1', {
-          'dependencies': [
-            '../ozone/ozone.gyp:vgem_map',
-          ],
-          'sources': [
-            'common/client_native_pixmap_vgem.cc',
-            'common/client_native_pixmap_vgem.h',
-          ],
-        }],
         ['use_drm_atomic == 1', {
           'sources': [
             'gpu/hardware_display_plane_atomic.cc',

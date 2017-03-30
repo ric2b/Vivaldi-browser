@@ -107,10 +107,6 @@ NSMenuItem* GetMenuItemByID(ui::MenuModel* model,
   if (![[NSProcessInfo processInfo] cr_isMainBrowserOrTestProcess])
     return;
 
-  // Services filtering does not work on OS X 10.6.
-  if (base::mac::IsOSSnowLeopard())
-    return;
-
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     // Confirm that the AppKit's private _NSServiceEntry class exists. This
@@ -190,7 +186,7 @@ RenderViewContextMenuMac::RenderViewContextMenuMac(
       speech_submenu_model_(this),
       bidi_submenu_model_(this),
       parent_view_(parent_view) {
-  scoped_ptr<ToolkitDelegate> delegate(new ToolkitDelegateMac(this));
+  std::unique_ptr<ToolkitDelegate> delegate(new ToolkitDelegateMac(this));
   set_toolkit_delegate(std::move(delegate));
 }
 

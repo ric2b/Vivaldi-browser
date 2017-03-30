@@ -21,6 +21,7 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/renderer/media/media_stream.h"
 #include "content/renderer/media/media_stream_audio_source.h"
+#include "content/renderer/media/media_stream_constraints_util.h"
 #include "content/renderer/media/media_stream_dispatcher.h"
 #include "content/renderer/media/media_stream_video_capturer_source.h"
 #include "content/renderer/media/media_stream_video_track.h"
@@ -102,6 +103,26 @@ void CopyBlinkRequestToStreamControls(const blink::WebUserMediaRequest& request,
   }
 }
 
+bool IsSameDevice(const StreamDeviceInfo& device,
+                  const StreamDeviceInfo& other_device) {
+  return device.device.id == other_device.device.id &&
+         device.device.type == other_device.device.type &&
+         device.session_id == other_device.session_id;
+}
+
+bool IsSameSource(const blink::WebMediaStreamSource& source,
+                  const blink::WebMediaStreamSource& other_source) {
+  MediaStreamSource* const source_extra_data =
+      static_cast<MediaStreamSource*>(source.getExtraData());
+  const StreamDeviceInfo& device = source_extra_data->device_info();
+
+  MediaStreamSource* const other_source_extra_data =
+      static_cast<MediaStreamSource*>(other_source.getExtraData());
+  const StreamDeviceInfo& other_device = other_source_extra_data->device_info();
+
+  return IsSameDevice(device, other_device);
+}
+
 static int g_next_request_id  = 0;
 
 }  // namespace
@@ -153,7 +174,7 @@ struct UserMediaClientImpl::MediaDevicesRequestInfo {
 UserMediaClientImpl::UserMediaClientImpl(
     RenderFrame* render_frame,
     PeerConnectionDependencyFactory* dependency_factory,
-    scoped_ptr<MediaStreamDispatcher> media_stream_dispatcher)
+    std::unique_ptr<MediaStreamDispatcher> media_stream_dispatcher)
     : RenderFrameObserver(render_frame),
       dependency_factory_(dependency_factory),
       media_stream_dispatcher_(std::move(media_stream_dispatcher)),
@@ -198,24 +219,21 @@ void UserMediaClientImpl::requestUserMedia(
       controls.audio.requested = true;
       // Check if this input device should be used to select a matching output
       // device for audio rendering.
-      enable_automatic_output_device_selection = true;  // On by default.
-      for (const auto& advanced_constraint :
-           user_media_request.audioConstraints().advanced()) {
-        if (advanced_constraint.renderToAssociatedSink.hasExact()) {
-          enable_automatic_output_device_selection =
-              advanced_constraint.renderToAssociatedSink.exact();
-          break;
-        }
-      }
+      GetConstraintValueAsBoolean(
+          user_media_request.audioConstraints(),
+          &blink::WebMediaTrackConstraintSet::renderToAssociatedSink,
+          &enable_automatic_output_device_selection);
     }
     if (user_media_request.video()) {
       controls.video.requested = true;
     }
     CopyBlinkRequestToStreamControls(user_media_request, &controls);
-
-    security_origin =
-        blink::WebStringToGURL(user_media_request.securityOrigin().toString());
-    DCHECK(render_frame()->GetWebFrame() ==
+    security_origin = blink::WebStringToGURL(
+        user_media_request.getSecurityOrigin().toString());
+    // ownerDocument may be null if we are in a test.
+    // In that case, it's OK to not check frame().
+    DCHECK(user_media_request.ownerDocument().isNull() ||
+           render_frame()->GetWebFrame() ==
                static_cast<blink::WebFrame*>(
                    user_media_request.ownerDocument().frame()));
   }
@@ -227,37 +245,25 @@ void UserMediaClientImpl::requestUserMedia(
            << ", video=" << (controls.video.requested) << " ], "
            << security_origin.spec() << ")";
 
-  blink::WebString audio_device_id;
-  bool mandatory_audio = false;
+  std::string audio_device_id;
   if (!user_media_request.isNull() && user_media_request.audio()) {
-    mandatory_audio =
-        user_media_request.audioConstraints().getMandatoryConstraintValue(
-            base::UTF8ToUTF16(kMediaStreamSourceInfoId), audio_device_id);
-    if (!mandatory_audio) {
-      user_media_request.audioConstraints().getOptionalConstraintValue(
-          base::UTF8ToUTF16(kMediaStreamSourceInfoId), audio_device_id);
-    }
+    GetConstraintValueAsString(user_media_request.audioConstraints(),
+                               &blink::WebMediaTrackConstraintSet::deviceId,
+                               &audio_device_id);
   }
 
-  blink::WebString video_device_id;
-  bool mandatory_video = false;
+  std::string video_device_id;
   if (!user_media_request.isNull() && user_media_request.video()) {
-    mandatory_video =
-        user_media_request.videoConstraints().getMandatoryConstraintValue(
-            base::UTF8ToUTF16(kMediaStreamSourceInfoId), video_device_id);
-    if (!mandatory_video) {
-      user_media_request.videoConstraints().getOptionalConstraintValue(
-          base::UTF8ToUTF16(kMediaStreamSourceInfoId), video_device_id);
-    }
+    GetConstraintValueAsString(user_media_request.videoConstraints(),
+                               &blink::WebMediaTrackConstraintSet::deviceId,
+                               &video_device_id);
   }
 
   WebRtcLogMessage(base::StringPrintf(
       "MSI::requestUserMedia. request_id=%d"
-      ", audio source id=%s mandatory= %s "
-      ", video source id=%s mandatory= %s",
-      request_id, audio_device_id.utf8().c_str(),
-      mandatory_audio ? "true" : "false", video_device_id.utf8().c_str(),
-      mandatory_video ? "true" : "false"));
+      ", audio source id=%s"
+      ", video source id=%s",
+      request_id, audio_device_id.c_str(), video_device_id.c_str()));
 
   user_media_requests_.push_back(
       new UserMediaRequestInfo(request_id, user_media_request,
@@ -295,7 +301,7 @@ void UserMediaClientImpl::requestMediaDevices(
   GURL security_origin;
   if (!media_devices_request.isNull()) {
     security_origin = blink::WebStringToGURL(
-        media_devices_request.securityOrigin().toString());
+        media_devices_request.getSecurityOrigin().toString());
   }
 
   DVLOG(1) << "UserMediaClientImpl::requestMediaDevices("
@@ -579,14 +585,7 @@ void UserMediaClientImpl::OnDeviceStopped(
   // object is valid during the cleanup.
   blink::WebMediaStreamSource source(*source_ptr);
   StopLocalSource(source, false);
-
-  for (LocalStreamSources::iterator device_it = local_sources_.begin();
-       device_it != local_sources_.end(); ++device_it) {
-    if (device_it->id() == source.id()) {
-      local_sources_.erase(device_it);
-      break;
-    }
-  }
+  RemoveLocalSource(source);
 }
 
 void UserMediaClientImpl::InitializeSourceObject(
@@ -890,15 +889,27 @@ const blink::WebMediaStreamSource* UserMediaClientImpl::FindLocalSource(
   for (LocalStreamSources::const_iterator it = local_sources_.begin();
        it != local_sources_.end(); ++it) {
     MediaStreamSource* const source =
-        static_cast<MediaStreamSource*>(it->extraData());
+        static_cast<MediaStreamSource*>(it->getExtraData());
     const StreamDeviceInfo& active_device = source->device_info();
-    if (active_device.device.id == device.device.id &&
-        active_device.device.type == device.device.type &&
-        active_device.session_id == device.session_id) {
+    if (IsSameDevice(active_device, device)) {
       return &(*it);
     }
   }
   return NULL;
+}
+
+bool UserMediaClientImpl::RemoveLocalSource(
+    const blink::WebMediaStreamSource& source) {
+  bool device_found = false;
+  for (LocalStreamSources::iterator device_it = local_sources_.begin();
+       device_it != local_sources_.end(); ++device_it) {
+    if (IsSameSource(*device_it, source)) {
+      device_found = true;
+      local_sources_.erase(device_it);
+      break;
+    }
+  }
+  return device_found;
 }
 
 UserMediaClientImpl::UserMediaRequestInfo*
@@ -1020,19 +1031,11 @@ void UserMediaClientImpl::OnLocalSourceStopped(
   DCHECK(CalledOnValidThread());
   DVLOG(1) << "UserMediaClientImpl::OnLocalSourceStopped";
 
-  bool device_found = false;
-  for (LocalStreamSources::iterator device_it = local_sources_.begin();
-       device_it != local_sources_.end(); ++device_it) {
-    if (device_it->id()  == source.id()) {
-      device_found = true;
-      local_sources_.erase(device_it);
-      break;
-    }
-  }
-  CHECK(device_found);
+  const bool some_source_removed = RemoveLocalSource(source);
+  CHECK(some_source_removed);
 
   MediaStreamSource* source_impl =
-      static_cast<MediaStreamSource*>(source.extraData());
+      static_cast<MediaStreamSource*>(source.getExtraData());
   media_stream_dispatcher_->StopStreamDevice(source_impl->device_info());
 }
 
@@ -1040,7 +1043,7 @@ void UserMediaClientImpl::StopLocalSource(
     const blink::WebMediaStreamSource& source,
     bool notify_dispatcher) {
   MediaStreamSource* source_impl =
-      static_cast<MediaStreamSource*>(source.extraData());
+      static_cast<MediaStreamSource*>(source.getExtraData());
   DVLOG(1) << "UserMediaClientImpl::StopLocalSource("
            << "{device_id = " << source_impl->device_info().device.id << "})";
 
@@ -1071,9 +1074,9 @@ UserMediaClientImpl::UserMediaRequestInfo::~UserMediaRequestInfo() {
 void UserMediaClientImpl::UserMediaRequestInfo::StartAudioTrack(
     const blink::WebMediaStreamTrack& track,
     const blink::WebMediaConstraints& constraints) {
-  DCHECK(track.source().type() == blink::WebMediaStreamSource::TypeAudio);
+  DCHECK(track.source().getType() == blink::WebMediaStreamSource::TypeAudio);
   MediaStreamAudioSource* native_source =
-      static_cast <MediaStreamAudioSource*>(track.source().extraData());
+      MediaStreamAudioSource::From(track.source());
   DCHECK(native_source);
 
   sources_.push_back(track.source());
@@ -1088,7 +1091,7 @@ blink::WebMediaStreamTrack
 UserMediaClientImpl::UserMediaRequestInfo::CreateAndStartVideoTrack(
     const blink::WebMediaStreamSource& source,
     const blink::WebMediaConstraints& constraints) {
-  DCHECK(source.type() == blink::WebMediaStreamSource::TypeVideo);
+  DCHECK(source.getType() == blink::WebMediaStreamSource::TypeVideo);
   MediaStreamVideoSource* native_source =
       MediaStreamVideoSource::GetVideoSource(source);
   DCHECK(native_source);

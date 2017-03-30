@@ -6,11 +6,11 @@
 
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
 #include "components/dom_distiller/core/distilled_page_prefs.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/gcm_driver/gcm_channel_status_syncer.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/ntp_snippets/ntp_snippets_service.h"
 #include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -69,8 +69,6 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   [OmniboxGeolocationLocalState registerLocalState:registry];
   [MemoryDebuggerManager registerLocalState:registry];
 
-  data_reduction_proxy::RegisterPrefs(registry);
-
   registry->RegisterBooleanPref(prefs::kBrowsingDataMigrationHasBeenPossible,
                                 false);
 
@@ -79,12 +77,12 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 
 void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   autofill::AutofillManager::RegisterProfilePrefs(registry);
-  data_reduction_proxy::RegisterSyncableProfilePrefs(registry);
   dom_distiller::DistilledPagePrefs::RegisterProfilePrefs(registry);
   FirstRun::RegisterProfilePrefs(registry);
   gcm::GCMChannelStatusSyncer::RegisterProfilePrefs(registry);
   HostContentSettingsMap::RegisterProfilePrefs(registry);
   HttpServerPropertiesManagerFactory::RegisterProfilePrefs(registry);
+  ntp_snippets::NTPSnippetsService::RegisterProfilePrefs(registry);
   password_manager::PasswordManager::RegisterProfilePrefs(registry);
   PrefProxyConfigTrackerImpl::RegisterProfilePrefs(registry);
   sync_driver::SyncPrefs::RegisterProfilePrefs(registry);
@@ -132,6 +130,10 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterListPref(kURLsToRestoreOnStartup,
                              user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterListPref(kURLsToRestoreOnStartupOld);
+
+  // Register prefs used by Clear Browsing Data UI.
+  registry->RegisterIntegerPref(
+      prefs::kClearBrowsingDataHistoryNoticeShownTimes, 0);
 
   ios::GetChromeBrowserProvider()->RegisterProfilePrefs(registry);
 }

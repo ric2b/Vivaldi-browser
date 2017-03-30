@@ -40,6 +40,7 @@ class MEDIA_BLINK_EXPORT ResourceMultiBufferDataProvider
   // MultiBuffer::DataProvider implementation
   MultiBufferBlockId Tell() const override;
   bool Available() const override;
+  int64_t AvailableBytes() const override;
   scoped_refptr<DataBuffer> Read() override;
   void SetDeferred(bool defer) override;
 
@@ -89,7 +90,8 @@ class MEDIA_BLINK_EXPORT ResourceMultiBufferDataProvider
   int64_t block_size() const;
 
   // If we have made a range request, verify the response from the server.
-  bool VerifyPartialResponse(const blink::WebURLResponse& response);
+  bool VerifyPartialResponse(const blink::WebURLResponse& response,
+                             const scoped_refptr<UrlData>& url_data);
 
   // Current Position.
   MultiBufferBlockId pos_;

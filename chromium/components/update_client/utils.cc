@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <vector>
@@ -32,6 +34,7 @@
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
+#include "url/gurl.h"
 
 namespace update_client {
 
@@ -224,6 +227,43 @@ bool VerifyFileHash256(const base::FilePath& filepath,
   hasher->Finish(actual_hash, sizeof(actual_hash));
 
   return memcmp(actual_hash, &expected_hash[0], sizeof(actual_hash)) == 0;
+}
+
+bool IsValidBrand(const std::string& brand) {
+  const size_t kMaxBrandSize = 4;
+  if (!brand.empty() && brand.size() != kMaxBrandSize)
+    return false;
+
+  return std::find_if_not(brand.begin(), brand.end(), [](char ch) {
+           return base::IsAsciiAlpha(ch);
+         }) == brand.end();
+}
+
+bool IsValidAp(const std::string& ap) {
+  const size_t kMaxApSize = 256;
+  if (ap.size() > kMaxApSize)
+    return false;
+
+  return std::find_if_not(ap.begin(), ap.end(), [](char ch) {
+           if (base::IsAsciiAlpha(ch) || base::IsAsciiDigit(ch))
+             return true;
+
+           const char kSpecialChars[] = "+-_=";
+           for (auto c : kSpecialChars) {
+             if (c == ch)
+               return true;
+           }
+
+           return false;
+         }) == ap.end();
+}
+
+void RemoveUnsecureUrls(std::vector<GURL>* urls) {
+  DCHECK(urls);
+  urls->erase(std::remove_if(
+                  urls->begin(), urls->end(),
+                  [](const GURL& url) { return !url.SchemeIsCryptographic(); }),
+              urls->end());
 }
 
 }  // namespace update_client

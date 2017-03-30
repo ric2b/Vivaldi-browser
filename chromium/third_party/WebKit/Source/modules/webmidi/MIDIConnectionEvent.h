@@ -41,19 +41,19 @@ class MIDIConnectionEventInit;
 class MIDIConnectionEvent final : public Event {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static PassRefPtrWillBeRawPtr<MIDIConnectionEvent> create()
+    static MIDIConnectionEvent* create()
     {
-        return adoptRefWillBeNoop(new MIDIConnectionEvent());
+        return new MIDIConnectionEvent();
     }
 
-    static PassRefPtrWillBeRawPtr<MIDIConnectionEvent> create(MIDIPort* port)
+    static MIDIConnectionEvent* create(MIDIPort* port)
     {
-        return adoptRefWillBeNoop(new MIDIConnectionEvent(port));
+        return new MIDIConnectionEvent(port);
     }
 
-    static PassRefPtrWillBeRawPtr<MIDIConnectionEvent> create(const AtomicString& type, const MIDIConnectionEventInit& initializer)
+    static MIDIConnectionEvent* create(const AtomicString& type, const MIDIConnectionEventInit& initializer)
     {
-        return adoptRefWillBeNoop(new MIDIConnectionEvent(type, initializer));
+        return new MIDIConnectionEvent(type, initializer);
     }
 
     MIDIPort* port() { return m_port; }
@@ -72,7 +72,7 @@ private:
 
     MIDIConnectionEvent(const AtomicString&, const MIDIConnectionEventInit&);
 
-    PersistentWillBeMember<MIDIPort> m_port;
+    Member<MIDIPort> m_port;
 };
 
 } // namespace blink

@@ -17,7 +17,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/frame_messages.h"
-#include "content/common/gpu/gpu_messages.h"
+#include "gpu/ipc/common/gpu_messages.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 
 namespace content {
@@ -63,7 +63,7 @@ void CrossProcessFrameConnector::set_view(
   if (view_) {
     view_->set_cross_process_frame_connector(this);
     SetDeviceScaleFactor(device_scale_factor_);
-    SetSize(child_frame_rect_);
+    SetRect(child_frame_rect_);
   }
 }
 
@@ -108,7 +108,7 @@ void CrossProcessFrameConnector::OnInitializeChildFrame(gfx::Rect frame_rect,
     SetDeviceScaleFactor(scale_factor);
 
   if (!frame_rect.size().IsEmpty())
-    SetSize(frame_rect);
+    SetRect(frame_rect);
 }
 
 gfx::Rect CrossProcessFrameConnector::ChildFrameRect() {
@@ -116,20 +116,10 @@ gfx::Rect CrossProcessFrameConnector::ChildFrameRect() {
 }
 
 void CrossProcessFrameConnector::GetScreenInfo(blink::WebScreenInfo* results) {
-  // Inner WebContents's root FrameTreeNode does not have a parent(), so
-  // GetRenderWidgetHostView() call below will fail.
-  // TODO(lazyboy): Fix this.
-  if (frame_proxy_in_parent_renderer_->frame_tree_node()
-          ->render_manager()
-          ->ForInnerDelegate()) {
-    DCHECK(frame_proxy_in_parent_renderer_->frame_tree_node()->IsMainFrame());
-    return;
+  auto parent_view = GetParentRenderWidgetHostView();
+  if (parent_view) {
+    parent_view->GetScreenInfo(results);
   }
-
-  RenderWidgetHostView* rwhv =
-      frame_proxy_in_parent_renderer_->GetRenderWidgetHostView();
-  if (rwhv)
-    static_cast<RenderWidgetHostViewBase*>(rwhv)->GetScreenInfo(results);
 }
 
 void CrossProcessFrameConnector::UpdateCursor(const WebCursor& cursor) {
@@ -149,11 +139,25 @@ gfx::Point CrossProcessFrameConnector::TransformPointToRootCoordSpace(
   return transformed_point;
 }
 
+void CrossProcessFrameConnector::ForwardProcessAckedTouchEvent(
+    const TouchEventWithLatencyInfo& touch,
+    InputEventAckState ack_result) {
+  auto main_view = GetRootRenderWidgetHostView();
+  if (main_view)
+    main_view->ProcessAckedTouchEvent(touch, ack_result);
+}
+
 bool CrossProcessFrameConnector::HasFocus() {
   RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
   if (root_view)
     return root_view->HasFocus();
   return false;
+}
+
+void CrossProcessFrameConnector::FocusRootView() {
+  RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
+  if (root_view)
+    root_view->Focus();
 }
 
 void CrossProcessFrameConnector::OnForwardInputEvent(
@@ -168,6 +172,10 @@ void CrossProcessFrameConnector::OnForwardInputEvent(
           ? manager->GetOuterRenderWidgetHostForKeyboardInput()
           : frame_proxy_in_parent_renderer_->GetRenderViewHost()->GetWidget();
 
+  // TODO(wjmaclean): We should remove these forwarding functions, since they
+  // are directly target using RenderWidgetHostInputEventRouter. But neither
+  // pathway is currently handling gesture events, so that needs to be fixed
+  // in a subsequent CL.
   if (blink::WebInputEvent::isKeyboardEventType(event->type)) {
     if (!parent_widget->GetLastKeyboardEvent())
       return;
@@ -192,7 +200,7 @@ void CrossProcessFrameConnector::OnForwardInputEvent(
 void CrossProcessFrameConnector::OnFrameRectChanged(
     const gfx::Rect& frame_rect) {
   if (!frame_rect.size().IsEmpty())
-    SetSize(frame_rect);
+    SetRect(frame_rect);
 }
 
 void CrossProcessFrameConnector::OnVisibilityChanged(bool visible) {
@@ -228,10 +236,27 @@ void CrossProcessFrameConnector::SetDeviceScaleFactor(float scale_factor) {
   }
 }
 
-void CrossProcessFrameConnector::SetSize(gfx::Rect frame_rect) {
+void CrossProcessFrameConnector::SetRect(const gfx::Rect& frame_rect) {
+  gfx::Rect old_rect = child_frame_rect_;
   child_frame_rect_ = frame_rect;
-  if (view_)
-    view_->SetSize(frame_rect.size());
+  if (view_) {
+    view_->SetBounds(frame_rect);
+
+    // Out-of-process iframes nested underneath this one implicitly have their
+    // view rects changed when their ancestor is repositioned, and therefore
+    // need to have their screen rects updated.
+    FrameTreeNode* proxy_node =
+        frame_proxy_in_parent_renderer_->frame_tree_node();
+    if (old_rect.x() != child_frame_rect_.x() ||
+        old_rect.y() != child_frame_rect_.y()) {
+      for (FrameTreeNode* node :
+           proxy_node->frame_tree()->SubtreeNodes(proxy_node)) {
+        if (node != proxy_node &&
+            node->current_frame_host()->GetRenderWidgetHost())
+          node->current_frame_host()->GetRenderWidgetHost()->SendScreenRects();
+      }
+    }
+  }
 }
 
 RenderWidgetHostViewBase*
@@ -247,6 +272,29 @@ CrossProcessFrameConnector::GetRootRenderWidgetHostView() {
   }
 
   return static_cast<RenderWidgetHostViewBase*>(top_host->GetView());
+}
+
+RenderWidgetHostViewBase*
+CrossProcessFrameConnector::GetParentRenderWidgetHostView() {
+  FrameTreeNode* parent =
+      frame_proxy_in_parent_renderer_->frame_tree_node()->parent();
+
+  if (!parent &&
+      frame_proxy_in_parent_renderer_->frame_tree_node()
+          ->render_manager()
+          ->GetOuterDelegateNode()) {
+    parent = frame_proxy_in_parent_renderer_->frame_tree_node()
+                 ->render_manager()
+                 ->GetOuterDelegateNode()
+                 ->parent();
+  }
+
+  if (parent) {
+    return static_cast<RenderWidgetHostViewBase*>(
+        parent->current_frame_host()->GetView());
+  }
+
+  return nullptr;
 }
 
 }  // namespace content

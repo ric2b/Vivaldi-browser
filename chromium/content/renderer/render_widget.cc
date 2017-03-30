@@ -29,11 +29,10 @@
 #include "cc/trees/layer_tree_host.h"
 #include "components/scheduler/renderer/render_widget_scheduling_state.h"
 #include "components/scheduler/renderer/renderer_scheduler.h"
-#include "content/child/npapi/webplugin.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/gpu/client/webgraphicscontext3d_command_buffer_impl.h"
-#include "content/common/gpu/gpu_process_launch_causes.h"
+#include "content/common/gpu_process_launch_causes.h"
 #include "content/common/input/synthetic_gesture_packet.h"
 #include "content/common/input/web_input_event_traits.h"
 #include "content/common/input_messages.h"
@@ -59,6 +58,7 @@
 #include "content/renderer/render_process.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
+#include "content/renderer/render_widget_owner_delegate.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "content/renderer/resizing_mode_selector.h"
 #include "ipc/ipc_sync_message.h"
@@ -104,6 +104,10 @@
 #if defined(MOJO_SHELL_CLIENT)
 #include "content/public/common/mojo_shell_connection.h"
 #include "content/renderer/mus/render_widget_mus_connection.h"
+#endif
+
+#if defined(ENABLE_VULKAN)
+#include "cc/output/vulkan_in_process_context_provider.h"
 #endif
 
 #include "third_party/WebKit/public/web/WebWidget.h"
@@ -216,6 +220,7 @@ RenderWidget::RenderWidget(CompositorDependencies* compositor_deps,
     : routing_id_(MSG_ROUTING_NONE),
       compositor_deps_(compositor_deps),
       webwidget_(nullptr),
+      owner_delegate_(nullptr),
       opener_id_(MSG_ROUTING_NONE),
       top_controls_shrink_blink_size_(false),
       top_controls_height_(0.f),
@@ -300,8 +305,9 @@ RenderWidget* RenderWidget::CreateForFrame(
   // routing ID. https://crbug.com/545684
   RenderViewImpl* view = RenderViewImpl::FromRoutingID(routing_id);
   if (view) {
-    view->AttachWebFrameWidget(RenderWidget::CreateWebFrameWidget(view, frame));
-    return view;
+    view->AttachWebFrameWidget(
+        RenderWidget::CreateWebFrameWidget(view->GetWidget(), frame));
+    return view->GetWidget();
   }
   scoped_refptr<RenderWidget> widget(
       new RenderWidget(compositor_deps, blink::WebPopupTypeNone, screen_info,
@@ -716,7 +722,7 @@ scoped_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(bool fallback) {
   }
 #endif
 
-  scoped_refptr<GpuChannelHost> gpu_channel_host;
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host;
   if (!use_software) {
     CauseForGpuLaunch cause =
         CAUSE_FOR_GPU_LAUNCH_WEBGRAPHICSCONTEXT3DCOMMANDBUFFERIMPL_INITIALIZE;
@@ -732,9 +738,23 @@ scoped_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(bool fallback) {
       use_software = true;
   }
 
+#if defined(ENABLE_VULKAN)
+  scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider;
+#endif
   scoped_refptr<ContextProviderCommandBuffer> context_provider;
   scoped_refptr<ContextProviderCommandBuffer> worker_context_provider;
   if (!use_software) {
+#if defined(ENABLE_VULKAN)
+    vulkan_context_provider = cc::VulkanInProcessContextProvider::Create();
+    if (vulkan_context_provider) {
+      uint32_t output_surface_id = next_output_surface_id_++;
+      return scoped_ptr<cc::OutputSurface>(new DelegatedCompositorOutputSurface(
+          routing_id(), output_surface_id, context_provider,
+          worker_context_provider, vulkan_context_provider,
+          frame_swap_message_queue_));
+    }
+#endif
+
     context_provider = ContextProviderCommandBuffer::Create(
         CreateGraphicsContext3D(gpu_channel_host.get()),
         RENDER_COMPOSITOR_CONTEXT);
@@ -749,14 +769,16 @@ scoped_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(bool fallback) {
 #if defined(OS_ANDROID)
     if (SynchronousCompositorFactory* factory =
             SynchronousCompositorFactory::GetInstance()) {
+      uint32_t output_surface_id = next_output_surface_id_++;
       return factory->CreateOutputSurface(
-          routing_id(), frame_swap_message_queue_, context_provider,
-          worker_context_provider);
+          routing_id(), output_surface_id, frame_swap_message_queue_,
+          context_provider, worker_context_provider);
     } else if (RenderThreadImpl::current()->sync_compositor_message_filter()) {
+      uint32_t output_surface_id = next_output_surface_id_++;
       return make_scoped_ptr(new SynchronousCompositorOutputSurface(
           context_provider, worker_context_provider, routing_id(),
-          content::RenderThreadImpl::current()
-              ->sync_compositor_message_filter(),
+          output_surface_id, content::RenderThreadImpl::current()
+                                 ->sync_compositor_message_filter(),
           frame_swap_message_queue_));
     }
 #endif
@@ -771,7 +793,11 @@ scoped_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(bool fallback) {
     DCHECK(compositor_deps_->GetCompositorImplThreadTaskRunner());
     return make_scoped_ptr(new DelegatedCompositorOutputSurface(
         routing_id(), output_surface_id, context_provider,
-        worker_context_provider, frame_swap_message_queue_));
+        worker_context_provider,
+#if defined(ENABLE_VULKAN)
+        vulkan_context_provider,
+#endif
+        frame_swap_message_queue_));
   }
 
   if (!context_provider.get()) {
@@ -780,6 +806,9 @@ scoped_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(bool fallback) {
 
     return make_scoped_ptr(new CompositorOutputSurface(
         routing_id(), output_surface_id, nullptr, nullptr,
+#if defined(ENABLE_VULKAN)
+        nullptr,
+#endif
         std::move(software_device), frame_swap_message_queue_, true));
   }
 
@@ -821,14 +850,12 @@ void RenderWidget::DidCompleteSwapBuffers() {
   // Notify subclasses threaded composited rendering was flushed to the screen.
   DidFlushPaint();
 
-  if (!next_paint_flags_ && !need_update_rect_for_auto_resize_ &&
-      !plugin_window_moves_.size()) {
+  if (!next_paint_flags_ && !need_update_rect_for_auto_resize_) {
     return;
   }
 
   ViewHostMsg_UpdateRect_Params params;
   params.view_size = size_;
-  params.plugin_window_moves.swap(plugin_window_moves_);
   params.flags = next_paint_flags_;
 
   Send(new ViewHostMsg_UpdateRect(routing_id_, params));
@@ -899,7 +926,7 @@ void RenderWidget::RecordFrameTimingEvents(
   }
 }
 
-void RenderWidget::ScheduleAnimation() {
+void RenderWidget::RequestScheduleAnimation() {
   scheduleAnimation();
 }
 
@@ -923,9 +950,15 @@ void RenderWidget::WillBeginCompositorFrame() {
 ///////////////////////////////////////////////////////////////////////////////
 // RenderWidgetInputHandlerDelegate
 
-void RenderWidget::FocusChangeComplete() {}
+void RenderWidget::FocusChangeComplete() {
+  if (owner_delegate_)
+    owner_delegate_->RenderWidgetFocusChangeComplete();
+}
 
 bool RenderWidget::HasTouchEventHandlersAt(const gfx::Point& point) const {
+  if (owner_delegate_)
+    return owner_delegate_->DoesRenderWidgetHaveTouchEventHandlersAt(point);
+
   return true;
 }
 
@@ -950,7 +983,31 @@ void RenderWidget::ObserveWheelEventAndResult(
   }
 }
 
-void RenderWidget::OnDidHandleKeyEvent() {}
+void RenderWidget::ObserveGestureEventAndResult(
+    const blink::WebGestureEvent& gesture_event,
+    const gfx::Vector2dF& unused_delta,
+    bool event_processed) {
+  if (!compositor_deps_->IsElasticOverscrollEnabled())
+    return;
+
+  cc::InputHandlerScrollResult scroll_result;
+  scroll_result.did_scroll = event_processed;
+  scroll_result.did_overscroll_root = !unused_delta.IsZero();
+  scroll_result.unused_scroll_delta = unused_delta;
+
+  RenderThreadImpl* render_thread = RenderThreadImpl::current();
+  InputHandlerManager* input_handler_manager =
+      render_thread ? render_thread->input_handler_manager() : NULL;
+  if (input_handler_manager) {
+    input_handler_manager->ObserveGestureEventAndResultOnMainThread(
+        routing_id_, gesture_event, scroll_result);
+  }
+}
+
+void RenderWidget::OnDidHandleKeyEvent() {
+  if (owner_delegate_)
+    owner_delegate_->RenderWidgetDidHandleKeyEvent();
+}
 
 void RenderWidget::OnDidOverscroll(const DidOverscrollParams& params) {
   Send(new InputHostMsg_DidOverscroll(routing_id_, params));
@@ -960,14 +1017,14 @@ void RenderWidget::OnInputEventAck(scoped_ptr<InputEventAck> input_event_ack) {
   Send(new InputHostMsg_HandleInputEvent_ACK(routing_id_, *input_event_ack));
 }
 
-void RenderWidget::NonBlockingInputEventHandled(
+void RenderWidget::NotifyInputEventHandled(
     blink::WebInputEvent::Type handled_type) {
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
   InputHandlerManager* input_handler_manager =
       render_thread ? render_thread->input_handler_manager() : NULL;
   if (input_handler_manager) {
-    input_handler_manager->NonBlockingInputEventHandledOnMainThread(
-        routing_id_, handled_type);
+    input_handler_manager->NotifyInputEventHandledOnMainThread(routing_id_,
+                                                               handled_type);
   }
 }
 
@@ -1044,10 +1101,16 @@ void RenderWidget::UpdateTextInputState(ShowIme show_ime,
 }
 
 bool RenderWidget::WillHandleGestureEvent(const blink::WebGestureEvent& event) {
+  if (owner_delegate_)
+    return owner_delegate_->RenderWidgetWillHandleGestureEvent(event);
+
   return false;
 }
 
 bool RenderWidget::WillHandleMouseEvent(const blink::WebMouseEvent& event) {
+  if (owner_delegate_)
+    return owner_delegate_->RenderWidgetWillHandleMouseEvent(event);
+
   return false;
 }
 
@@ -1530,6 +1593,15 @@ void RenderWidget::OnUpdateScreenRects(const gfx::Rect& view_screen_rect,
   Send(new ViewHostMsg_UpdateScreenRects_ACK(routing_id()));
 }
 
+void RenderWidget::OnUpdateWindowScreenRect(
+    const gfx::Rect& window_screen_rect) {
+  if (screen_metrics_emulator_) {
+    screen_metrics_emulator_->OnUpdateWindowScreenRect(window_screen_rect);
+  } else {
+    window_screen_rect_ = window_screen_rect;
+  }
+}
+
 void RenderWidget::OnSetSurfaceIdNamespace(uint32_t surface_id_namespace) {
   if (compositor_)
     compositor_->SetSurfaceIdNamespace(surface_id_namespace);
@@ -1551,10 +1623,6 @@ ui::TextInputType RenderWidget::GetTextInputType() {
 }
 
 void RenderWidget::UpdateCompositionInfo(bool should_update_range) {
-#if defined(OS_ANDROID)
-// TODO(yukawa): Start sending character bounds when the browser side
-// implementation becomes ready (crbug.com/424866).
-#else
   TRACE_EVENT0("renderer", "RenderWidget::UpdateCompositionInfo");
   gfx::Range range = gfx::Range();
   if (should_update_range) {
@@ -1571,7 +1639,6 @@ void RenderWidget::UpdateCompositionInfo(bool should_update_range) {
   composition_range_ = range;
   Send(new InputHostMsg_ImeCompositionRangeChanged(
       routing_id(), composition_range_, composition_character_bounds_));
-#endif
 }
 
 void RenderWidget::convertViewportToWindow(blink::WebRect* rect) {
@@ -1666,21 +1733,24 @@ bool RenderWidget::SetDeviceColorProfile(
     return false;
 
   device_color_profile_ = color_profile;
-  return true;
-}
 
-void RenderWidget::ResetDeviceColorProfileForTesting() {
-  if (!device_color_profile_.empty())
-    device_color_profile_.clear();
-  device_color_profile_.push_back('0');
+  if (owner_delegate_)
+    owner_delegate_->RenderWidgetDidSetColorProfile(color_profile);
+
+  return true;
 }
 
 void RenderWidget::OnOrientationChange() {
 }
 
-gfx::Vector2d RenderWidget::GetScrollOffset() {
-  // Bare RenderWidgets don't support scroll offset.
-  return gfx::Vector2d();
+void RenderWidget::DidInitiatePaint() {
+  if (owner_delegate_)
+    owner_delegate_->RenderWidgetDidCommitAndDrawCompositorFrame();
+}
+
+void RenderWidget::DidFlushPaint() {
+  if (owner_delegate_)
+    owner_delegate_->RenderWidgetDidFlushPaint();
 }
 
 void RenderWidget::SetHidden(bool hidden) {
@@ -1807,6 +1877,17 @@ void RenderWidget::UpdateSelectionBounds() {
   }
 
   UpdateCompositionInfo(false);
+}
+
+void RenderWidget::SetDeviceColorProfileForTesting(
+    const std::vector<char>& color_profile) {
+  SetDeviceColorProfile(color_profile);
+}
+
+void RenderWidget::ResetDeviceColorProfileForTesting() {
+  std::vector<char> color_profile;
+  color_profile.push_back('0');
+  SetDeviceColorProfile(color_profile);
 }
 
 // Check blink::WebTextInputType and ui::TextInputType is kept in sync.
@@ -1937,6 +2018,13 @@ void RenderWidget::didOverscroll(
     const blink::WebFloatSize& accumulatedRootOverScroll,
     const blink::WebFloatPoint& position,
     const blink::WebFloatSize& velocity) {
+#if defined(OS_MACOSX)
+  // On OSX the user can disable the elastic overscroll effect. If that's the
+  // case, don't forward the overscroll notification.
+  DCHECK(compositor_deps());
+  if (!compositor_deps()->IsElasticOverscrollEnabled())
+    return;
+#endif
   input_handler_->DidOverscrollFromBlink(unusedDelta, accumulatedRootOverScroll,
                                          position, velocity);
 }
@@ -1945,34 +2033,6 @@ void RenderWidget::StartCompositor() {
   if (!is_hidden())
     compositor_->setVisible(true);
 }
-
-void RenderWidget::SchedulePluginMove(const WebPluginGeometry& move) {
-  size_t i = 0;
-  for (; i < plugin_window_moves_.size(); ++i) {
-    if (plugin_window_moves_[i].window == move.window) {
-      if (move.rects_valid) {
-        plugin_window_moves_[i] = move;
-      } else {
-        plugin_window_moves_[i].visible = move.visible;
-      }
-      break;
-    }
-  }
-
-  if (i == plugin_window_moves_.size())
-    plugin_window_moves_.push_back(move);
-}
-
-void RenderWidget::CleanupWindowInPluginMoves(gfx::PluginWindowHandle window) {
-  for (WebPluginGeometryVector::iterator i = plugin_window_moves_.begin();
-       i != plugin_window_moves_.end(); ++i) {
-    if (i->window == window) {
-      plugin_window_moves_.erase(i);
-      break;
-    }
-  }
-}
-
 
 RenderWidgetCompositor* RenderWidget::compositor() const {
   return compositor_.get();
@@ -2033,24 +2093,18 @@ void RenderWidget::didUpdateTextOfFocusedElementByNonUserInput() {
 }
 
 scoped_ptr<WebGraphicsContext3DCommandBufferImpl>
-RenderWidget::CreateGraphicsContext3D(GpuChannelHost* gpu_channel_host) {
-  // Explicitly disable antialiasing for the compositor. As of the time of
-  // this writing, the only platform that supported antialiasing for the
-  // compositor was Mac OS X, because the on-screen OpenGL context creation
-  // code paths on Windows and Linux didn't yet have multisampling support.
-  // Mac OS X essentially always behaves as though it's rendering offscreen.
-  // Multisampling has a heavy cost especially on devices with relatively low
-  // fill rate like most notebooks, and the Mac implementation would need to
-  // be optimized to resolve directly into the IOSurface shared between the
-  // GPU and browser processes. For these reasons and to avoid platform
-  // disparities we explicitly disable antialiasing.
-  blink::WebGraphicsContext3D::Attributes attributes;
-  attributes.antialias = false;
-  attributes.shareResources = true;
-  attributes.noAutomaticFlushes = true;
-  attributes.depth = false;
-  attributes.stencil = false;
-  bool lose_context_when_out_of_memory = true;
+RenderWidget::CreateGraphicsContext3D(gpu::GpuChannelHost* gpu_channel_host) {
+  // This is for an offscreen context for raster in the compositor. So the
+  // default framebuffer doesn't need alpha, depth, stencil, antialiasing.
+  gpu::gles2::ContextCreationAttribHelper attributes;
+  attributes.alpha_size = -1;
+  attributes.depth_size = 0;
+  attributes.stencil_size = 0;
+  attributes.samples = 0;
+  attributes.sample_buffers = 0;
+  attributes.bind_generates_resource = false;
+  attributes.lose_context_when_out_of_memory = true;
+
   WebGraphicsContext3DCommandBufferImpl::SharedMemoryLimits limits;
 #if defined(OS_ANDROID)
   bool using_synchronous_compositing =
@@ -2085,9 +2139,13 @@ RenderWidget::CreateGraphicsContext3D(GpuChannelHost* gpu_channel_host) {
   limits.start_transfer_buffer_size = 64 * 1024;
   limits.min_transfer_buffer_size = 64 * 1024;
 
+  bool share_resources = true;
+  bool automatic_flushes = false;
+
   return make_scoped_ptr(new WebGraphicsContext3DCommandBufferImpl(
-          0, GetURLForGraphicsContext3D(), gpu_channel_host, attributes,
-          lose_context_when_out_of_memory, limits, NULL));
+      gpu::kNullSurfaceHandle, GetURLForGraphicsContext3D(), gpu_channel_host,
+      attributes, gfx::PreferIntegratedGpu, share_resources, automatic_flushes,
+      limits, nullptr));
 }
 
 void RenderWidget::RegisterRenderFrameProxy(RenderFrameProxy* proxy) {

@@ -44,13 +44,16 @@ class InputInjector;
 class MouseShapePump;
 class ScreenControls;
 
+namespace protocol {
+class VideoLayout;
+}  // namespace protocol
+
 // A ClientSession keeps a reference to a connection to a client, and maintains
 // per-client state.
-class ClientSession
-    : public base::NonThreadSafe,
-      public protocol::HostStub,
-      public protocol::ConnectionToClient::EventHandler,
-      public ClientSessionControl {
+class ClientSession : public base::NonThreadSafe,
+                      public protocol::HostStub,
+                      public protocol::ConnectionToClient::EventHandler,
+                      public ClientSessionControl {
  public:
   // Callback interface for passing events to the ChromotingHost.
   class EventHandler {
@@ -87,7 +90,7 @@ class ClientSession
   // All |HostExtension|s in |extensions| must outlive |this|.
   ClientSession(EventHandler* event_handler,
                 scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner,
-                scoped_ptr<protocol::ConnectionToClient> connection,
+                std::unique_ptr<protocol::ConnectionToClient> connection,
                 DesktopEnvironmentFactory* desktop_environment_factory,
                 const base::TimeDelta& max_duration,
                 scoped_refptr<protocol::PairingRegistry> pairing_registry,
@@ -112,11 +115,11 @@ class ClientSession
       protocol::ConnectionToClient* connection) override;
   void OnConnectionAuthenticated(
       protocol::ConnectionToClient* connection) override;
+  void CreateVideoStreams(protocol::ConnectionToClient* connection) override;
   void OnConnectionChannelsConnected(
       protocol::ConnectionToClient* connection) override;
   void OnConnectionClosed(protocol::ConnectionToClient* connection,
                           protocol::ErrorCode error) override;
-  void OnCreateVideoEncoder(scoped_ptr<VideoEncoder>* encoder) override;
   void OnInputEventReceived(protocol::ConnectionToClient* connection,
                             int64_t timestamp) override;
   void OnRouteChange(protocol::ConnectionToClient* connection,
@@ -128,13 +131,10 @@ class ClientSession
   void DisconnectSession(protocol::ErrorCode error) override;
   void OnLocalMouseMoved(const webrtc::DesktopVector& position) override;
   void SetDisableInputs(bool disable_inputs) override;
-  void ResetVideoPipeline() override;
 
-  protocol::ConnectionToClient* connection() const {
-    return connection_.get();
-  }
+  protocol::ConnectionToClient* connection() const { return connection_.get(); }
 
-  bool is_authenticated() { return is_authenticated_;  }
+  bool is_authenticated() { return is_authenticated_; }
 
   const std::string* client_capabilities() const {
     return client_capabilities_.get();
@@ -142,14 +142,15 @@ class ClientSession
 
  private:
   // Creates a proxy for sending clipboard events to the client.
-  scoped_ptr<protocol::ClipboardStub> CreateClipboardProxy();
+  std::unique_ptr<protocol::ClipboardStub> CreateClipboardProxy();
 
-  void OnScreenSizeChanged(const webrtc::DesktopSize& size);
+  void OnScreenSizeChanged(const webrtc::DesktopSize& size,
+                           const webrtc::DesktopVector& dpi);
 
   EventHandler* event_handler_;
 
   // The connection to the client.
-  scoped_ptr<protocol::ConnectionToClient> connection_;
+  std::unique_ptr<protocol::ConnectionToClient> connection_;
 
   std::string client_jid_;
 
@@ -157,7 +158,7 @@ class ClientSession
   DesktopEnvironmentFactory* desktop_environment_factory_;
 
   // The DesktopEnvironment instance for this session.
-  scoped_ptr<DesktopEnvironment> desktop_environment_;
+  std::unique_ptr<DesktopEnvironment> desktop_environment_;
 
   // Filter used as the final element in the input pipeline.
   protocol::InputFilter host_input_filter_;
@@ -196,14 +197,12 @@ class ClientSession
   scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner_;
 
   // Objects responsible for sending video, audio and mouse shape.
-  // |video_stream_| and |mouse_shape_pump_| may be nullptr if the video
-  // stream is handled by an extension, see ResetVideoPipeline().
-  scoped_ptr<AudioPump> audio_pump_;
-  scoped_ptr<protocol::VideoStream> video_stream_;
-  scoped_ptr<MouseShapePump> mouse_shape_pump_;
+  std::unique_ptr<AudioPump> audio_pump_;
+  std::unique_ptr<protocol::VideoStream> video_stream_;
+  std::unique_ptr<MouseShapePump> mouse_shape_pump_;
 
   // The set of all capabilities supported by the client.
-  scoped_ptr<std::string> client_capabilities_;
+  std::unique_ptr<std::string> client_capabilities_;
 
   // The set of all capabilities supported by the host.
   std::string host_capabilities_;
@@ -212,24 +211,31 @@ class ClientSession
   std::string capabilities_;
 
   // Used to inject mouse and keyboard input and handle clipboard events.
-  scoped_ptr<InputInjector> input_injector_;
+  std::unique_ptr<InputInjector> input_injector_;
 
   // Used to apply client-requested changes in screen resolution.
-  scoped_ptr<ScreenControls> screen_controls_;
+  std::unique_ptr<ScreenControls> screen_controls_;
 
   // The pairing registry for PIN-less authentication.
   scoped_refptr<protocol::PairingRegistry> pairing_registry_;
 
   // Used to manage extension functionality.
-  scoped_ptr<HostExtensionSessionManager> extension_manager_;
+  std::unique_ptr<HostExtensionSessionManager> extension_manager_;
 
   // Set to true if the client was authenticated successfully.
-  bool is_authenticated_;
+  bool is_authenticated_ = false;
+
+  // Set to true after all data channels have been connected.
+  bool channels_connected_ = false;
 
   // Used to store video channel pause & lossless parameters.
-  bool pause_video_;
-  bool lossless_video_encode_;
-  bool lossless_video_color_;
+  bool pause_video_ = false;
+  bool lossless_video_encode_ = false;
+  bool lossless_video_color_ = false;
+
+  // VideoLayout is sent only after the control channel is connected. Until
+  // then it's stored in |pending_video_layout_message_|.
+  std::unique_ptr<protocol::VideoLayout> pending_video_layout_message_;
 
   // Used to disable callbacks to |this| once DisconnectSession() has been
   // called.

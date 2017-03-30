@@ -75,6 +75,10 @@ bool EVWhitelistComponentInstallerTraits::CanAutoUpdate() const {
   return true;
 }
 
+bool EVWhitelistComponentInstallerTraits::RequiresNetworkEncryption() const {
+  return false;
+}
+
 bool EVWhitelistComponentInstallerTraits::OnCustomInstall(
     const base::DictionaryValue& manifest,
     const base::FilePath& install_dir) {
@@ -126,6 +130,10 @@ void EVWhitelistComponentInstallerTraits::GetHash(
 
 std::string EVWhitelistComponentInstallerTraits::GetName() const {
   return kEVWhitelistManifestName;
+}
+
+std::string EVWhitelistComponentInstallerTraits::GetAp() const {
+  return std::string();
 }
 
 void RegisterEVWhitelistComponent(ComponentUpdateService* cus,

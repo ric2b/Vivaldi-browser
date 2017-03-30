@@ -4,38 +4,39 @@
 
 #include "platform/v8_inspector/V8StackTraceImpl.h"
 
+#include "platform/inspector_protocol/String16.h"
 #include "platform/v8_inspector/V8DebuggerAgentImpl.h"
 #include "platform/v8_inspector/V8DebuggerImpl.h"
 #include "platform/v8_inspector/V8StringUtil.h"
 #include "wtf/PassOwnPtr.h"
-#include "wtf/text/StringBuilder.h"
 
 #include <v8-debug.h>
 #include <v8-profiler.h>
+#include <v8-version.h>
 
 namespace blink {
 
 namespace {
 
-V8StackTraceImpl::Frame toCallFrame(v8::Local<v8::StackFrame> frame)
+V8StackTraceImpl::Frame toFrame(v8::Local<v8::StackFrame> frame)
 {
-    String scriptId = String::number(frame->GetScriptId());
-    String sourceName;
+    String16 scriptId = String16::number(frame->GetScriptId());
+    String16 sourceName;
     v8::Local<v8::String> sourceNameValue(frame->GetScriptNameOrSourceURL());
     if (!sourceNameValue.IsEmpty())
-        sourceName = toWTFString(sourceNameValue);
+        sourceName = toProtocolString(sourceNameValue);
 
-    String functionName;
+    String16 functionName;
     v8::Local<v8::String> functionNameValue(frame->GetFunctionName());
     if (!functionNameValue.IsEmpty())
-        functionName = toWTFString(functionNameValue);
+        functionName = toProtocolString(functionNameValue);
 
     int sourceLineNumber = frame->GetLineNumber();
     int sourceColumn = frame->GetColumn();
     return V8StackTraceImpl::Frame(functionName, scriptId, sourceName, sourceLineNumber, sourceColumn);
 }
 
-void toCallFramesVector(v8::Local<v8::StackTrace> stackTrace, Vector<V8StackTraceImpl::Frame>& scriptCallFrames, size_t maxStackSize, v8::Isolate* isolate)
+void toFramesVector(v8::Local<v8::StackTrace> stackTrace, protocol::Vector<V8StackTraceImpl::Frame>& frames, size_t maxStackSize, v8::Isolate* isolate)
 {
     ASSERT(isolate->InContext());
     int frameCount = stackTrace->GetFrameCount();
@@ -43,7 +44,7 @@ void toCallFramesVector(v8::Local<v8::StackTrace> stackTrace, Vector<V8StackTrac
         frameCount = maxStackSize;
     for (int i = 0; i < frameCount; i++) {
         v8::Local<v8::StackFrame> stackFrame = stackTrace->GetFrame(i);
-        scriptCallFrames.append(toCallFrame(stackFrame));
+        frames.append(toFrame(stackFrame));
     }
 }
 
@@ -58,7 +59,7 @@ V8StackTraceImpl::Frame::Frame()
 {
 }
 
-V8StackTraceImpl::Frame::Frame(const String& functionName, const String& scriptId, const String& scriptName, int lineNumber, int column)
+V8StackTraceImpl::Frame::Frame(const String16& functionName, const String16& scriptId, const String16& scriptName, int lineNumber, int column)
     : m_functionName(functionName)
     , m_scriptId(scriptId)
     , m_scriptName(scriptName)
@@ -84,39 +85,63 @@ PassOwnPtr<protocol::Runtime::CallFrame> V8StackTraceImpl::Frame::buildInspector
         .build();
 }
 
-PassOwnPtr<V8StackTraceImpl> V8StackTraceImpl::create(V8DebuggerAgentImpl* agent, v8::Local<v8::StackTrace> stackTrace, size_t maxStackSize)
+PassOwnPtr<V8StackTraceImpl> V8StackTraceImpl::create(V8DebuggerAgentImpl* agent, v8::Local<v8::StackTrace> stackTrace, size_t maxStackSize, const String16& description)
 {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    ASSERT(isolate->InContext());
-    ASSERT(!stackTrace.IsEmpty());
-
     v8::HandleScope scope(isolate);
-    Vector<V8StackTraceImpl::Frame> scriptCallFrames;
-    toCallFramesVector(stackTrace, scriptCallFrames, maxStackSize, isolate);
+    protocol::Vector<V8StackTraceImpl::Frame> frames;
+    if (!stackTrace.IsEmpty())
+        toFramesVector(stackTrace, frames, maxStackSize, isolate);
 
-    OwnPtr<V8StackTraceImpl> callStack;
-    if (agent && maxStackSize > 1)
-        callStack = agent->currentAsyncStackTraceForRuntime();
-    return V8StackTraceImpl::create(String(), scriptCallFrames, callStack.release());
+    int maxAsyncCallChainDepth = 1;
+    V8StackTraceImpl* asyncCallChain = nullptr;
+    if (agent && maxStackSize > 1) {
+        asyncCallChain = agent->currentAsyncCallChain();
+        maxAsyncCallChainDepth = agent->maxAsyncCallChainDepth();
+    }
+
+    // Only the top stack in the chain may be empty, so ensure that second stack is non-empty (it's the top of appended chain).
+    if (asyncCallChain && asyncCallChain->isEmpty())
+        asyncCallChain = asyncCallChain->m_parent.get();
+
+    if (stackTrace.IsEmpty() && !asyncCallChain)
+        return nullptr;
+
+    OwnPtr<V8StackTraceImpl> result = adoptPtr(new V8StackTraceImpl(description, frames, asyncCallChain ? asyncCallChain->clone() : nullptr));
+
+    // Crop to not exceed maxAsyncCallChainDepth.
+    V8StackTraceImpl* deepest = result.get();
+    while (deepest && maxAsyncCallChainDepth) {
+        deepest = deepest->m_parent.get();
+        maxAsyncCallChainDepth--;
+    }
+    if (deepest)
+        deepest->m_parent.clear();
+
+    return result.release();
 }
 
-PassOwnPtr<V8StackTraceImpl> V8StackTraceImpl::capture(V8DebuggerAgentImpl* agent, size_t maxStackSize)
+PassOwnPtr<V8StackTraceImpl> V8StackTraceImpl::capture(V8DebuggerAgentImpl* agent, size_t maxStackSize, const String16& description)
 {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    if (!isolate->InContext())
-        return nullptr;
     v8::HandleScope handleScope(isolate);
-    isolate->GetCpuProfiler()->CollectSample();
-    v8::Local<v8::StackTrace> stackTrace(v8::StackTrace::CurrentStackTrace(isolate, maxStackSize, stackTraceOptions));
-    return V8StackTraceImpl::create(agent, stackTrace, maxStackSize);
+    v8::Local<v8::StackTrace> stackTrace;
+    if (isolate->InContext()) {
+#if V8_MAJOR_VERSION >= 5
+        isolate->GetCpuProfiler()->CollectSample();
+#endif
+        stackTrace = v8::StackTrace::CurrentStackTrace(isolate, maxStackSize, stackTraceOptions);
+    }
+    return V8StackTraceImpl::create(agent, stackTrace, maxStackSize, description);
 }
 
-PassOwnPtr<V8StackTraceImpl> V8StackTraceImpl::create(const String& description, Vector<Frame>& frames, PassOwnPtr<V8StackTraceImpl> parent)
+PassOwnPtr<V8StackTraceImpl> V8StackTraceImpl::clone()
 {
-    return adoptPtr(new V8StackTraceImpl(description, frames, parent));
+    protocol::Vector<Frame> framesCopy(m_frames);
+    return adoptPtr(new V8StackTraceImpl(m_description, framesCopy, m_parent ? m_parent->clone() : nullptr));
 }
 
-V8StackTraceImpl::V8StackTraceImpl(const String& description, Vector<Frame>& frames, PassOwnPtr<V8StackTraceImpl> parent)
+V8StackTraceImpl::V8StackTraceImpl(const String16& description, protocol::Vector<Frame>& frames, PassOwnPtr<V8StackTraceImpl> parent)
     : m_description(description)
     , m_parent(parent)
 {
@@ -127,7 +152,7 @@ V8StackTraceImpl::~V8StackTraceImpl()
 {
 }
 
-String V8StackTraceImpl::topSourceURL() const
+String16 V8StackTraceImpl::topSourceURL() const
 {
     ASSERT(m_frames.size());
     return m_frames[0].m_scriptName;
@@ -145,13 +170,13 @@ int V8StackTraceImpl::topColumnNumber() const
     return m_frames[0].m_columnNumber;
 }
 
-String V8StackTraceImpl::topFunctionName() const
+String16 V8StackTraceImpl::topFunctionName() const
 {
     ASSERT(m_frames.size());
     return m_frames[0].m_functionName;
 }
 
-String V8StackTraceImpl::topScriptId() const
+String16 V8StackTraceImpl::topScriptId() const
 {
     ASSERT(m_frames.size());
     return m_frames[0].m_scriptId;
@@ -172,13 +197,23 @@ PassOwnPtr<protocol::Runtime::StackTrace> V8StackTraceImpl::buildInspectorObject
     return stackTrace.release();
 }
 
-String V8StackTraceImpl::toString() const
+PassOwnPtr<protocol::Runtime::StackTrace> V8StackTraceImpl::buildInspectorObjectForTail(V8DebuggerAgentImpl* agent) const
 {
-    StringBuilder stackTrace;
+    v8::HandleScope handleScope(v8::Isolate::GetCurrent());
+    // Next call collapses possible empty stack and ensures maxAsyncCallChainDepth.
+    OwnPtr<V8StackTraceImpl> fullChain = V8StackTraceImpl::create(agent, v8::Local<v8::StackTrace>(), V8StackTrace::maxCallStackSizeToCapture);
+    if (!fullChain || !fullChain->m_parent)
+        return nullptr;
+    return fullChain->m_parent->buildInspectorObject();
+}
+
+String16 V8StackTraceImpl::toString() const
+{
+    String16Builder stackTrace;
     for (size_t i = 0; i < m_frames.size(); ++i) {
         const Frame& frame = m_frames[i];
         stackTrace.append("\n    at " + (frame.functionName().length() ? frame.functionName() : "(anonymous function)"));
-        stackTrace.appendLiteral(" (");
+        stackTrace.append(" (");
         stackTrace.append(frame.sourceURL());
         stackTrace.append(':');
         stackTrace.appendNumber(frame.lineNumber());

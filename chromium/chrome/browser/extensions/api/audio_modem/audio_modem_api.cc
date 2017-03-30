@@ -5,7 +5,9 @@
 #include "chrome/browser/extensions/api/audio_modem/audio_modem_api.h"
 
 #include <stdint.h>
+
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,7 +17,7 @@
 #include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/copresence/chrome_whispernet_client.h"
@@ -104,13 +106,13 @@ const std::string DecodeBase64Token(std::string encoded_token) {
 
 AudioModemAPI::AudioModemAPI(content::BrowserContext* context)
     : AudioModemAPI(context,
-                    make_scoped_ptr(new ChromeWhispernetClient(context)),
+                    base::WrapUnique(new ChromeWhispernetClient(context)),
                     audio_modem::Modem::Create()) {}
 
 AudioModemAPI::AudioModemAPI(
     content::BrowserContext* context,
-    scoped_ptr<audio_modem::WhispernetClient> whispernet_client,
-    scoped_ptr<audio_modem::Modem> modem)
+    std::unique_ptr<audio_modem::WhispernetClient> whispernet_client,
+    std::unique_ptr<audio_modem::Modem> modem)
     : browser_context_(context),
       whispernet_client_(std::move(whispernet_client)),
       modem_(std::move(modem)),
@@ -226,31 +228,42 @@ void AudioModemAPI::WhispernetInitComplete(bool success) {
 
 void AudioModemAPI::TokensReceived(const std::vector<AudioToken>& tokens) {
   // Distribute the tokens to the appropriate app(s).
-  std::map<std::string, std::vector<linked_ptr<ReceivedToken>>> tokens_by_app;
+  std::list<ReceivedToken> all_tokens;
+  std::map<std::string, std::vector<ReceivedToken*>> tokens_by_app;
   for (const AudioToken& token : tokens) {
-    linked_ptr<ReceivedToken> api_token(new ReceivedToken);
+    ReceivedToken api_token;
     const std::string& raw_token = DecodeBase64Token(token.token);
-    api_token->token.assign(raw_token.c_str(),
-                            raw_token.c_str() + raw_token.size());
-    api_token->band = token.audible ? AUDIOBAND_AUDIBLE : AUDIOBAND_INAUDIBLE;
+    api_token.token.assign(raw_token.c_str(),
+                           raw_token.c_str() + raw_token.size());
+    api_token.band = token.audible ? AUDIOBAND_AUDIBLE : AUDIOBAND_INAUDIBLE;
+    all_tokens.push_back(std::move(api_token));
     for (const auto& receiver :
          receive_timers_[token.audible ? AUDIBLE : INAUDIBLE]) {
-      tokens_by_app[receiver.first].push_back(api_token);
+      tokens_by_app[receiver.first].push_back(&all_tokens.back());
     }
   }
 
   // Send events to the appropriate app(s).
   for (const auto& app_entry : tokens_by_app) {
     const std::string& app_id = app_entry.first;
-    const auto& tokens = app_entry.second;
+    const auto& app_tokens = app_entry.second;
     if (app_id.empty())
       continue;
 
+    // Construct the event arguments by hand because a given token can be
+    // present for multiple listeners, so constructing a
+    // std::vector<ReceivedToken> for each is inefficient.
+    std::unique_ptr<base::ListValue> tokens_value(new base::ListValue());
+    for (const ReceivedToken* token : app_tokens)
+      tokens_value->Append(token->ToValue());
+    std::unique_ptr<base::ListValue> args(new base::ListValue());
+    args->Append(std::move(tokens_value));
+
     EventRouter::Get(browser_context_)
         ->DispatchEventToExtension(
-            app_id, make_scoped_ptr(new Event(events::AUDIO_MODEM_ON_RECEIVED,
-                                              OnReceived::kEventName,
-                                              OnReceived::Create(tokens))));
+            app_id, base::WrapUnique(new Event(events::AUDIO_MODEM_ON_RECEIVED,
+                                               OnReceived::kEventName,
+                                               std::move(args))));
   }
 }
 
@@ -264,7 +277,7 @@ BrowserContextKeyedAPIFactory<AudioModemAPI>::DeclareFactoryDependencies() {
 }
 
 ExtensionFunction::ResponseAction AudioModemTransmitFunction::Run() {
-  scoped_ptr<Transmit::Params> params(Transmit::Params::Create(*args_));
+  std::unique_ptr<Transmit::Params> params(Transmit::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   AudioModemAPI* api =
       AudioModemAPI::GetFactoryInstance()->Get(browser_context());
@@ -305,7 +318,8 @@ ExtensionFunction::ResponseAction AudioModemTransmitFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction AudioModemStopTransmitFunction::Run() {
-  scoped_ptr<StopTransmit::Params> params(StopTransmit::Params::Create(*args_));
+  std::unique_ptr<StopTransmit::Params> params(
+      StopTransmit::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   Status status = AudioModemAPI::GetFactoryInstance()->Get(browser_context())
@@ -314,7 +328,7 @@ ExtensionFunction::ResponseAction AudioModemStopTransmitFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction AudioModemReceiveFunction::Run() {
-  scoped_ptr<Receive::Params> params(Receive::Params::Create(*args_));
+  std::unique_ptr<Receive::Params> params(Receive::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   AudioModemAPI* api =
       AudioModemAPI::GetFactoryInstance()->Get(browser_context());
@@ -340,7 +354,8 @@ ExtensionFunction::ResponseAction AudioModemReceiveFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction AudioModemStopReceiveFunction::Run() {
-  scoped_ptr<StopReceive::Params> params(StopReceive::Params::Create(*args_));
+  std::unique_ptr<StopReceive::Params> params(
+      StopReceive::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   Status status = AudioModemAPI::GetFactoryInstance()->Get(browser_context())

@@ -25,11 +25,13 @@
 
 #include "modules/webgl/WebGLRenderingContext.h"
 
+#include "bindings/modules/v8/UnionTypesModules.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutBox.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/webgl/ANGLEInstancedArrays.h"
 #include "modules/webgl/CHROMIUMSubscribeUniform.h"
 #include "modules/webgl/EXTBlendMinMax.h"
@@ -60,24 +62,26 @@
 #include "platform/CheckedInt.h"
 #include "platform/graphics/gpu/DrawingBuffer.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebGraphicsContext3DProvider.h"
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<CanvasRenderingContext> WebGLRenderingContext::Factory::create(HTMLCanvasElement* canvas, const CanvasContextCreationAttributes& attrs, Document&)
+CanvasRenderingContext* WebGLRenderingContext::Factory::create(HTMLCanvasElement* canvas, const CanvasContextCreationAttributes& attrs, Document&)
 {
     WebGLContextAttributes attributes = toWebGLContextAttributes(attrs);
-    OwnPtr<WebGraphicsContext3D> context(createWebGraphicsContext3D(canvas, attributes, 1));
-    if (!context)
+    OwnPtr<WebGraphicsContext3DProvider> contextProvider(createWebGraphicsContext3DProvider(canvas, attributes, 1));
+    if (!contextProvider)
         return nullptr;
-    OwnPtr<Extensions3DUtil> extensionsUtil = Extensions3DUtil::create(context.get());
+    gpu::gles2::GLES2Interface* gl = contextProvider->contextGL();
+    OwnPtr<Extensions3DUtil> extensionsUtil = Extensions3DUtil::create(gl);
     if (!extensionsUtil)
         return nullptr;
     if (extensionsUtil->supportsExtension("GL_EXT_debug_marker")) {
-        String contextLabel(String::format("WebGLRenderingContext-%p", context.get()));
-        context->pushGroupMarkerEXT(contextLabel.ascii().data());
+        String contextLabel(String::format("WebGLRenderingContext-%p", contextProvider.get()));
+        gl->PushGroupMarkerEXT(0, contextLabel.ascii().data());
     }
 
-    OwnPtrWillBeRawPtr<WebGLRenderingContext> renderingContext = adoptPtrWillBeNoop(new WebGLRenderingContext(canvas, context.release(), attributes));
+    WebGLRenderingContext* renderingContext = new WebGLRenderingContext(canvas, contextProvider.release(), attributes);
 
     if (!renderingContext->drawingBuffer()) {
         canvas->dispatchEvent(WebGLContextEvent::create(EventTypeNames::webglcontextcreationerror, false, true, "Could not create a WebGL context."));
@@ -87,7 +91,7 @@ PassOwnPtrWillBeRawPtr<CanvasRenderingContext> WebGLRenderingContext::Factory::c
     renderingContext->initializeNewContext();
     renderingContext->registerContextExtensions();
 
-    return renderingContext.release();
+    return renderingContext;
 }
 
 void WebGLRenderingContext::Factory::onError(HTMLCanvasElement* canvas, const String& error)
@@ -95,13 +99,18 @@ void WebGLRenderingContext::Factory::onError(HTMLCanvasElement* canvas, const St
     canvas->dispatchEvent(WebGLContextEvent::create(EventTypeNames::webglcontextcreationerror, false, true, error));
 }
 
-WebGLRenderingContext::WebGLRenderingContext(HTMLCanvasElement* passedCanvas, PassOwnPtr<WebGraphicsContext3D> context, const WebGLContextAttributes& requestedAttributes)
-    : WebGLRenderingContextBase(passedCanvas, context, requestedAttributes)
+WebGLRenderingContext::WebGLRenderingContext(HTMLCanvasElement* passedCanvas, PassOwnPtr<WebGraphicsContext3DProvider> contextProvider, const WebGLContextAttributes& requestedAttributes)
+    : WebGLRenderingContextBase(passedCanvas, contextProvider, requestedAttributes)
 {
 }
 
 WebGLRenderingContext::~WebGLRenderingContext()
 {
+}
+
+void WebGLRenderingContext::setCanvasGetContextResult(RenderingContext& result)
+{
+    result.setWebGLRenderingContext(RawPtr<WebGLRenderingContext>(this));
 }
 
 void WebGLRenderingContext::registerContextExtensions()

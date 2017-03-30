@@ -17,7 +17,7 @@ MediaSession* HTMLMediaElementMediaSession::session(HTMLMediaElement& mediaEleme
 
 void HTMLMediaElementMediaSession::setSession(HTMLMediaElement& mediaElement, MediaSession* session, ExceptionState& exceptionState)
 {
-    HTMLMediaElement::NetworkState networkState = mediaElement.networkState();
+    HTMLMediaElement::NetworkState networkState = mediaElement.getNetworkState();
     if (networkState == HTMLMediaElement::NETWORK_IDLE || networkState == HTMLMediaElement::NETWORK_LOADING) {
         exceptionState.throwDOMException(InvalidStateError, "networkState must be NETWORK_EMPTY or NETWORK_NO_SOURCE.");
         return;
@@ -36,20 +36,20 @@ HTMLMediaElementMediaSession& HTMLMediaElementMediaSession::from(HTMLMediaElemen
     HTMLMediaElementMediaSession* supplement = fromIfExists(element);
     if (!supplement) {
         supplement = new HTMLMediaElementMediaSession();
-        provideTo(element, supplementName(), adoptPtrWillBeNoop(supplement));
+        provideTo(element, supplementName(), supplement);
     }
     return *supplement;
 }
 
 HTMLMediaElementMediaSession* HTMLMediaElementMediaSession::fromIfExists(HTMLMediaElement& element)
 {
-    return static_cast<HTMLMediaElementMediaSession*>(WillBeHeapSupplement<HTMLMediaElement>::from(element, supplementName()));
+    return static_cast<HTMLMediaElementMediaSession*>(Supplement<HTMLMediaElement>::from(element, supplementName()));
 }
 
 DEFINE_TRACE(HTMLMediaElementMediaSession)
 {
     visitor->trace(m_session);
-    WillBeHeapSupplement<HTMLMediaElement>::trace(visitor);
+    Supplement<HTMLMediaElement>::trace(visitor);
 }
 
 } // namespace blink

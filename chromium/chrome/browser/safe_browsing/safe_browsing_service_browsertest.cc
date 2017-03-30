@@ -8,7 +8,6 @@
 
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "base/bind.h"
@@ -19,6 +18,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/metrics/field_trial.h"
 #include "base/path_service.h"
+#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -36,7 +36,6 @@
 #include "chrome/browser/safe_browsing/local_database_manager.h"
 #include "chrome/browser/safe_browsing/protocol_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_database.h"
-#include "chrome/browser/safe_browsing/safe_browsing_util.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
@@ -326,10 +325,8 @@ class TestSafeBrowsingDatabase : public SafeBrowsingDatabase {
         continue;
 
       std::vector<int> list_ids_for_url = badurls_it->second.list_ids;
-      if (std::find(list_ids_for_url.begin(), list_ids_for_url.end(), list_id0)
-              != list_ids_for_url.end() ||
-          std::find(list_ids_for_url.begin(), list_ids_for_url.end(), list_id1)
-              != list_ids_for_url.end()) {
+      if (ContainsValue(list_ids_for_url, list_id0) ||
+          ContainsValue(list_ids_for_url, list_id1)) {
         prefix_hits->insert(prefix_hits->end(),
                             badurls_it->second.prefix_hits.begin(),
                             badurls_it->second.prefix_hits.end());
@@ -686,36 +683,17 @@ class SafeBrowsingServiceTest : public InProcessBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingServiceTest);
 };
 
-enum MalwareMetadataTestType {
-  METADATA_NONE,
-  METADATA_LANDING,
-  METADATA_DISTRIBUTION,
-};
-
 class SafeBrowsingServiceMetadataTest
     : public SafeBrowsingServiceTest,
-      public ::testing::WithParamInterface<MalwareMetadataTestType> {
+      public ::testing::WithParamInterface<ThreatPatternType> {
  public:
   SafeBrowsingServiceMetadataTest() {}
 
   void GenUrlFullhashResultWithMetadata(const GURL& url,
                                         SBFullHashResult* full_hash) {
     GenUrlFullhashResult(url, MALWARE, full_hash);
-
-    MalwarePatternType proto;
-    switch (GetParam()) {
-      case METADATA_NONE:
-        full_hash->metadata = std::string();
-        break;
-      case METADATA_LANDING:
-        proto.set_pattern_type(MalwarePatternType::LANDING);
-        full_hash->metadata = proto.SerializeAsString();
-        break;
-      case METADATA_DISTRIBUTION:
-        proto.set_pattern_type(MalwarePatternType::DISTRIBUTION);
-        full_hash->metadata = proto.SerializeAsString();
-        break;
-    }
+    // We test with different threat_pattern_types.
+    full_hash->metadata.threat_pattern_type = GetParam();
   }
 
  private:
@@ -771,12 +749,12 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingServiceMetadataTest, MalwareImg) {
   SBFullHashResult malware_full_hash;
   GenUrlFullhashResultWithMetadata(img_url, &malware_full_hash);
   switch (GetParam()) {
-    case METADATA_NONE:  // Falls through.
-    case METADATA_DISTRIBUTION:
+    case ThreatPatternType::NONE:  // Falls through.
+    case ThreatPatternType::DISTRIBUTION:
       EXPECT_CALL(observer_, OnSafeBrowsingHit(IsUnsafeResourceFor(img_url)))
           .Times(1);
       break;
-    case METADATA_LANDING:
+    case ThreatPatternType::LANDING:
       // No interstitial shown, so no notifications expected.
       break;
   }
@@ -785,8 +763,8 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingServiceMetadataTest, MalwareImg) {
   // Subresource which is tagged as a landing page should not show an
   // interstitial, the other types should.
   switch (GetParam()) {
-    case METADATA_NONE:
-    case METADATA_DISTRIBUTION:
+    case ThreatPatternType::NONE:  // Falls through.
+    case ThreatPatternType::DISTRIBUTION:
       EXPECT_TRUE(ShowingInterstitialPage());
       EXPECT_TRUE(got_hit_report());
       EXPECT_EQ(img_url, hit_report().malicious_url);
@@ -794,7 +772,7 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingServiceMetadataTest, MalwareImg) {
       EXPECT_EQ(GURL(), hit_report().referrer_url);
       EXPECT_TRUE(hit_report().is_subresource);
       break;
-    case METADATA_LANDING:
+    case ThreatPatternType::LANDING:
       EXPECT_FALSE(ShowingInterstitialPage());
       EXPECT_FALSE(got_hit_report());
       break;
@@ -803,9 +781,9 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingServiceMetadataTest, MalwareImg) {
 
 INSTANTIATE_TEST_CASE_P(MaybeSetMetadata,
                         SafeBrowsingServiceMetadataTest,
-                        testing::Values(METADATA_NONE,
-                                        METADATA_LANDING,
-                                        METADATA_DISTRIBUTION));
+                        testing::Values(ThreatPatternType::NONE,
+                                        ThreatPatternType::LANDING,
+                                        ThreatPatternType::DISTRIBUTION));
 
 IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest, UnwantedImgIgnored) {
   GURL main_url = embedded_test_server()->GetURL(kMalwarePage);
@@ -1083,10 +1061,8 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest,
 IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest, SubResourceHitOnFreshTab) {
   // Allow popups.
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
-      ->SetContentSetting(ContentSettingsPattern::Wildcard(),
-                          ContentSettingsPattern::Wildcard(),
-                          CONTENT_SETTINGS_TYPE_POPUPS, std::string(),
-                          CONTENT_SETTING_ALLOW);
+      ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_POPUPS,
+                                 CONTENT_SETTING_ALLOW);
 
   // Add |kMalwareImg| to fake safebrowsing db.
   GURL img_url = embedded_test_server()->GetURL(kMalwareImg);
@@ -1219,7 +1195,7 @@ class TestSBClient : public base::RefCountedThreadSafe<TestSBClient>,
   // Called when the result of checking a browse URL is known.
   void OnCheckBrowseUrlResult(const GURL& /* url */,
                               SBThreatType threat_type,
-                              const std::string& /* metadata */) override {
+                              const ThreatMetadata& /* metadata */) override {
     threat_type_ = threat_type;
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                             base::Bind(&TestSBClient::CheckDone, this));

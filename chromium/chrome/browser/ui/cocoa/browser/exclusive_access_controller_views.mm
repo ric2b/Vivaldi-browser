@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 
 ExclusiveAccessController::ExclusiveAccessController(
@@ -22,7 +23,13 @@ ExclusiveAccessController::ExclusiveAccessController(
     Browser* browser)
     : controller_(controller),
       browser_(browser),
-      bubble_type_(EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE) {}
+      bubble_type_(EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE) {
+  pref_registrar_.Init(GetProfile()->GetPrefs());
+  pref_registrar_.Add(
+      prefs::kShowFullscreenToolbar,
+      base::Bind(&ExclusiveAccessController::UpdateFullscreenToolbar,
+                 base::Unretained(this)));
+}
 
 ExclusiveAccessController::~ExclusiveAccessController() {}
 
@@ -73,11 +80,10 @@ void ExclusiveAccessController::UpdateFullscreenWithToolbar(bool with_toolbar) {
   [controller_ updateFullscreenWithToolbar:with_toolbar];
 }
 
-void ExclusiveAccessController::ToggleFullscreenToolbar() {
-  PrefService* prefs = browser_->profile()->GetPrefs();
-  bool hideToolbar = !prefs->GetBoolean(prefs::kHideFullscreenToolbar);
-  [controller_ setFullscreenToolbarHidden:hideToolbar];
-  prefs->SetBoolean(prefs::kHideFullscreenToolbar, hideToolbar);
+void ExclusiveAccessController::UpdateFullscreenToolbar() {
+  PrefService* prefs = GetProfile()->GetPrefs();
+  bool showToolbar = prefs->GetBoolean(prefs::kShowFullscreenToolbar);
+  [controller_ setFullscreenToolbarVisible:showToolbar];
 }
 
 bool ExclusiveAccessController::IsFullscreenWithToolbar() const {
@@ -162,7 +168,8 @@ gfx::NativeView ExclusiveAccessController::GetBubbleParentView() const {
 
 gfx::Point ExclusiveAccessController::GetCursorPointInParent() const {
   NSWindow* window = [controller_ window];
-  NSPoint location = [window convertScreenToBase:[NSEvent mouseLocation]];
+  NSPoint location =
+      ui::ConvertPointFromScreenToWindow(window, [NSEvent mouseLocation]);
   return gfx::Point(location.x,
                     NSHeight([[window contentView] frame]) - location.y);
 }

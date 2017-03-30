@@ -21,12 +21,12 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browsing_data_ui/history_notice_utils.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/history/core/browser/web_history_service.h"
 #include "components/keyed_service/core/service_access_type.h"
-#include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync_driver/device_info.h"
 #include "components/sync_driver/device_info_tracker.h"
@@ -39,7 +39,6 @@
 #include "ios/chrome/browser/history/history_utils.h"
 #include "ios/chrome/browser/history/top_sites_factory.h"
 #include "ios/chrome/browser/history/web_history_service_factory.h"
-#include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/ui/show_privacy_settings_util.h"
 #include "ios/chrome/browser/ui/webui/history/favicon_source.h"
@@ -112,7 +111,7 @@ void GetDeviceNameAndType(const ProfileSyncService* sync_service,
   DCHECK(sync_service->GetDeviceInfoTracker());
   DCHECK(sync_service->GetDeviceInfoTracker()->IsSyncing());
 
-  scoped_ptr<sync_driver::DeviceInfo> device_info =
+  std::unique_ptr<sync_driver::DeviceInfo> device_info =
       sync_service->GetDeviceInfoTracker()->GetDeviceInfo(client_id);
   if (device_info.get()) {
     *name = device_info->client_name();
@@ -133,6 +132,11 @@ void GetDeviceNameAndType(const ProfileSyncService* sync_service,
   *type = kDeviceTypeLaptop;
 }
 
+void RecordMetricsForNoticeAboutOtherFormsOfBrowsingHistory(bool shown) {
+  UMA_HISTOGRAM_BOOLEAN("History.ShownHeaderAboutOtherFormsOfBrowsingHistory",
+                        shown);
+}
+
 }  // namespace
 
 BrowsingHistoryHandler::HistoryEntry::HistoryEntry(
@@ -143,8 +147,7 @@ BrowsingHistoryHandler::HistoryEntry::HistoryEntry(
     const std::string& client_id,
     bool is_search_result,
     const base::string16& snippet,
-    bool blocked_visit,
-    const std::string& accept_languages) {
+    bool blocked_visit) {
   this->entry_type = entry_type;
   this->url = url;
   this->title = title;
@@ -154,11 +157,13 @@ BrowsingHistoryHandler::HistoryEntry::HistoryEntry(
   this->is_search_result = is_search_result;
   this->snippet = snippet;
   this->blocked_visit = blocked_visit;
-  this->accept_languages = accept_languages;
 }
 
 BrowsingHistoryHandler::HistoryEntry::HistoryEntry()
     : entry_type(EMPTY_ENTRY), is_search_result(false), blocked_visit(false) {}
+
+BrowsingHistoryHandler::HistoryEntry::HistoryEntry(const HistoryEntry& other) =
+    default;
 
 BrowsingHistoryHandler::HistoryEntry::~HistoryEntry() {}
 
@@ -186,15 +191,15 @@ void BrowsingHistoryHandler::HistoryEntry::SetUrlAndTitle(
   result->SetString("title", title_to_set);
 }
 
-scoped_ptr<base::DictionaryValue> BrowsingHistoryHandler::HistoryEntry::ToValue(
+std::unique_ptr<base::DictionaryValue>
+BrowsingHistoryHandler::HistoryEntry::ToValue(
     BookmarkModel* bookmark_model,
     SupervisedUserService* supervised_user_service,
     const ProfileSyncService* sync_service) const {
-  scoped_ptr<base::DictionaryValue> result(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
   SetUrlAndTitle(result.get());
 
-  base::string16 domain =
-      url_formatter::IDNToUnicode(url.host(), accept_languages);
+  base::string16 domain = url_formatter::IDNToUnicode(url.host());
   // When the domain is empty, use the scheme instead. This allows for a
   // sensible treatment of e.g. file: URLs when group by domain is on.
   if (domain.empty())
@@ -208,7 +213,7 @@ scoped_ptr<base::DictionaryValue> BrowsingHistoryHandler::HistoryEntry::ToValue(
   result->SetDouble("time", time.ToJsTime());
 
   // Pass the timestamps in a list.
-  scoped_ptr<base::ListValue> timestamps(new base::ListValue);
+  std::unique_ptr<base::ListValue> timestamps(new base::ListValue);
   for (int64_t timestamp : all_timestamps) {
     timestamps->AppendDouble(
         base::Time::FromInternalValue(timestamp).ToJsTime());
@@ -257,6 +262,8 @@ bool BrowsingHistoryHandler::HistoryEntry::SortByTimeDescending(
 BrowsingHistoryHandler::BrowsingHistoryHandler()
     : has_pending_delete_request_(false),
       history_service_observer_(this),
+      has_synced_results_(false),
+      has_other_forms_of_browsing_history_(false),
       weak_factory_(this) {}
 
 BrowsingHistoryHandler::~BrowsingHistoryHandler() {
@@ -339,6 +346,8 @@ void BrowsingHistoryHandler::QueryHistory(
 
   query_results_.clear();
   results_info_value_.Clear();
+  has_synced_results_ = false;
+  has_other_forms_of_browsing_history_ = false;
 
   history::HistoryService* hs = ios::HistoryServiceFactory::GetForBrowserState(
       browser_state, ServiceAccessType::EXPLICIT_ACCESS);
@@ -361,8 +370,21 @@ void BrowsingHistoryHandler::QueryHistory(
         FROM_HERE, base::TimeDelta::FromSeconds(kWebHistoryTimeoutSeconds),
         this, &BrowsingHistoryHandler::WebHistoryTimeout);
 
+    ProfileSyncService* sync_service =
+        IOSChromeProfileSyncServiceFactory::GetInstance()->GetForBrowserState(
+            browser_state);
+    // Test the existence of other forms of browsing history.
+    browsing_data_ui::ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
+        sync_service, web_history,
+        base::Bind(
+            &BrowsingHistoryHandler::OtherFormsOfBrowsingHistoryQueryComplete,
+            weak_factory_.GetWeakPtr()));
+
     // Set this to false until the results actually arrive.
     results_info_value_.SetBoolean("hasSyncedResults", false);
+  } else {
+    // The notice could not have been shown, because there is no web history.
+    RecordMetricsForNoticeAboutOtherFormsOfBrowsingHistory(false);
   }
 }
 
@@ -594,13 +616,16 @@ void BrowsingHistoryHandler::ReturnResultsToFrontEnd() {
   // Convert the result vector into a ListValue.
   base::ListValue results_value;
   for (const BrowsingHistoryHandler::HistoryEntry& entry : query_results_) {
-    scoped_ptr<base::Value> value(
+    std::unique_ptr<base::Value> value(
         entry.ToValue(bookmark_model, nullptr, sync_service));
     results_value.Append(value.release());
   }
 
   web_ui()->CallJavascriptFunction("historyResult", results_info_value_,
                                    results_value);
+  web_ui()->CallJavascriptFunction(
+      "showNotification", base::FundamentalValue(has_synced_results_),
+      base::FundamentalValue(has_other_forms_of_browsing_history_));
   results_info_value_.Clear();
   query_results_.clear();
   web_history_query_results_.clear();
@@ -611,15 +636,14 @@ void BrowsingHistoryHandler::QueryComplete(const base::string16& search_text,
                                            history::QueryResults* results) {
   DCHECK_EQ(0U, query_results_.size());
   query_results_.reserve(results->size());
-  const std::string accept_languages = GetAcceptLanguages();
 
   for (size_t i = 0; i < results->size(); ++i) {
     history::URLResult const& page = (*results)[i];
     // TODO(dubroy): Use sane time (crbug.com/146090) here when it's ready.
-    query_results_.push_back(HistoryEntry(
-        HistoryEntry::LOCAL_ENTRY, page.url(), page.title(), page.visit_time(),
-        std::string(), !search_text.empty(), page.snippet().text(),
-        page.blocked_visit(), accept_languages));
+    query_results_.push_back(
+        HistoryEntry(HistoryEntry::LOCAL_ENTRY, page.url(), page.title(),
+                     page.visit_time(), std::string(), !search_text.empty(),
+                     page.snippet().text(), page.blocked_visit()));
   }
 
   // The items which are to be written into results_info_value_ are also
@@ -653,7 +677,6 @@ void BrowsingHistoryHandler::WebHistoryQueryComplete(
     const base::DictionaryValue* results_value) {
   base::TimeDelta delta = base::TimeTicks::Now() - start_time;
   UMA_HISTOGRAM_TIMES("WebHistory.ResponseTime", delta);
-  const std::string accept_languages = GetAcceptLanguages();
 
   // If the response came in too late, do nothing.
   // TODO(dubroy): Maybe show a banner, and prompt the user to reload?
@@ -720,13 +743,24 @@ void BrowsingHistoryHandler::WebHistoryQueryComplete(
         web_history_query_results_.push_back(
             HistoryEntry(HistoryEntry::REMOTE_ENTRY, gurl, title, time,
                          client_id, !search_text.empty(), base::string16(),
-                         /* blocked_visit */ false, accept_languages));
+                         /* blocked_visit */ false));
       }
     }
   }
-  results_info_value_.SetBoolean("hasSyncedResults", results_value != NULL);
+  has_synced_results_ = results_value != nullptr;
+  results_info_value_.SetBoolean("hasSyncedResults", has_synced_results_);
   if (!query_task_tracker_.HasTrackedTasks())
     ReturnResultsToFrontEnd();
+}
+
+void BrowsingHistoryHandler::OtherFormsOfBrowsingHistoryQueryComplete(
+    bool found_other_forms_of_browsing_history) {
+  has_other_forms_of_browsing_history_ = found_other_forms_of_browsing_history;
+  RecordMetricsForNoticeAboutOtherFormsOfBrowsingHistory(
+      has_other_forms_of_browsing_history_);
+  web_ui()->CallJavascriptFunction(
+      "showNotification", base::FundamentalValue(has_synced_results_),
+      base::FundamentalValue(has_other_forms_of_browsing_history_));
 }
 
 void BrowsingHistoryHandler::RemoveComplete() {
@@ -801,12 +835,6 @@ static bool DeletionsDiffer(const history::URLRows& deleted_rows,
       return true;
   }
   return false;
-}
-
-std::string BrowsingHistoryHandler::GetAcceptLanguages() const {
-  ios::ChromeBrowserState* browser_state =
-      ios::ChromeBrowserState::FromWebUIIOS(web_ui());
-  return browser_state->GetPrefs()->GetString(prefs::kAcceptLanguages);
 }
 
 void BrowsingHistoryHandler::OnURLsDeleted(

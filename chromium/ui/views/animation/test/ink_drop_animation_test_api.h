@@ -8,7 +8,8 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/time/time.h"
+#include "ui/compositor/test/multi_layer_animator_test_controller.h"
+#include "ui/compositor/test/multi_layer_animator_test_controller_delegate.h"
 
 namespace ui {
 class LayerAnimator;
@@ -19,24 +20,21 @@ class InkDropAnimation;
 
 namespace test {
 
-// Base Test API used by test fixtures to validate all concrete implementations
-// of the InkDropAnimation class.
-class InkDropAnimationTestApi {
+// Test API to provide internal access to an InkDropAnimation instance. This can
+// also be used to control the animations via the
+// ui::test::MultiLayerAnimatorTestController API.
+class InkDropAnimationTestApi
+    : public ui::test::MultiLayerAnimatorTestController,
+      public ui::test::MultiLayerAnimatorTestControllerDelegate {
  public:
   explicit InkDropAnimationTestApi(InkDropAnimation* ink_drop_animation);
-  virtual ~InkDropAnimationTestApi();
-
-  // Disables the animation timers when |disable_timers| is true.
-  void SetDisableAnimationTimers(bool disable_timers);
-
-  // Returns true if any animations are active.
-  bool HasActiveAnimations() const;
-
-  // Completes all animations for all the Layer's owned by the InkDropAnimation.
-  void CompleteAnimations();
+  ~InkDropAnimationTestApi() override;
 
   // Gets the opacity of the ink drop.
   virtual float GetCurrentOpacity() const = 0;
+
+  // MultiLayerAnimatorTestControllerDelegate:
+  std::vector<ui::LayerAnimator*> GetLayerAnimators() override;
 
  protected:
   InkDropAnimation* ink_drop_animation() {
@@ -46,18 +44,7 @@ class InkDropAnimationTestApi {
 
   InkDropAnimation* ink_drop_animation() const { return ink_drop_animation_; }
 
-  // Get a list of all the LayerAnimator's used internally by the
-  // InkDropAnimation.
-  std::vector<ui::LayerAnimator*> GetLayerAnimators();
-  virtual std::vector<ui::LayerAnimator*> GetLayerAnimators() const;
-
  private:
-  // Progresses all running LayerAnimationSequences by the given |duration|.
-  //
-  // NOTE: This function will NOT progress LayerAnimationSequences that are
-  // queued, only the running ones will be progressed.
-  void StepAnimations(const base::TimeDelta& duration);
-
   // The InkDropedAnimation to provide internal access to.
   InkDropAnimation* ink_drop_animation_;
 

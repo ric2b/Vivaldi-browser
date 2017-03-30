@@ -17,60 +17,60 @@ class CORE_EXPORT DragEvent final : public MouseEvent {
     DEFINE_WRAPPERTYPEINFO();
 
 public:
-    static PassRefPtrWillBeRawPtr<DragEvent> create()
+    static DragEvent* create()
     {
-        return adoptRefWillBeNoop(new DragEvent);
+        return new DragEvent;
     }
 
-    static PassRefPtrWillBeRawPtr<DragEvent> create(DataTransfer* dataTransfer)
+    static DragEvent* create(DataTransfer* dataTransfer)
     {
-        return adoptRefWillBeNoop(new DragEvent(dataTransfer));
+        return new DragEvent(dataTransfer);
     }
 
-    static PassRefPtrWillBeRawPtr<DragEvent> create(const AtomicString& type, bool canBubble, bool cancelable, PassRefPtrWillBeRawPtr<AbstractView>,
+    static DragEvent* create(const AtomicString& type, bool canBubble, bool cancelable, AbstractView*,
         int detail, int screenX, int screenY, int windowX, int windowY,
         int movementX, int movementY,
         PlatformEvent::Modifiers, short button, unsigned short buttons,
-        PassRefPtrWillBeRawPtr<EventTarget> relatedTarget,
+        EventTarget* relatedTarget,
         double platformTimeStamp, DataTransfer*,
         PlatformMouseEvent::SyntheticEventType = PlatformMouseEvent::RealOrIndistinguishable);
 
-    static PassRefPtrWillBeRawPtr<DragEvent> create(const AtomicString& type, const DragEventInit& initializer)
+    static DragEvent* create(const AtomicString& type, const DragEventInit& initializer)
     {
-        return adoptRefWillBeNoop(new DragEvent(type, initializer));
+        return new DragEvent(type, initializer);
     }
 
-    DataTransfer* dataTransfer() const override { return isDragEvent() ? m_dataTransfer.get() : nullptr; }
+    DataTransfer* getDataTransfer() const override { return isDragEvent() ? m_dataTransfer.get() : nullptr; }
 
     bool isDragEvent() const override;
     bool isMouseEvent() const override;
 
-    PassRefPtrWillBeRawPtr<EventDispatchMediator> createMediator() override;
+    EventDispatchMediator* createMediator() override;
 
     DECLARE_VIRTUAL_TRACE();
 
 private:
     DragEvent();
     DragEvent(DataTransfer*);
-    DragEvent(const AtomicString& type, bool canBubble, bool cancelable, PassRefPtrWillBeRawPtr<AbstractView>,
+    DragEvent(const AtomicString& type, bool canBubble, bool cancelable, AbstractView*,
         int detail, int screenX, int screenY, int windowX, int windowY,
         int movementX, int movementY,
         PlatformEvent::Modifiers, short button, unsigned short buttons,
-        PassRefPtrWillBeRawPtr<EventTarget> relatedTarget,
+        EventTarget* relatedTarget,
         double platformTimeStamp, DataTransfer*,
         PlatformMouseEvent::SyntheticEventType);
 
     DragEvent(const AtomicString& type, const DragEventInit&);
 
-    PersistentWillBeMember<DataTransfer> m_dataTransfer;
+    Member<DataTransfer> m_dataTransfer;
 };
 
 class DragEventDispatchMediator final : public EventDispatchMediator {
 public:
-    static PassRefPtrWillBeRawPtr<DragEventDispatchMediator> create(PassRefPtrWillBeRawPtr<DragEvent>);
+    static DragEventDispatchMediator* create(DragEvent*);
 
 private:
-    explicit DragEventDispatchMediator(PassRefPtrWillBeRawPtr<DragEvent>);
+    explicit DragEventDispatchMediator(DragEvent*);
     DragEvent& event() const;
     DispatchEventResult dispatchEvent(EventDispatcher&) const override;
 };

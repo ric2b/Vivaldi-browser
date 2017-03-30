@@ -7,7 +7,7 @@
 #include "platform/weborigin/KURL.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLLoaderClient.h"
-#include "public/platform/WebUnitTestSupport.h"
+#include "public/platform/WebURLLoaderMockFactory.h"
 #include "web/tests/sim/SimNetwork.h"
 
 namespace blink {
@@ -23,13 +23,13 @@ SimRequest::SimRequest(String url, String mimeType)
     WebURLResponse response(fullUrl);
     response.setMIMEType(mimeType);
     response.setHTTPStatusCode(200);
-    Platform::current()->unitTestSupport()->registerMockedURL(fullUrl, response, "");
+    Platform::current()->getURLLoaderMockFactory()->registerURL(fullUrl, response, "");
     SimNetwork::current().addRequest(*this);
 }
 
 SimRequest::~SimRequest()
 {
-    ASSERT(!m_isReady);
+    DCHECK(!m_isReady);
 }
 
 void SimRequest::didReceiveResponse(WebURLLoaderClient* client, WebURLLoader* loader, const WebURLResponse& response)
@@ -48,20 +48,21 @@ void SimRequest::didFail(const WebURLError& error)
 void SimRequest::start()
 {
     SimNetwork::current().servePendingRequests();
-    ASSERT(m_isReady);
+    DCHECK(m_isReady);
     m_client->didReceiveResponse(m_loader, m_response);
 }
 
 void SimRequest::write(const String& data)
 {
-    ASSERT(m_isReady && !m_error.reason);
+    DCHECK(m_isReady);
+    DCHECK(!m_error.reason);
     m_totalEncodedDataLength += data.length();
     m_client->didReceiveData(m_loader, data.utf8().data(), data.length(), data.length());
 }
 
 void SimRequest::finish()
 {
-    ASSERT(m_isReady);
+    DCHECK(m_isReady);
     if (m_error.reason) {
         m_client->didFail(m_loader, m_error);
     } else {

@@ -12,8 +12,6 @@ static_library("sandbox") {
   sources = [
     "src/acl.cc",
     "src/acl.h",
-    "src/app_container.cc",
-    "src/app_container.h",
     "src/broker_services.cc",
     "src/broker_services.h",
     "src/crosscall_client.h",
@@ -141,7 +139,6 @@ static_library("sandbox") {
 
   if (current_cpu == "x64") {
     sources += [
-      "src/Wow64_64.cc",
       "src/interceptors_64.cc",
       "src/interceptors_64.h",
       "src/resolver_64.cc",
@@ -149,8 +146,6 @@ static_library("sandbox") {
     ]
   } else if (current_cpu == "x86") {
     sources += [
-      "src/Wow64.cc",
-      "src/Wow64.h",
       "src/resolver_32.cc",
       "src/service_resolver_32.cc",
       "src/sidestep/ia32_modrm_map.cpp",
@@ -208,6 +203,7 @@ test("sbox_integration_tests") {
     "src/process_mitigations_test.cc",
     "src/process_policy_test.cc",
     "src/registry_policy_test.cc",
+    "src/restricted_token_test.cc",
     "src/sync_policy_test.cc",
     "src/sync_policy_test.h",
     "src/unload_dll_test.cc",
@@ -241,11 +237,12 @@ test("sbox_validation_tests") {
     "//base/test:test_support",
     "//testing/gtest",
   ]
+
+  libs = [ "shlwapi.lib" ]
 }
 
 test("sbox_unittests") {
   sources = [
-    "src/app_container_unittest.cc",
     "src/interception_unittest.cc",
     "src/ipc_unittest.cc",
     "src/job_unittest.cc",

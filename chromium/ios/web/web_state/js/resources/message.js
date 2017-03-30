@@ -7,7 +7,6 @@
 goog.provide('__crWeb.message');
 
 goog.require('__crWeb.common');
-goog.require('__crWeb.messageDynamic');
 
 /**
  * Namespace for this module.
@@ -111,7 +110,22 @@ __gCrWeb.message = {};
     var originalObjectToJSON = Object.prototype.toJSON;
     if (originalObjectToJSON)
       delete Object.prototype.toJSON;
-    __gCrWeb.message_dynamic.sendQueue(queueObject);
+
+    queueObject.queue.forEach(function(command) {
+        var stringifiedMessage = __gCrWeb.common.JSONStringify({
+            "crwCommand": command,
+            "crwWindowId": __gCrWeb.windowId
+        });
+        // A web page can override |window.webkit| with any value. Deleting the
+        // object ensures that original and working implementation of
+        // window.webkit is restored.
+        var oldWebkit = window.webkit;
+        delete window.webkit;
+        window.webkit.messageHandlers[queueObject.scheme].postMessage(
+            stringifiedMessage);
+        window.webkit = oldWebkit;
+    });
+    queueObject.reset();
 
     if (originalObjectToJSON) {
       // Restore Object.prototype.toJSON to prevent from breaking any

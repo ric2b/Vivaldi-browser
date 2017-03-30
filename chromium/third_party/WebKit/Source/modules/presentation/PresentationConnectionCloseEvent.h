@@ -20,19 +20,19 @@ class PresentationConnectionCloseEvent final : public Event {
 public:
     ~PresentationConnectionCloseEvent() override = default;
 
-    static PassRefPtrWillBeRawPtr<PresentationConnectionCloseEvent> create()
+    static PresentationConnectionCloseEvent* create()
     {
-        return adoptRefWillBeNoop(new PresentationConnectionCloseEvent);
+        return new PresentationConnectionCloseEvent;
     }
 
-    static PassRefPtrWillBeRawPtr<PresentationConnectionCloseEvent> create(const AtomicString& eventType, const String& reason, const String& message)
+    static PresentationConnectionCloseEvent* create(const AtomicString& eventType, const String& reason, const String& message)
     {
-        return adoptRefWillBeNoop(new PresentationConnectionCloseEvent(eventType, reason, message));
+        return new PresentationConnectionCloseEvent(eventType, reason, message);
     }
 
-    static PassRefPtrWillBeRawPtr<PresentationConnectionCloseEvent> create(const AtomicString& eventType, const PresentationConnectionCloseEventInit& initializer)
+    static PresentationConnectionCloseEvent* create(const AtomicString& eventType, const PresentationConnectionCloseEventInit& initializer)
     {
-        return adoptRefWillBeNoop(new PresentationConnectionCloseEvent(eventType, initializer));
+        return new PresentationConnectionCloseEvent(eventType, initializer);
     }
 
     const String& reason() const { return m_reason; }

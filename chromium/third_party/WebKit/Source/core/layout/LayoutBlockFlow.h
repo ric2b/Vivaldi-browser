@@ -44,6 +44,7 @@
 
 namespace blink {
 
+class BlockChildrenLayoutInfo;
 class ClipScope;
 class MarginInfo;
 class LineBreaker;
@@ -279,6 +280,9 @@ public:
 
     void invalidateDisplayItemClientsOfFirstLine();
 
+    void simplifiedNormalFlowInlineLayout();
+    bool recalcInlineChildrenOverflowAfterStyleChange();
+
 protected:
     void rebuildFloatsFromIntruding();
     void layoutInlineChildren(bool relayoutChildren, LayoutUnit& paintInvalidationLogicalTop, LayoutUnit& paintInvalidationLogicalBottom, LayoutUnit afterEdge);
@@ -309,16 +313,21 @@ protected:
     void setLogicalTopForChild(LayoutBox& child, LayoutUnit logicalTop);
     void determineLogicalLeftPositionForChild(LayoutBox& child);
 
-    PaintInvalidationReason invalidatePaintIfNeeded(PaintInvalidationState&, const LayoutBoxModelObject& paintInvalidationContainer) override;
+    PaintInvalidationReason invalidatePaintIfNeeded(const PaintInvalidationState&) override;
 
 private:
     bool layoutBlockFlow(bool relayoutChildren, LayoutUnit& pageLogicalHeight, SubtreeLayoutScope&);
     void layoutBlockChildren(bool relayoutChildren, SubtreeLayoutScope&, LayoutUnit beforeEdge, LayoutUnit afterEdge);
 
     void markDescendantsWithFloatsForLayoutIfNeeded(LayoutBlockFlow& child, LayoutUnit newLogicalTop, LayoutUnit previousFloatLogicalBottom);
-    bool positionAndLayoutOnceIfNeeded(LayoutBox& child, LayoutUnit newLogicalTop, LayoutUnit& previousFloatLogicalBottom);
-    void layoutBlockChild(LayoutBox& child, MarginInfo&, LayoutUnit& previousFloatLogicalBottom);
-    void adjustPositionedBlock(LayoutBox& child, const MarginInfo&);
+    bool positionAndLayoutOnceIfNeeded(LayoutBox& child, LayoutUnit newLogicalTop, BlockChildrenLayoutInfo&);
+
+    // Handle breaking policy before the child, and insert a forced break in front of it if needed.
+    // Returns true if a forced break was inserted.
+    bool insertForcedBreakBeforeChildIfNeeded(LayoutBox& child, BlockChildrenLayoutInfo&);
+
+    void layoutBlockChild(LayoutBox& child, BlockChildrenLayoutInfo&);
+    void adjustPositionedBlock(LayoutBox& child, const BlockChildrenLayoutInfo&);
     void adjustFloatingBlock(const MarginInfo&);
 
     LayoutPoint computeLogicalLocationForFloat(const FloatingObject&, LayoutUnit logicalTopOffset) const;
@@ -363,7 +372,7 @@ private:
         PagedFlowThread
     };
 
-    FlowThreadType flowThreadType(const ComputedStyle&);
+    FlowThreadType getFlowThreadType(const ComputedStyle&);
 
     LayoutMultiColumnFlowThread* createMultiColumnFlowThread(FlowThreadType);
     void createOrDestroyMultiColumnFlowThreadIfNeeded(const ComputedStyle* oldStyle);
@@ -440,6 +449,8 @@ public:
         LayoutBlockFlowRareData(const LayoutBlockFlow* block)
             : m_margins(positiveMarginBeforeDefault(block), negativeMarginBeforeDefault(block), positiveMarginAfterDefault(block), negativeMarginAfterDefault(block))
             , m_multiColumnFlowThread(nullptr)
+            , m_breakBefore(BreakAuto)
+            , m_breakAfter(BreakAuto)
             , m_lineBreakToAvoidWidow(-1)
             , m_didBreakAtLineToAvoidWidow(false)
             , m_discardMarginBefore(false)
@@ -469,6 +480,8 @@ public:
 
         LayoutMultiColumnFlowThread* m_multiColumnFlowThread;
 
+        unsigned m_breakBefore : 4;
+        unsigned m_breakAfter : 4;
         int m_lineBreakToAvoidWidow;
         bool m_didBreakAtLineToAvoidWidow : 1;
         bool m_discardMarginBefore : 1;
@@ -522,15 +535,20 @@ private:
 
     LayoutUnit collapseMargins(LayoutBox& child, MarginInfo&, bool childIsSelfCollapsing, bool childDiscardMarginBefore, bool childDiscardMarginAfter);
     LayoutUnit clearFloatsIfNeeded(LayoutBox& child, MarginInfo&, LayoutUnit oldTopPosMargin, LayoutUnit oldTopNegMargin, LayoutUnit yPos, bool childIsSelfCollapsing, bool childDiscardMargin);
-    LayoutUnit estimateLogicalTopPosition(LayoutBox& child, const MarginInfo&, LayoutUnit& estimateWithoutPagination);
+    LayoutUnit estimateLogicalTopPosition(LayoutBox& child, const BlockChildrenLayoutInfo&, LayoutUnit& estimateWithoutPagination);
     void marginBeforeEstimateForChild(LayoutBox&, LayoutUnit&, LayoutUnit&, bool&) const;
     void handleAfterSideOfBlock(LayoutBox* lastChild, LayoutUnit top, LayoutUnit bottom, MarginInfo&);
     void setCollapsedBottomMargin(const MarginInfo&);
 
-    LayoutUnit applyBeforeBreak(LayoutBox& child, LayoutUnit logicalOffset); // If the child has a before break, then return a new yPos that shifts to the top of the next page/column.
-    LayoutUnit applyAfterBreak(LayoutBox& child, LayoutUnit logicalOffset, MarginInfo&); // If the child has an after break, then return a new offset that shifts to the top of the next page/column.
+    // Apply any forced fragmentainer break that's set on the current class A break point.
+    LayoutUnit applyForcedBreak(LayoutUnit logicalOffset, EBreak);
 
-    LayoutUnit adjustBlockChildForPagination(LayoutUnit logicalTop, LayoutBox& child, bool atBeforeSideOfBlock);
+    void setBreakBefore(EBreak);
+    void setBreakAfter(EBreak);
+    EBreak breakBefore() const override;
+    EBreak breakAfter() const override;
+
+    LayoutUnit adjustBlockChildForPagination(LayoutUnit logicalTop, LayoutBox& child, BlockChildrenLayoutInfo&, bool atBeforeSideOfBlock);
     // Computes a deltaOffset value that put a line at the top of the next page if it doesn't fit on the current page.
     void adjustLinePositionForPagination(RootInlineBox&, LayoutUnit& deltaOffset);
     // If the child is unsplittable and can't fit on the current page, return the top of the next page/column.
@@ -559,7 +577,7 @@ protected:
 // line layout code is separated from LayoutBlock and LayoutBlockFlow.
 // START METHODS DEFINED IN LayoutBlockFlowLine
 private:
-    InlineFlowBox* createLineBoxes(LayoutObject*, const LineInfo&, InlineBox* childBox);
+    InlineFlowBox* createLineBoxes(LineLayoutItem, const LineInfo&, InlineBox* childBox);
     RootInlineBox* constructLine(BidiRunList<BidiRun>&, const LineInfo&);
     void setMarginsForRubyRun(BidiRun*, LayoutRubyRun*, LayoutObject*, const LineInfo&);
     void computeInlineDirectionPositionsForLine(RootInlineBox*, const LineInfo&, BidiRun* firstRun, BidiRun* trailingSpaceRun, bool reachedEnd, GlyphOverflowAndFallbackFontsMap&, VerticalPositionCache&, WordMeasurements&);

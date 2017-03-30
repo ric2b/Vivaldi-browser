@@ -16,7 +16,7 @@ SimDisplayItemList::SimDisplayItemList()
 {
 }
 
-void SimDisplayItemList::appendDrawingItem(const WebRect&, const SkPicture* picture)
+void SimDisplayItemList::appendDrawingItem(const WebRect&, sk_sp<const SkPicture> picture)
 {
     m_containsText |= picture->hasText();
 
@@ -30,7 +30,7 @@ bool SimDisplayItemList::contains(SimCanvas::CommandType type, const String& col
 {
     Color color = 0;
     if (!colorString.isNull())
-        RELEASE_ASSERT(CSSParser::parseColor(color, colorString, true));
+        CHECK(CSSParser::parseColor(color, colorString, true));
     for (auto& command : m_commands) {
         if (command.type == type && (colorString.isNull() || command.color == color.rgb()))
             return true;

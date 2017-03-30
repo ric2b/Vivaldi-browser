@@ -6,17 +6,17 @@
 
 #include <map>
 
-#include "base/lazy_instance.h"
+#include "base/callback_helpers.h"
+#include "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
-#include "base/strings/stringize_macros.h"
-#include "base/strings/stringprintf.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
-#include "ui/gl/gl_helper.h"
+#include "ui/gl/scoped_api.h"
 #include "ui/gl/scoped_binders.h"
+#include "ui/gl/yuv_to_rgb_converter.h"
 
 // Note that this must be included after gl_bindings.h to avoid conflicts.
 #include <OpenGL/CGLIOSurface.h>
@@ -27,44 +27,6 @@ using gfx::BufferFormat;
 
 namespace gl {
 namespace {
-
-using WidgetToLayerMap = std::map<gfx::AcceleratedWidget, CALayer*>;
-base::LazyInstance<WidgetToLayerMap> g_widget_to_layer_map;
-
-const char kGLSLVersion[] = "#version 110";
-
-const char kTextureRectangleRequired[] =
-    "#extension GL_ARB_texture_rectangle : require";
-
-// clang-format off
-const char kVertexShader[] =
-STRINGIZE(
-  attribute vec2 a_position;
-  uniform vec2 a_texScale;
-  varying vec2 v_texCoord;
-  void main() {
-    gl_Position = vec4(a_position.x, a_position.y, 0.0, 1.0);
-    v_texCoord = (a_position + vec2(1.0, 1.0)) * 0.5 * a_texScale;
-  }
-);
-
-const char kFragmentShader[] =
-STRINGIZE(
-  uniform sampler2DRect a_y_texture;
-  uniform sampler2DRect a_uv_texture;
-  varying vec2 v_texCoord;
-  void main() {
-    vec3 yuv_adj = vec3(-0.0625, -0.5, -0.5);
-    mat3 yuv_matrix = mat3(vec3(1.164, 1.164, 1.164),
-                           vec3(0.0, -.391, 2.018),
-                           vec3(1.596, -.813, 0.0));
-    vec3 yuv = vec3(
-        texture2DRect(a_y_texture, v_texCoord).r,
-        texture2DRect(a_uv_texture, v_texCoord * 0.5).rg);
-    gl_FragColor = vec4(yuv_matrix * (yuv + yuv_adj), 1.0);
-  }
-);
-// clang-format on
 
 bool ValidInternalFormat(unsigned internalformat) {
   switch (internalformat) {
@@ -222,17 +184,27 @@ bool GLImageIOSurface::Initialize(IOSurfaceRef io_surface,
   return true;
 }
 
+bool GLImageIOSurface::InitializeWithCVPixelBuffer(
+    CVPixelBufferRef cv_pixel_buffer,
+    gfx::GenericSharedMemoryId io_surface_id,
+    BufferFormat format) {
+  IOSurfaceRef io_surface = CVPixelBufferGetIOSurface(cv_pixel_buffer);
+  if (!io_surface) {
+    LOG(ERROR) << "Can't init GLImage from CVPixelBuffer with no IOSurface";
+    return false;
+  }
+
+  if (!Initialize(io_surface, io_surface_id, format))
+    return false;
+
+  cv_pixel_buffer_.reset(cv_pixel_buffer, base::scoped_policy::RETAIN);
+  return true;
+}
+
 void GLImageIOSurface::Destroy(bool have_context) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (have_context && framebuffer_) {
-    glDeleteProgram(program_);
-    glDeleteShader(vertex_shader_);
-    glDeleteShader(fragment_shader_);
-    glDeleteBuffersARB(1, &vertex_buffer_);
-    glDeleteFramebuffersEXT(1, &framebuffer_);
-    glDeleteTextures(2, yuv_textures_);
-  }
   io_surface_.reset();
+  cv_pixel_buffer_.reset();
 }
 
 gfx::Size GLImageIOSurface::GetSize() {
@@ -280,94 +252,57 @@ bool GLImageIOSurface::CopyTexImage(unsigned target) {
 
   if (format_ != BufferFormat::YUV_420_BIPLANAR)
     return false;
+
   if (target != GL_TEXTURE_RECTANGLE_ARB) {
     LOG(ERROR) << "YUV_420_BIPLANAR requires GL_TEXTURE_RECTANGLE_ARB target";
     return false;
   }
 
-  if (!framebuffer_) {
-    glGenFramebuffersEXT(1, &framebuffer_);
-    vertex_buffer_ = gfx::GLHelper::SetupQuadVertexBuffer();
-    vertex_shader_ = gfx::GLHelper::LoadShader(
-        GL_VERTEX_SHADER,
-        base::StringPrintf("%s\n%s", kGLSLVersion, kVertexShader).c_str());
-    fragment_shader_ = gfx::GLHelper::LoadShader(
-        GL_FRAGMENT_SHADER,
-        base::StringPrintf("%s\n%s\n%s", kGLSLVersion,
-                           kTextureRectangleRequired, kFragmentShader)
-            .c_str());
-    program_ = gfx::GLHelper::SetupProgram(vertex_shader_, fragment_shader_);
-    gfx::ScopedUseProgram use_program(program_);
+  gfx::GLContext* gl_context = gfx::GLContext::GetCurrent();
+  DCHECK(gl_context);
 
-    size_location_ = glGetUniformLocation(program_, "a_texScale");
-    DCHECK_NE(-1, size_location_);
-    int y_sampler_location = glGetUniformLocation(program_, "a_y_texture");
-    DCHECK_NE(-1, y_sampler_location);
-    int uv_sampler_location = glGetUniformLocation(program_, "a_uv_texture");
-    DCHECK_NE(-1, uv_sampler_location);
+  gl::YUVToRGBConverter* yuv_to_rgb_converter =
+      gl_context->GetYUVToRGBConverter();
+  DCHECK(yuv_to_rgb_converter);
 
-    glUniform1i(y_sampler_location, 0);
-    glUniform1i(uv_sampler_location, 1);
+  gfx::ScopedSetGLToRealGLApi scoped_set_gl_api;
 
-    glGenTextures(2, yuv_textures_);
-    DCHECK(yuv_textures_[0]);
-    DCHECK(yuv_textures_[1]);
-  }
+  // Note that state restoration is done explicitly instead of scoped binders to
+  // avoid https://crbug.com/601729.
+  GLint rgb_texture = 0;
+  glGetIntegerv(GL_TEXTURE_BINDING_RECTANGLE_ARB, &rgb_texture);
+  base::ScopedClosureRunner destroy_resources_runner(base::BindBlock(^{
+    glBindTexture(GL_TEXTURE_RECTANGLE_ARB, rgb_texture);
+  }));
 
-  CGLContextObj cgl_context =
-      static_cast<CGLContextObj>(gfx::GLContext::GetCurrent()->GetHandle());
-
-  GLint target_texture = 0;
-  glGetIntegerv(GL_TEXTURE_BINDING_RECTANGLE_ARB, &target_texture);
-  DCHECK(target_texture);
-  glTexImage2D(GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGB, size_.width(),
-               size_.height(), 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-
-  CGLError cgl_error = kCGLNoError;
+  CGLContextObj cgl_context = CGLGetCurrentContext();
   {
-    DCHECK(io_surface_);
-
-    gfx::ScopedActiveTexture active_texture0(GL_TEXTURE0);
-    gfx::ScopedTextureBinder texture_y_binder(GL_TEXTURE_RECTANGLE_ARB,
-                                              yuv_textures_[0]);
-    cgl_error = CGLTexImageIOSurface2D(
+    glBindTexture(GL_TEXTURE_RECTANGLE_ARB, yuv_to_rgb_converter->y_texture());
+    CGLError cgl_error = CGLTexImageIOSurface2D(
         cgl_context, GL_TEXTURE_RECTANGLE_ARB, GL_RED, size_.width(),
-        size_.height(), GL_RED, GL_UNSIGNED_BYTE, io_surface_.get(), 0);
+        size_.height(), GL_RED, GL_UNSIGNED_BYTE, io_surface_, 0);
     if (cgl_error != kCGLNoError) {
       LOG(ERROR) << "Error in CGLTexImageIOSurface2D for the Y plane. "
                  << cgl_error;
       return false;
     }
-    {
-      gfx::ScopedActiveTexture active_texture1(GL_TEXTURE1);
-      gfx::ScopedTextureBinder texture_uv_binder(GL_TEXTURE_RECTANGLE_ARB,
-                                                 yuv_textures_[1]);
-      cgl_error = CGLTexImageIOSurface2D(
-          cgl_context, GL_TEXTURE_RECTANGLE_ARB, GL_RG, size_.width() / 2,
-          size_.height() / 2, GL_RG, GL_UNSIGNED_BYTE, io_surface_.get(), 1);
-      if (cgl_error != kCGLNoError) {
-        LOG(ERROR) << "Error in CGLTexImageIOSurface2D for the UV plane. "
-                   << cgl_error;
-        return false;
-      }
-
-      gfx::ScopedFrameBufferBinder framebuffer_binder(framebuffer_);
-      gfx::ScopedViewport viewport(0, 0, size_.width(), size_.height());
-      glViewport(0, 0, size_.width(), size_.height());
-      glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                GL_TEXTURE_RECTANGLE_ARB, target_texture, 0);
-      DCHECK_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_COMPLETE),
-                glCheckFramebufferStatusEXT(GL_FRAMEBUFFER));
-
-      gfx::ScopedUseProgram use_program(program_);
-      glUniform2f(size_location_, size_.width(), size_.height());
-
-      gfx::GLHelper::DrawQuad(vertex_buffer_);
-      // Detach the output texture from the fbo.
-      glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                GL_TEXTURE_RECTANGLE_ARB, 0, 0);
+  }
+  {
+    glBindTexture(GL_TEXTURE_RECTANGLE_ARB, yuv_to_rgb_converter->uv_texture());
+    CGLError cgl_error = CGLTexImageIOSurface2D(
+        cgl_context, GL_TEXTURE_RECTANGLE_ARB, GL_RG, size_.width() / 2,
+        size_.height() / 2, GL_RG, GL_UNSIGNED_BYTE, io_surface_, 1);
+    if (cgl_error != kCGLNoError) {
+      LOG(ERROR) << "Error in CGLTexImageIOSurface2D for the UV plane. "
+                 << cgl_error;
+      return false;
     }
   }
+
+  yuv_to_rgb_converter->CopyYUV420ToRGB(
+      GL_TEXTURE_RECTANGLE_ARB,
+      size_,
+      rgb_texture);
   return true;
 }
 
@@ -409,13 +344,8 @@ base::ScopedCFTypeRef<IOSurfaceRef> GLImageIOSurface::io_surface() {
   return io_surface_;
 }
 
-// static
-void GLImageIOSurface::SetLayerForWidget(gfx::AcceleratedWidget widget,
-                                         CALayer* layer) {
-  if (layer)
-    g_widget_to_layer_map.Pointer()->insert(std::make_pair(widget, layer));
-  else
-    g_widget_to_layer_map.Pointer()->erase(widget);
+base::ScopedCFTypeRef<CVPixelBufferRef> GLImageIOSurface::cv_pixel_buffer() {
+  return cv_pixel_buffer_;
 }
 
 // static

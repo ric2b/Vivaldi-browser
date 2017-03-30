@@ -113,6 +113,9 @@ const PermissionsUIInfo kPermissionsUIInfo[] = {
      IDR_BLOCKED_MIDI_SYSEX, IDR_ALLOWED_MIDI_SYSEX},
     {CONTENT_SETTINGS_TYPE_KEYGEN, IDS_WEBSITE_SETTINGS_TYPE_KEYGEN,
      IDR_BLOCKED_KEYGEN, IDR_ALLOWED_KEYGEN},
+    {CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC,
+     IDS_WEBSITE_SETTINGS_TYPE_BACKGROUND_SYNC, IDR_BLOCKED_BACKGROUND_SYNC,
+     IDR_ALLOWED_BACKGROUND_SYNC},
 };
 
 }  // namespace
@@ -130,7 +133,7 @@ WebsiteSettingsUI::PermissionInfo::PermissionInfo()
 
 WebsiteSettingsUI::ChosenObjectInfo::ChosenObjectInfo(
     const WebsiteSettings::ChooserUIInfo& ui_info,
-    scoped_ptr<base::DictionaryValue> object)
+    std::unique_ptr<base::DictionaryValue> object)
     : ui_info(ui_info), object(std::move(object)) {}
 
 WebsiteSettingsUI::ChosenObjectInfo::~ChosenObjectInfo() {}

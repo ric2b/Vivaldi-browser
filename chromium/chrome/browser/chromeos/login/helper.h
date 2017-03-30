@@ -86,11 +86,12 @@ class NetworkStateHelper {
  private:
   void OnCreateConfiguration(const base::Closure& success_callback,
                              const base::Closure& error_callback,
-                             const std::string& service_path) const;
+                             const std::string& service_path,
+                             const std::string& guid) const;
   void OnCreateOrConnectNetworkFailed(
       const base::Closure& error_callback,
       const std::string& error_name,
-      scoped_ptr<base::DictionaryValue> error_data) const;
+      std::unique_ptr<base::DictionaryValue> error_data) const;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkStateHelper);
 };

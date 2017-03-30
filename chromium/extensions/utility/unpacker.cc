@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <set>
+#include <tuple>
 #include <utility>
 
 #include "base/files/file_enumerator.h"
@@ -20,7 +21,6 @@
 #include "base/threading/thread.h"
 #include "base/values.h"
 #include "content/public/child/image_decoder_utils.h"
-#include "content/public/common/common_param_traits.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_l10n_util.h"
@@ -248,7 +248,7 @@ bool Unpacker::AddDecodedImage(const base::FilePath& path) {
     return false;
   }
 
-  internal_data_->decoded_images.push_back(base::MakeTuple(image_bitmap, path));
+  internal_data_->decoded_images.push_back(std::make_tuple(image_bitmap, path));
   return true;
 }
 

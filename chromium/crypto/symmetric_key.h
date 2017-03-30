@@ -31,12 +31,12 @@ class CRYPTO_EXPORT SymmetricKey {
   // Defines the algorithm that a key will be used with. See also
   // classs Encrptor.
   enum Algorithm {
-	ENC_ALG_START,
+    ENC_ALG_START,
     AES,
-	DES_EDE3,
-	ENC_ALG_END,
+    DES_EDE3,
+    ENC_ALG_END,
     HMAC_SHA1,
-	SHA1
+    SHA1
   };
 
   virtual ~SymmetricKey();
@@ -64,8 +64,8 @@ class CRYPTO_EXPORT SymmetricKey {
   // size for use with |algorithm|. The caller owns the returned SymmetricKey.
   static SymmetricKey* Import(Algorithm algorithm, const std::string& raw_key);
   static SymmetricKey* Import(Algorithm algorithm,
-                              const unsigned char *raw_key, 
-								              unsigned int raw_key_len);
+                              const unsigned char *raw_key,
+                              unsigned int raw_key_len);
 
 #if defined(NACL_WIN64)
   HCRYPTKEY key() const { return key_.get(); }

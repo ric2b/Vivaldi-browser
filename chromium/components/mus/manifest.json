@@ -1,5 +1,11 @@
 {
-  "url": "mojo://mus/",
-  "name": "Mandoline UI Services",
-  "capabilities": { "*": [ "*" ] }
+  "manifest_version":  1,
+  "name": "mojo:mus",
+  "display_name": "Mandoline UI Services",
+  "capabilities": {
+    "required": {
+      "*": { "interfaces": [ "*" ] },
+      "mojo:shell": { "classes": [ "all_users" ] }
+    }
+  }
 }

@@ -12,13 +12,17 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.webkit.MimeTypeMap;
 
+import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
+import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionProxyUma;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 import org.chromium.chrome.browser.util.UrlUtilities;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Arrays;
 
 /**
@@ -28,6 +32,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     public static final int NORMAL_MODE = 0;
     public static final int CUSTOM_TAB_MODE = 1;
     public static final int FULLSCREEN_TAB_MODE = 2;
+    private static final String TAG = "CCMenuPopulator";
 
     // Items that are included in all context menus.
     private static final int[] BASE_WHITELIST = {
@@ -44,11 +49,13 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     private static final int[] NORMAL_MODE_WHITELIST = {
             R.id.contextmenu_load_images,
             R.id.contextmenu_open_in_new_tab,
+            R.id.contextmenu_open_in_other_window,
             R.id.contextmenu_open_in_incognito_tab,
             R.id.contextmenu_save_link_as,
             R.id.contextmenu_load_original_image,
-            R.id.contextmenu_open_image,
+            R.id.contextmenu_open_image_in_new_tab,
             R.id.contextmenu_search_by_image,
+            R.id.contextmenu_save_offline,
     };
 
     // Additional items for custom tabs mode.
@@ -77,12 +84,14 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         static final int ACTION_SAVE_LINK = 5;
         static final int ACTION_SAVE_IMAGE = 6;
         static final int ACTION_OPEN_IMAGE = 7;
+        static final int ACTION_OPEN_IMAGE_IN_NEW_TAB = 8;
         static final int ACTION_SEARCH_BY_IMAGE = 11;
         static final int ACTION_LOAD_IMAGES = 12;
         static final int ACTION_LOAD_ORIGINAL_IMAGE = 13;
         static final int ACTION_SAVE_VIDEO = 14;
         static final int ACTION_SHARE_IMAGE = 19;
-        static final int NUM_ACTIONS = 20;
+        static final int ACTION_OPEN_IN_OTHER_WINDOW = 20;
+        static final int NUM_ACTIONS = 21;
 
         // Note: these values must match the ContextMenuSaveLinkType enum in histograms.xml.
         // Only add new values at the end, right before NUM_TYPES. We depend on these specific
@@ -176,6 +185,10 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         menu.setGroupVisible(R.id.contextmenu_group_image, params.isImage());
         menu.setGroupVisible(R.id.contextmenu_group_video, params.isVideo());
 
+        if (params.isAnchor() && !mDelegate.isOpenInOtherWindowSupported()) {
+            menu.findItem(R.id.contextmenu_open_in_other_window).setVisible(false);
+        }
+
         if (mDelegate.isIncognito() || !mDelegate.isIncognitoSupported()) {
             menu.findItem(R.id.contextmenu_open_in_incognito_tab).setVisible(false);
         }
@@ -192,6 +205,13 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
 
         menu.findItem(R.id.contextmenu_save_link_as).setVisible(
                 UrlUtilities.isDownloadableScheme(params.getLinkUrl()));
+
+        // Only enable the save as offline feature if OfflinePagesBackgroundLoading is enabled, and
+        // it looks like a web page.
+        boolean showSaveOfflineMenuItem =
+                shouldShowBackgroundLoadingContextMenu(params.getLinkUrl());
+
+        menu.findItem(R.id.contextmenu_save_offline).setVisible(showSaveOfflineMenuItem);
 
         if (params.imageWasFetchedLoFi()
                 || !DataReductionProxySettings.getInstance().wasLoFiModeActiveOnMainFrame()
@@ -270,7 +290,10 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
 
     @Override
     public boolean onItemSelected(ContextMenuHelper helper, ContextMenuParams params, int itemId) {
-        if (itemId == R.id.contextmenu_open_in_new_tab) {
+        if (itemId == R.id.contextmenu_open_in_other_window) {
+            ContextMenuUma.record(params, ContextMenuUma.ACTION_OPEN_IN_OTHER_WINDOW);
+            mDelegate.onOpenInOtherWindow(params.getLinkUrl(), params.getReferrer());
+        } else if (itemId == R.id.contextmenu_open_in_new_tab) {
             ContextMenuUma.record(params, ContextMenuUma.ACTION_OPEN_IN_NEW_TAB);
             mDelegate.onOpenInNewTab(params.getLinkUrl(), params.getReferrer());
         } else if (itemId == R.id.contextmenu_open_in_incognito_tab) {
@@ -279,6 +302,9 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         } else if (itemId == R.id.contextmenu_open_image) {
             ContextMenuUma.record(params, ContextMenuUma.ACTION_OPEN_IMAGE);
             mDelegate.onOpenImageUrl(params.getSrcUrl(), params.getReferrer());
+        } else if (itemId == R.id.contextmenu_open_image_in_new_tab) {
+            ContextMenuUma.record(params, ContextMenuUma.ACTION_OPEN_IMAGE_IN_NEW_TAB);
+            mDelegate.onOpenImageInNewTab(params.getSrcUrl(), params.getReferrer());
         } else if (itemId == R.id.contextmenu_load_images) {
             ContextMenuUma.record(params, ContextMenuUma.ACTION_LOAD_IMAGES);
             DataReductionProxyUma.dataReductionProxyLoFiUIAction(
@@ -324,6 +350,9 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                 ContextMenuUma.recordSaveLinkTypes(url);
                 helper.startContextMenuDownload(true, false);
             }
+        } else if (itemId == R.id.contextmenu_save_offline) {
+            // TODO(petewil): Add code here to save the page offline.
+            Log.d(TAG, "Save an offline copy of the linked page");
         } else if (itemId == R.id.contextmenu_search_by_image) {
             ContextMenuUma.record(params, ContextMenuUma.ACTION_SEARCH_BY_IMAGE);
             helper.searchForImage();
@@ -337,6 +366,36 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         }
 
         return true;
+    }
+
+    /**
+     * Return true if we should show a context menu for background loading.  Make sure the uri looks
+     * like a web page (scheme is http or https) and has mime type of unknown or text.
+     * @param uriString The uri that we are showing a context menu on.
+     */
+    private static boolean shouldShowBackgroundLoadingContextMenu(String uriString) {
+
+        if (!OfflinePageBridge.isBackgroundLoadingEnabled()) return false;
+
+        URI uri = null;
+        try {
+            uri = new URI(uriString);
+        } catch (URISyntaxException e) {
+            Log.e(TAG, "Trying to parse a link that is not a URI " + e);
+            return false;
+        }
+
+        String scheme = uri.getScheme();
+        if (scheme == null) return false;
+
+        String extension = MimeTypeMap.getFileExtensionFromUrl(uriString);
+        String type = null;
+        if (extension != null) {
+            type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
+        }
+
+        return (scheme.equals("http") || scheme.equals("https"))
+                && (type == null || type.startsWith("text"));
     }
 
     private void setHeaderText(Context context, ContextMenu menu, String text) {

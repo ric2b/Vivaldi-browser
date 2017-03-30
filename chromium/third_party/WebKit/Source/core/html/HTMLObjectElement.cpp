@@ -61,9 +61,9 @@ inline HTMLObjectElement::~HTMLObjectElement()
 #endif
 }
 
-PassRefPtrWillBeRawPtr<HTMLObjectElement> HTMLObjectElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
+RawPtr<HTMLObjectElement> HTMLObjectElement::create(Document& document, HTMLFormElement* form, bool createdByParser)
 {
-    RefPtrWillBeRawPtr<HTMLObjectElement> element = adoptRefWillBeNoop(new HTMLObjectElement(document, form, createdByParser));
+    RawPtr<HTMLObjectElement> element = new HTMLObjectElement(document, form, createdByParser);
     element->ensureUserAgentShadowRoot();
     return element.release();
 }
@@ -189,8 +189,8 @@ void HTMLObjectElement::parametersForPlugin(Vector<String>& paramNames, Vector<S
     for (const Attribute& attribute : attributes) {
         const AtomicString& name = attribute.name().localName();
         if (!uniqueParamNames.contains(name.impl())) {
-            paramNames.append(name.string());
-            paramValues.append(attribute.value().string());
+            paramNames.append(name.getString());
+            paramValues.append(attribute.value().getString());
         }
     }
 
@@ -261,7 +261,7 @@ void HTMLObjectElement::reloadPluginOnAttributeChange(const QualifiedName& name)
 // moved down into HTMLPluginElement.cpp
 void HTMLObjectElement::updateWidgetInternal()
 {
-    ASSERT(!layoutEmbeddedObject()->showsUnavailablePluginIndicator());
+    ASSERT(!layoutEmbeddedItem().showsUnavailablePluginIndicator());
     ASSERT(needsWidgetUpdate());
     setNeedsWidgetUpdate(false);
     // TODO(schenney): crbug.com/572908 This should ASSERT isFinishedParsingChildren() instead.
@@ -319,7 +319,7 @@ void HTMLObjectElement::removedFrom(ContainerNode* insertionPoint)
 
 void HTMLObjectElement::childrenChanged(const ChildrenChange& change)
 {
-    if (inDocument() && !useFallbackContent()) {
+    if (inShadowIncludingDocument() && !useFallbackContent()) {
         setNeedsWidgetUpdate(true);
         lazyReattachIfNeeded();
     }
@@ -364,7 +364,7 @@ void HTMLObjectElement::renderFallbackContent()
     if (useFallbackContent())
         return;
 
-    if (!inDocument())
+    if (!inShadowIncludingDocument())
         return;
 
     // Before we give up and use fallback content, check to see if this is a MIME type issue.
@@ -406,7 +406,7 @@ bool HTMLObjectElement::containsJavaApplet() const
     for (HTMLElement& child : Traversal<HTMLElement>::childrenOf(*this)) {
         if (isHTMLParamElement(child)
             && equalIgnoringCase(child.getNameAttribute(), "type")
-            && MIMETypeRegistry::isJavaAppletMIMEType(child.getAttribute(valueAttr).string()))
+            && MIMETypeRegistry::isJavaAppletMIMEType(child.getAttribute(valueAttr).getString()))
             return true;
         if (isHTMLObjectElement(child) && toHTMLObjectElement(child).containsJavaApplet())
             return true;
@@ -419,19 +419,6 @@ void HTMLObjectElement::didMoveToNewDocument(Document& oldDocument)
 {
     FormAssociatedElement::didMoveToNewDocument(oldDocument);
     HTMLPlugInElement::didMoveToNewDocument(oldDocument);
-}
-
-void HTMLObjectElement::appendToFormData(FormData& formData)
-{
-    if (name().isEmpty())
-        return;
-
-    Widget* widget = pluginWidget();
-    if (!widget || !widget->isPluginView())
-        return;
-    String value;
-    if (toPluginView(widget)->getFormValue(value))
-        formData.append(name(), value);
 }
 
 HTMLFormElement* HTMLObjectElement::formOwner() const

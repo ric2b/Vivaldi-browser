@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_MEDIA_ROUTER_MEDIA_ROUTER_METRICS_H_
 #define CHROME_BROWSER_MEDIA_ROUTER_MEDIA_ROUTER_METRICS_H_
 
+#include "base/gtest_prod_util.h"
 #include "base/time/time.h"
 
 namespace media_router {
@@ -12,6 +13,9 @@ namespace media_router {
 // NOTE: Do not renumber enums as that would confuse interpretation of
 // previously logged data. When making changes, also update the enum list
 // in tools/metrics/histograms/histograms.xml to keep it in sync.
+
+// NOTE: For metrics specific to the Media Router component extension, see
+// mojo/media_router_mojo_metrics.h.
 
 // Where the user clicked to open the Media Router dialog.
 enum class MediaRouterDialogOpenOrigin {
@@ -24,27 +28,14 @@ enum class MediaRouterDialogOpenOrigin {
   TOTAL_COUNT = 4
 };
 
-// Why the Media Route Provider process was woken up.
-enum class MediaRouteProviderWakeReason {
-  CREATE_ROUTE = 0,
-  JOIN_ROUTE = 1,
-  TERMINATE_ROUTE = 2,
-  SEND_SESSION_MESSAGE = 3,
-  SEND_SESSION_BINARY_MESSAGE = 4,
-  DETACH_ROUTE = 5,
-  START_OBSERVING_MEDIA_SINKS = 6,
-  STOP_OBSERVING_MEDIA_SINKS = 7,
-  START_OBSERVING_MEDIA_ROUTES = 8,
-  STOP_OBSERVING_MEDIA_ROUTES = 9,
-  LISTEN_FOR_ROUTE_MESSAGES = 10,
-  STOP_LISTENING_FOR_ROUTE_MESSAGES = 11,
-  CONNECTION_ERROR = 12,
-  REGISTER_MEDIA_ROUTE_PROVIDER = 13,
-  CONNECT_ROUTE_BY_ROUTE_ID = 14,
-  ENABLE_MDNS_DISCOVERY = 15,
+// The possible outcomes from a route creation response.
+enum class MediaRouterRouteCreationOutcome {
+  SUCCESS = 0,
+  FAILURE_NO_ROUTE = 1,
+  FAILURE_INVALID_SINK = 2,
 
-  // NOTE: Add entries only immediately above this line.
-  TOTAL_COUNT = 16
+  // Note: Add entries only immediately above this line.
+  TOTAL_COUNT = 3,
 };
 
 // The possible actions a user can take while interacting with the Media Router
@@ -66,10 +57,6 @@ class MediaRouterMetrics {
   static void RecordMediaRouterDialogOrigin(
       MediaRouterDialogOpenOrigin origin);
 
-  // Records why the media route provider extension was woken up.
-  static void RecordMediaRouteProviderWakeReason(
-      MediaRouteProviderWakeReason reason);
-
   // Records the duration it takes for the Media Router dialog to open and
   // finish painting after a user clicks to open the dialog.
   static void RecordMediaRouterDialogPaint(
@@ -84,6 +71,10 @@ class MediaRouterMetrics {
   // opened.
   static void RecordMediaRouterInitialUserAction(
       MediaRouterUserAction action);
+
+  // Records the outcome in a create route response.
+  static void RecordRouteCreationOutcome(
+      MediaRouterRouteCreationOutcome outcome);
 };
 
 }  // namespace media_router

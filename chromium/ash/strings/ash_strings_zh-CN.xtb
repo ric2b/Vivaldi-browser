@@ -20,6 +20,7 @@
 <translation id="1467432559032391204">向左</translation>
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
 <translation id="1510238584712386396">启动器</translation>
+<translation id="1525508553941733066">关闭</translation>
 <translation id="15373452373711364">大号鼠标光标</translation>
 <translation id="1550523713251050646">点击即可查看更多选项</translation>
 <translation id="1602076796624386989">启用移动数据</translation>
@@ -68,7 +69,7 @@
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2964193600955408481">停用 Wi-Fi</translation>
 <translation id="2983818520079887040">设置...</translation>
-<translation id="2999742336789313416">“<ph name="DISPLAY_NAME" />”是由 <ph name="DOMAIN" /> 管理的公开会话</translation>
+<translation id="2999742336789313416">“<ph name="DISPLAY_NAME" />”是由 <ph name="DOMAIN" /> 管理的公用自助终端</translation>
 <translation id="3009178788565917040">输出</translation>
 <translation id="30155388420722288">溢出按钮</translation>
 <translation id="3019353588588144572">电池电量将在 <ph name="TIME_REMAINING" />后充满</translation>

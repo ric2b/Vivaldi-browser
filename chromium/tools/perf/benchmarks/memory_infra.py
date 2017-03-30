@@ -10,6 +10,7 @@ from telemetry import benchmark
 from telemetry.timeline import tracing_category_filter
 from telemetry.web_perf import timeline_based_measurement
 from telemetry.web_perf.metrics import memory_timeline
+from telemetry.web_perf.metrics import v8_gc_latency
 
 import page_sets
 
@@ -39,7 +40,7 @@ class _MemoryInfra(perf_benchmark.PerfBenchmark):
     return tbm_options
 
   @classmethod
-  def HasBenchmarkTraceRerunDebugOption(cls):
+  def HasTraceRerunDebugOption(cls):
     return True
 
   def SetupBenchmarkDefaultTraceRerunOptions(self, tbm_options):
@@ -77,7 +78,7 @@ class MemoryHealthPlan(_MemoryInfra):
 
 # TODO(bashi): Workaround for http://crbug.com/532075
 # @benchmark.Enabled('android') shouldn't be needed.
-@benchmark.Disabled('all')  # crbug.com/581119
+@benchmark.Enabled('android')
 class RendererMemoryBlinkMemoryMobile(_MemoryInfra):
   """Timeline based benchmark for measuring memory consumption on mobile
   sites on which blink's memory consumption is relatively high."""
@@ -115,3 +116,39 @@ class MemoryBenchmarkTop10Mobile(_MemoryInfra):
   @classmethod
   def Name(cls):
     return 'memory.top_10_mobile'
+
+
+# Disabled on reference builds because they don't support the new
+# Tracing.requestMemoryDump DevTools API.
+# For 'reference' see http://crbug.com/540022.
+# For 'android' see http://crbug.com/579546.
+@benchmark.Disabled('reference', 'android')
+class MemoryLongRunningIdleGmailTBM(_MemoryInfra):
+  """Use (recorded) real world web sites and measure memory consumption
+  of long running idle Gmail page """
+  page_set = page_sets.LongRunningIdleGmailPageSet
+
+  def CreateTimelineBasedMeasurementOptions(self):
+    v8_categories = [
+        'blink.console', 'renderer.scheduler', 'v8', 'webkit.console']
+    memory_categories = 'blink.console,disabled-by-default-memory-infra'
+    category_filter = tracing_category_filter.TracingCategoryFilter(
+        memory_categories)
+    for category in v8_categories:
+      category_filter.AddIncludedCategory(category)
+    options = timeline_based_measurement.Options(category_filter)
+    return options
+
+  def SetupBenchmarkDefaultTraceRerunOptions(self, tbm_options):
+    tbm_options.SetLegacyTimelineBasedMetrics((
+        v8_gc_latency.V8GCLatency(),
+        memory_timeline.MemoryTimelineMetric(),
+    ))
+
+  @classmethod
+  def Name(cls):
+    return 'memory.long_running_idle_gmail_tbm'
+
+  @classmethod
+  def ShouldTearDownStateAfterEachStoryRun(cls):
+    return True

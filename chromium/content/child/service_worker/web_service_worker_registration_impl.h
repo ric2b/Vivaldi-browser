@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/compiler_specific.h"
@@ -38,7 +39,7 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
       public base::RefCounted<WebServiceWorkerRegistrationImpl> {
  public:
   explicit WebServiceWorkerRegistrationImpl(
-      scoped_ptr<ServiceWorkerRegistrationHandleReference> handle_ref);
+      std::unique_ptr<ServiceWorkerRegistrationHandleReference> handle_ref);
 
   void SetInstalling(const scoped_refptr<WebServiceWorkerImpl>& service_worker);
   void SetWaiting(const scoped_refptr<WebServiceWorkerImpl>& service_worker);
@@ -62,7 +63,7 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
 
   // Creates WebServiceWorkerRegistrationHandle object that owns a reference to
   // the given WebServiceWorkerRegistrationImpl object.
-  static blink::WebPassOwnPtr<WebServiceWorkerRegistrationHandle> CreateHandle(
+  static std::unique_ptr<WebServiceWorkerRegistrationHandle> CreateHandle(
       const scoped_refptr<WebServiceWorkerRegistrationImpl>& registration);
 
   // Same with CreateHandle(), but returns a raw pointer to the handle w/ its
@@ -94,7 +95,7 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
 
   void RunQueuedTasks();
 
-  scoped_ptr<ServiceWorkerRegistrationHandleReference> handle_ref_;
+  std::unique_ptr<ServiceWorkerRegistrationHandleReference> handle_ref_;
   blink::WebServiceWorkerRegistrationProxy* proxy_;
 
   std::vector<QueuedTask> queued_tasks_;

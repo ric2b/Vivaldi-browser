@@ -101,10 +101,8 @@ CustomButton* GetFirstHotTrackedView(View* view) {
   if (!view)
     return NULL;
   CustomButton* button = CustomButton::AsCustomButton(view);
-  if (button) {
-    if (button->IsHotTracked())
-      return button;
-  }
+  if (button && button->IsHotTracked())
+    return button;
 
   for (int i = 0; i < view->child_count(); ++i) {
     CustomButton* hot_view = GetFirstHotTrackedView(view->child_at(i));
@@ -365,7 +363,8 @@ struct MenuController::SelectByCharDetails {
 // MenuController:State ------------------------------------------------------
 
 MenuController::State::State()
-    : item(NULL),
+    : item(nullptr),
+      hot_button(nullptr),
       submenu_open(false),
       anchor(MENU_ANCHOR_TOPLEFT),
       context_menu(false) {
@@ -426,6 +425,8 @@ MenuItemView* MenuController::Run(Widget* parent,
     // blocking/non-blocking shouldn't be needed.
     DCHECK(blocking_run_);
 
+    state_.hot_button = hot_button_;
+    hot_button_ = nullptr;
     // We're already showing, push the current state.
     menu_stack_.push_back(
         std::make_pair(state_, make_linked_ptr(pressed_lock_.release())));
@@ -559,9 +560,14 @@ bool MenuController::OnMousePressed(SubmenuView* source,
 
   if (forward_to_root) {
     ui::MouseEvent event_for_root(event);
+    // Reset hot-tracking if a different view is getting a mouse press.
     ConvertLocatedEventForRootView(source, forward_to_root, &event_for_root);
     View* view =
         forward_to_root->GetEventHandlerForPoint(event_for_root.location());
+    CustomButton* button = CustomButton::AsCustomButton(view);
+    if (hot_button_ != button)
+      SetHotTrackedButton(button);
+
     // Empty menu items are always handled by the menu controller.
     if (!view || view->id() != MenuItemView::kEmptyMenuItemViewID) {
       bool processed = forward_to_root->ProcessMousePressed(event_for_root);
@@ -719,11 +725,21 @@ void MenuController::OnMouseMoved(SubmenuView* source,
   }
 
   MenuHostRootView* root_view = GetRootView(source, event.location());
-  if (root_view)
+  if (root_view) {
     root_view->ProcessMouseMoved(event);
-  // TODO(varkha): It is possible that another child CustomButton has become
-  // hot-tracked as a result of this event. We need to track it for accurate
-  // hot-tracking when both mouse and keyboard are used to navigate the menu.
+
+    // Update hot-tracked button when a button state is changed with a mouse
+    // event. It is necessary to track it for accurate hot-tracking when both
+    // mouse and keyboard are used to navigate the menu.
+    ui::MouseEvent event_for_root(event);
+    ConvertLocatedEventForRootView(source, root_view, &event_for_root);
+    View* view =
+        root_view->GetEventHandlerForPoint(event_for_root.location());
+    CustomButton* button = CustomButton::AsCustomButton(view);
+    if (button && button->IsHotTracked())
+      SetHotTrackedButton(button);
+  }
+
   HandleMouseLocation(source, event.location());
 }
 
@@ -741,6 +757,18 @@ bool MenuController::OnMouseWheel(SubmenuView* source,
 
 void MenuController::OnGestureEvent(SubmenuView* source,
                                     ui::GestureEvent* event) {
+  MenuHostRootView* root_view = GetRootView(source, event->location());
+  if (root_view) {
+    // Reset hot-tracking if a different view is getting a touch event.
+    ui::GestureEvent event_for_root(*event);
+    ConvertLocatedEventForRootView(source, root_view, &event_for_root);
+    View* view =
+        root_view->GetEventHandlerForPoint(event_for_root.location());
+    CustomButton* button = CustomButton::AsCustomButton(view);
+    if (hot_button_ && hot_button_ != button)
+      SetHotTrackedButton(nullptr);
+  }
+
   MenuPart part = GetMenuPart(source, event->location());
   if (event->type() == ui::ET_GESTURE_TAP_DOWN) {
     SetSelectionOnPointerDown(source, event);
@@ -758,8 +786,8 @@ void MenuController::OnGestureEvent(SubmenuView* source,
         !(part.menu->HasSubmenu())) {
       if (part.menu->GetDelegate()->IsTriggerableEvent(
           part.menu, *event)) {
-        Accept(part.menu, event->flags());
         item_selected_by_touch_ = true;
+        Accept(part.menu, event->flags());
       }
       event->StopPropagation();
     } else if (part.type == MenuPart::MENU_ITEM) {
@@ -807,10 +835,22 @@ View* MenuController::GetTooltipHandlerForPoint(SubmenuView* source,
 void MenuController::ViewHierarchyChanged(
     SubmenuView* source,
     const View::ViewHierarchyChangedDetails& details) {
-  // If the current mouse handler is removed, remove it as the handler.
-  if (!details.is_add && details.child == current_mouse_event_target_) {
-    current_mouse_event_target_ = nullptr;
-    current_mouse_pressed_state_ = 0;
+  if (!details.is_add) {
+    // If the current mouse handler is removed, remove it as the handler.
+    if (details.child == current_mouse_event_target_) {
+      current_mouse_event_target_ = nullptr;
+      current_mouse_pressed_state_ = 0;
+    }
+    // Update |hot_button_| (both in |this| and in |menu_stack_| if it gets
+    // removed while a menu is up.
+    if (details.child == hot_button_) {
+      hot_button_ = nullptr;
+      for (auto nested_state : menu_stack_) {
+        State& state = nested_state.first;
+        if (details.child == state.hot_button)
+          state.hot_button = nullptr;
+      }
+    }
   }
 }
 
@@ -1038,11 +1078,8 @@ void MenuController::SetSelection(MenuItemView* menu_item,
   size_t new_size = new_path.size();
 
   bool pending_item_changed = pending_state_.item != menu_item;
-  if (pending_item_changed && pending_state_.item) {
-    CustomButton* button = GetFirstHotTrackedView(pending_state_.item);
-    if (button)
-      button->SetHotTracked(false);
-  }
+  if (pending_item_changed && pending_state_.item)
+    SetHotTrackedButton(nullptr);
 
   // Notify the old path it isn't selected.
   MenuDelegate* current_delegate =
@@ -1171,7 +1208,9 @@ void MenuController::StartDrag(SubmenuView* source,
 }
 
 void MenuController::OnKeyDown(ui::KeyboardCode key_code) {
-  DCHECK(blocking_run_);
+  // Do not process while performing drag-and-drop
+  if (!blocking_run_)
+    return;
 
   switch (key_code) {
     case ui::VKEY_UP:
@@ -1293,6 +1332,7 @@ MenuController::MenuController(bool blocking,
       last_drop_operation_(MenuDelegate::DROP_UNKNOWN),
       showing_submenu_(false),
       active_mouse_view_id_(ViewStorage::GetInstance()->CreateStorageID()),
+      hot_button_(nullptr),
       delegate_(delegate),
       message_loop_depth_(0),
       closing_event_time_(base::TimeDelta()),
@@ -1329,7 +1369,7 @@ bool MenuController::SendAcceleratorToHotTrackedView() {
   ui::Accelerator accelerator(ui::VKEY_RETURN, ui::EF_NONE);
   hot_view->AcceleratorPressed(accelerator);
   CustomButton* button = static_cast<CustomButton*>(hot_view);
-  button->SetHotTracked(true);
+  SetHotTrackedButton(button);
   return true;
 }
 
@@ -2100,22 +2140,17 @@ void MenuController::IncrementSelection(
   if (item->has_children()) {
     CustomButton* button = GetFirstHotTrackedView(item);
     if (button) {
-      button->SetHotTracked(false);
-      View* to_make_hot = GetNextFocusableView(
-          item, button, direction == INCREMENT_SELECTION_DOWN);
-      CustomButton* button_hot = CustomButton::AsCustomButton(to_make_hot);
-      if (button_hot) {
-        button_hot->SetHotTracked(true);
-        return;
-      }
-    } else {
-      View* to_make_hot =
-          GetInitialFocusableView(item, direction == INCREMENT_SELECTION_DOWN);
-      CustomButton* button_hot = CustomButton::AsCustomButton(to_make_hot);
-      if (button_hot) {
-        button_hot->SetHotTracked(true);
-        return;
-      }
+      DCHECK_EQ(hot_button_, button);
+      SetHotTrackedButton(nullptr);
+    }
+    bool direction_is_down = direction == INCREMENT_SELECTION_DOWN;
+    View* to_make_hot = button
+        ? GetNextFocusableView(item, button, direction_is_down)
+        : GetInitialFocusableView(item, direction_is_down);
+    CustomButton* hot_button = CustomButton::AsCustomButton(to_make_hot);
+    if (hot_button) {
+      SetHotTrackedButton(hot_button);
+      return;
     }
   }
 
@@ -2244,6 +2279,9 @@ void MenuController::AcceptOrSelect(MenuItemView* parent,
 }
 
 void MenuController::SelectByChar(base::char16 character) {
+  // Do not process while performing drag-and-drop
+  if (!blocking_run_)
+    return;
   if (!character)
     return;
 
@@ -2530,6 +2568,7 @@ MenuItemView* MenuController::ExitMenuRun() {
     // The menus are already showing, so we don't have to show them.
     state_ = menu_stack_.back().first;
     pending_state_ = menu_stack_.back().first;
+    hot_button_ = state_.hot_button;
     nested_pressed_lock = menu_stack_.back().second;
     menu_stack_.pop_back();
     // Even though the menus are nested, there may not be nested delegates.
@@ -2569,9 +2608,11 @@ MenuItemView* MenuController::ExitMenuRun() {
     }
   }
 
-  // Reset our pressed lock to the previous state's, if there was one.
-  // The lock handles the case if the button was destroyed.
+  // Reset our pressed lock and hot-tracked state to the previous state's, if
+  // they were active. The lock handles the case if the button was destroyed.
   pressed_lock_.reset(nested_pressed_lock.release());
+  if (hot_button_)
+    hot_button_->SetHotTracked(true);
 
   return result;
 }
@@ -2616,7 +2657,19 @@ void MenuController::SetInitialHotTrackedView(
   SetSelection(item, SELECTION_DEFAULT);
   View* hot_view =
       GetInitialFocusableView(item, direction == INCREMENT_SELECTION_DOWN);
-  CustomButton* hot_button = CustomButton::AsCustomButton(hot_view);
+  SetHotTrackedButton(CustomButton::AsCustomButton(hot_view));
+}
+
+void MenuController::SetHotTrackedButton(CustomButton* hot_button) {
+  if (hot_button == hot_button_) {
+    // Hot-tracked state may change outside of the MenuController. Correct it.
+    if (hot_button && !hot_button->IsHotTracked())
+      hot_button->SetHotTracked(true);
+    return;
+  }
+  if (hot_button_)
+    hot_button_->SetHotTracked(false);
+  hot_button_ = hot_button;
   if (hot_button)
     hot_button->SetHotTracked(true);
 }

@@ -80,18 +80,14 @@ WebInspector.SourcesPanel = function(workspaceForTest)
     this.sidebarPanes.watchExpressions = new WebInspector.WatchExpressionsSidebarPane();
     this.sidebarPanes.callstack = new WebInspector.CallStackSidebarPane();
     this.sidebarPanes.callstack.addEventListener(WebInspector.CallStackSidebarPane.Events.CallFrameSelected, this._callFrameSelectedInSidebar.bind(this));
-    this.sidebarPanes.callstack.addEventListener(WebInspector.CallStackSidebarPane.Events.RevealHiddenCallFrames, this._hiddenCallFramesRevealedInSidebar.bind(this));
     this.sidebarPanes.callstack.registerShortcuts(this.registerShortcuts.bind(this));
 
     this.sidebarPanes.scopechain = new WebInspector.ScopeChainSidebarPane();
-    this.sidebarPanes.serviceWorkers = new WebInspector.ServiceWorkersSidebarPane();
     this.sidebarPanes.jsBreakpoints = new WebInspector.JavaScriptBreakpointsSidebarPane(WebInspector.breakpointManager, this.showUISourceCode.bind(this));
     this.sidebarPanes.domBreakpoints = WebInspector.domBreakpointsSidebarPane.createProxy(this);
     this.sidebarPanes.xhrBreakpoints = new WebInspector.XHRBreakpointsSidebarPane();
     this.sidebarPanes.eventListenerBreakpoints = new WebInspector.EventListenerBreakpointsSidebarPane();
     this.sidebarPanes.objectEventListeners = new WebInspector.ObjectEventListenersSidebarPane();
-    if (Runtime.experiments.isEnabled("stepIntoAsync"))
-        this.sidebarPanes.asyncOperationBreakpoints = new WebInspector.AsyncOperationsSidebarPane();
 
     this._lastSelectedTabSetting = WebInspector.settings.createLocalSetting("lastSelectedSourcesSidebarPaneTab", this.sidebarPanes.scopechain.title());
 
@@ -103,6 +99,9 @@ WebInspector.SourcesPanel = function(workspaceForTest)
     this._updateDebuggerButtons();
     this._pauseOnExceptionEnabledChanged();
     WebInspector.moduleSetting("pauseOnExceptionEnabled").addChangeListener(this._pauseOnExceptionEnabledChanged, this);
+
+    this._liveLocationPool = new WebInspector.LiveLocationPool();
+
     this._setTarget(WebInspector.context.flavor(WebInspector.Target));
     WebInspector.breakpointManager.addEventListener(WebInspector.BreakpointManager.Events.BreakpointsActiveStateChanged, this._breakpointsActiveStateChanged, this);
     WebInspector.context.addFlavorChangeListener(WebInspector.Target, this._onCurrentTargetChanged, this);
@@ -281,17 +280,9 @@ WebInspector.SourcesPanel.prototype = {
             this.sidebarPanes.callstack.setStatus(WebInspector.UIString("Paused on a script blocked due to Content Security Policy directive: \"%s\".", details.auxData["directiveText"]));
         } else if (details.reason === WebInspector.DebuggerModel.BreakReason.DebugCommand) {
             this.sidebarPanes.callstack.setStatus(WebInspector.UIString("Paused on a debugged function."));
-        } else if (details.reason === WebInspector.DebuggerModel.BreakReason.AsyncOperation) {
-            if (Runtime.experiments.isEnabled("stepIntoAsync")) {
-                var operationId = details.auxData["operationId"];
-                var operation = this.sidebarPanes.asyncOperationBreakpoints.operationById(details.target(), operationId);
-                var description = (operation && operation.stack && operation.stack.description) || WebInspector.UIString("<unknown>");
-                this.sidebarPanes.callstack.setStatus(WebInspector.UIString("Paused on a \"%s\" async operation.", description));
-                this.sidebarPanes.asyncOperationBreakpoints.highlightBreakpoint(operationId);
-            }
         } else {
             if (details.callFrames.length)
-                WebInspector.debuggerWorkspaceBinding.createCallFrameLiveLocation(details.callFrames[0], didGetUILocation.bind(this));
+                WebInspector.debuggerWorkspaceBinding.createCallFrameLiveLocation(details.callFrames[0].location(), didGetUILocation.bind(this), this._liveLocationPool);
             else
                 console.warn("ScriptsPanel paused, but callFrames.length is zero."); // TODO remove this once we understand this case better
         }
@@ -436,7 +427,7 @@ WebInspector.SourcesPanel.prototype = {
         this.sidebarPanes.scopechain.update(callFrame);
         this.sidebarPanes.watchExpressions.refreshExpressions();
         this.sidebarPanes.callstack.setSelectedCallFrame(callFrame);
-        WebInspector.debuggerWorkspaceBinding.createCallFrameLiveLocation(callFrame, this._executionLineChanged.bind(this));
+        WebInspector.debuggerWorkspaceBinding.createCallFrameLiveLocation(callFrame.location(), this._executionLineChanged.bind(this), this._liveLocationPool);
     },
 
     /**
@@ -507,6 +498,7 @@ WebInspector.SourcesPanel.prototype = {
 
         if (this._switchToPausedTargetTimeout)
             clearTimeout(this._switchToPausedTargetTimeout);
+        this._liveLocationPool.disposeAll();
     },
 
     /**
@@ -661,19 +653,6 @@ WebInspector.SourcesPanel.prototype = {
     /**
      * @return {boolean}
      */
-    _stepIntoAsync: function()
-    {
-        var debuggerModel = this._prepareToResume();
-        if (!debuggerModel)
-            return true;
-
-        debuggerModel.stepIntoAsync();
-        return true;
-    },
-
-    /**
-     * @return {boolean}
-     */
     _stepOut: function()
     {
         var debuggerModel = this._prepareToResume();
@@ -691,12 +670,6 @@ WebInspector.SourcesPanel.prototype = {
     {
         var callFrame = /** @type {!WebInspector.DebuggerModel.CallFrame} */ (event.data);
         callFrame.debuggerModel.setSelectedCallFrame(callFrame);
-    },
-
-    _hiddenCallFramesRevealedInSidebar: function()
-    {
-        if (Runtime.experiments.isEnabled("stepIntoAsync"))
-            this.sidebarPanes.asyncOperationBreakpoints.revealHiddenCallFrames(/** @type {!WebInspector.Target} */ (WebInspector.context.flavor(WebInspector.Target)));
     },
 
     /**
@@ -1137,8 +1110,6 @@ WebInspector.SourcesPanel.prototype = {
             sidebarPaneStack.addPane(this.sidebarPanes.xhrBreakpoints);
             sidebarPaneStack.addPane(this.sidebarPanes.eventListenerBreakpoints);
             sidebarPaneStack.addPane(this.sidebarPanes.objectEventListeners);
-            if (Runtime.experiments.isEnabled("stepIntoAsync"))
-                sidebarPaneStack.addPane(this.sidebarPanes.asyncOperationBreakpoints);
 
             var tabbedPane = new WebInspector.SidebarTabbedPane();
             splitWidget.setSidebarWidget(tabbedPane);
@@ -1378,9 +1349,6 @@ WebInspector.SourcesPanel.DebuggingActionDelegate.prototype = {
             return true;
         case "debugger.step-into":
             panel._stepInto();
-            return true;
-        case "debugger.step-into-async":
-            panel._stepIntoAsync();
             return true;
         case "debugger.step-out":
             panel._stepOut();

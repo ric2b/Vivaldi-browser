@@ -8,10 +8,10 @@
 #include "base/gtest_prod_util.h"
 #include "cc/animation/animation_curve.h"
 #include "platform/PlatformExport.h"
+#include "platform/animation/CompositorAnimationDelegate.h"
 #include "platform/animation/CompositorAnimationPlayerClient.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/WebCompositorAnimationDelegate.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/OwnPtr.h"
@@ -23,15 +23,15 @@ class CompositorAnimation;
 class CompositorAnimationPlayer;
 class CompositorAnimationTimeline;
 
-class PLATFORM_EXPORT ScrollAnimatorCompositorCoordinator : public NoBaseWillBeGarbageCollectedFinalized<ScrollAnimatorCompositorCoordinator>, private CompositorAnimationPlayerClient, WebCompositorAnimationDelegate {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(ScrollAnimatorCompositorCoordinator);
+class PLATFORM_EXPORT ScrollAnimatorCompositorCoordinator : public GarbageCollectedFinalized<ScrollAnimatorCompositorCoordinator>, private CompositorAnimationPlayerClient, CompositorAnimationDelegate {
     WTF_MAKE_NONCOPYABLE(ScrollAnimatorCompositorCoordinator);
-    WILL_BE_USING_PRE_FINALIZER(ScrollAnimatorCompositorCoordinator, dispose);
+    USING_PRE_FINALIZER(ScrollAnimatorCompositorCoordinator, dispose);
 public:
     virtual ~ScrollAnimatorCompositorCoordinator();
 
     bool hasAnimationThatRequiresService() const;
     void dispose();
+    String runStateAsText() const;
 
     virtual bool hasRunningAnimation() const { return false; }
 
@@ -42,7 +42,7 @@ public:
     // DocumentLifecycle::LifecycleState::CompositingClean state.
     virtual void takeoverCompositorAnimation();
 
-    virtual ScrollableArea* scrollableArea() const = 0;
+    virtual ScrollableArea* getScrollableArea() const = 0;
     virtual void tickAnimation(double monotonicTime) = 0;
     virtual void updateCompositorAnimations() = 0;
     virtual void notifyCompositorAnimationFinished(int groupId) = 0;
@@ -65,14 +65,14 @@ protected:
     // Returns true if the compositor player was attached to a new layer.
     bool reattachCompositorPlayerIfNeeded(CompositorAnimationTimeline*);
 
-    // WebCompositorAnimationDelegate implementation.
+    // CompositorAnimationDelegate implementation.
     void notifyAnimationStarted(double monotonicTime, int group) override;
     void notifyAnimationFinished(double monotonicTime, int group) override;
     void notifyAnimationAborted(double monotonicTime, int group) override;
     void notifyAnimationTakeover(
         double monotonicTime,
         double animationStartTime,
-        scoped_ptr<cc::AnimationCurve>) override { };
+        std::unique_ptr<cc::AnimationCurve>) override { };
 
     // CompositorAnimationPlayerClient implementation.
     CompositorAnimationPlayer* compositorPlayer() const override;

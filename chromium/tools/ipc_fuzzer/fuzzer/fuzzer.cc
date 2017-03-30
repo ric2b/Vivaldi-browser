@@ -155,8 +155,8 @@ struct FuzzTraits<unsigned short> {
 };
 
 template <>
-struct FuzzTraits<char> {
-  static bool Fuzz(char* p, Fuzzer* fuzzer) {
+struct FuzzTraits<signed char> {
+  static bool Fuzz(signed char* p, Fuzzer* fuzzer) {
     fuzzer->FuzzUChar(reinterpret_cast<unsigned char*>(p));
     return true;
   }
@@ -785,7 +785,7 @@ struct FuzzTraits<cc::RenderPassList> {
 
     size_t count = RandElementCount();
     for (size_t i = 0; i < count; ++i) {
-      scoped_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
+      std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
       if (!FuzzParam(render_pass.get(), fuzzer))
         return false;
       p->push_back(std::move(render_pass));
@@ -910,22 +910,6 @@ struct FuzzTraits<content::IndexedDBKeyPath> {
 };
 
 template <>
-struct FuzzTraits<content::NPIdentifier_Param> {
-  static bool Fuzz(content::NPIdentifier_Param* p, Fuzzer* fuzzer) {
-    // TODO(mbarbella): This should actually do something.
-    return true;
-  }
-};
-
-template <>
-struct FuzzTraits<content::NPVariant_Param> {
-  static bool Fuzz(content::NPVariant_Param* p, Fuzzer* fuzzer) {
-    // TODO(mbarbella): This should actually do something.
-    return true;
-  }
-};
-
-template <>
 struct FuzzTraits<content::PageState> {
   static bool Fuzz(content::PageState* p, Fuzzer* fuzzer) {
     std::string data = p->ToEncodedData();
@@ -944,7 +928,7 @@ struct FuzzTraits<content::SyntheticGesturePacket> {
     if (!fuzzer->ShouldGenerate())
       return true;
 
-    scoped_ptr<content::SyntheticGestureParams> gesture_params;
+    std::unique_ptr<content::SyntheticGestureParams> gesture_params;
     switch (RandInRange(
         content::SyntheticGestureParams::SYNTHETIC_GESTURE_TYPE_MAX + 1)) {
       case content::SyntheticGestureParams::GestureType::
@@ -1352,6 +1336,9 @@ struct FuzzTraits<IPC::Message> {
   }
 };
 
+#if !defined(OS_WIN)
+// PlatformfileForTransit is just SharedMemoryHandle on Windows, which already
+// has a trait, see ipc/ipc_platform_file.h
 template <>
 struct FuzzTraits<IPC::PlatformFileForTransit> {
   static bool Fuzz(IPC::PlatformFileForTransit* p, Fuzzer* fuzzer) {
@@ -1360,6 +1347,7 @@ struct FuzzTraits<IPC::PlatformFileForTransit> {
     return true;
   }
 };
+#endif
 
 template <>
 struct FuzzTraits<IPC::ChannelHandle> {
@@ -1425,6 +1413,20 @@ struct FuzzTraits<media::AudioParameters> {
     params.set_channels_for_discrete(channels);
     params.set_effects(effects);
     *p = params;
+    return true;
+  }
+};
+
+template <>
+struct FuzzTraits<media::cast::RtpTimeTicks> {
+  static bool Fuzz(media::cast::RtpTimeTicks* p, Fuzzer* fuzzer) {
+    base::TimeDelta delta;
+    int base;
+    if (!FuzzParam(&delta, fuzzer))
+      return false;
+    if (!FuzzParam(&base, fuzzer))
+      return false;
+    *p = media::cast::RtpTimeTicks::FromTimeDelta(delta, base);
     return true;
   }
 };
@@ -1708,20 +1710,6 @@ struct FuzzTraits<printing::PdfRenderSettings> {
 };
 
 template <>
-struct FuzzTraits<remoting::ScreenResolution> {
-  static bool Fuzz(remoting::ScreenResolution* p, Fuzzer* fuzzer) {
-    webrtc::DesktopSize dimensions = p->dimensions();
-    webrtc::DesktopVector dpi = p->dpi();
-    if (!FuzzParam(&dimensions, fuzzer))
-      return false;
-    if (!FuzzParam(&dpi, fuzzer))
-      return false;
-    *p = remoting::ScreenResolution(dimensions, dpi);
-    return true;
-  }
-};
-
-template <>
 struct FuzzTraits<SkBitmap> {
   static bool Fuzz(SkBitmap* p, Fuzzer* fuzzer) {
     // TODO(mbarbella): This should actually do something.
@@ -1811,13 +1799,8 @@ struct FuzzTraits<ui::LatencyInfo> {
         RandInRange(ui::LatencyInfo::kMaxInputCoordinates + 1));
     ui::LatencyInfo::InputCoordinate
         input_coordinates[ui::LatencyInfo::kMaxInputCoordinates];
-    uint32_t event_timestamps_size = static_cast<uint32_t>(
-        RandInRange(ui::LatencyInfo::kMaxCoalescedEventTimestamps + 1));
-    double event_timestamps[ui::LatencyInfo::kMaxCoalescedEventTimestamps];
     if (!FuzzParamArray(
         input_coordinates, input_coordinates_size, fuzzer))
-      return false;
-    if (!FuzzParamArray(event_timestamps, event_timestamps_size, fuzzer))
       return false;
     if (!FuzzParam(&trace_id, fuzzer))
       return false;
@@ -1827,9 +1810,6 @@ struct FuzzTraits<ui::LatencyInfo> {
     ui::LatencyInfo latency(trace_id, terminated);
     for (size_t i = 0; i < input_coordinates_size; i++) {
       latency.AddInputCoordinate(input_coordinates[i]);
-    }
-    for (size_t i = 0; i < event_timestamps_size; i++) {
-      latency.AddCoalescedEventTimestamp(event_timestamps[i]);
     }
     *p = latency;
 
@@ -1890,73 +1870,6 @@ struct FuzzTraits<URLPattern> {
     p->SetHost(host);
     p->SetPort(port);
     p->SetPath(path);
-    return true;
-  }
-};
-
-template <>
-struct FuzzTraits<webrtc::DesktopSize> {
-  static bool Fuzz(webrtc::DesktopSize* p, Fuzzer* fuzzer) {
-    int32_t width = p->width();
-    int32_t height = p->height();
-    if (!FuzzParam(&width, fuzzer))
-      return false;
-    if (!FuzzParam(&height, fuzzer))
-      return false;
-    *p = webrtc::DesktopSize(width, height);
-    return true;
-  }
-};
-
-template <>
-struct FuzzTraits<webrtc::DesktopVector> {
-  static bool Fuzz(webrtc::DesktopVector* p, Fuzzer* fuzzer) {
-    int32_t x = p->x();
-    int32_t y = p->y();
-    if (!FuzzParam(&x, fuzzer))
-      return false;
-    if (!FuzzParam(&y, fuzzer))
-      return false;
-    p->set(x, y);
-    return true;
-  }
-};
-
-template <>
-struct FuzzTraits<webrtc::DesktopRect> {
-  static bool Fuzz(webrtc::DesktopRect* p, Fuzzer* fuzzer) {
-    int32_t left = p->left();
-    int32_t top = p->top();
-    int32_t right = p->right();
-    int32_t bottom = p->bottom();
-    if (!FuzzParam(&left, fuzzer))
-      return false;
-    if (!FuzzParam(&top, fuzzer))
-      return false;
-    if (!FuzzParam(&right, fuzzer))
-      return false;
-    if (!FuzzParam(&bottom, fuzzer))
-      return false;
-    *p = webrtc::DesktopRect::MakeLTRB(left, top, right, bottom);
-    return true;
-  }
-};
-
-template <>
-struct FuzzTraits<webrtc::MouseCursor> {
-  static bool Fuzz(webrtc::MouseCursor* p, Fuzzer* fuzzer) {
-    webrtc::DesktopVector hotspot = p->hotspot();
-    if (!FuzzParam(&hotspot, fuzzer))
-      return false;
-    p->set_hotspot(hotspot);
-
-    // TODO(mbarbella): Find a way to handle the size mutation properly.
-    if (!fuzzer->ShouldGenerate())
-      return false;
-
-    // Using a small size here to avoid OOM or overflow on image allocation.
-    webrtc::DesktopSize size(RandInRange(100), RandInRange(100));
-    p->set_image(new webrtc::BasicDesktopFrame(size));
     return true;
   }
 };

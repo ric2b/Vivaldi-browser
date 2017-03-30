@@ -32,6 +32,7 @@ class BLIMP_CLIENT_EXPORT NavigationFeature : public BlimpMessageProcessor {
     virtual void OnFaviconChanged(int tab_id, const SkBitmap& favicon) = 0;
     virtual void OnTitleChanged(int tab_id, const std::string& title) = 0;
     virtual void OnLoadingChanged(int tab_id, bool loading) = 0;
+    virtual void OnPageLoadStatusUpdate(int tab_id, bool completed) = 0;
   };
 
   NavigationFeature();
@@ -40,7 +41,7 @@ class BLIMP_CLIENT_EXPORT NavigationFeature : public BlimpMessageProcessor {
   // Set the BlimpMessageProcessor that will be used to send
   // BlimpMessage::NAVIGATION messages to the engine.
   void set_outgoing_message_processor(
-      scoped_ptr<BlimpMessageProcessor> processor);
+      std::unique_ptr<BlimpMessageProcessor> processor);
 
   // Sets a NavigationMessageDelegate to be notified of all navigation messages
   // for |tab_id| from the engine.
@@ -54,7 +55,7 @@ class BLIMP_CLIENT_EXPORT NavigationFeature : public BlimpMessageProcessor {
 
  private:
   // BlimpMessageProcessor implementation.
-  void ProcessMessage(scoped_ptr<BlimpMessage> message,
+  void ProcessMessage(std::unique_ptr<BlimpMessage> message,
                       const net::CompletionCallback& callback) override;
 
   NavigationFeatureDelegate* FindDelegate(const int tab_id);
@@ -64,7 +65,7 @@ class BLIMP_CLIENT_EXPORT NavigationFeature : public BlimpMessageProcessor {
   DelegateMap delegates_;
 
   // Used to send BlimpMessage::NAVIGATION messages to the engine.
-  scoped_ptr<BlimpMessageProcessor> outgoing_message_processor_;
+  std::unique_ptr<BlimpMessageProcessor> outgoing_message_processor_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationFeature);
 };

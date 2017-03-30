@@ -17,6 +17,7 @@
 #include "net/url_request/url_request_test_util.h"
 
 class GURL;
+class PrefService;
 
 namespace base {
 class SequencedTaskRunner;
@@ -65,6 +66,7 @@ class TestConfigurator : public Configurator {
   std::vector<GURL> PingUrl() const override;
   base::Version GetBrowserVersion() const override;
   std::string GetChannel() const override;
+  std::string GetBrand() const override;
   std::string GetLang() const override;
   std::string GetOSLongName() const override;
   std::string ExtraRequestParams() const override;
@@ -76,11 +78,15 @@ class TestConfigurator : public Configurator {
   bool UseCupSigning() const override;
   scoped_refptr<base::SequencedTaskRunner> GetSequencedTaskRunner()
       const override;
+  PrefService* GetPrefService() const override;
 
+  void SetBrand(const std::string& brand);
   void SetOnDemandTime(int seconds);
   void SetInitialDelay(int seconds);
   void SetDownloadPreference(const std::string& download_preference);
   void SetUseCupSigning(bool use_cup_signing);
+  void SetUpdateCheckUrl(const GURL& url);
+  void SetPingUrl(const GURL& url);
 
  private:
   friend class base::RefCountedThreadSafe<TestConfigurator>;
@@ -89,10 +95,13 @@ class TestConfigurator : public Configurator {
 
   scoped_refptr<base::SequencedTaskRunner> worker_task_runner_;
 
+  std::string brand_;
   int initial_time_;
   int ondemand_time_;
   std::string download_preference_;
   bool use_cup_signing_;
+  GURL update_check_url_;
+  GURL ping_url_;
 
   scoped_refptr<net::TestURLRequestContextGetter> context_;
 

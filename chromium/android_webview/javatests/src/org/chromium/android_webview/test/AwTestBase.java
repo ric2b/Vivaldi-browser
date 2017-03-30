@@ -36,6 +36,7 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.net.test.util.TestWebServer;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -341,7 +342,7 @@ public class AwTestBase
     // as visual state callback only indicates that *something* has appeared in WebView.
     public void waitForPixelColorAtCenterOfView(final AwContents awContents,
             final AwTestContainerView testContainerView, final int expectedColor) throws Exception {
-        pollOnUiThread(new Callable<Boolean>() {
+        pollUiThread(new Callable<Boolean>() {
             @Override
             public Boolean call() throws Exception {
                 Bitmap bitmap = GraphicsTestUtils.drawAwContents(awContents, 2, 2,
@@ -366,7 +367,10 @@ public class AwTestBase
             return false;
         }
 
-        return method.isAnnotationPresent(clazz);
+        // Cast to AnnotatedElement to work around a compilation failure.
+        // Method.isAnnotationPresent() was removed in Java 8 (which is used by the Android N SDK),
+        // so compilation with Java 7 fails. See crbug.com/608792.
+        return ((AnnotatedElement) method).isAnnotationPresent(clazz);
     }
 
     /**
@@ -381,7 +385,9 @@ public class AwTestBase
             return new AwTestContainerView(activity, allowHardwareAcceleration);
         }
         public AwSettings createAwSettings(Context context, boolean supportsLegacyQuirks) {
-            return new AwSettings(context, false, supportsLegacyQuirks);
+            return new AwSettings(context, false /* isAccessFromFileURLsGrantedByDefault */,
+                    supportsLegacyQuirks, false /* allowEmptyDocumentPersistence */,
+                    true /* allowGeolocationOnInsecureOrigins */);
         }
     }
 
@@ -491,11 +497,12 @@ public class AwTestBase
     }
 
     /**
-     * Wrapper around CriteriaHelper.pollForCriteria. This uses AwTestBase-specifc timeouts and
-     * treats timeouts and exceptions as test failures automatically.
+     * Wrapper around CriteriaHelper.pollInstrumentationThread. This uses AwTestBase-specifc
+     * timeouts and treats timeouts and exceptions as test failures automatically.
      */
-    public static void poll(final Callable<Boolean> callable) throws Exception {
-        CriteriaHelper.pollForCriteria(new Criteria() {
+    public static void pollInstrumentationThread(final Callable<Boolean> callable)
+            throws Exception {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 try {
@@ -511,8 +518,8 @@ public class AwTestBase
     /**
      * Wrapper around {@link AwTestBase#poll()} but runs the callable on the UI thread.
      */
-    public void pollOnUiThread(final Callable<Boolean> callable) throws Exception {
-        poll(new Callable<Boolean>() {
+    public void pollUiThread(final Callable<Boolean> callable) throws Exception {
+        pollInstrumentationThread(new Callable<Boolean>() {
             @Override
             public Boolean call() throws Exception {
                 return runTestOnUiThreadAndGetResult(callable);

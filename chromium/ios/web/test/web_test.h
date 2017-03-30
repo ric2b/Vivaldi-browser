@@ -35,7 +35,7 @@ class WebTest : public PlatformTest {
   TestWebClient* GetWebClient();
 
   // Returns the BrowserState that is used for testing.
-  BrowserState* GetBrowserState() { return &browser_state_; }
+  virtual BrowserState* GetBrowserState();
 
  private:
   // The WebClient used in tests.
@@ -103,13 +103,6 @@ class WebTestWithWebController : public WebTest,
   // ResetPageIfNavigationStalled().
   NSString* CreateLoadCheck();
 };
-
-#pragma mark -
-
-// A test fixtures thats creates a CRWWKWebViewWebController for testing.
-// TODO(crbug.com/589563): Remove this typedef, clients should use
-// |WebTestWithWebController|.
-typedef WebTestWithWebController WebTestWithWKWebViewWebController;
 
 }  // namespace web
 

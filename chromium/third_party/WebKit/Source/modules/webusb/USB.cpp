@@ -49,7 +49,7 @@ void convertDeviceFilter(const USBDeviceFilter& filter, WebUSBDeviceFilter* webF
 
 void convertDeviceRequestOptions(const USBDeviceRequestOptions& options, WebUSBDeviceRequestOptions* webOptions)
 {
-    ASSERT(options.hasFilters());
+    DCHECK(options.hasFilters());
     webOptions->filters = WebVector<WebUSBDeviceFilter>(options.filters().size());
     for (size_t i = 0; i < options.filters().size(); ++i) {
         convertDeviceFilter(options.filters()[i], &webOptions->filters[i]);
@@ -63,11 +63,11 @@ class DeviceArray {
 public:
     using WebType = OwnPtr<WebVector<WebUSBDevice*>>;
 
-    static HeapVector<Member<USBDevice>> take(ScriptPromiseResolver*, PassOwnPtr<WebVector<WebUSBDevice*>> webDevices)
+    static HeapVector<Member<USBDevice>> take(ScriptPromiseResolver* resolver, PassOwnPtr<WebVector<WebUSBDevice*>> webDevices)
     {
         HeapVector<Member<USBDevice>> devices;
         for (const auto webDevice : *webDevices)
-            devices.append(USBDevice::create(adoptPtr(webDevice)));
+            devices.append(USBDevice::create(adoptPtr(webDevice), resolver->getExecutionContext()));
         return devices;
     }
 };
@@ -75,17 +75,17 @@ public:
 } // namespace
 
 USB::USB(LocalFrame& frame)
-    : LocalFrameLifecycleObserver(&frame)
+    : ContextLifecycleObserver(frame.document())
     , m_client(USBController::from(frame).client())
 {
     if (m_client)
-        m_client->setObserver(this);
+        m_client->addObserver(this);
 }
 
 USB::~USB()
 {
     if (m_client)
-        m_client->setObserver(nullptr);
+        m_client->removeObserver(this);
 }
 
 ScriptPromise USB::getDevices(ScriptState* scriptState)
@@ -94,7 +94,7 @@ ScriptPromise USB::getDevices(ScriptState* scriptState)
         return ScriptPromise::rejectWithDOMException(scriptState, DOMException::create(NotSupportedError));
 
     String errorMessage;
-    if (!scriptState->executionContext()->isSecureContext(errorMessage))
+    if (!scriptState->getExecutionContext()->isSecureContext(errorMessage))
         return ScriptPromise::rejectWithDOMException(scriptState, DOMException::create(SecurityError, errorMessage));
 
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
@@ -110,7 +110,7 @@ ScriptPromise USB::requestDevice(ScriptState* scriptState, const USBDeviceReques
         return ScriptPromise::rejectWithDOMException(scriptState, DOMException::create(NotSupportedError));
 
     String errorMessage;
-    if (!scriptState->executionContext()->isSecureContext(errorMessage))
+    if (!scriptState->getExecutionContext()->isSecureContext(errorMessage))
         return ScriptPromise::rejectWithDOMException(scriptState, DOMException::create(SecurityError, errorMessage));
 
     if (!UserGestureIndicator::consumeUserGesture())
@@ -126,9 +126,9 @@ ScriptPromise USB::requestDevice(ScriptState* scriptState, const USBDeviceReques
     return promise;
 }
 
-ExecutionContext* USB::executionContext() const
+ExecutionContext* USB::getExecutionContext() const
 {
-    return frame() ? frame()->document() : nullptr;
+    return ContextLifecycleObserver::getExecutionContext();
 }
 
 const AtomicString& USB::interfaceName() const
@@ -136,27 +136,27 @@ const AtomicString& USB::interfaceName() const
     return EventTargetNames::USB;
 }
 
-void USB::willDetachFrameHost()
+void USB::contextDestroyed()
 {
     if (m_client)
-        m_client->setObserver(nullptr);
+        m_client->removeObserver(this);
     m_client = nullptr;
 }
 
-void USB::onDeviceConnected(WebPassOwnPtr<WebUSBDevice> device)
+void USB::onDeviceConnected(std::unique_ptr<WebUSBDevice> device)
 {
-    dispatchEvent(USBConnectionEvent::create(EventTypeNames::connect, USBDevice::create(device.release())));
+    dispatchEvent(USBConnectionEvent::create(EventTypeNames::connect, USBDevice::create(adoptPtr(device.release()), getExecutionContext())));
 }
 
-void USB::onDeviceDisconnected(WebPassOwnPtr<WebUSBDevice> device)
+void USB::onDeviceDisconnected(std::unique_ptr<WebUSBDevice> device)
 {
-    dispatchEvent(USBConnectionEvent::create(EventTypeNames::disconnect, USBDevice::create(device.release())));
+    dispatchEvent(USBConnectionEvent::create(EventTypeNames::disconnect, USBDevice::create(adoptPtr(device.release()), getExecutionContext())));
 }
 
 DEFINE_TRACE(USB)
 {
     RefCountedGarbageCollectedEventTargetWithInlineData<USB>::trace(visitor);
-    LocalFrameLifecycleObserver::trace(visitor);
+    ContextLifecycleObserver::trace(visitor);
 }
 
 } // namespace blink

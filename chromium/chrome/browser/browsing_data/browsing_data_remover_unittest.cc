@@ -76,6 +76,10 @@
 #include "ui/gfx/favicon_size.h"
 #include "url/origin.h"
 
+#if BUILDFLAG(ANDROID_JAVA_UI)
+#include "chrome/browser/android/webapps/webapp_registry.h"
+#endif
+
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
@@ -191,9 +195,6 @@ class TestStoragePartition : public StoragePartition {
   content::GeofencingManager* GetGeofencingManager() override {
     return nullptr;
   }
-  content::NavigatorConnectContext* GetNavigatorConnectContext() override {
-    return nullptr;
-  }
   content::PlatformNotificationContext* GetPlatformNotificationContext()
       override {
     return nullptr;
@@ -260,38 +261,24 @@ class TestStoragePartition : public StoragePartition {
   DISALLOW_COPY_AND_ASSIGN(TestStoragePartition);
 };
 
-// Custom matcher to verify is-same-origin relationship to given reference
-// origin.
-// (We cannot use equality-based matching because operator== is not defined for
-// Origin, and we in fact want to rely on IsSameOrigin for matching purposes.)
-// TODO(msramek): This is only used for backends that take url::Origin instead
-// of an url filter predicate to match URLs. Remove this when we fully switch
-// to url filter predicates.
-class SameOriginMatcher : public MatcherInterface<const url::Origin&> {
+#if BUILDFLAG(ANDROID_JAVA_UI)
+class TestWebappRegistry : public WebappRegistry {
  public:
-  explicit SameOriginMatcher(const url::Origin& reference)
-      : reference_(reference) {}
+  TestWebappRegistry() : WebappRegistry() { }
 
-  virtual bool MatchAndExplain(const url::Origin& origin,
-                               MatchResultListener* listener) const {
-    return reference_.IsSameOriginWith(origin);
+  void UnregisterWebapps(const base::Closure& callback) override {
+    // Mocks out a JNI call and runs the callback as a delayed task.
+    BrowserThread::PostDelayedTask(BrowserThread::UI, FROM_HERE, callback,
+                                   base::TimeDelta::FromMilliseconds(10));
   }
 
-  virtual void DescribeTo(::std::ostream* os) const {
-    *os << "is same origin with " << reference_;
+  void ClearWebappHistory(const base::Closure& callback) override {
+    // Mocks out a JNI call and runs the callback as a delayed task.
+    BrowserThread::PostDelayedTask(BrowserThread::UI, FROM_HERE, callback,
+                                   base::TimeDelta::FromMilliseconds(10));
   }
-
-  virtual void DescribeNegationTo(::std::ostream* os) const {
-    *os << "is not same origin with " << reference_;
-  }
-
- private:
-  const url::Origin& reference_;
 };
-
-inline Matcher<const url::Origin&> SameOrigin(const url::Origin& reference) {
-  return MakeMatcher(new SameOriginMatcher(reference));
-}
+#endif
 
 // Custom matcher to test the equivalence of two URL filters. Since those are
 // blackbox predicates, we can only approximate the equivalence by testing
@@ -376,8 +363,8 @@ class RemoveCookieTester {
   }
 
  protected:
-  void SetMonster(net::CookieStore* monster) {
-    cookie_store_ = monster;
+  void SetCookieStore(net::CookieStore* cookie_store) {
+    cookie_store_ = cookie_store;
   }
 
  private:
@@ -398,10 +385,17 @@ class RemoveCookieTester {
 
   bool get_cookie_success_ = false;
   base::Closure quit_closure_;
+
+  // CookieStore must out live |this|.
   net::CookieStore* cookie_store_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(RemoveCookieTester);
 };
+
+void RunClosureAfterCookiesCleared(const base::Closure& task,
+                                   int cookies_deleted) {
+  task.Run();
+}
 
 class RemoveSafeBrowsingCookieTester : public RemoveCookieTester {
  public:
@@ -413,13 +407,16 @@ class RemoveSafeBrowsingCookieTester : public RemoveCookieTester {
     sb_service->Initialize();
     base::MessageLoop::current()->RunUntilIdle();
 
-    // Create a cookiemonster that does not have persistant storage, and replace
-    // the SafeBrowsingService created one with it.
-    net::CookieStore* monster =
-        content::CreateCookieStore(content::CookieStoreConfig());
-    sb_service->url_request_context()->GetURLRequestContext()->
-        set_cookie_store(monster);
-    SetMonster(monster);
+    // Make sure the safe browsing cookie store has no cookies.
+    // TODO(mmenke): Is this really needed?
+    base::RunLoop run_loop;
+    net::URLRequestContext* request_context =
+        sb_service->url_request_context()->GetURLRequestContext();
+    request_context->cookie_store()->DeleteAllAsync(
+        base::Bind(&RunClosureAfterCookiesCleared, run_loop.QuitClosure()));
+    run_loop.Run();
+
+    SetCookieStore(request_context->cookie_store());
   }
 
   virtual ~RemoveSafeBrowsingCookieTester() {
@@ -965,6 +962,13 @@ class BrowsingDataRemoverTest : public testing::Test {
         BrowsingDataRemover::RegisterOnBrowsingDataRemovedCallback(
             base::Bind(&BrowsingDataRemoverTest::NotifyWithDetails,
                        base::Unretained(this)));
+
+#if BUILDFLAG(ANDROID_JAVA_UI)
+    BrowsingDataRemover* remover =
+        BrowsingDataRemoverFactory::GetForBrowserContext(profile_.get());
+    remover->OverrideWebappRegistryForTesting(
+        scoped_ptr<WebappRegistry>(new TestWebappRegistry()));
+#endif
   }
 
   ~BrowsingDataRemoverTest() override {}
@@ -2260,8 +2264,11 @@ TEST_F(BrowsingDataRemoverTest, RemovePasswordStatistics) {
 
 TEST_F(BrowsingDataRemoverTest, RemovePasswordsByTimeOnly) {
   RemovePasswordsTester tester(GetProfile());
+  base::Callback<bool(const GURL&)> filter =
+      OriginFilterBuilder::BuildNoopFilter();
 
-  EXPECT_CALL(*tester.store(), RemoveLoginsCreatedBetweenImpl(_, _))
+  EXPECT_CALL(*tester.store(),
+              RemoveLoginsByURLAndTimeImpl(ProbablySameFilter(filter), _, _))
       .WillOnce(Return(password_manager::PasswordStoreChangeList()));
   BlockUntilBrowsingDataRemoved(BrowsingDataRemover::EVERYTHING,
                                 BrowsingDataRemover::REMOVE_PASSWORDS, false);
@@ -2269,10 +2276,12 @@ TEST_F(BrowsingDataRemoverTest, RemovePasswordsByTimeOnly) {
 
 TEST_F(BrowsingDataRemoverTest, RemovePasswordsByOrigin) {
   RemovePasswordsTester tester(GetProfile());
-  const url::Origin expectedOrigin(kOrigin1);
+  OriginFilterBuilder builder(OriginFilterBuilder::WHITELIST);
+  builder.AddOrigin(url::Origin(kOrigin1));
+  base::Callback<bool(const GURL&)> filter = builder.BuildSameOriginFilter();
 
   EXPECT_CALL(*tester.store(),
-              RemoveLoginsByOriginAndTimeImpl(SameOrigin(expectedOrigin), _, _))
+              RemoveLoginsByURLAndTimeImpl(ProbablySameFilter(filter), _, _))
       .WillOnce(Return(password_manager::PasswordStoreChangeList()));
   BlockUntilOriginDataRemoved(BrowsingDataRemover::EVERYTHING,
                               BrowsingDataRemover::REMOVE_PASSWORDS, kOrigin1);
@@ -2291,7 +2300,7 @@ TEST_F(BrowsingDataRemoverTest, DisableAutoSignIn) {
 TEST_F(BrowsingDataRemoverTest, DisableAutoSignInAfterRemovingPasswords) {
   RemovePasswordsTester tester(GetProfile());
 
-  EXPECT_CALL(*tester.store(), RemoveLoginsCreatedBetweenImpl(_, _))
+  EXPECT_CALL(*tester.store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
       .WillOnce(Return(password_manager::PasswordStoreChangeList()));
   EXPECT_CALL(*tester.store(), DisableAutoSignInForAllLoginsImpl())
       .WillOnce(Return(password_manager::PasswordStoreChangeList()));

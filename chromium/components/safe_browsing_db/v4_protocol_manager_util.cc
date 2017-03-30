@@ -18,6 +18,31 @@ namespace safe_browsing {
 // The Safe Browsing V4 server URL prefix.
 const char kSbV4UrlPrefix[] = "https://safebrowsing.googleapis.com/v4";
 
+bool UpdateListIdentifier::operator==(const UpdateListIdentifier& other) const {
+  return platform_type == other.platform_type &&
+         threat_entry_type == other.threat_entry_type &&
+         threat_type == other.threat_type;
+}
+
+bool UpdateListIdentifier::operator!=(const UpdateListIdentifier& other) const {
+  return !operator==(other);
+}
+
+size_t UpdateListIdentifier::hash() const {
+  std::size_t first = std::hash<unsigned int>()(platform_type);
+  std::size_t second = std::hash<unsigned int>()(threat_entry_type);
+  std::size_t third = std::hash<unsigned int>()(threat_type);
+
+  std::size_t interim = base::HashInts(first, second);
+  return base::HashInts(interim, third);
+}
+
+V4ProtocolConfig::V4ProtocolConfig() : disable_auto_update(false) {}
+
+V4ProtocolConfig::V4ProtocolConfig(const V4ProtocolConfig& other) = default;
+
+V4ProtocolConfig::~V4ProtocolConfig() {}
+
 // static
 // Backoff interval is MIN(((2^(n-1))*15 minutes) * (RAND + 1), 24 hours) where
 // n is the number of consecutive errors.
@@ -53,9 +78,9 @@ void V4ProtocolManagerUtil::RecordHttpResponseOrErrorCode(
 
 // static
 // The API hash call uses the pver4 Safe Browsing server.
-GURL V4ProtocolManagerUtil::GetRequestUrl(
-    const std::string& request_base64, const std::string& method_name,
-    const V4ProtocolConfig& config) {
+GURL V4ProtocolManagerUtil::GetRequestUrl(const std::string& request_base64,
+                                          const std::string& method_name,
+                                          const V4ProtocolConfig& config) {
   std::string url =
       ComposeUrl(kSbV4UrlPrefix, method_name, request_base64,
                  config.client_name, config.version, config.key_param);
@@ -63,13 +88,12 @@ GURL V4ProtocolManagerUtil::GetRequestUrl(
 }
 
 // static
-std::string V4ProtocolManagerUtil::ComposeUrl(
-    const std::string& prefix,
-    const std::string& method,
-    const std::string& request_base64,
-    const std::string& client_id,
-    const std::string& version,
-    const std::string& key_param) {
+std::string V4ProtocolManagerUtil::ComposeUrl(const std::string& prefix,
+                                              const std::string& method,
+                                              const std::string& request_base64,
+                                              const std::string& client_id,
+                                              const std::string& version,
+                                              const std::string& key_param) {
   DCHECK(!prefix.empty() && !method.empty() && !client_id.empty() &&
          !version.empty());
   std::string url =

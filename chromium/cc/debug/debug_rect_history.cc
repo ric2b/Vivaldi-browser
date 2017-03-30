@@ -9,6 +9,7 @@
 #include "cc/base/math_util.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/layer_iterator.h"
+#include "cc/layers/layer_list_iterator.h"
 #include "cc/layers/layer_utils.h"
 #include "cc/layers/render_surface_impl.h"
 #include "cc/trees/damage_tracker.h"
@@ -38,16 +39,16 @@ void DebugRectHistory::SaveDebugRectsForCurrentFrame(
   debug_rects_.clear();
 
   if (debug_state.show_touch_event_handler_rects)
-    SaveTouchEventHandlerRects(root_layer);
+    SaveTouchEventHandlerRects(root_layer->layer_tree_impl());
 
   if (debug_state.show_wheel_event_handler_rects)
     SaveWheelEventHandlerRects(root_layer);
 
   if (debug_state.show_scroll_event_handler_rects)
-    SaveScrollEventHandlerRects(root_layer);
+    SaveScrollEventHandlerRects(root_layer->layer_tree_impl());
 
   if (debug_state.show_non_fast_scrollable_rects)
-    SaveNonFastScrollableRects(root_layer);
+    SaveNonFastScrollableRects(root_layer->layer_tree_impl());
 
   if (debug_state.show_paint_rects)
     SavePaintRects(root_layer);
@@ -65,23 +66,22 @@ void DebugRectHistory::SaveDebugRectsForCurrentFrame(
     SaveLayerAnimationBoundsRects(render_surface_layer_list);
 }
 
-void DebugRectHistory::SavePaintRects(LayerImpl* layer) {
+void DebugRectHistory::SavePaintRects(LayerImpl* root_layer) {
   // We would like to visualize where any layer's paint rect (update rect) has
   // changed, regardless of whether this layer is skipped for actual drawing or
-  // not. Therefore we traverse recursively over all layers, not just the render
-  // surface list.
+  // not. Therefore we traverse over all layers, not just the render surface
+  // list.
+  for (auto* layer : *root_layer->layer_tree_impl()) {
+    Region invalidation_region = layer->GetInvalidationRegionForDebugging();
+    if (invalidation_region.IsEmpty() || !layer->DrawsContent())
+      continue;
 
-  Region invalidation_region = layer->GetInvalidationRegionForDebugging();
-  if (!invalidation_region.IsEmpty() && layer->DrawsContent()) {
     for (Region::Iterator it(invalidation_region); it.has_rect(); it.next()) {
       debug_rects_.push_back(DebugRect(
           PAINT_RECT_TYPE, MathUtil::MapEnclosingClippedRect(
                                layer->ScreenSpaceTransform(), it.rect())));
     }
   }
-
-  for (unsigned i = 0; i < layer->children().size(); ++i)
-    SavePaintRects(layer->children()[i].get());
 }
 
 void DebugRectHistory::SavePropertyChangedRects(
@@ -157,10 +157,11 @@ void DebugRectHistory::SaveScreenSpaceRects(
   }
 }
 
-void DebugRectHistory::SaveTouchEventHandlerRects(LayerImpl* layer) {
-  LayerTreeHostCommon::CallFunctionForSubtree(layer, [this](LayerImpl* layer) {
-    SaveTouchEventHandlerRectsCallback(layer);
-  });
+void DebugRectHistory::SaveTouchEventHandlerRects(LayerTreeImpl* tree_impl) {
+  LayerTreeHostCommon::CallFunctionForEveryLayer(
+      tree_impl,
+      [this](LayerImpl* layer) { SaveTouchEventHandlerRectsCallback(layer); },
+      CallFunctionLayerType::ALL_LAYERS);
 }
 
 void DebugRectHistory::SaveTouchEventHandlerRectsCallback(LayerImpl* layer) {
@@ -174,32 +175,33 @@ void DebugRectHistory::SaveTouchEventHandlerRectsCallback(LayerImpl* layer) {
   }
 }
 
-void DebugRectHistory::SaveWheelEventHandlerRects(LayerImpl* layer) {
-  LayerTreeHostCommon::CallFunctionForSubtree(layer, [this](LayerImpl* layer) {
-    SaveWheelEventHandlerRectsCallback(layer);
-  });
-}
-
-void DebugRectHistory::SaveWheelEventHandlerRectsCallback(LayerImpl* layer) {
+void DebugRectHistory::SaveWheelEventHandlerRects(LayerImpl* root_layer) {
   EventListenerProperties event_properties =
-      layer->layer_tree_impl()->event_listener_properties(
+      root_layer->layer_tree_impl()->event_listener_properties(
           EventListenerClass::kMouseWheel);
   if (event_properties == EventListenerProperties::kNone ||
-      (layer->layer_tree_impl()->settings().use_mouse_wheel_gestures &&
+      (root_layer->layer_tree_impl()->settings().use_mouse_wheel_gestures &&
        event_properties == EventListenerProperties::kPassive)) {
     return;
   }
 
-  debug_rects_.push_back(
-      DebugRect(WHEEL_EVENT_HANDLER_RECT_TYPE,
-                MathUtil::MapEnclosingClippedRect(layer->ScreenSpaceTransform(),
-                                                  gfx::Rect(layer->bounds()))));
+  // Since the wheel event handlers property is on the entire layer tree just
+  // mark inner viewport if have listeners.
+  LayerImpl* inner_viewport =
+      root_layer->layer_tree_impl()->InnerViewportScrollLayer();
+  if (!inner_viewport)
+    return;
+  debug_rects_.push_back(DebugRect(
+      WHEEL_EVENT_HANDLER_RECT_TYPE,
+      MathUtil::MapEnclosingClippedRect(inner_viewport->ScreenSpaceTransform(),
+                                        gfx::Rect(inner_viewport->bounds()))));
 }
 
-void DebugRectHistory::SaveScrollEventHandlerRects(LayerImpl* layer) {
-  LayerTreeHostCommon::CallFunctionForSubtree(layer, [this](LayerImpl* layer) {
-    SaveScrollEventHandlerRectsCallback(layer);
-  });
+void DebugRectHistory::SaveScrollEventHandlerRects(LayerTreeImpl* tree_impl) {
+  LayerTreeHostCommon::CallFunctionForEveryLayer(
+      tree_impl,
+      [this](LayerImpl* layer) { SaveScrollEventHandlerRectsCallback(layer); },
+      CallFunctionLayerType::ALL_LAYERS);
 }
 
 void DebugRectHistory::SaveScrollEventHandlerRectsCallback(LayerImpl* layer) {
@@ -212,10 +214,11 @@ void DebugRectHistory::SaveScrollEventHandlerRectsCallback(LayerImpl* layer) {
                                                   gfx::Rect(layer->bounds()))));
 }
 
-void DebugRectHistory::SaveNonFastScrollableRects(LayerImpl* layer) {
-  LayerTreeHostCommon::CallFunctionForSubtree(layer, [this](LayerImpl* layer) {
-    SaveNonFastScrollableRectsCallback(layer);
-  });
+void DebugRectHistory::SaveNonFastScrollableRects(LayerTreeImpl* tree_impl) {
+  LayerTreeHostCommon::CallFunctionForEveryLayer(
+      tree_impl,
+      [this](LayerImpl* layer) { SaveNonFastScrollableRectsCallback(layer); },
+      CallFunctionLayerType::ALL_LAYERS);
 }
 
 void DebugRectHistory::SaveNonFastScrollableRectsCallback(LayerImpl* layer) {

@@ -23,7 +23,7 @@
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
 #include "content/browser/browser_thread_impl.h"
-#include "content/browser/compositor/resize_lock.h"
+#include "content/browser/compositor/gl_helper.h"
 #include "content/browser/compositor/test/no_transport_image_transport_factory.h"
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
 #include "content/browser/gpu/compositor_util.h"
@@ -35,8 +35,8 @@
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/resize_lock.h"
 #include "content/browser/web_contents/web_contents_view_aura.h"
-#include "content/common/gpu/client/gl_helper.h"
 #include "content/common/host_shared_bitmap_manager.h"
 #include "content/common/input/input_event_utils.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
@@ -152,9 +152,12 @@ class TestOverscrollDelegate : public OverscrollControllerDelegate {
 
 class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
  public:
-  MockRenderWidgetHostDelegate() {}
+  MockRenderWidgetHostDelegate() : rwh_(nullptr), is_fullscreen_(false) {}
   ~MockRenderWidgetHostDelegate() override {}
   const NativeWebKeyboardEvent* last_event() const { return last_event_.get(); }
+  void set_widget_host(RenderWidgetHostImpl* rwh) { rwh_ = rwh; }
+  void set_is_fullscreen(bool is_fullscreen) { is_fullscreen_ = is_fullscreen; }
+
  protected:
   // RenderWidgetHostDelegate:
   bool PreHandleKeyboardEvent(const NativeWebKeyboardEvent& event,
@@ -166,9 +169,20 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   void Copy() override {}
   void Paste() override {}
   void SelectAll() override {}
+  void SendScreenRects() override {
+    if (rwh_)
+      rwh_->SendScreenRects();
+  }
+  bool IsFullscreenForCurrentTab(
+      RenderWidgetHostImpl* render_widget_host) const override {
+    return is_fullscreen_;
+  }
 
  private:
   scoped_ptr<NativeWebKeyboardEvent> last_event_;
+  RenderWidgetHostImpl* rwh_;
+  bool is_fullscreen_;
+
   DISALLOW_COPY_AND_ASSIGN(MockRenderWidgetHostDelegate);
 };
 
@@ -270,7 +284,7 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
   FakeRenderWidgetHostViewAura(RenderWidgetHost* widget,
                                bool is_guest_view_hack)
       : RenderWidgetHostViewAura(widget, is_guest_view_hack),
-        has_resize_lock_(false) {}
+        can_create_resize_lock_(true) {}
 
   void UseFakeDispatcher() {
     dispatcher_ = new FakeWindowEventDispatcher(window()->GetHost());
@@ -287,7 +301,9 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
         new FakeResizeLock(desired_size, defer_compositor_lock));
   }
 
-  bool DelegatedFrameCanCreateResizeLock() const override { return true; }
+  bool DelegatedFrameCanCreateResizeLock() const override {
+    return can_create_resize_lock_;
+  }
 
   void RunOnCompositingDidCommit() {
     GetDelegatedFrameHost()->OnCompositingDidCommitForTesting(
@@ -331,7 +347,7 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
     return pointer_state();
   }
 
-  bool has_resize_lock_;
+  bool can_create_resize_lock_;
   gfx::Size last_frame_size_;
   scoped_ptr<cc::CopyOutputRequest> last_copy_request_;
   FakeWindowEventDispatcher* dispatcher_;
@@ -406,8 +422,10 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     sink_ = &process_host_->sink();
 
     int32_t routing_id = process_host_->GetNextRoutingID();
-    parent_host_ =
-        new RenderWidgetHostImpl(&delegate_, process_host_, routing_id, false);
+    delegates_.push_back(make_scoped_ptr(new MockRenderWidgetHostDelegate));
+    parent_host_ = new RenderWidgetHostImpl(delegates_.back().get(),
+                                            process_host_, routing_id, false);
+    delegates_.back()->set_widget_host(parent_host_);
     parent_view_ = new RenderWidgetHostViewAura(parent_host_,
                                                 is_guest_view_hack_);
     parent_view_->InitAsChild(NULL);
@@ -416,8 +434,10 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
                                           gfx::Rect());
 
     routing_id = process_host_->GetNextRoutingID();
-    widget_host_ =
-        new RenderWidgetHostImpl(&delegate_, process_host_, routing_id, false);
+    delegates_.push_back(make_scoped_ptr(new MockRenderWidgetHostDelegate));
+    widget_host_ = new RenderWidgetHostImpl(delegates_.back().get(),
+                                            process_host_, routing_id, false);
+    delegates_.back()->set_widget_host(widget_host_);
     widget_host_->Init();
     view_ = new FakeRenderWidgetHostViewAura(widget_host_, is_guest_view_hack_);
   }
@@ -506,8 +526,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
       return;
     }
 
-    if (!WebInputEventTraits::WillReceiveAckFromRenderer(
-            *base::get<0>(params)))
+    InputEventDispatchType dispatch_type = base::get<2>(params);
+    if (dispatch_type == InputEventDispatchType::DISPATCH_TYPE_NON_BLOCKING)
       return;
 
     const blink::WebInputEvent* event = base::get<0>(params);
@@ -529,7 +549,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   BrowserThreadImpl browser_thread_for_ui_;
   scoped_ptr<aura::test::AuraTestHelper> aura_test_helper_;
   scoped_ptr<BrowserContext> browser_context_;
-  MockRenderWidgetHostDelegate delegate_;
+  std::vector<scoped_ptr<MockRenderWidgetHostDelegate>> delegates_;
   MockRenderProcessHost* process_host_;
 
   // Tests should set these to NULL if they've already triggered their
@@ -1675,6 +1695,58 @@ TEST_F(RenderWidgetHostViewAuraTest, RecreateLayers) {
   }
 }
 
+// If the view size is larger than the compositor frame then extra layers
+// should be created to fill the gap.
+TEST_F(RenderWidgetHostViewAuraTest, DelegatedFrameGutter) {
+  gfx::Size large_size(100, 100);
+  gfx::Size small_size(40, 45);
+  gfx::Size medium_size(40, 95);
+
+  // Prevent the DelegatedFrameHost from skipping frames.
+  view_->can_create_resize_lock_ = false;
+
+  view_->InitAsChild(NULL);
+  aura::client::ParentWindowWithContext(
+      view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
+      gfx::Rect());
+  view_->SetSize(large_size);
+  view_->Show();
+  scoped_ptr<cc::CompositorFrame> frame =
+      MakeDelegatedFrame(1.f, small_size, gfx::Rect(small_size));
+  frame->metadata.root_background_color = SK_ColorRED;
+  view_->OnSwapCompositorFrame(0, std::move(frame));
+
+  ui::Layer* parent_layer = view_->GetNativeView()->layer();
+
+  ASSERT_EQ(2u, parent_layer->children().size());
+  EXPECT_EQ(gfx::Rect(40, 0, 60, 100), parent_layer->children()[0]->bounds());
+  EXPECT_EQ(SK_ColorRED, parent_layer->children()[0]->background_color());
+  EXPECT_EQ(gfx::Rect(0, 45, 40, 55), parent_layer->children()[1]->bounds());
+  EXPECT_EQ(SK_ColorRED, parent_layer->children()[1]->background_color());
+
+  delegates_.back()->set_is_fullscreen(true);
+  view_->SetSize(medium_size);
+
+  // Right gutter is unnecessary.
+  ASSERT_EQ(1u, parent_layer->children().size());
+  EXPECT_EQ(gfx::Rect(0, 45, 40, 50), parent_layer->children()[0]->bounds());
+
+  // RWH is fullscreen, so gutters should be black.
+  EXPECT_EQ(SK_ColorBLACK, parent_layer->children()[0]->background_color());
+
+  frame = MakeDelegatedFrame(1.f, medium_size, gfx::Rect(medium_size));
+  view_->OnSwapCompositorFrame(0, std::move(frame));
+  EXPECT_EQ(0u, parent_layer->children().size());
+
+  view_->SetSize(large_size);
+  ASSERT_EQ(2u, parent_layer->children().size());
+
+  // This should evict the frame and remove the gutter layers.
+  view_->Hide();
+  view_->SetSize(small_size);
+  ASSERT_EQ(0u, parent_layer->children().size());
+}
+
 TEST_F(RenderWidgetHostViewAuraTest, Resize) {
   gfx::Size size1(100, 100);
   gfx::Size size2(200, 200);
@@ -1940,8 +2012,10 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
   // Create a bunch of renderers.
   for (size_t i = 0; i < renderer_count; ++i) {
     int32_t routing_id = process_host_->GetNextRoutingID();
-    hosts[i] =
-        new RenderWidgetHostImpl(&delegate_, process_host_, routing_id, false);
+    delegates_.push_back(make_scoped_ptr(new MockRenderWidgetHostDelegate));
+    hosts[i] = new RenderWidgetHostImpl(delegates_.back().get(), process_host_,
+                                        routing_id, false);
+    delegates_.back()->set_widget_host(hosts[i]);
     hosts[i]->Init();
     views[i] = new FakeRenderWidgetHostViewAura(hosts[i], false);
     views[i]->InitAsChild(NULL);
@@ -2104,8 +2178,10 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithLocking) {
   // Create a bunch of renderers.
   for (size_t i = 0; i < renderer_count; ++i) {
     int32_t routing_id = process_host_->GetNextRoutingID();
-    hosts[i] =
-        new RenderWidgetHostImpl(&delegate_, process_host_, routing_id, false);
+    delegates_.push_back(make_scoped_ptr(new MockRenderWidgetHostDelegate));
+    hosts[i] = new RenderWidgetHostImpl(delegates_.back().get(), process_host_,
+                                        routing_id, false);
+    delegates_.back()->set_widget_host(hosts[i]);
     hosts[i]->Init();
     views[i] = new FakeRenderWidgetHostViewAura(hosts[i], false);
     views[i]->InitAsChild(NULL);
@@ -2173,8 +2249,10 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
   // Create a bunch of renderers.
   for (size_t i = 0; i < renderer_count; ++i) {
     int32_t routing_id = process_host_->GetNextRoutingID();
-    hosts[i] =
-        new RenderWidgetHostImpl(&delegate_, process_host_, routing_id, false);
+    delegates_.push_back(make_scoped_ptr(new MockRenderWidgetHostDelegate));
+    hosts[i] = new RenderWidgetHostImpl(delegates_.back().get(), process_host_,
+                                        routing_id, false);
+    delegates_.back()->set_widget_host(hosts[i]);
     hosts[i]->Init();
     views[i] = new FakeRenderWidgetHostViewAura(hosts[i], false);
     views[i]->InitAsChild(NULL);
@@ -3876,11 +3954,14 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   // consumed and have triggered a fling animation (as tracked by the router).
   EXPECT_FALSE(parent_host_->input_router()->HasPendingEvents());
 
+  SimulateGestureEvent(WebInputEvent::GestureScrollEnd,
+                       blink::WebGestureDeviceTouchscreen);
+
   SimulateWheelEvent(-5, 0, 0, true);    // sent directly
   SimulateWheelEvent(-60, 0, 0, true);   // enqueued
   SimulateWheelEvent(-100, 0, 0, true);  // coalesced into previous event
   EXPECT_TRUE(ScrollStateIsUnknown());
-  EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
+  EXPECT_EQ(3U, GetSentMessageCountAndResetSink());
 
   // The first wheel scroll did not scroll content. Overscroll should not start
   // yet, since enough hasn't been scrolled.
@@ -3998,7 +4079,7 @@ TEST_F(RenderWidgetHostViewAuraTest, KeyEvent) {
                          ui::EF_NONE);
   view_->OnKeyEvent(&key_event);
 
-  const NativeWebKeyboardEvent* event = delegate_.last_event();
+  const NativeWebKeyboardEvent* event = delegates_.back()->last_event();
   EXPECT_NE(nullptr, event);
   if (event) {
     EXPECT_EQ(key_event.key_code(), event->windowsKeyCode);
@@ -4041,7 +4122,7 @@ TEST_F(RenderWidgetHostViewAuraTest, SetCanScrollForWebMouseWheelEvent) {
   wheel_event = static_cast<const WebMouseWheelEvent*>(input_event);
   // Check if the canScroll set to true when no modifier is applied to the
   // mouse wheel event.
-  EXPECT_EQ(!UseGestureBasedWheelScrolling(), wheel_event->canScroll);
+  EXPECT_TRUE(wheel_event->canScroll);
   sink_->ClearMessages();
 
   SendInputEventACK(blink::WebInputEvent::MouseWheel,
@@ -4056,7 +4137,7 @@ TEST_F(RenderWidgetHostViewAuraTest, SetCanScrollForWebMouseWheelEvent) {
   wheel_event = static_cast<const WebMouseWheelEvent*>(input_event);
   // Check if the canScroll set to true when ctrl-touchpad-scroll is generated
   // from scroll event.
-  EXPECT_EQ(!UseGestureBasedWheelScrolling(), wheel_event->canScroll);
+  EXPECT_TRUE(wheel_event->canScroll);
 }
 
 // Ensures that the mapping from ui::TouchEvent to blink::WebTouchEvent doesn't

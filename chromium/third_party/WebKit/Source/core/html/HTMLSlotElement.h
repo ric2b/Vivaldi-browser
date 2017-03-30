@@ -43,9 +43,9 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
 public:
     DECLARE_NODE_FACTORY(HTMLSlotElement);
 
-    const WillBeHeapVector<RefPtrWillBeMember<Node>>& getAssignedNodes() const { ASSERT(!needsDistributionRecalc()); return m_assignedNodes; }
-    const WillBeHeapVector<RefPtrWillBeMember<Node>>& getDistributedNodes();
-    const WillBeHeapVector<RefPtrWillBeMember<Node>> getAssignedNodesForBinding(const AssignedNodesOptions&);
+    const HeapVector<Member<Node>>& assignedNodes() const { ASSERT(!needsDistributionRecalc()); return m_assignedNodes; }
+    const HeapVector<Member<Node>>& getDistributedNodes();
+    const HeapVector<Member<Node>> assignedNodesForBinding(const AssignedNodesOptions&);
 
     Node* firstDistributedNode() const { return m_distributedNodes.isEmpty() ? nullptr : m_distributedNodes.first().get(); }
     Node* lastDistributedNode() const { return m_distributedNodes.isEmpty() ? nullptr : m_distributedNodes.last().get(); }
@@ -56,7 +56,7 @@ public:
     void appendAssignedNode(Node&);
     void appendDistributedNode(Node&);
     void appendDistributedNodesFrom(const HTMLSlotElement& other);
-    void clearDistribution();
+    void willUpdateDistribution();
 
     bool hasSlotChangeEventListener();
 
@@ -68,17 +68,21 @@ public:
 
     void attributeChanged(const QualifiedName&, const AtomicString& oldValue, const AtomicString& newValue, AttributeModificationReason = ModifiedDirectly) final;
 
+    short tabIndex() const override;
+
     DECLARE_VIRTUAL_TRACE();
 
 private:
     HTMLSlotElement(Document&);
 
     enum DistributionState {
-        DistributionReset,
+        DistributionOnGoing,
+        DistributionDone,
         DistributionChanged,
         DistributionUnchanged
     };
 
+    void clearDistribution();
     void childrenChanged(const ChildrenChange&) final;
     InsertionNotificationRequest insertedInto(ContainerNode*) final;
     void removedFrom(ContainerNode*) final;
@@ -87,11 +91,11 @@ private:
     void dispatchSlotChangeEvent();
     bool distributionChanged();
 
-    WillBeHeapVector<RefPtrWillBeMember<Node>> m_assignedNodes;
-    WillBeHeapVector<RefPtrWillBeMember<Node>> m_distributedNodes;
-    WillBeHeapHashMap<RawPtrWillBeMember<const Node>, size_t> m_distributedIndices;
+    HeapVector<Member<Node>> m_assignedNodes;
+    HeapVector<Member<Node>> m_distributedNodes;
+    HeapHashMap<Member<const Node>, size_t> m_distributedIndices;
     // TODO(hayato): Remove m_oldDistibutedNodes and make SlotAssignment check the diffirence between old and new distributed nodes for each slot to save the memories.
-    WillBeHeapVector<RefPtrWillBeMember<Node>> m_oldDistributedNodes;
+    HeapVector<Member<Node>> m_oldDistributedNodes;
     DistributionState m_distributionState;
 };
 

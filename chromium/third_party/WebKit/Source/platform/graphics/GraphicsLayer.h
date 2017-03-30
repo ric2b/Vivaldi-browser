@@ -46,7 +46,6 @@
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/heap/Handle.h"
 #include "platform/transforms/TransformationMatrix.h"
-#include "public/platform/WebCompositorAnimationDelegate.h"
 #include "public/platform/WebContentLayer.h"
 #include "public/platform/WebImageLayer.h"
 #include "public/platform/WebLayerScrollClient.h"
@@ -58,14 +57,11 @@
 namespace blink {
 
 class FloatRect;
-class GraphicsLayerFactory;
-class GraphicsLayerFactoryChromium;
 class Image;
 class LinkHighlight;
 class JSONObject;
 class PaintController;
 class ScrollableArea;
-class CompositorAnimation;
 class WebLayer;
 
 typedef Vector<GraphicsLayer*, 64> GraphicsLayerVector;
@@ -73,10 +69,10 @@ typedef Vector<GraphicsLayer*, 64> GraphicsLayerVector;
 // GraphicsLayer is an abstraction for a rendering surface with backing store,
 // which may have associated transformation and animations.
 
-class PLATFORM_EXPORT GraphicsLayer : public WebCompositorAnimationDelegate, public WebLayerScrollClient, public cc::LayerClient, public DisplayItemClient {
+class PLATFORM_EXPORT GraphicsLayer : public WebLayerScrollClient, public cc::LayerClient, public DisplayItemClient {
     WTF_MAKE_NONCOPYABLE(GraphicsLayer); USING_FAST_MALLOC(GraphicsLayer);
 public:
-    static PassOwnPtr<GraphicsLayer> create(GraphicsLayerFactory*, GraphicsLayerClient*);
+    static PassOwnPtr<GraphicsLayer> create(GraphicsLayerClient*);
 
     ~GraphicsLayer() override;
 
@@ -85,7 +81,7 @@ public:
     GraphicsLayerDebugInfo& debugInfo();
 
     void setCompositingReasons(CompositingReasons);
-    CompositingReasons compositingReasons() const { return m_debugInfo.compositingReasons(); }
+    CompositingReasons getCompositingReasons() const { return m_debugInfo.getCompositingReasons(); }
     void setSquashingDisallowedReasons(SquashingDisallowedReasons);
     void setOwnerNodeId(int);
 
@@ -181,6 +177,7 @@ public:
     void setFilterQuality(SkFilterQuality);
 
     // Some GraphicsLayers paint only the foreground or the background content
+    GraphicsLayerPaintingPhase paintingPhase() const { return m_paintingPhase; }
     void setPaintingPhase(GraphicsLayerPaintingPhase);
 
     void setNeedsDisplay();
@@ -193,14 +190,6 @@ public:
 
     // Set that the position/size of the contents (image or video).
     void setContentsRect(const IntRect&);
-
-    // Return true if the animation is handled by the compositing system. If this returns
-    // false, the animation will be run by AnimationController.
-    // These methods handle both transitions and keyframe animations.
-    bool addAnimation(PassOwnPtr<CompositorAnimation>);
-    void pauseAnimation(int animationId, double /*timeOffset*/);
-    void removeAnimation(int animationId);
-    void abortAnimation(int animationId);
 
     // Layer contents
     void setContentsToImage(Image*, RespectImageOrientationEnum = DoNotRespectImageOrientation);
@@ -229,10 +218,10 @@ public:
     void removeLinkHighlight(LinkHighlight*);
     // Exposed for tests
     unsigned numLinkHighlights() { return m_linkHighlights.size(); }
-    LinkHighlight* linkHighlight(int i) { return m_linkHighlights[i]; }
+    LinkHighlight* getLinkHighlight(int i) { return m_linkHighlights[i]; }
 
     void setScrollableArea(ScrollableArea*, bool isViewport);
-    ScrollableArea* scrollableArea() const { return m_scrollableArea; }
+    ScrollableArea* getScrollableArea() const { return m_scrollableArea; }
 
     WebContentLayer* contentLayer() const { return m_layer.get(); }
 
@@ -242,18 +231,13 @@ public:
     IntRect interestRect();
     void paint(const IntRect* interestRect, GraphicsContext::DisabledMode = GraphicsContext::NothingDisabled);
 
-    // WebCompositorAnimationDelegate implementation.
-    void notifyAnimationStarted(double monotonicTime, int group) override;
-    void notifyAnimationFinished(double monotonicTime, int group) override;
-    void notifyAnimationAborted(double monotonicTime, int group) override;
-
     // WebLayerScrollClient implementation.
     void didScroll() override;
 
     // cc::LayerClient implementation.
-    scoped_refptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(cc::Layer*) override;
+    std::unique_ptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(cc::Layer*) override;
 
-    PaintController& paintController();
+    PaintController& getPaintController();
 
     // Exposed for tests.
     WebLayer* contentsLayer() const { return m_contentsLayer; }
@@ -273,11 +257,8 @@ protected:
     bool shouldFlattenTransform() const { return m_shouldFlattenTransform; }
 
     explicit GraphicsLayer(GraphicsLayerClient*);
-    // GraphicsLayerFactoryChromium that wants to create a GraphicsLayer need to be friends.
-    friend class GraphicsLayerFactoryChromium;
     // for testing
     friend class CompositedLayerMappingTest;
-    friend class FakeGraphicsLayerFactory;
     friend class PaintControllerPaintTestBase;
 
 private:
@@ -372,7 +353,7 @@ private:
 
     OwnPtr<ContentLayerDelegate> m_contentLayerDelegate;
 
-    RawPtrWillBeWeakPersistent<ScrollableArea> m_scrollableArea;
+    WeakPersistent<ScrollableArea> m_scrollableArea;
     GraphicsLayerDebugInfo m_debugInfo;
     int m_3dRenderingContext;
 

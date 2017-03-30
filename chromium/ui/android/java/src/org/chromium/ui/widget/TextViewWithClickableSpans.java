@@ -4,6 +4,7 @@
 
 package org.chromium.ui.widget;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.Bundle;
 import android.text.Layout;
@@ -18,6 +19,8 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.PopupMenu;
 import android.widget.TextView;
+
+import org.chromium.base.VisibleForTesting;
 
 /**
  * ClickableSpan isn't accessible by default, so we create a subclass
@@ -76,6 +79,7 @@ public class TextViewWithClickableSpans extends TextView {
     }
 
     @Override
+    @SuppressLint("ClickableViewAccessibility")
     public boolean onTouchEvent(MotionEvent event) {
         boolean superResult = super.onTouchEvent(event);
 
@@ -118,7 +122,11 @@ public class TextViewWithClickableSpans extends TextView {
         return clickableSpans.length > 0;
     }
 
-    private ClickableSpan[] getClickableSpans() {
+    /**
+     * Returns the ClickableSpans in this TextView's text.
+     */
+    @VisibleForTesting
+    public ClickableSpan[] getClickableSpans() {
         CharSequence text = getText();
         if (!(text instanceof SpannableString)) return null;
 

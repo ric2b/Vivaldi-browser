@@ -42,7 +42,7 @@ class MockQuicClientSession : public QuicClientSession {
       : QuicClientSession(
             DefaultQuicConfig(),
             connection,
-            QuicServerId("example.com", 80, PRIVACY_MODE_DISABLED),
+            QuicServerId("example.com", 443, PRIVACY_MODE_DISABLED),
             &crypto_config_,
             push_promise_index),
         crypto_config_(CryptoTestUtils::ProofVerifierForTesting()) {}
@@ -95,12 +95,23 @@ class QuicSpdyClientStreamTest : public ::testing::Test {
   string body_;
 };
 
+TEST_F(QuicSpdyClientStreamTest, TestReceivingIllegalResponseStatusCode) {
+  headers_.ReplaceOrAppendHeader(":status", "200 ok");
+  headers_string_ = SpdyBalsaUtils::SerializeResponseHeaders(headers_);
+
+  stream_->OnStreamHeaders(headers_string_);
+  EXPECT_CALL(*connection_,
+              SendRstStream(stream_->id(), QUIC_BAD_APPLICATION_PAYLOAD, 0));
+  stream_->OnStreamHeadersComplete(false, headers_string_.size());
+  EXPECT_EQ(QUIC_BAD_APPLICATION_PAYLOAD, stream_->stream_error());
+}
+
 TEST_F(QuicSpdyClientStreamTest, TestFraming) {
   stream_->OnStreamHeaders(headers_string_);
   stream_->OnStreamHeadersComplete(false, headers_string_.size());
   stream_->OnStreamFrame(
       QuicStreamFrame(stream_->id(), /*fin=*/false, /*offset=*/0, body_));
-  EXPECT_EQ("200", stream_->headers().find(":status")->second);
+  EXPECT_EQ("200", stream_->response_headers().find(":status")->second);
   EXPECT_EQ(200, stream_->response_code());
   EXPECT_EQ(body_, stream_->data());
 }
@@ -110,7 +121,7 @@ TEST_F(QuicSpdyClientStreamTest, TestFramingOnePacket) {
   stream_->OnStreamHeadersComplete(false, headers_string_.size());
   stream_->OnStreamFrame(
       QuicStreamFrame(stream_->id(), /*fin=*/false, /*offset=*/0, body_));
-  EXPECT_EQ("200", stream_->headers().find(":status")->second);
+  EXPECT_EQ("200", stream_->response_headers().find(":status")->second);
   EXPECT_EQ(200, stream_->response_code());
   EXPECT_EQ(body_, stream_->data());
 }
@@ -122,7 +133,7 @@ TEST_F(QuicSpdyClientStreamTest, DISABLED_TestFramingExtraData) {
   stream_->OnStreamHeadersComplete(false, headers_string_.size());
   // The headers should parse successfully.
   EXPECT_EQ(QUIC_STREAM_NO_ERROR, stream_->stream_error());
-  EXPECT_EQ("200", stream_->headers().find(":status")->second);
+  EXPECT_EQ("200", stream_->response_headers().find(":status")->second);
   EXPECT_EQ(200, stream_->response_code());
 
   EXPECT_CALL(*connection_,
@@ -144,8 +155,6 @@ TEST_F(QuicSpdyClientStreamTest, TestNoBidirectionalStreaming) {
 TEST_F(QuicSpdyClientStreamTest, ReceivingTrailers) {
   // Test that receiving trailing headers, containing a final offset, results in
   // the stream being closed at that byte offset.
-  ValueRestore<bool> old_flag(&FLAGS_quic_supports_trailers, true);
-
   // Send headers as usual.
   stream_->OnStreamHeaders(headers_string_);
   stream_->OnStreamHeadersComplete(false, headers_string_.size());

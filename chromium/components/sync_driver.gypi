@@ -16,11 +16,13 @@
         '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_proto_cpp',
         'data_use_measurement_core',
         'invalidation_public',
+        'metrics',
         'os_crypt',
         'signin_core_browser',
         'version_info',
       ],
       'export_dependent_settings': [
+        '../sync/sync.gyp:sync',
         '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation',
       ],
       'include_dirs': [
@@ -48,6 +50,8 @@
         'sync_driver/data_type_manager_observer.h',
         'sync_driver/data_type_status_table.cc',
         'sync_driver/data_type_status_table.h',
+        'sync_driver/device_count_metrics_provider.cc',
+        'sync_driver/device_count_metrics_provider.h',
         'sync_driver/device_info.cc',
         'sync_driver/device_info.h',
         'sync_driver/device_info_data_type_controller.cc',

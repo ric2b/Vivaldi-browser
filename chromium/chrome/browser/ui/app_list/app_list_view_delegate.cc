@@ -36,7 +36,6 @@
 #include "chrome/browser/ui/apps/chrome_app_delegate.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/common/chrome_switches.h"
@@ -86,6 +85,11 @@
 #include "chrome/browser/web_applications/web_app_win.h"
 #endif
 
+#if !defined(OS_CHROMEOS)
+#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/generated_resources.h"
+#include "ui/base/l10n/l10n_util.h"
+#endif
 
 namespace chrome {
 const char kAppLauncherCategoryTag[] = "AppLauncher";
@@ -99,7 +103,7 @@ const int kAutoLaunchDefaultTimeoutMilliSec = 50;
 void CreateShortcutInWebAppDir(
     const base::FilePath& app_data_dir,
     base::Callback<void(const base::FilePath&)> callback,
-    scoped_ptr<web_app::ShortcutInfo> info) {
+    std::unique_ptr<web_app::ShortcutInfo> info) {
   content::BrowserThread::PostTaskAndReplyWithResult(
       content::BrowserThread::FILE, FROM_HERE,
       base::Bind(web_app::CreateShortcutInWebAppDir, app_data_dir,
@@ -325,11 +329,10 @@ void AppListViewDelegate::SetUpProfileSwitcher() {
   if (!profile_)
     return;
 
+#if defined(USE_ASH)
   // Don't populate the app list users if we are on the ash desktop.
-  chrome::HostDesktopType desktop = chrome::GetHostDesktopTypeForNativeWindow(
-      controller_->GetAppListWindow());
-  if (desktop == chrome::HOST_DESKTOP_TYPE_ASH)
-    return;
+  return;
+#endif  // USE_ASH
 
   // Populate the app list users.
   PopulateUsers(profile_->GetPath(), &users_);
@@ -350,7 +353,8 @@ void AppListViewDelegate::SetUpCustomLauncherPages() {
     std::string extension_id = it->host();
     apps::CustomLauncherPageContents* page_contents =
         new apps::CustomLauncherPageContents(
-            scoped_ptr<extensions::AppDelegate>(new ChromeAppDelegate(false)),
+            std::unique_ptr<extensions::AppDelegate>(
+                new ChromeAppDelegate(false)),
             extension_id);
     page_contents->Initialize(profile_, *it);
     custom_page_contents_.push_back(page_contents);
@@ -787,6 +791,42 @@ void AppListViewDelegate::RemoveObserver(
     app_list::AppListViewDelegateObserver* observer) {
   observers_.RemoveObserver(observer);
 }
+
+#if !defined(OS_CHROMEOS)
+base::string16 AppListViewDelegate::GetMessageTitle() const {
+  return l10n_util::GetStringUTF16(IDS_APP_LIST_MESSAGE_TITLE);
+}
+
+base::string16 AppListViewDelegate::GetMessageText(
+    size_t* message_break) const {
+  return l10n_util::GetStringFUTF16(IDS_APP_LIST_MESSAGE_TEXT, base::string16(),
+                                    message_break);
+}
+
+base::string16 AppListViewDelegate::GetAppsShortcutName() const {
+  return l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_APPS_SHORTCUT_NAME);
+}
+
+base::string16 AppListViewDelegate::GetLearnMoreText() const {
+  return l10n_util::GetStringUTF16(IDS_APP_LIST_MESSAGE_LEARN_MORE_TEXT);
+}
+
+base::string16 AppListViewDelegate::GetLearnMoreLink() const {
+  return l10n_util::GetStringUTF16(IDS_APP_LIST_MESSAGE_LEARN_MORE_LINK);
+}
+
+gfx::ImageSkia* AppListViewDelegate::GetAppsIcon() const {
+  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+  // Ensure it's backed by a native image type in the ResourceBundle cache.
+  rb.GetNativeImageNamed(IDR_BOOKMARK_BAR_APPS_SHORTCUT);
+  return rb.GetImageSkiaNamed(IDR_BOOKMARK_BAR_APPS_SHORTCUT);
+}
+
+void AppListViewDelegate::OpenLearnMoreLink() {
+  controller_->OpenURL(profile_, GURL(GetLearnMoreLink()),
+                       ui::PAGE_TRANSITION_LINK, CURRENT_TAB);
+}
+#endif  // !defined(OS_CHROMEOS)
 
 void AppListViewDelegate::OnTemplateURLServiceChanged() {
   if (!app_list::switches::IsExperimentalAppListEnabled())

@@ -35,16 +35,16 @@
  */
 WebInspector.PlatformFontsWidget = function(sharedModel)
 {
-    WebInspector.ThrottledWidget.call(this);
-    this.element.classList.add("platform-fonts");
+    WebInspector.ThrottledWidget.call(this, true);
+    this.registerRequiredCSS("elements/platformFontsWidget.css");
 
     this._sharedModel = sharedModel;
     this._sharedModel.addEventListener(WebInspector.SharedSidebarModel.Events.ComputedStyleChanged, this.update, this);
 
-    this._sectionTitle = createElementWithClass("div", "sidebar-separator");
-    this.element.appendChild(this._sectionTitle);
+    this._sectionTitle = createElementWithClass("div", "title");
+    this.contentElement.appendChild(this._sectionTitle);
     this._sectionTitle.textContent = WebInspector.UIString("Rendered Fonts");
-    this._fontStatsSection = this.element.createChild("div", "stats-section");
+    this._fontStatsSection = this.contentElement.createChild("div", "stats-section");
 }
 
 /**
@@ -99,12 +99,15 @@ WebInspector.PlatformFontsWidget.prototype = {
             var fontNameElement = fontStatElement.createChild("span", "font-name");
             fontNameElement.textContent = platformFonts[i].familyName;
 
-            var fontDelimeterElement = fontStatElement.createChild("span", "delimeter");
+            var fontDelimeterElement = fontStatElement.createChild("span", "font-delimeter");
             fontDelimeterElement.textContent = "\u2014";
+
+            var fontOrigin = fontStatElement.createChild("span");
+            fontOrigin.textContent = platformFonts[i].isCustomFont? WebInspector.UIString("Network resource") : WebInspector.UIString("Local file");
 
             var fontUsageElement = fontStatElement.createChild("span", "font-usage");
             var usage = platformFonts[i].glyphCount;
-            fontUsageElement.textContent = usage === 1 ? WebInspector.UIString("%d glyph", usage) : WebInspector.UIString("%d glyphs", usage);
+            fontUsageElement.textContent = usage === 1 ? WebInspector.UIString("(%d glyph)", usage) : WebInspector.UIString("(%d glyphs)", usage);
         }
     },
 

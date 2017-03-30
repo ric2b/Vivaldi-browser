@@ -6,10 +6,14 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_runner.h"
 #include "base/time/time.h"
@@ -22,26 +26,27 @@
 #include "url/gurl.h"
 
 namespace storage {
+using BlobState = BlobStorageRegistry::BlobState;
 
 namespace {
 
 class FileStreamReaderProviderImpl
     : public BlobReader::FileStreamReaderProvider {
  public:
-  FileStreamReaderProviderImpl(FileSystemContext* file_system_context)
+  explicit FileStreamReaderProviderImpl(FileSystemContext* file_system_context)
       : file_system_context_(file_system_context) {}
   ~FileStreamReaderProviderImpl() override {}
 
-  scoped_ptr<FileStreamReader> CreateForLocalFile(
+  std::unique_ptr<FileStreamReader> CreateForLocalFile(
       base::TaskRunner* task_runner,
       const base::FilePath& file_path,
       int64_t initial_offset,
       const base::Time& expected_modification_time) override {
-    return make_scoped_ptr(FileStreamReader::CreateForLocalFile(
+    return base::WrapUnique(FileStreamReader::CreateForLocalFile(
         task_runner, file_path, initial_offset, expected_modification_time));
   }
 
-  scoped_ptr<FileStreamReader> CreateFileStreamReader(
+  std::unique_ptr<FileStreamReader> CreateFileStreamReader(
       const GURL& filesystem_url,
       int64_t offset,
       int64_t max_bytes_to_read,
@@ -70,18 +75,13 @@ BlobDataHandle::BlobDataHandleShared::BlobDataHandleShared(
   context_->IncrementBlobRefCount(uuid);
 }
 
-scoped_ptr<BlobReader> BlobDataHandle::CreateReader(
+std::unique_ptr<BlobReader> BlobDataHandle::CreateReader(
     FileSystemContext* file_system_context,
     base::SequencedTaskRunner* file_task_runner) const {
-  return scoped_ptr<BlobReader>(new BlobReader(
-      this, scoped_ptr<BlobReader::FileStreamReaderProvider>(
+  return std::unique_ptr<BlobReader>(new BlobReader(
+      this, std::unique_ptr<BlobReader::FileStreamReaderProvider>(
                 new FileStreamReaderProviderImpl(file_system_context)),
       file_task_runner));
-}
-
-scoped_ptr<BlobDataSnapshot>
-BlobDataHandle::BlobDataHandleShared::CreateSnapshot() const {
-  return context_->CreateSnapshot(uuid_);
 }
 
 BlobDataHandle::BlobDataHandleShared::~BlobDataHandleShared() {
@@ -117,9 +117,35 @@ BlobDataHandle::~BlobDataHandle() {
   }
 }
 
-scoped_ptr<BlobDataSnapshot> BlobDataHandle::CreateSnapshot() const {
+bool BlobDataHandle::IsBeingBuilt() const {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
-  return shared_->CreateSnapshot();
+  if (!shared_->context_)
+    return false;
+  return shared_->context_->IsBeingBuilt(shared_->uuid_);
+}
+
+bool BlobDataHandle::IsBroken() const {
+  DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
+  if (!shared_->context_)
+    return true;
+  return shared_->context_->IsBroken(shared_->uuid_);
+}
+
+void BlobDataHandle::RunOnConstructionComplete(
+    const BlobConstructedCallback& done) {
+  DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
+  if (!shared_->context_.get()) {
+    done.Run(false, IPCBlobCreationCancelCode::UNKNOWN);
+    return;
+  }
+  shared_->context_->RunOnConstructionComplete(shared_->uuid_, done);
+}
+
+std::unique_ptr<BlobDataSnapshot> BlobDataHandle::CreateSnapshot() const {
+  DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
+  if (!shared_->context_.get())
+    return nullptr;
+  return shared_->context_->CreateSnapshot(shared_->uuid_);
 }
 
 const std::string& BlobDataHandle::uuid() const {

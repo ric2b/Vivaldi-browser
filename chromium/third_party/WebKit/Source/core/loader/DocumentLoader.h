@@ -31,6 +31,7 @@
 #define DocumentLoader_h
 
 #include "core/CoreExport.h"
+#include "core/dom/ViewportDescription.h"
 #include "core/dom/WeakIdentifierMap.h"
 #include "core/fetch/ClientHintsPreferences.h"
 #include "core/fetch/RawResource.h"
@@ -45,6 +46,7 @@
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
+#include "public/platform/WebLoadingBehaviorFlag.h"
 #include "wtf/HashSet.h"
 #include "wtf/RefPtr.h"
 
@@ -56,14 +58,12 @@ class DocumentInit;
 class LocalFrame;
 class FrameLoader;
 class ResourceLoader;
-class ThreadedDataReceiver;
 
-class CORE_EXPORT DocumentLoader : public RefCountedWillBeGarbageCollectedFinalized<DocumentLoader>, private RawResourceClient {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(DocumentLoader);
+class CORE_EXPORT DocumentLoader : public GarbageCollectedFinalized<DocumentLoader>, private RawResourceClient {
 public:
-    static PassRefPtrWillBeRawPtr<DocumentLoader> create(LocalFrame* frame, const ResourceRequest& request, const SubstituteData& data)
+    static DocumentLoader* create(LocalFrame* frame, const ResourceRequest& request, const SubstituteData& data)
     {
-        return adoptRefWillBeNoop(new DocumentLoader(frame, request, data));
+        return new DocumentLoader(frame, request, data);
     }
     ~DocumentLoader() override;
 
@@ -73,7 +73,7 @@ public:
 
     unsigned long mainResourceIdentifier() const;
 
-    void replaceDocumentWhileExecutingJavaScriptURL(const DocumentInit&, const String& source, Document*);
+    void replaceDocumentWhileExecutingJavaScriptURL(const DocumentInit&, const String& source);
 
     const AtomicString& mimeType() const;
 
@@ -92,9 +92,8 @@ public:
     const AtomicString& responseMIMEType() const;
 
     void didChangePerformanceTiming();
+    void didObserveLoadingBehavior(WebLoadingBehaviorFlag);
     void updateForSameDocumentNavigation(const KURL&, SameDocumentNavigationSource);
-    void stopLoading();
-    bool isLoading() const;
     const ResourceResponse& response() const { return m_response; }
     bool isClientRedirect() const { return m_isClientRedirect; }
     void setIsClientRedirect(bool isClientRedirect) { m_isClientRedirect = isClientRedirect; }
@@ -106,15 +105,11 @@ public:
     void setSentDidFinishLoad() { m_state = SentDidFinishLoad; }
     bool sentDidFinishLoad() const { return m_state == SentDidFinishLoad; }
 
-    NavigationType navigationType() const { return m_navigationType; }
+    NavigationType getNavigationType() const { return m_navigationType; }
     void setNavigationType(NavigationType navigationType) { m_navigationType = navigationType; }
 
-    void setDefersLoading(bool);
-
     void startLoadingMainResource();
-    void cancelMainResourceLoad(const ResourceError&);
 
-    void attachThreadedDataReceiver(PassRefPtrWillBeRawPtr<ThreadedDataReceiver>);
     void acceptDataFromThreadedReceiver(const char* data, int dataLength, int encodedDataLength);
     DocumentLoadTiming& timing() { return m_documentLoadTiming; }
     const DocumentLoadTiming& timing() const { return m_documentLoadTiming; }
@@ -124,7 +119,7 @@ public:
     void clearRedirectChain();
     void appendRedirect(const KURL&);
 
-    PassRefPtrWillBeRawPtr<ContentSecurityPolicy> releaseContentSecurityPolicy() { return m_contentSecurityPolicy.release(); }
+    ContentSecurityPolicy* releaseContentSecurityPolicy() { return m_contentSecurityPolicy.release(); }
 
     ClientHintsPreferences& clientHintsPreferences() { return m_clientHintsPreferences; }
 
@@ -141,7 +136,8 @@ public:
     };
     InitialScrollState& initialScrollState() { return m_initialScrollState; }
 
-    bool loadingMultipartContent() const;
+    void setWasBlockedAfterXFrameOptionsOrCSP() { m_wasBlockedAfterXFrameOptionsOrCSP = true; }
+    bool wasBlockedAfterXFrameOptionsOrCSP() { return m_wasBlockedAfterXFrameOptionsOrCSP; }
 
     Resource* startPreload(Resource::Type, FetchRequest&);
 
@@ -153,12 +149,11 @@ protected:
     Vector<KURL> m_redirectChain;
 
 private:
-    static PassRefPtrWillBeRawPtr<DocumentWriter> createWriterFor(const Document* ownerDocument, const DocumentInit&, const AtomicString& mimeType, const AtomicString& encoding, bool dispatch, ParserSynchronizationPolicy);
+    static DocumentWriter* createWriterFor(const DocumentInit&, const AtomicString& mimeType, const AtomicString& encoding, bool dispatch, ParserSynchronizationPolicy);
 
     void ensureWriter(const AtomicString& mimeType, const KURL& overridingURL = KURL());
     void endWriting(DocumentWriter*);
 
-    Document* document() const;
     FrameLoader* frameLoader() const;
 
     void commitIfReady();
@@ -169,10 +164,8 @@ private:
     bool maybeCreateArchive();
 
     void finishedLoading(double finishTime);
-    void mainReceivedError(const ResourceError&);
     void cancelLoadAfterXFrameOptionsOrCSPDenied(const ResourceResponse&);
     void redirectReceived(Resource*, ResourceRequest&, const ResourceResponse&) final;
-    void updateRequest(Resource*, const ResourceRequest&) final;
     void responseReceived(Resource*, const ResourceResponse&, PassOwnPtr<WebDataConsumerHandle>) final;
     void dataReceived(Resource*, const char* data, size_t length) final;
     void processData(const char* data, size_t length);
@@ -185,12 +178,12 @@ private:
 
     bool shouldContinueForResponse() const;
 
-    RawPtrWillBeMember<LocalFrame> m_frame;
-    PersistentWillBeMember<ResourceFetcher> m_fetcher;
+    Member<LocalFrame> m_frame;
+    Member<ResourceFetcher> m_fetcher;
 
-    RefPtrWillBeMember<RawResource> m_mainResource;
+    Member<RawResource> m_mainResource;
 
-    RefPtrWillBeMember<DocumentWriter> m_writer;
+    Member<DocumentWriter> m_writer;
 
     // A reference to actual request used to create the data source.
     // The only part of this request that should change is the url, and
@@ -215,11 +208,13 @@ private:
 
     double m_timeOfLastDataReceived;
 
-    PersistentWillBeMember<ApplicationCacheHost> m_applicationCacheHost;
+    Member<ApplicationCacheHost> m_applicationCacheHost;
 
-    RefPtrWillBeMember<ContentSecurityPolicy> m_contentSecurityPolicy;
+    Member<ContentSecurityPolicy> m_contentSecurityPolicy;
     ClientHintsPreferences m_clientHintsPreferences;
     InitialScrollState m_initialScrollState;
+
+    bool m_wasBlockedAfterXFrameOptionsOrCSP;
 
     enum State {
         NotStarted,

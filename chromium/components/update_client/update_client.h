@@ -128,6 +128,7 @@
 // being checked for updates and applying the update.
 
 class ComponentsUI;
+class PrefRegistrySimple;
 
 namespace base {
 class DictionaryValue;
@@ -143,6 +144,7 @@ enum Error {
   ERROR_UPDATE_INVALID_ARGUMENT = -1,
   ERROR_UPDATE_IN_PROGRESS = 1,
   ERROR_UPDATE_CANCELED = 2,
+  ERROR_UPDATE_RETRY_LATER = 3,
 };
 
 // Defines an interface for a generic CRX installer.
@@ -195,12 +197,17 @@ struct CrxComponent {
 
   std::string fingerprint;  // Optional.
   std::string name;         // Optional.
+  std::string ap;           // Optional. Must match ^[-+_=a-zA-Z0-9]{0,256}$
 
   // Specifies that the CRX can be background-downloaded in some cases.
-  // The default for this value is |true| and the value can be overriden at
-  // the registration time. This is a temporary change until the issue
-  // crbug/340448 is resolved.
-  bool allow_background_download;
+  // The default for this value is |true|.
+  bool allows_background_download;
+
+  // Specifies that the update checks and pings associated with this component
+  // require confidentiality. The default for this value is |true|. As a side
+  // note, the confidentiality of the downloads is enforced by the server,
+  // which only returns secure download URLs in this case.
+  bool requires_network_encryption;
 };
 
 // All methods are safe to call only from the browser's main thread. Once an
@@ -323,6 +330,10 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
 // Creates an instance of the update client.
 scoped_refptr<UpdateClient> UpdateClientFactory(
     const scoped_refptr<Configurator>& config);
+
+// This must be called prior to the construction of any Configurator that
+// contains a PrefService.
+void RegisterPrefs(PrefRegistrySimple* registry);
 
 }  // namespace update_client
 

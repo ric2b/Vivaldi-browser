@@ -2,6 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-CN">
 <translation id="101438888985615157">将屏幕旋转 180 度</translation>
+<translation id="1015272884520659144">定义可从其内核驱动程序分离以便直接通过网络应用内的 chrome.usb API 使用的 USB 设备列表。列表中的条目是成对的用于标识特定硬件的 USB 供应商标识符和产品标识符。
+
+      如果此政策未配置，系统会将分离式 USB 设备列表视为空白。</translation>
 <translation id="1017967144265860778">登录屏幕的电源管理设置</translation>
 <translation id="1019101089073227242">设置用户数据目录</translation>
 <translation id="1022361784792428773">应禁止用户安装的扩展程序的 ID（或者用“*”表示禁止安装所有扩展程序）</translation>
@@ -59,7 +62,6 @@
 
       如果此政策未设置或设为 false，系统将不会在 TLS 中启用 RC4 加密套件。您也可以将此政策设为 true，以便与过时的服务器保持兼容。但这只是一种权宜之计，对服务器进行重新配置才是正确之道。</translation>
 <translation id="1297182715641689552">使用 .pac 代理脚本</translation>
-<translation id="1300635491585192248">连上网络时一律预测网络操作（移动网络除外）</translation>
 <translation id="1304973015437969093">要静默安装的扩展程序/应用的 ID 和更新网址</translation>
 <translation id="1310699457130669094">您可以在此指定代理 .pac 文件的网址。只有当您在“选择如何指定代理服务器设置”中选择了手动代理设置后，此政策才会生效。如果您选择了其他任何模式来设置代理政策，就不应设置此政策。要查看详细示例，请访问：<ph name="PROXY_HELP_URL" /></translation>
 <translation id="1313457536529613143">指定系统在屏幕变暗或屏幕关闭不久后察觉到用户活动时，对屏幕变暗延迟时间的调整幅度（百分比）。
@@ -78,6 +80,7 @@
 <translation id="1359553908012294236">如果此政策设为 true 或未配置，<ph name="PRODUCT_NAME" /> 将允许使用访客身份登录。访客身份是指 <ph name="PRODUCT_NAME" /> 个人资料，使用此类个人资料登录后，所有窗口均处于隐身模式。
 
       如果此政策设为 false，<ph name="PRODUCT_NAME" /> 将禁止使用访客个人资料登录。</translation>
+<translation id="1363275621236827384">允许在 Quirks Server 中查询硬件配置文件</translation>
 <translation id="1397855852561539316">默认搜索服务提供商建议网址</translation>
 <translation id="1398889361882383850">可让您设置是否允许网站自动运行插件。您可以允许所有网站或拒绝所有网站自动运行插件。
 
@@ -139,7 +142,7 @@
 <translation id="1655229863189977773">设置磁盘缓存大小（字节）</translation>
 <translation id="166427968280387991">代理服务器</translation>
 <translation id="1675002386741412210">支持的环境：</translation>
-<translation id="1679420586049708690">用于自动登录的公开会话</translation>
+<translation id="1679420586049708690">用于自动登录的公用自助终端</translation>
 <translation id="1689963000958717134">允许将推送网络配置应用于安装了 <ph name="PRODUCT_OS_NAME" />的设备的所有用户。网络配置为 JSON 格式的字符串，具体定义如 <ph name="ONC_SPEC_URL" /> 中的开放网络配置格式所述。</translation>
 <translation id="1708496595873025510">对变体种子的提取设置限制条件</translation>
 <translation id="172374442286684480">允许所有网站设置本地数据</translation>
@@ -197,7 +200,17 @@
 <translation id="1865417998205858223">密钥使用权限</translation>
 <translation id="186719019195685253">当闲置延迟时间已过且使用交流电源供电时执行的操作</translation>
 <translation id="187819629719252111">允许 <ph name="PRODUCT_NAME" />显示文件选择对话框，从而允许用户访问计算机上的本地文件。如果您启用了此设置，用户就可以正常地打开文件选择对话框。如果您停用了此设置，那么只要用户执行了会触发文件选择对话框的操作（如导入书签、上传文件、保存链接等），系统就会显示一条讯息，并且假定用户已在该文件选择对话框中点击了“取消”。如果您未设定此设置，用户就可以正常地打开文件选择对话框。</translation>
+<translation id="1879485426724769439">指定该设备使用的时区。用户可以为当前的会话覆盖指定的时区。不过，系统会在用户退出后恢复原本指定的时区。如果提供的值无效，则系统仍会启用此政策，但会采用“GMT”时区设置。如果提供空白字符串，则系统会忽略此政策。
+
+      如果不使用此政策，系统将会继续使用目前所采用的时区，不过用户可以更改时区，而且所做更改将永久有效。因此，某位用户所做的更改将会对登录屏幕和所有其他用户产生影响。
+
+      新设备的出厂默认时区会设置为“美国/太平洋”时间。
+
+      时区值格式遵循“IANA 时区数据库”（请访问“https://en.wikipedia.org/wiki/Tz_database”）中的时区名称所采用的格式。具体而言，大多数时区均可以依照“大陆/大城市”或“海洋/大城市”的格式命名。
+
+      设置此政策后，系统将完全停用根据设备位置信息自动解析时区的功能，SystemTimezoneAutomaticDetection 政策也会遭到覆盖。</translation>
 <translation id="1897365952389968758">允许所有网站运行 JavaScript</translation>
+<translation id="193259052151668190">分离式 USB 设备白名单</translation>
 <translation id="1933378685401357864">壁纸图片</translation>
 <translation id="193900697589383153">向系统任务栏添加退出按钮。
 
@@ -290,11 +303,11 @@
       设置此政策会替换默认值（3 小时）。此政策的有效值范围为 1800000（30 分钟）至 86400000（1 天）。任何超出此范围的值都会强制调整到相应范围内。
 
       如果未设置此政策，<ph name="PRODUCT_NAME" />就会使用默认值（3 小时）。</translation>
-<translation id="2372547058085956601">公开会话自动登录延迟。
+<translation id="2372547058085956601">公用自助终端自动登录延迟。
 
       如果未设置 |DeviceLocalAccountAutoLoginId| 政策，则此政策不会生效。否则：
 
-      如果设置了此政策，则只要用户停止活动的时间达到此政策指定的时长，系统就会自动登录由 |DeviceLocalAccountAutoLoginId| 政策指定的公开会话。
+      如果设置了此政策，则只要用户停止活动的时间达到此政策指定的时长，系统就会自动登录由 |DeviceLocalAccountAutoLoginId| 政策指定的公用自助终端。
 
       如果未设置此政策，则超时时间为 0 毫秒。
 
@@ -511,7 +524,6 @@
           如果此政策的值设置为 True 或未设置此政策，则播放音频时机器不会被视为闲置。这样就不会导致闲置超时，系统也不会执行闲置操作。不过，在达到指定的超时值后，屏幕会变暗、关闭和锁定（而不考虑音频活动）。
 
           如果此政策的值设置为 False，则音频活动不会影响系统将机器视为闲置状态。</translation>
-<translation id="2948381198510798695"><ph name="PRODUCT_NAME" />将对于此处给定的主机列表绕过任何代理。只有当您在“选择如何指定代理服务器设置”中选择了手动代理设置后，此政策才会生效。如果您选择了其他任何模式来设置代理政策，就不应设置此政策。要查看详细示例，请访问：<ph name="PROXY_HELP_URL" />。</translation>
 <translation id="2956777931324644324">此政策自36版<ph name="PRODUCT_NAME" />起已停止使用。
 
       用于指定是否启用TLS网域绑定证书扩展程序。
@@ -628,6 +640,13 @@
 
           如果此政策未设置，系统将根据“DefaultKeygenSetting”政策（如果此政策已设置）或用户的个人配置为所有网站使用全局默认值。</translation>
 <translation id="3381968327636295719">默认情况下托管主机浏览器</translation>
+<translation id="3398137877608138703">允许或拒绝视频捕获。
+
+      如果启用或未配置此政策（默认），则系统会在收到视频捕获设备使用请求时提示用户；但对于 VideoCaptureAllowedUrls 列表中配置的网址，系统不会提示用户，而是直接授予访问权限。ARC 应用只有在获得相应权限的情况下才能使用摄像头。
+
+      如果停用此政策，则系统一律不会提示用户，只有 VideoCaptureAllowedUrls 中配置的网址可以使用视频捕获设备。ARC 应用将无法使用摄像头。
+
+      在 ARC 应用之外，此政策会影响所有类型的视频输入设备（而不仅仅是内置摄像头）。</translation>
 <translation id="3417418267404583991">如果未配置此政策或将其设置为 true，<ph name="PRODUCT_OS_NAME" />将启用访客登录。访客登录是匿名用户会话，不需要密码。
 
       如果将此政策设置为 false，<ph name="PRODUCT_OS_NAME" />就不会允许访客会话启动。</translation>
@@ -645,6 +664,25 @@
 <translation id="3478024346823118645">退出时清除用户数据</translation>
 <translation id="348495353354674884">启用虚拟键盘</translation>
 <translation id="3496296378755072552">密码管理器</translation>
+<translation id="349667858031092827">一律不自动检测时区。</translation>
+<translation id="3502472987829488885">可让您指定 <ph name="PRODUCT_NAME" /> 和 ARC 应用使用的代理服务器，并禁止用户更改代理设置。
+
+          如果您选择永不使用代理服务器，并且一律直接连接，系统将会忽略所有其他选项。ARC 应用将使用当前网络的默认代理服务器（如果有）。
+
+          如果您选择使用系统的代理设置，系统也将会忽略所有其他选项。ARC 应用将使用当前网络的默认代理服务器（如果有）。
+
+          如果您选择自动检测代理服务器，系统同样会忽略所有其他选项。
+
+          如果您选择固定服务器代理模式，则可以进一步指定“代理服务器的地址或网址”和“代理绕过规则的逗号分隔列表”中的选项。ARC 应用将仅使用优先级最高的 HTTP 代理服务器。
+
+          如果您选择使用 .pac 代理脚本，则必须在“代理 .pac 文件的网址”中指定该脚本的网址。
+
+          要查看详细示例，请访问：
+          <ph name="PROXY_HELP_URL" />
+
+          如果您启用了此设置，<ph name="PRODUCT_NAME" /> 和 ARC 应用将会忽略通过命令行指定的所有代理相关选项。
+
+          如果您未设置此政策，用户将可以自行选择代理设置。</translation>
 <translation id="3504791027627803580">指定用于提供图片搜索结果的搜索引擎网址。系统将使用 GET 方法发送搜索请求。如果设置了 DefaultSearchProviderImageURLPostParams 政策，那么图片搜索请求会改用 POST 方式。
 
           此为可选政策。如果未设置此政策，将无法使用图片搜索。
@@ -661,8 +699,16 @@
 
       该策略值应该以毫秒为单位。值的范围限定在 30 秒到 24 小时之间。</translation>
 <translation id="3528000905991875314">启用备用的错误页面</translation>
+<translation id="3538538104630456270">在我们推出“查看密码时需重新验证”这一规定之前，我们是使用相关的设置来控制用户能否查看密码。自这一规定推出后，相关设置以及此政策便不再对 Chrome 的行为有任何影响。Chrome 的当前行为等同于此政策设为在密码管理器设置页面中禁止以明文形式显示密码。这意味着，设置页面中包含的只是一个占位符，仅当用户点击“显示”（并进行重新验证，如果适用的话）后，Chrome 才会显示相应密码。此政策的原始描述如下所示：
+
+          控制用户是否可以在密码管理器中以明文形式显示密码。
+
+          如果您停用了此设置，密码管理器将不允许在密码管理器窗口中以明文形式显示存储的密码。
+
+          如果您启用了此政策或未设置此政策，用户将可以在密码管理器中查看以明文形式显示的密码。</translation>
 <translation id="3547954654003013442">代理设置</translation>
 <translation id="3570008976476035109">在这些网站上阻止插件</translation>
+<translation id="3591584750136265240">配置登录身份验证行为</translation>
 <translation id="3627678165642179114">启用或停用拼写检查网络服务</translation>
 <translation id="3646859102161347133">设置放大镜类型</translation>
 <translation id="3653237928288822292">默认搜索服务提供商图标</translation>
@@ -741,8 +787,7 @@
 
       每个列表条目都包含一个字典，其“extension-id”字段必须包含扩展程序 ID，而其“update-url”字段必须包含更新网址。</translation>
 <translation id="3891357445869647828">启用 JavaScript</translation>
-<translation id="389421284571827139">可让您指定 <ph name="PRODUCT_NAME" />使用的代理服务器，并禁止用户更改代理设置。如果您选择从不使用代理服务器，而总是直接连接，就会忽略其他所有选项。如果您选择自动检测代理服务器，就会忽略其他所有选项。要查看详细示例，请访问：<ph name="PROXY_HELP_URL" />。如果您启用了此设置， <ph name="PRODUCT_NAME" />就会忽略通过命令行指定的所有代理相关选项。如果未设置此政策，用户就可以自行选择代理设置。</translation>
-<translation id="3907986150060929099">为公开会话设置建议的语言区域</translation>
+<translation id="3907986150060929099">为公用自助终端设置建议的语言区域</translation>
 <translation id="391531815696899618">当此政策设为 True 时，在 <ph name="PRODUCT_OS_NAME" />的“文件”应用中停用 Google 云端硬盘同步功能。在这种情况下，系统不会将任何数据上传到 Google 云端硬盘。
 
           如果此政策未设置或设为 False，用户可以将文件传输到 Google 云端硬盘。</translation>
@@ -762,7 +807,6 @@
 <translation id="402759845255257575">不允许任何网站运行 JavaScript</translation>
 <translation id="4027608872760987929">启用默认搜索服务提供商</translation>
 <translation id="4039085364173654945">控制是否允许网页上的第三方子内容弹出 HTTP 基本身份认证对话框。通常情况下，为了防止网上诱骗，此设置是停用的。如果未设置此政策，就会停用此设置，而不允许第三方子内容弹出 HTTP 基本身份认证对话框。</translation>
-<translation id="4052765007567912447">控制用户是否可以在密码管理器中以明文显示密码。如果您停用了此设置，就不允许在密码管理器窗口中以明文显示存储的密码。如果您启用或未设置此策略，用户就可以在密码管理器中以明文查看自己的密码。</translation>
 <translation id="4056910949759281379">停用 SPDY 协议</translation>
 <translation id="4088589230932595924">强制使用隐身模式</translation>
 <translation id="4088983553732356374">可让您指定是否允许网站设置本地数据。您可以允许所有网站设置本地数据，也可以禁止所有网站设置本地数据。
@@ -770,6 +814,23 @@
           如果此政策设为“在会话期间保留 Cookie”，系统将在会话结束后清除 Cookie。请注意，如果 <ph name="PRODUCT_NAME" /> 以“后台模式”运行，那么在最后一个窗口关闭后，会话可能不会结束。如需关于配置此行为的更多信息，请参见“BackgroundModeEnabled”政策。
 
           如果此政策未设置，系统将使用“AllowCookies”，并且用户可以更改此政策。</translation>
+<translation id="4098957623809244159">此政策已弃用，请改用 ProxyMode。
+
+          可让您指定 <ph name="PRODUCT_NAME" /> 和 ARC 应用使用的代理服务器，并禁止用户更改代理设置。
+
+          如果您选择永不使用代理服务器，并且一律直接连接，则系统会忽略其他所有选项。
+
+          如果您选择使用系统代理设置或自动检测代理服务器，则系统也会忽略其他所有选项。
+
+          如果您选择手动代理设置，则可以进一步指定“代理服务器的地址或网址”、“代理 .pac 文件的网址”和“代理绕过规则的逗号分隔列表”中的选项。
+
+          要查看详细示例，请访问以下网址：
+          <ph name="PROXY_HELP_URL" />
+
+          如果您启用此设置，则 <ph name="PRODUCT_NAME" /> 会忽略通过命令行指定的所有代理相关选项。
+
+          如果未设置此政策，用户则可以自行选择代理设置。</translation>
+<translation id="4103289232974211388">用户确认后重定向至 SAML IdP</translation>
 <translation id="410478022164847452">指定在使用交流电源供电时用户停止输入后隔多久才采取闲置操作。
 
           如果设置了此政策，则只要机器处于闲置状态的时间达到此处指定的时长，<ph name="PRODUCT_OS_NAME" />就会采取闲置操作（可单独配置）。
@@ -961,13 +1022,6 @@
           此值必须是一个字符串化的 JSON 字典数组。每个字典都必须采用 { "pattern": "$URL_PATTERN", "filter" : $FILTER } 样式，其中 $URL_PATTERN 是内容设置格式，而 $FILTER 会限制相应浏览器可自动从哪些客户端证书中进行选择。无论是否设置了过滤器，系统都只会选择与该服务器的证书请求相匹配的证书。如果 $FILTER 采用 { "ISSUER": { "CN": "$ISSUER_CN" } } 样式，系统则只会选择由 CommonName 为 $ISSUER_CN 的证书颁发机构颁发的客户端证书。如果 $FILTER 是空字典 {}，那么系统在选择客户端证书时便不会受到额外限制。
 
           如果未设置此政策，系统将不会为任何网站自动选择证书。</translation>
-<translation id="4980301635509504364">允许或拒绝视频捕获。
-
-      如果启用或未配置此政策（默认），则系统会在收到视频捕获设备使用请求时提示用户；但对于 VideoCaptureAllowedUrls 列表中配置的网址，系统不会提示用户，而是直接授予访问权限。
-
-      如果停用此政策，则系统一律不提示用户，只有 VideoCaptureAllowedUrls 中配置的网址可以使用视频捕获设备。
-
-      此政策会影响所有类型的视频输入（而不仅仅是内置摄像头）。</translation>
 <translation id="4980635395568992380">数据类型：</translation>
 <translation id="4983201894483989687">允许运行过期的插件</translation>
 <translation id="4988291787868618635">闲置延迟时间已过时执行的操作</translation>
@@ -1099,9 +1153,9 @@
       该策略值应该以毫秒为单位。</translation>
 <translation id="5511702823008968136">启用书签栏</translation>
 <translation id="5512418063782665071">主页网址</translation>
-<translation id="5523812257194833591">延迟后的自动登录公开会话。
+<translation id="5523812257194833591">延迟后的自动登录公用自助终端。
 
-      如果设置了此政策，则用户未与登录屏幕互动的时间达到指定的时长后，将会自动登录指定的会话。此公开会话必须已配置（参阅 |DeviceLocalAccounts|）。
+      如果设置了此政策，则用户未与登录屏幕互动的时间达到指定的时长后，将会自动登录指定的会话。此公用自助终端必须已配置（参阅 |DeviceLocalAccounts|）。
 
       如果未设置此政策，则不会自动登录。</translation>
 <translation id="5535973522252703021">Kerberos 授权服务器白名单</translation>
@@ -1110,7 +1164,6 @@
       指定后，系统将会向用来提取变体种子的网址中添加一个名为“restrict”的查询参数。此参数的值就是此政策中指定的值。
 
       如果未指定，则不会修改变体种子网址。</translation>
-<translation id="5564962323737505851">配置密码管理器。如果密码管理器已启用，您可以选择是否允许用户以明文形式显示存储的密码。</translation>
 <translation id="556941986578702361">控制 <ph name="PRODUCT_OS_NAME" />任务栏是否自动隐藏。
 
       如果此策略设置为“AlwaysAutoHideShelf”，任务栏将始终自动隐藏。
@@ -1150,9 +1203,6 @@
 
       如果此政策未设置或设为 false，<ph name="PRODUCT_NAME" /> 将使用现有的在线撤消检查设置。</translation>
 <translation id="5732972008943405952">首次运行时，从默认浏览器导入自动填充表单数据</translation>
-<translation id="5761030451068906335">配置 <ph name="PRODUCT_NAME" />的代理设置。
-
-      此政策尚未做好投入使用的准备，请勿使用。</translation>
 <translation id="5765780083710877561">说明：</translation>
 <translation id="5770738360657678870">开发者版（可能不稳定）</translation>
 <translation id="5774856474228476867">默认搜索服务提供商的搜索网址</translation>
@@ -1177,13 +1227,6 @@
       有关可用变量的列表，请访问 http://www.chromium.org/administrators/policy-list-3/user-data-directory-variables。
 
       如果此政策未设置，系统将使用默认的个人资料目录。</translation>
-<translation id="5819660021114910752">指定该设备使用的时区。对于当前的会话，用户可以覆盖指定的时区。不过，当用户退出当前会话后，系统会将时区重新设为指定的时区。如果提供的值无效，系统仍会启用此政策，但会采用“GMT”时区。如果提供的是空字符串，此政策将被忽略。
-
-      如果不使用此政策，系统将继续使用当前在使用的时区，不过，用户可以更改时区，并且所做更改持续有效。因此，任何用户所做的更改都会对登录屏幕和所有其他用户造成影响。
-
-      新设备在出厂时的时区设置是“美国/太平洋”。
-
-      值的格式遵循“IANA 时区数据库”中的时区名称所采用的格式（请访问 https://zh.wikipedia.org/wiki/%E6%97%B6%E5%8C%BA%E4%BF%A1%E6%81%AF%E6%95%B0%E6%8D%AE%E5%BA%93）。基本上，大多数时区都可以采用“洲/大城市”或“洋/大城市”的格式表示。</translation>
 <translation id="5826047473100157858">指定用户是否可以在 <ph name="PRODUCT_NAME" />中以隐身模式打开网页。如果选择“已启用”或未设置此政策，则允许以隐身模式打开网页。如果选择“已停用”，则不能以隐身模式打开网页。如果选择“强制”，则只能以隐身模式打开网页。</translation>
 <translation id="5836064773277134605">限制远程访问主机使用的UDP端口范围</translation>
 <translation id="5845159892130426052">启用 ShowModalDialog API，有效期至 2015 年 4 月 30 日</translation>
@@ -1216,7 +1259,14 @@
 <translation id="5893553533827140852">如果启用此设置，系统将通过远程主机连接经由代理处理gnubby身份验证请求。
 
           如果您已停用或未配置此设置，那么系统将不会经由代理处理gnubby身份验证请求。</translation>
-<translation id="5912364507361265851">允许用户在“密码管理器”中显示密码</translation>
+<translation id="5900959132054596599"><ph name="PRODUCT_NAME" /> 和 ARC 应用将针对此处给定的主机列表绕过任何代理。
+
+          只有当您在“选择如何指定代理服务器设置”中选择手动代理设置后，此政策才会生效。
+
+          如果您选择了任何其他代理政策设置模式，请勿设置此政策。
+
+          要查看更多详细示例，请访问以下网址：
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="5921713479449475707">允许通过 HTTP 自动更新下载内容</translation>
 <translation id="5921888683953999946">设置登录屏幕上大号光标辅助功能的默认状态。
 
@@ -1353,6 +1403,7 @@
 <translation id="637934607141010488">报告最近登录过的设备用户列表。
 
       如果此政策设为False，则不报告这些用户。</translation>
+<translation id="639009029157091157">让用户决定。</translation>
 <translation id="6392973646875039351">启用 <ph name="PRODUCT_NAME" />的自动填充功能，并允许用户使用以前存储的信息（例如地址或信用卡信息）自动填写网络表单。如果您停用了此设置，用户就无法使用自动填充功能。如果您启用了此设置或未设置值，那么自动填充功能仍由用户控制。这样，用户就可以配置自动填充个人资料，并自行决定是启用还是停用自动填充功能。</translation>
 <translation id="6394350458541421998">此政策从 <ph name="PRODUCT_OS_NAME" />版本 29 起开始弃用。请改用 PresentationScreenDimDelayScale 政策。</translation>
 <translation id="6401669939808766804">使用户退出</translation>
@@ -1365,7 +1416,7 @@
       如果您停用了此设置，用户将不能使用 Smart Lock。
 
       如果此政策未设置，默认情况下，受企业管理的用户不能使用 Smart Lock，不受管理的用户则能够使用 Smart Lock。</translation>
-<translation id="6513756852541213407">可让您指定 <ph name="PRODUCT_NAME" />使用的代理服务器，并禁止用户更改代理设置。如果您选择永不使用代理服务器，而总是直接连接，就会忽略其他所有选项。如果您选择使用系统代理设置或自动检测代理服务器，就会忽略其他所有选项。如果您选择固定服务器代理模式，可在“代理服务器的地址或网址”以及“代理绕过规则的逗号分隔列表”中进一步指定选项。如果您选择使用 .pac 代理脚本，必须在“代理 .pac 文件的网址”中指定该脚本的网址。要查看详细示例，请访问：<ph name="PROXY_HELP_URL" />。如果您启用了此设置，<ph name="PRODUCT_NAME" />就会忽略通过命令行指定的所有代理相关选项。如果未设置此政策，用户就可以自行选择代理设置。</translation>
+<translation id="6491139795995924304">允许在设备上使用蓝牙功能</translation>
 <translation id="6520802717075138474">首次运行时，从默认浏览器导入搜索引擎</translation>
 <translation id="653608967792832033">指定在使用电池供电时用户停止输入后隔多久锁定屏幕。
 
@@ -1446,7 +1497,6 @@
 
       如果此政策未设置，系统将启用网络联想查询功能，但用户可以自行更改。</translation>
 <translation id="6658245400435704251">指定一个时间（以秒为单位），即从更新首次推送到服务器起设备随机延迟更新下载的最大时间。设备的这一等待时间一部分会按照实际时间计算，而剩下的部分则取决于更新检查的次数。在任何情况下，分配的时间上限都是固定的，因此设备绝不会一直等待下载某个更新。</translation>
-<translation id="6672934768721876104">此政策已弃用，请改用 ProxyMode。可让您指定 <ph name="PRODUCT_NAME" />使用的代理服务器，并禁止用户更改代理设置。如果您选择从不使用代理服务器，而总是直接连接，就会忽略其他所有选项。如果您选择使用系统代理设置或自动检测代理服务器，就会忽略其他所有选项。如果您选择手动代理设置，可在“代理服务器的地址或网址”、“代理 .pac 文件的网址”以及“代理绕过规则的逗号分隔列表”中进一步指定选项。要查看详细示例，请访问：<ph name="PROXY_HELP_URL" />。如果您启用了此设置， <ph name="PRODUCT_NAME" />就会忽略通过命令行指定的所有代理相关选项。如果未设置此政策，用户就可以自行选择代理设置。</translation>
 <translation id="6689792153960219308">报告硬件状态</translation>
 <translation id="6693751878507293182">如果您启用了此设置，<ph name="PRODUCT_NAME" />就不会自动搜索和安装缺少的插件。如果停用或未设置此选项，就会启用插件查找程序。</translation>
 <translation id="6697474194550078937">限制通过 SAML 验证身份的用户可离线登录的时长。
@@ -1569,6 +1619,7 @@
 
       如果未设置此政策，用户就可以在启动程序中更改固定应用的列表。</translation>
 <translation id="7132877481099023201">无需提示用户即可使用视频捕获设备的网址</translation>
+<translation id="7167436895080860385">允许用户在密码管理器中显示密码（已弃用）</translation>
 <translation id="7173856672248996428">临时个人资料</translation>
 <translation id="7187256234726597551">如果此政策的值为 True，则系统将允许此设备进行远程认证，然后自动生成证书并将其上传到设备管理服务器。
 
@@ -1590,6 +1641,11 @@
 
           如果“RestoreOnStartup”政策设为恢复先前会话中的网址，系统将忽略此政策，并且将永久存储这些网站的 Cookie。</translation>
 <translation id="7207095846245296855">强制启用 Google 安全搜索功能</translation>
+<translation id="7213425178181578730">如果此政策设为 false，<ph name="PRODUCT_OS_NAME" />将停用蓝牙功能，并且用户无法重新启用该功能。
+
+      如果此政策设为 true 或未设置，用户将能够随意启用或停用蓝牙功能。
+
+      如果您设置了此政策，用户将无法更改或覆盖您的设置。</translation>
 <translation id="7216442368414164495">允许用户启用安全浏览扩展报告功能</translation>
 <translation id="7227967227357489766">定义可以登录此设备的用户名单。条目格式为 <ph name="USER_WHITELIST_ENTRY_FORMAT" />，例如 <ph name="USER_WHITELIST_ENTRY_EXAMPLE" />。要允许某个域上的任意用户，请使用以下条目格式：<ph name="USER_WHITELIST_ENTRY_WILDCARD" />。
 
@@ -1677,6 +1733,11 @@
 <translation id="7523476810162382273">将监测信息发送到管理服务器</translation>
 <translation id="7529100000224450960">可让您设置网址格式的列表，这些网址格式用于指定允许打开弹出式窗口的网站。在未设置此政策的情况下，如果设置了“DefaultPopupsSetting”政策，那么将对该政策中的所有网站使用全局默认值，否则将对用户个人配置中的所有网站使用全局默认值。</translation>
 <translation id="7529144158022474049">自动更新分配因素</translation>
+<translation id="7553535237300701827">设置此政策后，登录身份验证流程将采用以下其中一种方式，具体取决于设置的值：
+
+      如果设为 GAIA，将通过常规 GAIA 身份验证流程完成登录。
+
+      如果设为 SAML_INTERSTITIAL，登录过程中将会显示一个插页式屏幕，让用户选择是通过设备注册网域的 SAML IdP 进行身份验证，还是返回到常规 GAIA 登录流程。</translation>
 <translation id="7567380065339179813">在这些网站上允许插件</translation>
 <translation id="7593523670408385997">配置<ph name="PRODUCT_NAME" />将用于在磁盘上存储缓存文件的缓存大小。
 
@@ -1691,6 +1752,9 @@
 <translation id="7632724434767231364">GSSAPI 库名称</translation>
 <translation id="7635471475589566552">在 <ph name="PRODUCT_NAME" />中配置应用的语言区域，并禁止用户更改语言区域。如果您启用了此设置，<ph name="PRODUCT_NAME" />就会使用指定的语言区域。如果配置的语言区域不受支持，就会改用“en-US”。如果已停用或未配置此设置，<ph name="PRODUCT_NAME" />就会使用由用户指定的首选语言区域（如果已配置）、系统语言区域或备用语言区域“en-US”。</translation>
 <translation id="7651739109954974365">确定是否应为设备启用数据漫游。如果将此政策设置为 true，数据漫游就可以使用。如果未配置此政策或将其设置为 false，数据漫游就无法使用。</translation>
+<translation id="7667184304362487902">配置 <ph name="PRODUCT_NAME" /> 和 ARC 应用的代理设置。
+
+      此政策尚无法使用，因此请勿使用此政策。</translation>
 <translation id="76810863974142048">远程访问客户端获取身份验证令牌的网址。
 
           如果此政策已设置，远程访问主机将要求身份验证客户端从该网址获取身份验证令牌，以便建立连接。此政策必须与 RemoteAccessHostTokenValidationUrl 结合使用。
@@ -1720,17 +1784,17 @@
 
           如果停用或不设置该设置，那么系统将不启用双重身份验证，并采用由用户定义 PIN 这一默认行为。</translation>
 <translation id="7750991880413385988">打开新标签页</translation>
-<translation id="7761526206824804472">为公开会话设置一个或多个建议的语言区域，以便用户从这些语言区域中轻松选择。
+<translation id="7761526206824804472">为公用自助终端设置一个或多个建议的语言区域，以便用户从这些语言区域中轻松选择。
 
-      用户可以先选择语言区域和键盘布局，然后再启动公开会话。默认情况下，系统会按字母顺序列出 <ph name="PRODUCT_OS_NAME" />支持的所有语言区域。您可以使用此政策将一些建议的语言区域移至列表顶部。
+      用户可以先选择语言区域和键盘布局，然后再启动公用自助终端。默认情况下，系统会按字母顺序列出 <ph name="PRODUCT_OS_NAME" />支持的所有语言区域。您可以使用此政策将一些建议的语言区域移至列表顶部。
 
       如果此政策未设置，系统将预先选择当前的界面语言区域。
 
       如果此政策已设置，建议的语言区域将移至列表顶部，并且会与所有其他语言区域醒目地区分开来。系统将按照在此政策中的显示顺序列出建议的语言区域，并且将预先选择第一个建议的语言区域。
 
-      如果有多个建议的语言区域，系统将假定用户希望从这些语言区域中选择（启动公开会话时，所选的语言区域和键盘布局将以醒目的方式显示）。否则，系统将假定大多数用户希望使用预先选择的语言区域（启动公开会话时，所选的语言区域和键盘布局将以不太醒目的方式显示）。
+      如果有多个建议的语言区域，系统将假定用户希望从这些语言区域中选择（启动公用自助终端时，所选的语言区域和键盘布局将以醒目的方式显示）。否则，系统将假定大多数用户希望使用预先选择的语言区域（启动公用自助终端时，所选的语言区域和键盘布局将以不太醒目的方式显示）。
 
-      如果您设置了此政策并启用了自动登录功能（请参见 |DeviceLocalAccountAutoLoginId| 和 |DeviceLocalAccountAutoLoginDelay| 政策），自动启动的公开会话将使用第一个建议的语言区域，并使用与该语言区域匹配的最常用键盘布局。
+      如果您设置了此政策并启用了自动登录功能（请参见 |DeviceLocalAccountAutoLoginId| 和 |DeviceLocalAccountAutoLoginDelay| 政策），自动启动的公用自助终端将使用第一个建议的语言区域，并使用与该语言区域匹配的最常用键盘布局。
 
       预先选择的键盘布局始终是与预先选择的语言区域匹配的最常用布局。
 
@@ -1756,10 +1820,36 @@
 <translation id="7842869978353666042">配置 Google 云端硬盘选项</translation>
 <translation id="7843525027689416831">指定应在 <ph name="PRODUCT_NAME" /> 启动时应用于它的选项。指定的选项仅会应用于登录屏幕。通过此政策设置的选项不会反映在用户会话中。</translation>
 <translation id="7848840259379156480">可让您配置安装“<ph name="PRODUCT_FRAME_NAME" />”时默认使用的 HTML 呈现器。默认设置是允许托管浏览器进行呈现，但您可以选择替换此设置，并默认让“<ph name="PRODUCT_FRAME_NAME" />”呈现 HTML 页面。</translation>
+<translation id="7853178359124471330">设置此政策后，系统会根据设置值采用下列其中一种方式执行自动检测时区流程：
+
+      如果设为 TimezoneAutomaticDetectionUsersDecide，用户将能够使用 chrome://settings 中的常规控件控制自动检测时区操作。
+
+      如果设为 TimezoneAutomaticDetectionDisabled，则系统会停用 chrome://settings 中的自动时区控件。自动检测时区功能将始终处于关闭状态。
+
+      如果设为 TimezoneAutomaticDetectionIPOnly，则系统会停用 chrome://settings 中的时区控件。自动检测时区功能将始终处于开启状态。时区检测功能将使用仅限 IP 的方法来解析位置信息。
+
+      如果设为 TimezoneAutomaticDetectionSendWiFiAccessPoints，则系统会停用 chrome://settings 中的时区控件。自动检测时区功能将始终处于开启状态。可见 Wi-Fi 接入点列表将一律发送到 Geolocation API 服务器，以便提供更精确的时区检测结果。
+
+      如果此政策未设置，则系统行为会与设置 TimezoneAutomaticDetectionUsersDecide 时相同。
+
+      如果设置了 SystemTimezone 政策，则系统会覆盖此政策。在这种情况下，系统会全面停用自动检测时区功能。</translation>
 <translation id="7882585827992171421">此策略仅在零售模式下有效。
 
       确定在登录屏幕上用作屏幕保护程序的扩展程序的 ID。该扩展程序必须属于通过 DeviceAppPack 策略为此域配置的 AppPack。</translation>
+<translation id="7882890448959833986">禁止显示“操作系统不受支持”警告</translation>
 <translation id="7912255076272890813">配置允许的应用/扩展程序类型</translation>
+<translation id="7928112526630078979">可让您指定 <ph name="PRODUCT_NAME" /> 和 ARC 应用使用的代理服务器，并禁止用户更改代理设置。
+
+          如果您选择永不使用代理服务器，并且一律直接连接，系统将会忽略所有其他选项。ARC 应用将使用当前网络的默认代理服务器（如果有）。
+
+          如果您选择自动检测代理服务器，系统也将会忽略所有其他选项。
+
+          要查看详细示例，请访问：
+          <ph name="PROXY_HELP_URL" />
+
+          如果您启用了此设置，<ph name="PRODUCT_NAME" /> 和 ARC 应用将会忽略通过命令行指定的所有代理相关选项。
+
+          如果您未设置此政策，用户将可以自行选择代理设置。</translation>
 <translation id="793134539373873765">指定是否对操作系统更新有效负荷使用 p2p。如果设置为 True，设备将共享并试图消耗局域网中的更新有效负荷，从而可能会减少互联网带宽使用量和拥堵。如果局域网中没有更新有效负荷，设备将回退到从更新服务器下载。如果设置为 False 或未配置，则不会使用 p2p。</translation>
 <translation id="7933141401888114454">允许创建受监管用户</translation>
 <translation id="7936098023732125869">启用默认搜索服务提供商。
@@ -1791,6 +1881,7 @@
 
           如果此政策未设置，系统将启用此政策。</translation>
 <translation id="8073243368829195">允许使用 Smart Lock</translation>
+<translation id="8074052133552427532">一律使用粗略式时区检测方式。</translation>
 <translation id="8099880303030573137">使用电池供电时的闲置延迟时间</translation>
 <translation id="8102913158860568230">默认 mediastream 设置</translation>
 <translation id="8104962233214241919">自动选择这些网站的客户端证书</translation>
@@ -1815,6 +1906,7 @@
 
       如果此政策设为False，则不报告接口列表。</translation>
 <translation id="8146727383888924340">允许用户通过注册 Chrome 操作系统来兑换优惠</translation>
+<translation id="8148785525797916822">禁止显示当<ph name="PRODUCT_NAME" />在不再受支持的计算机或操作系统上运行时出现的警告。</translation>
 <translation id="8148901634826284024">启用高反差模式辅助功能。
 
           如果此政策的值设为 True，则系统将始终启用高反差模式。
@@ -1854,6 +1946,7 @@
 <translation id="8197918588508433925">此政策指定了允许使用 Enterprise Platform Keys API chrome.enterprise.platformKeysPrivate.challengeUserKey() 进行远程认证的扩展程序。只有添加到此列表中的扩展程序才能使用该 API。
 
           如果扩展程序不在此列表中，或者未设置此列表，则会导致无法调用 API，并返回错误代码。</translation>
+<translation id="8214600119442850823">配置密码管理器。</translation>
 <translation id="8244525275280476362">政策失效后的最大提取延迟</translation>
 <translation id="8256688113167012935">控制 <ph name="PRODUCT_OS_NAME" />在登录屏幕上为相应的设备本地帐户显示的帐户名。
 
@@ -1996,15 +2089,24 @@
       如果此政策设为false，那么用户以及任何应用和扩展程序均无法进入全屏模式。
 
       停用全屏模式后，在所有平台（<ph name="PRODUCT_OS_NAME" />除外）上都无法使用信息亭模式。</translation>
+<translation id="8795495354632096254">解析时区时一律将 Wi-Fi 接入点发送到服务器。</translation>
 <translation id="8818173863808665831">报告设备的地理位置。
 
       如果未设置此政策或将其设为 false，系统将不会报告相关位置。</translation>
+<translation id="8818768076343557335">连上网络时一律预测网络操作（移动网络除外）。
+          （在版本 50 中已不适用，在版本 52 中已遭到移除。在 52 以上版本中，如果设置值为 1，则系统会视为 0 - 连上网络时一律预测网络操作。）</translation>
 <translation id="8828766846428537606">在“<ph name="PRODUCT_NAME" />”中配置默认主页，并禁止用户更改主页。只有将主页设置为新标签页或某个特定的主页网址，才能完全锁定用户的主页设置。如果您没有指定主页网址，那么用户仍然可以通过指定“chrome://newtab”，将主页设置为新标签页。</translation>
+<translation id="8833109046074170275">通过默认的 GAIA 流程进行身份验证</translation>
 <translation id="8838303810937202360"><ph name="PRODUCT_OS_NAME" />会缓存应用和扩展程序，以便一台设备的多位用户安装，从而避免重复为每位用户下载。
       如果此政策未配置或值小于 1 MB，<ph name="PRODUCT_OS_NAME" />将使用默认缓存大小。</translation>
 <translation id="8858642179038618439">强制启用 YouTube 安全模式</translation>
 <translation id="8864975621965365890">浏览使用 <ph name="PRODUCT_FRAME_NAME" />呈现的网站时，阻止显示“停止支持”的提示。</translation>
 <translation id="8870318296973696995">主页</translation>
+<translation id="8889588091638298603">Quirks Server 可提供硬件方面的配置文件（例如 ICC 显示配置文件），以调整显示器校准。
+
+      如果此政策设为 false，设备将不会尝试联系 Quirks Server 来下载配置文件。
+
+     如果此政策设为 true 或未设置，<ph name="PRODUCT_OS_NAME" />将自动联系 Quirks Server 并下载配置文件（如果有），然后将这些文件存储在设备上。此类文件可能会用于多种目的，例如改善所连接的显示器的显示质量。</translation>
 <translation id="8905426178924715309">此政策已弃用，请改用 ForceGoogleSafeSearch 和 ForceYouTubeSafetyMode。如果设置了 ForceGoogleSafeSearch 或 ForceYouTubeSafetyMode 政策，此政策将被忽略。
 
       强制启用安全搜索功能来处理 Google 网页搜索中的查询，并禁止用户更改此设置。此设置还会强制在 YouTube 中启用安全模式。
@@ -2037,13 +2139,14 @@
 <translation id="8965758116018152083">如果此政策设为空字符串或未配置，<ph name="PRODUCT_OS_NAME" />将不会在用户登录期间显示自动填充选项。
       如果此政策设为表示域名的字符串，<ph name="PRODUCT_OS_NAME" />将在用户登录期间显示自动填充选项，以便用户只输入自己的用户名，而无需输入网域扩展名。用户可以覆盖此网域扩展名。</translation>
 <translation id="8970205333161758602">阻止显示 <ph name="PRODUCT_FRAME_NAME" />停止支持的提示</translation>
-<translation id="8971221018777092728">公开会话自动登录计时器</translation>
+<translation id="8971221018777092728">公用自助终端自动登录计时器</translation>
 <translation id="8976248126101463034">允许针对远程访问主机进行 gnubby 身份验证</translation>
 <translation id="8992176907758534924">不允许任何网站显示图片</translation>
 <translation id="9035964157729712237">要从黑名单中排除的扩展程序 ID</translation>
 <translation id="9042911395677044526">允许将要按用户应用的网络配置推送到 <ph name="PRODUCT_OS_NAME" />设备。网络配置是 JSON 格式的字符串，具体定义如 <ph name="ONC_SPEC_URL" /> 中的开放网络配置格式所述。</translation>
 <translation id="9084985621503260744">指定视频活动是否影响电源管理</translation>
 <translation id="9088433379343318874">启用受监管用户内容提供方</translation>
+<translation id="9088444059179765143">配置自动检测时区方法</translation>
 <translation id="9096086085182305205">身份验证服务器白名单</translation>
 <translation id="9098553063150791878">HTTP 身份验证政策</translation>
 <translation id="9104138886225968319">将监测信息发送到管理服务器，以便服务器检测设备是否处于离线状态。

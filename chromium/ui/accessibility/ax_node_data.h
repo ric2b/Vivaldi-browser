@@ -11,11 +11,16 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/accessibility/ax_export.h"
 #include "ui/gfx/geometry/rect.h"
+
+namespace gfx {
+class Transform;
+};
 
 namespace ui {
 
@@ -24,8 +29,10 @@ namespace ui {
 // one process to another.
 struct AX_EXPORT AXNodeData {
   AXNodeData();
-  AXNodeData(const AXNodeData& other);
   virtual ~AXNodeData();
+
+  AXNodeData(const AXNodeData& other);
+  AXNodeData& operator=(AXNodeData other);
 
   // Accessing accessibility attributes:
   //
@@ -95,12 +102,11 @@ struct AX_EXPORT AXNodeData {
   bool IsRoot() const;
   void SetRoot();
 
-  // This is a simple serializable struct. All member variables should be
-  // public and copyable.
+  // As much as possible this should behave as a simple, serializable,
+  // copyable struct.
   int32_t id;
   AXRole role;
   uint32_t state;
-  gfx::Rect location;
   std::vector<std::pair<AXStringAttribute, std::string> > string_attributes;
   std::vector<std::pair<AXIntAttribute, int32_t>> int_attributes;
   std::vector<std::pair<AXFloatAttribute, float> > float_attributes;
@@ -109,6 +115,16 @@ struct AX_EXPORT AXNodeData {
       intlist_attributes;
   base::StringPairs html_attributes;
   std::vector<int32_t> child_ids;
+
+  // The object's location relative to its window or frame.
+  gfx::Rect location;
+
+  // An additional transform to apply to position this object and its subtree.
+  // NOTE: this member is a scoped_ptr because it's rare and gfx::Transform
+  // takes up a fair amount of space. The assignment operator and copy
+  // constructor both make a duplicate of the owned pointer, so it acts more
+  // like a member than a pointer.
+  scoped_ptr<gfx::Transform> transform;
 };
 
 }  // namespace ui

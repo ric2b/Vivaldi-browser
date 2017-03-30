@@ -5,7 +5,9 @@
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 
 #include <stddef.h>
+
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -24,8 +26,8 @@
 #include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -82,7 +84,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
@@ -234,7 +235,7 @@ class TestingUpdateManifestProvider
 
   // This method must be registered with the test's EmbeddedTestServer to start
   // serving update manifests.
-  scoped_ptr<net::test_server::HttpResponse> HandleRequest(
+  std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
       const net::test_server::HttpRequest& request);
 
  private:
@@ -306,13 +307,13 @@ void TestingUpdateManifestProvider::AddUpdate(const std::string& id,
   updates_[id] = Update(version, crx_url);
 }
 
-scoped_ptr<net::test_server::HttpResponse>
+std::unique_ptr<net::test_server::HttpResponse>
 TestingUpdateManifestProvider::HandleRequest(
     const net::test_server::HttpRequest& request) {
   base::AutoLock auto_lock(lock_);
   const GURL url("http://localhost" + request.relative_url);
   if (url.path() != relative_update_url_)
-    return scoped_ptr<net::test_server::HttpResponse>();
+    return std::unique_ptr<net::test_server::HttpResponse>();
 
   std::string content = kUpdateManifestHeader;
   for (net::QueryIterator it(url); !it.IsAtEnd(); it.Advance()) {
@@ -332,8 +333,8 @@ TestingUpdateManifestProvider::HandleRequest(
     }
   }
   content += kUpdateManifestFooter;
-  scoped_ptr<net::test_server::BasicHttpResponse>
-      http_response(new net::test_server::BasicHttpResponse);
+  std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
+      new net::test_server::BasicHttpResponse);
   http_response->set_code(net::HTTP_OK);
   http_response->set_content(content);
   http_response->set_content_type("text/xml");
@@ -384,7 +385,7 @@ bool DoesInstallFailureReferToId(const std::string& id,
              .find(base::UTF8ToUTF16(id)) != base::string16::npos;
 }
 
-scoped_ptr<net::FakeURLFetcher> RunCallbackAndReturnFakeURLFetcher(
+std::unique_ptr<net::FakeURLFetcher> RunCallbackAndReturnFakeURLFetcher(
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     const base::Closure& callback,
     const GURL& url,
@@ -393,8 +394,8 @@ scoped_ptr<net::FakeURLFetcher> RunCallbackAndReturnFakeURLFetcher(
     net::HttpStatusCode response_code,
     net::URLRequestStatus::Status status) {
   task_runner->PostTask(FROM_HERE, callback);
-  return make_scoped_ptr(new net::FakeURLFetcher(
-      url, delegate, response_data, response_code, status));
+  return base::WrapUnique(new net::FakeURLFetcher(url, delegate, response_data,
+                                                  response_code, status));
 }
 
 bool IsSessionStarted() {
@@ -426,7 +427,7 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
 
   void SetUp() override {
     // Configure and start the test server.
-    scoped_ptr<crypto::RSAPrivateKey> signing_key(
+    std::unique_ptr<crypto::RSAPrivateKey> signing_key(
         PolicyBuilder::CreateTestSigningKey());
     ASSERT_TRUE(test_server_.SetSigningKeyAndSignature(
         signing_key.get(), PolicyBuilder::GetTestSigningKeySignature()));
@@ -731,7 +732,7 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
     ASSERT_TRUE(controller);
 
     chromeos::UserContext user_context(user_manager::USER_TYPE_PUBLIC_ACCOUNT,
-                                       account_id_1_.GetUserEmail());
+                                       account_id_1_);
     user_context.SetPublicSessionLocale(locale);
     user_context.SetPublicSessionInputMethod(input_method);
     controller->Login(user_context, chromeos::SigninSpecifics());
@@ -790,7 +791,7 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
   std::string initial_locale_;
   std::string initial_language_;
 
-  scoped_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<base::RunLoop> run_loop_;
 
   UserPolicyBuilder device_local_account_policy_;
   LocalPolicyTestServer test_server_;
@@ -1228,15 +1229,15 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsCached) {
   EXPECT_FALSE(cache->GetExtension(kGoodExtensionID, NULL, NULL));
 }
 
-static void OnPutExtension(scoped_ptr<base::RunLoop>* run_loop,
-                    const base::FilePath& file_path,
-                    bool file_ownership_passed) {
+static void OnPutExtension(std::unique_ptr<base::RunLoop>* run_loop,
+                           const base::FilePath& file_path,
+                           bool file_ownership_passed) {
   ASSERT_TRUE(*run_loop);
   (*run_loop)->Quit();
 }
 
 static void OnExtensionCacheImplInitialized(
-    scoped_ptr<base::RunLoop>* run_loop) {
+    std::unique_ptr<base::RunLoop>* run_loop) {
   ASSERT_TRUE(*run_loop);
   (*run_loop)->Quit();
 }
@@ -1271,9 +1272,9 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionCacheImplTest) {
   CreateFile(impl_path.Append(
                  extensions::LocalExtensionCache::kCacheReadyFlagFileName),
              0, base::Time::Now());
-  extensions::ExtensionCacheImpl cache_impl(make_scoped_ptr(
+  extensions::ExtensionCacheImpl cache_impl(base::WrapUnique(
       new extensions::ChromeOSExtensionCacheDelegate(impl_path)));
-  scoped_ptr<base::RunLoop> run_loop;
+  std::unique_ptr<base::RunLoop> run_loop;
   run_loop.reset(new base::RunLoop);
   cache_impl.Start(base::Bind(&OnExtensionCacheImplInitialized, &run_loop));
   run_loop->Run();
@@ -1354,8 +1355,8 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExternalData) {
   WaitForPolicy();
 
   // Start serving external data at |kExternalDataURL|.
-  scoped_ptr<base::RunLoop> run_loop(new base::RunLoop);
-  scoped_ptr<net::FakeURLFetcherFactory> fetcher_factory(
+  std::unique_ptr<base::RunLoop> run_loop(new base::RunLoop);
+  std::unique_ptr<net::FakeURLFetcherFactory> fetcher_factory(
       new net::FakeURLFetcherFactory(
           NULL, base::Bind(&RunCallbackAndReturnFakeURLFetcher,
                            base::ThreadTaskRunnerHandle::Get(),
@@ -1366,7 +1367,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExternalData) {
                                    net::URLRequestStatus::SUCCESS);
 
   // Specify an external data reference for the key::kUserAvatarImage policy.
-  scoped_ptr<base::DictionaryValue> metadata =
+  std::unique_ptr<base::DictionaryValue> metadata =
       test::ConstructExternalDataReference(kExternalDataURL, kExternalData);
   std::string policy;
   base::JSONWriter::Write(*metadata, &policy);
@@ -1397,7 +1398,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExternalData) {
   // |kExternalDataURL|, the retrieval should succeed because the data has been
   // cached.
   run_loop.reset(new base::RunLoop);
-  scoped_ptr<std::string> fetched_external_data;
+  std::unique_ptr<std::string> fetched_external_data;
   policy_entry->external_data_fetcher->Fetch(base::Bind(
       &test::ExternalDataFetchCallback,
       &fetched_external_data,
@@ -1476,8 +1477,10 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, UserAvatarImage) {
   run_loop_->Run();
   user_manager::UserManager::Get()->RemoveObserver(this);
 
-  scoped_ptr<gfx::ImageSkia> policy_image = chromeos::test::ImageLoader(
-      test_dir.Append(chromeos::test::kUserAvatarImage1RelativePath)).Load();
+  std::unique_ptr<gfx::ImageSkia> policy_image =
+      chromeos::test::ImageLoader(
+          test_dir.Append(chromeos::test::kUserAvatarImage1RelativePath))
+          .Load();
   ASSERT_TRUE(policy_image);
 
   const user_manager::User* user =
@@ -1505,7 +1508,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, UserAvatarImage) {
   EXPECT_EQ(user_manager::User::USER_IMAGE_EXTERNAL, image_index);
   EXPECT_EQ(saved_image_path.value(), image_path);
 
-  scoped_ptr<gfx::ImageSkia> saved_image =
+  std::unique_ptr<gfx::ImageSkia> saved_image =
       chromeos::test::ImageLoader(saved_image_path).Load();
   ASSERT_TRUE(saved_image);
 
@@ -1811,7 +1814,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, MultipleRecommendedLocales) {
   ASSERT_TRUE(content::ExecuteScriptAndExtractString(contents_,
                                                      get_locale_list,
                                                      &json));
-  scoped_ptr<base::Value> value_ptr = base::JSONReader::Read(json);
+  std::unique_ptr<base::Value> value_ptr = base::JSONReader::Read(json);
   const base::ListValue* locales = NULL;
   ASSERT_TRUE(value_ptr);
   ASSERT_TRUE(value_ptr->GetAsList(&locales));
@@ -2387,7 +2390,7 @@ IN_PROC_BROWSER_TEST_P(TermsOfServiceDownloadTest, TermsOfServiceScreen) {
       "  observer.observe(screenElement, options);"
       "}",
       &json));
-  scoped_ptr<base::Value> value_ptr = base::JSONReader::Read(json);
+  std::unique_ptr<base::Value> value_ptr = base::JSONReader::Read(json);
   const base::DictionaryValue* status = NULL;
   ASSERT_TRUE(value_ptr);
   ASSERT_TRUE(value_ptr->GetAsDictionary(&status));

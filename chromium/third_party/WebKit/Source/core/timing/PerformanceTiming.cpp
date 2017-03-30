@@ -33,6 +33,7 @@
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8ObjectBuilder.h"
 #include "core/dom/Document.h"
+#include "core/dom/DocumentParserTiming.h"
 #include "core/dom/DocumentTiming.h"
 #include "core/frame/LocalFrame.h"
 #include "core/loader/DocumentLoadTiming.h"
@@ -360,6 +361,42 @@ unsigned long long PerformanceTiming::firstContentfulPaint() const
     return monotonicTimeToIntegerMilliseconds(timing->firstContentfulPaint());
 }
 
+unsigned long long PerformanceTiming::parseStart() const
+{
+    const DocumentParserTiming* timing = documentParserTiming();
+    if (!timing)
+        return 0;
+
+    return monotonicTimeToIntegerMilliseconds(timing->parserStart());
+}
+
+unsigned long long PerformanceTiming::parseStop() const
+{
+    const DocumentParserTiming* timing = documentParserTiming();
+    if (!timing)
+        return 0;
+
+    return monotonicTimeToIntegerMilliseconds(timing->parserStop());
+}
+
+unsigned long long PerformanceTiming::parseBlockedOnScriptLoadDuration() const
+{
+    const DocumentParserTiming* timing = documentParserTiming();
+    if (!timing)
+        return 0;
+
+    return toIntegerMilliseconds(timing->parserBlockedOnScriptLoadDuration());
+}
+
+unsigned long long PerformanceTiming::parseBlockedOnScriptLoadFromDocumentWriteDuration() const
+{
+    const DocumentParserTiming* timing = documentParserTiming();
+    if (!timing)
+        return 0;
+
+    return toIntegerMilliseconds(timing->parserBlockedOnScriptLoadFromDocumentWriteDuration());
+}
+
 DocumentLoader* PerformanceTiming::documentLoader() const
 {
     if (!m_frame)
@@ -390,6 +427,18 @@ const PaintTiming* PerformanceTiming::paintTiming() const
         return nullptr;
 
     return &PaintTiming::from(*document);
+}
+
+const DocumentParserTiming* PerformanceTiming::documentParserTiming() const
+{
+    if (!m_frame)
+        return nullptr;
+
+    Document* document = m_frame->document();
+    if (!document)
+        return nullptr;
+
+    return &DocumentParserTiming::from(*document);
 }
 
 DocumentLoadTiming* PerformanceTiming::documentLoadTiming() const

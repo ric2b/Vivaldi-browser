@@ -34,6 +34,7 @@
           '../../../../third_party/polymer/v1_0/components-chromium/paper-toolbar/paper-toolbar-extracted.js',
           '../../../../ui/webui/resources/js/cr.js',
           '../../../../ui/webui/resources/js/compiled_resources.gyp:load_time_data',
+          '../../../../ui/webui/resources/js/promise_resolver.js',
           '../../../../ui/webui/resources/js/util.js',
           'media_router.js',
           'media_router_data.js',
@@ -42,6 +43,7 @@
           'elements/route_details/route_details.js',
           'elements/media_router_header/media_router_header.js',
           'elements/media_router_container/media_router_container.js',
+          'elements/media_router_search_highlighter/media_router_search_highlighter.js',
         ],
         'externs': [
           '<(EXTERNS_DIR)/chrome_send.js',

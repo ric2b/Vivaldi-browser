@@ -89,7 +89,6 @@ ImageQualityController::~ImageQualityController()
 
 ImageQualityController::ImageQualityController()
     : m_timer(adoptPtr(new Timer<ImageQualityController>(this, &ImageQualityController::highQualityRepaintTimerFired)))
-    , m_liveResizeOptimizationIsActive(false)
 {
 }
 
@@ -130,26 +129,15 @@ void ImageQualityController::objectDestroyed(const LayoutObject& object)
 
 void ImageQualityController::highQualityRepaintTimerFired(Timer<ImageQualityController>*)
 {
-    for (auto* layoutObject : m_objectLayerSizeMap.keys()) {
-        if (LocalFrame* frame = layoutObject->document().frame()) {
-            // If this layoutObject's containing FrameView is in live resize, punt the timer and hold back for now.
-            if (frame->view() && frame->view()->inLiveResize()) {
-                restartTimer();
-                return;
-            }
-        }
-        ObjectLayerSizeMap::iterator i = m_objectLayerSizeMap.find(layoutObject);
-        if (i != m_objectLayerSizeMap.end()) {
-            // Only invalidate the object if it is animating.
-            if (i->value.isResizing) {
-                // TODO(wangxianzhu): Use LayoutObject::getMutableForPainting().
-                const_cast<LayoutObject*>(layoutObject)->setShouldDoFullPaintInvalidation();
-            }
-            i->value.isResizing = false;
-        }
-    }
+    for (auto& i : m_objectLayerSizeMap) {
+        // Only invalidate the object if it is animating.
+        if (!i.value.isResizing)
+            continue;
 
-    m_liveResizeOptimizationIsActive = false;
+        // TODO(wangxianzhu): Use LayoutObject::getMutableForPainting().
+        const_cast<LayoutObject*>(i.key)->setShouldDoFullPaintInvalidation();
+        i.value.isResizing = false;
+    }
 }
 
 void ImageQualityController::restartTimer()
@@ -185,22 +173,6 @@ bool ImageQualityController::shouldPaintAtLowQuality(const LayoutObject& object,
         if (j != innerMap->end()) {
             isFirstResize = false;
             oldSize = j->value;
-        }
-    }
-
-    // If the containing FrameView is being resized, paint at low quality until resizing is finished.
-    if (LocalFrame* frame = object.document().frame()) {
-        bool frameViewIsCurrentlyInLiveResize = frame->view() && frame->view()->inLiveResize();
-        if (frameViewIsCurrentlyInLiveResize) {
-            set(object, innerMap, layer, layoutSize, true);
-            restartTimer();
-            m_liveResizeOptimizationIsActive = true;
-            return true;
-        }
-        if (m_liveResizeOptimizationIsActive) {
-            // Live resize has ended, paint in HQ and remove this object from the list.
-            removeLayer(object, innerMap, layer);
-            return false;
         }
     }
 

@@ -77,11 +77,11 @@ void BaseChooserOnlyDateAndTimeInputType::handleDOMActivateEvent(Event*)
 
 void BaseChooserOnlyDateAndTimeInputType::createShadowSubtree()
 {
-    DEFINE_STATIC_LOCAL(AtomicString, valueContainerPseudo, ("-webkit-date-and-time-value", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(AtomicString, valueContainerPseudo, ("-webkit-date-and-time-value"));
 
-    RefPtrWillBeRawPtr<HTMLDivElement> valueContainer = HTMLDivElement::create(element().document());
+    HTMLDivElement* valueContainer = HTMLDivElement::create(element().document());
     valueContainer->setShadowPseudoId(valueContainerPseudo);
-    element().userAgentShadowRoot()->appendChild(valueContainer.get());
+    element().userAgentShadowRoot()->appendChild(valueContainer);
     updateView();
 }
 
@@ -99,7 +99,7 @@ void BaseChooserOnlyDateAndTimeInputType::updateView()
         // Need to put something to keep text baseline.
         displayValue = " ";
     }
-    toHTMLElement(node)->setInnerText(displayValue, ASSERT_NO_EXCEPTION);
+    toHTMLElement(node)->setTextContent(displayValue);
 }
 
 void BaseChooserOnlyDateAndTimeInputType::setValue(const String& value, bool valueChanged, TextFieldEventBehavior eventBehavior)

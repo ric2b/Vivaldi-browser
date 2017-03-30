@@ -105,6 +105,7 @@ public class AwContentsGarbageCollectionTest extends AwTestBase {
     }
 
     @DisableHardwareAccelerationForTest
+    @SuppressFBWarnings("UC_USELESS_OBJECT")
     @SmallTest
     @Feature({"AndroidWebView"})
     public void testHoldKeyboardResultReceiver() throws Throwable {
@@ -253,7 +254,8 @@ public class AwContentsGarbageCollectionTest extends AwTestBase {
         final long timeoutBetweenGcMs = scaleTimeout(1000);
         for (int i = 0; i < 15; ++i) {
             try {
-                CriteriaHelper.pollForCriteria(criteria, timeoutBetweenGcMs, CHECK_INTERVAL);
+                CriteriaHelper.pollInstrumentationThread(
+                        criteria, timeoutBetweenGcMs, CHECK_INTERVAL);
                 break;
             } catch (AssertionError e) {
                 Runtime.getRuntime().gc();

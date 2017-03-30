@@ -47,7 +47,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/task_management/web_contents_tags.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
@@ -488,6 +487,9 @@ void ExtensionHost::AddNewContents(WebContents* source,
                                    const gfx::Rect& initial_rect,
                                    bool user_gesture,
                                    bool* was_blocked) {
+  if (vivaldi::IsVivaldiRunning() && disposition == NEW_POPUP) {
+    disposition = NEW_FOREGROUND_TAB;
+  }
   // First, if the creating extension view was associated with a tab contents,
   // use that tab content's delegate. We must be careful here that the
   // associated tab contents has the same profile as the new tab contents. In

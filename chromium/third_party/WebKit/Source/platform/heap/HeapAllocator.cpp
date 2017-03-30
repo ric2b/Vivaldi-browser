@@ -19,14 +19,14 @@ void HeapAllocator::backingFree(void* address)
     // Don't promptly free large objects because their page is never reused.
     // Don't free backings allocated on other threads.
     BasePage* page = pageFromObject(address);
-    if (page->isLargeObjectPage() || page->heap()->threadState() != state)
+    if (page->isLargeObjectPage() || page->arena()->getThreadState() != state)
         return;
 
     HeapObjectHeader* header = HeapObjectHeader::fromPayload(address);
     ASSERT(header->checkHeader());
-    NormalPageHeap* heap = static_cast<NormalPage*>(page)->heapForNormalPage();
+    NormalPageArena* arena = static_cast<NormalPage*>(page)->arenaForNormalPage();
     state->promptlyFreed(header->gcInfoIndex());
-    heap->promptlyFreeObject(header);
+    arena->promptlyFreeObject(header);
 }
 
 void HeapAllocator::freeVectorBacking(void* address)
@@ -58,15 +58,15 @@ bool HeapAllocator::backingExpand(void* address, size_t newSize)
     // FIXME: Support expand for large objects.
     // Don't expand backings allocated on other threads.
     BasePage* page = pageFromObject(address);
-    if (page->isLargeObjectPage() || page->heap()->threadState() != state)
+    if (page->isLargeObjectPage() || page->arena()->getThreadState() != state)
         return false;
 
     HeapObjectHeader* header = HeapObjectHeader::fromPayload(address);
     ASSERT(header->checkHeader());
-    NormalPageHeap* heap = static_cast<NormalPage*>(page)->heapForNormalPage();
-    bool succeed = heap->expandObject(header, newSize);
+    NormalPageArena* arena = static_cast<NormalPage*>(page)->arenaForNormalPage();
+    bool succeed = arena->expandObject(header, newSize);
     if (succeed)
-        state->allocationPointAdjusted(heap->heapIndex());
+        state->allocationPointAdjusted(arena->arenaIndex());
     return succeed;
 }
 
@@ -101,21 +101,21 @@ bool HeapAllocator::backingShrink(void* address, size_t quantizedCurrentSize, si
     // FIXME: Support shrink for large objects.
     // Don't shrink backings allocated on other threads.
     BasePage* page = pageFromObject(address);
-    if (page->isLargeObjectPage() || page->heap()->threadState() != state)
+    if (page->isLargeObjectPage() || page->arena()->getThreadState() != state)
         return false;
 
     HeapObjectHeader* header = HeapObjectHeader::fromPayload(address);
     ASSERT(header->checkHeader());
-    NormalPageHeap* heap = static_cast<NormalPage*>(page)->heapForNormalPage();
+    NormalPageArena* arena = static_cast<NormalPage*>(page)->arenaForNormalPage();
     // We shrink the object only if the shrinking will make a non-small
     // prompt-free block.
     // FIXME: Optimize the threshold size.
-    if (quantizedCurrentSize <= quantizedShrunkSize + sizeof(HeapObjectHeader) + sizeof(void*) * 32 && !heap->isObjectAllocatedAtAllocationPoint(header))
+    if (quantizedCurrentSize <= quantizedShrunkSize + sizeof(HeapObjectHeader) + sizeof(void*) * 32 && !arena->isObjectAllocatedAtAllocationPoint(header))
         return true;
 
-    bool succeededAtAllocationPoint = heap->shrinkObject(header, quantizedShrunkSize);
+    bool succeededAtAllocationPoint = arena->shrinkObject(header, quantizedShrunkSize);
     if (succeededAtAllocationPoint)
-        state->allocationPointAdjusted(heap->heapIndex());
+        state->allocationPointAdjusted(arena->arenaIndex());
     return true;
 }
 

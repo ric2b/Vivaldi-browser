@@ -8,6 +8,16 @@
 
 namespace net {
 
+bool IsTokenBindingSupported() {
+  return false;
+}
+
+bool SignTokenBindingEkm(base::StringPiece ekm,
+                         crypto::ECPrivateKey* key,
+                         std::vector<uint8_t>* out) {
+  return false;
+}
+
 Error BuildTokenBindingMessageFromTokenBindings(
     const std::vector<base::StringPiece>& token_bindings,
     std::string* out) {
@@ -15,16 +25,18 @@ Error BuildTokenBindingMessageFromTokenBindings(
   return ERR_NOT_IMPLEMENTED;
 }
 
-Error BuildProvidedTokenBinding(crypto::ECPrivateKey* key,
-                                const std::vector<uint8_t>& ekm,
-                                std::string* out) {
+Error BuildTokenBinding(TokenBindingType type,
+                        crypto::ECPrivateKey* key,
+                        const std::vector<uint8_t>& ekm,
+                        std::string* out) {
   NOTREACHED();
   return ERR_NOT_IMPLEMENTED;
 }
 
+TokenBinding::TokenBinding() {}
+
 bool ParseTokenBindingMessage(base::StringPiece token_binding_message,
-                              base::StringPiece* ec_point,
-                              base::StringPiece* signature) {
+                              std::vector<TokenBinding>* token_bindings) {
   NOTREACHED();
   return false;
 }

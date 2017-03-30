@@ -12,7 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/task_runner_util.h"
 #include "base/values.h"
-#include "chrome/browser/android/popular_sites.h"
+#include "chrome/browser/android/ntp/popular_sites.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
@@ -26,7 +26,8 @@ std::string ReadFileToString(const base::FilePath& path) {
     result.clear();
   return result;
 }
-}
+
+}  // namespace
 
 PopularSitesInternalsMessageHandler::PopularSitesInternalsMessageHandler()
     : weak_ptr_factory_(this) {}
@@ -105,9 +106,9 @@ void PopularSitesInternalsMessageHandler::SendDownloadResult(bool success) {
 }
 
 void PopularSitesInternalsMessageHandler::SendSites() {
-  scoped_ptr<base::ListValue> sites_list(new base::ListValue);
+  std::unique_ptr<base::ListValue> sites_list(new base::ListValue);
   for (const PopularSites::Site& site : popular_sites_->sites()) {
-    scoped_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
+    std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
     entry->SetString("title", site.title);
     entry->SetString("url", site.url.spec());
     sites_list->Append(std::move(entry));
@@ -115,6 +116,8 @@ void PopularSitesInternalsMessageHandler::SendSites() {
 
   base::DictionaryValue result;
   result.Set("sites", std::move(sites_list));
+  result.SetString("country", popular_sites_->GetCountry());
+  result.SetString("version", popular_sites_->GetVersion());
   web_ui()->CallJavascriptFunction(
       "chrome.popular_sites_internals.receiveSites", result);
 }

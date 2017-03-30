@@ -3,67 +3,44 @@
 // found in the LICENSE file.
 
 cr.define('md_history.history_list_test', function() {
-  // Array of test history data.
-  var TEST_HISTORY_RESULTS = [
-    {
-      "dateRelativeDay": "Today - Wednesday, December 9, 2015",
-      "url": "https://www.google.com"
-    },
-    {
-      "dateRelativeDay": "Yesterday - Tuesday, December 8, 2015",
-      "url": "https://en.wikipedia.com"
-    },
-    {
-      "dateRelativeDay": "Monday, December 7, 2015",
-      "url": "https://www.example.com"
-    },
-    {
-      "dateRelativeDay": "Monday, December 7, 2015",
-      "url": "https://www.google.com"
-    }
-  ];
-
-  var ADDITIONAL_RESULTS = [
-    {
-      "dateRelativeDay": "Monday, December 7, 2015",
-      "url": "https://en.wikipedia.com"
-    },
-    {
-      "dateRelativeDay": "Monday, December 7, 2015",
-      "url": "https://www.youtube.com"
-    },
-    {
-      "dateRelativeDay": "Sunday, December 6, 2015",
-      "url": "https://www.google.com"
-    },
-    {
-      "dateRelativeDay": "Saturday, December 5, 2015",
-      "url": "https://www.example.com"
-    }
-  ];
-
   function registerTests() {
     suite('history-list', function() {
       var element;
       var toolbar;
+      var TEST_HISTORY_RESULTS;
+      var ADDITIONAL_RESULTS;
 
       suiteSetup(function() {
         element = $('history-list');
         toolbar = $('toolbar');
-      });
 
-      setup(function() {
-        element.addNewResults(TEST_HISTORY_RESULTS);
+        TEST_HISTORY_RESULTS = [
+          createHistoryEntry('2016-03-15', 'https://www.google.com'),
+          createHistoryEntry('2016-03-14', 'https://en.wikipedia.org'),
+          createHistoryEntry('2016-03-13 10:00', 'https://www.example.com'),
+          createHistoryEntry('2016-03-13 9:00', 'https://www.google.com')
+        ];
+
+        ADDITIONAL_RESULTS = [
+          createHistoryEntry('2016-03-12 10:00', 'https://en.wikipedia.org'),
+          createHistoryEntry('2016-03-12 9:50', 'https://www.youtube.com'),
+          createHistoryEntry('2016-03-11', 'https://www.google.com'),
+          createHistoryEntry('2016-03-10', 'https://www.example.com')
+        ];
       });
 
       test('setting first and last items', function() {
-        assertTrue(element.historyData[0].isLastItem);
+        element.addNewResults(TEST_HISTORY_RESULTS, '');
         assertTrue(element.historyData[0].isFirstItem);
+        assertTrue(element.historyData[0].isLastItem);
         assertTrue(element.historyData[2].isFirstItem);
+        assertFalse(element.historyData[2].isLastItem);
+        assertFalse(element.historyData[3].isFirstItem);
         assertTrue(element.historyData[3].isLastItem);
       });
 
       test('cancelling selection of multiple items', function(done) {
+        element.addNewResults(TEST_HISTORY_RESULTS, '');
         flush(function() {
           var items = Polymer.dom(element.root)
               .querySelectorAll('history-item');
@@ -95,7 +72,8 @@ cr.define('md_history.history_list_test', function() {
       });
 
       test('updating history results', function(done) {
-        element.addNewResults(ADDITIONAL_RESULTS);
+        element.addNewResults(TEST_HISTORY_RESULTS, '');
+        element.addNewResults(ADDITIONAL_RESULTS, '');
 
         flush(function() {
           assertTrue(element.historyData[2].isFirstItem);
@@ -112,15 +90,16 @@ cr.define('md_history.history_list_test', function() {
       });
 
       test('removeVisits for multiple items', function(done) {
+        element.addNewResults(TEST_HISTORY_RESULTS, '');
         // Ensure that the correct identifying data is being used for removal.
         registerMessageCallback('removeVisits', this, function (toBeRemoved) {
 
           assertEquals(toBeRemoved[0].url, element.historyData[0].url);
           assertEquals(toBeRemoved[1].url, element.historyData[1].url);
           assertEquals(toBeRemoved[0].timestamps,
-                       element.historyData[0].timestamps);
+                       element.historyData[0].allTimestamps);
           assertEquals(toBeRemoved[1].timestamps,
-                       element.historyData[1].timestamps);
+                       element.historyData[1].allTimestamps);
 
           done();
         });
@@ -136,7 +115,8 @@ cr.define('md_history.history_list_test', function() {
       });
 
       test('deleting multiple items from view', function(done) {
-        element.addNewResults(ADDITIONAL_RESULTS);
+        element.addNewResults(TEST_HISTORY_RESULTS, '');
+        element.addNewResults(ADDITIONAL_RESULTS, '');
         flush(function() {
           items = Polymer.dom(element.root).querySelectorAll('history-item');
 
@@ -155,11 +135,11 @@ cr.define('md_history.history_list_test', function() {
 
             assertEquals(element.historyData.length, 5);
             assertEquals(element.historyData[0].dateRelativeDay,
-                         "Today - Wednesday, December 9, 2015");
+                         '2016-03-15');
             assertEquals(element.historyData[2].dateRelativeDay,
-                         "Monday, December 7, 2015");
+                         '2016-03-13');
             assertEquals(element.historyData[4].dateRelativeDay,
-                         "Sunday, December 6, 2015");
+                         '2016-03-11');
 
             // Checks that the first and last items have been reset correctly.
             assertTrue(element.historyData[2].isFirstItem);
@@ -172,8 +152,47 @@ cr.define('md_history.history_list_test', function() {
         });
       });
 
+      test('search results display with correct item title', function(done) {
+        element.addNewResults(
+            [createHistoryEntry('2016-03-15', 'https://www.google.com')],
+            'Google');
+
+        flush(function() {
+          assertTrue(element.historyData[0].isFirstItem);
+          var heading =
+              element.$$('history-item').$$('#date-accessed').textContent;
+          var title = element.$$('history-item').$.title;
+
+          // Check that the card title displays the search term somewhere.
+          var index = heading.indexOf('Google');
+          assertTrue(index != -1);
+
+          // Check that the search term is bolded correctly in the history-item.
+          assertGT(title.innerHTML.indexOf('<b>google</b>'), -1);
+          done();
+        });
+      });
+
+      test('correct display message when no history available', function(done) {
+        element.addNewResults([], '');
+
+        flush(function() {
+          assertFalse(element.$['no-results'].hidden);
+          assertTrue(element.$['infinite-list'].hidden);
+
+          element.addNewResults(TEST_HISTORY_RESULTS, '');
+
+          flush(function() {
+            assertTrue(element.$['no-results'].hidden);
+            assertFalse(element.$['infinite-list'].hidden);
+            done();
+          });
+        });
+      });
+
       teardown(function() {
         element.historyData = [];
+        registerMessageCallback('removeVisits', this, undefined);
       });
     });
   }

@@ -7,13 +7,11 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <sys/types.h>
-
-#include <linux/android/binder.h>
 
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "chromeos/binder/binder_driver_api.h"
 #include "chromeos/binder/transaction_data.h"
 #include "chromeos/chromeos_export.h"
 
@@ -44,7 +42,7 @@ class CHROMEOS_EXPORT TransactionDataFromDriver : public TransactionData {
   Status GetStatus() const override;
   const void* GetData() const override;
   size_t GetDataSize() const override;
-  const uintptr_t* GetObjectOffsets() const override;
+  const binder_uintptr_t* GetObjectOffsets() const override;
   size_t GetNumObjectOffsets() const override;
 
  private:

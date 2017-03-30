@@ -5,10 +5,10 @@
 #ifndef CONTENT_RENDERER_MEDIA_WEBMEDIAPLAYER_MS_H_
 #define CONTENT_RENDERER_MEDIA_WEBMEDIAPLAYER_MS_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
@@ -22,7 +22,6 @@
 
 namespace blink {
 class WebFrame;
-class WebGraphicsContext3D;
 class WebMediaPlayerClient;
 class WebSecurityOrigin;
 class WebString;
@@ -35,6 +34,12 @@ class VideoFrame;
 
 namespace cc_blink {
 class WebLayerImpl;
+}
+
+namespace gpu {
+namespace gles2 {
+class GLES2Interface;
+}
 }
 
 namespace content {
@@ -69,7 +74,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
       blink::WebMediaPlayerClient* client,
       base::WeakPtr<media::WebMediaPlayerDelegate> delegate,
       media::MediaLog* media_log,
-      scoped_ptr<MediaStreamRendererFactory> factory,
+      std::unique_ptr<MediaStreamRendererFactory> factory,
       const scoped_refptr<base::SingleThreadTaskRunner>& compositor_task_runner,
       const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
       const scoped_refptr<base::TaskRunner>& worker_task_runner,
@@ -105,6 +110,9 @@ class CONTENT_EXPORT WebMediaPlayerMS
   media::SkCanvasVideoRenderer* GetSkCanvasVideoRenderer();
   void ResetCanvasCache();
 
+  // Methods to trigger resize event.
+  void TriggerResize();
+
   // True if the loaded media has a playable video/audio track.
   bool hasVideo() const override;
   bool hasAudio() const override;
@@ -122,6 +130,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
   blink::WebMediaPlayer::NetworkState getNetworkState() const override;
   blink::WebMediaPlayer::ReadyState getReadyState() const override;
 
+  blink::WebString getErrorMessage() override;
   bool didLoadingProgress() override;
 
   bool hasSingleSecurityOrigin() const override;
@@ -131,23 +140,23 @@ class CONTENT_EXPORT WebMediaPlayerMS
 
   unsigned decodedFrameCount() const override;
   unsigned droppedFrameCount() const override;
-  unsigned audioDecodedByteCount() const override;
-  unsigned videoDecodedByteCount() const override;
+  size_t audioDecodedByteCount() const override;
+  size_t videoDecodedByteCount() const override;
 
   // WebMediaPlayerDelegate::Observer implementation.
-  void OnHidden(bool must_suspend) override;
+  void OnHidden() override;
   void OnShown() override;
+  void OnSuspendRequested(bool must_suspend) override;
   void OnPlay() override;
   void OnPause() override;
   void OnVolumeMultiplierUpdate(double multiplier) override;
 
-  bool copyVideoTextureToPlatformTexture(
-      blink::WebGraphicsContext3D* web_graphics_context,
-      unsigned int texture,
-      unsigned int internal_format,
-      unsigned int type,
-      bool premultiply_alpha,
-      bool flip_y) override;
+  bool copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface* gl,
+                                         unsigned int texture,
+                                         unsigned int internal_format,
+                                         unsigned int type,
+                                         bool premultiply_alpha,
+                                         bool flip_y) override;
 
  private:
   friend class WebMediaPlayerMSTest;
@@ -187,7 +196,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
   // Specify content:: to disambiguate from cc::.
   scoped_refptr<content::VideoFrameProvider> video_frame_provider_;  // Weak
 
-  scoped_ptr<cc_blink::WebLayerImpl> video_weblayer_;
+  std::unique_ptr<cc_blink::WebLayerImpl> video_weblayer_;
 
   scoped_refptr<MediaStreamAudioRenderer> audio_renderer_;  // Weak
   media::SkCanvasVideoRenderer video_renderer_;
@@ -198,7 +207,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
 
   scoped_refptr<media::MediaLog> media_log_;
 
-  scoped_ptr<MediaStreamRendererFactory> renderer_factory_;
+  std::unique_ptr<MediaStreamRendererFactory> renderer_factory_;
 
   const scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
   const scoped_refptr<base::TaskRunner> worker_task_runner_;
@@ -209,7 +218,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
 
   // WebMediaPlayerMS owns |compositor_| and destroys it on
   // |compositor_task_runner_|.
-  scoped_ptr<WebMediaPlayerMSCompositor> compositor_;
+  std::unique_ptr<WebMediaPlayerMSCompositor> compositor_;
 
   const scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
 
@@ -223,8 +232,9 @@ class CONTENT_EXPORT WebMediaPlayerMS
   double volume_;
   double volume_multiplier_;
 
-  // True if the delegate forced a pause during the last OnHidden() call.
-  bool paused_on_hidden_;
+  // True if playback should be started upon the next call to OnShown(). Only
+  // used on Android.
+  bool should_play_upon_shown_;
 
   DISALLOW_COPY_AND_ASSIGN(WebMediaPlayerMS);
 };

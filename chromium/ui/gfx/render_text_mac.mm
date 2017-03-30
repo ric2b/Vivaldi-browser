@@ -203,6 +203,9 @@ void RenderTextMac::DrawVisualText(internal::SkiaTextRenderer* renderer) {
 
   ApplyFadeEffects(renderer);
   ApplyTextShadows(renderer);
+  renderer->SetFontRenderParams(
+      font_list().GetPrimaryFont().GetFontRenderParams(),
+      subpixel_rendering_suppressed());
 
   for (size_t i = 0; i < runs_.size(); ++i) {
     const TextRun& run = runs_[i];
@@ -236,6 +239,8 @@ RenderTextMac::TextRun::TextRun()
       underline(false),
       strike(false),
       diagonal_strike(false) {}
+
+RenderTextMac::TextRun::TextRun(const TextRun& other) = default;
 
 RenderTextMac::TextRun::~TextRun() {}
 

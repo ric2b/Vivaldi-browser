@@ -31,7 +31,7 @@ QuicP2PSession::QuicP2PSession(const QuicConfig& config,
   // ToString() to format addresses for logging and ToString() is not allowed
   // for empty addresses.
   // TODO(sergeyu): Fix QuicConnection and remove SetSelfAddress() call below.
-  this->connection()->SetSelfAddress(IPEndPoint(IPAddress(0, 0, 0, 0), 0));
+  this->connection()->SetSelfAddress(IPEndPoint(IPAddress::IPv4AllZeros(), 0));
 }
 
 QuicP2PSession::~QuicP2PSession() {}
@@ -55,6 +55,7 @@ QuicP2PStream* QuicP2PSession::CreateIncomingDynamicStream(QuicStreamId id) {
   if (delegate_) {
     delegate_->OnIncomingStream(stream);
   }
+  ActivateStream(stream);
   return stream;
 }
 
@@ -68,8 +69,9 @@ QuicP2PStream* QuicP2PSession::CreateOutgoingDynamicStream(
 }
 
 void QuicP2PSession::OnConnectionClosed(QuicErrorCode error,
+                                        const std::string& error_details,
                                         ConnectionCloseSource source) {
-  QuicSession::OnConnectionClosed(error, source);
+  QuicSession::OnConnectionClosed(error, error_details, source);
 
   socket_.reset();
 
@@ -118,12 +120,12 @@ int QuicP2PSession::DoReadComplete(int result) {
   read_state_ = READ_STATE_DO_READ;
 
   if (result <= 0) {
-    connection()->CloseConnection(QUIC_PACKET_READ_ERROR,
-                                  ConnectionCloseSource::FROM_SELF);
+    connection()->CloseConnection(QUIC_PACKET_READ_ERROR, "packet read error",
+                                  ConnectionCloseBehavior::SILENT_CLOSE);
     return result;
   }
 
-  QuicEncryptedPacket packet(read_buffer_->data(), result);
+  QuicReceivedPacket packet(read_buffer_->data(), result, clock_.Now());
   connection()->ProcessUdpPacket(connection()->self_address(),
                                  connection()->peer_address(), packet);
   return OK;

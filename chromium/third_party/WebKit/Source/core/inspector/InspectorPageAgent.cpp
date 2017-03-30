@@ -64,6 +64,7 @@
 #include "platform/UserGestureIndicator.h"
 #include "platform/inspector_protocol/Values.h"
 #include "platform/v8_inspector/public/V8ContentSearchUtil.h"
+#include "platform/v8_inspector/public/V8DebuggerAgent.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/ListHashSet.h"
@@ -254,9 +255,9 @@ bool InspectorPageAgent::dataContent(const char* data, unsigned size, const Stri
     return decodeBuffer(data, size, textEncodingName, result);
 }
 
-PassOwnPtrWillBeRawPtr<InspectorPageAgent> InspectorPageAgent::create(InspectedFrames* inspectedFrames, Client* client, InspectorResourceContentLoader* resourceContentLoader, InspectorDebuggerAgent* debuggerAgent)
+RawPtr<InspectorPageAgent> InspectorPageAgent::create(InspectedFrames* inspectedFrames, Client* client, InspectorResourceContentLoader* resourceContentLoader, InspectorDebuggerAgent* debuggerAgent)
 {
-    return adoptPtrWillBeNoop(new InspectorPageAgent(inspectedFrames, client, resourceContentLoader, debuggerAgent));
+    return new InspectorPageAgent(inspectedFrames, client, resourceContentLoader, debuggerAgent);
 }
 
 Resource* InspectorPageAgent::cachedResource(LocalFrame* frame, const KURL& url)
@@ -266,7 +267,7 @@ Resource* InspectorPageAgent::cachedResource(LocalFrame* frame, const KURL& url)
         return nullptr;
     Resource* cachedResource = document->fetcher()->cachedResource(url);
     if (!cachedResource) {
-        WillBeHeapVector<RawPtrWillBeMember<Document>> allImports = InspectorPageAgent::importsForFrame(frame);
+        HeapVector<Member<Document>> allImports = InspectorPageAgent::importsForFrame(frame);
         for (Document* import : allImports) {
             cachedResource = import->fetcher()->cachedResource(url);
             if (cachedResource)
@@ -388,23 +389,24 @@ void InspectorPageAgent::disable(ErrorString*)
 
 void InspectorPageAgent::addScriptToEvaluateOnLoad(ErrorString*, const String& source, String* identifier)
 {
-    RefPtr<protocol::DictionaryValue> scripts = m_state->getObject(PageAgentState::pageAgentScriptsToEvaluateOnLoad);
+    protocol::DictionaryValue* scripts = m_state->getObject(PageAgentState::pageAgentScriptsToEvaluateOnLoad);
     if (!scripts) {
-        scripts = protocol::DictionaryValue::create();
-        m_state->setObject(PageAgentState::pageAgentScriptsToEvaluateOnLoad, scripts);
+        OwnPtr<protocol::DictionaryValue> newScripts = protocol::DictionaryValue::create();
+        scripts = newScripts.get();
+        m_state->setObject(PageAgentState::pageAgentScriptsToEvaluateOnLoad, newScripts.release());
     }
     // Assure we don't override existing ids -- m_lastScriptIdentifier could get out of sync WRT actual
     // scripts once we restored the scripts from the cookie during navigation.
     do {
         *identifier = String::number(++m_lastScriptIdentifier);
-    } while (scripts->find(*identifier) != scripts->end());
+    } while (scripts->get(*identifier));
     scripts->setString(*identifier, source);
 }
 
 void InspectorPageAgent::removeScriptToEvaluateOnLoad(ErrorString* error, const String& identifier)
 {
-    RefPtr<protocol::DictionaryValue> scripts = m_state->getObject(PageAgentState::pageAgentScriptsToEvaluateOnLoad);
-    if (!scripts || scripts->find(identifier) == scripts->end()) {
+    protocol::DictionaryValue* scripts = m_state->getObject(PageAgentState::pageAgentScriptsToEvaluateOnLoad);
+    if (!scripts || !scripts->get(identifier)) {
         *error = "Script not found";
         return;
     }
@@ -416,13 +418,13 @@ void InspectorPageAgent::setAutoAttachToCreatedPages(ErrorString*, bool autoAtta
     m_state->setBoolean(PageAgentState::autoAttachToCreatedPages, autoAttach);
 }
 
-void InspectorPageAgent::reload(ErrorString*, const Maybe<bool>& optionalIgnoreCache, const Maybe<String>& optionalScriptToEvaluateOnLoad)
+void InspectorPageAgent::reload(ErrorString*, const Maybe<bool>& optionalBypassCache, const Maybe<String>& optionalScriptToEvaluateOnLoad)
 {
     m_pendingScriptToEvaluateOnLoadOnce = optionalScriptToEvaluateOnLoad.fromMaybe("");
     ErrorString unused;
     m_debuggerAgent->setSkipAllPauses(&unused, true);
     m_reloading = true;
-    m_inspectedFrames->root()->reload(optionalIgnoreCache.fromMaybe(false) ? FrameLoadTypeReloadFromOrigin : FrameLoadTypeReload, NotClientRedirect);
+    m_inspectedFrames->root()->reload(optionalBypassCache.fromMaybe(false) ? FrameLoadTypeReloadBypassingCache : FrameLoadTypeReload, ClientRedirectPolicy::NotClientRedirect);
 }
 
 void InspectorPageAgent::navigate(ErrorString*, const String& url, String* outFrameId)
@@ -430,7 +432,7 @@ void InspectorPageAgent::navigate(ErrorString*, const String& url, String* outFr
     *outFrameId = frameId(m_inspectedFrames->root());
 }
 
-static void cachedResourcesForDocument(Document* document, WillBeHeapVector<RawPtrWillBeMember<Resource>>& result, bool skipXHRs)
+static void cachedResourcesForDocument(Document* document, HeapVector<Member<Resource>>& result, bool skipXHRs)
 {
     const ResourceFetcher::DocumentResourceMap& allResources = document->fetcher()->allResources();
     for (const auto& resource : allResources) {
@@ -438,34 +440,20 @@ static void cachedResourcesForDocument(Document* document, WillBeHeapVector<RawP
         if (!cachedResource)
             continue;
 
-        switch (cachedResource->getType()) {
-        case Resource::Image:
-            // Skip images that were not auto loaded (images disabled in the user agent).
-            if (toImageResource(cachedResource)->stillNeedsLoad())
-                continue;
-            break;
-        case Resource::Font:
-            // Skip fonts that were referenced in CSS but never used/downloaded.
-            if (toFontResource(cachedResource)->stillNeedsLoad())
-                continue;
-            break;
-        case Resource::Raw:
-            if (skipXHRs)
-                continue;
-            break;
-        default:
-            // All other Resource types download immediately.
-            break;
-        }
-
+        // Skip images that were not auto loaded (images disabled in the user agent),
+        // fonts that were referenced in CSS but never used/downloaded, etc.
+        if (cachedResource->stillNeedsLoad())
+            continue;
+        if (cachedResource->getType() == Resource::Raw && skipXHRs)
+            continue;
         result.append(cachedResource);
     }
 }
 
 // static
-WillBeHeapVector<RawPtrWillBeMember<Document>> InspectorPageAgent::importsForFrame(LocalFrame* frame)
+HeapVector<Member<Document>> InspectorPageAgent::importsForFrame(LocalFrame* frame)
 {
-    WillBeHeapVector<RawPtrWillBeMember<Document>> result;
+    HeapVector<Member<Document>> result;
     Document* rootDocument = frame->document();
 
     if (HTMLImportsController* controller = rootDocument->importsController()) {
@@ -478,11 +466,11 @@ WillBeHeapVector<RawPtrWillBeMember<Document>> InspectorPageAgent::importsForFra
     return result;
 }
 
-static WillBeHeapVector<RawPtrWillBeMember<Resource>> cachedResourcesForFrame(LocalFrame* frame, bool skipXHRs)
+static HeapVector<Member<Resource>> cachedResourcesForFrame(LocalFrame* frame, bool skipXHRs)
 {
-    WillBeHeapVector<RawPtrWillBeMember<Resource>> result;
+    HeapVector<Member<Resource>> result;
     Document* rootDocument = frame->document();
-    WillBeHeapVector<RawPtrWillBeMember<Document>> loaders = InspectorPageAgent::importsForFrame(frame);
+    HeapVector<Member<Document>> loaders = InspectorPageAgent::importsForFrame(frame);
 
     cachedResourcesForDocument(rootDocument, result, skipXHRs);
     for (size_t i = 0; i < loaders.size(); ++i)
@@ -505,11 +493,8 @@ void InspectorPageAgent::finishReload()
     m_debuggerAgent->setSkipAllPauses(&unused, false);
 }
 
-void InspectorPageAgent::getResourceContentAfterResourcesContentLoaded(const String& frameId, const String& url, PassRefPtr<GetResourceContentCallback> callback)
+void InspectorPageAgent::getResourceContentAfterResourcesContentLoaded(const String& frameId, const String& url, PassOwnPtr<GetResourceContentCallback> callback)
 {
-    if (!callback->isActive())
-        return;
-
     LocalFrame* frame = IdentifiersFactory::frameById(m_inspectedFrames, frameId);
     if (!frame) {
         callback->sendFailure("No frame for given id found");
@@ -526,7 +511,7 @@ void InspectorPageAgent::getResourceContentAfterResourcesContentLoaded(const Str
     callback->sendSuccess(content, base64Encoded);
 }
 
-void InspectorPageAgent::getResourceContent(ErrorString* errorString, const String& frameId, const String& url, PassRefPtr<GetResourceContentCallback> callback)
+void InspectorPageAgent::getResourceContent(ErrorString* errorString, const String& frameId, const String& url, PassOwnPtr<GetResourceContentCallback> callback)
 {
     if (!m_enabled) {
         callback->sendFailure("Agent is not enabled.");
@@ -535,11 +520,8 @@ void InspectorPageAgent::getResourceContent(ErrorString* errorString, const Stri
     m_inspectorResourceContentLoader->ensureResourcesContentLoaded(bind(&InspectorPageAgent::getResourceContentAfterResourcesContentLoaded, this, frameId, url, callback));
 }
 
-void InspectorPageAgent::searchContentAfterResourcesContentLoaded(const String& frameId, const String& url, const String& query, bool caseSensitive, bool isRegex, PassRefPtr<SearchInResourceCallback> callback)
+void InspectorPageAgent::searchContentAfterResourcesContentLoaded(const String& frameId, const String& url, const String& query, bool caseSensitive, bool isRegex, PassOwnPtr<SearchInResourceCallback> callback)
 {
-    if (!callback->isActive())
-        return;
-
     LocalFrame* frame = IdentifiersFactory::frameById(m_inspectedFrames, frameId);
     if (!frame) {
         callback->sendFailure("No frame for given id found");
@@ -555,11 +537,11 @@ void InspectorPageAgent::searchContentAfterResourcesContentLoaded(const String& 
     }
 
     OwnPtr<protocol::Array<protocol::Debugger::SearchMatch>> results;
-    results = V8ContentSearchUtil::searchInTextByLines(m_debuggerAgent->debugger(), content, query, caseSensitive, isRegex);
+    results = V8ContentSearchUtil::searchInTextByLines(&m_debuggerAgent->v8Agent()->debugger(), content, query, caseSensitive, isRegex);
     callback->sendSuccess(results.release());
 }
 
-void InspectorPageAgent::searchInResource(ErrorString*, const String& frameId, const String& url, const String& query, const Maybe<bool>& optionalCaseSensitive, const Maybe<bool>& optionalIsRegex, PassRefPtr<SearchInResourceCallback> callback)
+void InspectorPageAgent::searchInResource(ErrorString*, const String& frameId, const String& url, const String& query, const Maybe<bool>& optionalCaseSensitive, const Maybe<bool>& optionalIsRegex, PassOwnPtr<SearchInResourceCallback> callback)
 {
     if (!m_enabled) {
         callback->sendFailure("Agent is not enabled.");
@@ -589,11 +571,12 @@ void InspectorPageAgent::didClearDocumentOfWindowObject(LocalFrame* frame)
     if (!frontend())
         return;
 
-    RefPtr<protocol::DictionaryValue> scripts = m_state->getObject(PageAgentState::pageAgentScriptsToEvaluateOnLoad);
+    protocol::DictionaryValue* scripts = m_state->getObject(PageAgentState::pageAgentScriptsToEvaluateOnLoad);
     if (scripts) {
-        for (const auto& script : *scripts) {
-            String scriptText;
-            if (script.value->asString(&scriptText))
+        for (size_t i = 0; i < scripts->size(); ++i) {
+            auto script = scripts->at(i);
+            String16 scriptText;
+            if (script.second->asString(&scriptText))
                 frame->script().executeScriptInMainWorld(scriptText);
         }
     }
@@ -707,9 +690,9 @@ PassOwnPtr<protocol::Page::Frame> InspectorPageAgent::buildObjectForFrame(LocalF
     OwnPtr<protocol::Page::Frame> frameObject = protocol::Page::Frame::create()
         .setId(frameId(frame))
         .setLoaderId(IdentifiersFactory::loaderId(frame->loader().documentLoader()))
-        .setUrl(urlWithoutFragment(frame->document()->url()).string())
+        .setUrl(urlWithoutFragment(frame->document()->url()).getString())
         .setMimeType(frame->loader().documentLoader()->responseMIMEType())
-        .setSecurityOrigin(frame->document()->securityOrigin()->toRawString()).build();
+        .setSecurityOrigin(frame->document()->getSecurityOrigin()->toRawString()).build();
     // FIXME: This doesn't work for OOPI.
     Frame* parentFrame = frame->tree().parent();
     if (parentFrame && parentFrame->isLocalFrame())
@@ -729,10 +712,10 @@ PassOwnPtr<protocol::Page::FrameResourceTree> InspectorPageAgent::buildObjectFor
     OwnPtr<protocol::Page::Frame> frameObject = buildObjectForFrame(frame);
     OwnPtr<protocol::Array<protocol::Page::FrameResource>> subresources = protocol::Array<protocol::Page::FrameResource>::create();
 
-    WillBeHeapVector<RawPtrWillBeMember<Resource>> allResources = cachedResourcesForFrame(frame, true);
+    HeapVector<Member<Resource>> allResources = cachedResourcesForFrame(frame, true);
     for (Resource* cachedResource : allResources) {
         OwnPtr<protocol::Page::FrameResource> resourceObject = protocol::Page::FrameResource::create()
-            .setUrl(urlWithoutFragment(cachedResource->url()).string())
+            .setUrl(urlWithoutFragment(cachedResource->url()).getString())
             .setType(cachedResourceTypeJson(*cachedResource))
             .setMimeType(cachedResource->response().mimeType()).build();
         if (cachedResource->wasCanceled())
@@ -742,10 +725,10 @@ PassOwnPtr<protocol::Page::FrameResourceTree> InspectorPageAgent::buildObjectFor
         subresources->addItem(resourceObject.release());
     }
 
-    WillBeHeapVector<RawPtrWillBeMember<Document>> allImports = InspectorPageAgent::importsForFrame(frame);
+    HeapVector<Member<Document>> allImports = InspectorPageAgent::importsForFrame(frame);
     for (Document* import : allImports) {
         OwnPtr<protocol::Page::FrameResource> resourceObject = protocol::Page::FrameResource::create()
-            .setUrl(urlWithoutFragment(import->url()).string())
+            .setUrl(urlWithoutFragment(import->url()).getString())
             .setType(resourceTypeJson(InspectorPageAgent::DocumentResource))
             .setMimeType(import->suggestedMIMEType()).build();
         subresources->addItem(resourceObject.release());

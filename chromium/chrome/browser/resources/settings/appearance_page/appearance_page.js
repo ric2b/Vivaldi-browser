@@ -13,12 +13,11 @@
  *      </settings-appearance-page>
  *      ... other pages ...
  *    </iron-animated-pages>
- *
- * @group Chrome Settings Elements
- * @element settings-appearance-page
  */
 Polymer({
   is: 'settings-appearance-page',
+
+  behaviors: [I18nBehavior],
 
   properties: {
     /**
@@ -102,13 +101,13 @@ Polymer({
         {value: 500, name: '500%'},
       ],
     },
+
+    /** @private */
+    themeSublabel_: String,
   },
 
-  behaviors: [
-    I18nBehavior,
-  ],
-
   observers: [
+    'themeChanged_(prefs.extensions.theme.id.value)',
     'zoomLevelChanged_(defaultZoomLevel_.value)',
   ],
 
@@ -130,6 +129,18 @@ Polymer({
     // Set up the change event listener.
     cr.addWebUIListener('reset-theme-enabled-changed',
                         this.setResetThemeEnabled.bind(this));
+  },
+
+  /**
+   * @param {boolean} isNtp Whether to use the NTP as the home page.
+   * @param {string} homepage If not using NTP, use this URL.
+   * @return {string} The sub-label.
+   * @private
+   */
+  getShowHomeSubLabel_: function(isNtp, homepage) {
+    if (isNtp)
+      return this.i18n('homePageNtp');
+    return homepage || this.i18n('exampleDotCom');
   },
 
   /**
@@ -157,6 +168,21 @@ Polymer({
   /** @private */
   showFontsPage_: function() {
     return this.currentRoute.subpage[0] == 'appearance-fonts';
+  },
+
+  /**
+   * @param {string} themeId The theme ID.
+   * @private
+   */
+  themeChanged_: function(themeId) {
+    if (themeId) {
+      chrome.management.get(themeId,
+          function(info) {
+            this.themeSublabel_ = info.name;
+          }.bind(this));
+    } else {
+      this.themeSublabel_ = this.i18n('chooseFromWebStore');
+    }
   },
 
   /**

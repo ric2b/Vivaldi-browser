@@ -5,8 +5,9 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_BUBBLE_ICON_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_BUBBLE_ICON_VIEW_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/views/animation/ink_drop_host_view.h"
@@ -20,7 +21,7 @@ enum class VectorIconId;
 }
 
 namespace views {
-class BubbleDelegateView;
+class BubbleDialogDelegateView;
 class InkDropDelegate;
 }
 
@@ -62,12 +63,13 @@ class BubbleIconView : public views::InkDropHostView,
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
+  bool OnKeyReleased(const ui::KeyEvent& event) override;
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
-  scoped_ptr<views::InkDropHover> CreateInkDropHover() const override;
+  std::unique_ptr<views::InkDropHover> CreateInkDropHover() const override;
   SkColor GetInkDropBaseColor() const override;
 
   // ui::EventHandler:
@@ -83,7 +85,7 @@ class BubbleIconView : public views::InkDropHostView,
   virtual void ExecuteCommand(ExecuteSource source);
 
   // Returns the bubble instance for the icon.
-  virtual views::BubbleDelegateView* GetBubble() const = 0;
+  virtual views::BubbleDialogDelegateView* GetBubble() const = 0;
 
   // Gets the given vector icon in the correct color and size based on |active|
   // and whether Chrome's in material design mode.
@@ -127,7 +129,7 @@ class BubbleIconView : public views::InkDropHostView,
   bool suppress_mouse_released_action_;
 
   // Animation delegate for the ink drop ripple effect.
-  scoped_ptr<views::InkDropDelegate> ink_drop_delegate_;
+  std::unique_ptr<views::InkDropDelegate> ink_drop_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(BubbleIconView);
 };

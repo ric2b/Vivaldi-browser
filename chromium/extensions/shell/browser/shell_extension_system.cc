@@ -22,6 +22,7 @@
 #include "extensions/browser/quota_service.h"
 #include "extensions/browser/runtime_data.h"
 #include "extensions/browser/service_worker_manager.h"
+#include "extensions/browser/value_store/value_store_factory_impl.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/file_util.h"
 
@@ -36,7 +37,9 @@ void PerformApplicationShutdown()
 }
 
 ShellExtensionSystem::ShellExtensionSystem(BrowserContext* browser_context)
-    : browser_context_(browser_context), weak_factory_(this) {}
+    : browser_context_(browser_context),
+      store_factory_(new ValueStoreFactoryImpl(browser_context->GetPath())),
+      weak_factory_(this) {}
 
 ShellExtensionSystem::~ShellExtensionSystem() {
 }
@@ -139,6 +142,10 @@ StateStore* ShellExtensionSystem::rules_store() {
   return nullptr;
 }
 
+scoped_refptr<ValueStoreFactory> ShellExtensionSystem::store_factory() {
+  return store_factory_;
+}
+
 InfoMap* ShellExtensionSystem::info_map() {
   if (!info_map_.get())
     info_map_ = new InfoMap;
@@ -156,11 +163,11 @@ AppSorting* ShellExtensionSystem::app_sorting() {
 void ShellExtensionSystem::RegisterExtensionWithRequestContexts(
     const Extension* extension,
     const base::Closure& callback) {
-  BrowserThread::PostTaskAndReply(BrowserThread::IO, FROM_HERE,
-                                  base::Bind(&InfoMap::AddExtension, info_map(),
-                                             make_scoped_refptr(extension),
-                                             base::Time::Now(), false, false),
-                                  callback);
+  BrowserThread::PostTaskAndReply(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&InfoMap::AddExtension, info_map(),
+                 base::RetainedRef(extension), base::Time::Now(), false, false),
+      callback);
 }
 
 void ShellExtensionSystem::UnregisterExtensionWithRequestContexts(

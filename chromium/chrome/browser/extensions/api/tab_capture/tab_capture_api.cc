@@ -17,7 +17,6 @@
 #include "base/values.h"
 #include "chrome/browser/extensions/api/tab_capture/offscreen_tab.h"
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
-#include "chrome/browser/extensions/extension_renderer_state.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
@@ -90,7 +89,7 @@ void FilterDeprecatedGoogConstraints(TabCapture::CaptureOptions* options) {
         bad_keys.push_back(it.key());
     }
     for (const std::string& k : bad_keys) {
-      scoped_ptr<base::Value> ignored;
+      std::unique_ptr<base::Value> ignored;
       dict->RemoveWithoutPathExpansion(k, &ignored);
     }
   };
@@ -199,7 +198,7 @@ const char* const kMediaRouterExtensionIds[] = {
 };
 
 bool TabCaptureCaptureFunction::RunSync() {
-  scoped_ptr<api::tab_capture::Capture::Params> params =
+  std::unique_ptr<api::tab_capture::Capture::Params> params =
       TabCapture::Capture::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -274,7 +273,7 @@ bool TabCaptureGetCapturedTabsFunction::RunSync() {
 }
 
 bool TabCaptureCaptureOffscreenTabFunction::RunSync() {
-  scoped_ptr<TabCapture::CaptureOffscreenTab::Params> params =
+  std::unique_ptr<TabCapture::CaptureOffscreenTab::Params> params =
       TabCapture::CaptureOffscreenTab::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
 

@@ -36,10 +36,10 @@ const char* DeviceMotionController::supplementName()
 
 DeviceMotionController& DeviceMotionController::from(Document& document)
 {
-    DeviceMotionController* controller = static_cast<DeviceMotionController*>(WillBeHeapSupplement<Document>::from(document, supplementName()));
+    DeviceMotionController* controller = static_cast<DeviceMotionController*>(Supplement<Document>::from(document, supplementName()));
     if (!controller) {
         controller = new DeviceMotionController(document);
-        WillBeHeapSupplement<Document>::provideTo(document, supplementName(), adoptPtrWillBeNoop(controller));
+        Supplement<Document>::provideTo(document, supplementName(), controller);
     }
     return *controller;
 }
@@ -82,7 +82,7 @@ void DeviceMotionController::unregisterWithDispatcher()
     DeviceMotionDispatcher::instance().removeController(this);
 }
 
-PassRefPtrWillBeRawPtr<Event> DeviceMotionController::lastEvent() const
+Event* DeviceMotionController::lastEvent() const
 {
     return DeviceMotionEvent::create(EventTypeNames::devicemotion, DeviceMotionDispatcher::instance().latestDeviceMotionData());
 }
@@ -90,7 +90,7 @@ PassRefPtrWillBeRawPtr<Event> DeviceMotionController::lastEvent() const
 bool DeviceMotionController::isNullEvent(Event* event) const
 {
     DeviceMotionEvent* motionEvent = toDeviceMotionEvent(event);
-    return !motionEvent->deviceMotionData()->canProvideEventData();
+    return !motionEvent->getDeviceMotionData()->canProvideEventData();
 }
 
 const AtomicString& DeviceMotionController::eventTypeName() const
@@ -101,7 +101,7 @@ const AtomicString& DeviceMotionController::eventTypeName() const
 DEFINE_TRACE(DeviceMotionController)
 {
     DeviceSingleWindowEventController::trace(visitor);
-    WillBeHeapSupplement<Document>::trace(visitor);
+    Supplement<Document>::trace(visitor);
 }
 
 } // namespace blink

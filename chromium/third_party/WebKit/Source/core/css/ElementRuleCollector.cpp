@@ -51,7 +51,7 @@ ElementRuleCollector::ElementRuleCollector(const ElementResolveContext& context,
     : m_context(context)
     , m_selectorFilter(filter)
     , m_style(style)
-    , m_pseudoStyleRequest(NOPSEUDO)
+    , m_pseudoStyleRequest(PseudoIdNone)
     , m_mode(SelectorChecker::ResolvingStyle)
     , m_canUseFastReject(m_selectorFilter.parentStackIsConsistent(context.parentNode()))
     , m_sameOriginOnly(false)
@@ -68,13 +68,13 @@ const MatchResult& ElementRuleCollector::matchedResult() const
     return m_result;
 }
 
-PassRefPtrWillBeRawPtr<StyleRuleList> ElementRuleCollector::matchedStyleRuleList()
+StyleRuleList* ElementRuleCollector::matchedStyleRuleList()
 {
     ASSERT(m_mode == SelectorChecker::CollectingStyleRules);
     return m_styleRuleList.release();
 }
 
-PassRefPtrWillBeRawPtr<CSSRuleList> ElementRuleCollector::matchedCSSRuleList()
+CSSRuleList* ElementRuleCollector::matchedCSSRuleList()
 {
     ASSERT(m_mode == SelectorChecker::CollectingCSSRules);
     return m_cssRuleList.release();
@@ -164,7 +164,7 @@ void ElementRuleCollector::collectMatchingRulesForList(const RuleDataListType* r
             rejected++;
             continue;
         }
-        if (m_pseudoStyleRequest.pseudoId != NOPSEUDO && m_pseudoStyleRequest.pseudoId != result.dynamicPseudo) {
+        if (m_pseudoStyleRequest.pseudoId != PseudoIdNone && m_pseudoStyleRequest.pseudoId != result.dynamicPseudo) {
             rejected++;
             continue;
         }
@@ -254,7 +254,7 @@ void ElementRuleCollector::appendCSSOMWrapperForRule(CSSStyleSheet* parentStyleS
     // |parentStyleSheet| is 0 if and only if the |rule| is coming from User Agent. In this case,
     // it is safe to create CSSOM wrappers without parentStyleSheets as they will be used only
     // by inspector which will not try to edit them.
-    RefPtrWillBeRawPtr<CSSRule> cssRule = nullptr;
+    CSSRule* cssRule = nullptr;
     if (parentStyleSheet)
         cssRule = findStyleRule(parentStyleSheet, rule);
     else
@@ -294,13 +294,13 @@ void ElementRuleCollector::didMatchRule(const RuleData& ruleData, const Selector
     PseudoId dynamicPseudo = result.dynamicPseudo;
     // If we're matching normal rules, set a pseudo bit if
     // we really just matched a pseudo-element.
-    if (dynamicPseudo != NOPSEUDO && m_pseudoStyleRequest.pseudoId == NOPSEUDO) {
+    if (dynamicPseudo != PseudoIdNone && m_pseudoStyleRequest.pseudoId == PseudoIdNone) {
         if (m_mode == SelectorChecker::CollectingCSSRules || m_mode == SelectorChecker::CollectingStyleRules)
             return;
         // FIXME: Matching should not modify the style directly.
-        if (!m_style || dynamicPseudo >= FIRST_INTERNAL_PSEUDOID)
+        if (!m_style || dynamicPseudo >= FirstInternalPseudoId)
             return;
-        if ((dynamicPseudo == BEFORE || dynamicPseudo == AFTER) && !ruleData.rule()->properties().hasProperty(CSSPropertyContent))
+        if ((dynamicPseudo == PseudoIdBefore || dynamicPseudo == PseudoIdAfter) && !ruleData.rule()->properties().hasProperty(CSSPropertyContent))
             return;
         m_style->setHasPseudoStyle(dynamicPseudo);
     } else {

@@ -6,28 +6,46 @@
 #define UI_VIEWS_CONTROLS_BUTTON_MD_TEXT_BUTTON_H_
 
 #include "base/memory/scoped_ptr.h"
-#include "ui/views/controls/button/custom_button.h"
-
-namespace gfx {
-class RenderText;
-}
+#include "ui/views/animation/button_ink_drop_delegate.h"
+#include "ui/views/controls/button/label_button.h"
 
 namespace views {
 
 // A button class that implements the Material Design text button spec.
-class VIEWS_EXPORT MdTextButton : public CustomButton {
+class VIEWS_EXPORT MdTextButton : public LabelButton {
  public:
-  MdTextButton(ButtonListener* listener, const base::string16& text);
-  ~MdTextButton() override;
+  // Describes the presentation of a button. A stronger call to action draws
+  // more attention.
+  enum CallToAction {
+    NO_CALL_TO_ACTION,  // Default.
+    WEAK_CALL_TO_ACTION,
+    STRONG_CALL_TO_ACTION,
+  };
 
-  // View:
-  void OnPaint(gfx::Canvas* canvas) override;
-  gfx::Size GetPreferredSize() const override;
+  // Creates a normal STYLE_BUTTON LabelButton in pre-MD, or an MdTextButton
+  // in MD mode.
+  static LabelButton* CreateStandardButton(ButtonListener* listener,
+                                           const base::string16& text);
+  static MdTextButton* CreateMdButton(ButtonListener* listener,
+                                      const base::string16& text);
+
+  void SetCallToAction(CallToAction cta);
+
+  // LabelButton:
+  void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
+  SkColor GetInkDropBaseColor() const override;
+  void SetText(const base::string16& text) override;
 
  private:
-  void UpdateColor();
+  MdTextButton(ButtonListener* listener);
+  ~MdTextButton() override;
 
-  scoped_ptr<gfx::RenderText> render_text_;
+  void UpdateColorsFromNativeTheme();
+
+  ButtonInkDropDelegate ink_drop_delegate_;
+
+  // The call to action style for this button.
+  CallToAction cta_;
 
   DISALLOW_COPY_AND_ASSIGN(MdTextButton);
 };

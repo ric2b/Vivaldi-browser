@@ -95,6 +95,7 @@ WHITELISTED_LICENSES = [
     'Public domain BSD',
     'Public domain BSD-like',
     'Public domain LGPL (v2.1 or later)',
+    'Public domain University of Illinois/NCSA Open Source License (BSD like)',
     'Public domain',
     'SGI Free Software License B',
     'SunSoft (BSD like)',
@@ -405,7 +406,7 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',
     ],
 
-    'third_party/libvpx_new/source': [  # http://crbug.com/98319
+    'third_party/libvpx/source': [  # http://crbug.com/98319
         'UNKNOWN',
     ],
     'third_party/libxml': [
@@ -620,6 +621,9 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
 EXCLUDED_PATHS = [
     # Don't check generated files
     'out/',
+
+    # Don't check downloaded goma client binaries
+    'build/goma/client',
 
     # Don't check sysroot directories
     'build/linux/debian_wheezy_amd64-sysroot',

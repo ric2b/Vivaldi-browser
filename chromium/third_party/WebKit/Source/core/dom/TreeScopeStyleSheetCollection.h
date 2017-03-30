@@ -35,7 +35,6 @@
 #include "core/dom/TreeScope.h"
 #include "wtf/HashMap.h"
 #include "wtf/ListHashSet.h"
-#include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
@@ -47,7 +46,7 @@ class StyleRuleFontFace;
 
 class CORE_EXPORT TreeScopeStyleSheetCollection : public StyleSheetCollection {
 public:
-    void addStyleSheetCandidateNode(Node*, bool createdByParser);
+    void addStyleSheetCandidateNode(Node*);
     void removeStyleSheetCandidateNode(Node* node) { m_styleSheetCandidateNodes.remove(node); }
     bool hasStyleSheetCandidateNodes() const { return !m_styleSheetCandidateNodes.isEmpty(); }
 
@@ -72,7 +71,7 @@ protected:
     public:
         StyleResolverUpdateType styleResolverUpdateType;
         bool requiresFullStyleRecalc;
-        WillBeHeapVector<RawPtrWillBeMember<const StyleRuleFontFace>> fontFaceRulesToRemove;
+        HeapVector<Member<const StyleRuleFontFace>> fontFaceRulesToRemove;
 
         StyleSheetChange()
             : styleResolverUpdateType(Reconstruct)
@@ -82,13 +81,13 @@ protected:
     void analyzeStyleSheetChange(StyleResolverUpdateMode, const StyleSheetCollection&, StyleSheetChange&);
 
 private:
-    static StyleResolverUpdateType compareStyleSheets(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet>>& oldStyleSheets, const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet>>& newStylesheets, WillBeHeapVector<RawPtrWillBeMember<StyleSheetContents>>& addedSheets);
-    bool activeLoadingStyleSheetLoaded(const WillBeHeapVector<RefPtrWillBeMember<CSSStyleSheet>>& newStyleSheets);
+    static StyleResolverUpdateType compareStyleSheets(const HeapVector<Member<CSSStyleSheet>>& oldStyleSheets, const HeapVector<Member<CSSStyleSheet>>& newStylesheets, HeapVector<Member<StyleSheetContents>>& addedSheets);
+    bool activeLoadingStyleSheetLoaded(const HeapVector<Member<CSSStyleSheet>>& newStyleSheets);
 
     friend class TreeScopeStyleSheetCollectionTest;
 
 protected:
-    RawPtrWillBeMember<TreeScope> m_treeScope;
+    Member<TreeScope> m_treeScope;
     bool m_hadActiveLoadingStylesheet;
 
     DocumentOrderedList m_styleSheetCandidateNodes;

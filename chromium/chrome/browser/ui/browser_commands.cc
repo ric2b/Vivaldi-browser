@@ -217,7 +217,7 @@ WebContents* GetTabAndRevertIfNecessary(Browser* browser,
 
 void ReloadInternal(Browser* browser,
                     WindowOpenDisposition disposition,
-                    bool ignore_cache) {
+                    bool bypass_cache) {
   // As this is caused by a user action, give the focus to the page.
   //
   // Also notify RenderViewHostDelegate of the user gesture; this is
@@ -229,11 +229,11 @@ void ReloadInternal(Browser* browser,
 
   DevToolsWindow* devtools =
       DevToolsWindow::GetInstanceForInspectedWebContents(new_tab);
-  if (devtools && devtools->ReloadInspectedWebContents(ignore_cache))
+  if (devtools && devtools->ReloadInspectedWebContents(bypass_cache))
     return;
 
-  if (ignore_cache)
-    new_tab->GetController().ReloadIgnoringCache(true);
+  if (bypass_cache)
+    new_tab->GetController().ReloadBypassingCache(true);
   else
     new_tab->GetController().Reload(true);
 }
@@ -436,8 +436,8 @@ void Reload(Browser* browser, WindowOpenDisposition disposition) {
   ReloadInternal(browser, disposition, false);
 }
 
-void ReloadIgnoringCache(Browser* browser, WindowOpenDisposition disposition) {
-  content::RecordAction(UserMetricsAction("ReloadIgnoringCache"));
+void ReloadBypassingCache(Browser* browser, WindowOpenDisposition disposition) {
+  content::RecordAction(UserMetricsAction("ReloadBypassingCache"));
   ReloadInternal(browser, disposition, true);
 }
 
@@ -887,14 +887,17 @@ void Print(Browser* browser) {
 
 bool CanPrint(Browser* browser) {
   // Do not print when printing is disabled via pref or policy.
+  // Do not print when a page has crashed.
   // Do not print when a constrained window is showing. It's confusing.
   // TODO(gbillock): Need to re-assess the call to
   // IsShowingWebContentsModalDialog after a popup management policy is
   // refined -- we will probably want to just queue the print request, not
   // block it.
+  WebContents* current_tab = browser->tab_strip_model()->GetActiveWebContents();
   return browser->profile()->GetPrefs()->GetBoolean(prefs::kPrintingEnabled) &&
+      (current_tab && !current_tab->IsCrashed()) &&
       !(IsShowingWebContentsModalDialog(browser) ||
-      GetContentRestrictions(browser) & CONTENT_RESTRICTION_PRINT);
+        GetContentRestrictions(browser) & CONTENT_RESTRICTION_PRINT);
 }
 
 #if defined(ENABLE_BASIC_PRINTING)
@@ -904,27 +907,17 @@ void BasicPrint(Browser* browser) {
 
 bool CanBasicPrint(Browser* browser) {
   // If printing is not disabled via pref or policy, it is always possible to
-  // advanced print when the print preview is visible.  The exception to this
-  // is under Win8 ash, since showing the advanced print dialog will open it
-  // modally on the Desktop and hang the browser.
-#if defined(OS_WIN)
-  if (chrome::GetActiveDesktop() == chrome::HOST_DESKTOP_TYPE_ASH)
-    return false;
-#endif
-
+  // advanced print when the print preview is visible.
   return browser->profile()->GetPrefs()->GetBoolean(prefs::kPrintingEnabled) &&
       (PrintPreviewShowing(browser) || CanPrint(browser));
 }
 #endif  // ENABLE_BASIC_PRINTING
 
 bool CanRouteMedia(Browser* browser) {
-  Profile* profile = browser->profile();
-  if (profile->IsOffTheRecord() || !media_router::MediaRouterEnabled(profile))
-    return false;
-
   // Do not allow user to open Media Router dialog when there is already an
   // active modal dialog. This avoids overlapping dialogs.
-  return !IsShowingWebContentsModalDialog(browser);
+  return media_router::MediaRouterEnabled(browser->profile()) &&
+         !IsShowingWebContentsModalDialog(browser);
 }
 
 void RouteMedia(Browser* browser) {

@@ -107,9 +107,12 @@ void IPCDemuxer::Initialize(DemuxerHost* host,
                  status_cb));
 }
 
-void IPCDemuxer::StartWaitingForSeek() {
+void IPCDemuxer::StartWaitingForSeek(base::TimeDelta seek_time) {
   if (!stopping_)
     ipc_media_pipeline_host_->StartWaitingForSeek();
+}
+
+void IPCDemuxer::CancelPendingSeek(base::TimeDelta seek_time) {
 }
 
 void IPCDemuxer::Seek(base::TimeDelta time, const PipelineStatusCB& status_cb) {

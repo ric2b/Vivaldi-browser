@@ -180,8 +180,7 @@ body.show-tmi-mode .show-in-tmi-mode {
 }
 
 .plugin-disabled {
-  color: #a0a0a0;
-  opacity: 0.5;
+  color: #cccccc;
 }
 
 .plugin > tr > td {

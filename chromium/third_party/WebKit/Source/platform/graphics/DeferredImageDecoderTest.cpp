@@ -63,6 +63,28 @@ const unsigned char whitePNG[] = {
     0x42, 0x60, 0x82,
 };
 
+// Raw data for a 1x1 animated GIF with 2 frames.
+const unsigned char animatedGIF[] = {
+    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00,
+    0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x21,
+    0xff, 0x0b, 0x4e, 0x45, 0x54, 0x53, 0x43, 0x41, 0x50, 0x45,
+    0x32, 0x2e, 0x30, 0x03, 0x01, 0x00, 0x00, 0x00, 0x21, 0xff,
+    0x0b, 0x49, 0x6d, 0x61, 0x67, 0x65, 0x4d, 0x61, 0x67, 0x69,
+    0x63, 0x6b, 0x0d, 0x67, 0x61, 0x6d, 0x6d, 0x61, 0x3d, 0x30,
+    0x2e, 0x34, 0x35, 0x34, 0x35, 0x35, 0x00, 0x21, 0xff, 0x0b,
+    0x49, 0x6d, 0x61, 0x67, 0x65, 0x4d, 0x61, 0x67, 0x69, 0x63,
+    0x6b, 0x0d, 0x67, 0x61, 0x6d, 0x6d, 0x61, 0x3d, 0x30, 0x2e,
+    0x34, 0x35, 0x34, 0x35, 0x35, 0x00, 0x21, 0xf9, 0x04, 0x00,
+    0x14, 0x00, 0xff, 0x00, 0x21, 0xfe, 0x20, 0x43, 0x72, 0x65,
+    0x61, 0x74, 0x65, 0x64, 0x20, 0x77, 0x69, 0x74, 0x68, 0x20,
+    0x65, 0x7a, 0x67, 0x69, 0x66, 0x2e, 0x63, 0x6f, 0x6d, 0x20,
+    0x67, 0x69, 0x66, 0x20, 0x6d, 0x61, 0x6b, 0x65, 0x72, 0x00,
+    0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
+    0x02, 0x02, 0x44, 0x01, 0x00, 0x21, 0xf9, 0x04, 0x00, 0x14,
+    0x00, 0xff, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+    0x01, 0x00, 0x00, 0x02, 0x02, 0x4c, 0x01, 0x00, 0x3b,
+};
+
 struct Rasterizer {
     SkCanvas* canvas;
     SkPicture* picture;
@@ -82,7 +104,7 @@ public:
         m_actualDecoder = decoder.get();
         m_actualDecoder->setSize(1, 1);
         m_lazyDecoder = DeferredImageDecoder::createForTesting(decoder.release());
-        m_surface.reset(SkSurface::NewRasterN32Premul(100, 100));
+        m_surface = SkSurface::MakeRasterN32Premul(100, 100);
         ASSERT_TRUE(m_surface.get());
         m_decodeRequestCount = 0;
         m_repetitionCount = cAnimationNone;
@@ -140,7 +162,7 @@ protected:
     // Don't own this but saves the pointer to query states.
     MockImageDecoder* m_actualDecoder;
     OwnPtr<DeferredImageDecoder> m_lazyDecoder;
-    SkAutoTUnref<SkSurface> m_surface;
+    sk_sp<SkSurface> m_surface;
     int m_decodeRequestCount;
     RefPtr<SharedBuffer> m_data;
     size_t m_frameCount;
@@ -161,10 +183,10 @@ TEST_F(DeferredImageDecoderTest, drawIntoSkPicture)
     SkPictureRecorder recorder;
     SkCanvas* tempCanvas = recorder.beginRecording(100, 100, 0, 0);
     tempCanvas->drawImage(image.get(), 0, 0);
-    RefPtr<SkPicture> picture = adoptRef(recorder.endRecording());
+    sk_sp<SkPicture> picture = recorder.finishRecordingAsPicture();
     EXPECT_EQ(0, m_decodeRequestCount);
 
-    m_surface->getCanvas()->drawPicture(picture.get());
+    m_surface->getCanvas()->drawPicture(picture);
     EXPECT_EQ(0, m_decodeRequestCount);
 
     SkBitmap canvasBitmap;
@@ -185,8 +207,7 @@ TEST_F(DeferredImageDecoderTest, drawIntoSkPictureProgressive)
     SkPictureRecorder recorder;
     SkCanvas* tempCanvas = recorder.beginRecording(100, 100, 0, 0);
     tempCanvas->drawImage(image.get(), 0, 0);
-    RefPtr<SkPicture> picture = adoptRef(recorder.endRecording());
-    m_surface->getCanvas()->drawPicture(picture.get());
+    m_surface->getCanvas()->drawPicture(recorder.finishRecordingAsPicture());
 
     // Fully received the file and draw the SkPicture again.
     m_lazyDecoder->setData(*m_data, true);
@@ -194,8 +215,7 @@ TEST_F(DeferredImageDecoderTest, drawIntoSkPictureProgressive)
     ASSERT_TRUE(image);
     tempCanvas = recorder.beginRecording(100, 100, 0, 0);
     tempCanvas->drawImage(image.get(), 0, 0);
-    picture = adoptRef(recorder.endRecording());
-    m_surface->getCanvas()->drawPicture(picture.get());
+    m_surface->getCanvas()->drawPicture(recorder.finishRecordingAsPicture());
 
     SkBitmap canvasBitmap;
     canvasBitmap.allocN32Pixels(100, 100);
@@ -220,12 +240,12 @@ TEST_F(DeferredImageDecoderTest, decodeOnOtherThread)
     SkPictureRecorder recorder;
     SkCanvas* tempCanvas = recorder.beginRecording(100, 100, 0, 0);
     tempCanvas->drawImage(image.get(), 0, 0);
-    RefPtr<SkPicture> picture = adoptRef(recorder.endRecording());
+    sk_sp<SkPicture> picture = recorder.finishRecordingAsPicture();
     EXPECT_EQ(0, m_decodeRequestCount);
 
     // Create a thread to rasterize SkPicture.
     OwnPtr<WebThread> thread = adoptPtr(Platform::current()->createThread("RasterThread"));
-    thread->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&rasterizeMain, AllowCrossThreadAccess(m_surface->getCanvas()), AllowCrossThreadAccess(picture.get())));
+    thread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&rasterizeMain, AllowCrossThreadAccess(m_surface->getCanvas()), AllowCrossThreadAccess(picture.get())));
     thread.clear();
     EXPECT_EQ(0, m_decodeRequestCount);
 
@@ -318,9 +338,9 @@ TEST_F(DeferredImageDecoderTest, decodedSize)
     SkPictureRecorder recorder;
     SkCanvas* tempCanvas = recorder.beginRecording(100, 100, 0, 0);
     tempCanvas->drawImage(image.get(), 0, 0);
-    RefPtr<SkPicture> picture = adoptRef(recorder.endRecording());
+    sk_sp<SkPicture> picture = recorder.finishRecordingAsPicture();
     EXPECT_EQ(0, m_decodeRequestCount);
-    m_surface->getCanvas()->drawPicture(picture.get());
+    m_surface->getCanvas()->drawPicture(picture);
     EXPECT_EQ(1, m_decodeRequestCount);
 }
 
@@ -345,8 +365,12 @@ TEST_F(DeferredImageDecoderTest, frameOpacity)
     decoder->setData(*m_data, true);
 
     SkImageInfo pixInfo = SkImageInfo::MakeN32Premul(1, 1);
-    SkAutoPixmapStorage pixels;
-    pixels.alloc(pixInfo);
+
+    size_t rowBytes = pixInfo.minRowBytes();
+    size_t size = pixInfo.getSafeSize(rowBytes);
+
+    SkAutoMalloc storage(size);
+    SkPixmap pixmap(pixInfo, storage.get(), rowBytes);
 
     // Before decoding, the frame is not known to be opaque.
     RefPtr<SkImage> frame = decoder->createFrameAtIndex(0);
@@ -354,7 +378,7 @@ TEST_F(DeferredImageDecoderTest, frameOpacity)
     EXPECT_FALSE(frame->isOpaque());
 
     // Force a lazy decode by reading pixels.
-    EXPECT_TRUE(frame->readPixels(pixels, 0, 0));
+    EXPECT_TRUE(frame->readPixels(pixmap, 0, 0));
 
     // After decoding, the frame is known to be opaque.
     frame = decoder->createFrameAtIndex(0);
@@ -362,7 +386,26 @@ TEST_F(DeferredImageDecoderTest, frameOpacity)
     EXPECT_TRUE(frame->isOpaque());
 
     // Re-generating the opaque-marked frame should not fail.
-    EXPECT_TRUE(frame->readPixels(pixels, 0, 0));
+    EXPECT_TRUE(frame->readPixels(pixmap, 0, 0));
+}
+
+// The DeferredImageDecoder would sometimes assume that a frame was a certain
+// size even if the actual decoder reported it had a size of 0 bytes. This test
+// verifies that it's fixed by always checking with the actual decoder when
+// creating a frame.
+TEST_F(DeferredImageDecoderTest, respectActualDecoderSizeOnCreate)
+{
+    m_data = SharedBuffer::create(animatedGIF, sizeof(animatedGIF));
+    m_frameCount = 2;
+    forceFirstFrameToBeEmpty();
+    m_lazyDecoder->setData(*m_data, false);
+    m_lazyDecoder->createFrameAtIndex(0);
+    m_lazyDecoder->createFrameAtIndex(1);
+    m_lazyDecoder->setData(*m_data, true);
+    // Clears only the first frame (0 bytes). If DeferredImageDecoder doesn't
+    // check with the actual decoder it reports 4 bytes instead.
+    size_t frameBytesCleared = m_lazyDecoder->clearCacheExceptFrame(1);
+    EXPECT_EQ(static_cast<size_t>(0), frameBytesCleared);
 }
 
 } // namespace blink

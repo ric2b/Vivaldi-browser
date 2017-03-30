@@ -47,13 +47,15 @@ namespace blink {
 class Document;
 class VTTScanner;
 
-class VTTParserClient {
+class VTTParserClient : public GarbageCollectedMixin {
 public:
     virtual ~VTTParserClient() { }
 
     virtual void newCuesParsed() = 0;
     virtual void newRegionsParsed() = 0;
     virtual void fileFailedToParse() = 0;
+
+    DEFINE_INLINE_VIRTUAL_TRACE() { }
 };
 
 class VTTParser final : public GarbageCollectedFinalized<VTTParser> {
@@ -101,7 +103,7 @@ public:
     static bool parseFloatPercentageValuePair(VTTScanner&, char, FloatPoint&);
 
     // Create the DocumentFragment representation of the WebVTT cue text.
-    static PassRefPtrWillBeRawPtr<DocumentFragment> createDocumentFragmentFromCueText(Document&, const String&);
+    static RawPtr<DocumentFragment> createDocumentFragmentFromCueText(Document&, const String&);
 
     // Input data to the parser to parse.
     void parseBytes(const char* data, size_t length);
@@ -116,7 +118,7 @@ public:
 private:
     VTTParser(VTTParserClient*, Document&);
 
-    RawPtrWillBeMember<Document> m_document;
+    Member<Document> m_document;
     ParseState m_state;
 
     void parse();
@@ -144,7 +146,7 @@ private:
     StringBuilder m_currentContent;
     String m_currentSettings;
 
-    VTTParserClient* m_client;
+    Member<VTTParserClient> m_client;
 
     HeapVector<Member<TextTrackCue>> m_cueList;
 

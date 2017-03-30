@@ -9,9 +9,10 @@
 
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/webui/settings_utils.h"
 #include "chrome/common/pref_names.h"
-#include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/web_ui.h"
+#include "url/gurl.h"
 
 namespace settings {
 
@@ -27,17 +28,25 @@ void StartupPagesHandler::RegisterMessages() {
     return;
 
   web_ui()->RegisterMessageCallback("addStartupPage",
-      base::Bind(&StartupPagesHandler::AddStartupPage,
+      base::Bind(&StartupPagesHandler::HandleAddStartupPage,
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback("onStartupPrefsPageLoad",
-      base::Bind(&StartupPagesHandler::OnStartupPrefsPageLoad,
+      base::Bind(&StartupPagesHandler::HandleOnStartupPrefsPageLoad,
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback("removeStartupPage",
-      base::Bind(&StartupPagesHandler::RemoveStartupPage,
+      base::Bind(&StartupPagesHandler::HandleRemoveStartupPage,
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback("setStartupPagesToCurrentPages",
-      base::Bind(&StartupPagesHandler::SetStartupPagesToCurrentPages,
+      base::Bind(&StartupPagesHandler::HandleSetStartupPagesToCurrentPages,
                  base::Unretained(this)));
+  web_ui()->RegisterMessageCallback("validateStartupPage",
+      base::Bind(&StartupPagesHandler::HandleValidateStartupPage,
+                 base::Unretained(this)));
+}
+
+void StartupPagesHandler::RenderViewReused() {
+  startup_custom_pages_table_model_.SetObserver(nullptr);
+  pref_change_registrar_.RemoveAll();
 }
 
 void StartupPagesHandler::OnModelChanged() {
@@ -45,7 +54,7 @@ void StartupPagesHandler::OnModelChanged() {
   int page_count = startup_custom_pages_table_model_.RowCount();
   std::vector<GURL> urls = startup_custom_pages_table_model_.GetURLs();
   for (int i = 0; i < page_count; ++i) {
-    scoped_ptr<base::DictionaryValue> entry(new base::DictionaryValue());
+    std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue());
     entry->SetString("title", startup_custom_pages_table_model_.GetText(i, 0));
     entry->SetString("url", urls[i].spec());
     entry->SetString("tooltip",
@@ -54,7 +63,8 @@ void StartupPagesHandler::OnModelChanged() {
     startup_pages.Append(entry.release());
   }
 
-  web_ui()->CallJavascriptFunction("Settings.updateStartupPages",
+  web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
+                                   base::StringValue("update-startup-pages"),
                                    startup_pages);
 }
 
@@ -70,16 +80,16 @@ void StartupPagesHandler::OnItemsRemoved(int start, int length) {
   OnModelChanged();
 }
 
-void StartupPagesHandler::AddStartupPage(const base::ListValue* args) {
+void StartupPagesHandler::HandleAddStartupPage(const base::ListValue* args) {
   std::string url_string;
   if (!args->GetString(0, &url_string)) {
-    DLOG(ERROR) << "Missing URL string parameter";
+    NOTREACHED();
     return;
   }
 
-  GURL url = url_formatter::FixupURL(url_string, std::string());
-  if (!url.is_valid()) {
-    LOG(ERROR) << "FixupURL failed on " << url_string;
+  GURL url;
+  if (!settings_utils::FixupAndValidateStartupPage(url_string, &url)) {
+    NOTREACHED();
     return;
   }
 
@@ -92,7 +102,8 @@ void StartupPagesHandler::AddStartupPage(const base::ListValue* args) {
   SaveStartupPagesPref();
 }
 
-void StartupPagesHandler::OnStartupPrefsPageLoad(const base::ListValue* args) {
+void StartupPagesHandler::HandleOnStartupPrefsPageLoad(
+    const base::ListValue* args) {
   startup_custom_pages_table_model_.SetObserver(this);
 
   PrefService* prefService = Profile::FromWebUI(web_ui())->GetPrefs();
@@ -114,21 +125,41 @@ void StartupPagesHandler::OnStartupPrefsPageLoad(const base::ListValue* args) {
   startup_custom_pages_table_model_.SetURLs(startup_pref.urls);
 }
 
-void StartupPagesHandler::RemoveStartupPage(const base::ListValue* args) {
+void StartupPagesHandler::HandleRemoveStartupPage(const base::ListValue* args) {
   int selected_index;
   if (!args->GetInteger(0, &selected_index)) {
-    DLOG(ERROR) << "Missing index parameter";
+    NOTREACHED();
     return;
   }
 
   if (selected_index < 0 ||
       selected_index >= startup_custom_pages_table_model_.RowCount()) {
-    LOG(ERROR) << "Index out of range " << selected_index;
+    NOTREACHED();
     return;
   }
 
   startup_custom_pages_table_model_.Remove(selected_index);
   SaveStartupPagesPref();
+}
+
+void StartupPagesHandler::HandleSetStartupPagesToCurrentPages(
+    const base::ListValue* args) {
+  startup_custom_pages_table_model_.SetToCurrentlyOpenPages();
+  SaveStartupPagesPref();
+}
+
+void StartupPagesHandler::HandleValidateStartupPage(
+    const base::ListValue* args) {
+  CHECK_EQ(args->GetSize(), 2U);
+
+  const base::Value* callback_id;
+  CHECK(args->Get(0, &callback_id));
+
+  std::string url_string;
+  CHECK(args->GetString(1, &url_string));
+
+  bool valid = settings_utils::FixupAndValidateStartupPage(url_string, nullptr);
+  ResolveJavascriptCallback(*callback_id, base::FundamentalValue(valid));
 }
 
 void StartupPagesHandler::SaveStartupPagesPref() {
@@ -141,12 +172,6 @@ void StartupPagesHandler::SaveStartupPagesPref() {
     pref.type = SessionStartupPref::DEFAULT;
 
   SessionStartupPref::SetStartupPref(prefs, pref);
-}
-
-void StartupPagesHandler::SetStartupPagesToCurrentPages(
-    const base::ListValue* args) {
-  startup_custom_pages_table_model_.SetToCurrentlyOpenPages();
-  SaveStartupPagesPref();
 }
 
 void StartupPagesHandler::UpdateStartupPages() {

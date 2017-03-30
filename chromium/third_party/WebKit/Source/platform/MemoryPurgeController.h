@@ -9,7 +9,6 @@
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebMemoryPressureLevel.h"
-#include "wtf/MainThread.h"
 
 namespace blink {
 
@@ -22,7 +21,7 @@ enum class DeviceKind {
 // interface to be informed when they should reduce memory consumption.
 // MemoryPurgeController assumes that subclasses of MemoryPurgeClient are
 // WillBes.
-class PLATFORM_EXPORT MemoryPurgeClient : public WillBeGarbageCollectedMixin {
+class PLATFORM_EXPORT MemoryPurgeClient : public GarbageCollectedMixin {
 public:
     virtual ~MemoryPurgeClient() { }
 
@@ -37,17 +36,15 @@ public:
 // for reducing memory consumption and notifies its clients.
 // Since we want to control memory per tab, MemoryPurgeController is owned by
 // Page.
-class PLATFORM_EXPORT MemoryPurgeController final : public NoBaseWillBeGarbageCollectedFinalized<MemoryPurgeController> {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(MemoryPurgeController);
+class PLATFORM_EXPORT MemoryPurgeController final : public GarbageCollected<MemoryPurgeController> {
     WTF_MAKE_NONCOPYABLE(MemoryPurgeController);
 public:
     static void onMemoryPressure(WebMemoryPressureLevel);
 
-    static PassOwnPtrWillBeRawPtr<MemoryPurgeController> create()
+    static MemoryPurgeController* create()
     {
-        return adoptPtrWillBeNoop(new MemoryPurgeController);
+        return new MemoryPurgeController;
     }
-    ~MemoryPurgeController();
 
     void registerClient(MemoryPurgeClient* client)
     {
@@ -72,7 +69,7 @@ public:
 private:
     MemoryPurgeController();
 
-    WillBeHeapHashSet<RawPtrWillBeWeakMember<MemoryPurgeClient>> m_clients;
+    HeapHashSet<WeakMember<MemoryPurgeClient>> m_clients;
     DeviceKind m_deviceKind;
 };
 

@@ -26,6 +26,8 @@ BluetoothDeviceInfo::~BluetoothDeviceInfo() {
 IMEInfo::IMEInfo() : selected(false), third_party(false) {
 }
 
+IMEInfo::IMEInfo(const IMEInfo& other) = default;
+
 IMEInfo::~IMEInfo() {
 }
 
@@ -236,8 +238,7 @@ VolumeControlDelegate* SystemTrayDelegate::GetVolumeControlDelegate() const {
 }
 
 void SystemTrayDelegate::SetVolumeControlDelegate(
-    scoped_ptr<VolumeControlDelegate> delegate) {
-}
+    std::unique_ptr<VolumeControlDelegate> delegate) {}
 
 bool SystemTrayDelegate::GetSessionStartTime(
     base::TimeTicks* session_start_time) {

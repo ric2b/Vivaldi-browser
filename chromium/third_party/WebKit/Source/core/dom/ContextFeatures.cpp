@@ -29,6 +29,7 @@
 #include "core/dom/Document.h"
 #include "core/page/Page.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "wtf/StdLibExtras.h"
 
 namespace blink {
 
@@ -42,9 +43,9 @@ const char* ContextFeatures::supplementName()
     return "ContextFeatures";
 }
 
-ContextFeatures* ContextFeatures::defaultSwitch()
+ContextFeatures& ContextFeatures::defaultSwitch()
 {
-    DEFINE_STATIC_REF_WILL_BE_PERSISTENT(ContextFeatures, instance, (ContextFeatures::create(ContextFeaturesClient::empty())));
+    DEFINE_STATIC_LOCAL(ContextFeatures, instance, (ContextFeatures::create(ContextFeaturesClient::empty())));
     return instance;
 }
 
@@ -57,7 +58,7 @@ bool ContextFeatures::pagePopupEnabled(Document* document)
 
 bool ContextFeatures::mutationEventsEnabled(Document* document)
 {
-    ASSERT(document);
+    DCHECK(document);
     if (!document)
         return true;
     return document->contextFeatures().isEnabled(document, MutationEvents, true);
@@ -65,12 +66,12 @@ bool ContextFeatures::mutationEventsEnabled(Document* document)
 
 void provideContextFeaturesTo(Page& page, PassOwnPtr<ContextFeaturesClient> client)
 {
-    ContextFeatures::SupplementType::provideTo(page, ContextFeatures::supplementName(), ContextFeatures::create(client));
+    Supplement<Page>::provideTo(page, ContextFeatures::supplementName(), ContextFeatures::create(client));
 }
 
 void provideContextFeaturesToDocumentFrom(Document& document, Page& page)
 {
-    ContextFeatures* provided = static_cast<ContextFeatures*>(ContextFeatures::SupplementType::from(page, ContextFeatures::supplementName()));
+    ContextFeatures* provided = static_cast<ContextFeatures*>(Supplement<Page>::from(page, ContextFeatures::supplementName()));
     if (!provided)
         return;
     document.setContextFeatures(*provided);

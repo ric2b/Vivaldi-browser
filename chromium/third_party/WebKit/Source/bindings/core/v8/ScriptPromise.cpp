@@ -174,7 +174,7 @@ ScriptPromise ScriptPromise::InternalResolver::promise() const
 {
     if (m_resolver.isEmpty())
         return ScriptPromise();
-    return ScriptPromise(m_resolver.scriptState(), v8Promise());
+    return ScriptPromise(m_resolver.getScriptState(), v8Promise());
 }
 
 void ScriptPromise::InternalResolver::resolve(v8::Local<v8::Value> value)
@@ -249,6 +249,11 @@ ScriptPromise ScriptPromise::then(v8::Local<v8::Function> onFulfilled, v8::Local
     }
 
     return ScriptPromise(m_scriptState.get(), resultPromise);
+}
+
+ScriptPromise ScriptPromise::castUndefined(ScriptState* scriptState)
+{
+    return ScriptPromise::cast(scriptState, v8::Undefined(scriptState->isolate()));
 }
 
 ScriptPromise ScriptPromise::cast(ScriptState* scriptState, const ScriptValue& value)

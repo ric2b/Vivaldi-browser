@@ -8,9 +8,7 @@
   {
     "namespace": "extensionsManifestTypes",
     "description": "Schemas for structured manifest entries",
-    "compiler_options": {
-      "generate_error_messages": true
-    },
+    "compiler_options": { "generate_error_messages": true },
     "types": [
       {
         "id": "ContentCapabilities",

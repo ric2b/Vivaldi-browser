@@ -10,6 +10,8 @@
 #include "remoting/base/breakpad.h"
 
 #include <windows.h>
+
+#include <memory>
 #include <string>
 
 #include "base/atomicops.h"
@@ -17,9 +19,8 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "base/process/memory.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/win/current_module.h"
 #include "base/win/wrapped_window_proc.h"
 #include "breakpad/src/client/windows/handler/exception_handler.h"
 
@@ -77,7 +78,7 @@ class BreakpadWin {
   static int OnWindowProcedureException(EXCEPTION_POINTERS* exinfo);
 
   // Breakpad's exception handler.
-  scoped_ptr<google_breakpad::ExceptionHandler> breakpad_;
+  std::unique_ptr<google_breakpad::ExceptionHandler> breakpad_;
 
   // This flag is used to indicate that an exception is already being handled.
   volatile AtomicWord handling_exception_;
@@ -144,10 +145,8 @@ BreakpadWin* BreakpadWin::GetInstance() {
 
 // Returns the Custom information to be used for crash reporting.
 google_breakpad::CustomClientInfo* BreakpadWin::GetCustomInfo() {
-  HMODULE binary = base::GetModuleFromAddress(
-      reinterpret_cast<void*>(&remoting::InitializeCrashReporting));
-  scoped_ptr<FileVersionInfo> version_info(
-      FileVersionInfo::CreateFileVersionInfoForModule(binary));
+  std::unique_ptr<FileVersionInfo> version_info(
+      FileVersionInfo::CreateFileVersionInfoForModule(CURRENT_MODULE()));
 
   static wchar_t version[64];
   if (version_info.get()) {

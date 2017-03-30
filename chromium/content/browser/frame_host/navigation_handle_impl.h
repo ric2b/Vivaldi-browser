@@ -11,7 +11,6 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
@@ -72,7 +71,8 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       FrameTreeNode* frame_tree_node,
       bool is_synchronous,
       bool is_srcdoc,
-      const base::TimeTicks& navigation_start);
+      const base::TimeTicks& navigation_start,
+      int pending_nav_entry_id);
   ~NavigationHandleImpl() override;
 
   // NavigationHandle implementation:
@@ -119,6 +119,19 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // navigation is ready to commit. The headers returned should not be modified,
   // as modifications will not be reflected in the network stack.
   const net::HttpResponseHeaders* GetResponseHeaders();
+
+  // Get the unique id from the NavigationEntry associated with this
+  // NavigationHandle. Note that a synchronous, renderer-initiated navigation
+  // will not have a NavigationEntry associated with it, and this will return 0.
+  int pending_nav_entry_id() const { return pending_nav_entry_id_; }
+
+  // Changes the pending NavigationEntry ID for this handle.  This is currently
+  // required during transfer navigations.
+  // TODO(creis): Remove this when transfer navigations do not require pending
+  // entries.  See https://crbug.com/495161.
+  void update_entry_id_for_transfer(int nav_entry_id) {
+    pending_nav_entry_id_ = nav_entry_id;
+  }
 
   void set_net_error_code(net::Error net_error_code) {
     net_error_code_ = net_error_code;
@@ -189,9 +202,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // Called when the navigation is ready to be committed in
   // |render_frame_host|. This will update the |state_| and inform the
   // delegate.
-  void ReadyToCommitNavigation(
-      RenderFrameHostImpl* render_frame_host,
-      scoped_refptr<net::HttpResponseHeaders> response_headers);
+  void ReadyToCommitNavigation(RenderFrameHostImpl* render_frame_host);
 
   // Called when the navigation was committed in |render_frame_host|. This will
   // update the |state_|.
@@ -222,7 +233,8 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
                        FrameTreeNode* frame_tree_node,
                        bool is_synchronous,
                        bool is_srcdoc,
-                       const base::TimeTicks& navigation_start);
+                       const base::TimeTicks& navigation_start,
+                       int pending_nav_entry_id);
 
   NavigationThrottle::ThrottleCheckResult CheckWillStartRequest();
   NavigationThrottle::ThrottleCheckResult CheckWillRedirectRequest();
@@ -268,6 +280,9 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   // The time this navigation started.
   const base::TimeTicks navigation_start_;
+
+  // The unique id of the corresponding NavigationEntry.
+  int pending_nav_entry_id_;
 
   // This callback will be run when all throttle checks have been performed.
   ThrottleChecksFinishedCallback complete_callback_;

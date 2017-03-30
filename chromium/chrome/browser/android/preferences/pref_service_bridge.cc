@@ -6,6 +6,8 @@
 
 #include <jni.h>
 #include <stddef.h>
+
+#include <memory>
 #include <vector>
 
 #include "base/android/build_info.h"
@@ -15,7 +17,7 @@
 #include "base/android/jni_weak_ref.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -25,13 +27,16 @@
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/history/web_history_service_factory.h"
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/android/android_about_app_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/locale_settings.h"
+#include "components/browsing_data_ui/history_notice_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -163,11 +168,10 @@ static void SetContentSettingForPattern(JNIEnv* env,
                                         int setting) {
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
-  host_content_settings_map->SetContentSetting(
+  host_content_settings_map->SetContentSettingCustomScope(
       ContentSettingsPattern::FromString(ConvertJavaStringToUTF8(env, pattern)),
       ContentSettingsPattern::Wildcard(),
-      static_cast<ContentSettingsType>(content_settings_type),
-      std::string(),
+      static_cast<ContentSettingsType>(content_settings_type), std::string(),
       static_cast<ContentSetting>(setting));
 }
 
@@ -199,6 +203,11 @@ static jboolean GetAcceptCookiesEnabled(JNIEnv* env,
 static jboolean GetAcceptCookiesManaged(JNIEnv* env,
                                         const JavaParamRef<jobject>& obj) {
   return IsContentSettingManaged(CONTENT_SETTINGS_TYPE_COOKIES);
+}
+
+static jboolean GetBackgroundSyncEnabled(JNIEnv* env,
+                                         const JavaParamRef<jobject>& obj) {
+  return GetBooleanForContentSetting(CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC);
 }
 
 static jboolean GetBlockThirdPartyCookiesEnabled(
@@ -481,7 +490,7 @@ class ClearBrowsingDataObserver : public BrowsingDataRemover::Observer {
 
   void OnBrowsingDataRemoverDone() override {
     // We delete ourselves when done.
-    scoped_ptr<ClearBrowsingDataObserver> auto_delete(this);
+    std::unique_ptr<ClearBrowsingDataObserver> auto_delete(this);
 
     JNIEnv* env = AttachCurrentThread();
     if (weak_chrome_native_preferences_.get(env).is_null())
@@ -602,6 +611,47 @@ static jboolean CanDeleteBrowsingHistory(JNIEnv* env,
   return GetPrefService()->GetBoolean(prefs::kAllowDeletingBrowserHistory);
 }
 
+static void ShowNoticeAboutOtherFormsOfBrowsingHistory(
+    ScopedJavaGlobalRef<jobject>* listener,
+    bool show) {
+  JNIEnv* env = AttachCurrentThread();
+  UMA_HISTOGRAM_BOOLEAN(
+      "History.ClearBrowsingData.HistoryNoticeShownInFooterWhenUpdated", show);
+  if (!show)
+    return;
+  Java_OtherFormsOfBrowsingHistoryListener_showNoticeAboutOtherFormsOfBrowsingHistory(
+      env, listener->obj());
+}
+
+static void EnableDialogAboutOtherFormsOfBrowsingHistory(
+    ScopedJavaGlobalRef<jobject>* listener,
+    bool enabled) {
+  JNIEnv* env = AttachCurrentThread();
+  if (!enabled)
+    return;
+  Java_OtherFormsOfBrowsingHistoryListener_enableDialogAboutOtherFormsOfBrowsingHistory(
+      env, listener->obj());
+}
+
+static void RequestInfoAboutOtherFormsOfBrowsingHistory(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& listener) {
+  // The permanent notice in the footer.
+  browsing_data_ui::ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
+      ProfileSyncServiceFactory::GetForProfile(GetOriginalProfile()),
+      WebHistoryServiceFactory::GetForProfile(GetOriginalProfile()),
+      base::Bind(&ShowNoticeAboutOtherFormsOfBrowsingHistory,
+                 base::Owned(new ScopedJavaGlobalRef<jobject>(env, listener))));
+
+  // The one-time notice in the dialog.
+  browsing_data_ui::ShouldPopupDialogAboutOtherFormsOfBrowsingHistory(
+      ProfileSyncServiceFactory::GetForProfile(GetOriginalProfile()),
+      WebHistoryServiceFactory::GetForProfile(GetOriginalProfile()),
+      base::Bind(&EnableDialogAboutOtherFormsOfBrowsingHistory,
+                 base::Owned(new ScopedJavaGlobalRef<jobject>(env, listener))));
+}
+
 static void SetAllowCookiesEnabled(JNIEnv* env,
                                    const JavaParamRef<jobject>& obj,
                                    jboolean allow) {
@@ -609,6 +659,16 @@ static void SetAllowCookiesEnabled(JNIEnv* env,
       HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
   host_content_settings_map->SetDefaultContentSetting(
       CONTENT_SETTINGS_TYPE_COOKIES,
+      allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
+}
+
+static void SetBackgroundSyncEnabled(JNIEnv* env,
+                                     const JavaParamRef<jobject>& obj,
+                                     jboolean allow) {
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
+  host_content_settings_map->SetDefaultContentSetting(
+      CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC,
       allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
 }
 
@@ -741,7 +801,7 @@ static void SetAutoDetectEncodingEnabled(JNIEnv* env,
 
 static void ResetTranslateDefaults(JNIEnv* env,
                                    const JavaParamRef<jobject>& obj) {
-  scoped_ptr<translate::TranslatePrefs> translate_prefs =
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
   translate_prefs->ResetToDefaults();
 }
@@ -801,34 +861,6 @@ static jboolean GetMicManagedByCustodian(JNIEnv* env,
                                          const JavaParamRef<jobject>& obj) {
   return IsContentSettingManagedByCustodian(
              CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC);
-}
-
-static void SetJavaScriptAllowed(JNIEnv* env,
-                                 const JavaParamRef<jobject>& obj,
-                                 const JavaParamRef<jstring>& pattern,
-                                 int setting) {
-  HostContentSettingsMap* host_content_settings_map =
-      HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
-  host_content_settings_map->SetContentSetting(
-      ContentSettingsPattern::FromString(ConvertJavaStringToUTF8(env, pattern)),
-      ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_JAVASCRIPT,
-      "",
-      static_cast<ContentSetting>(setting));
-}
-
-static void SetPopupException(JNIEnv* env,
-                              const JavaParamRef<jobject>& obj,
-                              const JavaParamRef<jstring>& pattern,
-                              int setting) {
-  HostContentSettingsMap* host_content_settings_map =
-      HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
-  host_content_settings_map->SetContentSetting(
-      ContentSettingsPattern::FromString(ConvertJavaStringToUTF8(env, pattern)),
-      ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_POPUPS,
-      "",
-      static_cast<ContentSetting>(setting));
 }
 
 static void SetSearchSuggestEnabled(JNIEnv* env,

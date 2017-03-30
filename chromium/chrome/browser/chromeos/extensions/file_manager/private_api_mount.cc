@@ -48,7 +48,7 @@ void EnsureReadableFilePermissionOnBlockingPool(
 
 bool FileManagerPrivateAddMountFunction::RunAsync() {
   using file_manager_private::AddMount::Params;
-  const scoped_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   drive::EventLogger* logger = file_manager::util::GetLogger(GetProfile());
@@ -119,7 +119,7 @@ void FileManagerPrivateAddMountFunction::RunAfterGetDriveFile(
     const base::FilePath& drive_path,
     drive::FileError error,
     const base::FilePath& cache_path,
-    scoped_ptr<drive::ResourceEntry> entry) {
+    std::unique_ptr<drive::ResourceEntry> entry) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (error != drive::FILE_ERROR_OK) {
@@ -168,7 +168,7 @@ void FileManagerPrivateAddMountFunction::RunAfterMarkCacheFileAsMounted(
 
 bool FileManagerPrivateRemoveMountFunction::RunAsync() {
   using file_manager_private::RemoveMount::Params;
-  const scoped_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   drive::EventLogger* logger = file_manager::util::GetLogger(GetProfile());
@@ -227,13 +227,12 @@ bool FileManagerPrivateGetVolumeMetadataListFunction::RunAsync() {
       file_manager::VolumeManager::Get(GetProfile())->GetVolumeList();
 
   std::string log_string;
-  std::vector<linked_ptr<file_manager_private::VolumeMetadata> > result;
+  std::vector<file_manager_private::VolumeMetadata> result;
   for (const auto& volume : volume_list) {
-    linked_ptr<file_manager_private::VolumeMetadata> volume_metadata(
-        new file_manager_private::VolumeMetadata);
-    file_manager::util::VolumeToVolumeMetadata(GetProfile(), *volume.get(),
-                                               volume_metadata.get());
-    result.push_back(volume_metadata);
+    file_manager_private::VolumeMetadata volume_metadata;
+    file_manager::util::VolumeToVolumeMetadata(GetProfile(), *volume,
+                                               &volume_metadata);
+    result.push_back(std::move(volume_metadata));
     if (!log_string.empty())
       log_string += ", ";
     log_string += volume->mount_path().AsUTF8Unsafe();

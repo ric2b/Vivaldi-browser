@@ -5,12 +5,12 @@
 package org.chromium.chrome.browser.password_manager;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.DialogFragment;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.os.Bundle;
+import android.support.v7.app.AlertDialog;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.method.LinkMovementMethod;
@@ -75,7 +75,7 @@ public class AutoSigninFirstRunDialog
                         .setPositiveButton(mOkButtonText, this)
                         .setNegativeButton(mTurnOffButtonText, this);
         View view = LayoutInflater.from(mContext).inflate(
-                R.layout.single_line_bottom_text_dialog, null);
+                R.layout.auto_sign_in_first_run_dialog, null);
         TextView summaryView = (TextView) view.findViewById(R.id.summary);
 
         if (mExplanationLinkStart != mExplanationLinkEnd && mExplanationLinkEnd != 0) {
@@ -96,6 +96,7 @@ public class AutoSigninFirstRunDialog
         builder.setView(view);
 
         mDialog = builder.create();
+        mDialog.setCanceledOnTouchOutside(false);
         return mDialog;
     }
 
@@ -106,12 +107,17 @@ public class AutoSigninFirstRunDialog
     }
 
     @Override
-    public void onClick(DialogInterface dialog, int whichButton) {}
+    public void onClick(DialogInterface dialog, int whichButton) {
+        if (whichButton == DialogInterface.BUTTON_NEGATIVE) {
+            nativeOnTurnOffClicked(mNativeAutoSigninFirstRunDialog);
+        } else if (whichButton == DialogInterface.BUTTON_POSITIVE) {
+            nativeOnOkClicked(mNativeAutoSigninFirstRunDialog);
+        }
+    }
 
     @Override
     public void onDismiss(DialogInterface dialog) {
         super.onDismiss(dialog);
-        nativeOnTurnOffClicked(mNativeAutoSigninFirstRunDialog);
         destroy();
         mDialog = null;
     }

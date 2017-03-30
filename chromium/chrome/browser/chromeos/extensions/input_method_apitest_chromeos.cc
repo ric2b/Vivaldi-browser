@@ -11,12 +11,14 @@
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/chromeos/extensions/input_method_event_router.h"
 #include "chrome/browser/chromeos/input_method/input_method_util.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/common/content_switches.h"
 #include "extensions/common/switches.h"
 #include "extensions/browser/api/test/test_api.h"
 #include "extensions/browser/notification_types.h"
@@ -25,6 +27,7 @@
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/chromeos/input_method_whitelist.h"
+#include "ui/base/ime/ime_bridge.h"
 
 using namespace chromeos::input_method;
 
@@ -33,6 +36,8 @@ namespace {
 const char kLoginScreenUILanguage[] = "fr";
 const char kInitialInputMethodOnLoginScreen[] = "xkb:us::eng";
 const char kBackgroundReady[] = "ready";
+const char kTestIMEID[] = "_ext_ime_ilanclmaeigfpnmdlgelmhkpkegdioiptest";
+const char kTestIMEID2[] = "_ext_ime_ilanclmaeigfpnmdlgelmhkpkegdioiptest2";
 
 // Class that listens for the JS message.
 class TestListener : public content::NotificationObserver {
@@ -76,7 +81,8 @@ class ExtensionInputMethodApiTest : public ExtensionApiTest {
     command_line->AppendSwitchASCII(
         extensions::switches::kWhitelistedExtensionID,
         "ilanclmaeigfpnmdlgelmhkpkegdioip");
-    command_line->AppendSwitch(chromeos::switches::kEnableImeMenu);
+    command_line->AppendSwitchASCII(switches::kEnableFeatures,
+                                    features::kOptInImeMenu.name);
   }
 };
 
@@ -108,4 +114,40 @@ IN_PROC_BROWSER_TEST_F(ExtensionInputMethodApiTest, ImeMenuActivation) {
                                                false);
   // Test that the extension gets the IME activation change event properly.
   ASSERT_TRUE(event_listener.WaitUntilSatisfied()) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionInputMethodApiTest, ImeMenuAPITest) {
+  ExtensionTestMessageListener activated_listener("activated", false);
+  ExtensionTestMessageListener menu_listener("get_menu_update", false);
+  ExtensionTestMessageListener item_activated_listenter("get_menu_activated",
+                                                        false);
+  ExtensionTestMessageListener list_listenter("list_change", false);
+  browser()->profile()->GetPrefs()->SetBoolean(prefs::kLanguageImeMenuActivated,
+                                               true);
+  ASSERT_TRUE(
+      LoadExtension(test_data_dir_.AppendASCII("input_method/ime_menu2")));
+
+  std::vector<std::string> extension_ime_ids;
+  extension_ime_ids.push_back(kTestIMEID);
+  extension_ime_ids.push_back(kTestIMEID2);
+  InputMethodManager::Get()->GetActiveIMEState()->SetEnabledExtensionImes(
+      &extension_ime_ids);
+  InputMethodDescriptors extension_imes;
+  InputMethodManager::Get()->GetActiveIMEState()->GetInputMethodExtensions(
+      &extension_imes);
+  InputMethodManager::Get()->GetActiveIMEState()->ChangeInputMethod(
+      kTestIMEID, false /* show_message */);
+  ui::IMEEngineHandlerInterface* engine_handler =
+      ui::IMEBridge::Get()->GetCurrentEngineHandler();
+  ASSERT_TRUE(engine_handler);
+  engine_handler->Enable("test");
+
+  ASSERT_TRUE(activated_listener.WaitUntilSatisfied()) << message_;
+  ASSERT_TRUE(menu_listener.WaitUntilSatisfied()) << message_;
+  ASSERT_TRUE(item_activated_listenter.WaitUntilSatisfied()) << message_;
+
+  InputMethodManager::Get()->GetActiveIMEState()->ChangeInputMethod(
+      kTestIMEID2, false /* show_message */);
+  engine_handler->Enable("test2");
+  ASSERT_TRUE(list_listenter.WaitUntilSatisfied()) << message_;
 }

@@ -21,12 +21,12 @@ cr.define('cr.ui', function() {
   * @extends {DisplayManager}
   * @constructor
   */
-  function Oobe() {
+  function UserManager() {
   }
 
-  cr.addSingletonGetter(Oobe);
+  cr.addSingletonGetter(UserManager);
 
-  Oobe.prototype = {
+  UserManager.prototype = {
     __proto__: DisplayManager.prototype,
   };
 
@@ -35,8 +35,8 @@ cr.define('cr.ui', function() {
    * @param {bool} showGuest Whether the 'Browse as Guest' button is displayed.
    * @param {bool} showAddPerson Whether the 'Add Person' button is displayed.
    */
-  Oobe.showUserManagerScreen = function(showGuest, showAddPerson) {
-    Oobe.getInstance().showScreen({id: 'account-picker',
+  UserManager.showUserManagerScreen = function(showGuest, showAddPerson) {
+    UserManager.getInstance().showScreen({id: 'account-picker',
                                    data: {disableAddUser: false}});
     // The ChromeOS account-picker will hide the AddUser button if a user is
     // logged in and the screen is "locked", so we must re-enabled it
@@ -60,14 +60,14 @@ cr.define('cr.ui', function() {
    * Open a new browser for the given profile.
    * @param {string} profilePath The profile's path.
    */
-  Oobe.launchUser = function(profilePath) {
+  UserManager.launchUser = function(profilePath) {
     chrome.send('launchUser', [profilePath]);
   };
 
   /**
    * Disables signin UI.
    */
-  Oobe.disableSigninUI = function() {
+  UserManager.disableSigninUI = function() {
     DisplayManager.disableSigninUI();
   };
 
@@ -75,7 +75,7 @@ cr.define('cr.ui', function() {
    * Shows signin UI.
    * @param {string} opt_email An optional email for signin UI.
    */
-  Oobe.showSigninUI = function(opt_email) {
+  UserManager.showSigninUI = function(opt_email) {
     DisplayManager.showSigninUI(opt_email);
   };
 
@@ -86,28 +86,28 @@ cr.define('cr.ui', function() {
    * @param {string} link Text to use for help link.
    * @param {number} helpId Help topic Id associated with help link.
    */
-  Oobe.showSignInError = function(loginAttempts, message, link, helpId) {
+  UserManager.showSignInError = function(loginAttempts, message, link, helpId) {
     DisplayManager.showSignInError(loginAttempts, message, link, helpId);
   };
 
   /**
    * Clears error bubble as well as optional menus that could be open.
    */
-  Oobe.clearErrors = function() {
+  UserManager.clearErrors = function() {
     DisplayManager.clearErrors();
   };
 
   /**
    * Clears password field in user-pod.
    */
-  Oobe.clearUserPodPassword = function() {
+  UserManager.clearUserPodPassword = function() {
     DisplayManager.clearUserPodPassword();
   };
 
   /**
    * Restores input focus to currently selected pod.
    */
-  Oobe.refocusCurrentPod = function() {
+  UserManager.refocusCurrentPod = function() {
     DisplayManager.refocusCurrentPod();
   };
 
@@ -116,13 +116,13 @@ cr.define('cr.ui', function() {
    * @param {string} email The user's email, if signed in.
    * @param {string} displayName The user's display name.
    */
-  Oobe.showUserManagerTutorial = function() {
+  UserManager.showUserManagerTutorial = function() {
     UserManagerTutorial.startTutorial();
   };
 
   // Export
   return {
-    Oobe: Oobe
+    UserManager: UserManager
   };
 });
 
@@ -149,7 +149,8 @@ cr.define('UserManager', function() {
   };
 });
 
-var Oobe = cr.ui.Oobe;
+// Alias to Oobe for use in src/ui/login/account_picker/user_pod_row.js
+var Oobe = cr.ui.UserManager;
 
 // Allow selection events on components with editable text (password field)
 // bug (http://code.google.com/p/chromium/issues/detail?id=125863)

@@ -382,7 +382,7 @@ AppsGridView::AppsGridView(AppsGridViewDelegate* delegate)
   // Clip any icons that are outside the grid view's bounds. These icons would
   // otherwise be visible to the user when the grid view is off screen.
   layer()->SetMasksToBounds(true);
-  SetFillsBoundsOpaquely(false);
+  layer()->SetFillsBoundsOpaquely(false);
 
   pagination_model_.SetTransitionDurations(kPageTransitionDurationInMs,
                                            kOverscrollPageTransitionDurationMs);
@@ -803,9 +803,7 @@ void AppsGridView::InitiateDragFromReparentItemInRootLevelGridView(
   AddChildView(view);
   drag_view_ = view;
   drag_view_->SetPaintToLayer(true);
-  // Note: For testing purpose, SetFillsBoundsOpaquely can be set to true to
-  // show the gray background.
-  drag_view_->SetFillsBoundsOpaquely(false);
+  drag_view_->layer()->SetFillsBoundsOpaquely(false);
   drag_view_->SetBoundsRect(drag_view_rect);
   drag_view_->SetDragUIState();  // Hide the title of the drag_view_.
 
@@ -889,7 +887,9 @@ bool AppsGridView::IsAnimatingView(AppListItemView* view) {
 
 gfx::Size AppsGridView::GetPreferredSize() const {
   const gfx::Insets insets(GetInsets());
-  int page_switcher_height = page_switcher_view_->GetPreferredSize().height();
+  // If we are in a folder, ignore the page switcher for height calculations.
+  int page_switcher_height =
+      folder_delegate_ ? 0 : page_switcher_view_->GetPreferredSize().height();
   gfx::Size size = GetTileGridSize();
   size.Enlarge(insets.width(), insets.height() + page_switcher_height);
   return size;
@@ -1080,7 +1080,7 @@ AppListItemView* AppsGridView::CreateViewForItemAtIndex(size_t index) {
   AppListItemView* view = new AppListItemView(this,
                                               item_list_->item_at(index));
   view->SetPaintToLayer(true);
-  view->SetFillsBoundsOpaquely(false);
+  view->layer()->SetFillsBoundsOpaquely(false);
   return view;
 }
 
@@ -1116,8 +1116,7 @@ void AppsGridView::SetSelectedItemByIndex(const Index& index) {
   selected_view_ = new_selection;
   selected_view_->SetTitleSubpixelAA();
   selected_view_->SchedulePaint();
-  selected_view_->NotifyAccessibilityEvent(
-      ui::AX_EVENT_FOCUS, true);
+  selected_view_->NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
 }
 
 bool AppsGridView::IsValidIndex(const Index& index) const {
@@ -1326,7 +1325,7 @@ void AppsGridView::AnimationBetweenRows(AppListItemView* view,
     layer = view->RecreateLayer();
     layer->SuppressPaint();
 
-    view->SetFillsBoundsOpaquely(false);
+    view->layer()->SetFillsBoundsOpaquely(false);
     view->layer()->SetOpacity(0.f);
   }
 

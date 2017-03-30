@@ -37,12 +37,13 @@ class QuicServer : public EpollCallbackInterface {
   explicit QuicServer(ProofSource* proof_source);
   QuicServer(ProofSource* proof_source,
              const QuicConfig& config,
+             const QuicCryptoServerConfig::ConfigOptions& server_config_options,
              const QuicVersionVector& supported_versions);
 
   ~QuicServer() override;
 
   // Start listening on the specified address.
-  bool Listen(const IPEndPoint& address);
+  bool CreateUDPSocketAndListen(const IPEndPoint& address);
 
   // Wait up to 50ms, and handle any events which occur.
   void WaitForEvents();
@@ -112,14 +113,13 @@ class QuicServer : public EpollCallbackInterface {
   // because the socket would otherwise overflow.
   bool overflow_supported_;
 
-  // If true, use recvmmsg for reading.
-  bool use_recvmmsg_;
-
   // config_ contains non-crypto parameters that are negotiated in the crypto
   // handshake.
   QuicConfig config_;
   // crypto_config_ contains crypto parameters for the handshake.
   QuicCryptoServerConfig crypto_config_;
+  // crypto_config_options_ contains crypto parameters for the handshake.
+  QuicCryptoServerConfig::ConfigOptions crypto_config_options_;
 
   // This vector contains QUIC versions which we currently support.
   // This should be ordered such that the highest supported version is the first
@@ -127,6 +127,8 @@ class QuicServer : public EpollCallbackInterface {
   // skipped as necessary).
   QuicVersionVector supported_versions_;
 
+  // Point to a QuicPacketReader object on the heap. The reader allocates more
+  // space than allowed on the stack.
   scoped_ptr<QuicPacketReader> packet_reader_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicServer);

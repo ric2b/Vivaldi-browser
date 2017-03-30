@@ -35,9 +35,6 @@
 #include "core/dom/custom/CustomElementDefinition.h"
 #include "wtf/Allocator.h"
 #include "wtf/HashMap.h"
-#include "wtf/Noncopyable.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/AtomicString.h"
 
@@ -63,7 +60,7 @@ public:
     static void didFinishLoadingImport(Document& master);
 
     // API for registration contexts
-    static void define(Element*, PassRefPtrWillBeRawPtr<CustomElementDefinition>);
+    static void define(Element*, RawPtr<CustomElementDefinition>);
 
     // API for Element to kick off changes
 

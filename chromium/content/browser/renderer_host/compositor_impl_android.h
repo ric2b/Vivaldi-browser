@@ -113,7 +113,6 @@ class CONTENT_EXPORT CompositorImpl
   void DidAbortSwapBuffers() override;
 
   // WindowAndroidCompositor implementation.
-  void AttachLayerForReadback(scoped_refptr<cc::Layer> layer) override;
   void RequestCopyOfOutputOnRootLayer(
       scoped_ptr<cc::CopyOutputRequest> request) override;
   void OnVSync(base::TimeTicks frame_time,
@@ -132,12 +131,12 @@ class CONTENT_EXPORT CompositorImpl
   scoped_refptr<cc::Layer> subroot_layer_;
 
   // Destruction order matters here:
+  scoped_ptr<cc::SurfaceIdAllocator> surface_id_allocator_;
   base::ObserverList<VSyncObserver, true> observer_list_;
   scoped_ptr<cc::LayerTreeHost> host_;
   ui::ResourceManagerImpl resource_manager_;
 
   scoped_ptr<cc::OnscreenDisplayClient> display_client_;
-  scoped_ptr<cc::SurfaceIdAllocator> surface_id_allocator_;
 
   gfx::Size size_;
   bool has_transparent_background_;

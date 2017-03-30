@@ -63,9 +63,12 @@ class ImageBufferSurface;
 class ImageData;
 class IntSize;
 
+class CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContext;
+typedef CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContext RenderingContext;
+
 class CORE_EXPORT HTMLCanvasElement final : public HTMLElement, public DocumentVisibilityObserver, public CanvasImageSource, public ImageBufferClient, public ImageBitmapSource {
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(HTMLCanvasElement);
+    USING_GARBAGE_COLLECTED_MIXIN(HTMLCanvasElement);
 public:
     DECLARE_NODE_FACTORY(HTMLCanvasElement);
     ~HTMLCanvasElement() override;
@@ -90,14 +93,17 @@ public:
         reset();
     }
 
-    // Called by HTMLCanvasElement's V8 bindings.
-    ScriptValue getContext(ScriptState*, const String&, const CanvasContextCreationAttributes&);
     // Called by Document::getCSSCanvasContext as well as above getContext().
     CanvasRenderingContext* getCanvasRenderingContext(const String&, const CanvasContextCreationAttributes&);
 
     bool isPaintable() const;
 
-    static String toEncodingMimeType(const String& mimeType);
+    enum EncodeReason {
+        EncodeReasonToDataURL = 0,
+        EncodeReasonToBlobCallback = 1,
+        NumberOfEncodeReasons
+    };
+    static String toEncodingMimeType(const String& mimeType, const EncodeReason);
     String toDataURL(const String& mimeType, const ScriptValue& qualityArgument, ExceptionState&) const;
     String toDataURL(const String& mimeType, ExceptionState& exceptionState) const { return toDataURL(mimeType, ScriptValue(), exceptionState); }
 
@@ -117,7 +123,6 @@ public:
     void disableDeferral(DisableDeferralReason) const;
     SkCanvas* existingDrawingCanvas() const;
 
-    void setRenderingContext(PassOwnPtrWillBeRawPtr<CanvasRenderingContext>);
     CanvasRenderingContext* renderingContext() const { return m_context.get(); }
 
     void ensureUnacceleratedImageBuffer();
@@ -125,7 +130,7 @@ public:
     PassRefPtr<Image> copiedImage(SourceDrawingBuffer, AccelerationHint) const;
     void clearCopiedImage();
 
-    SecurityOrigin* securityOrigin() const;
+    SecurityOrigin* getSecurityOrigin() const;
     bool originClean() const;
     void setOriginTainted() { m_originClean = false; }
 
@@ -152,9 +157,9 @@ public:
     void willDetachDocument() override;
 
     // CanvasImageSource implementation
-    PassRefPtr<Image> getSourceImageForCanvas(SourceImageStatus*, AccelerationHint, SnapshotReason) const override;
+    PassRefPtr<Image> getSourceImageForCanvas(SourceImageStatus*, AccelerationHint, SnapshotReason, const FloatSize&) const override;
     bool wouldTaintOrigin(SecurityOrigin*) const override;
-    FloatSize elementSize() const override;
+    FloatSize elementSize(const FloatSize&) const override;
     bool isCanvasElement() const override { return true; }
     bool isOpaque() const override;
 
@@ -182,6 +187,7 @@ public:
     void notifyListenersCanvasChanged();
 
     bool isSupportedInteractiveCanvasFallback(const Element&);
+    std::pair<Element*, String> getControlAndIdIfHitRegionExists(const LayoutPoint&);
 
 protected:
     void didMoveToNewDocument(Document& oldDocument) override;
@@ -212,11 +218,11 @@ private:
 
     String toDataURLInternal(const String& mimeType, const double& quality, SourceDrawingBuffer) const;
 
-    PersistentHeapHashSetWillBeHeapHashSet<WeakMember<CanvasDrawListener>> m_listeners;
+    HeapHashSet<WeakMember<CanvasDrawListener>> m_listeners;
 
     IntSize m_size;
 
-    OwnPtrWillBeMember<CanvasRenderingContext> m_context;
+    Member<CanvasRenderingContext> m_context;
 
     bool m_ignoreReset;
     FloatRect m_dirtyRect;

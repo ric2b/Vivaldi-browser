@@ -13,6 +13,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/gfx/transform.h"
 
 using base::DoubleToString;
 using base::IntToString;
@@ -62,9 +63,40 @@ AXNodeData::AXNodeData()
       state(0xFFFFFFFF) {
 }
 
-AXNodeData::AXNodeData(const AXNodeData& other) = default;
-
 AXNodeData::~AXNodeData() {
+}
+
+AXNodeData::AXNodeData(const AXNodeData& other) {
+  id = other.id;
+  role = other.role;
+  state = other.state;
+  string_attributes = other.string_attributes;
+  int_attributes = other.int_attributes;
+  float_attributes = other.float_attributes;
+  bool_attributes = other.bool_attributes;
+  intlist_attributes = other.intlist_attributes;
+  html_attributes = other.html_attributes;
+  child_ids = other.child_ids;
+  location = other.location;
+  if (other.transform)
+    transform.reset(new gfx::Transform(*other.transform));
+}
+
+AXNodeData& AXNodeData::operator=(AXNodeData other) {
+  id = other.id;
+  role = other.role;
+  state = other.state;
+  string_attributes = other.string_attributes;
+  int_attributes = other.int_attributes;
+  float_attributes = other.float_attributes;
+  bool_attributes = other.bool_attributes;
+  intlist_attributes = other.intlist_attributes;
+  html_attributes = other.html_attributes;
+  child_ids = other.child_ids;
+  location = other.location;
+  if (other.transform)
+    transform.reset(new gfx::Transform(*other.transform));
+  return *this;
 }
 
 bool AXNodeData::HasBoolAttribute(AXBoolAttribute attribute) const {
@@ -311,6 +343,9 @@ std::string AXNodeData::ToString() const {
                    IntToString(location.width()) + ", " +
                    IntToString(location.height()) + ")";
 
+  if (transform && !transform->IsIdentity())
+    result += " transform=" + transform->ToString();
+
   for (size_t i = 0; i < int_attributes.size(); ++i) {
     std::string value = IntToString(int_attributes[i].second);
     switch (int_attributes[i].first) {
@@ -486,6 +521,9 @@ std::string AXNodeData::ToString() const {
       case AX_ATTR_ACTION:
         result += " action=" + value;
         break;
+      case AX_ATTR_ARIA_INVALID_VALUE:
+        result += " aria_invalid_value=" + value;
+        break;
       case AX_ATTR_AUTO_COMPLETE:
         result += " autocomplete=" + value;
         break;
@@ -495,11 +533,14 @@ std::string AXNodeData::ToString() const {
       case AX_ATTR_DISPLAY:
         result += " display=" + value;
         break;
+      case AX_ATTR_FONT_FAMILY:
+        result += " font-family=" + value;
+        break;
       case AX_ATTR_HTML_TAG:
         result += " html_tag=" + value;
         break;
-      case AX_ATTR_ARIA_INVALID_VALUE:
-        result += " aria_invalid_value=" + value;
+      case AX_ATTR_LANGUAGE:
+        result += " language=" + value;
         break;
       case AX_ATTR_LIVE_RELEVANT:
         result += " relevant=" + value;

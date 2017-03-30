@@ -28,7 +28,7 @@ class CONTENT_EXPORT DownloadControllerAndroid : public DownloadItem::Observer {
   // Starts a new download request with Android. Should be called on the
   // UI thread.
   virtual void CreateGETDownload(int render_process_id, int render_view_id,
-                                 int request_id) = 0;
+                                 int request_id, bool must_download) = 0;
 
   // Should be called when a download is started. It can be either a GET
   // request with authentication or a POST request. Notifies the embedding
@@ -41,8 +41,9 @@ class CONTENT_EXPORT DownloadControllerAndroid : public DownloadItem::Observer {
       bool is_link, const std::string& extra_headers) = 0;
 
   // Called when a dangerous download item is verified or rejected.
-  virtual void DangerousDownloadValidated(
-      WebContents* web_contents, int download_id, bool accept) = 0;
+  virtual void DangerousDownloadValidated(WebContents* web_contents,
+                                          const std::string& download_guid,
+                                          bool accept) = 0;
 
   // Callback when user permission prompt finishes. Args: whether file access
   // permission is acquired.

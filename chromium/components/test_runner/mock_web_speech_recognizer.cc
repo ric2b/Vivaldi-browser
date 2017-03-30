@@ -6,8 +6,11 @@
 
 #include <stddef.h>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "components/test_runner/web_task.h"
 #include "components/test_runner/web_test_delegate.h"
 #include "third_party/WebKit/public/web/WebSpeechRecognitionResult.h"
 #include "third_party/WebKit/public/web/WebSpeechRecognizerClient.h"
@@ -108,11 +111,31 @@ class ErrorTask : public MockWebSpeechRecognizer::Task {
   DISALLOW_COPY_AND_ASSIGN(ErrorTask);
 };
 
+// Task for tidying up after recognition task has ended.
+class EndedTask : public MockWebSpeechRecognizer::Task {
+ public:
+  EndedTask(MockWebSpeechRecognizer* mock)
+      : MockWebSpeechRecognizer::Task(mock) {}
+
+  ~EndedTask() override {}
+
+  void run() override {
+    blink::WebSpeechRecognitionHandle handle = recognizer_->Handle();
+    recognizer_->Handle().reset();
+    recognizer_->Client()->didEnd(handle);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(EndedTask);
+};
+
 }  // namespace
 
 MockWebSpeechRecognizer::MockWebSpeechRecognizer()
-    : was_aborted_(false), task_queue_running_(false), delegate_(0) {
-}
+    : was_aborted_(false),
+      task_queue_running_(false),
+      delegate_(0),
+      weak_factory_(this) {}
 
 MockWebSpeechRecognizer::~MockWebSpeechRecognizer() {
   ClearTaskQueue();
@@ -153,8 +176,7 @@ void MockWebSpeechRecognizer::start(
       new ClientCallTask(this, &blink::WebSpeechRecognizerClient::didEndSound));
   task_queue_.push_back(
       new ClientCallTask(this, &blink::WebSpeechRecognizerClient::didEndAudio));
-  task_queue_.push_back(
-      new ClientCallTask(this, &blink::WebSpeechRecognizerClient::didEnd));
+  task_queue_.push_back(new EndedTask(this));
 
   StartTaskQueue();
 }
@@ -177,8 +199,8 @@ void MockWebSpeechRecognizer::abort(
 
   ClearTaskQueue();
   was_aborted_ = true;
-  task_queue_.push_back(
-      new ClientCallTask(this, &blink::WebSpeechRecognizerClient::didEnd));
+  task_queue_.push_back(new EndedTask(this));
+
   StartTaskQueue();
 }
 
@@ -214,16 +236,15 @@ void MockWebSpeechRecognizer::SetError(const blink::WebString& error,
 
   ClearTaskQueue();
   task_queue_.push_back(new ErrorTask(this, code, message));
-  task_queue_.push_back(
-      new ClientCallTask(this, &blink::WebSpeechRecognizerClient::didEnd));
+  task_queue_.push_back(new EndedTask(this));
+
   StartTaskQueue();
 }
 
 void MockWebSpeechRecognizer::StartTaskQueue() {
   if (task_queue_running_)
     return;
-  delegate_->PostTask(new StepTask(this));
-  task_queue_running_ = true;
+  PostRunTaskFromQueue();
 }
 
 void MockWebSpeechRecognizer::ClearTaskQueue() {
@@ -234,23 +255,29 @@ void MockWebSpeechRecognizer::ClearTaskQueue() {
   task_queue_running_ = false;
 }
 
-void MockWebSpeechRecognizer::StepTask::RunIfValid() {
-  if (object_->task_queue_.empty()) {
-    object_->task_queue_running_ = false;
+void MockWebSpeechRecognizer::PostRunTaskFromQueue() {
+  task_queue_running_ = true;
+  delegate_->PostTask(new WebCallbackTask(base::Bind(
+      &MockWebSpeechRecognizer::RunTaskFromQueue, weak_factory_.GetWeakPtr())));
+}
+
+void MockWebSpeechRecognizer::RunTaskFromQueue() {
+  if (task_queue_.empty()) {
+    task_queue_running_ = false;
     return;
   }
 
-  Task* task = object_->task_queue_.front();
-  object_->task_queue_.pop_front();
+  MockWebSpeechRecognizer::Task* task = task_queue_.front();
+  task_queue_.pop_front();
   task->run();
   delete task;
 
-  if (object_->task_queue_.empty()) {
-    object_->task_queue_running_ = false;
+  if (task_queue_.empty()) {
+    task_queue_running_ = false;
     return;
   }
 
-  object_->delegate_->PostTask(new StepTask(object_));
+  PostRunTaskFromQueue();
 }
 
 }  // namespace test_runner

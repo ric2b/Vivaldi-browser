@@ -25,7 +25,7 @@ NetworkInterface::NetworkInterface(const std::string& name,
                                    const std::string& friendly_name,
                                    uint32_t interface_index,
                                    NetworkChangeNotifier::ConnectionType type,
-                                   const IPAddressNumber& address,
+                                   const IPAddress& address,
                                    uint32_t prefix_length,
                                    int ip_address_attributes)
     : name(name),
@@ -34,8 +34,7 @@ NetworkInterface::NetworkInterface(const std::string& name,
       type(type),
       address(address),
       prefix_length(prefix_length),
-      ip_address_attributes(ip_address_attributes) {
-}
+      ip_address_attributes(ip_address_attributes) {}
 
 NetworkInterface::NetworkInterface(const NetworkInterface& other) = default;
 

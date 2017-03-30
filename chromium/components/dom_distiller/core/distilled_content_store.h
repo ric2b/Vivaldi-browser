@@ -11,6 +11,7 @@
 #include "base/containers/hash_tables.h"
 #include "base/containers/mru_cache.h"
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "components/dom_distiller/core/article_entry.h"
 #include "components/dom_distiller/core/proto/distilled_article.pb.h"
 
@@ -64,7 +65,7 @@ class InMemoryContentStore : public DistilledContentStore {
    public:
     explicit CacheDeletor(InMemoryContentStore* store);
     ~CacheDeletor();
-    void operator()(const DistilledArticleProto& proto);
+    void operator()(DistilledArticleProto* proto);
 
    private:
     InMemoryContentStore* store_;
@@ -75,9 +76,10 @@ class InMemoryContentStore : public DistilledContentStore {
 
   void EraseUrlToIdMapping(const DistilledArticleProto& proto);
 
-  typedef base::MRUCacheBase<std::string,
-                             DistilledArticleProto,
-                             InMemoryContentStore::CacheDeletor> ContentMap;
+  typedef base::MRUCache<std::string,
+                         scoped_ptr<DistilledArticleProto, CacheDeletor>>
+
+      ContentMap;
   typedef base::hash_map<std::string, std::string> UrlMap;
 
   ContentMap cache_;

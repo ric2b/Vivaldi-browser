@@ -2,6 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="no">
 <translation id="101438888985615157">Rotér skjermen 180 grader</translation>
+<translation id="1015272884520659144">Definerer listen over USB-enheter som kan kobles fra kjernedriveren, så de kan brukes via chrome.usb API direkte i nettprogrammer. Oppføringene er par av leverandør- og produktkoder som identifiserer spesifikke USB-enheter.
+
+      Hvis denne regelen ikke er spesifisert, anses listen over frakoblingsbare USB-enheter for å være tom.</translation>
 <translation id="1017967144265860778">Strømstyring på påloggingssiden</translation>
 <translation id="1019101089073227242">Angi katalog for brukerdata</translation>
 <translation id="1022361784792428773">Utvidelses-ID-er brukeren skal hindres i å installere (eller * for alle)</translation>
@@ -64,8 +67,6 @@
 
       Hvis regelen ikke er angitt eller er satt til false (usann), er ikke RC4-chifferserier i TLS slått på. Ellers kan den settes til true (sann) for å sikre kompatibilitet med en utdatert tjener. Dette er en midlertidig løsning, og tjeneren bør konfigureres på nytt.</translation>
 <translation id="1297182715641689552">Bruk et .pac-skript for mellomtjener</translation>
-<translation id="1300635491585192248">Forutsi nettverkshandlinger på et hvilket som helst nettverk som ikke
-          er et mobilnettverk</translation>
 <translation id="1304973015437969093">ID-er for utvidelser/apper og oppdateringsnettadresser som skal installeres stille</translation>
 <translation id="1310699457130669094">Du kan angi nettadresse til en .pac-fil til mellomtjener her.
 
@@ -91,6 +92,7 @@
 <translation id="1359553908012294236">Hvis denne regelen settes til true (sann) eller ikke konfigureres, slås gjestepålogginger på i <ph name="PRODUCT_NAME" />. Gjestepålogginger er <ph name="PRODUCT_NAME" />-profiler der alle vinduene er i inkognitomodus.
 
       Hvis denne regelen settes til false (usann), tillater ikke <ph name="PRODUCT_NAME" /> at gjesteprofiler startes.</translation>
+<translation id="1363275621236827384">Slå på forespørsler til Quirks Server for maskinvareprofiler</translation>
 <translation id="1397855852561539316">Foreslått nettadresse for standard søkeleverandør</translation>
 <translation id="1398889361882383850">Med denne retningslinjen kan du angi hvorvidt nettsteder har tillatelse til å kjøre programtillegg automatisk.  Automatisk kjøring av programtillegg kan enten tillates eller nektes for alle nettsteder.
 
@@ -98,7 +100,7 @@
 
           Hvis denne retningslinjen ikke angis, brukes «AllowPlugins», og brukeren kan endre den.</translation>
 <translation id="1426410128494586442">Ja</translation>
-<translation id="1427655258943162134">Adresse eller nettadresse for proxytjener</translation>
+<translation id="1427655258943162134">Adresse eller nettadresse for proxy-tjener</translation>
 <translation id="1435659902881071157">Nettverkskonfigurasjon på enhetsnivå</translation>
 <translation id="1438739959477268107">Standardinnstilling for nøkkelgenerering</translation>
 <translation id="1454846751303307294">Gjør at du kan angi en liste over nettadressemønstre som spesifiserer nettsteder som ikke tillates å kjøre JavaScript.
@@ -227,7 +229,17 @@
       Hvis du deaktiverer denne innstillingen, vil det hver gang brukeren utfører en handling som kan utløse en filutvalgsdialog (som import av bokmerker, opplasting av filer, lagring av linker osv.), vises det en melding i stedet, og det antas at brukeren har klikket Avbryt i filutvalgdialogen.
 
       Hvis denne innstillingen ikke er angitt, kan brukerne åpne filutvalgdialogene som normalt.</translation>
+<translation id="1879485426724769439">Spesifiserer tidssonen som skal brukes for enheten. Brukerne kan overstyre den spesifiserte tidssonen for aktive økter, men når de logger av, tilbakestilles den til den spesifiserte tidssonen. Hvis du angir en ugyldig verdi, blir regelen likevel slått på, men «GMT» brukes som tidssone. Hvis strengen er tom, ignoreres regelen.
+
+      Hvis du ikke bruker denne regelen, brukes fortsatt den aktive tidssonen. Brukerne kan imidlertid endre tidssonen, og endringen er varig. Det betyr at endringer som gjøres av brukere, påvirker påloggingssiden og alle andre brukere.
+
+      På nye enheter er tidssonen angitt som «US/Pacific» (USA/Stillehavskysten).
+
+      Formatet på verdien følger navnene på tidssonene i «IANA Time Zone Database» (se https://en.wikipedia.org/wiki/Tz_database). De fleste tidssonene kan angis som «kontinent/stor_by» eller «hav/stor_by».
+
+      Hvis du spesifiserer denne regelen, blir den automatiske påvisningen av tidssoner basert på enhetens posisjon slått av. Regelen SystemTimezoneAutomaticDetection overstyres også.</translation>
 <translation id="1897365952389968758">Tillat alle nettsteder å kjøre JavaScript</translation>
+<translation id="193259052151668190">Godkjenningsliste for frakoblingsbare USB-enheter</translation>
 <translation id="1933378685401357864">Bakgrunnsbilde</translation>
 <translation id="193900697589383153">Legger til en avlogginsknapp i systemstatusfeltet.
 
@@ -568,13 +580,6 @@
           Hvis denne innstillingen er konfigurert som «True» eller ikke konfigurert, anses ikke brukeren som inaktiv mens lyd spilles av. Dette forhindrer at inaktivitetsforsinkelsen nås og at inaktivitetshandlingen utføres. Imidlertid blir skjermen nedtonet, låst eller slått av etter de konfigurerte tidsperiodene, uavhengig av lydaktiviteten.
 
           Hvis denne innstillingen er konfigurert som «False», forhindrer ikke lydaktivitet at brukeren anses som inaktiv.</translation>
-<translation id="2948381198510798695"><ph name="PRODUCT_NAME" /> vil gå forbi alle mellomtjenere for listen over verter som gis her.
-
-          Denne retningslinjen trer i kraft bare hvis du har valgt manuelle mellomtjenerinnstillinger under «Velg hvordan du angir innstillinger for proxytjener».
-          Du bør la være å angi denne retningslinjen hvis du har valgt en annen modus for innstilling av mellomtjenerretningslinjer.
-
-          Hvis du vil ha mer detaljerte eksempler, kan du gå til:
-          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="2956777931324644324">Denne innstillingen har ikke vært tilgjengelig siden <ph name="PRODUCT_NAME" />-versjon 36.
 
       Angi om TLS-domenebetingende sertifikatsutvidelser bør aktiveres.
@@ -623,7 +628,7 @@
 <translation id="3072045631333522102">Skjermsparer som skal brukes på påloggingssiden i detaljistmodus</translation>
 <translation id="3072847235228302527">Angi bruksvilkårene for en konto på enheten</translation>
 <translation id="3096595567015595053">Liste over aktiverte programtillegg</translation>
-<translation id="3101501961102569744">Velg hvordan proxytjenerinnstillinger angis</translation>
+<translation id="3101501961102569744">Velg hvordan innstillinger for proxy-tjener angis</translation>
 <translation id="3153348162326497318">Gjør at du kan angi hvilke utvidelser brukerne IKKE kan installere. Utvidelser som allerede er installert, fjernes eller svartelistes.
 
           En svartelisteverdi på * betyr at alle utvidelser er svartelistet med mindre de er uttrykkelig oppført på godkjenningslisten.
@@ -692,6 +697,20 @@
 
           Hvis denne regelen ikke angis, brukes den globale standardverdien for alle nettstedene, enten fra regelen «DefaultKeygenSetting» hvis den er angitt, eller fra brukerens personlige konfigurasjon.</translation>
 <translation id="3381968327636295719">Bruk vertsnettleser som standard</translation>
+<translation id="3398137877608138703">Tillat eller blokkér videoopptak.
+
+      Hvis dette alternativet er slått på eller ikke er konfigurert (standard),
+      blir brukeren bedt om tilgang for videoopptak – med unntak av for
+      nettadresser som er spesifisert i VideoCaptureAllowedUrls-listen. Disse gis
+      det tilgang til uten at brukeren blir vist noen melding. ARC-apper kan få
+      tilgang til kameraet hvis de har fått tillatelse til det.
+
+      Når denne regelen er slått av, blir brukeren aldri spurt, og videoopptak
+      er bare tilgjengelig for nettadressene i VideoCaptureAllowedUrls.
+      ARC-apper har ikke tilgang til kameraet.
+
+      I tillegg til ARC-apper har denne regelen innvirkning på alle typer
+      innenheter for video – ikke bare det innebygde kameraet.</translation>
 <translation id="3417418267404583991">Hvis denne retningslinjen er angitt som Sann eller ikke er konfigurert, aktiverer <ph name="PRODUCT_OS_NAME" /> gjestepålogging. Gjestepålogginger er anonyme brukerøkter og krever ikke passord.
 
       Hvis denne retningslinjen er angitt som Usann, tillater ikke <ph name="PRODUCT_OS_NAME" /> at gjesteøkter startes.</translation>
@@ -709,6 +728,25 @@
 <translation id="3478024346823118645">Slett brukerdata ved avlogging</translation>
 <translation id="348495353354674884">Aktiver virtuelt tastatur</translation>
 <translation id="3496296378755072552">Passordbehandling</translation>
+<translation id="349667858031092827">Påvis aldri tidssonen automatisk.</translation>
+<translation id="3502472987829488885">Lar deg spesifisere hvilken proxy-tjener som skal brukes av <ph name="PRODUCT_NAME" /> og ARC-apper, og hindrer brukerne i å endre innstillingene for proxy-tjenere.
+
+          Hvis du velger at det aldri skal brukes proxy-tjenere og alltid kobles til direkte, ignoreres alle andre alternativer. Hvis systemet har en standardinnstilling for proxy-tjenere, bruker ARC-apper denne.
+
+          Hvis du velger å bruke systeminnstillingene for proxy-tjenere, ignoreres alle andre alternativer. Hvis systemet har en standardinnstilling for proxy-tjenere, bruker ARC-apper denne.
+
+          Hvis du velger at proxy-tjeneren skal oppdages automatisk, ignoreres alle andre alternativer.
+
+          Hvis du velger modusen for fast proxy-tjener, kan du spesifisere flere alternativer i «Adresse eller nettadresse for proxy-tjener» og «Kommadelt liste over regler for å omgå proxy-tjener». ARC-apper bruker bare den HTTP-proxy-tjeneren som har høyest prioritet.
+
+          Hvis du velger å bruke et pac-skript for proxy-tjenere, må du spesifisere nettadressen for skriptet i «Nettadresse til en .pac-fil for proxy-tjener».
+
+          Du finner detaljerte eksempler her:
+          <ph name="PROXY_HELP_URL" />
+
+          Hvis du slår på denne innstillingen, ignorerer <ph name="PRODUCT_NAME" /> og ARC-apper alle proxy-tjenerrelaterte alternativer som spesifiseres fra kommandolinjen.
+
+          Hvis du ikke spesifiserer denne regelen, kan brukerne velge egne innstillinger for proxy-tjenere.</translation>
 <translation id="3504791027627803580">Angir nettadressen for søkemotoren som brukes til bildesøk. Søkeforespørsler blir sendt via GET-metoden. Hvis DefaultSearchProviderImageURLPostParams-innstillingen er angitt, bruker bildesøkforespørsler POST-metoden i stedet.
 
           Denne innstillingen er valgfri. Hvis den ikke angis, brukes ikke bildesøk.
@@ -725,8 +763,16 @@
 
       Verdien for innstillingen må spesifiseres i millisekunder. Verdier settes innenfor et spenn fra 30 sekunder til 24 timer.</translation>
 <translation id="3528000905991875314">Aktiver alternative feilsider</translation>
+<translation id="3538538104630456270">Den tilknyttede innstillingen ble brukt før vi implementerte ny autentisering for visning av passord. Etter dette har ikke innstillingen – og dermed heller ikke denne regenel – hatt noen innvirkning på funksjonaliteten i Chrome. Den nåværende funksjonaliteten i Chrome er den samme som hvis denne regelen hadde vært konfigurert til å slå av visning av passord i klartekst på innstillingssiden i passordbehandlingen. Det betyr at innstillingssiden bare har en plassholder, og brukeren må klikke på «Vis» (og eventuelt utføre en ny autentisering) for å se passordet i Chrome. Den originale beskrivelsen av regelen er som følger.
+
+          Kontrollerer hvorvidt brukeren kan vise passord i klartekst i passordbehandlingen.
+
+          Hvis du slår av denne innstillingen, tillater ikke passordbehandlingen at lagrede passord vises i klartekst i vinduet til passordbehandlingen.
+
+          Hvis du slår på eller ikke angir denne regelen, kan brukerne se passordene i klartekst i passordbehandlingen.</translation>
 <translation id="3547954654003013442">Innstillinger for proxy-tjener</translation>
 <translation id="3570008976476035109">Blokkér programtillegg på disse nettstedene</translation>
+<translation id="3591584750136265240">Konfigurer autentiseringsatferden ved pålogging</translation>
 <translation id="3627678165642179114">Aktiver eller deaktiver nett-tjeneste for stavekontroll</translation>
 <translation id="3646859102161347133">Angi skjermforstørrelsestype</translation>
 <translation id="3653237928288822292">Ikon for standard søkeleverandør</translation>
@@ -807,23 +853,11 @@
 
       Hver oppføring på listen inneholder en ordliste som må inkludere utvidelse-ID-en i feltet for utvidelse-ID samt dets oppdateringsnettadresse i feltet for oppdateringsnettadresse.</translation>
 <translation id="3891357445869647828">Aktiver JavaScript</translation>
-<translation id="389421284571827139">Gjør at du kan angi proxytjeneren <ph name="PRODUCT_NAME" /> skal bruke, og hindre brukerne i å endre mellomtjenerinnstillinger.
-
-      Hvis du velger aldri å bruke proxytjener og alltid koble til direkte, ignoreres alle andre alternativer.
-
-      Hvis du velger automatisk registrering av proxytjeneren, ignoreres alle andre alternativer.
-
-      Hvis du vil ha detaljerte eksempler, går du til:
-      <ph name="PROXY_HELP_URL" />
-
-      Hvis du aktiverer denne innstillingen, ignorerer <ph name="PRODUCT_NAME" /> alle mellomtjenerrelaterte alternativer som er angitt fra kommandolinjen.
-
-      Hvis disse retningslinjene ikke angis, kan brukerne velge mellomtjenerinnstillinger på egen hånd.</translation>
 <translation id="3907986150060929099">Spesifiser de anbefalte lokalitetene for offentlige økter</translation>
 <translation id="391531815696899618">Slår av Google Disk-synkronisering i Filer-appen for <ph name="PRODUCT_OS_NAME" /> ved bruk av mobiltilkobling når den har verdien true (sann). I disse tilfellene lastes ikke noen data opp til Google Disk.
 
           Hvis den ikke er spesifisert eller har verdien false (usann), kan brukere overføre filer til Google Disk.</translation>
-<translation id="3915395663995367577">Nettadresse til en .pac-fil for mellomtjener</translation>
+<translation id="3915395663995367577">Nettadresse til en .pac-fil for proxy-tjener</translation>
 <translation id="3964909636571393861">Gir tilgang til en liste over nettadresser</translation>
 <translation id="3965339130942650562">Tidsavbrudd før inaktiv brukeravlogging utføres</translation>
 <translation id="3967075520570946456">Slå på visning av velkomstsiden ved den første oppstarten av nettleseren etter at operativsystemet er oppgradert.</translation>
@@ -841,7 +875,6 @@
 <translation id="4039085364173654945">Kontrollerer om tredjeparts underinnhold på en side kan åpne en HTTP Basic Auth-dialogrute som forgrunnsvindu.
 
           Dette deaktiveres vanligvis for å beskytte seg mot nettfisking. Hvis denne retningslinjen ikke er angitt, er den deaktivert, og tredjeparts underinnhold kan ikke åpne en HTTP Basic Auth-dialogrute som forgrunnsvindu.</translation>
-<translation id="4052765007567912447">Kontrollerer om brukeren kan vise passord i klartekst i passordbehandlingen. Hvis du deaktiverer denne innstillingen, tillater ikke passordbehandlingen at lagrede passord vises i klartekst i vinduet til passordbehandlingen. Hvis du aktiverer eller ikke angir denne retningslinjen, kan brukerne se passordene i klartekst i passordbehandlingen.</translation>
 <translation id="4056910949759281379">Deaktiver SPDY-protokoll</translation>
 <translation id="4088589230932595924">Tvungen inkognitomodus</translation>
 <translation id="4088983553732356374">Gjør det mulig å velge om nettsteder kan angi lokale data. Dette kan enten tillates for alle nettsteder eller blokkeres for alle nettsteder.
@@ -849,6 +882,23 @@
           Hvis denne regelen settes til «Behold informasjonskapsler så lenge økten varer», blir informasjonskapslene slettet når økten avsluttes. Vær oppmerksom på at hvis <ph name="PRODUCT_NAME" /> kjører i «bakgrunnsmodus», kan det hende økten ikke avsluttes når det siste vinduet lukkes. Se regelen «BackgroundModeEnabled» for å få mer informasjon om konfigurering av denne atferden.
 
           Hvis denne regelen ikke spesifiseres, brukes «AllowCookies», og brukeren kan endre innstillingen.</translation>
+<translation id="4098957623809244159">Denne regelen er avviklet. Bruk ProxyMode i stedet.
+
+          Med denne regelen kan du spesifisere hvilken proxy-tjener som skal brukes av <ph name="PRODUCT_NAME" /> og ARC-apper, og hindre brukere i å endre innstillingene for proxy-tjenere.
+
+          Hvis du velger at det aldri skal brukes proxy-tjenere og alltid kobles til direkte, ignoreres alle andre alternativer.
+
+          Hvis du velger å bruke systeminnstillingene for proxy-tjenere eller oppdage proxy-tjenere automatisk, ignoreres alle andre alternativer.
+
+          Hvis du velger manuelle innstillinger for proxy-tjenere, kan du spesifisere ytterligere alternativer i «Adresse eller nettadresse for proxy-tjener», «Nettadresse til en .pac-fil for proxy-tjener» og «Kommadelt liste over regler for å omgå proxy-tjener».
+
+          Du finner detaljerte eksempler her:
+          <ph name="PROXY_HELP_URL" />
+
+          Hvis du slår på denne innstillingen, ignorerer <ph name="PRODUCT_NAME" /> alle proxy-tjenerrelaterte alternativer som spesifiseres fra kommandolinjen.
+
+          Hvis du ikke spesifiserer denne regelen, kan brukerne velge egne innstillinger for proxy-tjenere.</translation>
+<translation id="4103289232974211388">Viderekoble til SAML IdP etter at brukeren har bekreftet</translation>
 <translation id="410478022164847452">Angir hvor lenge brukeren kan være inaktiv før inaktivitetshandlingen blir utført når enheten kjører på vekselstrøm.
 
           Når denne innstillingen er konfigurert, angir den hvor lenge brukeren må være inaktiv før <ph name="PRODUCT_OS_NAME" /> utfører inaktivitetshandlingen, som kan konfigureres separat.
@@ -1059,14 +1109,6 @@
           Verdien må være en matrise med JSON-ordlister i strengformat. Hver ordliste må ha formen { "mønster": "$URL_PATTERN", "filter" : $FILTER }, der $URL_PATTERN er et mønster for spesifisering av innhold. $FILTER begrenser klientsertifikatene nettleseren automatisk velger fra. Uavhengig av hvilket filter som brukes, blir det bare valgt sertifikater som stemmer overens med tjenerens sertifikatforespørsel. Hvis $FILTER har formen { "ISSUER": { "CN": "$ISSUER_CN" } }, velges det bare klientsertifikater som er utstedt av et sertifikat med CommonName $ISSUER_CN. Hvis $FILTER er den tomme katalogen {}, brukes det ikke ytterligere begrensninger for valg av klientsertifikater.
 
           Hvis du ikke spesifiserer denne regelen, blir det ikke valgt klientsertifikat automatisk for noen nettsteder.</translation>
-<translation id="4980301635509504364">Tillat eller nekt videoopptak.
-
-      Hvis dette alternativet er aktivert eller ikke konfigurert (standard), mottar brukeren forespørsel om tilgang til videoopptak, bortsett fra for nettadresser som konfigureres i VideoCaptureAllowedUrls-listen, som gir tilgang uten forespørsel på forhånd.
-
-
-      Når denne innstillingen er deaktivert, mottar aldri brukeren forespørsler, og videoopptak blir bare tilgjengelig for nettadresser som konfigureres i VideoCaptureAllowedUrls.
-
-      Denne innstillingen påvirker alle typer videoinndata, og ikke bare det innebygde kameraet.</translation>
 <translation id="4980635395568992380">Datatype:</translation>
 <translation id="4983201894483989687">Tillat kjøring av foreldede programtillegg</translation>
 <translation id="4988291787868618635">Handling som skal utføres når inaktivitetsforsinkelsen blir overskredet</translation>
@@ -1233,7 +1275,6 @@
       Hvis angitt, legges et parameter kalt «begrenset» til nettadressen som brukes til å hente startverdien for variasjonene. Verdien av parameteret er verdien angitt i denne innstillingen.
 
       Hvis ikke angitt, endres ikke nettadressen for startverdien.</translation>
-<translation id="5564962323737505851">Konfigurerer passordbehandling. Hvis passordbehandling er aktivert, kan du velge å aktivere eller deaktivere hvorvidt brukeren kan vise lagrede passord i klartekst.</translation>
 <translation id="556941986578702361">Kontroller automatisk skjuling av <ph name="PRODUCT_OS_NAME" />-hyllen.
 
       Hvis denne innstillingen angis til «AlwaysAutoHideShelf'», skjules alltid hyllen automatisk.
@@ -1273,7 +1314,6 @@
 
       Hvis denne regelen ikke er spesifisert, eller hvis den er satt til «false», bruker <ph name="PRODUCT_NAME" /> de gjeldende alternativene for opphevelsessjekking på nettet.</translation>
 <translation id="5732972008943405952">Importér autofylldata for skjemaer fra standardnettleseren ved den første kjøringen</translation>
-<translation id="5761030451068906335">Konfigurerer innstillinger for mellomtjener i <ph name="PRODUCT_NAME" />. Disse retningslinjene er ikke klare for bruk ennå, så vi ber deg om ikke å bruke dem.</translation>
 <translation id="5765780083710877561">Beskrivelse:</translation>
 <translation id="5770738360657678870">Utviklerkanal (kan være ustabil)</translation>
 <translation id="5774856474228476867">Nettadresse for søk for standard søkeleverandør</translation>
@@ -1298,13 +1338,6 @@
       Gå til https://www.chromium.org/administrators/policy-list-3/user-data-directory-variables for å se en liste over variabler som kan brukes.
 
       Hvis du ikke angir denne innstillingen, brukes standardkatalogen for profiler.</translation>
-<translation id="5819660021114910752">Spesifiserer tidssonen som skal brukes på enheten. Brukerne kan overstyre den angitte tidssonen for den gjeldende økten, men ved avlogging tilbakestilles den til den spesifiserte tidssonen. Hvis du angir en ugyldig verdi, blir regelen likevel slått på, men «GMT» brukes som tidssone. Hvis strengen er tom, ignoreres regelen.
-
-      Hvis du ikke bruker denne regelen, brukes fortsatt den aktive tidssonen. Brukerne kan imidlertid endre tidssonen, og endringen er varig. Endringer som gjøres av brukere, påvirker derfor påloggingssiden og alle andre brukere.
-
-      «US Pacific Time» (USA og Stillehavskysten) er konfigurert som tidssonen for nye enheter.
-
-      Formatet på verdien følger navnene på tidssonene i «IANA Time Zone Database» (se https://en.wikipedia.org/wiki/Tz_database). De fleste tidssonene kan angis som «kontinent/stor_by» eller «hav/stor_by».</translation>
 <translation id="5826047473100157858">Angir om brukeren kan åpne sider i inkognitomodus i <ph name="PRODUCT_NAME" />.
 
       Hvis dette er aktivert, eller hvis retningslinjen ikke er angitt, kan sider åpnes i inkognitomodus.
@@ -1344,7 +1377,13 @@
 <translation id="5893553533827140852">Hvis denne innstillingen er aktivert sendes gnubby-godkjenningsforespørsler via en proxy-tjener på en ekstern tjenertilkobling.
 
           Hvis denne innstillingen ikke er aktivert sendes ikke gnubby-godkjenningsforespørsler via en proxy-tjener.</translation>
-<translation id="5912364507361265851">Tillat brukere å vise passord i passordbehandling</translation>
+<translation id="5900959132054596599"><ph name="PRODUCT_NAME" /> og ARC-apper omgår alle proxy-tjenere for listen med verter som spesifiseres her.
+
+          Denne regelen trer bare i kraft hvis du har valgt manuelle innstillinger for proxy-tjenere under «Velg hvordan innstillinger for proxy-tjener angis».
+          Du bør ikke spesifisere denne regelen hvis du har valgt en annen modus for spesifisering av regler for proxy-tjenere.
+
+          Du finner detaljerte eksempler her:
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="5921713479449475707">Tillat automatisk oppdatering av nedlastinger via HTTP</translation>
 <translation id="5921888683953999946">Angi standardtilstand for den store musepekerens tilgjengelighet på påloggingssiden.
 
@@ -1421,7 +1460,7 @@
           retningslinjene ikke spesifiseres, er passordlagring tillatt (men brukeren 
           kan slå det av).</translation>
 <translation id="6155936611791017817">Angi standard tilstand for stor musepeker på påloggingssiden</translation>
-<translation id="6157537876488211233">Kommadelt liste over regler for å omgå mellomtjener</translation>
+<translation id="6157537876488211233">Kommadelt liste over regler for å omgå proxy-tjener</translation>
 <translation id="6158324314836466367">Navn på bedriftens nettbutikk (avviklet)</translation>
 <translation id="6167074305866468481">Advarsel: SSLv3-støtte blir fjernet helt fra <ph name="PRODUCT_NAME" /> etter versjon 43 (cirka juli 2015), og denne regelen blir fjernet samtidig.
 
@@ -1494,6 +1533,7 @@
 <translation id="637934607141010488">Rapportliste over enhetsbrukere som har logget på i det siste.
 
       Hvis innstillingen angis som «false», blir ikke brukerne rapportert.</translation>
+<translation id="639009029157091157">La brukerne bestemme.</translation>
 <translation id="6392973646875039351">Aktiverer autofyll-funksjonen til <ph name="PRODUCT_NAME" />, og gjør at brukerne kan autofullføre nettskjemaer ved hjelp av tidligere lagret informasjon, som adresser eller kredittkortinformasjon.
 
       Hvis du deaktiverer denne innstillingen, blir autofyll-funksjonen utilgjengelig for brukerne.
@@ -1512,17 +1552,7 @@
       Hvis du slår av denne regelen, har brukerne ikke lov til å bruke Smart Lock.
 
       Hvis denne regelen ikke spesifiseres, er standardverdien «ikke tillatt» for bedriftsadministrerte brukere og «tillatt» for brukere som ikke er administrert.</translation>
-<translation id="6513756852541213407">Gjør at du kan angi proxytjeneren som brukes av <ph name="PRODUCT_NAME" />, og hindrer brukerne i å endre innstillinger for mellomtjener.
-
-          Hvis du velger aldri å bruke en proxytjener og alltid koble til direkte, ignoreres alle andre alternativer.
-
-         Hvis du velger å bruke systemets innstillinger for mellomtjenere eller la proxytjeneren bli oppdaget automatisk, ignoreres alle andre alternativer.
-
-          Hvis du velger statisk modus for proxytjener, kan du oppgi ytterligere spesifikasjoner i «Proxytjenerens adresse eller nettadresse» og «Liste over regler for å omgå mellomtjener, adskilt med komma». Hvis du velger å bruke et .pac-mellomtjenerskript, må du angi nettadressen til skriptet i «Nettadresse til .pac-fil for mellomtjener». Hvis du vil ha mer utførlige eksempler, kan du gå til <ph name="PROXY_HELP_URL" />.
-
-          Hvis du aktiverer denne innstillingen, ignorerer <ph name="PRODUCT_NAME" /> alle mellomtjenerrelaterte alternativer som er angitt fra kommandolinjen.
-
-          Hvis denne retningslinjen ikke angis, kan brukerne velge innstillinger for mellomtjener på egen hånd.</translation>
+<translation id="6491139795995924304">Tillat Bluetooth på enheten</translation>
 <translation id="6520802717075138474">Importér søkemotorer fra standard nettleser ved første kjøring</translation>
 <translation id="653608967792832033">Angir hvor lenge skjermen kan stå ubrukt før den låses når enheten bruker batteriet.
 
@@ -1603,22 +1633,6 @@ skjermtastaturet når som helst og statusen den har på påloggingsskjermen er v
 
       Hvis denne regelen ikke spesifiseres, er nettverksforutsigelse slått på, men brukeren kan endre innstillingen.</translation>
 <translation id="6658245400435704251">Angir grensen for hvor mange sekunder en enhet tilfeldig kan utsette nedlastingen av en oppdatering, fra tidspunktet oppdateringen første ble sendt til tjeneren. Enheten kan sette av en del av denne tiden i form av faktisk ventetid, og den gjenværende delen i form av antall oppdateringer som skal kontrolleres. I alle tilfelle er det den øvre grensen for spredning knyttet til en konstant tidsmengde, slik at enheten aldri blir stående fast og vente på å laste ned en oppdatering for alltid.</translation>
-<translation id="6672934768721876104">Denne retningsinjen er foreldet. Bruk ProxyMode i stedet.
-
-          Gjør at du kan angi proxytjeneren som brukes av <ph name="PRODUCT_NAME" />, og hindrer brukerne i å endre mellomtjenerinnstillinger.
-
-          Hvis du velger aldri å bruke en proxytjener og alltid koble til direkte, ignoreres alle andre alternativer.
-
-          Hvis du velger å bruke systemets mellomtjenerinnstillinger eller oppdage proxytjeneren automatisk, ignoreres alle andre alternativer.
-
-          Hvis du velger manuelle mellomtjenerinnstillinger, kan du angi flere alternativer under «Adressen eller nettadressen til proxytjener», «Nettadresse til mellomtjeners .pac-fil» og «Liste over regler for å gå forbi mellomtjener, adskilt med komma».
-
-          Hvis du vil ha detaljerte eksempler, kan du gå til:
-          <ph name="PROXY_HELP_URL" />
-
-          Hvis du aktiverer denne innstillingen, ignorerer <ph name="PRODUCT_NAME" /> alle mellomtjenerrelaterte alternativer som angis fra kommandolinjen.
-
-          Hvis denne retningslinjen ikke angis, kan brukerne velge mellomtjenerinnstillinger på egen hånd.</translation>
 <translation id="6689792153960219308">Rapportér maskinvarestatus</translation>
 <translation id="6693751878507293182">Hvis du aktiverer denne innstillingen, deaktiveres automatisk søk og installering av manglende programtillegg i <ph name="PRODUCT_NAME" />.
 
@@ -1753,6 +1767,7 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 
       Hvis denne innstillingen ikke angis, kan brukeren endre listen over programmer som er festet i programlisten.</translation>
 <translation id="7132877481099023201">Nettadresser som uten forespørsel blir gitt tilgang til enheter med videoopptak</translation>
+<translation id="7167436895080860385">Gi brukere tillatelse til å se passord i passordbehandlingen (avviklet)</translation>
 <translation id="7173856672248996428">Midlertidig profil</translation>
 <translation id="7187256234726597551">Hvis angitt til «true», tillates ekstern bekreftelse for enheten, og et sertifikat genereres automatisk og lastes opp til administreringstjeneren for enheten.
 
@@ -1774,6 +1789,11 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 
           Hvis «RestoreOnStartup»-regelen er konfigurert til å gjenopprette nettadressene fra forrige økt, overstyrer den denne regelen, og informasjonskapslene for slike nettsteder lagres permanent.</translation>
 <translation id="7207095846245296855">Fremtving bruk av Google Sikkert Søk</translation>
+<translation id="7213425178181578730">Hvis denne regelen er satt til «false» (usann), slår <ph name="PRODUCT_OS_NAME" /> av Bluetooth, og brukeren kan ikke slå det på igjen.
+
+      Hvis denne regelen settes til «true» (sann) eller ikke angis, kan brukeren slå Bluetooth på eller av etter eget ønske.
+
+      Hvis denne regelen er angitt, kan ikke brukeren endre den eller overstyre den.</translation>
 <translation id="7216442368414164495">Tillat at brukere velger utvidet rapportering for sikker surfing</translation>
 <translation id="7227967227357489766">Definerer listen over brukere som kan logge seg på enheten. Oppføringer har formatet <ph name="USER_WHITELIST_ENTRY_FORMAT" />, som for eksempel <ph name="USER_WHITELIST_ENTRY_EXAMPLE" />. Hvis du vil tillate vilkårlige brukere på domenet, må oppføringer bruke formatet <ph name="USER_WHITELIST_ENTRY_WILDCARD" />.
 
@@ -1865,6 +1885,11 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 
           Hvis denne retningslinjen ikke angis, brukes den globale standardverdien for alle nettsteder fra retningslinjen DefaultPopupsSetting hvis den er angitt, eller fra brukerens egen konfigurasjon hvis den nevnte retningslinjen ikke er angitt.</translation>
 <translation id="7529144158022474049">Automatisk oppdatering av spredningsfaktor</translation>
+<translation id="7553535237300701827">Når denne regelen er angitt, blir autentiseringsprosessen ved pålogging ett av de følgende alternativene, avhengig av verdien for innstillingen:
+
+      Hvis den settes til GAIA, gjøres påloggingen via den normale GAIA-autentiseringsprosessen.
+
+      Hvis den settes til SAML_INTERSTITIAL, vises en mellomskjerm under påloggingen der brukeren kan velge å gå videre med autentiseringen via SAML IdP-en for enhetens registreringsdomene eller gå tilbake til den normale GAIA-påloggingsprosessen.</translation>
 <translation id="7567380065339179813">Tillat programtillegg på disse nettstedene</translation>
 <translation id="7593523670408385997">Konfigurerer bufferstørrelsen som <ph name="PRODUCT_NAME" /> bruker for lagring av bufrede filer på disken.
 
@@ -1883,6 +1908,9 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 
       Hvis denne innstillingen er deakivert eller ikke angis, bruker <ph name="PRODUCT_NAME" /> enten det brukerspesifikke foretrukne språket (hvis dette er konfiguert), systemspråket eller, som siste mulighet, en-US.</translation>
 <translation id="7651739109954974365">Avgjør om datastreifing skal aktiveres for enheten. Hvis innstillingen er angitt som Sann, tillates datastreifing. Hvis innstillingen er angitt som Usann eller ikke er konfigurert, blir ikke datastreifing tilgjengelig.</translation>
+<translation id="7667184304362487902">Konfigurerer innstillingene for proxy-tjenere for <ph name="PRODUCT_NAME" /> og ARC-apper.
+
+      Denne regelen er ikke klar til bruk ennå, så ikke bruk den.</translation>
 <translation id="76810863974142048">Nettadressen fjerntilgangsklienter skal hente autentiseringstoken fra.
 
           Hvis denne regelen spesifiseres, krever fjerntilgangsverten at autentiseringsklientene innhenter et autentiseringstoken fra nettadressen som er oppgitt, før de kobles til. Denne regelen må brukes sammen med RemoteAccessHostTokenValidationUrl.
@@ -1954,10 +1982,36 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 <translation id="7842869978353666042">Konfigurer Google Disk-alternativer</translation>
 <translation id="7843525027689416831">Spesifiserer flaggene som skal gjelde for <ph name="PRODUCT_NAME" /> når det startes opp. De spesifiserte flaggene brukes bare på påloggingsskjermen. Flagg som angis via denne regelen, videreføres ikke til brukerøkter.</translation>
 <translation id="7848840259379156480">Lar deg konfigurere standard HTML-gjengivelse når <ph name="PRODUCT_FRAME_NAME" /> er installert. Standardinnstillingen er å tillate vertsnettleseren å foreta gjengivelsen. Du kan eventuelt overstyre dette og la <ph name="PRODUCT_FRAME_NAME" /> gjengi HTML-sider som standard.</translation>
+<translation id="7853178359124471330">Når denne regelen er spesifisert, blir tidssonen automatisk påvist i henhold til innstillingen som er valgt. Her ser du de ulike alternativene:
+
+      Hvis TimezoneAutomaticDetectionUsersDecide er angitt, kan brukerne kontrollere den automatiske påvisningen av tidssoner ved å bruke vanlige kontroller i chrome://settings.
+
+      Hvis TimezoneAutomaticDetectionDisabled er angitt, er kontrollene for automatisk tidssone i chrome://settings slått av. Automatisk påvisning av tidssoner er alltid av.
+
+      Hvis TimezoneAutomaticDetectionIPOnly er angitt, er tidssonekontrollene i chrome://settings slått av. Automatisk påvisning av tidssoner er alltid på. Systemet bruker bare IP-adresser for å finne riktig tidssone.
+
+      Hvis TimezoneAutomaticDetectionSendWiFiAccessPoints er angitt, er tidssonekontrollene i chrome://settings slått av. Automatisk påvisning av tidssoner er alltid på. Listen over synlige Wi-Fi-tilgangspunkter sendes alltid til Geolocation API-tjeneren, slik at det kan utføres detaljert påvisning av tidssonen.
+
+      Hvis denne regelen ikke spesifiseres, har det samme effekt som om TimezoneAutomaticDetectionUsersDecide var angitt.
+
+      Hvis SystemTimezone-regelen er spesifisert, overstyrer den denne regelen. I så fall er automatisk påvisning av tidssoner slått helt av.</translation>
 <translation id="7882585827992171421">Denne retningslinjen er aktiv bare i detaljistmodus.
 
       Bestemmer ID-en for utvidelsen som skal brukes som skjermsparer på påloggingssiden. Utvidelsen må være del av AppPack-elementet som er konfigurert for dette domenet gjennom DeviceAppPack-retningslinjene.</translation>
+<translation id="7882890448959833986">Ignorer advarselen om at operativsystemet ikke støttes</translation>
 <translation id="7912255076272890813">Konfigurer tillatte typer apper og utvidelser</translation>
+<translation id="7928112526630078979">Lar deg spesifisere hvilken proxy-tjener som skal brukes av <ph name="PRODUCT_NAME" /> og ARC-apper, og hindrer brukerne i å endre innstillingene for proxy-tjenere.
+
+      Hvis du velger at det aldri skal brukes proxy-tjenere og alltid kobles til direkte, ignoreres alle andre alternativer. Hvis systemet har en standardinnstilling for proxy-tjenere, bruker ARC-apper denne.
+
+      Hvis du velger at proxy-tjenere skal oppdages automatisk, ignoreres alle andre alternativer.
+
+      Du finner detaljerte eksempler her:
+      <ph name="PROXY_HELP_URL" />
+
+      Hvis du slår på denne innstillingen, ignorerer <ph name="PRODUCT_NAME" /> og ARC-apper alle proxy-tjenerrelaterte alternativer som spesifiseres fra kommandolinjen.
+
+      Hvis du ikke spesifiserer disse reglene, kan brukerne velge egne innstillinger for proxy-tjenere.</translation>
 <translation id="793134539373873765">Angir om p2p skal brukes for nyttelast av OS-oppdatering. Hvis angitt til «True», kommer enhetene til å dele og forsøke å konsumere oppdateringsnyttelast på LAN, noe som potensielt kan redusere Internett-båndbredden og -trafikken. Hvis oppdateringsnyttelasten ikke er tilgjengelig på LAN, går enheten tilbake til å laste ned fra en oppdateringstjener. Hvis angitt til «False» eller ikke konfigurert, blir ikke p2p brukt.</translation>
 <translation id="7933141401888114454">Slå på oppretting av administrerte brukere</translation>
 <translation id="7936098023732125869">Slår på bruk av en standard søkeleverandør.
@@ -1990,6 +2044,7 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 
           Hvis denne retningslinjen ikke angis, er innstillingen aktivert.</translation>
 <translation id="8073243368829195">Tillat bruk av Smart Lock</translation>
+<translation id="8074052133552427532">Bruk alltid grovkornet påvisning av tidssoner.</translation>
 <translation id="8099880303030573137">Inaktivitetsforsinkelse når enheten kjører på batteristrøm</translation>
 <translation id="8102913158860568230">Standard innstilling for direkteavspilling av medieinnhold</translation>
 <translation id="8104962233214241919">Automatisk valg av klientsertifikater for disse nettstedene</translation>
@@ -2014,6 +2069,7 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 
       Hvis innstillingen angis som «false», rapporteres ikke grensesnittlisten.</translation>
 <translation id="8146727383888924340">Tillat at brukere løser inn tilbud via Chrome OS-registering</translation>
+<translation id="8148785525797916822">Ignorer advarselen som vises når <ph name="PRODUCT_NAME" /> kjører på en datamaskin eller et operativsystem som ikke lenger støttes.</translation>
 <translation id="8148901634826284024">Aktiver tilgjengelighetsfunksjon for høykontrastmodus.
 
           Hvis denne innstillingen angis til «true», er høykontrastmodus alltid aktivert.
@@ -2062,6 +2118,7 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 <translation id="8197918588508433925">Denne innstillingen angir hvilke utvidelser som har tillatelse til å bruke Enterprise Platform Keys API-en chrome.enterprise.platformKeysPrivate.challengeUserKey() for ekstern attestering. Utvidelser må legges til på listen for å bruke API-en.
 
           Hvis en utvidelse ikke er på listen, eller listen ikke er angitt, vil kall av API-en returnere en feilkode.</translation>
+<translation id="8214600119442850823">Konfigurerer passordbehandlingen.</translation>
 <translation id="8244525275280476362">Maksimal innlastingsforsinkelse etter ugyldiggjøring av en innstilling</translation>
 <translation id="8256688113167012935">Kontrollerer hvilket kontonavn <ph name="PRODUCT_OS_NAME" /> viser på påloggingsskjermen for enhetens tilhørende lokale konto.
 
@@ -2232,15 +2289,31 @@ programtillegg. Shockwave Flash-programtillegget tilhører for eksempel Adobe Fl
       Hvis denne innstillingen angis som usann, kan verken brukeren, apper eller utvidelser gå til fullskjermmodus.
 
       På alle plattformer unntatt <ph name="PRODUCT_OS_NAME" />, er kioskmodus utilgjengelig når fullskjermmodus er deaktivert.</translation>
+<translation id="8795495354632096254">Send alltid Wi-Fi-tilgangspunkter til tjeneren mens tidssoner påvises.</translation>
 <translation id="8818173863808665831">Rapportering av enhetens geografiske posisjon.
 
       Hvis denne innstillingen ikke er angitt, eller er satt til «false», blir ikke posisjonen rapportert.</translation>
+<translation id="8818768076343557335">Forutsi nettverkshandlinger på et hvilket som helst nettverk som ikke er et mobilnettverk.
+          (Avviklet i 50, fjernet i 52. Etter 52 behandles verdien som 0 – Forutsi nettverkshandlinger på alle nettverkstilkoblinger – selv om verdien er satt til 1.)</translation>
 <translation id="8828766846428537606">Angir standard startside i <ph name="PRODUCT_NAME" /> og forhindrer brukerne i å endre den. Brukerens innstillinger for startside blir kun fullstendig overstyrt dersom du enten angir nettstedet på siden Ny fane som startside, eller angir den til å være en spesifikk nettadresse du velger. Hvis du ikke spesifiserer nettadressen for startsiden, kan brukeren fremdeles angi nettstedet på siden Ny fane som startside ved å spesifisere «chrome://newtab».</translation>
+<translation id="8833109046074170275">Autentisering via den normale GAIA-prosessen</translation>
 <translation id="8838303810937202360"><ph name="PRODUCT_OS_NAME" /> bufrer apper og utvidelser som skal installeres av flere brukere på én enkelt enhet, for å unngå å laste dem ned på nytt for hver bruker.
       Hvis denne regelen ikke er konfigurert, eller hvis verdien er lavere enn 1 MB, bruker <ph name="PRODUCT_OS_NAME" /> standardbufferstørrelsen.</translation>
 <translation id="8858642179038618439">Bruk tvungen sikkerhetsmodus i YouTube</translation>
 <translation id="8864975621965365890">Ignorerer avslagsforespørselen som vises når et nettsted gjengis av <ph name="PRODUCT_FRAME_NAME" />.</translation>
 <translation id="8870318296973696995">Startside</translation>
+<translation id="8889588091638298603">Med Quirks Server får du konfigurasjonsfiler som er spesifikke for ulike typer
+      maskinvare, for eksempel ICC-visningsprofiler du kan bruke for å justere
+      skjermkalibrering.
+
+      Når denne retningslinjen er satt til «false» (usann), prøver ikke enheten
+      å kontakte Quirks Server for å laste ned konfigurasjonsfiler.
+
+      Hvis denne retningslinjen er satt til «true» (sann) eller ikke er konfigurert,
+      kontakter <ph name="PRODUCT_OS_NAME" />
+      Quirks Server automatisk, laster ned eventuelle tilgjengelige
+      konfigurasjonsfiler og lagrer dem på enheten. Slike filer kan for eksempel
+      brukes for å forbedre visningskvaliteten på tilkoblede skjermer.</translation>
 <translation id="8905426178924715309">Denne regelen er avviklet. Bruk ForceGoogleSafeSearch og ForceYouTubeSafetyMode i stedet. Denne regelen ignoreres hvis ForceGoogleSafeSearch eller ForceYouTubeSafetyMode er spesifisert.
 
       Tvinger søkene i Google Nettsøk til å gjøres med Sikkert Søk slått på, og hindrer brukerne i å endre denne innstillingen. Denne regelen tvinger også frem bruk av sikkerhetsmodus i YouTube.
@@ -2282,6 +2355,7 @@ programtillegg. Shockwave Flash-programtillegget tilhører for eksempel Adobe Fl
 <translation id="9042911395677044526">Tillater skyving av nettverkskonfigurasjon for enkeltbrukere på en <ph name="PRODUCT_OS_NAME" />-enhet. Nettverkskonfigurasjon er en JSON-formatert streng, som definert av Open Network Configuration-formatet beskrevet på <ph name="ONC_SPEC_URL" /></translation>
 <translation id="9084985621503260744">Angi om videoaktivitet skal påvirke strømbehandling</translation>
 <translation id="9088433379343318874">Slå på innholdsleverandøren for administrerte brukere</translation>
+<translation id="9088444059179765143">Konfigurer metoden for automatisk påvisning av tidssoner</translation>
 <translation id="9096086085182305205">Godkjenningsliste for autentiseringstjener</translation>
 <translation id="9098553063150791878">Regler for HTTP-autentisering</translation>
 <translation id="9104138886225968319">Send overvåkningsimpulser til administrasjonstjeneren for å tillate at

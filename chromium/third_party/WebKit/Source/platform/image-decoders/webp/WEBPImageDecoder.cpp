@@ -126,10 +126,6 @@ WEBPImageDecoder::WEBPImageDecoder(AlphaOption alphaOption, GammaAndColorProfile
     , m_decoder(0)
     , m_formatFlags(0)
     , m_frameBackgroundHasAlpha(false)
-    , m_hasColorProfile(false)
-#if USE(QCMSLIB)
-    , m_transform(0)
-#endif
     , m_demux(0)
     , m_demuxState(WEBP_DEMUX_PARSING_HEADER)
     , m_haveAlreadyParsedThisData(false)
@@ -146,9 +142,6 @@ WEBPImageDecoder::~WEBPImageDecoder()
 
 void WEBPImageDecoder::clear()
 {
-#if USE(QCMSLIB)
-    clearColorTransform();
-#endif
     WebPDemuxDelete(m_demux);
     m_demux = 0;
     clearDecoder();
@@ -227,12 +220,8 @@ bool WEBPImageDecoder::updateDemuxer()
             m_repetitionCount = WebPDemuxGetI(m_demux, WEBP_FF_LOOP_COUNT);
             // Repetition count is always <= 16 bits.
             ASSERT(m_repetitionCount == (m_repetitionCount & 0xffff));
-            // Repetition count is the number of animation cycles to show,
-            // where 0 means "infinite". But ImageSource::repetitionCount()
-            // returns -1 for "infinite", and 0 and up for "show the image
-            // animation one cycle more than the value". Subtract one here
-            // to correctly handle the finite and infinite cases.
-            --m_repetitionCount;
+            if (!m_repetitionCount)
+                m_repetitionCount = cAnimationLoopInfinite;
             // FIXME: Implement ICC profile support for animated images.
             m_formatFlags &= ~ICCP_FLAG;
         }
@@ -250,7 +239,7 @@ bool WEBPImageDecoder::updateDemuxer()
 bool WEBPImageDecoder::initFrameBuffer(size_t frameIndex)
 {
     ImageFrame& buffer = m_frameBufferCache[frameIndex];
-    if (buffer.status() != ImageFrame::FrameEmpty) // Already initialized.
+    if (buffer.getStatus() != ImageFrame::FrameEmpty) // Already initialized.
         return true;
 
     const size_t requiredPreviousFrameIndex = buffer.requiredPreviousFrameIndex();
@@ -261,13 +250,13 @@ bool WEBPImageDecoder::initFrameBuffer(size_t frameIndex)
         m_frameBackgroundHasAlpha = !buffer.originalFrameRect().contains(IntRect(IntPoint(), size()));
     } else {
         const ImageFrame& prevBuffer = m_frameBufferCache[requiredPreviousFrameIndex];
-        ASSERT(prevBuffer.status() == ImageFrame::FrameComplete);
+        ASSERT(prevBuffer.getStatus() == ImageFrame::FrameComplete);
 
         // Preserve the last frame as the starting state for this frame.
         if (!buffer.copyBitmapData(prevBuffer))
             return setFailed();
 
-        if (prevBuffer.disposalMethod() == ImageFrame::DisposeOverwriteBgcolor) {
+        if (prevBuffer.getDisposalMethod() == ImageFrame::DisposeOverwriteBgcolor) {
             // We want to clear the previous frame to transparent, without
             // affecting pixels in the image outside of the frame.
             const IntRect& prevRect = prevBuffer.originalFrameRect();
@@ -275,7 +264,7 @@ bool WEBPImageDecoder::initFrameBuffer(size_t frameIndex)
             buffer.zeroFillFrameRect(prevRect);
         }
 
-        m_frameBackgroundHasAlpha = prevBuffer.hasAlpha() || (prevBuffer.disposalMethod() == ImageFrame::DisposeOverwriteBgcolor);
+        m_frameBackgroundHasAlpha = prevBuffer.hasAlpha() || (prevBuffer.getDisposalMethod() == ImageFrame::DisposeOverwriteBgcolor);
     }
 
     buffer.setStatus(ImageFrame::FramePartial);
@@ -291,7 +280,7 @@ size_t WEBPImageDecoder::clearCacheExceptFrame(size_t clearExceptFrame)
     // Otherwise, we preserve a previous frame with status FrameComplete whose data is required
     // to decode |clearExceptFrame|, either in initFrameBuffer() or ApplyPostProcessing().
     // All other frames can be cleared.
-    while ((clearExceptFrame < m_frameBufferCache.size()) && (m_frameBufferCache[clearExceptFrame].status() != ImageFrame::FrameComplete))
+    while ((clearExceptFrame < m_frameBufferCache.size()) && (m_frameBufferCache[clearExceptFrame].getStatus() != ImageFrame::FrameComplete))
         clearExceptFrame = m_frameBufferCache[clearExceptFrame].requiredPreviousFrameIndex();
 
     return ImageDecoder::clearCacheExceptFrame(clearExceptFrame);
@@ -299,7 +288,7 @@ size_t WEBPImageDecoder::clearCacheExceptFrame(size_t clearExceptFrame)
 
 void WEBPImageDecoder::clearFrameBuffer(size_t frameIndex)
 {
-    if (m_demux && m_demuxState >= WEBP_DEMUX_PARSED_HEADER && m_frameBufferCache[frameIndex].status() == ImageFrame::FramePartial) {
+    if (m_demux && m_demuxState >= WEBP_DEMUX_PARSED_HEADER && m_frameBufferCache[frameIndex].getStatus() == ImageFrame::FramePartial) {
         // Clear the decoder state so that this partial frame can be decoded again when requested.
         clearDecoder();
     }
@@ -307,41 +296,6 @@ void WEBPImageDecoder::clearFrameBuffer(size_t frameIndex)
 }
 
 #if USE(QCMSLIB)
-
-void WEBPImageDecoder::clearColorTransform()
-{
-    if (m_transform)
-        qcms_transform_release(m_transform);
-    m_transform = 0;
-}
-
-bool WEBPImageDecoder::createColorTransform(const char* data, size_t size)
-{
-    clearColorTransform();
-
-    qcms_profile* deviceProfile = ImageDecoder::qcmsOutputDeviceProfile();
-    if (!deviceProfile)
-        return false;
-    qcms_profile* inputProfile = qcms_profile_from_memory(data, size);
-    if (!inputProfile)
-        return false;
-
-    // We currently only support color profiles for RGB profiled images.
-    ASSERT(rgbData == qcms_profile_get_color_space(inputProfile));
-
-    if (qcms_profile_match(inputProfile, deviceProfile)) {
-        qcms_profile_release(inputProfile);
-        return false;
-    }
-
-    // The input image pixels are RGBA format.
-    qcms_data_type format = QCMS_DATA_RGBA_8;
-    // FIXME: Don't force perceptual intent if the image profile contains an intent.
-    m_transform = qcms_transform_create(inputProfile, format, deviceProfile, QCMS_DATA_RGBA_8, QCMS_INTENT_PERCEPTUAL);
-
-    qcms_profile_release(inputProfile);
-    return !!m_transform;
-}
 
 void WEBPImageDecoder::readColorProfile()
 {
@@ -354,17 +308,7 @@ void WEBPImageDecoder::readColorProfile()
     const char* profileData = reinterpret_cast<const char*>(chunkIterator.chunk.bytes);
     size_t profileSize = chunkIterator.chunk.size;
 
-    // Only accept RGB color profiles from input class devices.
-    bool ignoreProfile = false;
-    if (profileSize < ImageDecoder::iccColorProfileHeaderLength)
-        ignoreProfile = true;
-    else if (!ImageDecoder::rgbColorProfile(profileData, profileSize))
-        ignoreProfile = true;
-    else if (!ImageDecoder::inputDeviceColorProfile(profileData, profileSize))
-        ignoreProfile = true;
-
-    if (!ignoreProfile)
-        m_hasColorProfile = createColorTransform(profileData, profileSize);
+    setColorProfileAndTransform(profileData, profileSize, true /* hasAlpha */, false /* useSRGB */);
 
     WebPDemuxReleaseChunkIterator(&chunkIterator);
 }
@@ -408,10 +352,10 @@ void WEBPImageDecoder::applyPostProcessing(size_t frameIndex)
     // pixels based on disposal method of the previous frame and the previous frame buffer.
     // FIXME: This could be avoided if libwebp decoder had an API that used the previous required frame
     // to do the alpha-blending by itself.
-    if ((m_formatFlags & ANIMATION_FLAG) && frameIndex && buffer.alphaBlendSource() == ImageFrame::BlendAtopPreviousFrame && buffer.requiredPreviousFrameIndex() != kNotFound) {
+    if ((m_formatFlags & ANIMATION_FLAG) && frameIndex && buffer.getAlphaBlendSource() == ImageFrame::BlendAtopPreviousFrame && buffer.requiredPreviousFrameIndex() != kNotFound) {
         ImageFrame& prevBuffer = m_frameBufferCache[frameIndex - 1];
-        ASSERT(prevBuffer.status() == ImageFrame::FrameComplete);
-        ImageFrame::DisposalMethod prevDisposalMethod = prevBuffer.disposalMethod();
+        ASSERT(prevBuffer.getStatus() == ImageFrame::FrameComplete);
+        ImageFrame::DisposalMethod prevDisposalMethod = prevBuffer.getDisposalMethod();
         if (prevDisposalMethod == ImageFrame::DisposeKeep) { // Blend transparent pixels with pixels in previous canvas.
             for (int y = m_decodedHeight; y < decodedHeight; ++y) {
                 m_blendFunction(buffer, prevBuffer, top + y, left, width);
@@ -474,7 +418,7 @@ void WEBPImageDecoder::decode(size_t index)
     do {
         framesToDecode.append(frameToDecode);
         frameToDecode = m_frameBufferCache[frameToDecode].requiredPreviousFrameIndex();
-    } while (frameToDecode != kNotFound && m_frameBufferCache[frameToDecode].status() != ImageFrame::FrameComplete);
+    } while (frameToDecode != kNotFound && m_frameBufferCache[frameToDecode].getStatus() != ImageFrame::FrameComplete);
 
     ASSERT(m_demux);
     for (auto i = framesToDecode.rbegin(); i != framesToDecode.rend(); ++i) {
@@ -491,7 +435,7 @@ void WEBPImageDecoder::decode(size_t index)
             return;
 
         // We need more data to continue decoding.
-        if (m_frameBufferCache[*i].status() != ImageFrame::FrameComplete)
+        if (m_frameBufferCache[*i].getStatus() != ImageFrame::FrameComplete)
             break;
     }
 
@@ -510,9 +454,9 @@ bool WEBPImageDecoder::decodeSingleFrame(const uint8_t* dataBytes, size_t dataSi
 
     ASSERT(m_frameBufferCache.size() > frameIndex);
     ImageFrame& buffer = m_frameBufferCache[frameIndex];
-    ASSERT(buffer.status() != ImageFrame::FrameComplete);
+    ASSERT(buffer.getStatus() != ImageFrame::FrameComplete);
 
-    if (buffer.status() == ImageFrame::FrameEmpty) {
+    if (buffer.getStatus() == ImageFrame::FrameEmpty) {
         if (!buffer.setSize(size().width(), size().height()))
             return setFailed();
         buffer.setStatus(ImageFrame::FramePartial);

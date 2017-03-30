@@ -47,7 +47,7 @@ class TextTrackCue : public RefCountedGarbageCollectedEventTargetWithInlineData<
 public:
     static const AtomicString& cueShadowPseudoId()
     {
-        DEFINE_STATIC_LOCAL(const AtomicString, cue, ("cue", AtomicString::ConstructFromLiteral));
+        DEFINE_STATIC_LOCAL(const AtomicString, cue, ("cue"));
         return cue;
     }
 
@@ -109,7 +109,7 @@ protected:
 
     void cueWillChange();
     virtual void cueDidChange();
-    DispatchEventResult dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) override;
+    DispatchEventResult dispatchEventInternal(Event*) override;
 
 private:
     AtomicString m_id;

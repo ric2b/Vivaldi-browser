@@ -9,23 +9,22 @@
 
 #include "ios/web/public/block_types.h"
 
-@class UIWebView;
 @class WKWebView;
 
-// This file contains functions that asynchronously evaluate JavaScript on
-// WKWebView/UIWebView and provide result in the same format. Call
-// |completion_handler| with results of the evaluation or an NSError if there is
-// an error. The |completion_handler| can be nil.
 namespace web {
 
-// Asynchronous adaptor to evaluate JavaScript on UIWebView. Provides evaluation
-// result as it is, without modifications.
-void EvaluateJavaScript(UIWebView* web_view,
-                        NSString* script,
-                        JavaScriptCompletion completion_handler);
+// The domain for JS evaluation NSErrors in web.
+extern NSString* const kJSEvaluationErrorDomain;
 
-// Evaluates JavaScript on WKWebView. Provides evaluation result is the same
-// format as UIWebView.
+// The type of errors that can occur while evaluating JS.
+enum JSEvaluationErrorCode {
+  // No web view present to evaluate JS.
+  JS_EVALUATION_ERROR_CODE_NO_WEB_VIEW = 1,
+};
+
+// Evaluates JavaScript on WKWebView. Provides evaluation result as a string.
+// If the web view cannot evaluate JS at the moment, |completion_handler| is
+// called with an NSError.
 void EvaluateJavaScript(WKWebView* web_view,
                         NSString* script,
                         JavaScriptCompletion completion_handler);

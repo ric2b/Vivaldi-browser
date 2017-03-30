@@ -63,6 +63,9 @@ void PasswordFormToJSON(const PasswordForm& form,
   target->SetString("layout", layout_string_stream.str());
   target->SetBoolean("was_parsed_using_autofill_predictions",
                      form.was_parsed_using_autofill_predictions);
+  target->SetString("affiliated_web_realm", form.affiliated_web_realm);
+  target->SetBoolean("does_look_like_signup_form",
+                     form.does_look_like_signup_form);
 }
 
 }  // namespace
@@ -83,7 +86,8 @@ PasswordForm::PasswordForm()
       layout(Layout::LAYOUT_OTHER),
       was_parsed_using_autofill_predictions(false),
       is_public_suffix_match(false),
-      is_affiliation_based_match(false) {}
+      is_affiliation_based_match(false),
+      does_look_like_signup_form(false) {}
 
 PasswordForm::PasswordForm(const PasswordForm& other) = default;
 
@@ -126,7 +130,9 @@ bool PasswordForm::operator==(const PasswordForm& form) const {
          was_parsed_using_autofill_predictions ==
              form.was_parsed_using_autofill_predictions &&
          is_public_suffix_match == form.is_public_suffix_match &&
-         is_affiliation_based_match == form.is_affiliation_based_match;
+         is_affiliation_based_match == form.is_affiliation_based_match &&
+         affiliated_web_realm == form.affiliated_web_realm &&
+         does_look_like_signup_form == form.does_look_like_signup_form;
 }
 
 bool PasswordForm::operator!=(const PasswordForm& form) const {

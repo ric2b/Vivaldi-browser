@@ -114,8 +114,13 @@ void VpnService::VpnConfiguration::OnPlatformMessage(uint32_t message) {
 
   api_vpn::PlatformMessage platform_message =
       static_cast<api_vpn::PlatformMessage>(message);
-  vpn_service_->SetActiveConfiguration(
-      platform_message == api_vpn::PLATFORM_MESSAGE_CONNECTED ? this : nullptr);
+
+  if (platform_message == api_vpn::PLATFORM_MESSAGE_CONNECTED) {
+    vpn_service_->SetActiveConfiguration(this);
+  } else if (platform_message == api_vpn::PLATFORM_MESSAGE_DISCONNECTED ||
+             platform_message == api_vpn::PLATFORM_MESSAGE_ERROR) {
+    vpn_service_->SetActiveConfiguration(nullptr);
+  }
 
   // TODO(kaliamoorthi): Update the lower layers to get the error message and
   // pass in the error instead of std::string().
@@ -494,7 +499,8 @@ void VpnService::OnExtensionUnloaded(
 void VpnService::OnCreateConfigurationSuccess(
     const VpnService::SuccessCallback& callback,
     VpnConfiguration* configuration,
-    const std::string& service_path) {
+    const std::string& service_path,
+    const std::string& guid) {
   configuration->set_service_path(service_path);
   service_path_to_configuration_map_[service_path] = configuration;
   shill_client_->AddShillThirdPartyVpnObserver(configuration->object_path(),

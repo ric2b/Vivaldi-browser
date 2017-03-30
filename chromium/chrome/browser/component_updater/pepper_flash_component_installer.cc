@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <stdint.h>
-#include <string.h>
+#include "chrome/browser/component_updater/pepper_flash_component_installer.h"
+
+#include <stddef.h>
+
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "base/base_paths.h"
@@ -12,6 +16,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
@@ -20,7 +25,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "build/build_config.h"
-#include "chrome/browser/component_updater/flash_component_installer.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
@@ -151,24 +155,49 @@ void RegisterPepperFlashWithChrome(const base::FilePath& path,
   if (!MakePepperFlashPluginInfo(path, version, true, &plugin_info))
     return;
 
+  base::FilePath bundled_flash_dir;
+  PathService::Get(chrome::DIR_PEPPER_FLASH_PLUGIN, &bundled_flash_dir);
+  base::FilePath system_flash_path;
+  PathService::Get(chrome::FILE_PEPPER_FLASH_SYSTEM_PLUGIN, &system_flash_path);
+
   std::vector<content::WebPluginInfo> plugins;
   PluginService::GetInstance()->GetInternalPlugins(&plugins);
-  for (std::vector<content::WebPluginInfo>::const_iterator it =
-            plugins.begin();
-        it != plugins.end();
-        ++it) {
-    if (!IsPepperFlash(*it))
+  for (const auto& plugin : plugins) {
+    if (!IsPepperFlash(plugin))
       continue;
 
-    // Do it only if the version we're trying to register is newer.
-    Version registered_version(base::UTF16ToUTF8(it->version));
+    Version registered_version(base::UTF16ToUTF8(plugin.version));
+
+    // If lower version, never register.
     if (registered_version.IsValid() &&
-        version.CompareTo(registered_version) <= 0) {
+        version.CompareTo(registered_version) < 0) {
+      return;
+    }
+
+    bool registered_is_bundled =
+        !bundled_flash_dir.empty() && bundled_flash_dir.IsParent(plugin.path);
+    bool registered_is_debug_system =
+        !system_flash_path.empty() &&
+        base::FilePath::CompareEqualIgnoreCase(plugin.path.value(),
+                                               system_flash_path.value()) &&
+        chrome::IsSystemFlashScriptDebuggerPresent();
+    bool is_on_network = false;
+#if defined(OS_WIN)
+    // On Windows, component updated DLLs can't load off network drives.
+    // See crbug.com/572131 for details.
+    is_on_network = base::IsOnNetworkDrive(path);
+#endif
+    // If equal version, register iff component is not on a network drive,
+    // and the version of flash is not bundled, and not debug system.
+    if (registered_version.IsValid() &&
+        version.CompareTo(registered_version) == 0 &&
+        (is_on_network || registered_is_bundled ||
+         registered_is_debug_system)) {
       return;
     }
 
     // If the version is newer, remove the old one first.
-    PluginService::GetInstance()->UnregisterInternalPlugin(it->path);
+    PluginService::GetInstance()->UnregisterInternalPlugin(plugin.path);
     break;
   }
 
@@ -289,6 +318,25 @@ void FinishPepperFlashUpdateRegistration(ComponentUpdateService* cus,
     NOTREACHED() << "Pepper Flash component registration failed.";
 }
 
+bool ValidatePepperFlashManifest(const base::FilePath& path) {
+  base::FilePath manifest_path(path.DirName().AppendASCII("manifest.json"));
+
+  std::string manifest_data;
+  if (!base::ReadFileToString(manifest_path, &manifest_data))
+    return false;
+  std::unique_ptr<base::Value> manifest_value(
+      base::JSONReader::Read(manifest_data, base::JSON_ALLOW_TRAILING_COMMAS));
+  if (!manifest_value.get())
+    return false;
+  base::DictionaryValue* manifest = NULL;
+  if (!manifest_value->GetAsDictionary(&manifest))
+    return false;
+  Version version;
+  if (!chrome::CheckPepperFlashManifest(*manifest, &version))
+    return false;
+  return true;
+}
+
 void StartPepperFlashUpdateRegistration(ComponentUpdateService* cus) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
   base::FilePath path;
@@ -309,10 +357,17 @@ void StartPepperFlashUpdateRegistration(ComponentUpdateService* cus) {
   if (GetPepperFlashDirectory(&path, &version, &older_dirs)) {
     path = path.Append(chrome::kPepperFlashPluginFilename);
     if (base::PathExists(path)) {
-      BrowserThread::PostTask(
-          BrowserThread::UI,
-          FROM_HERE,
-          base::Bind(&RegisterPepperFlashWithChrome, path, version));
+      // Only register component pepper flash if it validates manifest check.
+      if (ValidatePepperFlashManifest(path)) {
+        BrowserThread::PostTask(
+            BrowserThread::UI,
+            FROM_HERE,
+            base::Bind(&RegisterPepperFlashWithChrome, path, version));
+      } else {
+        // Queue this version to be deleted.
+        older_dirs.push_back(path.DirName());
+        version = Version(kNullVersion);
+      }
     } else {
       version = Version(kNullVersion);
     }

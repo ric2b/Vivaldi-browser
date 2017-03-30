@@ -12,6 +12,7 @@
 #include "base/debug/alias.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
@@ -397,10 +398,10 @@ URLDataManagerIOSBackend::~URLDataManagerIOSBackend() {
 }
 
 // static
-scoped_ptr<net::URLRequestJobFactory::ProtocolHandler>
+std::unique_ptr<net::URLRequestJobFactory::ProtocolHandler>
 URLDataManagerIOSBackend::CreateProtocolHandler(BrowserState* browser_state) {
   DCHECK(browser_state);
-  return make_scoped_ptr(new ChromeProtocolHandler(
+  return base::WrapUnique(new ChromeProtocolHandler(
       browser_state, browser_state->IsOffTheRecord()));
 }
 
@@ -461,9 +462,8 @@ bool URLDataManagerIOSBackend::StartRequest(const net::URLRequest* request,
   base::MessageLoop* target_message_loop =
       web::WebThread::UnsafeGetMessageLoopForThread(web::WebThread::UI);
   target_message_loop->PostTask(
-      FROM_HERE,
-      base::Bind(&GetMimeTypeOnUI, scoped_refptr<URLDataSourceIOSImpl>(source),
-                 path, job->weak_factory_.GetWeakPtr()));
+      FROM_HERE, base::Bind(&GetMimeTypeOnUI, base::RetainedRef(source), path,
+                            job->weak_factory_.GetWeakPtr()));
 
   target_message_loop->PostTask(
       FROM_HERE, base::Bind(&URLDataManagerIOSBackend::CallStartRequest,

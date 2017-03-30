@@ -4,6 +4,8 @@
 
 #include "ash/wm/gestures/long_press_affordance_handler.h"
 
+#include <memory>
+
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
@@ -103,16 +105,13 @@ void PaintAffordanceGlow(gfx::Canvas* canvas,
   int radius = (end_radius + start_radius) / 2;
   int glow_width = end_radius - start_radius;
   SkPoint sk_center(PointToSkPoint(center));
-  skia::RefPtr<SkShader> shader =
-      skia::AdoptRef(SkGradientShader::CreateTwoPointConical(
-          sk_center, SkIntToScalar(start_radius), sk_center,
-          SkIntToScalar(end_radius), colors, pos, num_colors,
-          SkShader::kClamp_TileMode));
-  DCHECK(shader);
   SkPaint paint;
   paint.setStyle(SkPaint::kStroke_Style);
   paint.setStrokeWidth(glow_width);
-  paint.setShader(shader.get());
+  paint.setShader(SkGradientShader::MakeTwoPointConical(
+      sk_center, SkIntToScalar(start_radius), sk_center,
+      SkIntToScalar(end_radius), colors, pos, num_colors,
+      SkShader::kClamp_TileMode));
   paint.setAntiAlias(true);
   SkPath arc_path;
   arc_path.addArc(SkRect::MakeXYWH(center.x() - radius,
@@ -216,7 +215,7 @@ class LongPressAffordanceHandler::LongPressAffordanceView
     canvas->Restore();
   }
 
-  scoped_ptr<views::Widget> widget_;
+  std::unique_ptr<views::Widget> widget_;
   int current_angle_;
   double current_scale_;
 

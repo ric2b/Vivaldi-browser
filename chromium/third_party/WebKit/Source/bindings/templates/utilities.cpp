@@ -55,22 +55,14 @@ const char* validValues[] = {
 {%- endmacro %}
 
 
-{% macro check_origin_trial_internal(errorName, origin_trial_name) %}
-{% if origin_trial_name %}
-String {{errorName}};
-if (!{{origin_trial_name}}(executionContext, {{errorName}})) {
-     v8SetReturnValue(info, v8::Undefined(info.GetIsolate()));
-     if (!{{errorName}}.isEmpty()) {
-         toDocument(executionContext)->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, {{errorName}}));
-     }
-     return;
-}
-{% endif %}
-{% endmacro %}
-
-
 {% macro check_origin_trial(member, isolate="info.GetIsolate()") -%}
 ExecutionContext* executionContext = currentExecutionContext({{isolate}});
-{{check_origin_trial_internal("errorMessage", member.origin_trial_enabled_per_interface) -}}
-{{check_origin_trial_internal("memberErrorMessage", member.origin_trial_enabled) -}}
+String errorMessage;
+if (!{{member.origin_trial_enabled_function}}(executionContext, errorMessage)) {
+    v8SetReturnValue(info, v8::Undefined(info.GetIsolate()));
+    if (!errorMessage.isEmpty()) {
+        toDocument(executionContext)->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage));
+    }
+    return;
+}
 {% endmacro %}

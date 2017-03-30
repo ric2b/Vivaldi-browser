@@ -188,11 +188,8 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // fails, all other functions will fail as well. (Since this runs on another
   // thread, we don't bother returning failure.)
   //
-  // |languages| gives a list of language encodings with which the history
-  // URLs and omnibox searches are interpreted.
   // |force_fail| can be set during unittests to unconditionally fail to init.
-  void Init(const std::string& languages,
-            bool force_fail,
+  void Init(bool force_fail,
             const HistoryDatabaseParams& history_database_params);
 
   // Notification that the history system is shutting down. This will break
@@ -216,11 +213,12 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // generating internal metrics.
   TopHostsList TopHosts(size_t num_hosts) const;
 
-  // Gets the counts of URLs that belong to |origins| in the history database.
-  // Origins that are not in the history database will be in the map with a
-  // count of 0.
+  // Gets the counts and last last time of URLs that belong to |origins| in the
+  // history database. Origins that are not in the history database will be in
+  // the map with a count and time of 0.
   // Returns an empty map if db_ is not initialized.
-  OriginCountMap GetCountsForOrigins(const std::set<GURL>& origins) const;
+  OriginCountAndLastVisitMap GetCountsAndLastVisitForOrigins(
+      const std::set<GURL>& origins) const;
 
   // Returns, for the given URL, a 0-based index into the list produced by
   // TopHosts(), corresponding to that URL's host. If TopHosts() has not
@@ -564,7 +562,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, TopHosts_IgnoreUnusualURLs);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, HostRankIfAvailable);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, RecordTopHostsMetrics);
-  FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, GetCountsForOrigins);
+  FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, GetCountsAndLastVisitForOrigins);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, UpdateVisitDuration);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, ExpireHistoryForTimes);
   FRIEND_TEST_ALL_PREFIXES(HistoryBackendTest, DeleteFTSIndexDatabases);
@@ -583,8 +581,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   friend class URLQuerier;
 
   // Does the work of Init.
-  void InitImpl(const std::string& languages,
-                const HistoryDatabaseParams& history_database_params);
+  void InitImpl(const HistoryDatabaseParams& history_database_params);
 
   // Called when the system is under memory pressure.
   void OnMemoryPressure(

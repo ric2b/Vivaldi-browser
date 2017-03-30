@@ -31,6 +31,7 @@
 #ifndef AssociatedURLLoader_h
 #define AssociatedURLLoader_h
 
+#include "platform/heap/Handle.h"
 #include "public/platform/WebURLLoader.h"
 #include "public/web/WebURLLoaderOptions.h"
 #include "wtf/Noncopyable.h"
@@ -46,7 +47,7 @@ class WebLocalFrameImpl;
 class AssociatedURLLoader final : public WebURLLoader {
     WTF_MAKE_NONCOPYABLE(AssociatedURLLoader);
 public:
-    AssociatedURLLoader(PassRefPtrWillBeRawPtr<WebLocalFrameImpl>, const WebURLLoaderOptions&);
+    AssociatedURLLoader(WebLocalFrameImpl*, const WebURLLoaderOptions&);
     ~AssociatedURLLoader();
 
     // WebURLLoader methods:
@@ -59,11 +60,16 @@ public:
     // Called by |m_observer| to handle destruction of the Document associated
     // with the frame given to the constructor.
     void documentDestroyed();
-    void disposeObserver();
+
+    // Called by ClientAdapter to handle completion of loading.
+    void clientAdapterDone();
 
 private:
     class ClientAdapter;
     class Observer;
+
+    void cancelLoader();
+    void disposeObserver();
 
     WebURLLoaderClient* m_client;
     WebURLLoaderOptions m_options;
@@ -71,7 +77,7 @@ private:
     // An adapter which converts the DocumentThreadableLoaderClient method
     // calls into the WebURLLoaderClient method calls.
     OwnPtr<ClientAdapter> m_clientAdapter;
-    RefPtr<DocumentThreadableLoader> m_loader;
+    OwnPtr<DocumentThreadableLoader> m_loader;
 
     // A ContextLifecycleObserver for cancelling |m_loader| when the Document
     // is detached.

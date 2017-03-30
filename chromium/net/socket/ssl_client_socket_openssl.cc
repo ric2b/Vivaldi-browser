@@ -30,11 +30,13 @@
 #include "base/strings/string_piece.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_local.h"
+#include "base/trace_event/trace_event.h"
 #include "base/values.h"
+#include "crypto/auto_cbb.h"
 #include "crypto/ec_private_key.h"
 #include "crypto/openssl_util.h"
 #include "crypto/scoped_openssl_types.h"
-#include "net/base/ip_address_number.h"
+#include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_ev_whitelist.h"
@@ -51,12 +53,13 @@
 #include "net/ssl/ssl_failure_state.h"
 #include "net/ssl/ssl_info.h"
 #include "net/ssl/ssl_private_key.h"
+#include "net/ssl/token_binding.h"
 
 #if !defined(OS_NACL)
 #include "net/ssl/ssl_key_logger.h"
 #endif
 
-#if defined(USE_NSS_CERTS) || defined(OS_IOS)
+#if defined(USE_NSS_VERIFIER)
 #include "net/cert_net/nss_ocsp.h"
 #endif
 
@@ -89,7 +92,7 @@ const unsigned int kTbExtNum = 24;
 
 // Token Binding ProtocolVersions supported.
 const uint8_t kTbProtocolVersionMajor = 0;
-const uint8_t kTbProtocolVersionMinor = 4;
+const uint8_t kTbProtocolVersionMinor = 5;
 const uint8_t kTbMinProtocolVersionMajor = 0;
 const uint8_t kTbMinProtocolVersionMinor = 3;
 
@@ -114,18 +117,6 @@ bool EVP_MDToPrivateKeyHash(const EVP_MD* md, SSLPrivateKey::Hash* hash) {
       return false;
   }
 }
-
-class ScopedCBB {
- public:
-  ScopedCBB() { CBB_zero(&cbb_); }
-  ~ScopedCBB() { CBB_cleanup(&cbb_); }
-
-  CBB* get() { return &cbb_; }
-
- private:
-  CBB cbb_;
-  DISALLOW_COPY_AND_ASSIGN(ScopedCBB);
-};
 
 scoped_ptr<base::Value> NetLogPrivateKeyOperationCallback(
     SSLPrivateKey::Type type,
@@ -570,19 +561,11 @@ Error SSLClientSocketOpenSSL::GetSignedEKMForTokenBinding(
     return ERR_FAILED;
   }
 
-  size_t sig_len;
-  crypto::ScopedEVP_PKEY_CTX pctx(EVP_PKEY_CTX_new(key->key(), nullptr));
-  if (!EVP_PKEY_sign_init(pctx.get()) ||
-      !EVP_PKEY_sign(pctx.get(), nullptr, &sig_len, tb_ekm_buf,
-                     sizeof(tb_ekm_buf))) {
+  if (!SignTokenBindingEkm(
+          base::StringPiece(reinterpret_cast<char*>(tb_ekm_buf),
+                            sizeof(tb_ekm_buf)),
+          key, out))
     return ERR_FAILED;
-  }
-  out->resize(sig_len);
-  if (!EVP_PKEY_sign(pctx.get(), out->data(), &sig_len, tb_ekm_buf,
-                     sizeof(tb_ekm_buf))) {
-    return ERR_FAILED;
-  }
-  out->resize(sig_len);
 
   tb_signed_ekm_map_.Put(raw_public_key, *out);
   return OK;
@@ -618,11 +601,6 @@ int SSLClientSocketOpenSSL::ExportKeyingMaterial(
     return MapOpenSSLError(ssl_error, err_tracer);
   }
   return OK;
-}
-
-int SSLClientSocketOpenSSL::GetTLSUniqueChannelBinding(std::string* out) {
-  NOTIMPLEMENTED();
-  return ERR_NOT_IMPLEMENTED;
 }
 
 int SSLClientSocketOpenSSL::Connect(const CompletionCallback& callback) {
@@ -662,6 +640,8 @@ int SSLClientSocketOpenSSL::Connect(const CompletionCallback& callback) {
 }
 
 void SSLClientSocketOpenSSL::Disconnect() {
+  crypto::OpenSSLErrStackTracer tracer(FROM_HERE);
+
   if (ssl_) {
     // Calling SSL_shutdown prevents the session from being marked as
     // unresumable.
@@ -787,14 +767,6 @@ bool SSLClientSocketOpenSSL::WasEverUsed() const {
   return was_ever_used_;
 }
 
-bool SSLClientSocketOpenSSL::UsingTCPFastOpen() const {
-  if (transport_.get() && transport_->socket())
-    return transport_->socket()->UsingTCPFastOpen();
-
-  NOTREACHED();
-  return false;
-}
-
 bool SSLClientSocketOpenSSL::GetSSLInfo(SSLInfo* ssl_info) {
   ssl_info->Reset();
   if (server_cert_chain_->empty())
@@ -905,7 +877,7 @@ int SSLClientSocketOpenSSL::Init() {
   DCHECK(!ssl_);
   DCHECK(!transport_bio_);
 
-#if defined(USE_NSS_CERTS) || defined(OS_IOS)
+#if defined(USE_NSS_VERIFIER)
   if (ssl_config_.cert_io_enabled) {
     // TODO(davidben): Move this out of SSLClientSocket. See
     // https://crbug.com/539520.
@@ -925,8 +897,8 @@ int SSLClientSocketOpenSSL::Init() {
   //
   // TODO(rsleevi): Should this code allow hostnames that violate the LDH rule?
   // See https://crbug.com/496472 and https://crbug.com/496468 for discussion.
-  IPAddressNumber unused;
-  if (!ParseIPLiteralToNumber(host_and_port_.host(), &unused) &&
+  IPAddress unused;
+  if (!unused.AssignFromIPLiteral(host_and_port_.host()) &&
       !SSL_set_tlsext_host_name(ssl_, host_and_port_.host().c_str())) {
     return ERR_UNEXPECTED;
   }
@@ -989,11 +961,13 @@ int SSLClientSocketOpenSSL::Init() {
   SSL_set_mode(ssl_, mode.set_mask);
   SSL_clear_mode(ssl_, mode.clear_mask);
 
-  // See SSLConfig::disabled_cipher_suites for description of the suites
-  // disabled by default. Note that SHA256 and SHA384 only select HMAC-SHA256
-  // and HMAC-SHA384 cipher suites, not GCM cipher suites with SHA256 or SHA384
-  // as the handshake hash.
-  std::string command("DEFAULT:!SHA256:-SHA384:!AESGCM+AES256:!aPSK");
+  // Use BoringSSL defaults, but disable HMAC-SHA256 and HMAC-SHA384 ciphers
+  // (note that SHA256 and SHA384 only select legacy CBC ciphers). Also disable
+  // DHE_RSA_WITH_AES_256_GCM_SHA384. Historically, AES_256_GCM was not
+  // supported. As DHE is being deprecated, don't add a cipher only to remove it
+  // immediately.
+  std::string command(
+      "DEFAULT:!SHA256:!SHA384:!DHE-RSA-AES256-GCM-SHA384:!aPSK");
 
   if (ssl_config_.require_ecdhe)
     command.append(":!kRSA:!kDHE");
@@ -1484,6 +1458,7 @@ void SSLClientSocketOpenSSL::OnSendComplete(int result) {
 }
 
 void SSLClientSocketOpenSSL::OnRecvComplete(int result) {
+  TRACE_EVENT0("net", "SSLClientSocketOpenSSL::OnRecvComplete");
   if (next_handshake_state_ == STATE_HANDSHAKE) {
     // In handshake phase.
     OnHandshakeIOComplete(result);
@@ -1501,6 +1476,7 @@ void SSLClientSocketOpenSSL::OnRecvComplete(int result) {
 }
 
 int SSLClientSocketOpenSSL::DoHandshakeLoop(int last_io_result) {
+  TRACE_EVENT0("net", "SSLClientSocketOpenSSL::DoHandshakeLoop");
   int rv = last_io_result;
   do {
     // Default to STATE_NONE for next state.
@@ -2262,7 +2238,7 @@ int SSLClientSocketOpenSSL::TokenBindingAdd(const uint8_t** out,
   if (ssl_config_.token_binding_params.empty()) {
     return 0;
   }
-  ScopedCBB output;
+  crypto::AutoCBB output;
   CBB parameters_list;
   if (!CBB_init(output.get(), 7) ||
       !CBB_add_u8(output.get(), kTbProtocolVersionMajor) ||

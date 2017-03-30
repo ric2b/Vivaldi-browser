@@ -173,8 +173,9 @@ int DragDropController::StartDragAndDrop(
     // We need to transfer the current gesture sequence and the GR's touch event
     // queue to the |drag_drop_tracker_|'s capture window so that when it takes
     // capture, it still gets a valid gesture state.
-    ui::GestureRecognizer::Get()->TransferEventsTo(source_window,
-        tracker->capture_window());
+    ui::GestureRecognizer::Get()->TransferEventsTo(
+        source_window, tracker->capture_window(),
+        ui::GestureRecognizer::ShouldCancelTouches::Cancel);
     // We also send a gesture end to the source window so it can clear state.
     // TODO(varunjain): Remove this whole block when gesture sequence
     // transferring is properly done in the GR (http://crbug.com/160558)
@@ -372,7 +373,7 @@ void DragDropController::OnMouseEvent(ui::MouseEvent* event) {
     event->StopPropagation();
     return;
   }
-  scoped_ptr<ui::LocatedEvent> translated_event(
+  std::unique_ptr<ui::LocatedEvent> translated_event(
       drag_drop_tracker_->ConvertEvent(translated_target, *event));
   switch (translated_event->type()) {
     case ui::ET_MOUSE_DRAGGED:
@@ -440,7 +441,7 @@ void DragDropController::OnGestureEvent(ui::GestureEvent* event) {
     event->SetHandled();
     return;
   }
-  scoped_ptr<ui::LocatedEvent> translated_event(
+  std::unique_ptr<ui::LocatedEvent> translated_event(
       drag_drop_tracker_->ConvertEvent(translated_target, touch_offset_event));
 
   switch (event->type()) {
@@ -567,7 +568,7 @@ void DragDropController::Cleanup() {
   drag_data_ = NULL;
   // Cleanup can be called again while deleting DragDropTracker, so delete
   // the pointer with a local variable to avoid double free.
-  scoped_ptr<ash::DragDropTracker> holder = std::move(drag_drop_tracker_);
+  std::unique_ptr<ash::DragDropTracker> holder = std::move(drag_drop_tracker_);
 }
 
 }  // namespace ash

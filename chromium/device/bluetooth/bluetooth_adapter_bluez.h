@@ -46,8 +46,8 @@ class BluetoothRemoteGattCharacteristicBlueZ;
 class BluetoothRemoteGattDescriptorBlueZ;
 class BluetoothRemoteGattServiceBlueZ;
 
-// The BluetoothAdapterBlueZ class implements BluetoothAdapter for the
-// Chrome OS platform.
+// The BluetoothAdapterBlueZ class implements BluetoothAdapter for platforms
+// that use BlueZ.
 //
 // All methods are called from the dbus origin / UI thread and are generally
 // not assumed to be thread-safe.
@@ -79,6 +79,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ
 
   // BluetoothAdapter:
   void Shutdown() override;
+  UUIDList GetUUIDs() const override;
   std::string GetAddress() const override;
   std::string GetName() const override;
   void SetName(const std::string& name,
@@ -247,8 +248,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ
   // subsequently operate on that adapter until it is removed.
   void SetAdapter(const dbus::ObjectPath& object_path);
 
+#if defined(OS_CHROMEOS)
   // Set the adapter name to one chosen from the system information.
-  void SetDefaultAdapterName();
+  void SetStandardChromeOSAdapterName();
+#endif
 
   // Remove the currently tracked adapter. IsPresent() will return false after
   // this is called.

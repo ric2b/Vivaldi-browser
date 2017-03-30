@@ -11,12 +11,12 @@
 
 #include <deque>
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
@@ -31,10 +31,6 @@
 struct ResourceHostMsg_Request;
 struct ResourceMsg_RequestCompleteData;
 
-namespace blink {
-class WebThreadedDataReceiver;
-}
-
 namespace net {
 struct RedirectInfo;
 }
@@ -44,7 +40,6 @@ class RequestPeer;
 class ResourceDispatcherDelegate;
 class ResourceRequestBody;
 class ResourceSchedulingFilter;
-class ThreadedDataProvider;
 struct ResourceResponseInfo;
 struct RequestInfo;
 struct ResourceResponseHead;
@@ -81,7 +76,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
   // Returns the request id.
   virtual int StartAsync(const RequestInfo& request_info,
                          ResourceRequestBody* request_body,
-                         scoped_ptr<RequestPeer> peer);
+                         std::unique_ptr<RequestPeer> peer);
 
   // Removes a request from the |pending_requests_| list, returning true if the
   // request was found and removed.
@@ -92,25 +87,12 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
   virtual void Cancel(int request_id);
 
   // Toggles the is_deferred attribute for the specified request.
-  void SetDefersLoading(int request_id, bool value);
+  virtual void SetDefersLoading(int request_id, bool value);
 
   // Indicates the priority of the specified request changed.
   void DidChangePriority(int request_id,
                          net::RequestPriority new_priority,
                          int intra_priority_value);
-
-  // The provided data receiver will receive incoming resource data rather
-  // than the resource bridge.
-  bool AttachThreadedDataReceiver(
-      int request_id, blink::WebThreadedDataReceiver* threaded_data_receiver);
-
-  // If we have a ThreadedDataProvider attached, an OnRequestComplete message
-  // will get bounced via the background thread and then passed to this function
-  // to resume processing.
-  void CompletedRequestAfterBackgroundThreadFlush(
-      int request_id,
-      const ResourceMsg_RequestCompleteData& request_complete_data,
-      const base::TimeTicks& renderer_completion_time);
 
   void set_message_sender(IPC::Sender* sender) {
     DCHECK(sender);
@@ -142,18 +124,16 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
 
   typedef std::deque<IPC::Message*> MessageQueue;
   struct PendingRequestInfo {
-    PendingRequestInfo(
-        scoped_ptr<RequestPeer> peer,
-        ResourceType resource_type,
-        int origin_pid,
-        const GURL& frame_origin,
-        const GURL& request_url,
-        bool download_to_file);
+    PendingRequestInfo(std::unique_ptr<RequestPeer> peer,
+                       ResourceType resource_type,
+                       int origin_pid,
+                       const GURL& frame_origin,
+                       const GURL& request_url,
+                       bool download_to_file);
 
     ~PendingRequestInfo();
 
-    scoped_ptr<RequestPeer> peer;
-    ThreadedDataProvider* threaded_data_provider = nullptr;
+    std::unique_ptr<RequestPeer> peer;
     ResourceType resource_type;
     // The PID of the original process which issued this request. This gets
     // non-zero only for a request proxied by another renderer, particularly
@@ -168,16 +148,16 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
     // The url of the latest response even in case of redirection.
     GURL response_url;
     bool download_to_file;
-    scoped_ptr<IPC::Message> pending_redirect_message;
+    std::unique_ptr<IPC::Message> pending_redirect_message;
     base::TimeTicks request_start;
     base::TimeTicks response_start;
     base::TimeTicks completion_time;
     linked_ptr<base::SharedMemory> buffer;
     scoped_refptr<SharedMemoryReceivedDataFactory> received_data_factory;
-    scoped_ptr<SiteIsolationResponseMetaData> site_isolation_metadata;
+    std::unique_ptr<SiteIsolationResponseMetaData> site_isolation_metadata;
     int buffer_size;
   };
-  using PendingRequestMap = std::map<int, scoped_ptr<PendingRequestInfo>>;
+  using PendingRequestMap = std::map<int, std::unique_ptr<PendingRequestInfo>>;
 
   // Helper to lookup the info based on the request_id.
   // May return NULL if the request as been canceled from the client side.
@@ -243,7 +223,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
   // for use on deferred message queues that are no longer needed.
   static void ReleaseResourcesInMessageQueue(MessageQueue* queue);
 
-  scoped_ptr<ResourceHostMsg_Request> CreateRequest(
+  std::unique_ptr<ResourceHostMsg_Request> CreateRequest(
       const RequestInfo& request_info,
       ResourceRequestBody* request_body,
       GURL* frame_origin);

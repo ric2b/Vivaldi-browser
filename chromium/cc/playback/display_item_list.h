@@ -98,7 +98,7 @@ class CC_EXPORT DisplayItemList
 
   bool RetainsIndividualDisplayItems() const;
 
-  scoped_refptr<base::trace_event::ConvertableToTraceFormat> AsValue(
+  scoped_ptr<base::trace_event::ConvertableToTraceFormat> AsValue(
       bool include_items) const;
 
   void EmitTraceSnapshot() const;
@@ -108,8 +108,6 @@ class CC_EXPORT DisplayItemList
                                   float raster_scale,
                                   std::vector<DrawImage>* images);
   bool MayHaveDiscardableImages() const;
-
-  bool HasDiscardableImageInRect(const gfx::Rect& layer_rect) const;
 
   gfx::Rect VisualRectForTesting(int index) { return visual_rects_[index]; }
 
@@ -128,7 +126,7 @@ class CC_EXPORT DisplayItemList
   // |items_| . These rects are intentionally kept separate
   // because they are not needed while walking the |items_| for raster.
   std::vector<gfx::Rect> visual_rects_;
-  skia::RefPtr<SkPicture> picture_;
+  sk_sp<SkPicture> picture_;
 
   scoped_ptr<SkPictureRecorder> recorder_;
   skia::RefPtr<SkCanvas> canvas_;

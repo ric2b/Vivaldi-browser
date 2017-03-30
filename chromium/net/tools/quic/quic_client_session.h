@@ -53,6 +53,8 @@ class QuicClientSession : public QuicClientSessionBase {
   // than the number of round-trips needed for the handshake.
   int GetNumSentClientHellos() const;
 
+  int GetNumReceivedServerConfigUpdates() const;
+
   void set_respect_goaway(bool respect_goaway) {
     respect_goaway_ = respect_goaway;
   }
@@ -60,6 +62,11 @@ class QuicClientSession : public QuicClientSessionBase {
  protected:
   // QuicSession methods:
   QuicSpdyStream* CreateIncomingDynamicStream(QuicStreamId id) override;
+  // If an outgoing stream can be created, return true.
+  bool ShouldCreateOutgoingDynamicStream() override;
+
+  // If an incoming stream can be created, return true.
+  bool ShouldCreateIncomingDynamicStream(QuicStreamId id) override;
 
   // Create the crypto stream. Called by Initialize()
   virtual QuicCryptoClientStreamBase* CreateQuicCryptoStream();
@@ -74,12 +81,6 @@ class QuicClientSession : public QuicClientSessionBase {
   QuicCryptoClientConfig* crypto_config() { return crypto_config_; }
 
  private:
-  // If an outgoing stream can be created, return true.
-  bool ShouldCreateOutgoingDynamicStream();
-
-  // If an incoming stream can be created, return true.
-  bool ShouldCreateIncomingDynamicStream(QuicStreamId id);
-
   scoped_ptr<QuicCryptoClientStreamBase> crypto_stream_;
   QuicServerId server_id_;
   QuicCryptoClientConfig* crypto_config_;

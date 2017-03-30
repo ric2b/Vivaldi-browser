@@ -4,7 +4,8 @@
 #include "core/loader/FrameLoader.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebUnitTestSupport.h"
+#include "public/platform/WebURLLoaderMockFactory.h"
+#include "public/web/WebCache.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebHistoryItem.h"
@@ -19,9 +20,6 @@
 
 namespace blink {
 
-class MockWebFrameClient : public WebFrameClient {
-};
-
 class ProgrammaticScrollTest : public testing::Test {
 public:
     ProgrammaticScrollTest()
@@ -31,7 +29,8 @@ public:
 
     void TearDown() override
     {
-        Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
+        Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+        WebCache::clear();
     }
 
 protected:
@@ -42,7 +41,7 @@ protected:
     }
 
     std::string m_baseURL;
-    MockWebFrameClient m_mockWebFrameClient;
+    FrameTestHelpers::TestWebFrameClient m_mockWebFrameClient;
 };
 
 TEST_F(ProgrammaticScrollTest, RestoreScrollPositionAndViewStateWithScale)

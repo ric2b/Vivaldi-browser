@@ -61,8 +61,8 @@ public:
         ~Thread();
 
         WebThreadSupportingGC* thread() { return m_thread.get(); }
-        ExecutionContext* executionContext() { return m_executionContext.get(); }
-        ScriptState* scriptState() { return m_scriptState.get(); }
+        ExecutionContext* getExecutionContext() { return m_executionContext.get(); }
+        ScriptState* getScriptState() { return m_scriptState.get(); }
         v8::Isolate* isolate() { return m_isolateHolder->isolate(); }
 
     private:
@@ -72,7 +72,7 @@ public:
         OwnPtr<WebThreadSupportingGC> m_thread;
         const InitializationPolicy m_initializationPolicy;
         OwnPtr<WaitableEvent> m_waitableEvent;
-        RefPtrWillBePersistent<NullExecutionContext> m_executionContext;
+        Persistent<NullExecutionContext> m_executionContext;
         OwnPtr<gin::IsolateHolder> m_isolateHolder;
         RefPtr<ScriptState> m_scriptState;
     };
@@ -115,13 +115,13 @@ public:
                 ASSERT(m_holder);
                 m_holder = nullptr;
             }
-            void postTaskToReadingThread(const WebTraceLocation& location, PassOwnPtr<Closure> task)
+            void postTaskToReadingThread(const WebTraceLocation& location, PassOwnPtr<CrossThreadClosure> task)
             {
                 MutexLocker locker(m_holderMutex);
                 ASSERT(m_holder);
                 m_holder->readingThread()->postTask(location, task);
             }
-            void postTaskToUpdatingThread(const WebTraceLocation& location, PassOwnPtr<Closure> task)
+            void postTaskToUpdatingThread(const WebTraceLocation& location, PassOwnPtr<CrossThreadClosure> task)
             {
                 MutexLocker locker(m_holderMutex);
                 ASSERT(m_holder);
@@ -218,20 +218,20 @@ public:
         void resetReader() { m_reader = nullptr; }
         void signalDone() { m_waitableEvent->signal(); }
         const String& result() { return m_context->result(); }
-        void postTaskToReadingThread(const WebTraceLocation& location, PassOwnPtr<Closure> task)
+        void postTaskToReadingThread(const WebTraceLocation& location, PassOwnPtr<CrossThreadClosure> task)
         {
             m_context->postTaskToReadingThread(location,  task);
         }
-        void postTaskToUpdatingThread(const WebTraceLocation& location, PassOwnPtr<Closure> task)
+        void postTaskToUpdatingThread(const WebTraceLocation& location, PassOwnPtr<CrossThreadClosure> task)
         {
             m_context->postTaskToUpdatingThread(location,  task);
         }
-        void postTaskToReadingThreadAndWait(const WebTraceLocation& location, PassOwnPtr<Closure> task)
+        void postTaskToReadingThreadAndWait(const WebTraceLocation& location, PassOwnPtr<CrossThreadClosure> task)
         {
             postTaskToReadingThread(location,  task);
             m_waitableEvent->wait();
         }
-        void postTaskToUpdatingThreadAndWait(const WebTraceLocation& location, PassOwnPtr<Closure> task)
+        void postTaskToUpdatingThreadAndWait(const WebTraceLocation& location, PassOwnPtr<CrossThreadClosure> task)
         {
             postTaskToUpdatingThread(location,  task);
             m_waitableEvent->wait();
@@ -376,7 +376,7 @@ public:
             m_body.append(body, size);
         }
         Command(Name name, const char* body) : Command(name, body, strlen(body)) { }
-        Name name() const { return m_name; }
+        Name getName() const { return m_name; }
         const Vector<char>& body() const { return m_body; }
 
     private:
@@ -428,7 +428,7 @@ public:
             OwnPtr<WaitableEvent> m_detached;
         };
 
-        Context* context() { return m_context.get(); }
+        Context* getContext() { return m_context.get(); }
 
     private:
         class ReaderImpl;

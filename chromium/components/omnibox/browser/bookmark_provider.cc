@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/trace_event/trace_event.h"
 #include "components/bookmarks/browser/bookmark_match.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/metrics/proto/omnibox_input_type.pb.h"
@@ -56,15 +57,11 @@ void CorrectTitleAndMatchPositions(
 BookmarkProvider::BookmarkProvider(AutocompleteProviderClient* client)
     : AutocompleteProvider(AutocompleteProvider::TYPE_BOOKMARK),
       client_(client),
-      bookmark_model_(NULL) {
-  if (client_) {
-    bookmark_model_ = client_->GetBookmarkModel();
-    languages_ = client_->GetAcceptLanguages();
-  }
-}
+      bookmark_model_(client ? client_->GetBookmarkModel() : nullptr) {}
 
 void BookmarkProvider::Start(const AutocompleteInput& input,
                              bool minimal_changes) {
+  TRACE_EVENT0("omnibox", "BookmarkProvider::Start");
   if (minimal_changes)
     return;
   matches_.clear();
@@ -205,8 +202,8 @@ AutocompleteMatch BookmarkProvider::BookmarkMatchToACMatch(
   // end.
   offsets.push_back(inline_autocomplete_offset);
   match.contents = url_formatter::FormatUrlWithOffsets(
-      url, languages_, url_formatter::kFormatUrlOmitAll &
-                           ~(trim_http ? 0 : url_formatter::kFormatUrlOmitHTTP),
+      url, url_formatter::kFormatUrlOmitAll &
+               ~(trim_http ? 0 : url_formatter::kFormatUrlOmitHTTP),
       net::UnescapeRule::SPACES, nullptr, nullptr, &offsets);
   inline_autocomplete_offset = offsets.back();
   offsets.pop_back();

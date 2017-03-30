@@ -16,7 +16,6 @@ component("ipc") {
   deps = [
     "//base",
     "//ipc",
-    "//skia",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]

@@ -6,7 +6,7 @@
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_APPEARANCE_HANDLER_H_
 
 #include "base/macros.h"
-#include "chrome/browser/ui/webui/settings/md_settings_ui.h"
+#include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 
@@ -38,8 +38,8 @@ class AppearanceHandler : public SettingsPageUIHandler,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // Queries the enabled state of the reset-theme control.
-  base::FundamentalValue QueryResetThemeEnabledState();
+  // Whether the theme can be reset.
+  bool ResetThemeEnabled() const;
 
   // Resets the UI theme of the browser to the default theme.
   void ResetTheme(const base::ListValue*);

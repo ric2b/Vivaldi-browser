@@ -165,7 +165,7 @@ void ApiTestEnvironment::RegisterModules() {
   service_provider_ = service_provider.get();
   gin::ModuleRegistry::From(env()->context()->v8_context())
       ->AddBuiltinModule(env()->isolate(),
-                         "content/public/renderer/service_provider",
+                         "content/public/renderer/frame_service_registry",
                          service_provider.ToV8());
 }
 
@@ -214,7 +214,7 @@ void ApiTestEnvironment::RunTestInner(const std::string& test_name,
 }
 
 void ApiTestEnvironment::RunPromisesAgain() {
-  env()->isolate()->RunMicrotasks();
+  v8::MicrotasksScope::PerformCheckpoint(env()->isolate());
   base::MessageLoop::current()->PostTask(
       FROM_HERE, base::Bind(&ApiTestEnvironment::RunPromisesAgain,
                             base::Unretained(this)));

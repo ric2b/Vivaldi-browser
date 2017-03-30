@@ -63,6 +63,9 @@ class TopSitesDatabase {
   // Vivaldi: Deletes all data except for bookmark thumbnails
   bool DeleteDataExceptBookmarkThumbnails();
 
+  // Vivaldi: Deletes the thumbnail for the given url.
+  bool RemoveThumbnailForUrl(const GURL& url);
+
  private:
   FRIEND_TEST_ALL_PREFIXES(TopSitesDatabaseTest, Version1);
   FRIEND_TEST_ALL_PREFIXES(TopSitesDatabaseTest, Version2);

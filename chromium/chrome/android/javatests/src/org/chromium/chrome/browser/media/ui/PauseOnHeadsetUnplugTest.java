@@ -28,7 +28,7 @@ import java.util.concurrent.TimeoutException;
 @CommandLineFlags.Add(ContentSwitches.DISABLE_GESTURE_REQUIREMENT_FOR_MEDIA_PLAYBACK)
 public class PauseOnHeadsetUnplugTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     private static final String TEST_PATH =
-            "/content/test/data/android/media/media-session.html";
+            "/content/test/data/media/session/media-session.html";
     private static final String VIDEO_ID = "long-video";
 
     private EmbeddedTestServer mTestServer;
@@ -70,7 +70,7 @@ public class PauseOnHeadsetUnplugTest extends ChromeActivityTestCaseBase<ChromeA
     }
 
     private void waitForNotificationReady() throws InterruptedException {
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return MediaNotificationManager.hasManagerForTesting(

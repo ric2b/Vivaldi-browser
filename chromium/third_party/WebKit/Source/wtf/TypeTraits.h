@@ -48,23 +48,103 @@ enum WeakHandlingFlag {
     WeakHandlingInCollections
 };
 
+// Compilers behave differently on __has_trivial_assign(T) if T has a user-deleted copy assignment operator:
+//
+//     * MSVC returns false; but
+//     * The others return true.
+//
+// To workaround that, here we have IsAssignable<T, From> class template, but unfortunately, MSVC 2013 cannot compile
+// it due to the lack of expression SFINAE.
+//
+// Thus, IsAssignable is only defined on non-MSVC compilers.
+#if !COMPILER(MSVC) || COMPILER(CLANG)
+template <typename T, typename From>
+class IsAssignable {
+    typedef char YesType;
+    struct NoType {
+        char padding[8];
+    };
+
+    template <typename T2, typename From2, typename = decltype(std::declval<T2>() = std::declval<From2>())>
+    static YesType checkAssignability(int);
+    template <typename T2, typename From2>
+    static NoType checkAssignability(...);
+
+public:
+    static const bool value = sizeof(checkAssignability<T, From>(0)) == sizeof(YesType);
+};
+
+template <typename T>
+struct IsCopyAssignable {
+    static_assert(!std::is_reference<T>::value, "T must not be a reference.");
+    static const bool value = IsAssignable<T, const T&>::value;
+};
+
+template <typename T>
+struct IsMoveAssignable {
+    static_assert(!std::is_reference<T>::value, "T must not be a reference.");
+    static const bool value = IsAssignable<T, T&&>::value;
+};
+#endif // !COMPILER(MSVC) || COMPILER(CLANG)
+
 template <typename T> struct IsTriviallyCopyAssignable {
+#if COMPILER(MSVC) && !COMPILER(CLANG)
     static const bool value = __has_trivial_assign(T);
+#else
+    static const bool value = __has_trivial_assign(T) && IsCopyAssignable<T>::value;
+#endif
 };
 
 template <typename T> struct IsTriviallyMoveAssignable {
-    static const bool value = __has_trivial_assign(T);
+    // TODO(yutak): This isn't really correct, because __has_trivial_assign appears to look only at copy assignment.
+    // However, std::is_trivially_move_assignable isn't available at this moment, and there isn't a good way to
+    // write that ourselves.
+    //
+    // Here we use IsTriviallyCopyAssignable as a conservative approximation: if T is trivially copy assignable,
+    // T is trivially move assignable, too. This definition misses a case where T is trivially move-only assignable,
+    // but such cases should be rare.
+    static const bool value = IsTriviallyCopyAssignable<T>::value;
 };
 
+// Same as above, but for __has_trivial_constructor and __has_trivial_destructor. For IsTriviallyDefaultConstructible,
+// we don't have to write IsDefaultConstructible ourselves since we can use std::is_constructible<T>. For
+// IsTriviallyDestructible, though, we can't rely on std::is_destructible<T> right now.
+#if !COMPILER(MSVC) || COMPILER(CLANG)
+template <typename T>
+class IsDestructible {
+    typedef char YesType;
+    struct NoType {
+        char padding[8];
+    };
+
+    template <typename T2, typename = decltype(std::declval<T2>().~T2())>
+    static YesType checkDestructibility(int);
+    template <typename T2>
+    static NoType checkDestructibility(...);
+
+public:
+    static const bool value = sizeof(checkDestructibility<T>(0)) == sizeof(YesType);
+};
+#endif
+
 template <typename T> struct IsTriviallyDefaultConstructible {
+#if COMPILER(MSVC) && !COMPILER(CLANG)
     static const bool value = __has_trivial_constructor(T);
+#else
+    static const bool value = __has_trivial_constructor(T) && std::is_constructible<T>::value;
+#endif
 };
 
 template <typename T> struct IsTriviallyDestructible {
+#if COMPILER(MSVC) && !COMPILER(CLANG)
     static const bool value = __has_trivial_destructor(T);
+#else
+    static const bool value = __has_trivial_destructor(T) && IsDestructible<T>::value;
+#endif
 };
 
-template <typename T, typename U> class IsSubclass {
+template <typename T, typename U> struct IsSubclass {
+private:
     typedef char YesType;
     struct NoType {
         char padding[8];
@@ -77,7 +157,8 @@ public:
     static const bool value = sizeof(subclassCheck(t)) == sizeof(YesType);
 };
 
-template <typename T, template <typename... V> class U> class IsSubclassOfTemplate {
+template <typename T, template <typename... V> class U> struct IsSubclassOfTemplate {
+private:
     typedef char YesType;
     struct NoType {
         char padding[8];
@@ -91,7 +172,8 @@ public:
 };
 
 template <typename T, template <typename V, size_t W> class U>
-class IsSubclassOfTemplateTypenameSize {
+struct IsSubclassOfTemplateTypenameSize {
+private:
     typedef char YesType;
     struct NoType {
         char padding[8];
@@ -105,7 +187,8 @@ public:
 };
 
 template <typename T, template <typename V, size_t W, typename X> class U>
-class IsSubclassOfTemplateTypenameSizeTypename {
+struct IsSubclassOfTemplateTypenameSizeTypename {
+private:
     typedef char YesType;
     struct NoType {
         char padding[8];
@@ -137,13 +220,11 @@ struct RemoveTemplate<OuterTemplate<T>, OuterTemplate> {
 // Here, we use a template specialization for same type case to allow incomplete
 // types.
 
-template <typename T, typename U> class IsBaseOf {
-public:
+template <typename T, typename U> struct IsBaseOf {
     static const bool value = std::is_base_of<T, U>::value;
 };
 
-template <typename T> class IsBaseOf<T, T> {
-public:
+template <typename T> struct IsBaseOf<T, T> {
     static const bool value = true;
 };
 

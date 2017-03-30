@@ -39,7 +39,7 @@ SVGRect::SVGRect(const FloatRect& rect)
 {
 }
 
-PassRefPtrWillBeRawPtr<SVGRect> SVGRect::clone() const
+SVGRect* SVGRect::clone() const
 {
     return SVGRect::create(m_value);
 }
@@ -104,17 +104,17 @@ String SVGRect::valueAsString() const
     return builder.toString();
 }
 
-void SVGRect::add(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement*)
+void SVGRect::add(SVGPropertyBase* other, SVGElement*)
 {
     m_value += toSVGRect(other)->value();
 }
 
-void SVGRect::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> fromValue, PassRefPtrWillBeRawPtr<SVGPropertyBase> toValue, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDurationValue, SVGElement*)
+void SVGRect::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, SVGPropertyBase* fromValue, SVGPropertyBase* toValue, SVGPropertyBase* toAtEndOfDurationValue, SVGElement*)
 {
     ASSERT(animationElement);
-    RefPtrWillBeRawPtr<SVGRect> fromRect = animationElement->animationMode() == ToAnimation ? PassRefPtrWillBeRawPtr<SVGRect>(this) : toSVGRect(fromValue);
-    RefPtrWillBeRawPtr<SVGRect> toRect = toSVGRect(toValue);
-    RefPtrWillBeRawPtr<SVGRect> toAtEndOfDurationRect = toSVGRect(toAtEndOfDurationValue);
+    SVGRect* fromRect = animationElement->getAnimationMode() == ToAnimation ? this : toSVGRect(fromValue);
+    SVGRect* toRect = toSVGRect(toValue);
+    SVGRect* toAtEndOfDurationRect = toSVGRect(toAtEndOfDurationValue);
 
     float animatedX = x();
     float animatedY = y();
@@ -128,7 +128,7 @@ void SVGRect::calculateAnimatedValue(SVGAnimationElement* animationElement, floa
     m_value = FloatRect(animatedX, animatedY, animatedWidth, animatedHeight);
 }
 
-float SVGRect::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> to, SVGElement* contextElement)
+float SVGRect::calculateDistance(SVGPropertyBase* to, SVGElement* contextElement)
 {
     // FIXME: Distance calculation is not possible for SVGRect right now. We need the distance for every single value.
     return -1;

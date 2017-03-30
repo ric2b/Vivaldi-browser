@@ -129,7 +129,7 @@ class SessionStateDelegateImpl : public SessionStateDelegate {
   bool screen_locked_;
 
   // A pseudo user info.
-  scoped_ptr<user_manager::UserInfo> user_info_;
+  std::unique_ptr<user_manager::UserInfo> user_info_;
 
   DISALLOW_COPY_AND_ASSIGN(SessionStateDelegateImpl);
 };
@@ -189,6 +189,8 @@ void ShellDelegateImpl::RemoveVirtualKeyboardStateObserver(
     VirtualKeyboardStateObserver* observer) {
 }
 
+void ShellDelegateImpl::OpenUrl(const GURL& url) {}
+
 app_list::AppListViewDelegate* ShellDelegateImpl::GetAppListViewDelegate() {
   if (!app_list_view_delegate_)
     app_list_view_delegate_.reset(ash::shell::CreateAppListViewDelegate());
@@ -225,10 +227,9 @@ ash::MediaDelegate* ShellDelegateImpl::CreateMediaDelegate() {
 }
 
 ui::MenuModel* ShellDelegateImpl::CreateContextMenu(
-    aura::Window* root,
-    ash::ShelfItemDelegate* item_delegate,
-    ash::ShelfItem* item) {
-  return new ContextMenu(root);
+    ash::Shelf* shelf,
+    const ash::ShelfItem* item) {
+  return new ContextMenu(shelf);
 }
 
 GPUSupport* ShellDelegateImpl::CreateGPUSupport() {

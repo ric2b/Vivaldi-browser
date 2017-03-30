@@ -95,16 +95,13 @@ void ToolbarActionView::GetAccessibleState(ui::AXViewState* state) {
   state->role = ui::AX_ROLE_BUTTON;
 }
 
-scoped_ptr<LabelButtonBorder> ToolbarActionView::CreateDefaultBorder() const {
-  scoped_ptr<LabelButtonBorder> border = LabelButton::CreateDefaultBorder();
+std::unique_ptr<LabelButtonBorder> ToolbarActionView::CreateDefaultBorder()
+    const {
+  std::unique_ptr<LabelButtonBorder> border =
+      LabelButton::CreateDefaultBorder();
   border->set_insets(gfx::Insets(kBorderInset, kBorderInset,
                                  kBorderInset, kBorderInset));
   return border;
-}
-
-void ToolbarActionView::OnMouseEntered(const ui::MouseEvent& event) {
-  delegate_->OnMouseEnteredToolbarActionView();
-  views::MenuButton::OnMouseEntered(event);
 }
 
 bool ToolbarActionView::IsTriggerableEvent(const ui::Event& event) {
@@ -119,10 +116,8 @@ SkColor ToolbarActionView::GetInkDropBaseColor() const {
         ui::NativeTheme::kColorId_HoverMenuItemBackgroundColor);
   }
 
-  return GetThemeProvider()
-             ? GetThemeProvider()->GetColor(
-                   ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON)
-             : CustomButton::GetInkDropBaseColor();
+  return GetThemeProvider()->GetColor(
+      ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
 }
 
 bool ToolbarActionView::ShouldShowInkDropHover() const {

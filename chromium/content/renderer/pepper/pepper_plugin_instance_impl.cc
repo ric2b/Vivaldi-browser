@@ -103,7 +103,6 @@
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/web/WebBindings.h"
 #include "third_party/WebKit/public/web/WebCompositionUnderline.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -157,7 +156,6 @@ using ppapi::thunk::PPB_ImageData_API;
 using ppapi::Var;
 using ppapi::ArrayBufferVar;
 using ppapi::ViewData;
-using blink::WebBindings;
 using blink::WebCanvas;
 using blink::WebCursorInfo;
 using blink::WebDocument;
@@ -298,7 +296,7 @@ bool SecurityOriginForInstance(PP_Instance instance_id,
     return false;
 
   WebElement plugin_element = instance->container()->element();
-  *security_origin = plugin_element.document().securityOrigin();
+  *security_origin = plugin_element.document().getSecurityOrigin();
   return true;
 }
 
@@ -1750,7 +1748,7 @@ int PepperPluginInstanceImpl::PrintBegin(const WebPrintParams& print_params) {
   if (!num_pages)
     return 0;
   current_print_settings_ = print_settings;
-  canvas_.clear();
+  canvas_.reset();
   ranges_.clear();
   return num_pages;
 }
@@ -1769,7 +1767,7 @@ void PepperPluginInstanceImpl::PrintPage(int page_number,
 #endif  // defined(OS_MACOSX)
   if (save_for_later) {
     ranges_.push_back(page_range);
-    canvas_ = skia::SharePtr(canvas);
+    canvas_ = sk_ref_sp(canvas);
   } else {
     PrintPageHelper(&page_range, 1, canvas);
   }
@@ -1802,7 +1800,7 @@ void PepperPluginInstanceImpl::PrintEnd() {
   scoped_refptr<PepperPluginInstanceImpl> ref(this);
   if (!ranges_.empty())
     PrintPageHelper(&(ranges_.front()), ranges_.size(), canvas_.get());
-  canvas_.clear();
+  canvas_.reset();
   ranges_.clear();
 
   DCHECK(plugin_print_interface_);
@@ -2038,15 +2036,13 @@ void PepperPluginInstanceImpl::UpdateLayer(bool force_creation) {
     bool opaque = false;
     if (want_3d_layer) {
       DCHECK(bound_graphics_3d_.get());
-      texture_layer_ = cc::TextureLayer::CreateForMailbox(
-          cc_blink::WebLayerImpl::LayerSettings(), NULL);
+      texture_layer_ = cc::TextureLayer::CreateForMailbox(NULL);
       opaque = bound_graphics_3d_->IsOpaque();
       texture_layer_->SetTextureMailboxWithoutReleaseCallback(
           cc::TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D));
     } else {
       DCHECK(bound_graphics_2d_platform_);
-      texture_layer_ = cc::TextureLayer::CreateForMailbox(
-          cc_blink::WebLayerImpl::LayerSettings(), this);
+      texture_layer_ = cc::TextureLayer::CreateForMailbox(this);
       bound_graphics_2d_platform_->AttachedToNewLayer();
       opaque = bound_graphics_2d_platform_->IsAlwaysOpaque();
       texture_layer_->SetFlipped(false);
@@ -2364,8 +2360,8 @@ PP_Var PepperPluginInstanceImpl::ExecuteScript(PP_Instance instance,
   RecordFlashJavaScriptUse();
 
   // Executing the script may remove the plugin from the DOM, so we need to keep
-  // a reference to ourselves so that we can still process the result after the
-  // WebBindings::evaluate() below.
+  // a reference to ourselves so that we can still process the result after
+  // running the script below.
   scoped_refptr<PepperPluginInstanceImpl> ref(this);
   V8VarConverter converter(pp_instance_, V8VarConverter::kAllowObjectVars);
   PepperTryCatchVar try_catch(this, &converter, exception);
@@ -2553,7 +2549,11 @@ void PepperPluginInstanceImpl::NumberOfFindResultsChanged(
     PP_Instance instance,
     int32_t total,
     PP_Bool final_result) {
-  DCHECK_NE(find_identifier_, -1);
+  // After stopping search and setting find_identifier_ to -1 there still may be
+  // a NumberOfFindResultsChanged notification pending from plug-in. Just ignore
+  // them.
+  if (find_identifier_ == -1)
+    return;
   if (render_frame_) {
     render_frame_->reportFindInPageMatchCount(
         find_identifier_, total, PP_ToBool(final_result));
@@ -2562,7 +2562,8 @@ void PepperPluginInstanceImpl::NumberOfFindResultsChanged(
 
 void PepperPluginInstanceImpl::SelectedFindResultChanged(PP_Instance instance,
                                                          int32_t index) {
-  DCHECK_NE(find_identifier_, -1);
+  if (find_identifier_ == -1)
+    return;
   if (render_frame_) {
     render_frame_->reportFindInPageSelection(
         find_identifier_, index + 1, blink::WebRect());
@@ -3039,7 +3040,7 @@ void PepperPluginInstanceImpl::SetAlwaysOnTop(bool on_top) {
 void PepperPluginInstanceImpl::DoSetCursor(WebCursorInfo* cursor) {
   cursor_.reset(cursor);
   if (fullscreen_container_) {
-    fullscreen_container_->DidChangeCursor(*cursor);
+    fullscreen_container_->PepperDidChangeCursor(*cursor);
   } else if (render_frame_) {
     render_frame_->PepperDidChangeCursor(this, *cursor);
   }
@@ -3179,8 +3180,8 @@ bool PepperPluginInstanceImpl::CanAccessMainFrame() const {
   blink::WebDocument main_document =
       containing_document.frame()->view()->mainFrame()->document();
 
-  return containing_document.securityOrigin().canAccess(
-      main_document.securityOrigin());
+  return containing_document.getSecurityOrigin().canAccess(
+      main_document.getSecurityOrigin());
 }
 
 void PepperPluginInstanceImpl::KeepSizeAttributesBeforeFullscreen() {

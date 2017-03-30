@@ -168,38 +168,6 @@ static void logicalQuery(LayoutObject* queryRoot, QueryData* queryData, ProcessT
     }
 }
 
-static void modifyStartEndPositionsRespectingLigatures(const QueryData* queryData, const SVGTextFragment& fragment, int& startPosition, int& endPosition)
-{
-    const Vector<SVGTextMetrics>& textMetricsValues = queryData->textLineLayout.layoutAttributes()->textMetricsValues();
-
-    unsigned textMetricsOffset = fragment.metricsListOffset;
-    int fragmentOffset = 0;
-    int fragmentEnd = static_cast<int>(fragment.length);
-
-    // Find the text metrics cell that start at or contain the character startPosition.
-    while (fragmentOffset < fragmentEnd) {
-        const SVGTextMetrics& metrics = textMetricsValues[textMetricsOffset];
-        int glyphEnd = fragmentOffset + metrics.length();
-        if (startPosition < glyphEnd)
-            break;
-        fragmentOffset = glyphEnd;
-        textMetricsOffset++;
-    }
-
-    startPosition = fragmentOffset;
-
-    // Find the text metrics cell that contain or ends at the character endPosition.
-    while (fragmentOffset < fragmentEnd) {
-        const SVGTextMetrics& metrics = textMetricsValues[textMetricsOffset];
-        fragmentOffset += metrics.length();
-        if (fragmentOffset >= endPosition)
-            break;
-        textMetricsOffset++;
-    }
-
-    endPosition = fragmentOffset;
-}
-
 static bool mapStartEndPositionsIntoFragmentCoordinates(const QueryData* queryData, const SVGTextFragment& fragment, int& startPosition, int& endPosition)
 {
     unsigned boxStart = queryData->currentOffset;
@@ -210,12 +178,7 @@ static bool mapStartEndPositionsIntoFragmentCoordinates(const QueryData* queryDa
 
     // Reuse the same logic used for text selection & painting, to map our
     // query start/length into start/endPositions of the current text fragment.
-    if (!queryData->textBox->mapStartEndPositionsIntoFragmentCoordinates(fragment, startPosition, endPosition))
-        return false;
-
-    modifyStartEndPositionsRespectingLigatures(queryData, fragment, startPosition, endPosition);
-    ASSERT(startPosition < endPosition);
-    return true;
+    return queryData->textBox->mapStartEndPositionsIntoFragmentCoordinates(fragment, startPosition, endPosition);
 }
 
 // numberOfCharacters() implementation
@@ -256,6 +219,34 @@ float SVGTextQuery::textLength() const
     return data.textLength;
 }
 
+using MetricsList = Vector<SVGTextMetrics>;
+
+MetricsList::const_iterator findMetricsForCharacter(const MetricsList& metricsList, const SVGTextFragment& fragment, unsigned startInFragment)
+{
+    // Find the text metrics cell that starts at or contains the character at |startInFragment|.
+    MetricsList::const_iterator metrics = metricsList.begin() + fragment.metricsListOffset;
+    unsigned fragmentOffset = 0;
+    while (fragmentOffset < fragment.length) {
+        fragmentOffset += metrics->length();
+        if (startInFragment < fragmentOffset)
+            break;
+        ++metrics;
+    }
+    ASSERT(metrics <= metricsList.end());
+    return metrics;
+}
+
+static float calculateGlyphRange(const QueryData* queryData, const SVGTextFragment& fragment, unsigned start, unsigned end)
+{
+    const MetricsList& metricsList = queryData->textLineLayout.metricsList();
+    auto metrics = findMetricsForCharacter(metricsList, fragment, start);
+    auto endMetrics = findMetricsForCharacter(metricsList, fragment, end);
+    float glyphRange = 0;
+    for (; metrics != endMetrics; ++metrics)
+        glyphRange += queryData->isVerticalText ? metrics->height() : metrics->width();
+    return glyphRange;
+}
+
 // subStringLength() implementation
 struct SubStringLengthData : QueryData {
     SubStringLengthData(unsigned queryStartPosition, unsigned queryLength)
@@ -280,8 +271,7 @@ static bool subStringLengthCallback(QueryData* queryData, const SVGTextFragment&
     if (!mapStartEndPositionsIntoFragmentCoordinates(queryData, fragment, startPosition, endPosition))
         return false;
 
-    SVGTextMetrics metrics = SVGTextMetrics::measureCharacterRange(queryData->textLineLayout, fragment.characterOffset + startPosition, endPosition - startPosition, queryData->textBox->direction());
-    data->subStringLength += queryData->isVerticalText ? metrics.height() : metrics.width();
+    data->subStringLength += calculateGlyphRange(queryData, fragment, startPosition, endPosition);
     return false;
 }
 
@@ -303,34 +293,27 @@ struct StartPositionOfCharacterData : QueryData {
     FloatPoint startPosition;
 };
 
-static FloatPoint calculateGlyphPositionWithoutTransform(const QueryData* queryData, const SVGTextFragment& fragment, int offsetInFragment)
+static FloatPoint logicalGlyphPositionToPhysical(const QueryData* queryData, const SVGTextFragment& fragment, float logicalGlyphOffset)
 {
-    float glyphOffsetInDirection = 0;
-    if (offsetInFragment) {
-        SVGTextMetrics metrics = SVGTextMetrics::measureCharacterRange(queryData->textLineLayout, fragment.characterOffset, offsetInFragment, queryData->textBox->direction());
-        if (queryData->isVerticalText)
-            glyphOffsetInDirection = metrics.height();
-        else
-            glyphOffsetInDirection = metrics.width();
-    }
-
+    float physicalGlyphOffset = logicalGlyphOffset;
     if (!queryData->textBox->isLeftToRightDirection()) {
         float fragmentExtent = queryData->isVerticalText ? fragment.height : fragment.width;
-        glyphOffsetInDirection = fragmentExtent - glyphOffsetInDirection;
+        physicalGlyphOffset = fragmentExtent - logicalGlyphOffset;
     }
 
     FloatPoint glyphPosition(fragment.x, fragment.y);
     if (queryData->isVerticalText)
-        glyphPosition.move(0, glyphOffsetInDirection);
+        glyphPosition.move(0, physicalGlyphOffset);
     else
-        glyphPosition.move(glyphOffsetInDirection, 0);
+        glyphPosition.move(physicalGlyphOffset, 0);
 
     return glyphPosition;
 }
 
-static FloatPoint calculateGlyphPosition(const QueryData* queryData, const SVGTextFragment& fragment, int offsetInFragment)
+static FloatPoint calculateGlyphPosition(const QueryData* queryData, const SVGTextFragment& fragment, unsigned offsetInFragment)
 {
-    FloatPoint glyphPosition = calculateGlyphPositionWithoutTransform(queryData, fragment, offsetInFragment);
+    float glyphOffsetInDirection = calculateGlyphRange(queryData, fragment, 0, offsetInFragment);
+    FloatPoint glyphPosition = logicalGlyphPositionToPhysical(queryData, fragment, glyphOffsetInDirection);
     if (fragment.isTransformed()) {
         AffineTransform fragmentTransform = fragment.buildFragmentTransform(SVGTextFragment::TransformIgnoringTextLength);
         glyphPosition = fragmentTransform.mapPoint(glyphPosition);
@@ -378,10 +361,7 @@ static bool endPositionOfCharacterCallback(QueryData* queryData, const SVGTextFr
     if (!mapStartEndPositionsIntoFragmentCoordinates(queryData, fragment, startPosition, endPosition))
         return false;
 
-    // TODO(fs): mapStartEndPositionsIntoFragmentCoordinates(...) above applies
-    // some heuristics for ligatures, so why not just use endPosition here?
-    // (rather than startPosition+1)
-    data->endPosition = calculateGlyphPosition(queryData, fragment, startPosition + 1);
+    data->endPosition = calculateGlyphPosition(queryData, fragment, endPosition);
     return true;
 }
 
@@ -441,61 +421,44 @@ struct ExtentOfCharacterData : QueryData {
     FloatRect extent;
 };
 
-const SVGTextMetrics& findMetricsForCharacter(const Vector<SVGTextMetrics>& textMetricsValues, const SVGTextFragment& fragment, unsigned startInFragment)
+static FloatRect physicalGlyphExtents(const QueryData* queryData, const SVGTextMetrics& metrics, const FloatPoint& glyphPosition)
 {
-    // Find the text metrics cell that start at or contain the character at |startInFragment|.
-    unsigned textMetricsOffset = fragment.metricsListOffset;
-    unsigned fragmentOffset = 0;
-    while (fragmentOffset < fragment.length) {
-        const SVGTextMetrics& metrics = textMetricsValues[textMetricsOffset++];
-        unsigned glyphEnd = fragmentOffset + metrics.length();
-        if (startInFragment < glyphEnd)
-            break;
-        fragmentOffset = glyphEnd;
-    }
-    return textMetricsValues[textMetricsOffset - 1];
-}
-
-static inline void calculateGlyphBoundaries(const QueryData* queryData, const SVGTextFragment& fragment, int startPosition, FloatRect& extent)
-{
-    float scalingFactor = queryData->textLineLayout.scalingFactor();
-    ASSERT(scalingFactor);
-
-    FloatPoint glyphPosition = calculateGlyphPositionWithoutTransform(queryData, fragment, startPosition);
-    glyphPosition.move(0, -queryData->textLineLayout.scaledFont().fontMetrics().floatAscent() / scalingFactor);
-    extent.setLocation(glyphPosition);
-
-    // Use the SVGTextMetrics computed by SVGTextMetricsBuilder (which spends
-    // time attempting to compute more correct glyph bounds already, handling
-    // cursive scripts to some degree.)
-    const Vector<SVGTextMetrics>& textMetricsValues = queryData->textLineLayout.layoutAttributes()->textMetricsValues();
-    const SVGTextMetrics& metrics = findMetricsForCharacter(textMetricsValues, fragment, startPosition);
-
     // TODO(fs): Negative glyph extents seems kind of weird to have, but
     // presently it can occur in some cases (like Arabic.)
-    FloatSize glyphSize(std::max<float>(metrics.width(), 0), std::max<float>(metrics.height(), 0));
-    extent.setSize(glyphSize);
+    FloatRect glyphExtents(
+        glyphPosition,
+        FloatSize(std::max<float>(metrics.width(), 0), std::max<float>(metrics.height(), 0)));
 
     // If RTL, adjust the starting point to align with the LHS of the glyph bounding box.
     if (!queryData->textBox->isLeftToRightDirection()) {
         if (queryData->isVerticalText)
-            extent.move(0, -glyphSize.height());
+            glyphExtents.move(0, -glyphExtents.height());
         else
-            extent.move(-glyphSize.width(), 0);
+            glyphExtents.move(-glyphExtents.width(), 0);
     }
+    return glyphExtents;
+}
 
+static inline FloatRect calculateGlyphBoundaries(const QueryData* queryData, const SVGTextFragment& fragment, int startPosition)
+{
+    const float scalingFactor = queryData->textLineLayout.scalingFactor();
+    ASSERT(scalingFactor);
+    const float baseline = queryData->textLineLayout.scaledFont().getFontMetrics().floatAscent() / scalingFactor;
+
+    float glyphOffsetInDirection = calculateGlyphRange(queryData, fragment, 0, startPosition);
+    FloatPoint glyphPosition = logicalGlyphPositionToPhysical(queryData, fragment, glyphOffsetInDirection);
+    glyphPosition.move(0, -baseline);
+
+    // Use the SVGTextMetrics computed by SVGTextMetricsBuilder.
+    const MetricsList& metricsList = queryData->textLineLayout.metricsList();
+    auto metrics = findMetricsForCharacter(metricsList, fragment, startPosition);
+
+    FloatRect extent = physicalGlyphExtents(queryData, *metrics, glyphPosition);
     if (fragment.isTransformed()) {
         AffineTransform fragmentTransform = fragment.buildFragmentTransform(SVGTextFragment::TransformIgnoringTextLength);
         extent = fragmentTransform.mapRect(extent);
     }
-}
-
-static inline FloatRect calculateFragmentBoundaries(LineLayoutSVGInlineText textLineLayout, const SVGTextFragment& fragment)
-{
-    float scalingFactor = textLineLayout.scalingFactor();
-    ASSERT(scalingFactor);
-    float baseline = textLineLayout.scaledFont().fontMetrics().floatAscent() / scalingFactor;
-    return fragment.boundingBox(baseline);
+    return extent;
 }
 
 static bool extentOfCharacterCallback(QueryData* queryData, const SVGTextFragment& fragment)
@@ -507,7 +470,7 @@ static bool extentOfCharacterCallback(QueryData* queryData, const SVGTextFragmen
     if (!mapStartEndPositionsIntoFragmentCoordinates(queryData, fragment, startPosition, endPosition))
         return false;
 
-    calculateGlyphBoundaries(queryData, fragment, startPosition, data->extent);
+    data->extent = calculateGlyphBoundaries(queryData, fragment, startPosition);
     return true;
 }
 
@@ -575,19 +538,27 @@ static bool characterNumberAtPositionCallback(QueryData* queryData, const SVGTex
 {
     CharacterNumberAtPositionData* data = static_cast<CharacterNumberAtPositionData*>(queryData);
 
+    const float scalingFactor = data->textLineLayout.scalingFactor();
+    ASSERT(scalingFactor);
+    const float baseline = data->textLineLayout.scaledFont().getFontMetrics().floatAscent() / scalingFactor;
+
     // Test the query point against the bounds of the entire fragment first.
-    FloatRect fragmentExtents = calculateFragmentBoundaries(queryData->textLineLayout, fragment);
-    if (!fragmentExtents.contains(data->position))
+    if (!fragment.boundingBox(baseline).contains(data->position))
         return false;
+
+    AffineTransform fragmentTransform = fragment.buildFragmentTransform(SVGTextFragment::TransformIgnoringTextLength);
 
     // Iterate through the glyphs in this fragment, and check if their extents
     // contain the query point.
-    FloatRect extent;
-    const Vector<SVGTextMetrics>& textMetrics = queryData->textLineLayout.layoutAttributes()->textMetricsValues();
-    unsigned textMetricsOffset = fragment.metricsListOffset;
+    MetricsList::const_iterator metrics =
+        data->textLineLayout.metricsList().begin() + fragment.metricsListOffset;
     unsigned fragmentOffset = 0;
+    float glyphOffset = 0;
     while (fragmentOffset < fragment.length) {
-        calculateGlyphBoundaries(queryData, fragment, fragmentOffset, extent);
+        FloatPoint glyphPosition = logicalGlyphPositionToPhysical(data, fragment, glyphOffset);
+        glyphPosition.move(0, -baseline);
+
+        FloatRect extent = fragmentTransform.mapRect(physicalGlyphExtents(data, *metrics, glyphPosition));
         if (extent.contains(data->position)) {
             // Compute the character offset of the glyph within the text node.
             unsigned offsetInBox = fragment.characterOffset - queryData->textBox->start() + fragmentOffset;
@@ -595,8 +566,9 @@ static bool characterNumberAtPositionCallback(QueryData* queryData, const SVGTex
             data->hitLayoutItem = LineLayoutItem(data->textLineLayout);
             return true;
         }
-        fragmentOffset += textMetrics[textMetricsOffset].length();
-        textMetricsOffset++;
+        fragmentOffset += metrics->length();
+        glyphOffset += data->isVerticalText ? metrics->height() : metrics->width();
+        ++metrics;
     }
     return false;
 }

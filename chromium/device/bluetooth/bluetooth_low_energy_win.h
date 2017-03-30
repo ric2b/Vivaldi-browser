@@ -153,6 +153,48 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyWrapper {
       scoped_ptr<BTH_LE_GATT_CHARACTERISTIC>* out_included_characteristics,
       USHORT* out_counts);
 
+  // Reads included descriptors of |characteristic| in service with service
+  // device path |service_path|. The result will be stored in
+  // |*out_included_descriptors| and |*out_counts|.
+  virtual HRESULT ReadDescriptorsOfACharacteristic(
+      base::FilePath& service_path,
+      const PBTH_LE_GATT_CHARACTERISTIC characteristic,
+      scoped_ptr<BTH_LE_GATT_DESCRIPTOR>* out_included_descriptors,
+      USHORT* out_counts);
+
+  // Reads |characteristic| value in service with service device path
+  // |service_path|. The result will be stored in |*out_value|.
+  virtual HRESULT ReadCharacteristicValue(
+      base::FilePath& service_path,
+      const PBTH_LE_GATT_CHARACTERISTIC characteristic,
+      scoped_ptr<BTH_LE_GATT_CHARACTERISTIC_VALUE>* out_value);
+
+  // Writes |characteristic| value in service with service device path
+  // |service_path| to |*new_value|.
+  virtual HRESULT WriteCharacteristicValue(
+      base::FilePath& service_path,
+      const PBTH_LE_GATT_CHARACTERISTIC characteristic,
+      PBTH_LE_GATT_CHARACTERISTIC_VALUE new_value);
+
+  // Register GATT events of |event_type| in the service with service device
+  // path |service_path|. |event_parameter| is the event's parameter. |callback|
+  // is the function to be invoked if the event happened. |context| is the input
+  // parameter to be given back through |callback|. |*out_handle| stores the
+  // unique handle in OS for this registration.
+  virtual HRESULT RegisterGattEvents(base::FilePath& service_path,
+                                     BTH_LE_GATT_EVENT_TYPE event_type,
+                                     PVOID event_parameter,
+                                     PFNBLUETOOTH_GATT_EVENT_CALLBACK callback,
+                                     PVOID context,
+                                     BLUETOOTH_GATT_EVENT_HANDLE* out_handle);
+  virtual HRESULT UnregisterGattEvent(BLUETOOTH_GATT_EVENT_HANDLE event_handle);
+
+  // Writes |descriptor| value in service with service device path
+  // |service_path| to |*new_value|.
+  virtual HRESULT WriteDescriptorValue(base::FilePath& service_path,
+                                       const PBTH_LE_GATT_DESCRIPTOR descriptor,
+                                       PBTH_LE_GATT_DESCRIPTOR_VALUE new_value);
+
  protected:
   BluetoothLowEnergyWrapper();
   virtual ~BluetoothLowEnergyWrapper();

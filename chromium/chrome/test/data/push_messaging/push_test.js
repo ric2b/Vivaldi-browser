@@ -5,7 +5,6 @@
 'use strict';
 
 var resultQueue = new ResultQueue();
-var pushSubscription = null;
 
 var pushSubscriptionOptions = {
   userVisibleOnly: true
@@ -106,14 +105,51 @@ function swapManifestNoSenderId() {
   }
 }
 
-function subscribePush() {
+// This is the old style of push subscriptions which we are phasing away
+// from, where the subscription used a sender ID instead of public key.
+function documentSubscribePushWithoutKey() {
   navigator.serviceWorker.ready.then(function(swRegistration) {
-    return swRegistration.pushManager.subscribe(pushSubscriptionOptions)
+    return swRegistration.pushManager.subscribe(
+        pushSubscriptionOptions)
         .then(function(subscription) {
-          pushSubscription = subscription;
           sendResultToTest(subscription.endpoint);
         });
   }).catch(sendErrorToTest);
+}
+
+function documentSubscribePush() {
+  navigator.serviceWorker.ready.then(function(swRegistration) {
+    pushSubscriptionOptions.applicationServerKey = kApplicationServerKey.buffer;
+    return swRegistration.pushManager.subscribe(pushSubscriptionOptions)
+        .then(function(subscription) {
+          sendResultToTest(subscription.endpoint);
+        });
+  }).catch(sendErrorToTest);
+}
+
+function documentSubscribePushBadKey() {
+  navigator.serviceWorker.ready.then(function(swRegistration) {
+    var invalidApplicationServerKey = new Uint8Array(300);
+    invalidApplicationServerKey.fill('0x05', 1, 300);
+    pushSubscriptionOptions.applicationServerKey =
+        invalidApplicationServerKey.buffer;
+    return swRegistration.pushManager.subscribe(pushSubscriptionOptions)
+        .then(function(subscription) {
+          sendResultToTest(subscription.endpoint);
+        });
+  }).catch(sendErrorToTest);
+}
+
+function workerSubscribePush() {
+  // Send the message to the worker for it to subscribe
+  navigator.serviceWorker.controller.postMessage({command: 'workerSubscribe'});
+}
+
+function workerSubscribePushNoKey() {
+  // The worker will try to subscribe without providing a key. This should
+  // succeed if the worker was previously subscribed and fail otherwise.
+  navigator.serviceWorker.controller.postMessage(
+      {command: 'workerSubscribeNoKey'});
 }
 
 function GetP256dh() {
@@ -144,15 +180,23 @@ function isControlled() {
 }
 
 function unsubscribePush() {
-  if (!pushSubscription) {
-    sendResultToTest('unsubscribe error: no subscription');
-    return;
-  }
-
-  pushSubscription.unsubscribe().then(function(result) {
-    sendResultToTest('unsubscribe result: ' + result);
-  }, function(error) {
-    sendResultToTest('unsubscribe error: ' + error.name + ': ' + error.message);
+  navigator.serviceWorker.ready.then(function(swRegistration) {
+    if (!swRegistration) {
+      sendResultToTest('unsubscribe result: false');
+      return;
+    }
+    swRegistration.pushManager.getSubscription().then(function(pushSubscription)
+    {
+      if (!pushSubscription) {
+        sendResultToTest('unsubscribe result: false');
+        return;
+      }
+      pushSubscription.unsubscribe().then(function(result) {
+        sendResultToTest('unsubscribe result: ' + result);
+      }, function(error) {
+        sendResultToTest('unsubscribe error: ' + error.message);
+      })
+    })
   });
 }
 
@@ -169,4 +213,6 @@ navigator.serviceWorker.addEventListener('message', function(event) {
   var message = JSON.parse(event.data);
   if (message.type == 'push')
     resultQueue.push(message.data);
+  else
+    sendResultToTest(message.data);
 }, false);

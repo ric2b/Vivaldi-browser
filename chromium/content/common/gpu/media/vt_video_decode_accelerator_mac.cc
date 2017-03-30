@@ -10,7 +10,6 @@
 #include <stddef.h>
 
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/mac/mac_logging.h"
 #include "base/macros.h"
@@ -20,7 +19,6 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/version.h"
 #include "content/common/gpu/media/vt_video_decode_accelerator_mac.h"
-#include "content/public/common/content_switches.h"
 #include "media/base/limits.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_image_io_surface.h"
@@ -76,9 +74,9 @@ static base::ScopedCFTypeRef<CFMutableDictionaryRef>
 BuildImageConfig(CMVideoDimensions coded_dimensions) {
   base::ScopedCFTypeRef<CFMutableDictionaryRef> image_config;
 
-  // 4:2:2 is used over the native 4:2:0 because only 4:2:2 can be directly
-  // bound to a texture by CGLTexImageIOSurface2D().
-  int32_t pixel_format = kCVPixelFormatType_422YpCbCr8;
+  // Note that 4:2:0 textures cannot be used directly as RGBA in OpenGL, but are
+  // lower power than 4:2:2 when composited directly by CoreAnimation.
+  int32_t pixel_format = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
 #define CFINT(i) CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &i)
   base::ScopedCFTypeRef<CFNumberRef> cf_pixel_format(CFINT(pixel_format));
   base::ScopedCFTypeRef<CFNumberRef> cf_width(CFINT(coded_dimensions.width));
@@ -90,7 +88,7 @@ BuildImageConfig(CMVideoDimensions coded_dimensions) {
   image_config.reset(
       CFDictionaryCreateMutable(
           kCFAllocatorDefault,
-          4,  // capacity
+          3,  // capacity
           &kCFTypeDictionaryKeyCallBacks,
           &kCFTypeDictionaryValueCallBacks));
   if (!image_config.get())
@@ -100,8 +98,6 @@ BuildImageConfig(CMVideoDimensions coded_dimensions) {
                        cf_pixel_format);
   CFDictionarySetValue(image_config, kCVPixelBufferWidthKey, cf_width);
   CFDictionarySetValue(image_config, kCVPixelBufferHeightKey, cf_height);
-  CFDictionarySetValue(image_config, kCVPixelBufferOpenGLCompatibilityKey,
-                       kCFBooleanTrue);
 
   return image_config;
 }
@@ -179,11 +175,6 @@ static bool CreateVideoToolboxSession(const uint8_t* sps, size_t sps_size,
 // session fails, hardware decoding will be disabled (Initialize() will always
 // return false).
 static bool InitializeVideoToolboxInternal() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableAcceleratedVideoDecode)) {
-    return false;
-  }
-
   if (!IsVtInitialized()) {
     // CoreVideo is also required, but the loader stops after the first path is
     // loaded. Instead we rely on the transitive dependency from VideoToolbox to
@@ -259,6 +250,8 @@ static void OutputThunk(
 VTVideoDecodeAccelerator::Task::Task(TaskType type) : type(type) {
 }
 
+VTVideoDecodeAccelerator::Task::Task(const Task& other) = default;
+
 VTVideoDecodeAccelerator::Task::~Task() {
 }
 
@@ -295,11 +288,10 @@ bool VTVideoDecodeAccelerator::FrameOrder::operator()(
 }
 
 VTVideoDecodeAccelerator::VTVideoDecodeAccelerator(
-    const base::Callback<bool(void)>& make_context_current,
-    const base::Callback<void(uint32_t, uint32_t, scoped_refptr<gl::GLImage>)>&
-        bind_image)
-    : make_context_current_(make_context_current),
-      bind_image_(bind_image),
+    const MakeGLContextCurrentCallback& make_context_current_cb,
+    const BindGLImageCallback& bind_image_cb)
+    : make_context_current_cb_(make_context_current_cb),
+      bind_image_cb_(bind_image_cb),
       client_(nullptr),
       state_(STATE_DECODING),
       format_(nullptr),
@@ -311,7 +303,6 @@ VTVideoDecodeAccelerator::VTVideoDecodeAccelerator(
       gpu_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       decoder_thread_("VTDecoderThread"),
       weak_this_factory_(this) {
-  DCHECK(!make_context_current_.is_null());
   callback_.decompressionOutputCallback = OutputThunk;
   callback_.decompressionOutputRefCon = this;
   weak_this_ = weak_this_factory_.GetWeakPtr();
@@ -324,6 +315,11 @@ VTVideoDecodeAccelerator::~VTVideoDecodeAccelerator() {
 bool VTVideoDecodeAccelerator::Initialize(const Config& config,
                                           Client* client) {
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
+
+  if (make_context_current_cb_.is_null() || bind_image_cb_.is_null()) {
+    NOTREACHED() << "GL callbacks are required for this VDA";
+    return false;
+  }
 
   if (config.is_encrypted) {
     NOTREACHED() << "Encrypted streams are not supported for this VDA";
@@ -626,22 +622,20 @@ void VTVideoDecodeAccelerator::DecodeTask(
     config_changed_ = true;
   }
   if (config_changed_) {
-    if (last_sps_.empty()) {
-      config_changed_ = false;
-      DLOG(ERROR) << "Invalid configuration; no SPS";
-      NotifyError(INVALID_ARGUMENT, SFT_INVALID_STREAM);
-      return;
-    }
-    if (last_pps_.empty()) {
-      config_changed_ = false;
-      DLOG(ERROR) << "Invalid configuration; no PPS";
-      NotifyError(INVALID_ARGUMENT, SFT_INVALID_STREAM);
-      return;
-    }
-
     // Only reconfigure at IDRs to avoid corruption.
     if (frame->is_idr) {
       config_changed_ = false;
+
+      if (last_sps_.empty()) {
+        DLOG(ERROR) << "Invalid configuration; no SPS";
+        NotifyError(INVALID_ARGUMENT, SFT_INVALID_STREAM);
+        return;
+      }
+      if (last_pps_.empty()) {
+        DLOG(ERROR) << "Invalid configuration; no PPS";
+        NotifyError(INVALID_ARGUMENT, SFT_INVALID_STREAM);
+        return;
+      }
 
       // ConfigureDecoder() calls NotifyError() on failure.
       if (!ConfigureDecoder())
@@ -853,10 +847,12 @@ void VTVideoDecodeAccelerator::AssignPictureBuffers(
     DCHECK(!picture_info_map_.count(picture.id()));
     assigned_picture_ids_.insert(picture.id());
     available_picture_ids_.push_back(picture.id());
+    DCHECK_LE(1u, picture.internal_texture_ids().size());
+    DCHECK_LE(1u, picture.texture_ids().size());
     picture_info_map_.insert(std::make_pair(
         picture.id(),
-        make_scoped_ptr(new PictureInfo(picture.internal_texture_id(),
-                                        picture.texture_id()))));
+        make_scoped_ptr(new PictureInfo(picture.internal_texture_ids()[0],
+                                        picture.texture_ids()[0]))));
   }
 
   // Pictures are not marked as uncleared until after this method returns, and
@@ -870,7 +866,7 @@ void VTVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_id) {
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
   DCHECK(picture_info_map_.count(picture_id));
   PictureInfo* picture_info = picture_info_map_.find(picture_id)->second.get();
-  DCHECK_EQ(CFGetRetainCount(picture_info->cv_image), 1);
+  DCHECK_EQ(CFGetRetainCount(picture_info->cv_image), 2);
   picture_info->cv_image.reset();
   picture_info->gl_image->Destroy(false);
   picture_info->gl_image = nullptr;
@@ -1013,8 +1009,8 @@ bool VTVideoDecodeAccelerator::ProcessFrame(const Frame& frame) {
 
       // Request new pictures.
       picture_size_ = frame.coded_size;
-      client_->ProvidePictureBuffers(
-          kNumPictureBuffers, coded_size_, GL_TEXTURE_RECTANGLE_ARB);
+      client_->ProvidePictureBuffers(kNumPictureBuffers, 1, coded_size_,
+                                     GL_TEXTURE_RECTANGLE_ARB);
       return false;
     }
     if (!SendFrame(frame))
@@ -1037,47 +1033,27 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
   DCHECK(!picture_info->cv_image);
   DCHECK(!picture_info->gl_image);
 
-  if (!make_context_current_.Run()) {
+  if (!make_context_current_cb_.Run()) {
     DLOG(ERROR) << "Failed to make GL context current";
     NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
     return false;
   }
 
-  IOSurfaceRef surface = CVPixelBufferGetIOSurface(frame.image.get());
-  if (gfx::GetGLImplementation() != gfx::kGLImplementationDesktopGLCoreProfile)
-    glEnable(GL_TEXTURE_RECTANGLE_ARB);
-  gfx::ScopedTextureBinder texture_binder(GL_TEXTURE_RECTANGLE_ARB,
-                                          picture_info->service_texture_id);
-  CGLContextObj cgl_context =
-      static_cast<CGLContextObj>(gfx::GLContext::GetCurrent()->GetHandle());
-  CGLError status = CGLTexImageIOSurface2D(
-      cgl_context,                  // ctx
-      GL_TEXTURE_RECTANGLE_ARB,     // target
-      GL_RGB,                       // internal_format
-      frame.coded_size.width(),     // width
-      frame.coded_size.height(),    // height
-      GL_YCBCR_422_APPLE,           // format
-      GL_UNSIGNED_SHORT_8_8_APPLE,  // type
-      surface,                      // io_surface
-      0);                           // plane
-  if (gfx::GetGLImplementation() != gfx::kGLImplementationDesktopGLCoreProfile)
-    glDisable(GL_TEXTURE_RECTANGLE_ARB);
-  if (status != kCGLNoError) {
-    NOTIFY_STATUS("CGLTexImageIOSurface2D()", status, SFT_PLATFORM_ERROR);
-    return false;
-  }
-
-  bool allow_overlay = false;
   scoped_refptr<gl::GLImageIOSurface> gl_image(
       new gl::GLImageIOSurface(frame.coded_size, GL_BGRA_EXT));
-  if (gl_image->Initialize(surface, gfx::GenericSharedMemoryId(),
-                           gfx::BufferFormat::BGRA_8888)) {
-    allow_overlay = true;
-  } else {
-    gl_image = nullptr;
+  if (!gl_image->InitializeWithCVPixelBuffer(
+          frame.image.get(), gfx::GenericSharedMemoryId(),
+          gfx::BufferFormat::YUV_420_BIPLANAR)) {
+    NOTIFY_STATUS("Failed to initialize GLImageIOSurface", PLATFORM_FAILURE,
+        SFT_PLATFORM_ERROR);
   }
-  bind_image_.Run(picture_info->client_texture_id, GL_TEXTURE_RECTANGLE_ARB,
-                  gl_image);
+
+  if (!bind_image_cb_.Run(picture_info->client_texture_id,
+                          GL_TEXTURE_RECTANGLE_ARB, gl_image, false)) {
+    DLOG(ERROR) << "Failed to bind image";
+    NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
+    return false;
+  }
 
   // Assign the new image(s) to the the picture info.
   picture_info->gl_image = gl_image;
@@ -1091,7 +1067,7 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
   // coded size and fix it.
   client_->PictureReady(media::Picture(picture_id, frame.bitstream_id,
                                        gfx::Rect(frame.coded_size),
-                                       allow_overlay));
+                                       true));
   return true;
 }
 
@@ -1154,7 +1130,9 @@ void VTVideoDecodeAccelerator::Destroy() {
   QueueFlush(TASK_DESTROY);
 }
 
-bool VTVideoDecodeAccelerator::CanDecodeOnIOThread() {
+bool VTVideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
+    const base::WeakPtr<Client>& decode_client,
+    const scoped_refptr<base::SingleThreadTaskRunner>& decode_task_runner) {
   return false;
 }
 

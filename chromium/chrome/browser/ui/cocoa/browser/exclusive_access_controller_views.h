@@ -10,11 +10,13 @@
 
 #import <CoreGraphics/CoreGraphics.h>
 
+#include <memory>
+
 #import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views_context.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "ui/base/accelerators/accelerator.h"
 
 class Browser;
@@ -55,7 +57,7 @@ class ExclusiveAccessController : public ExclusiveAccessContext,
   bool IsFullscreen() const override;
   bool SupportsFullscreenWithToolbar() const override;
   void UpdateFullscreenWithToolbar(bool with_toolbar) override;
-  void ToggleFullscreenToolbar() override;
+  void UpdateFullscreenToolbar() override;
   bool IsFullscreenWithToolbar() const override;
   void EnterFullscreen(const GURL& url,
                        ExclusiveAccessBubbleType type,
@@ -95,8 +97,11 @@ class ExclusiveAccessController : public ExclusiveAccessContext,
   GURL url_;
   ExclusiveAccessBubbleType bubble_type_;
 
-  scoped_ptr<ExclusiveAccessBubbleViews> views_bubble_;
+  std::unique_ptr<ExclusiveAccessBubbleViews> views_bubble_;
   base::scoped_nsobject<ExclusiveAccessBubbleWindowController> cocoa_bubble_;
+
+  // Used to keep track of the kShowFullscreenToolbar preference.
+  PrefChangeRegistrar pref_registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(ExclusiveAccessController);
 };

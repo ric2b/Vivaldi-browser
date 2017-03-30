@@ -28,6 +28,7 @@
 #include "SkXfermodeImageFilter.h"
 
 #include "platform/graphics/filters/SkiaImageFilterBuilder.h"
+#include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/text/TextStream.h"
 
 namespace blink {
@@ -42,9 +43,9 @@ FEComposite::FEComposite(Filter* filter, const CompositeOperationType& type, flo
 {
 }
 
-PassRefPtrWillBeRawPtr<FEComposite> FEComposite::create(Filter* filter, const CompositeOperationType& type, float k1, float k2, float k3, float k4)
+FEComposite* FEComposite::create(Filter* filter, const CompositeOperationType& type, float k1, float k2, float k3, float k4)
 {
-    return adoptRefWillBeNoop(new FEComposite(filter, type, k1, k2, k3, k4));
+    return new FEComposite(filter, type, k1, k2, k3, k4);
 }
 
 CompositeOperationType FEComposite::operation() const
@@ -205,12 +206,12 @@ PassRefPtr<SkImageFilter> FEComposite::createImageFilterInternal(SkiaImageFilter
     RefPtr<SkImageFilter> foreground(builder.build(inputEffect(0), operatingColorSpace(), !mayProduceInvalidPreMultipliedPixels()));
     RefPtr<SkImageFilter> background(builder.build(inputEffect(1), operatingColorSpace(), !mayProduceInvalidPreMultipliedPixels()));
     SkImageFilter::CropRect cropRect = getCropRect();
-    RefPtr<SkXfermode> mode;
+    sk_sp<SkXfermode> mode;
     if (m_type == FECOMPOSITE_OPERATOR_ARITHMETIC)
-        mode = adoptRef(SkArithmeticMode::Create(SkFloatToScalar(m_k1), SkFloatToScalar(m_k2), SkFloatToScalar(m_k3), SkFloatToScalar(m_k4), requiresPMColorValidation));
+        mode = SkArithmeticMode::Make(SkFloatToScalar(m_k1), SkFloatToScalar(m_k2), SkFloatToScalar(m_k3), SkFloatToScalar(m_k4), requiresPMColorValidation);
     else
-        mode = adoptRef(SkXfermode::Create(toXfermode(m_type)));
-    return adoptRef(SkXfermodeImageFilter::Create(mode.get(), background.get(), foreground.get(), &cropRect));
+        mode = SkXfermode::Make(toXfermode(m_type));
+    return fromSkSp(SkXfermodeImageFilter::Make(std::move(mode), background.get(), foreground.get(), &cropRect));
 }
 
 static TextStream& operator<<(TextStream& ts, const CompositeOperationType& type)

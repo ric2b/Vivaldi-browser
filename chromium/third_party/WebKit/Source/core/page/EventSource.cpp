@@ -61,8 +61,10 @@ namespace blink {
 const unsigned long long EventSource::defaultReconnectDelay = 3000;
 
 inline EventSource::EventSource(ExecutionContext* context, const KURL& url, const EventSourceInit& eventSourceInit)
-    : ActiveDOMObject(context)
+    : ActiveScriptWrappable(this)
+    , ActiveDOMObject(context)
     , m_url(url)
+    , m_currentURL(url)
     , m_withCredentials(eventSourceInit.withCredentials())
     , m_state(CONNECTING)
     , m_connectTimer(this, &EventSource::connectTimerFired)
@@ -115,14 +117,15 @@ void EventSource::connect()
 {
     ASSERT(m_state == CONNECTING);
     ASSERT(!m_loader);
-    ASSERT(executionContext());
+    ASSERT(getExecutionContext());
 
-    ExecutionContext& executionContext = *this->executionContext();
-    ResourceRequest request(m_url);
+    ExecutionContext& executionContext = *this->getExecutionContext();
+    ResourceRequest request(m_currentURL);
     request.setHTTPMethod(HTTPNames::GET);
     request.setHTTPHeaderField(HTTPNames::Accept, "text/event-stream");
     request.setHTTPHeaderField(HTTPNames::Cache_Control, "no-cache");
     request.setRequestContext(WebURLRequest::RequestContextEventSource);
+    request.setExternalRequestStateFromRequestorAddressSpace(executionContext.securityContext().addressSpace());
     if (m_parser && !m_parser->lastEventId().isEmpty()) {
         // HTTP headers are Latin-1 byte strings, but the Last-Event-ID header is encoded as UTF-8.
         // TODO(davidben): This should be captured in the type of setHTTPHeaderField's arguments.
@@ -130,15 +133,15 @@ void EventSource::connect()
         request.setHTTPHeaderField(HTTPNames::Last_Event_ID, AtomicString(reinterpret_cast<const LChar*>(lastEventIdUtf8.data()), lastEventIdUtf8.length()));
     }
 
-    SecurityOrigin* origin = executionContext.securityOrigin();
+    SecurityOrigin* origin = executionContext.getSecurityOrigin();
 
     ThreadableLoaderOptions options;
     options.preflightPolicy = PreventPreflight;
     options.crossOriginRequestPolicy = UseAccessControl;
-    options.contentSecurityPolicyEnforcement = ContentSecurityPolicy::shouldBypassMainWorld(&executionContext) ? DoNotEnforceContentSecurityPolicy : EnforceConnectSrcDirective;
+    options.contentSecurityPolicyEnforcement = ContentSecurityPolicy::shouldBypassMainWorld(&executionContext) ? DoNotEnforceContentSecurityPolicy : EnforceContentSecurityPolicy;
 
     ResourceLoaderOptions resourceLoaderOptions;
-    resourceLoaderOptions.allowCredentials = (origin->canRequestNoSuborigin(m_url) || m_withCredentials) ? AllowStoredCredentials : DoNotAllowStoredCredentials;
+    resourceLoaderOptions.allowCredentials = (origin->canRequestNoSuborigin(m_currentURL) || m_withCredentials) ? AllowStoredCredentials : DoNotAllowStoredCredentials;
     resourceLoaderOptions.credentialsRequested = m_withCredentials ? ClientRequestedCredentials : ClientDidNotRequestCredentials;
     resourceLoaderOptions.dataBufferingPolicy = DoNotBufferData;
     resourceLoaderOptions.securityOrigin = origin;
@@ -151,7 +154,7 @@ void EventSource::connect()
 
 void EventSource::networkRequestEnded()
 {
-    InspectorInstrumentation::didFinishEventSourceRequest(executionContext(), this);
+    InspectorInstrumentation::didFinishEventSourceRequest(getExecutionContext(), this);
 
     m_loader = nullptr;
 
@@ -173,7 +176,7 @@ void EventSource::connectTimerFired(Timer<EventSource>*)
 
 String EventSource::url() const
 {
-    return m_url.string();
+    return m_url.getString();
 }
 
 bool EventSource::withCredentials() const
@@ -213,9 +216,9 @@ const AtomicString& EventSource::interfaceName() const
     return EventTargetNames::EventSource;
 }
 
-ExecutionContext* EventSource::executionContext() const
+ExecutionContext* EventSource::getExecutionContext() const
 {
-    return ActiveDOMObject::executionContext();
+    return ActiveDOMObject::getExecutionContext();
 }
 
 void EventSource::didReceiveResponse(unsigned long, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
@@ -224,6 +227,7 @@ void EventSource::didReceiveResponse(unsigned long, const ResourceResponse& resp
     ASSERT(m_state == CONNECTING);
     ASSERT(m_loader);
 
+    m_currentURL = response.url();
     m_eventStreamOrigin = SecurityOrigin::create(response.url())->toString();
     int statusCode = response.httpStatusCode();
     bool mimeTypeIsValid = response.mimeType() == "text/event-stream";
@@ -238,7 +242,7 @@ void EventSource::didReceiveResponse(unsigned long, const ResourceResponse& resp
             message.append(charset);
             message.appendLiteral("\") that is not UTF-8. Aborting the connection.");
             // FIXME: We are missing the source line.
-            executionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message.toString()));
+            getExecutionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message.toString()));
         }
     } else {
         // To keep the signal-to-noise ratio low, we only log 200-response with an invalid MIME type.
@@ -248,7 +252,7 @@ void EventSource::didReceiveResponse(unsigned long, const ResourceResponse& resp
             message.append(response.mimeType());
             message.appendLiteral("\") that is not \"text/event-stream\". Aborting the connection.");
             // FIXME: We are missing the source line.
-            executionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message.toString()));
+            getExecutionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message.toString()));
         }
     }
 
@@ -299,7 +303,7 @@ void EventSource::didFailAccessControlCheck(const ResourceError& error)
     ASSERT(m_loader);
 
     String message = "EventSource cannot load " + error.failingURL() + ". " + error.localizedDescription();
-    executionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message));
+    getExecutionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message));
 
     abortConnectionAttempt();
 }
@@ -313,10 +317,10 @@ void EventSource::didFailRedirectCheck()
 
 void EventSource::onMessageEvent(const AtomicString& eventType, const String& data, const AtomicString& lastEventId)
 {
-    RefPtrWillBeRawPtr<MessageEvent> e = MessageEvent::create();
+    MessageEvent* e = MessageEvent::create();
     e->initMessageEvent(eventType, false, false, SerializedScriptValueFactory::instance().create(data), m_eventStreamOrigin, lastEventId, 0, nullptr);
 
-    InspectorInstrumentation::willDispatchEventSourceEvent(executionContext(), this, eventType, lastEventId, data);
+    InspectorInstrumentation::willDispatchEventSourceEvent(getExecutionContext(), this, eventType, lastEventId, data);
     dispatchEvent(e);
 }
 

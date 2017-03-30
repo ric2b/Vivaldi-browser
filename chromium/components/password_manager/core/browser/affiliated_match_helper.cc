@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/single_thread_task_runner.h"
@@ -36,7 +37,7 @@ const int64_t AffiliatedMatchHelper::kInitializationDelayOnStartupInSeconds;
 
 AffiliatedMatchHelper::AffiliatedMatchHelper(
     PasswordStore* password_store,
-    scoped_ptr<AffiliationService> affiliation_service)
+    std::unique_ptr<AffiliationService> affiliation_service)
     : password_store_(password_store),
       task_runner_for_waiting_(base::ThreadTaskRunnerHandle::Get()),
       affiliation_service_(std::move(affiliation_service)),
@@ -85,6 +86,45 @@ void AffiliatedMatchHelper::GetAffiliatedWebRealms(
   }
 }
 
+void AffiliatedMatchHelper::InjectAffiliatedWebRealms(
+    ScopedVector<autofill::PasswordForm> forms,
+    const PasswordFormsCallback& result_callback) {
+  std::vector<autofill::PasswordForm*> android_credentials;
+  for (auto* form : forms) {
+    if (IsValidAndroidCredential(*form))
+      android_credentials.push_back(form);
+  }
+  base::Closure on_get_all_realms(
+      base::Bind(result_callback, base::Passed(&forms)));
+  base::Closure barrier_closure =
+      base::BarrierClosure(android_credentials.size(), on_get_all_realms);
+  for (auto* form : android_credentials) {
+    affiliation_service_->GetAffiliations(
+        FacetURI::FromPotentiallyInvalidSpec(form->signon_realm),
+        AffiliationService::StrategyOnCacheMiss::FAIL,
+        base::Bind(&AffiliatedMatchHelper::CompleteInjectAffiliatedWebRealm,
+                   weak_ptr_factory_.GetWeakPtr(), base::Unretained(form),
+                   barrier_closure));
+  }
+}
+
+void AffiliatedMatchHelper::CompleteInjectAffiliatedWebRealm(
+    autofill::PasswordForm* form,
+    base::Closure barrier_closure,
+    const AffiliatedFacets& results,
+    bool success) {
+  // If there is a number of realms, choose the first in the list.
+  if (success) {
+    for (const FacetURI& affiliated_facet : results) {
+      if (affiliated_facet.IsValidWebFacetURI()) {
+        form->affiliated_web_realm = affiliated_facet.canonical_spec() + "/";
+        break;
+      }
+    }
+  }
+  barrier_closure.Run();
+}
+
 void AffiliatedMatchHelper::TrimAffiliationCache() {
   affiliation_service_->TrimCache();
 }
@@ -114,6 +154,7 @@ void AffiliatedMatchHelper::DoDeferredInitialization() {
   // taken to avoid inconsistencies due to any changes taking place in-between.
   password_store_->AddObserver(this);
   password_store_->GetAutofillableLogins(this);
+  password_store_->GetBlacklistLogins(this);
 }
 
 void AffiliatedMatchHelper::CompleteGetAffiliatedAndroidRealms(

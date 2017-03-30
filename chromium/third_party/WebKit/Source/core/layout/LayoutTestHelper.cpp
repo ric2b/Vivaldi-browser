@@ -6,34 +6,19 @@
 
 #include "core/frame/FrameHost.h"
 #include "core/html/HTMLIFrameElement.h"
-#include "platform/graphics/test/FakeGraphicsLayerFactory.h"
 #include "platform/scroll/ScrollbarTheme.h"
 
 namespace blink {
 
-namespace {
-
-class FakeChromeClient : public EmptyChromeClient {
-public:
-    static PassOwnPtrWillBeRawPtr<FakeChromeClient> create() { return adoptPtrWillBeNoop(new FakeChromeClient); }
-
-    GraphicsLayerFactory* graphicsLayerFactory() const override
-    {
-        return FakeGraphicsLayerFactory::instance();
-    }
-};
-
-} // namespace
-
-RenderingTest::RenderingTest(PassOwnPtrWillBeRawPtr<FrameLoaderClient> frameLoaderClient)
+RenderingTest::RenderingTest(FrameLoaderClient* frameLoaderClient)
     : m_frameLoaderClient(frameLoaderClient) { }
 
 void RenderingTest::SetUp()
 {
     Page::PageClients pageClients;
     fillWithEmptyClients(pageClients);
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<FakeChromeClient>, chromeClient, (FakeChromeClient::create()));
-    pageClients.chromeClient = chromeClient.get();
+    DEFINE_STATIC_LOCAL(EmptyChromeClient, chromeClient, (EmptyChromeClient::create()));
+    pageClients.chromeClient = &chromeClient;
     m_pageHolder = DummyPageHolder::create(IntSize(800, 600), &pageClients, m_frameLoaderClient.release(), settingOverrider());
 
     Settings::setMockScrollbarsEnabled(true);
@@ -61,7 +46,8 @@ void RenderingTest::TearDown()
 
 Document& RenderingTest::setupChildIframe(const AtomicString& iframeElementId, const String& htmlContentOfIframe)
 {
-
+    // TODO(pdr): This should be refactored to share code with the actual setup
+    // instead of partially duplicating it here (e.g., LocalFrame::createView).
     HTMLIFrameElement& iframe = *toHTMLIFrameElement(document().getElementById(iframeElementId));
     m_childFrameLoaderClient = FrameLoaderClientWithParent::create(document().frame());
     m_subframe = LocalFrame::create(m_childFrameLoaderClient.get(), document().frame()->host(), &iframe);
@@ -69,6 +55,7 @@ Document& RenderingTest::setupChildIframe(const AtomicString& iframeElementId, c
     m_subframe->init();
     m_subframe->view()->setParentVisible(true);
     m_subframe->view()->setSelfVisible(true);
+    iframe.setWidget(m_subframe->view());
     static_cast<SingleChildFrameLoaderClient*>(document().frame()->client())->setChild(m_subframe.get());
     document().frame()->host()->incrementSubframeCount();
     Document& frameDocument = *iframe.contentDocument();

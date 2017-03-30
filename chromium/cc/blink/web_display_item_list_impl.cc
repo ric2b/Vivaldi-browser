@@ -50,12 +50,12 @@ WebDisplayItemListImpl::WebDisplayItemListImpl(
 
 void WebDisplayItemListImpl::appendDrawingItem(
     const blink::WebRect& visual_rect,
-    const SkPicture* picture) {
+    sk_sp<const SkPicture> picture) {
   if (display_item_list_->RetainsIndividualDisplayItems()) {
     display_item_list_->CreateAndAppendItem<cc::DrawingDisplayItem>(
-        visual_rect, skia::SharePtr(picture));
+        visual_rect, std::move(picture));
   } else {
-    cc::DrawingDisplayItem item(skia::SharePtr(picture));
+    cc::DrawingDisplayItem item(std::move(picture));
     display_item_list_->RasterIntoCanvas(item);
   }
 }
@@ -173,12 +173,11 @@ void WebDisplayItemListImpl::appendCompositingItem(
   if (display_item_list_->RetainsIndividualDisplayItems()) {
     display_item_list_->CreateAndAppendItem<cc::CompositingDisplayItem>(
         visual_rect, static_cast<uint8_t>(gfx::ToFlooredInt(255 * opacity)),
-        xfermode, bounds, skia::SharePtr(color_filter),
-        kLcdTextRequiresOpaqueLayer);
+        xfermode, bounds, sk_ref_sp(color_filter), kLcdTextRequiresOpaqueLayer);
   } else {
     cc::CompositingDisplayItem item(
         static_cast<uint8_t>(gfx::ToFlooredInt(255 * opacity)), xfermode,
-        bounds, skia::SharePtr(color_filter), kLcdTextRequiresOpaqueLayer);
+        bounds, sk_ref_sp(color_filter), kLcdTextRequiresOpaqueLayer);
     display_item_list_->RasterIntoCanvas(item);
   }
 }

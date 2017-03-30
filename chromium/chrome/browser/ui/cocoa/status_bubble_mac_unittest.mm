@@ -2,15 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#import "chrome/browser/ui/cocoa/status_bubble_mac.h"
+
 #include <Cocoa/Cocoa.h>
 
+#include <memory>
+
 #include "base/mac/scoped_nsobject.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #import "chrome/browser/ui/cocoa/bubble_view.h"
 #import "chrome/browser/ui/cocoa/cocoa_test_helper.h"
-#import "chrome/browser/ui/cocoa/status_bubble_mac.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -193,20 +195,20 @@ TEST_F(StatusBubbleMacTest, SetStatus) {
 }
 
 TEST_F(StatusBubbleMacTest, SetURL) {
-  bubble_->SetURL(GURL(), std::string());
+  bubble_->SetURL(GURL());
   EXPECT_FALSE(IsVisible());
-  bubble_->SetURL(GURL("bad url"), std::string());
+  bubble_->SetURL(GURL("bad url"));
   EXPECT_FALSE(IsVisible());
-  bubble_->SetURL(GURL("http://"), std::string());
+  bubble_->SetURL(GURL("http://"));
   EXPECT_TRUE(IsVisible());
   EXPECT_NSEQ(@"http:", GetURLText());
-  bubble_->SetURL(GURL("about:blank"), std::string());
+  bubble_->SetURL(GURL("about:blank"));
   EXPECT_TRUE(IsVisible());
   EXPECT_NSEQ(@"about:blank", GetURLText());
-  bubble_->SetURL(GURL("foopy://"), std::string());
+  bubble_->SetURL(GURL("foopy://"));
   EXPECT_TRUE(IsVisible());
   EXPECT_NSEQ(@"foopy://", GetURLText());
-  bubble_->SetURL(GURL("http://www.cnn.com"), std::string());
+  bubble_->SetURL(GURL("http://www.cnn.com"));
   EXPECT_TRUE(IsVisible());
   EXPECT_NSEQ(@"www.cnn.com", GetURLText());
 }
@@ -227,15 +229,15 @@ TEST_F(StatusBubbleMacTest, SetStatusAndURL) {
   bubble_->SetStatus(UTF8ToUTF16("Status"));
   EXPECT_TRUE(IsVisible());
   EXPECT_NSEQ(@"Status", GetBubbleViewText());
-  bubble_->SetURL(GURL("http://www.nytimes.com"), std::string());
+  bubble_->SetURL(GURL("http://www.nytimes.com"));
   EXPECT_TRUE(IsVisible());
   EXPECT_NSEQ(@"www.nytimes.com", GetBubbleViewText());
-  bubble_->SetURL(GURL(), std::string());
+  bubble_->SetURL(GURL());
   EXPECT_TRUE(IsVisible());
   EXPECT_NSEQ(@"Status", GetBubbleViewText());
   bubble_->SetStatus(base::string16());
   EXPECT_FALSE(IsVisible());
-  bubble_->SetURL(GURL("http://www.nytimes.com"), std::string());
+  bubble_->SetURL(GURL("http://www.nytimes.com"));
   EXPECT_TRUE(IsVisible());
   EXPECT_NSEQ(@"www.nytimes.com", GetBubbleViewText());
   bubble_->SetStatus(UTF8ToUTF16("Status"));
@@ -244,7 +246,7 @@ TEST_F(StatusBubbleMacTest, SetStatusAndURL) {
   bubble_->SetStatus(base::string16());
   EXPECT_TRUE(IsVisible());
   EXPECT_NSEQ(@"www.nytimes.com", GetBubbleViewText());
-  bubble_->SetURL(GURL(), std::string());
+  bubble_->SetURL(GURL());
   EXPECT_FALSE(IsVisible());
 }
 
@@ -591,8 +593,7 @@ TEST_F(StatusBubbleMacTest, ExpandBubble) {
   // Check basic expansion
   bubble_->SetStatus(UTF8ToUTF16("Showing"));
   EXPECT_TRUE(IsVisible());
-  bubble_->SetURL(GURL("http://www.battersbox.com/peter_paul_and_mary.html"),
-                  std::string());
+  bubble_->SetURL(GURL("http://www.battersbox.com/peter_paul_and_mary.html"));
   EXPECT_TRUE([GetURLText() hasSuffix:@"\u2026"]);
   bubble_->ExpandBubble();
   EXPECT_TRUE(IsVisible());
@@ -601,15 +602,13 @@ TEST_F(StatusBubbleMacTest, ExpandBubble) {
 
   // Make sure bubble resets after hide.
   bubble_->SetStatus(UTF8ToUTF16("Showing"));
-  bubble_->SetURL(GURL("http://www.snickersnee.com/pioneer_fishstix.html"),
-                  std::string());
+  bubble_->SetURL(GURL("http://www.snickersnee.com/pioneer_fishstix.html"));
   EXPECT_TRUE([GetURLText() hasSuffix:@"\u2026"]);
   // ...and that it expands again properly.
   bubble_->ExpandBubble();
   EXPECT_NSEQ(@"www.snickersnee.com/pioneer_fishstix.html", GetURLText());
   // ...again, again!
-  bubble_->SetURL(GURL("http://www.battersbox.com/peter_paul_and_mary.html"),
-                  std::string());
+  bubble_->SetURL(GURL("http://www.battersbox.com/peter_paul_and_mary.html"));
   bubble_->ExpandBubble();
   EXPECT_NSEQ(@"www.battersbox.com/peter_paul_and_mary.html", GetURLText());
   bubble_->Hide();
@@ -622,7 +621,7 @@ TEST_F(StatusBubbleMacTest, ExpandBubble) {
   bubble_->SetStatus(UTF8ToUTF16("Showing"));
   const char veryLongUrl[] =
       "http://www.diewahrscheinlichlaengstepralinederwelt.com/duuuuplo.html";
-  bubble_->SetURL(GURL(veryLongUrl), std::string());
+  bubble_->SetURL(GURL(veryLongUrl));
   EXPECT_TRUE([GetURLText() hasSuffix:@"\u2026"]);
   bubble_->ExpandBubble();
   EXPECT_TRUE([GetURLText() hasSuffix:@"\u2026"]);

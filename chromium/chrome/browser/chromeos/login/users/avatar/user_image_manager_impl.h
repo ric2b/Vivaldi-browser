@@ -6,13 +6,13 @@
 #define CHROME_BROWSER_CHROMEOS_LOGIN_USERS_AVATAR_USER_IMAGE_MANAGER_IMPL_H_
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -51,7 +51,8 @@ class UserImageManagerImpl
   void UserLoggedIn(bool user_is_new, bool user_is_local) override;
   void UserProfileCreated() override;
   void SaveUserDefaultImageIndex(int default_image_index) override;
-  void SaveUserImage(const user_manager::UserImage& user_image) override;
+  void SaveUserImage(
+      std::unique_ptr<user_manager::UserImage> user_image) override;
   void SaveUserImageFromFile(const base::FilePath& path) override;
   void SaveUserImageFromProfileImage() override;
   void DeleteUserImage() override;
@@ -63,9 +64,17 @@ class UserImageManagerImpl
   void OnExternalDataSet(const std::string& policy) override;
   void OnExternalDataCleared(const std::string& policy) override;
   void OnExternalDataFetched(const std::string& policy,
-                             scoped_ptr<std::string> data) override;
+                             std::unique_ptr<std::string> data) override;
 
   static void IgnoreProfileDataDownloadDelayForTesting();
+
+  // Key for a dictionary that maps user IDs to user image data with images
+  // stored in JPEG format.
+  static const char kUserImageProperties[];
+  // Names of user image properties.
+  static const char kImagePathNodeName[];
+  static const char kImageIndexNodeName[];
+  static const char kImageURLNodeName[];
 
  private:
   friend class UserImageManagerTest;
@@ -130,14 +139,8 @@ class UserImageManagerImpl
   // send a NOTIFICATION_LOGIN_USER_IMAGE_CHANGED notification.
   void OnJobChangedUserImage();
 
-  // Called when a Job for the user finishes. If a migration was
-  // required for the user, the migration is now complete and the old
-  // image file for that user, if any, is deleted.
+  // Called when a Job for the user finishes.
   void OnJobDone();
-
-  // Completes migration by removing the user from the old prefs
-  // dictionary.
-  void UpdateLocalStateAfterMigration();
 
   // Create a sync observer if a user is logged in, the user's user image is
   // allowed to be synced and no sync observer exists yet.
@@ -171,7 +174,7 @@ class UserImageManagerImpl
 
   // Downloader for the user's profile data. NULL when no download is
   // currently in progress.
-  scoped_ptr<ProfileDownloader> profile_downloader_;
+  std::unique_ptr<ProfileDownloader> profile_downloader_;
 
   // The currently logged-in user's downloaded profile image, if successfully
   // downloaded or initialized from a previously downloaded and saved image.
@@ -199,17 +202,16 @@ class UserImageManagerImpl
   base::RepeatingTimer profile_download_periodic_timer_;
 
   // Sync observer for the currently logged-in user.
-  scoped_ptr<UserImageSyncObserver> user_image_sync_observer_;
+  std::unique_ptr<UserImageSyncObserver> user_image_sync_observer_;
 
   // Background task runner on which Jobs perform file I/O and the image
   // decoders run.
   scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
 
   // The currently running job.
-  scoped_ptr<Job> job_;
+  std::unique_ptr<Job> job_;
 
   bool has_managed_image_;
-  bool user_needs_migration_;
 
   base::WeakPtrFactory<UserImageManagerImpl> weak_factory_;
 

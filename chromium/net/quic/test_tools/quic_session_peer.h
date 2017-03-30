@@ -9,7 +9,6 @@
 
 #include <map>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_session.h"
@@ -40,7 +39,6 @@ class QuicSessionPeer {
   static std::map<QuicStreamId, QuicStreamOffset>&
   GetLocallyClosedStreamsHighestOffset(QuicSession* session);
   static QuicSession::StreamMap& static_streams(QuicSession* session);
-  static QuicSession::StreamMap& dynamic_streams(QuicSession* session);
   static std::unordered_set<QuicStreamId>* GetDrainingStreams(
       QuicSession* session);
 

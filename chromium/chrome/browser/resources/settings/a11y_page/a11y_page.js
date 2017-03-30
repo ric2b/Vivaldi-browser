@@ -13,9 +13,6 @@
  *      <settings-a11y-page prefs="{{prefs}}"></settings-a11y-page>
  *      ... other pages ...
  *    </iron-animated-pages>
- *
- * @group Chrome Settings Elements
- * @element settings-a11y-page
  */
 Polymer({
   is: 'settings-a11y-page',
@@ -28,6 +25,19 @@ Polymer({
       type: Object,
       notify: true,
     },
+
+<if expr="chromeos">
+    /**
+     * Whether to show experimental accessibility features.
+     * @private {boolean}
+     */
+    showExperimentalFeatures_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('showExperimentalA11yFeatures');
+      },
+    }
+</if>
   },
 
   /** @private */

@@ -7,8 +7,9 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
@@ -16,6 +17,7 @@
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_message.h"
+#include "ipc/mojo/scoped_ipc_support.h"
 #include "tools/ipc_fuzzer/message_lib/message_file.h"
 
 namespace ipc_fuzzer {
@@ -46,11 +48,12 @@ class ReplayProcess : public IPC::Listener {
  private:
   void SendNextMessage();
 
-  scoped_ptr<IPC::ChannelProxy> channel_;
+  std::unique_ptr<IPC::ScopedIPCSupport> mojo_ipc_support_;
+  std::unique_ptr<IPC::ChannelProxy> channel_;
   base::MessageLoop main_loop_;
   base::Thread io_thread_;
   base::WaitableEvent shutdown_event_;
-  scoped_ptr<base::Timer> timer_;
+  std::unique_ptr<base::Timer> timer_;
   MessageVector messages_;
   size_t message_index_;
 

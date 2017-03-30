@@ -73,6 +73,7 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.PageTransition;
 
 import java.io.File;
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
 import java.util.LinkedList;
 import java.util.List;
@@ -395,7 +396,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
                     getInstrumentation(),
                     incognito ? IncognitoDocumentActivity.class : DocumentActivity.class,
                     activityTrigger);
-            CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+            CriteriaHelper.pollUiThread(new Criteria() {
                 @Override
                 public boolean isSatisfied() {
                     return activity.getActivityTab() != null;
@@ -475,7 +476,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
 
         startActivityCompletely(intent);
 
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria("Tab never selected/initialized.") {
+        CriteriaHelper.pollUiThread(new Criteria("Tab never selected/initialized.") {
             @Override
             public boolean isSatisfied() {
                 return getActivity().getActivityTab() != null;
@@ -489,7 +490,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
             NewTabPageTestUtils.waitForNtpLoaded(tab);
         }
 
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria("Deferred startup never completed") {
+        CriteriaHelper.pollUiThread(new Criteria("Deferred startup never completed") {
             @Override
             public boolean isSatisfied() {
                 return DeferredStartupHandler.getInstance().isDeferredStartupComplete();
@@ -517,7 +518,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
 
         try {
             Method method = getClass().getMethod(getName(), (Class[]) null);
-            if (method.isAnnotationPresent(RenderProcessLimit.class)) {
+            if (((AnnotatedElement) method).isAnnotationPresent(RenderProcessLimit.class)) {
                 RenderProcessLimit limit = method.getAnnotation(RenderProcessLimit.class);
                 intent.putExtra(ChromeTabbedActivity.INTENT_EXTRA_TEST_RENDER_PROCESS_LIMIT,
                         limit.value());
@@ -547,7 +548,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
                         }
                     });
 
-            CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+            CriteriaHelper.pollUiThread(new Criteria() {
                 @Override
                 public boolean isSatisfied() {
                     return activity.getActivityTab() != null;
@@ -705,7 +706,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
                 }
 
                 // Wait for suggestions to show up.
-                CriteriaHelper.pollForCriteria(new Criteria() {
+                CriteriaHelper.pollInstrumentationThread(new Criteria() {
                     @Override
                     public boolean isSatisfied() {
                         return ((LocationBarLayout) getActivity().findViewById(
@@ -721,7 +722,7 @@ public abstract class ChromeActivityTestCaseBase<T extends ChromeActivity>
                         && !suggestion.getDisplayText().equals(displayText)) {
                     // If there is only one suggestion and it's the same as inputText,
                     // wait for other suggestions before looking for the one we want.
-                    CriteriaHelper.pollForCriteria(new Criteria() {
+                    CriteriaHelper.pollInstrumentationThread(new Criteria() {
                         @Override
                         public boolean isSatisfied() {
                             return suggestionListView.getCount() > 1;

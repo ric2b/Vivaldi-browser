@@ -9,6 +9,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "media/base/media_export.h"
@@ -39,6 +40,12 @@ class MEDIA_EXPORT VideoFrameMetadata {
     // WebView because of limitations about sharing surface textures between GL
     // contexts.
     COPY_REQUIRED,
+
+    // Indicates that the frame is owned by the decoder and that destroying the
+    // decoder will make the frame unrenderable. TODO(sandersd): Remove once OSX
+    // and Windows hardware decoders support frames which outlive the decoder.
+    // http://crbug.com/595716 and http://crbug.com/602708.
+    DECODER_OWNS_FRAME,
 
     // Indicates if the current frame is the End of its current Stream. Use
     // Get/SetBoolean() for this Key.
@@ -135,6 +142,9 @@ class MEDIA_EXPORT VideoFrameMetadata {
   // For serialization.
   void MergeInternalValuesInto(base::DictionaryValue* out) const;
   void MergeInternalValuesFrom(const base::DictionaryValue& in);
+
+  // Merges internal values from |metadata_source|.
+  void MergeMetadataFrom(const VideoFrameMetadata* metadata_source);
 
  private:
   const base::BinaryValue* GetBinaryValue(Key key) const;

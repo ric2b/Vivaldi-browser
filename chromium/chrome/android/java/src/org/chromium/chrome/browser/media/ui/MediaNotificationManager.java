@@ -24,6 +24,7 @@ import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.support.v7.media.MediaRouter;
+import android.text.TextUtils;
 import android.util.SparseArray;
 import android.view.KeyEvent;
 import android.view.View;
@@ -352,16 +353,18 @@ public class MediaNotificationManager {
     }
 
     @VisibleForTesting
-    protected static boolean hasManagerForTesting(int notificationId) {
+    static boolean hasManagerForTesting(int notificationId) {
         return getManager(notificationId) != null;
     }
 
     @VisibleForTesting
     @Nullable
-    protected static MediaNotificationInfo getNotificationInfoForTesting(int notificationId) {
+    static NotificationCompat.Builder getNotificationBuilderForTesting(
+            int notificationId) {
         MediaNotificationManager manager = getManager(notificationId);
         if (manager == null) return null;
-        return manager.mMediaNotificationInfo;
+
+        return manager.mNotificationBuilder;
     }
 
     private final Context mContext;
@@ -384,25 +387,20 @@ public class MediaNotificationManager {
 
     private MediaSessionCompat mMediaSession;
 
-    private static final class MediaSessionCallback extends MediaSessionCompat.Callback {
-        private final MediaNotificationManager mManager;
+    private final MediaSessionCompat.Callback mMediaSessionCallback =
+            new MediaSessionCompat.Callback() {
+                @Override
+                public void onPlay() {
+                    MediaNotificationManager.this.onPlay(
+                            MediaNotificationListener.ACTION_SOURCE_MEDIA_SESSION);
+                }
 
-        private MediaSessionCallback(MediaNotificationManager manager) {
-            mManager = manager;
-        }
-
-        @Override
-        public void onPlay() {
-            mManager.onPlay(MediaNotificationListener.ACTION_SOURCE_MEDIA_SESSION);
-        }
-
-        @Override
-        public void onPause() {
-            mManager.onPause(MediaNotificationListener.ACTION_SOURCE_MEDIA_SESSION);
-        }
-    }
-
-    private final MediaSessionCallback mMediaSessionCallback = new MediaSessionCallback(this);
+                @Override
+                public void onPause() {
+                    MediaNotificationManager.this.onPause(
+                            MediaNotificationListener.ACTION_SOURCE_MEDIA_SESSION);
+                }
+            };
 
     private MediaNotificationManager(Context context, int notificationId) {
         mContext = context;
@@ -470,6 +468,7 @@ public class MediaNotificationManager {
         manager.cancel(mMediaNotificationInfo.id);
 
         if (mMediaSession != null) {
+            mMediaSession.setCallback(null);
             mMediaSession.setActive(false);
             mMediaSession.release();
             mMediaSession = null;
@@ -502,7 +501,7 @@ public class MediaNotificationManager {
             playPauseButtonId = R.id.button2;
         }
 
-        contentView.setTextViewText(R.id.title, mMediaNotificationInfo.title);
+        contentView.setTextViewText(R.id.title, mMediaNotificationInfo.metadata.getTitle());
         contentView.setTextViewText(R.id.status, mMediaNotificationInfo.origin);
         if (mNotificationIcon != null) {
             contentView.setImageViewBitmap(R.id.icon, mNotificationIcon);
@@ -541,7 +540,7 @@ public class MediaNotificationManager {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE,
-                    mMediaNotificationInfo.title);
+                    mMediaNotificationInfo.metadata.getTitle());
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE,
                     mMediaNotificationInfo.origin);
             metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON,
@@ -554,10 +553,19 @@ public class MediaNotificationManager {
             }
         } else {
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_TITLE,
-                    mMediaNotificationInfo.title);
+                    mMediaNotificationInfo.metadata.getTitle());
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST,
                     mMediaNotificationInfo.origin);
             metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, mediaSessionImage);
+        }
+
+        if (!TextUtils.isEmpty(mMediaNotificationInfo.metadata.getArtist())) {
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST,
+                    mMediaNotificationInfo.metadata.getArtist());
+        }
+        if (!TextUtils.isEmpty(mMediaNotificationInfo.metadata.getAlbum())) {
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM,
+                    mMediaNotificationInfo.metadata.getAlbum());
         }
 
         return metadataBuilder.build();

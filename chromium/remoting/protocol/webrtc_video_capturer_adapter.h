@@ -8,15 +8,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
+#include "remoting/protocol/video_stream.h"
 #include "third_party/webrtc/media/base/videocapturer.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -43,13 +45,12 @@ namespace protocol {
 class WebrtcVideoCapturerAdapter : public cricket::VideoCapturer,
                                    public webrtc::DesktopCapturer::Callback {
  public:
-  typedef base::Callback<void(const webrtc::DesktopSize& size)> SizeCallback;
-
   explicit WebrtcVideoCapturerAdapter(
-      scoped_ptr<webrtc::DesktopCapturer> capturer);
+      std::unique_ptr<webrtc::DesktopCapturer> capturer);
   ~WebrtcVideoCapturerAdapter() override;
 
-  void SetSizeCallback(const SizeCallback& size_callback);
+  void SetSizeCallback(const VideoStream::SizeCallback& size_callback);
+  bool PauseCapturer(bool pause);
   base::WeakPtr<WebrtcVideoCapturerAdapter> GetWeakPtr();
 
   // cricket::VideoCapturer implementation.
@@ -57,7 +58,6 @@ class WebrtcVideoCapturerAdapter : public cricket::VideoCapturer,
                             cricket::VideoFormat* best_format) override;
   cricket::CaptureState Start(
       const cricket::VideoFormat& capture_format) override;
-  bool Pause(bool pause) override;
   void Stop() override;
   bool IsRunning() override;
   bool IsScreencast() const override;
@@ -74,18 +74,22 @@ class WebrtcVideoCapturerAdapter : public cricket::VideoCapturer,
 
   base::ThreadChecker thread_checker_;
 
-  scoped_ptr<webrtc::DesktopCapturer> desktop_capturer_;
+  std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer_;
 
-  SizeCallback size_callback_;
+  VideoStream::SizeCallback size_callback_;
 
   // Timer to call CaptureNextFrame().
-  scoped_ptr<base::RepeatingTimer> capture_timer_;
+  std::unique_ptr<base::RepeatingTimer> capture_timer_;
+
+  webrtc::DesktopSize frame_size_;
+  webrtc::DesktopVector frame_dpi_;
 
   // Video frame is kept between captures to avoid YUV conversion for static
   // parts of the screen.
-  scoped_ptr<cricket::VideoFrame> yuv_frame_;
+  rtc::scoped_refptr<webrtc::I420Buffer> yuv_frame_;
 
   bool capture_pending_ = false;
+  bool paused_ = false;
 
   base::WeakPtrFactory<WebrtcVideoCapturerAdapter> weak_factory_;
 
@@ -96,4 +100,3 @@ class WebrtcVideoCapturerAdapter : public cricket::VideoCapturer,
 }  // namespace remoting
 
 #endif  // REMOTING_PROTOCOL_WEBRTC_VIDEO_CAPTURER_ADAPTER_H_
-

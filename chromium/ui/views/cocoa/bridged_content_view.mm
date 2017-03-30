@@ -9,6 +9,7 @@
 #import "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "skia/ext/skia_utils_mac.h"
+#include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/compositor/canvas_painter.h"
@@ -50,10 +51,11 @@ gfx::Point MovePointToWindow(const NSPoint& point,
                              NSWindow* source_window,
                              NSWindow* target_window) {
   NSPoint point_in_screen = source_window
-      ? [source_window convertBaseToScreen:point]
+      ? ui::ConvertPointFromWindowToScreen(source_window, point)
       : point;
 
-  NSPoint point_in_window = [target_window convertScreenToBase:point_in_screen];
+  NSPoint point_in_window =
+      ui::ConvertPointFromScreenToWindow(target_window, point_in_screen);
   NSRect content_rect =
       [target_window contentRectForFrameRect:[target_window frame]];
   return gfx::Point(point_in_window.x,
@@ -407,6 +409,20 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
   return YES;
 }
 
+- (BOOL)becomeFirstResponder {
+  BOOL result = [super becomeFirstResponder];
+  if (result && hostedView_)
+    hostedView_->GetWidget()->GetFocusManager()->RestoreFocusedView();
+  return result;
+}
+
+- (BOOL)resignFirstResponder {
+  BOOL result = [super resignFirstResponder];
+  if (result && hostedView_)
+    hostedView_->GetWidget()->GetFocusManager()->StoreFocusedView(true);
+  return result;
+}
+
 - (void)viewDidMoveToWindow {
   // When this view is added to a window, AppKit calls setFrameSize before it is
   // added to the window, so the behavior in setFrameSize is not triggered.
@@ -492,6 +508,13 @@ gfx::Rect GetFirstRectForRangeHelper(const ui::TextInputClient* client,
   gfx::CanvasSkiaPaint canvas(dirtyRect, false /* opaque */);
   hostedView_->GetWidget()->OnNativeWidgetPaint(
       ui::CanvasPainter(&canvas, 1.f).context());
+}
+
+// To maximize consistency with the Cocoa browser (mac_views_browser=0), accept
+// mouse clicks immediately so that clicking on Chrome from an inactive window
+// will allow the event to be processed, rather than merely activate the window.
+- (BOOL)acceptsFirstMouse:(NSEvent*)theEvent {
+  return YES;
 }
 
 - (NSTextInputContext*)inputContext {

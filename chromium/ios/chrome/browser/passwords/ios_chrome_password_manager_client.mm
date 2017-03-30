@@ -4,9 +4,9 @@
 
 #import "ios/chrome/browser/passwords/ios_chrome_password_manager_client.h"
 
+#include <memory>
 #include <utility>
 
-#include "base/memory/scoped_ptr.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/keyed_service/core/service_access_type.h"
@@ -63,13 +63,13 @@ bool IOSChromePasswordManagerClient::PromptUserToChooseCredentials(
     ScopedVector<autofill::PasswordForm> local_forms,
     ScopedVector<autofill::PasswordForm> federated_forms,
     const GURL& origin,
-    base::Callback<void(const password_manager::CredentialInfo&)> callback) {
+    const CredentialsCallback& callback) {
   NOTIMPLEMENTED();
   return false;
 }
 
 bool IOSChromePasswordManagerClient::PromptUserToSaveOrUpdatePassword(
-    scoped_ptr<PasswordFormManager> form_to_save,
+    std::unique_ptr<PasswordFormManager> form_to_save,
     password_manager::CredentialSourceType type,
     bool update_password) {
   if (form_to_save->IsBlacklisted())
@@ -79,7 +79,7 @@ bool IOSChromePasswordManagerClient::PromptUserToSaveOrUpdatePassword(
 }
 
 void IOSChromePasswordManagerClient::AutomaticPasswordSave(
-    scoped_ptr<PasswordFormManager> saved_form_manager) {
+    std::unique_ptr<PasswordFormManager> saved_form_manager) {
   NOTIMPLEMENTED();
 }
 
@@ -98,13 +98,16 @@ PasswordStore* IOSChromePasswordManagerClient::GetPasswordStore() const {
 }
 
 void IOSChromePasswordManagerClient::NotifyUserAutoSignin(
-    ScopedVector<autofill::PasswordForm> local_forms) {}
+    ScopedVector<autofill::PasswordForm> local_forms,
+    const GURL& origin) {}
 
 void IOSChromePasswordManagerClient::NotifyUserCouldBeAutoSignedIn(
-    scoped_ptr<autofill::PasswordForm> form) {}
+    std::unique_ptr<autofill::PasswordForm> form) {}
 
 void IOSChromePasswordManagerClient::NotifySuccessfulLoginWithExistingPassword(
     const autofill::PasswordForm& form) {}
+
+void IOSChromePasswordManagerClient::NotifyStorePasswordCalled() {}
 
 void IOSChromePasswordManagerClient::ForceSavePassword() {
   NOTIMPLEMENTED();

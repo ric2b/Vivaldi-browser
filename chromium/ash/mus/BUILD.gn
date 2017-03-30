@@ -10,6 +10,8 @@ import("//tools/grit/repack.gni")
 
 source_set("lib") {
   sources = [
+    "context_menu_mus.cc",
+    "context_menu_mus.h",
     "keyboard_ui_mus.cc",
     "keyboard_ui_mus.h",
     "shelf_delegate_mus.cc",
@@ -26,7 +28,7 @@ source_set("lib") {
     "//ash",
     "//cc",
     "//cc/surfaces",
-    "//components/mus/common",
+    "//components/mus/common:mus_common",
     "//components/mus/public/cpp",
     "//components/mus/public/interfaces",
     "//components/user_manager",
@@ -76,11 +78,11 @@ mojo_native_application("mus") {
   ]
   deps = [
     ":lib",
-    ":manifest",
     "//mojo/shell/public/cpp",
   ]
 
   data_deps = [
+    ":manifest",
     "//components/mus",
   ]
 }

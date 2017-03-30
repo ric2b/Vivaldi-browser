@@ -35,6 +35,7 @@
 #include "core/animation/AnimationTimeline.h"
 #include "core/animation/CompositorAnimationsImpl.h"
 #include "core/animation/CompositorAnimationsTestHelper.h"
+#include "core/animation/CompositorPendingAnimations.h"
 #include "core/animation/ElementAnimations.h"
 #include "core/animation/KeyframeEffect.h"
 #include "core/animation/animatable/AnimatableDouble.h"
@@ -79,8 +80,8 @@ protected:
     OwnPtr<AnimatableValueKeyframeVector> m_keyframeVector5;
     Persistent<AnimatableValueKeyframeEffectModel> m_keyframeAnimationEffect5;
 
-    RefPtrWillBePersistent<Document> m_document;
-    RefPtrWillBePersistent<Element> m_element;
+    Persistent<Document> m_document;
+    Persistent<Element> m_element;
     Persistent<AnimationTimeline> m_timeline;
     OwnPtr<DummyPageHolder> m_pageHolder;
     CompositorFactoryMock* m_mockCompositorFactory;
@@ -109,18 +110,16 @@ protected:
         m_keyframeVector5 = createCompositableFloatKeyframeVector(5);
         m_keyframeAnimationEffect5 = AnimatableValueKeyframeEffectModel::create(*m_keyframeVector5);
 
-        if (RuntimeEnabledFeatures::compositorAnimationTimelinesEnabled()) {
-            EXPECT_CALL(*m_mockCompositorFactory, createAnimationTimeline())
-                .WillOnce(Return(new WebCompositorAnimationTimelineMock()));
-        }
+        EXPECT_CALL(*m_mockCompositorFactory, createAnimationTimeline())
+            .WillOnce(Return(new WebCompositorAnimationTimelineMock()));
+
         m_pageHolder = DummyPageHolder::create();
         m_document = &m_pageHolder->document();
         m_document->animationClock().resetTimeForTesting();
 
-        if (RuntimeEnabledFeatures::compositorAnimationTimelinesEnabled()) {
-            EXPECT_CALL(*m_mockCompositorFactory, createAnimationTimeline())
-                .WillOnce(Return(new WebCompositorAnimationTimelineMock()));
-        }
+        EXPECT_CALL(*m_mockCompositorFactory, createAnimationTimeline())
+            .WillOnce(Return(new WebCompositorAnimationTimelineMock()));
+
         m_timeline = AnimationTimeline::create(m_document.get());
         m_timeline->resetForTesting();
         m_element = m_document->createElement("test", ASSERT_NO_EXCEPTION);
@@ -1184,7 +1183,7 @@ TEST_F(AnimationCompositorAnimationsTest, createSimpleOpacityAnimationWithTiming
 
 TEST_F(AnimationCompositorAnimationsTest, CancelIncompatibleCompositorAnimations)
 {
-    RefPtrWillBePersistent<Element> element = m_document->createElement("shared", ASSERT_NO_EXCEPTION);
+    Persistent<Element> element = m_document->createElement("shared", ASSERT_NO_EXCEPTION);
 
     LayoutObjectProxy* layoutObject = LayoutObjectProxy::create(element.get());
     element->setLayoutObject(layoutObject);

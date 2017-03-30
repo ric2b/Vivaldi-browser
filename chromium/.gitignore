@@ -63,6 +63,7 @@ vs-chromium-project.txt
 /build/android/bin
 /build/Debug
 /build/Debug_x64
+/build/goma
 /build/gomacc.lock
 /build/ipch/
 /build/Release
@@ -73,6 +74,7 @@ vs-chromium-project.txt
 /build/x64/
 /build/linux/bin/eu-strip
 /build/linux/debian_*-sysroot/
+/build/mac_files
 /buildtools
 # The Chrome OS build creates a /c symlink due to http://crbug.com/54866.
 /c
@@ -183,7 +185,7 @@ vs-chromium-project.txt
 /gyp-mac-tool
 /infra/.recipe_deps
 /internal_gyp
-/ios/build/util/CANARY_VERSION
+/ios/third_party/earl_grey/src
 /ios/third_party/fishhook/src
 /ios/third_party/gcdwebserver/src
 /ios/third_party/ochamcrest/src
@@ -247,6 +249,7 @@ vs-chromium-project.txt
 /remoting/android/internal/
 /remoting/appengine/
 /remoting/host/installer/linux/internal/
+/remoting/ios/
 /remoting/internal/
 /remoting/proto/chromotocol_proto_lib.xml
 /remoting/remoting_core_resources.xml
@@ -351,15 +354,14 @@ vs-chromium-project.txt
 /third_party/libc++-static/libc++.a
 /third_party/libaddressinput/src
 /third_party/libexif/sources
+/third_party/libFuzzer/src
 /third_party/libjingle/source
 /third_party/libjpeg_turbo
 /third_party/liblouis/src
-/third_party/libphonenumber/libphonenumber.xml
-/third_party/libphonenumber/libphonenumber_without_metadata.xml
-/third_party/libphonenumber/src
+/third_party/libphonenumber/dist
 /third_party/libsrtp
 /third_party/libupnp
-/third_party/libvpx_new/source/libvpx
+/third_party/libvpx/source/libvpx
 /third_party/libwebm/source
 /third_party/libyuv
 /third_party/lighttpd

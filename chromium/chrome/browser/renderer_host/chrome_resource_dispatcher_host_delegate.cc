@@ -12,6 +12,8 @@
 #include "base/base64.h"
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/metrics/field_trial.h"
+#include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -21,7 +23,6 @@
 #include "chrome/browser/mod_pagespeed/mod_pagespeed_metrics.h"
 #include "chrome/browser/net/resource_prefetch_predictor_observer.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
-#include "chrome/browser/prefetch/prefetch.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/prerender/prerender_resource_throttle.h"
@@ -33,13 +34,14 @@
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/tab_contents/tab_util.h"
-#include "chrome/browser/ui/login/login_prompt.h"
+#include "chrome/browser/ui/login/login_handler.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/features.h"
 #include "chrome/common/url_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/policy/core/common/cloud/policy_header_io_helper.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -63,10 +65,6 @@
 
 #if !defined(DISABLE_NACL)
 #include "chrome/browser/component_updater/pnacl_component_installer.h"
-#endif
-
-#if defined(ENABLE_CONFIGURATION_POLICY)
-#include "components/policy/core/common/cloud/policy_header_io_helper.h"
 #endif
 
 #if defined(ENABLE_EXTENSIONS)
@@ -99,10 +97,6 @@
 #if defined(OS_ANDROID)
 #include "chrome/browser/renderer_host/data_reduction_proxy_resource_throttle_android.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
-#endif
-
-#if defined(ENABLE_DATA_REDUCTION_PROXY_DEBUGGING)
-#include "components/data_reduction_proxy/content/browser/data_reduction_proxy_debug_resource_throttle.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -305,8 +299,12 @@ bool ChromeResourceDispatcherHostDelegate::ShouldBeginRequest(
       return false;
 
     // If prefetch is disabled, kill the request.
-    if (!prefetch::IsPrefetchEnabled(resource_context))
+    std::string prefetch_experiment =
+        base::FieldTrialList::FindFullName("Prefetch");
+    if (base::StartsWith(prefetch_experiment, "ExperimentDisable",
+                         base::CompareCase::INSENSITIVE_ASCII)) {
       return false;
+    }
   }
 
   return true;
@@ -370,10 +368,8 @@ void ChromeResourceDispatcherHostDelegate::RequestBeginning(
     request->SetExtraRequestHeaders(headers);
   }
 
-#if defined(ENABLE_CONFIGURATION_POLICY)
   if (io_data->policy_header_helper())
     io_data->policy_header_helper()->AddPolicyHeaders(request->url(), request);
-#endif
 
   signin::AppendMirrorRequestHeaderHelper(request, GURL() /* redirect_url */,
                                           io_data, info->GetChildID(),
@@ -434,7 +430,7 @@ void ChromeResourceDispatcherHostDelegate::DownloadStarting(
 #if BUILDFLAG(ANDROID_JAVA_UI)
     throttles->push_back(
         new chrome::InterceptDownloadResourceThrottle(
-            request, child_id, route_id, request_id));
+            request, child_id, route_id, request_id, must_download));
 #endif
   }
 
@@ -509,15 +505,6 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
 
   if (first_throttle)
     throttles->push_back(first_throttle);
-
-#if defined(ENABLE_DATA_REDUCTION_PROXY_DEBUGGING)
-  scoped_ptr<content::ResourceThrottle> data_reduction_proxy_throttle =
-      data_reduction_proxy::DataReductionProxyDebugResourceThrottle::
-          MaybeCreate(
-              request, resource_type, io_data->data_reduction_proxy_io_data());
-  if (data_reduction_proxy_throttle)
-    throttles->push_back(std::move(data_reduction_proxy_throttle));
-#endif
 
 #if defined(ENABLE_SUPERVISED_USERS)
   bool is_subresource_request =
@@ -712,10 +699,8 @@ void ChromeResourceDispatcherHostDelegate::OnRequestRedirected(
         redirect_url, request);
   }
 
-#if defined(ENABLE_CONFIGURATION_POLICY)
   if (io_data->policy_header_helper())
     io_data->policy_header_helper()->AddPolicyHeaders(redirect_url, request);
-#endif
 }
 
 // Notification that a request has completed.

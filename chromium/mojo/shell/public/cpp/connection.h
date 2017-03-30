@@ -12,7 +12,9 @@
 
 #include "base/memory/weak_ptr.h"
 #include "mojo/shell/public/cpp/connect.h"
+#include "mojo/shell/public/cpp/identity.h"
 #include "mojo/shell/public/cpp/interface_registry.h"
+#include "mojo/shell/public/interfaces/connector.mojom.h"
 #include "mojo/shell/public/interfaces/interface_provider.mojom.h"
 
 namespace mojo {
@@ -38,6 +40,19 @@ class InterfaceBinder;
 class Connection {
  public:
   virtual ~Connection() {}
+
+  enum class State {
+    // The shell has not yet processed the connection.
+    PENDING,
+
+    // The shell processed the connection and it was established. GetResult()
+    // returns mojom::shell::ConnectionResult::SUCCESS.
+    CONNECTED,
+
+    // The shell processed the connection and establishment was prevented by
+    // an error, call GetResult().
+    DISCONNECTED
+  };
 
   class TestApi {
    public:
@@ -67,41 +82,50 @@ class Connection {
     mojo::GetInterface(GetRemoteInterfaces(), ptr);
   }
 
-  // Returns the URL that was used by the source application to establish a
+  // Returns true if the remote application has the specified capability class
+  // specified in its manifest. Only valid for inbound connections. Will return
+  // false for outbound connections.
+  virtual bool HasCapabilityClass(const std::string& class_name) const = 0;
+
+  // Returns the name that was used by the source application to establish a
   // connection to the destination application.
   //
-  // When Connection is representing an incoming connection this can be
-  // different than the URL the application was initially loaded from, if the
-  // application handles multiple URLs. Note that this is the URL after all
-  // URL rewriting and HTTP redirects have been performed.
-  //
   // When Connection is representing and outgoing connection, this will be the
-  // same as the value returned by GetRemoveApplicationURL().
-  virtual const std::string& GetConnectionURL() = 0;
+  // same as the value returned by GetRemoveApplicationName().
+  virtual const std::string& GetConnectionName() = 0;
 
-  // Returns the URL identifying the remote application on this connection.
-  virtual const std::string& GetRemoteApplicationURL() = 0;
-
-  // Returns the User ID for the remote application.
-  virtual uint32_t GetRemoteUserID() const = 0;
+  // Returns the remote identity. While the connection is in the pending state,
+  // the user_id() field will be the value passed via Connect(). After the
+  // connection is completed, it will change to the value assigned by the shell.
+  // Call AddConnectionCompletedClosure() to schedule a closure to be run when
+  // the resolved user id is available.
+  virtual const Identity& GetRemoteIdentity() const = 0;
 
   // Register a handler to receive an error notification on the pipe to the
   // remote application's InterfaceProvider.
-  virtual void SetRemoteInterfaceProviderConnectionErrorHandler(
-      const Closure& handler) = 0;
+  virtual void SetConnectionLostClosure(const Closure& handler) = 0;
 
-  // Returns the id of the remote application. For Connections created via
-  // Shell::Connect(), this will not be determined until Connect()'s callback is
-  // run, and this function will return false. Use AddRemoteIDCallback() to
-  // schedule a callback to be run when the remote application id is available.
-  // A value of Shell::kInvalidApplicationID indicates the connection has not
-  // been established.
-  virtual bool GetRemoteApplicationID(uint32_t* remote_id) const = 0;
+  // Returns the result of the connection. This function should only be called
+  // when the connection state is not pending. Call
+  // AddConnectionCompletedClosure() to schedule a closure to be run when the
+  // connection is processed by the shell.
+  virtual shell::mojom::ConnectResult GetResult() const = 0;
 
-  // See description in GetRemoteApplicationID()/
-  // GetRemoteShellClientFactoryID(). If the ids are available, |callback| is
-  // run immediately.
-  virtual void AddRemoteIDCallback(const Closure& callback) = 0;
+  // Returns true if the connection has not yet been processed by the shell.
+  virtual bool IsPending() const = 0;
+
+  // Returns the instance id of the remote application if it is known at the
+  // time this function is called. When IsPending() returns true, this function
+  // will return shell::mojom::kInvalidInstanceID. Use
+  // AddConnectionCompletedClosure() to schedule a closure to be run when the
+  // connection is processed by the shell and remote id is available.
+  virtual uint32_t GetRemoteInstanceID() const = 0;
+
+  // Register a closure to be run when the connection has been completed by the
+  // shell and remote metadata is available. Useful only for connections created
+  // via Connector::Connect(). Once the connection is complete, metadata is
+  // available immediately.
+  virtual void AddConnectionCompletedClosure(const Closure& callback) = 0;
 
   // Returns true if the Shell allows |interface_name| to be exposed to the
   // remote application.

@@ -156,14 +156,15 @@ BadClockBlockingPage* CreateBadClockBlockingPage(
   }
 
   // Determine whether to change the clock to be ahead or behind.
-  base::Time time_triggered_ = base::Time::NowFromSystemTime();
   std::string clock_manipulation_param;
+  ssl_errors::ClockState clock_state = ssl_errors::CLOCK_STATE_PAST;
   if (net::GetValueForKeyInQuery(web_contents->GetURL(), "clock_manipulation",
                                  &clock_manipulation_param)) {
     int time_offset;
-    if (!base::StringToInt(clock_manipulation_param, &time_offset))
-      time_offset = 2;
-    time_triggered_ += base::TimeDelta::FromDays(365 * time_offset);
+    if (base::StringToInt(clock_manipulation_param, &time_offset)) {
+      clock_state = time_offset > 0 ? ssl_errors::CLOCK_STATE_FUTURE
+                                    : ssl_errors::CLOCK_STATE_PAST;
+    }
   }
 
   net::SSLInfo ssl_info;
@@ -176,8 +177,8 @@ BadClockBlockingPage* CreateBadClockBlockingPage(
   if (strict_enforcement)
     options_mask |= security_interstitials::SSLErrorUI::STRICT_ENFORCEMENT;
   return new BadClockBlockingPage(web_contents, cert_error, ssl_info,
-                                  request_url, time_triggered_, nullptr,
-                                  base::Callback<void(bool)>());
+                                  request_url, base::Time::Now(), clock_state,
+                                  nullptr, base::Callback<void(bool)>());
 }
 
 safe_browsing::SafeBrowsingBlockingPage* CreateSafeBrowsingBlockingPage(
@@ -217,7 +218,7 @@ safe_browsing::SafeBrowsingBlockingPage* CreateSafeBrowsingBlockingPage(
   resource.threat_type = threat_type;
   resource.render_process_host_id =
       web_contents->GetRenderProcessHost()->GetID();
-  resource.render_frame_id = web_contents->GetFocusedFrame()->GetRoutingID();
+  resource.render_frame_id = web_contents->GetMainFrame()->GetRoutingID();
   resource.threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;
 
   // Normally safebrowsing interstitial types which block the main page load
@@ -279,7 +280,7 @@ CaptivePortalBlockingPage* CreateCaptivePortalBlockingPage(
 
 InterstitialUI::InterstitialUI(content::WebUI* web_ui)
     : WebUIController(web_ui) {
-  scoped_ptr<InterstitialHTMLSource> html_source(
+  std::unique_ptr<InterstitialHTMLSource> html_source(
       new InterstitialHTMLSource(web_ui->GetWebContents()));
   Profile* profile = Profile::FromWebUI(web_ui);
   content::URLDataSource::Add(profile, html_source.release());
@@ -317,7 +318,7 @@ void InterstitialHTMLSource::StartDataRequest(
     int render_process_id,
     int render_frame_id,
     const content::URLDataSource::GotDataCallback& callback) {
-  scoped_ptr<content::InterstitialPageDelegate> interstitial_delegate;
+  std::unique_ptr<content::InterstitialPageDelegate> interstitial_delegate;
   if (base::StartsWith(path, "ssl", base::CompareCase::SENSITIVE)) {
     interstitial_delegate.reset(CreateSSLBlockingPage(web_contents_));
   } else if (base::StartsWith(path, "safebrowsing",

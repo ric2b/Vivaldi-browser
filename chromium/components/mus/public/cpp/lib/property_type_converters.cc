@@ -7,14 +7,23 @@
 #include <stdint.h>
 
 #include "base/strings/utf_string_conversions.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+
+namespace {
+
+// Maximum allowed height or width of a bitmap, in pixels. This limit prevents
+// malformed bitmap headers from causing arbitrarily large memory allocations
+// for pixel data.
+const int kMaxBitmapSize = 4096;
+
+}  // namespace
 
 namespace mojo {
 
 // static
-const std::vector<uint8_t>
-TypeConverter<const std::vector<uint8_t>, gfx::Rect>::Convert(
+std::vector<uint8_t> TypeConverter<std::vector<uint8_t>, gfx::Rect>::Convert(
     const gfx::Rect& input) {
   std::vector<uint8_t> vec(16);
   vec[0] = (input.x() >> 24) & 0xFF;
@@ -37,7 +46,7 @@ TypeConverter<const std::vector<uint8_t>, gfx::Rect>::Convert(
 }
 
 // static
-gfx::Rect TypeConverter<gfx::Rect, const std::vector<uint8_t>>::Convert(
+gfx::Rect TypeConverter<gfx::Rect, std::vector<uint8_t>>::Convert(
     const std::vector<uint8_t>& input) {
   return gfx::Rect(
       input[0] << 24 | input[1] << 16 | input[2] << 8 | input[3],
@@ -47,8 +56,7 @@ gfx::Rect TypeConverter<gfx::Rect, const std::vector<uint8_t>>::Convert(
 }
 
 // static
-const std::vector<uint8_t>
-TypeConverter<const std::vector<uint8_t>, gfx::Size>::Convert(
+std::vector<uint8_t> TypeConverter<std::vector<uint8_t>, gfx::Size>::Convert(
     const gfx::Size& input) {
   std::vector<uint8_t> vec(8);
   vec[0] = (input.width() >> 24) & 0xFF;
@@ -63,17 +71,16 @@ TypeConverter<const std::vector<uint8_t>, gfx::Size>::Convert(
 }
 
 // static
-gfx::Size TypeConverter<gfx::Size, const std::vector<uint8_t>>::Convert(
+gfx::Size TypeConverter<gfx::Size, std::vector<uint8_t>>::Convert(
     const std::vector<uint8_t>& input) {
   return gfx::Size(input[0] << 24 | input[1] << 16 | input[2] << 8 | input[3],
                    input[4] << 24 | input[5] << 16 | input[6] << 8 | input[7]);
 }
 
 // static
-const std::vector<uint8_t>
-    TypeConverter<const std::vector<uint8_t>, int32_t>::Convert(
-        const int32_t& input) {
-  std::vector<uint8_t> vec(8);
+std::vector<uint8_t> TypeConverter<std::vector<uint8_t>, int32_t>::Convert(
+    const int32_t& input) {
+  std::vector<uint8_t> vec(4);
   vec[0] = (input >> 24) & 0xFF;
   vec[1] = (input >> 16) & 0xFF;
   vec[2] = (input >> 8) & 0xFF;
@@ -82,41 +89,104 @@ const std::vector<uint8_t>
 }
 
 // static
-int32_t TypeConverter<int32_t, const std::vector<uint8_t>>::Convert(
+int32_t TypeConverter<int32_t, std::vector<uint8_t>>::Convert(
     const std::vector<uint8_t>& input) {
   return input[0] << 24 | input[1] << 16 | input[2] << 8 | input[3];
 }
 
 // static
-const std::vector<uint8_t>
-TypeConverter<const std::vector<uint8_t>, base::string16>::Convert(
+std::vector<uint8_t>
+TypeConverter<std::vector<uint8_t>, base::string16>::Convert(
     const base::string16& input) {
-  return TypeConverter<const std::vector<uint8_t>, std::string>::Convert(
-      base::UTF16ToUTF8(input));
+  return ConvertTo<std::vector<uint8_t>>(base::UTF16ToUTF8(input));
 }
 
 // static
-base::string16
-TypeConverter<base::string16, const std::vector<uint8_t>>::Convert(
+base::string16 TypeConverter<base::string16, std::vector<uint8_t>>::Convert(
     const std::vector<uint8_t>& input) {
-  return base::UTF8ToUTF16(
-      TypeConverter<std::string, const std::vector<uint8_t>>::Convert(
-          input));
+  return base::UTF8ToUTF16(ConvertTo<std::string>(input));
 }
 
 // static
-const std::vector<uint8_t>
-TypeConverter<const std::vector<uint8_t>, std::string>::Convert(
+std::vector<uint8_t> TypeConverter<std::vector<uint8_t>, std::string>::Convert(
     const std::string& input) {
   return std::vector<uint8_t>(input.begin(), input.end());
 }
 
 // static
-std::string
-TypeConverter<std::string, const std::vector<uint8_t>>::Convert(
+std::string TypeConverter<std::string, std::vector<uint8_t>>::Convert(
     const std::vector<uint8_t>& input) {
   return std::string(input.begin(), input.end());
 }
 
-}  // namespace mojo
+// static
+std::vector<uint8_t> TypeConverter<std::vector<uint8_t>, SkBitmap>::Convert(
+    const SkBitmap& input) {
+  // Empty images are valid to serialize and are represented by an empty vector.
+  if (input.isNull())
+    return std::vector<uint8_t>();
 
+  // Only RGBA 8888 bitmaps with premultiplied alpha are supported.
+  if (input.colorType() != kBGRA_8888_SkColorType ||
+      input.alphaType() != kPremul_SkAlphaType) {
+    NOTREACHED();
+    return std::vector<uint8_t>();
+  }
+
+  // Sanity check the bitmap size.
+  int width = input.width();
+  int height = input.height();
+  if (width < 0 || width > kMaxBitmapSize || height < 0 ||
+      height > kMaxBitmapSize) {
+    NOTREACHED();
+    return std::vector<uint8_t>();
+  }
+
+  // Serialize the bitmap. The size is restricted so only 2 bytes are required
+  // per dimension.
+  std::vector<uint8_t> vec(4 + input.getSize());
+  vec[0] = (width >> 8) & 0xFF;
+  vec[1] = width & 0xFF;
+  vec[2] = (height >> 8) & 0xFF;
+  vec[3] = height & 0xFF;
+  if (!input.copyPixelsTo(&vec[4], input.getSize()))
+    return std::vector<uint8_t>();
+  return vec;
+}
+
+// static
+SkBitmap TypeConverter<SkBitmap, std::vector<uint8_t>>::Convert(
+    const std::vector<uint8_t>& input) {
+  // Empty images are represented by empty vectors.
+  if (input.empty())
+    return SkBitmap();
+
+  // Read and sanity check size.
+  int width = input[0] << 8 | input[1];
+  int height = input[2] << 8 | input[3];
+  if (width < 0 || width > kMaxBitmapSize || height < 0 ||
+      height > kMaxBitmapSize) {
+    NOTREACHED();
+    return SkBitmap();
+  }
+
+  // Try to allocate a bitmap of the appropriate size.
+  SkBitmap bitmap;
+  if (!bitmap.tryAllocPixels(SkImageInfo::Make(
+          width, height, kBGRA_8888_SkColorType, kPremul_SkAlphaType))) {
+    return SkBitmap();
+  }
+
+  // Ensure the vector contains the right amount of data.
+  if (input.size() != bitmap.getSize() + 4) {
+    NOTREACHED();
+    return SkBitmap();
+  }
+
+  // Read the pixel data.
+  SkAutoLockPixels lock(bitmap);
+  memcpy(bitmap.getPixels(), &input[4], bitmap.getSize());
+  return bitmap;
+}
+
+}  // namespace mojo

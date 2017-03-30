@@ -37,7 +37,7 @@ void SVGFilterRecordingContext::endContent(FilterData* filterData)
 {
     ASSERT(filterData->m_state == FilterData::RecordingContent);
 
-    SourceGraphic* sourceGraphic = filterData->filter->sourceGraphic();
+    SourceGraphic* sourceGraphic = filterData->filter->getSourceGraphic();
     ASSERT(sourceGraphic);
 
     GraphicsContext* context = &paintingContext();
@@ -62,7 +62,7 @@ void SVGFilterRecordingContext::endContent(FilterData* filterData)
 static void paintFilteredContent(const LayoutObject& object, GraphicsContext& context, FilterData* filterData)
 {
     ASSERT(filterData->m_state == FilterData::ReadyToPaint);
-    ASSERT(filterData->filter->sourceGraphic());
+    ASSERT(filterData->filter->getSourceGraphic());
 
     filterData->m_state = FilterData::PaintingFilter;
 
@@ -118,7 +118,7 @@ GraphicsContext* SVGFilterPainter::prepareEffect(const LayoutObject& object, SVG
         return nullptr;
     }
 
-    OwnPtrWillBeRawPtr<FilterData> filterData = FilterData::create();
+    FilterData* filterData = FilterData::create();
     FloatRect referenceBox = object.objectBoundingBox();
 
     SVGFilterElement* filterElement = toSVGFilterElement(m_filter.element());
@@ -133,10 +133,10 @@ GraphicsContext* SVGFilterPainter::prepareEffect(const LayoutObject& object, SVG
     filterData->nodeMap = SVGFilterGraphNodeMap::create();
 
     IntRect sourceRegion = enclosingIntRect(intersection(filterRegion, object.strokeBoundingBox()));
-    filterData->filter->sourceGraphic()->setSourceRect(sourceRegion);
+    filterData->filter->getSourceGraphic()->setSourceRect(sourceRegion);
 
     // Create all relevant filter primitives.
-    SVGFilterBuilder builder(filterData->filter->sourceGraphic(), filterData->nodeMap.get());
+    SVGFilterBuilder builder(filterData->filter->getSourceGraphic(), filterData->nodeMap.get());
     builder.buildGraph(filterData->filter.get(), *filterElement, referenceBox);
 
     FilterEffect* lastEffect = builder.lastEffect();
@@ -146,10 +146,9 @@ GraphicsContext* SVGFilterPainter::prepareEffect(const LayoutObject& object, SVG
     lastEffect->determineFilterPrimitiveSubregion(ClipToFilterRegion);
     filterData->filter->setLastEffect(lastEffect);
 
-    FilterData* data = filterData.get();
     // TODO(pdr): Can this be moved out of painter?
-    m_filter.setFilterDataForLayoutObject(const_cast<LayoutObject*>(&object), filterData.release());
-    return recordingContext.beginContent(data);
+    m_filter.setFilterDataForLayoutObject(const_cast<LayoutObject*>(&object), filterData);
+    return recordingContext.beginContent(filterData);
 }
 
 void SVGFilterPainter::finishEffect(const LayoutObject& object, SVGFilterRecordingContext& recordingContext)
@@ -172,11 +171,11 @@ void SVGFilterPainter::finishEffect(const LayoutObject& object, SVGFilterRecordi
     }
 
     GraphicsContext& context = recordingContext.paintingContext();
-    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(context, object, DisplayItem::SVGFilter, LayoutPoint()))
+    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(context, object, DisplayItem::SVGFilter))
         return;
 
     // TODO(chrishtr): stop using an infinite rect, and instead bound the filter.
-    LayoutObjectDrawingRecorder recorder(context, object, DisplayItem::SVGFilter, LayoutRect::infiniteIntRect(), LayoutPoint());
+    LayoutObjectDrawingRecorder recorder(context, object, DisplayItem::SVGFilter, LayoutRect::infiniteIntRect());
     if (filterData && filterData->m_state == FilterData::ReadyToPaint)
         paintFilteredContent(object, context, filterData);
 }

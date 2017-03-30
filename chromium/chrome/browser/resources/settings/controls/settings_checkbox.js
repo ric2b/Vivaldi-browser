@@ -10,24 +10,13 @@
  *      <settings-checkbox pref="{{prefs.settings.enableFoo}}"
  *          label="Enable foo setting." subLabel="(bar also)">
  *      </settings-checkbox>
- *
- * @element settings-checkbox
  */
 Polymer({
   is: 'settings-checkbox',
 
-  behaviors: [CrPolicyPrefBehavior],
+  behaviors: [CrPolicyPrefBehavior, PrefControlBehavior],
 
   properties: {
-    /**
-     * The boolean preference object to control.
-     * @type {!chrome.settingsPrivate.PrefObject|undefined}
-     */
-    pref: {
-      type: Object,
-      notify: true,
-    },
-
     /** Whether the checkbox should represent the inverted value. */
     inverted: {
       type: Boolean,

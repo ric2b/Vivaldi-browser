@@ -29,17 +29,15 @@
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<IdTargetObserverRegistry> IdTargetObserverRegistry::create()
+RawPtr<IdTargetObserverRegistry> IdTargetObserverRegistry::create()
 {
-    return adoptPtrWillBeNoop(new IdTargetObserverRegistry());
+    return new IdTargetObserverRegistry();
 }
 
 DEFINE_TRACE(IdTargetObserverRegistry)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_registry);
     visitor->trace(m_notifyingObserversInSet);
-#endif
 }
 
 void IdTargetObserverRegistry::addObserver(const AtomicString& id, IdTargetObserver* observer)
@@ -49,7 +47,7 @@ void IdTargetObserverRegistry::addObserver(const AtomicString& id, IdTargetObser
 
     IdToObserverSetMap::AddResult result = m_registry.add(id.impl(), nullptr);
     if (result.isNewEntry)
-        result.storedValue->value = adoptPtrWillBeNoop(new ObserverSet());
+        result.storedValue->value = new ObserverSet();
 
     result.storedValue->value->add(observer);
 }
@@ -69,14 +67,14 @@ void IdTargetObserverRegistry::removeObserver(const AtomicString& id, IdTargetOb
 
 void IdTargetObserverRegistry::notifyObserversInternal(const AtomicString& id)
 {
-    ASSERT(!id.isEmpty());
-    ASSERT(!m_registry.isEmpty());
+    DCHECK(!id.isEmpty());
+    DCHECK(!m_registry.isEmpty());
 
     m_notifyingObserversInSet = m_registry.get(id.impl());
     if (!m_notifyingObserversInSet)
         return;
 
-    WillBeHeapVector<RawPtrWillBeMember<IdTargetObserver>> copy;
+    HeapVector<Member<IdTargetObserver>> copy;
     copyToVector(*m_notifyingObserversInSet, copy);
     for (const auto& observer : copy) {
         if (m_notifyingObserversInSet->contains(observer))

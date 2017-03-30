@@ -24,13 +24,13 @@ namespace {
 void OnEventDispatchComplete(PersistentNotificationStatus status) {}
 
 blink::WebNotificationPermission ToWebNotificationPermission(
-    PermissionStatus status) {
+    blink::mojom::PermissionStatus status) {
   switch (status) {
-    case PermissionStatus::GRANTED:
+    case blink::mojom::PermissionStatus::GRANTED:
       return blink::WebNotificationPermissionAllowed;
-    case PermissionStatus::DENIED:
+    case blink::mojom::PermissionStatus::DENIED:
       return blink::WebNotificationPermissionDenied;
-    case PermissionStatus::ASK:
+    case blink::mojom::PermissionStatus::ASK:
       return blink::WebNotificationPermissionDefault;
   }
 

@@ -16,6 +16,7 @@
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
+#include "third_party/WebKit/public/platform/WebRTCAnswerOptions.h"
 #include "third_party/WebKit/public/platform/WebRTCICECandidate.h"
 #include "third_party/WebKit/public/platform/WebRTCOfferOptions.h"
 #include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandlerClient.h"
@@ -64,6 +65,17 @@ static std::string SerializeOfferOptions(
          << ", voiceActivityDetection: "
          << SerializeBoolean(options.voiceActivityDetection())
          << ", iceRestart: " << SerializeBoolean(options.iceRestart());
+  return result.str();
+}
+
+static std::string SerializeAnswerOptions(
+    const blink::WebRTCAnswerOptions& options) {
+  if (options.isNull())
+    return "null";
+
+  std::ostringstream result;
+  result << ", voiceActivityDetection: "
+         << SerializeBoolean(options.voiceActivityDetection());
   return result.str();
 }
 
@@ -260,7 +272,7 @@ static base::DictionaryValue* GetDictValueStats(const StatsReport& report) {
 // Builds a DictionaryValue from the StatsReport.
 // The caller takes the ownership of the returned value.
 static base::DictionaryValue* GetDictValue(const StatsReport& report) {
-  scoped_ptr<base::DictionaryValue> stats, result;
+  std::unique_ptr<base::DictionaryValue> stats, result;
 
   stats.reset(GetDictValueStats(report));
   if (!stats)
@@ -283,7 +295,7 @@ class InternalStatsObserver : public webrtc::StatsObserver {
       : lid_(lid), main_thread_(base::ThreadTaskRunnerHandle::Get()) {}
 
   void OnComplete(const StatsReports& reports) override {
-    scoped_ptr<base::ListValue> list(new base::ListValue());
+    std::unique_ptr<base::ListValue> list(new base::ListValue());
 
     for (const auto* r : reports) {
       base::DictionaryValue* report = GetDictValue(*r);
@@ -309,7 +321,7 @@ class InternalStatsObserver : public webrtc::StatsObserver {
  private:
   // Static since |this| will most likely have been deleted by the time we
   // get here.
-  static void OnCompleteImpl(scoped_ptr<base::ListValue> list, int lid) {
+  static void OnCompleteImpl(std::unique_ptr<base::ListValue> list, int lid) {
     DCHECK(!list->empty());
     RenderThreadImpl::current()->Send(
         new PeerConnectionTrackerHost_AddStats(lid, *list.get()));
@@ -422,9 +434,8 @@ void PeerConnectionTracker::TrackCreateOffer(
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
-  SendPeerConnectionUpdate(
-      id, "createOffer",
-      "constraints: {" + SerializeOfferOptions(options) + "}");
+  SendPeerConnectionUpdate(id, "createOffer",
+                           "options: {" + SerializeOfferOptions(options) + "}");
 }
 
 void PeerConnectionTracker::TrackCreateOffer(
@@ -437,6 +448,17 @@ void PeerConnectionTracker::TrackCreateOffer(
   SendPeerConnectionUpdate(
       id, "createOffer",
       "constraints: {" + SerializeMediaConstraints(constraints) + "}");
+}
+
+void PeerConnectionTracker::TrackCreateAnswer(
+    RTCPeerConnectionHandler* pc_handler,
+    const blink::WebRTCAnswerOptions& options) {
+  DCHECK(main_thread_.CalledOnValidThread());
+  int id = GetLocalIDForHandler(pc_handler);
+  if (id == -1)
+    return;
+  SendPeerConnectionUpdate(
+      id, "createAnswer", "options: {" + SerializeAnswerOptions(options) + "}");
 }
 
 void PeerConnectionTracker::TrackCreateAnswer(
@@ -467,8 +489,7 @@ void PeerConnectionTracker::TrackSetSessionDescription(
 
 void PeerConnectionTracker::TrackUpdateIce(
     RTCPeerConnectionHandler* pc_handler,
-    const webrtc::PeerConnectionInterface::RTCConfiguration& config,
-    const blink::WebMediaConstraints& options) {
+    const webrtc::PeerConnectionInterface::RTCConfiguration& config) {
   DCHECK(main_thread_.CalledOnValidThread());
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
@@ -478,9 +499,8 @@ void PeerConnectionTracker::TrackUpdateIce(
   result << "servers: " << SerializeServers(config.servers)
          << "iceTransportType: " << SerializeIceTransportType(config.type)
          << "bundlePolicy: " << SerializeBundlePolicy(config.bundle_policy)
-         << "rtcpMuxPolicy: "
-         << SerializeRtcpMuxPolicy(config.rtcp_mux_policy)
-         << "constraints: {" << SerializeMediaConstraints(options) << "}";
+         << "rtcpMuxPolicy: " << SerializeRtcpMuxPolicy(config.rtcp_mux_policy)
+         << "}";
 
   SendPeerConnectionUpdate(
       id,
@@ -656,7 +676,7 @@ void PeerConnectionTracker::TrackGetUserMedia(
   DCHECK(main_thread_.CalledOnValidThread());
 
   SendTarget()->Send(new PeerConnectionTrackerHost_GetUserMedia(
-      user_media_request.securityOrigin().toString().utf8(),
+      user_media_request.getSecurityOrigin().toString().utf8(),
       user_media_request.audio(), user_media_request.video(),
       SerializeMediaConstraints(user_media_request.audioConstraints()),
       SerializeMediaConstraints(user_media_request.videoConstraints())));

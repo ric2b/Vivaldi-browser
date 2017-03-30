@@ -9,13 +9,14 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
-#include "chrome/browser/android/data_usage/external_data_use_observer.h"
+#include "chrome/browser/android/data_usage/external_data_use_observer_bridge.h"
 #include "third_party/re2/src/re2/re2.h"
 #include "url/gurl.h"
 
@@ -25,16 +26,14 @@ namespace android {
 
 DataUseMatcher::DataUseMatcher(
     const base::WeakPtr<DataUseTabModel>& data_use_tab_model,
-    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
-    const base::WeakPtr<ExternalDataUseObserver>& external_data_use_observer,
+    const ExternalDataUseObserverBridge* external_data_use_observer_bridge,
     const base::TimeDelta& default_matching_rule_expiration_duration)
     : data_use_tab_model_(data_use_tab_model),
       default_matching_rule_expiration_duration_(
           default_matching_rule_expiration_duration),
       tick_clock_(new base::DefaultTickClock()),
-      io_task_runner_(io_task_runner),
-      external_data_use_observer_(external_data_use_observer) {
-  DCHECK(io_task_runner_);
+      external_data_use_observer_bridge_(external_data_use_observer_bridge) {
+  DCHECK(external_data_use_observer_bridge_);
 }
 
 DataUseMatcher::~DataUseMatcher() {}
@@ -68,7 +67,7 @@ void DataUseMatcher::RegisterURLRegexes(
       invalid_rules++;
       continue;
     }
-    scoped_ptr<re2::RE2> pattern(new re2::RE2(url_regex, options));
+    std::unique_ptr<re2::RE2> pattern(new re2::RE2(url_regex, options));
     if (!pattern->ok()) {
       invalid_rules++;
       continue;
@@ -77,7 +76,7 @@ void DataUseMatcher::RegisterURLRegexes(
     if (expiration <= now_ticks)
       continue;  // skip expired matching rules.
     DCHECK(!labels.at(i).empty());
-    matching_rules_.push_back(make_scoped_ptr(new MatchingRule(
+    matching_rules_.push_back(base::WrapUnique(new MatchingRule(
         app_package_name, std::move(pattern), labels.at(i), expiration)));
 
     removed_matching_rule_labels.erase(labels.at(i));
@@ -92,14 +91,8 @@ void DataUseMatcher::RegisterURLRegexes(
   UMA_HISTOGRAM_COUNTS_100("DataUsage.MatchingRulesCount.Invalid",
                            invalid_rules);
 
-  DCHECK(io_task_runner_);
-
-  // Notify |external_data_use_observer_| if it should register as a data use
-  // observer.
-  io_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&ExternalDataUseObserver::ShouldRegisterAsDataUseObserver,
-                 external_data_use_observer_, !matching_rules_.empty()));
+  external_data_use_observer_bridge_->ShouldRegisterAsDataUseObserver(
+      !matching_rules_.empty());
 }
 
 bool DataUseMatcher::MatchesURL(const GURL& url, std::string* label) const {
@@ -149,12 +142,7 @@ bool DataUseMatcher::MatchesAppPackageName(const std::string& app_package_name,
 
 void DataUseMatcher::FetchMatchingRules() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(io_task_runner_);
-
-  // Notify |external_data_use_observer_| to fetch the rules.
-  io_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&ExternalDataUseObserver::FetchMatchingRules,
-                            external_data_use_observer_));
+  external_data_use_observer_bridge_->FetchMatchingRules();
 }
 
 bool DataUseMatcher::HasValidRules() const {
@@ -182,7 +170,7 @@ void DataUseMatcher::ParsePackageField(const std::string& app_package_name,
 }
 
 DataUseMatcher::MatchingRule::MatchingRule(const std::string& app_package_name,
-                                           scoped_ptr<re2::RE2> pattern,
+                                           std::unique_ptr<re2::RE2> pattern,
                                            const std::string& label,
                                            const base::TimeTicks& expiration)
     : app_package_name_(app_package_name),

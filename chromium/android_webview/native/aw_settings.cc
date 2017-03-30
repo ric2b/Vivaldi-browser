@@ -400,6 +400,9 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
   web_prefs->ignore_main_frame_overflow_hidden_quirk = support_quirks;
   web_prefs->report_screen_size_in_physical_pixels_quirk = support_quirks;
 
+  web_prefs->resue_global_for_unowned_main_frame =
+      Java_AwSettings_getAllowEmptyDocumentPersistenceLocked(env, obj);
+
   web_prefs->password_echo_enabled =
       Java_AwSettings_getPasswordEchoEnabledLocked(env, obj);
   web_prefs->spatial_navigation_enabled =
@@ -436,7 +439,8 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
 
   // TODO(jww): This should be removed once sufficient warning has been given of
   // possible API breakage because of disabling insecure use of geolocation.
-  web_prefs->allow_geolocation_on_insecure_origins = true;
+  web_prefs->allow_geolocation_on_insecure_origins =
+      Java_AwSettings_getAllowGeolocationOnInsecureOrigins(env, obj);
 }
 
 static jlong Init(JNIEnv* env,

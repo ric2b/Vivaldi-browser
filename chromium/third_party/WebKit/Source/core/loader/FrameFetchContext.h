@@ -51,9 +51,9 @@ class ResourceRequest;
 
 class CORE_EXPORT FrameFetchContext final : public FetchContext {
 public:
-    static ResourceFetcher* createContextAndFetcher(DocumentLoader* loader)
+    static ResourceFetcher* createContextAndFetcher(DocumentLoader* loader, Document* document)
     {
-        return ResourceFetcher::create(new FrameFetchContext(loader));
+        return ResourceFetcher::create(new FrameFetchContext(loader, document));
     }
 
     static void provideDocumentToContext(FetchContext& context, Document* document)
@@ -70,7 +70,7 @@ public:
     void addAdditionalRequestHeaders(ResourceRequest&, FetchResourceType) override;
     void setFirstPartyForCookies(ResourceRequest&) override;
     CachePolicy getCachePolicy() const override;
-    ResourceRequestCachePolicy resourceRequestCachePolicy(const ResourceRequest&, Resource::Type) const override;
+    WebCachePolicy resourceRequestCachePolicy(const ResourceRequest&, Resource::Type, FetchRequest::DeferOption) const override;
     void dispatchDidChangeResourcePriority(unsigned long identifier, ResourceLoadPriority, int intraPriorityValue) override;
     void dispatchWillSendRequest(unsigned long identifier, ResourceRequest&, const ResourceResponse& redirectResponse, const FetchInitiatorInfo& = FetchInitiatorInfo()) override;
     void dispatchDidLoadResourceFromMemoryCache(const Resource*, WebURLRequest::FrameType, WebURLRequest::RequestContext) override;
@@ -81,7 +81,7 @@ public:
     void dispatchDidFail(unsigned long identifier, const ResourceError&, bool isInternalRequest) override;
 
     bool shouldLoadNewResource(Resource::Type) const override;
-    void willStartLoadingResource(ResourceRequest&) override;
+    void willStartLoadingResource(Resource*, ResourceRequest&) override;
     void didLoadResource(Resource*) override;
 
     void addResourceTiming(const ResourceTimingInfo&) override;
@@ -99,7 +99,7 @@ public:
     bool updateTimingInfoForIFrameNavigation(ResourceTimingInfo*) override;
     void sendImagePing(const KURL&) override;
     void addConsoleMessage(const String&) const override;
-    SecurityOrigin* securityOrigin() const override;
+    SecurityOrigin* getSecurityOrigin() const override;
     void upgradeInsecureRequest(FetchRequest&) override;
     void addClientHintsIfNecessary(FetchRequest&) override;
     void addCSPHeaderIfNecessary(Resource::Type, FetchRequest&) override;
@@ -117,7 +117,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 private:
-    explicit FrameFetchContext(DocumentLoader*);
+    explicit FrameFetchContext(DocumentLoader*, Document*);
     inline DocumentLoader* ensureLoaderForNotifications() const;
 
     LocalFrame* frame() const; // Can be null
@@ -127,8 +127,8 @@ private:
     // FIXME: Oilpan: Ideally this should just be a traced Member but that will
     // currently leak because ComputedStyle and its data are not on the heap.
     // See crbug.com/383860 for details.
-    RawPtrWillBeWeakMember<Document> m_document;
-    RawPtrWillBeMember<DocumentLoader> m_documentLoader;
+    WeakMember<Document> m_document;
+    Member<DocumentLoader> m_documentLoader;
 
     bool m_imageFetched : 1;
 };

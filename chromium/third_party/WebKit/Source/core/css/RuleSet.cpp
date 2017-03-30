@@ -122,9 +122,9 @@ RuleData::RuleData(StyleRule* rule, unsigned selectorIndex, unsigned position, A
 
 void RuleSet::addToRuleSet(const AtomicString& key, PendingRuleMap& map, const RuleData& ruleData)
 {
-    OwnPtrWillBeMember<WillBeHeapLinkedStack<RuleData>>& rules = map.add(key, nullptr).storedValue->value;
+    Member<HeapLinkedStack<RuleData>>& rules = map.add(key, nullptr).storedValue->value;
     if (!rules)
-        rules = adoptPtrWillBeNoop(new WillBeHeapLinkedStack<RuleData>);
+        rules = new HeapLinkedStack<RuleData>;
     rules->push(ruleData);
 }
 
@@ -204,9 +204,6 @@ bool RuleSet::findBestRuleSetAndAdd(const CSSSelector& component, RuleData& rule
         return true;
     }
 
-    // TODO(esprehn): We shouldn't favor tagName over m_shadowHostRules, it means
-    // selectors with div:host end up in the tagName list matched against all tags
-    // even though they can't match anything at all.
     if (component.isHostPseudoClass()) {
         m_shadowHostRules.append(ruleData);
         return true;
@@ -251,7 +248,7 @@ void RuleSet::addKeyframesRule(StyleRuleKeyframes* rule)
     m_keyframesRules.append(rule);
 }
 
-void RuleSet::addChildRules(const WillBeHeapVector<RefPtrWillBeMember<StyleRuleBase>>& rules, const MediaQueryEvaluator& medium, AddRuleFlags addRuleFlags)
+void RuleSet::addChildRules(const HeapVector<Member<StyleRuleBase>>& rules, const MediaQueryEvaluator& medium, AddRuleFlags addRuleFlags)
 {
     for (unsigned i = 0; i < rules.size(); ++i) {
         StyleRuleBase* rule = rules[i].get();
@@ -295,7 +292,7 @@ void RuleSet::addRulesFromSheet(StyleSheetContents* sheet, const MediaQueryEvalu
 
     ASSERT(sheet);
 
-    const WillBeHeapVector<RefPtrWillBeMember<StyleRuleImport>>& importRules = sheet->importRules();
+    const HeapVector<Member<StyleRuleImport>>& importRules = sheet->importRules();
     for (unsigned i = 0; i < importRules.size(); ++i) {
         StyleRuleImport* importRule = importRules[i].get();
         if (importRule->styleSheet() && (!importRule->mediaQueries() || medium.eval(importRule->mediaQueries(), &m_viewportDependentMediaQueryResults, &m_deviceDependentMediaQueryResults)))
@@ -314,10 +311,10 @@ void RuleSet::addStyleRule(StyleRule* rule, AddRuleFlags addRuleFlags)
 void RuleSet::compactPendingRules(PendingRuleMap& pendingMap, CompactRuleMap& compactMap)
 {
     for (auto& item : pendingMap) {
-        OwnPtrWillBeRawPtr<WillBeHeapLinkedStack<RuleData>> pendingRules = item.value.release();
+        HeapLinkedStack<RuleData>* pendingRules = item.value.release();
         CompactRuleMap::ValueType* compactRules = compactMap.add(item.key, nullptr).storedValue;
 
-        WillBeHeapTerminatedArrayBuilder<RuleData> builder(compactRules->value.release());
+        HeapTerminatedArrayBuilder<RuleData> builder(compactRules->value.release());
         builder.grow(pendingRules->size());
         while (!pendingRules->isEmpty()) {
             builder.append(pendingRules->peek());
@@ -331,7 +328,7 @@ void RuleSet::compactPendingRules(PendingRuleMap& pendingMap, CompactRuleMap& co
 void RuleSet::compactRules()
 {
     ASSERT(m_pendingRules);
-    OwnPtrWillBeRawPtr<PendingRuleMaps> pendingRules = m_pendingRules.release();
+    PendingRuleMaps* pendingRules = m_pendingRules.release();
     compactPendingRules(pendingRules->idRules, m_idRules);
     compactPendingRules(pendingRules->classRules, m_classRules);
     compactPendingRules(pendingRules->tagRules, m_tagRules);
@@ -362,17 +359,14 @@ DEFINE_TRACE(RuleData)
 
 DEFINE_TRACE(RuleSet::PendingRuleMaps)
 {
-#if ENABLE(OILPAN)
     visitor->trace(idRules);
     visitor->trace(classRules);
     visitor->trace(tagRules);
     visitor->trace(shadowPseudoElementRules);
-#endif
 }
 
 DEFINE_TRACE(RuleSet)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_idRules);
     visitor->trace(m_classRules);
     visitor->trace(m_tagRules);
@@ -395,7 +389,6 @@ DEFINE_TRACE(RuleSet)
     visitor->trace(m_pendingRules);
 #ifndef NDEBUG
     visitor->trace(m_allRules);
-#endif
 #endif
 }
 

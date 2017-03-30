@@ -14,6 +14,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_node_data.h"
+#include "components/prefs/pref_registry_simple.h"
 
 class GURL;
 
@@ -89,15 +90,16 @@ bool MoreRecentlyAdded(const BookmarkNode* n1, const BookmarkNode* n2);
 // Returns up to |max_count| bookmarks from |model| whose url or title contain
 // the text |query.word_phrase_query| and exactly match |query.url| and
 // |query.title|, for all of the preceding fields that are not NULL.
-// |languages| is user's accept-language setting to decode IDN.
 void GetBookmarksMatchingProperties(BookmarkModel* model,
                                     const QueryFields& query,
                                     size_t max_count,
-                                    const std::string& languages,
                                     std::vector<const BookmarkNode*>* nodes);
 
 // Register user preferences for Bookmarks Bar.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+// Register managed bookmarks preferences.
+void RegisterManagedBookmarksPrefs(PrefRegistrySimple* registry);
 
 // Returns the parent for newly created folders/bookmarks. If |selection| has
 // one element and it is a folder, |selection[0]| is returned, otherwise
@@ -120,17 +122,17 @@ void AddIfNotBookmarked(BookmarkModel* model,
 // Removes all bookmarks for the given |url|.
 void RemoveAllBookmarks(BookmarkModel* model, const GURL& url);
 
-// Truncates an overly-long URL, unescapes it and interprets the characters
-// as UTF-8 (both via url_formatter::FormatUrl()), and lower-cases it, returning
-// the result.  |languages| is passed to url_formatter::FormatUrl().
-// |adjustments|, if non-NULL, is set to reflect the transformations the URL
-// spec underwent to become the return value.  If a caller computes offsets
-// (e.g., for the position of matched text) in this cleaned-up string, it can
-// use |adjustments| to calculate the location of these offsets in the original
-// string (via base::OffsetAdjuster::UnadjustOffsets()).  This is useful if
-// later the original string gets formatted in a different way for displaying.
-// In this case, knowing the offsets in the original string will allow them to
-// be properly translated to offsets in the newly-formatted string.
+// Truncates an overly-long URL, unescapes it and interprets the
+// characters as UTF-8 (both via url_formatter::FormatUrl()), and
+// lower-cases it, returning the result. |adjustments|, if non-NULL, is
+// set to reflect the transformations the URL spec underwent to become the
+// return value.  If a caller computes offsets (e.g., for the position
+// of matched text) in this cleaned-up string, it can use |adjustments|
+// to calculate the location of these offsets in the original string
+// (via base::OffsetAdjuster::UnadjustOffsets()).  This is useful if later
+// the original string gets formatted in a different way for displaying.
+// In this case, knowing the offsets in the original string will allow them
+// to be properly translated to offsets in the newly-formatted string.
 //
 // The unescaping done by this function makes it possible to match substrings
 // that were originally escaped for navigation; for example, if the user
@@ -140,7 +142,6 @@ void RemoveAllBookmarks(BookmarkModel* model, const GURL& url);
 // why it was escaped to begin with).
 base::string16 CleanUpUrlForMatching(
     const GURL& gurl,
-    const std::string& languages,
     base::OffsetAdjuster::Adjustments* adjustments);
 
 // Returns the lower-cased title, possibly truncated if the original title

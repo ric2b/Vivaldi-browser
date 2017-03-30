@@ -70,6 +70,9 @@
 [submodule "third_party/fontconfig/src"]
 	path = third_party/fontconfig/src
 	url = ../../external/fontconfig.git
+[submodule "third_party/freetype-android/src"]
+	path = third_party/freetype-android/src
+	url = ../src/third_party/freetype2.git
 [submodule "third_party/freetype2/src"]
 	path = third_party/freetype2/src
 	url = ../src/third_party/freetype2.git
@@ -94,12 +97,12 @@
 [submodule "third_party/leveldatabase/src"]
 	path = third_party/leveldatabase/src
 	url = ../../external/leveldb.git
+[submodule "third_party/libFuzzer/src"]
+	path = third_party/libFuzzer/src
+	url = ../llvm-project/llvm/lib/Fuzzer.git
 [submodule "third_party/libaddressinput/src"]
 	path = third_party/libaddressinput/src
 	url = ../../external/libaddressinput.git
-[submodule "third_party/libexif/sources"]
-	path = third_party/libexif/sources
-	url = ../deps/libexif/sources.git
 [submodule "third_party/libjingle/source/talk"]
 	path = third_party/libjingle/source/talk
 	url = ../../external/webrtc/trunk/talk.git
@@ -109,20 +112,14 @@
 [submodule "third_party/liblouis/src"]
 	path = third_party/liblouis/src
 	url = ../../external/liblouis-github.git
-[submodule "third_party/libphonenumber/src/phonenumbers"]
-	path = third_party/libphonenumber/src/phonenumbers
-	url = ../../external/libphonenumber/cpp/src/phonenumbers.git
-[submodule "third_party/libphonenumber/src/resources"]
-	path = third_party/libphonenumber/src/resources
-	url = ../../external/libphonenumber/resources.git
-[submodule "third_party/libphonenumber/src/test"]
-	path = third_party/libphonenumber/src/test
-	url = ../../external/libphonenumber/cpp/test.git
+[submodule "third_party/libphonenumber/dist"]
+	path = third_party/libphonenumber/dist
+	url = ../../external/libphonenumber.git
 [submodule "third_party/libsrtp"]
 	path = third_party/libsrtp
 	url = ../deps/libsrtp.git
-[submodule "third_party/libvpx_new/source/libvpx"]
-	path = third_party/libvpx_new/source/libvpx
+[submodule "third_party/libvpx/source/libvpx"]
+	path = third_party/libvpx/source/libvpx
 	url = ../../webm/libvpx.git
 [submodule "third_party/libwebm/source"]
 	path = third_party/libwebm/source

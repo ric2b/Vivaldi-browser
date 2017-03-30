@@ -19,11 +19,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/media_galleries/media_galleries_api.h"
 #include "chrome/browser/media_galleries/media_file_system_registry.h"
-#include "chrome/browser/media_galleries/media_folder_finder.h"
 #include "chrome/browser/media_galleries/media_galleries_preferences.h"
-#include "chrome/browser/media_galleries/media_galleries_scan_result_controller.h"
 #include "chrome/browser/media_galleries/media_galleries_test_util.h"
-#include "chrome/browser/media_galleries/media_scan_manager.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/common/chrome_paths.h"
@@ -71,49 +68,7 @@ base::FilePath::CharType kDevicePath[] = FILE_PATH_LITERAL("C:\\qux");
 base::FilePath::CharType kDevicePath[] = FILE_PATH_LITERAL("/qux");
 #endif
 
-class DoNothingMediaFolderFinder : public MediaFolderFinder {
- public:
-  explicit DoNothingMediaFolderFinder(
-      const MediaFolderFinderResultsCallback& callback)
-      : MediaFolderFinder(callback) {
-  }
-  ~DoNothingMediaFolderFinder() override {}
-
-  static MediaFolderFinder* CreateDoNothingMediaFolderFinder(
-      const MediaFolderFinderResultsCallback& callback) {
-    return new DoNothingMediaFolderFinder(callback);
-  }
-
-  void StartScan() override {}
-
- private:
-};
-
 }  // namespace
-
-class TestMediaGalleriesAddScanResultsFunction
-    : public extensions::MediaGalleriesAddScanResultsFunction {
- public:
-  static ExtensionFunction* Factory() {
-    return new TestMediaGalleriesAddScanResultsFunction;
-  }
-
- protected:
-  ~TestMediaGalleriesAddScanResultsFunction() override {}
-
-  // Accepts the dialog as soon as it is created.
-  MediaGalleriesScanResultController* MakeDialog(
-      content::WebContents* web_contents,
-      const extensions::Extension& extension,
-      const base::Closure& on_finish) override {
-    MediaGalleriesScanResultController* controller =
-        extensions::MediaGalleriesAddScanResultsFunction::MakeDialog(
-            web_contents, extension, on_finish);
-    controller->dialog_->AcceptDialogForTesting();
-    // The dialog is closing or closed so don't return it.
-    return NULL;
-  }
-};
 
 class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
  protected:
@@ -279,115 +234,10 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
   }
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
 
-#if defined(OS_MACOSX)
-  void PopulateIPhotoTestData(const base::FilePath& iphoto_data_root) {
-    std::string xml_contents = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-    "<plist version=\"1.0\">"
-    "<dict>\n"
-
-    "    <key>List of Albums</key>"
-    "    <array>\n"
-
-    "    <dict>\n"
-    "      <key>AlbumId</key>"
-    "      <integer>1</integer>"
-    "      <key>AlbumName</key>"
-    "      <string>Album1</string>"
-    "      <key>KeyList</key>\n"
-    "      <array>"
-    "      <string>1</string>"
-    "      <string>2</string>"
-    "      </array>\n"
-    "    </dict>\n"
-
-    "    <dict>\n"
-    "      <key>AlbumId</key>"
-    "      <integer>2</integer>"
-    "      <key>AlbumName</key>"
-    "      <string>Album2</string>"
-    "      <key>KeyList</key>\n"
-    "      <array>"
-    "      <string>2</string>"
-    "      </array>\n"
-    "    </dict>\n"
-
-    "    </array>\n"
-
-    "   <key>Master Image List</key>\n"
-    "   <dict>\n"
-
-    "  <key>1</key>"
-    "  <dict>\n"
-    "    <key>MediaType</key>"
-    "    <string>Image</string>"
-    "    <key>Caption</key>"
-    "    <string>caption 1</string>"
-    "    <key>GUID</key>"
-    "    <string>1</string>"
-    "    <key>ModDateAsTimerInterval</key>"
-    "    <string>386221543.0000</string>"
-    "    <key>DateAsTimerInterval</key>"
-    "    <string>386221543.0000</string>"
-    "    <key>DateAsTimerIntervalGMT</key>"
-    "    <string>385123456.00</string>"
-    "    <key>ImagePath</key>"
-    "    <string>$path1</string>"
-    "    <key>ThumbPath</key>"
-    "    <string>/thumb/path</string>\n"
-    "  </dict>\n"
-
-    "  <key>2</key>\n"
-    "  <dict>\n"
-    "    <key>MediaType</key>"
-    "    <string>Image</string>"
-    "    <key>Caption</key>"
-    "    <string>caption 2</string>"
-    "    <key>GUID</key>"
-    "    <string>2</string>"
-    "    <key>ModDateAsTimerInterval</key>"
-    "    <string>386221543.0000</string>"
-    "    <key>DateAsTimerInterval</key>"
-    "    <string>386221543.0000</string>"
-    "    <key>DateAsTimerIntervalGMT</key>"
-    "    <string>385123456.00</string>"
-    "    <key>ImagePath</key>"
-    "    <string>$path2</string>"
-    "    <key>ThumbPath</key>"
-    "    <string>/thumb/path2</string>\n"
-    "  </dict>\n"
-
-    "   </dict>\n"  // Master Image List
-
-    "</dict>\n"
-    "</plist>";
-
-    base::FilePath test_jpg_path = GetCommonDataDir().AppendASCII("test.jpg");
-    ASSERT_TRUE(base::CreateDirectory(iphoto_data_root));
-    base::FilePath first_only_jpg =
-        iphoto_data_root.AppendASCII("InFirstAlbumOnly.jpg");
-    base::FilePath in_both_jpg = iphoto_data_root.AppendASCII("InBoth.jpg");
-    ASSERT_TRUE(base::CopyFile(test_jpg_path, first_only_jpg));
-    ASSERT_TRUE(base::CopyFile(test_jpg_path, in_both_jpg));
-    base::ReplaceFirstSubstringAfterOffset(
-        &xml_contents, 0, "$path1", first_only_jpg.value());
-    base::ReplaceFirstSubstringAfterOffset(
-        &xml_contents, 0, "$path2", in_both_jpg.value());
-
-    base::FilePath album_xml = iphoto_data_root.AppendASCII("AlbumData.xml");
-    ASSERT_NE(-1, base::WriteFile(album_xml,
-                                  xml_contents.c_str(), xml_contents.size()));
-  }
-#endif  // defined(OS_MACOSX)
-
   base::FilePath GetCommonDataDir() const {
     return test_data_dir_.AppendASCII("api_test")
                          .AppendASCII("media_galleries")
                          .AppendASCII("common");
-  }
-
-  base::FilePath GetWallpaperTestDataDir() const {
-    return test_data_dir_.AppendASCII("api_test")
-                         .AppendASCII("wallpaper");
   }
 
   int num_galleries() const {
@@ -400,30 +250,7 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
     return ensure_media_directories_exists_.get();
   }
 
-  void InstallDoNothingFolderFinder() {
-    MediaScanManager * scan_manager =
-        g_browser_process->media_file_system_registry()->media_scan_manager();
-    scan_manager->SetMediaFolderFinderFactory(base::Bind(
-        &DoNothingMediaFolderFinder::CreateDoNothingMediaFolderFinder));
-  }
-
-  void SetRootsForFolderFinder(const std::vector<base::FilePath>& roots) {
-    MediaScanManager* scan_manager =
-        g_browser_process->media_file_system_registry()->media_scan_manager();
-    scan_manager->SetMediaFolderFinderFactory(base::Bind(
-        &MediaGalleriesPlatformAppBrowserTest::CreateMediaFolderFinderWithRoots,
-        roots));
-  }
-
  private:
-  static MediaFolderFinder* CreateMediaFolderFinderWithRoots(
-      const std::vector<base::FilePath>& roots,
-      const MediaFolderFinder::MediaFolderFinderResultsCallback& callback) {
-    MediaFolderFinder* finder = new MediaFolderFinder(callback);
-    finder->SetRootsForTesting(roots);
-    return finder;
-  }
-
   MediaGalleriesPreferences* GetAndInitializePreferences() {
     MediaGalleriesPreferences* preferences =
         g_browser_process->media_file_system_registry()->GetPreferences(
@@ -437,7 +264,8 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
   std::string device_id_;
   base::ScopedTempDir fake_gallery_temp_dir_;
   int test_jpg_size_;
-  scoped_ptr<EnsureMediaDirectoriesExists> ensure_media_directories_exists_;
+  std::unique_ptr<EnsureMediaDirectoriesExists>
+      ensure_media_directories_exists_;
 };
 
 #if !defined(DISABLE_NACL)
@@ -607,65 +435,6 @@ IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest,
 }
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
 
-#if defined(OS_MACOSX)
-IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest,
-                       IPhotoTest) {
-  PopulateIPhotoTestData(
-      ensure_media_directories_exists()->GetFakeIPhotoRootPath());
-
-  base::ListValue custom_args;
-  custom_args.AppendInteger(test_jpg_size());
-  ASSERT_TRUE(RunMediaGalleriesTestWithArg("iphoto", custom_args)) << message_;
-
-  iapps::SetMacPreferencesForTesting(NULL);
-}
-#endif  // defined(OS_MACOSX)
-
-IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest, CancelScan) {
-  InstallDoNothingFolderFinder();
-  ASSERT_TRUE(RunMediaGalleriesTest("cancel_scan")) << message_;
-}
-
-// Flaky time outs on MSAN. https://crbug.com/503329
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_Scan DISABLED_Scan
-#else
-#define MAYBE_Scan Scan
-#endif
-IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest, MAYBE_Scan) {
-  base::ScopedTempDir scan_root;
-  ASSERT_TRUE(scan_root.CreateUniqueTempDir());
-  std::vector<base::FilePath> roots;
-  roots.push_back(scan_root.path());
-  SetRootsForFolderFinder(roots);
-
-  // Override addScanResults so that the dialog is accepted as soon as it is
-  // created.
-  ASSERT_TRUE(extensions::ExtensionFunctionDispatcher::OverrideFunction(
-      "mediaGalleries.addScanResults",
-      &TestMediaGalleriesAddScanResultsFunction::Factory));
-
-  // Add some files and directories to the scan root for testing. Only the
-  // "f" directory should be found.
-  std::string dummy_data;
-  dummy_data.resize(1);
-  ASSERT_TRUE(base::CreateDirectory(scan_root.path().AppendASCII("a/b")));
-  ASSERT_EQ(static_cast<int>(dummy_data.size()),
-            base::WriteFile(scan_root.path().AppendASCII("a/b/c.jpg"),
-                            dummy_data.c_str(), dummy_data.size()));
-  ASSERT_TRUE(base::CreateDirectory(scan_root.path().AppendASCII("a/d")));
-  dummy_data.resize(201 * 1024);  // 200k is the min size for the folder finder.
-  ASSERT_EQ(static_cast<int>(dummy_data.size()),
-            base::WriteFile(scan_root.path().AppendASCII("a/d/e.txt"),
-                            dummy_data.c_str(), dummy_data.size()));
-  ASSERT_TRUE(base::CreateDirectory(scan_root.path().AppendASCII("f")));
-  ASSERT_EQ(static_cast<int>(dummy_data.size()),
-            base::WriteFile(scan_root.path().AppendASCII("f/g.jpg"),
-                            dummy_data.c_str(), dummy_data.size()));
-
-  ASSERT_TRUE(RunMediaGalleriesTest("scan")) << message_;
-}
-
 IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest, ToURL) {
   RemoveAllGalleries();
   MediaGalleryPrefId pref_id;
@@ -685,10 +454,9 @@ IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest, GetMetadata) {
 
   AddFileToSingleFakeGallery(media::GetTestDataFilePath("90rotation.mp4"));
   AddFileToSingleFakeGallery(media::GetTestDataFilePath("id3_png_test.mp3"));
-  AddFileToSingleFakeGallery(GetWallpaperTestDataDir().AppendASCII("test.jpg"));
 
   base::ListValue custom_args;
-#if 0 && defined(USE_PROPRIETARY_CODECS)
+#if defined(USE_PROPRIETARY_CODECS)
   custom_args.AppendBoolean(true);
 #else
   custom_args.AppendBoolean(false);

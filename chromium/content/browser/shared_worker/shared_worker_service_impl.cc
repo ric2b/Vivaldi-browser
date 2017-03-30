@@ -292,8 +292,8 @@ void SharedWorkerServiceImpl::CreateWorker(
   *creation_error = blink::WebWorkerCreationErrorNone;
   scoped_ptr<SharedWorkerInstance> instance(new SharedWorkerInstance(
       params.url, params.name, params.content_security_policy,
-      params.security_policy_type, resource_context, partition_id,
-      params.creation_context_type));
+      params.security_policy_type, params.creation_address_space,
+      resource_context, partition_id, params.creation_context_type));
   scoped_ptr<SharedWorkerPendingInstance::SharedWorkerPendingRequest> request(
       new SharedWorkerPendingInstance::SharedWorkerPendingRequest(
           filter,
@@ -394,19 +394,6 @@ void SharedWorkerServiceImpl::WorkerConnected(
     SharedWorkerMessageFilter* filter) {
   if (SharedWorkerHost* host = FindSharedWorkerHost(filter, worker_route_id))
     host->WorkerConnected(message_port_id);
-}
-
-void SharedWorkerServiceImpl::AllowDatabase(
-    int worker_route_id,
-    const GURL& url,
-    const base::string16& name,
-    const base::string16& display_name,
-    bool* result,
-    SharedWorkerMessageFilter* filter) {
-  if (SharedWorkerHost* host = FindSharedWorkerHost(filter, worker_route_id))
-    host->AllowDatabase(url, name, display_name, result);
-  else
-    *result = false;
 }
 
 void SharedWorkerServiceImpl::AllowFileSystem(

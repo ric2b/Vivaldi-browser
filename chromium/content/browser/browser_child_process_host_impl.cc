@@ -8,10 +8,12 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -126,7 +128,8 @@ BrowserChildProcessHostImpl::BrowserChildProcessHostImpl(
     : data_(process_type),
       delegate_(delegate),
       power_monitor_message_broadcaster_(this),
-      is_channel_connected_(false) {
+      is_channel_connected_(false),
+      notify_child_disconnected_(false) {
   data_.id = ChildProcessHostImpl::GenerateChildProcessUniqueId();
 
 #if USE_ATTACHMENT_BROKER
@@ -134,12 +137,12 @@ BrowserChildProcessHostImpl::BrowserChildProcessHostImpl(
   // child process. This ensures that when a test is being run in one of the
   // single process modes, the global attachment broker is the privileged
   // attachment broker, rather than an unprivileged attachment broker.
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MACOSX)
   IPC::AttachmentBrokerPrivileged::CreateBrokerIfNeeded(
       MachBroker::GetInstance());
 #else
   IPC::AttachmentBrokerPrivileged::CreateBrokerIfNeeded();
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // defined(OS_MACOSX)
 #endif  // USE_ATTACHMENT_BROKER
 
   child_process_host_.reset(ChildProcessHost::Create(this));
@@ -156,6 +159,11 @@ BrowserChildProcessHostImpl::BrowserChildProcessHostImpl(
 
 BrowserChildProcessHostImpl::~BrowserChildProcessHostImpl() {
   g_child_process_list.Get().remove(this);
+
+  if (notify_child_disconnected_) {
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::Bind(&NotifyProcessHostDisconnected, data_));
+  }
 }
 
 // static
@@ -167,6 +175,28 @@ void BrowserChildProcessHostImpl::TerminateAll() {
   for (BrowserChildProcessList::iterator it = copy.begin();
        it != copy.end(); ++it) {
     delete (*it)->delegate();  // ~*HostDelegate deletes *HostImpl.
+  }
+}
+
+// static
+void BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(
+    base::CommandLine* cmd_line) {
+  std::string enabled_features;
+  std::string disabled_features;
+  base::FeatureList::GetInstance()->GetFeatureOverrides(&enabled_features,
+                                                        &disabled_features);
+  if (!enabled_features.empty())
+    cmd_line->AppendSwitchASCII(switches::kEnableFeatures, enabled_features);
+  if (!disabled_features.empty())
+    cmd_line->AppendSwitchASCII(switches::kDisableFeatures, disabled_features);
+
+  // If we run base::FieldTrials, we want to pass to their state to the
+  // child process so that it can act in accordance with each state.
+  std::string field_trial_states;
+  base::FieldTrialList::AllStatesToString(&field_trial_states);
+  if (!field_trial_states.empty()) {
+    cmd_line->AppendSwitchASCII(switches::kForceFieldTrials,
+                                field_trial_states);
   }
 }
 
@@ -193,6 +223,7 @@ void BrowserChildProcessHostImpl::Launch(
   cmd_line->CopySwitchesFrom(browser_command_line, kForwardSwitches,
                              arraysize(kForwardSwitches));
 
+  notify_child_disconnected_ = true;
   child_process_.reset(new ChildProcessLauncher(
       delegate,
       cmd_line,
@@ -249,13 +280,6 @@ void BrowserChildProcessHostImpl::AddFilter(BrowserMessageFilter* filter) {
   child_process_host_->AddFilter(filter->GetFilter());
 }
 
-void BrowserChildProcessHostImpl::NotifyProcessInstanceCreated(
-    const ChildProcessData& data) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  FOR_EACH_OBSERVER(BrowserChildProcessObserver, g_observers.Get(),
-                    BrowserChildProcessInstanceCreated(data));
-}
-
 void BrowserChildProcessHostImpl::HistogramBadMessageTerminated(
     int process_type) {
   UMA_HISTOGRAM_ENUMERATION("ChildProcess.BadMessgeTerminated", process_type,
@@ -280,6 +304,7 @@ void BrowserChildProcessHostImpl::OnChannelConnected(int32_t peer_pid) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   is_channel_connected_ = true;
+  notify_child_disconnected_ = true;
 
 #if defined(OS_WIN)
   // From this point onward, the exit of the child process is detected by an
@@ -387,8 +412,6 @@ void BrowserChildProcessHostImpl::OnChildDisconnected() {
     }
 #endif
   }
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(&NotifyProcessHostDisconnected, data_));
   delete delegate_;  // Will delete us
 }
 
@@ -398,6 +421,7 @@ bool BrowserChildProcessHostImpl::Send(IPC::Message* message) {
 
 void BrowserChildProcessHostImpl::OnProcessLaunchFailed() {
   delegate_->OnProcessLaunchFailed();
+  notify_child_disconnected_ = false;
   delete delegate_;  // Will delete us
 }
 
@@ -409,8 +433,8 @@ void BrowserChildProcessHostImpl::OnProcessLaunched() {
 
   mojo::edk::ScopedPlatformHandle client_pipe =
       mojo::edk::ChildProcessLaunched(process.Handle());
-  Send(new ChildProcessMsg_SetMojoParentPipeHandle(IPC::GetFileHandleForProcess(
-      client_pipe.release().handle, process.Handle(), true)));
+  Send(new ChildProcessMsg_SetMojoParentPipeHandle(
+      IPC::GetPlatformFileForTransit(client_pipe.release().handle, true)));
 
 #if defined(OS_WIN)
   // Start a WaitableEventWatcher that will invoke OnProcessExitedEarly if the

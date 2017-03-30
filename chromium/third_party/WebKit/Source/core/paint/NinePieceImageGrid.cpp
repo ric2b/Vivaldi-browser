@@ -35,14 +35,10 @@ NinePieceImageGrid::NinePieceImageGrid(const NinePieceImage& ninePieceImage, Int
     , m_verticalTileRule((Image::TileRule)ninePieceImage.verticalRule())
     , m_fill(ninePieceImage.fill())
 {
-    StyleImage* styleImage = ninePieceImage.image();
-    ASSERT(styleImage);
-
-    float imageScaleFactor = styleImage->imageScaleFactor();
-    m_top.slice = computeEdgeSlice(ninePieceImage.imageSlices().top(), imageSize.height()) * imageScaleFactor;
-    m_right.slice = computeEdgeSlice(ninePieceImage.imageSlices().right(), imageSize.width()) * imageScaleFactor;
-    m_bottom.slice = computeEdgeSlice(ninePieceImage.imageSlices().bottom(), imageSize.height()) * imageScaleFactor;
-    m_left.slice = computeEdgeSlice(ninePieceImage.imageSlices().left(), imageSize.width()) * imageScaleFactor;
+    m_top.slice = computeEdgeSlice(ninePieceImage.imageSlices().top(), imageSize.height());
+    m_right.slice = computeEdgeSlice(ninePieceImage.imageSlices().right(), imageSize.width());
+    m_bottom.slice = computeEdgeSlice(ninePieceImage.imageSlices().bottom(), imageSize.height());
+    m_left.slice = computeEdgeSlice(ninePieceImage.imageSlices().left(), imageSize.width());
 
     m_top.width = computeEdgeWidth(ninePieceImage.borderSlices().top(), borderWidths.top(), m_top.slice,
         borderImageArea.height());
@@ -230,8 +226,10 @@ void NinePieceImageGrid::setDrawInfoMiddle(NinePieceDrawInfo& drawInfo) const
     drawInfo.tileRule = { m_horizontalTileRule, m_verticalTileRule };
 }
 
-NinePieceImageGrid::NinePieceDrawInfo NinePieceImageGrid::getNinePieceDrawInfo(NinePiece piece) const
+NinePieceImageGrid::NinePieceDrawInfo NinePieceImageGrid::getNinePieceDrawInfo(NinePiece piece, float imageScaleFactor) const
 {
+    DCHECK_NE(imageScaleFactor, 0);
+
     NinePieceDrawInfo drawInfo;
     drawInfo.isCornerPiece =
         piece == TopLeftPiece || piece == TopRightPiece || piece == BottomLeftPiece || piece == BottomRightPiece;
@@ -242,6 +240,15 @@ NinePieceImageGrid::NinePieceDrawInfo NinePieceImageGrid::getNinePieceDrawInfo(N
         setDrawInfoEdge(drawInfo, piece);
     else
         setDrawInfoMiddle(drawInfo);
+
+    if (imageScaleFactor != 1) {
+        // The nine piece grid is computed in unscaled image coordinates but must be drawn using
+        // scaled image coordinates.
+        drawInfo.source.scale(imageScaleFactor);
+
+        // Compensate for source scaling by scaling down the individual tiles.
+        drawInfo.tileScale.scale(1 / imageScaleFactor);
+    }
 
     return drawInfo;
 }

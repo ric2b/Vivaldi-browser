@@ -8,6 +8,7 @@
 
 #include "base/files/file_path.h"
 #include "base/json/json_file_value_serializer.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -39,19 +40,20 @@ namespace extensions {
 namespace {
 
 scoped_refptr<const Extension> CreateExtensionWithOptionalPermissions(
-    scoped_ptr<base::Value> optional_permissions,
-    scoped_ptr<base::Value> permissions,
+    std::unique_ptr<base::Value> optional_permissions,
+    std::unique_ptr<base::Value> permissions,
     const std::string& name) {
   return ExtensionBuilder()
       .SetLocation(Manifest::INTERNAL)
-      .SetManifest(std::move(
+      .SetManifest(
           DictionaryBuilder()
               .Set("name", name)
               .Set("description", "foo")
               .Set("manifest_version", 2)
               .Set("version", "0.1.2.3")
               .Set("permissions", std::move(permissions))
-              .Set("optional_permissions", std::move(optional_permissions))))
+              .Set("optional_permissions", std::move(optional_permissions))
+              .Build())
       .SetID(crx_file::id_util::GenerateId(name))
       .Build();
 }
@@ -109,7 +111,7 @@ class PermissionsUpdaterListener : public content::NotificationObserver {
   bool waiting_;
   content::NotificationRegistrar registrar_;
   scoped_refptr<const Extension> extension_;
-  scoped_ptr<const PermissionSet> permissions_;
+  std::unique_ptr<const PermissionSet> permissions_;
   UpdatedExtensionPermissionsInfo::Reason reason_;
 };
 
@@ -158,8 +160,8 @@ TEST_F(PermissionsUpdaterTest, AddAndRemovePermissions) {
             extension->permissions_data()->active_permissions());
 
   ExtensionPrefs* prefs = ExtensionPrefs::Get(profile_.get());
-  scoped_ptr<const PermissionSet> active_permissions;
-  scoped_ptr<const PermissionSet> granted_permissions;
+  std::unique_ptr<const PermissionSet> active_permissions;
+  std::unique_ptr<const PermissionSet> granted_permissions;
 
   // Add a few permissions.
   APIPermissionSet apis;
@@ -238,15 +240,15 @@ TEST_F(PermissionsUpdaterTest, RevokingPermissions) {
   auto api_permission_set = [](APIPermission::ID id) {
     APIPermissionSet apis;
     apis.insert(id);
-    return make_scoped_ptr(new PermissionSet(apis, ManifestPermissionSet(),
-                                             URLPatternSet(), URLPatternSet()));
+    return base::WrapUnique(new PermissionSet(
+        apis, ManifestPermissionSet(), URLPatternSet(), URLPatternSet()));
   };
 
   auto url_permission_set = [](const GURL& url) {
     URLPatternSet set;
     URLPattern pattern(URLPattern::SCHEME_ALL, url.spec());
     set.AddPattern(pattern);
-    return make_scoped_ptr(new PermissionSet(
+    return base::WrapUnique(new PermissionSet(
         APIPermissionSet(), ManifestPermissionSet(), set, URLPatternSet()));
   };
 
@@ -272,7 +274,7 @@ TEST_F(PermissionsUpdaterTest, RevokingPermissions) {
     // its granted permissions (stored in prefs). And, the permission should
     // be revokable.
     EXPECT_TRUE(permissions->HasAPIPermission(APIPermission::kCookie));
-    scoped_ptr<const PermissionSet> granted_permissions =
+    std::unique_ptr<const PermissionSet> granted_permissions =
         prefs->GetGrantedPermissions(extension->id());
     EXPECT_TRUE(granted_permissions->HasAPIPermission(APIPermission::kCookie));
     EXPECT_TRUE(updater.GetRevokablePermissions(extension.get())

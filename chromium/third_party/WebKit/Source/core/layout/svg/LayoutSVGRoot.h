@@ -29,7 +29,7 @@ namespace blink {
 
 class SVGElement;
 
-class LayoutSVGRoot final : public LayoutReplaced {
+class CORE_EXPORT LayoutSVGRoot final : public LayoutReplaced {
 public:
     explicit LayoutSVGRoot(SVGElement*);
     ~LayoutSVGRoot() override;
@@ -38,7 +38,6 @@ public:
     bool isEmbeddedThroughFrameContainingSVGDocument() const;
 
     void computeIntrinsicSizingInfo(IntrinsicSizingInfo&) const override;
-    void mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, const PaintInvalidationState*) const override;
 
     // If you have a LayoutSVGRoot, use firstChild or lastChild instead.
     void slowFirstChild() const = delete;
@@ -93,17 +92,17 @@ private:
     void insertedIntoTree() override;
     void willBeRemovedFromTree() override;
 
-    const AffineTransform& localToParentTransform() const override;
+    const AffineTransform& localToSVGParentTransform() const override;
 
     FloatRect objectBoundingBox() const override { return m_objectBoundingBox; }
     FloatRect strokeBoundingBox() const override { return m_strokeBoundingBox; }
-    FloatRect paintInvalidationRectInLocalCoordinates() const override { return m_paintInvalidationBoundingBox; }
+    FloatRect paintInvalidationRectInLocalSVGCoordinates() const override { return m_paintInvalidationBoundingBox; }
 
     bool nodeAtPoint(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) override;
 
-    LayoutRect clippedOverflowRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState* = nullptr) const override;
+    LayoutRect localOverflowRectForPaintInvalidation() const override;
 
-    void mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = nullptr, const PaintInvalidationState* = nullptr) const override;
+    void mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState&, MapCoordinatesFlags = ApplyContainerFlip) const override;
     const LayoutObject* pushMappingToContainer(const LayoutBoxModelObject* ancestorToStopAt, LayoutGeometryMap&) const override;
 
     bool canBeSelectionLeaf() const override { return false; }

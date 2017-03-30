@@ -5,14 +5,26 @@
 #ifndef IOS_CHROME_BROWSER_READING_LIST_READING_LIST_MODEL_MEMORY_H_
 #define IOS_CHROME_BROWSER_READING_LIST_READING_LIST_MODEL_MEMORY_H_
 
+#include <memory>
+
 #include "components/keyed_service/core/keyed_service.h"
 #include "ios/chrome/browser/reading_list/reading_list_entry.h"
 #include "ios/chrome/browser/reading_list/reading_list_model.h"
 
+class ReadingListModelStorage;
+
 // Concrete implementation of a reading list model using in memory lists.
 class ReadingListModelMemory : public ReadingListModel, public KeyedService {
  public:
+  // Initialize a ReadingListModelMemory to load and save data in
+  // |persistence_layer|.
+  ReadingListModelMemory(
+      std::unique_ptr<ReadingListModelStorage> storage_layer);
+
+  // Initialize a ReadingListModelMemory without persistence. Data will not be
+  // persistent across sessions.
   ReadingListModelMemory();
+
   ~ReadingListModelMemory() override;
   void Shutdown() override;
 
@@ -35,9 +47,13 @@ class ReadingListModelMemory : public ReadingListModel, public KeyedService {
 
   void MarkReadByURL(const GURL& url) override;
 
+ protected:
+  void EndBatchUpdates() override;
+
  private:
   std::vector<ReadingListEntry> unread_;
   std::vector<ReadingListEntry> read_;
+  std::unique_ptr<ReadingListModelStorage> storageLayer_;
   bool hasUnseen_;
   bool loaded_;
 };

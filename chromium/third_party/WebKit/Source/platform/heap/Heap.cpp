@@ -30,6 +30,7 @@
 
 #include "platform/heap/Heap.h"
 
+#include "base/debug/alias.h"
 #include "base/sys_info.h"
 #include "platform/Histogram.h"
 #include "platform/ScriptForbiddenScope.h"
@@ -48,7 +49,6 @@
 #include "wtf/CurrentTime.h"
 #include "wtf/DataLog.h"
 #include "wtf/LeakAnnotations.h"
-#include "wtf/MainThread.h"
 #include "wtf/Partitions.h"
 
 namespace blink {
@@ -104,30 +104,33 @@ void Heap::flushHeapDoesNotContainCache()
     s_heapDoesNotContainCache->flush();
 }
 
+void ProcessHeap::init()
+{
+    s_totalAllocatedSpace = 0;
+    s_totalAllocatedObjectSize = 0;
+    s_totalMarkedObjectSize = 0;
+    s_isLowEndDevice = base::SysInfo::IsLowEndDevice();
+}
+
+void ProcessHeap::resetHeapCounters()
+{
+    s_totalAllocatedObjectSize = 0;
+    s_totalMarkedObjectSize = 0;
+}
+
 void Heap::init()
 {
     ThreadState::init();
+    ProcessHeap::init();
     s_markingStack = new CallbackStack();
     s_postMarkingCallbackStack = new CallbackStack();
     s_globalWeakCallbackStack = new CallbackStack();
-    s_ephemeronStack = new CallbackStack();
+    // Use smallest supported block size for ephemerons.
+    s_ephemeronStack = new CallbackStack(CallbackStack::kMinimalBlockSize);
     s_heapDoesNotContainCache = new HeapDoesNotContainCache();
     s_freePagePool = new FreePagePool();
     s_orphanedPagePool = new OrphanedPagePool();
-    s_allocatedSpace = 0;
-    s_allocatedObjectSize = 0;
-    s_objectSizeAtLastGC = 0;
-    s_markedObjectSize = 0;
-    s_markedObjectSizeAtLastCompleteSweep = 0;
-    s_wrapperCount = 0;
-    s_wrapperCountAtLastGC = 0;
-    s_collectedWrapperCount = 0;
-    s_partitionAllocSizeAtLastGC = WTF::Partitions::totalSizeOfCommittedPages();
-    s_estimatedMarkingTimePerByte = 0.0;
-    s_isLowEndDevice = base::SysInfo::IsLowEndDevice();
-#if ENABLE(ASSERT)
-    s_gcGeneration = 1;
-#endif
+    s_lastGCReason = BlinkGC::NumberOfGCReason;
 
     GCInfoTable::init();
 
@@ -137,19 +140,14 @@ void Heap::init()
 
 void Heap::shutdown()
 {
+    ASSERT(s_markingStack);
+
     if (Platform::current() && Platform::current()->currentThread())
         Platform::current()->unregisterMemoryDumpProvider(BlinkGCMemoryDumpProvider::instance());
-    s_shutdownCalled = true;
-    ThreadState::shutdownHeapIfNecessary();
-}
 
-void Heap::doShutdown()
-{
-    // We don't want to call doShutdown() twice.
-    if (!s_markingStack)
-        return;
+    // The main thread must be the last thread that gets detached.
+    RELEASE_ASSERT(ThreadState::attachedThreads().size() == 0);
 
-    ASSERT(!ThreadState::attachedThreads().size());
     delete s_heapDoesNotContainCache;
     s_heapDoesNotContainCache = nullptr;
     delete s_freePagePool;
@@ -164,17 +162,87 @@ void Heap::doShutdown()
     s_markingStack = nullptr;
     delete s_ephemeronStack;
     s_ephemeronStack = nullptr;
-    delete s_regionTree;
-    s_regionTree = nullptr;
     GCInfoTable::shutdown();
     ThreadState::shutdown();
-    ASSERT(Heap::allocatedSpace() == 0);
+    ASSERT(Heap::heapStats().allocatedSpace() == 0);
 }
 
-CrossThreadPersistentRegion& Heap::crossThreadPersistentRegion()
+CrossThreadPersistentRegion& ProcessHeap::crossThreadPersistentRegion()
 {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(CrossThreadPersistentRegion, persistentRegion, new CrossThreadPersistentRegion());
     return persistentRegion;
+}
+
+bool ProcessHeap::s_isLowEndDevice = false;
+size_t ProcessHeap::s_totalAllocatedSpace = 0;
+size_t ProcessHeap::s_totalAllocatedObjectSize = 0;
+size_t ProcessHeap::s_totalMarkedObjectSize = 0;
+
+ThreadHeapStats::ThreadHeapStats()
+    : m_allocatedSpace(0)
+    , m_allocatedObjectSize(0)
+    , m_objectSizeAtLastGC(0)
+    , m_markedObjectSize(0)
+    , m_markedObjectSizeAtLastCompleteSweep(0)
+    , m_wrapperCount(0)
+    , m_wrapperCountAtLastGC(0)
+    , m_collectedWrapperCount(0)
+    , m_partitionAllocSizeAtLastGC(WTF::Partitions::totalSizeOfCommittedPages())
+    , m_estimatedMarkingTimePerByte(0.0)
+{
+}
+
+double ThreadHeapStats::estimatedMarkingTime()
+{
+    // Use 8 ms as initial estimated marking time.
+    // 8 ms is long enough for low-end mobile devices to mark common
+    // real-world object graphs.
+    if (m_estimatedMarkingTimePerByte == 0)
+        return 0.008;
+
+    // Assuming that the collection rate of this GC will be mostly equal to
+    // the collection rate of the last GC, estimate the marking time of this GC.
+    return m_estimatedMarkingTimePerByte * (allocatedObjectSize() + markedObjectSize());
+}
+
+void ThreadHeapStats::reset()
+{
+    m_objectSizeAtLastGC = m_allocatedObjectSize + m_markedObjectSize;
+    m_partitionAllocSizeAtLastGC = WTF::Partitions::totalSizeOfCommittedPages();
+    m_allocatedObjectSize = 0;
+    m_markedObjectSize = 0;
+    m_wrapperCountAtLastGC = m_wrapperCount;
+    m_collectedWrapperCount = 0;
+}
+
+void ThreadHeapStats::increaseAllocatedObjectSize(size_t delta)
+{
+    atomicAdd(&m_allocatedObjectSize, static_cast<long>(delta));
+    ProcessHeap::increaseTotalAllocatedObjectSize(delta);
+}
+
+void ThreadHeapStats::decreaseAllocatedObjectSize(size_t delta)
+{
+    atomicSubtract(&m_allocatedObjectSize, static_cast<long>(delta));
+    ProcessHeap::decreaseTotalAllocatedObjectSize(delta);
+}
+
+void ThreadHeapStats::increaseMarkedObjectSize(size_t delta)
+{
+    atomicAdd(&m_markedObjectSize, static_cast<long>(delta));
+    ProcessHeap::increaseTotalMarkedObjectSize(delta);
+}
+
+void ThreadHeapStats::increaseAllocatedSpace(size_t delta)
+{
+    atomicAdd(&m_allocatedSpace, static_cast<long>(delta));
+    ProcessHeap::increaseTotalAllocatedSpace(delta);
+}
+
+void ThreadHeapStats::decreaseAllocatedSpace(size_t delta)
+{
+    atomicSubtract(&m_allocatedSpace, static_cast<long>(delta));
+    ProcessHeap::decreaseTotalAllocatedSpace(delta);
 }
 
 #if ENABLE(ASSERT)
@@ -220,7 +288,7 @@ void Heap::pushTraceCallback(void* object, TraceCallback callback)
     ASSERT(ThreadState::current()->isInGC());
 
     // Trace should never reach an orphaned page.
-    ASSERT(!Heap::orphanedPagePool()->contains(object));
+    ASSERT(!Heap::getOrphanedPagePool()->contains(object));
     CallbackStack::Item* slot = s_markingStack->allocateEntry();
     *slot = CallbackStack::Item(object, callback);
 }
@@ -239,7 +307,7 @@ void Heap::pushPostMarkingCallback(void* object, TraceCallback callback)
     ASSERT(ThreadState::current()->isInGC());
 
     // Trace should never reach an orphaned page.
-    ASSERT(!Heap::orphanedPagePool()->contains(object));
+    ASSERT(!Heap::getOrphanedPagePool()->contains(object));
     CallbackStack::Item* slot = s_postMarkingCallbackStack->allocateEntry();
     *slot = CallbackStack::Item(object, callback);
 }
@@ -258,7 +326,7 @@ void Heap::pushGlobalWeakCallback(void** cell, WeakCallback callback)
     ASSERT(ThreadState::current()->isInGC());
 
     // Trace should never reach an orphaned page.
-    ASSERT(!Heap::orphanedPagePool()->contains(cell));
+    ASSERT(!Heap::getOrphanedPagePool()->contains(cell));
     CallbackStack::Item* slot = s_globalWeakCallbackStack->allocateEntry();
     *slot = CallbackStack::Item(cell, callback);
 }
@@ -268,8 +336,8 @@ void Heap::pushThreadLocalWeakCallback(void* closure, void* object, WeakCallback
     ASSERT(ThreadState::current()->isInGC());
 
     // Trace should never reach an orphaned page.
-    ASSERT(!Heap::orphanedPagePool()->contains(object));
-    ThreadState* state = pageFromObject(object)->heap()->threadState();
+    ASSERT(!Heap::getOrphanedPagePool()->contains(object));
+    ThreadState* state = pageFromObject(object)->arena()->getThreadState();
     state->pushThreadLocalWeakCallback(closure, callback);
 }
 
@@ -287,7 +355,7 @@ void Heap::registerWeakTable(void* table, EphemeronCallback iterationCallback, E
     ASSERT(ThreadState::current()->isInGC());
 
     // Trace should never reach an orphaned page.
-    ASSERT(!Heap::orphanedPagePool()->contains(table));
+    ASSERT(!Heap::getOrphanedPagePool()->contains(table));
     CallbackStack::Item* slot = s_ephemeronStack->allocateEntry();
     *slot = CallbackStack::Item(table, iterationCallback);
 
@@ -356,7 +424,12 @@ void Heap::collectGarbage(BlinkGC::StackState stackState, BlinkGC::GCType gcType
     RELEASE_ASSERT(!state->isGCForbidden());
     state->completeSweep();
 
-    VisitorScope visitorScope(state, gcType);
+    size_t debugAllocatedObjectSize = Heap::heapStats().allocatedObjectSize();
+    base::debug::Alias(&debugAllocatedObjectSize);
+    size_t debugWrapperCount = Heap::heapStats().wrapperCount();
+    base::debug::Alias(&debugWrapperCount);
+
+    OwnPtr<Visitor> visitor = Visitor::create(state, gcType);
 
     SafePointScope safePointScope(stackState, state);
 
@@ -386,30 +459,30 @@ void Heap::collectGarbage(BlinkGC::StackState stackState, BlinkGC::GCType gcType
 
     StackFrameDepthScope stackDepthScope;
 
-    size_t totalObjectSize = Heap::allocatedObjectSize() + Heap::markedObjectSize();
+    size_t totalObjectSize = Heap::heapStats().allocatedObjectSize() + Heap::heapStats().markedObjectSize();
     if (gcType != BlinkGC::TakeSnapshot)
         Heap::resetHeapCounters();
 
     // 1. Trace persistent roots.
-    ThreadState::visitPersistentRoots(visitorScope.visitor());
+    ThreadState::visitPersistentRoots(visitor.get());
 
     // 2. Trace objects reachable from the stack.  We do this independent of the
     // given stackState since other threads might have a different stack state.
-    ThreadState::visitStackRoots(visitorScope.visitor());
+    ThreadState::visitStackRoots(visitor.get());
 
     // 3. Transitive closure to trace objects including ephemerons.
-    processMarkingStack(visitorScope.visitor());
+    processMarkingStack(visitor.get());
 
-    postMarkingProcessing(visitorScope.visitor());
-    globalWeakProcessing(visitorScope.visitor());
+    postMarkingProcessing(visitor.get());
+    globalWeakProcessing(visitor.get());
 
     // Now we can delete all orphaned pages because there are no dangling
     // pointers to the orphaned pages.  (If we have such dangling pointers,
     // we should have crashed during marking before getting here.)
-    orphanedPagePool()->decommitOrphanedPages();
+    getOrphanedPagePool()->decommitOrphanedPages();
 
     double markingTimeInMilliseconds = WTF::currentTimeMS() - startTime;
-    s_estimatedMarkingTimePerByte = totalObjectSize ? (markingTimeInMilliseconds / 1000 / totalObjectSize) : 0;
+    Heap::heapStats().setEstimatedMarkingTimePerByte(totalObjectSize ? (markingTimeInMilliseconds / 1000 / totalObjectSize) : 0);
 
 #if PRINT_HEAP_STATS
     dataLogF("Heap::collectGarbage (gcReason=%s, lazySweeping=%d, time=%.1lfms)\n", gcReasonString(reason), gcType == BlinkGC::GCWithoutSweep, markingTimeInMilliseconds);
@@ -418,24 +491,19 @@ void Heap::collectGarbage(BlinkGC::StackState stackState, BlinkGC::GCType gcType
     DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, markingTimeHistogram, new CustomCountHistogram("BlinkGC.CollectGarbage", 0, 10 * 1000, 50));
     markingTimeHistogram.count(markingTimeInMilliseconds);
     DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, totalObjectSpaceHistogram, new CustomCountHistogram("BlinkGC.TotalObjectSpace", 0, 4 * 1024 * 1024, 50));
-    totalObjectSpaceHistogram.count(Heap::allocatedObjectSize() / 1024);
+    totalObjectSpaceHistogram.count(ProcessHeap::totalAllocatedObjectSize() / 1024);
     DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, totalAllocatedSpaceHistogram, new CustomCountHistogram("BlinkGC.TotalAllocatedSpace", 0, 4 * 1024 * 1024, 50));
-    totalAllocatedSpaceHistogram.count(Heap::allocatedSpace() / 1024);
+    totalAllocatedSpaceHistogram.count(ProcessHeap::totalAllocatedSpace() / 1024);
     DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, gcReasonHistogram, new EnumerationHistogram("BlinkGC.GCReason", BlinkGC::NumberOfGCReason));
     gcReasonHistogram.count(reason);
+
+    s_lastGCReason = reason;
 
     Heap::reportMemoryUsageHistogram();
     WTF::Partitions::reportMemoryUsageHistogram();
 
     postGC(gcType);
     Heap::decommitCallbackStacks();
-
-#if ENABLE(ASSERT)
-    // 0 is used to figure non-assigned area, so avoid to use 0 in s_gcGeneration.
-    if (++s_gcGeneration == 0) {
-        s_gcGeneration = 1;
-    }
-#endif
 }
 
 void Heap::collectGarbageForTerminatingThread(ThreadState* state)
@@ -445,7 +513,7 @@ void Heap::collectGarbageForTerminatingThread(ThreadState* state)
         // ahead while it is running, hence the termination GC does not enter a
         // safepoint. VisitorScope will not enter also a safepoint scope for
         // ThreadTerminationGC.
-        VisitorScope visitorScope(state, BlinkGC::ThreadTerminationGC);
+        OwnPtr<Visitor> visitor = Visitor::create(state, BlinkGC::ThreadTerminationGC);
 
         ThreadState::NoAllocationScope noAllocationScope(state);
 
@@ -461,14 +529,14 @@ void Heap::collectGarbageForTerminatingThread(ThreadState* state)
         // global GC finds a "pointer" on the stack or due to a programming
         // error where an object has a dangling cross-thread pointer to an
         // object on this heap.
-        state->visitPersistents(visitorScope.visitor());
+        state->visitPersistents(visitor.get());
 
         // 2. Trace objects reachable from the thread's persistent roots
         // including ephemerons.
-        processMarkingStack(visitorScope.visitor());
+        processMarkingStack(visitor.get());
 
-        postMarkingProcessing(visitorScope.visitor());
-        globalWeakProcessing(visitorScope.visitor());
+        postMarkingProcessing(visitor.get());
+        globalWeakProcessing(visitor.get());
 
         state->postGC(BlinkGC::GCWithSweep);
         Heap::decommitCallbackStacks();
@@ -527,7 +595,7 @@ void Heap::globalWeakProcessing(Visitor* visitor)
     ASSERT(s_markingStack->isEmpty());
 
     double timeForGlobalWeakProcessing = WTF::currentTimeMS() - startTime;
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, globalWeakTimeHistogram, new CustomCountHistogram("BlinkGC.TimeForGlobalWeakPrcessing", 1, 10 * 1000, 50));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, globalWeakTimeHistogram, new CustomCountHistogram("BlinkGC.TimeForGlobalWeakProcessing", 1, 10 * 1000, 50));
     globalWeakTimeHistogram.count(timeForGlobalWeakProcessing);
 }
 
@@ -537,26 +605,11 @@ void Heap::collectAllGarbage()
     size_t previousLiveObjects = 0;
     for (int i = 0; i < 5; ++i) {
         collectGarbage(BlinkGC::NoHeapPointersOnStack, BlinkGC::GCWithSweep, BlinkGC::ForcedGC);
-        size_t liveObjects = Heap::markedObjectSize();
+        size_t liveObjects = Heap::heapStats().markedObjectSize();
         if (liveObjects == previousLiveObjects)
             break;
         previousLiveObjects = liveObjects;
     }
-}
-
-double Heap::estimatedMarkingTime()
-{
-    ASSERT(ThreadState::current()->isMainThread());
-
-    // Use 8 ms as initial estimated marking time.
-    // 8 ms is long enough for low-end mobile devices to mark common
-    // real-world object graphs.
-    if (s_estimatedMarkingTimePerByte == 0)
-        return 0.008;
-
-    // Assuming that the collection rate of this GC will be mostly equal to
-    // the collection rate of the last GC, estimate the marking time of this GC.
-    return s_estimatedMarkingTimePerByte * (Heap::allocatedObjectSize() + Heap::markedObjectSize());
 }
 
 void Heap::reportMemoryUsageHistogram()
@@ -568,7 +621,7 @@ void Heap::reportMemoryUsageHistogram()
     if (!isMainThread())
         return;
     // +1 is for rounding up the sizeInMB.
-    size_t sizeInMB = Heap::allocatedSpace() / 1024 / 1024 + 1;
+    size_t sizeInMB = Heap::heapStats().allocatedSpace() / 1024 / 1024 + 1;
     if (sizeInMB >= supportedMaxSizeInMB)
         sizeInMB = supportedMaxSizeInMB - 1;
     if (sizeInMB > observedMaxSizeInMB) {
@@ -593,15 +646,15 @@ void Heap::reportMemoryUsageForTracing()
 
     // These values are divided by 1024 to avoid overflow in practical cases (TRACE_COUNTER values are 32-bit ints).
     // They are capped to INT_MAX just in case.
-    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::allocatedObjectSizeKB", std::min(Heap::allocatedObjectSize() / 1024, static_cast<size_t>(INT_MAX)));
-    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::markedObjectSizeKB", std::min(Heap::markedObjectSize() / 1024, static_cast<size_t>(INT_MAX)));
-    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::markedObjectSizeAtLastCompleteSweepKB", std::min(Heap::markedObjectSizeAtLastCompleteSweep() / 1024, static_cast<size_t>(INT_MAX)));
-    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::allocatedSpaceKB", std::min(Heap::allocatedSpace() / 1024, static_cast<size_t>(INT_MAX)));
-    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::objectSizeAtLastGCKB", std::min(Heap::objectSizeAtLastGC() / 1024, static_cast<size_t>(INT_MAX)));
-    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::wrapperCount", std::min(Heap::wrapperCount(), static_cast<size_t>(INT_MAX)));
-    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::wrapperCountAtLastGC", std::min(Heap::wrapperCountAtLastGC(), static_cast<size_t>(INT_MAX)));
-    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::collectedWrapperCount", std::min(Heap::collectedWrapperCount(), static_cast<size_t>(INT_MAX)));
-    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::partitionAllocSizeAtLastGCKB", std::min(Heap::partitionAllocSizeAtLastGC() / 1024, static_cast<size_t>(INT_MAX)));
+    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::allocatedObjectSizeKB", std::min(Heap::heapStats().allocatedObjectSize() / 1024, static_cast<size_t>(INT_MAX)));
+    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::markedObjectSizeKB", std::min(Heap::heapStats().markedObjectSize() / 1024, static_cast<size_t>(INT_MAX)));
+    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::markedObjectSizeAtLastCompleteSweepKB", std::min(Heap::heapStats().markedObjectSizeAtLastCompleteSweep() / 1024, static_cast<size_t>(INT_MAX)));
+    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::allocatedSpaceKB", std::min(Heap::heapStats().allocatedSpace() / 1024, static_cast<size_t>(INT_MAX)));
+    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::objectSizeAtLastGCKB", std::min(Heap::heapStats().objectSizeAtLastGC() / 1024, static_cast<size_t>(INT_MAX)));
+    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::wrapperCount", std::min(Heap::heapStats().wrapperCount(), static_cast<size_t>(INT_MAX)));
+    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::heapStats().wrapperCountAtLastGC", std::min(Heap::heapStats().wrapperCountAtLastGC(), static_cast<size_t>(INT_MAX)));
+    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::collectedWrapperCount", std::min(Heap::heapStats().collectedWrapperCount(), static_cast<size_t>(INT_MAX)));
+    TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Heap::partitionAllocSizeAtLastGCKB", std::min(Heap::heapStats().partitionAllocSizeAtLastGC() / 1024, static_cast<size_t>(INT_MAX)));
     TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink_gc"), "Partitions::totalSizeOfCommittedPagesKB", std::min(WTF::Partitions::totalSizeOfCommittedPages() / 1024, static_cast<size_t>(INT_MAX)));
 }
 
@@ -619,38 +672,20 @@ size_t Heap::objectPayloadSizeForTesting()
     return objectPayloadSize;
 }
 
+RegionTree* Heap::getRegionTree()
+{
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(RegionTree, tree, new RegionTree);
+    return &tree;
+}
+
 BasePage* Heap::lookup(Address address)
 {
     ASSERT(ThreadState::current()->isInGC());
-    if (!s_regionTree)
-        return nullptr;
-    if (PageMemoryRegion* region = s_regionTree->lookup(address)) {
+    if (PageMemoryRegion* region = Heap::getRegionTree()->lookup(address)) {
         BasePage* page = region->pageFromAddress(address);
         return page && !page->orphaned() ? page : nullptr;
     }
     return nullptr;
-}
-
-static Mutex& regionTreeMutex()
-{
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, new Mutex);
-    return mutex;
-}
-
-void Heap::removePageMemoryRegion(PageMemoryRegion* region)
-{
-    // Deletion of large objects (and thus their regions) can happen
-    // concurrently on sweeper threads.  Removal can also happen during thread
-    // shutdown, but that case is safe.  Regardless, we make all removals
-    // mutually exclusive.
-    MutexLocker locker(regionTreeMutex());
-    RegionTree::remove(region, &s_regionTree);
-}
-
-void Heap::addPageMemoryRegion(PageMemoryRegion* region)
-{
-    MutexLocker locker(regionTreeMutex());
-    RegionTree::add(new RegionTree(region), &s_regionTree);
 }
 
 void Heap::resetHeapCounters()
@@ -659,14 +694,17 @@ void Heap::resetHeapCounters()
 
     Heap::reportMemoryUsageForTracing();
 
-    s_objectSizeAtLastGC = s_allocatedObjectSize + s_markedObjectSize;
-    s_partitionAllocSizeAtLastGC = WTF::Partitions::totalSizeOfCommittedPages();
-    s_allocatedObjectSize = 0;
-    s_markedObjectSize = 0;
-    s_wrapperCountAtLastGC = s_wrapperCount;
-    s_collectedWrapperCount = 0;
+    ProcessHeap::resetHeapCounters();
+    Heap::heapStats().reset();
     for (ThreadState* state : ThreadState::attachedThreads())
         state->resetHeapCounters();
+}
+
+// TODO(keishi): Make this a member of ThreadHeap.
+ThreadHeapStats& Heap::heapStats()
+{
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadHeapStats, stats, new ThreadHeapStats());
+    return stats;
 }
 
 CallbackStack* Heap::s_markingStack;
@@ -674,23 +712,9 @@ CallbackStack* Heap::s_postMarkingCallbackStack;
 CallbackStack* Heap::s_globalWeakCallbackStack;
 CallbackStack* Heap::s_ephemeronStack;
 HeapDoesNotContainCache* Heap::s_heapDoesNotContainCache;
-bool Heap::s_shutdownCalled = false;
 FreePagePool* Heap::s_freePagePool;
 OrphanedPagePool* Heap::s_orphanedPagePool;
-RegionTree* Heap::s_regionTree = nullptr;
-size_t Heap::s_allocatedSpace = 0;
-size_t Heap::s_allocatedObjectSize = 0;
-size_t Heap::s_objectSizeAtLastGC = 0;
-size_t Heap::s_markedObjectSize = 0;
-size_t Heap::s_markedObjectSizeAtLastCompleteSweep = 0;
-size_t Heap::s_wrapperCount = 0;
-size_t Heap::s_wrapperCountAtLastGC = 0;
-size_t Heap::s_collectedWrapperCount = 0;
-size_t Heap::s_partitionAllocSizeAtLastGC = 0;
-double Heap::s_estimatedMarkingTimePerByte = 0.0;
-bool Heap::s_isLowEndDevice = false;
-#if ENABLE(ASSERT)
-uint16_t Heap::s_gcGeneration = 0;
-#endif
+
+BlinkGC::GCReason Heap::s_lastGCReason = BlinkGC::NumberOfGCReason;
 
 } // namespace blink

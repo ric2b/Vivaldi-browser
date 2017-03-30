@@ -14,37 +14,31 @@
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/desktop_shell_launcher_context_menu.h"
+#include "chrome/browser/ui/ash/launcher/extension_launcher_context_menu.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/prefs/pref_service.h"
 #include "ui/aura/window_event_dispatcher.h"
 
-class TestChromeLauncherController : public ChromeLauncherController {
- public:
-  TestChromeLauncherController(Profile* profile, ash::ShelfModel* model)
-      : ChromeLauncherController(profile, model) {}
-  bool IsLoggedInAsGuest() override { return false; }
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestChromeLauncherController);
-};
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/ui/ash/launcher/arc_launcher_context_menu.h"
+#endif  // defined(OS_CHROMEOS)
 
 class LauncherContextMenuTest : public ash::test::AshTestBase {
  protected:
   static bool IsItemPresentInMenu(LauncherContextMenu* menu, int command_id) {
-    DCHECK(menu);
     return menu->GetIndexOfCommandId(command_id) != -1;
   }
 
-  LauncherContextMenuTest()
-      : profile_(new TestingProfile()) {}
+  LauncherContextMenuTest() : profile_(new TestingProfile()) {}
 
   void SetUp() override {
     ash::test::AshTestBase::SetUp();
-    controller_.reset(
-        new TestChromeLauncherController(profile(), &shelf_model_));
+    controller_.reset(new ChromeLauncherController(profile(), &shelf_model_));
   }
 
   void TearDown() override {
-    controller_.reset(NULL);
+    controller_.reset(nullptr);
     ash::test::AshTestBase::TearDown();
   }
 
@@ -53,15 +47,31 @@ class LauncherContextMenuTest : public ash::test::AshTestBase {
     ash::ShelfItem item;
     item.id = 1;  // dummy id
     item.type = shelf_item_type;
-    return new LauncherContextMenu(controller_.get(), &item, CurrentContext());
+    ash::Shelf* shelf = ash::Shelf::ForWindow(CurrentContext());
+    return LauncherContextMenu::Create(controller_.get(), &item, shelf);
   }
+
+  LauncherContextMenu* CreateLauncherContextMenuForDesktopShell() {
+    ash::ShelfItem* item = nullptr;
+    ash::Shelf* shelf = ash::Shelf::ForWindow(CurrentContext());
+    return LauncherContextMenu::Create(controller_.get(), item, shelf);
+  }
+
+#if defined(OS_CHROMEOS)
+  LauncherContextMenu* CreateLauncherContextMenuForArcApp() {
+    ash::ShelfItem item;
+    item.id = 1;  // dummy id
+    ash::Shelf* shelf = ash::Shelf::ForWindow(CurrentContext());
+    return new ArcLauncherContextMenu(controller_.get(), &item, shelf);
+  }
+#endif
 
   Profile* profile() { return profile_.get(); }
 
  private:
-  scoped_ptr<TestingProfile> profile_;
+  std::unique_ptr<TestingProfile> profile_;
   ash::ShelfModel shelf_model_;
-  scoped_ptr<ChromeLauncherController> controller_;
+  std::unique_ptr<ChromeLauncherController> controller_;
 
   DISALLOW_COPY_AND_ASSIGN(LauncherContextMenuTest);
 };
@@ -71,7 +81,7 @@ class LauncherContextMenuTest : public ash::test::AshTestBase {
 TEST_F(LauncherContextMenuTest,
        NewIncognitoWindowMenuIsDisabledWhenIncognitoModeOff) {
   // Initially, "New Incognito window" should be enabled.
-  scoped_ptr<LauncherContextMenu> menu(
+  std::unique_ptr<LauncherContextMenu> menu(
       CreateLauncherContextMenu(ash::TYPE_BROWSER_SHORTCUT));
   ASSERT_TRUE(IsItemPresentInMenu(
       menu.get(), LauncherContextMenu::MENU_NEW_INCOGNITO_WINDOW));
@@ -94,7 +104,7 @@ TEST_F(LauncherContextMenuTest,
 TEST_F(LauncherContextMenuTest,
        NewWindowMenuIsDisabledWhenIncognitoModeForced) {
   // Initially, "New window" should be enabled.
-  scoped_ptr<LauncherContextMenu> menu(
+  std::unique_ptr<LauncherContextMenu> menu(
       CreateLauncherContextMenu(ash::TYPE_BROWSER_SHORTCUT));
   ASSERT_TRUE(IsItemPresentInMenu(
       menu.get(), LauncherContextMenu::MENU_NEW_WINDOW));
@@ -108,3 +118,50 @@ TEST_F(LauncherContextMenuTest,
       menu.get(), LauncherContextMenu::MENU_NEW_WINDOW));
   EXPECT_FALSE(menu->IsCommandIdEnabled(LauncherContextMenu::MENU_NEW_WINDOW));
 }
+
+// Verifies status of contextmenu items for desktop shell.
+TEST_F(LauncherContextMenuTest, DesktopShellLauncherContextMenuItemCheck) {
+  std::unique_ptr<LauncherContextMenu> menu(
+      CreateLauncherContextMenuForDesktopShell());
+  EXPECT_FALSE(
+      IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_OPEN_NEW));
+  EXPECT_FALSE(IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_PIN));
+  EXPECT_TRUE(
+      IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_AUTO_HIDE));
+  EXPECT_TRUE(menu->IsCommandIdEnabled(LauncherContextMenu::MENU_AUTO_HIDE));
+  EXPECT_TRUE(IsItemPresentInMenu(menu.get(),
+                                  LauncherContextMenu::MENU_ALIGNMENT_MENU));
+  EXPECT_TRUE(
+      menu->IsCommandIdEnabled(LauncherContextMenu::MENU_ALIGNMENT_MENU));
+#if defined(OS_CHROMEOS)
+  // By default, screen is not locked and ChangeWallPaper item is added in
+  // menu. ChangeWallPaper item is not enabled in default mode.
+  EXPECT_TRUE(IsItemPresentInMenu(menu.get(),
+                                  LauncherContextMenu::MENU_CHANGE_WALLPAPER));
+  EXPECT_FALSE(
+      menu->IsCommandIdEnabled(LauncherContextMenu::MENU_CHANGE_WALLPAPER));
+#endif
+}
+
+// Verifies contextmenu items for Arc app
+#if defined(OS_CHROMEOS)
+TEST_F(LauncherContextMenuTest, ArcLauncherContextMenuItemCheck) {
+  scoped_ptr<LauncherContextMenu> menu(CreateLauncherContextMenuForArcApp());
+  EXPECT_TRUE(
+      IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_OPEN_NEW));
+  EXPECT_TRUE(menu->IsCommandIdEnabled(LauncherContextMenu::MENU_OPEN_NEW));
+  EXPECT_TRUE(
+      IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_AUTO_HIDE));
+  EXPECT_TRUE(menu->IsCommandIdEnabled(LauncherContextMenu::MENU_AUTO_HIDE));
+  EXPECT_TRUE(IsItemPresentInMenu(menu.get(),
+                                  LauncherContextMenu::MENU_ALIGNMENT_MENU));
+  EXPECT_TRUE(
+      menu->IsCommandIdEnabled(LauncherContextMenu::MENU_ALIGNMENT_MENU));
+  // By default, screen is not locked and ChangeWallPaper item is added in
+  // menu. ChangeWallPaper item is not enabled in default mode.
+  EXPECT_TRUE(IsItemPresentInMenu(menu.get(),
+                                  LauncherContextMenu::MENU_CHANGE_WALLPAPER));
+  EXPECT_FALSE(
+      menu->IsCommandIdEnabled(LauncherContextMenu::MENU_CHANGE_WALLPAPER));
+}
+#endif

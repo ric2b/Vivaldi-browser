@@ -4,6 +4,7 @@
 
 #include "components/exo/display.h"
 
+#include <iterator>
 #include <utility>
 
 #include "base/trace_event/trace_event.h"
@@ -12,6 +13,7 @@
 #include "components/exo/shell_surface.h"
 #include "components/exo/sub_surface.h"
 #include "components/exo/surface.h"
+#include "ui/views/widget/widget.h"
 
 #if defined(USE_OZONE)
 #include <GLES2/gl2extchromium.h>
@@ -49,11 +51,12 @@ scoped_ptr<SharedMemory> Display::CreateSharedMemory(
 }
 
 #if defined(USE_OZONE)
-scoped_ptr<Buffer> Display::CreatePrimeBuffer(base::ScopedFD fd,
-                                              const gfx::Size& size,
-                                              gfx::BufferFormat format,
-                                              int stride) {
-  TRACE_EVENT1("exo", "Display::CreatePrimeBuffer", "size", size.ToString());
+scoped_ptr<Buffer> Display::CreateLinuxDMABufBuffer(base::ScopedFD fd,
+                                                    const gfx::Size& size,
+                                                    gfx::BufferFormat format,
+                                                    int stride) {
+  TRACE_EVENT1("exo", "Display::CreateLinuxDMABufBuffer", "size",
+               size.ToString());
 
   gfx::GpuMemoryBufferHandle handle;
   handle.type = gfx::OZONE_NATIVE_PIXMAP;
@@ -73,10 +76,17 @@ scoped_ptr<Buffer> Display::CreatePrimeBuffer(base::ScopedFD fd,
   // Using zero-copy for optimal performance.
   bool use_zero_copy = true;
 
-  return make_scoped_ptr(
-      new Buffer(std::move(gpu_memory_buffer), GL_TEXTURE_EXTERNAL_OES,
-                 // COMMANDS_COMPLETED queries are required by native pixmaps.
-                 GL_COMMANDS_COMPLETED_CHROMIUM, use_zero_copy));
+  // List of overlay formats that are known to be supported.
+  // TODO(reveman): Determine this at runtime.
+  const gfx::BufferFormat kOverlayFormats[] = {gfx::BufferFormat::BGRX_8888};
+  bool is_overlay_candidate =
+      std::find(std::begin(kOverlayFormats), std::end(kOverlayFormats),
+                format) != std::end(kOverlayFormats);
+
+  return make_scoped_ptr(new Buffer(
+      std::move(gpu_memory_buffer), GL_TEXTURE_EXTERNAL_OES,
+      // COMMANDS_COMPLETED queries are required by native pixmaps.
+      GL_COMMANDS_COMPLETED_CHROMIUM, use_zero_copy, is_overlay_candidate));
 }
 #endif
 
@@ -89,7 +99,28 @@ scoped_ptr<ShellSurface> Display::CreateShellSurface(Surface* surface) {
     return nullptr;
   }
 
-  return make_scoped_ptr(new ShellSurface(surface));
+  return make_scoped_ptr(new ShellSurface(surface, nullptr, gfx::Rect(), true));
+}
+
+scoped_ptr<ShellSurface> Display::CreatePopupShellSurface(
+    Surface* surface,
+    ShellSurface* parent,
+    const gfx::Point& position) {
+  TRACE_EVENT2("exo", "Display::CreatePopupShellSurface", "surface",
+               surface->AsTracedValue(), "parent", parent->AsTracedValue());
+
+  if (surface->Contains(parent->GetWidget()->GetNativeWindow())) {
+    DLOG(ERROR) << "Parent is contained within surface's hierarchy";
+    return nullptr;
+  }
+
+  if (surface->HasSurfaceDelegate()) {
+    DLOG(ERROR) << "Surface has already been assigned a role";
+    return nullptr;
+  }
+
+  return make_scoped_ptr(new ShellSurface(
+      surface, parent, gfx::Rect(position, gfx::Size(1, 1)), false));
 }
 
 scoped_ptr<SubSurface> Display::CreateSubSurface(Surface* surface,

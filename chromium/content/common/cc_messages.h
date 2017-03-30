@@ -28,9 +28,10 @@
 #include "cc/surfaces/surface_id.h"
 #include "cc/surfaces/surface_sequence.h"
 #include "content/common/content_export.h"
-#include "gpu/ipc/gpu_command_buffer_traits.h"
+#include "gpu/ipc/common/gpu_command_buffer_traits.h"
 #include "ipc/ipc_message_macros.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
+#include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 
 #ifndef CONTENT_COMMON_CC_MESSAGES_H_
 #define CONTENT_COMMON_CC_MESSAGES_H_
@@ -68,16 +69,6 @@ struct ParamTraits<cc::FilterOperations> {
 template <>
 struct ParamTraits<skia::RefPtr<SkImageFilter> > {
   typedef skia::RefPtr<SkImageFilter> param_type;
-  static void Write(base::Pickle* m, const param_type& p);
-  static bool Read(const base::Pickle* m,
-                   base::PickleIterator* iter,
-                   param_type* r);
-  static void Log(const param_type& p, std::string* l);
-};
-
-template <>
-struct ParamTraits<gfx::Transform> {
-  typedef gfx::Transform param_type;
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,

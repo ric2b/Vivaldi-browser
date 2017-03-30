@@ -45,6 +45,7 @@ static void paintFrames(LocalFrame& root, SimDisplayItemList& displayList)
 SimCompositor::SimCompositor()
     : m_needsAnimate(false)
     , m_deferCommits(true)
+    , m_hasSelection(false)
     , m_webViewImpl(0)
     , m_lastFrameTimeMonotonic(0)
 {
@@ -75,11 +76,21 @@ void SimCompositor::setDeferCommits(bool deferCommits)
     m_deferCommits = deferCommits;
 }
 
+void SimCompositor::registerSelection(const WebSelection&)
+{
+    m_hasSelection = true;
+}
+
+void SimCompositor::clearSelection()
+{
+    m_hasSelection = false;
+}
+
 SimDisplayItemList SimCompositor::beginFrame()
 {
-    ASSERT(m_webViewImpl);
-    ASSERT(!m_deferCommits);
-    ASSERT(m_needsAnimate);
+    DCHECK(m_webViewImpl);
+    DCHECK(!m_deferCommits);
+    DCHECK(m_needsAnimate);
     m_needsAnimate = false;
 
     // Always advance the time as if the compositor was running at 60fps.

@@ -14,6 +14,7 @@
 #include "media/base/video_frame_pool.h"
 #include "media/base/video_types.h"
 #include "skia/ext/platform_canvas.h"
+#include "skia/ext/refptr.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 
 namespace blink {
@@ -28,10 +29,10 @@ namespace content {
 class CONTENT_EXPORT HtmlVideoElementCapturerSource final
     : public media::VideoCapturerSource {
  public:
-  static scoped_ptr<HtmlVideoElementCapturerSource>
-      CreateFromWebMediaPlayerImpl(
-          blink::WebMediaPlayer* player,
-          const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner);
+  static std::unique_ptr<HtmlVideoElementCapturerSource>
+  CreateFromWebMediaPlayerImpl(
+      blink::WebMediaPlayer* player,
+      const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner);
 
   HtmlVideoElementCapturerSource(
       const base::WeakPtr<blink::WebMediaPlayer>& player,
@@ -55,7 +56,7 @@ class CONTENT_EXPORT HtmlVideoElementCapturerSource final
   void sendNewFrame();
 
   media::VideoFramePool frame_pool_;
-  skia::RefPtr<SkCanvas> canvas_;
+  sk_sp<SkCanvas> canvas_;
 
   const base::WeakPtr<blink::WebMediaPlayer> web_media_player_;
   const scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;

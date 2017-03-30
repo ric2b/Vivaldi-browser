@@ -4,14 +4,19 @@
 
 package org.chromium.chrome.browser.offlinepages;
 
+import android.content.Context;
+
 import org.chromium.base.Log;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.base.VisibleForTesting;
+import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.net.NetworkChangeNotifier;
 
-import java.util.Map;
-import java.util.WeakHashMap;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * A class that observes events for a tab which has an associated offline page.  This will be
@@ -19,171 +24,241 @@ import java.util.WeakHashMap;
  * to show a snackbar if the device connects).  It will be removed when the user navigates away
  * from the offline tab.
  */
-public class OfflinePageTabObserver extends EmptyTabObserver {
+public class OfflinePageTabObserver
+        extends EmptyTabObserver implements NetworkChangeNotifier.ConnectionTypeObserver {
     private static final String TAG = "OfflinePageTO";
-    private ChromeActivity mActivity;
-    private long mBookmarkId;
-    private boolean mConnected;
+    private Context mContext;
+    private SnackbarManager mSnackbarManager;
     private SnackbarController mSnackbarController;
-    private boolean mWasHidden;
-    private OfflinePageConnectivityListener mListener;
+    private final Set<Integer> mObservedTabs = new HashSet<Integer>();
+    private boolean mWasSnackbarShown;
+    private Tab mCurrentTab;
+    private boolean mIsObservingNetworkChanges;
 
-    private static final Map<Integer, OfflinePageTabObserver> sTabObservers =
-            new WeakHashMap<Integer, OfflinePageTabObserver>();
+    private static TabHelper sTabHelper;
+    private static OfflinePageTabObserver sInstance;
 
     /**
-     * Create and attach a tab observer if we don't already have one, otherwise update it.
-     * @param activity The ChromeActivity we are associated with.
-     * @param tab The tab we are adding an observer for.
-     * @param conneted True if we were connected when this call was made.
+     * Helper class that allows mocking access to the tab methods, without having to have a tab,
+     * which makes things testable.
      */
-    public static void addObserverForTab(ChromeActivity activity, Tab tab, boolean connected,
-            SnackbarController snackbarController) {
-        // See if we already have an observer for this tab.
-        int tabId = tab.getId();
-        OfflinePageTabObserver observer = sTabObservers.get(tabId);
+    static class TabHelper {
+        public int getTabId(Tab tab) {
+            if (tab == null) return Tab.INVALID_TAB_ID;
+            return tab.getId();
+        }
 
-        if (observer == null) {
-            // If we don't have an observer, build one and attach it to the tab.
-            observer = new OfflinePageTabObserver(activity, tab, connected, snackbarController);
-            sTabObservers.put(tabId, observer);
-            tab.addObserver(observer);
-        } else {
-            // If we already have an observer, update the connected state.
-            observer.setConnected(connected);
-            // If we already have an observer and addObserver was called, we should re-enable
-            // the connectivity listener in case we go offline again.  This typically happens
-            // if a background page comes back to the foreground.
-            // To make testing work properly, replace the snackbar controller.  Otherwise the test
-            // will use the release version of the snackbar controller instead of its mock.
-            if (!connected) {
-                observer.enableConnectivityListener(snackbarController);
+        public boolean isOfflinePage(Tab tab) {
+            return tab != null && tab.isOfflinePage();
+        }
+
+        public boolean isTabShowing(Tab tab) {
+            return tab != null && !tab.isFrozen() && !tab.isHidden();
+        }
+
+        public void addObserver(Tab tab, TabObserver observer) {
+            if (tab != null && observer != null) {
+                tab.addObserver(observer);
+            }
+        }
+
+        public void removeObserver(Tab tab, TabObserver observer) {
+            if (tab != null && observer != null) {
+                tab.removeObserver(observer);
             }
         }
     }
 
-    /**
-     * Removes tab observer for a given bookmark.
-     * @param bookmarkId The bookmarkId we are removing an observer for.
-     */
-    public static void removeObserverForBookmark(long bookmarkId) {
-        // Find any observer, if we have one.
-        int tabId = findTabIdByObserverBookmarkId(bookmarkId);
-        Log.d(TAG, "removeObserver called, tabId " + tabId + ", bookmarkId " + bookmarkId);
-        if (tabId == Tab.INVALID_TAB_ID) return;
+    static void setTabHelperForTesting(TabHelper tabHelper) {
+        sTabHelper = tabHelper;
+    }
 
-        removeObserverForTab(tabId);
+    static TabHelper getTabHelper() {
+        if (sTabHelper == null) {
+            sTabHelper = new TabHelper();
+        }
+        return sTabHelper;
+    }
+
+    static void init(Context context, SnackbarManager manager, SnackbarController controller) {
+        sInstance = new OfflinePageTabObserver(context, manager, controller);
+    }
+
+    static OfflinePageTabObserver getInstance() {
+        return sInstance;
+    }
+
+    @VisibleForTesting
+    static void setInstanceForTesting(OfflinePageTabObserver instance) {
+        sInstance = instance;
     }
 
     /**
-     * Removes the observer for a tab with the specified tabId.
-     * @param tabId The Id of the tab to remove an observer for.
+     * Create and attach a tab observer if we don't already have one, otherwise update it.
+     * @param tab The tab we are adding an observer for.
      */
-    private static void removeObserverForTab(int tabId) {
-        OfflinePageTabObserver observer = sTabObservers.get(tabId);
-        sTabObservers.remove(tabId);
-        if (observer != null) {
-            Tab tab = observer.mActivity.getTabModelSelector().getTabById(tabId);
-            tab.removeObserver(observer);
-        }
-    }
-    /**
-     * Finds the tab ID of the observer with the specified bookmark ID, if it exists.  Returns an
-     * invalid tab ID if none found.
-     * @param bookmarkId The bookmark ID on the observer on the searched for tab.
-     * @return ID of the tab associated with this bookmark, or Tab.INVALID_TAB_ID if none found.
-     */
-    private static int findTabIdByObserverBookmarkId(long bookmarkId) {
-        // Iterate over the whole map looking for a bookmark ID that matches.
-        for (Map.Entry<Integer, OfflinePageTabObserver> entry : sTabObservers.entrySet()) {
-            OfflinePageTabObserver value = (OfflinePageTabObserver) entry.getValue();
-            if (value != null && value.mBookmarkId == bookmarkId) return entry.getKey();
-        }
-        return Tab.INVALID_TAB_ID;
+    public static void addObserverForTab(Tab tab) {
+        assert getInstance() != null;
+        getInstance().startObservingTab(tab);
     }
 
     /**
      * Builds a new OfflinePageTabObserver.
-     * @param activity The ChromeActivity of this instance of the browser.
-     * @param connected True if the phone is connected when the observer is created.
-     * @param bookmarkId Id of the bookmark (offline page) that is associated with this observer.
+     * @param context Android context.
+     * @param snackbarManager The snackbar manager to show and dismiss snackbars.
      * @param snackbarController Controller to use to build the snackbar.
      */
-    public OfflinePageTabObserver(ChromeActivity activity, Tab tab, boolean connected,
+    OfflinePageTabObserver(Context context, SnackbarManager snackbarManager,
             SnackbarController snackbarController) {
-        mActivity = activity;
-        mBookmarkId = tab.getBookmarkId();
-        mConnected = connected;
-        // Remember if the tab was hidden when we started, so we can show the snackbar when
-        // the tab becomes visible.
-        mWasHidden = tab.isHidden();
-
-        mListener = new OfflinePageConnectivityListener(activity, tab, snackbarController);
+        mContext = context;
+        mSnackbarManager = snackbarManager;
         mSnackbarController = snackbarController;
-    }
 
-    private void setConnected(boolean connected) {
-        mConnected = connected;
-    }
-
-    private void enableConnectivityListener(SnackbarController snackbarController) {
-        mListener.enable(snackbarController);
+        // The first time observer is created snackbar has net yet been shown.
+        mWasSnackbarShown = false;
+        mIsObservingNetworkChanges = false;
     }
 
     // Methods from EmptyTabObserver
     @Override
-    public void onShown(Tab visibleTab) {
-        // If there is no bookmark on this tab, there is nothing to do.
-        long bookmarkNum = visibleTab.getBookmarkId();
-        if (bookmarkNum == Tab.INVALID_BOOKMARK_ID) return;
+    public void onShown(Tab tab) {
+        if (!getTabHelper().isOfflinePage(tab)) return;
 
-        if (mWasHidden) {
-            if (mConnected) {
-                OfflinePageUtils.showReloadSnackbar(mActivity, mSnackbarController);
-            }
-
-            mWasHidden = false;
+        // Whenever we get a new tab shown, we will give a reload snackbar a chance to be shown,
+        // therefor the state is reset to false. Also the currently shown tab is captured.
+        mWasSnackbarShown = false;
+        mCurrentTab = tab;
+        if (isConnected() && !wasSnackbarShown()) {
             Log.d(TAG, "onShown, showing 'delayed' snackbar");
+            showReloadSnackbar();
+            // TODO(fgorski): Move the variable assignment to the method above, once
+            // OfflinePageUtils can be mocked.
+            mWasSnackbarShown = true;
         }
     }
 
     @Override
     public void onHidden(Tab hiddenTab) {
-        mWasHidden = true;
+        mWasSnackbarShown = false;
+        mCurrentTab = null;
         // In case any snackbars are showing, dismiss them before we switch tabs.
-        mActivity.getSnackbarManager().dismissSnackbars(mSnackbarController);
+        mSnackbarManager.dismissSnackbars(mSnackbarController);
     }
 
     @Override
-    public void onPageLoadStarted(Tab tab, String newUrl) {
-        OfflinePageUtils.preferOnlineVersion(mActivity, tab, newUrl);
-    }
-
-    @Override
-    public void onDestroyed(Tab destroyedTab) {
-        // Unregister this tab for OS connectivity notifications.
-        mListener.disable();
-        destroyedTab.removeObserver(this);
-        sTabObservers.remove(destroyedTab.getId());
+    public void onDestroyed(Tab tab) {
         Log.d(TAG, "onDestroyed");
+        stopObservingTab(tab);
     }
 
     @Override
-    public void onUrlUpdated(Tab reloadingTab) {
-        // Unregister this tab for OS connectivity notifications.
-        mListener.disable();
+    public void onUrlUpdated(Tab tab) {
         Log.d(TAG, "onUrlUpdated");
-        removeObserverForTab(reloadingTab.getId());
+        if (!getTabHelper().isOfflinePage(tab)) {
+            stopObservingTab(tab);
+        }
         // In case any snackbars are showing, dismiss them before we navigate away.
-        mActivity.getSnackbarManager().dismissSnackbars(mSnackbarController);
+        mSnackbarManager.dismissSnackbars(mSnackbarController);
+    }
+
+    void startObservingTab(Tab tab) {
+        // If the tab does not contain an offline page, we don't care to track it.
+        if (!getTabHelper().isOfflinePage(tab)) return;
+
+        // TODO(fgorski): check for one of 2 things:
+        // 1. can we presume that we start observing the current tab, always
+        // 2. will onShown happen right after and then we don't need the next 2 lines:
+        mCurrentTab = tab;
+        mWasSnackbarShown = false;
+
+        // If we are not observing the tab yet, let's.
+        if (!isObservingTab(tab)) {
+            int tabId = getTabHelper().getTabId(tab);
+            mObservedTabs.add(tabId);
+            getTabHelper().addObserver(tab, this);
+        }
+        if (!isObservingNetworkChanges()) {
+            startObservingNetworkChanges();
+            mIsObservingNetworkChanges = true;
+        }
+        if (getTabHelper().isTabShowing(tab) && isConnected()) {
+            showReloadSnackbar();
+            // TODO(fgorski): Move the variable assignment to the method above, once
+            // OfflinePageUtils can be mocked.
+            mWasSnackbarShown = true;
+        }
     }
 
     /**
-     * Attaches a connectivity listener if needed by this observer.
-     * @param tabId The index of the tab that this listener is listening to.
-     * @param listener The listener itself.
+     * Removes the observer for a tab with the specified tabId.
+     * @param tabId ID of a tab that was observed.
      */
-    private void setConnectivityListener(int tabId, OfflinePageConnectivityListener listener) {
-        mListener = listener;
+    void stopObservingTab(Tab tab) {
+        if (isObservingTab(tab)) {
+            int tabId = getTabHelper().getTabId(tab);
+            mObservedTabs.remove(tabId);
+            getTabHelper().removeObserver(tab, this);
+        }
+        if (mObservedTabs.isEmpty() && isObservingNetworkChanges()) {
+            stopObservingNetworkChanges();
+            mIsObservingNetworkChanges = false;
+        }
+        mWasSnackbarShown = false;
+        mCurrentTab = null;
+    }
+
+    // Methods from ConnectionTypeObserver.
+    @Override
+    public void onConnectionTypeChanged(int connectionType) {
+        Log.d(TAG, "Got connectivity event, connectionType: " + connectionType + ", controller "
+                        + mSnackbarController);
+
+        Log.d(TAG, "Connection changed, connected " + isConnected());
+        // Shows or hides the snackbar as needed.  This also adds some hysterisis - if we keep
+        // connecting and disconnecting, we don't want to flash the snackbar.  It will timeout after
+        // several seconds.
+        if (isConnected() && getTabHelper().isTabShowing(mCurrentTab) && !wasSnackbarShown()) {
+            Log.d(TAG, "Connection became available, show reload snackbar.");
+            showReloadSnackbar();
+            // TODO(fgorski): Move the variable assignment to the method above, once
+            // OfflinePageUtils can be mocked.
+            mWasSnackbarShown = true;
+        }
+    }
+
+    @VisibleForTesting
+    boolean isObservingTab(Tab tab) {
+        return mObservedTabs.contains(getTabHelper().getTabId(tab));
+    }
+
+    @VisibleForTesting
+    boolean isObservingNetworkChanges() {
+        return mIsObservingNetworkChanges;
+    }
+
+    @VisibleForTesting
+    boolean isConnected() {
+        return OfflinePageUtils.isConnected();
+    }
+
+    @VisibleForTesting
+    boolean wasSnackbarShown() {
+        return mWasSnackbarShown;
+    }
+
+    @VisibleForTesting
+    void showReloadSnackbar() {
+        OfflinePageUtils.showReloadSnackbar(mContext, mSnackbarManager, mSnackbarController,
+                getTabHelper().getTabId(mCurrentTab));
+    }
+
+    @VisibleForTesting
+    void startObservingNetworkChanges() {
+        NetworkChangeNotifier.addConnectionTypeObserver(this);
+    }
+
+    @VisibleForTesting
+    void stopObservingNetworkChanges() {
+        NetworkChangeNotifier.removeConnectionTypeObserver(this);
     }
 }

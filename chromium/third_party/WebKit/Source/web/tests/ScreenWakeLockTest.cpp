@@ -12,8 +12,9 @@
 #include "platform/testing/URLTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebPageVisibilityState.h"
-#include "public/platform/WebUnitTestSupport.h"
+#include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/platform/modules/wake_lock/WebWakeLockClient.h"
+#include "public/web/WebCache.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
@@ -67,7 +68,8 @@ protected:
 
     void TearDown() override
     {
-        blink::Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
+        blink::Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+        blink::WebCache::clear();
     }
 
     void loadFrame()
@@ -80,21 +82,21 @@ protected:
 
     blink::LocalFrame* frame()
     {
-        ASSERT(m_webViewHelper.webViewImpl());
-        ASSERT(m_webViewHelper.webViewImpl()->mainFrameImpl());
+        DCHECK(m_webViewHelper.webViewImpl());
+        DCHECK(m_webViewHelper.webViewImpl()->mainFrameImpl());
         return m_webViewHelper.webViewImpl()->mainFrameImpl()->frame();
     }
 
     blink::Screen* screen()
     {
-        ASSERT(frame());
-        ASSERT(frame()->localDOMWindow());
+        DCHECK(frame());
+        DCHECK(frame()->localDOMWindow());
         return frame()->localDOMWindow()->screen();
     }
 
     bool screenKeepAwake()
     {
-        ASSERT(screen());
+        DCHECK(screen());
         return ScreenWakeLock::keepAwake(*screen());
     }
 
@@ -105,20 +107,20 @@ protected:
 
     void setKeepAwake(bool keepAwake)
     {
-        ASSERT(screen());
+        DCHECK(screen());
         ScreenWakeLock::setKeepAwake(*screen(), keepAwake);
     }
 
     void show()
     {
-        ASSERT(m_webViewHelper.webView());
+        DCHECK(m_webViewHelper.webView());
         m_webViewHelper.webView()->setVisibilityState(
             blink::WebPageVisibilityStateVisible, false);
     }
 
     void hide()
     {
-        ASSERT(m_webViewHelper.webView());
+        DCHECK(m_webViewHelper.webView());
         m_webViewHelper.webView()->setVisibilityState(
             blink::WebPageVisibilityStateHidden, false);
     }

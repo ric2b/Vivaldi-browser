@@ -81,7 +81,6 @@ HttpNetworkSession::Params::Params()
       proxy_service(NULL),
       ssl_config_service(NULL),
       http_auth_handler_factory(NULL),
-      network_delegate(NULL),
       net_log(NULL),
       host_mapping_rules(NULL),
       socket_performance_watcher_factory(NULL),
@@ -91,16 +90,16 @@ HttpNetworkSession::Params::Params()
       enable_tcp_fast_open_for_ssl(false),
       enable_spdy_ping_based_connection_checking(true),
       spdy_default_protocol(kProtoUnknown),
-      enable_spdy31(true),
+      enable_spdy31(false),
       enable_http2(true),
       spdy_session_max_recv_window_size(kSpdySessionMaxRecvWindowSize),
       spdy_stream_max_recv_window_size(kSpdyStreamMaxRecvWindowSize),
       time_func(&base::TimeTicks::Now),
       parse_alternative_services(false),
       enable_alternative_service_with_different_host(false),
-      alternative_service_probability_threshold(1),
-      enable_npn(true),
+      enable_npn(false),
       enable_brotli(false),
+      enable_priority_dependencies(true),
       enable_quic(false),
       disable_quic_on_timeout_with_open_streams(false),
       enable_quic_for_proxies(false),
@@ -131,6 +130,7 @@ HttpNetworkSession::Params::Params()
       quic_disable_preconnect_if_0rtt(false),
       quic_migrate_sessions_on_network_change(false),
       quic_migrate_sessions_early(false),
+      quic_disable_bidirectional_streams(false),
       proxy_delegate(NULL),
       enable_token_binding(false) {
   quic_supported_versions.push_back(QUIC_VERSION_30);
@@ -143,7 +143,6 @@ HttpNetworkSession::Params::~Params() {}
 // TODO(mbelshe): Move the socket factories into HttpStreamFactory.
 HttpNetworkSession::HttpNetworkSession(const Params& params)
     : net_log_(params.net_log),
-      network_delegate_(params.network_delegate),
       http_server_properties_(params.http_server_properties),
       cert_verifier_(params.cert_verifier),
       http_auth_handler_factory_(params.http_auth_handler_factory),
@@ -188,12 +187,14 @@ HttpNetworkSession::HttpNetworkSession(const Params& params)
           params.quic_idle_connection_timeout_seconds,
           params.quic_migrate_sessions_on_network_change,
           params.quic_migrate_sessions_early,
-          params.quic_connection_options),
+          params.quic_connection_options,
+          params.enable_token_binding),
       spdy_session_pool_(params.host_resolver,
                          params.ssl_config_service,
                          params.http_server_properties,
                          params.transport_security_state,
                          params.enable_spdy_ping_based_connection_checking,
+                         params.enable_priority_dependencies,
                          params.spdy_default_protocol,
                          params.spdy_session_max_recv_window_size,
                          params.spdy_stream_max_recv_window_size,
@@ -243,8 +244,6 @@ HttpNetworkSession::HttpNetworkSession(const Params& params)
 
   next_protos_.push_back(kProtoHTTP11);
 
-  http_server_properties_->SetAlternativeServiceProbabilityThreshold(
-      params.alternative_service_probability_threshold);
   http_server_properties_->SetMaxServerConfigsStoredInProperties(
       params.quic_max_server_configs_stored_in_properties);
 }
@@ -318,10 +317,13 @@ scoped_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
     connection_options->AppendString("'" + QuicUtils::TagToString(*it) + "'");
   }
   dict->Set("connection_options", std::move(connection_options));
-  dict->SetString("origin_to_force_quic_on",
-                  params_.origin_to_force_quic_on.ToString());
-  dict->SetDouble("alternative_service_probability_threshold",
-                  params_.alternative_service_probability_threshold);
+
+  scoped_ptr<base::ListValue> origins_to_force_quic_on(new base::ListValue);
+  for (const auto& origin : params_.origins_to_force_quic_on) {
+    origins_to_force_quic_on->AppendString("'" + origin.ToString() + "'");
+  }
+  dict->Set("origins_to_force_quic_on", std::move(origins_to_force_quic_on));
+
   dict->SetDouble("load_server_info_timeout_srtt_multiplier",
                   params_.quic_load_server_info_timeout_srtt_multiplier);
   dict->SetBoolean("enable_connection_racing",
@@ -338,6 +340,8 @@ scoped_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
                    params_.quic_idle_connection_timeout_seconds);
   dict->SetBoolean("disable_preconnect_if_0rtt",
                    params_.quic_disable_preconnect_if_0rtt);
+  dict->SetBoolean("disable_quic_on_timeout_with_open_streams",
+                   params_.disable_quic_on_timeout_with_open_streams);
   dict->SetString("disabled_reason",
                   quic_stream_factory_.QuicDisabledReasonString());
   return std::move(dict);

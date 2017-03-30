@@ -214,8 +214,7 @@ class BridgedNativeWidgetTest : public BridgedNativeWidgetTestBase {
 
  protected:
   scoped_ptr<views::View> view_;
-  scoped_ptr<BridgedNativeWidget> bridge_;
-  BridgedContentView* ns_view_;  // Weak. Owned by bridge_.
+  BridgedContentView* ns_view_;  // Weak. Owned by bridge().
   base::MessageLoopForUI message_loop_;
 
  private:
@@ -280,6 +279,8 @@ void BridgedNativeWidgetTest::SetUp() {
 }
 
 void BridgedNativeWidgetTest::TearDown() {
+  if (bridge())
+    bridge()->SetRootView(nullptr);
   view_.reset();
   BridgedNativeWidgetTestBase::TearDown();
 }
@@ -683,9 +684,6 @@ typedef BridgedNativeWidgetTestBase BridgedNativeWidgetSimulateFullscreenTest;
 // mashing Ctrl+Left/Right to keep OSX in a transition between Spaces to cause
 // the fullscreen transition to fail.
 TEST_F(BridgedNativeWidgetSimulateFullscreenTest, FailToEnterAndExit) {
-  if (base::mac::IsOSSnowLeopard())
-    return;
-
   base::scoped_nsobject<NSWindow> owned_window(
       [[BridgedNativeWidgetTestFullScreenWindow alloc]
           initWithContentRect:NSMakeRect(50, 50, 400, 300)

@@ -31,6 +31,7 @@
 #ifndef MIDIPort_h
 #define MIDIPort_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/dom/ExceptionCode.h"
@@ -42,10 +43,10 @@ namespace blink {
 
 class MIDIAccess;
 
-class MIDIPort : public RefCountedGarbageCollectedEventTargetWithInlineData<MIDIPort>, public ActiveDOMObject {
+class MIDIPort : public RefCountedGarbageCollectedEventTargetWithInlineData<MIDIPort>, public ActiveScriptWrappable, public ActiveDOMObject {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(MIDIPort);
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MIDIPort);
+    USING_GARBAGE_COLLECTED_MIXIN(MIDIPort);
 public:
     enum ConnectionState {
         ConnectionStateOpen,
@@ -82,10 +83,12 @@ public:
 
     // EventTarget
     const AtomicString& interfaceName() const override { return EventTargetNames::MIDIPort; }
-    ExecutionContext* executionContext() const final;
+    ExecutionContext* getExecutionContext() const final;
+
+    // ActiveScriptWrappable
+    bool hasPendingActivity() const final;
 
     // ActiveDOMObject
-    bool hasPendingActivity() const override;
     void stop() override;
 
 protected:

@@ -22,7 +22,7 @@ public:
     explicit LineLayoutText(const LineLayoutItem& item)
         : LineLayoutItem(item)
     {
-        ASSERT(!item || item.isText());
+        ASSERT_WITH_SECURITY_IMPLICATION(!item || item.isText());
     }
 
     explicit LineLayoutText(std::nullptr_t) : LineLayoutItem(nullptr) { }
@@ -32,6 +32,11 @@ public:
     InlineTextBox* firstTextBox() const
     {
         return toText()->firstTextBox();
+    }
+
+    InlineTextBox* lastTextBox() const
+    {
+        return toText()->lastTextBox();
     }
 
     InlineTextBox* createInlineTextBox(int start, unsigned short length)
@@ -124,9 +129,9 @@ public:
         return toText()->width(from, len, font, xPos, textDirection, fallbackFonts, glyphBounds);
     }
 
-    float width(unsigned from, unsigned len, LayoutUnit xPos, TextDirection textDirection, bool firstLine) const
+    float width(unsigned from, unsigned len, LayoutUnit xPos, TextDirection textDirection, bool firstLine, HashSet<const SimpleFontData*>* fallbackFonts = nullptr, FloatRect* glyphBounds = nullptr) const
     {
-        return toText()->width(from, len, xPos, textDirection, firstLine);
+        return toText()->width(from, len, xPos, textDirection, firstLine, fallbackFonts, glyphBounds);
     }
 
     float hyphenWidth(const Font& font, TextDirection textDirection)
@@ -142,6 +147,11 @@ public:
     unsigned textStartOffset() const
     {
         return toText()->textStartOffset();
+    }
+
+    float minLogicalWidth() const
+    {
+        return toText()->minLogicalWidth();
     }
 
 private:

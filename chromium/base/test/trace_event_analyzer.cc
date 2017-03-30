@@ -7,10 +7,10 @@
 #include <math.h>
 
 #include <algorithm>
+#include <memory>
 #include <set>
 
 #include "base/json/json_reader.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/pattern.h"
 #include "base/values.h"
 
@@ -26,10 +26,33 @@ TraceEvent::TraceEvent()
       other_event(NULL) {
 }
 
-TraceEvent::TraceEvent(const TraceEvent& other) = default;
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+TraceEvent::TraceEvent(TraceEvent&& other) = default;
+#else
+TraceEvent::TraceEvent(TraceEvent&& other)
+  : thread(other.thread),
+    timestamp(other.timestamp),
+    duration(other.duration),
+    phase(other.phase),
+    other_event(other.other_event)
+{}
+#endif
 
 TraceEvent::~TraceEvent() {
 }
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+TraceEvent& TraceEvent::operator=(TraceEvent&& rhs) = default;
+#else
+TraceEvent& TraceEvent::operator=(TraceEvent&& rhs) {
+  thread = rhs.thread;
+  timestamp = rhs.timestamp;
+  duration = rhs.duration;
+  phase = rhs.phase;
+  other_event = rhs.other_event;
+  return *this;
+}
+#endif
 
 bool TraceEvent::SetFromJSON(const base::Value* event_value) {
   if (event_value->GetType() != base::Value::TYPE_DICTIONARY) {
@@ -54,6 +77,12 @@ bool TraceEvent::SetFromJSON(const base::Value* event_value) {
   bool require_id = (phase == TRACE_EVENT_PHASE_ASYNC_BEGIN ||
                      phase == TRACE_EVENT_PHASE_ASYNC_STEP_INTO ||
                      phase == TRACE_EVENT_PHASE_ASYNC_STEP_PAST ||
+                     phase == TRACE_EVENT_PHASE_MEMORY_DUMP ||
+                     phase == TRACE_EVENT_PHASE_ENTER_CONTEXT ||
+                     phase == TRACE_EVENT_PHASE_LEAVE_CONTEXT ||
+                     phase == TRACE_EVENT_PHASE_CREATE_OBJECT ||
+                     phase == TRACE_EVENT_PHASE_DELETE_OBJECT ||
+                     phase == TRACE_EVENT_PHASE_SNAPSHOT_OBJECT ||
                      phase == TRACE_EVENT_PHASE_ASYNC_END);
 
   if (require_origin && !dictionary->GetInteger("pid", &thread.process_id)) {
@@ -103,11 +132,9 @@ bool TraceEvent::SetFromJSON(const base::Value* event_value) {
       arg_numbers[it.key()] = static_cast<double>(boolean ? 1 : 0);
     } else if (it.value().GetAsDouble(&double_num)) {
       arg_numbers[it.key()] = double_num;
-    } else {
-      LOG(WARNING) << "Value type of argument is not supported: " <<
-          static_cast<int>(it.value().GetType());
-      continue;  // Skip non-supported arguments.
     }
+    // Record all arguments as values.
+    arg_values[it.key()] = it.value().CreateDeepCopy();
   }
 
   return true;
@@ -119,9 +146,9 @@ double TraceEvent::GetAbsTimeToOtherEvent() const {
 
 bool TraceEvent::GetArgAsString(const std::string& name,
                                 std::string* arg) const {
-  std::map<std::string, std::string>::const_iterator i = arg_strings.find(name);
-  if (i != arg_strings.end()) {
-    *arg = i->second;
+  const auto it = arg_strings.find(name);
+  if (it != arg_strings.end()) {
+    *arg = it->second;
     return true;
   }
   return false;
@@ -129,9 +156,19 @@ bool TraceEvent::GetArgAsString(const std::string& name,
 
 bool TraceEvent::GetArgAsNumber(const std::string& name,
                                 double* arg) const {
-  std::map<std::string, double>::const_iterator i = arg_numbers.find(name);
-  if (i != arg_numbers.end()) {
-    *arg = i->second;
+  const auto it = arg_numbers.find(name);
+  if (it != arg_numbers.end()) {
+    *arg = it->second;
+    return true;
+  }
+  return false;
+}
+
+bool TraceEvent::GetArgAsValue(const std::string& name,
+                               std::unique_ptr<base::Value>* arg) const {
+  const auto it = arg_values.find(name);
+  if (it != arg_values.end()) {
+    *arg = it->second->CreateDeepCopy();
     return true;
   }
   return false;
@@ -143,6 +180,10 @@ bool TraceEvent::HasStringArg(const std::string& name) const {
 
 bool TraceEvent::HasNumberArg(const std::string& name) const {
   return (arg_numbers.find(name) != arg_numbers.end());
+}
+
+bool TraceEvent::HasArg(const std::string& name) const {
+  return (arg_values.find(name) != arg_values.end());
 }
 
 std::string TraceEvent::GetKnownArgAsString(const std::string& name) const {
@@ -171,6 +212,14 @@ bool TraceEvent::GetKnownArgAsBool(const std::string& name) const {
   bool result = GetArgAsNumber(name, &arg_double);
   DCHECK(result);
   return (arg_double != 0.0);
+}
+
+std::unique_ptr<base::Value> TraceEvent::GetKnownArgAsValue(
+    const std::string& name) const {
+  std::unique_ptr<base::Value> arg_value;
+  bool result = GetArgAsValue(name, &arg_value);
+  DCHECK(result);
+  return arg_value;
 }
 
 // QueryNode
@@ -651,7 +700,7 @@ size_t FindMatchingEvents(const std::vector<TraceEvent>& events,
 
 bool ParseEventsFromJson(const std::string& json,
                          std::vector<TraceEvent>* output) {
-  scoped_ptr<base::Value> root = base::JSONReader::Read(json);
+  std::unique_ptr<base::Value> root = base::JSONReader::Read(json);
 
   base::ListValue* root_list = NULL;
   if (!root.get() || !root->GetAsList(&root_list))
@@ -662,7 +711,7 @@ bool ParseEventsFromJson(const std::string& json,
     if (root_list->Get(i, &item)) {
       TraceEvent event;
       if (event.SetFromJSON(item))
-        output->push_back(event);
+        output->push_back(std::move(event));
       else
         return false;
     }
@@ -684,7 +733,7 @@ TraceAnalyzer::~TraceAnalyzer() {
 
 // static
 TraceAnalyzer* TraceAnalyzer::Create(const std::string& json_events) {
-  scoped_ptr<TraceAnalyzer> analyzer(new TraceAnalyzer());
+  std::unique_ptr<TraceAnalyzer> analyzer(new TraceAnalyzer());
   if (analyzer->SetEvents(json_events))
     return analyzer.release();
   return NULL;

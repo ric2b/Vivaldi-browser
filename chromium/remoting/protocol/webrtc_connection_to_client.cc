@@ -26,7 +26,6 @@
 #include "third_party/webrtc/api/mediastreaminterface.h"
 #include "third_party/webrtc/api/peerconnectioninterface.h"
 #include "third_party/webrtc/api/test/fakeconstraints.h"
-#include "third_party/webrtc/api/videosourceinterface.h"
 
 namespace remoting {
 namespace protocol {
@@ -36,14 +35,15 @@ namespace protocol {
 // TODO(sergeyu): Figure out if we would benefit from using a separate
 // thread as a worker thread.
 WebrtcConnectionToClient::WebrtcConnectionToClient(
-    scoped_ptr<protocol::Session> session,
+    std::unique_ptr<protocol::Session> session,
     scoped_refptr<protocol::TransportContext> transport_context)
     : transport_(jingle_glue::JingleThreadWrapper::current(),
                  transport_context,
                  this),
       session_(std::move(session)),
       control_dispatcher_(new HostControlDispatcher()),
-      event_dispatcher_(new HostEventDispatcher()) {
+      event_dispatcher_(new HostEventDispatcher()),
+      weak_factory_(this) {
   session_->SetEventHandler(this);
   session_->SetTransport(&transport_);
 }
@@ -74,15 +74,14 @@ void WebrtcConnectionToClient::OnInputEventReceived(int64_t timestamp) {
   event_handler_->OnInputEventReceived(this, timestamp);
 }
 
-scoped_ptr<VideoStream> WebrtcConnectionToClient::StartVideoStream(
-    scoped_ptr<webrtc::DesktopCapturer> desktop_capturer) {
-  scoped_ptr<WebrtcVideoStream> stream(new WebrtcVideoStream());
+std::unique_ptr<VideoStream> WebrtcConnectionToClient::StartVideoStream(
+    std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer) {
+  std::unique_ptr<WebrtcVideoStream> stream(new WebrtcVideoStream());
   if (!stream->Start(std::move(desktop_capturer), transport_.peer_connection(),
                      transport_.peer_connection_factory())) {
     return nullptr;
   }
   return std::move(stream);
-
 }
 
 AudioStub* WebrtcConnectionToClient::audio_stub() {
@@ -123,12 +122,22 @@ void WebrtcConnectionToClient::OnSessionStateChange(Session::State state) {
     case Session::ACCEPTED:
       // Don't care about these events.
       break;
+
     case Session::AUTHENTICATING:
       event_handler_->OnConnectionAuthenticating(this);
       break;
-    case Session::AUTHENTICATED:
+
+    case Session::AUTHENTICATED: {
+      base::WeakPtr<WebrtcConnectionToClient> self = weak_factory_.GetWeakPtr();
       event_handler_->OnConnectionAuthenticated(this);
+
+      // OnConnectionAuthenticated() call above may result in the connection
+      // being torn down.
+      if (self)
+        event_handler_->CreateVideoStreams(this);
       break;
+    }
+
     case Session::CLOSED:
     case Session::FAILED:
       control_dispatcher_.reset();

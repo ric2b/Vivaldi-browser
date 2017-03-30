@@ -37,7 +37,7 @@ namespace blink {
 
 class CheckboxInputType final : public BaseCheckableInputType {
 public:
-    static PassRefPtrWillBeRawPtr<InputType> create(HTMLInputElement&);
+    static InputType* create(HTMLInputElement&);
 
 private:
     CheckboxInputType(HTMLInputElement& element) : BaseCheckableInputType(element) { }
@@ -45,7 +45,7 @@ private:
     bool valueMissing(const String&) const override;
     String valueMissingText() const override;
     void handleKeyupEvent(KeyboardEvent*) override;
-    PassOwnPtrWillBeRawPtr<ClickHandlingState> willDispatchClick() override;
+    ClickHandlingState* willDispatchClick() override;
     void didDispatchClick(Event*, const ClickHandlingState&) override;
     bool shouldAppearIndeterminate() const override;
 };

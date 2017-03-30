@@ -4,7 +4,9 @@
 
 #include "components/sync_driver/glue/sync_backend_host_impl.h"
 
+#include <map>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/location.h"
@@ -238,7 +240,7 @@ void SyncBackendHostImpl::StopSyncingForShutdown() {
   frontend_ = NULL;
 
   // Stop non-blocking sync types from sending any more requests to the syncer.
-  sync_context_proxy_.reset();
+  sync_context_.reset();
 
   DCHECK(registrar_->sync_thread()->IsRunning());
 
@@ -439,12 +441,13 @@ void SyncBackendHostImpl::DeactivateDirectoryDataType(syncer::ModelType type) {
 void SyncBackendHostImpl::ActivateNonBlockingDataType(
     syncer::ModelType type,
     scoped_ptr<syncer_v2::ActivationContext> activation_context) {
-  sync_context_proxy_->ConnectTypeToSync(type, std::move(activation_context));
+  registrar_->RegisterNonBlockingType(type);
+  sync_context_->ConnectType(type, std::move(activation_context));
 }
 
 void SyncBackendHostImpl::DeactivateNonBlockingDataType(
     syncer::ModelType type) {
-  sync_context_proxy_->Disconnect(type);
+  sync_context_->DisconnectType(type);
 }
 
 syncer::UserShare* SyncBackendHostImpl::GetUserShare() const {
@@ -597,12 +600,11 @@ void SyncBackendHostImpl::HandleInitializationSuccessOnFrontendLoop(
     const syncer::WeakHandle<syncer::JsBackend> js_backend,
     const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>
         debug_info_listener,
-    syncer_v2::SyncContextProxy* sync_context_proxy,
+    scoped_ptr<syncer_v2::SyncContext> sync_context,
     const std::string& cache_guid) {
   DCHECK_EQ(base::MessageLoop::current(), frontend_loop_);
 
-  if (sync_context_proxy)
-    sync_context_proxy_ = sync_context_proxy->Clone();
+  sync_context_ = std::move(sync_context);
 
   if (!frontend_)
     return;
@@ -851,6 +853,13 @@ void SyncBackendHostImpl::ClearServerData(
   registrar_->sync_thread()->task_runner()->PostTask(
       FROM_HERE, base::Bind(&SyncBackendHostCore::DoClearServerData,
                             core_.get(), callback));
+}
+
+void SyncBackendHostImpl::OnCookieJarChanged(bool account_mismatch) {
+  DCHECK(ui_thread_->BelongsToCurrentThread());
+  registrar_->sync_thread()->task_runner()->PostTask(
+      FROM_HERE, base::Bind(&SyncBackendHostCore::DoOnCookieJarChanged,
+                            core_.get(), account_mismatch));
 }
 
 void SyncBackendHostImpl::ClearServerDataDoneOnFrontendLoop(

@@ -14,7 +14,7 @@ var idGeneratorNatives = requireNative('id_generator');
 var webRequestInternal;
 
 function GetUniqueSubEventName(eventName) {
-  return eventName + "/" + idGeneratorNatives.GetNextId();
+  return eventName + '/' + idGeneratorNatives.GetNextId();
 }
 
 // WebRequestEventImpl object. This is used for special webRequest events
@@ -44,6 +44,7 @@ function WebRequestEventImpl(eventName, opt_argSchemas, opt_extraArgSchemas,
                                 opt_webViewInstanceId);
   }
 }
+$Object.setPrototypeOf(WebRequestEventImpl.prototype, null);
 
 // Test if the given callback is registered for this event.
 WebRequestEventImpl.prototype.hasListener = function(cb) {
@@ -175,17 +176,20 @@ binding.registerCustomHook(function(api) {
   });
 });
 
-var WebRequestEvent = utils.expose('WebRequestEvent',
-                                   WebRequestEventImpl,
-                                   { functions: [
-  'hasListener',
-  'hasListeners',
-  'addListener',
-  'removeListener',
-  'addRules',
-  'removeRules',
-  'getRules'
-] });
+function WebRequestEvent() {
+  privates(WebRequestEvent).constructPrivate(this, arguments);
+}
+utils.expose(WebRequestEvent, WebRequestEventImpl, {
+  functions: [
+    'hasListener',
+    'hasListeners',
+    'addListener',
+    'removeListener',
+    'addRules',
+    'removeRules',
+    'getRules',
+  ],
+});
 
 webRequestInternal = binding.generate();
 exports.$set('binding', webRequestInternal);

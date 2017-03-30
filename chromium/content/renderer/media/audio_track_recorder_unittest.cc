@@ -11,7 +11,6 @@
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/renderer/media/media_stream_audio_source.h"
-#include "content/renderer/media/mock_media_constraint_factory.h"
 #include "content/renderer/media/webrtc/webrtc_local_audio_track_adapter.h"
 #include "content/renderer/media/webrtc_local_audio_track.h"
 #include "media/audio/simple_sources.h"
@@ -28,6 +27,7 @@ using ::testing::Return;
 using ::testing::SaveArg;
 using ::testing::TestWithParam;
 using ::testing::ValuesIn;
+using base::TimeTicks;
 
 namespace {
 
@@ -149,16 +149,16 @@ class AudioTrackRecorderTest : public TestWithParam<ATRTestParams> {
     buffer_.reset(new float[kFramesPerBuffer * params.channels()]);
   }
 
-  scoped_ptr<media::AudioBus> GetFirstSourceAudioBus() {
-    scoped_ptr<media::AudioBus> bus(media::AudioBus::Create(
+  std::unique_ptr<media::AudioBus> GetFirstSourceAudioBus() {
+    std::unique_ptr<media::AudioBus> bus(media::AudioBus::Create(
         first_params_.channels(), first_params_.sample_rate() *
                                       kMediaStreamAudioTrackBufferDurationMs /
                                       base::Time::kMillisecondsPerSecond));
     first_source_.OnMoreData(bus.get(), 0, 0);
     return bus;
   }
-  scoped_ptr<media::AudioBus> GetSecondSourceAudioBus() {
-    scoped_ptr<media::AudioBus> bus(media::AudioBus::Create(
+  std::unique_ptr<media::AudioBus> GetSecondSourceAudioBus() {
+    std::unique_ptr<media::AudioBus> bus(media::AudioBus::Create(
         second_params_.channels(), second_params_.sample_rate() *
                                        kMediaStreamAudioTrackBufferDurationMs /
                                        base::Time::kMillisecondsPerSecond));
@@ -169,11 +169,11 @@ class AudioTrackRecorderTest : public TestWithParam<ATRTestParams> {
   MOCK_METHOD3(DoOnEncodedAudio,
                void(const media::AudioParameters& params,
                     std::string encoded_data,
-                    base::TimeTicks timestamp));
+                    TimeTicks timestamp));
 
   void OnEncodedAudio(const media::AudioParameters& params,
-                      scoped_ptr<std::string> encoded_data,
-                      base::TimeTicks timestamp) {
+                      std::unique_ptr<std::string> encoded_data,
+                      TimeTicks timestamp) {
     EXPECT_TRUE(!encoded_data->empty());
     // Decode |encoded_data| and check we get the expected number of frames
     // per buffer.
@@ -189,7 +189,7 @@ class AudioTrackRecorderTest : public TestWithParam<ATRTestParams> {
   const base::MessageLoop message_loop_;
 
   // ATR and WebMediaStreamTrack for fooling it.
-  scoped_ptr<AudioTrackRecorder> audio_track_recorder_;
+  std::unique_ptr<AudioTrackRecorder> audio_track_recorder_;
   blink::WebMediaStreamTrack blink_track_;
 
   // Two different sets of AudioParameters for testing re-init of ATR.
@@ -202,22 +202,17 @@ class AudioTrackRecorderTest : public TestWithParam<ATRTestParams> {
 
   // Decoder for verifying data was properly encoded.
   OpusDecoder* opus_decoder_;
-  scoped_ptr<float[]> buffer_;
+  std::unique_ptr<float[]> buffer_;
 
  private:
   // Prepares a blink track of a given MediaStreamType and attaches the native
   // track, which can be used to capture audio data and pass it to the producer.
   // Adapted from media::WebRTCLocalAudioSourceProviderTest.
   void PrepareBlinkTrack() {
-    MockMediaConstraintFactory constraint_factory;
-    scoped_refptr<WebRtcAudioCapturer> capturer(
-        WebRtcAudioCapturer::CreateCapturer(
-            -1, StreamDeviceInfo(),
-            constraint_factory.CreateWebMediaConstraints(), NULL, NULL));
     scoped_refptr<WebRtcLocalAudioTrackAdapter> adapter(
         WebRtcLocalAudioTrackAdapter::Create(std::string(), NULL));
-    scoped_ptr<WebRtcLocalAudioTrack> native_track(
-        new WebRtcLocalAudioTrack(adapter.get(), capturer, NULL));
+    std::unique_ptr<WebRtcLocalAudioTrack> native_track(
+        new WebRtcLocalAudioTrack(adapter.get()));
     blink::WebMediaStreamSource audio_source;
     audio_source.initialize(base::UTF8ToUTF16("dummy_source_id"),
                             blink::WebMediaStreamSource::TypeAudio,
@@ -242,31 +237,23 @@ TEST_P(AudioTrackRecorderTest, OnData) {
   // TODO(ajose): consider adding WillOnce(SaveArg...) and inspecting, as done
   // in VTR unittests. http://crbug.com/548856
   EXPECT_CALL(*this, DoOnEncodedAudio(_, _, _)).Times(1);
-  audio_track_recorder_->OnData(*GetFirstSourceAudioBus(),
-                                base::TimeTicks::Now());
-  for (int i = 0; i < kRatioInputToOutputFrames - 1; ++i) {
-    audio_track_recorder_->OnData(*GetFirstSourceAudioBus(),
-                                  base::TimeTicks::Now());
-  }
+  audio_track_recorder_->OnData(*GetFirstSourceAudioBus(), TimeTicks::Now());
+  for (int i = 0; i < kRatioInputToOutputFrames - 1; ++i)
+    audio_track_recorder_->OnData(*GetFirstSourceAudioBus(), TimeTicks::Now());
 
   EXPECT_CALL(*this, DoOnEncodedAudio(_, _, _))
       .Times(1)
       // Only reset the decoder once we've heard back:
       .WillOnce(RunClosure(base::Bind(&AudioTrackRecorderTest::ResetDecoder,
                                       base::Unretained(this), second_params_)));
-  audio_track_recorder_->OnData(*GetFirstSourceAudioBus(),
-                                base::TimeTicks::Now());
-  for (int i = 0; i < kRatioInputToOutputFrames - 1; ++i) {
-    audio_track_recorder_->OnData(*GetFirstSourceAudioBus(),
-                                  base::TimeTicks::Now());
-  }
+  audio_track_recorder_->OnData(*GetFirstSourceAudioBus(), TimeTicks::Now());
+  for (int i = 0; i < kRatioInputToOutputFrames - 1; ++i)
+    audio_track_recorder_->OnData(*GetFirstSourceAudioBus(), TimeTicks::Now());
 
   // If the amount of samples/10ms buffer is not an integer (e.g. 22050Hz) we
   // need an extra OnData() to account for the round-off error.
-  if (GetParam().sample_rate % 100) {
-    audio_track_recorder_->OnData(*GetFirstSourceAudioBus(),
-                                  base::TimeTicks::Now());
-  }
+  if (GetParam().sample_rate % 100)
+    audio_track_recorder_->OnData(*GetFirstSourceAudioBus(), TimeTicks::Now());
 
   // Give ATR new audio parameters.
   audio_track_recorder_->OnSetFormat(second_params_);
@@ -275,17 +262,42 @@ TEST_P(AudioTrackRecorderTest, OnData) {
   EXPECT_CALL(*this, DoOnEncodedAudio(_, _, _))
       .Times(1)
       .WillOnce(RunClosure(quit_closure));
-  audio_track_recorder_->OnData(*GetSecondSourceAudioBus(),
-                                base::TimeTicks::Now());
-  for (int i = 0; i < kRatioInputToOutputFrames - 1; ++i) {
-    audio_track_recorder_->OnData(*GetSecondSourceAudioBus(),
-                                  base::TimeTicks::Now());
-  }
+  audio_track_recorder_->OnData(*GetSecondSourceAudioBus(), TimeTicks::Now());
+  for (int i = 0; i < kRatioInputToOutputFrames - 1; ++i)
+    audio_track_recorder_->OnData(*GetSecondSourceAudioBus(), TimeTicks::Now());
+
+  run_loop.Run();
+  Mock::VerifyAndClearExpectations(this);
+}
+
+TEST_P(AudioTrackRecorderTest, PauseResume) {
+  InSequence s;
+  base::RunLoop run_loop;
+  base::Closure quit_closure = run_loop.QuitClosure();
+
+  // Give ATR initial audio parameters.
+  audio_track_recorder_->OnSetFormat(first_params_);
+
+  audio_track_recorder_->Pause();
+  EXPECT_CALL(*this, DoOnEncodedAudio(_, _, _)).Times(0);
+  audio_track_recorder_->OnData(*GetFirstSourceAudioBus(), TimeTicks::Now());
+  for (int i = 0; i < kRatioInputToOutputFrames - 1; ++i)
+    audio_track_recorder_->OnData(*GetFirstSourceAudioBus(), TimeTicks::Now());
+
+  audio_track_recorder_->Resume();
+  EXPECT_CALL(*this, DoOnEncodedAudio(_, _, _))
+      .Times(1)
+      .WillOnce(RunClosure(quit_closure));
+  audio_track_recorder_->OnData(*GetFirstSourceAudioBus(), TimeTicks::Now());
+  for (int i = 0; i < kRatioInputToOutputFrames - 1; ++i)
+    audio_track_recorder_->OnData(*GetFirstSourceAudioBus(), TimeTicks::Now());
+
+  if (GetParam().sample_rate % 100)
+    audio_track_recorder_->OnData(*GetFirstSourceAudioBus(), TimeTicks::Now());
 
   run_loop.Run();
   Mock::VerifyAndClearExpectations(this);
 }
 
 INSTANTIATE_TEST_CASE_P(, AudioTrackRecorderTest, ValuesIn(kATRTestParams));
-
 }  // namespace content

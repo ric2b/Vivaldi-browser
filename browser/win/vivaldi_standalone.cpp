@@ -2,6 +2,7 @@
 
 #include "browser/win/vivaldi_standalone.h"
 
+#include "app/vivaldi_apptools.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
@@ -13,6 +14,9 @@ namespace vivaldi {
 #if defined(OS_WIN)
 bool GetVivaldiStandaloneUserDataDirectory(base::FilePath* result) {
   const wchar_t kStandaloneProfileHelper[] = L"stp.viv";
+
+  if (!vivaldi::IsVivaldiRunning())
+    return false;
 
   // Allow IO temporarily, since this call will come before UI is displayed.
   bool last_ioallow = base::ThreadRestrictions::SetIOAllowed(true);

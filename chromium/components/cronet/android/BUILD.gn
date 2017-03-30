@@ -13,7 +13,6 @@ assert(!is_component_build, "Cronet requires static library build.")
 
 declare_args() {
   cronet_enable_data_reduction_proxy_support = false
-  cronet_enable_bidirectional_stream = false
 }
 
 generate_jni("cronet_jni_headers") {
@@ -116,7 +115,6 @@ template("cronet_static_tmpl") {
       ":chromium_url_request_java",
       ":cronet_jni_headers",
       ":cronet_version_header",
-      ":features",
       "//base",
       "//base:i18n",
       "//base/third_party/dynamic_annotations",
@@ -128,6 +126,8 @@ template("cronet_static_tmpl") {
       "//components/cronet/android/chromium_url_request.h",
       "//components/cronet/android/chromium_url_request_context.cc",
       "//components/cronet/android/chromium_url_request_context.h",
+      "//components/cronet/android/cronet_bidirectional_stream_adapter.cc",
+      "//components/cronet/android/cronet_bidirectional_stream_adapter.h",
       "//components/cronet/android/cronet_in_memory_pref_store.cc",
       "//components/cronet/android/cronet_in_memory_pref_store.h",
       "//components/cronet/android/cronet_library_loader.cc",
@@ -173,13 +173,6 @@ template("cronet_static_tmpl") {
       sources += [
         "//components/cronet/android/cronet_data_reduction_proxy.cc",
         "//components/cronet/android/cronet_data_reduction_proxy.h",
-      ]
-    }
-
-    if (cronet_enable_bidirectional_stream) {
-      sources += [
-        "//components/cronet/android/cronet_bidirectional_stream_adapter.cc",
-        "//components/cronet/android/cronet_bidirectional_stream_adapter.h",
       ]
     }
 
@@ -240,12 +233,45 @@ shared_library("cronet") {
     "//base",
     "//net:net_small",
   ]
+  ldflags = [ "-Wl,--version-script=" +
+              rebase_path("//components/cronet/android/only_jni_exports.lst") ]
+
+  # Avoid hide_native_jni_exports as it adds another version script, and the
+  # ARM64 linker throws an error for multiple version scripts with anonymous
+  # version tags.
+  configs -= [ "//build/config/android:hide_native_jni_exports" ]
 }
 
 # cronet_api.jar defines Cronet API and provides implementation of
 # legacy api using HttpUrlConnection (not the Chromium stack).
 android_library("cronet_api") {
-  DEPRECATED_java_in_dir = "api/src"
+  java_files = [
+    "api/src/org/chromium/net/BidirectionalStream.java",
+    "api/src/org/chromium/net/ChunkedWritableByteChannel.java",
+    "api/src/org/chromium/net/CronetEngine.java",
+    "api/src/org/chromium/net/CronetException.java",
+    "api/src/org/chromium/net/HttpUrlConnectionUrlRequest.java",
+    "api/src/org/chromium/net/HttpUrlConnectionUrlRequestFactory.java",
+    "api/src/org/chromium/net/HttpUrlRequest.java",
+    "api/src/org/chromium/net/HttpUrlRequestFactory.java",
+    "api/src/org/chromium/net/HttpUrlRequestFactoryConfig.java",
+    "api/src/org/chromium/net/HttpUrlRequestListener.java",
+    "api/src/org/chromium/net/InputStreamChannel.java",
+    "api/src/org/chromium/net/JavaCronetEngine.java",
+    "api/src/org/chromium/net/JavaUrlRequest.java",
+    "api/src/org/chromium/net/NetworkQualityRttListener.java",
+    "api/src/org/chromium/net/NetworkQualityThroughputListener.java",
+    "api/src/org/chromium/net/Preconditions.java",
+    "api/src/org/chromium/net/ResponseTooLargeException.java",
+    "api/src/org/chromium/net/UploadDataProvider.java",
+    "api/src/org/chromium/net/UploadDataProviders.java",
+    "api/src/org/chromium/net/UploadDataSink.java",
+    "api/src/org/chromium/net/UrlRequest.java",
+    "api/src/org/chromium/net/UrlRequestContextConfig.java",
+    "api/src/org/chromium/net/UrlRequestException.java",
+    "api/src/org/chromium/net/UrlResponseInfo.java",
+    "api/src/org/chromium/net/UserAgent.java",
+  ]
 
   deps = [
     "//third_party/android_tools:android_support_annotations_javalib",
@@ -305,7 +331,10 @@ android_resources("cronet_sample_apk_resources") {
 }
 
 android_library("cronet_sample_apk_java") {
-  DEPRECATED_java_in_dir = "sample/src"
+  java_files = [
+    "sample/src/org/chromium/cronet_sample_apk/CronetSampleActivity.java",
+    "sample/src/org/chromium/cronet_sample_apk/CronetSampleApplication.java",
+  ]
 
   deps = [
     ":cronet_api",
@@ -353,7 +382,10 @@ instrumentation_test_apk("cronet_sample_test_apk") {
   apk_name = "CronetSampleTest"
   apk_under_test = ":cronet_sample_apk"
   android_manifest = "sample/javatests/AndroidManifest.xml"
-  DEPRECATED_java_in_dir = "sample/javatests/src"
+  java_files = [
+    "sample/javatests/src/org/chromium/cronet_sample_apk/Criteria.java",
+    "sample/javatests/src/org/chromium/cronet_sample_apk/CronetSampleTest.java",
+  ]
 
   deps = [
     ":cronet_api",
@@ -362,7 +394,9 @@ instrumentation_test_apk("cronet_sample_test_apk") {
     ":cronet_sample_test_apk_resources",
     "//base:base_java",
     "//base:base_java_test_support",
+    "//net/android:net_java_test_support",
   ]
+  additional_apks = [ "//net/android:net_test_support_apk" ]
 
   run_findbugs = true
   proguard_enabled = !is_debug
@@ -422,6 +456,14 @@ shared_library("cronet_tests") {
 
   include_dirs = [ _cronet_version_header_include_dir ]
 
+  ldflags = [ "-Wl,--version-script=" +
+              rebase_path("//components/cronet/android/only_jni_exports.lst") ]
+
+  # Avoid hide_native_jni_exports as it adds another version script, and the
+  # ARM64 linker throws an error for multiple version scripts with anonymous
+  # version tags.
+  configs -= [ "//build/config/android:hide_native_jni_exports" ]
+
   if (cronet_enable_data_reduction_proxy_support) {
     deps += [ "//components/data_reduction_proxy/core/browser" ]
   }
@@ -438,16 +480,18 @@ android_library("cronet_test_apk_java") {
 
   java_files = [
     "test/src/org/chromium/net/CronetTestApplication.java",
-    "test/src/org/chromium/net/MockCertVerifier.java",
-    "test/src/org/chromium/net/SdchObserver.java",
     "test/src/org/chromium/net/CronetTestFramework.java",
-    "test/src/org/chromium/net/MockUrlRequestJobFactory.java",
-    "test/src/org/chromium/net/TestFilesInstaller.java",
     "test/src/org/chromium/net/CronetTestUtil.java",
+    "test/src/org/chromium/net/Http2TestHandler.java",
+    "test/src/org/chromium/net/Http2TestServer.java",
+    "test/src/org/chromium/net/MockCertVerifier.java",
+    "test/src/org/chromium/net/MockUrlRequestJobFactory.java",
     "test/src/org/chromium/net/NativeTestServer.java",
-    "test/src/org/chromium/net/TestUploadDataStreamHandler.java",
     "test/src/org/chromium/net/NetworkChangeNotifierUtil.java",
     "test/src/org/chromium/net/QuicTestServer.java",
+    "test/src/org/chromium/net/SdchObserver.java",
+    "test/src/org/chromium/net/TestFilesInstaller.java",
+    "test/src/org/chromium/net/TestUploadDataStreamHandler.java",
   ]
 
   deps = [
@@ -455,21 +499,11 @@ android_library("cronet_test_apk_java") {
     ":cronet_java",
     "//base:base_java",
     "//net/android:net_java_test_support",
+    "//third_party/netty-tcnative:netty-tcnative",
+    "//third_party/netty4:netty_all",
   ]
 
   run_findbugs = true
-
-  if (cronet_enable_bidirectional_stream) {
-    java_files += [
-      "test/src/org/chromium/net/Http2TestHandler.java",
-      "test/src/org/chromium/net/Http2TestServer.java",
-    ]
-
-    deps += [
-      "//third_party/netty-tcnative:netty-tcnative",
-      "//third_party/netty4:netty_all",
-    ]
-  }
 }
 
 android_assets("cronet_test_apk_assets") {
@@ -483,6 +517,8 @@ android_assets("cronet_test_apk_assets") {
     "test/assets/test/content_length_mismatch.html.mock-http-headers",
     "test/assets/test/datareductionproxysuccess.txt",
     "test/assets/test/datareductionproxysuccess.txt.mock-http-headers",
+    "test/assets/test/gzipped.html",
+    "test/assets/test/gzipped.html.mock-http-headers",
     "test/assets/test/multiredirect.html",
     "test/assets/test/multiredirect.html.mock-http-headers",
     "test/assets/test/notfound.html",
@@ -492,6 +528,8 @@ android_assets("cronet_test_apk_assets") {
     "test/assets/test/redirect.html.mock-http-headers",
     "test/assets/test/redirect_invalid_scheme.html",
     "test/assets/test/redirect_invalid_scheme.html.mock-http-headers",
+    "test/assets/test/set_cookie.html",
+    "test/assets/test/set_cookie.html.mock-http-headers",
     "test/assets/test/sdch/dict/LeQxM80O",
     "test/assets/test/sdch/dict/LeQxM80O.mock-http-headers",
     "test/assets/test/sdch/index",
@@ -531,6 +569,8 @@ android_library("cronet_javatests") {
   testonly = true
 
   java_files = [
+    "test/javatests/src/org/chromium/net/BidirectionalStreamQuicTest.java",
+    "test/javatests/src/org/chromium/net/BidirectionalStreamTest.java",
     "test/javatests/src/org/chromium/net/ChromiumUrlRequestTest.java",
     "test/javatests/src/org/chromium/net/ChunkedWritableByteChannelTest.java",
     "test/javatests/src/org/chromium/net/ContextInitTest.java",
@@ -540,19 +580,20 @@ android_library("cronet_javatests") {
     "test/javatests/src/org/chromium/net/CronetUrlRequestContextTest.java",
     "test/javatests/src/org/chromium/net/CronetUrlRequestTest.java",
     "test/javatests/src/org/chromium/net/CronetUrlTest.java",
+    "test/javatests/src/org/chromium/net/DiskStorageTest.java",
     "test/javatests/src/org/chromium/net/GetStatusTest.java",
     "test/javatests/src/org/chromium/net/HttpUrlRequestFactoryTest.java",
     "test/javatests/src/org/chromium/net/NetworkChangeNotifierTest.java",
     "test/javatests/src/org/chromium/net/PkpTest.java",
     "test/javatests/src/org/chromium/net/QuicTest.java",
     "test/javatests/src/org/chromium/net/SdchTest.java",
+    "test/javatests/src/org/chromium/net/TestBidirectionalStreamCallback.java",
     "test/javatests/src/org/chromium/net/TestDrivenDataProvider.java",
     "test/javatests/src/org/chromium/net/TestHttpUrlRequestListener.java",
     "test/javatests/src/org/chromium/net/TestUploadDataProvider.java",
     "test/javatests/src/org/chromium/net/TestUrlRequestCallback.java",
     "test/javatests/src/org/chromium/net/UploadDataProvidersTest.java",
     "test/javatests/src/org/chromium/net/UploadTest.java",
-    "test/javatests/src/org/chromium/net/UrlResponseInfoTest.java",
     "test/javatests/src/org/chromium/net/urlconnection/CronetBufferedOutputStreamTest.java",
     "test/javatests/src/org/chromium/net/urlconnection/CronetChunkedOutputStreamTest.java",
     "test/javatests/src/org/chromium/net/urlconnection/CronetFixedModeOutputStreamTest.java",
@@ -561,6 +602,7 @@ android_library("cronet_javatests") {
     "test/javatests/src/org/chromium/net/urlconnection/CronetURLStreamHandlerFactoryTest.java",
     "test/javatests/src/org/chromium/net/urlconnection/MessageLoopTest.java",
     "test/javatests/src/org/chromium/net/urlconnection/TestUtil.java",
+    "test/javatests/src/org/chromium/net/UrlResponseInfoTest.java",
   ]
 
   deps = [
@@ -574,13 +616,6 @@ android_library("cronet_javatests") {
   ]
 
   run_findbugs = true
-
-  if (cronet_enable_bidirectional_stream) {
-    java_files += [
-      "test/javatests/src/org/chromium/net/BidirectionalStreamTest.java",
-      "test/javatests/src/org/chromium/net/TestBidirectionalStreamCallback.java",
-    ]
-  }
 }
 
 instrumentation_test_apk("cronet_test_instrumentation_apk") {
@@ -598,6 +633,17 @@ instrumentation_test_apk("cronet_test_instrumentation_apk") {
     "//net/android:net_java",
     "//net/android:net_java_test_support",
   ]
+  additional_apks = [ "//net/android:net_test_support_apk" ]
+
+  data = [
+    "//net/data/ssl/certificates/quic_test.example.com.crt",
+    "//net/data/ssl/certificates/quic_test.example.com.key",
+    "//net/data/ssl/certificates/quic_test.example.com.key.pkcs8",
+    "//net/data/ssl/certificates/quic_test.example.com.key.sct",
+  ]
+
+  # TODO(jbudorick): Remove this once GN uses the generated .isolate files.
+  isolate_file = "cronet_test_instrumentation_apk.isolate"
 
   run_findbugs = true
 }
@@ -843,10 +889,4 @@ group("cronet_package") {
     ":jar_cronet_sample_source",
     ":repackage_extracted_jars",
   ]
-}
-
-buildflag_header("features") {
-  header = "../cronet_features.h"
-
-  flags = [ "ENABLE_BIDIRECTIONAL_STREAM=$cronet_enable_bidirectional_stream" ]
 }

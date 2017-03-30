@@ -25,20 +25,25 @@ static void detachNotAssignedNode(Node& node)
         node.lazyReattachIfAttached();
 }
 
+inline static bool isDefaultSlotName(const AtomicString& name)
+{
+    return name.isNull() || name.isEmpty();
+}
+
 void SlotAssignment::resolveAssignment(ShadowRoot& shadowRoot)
 {
     m_assignment.clear();
 
-    using Name2Slot = WillBeHeapHashMap<AtomicString, RefPtrWillBeMember<HTMLSlotElement>>;
+    using Name2Slot = HeapHashMap<AtomicString, Member<HTMLSlotElement>>;
     Name2Slot name2slot;
     HTMLSlotElement* defaultSlot = nullptr;
 
-    const WillBeHeapVector<RefPtrWillBeMember<HTMLSlotElement>>& slots = shadowRoot.descendantSlots();
+    const HeapVector<Member<HTMLSlotElement>>& slots = shadowRoot.descendantSlots();
 
-    for (RefPtrWillBeMember<HTMLSlotElement> slot : slots) {
-        slot->clearDistribution();
+    for (Member<HTMLSlotElement> slot : slots) {
+        slot->willUpdateDistribution();
         AtomicString name = slot->fastGetAttribute(HTMLNames::nameAttr);
-        if (name.isNull() || name.isEmpty()) {
+        if (isDefaultSlotName(name)) {
             if (!defaultSlot)
                 defaultSlot = slot.get();
         } else {
@@ -54,7 +59,7 @@ void SlotAssignment::resolveAssignment(ShadowRoot& shadowRoot)
                 continue;
             }
             AtomicString slotName = toElement(child).fastGetAttribute(HTMLNames::slotAttr);
-            if (slotName.isNull() || slotName.isEmpty()) {
+            if (isDefaultSlotName(slotName)) {
                 if (defaultSlot)
                     assign(child, *defaultSlot);
                 else
@@ -82,7 +87,7 @@ void SlotAssignment::resolveAssignment(ShadowRoot& shadowRoot)
 
 void SlotAssignment::assign(Node& hostChild, HTMLSlotElement& slot)
 {
-    ASSERT(hostChild.isSlotAssignable());
+    DCHECK(hostChild.isSlotAssignable());
     m_assignment.add(&hostChild, &slot);
     slot.appendAssignedNode(hostChild);
     if (isHTMLSlotElement(hostChild))
@@ -95,9 +100,7 @@ void SlotAssignment::assign(Node& hostChild, HTMLSlotElement& slot)
 
 DEFINE_TRACE(SlotAssignment)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_assignment);
-#endif
 }
 
 } // namespace blink

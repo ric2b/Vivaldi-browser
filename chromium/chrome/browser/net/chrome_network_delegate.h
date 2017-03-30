@@ -17,6 +17,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/data_use_measurement/content/data_use_measurement.h"
+#include "components/metrics/data_use_tracker.h"
 #include "net/base/network_delegate_impl.h"
 
 class ChromeExtensionsNetworkDelegate;
@@ -67,19 +68,19 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
   // |enable_referrers| (and all of the other optional PrefMembers) should be
   // initialized on the UI thread (see below) beforehand. This object's owner is
   // responsible for cleaning them up at shutdown.
-  ChromeNetworkDelegate(extensions::EventRouterForwarder* event_router,
-                        BooleanPrefMember* enable_referrers);
+  ChromeNetworkDelegate(
+      extensions::EventRouterForwarder* event_router,
+      BooleanPrefMember* enable_referrers,
+      const metrics::UpdateUsagePrefCallbackType& metrics_data_use_forwarder);
   ~ChromeNetworkDelegate() override;
 
   // Pass through to ChromeExtensionsNetworkDelegate::set_extension_info_map().
   void set_extension_info_map(extensions::InfoMap* extension_info_map);
 
-#if defined(ENABLE_CONFIGURATION_POLICY)
   void set_url_blacklist_manager(
       const policy::URLBlacklistManager* url_blacklist_manager) {
     url_blacklist_manager_ = url_blacklist_manager;
   }
-#endif
 
   // If |profile| is NULL or not set, events will be broadcast to all profiles,
   // otherwise they will only be sent to the specified profile.
@@ -208,9 +209,7 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
   BooleanPrefMember* force_youtube_safety_mode_;
 
   // Weak, owned by our owner.
-#if defined(ENABLE_CONFIGURATION_POLICY)
   const policy::URLBlacklistManager* url_blacklist_manager_;
-#endif
   domain_reliability::DomainReliabilityMonitor* domain_reliability_monitor_;
 
   // When true, allow access to all file:// URLs.

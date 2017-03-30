@@ -12,6 +12,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/scoped_file.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/process/process.h"
 #include "build/build_config.h"
 #include "ipc/ipc_channel_handle.h"
@@ -164,6 +165,9 @@ class IPC_EXPORT Channel : public Endpoint {
   // connect to a pre-existing pipe.  Note, calling Connect()
   // will not block the calling thread and may complete
   // asynchronously.
+  //
+  // The subclass implementation must call WillConnect() at the beginning of its
+  // implementation.
   virtual bool Connect() WARN_UNUSED_RESULT = 0;
 
   // Close this Channel explicitly.  May be called multiple times.
@@ -223,6 +227,7 @@ class IPC_EXPORT Channel : public Endpoint {
   // message from client to server we need to send the PID from the global
   // PID namespace.
   static void SetGlobalPid(int pid);
+  static int GetGlobalPid();
 #endif
 
 #if defined(OS_ANDROID)
@@ -253,6 +258,16 @@ class IPC_EXPORT Channel : public Endpoint {
     void* buffer_;
     size_t length_;
   };
+
+  // Endpoint overrides.
+  void OnSetAttachmentBrokerEndpoint() override;
+
+  // Subclasses must call this method at the beginning of their implementation
+  // of Connect().
+  void WillConnect();
+
+ private:
+  bool did_start_connect_ = false;
 };
 
 #if defined(OS_POSIX)

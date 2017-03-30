@@ -9,6 +9,7 @@
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/views/animation/button_ink_drop_delegate.h"
 #include "ui/views/border.h"
+#include "ui/views/painter.h"
 
 namespace {
 
@@ -23,6 +24,10 @@ BarControlButton::BarControlButton(views::ButtonListener* listener)
       ink_drop_delegate_(new views::ButtonInkDropDelegate(this, this)) {
   set_ink_drop_delegate(ink_drop_delegate_.get());
   set_has_ink_drop_action_on_click(true);
+  SetImageAlignment(views::ImageButton::ALIGN_CENTER,
+                    views::ImageButton::ALIGN_MIDDLE);
+  SetFocusPainter(nullptr);
+  UseMdFocusRing();
 }
 
 BarControlButton::~BarControlButton() {}
@@ -33,11 +38,11 @@ void BarControlButton::SetIcon(
   id_ = id;
   get_text_color_callback_ = get_text_color_callback;
 
-  SetBorder(views::Border::CreateEmptyBorder(
-      kButtonExtraTouchSize, kButtonExtraTouchSize, kButtonExtraTouchSize,
-      kButtonExtraTouchSize));
-  SetImageAlignment(views::ImageButton::ALIGN_CENTER,
-                    views::ImageButton::ALIGN_MIDDLE);
+  if (!border()) {
+    SetBorder(views::Border::CreateEmptyBorder(
+        kButtonExtraTouchSize, kButtonExtraTouchSize, kButtonExtraTouchSize,
+        kButtonExtraTouchSize));
+  }
 }
 
 void BarControlButton::OnThemeChanged() {

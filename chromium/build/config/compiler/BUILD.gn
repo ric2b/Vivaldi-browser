@@ -7,6 +7,7 @@ import("//build/config/chrome_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/nacl/config.gni")
 import("//build/toolchain/cc_wrapper.gni")
+import("//build/toolchain/toolchain.gni")
 
 if (current_cpu == "arm") {
   import("//build/config/arm.gni")
@@ -22,6 +23,7 @@ declare_args() {
   # Default to warnings as errors for default workflow, where we catch
   # warnings with known toolchains. Allow overriding this e.g. for Chromium
   # builds on Linux that could use a different version of the compiler.
+  # With GCC, warnings in no-Chromium code are always not treated as errors.
   treat_warnings_as_errors = true
 
   # Normally, Android builds are lightly optimized, even for debug builds, to
@@ -74,6 +76,10 @@ declare_args() {
   # Omit unwind support in official builds to save space.
   # We can use breakpad for these builds.
   exclude_unwind_tables = is_chrome_branded && is_official_build
+
+  # If true, gold linker will save symbol table inside object files.
+  # This speeds up gdb startup by 60%
+  gdb_index = false
 }
 
 # Apply the default logic for these values if they were not set explicitly.
@@ -286,6 +292,10 @@ config("compiler") {
       #"-Wl,--thread-count=4",
     ]
 
+    if (gdb_index) {
+      ldflags += [ "-Wl,--gdb-index" ]
+    }
+
     if (!using_sanitizer && !(is_android && use_order_profiling)) {
       # TODO(brettw) common.gypi has this only for target toolset.
       ldflags += [ "-Wl,--icf=all" ]
@@ -366,6 +376,52 @@ config("compiler") {
         "-L",
         rebase_path("//third_party/libc++-static", root_build_dir),
       ]
+    }
+  }
+
+  # Add flags for link-time optimization. These flags enable
+  # optimizations/transformations that require whole-program visibility at link
+  # time, so they need to be applied to all translation units, and we may end up
+  # with miscompiles if only part of the program is compiled with LTO flags. For
+  # that reason, we cannot allow targets to enable or disable these flags, for
+  # example by disabling the optimize configuration.
+  # TODO(pcc): Make this conditional on is_official_build rather than on gn
+  # flags for specific features.
+  if (!is_debug && (allow_posix_link_time_opt || is_cfi) && !is_nacl) {
+    cflags += [ "-flto" ]
+    ldflags += [ "-flto" ]
+
+    # Apply a lower LTO optimization level as the default is too slow.
+    if (is_linux) {
+      ldflags += [ "-Wl,-plugin-opt,O1" ]
+    } else if (is_mac) {
+      ldflags += [ "-Wl,-mllvm,-O1" ]
+    }
+
+    # Work-around for http://openradar.appspot.com/20356002
+    if (is_mac) {
+      ldflags += [ "-Wl,-all_load" ]
+    }
+
+    # Allows the linker to apply ICF to the LTO object file. Also, when
+    # targeting ARM, without this flag, LTO produces a .text section that is
+    # larger than the maximum call displacement, preventing the linker from
+    # relocating calls (http://llvm.org/PR22999).
+    if (is_linux) {
+      ldflags += [ "-Wl,-plugin-opt,-function-sections" ]
+    }
+
+    # TODO(pcc): Make these flags work correctly with CFI.
+    if (!is_cfi) {
+      cflags += [
+        "-fwhole-program-vtables",
+
+        # TODO(pcc): Remove this flag once the upstream interface change
+        # (http://reviews.llvm.org/D18635) lands.
+        "-fwhole-program-vtables-blacklist=" +
+            rebase_path("//tools/cfi/blacklist.txt", root_build_dir),
+      ]
+      ldflags += [ "-fwhole-program-vtables" ]
     }
   }
 
@@ -593,7 +649,7 @@ config("compiler_codegen") {
         ]
       }
     } else if (current_cpu == "arm") {
-      if (!is_clang) {
+      if (is_android && !is_clang) {
         # Clang doesn't support these flags.
         cflags += [
           # The tree-sra optimization (scalar replacement for
@@ -782,6 +838,12 @@ config("default_warnings") {
         # C4312 is a VS 2015 64-bit warning for integer to larger pointer.
         # TODO(brucedawson): fix warnings, crbug.com/554200
         "/wd4312",
+
+        # TODO(brucedawson): http://crbug.com/593448 4334 is a 'suspicious
+        # shift' warning and 4595 is an 'illegal inline operator new' warning
+        # Both are new in VS 2015 Update 2 and can safely be deferred for now.
+        "/wd4334",
+        "/wd4595",
       ]
     }
 
@@ -799,17 +861,12 @@ config("default_warnings") {
     if (is_clang) {
       cflags += [
         # TODO(hans): Make this list shorter eventually, http://crbug.com/504657
-        "-Qunused-arguments",  # http://crbug.com/504658
         "-Wno-microsoft-enum-value",  # http://crbug.com/505296
         "-Wno-unknown-pragmas",  # http://crbug.com/505314
         "-Wno-microsoft-cast",  # http://crbug.com/550065
       ]
     }
   } else {
-    if (treat_warnings_as_errors) {
-      cflags += [ "-Werror" ]
-    }
-
     if (is_mac && !is_nacl) {
       # When compiling Objective-C, warns if a method is used whose
       # availability is newer than the deployment target. This is not
@@ -906,6 +963,9 @@ config("chromium_code") {
     cflags = [ "/W4" ]  # Warning level 4.
   } else {
     cflags = [ "-Wall" ]
+    if (treat_warnings_as_errors) {
+      cflags += [ "-Werror" ]
+    }
     if (is_clang) {
       # Enable -Wextra for chromium_code when we control the compiler.
       cflags += [ "-Wextra" ]
@@ -951,10 +1011,17 @@ config("no_chromium_code") {
       "_CRT_NONSTDC_NO_WARNINGS",
       "_CRT_NONSTDC_NO_DEPRECATE",
     ]
-  } else if (is_clang && !is_nacl) {
-    # TODO(thakis): Remove !is_nacl once
-    # https://codereview.webrtc.org/1552863002/ made its way into chromium.
-    cflags += [ "-Wall" ]
+  } else {
+    # GCC may emit unsuppressible warnings so don't add -Werror for no chromium
+    # code. crbug.com/589724
+    if (treat_warnings_as_errors && is_clang) {
+      cflags += [ "-Werror" ]
+    }
+    if (is_clang && !is_nacl) {
+      # TODO(thakis): Remove !is_nacl once
+      # https://codereview.webrtc.org/1552863002/ made its way into chromium.
+      cflags += [ "-Wall" ]
+    }
   }
 
   if (is_clang) {
@@ -1160,7 +1227,6 @@ config("no_optimize") {
     cflags = [
       "/Od",  # Disable optimization.
       "/Ob0",  # Disable all inlining (on by default).
-      "/RTC1",  # Runtime checks for stack frame and uninitialized variables.
     ]
   } else if (is_android && !android_full_debug) {
     # On Android we kind of optimize some things that don't affect debugging
@@ -1207,7 +1273,9 @@ config("optimize_max") {
       # Favor speed over size, /O2 must be before the common flags. The GYP
       # build also specifies /Ot, /Oi, and /GF, but these are implied by /O2.
       cflags = [ "/O2" ] + common_optimize_on_cflags
-      if (is_official_build) {
+
+      # TODO(thakis): Remove is_clang here, https://crbug.com/598772
+      if (is_official_build && !is_clang) {
         # TODO(GYP): TODO(dpranke): Should these only be on in an official
         # build, or on all the time? For now we'll require official build so
         # that the compile is clean.
@@ -1320,5 +1388,15 @@ config("default_symbols") {
     configs = [ ":symbols" ]
   } else {
     assert(false)
+  }
+}
+
+if (is_ios || is_mac) {
+  # On Mac and iOS, this enables support for ARC (automatic ref-counting).
+  # See http://clang.llvm.org/docs/AutomaticReferenceCounting.html.
+  config("enable_arc") {
+    common_flags = [ "-fobjc-arc" ]
+    cflags_objc = common_flags
+    cflags_objcc = common_flags
   }
 }

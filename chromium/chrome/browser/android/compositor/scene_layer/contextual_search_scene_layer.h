@@ -5,13 +5,13 @@
 #ifndef CHROME_BROWSER_ANDROID_COMPOSITOR_SCENE_LAYER_CONTEXTUAL_SEARCH_SCENE_LAYER_H_
 #define CHROME_BROWSER_ANDROID_COMPOSITOR_SCENE_LAYER_CONTEXTUAL_SEARCH_SCENE_LAYER_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "chrome/browser/android/compositor/scene_layer/scene_layer.h"
 
 namespace chrome {
@@ -30,6 +30,7 @@ class ContextualSearchSceneLayer : public SceneLayer {
       jint search_bar_background_resource_id,
       jint search_context_resource_id,
       jint search_term_resource_id,
+      jint search_caption_resource_id,
       jint search_bar_shadow_resource_id,
       jint panel_icon_resource_id,
       jint search_provider_icon_sprite_metadata_resource_id,
@@ -51,7 +52,7 @@ class ContextualSearchSceneLayer : public SceneLayer {
       jfloat search_peek_promo_ripple_width,
       jfloat search_peek_promo_ripple_opacity,
       jfloat search_peek_promo_text_opacity,
-      jfloat search_panel_X,
+      jfloat search_panel_x,
       jfloat search_panel_y,
       jfloat search_panel_width,
       jfloat search_panel_height,
@@ -59,6 +60,7 @@ class ContextualSearchSceneLayer : public SceneLayer {
       jfloat search_bar_height,
       jfloat search_context_opacity,
       jfloat search_term_opacity,
+      jfloat search_caption_opacity,
       jboolean search_bar_border_visible,
       jfloat search_bar_border_height,
       jboolean search_bar_shadow_visible,

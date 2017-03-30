@@ -20,8 +20,8 @@ namespace content {
 class BrowsingInstance;
 class RenderProcessHostFactory;
 
-class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
-                                        public RenderProcessHostObserver {
+class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
+                                              public RenderProcessHostObserver {
  public:
   class CONTENT_EXPORT Observer {
    public:
@@ -33,16 +33,28 @@ class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
     virtual void RenderProcessGone(SiteInstanceImpl* site_instance) = 0;
   };
 
+  static scoped_refptr<SiteInstanceImpl> Create(
+      BrowserContext* browser_context);
+  static scoped_refptr<SiteInstanceImpl> CreateForURL(
+      BrowserContext* browser_context,
+      const GURL& url);
+
   // SiteInstance interface overrides.
   int32_t GetId() override;
   bool HasProcess() const override;
   RenderProcessHost* GetProcess() override;
   BrowserContext* GetBrowserContext() const override;
   const GURL& GetSiteURL() const override;
-  SiteInstance* GetRelatedSiteInstance(const GURL& url) override;
+  scoped_refptr<SiteInstance> GetRelatedSiteInstance(const GURL& url) override;
   bool IsRelatedSiteInstance(const SiteInstance* instance) override;
   size_t GetRelatedActiveContentsCount() override;
   bool RequiresDedicatedProcess() override;
+
+  // Returns the SiteInstance, related to this one, that should be used
+  // for subframes when an oopif is required, but a dedicated process is not.
+  // This SiteInstance will be created if it doesn't already exist. There is
+  // at most one of these per BrowsingInstance.
+  scoped_refptr<SiteInstanceImpl> GetDefaultSubframeSiteInstance();
 
   // Set the web site that this SiteInstance is rendering pages for.
   // This includes the scheme and registered domain, but not the port.  If the
@@ -88,6 +100,10 @@ class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
+  bool is_default_subframe_site_instance() {
+    return is_default_subframe_site_instance_;
+  }
+
   // Sets the global factory used to create new RenderProcessHosts.  It may be
   // NULL, in which case the default RenderProcessHost will be created (this is
   // the behavior if you don't call this function).  The factory must be set
@@ -113,19 +129,16 @@ class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
   static bool DoesSiteRequireDedicatedProcess(BrowserContext* browser_context,
                                               const GURL& effective_url);
 
- protected:
+ private:
   friend class BrowsingInstance;
-  friend class SiteInstance;
+  friend class SiteInstanceTestBrowserClient;
 
-  // Virtual to allow tests to extend it.
-  ~SiteInstanceImpl() override;
-
-  // Create a new SiteInstance.  Protected to give access to BrowsingInstance
-  // and tests; most callers should use Create or GetRelatedSiteInstance
-  // instead.
+  // Create a new SiteInstance.  Only BrowsingInstance should call this
+  // directly; clients should use Create() or GetRelatedSiteInstance() instead.
   explicit SiteInstanceImpl(BrowsingInstance* browsing_instance);
 
- private:
+  ~SiteInstanceImpl() override;
+
   // RenderProcessHostObserver implementation.
   void RenderProcessHostDestroyed(RenderProcessHost* host) override;
   void RenderProcessWillExit(RenderProcessHost* host) override;
@@ -135,6 +148,10 @@ class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
 
   // Used to restrict a process' origin access rights.
   void LockToOrigin();
+
+  void set_is_default_subframe_site_instance() {
+    is_default_subframe_site_instance_ = true;
+  }
 
   // An object used to construct RenderProcessHosts.
   static const RenderProcessHostFactory* g_render_process_host_factory_;
@@ -162,6 +179,11 @@ class CONTENT_EXPORT SiteInstanceImpl : public SiteInstance,
 
   // Whether SetSite has been called.
   bool has_site_;
+
+  // Whether this SiteInstance is the default subframe SiteInstance for its
+  // BrowsingInstance. Only one SiteInstance per BrowsingInstance can have this
+  // be true.
+  bool is_default_subframe_site_instance_;
 
   base::ObserverList<Observer, true> observers_;
 

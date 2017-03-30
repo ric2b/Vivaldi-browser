@@ -89,7 +89,7 @@ class CONTENT_EXPORT BrowserPlugin :
   bool supportsInputMethod() const override;
   bool canProcessDrag() const override;
   void updateAllLifecyclePhases() override {}
-  void paint(blink::WebCanvas* canvas, const blink::WebRect& rect) override;
+  void paint(blink::WebCanvas* canvas, const blink::WebRect& rect) override {}
   void updateGeometry(const blink::WebRect& window_rect,
                       const blink::WebRect& clip_rect,
                       const blink::WebRect& unobscured_rect,
@@ -97,7 +97,6 @@ class CONTENT_EXPORT BrowserPlugin :
                       bool is_visible) override;
   void updateFocus(bool focused, blink::WebFocusType focus_type) override;
   void updateVisibility(bool visible) override;
-  bool acceptsInputEvents() override;
   blink::WebInputEventResult handleInputEvent(
       const blink::WebInputEvent& event,
       blink::WebCursorInfo& cursor_info) override;
@@ -146,7 +145,6 @@ class CONTENT_EXPORT BrowserPlugin :
 
   gfx::Rect view_rect() const { return view_rect_; }
 
-  void ShowSadGraphic();
   void UpdateInternalInstanceId();
 
   // IPC message handlers.

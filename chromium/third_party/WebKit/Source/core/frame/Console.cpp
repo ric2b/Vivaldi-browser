@@ -56,7 +56,7 @@ DEFINE_TRACE(Console)
 {
     ConsoleBase::trace(visitor);
     DOMWindowProperty::trace(visitor);
-    HeapSupplementable<Console>::trace(visitor);
+    Supplementable<Console>::trace(visitor);
 }
 
 ExecutionContext* Console::context()
@@ -66,7 +66,7 @@ ExecutionContext* Console::context()
     return frame()->document();
 }
 
-void Console::reportMessageToConsole(PassRefPtrWillBeRawPtr<ConsoleMessage> consoleMessage)
+void Console::reportMessageToConsole(ConsoleMessage* consoleMessage)
 {
     if (!frame())
         return;

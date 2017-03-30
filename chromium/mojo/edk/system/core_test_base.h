@@ -7,11 +7,11 @@
 
 #include <stddef.h>
 
+#include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "mojo/edk/embedder/embedder_internal.h"
 #include "mojo/edk/system/test_utils.h"
 #include "mojo/public/c/system/types.h"
-#include "mojo/public/cpp/system/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace mojo {
@@ -38,7 +38,7 @@ class CoreTestBase : public testing::Test {
   Core* core();
 
  private:
-  MOJO_DISALLOW_COPY_AND_ASSIGN(CoreTestBase);
+  DISALLOW_COPY_AND_ASSIGN(CoreTestBase);
 };
 
 class CoreTestBase_MockHandleInfo {
@@ -101,7 +101,7 @@ class CoreTestBase_MockHandleInfo {
   bool add_awakable_allowed_;
   std::vector<Awakable*> added_awakables_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(CoreTestBase_MockHandleInfo);
+  DISALLOW_COPY_AND_ASSIGN(CoreTestBase_MockHandleInfo);
 };
 
 }  // namespace test

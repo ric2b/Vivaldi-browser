@@ -12,15 +12,13 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/simple_thread.h"
 #include "mojo/message_pump/message_pump_mojo.h"
-#include "mojo/services/package_manager/package_manager.h"
-#include "mojo/shell/application_loader.h"
-#include "mojo/shell/application_manager.h"
-#include "mojo/shell/capability_filter.h"
+#include "mojo/services/catalog/store.h"
 #include "mojo/shell/connect_params.h"
+#include "mojo/shell/loader.h"
 #include "mojo/shell/public/cpp/shell_client.h"
 #include "mojo/shell/public/cpp/shell_connection.h"
+#include "mojo/shell/shell.h"
 #include "mojo/shell/standalone/context.h"
-#include "url/gurl.h"
 
 namespace mojo {
 namespace shell {
@@ -30,19 +28,18 @@ scoped_ptr<base::MessagePump> CreateMessagePumpMojo() {
   return make_scoped_ptr(new common::MessagePumpMojo);
 }
 
-// Used to obtain the ShellClientRequest for an application. When
-// ApplicationLoader::Load() is called a callback is run with the
-// ShellClientRequest.
-class BackgroundApplicationLoader : public ApplicationLoader {
+// Used to obtain the ShellClientRequest for an application. When Loader::Load()
+// is called a callback is run with the ShellClientRequest.
+class BackgroundLoader : public Loader {
  public:
   using Callback = base::Callback<void(mojom::ShellClientRequest)>;
 
-  explicit BackgroundApplicationLoader(const Callback& callback)
-      : callback_(callback) {}
-  ~BackgroundApplicationLoader() override {}
+  explicit BackgroundLoader(const Callback& callback) : callback_(callback) {}
+  ~BackgroundLoader() override {}
 
-  // ApplicationLoader:
-  void Load(const GURL& url, mojom::ShellClientRequest request) override {
+  // Loader:
+  void Load(const std::string& name,
+            mojom::ShellClientRequest request) override {
     DCHECK(!callback_.is_null());  // Callback should only be run once.
     Callback callback = callback_;
     callback_.Reset();
@@ -52,7 +49,7 @@ class BackgroundApplicationLoader : public ApplicationLoader {
  private:
   Callback callback_;
 
-  DISALLOW_COPY_AND_ASSIGN(BackgroundApplicationLoader);
+  DISALLOW_COPY_AND_ASSIGN(BackgroundLoader);
 };
 
 class MojoMessageLoop : public base::MessageLoop {
@@ -84,14 +81,13 @@ class BackgroundShell::MojoThread : public base::SimpleThread {
     // Only valid to call this on the background thread.
     DCHECK_EQ(message_loop_, base::MessageLoop::current());
 
-    // Ownership of |loader| passes to ApplicationManager.
-    const GURL url = params->target().url();
-    BackgroundApplicationLoader* loader = new BackgroundApplicationLoader(
+    // Ownership of |loader| passes to Shell.
+    const std::string name = params->target().name();
+    BackgroundLoader* loader = new BackgroundLoader(
         base::Bind(&MojoThread::OnGotApplicationRequest, base::Unretained(this),
-                   url, signal, request));
-    context_->application_manager()->SetLoaderForURL(make_scoped_ptr(loader),
-                                                     url);
-    context_->application_manager()->Connect(std::move(params));
+                   name, signal, request));
+    context_->shell()->SetLoaderForName(make_scoped_ptr(loader), name);
+    context_->shell()->Connect(std::move(params));
     // The request is asynchronously processed. When processed
     // OnGotApplicationRequest() is called and we'll signal |signal|.
   }
@@ -106,6 +102,11 @@ class BackgroundShell::MojoThread : public base::SimpleThread {
     Join();
   }
 
+  void RunShellCallback(const BackgroundShell::ShellThreadCallback& callback) {
+    DCHECK_EQ(message_loop_, base::MessageLoop::current());
+    callback.Run(context_->shell());
+  }
+
   // base::SimpleThread:
   void Start() override {
     DCHECK(!message_loop_);
@@ -117,19 +118,22 @@ class BackgroundShell::MojoThread : public base::SimpleThread {
     // in the order here.
     scoped_ptr<base::MessageLoop> message_loop(message_loop_);
 
-    Context::EnsureEmbedderIsInitialized();
+    scoped_ptr<mojo::shell::Context::InitParams> context_init_params(
+        new mojo::shell::Context::InitParams);
+    if (init_params_) {
+      context_init_params->catalog_store =
+          std::move(init_params_->catalog_store);
+      context_init_params->native_runner_delegate =
+          init_params_->native_runner_delegate;
+      context_init_params->init_edk = init_params_->init_edk;
+    }
+    if (context_init_params->init_edk)
+      Context::EnsureEmbedderIsInitialized();
 
     message_loop_->BindToCurrentThread();
 
     scoped_ptr<Context> context(new Context);
     context_ = context.get();
-    scoped_ptr<mojo::shell::Context::InitParams> context_init_params(
-        new mojo::shell::Context::InitParams);
-    if (init_params_) {
-      context_init_params->app_catalog = std::move(init_params_->app_catalog);
-      context_init_params->native_runner_delegate =
-          init_params_->native_runner_delegate;
-    }
     context_->Init(std::move(context_init_params));
 
     message_loop_->Run();
@@ -143,13 +147,13 @@ class BackgroundShell::MojoThread : public base::SimpleThread {
   }
 
  private:
-  void OnGotApplicationRequest(const GURL& url,
+  void OnGotApplicationRequest(const std::string& name,
                                base::WaitableEvent* signal,
                                mojom::ShellClientRequest* request_result,
                                mojom::ShellClientRequest actual_request) {
     *request_result = std::move(actual_request);
     // Trigger destruction of the loader.
-    context_->application_manager()->SetLoaderForURL(nullptr, url);
+    context_->shell()->SetLoaderForName(nullptr, name);
     signal->Signal();
   }
 
@@ -180,9 +184,10 @@ void BackgroundShell::Init(scoped_ptr<InitParams> init_params) {
 }
 
 mojom::ShellClientRequest BackgroundShell::CreateShellClientRequest(
-    const GURL& url) {
+    const std::string& name) {
   scoped_ptr<ConnectParams> params(new ConnectParams);
-  params->set_target(Identity(url, std::string(), mojom::Connector::kUserRoot));
+  params->set_source(CreateShellIdentity());
+  params->set_target(Identity(name, mojom::kRootUserID));
   mojom::ShellClientRequest request;
   base::WaitableEvent signal(true, false);
   thread_->message_loop()->task_runner()->PostTask(
@@ -191,6 +196,13 @@ mojom::ShellClientRequest BackgroundShell::CreateShellClientRequest(
                             base::Passed(&params), &request));
   signal.Wait();
   return request;
+}
+
+void BackgroundShell::ExecuteOnShellThread(
+    const ShellThreadCallback& callback) {
+  thread_->message_loop()->task_runner()->PostTask(
+      FROM_HERE, base::Bind(&MojoThread::RunShellCallback,
+                            base::Unretained(thread_.get()), callback));
 }
 
 }  // namespace shell

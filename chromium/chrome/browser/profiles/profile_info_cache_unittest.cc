@@ -9,6 +9,7 @@
 
 #include <vector>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
@@ -491,7 +492,7 @@ TEST_F(ProfileInfoCacheTest, CreateSupervisedTestingProfile) {
   testing_profile_manager_.CreateTestingProfile("default");
   base::string16 supervised_user_name = ASCIIToUTF16("Supervised User");
   testing_profile_manager_.CreateTestingProfile(
-      "test1", scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
+      "test1", std::unique_ptr<syncable_prefs::PrefServiceSyncable>(),
       supervised_user_name, 0, "TEST_ID", TestingProfile::TestingFactories());
   for (size_t i = 0; i < GetCache()->GetNumberOfProfiles(); i++) {
     bool is_supervised =
@@ -585,8 +586,10 @@ TEST_F(ProfileInfoCacheTest, DownloadHighResAvatarTest) {
 
   // Simulate downloading a high-res avatar.
   ProfileAvatarDownloader avatar_downloader(
-      kIconIndex, profile_info_cache.GetPathOfProfileAtIndex(0),
-      &profile_info_cache);
+      kIconIndex,
+      base::Bind(&ProfileInfoCache::SaveAvatarImageAtPath,
+                 base::Unretained(&profile_info_cache),
+                 profile_info_cache.GetPathOfProfileAtIndex(0)));
 
   // Put a real bitmap into "bitmap".  2x2 bitmap of green 32 bit pixels.
   SkBitmap bitmap;

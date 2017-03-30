@@ -225,8 +225,8 @@ void NaClHostMessageFilter::BatchOpenResourceFiles(
       continue;
 
     prefetched_resource_files.push_back(NaClResourcePrefetchResult(
-        IPC::TakeFileHandleForProcess(std::move(file), PeerHandle()),
-        file_path_metadata, request_list[i].file_key));
+        IPC::TakePlatformFileForTransit(std::move(file)), file_path_metadata,
+        request_list[i].file_key));
 
     if (prefetched_resource_files.size() >= kMaxPreOpenResourceFiles)
       break;
@@ -255,30 +255,8 @@ void NaClHostMessageFilter::LaunchNaClContinuationOnIOThread(
       launch_params.nexe_token_hi   // hi
   };
 
-  base::PlatformFile nexe_file;
-#if defined(OS_WIN)
-  // Duplicate the nexe file handle from the renderer process into the browser
-  // process.
-  if (!::DuplicateHandle(PeerHandle(),
-                         launch_params.nexe_file,
-                         base::GetCurrentProcessHandle(),
-                         &nexe_file,
-                         0,  // Unused, given DUPLICATE_SAME_ACCESS.
-                         FALSE,
-                         DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS)) {
-    NaClHostMsg_LaunchNaCl::WriteReplyParams(
-        reply_msg,
-        NaClLaunchResult(),
-        std::string("Failed to duplicate nexe file handle"));
-    Send(reply_msg);
-    return;
-  }
-#elif defined(OS_POSIX)
-  nexe_file =
+  base::PlatformFile nexe_file =
       IPC::PlatformFileForTransitToPlatformFile(launch_params.nexe_file);
-#else
-#error Unsupported platform.
-#endif
 
   NaClProcessHost* host = new NaClProcessHost(
       GURL(launch_params.manifest_url),
@@ -323,8 +301,7 @@ void NaClHostMessageFilter::SyncReturnTemporaryFile(
     base::File file) {
   if (file.IsValid()) {
     NaClHostMsg_NaClCreateTemporaryFile::WriteReplyParams(
-        reply_msg,
-        IPC::TakeFileHandleForProcess(std::move(file), PeerHandle()));
+        reply_msg, IPC::TakePlatformFileForTransit(std::move(file)));
   } else {
     reply_msg->set_reply_error();
   }
@@ -347,8 +324,7 @@ void NaClHostMessageFilter::AsyncReturnTemporaryFile(
   if (file.IsValid()) {
     // Don't close our copy of the handle, because PnaclHost will use it
     // when the translation finishes.
-    fd = IPC::GetFileHandleForProcess(file.GetPlatformFile(), PeerHandle(),
-                                      false);
+    fd = IPC::GetPlatformFileForTransit(file.GetPlatformFile(), false);
   }
   Send(new NaClViewMsg_NexeTempFileReply(pp_instance, is_hit, fd));
 }

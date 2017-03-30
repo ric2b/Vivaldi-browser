@@ -75,7 +75,7 @@ public:
     DECLARE_TRACE();
     void dispose();
 
-    RefPtrWillBeMember<Resource> m_resource;
+    Member<Resource> m_resource;
     bool m_inLiveDecodedResourcesList;
     unsigned m_accessCount;
     double m_lastDecodedAccessTime; // Used as a thrash guard
@@ -165,7 +165,7 @@ public:
 
     Resource* resourceForURL(const KURL&);
     Resource* resourceForURL(const KURL&, const String& cacheIdentifier);
-    WillBeHeapVector<RawPtrWillBeMember<Resource>> resourcesForURL(const KURL&);
+    HeapVector<Member<Resource>> resourcesForURL(const KURL&);
 
     void add(Resource*);
     void remove(Resource*);
@@ -291,6 +291,7 @@ private:
 
     // A URL-based map of all resources that are in the cache (including the freshest version of objects that are currently being
     // referenced by a Web page).
+    // removeFragmentIdentifierIfNeeded() should be called for the url before using it as a key for the map.
     using ResourceMap = HeapHashMap<String, Member<MemoryCacheEntry>>;
     using ResourceMapIndex = HeapHashMap<String, Member<ResourceMap>>;
     ResourceMap* ensureResourceMap(const String& cacheIdentifier);

@@ -5,13 +5,15 @@
 #ifndef MOJO_PUBLIC_CPP_SYSTEM_HANDLE_H_
 #define MOJO_PUBLIC_CPP_SYSTEM_HANDLE_H_
 
-#include <assert.h>
 #include <stdint.h>
 #include <limits>
 
+#include "base/compiler_specific.h"
+#include "base/logging.h"
+#include "base/macros.h"
+#include "base/move.h"
 #include "mojo/public/c/system/functions.h"
 #include "mojo/public/c/system/types.h"
-#include "mojo/public/cpp/system/macros.h"
 
 namespace mojo {
 
@@ -70,7 +72,7 @@ namespace mojo {
 // like the C++11 |unique_ptr|.
 template <class HandleType>
 class ScopedHandleBase {
-  MOJO_MOVE_ONLY_TYPE(ScopedHandleBase)
+  MOVE_ONLY_TYPE_FOR_CPP_03(ScopedHandleBase);
 
  public:
   ScopedHandleBase() {}
@@ -105,7 +107,7 @@ class ScopedHandleBase {
 
   void swap(ScopedHandleBase& other) { handle_.swap(other.handle_); }
 
-  HandleType release() MOJO_WARN_UNUSED_RESULT {
+  HandleType release() WARN_UNUSED_RESULT {
     HandleType rv;
     rv.swap(handle_);
     return rv;
@@ -123,8 +125,8 @@ class ScopedHandleBase {
     if (!handle_.is_valid())
       return;
     MojoResult result = MojoClose(handle_.value());
-    MOJO_ALLOW_UNUSED_LOCAL(result);
-    assert(result == MOJO_RESULT_OK);
+    ALLOW_UNUSED_LOCAL(result);
+    DCHECK_EQ(MOJO_RESULT_OK, result);
   }
 
   HandleType handle_;

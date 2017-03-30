@@ -34,14 +34,15 @@ inline static unsigned convertDeltaMode(const PlatformWheelEvent& event)
     return event.granularity() == ScrollByPageWheelEvent ? WheelEvent::DOM_DELTA_PAGE : WheelEvent::DOM_DELTA_PIXEL;
 }
 
-PassRefPtrWillBeRawPtr<WheelEvent> WheelEvent::create(const PlatformWheelEvent& event, PassRefPtrWillBeRawPtr<AbstractView> view)
+WheelEvent* WheelEvent::create(const PlatformWheelEvent& event, AbstractView* view)
 {
-    return adoptRefWillBeNoop(new WheelEvent(FloatPoint(event.wheelTicksX(), event.wheelTicksY()), FloatPoint(event.deltaX(), event.deltaY()),
+    return new WheelEvent(FloatPoint(event.wheelTicksX(), event.wheelTicksY()), FloatPoint(event.deltaX(), event.deltaY()),
         convertDeltaMode(event), view, event.globalPosition(), event.position(),
-        event.modifiers(),
-        MouseEvent::platformModifiersToButtons(event.modifiers()), event.timestamp(),
+        event.getModifiers(),
+        MouseEvent::platformModifiersToButtons(event.getModifiers()), event.timestamp(),
         event.canScroll(), event.resendingPluginId(), event.hasPreciseScrollingDeltas(),
-        static_cast<Event::RailsMode>(event.getRailsMode())));
+        static_cast<Event::RailsMode>(event.getRailsMode()),
+        event.cancelable());
 }
 
 WheelEvent::WheelEvent()
@@ -71,12 +72,15 @@ WheelEvent::WheelEvent(const AtomicString& type, const WheelEventInit& initializ
 }
 
 WheelEvent::WheelEvent(const FloatPoint& wheelTicks, const FloatPoint& rawDelta, unsigned deltaMode,
-    PassRefPtrWillBeRawPtr<AbstractView> view, const IntPoint& screenLocation, const IntPoint& windowLocation,
+    AbstractView* view, const IntPoint& screenLocation, const IntPoint& windowLocation,
     PlatformEvent::Modifiers modifiers, unsigned short buttons, double platformTimeStamp,
-    bool canScroll, int resendingPluginId, bool hasPreciseScrollingDeltas, RailsMode railsMode)
-    : MouseEvent(EventTypeNames::wheel, true, true, view, 0, screenLocation.x(), screenLocation.y(),
+    bool canScroll, int resendingPluginId, bool hasPreciseScrollingDeltas, RailsMode railsMode, bool cancelable)
+    : MouseEvent(EventTypeNames::wheel, true, cancelable, view, 0, screenLocation.x(), screenLocation.y(),
         windowLocation.x(), windowLocation.y(), 0, 0, modifiers, 0, buttons,
-        nullptr, platformTimeStamp, PlatformMouseEvent::RealOrIndistinguishable)
+        nullptr, platformTimeStamp, PlatformMouseEvent::RealOrIndistinguishable,
+        // TODO(zino): Should support canvas hit region because the wheel event
+        // is a kind of mouse event. Please see http://crbug.com/594075
+        String())
     , m_wheelDelta(wheelTicks.x() * TickMultiplier, wheelTicks.y() * TickMultiplier)
     , m_deltaX(-rawDelta.x())
     , m_deltaY(-rawDelta.y())
@@ -104,7 +108,7 @@ bool WheelEvent::isWheelEvent() const
     return true;
 }
 
-PassRefPtrWillBeRawPtr<EventDispatchMediator> WheelEvent::createMediator()
+EventDispatchMediator* WheelEvent::createMediator()
 {
     return EventDispatchMediator::create(this);
 }

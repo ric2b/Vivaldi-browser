@@ -17,7 +17,7 @@
 #include "chrome/browser/plugins/plugin_metadata.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 #include "chrome/browser/ui/content_settings/content_setting_media_menu_model.h"
-#include "chrome/browser/ui/views/browser_dialogs.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/plugin_service.h"
@@ -118,7 +118,7 @@ struct ContentSettingBubbleContents::MediaMenuParts {
   ~MediaMenuParts();
 
   content::MediaStreamType type;
-  scoped_ptr<ui::SimpleMenuModel> menu_model;
+  std::unique_ptr<ui::SimpleMenuModel> menu_model;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MediaMenuParts);
@@ -138,14 +138,15 @@ ContentSettingBubbleContents::ContentSettingBubbleContents(
     views::View* anchor_view,
     views::BubbleBorder::Arrow arrow)
     : content::WebContentsObserver(web_contents),
-      BubbleDelegateView(anchor_view, arrow),
+      BubbleDialogDelegateView(anchor_view, arrow),
       content_setting_bubble_model_(content_setting_bubble_model),
       custom_link_(NULL),
       manage_link_(NULL),
       learn_more_link_(NULL),
       close_button_(NULL) {
   // Compensate for built-in vertical padding in the anchor view's image.
-  set_anchor_view_insets(gfx::Insets(5, 0, 5, 0));
+  set_anchor_view_insets(gfx::Insets(
+      GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
 }
 
 ContentSettingBubbleContents::~ContentSettingBubbleContents() {
@@ -372,34 +373,29 @@ void ContentSettingBubbleContents::Init() {
     bubble_content_empty = false;
   }
 
-  const int kDoubleColumnSetId = 1;
-  views::ColumnSet* double_column_set =
-      layout->AddColumnSet(kDoubleColumnSetId);
   if (!bubble_content_empty) {
-      layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
-      layout->StartRow(0, kSingleColumnSetId);
-      layout->AddView(new views::Separator(views::Separator::HORIZONTAL), 1, 1,
-                      GridLayout::FILL, GridLayout::FILL);
-      layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
-    }
+    layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
+    layout->StartRow(0, kSingleColumnSetId);
+    layout->AddView(new views::Separator(views::Separator::HORIZONTAL), 1, 1,
+                    GridLayout::FILL, GridLayout::FILL);
+    layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
+  }
+}
 
-    double_column_set->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 1,
-                                 GridLayout::USE_PREF, 0, 0);
-    double_column_set->AddPaddingColumn(
-        0, views::kUnrelatedControlHorizontalSpacing);
-    double_column_set->AddColumn(GridLayout::TRAILING, GridLayout::CENTER, 0,
-                                 GridLayout::USE_PREF, 0, 0);
+views::View* ContentSettingBubbleContents::CreateExtraView() {
+  manage_link_ = new views::Link(base::UTF8ToUTF16(
+      content_setting_bubble_model_->bubble_content().manage_link));
+  manage_link_->set_listener(this);
+  return manage_link_;
+}
 
-    layout->StartRow(0, kDoubleColumnSetId);
-    manage_link_ =
-        new views::Link(base::UTF8ToUTF16(bubble_content.manage_link));
-    manage_link_->set_listener(this);
-    layout->AddView(manage_link_);
+int ContentSettingBubbleContents::GetDialogButtons() const {
+  return ui::DIALOG_BUTTON_OK;
+}
 
-    close_button_ =
-        new views::LabelButton(this, l10n_util::GetStringUTF16(IDS_DONE));
-    close_button_->SetStyle(views::Button::STYLE_BUTTON);
-    layout->AddView(close_button_);
+base::string16 ContentSettingBubbleContents::GetDialogButtonLabel(
+    ui::DialogButton button) const {
+  return l10n_util::GetStringUTF16(IDS_DONE);
 }
 
 void ContentSettingBubbleContents::DidNavigateMainFrame(

@@ -7,9 +7,16 @@
 #include <utility>
 
 #include "base/memory/scoped_ptr.h"
-#include "chrome/browser/usb/web_usb_permission_bubble.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/usb/web_usb_permission_provider.h"
 #include "device/usb/mojo/device_manager_impl.h"
+
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/usb/web_usb_chooser_service_android.h"
+#else
+#include "chrome/browser/usb/web_usb_chooser_service.h"
+#endif  // defined(OS_ANDROID)
 
 using content::RenderFrameHost;
 using content::WebContents;
@@ -18,7 +25,11 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(UsbTabHelper);
 
 struct FrameUsbServices {
   scoped_ptr<WebUSBPermissionProvider> permission_provider;
-  scoped_ptr<ChromeWebUsbPermissionBubble> permission_bubble;
+#if defined(OS_ANDROID)
+  scoped_ptr<WebUsbChooserServiceAndroid> chooser_service;
+#else
+  scoped_ptr<WebUsbChooserService> chooser_service;
+#endif  // defined(OS_ANDROID)
 };
 
 // static
@@ -38,23 +49,33 @@ void UsbTabHelper::CreateDeviceManager(
     RenderFrameHost* render_frame_host,
     mojo::InterfaceRequest<device::usb::DeviceManager> request) {
   DCHECK(WebContents::FromRenderFrameHost(render_frame_host) == web_contents());
-  device::usb::PermissionProviderPtr permission_provider;
-  GetPermissionProvider(render_frame_host,
-                        mojo::GetProxy(&permission_provider));
-  device::usb::DeviceManagerImpl::Create(std::move(permission_provider),
-                                         std::move(request));
+  device::usb::DeviceManagerImpl::Create(
+      GetPermissionProvider(render_frame_host), std::move(request));
 }
 
-#if !defined(OS_ANDROID)
-void UsbTabHelper::CreatePermissionBubble(
+void UsbTabHelper::CreateChooserService(
     content::RenderFrameHost* render_frame_host,
-    mojo::InterfaceRequest<webusb::WebUsbPermissionBubble> request) {
-  GetPermissionBubble(render_frame_host, std::move(request));
+    mojo::InterfaceRequest<device::usb::ChooserService> request) {
+  GetChooserService(render_frame_host, std::move(request));
 }
-#endif  // !defined(OS_ANDROID)
+
+void UsbTabHelper::IncrementConnectionCount() {
+  device_connection_count_++;
+  NotifyTabStateChanged();
+}
+
+void UsbTabHelper::DecrementConnectionCount() {
+  DCHECK_GT(device_connection_count_, 0);
+  device_connection_count_--;
+  NotifyTabStateChanged();
+}
+
+bool UsbTabHelper::IsDeviceConnected() const {
+  return device_connection_count_ > 0;
+}
 
 UsbTabHelper::UsbTabHelper(WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {}
+    : content::WebContentsObserver(web_contents), device_connection_count_(0) {}
 
 void UsbTabHelper::RenderFrameDeleted(RenderFrameHost* render_frame_host) {
   frame_usb_services_.erase(render_frame_host);
@@ -73,26 +94,40 @@ FrameUsbServices* UsbTabHelper::GetFrameUsbService(
   return it->second.get();
 }
 
-void UsbTabHelper::GetPermissionProvider(
-    RenderFrameHost* render_frame_host,
-    mojo::InterfaceRequest<device::usb::PermissionProvider> request) {
+base::WeakPtr<device::usb::PermissionProvider>
+UsbTabHelper::GetPermissionProvider(RenderFrameHost* render_frame_host) {
   FrameUsbServices* frame_usb_services = GetFrameUsbService(render_frame_host);
   if (!frame_usb_services->permission_provider) {
     frame_usb_services->permission_provider.reset(
         new WebUSBPermissionProvider(render_frame_host));
   }
-  frame_usb_services->permission_provider->Bind(std::move(request));
+  return frame_usb_services->permission_provider->GetWeakPtr();
 }
 
-#if !defined(OS_ANDROID)
-void UsbTabHelper::GetPermissionBubble(
+void UsbTabHelper::GetChooserService(
     content::RenderFrameHost* render_frame_host,
-    mojo::InterfaceRequest<webusb::WebUsbPermissionBubble> request) {
+    mojo::InterfaceRequest<device::usb::ChooserService> request) {
   FrameUsbServices* frame_usb_services = GetFrameUsbService(render_frame_host);
-  if (!frame_usb_services->permission_bubble) {
-    frame_usb_services->permission_bubble.reset(
-        new ChromeWebUsbPermissionBubble(render_frame_host));
+  if (!frame_usb_services->chooser_service) {
+    frame_usb_services->chooser_service.reset(
+#if defined(OS_ANDROID)
+        new WebUsbChooserServiceAndroid(render_frame_host));
+#else
+        new WebUsbChooserService(render_frame_host));
+#endif  // defined(OS_ANDROID)
   }
-  frame_usb_services->permission_bubble->Bind(std::move(request));
+  frame_usb_services->chooser_service->Bind(std::move(request));
 }
-#endif  // !defined(OS_ANDROID)
+
+void UsbTabHelper::NotifyTabStateChanged() const {
+  // TODO(https://crbug.com/601627): Implement tab indicator for Android.
+#if !defined(OS_ANDROID)
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  if (browser) {
+    TabStripModel* tab_strip_model = browser->tab_strip_model();
+    tab_strip_model->UpdateWebContentsStateAt(
+        tab_strip_model->GetIndexOfWebContents(web_contents()),
+        TabStripModelObserver::ALL);
+  }
+#endif
+}

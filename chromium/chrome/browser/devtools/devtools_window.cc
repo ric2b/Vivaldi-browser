@@ -23,7 +23,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -563,15 +562,6 @@ void DevToolsWindow::InspectElement(
     window->inspect_element_start_time_ = start_time;
 }
 
-// static
-content::DevToolsExternalAgentProxyDelegate*
-DevToolsWindow::CreateWebSocketAPIChannel(const std::string& path) {
-  if (path.find("/devtools/frontend_api") != 0)
-    return nullptr;
-
-  return DevToolsUIBindings::CreateWebSocketAPIChannel();
-}
-
 void DevToolsWindow::ScheduleShow(const DevToolsToggleAction& action) {
   if (life_stage_ == kLoadCompleted) {
     Show(action);
@@ -731,7 +721,8 @@ DevToolsWindow::DevToolsWindow(Profile* profile,
       // Passing "dockSide=undocked" parameter ensures proper UI.
       life_stage_(can_dock ? kNotLoaded : kIsDockedSet),
       action_on_load_(DevToolsToggleAction::NoOp()),
-      intercepted_page_beforeunload_(false) {
+      intercepted_page_beforeunload_(false),
+      ready_for_test_(false) {
   // Set up delegate, so we get fully-functional window immediately.
   // It will not appear in UI though until |life_stage_ == kLoadCompleted|.
   main_web_contents_->SetDelegate(this);
@@ -1189,6 +1180,14 @@ void DevToolsWindow::OnLoadCompleted() {
     LoadCompleted();
 }
 
+void DevToolsWindow::ReadyForTest() {
+  ready_for_test_ = true;
+  if (!ready_for_test_callback_.is_null()) {
+    ready_for_test_callback_.Run();
+    ready_for_test_callback_ = base::Closure();
+  }
+}
+
 void DevToolsWindow::CreateDevToolsBrowser() {
   PrefService* prefs = profile_->GetPrefs();
   if (!prefs->GetDictionary(prefs::kAppWindowPlacement)->HasKey(kDevToolsApp)) {
@@ -1302,13 +1301,13 @@ bool DevToolsWindow::ForwardKeyboardEvent(
   return event_forwarder_->ForwardEvent(event);
 }
 
-bool DevToolsWindow::ReloadInspectedWebContents(bool ignore_cache) {
+bool DevToolsWindow::ReloadInspectedWebContents(bool bypass_cache) {
   // Only route reload via front-end if the agent is attached.
   WebContents* wc = GetInspectedWebContents();
   if (!wc || wc->GetCrashedStatus() != base::TERMINATION_STATUS_STILL_RUNNING)
     return false;
-  base::FundamentalValue ignore_cache_value(ignore_cache);
+  base::FundamentalValue bypass_cache_value(bypass_cache);
   bindings_->CallClientFunction("DevToolsAPI.reloadInspectedPage",
-                                &ignore_cache_value, nullptr, nullptr);
+                                &bypass_cache_value, nullptr, nullptr);
   return true;
 }

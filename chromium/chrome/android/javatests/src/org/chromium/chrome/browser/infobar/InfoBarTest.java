@@ -12,6 +12,7 @@ import android.test.suitebuilder.annotation.Smoke;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -59,7 +60,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
         super.setUp();
 
         // Register for animation notifications
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 if (getActivity().getActivityTab() == null) return false;
@@ -87,6 +88,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     @Smoke
     @MediumTest
     @Feature({"Browser", "Main"})
+    @DisabledTest // crbug.com/593003
     public void testInfoBarForPopUp() throws InterruptedException {
         loadUrl(mTestServer.getURL(POPUP_PAGE));
         assertTrue("InfoBar not added", mListener.addInfoBarAnimationFinished());
@@ -148,7 +150,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
                         getActivity().getActivityTab().goBack();
                     }
                 });
-        CriteriaHelper.pollForCriteria(
+        CriteriaHelper.pollInstrumentationThread(
                 new Criteria() {
                     @Override
                     public boolean isSatisfied() {
@@ -240,7 +242,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
         // The renderer should have been killed and the InfoBar removed.
         assertTrue("InfoBar not removed.", mListener.removeInfoBarAnimationFinished());
         assertTrue("Wrong infobar count", getInfoBars().isEmpty());
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return getActivity().getActivityTab().isShowingSadTab();

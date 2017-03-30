@@ -62,7 +62,6 @@
       <include name="IDR_WEB_VIEW_CONSTANTS_JS" file="guest_view/web_view/web_view_constants.js" type="BINDATA" />
       <include name="IDR_WEB_VIEW_EVENTS_JS" file="guest_view/web_view/web_view_events.js" type="BINDATA" />
       <include name="IDR_WEB_VIEW_EXPERIMENTAL_JS" file="guest_view/web_view/web_view_experimental.js" type="BINDATA" />
-      <include name="IDR_WEB_VIEW_IFRAME_JS" file="guest_view/web_view/web_view_iframe.js" type="BINDATA" />
       <include name="IDR_WEB_VIEW_INTERNAL_CUSTOM_BINDINGS_JS" file="guest_view/web_view/web_view_internal.js" type="BINDATA" />
       <include name="IDR_WEB_VIEW_JS" file="guest_view/web_view/web_view.js" type="BINDATA" />
 
@@ -100,7 +99,7 @@
 
       <!-- Media Router Mojo service and bindings. -->
       <if expr="enable_media_router">
-        <include name="IDR_MEDIA_ROUTER_MOJOM_JS" file="${mojom_root}\chrome\browser\media\router\media_router.mojom.js" use_base_dir="false" type="BINDATA" />
+        <include name="IDR_MEDIA_ROUTER_MOJOM_JS" file="${mojom_root}\chrome\browser\media\router\mojo\media_router.mojom.js" use_base_dir="false" type="BINDATA" />
         <include name="IDR_MEDIA_ROUTER_BINDINGS_JS" file="media_router_bindings.js" type="BINDATA" />
       </if>
     </includes>

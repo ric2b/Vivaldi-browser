@@ -55,8 +55,6 @@ component("gfx") {
     "animation/tween.cc",
     "animation/tween.h",
     "break_list.h",
-    "buffer_format_util.cc",
-    "buffer_format_util.h",
     "codec/jpeg_codec.cc",
     "codec/jpeg_codec.h",
     "codec/png_codec.cc",
@@ -84,6 +82,7 @@ component("gfx") {
     "font.h",
     "font_fallback.h",
     "font_fallback_linux.cc",
+    "font_fallback_linux.h",
     "font_fallback_mac.mm",
     "font_fallback_win.cc",
     "font_fallback_win.h",
@@ -99,8 +98,6 @@ component("gfx") {
     "font_render_params_win.cc",
     "gdi_util.cc",
     "gdi_util.h",
-    "generic_shared_memory_id.cc",
-    "generic_shared_memory_id.h",
     "gfx_paths.cc",
     "gfx_paths.h",
     "icon_util.cc",
@@ -117,6 +114,7 @@ component("gfx") {
     "image/image_skia.h",
     "image/image_skia_rep.cc",
     "image/image_skia_rep.h",
+    "image/image_skia_source.cc",
     "image/image_skia_source.h",
     "image/image_skia_util_ios.h",
     "image/image_skia_util_ios.mm",
@@ -135,12 +133,9 @@ component("gfx") {
     "linux_font_delegate.h",
     "mac/coordinate_conversion.h",
     "mac/coordinate_conversion.mm",
-    "mac/io_surface.cc",
-    "mac/io_surface.h",
     "mac/nswindow_frame_controls.h",
     "mac/nswindow_frame_controls.mm",
     "mac/scoped_cocoa_disable_screen_updates.h",
-    "native_widget_types.h",
     "nine_image_painter.cc",
     "nine_image_painter.h",
     "path.cc",
@@ -179,8 +174,6 @@ component("gfx") {
     "screen_aura.cc",
     "screen_ios.mm",
     "screen_mac.mm",
-    "screen_win.cc",
-    "screen_win.h",
     "scrollbar_size.cc",
     "scrollbar_size.h",
     "selection_model.cc",
@@ -216,8 +209,6 @@ component("gfx") {
     "win/direct_manipulation.h",
     "win/direct_write.cc",
     "win/direct_write.h",
-    "win/display_info.cc",
-    "win/display_info.h",
     "win/dpi.cc",
     "win/dpi.h",
     "win/hwnd_util.cc",
@@ -227,8 +218,6 @@ component("gfx") {
     "win/rendering_window_manager.cc",
     "win/rendering_window_manager.h",
     "win/scoped_set_map_mode.h",
-    "win/screen_win_display.cc",
-    "win/screen_win_display.h",
     "win/singleton_hwnd.cc",
     "win/singleton_hwnd.h",
     "win/singleton_hwnd_observer.cc",
@@ -247,8 +236,6 @@ component("gfx") {
       "canvas_paint_mac.mm",
       "canvas_skia.cc",
       "canvas_skia_paint.h",
-      "gpu_memory_buffer.cc",
-      "gpu_memory_buffer.h",
       "image/canvas_image_source.cc",
       "image/canvas_image_source.h",
       "image/image_skia_operations.cc",
@@ -265,8 +252,17 @@ component("gfx") {
     "//build/config/compiler:no_size_t_to_int_warning",
   ]
 
+  # This is part of the gfx component in the component build.
   defines = [ "GFX_IMPLEMENTATION" ]
 
+  public_deps = [
+    ":memory_buffer_sources",
+    ":native_widget_types",
+    "//base",
+    "//skia",
+    "//third_party/icu",
+    "//ui/gfx/geometry",
+  ]
   deps = [
     ":gfx_export",
     "//base",
@@ -277,12 +273,6 @@ component("gfx") {
     "//third_party/harfbuzz-ng",
     "//third_party/libpng",
     "//third_party/zlib",
-    "//ui/gfx/geometry",
-  ]
-  public_deps = [
-    "//base",
-    "//skia",
-    "//third_party/icu",
   ]
 
   # Text rendering conditions (complicated so separated out).
@@ -428,10 +418,6 @@ component("gfx") {
     sources -= [ "path_x11.cc" ]
   }
 
-  if (use_ozone) {
-    sources += [ "native_pixmap_handle_ozone.h" ]
-  }
-
   if (use_cairo) {
     configs += [ "//build/config/linux:pangocairo" ]
   }
@@ -446,7 +432,6 @@ action("aggregate_vector_icons") {
     "vector_icons/account_box.icon",
     "vector_icons/account_child_invert.icon",
     "vector_icons/apps.icon",
-    "vector_icons/autofill.icon",
     "vector_icons/autologin.icon",
     "vector_icons/bar_close.1x.icon",
     "vector_icons/bar_close.icon",
@@ -547,12 +532,14 @@ action("aggregate_vector_icons") {
     "vector_icons/tab_audio.icon",
     "vector_icons/tab_audio_muting.1x.icon",
     "vector_icons/tab_audio_muting.icon",
+    "vector_icons/tab_bluetooth_connected.icon",
     "vector_icons/tab_close_hovered_pressed.1x.icon",
     "vector_icons/tab_close_hovered_pressed.icon",
     "vector_icons/tab_close_normal.1x.icon",
     "vector_icons/tab_close_normal.icon",
     "vector_icons/tab_media_capturing.icon",
     "vector_icons/tab_media_recording.icon",
+    "vector_icons/tab_usb_connected.icon",
     "vector_icons/tablet.icon",
     "vector_icons/translate.icon",
     "vector_icons/upgrade_menu_item.icon",
@@ -591,9 +578,76 @@ action("aggregate_vector_icons") {
     "--output_cc=" + rebase_path(vector_icons_cc_file, root_build_dir),
     "--output_h=" + rebase_path(vector_icons_h_file, root_build_dir),
   ]
+
+  if (is_mac) {
+    sources += [ "vector_icons/combobox_arrow_mac.icon" ]
+  }
 }
 
 # Looking for gfx_geometry? It's //ui/gfx/geometry:geometry
+
+# Depend on this to use native_widget_types.h without pulling in all of gfx.
+source_set("native_widget_types") {
+  public = [
+    "native_widget_types.h",
+  ]
+
+  public_deps = [
+    "//base",
+  ]
+}
+
+# The GPU memory buffer stuff is separate from "gfx" to allow GPU-related
+# things to use these files without pulling in all of gfx, which includes large
+# things like Skia.
+#
+# The structure here allows the memory buffer to be part of the gfx component
+# in the component build, but be a separate source set in a static build.
+group("memory_buffer") {
+  if (is_component_build) {
+    public_deps = [
+      ":gfx",
+    ]
+  } else {
+    public_deps = [
+      ":memory_buffer_sources",
+    ]
+  }
+}
+source_set("memory_buffer_sources") {
+  visibility = [ ":*" ]  # Depend on through ":memory_buffer".
+
+  # TODO(brettw) refactor this so these sources are in a coherent directory
+  # structure rather than random samplings of ui/gfx and ui/gfx/mac.
+  sources = [
+    "buffer_format_util.cc",
+    "buffer_format_util.h",
+    "buffer_types.h",
+    "generic_shared_memory_id.cc",
+    "generic_shared_memory_id.h",
+    "gfx_export.h",
+    "mac/io_surface.cc",
+    "mac/io_surface.h",
+  ]
+
+  if (!is_ios) {
+    sources += [
+      "gpu_memory_buffer.cc",
+      "gpu_memory_buffer.h",
+    ]
+  }
+
+  if (use_ozone) {
+    sources += [ "native_pixmap_handle_ozone.h" ]
+  }
+
+  defines = [ "GFX_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
+}
 
 source_set("test_support") {
   testonly = true
@@ -635,6 +689,17 @@ source_set("test_support") {
   if (is_linux) {
     deps += [ "//build/linux:fontconfig" ]
   }
+}
+
+bundle_data("gfx_unittests_bundle_data") {
+  testonly = true
+  sources = [
+    "test/data",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/" +
+        "{{source_root_relative_dir}}/{{source_file_part}}",
+  ]
 }
 
 test("gfx_unittests") {
@@ -719,6 +784,7 @@ test("gfx_unittests") {
 
   deps = [
     ":gfx",
+    ":gfx_unittests_bundle_data",
     ":test_support",
     "//base",
     "//base/test:test_support",

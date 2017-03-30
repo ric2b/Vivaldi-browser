@@ -73,6 +73,10 @@ class CONTENT_EXPORT VideoCaptureImpl
   // Stop capturing. |client_id| is the identifier used to call StartCapture.
   void StopCapture(int client_id);
 
+  // Requests that the video capturer send a frame "soon" (e.g., to resolve
+  // picture loss or quality issues).
+  void RequestRefreshFrame();
+
   // Get capturing formats supported by this device.
   // |callback| will be invoked with the results.
   void GetDeviceSupportedFormats(const VideoCaptureDeviceFormatsCB& callback);
@@ -157,7 +161,7 @@ class CONTENT_EXPORT VideoCaptureImpl
   // callback, to trampoline back to the IO thread with the values.
   static void DidFinishConsumingFrame(
       const media::VideoFrameMetadata* metadata,
-      scoped_ptr<gpu::SyncToken> release_sync_token,
+      std::unique_ptr<gpu::SyncToken> release_sync_token,
       const BufferFinishedCallback& callback_to_io_thread);
 
   const scoped_refptr<VideoCaptureMessageFilter> message_filter_;

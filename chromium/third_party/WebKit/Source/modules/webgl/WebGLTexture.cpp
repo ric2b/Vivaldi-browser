@@ -25,6 +25,7 @@
 
 #include "modules/webgl/WebGLTexture.h"
 
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/webgl/WebGLRenderingContextBase.h"
 
 namespace blink {
@@ -38,7 +39,9 @@ WebGLTexture::WebGLTexture(WebGLRenderingContextBase* ctx)
     : WebGLSharedPlatform3DObject(ctx)
     , m_target(0)
 {
-    setObject(ctx->webContext()->createTexture());
+    GLuint texture;
+    ctx->contextGL()->GenTextures(1, &texture);
+    setObject(texture);
 }
 
 WebGLTexture::~WebGLTexture()
@@ -57,9 +60,9 @@ void WebGLTexture::setTarget(GLenum target)
     m_target = target;
 }
 
-void WebGLTexture::deleteObjectImpl(WebGraphicsContext3D* context3d)
+void WebGLTexture::deleteObjectImpl(gpu::gles2::GLES2Interface* gl)
 {
-    context3d->deleteTexture(m_object);
+    gl->DeleteTextures(1, &m_object);
     m_object = 0;
 }
 

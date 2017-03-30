@@ -22,7 +22,6 @@
 #include "media/base/audio_pull_fifo.h"
 #include "media/base/audio_renderer_sink.h"
 #include "media/base/channel_layout.h"
-#include "media/base/output_device.h"
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
 
 namespace webrtc {
@@ -37,8 +36,7 @@ class WebRtcAudioRendererSource;
 // for connecting WebRtc MediaStream with the audio pipeline.
 class CONTENT_EXPORT WebRtcAudioRenderer
     : NON_EXPORTED_BASE(public media::AudioRendererSink::RenderCallback),
-      NON_EXPORTED_BASE(public MediaStreamAudioRenderer),
-      NON_EXPORTED_BASE(public media::OutputDevice) {
+      NON_EXPORTED_BASE(public MediaStreamAudioRenderer) {
  public:
   // This is a little utility class that holds the configured state of an audio
   // stream.
@@ -119,16 +117,12 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   void Pause() override;
   void Stop() override;
   void SetVolume(float volume) override;
-  media::OutputDevice* GetOutputDevice() override;
+  media::OutputDeviceInfo GetOutputDeviceInfo() override;
   base::TimeDelta GetCurrentRenderTime() const override;
   bool IsLocalRenderer() const override;
-
-  // media::OutputDevice implementation
   void SwitchOutputDevice(const std::string& device_id,
                           const url::Origin& security_origin,
-                          const media::SwitchOutputDeviceCB& callback) override;
-  media::AudioParameters GetOutputParameters() override;
-  media::OutputDeviceStatus GetDeviceStatus() override;
+                          const media::OutputDeviceStatusCB& callback) override;
 
   // Called when an audio renderer, either the main or a proxy, starts playing.
   // Here we maintain a reference count of how many renderers are currently
@@ -231,7 +225,7 @@ class CONTENT_EXPORT WebRtcAudioRenderer
 
   // Used to buffer data between the client and the output device in cases where
   // the client buffer size is not the same as the output device buffer size.
-  scoped_ptr<media::AudioPullFifo> audio_fifo_;
+  std::unique_ptr<media::AudioPullFifo> audio_fifo_;
 
   // Contains the accumulated delay estimate which is provided to the WebRTC
   // AEC.

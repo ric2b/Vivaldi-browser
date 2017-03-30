@@ -134,9 +134,9 @@ class MEDIA_EXPORT AudioRendererImpl
   // Returns true if more buffers are needed.
   bool HandleSplicerBuffer_Locked(const scoped_refptr<AudioBuffer>& buffer);
 
-  // Helper functions for AudioDecoder::Status values passed to
+  // Helper functions for DecodeStatus values passed to
   // DecodedAudioReady().
-  void HandleAbortedReadOrDecodeError(bool is_decode_error);
+  void HandleAbortedReadOrDecodeError(PipelineStatus status);
 
   void StartRendering_Locked();
   void StopRendering_Locked();
@@ -290,6 +290,10 @@ class MEDIA_EXPORT AudioRendererImpl
   // Set upon receipt of the first decoded buffer after a StartPlayingFrom().
   // Used to determine how long to delay playback.
   base::TimeDelta first_packet_timestamp_;
+
+  // Set by CurrentMediaTime(), used to prevent the current media time value as
+  // reported to JavaScript from going backwards in time.
+  base::TimeDelta last_media_timestamp_;
 
   // End variables which must be accessed under |lock_|. ----------------------
 

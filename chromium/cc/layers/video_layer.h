@@ -21,8 +21,7 @@ class VideoLayerImpl;
 // A Layer that contains a Video element.
 class CC_EXPORT VideoLayer : public Layer {
  public:
-  static scoped_refptr<VideoLayer> Create(const LayerSettings& settings,
-                                          VideoFrameProvider* provider,
+  static scoped_refptr<VideoLayer> Create(VideoFrameProvider* provider,
                                           media::VideoRotation video_rotation);
 
   scoped_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
@@ -30,9 +29,7 @@ class CC_EXPORT VideoLayer : public Layer {
   bool Update() override;
 
  private:
-  VideoLayer(const LayerSettings& settings,
-             VideoFrameProvider* provider,
-             media::VideoRotation video_rotation);
+  VideoLayer(VideoFrameProvider* provider, media::VideoRotation video_rotation);
   ~VideoLayer() override;
 
   // This pointer is only for passing to VideoLayerImpl's constructor. It should

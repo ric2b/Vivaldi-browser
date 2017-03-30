@@ -47,6 +47,7 @@ component("views") {
     "//ui/base",
     "//ui/base/ime",
     "//ui/compositor",
+    "//ui/display",
     "//ui/events",
     "//ui/events:events_base",
     "//ui/events/platform",
@@ -84,6 +85,7 @@ component("views") {
       "dwmapi.lib",
       "imm32.lib",
       "oleacc.lib",
+      "wtsapi32.lib",
     ]
     ldflags = [ "/DELAYLOAD:user32.dll" ]
     deps += [
@@ -160,6 +162,7 @@ source_set("test_support_internal") {
     "//skia",
     "//testing/gtest",
     "//ui/base",
+    "//ui/base:test_support",
     "//ui/base/ime",
     "//ui/compositor",
     "//ui/compositor:test_support",
@@ -188,7 +191,10 @@ source_set("test_support_internal") {
     deps += [ "//ui/gfx/x" ]
   }
   if (use_ozone || !use_x11) {
-    sources -= [ "test/x11_property_change_waiter.cc" ]
+    sources -= [
+      "test/x11_property_change_waiter.cc",
+      "test/x11_property_change_waiter.h",
+    ]
   }
 }
 
@@ -199,6 +205,7 @@ static_library("test_support") {
   ]
   sources = [
     "test/default_platform_test_helper.cc",
+    "test/native_widget_factory_desktop.cc",
   ]
 }
 
@@ -228,6 +235,7 @@ test("views_unittests") {
     "//ui/gl:test_support",
     "//ui/native_theme",
     "//ui/resources",
+    "//ui/resources:ui_test_pak",
     "//ui/strings",
     "//url",
   ]

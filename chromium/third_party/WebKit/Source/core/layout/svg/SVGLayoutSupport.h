@@ -46,7 +46,7 @@ class SVGLengthContext;
 class StrokeData;
 class TransformState;
 
-class SVGLayoutSupport {
+class CORE_EXPORT SVGLayoutSupport {
     STATIC_ONLY(SVGLayoutSupport);
 public:
     // Shares child layouting code between LayoutSVGRoot/LayoutSVG(Hidden)Container
@@ -75,12 +75,12 @@ public:
     static void computeContainerBoundingBoxes(const LayoutObject* container, FloatRect& objectBoundingBox, bool& objectBoundingBoxValid, FloatRect& strokeBoundingBox, FloatRect& paintInvalidationBoundingBox);
 
     // Important functions used by nearly all SVG layoutObjects centralizing coordinate transformations / paint invalidation rect calculations
-    static LayoutRect clippedOverflowRectForPaintInvalidation(const LayoutObject&,
-        const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState*,
-        float strokeWidthForHairlinePadding = 0);
-    static const LayoutSVGRoot& mapRectToSVGRootForPaintInvalidation(const LayoutObject&,
-        const FloatRect& localPaintInvalidationRect, LayoutRect&, float strokeWidthForHairlinePadding = 0);
-    static void mapLocalToAncestor(const LayoutObject*, const LayoutBoxModelObject* ancestor, TransformState&, bool* wasFixed = nullptr, const PaintInvalidationState* = nullptr);
+    static FloatRect localOverflowRectForPaintInvalidation(const LayoutObject&);
+    static LayoutRect clippedOverflowRectForPaintInvalidation(const LayoutObject&, const LayoutBoxModelObject& paintInvalidationContainer);
+    static LayoutRect transformPaintInvalidationRect(const LayoutObject&, const AffineTransform&, const FloatRect&);
+    static bool mapToVisualRectInAncestorSpace(const LayoutObject&, const LayoutBoxModelObject* ancestor, const FloatRect& localPaintInvalidationRect, LayoutRect& resultRect, VisualRectFlags = DefaultVisualRectFlags);
+    static void mapLocalToAncestor(const LayoutObject*, const LayoutBoxModelObject* ancestor, TransformState&);
+    static void mapAncestorToLocal(const LayoutObject&, const LayoutBoxModelObject* ancestor, TransformState&);
     static const LayoutObject* pushMappingToContainer(const LayoutObject*, const LayoutBoxModelObject* ancestorToStopAt, LayoutGeometryMap&);
 
     // Shared between SVG layoutObjects and resources.

@@ -56,7 +56,7 @@ bool DataModelWrapper::GetDisplayText(
     return false;
 
   // Format the address.
-  scoped_ptr< ::i18n::addressinput::AddressData> address_data =
+  std::unique_ptr<::i18n::addressinput::AddressData> address_data =
       i18n::CreateAddressData(
           base::Bind(&DataModelWrapper::GetInfo, base::Unretained(this)));
   address_data->language_code = GetLanguageCode();
@@ -110,7 +110,7 @@ base::string16 AutofillProfileWrapper::GetInfo(const AutofillType& type) const {
   // but the AutofillProfile class doesn't know how to fill credit card
   // fields. So, request for the corresponding profile type instead.
   AutofillType effective_type = type;
-  if (type.GetStorableType() == CREDIT_CARD_NAME)
+  if (type.GetStorableType() == CREDIT_CARD_NAME_FULL)
     effective_type = AutofillType(NAME_BILLING_FULL);
 
   const std::string& app_locale = g_browser_process->GetApplicationLocale();

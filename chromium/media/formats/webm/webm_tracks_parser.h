@@ -18,6 +18,7 @@
 #include "base/time/time.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/media_log.h"
+#include "media/base/media_tracks.h"
 #include "media/base/text_track_config.h"
 #include "media/base/video_decoder_config.h"
 #include "media/formats/webm/webm_audio_client.h"
@@ -77,7 +78,25 @@ class MEDIA_EXPORT WebMTracksParser : public WebMParserClient {
     return text_tracks_;
   }
 
+  int detected_audio_track_count() const { return detected_audio_track_count_; }
+
+  int detected_video_track_count() const { return detected_video_track_count_; }
+
+  int detected_text_track_count() const { return detected_text_track_count_; }
+
+  // Note: Calling media_tracks() method passes the ownership of the MediaTracks
+  // object from WebMTracksParser to the caller (which is typically
+  // WebMStreamParser object). So this method must be called only once, after
+  // track parsing has been completed.
+  scoped_ptr<MediaTracks> media_tracks() {
+    CHECK(media_tracks_.get());
+    return std::move(media_tracks_);
+  }
+
  private:
+  void Reset();
+  void ResetTrackEntry();
+
   // WebMParserClient implementation.
   WebMParserClient* OnListStart(int id) override;
   bool OnListEnd(int id) override;
@@ -86,6 +105,7 @@ class MEDIA_EXPORT WebMTracksParser : public WebMParserClient {
   bool OnBinary(int id, const uint8_t* data, int size) override;
   bool OnString(int id, const std::string& str) override;
 
+  bool reset_on_next_parse_;
   int64_t track_type_;
   int64_t track_num_;
   std::string track_name_;
@@ -113,6 +133,11 @@ class MEDIA_EXPORT WebMTracksParser : public WebMParserClient {
 
   WebMVideoClient video_client_;
   VideoDecoderConfig video_decoder_config_;
+
+  int detected_audio_track_count_;
+  int detected_video_track_count_;
+  int detected_text_track_count_;
+  scoped_ptr<MediaTracks> media_tracks_;
 
   DISALLOW_COPY_AND_ASSIGN(WebMTracksParser);
 };

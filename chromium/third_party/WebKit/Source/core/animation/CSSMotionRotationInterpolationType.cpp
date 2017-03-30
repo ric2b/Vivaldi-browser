@@ -91,7 +91,7 @@ InterpolationValue CSSMotionRotationInterpolationType::maybeConvertNeutral(const
     return convertMotionRotation(StyleMotionRotation(0, underlyingRotationType));
 }
 
-InterpolationValue CSSMotionRotationInterpolationType::maybeConvertInitial() const
+InterpolationValue CSSMotionRotationInterpolationType::maybeConvertInitial(const StyleResolverState&) const
 {
     return convertMotionRotation(StyleMotionRotation(0, MotionRotationAuto));
 }
@@ -108,7 +108,7 @@ InterpolationValue CSSMotionRotationInterpolationType::maybeConvertValue(const C
     return convertMotionRotation(StyleBuilderConverter::convertMotionRotation(value));
 }
 
-PairwiseInterpolationValue CSSMotionRotationInterpolationType::mergeSingleConversions(InterpolationValue& start, InterpolationValue& end) const
+PairwiseInterpolationValue CSSMotionRotationInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
 {
     const MotionRotationType& startType = toCSSMotionRotationNonInterpolableValue(*start.nonInterpolableValue).rotationType();
     const MotionRotationType& endType = toCSSMotionRotationNonInterpolableValue(*end.nonInterpolableValue).rotationType();
@@ -125,7 +125,7 @@ InterpolationValue CSSMotionRotationInterpolationType::maybeConvertUnderlyingVal
     return convertMotionRotation(environment.state().style()->motionRotation());
 }
 
-void CSSMotionRotationInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value) const
+void CSSMotionRotationInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const
 {
     const MotionRotationType& underlyingType = toCSSMotionRotationNonInterpolableValue(*underlyingValueOwner.value().nonInterpolableValue).rotationType();
     const MotionRotationType& rotationType = toCSSMotionRotationNonInterpolableValue(*value.nonInterpolableValue).rotationType();

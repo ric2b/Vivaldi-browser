@@ -102,6 +102,7 @@ PULL_LIBS_DIR=
 SANDBOXED=
 SANDBOXED_INDEX=
 START=
+START_URL=
 ATTACH_DELAY=1
 SU_PREFIX=
 SYMBOL_DIR=
@@ -114,6 +115,9 @@ for opt; do
   case $opt in
     --adb=*)
       ADB=$optarg
+      ;;
+    --device=*)
+      export ANDROID_SERIAL=$optarg
       ;;
     --activity=*)
       ACTIVITY=$optarg
@@ -174,6 +178,9 @@ for opt; do
     --script=*)
       GDBINIT=$optarg
       ;;
+    --start=*)
+      START_URL=$optarg
+      ;& # fallthrough
     --start)
       START=true
       ;;
@@ -274,7 +281,7 @@ the path to the host target-specific cross-toolchain.
 
 You will also need the 'adb' tool in your path. Otherwise, use the --adb
 option. The script will complain if there is more than one device connected
-and ANDROID_SERIAL is not defined.
+and a device is not specified with either --device or ANDROID_SERIAL).
 
 The first time you use it on a device, the script will pull many system
 libraries required by the process into a temporary directory. This
@@ -308,7 +315,7 @@ Valid options:
   --program-name=<name> Specify program name (cosmetic only).
   --pid=<pid>           Specify application process pid.
   --force               Kill any previous debugging session, if any.
-  --start               Start package's activity on device.
+  --start[=<url>]       Start package's activity on device.
   --attach-delay=<num>  Seconds to wait for gdbserver to attach to the
                         remote process before starting gdb. Default 1.
                         <num> may be a float if your sleep(1) supports it.
@@ -321,6 +328,7 @@ Valid options:
   --gdb=<file>          Specify host gdb client binary.
   --target-arch=<name>  Specify NDK target arch.
   --adb=<file>          Specify host ADB binary.
+  --device=<file>       ADB device serial to use (-s flag).
   --port=<port>         Specify the tcp port to use.
 
   --su-prefix=<prefix>  Prepend <prefix> to 'adb shell' commands that are
@@ -340,7 +348,7 @@ if [ -z "$PACKAGE_NAME" ]; then
   panic "Please specify a package name on the command line. See --help."
 fi
 
-if [[ -z "$CHROMIUM_OUTPUT_DIR" ]]; then
+if [[ -z "$SYMBOL_DIR" && -z "$CHROMIUM_OUTPUT_DIR" ]]; then
   if [[ -e "build.ninja" ]]; then
     CHROMIUM_OUTPUT_DIR=$PWD
   else
@@ -350,6 +358,36 @@ if [[ -z "$CHROMIUM_OUTPUT_DIR" ]]; then
        Setting working directory to an output directory.
        See --help."
    fi
+fi
+
+# Detect the build type and symbol directory. This is done by finding
+# the most recent sub-directory containing debug shared libraries under
+# $CHROMIUM_OUTPUT_DIR.
+#
+# Out: nothing, but this sets SYMBOL_DIR
+#
+detect_symbol_dir () {
+  # GYP places unstripped libraries under out/lib
+  # GN places them under out/lib.unstripped
+  local PARENT_DIR="$CHROMIUM_OUTPUT_DIR"
+  if [[ ! -e "$PARENT_DIR" ]]; then
+    PARENT_DIR="$CHROMIUM_SRC/$PARENT_DIR"
+  fi
+  SYMBOL_DIR="$PARENT_DIR/lib.unstripped"
+  if [[ -z "$(ls "$SYMBOL_DIR"/lib*.so 2>/dev/null)" ]]; then
+    SYMBOL_DIR="$PARENT_DIR/lib"
+    if [[ -z "$(ls "$SYMBOL_DIR"/lib*.so 2>/dev/null)" ]]; then
+      panic "Could not find any symbols under \
+$PARENT_DIR/lib{.unstripped}. Please build the program first!"
+    fi
+  fi
+  log "Auto-config: --symbol-dir=$SYMBOL_DIR"
+}
+
+if [ -z "$SYMBOL_DIR" ]; then
+  detect_symbol_dir
+elif [[ -z "$(ls "$SYMBOL_DIR"/lib*.so 2>/dev/null)" ]]; then
+  panic "Could not find any symbols under $SYMBOL_DIR"
 fi
 
 if [ -z "$NDK_DIR" ]; then
@@ -390,7 +428,7 @@ fi
 # If there are more than one device connected, and ANDROID_SERIAL is not
 # defined, print an error message.
 NUM_DEVICES_PLUS2=$($ADB devices 2>/dev/null | wc -l)
-if [ "$NUM_DEVICES_PLUS2" -lt 3 -a -z "$ANDROID_SERIAL" ]; then
+if [ "$NUM_DEVICES_PLUS2" -gt 3 -a -z "$ANDROID_SERIAL" ]; then
   echo "ERROR: There is more than one Android device connected to ADB."
   echo "Please define ANDROID_SERIAL to specify which one to use."
   exit 1
@@ -432,15 +470,18 @@ adb_shell () {
   return $RET
 }
 
-# Find the target architecture from the target device.
+# Find the target architecture from a local shared library.
 # This returns an NDK-compatible architecture name.
 # out: NDK Architecture name, or empty string.
 get_gyp_target_arch () {
-  local ARCH=$(adb_shell getprop ro.product.cpu.abi)
+  local RANDOM_LIB=$(ls "$SYMBOL_DIR"/lib*.so | head -n1)
+  local SO_DESC=$(file $RANDOM_LIB)
   case $ARCH in
-    mips|x86|x86_64) echo "$ARCH";;
-    arm64*) echo "arm64";;
-    arm*) echo "arm";;
+    *32-bit*ARM,*) echo "arm";;
+    *64-bit*ARM,*) echo "arm64";;
+    *32-bit*Intel,*) echo "x86";;
+    *x86-64,*) echo "x86_64";;
+    *32-bit*MIPS,*) echo "mips";;
     *) echo "";
   esac
 }
@@ -682,7 +723,7 @@ fi
 
 if [ "$START" ]; then
   log "Starting $PROGRAM_NAME on device."
-  adb_shell am start -n $PACKAGE_NAME/$ACTIVITY 2>/dev/null
+  adb_shell am start -n $PACKAGE_NAME/$ACTIVITY ${START_URL:+-d "$START_URL"}
   adb_shell ps | grep -q $PACKAGE_NAME
   fail_panic "Could not start $PROGRAM_NAME on device. Are you sure the \
 package is installed?"
@@ -694,34 +735,6 @@ fi
 get_file_timestamp () {
   stat -c %Y "$1" 2>/dev/null
 }
-
-# Detect the build type and symbol directory. This is done by finding
-# the most recent sub-directory containing debug shared libraries under
-# $CHROMIUM_OUTPUT_DIR.
-#
-# Out: nothing, but this sets SYMBOL_DIR
-#
-detect_symbol_dir () {
-  # GYP places unstripped libraries under out/lib
-  # GN places them under out/lib.unstripped
-  local PARENT_DIR="$CHROMIUM_OUTPUT_DIR"
-  if [[ ! -e "$PARENT_DIR" ]]; then
-    PARENT_DIR="$CHROMIUM_SRC/$PARENT_DIR"
-  fi
-  SYMBOL_DIR="$PARENT_DIR/lib.unstripped"
-  if [[ -z "$(ls "$SYMBOL_DIR"/lib*.so 2>/dev/null)" ]]; then
-    SYMBOL_DIR="$PARENT_DIR/lib"
-    if [[ -z "$(ls "$SYMBOL_DIR"/lib*.so 2>/dev/null)" ]]; then
-      panic "Could not find any symbols under \
-$PARENT_DIR/lib{.unstripped}. Please build the program first!"
-    fi
-  fi
-  log "Auto-config: --symbol-dir=$SYMBOL_DIR"
-}
-
-if [ -z "$SYMBOL_DIR" ]; then
-  detect_symbol_dir
-fi
 
 # Allow several concurrent debugging sessions
 TARGET_GDBSERVER=/data/data/$PACKAGE_NAME/gdbserver-adb-gdb-$TMP_ID

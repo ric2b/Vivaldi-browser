@@ -3,15 +3,18 @@
 // found in the LICENSE file.
 
 // devguid requires Windows.h be imported first.
+#include "chrome/browser/extensions/api/image_writer_private/removable_storage_provider.h"
+
 #include <windows.h>
 #include <setupapi.h>
 #include <winioctl.h>
+
+#include <memory>
 
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_handle.h"
-#include "chrome/browser/extensions/api/image_writer_private/removable_storage_provider.h"
 
 namespace extensions {
 
@@ -35,7 +38,7 @@ bool AddDeviceInfo(HANDLE interface_enumerator,
     return false;
   }
 
-  scoped_ptr<char[]> interface_detail_data_buffer(
+  std::unique_ptr<char[]> interface_detail_data_buffer(
       new char[interface_detail_data_size]);
 
   SP_DEVICE_INTERFACE_DETAIL_DATA* interface_detail_data =
@@ -101,7 +104,7 @@ bool AddDeviceInfo(HANDLE interface_enumerator,
   query.PropertyId = StorageDeviceProperty;
   query.QueryType = PropertyStandardQuery;
 
-  scoped_ptr<char[]> output_buf(new char[1024]);
+  std::unique_ptr<char[]> output_buf(new char[1024]);
   status = DeviceIoControl(
       device_handle.Get(),            // Device handle.
       IOCTL_STORAGE_QUERY_PROPERTY,   // Flag to request device properties.
@@ -148,24 +151,23 @@ bool AddDeviceInfo(HANDLE interface_enumerator,
   std::string drive_id = "\\\\.\\PhysicalDrive";
   drive_id.append(base::Uint64ToString(device_number.DeviceNumber));
 
-  linked_ptr<api::image_writer_private::RemovableStorageDevice> device(
-    new api::image_writer_private::RemovableStorageDevice());
-  device->capacity = disk_capacity;
-  device->storage_unit_id = drive_id;
-  device->removable = device_descriptor->RemovableMedia == TRUE;
+  api::image_writer_private::RemovableStorageDevice device;
+  device.capacity = disk_capacity;
+  device.storage_unit_id = drive_id;
+  device.removable = device_descriptor->RemovableMedia == TRUE;
 
   if (device_descriptor->VendorIdOffset &&
       output_buf[device_descriptor->VendorIdOffset]) {
-    device->vendor.assign(output_buf.get() + device_descriptor->VendorIdOffset);
+    device.vendor.assign(output_buf.get() + device_descriptor->VendorIdOffset);
   }
 
   std::string product_id;
   if (device_descriptor->ProductIdOffset &&
       output_buf[device_descriptor->ProductIdOffset]) {
-    device->model.assign(output_buf.get() + device_descriptor->ProductIdOffset);
+    device.model.assign(output_buf.get() + device_descriptor->ProductIdOffset);
   }
 
-  device_list->data.push_back(device);
+  device_list->data.push_back(std::move(device));
 
   return true;
 }

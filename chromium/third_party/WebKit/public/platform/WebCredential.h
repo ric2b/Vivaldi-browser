@@ -10,6 +10,8 @@
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 
+#include <memory>
+
 namespace blink {
 
 class PlatformCredential;
@@ -35,9 +37,9 @@ public:
     BLINK_PLATFORM_EXPORT bool isLocalCredential() const { return isPasswordCredential(); }
 
 #if INSIDE_BLINK
-    BLINK_PLATFORM_EXPORT static WebCredential create(PlatformCredential*);
+    BLINK_PLATFORM_EXPORT static std::unique_ptr<WebCredential> create(PlatformCredential*);
     BLINK_PLATFORM_EXPORT WebCredential& operator=(PlatformCredential*);
-    BLINK_PLATFORM_EXPORT PlatformCredential* platformCredential() const { return m_platformCredential.get(); }
+    BLINK_PLATFORM_EXPORT PlatformCredential* getPlatformCredential() const { return m_platformCredential.get(); }
 #endif
 
 protected:

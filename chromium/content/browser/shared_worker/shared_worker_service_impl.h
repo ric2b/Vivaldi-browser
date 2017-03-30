@@ -10,6 +10,7 @@
 #include "base/compiler_specific.h"
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/observer_list.h"
 #include "content/public/browser/notification_observer.h"
@@ -70,12 +71,6 @@ class CONTENT_EXPORT SharedWorkerServiceImpl
   void WorkerConnected(int message_port_id,
                        int worker_route_id,
                        SharedWorkerMessageFilter* filter);
-  void AllowDatabase(int worker_route_id,
-                     const GURL& url,
-                     const base::string16& name,
-                     const base::string16& display_name,
-                     bool* result,
-                     SharedWorkerMessageFilter* filter);
   void AllowFileSystem(int worker_route_id,
                        const GURL& url,
                        IPC::Message* reply_msg,

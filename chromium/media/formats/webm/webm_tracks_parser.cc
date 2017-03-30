@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "media/base/media_util.h"
 #include "media/base/timestamp_constants.h"
 #include "media/formats/webm/webm_constants.h"
 #include "media/formats/webm/webm_content_encodings.h"
@@ -46,29 +47,18 @@ static base::TimeDelta PrecisionCappedDefaultDuration(
 
 WebMTracksParser::WebMTracksParser(const scoped_refptr<MediaLog>& media_log,
                                    bool ignore_text_tracks)
-    : track_type_(-1),
-      track_num_(-1),
-      seek_preroll_(-1),
-      codec_delay_(-1),
-      default_duration_(-1),
-      audio_track_num_(-1),
-      audio_default_duration_(-1),
-      video_track_num_(-1),
-      video_default_duration_(-1),
-      ignore_text_tracks_(ignore_text_tracks),
+    : ignore_text_tracks_(ignore_text_tracks),
       media_log_(media_log),
       audio_client_(media_log),
       video_client_(media_log) {
+  Reset();
 }
 
 WebMTracksParser::~WebMTracksParser() {}
 
-int WebMTracksParser::Parse(const uint8_t* buf, int size) {
-  track_type_ =-1;
-  track_num_ = -1;
-  default_duration_ = -1;
-  track_name_.clear();
-  track_language_.clear();
+void WebMTracksParser::Reset() {
+  ResetTrackEntry();
+  reset_on_next_parse_ = false;
   audio_track_num_ = -1;
   audio_default_duration_ = -1;
   audio_decoder_config_ = AudioDecoderConfig();
@@ -77,6 +67,31 @@ int WebMTracksParser::Parse(const uint8_t* buf, int size) {
   video_decoder_config_ = VideoDecoderConfig();
   text_tracks_.clear();
   ignored_tracks_.clear();
+  detected_audio_track_count_ = 0;
+  detected_video_track_count_ = 0;
+  detected_text_track_count_ = 0;
+  media_tracks_.reset(new MediaTracks());
+}
+
+void WebMTracksParser::ResetTrackEntry() {
+  track_type_ = -1;
+  track_num_ = -1;
+  track_name_.clear();
+  track_language_.clear();
+  codec_id_ = "";
+  codec_private_.clear();
+  seek_preroll_ = -1;
+  codec_delay_ = -1;
+  default_duration_ = -1;
+  audio_client_.Reset();
+  video_client_.Reset();
+}
+
+int WebMTracksParser::Parse(const uint8_t* buf, int size) {
+  if (reset_on_next_parse_)
+    Reset();
+
+  reset_on_next_parse_ = true;
 
   WebMListParser parser(kWebMIdTracks, this);
   int result = parser.Parse(buf, size);
@@ -109,15 +124,7 @@ WebMParserClient* WebMTracksParser::OnListStart(int id) {
   }
 
   if (id == kWebMIdTrackEntry) {
-    track_type_ = -1;
-    track_num_ = -1;
-    default_duration_ = -1;
-    track_name_.clear();
-    track_language_.clear();
-    codec_id_ = "";
-    codec_private_.clear();
-    audio_client_.Reset();
-    video_client_.Reset();
+    ResetTrackEntry();
     return this;
   }
 
@@ -192,7 +199,11 @@ bool WebMTracksParser::OnListEnd(int id) {
           content_encodings()[0]->encryption_key_id();
     }
 
+    EncryptionScheme encryption_scheme =
+        encryption_key_id.empty() ? Unencrypted() : AesCtrEncryptionScheme();
+
     if (track_type_ == kWebMTrackTypeAudio) {
+      detected_audio_track_count_++;
       if (audio_track_num_ == -1) {
         audio_track_num_ = track_num_;
         audio_encryption_key_id_ = encryption_key_id;
@@ -207,14 +218,18 @@ bool WebMTracksParser::OnListEnd(int id) {
         DCHECK(!audio_decoder_config_.IsValidConfig());
         if (!audio_client_.InitializeConfig(
                 codec_id_, codec_private_, seek_preroll_, codec_delay_,
-                !audio_encryption_key_id_.empty(), &audio_decoder_config_)) {
+                encryption_scheme, &audio_decoder_config_)) {
           return false;
         }
+        media_tracks_->AddAudioTrack(audio_decoder_config_,
+                                     base::Uint64ToString(track_num_), "main",
+                                     track_name_, track_language_);
       } else {
         MEDIA_LOG(DEBUG, media_log_) << "Ignoring audio track " << track_num_;
         ignored_tracks_.insert(track_num_);
       }
     } else if (track_type_ == kWebMTrackTypeVideo) {
+      detected_video_track_count_++;
       if (video_track_num_ == -1) {
         video_track_num_ = track_num_;
         video_encryption_key_id_ = encryption_key_id;
@@ -227,17 +242,21 @@ bool WebMTracksParser::OnListEnd(int id) {
         video_default_duration_ = default_duration_;
 
         DCHECK(!video_decoder_config_.IsValidConfig());
-        if (!video_client_.InitializeConfig(
-                codec_id_, codec_private_, !video_encryption_key_id_.empty(),
-                &video_decoder_config_)) {
+        if (!video_client_.InitializeConfig(codec_id_, codec_private_,
+                                            encryption_scheme,
+                                            &video_decoder_config_)) {
           return false;
         }
+        media_tracks_->AddVideoTrack(video_decoder_config_,
+                                     base::Uint64ToString(track_num_), "main",
+                                     track_name_, track_language_);
       } else {
         MEDIA_LOG(DEBUG, media_log_) << "Ignoring video track " << track_num_;
         ignored_tracks_.insert(track_num_);
       }
     } else if (track_type_ == kWebMTrackTypeSubtitlesOrCaptions ||
                track_type_ == kWebMTrackTypeDescriptionsOrMetadata) {
+      detected_text_track_count_++;
       if (ignore_text_tracks_) {
         MEDIA_LOG(DEBUG, media_log_) << "Ignoring text track " << track_num_;
         ignored_tracks_.insert(track_num_);
@@ -335,7 +354,15 @@ bool WebMTracksParser::OnString(int id, const std::string& str) {
   }
 
   if (id == kWebMIdLanguage) {
-    track_language_ = str;
+    // Check that the language string is in ISO 639-2 format (3 letter code of a
+    // language, all lower-case letters).
+    if (str.size() != 3 || str[0] < 'a' || str[0] > 'z' || str[1] < 'a' ||
+        str[1] > 'z' || str[2] < 'a' || str[2] > 'z') {
+      VLOG(2) << "Ignoring kWebMIdLanguage (not ISO 639-2 compliant): " << str;
+      track_language_ = "und";
+    } else {
+      track_language_ = str;
+    }
     return true;
   }
 

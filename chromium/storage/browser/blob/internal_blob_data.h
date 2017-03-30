@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -33,8 +34,6 @@ class InternalBlobData {
   void RemoveBlobFromShareableItems(const std::string& blob_uuid);
 
   const std::vector<scoped_refptr<ShareableBlobDataItem>>& items() const;
-  const std::string& content_type() const;
-  const std::string& content_disposition() const;
 
   // Gets the memory used by this blob that is not shared by other blobs. This
   // also doesn't count duplicate items.
@@ -60,8 +59,6 @@ class InternalBlobData {
     ~Builder();
 
     void AppendSharedBlobItem(scoped_refptr<ShareableBlobDataItem> item);
-    void set_content_type(const std::string& content_type);
-    void set_content_disposition(const std::string& content_disposition);
 
     // Gets the memory used by this builder that is not shared with other blobs.
     size_t GetNonsharedMemoryUsage() const;
@@ -71,10 +68,10 @@ class InternalBlobData {
     void RemoveBlobFromShareableItems(const std::string& blob_uuid);
 
     // The builder is invalid after calling this method.
-    scoped_ptr<::storage::InternalBlobData> Build();
+    std::unique_ptr<::storage::InternalBlobData> Build();
 
    private:
-    scoped_ptr<::storage::InternalBlobData> data_;
+    std::unique_ptr<::storage::InternalBlobData> data_;
 
     DISALLOW_COPY_AND_ASSIGN(Builder);
   };

@@ -5,12 +5,12 @@
 #ifndef IOS_CHROME_BROWSER_PASSWORDS_CREDENTIAL_MANAGER_H_
 #define IOS_CHROME_BROWSER_PASSWORDS_CREDENTIAL_MANAGER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/password_manager/core/browser/credential_manager_password_form_manager.h"
 #include "components/password_manager/core/browser/credential_manager_pending_request_task.h"
@@ -60,6 +60,7 @@ class CredentialManager
   void SendCredential(
       int id,
       const password_manager::CredentialInfo& credential) override;
+  void SendPasswordForm(int id, const autofill::PasswordForm* form) override;
   password_manager::PasswordManagerClient* client() const override;
   autofill::PasswordForm GetSynthesizedFormForOrigin() const override;
 
@@ -99,15 +100,16 @@ class CredentialManager
   bool GetUrlWithAbsoluteTrust(GURL* page_url);
 
   // The request to retrieve credentials from the PasswordStore.
-  scoped_ptr<password_manager::CredentialManagerPendingRequestTask>
+  std::unique_ptr<password_manager::CredentialManagerPendingRequestTask>
       pending_request_;
 
   // The task to notify the password manager that the user was signed out.
-  scoped_ptr<password_manager::CredentialManagerPendingRequireUserMediationTask>
+  std::unique_ptr<
+      password_manager::CredentialManagerPendingRequireUserMediationTask>
       pending_require_user_mediation_;
 
   // Saves credentials to the PasswordStore.
-  scoped_ptr<password_manager::CredentialManagerPasswordFormManager>
+  std::unique_ptr<password_manager::CredentialManagerPasswordFormManager>
       form_manager_;
 
   // Injected JavaScript to provide the API to web pages.

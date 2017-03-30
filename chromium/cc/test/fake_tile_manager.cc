@@ -50,8 +50,7 @@ class FakeTileTaskRunnerImpl : public TileTaskRunner, public TileTaskClient {
     return RGBA_8888;
   }
   bool GetResourceRequiresSwizzle(bool must_support_alpha) const override {
-    return !PlatformColor::SameComponentOrder(
-        GetResourceFormat(must_support_alpha));
+    return ResourceFormatRequiresSwizzle(GetResourceFormat(must_support_alpha));
   }
 
   // Overridden from TileTaskClient:
@@ -77,7 +76,7 @@ FakeTileManager::FakeTileManager(TileManagerClient* client)
                   std::numeric_limits<size_t>::max(),
                   false /* use_partial_raster */) {
   SetResources(nullptr, g_fake_tile_task_runner.Pointer(),
-               std::numeric_limits<size_t>::max(),
+               &image_decode_controller_, std::numeric_limits<size_t>::max(),
                false /* use_gpu_rasterization */);
 }
 
@@ -88,7 +87,7 @@ FakeTileManager::FakeTileManager(TileManagerClient* client,
                   std::numeric_limits<size_t>::max(),
                   false /* use_partial_raster */) {
   SetResources(resource_pool, g_fake_tile_task_runner.Pointer(),
-               std::numeric_limits<size_t>::max(),
+               &image_decode_controller_, std::numeric_limits<size_t>::max(),
                false /* use_gpu_rasterization */);
 }
 

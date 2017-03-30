@@ -5,8 +5,9 @@
 #ifndef CONTENT_BROWSER_LOADER_RESOURCE_LOADER_H_
 #define CONTENT_BROWSER_LOADER_RESOURCE_LOADER_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "content/browser/loader/resource_handler.h"
@@ -22,6 +23,7 @@ class X509Certificate;
 }
 
 namespace content {
+class CertStore;
 class ResourceDispatcherHostLoginDelegate;
 class ResourceLoaderDelegate;
 class ResourceRequestInfoImpl;
@@ -34,8 +36,9 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
                                       public SSLClientAuthHandler::Delegate,
                                       public ResourceController {
  public:
-  ResourceLoader(scoped_ptr<net::URLRequest> request,
-                 scoped_ptr<ResourceHandler> handler,
+  ResourceLoader(std::unique_ptr<net::URLRequest> request,
+                 std::unique_ptr<ResourceHandler> handler,
+                 CertStore* cert_store,
                  ResourceLoaderDelegate* delegate);
   ~ResourceLoader() override;
 
@@ -43,13 +46,22 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
   void CancelRequest(bool from_renderer);
 
   bool is_transferring() const { return is_transferring_; }
-  void MarkAsTransferring();
+  void MarkAsTransferring(const scoped_refptr<ResourceResponse>& response);
   void CompleteTransfer();
 
   net::URLRequest* request() { return request_.get(); }
   ResourceRequestInfoImpl* GetRequestInfo();
 
   void ClearLoginDelegate();
+
+  // Returns a pointer to the ResourceResponse for a request that is
+  // being transferred to a new consumer. The response is valid between
+  // the time that the request is marked as transferring via
+  // MarkAsTransferring() and the time that the transfer is completed
+  // via CompleteTransfer().
+  ResourceResponse* transferring_response() {
+    return transferring_response_.get();
+  }
 
  private:
   // net::URLRequest::Delegate implementation:
@@ -125,12 +137,12 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
   };
   DeferredStage deferred_stage_;
 
-  scoped_ptr<net::URLRequest> request_;
-  scoped_ptr<ResourceHandler> handler_;
+  std::unique_ptr<net::URLRequest> request_;
+  std::unique_ptr<ResourceHandler> handler_;
   ResourceLoaderDelegate* delegate_;
 
   scoped_refptr<ResourceDispatcherHostLoginDelegate> login_delegate_;
-  scoped_ptr<SSLClientAuthHandler> ssl_client_auth_handler_;
+  std::unique_ptr<SSLClientAuthHandler> ssl_client_auth_handler_;
 
   base::TimeTicks read_deferral_start_time_;
 
@@ -139,11 +151,21 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
   // which point we'll receive a new ResourceHandler.
   bool is_transferring_;
 
+  // Holds the ResourceResponse for a request that is being transferred
+  // to a new consumer. This member is populated when the request is
+  // marked as transferring via MarkAsTransferring(), and it is cleared
+  // when the transfer is completed via CompleteTransfer().
+  scoped_refptr<ResourceResponse> transferring_response_;
+
   // Instrumentation add to investigate http://crbug.com/503306.
   // TODO(mmenke): Remove once bug is fixed.
   int times_cancelled_before_request_start_;
   bool started_request_;
   int times_cancelled_after_request_start_;
+
+  // Allows tests to use a mock CertStore. The CertStore must outlive
+  // the ResourceLoader.
+  CertStore* cert_store_;
 
   base::WeakPtrFactory<ResourceLoader> weak_ptr_factory_;
 

@@ -209,8 +209,8 @@ void AudioScheduledSourceHandler::finish()
 {
     finishWithoutOnEnded();
 
-    if (context()->executionContext()) {
-        context()->executionContext()->postTask(BLINK_FROM_HERE, createCrossThreadTask(&AudioScheduledSourceHandler::notifyEnded, PassRefPtr<AudioScheduledSourceHandler>(this)));
+    if (context()->getExecutionContext()) {
+        context()->getExecutionContext()->postTask(BLINK_FROM_HERE, createCrossThreadTask(&AudioScheduledSourceHandler::notifyEnded, PassRefPtr<AudioScheduledSourceHandler>(this)));
     }
 }
 
@@ -225,6 +225,7 @@ void AudioScheduledSourceHandler::notifyEnded()
 
 AudioScheduledSourceNode::AudioScheduledSourceNode(AbstractAudioContext& context)
     : AudioSourceNode(context)
+    , ActiveScriptWrappable(this)
 {
 }
 
@@ -258,7 +259,7 @@ EventListener* AudioScheduledSourceNode::onended()
     return getAttributeEventListener(EventTypeNames::ended);
 }
 
-void AudioScheduledSourceNode::setOnended(PassRefPtrWillBeRawPtr<EventListener> listener)
+void AudioScheduledSourceNode::setOnended(EventListener* listener)
 {
     setAttributeEventListener(EventTypeNames::ended, listener);
 }

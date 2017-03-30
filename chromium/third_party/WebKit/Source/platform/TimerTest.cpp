@@ -185,7 +185,7 @@ public:
     }
 
     void shutdown() override {}
-    WebPassOwnPtr<WebViewScheduler> createWebViewScheduler(blink::WebView*) override { return nullptr; }
+    std::unique_ptr<WebViewScheduler> createWebViewScheduler(blink::WebView*) override { return nullptr; }
     void suspendTimerQueue() override { }
     void resumeTimerQueue() override { }
     void addPendingNavigation() override { }
@@ -214,7 +214,7 @@ public:
         return 0;
     }
 
-    WebTaskRunner* taskRunner() override
+    WebTaskRunner* getWebTaskRunner() override
     {
         ASSERT_NOT_REACHED();
         return nullptr;

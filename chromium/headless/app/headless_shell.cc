@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
@@ -10,6 +12,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "content/public/common/content_switches.h"
+#include "headless/app/headless_shell_switches.h"
 #include "headless/public/headless_browser.h"
 #include "headless/public/headless_web_contents.h"
 #include "net/base/ip_address.h"
@@ -34,8 +37,6 @@ class HeadlessShell : public HeadlessWebContents::Observer {
 
   void OnStart(HeadlessBrowser* browser) {
     browser_ = browser;
-    web_contents_ = browser->CreateWebContents(gfx::Size(800, 600));
-    web_contents_->AddObserver(this);
 
     base::CommandLine::StringVector args =
         base::CommandLine::ForCurrentProcess()->GetArgs();
@@ -47,11 +48,13 @@ class HeadlessShell : public HeadlessWebContents::Observer {
     } else {
       url = GURL(args[0]);
     }
-    if (!web_contents_->OpenURL(url)) {
+    web_contents_ = browser->CreateWebContents(url, gfx::Size(800, 600));
+    if (!web_contents_) {
       LOG(ERROR) << "Navigation failed";
-      web_contents_ = nullptr;
       browser_->Shutdown();
+      return;
     }
+    web_contents_->AddObserver(this);
   }
 
   void ShutdownIfNeeded() {
@@ -65,13 +68,12 @@ class HeadlessShell : public HeadlessWebContents::Observer {
 
   // HeadlessWebContents::Observer implementation:
   void DocumentOnLoadCompletedInMainFrame() override {
-    LOG(DEBUG) << "Document load completed";
     ShutdownIfNeeded();
   }
 
  private:
   HeadlessBrowser* browser_;  // Not owned.
-  scoped_ptr<HeadlessWebContents> web_contents_;
+  std::unique_ptr<HeadlessWebContents> web_contents_;
 
   DISALLOW_COPY_AND_ASSIGN(HeadlessShell);
 };
@@ -95,6 +97,18 @@ int main(int argc, const char** argv) {
       builder.EnableDevToolsServer(net::IPEndPoint(
           devtools_address, base::checked_cast<uint16_t>(parsed_port)));
     }
+  }
+
+  if (command_line.HasSwitch(headless::switches::kProxyServer)) {
+    std::string proxy_server =
+        command_line.GetSwitchValueASCII(headless::switches::kProxyServer);
+    net::HostPortPair parsed_proxy_server =
+        net::HostPortPair::FromString(proxy_server);
+    if (parsed_proxy_server.host().empty() || !parsed_proxy_server.port()) {
+      LOG(ERROR) << "Malformed proxy server url";
+      return EXIT_FAILURE;
+    }
+    builder.SetProxyServer(parsed_proxy_server);
   }
 
   return HeadlessBrowserMain(

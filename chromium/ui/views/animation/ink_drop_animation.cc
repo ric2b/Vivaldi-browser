@@ -91,10 +91,14 @@ void InkDropAnimation::HideImmediately() {
   target_ink_drop_state_ = InkDropState::HIDDEN;
 }
 
+test::InkDropAnimationTestApi* InkDropAnimation::GetTestApi() {
+  return nullptr;
+}
+
 void InkDropAnimation::AnimationStartedCallback(
     InkDropState ink_drop_state,
     const ui::CallbackLayerAnimationObserver& observer) {
-  observer_->InkDropAnimationStarted(ink_drop_state);
+  observer_->AnimationStarted(ink_drop_state);
 }
 
 bool InkDropAnimation::AnimationEndedCallback(
@@ -102,10 +106,10 @@ bool InkDropAnimation::AnimationEndedCallback(
     const ui::CallbackLayerAnimationObserver& observer) {
   if (ink_drop_state == InkDropState::HIDDEN)
     SetStateToHidden();
-  observer_->InkDropAnimationEnded(ink_drop_state,
-                                   observer.aborted_count()
-                                       ? InkDropAnimationObserver::PRE_EMPTED
-                                       : InkDropAnimationObserver::SUCCESS);
+  observer_->AnimationEnded(ink_drop_state,
+                            observer.aborted_count()
+                                ? InkDropAnimationEndedReason::PRE_EMPTED
+                                : InkDropAnimationEndedReason::SUCCESS);
   // |this| may be deleted!
   return true;
 }

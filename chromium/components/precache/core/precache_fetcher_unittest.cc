@@ -4,6 +4,9 @@
 
 #include "components/precache/core/precache_fetcher.h"
 
+#include <stdint.h>
+
+#include <cstring>
 #include <set>
 #include <string>
 #include <vector>
@@ -14,6 +17,7 @@
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
 #include "base/thread_task_runner_handle.h"
@@ -34,6 +38,9 @@ namespace precache {
 namespace {
 
 using ::testing::_;
+using ::testing::ElementsAre;
+using ::testing::NotNull;
+using ::testing::Property;
 
 const char kConfigURL[] = "http://config-url.com";
 const char kManifestURLPrefix[] = "http://manifest-url-prefix.com/";
@@ -151,11 +158,13 @@ class MockURLFetcherFactory : public net::URLFetcherFactory {
                              const GURL&,
                              net::URLFetcher::RequestType,
                              net::URLFetcherDelegate*>& args) {
-      *fetcher_ = new net::FakeURLFetcher(
+      auto fetcher = new net::FakeURLFetcher(
           testing::get<1>(args), testing::get<3>(args), body_, net::HTTP_OK,
           net::URLRequestStatus::SUCCESS);
-      modifier_(*fetcher_);
-      return *fetcher_;
+      modifier_(fetcher);
+      if (fetcher_)
+        *fetcher_ = fetcher;
+      return fetcher;
     }
 
    private:
@@ -172,19 +181,28 @@ class PrecacheFetcherFetcherTest : public testing::Test {
             base::ThreadTaskRunnerHandle::Get())),
         scoped_url_fetcher_factory_(&factory_),
         callback_(base::Bind(&PrecacheFetcherFetcherTest::Callback,
-                             base::Unretained(this))),
-        callback_called_(false) {}
+                             base::Unretained(this))) {}
 
-  void Callback(const net::URLFetcher&) { callback_called_ = true; }
+  MOCK_METHOD1(Callback, void(const PrecacheFetcher::Fetcher&));
 
  protected:
   base::MessageLoopForUI loop_;
   scoped_refptr<net::TestURLRequestContextGetter> request_context_;
   MockURLFetcherFactory factory_;
   net::ScopedURLFetcherFactory scoped_url_fetcher_factory_;
-  base::Callback<void(const net::URLFetcher&)> callback_;
-  bool callback_called_;
+  base::Callback<void(const PrecacheFetcher::Fetcher&)> callback_;
 };
+
+void CacheMiss(net::FakeURLFetcher* fetcher) {
+  fetcher->set_status(net::URLRequestStatus(net::URLRequestStatus::FAILED,
+                                            net::ERR_CACHE_MISS));
+}
+
+void HasETag(net::FakeURLFetcher* fetcher) {
+  std::string raw_headers("HTTP/1.1 200 OK\0ETag: foo\0\0", 27);
+  fetcher->set_response_headers(
+      make_scoped_refptr(new net::HttpResponseHeaders(raw_headers)));
+}
 
 TEST_F(PrecacheFetcherFetcherTest, Config) {
   GURL url(kConfigURL);
@@ -192,16 +210,18 @@ TEST_F(PrecacheFetcherFetcherTest, Config) {
   net::FakeURLFetcher* fetcher = nullptr;
   EXPECT_CALL(factory_, DoCreateURLFetcher(_, url, net::URLFetcher::GET, _))
       .WillOnce(factory_.RespondWith("", &fetcher));
+  EXPECT_CALL(*this,
+              Callback(Property(&PrecacheFetcher::Fetcher::network_url_fetcher,
+                                NotNull())));
 
   PrecacheFetcher::Fetcher precache_fetcher(
-      request_context_.get(), url, callback_, false /* is_resource_request */);
+      request_context_.get(), url, callback_, false /* is_resource_request */,
+      SIZE_MAX);
 
   loop_.RunUntilIdle();
 
   ASSERT_NE(nullptr, fetcher);
   EXPECT_EQ(kNoTracking, fetcher->GetLoadFlags());
-
-  EXPECT_EQ(true, callback_called_);
 }
 
 TEST_F(PrecacheFetcherFetcherTest, ResourceNotInCache) {
@@ -209,17 +229,16 @@ TEST_F(PrecacheFetcherFetcherTest, ResourceNotInCache) {
 
   net::FakeURLFetcher *fetcher1 = nullptr, *fetcher2 = nullptr;
   EXPECT_CALL(factory_, DoCreateURLFetcher(_, url, net::URLFetcher::GET, _))
-      .WillOnce(factory_.RespondWith(
-          "",
-          [](net::FakeURLFetcher* fetcher) {
-            fetcher->set_status(net::URLRequestStatus(
-                net::URLRequestStatus::FAILED, net::ERR_CACHE_MISS));
-          },
-          &fetcher1))
+      .WillOnce(factory_.RespondWith("", CacheMiss, &fetcher1))
       .WillOnce(factory_.RespondWith("", &fetcher2));
+  EXPECT_CALL(*this,
+              Callback(Property(&PrecacheFetcher::Fetcher::network_url_fetcher,
+                                NotNull())))
+      .Times(1);
 
   PrecacheFetcher::Fetcher precache_fetcher(
-      request_context_.get(), url, callback_, true /* is_resource_request */);
+      request_context_.get(), url, callback_, true /* is_resource_request */,
+      SIZE_MAX);
 
   loop_.RunUntilIdle();
 
@@ -227,27 +246,22 @@ TEST_F(PrecacheFetcherFetcherTest, ResourceNotInCache) {
   EXPECT_EQ(net::LOAD_ONLY_FROM_CACHE | kNoTracking, fetcher1->GetLoadFlags());
   ASSERT_NE(nullptr, fetcher2);
   EXPECT_EQ(net::LOAD_VALIDATE_CACHE | kNoTracking, fetcher2->GetLoadFlags());
-
-  EXPECT_EQ(true, callback_called_);
 }
 
-TEST_F(PrecacheFetcherFetcherTest, ResourceHasStrongValidators) {
+TEST_F(PrecacheFetcherFetcherTest, ResourceHasValidators) {
   GURL url(kGoodResourceURL);
 
   net::FakeURLFetcher *fetcher1 = nullptr, *fetcher2 = nullptr;
   EXPECT_CALL(factory_, DoCreateURLFetcher(_, url, net::URLFetcher::GET, _))
-      .WillOnce(factory_.RespondWith(
-          "",
-          [](net::FakeURLFetcher* fetcher) {
-            std::string raw_headers("HTTP/1.1 200 OK\0ETag: foo\0\0", 27);
-            fetcher->set_response_headers(
-                make_scoped_refptr(new net::HttpResponseHeaders(raw_headers)));
-          },
-          &fetcher1))
+      .WillOnce(factory_.RespondWith("", HasETag, &fetcher1))
       .WillOnce(factory_.RespondWith("", &fetcher2));
+  EXPECT_CALL(*this,
+              Callback(Property(&PrecacheFetcher::Fetcher::network_url_fetcher,
+                                NotNull())));
 
   PrecacheFetcher::Fetcher precache_fetcher(
-      request_context_.get(), url, callback_, true /* is_resource_request */);
+      request_context_.get(), url, callback_, true /* is_resource_request */,
+      SIZE_MAX);
 
   loop_.RunUntilIdle();
 
@@ -255,8 +269,6 @@ TEST_F(PrecacheFetcherFetcherTest, ResourceHasStrongValidators) {
   EXPECT_EQ(net::LOAD_ONLY_FROM_CACHE | kNoTracking, fetcher1->GetLoadFlags());
   ASSERT_NE(nullptr, fetcher2);
   EXPECT_EQ(net::LOAD_VALIDATE_CACHE | kNoTracking, fetcher2->GetLoadFlags());
-
-  EXPECT_EQ(true, callback_called_);
 }
 
 TEST_F(PrecacheFetcherFetcherTest, ResourceHasNoValidators) {
@@ -265,15 +277,42 @@ TEST_F(PrecacheFetcherFetcherTest, ResourceHasNoValidators) {
   net::FakeURLFetcher* fetcher;
   EXPECT_CALL(factory_, DoCreateURLFetcher(_, url, net::URLFetcher::GET, _))
       .WillOnce(factory_.RespondWith("", &fetcher));
+  EXPECT_CALL(*this,
+              Callback(Property(&PrecacheFetcher::Fetcher::network_url_fetcher,
+                                nullptr)));  // It never reached the network.
 
   PrecacheFetcher::Fetcher precache_fetcher(
-      request_context_.get(), url, callback_, true /* is_resource_request */);
+      request_context_.get(), url, callback_, true /* is_resource_request */,
+      SIZE_MAX);
 
   loop_.RunUntilIdle();
 
   EXPECT_EQ(net::LOAD_ONLY_FROM_CACHE | kNoTracking, fetcher->GetLoadFlags());
+}
 
-  EXPECT_EQ(true, callback_called_);
+TEST_F(PrecacheFetcherFetcherTest, ResourceTooBig) {
+  GURL url(kGoodResourceURL);
+
+  EXPECT_CALL(factory_, DoCreateURLFetcher(_, url, net::URLFetcher::GET, _))
+      // Cache request will fail, so that a network request is made. Only
+      // network requests are byte-capped.
+      .WillOnce(factory_.RespondWith("", CacheMiss, nullptr))
+      .WillOnce(factory_.RespondWith(std::string(100, '.'), nullptr));
+
+  // The callback should be called even though the download was cancelled, so
+  // that the next download can start. The network_url_fetcher within should be
+  // null, to signify that either the network was never reached (which will be
+  // flagged as an error due to the expectation above) or it was requested but
+  // cancelled (which is the desired behavior).
+  EXPECT_CALL(*this,
+              Callback(Property(&PrecacheFetcher::Fetcher::network_url_fetcher,
+                                nullptr)));
+
+  PrecacheFetcher::Fetcher precache_fetcher(
+      request_context_.get(), url, callback_, true /* is_resource_request */,
+      99 /* max_bytes */);
+
+  loop_.RunUntilIdle();
 }
 
 class PrecacheFetcherTest : public testing::Test {
@@ -491,7 +530,7 @@ TEST_F(PrecacheFetcherTest, Cancel) {
 
   histogram.ExpectUniqueSample("Precache.Fetch.PercentCompleted", 0, 1);
   histogram.ExpectUniqueSample("Precache.Fetch.ResponseBytes.Total", 0, 1);
-  histogram.ExpectTotalCount("Precache.Fetch.TimeToComplete", 0);
+  histogram.ExpectTotalCount("Precache.Fetch.TimeToComplete", 1);
 }
 
 #if defined(PRECACHE_CONFIG_SETTINGS_URL)
@@ -558,6 +597,127 @@ TEST_F(PrecacheFetcherTest, PrecacheUsingDefaultManifestURLPrefix) {
 }
 
 #endif  // PRECACHE_MANIFEST_URL_PREFIX
+
+TEST_F(PrecacheFetcherTest, TopResourcesCount) {
+  SetDefaultFlags();
+
+  std::vector<std::string> starting_hosts;
+  starting_hosts.push_back("good-manifest.com");
+
+  PrecacheConfigurationSettings config;
+  config.set_top_resources_count(3);
+
+  PrecacheManifest good_manifest;
+  good_manifest.add_resource()->set_url("http://good-manifest.com/retrieved");
+  good_manifest.add_resource()->set_url("http://good-manifest.com/retrieved");
+  good_manifest.add_resource()->set_url("http://good-manifest.com/retrieved");
+  good_manifest.add_resource()->set_url("http://good-manifest.com/skipped");
+  good_manifest.add_resource()->set_url("http://good-manifest.com/skipped");
+
+  factory_.SetFakeResponse(GURL(kConfigURL), config.SerializeAsString(),
+                           net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+  factory_.SetFakeResponse(GURL(kGoodManifestURL),
+                           good_manifest.SerializeAsString(), net::HTTP_OK,
+                           net::URLRequestStatus::SUCCESS);
+  factory_.SetFakeResponse(GURL("http://good-manifest.com/retrieved"), "good",
+                           net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+
+  base::HistogramTester histogram;
+
+  {
+    PrecacheFetcher precache_fetcher(starting_hosts, request_context_.get(),
+                                     GURL(), std::string(),
+                                     &precache_delegate_);
+    precache_fetcher.Start();
+
+    loop_.RunUntilIdle();
+
+    // Destroy the PrecacheFetcher after it has finished, to record metrics.
+  }
+
+  std::multiset<GURL> expected_requested_urls;
+  expected_requested_urls.insert(GURL(kConfigURL));
+  expected_requested_urls.insert(GURL(kGoodManifestURL));
+  expected_requested_urls.insert(GURL("http://good-manifest.com/retrieved"));
+  expected_requested_urls.insert(GURL("http://good-manifest.com/retrieved"));
+  expected_requested_urls.insert(GURL("http://good-manifest.com/retrieved"));
+
+  EXPECT_EQ(expected_requested_urls, url_callback_.requested_urls());
+
+  EXPECT_TRUE(precache_delegate_.was_on_done_called());
+
+  histogram.ExpectUniqueSample("Precache.Fetch.PercentCompleted", 100, 1);
+  histogram.ExpectUniqueSample("Precache.Fetch.ResponseBytes.Total",
+                               url_callback_.total_response_bytes(), 1);
+  histogram.ExpectTotalCount("Precache.Fetch.TimeToComplete", 1);
+}
+
+// MaxBytesPerResource is impossible to test with net::FakeURLFetcherFactory:
+//
+// - The PrecacheFetcher::Fetcher's max_bytes logic only applies to network
+//   requests, and not cached requests.
+// - Forcing PrecacheFetcher::Fetcher to do a network request (i.e. a second
+//   request for the same URL) requires either setting a custom error of
+//   ERR_CACHE_MISS or setting a custom ETag response header, neither of which
+//   is possible under FakeURLFetcherFactory.
+//
+// PrecacheFetcherFetcherTest.ResourceTooBig tests the bulk of the code. We'll
+// assume that PrecacheFetcher passes the right max_bytes to the
+// PrecacheFetcher::Fetcher constructor.
+//
+// TODO(twifkak): Port these tests from FakeURLFetcherFactory to
+// MockURLFetcherFactory or EmbeddedTestServer, and add a test that fetches are
+// cancelled midstream.
+
+TEST_F(PrecacheFetcherTest, MaxBytesTotal) {
+  SetDefaultFlags();
+  const size_t kNumResources = 15;  // > kMaxParallelFetches.
+  const size_t kMaxBytesTotal = 1000;
+  const size_t kBytesPerResource = kMaxBytesTotal / 3;
+  // kBytesPerResource * kMaxParallelFeches > kMaxBytesTotal.
+
+  PrecacheConfigurationSettings config;
+  config.set_max_bytes_total(kMaxBytesTotal);
+
+  factory_.SetFakeResponse(GURL(kConfigURL), config.SerializeAsString(),
+                           net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+
+  PrecacheManifest good_manifest;
+  for (size_t i = 0; i < kNumResources; ++i) {
+    const std::string url = "http://good-manifest.com/" + std::to_string(i);
+    good_manifest.add_resource()->set_url(url);
+    factory_.SetFakeResponse(GURL(url), std::string(kBytesPerResource, '.'),
+                             net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+  }
+
+  factory_.SetFakeResponse(GURL(kGoodManifestURL),
+                           good_manifest.SerializeAsString(), net::HTTP_OK,
+                           net::URLRequestStatus::SUCCESS);
+
+  base::HistogramTester histogram;
+
+  {
+    PrecacheFetcher precache_fetcher({"good-manifest.com"},
+                                     request_context_.get(), GURL(),
+                                     std::string(), &precache_delegate_);
+    precache_fetcher.Start();
+
+    loop_.RunUntilIdle();
+
+    // Destroy the PrecacheFetcher after it has finished, to record metrics.
+  }
+
+  // We don't know which will make it and which won't due to the parallelism in
+  // the pool of Fetchers.
+  EXPECT_GT(kNumResources, url_callback_.requested_urls().size());
+
+  EXPECT_TRUE(precache_delegate_.was_on_done_called());
+
+  // good-manifest.com will not have been completed.
+  EXPECT_THAT(histogram.GetAllSamples("Precache.Fetch.PercentCompleted"),
+              ElementsAre(base::Bucket(0, 1)));
+  histogram.ExpectTotalCount("Precache.Fetch.TimeToComplete", 1);
+}
 
 }  // namespace
 

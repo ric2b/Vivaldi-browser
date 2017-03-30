@@ -49,15 +49,15 @@ PassOwnPtr<InterpolableValue> translateToInterpolableValue(SVGTransform* transfo
     return result.release();
 }
 
-PassRefPtrWillBeRawPtr<SVGTransform> translateFromInterpolableValue(const InterpolableValue& value)
+SVGTransform* translateFromInterpolableValue(const InterpolableValue& value)
 {
     const InterpolableList& list = toInterpolableList(value);
 
-    RefPtrWillBeRawPtr<SVGTransform> transform = SVGTransform::create(SVG_TRANSFORM_TRANSLATE);
+    SVGTransform* transform = SVGTransform::create(SVG_TRANSFORM_TRANSLATE);
     transform->setTranslate(
         toInterpolableNumber(list.get(0))->value(),
         toInterpolableNumber(list.get(1))->value());
-    return transform.release();
+    return transform;
 }
 
 PassOwnPtr<InterpolableValue> scaleToInterpolableValue(SVGTransform* transform)
@@ -69,15 +69,15 @@ PassOwnPtr<InterpolableValue> scaleToInterpolableValue(SVGTransform* transform)
     return result.release();
 }
 
-PassRefPtrWillBeRawPtr<SVGTransform> scaleFromInterpolableValue(const InterpolableValue& value)
+SVGTransform* scaleFromInterpolableValue(const InterpolableValue& value)
 {
     const InterpolableList& list = toInterpolableList(value);
 
-    RefPtrWillBeRawPtr<SVGTransform> transform = SVGTransform::create(SVG_TRANSFORM_SCALE);
+    SVGTransform* transform = SVGTransform::create(SVG_TRANSFORM_SCALE);
     transform->setScale(
         toInterpolableNumber(list.get(0))->value(),
         toInterpolableNumber(list.get(1))->value());
-    return transform.release();
+    return transform;
 }
 
 PassOwnPtr<InterpolableValue> rotateToInterpolableValue(SVGTransform* transform)
@@ -90,16 +90,16 @@ PassOwnPtr<InterpolableValue> rotateToInterpolableValue(SVGTransform* transform)
     return result.release();
 }
 
-PassRefPtrWillBeRawPtr<SVGTransform> rotateFromInterpolableValue(const InterpolableValue& value)
+SVGTransform* rotateFromInterpolableValue(const InterpolableValue& value)
 {
     const InterpolableList& list = toInterpolableList(value);
 
-    RefPtrWillBeRawPtr<SVGTransform> transform = SVGTransform::create(SVG_TRANSFORM_ROTATE);
+    SVGTransform* transform = SVGTransform::create(SVG_TRANSFORM_ROTATE);
     transform->setRotate(
         toInterpolableNumber(list.get(0))->value(),
         toInterpolableNumber(list.get(1))->value(),
         toInterpolableNumber(list.get(2))->value());
-    return transform.release();
+    return transform;
 }
 
 PassOwnPtr<InterpolableValue> skewXToInterpolableValue(SVGTransform* transform)
@@ -107,11 +107,11 @@ PassOwnPtr<InterpolableValue> skewXToInterpolableValue(SVGTransform* transform)
     return InterpolableNumber::create(transform->angle());
 }
 
-PassRefPtrWillBeRawPtr<SVGTransform> skewXFromInterpolableValue(const InterpolableValue& value)
+SVGTransform* skewXFromInterpolableValue(const InterpolableValue& value)
 {
-    RefPtrWillBeRawPtr<SVGTransform> transform = SVGTransform::create(SVG_TRANSFORM_SKEWX);
+    SVGTransform* transform = SVGTransform::create(SVG_TRANSFORM_SKEWX);
     transform->setSkewX(toInterpolableNumber(value).value());
-    return transform.release();
+    return transform;
 }
 
 PassOwnPtr<InterpolableValue> skewYToInterpolableValue(SVGTransform* transform)
@@ -119,11 +119,11 @@ PassOwnPtr<InterpolableValue> skewYToInterpolableValue(SVGTransform* transform)
     return InterpolableNumber::create(transform->angle());
 }
 
-PassRefPtrWillBeRawPtr<SVGTransform> skewYFromInterpolableValue(const InterpolableValue& value)
+SVGTransform* skewYFromInterpolableValue(const InterpolableValue& value)
 {
-    RefPtrWillBeRawPtr<SVGTransform> transform = SVGTransform::create(SVG_TRANSFORM_SKEWY);
+    SVGTransform* transform = SVGTransform::create(SVG_TRANSFORM_SKEWY);
     transform->setSkewY(toInterpolableNumber(value).value());
-    return transform.release();
+    return transform;
 }
 
 PassOwnPtr<InterpolableValue> toInterpolableValue(SVGTransform* transform, SVGTransformType transformType)
@@ -147,7 +147,7 @@ PassOwnPtr<InterpolableValue> toInterpolableValue(SVGTransform* transform, SVGTr
     return nullptr;
 }
 
-PassRefPtrWillBeRawPtr<SVGTransform> fromInterpolableValue(const InterpolableValue& value, SVGTransformType transformType)
+SVGTransform* fromInterpolableValue(const InterpolableValue& value, SVGTransformType transformType)
 {
     switch (transformType) {
     case SVG_TRANSFORM_TRANSLATE:
@@ -224,7 +224,7 @@ InterpolationValue SVGTransformListInterpolationType::maybeConvertSVGValue(const
             // TODO(ericwilligers): Support matrix interpolation.
             return nullptr;
         }
-        result->set(i, toInterpolableValue(transform->clone().get(), transformType));
+        result->set(i, toInterpolableValue(transform->clone(), transformType));
         transformTypes.append(transformType);
     }
     return InterpolationValue(result.release(), SVGTransformNonInterpolableValue::create(transformTypes));
@@ -246,7 +246,7 @@ InterpolationValue SVGTransformListInterpolationType::maybeConvertSingle(const P
     }
 
     if (!keyframe.isNeutral()) {
-        RefPtrWillBeRawPtr<SVGPropertyBase> svgValue = environment.svgBaseValue().cloneForAnimation(toSVGPropertySpecificKeyframe(keyframe).value());
+        SVGPropertyBase* svgValue = environment.svgBaseValue().cloneForAnimation(toSVGPropertySpecificKeyframe(keyframe).value());
         InterpolationValue value = maybeConvertSVGValue(*svgValue);
         if (!value)
             return nullptr;
@@ -267,17 +267,17 @@ InterpolationValue SVGTransformListInterpolationType::maybeConvertSingle(const P
     return InterpolationValue(interpolableList.release(), SVGTransformNonInterpolableValue::create(types));
 }
 
-PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGTransformListInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue* nonInterpolableValue) const
+SVGPropertyBase* SVGTransformListInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue* nonInterpolableValue) const
 {
-    RefPtrWillBeRawPtr<SVGTransformList> result = SVGTransformList::create();
+    SVGTransformList* result = SVGTransformList::create();
     const InterpolableList& list = toInterpolableList(interpolableValue);
     const Vector<SVGTransformType>& transformTypes = toSVGTransformNonInterpolableValue(nonInterpolableValue)->transformTypes();
     for (size_t i = 0; i < list.length(); ++i)
         result->append(fromInterpolableValue(*list.get(i), transformTypes.at(i)));
-    return result.release();
+    return result;
 }
 
-PairwiseInterpolationValue SVGTransformListInterpolationType::mergeSingleConversions(InterpolationValue& start, InterpolationValue& end) const
+PairwiseInterpolationValue SVGTransformListInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
 {
     if (!transformTypesMatch(start, end))
         return nullptr;
@@ -285,7 +285,7 @@ PairwiseInterpolationValue SVGTransformListInterpolationType::mergeSingleConvers
     return PairwiseInterpolationValue(start.interpolableValue.release(), end.interpolableValue.release(), end.nonInterpolableValue.release());
 }
 
-void SVGTransformListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value) const
+void SVGTransformListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const
 {
     underlyingValueOwner.set(*this, value);
 }

@@ -382,7 +382,7 @@ class MockDemuxerAndroid : public DemuxerAndroid {
 
   // Conditions to wait for.
   bool IsInitialized() const { return client_; }
-  bool HasPendingConfigs() const { return pending_configs_; }
+  bool HasPendingConfigs() const { return !!pending_configs_; }
   bool ReceivedSeekRequest() const { return num_seeks_ > 0; }
   bool ReceivedBrowserSeekRequest() const { return num_browser_seeks_ > 0; }
 
@@ -644,7 +644,7 @@ void MediaCodecPlayerTest::CreatePlayer() {
       manager_.GetWeakPtr(),
       base::Bind(&MockMediaPlayerManager::OnMediaResourcesRequested,
                  base::Unretained(&manager_)),
-      scoped_ptr<MockDemuxerAndroid>(demuxer_), GURL());
+      scoped_ptr<MockDemuxerAndroid>(demuxer_), GURL(), kDefaultMediaSessionId);
 
   DCHECK(player_);
 }

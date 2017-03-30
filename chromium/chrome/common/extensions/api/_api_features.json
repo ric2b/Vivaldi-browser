@@ -578,10 +578,6 @@
     "dependencies": ["permission:launcherSearchProvider"],
     "contexts": ["blessed_extension"]
   },
-  "location": {
-    "dependencies": ["permission:location"],
-    "contexts": ["blessed_extension"]
-  },
   "logPrivate": {
     "dependencies": ["permission:logPrivate"],
     "contexts": ["blessed_extension"]
@@ -683,10 +679,6 @@
   }],
   "preferencesPrivate": {
     "dependencies": ["permission:preferencesPrivate"],
-    "contexts": ["blessed_extension"]
-  },
-  "principalsPrivate": {
-    "dependencies": ["permission:principalsPrivate"],
     "contexts": ["blessed_extension"]
   },
   "privacy": {

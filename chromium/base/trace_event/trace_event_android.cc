@@ -46,7 +46,7 @@ void WriteEvent(
     const char** arg_names,
     const unsigned char* arg_types,
     const TraceEvent::TraceValue* arg_values,
-    const scoped_refptr<ConvertableToTraceFormat>* convertable_values,
+    const std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
     unsigned int flags) {
   std::string out = StringPrintf("%c|%d|%s", phase, getpid(), name);
   if (flags & TRACE_EVENT_FLAG_HAS_ID)

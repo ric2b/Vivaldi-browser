@@ -82,7 +82,7 @@ static void mapCaretRectToCaretPainter(LayoutItem caretLayoutItem, LayoutBlockIt
             unrooted = true;
             break;
         }
-        caretRect.move(caretLayoutItem.offsetFromContainer(containerItem, caretRect.location()));
+        caretRect.move(caretLayoutItem.offsetFromContainer(containerItem));
         caretLayoutItem = containerItem;
     }
 
@@ -178,7 +178,7 @@ void CaretBase::invalidateCaretRect(Node* node, bool caretRectChanged)
 
 void CaretBase::paintCaret(Node* node, GraphicsContext& context, const LayoutPoint& paintOffset) const
 {
-    if (m_caretVisibility == Hidden)
+    if (m_caretVisibility == CaretVisibility::Hidden)
         return;
 
     LayoutRect drawingRect = localCaretRectWithoutUpdate();

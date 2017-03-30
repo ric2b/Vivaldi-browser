@@ -48,7 +48,7 @@ DEFINE_TRACE(DatabaseClient)
 
 DatabaseClient* DatabaseClient::fromPage(Page* page)
 {
-    return static_cast<DatabaseClient*>(WillBeHeapSupplement<Page>::from(page, supplementName()));
+    return static_cast<DatabaseClient*>(Supplement<Page>::from(page, supplementName()));
 }
 
 DatabaseClient* DatabaseClient::from(ExecutionContext* context)
@@ -61,7 +61,7 @@ const char* DatabaseClient::supplementName()
     return "DatabaseClient";
 }
 
-void DatabaseClient::didOpenDatabase(Database* database, const String& domain, const String& name, const String& version)
+void DatabaseClient::didOpenDatabase(blink::Database* database, const String& domain, const String& name, const String& version)
 {
     if (m_inspectorAgent)
         m_inspectorAgent->didOpenDatabase(database, domain, name, version);
@@ -73,7 +73,7 @@ void DatabaseClient::setInspectorAgent(InspectorDatabaseAgent* agent)
     m_inspectorAgent = agent;
 }
 
-void provideDatabaseClientTo(Page& page, PassOwnPtrWillBeRawPtr<DatabaseClient> client)
+void provideDatabaseClientTo(Page& page, DatabaseClient* client)
 {
     page.provideSupplement(DatabaseClient::supplementName(), client);
 }

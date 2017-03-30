@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/gfx/display_change_notifier.h"
@@ -69,6 +70,9 @@ class VIEWS_EXPORT DesktopScreenX11 : public gfx::Screen,
 
   // We delay updating the display so we can coalesce events.
   void ConfigureTimerFired();
+
+  // Updates |displays_| and sets FontRenderParams's scale factor.
+  void SetDisplaysInternal(const std::vector<gfx::Display>& displays);
 
   Display* xdisplay_;
   ::Window x_root_window_;

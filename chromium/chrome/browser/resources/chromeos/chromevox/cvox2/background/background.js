@@ -170,9 +170,9 @@ Background.prototype = {
     // cvox.KeySequence.deserialize which gets called by cvox.KeyMap.
     cvox.ChromeVox.sequenceSwitchKeyCodes = [];
     if (mode === ChromeVoxMode.CLASSIC || mode === ChromeVoxMode.COMPAT)
-      cvox.ChromeVoxKbHandler.handlerKeyMap = cvox.KeyMap.fromDefaults();
+      window['prefs'].switchToKeyMap('keymap_classic');
     else
-      cvox.ChromeVoxKbHandler.handlerKeyMap = cvox.KeyMap.fromNext();
+      window['prefs'].switchToKeyMap('keymap_next');
 
     if (mode == ChromeVoxMode.CLASSIC) {
       if (chrome.commands &&
@@ -280,6 +280,15 @@ Background.prototype = {
     if (!newRange)
       return;
 
+    // Is the range invalid?
+    if (newRange.start.node.role === undefined ||
+        newRange.end.node.role === undefined) {
+      // Restore range to the focused location.
+      chrome.automation.getFocus(function(f) {
+        newRange = cursors.Range.fromNode(f);
+      });
+    }
+
     if (!this.inExcursion_)
       this.savedRange_ = new cursors.Range(newRange.start, newRange.end);
 
@@ -302,6 +311,13 @@ Background.prototype = {
    * @return {boolean} True if the command should propagate.
    */
   onGotCommand: function(command, opt_bypassModeCheck) {
+    // Check for loss of focus which results in us invalidating our current
+    // range. Note this call is synchronis.
+    chrome.automation.getFocus(function(focusedNode) {
+      if (!focusedNode)
+        this.currentRange_ = null;
+    }.bind(this));
+
     if (!this.currentRange_)
       return true;
 
@@ -448,7 +464,6 @@ Background.prototype = {
           current = cursors.Range.fromNode(node);
         break;
       case 'forceClickOnCurrentItem':
-      case 'performDefaultAction':
         if (this.currentRange_) {
           var actionNode = this.currentRange_.start.node;
           if (actionNode.role == RoleType.inlineTextBox)
@@ -553,6 +568,9 @@ Background.prototype = {
       case 'openChromeVoxMenus':
         this.startExcursion();
         (new PanelCommand(PanelCommandType.OPEN_MENUS)).send();
+        return false;
+      case 'toggleSearchWidget':
+        (new PanelCommand(PanelCommandType.SEARCH)).send();
         return false;
       case 'showKbExplorerPage':
         var explorerPage = {url: 'chromevox/background/kbexplorer.html'};
@@ -728,6 +746,8 @@ Background.prototype = {
 
     var prevRange = this.currentRange_;
     this.setCurrentRange(range);
+
+    range.select();
 
     new Output().withRichSpeechAndBraille(
         range, prevRange, Output.EventType.NAVIGATE)
@@ -928,12 +948,23 @@ Background.prototype = {
    */
   restoreCurrentRange_: function() {
     if (this.savedRange_) {
-      var containingWebView = this.savedRange_.start.node;
+      var node = this.savedRange_.start.node;
+      var containingWebView = node;
       while (containingWebView && containingWebView.role != RoleType.webView)
         containingWebView = containingWebView.parent;
-      if (containingWebView)
-        containingWebView.focus();
 
+      if (containingWebView) {
+        // Focusing the webView causes a focus change event which steals focus
+        // away from the saved range.
+        var saved = this.savedRange_;
+        var setSavedRange = function(e) {
+          if (e.target.root == saved.start.node.root)
+            this.navigateToRange_(saved);
+          node.root.removeEventListener(EventType.focus, setSavedRange, true);
+        }.bind(this);
+        node.root.addEventListener(EventType.focus, setSavedRange, true);
+        containingWebView.focus();
+      }
       this.navigateToRange_(this.savedRange_);
       this.savedRange_ = null;
     }
@@ -952,6 +983,14 @@ Background.prototype = {
   endExcursion: function() {
     this.inExcursion_ = false;
     this.restoreCurrentRange_();
+  },
+
+  /**
+   * Move ChromeVox back to the last saved range.
+   */
+  saveExcursion: function() {
+    this.savedRange_ =
+        new cursors.Range(this.currentRange_.start, this.currentRange_.end);
   },
 };
 

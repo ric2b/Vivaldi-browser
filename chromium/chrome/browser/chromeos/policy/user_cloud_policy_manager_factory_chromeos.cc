@@ -86,11 +86,11 @@ UserCloudPolicyManagerChromeOS*
 }
 
 // static
-scoped_ptr<UserCloudPolicyManagerChromeOS>
-    UserCloudPolicyManagerFactoryChromeOS::CreateForProfile(
-        Profile* profile,
-        bool force_immediate_load,
-        scoped_refptr<base::SequencedTaskRunner> background_task_runner) {
+std::unique_ptr<UserCloudPolicyManagerChromeOS>
+UserCloudPolicyManagerFactoryChromeOS::CreateForProfile(
+    Profile* profile,
+    bool force_immediate_load,
+    scoped_refptr<base::SequencedTaskRunner> background_task_runner) {
   return GetInstance()->CreateManagerForProfile(
       profile, force_immediate_load, background_task_runner);
 }
@@ -114,16 +114,16 @@ UserCloudPolicyManagerChromeOS*
   return it != managers_.end() ? it->second : NULL;
 }
 
-scoped_ptr<UserCloudPolicyManagerChromeOS>
-    UserCloudPolicyManagerFactoryChromeOS::CreateManagerForProfile(
-        Profile* profile,
-        bool force_immediate_load,
-        scoped_refptr<base::SequencedTaskRunner> background_task_runner) {
+std::unique_ptr<UserCloudPolicyManagerChromeOS>
+UserCloudPolicyManagerFactoryChromeOS::CreateManagerForProfile(
+    Profile* profile,
+    bool force_immediate_load,
+    scoped_refptr<base::SequencedTaskRunner> background_task_runner) {
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
   // Don't initialize cloud policy for the signin profile.
   if (chromeos::ProfileHelper::IsSigninProfile(profile))
-    return scoped_ptr<UserCloudPolicyManagerChromeOS>();
+    return std::unique_ptr<UserCloudPolicyManagerChromeOS>();
 
   // |user| should never be NULL except for the signin profile. This object is
   // created as part of the Profile creation, which happens right after
@@ -138,11 +138,10 @@ scoped_ptr<UserCloudPolicyManagerChromeOS>
   // - For device-local accounts, policy is provided by
   //   |DeviceLocalAccountPolicyService|.
   // All other user types do not have user policy.
-  const std::string& username = user->email();
-  if (!user->HasGaiaAccount() ||
-      user->IsSupervised() ||
-      BrowserPolicyConnector::IsNonEnterpriseUser(username)) {
-    return scoped_ptr<UserCloudPolicyManagerChromeOS>();
+  const AccountId account_id = user->GetAccountId();
+  if (!user->HasGaiaAccount() || user->IsSupervised() ||
+      BrowserPolicyConnector::IsNonEnterpriseUser(account_id.GetUserEmail())) {
+    return std::unique_ptr<UserCloudPolicyManagerChromeOS>();
   }
 
   policy::BrowserPolicyConnectorChromeOS* connector =
@@ -191,12 +190,12 @@ scoped_ptr<UserCloudPolicyManagerChromeOS>
   base::FilePath policy_key_dir;
   CHECK(PathService::Get(chromeos::DIR_USER_POLICY_KEYS, &policy_key_dir));
 
-  scoped_ptr<UserCloudPolicyStoreChromeOS> store(
+  std::unique_ptr<UserCloudPolicyStoreChromeOS> store(
       new UserCloudPolicyStoreChromeOS(
           chromeos::DBusThreadManager::Get()->GetCryptohomeClient(),
           chromeos::DBusThreadManager::Get()->GetSessionManagerClient(),
-          background_task_runner,
-          username, policy_key_dir, token_cache_file, policy_cache_file));
+          background_task_runner, account_id, policy_key_dir, token_cache_file,
+          policy_cache_file));
 
   scoped_refptr<base::SequencedTaskRunner> backend_task_runner =
       content::BrowserThread::GetBlockingPool()->GetSequencedTaskRunner(
@@ -204,12 +203,10 @@ scoped_ptr<UserCloudPolicyManagerChromeOS>
   scoped_refptr<base::SequencedTaskRunner> io_task_runner =
       content::BrowserThread::GetMessageLoopProxyForThread(
           content::BrowserThread::IO);
-  scoped_ptr<CloudExternalDataManager> external_data_manager(
+  std::unique_ptr<CloudExternalDataManager> external_data_manager(
       new UserCloudExternalDataManager(base::Bind(&GetChromePolicyDetails),
-                                       backend_task_runner,
-                                       io_task_runner,
-                                       external_data_dir,
-                                       store.get()));
+                                       backend_task_runner, io_task_runner,
+                                       external_data_dir, store.get()));
   if (force_immediate_load)
     store->LoadImmediately();
 
@@ -217,7 +214,7 @@ scoped_ptr<UserCloudPolicyManagerChromeOS>
       content::BrowserThread::GetMessageLoopProxyForThread(
           content::BrowserThread::FILE);
 
-  scoped_ptr<UserCloudPolicyManagerChromeOS> manager(
+  std::unique_ptr<UserCloudPolicyManagerChromeOS> manager(
       new UserCloudPolicyManagerChromeOS(
           std::move(store), std::move(external_data_manager),
           component_policy_cache_dir, wait_for_policy_fetch,
@@ -226,9 +223,11 @@ scoped_ptr<UserCloudPolicyManagerChromeOS>
 
   bool wildcard_match = false;
   if (connector->IsEnterpriseManaged() &&
-      chromeos::CrosSettings::IsWhitelisted(username, &wildcard_match) &&
-      wildcard_match && !connector->IsNonEnterpriseUser(username)) {
-    manager->EnableWildcardLoginCheck(username);
+      chromeos::CrosSettings::IsWhitelisted(account_id.GetUserEmail(),
+                                            &wildcard_match) &&
+      wildcard_match &&
+      !connector->IsNonEnterpriseUser(account_id.GetUserEmail())) {
+    manager->EnableWildcardLoginCheck(account_id.GetUserEmail());
   }
 
   manager->Init(

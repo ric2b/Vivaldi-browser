@@ -68,17 +68,6 @@ public:
             freeHook(address);
     }
 
-    static void reallocHookIfEnabled(Address oldAddress, Address newAddress, size_t size, const char* typeName)
-    {
-        // Report a reallocation as a free followed by an allocation.
-        AllocationHook* allocationHook = m_allocationHook;
-        FreeHook* freeHook = m_freeHook;
-        if (UNLIKELY(allocationHook && freeHook)) {
-            freeHook(oldAddress);
-            allocationHook(newAddress, size, typeName);
-        }
-    }
-
 private:
     static AllocationHook* m_allocationHook;
     static FreeHook* m_freeHook;
@@ -114,14 +103,79 @@ public:
     }
 };
 
+class PLATFORM_EXPORT ProcessHeap {
+    STATIC_ONLY(ProcessHeap);
+public:
+    static void init();
+
+    static CrossThreadPersistentRegion& crossThreadPersistentRegion();
+
+    static bool isLowEndDevice() { return s_isLowEndDevice; }
+    static void increaseTotalAllocatedObjectSize(size_t delta) { atomicAdd(&s_totalAllocatedObjectSize, static_cast<long>(delta)); }
+    static void decreaseTotalAllocatedObjectSize(size_t delta) { atomicSubtract(&s_totalAllocatedObjectSize, static_cast<long>(delta)); }
+    static size_t totalAllocatedObjectSize() { return acquireLoad(&s_totalAllocatedObjectSize); }
+    static void increaseTotalMarkedObjectSize(size_t delta) { atomicAdd(&s_totalMarkedObjectSize, static_cast<long>(delta)); }
+    static size_t totalMarkedObjectSize() { return acquireLoad(&s_totalMarkedObjectSize); }
+    static void increaseTotalAllocatedSpace(size_t delta) { atomicAdd(&s_totalAllocatedSpace, static_cast<long>(delta)); }
+    static void decreaseTotalAllocatedSpace(size_t delta) { atomicSubtract(&s_totalAllocatedSpace, static_cast<long>(delta)); }
+    static size_t totalAllocatedSpace() { return acquireLoad(&s_totalAllocatedSpace); }
+    static void resetHeapCounters();
+
+private:
+    static bool s_isLowEndDevice;
+    static size_t s_totalAllocatedSpace;
+    static size_t s_totalAllocatedObjectSize;
+    static size_t s_totalMarkedObjectSize;
+
+    friend class ThreadState;
+};
+
+// Stats for the heap.
+class ThreadHeapStats {
+    USING_FAST_MALLOC(ThreadHeapStats);
+public:
+    ThreadHeapStats();
+    void setMarkedObjectSizeAtLastCompleteSweep(size_t size) { releaseStore(&m_markedObjectSizeAtLastCompleteSweep, size); }
+    size_t markedObjectSizeAtLastCompleteSweep() { return acquireLoad(&m_markedObjectSizeAtLastCompleteSweep); }
+    void increaseAllocatedObjectSize(size_t delta);
+    void decreaseAllocatedObjectSize(size_t delta);
+    size_t allocatedObjectSize() { return acquireLoad(&m_allocatedObjectSize); }
+    void increaseMarkedObjectSize(size_t delta);
+    size_t markedObjectSize() { return acquireLoad(&m_markedObjectSize); }
+    void increaseAllocatedSpace(size_t delta);
+    void decreaseAllocatedSpace(size_t delta);
+    size_t allocatedSpace() { return acquireLoad(&m_allocatedSpace); }
+    size_t objectSizeAtLastGC() { return acquireLoad(&m_objectSizeAtLastGC); }
+    void increaseWrapperCount(size_t delta) { atomicAdd(&m_wrapperCount, static_cast<long>(delta)); }
+    void decreaseWrapperCount(size_t delta) { atomicSubtract(&m_wrapperCount, static_cast<long>(delta)); }
+    size_t wrapperCount() { return acquireLoad(&m_wrapperCount); }
+    size_t wrapperCountAtLastGC() { return acquireLoad(&m_wrapperCountAtLastGC); }
+    void increaseCollectedWrapperCount(size_t delta) { atomicAdd(&m_collectedWrapperCount, static_cast<long>(delta)); }
+    size_t collectedWrapperCount() { return acquireLoad(&m_collectedWrapperCount); }
+    size_t partitionAllocSizeAtLastGC() { return acquireLoad(&m_partitionAllocSizeAtLastGC); }
+    void setEstimatedMarkingTimePerByte(double estimatedMarkingTimePerByte) { m_estimatedMarkingTimePerByte = estimatedMarkingTimePerByte; }
+    double estimatedMarkingTimePerByte() const { return m_estimatedMarkingTimePerByte; }
+    double estimatedMarkingTime();
+    void reset();
+
+private:
+    size_t m_allocatedSpace;
+    size_t m_allocatedObjectSize;
+    size_t m_objectSizeAtLastGC;
+    size_t m_markedObjectSize;
+    size_t m_markedObjectSizeAtLastCompleteSweep;
+    size_t m_wrapperCount;
+    size_t m_wrapperCountAtLastGC;
+    size_t m_collectedWrapperCount;
+    size_t m_partitionAllocSizeAtLastGC;
+    double m_estimatedMarkingTimePerByte;
+};
+
 class PLATFORM_EXPORT Heap {
     STATIC_ONLY(Heap);
 public:
     static void init();
     static void shutdown();
-    static void doShutdown();
-
-    static CrossThreadPersistentRegion& crossThreadPersistentRegion();
 
 #if ENABLE(ASSERT)
     static BasePage* findPageFromAddress(Address);
@@ -178,7 +232,7 @@ public:
         BasePage* page = pageFromObject(objectPointer);
         if (page->hasBeenSwept())
             return false;
-        ASSERT(page->heap()->threadState()->isSweepingInProgress());
+        ASSERT(page->arena()->getThreadState()->isSweepingInProgress());
 
         return !Heap::isHeapObjectAlive(const_cast<T*>(objectPointer));
     }
@@ -239,7 +293,7 @@ public:
         allocationSize = (allocationSize + allocationMask) & ~allocationMask;
         return allocationSize;
     }
-    static Address allocateOnHeapIndex(ThreadState*, size_t, int heapIndex, size_t gcInfoIndex);
+    static Address allocateOnArenaIndex(ThreadState*, size_t, int arenaIndex, size_t gcInfoIndex, const char* typeName);
     template<typename T> static Address allocate(size_t, bool eagerlySweep = false);
     template<typename T> static Address reallocate(void* previous, size_t);
 
@@ -264,15 +318,14 @@ public:
 
     static void flushHeapDoesNotContainCache();
 
-    static FreePagePool* freePagePool() { return s_freePagePool; }
-    static OrphanedPagePool* orphanedPagePool() { return s_orphanedPagePool; }
+    static FreePagePool* getFreePagePool() { return s_freePagePool; }
+    static OrphanedPagePool* getOrphanedPagePool() { return s_orphanedPagePool; }
 
     // This look-up uses the region search tree and a negative contains cache to
     // provide an efficient mapping from arbitrary addresses to the containing
     // heap-page if one exists.
     static BasePage* lookup(Address);
-    static void addPageMemoryRegion(PageMemoryRegion*);
-    static void removePageMemoryRegion(PageMemoryRegion*);
+    static RegionTree* getRegionTree();
 
     static const GCInfo* gcInfo(size_t gcInfoIndex)
     {
@@ -284,40 +337,19 @@ public:
         return info;
     }
 
-    static void setMarkedObjectSizeAtLastCompleteSweep(size_t size) { releaseStore(&s_markedObjectSizeAtLastCompleteSweep, size); }
-    static size_t markedObjectSizeAtLastCompleteSweep() { return acquireLoad(&s_markedObjectSizeAtLastCompleteSweep); }
-    static void increaseAllocatedObjectSize(size_t delta) { atomicAdd(&s_allocatedObjectSize, static_cast<long>(delta)); }
-    static void decreaseAllocatedObjectSize(size_t delta) { atomicSubtract(&s_allocatedObjectSize, static_cast<long>(delta)); }
-    static size_t allocatedObjectSize() { return acquireLoad(&s_allocatedObjectSize); }
-    static void increaseMarkedObjectSize(size_t delta) { atomicAdd(&s_markedObjectSize, static_cast<long>(delta)); }
-    static size_t markedObjectSize() { return acquireLoad(&s_markedObjectSize); }
-    static void increaseAllocatedSpace(size_t delta) { atomicAdd(&s_allocatedSpace, static_cast<long>(delta)); }
-    static void decreaseAllocatedSpace(size_t delta) { atomicSubtract(&s_allocatedSpace, static_cast<long>(delta)); }
-    static size_t allocatedSpace() { return acquireLoad(&s_allocatedSpace); }
-    static size_t objectSizeAtLastGC() { return acquireLoad(&s_objectSizeAtLastGC); }
-    static void increaseWrapperCount(size_t delta) { atomicAdd(&s_wrapperCount, static_cast<long>(delta)); }
-    static void decreaseWrapperCount(size_t delta) { atomicSubtract(&s_wrapperCount, static_cast<long>(delta)); }
-    static size_t wrapperCount() { return acquireLoad(&s_wrapperCount); }
-    static size_t wrapperCountAtLastGC() { return acquireLoad(&s_wrapperCountAtLastGC); }
-    static void increaseCollectedWrapperCount(size_t delta) { atomicAdd(&s_collectedWrapperCount, static_cast<long>(delta)); }
-    static size_t collectedWrapperCount() { return acquireLoad(&s_collectedWrapperCount); }
-    static size_t partitionAllocSizeAtLastGC() { return acquireLoad(&s_partitionAllocSizeAtLastGC); }
+    static ThreadHeapStats& heapStats();
 
     static double estimatedMarkingTime();
     static void reportMemoryUsageHistogram();
     static void reportMemoryUsageForTracing();
-    static bool isLowEndDevice() { return s_isLowEndDevice; }
-
-#if ENABLE(ASSERT)
-    static uint16_t gcGeneration() { return s_gcGeneration; }
-#endif
+    static BlinkGC::GCReason lastGCReason() { return s_lastGCReason; }
 
 private:
     // Reset counters that track live and allocated-since-last-GC sizes.
     static void resetHeapCounters();
 
-    static int heapIndexForObjectSize(size_t);
-    static bool isNormalHeapIndex(int);
+    static int arenaIndexForObjectSize(size_t);
+    static bool isNormalArenaIndex(int);
 
     static void decommitCallbackStacks();
 
@@ -326,24 +358,9 @@ private:
     static CallbackStack* s_globalWeakCallbackStack;
     static CallbackStack* s_ephemeronStack;
     static HeapDoesNotContainCache* s_heapDoesNotContainCache;
-    static bool s_shutdownCalled;
     static FreePagePool* s_freePagePool;
     static OrphanedPagePool* s_orphanedPagePool;
-    static RegionTree* s_regionTree;
-    static size_t s_allocatedSpace;
-    static size_t s_allocatedObjectSize;
-    static size_t s_objectSizeAtLastGC;
-    static size_t s_markedObjectSize;
-    static size_t s_markedObjectSizeAtLastCompleteSweep;
-    static size_t s_wrapperCount;
-    static size_t s_wrapperCountAtLastGC;
-    static size_t s_collectedWrapperCount;
-    static size_t s_partitionAllocSizeAtLastGC;
-    static double s_estimatedMarkingTimePerByte;
-    static bool s_isLowEndDevice;
-#if ENABLE(ASSERT)
-    static uint16_t s_gcGeneration;
-#endif
+    static BlinkGC::GCReason s_lastGCReason;
 
     friend class ThreadState;
 };
@@ -408,17 +425,17 @@ protected:
     }
 };
 
-// Assigning class types to their heaps.
+// Assigning class types to their arenas.
 //
-// We use sized heaps for most 'normal' objects to improve memory locality.
+// We use sized arenas for most 'normal' objects to improve memory locality.
 // It seems that the same type of objects are likely to be accessed together,
 // which means that we want to group objects by type. That's one reason
-// why we provide dedicated heaps for popular types (e.g., Node, CSSValue),
-// but it's not practical to prepare dedicated heaps for all types.
+// why we provide dedicated arenas for popular types (e.g., Node, CSSValue),
+// but it's not practical to prepare dedicated arenas for all types.
 // Thus we group objects by their sizes, hoping that this will approximately
 // group objects by their types.
 //
-// An exception to the use of sized heaps is made for class types that
+// An exception to the use of sized arenas is made for class types that
 // require prompt finalization after a garbage collection. That is, their
 // instances have to be finalized early and cannot be delayed until lazy
 // sweeping kicks in for their heap and page. The EAGERLY_FINALIZE()
@@ -427,21 +444,21 @@ protected:
 // for a class.
 //
 
-inline int Heap::heapIndexForObjectSize(size_t size)
+inline int Heap::arenaIndexForObjectSize(size_t size)
 {
     if (size < 64) {
         if (size < 32)
-            return BlinkGC::NormalPage1HeapIndex;
-        return BlinkGC::NormalPage2HeapIndex;
+            return BlinkGC::NormalPage1ArenaIndex;
+        return BlinkGC::NormalPage2ArenaIndex;
     }
     if (size < 128)
-        return BlinkGC::NormalPage3HeapIndex;
-    return BlinkGC::NormalPage4HeapIndex;
+        return BlinkGC::NormalPage3ArenaIndex;
+    return BlinkGC::NormalPage4ArenaIndex;
 }
 
-inline bool Heap::isNormalHeapIndex(int index)
+inline bool Heap::isNormalArenaIndex(int index)
 {
-    return index >= BlinkGC::NormalPage1HeapIndex && index <= BlinkGC::NormalPage4HeapIndex;
+    return index >= BlinkGC::NormalPage1ArenaIndex && index <= BlinkGC::NormalPage4ArenaIndex;
 }
 
 #define DECLARE_EAGER_FINALIZATION_OPERATOR_NEW() \
@@ -452,8 +469,8 @@ public:                                           \
         return allocateObject(size, true);        \
     }
 
-#define IS_EAGERLY_FINALIZED() (pageFromObject(this)->heap()->heapIndex() == BlinkGC::EagerSweepHeapIndex)
-#if ENABLE(ASSERT) && ENABLE(OILPAN)
+#define IS_EAGERLY_FINALIZED() (pageFromObject(this)->arena()->arenaIndex() == BlinkGC::EagerSweepArenaIndex)
+#if ENABLE(ASSERT)
 class VerifyEagerFinalization {
     DISALLOW_NEW();
 public:
@@ -479,28 +496,22 @@ public:                                                \
 #define EAGERLY_FINALIZE() typedef int IsEagerlyFinalizedMarker
 #endif
 
-#if !ENABLE(OILPAN)
-#define EAGERLY_FINALIZE_WILL_BE_REMOVED() EAGERLY_FINALIZE()
-#else
-#define EAGERLY_FINALIZE_WILL_BE_REMOVED()
-#endif
-
-inline Address Heap::allocateOnHeapIndex(ThreadState* state, size_t size, int heapIndex, size_t gcInfoIndex)
+inline Address Heap::allocateOnArenaIndex(ThreadState* state, size_t size, int arenaIndex, size_t gcInfoIndex, const char* typeName)
 {
     ASSERT(state->isAllocationAllowed());
-    ASSERT(heapIndex != BlinkGC::LargeObjectHeapIndex);
-    NormalPageHeap* heap = static_cast<NormalPageHeap*>(state->heap(heapIndex));
-    return heap->allocateObject(allocationSizeFromSize(size), gcInfoIndex);
+    ASSERT(arenaIndex != BlinkGC::LargeObjectArenaIndex);
+    NormalPageArena* arena = static_cast<NormalPageArena*>(state->arena(arenaIndex));
+    Address address = arena->allocateObject(allocationSizeFromSize(size), gcInfoIndex);
+    HeapAllocHooks::allocationHookIfEnabled(address, size, typeName);
+    return address;
 }
 
 template<typename T>
 Address Heap::allocate(size_t size, bool eagerlySweep)
 {
     ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
-    Address address = Heap::allocateOnHeapIndex(state, size, eagerlySweep ? BlinkGC::EagerSweepHeapIndex : Heap::heapIndexForObjectSize(size), GCInfoTrait<T>::index());
     const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(T);
-    HeapAllocHooks::allocationHookIfEnabled(address, size, typeName);
-    return address;
+    return Heap::allocateOnArenaIndex(state, size, eagerlySweep ? BlinkGC::EagerSweepArenaIndex : Heap::arenaIndexForObjectSize(size), GCInfoTrait<T>::index(), typeName);
 }
 
 template<typename T>
@@ -519,22 +530,22 @@ Address Heap::reallocate(void* previous, size_t size)
     HeapObjectHeader* previousHeader = HeapObjectHeader::fromPayload(previous);
     BasePage* page = pageFromObject(previousHeader);
     ASSERT(page);
-    int heapIndex = page->heap()->heapIndex();
+    int arenaIndex = page->arena()->arenaIndex();
     // Recompute the effective heap index if previous allocation
-    // was on the normal heaps or a large object.
-    if (isNormalHeapIndex(heapIndex) || heapIndex == BlinkGC::LargeObjectHeapIndex)
-        heapIndex = heapIndexForObjectSize(size);
+    // was on the normal arenas or a large object.
+    if (isNormalArenaIndex(arenaIndex) || arenaIndex == BlinkGC::LargeObjectArenaIndex)
+        arenaIndex = arenaIndexForObjectSize(size);
 
     // TODO(haraken): We don't support reallocate() for finalizable objects.
     ASSERT(!Heap::gcInfo(previousHeader->gcInfoIndex())->hasFinalizer());
     ASSERT(previousHeader->gcInfoIndex() == GCInfoTrait<T>::index());
-    Address address = Heap::allocateOnHeapIndex(state, size, heapIndex, GCInfoTrait<T>::index());
+    const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(T);
+    HeapAllocHooks::freeHookIfEnabled(static_cast<Address>(previous));
+    Address address = Heap::allocateOnArenaIndex(state, size, arenaIndex, GCInfoTrait<T>::index(), typeName);
     size_t copySize = previousHeader->payloadSize();
     if (copySize > size)
         copySize = size;
     memcpy(address, previous, copySize);
-    const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(T);
-    HeapAllocHooks::reallocHookIfEnabled(static_cast<Address>(previous), address, size, typeName);
     return address;
 }
 

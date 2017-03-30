@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
@@ -399,11 +401,11 @@ class FacetManagerTest : public testing::Test {
   MockAffiliationConsumer mock_consumer_;
   scoped_refptr<base::TestSimpleTaskRunner> consumer_task_runner_;
   scoped_refptr<base::TestMockTimeTaskRunner> main_task_runner_;
-  scoped_ptr<base::Clock> main_clock_;
+  std::unique_ptr<base::Clock> main_clock_;
   TestFacetManagerNotifier facet_manager_notifier_;
   MockFacetManagerHost facet_manager_host_;
 
-  scoped_ptr<FacetManager> facet_manager_;
+  std::unique_ptr<FacetManager> facet_manager_;
   base::Time facet_manager_creation_;
 
   DISALLOW_COPY_AND_ASSIGN(FacetManagerTest);

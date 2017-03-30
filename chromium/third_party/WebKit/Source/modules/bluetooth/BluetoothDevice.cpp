@@ -8,10 +8,8 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
-#include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/events/Event.h"
-#include "core/page/PageVisibilityState.h"
 #include "modules/bluetooth/BluetoothError.h"
 #include "modules/bluetooth/BluetoothRemoteGATTServer.h"
 #include "modules/bluetooth/BluetoothSupplement.h"
@@ -21,10 +19,8 @@ namespace blink {
 
 BluetoothDevice::BluetoothDevice(ExecutionContext* context, PassOwnPtr<WebBluetoothDevice> webDevice)
     : ActiveDOMObject(context)
-    , PageLifecycleObserver(toDocument(context)->page())
     , m_webDevice(webDevice)
-    , m_adData(BluetoothAdvertisingData::create(m_webDevice->txPower,
-        m_webDevice->rssi))
+    , m_adData(BluetoothAdvertisingData::create(m_webDevice->txPower, m_webDevice->rssi))
     , m_gatt(BluetoothRemoteGATTServer::create(this))
 {
     // See example in Source/platform/heap/ThreadState.h
@@ -34,7 +30,7 @@ BluetoothDevice::BluetoothDevice(ExecutionContext* context, PassOwnPtr<WebBlueto
 BluetoothDevice* BluetoothDevice::take(ScriptPromiseResolver* resolver, PassOwnPtr<WebBluetoothDevice> webDevice)
 {
     ASSERT(webDevice);
-    BluetoothDevice* device = new BluetoothDevice(resolver->executionContext(), webDevice);
+    BluetoothDevice* device = new BluetoothDevice(resolver->getExecutionContext(), webDevice);
     device->suspendIfNeeded();
     return device;
 }
@@ -49,18 +45,11 @@ void BluetoothDevice::stop()
     disconnectGATTIfConnected();
 }
 
-void BluetoothDevice::pageVisibilityChanged()
-{
-    if (!page()->isPageVisible() && disconnectGATTIfConnected()) {
-        dispatchEvent(Event::create(EventTypeNames::gattserverdisconnected));
-    }
-}
-
 bool BluetoothDevice::disconnectGATTIfConnected()
 {
     if (m_gatt->connected()) {
         m_gatt->setConnected(false);
-        BluetoothSupplement::fromExecutionContext(executionContext())->disconnect(id());
+        BluetoothSupplement::fromExecutionContext(getExecutionContext())->disconnect(id());
         return true;
     }
     return false;
@@ -71,16 +60,15 @@ const WTF::AtomicString& BluetoothDevice::interfaceName() const
     return EventTargetNames::BluetoothDevice;
 }
 
-ExecutionContext* BluetoothDevice::executionContext() const
+ExecutionContext* BluetoothDevice::getExecutionContext() const
 {
-    return ActiveDOMObject::executionContext();
+    return ActiveDOMObject::getExecutionContext();
 }
 
 DEFINE_TRACE(BluetoothDevice)
 {
     RefCountedGarbageCollectedEventTargetWithInlineData<BluetoothDevice>::trace(visitor);
     ActiveDOMObject::trace(visitor);
-    PageLifecycleObserver::trace(visitor);
     visitor->trace(m_adData);
     visitor->trace(m_gatt);
 }

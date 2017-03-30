@@ -47,14 +47,14 @@ public:
     };
 
     // Returns the list's style as one of a reduced high level categorical set of styles.
-    ListStyleCategory listStyleCategory() const;
+    ListStyleCategory getListStyleCategory() const;
 
     bool isInside() const;
 
     void updateMarginsAndContent();
 
     IntRect getRelativeMarkerRect() const;
-    LayoutRect localSelectionRect() const;
+    LayoutRect localSelectionRect() const final;
     bool isImage() const override;
     const StyleImage* image() const { return m_image.get(); }
     const LayoutListItem* listItem() const { return m_listItem; }
@@ -88,7 +88,6 @@ private:
     bool isText() const { return !isImage(); }
 
     void setSelectionState(SelectionState) override;
-    LayoutRect selectionRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer) const override;
     bool canBeSelectionLeaf() const override { return true; }
 
     LayoutUnit getWidthOfTextWithSuffix() const;
@@ -99,7 +98,7 @@ private:
     void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
 
     String m_text;
-    RefPtrWillBePersistent<StyleImage> m_image;
+    Persistent<StyleImage> m_image;
     LayoutListItem* m_listItem;
 };
 

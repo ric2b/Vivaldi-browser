@@ -30,7 +30,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/common/edit_command.h"
-#include "content/common/webplugin_geometry.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 #include "content/public/browser/guest_host.h"
@@ -476,10 +475,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   std::deque<linked_ptr<IPC::Message> > pending_messages_;
 
   BrowserPluginGuestDelegate* delegate_;
-
-  // Keep a copy of the last moved plugin windows so we can move them in
-  // OnUpdateGeometry().
-  std::vector<content::WebPluginGeometry> plugin_moves_;
 
   int guest_routing_id_;
 

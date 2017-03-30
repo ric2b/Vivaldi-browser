@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "content/browser/site_instance_impl.h"
+#include "content/common/site_isolation_policy.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_switches.h"
@@ -27,29 +28,49 @@ bool BrowsingInstance::HasSiteInstance(const GURL& url) {
   return site_instance_map_.find(site) != site_instance_map_.end();
 }
 
-SiteInstance* BrowsingInstance::GetSiteInstanceForURL(const GURL& url) {
-  std::string site =
-      SiteInstanceImpl::GetSiteForURL(browser_context_, url)
-          .possibly_invalid_spec();
+scoped_refptr<SiteInstanceImpl> BrowsingInstance::GetSiteInstanceForURL(
+    const GURL& url) {
+  std::string site = SiteInstanceImpl::GetSiteForURL(browser_context_, url)
+                         .possibly_invalid_spec();
 
   SiteInstanceMap::iterator i = site_instance_map_.find(site);
   if (i != site_instance_map_.end())
     return i->second;
 
-
   // No current SiteInstance for this site, so let's create one.
-  SiteInstanceImpl* instance = new SiteInstanceImpl(this);
+  scoped_refptr<SiteInstanceImpl> instance = new SiteInstanceImpl(this);
 
   // Set the site of this new SiteInstance, which will register it with us.
   instance->SetSite(url);
   return instance;
 }
 
-void BrowsingInstance::RegisterSiteInstance(SiteInstance* site_instance) {
-  DCHECK(static_cast<SiteInstanceImpl*>(site_instance)
-             ->browsing_instance_.get() ==
-         this);
-  DCHECK(static_cast<SiteInstanceImpl*>(site_instance)->HasSite());
+scoped_refptr<SiteInstanceImpl>
+BrowsingInstance::GetDefaultSubframeSiteInstance() {
+  // This should only be used for --top-document-isolation mode.
+  CHECK(SiteIsolationPolicy::IsTopDocumentIsolationEnabled());
+  if (!default_subframe_site_instance_) {
+    SiteInstanceImpl* instance = new SiteInstanceImpl(this);
+    instance->set_is_default_subframe_site_instance();
+
+    // TODO(nick): This is a hack for now.
+    instance->SetSite(GURL("http://web-subframes.invalid"));
+
+    default_subframe_site_instance_ = instance;
+  }
+
+  return make_scoped_refptr(default_subframe_site_instance_);
+}
+
+void BrowsingInstance::RegisterSiteInstance(SiteInstanceImpl* site_instance) {
+  DCHECK(site_instance->browsing_instance_.get() == this);
+  DCHECK(site_instance->HasSite());
+
+  // Don't register the default subframe SiteInstance, to prevent it from being
+  // returned by GetSiteInstanceForURL.
+  if (default_subframe_site_instance_ == site_instance)
+    return;
+
   std::string site = site_instance->GetSiteURL().possibly_invalid_spec();
 
   // Only register if we don't have a SiteInstance for this site already.
@@ -64,11 +85,9 @@ void BrowsingInstance::RegisterSiteInstance(SiteInstance* site_instance) {
   }
 }
 
-void BrowsingInstance::UnregisterSiteInstance(SiteInstance* site_instance) {
-  DCHECK(static_cast<SiteInstanceImpl*>(site_instance)
-             ->browsing_instance_.get() ==
-         this);
-  DCHECK(static_cast<SiteInstanceImpl*>(site_instance)->HasSite());
+void BrowsingInstance::UnregisterSiteInstance(SiteInstanceImpl* site_instance) {
+  DCHECK(site_instance->browsing_instance_.get() == this);
+  DCHECK(site_instance->HasSite());
   std::string site = site_instance->GetSiteURL().possibly_invalid_spec();
 
   // Only unregister the SiteInstance if it is the same one that is registered
@@ -79,6 +98,8 @@ void BrowsingInstance::UnregisterSiteInstance(SiteInstance* site_instance) {
     // Matches, so erase it.
     site_instance_map_.erase(i);
   }
+  if (default_subframe_site_instance_ == site_instance)
+    default_subframe_site_instance_ = nullptr;
 }
 
 BrowsingInstance::~BrowsingInstance() {

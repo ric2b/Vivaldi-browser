@@ -16,6 +16,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -94,7 +95,7 @@ const char kRequiresFileSystemWriteError[] =
 const char kRequiresFileSystemDirectoryError[] =
     "Operation requires fileSystem.directory permission";
 const char kMultipleUnsupportedError[] =
-    "acceptsMultiple: true is not supported for 'saveFile'";
+    "acceptsMultiple: true is only supported for 'openFile'";
 const char kUnknownIdError[] = "Unknown id";
 
 #if !defined(OS_CHROMEOS)
@@ -213,14 +214,15 @@ const int kGraylistedPaths[] = {
 #endif
 };
 
-typedef base::Callback<void(scoped_ptr<base::File::Info>)> FileInfoOptCallback;
+typedef base::Callback<void(std::unique_ptr<base::File::Info>)>
+    FileInfoOptCallback;
 
 // Passes optional file info to the UI thread depending on |result| and |info|.
 void PassFileInfoToUIThread(const FileInfoOptCallback& callback,
                             base::File::Error result,
                             const base::File::Info& info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  scoped_ptr<base::File::Info> file_info(
+  std::unique_ptr<base::File::Info> file_info(
       result == base::File::FILE_OK ? new base::File::Info(info) : NULL);
   content::BrowserThread::PostTask(
       content::BrowserThread::UI,
@@ -256,19 +258,18 @@ content::WebContents* GetWebContentsForAppId(Profile* profile,
 
 // Fills a list of volumes mounted in the system.
 void FillVolumeList(Profile* profile,
-                    std::vector<linked_ptr<api::file_system::Volume>>* result) {
-  using file_manager::VolumeManager;
-  VolumeManager* const volume_manager = VolumeManager::Get(profile);
+                    std::vector<api::file_system::Volume>* result) {
+  file_manager::VolumeManager* const volume_manager =
+      file_manager::VolumeManager::Get(profile);
   DCHECK(volume_manager);
 
-  using api::file_system::Volume;
   const auto& volume_list = volume_manager->GetVolumeList();
   // Convert volume_list to result_volume_list.
   for (const auto& volume : volume_list) {
-    const linked_ptr<Volume> result_volume(new Volume);
-    result_volume->volume_id = volume->volume_id();
-    result_volume->writable = !volume->is_read_only();
-    result->push_back(result_volume);
+    api::file_system::Volume result_volume;
+    result_volume.volume_id = volume->volume_id();
+    result_volume.writable = !volume->is_read_only();
+    result->push_back(std::move(result_volume));
   }
 }
 #endif
@@ -297,16 +298,6 @@ void SetLastChooseEntryDirectory(ExtensionPrefs* prefs,
                              base::CreateFilePathValue(path));
 }
 
-std::vector<base::FilePath> GetGrayListedDirectories() {
-  std::vector<base::FilePath> graylisted_directories;
-  for (size_t i = 0; i < arraysize(kGraylistedPaths); ++i) {
-    base::FilePath graylisted_path;
-    if (PathService::Get(kGraylistedPaths[i], &graylisted_path))
-      graylisted_directories.push_back(graylisted_path);
-  }
-  return graylisted_directories;
-}
-
 #if defined(OS_CHROMEOS)
 void DispatchVolumeListChangeEvent(Profile* profile) {
   DCHECK(profile);
@@ -327,7 +318,7 @@ void DispatchVolumeListChangeEvent(Profile* profile) {
       continue;
     event_router->DispatchEventToExtension(
         extension->id(),
-        make_scoped_ptr(new Event(
+        base::WrapUnique(new Event(
             events::FILE_SYSTEM_ON_VOLUME_LIST_CHANGED,
             api::file_system::OnVolumeListChanged::kEventName,
             api::file_system::OnVolumeListChanged::Create(event_args))));
@@ -989,13 +980,11 @@ void FileSystemChooseEntryFunction::BuildFileTypeInfo(
                          !suggested_extension.empty();
 
   if (accepts) {
-    typedef file_system::AcceptOption AcceptOption;
-    for (std::vector<linked_ptr<AcceptOption> >::const_iterator iter =
-            accepts->begin(); iter != accepts->end(); ++iter) {
+    for (const file_system::AcceptOption& option : *accepts) {
       base::string16 description;
       std::vector<base::FilePath::StringType> extensions;
 
-      if (!GetFileTypesFromAcceptOption(**iter, &extensions, &description))
+      if (!GetFileTypesFromAcceptOption(option, &extensions, &description))
         continue;  // No extensions were found.
 
       file_type_info->extensions.push_back(extensions);
@@ -1057,7 +1046,8 @@ void FileSystemChooseEntryFunction::SetInitialPathAndShowPicker(
 }
 
 bool FileSystemChooseEntryFunction::RunAsync() {
-  scoped_ptr<ChooseEntry::Params> params(ChooseEntry::Params::Create(*args_));
+  std::unique_ptr<ChooseEntry::Params> params(
+      ChooseEntry::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   base::FilePath suggested_name;
@@ -1067,7 +1057,7 @@ bool FileSystemChooseEntryFunction::RunAsync() {
 
   file_system::ChooseEntryOptions* options = params->options.get();
   if (options) {
-    multiple_ = !!options->accepts_multiple;
+    multiple_ = options->accepts_multiple && *options->accepts_multiple;
     if (multiple_)
       picker_type = ui::SelectFileDialog::SELECT_OPEN_MULTI_FILE;
 
@@ -1195,7 +1185,7 @@ bool FileSystemRetainEntryFunction::RunAsync() {
 void FileSystemRetainEntryFunction::RetainFileEntry(
     const std::string& entry_id,
     const base::FilePath& path,
-    scoped_ptr<base::File::Info> file_info) {
+    std::unique_ptr<base::File::Info> file_info) {
   if (!file_info) {
     SendResponse(false);
     return;
@@ -1264,7 +1254,7 @@ bool FileSystemGetObservedEntriesFunction::RunSync() {
 #if !defined(OS_CHROMEOS)
 ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
   using api::file_system::RequestFileSystem::Params;
-  const scoped_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   NOTIMPLEMENTED();
@@ -1286,7 +1276,7 @@ FileSystemRequestFileSystemFunction::~FileSystemRequestFileSystemFunction() {
 
 ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
   using api::file_system::RequestFileSystem::Params;
-  const scoped_ptr<Params> params(Params::Create(*args_));
+  const std::unique_ptr<Params> params(Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
 
   // Only kiosk apps in kiosk sessions can use this API.
@@ -1458,8 +1448,7 @@ ExtensionFunction::ResponseAction FileSystemGetVolumeListFunction::Run() {
 
   if (!consent_provider.IsGrantable(*extension()))
     return RespondNow(Error(kNotSupportedOnNonKioskSessionError));
-  using api::file_system::Volume;
-  std::vector<linked_ptr<Volume>> result_volume_list;
+  std::vector<api::file_system::Volume> result_volume_list;
   FillVolumeList(chrome_details_.GetProfile(), &result_volume_list);
 
   return RespondNow(ArgumentList(

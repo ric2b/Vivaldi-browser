@@ -10,6 +10,7 @@
 #include <stddef.h>
 
 #include <list>
+#include <memory>
 #include <vector>
 
 #include "base/containers/hash_tables.h"
@@ -17,7 +18,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/non_thread_safe.h"
 #include "build/build_config.h"
@@ -35,6 +35,7 @@ class ProfileManager : public base::NonThreadSafe,
                        public Profile::Delegate {
  public:
   typedef base::Callback<void(Profile*, Profile::CreateStatus)> CreateCallback;
+  typedef base::Callback<void(Profile*)> ProfileLoadedCallback;
 
   explicit ProfileManager(const base::FilePath& user_data_dir);
   ~ProfileManager() override;
@@ -86,6 +87,18 @@ class ProfileManager : public base::NonThreadSafe,
 
   // Returns total number of profiles available on this machine.
   size_t GetNumberOfProfiles();
+
+  // Asynchronously loads an existing profile given its |profile_name| within
+  // the user data directory, optionally in |incognito| mode. The |callback|
+  // will be called with the Profile when it has been loaded, or with a nullptr
+  // otherwise. Should be called on the UI thread.
+  // Unlike CreateProfileAsync this will not create a profile if one doesn't
+  // already exist on disk
+  // Returns true if the profile exists, but the final loaded profile will come
+  // as part of the callback.
+  bool LoadProfile(const std::string& profile_name,
+                   bool incognito,
+                   const ProfileLoadedCallback& callback);
 
   // Explicit asynchronous creation of a profile located at |profile_path|.
   // If the profile has already been created then callback is called
@@ -246,7 +259,7 @@ class ProfileManager : public base::NonThreadSafe,
 
     ~ProfileInfo();
 
-    scoped_ptr<Profile> profile;
+    std::unique_ptr<Profile> profile;
     // Whether profile has been fully loaded (created and initialized).
     bool created;
     // List of callbacks to run when profile initialization is done. Note, when
@@ -349,7 +362,7 @@ class ProfileManager : public base::NonThreadSafe,
   // if it has not been explicitly deleted. It must be destroyed after
   // |profiles_info_| because ~ProfileInfo can trigger a chain of events leading
   // to an access to this member.
-  scoped_ptr<ProfileInfoCache> profile_info_cache_;
+  std::unique_ptr<ProfileInfoCache> profile_info_cache_;
 
   content::NotificationRegistrar registrar_;
 
@@ -372,7 +385,7 @@ class ProfileManager : public base::NonThreadSafe,
   ProfilesInfoMap profiles_info_;
 
   // Manages the process of creating, deleteing and updating Desktop shortcuts.
-  scoped_ptr<ProfileShortcutManager> profile_shortcut_manager_;
+  std::unique_ptr<ProfileShortcutManager> profile_shortcut_manager_;
 
   // For keeping track of the last active profiles.
   std::map<Profile*, int> browser_counts_;

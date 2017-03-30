@@ -9,14 +9,33 @@
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/system/handle_signals_state.h"
 #include "mojo/public/c/system/buffer.h"
+#include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/c/system/functions.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+#include "base/mac/mach_port_broker.h"
+#endif
 
 namespace mojo {
 namespace edk {
 namespace test {
 
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+namespace {
+base::MachPortBroker* g_mach_broker = nullptr;
+}
+#endif
+
 MojoTestBase::MojoTestBase() {
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  if (!g_mach_broker) {
+    g_mach_broker = new base::MachPortBroker("mojo_test");
+    CHECK(g_mach_broker->Init());
+    SetMachPortProvider(g_mach_broker);
+  }
+#endif
 }
 
 MojoTestBase::~MojoTestBase() {}
@@ -30,12 +49,22 @@ MojoTestBase::ClientController& MojoTestBase::StartClient(
 
 MojoTestBase::ClientController::ClientController(const std::string& client_name,
                                                  MojoTestBase* test)
-    : test_(test)
+    : test_(test) {
 #if !defined(OS_IOS)
-      ,
-      pipe_(helper_.StartChild(client_name))
+#if defined(OS_MACOSX)
+  // This lock needs to be held while launching the child because the Mach port
+  // broker only allows task ports to be received from known child processes.
+  // However, it can only know the child process's pid after the child has
+  // launched. To prevent a race where the child process sends its task port
+  // before the pid has been registered, the lock needs to be held over both
+  // launch and child pid registration.
+  base::AutoLock lock(g_mach_broker->GetLock());
 #endif
-{
+  pipe_ = helper_.StartChild(client_name);
+#if defined(OS_MACOSX)
+  g_mach_broker->AddPlaceholderForPid(helper_.test_child().Handle());
+#endif
+#endif
 }
 
 MojoTestBase::ClientController::~ClientController() {
@@ -46,7 +75,12 @@ MojoTestBase::ClientController::~ClientController() {
 int MojoTestBase::ClientController::WaitForShutdown() {
   was_shutdown_ = true;
 #if !defined(OS_IOS)
-  return helper_.WaitForChildShutdown();
+  int retval = helper_.WaitForChildShutdown();
+#if defined(OS_MACOSX)
+  base::AutoLock lock(g_mach_broker->GetLock());
+  g_mach_broker->InvalidatePid(helper_.test_child().Handle());
+#endif
+  return retval;
 #else
   NOTREACHED();
   return 1;
@@ -190,10 +224,16 @@ MojoHandle MojoTestBase::CreateBuffer(uint64_t size) {
 }
 
 // static
-MojoHandle MojoTestBase::DuplicateBuffer(MojoHandle h) {
+MojoHandle MojoTestBase::DuplicateBuffer(MojoHandle h, bool read_only) {
   MojoHandle new_handle;
+  MojoDuplicateBufferHandleOptions options = {
+    sizeof(MojoDuplicateBufferHandleOptions),
+    MOJO_DUPLICATE_BUFFER_HANDLE_OPTIONS_FLAG_NONE
+  };
+  if (read_only)
+    options.flags |= MOJO_DUPLICATE_BUFFER_HANDLE_OPTIONS_FLAG_READ_ONLY;
   EXPECT_EQ(MOJO_RESULT_OK,
-            MojoDuplicateBufferHandle(h, nullptr, &new_handle));
+            MojoDuplicateBufferHandle(h, &options, &new_handle));
   return new_handle;
 }
 
@@ -219,6 +259,48 @@ void MojoTestBase::ExpectBufferContents(MojoHandle h,
                           MOJO_MAP_BUFFER_FLAG_NONE));
   EXPECT_EQ(s, base::StringPiece(data, s.size()));
   EXPECT_EQ(MOJO_RESULT_OK, MojoUnmapBuffer(static_cast<void*>(data)));
+}
+
+// static
+void MojoTestBase::CreateDataPipe(MojoHandle *p0,
+                                  MojoHandle* p1,
+                                  size_t capacity) {
+  MojoCreateDataPipeOptions options;
+  options.struct_size = static_cast<uint32_t>(sizeof(options));
+  options.flags = MOJO_CREATE_DATA_PIPE_OPTIONS_FLAG_NONE;
+  options.element_num_bytes = 1;
+  options.capacity_num_bytes = static_cast<uint32_t>(capacity);
+
+  MojoCreateDataPipe(&options, p0, p1);
+  CHECK_NE(*p0, MOJO_HANDLE_INVALID);
+  CHECK_NE(*p1, MOJO_HANDLE_INVALID);
+}
+
+// static
+void MojoTestBase::WriteData(MojoHandle producer, const std::string& data) {
+  CHECK_EQ(MojoWait(producer, MOJO_HANDLE_SIGNAL_WRITABLE,
+                    MOJO_DEADLINE_INDEFINITE, nullptr),
+           MOJO_RESULT_OK);
+  uint32_t num_bytes = static_cast<uint32_t>(data.size());
+  CHECK_EQ(MojoWriteData(producer, data.data(), &num_bytes,
+                         MOJO_WRITE_DATA_FLAG_ALL_OR_NONE),
+           MOJO_RESULT_OK);
+  CHECK_EQ(num_bytes, static_cast<uint32_t>(data.size()));
+}
+
+// static
+std::string MojoTestBase::ReadData(MojoHandle consumer, size_t size) {
+  CHECK_EQ(MojoWait(consumer, MOJO_HANDLE_SIGNAL_READABLE,
+                    MOJO_DEADLINE_INDEFINITE, nullptr),
+           MOJO_RESULT_OK);
+  std::vector<char> buffer(size);
+  uint32_t num_bytes = static_cast<uint32_t>(size);
+  CHECK_EQ(MojoReadData(consumer, buffer.data(), &num_bytes,
+                         MOJO_WRITE_DATA_FLAG_ALL_OR_NONE),
+           MOJO_RESULT_OK);
+  CHECK_EQ(num_bytes, static_cast<uint32_t>(size));
+
+  return std::string(buffer.data(), buffer.size());
 }
 
 }  // namespace test

@@ -27,7 +27,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
-scoped_ptr<TestingProfile> GetTestingProfile() {
+std::unique_ptr<TestingProfile> GetTestingProfile() {
   TestingProfile::Builder profile_builder;
   return profile_builder.Build();
 }
@@ -43,7 +43,7 @@ class AppDataMigratorTest : public testing::Test {
   void SetUp() override {
     profile_ = GetTestingProfile();
     registry_ = ExtensionRegistry::Get(profile_.get());
-    migrator_ = scoped_ptr<AppDataMigrator>(
+    migrator_ = std::unique_ptr<AppDataMigrator>(
         new AppDataMigrator(profile_.get(), registry_));
 
     default_partition_ =
@@ -55,7 +55,7 @@ class AppDataMigratorTest : public testing::Test {
 
     default_fs_context_ = default_partition_->GetFileSystemContext();
 
-    url_request_context_ = scoped_ptr<content::MockBlobURLRequestContext>(
+    url_request_context_ = std::unique_ptr<content::MockBlobURLRequestContext>(
         new content::MockBlobURLRequestContext(default_fs_context_));
   }
 
@@ -63,47 +63,52 @@ class AppDataMigratorTest : public testing::Test {
 
  protected:
   content::TestBrowserThreadBundle thread_bundle_;
-  scoped_ptr<TestingProfile> profile_;
-  scoped_ptr<AppDataMigrator> migrator_;
+  std::unique_ptr<TestingProfile> profile_;
+  std::unique_ptr<AppDataMigrator> migrator_;
   content::StoragePartition* default_partition_;
   ExtensionRegistry* registry_;
   storage::FileSystemContext* default_fs_context_;
   content::IndexedDBContext* idb_context_;
-  scoped_ptr<content::MockBlobURLRequestContext> url_request_context_;
+  std::unique_ptr<content::MockBlobURLRequestContext> url_request_context_;
 };
 
 scoped_refptr<const Extension> GetTestExtension(bool platform_app) {
   scoped_refptr<const Extension> app;
   if (platform_app) {
-    app =
-        ExtensionBuilder()
-            .SetManifest(std::move(
-                DictionaryBuilder()
-                    .Set("name", "test app")
-                    .Set("version", "1")
-                    .Set("app",
-                         std::move(DictionaryBuilder().Set(
-                             "background",
-                             std::move(DictionaryBuilder().Set(
-                                 "scripts", std::move(ListBuilder().Append(
-                                                "background.js")))))))
-                    .Set("permissions",
-                         std::move(ListBuilder().Append("unlimitedStorage")))))
-            .Build();
+    app = ExtensionBuilder()
+              .SetManifest(
+                  DictionaryBuilder()
+                      .Set("name", "test app")
+                      .Set("version", "1")
+                      .Set("app", DictionaryBuilder()
+                                      .Set("background",
+                                           DictionaryBuilder()
+                                               .Set("scripts",
+                                                    ListBuilder()
+                                                        .Append("background.js")
+                                                        .Build())
+                                               .Build())
+                                      .Build())
+                      .Set("permissions",
+                           ListBuilder().Append("unlimitedStorage").Build())
+                      .Build())
+              .Build();
   } else {
-    app =
-        ExtensionBuilder()
-            .SetManifest(std::move(
-                DictionaryBuilder()
-                    .Set("name", "test app")
-                    .Set("version", "1")
-                    .Set("app",
-                         std::move(DictionaryBuilder().Set(
-                             "launch", std::move(DictionaryBuilder().Set(
-                                           "local_path", "index.html")))))
-                    .Set("permissions",
-                         std::move(ListBuilder().Append("unlimitedStorage")))))
-            .Build();
+    app = ExtensionBuilder()
+              .SetManifest(
+                  DictionaryBuilder()
+                      .Set("name", "test app")
+                      .Set("version", "1")
+                      .Set("app", DictionaryBuilder()
+                                      .Set("launch",
+                                           DictionaryBuilder()
+                                               .Set("local_path", "index.html")
+                                               .Build())
+                                      .Build())
+                      .Set("permissions",
+                           ListBuilder().Append("unlimitedStorage").Build())
+                      .Build())
+              .Build();
   }
   return app;
 }
@@ -178,7 +183,7 @@ void GenerateTestFiles(content::MockBlobURLRequestContext* url_request_context,
 void VerifyFileContents(base::File file,
                         const base::Closure& on_close_callback) {
   ASSERT_EQ(14, file.GetLength());
-  scoped_ptr<char[]> buffer(new char[15]);
+  std::unique_ptr<char[]> buffer(new char[15]);
 
   file.Read(0, buffer.get(), 14);
   buffer.get()[14] = 0;

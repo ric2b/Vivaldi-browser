@@ -60,6 +60,15 @@ public:
 
     const OrderIterator& orderIterator() const { return m_orderIterator; }
 
+    // Returns -1 if the height of this flexbox is indefinite
+    LayoutUnit computeDefiniteLogicalWidth();
+    LayoutUnit computeDefiniteLogicalHeight();
+
+    LayoutUnit crossSizeForPercentageResolution(const LayoutBox& child);
+    LayoutUnit mainSizeForPercentageResolution(const LayoutBox& child);
+    LayoutUnit childLogicalHeightForPercentageResolution(const LayoutBox& child);
+    LayoutUnit childLogicalWidthForPercentageResolution(const LayoutBox& child);
+
     void clearCachedMainSizeForChild(const LayoutBox& child);
 protected:
     void computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const override;
@@ -112,7 +121,7 @@ private:
     LayoutUnit crossAxisContentExtent() const;
     LayoutUnit mainAxisContentExtent(LayoutUnit contentLogicalHeight);
     LayoutUnit computeMainAxisExtentForChild(const LayoutBox& child, SizeType, const Length& size);
-    TransformedWritingMode transformedWritingMode() const;
+    TransformedWritingMode getTransformedWritingMode() const;
     LayoutUnit flowAwareBorderStart() const;
     LayoutUnit flowAwareBorderEnd() const;
     LayoutUnit flowAwareBorderBefore() const;
@@ -182,6 +191,11 @@ private:
 
     // This is used to cache the preferred size for orthogonal flow children so we don't have to relayout to get it
     HashMap<const LayoutObject*, LayoutUnit> m_intrinsicSizeAlongMainAxis;
+
+    // This set is used to keep track of which children we laid out in this current layout iteration.
+    // We need it because the ones in this set may need an additional layout pass for correct stretch alignment
+    // handling, as the first layout likely did not use the correct value for percentage sizing of children.
+    HashSet<const LayoutObject*> m_relaidOutChildren;
 
     mutable OrderIterator m_orderIterator;
     int m_numberOfInFlowChildrenOnFirstLine;

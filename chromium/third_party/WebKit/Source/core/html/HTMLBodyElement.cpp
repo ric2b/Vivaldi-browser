@@ -30,6 +30,7 @@
 #include "core/css/StylePropertySet.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/dom/Attribute.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/parser/HTMLParserIdioms.h"
@@ -61,7 +62,7 @@ void HTMLBodyElement::collectStyleForPresentationAttribute(const QualifiedName& 
     if (name == backgroundAttr) {
         String url = stripLeadingAndTrailingHTMLSpaces(value);
         if (!url.isEmpty()) {
-            RefPtrWillBeRawPtr<CSSImageValue> imageValue = CSSImageValue::create(url, document().completeURL(url));
+            RawPtr<CSSImageValue> imageValue = CSSImageValue::create(url, document().completeURL(url));
             imageValue->setInitiator(localName());
             imageValue->setReferrer(Referrer(document().outgoingReferrer(), document().getReferrerPolicy()));
             style->setProperty(CSSProperty(CSSPropertyBackgroundImage, imageValue.release()));

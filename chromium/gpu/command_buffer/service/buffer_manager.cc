@@ -34,6 +34,7 @@ BufferManager::BufferManager(MemoryTracker* memory_tracker,
       allow_buffers_on_multiple_targets_(false),
       allow_fixed_attribs_(false),
       buffer_count_(0),
+      primitive_restart_fixed_index_(0),
       have_context_(true),
       use_client_side_arrays_for_stream_buffers_(
           feature_info
@@ -118,7 +119,6 @@ Buffer::Buffer(BufferManager* manager, GLuint service_id)
     : manager_(manager),
       size_(0),
       deleted_(false),
-      shadowed_(false),
       is_client_side_array_(false),
       service_id_(service_id),
       initial_target_(0),
@@ -137,28 +137,36 @@ Buffer::~Buffer() {
   }
 }
 
-void Buffer::SetInfo(
-    GLsizeiptr size, GLenum usage, bool shadow, const GLvoid* data,
-    bool is_client_side_array) {
+const GLvoid* Buffer::StageShadow(bool use_shadow,
+                                  GLsizeiptr size,
+                                  const GLvoid* data) {
+  shadow_.clear();
+  if (use_shadow) {
+    if (data) {
+      shadow_.insert(shadow_.begin(),
+                     static_cast<const uint8_t*>(data),
+                     static_cast<const uint8_t*>(data) + size);
+    } else {
+      shadow_.resize(size);
+    }
+    return shadow_.data();
+  } else {
+    return data;
+  }
+}
+
+void Buffer::SetInfo(GLsizeiptr size,
+                     GLenum usage,
+                     bool use_shadow,
+                     bool is_client_side_array) {
   usage_ = usage;
   is_client_side_array_ = is_client_side_array;
   ClearCache();
-  if (size != size_ || shadow != shadowed_) {
-    shadowed_ = shadow;
-    size_ = size;
-    if (shadowed_) {
-      shadow_.reset(new int8_t[size]);
-    } else {
-      shadow_.reset();
-    }
-  }
-  if (shadowed_) {
-    if (data) {
-      memcpy(shadow_.get(), data, size);
-    } else {
-      memset(shadow_.get(), 0, size);
-    }
-  }
+
+  // Shadow must have been setup already.
+  DCHECK_EQ(shadow_.size(), static_cast<size_t>(use_shadow ? size : 0u));
+  size_ = size;
+
   mapped_range_.reset(nullptr);
 }
 
@@ -176,8 +184,9 @@ bool Buffer::SetRange(
   if (!CheckRange(offset, size)) {
     return false;
   }
-  if (shadowed_) {
-    memcpy(shadow_.get() + offset, data, size);
+  if (!shadow_.empty()) {
+    DCHECK_LE(static_cast<size_t>(offset + size), shadow_.size());
+    memcpy(shadow_.data() + offset, data, size);
     ClearCache();
   }
   return true;
@@ -185,13 +194,14 @@ bool Buffer::SetRange(
 
 const void* Buffer::GetRange(
     GLintptr offset, GLsizeiptr size) const {
-  if (!shadowed_) {
+  if (shadow_.empty()) {
     return NULL;
   }
   if (!CheckRange(offset, size)) {
     return NULL;
   }
-  return shadow_.get() + offset;
+  DCHECK_LE(static_cast<size_t>(offset + size), shadow_.size());
+  return shadow_.data() + offset;
 }
 
 void Buffer::ClearCache() {
@@ -199,13 +209,17 @@ void Buffer::ClearCache() {
 }
 
 template <typename T>
-GLuint GetMaxValue(const void* data, GLuint offset, GLsizei count) {
+GLuint GetMaxValue(const void* data, GLuint offset, GLsizei count,
+    GLuint primitive_restart_index) {
   GLuint max_value = 0;
   const T* element =
       reinterpret_cast<const T*>(static_cast<const int8_t*>(data) + offset);
   const T* end = element + count;
   for (; element < end; ++element) {
     if (*element > max_value) {
+      if (*element == primitive_restart_index) {
+        continue;
+      }
       max_value = *element;
     }
   }
@@ -213,12 +227,52 @@ GLuint GetMaxValue(const void* data, GLuint offset, GLsizei count) {
 }
 
 bool Buffer::GetMaxValueForRange(
-    GLuint offset, GLsizei count, GLenum type, GLuint* max_value) {
-  Range range(offset, count, type);
+    GLuint offset, GLsizei count, GLenum type, bool primitive_restart_enabled,
+    GLuint* max_value) {
+  GLuint primitive_restart_index = 0;
+  if (primitive_restart_enabled) {
+    switch (type) {
+      case GL_UNSIGNED_BYTE:
+        primitive_restart_index = 0xFF;
+        break;
+      case GL_UNSIGNED_SHORT:
+        primitive_restart_index = 0xFFFF;
+        break;
+      case GL_UNSIGNED_INT:
+        primitive_restart_index = 0xFFFFFFFF;
+        break;
+      default:
+        NOTREACHED();  // should never get here by validation.
+        break;
+    }
+  }
+
+  Range range(offset, count, type, primitive_restart_enabled);
   RangeToMaxValueMap::iterator it = range_set_.find(range);
   if (it != range_set_.end()) {
     *max_value = it->second;
     return true;
+  }
+  // Optimization. If:
+  //  - primitive restart is enabled
+  //  - we don't have an entry in the range set for these parameters
+  //    for the situation when primitive restart is enabled
+  //  - we do have an entry in the range set for these parameters for
+  //    the situation when primitive restart is disabled
+  //  - this entry is less than the primitive restart index
+  // Then we can repurpose this entry for the situation when primitive
+  // restart is enabled. Otherwise, we need to compute the max index
+  // from scratch.
+  if (primitive_restart_enabled) {
+    Range disabled_range(offset, count, type, false);
+    RangeToMaxValueMap::iterator it = range_set_.find(disabled_range);
+    if (it != range_set_.end() && it->second < primitive_restart_index) {
+      // This reuses the max value for the case where primitive
+      // restart is enabled.
+      range_set_.insert(std::make_pair(range, it->second));
+      *max_value = it->second;
+      return true;
+    }
   }
 
   uint32_t size;
@@ -235,7 +289,7 @@ bool Buffer::GetMaxValueForRange(
     return false;
   }
 
-  if (!shadowed_) {
+  if (shadow_.empty()) {
     return false;
   }
 
@@ -243,21 +297,24 @@ bool Buffer::GetMaxValueForRange(
   GLuint max_v = 0;
   switch (type) {
     case GL_UNSIGNED_BYTE:
-      max_v = GetMaxValue<uint8_t>(shadow_.get(), offset, count);
+      max_v = GetMaxValue<uint8_t>(shadow_.data(), offset, count,
+                                   primitive_restart_index);
       break;
     case GL_UNSIGNED_SHORT:
       // Check we are not accessing an odd byte for a 2 byte value.
       if ((offset & 1) != 0) {
         return false;
       }
-      max_v = GetMaxValue<uint16_t>(shadow_.get(), offset, count);
+      max_v = GetMaxValue<uint16_t>(shadow_.data(), offset, count,
+                                    primitive_restart_index);
       break;
     case GL_UNSIGNED_INT:
       // Check we are not accessing a non aligned address for a 4 byte value.
       if ((offset & 3) != 0) {
         return false;
       }
-      max_v = GetMaxValue<uint32_t>(shadow_.get(), offset, count);
+      max_v = GetMaxValue<uint32_t>(shadow_.data(), offset, count,
+                                    primitive_restart_index);
       break;
     default:
       NOTREACHED();  // should never get here by validation.
@@ -290,19 +347,25 @@ bool BufferManager::UseNonZeroSizeForClientSideArrayBuffer() {
              .use_non_zero_size_for_client_side_stream_buffers;
 }
 
-void BufferManager::SetInfo(Buffer* buffer, GLenum target, GLsizeiptr size,
-                            GLenum usage, const GLvoid* data) {
-  DCHECK(buffer);
-  memory_type_tracker_->TrackMemFree(buffer->size());
+bool BufferManager::UseShadowBuffer(GLenum target, GLenum usage) {
   const bool is_client_side_array = IsUsageClientSideArray(usage);
   const bool support_fixed_attribs =
     gfx::GetGLImplementation() == gfx::kGLImplementationEGLGLES2;
+
   // TODO(zmo): Don't shadow buffer data on ES3. crbug.com/491002.
-  const bool shadow = target == GL_ELEMENT_ARRAY_BUFFER ||
-                      allow_buffers_on_multiple_targets_ ||
-                      (allow_fixed_attribs_ && !support_fixed_attribs) ||
-                      is_client_side_array;
-  buffer->SetInfo(size, usage, shadow, data, is_client_side_array);
+  return (
+      target == GL_ELEMENT_ARRAY_BUFFER || allow_buffers_on_multiple_targets_ ||
+      (allow_fixed_attribs_ && !support_fixed_attribs) || is_client_side_array);
+}
+
+void BufferManager::SetInfo(Buffer* buffer,
+                            GLenum target,
+                            GLsizeiptr size,
+                            GLenum usage,
+                            bool use_shadow) {
+  DCHECK(buffer);
+  memory_type_tracker_->TrackMemFree(buffer->size());
+  buffer->SetInfo(size, usage, use_shadow, IsUsageClientSideArray(usage));
   memory_type_tracker_->TrackMemAlloc(buffer->size());
 }
 
@@ -323,6 +386,12 @@ void BufferManager::ValidateAndDoBufferData(
   if (size < 0) {
     ERRORSTATE_SET_GL_ERROR(
         error_state, GL_INVALID_VALUE, "glBufferData", "size < 0");
+    return;
+  }
+
+  if (size > 1024 * 1024 * 1024) {
+    ERRORSTATE_SET_GL_ERROR(error_state, GL_OUT_OF_MEMORY, "glBufferData",
+                            "cannot allocate more than 1GB.");
     return;
   }
 
@@ -350,13 +419,10 @@ void BufferManager::DoBufferData(
     GLsizeiptr size,
     GLenum usage,
     const GLvoid* data) {
-  // Clear the buffer to 0 if no initial data was passed in.
-  scoped_ptr<int8_t[]> zero;
-  if (!data) {
-    zero.reset(new int8_t[size]);
-    memset(zero.get(), 0, size);
-    data = zero.get();
-  }
+  // Stage the shadow buffer first if we are using a shadow buffer so that we
+  // validate what we store internally.
+  const bool use_shadow = UseShadowBuffer(target, usage);
+  data = buffer->StageShadow(use_shadow, size, data);
 
   ERRORSTATE_COPY_REAL_GL_ERRORS_TO_WRAPPER(error_state, "glBufferData");
   if (IsUsageClientSideArray(usage)) {
@@ -366,11 +432,12 @@ void BufferManager::DoBufferData(
     glBufferData(target, size, data, usage);
   }
   GLenum error = ERRORSTATE_PEEK_GL_ERROR(error_state, "glBufferData");
-  if (error == GL_NO_ERROR) {
-    SetInfo(buffer, target, size, usage, data);
-  } else {
-    SetInfo(buffer, target, 0, usage, NULL);
+  if (error != GL_NO_ERROR) {
+    size = 0;
+    buffer->StageShadow(false, 0, nullptr);  // Also clear the shadow.
   }
+
+  SetInfo(buffer, target, size, usage, use_shadow);
 }
 
 void BufferManager::ValidateAndDoBufferSubData(
@@ -533,6 +600,28 @@ Buffer* BufferManager::GetBufferInfoForTarget(
     default:
       NOTREACHED();
       return nullptr;
+  }
+}
+
+void BufferManager::SetPrimitiveRestartFixedIndexIfNecessary(GLenum type) {
+  GLuint index = 0;
+  switch (type) {
+    case GL_UNSIGNED_BYTE:
+      index = 0xFF;
+      break;
+    case GL_UNSIGNED_SHORT:
+      index = 0xFFFF;
+      break;
+    case GL_UNSIGNED_INT:
+      index = 0xFFFFFFFF;
+      break;
+    default:
+      NOTREACHED();  // should never get here by validation.
+      break;
+  }
+  if (primitive_restart_fixed_index_ != index) {
+    glPrimitiveRestartIndex(index);
+    primitive_restart_fixed_index_ = index;
   }
 }
 

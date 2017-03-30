@@ -53,11 +53,11 @@ WebLayer* toWebLayer(GraphicsLayer* layer)
 
 } // namespace
 
-PassOwnPtrWillBeRawPtr<ScrollAnimatorBase> ScrollAnimatorBase::create(ScrollableArea* scrollableArea)
+ScrollAnimatorBase* ScrollAnimatorBase::create(ScrollableArea* scrollableArea)
 {
     if (scrollableArea && scrollableArea->scrollAnimatorEnabled())
-        return adoptPtrWillBeNoop(new ScrollAnimator(scrollableArea));
-    return adoptPtrWillBeNoop(new ScrollAnimatorBase(scrollableArea));
+        return new ScrollAnimator(scrollableArea);
+    return new ScrollAnimatorBase(scrollableArea);
 }
 
 ScrollAnimator::ScrollAnimator(ScrollableArea* scrollableArea, WTF::TimeFunction timeFunction)
@@ -82,13 +82,11 @@ bool ScrollAnimator::hasRunningAnimation() const
     return (m_animationCurve || m_runState == RunState::WaitingToSendToCompositor);
 }
 
-float ScrollAnimator::computeDeltaToConsume(
-    ScrollbarOrientation orientation, float pixelDelta) const
+FloatSize ScrollAnimator::computeDeltaToConsume(const FloatSize& delta) const
 {
     FloatPoint pos = desiredTargetPosition();
-    float currentPos = (orientation == HorizontalScrollbar) ? pos.x() : pos.y();
-    float newPos = clampScrollPosition(orientation, currentPos + pixelDelta);
-    return (currentPos == newPos) ? 0.0f : (newPos - currentPos);
+    FloatPoint newPos = toFloatPoint(m_scrollableArea->clampScrollPosition(pos + delta));
+    return newPos - pos;
 }
 
 void ScrollAnimator::resetAnimationState()
@@ -99,11 +97,11 @@ void ScrollAnimator::resetAnimationState()
     m_startTime = 0.0;
 }
 
-ScrollResultOneDimensional ScrollAnimator::userScroll(
-    ScrollbarOrientation orientation, ScrollGranularity granularity, float step, float delta)
+ScrollResult ScrollAnimator::userScroll(
+    ScrollGranularity granularity, const FloatSize& delta)
 {
     if (!m_scrollableArea->scrollAnimatorEnabled())
-        return ScrollAnimatorBase::userScroll(orientation, granularity, step, delta);
+        return ScrollAnimatorBase::userScroll(granularity, delta);
 
     TRACE_EVENT0("blink", "ScrollAnimator::scroll");
 
@@ -111,24 +109,25 @@ ScrollResultOneDimensional ScrollAnimator::userScroll(
         // Cancel scroll animation because asked to instant scroll.
         if (hasRunningAnimation())
             cancelAnimation();
-        return ScrollAnimatorBase::userScroll(orientation, granularity, step, delta);
+        return ScrollAnimatorBase::userScroll(granularity, delta);
     }
 
     bool needsPostAnimationCleanup = m_runState == RunState::PostAnimationCleanup;
     if (m_runState == RunState::PostAnimationCleanup)
         resetAnimationState();
 
-    float usedPixelDelta = computeDeltaToConsume(orientation, step * delta);
-    FloatPoint pixelDelta = (orientation == VerticalScrollbar
-        ? FloatPoint(0, usedPixelDelta) : FloatPoint(usedPixelDelta, 0));
+    FloatSize consumedDelta = computeDeltaToConsume(delta);
+
     FloatPoint targetPos = desiredTargetPosition();
-    targetPos.moveBy(pixelDelta);
+    targetPos.move(consumedDelta);
 
     if (willAnimateToOffset(targetPos)) {
         m_lastGranularity = granularity;
         // Report unused delta only if there is no animation running. See
         // comment below regarding scroll latching.
-        return ScrollResultOneDimensional(/* didScroll */ true, /* unusedScrollDelta */ 0);
+        // TODO(bokan): Need to standardize how ScrollAnimators report
+        // unusedDelta. This differs from ScrollAnimatorMac currently.
+        return ScrollResult(true, true, 0, 0);
     }
 
     // If the run state when this method was called was PostAnimationCleanup and
@@ -140,7 +139,7 @@ ScrollResultOneDimensional ScrollAnimator::userScroll(
     // Report unused delta only if there is no animation and we are not
     // starting one. This ensures we latch for the duration of the
     // animation rather than animating multiple scrollers at the same time.
-    return ScrollResultOneDimensional(/* didScroll */ false, delta);
+    return ScrollResult(false, false, delta.width(), delta.height());
 }
 
 bool ScrollAnimator::willAnimateToOffset(const FloatPoint& targetPos)
@@ -193,8 +192,7 @@ bool ScrollAnimator::willAnimateToOffset(const FloatPoint& targetPos)
 
 void ScrollAnimator::scrollToOffsetWithoutAnimation(const FloatPoint& offset)
 {
-    m_currentPosX = offset.x();
-    m_currentPosY = offset.y();
+    m_currentPos = offset;
 
     resetAnimationState();
     notifyPositionChanged();
@@ -215,13 +213,12 @@ void ScrollAnimator::tickAnimation(double monotonicTime)
 
     offset = FloatPoint(m_scrollableArea->clampScrollPosition(offset));
 
-    m_currentPosX = offset.x();
-    m_currentPosY = offset.y();
+    m_currentPos = offset;
 
     if (isFinished)
         m_runState = RunState::PostAnimationCleanup;
     else
-        scrollableArea()->scheduleAnimation();
+        getScrollableArea()->scheduleAnimation();
 
     TRACE_EVENT0("blink", "ScrollAnimator::notifyPositionChanged");
     notifyPositionChanged();
@@ -301,6 +298,9 @@ void ScrollAnimator::updateCompositorAnimations()
 
     if (m_runState == RunState::WaitingToSendToCompositor
         || m_runState == RunState::RunningOnCompositorButNeedsUpdate) {
+        if (!m_compositorAnimationAttachedToLayerId)
+            reattachCompositorPlayerIfNeeded(getScrollableArea()->compositorAnimationTimeline());
+
         if (m_runState == RunState::RunningOnCompositorButNeedsUpdate) {
             // Abort the running animation before a new one with an updated
             // target is added.
@@ -342,7 +342,7 @@ void ScrollAnimator::updateCompositorAnimations()
 
 void ScrollAnimator::addMainThreadScrollingReason()
 {
-    if (WebLayer* scrollLayer = toWebLayer(scrollableArea()->layerForScrolling())) {
+    if (WebLayer* scrollLayer = toWebLayer(getScrollableArea()->layerForScrolling())) {
         scrollLayer->addMainThreadScrollingReasons(
             MainThreadScrollingReason::kAnimatingScrollOnMainThread);
     }
@@ -350,7 +350,7 @@ void ScrollAnimator::addMainThreadScrollingReason()
 
 void ScrollAnimator::removeMainThreadScrollingReason()
 {
-    if (WebLayer* scrollLayer = toWebLayer(scrollableArea()->layerForScrolling())) {
+    if (WebLayer* scrollLayer = toWebLayer(getScrollableArea()->layerForScrolling())) {
         scrollLayer->clearMainThreadScrollingReasons(
             MainThreadScrollingReason::kAnimatingScrollOnMainThread);
     }
@@ -371,7 +371,7 @@ void ScrollAnimator::notifyCompositorAnimationFinished(int groupId)
 void ScrollAnimator::notifyAnimationTakeover(
     double monotonicTime,
     double animationStartTime,
-    scoped_ptr<cc::AnimationCurve> curve)
+    std::unique_ptr<cc::AnimationCurve> curve)
 {
     // If there is already an animation running and the compositor asks to take
     // over an animation, do nothing to avoid judder.
@@ -413,7 +413,7 @@ void ScrollAnimator::layerForCompositedScrollingDidChange(
 
 bool ScrollAnimator::registerAndScheduleAnimation()
 {
-    scrollableArea()->registerForAnimation();
+    getScrollableArea()->registerForAnimation();
     if (!m_scrollableArea->scheduleAnimation()) {
         scrollToOffsetWithoutAnimation(m_targetOffset);
         resetAnimationState();

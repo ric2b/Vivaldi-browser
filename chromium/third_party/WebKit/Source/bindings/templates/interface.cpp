@@ -167,6 +167,8 @@ static void indexedPropertyDeleterCallback(uint32_t index, const v8::PropertyCal
 {% set getter = named_property_getter %}
 static void namedPropertyGetter(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
+    if (!name->IsString())
+        return;
     auto nameString = name.As<v8::String>();
     {{cpp_class}}* impl = {{v8_class}}::toImpl(info.Holder());
     AtomicString propertyName = toCoreAtomicString(nameString);
@@ -220,6 +222,8 @@ static void namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::Prop
 {% set setter = named_property_setter %}
 static void namedPropertySetter(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
+    if (!name->IsString())
+        return;
     auto nameString = name.As<v8::String>();
     {% if setter.has_exception_state %}
     v8::String::Utf8Value namedProperty(nameString);
@@ -291,6 +295,8 @@ static void namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::
    communicate property attributes. #}
 static void namedPropertyQuery(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info)
 {
+    if (!name->IsString())
+        return;
     {{cpp_class}}* impl = {{v8_class}}::toImpl(info.Holder());
     AtomicString propertyName = toCoreAtomicString(name.As<v8::String>());
     v8::String::Utf8Value namedProperty(name);
@@ -335,6 +341,8 @@ static void namedPropertyQueryCallback(v8::Local<v8::Name> name, const v8::Prope
 {% set deleter = named_property_deleter %}
 static void namedPropertyDeleter(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Boolean>& info)
 {
+    if (!name->IsString())
+        return;
     {{cpp_class}}* impl = {{v8_class}}::toImpl(info.Holder());
     AtomicString propertyName = toCoreAtomicString(name.As<v8::String>());
     {% if deleter.is_raises_exception %}
@@ -428,6 +436,8 @@ static void namedPropertyEnumeratorCallback(const v8::PropertyCallbackInfo<v8::A
 {% if has_origin_safe_method_setter %}
 static void {{cpp_class}}OriginSafeMethodSetter(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
 {
+    if (!name->IsString())
+        return;
     v8::Local<v8::Object> holder = {{v8_class}}::findInstanceInPrototypeChain(info.This(), info.GetIsolate());
     if (holder.IsEmpty())
         return;
@@ -456,13 +466,15 @@ static void {{cpp_class}}OriginSafeMethodSetterCallback(v8::Local<v8::Name> name
 {% block named_constructor %}
 {% from 'methods.cpp' import generate_constructor with context %}
 {% if named_constructor %}
+{% set to_active_scriptwrappable = '%s::toActiveScriptWrappable' % v8_class
+                                   if active_scriptwrappable else '0' %}
 // Suppress warning: global constructors, because struct WrapperTypeInfo is trivial
 // and does not depend on another global objects.
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::refObject, {{v8_class}}::derefObject, {{v8_class}}::trace, 0, {{v8_class}}::preparePrototypeAndInterfaceObject, {{v8_class}}::installConditionallyEnabledProperties, "{{interface_name}}", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}}, WrapperTypeInfo::{{gc_type}} };
+const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::refObject, {{v8_class}}::derefObject, {{v8_class}}::trace, {{to_active_scriptwrappable}}, 0, {{v8_class}}::preparePrototypeAndInterfaceObject, {{v8_class}}::installConditionallyEnabledProperties, "{{interface_name}}", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}}, WrapperTypeInfo::{{gc_type}} };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -616,7 +628,7 @@ void {{v8_class}}::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>
        'static_cast<v8::PropertyAttribute>(%s)' %
        ' | '.join(method.property_attributes or ['v8::None']) %}
 {% set only_exposed_to_private_script = 'V8DOMConfiguration::OnlyExposedToPrivateScript' if method.only_exposed_to_private_script else 'V8DOMConfiguration::ExposedToAllScripts' %}
-{% set holder_check = 'V8DOMConfiguration::DoNotCheckHolder' if method.is_do_not_check_signature else 'V8DOMConfiguration::CheckHolder' %}
+{% set holder_check = 'V8DOMConfiguration::CheckHolder' %}
 const V8DOMConfiguration::AttributeConfiguration {{method.name}}OriginSafeAttributeConfiguration = {
     "{{method.name}}", {{getter_callback}}, {{setter_callback}}, {{getter_callback_for_main_world}}, {{setter_callback_for_main_world}}, &{{v8_class}}::wrapperTypeInfo, v8::ALL_CAN_READ, {{property_attribute}}, {{only_exposed_to_private_script}}, {{property_location(method)}}, {{holder_check}},
 };
@@ -907,25 +919,29 @@ V8DOMConfiguration::installAccessor(isolate, v8::Local<v8::Object>(), prototypeO
 
 
 {##############################################################################}
+{% block to_active_scriptwrappable %}
+{% if active_scriptwrappable %}
+ActiveScriptWrappable* {{v8_class}}::toActiveScriptWrappable(v8::Local<v8::Object> wrapper)
+{
+    return toImpl(wrapper);
+}
+
+{% endif %}
+{% endblock %}
+
+
+{##############################################################################}
 {% block ref_object_and_deref_object %}
 void {{v8_class}}::refObject(ScriptWrappable* scriptWrappable)
 {
-{% if gc_type == 'WillBeGarbageCollectedObject' %}
-#if !ENABLE(OILPAN)
-    scriptWrappable->toImpl<{{cpp_class}}>()->ref();
-#endif
-{% elif gc_type == 'RefCountedObject' %}
+{% if gc_type == 'RefCountedObject' %}
     scriptWrappable->toImpl<{{cpp_class}}>()->ref();
 {% endif %}
 }
 
 void {{v8_class}}::derefObject(ScriptWrappable* scriptWrappable)
 {
-{% if gc_type == 'WillBeGarbageCollectedObject' %}
-#if !ENABLE(OILPAN)
-    scriptWrappable->toImpl<{{cpp_class}}>()->deref();
-#endif
-{% elif gc_type == 'RefCountedObject' %}
+{% if gc_type == 'RefCountedObject' %}
     scriptWrappable->toImpl<{{cpp_class}}>()->deref();
 {% endif %}
 }

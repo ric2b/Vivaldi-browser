@@ -29,6 +29,7 @@
 #include "core/css/StyleSheetList.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeTraversal.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/dom/shadow/DistributedNodes.h"
 #include "core/frame/Deprecation.h"
 #include "core/html/HTMLContentElement.h"
@@ -50,7 +51,7 @@ public:
 
 private:
     void detachNonDistributedNodes();
-    WillBeHeapVector<RawPtrWillBeMember<Node>, 32> m_nodes;
+    HeapVector<Member<Node>, 32> m_nodes;
     Vector<bool, 32> m_distributed;
 };
 
@@ -128,9 +129,9 @@ inline void DistributionPool::detachNonDistributedNodes()
     }
 }
 
-PassOwnPtrWillBeRawPtr<ElementShadow> ElementShadow::create()
+RawPtr<ElementShadow> ElementShadow::create()
 {
-    return adoptPtrWillBeNoop(new ElementShadow());
+    return new ElementShadow();
 }
 
 ElementShadow::ElementShadow()
@@ -167,7 +168,7 @@ ShadowRoot& ElementShadow::addShadowRoot(Element& shadowHost, ShadowRootType typ
     for (ShadowRoot* root = m_shadowRoots.head(); root; root = root->olderShadowRoot())
         root->lazyReattachIfAttached();
 
-    RefPtrWillBeRawPtr<ShadowRoot> shadowRoot = ShadowRoot::create(shadowHost.document(), type);
+    RawPtr<ShadowRoot> shadowRoot = ShadowRoot::create(shadowHost.document(), type);
     shadowRoot->setParentOrShadowHostNode(&shadowHost);
     shadowRoot->setParentTreeScope(shadowHost.treeScope());
     m_shadowRoots.push(shadowRoot.get());
@@ -187,9 +188,9 @@ void ElementShadow::removeDetachedShadowRoots()
 {
     // Dont protect this ref count.
     Element* shadowHost = host();
-    ASSERT(shadowHost);
+    DCHECK(shadowHost);
 
-    while (RefPtrWillBeRawPtr<ShadowRoot> oldRoot = m_shadowRoots.head()) {
+    while (RawPtr<ShadowRoot> oldRoot = m_shadowRoots.head()) {
         InspectorInstrumentation::willPopShadowRoot(shadowHost, oldRoot.get());
         shadowHost->document().removeFocusedElementOfSubtree(oldRoot.get());
         m_shadowRoots.removeHead();
@@ -257,7 +258,10 @@ bool ElementShadow::hasSameStyles(const ElementShadow* other) const
 
 const InsertionPoint* ElementShadow::finalDestinationInsertionPointFor(const Node* key) const
 {
-    ASSERT(key && !key->needsDistributionRecalc());
+    DCHECK(key);
+#if DCHECK_IS_ON()
+    DCHECK(!key->needsDistributionRecalc());
+#endif
     NodeToDestinationInsertionPoints::const_iterator it = m_nodeToInsertionPoints.find(key);
 #if ENABLE(OILPAN)
     return it == m_nodeToInsertionPoints.end() ? nullptr : it->value->last().get();
@@ -268,7 +272,10 @@ const InsertionPoint* ElementShadow::finalDestinationInsertionPointFor(const Nod
 
 const DestinationInsertionPoints* ElementShadow::destinationInsertionPointsFor(const Node* key) const
 {
-    ASSERT(key && !key->needsDistributionRecalc());
+    DCHECK(key);
+#if DCHECK_IS_ON()
+    DCHECK(!key->needsDistributionRecalc());
+#endif
     NodeToDestinationInsertionPoints::const_iterator it = m_nodeToInsertionPoints.find(key);
 #if ENABLE(OILPAN)
     return it == m_nodeToInsertionPoints.end() ? nullptr : it->value.get();
@@ -287,18 +294,18 @@ void ElementShadow::distribute()
 
 void ElementShadow::distributeV0()
 {
-    WillBeHeapVector<RawPtrWillBeMember<HTMLShadowElement>, 32> shadowInsertionPoints;
+    HeapVector<Member<HTMLShadowElement>, 32> shadowInsertionPoints;
     DistributionPool pool(*host());
 
     for (ShadowRoot* root = &youngestShadowRoot(); root; root = root->olderShadowRoot()) {
         HTMLShadowElement* shadowInsertionPoint = 0;
-        const WillBeHeapVector<RefPtrWillBeMember<InsertionPoint>>& insertionPoints = root->descendantInsertionPoints();
+        const HeapVector<Member<InsertionPoint>>& insertionPoints = root->descendantInsertionPoints();
         for (size_t i = 0; i < insertionPoints.size(); ++i) {
             InsertionPoint* point = insertionPoints[i].get();
             if (!point->isActive())
                 continue;
             if (isHTMLShadowElement(*point)) {
-                ASSERT(!shadowInsertionPoint);
+                DCHECK(!shadowInsertionPoint);
                 shadowInsertionPoint = toHTMLShadowElement(point);
                 shadowInsertionPoints.append(shadowInsertionPoint);
             } else {
@@ -312,7 +319,7 @@ void ElementShadow::distributeV0()
     for (size_t i = shadowInsertionPoints.size(); i > 0; --i) {
         HTMLShadowElement* shadowInsertionPoint = shadowInsertionPoints[i - 1];
         ShadowRoot* root = shadowInsertionPoint->containingShadowRoot();
-        ASSERT(root);
+        DCHECK(root);
         if (root->isOldest()) {
             pool.distributeTo(shadowInsertionPoint, this);
         } else if (root->olderShadowRoot()->type() == root->type()) {
@@ -340,7 +347,7 @@ void ElementShadow::didDistributeNode(const Node* node, InsertionPoint* insertio
 #if ENABLE(OILPAN)
     NodeToDestinationInsertionPoints::AddResult result = m_nodeToInsertionPoints.add(node, nullptr);
     if (result.isNewEntry)
-        result.storedValue->value = adoptPtrWillBeNoop(new DestinationInsertionPoints());
+        result.storedValue->value = new DestinationInsertionPoints();
     result.storedValue->value->append(insertionPoint);
 #else
     NodeToDestinationInsertionPoints::AddResult result = m_nodeToInsertionPoints.add(node, DestinationInsertionPoints());
@@ -395,7 +402,6 @@ void ElementShadow::clearDistribution()
 
 DEFINE_TRACE(ElementShadow)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_nodeToInsertionPoints);
     visitor->trace(m_selectFeatures);
     // Shadow roots are linked with previous and next pointers which are traced.
@@ -403,7 +409,6 @@ DEFINE_TRACE(ElementShadow)
     // rest will be traced from there.
     visitor->trace(m_shadowRoots.head());
     visitor->trace(m_slotAssignment);
-#endif
 }
 
 } // namespace blink

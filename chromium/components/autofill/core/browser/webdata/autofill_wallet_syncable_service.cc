@@ -70,7 +70,8 @@ CreditCard CardFromSpecifics(const sync_pb::WalletMaskedCreditCard& card) {
   result.SetNumber(base::UTF8ToUTF16(card.last_four()));
   result.SetServerStatus(ServerToLocalStatus(card.status()));
   result.SetTypeForMaskedCard(CardTypeFromWalletCardType(card.type()));
-  result.SetRawInfo(CREDIT_CARD_NAME, base::UTF8ToUTF16(card.name_on_card()));
+  result.SetRawInfo(CREDIT_CARD_NAME_FULL,
+                    base::UTF8ToUTF16(card.name_on_card()));
   result.SetExpirationMonth(card.exp_month());
   result.SetExpirationYear(card.exp_year());
   return result;
@@ -189,12 +190,11 @@ AutofillWalletSyncableService::AutofillWalletSyncableService(
 AutofillWalletSyncableService::~AutofillWalletSyncableService() {
 }
 
-syncer::SyncMergeResult
-AutofillWalletSyncableService::MergeDataAndStartSyncing(
+syncer::SyncMergeResult AutofillWalletSyncableService::MergeDataAndStartSyncing(
     syncer::ModelType type,
     const syncer::SyncDataList& initial_sync_data,
-    scoped_ptr<syncer::SyncChangeProcessor> sync_processor,
-    scoped_ptr<syncer::SyncErrorFactory> sync_error_factory) {
+    std::unique_ptr<syncer::SyncChangeProcessor> sync_processor,
+    std::unique_ptr<syncer::SyncErrorFactory> sync_error_factory) {
   DCHECK(thread_checker_.CalledOnValidThread());
   sync_processor_ = std::move(sync_processor);
   return SetSyncData(initial_sync_data);

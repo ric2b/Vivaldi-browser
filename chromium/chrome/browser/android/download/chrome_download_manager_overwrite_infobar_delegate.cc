@@ -4,16 +4,34 @@
 
 #include "chrome/browser/android/download/chrome_download_manager_overwrite_infobar_delegate.h"
 
+#include <memory>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/files/file_util.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/android/infobars/download_overwrite_infobar.h"
 #include "components/infobars/core/infobar.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
+
+namespace {
+
+void DeleteExistingDownloadFile(
+    const base::FilePath& download_path,
+    const DownloadTargetDeterminerDelegate::FileSelectedCallback& callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
+  base::File::Info info;
+  if (GetFileInfo(download_path, &info) && !info.is_directory)
+    base::DeleteFile(download_path, false);
+
+  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
+                                   base::Bind(callback, download_path));
+}
+
+}  // namespace
 
 namespace chrome {
 namespace android {
@@ -28,7 +46,7 @@ void ChromeDownloadManagerOverwriteInfoBarDelegate::Create(
     const base::FilePath& suggested_path,
     const DownloadTargetDeterminerDelegate::FileSelectedCallback& callback) {
   infobar_service->AddInfoBar(DownloadOverwriteInfoBar::CreateInfoBar(
-      make_scoped_ptr(new ChromeDownloadManagerOverwriteInfoBarDelegate(
+      base::WrapUnique(new ChromeDownloadManagerOverwriteInfoBarDelegate(
           suggested_path, callback))));
 }
 
@@ -47,7 +65,10 @@ ChromeDownloadManagerOverwriteInfoBarDelegate::GetIdentifier() const {
 }
 
 bool ChromeDownloadManagerOverwriteInfoBarDelegate::OverwriteExistingFile() {
-  file_selected_callback_.Run(suggested_download_path_);
+  content::BrowserThread::PostTask(
+      content::BrowserThread::FILE, FROM_HERE,
+      base::Bind(&DeleteExistingDownloadFile, suggested_download_path_,
+                 file_selected_callback_));
   return true;
 }
 

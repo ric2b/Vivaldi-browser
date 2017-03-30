@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "media/base/android/media_drm_bridge_cdm_context.h"
 #include "media/base/android/provision_fetcher.h"
 #include "media/base/cdm_promise_adapter.h"
 #include "media/base/media_export.h"
@@ -55,9 +56,9 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
   using MediaCryptoReadyCB = base::Callback<void(JavaObjectPtr media_crypto,
                                                  bool needs_protected_surface)>;
 
-  // Checks whether MediaDRM is available.
-  // All other static methods check IsAvailable() internally. There's no need
-  // to check IsAvailable() explicitly before calling them.
+  // Checks whether MediaDRM is available and usable, including for decoding.
+  // All other static methods check IsAvailable() or equivalent internally.
+  // There is no need to check IsAvailable() explicitly before calling them.
   static bool IsAvailable();
 
   static bool RegisterMediaDrmBridge(JNIEnv* env);
@@ -114,6 +115,7 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
                     scoped_ptr<media::SimpleCdmPromise> promise) override;
   void RemoveSession(const std::string& session_id,
                      scoped_ptr<media::SimpleCdmPromise> promise) override;
+  CdmContext* GetCdmContext() override;
   void DeleteOnCorrectThread() const override;
 
   // PlayerTracker implementation. Can be called on any thread.
@@ -243,6 +245,16 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
   // For DeleteSoon() in DeleteOnCorrectThread().
   friend class base::DeleteHelper<MediaDrmBridge>;
 
+  static scoped_refptr<MediaDrmBridge> CreateInternal(
+      const std::string& key_system,
+      SecurityLevel security_level,
+      const CreateFetcherCB& create_fetcher_cb,
+      const SessionMessageCB& session_message_cb,
+      const SessionClosedCB& session_closed_cb,
+      const LegacySessionErrorCB& legacy_session_error_cb,
+      const SessionKeysChangeCB& session_keys_change_cb,
+      const SessionExpirationUpdateCB& session_expiration_update_cb);
+
   // Constructs a MediaDrmBridge for |scheme_uuid| and |security_level|. The
   // default security level will be used if |security_level| is
   // SECURITY_LEVEL_DEFAULT. Sessions should not be created if session callbacks
@@ -275,6 +287,9 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
 
   // Process the data received by provisioning server.
   void ProcessProvisionResponse(bool success, const std::string& response);
+
+  // Called on the |task_runner_| when there is additional usable key.
+  void OnHasAdditionalUsableKey();
 
   // UUID of the key system.
   std::vector<uint8_t> scheme_uuid_;
@@ -315,6 +330,8 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
 
   // Default task runner.
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+
+  MediaDrmBridgeCdmContext media_drm_bridge_cdm_context_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<MediaDrmBridge> weak_factory_;

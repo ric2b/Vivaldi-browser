@@ -13,15 +13,37 @@
 
 namespace content {
 
+namespace {
+using EventType = ServiceWorkerMetrics::EventType;
+EventType ResourceTypeToEventType(ResourceType resource_type) {
+  switch (resource_type) {
+    case RESOURCE_TYPE_MAIN_FRAME:
+      return EventType::FETCH_MAIN_FRAME;
+    case RESOURCE_TYPE_SUB_FRAME:
+      return EventType::FETCH_SUB_FRAME;
+    case RESOURCE_TYPE_SHARED_WORKER:
+      return EventType::FETCH_SHARED_WORKER;
+    case RESOURCE_TYPE_SERVICE_WORKER:
+    case RESOURCE_TYPE_LAST_TYPE:
+      NOTREACHED() << resource_type;
+      return EventType::FETCH_SUB_RESOURCE;
+    default:
+      return EventType::FETCH_SUB_RESOURCE;
+  }
+}
+}  // namespace
+
 ServiceWorkerFetchDispatcher::ServiceWorkerFetchDispatcher(
     scoped_ptr<ServiceWorkerFetchRequest> request,
     ServiceWorkerVersion* version,
+    ResourceType resource_type,
     const base::Closure& prepare_callback,
     const FetchCallback& fetch_callback)
     : version_(version),
       prepare_callback_(prepare_callback),
       fetch_callback_(fetch_callback),
       request_(std::move(request)),
+      resource_type_(resource_type),
       weak_factory_(this) {}
 
 ServiceWorkerFetchDispatcher::~ServiceWorkerFetchDispatcher() {}
@@ -47,6 +69,7 @@ void ServiceWorkerFetchDispatcher::DidWaitActivation() {
     return;
   }
   version_->RunAfterStartWorker(
+      GetEventType(),
       base::Bind(&ServiceWorkerFetchDispatcher::DispatchFetchEvent,
                  weak_factory_.GetWeakPtr()),
       base::Bind(&ServiceWorkerFetchDispatcher::DidFail,
@@ -71,10 +94,9 @@ void ServiceWorkerFetchDispatcher::DispatchFetchEvent() {
   base::Closure prepare_callback = prepare_callback_;
   prepare_callback.Run();
 
-  int request_id =
-      version_->StartRequest(ServiceWorkerMetrics::EventType::FETCH,
-                             base::Bind(&ServiceWorkerFetchDispatcher::DidFail,
-                                        weak_factory_.GetWeakPtr()));
+  int request_id = version_->StartRequest(
+      GetEventType(), base::Bind(&ServiceWorkerFetchDispatcher::DidFail,
+                                 weak_factory_.GetWeakPtr()));
   version_->DispatchEvent<ServiceWorkerHostMsg_FetchEventFinished>(
       request_id, ServiceWorkerMsg_FetchEvent(request_id, *request_.get()),
       base::Bind(&ServiceWorkerFetchDispatcher::DidFinish,
@@ -108,6 +130,13 @@ void ServiceWorkerFetchDispatcher::DidFinish(
   FetchCallback fetch_callback = fetch_callback_;
   scoped_refptr<ServiceWorkerVersion> version = version_;
   fetch_callback.Run(SERVICE_WORKER_OK, fetch_result, response, version);
+}
+
+ServiceWorkerMetrics::EventType ServiceWorkerFetchDispatcher::GetEventType()
+    const {
+  if (request_->fetch_type == ServiceWorkerFetchType::FOREIGN_FETCH)
+    return ServiceWorkerMetrics::EventType::FOREIGN_FETCH;
+  return ResourceTypeToEventType(resource_type_);
 }
 
 }  // namespace content

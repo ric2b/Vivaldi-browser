@@ -30,7 +30,9 @@ public class MockDownloadNotificationService extends DownloadNotificationService
 
     @Override
     void updateNotification(int id, Notification notification) {
-        mNotificationIds.add(id);
+        if (!mNotificationIds.contains(id)) {
+            mNotificationIds.add(id);
+        }
     }
 
     public boolean isPaused() {
@@ -42,8 +44,8 @@ public class MockDownloadNotificationService extends DownloadNotificationService
     }
 
     @Override
-    public void cancelNotification(int downloadId) {
-        mNotificationIds.remove(Integer.valueOf(downloadId));
+    public void cancelNotification(int notificationId, String downloadGuid) {
+        mNotificationIds.remove(Integer.valueOf(notificationId));
     }
 
     @Override
@@ -51,5 +53,9 @@ public class MockDownloadNotificationService extends DownloadNotificationService
         return mContext == null ? super.getApplicationContext() : mContext;
     }
 
+    @Override
+    String getDurationString(long timeRemainingInMillis) {
+        return "";
+    }
 }
 

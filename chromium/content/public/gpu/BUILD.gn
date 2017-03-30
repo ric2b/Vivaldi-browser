@@ -16,15 +16,27 @@ group("gpu") {
 }
 
 source_set("gpu_sources") {
+  # You must depend on this via //content/public/gpu above for the component
+  # build to work properly.
   visibility = [ "//content/*" ]
+
+  configs += [ "//content:content_implementation" ]
 
   sources = [
     "content_gpu_client.h",
+    "gpu_video_decode_accelerator_factory.cc",
+    "gpu_video_decode_accelerator_factory.h",
   ]
 
   deps = [
     "//base",
     "//content:export",
     "//content/gpu:gpu_sources",
+    "//content/public/common:common_sources",
+    "//gpu/command_buffer/service",
+    "//gpu/config",
+    "//media:media",
   ]
+
+  allow_circular_includes_from = [ "//content/gpu:gpu_sources" ]
 }

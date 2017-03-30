@@ -8,21 +8,30 @@ regression sheriff role is now entirely focused on performance.
 ## Key Responsibilities
 
  * [Triage Regressions on the Perf Dashboard](#triage)
+ * [Triaging Data Stoppage Alerts](#datastoppage)
  * [Follow up on Performance Regressions](#followup)
  * [Give Feedback on our Infrastructure](#feedback)
 
-###<a name="triage"></a> Triage Regressions on the Perf Dashboard
+##<a name="triage"></a> Triage Regressions on the Perf Dashboard
 
 Open the perf dashboard [alerts page](https://chromeperf.appspot.com/alerts).
 
-In the upper right corner, **sign in with your Google account**. Signing in is
+In the upper right corner, **sign in with your Chromium account**. Signing in is
 important in order to be able to kick off bisect jobs, and see data from
 internal waterfalls.
 
-The page shows two lists; you are responsible for triaging
-**Performance Alerts**. The list can be sorted by clicking on the column header.
-When you click on the checkbox next to an alert, all the other alerts that
-occurred in the same revision range will be highlighted.
+Pick up **Chromium Perf Sheriff** from "Select an item ▼" drop down menu. There
+are two tables of alerts that may be shown:
+
+ * "Performance Alerts", which you should triage, and
+ * "Data Stoppage Alerts", which you can ignore.
+
+For either type of alert, if there are no currently pending alerts, then the
+table won't be shown.
+
+The list can be sorted by clicking on the column header. When you click on the
+checkbox next to an alert, all the other alerts that occurred in the same
+revision range will be highlighted.
 
 Check the boxes next to the alerts you want to take a look at, and click the
 "Graph" button. You'll be taken to a page with a table at the top listing all
@@ -64,7 +73,42 @@ below it the dashboard shows graphs of all the alerts checked in that table.
    bisects as you feel are necessary to investigate; [give feedback](#feedback)
    below if you feel that is not the case.
 
-###<a name="followup"></a> Follow up on Performance Regressions
+##<a name="datastoppage"></a> Triaging data stoppage alerts
+
+Data stoppage alerts are listed on the
+[perf dashboard alerts page](https://chromeperf.appspot.com/alerts). Whenever
+the dashboard is monitoring a metric, and that metric stops sending data, an
+alert is fired. Some of these alerts are expected:
+
+   * When a telemetry benchmark is disabled, we get a data stoppage alert.
+     Check the [code for the benchmark](https://code.google.com/p/chromium/codesearch#chromium/src/tools/perf/benchmarks/)
+     to see if it has been disabled, and if so associate the alert with the
+     bug for the disable.
+   * When a bot has been turned down. These should be announced to
+     perf-sheriffs@chromium.org, but if you can't find the bot on the waterfall
+     and you didn't see the announcement, double check in the speed infra chat.
+     Ideally these will be associated with the bug for the bot turndown, but
+     it's okay to mark them invalid if you can't find the bug.
+
+If there doesn't seem to be a valid reason for the alert, file a bug on it
+using the perf dashboard, and cc [the owner](http://go/perf-owners). Then do
+some diagnosis:
+
+   * Look at the perf dashboard graph to see the last revision we got data for,
+     and note that in the bug. Click on the `buildbot stdio` link in the tooltip
+     to find the buildbot status page for the last good build, and increment
+     the build number to get the first build with no data, and note that in the
+     bug as well. Check for any changes to the test in the revision range.
+   * Go to the buildbot status page of the bot which should be running the test.
+     Is it running the test? If not, note that in the bug.
+   * If it is running the test and the test is failing, diagnose as a test
+     failure.
+   * If it is running the test and the test is passing, check the `json.output`
+     link on the buildbot status page for the test. This is the data the test
+     sent to the perf dashboard. Are there null values? Sometimes it lists a
+     reason as well. Please put your finding in the bug.
+
+##<a name="followup"></a> Follow up on Performance Regressions
 
 During your shift, you should try to follow up on each of the bugs you filed.
 Once you've triaged all the alerts, check to see if the bisects have come back,
@@ -85,7 +129,7 @@ culprit follow up to ensure the CL author addresses the problem. If you are
 certain that a specific CL caused a performance regression, and the author does
 not have an immediate plan to address the problem, please revert the CL.
 
-###<a name="feedback"></a> Give Feedback on our Infrastructure
+##<a name="feedback"></a> Give Feedback on our Infrastructure
 
 Perf regression sheriffs have their eyes on the perf dashboard and bisects
 more than anyone else, and their feedback is invaluable for making sure these

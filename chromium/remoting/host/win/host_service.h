@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <list>
+#include <memory>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -103,7 +104,7 @@ class HostService : public WtsTerminalMonitor {
   // The list of observers receiving session notifications.
   std::list<RegisteredObserver> observers_;
 
-  scoped_ptr<DaemonProcess> daemon_process_;
+  std::unique_ptr<DaemonProcess> daemon_process_;
 
   // Service message loop. |main_task_runner_| must be valid as long as the
   // Control+C or service notification handler is registered.

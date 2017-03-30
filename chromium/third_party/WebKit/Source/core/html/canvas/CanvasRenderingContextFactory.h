@@ -23,8 +23,8 @@ public:
     CanvasRenderingContextFactory() = default;
     virtual ~CanvasRenderingContextFactory() { }
 
-    virtual PassOwnPtrWillBeRawPtr<CanvasRenderingContext> create(HTMLCanvasElement*, const CanvasContextCreationAttributes&, Document&) = 0;
-    virtual CanvasRenderingContext::ContextType contextType() const = 0;
+    virtual CanvasRenderingContext* create(HTMLCanvasElement*, const CanvasContextCreationAttributes&, Document&) = 0;
+    virtual CanvasRenderingContext::ContextType getContextType() const = 0;
     virtual void onError(HTMLCanvasElement*, const String& error) = 0;
 };
 

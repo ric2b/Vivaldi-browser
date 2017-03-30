@@ -6,13 +6,35 @@
 
 #include "build/build_config.h"
 #include "ui/base/material_design/material_design_controller.h"
+#include "ui/base/resource/resource_bundle.h"
+#include "ui/resources/grit/ui_resources.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/label_button_border.h"
+#include "ui/views/controls/focusable_border.h"
 #include "ui/views/controls/scrollbar/native_scroll_bar.h"
 
 namespace views {
 
 #if !defined(OS_MACOSX)
+
+// static
+gfx::ImageSkia PlatformStyle::CreateComboboxArrow(bool is_enabled,
+                                                  Combobox::Style style) {
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+  return *rb.GetImageSkiaNamed(IDR_MENU_DROPARROW);
+}
+
+// static
+scoped_ptr<FocusableBorder> PlatformStyle::CreateComboboxBorder() {
+  return make_scoped_ptr(new FocusableBorder());
+}
+
+// static
+scoped_ptr<Background> PlatformStyle::CreateComboboxBackground() {
+  return nullptr;
+}
+
 // static
 scoped_ptr<LabelButtonBorder> PlatformStyle::CreateLabelButtonBorder(
     Button::ButtonStyle style) {
@@ -31,7 +53,6 @@ scoped_ptr<LabelButtonBorder> PlatformStyle::CreateLabelButtonBorder(
 scoped_ptr<ScrollBar> PlatformStyle::CreateScrollBar(bool is_horizontal) {
   return make_scoped_ptr(new NativeScrollBar(is_horizontal));
 }
-
 #endif
 
 #if !defined(OS_LINUX) || defined(OS_CHROMEOS)

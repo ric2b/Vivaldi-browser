@@ -24,7 +24,6 @@ class ShellJavaScriptDialogManager : public JavaScriptDialogManager {
   // JavaScriptDialogManager:
   void RunJavaScriptDialog(WebContents* web_contents,
                            const GURL& origin_url,
-                           const std::string& accept_lang,
                            JavaScriptMessageType javascript_message_type,
                            const base::string16& message_text,
                            const base::string16& default_prompt_text,
@@ -32,7 +31,6 @@ class ShellJavaScriptDialogManager : public JavaScriptDialogManager {
                            bool* did_suppress_message) override;
 
   void RunBeforeUnloadDialog(WebContents* web_contents,
-                             const base::string16& message_text,
                              bool is_reload,
                              const DialogClosedCallback& callback) override;
 

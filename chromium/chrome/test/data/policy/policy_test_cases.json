@@ -334,11 +334,7 @@
   },
 
   "PasswordManagerAllowShowPasswords": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "PasswordManagerAllowShowPasswords": false },
-    "pref_mappings": [
-      { "pref": "profile.password_manager_allow_show_passwords" }
-    ]
+    "note": "This policy is retired, see http://crbug.com/598698."
   },
 
   "ContextualSearchEnabled": {
@@ -1881,6 +1877,16 @@
     ]
   },
 
+  "SuppressUnsupportedOSWarning": {
+    "os": ["chromeos", "linux", "mac", "win"],
+    "test_policy": { "SuppressUnsupportedOSWarning": true },
+    "pref_mappings": [
+      { "pref": "browser.suppress_unsupported_os_warning",
+        "local_state": true
+      }
+    ]
+  },
+
   "----- Chrome OS policies ------------------------------------------------": {},
 
   "ChromeOsLockOnIdleSuspend": {
@@ -2436,7 +2442,10 @@
   "ArcEnabled": {
     "os": ["chromeos"],
     "can_be_recommended": false,
-    "test_policy": { "ArcEnabled": false }
+    "test_policy": { "ArcEnabled": false },
+    "pref_mappings": [
+      { "pref": "arc.enabled" }
+    ]
   },
 
   "ArcApplicationPolicy": {
@@ -2665,6 +2674,37 @@
   },
 
   "AllowKioskAppControlChromeVersion": {
+  },
+  
+  "LoginAuthenticationBehavior": {
+    "os": ["chromeos"],
+    "test_policy": { "LoginAuthenticationBehavior": 1 },
+    "pref_mappings": [
+      { "pref": "cros.device.login_authentication_behavior" }
+    ]
+  },
+
+  "UsbDetachableWhitelist": {
+  },
+
+  "DeviceAllowBluetooth": {
+  },
+
+  "DeviceQuirksDownloadEnabled": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "DeviceQuirksDownloadEnabled": true },
+    "pref_mappings": [
+      { "pref": "cros.device.quirks_download_enabled" }
+    ]
+  },
+
+  "SystemTimezoneAutomaticDetection": {
+    "os": ["chromeos"],
+    "test_policy": { "SystemTimezoneAutomaticDetection": 1 },
+    "pref_mappings": [
+      { "pref": "cros.device.system_timezone_automatic_detection" }
+    ]
   },
 
   "----- Chrome Frame policies -------------------------------------------": {},

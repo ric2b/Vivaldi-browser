@@ -9,8 +9,8 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/permissions/permission_service_context.h"
-#include "content/common/permission_service.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "third_party/WebKit/public/platform/modules/permissions/permission.mojom.h"
 
 namespace content {
 
@@ -23,7 +23,7 @@ enum class PermissionType;
 // to have some information about the current context. That enables the service
 // to know whether it can show UI and have knowledge of the associated
 // WebContents for example.
-class PermissionServiceImpl : public PermissionService {
+class PermissionServiceImpl : public blink::mojom::PermissionService {
  public:
   ~PermissionServiceImpl() override;
 
@@ -35,13 +35,15 @@ class PermissionServiceImpl : public PermissionService {
  protected:
   friend PermissionServiceContext;
 
-  PermissionServiceImpl(PermissionServiceContext* context,
-                        mojo::InterfaceRequest<PermissionService> request);
+  PermissionServiceImpl(
+      PermissionServiceContext* context,
+      mojo::InterfaceRequest<blink::mojom::PermissionService> request);
 
  private:
-  using PermissionStatusCallback = mojo::Callback<void(PermissionStatus)>;
+  using PermissionStatusCallback =
+      mojo::Callback<void(blink::mojom::PermissionStatus)>;
   using PermissionsStatusCallback =
-      mojo::Callback<void(mojo::Array<PermissionStatus>)>;
+      mojo::Callback<void(mojo::Array<blink::mojom::PermissionStatus>)>;
 
   struct PendingRequest {
     PendingRequest(const PermissionsStatusCallback& callback,
@@ -68,48 +70,49 @@ class PermissionServiceImpl : public PermissionService {
   };
   using SubscriptionsMap = IDMap<PendingSubscription, IDMapOwnPointer>;
 
-  // PermissionService.
-  void HasPermission(PermissionName permission,
+  // blink::mojom::PermissionService.
+  void HasPermission(blink::mojom::PermissionName permission,
                      const mojo::String& origin,
                      const PermissionStatusCallback& callback) override;
-  void RequestPermission(PermissionName permission,
+  void RequestPermission(blink::mojom::PermissionName permission,
                          const mojo::String& origin,
                          const PermissionStatusCallback& callback) override;
-  void RequestPermissions(mojo::Array<PermissionName> permissions,
+  void RequestPermissions(mojo::Array<blink::mojom::PermissionName> permissions,
                           const mojo::String& origin,
                           const PermissionsStatusCallback& callback) override;
-  void RevokePermission(PermissionName permission,
+  void RevokePermission(blink::mojom::PermissionName permission,
                         const mojo::String& origin,
                         const PermissionStatusCallback& callback) override;
   void GetNextPermissionChange(
-      PermissionName permission,
+      blink::mojom::PermissionName permission,
       const mojo::String& origin,
-      PermissionStatus last_known_status,
+      blink::mojom::PermissionStatus last_known_status,
       const PermissionStatusCallback& callback) override;
 
   void OnConnectionError();
 
-  void OnRequestPermissionResponse(
-      int pending_request_id,
-      PermissionStatus status);
+  void OnRequestPermissionResponse(int pending_request_id,
+                                   blink::mojom::PermissionStatus status);
   void OnRequestPermissionsResponse(
       int pending_request_id,
-      const std::vector<PermissionStatus>& result);
+      const std::vector<blink::mojom::PermissionStatus>& result);
 
-  PermissionStatus GetPermissionStatusFromName(PermissionName permission,
-                                               const GURL& origin);
-  PermissionStatus GetPermissionStatusFromType(PermissionType type,
-                                               const GURL& origin);
+  blink::mojom::PermissionStatus GetPermissionStatusFromName(
+      blink::mojom::PermissionName permission,
+      const GURL& origin);
+  blink::mojom::PermissionStatus GetPermissionStatusFromType(
+      PermissionType type,
+      const GURL& origin);
   void ResetPermissionStatus(PermissionType type, const GURL& origin);
 
   void OnPermissionStatusChanged(int pending_subscription_id,
-                                 PermissionStatus status);
+                                 blink::mojom::PermissionStatus status);
 
   RequestsMap pending_requests_;
   SubscriptionsMap pending_subscriptions_;
   // context_ owns |this|.
   PermissionServiceContext* context_;
-  mojo::Binding<PermissionService> binding_;
+  mojo::Binding<blink::mojom::PermissionService> binding_;
   base::WeakPtrFactory<PermissionServiceImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PermissionServiceImpl);

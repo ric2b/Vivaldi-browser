@@ -72,12 +72,26 @@ shared_library("power_saver_test_plugin") {
   ]
 }
 
+loadable_module("blink_deprecated_test_plugin") {
+  sources = [
+    "tests/blink_deprecated_test_plugin.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//build/config/sanitizers:deps",
+    "//ppapi/cpp",
+    "//ppapi/shared_impl",
+  ]
+}
+
 loadable_module("blink_test_plugin") {
   sources = [
     "tests/blink_test_plugin.cc",
   ]
 
   deps = [
+    "//base",
     "//build/config/sanitizers:deps",
     "//ppapi/cpp",
     "//ppapi/shared_impl",
@@ -123,7 +137,7 @@ test("ppapi_unittests") {
   deps = [
     "//base/test:run_all_unittests",
     "//base/test:test_support",
-    "//gpu/ipc",
+    "//gpu/ipc/common:command_buffer_traits",
     "//ipc",
     "//ipc:test_support",
     "//media:shared_memory_support",

@@ -40,6 +40,7 @@ namespace blink {
 
 class DocumentLoadTiming;
 class DocumentLoader;
+class DocumentParserTiming;
 class DocumentTiming;
 class LocalFrame;
 class PaintTiming;
@@ -47,9 +48,9 @@ class ResourceLoadTiming;
 class ScriptState;
 class ScriptValue;
 
-class CORE_EXPORT PerformanceTiming final : public GarbageCollectedFinalized<PerformanceTiming>, public ScriptWrappable, public DOMWindowProperty {
+class CORE_EXPORT PerformanceTiming final : public GarbageCollected<PerformanceTiming>, public ScriptWrappable, public DOMWindowProperty {
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(PerformanceTiming);
+    USING_GARBAGE_COLLECTED_MIXIN(PerformanceTiming);
 public:
     static PerformanceTiming* create(LocalFrame* frame)
     {
@@ -92,6 +93,11 @@ public:
     // that includes content of some kind (for example, text or image content).
     unsigned long long firstContentfulPaint() const;
 
+    unsigned long long parseStart() const;
+    unsigned long long parseStop() const;
+    unsigned long long parseBlockedOnScriptLoadDuration() const;
+    unsigned long long parseBlockedOnScriptLoadFromDocumentWriteDuration() const;
+
     ScriptValue toJSONForBinding(ScriptState*) const;
 
     DECLARE_VIRTUAL_TRACE();
@@ -103,6 +109,7 @@ private:
     explicit PerformanceTiming(LocalFrame*);
 
     const DocumentTiming* documentTiming() const;
+    const DocumentParserTiming* documentParserTiming() const;
     const PaintTiming* paintTiming() const;
     DocumentLoader* documentLoader() const;
     DocumentLoadTiming* documentLoadTiming() const;

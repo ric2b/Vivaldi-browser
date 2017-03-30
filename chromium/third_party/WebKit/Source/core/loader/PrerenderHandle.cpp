@@ -41,24 +41,24 @@
 namespace blink {
 
 // static
-PassOwnPtrWillBeRawPtr<PrerenderHandle> PrerenderHandle::create(Document& document, PrerenderClient* client, const KURL& url, const unsigned prerenderRelTypes)
+PrerenderHandle* PrerenderHandle::create(Document& document, PrerenderClient* client, const KURL& url, const unsigned prerenderRelTypes)
 {
     // Prerenders are unlike requests in most ways (for instance, they pass down fragments, and they don't return data),
     // but they do have referrers.
     if (!document.frame())
         return nullptr;
 
-    RefPtr<Prerender> prerender = Prerender::create(client, url, prerenderRelTypes, SecurityPolicy::generateReferrer(document.getReferrerPolicy(), url, document.outgoingReferrer()));
+    Prerender* prerender = Prerender::create(client, url, prerenderRelTypes, SecurityPolicy::generateReferrer(document.getReferrerPolicy(), url, document.outgoingReferrer()));
 
     PrerendererClient* prerendererClient = PrerendererClient::from(document.page());
     if (prerendererClient)
-        prerendererClient->willAddPrerender(prerender.get());
+        prerendererClient->willAddPrerender(prerender);
     prerender->add();
 
-    return adoptPtrWillBeNoop(new PrerenderHandle(document, prerender.release()));
+    return new PrerenderHandle(document, prerender);
 }
 
-PrerenderHandle::PrerenderHandle(Document& document, PassRefPtr<Prerender> prerender)
+PrerenderHandle::PrerenderHandle(Document& document, Prerender* prerender)
     : DocumentLifecycleObserver(&document)
     , m_prerender(prerender)
 {
@@ -90,7 +90,6 @@ const KURL& PrerenderHandle::url() const
 
 void PrerenderHandle::documentWasDetached()
 {
-#if ENABLE(OILPAN)
     // In Oilpan, a PrerenderHandle is not removed from
     // LifecycleNotifier::m_observers until a next GC is triggered.
     // Thus documentWasDetached() can be called for a PrerenderHandle
@@ -98,21 +97,19 @@ void PrerenderHandle::documentWasDetached()
     // we should not detach the PrerenderHandle again, so we need this check.
     if (!m_prerender)
         return;
-#else
-    ASSERT(m_prerender);
-#endif
     m_prerender->abandon();
     detach();
 }
 
 void PrerenderHandle::detach()
 {
-    m_prerender->removeClient();
+    m_prerender->dispose();
     m_prerender.clear();
 }
 
 DEFINE_TRACE(PrerenderHandle)
 {
+    visitor->trace(m_prerender);
     DocumentLifecycleObserver::trace(visitor);
 }
 

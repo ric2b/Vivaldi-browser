@@ -27,7 +27,6 @@
 #include "core/XMLNames.h"
 #include "wtf/Assertions.h"
 #include "wtf/HashSet.h"
-#include "wtf/MainThread.h"
 #include "wtf/StaticConstructors.h"
 
 namespace blink {
@@ -44,7 +43,7 @@ using QualifiedNameCache = HashSet<QualifiedName::QualifiedNameImpl*, QualifiedN
 static QualifiedNameCache& qualifiedNameCache()
 {
     // This code is lockless and thus assumes it all runs on one thread!
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     static QualifiedNameCache* gNameCache = new QualifiedNameCache;
     return *gNameCache;
 }
@@ -70,14 +69,14 @@ struct QNameComponentsTranslator {
 QualifiedName::QualifiedName(const AtomicString& p, const AtomicString& l, const AtomicString& n)
 {
     QualifiedNameData data = { { p.impl(), l.impl(), n.isEmpty() ? nullAtom.impl() : n.impl() }, false };
-    QualifiedNameCache::AddResult addResult = qualifiedNameCache().add<QNameComponentsTranslator>(data);
+    QualifiedNameCache::AddResult addResult = qualifiedNameCache().addWithTranslator<QNameComponentsTranslator>(data);
     m_impl = addResult.isNewEntry ? adoptRef(*addResult.storedValue) : *addResult.storedValue;
 }
 
 QualifiedName::QualifiedName(const AtomicString& p, const AtomicString& l, const AtomicString& n, bool isStatic)
 {
     QualifiedNameData data = { { p.impl(), l.impl(), n.impl() }, isStatic };
-    QualifiedNameCache::AddResult addResult = qualifiedNameCache().add<QNameComponentsTranslator>(data);
+    QualifiedNameCache::AddResult addResult = qualifiedNameCache().addWithTranslator<QNameComponentsTranslator>(data);
     m_impl = addResult.isNewEntry ? adoptRef(*addResult.storedValue) : *addResult.storedValue;
 }
 
@@ -94,7 +93,7 @@ String QualifiedName::toString() const
 {
     String local = localName();
     if (hasPrefix())
-        return prefix().string() + ":" + local;
+        return prefix().getString() + ":" + local;
     return local;
 }
 
@@ -104,7 +103,7 @@ DEFINE_GLOBAL(QualifiedName, nullName, nullAtom, nullAtom, nullAtom)
 
 void QualifiedName::initAndReserveCapacityForSize(unsigned size)
 {
-    ASSERT(starAtom.impl());
+    DCHECK(starAtom.impl());
     qualifiedNameCache().reserveCapacityForSize(size + 2 /*starAtom and nullAtom */);
     new ((void*)&anyName) QualifiedName(nullAtom, starAtom, starAtom, true );
     new ((void*)&nullName) QualifiedName(nullAtom, nullAtom, nullAtom, true );

@@ -45,19 +45,15 @@ class Isolate;
 namespace blink {
 
 class V8HeapProfilerAgent;
-class V8RuntimeAgent;
 
-typedef String ErrorString;
-
-class CORE_EXPORT InspectorHeapProfilerAgent final : public InspectorBaseAgent<InspectorHeapProfilerAgent, protocol::Frontend::HeapProfiler>, public protocol::Dispatcher::HeapProfilerCommandHandler {
+class CORE_EXPORT InspectorHeapProfilerAgent final : public InspectorBaseAgent<InspectorHeapProfilerAgent, protocol::Frontend::HeapProfiler>, public protocol::Backend::HeapProfiler {
     WTF_MAKE_NONCOPYABLE(InspectorHeapProfilerAgent);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(InspectorHeapProfilerAgent);
 public:
-    static PassOwnPtrWillBeRawPtr<InspectorHeapProfilerAgent> create(v8::Isolate*, V8RuntimeAgent*);
+    static RawPtr<InspectorHeapProfilerAgent> create(v8::Isolate*, V8HeapProfilerAgent*);
     ~InspectorHeapProfilerAgent() override;
 
     // InspectorBaseAgent overrides.
-    void setState(PassRefPtr<protocol::DictionaryValue>) override;
+    void setState(protocol::DictionaryValue*) override;
     void setFrontend(protocol::Frontend*) override;
     void clearFrontend() override;
     void restore() override;
@@ -68,22 +64,22 @@ public:
     void stopTrackingHeapObjects(ErrorString*, const Maybe<bool>& reportProgress) override;
     void takeHeapSnapshot(ErrorString*, const Maybe<bool>& reportProgress) override;
     void collectGarbage(ErrorString*) override;
-    void getObjectByHeapObjectId(ErrorString*, const String& objectId, const Maybe<String>& objectGroup, OwnPtr<protocol::Runtime::RemoteObject>* result) override;
-    void addInspectedHeapObject(ErrorString*, const String& heapObjectId) override;
-    void getHeapObjectId(ErrorString*, const String& objectId, String* heapSnapshotObjectId) override;
+    void getObjectByHeapObjectId(ErrorString*, const String16& objectId, const Maybe<String16>& objectGroup, OwnPtr<protocol::Runtime::RemoteObject>* result) override;
+    void addInspectedHeapObject(ErrorString*, const String16& heapObjectId) override;
+    void getHeapObjectId(ErrorString*, const String16& objectId, String16* heapSnapshotObjectId) override;
     void startSampling(ErrorString*) override;
     void stopSampling(ErrorString*, OwnPtr<protocol::HeapProfiler::SamplingHeapProfile>*) override;
 
 private:
     class HeapStatsUpdateTask;
 
-    InspectorHeapProfilerAgent(v8::Isolate*, V8RuntimeAgent*);
+    InspectorHeapProfilerAgent(v8::Isolate*, V8HeapProfilerAgent*);
 
     void startUpdateStatsTimer();
     void stopUpdateStatsTimer();
-    bool isInspectableHeapObject(unsigned id);
+    bool isInspectableHeapObject(int id);
 
-    OwnPtr<V8HeapProfilerAgent> m_v8HeapProfilerAgent;
+    V8HeapProfilerAgent* m_v8HeapProfilerAgent;
     OwnPtr<HeapStatsUpdateTask> m_heapStatsUpdateTask;
     v8::Isolate* m_isolate;
 };

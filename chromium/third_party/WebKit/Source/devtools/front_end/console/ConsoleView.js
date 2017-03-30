@@ -355,8 +355,10 @@ WebInspector.ConsoleView.prototype = {
     {
         if (this._promptElement === WebInspector.currentFocusElement())
             return;
-        WebInspector.setCurrentFocusElement(this._promptElement);
+        // Set caret position before setting focus in order to avoid scrolling
+        // by focus().
         this._prompt.moveCaretToEndOfPrompt();
+        WebInspector.setCurrentFocusElement(this._promptElement);
     },
 
     restoreScrollPositions: function()
@@ -442,7 +444,7 @@ WebInspector.ConsoleView.prototype = {
             message.timestamp = this._consoleMessages.length ? this._consoleMessages.peekLast().consoleMessage().timestamp : 0;
         var viewMessage = this._createViewMessage(message);
         message[this._viewMessageSymbol] = viewMessage;
-        var insertAt = insertionIndexForObjectInListSortedByFunction(viewMessage, this._consoleMessages, compareTimestamps, true);
+        var insertAt = this._consoleMessages.upperBound(viewMessage, compareTimestamps)
         var insertedInMiddle = insertAt < this._consoleMessages.length;
         this._consoleMessages.splice(insertAt, 0, viewMessage);
 

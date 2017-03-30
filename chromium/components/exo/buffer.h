@@ -41,7 +41,8 @@ class Buffer : public base::SupportsWeakPtr<Buffer> {
   Buffer(scoped_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer,
          unsigned texture_target,
          unsigned query_type,
-         bool use_zero_copy);
+         bool use_zero_copy,
+         bool is_overlay_candidate);
   ~Buffer();
 
   // Set the callback to run when the buffer is no longer used by the
@@ -57,13 +58,14 @@ class Buffer : public base::SupportsWeakPtr<Buffer> {
   // |lost_context| is true.
   scoped_ptr<cc::SingleReleaseCallback> ProduceTextureMailbox(
       cc::TextureMailbox* mailbox,
+      bool secure_output_only,
       bool lost_context);
 
   // Returns the size of the buffer.
   gfx::Size GetSize() const;
 
   // Returns a trace value representing the state of the buffer.
-  scoped_refptr<base::trace_event::TracedValue> AsTracedValue() const;
+  scoped_ptr<base::trace_event::TracedValue> AsTracedValue() const;
 
  private:
   class Texture;
@@ -92,6 +94,9 @@ class Buffer : public base::SupportsWeakPtr<Buffer> {
 
   // True if zero copy is used when producing a texture mailbox for buffer.
   const bool use_zero_copy_;
+
+  // True if this buffer is an overlay candidate.
+  const bool is_overlay_candidate_;
 
   // This is incremented when a texture mailbox is produced and decremented
   // when a texture mailbox is released. It is used to determine when we should

@@ -5,6 +5,7 @@
 #ifndef ASH_WM_IMMERSIVE_FULLSCREEN_CONTROLLER_H_
 #define ASH_WM_IMMERSIVE_FULLSCREEN_CONTROLLER_H_
 
+#include <memory>
 #include <vector>
 
 #include "ash/ash_export.h"
@@ -16,6 +17,7 @@
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/widget/widget_observer.h"
+
 #include "ui/wm/core/transient_window_observer.h"
 
 namespace aura {
@@ -238,9 +240,9 @@ class ASH_EXPORT ImmersiveFullscreenController
   // is a bezel sensor above the top container.
   bool ShouldHandleGestureEvent(const gfx::Point& location) const;
 
-  // Recreate |bubble_manager_| and start observing any bubbles anchored to a
+  // Recreate |bubble_observer_| and start observing any bubbles anchored to a
   // child of |top_container_|.
-  void RecreateBubbleManager();
+  void RecreateBubbleObserver();
 
   // Not owned.
   Delegate* delegate_;
@@ -274,22 +276,22 @@ class ASH_EXPORT ImmersiveFullscreenController
   // mouse state and the current touch state. Acquiring the lock is used to
   // trigger a reveal when the user moves the mouse to the top of the screen
   // and when the user does a SWIPE_OPEN edge gesture.
-  scoped_ptr<ImmersiveRevealedLock> located_event_revealed_lock_;
+  std::unique_ptr<ImmersiveRevealedLock> located_event_revealed_lock_;
 
   // Lock which keeps the top-of-window views revealed based on the focused view
   // and the active widget. Acquiring the lock never triggers a reveal because
   // a view is not focusable till a reveal has made it visible.
-  scoped_ptr<ImmersiveRevealedLock> focus_revealed_lock_;
+  std::unique_ptr<ImmersiveRevealedLock> focus_revealed_lock_;
 
   // The animation which controls sliding the top-of-window views in and out.
-  scoped_ptr<gfx::SlideAnimation> animation_;
+  std::unique_ptr<gfx::SlideAnimation> animation_;
 
   // Whether the animations are disabled for testing.
   bool animations_disabled_for_test_;
 
   // Manages bubbles which are anchored to a child of |top_container_|.
-  class BubbleManager;
-  scoped_ptr<BubbleManager> bubble_manager_;
+  class BubbleObserver;
+  std::unique_ptr<BubbleObserver> bubble_observer_;
 
   base::WeakPtrFactory<ImmersiveFullscreenController> weak_ptr_factory_;
 

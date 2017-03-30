@@ -39,7 +39,7 @@ enum class NodeListRootType {
     TreeScope,
 };
 
-class CORE_EXPORT LiveNodeListBase : public WillBeGarbageCollectedMixin {
+class CORE_EXPORT LiveNodeListBase : public GarbageCollectedMixin {
 public:
     LiveNodeListBase(ContainerNode& ownerNode, NodeListRootType rootType, NodeListInvalidationType invalidationType,
         CollectionType collectionType)
@@ -48,9 +48,9 @@ public:
         , m_invalidationType(invalidationType)
         , m_collectionType(collectionType)
     {
-        ASSERT(m_rootType == static_cast<unsigned>(rootType));
-        ASSERT(m_invalidationType == static_cast<unsigned>(invalidationType));
-        ASSERT(m_collectionType == static_cast<unsigned>(collectionType));
+        DCHECK_EQ(m_rootType, static_cast<unsigned>(rootType));
+        DCHECK_EQ(m_invalidationType, static_cast<unsigned>(invalidationType));
+        DCHECK_EQ(m_collectionType, static_cast<unsigned>(collectionType));
 
         document().registerNodeList(this);
     }
@@ -88,7 +88,7 @@ protected:
     DEFINE_INLINE_VIRTUAL_TRACE() { visitor->trace(m_ownerNode); }
 
 private:
-    RefPtrWillBeMember<ContainerNode> m_ownerNode; // Cannot be null.
+    Member<ContainerNode> m_ownerNode; // Cannot be null.
     const unsigned m_rootType : 1;
     const unsigned m_invalidationType : 4;
     const unsigned m_collectionType : 5;
@@ -121,7 +121,7 @@ ALWAYS_INLINE bool LiveNodeListBase::shouldInvalidateTypeOnAttributeChange(NodeL
 template <typename MatchFunc>
 Element* LiveNodeListBase::traverseMatchingElementsForwardToOffset(Element& currentElement, const ContainerNode* stayWithin, unsigned offset, unsigned& currentOffset, MatchFunc isMatch)
 {
-    ASSERT(currentOffset < offset);
+    DCHECK_LT(currentOffset, offset);
     for (Element* next = ElementTraversal::next(currentElement, stayWithin, isMatch); next; next = ElementTraversal::next(*next, stayWithin, isMatch)) {
         if (++currentOffset == offset)
             return next;
@@ -132,7 +132,7 @@ Element* LiveNodeListBase::traverseMatchingElementsForwardToOffset(Element& curr
 template <typename MatchFunc>
 Element* LiveNodeListBase::traverseMatchingElementsBackwardToOffset(Element& currentElement, const ContainerNode* stayWithin, unsigned offset, unsigned& currentOffset, MatchFunc isMatch)
 {
-    ASSERT(currentOffset > offset);
+    DCHECK_GT(currentOffset, offset);
     for (Element* previous = ElementTraversal::previous(currentElement, stayWithin, isMatch); previous; previous = ElementTraversal::previous(*previous, stayWithin, isMatch)) {
         if (--currentOffset == offset)
             return previous;

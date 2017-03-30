@@ -16,9 +16,6 @@ FakePluginService::~FakePluginService() {
 void FakePluginService::Init() {
 }
 
-void FakePluginService::StartWatchingPlugins() {
-}
-
 bool FakePluginService::GetPluginInfoArray(
     const GURL& url,
     const std::string& mime_type,
@@ -67,23 +64,11 @@ PluginServiceFilter* FakePluginService::GetFilter() {
   return nullptr;
 }
 
-void FakePluginService::ForcePluginShutdown(const base::FilePath& plugin_path) {
-}
-
 bool FakePluginService::IsPluginUnstable(const base::FilePath& path) {
   return false;
 }
 
 void FakePluginService::RefreshPlugins() {
-}
-
-void FakePluginService::AddExtraPluginPath(const base::FilePath& path) {
-}
-
-void FakePluginService::RemoveExtraPluginPath(const base::FilePath& path) {
-}
-
-void FakePluginService::AddExtraPluginDir(const base::FilePath& path) {
 }
 
 void FakePluginService::RegisterInternalPlugin(
@@ -97,25 +82,6 @@ void FakePluginService::UnregisterInternalPlugin(const base::FilePath& path) {
 void FakePluginService::GetInternalPlugins(
     std::vector<WebPluginInfo>* plugins) {
 }
-
-bool FakePluginService::NPAPIPluginsSupported() {
-  return false;
-}
-
-void FakePluginService::DisablePluginsDiscoveryForTesting() {
-}
-
-#if defined(OS_MACOSX)
-void FakePluginService::AppActivated() {
-}
-#elif defined(OS_WIN)
-bool FakePluginService::GetPluginInfoFromWindow(
-    HWND window,
-    base::string16* plugin_name,
-    base::string16* plugin_version) {
-  return false;
-}
-#endif
 
 bool FakePluginService::PpapiDevChannelSupported(
     BrowserContext* browser_context,

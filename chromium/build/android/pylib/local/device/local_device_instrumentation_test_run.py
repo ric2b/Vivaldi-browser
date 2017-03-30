@@ -54,7 +54,7 @@ class LocalDeviceInstrumentationTestRun(
     self._flag_changers = {}
 
   def TestPackage(self):
-    return None
+    return self._test_instance.suite
 
   def SetUp(self):
     def substitute_external_storage(d, external_storage):
@@ -69,15 +69,16 @@ class LocalDeviceInstrumentationTestRun(
         self._env.BlacklistDevice)
     def individual_device_set_up(dev, host_device_tuples):
       def install_apk():
-        if self._test_instance.apk_under_test_incremental_install_script:
-          local_device_test_run.IncrementalInstall(
-              dev,
-              self._test_instance.apk_under_test,
-              self._test_instance.apk_under_test_incremental_install_script)
-        else:
-          permissions = self._test_instance.apk_under_test.GetPermissions()
-          dev.Install(self._test_instance.apk_under_test,
-                      permissions=permissions)
+        if self._test_instance.apk_under_test:
+          if self._test_instance.apk_under_test_incremental_install_script:
+            local_device_test_run.IncrementalInstall(
+                dev,
+                self._test_instance.apk_under_test,
+                self._test_instance.apk_under_test_incremental_install_script)
+          else:
+            permissions = self._test_instance.apk_under_test.GetPermissions()
+            dev.Install(self._test_instance.apk_under_test,
+                        permissions=permissions)
 
         if self._test_instance.test_apk_incremental_install_script:
           local_device_test_run.IncrementalInstall(
@@ -90,6 +91,18 @@ class LocalDeviceInstrumentationTestRun(
 
         for apk in self._test_instance.additional_apks:
           dev.Install(apk)
+
+        # Set debug app in order to enable reading command line flags on user
+        # builds
+        if self._test_instance.flags:
+          if not self._test_instance.package_info:
+            logging.error("Couldn't set debug app: no package info")
+          elif not self._test_instance.package_info.package:
+            logging.error("Couldn't set debug app: no package defined")
+          else:
+            dev.RunShellCommand(['am', 'set-debug-app', '--persistent',
+                                  self._test_instance.package_info.package],
+                                check_return=True)
 
       def push_test_data():
         external_storage = dev.GetExternalStoragePath()
@@ -128,9 +141,14 @@ class LocalDeviceInstrumentationTestRun(
         self._test_instance.GetDataDependencies())
 
   def TearDown(self):
+    @local_device_test_run.handle_shard_failures_with(
+        self._env.BlacklistDevice)
     def individual_device_tear_down(dev):
       if str(dev) in self._flag_changers:
         self._flag_changers[str(dev)].Restore()
+
+      # Remove package-specific configuration
+      dev.RunShellCommand(['am', 'clear-debug-app'], check_return=True)
 
       valgrind_tools.SetChromeTimeoutScale(dev, None)
 

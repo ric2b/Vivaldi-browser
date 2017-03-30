@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string>
+#include <vector>
+
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/models/menu_model.h"
@@ -75,6 +79,15 @@ bool TestRenderViewContextMenu::GetMenuModelAndItemIndex(
   }
 
   return false;
+}
+
+int TestRenderViewContextMenu::GetCommandIDByProfilePath(
+    const base::FilePath& path) {
+  size_t count = profile_link_paths_.size();
+  for (size_t i = 0; i < count; ++i)
+    if (profile_link_paths_[i] == path)
+      return IDC_OPEN_LINK_IN_PROFILE_FIRST + static_cast<int>(i);
+  return -1;
 }
 
 void TestRenderViewContextMenu::Show() {

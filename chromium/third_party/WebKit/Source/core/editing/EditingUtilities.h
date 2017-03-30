@@ -40,9 +40,16 @@
 namespace blink {
 
 enum class PositionMoveType {
-    CodePoint, // Move by a single code point.
-    Character, // Move to the next Unicode character break.
-    BackwardDeletion // Subject to platform conventions.
+    // Move by a single code unit. |PositionMoveType::CodeUnit| is used for
+    // implementing other |PositionMoveType|. You should not use this.
+    CodeUnit,
+    // Move to the next Unicode code point. At most two code unit when we are
+    // at surrogate pair. Please consider using |GraphemeCluster|.
+    BackwardDeletion,
+    // Move by a grapheme cluster for user-perceived character in Unicode
+    // Standard Annex #29, Unicode text segmentation[1].
+    // [1] http://www.unicode.org/reports/tr29/
+    GraphemeCluster,
 };
 
 class Document;
@@ -78,8 +85,7 @@ Node* highestNodeToRemoveInPruning(Node*, Node* excludeNode = nullptr);
 Element* enclosingBlock(Node*, EditingBoundaryCrossingRule = CannotCrossEditingBoundary);
 CORE_EXPORT Element* enclosingBlock(const Position&, EditingBoundaryCrossingRule);
 CORE_EXPORT Element* enclosingBlock(const PositionInFlatTree&, EditingBoundaryCrossingRule);
-Element* enclosingBlockFlowElement(Node&); // Deprecated, use enclosingBlock instead.
-bool inSameContainingBlockFlowElement(Node*, Node*);
+Element* enclosingBlockFlowElement(const Node&); // Deprecated, use enclosingBlock instead.
 Element* enclosingTableCell(const Position&);
 Element* associatedElementOf(const Position&);
 Node* enclosingEmptyListItem(const VisiblePosition&);
@@ -202,8 +208,8 @@ CORE_EXPORT Position nextPositionOf(const Position&, PositionMoveType);
 CORE_EXPORT PositionInFlatTree previousPositionOf(const PositionInFlatTree&, PositionMoveType);
 CORE_EXPORT PositionInFlatTree nextPositionOf(const PositionInFlatTree&, PositionMoveType);
 
-CORE_EXPORT int uncheckedPreviousOffset(const Node*, int current);
-CORE_EXPORT int uncheckedNextOffset(const Node*, int current);
+CORE_EXPORT int previousGraphemeBoundaryOf(const Node*, int current);
+CORE_EXPORT int nextGraphemeBoundaryOf(const Node*, int current);
 
 // comparision functions on Position
 
@@ -230,6 +236,14 @@ bool isAtUnsplittableElement(const Position&);
 // miscellaneous functions on Position
 
 enum WhitespacePositionOption { NotConsiderNonCollapsibleWhitespace, ConsiderNonCollapsibleWhitespace };
+
+// |leadingWhitespacePosition(position)| returns a previous position of
+// |position| if it is at collapsible whitespace, otherwise it returns null
+// position. When it is called with |NotConsiderNonCollapsibleWhitespace| and
+// a previous position in a element which has CSS property "white-space:pre",
+// or its variant, |leadingWhitespacePosition()| returns null position.
+// TODO(yosin) We should rename |leadingWhitespacePosition()| to
+// |leadingCollapsibleWhitespacePosition()| as this function really returns.
 Position leadingWhitespacePosition(const Position&, TextAffinity, WhitespacePositionOption = NotConsiderNonCollapsibleWhitespace);
 Position trailingWhitespacePosition(const Position&, TextAffinity, WhitespacePositionOption = NotConsiderNonCollapsibleWhitespace);
 unsigned numEnclosingMailBlockquotes(const Position&);
@@ -260,7 +274,7 @@ bool lineBreakExistsAtVisiblePosition(const VisiblePosition&);
 
 int comparePositions(const VisiblePosition&, const VisiblePosition&);
 
-int indexForVisiblePosition(const VisiblePosition&, RefPtrWillBeRawPtr<ContainerNode>& scope);
+int indexForVisiblePosition(const VisiblePosition&, RawPtr<ContainerNode>& scope);
 EphemeralRange makeRange(const VisiblePosition&, const VisiblePosition&);
 EphemeralRange normalizeRange(const EphemeralRange&);
 EphemeralRangeInFlatTree normalizeRange(const EphemeralRangeInFlatTree&);
@@ -272,8 +286,8 @@ VisiblePosition visiblePositionForIndex(int index, ContainerNode* scope);
 
 // Functions returning HTMLElement
 
-PassRefPtrWillBeRawPtr<HTMLElement> createDefaultParagraphElement(Document&);
-PassRefPtrWillBeRawPtr<HTMLElement> createHTMLElement(Document&, const QualifiedName&);
+RawPtr<HTMLElement> createDefaultParagraphElement(Document&);
+RawPtr<HTMLElement> createHTMLElement(Document&, const QualifiedName&);
 
 HTMLElement* enclosingList(Node*);
 HTMLElement* outermostEnclosingList(Node*, HTMLElement* rootList = nullptr);
@@ -285,8 +299,8 @@ Node* enclosingListChild(Node*);
 
 // Functions returning Element
 
-PassRefPtrWillBeRawPtr<HTMLSpanElement> createTabSpanElement(Document&);
-PassRefPtrWillBeRawPtr<HTMLSpanElement> createTabSpanElement(Document&, const String& tabText);
+RawPtr<HTMLSpanElement> createTabSpanElement(Document&);
+RawPtr<HTMLSpanElement> createTabSpanElement(Document&, const String& tabText);
 
 Element* rootEditableElementOf(const Position&, EditableType = ContentIsEditable);
 Element* rootEditableElementOf(const PositionInFlatTree&, EditableType = ContentIsEditable);

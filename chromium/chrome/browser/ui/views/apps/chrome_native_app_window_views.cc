@@ -260,23 +260,18 @@ ChromeNativeAppWindowViews::CreateStandardDesktopAppFrame() {
 
 void ChromeNativeAppWindowViews::UpdateEventTargeterWithInset() {
 #if !defined(OS_MACOSX)
-  // For non-Ash windows, install an easy resize window targeter, which ensures
-  // that the root window (not the app) receives mouse events on the edges.
-  if (chrome::GetHostDesktopTypeForNativeWindow(widget()->GetNativeWindow()) !=
-    chrome::HOST_DESKTOP_TYPE_ASH) {
-    bool is_maximized = IsMaximized();
-    aura::Window* window = widget()->GetNativeWindow();
-    int resize_inside = is_maximized ? 0 : 5;// frame->resize_inside_bounds_size();
-    gfx::Insets inset(
-      resize_inside, resize_inside, resize_inside, resize_inside);
-    // Add the EasyResizeWindowTargeter on the window, not its root window. The
-    // root window does not have a delegate, which is needed to handle the event
-    // in Linux.
-    scoped_ptr<ui::EventTargeter> old_eventtarget =
-      window->SetEventTargeter(scoped_ptr<ui::EventTargeter>(
-      new wm::EasyResizeWindowTargeter(window, inset, inset)));
-    delete old_eventtarget.release();
-  }
+  bool is_maximized = IsMaximized();
+  aura::Window* window = widget()->GetNativeWindow();
+  int resize_inside = is_maximized ? 0 : 5;// frame->resize_inside_bounds_size();
+  gfx::Insets inset(
+    resize_inside, resize_inside, resize_inside, resize_inside);
+  // Add the EasyResizeWindowTargeter on the window, not its root window. The
+  // root window does not have a delegate, which is needed to handle the event
+  // in Linux.
+  scoped_ptr<ui::EventTargeter> old_eventtarget =
+    window->SetEventTargeter(scoped_ptr<ui::EventTargeter>(
+    new wm::EasyResizeWindowTargeter(window, inset, inset)));
+  delete old_eventtarget.release();
 #endif
 }
 
@@ -392,7 +387,7 @@ bool ChromeNativeAppWindowViews::IsFullscreenOrPending() const {
   return widget()->IsFullscreen();
 }
 
-void ChromeNativeAppWindowViews::UpdateShape(scoped_ptr<SkRegion> region) {
+void ChromeNativeAppWindowViews::UpdateShape(std::unique_ptr<SkRegion> region) {
   shape_ = std::move(region);
   widget()->SetShape(shape() ? new SkRegion(*shape()) : nullptr);
   widget()->OnSizeConstraintsChanged();

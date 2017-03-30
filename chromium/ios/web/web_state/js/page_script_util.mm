@@ -12,21 +12,6 @@
 
 namespace web {
 
-namespace {
-// Returns an autoreleased string containing the JavaScript to be injected into
-// the web view as early as possible. Does not include embedder's script.
-NSString* GetWebEarlyPageScript(WebViewType web_view_type) {
-  switch (web_view_type) {
-    case UI_WEB_VIEW_TYPE:
-      return GetPageScript(@"web_bundle_ui");
-    case WK_WEB_VIEW_TYPE:
-      return GetPageScript(@"web_bundle_wk");
-  }
-  NOTREACHED();
-  return nil;
-}
-}  // namespace
-
 NSString* GetPageScript(NSString* script_file_name) {
   DCHECK(script_file_name);
   NSString* path =
@@ -43,10 +28,9 @@ NSString* GetPageScript(NSString* script_file_name) {
   return content;
 }
 
-NSString* GetEarlyPageScript(WebViewType web_view_type) {
+NSString* GetEarlyPageScript() {
   DCHECK(GetWebClient());
-  NSString* embedder_page_script =
-      GetWebClient()->GetEarlyPageScript(web_view_type);
+  NSString* embedder_page_script = GetWebClient()->GetEarlyPageScript();
   DCHECK(embedder_page_script);
 
   // Make sure that script is injected only once. For example, content of
@@ -58,7 +42,7 @@ NSString* GetEarlyPageScript(WebViewType web_view_type) {
   // prevents multiple injections into the same page.
   NSString* kScriptTemplate = @"if (typeof __gCrWeb !== 'object') { %@; %@ }";
   return [NSString stringWithFormat:kScriptTemplate,
-                                    GetWebEarlyPageScript(web_view_type),
+                                    GetPageScript(@"web_bundle"),
                                     embedder_page_script];
 }
 

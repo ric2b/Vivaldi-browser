@@ -119,6 +119,9 @@ base::string16 PhoneNumber::GetInfo(const AutofillType& type,
       return
           cached_parsed_phone_.city_code() + cached_parsed_phone_.number();
 
+    case PHONE_HOME_EXTENSION:
+      return base::string16();
+
     default:
       NOTREACHED();
       return base::string16();
@@ -185,18 +188,6 @@ void PhoneNumber::GetMatchingTypes(const base::string16& text,
       if (normalized_number == whole_number)
         matching_types->insert(PHONE_HOME_WHOLE_NUMBER);
     }
-  }
-
-  // If both PHONE_HOME_CITY_AND_NUMBER and PHONE_HOME_WHOLE_NUMBER are matched,
-  // it means there is no country code in the profile's phone number. In that
-  // case, we should only return PHONE_HOME_CITY_AND_NUMBER because it's more
-  // precise.
-  ServerFieldTypeSet::iterator whole_number_iterator =
-      matching_types->find(PHONE_HOME_WHOLE_NUMBER);
-  if (whole_number_iterator != matching_types->end() &&
-      matching_types->find(PHONE_HOME_CITY_AND_NUMBER) !=
-          matching_types->end()) {
-    matching_types->erase(whole_number_iterator);
   }
 }
 

@@ -51,6 +51,7 @@
 <translation id="2896972712917208084">라디오 그룹</translation>
 <translation id="2901282870647571346">현재 영화 상태</translation>
 <translation id="2908441821576996758">이메일 주소를 쉼표로 구분하여 입력하세요.</translation>
+<translation id="2931838996092594335">클릭</translation>
 <translation id="2940813599313844715">객체</translation>
 <translation id="2942448076852699108">강조표시된 콘텐츠</translation>
 <translation id="3040011195152428237">링크</translation>
@@ -97,6 +98,7 @@
 <translation id="512758898067543763">행 헤더</translation>
 <translation id="5164977714490026579">값은 <ph name="MINIMUM" /> 이상이어야 합니다.</translation>
 <translation id="5307600278924710095">'<ph name="ATSIGN" />' 앞 부분을 입력해 주세요. '<ph name="INVALIDADDRESS" />'(이)가 완전하지 않습니다.</translation>
+<translation id="5317780077021120954">저장</translation>
 <translation id="5406322316791861025">그림</translation>
 <translation id="5453733299334684579">트리 항목</translation>
 <translation id="5466621249238537318">파일을 한 개 이상 선택하세요.</translation>
@@ -176,6 +178,7 @@
 <translation id="8785498733064193001">재생 시작</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8987927404178983737">월</translation>
+<translation id="9002566407876343676">열기</translation>
 <translation id="901493112792887934">현재 시간(초)</translation>
 <translation id="9048119486235211610">탐색</translation>
 <translation id="9050748414552849310">캡션 표시</translation>

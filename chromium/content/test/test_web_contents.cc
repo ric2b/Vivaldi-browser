@@ -34,9 +34,10 @@ TestWebContents::TestWebContents(BrowserContext* browser_context)
 }
 
 TestWebContents* TestWebContents::Create(BrowserContext* browser_context,
-                                         SiteInstance* instance) {
+                                         scoped_refptr<SiteInstance> instance) {
   TestWebContents* test_web_contents = new TestWebContents(browser_context);
-  test_web_contents->Init(WebContents::CreateParams(browser_context, instance));
+  test_web_contents->Init(
+      WebContents::CreateParams(browser_context, std::move(instance)));
   return test_web_contents;
 }
 
@@ -148,10 +149,7 @@ const std::string& TestWebContents::GetSaveFrameHeaders() {
 
 bool TestWebContents::CrossProcessNavigationPending() {
   if (IsBrowserSideNavigationEnabled()) {
-    return GetRenderManager()->speculative_render_frame_host_ &&
-           static_cast<TestRenderFrameHost*>(
-               GetRenderManager()->speculative_render_frame_host_.get())
-               ->pending_commit();
+    return GetRenderManager()->speculative_render_frame_host_ != nullptr;
   }
   return GetRenderManager()->pending_frame_host() != nullptr;
 }

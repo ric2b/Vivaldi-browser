@@ -19,7 +19,7 @@
         '<(DEPTH)/chrome/common_constants.gyp:common_constants',
         '<(DEPTH)/components/components.gyp:keyed_service_content',
         '<(DEPTH)/components/components.gyp:keyed_service_core',
-        '<(DEPTH)/skia/skia.gyp:skia',
+        '<(DEPTH)/content/content.gyp:content_browser',
         '<(DEPTH)/url/url.gyp:url_lib',
       ],
       'sources': [
@@ -44,7 +44,7 @@
       'target_name': 'media_router_mojo_gen',
       'type': 'none',
       'sources': [
-        'media_router.mojom',
+        'mojo/media_router.mojom',
       ],
       'includes': [
         '../../../../mojo/mojom_bindings_generator.gypi',
@@ -57,8 +57,8 @@
         'media_router_mojo_gen',
       ],
       'sources': [
-        '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/media/router/media_router.mojom.cc',
-        '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/media/router/media_router.mojom.h',
+        '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/media/router/mojo/media_router.mojom.cc',
+        '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/media/router/mojo/media_router.mojom.h',
       ],
     },
     {
@@ -70,14 +70,24 @@
       ],
       'dependencies': [
         'media_router',
-        'media_router_mojo',
-        'media_router_mojo_gen',
         '<(DEPTH)/base/base.gyp:base',
         '<(DEPTH)/testing/gmock.gyp:gmock',
       ],
       'sources': [
         '<@(media_router_test_support_sources)',
       ],
+      'conditions': [
+        [ 'OS!="android" and OS!="ios"', {
+          'dependencies': [
+            'media_router_mojo',
+            'media_router_mojo_gen',
+            '<(DEPTH)/extensions/extensions.gyp:extensions_common',
+          ],
+          'sources': [
+            '<@(media_router_non_android_test_support_sources)',
+          ]
+        }],
+      ]
     },
   ],
 }

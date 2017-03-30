@@ -50,13 +50,6 @@ class MediaDecoderJob {
   // case.
   typedef base::Callback<void(MediaCodecStatus, bool, base::TimeDelta,
                               base::TimeDelta)> DecoderCallback;
-  // Callback when a decoder job finishes releasing the output buffer.
-  // Args: whether the frame is a late frame, current presentation time, max
-  // presentation time.
-  // If the current presentation time is equal to kNoTimestamp(), the callback
-  // target should ignore the timestamps provided and whether it is late.
-  typedef base::Callback<void(bool, base::TimeDelta, base::TimeDelta)>
-      ReleaseOutputCompletionCallback;
 
   virtual ~MediaDecoderJob();
 
@@ -136,7 +129,8 @@ class MediaDecoderJob {
       bool render_output,
       bool is_late_frame,
       base::TimeDelta current_presentation_timestamp,
-      const ReleaseOutputCompletionCallback& callback) = 0;
+      MediaCodecStatus status,
+      const DecoderCallback& callback) = 0;
 
   // Returns true if the "time to render" needs to be computed for frames in
   // this decoder job.
@@ -253,8 +247,8 @@ class MediaDecoderJob {
 
   // Signals to decoder job that decoder has updated output format. Decoder job
   // may need to do internal reconfiguration in order to correctly interpret
-  // incoming buffers
-  virtual void OnOutputFormatChanged();
+  // incoming buffers. Returns true if this internal configuration succeeded.
+  virtual bool OnOutputFormatChanged();
 
   // Update the output format from the decoder, returns true if the output
   // format changes, or false otherwise.

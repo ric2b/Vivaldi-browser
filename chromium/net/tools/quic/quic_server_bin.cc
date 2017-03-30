@@ -77,17 +77,17 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  net::IPAddress ip;
-  CHECK(ip.AssignFromIPLiteral("::"));
+  auto ip = net::IPAddress::IPv6AllZeros();
 
   net::QuicConfig config;
   net::QuicServer server(
       CreateProofSource(line->GetSwitchValuePath("certificate_file"),
                         line->GetSwitchValuePath("key_file")),
-      config, net::QuicSupportedVersions());
+      config, net::QuicCryptoServerConfig::ConfigOptions(),
+      net::QuicSupportedVersions());
   server.SetStrikeRegisterNoStartupPeriod();
 
-  int rc = server.Listen(net::IPEndPoint(ip, FLAGS_port));
+  int rc = server.CreateUDPSocketAndListen(net::IPEndPoint(ip, FLAGS_port));
   if (rc < 0) {
     return 1;
   }

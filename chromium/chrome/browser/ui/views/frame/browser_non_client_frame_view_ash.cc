@@ -116,8 +116,6 @@ void BrowserNonClientFrameViewAsh::Init() {
     window_icon_->Update();
   }
 
-  UpdateAvatar();
-
   if (UsePackagedAppHeaderStyle() || UseWebAppHeaderStyle()) {
     ash::DefaultHeaderPainter* header_painter = new ash::DefaultHeaderPainter;
     header_painter_.reset(header_painter);
@@ -400,14 +398,15 @@ bool BrowserNonClientFrameViewAsh::DoesIntersectRect(
     return false;
   }
 
-  TabStrip* tabstrip = browser_view()->tabstrip();
-  if (!tabstrip || !browser_view()->IsTabStripVisible()) {
+  if (!browser_view()->IsTabStripVisible()) {
     // Claim |rect| if it is above the top of the topmost client area view.
     return rect.y() < GetTopInset(false);
   }
 
-  // Claim |rect| if it is above the bottom of the tabstrip in a non-tab
-  // portion.
+  // Claim |rect| only if it is above the bottom of the tabstrip in a non-tab
+  // portion. In particular, the avatar label/button is left of the tabstrip and
+  // the window controls are right of the tabstrip.
+  TabStrip* tabstrip = browser_view()->tabstrip();
   gfx::RectF rect_in_tabstrip_coords_f(rect);
   View::ConvertRectToTarget(this, tabstrip, &rect_in_tabstrip_coords_f);
   const gfx::Rect rect_in_tabstrip_coords(
@@ -419,8 +418,8 @@ bool BrowserNonClientFrameViewAsh::DoesIntersectRect(
 
 int BrowserNonClientFrameViewAsh::GetTabStripLeftInset() const {
   const gfx::Insets insets(GetLayoutInsets(AVATAR_ICON));
-  const int avatar_right = avatar_button() ?
-      (insets.left() + browser_view()->GetOTRAvatarIcon().width()) : 0;
+  const int avatar_right =
+      avatar_button() ? (insets.left() + GetOTRAvatarIcon().width()) : 0;
   return avatar_right + insets.right();
 }
 
@@ -457,7 +456,7 @@ void BrowserNonClientFrameViewAsh::LayoutAvatar() {
   DCHECK(browser_view()->IsTabStripVisible());
 #endif
 
-  const gfx::ImageSkia incognito_icon = browser_view()->GetOTRAvatarIcon();
+  const gfx::ImageSkia incognito_icon = GetOTRAvatarIcon();
   const gfx::Insets avatar_insets = GetLayoutInsets(AVATAR_ICON);
   const int avatar_bottom = GetTopInset(false) +
       browser_view()->GetTabStripHeight() - avatar_insets.bottom();
@@ -529,9 +528,8 @@ void BrowserNonClientFrameViewAsh::PaintToolbarBackground(gfx::Canvas* canvas) {
     canvas->sk_canvas()->clipRect(gfx::RectToSkRect(tabstrip_bounds),
                                   SkRegion::kDifference_Op);
     separator_rect.set_y(tabstrip_bounds.bottom());
-    BrowserView::Paint1pxHorizontalLine(
-        canvas, tp->GetColor(ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR),
-        separator_rect, true);
+    BrowserView::Paint1pxHorizontalLine(canvas, GetToolbarTopSeparatorColor(),
+                                        separator_rect, true);
 
     // Toolbar/content separator.
     toolbar_bounds.Inset(kClientEdgeThickness, 0);

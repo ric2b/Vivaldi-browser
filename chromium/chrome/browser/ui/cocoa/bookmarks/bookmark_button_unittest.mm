@@ -29,8 +29,8 @@ using bookmarks::BookmarkNode;
 
 @implementation FakeButtonDelegate
 
-- (void)fillPasteboard:(NSPasteboard*)pboard
-       forDragOfButton:(BookmarkButton*)button {
+- (NSPasteboardItem*)pasteboardItemForDragOfButton:(BookmarkButton*)button {
+  return nil;
 }
 
 - (void)mouseEnteredButton:(id)buton event:(NSEvent*)event {
@@ -151,31 +151,49 @@ TEST_F(BookmarkButtonTest, DragToTrash) {
                                            GURL("http://www.google.com"));
   [cell setBookmarkNode:node];
 
+  // Several calls to -draggingSession: coming up have nil arguments. Starting
+  // with XCode7, that's not an option any more. Hotfixing for now.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnonnull"
+
   // Verify that if canDragBookmarkButtonToTrash is NO then the button can't
   // be dragged to the trash.
   delegate.get()->canDragToTrash_ = NO;
-  NSDragOperation operation = [button draggingSourceOperationMaskForLocal:NO];
+  NSDragOperation operation = [button draggingSession:nil
+                sourceOperationMaskForDraggingContext:
+                    NSDraggingContextOutsideApplication];
   EXPECT_EQ(0u, operation & NSDragOperationDelete);
-  operation = [button draggingSourceOperationMaskForLocal:YES];
+  operation = [button draggingSession:nil
+      sourceOperationMaskForDraggingContext:NSDraggingContextWithinApplication];
   EXPECT_EQ(0u, operation & NSDragOperationDelete);
 
   // Verify that if canDragBookmarkButtonToTrash is YES then the button can
   // be dragged to the trash.
   delegate.get()->canDragToTrash_ = YES;
-  operation = [button draggingSourceOperationMaskForLocal:NO];
+  operation = [button draggingSession:nil
+      sourceOperationMaskForDraggingContext:
+          NSDraggingContextOutsideApplication];
   EXPECT_EQ(NSDragOperationDelete, operation & NSDragOperationDelete);
-  operation = [button draggingSourceOperationMaskForLocal:YES];
+  operation = [button draggingSession:nil
+      sourceOperationMaskForDraggingContext:NSDraggingContextWithinApplication];
   EXPECT_EQ(NSDragOperationDelete, operation & NSDragOperationDelete);
 
   // Verify that canDragBookmarkButtonToTrash is called when expected.
   delegate.get()->canDragToTrash_ = YES;
   EXPECT_EQ(0, delegate.get()->didDragToTrashCount_);
-  [button draggedImage:nil endedAt:NSZeroPoint operation:NSDragOperationCopy];
+  [button draggingSession:nil
+             endedAtPoint:NSZeroPoint
+                operation:NSDragOperationCopy];
   EXPECT_EQ(0, delegate.get()->didDragToTrashCount_);
-  [button draggedImage:nil endedAt:NSZeroPoint operation:NSDragOperationMove];
+  [button draggingSession:nil
+             endedAtPoint:NSZeroPoint
+                operation:NSDragOperationMove];
   EXPECT_EQ(0, delegate.get()->didDragToTrashCount_);
-  [button draggedImage:nil endedAt:NSZeroPoint operation:NSDragOperationDelete];
+  [button draggingSession:nil
+             endedAtPoint:NSZeroPoint
+                operation:NSDragOperationDelete];
   EXPECT_EQ(1, delegate.get()->didDragToTrashCount_);
+#pragma clang diagnostic pop
 }
 
 }

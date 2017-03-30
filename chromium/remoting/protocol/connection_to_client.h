@@ -41,14 +41,14 @@ class ConnectionToClient {
     // Called when the network connection is authenticated.
     virtual void OnConnectionAuthenticated(ConnectionToClient* connection) = 0;
 
+    // Called to request creation of video streams. May be called before or
+    // after OnConnectionChannelsConnected().
+    virtual void CreateVideoStreams(ConnectionToClient* connection) = 0;
+
     // Called when the network connection is authenticated and all
     // channels are connected.
     virtual void OnConnectionChannelsConnected(
         ConnectionToClient* connection) = 0;
-
-    // Called when a VideoEncoder is created. Used by ClientSession to modify
-    // the video pipeline if necessary.
-    virtual void OnCreateVideoEncoder(scoped_ptr<VideoEncoder>* encoder) = 0;
 
     // Called when the network connection is closed or failed.
     virtual void OnConnectionClosed(ConnectionToClient* connection,
@@ -88,8 +88,8 @@ class ConnectionToClient {
 
   // Start video stream that sends screen content from |desktop_capturer| to the
   // client.
-  virtual scoped_ptr<VideoStream> StartVideoStream(
-      scoped_ptr<webrtc::DesktopCapturer> desktop_capturer) = 0;
+  virtual std::unique_ptr<VideoStream> StartVideoStream(
+      std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer) = 0;
 
   // Get the stubs used by the host to transmit messages to the client.
   // The stubs must not be accessed before OnConnectionAuthenticated(), or

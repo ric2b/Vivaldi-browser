@@ -70,35 +70,6 @@ config("media_dependent_config") {
   }
 }
 
-if (use_ozone) {
-  action("generate_ozone_constructor_list") {
-    # Ozone platform objects are auto-generated using similar
-    # patterns for naming and classes constructors. Here we build the
-    # object MediaOzonePlatform.
-    script = "../ui/ozone/generate_constructor_list.py"
-
-    platform_list_txt_file = "$target_gen_dir/../ui/ozone/platform_list.txt"
-    constructor_list_cc_file = "$target_gen_dir/ozone/constructor_list.cc"
-
-    sources = [
-      platform_list_txt_file,
-    ]
-    outputs = [
-      constructor_list_cc_file,
-    ]
-    args = [
-      "--platform_list=" + rebase_path(platform_list_txt_file, root_build_dir),
-      "--output_cc=" + rebase_path(constructor_list_cc_file, root_build_dir),
-      "--namespace=media",
-      "--typename=MediaOzonePlatform",
-      "--include=\"media/ozone/media_ozone_platform.h\"",
-    ]
-    deps = [
-      "//ui/ozone:generate_ozone_platform_list",
-    ]
-  }
-}
-
 component("media") {
   sources = [
     "cdm/aes_decryptor.cc",
@@ -157,8 +128,14 @@ component("media") {
     "filters/jpeg_parser.h",
     "filters/media_source_state.cc",
     "filters/media_source_state.h",
+    "filters/memory_data_source.cc",
+    "filters/memory_data_source.h",
+    "filters/opus_audio_decoder.cc",
+    "filters/opus_audio_decoder.h",
     "filters/opus_constants.cc",
     "filters/opus_constants.h",
+    "filters/pipeline_controller.cc",
+    "filters/pipeline_controller.h",
     "filters/source_buffer_range.cc",
     "filters/source_buffer_range.h",
     "filters/source_buffer_stream.cc",
@@ -308,7 +285,7 @@ component("media") {
       "filters/vpx_video_decoder.cc",
       "filters/vpx_video_decoder.h",
     ]
-    deps += [ "//third_party/libvpx_new" ]
+    deps += [ "//third_party/libvpx" ]
   }
 
   if (is_android) {
@@ -349,34 +326,10 @@ component("media") {
     allow_circular_includes_from = [ "//media/base/android" ]
   }
 
-  if (!is_android || media_use_ffmpeg) {
-    sources += [
-      "filters/opus_audio_decoder.cc",
-      "filters/opus_audio_decoder.h",
-    ]
-  }
-
   if (current_cpu != "arm" && is_chromeos) {
     sources += [
       "filters/h264_bitstream_buffer.cc",
       "filters/h264_bitstream_buffer.h",
-    ]
-  }
-
-  # A simple WebM encoder for animated avatars on ChromeOS.
-
-  if (use_ozone) {
-    # Used for the generated listing header (ui/ozone/platform_list.h)
-    include_dirs += [ target_gen_dir ]
-
-    sources += [
-                 "ozone/media_ozone_platform.cc",
-                 "ozone/media_ozone_platform.h",
-               ] + get_target_outputs(":generate_ozone_constructor_list")
-
-    deps += [
-      ":generate_ozone_constructor_list",
-      "//ui/ozone",
     ]
   }
 
@@ -418,8 +371,6 @@ component("media") {
       "formats/mp4/box_definitions.h",
       "formats/mp4/box_reader.cc",
       "formats/mp4/box_reader.h",
-      "formats/mp4/cenc.cc",
-      "formats/mp4/cenc.h",
       "formats/mp4/es_descriptor.cc",
       "formats/mp4/es_descriptor.h",
       "formats/mp4/mp4_stream_parser.cc",
@@ -430,6 +381,8 @@ component("media") {
       "formats/mp4/track_run_iterator.h",
       "formats/mpeg/adts_constants.cc",
       "formats/mpeg/adts_constants.h",
+      "formats/mpeg/adts_header_parser.cc",
+      "formats/mpeg/adts_header_parser.h",
       "formats/mpeg/adts_stream_parser.cc",
       "formats/mpeg/adts_stream_parser.h",
       "formats/mpeg/mpeg1_audio_stream_parser.cc",
@@ -496,6 +449,7 @@ component("media") {
     "//base/third_party/dynamic_annotations",
     "//crypto",
     "//crypto:platform",  # TODO(ajwong): This used to be provided by crypto.gyp via export_dependent_settings
+    "//gpu/command_buffer/client:gles2_interface",
     "//gpu/command_buffer/common",
     "//skia",
     "//third_party/libwebm",
@@ -504,6 +458,7 @@ component("media") {
     "//ui/events:events_base",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/gl:gl",
     "//url",
   ]
 }
@@ -557,6 +512,7 @@ test("media_unittests") {
     "filters/h264_parser_unittest.cc",
     "filters/ivf_parser_unittest.cc",
     "filters/jpeg_parser_unittest.cc",
+    "filters/pipeline_controller_unittest.cc",
     "filters/source_buffer_stream_unittest.cc",
     "filters/video_cadence_estimator_unittest.cc",
     "filters/video_decoder_selector_unittest.cc",
@@ -576,6 +532,7 @@ test("media_unittests") {
     "formats/webm/webm_cluster_parser_unittest.cc",
     "formats/webm/webm_content_encodings_client_unittest.cc",
     "formats/webm/webm_parser_unittest.cc",
+    "formats/webm/webm_stream_parser_unittest.cc",
     "formats/webm/webm_tracks_parser_unittest.cc",
     "formats/webm/webm_webvtt_parser_unittest.cc",
     "muxers/webm_muxer_unittest.cc",
@@ -642,20 +599,16 @@ test("media_unittests") {
   if (media_use_ffmpeg) {
     sources += [
       "ffmpeg/ffmpeg_common_unittest.cc",
+      "filters/audio_decoder_unittest.cc",
+      "filters/audio_file_reader_unittest.cc",
       "filters/blocking_url_protocol_unittest.cc",
+      "filters/ffmpeg_demuxer_unittest.cc",
       "filters/ffmpeg_glue_unittest.cc",
       "filters/in_memory_url_protocol_unittest.cc",
     ]
 
     if (!is_android) {
       sources += [
-        # These tests are confused by Android always having proprietary
-        # codecs enabled, but ffmpeg_branding=Chromium.  These should be
-        # fixed, http://crbug.com/570762.
-        "filters/audio_decoder_unittest.cc",
-        "filters/audio_file_reader_unittest.cc",
-        "filters/ffmpeg_demuxer_unittest.cc",
-
         # FFmpeg on Android does not include video decoders.
         "filters/ffmpeg_video_decoder_unittest.cc",
       ]
@@ -771,9 +724,11 @@ source_set("test_support") {
     "video/mock_video_decode_accelerator.cc",
     "video/mock_video_decode_accelerator.h",
   ]
-  deps = [
+  public_deps = [
     ":media",
     ":shared_memory_support",
+  ]
+  deps = [
     "//base",
     "//skia",
     "//testing/gmock",
@@ -843,4 +798,37 @@ if (proprietary_codecs) {
       ":media",
     ]
   }
+}
+
+fuzzer_test("media_h264_parser_fuzzer") {
+  sources = [
+    "filters/h264_parser_fuzzertest.cc",
+  ]
+  deps = [
+    ":media",
+    "//base",
+  ]
+}
+
+fuzzer_test("media_vp8_parser_fuzzer") {
+  sources = [
+    "filters/vp8_parser_fuzzertest.cc",
+  ]
+  deps = [
+    ":media",
+    "//base",
+  ]
+  libfuzzer_options = "filters/vp8_parser_fuzzertest.options"
+  dict = "test/vp8.dict"
+}
+
+fuzzer_test("media_vp9_parser_fuzzer") {
+  sources = [
+    "filters/vp9_parser_fuzzertest.cc",
+  ]
+  deps = [
+    ":media",
+    "//base",
+  ]
+  libfuzzer_options = "filters/vp9_parser_fuzzertest.options"
 }

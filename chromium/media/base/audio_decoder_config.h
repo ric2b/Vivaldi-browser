@@ -12,44 +12,13 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "media/base/audio_codecs.h"
 #include "media/base/channel_layout.h"
+#include "media/base/encryption_scheme.h"
 #include "media/base/media_export.h"
 #include "media/base/sample_format.h"
 
 namespace media {
-
-enum AudioCodec {
-  // These values are histogrammed over time; do not change their ordinal
-  // values.  When deleting a codec replace it with a dummy value; when adding a
-  // codec, do so at the bottom before kAudioCodecMax, and update the value of
-  // kAudioCodecMax to equal the new codec.
-  kUnknownAudioCodec = 0,
-  kCodecAAC = 1,
-  kCodecMP3 = 2,
-  kCodecPCM = 3,
-  kCodecVorbis = 4,
-  kCodecFLAC = 5,
-  kCodecAMR_NB = 6,
-  kCodecAMR_WB = 7,
-  kCodecPCM_MULAW = 8,
-  kCodecGSM_MS = 9,
-  kCodecPCM_S16BE = 10,
-  kCodecPCM_S24BE = 11,
-  kCodecOpus = 12,
-  kCodecEAC3 = 13,
-  kCodecPCM_ALAW = 14,
-  kCodecALAC = 15,
-  kCodecAC3 = 16,
-  // DO NOT ADD RANDOM AUDIO CODECS!
-  //
-  // The only acceptable time to add a new codec is if there is production code
-  // that uses said codec in the same CL.
-
-  // Must always be equal to the largest entry ever logged.
-  kAudioCodecMax = kCodecAC3,
-};
-
-std::string MEDIA_EXPORT GetCodecName(AudioCodec codec);
 
 // TODO(dalecurtis): FFmpeg API uses |bytes_per_channel| instead of
 // |bits_per_channel|, we should switch over since bits are generally confusing
@@ -66,7 +35,7 @@ class MEDIA_EXPORT AudioDecoderConfig {
                      ChannelLayout channel_layout,
                      int samples_per_second,
                      const std::vector<uint8_t>& extra_data,
-                     bool is_encrypted);
+                     const EncryptionScheme& encryption_scheme);
 
   AudioDecoderConfig(const AudioDecoderConfig& other);
 
@@ -78,7 +47,7 @@ class MEDIA_EXPORT AudioDecoderConfig {
                   ChannelLayout channel_layout,
                   int samples_per_second,
                   const std::vector<uint8_t>& extra_data,
-                  bool is_encrypted,
+                  const EncryptionScheme& encryption_scheme,
                   base::TimeDelta seek_preroll,
                   int codec_delay);
 
@@ -111,7 +80,12 @@ class MEDIA_EXPORT AudioDecoderConfig {
   // Whether the audio stream is potentially encrypted.
   // Note that in a potentially encrypted audio stream, individual buffers
   // can be encrypted or not encrypted.
-  bool is_encrypted() const { return is_encrypted_; }
+  bool is_encrypted() const { return encryption_scheme_.is_encrypted(); }
+
+  // Encryption scheme used for encrypted buffers.
+  const EncryptionScheme& encryption_scheme() const {
+    return encryption_scheme_;
+  }
 
   // The sampling rate on decoder input.  Note that |samples_per_second| refers
   // to the output sampling rate.
@@ -134,7 +108,7 @@ class MEDIA_EXPORT AudioDecoderConfig {
   int input_samples_per_second_;
   int bytes_per_frame_;
   std::vector<uint8_t> extra_data_;
-  bool is_encrypted_;
+  EncryptionScheme encryption_scheme_;
 
   // |seek_preroll_| is the duration of the data that the decoder must decode
   // before the decoded data is valid.

@@ -21,7 +21,6 @@ import org.chromium.chrome.browser.signin.AccountSigninActivity;
 import org.chromium.chrome.browser.signin.SigninAccessPoint;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.sync.signin.ChromeSigninController;
 
 /**
@@ -102,14 +101,6 @@ public class MainPreferences extends PreferenceFragment implements SignInStateOb
             }
         });
         mSignInPreference.setEnabled(true);
-
-        Preference documentMode = findPreference(PREF_DOCUMENT_MODE);
-        if (FeatureUtilities.isDocumentModeEligible(getActivity())) {
-            setOnOffSummary(documentMode,
-                    !DocumentModeManager.getInstance(getActivity()).isOptedOutOfDocumentMode());
-        } else {
-            getPreferenceScreen().removePreference(documentMode);
-        }
 
         ChromeBasePreference autofillPref =
                 (ChromeBasePreference) findPreference(PREF_AUTOFILL_SETTINGS);

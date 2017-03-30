@@ -9,6 +9,7 @@ import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build_overrides/v8.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 import("//third_party/icu/config.gni")
 import("//third_party/protobuf/proto_library.gni")
@@ -27,10 +28,6 @@ gypi_values = exec_script("//build/gypi_to_gn.py",
                           "scope",
                           [ "net.gypi" ])
 
-# Disable Kerberos on ChromeOS, iOS, Chromecast and headless, at least for now.
-# It needs configuration (krb5.conf and so on).
-use_kerberos = !is_chromeos && !is_ios && !is_chromecast && !is_headless
-
 # The way the cache uses mmap() is inefficient on some Android devices. If
 # this flag is set, we hackily avoid using mmap() in the disk cache. We are
 # pretty confident that mmap-ing the index would not hurt any existing x86
@@ -45,13 +42,15 @@ declare_args() {
   # Disables support for file URLs.  File URL support requires use of icu.
   disable_file_support = false
 
-  # Enables BidirectionalStream; Used in cronet, disabled by default.
-  enable_bidirectional_stream = false
-
   # WebSockets and socket stream code are not used on iOS and are optional in
   # cronet.
   enable_websockets = !is_ios
   disable_ftp_support = is_ios
+
+  # Enable Kerberos authentication. It is disabled by default on ChromeOS, iOS,
+  # Chromecast, at least for now. This feature needs configuration (krb5.conf
+  # and so on).
+  use_kerberos = !is_chromeos && !is_ios && !is_chromecast
 }
 
 config("net_config") {
@@ -105,7 +104,6 @@ net_shared_configs = [
 ]
 
 net_shared_public_deps = [
-  ":features",
   ":net_quic_proto",
   "//crypto",
   "//crypto:platform",
@@ -165,8 +163,6 @@ if (!is_nacl) {
       "quic/crypto/aead_base_encrypter_nss.cc",
       "quic/crypto/aes_128_gcm_12_decrypter_nss.cc",
       "quic/crypto/aes_128_gcm_12_encrypter_nss.cc",
-      "quic/crypto/chacha20_poly1305_decrypter_nss.cc",
-      "quic/crypto/chacha20_poly1305_encrypter_nss.cc",
       "quic/crypto/chacha20_poly1305_rfc7539_decrypter_nss.cc",
       "quic/crypto/chacha20_poly1305_rfc7539_encrypter_nss.cc",
       "quic/crypto/channel_id_nss.cc",
@@ -181,14 +177,10 @@ if (!is_nacl) {
       "ssl/token_binding_nss.cc",
     ]
     if (is_ios) {
-      # Always removed for !ios below.
       net_shared_sources -= [
-        "cert/cert_verify_proc_nss.cc",
-        "cert/cert_verify_proc_nss.h",
+        "cert/x509_util_ios.cc",
+        "cert/x509_util_ios.h",
       ]
-    }
-    if (!use_nss_certs && !is_ios) {
-      net_shared_sources -= [ "cert/x509_util_nss.h" ]
     }
   } else {
     net_shared_sources -= [
@@ -201,8 +193,6 @@ if (!is_nacl) {
       "quic/crypto/aead_base_encrypter_openssl.cc",
       "quic/crypto/aes_128_gcm_12_decrypter_openssl.cc",
       "quic/crypto/aes_128_gcm_12_encrypter_openssl.cc",
-      "quic/crypto/chacha20_poly1305_decrypter_openssl.cc",
-      "quic/crypto/chacha20_poly1305_encrypter_openssl.cc",
       "quic/crypto/chacha20_poly1305_rfc7539_decrypter_openssl.cc",
       "quic/crypto/chacha20_poly1305_rfc7539_encrypter_openssl.cc",
       "quic/crypto/channel_id_openssl.cc",
@@ -293,18 +283,6 @@ if (!is_nacl) {
       "third_party/mozilla_security_manager/nsPKCS12Blob.cpp",
       "third_party/mozilla_security_manager/nsPKCS12Blob.h",
     ]
-    if (!is_ios) {
-      # These files are part of the partial implementation of NSS on iOS so
-      # keep them in that case (even though use_nss_certs is not set).
-      net_shared_sources -= [
-        "cert/cert_verify_proc_nss.cc",
-        "cert/cert_verify_proc_nss.h",
-        "cert/test_root_certs_nss.cc",
-        "cert/x509_util_nss_certs.cc",
-        "cert_net/nss_ocsp.cc",
-        "cert_net/nss_ocsp.h",
-      ]
-    }
     if (is_chromeos) {
       # These were already removed on non-ChromeOS.
       net_shared_sources -= [
@@ -324,6 +302,27 @@ if (!is_nacl) {
     # libssl, but our bundled copy is not built in OpenSSL ports. Pull that file
     # in directly.
     net_shared_sources += [ "third_party/nss/ssl/cmpcert.c" ]
+  }
+
+  if (!use_nss_verifier) {
+    # These files are part of the partial implementation of NSS for
+    # cert verification, so keep them in that case.
+    net_shared_sources -= [
+      "cert/cert_verify_proc_nss.cc",
+      "cert/cert_verify_proc_nss.h",
+      "cert/test_root_certs_nss.cc",
+      "cert/x509_util_nss_certs.cc",
+      "cert_net/nss_ocsp.cc",
+      "cert_net/nss_ocsp.h",
+    ]
+  }
+
+  if (is_ios && use_nss_verifier) {
+    net_shared_sources -= [
+      "cert/cert_verify_proc_ios.cc",
+      "cert/cert_verify_proc_ios.h",
+      "cert/x509_certificate_openssl_ios.cc",
+    ]
   }
 
   if (is_chromecast && use_nss_certs) {
@@ -382,6 +381,10 @@ if (!is_nacl) {
     ]
   }
 
+  if (is_ios && !use_nss_verifier) {
+    net_shared_sources += [ "cert/test_root_certs_mac.cc" ]
+  }
+
   if (is_ios || is_mac) {
     net_shared_sources += gypi_values.net_base_mac_ios_sources
   }
@@ -437,6 +440,18 @@ component("net") {
     ]
   }
 
+  if (is_win) {
+    libs = [
+      "crypt32.lib",
+      "dhcpcsvc.lib",
+      "iphlpapi.lib",
+      "rpcrt4.lib",
+      "secur32.lib",
+      "urlmon.lib",
+      "winhttp.lib",
+    ]
+  }
+
   if (!is_nacl) {
     if (!disable_file_support) {
       sources += gypi_values.net_file_support_sources
@@ -444,10 +459,6 @@ component("net") {
 
     if (!disable_ftp_support) {
       sources += gypi_values.net_ftp_support_sources
-    }
-
-    if (enable_bidirectional_stream) {
-      sources += gypi_values.net_bidirectional_stream_sources
     }
 
     if (enable_websockets) {
@@ -504,10 +515,6 @@ if (is_android) {
 
     # Disable Brotli support.
     sources += [ "filter/brotli_filter_disabled.cc" ]
-
-    if (enable_bidirectional_stream) {
-      sources += gypi_values.net_bidirectional_stream_sources
-    }
   }
 }
 
@@ -573,22 +580,35 @@ static_library("http_server") {
   ]
 }
 
-executable("dump_cache") {
+if (!is_ios) {
+  executable("dump_cache") {
+    testonly = true
+    sources = [
+      "tools/dump_cache/dump_cache.cc",
+      "tools/dump_cache/dump_files.cc",
+      "tools/dump_cache/dump_files.h",
+    ]
+
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+    deps = [
+      ":net",
+      ":test_support",
+      "//base",
+      "//build/config/sanitizers:deps",
+    ]
+  }
+}
+
+bundle_data("test_support_bundle_data") {
   testonly = true
   sources = [
-    "tools/dump_cache/dump_cache.cc",
-    "tools/dump_cache/dump_files.cc",
-    "tools/dump_cache/dump_files.h",
+    "data/ssl/certificates",
   ]
-
-  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
-
-  deps = [
-    ":net",
-    ":test_support",
-    "//base",
-    "//build/config/sanitizers:deps",
+  outputs = [
+    "{{bundle_resources_dir}}/" +
+        "{{source_root_relative_dir}}/{{source_file_part}}",
   ]
 }
 
@@ -697,6 +717,10 @@ source_set("test_support") {
     "//build/config/compiler:no_size_t_to_int_warning",
   ]
 
+  deps = [
+    ":test_support_bundle_data",
+  ]
+
   public_deps = [
     "//base",
     "//base/test:test_support",
@@ -712,7 +736,7 @@ source_set("test_support") {
     public_deps += [ "//third_party/protobuf:py_proto" ]
   }
 
-  if (use_nss_certs || is_ios) {
+  if (use_nss_verifier) {
     public_deps += [ "//crypto:platform" ]
   }
 
@@ -1073,6 +1097,33 @@ if (!is_ios && !is_android) {
 }
 
 if (is_linux) {
+  executable("cachetool") {
+    testonly = true
+    sources = [
+      "tools/cachetool/cachetool.cc",
+    ]
+    deps = [
+      ":net",
+      ":test_support",
+      "//base",
+    ]
+  }
+
+  executable("content_decoder_tool") {
+    testonly = true
+    sources = [
+      "filter/mock_filter_context.cc",
+      "filter/mock_filter_context.h",
+      "tools/content_decoder_tool/content_decoder_tool.cc",
+    ]
+    deps = [
+      ":net",
+      ":test_support",
+      "//base",
+      "//url",
+    ]
+  }
+
   static_library("epoll_server") {
     sources = [
       "tools/epoll_server/epoll_server.cc",
@@ -1179,7 +1230,6 @@ if (is_linux) {
       "tools/quic/quic_packet_reader.h",
       "tools/quic/quic_packet_writer_wrapper.cc",
       "tools/quic/quic_packet_writer_wrapper.h",
-      "tools/quic/quic_process_packet_interface.h",
       "tools/quic/quic_server.cc",
       "tools/quic/quic_server.h",
       "tools/quic/quic_socket_utils.cc",
@@ -1283,6 +1333,7 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_in_memory_cache.h",
     "tools/quic/quic_per_connection_packet_writer.cc",
     "tools/quic/quic_per_connection_packet_writer.h",
+    "tools/quic/quic_process_packet_interface.h",
     "tools/quic/quic_server_session_base.cc",
     "tools/quic/quic_server_session_base.h",
     "tools/quic/quic_simple_client.cc",
@@ -1369,16 +1420,26 @@ if (!is_ios) {
   }
 }
 
+bundle_data("net_unittests_bundle_data") {
+  testonly = true
+  sources = [
+    "data/certificate_policies_unittest",
+    "data/name_constraints_unittest",
+    "data/parse_certificate_unittest",
+    "data/parse_ocsp_unittest",
+    "data/test.html",
+    "data/url_request_unittest",
+    "data/verify_certificate_chain_unittest",
+    "data/verify_name_match_unittest/names",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/" +
+        "{{source_root_relative_dir}}/{{source_file_part}}",
+  ]
+}
+
 test("net_unittests") {
   sources = gypi_values.net_test_sources
-
-  if (is_ios) {
-    sources -= [
-      "websockets/websocket_stream_cookie_test.cc",
-      "websockets/websocket_stream_create_test_base.cc",
-      "websockets/websocket_stream_create_test_base.h",
-    ]
-  }
 
   configs += [
     "//build/config:precompiled_headers",
@@ -1391,8 +1452,8 @@ test("net_unittests") {
   deps = [
     ":balsa",
     ":extras",
-    ":http_server",
     ":net",
+    ":net_unittests_bundle_data",
     ":simple_quic_tools",
     ":stale_while_revalidate_experiment_domains",
     ":test_support",
@@ -1502,9 +1563,8 @@ test("net_unittests") {
     sources -= [ "http/http_auth_handler_negotiate_unittest.cc" ]
   }
 
-  if (!use_nss_certs && !is_ios) {
-    # Only include this test when on Posix and using NSS for
-    # cert verification or on iOS (which also uses NSS for certs).
+  if (!use_nss_verifier) {
+    # Only include this test when using NSS for cert verification.
     sources -= [ "cert_net/nss_ocsp_unittest.cc" ]
   }
 
@@ -1512,32 +1572,9 @@ test("net_unittests") {
     sources -= [ "ssl/openssl_client_key_store_unittest.cc" ]
   }
 
-  if (!enable_websockets) {
-    sources -= [
-      "server/http_connection_unittest.cc",
-      "server/http_server_response_info_unittest.cc",
-      "server/http_server_unittest.cc",
-      "server/web_socket_encoder_unittest.cc",
-      "websockets/websocket_basic_stream_test.cc",
-      "websockets/websocket_channel_test.cc",
-      "websockets/websocket_deflate_parameters_test.cc",
-      "websockets/websocket_deflate_predictor_impl_test.cc",
-      "websockets/websocket_deflate_stream_test.cc",
-      "websockets/websocket_deflater_test.cc",
-      "websockets/websocket_end_to_end_test.cc",
-      "websockets/websocket_errors_test.cc",
-      "websockets/websocket_extension_parser_test.cc",
-      "websockets/websocket_extension_test.cc",
-      "websockets/websocket_frame_parser_test.cc",
-      "websockets/websocket_frame_test.cc",
-      "websockets/websocket_handshake_challenge_test.cc",
-      "websockets/websocket_handshake_stream_create_helper_test.cc",
-      "websockets/websocket_inflater_test.cc",
-      "websockets/websocket_stream_test.cc",
-      "websockets/websocket_test_util.cc",
-      "websockets/websocket_test_util.h",
-    ]
-    deps -= [ ":http_server" ]
+  if (enable_websockets) {
+    sources += gypi_values.net_websockets_test_sources
+    deps += [ ":http_server" ]
   }
 
   if (disable_file_support) {
@@ -1564,9 +1601,6 @@ test("net_unittests") {
     ]
   }
 
-  if (!enable_bidirectional_stream) {
-    sources -= [ "http/bidirectional_stream_unittest.cc" ]
-  }
   if (!enable_built_in_dns) {
     sources -= [
       "dns/address_sorter_posix_unittest.cc",
@@ -1589,7 +1623,6 @@ test("net_unittests") {
       ":net_browser_services",
       ":net_utility_services",
       "//mojo/edk/system",
-      "//mojo/environment:chromium",
     ]
   } else {
     sources -= [
@@ -1613,26 +1646,6 @@ test("net_unittests") {
   }
 
   if (is_ios) {
-    # TODO(GYP)
-    #  'actions': [
-    #    {
-    #      'action_name': 'copy_test_data',
-    #      'variables': {
-    #        'test_data_files': [
-    #          'data/certificate_policies_unittest/',
-    #          'data/name_constraints_unittest/',
-    #          'data/parse_certificate_unittest/',
-    #          'data/ssl/certificates/',
-    #          'data/test.html',
-    #          'data/url_request_unittest/',
-    #          'data/verify_certificate_chain_unittest/',
-    #          'data/verify_name_match_unittest/names/',
-    #        ],
-    #        'test_data_prefix': 'net',
-    #      },
-    #      'includes': [ '../build/copy_test_data_ios.gypi' ],
-    #    },
-    #  ],
     sources -= [
       # TODO(droger): The following tests are disabled because the
       # implementation is missing or incomplete.
@@ -1704,45 +1717,239 @@ test("net_unittests") {
 }
 
 # !is_android && !is_win && !is_mac
+if (!is_ios) {
+  # TODO(crbug.com/594965): this should be converted to "app" template and
+  # enabled on iOS too.
+  executable("net_perftests") {
+    testonly = true
+    sources = [
+      "base/mime_sniffer_perftest.cc",
+      "cookies/cookie_monster_perftest.cc",
+      "disk_cache/blockfile/disk_cache_perftest.cc",
+      "extras/sqlite/sqlite_persistent_cookie_store_perftest.cc",
+      "proxy/proxy_resolver_perftest.cc",
+      "udp/udp_socket_perftest.cc",
+    ]
 
-executable("net_perftests") {
-  testonly = true
-  sources = [
-    "base/mime_sniffer_perftest.cc",
-    "cookies/cookie_monster_perftest.cc",
-    "disk_cache/blockfile/disk_cache_perftest.cc",
-    "extras/sqlite/sqlite_persistent_cookie_store_perftest.cc",
-    "proxy/proxy_resolver_perftest.cc",
-    "udp/udp_socket_perftest.cc",
-  ]
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+    deps = [
+      ":extras",
+      ":net",
+      ":test_support",
+      "//base",
+      "//base:i18n",
+      "//base/test:test_support_perf",
+      "//build/config/sanitizers:deps",
+      "//testing/gtest",
+      "//url",
+    ]
 
-  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
-  deps = [
-    ":extras",
-    ":net",
-    ":test_support",
-    "//base",
-    "//base:i18n",
-    "//base/test:test_support_perf",
-    "//build/config/sanitizers:deps",
-    "//testing/gtest",
-    "//url",
-  ]
+    if (enable_websockets) {
+      sources += [ "websockets/websocket_frame_perftest.cc" ]
+    }
 
-  if (enable_websockets) {
-    sources += [ "websockets/websocket_frame_perftest.cc" ]
-  }
-
-  if (use_v8_in_net) {
-    deps += [ ":net_with_v8" ]
-  } else {
-    sources -= [ "proxy/proxy_resolver_perftest.cc" ]
+    if (use_v8_in_net) {
+      deps += [ ":net_with_v8" ]
+    } else {
+      sources -= [ "proxy/proxy_resolver_perftest.cc" ]
+    }
   }
 }
 
-buildflag_header("features") {
-  header = "net_features.h"
+# Fuzzers
 
-  flags = [ "ENABLE_BIDIRECTIONAL_STREAM=$enable_bidirectional_stream" ]
+source_set("net_fuzzer_test_support") {
+  testonly = true
+
+  sources = [
+    "base/fuzzer_test_support.cc",
+  ]
+  deps = [
+    "//base",
+    "//base:i18n",
+  ]
+}
+
+fuzzer_test("net_mime_sniffer_fuzzer") {
+  sources = [
+    "base/mime_sniffer_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_parse_proxy_list_pac_fuzzer") {
+  sources = [
+    "proxy/parse_proxy_list_pac_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_parse_proxy_list_fuzzer") {
+  sources = [
+    "proxy/parse_proxy_list_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_parse_proxy_bypass_rules_fuzzer") {
+  sources = [
+    "proxy/parse_proxy_bypass_rules_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_parse_proxy_rules_fuzzer") {
+  sources = [
+    "proxy/parse_proxy_rules_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_parse_data_url_fuzzer") {
+  sources = [
+    "base/parse_data_url_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_parse_ip_pattern_fuzzer") {
+  sources = [
+    "base/parse_ip_pattern_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_get_domain_and_registry_fuzzer") {
+  sources = [
+    "base/registry_controlled_domains/get_domain_and_registry_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_parse_cookie_line_fuzzer") {
+  sources = [
+    "cookies/parse_cookie_line_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_dns_record_fuzzer") {
+  sources = [
+    "dns/dns_record_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_http_stream_parser_fuzzer") {
+  sources = [
+    "http/http_stream_parser_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    ":test_support",
+    "//base",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_ftp_ctrl_response_fuzzer") {
+  sources = [
+    "ftp/ftp_ctrl_response_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_ftp_directory_listing_fuzzer") {
+  sources = [
+    "ftp/ftp_directory_listing_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_unescape_url_component_fuzzer") {
+  sources = [
+    "base/unescape_url_component_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+  ]
+  dict = "base/unescape_url_component_fuzzer.dict"
+  libfuzzer_options = "base/unescape_url_component_fuzzer.options"
+}
+
+fuzzer_test("net_websocket_frame_parser_fuzzer") {
+  sources = [
+    "websockets/websocket_frame_parser_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//net",
+  ]
+}
+
+fuzzer_test("net_http_chunked_decoder_fuzzer") {
+  sources = [
+    "http/http_chunked_decoder_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//net",
+  ]
+  dict = "http/http_chunked_decoder_fuzzer.dict"
+}
+
+fuzzer_test("net_quic_crypto_framer_parse_message_fuzzer") {
+  sources = [
+    "quic/quic_crypto_framer_parse_message_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+  ]
 }

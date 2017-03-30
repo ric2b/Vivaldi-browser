@@ -54,7 +54,6 @@ class SaveCardIconView;
 }
 
 namespace views {
-class BubbleDelegateView;
 class Label;
 class Widget;
 }
@@ -84,10 +83,6 @@ class LocationBarView : public LocationBar,
 
     virtual ToolbarModel* GetToolbarModel() = 0;
     virtual const ToolbarModel* GetToolbarModel() const = 0;
-
-    // Creates Widget for the given delegate.
-    virtual views::Widget* CreateViewsBubble(
-        views::BubbleDelegateView* bubble_delegate) = 0;
 
     // Creates PageActionImageView. Caller gets an ownership.
     virtual PageActionImageView* CreatePageActionImageView(
@@ -403,7 +398,7 @@ class LocationBarView : public LocationBar,
   Delegate* delegate_;
 
   // Object used to paint the border. Not used for material design.
-  scoped_ptr<views::Painter> border_painter_;
+  std::unique_ptr<views::Painter> border_painter_;
 
   // An icon to the left of the edit field: the HTTPS lock, blank page icon,
   // search icon, EV HTTPS bubble, etc.

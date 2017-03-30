@@ -77,7 +77,7 @@ public:
     SkCanvas* canvas() { return m_canvas; }
     const SkCanvas* canvas() const { return m_canvas; }
 
-    PaintController& paintController() { return m_paintController; }
+    PaintController& getPaintController() { return m_paintController; }
 
     bool contextDisabled() const { return m_disabledState; }
 
@@ -89,10 +89,10 @@ public:
     unsigned saveCount() const;
 #endif
 
-    float strokeThickness() const { return immutableState()->strokeData().thickness(); }
+    float strokeThickness() const { return immutableState()->getStrokeData().thickness(); }
     void setStrokeThickness(float thickness) { mutableState()->setStrokeThickness(thickness); }
 
-    StrokeStyle strokeStyle() const { return immutableState()->strokeData().style(); }
+    StrokeStyle getStrokeStyle() const { return immutableState()->getStrokeData().style(); }
     void setStrokeStyle(StrokeStyle style) { mutableState()->setStrokeStyle(style); }
 
     Color strokeColor() const { return immutableState()->strokeColor(); }
@@ -118,7 +118,7 @@ public:
     TextDrawingModeFlags textDrawingMode() const { return immutableState()->textDrawingMode(); }
 
     void setImageInterpolationQuality(InterpolationQuality quality) { mutableState()->setInterpolationQuality(quality); }
-    InterpolationQuality imageInterpolationQuality() const { return immutableState()->interpolationQuality(); }
+    InterpolationQuality imageInterpolationQuality() const { return immutableState()->getInterpolationQuality(); }
 
     // Specify the device scale factor which may change the way document markers
     // and fonts are rendered.
@@ -211,7 +211,10 @@ public:
     // are stored in a display list that can be replayed at a later time. Pass in the bounding
     // rectangle for the content in the list.
     void beginRecording(const FloatRect&);
-    PassRefPtr<const SkPicture> endRecording();
+    // Returns a picture with any recorded draw commands since the prerequisite call to
+    // beginRecording().  The picture is guaranteed to be non-null (but not necessarily non-empty),
+    // even when the context is disabled.
+    PassRefPtr<SkPicture> endRecording();
 
     void setShadow(const FloatSize& offset, float blur, const Color&,
         DrawLooperBuilder::ShadowTransformMode = DrawLooperBuilder::ShadowRespectsTransforms,
@@ -221,7 +224,6 @@ public:
     // (i.e. a draw looper is set if and only if there is a shadow).
     // The builder passed into this method will be destroyed.
     void setDrawLooper(PassOwnPtr<DrawLooperBuilder>);
-    void clearDrawLooper();
 
     void drawFocusRing(const Vector<IntRect>&, int width, int offset, const Color&);
     void drawFocusRing(const Path&, int width, int offset, const Color&);

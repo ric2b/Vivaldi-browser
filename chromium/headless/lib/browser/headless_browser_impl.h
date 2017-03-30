@@ -7,7 +7,8 @@
 
 #include "headless/public/headless_browser.h"
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "base/synchronization/lock.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
 
@@ -28,7 +29,8 @@ class HeadlessBrowserImpl : public HeadlessBrowser {
   ~HeadlessBrowserImpl() override;
 
   // HeadlessBrowser implementation:
-  scoped_ptr<HeadlessWebContents> CreateWebContents(
+  std::unique_ptr<HeadlessWebContents> CreateWebContents(
+      const GURL& initial_url,
       const gfx::Size& size) override;
   scoped_refptr<base::SingleThreadTaskRunner> BrowserMainThread()
       const override;
@@ -44,11 +46,16 @@ class HeadlessBrowserImpl : public HeadlessBrowser {
 
   const HeadlessBrowser::Options& options() const { return options_; }
 
+  // Customize the options used by this headless browser instance. Note that
+  // options which take effect before the message loop has been started (e.g.,
+  // custom message pumps) cannot be set via this method.
+  void SetOptionsForTesting(const HeadlessBrowser::Options& options);
+
  protected:
   base::Callback<void(HeadlessBrowser*)> on_start_callback_;
   HeadlessBrowser::Options options_;
   HeadlessBrowserMainParts* browser_main_parts_;  // Not owned.
-  scoped_ptr<aura::WindowTreeHost> window_tree_host_;
+  std::unique_ptr<aura::WindowTreeHost> window_tree_host_;
 
   DISALLOW_COPY_AND_ASSIGN(HeadlessBrowserImpl);
 };

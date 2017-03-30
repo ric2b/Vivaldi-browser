@@ -28,12 +28,6 @@ void WebFontRendering::setDeviceScaleFactor(float deviceScaleFactor)
 }
 
 // static
-void WebFontRendering::setUseSubpixelPositioning(bool useSubpixelPositioning)
-{
-    FontCache::setUseSubpixelPositioning(useSubpixelPositioning);
-}
-
-// static
 void WebFontRendering::addSideloadedFontForTesting(SkTypeface* typeface)
 {
     FontCache::addSideloadedFontForTesting(typeface);
@@ -67,6 +61,18 @@ void WebFontRendering::setLCDOrder(SkFontHost::LCDOrder order)
 void WebFontRendering::setLCDOrientation(SkFontHost::LCDOrientation orientation)
 {
     SkFontHost::SetSubpixelOrientation(orientation);
+}
+
+// static
+void WebFontRendering::setAntialiasedTextEnabled(bool enabled)
+{
+    FontCache::setAntialiasedTextEnabled(enabled);
+}
+
+// static
+void WebFontRendering::setLCDTextEnabled(bool enabled)
+{
+    FontCache::setLCDTextEnabled(enabled);
 }
 
 } // namespace blink

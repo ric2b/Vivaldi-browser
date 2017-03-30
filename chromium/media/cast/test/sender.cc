@@ -32,8 +32,8 @@
 #include "media/cast/logging/proto/raw_events.pb.h"
 #include "media/cast/logging/receiver_time_offset_estimator_impl.h"
 #include "media/cast/logging/stats_event_subscriber.h"
+#include "media/cast/net/cast_transport.h"
 #include "media/cast/net/cast_transport_defines.h"
-#include "media/cast/net/cast_transport_sender.h"
 #include "media/cast/net/udp_transport.h"
 #include "media/cast/test/fake_media_source.h"
 #include "media/cast/test/utility/default_config.h"
@@ -79,9 +79,9 @@ void QuitLoopOnInitializationResult(media::cast::OperationalStatus result) {
 }
 
 net::IPEndPoint CreateUDPAddress(const std::string& ip_str, uint16_t port) {
-  net::IPAddressNumber ip_number;
-  CHECK(net::ParseIPLiteralToNumber(ip_str, &ip_number));
-  return net::IPEndPoint(ip_number, port);
+  net::IPAddress ip_address;
+  CHECK(ip_address.AssignFromIPLiteral(ip_str));
+  return net::IPEndPoint(ip_address, port);
 }
 
 void DumpLoggingData(const media::cast::proto::LogMetadata& log_metadata,
@@ -160,7 +160,7 @@ void WriteStatsAndDestroySubscribers(
   VLOG(0) << "Audio stats: " << json;
 }
 
-class TransportClient : public media::cast::CastTransportSender::Client {
+class TransportClient : public media::cast::CastTransport::Client {
  public:
   explicit TransportClient(
       media::cast::LogEventDispatcher* log_event_dispatcher)
@@ -257,9 +257,9 @@ int main(int argc, char** argv) {
   if (cmd->HasSwitch(kSwitchVaryFrameSizes))
     fake_media_source->SetVariableFrameSizeMode(true);
 
-  // CastTransportSender initialization.
-  scoped_ptr<media::cast::CastTransportSender> transport_sender =
-      media::cast::CastTransportSender::Create(
+  // CastTransport initialization.
+  scoped_ptr<media::cast::CastTransport> transport_sender =
+      media::cast::CastTransport::Create(
           cast_environment->Clock(), base::TimeDelta::FromSeconds(1),
           make_scoped_ptr(new TransportClient(cast_environment->logger())),
           make_scoped_ptr(new media::cast::UdpTransport(

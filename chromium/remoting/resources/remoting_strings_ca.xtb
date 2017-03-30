@@ -24,11 +24,9 @@ Per obtenir informació sobre la privadesa, vegeu la Política de privadesa de G
 <translation id="1546934824884762070">S'ha produït un error inesperat. Informeu d'aquest problema als desenvolupadors.</translation>
 <translation id="1619813076098775562">La connexió amb el dispositiu d'emissió s'ha tancat</translation>
 <translation id="1643640058022401035">Si sortiu d'aquesta pàgina, la sessió de Chromoting finalitzarà.</translation>
-<translation id="1646994964686260497">No hi ha cap ordinador per connectar-s'hi.</translation>
 <translation id="1654128982815600832">S'estan activant les connexions remotes en aquest ordinador...</translation>
 <translation id="170207782578677537">No s'ha pogut registrar aquest ordinador.</translation>
 <translation id="1704090719919187045">Preferències de Chromoting Host</translation>
-<translation id="1738759452976856405">Atura l'enregistrament</translation>
 <translation id="174018511426417793">No teniu cap ordinador registrat. Per activar les connexions remotes a un ordinador, instal·leu-hi l'escriptori remot de Chrome i feu clic a <ph name="BUTTON_NAME" />.</translation>
 <translation id="1742469581923031760">S'està connectant...</translation>
 <translation id="1770394049404108959">No puc obrir l'aplicació.</translation>
@@ -121,10 +119,9 @@ Host</translation>
 <translation id="3908017899227008678">Redueix per ajustar</translation>
 <translation id="3931191050278863510">S'ha aturat l'amfitrió.</translation>
 <translation id="3933246213702324812">Chromoting a <ph name="HOSTNAME" /> és obsolet i cal actualitzar-lo.</translation>
-<translation id="3950820424414687140">Inici de sessió</translation>
+<translation id="3950820424414687140">Inicia la sessió</translation>
 <translation id="3989511127559254552">Per continuar heu de concedir permisos d'accés ampliat a l'ordinador. Només ho heu de fer una vegada.</translation>
 <translation id="4006787130661126000">Heu d'activar les connexions remotes si voleu utilitzar l'escriptori remot de Chrome per accedir a aquest ordinador.</translation>
-<translation id="401121182145179743">Primer heu de configurar l'accés remot al vostre ordinador.</translation>
 <translation id="4028465833180158312">• Actualitzacions a la interfície de material design.
 • Atribució de llicències de tercers.
 • Es mostra informació per als ordinadors remots que no tenen connexió.</translation>
@@ -168,6 +165,7 @@ remot de Chrome</translation>
 <translation id="4918086044614829423">Accepta</translation>
 <translation id="492843737083352574">Tinc problemes amb el teclat o amb el ratolí.</translation>
 <translation id="4973800994433240357">En baixar l'instal·lador de l'amfitrió de Chromoting accepteu les <ph name="LINK_BEGIN" />Condicions del servei<ph name="LINK_END" /> de Google.</translation>
+<translation id="4985296110227979402">Primer heu de configurar l'accés remot al vostre ordinador.</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (fora de línia)</translation>
 <translation id="5070121137485264635">L'amfitrió remot necessita que us autentiqueu en un lloc web de tercers. Per continuar, cal que concediu permisos addicionals a l'escriptori remot de Chrome per accedir a aquesta adreça:</translation>
 <translation id="5156271271724754543">Introduïu el mateix PIN als dos quadres.</translation>
@@ -176,7 +174,8 @@ remot de Chrome</translation>
 <translation id="518094545883702183">Aquesta informació només s'utilitza per diagnosticar el problema de què esteu informant. Només hi poden accedir les persones que analitzen l'informe i es conserva com a màxim durant 30 dies.</translation>
 <translation id="5222676887888702881">Tanca la sessió</translation>
 <translation id="5254120496627797685">Si sortiu d'aquesta pàgina, la sessió de l'escriptori remot de Chrome finalitzarà.</translation>
-<translation id="5308380583665731573">Connexió</translation>
+<translation id="5308380583665731573">Connecta</translation>
+<translation id="533625276787323658">No hi ha cap ordinador per connectar-s'hi</translation>
 <translation id="5363265567587775042">Demaneu a l'usuari de l'ordinador al qual voleu accedir que faci clic a <ph name="SHARE" /> i que us faciliti el codi d'accés.</translation>
 <translation id="5379087427956679853">L'escriptori remot de Chrome us permet compartir el vostre ordinador de manera segura al web. Els dos usuaris han d'executar l'aplicació d'escriptori remot de Chrome, que podeu trobar a la pàgina <ph name="URL" />.</translation>
 <translation id="5394895745784982830">Per a Mac (OS X 10.6 i versions posteriors)</translation>
@@ -237,7 +236,6 @@ remot de Chrome</translation>
 <translation id="6965382102122355670">D'acord</translation>
 <translation id="6985691951107243942">Esteu segur que voleu desactivar les connexions remotes a <ph name="HOSTNAME" />? Si canvieu de parer, haureu de visitar aquest ordinador per tornar-les a activar.</translation>
 <translation id="6998989275928107238">Per a</translation>
-<translation id="7017806586333792422">Inicia l'enregistrament</translation>
 <translation id="7019153418965365059">Error d'amfitrió no reconegut: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Assistència remota</translation>
 <translation id="7038683108611689168">Ajudeu-nos a millorar Chromoting: permeteu-nos recollir estadístiques d'ús i informes d'error.</translation>
@@ -274,7 +272,7 @@ remot de Chrome</translation>
 <translation id="8187079423890319756">Copyright 2013 Els autors de Chromium. Tots els drets reservats.</translation>
 <translation id="8196755618196986400">La vostra adreça electrònica s'inclourà en tots els suggeriments que envieu perquè us puguem escriure i proporcionar-vos més informació.</translation>
 <translation id="8244400547700556338">Més informació</translation>
-<translation id="8261506727792406068">Elimina</translation>
+<translation id="8261506727792406068">Suprimeix</translation>
 <translation id="8355326866731426344">Aquest codi d'accés caducarà d'aquí a <ph name="TIMEOUT" /></translation>
 <translation id="8355485110405946777">Inclou registres de l'aplicació per ajudar-nos a resoldre el vostre problema (els registres poden incloure informació privada).</translation>
 <translation id="837021510621780684">Des d'aquest ordinador</translation>

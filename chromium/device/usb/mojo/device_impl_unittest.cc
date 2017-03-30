@@ -22,7 +22,8 @@
 #include "base/stl_util.h"
 #include "device/usb/mock_usb_device.h"
 #include "device/usb/mock_usb_device_handle.h"
-#include "device/usb/mojo/fake_permission_provider.h"
+#include "device/usb/mojo/mock_permission_provider.h"
+#include "device/usb/mojo/type_converters.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/base/io_buffer.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -151,6 +152,7 @@ class USBDeviceImplTest : public testing::Test {
   ~USBDeviceImplTest() override {}
 
  protected:
+  MockPermissionProvider& permission_provider() { return permission_provider_; }
   MockUsbDevice& mock_device() { return *mock_device_.get(); }
   bool is_device_open() const { return is_device_open_; }
   MockUsbDeviceHandle& mock_handle() { return *mock_handle_.get(); }
@@ -168,11 +170,11 @@ class USBDeviceImplTest : public testing::Test {
         new MockUsbDevice(vendor_id, product_id, manufacturer, product, serial);
     mock_handle_ = new MockUsbDeviceHandle(mock_device_.get());
 
-    PermissionProviderPtr permission_provider;
-    permission_provider_.Bind(mojo::GetProxy(&permission_provider));
     DevicePtr proxy;
-    new DeviceImpl(mock_device_, std::move(permission_provider),
-                   mojo::GetProxy(&proxy));
+    new DeviceImpl(
+        mock_device_,
+        DeviceInfo::From(static_cast<const UsbDevice&>(*mock_device_)),
+        permission_provider_.GetWeakPtr(), mojo::GetProxy(&proxy));
 
     // Set up mock handle calls to respond based on mock device configs
     // established by the test.
@@ -440,7 +442,7 @@ class USBDeviceImplTest : public testing::Test {
 
   std::set<uint8_t> claimed_interfaces_;
 
-  FakePermissionProvider permission_provider_;
+  MockPermissionProvider permission_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(USBDeviceImplTest);
 };
@@ -531,6 +533,7 @@ TEST_F(USBDeviceImplTest, SetInvalidConfiguration) {
   }
 
   EXPECT_CALL(mock_handle(), SetConfiguration(42, _));
+  EXPECT_CALL(permission_provider(), HasConfigurationPermission(42, _));
 
   {
     // SetConfiguration should fail because 42 is not a valid mock
@@ -557,6 +560,7 @@ TEST_F(USBDeviceImplTest, SetValidConfiguration) {
   }
 
   EXPECT_CALL(mock_handle(), SetConfiguration(42, _));
+  EXPECT_CALL(permission_provider(), HasConfigurationPermission(42, _));
 
   AddMockConfig(ConfigBuilder(42));
 
@@ -624,6 +628,7 @@ TEST_F(USBDeviceImplTest, ClaimAndReleaseInterface) {
   AddMockConfig(ConfigBuilder(1).AddInterface(1, 0, 1, 2, 3));
 
   EXPECT_CALL(mock_handle(), SetConfiguration(1, _));
+  EXPECT_CALL(permission_provider(), HasConfigurationPermission(1, _));
 
   {
     base::RunLoop loop;
@@ -633,7 +638,6 @@ TEST_F(USBDeviceImplTest, ClaimAndReleaseInterface) {
   }
 
   EXPECT_CALL(mock_device(), GetActiveConfiguration());
-  EXPECT_CALL(mock_handle(), ClaimInterface(2, _));
 
   {
     // Try to claim an invalid interface and expect failure.
@@ -645,6 +649,7 @@ TEST_F(USBDeviceImplTest, ClaimAndReleaseInterface) {
 
   EXPECT_CALL(mock_device(), GetActiveConfiguration());
   EXPECT_CALL(mock_handle(), ClaimInterface(1, _));
+  EXPECT_CALL(permission_provider(), HasFunctionPermission(1, 1, _));
 
   {
     base::RunLoop loop;
@@ -730,6 +735,7 @@ TEST_F(USBDeviceImplTest, ControlTransfer) {
 
   EXPECT_CALL(mock_device(), GetActiveConfiguration());
   EXPECT_CALL(mock_handle(), SetConfiguration(1, _));
+  EXPECT_CALL(permission_provider(), HasConfigurationPermission(1, _));
 
   {
     base::RunLoop loop;
@@ -748,6 +754,7 @@ TEST_F(USBDeviceImplTest, ControlTransfer) {
   EXPECT_CALL(mock_handle(),
               ControlTransfer(USB_DIRECTION_INBOUND, UsbDeviceHandle::STANDARD,
                               UsbDeviceHandle::DEVICE, 5, 6, 7, _, _, 0, _));
+  EXPECT_CALL(permission_provider(), HasConfigurationPermission(1, _));
 
   {
     auto params = ControlTransferParams::New();
@@ -770,6 +777,7 @@ TEST_F(USBDeviceImplTest, ControlTransfer) {
   EXPECT_CALL(mock_handle(),
               ControlTransfer(USB_DIRECTION_OUTBOUND, UsbDeviceHandle::STANDARD,
                               UsbDeviceHandle::INTERFACE, 5, 6, 7, _, _, 0, _));
+  EXPECT_CALL(permission_provider(), HasFunctionPermission(7, 1, _));
 
   {
     auto params = ControlTransferParams::New();

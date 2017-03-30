@@ -6,12 +6,12 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/task_runner_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "net/base/net_errors.h"
@@ -133,9 +133,9 @@ void DatabaseQuotaClient::GetOriginUsage(const GURL& origin_url,
   }
 
   base::PostTaskAndReplyWithResult(
-      db_tracker_thread_.get(),
-      FROM_HERE,
-      base::Bind(&GetOriginUsageOnDBThread, db_tracker_, origin_url),
+      db_tracker_thread_.get(), FROM_HERE,
+      base::Bind(&GetOriginUsageOnDBThread, base::RetainedRef(db_tracker_),
+                 origin_url),
       callback);
 }
 
@@ -154,12 +154,9 @@ void DatabaseQuotaClient::GetOriginsForType(
   std::set<GURL>* origins_ptr = new std::set<GURL>();
   db_tracker_thread_->PostTaskAndReply(
       FROM_HERE,
-      base::Bind(&GetOriginsOnDBThread,
-                 db_tracker_,
+      base::Bind(&GetOriginsOnDBThread, base::RetainedRef(db_tracker_),
                  base::Unretained(origins_ptr)),
-      base::Bind(&DidGetOrigins,
-                 callback,
-                 base::Owned(origins_ptr)));
+      base::Bind(&DidGetOrigins, callback, base::Owned(origins_ptr)));
 }
 
 void DatabaseQuotaClient::GetOriginsForHost(
@@ -178,13 +175,9 @@ void DatabaseQuotaClient::GetOriginsForHost(
   std::set<GURL>* origins_ptr = new std::set<GURL>();
   db_tracker_thread_->PostTaskAndReply(
       FROM_HERE,
-      base::Bind(&GetOriginsForHostOnDBThread,
-                 db_tracker_,
-                 base::Unretained(origins_ptr),
-                 host),
-      base::Bind(&DidGetOrigins,
-                 callback,
-                 base::Owned(origins_ptr)));
+      base::Bind(&GetOriginsForHostOnDBThread, base::RetainedRef(db_tracker_),
+                 base::Unretained(origins_ptr), host),
+      base::Bind(&DidGetOrigins, callback, base::Owned(origins_ptr)));
 }
 
 void DatabaseQuotaClient::DeleteOriginData(const GURL& origin,
@@ -199,10 +192,9 @@ void DatabaseQuotaClient::DeleteOriginData(const GURL& origin,
     return;
   }
 
-  base::Callback<void(int)> delete_callback =
-      base::Bind(&DidDeleteOriginData,
-                 base::ThreadTaskRunnerHandle::Get(),
-                 callback);
+  base::Callback<void(int)> delete_callback = base::Bind(
+      &DidDeleteOriginData,
+      base::RetainedRef(base::ThreadTaskRunnerHandle::Get()), callback);
 
   PostTaskAndReplyWithResult(
       db_tracker_thread_.get(),

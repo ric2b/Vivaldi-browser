@@ -229,7 +229,7 @@ void LayoutSVGResourceContainer::registerResource()
         return;
     }
 
-    OwnPtrWillBeRawPtr<SVGDocumentExtensions::SVGPendingElements> clients(extensions.removePendingResource(m_id));
+    RawPtr<SVGDocumentExtensions::SVGPendingElements> clients(extensions.removePendingResource(m_id));
 
     // Cache us with the new id.
     extensions.addResource(m_id, this);
@@ -289,17 +289,17 @@ static inline void removeFromCacheAndInvalidateDependencies(LayoutObject* object
     // reference graph adjustments on changes, so we need to break possible cycles here.
     // This strong reference is safe, as it is guaranteed that this set will be emptied
     // at the end of recursion.
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<SVGElementSet>, invalidatingDependencies, (adoptPtrWillBeNoop(new SVGElementSet)));
+    DEFINE_STATIC_LOCAL(SVGElementSet, invalidatingDependencies, (new SVGElementSet));
 
     for (SVGElement* element : *dependencies) {
         if (LayoutObject* layoutObject = element->layoutObject()) {
-            if (UNLIKELY(!invalidatingDependencies->add(element).isNewEntry)) {
+            if (UNLIKELY(!invalidatingDependencies.add(element).isNewEntry)) {
                 // Reference cycle: we are in process of invalidating this dependant.
                 continue;
             }
 
             LayoutSVGResourceContainer::markForLayoutAndParentResourceInvalidation(layoutObject, needsLayout);
-            invalidatingDependencies->remove(element);
+            invalidatingDependencies.remove(element);
         }
     }
 }

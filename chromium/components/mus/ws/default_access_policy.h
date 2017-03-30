@@ -11,7 +11,6 @@
 #include "components/mus/ws/access_policy.h"
 
 namespace mus {
-
 namespace ws {
 
 class AccessPolicyDelegate;
@@ -19,11 +18,12 @@ class AccessPolicyDelegate;
 // AccessPolicy for all connections, except the window manager.
 class DefaultAccessPolicy : public AccessPolicy {
  public:
-  DefaultAccessPolicy(ConnectionSpecificId connection_id,
-                      AccessPolicyDelegate* delegate);
+  DefaultAccessPolicy();
   ~DefaultAccessPolicy() override;
 
   // AccessPolicy:
+  void Init(ConnectionSpecificId connection_id,
+            AccessPolicyDelegate* delegate) override;
   bool CanRemoveWindowFromParent(const ServerWindow* window) const override;
   bool CanAddWindow(const ServerWindow* parent,
                     const ServerWindow* child) const override;
@@ -31,6 +31,7 @@ class DefaultAccessPolicy : public AccessPolicy {
                              const ServerWindow* child) const override;
   bool CanRemoveTransientWindowFromParent(
       const ServerWindow* window) const override;
+  bool CanSetModal(const ServerWindow* window) const override;
   bool CanReorderWindow(const ServerWindow* window,
                         const ServerWindow* relative_window,
                         mojom::OrderDirection direction) const override;
@@ -38,9 +39,9 @@ class DefaultAccessPolicy : public AccessPolicy {
   bool CanGetWindowTree(const ServerWindow* window) const override;
   bool CanDescendIntoWindowForWindowTree(
       const ServerWindow* window) const override;
-  bool CanEmbed(const ServerWindow* window,
-                uint32_t policy_bitmask) const override;
+  bool CanEmbed(const ServerWindow* window) const override;
   bool CanChangeWindowVisibility(const ServerWindow* window) const override;
+  bool CanChangeWindowOpacity(const ServerWindow* window) const override;
   bool CanSetWindowSurface(const ServerWindow* window,
                            mus::mojom::SurfaceType surface_type) const override;
   bool CanSetWindowBounds(const ServerWindow* window) const override;
@@ -57,19 +58,18 @@ class DefaultAccessPolicy : public AccessPolicy {
   const ServerWindow* GetWindowForFocusChange(
       const ServerWindow* focused) override;
   bool CanSetWindowManager() const override;
+  bool IsValidIdForNewWindow(const ClientWindowId& id) const override;
 
  private:
   bool WasCreatedByThisConnection(const ServerWindow* window) const;
-  bool IsDescendantOfEmbedRoot(const ServerWindow* window) const;
 
-  const ConnectionSpecificId connection_id_;
-  AccessPolicyDelegate* delegate_;
+  ConnectionSpecificId connection_id_ = 0u;
+  AccessPolicyDelegate* delegate_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(DefaultAccessPolicy);
 };
 
 }  // namespace ws
-
 }  // namespace mus
 
 #endif  // COMPONENTS_MUS_WS_DEFAULT_ACCESS_POLICY_H_

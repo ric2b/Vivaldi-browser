@@ -25,6 +25,7 @@ class Connector;
 }
 
 namespace ui {
+class Event;
 class ViewProp;
 }
 
@@ -82,9 +83,10 @@ class VIEWS_MUS_EXPORT PlatformWindowMus
   void OnRequestClose(mus::Window* window) override;
 
   // mus::InputEventHandler:
-  void OnWindowInputEvent(mus::Window* view,
-                          mus::mojom::EventPtr event,
-                          scoped_ptr<base::Closure>* ack_callback) override;
+  void OnWindowInputEvent(
+      mus::Window* view,
+      const ui::Event& event,
+      scoped_ptr<base::Callback<void(bool)>>* ack_callback) override;
 
   ui::PlatformWindowDelegate* delegate_;
   mus::Window* mus_window_;

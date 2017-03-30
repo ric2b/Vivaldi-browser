@@ -1,6 +1,9 @@
-<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/device-icons.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/image-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-radio-button/paper-radio-button.html">
@@ -9,9 +12,8 @@
 <link rel="import" href="chrome://md-settings/controls/settings_input.html">
 <link rel="import" href="chrome://md-settings/controls/settings_radio_group.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
-<link rel="import" href="chrome://md-settings/settings_page/settings_subheader.html">
+<link rel="import" href="chrome://md-settings/settings_page/settings_subpage.html">
 <link rel="import" href="chrome://md-settings/settings_shared_css.html">
-<link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="appearance_fonts_page.html">
 
 <dom-module id="settings-appearance-page">
@@ -20,35 +22,40 @@
   <link rel="import" type="css" href="chrome://resources/css/widgets.css">
   <link rel="import" href="chrome://resources/html/action_link.html">
   <template>
-    <style include="settings-shared"></style>
+    <style include="settings-shared">
+      .settings-box iron-icon {
+        -webkit-margin-end: var(--checkbox-spacing);
+      }
+    </style>
     <settings-animated-pages id="pages" current-route="{{currentRoute}}"
         section="appearance">
       <neon-animatable id="main">
+<if expr="chromeos">
         <div class="settings-box first two-line">
-          <iron-icon icon="image:brightness-1"></iron-icon>
-          <paper-button class="primary-button middle">
+          <iron-icon icon="device:wallpaper"></iron-icon>
+          <div class="start">
             <div>[[i18n('setWallpaper')]]</div>
             <div class="secondary">[[i18n('openWallpaperApp')]]</div>
-          </paper-button>
-          <iron-icon icon="exit-to-app" disabled></iron-icon>
+          </div>
         </div>
-        <div class="settings-box two-line">
-          <iron-icon icon="image:brightness-1"></iron-icon>
-          <paper-button class="primary-button middle" id="get-themes"
-              on-tap="openThemesGallery_">
+        <div class="settings-box two-line" on-tap="openThemesGallery_">
+</if>
+<if expr="not chromeos">
+        <div class="settings-box two-line first" on-tap="openThemesGallery_">
+</if>
+          <iron-icon icon="image:palette"></iron-icon>
+          <div class="start">
             <div>[[i18n('getThemes')]]</div>
-            <div class="secondary">[[i18n('chooseFromWebStore')]]</div>
-          </paper-button>
-          <template is="dom-if" if="[[!allowResetTheme_]]">
-            <iron-icon icon="exit-to-app"></iron-icon>
-          </template>
+            <div class="secondary">[[themeSublabel_]]</div>
+          </div>
           <template is="dom-if" if="[[allowResetTheme_]]">
-            <paper-button on-tap="resetTheme_"
+            <paper-button on-tap="resetTheme_" class="secondary-action"
                 >[[i18n('resetToDefaultTheme')]]</paper-button>
           </template>
         </div>
         <div class="settings-box two-line">
           <settings-checkbox class="start" i18n-values="label:showHomeButton"
+              sub-label="[[getShowHomeSubLabel_(prefs.homepage_is_newtabpage.value, prefs.homepage.value)]]"
               pref="{{prefs.browser.show_home_button}}">
           </settings-checkbox>
         </div>
@@ -79,10 +86,11 @@
               menu-options="[[fontSizeOptions_]]" no-label-float>
           </settings-dropdown-menu>
         </div>
-        <div class="settings-box">
-          <div class="start" i18n-content="customizeFonts"></div>
-          <paper-button on-tap="onCustomizeFontsTap_"
-              i18n-content="customizeFonts"></paper-button>
+        <div class="settings-box two-line" on-tap="onCustomizeFontsTap_">
+          <div class="start">
+            <div i18n-content="customizeFonts"></div>
+            <div class="secondary" i18n-content="chooseFontsAndEncoding"></div>
+          </div>
         </div>
         <div class="settings-box">
           <div class="start" i18n-content="pageZoom"></div>
@@ -91,15 +99,12 @@
           </settings-dropdown-menu>
         </div>
       </neon-animatable>
-      <neon-animatable id="appearance-fonts">
-        <settings-subheader i18n-values="page-title:customizeFonts">
-        </settings-subheader>
-        <template is="dom-if" if="[[showFontsPage_(currentRoute.subpage.*)]]"
-            restamp>
+      <template is="dom-if" name="appearance-fonts">
+        <settings-subpage page-title="[[i18n('customizeFonts')]]">
           <settings-appearance-fonts-page prefs="{{prefs}}">
           </settings-appearance-fonts-page>
-        </template>
-      </neon-animatable>
+        </settings-subpage>
+      </template>
     </settings-animated-pages>
   </template>
   <script src="appearance_page.js"></script>

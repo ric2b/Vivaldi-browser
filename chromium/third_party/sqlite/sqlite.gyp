@@ -56,40 +56,6 @@
     {
       'target_name': 'sqlite',
       'conditions': [
-        [ 'chromeos==1' , {
-          'defines': [
-            # Despite obvious warnings about not using this flag in deployment,
-            # we are turning off sync in ChromeOS and relying on the underlying
-            # journaling filesystem to do error recovery properly.  It's much
-            # faster.
-            'SQLITE_NO_SYNC',
-          ],
-        }],
-        ['os_posix == 1', {
-          'defines': [
-            # Allow xSleep() call on Unix to use usleep() rather than sleep().
-            # Microsecond precision is better than second precision.  Should
-            # only affect contended databases via the busy callback.  Browser
-            # profile databases are mostly exclusive, but renderer databases may
-            # allow for contention.
-            'HAVE_USLEEP=1',
-            # Use pread/pwrite directly rather than emulating them.
-            'USE_PREAD=1',
-          ],
-        }],
-        ['OS == "linux" or OS == "android"', {
-          'defines': [
-            # Linux provides fdatasync(), a faster equivalent of fsync().
-            'fdatasync=fdatasync',
-          ],
-        }],
-        # Pull in config.h on Linux.  This allows use of preprocessor macros
-        # which are not available to the build config.
-        ['OS == "linux"', {
-          'defines': [
-            '_HAVE_SQLITE_CONFIG_H',
-          ],
-        }],
         ['use_system_sqlite', {
           'type': 'none',
           'direct_dependent_settings': {
@@ -101,6 +67,7 @@
           'conditions': [
             ['OS == "ios"', {
               'dependencies': [
+                'sqlite_recover',
                 'sqlite_regexp',
               ],
               'link_settings': {
@@ -140,6 +107,9 @@
             'amalgamation/config.h',
             'amalgamation/sqlite3.h',
             'amalgamation/sqlite3.c',
+            'src/src/recover_varint.c',
+            'src/src/recover.c',
+            'src/src/recover.h',
           ],
           'variables': {
             'clang_warning_flags': [
@@ -170,6 +140,40 @@
             }],
             ['OS != "win" and component == "shared_library"', {
               'defines': ['SQLITE_API=__attribute__((visibility("default")))'],
+            }],
+            [ 'chromeos==1' , {
+              'defines': [
+                # Despite obvious warnings about not using this flag in
+                # deployment, we are turning off sync in ChromeOS and relying on
+                # the underlying journaling filesystem to do error recovery
+                # properly.  It's much faster.
+                'SQLITE_NO_SYNC',
+              ],
+            }],
+            ['os_posix == 1', {
+              'defines': [
+                # Allow xSleep() call on Unix to use usleep() rather than
+                # sleep().  Microsecond precision is better than second
+                # precision.  Should only affect contended databases via the
+                # busy callback.  Browser profile databases are mostly
+                # exclusive, but renderer databases may allow for contention.
+                'HAVE_USLEEP=1',
+                # Use pread/pwrite directly rather than emulating them.
+                'USE_PREAD=1',
+              ],
+            }],
+            # Pull in config.h on Linux.  This allows use of preprocessor macros
+            # which are not available to the build config.
+            ['OS == "linux"', {
+              'defines': [
+                '_HAVE_SQLITE_CONFIG_H',
+              ],
+            }],
+            ['OS == "linux" or OS == "android"', {
+              'defines': [
+                # Linux provides fdatasync(), a faster equivalent of fsync().
+                'fdatasync=fdatasync',
+              ],
             }],
             ['OS=="linux"', {
               'link_settings': {
@@ -239,6 +243,18 @@
     },],
     ['OS == "ios"', {
       'targets': [
+        {
+          # Virtual table used by sql::Recovery to recover corrupt
+          # databases, for use with USE_SYSTEM_SQLITE.
+          'target_name': 'sqlite_recover',
+          'type': 'static_library',
+          'sources': [
+            # TODO(shess): Move out of the SQLite source tree, perhaps to ext/.
+            'src/src/recover_varint.c',
+            'src/src/recover.c',
+            'src/src/recover.h',
+          ],
+        },
         {
           'target_name': 'sqlite_regexp',
           'type': 'static_library',

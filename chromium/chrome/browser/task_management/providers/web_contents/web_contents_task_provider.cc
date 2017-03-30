@@ -11,10 +11,12 @@
 #include "chrome/browser/task_management/providers/web_contents/web_contents_tags_manager.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 
 using content::RenderFrameHost;
+using content::RenderWidgetHost;
 using content::SiteInstance;
 using content::WebContents;
 
@@ -52,6 +54,7 @@ class WebContentsEntry : public content::WebContentsObserver {
   void RenderViewReady() override;
   void WebContentsDestroyed() override;
   void RenderProcessGone(base::TerminationStatus status) override;
+  void OnRendererUnresponsive(RenderWidgetHost* render_widget_host) override;
   void DidNavigateMainFrame(
       const content::LoadCommittedDetails& details,
       const content::FrameNavigateParams& params) override;
@@ -72,13 +75,13 @@ class WebContentsEntry : public content::WebContentsObserver {
 
   // The RenderFrameHosts associated with this entry's WebContents that we're
   // tracking mapped by their SiteInstances.
-  typedef std::vector<RenderFrameHost*> FramesList;
-  typedef std::map<SiteInstance*, FramesList> SiteInstanceToFramesMap;
+  using FramesList = std::vector<RenderFrameHost*>;
+  using SiteInstanceToFramesMap = std::map<SiteInstance*, FramesList>;
   SiteInstanceToFramesMap frames_by_site_instance_;
 
   // The RendererTasks that we create for the task manager, mapped by their
   // RenderFrameHosts.
-  typedef std::map<RenderFrameHost*, RendererTask*> FramesToTasksMap;
+  using FramesToTasksMap = std::map<RenderFrameHost*, RendererTask*>;
   FramesToTasksMap tasks_by_frames_;
 
   // States whether we did record a main frame for this entry.
@@ -93,8 +96,6 @@ WebContentsEntry::WebContentsEntry(content::WebContents* web_contents,
                                    WebContentsTaskProvider* provider)
     : WebContentsObserver(web_contents),
       provider_(provider),
-      frames_by_site_instance_(),
-      tasks_by_frames_(),
       main_frame_site_instance_(nullptr) {
 }
 
@@ -109,10 +110,14 @@ void WebContentsEntry::CreateAllTasks() {
 }
 
 void WebContentsEntry::ClearAllTasks(bool notify_observer) {
-  for (auto& pair : frames_by_site_instance_) {
-    FramesList& frames_list = pair.second;
+  for (const auto& pair : frames_by_site_instance_) {
+    const FramesList& frames_list = pair.second;
     DCHECK(!frames_list.empty());
     RendererTask* task = tasks_by_frames_[frames_list[0]];
+
+    task->set_termination_status(web_contents()->GetCrashedStatus());
+    task->set_termination_error_code(web_contents()->GetCrashedErrorCode());
+
     if (notify_observer)
       provider_->NotifyObserverTaskRemoved(task);
     delete task;
@@ -156,6 +161,18 @@ void WebContentsEntry::RenderProcessGone(base::TerminationStatus status) {
   ClearAllTasks(true);
 }
 
+void WebContentsEntry::OnRendererUnresponsive(
+    RenderWidgetHost* render_widget_host) {
+  auto itr = tasks_by_frames_.find(web_contents()->GetMainFrame());
+  if (itr == tasks_by_frames_.end())
+    return;
+
+  DCHECK_EQ(render_widget_host->GetProcess(),
+            web_contents()->GetMainFrame()->GetProcess());
+
+  provider_->NotifyObserverTaskUnresponsive(itr->second);
+}
+
 void WebContentsEntry::DidNavigateMainFrame(
     const content::LoadCommittedDetails& details,
     const content::FrameNavigateParams& params) {
@@ -192,14 +209,14 @@ void WebContentsEntry::TitleWasSet(content::NavigationEntry* entry,
 }
 
 void WebContentsEntry::CreateTaskForFrame(RenderFrameHost* render_frame_host) {
-  DCHECK_EQ(0U, tasks_by_frames_.count(render_frame_host));
+  DCHECK(!ContainsKey(tasks_by_frames_, render_frame_host));
 
   content::SiteInstance* site_instance = render_frame_host->GetSiteInstance();
   if (!site_instance->GetProcess()->HasConnection())
     return;
 
   bool site_instance_exists =
-      frames_by_site_instance_.count(site_instance) != 0U;
+      ContainsKey(frames_by_site_instance_, site_instance);
   bool is_main_frame = (render_frame_host == web_contents()->GetMainFrame());
   bool site_instance_is_main = (site_instance == main_frame_site_instance_);
 
@@ -210,7 +227,6 @@ void WebContentsEntry::CreateTaskForFrame(RenderFrameHost* render_frame_host) {
     if (is_main_frame) {
       const WebContentsTag* tag =
           WebContentsTag::FromWebContents(web_contents());
-      CHECK(tag);
       new_task = tag->CreateTask();
       main_frame_site_instance_ = site_instance;
     } else {
@@ -271,8 +287,7 @@ void WebContentsEntry::ClearTaskForFrame(RenderFrameHost* render_frame_host) {
 ////////////////////////////////////////////////////////////////////////////////
 
 WebContentsTaskProvider::WebContentsTaskProvider()
-    : entries_map_(),
-      is_updating_(false) {
+    : is_updating_(false) {
 }
 
 WebContentsTaskProvider::~WebContentsTaskProvider() {
@@ -289,7 +304,7 @@ void WebContentsTaskProvider::OnWebContentsTagCreated(
 
   // TODO(afakhry): Check if we need this check. It seems that we no longer
   // need it in the new implementation.
-  if (entries_map_.count(web_contents)) {
+  if (HasWebContents(web_contents)) {
     // This case may happen if we added a WebContents while collecting all the
     // pre-existing ones at the time |StartUpdating()| was called, but the
     // notification of its connection hasn't been fired yet. In this case we
@@ -343,7 +358,7 @@ Task* WebContentsTaskProvider::GetTaskOfUrlRequest(int origin_pid,
 
 bool WebContentsTaskProvider::HasWebContents(
     content::WebContents* web_contents) const {
-  return entries_map_.count(web_contents) != 0;
+  return ContainsKey(entries_map_, web_contents);
 }
 
 void WebContentsTaskProvider::StartUpdating() {
@@ -351,7 +366,7 @@ void WebContentsTaskProvider::StartUpdating() {
 
   // 1- Collect all pre-existing WebContents from the WebContentsTagsManager.
   WebContentsTagsManager* tags_manager = WebContentsTagsManager::GetInstance();
-  for (auto& tag : tags_manager->tracked_tags())
+  for (const auto& tag : tags_manager->tracked_tags())
     OnWebContentsTagCreated(tag);
 
   // 2- Start observing newly connected ones.

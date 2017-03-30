@@ -10,12 +10,18 @@
   // is not detected by chromium on windows WM testers.
   DISABLE_ALL(AbortsPageLoadMetricsObserverTest)
 
+  // Seem to not work in VS2013 at least, even in Chrome
+  DISABLE_ALL(BlameContextTest)
+
   // Disabled because the key playing sends wrong keys
   DISABLE(BrowserKeyEventsTest, FocusMenuBarByAltKey)
 
   // Disabled because high performance timing support (contant_tsc)
   // is not detected by chromium on windows WM testers.
   DISABLE_ALL(BackgroundTracingManagerBrowserTest)
+
+  // Nacl is disabled in Vivaldi
+  DISABLE_ALL(ChromeServiceWorkerFetchTest)
 
   // Disabled because high performance timing support (contant_tsc)
   // is not detected by chromium on windows WM testers.
@@ -39,8 +45,20 @@
 
   // Disabled because high performance timing support (contant_tsc)
   // is not detected by chromium on windows WM testers.
-  DISABLE(MetricsWebContentsObserverTest, DontLogIrrelevantNavigation)
-  DISABLE(MetricsWebContentsObserverTest, LogAbortChains)
+  DISABLE_ALL(MetricsWebContentsObserverTest)
+  DISABLE_ALL(DocumentWritePageLoadMetricsObserverTest)
+  DISABLE_ALL(FromGWSPageLoadMetricsObserverTest)
 
   // Fails on tester, works on dev PC; assume it is the timing issue
   DISABLE(NotificationPermissionContextTest, TestDenyInIncognitoAfterDelay)
+
+#if defined(_MSC_VER) && _MSC_VER<1900
+  // Seems to rely on VS2015 specific format string argument
+  DISABLE(SafeBrowsingProtocolParsingTest, TestGetHash)
+#endif
+  // Seem to not work in VS2013 at least, even in Chrome
+  DISABLE_ALL(TraceEventAnalyzerTest)
+
+  // Seems broken in chromium, too
+  DISABLE(WebRtcGetUserMediaBrowserTest,
+          TraceVideoCaptureControllerPerformanceDuringGetUserMedia)

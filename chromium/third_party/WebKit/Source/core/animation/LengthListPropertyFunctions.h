@@ -16,9 +16,9 @@ class ComputedStyle;
 class LengthListPropertyFunctions {
     STATIC_ONLY(LengthListPropertyFunctions);
 public:
-    static ValueRange valueRange(CSSPropertyID);
-    static Vector<Length> getInitialLengthList(CSSPropertyID);
-    static Vector<Length> getLengthList(CSSPropertyID, const ComputedStyle&);
+    static ValueRange getValueRange(CSSPropertyID);
+    static bool getInitialLengthList(CSSPropertyID, Vector<Length>& result);
+    static bool getLengthList(CSSPropertyID, const ComputedStyle&, Vector<Length>& result);
     static void setLengthList(CSSPropertyID, ComputedStyle&, Vector<Length>&& lengthList);
 };
 

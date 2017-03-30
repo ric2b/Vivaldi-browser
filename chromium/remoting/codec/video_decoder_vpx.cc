@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "remoting/base/util.h"
 #include "remoting/proto/video.pb.h"
 #include "third_party/libyuv/include/libyuv/convert_argb.h"
@@ -17,8 +18,8 @@
 
 extern "C" {
 #define VPX_CODEC_DISABLE_COMPAT 1
-#include "third_party/libvpx_new/source/libvpx/vpx/vp8dx.h"
-#include "third_party/libvpx_new/source/libvpx/vpx/vpx_decoder.h"
+#include "third_party/libvpx/source/libvpx/vpx/vp8dx.h"
+#include "third_party/libvpx/source/libvpx/vpx/vpx_decoder.h"
 }
 
 namespace remoting {
@@ -68,13 +69,13 @@ void RenderRect(vpx_image_t* image,
 }  // namespace
 
 // static
-scoped_ptr<VideoDecoderVpx> VideoDecoderVpx::CreateForVP8() {
-  return make_scoped_ptr(new VideoDecoderVpx(vpx_codec_vp8_dx()));
+std::unique_ptr<VideoDecoderVpx> VideoDecoderVpx::CreateForVP8() {
+  return base::WrapUnique(new VideoDecoderVpx(vpx_codec_vp8_dx()));
 }
 
 // static
-scoped_ptr<VideoDecoderVpx> VideoDecoderVpx::CreateForVP9() {
-  return make_scoped_ptr(new VideoDecoderVpx(vpx_codec_vp9_dx()));
+std::unique_ptr<VideoDecoderVpx> VideoDecoderVpx::CreateForVP9() {
+  return base::WrapUnique(new VideoDecoderVpx(vpx_codec_vp9_dx()));
 }
 
 VideoDecoderVpx::~VideoDecoderVpx() {}
@@ -116,26 +117,6 @@ bool VideoDecoderVpx::DecodePacket(const VideoPacket& packet,
     region->AddRect(rect);
     RenderRect(image, rect, frame);
   }
-
-  // Process the frame shape, if supplied.
-  if (packet.has_use_desktop_shape()) {
-    if (packet.use_desktop_shape()) {
-      if (!desktop_shape_)
-        desktop_shape_ = make_scoped_ptr(new webrtc::DesktopRegion);
-      desktop_shape_->Clear();
-      for (int i = 0; i < packet.desktop_shape_rects_size(); ++i) {
-        Rect proto_rect = packet.desktop_shape_rects(i);
-        desktop_shape_->AddRect(webrtc::DesktopRect::MakeXYWH(
-            proto_rect.x(), proto_rect.y(), proto_rect.width(),
-            proto_rect.height()));
-      }
-    } else {
-      desktop_shape_.reset();
-    }
-  }
-
-  if (desktop_shape_)
-    frame->set_shape(new webrtc::DesktopRegion(*desktop_shape_));
 
   return true;
 }

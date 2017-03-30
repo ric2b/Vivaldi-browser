@@ -37,13 +37,13 @@
 
 namespace blink {
 
-v8::RetainedObjectInfo* RetainedDOMInfo::retainedDOMInfo(uint16_t classId, v8::Local<v8::Value> wrapper)
+v8::RetainedObjectInfo* RetainedDOMInfo::createRetainedDOMInfo(uint16_t classId, v8::Local<v8::Value> wrapper)
 {
     ASSERT(classId == WrapperTypeInfo::NodeClassId);
     if (!wrapper->IsObject())
         return 0;
     Node* node = V8Node::toImpl(wrapper.As<v8::Object>());
-    return node ? new RetainedDOMInfo(node) : 0;
+    return node ? new RetainedDOMInfo(node) : nullptr;
 }
 
 RetainedDOMInfo::RetainedDOMInfo(Node* root)
@@ -73,17 +73,17 @@ bool RetainedDOMInfo::IsEquivalent(v8::RetainedObjectInfo* other)
 
 intptr_t RetainedDOMInfo::GetHash()
 {
-    return PtrHash<void*>::hash(m_root);
+    return PtrHash<void>::hash(m_root);
 }
 
 const char* RetainedDOMInfo::GetGroupLabel()
 {
-    return m_root->inDocument() ? "(Document DOM trees)" : "(Detached DOM trees)";
+    return m_root->inShadowIncludingDocument() ? "(Document DOM trees)" : "(Detached DOM trees)";
 }
 
 const char* RetainedDOMInfo::GetLabel()
 {
-    return m_root->inDocument() ? "Document DOM tree" : "Detached DOM tree";
+    return m_root->inShadowIncludingDocument() ? "Document DOM tree" : "Detached DOM tree";
 }
 
 intptr_t RetainedDOMInfo::GetElementCount()
@@ -122,7 +122,7 @@ bool ActiveDOMObjectsInfo::IsEquivalent(v8::RetainedObjectInfo* other)
 
 intptr_t ActiveDOMObjectsInfo::GetHash()
 {
-    return PtrHash<void*>::hash(this);
+    return PtrHash<void>::hash(this);
 }
 
 const char* ActiveDOMObjectsInfo::GetGroupLabel()

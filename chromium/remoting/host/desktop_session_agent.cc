@@ -9,8 +9,11 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
+#include "base/process/process_handle.h"
 #include "build/build_config.h"
+#include "ipc/attachment_broker.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_macros.h"
@@ -69,12 +72,12 @@ void DesktopSessionClipboardStub::InjectClipboardEvent(
 // webrtc::SharedMemory implementation that creates base::SharedMemory.
 class SharedMemoryImpl : public webrtc::SharedMemory {
  public:
-  static scoped_ptr<SharedMemoryImpl>
+  static std::unique_ptr<SharedMemoryImpl>
   Create(size_t size, int id, const base::Closure& on_deleted_callback) {
-    scoped_ptr<base::SharedMemory> memory(new base::SharedMemory());
+    std::unique_ptr<base::SharedMemory> memory(new base::SharedMemory());
     if (!memory->CreateAndMapAnonymous(size))
       return nullptr;
-    return make_scoped_ptr(
+    return base::WrapUnique(
         new SharedMemoryImpl(std::move(memory), size, id, on_deleted_callback));
   }
 
@@ -83,7 +86,7 @@ class SharedMemoryImpl : public webrtc::SharedMemory {
   base::SharedMemory* shared_memory() { return shared_memory_.get(); }
 
  private:
-  SharedMemoryImpl(scoped_ptr<base::SharedMemory> memory,
+  SharedMemoryImpl(std::unique_ptr<base::SharedMemory> memory,
                    size_t size,
                    int id,
                    const base::Closure& on_deleted_callback)
@@ -101,14 +104,14 @@ class SharedMemoryImpl : public webrtc::SharedMemory {
   }
 
   base::Closure on_deleted_callback_;
-  scoped_ptr<base::SharedMemory> shared_memory_;
+  std::unique_ptr<base::SharedMemory> shared_memory_;
 
   DISALLOW_COPY_AND_ASSIGN(SharedMemoryImpl);
 };
 
 class SharedMemoryFactoryImpl : public webrtc::SharedMemoryFactory {
  public:
-  typedef base::Callback<void(scoped_ptr<IPC::Message> message)>
+  typedef base::Callback<void(std::unique_ptr<IPC::Message> message)>
       SendMessageCallback;
 
   SharedMemoryFactoryImpl(const SendMessageCallback& send_message_callback)
@@ -116,12 +119,12 @@ class SharedMemoryFactoryImpl : public webrtc::SharedMemoryFactory {
 
   rtc::scoped_ptr<webrtc::SharedMemory> CreateSharedMemory(
       size_t size) override {
-    base::Closure release_buffer_callback = base::Bind(
-        send_message_callback_,
-        base::Passed(
-            make_scoped_ptr(new ChromotingDesktopNetworkMsg_ReleaseSharedBuffer(
-                next_shared_buffer_id_))));
-    scoped_ptr<SharedMemoryImpl> buffer = SharedMemoryImpl::Create(
+    base::Closure release_buffer_callback =
+        base::Bind(send_message_callback_,
+                   base::Passed(base::WrapUnique(
+                       new ChromotingDesktopNetworkMsg_ReleaseSharedBuffer(
+                           next_shared_buffer_id_))));
+    std::unique_ptr<SharedMemoryImpl> buffer = SharedMemoryImpl::Create(
         size, next_shared_buffer_id_, release_buffer_callback);
     if (buffer) {
       // |next_shared_buffer_id_| starts from 1 and incrementing it by 2 makes
@@ -135,7 +138,7 @@ class SharedMemoryFactoryImpl : public webrtc::SharedMemoryFactory {
       next_shared_buffer_id_ += 2;
 
       send_message_callback_.Run(
-          make_scoped_ptr(new ChromotingDesktopNetworkMsg_CreateSharedBuffer(
+          base::WrapUnique(new ChromotingDesktopNetworkMsg_CreateSharedBuffer(
               buffer->id(), buffer->shared_memory()->handle(),
               buffer->size())));
     }
@@ -213,6 +216,10 @@ void DesktopSessionAgent::OnChannelError() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   // Make sure the channel is closed.
+  if (IPC::AttachmentBroker::GetGlobal()) {
+    IPC::AttachmentBroker::GetGlobal()->DeregisterCommunicationChannel(
+        network_channel_.get());
+  }
   network_channel_.reset();
   desktop_pipe_.Close();
 
@@ -234,7 +241,7 @@ const std::string& DesktopSessionAgent::client_jid() const {
 }
 
 void DesktopSessionAgent::DisconnectSession(protocol::ErrorCode error) {
-  SendToNetwork(make_scoped_ptr(
+  SendToNetwork(base::WrapUnique(
       new ChromotingDesktopNetworkMsg_DisconnectSession(error)));
 }
 
@@ -249,13 +256,6 @@ void DesktopSessionAgent::SetDisableInputs(bool disable_inputs) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   // Do not expect this method to be called because it is only used by It2Me.
-  NOTREACHED();
-}
-
-void DesktopSessionAgent::ResetVideoPipeline() {
-  DCHECK(caller_task_runner_->BelongsToCurrentThread());
-
-  // This method is only used by HostExtensionSessions in the network process.
   NOTREACHED();
 }
 
@@ -300,7 +300,7 @@ void DesktopSessionAgent::OnStartSessionAgent(
 #endif  // defined(OS_WIN)
 
   // Start the input injector.
-  scoped_ptr<protocol::ClipboardStub> clipboard_stub(
+  std::unique_ptr<protocol::ClipboardStub> clipboard_stub(
       new DesktopSessionClipboardStub(this));
   input_injector_->Start(std::move(clipboard_stub));
 
@@ -340,16 +340,16 @@ void DesktopSessionAgent::OnCaptureCompleted(webrtc::DesktopFrame* frame) {
     serialized_frame.dirty_region.push_back(i.rect());
   }
 
-  SendToNetwork(make_scoped_ptr(
+  SendToNetwork(base::WrapUnique(
       new ChromotingDesktopNetworkMsg_CaptureCompleted(serialized_frame)));
 }
 
 void DesktopSessionAgent::OnMouseCursor(webrtc::MouseCursor* cursor) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
-  scoped_ptr<webrtc::MouseCursor> owned_cursor(cursor);
+  std::unique_ptr<webrtc::MouseCursor> owned_cursor(cursor);
 
-  SendToNetwork(make_scoped_ptr(
+  SendToNetwork(base::WrapUnique(
       new ChromotingDesktopNetworkMsg_MouseCursor(*owned_cursor)));
 }
 
@@ -370,11 +370,12 @@ void DesktopSessionAgent::InjectClipboardEvent(
     return;
   }
 
-  SendToNetwork(make_scoped_ptr(
+  SendToNetwork(base::WrapUnique(
       new ChromotingDesktopNetworkMsg_InjectClipboardEvent(serialized_event)));
 }
 
-void DesktopSessionAgent::ProcessAudioPacket(scoped_ptr<AudioPacket> packet) {
+void DesktopSessionAgent::ProcessAudioPacket(
+    std::unique_ptr<AudioPacket> packet) {
   DCHECK(audio_capture_task_runner_->BelongsToCurrentThread());
 
   std::string serialized_packet;
@@ -383,7 +384,7 @@ void DesktopSessionAgent::ProcessAudioPacket(scoped_ptr<AudioPacket> packet) {
     return;
   }
 
-  SendToNetwork(make_scoped_ptr(
+  SendToNetwork(base::WrapUnique(
       new ChromotingDesktopNetworkMsg_AudioPacket(serialized_packet)));
 }
 
@@ -401,7 +402,8 @@ bool DesktopSessionAgent::Start(const base::WeakPtr<Delegate>& delegate,
                                           &network_channel_);
   base::PlatformFile raw_desktop_pipe = desktop_pipe_.GetPlatformFile();
 #if defined(OS_WIN)
-  *desktop_pipe_out = IPC::PlatformFileForTransit(raw_desktop_pipe);
+  *desktop_pipe_out =
+      IPC::PlatformFileForTransit(raw_desktop_pipe, base::GetCurrentProcId());
 #elif defined(OS_POSIX)
   *desktop_pipe_out = IPC::PlatformFileForTransit(raw_desktop_pipe, false);
 #else
@@ -416,6 +418,10 @@ void DesktopSessionAgent::Stop() {
   delegate_.reset();
 
   // Make sure the channel is closed.
+  if (IPC::AttachmentBroker::GetGlobal()) {
+    IPC::AttachmentBroker::GetGlobal()->DeregisterCommunicationChannel(
+        network_channel_.get());
+  }
   network_channel_.reset();
 
   if (started_) {
@@ -550,7 +556,7 @@ void DesktopSessionAgent::SetScreenResolution(
     screen_controls_->SetScreenResolution(resolution);
 }
 
-void DesktopSessionAgent::SendToNetwork(scoped_ptr<IPC::Message> message) {
+void DesktopSessionAgent::SendToNetwork(std::unique_ptr<IPC::Message> message) {
   if (!caller_task_runner_->BelongsToCurrentThread()) {
     caller_task_runner_->PostTask(
         FROM_HERE, base::Bind(&DesktopSessionAgent::SendToNetwork, this,

@@ -5,6 +5,7 @@
 #include "net/tools/quic/quic_socket_utils.h"
 
 #include <errno.h>
+#include <linux/net_tstamp.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -12,6 +13,8 @@
 #include <string>
 
 #include "base/logging.h"
+#include "net/quic/quic_bug_tracker.h"
+#include "net/quic/quic_flags.h"
 #include "net/quic/quic_protocol.h"
 
 #ifndef SO_RXQ_OVFL
@@ -21,28 +24,36 @@
 namespace net {
 
 // static
-IPAddress QuicSocketUtils::GetAddressFromMsghdr(struct msghdr* hdr) {
+void QuicSocketUtils::GetAddressAndTimestampFromMsghdr(struct msghdr* hdr,
+                                                       IPAddress* address,
+                                                       QuicTime* timestamp) {
   if (hdr->msg_controllen > 0) {
     for (cmsghdr* cmsg = CMSG_FIRSTHDR(hdr); cmsg != nullptr;
          cmsg = CMSG_NXTHDR(hdr, cmsg)) {
       const uint8_t* addr_data = nullptr;
       int len = 0;
       if (cmsg->cmsg_type == IPV6_PKTINFO) {
-        in6_pktinfo* info = reinterpret_cast<in6_pktinfo*> CMSG_DATA(cmsg);
+        in6_pktinfo* info = reinterpret_cast<in6_pktinfo*>(CMSG_DATA(cmsg));
         addr_data = reinterpret_cast<const uint8_t*>(&info->ipi6_addr);
         len = sizeof(in6_addr);
+        *address = IPAddress(addr_data, len);
       } else if (cmsg->cmsg_type == IP_PKTINFO) {
-        in_pktinfo* info = reinterpret_cast<in_pktinfo*> CMSG_DATA(cmsg);
+        in_pktinfo* info = reinterpret_cast<in_pktinfo*>(CMSG_DATA(cmsg));
         addr_data = reinterpret_cast<const uint8_t*>(&info->ipi_addr);
         len = sizeof(in_addr);
-      } else {
-        continue;
+        *address = IPAddress(addr_data, len);
+      } else if (cmsg->cmsg_level == SOL_SOCKET &&
+                 cmsg->cmsg_type == SO_TIMESTAMPING) {
+        LinuxTimestamping* lts =
+            reinterpret_cast<LinuxTimestamping*>(CMSG_DATA(cmsg));
+        timespec* ts = &lts->systime;
+        int64_t usec = (static_cast<int64_t>(ts->tv_sec) * 1000 * 1000) +
+                       (static_cast<int64_t>(ts->tv_nsec) / 1000);
+        *timestamp =
+            QuicTime::Zero().Add(QuicTime::Delta::FromMicroseconds(usec));
       }
-      return IPAddress(addr_data, len);
     }
   }
-  DCHECK(false) << "Unable to get address from msghdr";
-  return IPAddress();
 }
 
 // static
@@ -74,6 +85,13 @@ int QuicSocketUtils::SetGetAddressInfo(int fd, int address_family) {
 }
 
 // static
+int QuicSocketUtils::SetGetSoftwareReceiveTimestamp(int fd) {
+  int timestamping = SOF_TIMESTAMPING_RX_SOFTWARE | SOF_TIMESTAMPING_SOFTWARE;
+  return setsockopt(fd, SOL_SOCKET, SO_TIMESTAMPING, &timestamping,
+                    sizeof(timestamping));
+}
+
+// static
 bool QuicSocketUtils::SetSendBufferSize(int fd, size_t size) {
   if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size)) != 0) {
     LOG(ERROR) << "Failed to set socket send size";
@@ -97,11 +115,10 @@ int QuicSocketUtils::ReadPacket(int fd,
                                 size_t buf_len,
                                 QuicPacketCount* dropped_packets,
                                 IPAddress* self_address,
+                                QuicTime* timestamp,
                                 IPEndPoint* peer_address) {
   DCHECK(peer_address != nullptr);
-  const int kSpaceForOverflowAndIp =
-      CMSG_SPACE(sizeof(int)) + CMSG_SPACE(sizeof(in6_pktinfo));
-  char cbuf[kSpaceForOverflowAndIp];
+  char cbuf[kSpaceForCmsg];
   memset(cbuf, 0, arraysize(cbuf));
 
   iovec iov = {buffer, buf_len};
@@ -130,12 +147,27 @@ int QuicSocketUtils::ReadPacket(int fd,
     return -1;
   }
 
+  if (hdr.msg_controllen >= arraysize(cbuf)) {
+    QUIC_BUG << "Incorrectly set control length: " << hdr.msg_controllen
+             << ", expected " << arraysize(cbuf);
+    return -1;
+  }
+
   if (dropped_packets != nullptr) {
     GetOverflowFromMsghdr(&hdr, dropped_packets);
   }
-  if (self_address != nullptr) {
-    *self_address = QuicSocketUtils::GetAddressFromMsghdr(&hdr);
+
+  IPAddress stack_address;
+  if (self_address == nullptr) {
+    self_address = &stack_address;
   }
+
+  QuicTime stack_timestamp = QuicTime::Zero();
+  if (timestamp == nullptr) {
+    timestamp = &stack_timestamp;
+  }
+
+  GetAddressAndTimestampFromMsghdr(&hdr, self_address, timestamp);
 
   if (raw_address.ss_family == AF_INET) {
     CHECK(peer_address->FromSockAddr(
@@ -213,7 +245,10 @@ WriteResult QuicSocketUtils::WritePacket(int fd,
     hdr.msg_controllen = cmsg->cmsg_len;
   }
 
-  int rc = sendmsg(fd, &hdr, 0);
+  int rc;
+  do {
+    rc = sendmsg(fd, &hdr, 0);
+  } while (rc < 0 && errno == EINTR);
   if (rc >= 0) {
     return WriteResult(WRITE_STATUS_OK, rc);
   }
@@ -221,6 +256,50 @@ WriteResult QuicSocketUtils::WritePacket(int fd,
                          ? WRITE_STATUS_BLOCKED
                          : WRITE_STATUS_ERROR,
                      errno);
+}
+
+// static
+int QuicSocketUtils::CreateUDPSocket(const IPEndPoint& address,
+                                     bool* overflow_supported) {
+  int address_family = address.GetSockAddrFamily();
+  int fd = socket(address_family, SOCK_DGRAM | SOCK_NONBLOCK, IPPROTO_UDP);
+  if (fd < 0) {
+    LOG(ERROR) << "socket() failed: " << strerror(errno);
+    return -1;
+  }
+
+  int get_overflow = 1;
+  int rc = setsockopt(fd, SOL_SOCKET, SO_RXQ_OVFL, &get_overflow,
+                      sizeof(get_overflow));
+  if (rc < 0) {
+    DLOG(WARNING) << "Socket overflow detection not supported";
+  } else {
+    *overflow_supported = true;
+  }
+
+  if (!SetReceiveBufferSize(fd, kDefaultSocketReceiveBuffer)) {
+    return -1;
+  }
+
+  if (!SetSendBufferSize(fd, kDefaultSocketReceiveBuffer)) {
+    return -1;
+  }
+
+  rc = SetGetAddressInfo(fd, address_family);
+  if (rc < 0) {
+    LOG(ERROR) << "IP detection not supported" << strerror(errno);
+    return -1;
+  }
+
+  if (FLAGS_quic_use_socket_timestamp) {
+    rc = SetGetSoftwareReceiveTimestamp(fd);
+    if (rc < 0) {
+      LOG(WARNING) << "SO_TIMESTAMPING not supported; using fallback: "
+                   << strerror(errno);
+    }
+  }
+
+  return fd;
 }
 
 }  // namespace net

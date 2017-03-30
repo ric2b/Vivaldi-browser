@@ -21,6 +21,7 @@
 
 #include "core/layout/svg/LayoutSVGInline.h"
 
+#include "core/layout/LayoutView.h"
 #include "core/layout/svg/LayoutSVGText.h"
 #include "core/layout/svg/SVGLayoutSupport.h"
 #include "core/layout/svg/SVGResourcesCache.h"
@@ -54,7 +55,7 @@ LayoutSVGInline::LayoutSVGInline(Element* element)
 
 InlineFlowBox* LayoutSVGInline::createInlineFlowBox()
 {
-    InlineFlowBox* box = new SVGInlineFlowBox(*this);
+    InlineFlowBox* box = new SVGInlineFlowBox(LineLayoutItem(this));
     box->setHasVirtualLogicalHeight();
     return box;
 }
@@ -75,22 +76,22 @@ FloatRect LayoutSVGInline::strokeBoundingBox() const
     return FloatRect();
 }
 
-FloatRect LayoutSVGInline::paintInvalidationRectInLocalCoordinates() const
+FloatRect LayoutSVGInline::paintInvalidationRectInLocalSVGCoordinates() const
 {
     if (const LayoutSVGText* textRoot = LayoutSVGText::locateLayoutSVGTextAncestor(this))
-        return textRoot->paintInvalidationRectInLocalCoordinates();
+        return textRoot->paintInvalidationRectInLocalSVGCoordinates();
 
     return FloatRect();
 }
 
-LayoutRect LayoutSVGInline::clippedOverflowRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState* paintInvalidationState) const
+LayoutRect LayoutSVGInline::absoluteClippedOverflowRect() const
 {
-    return SVGLayoutSupport::clippedOverflowRectForPaintInvalidation(*this, paintInvalidationContainer, paintInvalidationState);
+    return SVGLayoutSupport::clippedOverflowRectForPaintInvalidation(*this, *view());
 }
 
-void LayoutSVGInline::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags, bool* wasFixed, const PaintInvalidationState* paintInvalidationState) const
+void LayoutSVGInline::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags) const
 {
-    SVGLayoutSupport::mapLocalToAncestor(this, ancestor, transformState, wasFixed, paintInvalidationState);
+    SVGLayoutSupport::mapLocalToAncestor(this, ancestor, transformState);
 }
 
 const LayoutObject* LayoutSVGInline::pushMappingToContainer(const LayoutBoxModelObject* ancestorToStopAt, LayoutGeometryMap& geometryMap) const
@@ -98,7 +99,7 @@ const LayoutObject* LayoutSVGInline::pushMappingToContainer(const LayoutBoxModel
     return SVGLayoutSupport::pushMappingToContainer(this, ancestorToStopAt, geometryMap);
 }
 
-void LayoutSVGInline::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed) const
+void LayoutSVGInline::absoluteQuads(Vector<FloatQuad>& quads) const
 {
     const LayoutSVGText* textRoot = LayoutSVGText::locateLayoutSVGTextAncestor(this);
     if (!textRoot)
@@ -106,7 +107,7 @@ void LayoutSVGInline::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed) co
 
     FloatRect textBoundingBox = textRoot->strokeBoundingBox();
     for (InlineFlowBox* box = firstLineBox(); box; box = box->nextLineBox())
-        quads.append(localToAbsoluteQuad(FloatRect(textBoundingBox.x() + box->x().toFloat(), textBoundingBox.y() + box->y().toFloat(), box->logicalWidth().toFloat(), box->logicalHeight().toFloat()), false, wasFixed));
+        quads.append(localToAbsoluteQuad(FloatRect(textBoundingBox.x() + box->x().toFloat(), textBoundingBox.y() + box->y().toFloat(), box->logicalWidth().toFloat(), box->logicalHeight().toFloat()), false));
 }
 
 void LayoutSVGInline::willBeDestroyed()
@@ -130,41 +131,37 @@ void LayoutSVGInline::addChild(LayoutObject* child, LayoutObject* beforeChild)
     SVGResourcesCache::clientWasAddedToTree(child, child->styleRef());
 
     if (LayoutSVGText* textLayoutObject = LayoutSVGText::locateLayoutSVGTextAncestor(this))
-        textLayoutObject->subtreeChildWasAdded(child);
+        textLayoutObject->subtreeChildWasAdded();
 }
 
 void LayoutSVGInline::removeChild(LayoutObject* child)
 {
     SVGResourcesCache::clientWillBeRemovedFromTree(child);
 
-    LayoutSVGText* textLayoutObject = LayoutSVGText::locateLayoutSVGTextAncestor(this);
-    if (!textLayoutObject) {
-        LayoutInline::removeChild(child);
-        return;
-    }
-    Vector<SVGTextLayoutAttributes*, 2> affectedAttributes;
-    textLayoutObject->subtreeChildWillBeRemoved(child, affectedAttributes);
+    if (LayoutSVGText* textLayoutObject = LayoutSVGText::locateLayoutSVGTextAncestor(this))
+        textLayoutObject->subtreeChildWillBeRemoved();
     LayoutInline::removeChild(child);
-    textLayoutObject->subtreeChildWasRemoved(affectedAttributes);
 }
 
-void LayoutSVGInline::invalidateTreeIfNeeded(PaintInvalidationState& paintInvalidationState)
+void LayoutSVGInline::invalidateTreeIfNeeded(const PaintInvalidationState& paintInvalidationState)
 {
     ASSERT(!needsLayout());
 
     if (!shouldCheckForPaintInvalidation(paintInvalidationState))
         return;
 
-    PaintInvalidationReason reason = invalidatePaintIfNeeded(paintInvalidationState, paintInvalidationState.paintInvalidationContainer());
-    clearPaintInvalidationState(paintInvalidationState);
+    PaintInvalidationState newPaintInvalidationState(paintInvalidationState, *this);
+    PaintInvalidationReason reason = invalidatePaintIfNeeded(newPaintInvalidationState);
+    clearPaintInvalidationFlags(newPaintInvalidationState);
 
     if (reason == PaintInvalidationDelayedFull)
         paintInvalidationState.pushDelayedPaintInvalidationTarget(*this);
 
-    PaintInvalidationState childTreeWalkState(paintInvalidationState, *this, paintInvalidationState.paintInvalidationContainer());
     if (reason == PaintInvalidationSVGResourceChange)
-        childTreeWalkState.setForceSubtreeInvalidationWithinContainer();
-    invalidatePaintOfSubtreesIfNeeded(childTreeWalkState);
+        newPaintInvalidationState.setForceSubtreeInvalidationWithinContainer();
+
+    newPaintInvalidationState.updateForChildren();
+    invalidatePaintOfSubtreesIfNeeded(newPaintInvalidationState);
 }
 
 } // namespace blink

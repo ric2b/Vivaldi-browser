@@ -116,7 +116,7 @@ TestLayerAnimationDelegate::GetThreadedAnimationDelegate() {
 }
 
 void TestLayerAnimationDelegate::CreateCcLayer() {
-  cc_layer_ = cc::Layer::Create(ui::Layer::UILayerSettings());
+  cc_layer_ = cc::Layer::Create();
 }
 
 void TestLayerThreadedAnimationDelegate::AddThreadedAnimation(

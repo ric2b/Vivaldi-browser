@@ -5,9 +5,6 @@
 /**
  * @fileoverview 'settings-manage-languages-page' is a sub-page for enabling
  * and disabling languages.
- *
- * @group Chrome Settings Elements
- * @element settings-manage-languages-page
  */
 Polymer({
   is: 'settings-manage-languages-page',
@@ -54,16 +51,22 @@ Polymer({
   },
 
   /**
-   * Handler for adding a language.
-   * @param {!{model: {item: !chrome.languageSettingsPrivate.Language}}} e
+   * Handler for checking or unchecking a language item.
+   * @param {!{model: !{item: !chrome.languageSettingsPrivate.Language},
+   *           target: !PaperCheckboxElement}} e
    * @private
    */
-  onAddLanguageTap_: function(e) {
-    this.languageHelper_.enableLanguage(e.model.item.code);
+  onLanguageCheckboxChange_: function(e) {
+    var code = e.model.item.code;
+    if (e.target.checked)
+      this.languageHelper_.enableLanguage(code);
+    else
+      this.languageHelper_.disableLanguage(code);
   },
 
   /**
-   * True if a language is not the current or prospective UI language.
+   * True if a language is not the current or prospective UI language, ie,
+   * it could be disabled.
    * @param {string} languageCode
    * @param {string} prospectiveUILanguageCode
    * @return {boolean}
@@ -74,7 +77,6 @@ Polymer({
         languageCode == prospectiveUILanguageCode) {
       return false;
     }
-    assert(this.languages.enabledLanguages.length > 1);
     return true;
   },
 

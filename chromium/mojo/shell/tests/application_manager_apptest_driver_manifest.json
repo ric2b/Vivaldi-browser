@@ -1,5 +1,0 @@
-{
-  "url": "exe://application_manager_apptest_driver/",
-  "name": "Application Manager Apptests: Driver",
-  "capabilities": { "*": [ "*" ] }
-}

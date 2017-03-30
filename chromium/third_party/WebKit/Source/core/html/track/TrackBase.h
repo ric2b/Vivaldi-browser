@@ -27,6 +27,7 @@
 #define TrackBase_h
 
 #include "core/CoreExport.h"
+#include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebMediaPlayer.h"
 #include "wtf/RefCounted.h"
@@ -36,14 +37,13 @@ namespace blink {
 
 class HTMLMediaElement;
 
-class CORE_EXPORT TrackBase : public GarbageCollectedMixin {
+class CORE_EXPORT TrackBase : public Supplementable<TrackBase> {
 public:
     virtual ~TrackBase();
 
     WebMediaPlayer::TrackId trackId() const { return m_trackId; }
 
-    enum TrackType { TextTrack, AudioTrack, VideoTrack };
-    TrackType type() const { return m_type; }
+    WebMediaPlayer::TrackType type() const { return m_type; }
 
     const AtomicString& kind() const { return m_kind; }
     virtual void setKind(const AtomicString&);
@@ -64,19 +64,19 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 protected:
-    TrackBase(TrackType, const AtomicString& label, const AtomicString& language, const String& id);
+    TrackBase(WebMediaPlayer::TrackType, const AtomicString& label, const AtomicString& language, const String& id);
 
     virtual bool isValidKind(const AtomicString&) const = 0;
     virtual AtomicString defaultKind() const = 0;
 
 private:
     WebMediaPlayer::TrackId m_trackId;
-    TrackType m_type;
+    WebMediaPlayer::TrackType m_type;
     AtomicString m_kind;
     AtomicString m_label;
     AtomicString m_language;
     String m_id;
-    RawPtrWillBeMember<HTMLMediaElement> m_mediaElement;
+    Member<HTMLMediaElement> m_mediaElement;
 };
 
 #define DEFINE_TRACK_TYPE_CASTS(thisType, predicate) \

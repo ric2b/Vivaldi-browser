@@ -39,7 +39,7 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutVideo.h"
-#include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/CompositingInputsUpdater.h"
 #include "core/layout/compositing/CompositingLayerAssigner.h"
@@ -56,11 +56,13 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
+#include "platform/geometry/FloatRect.h"
 #include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
+#include "platform/graphics/paint/SkPictureBuilder.h"
 #include "platform/graphics/paint/TransformDisplayItem.h"
 
 namespace blink {
@@ -211,8 +213,8 @@ void PaintLayerCompositor::updateIfNeededRecursiveInternal()
         // It's possible for trusted Pepper plugins to force hit testing in situations where
         // the frame tree is in an inconsistent state, such as in the middle of frame detach.
         // TODO(bbudge) Remove this check when trusted Pepper plugins are gone.
-        if (localFrame->document()->isActive() && localFrame->contentLayoutObject())
-            localFrame->contentLayoutObject()->compositor()->updateIfNeededRecursiveInternal();
+        if (localFrame->document()->isActive() && !localFrame->contentLayoutItem().isNull())
+            localFrame->contentLayoutItem().compositor()->updateIfNeededRecursiveInternal();
     }
 
     TRACE_EVENT0("blink", "PaintLayerCompositor::updateIfNeededRecursive");
@@ -238,7 +240,7 @@ void PaintLayerCompositor::updateIfNeededRecursiveInternal()
 
     DocumentAnimations::updateCompositorAnimations(m_layoutView.document());
 
-    m_layoutView.frameView()->scrollableArea()->updateCompositorScrollAnimations();
+    m_layoutView.frameView()->getScrollableArea()->updateCompositorScrollAnimations();
     if (const FrameView::ScrollableAreaSet* animatingScrollableAreas = m_layoutView.frameView()->animatingScrollableAreas()) {
         for (ScrollableArea* scrollableArea : *animatingScrollableAreas)
             scrollableArea->updateCompositorScrollAnimations();
@@ -251,9 +253,9 @@ void PaintLayerCompositor::updateIfNeededRecursiveInternal()
         if (!child->isLocalFrame())
             continue;
         LocalFrame* localFrame = toLocalFrame(child);
-        if (localFrame->shouldThrottleRendering() || !localFrame->contentLayoutObject())
+        if (localFrame->shouldThrottleRendering() || localFrame->contentLayoutItem().isNull())
             continue;
-        localFrame->contentLayoutObject()->compositor()->assertNoUnresolvedDirtyBits();
+        localFrame->contentLayoutItem().compositor()->assertNoUnresolvedDirtyBits();
     }
 #endif
 }
@@ -629,7 +631,7 @@ void PaintLayerCompositor::rootFixedBackgroundsChanged()
 bool PaintLayerCompositor::scrollingLayerDidChange(PaintLayer* layer)
 {
     if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
-        return scrollingCoordinator->scrollableAreaScrollLayerDidChange(layer->scrollableArea());
+        return scrollingCoordinator->scrollableAreaScrollLayerDidChange(layer->getScrollableArea());
     return false;
 }
 
@@ -713,7 +715,7 @@ GraphicsLayer* PaintLayerCompositor::frameScrollLayer() const
 
 GraphicsLayer* PaintLayerCompositor::scrollLayer() const
 {
-    if (ScrollableArea* scrollableArea = m_layoutView.frameView()->scrollableArea())
+    if (ScrollableArea* scrollableArea = m_layoutView.frameView()->getScrollableArea())
         return scrollableArea->layerForScrolling();
     return nullptr;
 }
@@ -797,11 +799,8 @@ bool PaintLayerCompositor::needsContentsCompositingLayer(const PaintLayer* layer
     return layer->stackingNode()->hasNegativeZOrderList();
 }
 
-static void paintScrollbar(const Scrollbar* scrollbar, GraphicsContext& context, const IntRect& clip)
+static void paintScrollbar(const GraphicsLayer* graphicsLayer, const Scrollbar* scrollbar, GraphicsContext& context, const IntRect& clip)
 {
-    if (!scrollbar)
-        return;
-
     // Frame scrollbars are painted in the space of the containing frame, not the local space of the scrollbar.
     const IntPoint& paintOffset = scrollbar->frameRect().location();
     IntRect transformedClip = clip;
@@ -810,7 +809,6 @@ static void paintScrollbar(const Scrollbar* scrollbar, GraphicsContext& context,
     AffineTransform translation;
     translation.translate(-paintOffset.x(), -paintOffset.y());
     TransformRecorder transformRecorder(context, *scrollbar, translation);
-
     scrollbar->paint(context, CullRect(transformedClip));
 }
 
@@ -821,12 +819,40 @@ IntRect PaintLayerCompositor::computeInterestRect(const GraphicsLayer* graphicsL
 
 void PaintLayerCompositor::paintContents(const GraphicsLayer* graphicsLayer, GraphicsContext& context, GraphicsLayerPaintingPhase, const IntRect& interestRect) const
 {
-    if (graphicsLayer == layerForHorizontalScrollbar())
-        paintScrollbar(m_layoutView.frameView()->horizontalScrollbar(), context, interestRect);
-    else if (graphicsLayer == layerForVerticalScrollbar())
-        paintScrollbar(m_layoutView.frameView()->verticalScrollbar(), context, interestRect);
-    else if (graphicsLayer == layerForScrollCorner())
-        FramePainter(*m_layoutView.frameView()).paintScrollCorner(context, interestRect);
+    // Note the composited scrollable area painted below is always associated with a frame. For
+    // painting non-frame ScrollableAreas, see CompositedLayerMapping::paintScrollableArea.
+
+    const Scrollbar* scrollbar = graphicsLayerToScrollbar(graphicsLayer);
+    if (!scrollbar && graphicsLayer != layerForScrollCorner())
+        return;
+
+    if (DrawingRecorder::useCachedDrawingIfPossible(context, *graphicsLayer, DisplayItem::ScrollbarCompositedScrollbar))
+        return;
+
+    FloatRect layerBounds(FloatPoint(), graphicsLayer->size());
+    SkPictureBuilder pictureBuilder(layerBounds, nullptr, &context);
+
+    if (scrollbar)
+        paintScrollbar(graphicsLayer, scrollbar, pictureBuilder.context(), interestRect);
+    else
+        FramePainter(*m_layoutView.frameView()).paintScrollCorner(pictureBuilder.context(), interestRect);
+
+    // Replay the painted scrollbar content with the GraphicsLayer backing as the DisplayItemClient
+    // in order for the resulting DrawingDisplayItem to produce the correct visualRect (i.e., the
+    // bounds of the involved GraphicsLayer).
+    DrawingRecorder drawingRecorder(context, *graphicsLayer, DisplayItem::ScrollbarCompositedScrollbar, layerBounds);
+    pictureBuilder.endRecording()->playback(context.canvas());
+}
+
+Scrollbar* PaintLayerCompositor::graphicsLayerToScrollbar(const GraphicsLayer* graphicsLayer) const
+{
+    if (graphicsLayer == layerForHorizontalScrollbar()) {
+        return m_layoutView.frameView()->horizontalScrollbar();
+    }
+    if (graphicsLayer == layerForVerticalScrollbar()) {
+        return m_layoutView.frameView()->verticalScrollbar();
+    }
+    return nullptr;
 }
 
 bool PaintLayerCompositor::supportsFixedRootBackgroundCompositing() const
@@ -926,7 +952,7 @@ void PaintLayerCompositor::updateOverflowControlsLayers()
 
     if (requiresHorizontalScrollbarLayer()) {
         if (!m_layerForHorizontalScrollbar) {
-            m_layerForHorizontalScrollbar = GraphicsLayer::create(graphicsLayerFactory(), this);
+            m_layerForHorizontalScrollbar = GraphicsLayer::create(this);
         }
 
         if (m_layerForHorizontalScrollbar->parent() != controlsParent) {
@@ -945,7 +971,7 @@ void PaintLayerCompositor::updateOverflowControlsLayers()
 
     if (requiresVerticalScrollbarLayer()) {
         if (!m_layerForVerticalScrollbar) {
-            m_layerForVerticalScrollbar = GraphicsLayer::create(graphicsLayerFactory(), this);
+            m_layerForVerticalScrollbar = GraphicsLayer::create(this);
         }
 
         if (m_layerForVerticalScrollbar->parent() != controlsParent) {
@@ -964,7 +990,7 @@ void PaintLayerCompositor::updateOverflowControlsLayers()
 
     if (requiresScrollCornerLayer()) {
         if (!m_layerForScrollCorner)
-            m_layerForScrollCorner = GraphicsLayer::create(graphicsLayerFactory(), this);
+            m_layerForScrollCorner = GraphicsLayer::create(this);
 
         if (m_layerForScrollCorner->parent() != controlsParent)
             controlsParent->addChild(m_layerForScrollCorner.get());
@@ -984,7 +1010,7 @@ void PaintLayerCompositor::ensureRootLayer()
 
     Settings* settings = m_layoutView.document().settings();
     if (!m_rootContentLayer) {
-        m_rootContentLayer = GraphicsLayer::create(graphicsLayerFactory(), this);
+        m_rootContentLayer = GraphicsLayer::create(this);
         IntRect overflowRect = m_layoutView.pixelSnappedLayoutOverflowRect();
         m_rootContentLayer->setSize(FloatSize(overflowRect.maxX(), overflowRect.maxY()));
         m_rootContentLayer->setPosition(FloatPoint());
@@ -1002,17 +1028,17 @@ void PaintLayerCompositor::ensureRootLayer()
         ASSERT(!m_containerLayer);
 
         // Create a layer to host the clipping layer and the overflow controls layers.
-        m_overflowControlsHostLayer = GraphicsLayer::create(graphicsLayerFactory(), this);
+        m_overflowControlsHostLayer = GraphicsLayer::create(this);
 
         // Clip iframe's overflow controls layer.
         bool containerMasksToBounds = !m_layoutView.frame()->isLocalRoot();
         m_overflowControlsHostLayer->setMasksToBounds(containerMasksToBounds);
 
         // Create a clipping layer if this is an iframe or settings require to clip.
-        m_containerLayer = GraphicsLayer::create(graphicsLayerFactory(), this);
+        m_containerLayer = GraphicsLayer::create(this);
         m_containerLayer->setMasksToBounds(containerMasksToBounds);
 
-        m_scrollLayer = GraphicsLayer::create(graphicsLayerFactory(), this);
+        m_scrollLayer = GraphicsLayer::create(this);
         if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
             scrollingCoordinator->setLayerIsContainerForFixedPositionLayers(m_scrollLayer.get(), true);
 
@@ -1173,13 +1199,6 @@ ScrollingCoordinator* PaintLayerCompositor::scrollingCoordinator() const
     if (Page* page = this->page())
         return page->scrollingCoordinator();
 
-    return nullptr;
-}
-
-GraphicsLayerFactory* PaintLayerCompositor::graphicsLayerFactory() const
-{
-    if (Page* page = this->page())
-        return page->chromeClient().graphicsLayerFactory();
     return nullptr;
 }
 

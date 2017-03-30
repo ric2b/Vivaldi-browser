@@ -157,5 +157,8 @@ void TopSitesBackend::VacuumDatabase() {
   db_->Vacuum();
 }
 
+void TopSitesBackend::RemoveThumbnailForUrl(const GURL& url) {
+  db_->RemoveThumbnailForUrl(url);
+}
 
 }  // namespace history

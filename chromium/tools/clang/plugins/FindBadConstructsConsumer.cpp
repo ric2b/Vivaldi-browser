@@ -7,6 +7,7 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/AST/Attr.h"
 #include "clang/Lex/Lexer.h"
+#include "clang/Sema/Sema.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
@@ -47,13 +48,6 @@ const char kNotePublicDtor[] =
     "[chromium-style] Public destructor declared here";
 const char kNoteProtectedNonVirtualDtor[] =
     "[chromium-style] Protected non-virtual destructor declared here";
-
-bool TypeHasNonTrivialDtor(const Type* type) {
-  if (const CXXRecordDecl* cxx_r = type->getAsCXXRecordDecl())
-    return !cxx_r->hasTrivialDestructor();
-
-  return false;
-}
 
 // Returns the underlying Type for |type| by expanding typedefs and removing
 // any namespace qualifiers. This is similar to desugaring, except that for
@@ -98,11 +92,32 @@ bool IsPodOrTemplateType(const CXXRecordDecl& record) {
          record.isDependentType();
 }
 
+// Use a local RAV implementation to simply collect all FunctionDecls marked for
+// late template parsing. This happens with the flag -fdelayed-template-parsing,
+// which is on by default in MSVC-compatible mode.
+std::set<FunctionDecl*> GetLateParsedFunctionDecls(TranslationUnitDecl* decl) {
+  struct Visitor : public RecursiveASTVisitor<Visitor> {
+    bool VisitFunctionDecl(FunctionDecl* function_decl) {
+      if (function_decl->isLateTemplateParsed())
+        late_parsed_decls.insert(function_decl);
+      return true;
+    }
+
+    std::set<FunctionDecl*> late_parsed_decls;
+  } v;
+  v.TraverseDecl(decl);
+  return v.late_parsed_decls;
+}
+
 }  // namespace
 
 FindBadConstructsConsumer::FindBadConstructsConsumer(CompilerInstance& instance,
                                                      const Options& options)
     : ChromeClassTester(instance, options) {
+  if (options.check_ipc) {
+    ipc_visitor_.reset(new CheckIPCVisitor(instance));
+  }
+
   // Messages for virtual method specifiers.
   diag_method_requires_override_ =
       diagnostic().getCustomDiagID(getErrorLevel(), kMethodRequiresOverride);
@@ -136,10 +151,37 @@ FindBadConstructsConsumer::FindBadConstructsConsumer(CompilerInstance& instance,
       DiagnosticsEngine::Note, kNoteProtectedNonVirtualDtor);
 }
 
+void FindBadConstructsConsumer::Traverse(ASTContext& context) {
+  if (ipc_visitor_) {
+    ipc_visitor_->set_context(&context);
+    ParseFunctionTemplates(context.getTranslationUnitDecl());
+  }
+  RecursiveASTVisitor::TraverseDecl(context.getTranslationUnitDecl());
+  if (ipc_visitor_) ipc_visitor_->set_context(nullptr);
+}
+
+bool FindBadConstructsConsumer::TraverseDecl(Decl* decl) {
+  if (ipc_visitor_) ipc_visitor_->BeginDecl(decl);
+  bool result = RecursiveASTVisitor::TraverseDecl(decl);
+  if (ipc_visitor_) ipc_visitor_->EndDecl();
+  return result;
+}
+
 bool FindBadConstructsConsumer::VisitDecl(clang::Decl* decl) {
   clang::TagDecl* tag_decl = dyn_cast<clang::TagDecl>(decl);
   if (tag_decl && tag_decl->isCompleteDefinition())
     CheckTag(tag_decl);
+  return true;
+}
+
+bool FindBadConstructsConsumer::VisitTemplateSpecializationType(
+    TemplateSpecializationType* spec) {
+  if (ipc_visitor_) ipc_visitor_->VisitTemplateSpecializationType(spec);
+  return true;
+}
+
+bool FindBadConstructsConsumer::VisitCallExpr(CallExpr* call_expr) {
+  if (ipc_visitor_) ipc_visitor_->VisitCallExpr(call_expr);
   return true;
 }
 
@@ -228,6 +270,14 @@ void FindBadConstructsConsumer::CheckCtorDtorWeight(
   //   ...
   // } name_;
   if (record->getIdentifier() == NULL)
+    return;
+
+  // We don't handle unions.
+  if (record->isUnion())
+    return;
+
+  // Skip records that derive from ignored base classes.
+  if (HasIgnoredBases(record))
     return;
 
   // Count the number of templated base classes as a feature of whether the
@@ -560,12 +610,17 @@ void FindBadConstructsConsumer::CountType(const Type* type,
                                           int* templated_non_trivial_member) {
   switch (type->getTypeClass()) {
     case Type::Record: {
+      auto* record_decl = type->getAsCXXRecordDecl();
       // Simplifying; the whole class isn't trivial if the dtor is, but
       // we use this as a signal about complexity.
-      if (TypeHasNonTrivialDtor(type))
-        (*non_trivial_member)++;
-      else
+      // Note that if a record doesn't have a definition, it doesn't matter how
+      // it's counted, since the translation unit will fail to build. In that
+      // case, just count it as a trivial member to avoid emitting warnings that
+      // might be spurious.
+      if (!record_decl->hasDefinition() || record_decl->hasTrivialDestructor())
         (*trivial_member)++;
+      else
+        (*non_trivial_member)++;
       break;
     }
     case Type::TemplateSpecialization: {
@@ -720,7 +775,7 @@ unsigned FindBadConstructsConsumer::DiagnosticForIssue(RefcountIssue issue) {
 // ref-counting classes (base::RefCounted / base::RefCountedThreadSafe),
 // ensure that there are no public destructors in the class hierarchy. This
 // is to guard against accidentally stack-allocating a RefCounted class or
-// sticking it in a non-ref-counted container (like scoped_ptr<>).
+// sticking it in a non-ref-counted container (like std::unique_ptr<>).
 void FindBadConstructsConsumer::CheckRefCountedDtors(
     SourceLocation record_location,
     CXXRecordDecl* record) {
@@ -869,6 +924,28 @@ void FindBadConstructsConsumer::CheckWeakPtrFactoryMembers(
       diagnostic().Report(weak_ptr_factory_location,
                           diag_weak_ptr_factory_order_);
     }
+  }
+}
+
+// Copied from BlinkGCPlugin, see crrev.com/1135333007
+void FindBadConstructsConsumer::ParseFunctionTemplates(
+    TranslationUnitDecl* decl) {
+  if (!instance().getLangOpts().DelayedTemplateParsing)
+    return;  // Nothing to do.
+
+  std::set<FunctionDecl*> late_parsed_decls = GetLateParsedFunctionDecls(decl);
+  clang::Sema& sema = instance().getSema();
+
+  for (const FunctionDecl* fd : late_parsed_decls) {
+    assert(fd->isLateTemplateParsed());
+
+    if (instance().getSourceManager().isInSystemHeader(
+            instance().getSourceManager().getSpellingLoc(fd->getLocation())))
+      continue;
+
+    // Parse and build AST for yet-uninstantiated template functions.
+    clang::LateParsedTemplate* lpt = sema.LateParsedTemplateMap[fd];
+    sema.LateTemplateParser(sema.OpaqueParser, *lpt);
   }
 }
 

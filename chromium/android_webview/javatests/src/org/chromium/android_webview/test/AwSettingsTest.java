@@ -27,6 +27,7 @@ import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.AwWebResourceResponse;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.ImagePageGenerator;
+import org.chromium.android_webview.test.util.JSUtils;
 import org.chromium.android_webview.test.util.VideoTestUtil;
 import org.chromium.android_webview.test.util.VideoTestWebServer;
 import org.chromium.base.test.util.DisabledTest;
@@ -941,7 +942,7 @@ public class AwSettingsTest extends AwTestBase {
                 executeJavaScriptAndWaitForResult("setTitleToActualFontSize()");
             } else {
                 final float oldFontSize = mOldFontSize;
-                poll(new Callable<Boolean>() {
+                pollInstrumentationThread(new Callable<Boolean>() {
                     @Override
                     public Boolean call() throws Exception {
                         executeJavaScriptAndWaitForResult("setTitleToActualFontSize()");
@@ -1164,7 +1165,7 @@ public class AwSettingsTest extends AwTestBase {
         protected void doEnsureSettingHasValue(Boolean value) throws Throwable {
             loadDataSync(getData());
             final boolean expectPopupEnabled = value;
-            poll(new Callable<Boolean>() {
+            pollInstrumentationThread(new Callable<Boolean>() {
                 @Override
                 public Boolean call() throws Exception {
                     String title = getTitleOnUiThread();
@@ -1582,7 +1583,7 @@ public class AwSettingsTest extends AwTestBase {
         assertEquals(ImagePageGenerator.IMAGE_NOT_LOADED_STRING,
                 getTitleOnUiThread(awContents));
         settings.setLoadsImagesAutomatically(true);
-        poll(new Callable<Boolean>() {
+        pollInstrumentationThread(new Callable<Boolean>() {
             @Override
             public Boolean call() throws Exception {
                 return !ImagePageGenerator.IMAGE_NOT_LOADED_STRING.equals(
@@ -1969,7 +1970,7 @@ public class AwSettingsTest extends AwTestBase {
                     getTitleOnUiThread(awContents));
 
             settings.setImagesEnabled(true);
-            poll(new Callable<Boolean>() {
+            pollInstrumentationThread(new Callable<Boolean>() {
                 @Override
                 public Boolean call() throws Exception {
                     return ImagePageGenerator.IMAGE_LOADED_STRING.equals(
@@ -2386,7 +2387,7 @@ public class AwSettingsTest extends AwTestBase {
 
         private int waitUntilResourceIsRequested(
                 final String path, final int initialRequestCount) throws Exception {
-            poll(new Callable<Boolean>() {
+            pollInstrumentationThread(new Callable<Boolean>() {
                 @Override
                 public Boolean call() throws Exception {
                     return mWebServer.getRequestCount(path) > initialRequestCount;
@@ -2871,6 +2872,66 @@ public class AwSettingsTest extends AwTestBase {
                 httpServer.shutdown();
             }
         }
+    }
+
+    private TestDependencyFactory mOverridenFactory;
+
+    @Override
+    public void tearDown() throws Exception {
+        mOverridenFactory = null;
+        super.tearDown();
+    }
+
+    @Override
+    protected TestDependencyFactory createTestDependencyFactory() {
+        if (mOverridenFactory == null) {
+            return new TestDependencyFactory();
+        } else {
+            return mOverridenFactory;
+        }
+    }
+
+    private static class EmptyDocumentPeristenceTestDependencyFactory
+            extends TestDependencyFactory {
+        private boolean mAllow;
+        public EmptyDocumentPeristenceTestDependencyFactory(boolean allow) {
+            mAllow = allow;
+        }
+
+        @Override
+        public AwSettings createAwSettings(Context context, boolean supportsLegacyQuirks) {
+            return new AwSettings(context, false /* isAccessFromFileURLsGrantedByDefault */,
+                    supportsLegacyQuirks, mAllow, true /* allowGeolocationOnInsecureOrigins */);
+        }
+    }
+
+    private void doAllowEmptyDocumentPersistenceTest(boolean allow) throws Throwable {
+        mOverridenFactory = new EmptyDocumentPeristenceTestDependencyFactory(allow);
+
+        final TestAwContentsClient client = new TestAwContentsClient();
+        final AwTestContainerView mContainerView = createAwTestContainerViewOnMainSync(client);
+        final AwContents awContents = mContainerView.getAwContents();
+        enableJavaScriptOnUiThread(awContents);
+        JSUtils.executeJavaScriptAndWaitForResult(this, awContents,
+                client.getOnEvaluateJavaScriptResultHelper(),
+                "window.emptyDocumentPersistenceTest = true;");
+        loadUrlSync(awContents, client.getOnPageFinishedHelper(), "about:blank");
+        String result = JSUtils.executeJavaScriptAndWaitForResult(this, awContents,
+                client.getOnEvaluateJavaScriptResultHelper(),
+                "window.emptyDocumentPersistenceTest ? 'set' : 'not set';");
+        assertEquals(allow ? "\"set\"" : "\"not set\"", result);
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView", "Preferences"})
+    public void testAllowEmptyDocumentPersistence() throws Throwable {
+        doAllowEmptyDocumentPersistenceTest(true);
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView", "Preferences"})
+    public void testDisallowEmptyDocumentPersistence() throws Throwable {
+        doAllowEmptyDocumentPersistenceTest(false);
     }
 
     static class ViewPair {

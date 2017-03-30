@@ -13,6 +13,8 @@ import("//ui/ozone/ozone.gni")
 if (is_android) {
   import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
+} else if (is_mac) {
+  import("//build/config/mac/rules.gni")
 }
 
 build_ime = !is_ios
@@ -66,6 +68,8 @@ component("base") {
     "clipboard/clipboard_mac.h",
     "clipboard/clipboard_mac.mm",
     "clipboard/clipboard_types.h",
+    "clipboard/clipboard_util_mac.h",
+    "clipboard/clipboard_util_mac.mm",
     "clipboard/clipboard_util_win.cc",
     "clipboard/clipboard_util_win.h",
     "clipboard/clipboard_win.cc",
@@ -553,6 +557,7 @@ component("base") {
     ]
 
     deps += [
+      "//ui/events/ozone:events_ozone_evdev",
       "//ui/events/ozone:events_ozone_layout",
       "//ui/ozone:ozone_base",
     ]
@@ -674,7 +679,10 @@ source_set("test_support") {
       "ime/dummy_text_input_client.h",
     ]
 
-    deps += [ "//ui/base/ime" ]
+    deps += [
+      "//ui/base/ime",
+      "//ui/events",
+    ]
   }
 
   if (!use_aura) {
@@ -698,9 +706,21 @@ if (is_android) {
   }
 }
 
+bundle_data("ui_base_unittests_bundle_data") {
+  testonly = true
+  sources = [
+    "test/data/data_pack_unittest/truncated-header.pak",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/" +
+        "{{source_root_relative_dir}}/{{source_file_part}}",
+  ]
+}
+
 # GYP version: ui/base/ui_base_tests.gyp:ui_base_unittests
 test("ui_base_unittests") {
   sources = [
+    "clipboard/clipboard_util_mac_unittest.mm",
     "ios/cru_context_menu_controller_unittest.mm",
     "l10n/l10n_util_mac_unittest.mm",
     "l10n/l10n_util_unittest.cc",
@@ -795,6 +815,7 @@ test("ui_base_unittests") {
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   deps = [
+    ":ui_base_unittests_bundle_data",
     "//base",
     "//base/test:test_support",
     "//net",
@@ -814,12 +835,12 @@ test("ui_base_unittests") {
     "//url",
   ]
 
-  if (is_ios) {
-    # TODO(GYP) lots of iOS-only steps for ui_base_unittests
-  }
-
   if (build_ime) {
     deps += [ "//ui/base/ime" ]
+  }
+
+  if (is_ios) {
+    deps += [ "//ui/resources:ui_test_pak_bundle_data" ]
   }
 
   if (is_win) {
@@ -872,8 +893,8 @@ test("ui_base_unittests") {
 
   if (is_mac) {
     deps += [
+      ":ui_unittests Framework",
       "//third_party/mozilla",
-      #'ui_base_tests_bundle',  TODO(GYP)
     ]
   }
 
@@ -928,4 +949,13 @@ test("ui_base_unittests") {
     }
   }
 }
-# TODO(GYP) Mac (ui_base_tests_bundle)
+
+if (is_mac) {
+  mac_framework("ui_unittests Framework") {
+    testonly = true
+    deps = [
+      "//ui/resources:ui_test_pak_bundle_data",
+    ]
+    info_plist = "test/framework-Info.plist"
+  }
+}

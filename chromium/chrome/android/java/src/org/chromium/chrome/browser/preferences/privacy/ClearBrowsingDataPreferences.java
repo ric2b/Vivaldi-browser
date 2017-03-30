@@ -12,26 +12,35 @@ import android.preference.PreferenceFragment;
 import android.widget.ListView;
 
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.BrowsingDataType;
+import org.chromium.chrome.browser.TimePeriod;
+import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.preferences.ButtonPreference;
 import org.chromium.chrome.browser.preferences.ClearBrowsingDataCheckBoxPreference;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.SpinnerPreference;
+import org.chromium.chrome.browser.preferences.TextMessageWithLinkAndIconPreference;
 import org.chromium.chrome.browser.preferences.privacy.BrowsingDataCounterBridge.BrowsingDataCounterCallback;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.sync.signin.ChromeSigninController;
 
 import java.util.Arrays;
 import java.util.EnumSet;
 
 /**
- * Modal dialog with options for selection the type of browsing data
- * to clear (history, cookies), triggered from a preference.
+ * Preference screen that allows the user to clear browsing data.
+ * The user can choose which types of data to clear (history, cookies, etc), and the time range
+ * from which to clear data.
  */
 public class ClearBrowsingDataPreferences extends PreferenceFragment
         implements PrefServiceBridge.OnClearBrowsingDataListener,
+                   PrefServiceBridge.OtherFormsOfBrowsingHistoryListener,
                    Preference.OnPreferenceClickListener,
-                   Preference.OnPreferenceChangeListener{
+                   Preference.OnPreferenceChangeListener {
     /**
      * Represents a single item in the dialog.
      */
@@ -106,28 +115,37 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
     private static final String PREF_CACHE = "clear_cache_checkbox";
     private static final String PREF_PASSWORDS = "clear_passwords_checkbox";
     private static final String PREF_FORM_DATA = "clear_form_data_checkbox";
-    private static final String PREF_BOOKMARKS = "clear_bookmarks_checkbox";
 
-    private static final String PREF_SUMMARY = "summary";
+    @VisibleForTesting
+    public static final String PREF_GOOGLE_SUMMARY = "google_summary";
+    @VisibleForTesting
+    public static final String PREF_GENERAL_SUMMARY = "general_summary";
     private static final String PREF_TIME_RANGE = "time_period_spinner";
 
-    /** The "Clear" button preference. Referenced in tests. */
+    /** The "Clear" button preference. */
+    @VisibleForTesting
     public static final String PREF_CLEAR_BUTTON = "clear_button";
 
     /** The tag used for logging. */
     public static final String TAG = "ClearBrowsingDataPreferences";
 
+    /** The histogram for the dialog about other forms of browsing history. */
+    private static final String DIALOG_HISTOGRAM =
+            "History.ClearBrowsingData.ShownHistoryNoticeAfterClearing";
+
+    /** The web history URL. */
+    private static final String WEB_HISTORY_URL =
+            "https://history.google.com/history/?utm_source=chrome_cbd";
+
     /**
-     * Enum for Dialog options to be displayed in the dialog.
+     * The various data types that can be cleared via this screen.
      */
     public enum DialogOption {
         CLEAR_HISTORY(BrowsingDataType.HISTORY, PREF_HISTORY),
         CLEAR_COOKIES_AND_SITE_DATA(BrowsingDataType.COOKIES, PREF_COOKIES),
         CLEAR_CACHE(BrowsingDataType.CACHE, PREF_CACHE),
         CLEAR_PASSWORDS(BrowsingDataType.PASSWORDS, PREF_PASSWORDS),
-        CLEAR_FORM_DATA(BrowsingDataType.FORM_DATA, PREF_FORM_DATA),
-        // Clear bookmarks is only used by ClearSyncData dialog.
-        CLEAR_BOOKMARKS_DATA(BrowsingDataType.BOOKMARKS, PREF_BOOKMARKS);
+        CLEAR_FORM_DATA(BrowsingDataType.FORM_DATA, PREF_FORM_DATA);
 
         private final int mDataType;
         private final String mPreferenceKey;
@@ -159,7 +177,7 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
         /**
          * Constructs this time period spinner option.
          * @param timePeriod The time period represented as an int from the shared enum
-         *     {@link org.chromium.chrome.browser.TimePeriod}.
+         *     {@link TimePeriod}.
          * @param title The text that will be used to represent this item in the spinner.
          */
         public TimePeriodSpinnerOption(int timePeriod, String title) {
@@ -168,8 +186,7 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
         }
 
         /**
-         * @return The time period represented as an int from the shared enum
-         *     {@link org.chromium.chrome.browser.TimePeriod}
+         * @return The time period represented as an int from the shared enum {@link TimePeriod}
          */
         public int getTimePeriod() {
             return mTimePeriod;
@@ -181,11 +198,13 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
         }
     }
 
+    private OtherFormsOfHistoryDialogFragment mDialogAboutOtherFormsOfBrowsingHistory;
+    private boolean mIsDialogAboutOtherFormsOfBrowsingHistoryEnabled;
+
     private ProgressDialog mProgressDialog;
-    private boolean mCanDeleteBrowsingHistory;
     private Item[] mItems;
 
-    protected final EnumSet<DialogOption> getSelectedOptions() {
+    private final EnumSet<DialogOption> getSelectedOptions() {
         EnumSet<DialogOption> selected = EnumSet.noneOf(DialogOption.class);
         for (Item item : mItems) {
             if (item.isSelected()) selected.add(item.getOption());
@@ -197,9 +216,10 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
      * Requests the browsing data corresponding to the given dialog options to be deleted.
      * @param options The dialog options whose corresponding data should be deleted.
      */
-    protected final void clearBrowsingData(EnumSet<DialogOption> options) {
-        int[] dataTypes = new int[options.size()];
+    private final void clearBrowsingData(EnumSet<DialogOption> options) {
+        showProgressDialog();
 
+        int[] dataTypes = new int[options.size()];
         int i = 0;
         for (DialogOption option : options) {
             dataTypes[i] = option.getDataType();
@@ -212,10 +232,8 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
         PrefServiceBridge.getInstance().clearBrowsingData(this, dataTypes, timePeriod);
     }
 
-    protected void dismissProgressDialog() {
-        android.util.Log.i(TAG, "in dismissProgressDialog");
+    private void dismissProgressDialog() {
         if (mProgressDialog != null && mProgressDialog.isShowing()) {
-            android.util.Log.i(TAG, "progress dialog dismissed");
             mProgressDialog.dismiss();
         }
         mProgressDialog = null;
@@ -225,7 +243,7 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
      * Returns the Array of dialog options. Options are displayed in the same
      * order as they appear in the array.
      */
-    protected DialogOption[] getDialogOptions() {
+    private DialogOption[] getDialogOptions() {
         return new DialogOption[] {
             DialogOption.CLEAR_HISTORY,
             DialogOption.CLEAR_COOKIES_AND_SITE_DATA,
@@ -242,15 +260,15 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
         Activity activity = getActivity();
 
         TimePeriodSpinnerOption[] options = new TimePeriodSpinnerOption[] {
-                new TimePeriodSpinnerOption(org.chromium.chrome.browser.TimePeriod.LAST_HOUR,
+                new TimePeriodSpinnerOption(TimePeriod.LAST_HOUR,
                         activity.getString(R.string.clear_browsing_data_period_hour)),
-                new TimePeriodSpinnerOption(org.chromium.chrome.browser.TimePeriod.LAST_DAY,
+                new TimePeriodSpinnerOption(TimePeriod.LAST_DAY,
                         activity.getString(R.string.clear_browsing_data_period_day)),
-                new TimePeriodSpinnerOption(org.chromium.chrome.browser.TimePeriod.LAST_WEEK,
+                new TimePeriodSpinnerOption(TimePeriod.LAST_WEEK,
                         activity.getString(R.string.clear_browsing_data_period_week)),
-                new TimePeriodSpinnerOption(org.chromium.chrome.browser.TimePeriod.FOUR_WEEKS,
+                new TimePeriodSpinnerOption(TimePeriod.FOUR_WEEKS,
                         activity.getString(R.string.clear_browsing_data_period_four_weeks)),
-                new TimePeriodSpinnerOption(org.chromium.chrome.browser.TimePeriod.EVERYTHING,
+                new TimePeriodSpinnerOption(TimePeriod.EVERYTHING,
                         activity.getString(R.string.clear_browsing_data_period_everything))};
 
         return options;
@@ -261,26 +279,40 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
      * @param option The option in question.
      * @return boolean Whether the given option should be preselected.
      */
-    protected boolean isOptionSelectedByDefault(DialogOption option) {
+    private boolean isOptionSelectedByDefault(DialogOption option) {
         return PrefServiceBridge.getInstance().getBrowsingDataDeletionPreference(
             option.getDataType());
     }
 
-    // Called when "clear browsing data" completes.
-    // Implements the ChromePreferences.OnClearBrowsingDataListener interface.
+    /**
+     * Called when clearing browsing data completes.
+     * Implements the ChromePreferences.OnClearBrowsingDataListener interface.
+     */
     @Override
     public void onBrowsingDataCleared() {
         if (getActivity() == null) return;
 
-        dismissProgressDialog();
-        getActivity().finish();
+        // If the user deleted their browsing history, the dialog about other forms of history
+        // is enabled, and it has never been shown before, show it. Otherwise, just close this
+        // preference screen.
+        if (getSelectedOptions().contains(DialogOption.CLEAR_HISTORY)
+                && mIsDialogAboutOtherFormsOfBrowsingHistoryEnabled
+                && !OtherFormsOfHistoryDialogFragment.wasDialogShown(getActivity())) {
+            mDialogAboutOtherFormsOfBrowsingHistory =
+                    OtherFormsOfHistoryDialogFragment.show(getActivity());
+            dismissProgressDialog();
+            RecordHistogram.recordBooleanHistogram(DIALOG_HISTOGRAM, true);
+        } else {
+            dismissProgressDialog();
+            getActivity().finish();
+            RecordHistogram.recordBooleanHistogram(DIALOG_HISTOGRAM, false);
+        }
     }
 
     @Override
     public boolean onPreferenceClick(Preference preference) {
         if (preference.getKey().equals(PREF_CLEAR_BUTTON)) {
-            dismissProgressDialog();
-            onOptionSelected();
+            clearBrowsingData(getSelectedOptions());
             return true;
         }
         return false;
@@ -315,6 +347,7 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        PrefServiceBridge.getInstance().requestInfoAboutOtherFormsOfBrowsingHistory(this);
         getActivity().setTitle(R.string.clear_browsing_data_title);
         addPreferencesFromResource(R.xml.clear_browsing_data_preferences);
         DialogOption[] options = getDialogOptions();
@@ -367,13 +400,39 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
         clearButton.setOnPreferenceClickListener(this);
         clearButton.setShouldDisableView(true);
 
-        // Only one footnote should be shown, the unsynced or synced version, depending on whether
-        // the user is signed in.
-        Preference summary = findPreference(PREF_SUMMARY);
+        // The general information footnote informs users about data that will not be deleted.
+        // If the user is signed in, it also informs users about the behavior of synced deletions.
+        // and we show an additional Google-specific footnote. This footnote informs users that they
+        // will not be signed out of their Google account, and if the web history service indicates
+        // that they have other forms of browsing history, then also about that.
+        TextMessageWithLinkAndIconPreference google_summary =
+                (TextMessageWithLinkAndIconPreference) findPreference(PREF_GOOGLE_SUMMARY);
+        TextMessageWithLinkAndIconPreference general_summary =
+                (TextMessageWithLinkAndIconPreference) findPreference(PREF_GENERAL_SUMMARY);
+
+        google_summary.setLinkClickDelegate(new Runnable() {
+            @Override
+            public void run() {
+                new TabDelegate(false /* incognito */).launchUrl(
+                        WEB_HISTORY_URL, TabLaunchType.FROM_CHROME_UI);
+            }
+        });
+        general_summary.setLinkClickDelegate(new Runnable() {
+            @Override
+            public void run() {
+                HelpAndFeedback.getInstance(getActivity()).show(
+                        getActivity(),
+                        getResources().getString(R.string.help_context_clear_browsing_data),
+                        Profile.getLastUsedProfile(),
+                        null);
+            }
+        });
         if (ChromeSigninController.get(getActivity()).isSignedIn()) {
-            summary.setSummary(R.string.clear_browsing_data_footnote_signed);
+            general_summary.setSummary(
+                    R.string.clear_browsing_data_footnote_sync_and_site_settings);
         } else {
-            summary.setSummary(R.string.clear_browsing_data_footnote);
+            getPreferenceScreen().removePreference(google_summary);
+            general_summary.setSummary(R.string.clear_browsing_data_footnote_site_settings);
         }
     }
 
@@ -396,18 +455,9 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
         }
     }
 
-    /**
-     * Called when PositiveButton is clicked for the dialog.
-     */
-    protected void onOptionSelected() {
-        showProgressDialog();
-        clearBrowsingData(getSelectedOptions());
-    }
-
-    protected final void showProgressDialog() {
+    private final void showProgressDialog() {
         if (getActivity() == null) return;
 
-        android.util.Log.i(TAG, "progress dialog shown");
         mProgressDialog = ProgressDialog.show(getActivity(),
                 getActivity().getString(R.string.clear_browsing_data_progress_title),
                 getActivity().getString(R.string.clear_browsing_data_progress_message), true,
@@ -417,5 +467,31 @@ public class ClearBrowsingDataPreferences extends PreferenceFragment
     @VisibleForTesting
     ProgressDialog getProgressDialog() {
         return mProgressDialog;
+    }
+
+    @Override
+    public void showNoticeAboutOtherFormsOfBrowsingHistory() {
+        if (getActivity() == null) return;
+
+        TextMessageWithLinkAndIconPreference google_summary =
+                (TextMessageWithLinkAndIconPreference) findPreference(PREF_GOOGLE_SUMMARY);
+        if (google_summary == null) return;
+        google_summary.setSummary(
+                R.string.clear_browsing_data_footnote_signed_and_other_forms_of_history);
+    }
+
+    @Override
+    public void enableDialogAboutOtherFormsOfBrowsingHistory() {
+        if (getActivity() == null) return;
+
+        mIsDialogAboutOtherFormsOfBrowsingHistoryEnabled = true;
+    }
+
+    /**
+     * Used only to access the dialog about other forms of browsing history from tests.
+     */
+    @VisibleForTesting
+    OtherFormsOfHistoryDialogFragment getDialogAboutOtherFormsOfBrowsingHistory() {
+        return mDialogAboutOtherFormsOfBrowsingHistory;
     }
 }

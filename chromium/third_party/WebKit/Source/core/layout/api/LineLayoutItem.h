@@ -10,6 +10,7 @@
 
 #include "platform/LayoutUnit.h"
 #include "wtf/Allocator.h"
+#include "wtf/HashTableDeletedValueType.h"
 
 namespace blink {
 
@@ -24,11 +25,18 @@ class LineLayoutAPIShim;
 
 enum HitTestFilter;
 
+static LayoutObject* const kHashTableDeletedValue = reinterpret_cast<LayoutObject*>(-1);
+
 class LineLayoutItem {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 public:
     explicit LineLayoutItem(LayoutObject* layoutObject)
         : m_layoutObject(layoutObject)
+    {
+    }
+
+    explicit LineLayoutItem(WTF::HashTableDeletedValueType)
+        : m_layoutObject(kHashTableDeletedValue)
     {
     }
 
@@ -39,20 +47,22 @@ public:
 
     LineLayoutItem() : m_layoutObject(0) { }
 
-    // TODO(pilgrim): Remove this. It's only here to make things compile before
-    // switching all of core/layout/line to using the API.
-    // https://crbug.com/499321
-    operator LayoutObject*() const { return m_layoutObject; }
-
-    // TODO(dgrogan): Remove this when we replace the operator above with UnspecifiedBoolType.
-    bool isNull() const
-    {
-        return !m_layoutObject;
-    }
+    typedef LayoutObject* LineLayoutItem::*UnspecifiedBoolType;
+    operator UnspecifiedBoolType() const { return m_layoutObject ? &LineLayoutItem::m_layoutObject : nullptr; }
 
     bool isEqual(const LayoutObject* layoutObject) const
     {
         return m_layoutObject == layoutObject;
+    }
+
+    bool operator==(const LineLayoutItem& other) const
+    {
+        return m_layoutObject == other.m_layoutObject;
+    }
+
+    bool operator!=(const LineLayoutItem& other) const
+    {
+        return !(*this == other);
     }
 
     String debugName() const
@@ -255,6 +265,11 @@ public:
         return m_layoutObject->isAtomicInlineLevel();
     }
 
+    bool isRubyText() const
+    {
+        return m_layoutObject->isRubyText();
+    }
+
     bool isRubyRun() const
     {
         return m_layoutObject->isRubyRun();
@@ -370,19 +385,9 @@ public:
         return LineLayoutItem(m_layoutObject->previousInPreOrder(stayWithin));
     }
 
-    FloatQuad localToAbsoluteQuad(const FloatQuad& quad, MapCoordinatesFlags mode = 0, bool* wasFixed = nullptr) const
+    FloatQuad localToAbsoluteQuad(const FloatQuad& quad, MapCoordinatesFlags mode = 0) const
     {
-        return m_layoutObject->localToAbsoluteQuad(quad, mode, wasFixed);
-    }
-
-    int previousOffset(int current) const
-    {
-        return m_layoutObject->previousOffset(current);
-    }
-
-    int nextOffset(int current) const
-    {
-        return m_layoutObject->nextOffset(current);
+        return m_layoutObject->localToAbsoluteQuad(quad, mode);
     }
 
     FloatPoint localToAbsolute(const FloatPoint& localPoint = FloatPoint(), MapCoordinatesFlags flags = 0) const
@@ -394,6 +399,36 @@ public:
     {
         return m_layoutObject->hasOverflowClip();
     }
+
+    bool documentBeingDestroyed() const
+    {
+        return m_layoutObject->documentBeingDestroyed();
+    }
+
+    void invalidateDisplayItemClient(const DisplayItemClient& displayItemClient)
+    {
+        return m_layoutObject->invalidateDisplayItemClient(displayItemClient);
+    }
+
+    LayoutRect visualRect() const
+    {
+        return m_layoutObject->visualRect();
+    }
+
+    bool isHashTableDeletedValue() const
+    {
+        return m_layoutObject == kHashTableDeletedValue;
+    }
+
+    struct LineLayoutItemHash {
+        STATIC_ONLY(LineLayoutItemHash);
+        static unsigned hash(const LineLayoutItem& key) { return WTF::PtrHash<LayoutObject>::hash(key.m_layoutObject); }
+        static bool equal(const LineLayoutItem& a, const LineLayoutItem& b)
+        {
+            return WTF::PtrHash<LayoutObject>::equal(a.m_layoutObject, b.m_layoutObject);
+        }
+        static const bool safeToCompareToEmptyOrDeleted = true;
+    };
 
 #ifndef NDEBUG
 
@@ -409,6 +444,16 @@ public:
         return m_layoutObject;
     }
 
+    void showTreeForThis() const
+    {
+        m_layoutObject->showTreeForThis();
+    }
+
+    String decoratedName() const
+    {
+        return m_layoutObject->decoratedName();
+    }
+
 #endif
 
 protected:
@@ -418,11 +463,28 @@ protected:
 private:
     LayoutObject* m_layoutObject;
 
+    friend class LayoutBlockFlow;
     friend class LineLayoutAPIShim;
     friend class LineLayoutBlockFlow;
+    friend class LineLayoutBox;
     friend class LineLayoutRubyRun;
 };
 
 } // namespace blink
+
+namespace WTF {
+
+template <>
+struct DefaultHash<blink::LineLayoutItem> {
+    using Hash = blink::LineLayoutItem::LineLayoutItemHash;
+};
+
+template <>
+struct HashTraits<blink::LineLayoutItem> : SimpleClassHashTraits<blink::LineLayoutItem> {
+    STATIC_ONLY(HashTraits);
+};
+
+} // namespace WTF
+
 
 #endif // LineLayoutItem_h

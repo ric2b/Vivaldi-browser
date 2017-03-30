@@ -13,6 +13,7 @@
 #include "platform/blob/BlobRegistry.h"
 #include "platform/blob/BlobURL.h"
 #include "platform/network/ResourceRequest.h"
+#include "wtf/OwnPtr.h"
 
 namespace blink {
 
@@ -83,12 +84,12 @@ public:
         ASSERT(executionContext->isContextThread());
         ASSERT(!m_loader);
 
-        KURL url = BlobURL::createPublicURL(executionContext->securityOrigin());
+        KURL url = BlobURL::createPublicURL(executionContext->getSecurityOrigin());
         if (url.isEmpty()) {
             m_updater->update(createUnexpectedErrorDataConsumerHandle());
             return;
         }
-        BlobRegistry::registerPublicBlobURL(executionContext->securityOrigin(), url, m_blobDataHandle);
+        BlobRegistry::registerPublicBlobURL(executionContext->getSecurityOrigin(), url, m_blobDataHandle);
 
         m_loader = createLoader(executionContext, this);
         ASSERT(m_loader);
@@ -96,11 +97,12 @@ public:
         ResourceRequest request(url);
         request.setRequestContext(WebURLRequest::RequestContextInternal);
         request.setUseStreamOnResponse(true);
+        // We intentionally skip 'setExternalRequestStateFromRequestorAddressSpace', as 'data:' can never be external.
         m_loader->start(request);
     }
 
 private:
-    PassRefPtr<ThreadableLoader> createLoader(ExecutionContext* executionContext, ThreadableLoaderClient* client) const
+    PassOwnPtr<ThreadableLoader> createLoader(ExecutionContext* executionContext, ThreadableLoaderClient* client) const
     {
         ThreadableLoaderOptions options;
         options.preflightPolicy = ConsiderPreflight;
@@ -151,14 +153,14 @@ private:
 
     RefPtr<BlobDataHandle> m_blobDataHandle;
     Persistent<FetchBlobDataConsumerHandle::LoaderFactory> m_loaderFactory;
-    RefPtr<ThreadableLoader> m_loader;
+    OwnPtr<ThreadableLoader> m_loader;
 
     bool m_receivedResponse;
 };
 
 class DefaultLoaderFactory final : public FetchBlobDataConsumerHandle::LoaderFactory {
 public:
-    PassRefPtr<ThreadableLoader> create(
+    PassOwnPtr<ThreadableLoader> create(
         ExecutionContext& executionContext,
         ThreadableLoaderClient* client,
         const ThreadableLoaderOptions& options,

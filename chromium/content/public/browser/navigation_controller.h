@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -42,10 +43,13 @@ class WebContents;
 // exactly one NavigationController.
 class NavigationController {
  public:
+  // Note: NO_RELOAD is used in general, but behaviors depend on context.
+  // If it is used for tab restore, or history navigation, it loads preferring
+  // cache (which may be stale).
   enum ReloadType {
-    NO_RELOAD,                   // Load all from cache as much as possible.
+    NO_RELOAD,                   // Normal load, restore, or history navigation.
     RELOAD,                      // Normal (cache-validating) reload.
-    RELOAD_IGNORING_CACHE,       // Reload bypassing the cache (shift-reload).
+    RELOAD_BYPASSING_CACHE,      // Reload bypassing the cache (shift-reload).
     RELOAD_ORIGINAL_REQUEST_URL, // Reload using the original request URL.
     RELOAD_DISABLE_LOFI_MODE     // Reload with Lo-Fi mode disabled.
   };
@@ -107,7 +111,7 @@ class NavigationController {
   // Creates a navigation entry and translates the virtual url to a real one.
   // This is a general call; prefer LoadURL[FromRenderer]/TransferURL below.
   // Extra headers are separated by \n.
-  CONTENT_EXPORT static scoped_ptr<NavigationEntry> CreateNavigationEntry(
+  CONTENT_EXPORT static std::unique_ptr<NavigationEntry> CreateNavigationEntry(
       const GURL& url,
       const Referrer& referrer,
       ui::PageTransition transition,
@@ -236,9 +240,10 @@ class NavigationController {
   // indicates where the restor comes from. This takes ownership of the
   // NavigationEntrys in |entries| and clears it out. This is used for session
   // restore.
-  virtual void Restore(int selected_navigation,
-                       RestoreType type,
-                       std::vector<scoped_ptr<NavigationEntry>>* entries) = 0;
+  virtual void Restore(
+      int selected_navigation,
+      RestoreType type,
+      std::vector<std::unique_ptr<NavigationEntry>>* entries) = 0;
 
   // Entries -------------------------------------------------------------------
 
@@ -327,7 +332,7 @@ class NavigationController {
   // represented as an entry, but should go away when the user navigates away
   // from them.
   // Note that adding a transient entry does not change the active contents.
-  virtual void SetTransientEntry(scoped_ptr<NavigationEntry> entry) = 0;
+  virtual void SetTransientEntry(std::unique_ptr<NavigationEntry> entry) = 0;
 
   // New navigations -----------------------------------------------------------
 
@@ -376,7 +381,7 @@ class NavigationController {
   virtual void ReloadToRefreshContent(bool check_for_repost) = 0;
 
   // Like Reload(), but don't use caches (aka "shift-reload").
-  virtual void ReloadIgnoringCache(bool check_for_repost) = 0;
+  virtual void ReloadBypassingCache(bool check_for_repost) = 0;
 
   // Reloads the current entry using the original URL used to create it.  This
   // is used for cases where the user wants to refresh a page using a different
@@ -395,9 +400,7 @@ class NavigationController {
 
   // Random --------------------------------------------------------------------
 
-  // Session storage depends on dom_storage that depends on blink::WebString,
-  // which cannot be used on iOS.
-#if !defined(OS_IOS)
+  // Session storage depends on dom_storage that depends on blink::WebString.
   // Returns all the SessionStorageNamespace objects that this
   // NavigationController knows about, the map key is a StoragePartition id.
   virtual const SessionStorageNamespaceMap&
@@ -406,7 +409,6 @@ class NavigationController {
   // TODO(ajwong): Remove this once prerendering, instant, and session restore
   // are migrated.
   virtual SessionStorageNamespace* GetDefaultSessionStorageNamespace() = 0;
-#endif
 
   // Sets the max restored page ID this NavigationController has seen, if it
   // was restored from a previous session.

@@ -18,10 +18,6 @@
 #include "ui/views/window/dialog_client_view.h"
 #include "ui/views/window/dialog_delegate.h"
 
-#if defined(OS_MACOSX)
-#include "ui/base/test/scoped_fake_nswindow_focus.h"
-#endif
-
 namespace views {
 
 namespace {
@@ -32,11 +28,21 @@ class TestDialog : public DialogDelegateView, public ButtonListener {
       : input_(new views::Textfield()),
         canceled_(false),
         accepted_(false),
+        closed_(false),
         closeable_(false),
-        last_pressed_button_(NULL) {
+        last_pressed_button_(nullptr),
+        should_handle_escape_(false) {
     AddChildView(input_);
   }
   ~TestDialog() override {}
+
+  void Init() {
+    // Add the accelerator before being added to the widget hierarchy (before
+    // DCV has registered its accelerator) to make sure accelerator handling is
+    // not dependent on the order of AddAccelerator calls.
+    EXPECT_FALSE(GetWidget());
+    AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
+  }
 
   // WidgetDelegate overrides:
   bool ShouldShowWindowTitle() const override {
@@ -52,9 +58,16 @@ class TestDialog : public DialogDelegateView, public ButtonListener {
     accepted_ = true;
     return closeable_;
   }
+  bool Close() override {
+    closed_ = true;
+    return closeable_;
+  }
 
   // DialogDelegateView overrides:
   gfx::Size GetPreferredSize() const override { return gfx::Size(200, 200); }
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
+    return should_handle_escape_;
+  }
   base::string16 GetWindowTitle() const override { return title_; }
   View* GetInitiallyFocusedView() override { return input_; }
   bool UseNewStyleForThisDialog() const override { return true; }
@@ -66,13 +79,18 @@ class TestDialog : public DialogDelegateView, public ButtonListener {
 
   Button* last_pressed_button() const { return last_pressed_button_; }
 
-  void CheckAndResetStates(bool canceled, bool accepted, Button* last_pressed) {
+  void CheckAndResetStates(bool canceled,
+                           bool accepted,
+                           bool closed,
+                           Button* last_pressed) {
     EXPECT_EQ(canceled, canceled_);
     canceled_ = false;
     EXPECT_EQ(accepted, accepted_);
     accepted_ = false;
     EXPECT_EQ(last_pressed, last_pressed_button_);
-    last_pressed_button_ = NULL;
+    last_pressed_button_ = nullptr;
+    EXPECT_EQ(closed, closed_);
+    closed_ = false;
   }
 
   void TearDown() {
@@ -81,6 +99,9 @@ class TestDialog : public DialogDelegateView, public ButtonListener {
   }
 
   void set_title(const base::string16& title) { title_ = title; }
+  void set_should_handle_escape(bool should_handle_escape) {
+    should_handle_escape_ = should_handle_escape;
+  }
 
   views::Textfield* input() { return input_; }
 
@@ -88,23 +109,26 @@ class TestDialog : public DialogDelegateView, public ButtonListener {
   views::Textfield* input_;
   bool canceled_;
   bool accepted_;
+  bool closed_;
   // Prevent the dialog from closing, for repeated ok and cancel button clicks.
   bool closeable_;
   Button* last_pressed_button_;
   base::string16 title_;
+  bool should_handle_escape_;
 
   DISALLOW_COPY_AND_ASSIGN(TestDialog);
 };
 
 class DialogTest : public ViewsTestBase {
  public:
-  DialogTest() : dialog_(NULL) {}
+  DialogTest() : dialog_(nullptr) {}
   ~DialogTest() override {}
 
   void SetUp() override {
     ViewsTestBase::SetUp();
     dialog_ = new TestDialog();
-    DialogDelegate::CreateDialogWidget(dialog_, GetContext(), NULL)->Show();
+    dialog_->Init();
+    DialogDelegate::CreateDialogWidget(dialog_, GetContext(), nullptr)->Show();
   }
 
   void TearDown() override {
@@ -123,12 +147,6 @@ class DialogTest : public ViewsTestBase {
  private:
   TestDialog* dialog_;
 
-#if defined(OS_MACOSX)
-  // Causes Widget::Show() to transfer focus synchronously and become immune to
-  // losing focus to processes running in parallel.
-  ui::test::ScopedFakeNSWindowFocus fake_focus;
-#endif
-
   DISALLOW_COPY_AND_ASSIGN(DialogTest);
 };
 
@@ -139,28 +157,33 @@ TEST_F(DialogTest, AcceptAndCancel) {
   LabelButton* ok_button = client_view->ok_button();
   LabelButton* cancel_button = client_view->cancel_button();
 
-  // Check that return/escape accelerators accept/cancel dialogs.
+  // Check that return/escape accelerators accept/close dialogs.
   EXPECT_EQ(dialog()->input(), dialog()->GetFocusManager()->GetFocusedView());
   const ui::KeyEvent return_event(
       ui::ET_KEY_PRESSED, ui::VKEY_RETURN, ui::EF_NONE);
   SimulateKeyEvent(return_event);
-  dialog()->CheckAndResetStates(false, true, NULL);
+  dialog()->CheckAndResetStates(false, true, false, nullptr);
   const ui::KeyEvent escape_event(
       ui::ET_KEY_PRESSED, ui::VKEY_ESCAPE, ui::EF_NONE);
   SimulateKeyEvent(escape_event);
-  dialog()->CheckAndResetStates(true, false, NULL);
+  dialog()->CheckAndResetStates(false, false, true, nullptr);
 
   // Check ok and cancel button behavior on a directed return key events.
   ok_button->OnKeyPressed(return_event);
-  dialog()->CheckAndResetStates(false, true, NULL);
+  dialog()->CheckAndResetStates(false, true, false, nullptr);
   cancel_button->OnKeyPressed(return_event);
-  dialog()->CheckAndResetStates(true, false, NULL);
+  dialog()->CheckAndResetStates(true, false, false, nullptr);
 
   // Check that return accelerators cancel dialogs if cancel is focused.
   cancel_button->RequestFocus();
   EXPECT_EQ(cancel_button, dialog()->GetFocusManager()->GetFocusedView());
   SimulateKeyEvent(return_event);
-  dialog()->CheckAndResetStates(true, false, NULL);
+  dialog()->CheckAndResetStates(true, false, false, nullptr);
+
+  // Check that escape can be overridden.
+  dialog()->set_should_handle_escape(true);
+  SimulateKeyEvent(escape_event);
+  dialog()->CheckAndResetStates(false, false, false, nullptr);
 }
 
 TEST_F(DialogTest, RemoveDefaultButton) {
@@ -225,7 +248,7 @@ TEST_F(DialogTest, HitTest_WithTitle) {
 TEST_F(DialogTest, BoundsAccommodateTitle) {
   TestDialog* dialog2(new TestDialog());
   dialog2->set_title(base::ASCIIToUTF16("Title"));
-  DialogDelegate::CreateDialogWidget(dialog2, GetContext(), NULL);
+  DialogDelegate::CreateDialogWidget(dialog2, GetContext(), nullptr);
 
   // Titled dialogs have taller initial frame bounds than untitled dialogs.
   View* frame1 = dialog()->GetWidget()->non_client_view()->frame_view();

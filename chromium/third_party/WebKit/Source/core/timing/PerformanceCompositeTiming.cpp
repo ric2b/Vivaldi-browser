@@ -31,6 +31,7 @@
 
 #include "core/timing/PerformanceCompositeTiming.h"
 
+#include "bindings/core/v8/V8ObjectBuilder.h"
 #include "core/dom/Document.h"
 #include "core/loader/DocumentLoader.h"
 
@@ -43,7 +44,7 @@ static double monotonicTimeToDocumentMilliseconds(Document* document, double sec
 }
 
 PerformanceCompositeTiming::PerformanceCompositeTiming(Document* requestingDocument, unsigned sourceFrame, double startTime)
-    : PerformanceEntry(requestingDocument->url().string(), "composite", monotonicTimeToDocumentMilliseconds(requestingDocument, startTime), monotonicTimeToDocumentMilliseconds(requestingDocument, startTime))
+    : PerformanceEntry(requestingDocument->url().getString(), "composite", monotonicTimeToDocumentMilliseconds(requestingDocument, startTime), monotonicTimeToDocumentMilliseconds(requestingDocument, startTime))
     , m_sourceFrame(sourceFrame)
     , m_requestingDocument(requestingDocument)
 {
@@ -56,6 +57,12 @@ PerformanceCompositeTiming::~PerformanceCompositeTiming()
 unsigned PerformanceCompositeTiming::sourceFrame() const
 {
     return m_sourceFrame;
+}
+
+void PerformanceCompositeTiming::buildJSONValue(V8ObjectBuilder& builder) const
+{
+    PerformanceEntry::buildJSONValue(builder);
+    builder.addNumber("sourceFrame", sourceFrame());
 }
 
 DEFINE_TRACE(PerformanceCompositeTiming)

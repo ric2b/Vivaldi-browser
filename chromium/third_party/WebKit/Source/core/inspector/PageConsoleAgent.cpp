@@ -45,8 +45,8 @@ namespace blink {
 
 int PageConsoleAgent::s_enabledAgentCount = 0;
 
-PageConsoleAgent::PageConsoleAgent(V8RuntimeAgent* runtimeAgent, InspectorDOMAgent* domAgent, InspectedFrames* inspectedFrames)
-    : InspectorConsoleAgent(runtimeAgent)
+PageConsoleAgent::PageConsoleAgent(V8RuntimeAgent* runtimeAgent, V8DebuggerAgent* debuggerAgent, InspectorDOMAgent* domAgent, InspectedFrames* inspectedFrames)
+    : InspectorConsoleAgent(runtimeAgent, debuggerAgent)
     , m_inspectorDOMAgent(domAgent)
     , m_inspectedFrames(inspectedFrames)
 {
@@ -64,6 +64,7 @@ DEFINE_TRACE(PageConsoleAgent)
 {
     visitor->trace(m_inspectorDOMAgent);
     visitor->trace(m_inspectedFrames);
+    visitor->trace(m_workersWithEnabledConsole);
     InspectorConsoleAgent::trace(visitor);
 }
 
@@ -78,6 +79,7 @@ void PageConsoleAgent::disable(ErrorString* errorString)
 {
     m_instrumentingAgents->setPageConsoleAgent(nullptr);
     InspectorConsoleAgent::disable(errorString);
+    m_workersWithEnabledConsole.clear();
 }
 
 void PageConsoleAgent::clearMessages(ErrorString* errorString)
@@ -86,9 +88,9 @@ void PageConsoleAgent::clearMessages(ErrorString* errorString)
     messageStorage()->clear(m_inspectedFrames->root()->document());
 }
 
-void PageConsoleAgent::workerConsoleAgentEnabled(WorkerGlobalScopeProxy* proxy)
+void PageConsoleAgent::workerConsoleAgentEnabled(WorkerInspectorProxy* workerInspectorProxy)
 {
-    m_workersWithEnabledConsole.add(proxy);
+    m_workersWithEnabledConsole.add(workerInspectorProxy);
 }
 
 ConsoleMessageStorage* PageConsoleAgent::messageStorage()
@@ -98,21 +100,18 @@ ConsoleMessageStorage* PageConsoleAgent::messageStorage()
 
 void PageConsoleAgent::workerTerminated(WorkerInspectorProxy* workerInspectorProxy)
 {
-    WorkerGlobalScopeProxy* proxy = workerInspectorProxy->workerGlobalScopeProxy();
-    if (!proxy)
+    WorkerInspectorProxySet::iterator it = m_workersWithEnabledConsole.find(workerInspectorProxy);
+    if (it != m_workersWithEnabledConsole.end()) {
+        m_workersWithEnabledConsole.remove(it);
         return;
-
-    HashSet<WorkerGlobalScopeProxy*>::iterator iterator = m_workersWithEnabledConsole.find(proxy);
-    bool workerAgentWasEnabled = iterator != m_workersWithEnabledConsole.end();
-    if (workerAgentWasEnabled)
-        return;
+    }
 
     ConsoleMessageStorage* storage = messageStorage();
     size_t messageCount = storage->size();
     for (size_t i = 0; i < messageCount; ++i) {
         ConsoleMessage* message = storage->at(i);
-        if (message->workerGlobalScopeProxy() == proxy) {
-            message->setWorkerGlobalScopeProxy(nullptr);
+        if (message->workerInspectorProxy() == workerInspectorProxy) {
+            message->setWorkerInspectorProxy(nullptr);
             sendConsoleMessageToFrontend(message, false);
         }
     }

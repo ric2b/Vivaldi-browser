@@ -4,6 +4,7 @@
 
 #include "components/password_manager/core/browser/mock_affiliated_match_helper.h"
 
+#include "base/memory/ptr_util.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/affiliation_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -13,7 +14,7 @@ namespace password_manager {
 
 MockAffiliatedMatchHelper::MockAffiliatedMatchHelper()
     : AffiliatedMatchHelper(nullptr,
-                            make_scoped_ptr<AffiliationService>(nullptr)) {}
+                            base::WrapUnique<AffiliationService>(nullptr)) {}
 
 MockAffiliatedMatchHelper::~MockAffiliatedMatchHelper() {}
 
@@ -31,6 +32,12 @@ void MockAffiliatedMatchHelper::ExpectCallToGetAffiliatedWebRealms(
       .WillOnce(testing::Return(results_to_return));
 }
 
+void MockAffiliatedMatchHelper::ExpectCallToInjectAffiliatedWebRealms(
+    const std::vector<std::string>& results_to_inject) {
+  EXPECT_CALL(*this, OnInjectAffiliatedWebRealmsCalled())
+      .WillOnce(testing::Return(results_to_inject));
+}
+
 void MockAffiliatedMatchHelper::GetAffiliatedAndroidRealms(
     const autofill::PasswordForm& observed_form,
     const AffiliatedRealmsCallback& result_callback) {
@@ -45,6 +52,17 @@ void MockAffiliatedMatchHelper::GetAffiliatedWebRealms(
   std::vector<std::string> affiliated_web_realms =
       OnGetAffiliatedWebRealmsCalled(android_form);
   result_callback.Run(affiliated_web_realms);
+}
+
+void MockAffiliatedMatchHelper::InjectAffiliatedWebRealms(
+    ScopedVector<autofill::PasswordForm> forms,
+    const PasswordFormsCallback& result_callback) {
+  std::vector<std::string> affiliated_web_realms =
+      OnInjectAffiliatedWebRealmsCalled();
+  DCHECK_EQ(affiliated_web_realms.size(), forms.size());
+  for (size_t i = 0; i < forms.size(); ++i)
+    forms[i]->affiliated_web_realm = affiliated_web_realms[i];
+  result_callback.Run(std::move(forms));
 }
 
 }  // namespace password_manager

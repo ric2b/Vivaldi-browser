@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/logging.h"
 #include "base/mac/scoped_mach_port.h"
 #include "base/process/process_handle.h"
@@ -46,7 +48,7 @@ uint64_t GetFreePhysicalBytes() {
 
 uint64_t GetRealMemoryUsedInBytes() {
   base::ProcessHandle process_handle = base::GetCurrentProcessHandle();
-  scoped_ptr<base::ProcessMetrics> process_metrics(
+  std::unique_ptr<base::ProcessMetrics> process_metrics(
       base::ProcessMetrics::CreateProcessMetrics(process_handle));
   return static_cast<uint64_t>(process_metrics->GetWorkingSetSize());
 }

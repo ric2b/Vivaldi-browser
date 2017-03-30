@@ -105,7 +105,7 @@ class MessageCenterChangeObserver
   }
 
  private:
-  scoped_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<base::RunLoop> run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(MessageCenterChangeObserver);
 };
@@ -334,7 +334,7 @@ class DownloadNotificationTest : public DownloadNotificationTestBase {
   void SetUpOnMainThread() override {
     Profile* profile = browser()->profile();
 
-    scoped_ptr<TestChromeDownloadManagerDelegate> test_delegate;
+    std::unique_ptr<TestChromeDownloadManagerDelegate> test_delegate;
     test_delegate.reset(new TestChromeDownloadManagerDelegate(profile));
     test_delegate->GetDownloadIdReceiverCallback().Run(
         content::DownloadItem::kInvalidId + 1);
@@ -356,7 +356,7 @@ class DownloadNotificationTest : public DownloadNotificationTestBase {
 
     ASSERT_TRUE(CreateAndSetDownloadsDirectory(incognito_browser_));
 
-    scoped_ptr<TestChromeDownloadManagerDelegate> incognito_test_delegate;
+    std::unique_ptr<TestChromeDownloadManagerDelegate> incognito_test_delegate;
     incognito_test_delegate.reset(
         new TestChromeDownloadManagerDelegate(incognito_profile));
     DownloadServiceFactory::GetForBrowserContext(incognito_profile)
@@ -1194,10 +1194,12 @@ class MultiProfileDownloadNotificationTest
     user_manager::UserManager* const user_manager =
         user_manager::UserManager::Get();
     if (log_in)
-      user_manager->UserLoggedIn(AccountId::FromUserEmail(info.email),
-                                 info.hash, false);
-    user_manager->SaveUserDisplayName(AccountId::FromUserEmail(info.email),
-                                      base::UTF8ToUTF16(info.display_name));
+      user_manager->UserLoggedIn(
+          AccountId::FromUserEmailGaiaId(info.email, info.gaia_id), info.hash,
+          false);
+    user_manager->SaveUserDisplayName(
+        AccountId::FromUserEmailGaiaId(info.email, info.gaia_id),
+        base::UTF8ToUTF16(info.display_name));
     SigninManagerFactory::GetForProfile(
         chromeos::ProfileHelper::GetProfileByUserIdHash(info.hash))
             ->SetAuthenticatedAccountInfo(info.gaia_id, info.email);

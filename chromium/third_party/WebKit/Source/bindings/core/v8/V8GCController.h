@@ -56,10 +56,8 @@ public:
 
     static Node* opaqueRootForGC(v8::Isolate*, Node*);
 
-    static void reportDOMMemoryUsageToV8(v8::Isolate*);
-
     static void traceDOMWrappers(v8::Isolate*, Visitor*);
-    static bool hasPendingActivity(ExecutionContext*);
+    static bool hasPendingActivity(v8::Isolate*, ExecutionContext*);
 };
 
 } // namespace blink

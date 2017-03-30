@@ -368,6 +368,27 @@ void WebViewGuest::CreateWebContents(
                                      url_encoded_partition.c_str()));
   }
 
+#if !defined(VIVALDI_BUILD)
+  // If we already have a webview tag in the same app using the same storage
+  // partition, we should use the same SiteInstance so the existing tag and
+  // the new tag can script each other.
+  auto guest_view_manager = GuestViewManager::FromBrowserContext(
+      owner_render_process_host->GetBrowserContext());
+  scoped_refptr<content::SiteInstance> guest_site_instance =
+      guest_view_manager->GetGuestSiteInstance(guest_site);
+  if (!guest_site_instance) {
+    // Create the SiteInstance in a new BrowsingInstance, which will ensure
+    // that webview tags are also not allowed to send messages across
+    // different partitions.
+    guest_site_instance = content::SiteInstance::CreateForURL(
+        owner_render_process_host->GetBrowserContext(), guest_site);
+  }
+  WebContents::CreateParams params(
+      owner_render_process_host->GetBrowserContext(),
+      std::move(guest_site_instance));
+  params.guest_delegate = this;
+#endif  // !defined(VIVALDI_BUILD)
+
   WebContents* newcontents = nullptr;
 
   // If we created the WebContents through CreateNewWindow and created this
@@ -392,7 +413,7 @@ void WebViewGuest::CreateWebContents(
         newcontents = tabstrip_contents;
       } else {
 
-        scoped_ptr<std::string> savedurl = tabstrip_contents->delayed_open_url();
+        std::unique_ptr<std::string> savedurl = tabstrip_contents->delayed_open_url();
         if (savedurl)
           delayed_open_url_.reset(new std::string(*savedurl));
 
@@ -447,7 +468,7 @@ void WebViewGuest::CreateWebContents(
     // of the AppWindow has been muted due to thumbnail capturing, so we also
     // mute the webview webcontents.
     chrome::SetTabAudioMuted(newcontents, true,
-                      TAB_MUTED_REASON_MEDIA_CAPTURE,
+                      TabMutedReason::MEDIA_CAPTURE,
                       chrome::GetExtensionIdForMutedTab(owner_web_contents()));
   }
   callback.Run(newcontents);
@@ -900,9 +921,9 @@ bool WebViewGuest::ClearData(base::Time remove_since,
     int render_process_id = web_contents()->GetRenderProcessHost()->GetID();
     // We need to clear renderer cache separately for our process because
     // StoragePartitionHttpCacheDataRemover::ClearData() does not clear that.
-    web_cache::WebCacheManager::GetInstance()->Remove(render_process_id);
     web_cache::WebCacheManager::GetInstance()->ClearCacheForProcess(
         render_process_id);
+    web_cache::WebCacheManager::GetInstance()->Remove(render_process_id);
 
     base::Closure cache_removal_done_callback = base::Bind(
         &WebViewGuest::ClearDataInternal, weak_ptr_factory_.GetWeakPtr(),

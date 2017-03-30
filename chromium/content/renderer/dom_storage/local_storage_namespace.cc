@@ -5,7 +5,9 @@
 #include "content/renderer/dom_storage/local_storage_namespace.h"
 
 #include "content/renderer/dom_storage/local_storage_area.h"
+#include "content/renderer/dom_storage/local_storage_cached_areas.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
+#include "third_party/WebKit/public/platform/WebURL.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -16,8 +18,8 @@ using blink::WebString;
 namespace content {
 
 LocalStorageNamespace::LocalStorageNamespace(
-    StoragePartitionService* storage_partition_service)
-    : storage_partition_service_(storage_partition_service) {
+    LocalStorageCachedAreas* local_storage_cached_areas)
+    : local_storage_cached_areas_(local_storage_cached_areas) {
 }
 
 LocalStorageNamespace::~LocalStorageNamespace() {
@@ -25,8 +27,8 @@ LocalStorageNamespace::~LocalStorageNamespace() {
 
 WebStorageArea* LocalStorageNamespace::createStorageArea(
     const WebString& origin) {
-  return new LocalStorageArea(
-      url::Origin(blink::WebStringToGURL(origin)), storage_partition_service_);
+  return new LocalStorageArea(local_storage_cached_areas_->GetCachedArea(
+      url::Origin(blink::WebStringToGURL(origin))));
 }
 
 bool LocalStorageNamespace::isSameNamespace(

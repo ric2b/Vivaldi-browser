@@ -52,7 +52,6 @@ class SynchronousCompositorProxy
   SynchronousCompositorProxy(
       int routing_id,
       IPC::Sender* sender,
-      SynchronousCompositorOutputSurface* output_surface,
       SynchronousCompositorExternalBeginFrameSource* begin_frame_source,
       ui::SynchronousInputHandlerProxy* input_handler_proxy,
       InputHandlerManagerClient::Handler* handler);
@@ -72,8 +71,10 @@ class SynchronousCompositorProxy
 
   // SynchronousCompositorOutputSurfaceClient overrides.
   void Invalidate() override;
-  void SwapBuffers(cc::CompositorFrame* frame) override;
+  void SwapBuffers(uint32_t output_surface_id,
+                   cc::CompositorFrame* frame) override;
 
+  void SetOutputSurface(SynchronousCompositorOutputSurface* output_surface);
   void OnMessageReceived(const IPC::Message& message);
   bool Send(IPC::Message* message);
   void DidOverscroll(const DidOverscrollParams& did_overscroll_params);
@@ -108,9 +109,15 @@ class SynchronousCompositorProxy
   void DemandDrawSw(const SyncCompositorCommonBrowserParams& common_params,
                     const SyncCompositorDemandDrawSwParams& params,
                     IPC::Message* reply_message);
+  void SynchronouslyZoomBy(
+      const SyncCompositorCommonBrowserParams& common_params,
+      float zoom_delta,
+      const gfx::Point& anchor,
+      SyncCompositorCommonRendererParams* common_renderer_params);
 
-  void SwapBuffersHw(cc::CompositorFrame* frame);
+  void SwapBuffersHw(uint32_t output_surface_id, cc::CompositorFrame* frame);
   void SendDemandDrawHwReply(cc::CompositorFrame* frame,
+                             uint32_t output_surface_id,
                              IPC::Message* reply_message);
   void DoDemandDrawSw(const SyncCompositorDemandDrawSwParams& params);
   void SwapBuffersSw(cc::CompositorFrame* frame);
@@ -123,11 +130,11 @@ class SynchronousCompositorProxy
 
   const int routing_id_;
   IPC::Sender* const sender_;
-  SynchronousCompositorOutputSurface* const output_surface_;
   SynchronousCompositorExternalBeginFrameSource* const begin_frame_source_;
   ui::SynchronousInputHandlerProxy* const input_handler_proxy_;
   InputHandlerManagerClient::Handler* const input_handler_;
   const bool use_in_process_zero_copy_software_draw_;
+  SynchronousCompositorOutputSurface* output_surface_;
   bool inside_receive_;
   IPC::Message* hardware_draw_reply_;
   IPC::Message* software_draw_reply_;

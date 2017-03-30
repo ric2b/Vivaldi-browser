@@ -20,7 +20,7 @@ class ChromeExtensionsAPIClient : public ExtensionsAPIClient {
   // ExtensionsApiClient implementation.
   void AddAdditionalValueStoreCaches(
       content::BrowserContext* context,
-      const scoped_refptr<SettingsStorageFactory>& factory,
+      const scoped_refptr<ValueStoreFactory>& factory,
       const scoped_refptr<base::ObserverListThreadSafe<SettingsObserver>>&
           observers,
       std::map<settings_namespace::Namespace, ValueStoreCache*>* caches)
@@ -30,10 +30,11 @@ class ChromeExtensionsAPIClient : public ExtensionsAPIClient {
   AppViewGuestDelegate* CreateAppViewGuestDelegate() const override;
   ExtensionOptionsGuestDelegate* CreateExtensionOptionsGuestDelegate(
       ExtensionOptionsGuest* guest) const override;
-  scoped_ptr<guest_view::GuestViewManagerDelegate>
-      CreateGuestViewManagerDelegate(
-          content::BrowserContext* context) const override;
-  scoped_ptr<MimeHandlerViewGuestDelegate> CreateMimeHandlerViewGuestDelegate(
+  std::unique_ptr<guest_view::GuestViewManagerDelegate>
+  CreateGuestViewManagerDelegate(
+      content::BrowserContext* context) const override;
+  std::unique_ptr<MimeHandlerViewGuestDelegate>
+  CreateMimeHandlerViewGuestDelegate(
       MimeHandlerViewGuest* guest) const override;
   WebViewGuestDelegate* CreateWebViewGuestDelegate(
       WebViewGuest* web_view_guest) const override;
@@ -44,9 +45,9 @@ class ChromeExtensionsAPIClient : public ExtensionsAPIClient {
   scoped_refptr<ContentRulesRegistry> CreateContentRulesRegistry(
       content::BrowserContext* browser_context,
       RulesCacheDelegate* cache_delegate) const override;
-  scoped_ptr<DevicePermissionsPrompt> CreateDevicePermissionsPrompt(
+  std::unique_ptr<DevicePermissionsPrompt> CreateDevicePermissionsPrompt(
       content::WebContents* web_contents) const override;
-  scoped_ptr<VirtualKeyboardDelegate> CreateVirtualKeyboardDelegate()
+  std::unique_ptr<VirtualKeyboardDelegate> CreateVirtualKeyboardDelegate()
       const override;
   ManagementAPIDelegate* CreateManagementAPIDelegate() const override;
 

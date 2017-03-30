@@ -277,10 +277,11 @@ AppWindow::AppWindow(BrowserContext* context,
 
 void AppWindow::Init(const GURL& url,
                      AppWindowContents* app_window_contents,
+                     content::RenderFrameHost* creator_frame,
                      const CreateParams& params) {
   // Initialize the render interface and web contents
   app_window_contents_.reset(app_window_contents);
-  app_window_contents_->Initialize(browser_context(), url);
+  app_window_contents_->Initialize(browser_context(), creator_frame, url);
 
   initial_url_ = url;
 
@@ -338,7 +339,7 @@ void AppWindow::Init(const GURL& url,
   if (new_params.thumbnail_window) {
     // Mute sound on thumbnail capture windows.
     chrome::SetTabAudioMuted(web_contents(), true,
-                             TAB_MUTED_REASON_MEDIA_CAPTURE,
+                             TabMutedReason::MEDIA_CAPTURE,
                              extension_id_);
   }
 

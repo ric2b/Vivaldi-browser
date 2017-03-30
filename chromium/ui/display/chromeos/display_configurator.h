@@ -92,6 +92,11 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
     virtual void OnDisplayModeChangeFailed(
         const DisplayStateList& displays,
         MultipleDisplayState failed_new_state) {}
+
+    // Called after the power state has been changed. |power_state| contains
+    // the just-applied power state.
+    virtual void OnPowerStateChanged(
+        chromeos::DisplayPowerState power_state) {}
   };
 
   // Interface for classes that make decisions about which display state
@@ -269,16 +274,23 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
   bool SetColorCalibrationProfile(int64_t display_id,
                                   ui::ColorCalibrationProfile new_profile);
 
-  // Sets the gamma ramp for |display_id| to the values in |lut|.
-  bool SetGammaRamp(int64_t display_id,
-                    const std::vector<GammaRampRGBEntry>& lut);
-
   // Enables/disables virtual display.
   int64_t AddVirtualDisplay(gfx::Size display_size);
   bool RemoveVirtualDisplay(int64_t display_id);
 
   // Returns true if there is at least one display on.
   bool IsDisplayOn() const;
+
+  void set_configure_display(bool configure_display) {
+    configure_display_ = configure_display;
+  }
+
+  // Sets the gamma, degamma and correction matrix for |display_id| to the
+  // values in |degamma_lut|, |gamma_lut| and |correction_matrix|.
+  bool SetColorCorrection(int64_t display_id,
+                          const std::vector<GammaRampRGBEntry>& degamma_lut,
+                          const std::vector<GammaRampRGBEntry>& gamma_lut,
+                          const std::vector<float>& correction_matrix);
 
  private:
   class DisplayLayoutManagerImpl;
@@ -298,7 +310,11 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
   void RestoreRequestedPowerStateAfterResume();
 
   // Notifies observers about an attempted state change.
-  void NotifyObservers(bool success, MultipleDisplayState attempted_state);
+  void NotifyDisplayStateObservers(bool success,
+                                   MultipleDisplayState attempted_state);
+
+  // Notifies observers about a power state change.
+  void NotifyPowerStateObservers();
 
   // Returns the display state that should be used with |cached_displays_| while
   // in |power_state|.

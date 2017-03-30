@@ -20,6 +20,7 @@
 #include "base/rand_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/trace_event/trace_event.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/history/core/browser/in_memory_database.h"
 #include "components/history/core/browser/keyword_search_term.h"
@@ -175,6 +176,7 @@ int SearchProvider::CalculateRelevanceForKeywordVerbatim(
 }
 
 void SearchProvider::ResetSession() {
+  set_field_trial_triggered(false);
   set_field_trial_triggered_in_session(false);
 }
 
@@ -219,6 +221,7 @@ ACMatches::iterator SearchProvider::FindTopMatch(ACMatches* matches) {
 
 void SearchProvider::Start(const AutocompleteInput& input,
                            bool minimal_changes) {
+  TRACE_EVENT0("omnibox", "SearchProvider::Start");
   // Do our best to load the model as early as possible.  This will reduce
   // odds of having the model not ready when really needed (a non-empty input).
   TemplateURLService* model = client()->GetTemplateURLService();
@@ -387,6 +390,7 @@ void SearchProvider::OnTemplateURLServiceChanged() {
 }
 
 void SearchProvider::OnURLFetchComplete(const net::URLFetcher* source) {
+  TRACE_EVENT0("omnibox", "SearchProvider::OnURLFetchComplete");
   DCHECK(!done_);
   const bool is_keyword = source == keyword_fetcher_.get();
 
@@ -442,11 +446,10 @@ void SearchProvider::UpdateMatchContentsClass(
        sug_it != results->suggest_results.end(); ++sug_it) {
     sug_it->ClassifyMatchContents(false, input_text);
   }
-  const std::string languages(client()->GetAcceptLanguages());
   for (SearchSuggestionParser::NavigationResults::iterator nav_it =
            results->navigation_results.begin();
        nav_it != results->navigation_results.end(); ++nav_it) {
-    nav_it->CalculateAndClassifyMatchContents(false, input_text, languages);
+    nav_it->CalculateAndClassifyMatchContents(false, input_text);
   }
 }
 
@@ -1413,13 +1416,12 @@ AutocompleteMatch SearchProvider::NavigationToMatch(
       url_formatter::kFormatUrlOmitAll &
       ~(trim_http ? 0 : url_formatter::kFormatUrlOmitHTTP);
 
-  const std::string languages(client()->GetAcceptLanguages());
   size_t inline_autocomplete_offset = (prefix == NULL) ?
       base::string16::npos : (match_start + input.length());
   match.fill_into_edit +=
       AutocompleteInput::FormattedStringWithEquivalentMeaning(
           navigation.url(),
-          url_formatter::FormatUrl(navigation.url(), languages, format_types,
+          url_formatter::FormatUrl(navigation.url(), format_types,
                                    net::UnescapeRule::SPACES, nullptr, nullptr,
                                    &inline_autocomplete_offset),
           client()->GetSchemeClassifier());
@@ -1451,7 +1453,7 @@ AutocompleteMatch SearchProvider::NavigationToMatch(
       !navigation.received_after_last_keystroke() &&
       (match.inline_autocompletion.empty() ||
       (!input_.prevent_inline_autocomplete() && !trimmed_whitespace));
-  match.EnsureUWYTIsAllowedToBeDefault(input_, client()->GetAcceptLanguages(),
+  match.EnsureUWYTIsAllowedToBeDefault(input_,
                                        client()->GetTemplateURLService());
 
   match.contents = navigation.match_contents();

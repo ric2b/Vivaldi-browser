@@ -4,6 +4,8 @@
 
 #include "chromeos/system/statistics_provider.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -43,6 +45,9 @@ const char kCrosSystemUnknownValue[] = "(error)";
 
 const char kHardwareClassCrosSystemKey[] = "hwid";
 const char kUnknownHardwareClass[] = "unknown";
+
+// File to get system vendor information from.
+const char kSystemVendorFile[] = "/sys/class/dmi/id/sys_vendor";
 
 // Key/value delimiters of machine hardware info file. machine-info is generated
 // only for OOBE and enterprise enrollment and may not be present. See
@@ -152,6 +157,7 @@ const char kFirmwareTypeValueDeveloper[] = "developer";
 const char kFirmwareTypeValueNonchrome[] = "nonchrome";
 const char kFirmwareTypeValueNormal[] = "normal";
 const char kHardwareClassKey[] = "hardware_class";
+const char kSystemVendorKey[] = "system_vendor";
 const char kOffersCouponCodeKey[] = "ubind_attribute";
 const char kOffersGroupCodeKey[] = "gbind_attribute";
 const char kRlzBrandCodeKey[] = "rlz_brand_code";
@@ -228,7 +234,7 @@ class StatisticsProviderImpl : public StatisticsProvider {
   base::WaitableEvent on_statistics_loaded_;
   bool oem_manifest_loaded_;
   std::string region_;
-  scoped_ptr<base::Value> regional_data_;
+  std::unique_ptr<base::Value> regional_data_;
   base::hash_map<std::string, RegionDataExtractor> regional_data_extractors_;
 
  private:
@@ -438,6 +444,12 @@ void StatisticsProviderImpl::LoadMachineStatistics(bool load_oem_manifest) {
       LOG(ERROR) << "Error writing machine info stub: "
                  << machine_info_path.value();
     }
+  }
+
+  if (base::SysInfo::IsRunningOnChromeOS()) {
+    std::string system_vendor;
+    base::ReadFileToString(base::FilePath(kSystemVendorFile), &system_vendor);
+    machine_info_[kSystemVendorKey] = system_vendor;
   }
 
   parser.GetNameValuePairsFromFile(machine_info_path,

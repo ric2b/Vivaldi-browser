@@ -21,14 +21,16 @@ modules/mediastream/MediaStreamTrack
 modules/mediastream/RTCDTMFSender
 modules/mediastream/RTCDataChannel
 modules/mediastream/RTCPeerConnection
-modules/navigatorconnect/ServicePortCollection
 modules/netinfo/NetworkInformation
 modules/notifications/Notification
+modules/payments/PaymentRequest
 modules/permissions/PermissionStatus
 modules/presentation/PresentationAvailability
 modules/presentation/PresentationConnection
 modules/presentation/PresentationReceiver
 modules/presentation/PresentationRequest
+modules/remoteplayback/RemotePlayback
+modules/remoteplayback/RemotePlaybackAvailability
 modules/screen_orientation/ScreenOrientation
 modules/serviceworkers/ServiceWorker
 modules/serviceworkers/ServiceWorkerContainer

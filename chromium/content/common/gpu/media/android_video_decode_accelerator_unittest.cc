@@ -27,6 +27,11 @@ bool MockMakeContextCurrent() {
   return true;
 }
 
+static base::WeakPtr<gpu::gles2::GLES2Decoder> MockGetGLES2Decoder(
+    const base::WeakPtr<gpu::gles2::GLES2Decoder>& decoder) {
+  return decoder;
+}
+
 }  // namespace
 
 namespace content {
@@ -39,6 +44,7 @@ class MockVideoDecodeAcceleratorClient
 
   // VideoDecodeAccelerator::Client implementation.
   void ProvidePictureBuffers(uint32_t requested_num_of_buffers,
+                             uint32_t textures_per_buffer,
                              const gfx::Size& dimensions,
                              uint32_t texture_target) override {}
   void DismissPictureBuffer(int32_t picture_buffer_id) override {}
@@ -67,7 +73,8 @@ class AndroidVideoDecodeAcceleratorTest : public testing::Test {
     scoped_ptr<MockVideoDecodeAcceleratorClient> client(
         new MockVideoDecodeAcceleratorClient());
     accelerator_.reset(new AndroidVideoDecodeAccelerator(
-        decoder->AsWeakPtr(), base::Bind(&MockMakeContextCurrent)));
+        base::Bind(&MockMakeContextCurrent),
+        base::Bind(&MockGetGLES2Decoder, decoder->AsWeakPtr())));
   }
 
   bool Configure(media::VideoCodec codec) {
@@ -75,9 +82,10 @@ class AndroidVideoDecodeAcceleratorTest : public testing::Test {
         static_cast<AndroidVideoDecodeAccelerator*>(accelerator_.get());
     scoped_refptr<gfx::SurfaceTexture> surface_texture =
         gfx::SurfaceTexture::Create(0);
-    accelerator->surface_ = gfx::ScopedJavaSurface(surface_texture.get());
-    accelerator->codec_ = codec;
-    return accelerator->ConfigureMediaCodec();
+    accelerator->codec_config_->surface_ =
+        gfx::ScopedJavaSurface(surface_texture.get());
+    accelerator->codec_config_->codec_ = codec;
+    return accelerator->ConfigureMediaCodecSynchronously();
   }
 
  private:

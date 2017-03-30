@@ -5,13 +5,13 @@
 #ifndef CONTENT_RENDERER_MEDIA_USER_MEDIA_CLIENT_IMPL_H_
 #define CONTENT_RENDERER_MEDIA_USER_MEDIA_CLIENT_IMPL_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
@@ -49,7 +49,7 @@ class CONTENT_EXPORT UserMediaClientImpl
   UserMediaClientImpl(
       RenderFrame* render_frame,
       PeerConnectionDependencyFactory* dependency_factory,
-      scoped_ptr<MediaStreamDispatcher> media_stream_dispatcher);
+      std::unique_ptr<MediaStreamDispatcher> media_stream_dispatcher);
   ~UserMediaClientImpl() override;
 
   MediaStreamDispatcher* media_stream_dispatcher() const {
@@ -121,7 +121,6 @@ class CONTENT_EXPORT UserMediaClientImpl
       const StreamDeviceInfo& device,
       const MediaStreamSource::SourceStoppedCallback& stop_callback);
 
- private:
   // Class for storing information about a WebKit request to create a
   // MediaStream.
   class UserMediaRequestInfo
@@ -176,8 +175,16 @@ class CONTENT_EXPORT UserMediaClientImpl
   };
   typedef ScopedVector<UserMediaRequestInfo> UserMediaRequests;
 
-  typedef std::vector<blink::WebMediaStreamSource> LocalStreamSources;
+ protected:
+  // These methods can be accessed in unit tests.
+  UserMediaRequestInfo* FindUserMediaRequestInfo(int request_id);
+  UserMediaRequestInfo* FindUserMediaRequestInfo(
+      const blink::WebUserMediaRequest& request);
 
+  void DeleteUserMediaRequestInfo(UserMediaRequestInfo* request);
+
+ private:
+  typedef std::vector<blink::WebMediaStreamSource> LocalStreamSources;
   struct MediaDevicesRequestInfo;
   typedef ScopedVector<MediaDevicesRequestInfo> MediaDevicesRequests;
 
@@ -215,10 +222,6 @@ class CONTENT_EXPORT UserMediaClientImpl
   void FinalizeEnumerateDevices(MediaDevicesRequestInfo* request);
   void FinalizeEnumerateSources(MediaDevicesRequestInfo* request);
 
-  UserMediaRequestInfo* FindUserMediaRequestInfo(int request_id);
-  UserMediaRequestInfo* FindUserMediaRequestInfo(
-      const blink::WebUserMediaRequest& request);
-  void DeleteUserMediaRequestInfo(UserMediaRequestInfo* request);
   void DeleteAllUserMediaRequests();
 
   MediaDevicesRequestInfo* FindMediaDevicesRequestInfo(int request_id);
@@ -231,6 +234,10 @@ class CONTENT_EXPORT UserMediaClientImpl
   const blink::WebMediaStreamSource* FindLocalSource(
       const StreamDeviceInfo& device) const;
 
+  // Returns true if we do find and remove the |source|.
+  // Otherwise returns false.
+  bool RemoveLocalSource(const blink::WebMediaStreamSource& source);
+
   void StopLocalSource(const blink::WebMediaStreamSource& source,
                        bool notify_dispatcher);
 
@@ -242,7 +249,7 @@ class CONTENT_EXPORT UserMediaClientImpl
 
   // UserMediaClientImpl owns MediaStreamDispatcher instead of RenderFrameImpl
   // (or RenderFrameObserver) to ensure tear-down occurs in the right order.
-  const scoped_ptr<MediaStreamDispatcher> media_stream_dispatcher_;
+  const std::unique_ptr<MediaStreamDispatcher> media_stream_dispatcher_;
 
   LocalStreamSources local_sources_;
 

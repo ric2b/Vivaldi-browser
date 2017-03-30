@@ -5,12 +5,18 @@
 import argparse
 import os
 import logging
+import platform
 import re
 import subprocess
 import urllib2
 import json
 
+from core import path_util
+
+from telemetry import benchmark
+from telemetry.core import discover
 from telemetry.util import command_line
+from telemetry.util import matching
 
 
 CHROMIUM_CONFIG_FILENAME = 'tools/run-perf-test.cfg'
@@ -92,9 +98,11 @@ def _GetBuilderNames(trybot_name, builders):
   # Special case for Windows x64, consider it as separate platform
   # config config should contain target_arch=x64 and --browser=release_x64.
   win_x64_bots = [
-      platform_and_bots['win'].pop(i)
-      for i, win_bot in enumerate(platform_and_bots['win'])
+      win_bot for win_bot in platform_and_bots['win']
       if 'x64' in win_bot]
+  # Separate out non x64 bits win bots
+  platform_and_bots['win'] = list(
+      set(platform_and_bots['win']) - set(win_x64_bots))
   platform_and_bots['win-x64'] = win_x64_bots
 
   if 'all-win' in trybot_name:
@@ -116,6 +124,12 @@ def _RunProcess(cmd):
   out, err = proc.communicate()
   returncode = proc.poll()
   return (returncode, out, err)
+
+
+_GIT_CMD = 'git'
+if platform.system() == 'Windows':
+  # On windows, the git command is installed as 'git.bat'
+  _GIT_CMD = 'git.bat'
 
 
 class Trybot(command_line.ArgParseCommand):
@@ -163,10 +177,22 @@ class Trybot(command_line.ArgParseCommand):
 
   @classmethod
   def ProcessCommandLineArgs(cls, parser, options, extra_args, environment):
-    del options, environment  # unused
+    del environment  # unused
     for arg in extra_args:
       if arg == '--browser' or arg.startswith('--browser='):
         parser.error('--browser=... is not allowed when running trybot.')
+    all_benchmarks = discover.DiscoverClasses(
+        start_dir=path_util.GetPerfBenchmarksDir(),
+        top_level_dir=path_util.GetPerfDir(),
+        base_class=benchmark.Benchmark).values()
+    all_benchmark_names = [b.Name() for b in all_benchmarks]
+    if options.benchmark_name not in all_benchmark_names:
+      possible_benchmark_names = matching.GetMostLikelyMatchedObject(
+          all_benchmark_names, options.benchmark_name)
+      parser.error(
+         'No benchmark named "%s". Do you mean any of those benchmarks '
+         'below?\n%s' %
+         (options.benchmark_name, '\n'.join(possible_benchmark_names)))
 
   @classmethod
   def AddCommandLineArgs(cls, parser, environment):
@@ -227,27 +253,32 @@ class Trybot(command_line.ArgParseCommand):
           url if success, otherwise throws TrybotError exception.
     """
     config = self._GetPerfConfig(bot_platform, arguments)
+    config_to_write = 'config = %s' % json.dumps(
+        config, sort_keys=True, indent=2, separators=(',', ': '))
+
     try:
-      config_file = open(cfg_file_path, 'w')
+      with open(cfg_file_path, 'r') as config_file:
+        if config_to_write == config_file.read():
+          return NO_CHANGES, ''
     except IOError:
       msg = 'Cannot find %s. Please run from src dir.' % cfg_file_path
       return (ERROR, msg)
-    config_file.write('config = %s' % json.dumps(
-        config, sort_keys=True, indent=2, separators=(',', ': ')))
-    config_file.close()
+
+    with open(cfg_file_path, 'w') as config_file:
+      config_file.write(config_to_write)
     # Commit the config changes locally.
     returncode, out, err = _RunProcess(
-        ['git', 'commit', '-a', '-m', 'bisect config: %s' % bot_platform])
+        [_GIT_CMD, 'commit', '-a', '-m', 'bisect config: %s' % bot_platform])
     if returncode:
       raise TrybotError('Could not commit bisect config change for %s,'
                         ' error %s' % (bot_platform, err))
     # Upload the CL to rietveld and run a try job.
     returncode, out, err = _RunProcess([
-        'git', 'cl', 'upload', '-f', '--bypass-hooks', '-m',
+        _GIT_CMD, 'cl', 'upload', '-f', '--bypass-hooks', '-m',
         'CL for perf tryjob on %s' % bot_platform
     ])
     if returncode:
-      raise TrybotError('Could upload to rietveld for %s, error %s' %
+      raise TrybotError('Could not upload to rietveld for %s, error %s' %
                         (bot_platform, err))
 
     match = re.search(r'https://codereview.chromium.org/[\d]+', out)
@@ -256,7 +287,7 @@ class Trybot(command_line.ArgParseCommand):
                         (bot_platform, out))
     rietveld_url = match.group(0)
     # Generate git try command for available bots.
-    git_try_command = ['git', 'cl', 'try', '-m', 'tryserver.chromium.perf']
+    git_try_command = [_GIT_CMD, 'cl', 'try', '-m', 'tryserver.chromium.perf']
     for bot in self._builder_names[bot_platform]:
       git_try_command.extend(['-b', bot])
     returncode, out, err = _RunProcess(git_try_command)
@@ -277,6 +308,10 @@ class Trybot(command_line.ArgParseCommand):
     """
     # To make sure that we don't mutate the original args
     arguments = arguments[:]
+
+    # Always set verbose logging for later debugging
+    if '-v' not in arguments and '--verbose' not in arguments:
+        arguments.append('--verbose')
 
     # Generate the command line for the perf trybots
     target_arch = 'ia32'
@@ -328,7 +363,7 @@ class Trybot(command_line.ArgParseCommand):
     # TODO(prasadv): This method is quite long, we should consider refactor
     # this by extracting to helper methods.
     returncode, original_branchname, err = _RunProcess(
-        ['git', 'rev-parse', '--abbrev-ref', 'HEAD'])
+        [_GIT_CMD, 'rev-parse', '--abbrev-ref', 'HEAD'])
     if returncode:
       msg = 'Must be in a git repository to send changes to trybots.'
       if err:
@@ -340,8 +375,8 @@ class Trybot(command_line.ArgParseCommand):
 
     # Check if the tree is dirty: make sure the index is up to date and then
     # run diff-index
-    _RunProcess(['git', 'update-index', '--refresh', '-q'])
-    returncode, out, err = _RunProcess(['git', 'diff-index', 'HEAD'])
+    _RunProcess([_GIT_CMD, 'update-index', '--refresh', '-q'])
+    returncode, out, err = _RunProcess([_GIT_CMD, 'diff-index', 'HEAD'])
     if out:
       logging.error(
           'Cannot send a try job with a dirty tree. Commit locally first.')
@@ -349,21 +384,21 @@ class Trybot(command_line.ArgParseCommand):
 
     # Make sure the tree does have local commits.
     returncode, out, err = _RunProcess(
-        ['git', 'log', 'origin/master..HEAD'])
+        [_GIT_CMD, 'log', 'origin/master..HEAD'])
     if not out:
       return NO_CHANGES
 
     # Create/check out the telemetry-tryjob branch, and edit the configs
     # for the tryjob there.
     returncode, out, err = _RunProcess(
-        ['git', 'checkout', '-b', 'telemetry-tryjob'])
+        [_GIT_CMD, 'checkout', '-b', 'telemetry-tryjob'])
     if returncode:
       logging.error('Error creating branch telemetry-tryjob. '
                     'Please delete it if it exists.\n%s', err)
       return ERROR
     try:
       returncode, out, err = _RunProcess(
-          ['git', 'branch', '--set-upstream-to', 'origin/master'])
+          [_GIT_CMD, 'branch', '--set-upstream-to', 'origin/master'])
       if returncode:
         logging.error('Error in git branch --set-upstream-to: %s', err)
         return ERROR
@@ -377,8 +412,12 @@ class Trybot(command_line.ArgParseCommand):
           if results == ERROR:
             logging.error(output)
             return ERROR
-          print ('Uploaded %s try job to rietveld for %s platform. '
-                 'View progress at %s' % (source_repo, bot_platform, output))
+          elif results == NO_CHANGES:
+            print ('Skip the try job run on %s because it has been tried in '
+                   'previous try job run. ' % bot_platform)
+          else:
+            print ('Uploaded %s try job to rietveld for %s platform. '
+                   'View progress at %s' % (source_repo, bot_platform, output))
         except TrybotError, err:
           print err
           logging.error(err)
@@ -387,7 +426,7 @@ class Trybot(command_line.ArgParseCommand):
       # TODO(prasadv): This finally block could be extracted out to be a
       # separate function called _CleanupBranch.
       returncode, out, err = _RunProcess(
-          ['git', 'checkout', original_branchname])
+          [_GIT_CMD, 'checkout', original_branchname])
       if returncode:
         logging.error('Could not check out %s. Please check it out and '
                       'manually delete the telemetry-tryjob branch. '
@@ -395,7 +434,7 @@ class Trybot(command_line.ArgParseCommand):
         return ERROR  # pylint: disable=lost-exception
       logging.info('Checked out original branch: %s', original_branchname)
       returncode, out, err = _RunProcess(
-          ['git', 'branch', '-D', 'telemetry-tryjob'])
+          [_GIT_CMD, 'branch', '-D', 'telemetry-tryjob'])
       if returncode:
         logging.error('Could not delete telemetry-tryjob branch. '
                       'Please delete it manually: %s', err)

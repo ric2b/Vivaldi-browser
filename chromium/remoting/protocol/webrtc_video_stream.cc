@@ -9,7 +9,6 @@
 #include "third_party/webrtc/api/mediastreaminterface.h"
 #include "third_party/webrtc/api/peerconnectioninterface.h"
 #include "third_party/webrtc/api/test/fakeconstraints.h"
-#include "third_party/webrtc/api/videosourceinterface.h"
 
 namespace remoting {
 namespace protocol {
@@ -35,11 +34,11 @@ WebrtcVideoStream::~WebrtcVideoStream() {
 }
 
 bool WebrtcVideoStream::Start(
-    scoped_ptr<webrtc::DesktopCapturer> desktop_capturer,
+    std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer,
     scoped_refptr<webrtc::PeerConnectionInterface> connection,
     scoped_refptr<webrtc::PeerConnectionFactoryInterface>
         peer_connection_factory) {
-  scoped_ptr<WebrtcVideoCapturerAdapter> capturer_adapter(
+  std::unique_ptr<WebrtcVideoCapturerAdapter> capturer_adapter(
       new WebrtcVideoCapturerAdapter(std::move(desktop_capturer)));
   capturer_adapter_ = capturer_adapter->GetWeakPtr();
 
@@ -69,7 +68,7 @@ bool WebrtcVideoStream::Start(
 
 void WebrtcVideoStream::Pause(bool pause) {
   if (capturer_adapter_)
-    capturer_adapter_->Pause(pause);
+    capturer_adapter_->PauseCapturer(pause);
 }
 
 void WebrtcVideoStream::OnInputEventReceived(int64_t event_timestamp) {

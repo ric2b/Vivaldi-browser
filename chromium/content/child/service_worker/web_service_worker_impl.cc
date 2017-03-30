@@ -7,11 +7,14 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "content/child/service_worker/service_worker_dispatcher.h"
 #include "content/child/service_worker/service_worker_handle_reference.h"
+#include "content/child/service_worker/web_service_worker_provider_impl.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/child/webmessageportchannel_impl.h"
 #include "content/common/service_worker/service_worker_messages.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProxy.h"
 #include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
@@ -20,6 +23,7 @@ using blink::WebMessagePortChannel;
 using blink::WebMessagePortChannelArray;
 using blink::WebMessagePortChannelClient;
 using blink::WebRuntimeFeatures;
+using blink::WebSecurityOrigin;
 using blink::WebString;
 
 namespace content {
@@ -43,11 +47,13 @@ class HandleImpl : public blink::WebServiceWorker::Handle {
 void SendPostMessageToWorkerOnMainThread(
     ThreadSafeSender* thread_safe_sender,
     int handle_id,
+    int provider_id,
     const base::string16& message,
-    scoped_ptr<WebMessagePortChannelArray> channels) {
+    const url::Origin& source_origin,
+    std::unique_ptr<WebMessagePortChannelArray> channels) {
   if (WebRuntimeFeatures::isServiceWorkerExtendableMessageEventEnabled()) {
     thread_safe_sender->Send(new ServiceWorkerHostMsg_PostMessageToWorker(
-        handle_id, message,
+        handle_id, provider_id, message, source_origin,
         WebMessagePortChannelImpl::ExtractMessagePortIDs(std::move(channels))));
   } else {
     thread_safe_sender->Send(
@@ -61,7 +67,7 @@ void SendPostMessageToWorkerOnMainThread(
 }  // namespace
 
 WebServiceWorkerImpl::WebServiceWorkerImpl(
-    scoped_ptr<ServiceWorkerHandleReference> handle_ref,
+    std::unique_ptr<ServiceWorkerHandleReference> handle_ref,
     ThreadSafeSender* thread_safe_sender)
     : handle_ref_(std::move(handle_ref)),
       state_(handle_ref_->state()),
@@ -100,8 +106,13 @@ blink::WebServiceWorkerState WebServiceWorkerImpl::state() const {
   return state_;
 }
 
-void WebServiceWorkerImpl::postMessage(const WebString& message,
-                                       WebMessagePortChannelArray* channels) {
+void WebServiceWorkerImpl::postMessage(
+    blink::WebServiceWorkerProvider* provider,
+    const WebString& message,
+    const WebSecurityOrigin& source_origin,
+    WebMessagePortChannelArray* channels) {
+  WebServiceWorkerProviderImpl* provider_impl =
+      static_cast<WebServiceWorkerProviderImpl*>(provider);
   ServiceWorkerDispatcher* dispatcher =
       ServiceWorkerDispatcher::GetThreadSpecificInstance();
   DCHECK(dispatcher);
@@ -111,12 +122,15 @@ void WebServiceWorkerImpl::postMessage(const WebString& message,
   // (with thread hopping), so we need to do the same thread hopping here not
   // to overtake those messages.
   dispatcher->main_thread_task_runner()->PostTask(
-      FROM_HERE, base::Bind(&SendPostMessageToWorkerOnMainThread,
-                            thread_safe_sender_, handle_ref_->handle_id(),
-                            // We cast WebString to string16 before crossing
-                            // threads for thread-safety.
-                            static_cast<base::string16>(message),
-                            base::Passed(make_scoped_ptr(channels))));
+      FROM_HERE,
+      base::Bind(&SendPostMessageToWorkerOnMainThread,
+                 base::RetainedRef(thread_safe_sender_),
+                 handle_ref_->handle_id(), provider_impl->provider_id(),
+                 // We cast WebString to string16 before crossing
+                 // threads for thread-safety.
+                 static_cast<base::string16>(message),
+                 url::Origin(source_origin),
+                 base::Passed(base::WrapUnique(channels))));
 }
 
 void WebServiceWorkerImpl::terminate() {
@@ -125,12 +139,12 @@ void WebServiceWorkerImpl::terminate() {
 }
 
 // static
-blink::WebPassOwnPtr<blink::WebServiceWorker::Handle>
+std::unique_ptr<blink::WebServiceWorker::Handle>
 WebServiceWorkerImpl::CreateHandle(
     const scoped_refptr<WebServiceWorkerImpl>& worker) {
   if (!worker)
     return nullptr;
-  return blink::adoptWebPtr(new HandleImpl(worker));
+  return base::WrapUnique(new HandleImpl(worker));
 }
 
 WebServiceWorkerImpl::~WebServiceWorkerImpl() {

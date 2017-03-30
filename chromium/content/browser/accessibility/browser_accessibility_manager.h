@@ -9,6 +9,7 @@
 
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
@@ -34,6 +35,8 @@ class BrowserAccessibilityManagerWin;
 #elif defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_X11)
 class BrowserAccessibilityManagerAuraLinux;
 #endif
+
+class SiteInstance;
 
 // For testing.
 CONTENT_EXPORT ui::AXTreeUpdate MakeAXTreeUpdate(
@@ -79,6 +82,9 @@ class CONTENT_EXPORT BrowserAccessibilityDelegate {
   virtual gfx::Rect AccessibilityGetViewBounds() const = 0;
   virtual gfx::Point AccessibilityOriginInScreen(
       const gfx::Rect& bounds) const = 0;
+  virtual gfx::Rect AccessibilityTransformToRootCoordSpace(
+      const gfx::Rect& bounds) = 0;
+  virtual SiteInstance* AccessibilityGetSiteInstance() = 0;
   virtual void AccessibilityHitTest(
       const gfx::Point& point) = 0;
   virtual void AccessibilitySetAccessibilityFocus(int acc_obj_id) = 0;
@@ -138,6 +144,18 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   virtual void NotifyAccessibilityEvent(
       ui::AXEvent event_type, BrowserAccessibility* node) { }
 
+  // Checks whether focus has changed since the last time it was checked,
+  // taking into account whether the window has focus and which frame within
+  // the frame tree has focus. If focus has changed, calls FireFocusEvent.
+  void FireFocusEventsIfNeeded();
+
+  // Return whether or not we are currently able to fire events.
+  virtual bool CanFireEvents();
+
+  // Fire a focus event. Virtual so that some platforms can customize it,
+  // like firing a focus event on the root first, on Windows.
+  virtual void FireFocusEvent(BrowserAccessibility* node);
+
   // Return a pointer to the root of the tree, does not make a new reference.
   BrowserAccessibility* GetRoot();
 
@@ -179,6 +197,10 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   // communicate with the renderer and doesn't fire any events.
   void SetFocusLocallyForTesting(BrowserAccessibility* node);
 
+  // For testing only, register a function to be called when focus changes
+  // in any BrowserAccessibilityManager.
+  static void SetFocusChangeCallbackForTesting(const base::Closure& callback);
+
   // Tell the renderer to do the default action for this node.
   void DoDefaultAction(const BrowserAccessibility& node);
 
@@ -214,12 +236,12 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   void ActivateFindInPageResult(int request_id, int match_index);
 
   // Called when the renderer process has notified us of about tree changes.
-  void OnAccessibilityEvents(
+  virtual void OnAccessibilityEvents(
       const std::vector<AXEventNotificationDetails>& details);
 
   // Called when the renderer process updates the location of accessibility
-  // objects.
-  virtual void OnLocationChanges(
+  // objects. Calls SendLocationChangeEvents(), which can be overridden.
+  void OnLocationChanges(
       const std::vector<AccessibilityHostMsg_LocationChangeParams>& params);
 
   // Called when a new find in page result is received. We hold on to this
@@ -227,6 +249,11 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   void OnFindInPageResult(
       int request_id, int match_index, int start_id, int start_offset,
       int end_id, int end_offset);
+
+  // Called in response to a hit test, when the object hit has a child frame
+  // (like an iframe element or browser plugin), and we need to do another
+  // hit test recursively.
+  void OnChildFrameHitTestResult(const gfx::Point& point, int hit_obj_id);
 
   // This is called when the user has committed to a find in page query,
   // e.g. by pressing enter or tapping on the next / previous result buttons.
@@ -249,8 +276,12 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
       ToBrowserAccessibilityManagerAuraLinux();
 #endif
 
-  // Return the object that has focus.
+  // Return the object that has focus, starting at the top of the frame tree.
   virtual BrowserAccessibility* GetFocus();
+
+  // Return the object that has focus, only considering this frame and
+  // descendants.
+  BrowserAccessibility* GetFocusFromThisOrDescendantFrame();
 
   // Given a focused node |focus|, returns a descendant of that node if it
   // has an active descendant, otherwise returns |focus|.
@@ -335,6 +366,12 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
       BrowserAccessibilityDelegate* delegate,
       BrowserAccessibilityFactory* factory);
 
+  // Send platform-specific notifications to each of these objects that
+  // their location has changed. This is called by OnLocationChanges
+  // after it's updated the internal data structure.
+  virtual void SendLocationChangeEvents(
+      const std::vector<AccessibilityHostMsg_LocationChangeParams>& params);
+
  private:
   // The following states keep track of whether or not the
   // on-screen keyboard is allowed to be shown.
@@ -378,6 +415,21 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   OnScreenKeyboardState osk_state_;
 
   BrowserAccessibilityFindInPageInfo find_in_page_info_;
+
+  // These are only used by the root BrowserAccessibilityManager of a
+  // frame tree. Stores the last focused node and last focused manager so
+  // that when focus might have changed we can figure out whether we need
+  // to fire a focus event.
+  //
+  // NOTE: these pointers are not cleared, so they should never be
+  // dereferenced, only used for comparison.
+  BrowserAccessibility* last_focused_node_;
+  BrowserAccessibilityManager* last_focused_manager_;
+
+  // True if the root's parent is in another accessibility tree and that
+  // parent's child is the root. Ensures that the parent node is notified
+  // once when this subtree is first connected.
+  bool connected_to_parent_tree_node_;
 
   // The global ID of this accessibility tree.
   AXTreeIDRegistry::AXTreeID ax_tree_id_;

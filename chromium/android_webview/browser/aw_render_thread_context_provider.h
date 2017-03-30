@@ -7,13 +7,14 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
 #include "cc/output/context_provider.h"
 #include "gpu/command_buffer/service/in_process_command_buffer.h"
-#include "skia/ext/refptr.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
+#include "third_party/skia/include/gpu/GrContext.h"
 
 namespace gfx {
 class GLSurface;
@@ -54,14 +55,12 @@ class AwRenderThreadContextProvider : public cc::ContextProvider {
 
   base::ThreadChecker main_thread_checker_;
 
-  scoped_ptr<gpu::GLInProcessContext> context_;
-  skia::RefPtr<class GrContext> gr_context_;
+  std::unique_ptr<gpu::GLInProcessContext> context_;
+  sk_sp<class GrContext> gr_context_;
 
   cc::ContextProvider::Capabilities capabilities_;
 
   LostContextCallback lost_context_callback_;
-
-  base::Lock context_lock_;
 
   DISALLOW_COPY_AND_ASSIGN(AwRenderThreadContextProvider);
 };

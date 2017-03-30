@@ -28,7 +28,6 @@ void PopulateCommonLayerTreeSettings(cc::LayerTreeSettings* settings) {
   settings->layer_transforms_should_scale_layer_contents = true;
 
   settings->main_frame_before_activation_enabled = false;
-  settings->accelerated_animation_enabled = true;
   settings->default_tile_size = gfx::Size(256, 256);
   settings->gpu_rasterization_msaa_sample_count = 0;
   settings->gpu_rasterization_forced = false;
@@ -52,7 +51,6 @@ void PopulateCommonLayerTreeSettings(cc::LayerTreeSettings* settings) {
   settings->initial_debug_state.show_screen_space_rects = false;
   settings->initial_debug_state.show_replica_screen_space_rects = false;
   settings->initial_debug_state.SetRecordRenderingStats(false);
-  settings->strict_layer_property_change_checking = false;
 
 #if defined(OS_ANDROID)
   if (base::SysInfo::IsLowEndDevice())
@@ -101,9 +99,6 @@ void PopulateCommonLayerTreeSettings(cc::LayerTreeSettings* settings) {
   // TODO(dtrainor): Update this since https://crrev.com/1267603004 landed.
   // settings->scrollbar_show_scale_threshold = 1.05f;
 #endif
-
-  // Blimp always uses new cc::AnimationHost system.
-  settings->use_compositor_animation_timelines = true;
 
   // Set the GpuMemoryPolicy.
   cc::ManagedMemoryPolicy memory_policy = settings->memory_policy_;

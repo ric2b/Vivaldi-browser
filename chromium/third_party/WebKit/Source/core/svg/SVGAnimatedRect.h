@@ -31,17 +31,18 @@
 #ifndef SVGAnimatedRect_h
 #define SVGAnimatedRect_h
 
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/svg/SVGRectTearOff.h"
 #include "core/svg/properties/SVGAnimatedProperty.h"
 
 namespace blink {
 
-class SVGAnimatedRect : public SVGAnimatedProperty<SVGRect> {
+class SVGAnimatedRect : public SVGAnimatedProperty<SVGRect>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static PassRefPtrWillBeRawPtr<SVGAnimatedRect> create(SVGElement* contextElement, const QualifiedName& attributeName)
+    static SVGAnimatedRect* create(SVGElement* contextElement, const QualifiedName& attributeName)
     {
-        return adoptRefWillBeNoop(new SVGAnimatedRect(contextElement, attributeName));
+        return new SVGAnimatedRect(contextElement, attributeName);
     }
 
 protected:

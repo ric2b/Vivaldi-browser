@@ -28,7 +28,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/common/chrome_switches.h"
@@ -94,6 +93,26 @@ class EmptyAccessibilityDelegate : public ash::AccessibilityDelegate {
   void SetAutoclickEnabled(bool enabled) override {}
 
   bool IsAutoclickEnabled() const override { return false; }
+
+  void SetCaretHighlightEnabled(bool enabled) override {}
+
+  bool IsCaretHighlightEnabled() const override { return false; }
+
+  void SetCursorHighlightEnabled(bool enabled) override {}
+
+  bool IsCursorHighlightEnabled() const override { return false; }
+
+  void SetFocusHighlightEnabled(bool enabled) override {}
+
+  bool IsFocusHighlightEnabled() const override { return false; }
+
+  void SetSelectToSpeakEnabled(bool enabled) override {}
+
+  bool IsSelectToSpeakEnabled() const override { return false; }
+
+  void SetSwitchAccessEnabled(bool enabled) override {}
+
+  bool IsSwitchAccessEnabled() const override { return false; }
 
   ui::MagnifierType GetMagnifierType() const override {
     return ui::kDefaultMagnifierType;
@@ -211,11 +230,8 @@ void ChromeShellDelegate::Observe(int type,
             base::FilePath(),
             dummy,
             chrome::startup::IS_NOT_FIRST_RUN);
-        startup_impl.Launch(
-            ProfileManager::GetActiveUserProfile(),
-            std::vector<GURL>(),
-            true,
-            chrome::HOST_DESKTOP_TYPE_ASH);
+        startup_impl.Launch(ProfileManager::GetActiveUserProfile(),
+                            std::vector<GURL>(), true);
       } else {
         Browser* browser =
             chrome::FindBrowserWithWindow(ash::wm::GetActiveWindow());

@@ -9,7 +9,7 @@
 #include "build/build_config.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
-#include "content/browser/mojo/mojo_shell_client_host.h"
+#include "content/browser/mojo/mojo_child_connection.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/render_widget_window_tree_client_factory.mojom.h"
@@ -38,9 +38,8 @@ RenderWidgetHostViewMus::RenderWidgetHostViewMus(mus::Window* parent_window,
 
   // Connect to the renderer, pass it a WindowTreeClient interface request
   // and embed that client inside our mus window.
-  std::string url = GetMojoApplicationInstanceURL(host_->GetProcess());
   mojom::RenderWidgetWindowTreeClientFactoryPtr factory;
-  MojoShellConnection::Get()->GetConnector()->ConnectToInterface(url, &factory);
+  GetMojoConnection(host_->GetProcess())->GetInterface(&factory);
 
   mus::mojom::WindowTreeClientPtr window_tree_client;
   factory->CreateWindowTreeClientForRenderWidget(
@@ -180,10 +179,6 @@ gfx::NativeViewAccessible RenderWidgetHostViewMus::GetNativeViewAccessible() {
   return gfx::NativeViewAccessible();
 }
 
-void RenderWidgetHostViewMus::MovePluginWindows(
-    const std::vector<WebPluginGeometry>& moves) {
-}
-
 void RenderWidgetHostViewMus::UpdateCursor(const WebCursor& cursor) {
   // TODO(fsamuel): Implement cursors in Mus.
   NOTIMPLEMENTED();
@@ -277,13 +272,6 @@ gfx::Rect RenderWidgetHostViewMus::GetBoundsInRootWindow() {
 void RenderWidgetHostViewMus::SetActive(bool active) {
 }
 
-void RenderWidgetHostViewMus::SetWindowVisibility(bool visible) {
-  // TODO(fsamuel): Propagate visibility to Mus?
-}
-
-void RenderWidgetHostViewMus::WindowFrameChanged() {
-}
-
 void RenderWidgetHostViewMus::ShowDefinitionForSelection() {
   // TODO(fsamuel): Implement this on Mac.
 }
@@ -305,12 +293,6 @@ bool RenderWidgetHostViewMus::IsSpeaking() const {
 void RenderWidgetHostViewMus::StopSpeaking() {
   // TODO(fsamuel): Implement this on Mac.
 }
-
-bool RenderWidgetHostViewMus::PostProcessEventForPluginIme(
-    const NativeWebKeyboardEvent& event) {
-  return false;
-}
-
 #endif  // defined(OS_MACOSX)
 
 void RenderWidgetHostViewMus::LockCompositingSurface() {
@@ -320,15 +302,5 @@ void RenderWidgetHostViewMus::LockCompositingSurface() {
 void RenderWidgetHostViewMus::UnlockCompositingSurface() {
   NOTIMPLEMENTED();
 }
-
-#if defined(OS_WIN)
-void RenderWidgetHostViewMus::SetParentNativeViewAccessible(
-    gfx::NativeViewAccessible accessible_parent) {}
-
-gfx::NativeViewId RenderWidgetHostViewMus::GetParentForWindowlessPlugin()
-    const {
-  return gfx::NativeViewId();
-}
-#endif
 
 }  // namespace content

@@ -42,14 +42,12 @@ namespace blink {
 
 class DocumentLoader;
 class InspectedFrames;
-class MainThreadDebugger;
 
 class CORE_EXPORT PageDebuggerAgent final
     : public InspectorDebuggerAgent {
     WTF_MAKE_NONCOPYABLE(PageDebuggerAgent);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(PageDebuggerAgent);
 public:
-    static PassOwnPtrWillBeRawPtr<PageDebuggerAgent> create(MainThreadDebugger*, InspectedFrames*, V8RuntimeAgent*);
+    static RawPtr<PageDebuggerAgent> create(V8DebuggerAgent*, InspectedFrames*);
     ~PageDebuggerAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -58,17 +56,14 @@ public:
     void restore() final;
 
     void didStartProvisionalLoad(LocalFrame*);
-    void didClearDocumentOfWindowObject(LocalFrame*);
 
 private:
-    PageDebuggerAgent(MainThreadDebugger*, InspectedFrames*, V8RuntimeAgent*);
-    void muteConsole() override;
-    void unmuteConsole() override;
+    PageDebuggerAgent(V8DebuggerAgent*, InspectedFrames*);
 
     // V8DebuggerAgent::Client implemntation.
     bool canExecuteScripts() const;
 
-    RawPtrWillBeMember<InspectedFrames> m_inspectedFrames;
+    Member<InspectedFrames> m_inspectedFrames;
     HashMap<String, String> m_compiledScriptURLs;
 };
 

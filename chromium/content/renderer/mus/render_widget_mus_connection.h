@@ -9,6 +9,7 @@
 #include "base/threading/thread_checker.h"
 #include "cc/output/output_surface.h"
 #include "components/mus/public/cpp/window_surface.h"
+#include "content/common/content_export.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
 #include "content/renderer/mus/compositor_mus_connection.h"
 
@@ -17,7 +18,8 @@ namespace content {
 class InputHandlerManager;
 
 // Use on main thread.
-class RenderWidgetMusConnection : public RenderWidgetInputHandlerDelegate {
+class CONTENT_EXPORT RenderWidgetMusConnection
+    : public RenderWidgetInputHandlerDelegate {
  public:
   // Bind to a WindowTreeClient request.
   void Bind(mojo::InterfaceRequest<mus::mojom::WindowTreeClient> request);
@@ -33,6 +35,7 @@ class RenderWidgetMusConnection : public RenderWidgetInputHandlerDelegate {
 
  private:
   friend class CompositorMusConnection;
+  friend class CompositorMusConnectionTest;
 
   explicit RenderWidgetMusConnection(int routing_id);
   ~RenderWidgetMusConnection() override;
@@ -43,10 +46,13 @@ class RenderWidgetMusConnection : public RenderWidgetInputHandlerDelegate {
   void ObserveWheelEventAndResult(const blink::WebMouseWheelEvent& wheel_event,
                                   const gfx::Vector2dF& wheel_unused_delta,
                                   bool event_processed) override;
+  void ObserveGestureEventAndResult(const blink::WebGestureEvent& gesture_event,
+                                    const gfx::Vector2dF& gesture_unused_delta,
+                                    bool event_processed) override;
   void OnDidHandleKeyEvent() override;
   void OnDidOverscroll(const DidOverscrollParams& params) override;
   void OnInputEventAck(scoped_ptr<InputEventAck> input_event_ack) override;
-  void NonBlockingInputEventHandled(
+  void NotifyInputEventHandled(
       blink::WebInputEvent::Type handled_type) override;
   void SetInputHandler(RenderWidgetInputHandler* input_handler) override;
   void UpdateTextInputState(ShowIme show_ime,
@@ -56,14 +62,14 @@ class RenderWidgetMusConnection : public RenderWidgetInputHandlerDelegate {
 
   void OnConnectionLost();
   void OnWindowInputEvent(scoped_ptr<blink::WebInputEvent> input_event,
-                          const base::Closure& ack);
+                          const base::Callback<void(bool)>& ack);
 
   const int routing_id_;
   RenderWidgetInputHandler* input_handler_;
   scoped_ptr<mus::WindowSurfaceBinding> window_surface_binding_;
   scoped_refptr<CompositorMusConnection> compositor_mus_connection_;
 
-  base::Closure pending_ack_;
+  base::Callback<void(bool)> pending_ack_;
 
   // Used to verify single threaded access.
   base::ThreadChecker thread_checker_;

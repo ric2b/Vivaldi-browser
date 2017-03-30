@@ -6,6 +6,7 @@
 #define CONTENT_COMMON_GPU_MEDIA_ANDROID_DEFERRED_RENDERING_BACKING_STRATEGY_H_
 
 #include <stdint.h>
+#include <vector>
 
 #include "base/macros.h"
 #include "content/common/content_export.h"
@@ -40,31 +41,35 @@ class CONTENT_EXPORT AndroidDeferredRenderingBackingStrategy
 
   // AndroidVideoDecodeAccelerator::BackingStrategy
   gfx::ScopedJavaSurface Initialize(int surface_view_id) override;
-  void Cleanup(bool have_context,
-               const AndroidVideoDecodeAccelerator::OutputBufferMap&) override;
+  void Cleanup(
+      bool have_context,
+      const AndroidVideoDecodeAccelerator::OutputBufferMap& buffers) override;
   scoped_refptr<gfx::SurfaceTexture> GetSurfaceTexture() const override;
   uint32_t GetTextureTarget() const override;
-  void UseCodecBufferForPictureBuffer(int32_t codec_buffer_index,
-                                      const media::PictureBuffer&) override;
-  void AssignOnePictureBuffer(const media::PictureBuffer&) override;
-  void ReuseOnePictureBuffer(const media::PictureBuffer&) override;
-  void DismissOnePictureBuffer(const media::PictureBuffer&) override;
-  void CodecChanged(
-      media::VideoCodecBridge*,
-      const AndroidVideoDecodeAccelerator::OutputBufferMap&) override;
+  gfx::Size GetPictureBufferSize() const override;
+  void UseCodecBufferForPictureBuffer(
+      int32_t codec_buffer_index,
+      const media::PictureBuffer& picture_buffer) override;
+  void AssignOnePictureBuffer(const media::PictureBuffer&, bool) override;
+  void ReuseOnePictureBuffer(
+      const media::PictureBuffer& picture_buffer) override;
+  void MaybeRenderEarly() override;
+  void CodecChanged(media::VideoCodecBridge* codec) override;
+  void ReleaseCodecBuffers(
+      const AndroidVideoDecodeAccelerator::OutputBufferMap& buffers) override;
   void OnFrameAvailable() override;
   bool ArePicturesOverlayable() override;
+  void UpdatePictureBufferSize(media::PictureBuffer* picture_buffer,
+                               const gfx::Size& new_size) override;
 
  private:
   // Release any codec buffer that is associated with the given picture buffer
   // back to the codec.  It is okay if there is no such buffer.
   void ReleaseCodecBufferForPicture(const media::PictureBuffer& picture_buffer);
 
-  // Return the TextureRef for a given PictureBuffer's texture.
-  gpu::gles2::TextureRef* GetTextureForPicture(const media::PictureBuffer&);
-
-  // Return the AVDACodecImage for a given PictureBuffer's texture.
-  AVDACodecImage* GetImageForPicture(const media::PictureBuffer&);
+  // Sets up the texture references (as found by |picture_buffer|), for the
+  // specified |image|. If |image| is null, clears any ref on the texture
+  // associated with |picture_buffer|.
   void SetImageForPicture(
       const media::PictureBuffer& picture_buffer,
       const scoped_refptr<gpu::gles2::GLStreamTextureImage>& image);
@@ -93,6 +98,10 @@ class CONTENT_EXPORT AndroidDeferredRenderingBackingStrategy
   scoped_refptr<gfx::SurfaceTexture> surface_texture_;
 
   media::VideoCodecBridge* media_codec_;
+
+  // Picture buffer IDs that are out for display. Stored in order of frames as
+  // they are returned from the decoder.
+  std::vector<int32_t> pictures_out_for_display_;
 
   DISALLOW_COPY_AND_ASSIGN(AndroidDeferredRenderingBackingStrategy);
 };

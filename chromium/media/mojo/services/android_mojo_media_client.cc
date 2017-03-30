@@ -4,7 +4,9 @@
 
 #include "media/mojo/services/android_mojo_media_client.h"
 
+#include "base/memory/ptr_util.h"
 #include "media/base/android/android_cdm_factory.h"
+#include "media/filters/android/media_codec_audio_decoder.h"
 #include "media/mojo/interfaces/provision_fetcher.mojom.h"
 #include "media/mojo/services/mojo_provision_fetcher.h"
 #include "mojo/shell/public/cpp/connect.h"
@@ -13,11 +15,11 @@ namespace media {
 
 namespace {
 
-scoped_ptr<ProvisionFetcher> CreateProvisionFetcher(
+std::unique_ptr<ProvisionFetcher> CreateProvisionFetcher(
     mojo::shell::mojom::InterfaceProvider* interface_provider) {
   interfaces::ProvisionFetcherPtr provision_fetcher_ptr;
   mojo::GetInterface(interface_provider, &provision_fetcher_ptr);
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new MojoProvisionFetcher(std::move(provision_fetcher_ptr)));
 }
 
@@ -28,9 +30,15 @@ AndroidMojoMediaClient::AndroidMojoMediaClient() {}
 AndroidMojoMediaClient::~AndroidMojoMediaClient() {}
 
 // MojoMediaClient overrides.
-scoped_ptr<CdmFactory> AndroidMojoMediaClient::CreateCdmFactory(
+
+std::unique_ptr<AudioDecoder> AndroidMojoMediaClient::CreateAudioDecoder(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+  return base::WrapUnique(new MediaCodecAudioDecoder(task_runner));
+}
+
+std::unique_ptr<CdmFactory> AndroidMojoMediaClient::CreateCdmFactory(
     mojo::shell::mojom::InterfaceProvider* interface_provider) {
-  return make_scoped_ptr(new AndroidCdmFactory(
+  return base::WrapUnique(new AndroidCdmFactory(
       base::Bind(&CreateProvisionFetcher, interface_provider)));
 }
 

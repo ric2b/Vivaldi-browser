@@ -26,15 +26,19 @@ const char kNotificationTag[] = "my_tag";
 const char kNotificationEmptyTag[] = "";
 const char kNotificationIcon[] = "https://example.com/icon.png";
 const char kNotificationIconInvalid[] = "https://invalid:icon:url";
+const char kNotificationBadge[] = "https://example.com/badge.png";
 const unsigned kNotificationVibration[] = { 42, 10, 20, 30, 40 };
 const unsigned long long kNotificationTimestamp = 621046800ull;
 const bool kNotificationRenotify = true;
 const bool kNotificationSilent = false;
 const bool kNotificationRequireInteraction = true;
 
+const WebNotificationAction::Type kWebNotificationActionType = WebNotificationAction::Text;
+const char kNotificationActionType[] = "text";
 const char kNotificationActionAction[] = "my_action";
 const char kNotificationActionTitle[] = "My Action";
 const char kNotificationActionIcon[] = "https://example.com/action_icon.png";
+const char kNotificationActionPlaceholder[] = "Placeholder...";
 
 const unsigned kNotificationVibrationUnnormalized[] = { 10, 1000000, 50, 42 };
 const int kNotificationVibrationNormalized[] = { 10, 10000, 50 };
@@ -43,13 +47,13 @@ class NotificationDataTest : public ::testing::Test {
 public:
     void SetUp() override
     {
-        m_executionContext = adoptRefWillBeNoop(new NullExecutionContext());
+        m_executionContext = new NullExecutionContext();
     }
 
-    ExecutionContext* executionContext() { return m_executionContext.get(); }
+    ExecutionContext* getExecutionContext() { return m_executionContext.get(); }
 
 private:
-    RefPtrWillBePersistent<ExecutionContext> m_executionContext;
+    Persistent<ExecutionContext> m_executionContext;
 };
 
 TEST_F(NotificationDataTest, ReflectProperties)
@@ -64,9 +68,11 @@ TEST_F(NotificationDataTest, ReflectProperties)
     HeapVector<NotificationAction> actions;
     for (size_t i = 0; i < Notification::maxActions(); ++i) {
         NotificationAction action;
+        action.setType(kNotificationActionType);
         action.setAction(kNotificationActionAction);
         action.setTitle(kNotificationActionTitle);
         action.setIcon(kNotificationActionIcon);
+        action.setPlaceholder(kNotificationActionPlaceholder);
 
         actions.append(action);
     }
@@ -77,6 +83,7 @@ TEST_F(NotificationDataTest, ReflectProperties)
     options.setBody(kNotificationBody);
     options.setTag(kNotificationTag);
     options.setIcon(kNotificationIcon);
+    options.setBadge(kNotificationBadge);
     options.setVibrate(vibrationSequence);
     options.setTimestamp(kNotificationTimestamp);
     options.setRenotify(kNotificationRenotify);
@@ -87,7 +94,7 @@ TEST_F(NotificationDataTest, ReflectProperties)
     // TODO(peter): Test |options.data| and |notificationData.data|.
 
     TrackExceptionState exceptionState;
-    WebNotificationData notificationData = createWebNotificationData(executionContext(), kNotificationTitle, options, exceptionState);
+    WebNotificationData notificationData = createWebNotificationData(getExecutionContext(), kNotificationTitle, options, exceptionState);
     ASSERT_FALSE(exceptionState.hadException());
 
     EXPECT_EQ(kNotificationTitle, notificationData.title);
@@ -97,7 +104,7 @@ TEST_F(NotificationDataTest, ReflectProperties)
     EXPECT_EQ(kNotificationBody, notificationData.body);
     EXPECT_EQ(kNotificationTag, notificationData.tag);
 
-    // TODO(peter): Test WebNotificationData.icon and WebNotificationAction.icon when ExecutionContext::completeURL() works in this test.
+    // TODO(peter): Test the various icon properties when ExecutionContext::completeURL() works in this test.
 
     ASSERT_EQ(vibrationPattern.size(), notificationData.vibrate.size());
     for (size_t i = 0; i < vibrationPattern.size(); ++i)
@@ -109,8 +116,10 @@ TEST_F(NotificationDataTest, ReflectProperties)
     EXPECT_EQ(kNotificationRequireInteraction, notificationData.requireInteraction);
     EXPECT_EQ(actions.size(), notificationData.actions.size());
     for (const auto& action : notificationData.actions) {
+        EXPECT_EQ(kWebNotificationActionType, action.type);
         EXPECT_EQ(kNotificationActionAction, action.action);
         EXPECT_EQ(kNotificationActionTitle, action.title);
+        EXPECT_EQ(kNotificationActionPlaceholder, action.placeholder);
     }
 }
 
@@ -128,10 +137,28 @@ TEST_F(NotificationDataTest, SilentNotificationWithVibration)
     options.setSilent(true);
 
     TrackExceptionState exceptionState;
-    WebNotificationData notificationData = createWebNotificationData(executionContext(), kNotificationTitle, options, exceptionState);
+    WebNotificationData notificationData = createWebNotificationData(getExecutionContext(), kNotificationTitle, options, exceptionState);
     ASSERT_TRUE(exceptionState.hadException());
 
     EXPECT_EQ("Silent notifications must not specify vibration patterns.", exceptionState.message());
+}
+
+TEST_F(NotificationDataTest, ActionTypeButtonWithPlaceholder)
+{
+    HeapVector<NotificationAction> actions;
+    NotificationAction action;
+    action.setType("button");
+    action.setPlaceholder("I'm afraid I can't do that...");
+    actions.append(action);
+
+    NotificationOptions options;
+    options.setActions(actions);
+
+    TrackExceptionState exceptionState;
+    WebNotificationData notificationData = createWebNotificationData(getExecutionContext(), kNotificationTitle, options, exceptionState);
+    ASSERT_TRUE(exceptionState.hadException());
+
+    EXPECT_EQ("Notifications of type \"button\" cannot specify a placeholder.", exceptionState.message());
 }
 
 TEST_F(NotificationDataTest, RenotifyWithEmptyTag)
@@ -141,7 +168,7 @@ TEST_F(NotificationDataTest, RenotifyWithEmptyTag)
     options.setRenotify(true);
 
     TrackExceptionState exceptionState;
-    WebNotificationData notificationData = createWebNotificationData(executionContext(), kNotificationTitle, options, exceptionState);
+    WebNotificationData notificationData = createWebNotificationData(getExecutionContext(), kNotificationTitle, options, exceptionState);
     ASSERT_TRUE(exceptionState.hadException());
 
     EXPECT_EQ("Notifications which set the renotify flag must specify a non-empty tag.", exceptionState.message());
@@ -160,13 +187,15 @@ TEST_F(NotificationDataTest, InvalidIconUrls)
 
     NotificationOptions options;
     options.setIcon(kNotificationIconInvalid);
+    options.setBadge(kNotificationIconInvalid);
     options.setActions(actions);
 
     TrackExceptionState exceptionState;
-    WebNotificationData notificationData = createWebNotificationData(executionContext(), kNotificationTitle, options, exceptionState);
+    WebNotificationData notificationData = createWebNotificationData(getExecutionContext(), kNotificationTitle, options, exceptionState);
     ASSERT_FALSE(exceptionState.hadException());
 
     EXPECT_TRUE(notificationData.icon.isEmpty());
+    EXPECT_TRUE(notificationData.badge.isEmpty());
     for (const auto& action : notificationData.actions)
         EXPECT_TRUE(action.icon.isEmpty());
 }
@@ -184,7 +213,7 @@ TEST_F(NotificationDataTest, VibrationNormalization)
     options.setVibrate(vibrationSequence);
 
     TrackExceptionState exceptionState;
-    WebNotificationData notificationData = createWebNotificationData(executionContext(), kNotificationTitle, options, exceptionState);
+    WebNotificationData notificationData = createWebNotificationData(getExecutionContext(), kNotificationTitle, options, exceptionState);
     EXPECT_FALSE(exceptionState.hadException());
 
     Vector<int> normalizedPattern;
@@ -201,7 +230,7 @@ TEST_F(NotificationDataTest, DefaultTimestampValue)
     NotificationOptions options;
 
     TrackExceptionState exceptionState;
-    WebNotificationData notificationData = createWebNotificationData(executionContext(), kNotificationTitle, options, exceptionState);
+    WebNotificationData notificationData = createWebNotificationData(getExecutionContext(), kNotificationTitle, options, exceptionState);
     EXPECT_FALSE(exceptionState.hadException());
 
     // The timestamp should be set to the current time since the epoch if it wasn't supplied by the developer.
@@ -224,7 +253,7 @@ TEST_F(NotificationDataTest, DirectionValues)
         options.setDir(direction);
 
         TrackExceptionState exceptionState;
-        WebNotificationData notificationData = createWebNotificationData(executionContext(), kNotificationTitle, options, exceptionState);
+        WebNotificationData notificationData = createWebNotificationData(getExecutionContext(), kNotificationTitle, options, exceptionState);
         ASSERT_FALSE(exceptionState.hadException());
 
         EXPECT_EQ(mappings.get(direction), notificationData.direction);
@@ -246,7 +275,7 @@ TEST_F(NotificationDataTest, MaximumActionCount)
     options.setActions(actions);
 
     TrackExceptionState exceptionState;
-    WebNotificationData notificationData = createWebNotificationData(executionContext(), kNotificationTitle, options, exceptionState);
+    WebNotificationData notificationData = createWebNotificationData(getExecutionContext(), kNotificationTitle, options, exceptionState);
     ASSERT_FALSE(exceptionState.hadException());
 
     // The stored actions will be capped to |maxActions| entries.

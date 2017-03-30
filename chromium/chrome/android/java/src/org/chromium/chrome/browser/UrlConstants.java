@@ -11,6 +11,7 @@ public class UrlConstants {
     public static final String CHROME_SCHEME = "chrome://";
     public static final String CHROME_NATIVE_SCHEME = "chrome-native://";
     public static final String DOCUMENT_SCHEME = "document";
+    public static final String CUSTOM_TAB_SCHEME = "customtab";
     public static final String HTTP_SCHEME = "http://";
     public static final String HTTPS_SCHEME = "https://";
 
@@ -29,4 +30,8 @@ public class UrlConstants {
     public static final String INTERESTS_HOST = "interests";
     public static final String PHYSICAL_WEB_URL = "chrome-native://physical-web/";
     public static final String PHYSICAL_WEB_HOST = "physical-web";
+    public static final String ABOUT_BLANK = "about:blank";
+
+    public static final String GOOGLE_ACCOUNT_ACTIVITY_CONTROLS_URL =
+            "https://myaccount.google.com/activitycontrols/search";
 }

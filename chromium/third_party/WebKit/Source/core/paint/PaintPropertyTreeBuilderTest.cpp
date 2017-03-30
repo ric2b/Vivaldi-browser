@@ -417,10 +417,41 @@ TEST_F(PaintPropertyTreeBuilderTest, TransformNodesInSVG)
     matrix.rotate(45);
     // SVG's transform origin is baked into the transform.
     matrix.applyTransformOrigin(50, 25, 0);
-    EXPECT_EQ(matrix, rectWith2dTransformProperties->transform()->matrix());
-    EXPECT_EQ(FloatPoint3D(0, 0, 0), rectWith2dTransformProperties->transform()->origin());
+    EXPECT_EQ(matrix, rectWith2dTransformProperties->svgLocalTransform()->matrix());
+    EXPECT_EQ(FloatPoint3D(0, 0, 0), rectWith2dTransformProperties->svgLocalTransform()->origin());
     // SVG does not use paint offset.
     EXPECT_EQ(nullptr, rectWith2dTransformProperties->paintOffsetTranslation());
+}
+
+TEST_F(PaintPropertyTreeBuilderTest, SVGViewBoxTransform)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "  body {"
+        "    margin: 0px;"
+        "  }"
+        "  svg {"
+        "    transform: translate3d(1px, 2px, 3px);"
+        "    position: absolute;"
+        "  }"
+        "  rect {"
+        "    transform: translate(100px, 100px);"
+        "  }"
+        "</style>"
+        "<svg id='svgWithViewBox' width='100px' height='100px' viewBox='50 50 100 100'>"
+        "  <rect id='rect' width='100px' height='100px' />"
+        "</svg>");
+
+    LayoutObject& svgWithViewBox = *document().getElementById("svgWithViewBox")->layoutObject();
+    ObjectPaintProperties* svgWithViewBoxProperties = svgWithViewBox.objectPaintProperties();
+    EXPECT_EQ(TransformationMatrix().translate3d(1, 2, 3), svgWithViewBoxProperties->transform()->matrix());
+    EXPECT_EQ(TransformationMatrix().translate(-50, -50), svgWithViewBoxProperties->svgLocalTransform()->matrix());
+    EXPECT_EQ(svgWithViewBoxProperties->svgLocalTransform()->parent(), svgWithViewBoxProperties->transform());
+
+    LayoutObject& rect = *document().getElementById("rect")->layoutObject();
+    ObjectPaintProperties* rectProperties = rect.objectPaintProperties();
+    EXPECT_EQ(TransformationMatrix().translate(100, 100), rectProperties->svgLocalTransform()->matrix());
+    EXPECT_EQ(svgWithViewBoxProperties->svgLocalTransform(), rectProperties->svgLocalTransform()->parent());
 }
 
 TEST_F(PaintPropertyTreeBuilderTest, SVGRootPaintOffsetTransformNode)
@@ -480,14 +511,14 @@ TEST_F(PaintPropertyTreeBuilderTest, FixedTransformAncestorAcrossSVGHTMLBoundary
 
     LayoutObject& container = *document().getElementById("container")->layoutObject();
     ObjectPaintProperties* containerProperties = container.objectPaintProperties();
-    EXPECT_EQ(TransformationMatrix().translate(20, 30), containerProperties->transform()->matrix());
-    EXPECT_EQ(svgProperties->transform(), containerProperties->transform()->parent());
+    EXPECT_EQ(TransformationMatrix().translate(20, 30), containerProperties->svgLocalTransform()->matrix());
+    EXPECT_EQ(svgProperties->transform(), containerProperties->svgLocalTransform()->parent());
 
     Element* fixed = document().getElementById("fixed");
     ObjectPaintProperties* fixedProperties = fixed->layoutObject()->objectPaintProperties();
     EXPECT_EQ(TransformationMatrix().translate(200, 150), fixedProperties->paintOffsetTranslation()->matrix());
     // Ensure the fixed position element is rooted at the nearest transform container.
-    EXPECT_EQ(containerProperties->transform(), fixedProperties->paintOffsetTranslation()->parent());
+    EXPECT_EQ(containerProperties->svgLocalTransform(), fixedProperties->paintOffsetTranslation()->parent());
 }
 
 TEST_F(PaintPropertyTreeBuilderTest, ControlClip)
@@ -562,9 +593,9 @@ TEST_F(PaintPropertyTreeBuilderTest, TransformNodesAcrossSubframes)
     setBodyInnerHTML(
         "<style>body { margin: 0; }</style>"
         "<div id='divWithTransform' style='transform: translate3d(1px, 2px, 3px);'>"
-        "  <iframe id='frame' width='500' height='500'></iframe>"
+        "  <iframe id='frame'></iframe>"
         "</div>");
-    Document& frameDocument = setupChildIframe("frame", "<div id='transform' style='transform: translate3d(4px, 5px, 6px);'></div>");
+    Document& frameDocument = setupChildIframe("frame", "<style>body { margin: 0; }</style><div id='transform' style='transform: translate3d(4px, 5px, 6px);'></div>");
     document().view()->updateAllLifecyclePhases();
 
     LayoutObject& divWithTransform = *document().getElementById("divWithTransform")->layoutObject();
@@ -573,7 +604,62 @@ TEST_F(PaintPropertyTreeBuilderTest, TransformNodesAcrossSubframes)
 
     LayoutObject* innerDivWithTransform = frameDocument.getElementById("transform")->layoutObject();
     ObjectPaintProperties* innerDivWithTransformProperties = innerDivWithTransform->objectPaintProperties();
-    EXPECT_EQ(TransformationMatrix().translate3d(4, 5, 6), innerDivWithTransformProperties->transform()->matrix());
+    auto* innerDivTransform = innerDivWithTransformProperties->transform();
+    EXPECT_EQ(TransformationMatrix().translate3d(4, 5, 6), innerDivTransform->matrix());
+
+    // Ensure that the inner div's transform is correctly rooted in the root frame's transform tree.
+    // This asserts that we have the following tree structure:
+    // ...
+    //   Transform transform=translation=1.000000,2.000000,3.000000
+    //     PreTranslation transform=translation=2.000000,2.000000,0.000000
+    //       ScrollTranslation transform=translation=0.000000,0.000000,0.000000
+    //         Transform transform=translation=4.000000,5.000000,6.000000
+    auto* innerDocumentScrollTranslation = innerDivTransform->parent();
+    EXPECT_EQ(TransformationMatrix().translate3d(0, 0, 0), innerDocumentScrollTranslation->matrix());
+    auto* iframePreTranslation = innerDocumentScrollTranslation->parent();
+    EXPECT_EQ(TransformationMatrix().translate3d(2, 2, 0), iframePreTranslation->matrix());
+    EXPECT_EQ(divWithTransformProperties->transform(), iframePreTranslation->parent());
+}
+
+TEST_F(PaintPropertyTreeBuilderTest, TransformNodesInTransformedSubframes)
+{
+    setBodyInnerHTML(
+        "<style>body { margin: 0; }</style>"
+        "<div id='divWithTransform' style='transform: translate3d(1px, 2px, 3px);'>"
+        "  <iframe id='frame' style='transform: translate3d(4px, 5px, 6px); border: 42px solid; margin: 7px;'></iframe>"
+        "</div>");
+    Document& frameDocument = setupChildIframe("frame", "<style>body { margin: 31px; }</style><div id='transform' style='transform: translate3d(7px, 8px, 9px);'></div>");
+    document().view()->updateAllLifecyclePhases();
+
+    // Assert that we have the following tree structure:
+    // ...
+    //   Transform transform=translation=1.000000,2.000000,3.000000
+    //     PaintOffsetTranslation transform=translation=7.000000,7.000000,0.000000
+    //       Transform transform=translation=4.000000,5.000000,6.000000
+    //         PreTranslation transform=translation=42.000000,42.000000,0.000000
+    //           ScrollTranslation transform=translation=0.000000,0.000000,0.000000
+    //             PaintOffsetTranslation transform=translation=31.000000,31.000000,0.000000
+    //               Transform transform=translation=7.000000,8.000000,9.000000
+
+    LayoutObject* innerDivWithTransform = frameDocument.getElementById("transform")->layoutObject();
+    auto* innerDivTransform = innerDivWithTransform->objectPaintProperties()->transform();
+    EXPECT_EQ(TransformationMatrix().translate3d(7, 8, 9), innerDivTransform->matrix());
+
+    auto* innerDocumentPaintOffsetTranslation = innerDivTransform->parent();
+    EXPECT_EQ(TransformationMatrix().translate3d(31, 31, 0), innerDocumentPaintOffsetTranslation->matrix());
+    auto* innerDocumentScrollTranslation = innerDocumentPaintOffsetTranslation->parent();
+    EXPECT_EQ(TransformationMatrix().translate3d(0, 0, 0), innerDocumentScrollTranslation->matrix());
+    auto* iframePreTranslation = innerDocumentScrollTranslation->parent();
+    EXPECT_EQ(TransformationMatrix().translate3d(42, 42, 0), iframePreTranslation->matrix());
+    auto* iframeTransform = iframePreTranslation->parent();
+    EXPECT_EQ(TransformationMatrix().translate3d(4, 5, 6), iframeTransform->matrix());
+    auto* iframePaintOffsetTranslation = iframeTransform->parent();
+    EXPECT_EQ(TransformationMatrix().translate3d(7, 7, 0), iframePaintOffsetTranslation->matrix());
+    auto* divWithTransformTransform = iframePaintOffsetTranslation->parent();
+    EXPECT_EQ(TransformationMatrix().translate3d(1, 2, 3), divWithTransformTransform->matrix());
+
+    LayoutObject& divWithTransform = *document().getElementById("divWithTransform")->layoutObject();
+    EXPECT_EQ(divWithTransformTransform, divWithTransform.objectPaintProperties()->transform());
 }
 
 TEST_F(PaintPropertyTreeBuilderTest, TreeContextClipByNonStackingContext)
@@ -622,6 +708,147 @@ TEST_F(PaintPropertyTreeBuilderTest, TreeContextUnclipFromParentStackingContext)
     EXPECT_EQ(frameView->contentClip(), childProperties->localBorderBoxProperties()->clip);
     EXPECT_EQ(frameView->scrollTranslation(), childProperties->localBorderBoxProperties()->transform);
     EXPECT_EQ(scrollerProperties->effect(), childProperties->localBorderBoxProperties()->effect);
+}
+
+TEST_F(PaintPropertyTreeBuilderTest, TableCellLayoutLocation)
+{
+    // This test verifies that the border box space of a table cell is being correctly computed.
+    // Table cells have weird location adjustment in our layout/paint implementation.
+    setBodyInnerHTML(
+        "<style>"
+        "  body {"
+        "    margin: 0;"
+        "  }"
+        "  table {"
+        "    border-spacing: 0;"
+        "    margin: 20px;"
+        "    padding: 40px;"
+        "    border: 10px solid black;"
+        "  }"
+        "  td {"
+        "    width: 100px;"
+        "    height: 100px;"
+        "    padding: 0;"
+        "  }"
+        "  #target {"
+        "    position: relative;"
+        "    width: 100px;"
+        "    height: 100px;"
+        "  }"
+        "</style>"
+        "<table>"
+        "  <tr><td></td><td></td></tr>"
+        "  <tr><td></td><td><div id='target'></div></td></tr>"
+        "</table>"
+    );
+
+    FrameView* frameView = document().view();
+    LayoutObject& target = *document().getElementById("target")->layoutObject();
+    ObjectPaintProperties* targetProperties = target.objectPaintProperties();
+
+    EXPECT_EQ(LayoutPoint(170, 170), targetProperties->localBorderBoxProperties()->paintOffset);
+    EXPECT_EQ(frameView->scrollTranslation(), targetProperties->localBorderBoxProperties()->transform);
+}
+
+TEST_F(PaintPropertyTreeBuilderTest, CSSClipFixedPositionDescendant)
+{
+    // This test verifies that clip tree hierarchy being generated correctly for the hard case
+    // such that a fixed position element getting clipped by an absolute position CSS clip.
+    setBodyInnerHTML(
+        "<style>"
+        "  #clip {"
+        "    position: absolute;"
+        "    left: 123px;"
+        "    top: 456px;"
+        "    clip: rect(10px, 80px, 70px, 40px);"
+        "    width: 100px;"
+        "    height: 100px;"
+        "  }"
+        "  #fixed {"
+        "    position: fixed;"
+        "    left: 654px;"
+        "    top: 321px;"
+        "  }"
+        "</style>"
+        "<div id='clip'><div id='fixed'></div></div>"
+    );
+    LayoutRect localClipRect(40, 10, 40, 60);
+    LayoutRect absoluteClipRect = localClipRect;
+    absoluteClipRect.move(123, 456);
+
+    FrameView* frameView = document().view();
+
+    LayoutObject& clip = *document().getElementById("clip")->layoutObject();
+    ObjectPaintProperties* clipProperties = clip.objectPaintProperties();
+    EXPECT_EQ(frameView->contentClip(), clipProperties->cssClip()->parent());
+    EXPECT_EQ(frameView->scrollTranslation(), clipProperties->cssClip()->localTransformSpace());
+    EXPECT_EQ(FloatRoundedRect(FloatRect(absoluteClipRect)), clipProperties->cssClip()->clipRect());
+
+    LayoutObject& fixed = *document().getElementById("fixed")->layoutObject();
+    ObjectPaintProperties* fixedProperties = fixed.objectPaintProperties();
+    EXPECT_EQ(clipProperties->cssClip(), fixedProperties->localBorderBoxProperties()->clip);
+    EXPECT_EQ(frameView->preTranslation(), fixedProperties->localBorderBoxProperties()->transform->parent());
+    EXPECT_EQ(TransformationMatrix().translate(654, 321), fixedProperties->localBorderBoxProperties()->transform->matrix());
+    EXPECT_EQ(LayoutPoint(), fixedProperties->localBorderBoxProperties()->paintOffset);
+}
+
+TEST_F(PaintPropertyTreeBuilderTest, CSSClipFixedPositionDescendantNonShared)
+{
+    // This test is similar to CSSClipFixedPositionDescendant above, except that
+    // now we have a parent overflow clip that should be escaped by the fixed descendant.
+    setBodyInnerHTML(
+        "<style>"
+        "  body {"
+        "    margin: 0;"
+        "  }"
+        "  #overflow {"
+        "    position: relative;"
+        "    width: 50px;"
+        "    height: 50px;"
+        "    overflow: scroll;"
+        "  }"
+        "  #clip {"
+        "    position: absolute;"
+        "    left: 123px;"
+        "    top: 456px;"
+        "    clip: rect(10px, 80px, 70px, 40px);"
+        "    width: 100px;"
+        "    height: 100px;"
+        "  }"
+        "  #fixed {"
+        "    position: fixed;"
+        "    left: 654px;"
+        "    top: 321px;"
+        "  }"
+        "</style>"
+        "<div id='overflow'><div id='clip'><div id='fixed'></div></div></div>"
+    );
+    LayoutRect localClipRect(40, 10, 40, 60);
+    LayoutRect absoluteClipRect = localClipRect;
+    absoluteClipRect.move(123, 456);
+
+    FrameView* frameView = document().view();
+
+    LayoutObject& overflow = *document().getElementById("overflow")->layoutObject();
+    ObjectPaintProperties* overflowProperties = overflow.objectPaintProperties();
+    EXPECT_EQ(frameView->contentClip(), overflowProperties->overflowClip()->parent());
+    EXPECT_EQ(frameView->scrollTranslation(), overflowProperties->scrollTranslation()->parent());
+
+    LayoutObject& clip = *document().getElementById("clip")->layoutObject();
+    ObjectPaintProperties* clipProperties = clip.objectPaintProperties();
+    EXPECT_EQ(overflowProperties->overflowClip(), clipProperties->cssClip()->parent());
+    EXPECT_EQ(overflowProperties->scrollTranslation(), clipProperties->cssClip()->localTransformSpace());
+    EXPECT_EQ(FloatRoundedRect(FloatRect(absoluteClipRect)), clipProperties->cssClip()->clipRect());
+    EXPECT_EQ(frameView->contentClip(), clipProperties->cssClipFixedPosition()->parent());
+    EXPECT_EQ(overflowProperties->scrollTranslation(), clipProperties->cssClipFixedPosition()->localTransformSpace());
+    EXPECT_EQ(FloatRoundedRect(FloatRect(absoluteClipRect)), clipProperties->cssClipFixedPosition()->clipRect());
+
+    LayoutObject& fixed = *document().getElementById("fixed")->layoutObject();
+    ObjectPaintProperties* fixedProperties = fixed.objectPaintProperties();
+    EXPECT_EQ(clipProperties->cssClipFixedPosition(), fixedProperties->localBorderBoxProperties()->clip);
+    EXPECT_EQ(frameView->preTranslation(), fixedProperties->localBorderBoxProperties()->transform->parent());
+    EXPECT_EQ(TransformationMatrix().translate(654, 321), fixedProperties->localBorderBoxProperties()->transform->matrix());
+    EXPECT_EQ(LayoutPoint(), fixedProperties->localBorderBoxProperties()->paintOffset);
 }
 
 } // namespace blink

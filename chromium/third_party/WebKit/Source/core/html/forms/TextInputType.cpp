@@ -38,9 +38,9 @@ namespace blink {
 
 using namespace HTMLNames;
 
-PassRefPtrWillBeRawPtr<InputType> TextInputType::create(HTMLInputElement& element)
+InputType* TextInputType::create(HTMLInputElement& element)
 {
-    return adoptRefWillBeNoop(new TextInputType(element));
+    return new TextInputType(element);
 }
 
 void TextInputType::countUsage()
@@ -67,7 +67,7 @@ bool TextInputType::supportsInputModeAttribute() const
 
 const AtomicString& TextInputType::defaultAutocapitalize() const
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, sentences, ("sentences", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, sentences, ("sentences"));
     return sentences;
 }
 

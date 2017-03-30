@@ -12,7 +12,9 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/point.h"
-#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -22,6 +24,41 @@
 namespace views {
 
 namespace {
+
+// SolidRoundRectPainter -------------------------------------------------------
+
+class SolidRoundRectPainter : public Painter {
+ public:
+  SolidRoundRectPainter(SkColor color, float radius);
+  ~SolidRoundRectPainter() override;
+
+  // Painter:
+  gfx::Size GetMinimumSize() const override;
+  void Paint(gfx::Canvas* canvas, const gfx::Size& size) override;
+
+ private:
+  const SkColor color_;
+  const float radius_;
+
+  DISALLOW_COPY_AND_ASSIGN(SolidRoundRectPainter);
+};
+
+SolidRoundRectPainter::SolidRoundRectPainter(SkColor color, float radius)
+    : color_(color), radius_(radius) {}
+
+SolidRoundRectPainter::~SolidRoundRectPainter() {}
+
+gfx::Size SolidRoundRectPainter::GetMinimumSize() const {
+  return gfx::Size();
+}
+
+void SolidRoundRectPainter::Paint(gfx::Canvas* canvas, const gfx::Size& size) {
+  gfx::RectF rect((gfx::SizeF(size)));
+  SkPaint paint;
+  paint.setAntiAlias(true);
+  paint.setColor(color_);
+  canvas->DrawRoundRect(rect, radius_, paint);
+}
 
 // DashedFocusPainter ----------------------------------------------------------
 
@@ -151,10 +188,9 @@ void GradientPainter::Paint(gfx::Canvas* canvas, const gfx::Size& size) {
   else
     p[1].iset(0, size.height());
 
-  skia::RefPtr<SkShader> s = skia::AdoptRef(SkGradientShader::CreateLinear(
+  paint.setShader(SkGradientShader::MakeLinear(
       p, colors_.get(), pos_.get(), count_, SkShader::kClamp_TileMode));
   paint.setStyle(SkPaint::kFill_Style);
-  paint.setShader(s.get());
 
   canvas->sk_canvas()->drawRectCoords(SkIntToScalar(0), SkIntToScalar(0),
                                       SkIntToScalar(size.width()),
@@ -233,6 +269,11 @@ void Painter::PaintFocusPainter(View* view,
                                 Painter* focus_painter) {
   if (focus_painter && view->HasFocus())
     PaintPainterAt(canvas, focus_painter, view->GetLocalBounds());
+}
+
+// static
+Painter* Painter::CreateSolidRoundRectPainter(SkColor color, float radius) {
+  return new SolidRoundRectPainter(color, radius);
 }
 
 // static

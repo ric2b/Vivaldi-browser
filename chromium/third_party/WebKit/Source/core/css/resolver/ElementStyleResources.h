@@ -51,26 +51,26 @@ class ElementStyleResources {
 public:
     ElementStyleResources(Document&, float deviceScaleFactor);
 
-    PassRefPtrWillBeRawPtr<StyleImage> styleImage(CSSPropertyID, const CSSValue&);
-    PassRefPtrWillBeRawPtr<StyleImage> cachedOrPendingFromValue(CSSPropertyID, const CSSImageValue&);
-    PassRefPtrWillBeRawPtr<StyleImage> setOrPendingFromValue(CSSPropertyID, const CSSImageSetValue&);
+    StyleImage* styleImage(CSSPropertyID, const CSSValue&);
+    StyleImage* cachedOrPendingFromValue(CSSPropertyID, const CSSImageValue&);
+    StyleImage* setOrPendingFromValue(CSSPropertyID, const CSSImageSetValue&);
 
     void loadPendingResources(ComputedStyle*);
 
     void addPendingSVGDocument(FilterOperation*, CSSSVGDocumentValue*);
 
 private:
-    PassRefPtrWillBeRawPtr<StyleImage> cursorOrPendingFromValue(CSSPropertyID, const CSSCursorImageValue&);
-    PassRefPtrWillBeRawPtr<StyleImage> generatedOrPendingFromValue(CSSPropertyID, const CSSImageGeneratorValue&);
+    StyleImage* cursorOrPendingFromValue(CSSPropertyID, const CSSCursorImageValue&);
+    StyleImage* generatedOrPendingFromValue(CSSPropertyID, const CSSImageGeneratorValue&);
 
     void loadPendingSVGDocuments(ComputedStyle*);
     void loadPendingImages(ComputedStyle*);
 
-    PassRefPtrWillBeRawPtr<StyleImage> loadPendingImage(StylePendingImage*, CrossOriginAttributeValue = CrossOriginAttributeNotSet);
+    StyleImage* loadPendingImage(StylePendingImage*, CrossOriginAttributeValue = CrossOriginAttributeNotSet);
 
-    RawPtrWillBeMember<Document> m_document;
+    Member<Document> m_document;
     HashSet<CSSPropertyID> m_pendingImageProperties;
-    WillBeHeapHashMap<RawPtrWillBeMember<FilterOperation>, RefPtrWillBeMember<CSSSVGDocumentValue>> m_pendingSVGDocuments;
+    HeapHashMap<Member<FilterOperation>, Member<CSSSVGDocumentValue>> m_pendingSVGDocuments;
     float m_deviceScaleFactor;
 };
 

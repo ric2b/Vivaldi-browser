@@ -20,17 +20,25 @@ message NotificationDatabaseDataProto {
 
   // A notification action, corresponds to content::PlatformNotificationAction.
   //
-  // Next tag: 4
+  // Next tag: 6
   message NotificationAction {
+    // Corresponds to PlatformNotificationActionType.
+    enum Type {
+      BUTTON = 0;
+      TEXT = 1;
+    }
+
     optional string action = 1;
     optional string title = 2;
     optional string icon = 3;
+    optional Type type = 4;
+    optional string placeholder = 5;
   }
 
   // Actual data payload of the notification. This message is the protocol
   // buffer meant to serialize the content::PlatformNotificationData structure.
   //
-  // Next tag: 14
+  // Next tag: 15
   message NotificationData {
     enum Direction {
       LEFT_TO_RIGHT = 0;
@@ -44,6 +52,7 @@ message NotificationDatabaseDataProto {
     optional string body = 4;
     optional string tag = 5;
     optional string icon = 6;
+    optional string badge = 14;
     repeated int32 vibration_pattern = 9 [packed=true];
     optional int64 timestamp = 12;
     optional bool renotify = 13;

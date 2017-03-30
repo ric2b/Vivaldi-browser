@@ -50,16 +50,14 @@ void MediaStreamVideoRendererSink::Start() {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(state_, STOPPED);
 
-  AddToVideoTrack(
-      this,
+  MediaStreamVideoSink::ConnectToTrack(video_track_,
       media::BindToCurrentLoop(
           base::Bind(
               &MediaStreamVideoRendererSink::OnVideoFrame,
-              weak_factory_.GetWeakPtr())),
-      video_track_);
+              weak_factory_.GetWeakPtr())));
   state_ = STARTED;
 
-  if (video_track_.source().readyState() ==
+  if (video_track_.source().getReadyState() ==
           blink::WebMediaStreamSource::ReadyStateEnded ||
       !video_track_.isEnabled()) {
     RenderSignalingFrame();
@@ -69,7 +67,7 @@ void MediaStreamVideoRendererSink::Start() {
 void MediaStreamVideoRendererSink::Stop() {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(state_ == STARTED || state_ == PAUSED);
-  RemoveFromVideoTrack(this, video_track_);
+  MediaStreamVideoSink::DisconnectFromTrack();
   weak_factory_.InvalidateWeakPtrs();
   state_ = STOPPED;
   frame_size_.set_width(kMinFrameSize);

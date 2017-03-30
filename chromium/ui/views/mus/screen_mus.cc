@@ -4,7 +4,6 @@
 
 #include "ui/views/mus/screen_mus.h"
 
-// #include "components/mus/public/interfaces/window_manager_constants.mojom.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/shell/public/cpp/connection.h"
 #include "mojo/shell/public/cpp/connector.h"
@@ -82,7 +81,11 @@ void ScreenMus::Init(mojo::Connector* connector) {
 
   display_manager_->AddObserver(
       display_manager_observer_binding_.CreateInterfacePtrAndBind());
+
   // We need the set of displays before we can continue. Wait for it.
+  //
+  // TODO(rockot): Do something better here. This should not have to block tasks
+  // from running on the calling thread. http://crbug.com/594852.
   display_manager_observer_binding_.WaitForIncomingMethodCall();
 
   // The WaitForIncomingMethodCall() should have supplied the set of Displays.
@@ -159,7 +162,7 @@ gfx::Display ScreenMus::GetPrimaryDisplay() const {
 }
 
 gfx::Display ScreenMus::GetDisplayNearestWindow(gfx::NativeView view) const {
-  NOTIMPLEMENTED();
+  //NOTIMPLEMENTED();
   return GetPrimaryDisplay();
 }
 

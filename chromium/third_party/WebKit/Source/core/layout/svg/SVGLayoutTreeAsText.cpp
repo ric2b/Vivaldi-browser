@@ -273,8 +273,8 @@ static void writeStyle(TextStream& ts, const LayoutObject& object)
     const ComputedStyle& style = object.styleRef();
     const SVGComputedStyle& svgStyle = style.svgStyle();
 
-    if (!object.localTransform().isIdentity())
-        writeNameValuePair(ts, "transform", object.localTransform());
+    if (!object.localSVGTransform().isIdentity())
+        writeNameValuePair(ts, "transform", object.localSVGTransform());
     writeIfNotDefault(ts, "image rendering", style.imageRendering(), ComputedStyle::initialImageRendering());
     writeIfNotDefault(ts, "opacity", style.opacity(), ComputedStyle::initialOpacity());
     if (object.isSVGShape()) {
@@ -506,9 +506,9 @@ void writeSVGResourceContainer(TextStream& ts, const LayoutObject& object, int i
         ts << "\n";
         // Creating a placeholder filter which is passed to the builder.
         FloatRect dummyRect;
-        RefPtrWillBeRawPtr<Filter> dummyFilter = Filter::create(dummyRect, dummyRect, 1, Filter::BoundingBox);
-        SVGFilterBuilder builder(dummyFilter->sourceGraphic());
-        builder.buildGraph(dummyFilter.get(), toSVGFilterElement(*filter->element()), dummyRect);
+        Filter* dummyFilter = Filter::create(dummyRect, dummyRect, 1, Filter::BoundingBox);
+        SVGFilterBuilder builder(dummyFilter->getSourceGraphic());
+        builder.buildGraph(dummyFilter, toSVGFilterElement(*filter->element()), dummyRect);
         if (FilterEffect* lastEffect = builder.lastEffect())
             lastEffect->externalRepresentation(ts, indent + 1);
     } else if (resource->resourceType() == ClipperResourceType) {

@@ -9,12 +9,12 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/values.h"
 #include "ios/web/navigation/navigation_manager_delegate.h"
@@ -208,12 +208,6 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   // Returns the tracker for this WebStateImpl.
   RequestTrackerImpl* GetRequestTracker();
 
-  // Gets and sets the mode controlling the HTTP cache behavior.
-  // TODO(rohitrao): As with the other RequestTracker-related methods, this
-  // should become an internal detail of this class.
-  net::RequestTracker::CacheMode GetCacheMode();
-  void SetCacheMode(net::RequestTracker::CacheMode mode);
-
   // Lazily creates (if necessary) and returns |request_group_id_|.
   // IMPORTANT: This should not be used for anything other than associating this
   // instance to network requests.
@@ -223,7 +217,6 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
 
   // WebState:
   UIView* GetView() override;
-  web::WebViewType GetWebViewType() const override;
   BrowserState* GetBrowserState() const override;
   void OpenURL(const WebState::OpenURLParams& params) override;
   NavigationManager* GetNavigationManager() override;
@@ -259,6 +252,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
 
   // NavigationManagerDelegate:
   void NavigateToPendingEntry() override;
+  void LoadURLWithParams(const NavigationManager::WebLoadParams&) override;
   void OnNavigationItemsPruned(size_t pruned_item_count) override;
   void OnNavigationItemChanged() override;
   void OnNavigationItemCommitted(
@@ -300,7 +294,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
 
   // |web::WebUIIOS| object for the current page if it is a WebUI page that
   // uses the web-based WebUI framework, or nullptr otherwise.
-  scoped_ptr<web::WebUIIOS> web_ui_;
+  std::unique_ptr<web::WebUIIOS> web_ui_;
 
   // A list of observers notified when page state changes. Weak references.
   base::ObserverList<WebStateObserver, true> observers_;
@@ -329,9 +323,6 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
 
   // Request tracker associted with this object.
   scoped_refptr<RequestTrackerImpl> request_tracker_;
-
-  // Mode controlling the HTTP cache behavior.
-  net::RequestTracker::CacheMode cache_mode_;
 
   // A number identifying this object. This number is injected into the user
   // agent to allow the network layer to know which web view requests originated

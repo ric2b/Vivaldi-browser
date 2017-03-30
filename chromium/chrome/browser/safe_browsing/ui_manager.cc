@@ -158,9 +158,8 @@ void SafeBrowsingUIManager::DisplayBlockingPage(
     MalwarePatternType proto;
     if (resource.threat_type == SB_THREAT_TYPE_URL_UNWANTED ||
         (resource.threat_type == SB_THREAT_TYPE_URL_MALWARE &&
-         !resource.threat_metadata.empty() &&
-         proto.ParseFromString(resource.threat_metadata) &&
-         proto.pattern_type() == MalwarePatternType::LANDING)) {
+         resource.threat_metadata.threat_pattern_type ==
+         ThreatPatternType::LANDING)) {
       if (!resource.callback.is_null()) {
         DCHECK(resource.callback_thread);
         resource.callback_thread->PostTask(FROM_HERE,
@@ -199,6 +198,7 @@ void SafeBrowsingUIManager::DisplayBlockingPage(
     hit_report.is_subresource = resource.is_subresource;
     hit_report.threat_type = resource.threat_type;
     hit_report.threat_source = resource.threat_source;
+    hit_report.population_id = resource.threat_metadata.population_id;
 
     NavigationEntry* entry = resource.GetNavigationEntryForResource();
     if (entry) {

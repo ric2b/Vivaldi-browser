@@ -33,7 +33,7 @@ class Notes_Node;
 // threading problems.
 class NotesLoadDetails {
  public:
-  explicit NotesLoadDetails(Notes_Node* notes_node);
+  NotesLoadDetails(Notes_Node* notes_node);
   ~NotesLoadDetails();
 
   Notes_Node* notes_node() { return notes_node_.get(); }
@@ -72,17 +72,18 @@ class NotesLoadDetails {
 // as notifying the NotesStorage every time the model changes.
 //
 // Internally NotesStorage uses BookmarkCodec to do the actual read/write.
-class NotesStorage : public base::ImportantFileWriter::DataSerializer,
-                     public base::RefCountedThreadSafe<NotesStorage> {
+class NotesStorage : public base::ImportantFileWriter::DataSerializer {
  public:
   // Creates a NotesStorage for the specified model
   NotesStorage(content::BrowserContext* context,
-    Notes_Model* model,
-    base::SequencedTaskRunner* sequenced_task_runner);
+               Notes_Model* model,
+               base::SequencedTaskRunner* sequenced_task_runner);
+
+  ~NotesStorage() override;
 
   // Loads the notes into the model, notifying the model when done. This
   // takes ownership of |details|. See NotesLoadDetails for details.
-  void LoadNotes(NotesLoadDetails* details);
+  void LoadNotes(scoped_ptr<NotesLoadDetails> details);
 
   // Schedules saving the bookmark bar model to disk.
   void ScheduleSave();
@@ -92,15 +93,13 @@ class NotesStorage : public base::ImportantFileWriter::DataSerializer,
   void NotesModelDeleted();
 
   // Callback from backend after loading the bookmark file.
-  void OnLoadFinished();
+  void OnLoadFinished(scoped_ptr<NotesLoadDetails> details);
 
   // ImportantFileWriter::DataSerializer implementation.
   bool SerializeData(std::string* output) override;
 
  private:
   friend class base::RefCountedThreadSafe<NotesStorage>;
-
-  ~NotesStorage() override;
 
   // Serializes the data and schedules save using ImportantFileWriter.
   // Returns true on successful serialization.
@@ -112,11 +111,10 @@ class NotesStorage : public base::ImportantFileWriter::DataSerializer,
   // Helper to write bookmark data safely.
   base::ImportantFileWriter writer_;
 
-  // See class description of NotesLoadDetails for details on this.
-  scoped_ptr<NotesLoadDetails> details_;
-
   // Sequenced task runner where file I/O operations will be performed at.
   scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner_;
+
+  base::WeakPtrFactory<NotesStorage> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NotesStorage);
 };

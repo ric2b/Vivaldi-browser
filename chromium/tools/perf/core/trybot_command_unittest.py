@@ -41,6 +41,9 @@ class TrybotCommandTest(unittest.TestCase):
     self._urllib2_mock = self._urllib2_patcher.start()
     self._stubs = system_stub.Override(trybot_command,
                                        ['sys', 'open', 'os'])
+    # Always set git command to 'git' to simplify testing across platforms.
+    self._original_git_cmd = trybot_command._GIT_CMD
+    trybot_command._GIT_CMD = 'git'
 
   def tearDown(self):
     logging.getLogger().removeHandler(self.stream_handler)
@@ -50,11 +53,15 @@ class TrybotCommandTest(unittest.TestCase):
     self._urllib2_patcher.stop()
     # Reset the cached builders in trybot_command
     trybot_command.Trybot._builders = None
+    trybot_command._GIT_CMD = self._original_git_cmd
 
   def _ExpectProcesses(self, expected_args_list):
     counter = [-1]
 
     def side_effect(args, **kwargs):
+      if not expected_args_list:
+        self.fail(
+            'Not expect any Popen() call but got a Popen call with %s\n' % args)
       del kwargs  # unused
       counter[0] += 1
       expected_args, expected_responses = expected_args_list[counter[0]]
@@ -177,6 +184,9 @@ class TrybotCommandTest(unittest.TestCase):
         'linux_perf_bisect': 'otherstuff3',
         'win_x64_perf_bisect': 'otherstuff4',
         'win_perf_bisect_builder': 'not a trybot',
+        'win_x64_10_perf_bisect': 'otherstuff4',
+        'winx64ati_perf_bisect': 'not a trybot',
+        'winx64nvidia_perf_bisect': 'not a trybot',
     })
     command = trybot_command.Trybot()
     command._InitializeBuilderNames('all-win')
@@ -186,8 +196,13 @@ class TrybotCommandTest(unittest.TestCase):
     self.assertEquals(
         ['win_8_perf_bisect', 'win_perf_bisect'],
         sorted(command._builder_names.get('win')))
+    self.assertNotIn(
+        'win_x64_perf_bisect',
+        sorted(command._builder_names.get('win')))
     self.assertEquals(
-        ['win_x64_perf_bisect'], sorted(command._builder_names.get('win-x64')))
+        sorted(['win_x64_perf_bisect', 'win_x64_10_perf_bisect',
+                'winx64ati_perf_bisect', 'winx64nvidia_perf_bisect']),
+        sorted(command._builder_names.get('win-x64')))
 
   def testConstructorTrybotAllAndroid(self):
     self._MockTryserverJson({
@@ -318,7 +333,7 @@ class TrybotCommandTest(unittest.TestCase):
         self.log_output.getvalue())
 
   def _GetConfigForTrybot(self, name, platform, branch, cfg_filename,
-                          is_blink=False):
+                          is_blink=False, extra_benchmark_args=None):
     bot = '%s_perf_bisect' % name.replace('', '').replace('-', '_')
     self._MockTryserverJson({bot: 'stuff'})
     first_processes = ()
@@ -352,7 +367,8 @@ class TrybotCommandTest(unittest.TestCase):
 
     options = argparse.Namespace(trybot=name, benchmark_name='sunspider')
     command = trybot_command.Trybot()
-    command.Run(options, [])
+    extra_benchmark_args = extra_benchmark_args or []
+    command.Run(options, extra_benchmark_args)
     return cfg.getvalue()
 
   def testConfigAndroid(self):
@@ -362,7 +378,7 @@ class TrybotCommandTest(unittest.TestCase):
     self.assertEquals(
         ('config = {\n'
          '  "command": "./tools/perf/run_benchmark '
-         '--browser=android-chromium sunspider",\n'
+         '--browser=android-chromium sunspider --verbose",\n'
          '  "max_time_minutes": "120",\n'
          '  "repeat_count": "1",\n'
          '  "target_arch": "ia32",\n'
@@ -375,7 +391,7 @@ class TrybotCommandTest(unittest.TestCase):
     self.assertEquals(
         ('config = {\n'
          '  "command": "./tools/perf/run_benchmark '
-         '--browser=release sunspider",\n'
+         '--browser=release sunspider --verbose",\n'
          '  "max_time_minutes": "120",\n'
          '  "repeat_count": "1",\n'
          '  "target_arch": "ia32",\n'
@@ -388,7 +404,21 @@ class TrybotCommandTest(unittest.TestCase):
     self.assertEquals(
         ('config = {\n'
          '  "command": "python tools\\\\perf\\\\run_benchmark '
-         '--browser=release_x64 sunspider",\n'
+         '--browser=release_x64 sunspider --verbose",\n'
+         '  "max_time_minutes": "120",\n'
+         '  "repeat_count": "1",\n'
+         '  "target_arch": "x64",\n'
+         '  "truncate_percent": "0"\n'
+         '}'), config)
+
+  def testVerboseOptionIsNotAddedTwice(self):
+    config = self._GetConfigForTrybot(
+        'win-x64', 'win-x64', 'currentwork', 'tools/run-perf-test.cfg',
+        extra_benchmark_args=['-v'])
+    self.assertEquals(
+        ('config = {\n'
+         '  "command": "python tools\\\\perf\\\\run_benchmark '
+         '--browser=release_x64 sunspider -v",\n'
          '  "max_time_minutes": "120",\n'
          '  "repeat_count": "1",\n'
          '  "target_arch": "x64",\n'
@@ -401,7 +431,7 @@ class TrybotCommandTest(unittest.TestCase):
     self.assertEquals(
         ('config = {\n'
          '  "command": "python tools\\\\perf\\\\run_benchmark '
-         '--browser=release_x64 sunspider",\n'
+         '--browser=release_x64 sunspider --verbose",\n'
          '  "max_time_minutes": "120",\n'
          '  "repeat_count": "1",\n'
          '  "target_arch": "x64",\n'
@@ -423,7 +453,7 @@ class TrybotCommandTest(unittest.TestCase):
     self.assertEquals(
         ('config = {\n'
          '  "command": "./tools/perf/run_benchmark '
-         '--browser=release sunspider",\n'
+         '--browser=release sunspider --verbose",\n'
          '  "max_time_minutes": "120",\n'
          '  "repeat_count": "1",\n'
          '  "target_arch": "ia32",\n'
@@ -487,6 +517,25 @@ class TrybotCommandTest(unittest.TestCase):
         trybot_command.TrybotError, command._UpdateConfigAndRunTryjob,
         'android', cfg_filename, [])
 
+  def testUpdateConfigSkipTryjob(self):
+    self._MockTryserverJson({'win_perf_bisect': 'stuff'})
+    command = trybot_command.Trybot()
+    command._InitializeBuilderNames('win-x64')
+    self._ExpectProcesses(())
+    cfg_filename = 'tools/run-perf-test.cfg'
+    cfg_data = ('''config = {
+  "command": "python tools\\\\perf\\\\run_benchmark --browser=release_x64'''
+''' --verbose",
+  "max_time_minutes": "120",
+  "repeat_count": "1",
+  "target_arch": "x64",
+  "truncate_percent": "0"
+}''')
+    self._stubs.open.files = {cfg_filename: cfg_data}
+    self.assertEquals((trybot_command.NO_CHANGES, ''),
+                      command._UpdateConfigAndRunTryjob(
+                          'win-x64', cfg_filename, []))
+
   def testUpdateConfigGitTry(self):
     self._MockTryserverJson({'android_nexus4_perf_bisect': 'stuff'})
     command = trybot_command.Trybot()
@@ -507,7 +556,7 @@ class TrybotCommandTest(unittest.TestCase):
                           'android', cfg_filename, []))
     cfg.seek(0)
     config = '''config = {
-  "command": "./tools/perf/run_benchmark --browser=android-chromium",
+  "command": "./tools/perf/run_benchmark --browser=android-chromium --verbose",
   "max_time_minutes": "120",
   "repeat_count": "1",
   "target_arch": "ia32",
@@ -564,13 +613,14 @@ class TrybotCommandTest(unittest.TestCase):
     # but that's because the stub testing does not reset the StringIO. In
     # reality, the cfg_filename should be overwritten with the new data.
     config = ('''config = {
-  "command": "python tools\\\\perf\\\\run_benchmark --browser=release",
+  "command": "python tools\\\\perf\\\\run_benchmark --browser=release '''
+  '''--verbose",
   "max_time_minutes": "120",
   "repeat_count": "1",
   "target_arch": "ia32",
   "truncate_percent": "0"
 }''''''config = {
-  "command": "./tools/perf/run_benchmark --browser=android-chromium",
+  "command": "./tools/perf/run_benchmark --browser=android-chromium --verbose",
   "max_time_minutes": "120",
   "repeat_count": "1",
   "target_arch": "ia32",

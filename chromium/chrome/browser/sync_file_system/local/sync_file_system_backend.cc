@@ -127,12 +127,8 @@ void SyncFileSystemBackend::ResolveURL(const storage::FileSystemURL& url,
   // It is safe to pass Unretained(this) since |context_| owns it.
   SyncStatusCallback initialize_callback =
       base::Bind(&SyncFileSystemBackend::DidInitializeSyncFileSystemService,
-                 base::Unretained(this),
-                 make_scoped_refptr(context_),
-                 url.origin(),
-                 url.type(),
-                 mode,
-                 callback);
+                 base::Unretained(this), base::RetainedRef(context_),
+                 url.origin(), url.type(), mode, callback);
   InitializeSyncFileSystemService(url.origin(), initialize_callback);
 }
 
@@ -163,7 +159,7 @@ storage::FileSystemOperation* SyncFileSystemBackend::CreateFileSystemOperation(
   DCHECK(context);
   DCHECK(error_code);
 
-  scoped_ptr<storage::FileSystemOperationContext> operation_context =
+  std::unique_ptr<storage::FileSystemOperationContext> operation_context =
       GetDelegate()->CreateFileSystemOperationContext(url, context, error_code);
   if (!operation_context)
     return nullptr;
@@ -187,7 +183,7 @@ bool SyncFileSystemBackend::HasInplaceCopyImplementation(
   return false;
 }
 
-scoped_ptr<storage::FileStreamReader>
+std::unique_ptr<storage::FileStreamReader>
 SyncFileSystemBackend::CreateFileStreamReader(
     const storage::FileSystemURL& url,
     int64_t offset,
@@ -199,7 +195,7 @@ SyncFileSystemBackend::CreateFileStreamReader(
       url, offset, expected_modification_time, context);
 }
 
-scoped_ptr<storage::FileStreamWriter>
+std::unique_ptr<storage::FileStreamWriter>
 SyncFileSystemBackend::CreateFileStreamWriter(
     const storage::FileSystemURL& url,
     int64_t offset,
@@ -238,7 +234,7 @@ SyncFileSystemBackend* SyncFileSystemBackend::GetBackend(
 }
 
 void SyncFileSystemBackend::SetLocalFileChangeTracker(
-    scoped_ptr<LocalFileChangeTracker> tracker) {
+    std::unique_ptr<LocalFileChangeTracker> tracker) {
   DCHECK(!change_tracker_);
   DCHECK(tracker);
   change_tracker_ = std::move(tracker);
@@ -305,7 +301,7 @@ void SyncFileSystemBackend::DidInitializeSyncFileSystemService(
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::Bind(&SyncFileSystemBackend::DidInitializeSyncFileSystemService,
-                   base::Unretained(this), make_scoped_refptr(context),
+                   base::Unretained(this), base::RetainedRef(context),
                    origin_url, type, mode, callback, status));
     return;
   }

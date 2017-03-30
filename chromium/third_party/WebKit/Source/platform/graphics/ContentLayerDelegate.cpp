@@ -57,8 +57,8 @@ static void paintArtifactToWebDisplayItemList(WebDisplayItemList* list, const Pa
         // separate layers and send those to the compositor, instead of sending
         // one big flat SkPicture.
         SkRect skBounds = SkRect::MakeXYWH(bounds.x(), bounds.y(), bounds.width(), bounds.height());
-        RefPtr<SkPicture> picture = paintArtifactToSkPicture(artifact, skBounds);
-        list->appendDrawingItem(WebRect(bounds.x(), bounds.y(), bounds.width(), bounds.height()), picture.get());
+        list->appendDrawingItem(WebRect(bounds.x(), bounds.y(), bounds.width(), bounds.height()),
+            paintArtifactToSkPicture(artifact, skBounds));
         return;
     }
     artifact.appendToWebDisplayItemList(list);
@@ -75,7 +75,7 @@ void ContentLayerDelegate::paintContents(
 {
     TRACE_EVENT0("blink,benchmark", "ContentLayerDelegate::paintContents");
 
-    PaintController& paintController = m_graphicsLayer->paintController();
+    PaintController& paintController = m_graphicsLayer->getPaintController();
     paintController.setDisplayItemConstructionIsDisabled(
         paintingControl == WebContentLayerClient::DisplayListConstructionDisabled);
     paintController.setSubsequenceCachingIsDisabled(
@@ -107,7 +107,7 @@ void ContentLayerDelegate::paintContents(
 
 size_t ContentLayerDelegate::approximateUnsharedMemoryUsage() const
 {
-    return m_graphicsLayer->paintController().approximateUnsharedMemoryUsage();
+    return m_graphicsLayer->getPaintController().approximateUnsharedMemoryUsage();
 }
 
 } // namespace blink

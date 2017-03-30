@@ -22,12 +22,12 @@ InterpolationValue SVGAngleInterpolationType::maybeConvertSVGValue(const SVGProp
     return InterpolationValue(InterpolableNumber::create(toSVGAngle(svgValue).value()));
 }
 
-PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGAngleInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue*) const
+SVGPropertyBase* SVGAngleInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue*) const
 {
     double doubleValue = toInterpolableNumber(interpolableValue).value();
-    RefPtrWillBeRawPtr<SVGAngle> result = SVGAngle::create();
+    SVGAngle* result = SVGAngle::create();
     result->newValueSpecifiedUnits(SVGAngle::SVG_ANGLETYPE_DEG, doubleValue);
-    return result.release();
+    return result;
 }
 
 } // namespace blink

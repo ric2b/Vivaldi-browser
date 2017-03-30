@@ -23,7 +23,6 @@
 #ifndef InlineTextBox_h
 #define InlineTextBox_h
 
-#include "core/layout/LayoutText.h" // so textLayoutObject() can be inline
 #include "core/layout/api/LineLayoutText.h"
 #include "core/layout/api/SelectionState.h"
 #include "core/layout/line/InlineBox.h"
@@ -40,8 +39,8 @@ const unsigned short cFullTruncation = USHRT_MAX - 1;
 
 class InlineTextBox : public InlineBox {
 public:
-    InlineTextBox(LayoutObject& obj, int start, unsigned short length)
-        : InlineBox(obj)
+    InlineTextBox(LineLayoutItem item, int start, unsigned short length)
+        : InlineBox(item)
         , m_prevTextBox(nullptr)
         , m_nextTextBox(nullptr)
         , m_start(start)
@@ -183,8 +182,6 @@ private:
 };
 
 DEFINE_INLINE_BOX_TYPE_CASTS(InlineTextBox);
-
-void alignSelectionRectToDevicePixels(LayoutRect&);
 
 } // namespace blink
 

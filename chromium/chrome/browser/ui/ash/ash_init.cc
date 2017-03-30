@@ -26,6 +26,8 @@
 
 #if defined(OS_CHROMEOS)
 #include "base/sys_info.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/ui/ash/ime_controller_chromeos.h"
@@ -68,7 +70,7 @@ void OpenAsh(gfx::AcceleratedWidget remote_window) {
 
   ash::Shell* shell = ash::Shell::CreateInstance(shell_init_params);
   shell->accelerator_controller()->SetScreenshotDelegate(
-      scoped_ptr<ash::ScreenshotDelegate>(new ChromeScreenshotGrabber));
+      std::unique_ptr<ash::ScreenshotDelegate>(new ChromeScreenshotGrabber));
 #if defined(OS_CHROMEOS)
   // TODO(flackr): Investigate exposing a blocking pool task runner to chromeos.
   chromeos::AccelerometerReader::GetInstance()->Initialize(
@@ -77,7 +79,7 @@ void OpenAsh(gfx::AcceleratedWidget remote_window) {
               content::BrowserThread::GetBlockingPool()->GetSequenceToken(),
               base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
   shell->accelerator_controller()->SetImeControlDelegate(
-      scoped_ptr<ash::ImeControlDelegate>(new ImeController));
+      std::unique_ptr<ash::ImeControlDelegate>(new ImeController));
   shell->high_contrast_controller()->SetEnabled(
       chromeos::AccessibilityManager::Get()->IsHighContrastEnabled());
 
@@ -93,7 +95,7 @@ void OpenAsh(gfx::AcceleratedWidget remote_window) {
 
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableZeroBrowsersOpenForTests)) {
-    chrome::IncrementKeepAliveCount();
+    g_browser_process->platform_part()->RegisterKeepAlive();
   }
 #endif
   ash::Shell::GetPrimaryRootWindow()->GetHost()->Show();

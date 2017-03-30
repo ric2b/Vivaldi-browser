@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "base/files/file_util.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/md5.h"
 #include "base/sha1.h"
 #include "base/strings/string16.h"

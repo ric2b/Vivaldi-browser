@@ -46,14 +46,14 @@ component("modules") {
 
   deps = [
     ":make_modules_generated",
+    "//device/battery:mojo_bindings",
+    "//mojo/public/c/system:for_component",
     "//third_party/WebKit/Source/core",
+    "//third_party/WebKit/public:mojo_bindings_blink",
     "//third_party/icu",
     "//third_party/sqlite",
     "//third_party/zlib",
   ]
-
-  public_configs =
-      [ "//third_party/WebKit/Source/core:link_core_modules_separately" ]
 
   if (is_win) {
     cflags = [ "/wd4334" ]  # Result of 32-bit shift implicitly converted to 64 bits.
@@ -86,6 +86,7 @@ source_set("modules_testing") {
 
   deps = [
     "//third_party/WebKit/Source/core",
+    "//third_party/WebKit/Source/modules",
   ]
 }
 

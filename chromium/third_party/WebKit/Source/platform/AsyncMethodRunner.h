@@ -120,11 +120,7 @@ public:
 
     DEFINE_INLINE_TRACE()
     {
-#if ENABLE(OILPAN)
         visitor->trace(m_object);
-#else
-        TraceIfNeeded<typename RawPtrOrMemberTrait<TargetClass>::Type>::trace(visitor, m_object);
-#endif
     }
 
 private:
@@ -144,11 +140,7 @@ private:
 
     Timer<AsyncMethodRunner<TargetClass>> m_timer;
 
-#if ENABLE(OILPAN)
     Member<TargetClass> m_object;
-#else
-    typename RawPtrOrMemberTrait<TargetClass>::Type m_object;
-#endif
     TargetMethod m_method;
 
     bool m_suspended;

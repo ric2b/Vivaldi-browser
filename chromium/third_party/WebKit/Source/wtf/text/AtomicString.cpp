@@ -95,11 +95,11 @@ private:
     HashSet<StringImpl*> m_table;
 };
 
-static inline AtomicStringTable& atomicStringTable()
+static inline AtomicStringTable& getAtomicStringTable()
 {
     // Once possible we should make this non-lazy (constructed in WTFThreadData's constructor).
     WTFThreadData& data = wtfThreadData();
-    AtomicStringTable* table = data.atomicStringTable();
+    AtomicStringTable* table = data.getAtomicStringTable();
     if (UNLIKELY(!table))
         table = AtomicStringTable::create(data);
     return *table;
@@ -107,32 +107,22 @@ static inline AtomicStringTable& atomicStringTable()
 
 static inline HashSet<StringImpl*>& atomicStrings()
 {
-    return atomicStringTable().table();
+    return getAtomicStringTable().table();
 }
 
 void AtomicString::reserveTableCapacity(size_t size)
 {
-    atomicStringTable().table().reserveCapacityForSize(size);
+    getAtomicStringTable().table().reserveCapacityForSize(size);
 }
 
 template<typename T, typename HashTranslator>
 static inline PassRefPtr<StringImpl> addToStringTable(const T& value)
 {
-    HashSet<StringImpl*>::AddResult addResult = atomicStrings().add<HashTranslator>(value);
+    HashSet<StringImpl*>::AddResult addResult = atomicStrings().addWithTranslator<HashTranslator>(value);
 
     // If the string is newly-translated, then we need to adopt it.
     // The boolean in the pair tells us if that is so.
     return addResult.isNewEntry ? adoptRef(*addResult.storedValue) : *addResult.storedValue;
-}
-
-PassRefPtr<StringImpl> AtomicString::add(const LChar* c)
-{
-    if (!c)
-        return nullptr;
-    if (!*c)
-        return StringImpl::empty();
-
-    return add(c, strlen(reinterpret_cast<const char*>(c)));
 }
 
 template<typename CharacterType>
@@ -367,26 +357,6 @@ struct LCharBufferTranslator {
     }
 };
 
-typedef HashTranslatorCharBuffer<char> CharBuffer;
-struct CharBufferFromLiteralDataTranslator {
-    static unsigned hash(const CharBuffer& buf)
-    {
-        return StringHasher::computeHashAndMaskTop8Bits(reinterpret_cast<const LChar*>(buf.s), buf.length);
-    }
-
-    static bool equal(StringImpl* const& str, const CharBuffer& buf)
-    {
-        return WTF::equal(str, buf.s, buf.length);
-    }
-
-    static void translate(StringImpl*& location, const CharBuffer& buf, unsigned hash)
-    {
-        location = StringImpl::create(buf.s, buf.length).leakRef();
-        location->setHash(hash);
-        location->setIsAtomic(true);
-    }
-};
-
 PassRefPtr<StringImpl> AtomicString::add(const LChar* s, unsigned length)
 {
     if (!s)
@@ -399,18 +369,9 @@ PassRefPtr<StringImpl> AtomicString::add(const LChar* s, unsigned length)
     return addToStringTable<LCharBuffer, LCharBufferTranslator>(buffer);
 }
 
-PassRefPtr<StringImpl> AtomicString::addFromLiteralData(const char* characters, unsigned length)
-{
-    ASSERT(characters);
-    ASSERT(length);
-
-    CharBuffer buffer = { characters, length };
-    return addToStringTable<CharBuffer, CharBufferFromLiteralDataTranslator>(buffer);
-}
-
 PassRefPtr<StringImpl> AtomicString::addSlowCase(StringImpl* string)
 {
-    return atomicStringTable().addStringImpl(string);
+    return getAtomicStringTable().addStringImpl(string);
 }
 
 template<typename CharacterType>
@@ -528,6 +489,11 @@ AtomicString AtomicString::number(double number, unsigned precision, TrailingZer
 {
     NumberToStringBuffer buffer;
     return AtomicString(numberToFixedPrecisionString(number, precision, buffer, trailingZerosTruncatingPolicy == TruncateTrailingZeros));
+}
+
+std::ostream& operator<<(std::ostream& out, const AtomicString& s)
+{
+    return out << s.getString();
 }
 
 #ifndef NDEBUG

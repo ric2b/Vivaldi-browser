@@ -6,9 +6,6 @@
  * @fileoverview
  * 'settings-internet-detail' is the settings subpage containing details
  * for a network.
- *
- * @group Chrome Settings Elements
- * @element settings-internet-detail
  */
 (function() {
 'use strict';
@@ -27,7 +24,6 @@ Polymer({
     guid: {
       type: String,
       value: '',
-      observer: 'guidChanged_',
     },
 
     /**
@@ -98,6 +94,10 @@ Polymer({
       type: Object,
     },
   },
+
+  observers: [
+    'guidChanged_(guid, networkingPrivate)',
+  ],
 
   /**
    * Listener function for chrome.networkingPrivate.onNetworksChanged event.

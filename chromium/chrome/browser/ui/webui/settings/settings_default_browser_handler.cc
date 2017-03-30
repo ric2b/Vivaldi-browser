@@ -6,25 +6,33 @@
 
 #include "base/bind.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/ui/startup/default_browser_prompt.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui.h"
 
 namespace settings {
 
+namespace {
+
+bool IsDisabledByPolicy(const BooleanPrefMember& pref) {
+  return pref.IsManaged() && !pref.GetValue();
+}
+
+}  // namespace
+
 DefaultBrowserHandler::DefaultBrowserHandler(content::WebUI* webui)
-    : default_browser_worker_(new shell_integration::DefaultBrowserWorker(
-          this,
-          /*delete_observer=*/false)) {
+    : weak_ptr_factory_(this) {
+  default_browser_worker_ = new shell_integration::DefaultBrowserWorker(
+      base::Bind(&DefaultBrowserHandler::OnDefaultBrowserWorkerFinished,
+                 weak_ptr_factory_.GetWeakPtr()));
   default_browser_policy_.Init(
       prefs::kDefaultBrowserSettingEnabled, g_browser_process->local_state(),
       base::Bind(&DefaultBrowserHandler::RequestDefaultBrowserState,
                  base::Unretained(this), nullptr));
 }
 
-DefaultBrowserHandler::~DefaultBrowserHandler() {
-  default_browser_worker_->ObserverDestroyed();
-}
+DefaultBrowserHandler::~DefaultBrowserHandler() {}
 
 void DefaultBrowserHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
@@ -37,44 +45,38 @@ void DefaultBrowserHandler::RegisterMessages() {
                  base::Unretained(this)));
 }
 
-void DefaultBrowserHandler::SetDefaultWebClientUIState(
-    shell_integration::DefaultWebClientUIState state) {
-  if (state == shell_integration::STATE_PROCESSING)
-    return;
-
-  if (state == shell_integration::STATE_IS_DEFAULT) {
-    // Notify the user in the future if Chrome ceases to be the user's chosen
-    // default browser.
-    Profile::FromWebUI(web_ui())->GetPrefs()->SetBoolean(
-        prefs::kCheckDefaultBrowser, true);
-  }
-
-  base::FundamentalValue is_default(state ==
-                                    shell_integration::STATE_IS_DEFAULT);
-  base::FundamentalValue can_be_default(
-      state != shell_integration::STATE_UNKNOWN &&
-      !default_browser_policy_.IsManaged() &&
-      shell_integration::CanSetAsDefaultBrowser() !=
-          shell_integration::SET_DEFAULT_NOT_ALLOWED);
-
-  web_ui()->CallJavascriptFunction("Settings.updateDefaultBrowserState",
-                                   is_default, can_be_default);
-}
-
 void DefaultBrowserHandler::RequestDefaultBrowserState(
     const base::ListValue* /*args*/) {
   default_browser_worker_->StartCheckIsDefault();
 }
 
 void DefaultBrowserHandler::SetAsDefaultBrowser(const base::ListValue* args) {
-  CHECK(!default_browser_policy_.IsManaged());
+  CHECK(!IsDisabledByPolicy(default_browser_policy_));
 
   default_browser_worker_->StartSetAsDefault();
 
   // If the user attempted to make Chrome the default browser, notify
   // them when this changes.
-  Profile::FromWebUI(web_ui())->GetPrefs()->SetBoolean(
-      prefs::kCheckDefaultBrowser, true);
+  chrome::ResetDefaultBrowserPrompt(Profile::FromWebUI(web_ui()));
+}
+
+void DefaultBrowserHandler::OnDefaultBrowserWorkerFinished(
+    shell_integration::DefaultWebClientState state) {
+  if (state == shell_integration::IS_DEFAULT) {
+    // Notify the user in the future if Chrome ceases to be the user's chosen
+    // default browser.
+    chrome::ResetDefaultBrowserPrompt(Profile::FromWebUI(web_ui()));
+  }
+
+  base::FundamentalValue is_default(state == shell_integration::IS_DEFAULT);
+  base::FundamentalValue can_be_default(
+      state != shell_integration::UNKNOWN_DEFAULT &&
+      !IsDisabledByPolicy(default_browser_policy_) &&
+      shell_integration::CanSetAsDefaultBrowser() !=
+          shell_integration::SET_DEFAULT_NOT_ALLOWED);
+
+  web_ui()->CallJavascriptFunction("Settings.updateDefaultBrowserState",
+                                   is_default, can_be_default);
 }
 
 }  // namespace settings

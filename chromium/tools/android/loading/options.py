@@ -20,13 +20,15 @@ class Options(object):
   # Tuples of (argument name, default value, help string).
   _ARGS = [ ('clear_cache', True,
              'clear browser cache before loading'),
+            ('clear_device_data', False,
+             'Clear Chrome data from device before loading'),
             ('chrome_package_name', 'chrome',
              'build/android/pylib/constants package description'),
             ('devtools_hostname', 'localhost',
              'hostname for devtools websocket connection'),
             ('devtools_port', 9222,
              'port for devtools websocket connection'),
-            ('local_binary', 'out/Release/chrome',
+            ('local_binary', os.path.join(_SRC_DIR, 'out/Release/chrome'),
              'chrome binary for local runs'),
             ('local_noisy', False,
              'Enable local chrome console output'),
@@ -118,7 +120,7 @@ class Options(object):
     for arg, default, help_str in self._ARGS:
       # All global options are named.
       arg = '--' + arg
-      self._AddArg(parser, arg, default, help_str=help_str)
+      self._AddArg(container, arg, default, help_str=help_str)
     if extra is not None:
       if type(extra) is not list:
         extra = [extra]

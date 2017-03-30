@@ -105,7 +105,7 @@ CSSPrimitiveValue::UnitType CSSPrimitiveValue::fromName(const String& unit)
     return unitTable().get(unit.lower());
 }
 
-CSSPrimitiveValue::UnitCategory CSSPrimitiveValue::unitCategory(UnitType type)
+CSSPrimitiveValue::UnitCategory CSSPrimitiveValue::unitTypeToUnitCategory(UnitType type)
 {
     switch (type) {
     case UnitType::Number:
@@ -154,7 +154,7 @@ bool CSSPrimitiveValue::colorIsDerivedFromElement() const
     }
 }
 
-using CSSTextCache = WillBePersistentHeapHashMap<RawPtrWillBeWeakMember<const CSSPrimitiveValue>, String>;
+using CSSTextCache = PersistentHeapHashMap<WeakMember<const CSSPrimitiveValue>, String>;
 
 static CSSTextCache& cssTextCache()
 {
@@ -192,8 +192,8 @@ CSSPrimitiveValue::UnitType CSSPrimitiveValue::typeWithCalcResolved() const
 
 static const AtomicString& valueName(CSSValueID valueID)
 {
-    ASSERT_ARG(valueID, valueID >= 0);
-    ASSERT_ARG(valueID, valueID < numCSSValueKeywords);
+    DCHECK_GE(valueID, 0);
+    DCHECK_LT(valueID, numCSSValueKeywords);
 
     if (valueID < 0)
         return nullAtom;
@@ -258,11 +258,11 @@ CSSPrimitiveValue::CSSPrimitiveValue(const Length& length, float zoom)
         m_value.num = length.value() / zoom;
         break;
     case Calculated: {
-        const CalculationValue& calc = length.calculationValue();
+        const CalculationValue& calc = length.getCalculationValue();
         if (calc.pixels() && calc.percent()) {
             init(CSSCalcValue::create(
                 CSSCalcValue::createExpressionNode(calc.pixels() / zoom, calc.percent()),
-                calc.valueRange()));
+                calc.getValueRange()));
             break;
         }
         if (calc.percent()) {
@@ -289,11 +289,11 @@ void CSSPrimitiveValue::init(UnitType type)
     m_primitiveUnitType = static_cast<unsigned>(type);
 }
 
-void CSSPrimitiveValue::init(PassRefPtrWillBeRawPtr<CSSCalcValue> c)
+void CSSPrimitiveValue::init(CSSCalcValue* c)
 {
     init(UnitType::Calc);
     m_hasCachedCSSText = false;
-    m_value.calc = c.leakRef();
+    m_value.calc = c;
 }
 
 CSSPrimitiveValue::~CSSPrimitiveValue()
@@ -408,7 +408,7 @@ template<> unsigned short CSSPrimitiveValue::computeLength(const CSSToLengthConv
 
 template<> float CSSPrimitiveValue::computeLength(const CSSToLengthConversionData& conversionData) const
 {
-    return static_cast<float>(computeLengthDouble(conversionData));
+    return clampTo<float>(computeLengthDouble(conversionData));
 }
 
 template<> double CSSPrimitiveValue::computeLength(const CSSToLengthConversionData& conversionData) const
@@ -830,7 +830,6 @@ bool CSSPrimitiveValue::equals(const CSSPrimitiveValue& other) const
 
 DEFINE_TRACE_AFTER_DISPATCH(CSSPrimitiveValue)
 {
-#if ENABLE(OILPAN)
     switch (type()) {
     case UnitType::Calc:
         visitor->trace(m_value.calc);
@@ -838,7 +837,6 @@ DEFINE_TRACE_AFTER_DISPATCH(CSSPrimitiveValue)
     default:
         break;
     }
-#endif
     CSSValue::traceAfterDispatch(visitor);
 }
 

@@ -5,35 +5,52 @@
 #include "blimp/engine/feature/engine_render_widget_feature.h"
 
 #include "base/numerics/safe_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "blimp/common/create_blimp_message.h"
 #include "blimp/common/proto/blimp_message.pb.h"
 #include "blimp/common/proto/compositor.pb.h"
 #include "blimp/common/proto/input.pb.h"
 #include "blimp/common/proto/render_widget.pb.h"
+#include "blimp/net/input_message_converter.h"
 #include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "net/base/net_errors.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 
 namespace blimp {
+namespace engine {
 
-EngineRenderWidgetFeature::EngineRenderWidgetFeature() {}
+EngineRenderWidgetFeature::EngineRenderWidgetFeature(SettingsManager* settings)
+    : settings_manager_(settings) {
+  DCHECK(settings_manager_);
+  settings_manager_->AddObserver(this);
+}
 
-EngineRenderWidgetFeature::~EngineRenderWidgetFeature() {}
+EngineRenderWidgetFeature::~EngineRenderWidgetFeature() {
+  DCHECK(settings_manager_);
+  settings_manager_->RemoveObserver(this);
+}
 
 void EngineRenderWidgetFeature::set_render_widget_message_sender(
-    scoped_ptr<BlimpMessageProcessor> message_processor) {
+    std::unique_ptr<BlimpMessageProcessor> message_processor) {
   DCHECK(message_processor);
   render_widget_message_sender_ = std::move(message_processor);
 }
 
 void EngineRenderWidgetFeature::set_input_message_sender(
-    scoped_ptr<BlimpMessageProcessor> message_processor) {
+    std::unique_ptr<BlimpMessageProcessor> message_processor) {
   DCHECK(message_processor);
   input_message_sender_ = std::move(message_processor);
 }
 
+void EngineRenderWidgetFeature::set_ime_message_sender(
+    std::unique_ptr<BlimpMessageProcessor> message_processor) {
+  DCHECK(message_processor);
+  ime_message_sender_ = std::move(message_processor);
+}
+
 void EngineRenderWidgetFeature::set_compositor_message_sender(
-    scoped_ptr<BlimpMessageProcessor> message_processor) {
+    std::unique_ptr<BlimpMessageProcessor> message_processor) {
   DCHECK(message_processor);
   compositor_message_sender_ = std::move(message_processor);
 }
@@ -47,7 +64,7 @@ void EngineRenderWidgetFeature::OnRenderWidgetCreated(
   DCHECK_GT(render_widget_id, 0);
 
   RenderWidgetMessage* render_widget_message;
-  scoped_ptr<BlimpMessage> blimp_message =
+  std::unique_ptr<BlimpMessage> blimp_message =
       CreateBlimpMessage(&render_widget_message, tab_id);
   render_widget_message->set_type(RenderWidgetMessage::CREATED);
   render_widget_message->set_render_widget_id(render_widget_id);
@@ -65,7 +82,7 @@ void EngineRenderWidgetFeature::OnRenderWidgetInitialized(
   DCHECK_GT(render_widget_id, 0);
 
   RenderWidgetMessage* render_widget_message;
-  scoped_ptr<BlimpMessage> blimp_message =
+  std::unique_ptr<BlimpMessage> blimp_message =
       CreateBlimpMessage(&render_widget_message, tab_id);
   render_widget_message->set_type(RenderWidgetMessage::INITIALIZE);
   render_widget_message->set_render_widget_id(render_widget_id);
@@ -83,7 +100,7 @@ void EngineRenderWidgetFeature::OnRenderWidgetDeleted(
   DCHECK_GT(render_widget_id, 0);
 
   RenderWidgetMessage* render_widget_message;
-  scoped_ptr<BlimpMessage> blimp_message =
+  std::unique_ptr<BlimpMessage> blimp_message =
       CreateBlimpMessage(&render_widget_message, tab_id);
   render_widget_message->set_type(RenderWidgetMessage::DELETED);
   render_widget_message->set_render_widget_id(render_widget_id);
@@ -97,7 +114,7 @@ void EngineRenderWidgetFeature::SendCompositorMessage(
     content::RenderWidgetHost* render_widget_host,
     const std::vector<uint8_t>& message) {
   CompositorMessage* compositor_message;
-  scoped_ptr<BlimpMessage> blimp_message =
+  std::unique_ptr<BlimpMessage> blimp_message =
       CreateBlimpMessage(&compositor_message, tab_id);
 
   int render_widget_id = GetRenderWidgetId(tab_id, render_widget_host);
@@ -111,6 +128,49 @@ void EngineRenderWidgetFeature::SendCompositorMessage(
 
   compositor_message_sender_->ProcessMessage(std::move(blimp_message),
                                                 net::CompletionCallback());
+}
+
+void EngineRenderWidgetFeature::SendShowImeRequest(
+    const int tab_id,
+    content::RenderWidgetHost* render_widget_host,
+    const ui::TextInputClient* client) {
+  DCHECK(client);
+
+  ImeMessage* ime_message;
+  std::unique_ptr<BlimpMessage> blimp_message =
+      CreateBlimpMessage(&ime_message, tab_id);
+
+  int render_widget_id = GetRenderWidgetId(tab_id, render_widget_host);
+  DCHECK_GT(render_widget_id, 0);
+  ime_message->set_render_widget_id(render_widget_id);
+  ime_message->set_type(ImeMessage::SHOW_IME);
+  ime_message->set_text_input_type(
+      InputMessageConverter::TextInputTypeToProto(client->GetTextInputType()));
+
+  gfx::Range text_range;
+  base::string16 existing_text;
+  client->GetTextRange(&text_range);
+  client->GetTextFromRange(text_range, &existing_text);
+  ime_message->set_ime_text(base::UTF16ToUTF8(existing_text));
+
+  ime_message_sender_->ProcessMessage(std::move(blimp_message),
+                                      net::CompletionCallback());
+}
+
+void EngineRenderWidgetFeature::SendHideImeRequest(
+    const int tab_id,
+    content::RenderWidgetHost* render_widget_host) {
+  ImeMessage* ime_message;
+  std::unique_ptr<BlimpMessage> blimp_message =
+      CreateBlimpMessage(&ime_message, tab_id);
+
+  int render_widget_id = GetRenderWidgetId(tab_id, render_widget_host);
+  DCHECK_GT(render_widget_id, 0);
+  ime_message->set_render_widget_id(render_widget_id);
+  ime_message->set_type(ImeMessage::HIDE_IME);
+
+  ime_message_sender_->ProcessMessage(std::move(blimp_message),
+                                      net::CompletionCallback());
 }
 
 void EngineRenderWidgetFeature::SetDelegate(
@@ -127,10 +187,11 @@ void EngineRenderWidgetFeature::RemoveDelegate(const int tab_id) {
 }
 
 void EngineRenderWidgetFeature::ProcessMessage(
-    scoped_ptr<BlimpMessage> message,
+    std::unique_ptr<BlimpMessage> message,
     const net::CompletionCallback& callback) {
   DCHECK(!callback.is_null());
   DCHECK(message->type() == BlimpMessage::RENDER_WIDGET ||
+         message->type() == BlimpMessage::IME ||
          message->type() == BlimpMessage::INPUT ||
          message->type() == BlimpMessage::COMPOSITOR);
 
@@ -146,7 +207,7 @@ void EngineRenderWidgetFeature::ProcessMessage(
       render_widget_host = GetRenderWidgetHost(target_tab_id,
                               message->input().render_widget_id());
       if (render_widget_host) {
-        scoped_ptr<blink::WebGestureEvent> event =
+        std::unique_ptr<blink::WebGestureEvent> event =
             input_message_converter_.ProcessMessage(message->input());
         if (event)
           delegate->OnWebGestureEvent(render_widget_host, std::move(event));
@@ -163,11 +224,49 @@ void EngineRenderWidgetFeature::ProcessMessage(
         delegate->OnCompositorMessageReceived(render_widget_host, payload);
       }
       break;
+    case BlimpMessage::IME:
+      DCHECK(message->ime().type() == ImeMessage::SET_TEXT);
+      render_widget_host =
+          GetRenderWidgetHost(target_tab_id, message->ime().render_widget_id());
+      if (render_widget_host && render_widget_host->GetView()) {
+        SetTextFromIME(render_widget_host->GetView()->GetTextInputClient(),
+                       message->ime().ime_text());
+      }
+      break;
     default:
       NOTREACHED();
   }
 
   callback.Run(net::OK);
+}
+
+void EngineRenderWidgetFeature::OnWebPreferencesChanged() {
+  for (TabMap::iterator tab_it = tabs_.begin(); tab_it != tabs_.end();
+       tab_it++) {
+    RenderWidgetMaps render_widget_maps = tab_it->second;
+    RenderWidgetToIdMap render_widget_to_id = render_widget_maps.first;
+    for (RenderWidgetToIdMap::iterator it = render_widget_to_id.begin();
+         it != render_widget_to_id.end(); it++) {
+      content::RenderWidgetHost* render_widget_host = it->first;
+      content::RenderViewHost* render_view_host =
+          content::RenderViewHost::From(render_widget_host);
+      if (render_view_host)
+        render_view_host->OnWebkitPreferencesChanged();
+    }
+  }
+}
+
+void EngineRenderWidgetFeature::SetTextFromIME(ui::TextInputClient* client,
+                                               std::string text) {
+  if (client && client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE) {
+    // Clear out any existing text first and then insert new text entered
+    // through IME.
+    gfx::Range text_range;
+    client->GetTextRange(&text_range);
+    client->ExtendSelectionAndDelete(text_range.length(), text_range.length());
+
+    client->InsertText(base::UTF8ToUTF16(text));
+  }
 }
 
 EngineRenderWidgetFeature::RenderWidgetMessageDelegate*
@@ -267,4 +366,5 @@ content::RenderWidgetHost* EngineRenderWidgetFeature::GetRenderWidgetHost(
   return widget_id_it->second;
 }
 
+}  // namespace engine
 }  // namespace blimp

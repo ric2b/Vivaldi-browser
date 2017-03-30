@@ -5,12 +5,12 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_NTP_APP_LAUNCHER_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_NTP_APP_LAUNCHER_HANDLER_H_
 
+#include <memory>
 #include <set>
 #include <string>
 
 #include "apps/metrics_names.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
@@ -33,6 +33,10 @@ namespace favicon_base {
 struct FaviconImageResult;
 }
 
+namespace user_prefs {
+class PrefRegistrySyncable;
+}
+
 // The handler for Javascript messages related to the "apps" view.
 class AppLauncherHandler
     : public content::WebUIMessageHandler,
@@ -49,6 +53,13 @@ class AppLauncherHandler
       const extensions::Extension* extension,
       ExtensionService* service,
       base::DictionaryValue* value);
+
+  // Registers values (strings etc.) for the page.
+  static void GetLocalizedValues(Profile* profile,
+      base::DictionaryValue* values);
+
+  // Register per-profile preferences.
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // WebUIMessageHandler:
   void RegisterMessages() override;
@@ -120,9 +131,14 @@ class AppLauncherHandler
   // page_index].
   void HandleGenerateAppForLink(const base::ListValue* args);
 
-  // Other registered message callbacks with unused |args|.
-  void StopShowingAppLauncherPromo(const base::ListValue* args);
-  void OnLearnMore(const base::ListValue* args);
+  // Handles "stopShowingAppLauncherPromo" message with unused |args|.
+  void HandleStopShowingAppLauncherPromo(const base::ListValue* args);
+
+  // Handles "learnMore" message with unused |args|.
+  void HandleOnLearnMore(const base::ListValue* args);
+
+  // Handles "pageSelected" message with |args| containing [page_index].
+  void HandlePageSelected(const base::ListValue* args);
 
  private:
   struct AppInstallInfo {
@@ -153,7 +169,7 @@ class AppLauncherHandler
   extensions::ExtensionUninstallDialog* GetExtensionUninstallDialog();
 
   // Continuation for installing a bookmark app after favicon lookup.
-  void OnFaviconForApp(scoped_ptr<AppInstallInfo> install_info,
+  void OnFaviconForApp(std::unique_ptr<AppInstallInfo> install_info,
                        const favicon_base::FaviconImageResult& image_result);
 
   // Sends |highlight_app_id_| to the js.
@@ -184,10 +200,11 @@ class AppLauncherHandler
   PrefChangeRegistrar local_state_pref_change_registrar_;
 
   // Used to show confirmation UI for uninstalling extensions in incognito mode.
-  scoped_ptr<extensions::ExtensionUninstallDialog> extension_uninstall_dialog_;
+  std::unique_ptr<extensions::ExtensionUninstallDialog>
+      extension_uninstall_dialog_;
 
   // Used to show confirmation UI for enabling extensions.
-  scoped_ptr<ExtensionEnableFlow> extension_enable_flow_;
+  std::unique_ptr<ExtensionEnableFlow> extension_enable_flow_;
 
   // The ids of apps to show on the NTP.
   std::set<std::string> visible_apps_;

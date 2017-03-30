@@ -32,6 +32,7 @@
 
 #include "core/animation/AnimationClock.h"
 #include "core/animation/AnimationTimeline.h"
+#include "core/animation/CompositorPendingAnimations.h"
 #include "core/animation/ElementAnimations.h"
 #include "core/animation/KeyframeEffect.h"
 #include "core/dom/Document.h"
@@ -84,7 +85,7 @@ protected:
         return animation->update(TimingUpdateForAnimationFrame);
     }
 
-    RefPtrWillBePersistent<Document> document;
+    Persistent<Document> document;
     Persistent<AnimationTimeline> timeline;
     Persistent<Animation> animation;
     TrackExceptionState exceptionState;
@@ -727,7 +728,7 @@ TEST_F(AnimationAnimationTest, TimeToNextEffectSimpleCancelledBeforeStart)
 
 TEST_F(AnimationAnimationTest, AttachedAnimations)
 {
-    RefPtrWillBePersistent<Element> element = document->createElement("foo", ASSERT_NO_EXCEPTION);
+    Persistent<Element> element = document->createElement("foo", ASSERT_NO_EXCEPTION);
 
     Timing timing;
     KeyframeEffect* keyframeEffect = KeyframeEffect::create(element.get(), nullptr, timing);

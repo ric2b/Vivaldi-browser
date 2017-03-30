@@ -37,8 +37,7 @@
 
 namespace blink {
 
-class CORE_EXPORT CustomElementProcessingStack : public NoBaseWillBeGarbageCollectedFinalized<CustomElementProcessingStack> {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(CustomElementProcessingStack);
+class CORE_EXPORT CustomElementProcessingStack : public GarbageCollectedFinalized<CustomElementProcessingStack> {
     WTF_MAKE_NONCOPYABLE(CustomElementProcessingStack);
 public:
     // This is stack allocated in many DOM callbacks. Make it cheap.
@@ -80,7 +79,7 @@ private:
         CustomElementCallbackQueue* sentinel = 0;
         for (size_t i = 0; i < kNumSentinels; i++)
             m_flattenedProcessingStack.append(sentinel);
-        ASSERT(s_elementQueueEnd == m_flattenedProcessingStack.size());
+        DCHECK_EQ(s_elementQueueEnd, m_flattenedProcessingStack.size());
     }
 
     // The start of the element queue on the top of the processing
@@ -100,7 +99,7 @@ private:
     // stack appear toward the head of the vector. The first element
     // is a null sentinel value.
     static const size_t kNumSentinels = 1;
-    WillBeHeapVector<RawPtrWillBeMember<CustomElementCallbackQueue>> m_flattenedProcessingStack;
+    HeapVector<Member<CustomElementCallbackQueue>> m_flattenedProcessingStack;
 };
 
 } // namespace blink

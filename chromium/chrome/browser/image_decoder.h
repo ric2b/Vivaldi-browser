@@ -6,17 +6,20 @@
 #define CHROME_BROWSER_IMAGE_DECODER_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/sequenced_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "chrome/common/image_decoder.mojom.h"
 #include "content/public/browser/utility_process_host.h"
 #include "content/public/browser/utility_process_host_client.h"
 
@@ -70,6 +73,7 @@ class ImageDecoder : public content::UtilityProcessHostClient {
     DEFAULT_CODEC = 0,  // Uses WebKit image decoding (via WebImage).
 #if defined(OS_CHROMEOS)
     ROBUST_JPEG_CODEC,  // Restrict decoding to robust jpeg codec.
+    ROBUST_PNG_CODEC,  // Restrict decoding to robust PNG codec.
 #endif  // defined(OS_CHROMEOS)
   };
 
@@ -152,7 +156,11 @@ class ImageDecoder : public content::UtilityProcessHostClient {
 
   // Calls StopBatchMode() after |kBatchModeTimeoutSeconds| have elapsed,
   // unless a new decoding request resets the timer.
-  scoped_ptr<base::DelayTimer> batch_mode_timer_;
+  std::unique_ptr<base::DelayTimer> batch_mode_timer_;
+
+  // Mojo service connection. Must always be bound/reset and used on the IO
+  // thread.
+  mojom::ImageDecoderPtr decoder_;
 
   DISALLOW_COPY_AND_ASSIGN(ImageDecoder);
 };

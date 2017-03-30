@@ -71,6 +71,12 @@ CoreAudioDemuxerStream* CoreAudioDemuxer::CreateAudioDemuxerStream() {
       this, input_format_info_, bit_rate_, CoreAudioDemuxerStream::AUDIO);
 }
 
+void CoreAudioDemuxer::StartWaitingForSeek(base::TimeDelta seek_time) {
+}
+
+void CoreAudioDemuxer::CancelPendingSeek(base::TimeDelta seek_time) {
+}
+
 void CoreAudioDemuxer::Seek(base::TimeDelta time,
                             const PipelineStatusCB& status_cb) {
   if (audio_stream_->Seek(time)) {

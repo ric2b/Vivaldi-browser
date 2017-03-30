@@ -9,6 +9,7 @@
 #include "base/callback.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
+#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/browser/download/download_shelf.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -24,7 +25,6 @@
 #else
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/host_desktop.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -84,6 +84,17 @@ class DownloadShelfUIControllerDelegate
 void DownloadShelfUIControllerDelegate::OnNewDownloadReady(
     content::DownloadItem* item) {
   content::WebContents* web_contents = item->GetWebContents();
+  // For the case of DevTools web contents, we'd like to use target browser
+  // shelf although saving from the DevTools web contents.
+  if (web_contents && DevToolsWindow::IsDevToolsWindow(web_contents)) {
+    DevToolsWindow* devtools_window =
+        DevToolsWindow::AsDevToolsWindow(web_contents);
+    content::WebContents* inspected =
+        devtools_window->GetInspectedWebContents();
+    // Do not overwrite web contents for the case of remote debugging.
+    if (inspected)
+      web_contents = inspected;
+  }
   Browser* browser =
       web_contents ? chrome::FindBrowserWithWebContents(web_contents) : NULL;
 
@@ -108,7 +119,7 @@ DownloadUIController::Delegate::~Delegate() {
 }
 
 DownloadUIController::DownloadUIController(content::DownloadManager* manager,
-                                           scoped_ptr<Delegate> delegate)
+                                           std::unique_ptr<Delegate> delegate)
     : download_notifier_(manager, this), delegate_(std::move(delegate)) {
 #if defined(OS_ANDROID)
   if (!delegate_)

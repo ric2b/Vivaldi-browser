@@ -65,8 +65,8 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
                                    translate::TranslateErrors::Type error_type,
                                    DisplayReason reason);
 
-  // Closes the current bubble if existing.
-  static void CloseBubble();
+  // Closes the current bubble if it exists.
+  static void CloseCurrentBubble();
 
   // Returns the bubble view currently shown. This may return NULL.
   static TranslateBubbleView* GetCurrentBubble();
@@ -137,7 +137,7 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest, CancelButtonReturningError);
 
   TranslateBubbleView(views::View* anchor_view,
-                      scoped_ptr<TranslateBubbleModel> model,
+                      std::unique_ptr<TranslateBubbleModel> model,
                       translate::TranslateErrors::Type error_type,
                       content::WebContents* web_contents);
 
@@ -191,9 +191,9 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   views::View* error_view_;
   views::View* advanced_view_;
 
-  scoped_ptr<ui::SimpleComboboxModel> denial_combobox_model_;
-  scoped_ptr<LanguageComboboxModel> source_language_combobox_model_;
-  scoped_ptr<LanguageComboboxModel> target_language_combobox_model_;
+  std::unique_ptr<ui::SimpleComboboxModel> denial_combobox_model_;
+  std::unique_ptr<LanguageComboboxModel> source_language_combobox_model_;
+  std::unique_ptr<LanguageComboboxModel> target_language_combobox_model_;
 
   views::Combobox* denial_combobox_;
   views::Combobox* source_language_combobox_;
@@ -204,7 +204,7 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   views::LabelButton* advanced_cancel_button_;
   views::LabelButton* advanced_done_button_;
 
-  scoped_ptr<TranslateBubbleModel> model_;
+  std::unique_ptr<TranslateBubbleModel> model_;
 
   translate::TranslateErrors::Type error_type_;
 
@@ -213,9 +213,6 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
 
   // Whether the translation is acutually executed.
   bool translate_executed_;
-
-  // Whether one of denial buttons is clicked.
-  bool denial_button_clicked_;
 
   DISALLOW_COPY_AND_ASSIGN(TranslateBubbleView);
 };

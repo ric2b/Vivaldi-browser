@@ -146,7 +146,7 @@ static inline bool layoutObjectHasAspectRatio(const LayoutObject* layoutObject)
     return layoutObject->isImage() || layoutObject->isCanvas() || layoutObject->isVideo();
 }
 
-void LayoutReplaced::computeIntrinsicSizingInfoForLayoutBox(LayoutBox* contentLayoutObject, IntrinsicSizingInfo& intrinsicSizingInfo) const
+void LayoutReplaced::computeIntrinsicSizingInfoForReplacedContent(LayoutReplaced* contentLayoutObject, IntrinsicSizingInfo& intrinsicSizingInfo) const
 {
     if (contentLayoutObject) {
         contentLayoutObject->computeIntrinsicSizingInfo(intrinsicSizingInfo);
@@ -489,7 +489,7 @@ void LayoutReplaced::computePositionedLogicalHeight(LogicalExtentComputedValues&
 LayoutRect LayoutReplaced::replacedContentRect(const LayoutSize* overriddenIntrinsicSize) const
 {
     LayoutRect contentRect = contentBoxRect();
-    ObjectFit objectFit = style()->objectFit();
+    ObjectFit objectFit = style()->getObjectFit();
 
     if (objectFit == ObjectFitFill && style()->objectPosition() == ComputedStyle::initialObjectPosition()) {
         return contentRect;
@@ -530,8 +530,8 @@ LayoutRect LayoutReplaced::replacedContentRect(const LayoutSize* overriddenIntri
 
 void LayoutReplaced::computeIntrinsicSizingInfo(IntrinsicSizingInfo& intrinsicSizingInfo) const
 {
-    // If there's an embeddedContentBox() of a remote, referenced document available, this code-path should never be used.
-    ASSERT(!embeddedContentBox());
+    // If there's an embeddedReplacedContent() of a remote, referenced document available, this code-path should never be used.
+    ASSERT(!embeddedReplacedContent());
     intrinsicSizingInfo.size = FloatSize(intrinsicLogicalWidth().toFloat(), intrinsicLogicalHeight().toFloat());
 
     // Figure out if we need to compute an intrinsic ratio.
@@ -556,11 +556,11 @@ LayoutUnit LayoutReplaced::computeReplacedLogicalWidth(ShouldComputePreferred sh
     if (style()->logicalWidth().isSpecified() || style()->logicalWidth().isIntrinsic())
         return computeReplacedLogicalWidthRespectingMinMaxWidth(computeReplacedLogicalWidthUsing(MainOrPreferredSize, style()->logicalWidth()), shouldComputePreferred);
 
-    LayoutBox* contentLayoutObject = embeddedContentBox();
+    LayoutReplaced* contentLayoutObject = embeddedReplacedContent();
 
     // 10.3.2 Inline, replaced elements: http://www.w3.org/TR/CSS21/visudet.html#inline-replaced-width
     IntrinsicSizingInfo intrinsicSizingInfo;
-    computeIntrinsicSizingInfoForLayoutBox(contentLayoutObject, intrinsicSizingInfo);
+    computeIntrinsicSizingInfoForReplacedContent(contentLayoutObject, intrinsicSizingInfo);
     FloatSize constrainedSize = constrainIntrinsicSizeToMinMax(intrinsicSizingInfo);
 
     if (style()->logicalWidth().isAuto()) {
@@ -617,11 +617,11 @@ LayoutUnit LayoutReplaced::computeReplacedLogicalHeight() const
     if (hasReplacedLogicalHeight())
         return computeReplacedLogicalHeightRespectingMinMaxHeight(computeReplacedLogicalHeightUsing(MainOrPreferredSize, style()->logicalHeight()));
 
-    LayoutBox* contentLayoutObject = embeddedContentBox();
+    LayoutReplaced* contentLayoutObject = embeddedReplacedContent();
 
     // 10.6.2 Inline, replaced elements: http://www.w3.org/TR/CSS21/visudet.html#inline-replaced-height
     IntrinsicSizingInfo intrinsicSizingInfo;
-    computeIntrinsicSizingInfoForLayoutBox(contentLayoutObject, intrinsicSizingInfo);
+    computeIntrinsicSizingInfoForReplacedContent(contentLayoutObject, intrinsicSizingInfo);
     FloatSize constrainedSize = constrainIntrinsicSizeToMinMax(intrinsicSizingInfo);
 
     bool widthIsAuto = style()->logicalWidth().isAuto();
@@ -709,21 +709,6 @@ PositionWithAffinity LayoutReplaced::positionForPoint(const LayoutPoint& point)
     return LayoutBox::positionForPoint(point);
 }
 
-LayoutRect LayoutReplaced::selectionRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer) const
-{
-    ASSERT(!needsLayout());
-
-    LayoutRect rect = localSelectionRect();
-    if (rect.isEmpty())
-        return rect;
-
-    mapToVisibleRectInAncestorSpace(paintInvalidationContainer, rect, 0);
-    // FIXME: groupedMapping() leaks the squashing abstraction.
-    if (paintInvalidationContainer->layer()->groupedMapping())
-        PaintLayer::mapRectToPaintBackingCoordinates(paintInvalidationContainer, rect);
-    return rect;
-}
-
 LayoutRect LayoutReplaced::localSelectionRect() const
 {
     if (getSelectionState() == SelectionNone)
@@ -751,11 +736,21 @@ void LayoutReplaced::setSelectionState(SelectionState state)
 
     // We only include the space below the baseline in our layer's cached paint invalidation rect if the
     // image is selected. Since the selection state has changed update the rect.
-    if (hasLayer())
-        setPreviousPaintInvalidationRect(boundsRectForPaintInvalidation(containerForPaintInvalidation()));
+    if (hasLayer()) {
+        LayoutRect rect = localOverflowRectForPaintInvalidation();
+        PaintLayer::mapRectToPaintInvalidationBacking(*this, containerForPaintInvalidation(), rect);
+        setPreviousPaintInvalidationRect(rect);
+    }
 
     if (canUpdateSelectionOnRootLineBoxes())
         inlineBoxWrapper()->root().setHasSelectedChildren(state != SelectionNone);
+}
+
+void LayoutReplaced::IntrinsicSizingInfo::transpose()
+{
+    size = size.transposedSize();
+    aspectRatio = aspectRatio.transposedSize();
+    std::swap(hasWidth, hasHeight);
 }
 
 } // namespace blink

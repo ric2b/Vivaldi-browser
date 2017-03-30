@@ -8,6 +8,7 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/free_deleter.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task_runner.h"
@@ -20,7 +21,6 @@
 #include <windows.h>
 #include <winsock2.h>
 #include <dhcpcsdk.h>
-#pragma comment(lib, "dhcpcsvc.lib")
 
 namespace {
 

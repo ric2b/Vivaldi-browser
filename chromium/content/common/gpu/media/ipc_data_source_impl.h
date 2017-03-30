@@ -7,6 +7,7 @@
 #ifndef CONTENT_COMMON_GPU_MEDIA_IPC_DATA_SOURCE_IMPL_H_
 #define CONTENT_COMMON_GPU_MEDIA_IPC_DATA_SOURCE_IMPL_H_
 
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/synchronization/lock.h"
 #include "content/common/gpu/media/ipc_data_source.h"

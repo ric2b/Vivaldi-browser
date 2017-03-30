@@ -14,17 +14,28 @@
 #include "base/memory/scoped_ptr.h"
 #include "mojo/edk/embedder/embedder_internal.h"
 #include "mojo/edk/system/configuration.h"
+#include "mojo/edk/system/node_controller.h"
 #include "mojo/edk/system/options_validation.h"
-#include "mojo/public/c/system/macros.h"
 
 namespace mojo {
 namespace edk {
 
 namespace {
 
-struct MOJO_ALIGNAS(8) SerializedSharedBufferDispatcher {
-  size_t num_bytes;
+#pragma pack(push, 1)
+
+struct SerializedState {
+  uint64_t num_bytes;
+  uint32_t flags;
+  uint32_t padding;
 };
+
+const uint32_t kSerializedStateFlagsReadOnly = 1 << 0;
+
+#pragma pack(pop)
+
+static_assert(sizeof(SerializedState) % 8 == 0,
+              "Invalid SerializedState size.");
 
 }  // namespace
 
@@ -65,6 +76,7 @@ MojoResult SharedBufferDispatcher::ValidateCreateOptions(
 // static
 MojoResult SharedBufferDispatcher::Create(
     const MojoCreateSharedBufferOptions& /*validated_options*/,
+    NodeController* node_controller,
     uint64_t num_bytes,
     scoped_refptr<SharedBufferDispatcher>* result) {
   if (!num_bytes)
@@ -72,8 +84,14 @@ MojoResult SharedBufferDispatcher::Create(
   if (num_bytes > GetConfiguration().max_shared_memory_num_bytes)
     return MOJO_RESULT_RESOURCE_EXHAUSTED;
 
-  scoped_refptr<PlatformSharedBuffer> shared_buffer(
-      PlatformSharedBuffer::Create(static_cast<size_t>(num_bytes)));
+  scoped_refptr<PlatformSharedBuffer> shared_buffer;
+  if (node_controller) {
+    shared_buffer =
+        node_controller->CreateSharedBuffer(static_cast<size_t>(num_bytes));
+  } else {
+    shared_buffer =
+        PlatformSharedBuffer::Create(static_cast<size_t>(num_bytes));
+  }
   if (!shared_buffer)
     return MOJO_RESULT_RESOURCE_EXHAUSTED;
 
@@ -100,13 +118,13 @@ scoped_refptr<SharedBufferDispatcher> SharedBufferDispatcher::Deserialize(
     size_t num_ports,
     PlatformHandle* platform_handles,
     size_t num_platform_handles) {
-  if (num_bytes != sizeof(SerializedSharedBufferDispatcher)) {
+  if (num_bytes != sizeof(SerializedState)) {
     LOG(ERROR) << "Invalid serialized shared buffer dispatcher (bad size)";
     return nullptr;
   }
 
-  const SerializedSharedBufferDispatcher* serialization =
-      static_cast<const SerializedSharedBufferDispatcher*>(bytes);
+  const SerializedState* serialization =
+      static_cast<const SerializedState*>(bytes);
   if (!serialization->num_bytes) {
     LOG(ERROR)
         << "Invalid serialized shared buffer dispatcher (invalid num_bytes)";
@@ -127,9 +145,11 @@ scoped_refptr<SharedBufferDispatcher> SharedBufferDispatcher::Deserialize(
 
   // Wrapping |platform_handle| in a |ScopedPlatformHandle| means that it'll be
   // closed even if creation fails.
+  bool read_only = (serialization->flags & kSerializedStateFlagsReadOnly);
   scoped_refptr<PlatformSharedBuffer> shared_buffer(
       PlatformSharedBuffer::CreateFromPlatformHandle(
-          serialization->num_bytes, ScopedPlatformHandle(platform_handle)));
+          static_cast<size_t>(serialization->num_bytes), read_only,
+          ScopedPlatformHandle(platform_handle)));
   if (!shared_buffer) {
     LOG(ERROR)
         << "Invalid serialized shared buffer dispatcher (invalid num_bytes?)";
@@ -175,6 +195,21 @@ MojoResult SharedBufferDispatcher::DuplicateBufferHandle(
   base::AutoLock lock(lock_);
   if (in_transit_)
     return MOJO_RESULT_INVALID_ARGUMENT;
+
+  if ((validated_options.flags &
+       MOJO_DUPLICATE_BUFFER_HANDLE_OPTIONS_FLAG_READ_ONLY) &&
+      (!shared_buffer_->IsReadOnly())) {
+    // If a read-only duplicate is requested and |shared_buffer_| is not
+    // read-only, make a read-only duplicate of |shared_buffer_|.
+    scoped_refptr<PlatformSharedBuffer> read_only_buffer =
+        shared_buffer_->CreateReadOnlyDuplicate();
+    if (!read_only_buffer)
+      return MOJO_RESULT_FAILED_PRECONDITION;
+    DCHECK(read_only_buffer->IsReadOnly());
+    *new_dispatcher = CreateInternal(std::move(read_only_buffer));
+    return MOJO_RESULT_OK;
+  }
+
   *new_dispatcher = CreateInternal(shared_buffer_);
   return MOJO_RESULT_OK;
 }
@@ -200,8 +235,10 @@ MojoResult SharedBufferDispatcher::MapBuffer(
   DCHECK(mapping);
   *mapping = shared_buffer_->MapNoCheck(static_cast<size_t>(offset),
                                         static_cast<size_t>(num_bytes));
-  if (!*mapping)
+  if (!*mapping) {
+    LOG(ERROR) << "Unable to map: read_only" << shared_buffer_->IsReadOnly();
     return MOJO_RESULT_RESOURCE_EXHAUSTED;
+  }
 
   return MOJO_RESULT_OK;
 }
@@ -209,7 +246,7 @@ MojoResult SharedBufferDispatcher::MapBuffer(
 void SharedBufferDispatcher::StartSerialize(uint32_t* num_bytes,
                                             uint32_t* num_ports,
                                             uint32_t* num_platform_handles) {
-  *num_bytes = sizeof(SerializedSharedBufferDispatcher);
+  *num_bytes = sizeof(SerializedState);
   *num_ports = 0;
   *num_platform_handles = 1;
 }
@@ -217,10 +254,14 @@ void SharedBufferDispatcher::StartSerialize(uint32_t* num_bytes,
 bool SharedBufferDispatcher::EndSerialize(void* destination,
                                           ports::PortName* ports,
                                           PlatformHandle* handles) {
-  SerializedSharedBufferDispatcher* serialization =
-      static_cast<SerializedSharedBufferDispatcher*>(destination);
+  SerializedState* serialization =
+      static_cast<SerializedState*>(destination);
   base::AutoLock lock(lock_);
-  serialization->num_bytes = shared_buffer_->GetNumBytes();
+  serialization->num_bytes =
+        static_cast<uint64_t>(shared_buffer_->GetNumBytes());
+  serialization->flags =
+      (shared_buffer_->IsReadOnly() ? kSerializedStateFlagsReadOnly : 0);
+  serialization->padding = 0;
 
   handle_for_transit_ = shared_buffer_->DuplicatePlatformHandle();
   if (!handle_for_transit_.is_valid()) {
@@ -267,7 +308,7 @@ MojoResult SharedBufferDispatcher::ValidateDuplicateOptions(
     const MojoDuplicateBufferHandleOptions* in_options,
     MojoDuplicateBufferHandleOptions* out_options) {
   const MojoDuplicateBufferHandleOptionsFlags kKnownFlags =
-      MOJO_DUPLICATE_BUFFER_HANDLE_OPTIONS_FLAG_NONE;
+      MOJO_DUPLICATE_BUFFER_HANDLE_OPTIONS_FLAG_READ_ONLY;
   static const MojoDuplicateBufferHandleOptions kDefaultOptions = {
       static_cast<uint32_t>(sizeof(MojoDuplicateBufferHandleOptions)),
       MOJO_DUPLICATE_BUFFER_HANDLE_OPTIONS_FLAG_NONE};

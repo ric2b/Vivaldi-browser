@@ -41,8 +41,6 @@
 
 namespace blink {
 
-class WebWaitableEvent;
-
 class CORE_EXPORT HTMLParserThread {
     USING_FAST_MALLOC(HTMLParserThread);
 public:
@@ -52,9 +50,7 @@ public:
     // It is an error to call shared() before init() or after shutdown();
     static HTMLParserThread* shared();
 
-    void postTask(PassOwnPtr<Closure>);
-    WebThread& platformThread();
-    bool isRunning();
+    void postTask(PassOwnPtr<CrossThreadClosure>);
 
 private:
     HTMLParserThread();

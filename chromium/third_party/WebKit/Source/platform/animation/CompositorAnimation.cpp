@@ -29,7 +29,7 @@ CompositorAnimation::CompositorAnimation(const CompositorAnimationCurve& webCurv
         groupId = AnimationIdProvider::NextGroupId();
 
     CompositorAnimationCurve::AnimationCurveType curveType = webCurve.type();
-    scoped_ptr<cc::AnimationCurve> curve;
+    std::unique_ptr<cc::AnimationCurve> curve;
     switch (curveType) {
     case CompositorAnimationCurve::AnimationCurveTypeFloat: {
         const blink::CompositorFloatAnimationCurve* floatCurve = static_cast<const blink::CompositorFloatAnimationCurve*>(&webCurve);
@@ -115,7 +115,7 @@ void CompositorAnimation::setTimeOffset(double monotonicTime)
     m_animation->set_time_offset(base::TimeDelta::FromSecondsD(monotonicTime));
 }
 
-blink::CompositorAnimation::Direction CompositorAnimation::direction() const
+blink::CompositorAnimation::Direction CompositorAnimation::getDirection() const
 {
     switch (m_animation->direction()) {
     case cc::Animation::DIRECTION_NORMAL:
@@ -160,7 +160,7 @@ void CompositorAnimation::setPlaybackRate(double playbackRate)
     m_animation->set_playback_rate(playbackRate);
 }
 
-blink::CompositorAnimation::FillMode CompositorAnimation::fillMode() const
+blink::CompositorAnimation::FillMode CompositorAnimation::getFillMode() const
 {
     switch (m_animation->fill_mode()) {
     case cc::Animation::FILL_MODE_NONE:
@@ -195,16 +195,10 @@ void CompositorAnimation::setFillMode(FillMode fillMode)
     }
 }
 
-scoped_ptr<cc::Animation> CompositorAnimation::passAnimation()
+std::unique_ptr<cc::Animation> CompositorAnimation::passAnimation()
 {
     m_animation->set_needs_synchronized_start_time(true);
     return std::move(m_animation);
-}
-
-cc::Animation* CompositorAnimation::releaseCCAnimation()
-{
-    m_animation->set_needs_synchronized_start_time(true);
-    return m_animation.release();
 }
 
 } // namespace blink

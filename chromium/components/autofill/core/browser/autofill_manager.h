@@ -5,8 +5,9 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_AUTOFILL_MANAGER_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_AUTOFILL_MANAGER_H_
 
-#include <list>
+#include <deque>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -14,7 +15,6 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -168,7 +168,7 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   // Will send an upload based on the |form_structure| data and the local
   // Autofill profile data. |observed_submission| is specified if the upload
   // follows an observed submission event.
-  void StartUploadProcess(scoped_ptr<FormStructure> form_structure,
+  void StartUploadProcess(std::unique_ptr<FormStructure> form_structure,
                           const base::TimeTicks& timestamp,
                           bool observed_submission);
 
@@ -278,7 +278,7 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   void OnDidGetUploadDetails(
       AutofillClient::PaymentsRpcResult result,
       const base::string16& context_token,
-      scoped_ptr<base::DictionaryValue> legal_message) override;
+      std::unique_ptr<base::DictionaryValue> legal_message) override;
   void OnDidUploadCard(AutofillClient::PaymentsRpcResult result) override;
 
   // Saves risk data in |unmasking_risk_data_| and calls UnmaskCard if the user
@@ -342,7 +342,7 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   // Creates a FormStructure using the FormData received from the renderer. Will
   // return an empty scoped_ptr if the data should not be processed for upload
   // or personal data.
-  scoped_ptr<FormStructure> ValidateSubmittedForm(const FormData& form);
+  std::unique_ptr<FormStructure> ValidateSubmittedForm(const FormData& form);
 
   // Fills |form_structure| cached element corresponding to |form|.
   // Returns false if the cached element was not found.
@@ -416,6 +416,24 @@ class AutofillManager : public AutofillDownloadManager::Observer,
       const std::string& app_locale,
       FormStructure* submitted_form);
 
+  // Uses context about previous and next fields to select the appropriate type
+  // for fields with ambiguous upload types.
+  static void DisambiguateUploadTypes(FormStructure* form);
+
+  // Disambiguates address field upload types.
+  static void DisambiguateAddressUploadTypes(FormStructure* form,
+                                             size_t current_index);
+
+  // Disambiguates phone field upload types.
+  static void DisambiguatePhoneUploadTypes(FormStructure* form,
+                                           size_t current_index);
+
+  // Disambiguates name field upload types.
+  static void DisambiguateNameUploadTypes(
+      FormStructure* form,
+      size_t current_index,
+      const ServerFieldTypeSet& upload_types);
+
 #ifdef ENABLE_FORM_DEBUG_DUMP
   // Dumps the cached forms to a file on disk.
   void DumpAutofillData(bool imported_cc) const;
@@ -428,7 +446,7 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   AutofillClient* const client_;
 
   // Handles Payments service requests.
-  scoped_ptr<payments::PaymentsClient> payments_client_;
+  std::unique_ptr<payments::PaymentsClient> payments_client_;
 
   std::string app_locale_;
 
@@ -438,18 +456,19 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   // May be NULL.  NULL indicates OTR.
   PersonalDataManager* personal_data_;
 
-  std::list<std::string> autofilled_form_signatures_;
+  std::deque<std::string> autofilled_form_signatures_;
 
   // Handles queries and uploads to Autofill servers. Will be NULL if
   // the download manager functionality is disabled.
-  scoped_ptr<AutofillDownloadManager> download_manager_;
+  std::unique_ptr<AutofillDownloadManager> download_manager_;
 
   // Handles single-field autocomplete form data.
-  scoped_ptr<AutocompleteHistoryManager> autocomplete_history_manager_;
+  std::unique_ptr<AutocompleteHistoryManager> autocomplete_history_manager_;
 
   // Utilities for logging form events.
-  scoped_ptr<AutofillMetrics::FormEventLogger> address_form_event_logger_;
-  scoped_ptr<AutofillMetrics::FormEventLogger> credit_card_form_event_logger_;
+  std::unique_ptr<AutofillMetrics::FormEventLogger> address_form_event_logger_;
+  std::unique_ptr<AutofillMetrics::FormEventLogger>
+      credit_card_form_event_logger_;
 
   // Have we logged whether Autofill is enabled for this page load?
   bool has_logged_autofill_enabled_;
@@ -474,7 +493,7 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   ScopedVector<FormStructure> form_structures_;
 
   // A copy of the currently interacted form data.
-  scoped_ptr<FormData> pending_form_data_;
+  std::unique_ptr<FormData> pending_form_data_;
 
   // Collected information about a pending unmask request, and data about the
   // form.
@@ -517,6 +536,7 @@ class AutofillManager : public AutofillDownloadManager::Observer,
                            DeterminePossibleFieldTypesForUpload);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
                            DeterminePossibleFieldTypesForUploadStressTest);
+  FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest, DisambiguateUploadTypes);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
                            DisabledAutofillDispatchesError);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, AddressFilledFormEvents);

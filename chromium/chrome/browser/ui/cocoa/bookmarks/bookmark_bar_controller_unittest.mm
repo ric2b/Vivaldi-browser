@@ -57,12 +57,10 @@ using bookmarks::BookmarkNode;
 
 - (id)initWithBrowser:(Browser*)browser
          initialWidth:(CGFloat)initialWidth
-             delegate:(id<BookmarkBarControllerDelegate>)delegate
-       resizeDelegate:(id<ViewResizer>)resizeDelegate {
+             delegate:(id<BookmarkBarControllerDelegate>)delegate {
   if ((self = [super initWithBrowser:browser
                         initialWidth:initialWidth
-                            delegate:delegate
-                      resizeDelegate:resizeDelegate])) {
+                            delegate:delegate])) {
     [self setStateAnimationsEnabled:NO];
     [self setInnerContentAnimationsEnabled:NO];
   }
@@ -190,12 +188,10 @@ using bookmarks::BookmarkNode;
 
 - (id)initWithBrowser:(Browser*)browser
          initialWidth:(CGFloat)initialWidth
-             delegate:(id<BookmarkBarControllerDelegate>)delegate
-       resizeDelegate:(id<ViewResizer>)resizeDelegate {
+             delegate:(id<BookmarkBarControllerDelegate>)delegate {
   if ((self = [super initWithBrowser:browser
                         initialWidth:initialWidth
-                            delegate:delegate
-                      resizeDelegate:resizeDelegate])) {
+                            delegate:delegate])) {
     dragDataNode_ = NULL;
   }
   return self;
@@ -231,6 +227,8 @@ class FakeTheme : public ui::ThemeProvider {
       const override {
     return NULL;
   }
+  bool InIncognitoMode() const override { return false; }
+  bool HasCustomColor(int id) const override { return false; }
   NSImage* GetNSImageNamed(int id) const override { return nil; }
   NSColor* GetNSImageColorNamed(int id) const override { return nil; }
   NSColor* GetNSColor(int id) const override { return color_.get(); }
@@ -310,8 +308,14 @@ class BookmarkBarControllerTestBase : public CocoaProfileTest {
   }
 
   void InstallAndToggleBar(BookmarkBarController* bar) {
-    // Force loading of the nib.
-    [bar view];
+    // In OSX 10.10, the owner of a nib file is retain/autoreleased during the
+    // initialization of the nib. Wrapping the nib loading in an
+    // autoreleasepool ensures that tests can control the destruction timing of
+    // the controller.
+    @autoreleasepool {
+      // Forces loading of the nib.
+      [[bar controlledView] setResizeDelegate:resizeDelegate_];
+    }
     // Awkwardness to look like we've been installed.
     for (NSView* subView in [parent_view_ subviews])
       [subView removeFromSuperview];
@@ -340,18 +344,10 @@ class BookmarkBarControllerTest : public BookmarkBarControllerTestBase {
     ASSERT_TRUE(browser());
     AddCommandLineSwitches();
 
-    // In OSX 10.10, the owner of a nib file is retain/autoreleased during the
-    // initialization of the nib. Wrapping the constructor in an
-    // autoreleasepool ensures that tests can control the destruction timing of
-    // |bar_|.
-    @autoreleasepool {
-      bar_.reset([[BookmarkBarControllerNoOpen alloc]
-          initWithBrowser:browser()
-             initialWidth:NSWidth([parent_view_ frame])
-                 delegate:nil
-           resizeDelegate:resizeDelegate_.get()]);
-    }
-
+    bar_.reset([[BookmarkBarControllerNoOpen alloc]
+        initWithBrowser:browser()
+           initialWidth:NSWidth([parent_view_ frame])
+               delegate:nil]);
     InstallAndToggleBar(bar_.get());
 
     // AppKit methods are not guaranteed to complete synchronously. Some of them
@@ -506,12 +502,10 @@ TEST_F(BookmarkBarControllerTest, StateChanges) {
 // Make sure we're watching for frame change notifications.
 TEST_F(BookmarkBarControllerTest, FrameChangeNotification) {
   base::scoped_nsobject<BookmarkBarControllerTogglePong> bar;
-  bar.reset(
-    [[BookmarkBarControllerTogglePong alloc]
-          initWithBrowser:browser()
-             initialWidth:100  // arbitrary
-                 delegate:nil
-           resizeDelegate:resizeDelegate_.get()]);
+  bar.reset([[BookmarkBarControllerTogglePong alloc]
+      initWithBrowser:browser()
+         initialWidth:100  // arbitrary
+             delegate:nil]);
   InstallAndToggleBar(bar.get());
 
   // Send a frame did change notification for the pong's view.
@@ -738,7 +732,7 @@ TEST_F(BookmarkBarControllerTest, MenuForFolderNode) {
 // Confirm openBookmark: forwards the request to the controller's delegate
 TEST_F(BookmarkBarControllerTest, OpenBookmark) {
   GURL gurl("http://walla.walla.ding.dong.com");
-  scoped_ptr<BookmarkNode> node(new BookmarkNode(gurl));
+  std::unique_ptr<BookmarkNode> node(new BookmarkNode(gurl));
 
   base::scoped_nsobject<BookmarkButtonCell> cell(
       [[BookmarkButtonCell alloc] init]);
@@ -1221,7 +1215,8 @@ TEST_F(BookmarkBarControllerTest, TestClearOnDealloc) {
     EXPECT_TRUE([button action]);
   }
 
-  // This will dealloc....
+  // This should dealloc. In production code, this is typically achieved more
+  // reliably by using -[HasWeakBrowserPointer browserWillBeDestroyed].
   bar_.reset();
 
   // Make sure that everything is cleared.
@@ -1683,13 +1678,12 @@ public:
 
     resizeDelegate_.reset([[ViewResizerPong alloc] init]);
     NSRect parent_frame = NSMakeRect(0, 0, 800, 50);
-    bar_.reset(
-               [[BookmarkBarControllerOpenAllPong alloc]
-                initWithBrowser:browser()
-                   initialWidth:NSWidth(parent_frame)
-                       delegate:nil
-                 resizeDelegate:resizeDelegate_.get()]);
-    [bar_ view];
+    bar_.reset([[BookmarkBarControllerOpenAllPong alloc]
+        initWithBrowser:browser()
+           initialWidth:NSWidth(parent_frame)
+               delegate:nil]);
+    // Forces loading of the nib.
+    [[bar_ controlledView] setResizeDelegate:resizeDelegate_];
     // Awkwardness to look like we've been installed.
     [parent_view_ addSubview:[bar_ view]];
     NSRect frame = [[[bar_ view] superview] frame];
@@ -1752,15 +1746,13 @@ class BookmarkBarControllerNotificationTest : public CocoaProfileTest {
     NSRect parent_frame = NSMakeRect(0, 0, 800, 50);
     parent_view_.reset([[NSView alloc] initWithFrame:parent_frame]);
     [parent_view_ setHidden:YES];
-    bar_.reset(
-      [[BookmarkBarControllerNotificationPong alloc]
-          initWithBrowser:browser()
-             initialWidth:NSWidth(parent_frame)
-                 delegate:nil
-           resizeDelegate:resizeDelegate_.get()]);
+    bar_.reset([[BookmarkBarControllerNotificationPong alloc]
+        initWithBrowser:browser()
+           initialWidth:NSWidth(parent_frame)
+               delegate:nil]);
 
-    // Force loading of the nib.
-    [bar_ view];
+    // Forces loading of the nib.
+    [[bar_ controlledView] setResizeDelegate:resizeDelegate_];
     // Awkwardness to look like we've been installed.
     [parent_view_ addSubview:[bar_ view]];
     NSRect frame = [[[bar_ view] superview] frame];
@@ -1814,12 +1806,10 @@ class BookmarkBarControllerDragDropTest : public BookmarkBarControllerTestBase {
     BookmarkBarControllerTestBase::SetUp();
     ASSERT_TRUE(browser());
 
-    bar_.reset(
-               [[BookmarkBarControllerDragData alloc]
-                initWithBrowser:browser()
-                   initialWidth:NSWidth([parent_view_ frame])
-                       delegate:nil
-                 resizeDelegate:resizeDelegate_.get()]);
+    bar_.reset([[BookmarkBarControllerDragData alloc]
+        initWithBrowser:browser()
+           initialWidth:NSWidth([parent_view_ frame])
+               delegate:nil]);
     InstallAndToggleBar(bar_.get());
   }
 };

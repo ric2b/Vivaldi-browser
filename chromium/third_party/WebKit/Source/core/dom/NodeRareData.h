@@ -31,33 +31,29 @@
 
 namespace blink {
 
-class NodeMutationObserverData final : public NoBaseWillBeGarbageCollected<NodeMutationObserverData> {
+class NodeMutationObserverData final : public GarbageCollected<NodeMutationObserverData> {
     WTF_MAKE_NONCOPYABLE(NodeMutationObserverData);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(NodeMutationObserverData);
 public:
-    WillBeHeapVector<OwnPtrWillBeMember<MutationObserverRegistration>> registry;
-    WillBeHeapHashSet<RawPtrWillBeMember<MutationObserverRegistration>> transientRegistry;
+    HeapVector<Member<MutationObserverRegistration>> registry;
+    HeapHashSet<Member<MutationObserverRegistration>> transientRegistry;
 
-    static PassOwnPtrWillBeRawPtr<NodeMutationObserverData> create()
+    static RawPtr<NodeMutationObserverData> create()
     {
-        return adoptPtrWillBeNoop(new NodeMutationObserverData);
+        return new NodeMutationObserverData;
     }
 
     DEFINE_INLINE_TRACE()
     {
-#if ENABLE(OILPAN)
         visitor->trace(registry);
         visitor->trace(transientRegistry);
-#endif
     }
 
 private:
     NodeMutationObserverData() { }
 };
 
-class NodeRareData : public NoBaseWillBeGarbageCollectedFinalized<NodeRareData>, public NodeRareDataBase {
+class NodeRareData : public GarbageCollectedFinalized<NodeRareData>, public NodeRareDataBase {
     WTF_MAKE_NONCOPYABLE(NodeRareData);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(NodeRareData);
 public:
     static NodeRareData* create(LayoutObject* layoutObject)
     {
@@ -82,12 +78,11 @@ public:
     }
 
     unsigned connectedSubframeCount() const { return m_connectedFrameCount; }
-    void incrementConnectedSubframeCount(unsigned amount);
-    void decrementConnectedSubframeCount(unsigned amount)
+    void incrementConnectedSubframeCount();
+    void decrementConnectedSubframeCount()
     {
-        ASSERT(m_connectedFrameCount);
-        ASSERT(amount <= m_connectedFrameCount);
-        m_connectedFrameCount -= amount;
+        DCHECK(m_connectedFrameCount);
+        --m_connectedFrameCount;
     }
 
     bool hasElementFlag(ElementFlags mask) const { return m_elementFlags & mask; }
@@ -118,8 +113,8 @@ protected:
     { }
 
 private:
-    OwnPtrWillBeMember<NodeListsNodeData> m_nodeLists;
-    OwnPtrWillBeMember<NodeMutationObserverData> m_mutationObserverData;
+    Member<NodeListsNodeData> m_nodeLists;
+    Member<NodeMutationObserverData> m_mutationObserverData;
 
     unsigned m_connectedFrameCount : ConnectedFrameCountBits;
     unsigned m_elementFlags : NumberOfElementFlags;

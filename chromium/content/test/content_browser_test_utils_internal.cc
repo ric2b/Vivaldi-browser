@@ -16,13 +16,13 @@
 #include "base/thread_task_runner_handle.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
-#include "content/browser/compositor/delegated_frame_host.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
+#include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_throttle.h"
@@ -242,9 +242,11 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
   for (auto& legend_entry : legend) {
     SiteInstanceImpl* site_instance =
         static_cast<SiteInstanceImpl*>(legend_entry.second);
+    std::string description = site_instance->GetSiteURL().spec();
+    if (site_instance->is_default_subframe_site_instance())
+      description = "default subframe process";
     base::StringAppendF(&result, "\n%s%s = %s", prefix,
-                        legend_entry.first.c_str(),
-                        site_instance->GetSiteURL().spec().c_str());
+                        legend_entry.first.c_str(), description.c_str());
     // Highlight some exceptionable conditions.
     if (site_instance->active_frame_count() == 0)
       result.append(" (active_frame_count == 0)");
@@ -313,7 +315,7 @@ void SurfaceHitTestReadyNotifier::WaitForSurfaceReady() {
   root_surface_id_ = target_view_->FrameConnectorForTesting()
                          ->GetRootRenderWidgetHostViewForTesting()
                          ->SurfaceIdForTesting();
-  if (ContainsSurfaceId())
+  if (ContainsSurfaceId(root_surface_id_))
     return;
 
   while (true) {
@@ -326,17 +328,19 @@ void SurfaceHitTestReadyNotifier::WaitForSurfaceReady() {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
     run_loop.Run();
-    if (ContainsSurfaceId())
+    if (ContainsSurfaceId(root_surface_id_))
       break;
   }
 }
 
-bool SurfaceHitTestReadyNotifier::ContainsSurfaceId() {
-  if (root_surface_id_.is_null())
+bool SurfaceHitTestReadyNotifier::ContainsSurfaceId(
+    cc::SurfaceId container_surface_id) {
+  if (container_surface_id.is_null())
     return false;
-  for (cc::SurfaceId id : surface_manager_->GetSurfaceForId(root_surface_id_)
-                              ->referenced_surfaces()) {
-    if (id == target_view_->SurfaceIdForTesting())
+  for (cc::SurfaceId id :
+       surface_manager_->GetSurfaceForId(container_surface_id)
+           ->referenced_surfaces()) {
+    if (id == target_view_->SurfaceIdForTesting() || ContainsSurfaceId(id))
       return true;
   }
   return false;

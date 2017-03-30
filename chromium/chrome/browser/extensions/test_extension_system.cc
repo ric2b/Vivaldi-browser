@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/extensions/blacklist.h"
 #include "chrome/browser/extensions/chrome_app_sorting.h"
 #include "chrome/browser/extensions/extension_management.h"
@@ -25,6 +26,7 @@
 #include "extensions/browser/quota_service.h"
 #include "extensions/browser/runtime_data.h"
 #include "extensions/browser/state_store.h"
+#include "extensions/browser/value_store/test_value_store_factory.h"
 #include "extensions/browser/value_store/testing_value_store.h"
 
 using content::BrowserThread;
@@ -33,11 +35,10 @@ namespace extensions {
 
 TestExtensionSystem::TestExtensionSystem(Profile* profile)
     : profile_(profile),
-      value_store_(NULL),
+      store_factory_(new TestValueStoreFactory()),
       info_map_(new InfoMap()),
       quota_service_(new QuotaService()),
-      app_sorting_(new ChromeAppSorting(profile_)) {
-}
+      app_sorting_(new ChromeAppSorting(profile_)) {}
 
 TestExtensionSystem::~TestExtensionSystem() {
 }
@@ -51,11 +52,8 @@ ExtensionService* TestExtensionSystem::CreateExtensionService(
     const base::CommandLine* command_line,
     const base::FilePath& install_directory,
     bool autoupdate_enabled) {
-  // The ownership of |value_store_| is immediately transferred to state_store_,
-  // but we keep a naked pointer to the TestingValueStore.
-  scoped_ptr<TestingValueStore> value_store(new TestingValueStore());
-  value_store_ = value_store.get();
-  state_store_.reset(new StateStore(profile_, std::move(value_store)));
+  state_store_.reset(new StateStore(
+      profile_, store_factory_, ValueStoreFrontend::BackendType::RULES, false));
   management_policy_.reset(new ManagementPolicy());
   management_policy_->RegisterProviders(
       ExtensionManagementFactory::GetForBrowserContext(profile_)
@@ -105,6 +103,10 @@ StateStore* TestExtensionSystem::rules_store() {
   return state_store_.get();
 }
 
+scoped_refptr<ValueStoreFactory> TestExtensionSystem::store_factory() {
+  return store_factory_;
+}
+
 InfoMap* TestExtensionSystem::info_map() { return info_map_.get(); }
 
 QuotaService* TestExtensionSystem::quota_service() {
@@ -123,7 +125,7 @@ ContentVerifier* TestExtensionSystem::content_verifier() {
   return NULL;
 }
 
-scoped_ptr<ExtensionSet> TestExtensionSystem::GetDependentExtensions(
+std::unique_ptr<ExtensionSet> TestExtensionSystem::GetDependentExtensions(
     const Extension* extension) {
   return extension_service()->shared_module_service()->GetDependentExtensions(
       extension);
@@ -134,10 +136,16 @@ void TestExtensionSystem::InstallUpdate(const std::string& extension_id,
   NOTREACHED();
 }
 
+TestingValueStore* TestExtensionSystem::value_store() {
+  // These tests use TestingValueStore in a way that ensures it only ever mints
+  // instances of TestingValueStore.
+  return static_cast<TestingValueStore*>(store_factory_->LastCreatedStore());
+}
+
 // static
-scoped_ptr<KeyedService> TestExtensionSystem::Build(
+std::unique_ptr<KeyedService> TestExtensionSystem::Build(
     content::BrowserContext* profile) {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new TestExtensionSystem(static_cast<Profile*>(profile)));
 }
 

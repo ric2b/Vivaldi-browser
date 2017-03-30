@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "net/base/net_errors.h"
 #include "remoting/base/rsa_key_pair.h"
 #include "remoting/protocol/authenticator_test_base.h"
@@ -17,6 +18,7 @@
 #include "remoting/protocol/third_party_client_authenticator.h"
 #include "remoting/protocol/third_party_host_authenticator.h"
 #include "remoting/protocol/token_validator.h"
+#include "remoting/protocol/v2_authenticator.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/webrtc/libjingle/xmllite/xmlelement.h"
@@ -42,16 +44,16 @@ namespace remoting {
 namespace protocol {
 
 class ThirdPartyAuthenticatorTest : public AuthenticatorTestBase {
-  class FakeTokenFetcher : public ThirdPartyClientAuthenticator::TokenFetcher {
+  class FakeTokenFetcher {
    public:
     void FetchThirdPartyToken(
-        const GURL& token_url,
+        const std::string& token_url,
         const std::string& scope,
-        const TokenFetchedCallback& token_fetched_callback) override {
-     ASSERT_EQ(token_url.spec(), kTokenUrl);
-     ASSERT_EQ(scope, kTokenScope);
-     ASSERT_FALSE(token_fetched_callback.is_null());
-     on_token_fetched_ = token_fetched_callback;
+        const ThirdPartyTokenFetchedCallback& token_fetched_callback) {
+      ASSERT_EQ(token_url, kTokenUrl);
+      ASSERT_EQ(scope, kTokenScope);
+      ASSERT_FALSE(token_fetched_callback.is_null());
+      on_token_fetched_ = token_fetched_callback;
     }
 
     void OnTokenFetched(const std::string& token,
@@ -61,7 +63,7 @@ class ThirdPartyAuthenticatorTest : public AuthenticatorTestBase {
     }
 
    private:
-    TokenFetchedCallback on_token_fetched_;
+    ThirdPartyTokenFetchedCallback on_token_fetched_;
   };
 
   class FakeTokenValidator : public TokenValidator {
@@ -100,17 +102,17 @@ class ThirdPartyAuthenticatorTest : public AuthenticatorTestBase {
 
  protected:
   void InitAuthenticators() {
-    scoped_ptr<TokenValidator> token_validator(new FakeTokenValidator());
-    token_validator_ = static_cast<FakeTokenValidator*>(token_validator.get());
+    token_validator_ = new FakeTokenValidator();
     host_.reset(new ThirdPartyHostAuthenticator(
-        host_cert_, key_pair_, std::move(token_validator)));
-    scoped_ptr<ThirdPartyClientAuthenticator::TokenFetcher>
-        token_fetcher(new FakeTokenFetcher());
-    token_fetcher_ = static_cast<FakeTokenFetcher*>(token_fetcher.get());
-    client_.reset(new ThirdPartyClientAuthenticator(std::move(token_fetcher)));
+        base::Bind(&V2Authenticator::CreateForHost, host_cert_, key_pair_),
+        base::WrapUnique(token_validator_)));
+    client_.reset(new ThirdPartyClientAuthenticator(
+        base::Bind(&V2Authenticator::CreateForClient),
+        base::Bind(&FakeTokenFetcher::FetchThirdPartyToken,
+                   base::Unretained(&token_fetcher_))));
   }
 
-  FakeTokenFetcher* token_fetcher_;
+  FakeTokenFetcher token_fetcher_;
   FakeTokenValidator* token_validator_;
 
  private:
@@ -121,11 +123,9 @@ TEST_F(ThirdPartyAuthenticatorTest, SuccessfulAuth) {
   ASSERT_NO_FATAL_FAILURE(InitAuthenticators());
   ASSERT_NO_FATAL_FAILURE(RunHostInitiatedAuthExchange());
   ASSERT_EQ(Authenticator::PROCESSING_MESSAGE, client_->state());
-  ASSERT_NO_FATAL_FAILURE(token_fetcher_->OnTokenFetched(
-      kToken, kSharedSecret));
+  ASSERT_NO_FATAL_FAILURE(token_fetcher_.OnTokenFetched(kToken, kSharedSecret));
   ASSERT_EQ(Authenticator::PROCESSING_MESSAGE, host_->state());
-  ASSERT_NO_FATAL_FAILURE(
-      token_validator_->OnTokenValidated(kSharedSecret));
+  ASSERT_NO_FATAL_FAILURE(token_validator_->OnTokenValidated(kSharedSecret));
 
   // Both sides have finished.
   ASSERT_EQ(Authenticator::ACCEPTED, host_->state());
@@ -148,8 +148,7 @@ TEST_F(ThirdPartyAuthenticatorTest, ClientNoSecret) {
   ASSERT_NO_FATAL_FAILURE(InitAuthenticators());
   ASSERT_NO_FATAL_FAILURE(RunHostInitiatedAuthExchange());
   ASSERT_EQ(Authenticator::PROCESSING_MESSAGE, client_->state());
-  ASSERT_NO_FATAL_FAILURE(
-      token_fetcher_->OnTokenFetched(kToken, std::string()));
+  ASSERT_NO_FATAL_FAILURE(token_fetcher_.OnTokenFetched(kToken, std::string()));
 
   // The end result is that the client rejected the connection, since it
   // couldn't fetch the secret.
@@ -160,7 +159,7 @@ TEST_F(ThirdPartyAuthenticatorTest, InvalidToken) {
   ASSERT_NO_FATAL_FAILURE(InitAuthenticators());
   ASSERT_NO_FATAL_FAILURE(RunHostInitiatedAuthExchange());
   ASSERT_EQ(Authenticator::PROCESSING_MESSAGE, client_->state());
-  ASSERT_NO_FATAL_FAILURE(token_fetcher_->OnTokenFetched(
+  ASSERT_NO_FATAL_FAILURE(token_fetcher_.OnTokenFetched(
       kToken, kSharedSecret));
   ASSERT_EQ(Authenticator::PROCESSING_MESSAGE, host_->state());
   ASSERT_NO_FATAL_FAILURE(token_validator_->OnTokenValidated(std::string()));
@@ -174,7 +173,7 @@ TEST_F(ThirdPartyAuthenticatorTest, CannotFetchToken) {
   ASSERT_NO_FATAL_FAILURE(RunHostInitiatedAuthExchange());
   ASSERT_EQ(Authenticator::PROCESSING_MESSAGE, client_->state());
   ASSERT_NO_FATAL_FAILURE(
-      token_fetcher_->OnTokenFetched(std::string(), std::string()));
+      token_fetcher_.OnTokenFetched(std::string(), std::string()));
 
   // The end result is that the client rejected the connection, since it
   // couldn't fetch the token.
@@ -186,8 +185,7 @@ TEST_F(ThirdPartyAuthenticatorTest, HostBadSecret) {
   ASSERT_NO_FATAL_FAILURE(InitAuthenticators());
   ASSERT_NO_FATAL_FAILURE(RunHostInitiatedAuthExchange());
   ASSERT_EQ(Authenticator::PROCESSING_MESSAGE, client_->state());
-  ASSERT_NO_FATAL_FAILURE(token_fetcher_->OnTokenFetched(
-      kToken, kSharedSecret));
+  ASSERT_NO_FATAL_FAILURE(token_fetcher_.OnTokenFetched(kToken, kSharedSecret));
   ASSERT_EQ(Authenticator::PROCESSING_MESSAGE, host_->state());
   ASSERT_NO_FATAL_FAILURE(
       token_validator_->OnTokenValidated(kSharedSecretBad));
@@ -201,7 +199,7 @@ TEST_F(ThirdPartyAuthenticatorTest, ClientBadSecret) {
   ASSERT_NO_FATAL_FAILURE(RunHostInitiatedAuthExchange());
   ASSERT_EQ(Authenticator::PROCESSING_MESSAGE, client_->state());
   ASSERT_NO_FATAL_FAILURE(
-      token_fetcher_->OnTokenFetched(kToken, kSharedSecretBad));
+      token_fetcher_.OnTokenFetched(kToken, kSharedSecretBad));
   ASSERT_EQ(Authenticator::PROCESSING_MESSAGE, host_->state());
   ASSERT_NO_FATAL_FAILURE(
       token_validator_->OnTokenValidated(kSharedSecret));

@@ -27,6 +27,10 @@
 #include "mojo/public/c/system/types.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
+namespace base {
+class PortProvider;
+}
+
 namespace mojo {
 namespace edk {
 
@@ -66,6 +70,9 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   // Creates a message pipe endpoint and connects it to a pipe the parent has
   // associated with |token|.
   ScopedMessagePipeHandle CreateChildMessagePipe(const std::string& token);
+
+  // Sets the mach port provider for this process.
+  void SetMachPortProvider(base::PortProvider* port_provider);
 
   MojoHandle AddDispatcher(scoped_refptr<Dispatcher> dispatcher);
 
@@ -132,6 +139,11 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                       MojoDeadline deadline,
                       uint32_t* result_index,
                       MojoHandleSignalsState* signals_states);
+  MojoResult Watch(MojoHandle handle,
+                   MojoHandleSignals signals,
+                   MojoWatchCallback callback,
+                   uintptr_t context);
+  MojoResult CancelWatch(MojoHandle handle, uintptr_t context);
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/wait_set.h":
@@ -165,6 +177,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                          MojoHandle* handles,
                          uint32_t* num_handles,
                          MojoReadMessageFlags flags);
+  MojoResult FuseMessagePipes(MojoHandle handle0, MojoHandle handle1);
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/data_pipe.h":

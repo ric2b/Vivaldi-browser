@@ -64,7 +64,8 @@ class ChildProcessResource : public Resource {
   base::string16 GetLocalizedTitle() const;
 
   static void ConnectResourceReporterOnIOThread(
-      int id, mojo::InterfaceRequest<ResourceUsageReporter> req);
+      int id,
+      mojo::InterfaceRequest<mojom::ResourceUsageReporter> req);
 
   int process_type_;
   base::string16 name_;
@@ -87,7 +88,8 @@ gfx::ImageSkia* ChildProcessResource::default_icon_ = NULL;
 
 // static
 void ChildProcessResource::ConnectResourceReporterOnIOThread(
-    int id, mojo::InterfaceRequest<ResourceUsageReporter> req) {
+    int id,
+    mojo::InterfaceRequest<mojom::ResourceUsageReporter> req) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   content::BrowserChildProcessHost* host =
       content::BrowserChildProcessHost::FromID(id);
@@ -118,8 +120,8 @@ ChildProcessResource::ChildProcessResource(int process_type,
     default_icon_ = rb.GetImageSkiaNamed(IDR_PLUGINS_FAVICON);
     // TODO(jabdelmalek): use different icon for web workers.
   }
-  ResourceUsageReporterPtr service;
-  mojo::InterfaceRequest<ResourceUsageReporter> request =
+  mojom::ResourceUsageReporterPtr service;
+  mojo::InterfaceRequest<mojom::ResourceUsageReporter> request =
       mojo::GetProxy(&service);
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
@@ -159,7 +161,6 @@ Resource::Type ChildProcessResource::GetType() const {
   // Translate types to Resource::Type, since ChildProcessData's type
   // is not available for all TaskManager resources.
   switch (process_type_) {
-    case content::PROCESS_TYPE_PLUGIN:
     case content::PROCESS_TYPE_PPAPI_PLUGIN:
     case content::PROCESS_TYPE_PPAPI_BROKER:
       return Resource::PLUGIN;
@@ -191,7 +192,6 @@ base::string16 ChildProcessResource::GetLocalizedTitle() const {
   base::string16 title = name_;
   if (title.empty()) {
     switch (process_type_) {
-      case content::PROCESS_TYPE_PLUGIN:
       case content::PROCESS_TYPE_PPAPI_PLUGIN:
       case content::PROCESS_TYPE_PPAPI_BROKER:
         title = l10n_util::GetStringUTF16(IDS_TASK_MANAGER_UNKNOWN_PLUGIN_NAME);
@@ -213,7 +213,6 @@ base::string16 ChildProcessResource::GetLocalizedTitle() const {
       return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_UTILITY_PREFIX, title);
     case content::PROCESS_TYPE_GPU:
       return l10n_util::GetStringUTF16(IDS_TASK_MANAGER_GPU_PREFIX);
-    case content::PROCESS_TYPE_PLUGIN:
     case content::PROCESS_TYPE_PPAPI_PLUGIN:
       return l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_PLUGIN_PREFIX, title);
     case content::PROCESS_TYPE_PPAPI_BROKER:

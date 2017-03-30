@@ -18,6 +18,8 @@ namespace blimp {
 
 // Multiplexing BlimpMessageProcessor which routes BlimpMessages to message
 // processors based on |message.type|.
+// BlimpMessageDemultiplexer is created on the UI thread, and then used and
+// destroyed on the IO thread.
 class BLIMP_NET_EXPORT BlimpMessageDemultiplexer
     : public BlimpMessageProcessor {
  public:
@@ -32,7 +34,7 @@ class BLIMP_NET_EXPORT BlimpMessageDemultiplexer
   void AddProcessor(BlimpMessage::Type type, BlimpMessageProcessor* handler);
 
   // BlimpMessageProcessor implementation.
-  void ProcessMessage(scoped_ptr<BlimpMessage> message,
+  void ProcessMessage(std::unique_ptr<BlimpMessage> message,
                       const net::CompletionCallback& callback) override;
 
  private:

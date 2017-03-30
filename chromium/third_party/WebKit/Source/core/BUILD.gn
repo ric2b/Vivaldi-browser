@@ -42,7 +42,6 @@ if (remove_webcore_debug_symbols) {
 # Config for code that builds as part of core.
 config("config") {
   defines = [ "BLINK_CORE_IMPLEMENTATION=1" ]
-  configs = [ ":link_core_modules_separately" ]
 
   cflags = []
   if (is_win) {
@@ -51,14 +50,6 @@ config("config") {
   }
 }
 core_config_add += [ ":config" ]
-
-# Config for linking core and modules separately in component builds.
-# Required for CoreExport.h and ModulesExport.h.
-config("link_core_modules_separately") {
-  if (is_component_build) {
-    defines = [ "LINK_CORE_MODULES_SEPARATELY=1" ]
-  }
-}
 
 config("core_include_dirs") {
   include_dirs = [
@@ -84,7 +75,6 @@ source_set("generated") {
     "//third_party/libwebp",
     "//third_party/libxml",
     "//third_party/libxslt",
-    "//third_party/npapi",
     "//third_party/qcms",
     "//third_party/sqlite",
 
@@ -111,12 +101,12 @@ source_set("prerequisites") {
     "//third_party/libwebp",
     "//third_party/libxml",
     "//third_party/libxslt",
-    "//third_party/npapi",
     "//third_party/ots",
     "//third_party/qcms",
     "//third_party/snappy",
     "//third_party/sqlite",
     "//third_party/zlib",
+    "//ui/gfx/geometry",
     "//url",
     "//v8",
   ]
@@ -165,7 +155,6 @@ component("core") {
     "//skia",
     "//third_party/WebKit/Source/platform",
     "//third_party/WebKit/Source/wtf",
-    "//third_party/npapi",
     "//third_party/qcms",
     "//url",
     "//v8",
@@ -185,10 +174,7 @@ component("core") {
     configs += [ "//build/config/win:no_incremental_linking" ]
   }
 
-  public_configs = [
-    ":core_include_dirs",
-    ":link_core_modules_separately",
-  ]
+  public_configs = [ ":core_include_dirs" ]
 }
 
 # GYP version: //third_party/WebKit/Source/core/core.gyp:webcore_dom
@@ -313,7 +299,6 @@ source_set("testing") {
   deps = [
     ":core",
     ":generated_testing_idls",
-    "//third_party/WebKit/Source/wtf:test_support",
   ]
 
   sources = generated_core_testing_dictionary_files + webcore_testing_files
@@ -427,6 +412,12 @@ source_set("core_generated") {
 
     # Generated from make_css_property_metadata.py
     "$blink_core_output_dir/CSSPropertyMetadata.cpp",
+
+    # Generated from make_cssom_types.py
+    "$blink_core_output_dir/CSSOMTypes.cpp",
+
+    # Generated from make_cssom_keywords.py
+    "$blink_core_output_dir/CSSOMKeywords.cpp",
   ]
 
   configs -= core_config_remove
@@ -446,7 +437,6 @@ source_set("core_generated") {
     "//third_party/libwebp",
     "//third_party/libxml",
     "//third_party/libxslt",
-    "//third_party/npapi",
     "//third_party/qcms",
     "//third_party/sqlite",
 
@@ -581,6 +571,7 @@ group("make_core_generated") {
     ":make_core_generated_css_property_names",
     ":make_core_generated_css_tokenizer_codepoints",
     ":make_core_generated_css_value_keywords",
+    ":make_core_generated_cssom_types",
     ":make_core_generated_event_factory",
     ":make_core_generated_event_names",
     ":make_core_generated_event_target_names",
@@ -657,6 +648,19 @@ css_properties("make_core_generated_style_builder") {
     "$blink_core_output_dir/StyleBuilder.cpp",
     "$blink_core_output_dir/StyleBuilderFunctions.h",
     "$blink_core_output_dir/StyleBuilderFunctions.cpp",
+  ]
+}
+
+# "CSSOMTypes" in make_core_generated from GYP.
+css_properties("make_core_generated_cssom_types") {
+  script = "../build/scripts/make_cssom_types.py"
+  other_inputs = [
+    "../build/scripts/templates/CSSOMKeywords.cpp.tmpl",
+    "../build/scripts/templates/CSSOMTypes.cpp.tmpl",
+  ]
+  outputs = [
+    "$blink_core_output_dir/CSSOMKeywords.cpp",
+    "$blink_core_output_dir/CSSOMTypes.cpp",
   ]
 }
 

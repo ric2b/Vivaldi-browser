@@ -199,7 +199,7 @@ StorageArea* InspectorDOMStorageAgent::findStorageArea(ErrorString* errorString,
     if (!m_page->mainFrame()->isLocalFrame())
         return nullptr;
 
-    OwnPtrWillBeRawPtr<InspectedFrames> inspectedFrames = InspectedFrames::create(m_page->deprecatedLocalMainFrame());
+    InspectedFrames* inspectedFrames = InspectedFrames::create(m_page->deprecatedLocalMainFrame());
     LocalFrame* frame = inspectedFrames->frameWithSecurityOrigin(securityOrigin);
     if (!frame) {
         if (errorString)
@@ -209,14 +209,14 @@ StorageArea* InspectorDOMStorageAgent::findStorageArea(ErrorString* errorString,
     targetFrame = frame;
 
     if (isLocalStorage)
-        return StorageNamespace::localStorageArea(frame->document()->securityOrigin());
+        return StorageNamespace::localStorageArea(frame->document()->getSecurityOrigin());
     StorageNamespace* sessionStorage = StorageNamespaceController::from(m_page)->sessionStorage();
     if (!sessionStorage) {
         if (errorString)
             *errorString = "SessionStorage is not supported";
         return nullptr;
     }
-    return sessionStorage->storageArea(frame->document()->securityOrigin());
+    return sessionStorage->storageArea(frame->document()->getSecurityOrigin());
 }
 
 } // namespace blink

@@ -34,33 +34,32 @@ class CSSImageGeneratorValue;
 
 class CORE_EXPORT StyleGeneratedImage final : public StyleImage {
 public:
-    static PassRefPtrWillBeRawPtr<StyleGeneratedImage> create(const CSSImageGeneratorValue& value)
+    static StyleGeneratedImage* create(const CSSImageGeneratorValue& value)
     {
-        return adoptRefWillBeNoop(new StyleGeneratedImage(value));
+        return new StyleGeneratedImage(value);
     }
 
     WrappedImagePtr data() const override { return m_imageGeneratorValue.get(); }
 
-    PassRefPtrWillBeRawPtr<CSSValue> cssValue() const override;
-    PassRefPtrWillBeRawPtr<CSSValue> computedCSSValue() const override;
+    CSSValue* cssValue() const override;
+    CSSValue* computedCSSValue() const override;
 
-    LayoutSize imageSize(const LayoutObject*, float multiplier) const override;
+    LayoutSize imageSize(const LayoutObject&, float multiplier, const LayoutSize& defaultObjectSize) const override;
     bool imageHasRelativeSize() const override { return !m_fixedSize; }
-    void computeIntrinsicDimensions(const LayoutObject*, FloatSize& intrinsicSize, FloatSize& intrinsicRatio) override;
     bool usesImageContainerSize() const override { return !m_fixedSize; }
     void addClient(LayoutObject*) override;
     void removeClient(LayoutObject*) override;
-    PassRefPtr<Image> image(const LayoutObject*, const IntSize&, float) const override;
-    bool knownToBeOpaque(const LayoutObject*) const override;
+    PassRefPtr<Image> image(const LayoutObject&, const IntSize&, float) const override;
+    bool knownToBeOpaque(const LayoutObject&) const override;
 
     DECLARE_VIRTUAL_TRACE();
 
 private:
     StyleGeneratedImage(const CSSImageGeneratorValue&);
 
-    // TODO(sashab): Replace this with <const CSSImageGeneratorValue> once RefPtrWillBeMember<>
+    // TODO(sashab): Replace this with <const CSSImageGeneratorValue> once Member<>
     // supports const types.
-    RefPtrWillBeMember<CSSImageGeneratorValue> m_imageGeneratorValue;
+    Member<CSSImageGeneratorValue> m_imageGeneratorValue;
     const bool m_fixedSize;
 };
 

@@ -161,6 +161,15 @@ DevToolsAPIImpl.prototype = {
     },
 
     /**
+     * @param {number} callId
+     * @param {string} script
+     */
+    evaluateForTestInFrontend: function(callId, script)
+    {
+        this._dispatchOnInspectorFrontendAPI("evaluateForTestInFrontend", [callId, script]);
+    },
+
+    /**
      * @param {!Array.<!{fileSystemName: string, rootURL: string, fileSystemPath: string}>} fileSystems
      */
     fileSystemsLoaded: function(fileSystems)
@@ -297,24 +306,6 @@ DevToolsAPIImpl.prototype = {
     streamWrite: function(id, chunk)
     {
         this._dispatchOnInspectorFrontendAPI("streamWrite", [id, chunk]);
-    },
-
-    frontendAPIAttached: function()
-    {
-        this._dispatchOnInspectorFrontendAPI("frontendAPIAttached", []);
-    },
-
-    frontendAPIDetached: function()
-    {
-        this._dispatchOnInspectorFrontendAPI("frontendAPIDetached", []);
-    },
-
-    /**
-     * @param {string} command
-     */
-    dispatchFrontendAPIMessage: function(command)
-    {
-        this._dispatchOnInspectorFrontendAPI("dispatchFrontendAPIMessage", [command]);
     }
 }
 
@@ -542,15 +533,6 @@ InspectorFrontendHostImpl.prototype = {
 
     /**
      * @override
-     * @param {string} message
-     */
-    sendFrontendAPINotification: function(message)
-    {
-        DevToolsAPI.sendMessageToEmbedder("sendFrontendAPINotification", [message], null);
-    },
-
-    /**
-     * @override
      */
     requestFileSystems: function()
     {
@@ -678,6 +660,14 @@ InspectorFrontendHostImpl.prototype = {
 
     /**
      * @override
+     */
+    readyForTest: function()
+    {
+        DevToolsAPI.sendMessageToEmbedder("readyForTest", [], null);
+    },
+
+    /**
+     * @override
      * @param {boolean} discoverUsbDevices
      * @param {boolean} portForwardingEnabled
      * @param {!Adb.PortForwardingConfig} portForwardingConfig
@@ -738,6 +728,14 @@ InspectorFrontendHostImpl.prototype = {
     },
 
     // Backward-compatible methods below this line --------------------------------------------
+
+    /**
+     * Support for legacy front-ends (<M50).
+     * @param {string} message
+     */
+    sendFrontendAPINotification: function(message)
+    {
+    },
 
     /**
      * Support for legacy front-ends (<M41).
@@ -966,8 +964,28 @@ function installObjectObserve()
 /**
  * @suppressGlobalPropertiesCheck
  */
+function sanitizeRemoteFrontendUrl()
+{
+    var queryParams = location.search;
+    if (!queryParams)
+        return;
+    var params = queryParams.substring(1).split("&");
+    for (var i = 0; i < params.length; ++i) {
+        var pair = params[i].split("=");
+        var name = pair.shift();
+        var value = pair.join("=");
+        if (name === "remoteFrontendUrl" && !value.startsWith("https://chrome-devtools-frontend.appspot.com/"))
+            location.search = "";
+    }
+}
+
+/**
+ * @suppressGlobalPropertiesCheck
+ */
 function installBackwardsCompatibility()
 {
+    sanitizeRemoteFrontendUrl();
+
     if (window.location.search.indexOf("remoteFrontend") === -1)
         return;
 
@@ -1006,6 +1024,11 @@ function installBackwardsCompatibility()
     var styleElement = window.document.createElement("style");
     styleElement.type = "text/css";
     styleElement.textContent = "html /deep/ * { min-width: 0; min-height: 0; }";
+
+    // Support for quirky border-image behavior (<M51), see:
+    // https://bugs.chromium.org/p/chromium/issues/detail?id=559258
+    styleElement.textContent += "\nhtml /deep/ .cm-breakpoint .CodeMirror-linenumber { border-style: solid !important; }";
+    styleElement.textContent += "\nhtml /deep/ .cm-breakpoint.cm-breakpoint-conditional .CodeMirror-linenumber { border-style: solid !important; }";
     window.document.head.appendChild(styleElement);
 
     // Support for legacy (<M49) frontends. Remove in M52.
@@ -1018,39 +1041,11 @@ function windowLoaded()
     installBackwardsCompatibility();
 }
 
+sanitizeRemoteFrontendUrl();
 if (window.document.head && (window.document.readyState === "complete" || window.document.readyState === "interactive"))
     installBackwardsCompatibility();
 else
     window.addEventListener("DOMContentLoaded", windowLoaded, false);
-
-// UITests ------------------------------------------------------------------
-
-if (window.domAutomationController) {
-    var uiTests = {};
-
-    uiTests._dispatchIfReady = function()
-    {
-        if (uiTests._testSuite && uiTests._pendingDispatchArgs) {
-            var args = uiTests._pendingDispatchArgs;
-            delete uiTests._pendingDispatchArgs;
-            uiTests._testSuite.dispatch(args);
-        }
-    }
-
-    uiTests.dispatchOnTestSuite = function(args)
-    {
-        uiTests._pendingDispatchArgs = args;
-        uiTests._dispatchIfReady();
-    };
-
-    uiTests.testSuiteReady = function(testSuiteConstructor)
-    {
-        uiTests._testSuite = testSuiteConstructor(window.domAutomationController);
-        uiTests._dispatchIfReady();
-    };
-
-    window.uiTests = uiTests;
-}
 
 })(window);
 

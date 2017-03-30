@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-module content;
+module content.mojom;
 
 interface TestMojoService {
   // Doesn't actually do anything, just responds.
   DoSomething() => ();
 
-  // Retrieve the requestor URL as seen by the test app providing this service.
-  GetRequestorURL() => (string url);
+  // Retrieve the requestor name as seen by the test app providing this service.
+  GetRequestorName() => (string name);
 };

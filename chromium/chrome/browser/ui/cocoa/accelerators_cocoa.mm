@@ -90,7 +90,7 @@ const struct AcceleratorMapping {
   {IDC_ZOOM_MINUS, NSCommandKeyMask, ui::VKEY_OEM_MINUS},
   {IDC_STOP, NSCommandKeyMask, ui::VKEY_OEM_PERIOD},
   {IDC_RELOAD, NSCommandKeyMask, ui::VKEY_R},
-  {IDC_RELOAD_IGNORING_CACHE, NSCommandKeyMask | NSShiftKeyMask, ui::VKEY_R},
+  {IDC_RELOAD_BYPASSING_CACHE, NSCommandKeyMask | NSShiftKeyMask, ui::VKEY_R},
   {IDC_PRESENTATION_MODE, NSCommandKeyMask | NSShiftKeyMask, ui::VKEY_F},
   {IDC_ZOOM_NORMAL, NSCommandKeyMask, ui::VKEY_0},
   {IDC_HOME, NSCommandKeyMask | NSShiftKeyMask, ui::VKEY_H},
@@ -106,7 +106,7 @@ const struct AcceleratorMapping {
 
 // Create a Cocoa platform accelerator given a cross platform |key_code| and
 // the |cocoa_modifiers|.
-scoped_ptr<ui::PlatformAccelerator> PlatformAcceleratorFromKeyCode(
+std::unique_ptr<ui::PlatformAccelerator> PlatformAcceleratorFromKeyCode(
     ui::KeyboardCode key_code,
     NSUInteger cocoa_modifiers) {
   unichar shifted_character;
@@ -116,7 +116,7 @@ scoped_ptr<ui::PlatformAccelerator> PlatformAcceleratorFromKeyCode(
   NSString* key_equivalent =
       [NSString stringWithFormat:@"%C", shifted_character];
 
-  return scoped_ptr<ui::PlatformAccelerator>(
+  return std::unique_ptr<ui::PlatformAccelerator>(
       new ui::PlatformAcceleratorCocoa(key_equivalent, cocoa_modifiers));
 }
 
@@ -127,7 +127,7 @@ ui::Accelerator AcceleratorFromKeyCode(ui::KeyboardCode key_code,
   int cross_platform_modifiers = ui::EventFlagsFromModifiers(cocoa_modifiers);
   ui::Accelerator accelerator(key_code, cross_platform_modifiers);
 
-  scoped_ptr<ui::PlatformAccelerator> platform_accelerator =
+  std::unique_ptr<ui::PlatformAccelerator> platform_accelerator =
       PlatformAcceleratorFromKeyCode(key_code, cocoa_modifiers);
   accelerator.set_platform_accelerator(std::move(platform_accelerator));
   return accelerator;

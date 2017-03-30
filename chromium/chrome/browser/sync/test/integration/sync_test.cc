@@ -47,7 +47,6 @@
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
@@ -81,12 +80,9 @@
 #include "net/base/load_flags.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/port_util.h"
-#include "net/cookies/cookie_monster.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "sync/engine/sync_scheduler_impl.h"
 #include "sync/protocol/sync.pb.h"
 #include "sync/test/fake_server/fake_server.h"
@@ -175,14 +171,6 @@ class EncryptionChecker : public SingleClientStatusChangeChecker {
 
   std::string GetDebugMessage() const override { return "Encryption"; }
 };
-
-void SetupNetworkCallback(
-    base::WaitableEvent* done,
-    net::URLRequestContextGetter* url_request_context_getter) {
-  url_request_context_getter->GetURLRequestContext()->
-      set_cookie_store(new net::CookieMonster(NULL, NULL));
-  done->Signal();
-}
 
 scoped_ptr<KeyedService> BuildFakeServerProfileInvalidationProvider(
     content::BrowserContext* context) {
@@ -432,6 +420,17 @@ Profile* SyncTest::GetProfile(int index) {
   return profiles_[index];
 }
 
+std::vector<Profile*> SyncTest::GetAllProfiles() {
+  std::vector<Profile*> profiles;
+  if (use_verifier()) {
+    profiles.push_back(verifier());
+  }
+  for (int i = 0; i < num_clients(); ++i) {
+    profiles.push_back(GetProfile(i));
+  }
+  return profiles;
+}
+
 Browser* SyncTest::GetBrowser(int index) {
   if (browsers_.empty())
     LOG(FATAL) << "SetupClients() has not yet been called.";
@@ -487,6 +486,14 @@ bool SyncTest::SetupClients() {
   invalidation_forwarders_.resize(num_clients_);
   sync_refreshers_.resize(num_clients_);
   fake_server_invalidation_services_.resize(num_clients_);
+
+  if (create_gaia_account_at_runtime_) {
+    CHECK(UsingExternalServers()) <<
+        "Cannot create Gaia accounts without external authentication servers";
+    if (!CreateGaiaAccount(username_, password_))
+      LOG(FATAL) << "Could not create Gaia account.";
+  }
+
   for (int i = 0; i < num_clients_; ++i) {
     CreateProfile(i);
   }
@@ -526,8 +533,6 @@ void SyncTest::InitializeProfile(int index, Profile* profile) {
   // already exist.
   ProfileSyncService* profile_sync_service =
       ProfileSyncServiceFactory::GetForProfile(GetProfile(index));
-
-  SetupNetwork(GetProfile(index)->GetRequestContext());
 
   if (server_type_ == IN_PROCESS_FAKE_SERVER) {
     // TODO(pvalenzuela): Run the fake server via EmbeddedTestServer.
@@ -593,22 +598,20 @@ void SyncTest::InitializeInvalidations(int index) {
 }
 
 bool SyncTest::SetupSync() {
-  if (create_gaia_account_at_runtime_) {
-    CHECK(UsingExternalServers()) <<
-        "Cannot create Gaia accounts without external authentication servers";
-    if (!CreateGaiaAccount(username_, password_))
-      LOG(FATAL) << "Could not create Gaia account.";
-  }
   // Create sync profiles and clients if they haven't already been created.
   if (profiles_.empty()) {
-    if (!SetupClients())
+    if (!SetupClients()) {
       LOG(FATAL) << "SetupClients() failed.";
+      return false;
+    }
   }
 
   // Sync each of the profiles.
   for (int i = 0; i < num_clients_; ++i) {
-    if (!GetClient(i)->SetupSync())
+    if (!GetClient(i)->SetupSync()) {
       LOG(FATAL) << "SetupSync() failed.";
+      return false;
+    }
   }
 
   // Because clients may modify sync data as part of startup (for example local
@@ -619,7 +622,10 @@ bool SyncTest::SetupSync() {
   // have to find their own way of waiting for an initial state if they really
   // need such guarantees.
   if (TestUsesSelfNotifications()) {
-    AwaitQuiescence();
+    if (!AwaitQuiescence()) {
+      LOG(FATAL) << "AwaitQuiescence() failed.";
+      return false;
+    }
   }
 
   // SyncRefresher is used instead of invalidations to notify other profiles to
@@ -1114,15 +1120,6 @@ void SyncTest::TriggerCreateSyncedBookmarks() {
             base::UTF16ToASCII(
                 browser()->tab_strip_model()->GetActiveWebContents()->
                     GetTitle()));
-}
-
-void SyncTest::SetupNetwork(net::URLRequestContextGetter* context_getter) {
-  base::WaitableEvent done(false, false);
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&SetupNetworkCallback, &done,
-                 make_scoped_refptr(context_getter)));
-  done.Wait();
 }
 
 fake_server::FakeServer* SyncTest::GetFakeServer() const {

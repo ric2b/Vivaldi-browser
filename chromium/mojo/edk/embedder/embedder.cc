@@ -54,6 +54,14 @@ void SetParentPipeHandle(ScopedPlatformHandle pipe) {
   internal::g_core->InitChild(std::move(pipe));
 }
 
+void SetParentPipeHandleFromCommandLine() {
+  ScopedPlatformHandle platform_channel =
+      PlatformChannelPair::PassClientHandleFromParentProcess(
+          *base::CommandLine::ForCurrentProcess());
+  CHECK(platform_channel.is_valid());
+  SetParentPipeHandle(std::move(platform_channel));
+}
+
 void Init() {
   internal::g_core = new Core();
 }
@@ -110,6 +118,13 @@ void ShutdownIPCSupport() {
       base::Bind(&ProcessDelegate::OnShutdownComplete,
                  base::Unretained(internal::g_process_delegate)));
 }
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+void SetMachPortProvider(base::PortProvider* port_provider) {
+  DCHECK(port_provider);
+  internal::g_core->SetMachPortProvider(port_provider);
+}
+#endif
 
 ScopedMessagePipeHandle CreateMessagePipe(
     ScopedPlatformHandle platform_handle) {

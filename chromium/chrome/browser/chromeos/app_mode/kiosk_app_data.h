@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/extensions/webstore_data_fetcher_delegate.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
 
@@ -48,8 +49,9 @@ class KioskAppData : public base::SupportsWeakPtr<KioskAppData>,
 
   KioskAppData(KioskAppDataDelegate* delegate,
                const std::string& app_id,
-               const std::string& user_id,
-               const GURL& update_url);
+               const AccountId& account_id,
+               const GURL& update_url,
+               const base::FilePath& cached_crx);
   ~KioskAppData() override;
 
   // Loads app data from cache. If there is no cached data, fetches it
@@ -73,7 +75,7 @@ class KioskAppData : public base::SupportsWeakPtr<KioskAppData>,
   bool IsFromWebStore() const;
 
   const std::string& app_id() const { return app_id_; }
-  const std::string& user_id() const { return user_id_; }
+  const AccountId& account_id() const { return account_id_; }
   const std::string& name() const { return name_; }
   const GURL& update_url() const { return update_url_; }
   const gfx::ImageSkia& icon() const { return icon_; }
@@ -125,7 +127,7 @@ class KioskAppData : public base::SupportsWeakPtr<KioskAppData>,
   // extensions::WebstoreDataFetcherDelegate overrides:
   void OnWebstoreRequestFailure() override;
   void OnWebstoreResponseParseSuccess(
-      scoped_ptr<base::DictionaryValue> webstore_data) override;
+      std::unique_ptr<base::DictionaryValue> webstore_data) override;
   void OnWebstoreResponseParseFailure(const std::string& error) override;
 
   // Helper function for testing for the existence of |key| in
@@ -137,7 +139,7 @@ class KioskAppData : public base::SupportsWeakPtr<KioskAppData>,
 
   // Extracts meta data from crx file when loading from Webstore and local
   // cache fails.
-  void MaybeLoadFromCrx();
+  void LoadFromCrx();
 
   void OnCrxLoadFinished(const CrxLoader* crx_loader);
 
@@ -145,13 +147,13 @@ class KioskAppData : public base::SupportsWeakPtr<KioskAppData>,
   Status status_;
 
   std::string app_id_;
-  std::string user_id_;
+  AccountId account_id_;
   std::string name_;
   GURL update_url_;
   gfx::ImageSkia icon_;
   std::string required_platform_version_;
 
-  scoped_ptr<extensions::WebstoreDataFetcher> webstore_fetcher_;
+  std::unique_ptr<extensions::WebstoreDataFetcher> webstore_fetcher_;
   base::FilePath icon_path_;
 
   base::FilePath crx_file_;

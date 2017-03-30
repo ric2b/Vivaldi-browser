@@ -87,12 +87,13 @@ IPC_MESSAGE_CONTROL2(ChromotingNetworkDaemonMsg_SetScreenResolution,
 
 // Serialized remoting::protocol::TransportRoute structure.
 IPC_STRUCT_BEGIN(SerializedTransportRoute)
-  IPC_STRUCT_MEMBER(int, type)
-  IPC_STRUCT_MEMBER(net::IPAddressNumber, remote_address)
-  IPC_STRUCT_MEMBER(uint16_t, remote_port)
-  IPC_STRUCT_MEMBER(net::IPAddressNumber, local_address)
-  IPC_STRUCT_MEMBER(uint16_t, local_port)
+  IPC_STRUCT_MEMBER(remoting::protocol::TransportRoute::RouteType, type)
+  IPC_STRUCT_MEMBER(net::IPEndPoint, remote_address)
+  IPC_STRUCT_MEMBER(net::IPEndPoint, local_address)
 IPC_STRUCT_END()
+
+IPC_ENUM_TRAITS_MAX_VALUE(remoting::protocol::TransportRoute::RouteType,
+                          remoting::protocol::TransportRoute::ROUTE_TYPE_MAX)
 
 // Hosts status notifications (see HostStatusObserver interface) sent by
 // IpcHostEventLogger.
@@ -236,3 +237,36 @@ IPC_MESSAGE_CONTROL1(ChromotingNetworkDesktopMsg_InjectTouchEvent,
 // Changes the screen resolution in the desktop session.
 IPC_MESSAGE_CONTROL1(ChromotingNetworkDesktopMsg_SetScreenResolution,
                      remoting::ScreenResolution /* resolution */)
+
+//---------------------------------------------------------------------
+// Chromoting messages sent from the remote_security_key process to the
+// network process.
+
+// The array of bytes representing a security key request to be sent to the
+// remote client.
+IPC_MESSAGE_CONTROL1(ChromotingRemoteSecurityKeyToNetworkMsg_Request,
+                     std::string /* request bytes */)
+
+//---------------------------------------------------------
+// Chromoting messages sent from the network process to the remote_security_key
+// process.  The network process uses two types of IPC channels to communicate
+// with the remote_security_key process.  The first is the 'service' channel.
+// It uses a hard-coded path known by the client and server classes and its job
+// is to create a new, private IPC channel for the client and provide the path
+// to that channel over the original IPC channel.  This purpose for this
+// mechanism is to allow the network process to service multiple concurrent
+// security key requests.  Once a client receives the connection details for
+// its private IPC channel, the server channel is reset and can be called by
+// another client.
+// The second type of IPC channel is strictly used for passing security key
+// request and response messages.  It is destroyed once the client disconnects.
+
+// The IPC channel path for this remote_security_key connection.  This message
+// is sent from the well-known IPC server channel.
+IPC_MESSAGE_CONTROL1(ChromotingNetworkToRemoteSecurityKeyMsg_ConnectionDetails,
+                     std::string /* IPC Server path */)
+
+// The array of bytes representing a security key response from the remote
+// client.  This message is sent over the per-client IPC channel.
+IPC_MESSAGE_CONTROL1(ChromotingNetworkToRemoteSecurityKeyMsg_Response,
+                     std::string /* response bytes */)

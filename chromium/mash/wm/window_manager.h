@@ -7,12 +7,14 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
 #include "components/mus/common/types.h"
 #include "components/mus/public/cpp/window_manager_delegate.h"
 #include "components/mus/public/cpp/window_observer.h"
 #include "components/mus/public/interfaces/window_manager.mojom.h"
-#include "mash/shell/public/interfaces/shell.mojom.h"
+#include "mash/session/public/interfaces/session.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace mash {
@@ -22,13 +24,13 @@ class RootWindowController;
 
 class WindowManager : public mus::WindowObserver,
                       public mus::WindowManagerDelegate,
-                      public mash::shell::mojom::ScreenlockStateListener {
+                      public session::mojom::ScreenlockStateListener {
  public:
   WindowManager();
   ~WindowManager() override;
 
   void Initialize(RootWindowController* root_controller,
-                  mash::shell::mojom::ShellPtr shell);
+                  session::mojom::Session* session);
 
   mus::WindowManagerClient* window_manager_client() {
     return window_manager_client_;
@@ -48,20 +50,21 @@ class WindowManager : public mus::WindowObserver,
   // WindowManagerDelegate:
   void SetWindowManagerClient(mus::WindowManagerClient* client) override;
   bool OnWmSetBounds(mus::Window* window, gfx::Rect* bounds) override;
-  bool OnWmSetProperty(mus::Window* window,
-                       const std::string& name,
-                       scoped_ptr<std::vector<uint8_t>>* new_data) override;
+  bool OnWmSetProperty(
+      mus::Window* window,
+      const std::string& name,
+      std::unique_ptr<std::vector<uint8_t>>* new_data) override;
   mus::Window* OnWmCreateTopLevelWindow(
       std::map<std::string, std::vector<uint8_t>>* properties) override;
-  void OnAccelerator(uint32_t id, mus::mojom::EventPtr event) override;
+  void OnAccelerator(uint32_t id, const ui::Event& event) override;
 
-  // mash::shell::mojom::ScreenlockStateListener:
+  // session::mojom::ScreenlockStateListener:
   void ScreenlockStateChanged(bool locked) override;
 
   RootWindowController* root_controller_;
   mus::WindowManagerClient* window_manager_client_;
 
-  mojo::Binding<mash::shell::mojom::ScreenlockStateListener> binding_;
+  mojo::Binding<session::mojom::ScreenlockStateListener> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowManager);
 };

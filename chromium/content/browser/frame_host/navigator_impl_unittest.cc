@@ -43,9 +43,8 @@ namespace content {
 class NavigatorTestWithBrowserSideNavigation
     : public RenderViewHostImplTestHarness {
  public:
-  // Re-defines the private RenderFrameHostManager::SiteInstanceDescriptor here
-  // to allow access to it from tests.
-  typedef RenderFrameHostManager::SiteInstanceDescriptor SiteInstanceDescriptor;
+  using SiteInstanceDescriptor = RenderFrameHostManager::SiteInstanceDescriptor;
+  using SiteInstanceRelation = RenderFrameHostManager::SiteInstanceRelation;
 
   void SetUp() override {
 #if !defined(OS_ANDROID)
@@ -110,9 +109,10 @@ class NavigatorTestWithBrowserSideNavigation
     return message && rfh->GetRoutingID() == message->routing_id();
   }
 
-  SiteInstance* ConvertToSiteInstance(RenderFrameHostManager* rfhm,
-                                      const SiteInstanceDescriptor& descriptor,
-                                      SiteInstance* candidate_instance) {
+  scoped_refptr<SiteInstance> ConvertToSiteInstance(
+      RenderFrameHostManager* rfhm,
+      const SiteInstanceDescriptor& descriptor,
+      SiteInstance* candidate_instance) {
     return rfhm->ConvertToSiteInstance(descriptor, candidate_instance);
   }
 };
@@ -151,7 +151,7 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
 
   // Commit the navigation.
   main_test_rfh()->SendNavigate(0, entry_id, true, kUrl);
-  EXPECT_EQ(RenderFrameHostImpl::STATE_DEFAULT, main_test_rfh()->rfh_state());
+  EXPECT_TRUE(main_test_rfh()->is_active());
   EXPECT_EQ(SiteInstanceImpl::GetSiteForURL(browser_context(), kUrl),
             main_test_rfh()->GetSiteInstance()->GetSiteURL());
   EXPECT_EQ(kUrl, contents()->GetLastCommittedURL());
@@ -204,7 +204,7 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
 
   // Commit the navigation.
   main_test_rfh()->SendNavigate(1, 0, true, kUrl2);
-  EXPECT_EQ(RenderFrameHostImpl::STATE_DEFAULT, main_test_rfh()->rfh_state());
+  EXPECT_TRUE(main_test_rfh()->is_active());
   EXPECT_EQ(SiteInstanceImpl::GetSiteForURL(browser_context(), kUrl2),
             main_test_rfh()->GetSiteInstance()->GetSiteURL());
   EXPECT_EQ(kUrl2, contents()->GetLastCommittedURL());
@@ -258,7 +258,7 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
 
   // Commit the navigation.
   main_test_rfh()->SendNavigate(1, 0, true, kUrl2);
-  EXPECT_EQ(RenderFrameHostImpl::STATE_DEFAULT, main_test_rfh()->rfh_state());
+  EXPECT_TRUE(main_test_rfh()->is_active());
   EXPECT_EQ(kUrl2, contents()->GetLastCommittedURL());
   EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
   EXPECT_FALSE(node->render_manager()->pending_frame_host());
@@ -456,7 +456,6 @@ TEST_F(NavigatorTestWithBrowserSideNavigation, CrossSiteNavigation) {
   // Receive the beforeUnload ACK.
   main_test_rfh()->SendBeforeUnloadACK(true);
   EXPECT_EQ(speculative_rfh, GetSpeculativeRenderFrameHost(node));
-  EXPECT_FALSE(contents()->CrossProcessNavigationPending());
 
   scoped_refptr<ResourceResponse> response(new ResourceResponse);
   GetLoaderForNavigationRequest(main_request)->CallOnResponseStarted(
@@ -464,7 +463,6 @@ TEST_F(NavigatorTestWithBrowserSideNavigation, CrossSiteNavigation) {
   EXPECT_EQ(speculative_rfh, GetSpeculativeRenderFrameHost(node));
   EXPECT_TRUE(DidRenderFrameHostRequestCommit(speculative_rfh));
   EXPECT_FALSE(DidRenderFrameHostRequestCommit(main_test_rfh()));
-  EXPECT_TRUE(contents()->CrossProcessNavigationPending());
 
   speculative_rfh->SendNavigate(0, entry_id, true, kUrl2);
 
@@ -850,11 +848,11 @@ TEST_F(NavigatorTestWithBrowserSideNavigation, Reload) {
   EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
 
   // Now do a shift+reload.
-  controller().ReloadIgnoringCache(false);
+  controller().ReloadBypassingCache(false);
   // A NavigationRequest should have been generated.
   main_request = node->navigation_request();
   ASSERT_TRUE(main_request != NULL);
-  EXPECT_EQ(FrameMsg_Navigate_Type::RELOAD_IGNORING_CACHE,
+  EXPECT_EQ(FrameMsg_Navigate_Type::RELOAD_BYPASSING_CACHE,
             main_request->common_params().navigation_type);
   main_test_rfh()->PrepareForCommit();
   EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
@@ -975,62 +973,6 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
   EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
 }
 
-// PlzNavigate: Verify that a previously swapped out RenderFrameHost is
-// correctly reused when spawning a speculative RenderFrameHost in a navigation
-// using the same SiteInstance.
-TEST_F(NavigatorTestWithBrowserSideNavigation,
-       SpeculativeRendererReuseSwappedOutRFH) {
-  // This test doesn't make sense in --site-per-process where swapped out
-  // RenderFrameHost is no longer used.
-  if (SiteIsolationPolicy::IsSwappedOutStateForbidden())
-    return;
-
-  // Navigate to an initial site.
-  const GURL kUrl1("http://wikipedia.org/");
-  contents()->NavigateAndCommit(kUrl1);
-  TestRenderFrameHost* rfh1 = main_test_rfh();
-  FrameTreeNode* node = rfh1->frame_tree_node();
-  RenderFrameHostManager* rfhm = node->render_manager();
-
-  // Increment active frame count to cause the RenderFrameHost to be swapped out
-  // (instead of immediately destroyed).
-  rfh1->GetSiteInstance()->IncrementActiveFrameCount();
-
-  // Navigate to another site to swap out the initial RenderFrameHost.
-  const GURL kUrl2("http://chromium.org/");
-  contents()->NavigateAndCommit(kUrl2);
-  ASSERT_NE(rfh1, main_test_rfh());
-  EXPECT_NE(RenderFrameHostImpl::STATE_DEFAULT, rfh1->rfh_state());
-  EXPECT_EQ(RenderFrameHostImpl::STATE_DEFAULT, main_test_rfh()->rfh_state());
-  EXPECT_TRUE(rfhm->IsOnSwappedOutList(rfh1));
-
-  // Now go back to the initial site so that the swapped out RenderFrameHost
-  // should be reused.
-  process()->sink().ClearMessages();
-  rfh1->GetProcess()->sink().ClearMessages();
-  int entry_id = RequestNavigation(node, kUrl1);
-  EXPECT_EQ(rfh1, GetSpeculativeRenderFrameHost(node));
-
-  main_test_rfh()->SendBeforeUnloadACK(true);
-  EXPECT_EQ(rfh1, GetSpeculativeRenderFrameHost(node));
-  EXPECT_NE(RenderFrameHostImpl::STATE_DEFAULT,
-            GetSpeculativeRenderFrameHost(node)->rfh_state());
-
-  scoped_refptr<ResourceResponse> response(new ResourceResponse);
-  GetLoaderForNavigationRequest(node->navigation_request())
-      ->CallOnResponseStarted(response, MakeEmptyStream());
-  EXPECT_EQ(rfh1, GetSpeculativeRenderFrameHost(node));
-  EXPECT_EQ(RenderFrameHostImpl::STATE_DEFAULT,
-            GetSpeculativeRenderFrameHost(node)->rfh_state());
-  EXPECT_TRUE(DidRenderFrameHostRequestCommit(rfh1));
-  EXPECT_FALSE(DidRenderFrameHostRequestCommit(main_test_rfh()));
-
-  rfh1->SendNavigate(1, entry_id, true, kUrl1);
-  EXPECT_EQ(rfh1, main_test_rfh());
-  EXPECT_EQ(RenderFrameHostImpl::STATE_DEFAULT, rfh1->rfh_state());
-  EXPECT_FALSE(rfhm->IsOnSwappedOutList(rfh1));
-}
-
 // PlzNavigate: Verify that data urls are properly handled.
 TEST_F(NavigatorTestWithBrowserSideNavigation, DataUrls) {
   const GURL kUrl1("http://wikipedia.org/");
@@ -1083,7 +1025,7 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
       main_test_rfh()->frame_tree_node()->render_manager();
   {
     SiteInstanceDescriptor descriptor(current_instance);
-    SiteInstance* converted_instance =
+    scoped_refptr<SiteInstance> converted_instance =
         ConvertToSiteInstance(rfhm, descriptor, nullptr);
     EXPECT_EQ(current_instance, converted_instance);
   }
@@ -1097,7 +1039,7 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
       current_instance->IsRelatedSiteInstance(unrelated_instance.get()));
   {
     SiteInstanceDescriptor descriptor(unrelated_instance.get());
-    SiteInstance* converted_instance =
+    scoped_refptr<SiteInstance> converted_instance =
         ConvertToSiteInstance(rfhm, descriptor, nullptr);
     EXPECT_EQ(unrelated_instance.get(), converted_instance);
   }
@@ -1106,8 +1048,9 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
   // current one.
   GURL kUrlSameSiteAs1("http://www.a.com/foo");
   {
-    SiteInstanceDescriptor descriptor(browser_context(), kUrlSameSiteAs1, true);
-    SiteInstance* converted_instance =
+    SiteInstanceDescriptor descriptor(browser_context(), kUrlSameSiteAs1,
+                                      SiteInstanceRelation::RELATED);
+    scoped_refptr<SiteInstance> converted_instance =
         ConvertToSiteInstance(rfhm, descriptor, nullptr);
     EXPECT_EQ(current_instance, converted_instance);
   }
@@ -1117,7 +1060,8 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
   GURL kUrlSameSiteAs2("http://www.b.com/foo");
   scoped_refptr<SiteInstance> related_instance;
   {
-    SiteInstanceDescriptor descriptor(browser_context(), kUrlSameSiteAs2, true);
+    SiteInstanceDescriptor descriptor(browser_context(), kUrlSameSiteAs2,
+                                      SiteInstanceRelation::RELATED);
     related_instance = ConvertToSiteInstance(rfhm, descriptor, nullptr);
     // Should return a new instance, related to the current, set to the new site
     // URL.
@@ -1133,7 +1077,7 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
   // current one, several times, with and without candidate sites.
   {
     SiteInstanceDescriptor descriptor(browser_context(), kUrlSameSiteAs1,
-                                      false);
+                                      SiteInstanceRelation::UNRELATED);
     scoped_refptr<SiteInstance> converted_instance_1 =
         ConvertToSiteInstance(rfhm, descriptor, nullptr);
     // Should return a new instance, unrelated to the current one, set to the
@@ -1160,7 +1104,7 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
               converted_instance_2->GetSiteURL());
 
     // Converts once more but with |converted_instance_1| as a candidate.
-    SiteInstance* converted_instance_3 =
+    scoped_refptr<SiteInstance> converted_instance_3 =
         ConvertToSiteInstance(rfhm, descriptor, converted_instance_1.get());
     // Should return |converted_instance_1| because its site matches and it is
     // unrelated to the current SiteInstance.
@@ -1171,7 +1115,7 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
   // related_instance and using it as a candidate.
   {
     SiteInstanceDescriptor descriptor(browser_context(), kUrlSameSiteAs2,
-                                      false);
+                                      SiteInstanceRelation::UNRELATED);
     scoped_refptr<SiteInstance> converted_instance_1 =
         ConvertToSiteInstance(rfhm, descriptor, related_instance.get());
     // Should return a new instance, unrelated to the current, set to the
@@ -1183,7 +1127,7 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
     EXPECT_EQ(SiteInstance::GetSiteForURL(browser_context(), kUrlSameSiteAs2),
               converted_instance_1->GetSiteURL());
 
-    SiteInstance* converted_instance_2 =
+    scoped_refptr<SiteInstance> converted_instance_2 =
         ConvertToSiteInstance(rfhm, descriptor, unrelated_instance.get());
     // Should return |unrelated_instance| because its site matches and it is
     // unrelated to the current SiteInstance.
@@ -1196,6 +1140,7 @@ void SetWithinPage(const GURL& url,
                    FrameHostMsg_DidCommitProvisionalLoad_Params* params) {
   params->was_within_same_page = true;
   params->url = url;
+  params->origin = url::Origin(url);
 }
 }
 

@@ -32,6 +32,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/MutationObserverInterestGroup.h"
 #include "core/dom/MutationRecord.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -114,8 +115,8 @@ private:
     static bool s_shouldNotifyInspector;
     static bool s_shouldDeliver;
 
-    OwnPtrWillBeMember<MutationObserverInterestGroup> m_mutationRecipients;
-    RefPtrWillBeMember<MutationRecord> m_mutation;
+    Member<MutationObserverInterestGroup> m_mutationRecipients;
+    Member<MutationRecord> m_mutation;
 };
 
 unsigned StyleAttributeMutationScope::s_scopeCount = 0;
@@ -155,6 +156,8 @@ String AbstractPropertySetCSSStyleDeclaration::item(unsigned i) const
     StylePropertySet::PropertyReference property = propertySet().propertyAt(i);
     if (RuntimeEnabledFeatures::cssVariablesEnabled() && property.id() == CSSPropertyVariable)
         return toCSSCustomPropertyDeclaration(property.value())->name();
+    if (property.id() == CSSPropertyApplyAtRule)
+        return "@apply";
     return getPropertyName(property.id());
 }
 
@@ -267,7 +270,7 @@ String AbstractPropertySetCSSStyleDeclaration::removeProperty(const String& prop
     return result;
 }
 
-PassRefPtrWillBeRawPtr<CSSValue> AbstractPropertySetCSSStyleDeclaration::getPropertyCSSValueInternal(CSSPropertyID propertyID)
+CSSValue* AbstractPropertySetCSSStyleDeclaration::getPropertyCSSValueInternal(CSSPropertyID propertyID)
 {
     return propertySet().getPropertyCSSValue(propertyID);
 }

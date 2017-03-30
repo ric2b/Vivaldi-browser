@@ -5,14 +5,14 @@
 #ifndef REMOTING_HOST_SECURITY_KEY_GNUBBY_AUTH_HANDLER_H_
 #define REMOTING_HOST_SECURITY_KEY_GNUBBY_AUTH_HANDLER_H_
 
+#include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/callback.h"
+#include "base/time/time.h"
 
 namespace base {
 class FilePath;
-class TimeDelta;
 }  // namespace base
 
 namespace remoting {
@@ -31,7 +31,7 @@ class GnubbyAuthHandler {
   // All invocations of |callback| are guaranteed to occur before the underlying
   // GnubbyAuthHandler object is destroyed.  It is not safe to destroy the
   // GnubbyAuthHandler object within the callback.
-  static scoped_ptr<GnubbyAuthHandler> Create(
+  static std::unique_ptr<GnubbyAuthHandler> Create(
       const SendMessageCallback& callback);
 
 #if defined(OS_LINUX)
@@ -59,7 +59,7 @@ class GnubbyAuthHandler {
   virtual size_t GetActiveConnectionCountForTest() const = 0;
 
   // Sets the timeout used when waiting for a gnubby response.
-  virtual void SetRequestTimeoutForTest(const base::TimeDelta& timeout) = 0;
+  virtual void SetRequestTimeoutForTest(base::TimeDelta timeout) = 0;
 };
 
 }  // namespace remoting

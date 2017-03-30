@@ -37,6 +37,7 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/NodeTraversal.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
@@ -165,7 +166,7 @@ void HTMLElement::mapLanguageAttributeToLocale(const AtomicString& value, Mutabl
             UseCounter::count(document(), UseCounter::LangAttributeOnHTML);
         else if (isHTMLBodyElement(*this))
             UseCounter::count(document(), UseCounter::LangAttributeOnBody);
-        String htmlLanguage = value.string();
+        String htmlLanguage = value.getString();
         size_t firstSeparator = htmlLanguage.find('-');
         if (firstSeparator != kNotFound)
             htmlLanguage = htmlLanguage.left(firstSeparator);
@@ -234,7 +235,7 @@ void HTMLElement::collectStyleForPresentationAttribute(const QualifiedName& name
         } else {
             if (isValidDirAttribute(value))
                 addPropertyToPresentationAttributeStyle(style, CSSPropertyDirection, value);
-            else
+            else if (isHTMLBodyElement(*this))
                 addPropertyToPresentationAttributeStyle(style, CSSPropertyDirection, "ltr");
             if (!hasTagName(bdiTag) && !hasTagName(bdoTag) && !hasTagName(outputTag))
                 addPropertyToPresentationAttributeStyle(style, CSSPropertyUnicodeBidi, CSSValueIsolate);
@@ -301,6 +302,7 @@ const AtomicString& HTMLElement::eventNameForAttributeName(const QualifiedName& 
             { onfocusAttr, EventTypeNames::focus },
             { onfocusinAttr, EventTypeNames::focusin },
             { onfocusoutAttr, EventTypeNames::focusout },
+            { ongotpointercaptureAttr, EventTypeNames::gotpointercapture },
             { oninputAttr, EventTypeNames::input },
             { oninvalidAttr, EventTypeNames::invalid },
             { onkeydownAttr, EventTypeNames::keydown },
@@ -310,6 +312,7 @@ const AtomicString& HTMLElement::eventNameForAttributeName(const QualifiedName& 
             { onloadeddataAttr, EventTypeNames::loadeddata },
             { onloadedmetadataAttr, EventTypeNames::loadedmetadata },
             { onloadstartAttr, EventTypeNames::loadstart },
+            { onlostpointercaptureAttr, EventTypeNames::lostpointercapture },
             { onmousedownAttr, EventTypeNames::mousedown },
             { onmouseenterAttr, EventTypeNames::mouseenter },
             { onmouseleaveAttr, EventTypeNames::mouseleave },
@@ -376,9 +379,9 @@ void HTMLElement::parseAttribute(const QualifiedName& name, const AtomicString& 
     }
 }
 
-PassRefPtrWillBeRawPtr<DocumentFragment> HTMLElement::textToFragment(const String& text, ExceptionState& exceptionState)
+RawPtr<DocumentFragment> HTMLElement::textToFragment(const String& text, ExceptionState& exceptionState)
 {
-    RefPtrWillBeRawPtr<DocumentFragment> fragment = DocumentFragment::create(document());
+    RawPtr<DocumentFragment> fragment = DocumentFragment::create(document());
     unsigned i, length = text.length();
     UChar c = 0;
     for (unsigned start = 0; start < length; ) {
@@ -462,7 +465,7 @@ void HTMLElement::setInnerText(const String& text, ExceptionState& exceptionStat
     }
 
     // Add text nodes and <br> elements.
-    RefPtrWillBeRawPtr<DocumentFragment> fragment = textToFragment(text, exceptionState);
+    RawPtr<DocumentFragment> fragment = textToFragment(text, exceptionState);
     if (!exceptionState.hadException())
         replaceChildrenWithFragment(this, fragment.release(), exceptionState);
 }
@@ -484,9 +487,9 @@ void HTMLElement::setOuterText(const String& text, ExceptionState& exceptionStat
         return;
     }
 
-    RefPtrWillBeRawPtr<Node> prev = previousSibling();
-    RefPtrWillBeRawPtr<Node> next = nextSibling();
-    RefPtrWillBeRawPtr<Node> newChild = nullptr;
+    RawPtr<Node> prev = previousSibling();
+    RawPtr<Node> next = nextSibling();
+    RawPtr<Node> newChild = nullptr;
 
     // Convert text to fragment with <br> tags instead of linebreaks if needed.
     if (text.contains('\r') || text.contains('\n'))
@@ -503,7 +506,7 @@ void HTMLElement::setOuterText(const String& text, ExceptionState& exceptionStat
 
     parent->replaceChild(newChild.release(), this, exceptionState);
 
-    RefPtrWillBeRawPtr<Node> node = next ? next->previousSibling() : nullptr;
+    RawPtr<Node> node = next ? next->previousSibling() : nullptr;
     if (!exceptionState.hadException() && node && node->isTextNode())
         mergeWithNextTextNode(toText(node.get()), exceptionState);
 
@@ -663,9 +666,9 @@ void HTMLElement::setTranslate(bool enable)
 // http://www.whatwg.org/specs/web-apps/current-work/multipage/common-dom-interfaces.html#limited-to-only-known-values
 static inline const AtomicString& toValidDirValue(const AtomicString& value)
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, ltrValue, ("ltr", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, rtlValue, ("rtl", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(const AtomicString, autoValue, ("auto", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, ltrValue, ("ltr"));
+    DEFINE_STATIC_LOCAL(const AtomicString, rtlValue, ("rtl"));
+    DEFINE_STATIC_LOCAL(const AtomicString, autoValue, ("auto"));
 
     if (equalIgnoringCase(value, ltrValue))
         return ltrValue;
@@ -789,7 +792,7 @@ void HTMLElement::adjustDirectionalityIfNeededAfterChildAttributeChanged(Element
         Element* elementToAdjust = this;
         for (; elementToAdjust; elementToAdjust = FlatTreeTraversal::parentElement(*elementToAdjust)) {
             if (elementAffectsDirectionality(elementToAdjust)) {
-                elementToAdjust->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::WritingModeChange));
+                elementToAdjust->setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::WritingModeChange));
                 return;
             }
         }
@@ -800,7 +803,7 @@ void HTMLElement::calculateAndAdjustDirectionality()
 {
     TextDirection textDirection = directionality();
     if (layoutObject() && layoutObject()->style() && layoutObject()->style()->direction() != textDirection)
-        setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::WritingModeChange));
+        setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::WritingModeChange));
 }
 
 void HTMLElement::adjustDirectionalityIfNeededAfterChildrenChanged(const ChildrenChange& change)
@@ -1027,7 +1030,7 @@ void HTMLElement::handleKeypressEvent(KeyboardEvent* event)
 
 const AtomicString& HTMLElement::eventParameterName()
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, eventString, ("event", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, eventString, ("event"));
     return eventString;
 }
 

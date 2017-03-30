@@ -39,6 +39,7 @@
 #include "core/dom/ExecutionContextTask.h"
 #include "core/dom/FrameRequestCallback.h"
 #include "core/dom/SandboxFlags.h"
+#include "core/dom/custom/CustomElementsRegistry.h"
 #include "core/editing/Editor.h"
 #include "core/events/DOMWindowEventQueue.h"
 #include "core/events/HashChangeEvent.h"
@@ -71,6 +72,8 @@
 #include "core/page/WindowFeatures.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "platform/EventDispatchForbiddenScope.h"
+#include "platform/weborigin/SecurityOrigin.h"
+#include "platform/weborigin/Suborigin.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebScreenInfo.h"
@@ -83,16 +86,10 @@ LocalDOMWindow::WindowFrameObserver::WindowFrameObserver(LocalDOMWindow* window,
 {
 }
 
-PassOwnPtrWillBeRawPtr<LocalDOMWindow::WindowFrameObserver> LocalDOMWindow::WindowFrameObserver::create(LocalDOMWindow* window, LocalFrame& frame)
+LocalDOMWindow::WindowFrameObserver* LocalDOMWindow::WindowFrameObserver::create(LocalDOMWindow* window, LocalFrame& frame)
 {
-    return adoptPtrWillBeNoop(new WindowFrameObserver(window, frame));
+    return new WindowFrameObserver(window, frame);
 }
-
-#if !ENABLE(OILPAN)
-LocalDOMWindow::WindowFrameObserver::~WindowFrameObserver()
-{
-}
-#endif
 
 DEFINE_TRACE(LocalDOMWindow::WindowFrameObserver)
 {
@@ -111,10 +108,10 @@ void LocalDOMWindow::WindowFrameObserver::contextDestroyed()
     LocalFrameLifecycleObserver::contextDestroyed();
 }
 
-class PostMessageTimer final : public NoBaseWillBeGarbageCollectedFinalized<PostMessageTimer>, public SuspendableTimer {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(PostMessageTimer);
+class PostMessageTimer final : public GarbageCollectedFinalized<PostMessageTimer>, public SuspendableTimer {
+    USING_GARBAGE_COLLECTED_MIXIN(PostMessageTimer);
 public:
-    PostMessageTimer(LocalDOMWindow& window, PassRefPtrWillBeRawPtr<MessageEvent> event, SecurityOrigin* targetOrigin, PassRefPtr<ScriptCallStack> stackTrace, UserGestureToken* userGestureToken)
+    PostMessageTimer(LocalDOMWindow& window, MessageEvent* event, SecurityOrigin* targetOrigin, PassRefPtr<ScriptCallStack> stackTrace, UserGestureToken* userGestureToken)
         : SuspendableTimer(window.document())
         , m_event(event)
         , m_window(&window)
@@ -123,10 +120,10 @@ public:
         , m_userGestureToken(userGestureToken)
         , m_disposalAllowed(true)
     {
-        m_asyncOperationId = InspectorInstrumentation::traceAsyncOperationStarting(executionContext(), "postMessage");
+        InspectorInstrumentation::asyncTaskScheduled(window.document(), "postMessage", this);
     }
 
-    PassRefPtrWillBeRawPtr<MessageEvent> event() const { return m_event.get(); }
+    MessageEvent* event() const { return m_event.get(); }
     SecurityOrigin* targetOrigin() const { return m_targetOrigin.get(); }
     ScriptCallStack* stackTrace() const { return m_stackTrace.get(); }
     UserGestureToken* userGestureToken() const { return m_userGestureToken.get(); }
@@ -153,11 +150,10 @@ public:
 private:
     void fired() override
     {
-        InspectorInstrumentationCookie cookie = InspectorInstrumentation::traceAsyncOperationCompletedCallbackStarting(executionContext(), m_asyncOperationId);
+        InspectorInstrumentation::AsyncTask asyncTask(m_window->document(), this);
         m_disposalAllowed = false;
         m_window->postMessageTimerFired(this);
         dispose();
-        InspectorInstrumentation::traceAsyncCallbackCompleted(cookie);
     }
 
     void dispose()
@@ -169,12 +165,11 @@ private:
         m_window->removePostMessageTimer(this);
     }
 
-    RefPtrWillBeMember<MessageEvent> m_event;
-    RawPtrWillBeMember<LocalDOMWindow> m_window;
+    Member<MessageEvent> m_event;
+    Member<LocalDOMWindow> m_window;
     RefPtr<SecurityOrigin> m_targetOrigin;
     RefPtr<ScriptCallStack> m_stackTrace;
     RefPtr<UserGestureToken> m_userGestureToken;
-    int m_asyncOperationId;
     bool m_disposalAllowed;
 };
 
@@ -185,7 +180,7 @@ static void updateSuddenTerminationStatus(LocalDOMWindow* domWindow, bool addedL
         domWindow->frame()->loader().client()->suddenTerminationDisablerChanged(addedListener, disablerType);
 }
 
-using DOMWindowSet = WillBePersistentHeapHashCountedSet<RawPtrWillBeWeakMember<LocalDOMWindow>>;
+using DOMWindowSet = PersistentHeapHashCountedSet<WeakMember<LocalDOMWindow>>;
 
 static DOMWindowSet& windowsWithUnloadEventListeners()
 {
@@ -263,7 +258,7 @@ static void removeAllBeforeUnloadEventListeners(LocalDOMWindow* domWindow)
 
 static bool allowsBeforeUnloadListeners(LocalDOMWindow* window)
 {
-    ASSERT_ARG(window, window);
+    DCHECK(window);
     LocalFrame* frame = window->frame();
     if (!frame)
         return false;
@@ -277,7 +272,7 @@ unsigned LocalDOMWindow::pendingUnloadEventListeners() const
 
 bool LocalDOMWindow::allowPopUp(LocalFrame& firstFrame)
 {
-    if (UserGestureIndicator::processingUserGesture())
+    if (UserGestureIndicator::utilizeUserGesture())
         return true;
 
     Settings* settings = firstFrame.settings();
@@ -296,9 +291,7 @@ LocalDOMWindow::LocalDOMWindow(LocalFrame& frame)
     , m_hasBeenReset(false)
 #endif
 {
-#if ENABLE(OILPAN)
     ThreadState::current()->registerPreFinalizer(this);
-#endif
 }
 
 void LocalDOMWindow::clearDocument()
@@ -331,9 +324,9 @@ void LocalDOMWindow::acceptLanguagesChanged()
     dispatchEvent(Event::create(EventTypeNames::languagechange));
 }
 
-PassRefPtrWillBeRawPtr<Document> LocalDOMWindow::createDocument(const String& mimeType, const DocumentInit& init, bool forceXHTML)
+Document* LocalDOMWindow::createDocument(const String& mimeType, const DocumentInit& init, bool forceXHTML)
 {
-    RefPtrWillBeRawPtr<Document> document = nullptr;
+    Document* document = nullptr;
     if (forceXHTML) {
         // This is a hack for XSLTProcessor. See XSLTProcessor::createDocumentFromSource().
         document = Document::create(init);
@@ -343,10 +336,10 @@ PassRefPtrWillBeRawPtr<Document> LocalDOMWindow::createDocument(const String& mi
             document = SinkDocument::create(init);
     }
 
-    return document.release();
+    return document;
 }
 
-PassRefPtrWillBeRawPtr<Document> LocalDOMWindow::installNewDocument(const String& mimeType, const DocumentInit& init, bool forceXHTML)
+Document* LocalDOMWindow::installNewDocument(const String& mimeType, const DocumentInit& init, bool forceXHTML)
 {
     ASSERT(init.frame() == frame());
 
@@ -374,12 +367,12 @@ PassRefPtrWillBeRawPtr<Document> LocalDOMWindow::installNewDocument(const String
     return m_document;
 }
 
-EventQueue* LocalDOMWindow::eventQueue() const
+EventQueue* LocalDOMWindow::getEventQueue() const
 {
     return m_eventQueue.get();
 }
 
-void LocalDOMWindow::enqueueWindowEvent(PassRefPtrWillBeRawPtr<Event> event)
+void LocalDOMWindow::enqueueWindowEvent(Event* event)
 {
     if (!m_eventQueue)
         return;
@@ -387,7 +380,7 @@ void LocalDOMWindow::enqueueWindowEvent(PassRefPtrWillBeRawPtr<Event> event)
     m_eventQueue->enqueueEvent(event);
 }
 
-void LocalDOMWindow::enqueueDocumentEvent(PassRefPtrWillBeRawPtr<Event> event)
+void LocalDOMWindow::enqueueDocumentEvent(Event* event)
 {
     if (!m_eventQueue)
         return;
@@ -402,7 +395,7 @@ void LocalDOMWindow::dispatchWindowLoadEvent()
     // workaround to avoid Editing code crashes.  We should always dispatch
     // 'load' event asynchronously.  crbug.com/569511.
     if (ScopedEventQueue::instance()->shouldQueueEvents() && m_document) {
-        m_document->postTask(BLINK_FROM_HERE, createSameThreadTask(&LocalDOMWindow::dispatchLoadEvent, PassRefPtrWillBeRawPtr<LocalDOMWindow>(this)));
+        m_document->postTask(BLINK_FROM_HERE, createSameThreadTask(&LocalDOMWindow::dispatchLoadEvent, this));
         return;
     }
     dispatchLoadEvent();
@@ -450,14 +443,8 @@ void LocalDOMWindow::statePopped(PassRefPtr<SerializedScriptValue> stateObject)
 
 LocalDOMWindow::~LocalDOMWindow()
 {
-#if ENABLE(OILPAN)
     // Cleared when detaching document.
     ASSERT(!m_eventQueue);
-#else
-    ASSERT(m_hasBeenReset);
-    ASSERT(m_document->isStopped());
-    clearDocument();
-#endif
 }
 
 void LocalDOMWindow::dispose()
@@ -469,16 +456,13 @@ void LocalDOMWindow::dispose()
     // Arrange for that removal to happen using a prefinalizer action. Making LocalDOMWindow
     // eager finalizable is problematic as other eagerly finalized objects may well
     // want to access their associated LocalDOMWindow from their destructors.
-    //
-    // (Non-Oilpan, LocalDOMWindow::reset() will always be invoked, the last opportunity
-    // being via ~LocalFrame's setDOMWindow() call. Asserted for in the destructor.)
     if (!frame())
         return;
 
     removeAllEventListeners();
 }
 
-ExecutionContext* LocalDOMWindow::executionContext() const
+ExecutionContext* LocalDOMWindow::getExecutionContext() const
 {
     return m_document.get();
 }
@@ -493,7 +477,7 @@ LocalDOMWindow* LocalDOMWindow::toDOMWindow()
     return this;
 }
 
-PassRefPtrWillBeRawPtr<MediaQueryList> LocalDOMWindow::matchMedia(const String& media)
+MediaQueryList* LocalDOMWindow::matchMedia(const String& media)
 {
     return document() ? document()->mediaQueryMatcher().matchMedia(media) : nullptr;
 }
@@ -550,6 +534,7 @@ void LocalDOMWindow::reset()
     m_console = nullptr;
     m_navigator = nullptr;
     m_media = nullptr;
+    m_customElements = nullptr;
     m_applicationCache = nullptr;
 #if ENABLE(ASSERT)
     m_hasBeenReset = true;
@@ -566,7 +551,7 @@ void LocalDOMWindow::sendOrientationChangeEvent()
     // Before dispatching the event, build a list of all frames in the page
     // to send the event to, to mitigate side effects from event handlers
     // potentially interfering with others.
-    WillBeHeapVector<RefPtrWillBeMember<Frame>> frames;
+    HeapVector<Member<Frame>> frames;
     for (Frame* f = frame(); f; f = f->tree().traverseNext())
         frames.append(f);
 
@@ -679,17 +664,17 @@ Navigator* LocalDOMWindow::navigator() const
     return m_navigator.get();
 }
 
-void LocalDOMWindow::schedulePostMessage(PassRefPtrWillBeRawPtr<MessageEvent> event, SecurityOrigin* target, PassRefPtr<ScriptCallStack> stackTrace)
+void LocalDOMWindow::schedulePostMessage(MessageEvent* event, SecurityOrigin* target, PassRefPtr<ScriptCallStack> stackTrace)
 {
     // Allowing unbounded amounts of messages to build up for a suspended context
     // is problematic; consider imposing a limit or other restriction if this
     // surfaces often as a problem (see crbug.com/587012).
 
     // Schedule the message.
-    OwnPtrWillBeRawPtr<PostMessageTimer> timer = adoptPtrWillBeNoop(new PostMessageTimer(*this, event, target, stackTrace, UserGestureIndicator::currentToken()));
+    PostMessageTimer* timer = new PostMessageTimer(*this, event, target, stackTrace, UserGestureIndicator::currentToken());
     timer->startOneShot(0, BLINK_FROM_HERE);
     timer->suspendIfNeeded();
-    m_postMessageTimers.add(timer.release());
+    m_postMessageTimers.add(timer);
 }
 
 void LocalDOMWindow::postMessageTimerFired(PostMessageTimer* timer)
@@ -697,7 +682,7 @@ void LocalDOMWindow::postMessageTimerFired(PostMessageTimer* timer)
     if (!isCurrentlyDisplayedInFrame())
         return;
 
-    RefPtrWillBeRawPtr<MessageEvent> event = timer->event();
+    MessageEvent* event = timer->event();
 
     UserGestureIndicator gestureIndicator(timer->userGestureToken());
 
@@ -710,15 +695,20 @@ void LocalDOMWindow::removePostMessageTimer(PostMessageTimer* timer)
     m_postMessageTimers.remove(timer);
 }
 
-void LocalDOMWindow::dispatchMessageEventWithOriginCheck(SecurityOrigin* intendedTargetOrigin, PassRefPtrWillBeRawPtr<Event> event, PassRefPtr<ScriptCallStack> stackTrace)
+void LocalDOMWindow::dispatchMessageEventWithOriginCheck(SecurityOrigin* intendedTargetOrigin, Event* event, PassRefPtr<ScriptCallStack> stackTrace)
 {
     if (intendedTargetOrigin) {
         // Check target origin now since the target document may have changed since the timer was scheduled.
-        if (!intendedTargetOrigin->isSameSchemeHostPortAndSuborigin(document()->securityOrigin())) {
-            String message = ExceptionMessages::failedToExecute("postMessage", "DOMWindow", "The target origin provided ('" + intendedTargetOrigin->toString() + "') does not match the recipient window's origin ('" + document()->securityOrigin()->toString() + "').");
-            RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, message);
+        SecurityOrigin* securityOrigin = document()->getSecurityOrigin();
+        bool validTarget = intendedTargetOrigin->isSameSchemeHostPortAndSuborigin(securityOrigin);
+        if (securityOrigin->hasSuborigin() && securityOrigin->suborigin()->policyContains(Suborigin::SuboriginPolicyOptions::UnsafePostMessageReceive))
+            validTarget = intendedTargetOrigin->isSameSchemeHostPort(securityOrigin);
+
+        if (!validTarget) {
+            String message = ExceptionMessages::failedToExecute("postMessage", "DOMWindow", "The target origin provided ('" + intendedTargetOrigin->toString() + "') does not match the recipient window's origin ('" + document()->getSecurityOrigin()->toString() + "').");
+            ConsoleMessage* consoleMessage = ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, message);
             consoleMessage->setCallStack(stackTrace);
-            frameConsole()->addMessage(consoleMessage.release());
+            frameConsole()->addMessage(consoleMessage);
             return;
         }
     }
@@ -853,10 +843,6 @@ bool LocalDOMWindow::find(const String& string, bool caseSensitive, bool backwar
     if (!isCurrentlyDisplayedInFrame())
         return false;
 
-    // |frame()| can be destructed during |Editor::findString()| via
-    // |Document::updateLayout()|, e.g. event handler removes a frame.
-    RefPtrWillBeRawPtr<LocalFrame> protectFrame(frame());
-
     // FIXME (13016): Support searchInFrames and showDialog
     FindOptions options = (backwards ? Backwards : 0) | (caseSensitive ? 0 : CaseInsensitive) | (wrap ? WrapAround : 0) | (wholeWord ? WholeWord | AtWordStarts : 0);
     return frame()->editor().findString(string, options);
@@ -984,7 +970,7 @@ double LocalDOMWindow::scrollX() const
 
     frame()->document()->updateLayoutIgnorePendingStylesheets();
 
-    ScrollableArea* viewport = host->settings().inertVisualViewport() ? view->layoutViewportScrollableArea() : view->scrollableArea();
+    ScrollableArea* viewport = host->settings().inertVisualViewport() ? view->layoutViewportScrollableArea() : view->getScrollableArea();
     double viewportX = viewport->scrollPositionDouble().x();
     return adjustScrollForAbsoluteZoom(viewportX, frame()->pageZoomFactor());
 }
@@ -1004,7 +990,7 @@ double LocalDOMWindow::scrollY() const
 
     frame()->document()->updateLayoutIgnorePendingStylesheets();
 
-    ScrollableArea* viewport = host->settings().inertVisualViewport() ? view->layoutViewportScrollableArea() : view->scrollableArea();
+    ScrollableArea* viewport = host->settings().inertVisualViewport() ? view->layoutViewportScrollableArea() : view->getScrollableArea();
     double viewportY = viewport->scrollPositionDouble().y();
     return adjustScrollForAbsoluteZoom(viewportY, frame()->pageZoomFactor());
 }
@@ -1069,13 +1055,13 @@ StyleMedia* LocalDOMWindow::styleMedia() const
     return m_media.get();
 }
 
-PassRefPtrWillBeRawPtr<CSSStyleDeclaration> LocalDOMWindow::getComputedStyle(Element* elt, const String& pseudoElt) const
+CSSStyleDeclaration* LocalDOMWindow::getComputedStyle(Element* elt, const String& pseudoElt) const
 {
     ASSERT(elt);
     return CSSComputedStyleDeclaration::create(elt, false, pseudoElt);
 }
 
-PassRefPtrWillBeRawPtr<CSSRuleList> LocalDOMWindow::getMatchedCSSRules(Element* element, const String& pseudoElement) const
+CSSRuleList* LocalDOMWindow::getMatchedCSSRules(Element* element, const String& pseudoElement) const
 {
     if (!element)
         return nullptr;
@@ -1120,7 +1106,7 @@ void LocalDOMWindow::scrollBy(double x, double y, ScrollBehavior scrollBehavior)
     x = ScrollableArea::normalizeNonFiniteScroll(x);
     y = ScrollableArea::normalizeNonFiniteScroll(y);
 
-    ScrollableArea* viewport = host->settings().inertVisualViewport() ? view->layoutViewportScrollableArea() : view->scrollableArea();
+    ScrollableArea* viewport = host->settings().inertVisualViewport() ? view->layoutViewportScrollableArea() : view->getScrollableArea();
 
     DoublePoint currentOffset = viewport->scrollPositionDouble();
     DoubleSize scaledDelta(x * frame()->pageZoomFactor(), y * frame()->pageZoomFactor());
@@ -1163,7 +1149,7 @@ void LocalDOMWindow::scrollTo(double x, double y) const
         document()->updateLayoutIgnorePendingStylesheets();
 
     DoublePoint layoutPos(x * frame()->pageZoomFactor(), y * frame()->pageZoomFactor());
-    ScrollableArea* viewport = host->settings().inertVisualViewport() ? view->layoutViewportScrollableArea() : view->scrollableArea();
+    ScrollableArea* viewport = host->settings().inertVisualViewport() ? view->layoutViewportScrollableArea() : view->getScrollableArea();
     viewport->setScrollPosition(layoutPos, ProgrammaticScroll, ScrollBehaviorAuto);
 }
 
@@ -1192,7 +1178,7 @@ void LocalDOMWindow::scrollTo(const ScrollToOptions& scrollToOptions) const
     double scaledX = 0.0;
     double scaledY = 0.0;
 
-    ScrollableArea* viewport = host->settings().inertVisualViewport() ? view->layoutViewportScrollableArea() : view->scrollableArea();
+    ScrollableArea* viewport = host->settings().inertVisualViewport() ? view->layoutViewportScrollableArea() : view->getScrollableArea();
 
     DoublePoint currentOffset = viewport->scrollPositionDouble();
     scaledX = currentOffset.x();
@@ -1305,9 +1291,15 @@ void LocalDOMWindow::cancelIdleCallback(int id)
         document->cancelIdleCallback(id);
 }
 
-bool LocalDOMWindow::addEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener> prpListener, const EventListenerOptions& options)
+CustomElementsRegistry* LocalDOMWindow::customElements() const
 {
-    RefPtrWillBeRawPtr<EventListener> listener = prpListener;
+    if (!m_customElements)
+        m_customElements = CustomElementsRegistry::create();
+    return m_customElements.get();
+}
+
+bool LocalDOMWindow::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const EventListenerOptions& options)
+{
     if (!EventTarget::addEventListenerInternal(eventType, listener, options))
         return false;
 
@@ -1339,7 +1331,7 @@ bool LocalDOMWindow::addEventListenerInternal(const AtomicString& eventType, Pas
     return true;
 }
 
-bool LocalDOMWindow::removeEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener> listener, const EventListenerOptions& options)
+bool LocalDOMWindow::removeEventListenerInternal(const AtomicString& eventType, EventListener* listener, const EventListenerOptions& options)
 {
     if (!EventTarget::removeEventListenerInternal(eventType, listener, options))
         return false;
@@ -1360,11 +1352,11 @@ bool LocalDOMWindow::removeEventListenerInternal(const AtomicString& eventType, 
 
 void LocalDOMWindow::dispatchLoadEvent()
 {
-    RefPtrWillBeRawPtr<Event> loadEvent(Event::create(EventTypeNames::load));
+    Event* loadEvent(Event::create(EventTypeNames::load));
     if (frame() && frame()->loader().documentLoader() && !frame()->loader().documentLoader()->timing().loadEventStart()) {
         // The DocumentLoader (and thus its DocumentLoadTiming) might get destroyed while dispatching
         // the event, so protect it to prevent writing the end time into freed memory.
-        RefPtrWillBeRawPtr<DocumentLoader> documentLoader = frame()->loader().documentLoader();
+        DocumentLoader* documentLoader = frame()->loader().documentLoader();
         DocumentLoadTiming& timing = documentLoader->timing();
         timing.markLoadEventStart();
         dispatchEvent(loadEvent, document());
@@ -1384,20 +1376,17 @@ void LocalDOMWindow::dispatchLoadEvent()
     InspectorInstrumentation::loadEventFired(frame());
 }
 
-DispatchEventResult LocalDOMWindow::dispatchEvent(PassRefPtrWillBeRawPtr<Event> prpEvent, PassRefPtrWillBeRawPtr<EventTarget> prpTarget)
+DispatchEventResult LocalDOMWindow::dispatchEvent(Event* event, EventTarget* target)
 {
     ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
 
-    RefPtrWillBeRawPtr<EventTarget> protect(this);
-    RefPtrWillBeRawPtr<Event> event = prpEvent;
-
     event->setTrusted(true);
-    event->setTarget(prpTarget ? prpTarget : this);
+    event->setTarget(target ? target : this);
     event->setCurrentTarget(this);
     event->setEventPhase(Event::AT_TARGET);
 
     TRACE_EVENT1("devtools.timeline", "EventDispatch", "data", InspectorEventDispatchEvent::data(*event));
-    return fireEventListeners(event.get());
+    return fireEventListeners(event);
 }
 
 void LocalDOMWindow::removeAllEventListeners()
@@ -1431,7 +1420,7 @@ void LocalDOMWindow::printErrorMessage(const String& message) const
     frameConsole()->addMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message));
 }
 
-PassRefPtrWillBeRawPtr<DOMWindow> LocalDOMWindow::open(const String& urlString, const AtomicString& frameName, const String& windowFeaturesString,
+DOMWindow* LocalDOMWindow::open(const String& urlString, const AtomicString& frameName, const String& windowFeaturesString,
     LocalDOMWindow* callingWindow, LocalDOMWindow* enteredWindow)
 {
     if (!isCurrentlyDisplayedInFrame())
@@ -1485,13 +1474,12 @@ PassRefPtrWillBeRawPtr<DOMWindow> LocalDOMWindow::open(const String& urlString, 
     }
 
     WindowFeatures features(windowFeaturesString);
-    RefPtrWillBeRawPtr<DOMWindow> newWindow = createWindow(urlString, frameName, features, *callingWindow, *firstFrame, *frame());
+    DOMWindow* newWindow = createWindow(urlString, frameName, features, *callingWindow, *firstFrame, *frame());
     return features.noopener ? nullptr : newWindow;
 }
 
 DEFINE_TRACE(LocalDOMWindow)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_frameObserver);
     visitor->trace(m_document);
     visitor->trace(m_properties);
@@ -1506,12 +1494,12 @@ DEFINE_TRACE(LocalDOMWindow)
     visitor->trace(m_console);
     visitor->trace(m_navigator);
     visitor->trace(m_media);
+    visitor->trace(m_customElements);
     visitor->trace(m_applicationCache);
     visitor->trace(m_eventQueue);
     visitor->trace(m_postMessageTimers);
-    HeapSupplementable<LocalDOMWindow>::trace(visitor);
-#endif
     DOMWindow::trace(visitor);
+    Supplementable<LocalDOMWindow>::trace(visitor);
     DOMWindowLifecycleNotifier::trace(visitor);
 }
 

@@ -6,6 +6,7 @@
 #define MEDIA_CAPTURE_DEVICE_MONITOR_MAC_H_
 
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/system_monitor/system_monitor.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/media_export.h"
@@ -33,8 +34,7 @@ class MEDIA_EXPORT DeviceMonitorMac {
 
   // Method called by the internal DeviceMonitorMacImpl object
   // |device_monitor_impl_| when a device of type |type| has been added to or
-  // removed from the system. This code executes in the notification thread
-  // (QTKit or AVFoundation).
+  // removed from the system. This code executes in the notification thread.
   void NotifyDeviceChanged(base::SystemMonitor::DeviceType type);
 
  private:

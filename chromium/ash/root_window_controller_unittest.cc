@@ -4,6 +4,8 @@
 
 #include "ash/root_window_controller.h"
 
+#include <memory>
+
 #include "ash/display/display_manager.h"
 #include "ash/session/session_state_delegate.h"
 #include "ash/shelf/shelf_layout_manager.h"
@@ -17,7 +19,6 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
-#include "base/memory/scoped_ptr.h"
 #include "ui/aura/client/focus_change_observer.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/client/window_tree_client.h"
@@ -664,26 +665,14 @@ typedef test::NoSessionAshTestBase NoSessionRootWindowControllerTest;
 
 // Make sure that an event handler exists for entire display area.
 TEST_F(NoSessionRootWindowControllerTest, Event) {
-  // Hide the shelf since it might otherwise get an event target.
-  RootWindowController* controller = Shell::GetPrimaryRootWindowController();
-  ShelfLayoutManager* shelf_layout_manager =
-      controller->GetShelfLayoutManager();
-  shelf_layout_manager->SetAutoHideBehavior(
-      ash::SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
-
   aura::Window* root = Shell::GetPrimaryRootWindow();
   const gfx::Size size = root->bounds().size();
-  aura::Window* event_target = root->GetEventHandlerForPoint(gfx::Point(0, 0));
-  EXPECT_TRUE(event_target);
-  EXPECT_EQ(event_target,
-            root->GetEventHandlerForPoint(gfx::Point(0, size.height() - 1)));
-  EXPECT_EQ(event_target,
-            root->GetEventHandlerForPoint(gfx::Point(size.width() - 1, 0)));
-  EXPECT_EQ(event_target,
-            root->GetEventHandlerForPoint(gfx::Point(0, size.height() - 1)));
-  EXPECT_EQ(event_target,
-            root->GetEventHandlerForPoint(
-                gfx::Point(size.width() - 1, size.height() - 1)));
+  EXPECT_TRUE(root->GetEventHandlerForPoint(gfx::Point(0, 0)));
+  EXPECT_TRUE(root->GetEventHandlerForPoint(gfx::Point(0, size.height() - 1)));
+  EXPECT_TRUE(root->GetEventHandlerForPoint(gfx::Point(size.width() - 1, 0)));
+  EXPECT_TRUE(root->GetEventHandlerForPoint(gfx::Point(0, size.height() - 1)));
+  EXPECT_TRUE(root->GetEventHandlerForPoint(
+      gfx::Point(size.width() - 1, size.height() - 1)));
 }
 
 class VirtualKeyboardRootWindowControllerTest
@@ -963,11 +952,10 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, ZOrderTest) {
 
   // Normal window is partially occluded by the virtual keyboard.
   aura::test::TestWindowDelegate delegate;
-  scoped_ptr<aura::Window> normal(CreateTestWindowInShellWithDelegateAndType(
-      &delegate,
-      ui::wm::WINDOW_TYPE_NORMAL,
-      0,
-      gfx::Rect(0, 0, window_width, window_height)));
+  std::unique_ptr<aura::Window> normal(
+      CreateTestWindowInShellWithDelegateAndType(
+          &delegate, ui::wm::WINDOW_TYPE_NORMAL, 0,
+          gfx::Rect(0, 0, window_width, window_height)));
   normal->set_owned_by_parent(false);
   normal->Show();
   TargetHitTestEventHandler normal_handler;
@@ -984,10 +972,8 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, ZOrderTest) {
 
   // Menu overlaps virtual keyboard.
   aura::test::TestWindowDelegate delegate2;
-  scoped_ptr<aura::Window> menu(CreateTestWindowInShellWithDelegateAndType(
-      &delegate2,
-      ui::wm::WINDOW_TYPE_MENU,
-      0,
+  std::unique_ptr<aura::Window> menu(CreateTestWindowInShellWithDelegateAndType(
+      &delegate2, ui::wm::WINDOW_TYPE_MENU, 0,
       gfx::Rect(window_width, 0, window_width, window_height)));
   menu->set_owned_by_parent(false);
   menu->Show();

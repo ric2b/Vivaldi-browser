@@ -18,6 +18,8 @@ namespace client {
 namespace {
 
 const int kDummyTabId = 0;
+const std::string kDefaultAssignerUrl =
+    "https://blimp-pa.googleapis.com/v1/assignment";
 
 class FakeNavigationFeatureDelegate
     : public NavigationFeature::NavigationFeatureDelegate {
@@ -30,6 +32,7 @@ class FakeNavigationFeatureDelegate
   void OnFaviconChanged(int tab_id, const SkBitmap& favicon) override;
   void OnTitleChanged(int tab_id, const std::string& title) override;
   void OnLoadingChanged(int tab_id, bool loading) override;
+  void OnPageLoadStatusUpdate(int tab_id, bool completed) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FakeNavigationFeatureDelegate);
@@ -57,10 +60,17 @@ void FakeNavigationFeatureDelegate::OnLoadingChanged(int tab_id, bool loading) {
   DVLOG(1) << "Loading status changed to " << loading << " in tab " << tab_id;
 }
 
+void FakeNavigationFeatureDelegate::OnPageLoadStatusUpdate(int tab_id,
+                                                           bool completed) {
+  DVLOG(1) << "Page Load Status changed to completed = " << completed <<
+      " in tab " << tab_id;
+}
+
 }  // namespace
 
 BlimpClientSessionLinux::BlimpClientSessionLinux()
-    : event_source_(ui::PlatformEventSource::CreateDefault()),
+    : BlimpClientSession(GURL(kDefaultAssignerUrl)),
+      event_source_(ui::PlatformEventSource::CreateDefault()),
       navigation_feature_delegate_(new FakeNavigationFeatureDelegate) {
   blimp_display_manager_.reset(new BlimpDisplayManager(gfx::Size(800, 600),
                                                        this,

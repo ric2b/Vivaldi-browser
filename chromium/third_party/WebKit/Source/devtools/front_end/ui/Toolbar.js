@@ -101,6 +101,11 @@ WebInspector.Toolbar.prototype = {
         this.appendToolbarItem(new WebInspector.ToolbarSeparator());
     },
 
+    appendSpacer: function()
+    {
+        this.appendToolbarItem(new WebInspector.ToolbarSeparator(true));
+    },
+
     /**
      * @param {string} text
      */
@@ -162,7 +167,7 @@ WebInspector.Toolbar.prototype = {
         if (lastSeparator && lastSeparator !== this._items.peekLast())
             lastSeparator.setVisible(false);
 
-        this.element.classList.toggle("hidden", lastSeparator && lastSeparator.visible() && !nonSeparatorVisible);
+        this.element.classList.toggle("hidden", !!lastSeparator && lastSeparator.visible() && !nonSeparatorVisible);
     }
 }
 
@@ -644,6 +649,16 @@ WebInspector.ToolbarMenuButton.prototype = {
             return;
         }
 
+        if (!this._triggerTimeout)
+            this._triggerTimeout = setTimeout(this._trigger.bind(this, event), 200);
+    },
+
+    /**
+     * @param {!Event} event
+     */
+    _trigger: function(event)
+    {
+        delete this._triggerTimeout;
         var contextMenu = new WebInspector.ContextMenu(event,
             this._useSoftMenu,
             this.element.totalOffsetLeft(),
@@ -658,6 +673,10 @@ WebInspector.ToolbarMenuButton.prototype = {
      */
     _clicked: function(event)
     {
+        if (!this._triggerTimeout)
+            return;
+        clearTimeout(this._triggerTimeout);
+        this._trigger(event);
     },
 
     __proto__: WebInspector.ToolbarButton.prototype
@@ -705,10 +724,11 @@ WebInspector.ToolbarSettingToggle.prototype = {
 /**
  * @constructor
  * @extends {WebInspector.ToolbarItem}
+ * @param {boolean=} spacer
  */
-WebInspector.ToolbarSeparator = function()
+WebInspector.ToolbarSeparator = function(spacer)
 {
-    WebInspector.ToolbarItem.call(this, createElementWithClass("div", "toolbar-divider"));
+    WebInspector.ToolbarItem.call(this, createElementWithClass("div", spacer ? "toolbar-spacer" : "toolbar-divider"));
 }
 
 WebInspector.ToolbarSeparator.prototype = {

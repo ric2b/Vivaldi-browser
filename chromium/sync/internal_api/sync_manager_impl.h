@@ -25,7 +25,6 @@
 #include "sync/internal_api/js_sync_encryption_handler_observer.h"
 #include "sync/internal_api/js_sync_manager_observer.h"
 #include "sync/internal_api/protocol_event_buffer.h"
-#include "sync/internal_api/public/sync_context_proxy.h"
 #include "sync/internal_api/public/sync_manager.h"
 #include "sync/internal_api/public/user_share.h"
 #include "sync/internal_api/sync_encryption_handler_impl.h"
@@ -35,10 +34,6 @@
 #include "sync/util/time.h"
 
 class GURL;
-
-namespace syncer_v2 {
-class SyncContext;
-}
 
 namespace syncer {
 
@@ -95,20 +90,20 @@ class SYNC_EXPORT SyncManagerImpl
   void SetInvalidatorEnabled(bool invalidator_enabled) override;
   void OnIncomingInvalidation(
       syncer::ModelType type,
-      scoped_ptr<InvalidationInterface> invalidation) override;
+      std::unique_ptr<InvalidationInterface> invalidation) override;
   void AddObserver(SyncManager::Observer* observer) override;
   void RemoveObserver(SyncManager::Observer* observer) override;
   SyncStatus GetDetailedStatus() const override;
   void SaveChanges() override;
   void ShutdownOnSyncThread(ShutdownReason reason) override;
   UserShare* GetUserShare() override;
-  syncer_v2::SyncContextProxy* GetSyncContextProxy() override;
+  scoped_ptr<syncer_v2::SyncContext> GetSyncContextProxy() override;
   const std::string cache_guid() override;
   bool ReceivedExperiment(Experiments* experiments) override;
   bool HasUnsyncedItems() override;
   SyncEncryptionHandler* GetEncryptionHandler() override;
   ScopedVector<syncer::ProtocolEvent> GetBufferedProtocolEvents() override;
-  scoped_ptr<base::ListValue> GetAllNodesForType(
+  std::unique_ptr<base::ListValue> GetAllNodesForType(
       syncer::ModelType type) override;
   void RegisterDirectoryTypeDebugInfoObserver(
       syncer::TypeDebugInfoObserver* observer) override;
@@ -118,6 +113,7 @@ class SYNC_EXPORT SyncManagerImpl
       syncer::TypeDebugInfoObserver* observer) override;
   void RequestEmitDebugInfo() override;
   void ClearServerData(const ClearServerDataCallback& callback) override;
+  void OnCookieJarChanged(bool account_mismatch) override;
 
   // SyncEncryptionHandler::Observer implementation.
   void OnPassphraseRequired(
@@ -288,23 +284,19 @@ class SYNC_EXPORT SyncManagerImpl
 
   // The ServerConnectionManager used to abstract communication between the
   // client (the Syncer) and the sync server.
-  scoped_ptr<SyncAPIServerConnectionManager> connection_manager_;
+  std::unique_ptr<SyncAPIServerConnectionManager> connection_manager_;
 
   // Maintains state that affects the way we interact with different sync types.
   // This state changes when entering or exiting a configuration cycle.
-  scoped_ptr<ModelTypeRegistry> model_type_registry_;
-
-  // The main interface for non-blocking sync types and a thread-safe wrapper.
-  scoped_ptr<syncer_v2::SyncContext> sync_context_;
-  scoped_ptr<syncer_v2::SyncContextProxy> sync_context_proxy_;
+  std::unique_ptr<ModelTypeRegistry> model_type_registry_;
 
   // A container of various bits of information used by the SyncScheduler to
   // create SyncSessions.  Must outlive the SyncScheduler.
-  scoped_ptr<sessions::SyncSessionContext> session_context_;
+  std::unique_ptr<sessions::SyncSessionContext> session_context_;
 
   // The scheduler that runs the Syncer. Needs to be explicitly
   // Start()ed.
-  scoped_ptr<SyncScheduler> scheduler_;
+  std::unique_ptr<SyncScheduler> scheduler_;
 
   // A multi-purpose status watch object that aggregates stats from various
   // sync components.
@@ -345,7 +337,7 @@ class SYNC_EXPORT SyncManagerImpl
   // Sync's encryption handler. It tracks the set of encrypted types, manages
   // changing passphrases, and in general handles sync-specific interactions
   // with the cryptographer.
-  scoped_ptr<SyncEncryptionHandlerImpl> sync_encryption_handler_;
+  std::unique_ptr<SyncEncryptionHandlerImpl> sync_encryption_handler_;
 
   base::WeakPtrFactory<SyncManagerImpl> weak_ptr_factory_;
 

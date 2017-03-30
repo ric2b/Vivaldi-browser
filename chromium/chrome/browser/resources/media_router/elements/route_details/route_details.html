@@ -1,4 +1,4 @@
-<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <dom-module id="route-details">
   <link rel="import" type="css" href="../../media_router_common.css">
@@ -14,12 +14,12 @@
       <paper-button flat class="route-button button"
           id="start-casting-to-route-button"
           hidden$="[[!route.canJoin]]"
-          on-click="startCastingToRoute_">
+          on-tap="startCastingToRoute_">
         <span>[[startCastingButtonText_]]</span>
       </paper-button>
       <paper-button flat class="route-button button"
           id="close-route-button"
-          on-click="closeRoute_">
+          on-tap="closeRoute_">
         <span>[[stopCastingButtonText_]]</span>
       </paper-button>
     <div>

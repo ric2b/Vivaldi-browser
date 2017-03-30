@@ -5,12 +5,12 @@
 #ifndef CHROMEOS_LOGIN_AUTH_CRYPTOHOME_AUTHENTICATOR_H_
 #define CHROMEOS_LOGIN_AUTH_CRYPTOHOME_AUTHENTICATOR_H_
 
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/task_runner.h"
 #include "chromeos/chromeos_export.h"
@@ -129,12 +129,12 @@ class CHROMEOS_EXPORT CryptohomeAuthenticator
   // success/failure.
   void LoginAsPublicSession(const UserContext& user_context) override;
 
-  // Initiates login into the kiosk mode account identified by |app_user_id|.
+  // Initiates login into the kiosk mode account identified by |app_account_id|.
   // Mounts an ephemeral guest cryptohome if |use_guest_mount| is |true|.
   // Otherwise, mounts a public cryptohome, which will be ephemeral if the
   // |DeviceEphemeralUsersEnabled| policy is enabled and non-ephemeral
   // otherwise.
-  void LoginAsKioskAccount(const std::string& app_user_id,
+  void LoginAsKioskAccount(const AccountId& app_account_id,
                            bool use_guest_mount) override;
 
   // These methods must be called on the UI thread, as they make DBus calls
@@ -232,7 +232,7 @@ class CHROMEOS_EXPORT CryptohomeAuthenticator
 
   scoped_refptr<base::TaskRunner> task_runner_;
 
-  scoped_ptr<AuthAttemptState> current_state_;
+  std::unique_ptr<AuthAttemptState> current_state_;
   bool migrate_attempted_;
   bool remove_attempted_;
   bool resync_attempted_;

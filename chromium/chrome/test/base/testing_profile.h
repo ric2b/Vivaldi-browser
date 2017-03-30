@@ -111,6 +111,9 @@ class TestingProfile : public Profile {
     // Sets the PolicyService to be used by this profile.
     void SetPolicyService(scoped_ptr<policy::PolicyService> policy_service);
 
+    // Sets the UserProfileName to be used by this profile.
+    void SetProfileName(const std::string& profile_name);
+
     // Creates the TestingProfile using previously-set settings.
     scoped_ptr<TestingProfile> Build();
 
@@ -134,6 +137,7 @@ class TestingProfile : public Profile {
     std::string supervised_user_id_;
     scoped_ptr<policy::PolicyService> policy_service_;
     TestingFactories testing_factories_;
+    std::string profile_name_;
 
     DISALLOW_COPY_AND_ASSIGN(Builder);
   };
@@ -163,7 +167,8 @@ class TestingProfile : public Profile {
                  bool guest_session,
                  const std::string& supervised_user_id,
                  scoped_ptr<policy::PolicyService> policy_service,
-                 const TestingFactories& factories);
+                 const TestingFactories& factories,
+                 const std::string& profile_name);
 
   ~TestingProfile() override;
 
@@ -218,11 +223,6 @@ class TestingProfile : public Profile {
   bool IsOffTheRecord() const override;
   content::DownloadManagerDelegate* GetDownloadManagerDelegate() override;
   net::URLRequestContextGetter* GetRequestContext() override;
-  net::URLRequestContextGetter* CreateRequestContext(
-      content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors) override;
-  net::URLRequestContextGetter* GetRequestContextForRenderProcess(
-      int renderer_child_id) override;
   content::ResourceContext* GetResourceContext() override;
   content::BrowserPluginGuestManager* GetGuestManager() override;
   storage::SpecialStoragePolicy* GetSpecialStoragePolicy() override;
@@ -230,6 +230,14 @@ class TestingProfile : public Profile {
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionManager* GetPermissionManager() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
+  net::URLRequestContextGetter* CreateRequestContext(
+      content::ProtocolHandlerMap* protocol_handlers,
+      content::URLRequestInterceptorScopedVector request_interceptors) override;
+  net::URLRequestContextGetter* CreateRequestContextForStoragePartition(
+      const base::FilePath& partition_path,
+      bool in_memory,
+      content::ProtocolHandlerMap* protocol_handlers,
+      content::URLRequestInterceptorScopedVector request_interceptors) override;
 
   TestingProfile* AsTestingProfile() override;
 
@@ -282,11 +290,6 @@ class TestingProfile : public Profile {
   net::URLRequestContextGetter* GetMediaRequestContextForStoragePartition(
       const base::FilePath& partition_path,
       bool in_memory) override;
-  net::URLRequestContextGetter* CreateRequestContextForStoragePartition(
-      const base::FilePath& partition_path,
-      bool in_memory,
-      content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors) override;
   net::SSLConfigService* GetSSLConfigService() override;
   void set_last_session_exited_cleanly(bool value) {
     last_session_exited_cleanly_ = value;
@@ -402,9 +405,7 @@ class TestingProfile : public Profile {
   // scoped_ptr<>.
   content::MockResourceContext* resource_context_;
 
-#if defined(ENABLE_CONFIGURATION_POLICY)
   scoped_ptr<policy::SchemaRegistryService> schema_registry_service_;
-#endif
   scoped_ptr<policy::ProfilePolicyConnector> profile_policy_connector_;
 
   // Weak pointer to a delegate for indicating that a profile was created.

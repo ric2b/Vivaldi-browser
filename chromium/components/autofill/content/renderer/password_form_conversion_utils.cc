@@ -12,7 +12,6 @@
 #include "base/i18n/case_conversion.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -390,6 +389,7 @@ bool GetPasswordForm(const SyntheticForm& form,
       form, &ignore_invisible_passwords, &ignore_invisible_usernames);
   std::string layout_sequence;
   layout_sequence.reserve(form.control_elements.size());
+  size_t number_of_non_empty_text_non_password_fields = 0;
   for (size_t i = 0; i < form.control_elements.size(); ++i) {
     WebFormControlElement control_element = form.control_elements[i];
 
@@ -404,6 +404,10 @@ bool GetPasswordForm(const SyntheticForm& form,
           continue;
         layout_sequence.push_back('P');
       } else {
+        if (nonscript_modified_values &&
+            nonscript_modified_values->find(*input_element) !=
+                nonscript_modified_values->end())
+          ++number_of_non_empty_text_non_password_fields;
         if (element_is_invisible && ignore_invisible_usernames)
           continue;
         layout_sequence.push_back('N');
@@ -595,6 +599,14 @@ bool GetPasswordForm(const SyntheticForm& form,
   password_form->blacklisted_by_user = false;
   password_form->type = PasswordForm::TYPE_MANUAL;
 
+  // The password form is considered that it looks like SignUp form if it has
+  // more than 1 text field with user input or it has a new password field and
+  // no current password field.
+  password_form->does_look_like_signup_form =
+      number_of_non_empty_text_non_password_fields > 1 ||
+      (number_of_non_empty_text_non_password_fields == 1 &&
+       password_form->password_element.empty() &&
+       !password_form->new_password_element.empty());
   return true;
 }
 
@@ -633,17 +645,17 @@ bool IsGaiaReauthenticationForm(
   return has_rart_field && has_continue_field;
 }
 
-scoped_ptr<PasswordForm> CreatePasswordFormFromWebForm(
+std::unique_ptr<PasswordForm> CreatePasswordFormFromWebForm(
     const WebFormElement& web_form,
     const ModifiedValues* nonscript_modified_values,
     const FormsPredictionsMap* form_predictions) {
   if (web_form.isNull())
-    return scoped_ptr<PasswordForm>();
+    return std::unique_ptr<PasswordForm>();
 
-  scoped_ptr<PasswordForm> password_form(new PasswordForm());
+  std::unique_ptr<PasswordForm> password_form(new PasswordForm());
   password_form->action = form_util::GetCanonicalActionForForm(web_form);
   if (!password_form->action.is_valid())
-    return scoped_ptr<PasswordForm>();
+    return std::unique_ptr<PasswordForm>();
 
   SyntheticForm synthetic_form;
   PopulateSyntheticFormFromWebForm(web_form, &synthetic_form);
@@ -654,12 +666,12 @@ scoped_ptr<PasswordForm> CreatePasswordFormFromWebForm(
 
   if (!GetPasswordForm(synthetic_form, password_form.get(),
                        nonscript_modified_values, form_predictions))
-    return scoped_ptr<PasswordForm>();
+    return std::unique_ptr<PasswordForm>();
 
   return password_form;
 }
 
-scoped_ptr<PasswordForm> CreatePasswordFormFromUnownedInputElements(
+std::unique_ptr<PasswordForm> CreatePasswordFormFromUnownedInputElements(
     const WebFrame& frame,
     const ModifiedValues* nonscript_modified_values,
     const FormsPredictionsMap* form_predictions) {
@@ -669,16 +681,16 @@ scoped_ptr<PasswordForm> CreatePasswordFormFromUnownedInputElements(
   synthetic_form.document = frame.document();
 
   if (synthetic_form.control_elements.empty())
-    return scoped_ptr<PasswordForm>();
+    return std::unique_ptr<PasswordForm>();
 
-  scoped_ptr<PasswordForm> password_form(new PasswordForm());
+  std::unique_ptr<PasswordForm> password_form(new PasswordForm());
   UnownedPasswordFormElementsAndFieldSetsToFormData(
       synthetic_form.fieldsets, synthetic_form.control_elements, nullptr,
       frame.document(), form_util::EXTRACT_NONE, &password_form->form_data,
       nullptr /* FormFieldData */);
   if (!GetPasswordForm(synthetic_form, password_form.get(),
                        nonscript_modified_values, form_predictions))
-    return scoped_ptr<PasswordForm>();
+    return std::unique_ptr<PasswordForm>();
 
   // No actual action on the form, so use the the origin as the action.
   password_form->action = password_form->origin;

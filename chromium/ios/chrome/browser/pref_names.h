@@ -14,6 +14,7 @@ extern const char kBrowserStateLastUsed[];
 extern const char kBrowserStatesLastActive[];
 extern const char kBrowserStatesNumCreated[];
 extern const char kBrowsingDataMigrationHasBeenPossible[];
+extern const char kClearBrowsingDataHistoryNoticeShownTimes[];
 extern const char kContextualSearchEnabled[];
 extern const char kDataSaverEnabled[];
 extern const char kDefaultCharset[];
@@ -50,13 +51,7 @@ extern const char kOmniboxGeolocationLastAuthorizationAlertVersion[];
 
 extern const char kRateThisAppDialogLastShownTime[];
 
-// TODO(crbug.com/567136): those preferences are duplicated between desktop
-// and iOS. Once the corresponding code has been componentized or is no longer
-// used by iOS, remove the duplicate registration/definition.
-extern const char kSafeBrowsingEnabled[];
-extern const char kSafeBrowsingExtendedReportingEnabled[];
-extern const char kSafeBrowsingExtendedReportingOptInAllowed[];
-extern const char kSafeBrowsingProceedAnywayDisabled[];
+extern const char kDroppedSafeBrowsingCookies[];
 
 }  // namespace prefs
 

@@ -4,20 +4,22 @@
 
 #include "sync/internal_api/public/base/progress_marker_map.h"
 
+#include "base/base64.h"
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
 #include "base/values.h"
 
 namespace syncer {
 
-scoped_ptr<base::DictionaryValue> ProgressMarkerMapToValue(
+std::unique_ptr<base::DictionaryValue> ProgressMarkerMapToValue(
     const ProgressMarkerMap& marker_map) {
-  scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   for (ProgressMarkerMap::const_iterator it = marker_map.begin();
        it != marker_map.end(); ++it) {
     std::string printable_payload;
     base::EscapeJSONString(
         it->second, false /* put_in_quotes */, &printable_payload);
+    base::Base64Encode(printable_payload, &printable_payload);
     value->SetString(ModelTypeToString(it->first), printable_payload);
   }
   return value;

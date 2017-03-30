@@ -9,6 +9,7 @@
 
 #include "base/mac/scoped_nsobject.h"
 #import "chrome/browser/ui/cocoa/styled_text_field.h"
+#import "chrome/browser/ui/cocoa/themed_window.h"
 #import "chrome/browser/ui/cocoa/url_drop_target.h"
 
 @class AutocompleteTextFieldCell;
@@ -45,8 +46,11 @@ class AutocompleteTextFieldObserver {
   // Return |true| if there is a selection to copy.
   virtual bool CanCopy() = 0;
 
-  // Clears the |pboard| and adds the field's current selection.
-  // Called when the user does a copy or drag.
+  // Creates a pasteboard item from the field's current selection.
+  virtual base::scoped_nsobject<NSPasteboardItem> CreatePasteboardItem() = 0;
+
+  // Copies the pasteboard item returned from |CreatePasteboardItem()| to
+  // |pboard|.
   virtual void CopyToPasteboard(NSPasteboard* pboard) = 0;
 
   // Returns true if the Show URL option should be available.
@@ -117,7 +121,8 @@ class AutocompleteTextFieldObserver {
 };
 
 @interface AutocompleteTextField : StyledTextField<NSTextViewDelegate,
-                                                   URLDropTarget> {
+                                                   URLDropTarget,
+                                                   ThemedWindowDrawing> {
  @private
   // Undo manager for this text field.  We use a specific instance rather than
   // the standard undo manager in order to let us clear the undo stack at will.

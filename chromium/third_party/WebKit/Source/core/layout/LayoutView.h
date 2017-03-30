@@ -104,15 +104,9 @@ public:
 
     FrameView* frameView() const { return m_frameView; }
 
-    enum ViewportConstrainedPosition {
-        IsNotFixedPosition,
-        IsFixedPosition,
-    };
-
-    static ViewportConstrainedPosition toViewportConstrainedPosition(EPosition position) { return position == FixedPosition ? IsFixedPosition : IsNotFixedPosition; }
-    void mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, ViewportConstrainedPosition, const PaintInvalidationState*) const;
-    void mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, const PaintInvalidationState*) const override;
-    void adjustViewportConstrainedOffset(LayoutRect&, ViewportConstrainedPosition) const;
+    bool mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, MapCoordinatesFlags, VisualRectFlags) const;
+    bool mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, VisualRectFlags = DefaultVisualRectFlags) const override;
+    void adjustOffsetForFixedPosition(LayoutRect&) const;
 
     void invalidatePaintForViewAndCompositedLayers();
 
@@ -131,7 +125,7 @@ public:
     void invalidatePaintForSelection();
 
     void absoluteRects(Vector<IntRect>&, const LayoutPoint& accumulatedOffset) const override;
-    void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed) const override;
+    void absoluteQuads(Vector<FloatQuad>&) const override;
 
     LayoutRect viewRect() const override;
     LayoutRect overflowClipRect(const LayoutPoint& location, OverlayScrollbarSizeRelevancy = IgnoreOverlayScrollbarSize) const override;
@@ -188,7 +182,7 @@ public:
 
     void pushLayoutState(LayoutState& layoutState) { m_layoutState = &layoutState; }
     void popLayoutState() { ASSERT(m_layoutState); m_layoutState = m_layoutState->next(); }
-    void invalidateTreeIfNeeded(PaintInvalidationState&) final;
+    void invalidateTreeIfNeeded(const PaintInvalidationState&) final;
 
     LayoutRect visualOverflowRect() const override;
 
@@ -210,11 +204,15 @@ public:
     // have changed.  visibleRect is the clipping boundary.
     void sendMediaPositionChangeNotifications(const IntRect& visibleRect);
 
+    // The rootLayerScrolls setting will ultimately determine whether FrameView
+    // or PaintLayerScrollableArea handle the scroll.
+    ScrollResult scroll(ScrollGranularity, const FloatSize&) override;
+
 private:
-    void mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState&, MapCoordinatesFlags = ApplyContainerFlip, bool* wasFixed = nullptr, const PaintInvalidationState* = nullptr) const override;
+    void mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState&, MapCoordinatesFlags = ApplyContainerFlip) const override;
 
     const LayoutObject* pushMappingToContainer(const LayoutBoxModelObject* ancestorToStopAt, LayoutGeometryMap&) const override;
-    void mapAbsoluteToLocalPoint(MapCoordinatesFlags, TransformState&) const override;
+    void mapAncestorToLocal(const LayoutBoxModelObject*, TransformState&, MapCoordinatesFlags) const override;
     void computeSelfHitTestRects(Vector<LayoutRect>&, const LayoutPoint& layerOffset) const override;
 
     void layoutContent();
@@ -222,14 +220,15 @@ private:
     void checkLayoutState();
 #endif
 
-    friend class ForceHorriblySlowRectMapping;
+    void updateFromStyle() override;
+    bool allowsOverflowClip() const override;
 
     bool shouldUsePrintingLayout() const;
 
     int viewLogicalWidthForBoxSizing() const;
     int viewLogicalHeightForBoxSizing() const;
 
-    RawPtrWillBeUntracedMember<FrameView> m_frameView;
+    UntracedMember<FrameView> m_frameView;
 
     // The current selection represented as 2 boundaries.
     // Selection boundaries are represented in LayoutView by a tuple
@@ -271,38 +270,12 @@ private:
 
     unsigned m_hitTestCount;
     unsigned m_hitTestCacheHits;
-    OwnPtrWillBePersistent<HitTestCache> m_hitTestCache;
+    Persistent<HitTestCache> m_hitTestCache;
 
     Vector<LayoutMedia*> m_mediaForPositionNotification;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutView, isLayoutView());
-
-// Suspends the PaintInvalidationState cached offset and clipRect optimization. Used under transforms
-// that cannot be represented by PaintInvalidationState (common in SVG) and when paint invalidation
-// containers don't follow the common tree-walk algorithm (e.g. when an absolute positioned descendant
-// is nested under a relatively positioned inline-block child).
-class ForceHorriblySlowRectMapping {
-    STACK_ALLOCATED();
-    WTF_MAKE_NONCOPYABLE(ForceHorriblySlowRectMapping);
-public:
-    ForceHorriblySlowRectMapping(const PaintInvalidationState* paintInvalidationState)
-        : m_paintInvalidationState(paintInvalidationState)
-        , m_didDisable(m_paintInvalidationState && m_paintInvalidationState->cachedOffsetsEnabled())
-    {
-        if (m_paintInvalidationState)
-            m_paintInvalidationState->m_cachedOffsetsEnabled = false;
-    }
-
-    ~ForceHorriblySlowRectMapping()
-    {
-        if (m_didDisable)
-            m_paintInvalidationState->m_cachedOffsetsEnabled = true;
-    }
-private:
-    const PaintInvalidationState* m_paintInvalidationState;
-    bool m_didDisable;
-};
 
 } // namespace blink
 

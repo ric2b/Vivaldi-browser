@@ -16,7 +16,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window_state.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/ui_base_switches.h"
@@ -79,13 +78,14 @@ class DefaultStateProvider : public WindowSizer::StateProvider {
       wp_pref->GetInteger("work_area_right", &work_area_right);
       if (*show_state == ui::SHOW_STATE_DEFAULT && maximized)
         *show_state = ui::SHOW_STATE_MAXIMIZED;
+#if defined(USE_ASH)
       bool docked = false;
       wp_pref->GetBoolean("docked", &docked);
       if (*show_state == ui::SHOW_STATE_DEFAULT && docked &&
-          !browser_->is_type_tabbed() &&
-          browser_->host_desktop_type() == chrome::HOST_DESKTOP_TYPE_ASH) {
+          !browser_->is_type_tabbed()) {
         *show_state = ui::SHOW_STATE_DOCKED;
       }
+#endif  // USE_ASH
     }
     work_area->SetRect(work_area_left, work_area_top,
                       std::max(0, work_area_right - work_area_left),
@@ -175,8 +175,8 @@ class DefaultTargetDisplayProvider : public WindowSizer::TargetDisplayProvider {
 // WindowSizer, public:
 
 WindowSizer::WindowSizer(
-    scoped_ptr<StateProvider> state_provider,
-    scoped_ptr<TargetDisplayProvider> target_display_provider,
+    std::unique_ptr<StateProvider> state_provider,
+    std::unique_ptr<TargetDisplayProvider> target_display_provider,
     const Browser* browser)
     : state_provider_(std::move(state_provider)),
       target_display_provider_(std::move(target_display_provider)),
@@ -184,8 +184,8 @@ WindowSizer::WindowSizer(
       browser_(browser) {}
 
 WindowSizer::WindowSizer(
-    scoped_ptr<StateProvider> state_provider,
-    scoped_ptr<TargetDisplayProvider> target_display_provider,
+    std::unique_ptr<StateProvider> state_provider,
+    std::unique_ptr<TargetDisplayProvider> target_display_provider,
     gfx::Screen* screen,
     const Browser* browser)
     : state_provider_(std::move(state_provider)),
@@ -205,9 +205,9 @@ void WindowSizer::GetBrowserWindowBoundsAndShowState(
     const Browser* browser,
     gfx::Rect* window_bounds,
     ui::WindowShowState* show_state) {
-  scoped_ptr<StateProvider> state_provider(
+  std::unique_ptr<StateProvider> state_provider(
       new DefaultStateProvider(app_name, browser));
-  scoped_ptr<TargetDisplayProvider> target_display_provider(
+  std::unique_ptr<TargetDisplayProvider> target_display_provider(
       new DefaultTargetDisplayProvider);
   const WindowSizer sizer(std::move(state_provider),
                           std::move(target_display_provider), browser);

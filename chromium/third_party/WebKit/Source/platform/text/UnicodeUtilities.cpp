@@ -77,13 +77,12 @@ void foldQuoteMarksAndSoftHyphens(String& s)
     s.replace(rightSingleQuotationMarkCharacter, '\'');
     // Replace soft hyphen with an ignorable character so that their presence or absence will
     // not affect string comparison.
-    s.replace(softHyphenCharacter, 0);
+    s.replace(softHyphenCharacter, static_cast<UChar>('\0'));
 }
 
 static bool isNonLatin1Separator(UChar32 character)
 {
-    ASSERT_ARG(character, character >= 256);
-
+    DCHECK_GE(character, 256);
     return U_GET_GC_MASK(character) & (U_GC_S_MASK | U_GC_P_MASK | U_GC_Z_MASK | U_GC_CF_MASK);
 }
 

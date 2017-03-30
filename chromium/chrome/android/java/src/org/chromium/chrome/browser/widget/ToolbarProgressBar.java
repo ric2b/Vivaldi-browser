@@ -138,6 +138,13 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
     }
 
     /**
+     * @return True if the progress bar is showing and started.
+     */
+    public boolean isStarted() {
+        return mIsStarted;
+    }
+
+    /**
      * Start hiding progress bar animation.
      * @param delayed Whether a delayed fading out animation should be posted.
      */
@@ -200,8 +207,7 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
 
     @Override
     public void setProgress(float progress) {
-        assert mIsStarted;
-        if (mTargetProgress == progress) return;
+        if (!mIsStarted || mTargetProgress == progress) return;
 
         mTargetProgressUpdateCount += 1;
         mTargetProgress = progress;

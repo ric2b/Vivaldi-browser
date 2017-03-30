@@ -7,8 +7,8 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/stl_util.h"
-#include "mojo/public/cpp/system/macros.h"
 
 namespace mus {
 
@@ -60,7 +60,7 @@ class WindowTrackerTemplate : public TObserver {
  private:
   WindowList windows_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(WindowTrackerTemplate);
+  DISALLOW_COPY_AND_ASSIGN(WindowTrackerTemplate);
 };
 
 }  // namespace mus

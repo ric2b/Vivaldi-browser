@@ -6,8 +6,8 @@
 <translation id="10614374240317010">Aldrig sparad</translation>
 <translation id="1061441684050139317">Chrome behöver tillgång till mikrofonen för att kunna dela den på den här webbplatsen.</translation>
 <translation id="1080790410959514870">Du loggar ut från ett konto som hanteras av <ph name="DOMAIN_NAME" />. Chrome-data som lagras på enheten kommer att tas bort, men all data finns kvar i ditt Google-konto.</translation>
-<translation id="1095407227123756519">Lägg till ett konto och få åtkomst till bokmärken, historik, lösenord och andra inställningar på alla dina enheter.</translation>
 <translation id="1098052486217676340">Har avslutats</translation>
+<translation id="1111673857033749125">Här visas bokmärken som du har sparat på andra enheter.</translation>
 <translation id="1121094540300013208">Användning och felrapporter</translation>
 <translation id="1137305377394488060">den senaste timmen</translation>
 <translation id="1178581264944972037">Paus</translation>
@@ -19,12 +19,14 @@
 <translation id="1240668123557180468">Upptäck webbsidor som skickats av enheter i närheten. Chrome samlar webbsidor som är kopplade till enheter i din omgivning, skickar de sedan anonymt till en av Googles tjänster och väljer de som är mest användbara för dig och visar dem sedan.
 
 Bluetooth och Plats måste vara aktiverade om du vill använda Physical Web-tjänster.</translation>
+<translation id="1250508505624960884">Bokmärken i Chrome Beta</translation>
 <translation id="1254090737195733114">Vill du importera data?</translation>
 <translation id="1258753120186372309">Googles doodle: <ph name="DOODLE_DESCRIPTION" /></translation>
 <translation id="1272079795634619415">Stopp</translation>
 <translation id="1285320974508926690">Översätt aldrig den här webbplatsen</translation>
 <translation id="1291207594882862231">Rensa historiken, cookies, webbplatsdata, cacheminnet …</translation>
 <translation id="129553762522093515">Nyligen stängda</translation>
+<translation id="1326317727527857210">Logga in i Chrome om du vill ha samma flikar tillgängliga på alla enheter.</translation>
 <translation id="13410144310025252">Visa dem i Chrome</translation>
 <translation id="1346090444609141578">Inga sparade sidor här</translation>
 <translation id="1369915414381695676">Webbplatsen <ph name="SITE_NAME" /> har lagts till</translation>
@@ -40,10 +42,11 @@ Bluetooth och Plats måste vara aktiverade om du vill använda Physical Web-tjä
 <translation id="1445680696957526815">Chromes komponenter är inte inbördes kompatibla. Kanske håller Chrome på att uppgraderas. Försök igen om några minuter. Om problemet kvarstår testar du att avinstallera och sedan installera om Chrome.</translation>
 <translation id="1446450296470737166">Tillåt fullst. kontroll av MIDI</translation>
 <translation id="145097072038377568">Inaktiverad i Android-inställningarna</translation>
+<translation id="147006957810816598">Du loggas inte ut från Google-kontot.</translation>
 <translation id="1477626028522505441">Det gick inte att ladda ned <ph name="FILE_NAME" /> på grund av serverfel.</translation>
 <translation id="1506061864768559482">Sökmotor</translation>
 <translation id="1513352483775369820">Bokmärken och webbhistorik</translation>
-<translation id="1546112724822176246">Visas inte enheten? <ph name="BEGIN_LINK" />Få hjälp<ph name="END_LINK" />.</translation>
+<translation id="1549000191223877751">Flytta till annat fönster</translation>
 <translation id="1553358976309200471">Uppdatera Chrome</translation>
 <translation id="1557201757634521564">Identifiera teckenkodning automatiskt</translation>
 <translation id="1592483623187843893">Bokmärket har sparats offline</translation>
@@ -62,6 +65,7 @@ Bluetooth och Plats måste vara aktiverade om du vill använda Physical Web-tjä
 <translation id="1742134235943978220">Översatt till <ph name="TARGET_LANGUAGE" />.</translation>
 <translation id="1749561566933687563">Synkronisera bokmärken</translation>
 <translation id="17513872634828108">Öppna flikar</translation>
+<translation id="1756600373018374892">Den här knappen ger snabb tillgång till flikarna.</translation>
 <translation id="1807246157184219062">Ljus</translation>
 <translation id="1825719650605518411">Första körningen</translation>
 <translation id="1829244130665387512">Hitta på sida</translation>
@@ -71,16 +75,21 @@ Bluetooth och Plats måste vara aktiverade om du vill använda Physical Web-tjä
 <translation id="194341124344773587">Aktivera behörighet för Chrome i <ph name="BEGIN_LINK" />Android-inställningar<ph name="END_LINK" />.</translation>
 <translation id="1943432128510653496">Spara lösenord</translation>
 <translation id="1944384637046898011">Kryptera alla med Google-lösenordet från <ph name="TIME" /></translation>
+<translation id="1946005195648379376">Styr hur Google anpassar Sök och andra Google-tjänster utifrån webbhistoriken.</translation>
+<translation id="1959930595721737608">Tillåt JavaScript på följande webbplats.</translation>
 <translation id="1966710179511230534">Uppdatera dina inloggningsuppgifter.</translation>
 <translation id="1974060860693918893">Avancerat</translation>
+<translation id="1984321224716884559">Bokmärken i Chrome Dev</translation>
 <translation id="1984937141057606926">Tillåts, men inte från tredje part</translation>
 <translation id="1994173015038366702">Webbadress</translation>
+<translation id="2001120796168634316">Spara den länkade sidan</translation>
 <translation id="200669432486043882">Ersätt fil</translation>
 <translation id="2038563949887743358">Aktivera begäran av skrivbordsversion</translation>
 <translation id="2073235970478114994">Läs in bilder</translation>
 <translation id="2079545284768500474">Ångra</translation>
 <translation id="2082238445998314030">Resultat <ph name="RESULT_NUMBER" /> av <ph name="TOTAL_RESULTS" /></translation>
 <translation id="2095887075102408547">När den här funktionen är aktiverad komprimerar Chrome sidor som du besöker med hjälp av Googles servrar innan de laddas ned. Sidor som öppnas via privata anslutningar (HTTPS) eller i inkognitoflikar varken optimeras eller visas av Google.</translation>
+<translation id="2096396629993765042">Du loggas inte ut från Google-kontot. Det kan finnas andra former av webbhistorik i Google-kontot på <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />.</translation>
 <translation id="2100273922101894616">Automatisk inloggning</translation>
 <translation id="2126426811489709554">Drivs av Chrome</translation>
 <translation id="213279576345780926"><ph name="TAB_TITLE" /> har stängts</translation>
@@ -92,10 +101,7 @@ Bluetooth och Plats måste vara aktiverade om du vill använda Physical Web-tjä
 <translation id="2206488550163399966"><ph name="APP_NAME" />, webbapp. <ph name="APP_URL" /></translation>
 <translation id="2268044343513325586">Finjustera</translation>
 <translation id="2315043854645842844">Val av certifikat på klienten stöds inte av operativsystemet.</translation>
-<translation id="2316129865977710310">Nej tack</translation>
-<translation id="2319528413610359757">För personer som läser <ph name="PUBLISHER" /></translation>
 <translation id="2321958826496381788">Flytta reglaget tills du kan läsa texten ordentligt. Texten bör bli åtminstone så här stor när du trycker två gånger på ett stycke.</translation>
-<translation id="2329597144923131178">Logga in så blir bokmärken, historik, lösenord med mera tillgängligt på alla dina enheter.</translation>
 <translation id="2343328333327081434">Installerar …</translation>
 <translation id="2351097562818989364">Översättningsinställningarna har återställts.</translation>
 <translation id="2359808026110333948">Fortsätt</translation>
@@ -133,9 +139,12 @@ Bluetooth och Plats måste vara aktiverade om du vill använda Physical Web-tjä
 <translation id="2762000892062317888">nyss</translation>
 <translation id="2770465223704140727">Ta bort från listan</translation>
 <translation id="278029852808208386">Inga Bluetooth-enheter hittades. <ph name="BEGIN_LINK" />Gör om sökningen<ph name="END_LINK" />.</translation>
+<translation id="2811892995384186721">Visas inte enheten? <ph name="BEGIN_LINK" />Få hjälp<ph name="END_LINK" /></translation>
+<translation id="2836148919159985482">Tryck på bakåtknappen om du vill lämna helskärmsläget.</translation>
 <translation id="2842985007712546952">Överordnad mapp</translation>
 <translation id="2870560284913253234">Webbplats</translation>
 <translation id="2888126860611144412">Om Chrome</translation>
+<translation id="2889768325388591707">Byt flik snabbt</translation>
 <translation id="2891154217021530873">Avbryt inläsningen av sidan</translation>
 <translation id="2902702728133930130">Ett oväntat fel uppstod när Chrome skulle startas.</translation>
 <translation id="2903493209154104877">Adresser</translation>
@@ -153,6 +162,7 @@ Bluetooth och Plats måste vara aktiverade om du vill använda Physical Web-tjä
 <translation id="307329814453917357">Erbjud att översätta sidor med Google Översätt</translation>
 <translation id="3089395242580810162">Öppna i inkognitoflik</translation>
 <translation id="3090193911106258841">Får åtkomst till ljud- och videoindata</translation>
+<translation id="3117051980354074377">Logga in i Chrome om du vill ha samma bokmärken tillgängliga på alla enheter.</translation>
 <translation id="3137521801621304719">Inaktivera inkognitoläge</translation>
 <translation id="3177909033752230686">Sidans språk:</translation>
 <translation id="3190152372525844641">Aktivera behörigheter för Chrome i <ph name="BEGIN_LINK" />Android-inställningar<ph name="END_LINK" />.</translation>
@@ -178,6 +188,7 @@ Du loggar in med ett hanterat konto, vilket innebär att administratören kontro
 <translation id="3387650086002190359">Det gick inte att ladda ned <ph name="FILE_NAME" /> på grund av filsystemfel.</translation>
 <translation id="3414952576877147120">Storlek:</translation>
 <translation id="3435896845095436175">Aktivera</translation>
+<translation id="3452612588551937789">Logga in med ditt Google-konto så att du kan använda bokmärken, lösenord, historik med mera på alla dina enheter.</translation>
 <translation id="3485544713029068372">Smart Lock för lösenord</translation>
 <translation id="3492207499832628349">Ny inkognitoflik</translation>
 <translation id="3501331331116143684">Sidan har sparats offline i <ph name="FOLDER_NAME" /></translation>
@@ -188,15 +199,15 @@ Du loggar in med ett hanterat konto, vilket innebär att administratören kontro
 <translation id="360480449234699036">Läs om olika ämnen på webbplatser utan att lämna sidan. När du trycker på Sök skickas ett ord och dess sammanhang till Google Sök och definitioner, bilder, sökresultat och annan information visas.
 
 Om du vill ändra söktermen trycker du länge för att välja. Om du vill förfina sökningen drar du panelen ända upp och trycker på sökrutan.</translation>
+<translation id="3623048332793834136">Bokmärken i Chrome Canary</translation>
 <translation id="363596933471559332">Logga in automatiskt på webbplatser med hjälp av lagrade inloggningsuppgifter. När funktionen är inaktiverad måste du verifiera dina uppgifter varje gång du besöker webbplatsen innan du kan logga in.</translation>
-<translation id="3653742808139624888">Logga in i Chrome om du vill få tillgång till samma bokmärken på alla dina enheter</translation>
 <translation id="3656115297268584622">Aktivera plats i <ph name="BEGIN_LINK" />Android-inställningarna<ph name="END_LINK" />.</translation>
 <translation id="3661699943263275414">Webbplatser från tredje part kan spara och läsa cookiedata</translation>
 <translation id="3672452749423051839">Förslag vid navigeringsfel</translation>
 <translation id="3716158070938632480">Det finns webbsidor i närheten</translation>
 <translation id="3732088672634061408">Det gick inte att hämta intressen.</translation>
 <translation id="3738139272394829648">Tryck för att söka</translation>
-<translation id="3774280986422214650">Om du aktiverar den här funktionen deltar du i ett experiment där HTTPS-sidor skickas via Googles servrar som proxy.</translation>
+<translation id="3744111561329211289">Synkronisera i bakgrunden</translation>
 <translation id="3809549525127675114">Uppspelningen av <ph name="VIDEO_TITLE" /> har avslutats</translation>
 <translation id="3828029223314399057">Sök efter bokmärken</translation>
 <translation id="3871171699884605801">Webbhistoriken kan inte rensas med barnkonton</translation>
@@ -213,7 +224,6 @@ Om du vill ändra söktermen trycker du länge för att välja. Om du vill förf
 <translation id="4035611068038188272">För närvarande används <ph name="TOTAL_OFFLINE_STORAGE_SIZE" /> av bokmärken.</translation>
 <translation id="4042870126885713738">Visa förslag när det inte går att öppna en webbadress eller upprätta en anslutning</translation>
 <translation id="4056223980640387499">Sepia</translation>
-<translation id="4059119910594077751">Tryck på bakåtknappen om du vill lämna helskärmsläget.</translation>
 <translation id="4062305924942672200">Juridisk information</translation>
 <translation id="4089831646916293264">Det kan hända att den här funktionen förhindrar åtkomst till premiumdatatjänster från operatören.</translation>
 <translation id="4099578267706723511">Hjälp till att förbättra Chrome genom att skicka användningsstatistik och felrapporter till Google.</translation>
@@ -225,6 +235,7 @@ Om du vill ändra söktermen trycker du länge för att välja. Om du vill förf
 <translation id="4195643157523330669">Öppna i ny flik</translation>
 <translation id="4198229475320555619">Ett bokmärke på <ph name="PAGE_SIZE_STRING" /> har sparats offline</translation>
 <translation id="423410644998903704">Chrome behöver tillgång till behörigheter för att kunna dela dem på den här webbplatsen.</translation>
+<translation id="4242533952199664413">Öppna Inställningar</translation>
 <translation id="424864128008805179">Vill du logga ut från Chrome?</translation>
 <translation id="4254813446494774748">Översättningsspråk:</translation>
 <translation id="4256782883801055595">Licenser för öppen källkod</translation>
@@ -256,6 +267,7 @@ Om du vill ändra söktermen trycker du länge för att välja. Om du vill förf
 <translation id="4645575059429386691">Hanteras av din förälder</translation>
 <translation id="4663756553811254707"><ph name="NUMBER_OF_BOOKMARKS" /> bokmärken har raderats</translation>
 <translation id="4665282149850138822"><ph name="NAME" /> har lagts till på startskärmen.</translation>
+<translation id="4668044310199835006">Bokmärken i Work Chrome</translation>
 <translation id="4684427112815847243">Synkronisera allt</translation>
 <translation id="4686372254213217147">Originalstorlek</translation>
 <translation id="4690286298542128877">Flikar flyttas till en funktion för flikbyte i Chrome.</translation>
@@ -271,22 +283,19 @@ Om du vill ändra söktermen trycker du länge för att välja. Om du vill förf
 <translation id="4816465935029283692">Datatyper</translation>
 <translation id="4827948050554950725">Lägg till ett kreditkort</translation>
 <translation id="4836364883164334657">Anslutningen till den här webbplatsen är inte privat. Hackare kan försöka stjäla information (till exempel bilder, lösenord, meddelanden och kreditkortsuppgifter) från <ph name="DOMAIN_NAME" />.</translation>
-<translation id="4842511359652954519">Läs mer</translation>
 <translation id="4850886885716139402">Visa</translation>
 <translation id="4875622588773761625">Vill du att lösenordet för den här webbplatsen ska uppdateras med <ph name="PASSWORD_MANAGER_BRAND" />?</translation>
 <translation id="4881695831933465202">Öppna</translation>
 <translation id="4885273946141277891">Fler Chrome-förekomster än det finns stöd för.</translation>
 <translation id="4927198283430892231">De sparade sidorna tar för närvarande upp <ph name="TOTAL_OFFLINE_STORAGE_SIZE" />.</translation>
 <translation id="4943872375798546930">Inga resultat</translation>
-<translation id="4970484396410298643">Använd flikar som du öppnar på datorn även här.
-
-Du behöver bara öppna Chrome på datorn, öppna menyn och välja Logga in i Chrome …</translation>
 <translation id="497421865427891073">Fortsätt</translation>
 <translation id="4996978546172906250">Dela via</translation>
 <translation id="5000922062037820727">Blockerad (rekommenderas)</translation>
 <translation id="5016205925109358554">Serif</translation>
 <translation id="5039804452771397117">Tillåt</translation>
 <translation id="5040262127954254034">Sekretess</translation>
+<translation id="5056549851600133418">Artiklar för dig</translation>
 <translation id="5063480226653192405">Användning</translation>
 <translation id="5100237604440890931">Vyn har komprimerats. Expandera den genom att klicka.</translation>
 <translation id="5107381076085091558">Nedladdning pausad.</translation>
@@ -303,20 +312,19 @@ Du behöver bara öppna Chrome på datorn, öppna menyn och välja Logga in i Ch
 <translation id="5184329579814168207">Öppna i Chrome</translation>
 <translation id="5199929503336119739">Jobbprofil</translation>
 <translation id="5210365745912300556">Stäng flik</translation>
-<translation id="5210714456814679336">Flikar som du hat öppnat i Chrome på andra enheter visas här.</translation>
 <translation id="5222676887888702881">Logga ut</translation>
-<translation id="5228579091201413441">Aktivera synkronisering</translation>
 <translation id="5233638681132016545">Ny flik</translation>
 <translation id="5271967389191913893">Innehållet som skulle laddas ned gick inte att öppna på enheten.</translation>
 <translation id="5275558766013849309">Flikarna visas tillsammans med aktuella appar.</translation>
+<translation id="528192093759286357">Dra uppifrån och tryck på bakåtknappen om du vill lämna helskärmsläget.</translation>
 <translation id="5284584623296338184">Ändringar i bokmärken, historik, lösenord och andra inställningar synkroniseras inte längre med ditt Google-konto. Befintlig data fortsätter dock att lagras i Google-kontot.</translation>
 <translation id="5301954838959518834">OK, jag fattar</translation>
 <translation id="5302048478445481009">Språk</translation>
 <translation id="5304593522240415983">Fältet får inte vara tomt</translation>
+<translation id="5308380583665731573">Ansluta</translation>
 <translation id="5308933389783727448">Sök i sparade sidor</translation>
 <translation id="5313967007315987356">Lägg till webbplats</translation>
 <translation id="5317780077021120954">Spara</translation>
-<translation id="5323972449344932352">Starta Chrome</translation>
 <translation id="5324858694974489420">Föräldrainställningar</translation>
 <translation id="5327248766486351172">Namn</translation>
 <translation id="5345040418939504969"><ph name="BOOKMARK_TITLE" /> raderades</translation>
@@ -337,6 +345,7 @@ Du behöver bara öppna Chrome på datorn, öppna menyn och välja Logga in i Ch
 <translation id="5556459405103347317">Hämta igen</translation>
 <translation id="5565871407246142825">Kreditkort</translation>
 <translation id="5578795271662203820">Sök på <ph name="SEARCH_ENGINE" /> efter denna bild</translation>
+<translation id="5579997910517802656">Inga enheter hittades.</translation>
 <translation id="5595485650161345191">Redigera adress</translation>
 <translation id="5596627076506792578">Fler alternativ</translation>
 <translation id="5626134646977739690">Namn:</translation>
@@ -349,10 +358,6 @@ Du behöver bara öppna Chrome på datorn, öppna menyn och välja Logga in i Ch
 <translation id="5677928146339483299">Blockerad</translation>
 <translation id="5684874026226664614">Det gick inte att översätta sidan.</translation>
 <translation id="5708031556037168012">Behåll befintlig data på enheten och importera data till <ph name="TO_ACCOUNT" /> permanent.</translation>
-<translation id="5712189971979076230">Hjälp oss att prioritera vilka funktioner och förbättringar vi ska arbeta med genom att skicka information till Google om vilka filer, program och tjänster som körs när en krasch inträffar.
-
-Användningsstatistiken innehåller information som inställningar, knappklick och minnesanvändning. De innehåller inte webbadresser eller personliga uppgifter. Felrapporter innehåller information om systemet vid tidpunkten för kraschen och kan innehålla webbadresser eller personliga uppgifter beroende på vad som hände vid kraschen.</translation>
-<translation id="5715468759630044318">Välj konto</translation>
 <translation id="5719837394786370183">Sidor du visar i inkognitoflikar sparas inte i webbläsarhistoriken och lagras inte bland cookies eller i sökhistoriken när du har stängt alla inkognitoflikar. Däremot sparas alla filer du laddar ned och bokmärken du skapar.
 
 Du är dock inte osynlig. Trots inkognitoläget kan din arbetsgivare, din internetleverantör eller de webbplatser du besöker se din aktivitet.</translation>
@@ -369,13 +374,11 @@ Du är dock inte osynlig. Trots inkognitoläget kan din arbetsgivare, din intern
 <translation id="585027516397408832">Databesparing har aktiverats</translation>
 <translation id="5860033963881614850">Av</translation>
 <translation id="5869522115854928033">Sparade lösenord</translation>
-<translation id="588258955323874662">Helskärm</translation>
 <translation id="5899349522111170522">Skapa ny fil</translation>
 <translation id="5902828464777634901">All data som sparats lokalt av webbplatsen tas bort, inklusive cookies.</translation>
 <translation id="5911030830365207728">Google Översätt</translation>
 <translation id="5916664084637901428">På</translation>
 <translation id="5939518447894949180">Återställ</translation>
-<translation id="5965336165840183977">Detta rensar synkroniserad data från alla enheter. Du loggas inte ut från Google-kontot. Webbplatsinställningar som har sparats raderas inte och kan visa dina surfvanor.</translation>
 <translation id="5968595432776860642">Spelar upp <ph name="VIDEO_TITLE" /></translation>
 <translation id="6010869025736512584">Får åtkomst till videoindata</translation>
 <translation id="6012342843556706400">Chrome behöver tillgång till platsinformation för att kunna dela den på den här webbplatsen.</translation>
@@ -395,8 +398,6 @@ Du är dock inte osynlig. Trots inkognitoläget kan din arbetsgivare, din intern
 <translation id="6159335304067198720">Sparat utrymme: <ph name="PERCENT" /></translation>
 <translation id="6165508094623778733">Läs mer</translation>
 <translation id="6192792657125177640">Undantag</translation>
-<translation id="6208263165776660488">Flikar i Chrome har flyttats</translation>
-<translation id="6231464350722415003">Tillåt JavaScript på webbplatser som du anger och blockera det för resten av webben</translation>
 <translation id="6232535412751077445">Om du aktiverar Do Not Track inkluderas en begäran i din surftrafik. Eventuella effekter beror på om webbplatsen svarar på begäran och hur begäran tolkas.
 
 Vissa webbplatser kan till exempel svara på begäran genom att visa annonser som inte baseras på andra webbplatser du har besökt. Många webbplatser samlar ändå in och använder din webbinformation – till exempel för att förbättra säkerheten, tillhandahålla innehåll, annonser och rekommendationer samt generera rapportstatistik.</translation>
@@ -419,10 +420,12 @@ Vissa webbplatser kan till exempel svara på begäran genom att visa annonser so
 <translation id="6464825623202322042">Den här enheten</translation>
 <translation id="6476911854266661814"><ph name="VIDEO_TITLE" /> har pausats</translation>
 <translation id="6482749332252372425">Det gick inte att ladda ned <ph name="FILE_NAME" /> eftersom det inte finns tillräckligt med lagringsutrymme.</translation>
+<translation id="6541922744811587456">Bokmärken i Chrome</translation>
 <translation id="654446541061731451">Välj en flik som du vill överföra</translation>
 <translation id="6550675742724504774">Alternativ</translation>
 <translation id="656628257199996201">Översätt alltid <ph name="SOURCE_LANGUAGE" /></translation>
 <translation id="6571070086367343653">Redigera kreditkort</translation>
+<translation id="6573431926118603307">Här visas flikar som du har öppnat i Chrome på andra enheter.</translation>
 <translation id="6575643671698722332">Fel vid återställning. Kolla att enheten är online. Försök igen.</translation>
 <translation id="6600954340915313787">Kopierat till Chrome</translation>
 <translation id="6612358246767739896">Skyddat innehåll</translation>
@@ -432,12 +435,12 @@ Vissa webbplatser kan till exempel svara på begäran genom att visa annonser so
 <translation id="6656545060687952787">Chrome behöver platsåtkomst för att söka efter enheter. <ph name="BEGIN_LINK" />Uppdatera behörigheter<ph name="END_LINK" /></translation>
 <translation id="666268767214822976">Använd en tjänst som ger förslag på relaterade sökfrågor och populära webbplatser när du skriver i adressfältet</translation>
 <translation id="666981079809192359">Chromes sekretessmeddelande</translation>
+<translation id="6683720003467092441">Tillåt bakgrundssynkronisering på följande webbplats.</translation>
 <translation id="6697251040310467641">Sidan har sparats offline</translation>
 <translation id="6698801883190606802">Hantera synkroniserad data</translation>
 <translation id="6699351163704950317">Alla sparade sidor</translation>
 <translation id="6710213216561001401">Föregående</translation>
 <translation id="6720988912937197322">Sidan som sparades är inte tillgänglig offline</translation>
-<translation id="6722992508235227685">Bokmärken, historik, lösenord och andra inställningar synkroniseras med ditt Google-konto så att du kan använda dem på alla enheter. Du kan välja vad som ska synkroniseras under <ph name="BEGIN_LINK1" />Inställningar<ph name="END_LINK1" />.</translation>
 <translation id="6738867403308150051">Laddar ned …</translation>
 <translation id="6762156594045689028"><ph name="BEGIN_LINK" />Återställ synkroniseringen<ph name="END_LINK" /> om du vill ändra den här inställningen.</translation>
 <translation id="6770414673596662518">Säker webbsökning i Chrome används dessutom för att identifiera skadliga sidor och skydda dig från nätfiske, skadlig programvara och skadliga filnedladdningar.</translation>
@@ -454,6 +457,7 @@ Vissa webbplatser kan till exempel svara på begäran genom att visa annonser so
 <translation id="6857778194843072568">Skicka endast via Wi-Fi</translation>
 <translation id="6865313869410766144">Formuläruppgifter för Autofyll</translation>
 <translation id="6868088497967843822">Logga in om du vill att bokmärken, historik, lösenord och andra inställningar ska vara tillgängliga på alla dina enheter.</translation>
+<translation id="6879008316532205713">Aktivera Autosynkronisering av data i kontoinställningarna för Android om du vill ha samma flikar tillgängliga på alla enheter.</translation>
 <translation id="6945221475159498467">Välj</translation>
 <translation id="6963766334940102469">Radera bokmärken</translation>
 <translation id="6965382102122355670">OK</translation>
@@ -484,9 +488,6 @@ Vissa webbplatser kan till exempel svara på begäran genom att visa annonser so
 <translation id="7244362611678346589"><ph name="SEARCH_ENGINE_URL" /> använder din platsinformation för att visa lokala sökresultat</translation>
 <translation id="7299441085833132046"><ph name="BEGIN_LINK" />Hjälp<ph name="END_LINK" /></translation>
 <translation id="7299721129597238157">Ta bort bokmärke</translation>
-<translation id="7324738665594301612">Som en del av ett experiment testar vi att skicka HTTPS-sidor via Googles servrar som proxy.</translation>
-<translation id="7346217184097589238">Webbplatsinställningar som har sparats raderas inte och kan visa dina surfvanor.</translation>
-<translation id="7346909386216857016">OK, jag förstår</translation>
 <translation id="7347770551817603360">Offlineinnehåll</translation>
 <translation id="7363354739009474003">Läser in <ph name="VIDEO_TITLE" /></translation>
 <translation id="7366340029385295517">Castar till <ph name="SCREEN_NAME" /></translation>
@@ -497,19 +498,23 @@ Vissa webbplatser kan till exempel svara på begäran genom att visa annonser so
 <translation id="7408644312175185557">Visa flikar tillsammans med de senaste apparna på skärmen Översikt på mobilen.</translation>
 <translation id="7423098979219808738">Fråga först</translation>
 <translation id="7437998757836447326">Logga ut från Chrome</translation>
+<translation id="7464701184726199289">Inställningarna rensar synkroniserad data från alla enheter. Sparade webbplatsinställningar raderas inte och kan visa dina surfvanor. <ph name="BEGIN_LINK" />Läs mer<ph name="END_LINK" /></translation>
 <translation id="7473891865547856676">Nej tack</translation>
 <translation id="7475192538862203634">Om du ser detta ofta provar du de här <ph name="BEGIN_LINK" />förslagen<ph name="END_LINK" />.</translation>
 <translation id="748127970106343339">Bekräfta borttagning av användaruppgifter för enheten</translation>
+<translation id="7487352416683556407">Den data som markerades har tagits bort från Chrome och från synkroniserade enheter.
+
+Det kan finnas andra former av webbhistorik i Google-kontot på <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />, t.ex. sökningar och aktivitet på andra tjänster från Google.</translation>
 <translation id="7493994139787901920"><ph name="VERSION" /> (uppdaterades <ph name="TIME_SINCE_UPDATE" />)</translation>
 <translation id="7498271377022651285">Vänta …</translation>
 <translation id="7499262814309712782">Konto för synkronisering</translation>
 <translation id="7501135638693251872">Alla bokmärken</translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7562080006725997899">Tar bort webbinformation</translation>
+<translation id="756809126120519699">Data i Chrome har rensats</translation>
 <translation id="7588950540487816470">Physical Web</translation>
 <translation id="7596558890252710462">Operativsystem</translation>
 <translation id="7599840151813361502">Du loggas inte ut från dina <ph name="BEGIN_LINK" />Google-konton<ph name="END_LINK" /></translation>
-<translation id="7603403729818446828">Gör så att flikar visas tillsammans med de senaste apparna på skärmen. Du kan styra detta i <ph name="BEGIN_LINK" />Inställningar<ph name="END_LINK" />.</translation>
 <translation id="7607002721634913082">Pausad</translation>
 <translation id="7612619742409846846">Inloggad i Google som</translation>
 <translation id="7619072057915878432">Det gick inte att ladda ned <ph name="FILE_NAME" /> på grund av nätverksfel.</translation>
@@ -548,7 +553,8 @@ Du är dock inte osynlig. Trots inkognitoläget kan din arbetsgivare, din intern
 <translation id="8050319187894766337">Sparad offline. Nästan fullt.</translation>
 <translation id="8068648041423924542">Det går inte att välja certifikat.</translation>
 <translation id="8069239273282989646">Efter komprimering</translation>
-<translation id="8084156870963450514">Logga in för att komma åt alla dina grejer på webben från vilken enhet som helst</translation>
+<translation id="8073388330009372546">Öppna bild i ny flik</translation>
+<translation id="8076014560081431679">Sparade webbplatsinställningar raderas inte och kan visa dina surfvanor. <ph name="BEGIN_LINK" />Läs mer<ph name="END_LINK" /></translation>
 <translation id="8087000398470557479">Innehållet kommer från <ph name="DOMAIN_NAME" /> via Google.</translation>
 <translation id="8098570222830891427">Webbsidor sänds via Bluetooth av enheter i närheten. Chrome söker efter sidor och visar dem när du startar enheten. Sidorna skickas via en tjänst från Google för att förbättra kvaliteten på sidresultaten.
 
@@ -561,6 +567,7 @@ Du kan styra Physical Web i inställningarna för Chrome.</translation>
 <translation id="8173098127580644436">tidens början</translation>
 <translation id="8200772114523450471">Återuppta</translation>
 <translation id="8209050860603202033">Öppna bild</translation>
+<translation id="8215250379351058554"><ph name="SITE" /> vill ansluta till:</translation>
 <translation id="8218346974737627104">Bekräfta inloggning</translation>
 <translation id="8218934717680664417">Nu kan du söka med en tryckning</translation>
 <translation id="8223946939421658889">Rensa data från</translation>
@@ -580,6 +587,7 @@ Du kan styra Physical Web i inställningarna för Chrome.</translation>
 <translation id="8497726226069778601">Det finns inget att se här … än</translation>
 <translation id="8514577642972634246">Starta inkognitoläget</translation>
 <translation id="8518901949365209398">Den här webbplatsen använder en svag säkerhetskonfiguration (signaturer med SHA-1), så anslutningen kanske inte är privat.</translation>
+<translation id="8525306231823319788">Helskärm</translation>
 <translation id="854522910157234410">Öppna sidan</translation>
 <translation id="8562452229998620586">Sparade lösenord visas här.</translation>
 <translation id="856481929701340285">Begär skrivbordsversion</translation>
@@ -591,6 +599,7 @@ Du kan styra Physical Web i inställningarna för Chrome.</translation>
 <translation id="862875433388403934">Det kan hända att det inte går att spela upp innehåll (t.ex. filmer och musik) som har hämtats i andra appar förrän dessa appar får nya licenser som baseras på nya användaruppgifter för enheten.
 
 Du hämtar nya licenser genom att ansluta till internet och spela upp det nedladdade innehållet.</translation>
+<translation id="8636825310635137004">Aktivera synkronisering om du vill ha samma flikar tillgängliga på alla enheter.</translation>
 <translation id="8660471606262461360">Från Google Payments</translation>
 <translation id="8676374126336081632">Radera inmatning</translation>
 <translation id="869891660844655955">Utgångsdatum</translation>
@@ -602,6 +611,7 @@ Du hämtar nya licenser genom att ansluta till internet och spela upp det nedlad
 <translation id="8737542153238017984">Sidan som sparades är inte tillgänglig offline. Lagringsutrymmet är nästan fullt.</translation>
 <translation id="8793430725658173476">Kopiera webbadress</translation>
 <translation id="8798099450830957504">Standard</translation>
+<translation id="8812942424849541387">Styr hur det fungerar i <ph name="BEGIN_LINK1" />Inställningar<ph name="END_LINK1" /></translation>
 <translation id="8820817407110198400">Bokmärken</translation>
 <translation id="8829678271838353305"><ph name="ACCOUNT_EMAIL_LAST" /> är inloggad. Om du loggar in med <ph name="ACCOUNT_EMAIL_NEW" /> slås synkroniserade uppgifter som bokmärken ihop mellan olika konton. Om du inte vill att uppgifterna ska slås ihop tar du bort webbinformationen i <ph name="BEGIN_LINK" />inställningarna<ph name="END_LINK" />.</translation>
 <translation id="8853345339104747198"><ph name="TAB_TITLE" />, flik</translation>
@@ -611,11 +621,13 @@ Du hämtar nya licenser genom att ansluta till internet och spela upp det nedlad
 <translation id="8912362522468806198">Google-konto</translation>
 <translation id="8920114477895755567">Väntar på föräldrauppgifter.</translation>
 <translation id="8931159598799892500">Chrome + Physical Web</translation>
-<translation id="8934455786738644694">Dra uppifrån och tryck på bakåtknappen om du vill lämna helskärmsläget.</translation>
 <translation id="8941248009481596111">Din anslutning till webbplatsen är privat.</translation>
 <translation id="8941729603749328384">www.example.com</translation>
+<translation id="8942627711005830162">Öppna i ett annat fönster</translation>
 <translation id="8959122750345127698">Det går inte att nå webbadressen: <ph name="URL" /></translation>
 <translation id="8979340629087822094">den senaste dagen</translation>
+<translation id="8981454092730389528">Googles aktivitetsinställningar</translation>
+<translation id="8986494364107987395">Skicka användningsstatistik och kraschrapporter till Google automatiskt</translation>
 <translation id="8987061207681586800">Anpassa Chrome</translation>
 <translation id="9019902583201351841">Hanteras av dina föräldrar</translation>
 <translation id="9020607083536754075">Stäng nuvarande flik och återvänd till föregående app</translation>

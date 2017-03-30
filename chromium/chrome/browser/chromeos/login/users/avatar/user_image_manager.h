@@ -52,7 +52,8 @@ class UserImageManager {
 
   // Saves image to file, sends LOGIN_USER_IMAGE_CHANGED notification and
   // updates Local State.
-  virtual void SaveUserImage(const user_manager::UserImage& user_image) = 0;
+  virtual void SaveUserImage(
+      std::unique_ptr<user_manager::UserImage> user_image) = 0;
 
   // Tries to load user image from disk; if successful, sets it for the user,
   // sends LOGIN_USER_IMAGE_CHANGED notification and updates Local State.
@@ -98,7 +99,7 @@ class UserImageManager {
   // (e.g. because the external data reference specifies an invalid URL),
   // the method is not called at all.
   virtual void OnExternalDataFetched(const std::string& policy,
-                                     scoped_ptr<std::string> data) = 0;
+                                     std::unique_ptr<std::string> data) = 0;
 
  protected:
   const std::string& user_id() const { return user_id_; }

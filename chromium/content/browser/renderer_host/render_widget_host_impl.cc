@@ -52,7 +52,6 @@
 #include "content/common/content_switches_internal.h"
 #include "content/common/cursors/webcursor.h"
 #include "content/common/frame_messages.h"
-#include "content/common/gpu/gpu_messages.h"
 #include "content/common/host_shared_bitmap_manager.h"
 #include "content/common/input_messages.h"
 #include "content/common/resize_params.h"
@@ -67,6 +66,7 @@
 #include "content/public/common/web_preferences.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "gpu/ipc/common/gpu_messages.h"
 #include "skia/ext/image_operations.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/web/WebCompositionUnderline.h"
@@ -76,10 +76,6 @@
 #include "ui/gfx/geometry/vector2d_conversions.h"
 #include "ui/gfx/skbitmap_operations.h"
 #include "ui/snapshot/snapshot.h"
-
-#if defined(OS_WIN)
-#include "content/common/plugin_constants_win.h"
-#endif
 
 #if defined(OS_MACOSX)
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
@@ -97,13 +93,6 @@ using blink::WebTextDirection;
 
 namespace content {
 namespace {
-
-// The amount of time after a mouse wheel event is sent to the delegate
-// OnUserInteraction method before another mouse wheel event will be sent. This
-// interval is used by the Blink EventHandler in its orthogonal heuristic for
-// detecting the end of a scroll event (if no event has been seen in 0.1
-// seconds, send an end scroll).
-const double kMouseWheelCoalesceIntervalInSeconds = 0.1;
 
 bool g_check_for_pending_resize_ack = true;
 
@@ -208,7 +197,8 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
       pending_mouse_lock_request_(false),
       allow_privileged_mouse_lock_(false),
       has_touch_handler_(false),
-      is_in_gesture_scroll_(false),
+      is_in_touchpad_gesture_scroll_(false),
+      is_in_touchscreen_gesture_scroll_(false),
       received_paint_after_load_(false),
       next_browser_snapshot_id_(1),
       owned_by_render_frame_host_(false),
@@ -218,7 +208,6 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
           base::TimeDelta::FromMilliseconds(kHungRendererDelayMs)),
       new_content_rendering_delay_(
           base::TimeDelta::FromMilliseconds(kNewContentRenderingDelayMs)),
-      mouse_wheel_coalesce_timer_(new base::ElapsedTimer()),
       weak_factory_(this) {
   CHECK(delegate_);
   CHECK_NE(MSG_ROUTING_NONE, routing_id_);
@@ -377,8 +366,6 @@ void RenderWidgetHostImpl::SendScreenRects() {
   last_window_screen_rect_ = view_->GetBoundsInRootWindow();
   Send(new ViewMsg_UpdateScreenRects(
       GetRoutingID(), last_view_screen_rect_, last_window_screen_rect_));
-  if (delegate_)
-    delegate_->DidSendScreenRects(this);
   waiting_for_screen_rects_ack_ = true;
 }
 
@@ -471,12 +458,6 @@ bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
     IPC_MESSAGE_HANDLER(ViewHostMsg_SelectionChanged, OnSelectionChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_SelectionBoundsChanged,
                         OnSelectionBoundsChanged)
-#if defined(OS_WIN)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_WindowlessPluginDummyWindowCreated,
-                        OnWindowlessPluginDummyWindowCreated)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_WindowlessPluginDummyWindowDestroyed,
-                        OnWindowlessPluginDummyWindowDestroyed)
-#endif
     IPC_MESSAGE_HANDLER(InputHostMsg_ImeCompositionRangeChanged,
                         OnImeCompositionRangeChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_DidFirstPaintAfterLoad,
@@ -679,7 +660,7 @@ void RenderWidgetHostImpl::DispatchColorProfile() {
       FROM_HERE,
       base::Bind(&RenderWidgetHostImpl::SendColorProfile,
                  weak_factory_.GetWeakPtr()));
-#elif !defined(OS_CHROMEOS) && !defined(OS_IOS) && !defined(OS_ANDROID)
+#elif !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
   // Only support desktop Mac and Linux at this time.
   SendColorProfile();
 #endif
@@ -1043,21 +1024,26 @@ void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
   // TODO(wjmaclean) Remove the code for supporting resending gesture events
   // when WebView transitions to OOPIF and BrowserPlugin is removed.
   // http://crbug.com/533069
+  bool* is_in_gesture_scroll =
+      gesture_event.sourceDevice ==
+              blink::WebGestureDevice::WebGestureDeviceTouchpad
+          ? &is_in_touchpad_gesture_scroll_
+          : &is_in_touchscreen_gesture_scroll_;
   if (gesture_event.type == blink::WebInputEvent::GestureScrollBegin) {
-    DCHECK(!is_in_gesture_scroll_);
-    is_in_gesture_scroll_ = true;
+    DCHECK(!(*is_in_gesture_scroll));
+    *is_in_gesture_scroll = true;
   } else if (gesture_event.type == blink::WebInputEvent::GestureScrollEnd ||
              gesture_event.type == blink::WebInputEvent::GestureFlingStart) {
-    DCHECK(is_in_gesture_scroll_ ||
+    DCHECK(*is_in_gesture_scroll ||
            (gesture_event.type == blink::WebInputEvent::GestureFlingStart &&
             gesture_event.sourceDevice ==
                 blink::WebGestureDevice::WebGestureDeviceTouchpad));
-    is_in_gesture_scroll_ = false;
+    *is_in_gesture_scroll = false;
   }
 
   bool scroll_update_needs_wrapping =
       gesture_event.type == blink::WebInputEvent::GestureScrollUpdate &&
-      gesture_event.resendingPluginId != -1 && !is_in_gesture_scroll_;
+      gesture_event.resendingPluginId != -1 && !(*is_in_gesture_scroll);
 
   if (scroll_update_needs_wrapping) {
     ForwardGestureEventWithLatencyInfo(
@@ -1462,8 +1448,10 @@ void RenderWidgetHostImpl::Destroy(bool also_delete) {
   if (delegate_)
     delegate_->RenderWidgetDeleted(this);
 
-  if (also_delete)
+  if (also_delete) {
+    CHECK(!owner_delegate_);
     delete this;
+  }
 }
 
 void RenderWidgetHostImpl::RendererIsUnresponsive() {
@@ -1679,15 +1667,6 @@ void RenderWidgetHostImpl::DidUpdateBackingStore(
   TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::DidUpdateBackingStore");
   TimeTicks update_start = TimeTicks::Now();
 
-  // Move the plugins if the view hasn't already been destroyed.  Plugin moves
-  // will not be re-issued, so must move them now, regardless of whether we
-  // paint or not.  MovePluginWindows attempts to move the plugin windows and
-  // in the process could dispatch other window messages which could cause the
-  // view to be destroyed.
-  // guest id defaults to -1 for non guest views.
-  if (view_)
-    view_->MovePluginWindows(params.plugin_window_moves, -1);
-
   NotificationService::current()->Notify(
       NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_BACKING_STORE,
       Source<RenderWidgetHost>(this),
@@ -1827,51 +1806,6 @@ void RenderWidgetHostImpl::OnShowDisambiguationPopup(
   Send(new ViewMsg_ReleaseDisambiguationPopupBitmap(GetRoutingID(), id));
 }
 
-#if defined(OS_WIN)
-void RenderWidgetHostImpl::OnWindowlessPluginDummyWindowCreated(
-    gfx::NativeViewId dummy_activation_window) {
-  HWND hwnd = reinterpret_cast<HWND>(dummy_activation_window);
-
-  // This may happen as a result of a race condition when the plugin is going
-  // away.
-  wchar_t window_title[MAX_PATH + 1] = {0};
-  if (!IsWindow(hwnd) ||
-      !GetWindowText(hwnd, window_title, arraysize(window_title)) ||
-      lstrcmpiW(window_title, kDummyActivationWindowName) != 0) {
-    return;
-  }
-
-#if defined(USE_AURA)
-  SetParent(hwnd,
-            reinterpret_cast<HWND>(view_->GetParentForWindowlessPlugin()));
-#else
-  SetParent(hwnd, reinterpret_cast<HWND>(GetNativeViewId()));
-#endif
-  dummy_windows_for_activation_.push_back(hwnd);
-}
-
-void RenderWidgetHostImpl::OnWindowlessPluginDummyWindowDestroyed(
-    gfx::NativeViewId dummy_activation_window) {
-  HWND hwnd = reinterpret_cast<HWND>(dummy_activation_window);
-  // To handle hwnd was not added to list because of race cond
-  // See:  OnWindowlessPluginDummyWindowCreated
-  wchar_t window_title[MAX_PATH + 1] = { 0 };
-  if (!IsWindow(hwnd) ||
-      !GetWindowText(hwnd, window_title, arraysize(window_title)) ||
-      lstrcmpiW(window_title, kDummyActivationWindowName) != 0) {
-    return;
-  }
-  std::list<HWND>::iterator i = dummy_windows_for_activation_.begin();
-  for (; i != dummy_windows_for_activation_.end(); ++i) {
-    if ((*i) == hwnd) {
-      dummy_windows_for_activation_.erase(i);
-      return;
-    }
-  }
-  NOTREACHED() << "Unknown dummy window";
-}
-#endif
-
 void RenderWidgetHostImpl::SetIgnoreInputEvents(bool ignore_input_events) {
   ignore_input_events_ = ignore_input_events;
 }
@@ -1909,21 +1843,11 @@ InputEventAckState RenderWidgetHostImpl::FilterInputEvent(
   if (!process_->HasConnection())
     return INPUT_EVENT_ACK_STATE_UNKNOWN;
 
-  if (delegate_) {
-    if (event.type == WebInputEvent::MouseDown ||
-        event.type == WebInputEvent::GestureTapDown ||
-        event.type == WebInputEvent::RawKeyDown) {
-      delegate_->OnUserInteraction(this, event.type);
-    } else if (event.type == WebInputEvent::MouseWheel) {
-      if (mouse_wheel_coalesce_timer_->Elapsed().InSecondsF() >
-          kMouseWheelCoalesceIntervalInSeconds) {
-        // TODO(dominickn): once GestureScrollBegin has landed on all platforms,
-        // replace this branch and remove.
-        delegate_->OnUserInteraction(this, event.type);
-      }
-
-      mouse_wheel_coalesce_timer_.reset(new base::ElapsedTimer());
-    }
+  if (delegate_ && (event.type == WebInputEvent::MouseDown ||
+                    event.type == WebInputEvent::GestureScrollBegin ||
+                    event.type == WebInputEvent::GestureTapDown ||
+                    event.type == WebInputEvent::RawKeyDown)) {
+    delegate_->OnUserInteraction(this, event.type);
   }
 
   return view_ ? view_->FilterInputEvent(event)
@@ -1970,11 +1894,6 @@ void RenderWidgetHostImpl::OnKeyboardEventAck(
       const NativeWebKeyboardEventWithLatencyInfo& event,
       InputEventAckState ack_result) {
   latency_tracker_.OnInputEventAck(event.event, &event.latency);
-
-#if defined(OS_MACOSX)
-  if (!is_hidden() && view_ && view_->PostProcessEventForPluginIme(event.event))
-    return;
-#endif
 
   // We only send unprocessed key event upwards if we are not hidden,
   // because the user has moved away from us and no longer expect any effect
@@ -2249,12 +2168,5 @@ BrowserAccessibilityManager*
   return delegate_ ?
       delegate_->GetOrCreateRootBrowserAccessibilityManager() : NULL;
 }
-
-#if defined(OS_WIN)
-gfx::NativeViewAccessible
-    RenderWidgetHostImpl::GetParentNativeViewAccessible() {
-  return delegate_ ? delegate_->GetParentNativeViewAccessible() : NULL;
-}
-#endif
 
 }  // namespace content

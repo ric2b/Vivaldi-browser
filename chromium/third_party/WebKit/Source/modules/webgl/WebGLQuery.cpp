@@ -4,6 +4,7 @@
 
 #include "modules/webgl/WebGLQuery.h"
 
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/webgl/WebGL2RenderingContextBase.h"
 #include "public/platform/Platform.h"
 
@@ -30,7 +31,9 @@ WebGLQuery::WebGLQuery(WebGL2RenderingContextBase* ctx)
     , m_queryResultAvailable(false)
     , m_queryResult(0)
 {
-    setObject(ctx->webContext()->createQueryEXT());
+    GLuint query;
+    ctx->contextGL()->GenQueriesEXT(1, &query);
+    setObject(query);
 }
 
 void WebGLQuery::setTarget(GLenum target)
@@ -40,9 +43,9 @@ void WebGLQuery::setTarget(GLenum target)
     m_target = target;
 }
 
-void WebGLQuery::deleteObjectImpl(WebGraphicsContext3D* context3d)
+void WebGLQuery::deleteObjectImpl(gpu::gles2::GLES2Interface* gl)
 {
-    context3d->deleteQueryEXT(m_object);
+    gl->DeleteQueriesEXT(1, &m_object);
     m_object = 0;
 }
 
@@ -57,7 +60,7 @@ void WebGLQuery::resetCachedResult()
     registerTaskObserver();
 }
 
-void WebGLQuery::updateCachedResult(WebGraphicsContext3D* ctx)
+void WebGLQuery::updateCachedResult(gpu::gles2::GLES2Interface* gl)
 {
     if (m_queryResultAvailable)
         return;
@@ -71,11 +74,11 @@ void WebGLQuery::updateCachedResult(WebGraphicsContext3D* ctx)
     // We can only update the cached result when control returns to the browser.
     m_canUpdateAvailability = false;
     GLuint available = 0;
-    ctx->getQueryObjectuivEXT(object(), GL_QUERY_RESULT_AVAILABLE_EXT, &available);
+    gl->GetQueryObjectuivEXT(object(), GL_QUERY_RESULT_AVAILABLE_EXT, &available);
     m_queryResultAvailable = !!available;
     if (m_queryResultAvailable) {
         GLuint result = 0;
-        ctx->getQueryObjectuivEXT(object(), GL_QUERY_RESULT_EXT, &result);
+        gl->GetQueryObjectuivEXT(object(), GL_QUERY_RESULT_EXT, &result);
         m_queryResult = result;
         unregisterTaskObserver();
     }

@@ -39,7 +39,7 @@ VideoPipelineImpl::~VideoPipelineImpl() {
 
 ::media::PipelineStatus VideoPipelineImpl::Initialize(
     const std::vector<::media::VideoDecoderConfig>& configs,
-    scoped_ptr<CodedFrameProvider> frame_provider) {
+    std::unique_ptr<CodedFrameProvider> frame_provider) {
   DCHECK_GT(configs.size(), 0u);
   for (const auto& config : configs) {
     CMALOG(kLogControl) << __FUNCTION__ << " "
@@ -117,6 +117,7 @@ void VideoPipelineImpl::UpdateStatistics() {
   delta_stats.video_frames_dropped =
       current_stats.video_frames_dropped - previous_stats_.video_frames_dropped;
 
+  bytes_decoded_since_last_update_ = delta_stats.video_bytes_decoded;
   previous_stats_ = current_stats;
 
   client().statistics_cb.Run(delta_stats);

@@ -21,20 +21,23 @@ class SynchronousCompositorClient;
 
 namespace {
 
-gpu::SyncPointManager* g_sync_point_manager = nullptr;
+base::LazyInstance<scoped_refptr<gpu::InProcessCommandBuffer::Service>>
+    g_gpu_service = LAZY_INSTANCE_INITIALIZER;
 
 base::Thread* CreateInProcessGpuThreadForSynchronousCompositor(
-    const InProcessChildThreadParams& params) {
-  DCHECK(g_sync_point_manager);
-  return new InProcessGpuThread(params, g_sync_point_manager);
+    const InProcessChildThreadParams& params,
+    const gpu::GpuPreferences& gpu_preferences) {
+  DCHECK(g_gpu_service.Get());
+  return new InProcessGpuThread(params, gpu_preferences,
+                                g_gpu_service.Get()->sync_point_manager());
 }
 
 }  // namespace
 
 void SynchronousCompositor::SetGpuService(
     scoped_refptr<gpu::InProcessCommandBuffer::Service> service) {
-  DCHECK(!g_sync_point_manager);
-  g_sync_point_manager = service->sync_point_manager();
+  DCHECK(!g_gpu_service.Get());
+  g_gpu_service.Get() = service;
   GpuProcessHost::RegisterGpuMainThreadFactory(
       CreateInProcessGpuThreadForSynchronousCompositor);
 }
@@ -63,11 +66,13 @@ scoped_ptr<SynchronousCompositorBase> SynchronousCompositorBase::Create(
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kIPCSyncCompositing)) {
+    bool async_input =
+        !command_line->HasSwitch(switches::kSyncInputForSyncCompositor);
     bool use_in_proc_software_draw =
         command_line->HasSwitch(switches::kSingleProcess);
     return make_scoped_ptr(new SynchronousCompositorHost(
         rwhva, web_contents_android->synchronous_compositor_client(),
-        use_in_proc_software_draw));
+        async_input, use_in_proc_software_draw));
   }
   return make_scoped_ptr(new SynchronousCompositorImpl(
       rwhva, web_contents_android->synchronous_compositor_client()));

@@ -78,15 +78,17 @@ void SplitHost(const GURL& url,
                base::string16* url_host,
                base::string16* url_domain,
                base::string16* url_subdomain) {
-  // Get Host.
-  *url_host = base::UTF8ToUTF16(url.host());
+  // GURL stores IDN hostnames in punycode.  Convert back to Unicode for
+  // display to the user.  (IDNToUnicode() will only perform this conversion
+  // if it's safe to display this host/domain in Unicode.)
+  *url_host = url_formatter::IDNToUnicode(url.host());
 
   // Get domain and registry information from the URL.
-  *url_domain =
-      base::UTF8ToUTF16(net::registry_controlled_domains::GetDomainAndRegistry(
-          url, net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES));
-  if (url_domain->empty())
-    *url_domain = *url_host;
+  std::string domain_puny =
+      net::registry_controlled_domains::GetDomainAndRegistry(
+          url, net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES);
+  *url_domain = domain_puny.empty() ?
+      *url_host : url_formatter::IDNToUnicode(domain_puny);
 
   // Add port if required.
   if (!url.port().empty()) {
@@ -108,10 +110,9 @@ void SplitHost(const GURL& url,
 #endif  // !defined(OS_ANDROID)
 
 base::string16 FormatUrlForSecurityDisplayInternal(const GURL& url,
-                                                   const std::string& languages,
                                                    bool omit_scheme) {
   if (!url.is_valid() || url.is_empty() || !url.IsStandard())
-    return url_formatter::FormatUrl(url, languages);
+    return url_formatter::FormatUrl(url);
 
   const base::string16 colon(base::ASCIIToUTF16(":"));
   const base::string16 scheme_separator(
@@ -126,13 +127,11 @@ base::string16 FormatUrlForSecurityDisplayInternal(const GURL& url,
     const GURL* inner_url = url.inner_url();
     if (inner_url->SchemeIsFile()) {
       return base::ASCIIToUTF16(url::kFileSystemScheme) + colon +
-             FormatUrlForSecurityDisplayInternal(*inner_url, languages,
-                                                 false /*omit_scheme*/) +
+             FormatUrlForSecurityDisplayInternal(*inner_url, false) +
              base::UTF8ToUTF16(url.path());
     }
     return base::ASCIIToUTF16(url::kFileSystemScheme) + colon +
-           FormatUrlForSecurityDisplayInternal(*inner_url, languages,
-                                               false /*omit_scheme*/);
+           FormatUrlForSecurityDisplayInternal(*inner_url, false);
   }
 
   const GURL origin = url.GetOrigin();
@@ -165,12 +164,11 @@ namespace url_formatter {
 // suspect it could be made simpler.
 base::string16 ElideUrl(const GURL& url,
                         const gfx::FontList& font_list,
-                        float available_pixel_width,
-                        const std::string& languages) {
+                        float available_pixel_width) {
   // Get a formatted string and corresponding parsing of the url.
   url::Parsed parsed;
   const base::string16 url_string = url_formatter::FormatUrl(
-      url, languages, url_formatter::kFormatUrlOmitAll,
+      url, url_formatter::kFormatUrlOmitAll,
       net::UnescapeRule::SPACES, &parsed, nullptr, nullptr);
   if (available_pixel_width <= 0)
     return url_string;
@@ -358,15 +356,12 @@ base::string16 ElideHost(const GURL& url,
 
 #endif  // !defined(OS_ANDROID)
 
-base::string16 FormatUrlForSecurityDisplay(const GURL& url,
-                                           const std::string& languages) {
-  return FormatUrlForSecurityDisplayInternal(url, languages, false);
+base::string16 FormatUrlForSecurityDisplay(const GURL& url) {
+  return FormatUrlForSecurityDisplayInternal(url, false);
 }
 
-base::string16 FormatUrlForSecurityDisplayOmitScheme(
-    const GURL& url,
-    const std::string& languages) {
-  return FormatUrlForSecurityDisplayInternal(url, languages, true);
+base::string16 FormatUrlForSecurityDisplayOmitScheme(const GURL& url) {
+  return FormatUrlForSecurityDisplayInternal(url, true);
 }
 
 }  // namespace url_formatter

@@ -8,6 +8,7 @@
 
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -19,7 +20,7 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/condition_variable.h"
@@ -98,7 +99,7 @@ struct SequencedTaskLessThan {
 class SequencedWorkerPoolTaskRunner : public TaskRunner {
  public:
   SequencedWorkerPoolTaskRunner(
-      const scoped_refptr<SequencedWorkerPool>& pool,
+      scoped_refptr<SequencedWorkerPool> pool,
       SequencedWorkerPool::WorkerShutdown shutdown_behavior);
 
   // TaskRunner implementation
@@ -118,11 +119,9 @@ class SequencedWorkerPoolTaskRunner : public TaskRunner {
 };
 
 SequencedWorkerPoolTaskRunner::SequencedWorkerPoolTaskRunner(
-    const scoped_refptr<SequencedWorkerPool>& pool,
+    scoped_refptr<SequencedWorkerPool> pool,
     SequencedWorkerPool::WorkerShutdown shutdown_behavior)
-    : pool_(pool),
-      shutdown_behavior_(shutdown_behavior) {
-}
+    : pool_(std::move(pool)), shutdown_behavior_(shutdown_behavior) {}
 
 SequencedWorkerPoolTaskRunner::~SequencedWorkerPoolTaskRunner() {
 }
@@ -150,7 +149,7 @@ bool SequencedWorkerPoolTaskRunner::RunsTasksOnCurrentThread() const {
 class SequencedWorkerPoolSequencedTaskRunner : public SequencedTaskRunner {
  public:
   SequencedWorkerPoolSequencedTaskRunner(
-      const scoped_refptr<SequencedWorkerPool>& pool,
+      scoped_refptr<SequencedWorkerPool> pool,
       SequencedWorkerPool::SequenceToken token,
       SequencedWorkerPool::WorkerShutdown shutdown_behavior);
 
@@ -178,13 +177,12 @@ class SequencedWorkerPoolSequencedTaskRunner : public SequencedTaskRunner {
 };
 
 SequencedWorkerPoolSequencedTaskRunner::SequencedWorkerPoolSequencedTaskRunner(
-    const scoped_refptr<SequencedWorkerPool>& pool,
+    scoped_refptr<SequencedWorkerPool> pool,
     SequencedWorkerPool::SequenceToken token,
     SequencedWorkerPool::WorkerShutdown shutdown_behavior)
-    : pool_(pool),
+    : pool_(std::move(pool)),
       token_(token),
-      shutdown_behavior_(shutdown_behavior) {
-}
+      shutdown_behavior_(shutdown_behavior) {}
 
 SequencedWorkerPoolSequencedTaskRunner::
 ~SequencedWorkerPoolSequencedTaskRunner() {
@@ -230,7 +228,7 @@ class SequencedWorkerPool::Worker : public SimpleThread {
  public:
   // Hold a (cyclic) ref to |worker_pool|, since we want to keep it
   // around as long as we are running.
-  Worker(const scoped_refptr<SequencedWorkerPool>& worker_pool,
+  Worker(scoped_refptr<SequencedWorkerPool> worker_pool,
          int thread_number,
          const std::string& thread_name_prefix);
   ~Worker() override;
@@ -448,7 +446,7 @@ class SequencedWorkerPool::Inner {
   // Owning pointers to all threads we've created so far, indexed by
   // ID. Since we lazily create threads, this may be less than
   // max_threads_ and will be initially empty.
-  using ThreadMap = std::map<PlatformThreadId, scoped_ptr<Worker>>;
+  using ThreadMap = std::map<PlatformThreadId, std::unique_ptr<Worker>>;
   ThreadMap threads_;
 
   // Set to true when we're in the process of creating another thread.
@@ -504,11 +502,11 @@ class SequencedWorkerPool::Inner {
 // Worker definitions ---------------------------------------------------------
 
 SequencedWorkerPool::Worker::Worker(
-    const scoped_refptr<SequencedWorkerPool>& worker_pool,
+    scoped_refptr<SequencedWorkerPool> worker_pool,
     int thread_number,
     const std::string& prefix)
     : SimpleThread(prefix + StringPrintf("Worker%d", thread_number)),
-      worker_pool_(worker_pool),
+      worker_pool_(std::move(worker_pool)),
       task_shutdown_behavior_(BLOCK_SHUTDOWN),
       is_processing_task_(false) {
   Start();
@@ -789,7 +787,7 @@ void SequencedWorkerPool::Inner::ThreadLoop(Worker* this_worker) {
     DCHECK(thread_being_created_);
     thread_being_created_ = false;
     auto result = threads_.insert(
-        std::make_pair(this_worker->tid(), make_scoped_ptr(this_worker)));
+        std::make_pair(this_worker->tid(), WrapUnique(this_worker)));
     DCHECK(result.second);
 
     while (true) {

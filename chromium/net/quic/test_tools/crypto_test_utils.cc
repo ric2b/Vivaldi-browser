@@ -16,6 +16,7 @@
 #include "net/quic/quic_crypto_server_stream.h"
 #include "net/quic/quic_crypto_stream.h"
 #include "net/quic/quic_server_id.h"
+#include "net/quic/quic_utils.h"
 #include "net/quic/test_tools/quic_connection_peer.h"
 #include "net/quic/test_tools/quic_framer_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
@@ -136,11 +137,14 @@ int CryptoTestUtils::HandshakeWithFakeServer(
   QuicCryptoServerConfig crypto_config(QuicCryptoServerConfig::TESTING,
                                        QuicRandom::GetInstance(),
                                        ProofSourceForTesting());
+  QuicCompressedCertsCache compressed_certs_cache(
+      QuicCompressedCertsCache::kQuicCompressedCertsCacheSize);
   SetupCryptoServerConfigForTest(server_conn->clock(),
                                  server_conn->random_generator(), &config,
                                  &crypto_config, options);
 
-  TestQuicSpdyServerSession server_session(server_conn, config, &crypto_config);
+  TestQuicSpdyServerSession server_session(server_conn, config, &crypto_config,
+                                           &compressed_certs_cache);
 
   // The client's handshake must have been started already.
   CHECK_NE(0u, client_conn->encrypted_packets_.size());
@@ -180,6 +184,8 @@ int CryptoTestUtils::HandshakeWithFakeClient(
   TestQuicSpdyClientSession client_session(client_conn, DefaultQuicConfig(),
                                            server_id, &crypto_config);
 
+  EXPECT_CALL(client_session, OnProofValid(testing::_))
+      .Times(testing::AnyNumber());
   client_session.GetCryptoStream()->CryptoConnect();
   CHECK_EQ(1u, client_conn->encrypted_packets_.size());
 
@@ -446,10 +452,8 @@ void CryptoTestUtils::CompareClientAndServerKeys(
   EXPECT_TRUE(server->ExportKeyingMaterial(kSampleLabel, kSampleContext,
                                            kSampleOutputLength,
                                            &server_key_extraction));
-  if (FLAGS_quic_save_initial_subkey_secret) {
-    EXPECT_TRUE(client->ExportTokenBindingKeyingMaterial(&client_tb_ekm));
-    EXPECT_TRUE(server->ExportTokenBindingKeyingMaterial(&server_tb_ekm));
-  }
+  EXPECT_TRUE(client->ExportTokenBindingKeyingMaterial(&client_tb_ekm));
+  EXPECT_TRUE(server->ExportTokenBindingKeyingMaterial(&server_tb_ekm));
 
   CompareCharArraysWithHexError("client write key", client_encrypter_key.data(),
                                 client_encrypter_key.length(),
@@ -496,11 +500,9 @@ void CryptoTestUtils::CompareClientAndServerKeys(
       client_key_extraction.length(), server_key_extraction.data(),
       server_key_extraction.length());
 
-  if (FLAGS_quic_save_initial_subkey_secret) {
-    CompareCharArraysWithHexError("token binding key extraction",
-                                  client_tb_ekm.data(), client_tb_ekm.length(),
-                                  server_tb_ekm.data(), server_tb_ekm.length());
-  }
+  CompareCharArraysWithHexError("token binding key extraction",
+                                client_tb_ekm.data(), client_tb_ekm.length(),
+                                server_tb_ekm.data(), server_tb_ekm.length());
 }
 
 // static

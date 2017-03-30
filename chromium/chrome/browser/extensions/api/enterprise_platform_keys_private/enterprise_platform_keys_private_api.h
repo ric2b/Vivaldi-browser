@@ -8,16 +8,17 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_ENTERPRISE_PLATFORM_KEYS_PRIVATE_ENTERPRISE_PLATFORM_KEYS_PRIVATE_API_H__
 #define CHROME_BROWSER_EXTENSIONS_API_ENTERPRISE_PLATFORM_KEYS_PRIVATE_ENTERPRISE_PLATFORM_KEYS_PRIVATE_API_H__
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
-#include "base/memory/scoped_ptr.h"
 #include "chrome/common/extensions/api/enterprise_platform_keys_private.h"
 #include "chromeos/attestation/attestation_constants.h"
 #include "chromeos/attestation/attestation_flow.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "extensions/browser/extension_function.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -94,6 +95,9 @@ class EPKPChallengeKeyBase {
   // Returns the user email.
   std::string GetUserEmail() const;
 
+  // Returns account id.
+  AccountId GetAccountId() const;
+
   // Returns the enterprise virtual device ID.
   std::string GetDeviceId() const;
 
@@ -103,7 +107,7 @@ class EPKPChallengeKeyBase {
   // user consent before calling GetCertificate().
   void PrepareKey(
       chromeos::attestation::AttestationKeyType key_type,
-      const std::string& user_id,
+      const AccountId& account_id,
       const std::string& key_name,
       chromeos::attestation::AttestationCertificateProfile certificate_profile,
       bool require_user_consent,
@@ -112,7 +116,8 @@ class EPKPChallengeKeyBase {
   chromeos::CryptohomeClient* cryptohome_client_;
   cryptohome::AsyncMethodCaller* async_caller_;
   chromeos::attestation::AttestationFlow* attestation_flow_;
-  scoped_ptr<chromeos::attestation::AttestationFlow> default_attestation_flow_;
+  std::unique_ptr<chromeos::attestation::AttestationFlow>
+      default_attestation_flow_;
   ChallengeKeyCallback callback_;
   Profile* profile_;
   std::string extension_id_;
@@ -120,18 +125,18 @@ class EPKPChallengeKeyBase {
  private:
   // Holds the context of a PrepareKey() operation.
   struct PrepareKeyContext {
-    PrepareKeyContext(
-        chromeos::attestation::AttestationKeyType key_type,
-        const std::string& user_id,
-        const std::string& key_name,
-        chromeos::attestation::AttestationCertificateProfile
-            certificate_profile,
-        bool require_user_consent,
-        const base::Callback<void(PrepareKeyResult)>& callback);
+    PrepareKeyContext(chromeos::attestation::AttestationKeyType key_type,
+                      const AccountId& account_id,
+                      const std::string& key_name,
+                      chromeos::attestation::AttestationCertificateProfile
+                          certificate_profile,
+                      bool require_user_consent,
+                      const base::Callback<void(PrepareKeyResult)>& callback);
+    PrepareKeyContext(const PrepareKeyContext& other);
     ~PrepareKeyContext();
 
     chromeos::attestation::AttestationKeyType key_type;
-    const std::string user_id;
+    const AccountId account_id;
     const std::string key_name;
     chromeos::attestation::AttestationCertificateProfile certificate_profile;
     bool require_user_consent;
@@ -257,7 +262,7 @@ class EnterprisePlatformKeysPrivateChallengeMachineKeyFunction
   // Otherwise |success| will be false and |data| is an error message.
   void OnChallengedKey(bool success, const std::string& data);
 
-  scoped_ptr<EPKPChallengeMachineKey> default_impl_;
+  std::unique_ptr<EPKPChallengeMachineKey> default_impl_;
   EPKPChallengeMachineKey* impl_;
 
   DECLARE_EXTENSION_FUNCTION(
@@ -281,7 +286,7 @@ class EnterprisePlatformKeysPrivateChallengeUserKeyFunction
   // Otherwise |success| will be false and |data| is an error message.
   void OnChallengedKey(bool success, const std::string& data);
 
-  scoped_ptr<EPKPChallengeUserKey> default_impl_;
+  std::unique_ptr<EPKPChallengeUserKey> default_impl_;
   EPKPChallengeUserKey* impl_;
 
   DECLARE_EXTENSION_FUNCTION(

@@ -26,15 +26,16 @@ string SpdyUtils::SerializeUncompressedHeaders(const SpdyHeaderBlock& headers) {
 
   size_t length = SpdyFramer::GetSerializedLength(spdy_version, &headers);
   SpdyFrameBuilder builder(length, spdy_version);
-  SpdyFramer::WriteHeaderBlock(&builder, spdy_version, &headers);
-  scoped_ptr<SpdyFrame> block(builder.take());
-  return string(block->data(), length);
+  SpdyFramer framer(spdy_version);
+  framer.SerializeHeaderBlockWithoutCompression(&builder, headers);
+  SpdySerializedFrame block(builder.take());
+  return string(block.data(), length);
 }
 
 // static
 bool SpdyUtils::ParseHeaders(const char* data,
                              uint32_t data_len,
-                             int* content_length,
+                             int64_t* content_length,
                              SpdyHeaderBlock* headers) {
   SpdyFramer framer(HTTP2);
   if (!framer.ParseHeaderBlockInBuffer(data, data_len, headers) ||
@@ -109,20 +110,23 @@ bool SpdyUtils::ParseTrailers(const char* data,
 // static
 string SpdyUtils::GetUrlFromHeaderBlock(const SpdyHeaderBlock& headers) {
   SpdyHeaderBlock::const_iterator it = headers.find(":scheme");
-  if (it == headers.end())
+  if (it == headers.end()) {
     return "";
+  }
   std::string url = it->second.as_string();
 
   url.append("://");
 
   it = headers.find(":authority");
-  if (it == headers.end())
+  if (it == headers.end()) {
     return "";
+  }
   url.append(it->second.as_string());
 
   it = headers.find(":path");
-  if (it == headers.end())
+  if (it == headers.end()) {
     return "";
+  }
   url.append(it->second.as_string());
   return url;
 }

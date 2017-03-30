@@ -7,7 +7,6 @@
 
 #import <Foundation/Foundation.h>
 
-#include "ios/web/public/web_view_type.h"
 
 namespace web {
 
@@ -16,9 +15,8 @@ namespace web {
 NSString* GetPageScript(NSString* script_file_name);
 
 // Returns an autoreleased string containing the JavaScript to be injected into
-// the web view as early as possible. The type of a target web view must match
-// |web_view_type|.
-NSString* GetEarlyPageScript(WebViewType web_view_type);
+// the web view as early as possible.
+NSString* GetEarlyPageScript();
 
 }  // namespace web
 

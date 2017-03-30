@@ -69,9 +69,9 @@ R RunOnThread(
   task_runner->PostTask(
       location,
       base::Bind(task, base::Bind(&AssignAndQuit<R>,
-                                  base::ThreadTaskRunnerHandle::Get(),
-                                  run_loop.QuitClosure(),
-                                  &result)));
+                                  base::RetainedRef(
+                                      base::ThreadTaskRunnerHandle::Get()),
+                                  run_loop.QuitClosure(), &result)));
   run_loop.Run();
   return result;
 }
@@ -99,7 +99,7 @@ void VerifySameTaskRunner(
   ASSERT_TRUE(runner1 != nullptr);
   ASSERT_TRUE(runner2 != nullptr);
   runner1->PostTask(FROM_HERE,
-                    base::Bind(&EnsureRunningOn, make_scoped_refptr(runner2)));
+                    base::Bind(&EnsureRunningOn, base::RetainedRef(runner2)));
 }
 
 void OnCreateSnapshotFileAndVerifyData(
@@ -187,8 +187,8 @@ class WriteHelper {
 
  private:
   int64_t bytes_written_;
-  scoped_ptr<MockBlobURLRequestContext> request_context_;
-  scoped_ptr<ScopedTextBlob> blob_data_;
+  std::unique_ptr<MockBlobURLRequestContext> request_context_;
+  std::unique_ptr<ScopedTextBlob> blob_data_;
 
   DISALLOW_COPY_AND_ASSIGN(WriteHelper);
 };
@@ -292,12 +292,12 @@ File::Error CannedSyncableFileSystem::OpenFileSystem() {
   base::RunLoop run_loop;
   io_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&CannedSyncableFileSystem::DoOpenFileSystem,
-                 base::Unretained(this),
-                 base::Bind(&CannedSyncableFileSystem::DidOpenFileSystem,
-                            base::Unretained(this),
-                            base::ThreadTaskRunnerHandle::Get(),
-                            run_loop.QuitClosure())));
+      base::Bind(
+          &CannedSyncableFileSystem::DoOpenFileSystem, base::Unretained(this),
+          base::Bind(&CannedSyncableFileSystem::DidOpenFileSystem,
+                     base::Unretained(this),
+                     base::RetainedRef(base::ThreadTaskRunnerHandle::Get()),
+                     run_loop.QuitClosure())));
   run_loop.Run();
 
   if (backend()->sync_context()) {
@@ -474,7 +474,7 @@ File::Error CannedSyncableFileSystem::ReadDirectory(
 int64_t CannedSyncableFileSystem::Write(
     net::URLRequestContext* url_request_context,
     const FileSystemURL& url,
-    scoped_ptr<storage::BlobDataHandle> blob_data_handle) {
+    std::unique_ptr<storage::BlobDataHandle> blob_data_handle) {
   return RunOnThread<int64_t>(
       io_task_runner_.get(), FROM_HERE,
       base::Bind(&CannedSyncableFileSystem::DoWrite, base::Unretained(this),
@@ -685,7 +685,7 @@ void CannedSyncableFileSystem::DoReadDirectory(
 void CannedSyncableFileSystem::DoWrite(
     net::URLRequestContext* url_request_context,
     const FileSystemURL& url,
-    scoped_ptr<storage::BlobDataHandle> blob_data_handle,
+    std::unique_ptr<storage::BlobDataHandle> blob_data_handle,
     const WriteCallback& callback) {
   EXPECT_TRUE(io_task_runner_->RunsTasksOnCurrentThread());
   EXPECT_TRUE(is_filesystem_opened_);
@@ -738,12 +738,10 @@ void CannedSyncableFileSystem::DidOpenFileSystem(
   if (!original_task_runner->RunsTasksOnCurrentThread()) {
     DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
     original_task_runner->PostTask(
-        FROM_HERE,
-        base::Bind(&CannedSyncableFileSystem::DidOpenFileSystem,
-                   base::Unretained(this),
-                   make_scoped_refptr(original_task_runner),
-                   quit_closure,
-                   root, name, result));
+        FROM_HERE, base::Bind(&CannedSyncableFileSystem::DidOpenFileSystem,
+                              base::Unretained(this),
+                              base::RetainedRef(original_task_runner),
+                              quit_closure, root, name, result));
     return;
   }
   result_ = result;

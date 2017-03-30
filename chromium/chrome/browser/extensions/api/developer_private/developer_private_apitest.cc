@@ -45,22 +45,22 @@ IN_PROC_BROWSER_TEST_F(DeveloperPrivateApiTest, InspectAppWindowView) {
   // Get the info about the app, including the inspectable views.
   scoped_refptr<UIThreadExtensionFunction> function(
       new api::DeveloperPrivateGetExtensionInfoFunction());
-  scoped_ptr<base::Value> result(
+  std::unique_ptr<base::Value> result(
       extension_function_test_utils::RunFunctionAndReturnSingleResult(
           function.get(), base::StringPrintf("[\"%s\"]", app->id().c_str()),
           browser()));
   ASSERT_TRUE(result);
-  scoped_ptr<api::developer_private::ExtensionInfo> info =
+  std::unique_ptr<api::developer_private::ExtensionInfo> info =
       api::developer_private::ExtensionInfo::FromValue(*result);
   ASSERT_TRUE(info);
 
   // There should be two inspectable views - the background page and the app
   // window.  Find the app window.
   ASSERT_EQ(2u, info->views.size());
-  api::developer_private::ExtensionView* window_view = nullptr;
+  const api::developer_private::ExtensionView* window_view = nullptr;
   for (const auto& view : info->views) {
-    if (view->type == api::developer_private::VIEW_TYPE_APP_WINDOW) {
-      window_view = view.get();
+    if (view.type == api::developer_private::VIEW_TYPE_APP_WINDOW) {
+      window_view = &view;
       break;
     }
   }
@@ -99,32 +99,31 @@ IN_PROC_BROWSER_TEST_F(DeveloperPrivateApiTest, InspectEmbeddedOptionsPage) {
   // Get the info about the extension, including the inspectable views.
   scoped_refptr<UIThreadExtensionFunction> function(
       new api::DeveloperPrivateGetExtensionInfoFunction());
-  scoped_ptr<base::Value> result(
+  std::unique_ptr<base::Value> result(
       extension_function_test_utils::RunFunctionAndReturnSingleResult(
           function.get(),
           base::StringPrintf("[\"%s\"]", extension->id().c_str()), browser()));
   ASSERT_TRUE(result);
-  scoped_ptr<api::developer_private::ExtensionInfo> info =
+  std::unique_ptr<api::developer_private::ExtensionInfo> info =
       api::developer_private::ExtensionInfo::FromValue(*result);
   ASSERT_TRUE(info);
 
   // The embedded options page should show up.
   ASSERT_EQ(1u, info->views.size());
-  api::developer_private::ExtensionView* view = info->views[0].get();
-  ASSERT_TRUE(view);
-  ASSERT_EQ(api::developer_private::VIEW_TYPE_EXTENSION_GUEST, view->type);
+  const api::developer_private::ExtensionView& view = info->views[0];
+  ASSERT_EQ(api::developer_private::VIEW_TYPE_EXTENSION_GUEST, view.type);
 
   // Inspect the embedded options page.
   function = new api::DeveloperPrivateOpenDevToolsFunction();
   extension_function_test_utils::RunFunction(
       function.get(),
       base::StringPrintf("[{\"renderViewId\": %d, \"renderProcessId\": %d}]",
-                         view->render_view_id, view->render_process_id),
+                         view.render_view_id, view.render_process_id),
       browser(), extension_function_test_utils::NONE);
 
   // Verify that dev tools opened.
   content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
-      view->render_process_id, view->render_view_id);
+      view.render_process_id, view.render_view_id);
   ASSERT_TRUE(rfh);
   content::WebContents* wc = content::WebContents::FromRenderFrameHost(rfh);
   ASSERT_TRUE(wc);

@@ -208,6 +208,15 @@ StreamMixerAlsa::StreamMixerAlsa()
   GetSwitchValueAsNonNegativeInt(switches::kAlsaNumOutputChannels,
                                  kDefaultNumOutputChannels,
                                  &num_output_channels_);
+
+  int fixed_samples_per_second;
+  GetSwitchValueAsNonNegativeInt(switches::kAlsaFixedOutputSampleRate,
+                                 kInvalidSampleRate, &fixed_samples_per_second);
+  if (fixed_samples_per_second != kInvalidSampleRate)
+    LOG(INFO) << "Setting fixed sample rate to " << fixed_samples_per_second;
+
+  fixed_output_samples_per_second_ = fixed_samples_per_second;
+
   DefineAlsaParameters();
 }
 
@@ -256,9 +265,64 @@ void StreamMixerAlsa::DefineAlsaParameters() {
   }
   alsa_avail_min_ = avail_min;
 
+  // --accept-resource-provider should imply a check close timeout of 0.
+  int default_close_timeout = chromecast::GetSwitchValueBoolean(
+                                  switches::kAcceptResourceProvider, false)
+                                  ? 0
+                                  : kDefaultCheckCloseTimeoutMs;
   GetSwitchValueAsNonNegativeInt(switches::kAlsaCheckCloseTimeout,
-                                 kDefaultCheckCloseTimeoutMs,
-                                 &check_close_timeout_);
+                                 default_close_timeout, &check_close_timeout_);
+}
+
+unsigned int StreamMixerAlsa::DetermineOutputRate(unsigned int requested_rate) {
+  if (fixed_output_samples_per_second_ != kInvalidSampleRate) {
+    LOG(INFO) << "Requested output rate is " << requested_rate;
+    LOG(INFO) << "Cannot change rate since it is fixed to "
+              << fixed_output_samples_per_second_;
+    return fixed_output_samples_per_second_;
+  }
+
+  unsigned int unsigned_output_samples_per_second = requested_rate;
+
+  // Try the requested sample rate. If the ALSA driver doesn't know how to deal
+  // with it, try the nearest supported sample rate instead. Lastly, try some
+  // common sample rates as a fallback. Note that PcmHwParamsSetRateNear
+  // doesn't always choose a rate that's actually near the given input sample
+  // rate when the input sample rate is not supported.
+  const int* kSupportedSampleRatesEnd =
+      kSupportedSampleRates + arraysize(kSupportedSampleRates);
+  auto nearest_sample_rate =
+      std::min_element(kSupportedSampleRates, kSupportedSampleRatesEnd,
+                       [this](int r1, int r2) -> bool {
+                         return abs(requested_output_samples_per_second_ - r1) <
+                                abs(requested_output_samples_per_second_ - r2);
+                       });
+  // Resample audio with sample rates deemed to be too low (i.e.  below 32kHz)
+  // because some common AV receivers don't support optical out at these
+  // frequencies. See b/26385501
+  unsigned int first_choice_sample_rate = requested_rate;
+  if (requested_rate < kLowSampleRateCutoff) {
+    first_choice_sample_rate = output_samples_per_second_ != kInvalidSampleRate
+                                   ? output_samples_per_second_
+                                   : kFallbackSampleRate;
+  }
+  const unsigned int preferred_sample_rates[] = {
+      first_choice_sample_rate,
+      static_cast<unsigned int>(*nearest_sample_rate),
+      kFallbackSampleRateHiRes,
+      kFallbackSampleRate};
+  int err;
+  for (const auto& sample_rate : preferred_sample_rates) {
+    err = alsa_->PcmHwParamsTestRate(pcm_, pcm_hw_params_, sample_rate,
+                                     0 /* try exact rate */);
+    if (err == 0) {
+      unsigned_output_samples_per_second = sample_rate;
+      break;
+    }
+  }
+  LOG_IF(ERROR, err != 0) << "Even the fallback sample rate isn't supported! "
+                          << "Have you tried /bin/alsa_api_test on-device?";
+  return unsigned_output_samples_per_second;
 }
 
 int StreamMixerAlsa::SetAlsaPlaybackParams() {
@@ -297,45 +361,9 @@ int StreamMixerAlsa::SetAlsaPlaybackParams() {
                     false /* Don't allow resampling. */);
   unsigned int requested_rate =
       static_cast<unsigned int>(requested_output_samples_per_second_);
-  unsigned int unsigned_output_samples_per_second = requested_rate;
 
-  // Try the requested sample rate. If the ALSA driver doesn't know how to deal
-  // with it, try the nearest supported sample rate instead. Lastly, try some
-  // common sample rates as a fallback. Note that PcmHwParamsSetRateNear
-  // doesn't always choose a rate that's actually near the given input sample
-  // rate when the input sample rate is not supported.
-  const int* kSupportedSampleRatesEnd =
-      kSupportedSampleRates + arraysize(kSupportedSampleRates);
-  auto nearest_sample_rate =
-      std::min_element(kSupportedSampleRates, kSupportedSampleRatesEnd,
-                       [this](int r1, int r2) -> bool {
-                         return abs(requested_output_samples_per_second_ - r1) <
-                                abs(requested_output_samples_per_second_ - r2);
-                       });
-  // Resample audio with sample rates deemed to be too low (i.e.  below 32kHz)
-  // because some common AV receivers don't support optical out at these
-  // frequencies. See b/26385501
-  unsigned int first_choice_sample_rate = requested_rate;
-  if (requested_rate < kLowSampleRateCutoff) {
-    first_choice_sample_rate = output_samples_per_second_ != kInvalidSampleRate
-                                   ? output_samples_per_second_
-                                   : kFallbackSampleRate;
-  }
-  const unsigned int preferred_sample_rates[] = {
-      first_choice_sample_rate,
-      static_cast<unsigned int>(*nearest_sample_rate),
-      kFallbackSampleRateHiRes,
-      kFallbackSampleRate};
-  for (const auto& sample_rate : preferred_sample_rates) {
-    err = alsa_->PcmHwParamsTestRate(pcm_, pcm_hw_params_, sample_rate,
-                                     0 /* try exact rate */);
-    if (err == 0) {
-      unsigned_output_samples_per_second = sample_rate;
-      break;
-    }
-  }
-  LOG_IF(ERROR, err != 0) << "Even the fallback sample rate isn't supported! "
-                          << "Have you tried /bin/alsa_api_test on-device?";
+  unsigned int unsigned_output_samples_per_second =
+      DetermineOutputRate(requested_rate);
   RETURN_ERROR_CODE(PcmHwParamsSetRateNear, pcm_, pcm_hw_params_,
                     &unsigned_output_samples_per_second, kAlsaDirDontCare);
   if (requested_rate != unsigned_output_samples_per_second) {
@@ -518,7 +546,7 @@ void StreamMixerAlsa::SignalError() {
 }
 
 void StreamMixerAlsa::SetAlsaWrapperForTest(
-    scoped_ptr<AlsaWrapper> alsa_wrapper) {
+    std::unique_ptr<AlsaWrapper> alsa_wrapper) {
   if (alsa_) {
     Stop();
     ClosePcm();
@@ -536,7 +564,7 @@ void StreamMixerAlsa::ClearInputsForTest() {
   inputs_.clear();
 }
 
-void StreamMixerAlsa::AddInput(scoped_ptr<InputQueue> input) {
+void StreamMixerAlsa::AddInput(std::unique_ptr<InputQueue> input) {
   RUN_ON_MIXER_THREAD(&StreamMixerAlsa::AddInput,
                       base::Passed(std::move(input)));
   if (!alsa_)
@@ -545,8 +573,11 @@ void StreamMixerAlsa::AddInput(scoped_ptr<InputQueue> input) {
   DCHECK(input);
   // If the new input is a primary one, we may need to change the output
   // sample rate to match its input sample rate.
-  if (input->primary())
+  // We only change the output rate if it is not set to a fixed value.
+  if (input->primary() &&
+      fixed_output_samples_per_second_ == kInvalidSampleRate) {
     CheckChangeOutputRate(input->input_samples_per_second());
+  }
 
   InputQueue* input_ptr = input.get();
   inputs_.push_back(std::move(input));
@@ -716,12 +747,20 @@ void StreamMixerAlsa::WriteMixedPcm(const ::media::AudioBus& mixed,
   DCHECK(mixer_task_runner_->BelongsToCurrentThread());
   CHECK_PCM_INITIALIZED();
 
-  if (interleaved_.size() < static_cast<size_t>(frames * num_output_channels_) *
-                                BytesPerOutputFormatSample()) {
-    interleaved_.resize(frames * num_output_channels_ *
-                        BytesPerOutputFormatSample());
+  size_t interleaved_size = static_cast<size_t>(frames * num_output_channels_) *
+                            BytesPerOutputFormatSample();
+  if (interleaved_.size() < interleaved_size)
+    interleaved_.resize(interleaved_size);
+
+  int64_t expected_playback_time = rendering_delay_.timestamp_microseconds +
+                                   rendering_delay_.delay_microseconds;
+  mixed.ToInterleaved(frames, BytesPerOutputFormatSample(),
+                      interleaved_.data());
+  for (CastMediaShlib::LoopbackAudioObserver* observer : loopback_observers_) {
+    observer->OnLoopbackAudio(expected_playback_time, kSampleFormatS32,
+                              output_samples_per_second_, num_output_channels_,
+                              interleaved_.data(), interleaved_size);
   }
-  mixed.ToInterleaved(frames, BytesPerOutputFormatSample(), &interleaved_[0]);
 
   // If the PCM has been drained it will be in SND_PCM_STATE_SETUP and need
   // to be prepared in order for playback to work.
@@ -766,6 +805,26 @@ void StreamMixerAlsa::UpdateRenderingDelay(int newly_pushed_frames) {
   rendering_delay_.delay_microseconds = static_cast<int64_t>(delay_frames) *
                                         base::Time::kMicrosecondsPerSecond /
                                         output_samples_per_second_;
+}
+
+void StreamMixerAlsa::AddLoopbackAudioObserver(
+    CastMediaShlib::LoopbackAudioObserver* observer) {
+  RUN_ON_MIXER_THREAD(&StreamMixerAlsa::AddLoopbackAudioObserver, observer);
+  DCHECK(observer);
+  DCHECK(std::find(loopback_observers_.begin(), loopback_observers_.end(),
+                   observer) == loopback_observers_.end());
+  loopback_observers_.push_back(observer);
+}
+
+void StreamMixerAlsa::RemoveLoopbackAudioObserver(
+    CastMediaShlib::LoopbackAudioObserver* observer) {
+  RUN_ON_MIXER_THREAD(&StreamMixerAlsa::RemoveLoopbackAudioObserver, observer);
+  DCHECK(std::find(loopback_observers_.begin(), loopback_observers_.end(),
+                   observer) != loopback_observers_.end());
+  loopback_observers_.erase(std::remove(loopback_observers_.begin(),
+                                        loopback_observers_.end(), observer),
+                            loopback_observers_.end());
+  observer->OnRemoved();
 }
 
 }  // namespace media

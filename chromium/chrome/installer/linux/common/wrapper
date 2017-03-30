@@ -49,7 +49,7 @@ CHR_CODECS_CH="/usr/share/doc/chromium-codecs-ffmpeg-extra/changelog.Debian.gz"
 if [ -r $CHR_CODECS_CH ]; then
   CHR_CODECS_VER=$(gzip -cd $CHR_CODECS_CH |
     sed -n '1s/chromium-browser (\(\([0-9]\+\.\)\{3\}\).*/\1/p')
-  if [ "$CHR_CODECS_VER" = "@@CHR_MAJOR@@.@@CHR_MINOR@@.@@CHR_BUILD@@." ] || [ "$CHR_CODECS_VER" = "49.0.2623." ]; then
+  if [ "$CHR_CODECS_VER" = "@@CHR_MAJOR@@.@@CHR_MINOR@@.@@CHR_BUILD@@." ] || [ "$CHR_CODECS_VER" = "50.0.2661." ] || [ "$CHR_CODECS_VER" = "49.0.2623." ]; then
     FFMPEG_LD_LIBRARY_PATH=":/usr/lib/chromium-browser/libs"
   fi
 fi
@@ -66,15 +66,6 @@ export CHROME_VERSION_EXTRA="@@CHANNEL@@"
 
 # We don't want bug-buddy intercepting our crashes. http://crbug.com/24120
 export GNOME_DISABLE_CRASH_DIALOG=SET_BY_GOOGLE_CHROME
-
-# Automagically migrate user data directory.
-# TODO(phajdan.jr): Remove along with migration code in the browser for M33.
-if [[ -n "@@SXS_USER_DATA_DIR@@" ]]; then
-  if [[ ! -d "@@SXS_USER_DATA_DIR@@" ]]; then
-    "$HERE/@@PROGNAME@@-bin" "--migrate-data-dir-for-sxs=@@SXS_USER_DATA_DIR@@" \
-      --enable-logging=stderr --log-level=0
-  fi
-fi
 
 # Sanitize std{in,out,err} because they'll be shared with untrusted child
 # processes (http://crbug.com/376567).

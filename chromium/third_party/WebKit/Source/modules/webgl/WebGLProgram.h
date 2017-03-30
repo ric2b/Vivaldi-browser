@@ -40,12 +40,7 @@ public:
 
     static WebGLProgram* create(WebGLRenderingContextBase*);
 
-    unsigned numActiveAttribLocations();
-    GLint getActiveAttribLocation(GLuint index);
-
-    bool isUsingVertexAttrib0();
-
-    bool linkStatus();
+    bool linkStatus(WebGLRenderingContextBase*);
 
     unsigned linkCount() const { return m_linkCount; }
 
@@ -68,15 +63,12 @@ public:
 protected:
     explicit WebGLProgram(WebGLRenderingContextBase*);
 
-    void deleteObjectImpl(WebGraphicsContext3D*) override;
+    void deleteObjectImpl(gpu::gles2::GLES2Interface*) override;
 
 private:
     bool isProgram() const override { return true; }
 
-    void cacheActiveAttribLocations(WebGraphicsContext3D*);
-    void cacheInfoIfNeeded();
-
-    Vector<GLint> m_activeAttribLocations;
+    void cacheInfoIfNeeded(WebGLRenderingContextBase*);
 
     GLint m_linkStatus;
 

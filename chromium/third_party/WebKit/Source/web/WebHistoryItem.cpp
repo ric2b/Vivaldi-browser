@@ -66,7 +66,7 @@ WebString WebHistoryItem::urlString() const
 
 void WebHistoryItem::setURLString(const WebString& url)
 {
-    m_private->setURLString(KURL(ParsedURLString, url).string());
+    m_private->setURLString(KURL(ParsedURLString, url).getString());
 }
 
 WebString WebHistoryItem::referrer() const
@@ -219,18 +219,18 @@ WebVector<WebString> WebHistoryItem::getReferencedFilePaths() const
     return results;
 }
 
-WebHistoryItem::WebHistoryItem(const PassRefPtrWillBeRawPtr<HistoryItem>& item)
+WebHistoryItem::WebHistoryItem(HistoryItem* item)
     : m_private(item)
 {
 }
 
-WebHistoryItem& WebHistoryItem::operator=(const PassRefPtrWillBeRawPtr<HistoryItem>& item)
+WebHistoryItem& WebHistoryItem::operator=(HistoryItem* item)
 {
     m_private = item;
     return *this;
 }
 
-WebHistoryItem::operator PassRefPtrWillBeRawPtr<HistoryItem>() const
+WebHistoryItem::operator HistoryItem*() const
 {
     return m_private.get();
 }

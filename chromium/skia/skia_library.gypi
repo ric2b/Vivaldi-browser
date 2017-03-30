@@ -25,8 +25,7 @@
   ],
 
   'sources': [
-    '../third_party/skia/src/ports/SkImageDecoder_empty.cpp',
-    '../third_party/skia/src/images/SkScaledBitmapSampler.cpp',
+    '../third_party/skia/src/ports/SkImageEncoder_none.cpp',
 
     '../third_party/skia/src/ports/SkFontConfigInterface_direct.cpp',
     '../third_party/skia/src/ports/SkFontConfigInterface_direct_factory.cpp',
@@ -53,7 +52,6 @@
     '../third_party/skia/src/ports/SkOSFile_stdio.cpp',
     '../third_party/skia/src/ports/SkOSFile_win.cpp',
     '../third_party/skia/src/ports/SkScalerContext_win_dw.cpp',
-    '../third_party/skia/src/ports/SkTime_Unix.cpp',
     '../third_party/skia/src/ports/SkTLS_pthread.cpp',
     '../third_party/skia/src/ports/SkTLS_win.cpp',
     '../third_party/skia/src/ports/SkTypeface_win_dw.cpp',
@@ -162,6 +160,7 @@
       'dependencies': [
         '../build/linux/system.gyp:fontconfig',
         '../build/linux/system.gyp:freetype2',
+        '../third_party/expat/expat.gyp:expat',
         '../third_party/icu/icu.gyp:icuuc',
       ],
       'cflags': [
@@ -256,7 +255,6 @@
     [ 'OS == "win"', {
       'sources!': [
         '../third_party/skia/src/ports/SkOSFile_posix.cpp',
-        '../third_party/skia/src/ports/SkTime_Unix.cpp',
         '../third_party/skia/src/ports/SkTLS_pthread.cpp',
       ],
       'include_dirs': [
@@ -293,6 +291,14 @@
           '-Wno-deprecated-declarations',
         ],
       },
+    }],
+    # Add the files for the SkFontMgr_Android. This is used to emulate android
+    # fonts on linux. See content/zygote/zygote_main_linux.cc
+    [ 'OS == "linux"', {
+      'sources/': [
+        ['include', 'SkFontMgr_android\\.cpp$',],
+        ['include', 'SkFontMgr_android_parser\\.cpp$',],
+      ],
     }],
   ],
 

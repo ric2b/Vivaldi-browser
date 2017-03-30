@@ -58,7 +58,6 @@ ServiceWorkerRegisterJob::ServiceWorkerRegisterJob(
     : context_(context),
       job_type_(UPDATE_JOB),
       pattern_(registration->pattern()),
-      script_url_(registration->GetNewestVersion()->script_url()),
       phase_(INITIAL),
       doom_installing_worker_(false),
       is_promise_resolved_(false),
@@ -87,7 +86,7 @@ void ServiceWorkerRegisterJob::AddCallback(
   }
   RunSoon(base::Bind(callback, promise_resolved_status_,
                      promise_resolved_status_message_,
-                     promise_resolved_registration_));
+                     base::RetainedRef(promise_resolved_registration_)));
 }
 
 void ServiceWorkerRegisterJob::Start() {
@@ -126,10 +125,13 @@ void ServiceWorkerRegisterJob::Abort() {
 }
 
 bool ServiceWorkerRegisterJob::Equals(ServiceWorkerRegisterJobBase* job) const {
-  if (job->GetType() != GetType())
+  if (job->GetType() != job_type_)
     return false;
   ServiceWorkerRegisterJob* register_job =
       static_cast<ServiceWorkerRegisterJob*>(job);
+  if (job_type_ == UPDATE_JOB)
+    return register_job->pattern_ == pattern_;
+  DCHECK_EQ(REGISTRATION_JOB, job_type_);
   return register_job->pattern_ == pattern_ &&
          register_job->script_url_ == script_url_;
 }
@@ -257,13 +259,15 @@ void ServiceWorkerRegisterJob::ContinueWithUpdate(
     return;
   }
 
-  // A previous job may have unregistered or installed a new version to this
-  // registration.
+  // A previous job may have unregistered this registration.
   if (registration()->is_uninstalling() ||
-      registration()->GetNewestVersion()->script_url() != script_url_) {
+      !registration()->GetNewestVersion()) {
     Complete(SERVICE_WORKER_ERROR_NOT_FOUND);
     return;
   }
+
+  DCHECK(script_url_.is_empty());
+  script_url_ = registration()->GetNewestVersion()->script_url();
 
   // TODO(michaeln): If the last update check was less than 24 hours
   // ago, depending on the freshness of the cached worker script we
@@ -351,6 +355,7 @@ void ServiceWorkerRegisterJob::UpdateAndContinue() {
     new_version()->set_pause_after_download(false);
   }
   new_version()->StartWorker(
+      ServiceWorkerMetrics::EventType::INSTALL,
       base::Bind(&ServiceWorkerRegisterJob::OnStartWorkerFinished,
                  weak_factory_.GetWeakPtr()));
 }
@@ -402,6 +407,7 @@ void ServiceWorkerRegisterJob::InstallAndContinue() {
 
   // "Fire an event named install..."
   new_version()->RunAfterStartWorker(
+      ServiceWorkerMetrics::EventType::INSTALL,
       base::Bind(&ServiceWorkerRegisterJob::DispatchInstallEvent,
                  weak_factory_.GetWeakPtr()),
       base::Bind(&ServiceWorkerRegisterJob::OnInstallFinished,

@@ -186,30 +186,12 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   base::TimeDelta GetStartTime() const override;
   int64_t GetMemoryUsage() const override;
 
-  // Methods used by an external object to control this demuxer.
-  //
-  // Indicates that a new Seek() call is on its way. Any pending Reads on the
-  // DemuxerStream objects should be aborted immediately inside this call and
-  // future Read calls should return kAborted until the Seek() call occurs.
-  // This method MUST ALWAYS be called before Seek() is called to signal that
-  // the next Seek() call represents the seek point we actually want to return
-  // data for.
-  // |seek_time| - The presentation timestamp for the seek that triggered this
-  // call. It represents the most recent position the caller is trying to seek
-  // to.
-  void StartWaitingForSeek(base::TimeDelta seek_time);
-
-  // Indicates that a Seek() call is on its way, but another seek has been
-  // requested that will override the impending Seek() call. Any pending Reads
-  // on the DemuxerStream objects should be aborted immediately inside this call
-  // and future Read calls should return kAborted until the next
-  // StartWaitingForSeek() call. This method also arranges for the next Seek()
-  // call received before a StartWaitingForSeek() call to immediately call its
-  // callback without waiting for any data.
-  // |seek_time| - The presentation timestamp for the seek request that
-  // triggered this call. It represents the most recent position the caller is
-  // trying to seek to.
-  void CancelPendingSeek(base::TimeDelta seek_time);
+  // ChunkDemuxer reads are abortable. StartWaitingForSeek() and
+  // CancelPendingSeek() always abort pending and future reads until the
+  // expected seek occurs, so that ChunkDemuxer can stay synchronized with the
+  // associated JS method calls.
+  void StartWaitingForSeek(base::TimeDelta seek_time) override;
+  void CancelPendingSeek(base::TimeDelta seek_time) override;
 
   // Registers a new |id| to use for AppendData() calls. |type| indicates
   // the MIME type for the data that we intend to append for this ID.
@@ -220,6 +202,11 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   //    now.
   Status AddId(const std::string& id, const std::string& type,
                std::vector<std::string>& codecs);
+
+  // Notifies a caller via |tracks_updated_cb| that the set of media tracks
+  // for a given |id| has changed.
+  void SetTracksWatcher(const std::string& id,
+                        const MediaTracksUpdatedCB& tracks_updated_cb);
 
   // Removed an ID & associated resources that were previously added with
   // AddId().
@@ -233,16 +220,12 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   // |append_window_start| and |append_window_end| correspond to the MSE spec's
   // similarly named source buffer attributes that are used in coded frame
   // processing.
-  // |init_segment_received_cb| is run for each newly successfully parsed
-  // initialization segment.
-  void AppendData(
-      const std::string& id,
-      const uint8_t* data,
-      size_t length,
-      base::TimeDelta append_window_start,
-      base::TimeDelta append_window_end,
-      base::TimeDelta* timestamp_offset,
-      const MediaSourceState::InitSegmentReceivedCB& init_segment_received_cb);
+  void AppendData(const std::string& id,
+                  const uint8_t* data,
+                  size_t length,
+                  base::TimeDelta append_window_start,
+                  base::TimeDelta append_window_end,
+                  base::TimeDelta* timestamp_offset);
 
   // Aborts parsing the current segment and reset the parser to a state where
   // it can accept a new segment.
@@ -398,6 +381,10 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   scoped_ptr<ChunkDemuxerStream> audio_;
   scoped_ptr<ChunkDemuxerStream> video_;
 
+  // Counter to ensure that we do not transition too early to INITIALIZED.
+  // Incremented in AddId(), decremented in OnSourceInitDone().
+  int pending_source_init_done_count_;
+
   base::TimeDelta duration_;
 
   // The duration passed to the last SetDuration(). If
@@ -421,6 +408,11 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
 
   // Indicates that splice frame generation is enabled.
   const bool splice_frames_enabled_;
+
+  // Accumulate, by type, detected track counts across the SourceBuffers.
+  int detected_audio_track_count_;
+  int detected_video_track_count_;
+  int detected_text_track_count_;
 
   DISALLOW_COPY_AND_ASSIGN(ChunkDemuxer);
 };

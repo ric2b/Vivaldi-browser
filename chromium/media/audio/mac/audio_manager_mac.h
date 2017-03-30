@@ -29,6 +29,8 @@ class MEDIA_EXPORT AudioManagerMac : public AudioManagerBase {
   AudioManagerMac(AudioLogFactory* audio_log_factory);
 
   // Implementation of AudioManager.
+  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> GetWorkerTaskRunner() override;
   bool HasAudioOutputDevices() override;
   bool HasAudioInputDevices() override;
   void GetAudioInputDeviceNames(AudioDeviceNames* device_names) override;
@@ -71,8 +73,19 @@ class MEDIA_EXPORT AudioManagerMac : public AudioManagerBase {
   // Streams should consult ShouldDeferStreamStart() and if true check the value
   // again after |kStartDelayInSecsForPowerEvents| has elapsed. If false, the
   // stream may be started immediately.
-  enum { kStartDelayInSecsForPowerEvents = 2 };
-  bool ShouldDeferStreamStart();
+  // TOOD(henrika): track UMA statistics related to defer start to come up with
+  // a suitable delay value.
+  enum { kStartDelayInSecsForPowerEvents = 5 };
+  bool ShouldDeferStreamStart() const;
+
+  // True if the device is on battery power.
+  bool IsOnBatteryPower() const;
+
+  // Number of times the device has resumed from power suspension.
+  size_t GetNumberOfResumeNotifications() const;
+
+  // True if the device is suspending.
+  bool IsSuspending() const;
 
   // Changes the I/O buffer size for |device_id| if |desired_buffer_size| is
   // lower than the current device buffer size. The buffer size can also be
@@ -113,6 +126,9 @@ class MEDIA_EXPORT AudioManagerMac : public AudioManagerBase {
   void HandleDeviceChanges();
 
   scoped_ptr<AudioDeviceListenerMac> output_device_listener_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  scoped_ptr<base::Thread> worker_thread_;
 
   // Track the output sample-rate and the default output device
   // so we can intelligently handle device notifications only when necessary.

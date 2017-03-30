@@ -32,14 +32,13 @@
 #define CustomElementLifecycleCallbacks_h
 
 #include "platform/heap/Handle.h"
-#include "wtf/RefCounted.h"
 #include "wtf/text/AtomicString.h"
 
 namespace blink {
 
 class Element;
 
-class CustomElementLifecycleCallbacks : public RefCountedWillBeGarbageCollectedFinalized<CustomElementLifecycleCallbacks> {
+class CustomElementLifecycleCallbacks : public GarbageCollectedFinalized<CustomElementLifecycleCallbacks> {
 public:
     virtual ~CustomElementLifecycleCallbacks() { }
 

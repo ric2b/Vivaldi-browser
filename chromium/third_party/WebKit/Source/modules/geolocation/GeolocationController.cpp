@@ -73,9 +73,9 @@ GeolocationController::~GeolocationController()
 #endif
 }
 
-PassOwnPtrWillBeRawPtr<GeolocationController> GeolocationController::create(LocalFrame& frame, GeolocationClient* client)
+GeolocationController* GeolocationController::create(LocalFrame& frame, GeolocationClient* client)
 {
-    return adoptPtrWillBeNoop(new GeolocationController(frame, client));
+    return new GeolocationController(frame, client);
 }
 
 void GeolocationController::addObserver(Geolocation* observer, bool enableHighAccuracy)
@@ -187,13 +187,13 @@ DEFINE_TRACE(GeolocationController)
     visitor->trace(m_lastPosition);
     visitor->trace(m_observers);
     visitor->trace(m_highAccuracyObservers);
-    WillBeHeapSupplement<LocalFrame>::trace(visitor);
+    Supplement<LocalFrame>::trace(visitor);
     PageLifecycleObserver::trace(visitor);
 }
 
 void provideGeolocationTo(LocalFrame& frame, GeolocationClient* client)
 {
-    WillBeHeapSupplement<LocalFrame>::provideTo(frame, GeolocationController::supplementName(), GeolocationController::create(frame, client));
+    Supplement<LocalFrame>::provideTo(frame, GeolocationController::supplementName(), GeolocationController::create(frame, client));
 }
 
 } // namespace blink

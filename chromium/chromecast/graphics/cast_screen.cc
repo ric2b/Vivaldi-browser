@@ -33,8 +33,15 @@ const int kInitDisplayHeight = k720pHeight;
 CastScreen::~CastScreen() {
 }
 
+void CastScreen::SetDisplayResizeCallback(const DisplayResizeCallback& cb) {
+  DCHECK(!cb.is_null());
+  display_resize_cb_ = cb;
+}
+
 void CastScreen::UpdateDisplaySize(const gfx::Size& size) {
   display_.SetScaleAndBounds(1.0f, gfx::Rect(size));
+  if (!display_resize_cb_.is_null())
+    display_resize_cb_.Run(Size(size.width(), size.height()));
 }
 
 gfx::Point CastScreen::GetCursorScreenPoint() {
@@ -47,7 +54,6 @@ gfx::NativeWindow CastScreen::GetWindowUnderCursor() {
 }
 
 gfx::NativeWindow CastScreen::GetWindowAtScreenPoint(const gfx::Point& point) {
-  NOTIMPLEMENTED();
   return gfx::NativeWindow(nullptr);
 }
 

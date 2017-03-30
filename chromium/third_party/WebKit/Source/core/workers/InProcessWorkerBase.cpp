@@ -14,12 +14,12 @@
 #include "core/workers/WorkerScriptLoader.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
-#include "wtf/MainThread.h"
 
 namespace blink {
 
 InProcessWorkerBase::InProcessWorkerBase(ExecutionContext* context)
     : AbstractWorker(context)
+    , ActiveScriptWrappable(this)
     , m_contextProxy(nullptr)
 {
 }
@@ -55,6 +55,7 @@ bool InProcessWorkerBase::initialize(ExecutionContext* context, const String& ur
         *context,
         scriptURL,
         DenyCrossOriginRequests,
+        context->securityContext().addressSpace(),
         bind(&InProcessWorkerBase::onResponse, this),
         bind(&InProcessWorkerBase::onFinished, this));
 
@@ -89,7 +90,7 @@ ContentSecurityPolicy* InProcessWorkerBase::contentSecurityPolicy()
 
 void InProcessWorkerBase::onResponse()
 {
-    InspectorInstrumentation::didReceiveScriptResponse(executionContext(), m_scriptLoader->identifier());
+    InspectorInstrumentation::didReceiveScriptResponse(getExecutionContext(), m_scriptLoader->identifier());
 }
 
 void InProcessWorkerBase::onFinished()
@@ -98,11 +99,8 @@ void InProcessWorkerBase::onFinished()
         dispatchEvent(Event::createCancelable(EventTypeNames::error));
     } else {
         ASSERT(m_contextProxy);
-        WorkerThreadStartMode startMode = DontPauseWorkerGlobalScopeOnStart;
-        if (InspectorInstrumentation::shouldPauseDedicatedWorkerOnStart(executionContext()))
-            startMode = PauseWorkerGlobalScopeOnStart;
-        m_contextProxy->startWorkerGlobalScope(m_scriptLoader->url(), executionContext()->userAgent(), m_scriptLoader->script(), startMode);
-        InspectorInstrumentation::scriptImported(executionContext(), m_scriptLoader->identifier(), m_scriptLoader->script());
+        m_contextProxy->startWorkerGlobalScope(m_scriptLoader->url(), getExecutionContext()->userAgent(), m_scriptLoader->script());
+        InspectorInstrumentation::scriptImported(getExecutionContext(), m_scriptLoader->identifier(), m_scriptLoader->script());
     }
     m_contentSecurityPolicy = m_scriptLoader->releaseContentSecurityPolicy();
     m_scriptLoader = nullptr;

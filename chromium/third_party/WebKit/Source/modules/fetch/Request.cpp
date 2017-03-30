@@ -18,6 +18,7 @@
 #include "platform/HTTPNames.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/network/ResourceRequest.h"
+#include "platform/weborigin/OriginAccessEntry.h"
 #include "platform/weborigin/Referrer.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerRequest.h"
@@ -36,12 +37,13 @@ FetchRequestData* createCopyOfFetchRequestDataForFetch(ScriptState* scriptState,
     if (world.isIsolatedWorld())
         request->setOrigin(world.isolatedWorldSecurityOrigin());
     else
-        request->setOrigin(scriptState->executionContext()->securityOrigin());
+        request->setOrigin(scriptState->getExecutionContext()->getSecurityOrigin());
     // FIXME: Set ForceOriginHeaderFlag.
     request->setSameOriginDataURLFlag(true);
     request->setReferrer(original->referrer());
     request->setMode(original->mode());
     request->setCredentials(original->credentials());
+    request->setAttachedCredential(original->attachedCredential());
     request->setRedirect(original->redirect());
     request->setIntegrity(original->integrity());
     // FIXME: Set cache mode.
@@ -64,7 +66,7 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
     // "Let |request| be |input|'s request, if |input| is a Request object,
     // and a new request otherwise."
 
-    RefPtr<SecurityOrigin> origin = scriptState->executionContext()->securityOrigin();
+    RefPtr<SecurityOrigin> origin = scriptState->getExecutionContext()->getSecurityOrigin();
 
     // TODO(yhirano): Implement the following steps:
     // - "Let |window| be client."
@@ -95,7 +97,7 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
     // "If |input| is a string, run these substeps:"
     if (!inputRequest) {
         // "Let |parsedURL| be the result of parsing |input| with |baseURL|."
-        KURL parsedURL = scriptState->executionContext()->completeURL(inputString);
+        KURL parsedURL = scriptState->getExecutionContext()->completeURL(inputString);
         // "If |parsedURL| is failure, throw a TypeError."
         if (!parsedURL.isValid()) {
             exceptionState.throwTypeError("Failed to parse URL from " + inputString);
@@ -159,7 +161,7 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
         } else {
             // "Let |parsedReferrer| be the result of parsing |referrer| with
             // |baseURL|."
-            KURL parsedReferrer = scriptState->executionContext()->completeURL(init.referrer.referrer);
+            KURL parsedReferrer = scriptState->getExecutionContext()->completeURL(init.referrer.referrer);
             if (!parsedReferrer.isValid()) {
                 // "If |parsedReferrer| is failure, throw a TypeError."
                 exceptionState.throwTypeError("Referrer '" + init.referrer.referrer + "' is not a valid URL.");
@@ -178,7 +180,7 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
                 return nullptr;
             } else {
                 // "Set |request|'s referrer to |parsedReferrer|."
-                request->setReferrerString(AtomicString(parsedReferrer.string()));
+                request->setReferrerString(AtomicString(parsedReferrer.getString()));
             }
         }
         request->setReferrerPolicy(init.referrer.referrerPolicy);
@@ -216,6 +218,14 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
         request->setCredentials(WebURLRequest::FetchCredentialsModeSameOrigin);
     } else if (init.credentials == "include") {
         request->setCredentials(WebURLRequest::FetchCredentialsModeInclude);
+    } else if (init.credentials == "password") {
+        if (!init.attachedCredential.get()) {
+            exceptionState.throwTypeError("Cannot construct a Request with a credential mode of 'password' without a PasswordCredential.");
+            return nullptr;
+        }
+        request->setCredentials(WebURLRequest::FetchCredentialsModePassword);
+        request->setAttachedCredential(init.attachedCredential);
+        request->setRedirect(WebURLRequest::FetchRedirectModeManual);
     } else {
         if (!inputRequest)
             request->setCredentials(WebURLRequest::FetchCredentialsModeOmit);
@@ -259,7 +269,7 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
     }
     // "Let |r| be a new Request object associated with |request| and a new
     // Headers object whose guard is "request"."
-    Request* r = Request::create(scriptState->executionContext(), request);
+    Request* r = Request::create(scriptState->getExecutionContext(), request);
     // Perform the following steps:
     // - "Let |headers| be a copy of |r|'s Headers object."
     // - "If |init|'s headers member is present, set |headers| to |init|'s
@@ -269,7 +279,7 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
     // is present.
     Headers* headers = nullptr;
     if (!init.headers && init.headersDictionary.isUndefinedOrNull()) {
-        headers = r->headers()->clone();
+        headers = r->getHeaders()->clone();
     }
     // "Empty |r|'s request's header list."
     r->m_request->headerList()->clearList();
@@ -288,26 +298,38 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
             return nullptr;
         }
         // "Set |r|'s Headers object's guard to "request-no-cors"."
-        r->headers()->setGuard(Headers::RequestNoCORSGuard);
+        r->getHeaders()->setGuard(Headers::RequestNoCORSGuard);
     }
     // "Fill |r|'s Headers object with |headers|. Rethrow any exceptions."
     if (init.headers) {
         ASSERT(init.headersDictionary.isUndefinedOrNull());
-        r->headers()->fillWith(init.headers.get(), exceptionState);
+        r->getHeaders()->fillWith(init.headers.get(), exceptionState);
     } else if (!init.headersDictionary.isUndefinedOrNull()) {
-        r->headers()->fillWith(init.headersDictionary, exceptionState);
+        r->getHeaders()->fillWith(init.headersDictionary, exceptionState);
     } else {
         ASSERT(headers);
-        r->headers()->fillWith(headers, exceptionState);
+        r->getHeaders()->fillWith(headers, exceptionState);
     }
     if (exceptionState.hadException())
         return nullptr;
 
     // "If either |init|'s body member is present or |temporaryBody| is
     // non-null, and |request|'s method is `GET` or `HEAD`, throw a TypeError.
-    if (init.body || temporaryBody) {
+    if (init.body || temporaryBody || request->credentials() == WebURLRequest::FetchCredentialsModePassword) {
         if (request->method() == HTTPNames::GET || request->method() == HTTPNames::HEAD) {
             exceptionState.throwTypeError("Request with GET/HEAD method cannot have body.");
+            return nullptr;
+        }
+    }
+
+    // TODO(mkwst): See the comment in RequestInit about serializing the attached credential
+    // prior to hitting the Service Worker machinery.
+    if (request->credentials() == WebURLRequest::FetchCredentialsModePassword) {
+        r->getHeaders()->append(HTTPNames::Content_Type, init.contentType, exceptionState);
+
+        const OriginAccessEntry accessEntry = OriginAccessEntry(r->url().protocol(), r->url().host(), OriginAccessEntry::AllowRegisterableDomains);
+        if (accessEntry.matchesDomain(*origin) == OriginAccessEntry::DoesNotMatchOrigin) {
+            exceptionState.throwTypeError("Credentials may only be submitted to endpoints on the same registrable domain.");
             return nullptr;
         }
     }
@@ -323,8 +345,8 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
         //   `Content-Type`/|Content-Type| to |r|'s Headers object. Rethrow any
         //   exception."
         temporaryBody = new BodyStreamBuffer(init.body.release());
-        if (!init.contentType.isEmpty() && !r->headers()->has(HTTPNames::Content_Type, exceptionState)) {
-            r->headers()->append(HTTPNames::Content_Type, init.contentType, exceptionState);
+        if (!init.contentType.isEmpty() && !r->getHeaders()->has(HTTPNames::Content_Type, exceptionState)) {
+            r->getHeaders()->append(HTTPNames::Content_Type, init.contentType, exceptionState);
         }
         if (exceptionState.hadException())
             return nullptr;
@@ -333,22 +355,6 @@ Request* Request::createRequestWithRequestOrString(ScriptState* scriptState, Req
     // "Set |r|'s request's body to |temporaryBody|.
     if (temporaryBody)
         r->m_request->setBuffer(temporaryBody);
-
-    // https://w3c.github.io/webappsec-credential-management/#monkey-patching-fetch-3
-    // "If |init|'s body member is a 'Credential' object:"
-    if (init.isCredentialRequest) {
-        // "1. If |r|'s url is not the same as |r|'s client’s origin, throw a TypeError."
-        if (!origin->canRequest(r->url())) {
-            exceptionState.throwTypeError("Credentials may only be submitted to same-origin endpoints.");
-            return nullptr;
-        }
-        // "2. Set |r|'s redirect mode to "error"."
-        r->m_request->setRedirect(WebURLRequest::FetchRedirectModeError);
-        // "3. Set |r|'s skip-service-worker flag."
-        // TODO(mkwst): Set this flag.
-        // "4. Set |r|'s opaque flag."
-        r->setOpaque();
-    }
 
     // "Set |r|'s MIME type to the result of extracting a MIME type from |r|'s
     // request's header list."
@@ -382,7 +388,7 @@ Request* Request::create(ScriptState* scriptState, const String& input, Exceptio
 
 Request* Request::create(ScriptState* scriptState, const String& input, const Dictionary& init, ExceptionState& exceptionState)
 {
-    RequestInit requestInit(scriptState->executionContext(), init, exceptionState);
+    RequestInit requestInit(scriptState->getExecutionContext(), init, exceptionState);
     return createRequestWithRequestOrString(scriptState, nullptr, input, requestInit, exceptionState);
 }
 
@@ -393,7 +399,7 @@ Request* Request::create(ScriptState* scriptState, Request* input, ExceptionStat
 
 Request* Request::create(ScriptState* scriptState, Request* input, const Dictionary& init, ExceptionState& exceptionState)
 {
-    RequestInit requestInit(scriptState->executionContext(), init, exceptionState);
+    RequestInit requestInit(scriptState->getExecutionContext(), init, exceptionState);
     return createRequestWithRequestOrString(scriptState, input, String(), requestInit, exceptionState);
 }
 
@@ -560,6 +566,8 @@ String Request::credentials() const
         return "same-origin";
     case WebURLRequest::FetchCredentialsModeInclude:
         return "include";
+    case WebURLRequest::FetchCredentialsModePassword:
+        return "password";
     }
     ASSERT_NOT_REACHED();
     return "";
@@ -592,16 +600,16 @@ Request* Request::clone(ExceptionState& exceptionState)
         return nullptr;
     }
 
-    FetchRequestData* request = m_request->clone(executionContext());
+    FetchRequestData* request = m_request->clone(getExecutionContext());
     Headers* headers = Headers::create(request->headerList());
-    headers->setGuard(m_headers->guard());
-    return new Request(executionContext(), request, headers);
+    headers->setGuard(m_headers->getGuard());
+    return new Request(getExecutionContext(), request, headers);
 }
 
 FetchRequestData* Request::passRequestData()
 {
     ASSERT(!bodyUsed());
-    return m_request->pass(executionContext());
+    return m_request->pass(getExecutionContext());
 }
 
 bool Request::hasBody() const

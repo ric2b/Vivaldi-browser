@@ -39,16 +39,16 @@ void MojoApplication::OnActivate(
 #if defined(OS_POSIX)
   base::PlatformFile handle = file.fd;
 #elif defined(OS_WIN)
-  base::PlatformFile handle = file;
+  base::PlatformFile handle = file.GetHandle();
 #endif
 
   mojo::ScopedMessagePipeHandle pipe =
       channel_init_.Init(handle, io_task_runner_);
   DCHECK(pipe.is_valid());
 
-  ApplicationSetupPtr application_setup;
+  mojom::ApplicationSetupPtr application_setup;
   application_setup.Bind(
-      mojo::InterfacePtrInfo<ApplicationSetup>(std::move(pipe), 0u));
+      mojo::InterfacePtrInfo<mojom::ApplicationSetup>(std::move(pipe), 0u));
 
   mojo::shell::mojom::InterfaceProviderPtr services;
   mojo::shell::mojom::InterfaceProviderPtr exposed_services;

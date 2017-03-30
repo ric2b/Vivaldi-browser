@@ -68,7 +68,9 @@ void SiteEngagementHelper::PeriodicTracker::StartTimer(
 SiteEngagementHelper::InputTracker::InputTracker(
     SiteEngagementHelper* helper,
     content::WebContents* web_contents)
-    : PeriodicTracker(helper), content::WebContentsObserver(web_contents) {}
+    : PeriodicTracker(helper),
+      content::WebContentsObserver(web_contents),
+      is_tracking_(false) {}
 
 void SiteEngagementHelper::InputTracker::TrackingStarted() {
   is_tracking_ = true;
@@ -102,8 +104,8 @@ void SiteEngagementHelper::InputTracker::DidGetUserInteraction(
       helper()->RecordUserInput(
           SiteEngagementMetrics::ENGAGEMENT_TOUCH_GESTURE);
       break;
-    case blink::WebInputEvent::MouseWheel:
-      helper()->RecordUserInput(SiteEngagementMetrics::ENGAGEMENT_WHEEL);
+    case blink::WebInputEvent::GestureScrollBegin:
+      helper()->RecordUserInput(SiteEngagementMetrics::ENGAGEMENT_SCROLL);
       break;
     case blink::WebInputEvent::Undefined:
       // Explicitly ignore browser-initiated navigation input.

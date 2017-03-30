@@ -30,7 +30,7 @@ IceConnectionToHost::IceConnectionToHost() {}
 IceConnectionToHost::~IceConnectionToHost() {}
 
 void IceConnectionToHost::Connect(
-    scoped_ptr<Session> session,
+    std::unique_ptr<Session> session,
     scoped_refptr<TransportContext> transport_context,
     HostEventCallback* event_callback) {
   DCHECK(client_stub_);
@@ -119,7 +119,7 @@ void IceConnectionToHost::OnSessionStateChange(Session::State state) {
           base::Bind(&IceConnectionToHost::OnVideoChannelStatus,
                      base::Unretained(this))));
       video_dispatcher_.reset(
-          new ClientVideoDispatcher(monitored_video_stub_.get()));
+          new ClientVideoDispatcher(monitored_video_stub_.get(), client_stub_));
       video_dispatcher_->Init(transport_->GetChannelFactory(), this);
 
       // Configure audio pipeline if necessary.

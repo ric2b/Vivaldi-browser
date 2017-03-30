@@ -126,8 +126,6 @@ void BrowserNonClientFrameViewMus::Init() {
     AddChildView(window_icon_);
     window_icon_->Update();
   }
-
-  UpdateAvatar();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -388,32 +386,28 @@ bool BrowserNonClientFrameViewMus::DoesIntersectRect(
     return false;
   }
 
-  TabStrip* tabstrip = browser_view()->tabstrip();
-  if (tabstrip && browser_view()->IsTabStripVisible()) {
-    // Claim |rect| only if it is above the bottom of the tabstrip in a non-tab
-    // portion.
-    gfx::RectF rect_in_tabstrip_coords_f(rect);
-    View::ConvertRectToTarget(this, tabstrip, &rect_in_tabstrip_coords_f);
-    gfx::Rect rect_in_tabstrip_coords =
-        gfx::ToEnclosingRect(rect_in_tabstrip_coords_f);
-
-    if (rect_in_tabstrip_coords.y() > tabstrip->height())
-      return false;
-
-    return !tabstrip->HitTestRect(rect_in_tabstrip_coords) ||
-           tabstrip->IsRectInWindowCaption(rect_in_tabstrip_coords);
+  if (!browser_view()->IsTabStripVisible()) {
+    // Claim |rect| if it is above the top of the topmost client area view.
+    return rect.y() < GetTopInset(false);
   }
 
-  // Claim |rect| if it is above the top of the topmost view in the client area.
-  return rect.y() < GetTopInset(false);
+  // Claim |rect| only if it is above the bottom of the tabstrip in a non-tab
+  // portion. In particular, the avatar label/button is left of the tabstrip and
+  // the window controls are right of the tabstrip.
+  TabStrip* tabstrip = browser_view()->tabstrip();
+  gfx::RectF rect_in_tabstrip_coords_f(rect);
+  View::ConvertRectToTarget(this, tabstrip, &rect_in_tabstrip_coords_f);
+  const gfx::Rect rect_in_tabstrip_coords =
+      gfx::ToEnclosingRect(rect_in_tabstrip_coords_f);
+  return (rect_in_tabstrip_coords.y() <= tabstrip->height()) &&
+          (!tabstrip->HitTestRect(rect_in_tabstrip_coords) ||
+          tabstrip->IsRectInWindowCaption(rect_in_tabstrip_coords));
 }
 
 int BrowserNonClientFrameViewMus::GetTabStripLeftInset() const {
   const gfx::Insets insets(GetLayoutInsets(AVATAR_ICON));
   const int avatar_right =
-      avatar_button()
-          ? (insets.left() + browser_view()->GetOTRAvatarIcon().width())
-          : 0;
+      avatar_button() ? (insets.left() + GetOTRAvatarIcon().width()) : 0;
   return avatar_right + insets.right() + frame_values().normal_insets.left();
 }
 
@@ -462,7 +456,7 @@ void BrowserNonClientFrameViewMus::LayoutIncognitoButton() {
   // ChromeOS shows avatar on V1 app.
   DCHECK(browser_view()->IsTabStripVisible());
 #endif
-  gfx::ImageSkia incognito_icon = browser_view()->GetOTRAvatarIcon();
+  gfx::ImageSkia incognito_icon = GetOTRAvatarIcon();
   gfx::Insets avatar_insets = GetLayoutInsets(AVATAR_ICON);
   int avatar_bottom = GetTopInset(false) + browser_view()->GetTabStripHeight() -
                       avatar_insets.bottom();
@@ -552,9 +546,8 @@ void BrowserNonClientFrameViewMus::PaintToolbarBackground(gfx::Canvas* canvas) {
       canvas->sk_canvas()->clipRect(gfx::RectToSkRect(tabstrip_bounds),
                                     SkRegion::kDifference_Op);
       separator_rect.set_y(tabstrip_bounds.bottom());
-      BrowserView::Paint1pxHorizontalLine(
-          canvas, tp->GetColor(ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR),
-          separator_rect, true);
+      BrowserView::Paint1pxHorizontalLine(canvas, GetToolbarTopSeparatorColor(),
+                                          separator_rect, true);
     }
 
     // Draw the content/toolbar separator.

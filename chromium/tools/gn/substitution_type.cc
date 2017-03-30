@@ -46,6 +46,11 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
   "{{output_extension}}",  // SUBSTITUTION_OUTPUT_EXTENSION
   "{{solibs}}",  // SUBSTITUTION_SOLIBS
 
+  "{{bundle_root_dir}}",  // SUBSTITUTION_BUNDLE_ROOT_DIR
+  "{{bundle_resources_dir}}",  // SUBSTITUTION_BUNDLE_RESOURCES_DIR
+  "{{bundle_executable_dir}}",  // SUBSTITUTION_BUNDLE_EXECUTABLE_DIR
+  "{{bundle_plugins_dir}}",  // SUBSTITUTION_BUNDLE_PLUGINS_DIR
+
   "{{response_file_name}}",  // SUBSTITUTION_RSP_FILE_NAME
 };
 
@@ -89,6 +94,11 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
     "output_extension",  // SUBSTITUTION_OUTPUT_EXTENSION
     "solibs",            // SUBSTITUTION_SOLIBS
 
+    "bundle_root_dir",        // SUBSTITUTION_BUNDLE_ROOT_DIR
+    "bundle_resources_dir",   // SUBSTITUTION_BUNDLE_RESOURCES_DIR
+    "bundle_executable_dir",  // SUBSTITUTION_BUNDLE_EXECUTABLE_DIR
+    "bundle_plugins_dir",     // SUBSTITUTION_BUNDLE_PLUGINS_DIR
+
     "rspfile",  // SUBSTITUTION_RSP_FILE_NAME
 };
 
@@ -116,6 +126,24 @@ bool SubstitutionIsInOutputDir(SubstitutionType type) {
          type == SUBSTITUTION_TARGET_OUT_DIR;
 }
 
+bool SubstitutionIsInBundleDir(SubstitutionType type) {
+  return type == SUBSTITUTION_BUNDLE_ROOT_DIR ||
+         type == SUBSTITUTION_BUNDLE_RESOURCES_DIR ||
+         type == SUBSTITUTION_BUNDLE_EXECUTABLE_DIR ||
+         type == SUBSTITUTION_BUNDLE_PLUGINS_DIR;
+}
+
+bool IsValidBundleDataSubstitution(SubstitutionType type) {
+  return type == SUBSTITUTION_LITERAL ||
+         type == SUBSTITUTION_SOURCE_NAME_PART ||
+         type == SUBSTITUTION_SOURCE_FILE_PART ||
+         type == SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR ||
+         type == SUBSTITUTION_BUNDLE_ROOT_DIR ||
+         type == SUBSTITUTION_BUNDLE_RESOURCES_DIR ||
+         type == SUBSTITUTION_BUNDLE_EXECUTABLE_DIR ||
+         type == SUBSTITUTION_BUNDLE_PLUGINS_DIR;
+}
+
 bool IsValidSourceSubstitution(SubstitutionType type) {
   return type == SUBSTITUTION_LITERAL ||
          type == SUBSTITUTION_SOURCE ||
@@ -127,7 +155,7 @@ bool IsValidSourceSubstitution(SubstitutionType type) {
          type == SUBSTITUTION_SOURCE_OUT_DIR;
 }
 
-bool IsValidToolSubstutition(SubstitutionType type) {
+bool IsValidToolSubstitution(SubstitutionType type) {
   return type == SUBSTITUTION_LITERAL ||
          type == SUBSTITUTION_OUTPUT ||
          type == SUBSTITUTION_LABEL ||
@@ -140,7 +168,7 @@ bool IsValidToolSubstutition(SubstitutionType type) {
 }
 
 bool IsValidCompilerSubstitution(SubstitutionType type) {
-  return IsValidToolSubstutition(type) ||
+  return IsValidToolSubstitution(type) ||
          IsValidSourceSubstitution(type) ||
          type == SUBSTITUTION_SOURCE ||
          type == SUBSTITUTION_ASMFLAGS ||
@@ -155,12 +183,12 @@ bool IsValidCompilerSubstitution(SubstitutionType type) {
 
 bool IsValidCompilerOutputsSubstitution(SubstitutionType type) {
   // All tool types except "output" (which would be infinitely recursive).
-  return (IsValidToolSubstutition(type) && type != SUBSTITUTION_OUTPUT) ||
+  return (IsValidToolSubstitution(type) && type != SUBSTITUTION_OUTPUT) ||
          IsValidSourceSubstitution(type);
 }
 
 bool IsValidLinkerSubstitution(SubstitutionType type) {
-  return IsValidToolSubstutition(type) ||
+  return IsValidToolSubstitution(type) ||
          type == SUBSTITUTION_LINKER_INPUTS ||
          type == SUBSTITUTION_LINKER_INPUTS_NEWLINE ||
          type == SUBSTITUTION_LDFLAGS ||
@@ -176,8 +204,13 @@ bool IsValidLinkerOutputsSubstitution(SubstitutionType type) {
 }
 
 bool IsValidCopySubstitution(SubstitutionType type) {
-  return IsValidToolSubstutition(type) ||
+  return IsValidToolSubstitution(type) ||
          type == SUBSTITUTION_SOURCE;
+}
+
+bool IsValidCompileXCassetsSubstitution(SubstitutionType type) {
+  return IsValidToolSubstitution(type) ||
+         type == SUBSTITUTION_LINKER_INPUTS;
 }
 
 bool EnsureValidSourcesSubstitutions(
@@ -187,7 +220,7 @@ bool EnsureValidSourcesSubstitutions(
   for (size_t i = 0; i < types.size(); i++) {
     if (!IsValidSourceSubstitution(types[i])) {
       *err = Err(origin, "Invalid substitution type.",
-          "The substitution " + std::string(kSubstitutionNames[i]) +
+          "The substitution " + std::string(kSubstitutionNames[types[i]]) +
           " isn't valid for something\n"
           "operating on a source file such as this.");
       return false;

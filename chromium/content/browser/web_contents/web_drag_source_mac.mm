@@ -30,6 +30,7 @@
 #include "net/base/filename_util.h"
 #include "net/base/mime_util.h"
 #include "ui/base/clipboard/custom_data_helper.h"
+#include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/dragdrop/cocoa_dnd_util.h"
 #include "ui/gfx/image/image.h"
 #include "ui/resources/grit/ui_resources.h"
@@ -173,8 +174,8 @@ void PromiseWriterHelper(const DropData& drop_data,
     // Strip out any existing escapes and then re-escape uniformly.
     if (!url && dropData_->url.SchemeIs(url::kJavaScriptScheme)) {
       net::UnescapeRule::Type unescapeRules =
-          net::UnescapeRule::SPACES |
-          net::UnescapeRule::URL_SPECIAL_CHARS |
+          net::UnescapeRule::SPACES | net::UnescapeRule::PATH_SEPARATORS |
+          net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS |
           net::UnescapeRule::SPOOFING_AND_CONTROL_CHARS;
       std::string unescapedUrlString =
           net::UnescapeURLComponent(dropData_->url.spec(), unescapeRules);
@@ -222,7 +223,8 @@ void PromiseWriterHelper(const DropData& drop_data,
 
 - (NSPoint)convertScreenPoint:(NSPoint)screenPoint {
   DCHECK([contentsView_ window]);
-  NSPoint basePoint = [[contentsView_ window] convertScreenToBase:screenPoint];
+  NSPoint basePoint =
+      ui::ConvertPointFromScreenToWindow([contentsView_ window], screenPoint);
   return [contentsView_ convertPoint:basePoint fromView:nil];
 }
 

@@ -2,13 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "bindings/core/v8/ScriptController.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLIFrameElement.h"
+#include "core/page/FocusController.h"
+#include "core/page/Page.h"
+#include "core/paint/PaintLayer.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
+#include "public/platform/WebDisplayItemList.h"
+#include "public/platform/WebLayer.h"
+#include "public/web/WebFrameContentDumper.h"
 #include "public/web/WebHitTestResult.h"
+#include "public/web/WebSettings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebRemoteFrameImpl.h"
@@ -17,11 +26,34 @@
 #include "web/tests/sim/SimRequest.h"
 #include "web/tests/sim/SimTest.h"
 
+using testing::_;
+
 namespace blink {
 
 using namespace HTMLNames;
 
 // NOTE: This test uses <iframe sandbox> to create cross origin iframes.
+
+namespace {
+
+class MockWebDisplayItemList : public WebDisplayItemList {
+public:
+    ~MockWebDisplayItemList() override {}
+
+    MOCK_METHOD2(appendDrawingItem, void(const WebRect&, sk_sp<const SkPicture>));
+};
+
+void paintRecursively(GraphicsLayer* layer, WebDisplayItemList* displayItems)
+{
+    if (layer->drawsContent()) {
+        layer->setNeedsDisplay();
+        layer->contentLayerDelegateForTesting()->paintContents(displayItems, ContentLayerDelegate::PaintDefaultBehaviorForTest);
+    }
+    for (const auto& child : layer->children())
+        paintRecursively(child, displayItems);
+}
+
+} // namespace
 
 class FrameThrottlingTest : public SimTest {
 protected:
@@ -36,6 +68,12 @@ protected:
         // Ensure intersection observer notifications get delivered.
         testing::runPendingTasks();
         return displayItems;
+    }
+
+    // Number of rectangles that make up the root layer's touch handler region.
+    size_t touchHandlerRegionSize()
+    {
+        return webView().mainFrameImpl()->frame()->contentLayoutItem().layer()->graphicsLayerBacking()->platformLayer()->touchEventHandlerRegion().size();
     }
 };
 
@@ -157,13 +195,16 @@ TEST_F(FrameThrottlingTest, ThrottledLifecycleUpdate)
 
     // Mutating the throttled frame followed by a beginFrame will not result in
     // a complete lifecycle update.
+    // TODO(skyostil): these expectations are either wrong, or the test is
+    // not exercising the code correctly. PaintClean means the entire lifecycle
+    // ran.
     frameElement->setAttribute(widthAttr, "50");
     compositeFrame();
-    EXPECT_EQ(DocumentLifecycle::StyleClean, frameDocument->lifecycle().state());
+    EXPECT_EQ(DocumentLifecycle::PaintClean, frameDocument->lifecycle().state());
 
     // A hit test will not force a complete lifecycle update.
     webView().hitTestResultAt(WebPoint(0, 0));
-    EXPECT_EQ(DocumentLifecycle::StyleClean, frameDocument->lifecycle().state());
+    EXPECT_EQ(DocumentLifecycle::PaintClean, frameDocument->lifecycle().state());
 }
 
 TEST_F(FrameThrottlingTest, UnthrottlingFrameSchedulesAnimation)
@@ -346,6 +387,42 @@ TEST_F(FrameThrottlingTest, ChangeStyleInThrottledFrame)
     EXPECT_TRUE(displayItems2.contains(SimCanvas::Rect, "green"));
 }
 
+TEST_F(FrameThrottlingTest, ThrottledFrameWithFocus)
+{
+    webView().settings()->setJavaScriptEnabled(true);
+    webView().settings()->setAcceleratedCompositingEnabled(true);
+    RuntimeEnabledFeatures::setCompositedSelectionUpdateEnabled(true);
+
+    // Create a hidden frame which is throttled and has a text selection.
+    SimRequest mainResource("https://example.com/", "text/html");
+    SimRequest frameResource("https://example.com/iframe.html", "text/html");
+
+    loadURL("https://example.com/");
+    mainResource.complete("<iframe id=frame sandbox=allow-scripts src=iframe.html></iframe>");
+    frameResource.complete(
+        "some text to select\n"
+        "<script>\n"
+        "var range = document.createRange();\n"
+        "range.selectNode(document.body);\n"
+        "window.getSelection().addRange(range);\n"
+        "</script>\n");
+
+    // Move the frame offscreen to throttle it.
+    auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+    frameElement->setAttribute(styleAttr, "transform: translateY(480px)");
+    EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
+    compositeFrame();
+    EXPECT_TRUE(frameElement->contentDocument()->view()->canThrottleRendering());
+
+    // Give the frame focus and do another composite. The selection in the
+    // compositor should be cleared because the frame is throttled.
+    EXPECT_FALSE(compositor().hasSelection());
+    document().page()->focusController().setFocusedFrame(frameElement->contentDocument()->frame());
+    document().body()->setAttribute(styleAttr, "background: green");
+    compositeFrame();
+    EXPECT_FALSE(compositor().hasSelection());
+}
+
 TEST(RemoteFrameThrottlingTest, ThrottledLocalRoot)
 {
     FrameTestHelpers::TestWebViewClient viewClient;
@@ -390,6 +467,212 @@ TEST(RemoteFrameThrottlingTest, ThrottledLocalRoot)
     testing::runPendingTasks();
     EXPECT_EQ(DocumentLifecycle::VisualUpdatePending, frameDocument->lifecycle().state());
     webView->close();
+}
+
+TEST_F(FrameThrottlingTest, ScrollingCoordinatorShouldSkipThrottledFrame)
+{
+    webView().settings()->setAcceleratedCompositingEnabled(true);
+
+    // Create a hidden frame which is throttled.
+    SimRequest mainResource("https://example.com/", "text/html");
+    SimRequest frameResource("https://example.com/iframe.html", "text/html");
+
+    loadURL("https://example.com/");
+    mainResource.complete("<iframe id=frame sandbox src=iframe.html></iframe>");
+    frameResource.complete("<style> html { background-image: linear-gradient(red, blue); background-attachment: fixed; } </style>");
+
+    // Move the frame offscreen to throttle it.
+    auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+    frameElement->setAttribute(styleAttr, "transform: translateY(480px)");
+    EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
+    compositeFrame();
+    EXPECT_TRUE(frameElement->contentDocument()->view()->canThrottleRendering());
+
+    // Change style of the frame's content to make it in VisualUpdatePending state.
+    frameElement->contentDocument()->body()->setAttribute(styleAttr, "background: green");
+    // Change root frame's layout so that the next lifecycle update will call
+    // ScrollingCoordinator::updateAfterCompositingChangeIfNeeded().
+    document().body()->setAttribute(styleAttr, "margin: 20px");
+    EXPECT_EQ(DocumentLifecycle::VisualUpdatePending, frameElement->contentDocument()->lifecycle().state());
+
+    DocumentLifecycle::AllowThrottlingScope throttlingScope(document().lifecycle());
+    // This will call ScrollingCoordinator::updateAfterCompositingChangeIfNeeded() and should not
+    // cause assert failure about isAllowedToQueryCompositingState() in the throttled frame.
+    document().view()->updateAllLifecyclePhases();
+    testing::runPendingTasks();
+    EXPECT_EQ(DocumentLifecycle::VisualUpdatePending, frameElement->contentDocument()->lifecycle().state());
+    // The fixed background in the throttled sub frame should not cause main thread scrolling.
+    EXPECT_FALSE(document().view()->shouldScrollOnMainThread());
+
+    // Make the frame visible by changing its transform. This doesn't cause a
+    // layout, but should still unthrottle the frame.
+    frameElement->setAttribute(styleAttr, "transform: translateY(0px)");
+    compositeFrame();
+    EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
+    // The fixed background in the throttled sub frame should be considered.
+    EXPECT_TRUE(document().view()->shouldScrollOnMainThread());
+}
+
+TEST_F(FrameThrottlingTest, ScrollingCoordinatorShouldSkipCompositedThrottledFrame)
+{
+    webView().settings()->setAcceleratedCompositingEnabled(true);
+    webView().settings()->setPreferCompositingToLCDTextEnabled(true);
+
+    // Create a hidden frame which is throttled.
+    SimRequest mainResource("https://example.com/", "text/html");
+    SimRequest frameResource("https://example.com/iframe.html", "text/html");
+
+    loadURL("https://example.com/");
+    mainResource.complete("<iframe id=frame sandbox src=iframe.html></iframe>");
+    frameResource.complete("<div style='height: 2000px'></div>");
+
+    // Move the frame offscreen to throttle it.
+    auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+    frameElement->setAttribute(styleAttr, "transform: translateY(480px)");
+    EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
+    compositeFrame();
+    EXPECT_TRUE(frameElement->contentDocument()->view()->canThrottleRendering());
+
+    // Change style of the frame's content to make it in VisualUpdatePending state.
+    frameElement->contentDocument()->body()->setAttribute(styleAttr, "background: green");
+    // Change root frame's layout so that the next lifecycle update will call
+    // ScrollingCoordinator::updateAfterCompositingChangeIfNeeded().
+    document().body()->setAttribute(styleAttr, "margin: 20px");
+    EXPECT_EQ(DocumentLifecycle::VisualUpdatePending, frameElement->contentDocument()->lifecycle().state());
+
+    DocumentLifecycle::AllowThrottlingScope throttlingScope(document().lifecycle());
+    // This will call ScrollingCoordinator::updateAfterCompositingChangeIfNeeded() and should not
+    // cause assert failure about isAllowedToQueryCompositingState() in the throttled frame.
+    compositeFrame();
+    EXPECT_EQ(DocumentLifecycle::VisualUpdatePending, frameElement->contentDocument()->lifecycle().state());
+
+    // Make the frame visible by changing its transform. This doesn't cause a
+    // layout, but should still unthrottle the frame.
+    frameElement->setAttribute(styleAttr, "transform: translateY(0px)");
+    compositeFrame(); // Unthrottle the frame.
+    compositeFrame(); // Handle the pending visual update of the unthrottled frame.
+    EXPECT_EQ(DocumentLifecycle::PaintClean, frameElement->contentDocument()->lifecycle().state());
+    EXPECT_TRUE(frameElement->contentDocument()->view()->usesCompositedScrolling());
+}
+
+TEST_F(FrameThrottlingTest, UnthrottleByTransformingWithoutLayout)
+{
+    webView().settings()->setAcceleratedCompositingEnabled(true);
+
+    // Create a hidden frame which is throttled.
+    SimRequest mainResource("https://example.com/", "text/html");
+    SimRequest frameResource("https://example.com/iframe.html", "text/html");
+
+    loadURL("https://example.com/");
+    mainResource.complete("<iframe id=frame sandbox src=iframe.html></iframe>");
+    frameResource.complete("");
+
+    // Move the frame offscreen to throttle it.
+    auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+    frameElement->setAttribute(styleAttr, "transform: translateY(480px)");
+    EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
+    compositeFrame();
+    EXPECT_TRUE(frameElement->contentDocument()->view()->canThrottleRendering());
+
+    // Make the frame visible by changing its transform. This doesn't cause a
+    // layout, but should still unthrottle the frame.
+    frameElement->setAttribute(styleAttr, "transform: translateY(0px)");
+    compositeFrame();
+    EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
+}
+
+TEST_F(FrameThrottlingTest, ThrottledTopLevelEventHandlerIgnored)
+{
+    webView().settings()->setAcceleratedCompositingEnabled(true);
+    webView().settings()->setJavaScriptEnabled(true);
+    EXPECT_EQ(0u, touchHandlerRegionSize());
+
+    // Create a frame which is throttled and has two different types of
+    // top-level touchstart handlers.
+    SimRequest mainResource("https://example.com/", "text/html");
+    SimRequest frameResource("https://example.com/iframe.html", "text/html");
+
+    loadURL("https://example.com/");
+    mainResource.complete("<iframe id=frame sandbox=allow-scripts src=iframe.html></iframe>");
+    frameResource.complete(
+        "<script>"
+        "window.addEventListener('touchstart', function(){});"
+        "document.addEventListener('touchstart', function(){});"
+        "</script>");
+    auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+    frameElement->setAttribute(styleAttr, "transform: translateY(480px)");
+    compositeFrame(); // Throttle the frame.
+    compositeFrame(); // Update touch handler regions.
+
+    // The touch handlers in the throttled frame should have been ignored.
+    EXPECT_EQ(0u, touchHandlerRegionSize());
+
+    // Unthrottling the frame makes the touch handlers active again. Note that
+    // both handlers get combined into the same rectangle in the region, so
+    // there is only one rectangle in total.
+    frameElement->setAttribute(styleAttr, "transform: translateY(0px)");
+    compositeFrame(); // Unthrottle the frame.
+    compositeFrame(); // Update touch handler regions.
+    EXPECT_EQ(1u, touchHandlerRegionSize());
+}
+
+TEST_F(FrameThrottlingTest, ThrottledEventHandlerIgnored)
+{
+    webView().settings()->setAcceleratedCompositingEnabled(true);
+    webView().settings()->setJavaScriptEnabled(true);
+    EXPECT_EQ(0u, touchHandlerRegionSize());
+
+    // Create a frame which is throttled and has a non-top-level touchstart handler.
+    SimRequest mainResource("https://example.com/", "text/html");
+    SimRequest frameResource("https://example.com/iframe.html", "text/html");
+
+    loadURL("https://example.com/");
+    mainResource.complete("<iframe id=frame sandbox=allow-scripts src=iframe.html></iframe>");
+    frameResource.complete(
+        "<div id=d>touch handler</div>"
+        "<script>"
+        "document.querySelector('#d').addEventListener('touchstart', function(){});"
+        "</script>");
+    auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+    frameElement->setAttribute(styleAttr, "transform: translateY(480px)");
+    compositeFrame(); // Throttle the frame.
+    compositeFrame(); // Update touch handler regions.
+
+    // The touch handler in the throttled frame should have been ignored.
+    EXPECT_EQ(0u, touchHandlerRegionSize());
+
+    // Unthrottling the frame makes the touch handler active again.
+    frameElement->setAttribute(styleAttr, "transform: translateY(0px)");
+    compositeFrame(); // Unthrottle the frame.
+    compositeFrame(); // Update touch handler regions.
+    EXPECT_EQ(1u, touchHandlerRegionSize());
+}
+
+TEST_F(FrameThrottlingTest, DumpThrottledFrame)
+{
+    webView().settings()->setJavaScriptEnabled(true);
+
+    // Create a frame which is throttled.
+    SimRequest mainResource("https://example.com/", "text/html");
+    SimRequest frameResource("https://example.com/iframe.html", "text/html");
+
+    loadURL("https://example.com/");
+    mainResource.complete("main <iframe id=frame sandbox=allow-scripts src=iframe.html></iframe>");
+    frameResource.complete("");
+    auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+    frameElement->setAttribute(styleAttr, "transform: translateY(480px)");
+    compositeFrame();
+    EXPECT_TRUE(frameElement->contentDocument()->view()->canThrottleRendering());
+
+    LocalFrame* localFrame = toLocalFrame(frameElement->contentFrame());
+    localFrame->script().executeScriptInMainWorld("document.body.innerHTML = 'throttled'");
+    EXPECT_FALSE(compositor().needsAnimate());
+
+    // The dumped contents should not include the throttled frame.
+    DocumentLifecycle::AllowThrottlingScope throttlingScope(document().lifecycle());
+    WebString result = WebFrameContentDumper::deprecatedDumpFrameTreeAsText(webView().mainFrameImpl(), 1024);
+    EXPECT_NE(std::string::npos, result.utf8().find("main"));
+    EXPECT_EQ(std::string::npos, result.utf8().find("throttled"));
 }
 
 } // namespace blink

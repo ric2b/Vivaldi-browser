@@ -48,15 +48,15 @@ public:
     {
         if (!hasIndex())
             m_index = node().nodeIndex();
-        ASSERT(hasIndex());
-        ASSERT(m_index == static_cast<int>(node().nodeIndex()));
+        DCHECK(hasIndex());
+        DCHECK_EQ(m_index, static_cast<int>(node().nodeIndex()));
         return m_index;
     }
 
 private:
     bool hasIndex() const { return m_index >= 0; }
 
-    RawPtrWillBeMember<Node> m_node;
+    Member<Node> m_node;
     mutable int m_index;
 };
 

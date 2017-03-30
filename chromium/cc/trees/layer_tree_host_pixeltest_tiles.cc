@@ -133,7 +133,7 @@ class BlueYellowClient : public ContentLayerClient {
     canvas->drawRect(gfx::RectToSkRect(yellow_rect), paint);
 
     display_list->CreateAndAppendItem<DrawingDisplayItem>(
-        PaintableRegion(), skia::AdoptRef(recorder.endRecordingAsPicture()));
+        PaintableRegion(), recorder.finishRecordingAsPicture());
     display_list->Finalize();
     return display_list;
   }
@@ -153,7 +153,7 @@ class LayerTreeHostTilesTestPartialInvalidation
  public:
   LayerTreeHostTilesTestPartialInvalidation()
       : client_(gfx::Size(200, 200)),
-        picture_layer_(PictureLayer::Create(layer_settings(), &client_)) {
+        picture_layer_(PictureLayer::Create(&client_)) {
     picture_layer_->SetBounds(gfx::Size(200, 200));
     picture_layer_->SetIsDrawable(true);
   }

@@ -149,21 +149,14 @@ void ToolbarLayer::UpdateProgressBar(int progress_bar_x,
 
 ToolbarLayer::ToolbarLayer(ui::ResourceManager* resource_manager)
     : resource_manager_(resource_manager),
-      layer_(cc::Layer::Create(content::Compositor::LayerSettings())),
-      toolbar_background_layer_(
-          cc::SolidColorLayer::Create(content::Compositor::LayerSettings())),
-      url_bar_background_layer_(
-          cc::NinePatchLayer::Create(content::Compositor::LayerSettings())),
-      bitmap_layer_(
-          cc::UIResourceLayer::Create(content::Compositor::LayerSettings())),
-      progress_bar_layer_(
-          cc::SolidColorLayer::Create(content::Compositor::LayerSettings())),
-      progress_bar_background_layer_(
-          cc::SolidColorLayer::Create(content::Compositor::LayerSettings())),
-      anonymize_layer_(
-          cc::SolidColorLayer::Create(content::Compositor::LayerSettings())),
-      debug_layer_(
-          cc::SolidColorLayer::Create(content::Compositor::LayerSettings())),
+      layer_(cc::Layer::Create()),
+      toolbar_background_layer_(cc::SolidColorLayer::Create()),
+      url_bar_background_layer_(cc::NinePatchLayer::Create()),
+      bitmap_layer_(cc::UIResourceLayer::Create()),
+      progress_bar_layer_(cc::SolidColorLayer::Create()),
+      progress_bar_background_layer_(cc::SolidColorLayer::Create()),
+      anonymize_layer_(cc::SolidColorLayer::Create()),
+      debug_layer_(cc::SolidColorLayer::Create()),
       brightness_(1.f) {
   toolbar_background_layer_->SetIsDrawable(true);
   layer_->AddChild(toolbar_background_layer_);

@@ -11,8 +11,8 @@
 #include "base/big_endian.h"
 #include "base/macros.h"
 #include "base/test/simple_test_tick_clock.h"
+#include "media/base/fake_single_thread_task_runner.h"
 #include "media/cast/net/pacing/paced_sender.h"
-#include "media/cast/test/fake_single_thread_task_runner.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using testing::_;
@@ -38,7 +38,7 @@ const uint32_t kAudioFrameRtpTimestamp = 23456;
 // check that.
 const uint16_t kRtcpPacketIdMagic = UINT16_C(31611);
 
-class TestPacketSender : public PacketSender {
+class TestPacketSender : public PacketTransport {
  public:
   TestPacketSender() : bytes_sent_(0) {}
 
@@ -95,7 +95,7 @@ class PacedSenderTest : public ::testing::Test {
   PacedSenderTest() {
     testing_clock_.Advance(
         base::TimeDelta::FromMilliseconds(kStartMillisecond));
-    task_runner_ = new test::FakeSingleThreadTaskRunner(&testing_clock_);
+    task_runner_ = new FakeSingleThreadTaskRunner(&testing_clock_);
     paced_sender_.reset(new PacedSender(kTargetBurstSize, kMaxBurstSize,
                                         &testing_clock_, &packet_events_,
                                         &mock_transport_, task_runner_));
@@ -169,7 +169,7 @@ class PacedSenderTest : public ::testing::Test {
   std::vector<PacketEvent> packet_events_;
   base::SimpleTestTickClock testing_clock_;
   TestPacketSender mock_transport_;
-  scoped_refptr<test::FakeSingleThreadTaskRunner> task_runner_;
+  scoped_refptr<FakeSingleThreadTaskRunner> task_runner_;
   scoped_ptr<PacedSender> paced_sender_;
 
   DISALLOW_COPY_AND_ASSIGN(PacedSenderTest);

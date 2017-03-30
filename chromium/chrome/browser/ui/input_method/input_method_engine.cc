@@ -4,9 +4,11 @@
 
 #include "chrome/browser/ui/input_method/input_method_engine.h"
 
+#include "content/public/browser/render_frame_host.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/ime_input_context_handler_interface.h"
+#include "ui/events/keycodes/keyboard_code_conversion.h"
 
 namespace {
 
@@ -26,14 +28,13 @@ namespace input_method {
 InputMethodEngine::InputMethodEngine() : follow_cursor_window_(nullptr) {}
 
 InputMethodEngine::~InputMethodEngine() {
-  CloseImeWindows();
-}
+  // Removes the listeners for OnWindowDestroyed.
+  if (follow_cursor_window_)
+    follow_cursor_window_->RemoveObserver(this);
+  for (auto window : normal_windows_)
+    window->RemoveObserver(this);
 
-bool InputMethodEngine::SendKeyEvents(
-    int context_id,
-    const std::vector<KeyboardEvent>& events) {
-  // TODO(azurewei) Implement SendKeyEvents funciton
-  return false;
+  CloseImeWindows();
 }
 
 bool InputMethodEngine::IsActive() const {
@@ -44,11 +45,13 @@ std::string InputMethodEngine::GetExtensionId() const {
   return extension_id_;
 }
 
-int InputMethodEngine::CreateImeWindow(const extensions::Extension* extension,
-                                       const std::string& url,
-                                       ui::ImeWindow::Mode mode,
-                                       const gfx::Rect& bounds,
-                                       std::string* error) {
+int InputMethodEngine::CreateImeWindow(
+    const extensions::Extension* extension,
+    content::RenderFrameHost* render_frame_host,
+    const std::string& url,
+    ui::ImeWindow::Mode mode,
+    const gfx::Rect& bounds,
+    std::string* error) {
   if (mode == ui::ImeWindow::FOLLOW_CURSOR) {
     if (follow_cursor_window_) {
       *error = kErrorFollowCursorWindowExists;
@@ -67,8 +70,8 @@ int InputMethodEngine::CreateImeWindow(const extensions::Extension* extension,
   }
 
   // ui::ImeWindow manages its own lifetime.
-  ui::ImeWindow* ime_window =
-      new ui::ImeWindow(profile_, extension, url, mode, bounds);
+  ui::ImeWindow* ime_window = new ui::ImeWindow(
+      profile_, extension, render_frame_host, url, mode, bounds);
   ime_window->AddObserver(this);
   ime_window->Show();
   if (mode == ui::ImeWindow::FOLLOW_CURSOR) {
@@ -81,19 +84,24 @@ int InputMethodEngine::CreateImeWindow(const extensions::Extension* extension,
   return ime_window->GetFrameId();
 }
 
+void InputMethodEngine::ShowImeWindow(int window_id) {
+  ui::ImeWindow* ime_window = FindWindowById(window_id);
+  if (ime_window)
+    ime_window->Show();
+}
+
+void InputMethodEngine::HideImeWindow(int window_id) {
+  ui::ImeWindow* ime_window = FindWindowById(window_id);
+  if (ime_window)
+    ime_window->Hide();
+}
+
 void InputMethodEngine::CloseImeWindows() {
   if (follow_cursor_window_)
     follow_cursor_window_->Close();
   for (auto window : normal_windows_)
     window->Close();
   normal_windows_.clear();
-}
-
-void InputMethodEngine::FocusIn(
-    const ui::IMEEngineHandlerInterface::InputContext& input_context) {
-  InputMethodEngineBase::FocusIn(input_context);
-  if (follow_cursor_window_)
-    follow_cursor_window_->Show();
 }
 
 void InputMethodEngine::FocusOut() {
@@ -130,8 +138,7 @@ void InputMethodEngine::UpdateComposition(
   // If the IME extension is handling key event, hold the composition text
   // until the key event is handled.
   if (input_context && !handling_key_event_) {
-    input_context->UpdateCompositionText(composition_text, cursor_pos,
-                                         is_visible);
+    input_context->UpdateCompositionText(composition_, cursor_pos, is_visible);
     composition_.Clear();
   }
 }
@@ -161,6 +168,33 @@ void InputMethodEngine::OnWindowDestroyed(ui::ImeWindow* ime_window) {
     if (it != normal_windows_.end())
       normal_windows_.erase(it);
   }
+}
+
+ui::ImeWindow* InputMethodEngine::FindWindowById(int window_id) const {
+  if (follow_cursor_window_ &&
+      follow_cursor_window_->GetFrameId() == window_id) {
+    return follow_cursor_window_;
+  }
+  for (auto ime_window : normal_windows_) {
+    if (ime_window->GetFrameId() == window_id)
+      return ime_window;
+  }
+  return nullptr;
+}
+
+bool InputMethodEngine::SendKeyEvent(ui::KeyEvent* event,
+                                     const std::string& code) {
+  DCHECK(event);
+  if (event->key_code() == ui::VKEY_UNKNOWN)
+    event->set_key_code(ui::DomCodeToUsLayoutKeyboardCode(event->code()));
+
+  ui::IMEInputContextHandlerInterface* input_context =
+      ui::IMEBridge::Get()->GetInputContextHandler();
+  if (!input_context)
+    return false;
+  input_context->SendKeyEvent(event);
+
+  return true;
 }
 
 }  // namespace input_method

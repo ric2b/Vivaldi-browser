@@ -87,7 +87,6 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
                            const base::StringPiece& context,
                            unsigned char* out,
                            unsigned int outlen) override;
-  int GetTLSUniqueChannelBinding(std::string* out) override;
 
   // StreamSocket implementation.
   int Connect(const CompletionCallback& callback) override;
@@ -100,7 +99,6 @@ class SSLClientSocketOpenSSL : public SSLClientSocket {
   void SetSubresourceSpeculation() override;
   void SetOmniboxSpeculation() override;
   bool WasEverUsed() const override;
-  bool UsingTCPFastOpen() const override;
   bool GetSSLInfo(SSLInfo* ssl_info) override;
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
   void ClearConnectionAttempts() override {}

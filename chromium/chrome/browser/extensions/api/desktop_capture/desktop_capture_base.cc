@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -18,6 +19,8 @@
 #include "chrome/browser/media/native_desktop_media_list.h"
 #include "chrome/browser/media/tab_desktop_media_list.h"
 #include "chrome/browser/ui/ash/ash_util.h"
+#include "chrome/common/channel_info.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -100,13 +103,24 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
         if (base::CommandLine::ForCurrentProcess()->HasSwitch(
                 extensions::switches::kEnableTabForDesktopShare)) {
           show_tabs = true;
+        } else if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            extensions::switches::kDisableTabForDesktopShare)) {
+          show_tabs = false;
+        } else {
+          const version_info::Channel channel = chrome::GetChannel();
+          if ((channel == version_info::Channel::STABLE) ||
+              (channel == version_info::Channel::BETA)) {
+            show_tabs = false;
+          } else {
+            show_tabs = true;
+          }
         }
         break;
 
       case api::desktop_capture::DESKTOP_CAPTURE_SOURCE_TYPE_AUDIO:
         bool has_flag = base::CommandLine::ForCurrentProcess()->HasSwitch(
-            extensions::switches::kEnableDesktopCaptureAudio);
-        request_audio = has_flag;
+            extensions::switches::kDisableDesktopCaptureAudio);
+        request_audio = !has_flag;
         break;
     }
   }
@@ -118,38 +132,38 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
 
   const gfx::NativeWindow parent_window =
       web_contents->GetTopLevelNativeWindow();
-  scoped_ptr<DesktopMediaList> media_list;
+  std::unique_ptr<DesktopMediaList> media_list;
   if (g_picker_factory) {
-    media_list = g_picker_factory->CreateModel(
-        show_screens, show_windows);
+    media_list = g_picker_factory->CreateModel(show_screens, show_windows,
+                                               show_tabs, request_audio);
     picker_ = g_picker_factory->CreatePicker();
   } else {
-    std::vector<scoped_ptr<DesktopMediaList>> media_lists;
+    std::vector<std::unique_ptr<DesktopMediaList>> media_lists;
     // Create a screens/windows list and push it into media_lists.
     if (show_screens || show_windows) {
 #if defined(USE_ASH)
       if (chrome::IsNativeWindowInAsh(parent_window)) {
-        media_lists.push_back(make_scoped_ptr(new DesktopMediaListAsh(
+        media_lists.push_back(base::WrapUnique(new DesktopMediaListAsh(
             (show_screens ? DesktopMediaListAsh::SCREENS : 0) |
             (show_windows ? DesktopMediaListAsh::WINDOWS : 0))));
       }
 #endif
-      if (!media_list) {
+      if (media_lists.empty()) {
         webrtc::DesktopCaptureOptions options =
             webrtc::DesktopCaptureOptions::CreateDefault();
         options.set_disable_effects(false);
-        scoped_ptr<webrtc::ScreenCapturer> screen_capturer(
+        std::unique_ptr<webrtc::ScreenCapturer> screen_capturer(
             show_screens ? webrtc::ScreenCapturer::Create(options) : NULL);
-        scoped_ptr<webrtc::WindowCapturer> window_capturer(
+        std::unique_ptr<webrtc::WindowCapturer> window_capturer(
             show_windows ? webrtc::WindowCapturer::Create(options) : NULL);
 
-        media_lists.push_back(make_scoped_ptr(new NativeDesktopMediaList(
+        media_lists.push_back(base::WrapUnique(new NativeDesktopMediaList(
             std::move(screen_capturer), std::move(window_capturer))));
       }
     }
 
     if (show_tabs)
-      media_lists.push_back(make_scoped_ptr(new TabDesktopMediaList()));
+      media_lists.push_back(base::WrapUnique(new TabDesktopMediaList()));
 
     DCHECK(!media_lists.empty());
 

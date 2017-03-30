@@ -22,10 +22,10 @@
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
-#include "content/browser/compositor/delegated_frame_host.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/compositor/owned_mailbox.h"
 #include "content/browser/renderer_host/begin_frame_observer_proxy.h"
+#include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
@@ -135,8 +135,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
                    const gfx::Rect& pos) override;
   void InitAsFullscreen(RenderWidgetHostView* reference_host_view) override;
-  void MovePluginWindows(const std::vector<WebPluginGeometry>& moves,
-    const int owner_wiew_id) override;
   void Focus() override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
@@ -183,7 +181,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   InputEventAckState FilterInputEvent(
       const blink::WebInputEvent& input_event) override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
-      BrowserAccessibilityDelegate* delegate) override;
+      BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
   gfx::AcceleratedWidget AccessibilityGetAcceleratedWidget() override;
   gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible() override;
   void ShowDisambiguationPopup(const gfx::Rect& rect_pixels,
@@ -205,15 +203,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) override;
   void ProcessTouchEvent(const blink::WebTouchEvent& event,
                          const ui::LatencyInfo& latency) override;
+  void ProcessGestureEvent(const blink::WebGestureEvent& event,
+                           const ui::LatencyInfo& latency) override;
   void TransformPointToLocalCoordSpace(const gfx::Point& point,
                                        cc::SurfaceId original_surface,
                                        gfx::Point* transformed_point) override;
-
-#if defined(OS_WIN)
-  void SetParentNativeViewAccessible(
-      gfx::NativeViewAccessible accessible_parent) override;
-  gfx::NativeViewId GetParentForWindowlessPlugin() const override;
-#endif
 
   // Overridden from ui::TextInputClient:
   void SetCompositionText(const ui::CompositionText& composition) override;
@@ -292,11 +286,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                    const gfx::Point& new_origin) override;
 
 #if defined(OS_WIN)
-  // Sets the cutout rects from constrained windows. These are rectangles that
-  // windowed NPAPI plugins shouldn't paint in. Overwrites any previous cutout
-  // rects.
-  void UpdateConstrainedWindowRects(const std::vector<gfx::Rect>& rects);
-
   // Updates the cursor clip region. Used for mouse locking.
   void UpdateMouseLockRegion();
 
@@ -359,6 +348,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   DelegatedFrameHost* GetDelegatedFrameHost() const {
     return delegated_frame_host_.get();
   }
+
   const ui::MotionEventAura& pointer_state() const { return pointer_state_; }
 
  private:
@@ -455,6 +445,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // DelegatedFrameHostClient implementation.
   ui::Layer* DelegatedFrameHostGetLayer() const override;
   bool DelegatedFrameHostIsVisible() const override;
+  SkColor DelegatedFrameHostGetGutterColor(SkColor color) const override;
   gfx::Size DelegatedFrameHostDesiredSizeInDIP() const override;
   bool DelegatedFrameCanCreateResizeLock() const override;
   scoped_ptr<ResizeLock> DelegatedFrameHostCreateResizeLock(
@@ -638,17 +629,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   CursorVisibilityState cursor_visibility_state_in_renderer_;
 
 #if defined(OS_WIN)
-  // The list of rectangles from constrained windows over this view. Windowed
-  // NPAPI plugins shouldn't draw over them.
-  std::vector<gfx::Rect> constrained_rects_;
-
-  typedef std::map<HWND, WebPluginGeometry> PluginWindowMoves;
-  // Contains information about each windowed plugin's clip and cutout rects (
-  // from the renderer). This is needed because when the transient windows
-  // over this view changes, we need this information in order to create a new
-  // region for the HWND.
-  PluginWindowMoves plugin_window_moves_;
-
   // The LegacyRenderWidgetHostHWND class provides a dummy HWND which is used
   // for accessibility, as the container for windowless plugins like
   // Flash/Silverlight, etc and for legacy drivers for trackpoints/trackpads,
@@ -704,6 +684,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   bool set_focus_on_mouse_down_or_key_event_;
 
   float device_scale_factor_;
+
+  // Allows tests to send gesture events for testing without first sending a
+  // corresponding touch sequence, as would be required by
+  // RenderWidgetHostInputEventRouter.
+  bool disable_input_event_router_for_testing_;
 
   base::WeakPtrFactory<RenderWidgetHostViewAura> weak_ptr_factory_;
 

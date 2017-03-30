@@ -36,18 +36,13 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/Referrer.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebURLRequest.h"
 #include "wtf/OwnPtr.h"
 
 namespace blink {
 
-enum ResourceRequestCachePolicy {
-    UseProtocolCachePolicy, // normal load
-    ReloadIgnoringCacheData, // reload
-    ReturnCacheDataElseLoad, // back/forward or encoding change - allow stale data
-    ReturnCacheDataDontLoad, // results of a post - allow stale data and only use cache
-    ReloadBypassingCache, // end-to-end reload
-};
+enum class WebCachePolicy;
 
 enum ResourceRequestBlockedReason {
     ResourceRequestBlockedReasonCSP,
@@ -102,8 +97,8 @@ public:
 
     void removeCredentials();
 
-    ResourceRequestCachePolicy getCachePolicy() const;
-    void setCachePolicy(ResourceRequestCachePolicy cachePolicy);
+    WebCachePolicy getCachePolicy() const;
+    void setCachePolicy(WebCachePolicy);
 
     double timeoutInterval() const; // May return 0 when using platform default.
     void setTimeoutInterval(double timeoutInterval);
@@ -129,7 +124,7 @@ public:
 
     bool didSetHTTPReferrer() const { return m_didSetHTTPReferrer; }
     const AtomicString& httpReferrer() const { return httpHeaderField(HTTPNames::Referer); }
-    ReferrerPolicy referrerPolicy() const { return m_referrerPolicy; }
+    ReferrerPolicy getReferrerPolicy() const { return m_referrerPolicy; }
     void setHTTPReferrer(const Referrer&);
     void clearHTTPReferrer();
 
@@ -145,11 +140,13 @@ public:
     void setHTTPUserAgent(const AtomicString& httpUserAgent) { setHTTPHeaderField(HTTPNames::User_Agent, httpUserAgent); }
     void clearHTTPUserAgent();
 
-    const AtomicString& httpAccept() const { return httpHeaderField(HTTPNames::Accept); }
     void setHTTPAccept(const AtomicString& httpAccept) { setHTTPHeaderField(HTTPNames::Accept, httpAccept); }
 
     EncodedFormData* httpBody() const;
     void setHTTPBody(PassRefPtr<EncodedFormData>);
+
+    EncodedFormData* attachedCredential() const;
+    void setAttachedCredential(PassRefPtr<EncodedFormData>);
 
     bool allowStoredCredentials() const;
     void setAllowStoredCredentials(bool allowCredentials);
@@ -205,7 +202,7 @@ public:
     void setShouldResetAppCache(bool shouldResetAppCache) { m_shouldResetAppCache = shouldResetAppCache; }
 
     // Extra data associated with this request.
-    ExtraData* extraData() const { return m_extraData.get(); }
+    ExtraData* getExtraData() const { return m_extraData.get(); }
     void setExtraData(PassRefPtr<ExtraData> extraData) { m_extraData = extraData; }
 
     WebURLRequest::RequestContext requestContext() const { return m_requestContext; }
@@ -230,16 +227,15 @@ public:
     bool cacheControlContainsNoStore() const;
     bool hasCacheValidatorFields() const;
 
-    static bool compare(const ResourceRequest&, const ResourceRequest&);
-
     bool checkForBrowserSideNavigation() const { return m_checkForBrowserSideNavigation; }
     void setCheckForBrowserSideNavigation(bool check) { m_checkForBrowserSideNavigation = check; }
 
     double uiStartTime() const { return m_uiStartTime; }
     void setUIStartTime(double uiStartTime) { m_uiStartTime = uiStartTime; }
 
-    bool originatesFromReservedIPRange() const { return m_originatesFromReservedIPRange; }
-    void setOriginatesFromReservedIPRange(bool value) { m_originatesFromReservedIPRange = value; }
+    // https://mikewest.github.io/cors-rfc1918/#external-request
+    bool isExternalRequest() const { return m_isExternalRequest; }
+    void setExternalRequestStateFromRequestorAddressSpace(WebAddressSpace);
 
     InputToLoadPerfMetricReportPolicy inputPerfMetricReportPolicy() const { return m_inputPerfMetricReportPolicy; }
     void setInputPerfMetricReportPolicy(InputToLoadPerfMetricReportPolicy inputPerfMetricReportPolicy) { m_inputPerfMetricReportPolicy = inputPerfMetricReportPolicy; }
@@ -253,13 +249,14 @@ private:
     const CacheControlHeader& cacheControlHeader() const;
 
     KURL m_url;
-    ResourceRequestCachePolicy m_cachePolicy;
+    WebCachePolicy m_cachePolicy;
     double m_timeoutInterval; // 0 is a magic value for platform default on platforms that have one.
     KURL m_firstPartyForCookies;
     RefPtr<SecurityOrigin> m_requestorOrigin;
     AtomicString m_httpMethod;
     HTTPHeaderMap m_httpHeaderFields;
     RefPtr<EncodedFormData> m_httpBody;
+    RefPtr<EncodedFormData> m_attachedCredential;
     bool m_allowStoredCredentials : 1;
     bool m_reportUploadProgress : 1;
     bool m_reportRawHeaders : 1;
@@ -284,7 +281,7 @@ private:
     bool m_didSetHTTPReferrer;
     bool m_checkForBrowserSideNavigation;
     double m_uiStartTime;
-    bool m_originatesFromReservedIPRange;
+    bool m_isExternalRequest;
     InputToLoadPerfMetricReportPolicy m_inputPerfMetricReportPolicy;
 
     mutable CacheControlHeader m_cacheControlHeaderCache;
@@ -294,18 +291,13 @@ private:
     bool m_followedRedirect;
 };
 
-bool equalIgnoringHeaderFields(const ResourceRequest&, const ResourceRequest&);
-
-inline bool operator==(const ResourceRequest& a, const ResourceRequest& b) { return ResourceRequest::compare(a, b); }
-inline bool operator!=(ResourceRequest& a, const ResourceRequest& b) { return !(a == b); }
-
 struct CrossThreadResourceRequestData {
     WTF_MAKE_NONCOPYABLE(CrossThreadResourceRequestData); USING_FAST_MALLOC(CrossThreadResourceRequestData);
 public:
     CrossThreadResourceRequestData() { }
     KURL m_url;
 
-    ResourceRequestCachePolicy m_cachePolicy;
+    WebCachePolicy m_cachePolicy;
     double m_timeoutInterval;
     KURL m_firstPartyForCookies;
     RefPtr<SecurityOrigin> m_requestorOrigin;
@@ -313,6 +305,7 @@ public:
     String m_httpMethod;
     OwnPtr<CrossThreadHTTPHeaderMapData> m_httpHeaders;
     RefPtr<EncodedFormData> m_httpBody;
+    RefPtr<EncodedFormData> m_attachedCredential;
     bool m_allowStoredCredentials;
     bool m_reportUploadProgress;
     bool m_hasUserGesture;
@@ -335,7 +328,7 @@ public:
     bool m_didSetHTTPReferrer;
     bool m_checkForBrowserSideNavigation;
     double m_uiStartTime;
-    bool m_originatesFromReservedIPRange;
+    bool m_isExternalRequest;
     InputToLoadPerfMetricReportPolicy m_inputPerfMetricReportPolicy;
     bool m_followedRedirect;
 };

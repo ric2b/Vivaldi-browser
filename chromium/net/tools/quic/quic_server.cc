@@ -26,9 +26,6 @@
 #include "net/tools/quic/quic_packet_reader.h"
 #include "net/tools/quic/quic_socket_utils.h"
 
-// TODO(rtenneti): Add support for MMSG_MORE.
-#define MMSG_MORE 0
-
 #ifndef SO_RXQ_OVFL
 #define SO_RXQ_OVFL 40
 #endif
@@ -47,30 +44,31 @@ const char kSourceAddressTokenSecret[] = "secret";
 }  // namespace
 
 QuicServer::QuicServer(ProofSource* proof_source)
-    : QuicServer(proof_source, QuicConfig(), QuicSupportedVersions()) {}
+    : QuicServer(proof_source,
+                 QuicConfig(),
+                 QuicCryptoServerConfig::ConfigOptions(),
+                 QuicSupportedVersions()) {}
 
-QuicServer::QuicServer(ProofSource* proof_source,
-                       const QuicConfig& config,
-                       const QuicVersionVector& supported_versions)
+QuicServer::QuicServer(
+    ProofSource* proof_source,
+    const QuicConfig& config,
+    const QuicCryptoServerConfig::ConfigOptions& crypto_config_options,
+    const QuicVersionVector& supported_versions)
     : port_(0),
       fd_(-1),
       packets_dropped_(0),
       overflow_supported_(false),
-      use_recvmmsg_(false),
       config_(config),
       crypto_config_(kSourceAddressTokenSecret,
                      QuicRandom::GetInstance(),
                      proof_source),
+      crypto_config_options_(crypto_config_options),
       supported_versions_(supported_versions),
       packet_reader_(new QuicPacketReader()) {
   Initialize();
 }
 
 void QuicServer::Initialize() {
-#if MMSG_MORE
-  use_recvmmsg_ = true;
-#endif
-
   // If an initial flow control window has not explicitly been set, then use a
   // sensible value for a server: 1 MB for session, 64 KB for each stream.
   const uint32_t kInitialSessionFlowControlWindow = 1 * 1024 * 1024;  // 1 MB
@@ -95,50 +93,16 @@ void QuicServer::Initialize() {
 
   QuicEpollClock clock(&epoll_server_);
 
-  scoped_ptr<CryptoHandshakeMessage> scfg(
-      crypto_config_.AddDefaultConfig(QuicRandom::GetInstance(), &clock,
-                                      QuicCryptoServerConfig::ConfigOptions()));
+  scoped_ptr<CryptoHandshakeMessage> scfg(crypto_config_.AddDefaultConfig(
+      QuicRandom::GetInstance(), &clock, crypto_config_options_));
 }
 
 QuicServer::~QuicServer() {}
 
-bool QuicServer::Listen(const IPEndPoint& address) {
-  port_ = address.port();
-  int address_family = address.GetSockAddrFamily();
-  fd_ = socket(address_family, SOCK_DGRAM | SOCK_NONBLOCK, IPPROTO_UDP);
+bool QuicServer::CreateUDPSocketAndListen(const IPEndPoint& address) {
+  fd_ = QuicSocketUtils::CreateUDPSocket(address, &overflow_supported_);
   if (fd_ < 0) {
     LOG(ERROR) << "CreateSocket() failed: " << strerror(errno);
-    return false;
-  }
-
-  // Enable the socket option that allows the local address to be
-  // returned if the socket is bound to more than one address.
-  int rc = QuicSocketUtils::SetGetAddressInfo(fd_, address_family);
-
-  if (rc < 0) {
-    LOG(ERROR) << "IP detection not supported" << strerror(errno);
-    return false;
-  }
-
-  int get_overflow = 1;
-  rc = setsockopt(fd_, SOL_SOCKET, SO_RXQ_OVFL, &get_overflow,
-                  sizeof(get_overflow));
-
-  if (rc < 0) {
-    DLOG(WARNING) << "Socket overflow detection not supported";
-  } else {
-    overflow_supported_ = true;
-  }
-
-  // These send and receive buffer sizes are sized for a single connection,
-  // because the default usage of QuicServer is as a test server with one or
-  // two clients.  Adjust higher for use with many clients.
-  if (!QuicSocketUtils::SetReceiveBufferSize(fd_,
-                                             kDefaultSocketReceiveBuffer)) {
-    return false;
-  }
-
-  if (!QuicSocketUtils::SetSendBufferSize(fd_, kDefaultSocketReceiveBuffer)) {
     return false;
   }
 
@@ -146,7 +110,7 @@ bool QuicServer::Listen(const IPEndPoint& address) {
   socklen_t raw_addr_len = sizeof(raw_addr);
   CHECK(address.ToSockAddr(reinterpret_cast<sockaddr*>(&raw_addr),
                            &raw_addr_len));
-  rc =
+  int rc =
       bind(fd_, reinterpret_cast<const sockaddr*>(&raw_addr), sizeof(raw_addr));
   if (rc < 0) {
     LOG(ERROR) << "Bind failed: " << strerror(errno);
@@ -179,7 +143,8 @@ QuicDefaultPacketWriter* QuicServer::CreateWriter(int fd) {
 
 QuicDispatcher* QuicServer::CreateQuicDispatcher() {
   return new QuicDispatcher(config_, &crypto_config_, supported_versions_,
-                            new QuicEpollConnectionHelper(&epoll_server_));
+                            new QuicEpollConnectionHelper(
+                                &epoll_server_, QuicAllocator::BUFFER_POOL));
 }
 
 void QuicServer::WaitForEvents() {
@@ -203,15 +168,9 @@ void QuicServer::OnEvent(int fd, EpollEvent* event) {
     DVLOG(1) << "EPOLLIN";
     bool more_to_read = true;
     while (more_to_read) {
-      if (use_recvmmsg_) {
-        more_to_read = packet_reader_->ReadAndDispatchPackets(
-            fd_, port_, dispatcher_.get(),
-            overflow_supported_ ? &packets_dropped_ : nullptr);
-      } else {
-        more_to_read = QuicPacketReader::ReadAndDispatchSinglePacket(
-            fd_, port_, dispatcher_.get(),
-            overflow_supported_ ? &packets_dropped_ : nullptr);
-      }
+      more_to_read = packet_reader_->ReadAndDispatchPackets(
+          fd_, port_, QuicEpollClock(&epoll_server_), dispatcher_.get(),
+          overflow_supported_ ? &packets_dropped_ : nullptr);
     }
   }
   if (event->in_events & EPOLLOUT) {

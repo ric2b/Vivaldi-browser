@@ -1417,8 +1417,8 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
   matrix[13] = matrix[14] = 0;
   matrix[15] = matrix[16] = matrix[17] = matrix[19] = 0;
   matrix[18] = 1;
-  skia::RefPtr<SkColorFilter> color_filter(
-      skia::AdoptRef(SkColorMatrixFilter::Create(matrix)));
+  sk_sp<SkColorFilter> color_filter =
+      SkColorFilter::MakeMatrixFilterRowMajor255(matrix);
   skia::RefPtr<SkImageFilter> filter = skia::AdoptRef(
       SkColorFilterImageFilter::Create(color_filter.get(), NULL));
   FilterOperations filters;
@@ -1958,7 +1958,7 @@ class TestOverlayProcessor : public OverlayProcessor {
     ~Strategy() override {}
     MOCK_METHOD3(Attempt,
                  bool(ResourceProvider* resource_provider,
-                      RenderPassList* render_passes,
+                      RenderPass* render_pass,
                       OverlayCandidateList* candidates));
   };
 
@@ -2033,7 +2033,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
 
   TextureMailbox mailbox =
       TextureMailbox(gpu::Mailbox::Generate(), gpu::SyncToken(), GL_TEXTURE_2D,
-                     gfx::Size(256, 256), true);
+                     gfx::Size(256, 256), true, false);
   scoped_ptr<SingleReleaseCallbackImpl> release_callback =
       SingleReleaseCallbackImpl::Create(base::Bind(&MailboxReleased));
   ResourceId resource_id = resource_provider->CreateResourceFromTextureMailbox(
@@ -2189,7 +2189,7 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
                             gpu::CommandBufferId::FromUnsafeValue(0x123), 29);
   TextureMailbox mailbox =
       TextureMailbox(gpu::Mailbox::Generate(), sync_token, GL_TEXTURE_2D,
-                     gfx::Size(256, 256), true);
+                     gfx::Size(256, 256), true, false);
   scoped_ptr<SingleReleaseCallbackImpl> release_callback =
       SingleReleaseCallbackImpl::Create(base::Bind(&MailboxReleased));
   ResourceId resource_id = resource_provider->CreateResourceFromTextureMailbox(

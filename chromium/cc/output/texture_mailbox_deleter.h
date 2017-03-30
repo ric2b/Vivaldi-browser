@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/base/cc_export.h"
 
@@ -27,7 +28,7 @@ class CC_EXPORT TextureMailboxDeleter {
   // task_runner corresponds with the thread the delete task should be posted
   // to. If null, the delete will happen on the calling thread.
   explicit TextureMailboxDeleter(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~TextureMailboxDeleter();
 
   // Returns a Callback that can be used as the ReleaseCallback for a
@@ -38,7 +39,7 @@ class CC_EXPORT TextureMailboxDeleter {
   // become a no-op and the texture will be deleted immediately on the
   // impl thread, along with dropping the reference to the ContextProvider.
   scoped_ptr<SingleReleaseCallback> GetReleaseCallback(
-      const scoped_refptr<ContextProvider>& context_provider,
+      scoped_refptr<ContextProvider> context_provider,
       unsigned texture_id);
 
  private:

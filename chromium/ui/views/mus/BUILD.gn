@@ -62,7 +62,6 @@ component("mus") {
     "//mojo/converters/geometry",
     "//mojo/converters/ime",
     "//mojo/converters/input_events",
-    "//mojo/converters/network",
     "//mojo/converters/surfaces",
     "//mojo/platform_handle:for_component",
     "//mojo/public/c/system:for_component",
@@ -145,7 +144,11 @@ test("views_mus_unittests") {
   sources = [
     "../run_all_unittests.cc",
     "../run_all_unittests.h",
+    "../test/native_widget_factory_mus.cc",
     "../view_targeter_unittest.cc",
+    "../widget/native_widget_unittest.cc",
+    "../widget/widget_unittest.cc",
+    "native_widget_mus_unittest.cc",
     "platform_test_helper_mus.cc",
     "run_all_unittests_mus.cc",
   ]
@@ -156,6 +159,8 @@ test("views_mus_unittests") {
     "//base:i18n",
     "//base/test:test_support",
     "//cc",
+    "//components/mus/public/cpp",
+    "//components/mus/public/interfaces",
     "//mojo/shell/background:lib",
     "//mojo/shell/background:main",
     "//mojo/shell/background/tests:test_support",
@@ -189,7 +194,12 @@ test("views_mus_unittests") {
 
   data_deps = [
     "//mash/wm",
-    "//ui/resources:ui_test_pak",
+  ]
+
+  # TODO(thakis): This should be a data_deps on //ui/resources:ui_test_pak, but
+  # that has no effect.  (See similar TODOs elsewhere ui_test.pak is listed)
+  data = [
+    "$root_out_dir/ui_test.pak",
   ]
 
   if (is_win) {

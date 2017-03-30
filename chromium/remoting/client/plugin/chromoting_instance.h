@@ -8,10 +8,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/thread_task_runner_handle.h"
 #include "ppapi/c/pp_instance.h"
@@ -29,15 +29,14 @@
 #include "remoting/client/plugin/pepper_video_renderer.h"
 #include "remoting/client/touch_input_scaler.h"
 #include "remoting/proto/event.pb.h"
+#include "remoting/protocol/client_authentication_config.h"
 #include "remoting/protocol/client_stub.h"
 #include "remoting/protocol/clipboard_stub.h"
 #include "remoting/protocol/connection_to_host.h"
 #include "remoting/protocol/cursor_shape_stub.h"
 #include "remoting/protocol/input_event_tracker.h"
 #include "remoting/protocol/mouse_input_filter.h"
-#include "remoting/protocol/negotiating_client_authenticator.h"
 #include "remoting/protocol/performance_tracker.h"
-#include "remoting/protocol/third_party_client_authenticator.h"
 
 namespace base {
 class DictionaryValue;
@@ -66,7 +65,6 @@ class ClientContext;
 class DelegatingSignalStrategy;
 class PepperAudioPlayer;
 class PepperMouseLocker;
-class TokenFetcherProxy;
 
 class ChromotingInstance : public ClientUserInterface,
                            public PepperVideoRenderer::EventHandler,
@@ -120,6 +118,8 @@ class ChromotingInstance : public ClientUserInterface,
   void SetPairingResponse(
       const protocol::PairingResponse& pairing_response) override;
   void DeliverHostMessage(const protocol::ExtensionMessage& message) override;
+  void SetDesktopSize(const webrtc::DesktopSize& size,
+                      const webrtc::DesktopVector& dpi) override;
   protocol::ClipboardStub* GetClipboardStub() override;
   protocol::CursorShapeStub* GetCursorShapeStub() override;
 
@@ -132,9 +132,6 @@ class ChromotingInstance : public ClientUserInterface,
   // PepperVideoRenderer::EventHandler interface.
   void OnVideoDecodeError() override;
   void OnVideoFirstFrameReceived() override;
-  void OnVideoSize(const webrtc::DesktopSize& size,
-                      const webrtc::DesktopVector& dpi) override;
-  void OnVideoShape(const webrtc::DesktopRegion* shape) override;
   void OnVideoFrameDirtyRegion(
       const webrtc::DesktopRegion& dirty_region) override;
 
@@ -162,10 +159,10 @@ class ChromotingInstance : public ClientUserInterface,
 
   // Requests the webapp to fetch a third-party token.
   void FetchThirdPartyToken(
-      const GURL& token_url,
       const std::string& host_public_key,
+      const std::string& token_url,
       const std::string& scope,
-      const base::WeakPtr<TokenFetcherProxy> pepper_token_fetcher);
+      const protocol::ThirdPartyTokenFetchedCallback& token_fetched_callback);
 
   // Updates the specified UMA enumeration histogram with the input value.
   void UpdateUmaEnumHistogram(const std::string& histogram_name,
@@ -225,7 +222,7 @@ class ChromotingInstance : public ClientUserInterface,
   // TODO(sergeyu): When all current versions of the webapp support raw messages
   // remove this method and use PostChromotingMessage() instead.
   void PostLegacyJsonMessage(const std::string& method,
-                             scoped_ptr<base::DictionaryValue> data);
+                             std::unique_ptr<base::DictionaryValue> data);
 
   // Posts trapped keys to the web-app to handle.
   void SendTrappedKey(uint32_t usb_keycode, bool pressed);
@@ -247,33 +244,33 @@ class ChromotingInstance : public ClientUserInterface,
   bool initialized_;
 
   scoped_refptr<base::SingleThreadTaskRunner> plugin_task_runner_;
-  scoped_ptr<base::ThreadTaskRunnerHandle> thread_task_runner_handle_;
-  scoped_ptr<jingle_glue::JingleThreadWrapper> thread_wrapper_;
+  std::unique_ptr<base::ThreadTaskRunnerHandle> thread_task_runner_handle_;
+  std::unique_ptr<jingle_glue::JingleThreadWrapper> thread_wrapper_;
   ClientContext context_;
   protocol::PerformanceTracker perf_tracker_;
-  scoped_ptr<PepperVideoRenderer> video_renderer_;
+  std::unique_ptr<PepperVideoRenderer> video_renderer_;
   pp::View plugin_view_;
 
   // Contains the most-recently-reported desktop shape, if any.
-  scoped_ptr<webrtc::DesktopRegion> desktop_shape_;
+  std::unique_ptr<webrtc::DesktopRegion> desktop_shape_;
 
-  scoped_ptr<DelegatingSignalStrategy> signal_strategy_;
+  std::unique_ptr<DelegatingSignalStrategy> signal_strategy_;
 
-  scoped_ptr<ChromotingClient> client_;
+  std::unique_ptr<ChromotingClient> client_;
 
   // Input pipeline components, in reverse order of distance from input source.
   protocol::MouseInputFilter mouse_input_filter_;
-  protocol::InputEventTracker input_tracker_;
   TouchInputScaler touch_input_scaler_;
   KeyEventMapper key_mapper_;
-  scoped_ptr<protocol::InputFilter> normalizing_input_filter_;
+  std::unique_ptr<protocol::InputFilter> normalizing_input_filter_;
+  protocol::InputEventTracker input_tracker_;
   PepperInputHandler input_handler_;
 
   // Cursor shape handling components, in reverse order to that in which they
   // process cursor shape events. Note that |mouse_locker_| appears in the
   // cursor pipeline since it is triggered by receipt of an empty cursor.
   PepperCursorSetter cursor_setter_;
-  scoped_ptr<PepperMouseLocker> mouse_locker_;
+  std::unique_ptr<PepperMouseLocker> mouse_locker_;
   EmptyCursorFilter empty_cursor_filter_;
 
   // Used to control text input settings, such as whether to show the IME.
@@ -283,7 +280,7 @@ class ChromotingInstance : public ClientUserInterface,
   bool use_async_pin_dialog_;
   protocol::SecretFetchedCallback secret_fetched_callback_;
 
-  base::WeakPtr<TokenFetcherProxy> token_fetcher_proxy_;
+  protocol::ThirdPartyTokenFetchedCallback third_party_token_fetched_callback_;
 
   base::RepeatingTimer stats_update_timer_;
 

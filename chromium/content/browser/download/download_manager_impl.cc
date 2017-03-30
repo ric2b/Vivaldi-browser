@@ -53,6 +53,7 @@ namespace {
 
 scoped_ptr<UrlDownloader, BrowserThread::DeleteOnIOThread> BeginDownload(
     scoped_ptr<DownloadUrlParameters> params,
+    content::ResourceContext* resource_context,
     uint32_t download_id,
     base::WeakPtr<DownloadManagerImpl> download_manager) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -70,11 +71,11 @@ scoped_ptr<UrlDownloader, BrowserThread::DeleteOnIOThread> BeginDownload(
   // request should be driven by the ResourceLoader. Pass it over to the
   // ResourceDispatcherHostImpl which will in turn pass it along to the
   // ResourceLoader.
-  if (params->render_process_host_id() != -1) {
+  if (params->render_process_host_id() >= 0) {
     DownloadInterruptReason reason =
         ResourceDispatcherHostImpl::Get()->BeginDownload(
             std::move(url_request), params->referrer(),
-            params->content_initiated(), params->resource_context(),
+            params->content_initiated(), resource_context,
             params->render_process_host_id(),
             params->render_view_host_routing_id(),
             params->render_frame_host_routing_id(),
@@ -113,11 +114,15 @@ class DownloadItemFactoryImpl : public DownloadItemFactory {
 
   DownloadItemImpl* CreatePersistedItem(
       DownloadItemImplDelegate* delegate,
+      const std::string& guid,
       uint32_t download_id,
       const base::FilePath& current_path,
       const base::FilePath& target_path,
       const std::vector<GURL>& url_chain,
       const GURL& referrer_url,
+      const GURL& site_url,
+      const GURL& tab_url,
+      const GURL& tab_refererr_url,
       const std::string& mime_type,
       const std::string& original_mime_type,
       const base::Time& start_time,
@@ -126,31 +131,18 @@ class DownloadItemFactoryImpl : public DownloadItemFactory {
       const std::string& last_modified,
       int64_t received_bytes,
       int64_t total_bytes,
+      const std::string& hash,
       DownloadItem::DownloadState state,
       DownloadDangerType danger_type,
       DownloadInterruptReason interrupt_reason,
       bool opened,
       const net::BoundNetLog& bound_net_log) override {
     return new DownloadItemImpl(
-        delegate,
-        download_id,
-        current_path,
-        target_path,
-        url_chain,
-        referrer_url,
-        mime_type,
-        original_mime_type,
-        start_time,
-        end_time,
-        etag,
-        last_modified,
-        received_bytes,
-        total_bytes,
-        state,
-        danger_type,
-        interrupt_reason,
-        opened,
-        bound_net_log);
+        delegate, guid, download_id, current_path, target_path, url_chain,
+        referrer_url, site_url, tab_url, tab_refererr_url, mime_type,
+        original_mime_type, start_time, end_time, etag, last_modified,
+        received_bytes, total_bytes, hash, state, danger_type, interrupt_reason,
+        opened, bound_net_log);
   }
 
   DownloadItemImpl* CreateActiveItem(
@@ -204,6 +196,7 @@ DownloadItemImpl* DownloadManagerImpl::CreateActiveItem(
   DownloadItemImpl* download =
       item_factory_->CreateActiveItem(this, id, info, bound_net_log);
   downloads_[id] = download;
+  downloads_by_guid_[download->GetGuid()] = download;
   return download;
 }
 
@@ -292,6 +285,7 @@ void DownloadManagerImpl::Shutdown() {
       download->Cancel(false);
   }
   STLDeleteValues(&downloads_);
+  downloads_by_guid_.clear();
   url_downloaders_.clear();
 
   // We'll have nothing more to report to the observers after this point.
@@ -368,17 +362,16 @@ void DownloadManagerImpl::StartDownloadWithId(
 
   if (info->result == DOWNLOAD_INTERRUPT_REASON_NONE) {
     DCHECK(stream.get());
-    download_file.reset(file_factory_->CreateFile(
-        *info->save_info, default_download_directory, info->url(),
-        info->referrer_url, delegate_ && delegate_->GenerateFileHash(),
-        std::move(info->save_info->file), std::move(stream),
-        download->GetBoundNetLog(), download->DestinationObserverAsWeakPtr()));
-
-    if (download_file.get() && delegate_) {
-      download_file->SetClientGuid(
-          delegate_->ApplicationClientIdForFileScanning());
-    }
+    download_file.reset(
+        file_factory_->CreateFile(std::move(info->save_info),
+                                  default_download_directory,
+                                  std::move(stream),
+                                  download->GetBoundNetLog(),
+                                  download->DestinationObserverAsWeakPtr()));
   }
+  // It is important to leave info->save_info intact in the case of an interrupt
+  // so that the DownloadItem can salvage what it can out of a failed resumption
+  // attempt.
 
   download->Start(std::move(download_file), std::move(info->request_handle),
                   *info);
@@ -457,6 +450,8 @@ void DownloadManagerImpl::CreateSavePackageDownloadItemWithId(
       this, id, main_file_path, page_url, mime_type, std::move(request_handle),
       bound_net_log);
   downloads_[download_item->GetId()] = download_item;
+  DCHECK(!ContainsKey(downloads_by_guid_, download_item->GetGuid()));
+  downloads_by_guid_[download_item->GetGuid()] = download_item;
   FOR_EACH_OBSERVER(Observer, observers_, OnDownloadCreated(
       this, download_item));
   if (!item_created.is_null())
@@ -478,7 +473,8 @@ void DownloadManagerImpl::ResumeInterruptedDownload(
   RecordDownloadSource(INITIATED_BY_RESUMPTION);
   BrowserThread::PostTaskAndReplyWithResult(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&BeginDownload, base::Passed(&params), id,
+      base::Bind(&BeginDownload, base::Passed(&params),
+                 browser_context_->GetResourceContext(), id,
                  weak_factory_.GetWeakPtr()),
       base::Bind(&DownloadManagerImpl::AddUrlDownloader,
                  weak_factory_.GetWeakPtr()));
@@ -501,6 +497,8 @@ DownloadFileFactory* DownloadManagerImpl::GetDownloadFileFactoryForTesting() {
 void DownloadManagerImpl::DownloadRemoved(DownloadItemImpl* download) {
   if (!download)
     return;
+
+  downloads_by_guid_.erase(download->GetGuid());
 
   uint32_t download_id = download->GetId();
   if (downloads_.erase(download_id) == 0)
@@ -589,6 +587,7 @@ void DownloadManagerImpl::DownloadUrl(
   BrowserThread::PostTaskAndReplyWithResult(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&BeginDownload, base::Passed(&params),
+                 browser_context_->GetResourceContext(),
                  content::DownloadItem::kInvalidId, weak_factory_.GetWeakPtr()),
       base::Bind(&DownloadManagerImpl::AddUrlDownloader,
                  weak_factory_.GetWeakPtr()));
@@ -603,11 +602,15 @@ void DownloadManagerImpl::RemoveObserver(Observer* observer) {
 }
 
 DownloadItem* DownloadManagerImpl::CreateDownloadItem(
+    const std::string& guid,
     uint32_t id,
     const base::FilePath& current_path,
     const base::FilePath& target_path,
     const std::vector<GURL>& url_chain,
     const GURL& referrer_url,
+    const GURL& site_url,
+    const GURL& tab_url,
+    const GURL& tab_refererr_url,
     const std::string& mime_type,
     const std::string& original_mime_type,
     const base::Time& start_time,
@@ -616,6 +619,7 @@ DownloadItem* DownloadManagerImpl::CreateDownloadItem(
     const std::string& last_modified,
     int64_t received_bytes,
     int64_t total_bytes,
+    const std::string& hash,
     DownloadItem::DownloadState state,
     DownloadDangerType danger_type,
     DownloadInterruptReason interrupt_reason,
@@ -624,27 +628,15 @@ DownloadItem* DownloadManagerImpl::CreateDownloadItem(
     NOTREACHED();
     return NULL;
   }
+  DCHECK(!ContainsKey(downloads_by_guid_, guid));
   DownloadItemImpl* item = item_factory_->CreatePersistedItem(
-      this,
-      id,
-      current_path,
-      target_path,
-      url_chain,
-      referrer_url,
-      mime_type,
-      original_mime_type,
-      start_time,
-      end_time,
-      etag,
-      last_modified,
-      received_bytes,
-      total_bytes,
-      state,
-      danger_type,
-      interrupt_reason,
-      opened,
+      this, guid, id, current_path, target_path, url_chain, referrer_url,
+      site_url, tab_url, tab_refererr_url, mime_type, original_mime_type,
+      start_time, end_time, etag, last_modified, received_bytes, total_bytes,
+      hash, state, danger_type, interrupt_reason, opened,
       net::BoundNetLog::Make(net_log_, net::NetLog::SOURCE_DOWNLOAD));
   downloads_[id] = item;
+  downloads_by_guid_[guid] = item;
   FOR_EACH_OBSERVER(Observer, observers_, OnDownloadCreated(this, item));
   DVLOG(20) << __FUNCTION__ << "() download = " << item->DebugString(true);
   return item;
@@ -675,7 +667,14 @@ int DownloadManagerImpl::NonMaliciousInProgressCount() const {
 }
 
 DownloadItem* DownloadManagerImpl::GetDownload(uint32_t download_id) {
-  return ContainsKey(downloads_, download_id) ? downloads_[download_id] : NULL;
+  return ContainsKey(downloads_, download_id) ? downloads_[download_id]
+                                              : nullptr;
+}
+
+DownloadItem* DownloadManagerImpl::GetDownloadByGuid(const std::string& guid) {
+  DCHECK(guid == base::ToUpperASCII(guid));
+  return ContainsKey(downloads_by_guid_, guid) ? downloads_by_guid_[guid]
+                                               : nullptr;
 }
 
 void DownloadManagerImpl::GetAllDownloads(DownloadVector* downloads) {

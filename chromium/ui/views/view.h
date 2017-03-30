@@ -35,6 +35,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/path.h"
 #include "ui/views/view_targeter.h"
 #include "ui/views/views_export.h"
 
@@ -233,9 +234,6 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // 0, 0).
   gfx::Rect GetLocalBounds() const;
 
-  // Returns the bounds of the layer in its own pixel coordinates.
-  gfx::Rect GetLayerBoundsInPixel() const;
-
   // Returns the insets of the current border. If there is no border an empty
   // insets is returned.
   virtual gfx::Insets GetInsets() const;
@@ -295,21 +293,14 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Returns whether the view is enabled.
   bool enabled() const { return enabled_; }
 
-  // This indicates that the view completely fills its bounds in an opaque
-  // color. This doesn't affect compositing but is a hint to the compositor to
-  // optimize painting.
-  // Note that this method does not implicitly create a layer if one does not
-  // already exist for the View, but is a no-op in that case.
-  void SetFillsBoundsOpaquely(bool fills_bounds_opaquely);
-
   // Transformations -----------------------------------------------------------
 
   // Methods for setting transformations for a view (e.g. rotation, scaling).
 
   gfx::Transform GetTransform() const;
 
-  // Clipping parameters. Clipping is done relative to the view bounds.
-  void set_clip_insets(gfx::Insets clip_insets) { clip_insets_ = clip_insets; }
+  // Clipping is done relative to the view's local bounds.
+  void set_clip_path(const gfx::Path& path) { clip_path_ = path; }
 
   // Sets the transform to the supplied transform.
   void SetTransform(const gfx::Transform& transform);
@@ -498,7 +489,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // transformations are applied to it to convert it into the parent coordinate
   // system before propagating SchedulePaint up the view hierarchy.
   // TODO(beng): Make protected.
-  virtual void SchedulePaint();
+  void SchedulePaint();
   virtual void SchedulePaintInRect(const gfx::Rect& r);
 
   // Called by the framework to paint a View. Performs translation and clipping
@@ -1495,9 +1486,9 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Transformations -----------------------------------------------------------
 
-  // Clipping parameters. skia transformation matrix does not give us clipping.
-  // So we do it ourselves.
-  gfx::Insets clip_insets_;
+  // Painting will be clipped to this path. TODO(estade): this doesn't work for
+  // layers.
+  gfx::Path clip_path_;
 
   // Layout --------------------------------------------------------------------
 

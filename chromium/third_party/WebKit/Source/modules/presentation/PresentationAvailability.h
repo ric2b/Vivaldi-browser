@@ -5,6 +5,7 @@
 #ifndef PresentationAvailability_h
 #define PresentationAvailability_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/events/EventTarget.h"
 #include "core/page/PageLifecycleObserver.h"
@@ -24,11 +25,12 @@ class ScriptPromiseResolver;
 // change. The object will only listen to changes when required.
 class MODULES_EXPORT PresentationAvailability final
     : public RefCountedGarbageCollectedEventTargetWithInlineData<PresentationAvailability>
+    , public ActiveScriptWrappable
     , public ActiveDOMObject
     , public PageLifecycleObserver
     , public WebPresentationAvailabilityObserver {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(PresentationAvailability);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(PresentationAvailability);
+    USING_GARBAGE_COLLECTED_MIXIN(PresentationAvailability);
     DEFINE_WRAPPERTYPEINFO();
 public:
     static PresentationAvailability* take(ScriptPromiseResolver*, const KURL&, bool);
@@ -36,14 +38,16 @@ public:
 
     // EventTarget implementation.
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
     // WebPresentationAvailabilityObserver implementation.
     void availabilityChanged(bool) override;
     const WebURL url() const override;
 
+    // ActiveScriptWrappable implementation.
+    bool hasPendingActivity() const final;
+
     // ActiveDOMObject implementation.
-    bool hasPendingActivity() const override;
     void suspend() override;
     void resume() override;
     void stop() override;
@@ -59,7 +63,7 @@ public:
 
 protected:
     // EventTarget implementation.
-    bool addEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, const EventListenerOptions&) override;
+    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) override;
 
 private:
     // Current state of the ActiveDOMObject. It is Active when created. It

@@ -7,10 +7,10 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
@@ -60,8 +60,8 @@ class BrowsingHistoryHandler : public web::WebUIIOSMessageHandler,
                  const std::string& client_id,
                  bool is_search_result,
                  const base::string16& snippet,
-                 bool blocked_visit,
-                 const std::string& accept_languages);
+                 bool blocked_visit);
+    HistoryEntry(const HistoryEntry& other);
     HistoryEntry();
     virtual ~HistoryEntry();
 
@@ -69,7 +69,7 @@ class BrowsingHistoryHandler : public web::WebUIIOSMessageHandler,
     void SetUrlAndTitle(base::DictionaryValue* result) const;
 
     // Converts the entry to a DictionaryValue to be owned by the caller.
-    scoped_ptr<base::DictionaryValue> ToValue(
+    std::unique_ptr<base::DictionaryValue> ToValue(
         bookmarks::BookmarkModel* bookmark_model,
         SupervisedUserService* supervised_user_service,
         const ProfileSyncService* sync_service) const;
@@ -102,9 +102,6 @@ class BrowsingHistoryHandler : public web::WebUIIOSMessageHandler,
 
     // Whether this entry was blocked when it was attempted.
     bool blocked_visit;
-
-    // kAcceptLanguages pref value.
-    std::string accept_languages;
   };
 
   BrowsingHistoryHandler();
@@ -162,6 +159,11 @@ class BrowsingHistoryHandler : public web::WebUIIOSMessageHandler,
                                history::WebHistoryService::Request* request,
                                const base::DictionaryValue* results_value);
 
+  // Callback telling us whether other forms of browsing history were found
+  // on the history server.
+  void OtherFormsOfBrowsingHistoryQueryComplete(
+      bool found_other_forms_of_browsing_history);
+
   // Callback from the history system when visits were deleted.
   void RemoveComplete();
 
@@ -178,9 +180,6 @@ class BrowsingHistoryHandler : public web::WebUIIOSMessageHandler,
   // Sets the query options for a monthly query, |offset| months ago.
   void SetQueryTimeInMonths(int offset, history::QueryOptions* options);
 
-  // kAcceptLanguages pref value.
-  std::string GetAcceptLanguages() const;
-
   // history::HistoryServiceObserver:
   void OnURLsDeleted(history::HistoryService* history_service,
                      bool all_history,
@@ -193,7 +192,7 @@ class BrowsingHistoryHandler : public web::WebUIIOSMessageHandler,
 
   // The currently-executing request for synced history results.
   // Deleting the request will cancel it.
-  scoped_ptr<history::WebHistoryService::Request> web_history_request_;
+  std::unique_ptr<history::WebHistoryService::Request> web_history_request_;
 
   // True if there is a pending delete requests to the history service.
   bool has_pending_delete_request_;
@@ -218,6 +217,12 @@ class BrowsingHistoryHandler : public web::WebUIIOSMessageHandler,
 
   ScopedObserver<history::HistoryService, history::HistoryServiceObserver>
       history_service_observer_;
+
+  // Whether the last call to Web History returned synced results.
+  bool has_synced_results_;
+
+  // Whether there are other forms of browsing history on the history server.
+  bool has_other_forms_of_browsing_history_;
 
   base::WeakPtrFactory<BrowsingHistoryHandler> weak_factory_;
 

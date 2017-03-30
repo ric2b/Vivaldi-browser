@@ -207,28 +207,31 @@ int main(int argc, char* argv[]) {
     LOG(ERROR) << "No hostname passed in, connect to host requires hostname!";
     return -1;
   }
+  VLOG(1) << "host_name: '" << options.host_name << "'";
 
   options.host_jid =
       command_line->GetSwitchValueASCII(switches::kHostJidSwitchName);
-
-  VLOG(1) << "Chromoting tests will connect to: " << options.host_name;
+  VLOG(1) << "host_jid: '" << options.host_jid << "'";
 
   options.pin = command_line->GetSwitchValueASCII(switches::kPinSwitchName);
 
   // Create and register our global test data object. It will handle
   // retrieving an access token or host list for the user. The GTest framework
   // will own the lifetime of this object once it is registered below.
-  scoped_ptr<remoting::test::ChromotingTestDriverEnvironment> shared_data(
+  std::unique_ptr<remoting::test::ChromotingTestDriverEnvironment> shared_data(
       new remoting::test::ChromotingTestDriverEnvironment(options));
 
   if (!shared_data->Initialize(auth_code)) {
+    VLOG(1) << "Failed to initialize ChromotingTestDriverEnvironment instance.";
     // If we failed to initialize our shared data object, then bail.
     return -1;
   }
 
-  if (!options.host_jid.empty() &&
-      !shared_data->WaitForHostOnline(options.host_jid, options.host_name)) {
-    // Host with expected JID is not online. No point running further tests.
+  // This method is necessary as there are occasional propagation delays in the
+  // backend and we don't want the test to fail because of that.
+  if (!shared_data->WaitForHostOnline(options.host_jid, options.host_name)) {
+    VLOG(1) << "The expected host was not available for connections.";
+    // Host is not online. No point running further tests.
     return -1;
   }
 

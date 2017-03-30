@@ -15,7 +15,6 @@
     <color name="text_highlight_color">#C6DAFC</color>
     <color name="dark_action_bar_color">#263238</color>
     <color name="descriptive_text_color">#646464</color>
-    <color name="ui_link_text_color">#3367D6</color>
 
     <!-- Infobar colors -->
     <color name="infobar_accent_blue">#4285f4</color>
@@ -61,7 +60,6 @@
 
     <!-- Password generation popup colors -->
     <color name="password_generation_divider_color">#e5e5e5</color>
-    <color name="password_generation_link_text_color">#5595e3</color>
 
     <!-- Preferences Colors -->
     <color name="pref_accent_color">@color/light_active_color</color>
@@ -81,10 +79,13 @@
     <!-- First Run Experience Colors -->
     <color name="fre_text_color">#000000</color>
     <color name="fre_title_color">#161616</color>
-    
+
     <!-- Account Signin Colors -->
     <!-- As in dimens.xml, signin uses values from the First Run Experience -->
-    <color name="signin_light_text_color">#494949</color>
+    <color name="signin_head_background">#fff</color>
+    <color name="signin_body_background">#fafafa</color>
+    <color name="signin_border_line_color">#000</color>
+    <color name="signin_disabled_button_text_color">#42000000</color>
 
     <!-- Sad Tab colors -->
     <color name="sad_tab_header_text_color">#333333</color>
@@ -97,18 +98,17 @@
     <color name="ntp_list_header_text">#333</color>
     <color name="ntp_list_header_subtext">#969696</color>
     <color name="ntp_list_header_subtext_active">#7cadff</color>
-    <color name="snippets_publisher_name_color">#7f7f7f</color>
-    <color name="snippets_text_color">#7f7f7f</color>
-    <color name="snippets_list_header_text_color">#7f7f7f</color>
-    <color name="snippets_headline_text_color">#000000</color>
-    <color name="snippets_read_more_link_color">@color/light_active_color</color>
-
-    <!-- Signin promo screen colors -->
-    <color name="illustration_background_color">#4FC3F7</color>
+    <color name="ntp_with_cards_bg">#f2f2f2</color>
+    <color name="snippets_background_color">#fff</color>
+    <color name="snippets_publisher_name_color">#646464</color>
+    <color name="snippets_text_color">#646464</color>
+    <color name="snippets_list_header_text_color">#646464</color>
+    <color name="snippets_headline_text_color">#333333</color>
 
     <!-- Contextual Search colors -->
     <color name="contextual_search_promo_text_color">#333333</color>
     <color name="contextual_search_promo_background_color">#EEEEEE</color>
+    <color name="contextual_search_promo_border_color">#C2C2C2</color>
 
     <!-- Progress Bar colors -->
     <color name="progress_bar_foreground">@color/light_active_color</color>
@@ -140,11 +140,9 @@
     <color name="find_in_page_results_status_white_color">#7f7f7f</color>
     <color name="find_in_page_failed_results_status_color">#db4437</color>
 
-    <!-- App Launch Colors -->
+    <!-- App Background Colors -->
     <color name="light_background_color">#FFFFFF</color>
-
-    <!-- Reader mode colors -->
-    <color name="reader_mode_header_bg">#ff494949</color>
+    <color name="resizing_background_color">#000000</color>
 
     <!-- WebappActivity colors -->
     <color name="webapp_default_bg">#fafafa</color>
@@ -161,8 +159,8 @@
     <color name="bookmark_icon_background_color">#ff787878</color>
     <color name="bookmark_appbar_background">@color/default_primary_color</color>
 
-    <!-- Opt out promo -->
-    <color name="opt_out_text_color">#646464</color>
+    <!-- Bookmark widget colors -->
+    <color name="bookmark_widget_pressed_highlight">#1D000000</color>
 
     <!-- Media UI Colors -->
     <color name="media_session_icon_color">#14181C</color>

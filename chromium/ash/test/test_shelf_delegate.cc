@@ -55,7 +55,8 @@ void TestShelfDelegate::AddShelfItem(aura::Window* window,
   ShelfItemDelegateManager* manager =
       Shell::GetInstance()->shelf_item_delegate_manager();
   // |manager| owns TestShelfItemDelegate.
-  scoped_ptr<ShelfItemDelegate> delegate(new TestShelfItemDelegate(window));
+  std::unique_ptr<ShelfItemDelegate> delegate(
+      new TestShelfItemDelegate(window));
   manager->SetShelfItemDelegate(id, std::move(delegate));
   SetShelfIDForWindow(id, window);
 }
@@ -90,11 +91,13 @@ void TestShelfDelegate::OnWindowHierarchyChanging(
     RemoveShelfItemForWindow(params.target);
 }
 
-void TestShelfDelegate::OnShelfCreated(Shelf* shelf) {
-}
+void TestShelfDelegate::OnShelfCreated(Shelf* shelf) {}
 
-void TestShelfDelegate::OnShelfDestroyed(Shelf* shelf) {
-}
+void TestShelfDelegate::OnShelfDestroyed(Shelf* shelf) {}
+
+void TestShelfDelegate::OnShelfAlignmentChanged(Shelf* shelf) {}
+
+void TestShelfDelegate::OnShelfAutoHideBehaviorChanged(Shelf* shelf) {}
 
 ShelfID TestShelfDelegate::GetShelfIDForAppID(const std::string& app_id) {
   for (auto const& iter : shelf_id_to_app_id_map_) {

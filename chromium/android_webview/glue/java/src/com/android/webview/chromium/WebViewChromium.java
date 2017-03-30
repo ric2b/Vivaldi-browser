@@ -6,7 +6,6 @@ package com.android.webview.chromium;
 
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
-import android.app.assist.AssistStructure.ViewNode;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
@@ -58,14 +57,11 @@ import org.chromium.android_webview.AwSettings;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.content.browser.SmartClipProvider;
-import org.chromium.content_public.browser.AccessibilitySnapshotCallback;
-import org.chromium.content_public.browser.AccessibilitySnapshotNode;
 import org.chromium.content_public.browser.NavigationHistory;
 
 import java.io.BufferedWriter;
 import java.io.File;
 import java.lang.reflect.Method;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Callable;
@@ -234,11 +230,16 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
         final boolean isAccessFromFileURLsGrantedByDefault =
                 mAppTargetSdkVersion < Build.VERSION_CODES.JELLY_BEAN;
         final boolean areLegacyQuirksEnabled = mAppTargetSdkVersion < Build.VERSION_CODES.KITKAT;
+        final boolean allowEmptyDocumentPersistence = mAppTargetSdkVersion <= Build.VERSION_CODES.M;
+        final boolean allowGeolocationOnInsecureOrigins =
+                mAppTargetSdkVersion <= Build.VERSION_CODES.M;
 
         mContentsClientAdapter =
                 new WebViewContentsClientAdapter(mWebView, mContext, mFactory.getWebViewDelegate());
-        mWebSettings = new ContentSettingsAdapter(new AwSettings(
-                mContext, isAccessFromFileURLsGrantedByDefault, areLegacyQuirksEnabled));
+        mWebSettings = new ContentSettingsAdapter(
+                new AwSettings(mContext, isAccessFromFileURLsGrantedByDefault,
+                        areLegacyQuirksEnabled, allowEmptyDocumentPersistence,
+                        allowGeolocationOnInsecureOrigins));
 
         if (mAppTargetSdkVersion < Build.VERSION_CODES.LOLLIPOP) {
             // Prior to Lollipop we always allowed third party cookies and mixed content.
@@ -456,10 +457,6 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
         mContentsClientAdapter.setDownloadListener(null);
 
         mAwContents.destroy();
-        if (mGLfunctor != null) {
-            mGLfunctor.destroy();
-            mGLfunctor = null;
-        }
     }
 
     @Override
@@ -1559,49 +1556,7 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
             });
             return;
         }
-        structure.setChildCount(1);
-        final ViewStructure viewRoot = structure.asyncNewChild(0);
-        mAwContents.requestAccessibilitySnapshot(new AccessibilitySnapshotCallback() {
-            @Override
-            public void onAccessibilitySnapshot(AccessibilitySnapshotNode root) {
-                viewRoot.setHint(AwContentsStatics.getProductVersion());
-                if (root == null) {
-                    viewRoot.setClassName("android.webkit.WebView");
-                    viewRoot.asyncCommit();
-                    return;
-                }
-                createAssistStructure(viewRoot, root, 0, 0);
-            }
-        });
-    }
-
-    // When creating the Assist structure, the left and top are relative to the parent node, and
-    // scroll offsets are not needed.
-    @TargetApi(Build.VERSION_CODES.M)
-    private void createAssistStructure(ViewStructure viewNode, AccessibilitySnapshotNode node,
-            int parentX, int parentY) {
-        viewNode.setClassName(node.className);
-        if (node.hasSelection) {
-            viewNode.setText(node.text, node.startSelection, node.endSelection);
-        } else {
-            viewNode.setText(node.text);
-        }
-        // Do not pass scroll information.
-        viewNode.setDimens(node.x - parentX, node.y - parentY, 0, 0, node.width, node.height);
-        viewNode.setChildCount(node.children.size());
-        if (node.hasStyle) {
-            int style = (node.bold ? ViewNode.TEXT_STYLE_BOLD : 0)
-                    | (node.italic ? ViewNode.TEXT_STYLE_ITALIC : 0)
-                    | (node.underline ? ViewNode.TEXT_STYLE_UNDERLINE : 0)
-                    | (node.lineThrough ? ViewNode.TEXT_STYLE_STRIKE_THRU : 0);
-            viewNode.setTextStyle(node.textSize, node.color, node.bgcolor, style);
-        }
-        final Iterator<AccessibilitySnapshotNode> children = node.children.listIterator();
-        int i = 0;
-        while (children.hasNext()) {
-            createAssistStructure(viewNode.asyncNewChild(i++), children.next(), node.x, node.y);
-        }
-        viewNode.asyncCommit();
+        mAwContents.onProvideVirtualStructure(structure);
     }
 
     @Override
@@ -2243,12 +2198,19 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
     // AwContents.NativeGLDelegate implementation --------------------------------------
     private class WebViewNativeGLDelegate implements AwContents.NativeGLDelegate {
         @Override
-        public boolean requestDrawGL(Canvas canvas, boolean waitForCompletion, View containerView) {
+        public boolean supportsDrawGLFunctorReleasedCallback() {
+            return DrawGLFunctor.supportsDrawGLFunctorReleasedCallback();
+        }
+
+        @Override
+        public boolean requestDrawGL(Canvas canvas, boolean waitForCompletion, View containerView,
+                Runnable releasedCallback) {
             if (mGLfunctor == null) {
                 mGLfunctor = new DrawGLFunctor(
                         mAwContents.getAwDrawGLViewContext(), mFactory.getWebViewDelegate());
             }
-            return mGLfunctor.requestDrawGL(canvas, containerView, waitForCompletion);
+            return mGLfunctor.requestDrawGL(
+                    canvas, containerView, waitForCompletion, releasedCallback);
         }
 
         @Override

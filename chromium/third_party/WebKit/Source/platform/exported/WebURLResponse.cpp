@@ -51,7 +51,7 @@ public:
 
     ~ExtraDataContainer() override {}
 
-    WebURLResponse::ExtraData* extraData() const { return m_extraData.get(); }
+    WebURLResponse::ExtraData* getExtraData() const { return m_extraData.get(); }
 
 private:
     explicit ExtraDataContainer(WebURLResponse::ExtraData* extraData)
@@ -311,9 +311,9 @@ void WebURLResponse::setHasMajorCertificateErrors(bool value)
     m_private->m_resourceResponse->setHasMajorCertificateErrors(value);
 }
 
-WebURLResponse::SecurityStyle WebURLResponse::securityStyle() const
+WebURLResponse::SecurityStyle WebURLResponse::getSecurityStyle() const
 {
-    return static_cast<SecurityStyle>(m_private->m_resourceResponse->securityStyle());
+    return static_cast<SecurityStyle>(m_private->m_resourceResponse->getSecurityStyle());
 }
 
 void WebURLResponse::setSecurityStyle(SecurityStyle securityStyle)
@@ -440,14 +440,19 @@ void WebURLResponse::setOriginalURLViaServiceWorker(const WebURL& url)
     m_private->m_resourceResponse->setOriginalURLViaServiceWorker(url);
 }
 
-bool WebURLResponse::isMultipartPayload() const
+void WebURLResponse::setMultipartBoundary(const char* bytes, size_t size)
 {
-    return m_private->m_resourceResponse->isMultipartPayload();
+    m_private->m_resourceResponse->setMultipartBoundary(bytes, size);
 }
 
-void WebURLResponse::setIsMultipartPayload(bool value)
+WebString WebURLResponse::cacheStorageCacheName() const
 {
-    m_private->m_resourceResponse->setIsMultipartPayload(value);
+    return m_private->m_resourceResponse->cacheStorageCacheName();
+}
+
+void WebURLResponse::setCacheStorageCacheName(const WebString& cacheStorageCacheName)
+{
+    m_private->m_resourceResponse->setCacheStorageCacheName(cacheStorageCacheName);
 }
 
 WebString WebURLResponse::downloadFilePath() const
@@ -480,12 +485,12 @@ void WebURLResponse::setRemotePort(unsigned short remotePort)
     m_private->m_resourceResponse->setRemotePort(remotePort);
 }
 
-WebURLResponse::ExtraData* WebURLResponse::extraData() const
+WebURLResponse::ExtraData* WebURLResponse::getExtraData() const
 {
-    RefPtr<ResourceResponse::ExtraData> data = m_private->m_resourceResponse->extraData();
+    RefPtr<ResourceResponse::ExtraData> data = m_private->m_resourceResponse->getExtraData();
     if (!data)
         return 0;
-    return static_cast<ExtraDataContainer*>(data.get())->extraData();
+    return static_cast<ExtraDataContainer*>(data.get())->getExtraData();
 }
 
 void WebURLResponse::setExtraData(WebURLResponse::ExtraData* extraData)

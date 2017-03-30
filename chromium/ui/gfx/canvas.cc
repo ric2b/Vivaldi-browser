@@ -153,16 +153,10 @@ void Canvas::DrawDashedRect(const Rect& rect, SkColor color) {
     }
   }
 
-  // Make a shader for the bitmap with an origin of the box we'll draw. This
-  // shader is refcounted and will have an initial refcount of 1.
-  skia::RefPtr<SkShader> shader = skia::AdoptRef(
-      SkShader::CreateBitmapShader(
-          *dots, SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode));
-  // Assign the shader to the paint & release our reference. The paint will
-  // now own the shader and the shader will be destroyed when the paint goes
-  // out of scope.
+  // Make a shader for the bitmap with an origin of the box we'll draw.
   SkPaint paint;
-  paint.setShader(shader.get());
+  paint.setShader(SkShader::MakeBitmapShader(*dots, SkShader::kRepeat_TileMode,
+                                             SkShader::kRepeat_TileMode));
 
   DrawRect(Rect(rect.x(), rect.y(), rect.width(), 1), paint);
   DrawRect(Rect(rect.x(), rect.y() + rect.height() - 1, rect.width(), 1),
@@ -424,13 +418,10 @@ void Canvas::DrawImageInPath(const ImageSkia& image,
 
   SkMatrix matrix;
   matrix.setTranslate(SkIntToScalar(x), SkIntToScalar(y));
-  skia::RefPtr<SkShader> shader = CreateImageRepShader(
-      image_rep,
-      SkShader::kRepeat_TileMode,
-      matrix);
-
   SkPaint p(paint);
-  p.setShader(shader.get());
+  p.setShader(CreateImageRepShader(image_rep,
+                                   SkShader::kRepeat_TileMode,
+                                   matrix));
   canvas_->drawPath(path, p);
 }
 
@@ -509,9 +500,8 @@ bool Canvas::InitSkPaintForTiling(const ImageSkia& image,
   shader_scale.preTranslate(SkIntToScalar(-src_x), SkIntToScalar(-src_y));
   shader_scale.postTranslate(SkIntToScalar(dest_x), SkIntToScalar(dest_y));
 
-  // setShader() takes ownership of the created shader.
   paint->setShader(CreateImageRepShader(image_rep, SkShader::kRepeat_TileMode,
-                                        shader_scale).get());
+                                        shader_scale));
   paint->setXfermodeMode(SkXfermode::kSrcOver_Mode);
   return true;
 }
@@ -564,15 +554,11 @@ void Canvas::DrawImageIntHelper(const ImageSkiaRep& image_rep,
   shader_scale.preTranslate(SkIntToScalar(-src_x), SkIntToScalar(-src_y));
   shader_scale.postTranslate(SkIntToScalar(dest_x), SkIntToScalar(dest_y));
 
-  skia::RefPtr<SkShader> shader = CreateImageRepShaderForScale(
-      image_rep, SkShader::kRepeat_TileMode, shader_scale,
-      remove_image_scale ? image_rep.scale() : 1.f);
-
-  // Set up our paint to use the shader & release our reference (now just owned
-  // by the paint).
   SkPaint p(paint);
   p.setFilterQuality(filter ? kLow_SkFilterQuality : kNone_SkFilterQuality);
-  p.setShader(shader.get());
+  p.setShader(CreateImageRepShaderForScale(
+      image_rep, SkShader::kRepeat_TileMode, shader_scale,
+      remove_image_scale ? image_rep.scale() : 1.f));
 
   // The rect will be filled by the bitmap.
   canvas_->drawRect(dest_rect, p);

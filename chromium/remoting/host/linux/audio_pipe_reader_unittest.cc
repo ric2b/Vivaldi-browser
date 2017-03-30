@@ -8,6 +8,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <memory>
+
 #include "base/files/file.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
@@ -73,11 +75,11 @@ class AudioPipeReaderTest : public testing::Test,
 
  protected:
   base::MessageLoop message_loop_;
-  scoped_ptr<base::RunLoop> run_loop_;
-  scoped_ptr<base::Thread> audio_thread_;
+  std::unique_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<base::Thread> audio_thread_;
   base::ScopedTempDir test_dir_;
   base::FilePath pipe_path_;
-  scoped_ptr<base::File> output_;
+  std::unique_ptr<base::File> output_;
 
   scoped_refptr<AudioPipeReader> reader_;
 

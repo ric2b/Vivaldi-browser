@@ -8,24 +8,28 @@
 #include <stdint.h>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "components/test_runner/mock_spell_check.h"
-#include "components/test_runner/web_task.h"
+#include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebSpellCheckClient.h"
+
+namespace blink {
+class WebTextCheckingCompletion;
+struct WebTextCheckingResult;
+}  // namespace blink
 
 namespace test_runner {
 
+class TestRunner;
 class WebTestDelegate;
-class WebTestProxyBase;
 
 class SpellCheckClient : public blink::WebSpellCheckClient {
  public:
-  explicit SpellCheckClient(WebTestProxyBase* web_test_proxy);
+  explicit SpellCheckClient(TestRunner* test_runner);
   virtual ~SpellCheckClient();
 
   void SetDelegate(WebTestDelegate* delegate);
-
-  WebTaskList* mutable_task_list() { return &task_list_; }
-  MockSpellCheck* MockSpellCheckWord() { return &spell_check_; }
 
   // blink::WebSpellCheckClient implementation.
   void spellCheck(
@@ -52,11 +56,10 @@ class SpellCheckClient : public blink::WebSpellCheckClient {
   blink::WebString last_requested_text_check_string_;
   blink::WebTextCheckingCompletion* last_requested_text_checking_completion_;
 
-  WebTaskList task_list_;
-
+  TestRunner* test_runner_;
   WebTestDelegate* delegate_;
 
-  WebTestProxyBase* web_test_proxy_;
+  base::WeakPtrFactory<SpellCheckClient> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SpellCheckClient);
 };

@@ -18,9 +18,9 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/supervised_user_whitelist_installer.h"
-#include "chrome/browser/net/file_downloader.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -255,6 +255,14 @@ void SupervisedUserService::AddURLAccessRequest(
       callback, 0);
 }
 
+void SupervisedUserService::ReportURL(const GURL& url,
+                                      const SuccessCallback& callback) {
+  if (url_reporter_)
+    url_reporter_->ReportUrl(url, callback);
+  else
+    callback.Run(false);
+}
+
 void SupervisedUserService::AddExtensionUpdateRequest(
     const std::string& extension_id,
     const base::Version& version,
@@ -359,7 +367,7 @@ void SupervisedUserService::RegisterAndInitSync(
 
   // Fetch the custodian's profile information, to store the name.
   // TODO(pamg): If --google-profile-info (flag: switches::kGoogleProfileInfo)
-  // is ever enabled, take the name from the ProfileInfoCache instead.
+  // is ever enabled, take the name from the ProfileAttributesStorage instead.
   CustodianProfileDownloaderService* profile_downloader_service =
       CustodianProfileDownloaderServiceFactory::GetForProfile(
           custodian_profile);
@@ -393,6 +401,11 @@ void SupervisedUserService::RemoveObserver(
 void SupervisedUserService::AddPermissionRequestCreator(
     scoped_ptr<PermissionRequestCreator> creator) {
   permissions_creators_.push_back(creator.release());
+}
+
+void SupervisedUserService::SetSafeSearchURLReporter(
+    scoped_ptr<SafeSearchURLReporter> reporter) {
+  url_reporter_ = std::move(reporter);
 }
 
 SupervisedUserService::URLFilterContext::URLFilterContext()
@@ -476,10 +489,9 @@ void SupervisedUserService::URLFilterContext::InitAsyncURLChecker(
     const scoped_refptr<net::URLRequestContextGetter>& context) {
   ui_url_filter_->InitAsyncURLChecker(context.get());
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&SupervisedUserURLFilter::InitAsyncURLChecker,
-                 io_url_filter_, context));
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&SupervisedUserURLFilter::InitAsyncURLChecker, io_url_filter_,
+                 base::RetainedRef(context)));
 }
 
 bool SupervisedUserService::URLFilterContext::HasAsyncURLChecker() const {
@@ -600,6 +612,7 @@ void SupervisedUserService::SetActive(bool active) {
 #endif
   } else {
     permissions_creators_.clear();
+    url_reporter_.reset();
 
     pref_change_registrar_.Remove(
         prefs::kDefaultSupervisedUserFilteringBehavior);
@@ -645,10 +658,12 @@ void SupervisedUserService::OnSupervisedUserRegistered(
         signin->GetAuthenticatedAccountInfo().email);
 
     // The supervised user profile is now ready for use.
-    ProfileManager* profile_manager = g_browser_process->profile_manager();
-    ProfileInfoCache& cache = profile_manager->GetProfileInfoCache();
-    size_t index = cache.GetIndexOfProfileWithPath(profile_->GetPath());
-    cache.SetIsOmittedProfileAtIndex(index, false);
+    ProfileAttributesEntry* entry = nullptr;
+    bool has_entry =
+        g_browser_process->profile_manager()->GetProfileAttributesStorage().
+            GetProfileAttributesWithPath(profile_->GetPath(), &entry);
+    DCHECK(has_entry);
+    entry->SetIsOmitted(false);
   } else {
     DCHECK_EQ(std::string(), token);
   }
@@ -837,10 +852,11 @@ void SupervisedUserService::LoadBlacklistFromFile(const base::FilePath& path) {
                  base::Unretained(this)));
 }
 
-void SupervisedUserService::OnBlacklistDownloadDone(const base::FilePath& path,
-                                                    bool success) {
+void SupervisedUserService::OnBlacklistDownloadDone(
+    const base::FilePath& path,
+    FileDownloader::Result result) {
   DCHECK(blacklist_state_ == BlacklistLoadState::LOAD_STARTED);
-  if (success) {
+  if (FileDownloader::IsSuccess(result)) {
     LoadBlacklistFromFile(path);
   } else {
     LOG(WARNING) << "Blacklist download failed";
@@ -1049,4 +1065,3 @@ void SupervisedUserService::OnSiteListUpdated() {
   FOR_EACH_OBSERVER(
       SupervisedUserServiceObserver, observer_list_, OnURLFilterChanged());
 }
-

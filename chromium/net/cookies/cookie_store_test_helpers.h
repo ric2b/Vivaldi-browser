@@ -19,6 +19,8 @@ class DelayedCookieMonster : public CookieStore {
  public:
   DelayedCookieMonster();
 
+  ~DelayedCookieMonster() override;
+
   // Call the asynchronous CookieMonster function, expect it to immediately
   // invoke the internal callback.
   // Post a delayed task to invoke the original callback with the results.
@@ -39,7 +41,7 @@ class DelayedCookieMonster : public CookieStore {
                                  base::Time last_access_time,
                                  bool secure,
                                  bool http_only,
-                                 bool same_site,
+                                 CookieSameSite same_site,
                                  bool enforce_strict_secure,
                                  CookiePriority priority,
                                  const SetCookiesCallback& callback) override;
@@ -91,6 +93,8 @@ class DelayedCookieMonster : public CookieStore {
   AddCallbackForCookie(const GURL& url, const std::string& name,
                        const CookieChangedCallback& callback) override;
 
+  bool IsEphemeral() override;
+
  private:
   // Be called immediately from CookieMonster.
 
@@ -111,9 +115,8 @@ class DelayedCookieMonster : public CookieStore {
       const CookieMonster::GetCookieListCallback& callback);
 
   friend class base::RefCountedThreadSafe<DelayedCookieMonster>;
-  ~DelayedCookieMonster() override;
 
-  scoped_refptr<CookieMonster> cookie_monster_;
+  scoped_ptr<CookieMonster> cookie_monster_;
 
   bool did_run_;
   bool result_;

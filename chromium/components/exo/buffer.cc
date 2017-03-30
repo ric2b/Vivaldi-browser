@@ -346,22 +346,26 @@ Buffer::Buffer(scoped_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer)
       texture_target_(GL_TEXTURE_2D),
       query_type_(GL_COMMANDS_COMPLETED_CHROMIUM),
       use_zero_copy_(true),
+      is_overlay_candidate_(false),
       use_count_(0) {}
 
 Buffer::Buffer(scoped_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer,
                unsigned texture_target,
                unsigned query_type,
-               bool use_zero_copy)
+               bool use_zero_copy,
+               bool is_overlay_candidate)
     : gpu_memory_buffer_(std::move(gpu_memory_buffer)),
       texture_target_(texture_target),
       query_type_(query_type),
       use_zero_copy_(use_zero_copy),
+      is_overlay_candidate_(is_overlay_candidate),
       use_count_(0) {}
 
 Buffer::~Buffer() {}
 
 scoped_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
     cc::TextureMailbox* texture_mailbox,
+    bool secure_output_only,
     bool lost_context) {
   DLOG_IF(WARNING, use_count_)
       << "Producing a texture mailbox for a buffer that has not been released";
@@ -412,11 +416,10 @@ scoped_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
     // This binds the latest contents of this buffer to |texture|.
     gpu::SyncToken sync_token = texture->BindTexImage();
 
-    // TODO(reveman): Set to true when GMBs can be imported for SCANOUT.
-    bool is_overlay_candidate = false;
     *texture_mailbox =
         cc::TextureMailbox(texture->mailbox(), sync_token, texture_target_,
-                           gpu_memory_buffer_->GetSize(), is_overlay_candidate);
+                           gpu_memory_buffer_->GetSize(), is_overlay_candidate_,
+                           secure_output_only);
     // The contents texture will be released when no longer used by the
     // compositor.
     return cc::SingleReleaseCallback::Create(
@@ -438,9 +441,10 @@ scoped_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
   gpu::SyncToken sync_token = contents_texture->CopyTexImage(
       texture, base::Bind(&Buffer::ReleaseContentsTexture, AsWeakPtr(),
                           base::Passed(&contents_texture_)));
-  *texture_mailbox = cc::TextureMailbox(
-      texture->mailbox(), sync_token, GL_TEXTURE_2D,
-      gpu_memory_buffer_->GetSize(), false /* is_overlay_candidate*/);
+  *texture_mailbox =
+      cc::TextureMailbox(texture->mailbox(), sync_token, GL_TEXTURE_2D,
+                         gpu_memory_buffer_->GetSize(),
+                         false /* is_overlay_candidate */, secure_output_only);
   // The mailbox texture will be released when no longer used by the
   // compositor.
   return cc::SingleReleaseCallback::Create(
@@ -453,9 +457,9 @@ gfx::Size Buffer::GetSize() const {
   return gpu_memory_buffer_->GetSize();
 }
 
-scoped_refptr<base::trace_event::TracedValue> Buffer::AsTracedValue() const {
-  scoped_refptr<base::trace_event::TracedValue> value =
-      new base::trace_event::TracedValue;
+scoped_ptr<base::trace_event::TracedValue> Buffer::AsTracedValue() const {
+  scoped_ptr<base::trace_event::TracedValue> value(
+      new base::trace_event::TracedValue());
   gfx::Size size = gpu_memory_buffer_->GetSize();
   value->SetInteger("width", size.width());
   value->SetInteger("height", size.height());

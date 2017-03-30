@@ -26,6 +26,7 @@
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
+#include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -37,7 +38,7 @@
 
 namespace blink {
 
-OfflineAudioContext* OfflineAudioContext::create(ExecutionContext* context, unsigned numberOfChannels, size_t numberOfFrames, float sampleRate, ExceptionState& exceptionState)
+OfflineAudioContext* OfflineAudioContext::create(ExecutionContext* context, unsigned numberOfChannels, unsigned numberOfFrames, float sampleRate, ExceptionState& exceptionState)
 {
     // FIXME: add support for workers.
     if (!context || !context->isDocument()) {
@@ -186,7 +187,7 @@ ScriptPromise OfflineAudioContext::suspendContext(ScriptState* scriptState)
 {
     // This CANNOT be called on OfflineAudioContext; this is only to implement
     // the pure virtual interface from AbstractAudioContext.
-    RELEASE_ASSERT_NOT_REACHED();
+    RELEASE_NOTREACHED();
 
     return ScriptPromise();
 }
@@ -315,7 +316,7 @@ void OfflineAudioContext::fireCompletionEvent()
         return;
 
     // Avoid firing the event if the document has already gone away.
-    if (executionContext()) {
+    if (getExecutionContext()) {
         // Call the offline rendering completion event listener and resolve the
         // promise too.
         dispatchEvent(OfflineAudioCompletionEvent::create(renderedBuffer));

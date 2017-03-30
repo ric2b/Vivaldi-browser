@@ -5,8 +5,9 @@
 #ifndef TOOLS_GN_TOOLCHAIN_H_
 #define TOOLS_GN_TOOLCHAIN_H_
 
+#include <memory>
+
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "tools/gn/item.h"
 #include "tools/gn/label_ptr.h"
@@ -44,6 +45,8 @@ class Toolchain : public Item {
     TYPE_LINK,
     TYPE_STAMP,
     TYPE_COPY,
+    TYPE_COPY_BUNDLE_DATA,
+    TYPE_COMPILE_XCASSETS,
 
     TYPE_NUMTYPES  // Must be last.
   };
@@ -60,6 +63,8 @@ class Toolchain : public Item {
   static const char* kToolLink;
   static const char* kToolStamp;
   static const char* kToolCopy;
+  static const char* kToolCopyBundleData;
+  static const char* kToolCompileXCAssets;
 
   Toolchain(const Settings* settings, const Label& label);
   ~Toolchain() override;
@@ -77,7 +82,7 @@ class Toolchain : public Item {
 
   // Set a tool. When all tools are configured, you should call
   // ToolchainSetupComplete().
-  void SetTool(ToolType type, scoped_ptr<Tool> t);
+  void SetTool(ToolType type, std::unique_ptr<Tool> t);
 
   // Does final setup on the toolchain once all tools are known.
   void ToolchainSetupComplete();
@@ -99,7 +104,7 @@ class Toolchain : public Item {
 
   // Returns the tool that produces the final output for the given target type.
   // This isn't necessarily the tool you would expect. For copy target, this
-  // will return the stamp tool ionstead since the final output of a copy
+  // will return the stamp tool instead since the final output of a copy
   // target is to stamp the set of copies done so there is one output.
   static ToolType GetToolTypeForTargetFinalOutput(const Target* target);
   const Tool* GetToolForTargetFinalOutput(const Target* target) const;
@@ -113,7 +118,7 @@ class Toolchain : public Item {
   int concurrent_links() const { return concurrent_links_; }
 
  private:
-  scoped_ptr<Tool> tools_[TYPE_NUMTYPES];
+  std::unique_ptr<Tool> tools_[TYPE_NUMTYPES];
 
   // How many links to run in parallel. Only the default toolchain's version of
   // this variable applies.

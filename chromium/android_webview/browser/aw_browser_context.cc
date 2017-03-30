@@ -79,8 +79,8 @@ void DeleteDirRecursively(const base::FilePath& path) {
 
 AwBrowserContext* g_browser_context = NULL;
 
-scoped_ptr<net::ProxyConfigService> CreateProxyConfigService() {
-  scoped_ptr<net::ProxyConfigService> config_service =
+std::unique_ptr<net::ProxyConfigService> CreateProxyConfigService() {
+  std::unique_ptr<net::ProxyConfigService> config_service =
       net::ProxyService::CreateSystemProxyConfigService(
           BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO),
           nullptr /* Ignored on Android */);
@@ -129,6 +129,7 @@ AwBrowserContext::AwBrowserContext(
       native_factory_(native_factory) {
   DCHECK(!g_browser_context);
   g_browser_context = this;
+  BrowserContext::Initialize(this, path);
 
   // This constructor is entered during the creation of ContentBrowserClient,
   // before browser threads are created. Therefore any checks to enforce
@@ -216,7 +217,7 @@ void AwBrowserContext::PreMainMessageLoopRun() {
           GetUserAgent()));
   data_reduction_proxy_settings_.reset(
       new data_reduction_proxy::DataReductionProxySettings());
-  scoped_ptr<data_reduction_proxy::DataStore> store(
+  std::unique_ptr<data_reduction_proxy::DataStore> store(
       new data_reduction_proxy::DataStore());
   base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
   scoped_refptr<base::SequencedTaskRunner> db_task_runner =
@@ -266,30 +267,6 @@ void AwBrowserContext::PreMainMessageLoopRun() {
 void AwBrowserContext::AddVisitedURLs(const std::vector<GURL>& urls) {
   DCHECK(visitedlink_master_);
   visitedlink_master_->AddURLs(urls);
-}
-
-net::URLRequestContextGetter* AwBrowserContext::CreateRequestContext(
-    content::ProtocolHandlerMap* protocol_handlers,
-    content::URLRequestInterceptorScopedVector request_interceptors) {
-  // This function cannot actually create the request context because
-  // there is a reentrant dependency on GetResourceContext() via
-  // content::StoragePartitionImplMap::Create(). This is not fixable
-  // until http://crbug.com/159193. Until then, assert that the context
-  // has already been allocated and just handle setting the protocol_handlers.
-  DCHECK(url_request_context_getter_.get());
-  url_request_context_getter_->SetHandlersAndInterceptors(
-      protocol_handlers, std::move(request_interceptors));
-  return url_request_context_getter_.get();
-}
-
-net::URLRequestContextGetter*
-AwBrowserContext::CreateRequestContextForStoragePartition(
-    const base::FilePath& partition_path,
-    bool in_memory,
-    content::ProtocolHandlerMap* protocol_handlers,
-    content::URLRequestInterceptorScopedVector request_interceptors) {
-  NOTREACHED();
-  return NULL;
 }
 
 AwQuotaManagerBridge* AwBrowserContext::GetQuotaManagerBridge() {
@@ -356,7 +333,7 @@ void AwBrowserContext::InitUserPrefService() {
   user_prefs::UserPrefs::Set(this, user_pref_service_.get());
 }
 
-scoped_ptr<content::ZoomLevelDelegate>
+std::unique_ptr<content::ZoomLevelDelegate>
 AwBrowserContext::CreateZoomLevelDelegate(
     const base::FilePath& partition_path) {
   return nullptr;
@@ -373,12 +350,6 @@ bool AwBrowserContext::IsOffTheRecord() const {
 
 net::URLRequestContextGetter* AwBrowserContext::GetRequestContext() {
   return GetDefaultStoragePartition(this)->GetURLRequestContext();
-}
-
-net::URLRequestContextGetter*
-AwBrowserContext::GetRequestContextForRenderProcess(
-    int renderer_child_id) {
-  return GetRequestContext();
 }
 
 net::URLRequestContextGetter* AwBrowserContext::GetMediaRequestContext() {
@@ -442,6 +413,30 @@ content::PermissionManager* AwBrowserContext::GetPermissionManager() {
 content::BackgroundSyncController*
 AwBrowserContext::GetBackgroundSyncController() {
   return nullptr;
+}
+
+net::URLRequestContextGetter* AwBrowserContext::CreateRequestContext(
+    content::ProtocolHandlerMap* protocol_handlers,
+    content::URLRequestInterceptorScopedVector request_interceptors) {
+  // This function cannot actually create the request context because
+  // there is a reentrant dependency on GetResourceContext() via
+  // content::StoragePartitionImplMap::Create(). This is not fixable
+  // until http://crbug.com/159193. Until then, assert that the context
+  // has already been allocated and just handle setting the protocol_handlers.
+  DCHECK(url_request_context_getter_.get());
+  url_request_context_getter_->SetHandlersAndInterceptors(
+      protocol_handlers, std::move(request_interceptors));
+  return url_request_context_getter_.get();
+}
+
+net::URLRequestContextGetter*
+AwBrowserContext::CreateRequestContextForStoragePartition(
+    const base::FilePath& partition_path,
+    bool in_memory,
+    content::ProtocolHandlerMap* protocol_handlers,
+    content::URLRequestInterceptorScopedVector request_interceptors) {
+  NOTREACHED();
+  return NULL;
 }
 
 policy::URLBlacklistManager* AwBrowserContext::GetURLBlacklistManager() {

@@ -289,7 +289,6 @@ base::TimeTicks StartupTimeToTimeTicks(const base::Time& time) {
   if (!statics_initialized) {
     base::PlatformThread::SetCurrentThreadPriority(previous_priority);
   }
-
   statics_initialized = true;
 #endif
 

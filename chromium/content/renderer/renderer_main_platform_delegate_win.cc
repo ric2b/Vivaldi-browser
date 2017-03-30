@@ -16,7 +16,6 @@
 #include "content/child/dwrite_font_proxy/dwrite_font_proxy_init_win.h"
 #include "content/child/font_warmup_win.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/dwrite_font_platform_win.h"
 #include "content/public/common/injection_test_win.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/render_thread_impl.h"
@@ -42,12 +41,6 @@ void SkiaPreCacheFont(const LOGFONT& logfont) {
   if (render_thread) {
     render_thread->PreCacheFont(logfont);
   }
-}
-
-// Helper function to cast RenderThread to IPC::Sender so we can Bind()
-// it.
-IPC::Sender* GetRenderThreadSender() {
-  return RenderThread::Get();
 }
 
 void WarmUpMediaFoundation() {
@@ -87,10 +80,7 @@ void RendererMainPlatformDelegate::PlatformInitialize() {
     scoped_ptr<icu::TimeZone> zone(icu::TimeZone::createDefault());
 
     if (use_direct_write) {
-      if (ShouldUseDirectWriteFontProxyFieldTrial())
-        InitializeDWriteFontProxy(base::Bind(&GetRenderThreadSender));
-      else
-        WarmupDirectWrite();
+      InitializeDWriteFontProxy();
     } else {
       SkTypeface_SetEnsureLOGFONTAccessibleProc(SkiaPreCacheFont);
     }
@@ -102,8 +92,7 @@ void RendererMainPlatformDelegate::PlatformInitialize() {
 }
 
 void RendererMainPlatformDelegate::PlatformUninitialize() {
-  if (ShouldUseDirectWriteFontProxyFieldTrial())
-    UninitializeDWriteFontProxy();
+  UninitializeDWriteFontProxy();
 }
 
 bool RendererMainPlatformDelegate::EnableSandbox() {
@@ -114,13 +103,6 @@ bool RendererMainPlatformDelegate::EnableSandbox() {
     // Cause advapi32 to load before the sandbox is turned on.
     unsigned int dummy_rand;
     rand_s(&dummy_rand);
-
-#if defined(ADDRESS_SANITIZER)
-    // Bind and leak dbghelp.dll before the token is lowered, otherwise
-    // AddressSanitizer will crash when trying to symbolize a report.
-    if (!LoadLibraryA("dbghelp.dll"))
-      return false;
-#endif
 
     target_services->LowerToken();
     return true;

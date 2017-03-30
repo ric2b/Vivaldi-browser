@@ -1,6 +1,5 @@
 include_rules = [
   "+crypto",
-  "+google_apis",
 
   # Note: Only for net::EnableSSLServerSockets(), which must be called by
   # unit tests at process start.
@@ -15,7 +14,7 @@ include_rules = [
   "+remoting/proto",
   "+third_party/google_toolbox_for_mac/src",
   "+third_party/libjingle",
-  "+third_party/libvpx_new",
+  "+third_party/libvpx",
   "+third_party/libyuv",
   "+third_party/webrtc/base",
   "+third_party/webrtc/libjingle",
@@ -23,4 +22,6 @@ include_rules = [
   "+third_party/webrtc/p2p",
   "+third_party/webrtc/modules/desktop_capture",
   "+ui/base/keycodes",
+  "+ui/base/l10n",
+  "+ui/base/resource",
 ]

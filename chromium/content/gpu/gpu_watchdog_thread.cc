@@ -11,6 +11,7 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/debug/alias.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -42,6 +43,8 @@ GpuWatchdogThread::GpuWatchdogThread(int timeout)
       timeout_(base::TimeDelta::FromMilliseconds(timeout)),
       armed_(false),
       task_observer_(this),
+      use_thread_cpu_time_(true),
+      responsive_acknowledge_count_(0),
 #if defined(OS_WIN)
       watched_thread_handle_(0),
       arm_cpu_time_(),
@@ -159,12 +162,30 @@ void GpuWatchdogThread::OnAcknowledge() {
   weak_factory_.InvalidateWeakPtrs();
   armed_ = false;
 
-  if (suspended_)
+  if (suspended_) {
+    responsive_acknowledge_count_ = 0;
     return;
+  }
+
+  base::Time current_time = base::Time::Now();
+
+  // The watchdog waits until at least 6 consecutive checks have returned in
+  // less than 50 ms before it will start ignoring the CPU time in determining
+  // whether to timeout. This is a compromise to allow startups that are slow
+  // due to disk contention to avoid timing out, but once the GPU process is
+  // running smoothly the watchdog will be able to detect hangs that don't use
+  // the CPU.
+  if ((current_time - check_time_) < base::TimeDelta::FromMilliseconds(50))
+    responsive_acknowledge_count_++;
+  else
+    responsive_acknowledge_count_ = 0;
+
+  if (responsive_acknowledge_count_ >= 6)
+    use_thread_cpu_time_ = false;
 
   // If it took a long time for the acknowledgement, assume the computer was
   // recently suspended.
-  bool was_suspended = (base::Time::Now() > suspension_timeout_);
+  bool was_suspended = (current_time > suspension_timeout_);
 
   // The monitored thread has responded. Post a task to check it again.
   task_runner()->PostDelayedTask(
@@ -188,12 +209,16 @@ void GpuWatchdogThread::OnCheck(bool after_suspend) {
 
 #if defined(OS_WIN)
   arm_cpu_time_ = GetWatchedThreadTime();
+
+  QueryUnbiasedInterruptTime(&arm_interrupt_time_);
 #endif
 
+  check_time_ = base::Time::Now();
+  check_timeticks_ = base::TimeTicks::Now();
   // Immediately after the computer is woken up from being suspended it might
   // be pretty sluggish, so allow some extra time before the next timeout.
   base::TimeDelta timeout = timeout_ * (after_suspend ? 3 : 1);
-  suspension_timeout_ = base::Time::Now() + timeout * 2;
+  suspension_timeout_ = check_time_ + timeout * 2;
 
   // Post a task to the monitored thread that does nothing but wake up the
   // TaskObserver. Any other tasks that are pending on the watched thread will
@@ -219,7 +244,7 @@ void GpuWatchdogThread::DeliberatelyTerminateToRecoverFromHang() {
   // Defer termination until a certain amount of CPU time has elapsed on the
   // watched thread.
   base::TimeDelta time_since_arm = GetWatchedThreadTime() - arm_cpu_time_;
-  if (time_since_arm < timeout_) {
+  if (use_thread_cpu_time_ && (time_since_arm < timeout_)) {
     message_loop()->PostDelayedTask(
         FROM_HERE,
         base::Bind(
@@ -311,6 +336,28 @@ void GpuWatchdogThread::DeliberatelyTerminateToRecoverFromHang() {
       return;
   }
 #endif
+
+// Store variables so they're available in crash dumps to help determine the
+// cause of any hang.
+#if defined(OS_WIN)
+  ULONGLONG fire_interrupt_time;
+  QueryUnbiasedInterruptTime(&fire_interrupt_time);
+
+  // This is the time since the watchdog was armed, in 100ns intervals,
+  // ignoring time where the computer is suspended.
+  ULONGLONG interrupt_delay = fire_interrupt_time - arm_interrupt_time_;
+
+  base::debug::Alias(&interrupt_delay);
+  base::debug::Alias(&time_since_arm);
+
+  bool using_high_res_timer = base::Time::IsHighResolutionTimerInUse();
+  base::debug::Alias(&using_high_res_timer);
+#endif
+
+  base::Time current_time = base::Time::Now();
+  base::TimeTicks current_timeticks = base::TimeTicks::Now();
+  base::debug::Alias(&current_time);
+  base::debug::Alias(&current_timeticks);
 
   LOG(ERROR) << "The GPU process hung. Terminating after "
              << timeout_.InMilliseconds() << " ms.";

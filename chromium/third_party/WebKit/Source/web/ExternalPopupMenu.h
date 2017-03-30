@@ -36,6 +36,8 @@
 #include "public/platform/WebCanvas.h"
 #include "public/platform/WebScrollbar.h"
 #include "public/web/WebExternalPopupMenuClient.h"
+#include "web/WebExport.h"
+#include "wtf/Compiler.h"
 
 namespace blink {
 
@@ -48,7 +50,7 @@ struct WebPopupMenuInfo;
 
 // The ExternalPopupMenu connects the actual implementation of the popup menu
 // to the WebCore popup menu.
-class ExternalPopupMenu final : public PopupMenu, public WebExternalPopupMenuClient {
+class WEB_EXPORT ExternalPopupMenu final : WTF_NON_EXPORTED_BASE(public PopupMenu), public WebExternalPopupMenuClient {
 public:
     ExternalPopupMenu(LocalFrame&, HTMLSelectElement&, WebViewImpl&);
     ~ExternalPopupMenu() override;
@@ -67,7 +69,7 @@ private:
     // PopupMenu methods:
     void show() override;
     void hide() override;
-    void updateFromElement() override;
+    void updateFromElement(UpdateReason) override;
     void disconnectClient() override;
 
     // WebExternalPopupClient methods:
@@ -80,14 +82,13 @@ private:
     void dispatchEvent(Timer<ExternalPopupMenu>*);
     void update();
 
-    RawPtrWillBeMember<HTMLSelectElement> m_ownerElement;
-    RefPtrWillBeMember<LocalFrame> m_localFrame;
+    Member<HTMLSelectElement> m_ownerElement;
+    Member<LocalFrame> m_localFrame;
     WebViewImpl& m_webView;
     OwnPtr<WebMouseEvent> m_syntheticEvent;
     Timer<ExternalPopupMenu> m_dispatchEventTimer;
     // The actual implementor of the show menu.
     WebExternalPopupMenu* m_webExternalPopupMenu;
-    uint64_t m_shownDOMTreeVersion = 0;
     bool m_needsUpdate = false;
 };
 

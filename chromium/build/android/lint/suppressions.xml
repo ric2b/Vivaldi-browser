@@ -56,7 +56,7 @@ Still reading?
     <ignore path="ui/android/java/res/drawable-xxhdpi"/>
     <ignore path="ui/android/java/res/drawable-xxxhdpi"/>
     <!-- The large assets below only include a few densities to reduce APK size. -->
-    <ignore regexp=".*: data_reduction_illustration.png, google_icon_sprite.png, physical_web_logo.png, physical_web_logo_anim1.png, physical_web_logo_anim2.png, tabs_moved_htc.png, tabs_moved_nexus.png, tabs_moved_samsung.png$"/>
+    <ignore regexp=".*: data_reduction_illustration.png, google_icon_sprite.png, physical_web_logo.png, physical_web_logo_anim1.png, physical_web_logo_anim2.png$"/>
   </issue>
   <issue id="IconDipSize">
     <ignore regexp=".*google_icon_sprite.png.*"/>
@@ -71,7 +71,9 @@ Still reading?
   </issue>
   <issue id="InconsistentLayout" severity="ignore"/>
   <issue id="InflateParams" severity="ignore"/>
+  <issue id="LongLogTag" severity="ignore"/>
   <issue id="MissingApplicationIcon" severity="ignore"/>
+  <issue id="MissingPermission" severity="ignore"/>
   <issue id="MissingRegistered" severity="ignore"/>
   <issue id="MissingVersion">
     <ignore path="AndroidManifest.xml"/>
@@ -102,7 +104,7 @@ Still reading?
   <issue id="UnusedResources">
     <!-- Used by chrome/android/java/AndroidManifest.xml -->
     <ignore path="chrome/android/java/res/drawable/window_background.xml" />
-    <ignore path="chrome/android/java/res/xml/bookmark_thumbnail_widget_info.xml" />
+    <ignore path="chrome/android/java/res/xml/bookmark_widget_info.xml" />
     <ignore path="chrome/android/java/res/xml/file_paths.xml" />
 
     <ignore path="content/shell/android/shell_apk/res/layout/content_shell_activity.xml" />

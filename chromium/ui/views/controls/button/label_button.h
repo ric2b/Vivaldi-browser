@@ -45,7 +45,7 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
 
   // Gets or sets the text shown on the button.
   const base::string16& GetText() const;
-  void SetText(const base::string16& text);
+  virtual void SetText(const base::string16& text);
 
   // Sets the text color shown for the specified button |for_state| to |color|.
   void SetTextColor(ButtonState for_state, SkColor color);
@@ -105,6 +105,7 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
   scoped_ptr<InkDropAnimation> CreateInkDropAnimation() const override;
   scoped_ptr<InkDropHover> CreateInkDropHover() const override;
+  gfx::Point GetInkDropCenter() const override;
 
  protected:
   ImageView* image() const { return image_; }
@@ -146,6 +147,8 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
   FRIEND_TEST_ALL_PREFIXES(LabelButtonTest, LabelAndImage);
   FRIEND_TEST_ALL_PREFIXES(LabelButtonTest, FontList);
   FRIEND_TEST_ALL_PREFIXES(LabelButtonTest, ButtonStyleIsDefaultSize);
+
+  void SetTextInternal(const base::string16& text);
 
   // View:
   void ChildPreferredSizeChanged(View* child) override;

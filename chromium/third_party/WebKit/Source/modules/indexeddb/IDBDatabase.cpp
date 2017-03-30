@@ -74,7 +74,8 @@ IDBDatabase* IDBDatabase::create(ExecutionContext* context, PassOwnPtr<WebIDBDat
 }
 
 IDBDatabase::IDBDatabase(ExecutionContext* context, PassOwnPtr<WebIDBDatabase> backend, IDBDatabaseCallbacks* callbacks)
-    : ActiveDOMObject(context)
+    : ActiveScriptWrappable(this)
+    , ActiveDOMObject(context)
     , m_backend(backend)
     , m_databaseCallbacks(callbacks)
 {
@@ -159,13 +160,13 @@ void IDBDatabase::onComplete(int64_t transactionId)
     m_transactions.get(transactionId)->onComplete();
 }
 
-PassRefPtrWillBeRawPtr<DOMStringList> IDBDatabase::objectStoreNames() const
+DOMStringList* IDBDatabase::objectStoreNames() const
 {
-    RefPtrWillBeRawPtr<DOMStringList> objectStoreNames = DOMStringList::create(DOMStringList::IndexedDB);
+    DOMStringList* objectStoreNames = DOMStringList::create(DOMStringList::IndexedDB);
     for (const auto& it : m_metadata.objectStores)
         objectStoreNames->append(it.value.name);
     objectStoreNames->sort();
-    return objectStoreNames.release();
+    return objectStoreNames;
 }
 
 IDBObjectStore* IDBDatabase::createObjectStore(const String& name, const IDBKeyPath& keyPath, bool autoIncrement, ExceptionState& exceptionState)
@@ -196,7 +197,7 @@ IDBObjectStore* IDBDatabase::createObjectStore(const String& name, const IDBKeyP
         return nullptr;
     }
 
-    if (autoIncrement && ((keyPath.type() == IDBKeyPath::StringType && keyPath.string().isEmpty()) || keyPath.type() == IDBKeyPath::ArrayType)) {
+    if (autoIncrement && ((keyPath.getType() == IDBKeyPath::StringType && keyPath.string().isEmpty()) || keyPath.getType() == IDBKeyPath::ArrayType)) {
         exceptionState.throwDOMException(InvalidAccessError, "The autoIncrement option was set but the keyPath option was empty or an array.");
         return nullptr;
     }
@@ -345,10 +346,10 @@ void IDBDatabase::closeConnection()
         m_backend.clear();
     }
 
-    if (m_contextStopped || !executionContext())
+    if (m_contextStopped || !getExecutionContext())
         return;
 
-    EventQueue* eventQueue = executionContext()->eventQueue();
+    EventQueue* eventQueue = getExecutionContext()->getEventQueue();
     // Remove any pending versionchange events scheduled to fire on this
     // connection. They would have been scheduled by the backend when another
     // connection attempted an upgrade, but the frontend connection is being
@@ -362,7 +363,7 @@ void IDBDatabase::closeConnection()
 void IDBDatabase::onVersionChange(int64_t oldVersion, int64_t newVersion)
 {
     IDB_TRACE("IDBDatabase::onVersionChange");
-    if (m_contextStopped || !executionContext())
+    if (m_contextStopped || !getExecutionContext())
         return;
 
     if (m_closePending) {
@@ -377,28 +378,28 @@ void IDBDatabase::onVersionChange(int64_t oldVersion, int64_t newVersion)
     enqueueEvent(IDBVersionChangeEvent::create(EventTypeNames::versionchange, oldVersion, newVersionNullable));
 }
 
-void IDBDatabase::enqueueEvent(PassRefPtrWillBeRawPtr<Event> event)
+void IDBDatabase::enqueueEvent(Event* event)
 {
     ASSERT(!m_contextStopped);
-    ASSERT(executionContext());
-    EventQueue* eventQueue = executionContext()->eventQueue();
+    ASSERT(getExecutionContext());
+    EventQueue* eventQueue = getExecutionContext()->getEventQueue();
     event->setTarget(this);
-    eventQueue->enqueueEvent(event.get());
+    eventQueue->enqueueEvent(event);
     m_enqueuedEvents.append(event);
 }
 
-DispatchEventResult IDBDatabase::dispatchEventInternal(PassRefPtrWillBeRawPtr<Event> event)
+DispatchEventResult IDBDatabase::dispatchEventInternal(Event* event)
 {
     IDB_TRACE("IDBDatabase::dispatchEvent");
-    if (m_contextStopped || !executionContext())
+    if (m_contextStopped || !getExecutionContext())
         return DispatchEventResult::CanceledBeforeDispatch;
     ASSERT(event->type() == EventTypeNames::versionchange || event->type() == EventTypeNames::close);
     for (size_t i = 0; i < m_enqueuedEvents.size(); ++i) {
-        if (m_enqueuedEvents[i].get() == event.get())
+        if (m_enqueuedEvents[i].get() == event)
             m_enqueuedEvents.remove(i);
     }
 
-    DispatchEventResult dispatchResult = EventTarget::dispatchEventInternal(event.get());
+    DispatchEventResult dispatchResult = EventTarget::dispatchEventInternal(event);
     if (event->type() == EventTypeNames::versionchange && !m_closePending && m_backend)
         m_backend->versionChangeIgnored();
     return dispatchResult;
@@ -440,9 +441,9 @@ const AtomicString& IDBDatabase::interfaceName() const
     return EventTargetNames::IDBDatabase;
 }
 
-ExecutionContext* IDBDatabase::executionContext() const
+ExecutionContext* IDBDatabase::getExecutionContext() const
 {
-    return ActiveDOMObject::executionContext();
+    return ActiveDOMObject::getExecutionContext();
 }
 
 void IDBDatabase::recordApiCallsHistogram(IndexedDatabaseMethods method)

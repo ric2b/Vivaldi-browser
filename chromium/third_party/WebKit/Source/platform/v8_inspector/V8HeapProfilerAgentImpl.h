@@ -5,25 +5,22 @@
 #ifndef V8HeapProfilerAgentImpl_h
 #define V8HeapProfilerAgentImpl_h
 
+#include "platform/inspector_protocol/Allocator.h"
 #include "platform/v8_inspector/public/V8HeapProfilerAgent.h"
-#include "wtf/Forward.h"
-#include "wtf/Noncopyable.h"
 
 namespace blink {
 
-class V8RuntimeAgent;
-
-typedef String ErrorString;
+class V8InspectorSessionImpl;
 
 using protocol::Maybe;
 
 class V8HeapProfilerAgentImpl : public V8HeapProfilerAgent {
-    WTF_MAKE_NONCOPYABLE(V8HeapProfilerAgentImpl);
+    PROTOCOL_DISALLOW_COPY(V8HeapProfilerAgentImpl);
 public:
-    explicit V8HeapProfilerAgentImpl(v8::Isolate*, V8RuntimeAgent*);
+    explicit V8HeapProfilerAgentImpl(V8InspectorSessionImpl*);
     ~V8HeapProfilerAgentImpl() override;
 
-    void setInspectorState(PassRefPtr<protocol::DictionaryValue> state) override { m_state = state; }
+    void setInspectorState(protocol::DictionaryValue* state) override { m_state = state; }
     void setFrontend(protocol::Frontend::HeapProfiler* frontend) override { m_frontend = frontend; }
     void clearFrontend() override;
     void restore() override;
@@ -38,9 +35,9 @@ public:
 
     void takeHeapSnapshot(ErrorString*, const Maybe<bool>& reportProgress) override;
 
-    void getObjectByHeapObjectId(ErrorString*, const String& heapSnapshotObjectId, const Maybe<String>& objectGroup, OwnPtr<protocol::Runtime::RemoteObject>* result) override;
-    void addInspectedHeapObject(ErrorString*, const String& inspectedHeapObjectId) override;
-    void getHeapObjectId(ErrorString*, const String& objectId, String* heapSnapshotObjectId) override;
+    void getObjectByHeapObjectId(ErrorString*, const String16& heapSnapshotObjectId, const Maybe<String16>& objectGroup, OwnPtr<protocol::Runtime::RemoteObject>* result) override;
+    void addInspectedHeapObject(ErrorString*, const String16& inspectedHeapObjectId) override;
+    void getHeapObjectId(ErrorString*, const String16& objectId, String16* heapSnapshotObjectId) override;
 
     void startSampling(ErrorString*) override;
     void stopSampling(ErrorString*, OwnPtr<protocol::HeapProfiler::SamplingHeapProfile>*) override;
@@ -51,10 +48,10 @@ private:
     void startTrackingHeapObjectsInternal(bool trackAllocations);
     void stopTrackingHeapObjectsInternal();
 
+    V8InspectorSessionImpl* m_session;
     v8::Isolate* m_isolate;
-    V8RuntimeAgent* m_runtimeAgent;
     protocol::Frontend::HeapProfiler* m_frontend;
-    RefPtr<protocol::DictionaryValue> m_state;
+    protocol::DictionaryValue* m_state;
 };
 
 } // namespace blink

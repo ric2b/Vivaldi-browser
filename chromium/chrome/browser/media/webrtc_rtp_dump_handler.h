@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -100,7 +102,7 @@ class WebRtcRtpDumpHandler {
   };
 
   // For unit test to inject a fake writer.
-  void SetDumpWriterForTesting(scoped_ptr<WebRtcRtpDumpWriter> writer);
+  void SetDumpWriterForTesting(std::unique_ptr<WebRtcRtpDumpWriter> writer);
 
   // Callback from the dump writer when the max dump size is reached.
   void OnMaxDumpSizeReached();
@@ -124,7 +126,7 @@ class WebRtcRtpDumpHandler {
   State outgoing_state_;
 
   // The object used to create and write the dump file.
-  scoped_ptr<WebRtcRtpDumpWriter> dump_writer_;
+  std::unique_ptr<WebRtcRtpDumpWriter> dump_writer_;
 
   base::WeakPtrFactory<WebRtcRtpDumpHandler> weak_ptr_factory_;
 

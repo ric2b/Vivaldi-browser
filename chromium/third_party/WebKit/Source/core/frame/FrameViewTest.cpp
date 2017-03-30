@@ -14,7 +14,6 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/paint/PaintArtifact.h"
-#include "platform/graphics/test/FakeGraphicsLayerFactory.h"
 #include "platform/heap/Handle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -31,10 +30,6 @@ public:
     MockChromeClient() : m_hasScheduledAnimation(false) { }
 
     // ChromeClient
-    GraphicsLayerFactory* graphicsLayerFactory() const override
-    {
-        return FakeGraphicsLayerFactory::instance();
-    }
     MOCK_METHOD1(didPaint, void(const PaintArtifact&));
     MOCK_METHOD2(attachRootGraphicsLayer, void(GraphicsLayer*, LocalFrame* localRoot));
     MOCK_METHOD2(setToolTip, void(const String&, TextDirection));
@@ -46,7 +41,7 @@ public:
 class FrameViewTestBase : public testing::Test {
 protected:
     FrameViewTestBase()
-        : m_chromeClient(adoptPtrWillBeNoop(new MockChromeClient))
+        : m_chromeClient(new MockChromeClient)
     { }
 
     ~FrameViewTestBase()
@@ -67,7 +62,7 @@ protected:
     MockChromeClient& chromeClient() { return *m_chromeClient; }
 
 private:
-    OwnPtrWillBePersistent<MockChromeClient> m_chromeClient;
+    Persistent<MockChromeClient> m_chromeClient;
     OwnPtr<DummyPageHolder> m_pageHolder;
 };
 
@@ -153,8 +148,11 @@ TEST_F(FrameViewTest, SetPaintInvalidationOutOfUpdateAllLifecyclePhases)
 // performance. See crbug.com/586852 for details.
 TEST_F(FrameViewTest, HideTooltipWhenScrollPositionChanges)
 {
+    document().body()->setInnerHTML("<div style='width:1000px;height:1000px'></div>", ASSERT_NO_EXCEPTION);
+    document().view()->updateAllLifecyclePhases();
+
     EXPECT_CALL(chromeClient(), setToolTip(String(), _));
-    document().view()->scrollTo(DoublePoint(1, 1));
+    document().view()->setScrollPosition(DoublePoint(1, 1), UserScroll);
 }
 
 } // namespace

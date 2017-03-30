@@ -46,6 +46,13 @@
         ],
       },
     }],
+    ['OS=="win" and (fastbuild==0 or fastbuild==1)', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/chrome<(EXECUTABLE_SUFFIX).pdb',
+        ],
+      },
+    }],
     ['disable_nacl==0 and (OS=="win" or (OS=="linux" and target_arch=="x64"))', {
       'variables': {
         'files': [
@@ -69,7 +76,6 @@
           '<(PRODUCT_DIR)/<(mac_product_name) Framework.framework/',
           '<(PRODUCT_DIR)/<(mac_product_name) Helper.app/',
           '<(PRODUCT_DIR)/<(mac_product_name).app/',
-          '<(PRODUCT_DIR)/exif.so',
         ],
       },
     }],
@@ -79,7 +85,6 @@
           '<(PRODUCT_DIR)/<(mac_product_name) Framework.framework.dSYM/',
           '<(PRODUCT_DIR)/<(mac_product_name) Helper.app.dSYM/',
           '<(PRODUCT_DIR)/<(mac_product_name).app.dSYM/',
-          '<(PRODUCT_DIR)/exif.so.dSYM/',
         ],
       },
     }],
@@ -90,7 +95,6 @@
           '<(PRODUCT_DIR)/chrome_200_percent.pak',
           '<(PRODUCT_DIR)/chrome.dll',
           '<(PRODUCT_DIR)/chrome_elf.dll',
-          '<(PRODUCT_DIR)/libexif.dll',
           '<(PRODUCT_DIR)/osmesa.dll',
         ],
       },
@@ -117,10 +121,27 @@
         ],
       },
     }],
+    ['OS=="win" and component=="static_library" and (fastbuild==0 or fastbuild==1)', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/chrome_child.dll.pdb',
+        ],
+      },
+    }],
     ['OS=="win" and kasko==1', {
       'variables': {
         'files': [
           '<(PRODUCT_DIR)/kasko.dll',
+        ],
+      },
+    }],
+    ['OS=="win" and component=="shared_library" and (fastbuild==0 or fastbuild==1)', {
+      'variables': {
+        'files': [
+          '<(PRODUCT_DIR)/base.dll.pdb',
+          '<(PRODUCT_DIR)/blink_platform.dll.pdb',
+          '<(PRODUCT_DIR)/blink_web.dll.pdb',
+          '<(PRODUCT_DIR)/content.dll.pdb',
         ],
       },
     }],

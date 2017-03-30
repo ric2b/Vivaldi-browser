@@ -21,7 +21,6 @@
 #ifndef InlineFlowBox_h
 #define InlineFlowBox_h
 
-#include "core/layout/LayoutObjectInlines.h"
 #include "core/layout/OverflowModel.h"
 #include "core/layout/api/SelectionState.h"
 #include "core/layout/line/InlineBox.h"
@@ -42,8 +41,8 @@ typedef HashMap<const InlineTextBox*, std::pair<Vector<const SimpleFontData*>, G
 
 class InlineFlowBox : public InlineBox {
 public:
-    InlineFlowBox(LayoutObject& obj)
-        : InlineBox(obj)
+    InlineFlowBox(LineLayoutItem lineLayoutItem)
+        : InlineBox(lineLayoutItem)
         , m_firstChild(nullptr)
         , m_lastChild(nullptr)
         , m_prevLineBox(nullptr)
@@ -67,7 +66,7 @@ public:
         // an invisible marker exists.  The side effect of having an invisible marker is that the quirks mode behavior of shrinking lines with no
         // text children must not apply.  This change also means that gaps will exist between image bullet list items.  Even when the list bullet
         // is an image, the line is still considered to be immune from the quirk.
-        m_hasTextChildren = obj.style()->display() == LIST_ITEM;
+        m_hasTextChildren = lineLayoutItem.style()->display() == LIST_ITEM;
         m_hasTextDescendants = m_hasTextChildren;
     }
 
@@ -173,7 +172,7 @@ public:
     }
 
     // Helper functions used during line construction and placement.
-    void determineSpacingForFlowBoxes(bool lastLine, bool isLogicallyLastRunWrapped, LayoutObject* logicallyLastRunLayoutObject);
+    void determineSpacingForFlowBoxes(bool lastLine, bool isLogicallyLastRunWrapped, LineLayoutItem logicallyLastRunLayoutObject);
     LayoutUnit getFlowSpacingLogicalWidth();
     LayoutUnit placeBoxesInInlineDirection(LayoutUnit logicalLeft, bool& needsWordSpacing);
 
@@ -202,9 +201,11 @@ public:
     void checkConsistency() const;
     void setHasBadChildList();
 
-    // Line visual and layout overflow are in the coordinate space of the block.  This means that they aren't purely physical directions.
-    // For horizontal-tb and vertical-lr they will match physical directions, but for horizontal-bt and vertical-rl, the top/bottom and left/right
-    // respectively are flipped when compared to their physical counterparts.  For example minX is on the left in vertical-lr, but it is on the right in vertical-rl.
+    // Line visual and layout overflow are in the coordinate space of the block.  This means that
+    // they aren't purely physical directions. For horizontal-tb and vertical-lr they will match
+    // physical directions, but for vertical-rl, the left/right respectively are flipped when
+    // compared to their physical counterparts.  For example minX is on the left in vertical-lr, but
+    // it is on the right in vertical-rl.
     LayoutRect layoutOverflowRect(LayoutUnit lineTop, LayoutUnit lineBottom) const
     {
         return m_overflow ? m_overflow->layoutOverflowRect() : frameRectIncludingLineHeight(lineTop, lineBottom);

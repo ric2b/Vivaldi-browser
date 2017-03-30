@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "tools/gn/action_values.h"
+#include "tools/gn/bundle_data.h"
 #include "tools/gn/config_values.h"
 #include "tools/gn/inherited_libraries.h"
 #include "tools/gn/item.h"
@@ -44,6 +45,8 @@ class Target : public Item {
     COPY_FILES,
     ACTION,
     ACTION_FOREACH,
+    BUNDLE_DATA,
+    CREATE_BUNDLE,
   };
 
   enum DepsIterationType {
@@ -86,16 +89,29 @@ class Target : public Item {
   void set_output_name(const std::string& name) { output_name_ = name; }
 
   // Returns the output name for this target, which is the output_name if
-  // specified, or the target label if not. If the flag is set, it will also
-  // include any output prefix specified on the tool (often "lib" on Linux).
+  // specified, or the target label if not.
   //
   // Because this depends on the tool for this target, the toolchain must
   // have been set before calling.
-  std::string GetComputedOutputName(bool include_prefix) const;
+  std::string GetComputedOutputName() const;
 
+  bool output_prefix_override() const { return output_prefix_override_; }
+  void set_output_prefix_override(bool prefix_override) {
+    output_prefix_override_ = prefix_override;
+  }
+
+  // The output extension is really a tri-state: unset (output_extension_set
+  // is false and the string is empty, meaning the default extension should be
+  // used), the output extension is set but empty (output should have no
+  // extension) and the output extension is set but nonempty (use the given
+  // extension).
   const std::string& output_extension() const { return output_extension_; }
   void set_output_extension(const std::string& extension) {
     output_extension_ = extension;
+    output_extension_set_ = true;
+  }
+  bool output_extension_set() const {
+    return output_extension_set_;
   }
 
   const FileList& sources() const { return sources_; }
@@ -125,6 +141,13 @@ class Target : public Item {
   bool testonly() const { return testonly_; }
   void set_testonly(bool value) { testonly_ = value; }
 
+  OutputFile write_runtime_deps_output() const {
+    return write_runtime_deps_output_;
+  }
+  void set_write_runtime_deps_output(const OutputFile& value) {
+    write_runtime_deps_output_ = value;
+  }
+
   // Compile-time extra dependencies.
   const FileList& inputs() const { return inputs_; }
   FileList& inputs() { return inputs_; }
@@ -135,12 +158,18 @@ class Target : public Item {
   const std::vector<std::string>& data() const { return data_; }
   std::vector<std::string>& data() { return data_; }
 
+  // Information about the bundle. Only valid for CREATE_BUNDLE target after
+  // they have been resolved.
+  const BundleData& bundle_data() const { return bundle_data_; }
+  BundleData& bundle_data() { return bundle_data_; }
+
   // Returns true if targets depending on this one should have an order
   // dependency.
   bool hard_dep() const {
     return output_type_ == ACTION ||
            output_type_ == ACTION_FOREACH ||
-           output_type_ == COPY_FILES;
+           output_type_ == COPY_FILES ||
+           output_type_ == CREATE_BUNDLE;
   }
 
   // Returns the iterator range which can be used in range-based for loops
@@ -283,6 +312,7 @@ class Target : public Item {
   void PullDependentTargetLibsFrom(const Target* dep, bool is_public);
   void PullDependentTargetLibs();
   void PullRecursiveHardDeps();
+  void PullRecursiveBundleData();
 
   // Fills the link and dependency output files when a target is resolved.
   void FillOutputFiles();
@@ -301,7 +331,9 @@ class Target : public Item {
 
   OutputType output_type_;
   std::string output_name_;
+  bool output_prefix_override_;
   std::string output_extension_;
+  bool output_extension_set_;
 
   FileList sources_;
   bool all_headers_public_;
@@ -311,6 +343,8 @@ class Target : public Item {
   bool testonly_;
   FileList inputs_;
   std::vector<std::string> data_;
+  BundleData bundle_data_;
+  OutputFile write_runtime_deps_output_;
 
   LabelTargetVector private_deps_;
   LabelTargetVector public_deps_;

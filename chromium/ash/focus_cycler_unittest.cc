@@ -4,9 +4,10 @@
 
 #include "ash/focus_cycler.h"
 
+#include <memory>
+
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/shell_factory.h"
@@ -94,9 +95,7 @@ class FocusCyclerTest : public AshTestBase {
         Shell::GetPrimaryRootWindowController()->GetContainer(
             ash::kShellWindowId_StatusContainer);
 
-    StatusAreaWidget* widget = new StatusAreaWidget(
-        parent,
-        ShelfLayoutManager::ForShelf(parent->GetRootWindow())->shelf_widget());
+    StatusAreaWidget* widget = new StatusAreaWidget(parent, shelf_widget());
     widget->CreateTrayViews();
     widget->Show();
     tray_.reset(widget->system_tray());
@@ -122,15 +121,15 @@ class FocusCyclerTest : public AshTestBase {
   }
 
  private:
-  scoped_ptr<FocusCycler> focus_cycler_;
-  scoped_ptr<SystemTray> tray_;
+  std::unique_ptr<FocusCycler> focus_cycler_;
+  std::unique_ptr<SystemTray> tray_;
 
   DISALLOW_COPY_AND_ASSIGN(FocusCyclerTest);
 };
 
 TEST_F(FocusCyclerTest, CycleFocusBrowserOnly) {
   // Create a single test window.
-  scoped_ptr<Window> window0(CreateTestWindowInShellWithId(0));
+  std::unique_ptr<Window> window0(CreateTestWindowInShellWithId(0));
   wm::ActivateWindow(window0.get());
   EXPECT_TRUE(wm::IsActiveWindow(window0.get()));
 
@@ -145,7 +144,7 @@ TEST_F(FocusCyclerTest, CycleFocusForward) {
   InstallFocusCycleOnShelf();
 
   // Create a single test window.
-  scoped_ptr<Window> window0(CreateTestWindowInShellWithId(0));
+  std::unique_ptr<Window> window0(CreateTestWindowInShellWithId(0));
   wm::ActivateWindow(window0.get());
   EXPECT_TRUE(wm::IsActiveWindow(window0.get()));
 
@@ -168,7 +167,7 @@ TEST_F(FocusCyclerTest, CycleFocusBackward) {
   InstallFocusCycleOnShelf();
 
   // Create a single test window.
-  scoped_ptr<Window> window0(CreateTestWindowInShellWithId(0));
+  std::unique_ptr<Window> window0(CreateTestWindowInShellWithId(0));
   wm::ActivateWindow(window0.get());
   EXPECT_TRUE(wm::IsActiveWindow(window0.get()));
 
@@ -191,7 +190,7 @@ TEST_F(FocusCyclerTest, CycleFocusForwardBackward) {
   InstallFocusCycleOnShelf();
 
   // Create a single test window.
-  scoped_ptr<Window> window0(CreateTestWindowInShellWithId(0));
+  std::unique_ptr<Window> window0(CreateTestWindowInShellWithId(0));
   wm::ActivateWindow(window0.get());
   EXPECT_TRUE(wm::IsActiveWindow(window0.get()));
 
@@ -256,8 +255,8 @@ TEST_F(FocusCyclerTest, Shelf_CycleFocusForward) {
   shelf_widget()->Hide();
 
   // Create two test windows.
-  scoped_ptr<Window> window0(CreateTestWindowInShellWithId(0));
-  scoped_ptr<Window> window1(CreateTestWindowInShellWithId(1));
+  std::unique_ptr<Window> window0(CreateTestWindowInShellWithId(0));
+  std::unique_ptr<Window> window1(CreateTestWindowInShellWithId(1));
   wm::ActivateWindow(window1.get());
   wm::ActivateWindow(window0.get());
   EXPECT_TRUE(wm::IsActiveWindow(window0.get()));
@@ -281,7 +280,7 @@ TEST_F(FocusCyclerTest, Shelf_CycleFocusBackwardInvisible) {
   shelf_widget()->Hide();
 
   // Create a single test window.
-  scoped_ptr<Window> window0(CreateTestWindowInShellWithId(0));
+  std::unique_ptr<Window> window0(CreateTestWindowInShellWithId(0));
   wm::ActivateWindow(window0.get());
   EXPECT_TRUE(wm::IsActiveWindow(window0.get()));
 
@@ -299,8 +298,8 @@ TEST_F(FocusCyclerTest, CycleFocusThroughWindowWithPanes) {
 
   InstallFocusCycleOnShelf();
 
-  scoped_ptr<PanedWidgetDelegate> test_widget_delegate;
-  scoped_ptr<views::Widget> browser_widget(new views::Widget);
+  std::unique_ptr<PanedWidgetDelegate> test_widget_delegate;
+  std::unique_ptr<views::Widget> browser_widget(new views::Widget);
   test_widget_delegate.reset(new PanedWidgetDelegate(browser_widget.get()));
   views::Widget::InitParams widget_params(
       views::Widget::InitParams::TYPE_WINDOW);
@@ -413,7 +412,7 @@ TEST_F(FocusCyclerTest, RemoveWidgetOnDisplayRemoved) {
   UpdateDisplay("800x800");
 
   // Create a single test window.
-  scoped_ptr<Window> window(CreateTestWindowInShellWithId(0));
+  std::unique_ptr<Window> window(CreateTestWindowInShellWithId(0));
   wm::ActivateWindow(window.get());
   EXPECT_TRUE(wm::IsActiveWindow(window.get()));
 

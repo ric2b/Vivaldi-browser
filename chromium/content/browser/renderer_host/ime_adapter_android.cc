@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/android/jni_android.h"
+#include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/feature_list.h"
@@ -47,7 +48,7 @@ namespace {
 // as a key press of character \r.
 NativeWebKeyboardEvent NativeWebKeyboardEventFromKeyEvent(
     JNIEnv* env,
-    jobject java_key_event,
+    const base::android::JavaRef<jobject>& java_key_event,
     int action,
     int modifiers,
     long time_ms,
@@ -62,8 +63,9 @@ NativeWebKeyboardEvent NativeWebKeyboardEventFromKeyEvent(
     type = blink::WebInputEvent::KeyUp;
   else
     NOTREACHED() << "Invalid Android key event action: " << action;
-  return NativeWebKeyboardEvent(java_key_event, type, modifiers,
-      time_ms / 1000.0, key_code, scan_code, unicode_char, is_system_key);
+  return NativeWebKeyboardEvent(env, java_key_event, type, modifiers,
+                                time_ms / 1000.0, key_code, scan_code,
+                                unicode_char, is_system_key);
 }
 
 }  // anonymous namespace
@@ -264,6 +266,31 @@ void ImeAdapterAndroid::SetEditableSelectionOffsets(
 
   rfh->Send(new FrameMsg_SetEditableSelectionOffsets(rfh->GetRoutingID(),
                                                      start, end));
+}
+
+void ImeAdapterAndroid::SetCharacterBounds(
+    const std::vector<gfx::RectF>& character_bounds) {
+  JNIEnv* env = AttachCurrentThread();
+  base::android::ScopedJavaLocalRef<jobject> obj = java_ime_adapter_.get(env);
+  if (obj.is_null())
+    return;
+
+  const size_t coordinates_array_size = character_bounds.size() * 4;
+  scoped_ptr<float[]> coordinates_array(new float[coordinates_array_size]);
+  for (size_t i = 0; i < character_bounds.size(); ++i) {
+    const gfx::RectF& rect = character_bounds[i];
+    const size_t coordinates_array_index = i * 4;
+    coordinates_array[coordinates_array_index + 0] = rect.x();
+    coordinates_array[coordinates_array_index + 1] = rect.y();
+    coordinates_array[coordinates_array_index + 2] = rect.right();
+    coordinates_array[coordinates_array_index + 3] = rect.bottom();
+  }
+  Java_ImeAdapter_setCharacterBounds(
+      env,
+      obj.obj(),
+      base::android::ToJavaFloatArray(env,
+                                      coordinates_array.get(),
+                                      coordinates_array_size).obj());
 }
 
 void ImeAdapterAndroid::SetComposingRegion(JNIEnv*,

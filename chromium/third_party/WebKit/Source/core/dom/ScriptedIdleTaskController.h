@@ -9,8 +9,6 @@
 #include "core/dom/IdleDeadline.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
-#include "wtf/RefCounted.h"
-#include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 
 namespace blink {
@@ -19,12 +17,12 @@ class ExecutionContext;
 class IdleRequestCallback;
 class IdleRequestOptions;
 
-class ScriptedIdleTaskController : public RefCountedWillBeGarbageCollectedFinalized<ScriptedIdleTaskController>, public ActiveDOMObject {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(ScriptedIdleTaskController);
+class ScriptedIdleTaskController : public GarbageCollectedFinalized<ScriptedIdleTaskController>, public ActiveDOMObject {
+    USING_GARBAGE_COLLECTED_MIXIN(ScriptedIdleTaskController);
 public:
-    static PassRefPtrWillBeRawPtr<ScriptedIdleTaskController> create(ExecutionContext* context)
+    static RawPtr<ScriptedIdleTaskController> create(ExecutionContext* context)
     {
-        return adoptRefWillBeNoop(new ScriptedIdleTaskController(context));
+        return new ScriptedIdleTaskController(context);
     }
     ~ScriptedIdleTaskController();
 
@@ -48,7 +46,7 @@ private:
     void runCallback(CallbackId, double deadlineSeconds, IdleDeadline::CallbackType);
 
     WebScheduler* m_scheduler; // Not owned.
-    PersistentHeapHashMapWillBeHeapHashMap<CallbackId, Member<IdleRequestCallback>> m_callbacks;
+    HeapHashMap<CallbackId, Member<IdleRequestCallback>> m_callbacks;
     Vector<CallbackId> m_pendingTimeouts;
     CallbackId m_nextCallbackId;
     bool m_suspended;

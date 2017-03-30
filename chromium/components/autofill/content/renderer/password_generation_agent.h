@@ -8,12 +8,12 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <utility>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
-#include "base/memory/scoped_ptr.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
 #include "url/gurl.h"
@@ -78,6 +78,7 @@ class PasswordGenerationAgent : public content::RenderFrameObserver {
 
   // RenderFrameObserver:
   void DidFinishDocumentLoad() override;
+  void OnDestruct() override;
 
   // Message handlers.
   void OnFormNotBlacklisted(const PasswordForm& form);
@@ -121,10 +122,15 @@ class PasswordGenerationAgent : public content::RenderFrameObserver {
   std::vector<autofill::PasswordFormGenerationData> generation_enabled_forms_;
 
   // Data for form which generation is allowed on.
-  scoped_ptr<AccountCreationFormData> generation_form_data_;
+  std::unique_ptr<AccountCreationFormData> generation_form_data_;
 
   // Element where we want to trigger password generation UI.
   blink::WebInputElement generation_element_;
+
+  // Password element that had focus last. Since Javascript could change focused
+  // element after the user triggered a generation request, it is better to save
+  // the last focused password element.
+  blink::WebInputElement last_focused_password_element_;
 
   // If the password field at |generation_element_| contains a generated
   // password.

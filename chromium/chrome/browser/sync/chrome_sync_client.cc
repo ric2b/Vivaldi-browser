@@ -12,6 +12,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/dom_distiller/dom_distiller_service_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -19,6 +20,7 @@
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
@@ -419,16 +421,15 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
   }
 }
 
-base::WeakPtr<syncer_v2::ModelTypeService>
-ChromeSyncClient::GetModelTypeServiceForType(syncer::ModelType type) {
+syncer_v2::ModelTypeService* ChromeSyncClient::GetModelTypeServiceForType(
+    syncer::ModelType type) {
   switch (type) {
     case syncer::DEVICE_INFO:
-      // TODO(gangwu): crbug.com/547087: after the bug(crbug.com/570080) fixed,
-      // Return a real service here.
-      return base::WeakPtr<syncer_v2::ModelTypeService>();
+      return ProfileSyncServiceFactory::GetForProfile(profile_)
+          ->GetDeviceInfoService();
     default:
       NOTREACHED();
-      return base::WeakPtr<syncer_v2::ModelTypeService>();
+      return nullptr;
   }
 }
 
@@ -479,6 +480,28 @@ ChromeSyncClient::GetSyncApiComponentFactory() {
 void ChromeSyncClient::SetSyncApiComponentFactoryForTesting(
     scoped_ptr<sync_driver::SyncApiComponentFactory> component_factory) {
   component_factory_ = std::move(component_factory);
+}
+
+// static
+void ChromeSyncClient::GetDeviceInfoTrackers(
+    std::vector<const sync_driver::DeviceInfoTracker*>* trackers) {
+  DCHECK(trackers);
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  std::vector<Profile*> profile_list = profile_manager->GetLoadedProfiles();
+  for (Profile* profile : profile_list) {
+    const ProfileSyncService* profile_sync_service =
+        ProfileSyncServiceFactory::GetForProfile(profile);
+    if (profile_sync_service != nullptr) {
+      const sync_driver::DeviceInfoTracker* tracker =
+          profile_sync_service->GetDeviceInfoTracker();
+      if (tracker != nullptr) {
+        // Even when sync is disabled and/or user is signed out, a tracker will
+        // still be present. It will only be missing when the ProfileSyncService
+        // has not sufficiently initialized yet.
+        trackers->push_back(tracker);
+      }
+    }
+  }
 }
 
 void ChromeSyncClient::RegisterDesktopDataTypes(

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/observer_list.h"
+#include "base/run_loop.h"
 #include "components/mus/public/interfaces/display.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "ui/gfx/display.h"

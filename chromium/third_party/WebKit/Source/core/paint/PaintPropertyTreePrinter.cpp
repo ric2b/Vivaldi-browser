@@ -99,8 +99,12 @@ public:
             printer.addPropertyNode(transform, "Transform");
         if (const TransformPaintPropertyNode* perspective = paintProperties.perspective())
             printer.addPropertyNode(perspective, "Perspective");
+        if (const TransformPaintPropertyNode* svgLocalTransform = paintProperties.svgLocalTransform())
+            printer.addPropertyNode(svgLocalTransform, "SvgLocalTransform");
         if (const TransformPaintPropertyNode* scrollTranslation = paintProperties.scrollTranslation())
             printer.addPropertyNode(scrollTranslation, "ScrollTranslation");
+        if (const TransformPaintPropertyNode* scrollbarPaintOffset = paintProperties.scrollbarPaintOffset())
+            printer.addPropertyNode(scrollbarPaintOffset, "ScrollbarPaintOffset");
     }
 
     static void printNodeAsString(const TransformPaintPropertyNode* node, StringBuilder& stringBuilder)
@@ -135,6 +139,10 @@ public:
 
     static void addObjectPaintProperties(const ObjectPaintProperties& paintProperties, PropertyTreePrinter<ClipPaintPropertyNode>& printer)
     {
+        if (const ClipPaintPropertyNode* cssClip = paintProperties.cssClip())
+            printer.addPropertyNode(cssClip, "CssClip");
+        if (const ClipPaintPropertyNode* cssClipFixedPosition = paintProperties.cssClipFixedPosition())
+            printer.addPropertyNode(cssClipFixedPosition, "CssClipFixedPosition");
         if (const ClipPaintPropertyNode* overflowClip = paintProperties.overflowClip())
             printer.addPropertyNode(overflowClip, "OverflowClip");
     }

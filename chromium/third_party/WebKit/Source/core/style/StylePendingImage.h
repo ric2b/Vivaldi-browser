@@ -41,16 +41,16 @@ namespace blink {
 
 class StylePendingImage final : public StyleImage {
 public:
-    static PassRefPtrWillBeRawPtr<StylePendingImage> create(const CSSValue& value)
+    static StylePendingImage* create(const CSSValue& value)
     {
-        return adoptRefWillBeNoop(new StylePendingImage(value));
+        return new StylePendingImage(value);
     }
 
     WrappedImagePtr data() const override { return m_value.get(); }
 
-    PassRefPtrWillBeRawPtr<CSSValue> cssValue() const override { return m_value; }
+    CSSValue* cssValue() const override { return m_value; }
 
-    PassRefPtrWillBeRawPtr<CSSValue> computedCSSValue() const override
+    CSSValue* computedCSSValue() const override
     {
         ASSERT_NOT_REACHED();
         return nullptr;
@@ -61,18 +61,17 @@ public:
     CSSCursorImageValue* cssCursorImageValue() const { return m_value->isCursorImageValue() ? toCSSCursorImageValue(m_value.get()) : 0; }
     CSSImageSetValue* cssImageSetValue() const { return m_value->isImageSetValue() ? toCSSImageSetValue(m_value.get()) : 0; }
 
-    LayoutSize imageSize(const LayoutObject*, float /*multiplier*/) const override { return LayoutSize(); }
+    LayoutSize imageSize(const LayoutObject&, float /*multiplier*/, const LayoutSize& /*defaultObjectSize*/) const override { return LayoutSize(); }
     bool imageHasRelativeSize() const override { return false; }
-    void computeIntrinsicDimensions(const LayoutObject*, FloatSize& /* intrinsicSize */, FloatSize& /* intrinsicRatio */) override { }
     bool usesImageContainerSize() const override { return false; }
     void addClient(LayoutObject*) override { }
     void removeClient(LayoutObject*) override { }
-    PassRefPtr<Image> image(const LayoutObject*, const IntSize&, float) const override
+    PassRefPtr<Image> image(const LayoutObject&, const IntSize&, float) const override
     {
         ASSERT_NOT_REACHED();
         return nullptr;
     }
-    bool knownToBeOpaque(const LayoutObject*) const override { return false; }
+    bool knownToBeOpaque(const LayoutObject&) const override { return false; }
 
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
@@ -87,9 +86,9 @@ private:
         m_isPendingImage = true;
     }
 
-    // TODO(sashab): Replace this with <const CSSValue> once RefPtrWillBeMember<>
+    // TODO(sashab): Replace this with <const CSSValue> once Member<>
     // supports const types.
-    RefPtrWillBeMember<CSSValue> m_value;
+    Member<CSSValue> m_value;
 };
 
 DEFINE_STYLE_IMAGE_TYPE_CASTS(StylePendingImage, isPendingImage());

@@ -65,9 +65,9 @@ public:
 
     bool isFeatureAllowed() const;
     bool validateOptions(const AtomicString& type, QualifiedName& tagName, ExceptionState&);
-    PassRefPtrWillBeRawPtr<CustomElementLifecycleCallbacks> createCallbacks();
+    RawPtr<CustomElementLifecycleCallbacks> createCallbacks();
     bool createConstructor(Document*, CustomElementDefinition*, ExceptionState&);
-    bool didRegisterDefinition(CustomElementDefinition*) const;
+    bool didRegisterDefinition() const;
 
     // This method collects a return value for the bindings. It is
     // safe to call this method even if the builder failed; it will
@@ -83,7 +83,7 @@ private:
     const ElementRegistrationOptions& m_options;
     v8::Local<v8::Object> m_prototype;
     v8::Local<v8::Function> m_constructor;
-    RefPtrWillBeMember<V8CustomElementLifecycleCallbacks> m_callbacks;
+    Member<V8CustomElementLifecycleCallbacks> m_callbacks;
 };
 
 } // namespace blink

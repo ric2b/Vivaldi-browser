@@ -11,6 +11,19 @@
 
 namespace printing {
 
+namespace {
+
+// When a ClipBox has top < bottom, or right < left, the values should be
+// swapped.
+void SwapClipBoxValuesIfNeeded(ClipBox* clip_box) {
+  if (clip_box->top < clip_box->bottom)
+    std::swap(clip_box->top, clip_box->bottom);
+  if (clip_box->right < clip_box->left)
+    std::swap(clip_box->right, clip_box->left);
+}
+
+}  // namespace
+
 double CalculateScaleFactor(const gfx::Rect& content_rect,
                             double src_width,
                             double src_height,
@@ -42,6 +55,11 @@ void CalculateMediaBoxAndCropBox(bool rotated,
                                  bool has_crop_box,
                                  printing::ClipBox* media_box,
                                  printing::ClipBox* crop_box) {
+  if (has_media_box)
+    SwapClipBoxValuesIfNeeded(media_box);
+  if (has_crop_box)
+    SwapClipBoxValuesIfNeeded(crop_box);
+
   if (!has_media_box && !has_crop_box) {
     SetDefaultClipBox(rotated, crop_box);
     SetDefaultClipBox(rotated, media_box);
@@ -58,13 +76,10 @@ ClipBox CalculateClipBoxBoundary(const ClipBox& media_box,
 
   // Clip |media_box| to the size of |crop_box|, but ignore |crop_box| if it is
   // bigger than |media_box|.
-  clip_box.left =
-      (crop_box.left < media_box.left) ? media_box.left : crop_box.left;
-  clip_box.right =
-      (crop_box.right > media_box.right) ? media_box.right : crop_box.right;
-  clip_box.top = (crop_box.top > media_box.top) ? media_box.top : crop_box.top;
-  clip_box.bottom =
-      (crop_box.bottom < media_box.bottom) ? media_box.bottom : crop_box.bottom;
+  clip_box.left = std::max(crop_box.left, media_box.left);
+  clip_box.right = std::min(crop_box.right, media_box.right);
+  clip_box.top = std::min(crop_box.top, media_box.top);
+  clip_box.bottom = std::max(crop_box.bottom, media_box.bottom);
   return clip_box;
 }
 

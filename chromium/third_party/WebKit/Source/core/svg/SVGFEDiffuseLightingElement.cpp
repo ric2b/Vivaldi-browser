@@ -71,16 +71,16 @@ bool SVGFEDiffuseLightingElement::setFilterEffectAttribute(FilterEffect* effect,
     const SVGFELightElement* lightElement = SVGFELightElement::findLightElement(*this);
     ASSERT(lightSource);
     ASSERT(lightElement);
-    ASSERT(effect->filter());
+    ASSERT(effect->getFilter());
 
     if (attrName == SVGNames::azimuthAttr)
         return lightSource->setAzimuth(lightElement->azimuth()->currentValue()->value());
     if (attrName == SVGNames::elevationAttr)
         return lightSource->setElevation(lightElement->elevation()->currentValue()->value());
     if (attrName == SVGNames::xAttr || attrName == SVGNames::yAttr || attrName == SVGNames::zAttr)
-        return lightSource->setPosition(effect->filter()->resolve3dPoint(lightElement->position()));
+        return lightSource->setPosition(effect->getFilter()->resolve3dPoint(lightElement->position()));
     if (attrName == SVGNames::pointsAtXAttr || attrName == SVGNames::pointsAtYAttr || attrName == SVGNames::pointsAtZAttr)
-        return lightSource->setPointsAt(effect->filter()->resolve3dPoint(lightElement->pointsAt()));
+        return lightSource->setPointsAt(effect->getFilter()->resolve3dPoint(lightElement->pointsAt()));
     if (attrName == SVGNames::specularExponentAttr)
         return lightSource->setSpecularExponent(lightElement->specularExponent()->currentValue()->value());
     if (attrName == SVGNames::limitingConeAngleAttr)
@@ -118,7 +118,7 @@ void SVGFEDiffuseLightingElement::lightElementAttributeChanged(const SVGFELightE
     primitiveAttributeChanged(attrName);
 }
 
-PassRefPtrWillBeRawPtr<FilterEffect> SVGFEDiffuseLightingElement::build(SVGFilterBuilder* filterBuilder, Filter* filter)
+FilterEffect* SVGFEDiffuseLightingElement::build(SVGFilterBuilder* filterBuilder, Filter* filter)
 {
     FilterEffect* input1 = filterBuilder->getEffectById(AtomicString(m_in1->currentValue()->value()));
     ASSERT(input1);
@@ -133,13 +133,13 @@ PassRefPtrWillBeRawPtr<FilterEffect> SVGFEDiffuseLightingElement::build(SVGFilte
     const SVGFELightElement* lightNode = SVGFELightElement::findLightElement(*this);
     RefPtr<LightSource> lightSource = lightNode ? lightNode->lightSource(filter) : nullptr;
 
-    RefPtrWillBeRawPtr<FilterEffect> effect = FEDiffuseLighting::create(filter,
+    FilterEffect* effect = FEDiffuseLighting::create(filter,
         color,
         m_surfaceScale->currentValue()->value(),
         m_diffuseConstant->currentValue()->value(),
         lightSource.release());
     effect->inputEffects().append(input1);
-    return effect.release();
+    return effect;
 }
 
 } // namespace blink

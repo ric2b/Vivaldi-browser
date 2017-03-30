@@ -5,11 +5,15 @@
 #include "core/animation/PropertyInterpolationTypesMapping.h"
 
 #include "core/HTMLNames.h"
+#include "core/animation/CSSBasicShapeInterpolationType.h"
+#include "core/animation/CSSBorderImageLengthBoxInterpolationType.h"
 #include "core/animation/CSSClipInterpolationType.h"
 #include "core/animation/CSSColorInterpolationType.h"
+#include "core/animation/CSSFontSizeInterpolationType.h"
 #include "core/animation/CSSFontWeightInterpolationType.h"
 #include "core/animation/CSSImageInterpolationType.h"
 #include "core/animation/CSSImageListInterpolationType.h"
+#include "core/animation/CSSImageSliceInterpolationType.h"
 #include "core/animation/CSSLengthInterpolationType.h"
 #include "core/animation/CSSLengthListInterpolationType.h"
 #include "core/animation/CSSLengthPairInterpolationType.h"
@@ -19,7 +23,11 @@
 #include "core/animation/CSSPathInterpolationType.h"
 #include "core/animation/CSSPositionAxisListInterpolationType.h"
 #include "core/animation/CSSPositionInterpolationType.h"
+#include "core/animation/CSSRotateInterpolationType.h"
+#include "core/animation/CSSScaleInterpolationType.h"
 #include "core/animation/CSSShadowListInterpolationType.h"
+#include "core/animation/CSSSizeListInterpolationType.h"
+#include "core/animation/CSSTextIndentInterpolationType.h"
 #include "core/animation/CSSTransformOriginInterpolationType.h"
 #include "core/animation/CSSTranslateInterpolationType.h"
 #include "core/animation/CSSValueInterpolationType.h"
@@ -201,6 +209,36 @@ const InterpolationTypes* PropertyInterpolationTypesMapping::get(const PropertyH
         case CSSPropertyTransformOrigin:
             applicableTypes->append(adoptPtr(new CSSTransformOriginInterpolationType(cssProperty)));
             break;
+        case CSSPropertyBackgroundSize:
+        case CSSPropertyWebkitMaskSize:
+            applicableTypes->append(adoptPtr(new CSSSizeListInterpolationType(cssProperty)));
+            break;
+        case CSSPropertyBorderImageOutset:
+        case CSSPropertyBorderImageWidth:
+        case CSSPropertyWebkitMaskBoxImageOutset:
+        case CSSPropertyWebkitMaskBoxImageWidth:
+            applicableTypes->append(adoptPtr(new CSSBorderImageLengthBoxInterpolationType(cssProperty)));
+            break;
+        case CSSPropertyScale:
+            applicableTypes->append(adoptPtr(new CSSScaleInterpolationType(cssProperty)));
+            break;
+        case CSSPropertyFontSize:
+            applicableTypes->append(adoptPtr(new CSSFontSizeInterpolationType(cssProperty)));
+            break;
+        case CSSPropertyTextIndent:
+            applicableTypes->append(adoptPtr(new CSSTextIndentInterpolationType(cssProperty)));
+            break;
+        case CSSPropertyBorderImageSlice:
+        case CSSPropertyWebkitMaskBoxImageSlice:
+            applicableTypes->append(adoptPtr(new CSSImageSliceInterpolationType(cssProperty)));
+            break;
+        case CSSPropertyWebkitClipPath:
+        case CSSPropertyShapeOutside:
+            applicableTypes->append(adoptPtr(new CSSBasicShapeInterpolationType(cssProperty)));
+            break;
+        case CSSPropertyRotate:
+            applicableTypes->append(adoptPtr(new CSSRotateInterpolationType(cssProperty)));
+            break;
         default:
             // TODO(alancutter): Support all interpolable CSS properties here so we can stop falling back to the old StyleInterpolation implementation.
             if (CSSPropertyMetadata::isInterpolableProperty(cssProperty))
@@ -325,11 +363,10 @@ const InterpolationTypes* PropertyInterpolationTypesMapping::get(const PropertyH
             || attribute == SVGNames::yChannelSelectorAttr) {
             // Use default SVGValueInterpolationType.
         } else {
-            fallbackToLegacy = true;
+            ASSERT_NOT_REACHED();
         }
 
-        if (!fallbackToLegacy)
-            applicableTypes->append(adoptPtr(new SVGValueInterpolationType(attribute)));
+        applicableTypes->append(adoptPtr(new SVGValueInterpolationType(attribute)));
     }
 
     auto addResult = applicableTypesMap.add(property, fallbackToLegacy ? nullptr : applicableTypes.release());

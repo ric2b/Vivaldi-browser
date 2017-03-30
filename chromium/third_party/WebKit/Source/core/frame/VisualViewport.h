@@ -32,6 +32,7 @@
 #define VisualViewport_h
 
 #include "core/CoreExport.h"
+#include "core/events/Event.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/IntSize.h"
@@ -52,7 +53,6 @@ namespace blink {
 class FrameHost;
 class GraphicsContext;
 class GraphicsLayer;
-class GraphicsLayerFactory;
 class IntRect;
 class IntSize;
 class LocalFrame;
@@ -62,18 +62,24 @@ class LocalFrame;
 // offset is set through the GraphicsLayer <-> CC sync mechanisms. Its contents is the page's
 // main FrameView, which corresponds to the outer viewport. The inner viewport is always contained
 // in the outer viewport and can pan within it.
-class CORE_EXPORT VisualViewport final : public NoBaseWillBeGarbageCollectedFinalized<VisualViewport>, public GraphicsLayerClient, public ScrollableArea {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(VisualViewport);
+class CORE_EXPORT VisualViewport final
+    : public GarbageCollectedFinalized<VisualViewport>
+    , public GraphicsLayerClient
+    , public ScriptWrappable
+    , public ScrollableArea {
+    USING_GARBAGE_COLLECTED_MIXIN(VisualViewport);
+    DEFINE_WRAPPERTYPEINFO();
 public:
-    static PassOwnPtrWillBeRawPtr<VisualViewport> create(FrameHost& host)
+    static VisualViewport* create(FrameHost& host)
     {
-        return adoptPtrWillBeNoop(new VisualViewport(host));
+        return new VisualViewport(host);
     }
     ~VisualViewport() override;
 
     DECLARE_VIRTUAL_TRACE();
 
-    void attachToLayerTree(GraphicsLayer*, GraphicsLayerFactory*);
+    void attachToLayerTree(GraphicsLayer*);
+
     GraphicsLayer* rootGraphicsLayer()
     {
         return m_rootTransformLayer.get();
@@ -166,10 +172,11 @@ public:
     IntPoint rootFrameToViewport(const IntPoint&) const;
 
     // ScrollableArea implementation
-    HostWindow* hostWindow() const override;
+    HostWindow* getHostWindow() const override;
     DoubleRect visibleContentRectDouble(IncludeScrollbarsInRect = ExcludeScrollbars) const override;
     IntRect visibleContentRect(IncludeScrollbarsInRect = ExcludeScrollbars) const override;
     bool shouldUseIntegerScrollOffset() const override;
+    LayoutRect visualRectForScrollbarParts() const override { ASSERT_NOT_REACHED(); return LayoutRect(); }
     bool isActive() const override { return false; }
     int scrollSize(ScrollbarOrientation) const override;
     bool isScrollCornerVisible() const override { return false; }
@@ -188,13 +195,22 @@ public:
     bool shouldPlaceVerticalScrollbarOnLeft() const override { return false; }
     bool scrollAnimatorEnabled() const override;
     void scrollControlWasSetNeedsPaintInvalidation() override { }
-    void setScrollOffset(const IntPoint&, ScrollType) override;
     void setScrollOffset(const DoublePoint&, ScrollType) override;
     GraphicsLayer* layerForContainer() const override;
     GraphicsLayer* layerForScrolling() const override;
     GraphicsLayer* layerForHorizontalScrollbar() const override;
     GraphicsLayer* layerForVerticalScrollbar() const override;
-    Widget* widget() override;
+    Widget* getWidget() override;
+    CompositorAnimationTimeline* compositorAnimationTimeline() const override;
+
+    // Visual Viewport API implementation.
+    double scrollLeft();
+    double scrollTop();
+    void setScrollLeft(double x);
+    void setScrollTop(double y);
+    double clientWidth();
+    double clientHeight();
+    double pageScale();
 
     // Used for gathering data on user pinch-zoom statistics.
     void userDidChangeScale();
@@ -210,7 +226,12 @@ private:
 
     bool visualViewportSuppliesScrollbars() const;
 
+    void updateLayoutIgnorePendingStylesheets();
+
+    void enqueueChangedEvent();
+
     // GraphicsLayerClient implementation.
+    bool needsRepaint(const GraphicsLayer&) const { ASSERT_NOT_REACHED(); return true; }
     IntRect computeInterestRect(const GraphicsLayer*, const IntRect&) const;
     void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect&) const override;
     String debugName(const GraphicsLayer*) const override;
@@ -226,7 +247,7 @@ private:
         return *m_frameHost;
     }
 
-    RawPtrWillBeMember<FrameHost> m_frameHost;
+    Member<FrameHost> m_frameHost;
     OwnPtr<GraphicsLayer> m_rootTransformLayer;
     OwnPtr<GraphicsLayer> m_innerViewportContainerLayer;
     OwnPtr<GraphicsLayer> m_overscrollElasticityLayer;

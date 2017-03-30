@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/thread_task_runner_handle.h"
@@ -35,35 +35,19 @@
 #include "net/base/net_errors.h"
 #include "net/http/http_content_disposition.h"
 #include "net/http/http_response_headers.h"
+#include "net/url_request/url_request.h"
 
 namespace content {
 
 namespace {
 
-void RecordSnifferMetrics(bool sniffing_blocked,
-                          bool we_would_like_to_sniff,
-                          const std::string& mime_type) {
-  static base::HistogramBase* nosniff_usage(NULL);
-  if (!nosniff_usage)
-    nosniff_usage = base::BooleanHistogram::FactoryGet(
-        "nosniff.usage", base::HistogramBase::kUmaTargetedHistogramFlag);
-  nosniff_usage->AddBoolean(sniffing_blocked);
-
-  if (sniffing_blocked) {
-    static base::HistogramBase* nosniff_otherwise(NULL);
-    if (!nosniff_otherwise)
-      nosniff_otherwise = base::BooleanHistogram::FactoryGet(
-          "nosniff.otherwise", base::HistogramBase::kUmaTargetedHistogramFlag);
-    nosniff_otherwise->AddBoolean(we_would_like_to_sniff);
-
-    static base::HistogramBase* nosniff_empty_mime_type(NULL);
-    if (!nosniff_empty_mime_type)
-      nosniff_empty_mime_type = base::BooleanHistogram::FactoryGet(
-          "nosniff.empty_mime_type",
-          base::HistogramBase::kUmaTargetedHistogramFlag);
-    nosniff_empty_mime_type->AddBoolean(mime_type.empty());
-  }
-}
+const char kAcceptHeader[] = "Accept";
+const char kFrameAcceptHeader[] =
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,"
+    "*/*;q=0.8";
+const char kStylesheetAcceptHeader[] = "text/css,*/*;q=0.1";
+const char kImageAcceptHeader[] = "image/webp,image/*,*/*;q=0.8";
+const char kDefaultAcceptHeader[] = "*/*";
 
 // Used to write into an existing IOBuffer at a given offset.
 class DependentIOBuffer : public net::WrappedIOBuffer {
@@ -82,7 +66,7 @@ class DependentIOBuffer : public net::WrappedIOBuffer {
 }  // namespace
 
 MimeTypeResourceHandler::MimeTypeResourceHandler(
-    scoped_ptr<ResourceHandler> next_handler,
+    std::unique_ptr<ResourceHandler> next_handler,
     ResourceDispatcherHostImpl* host,
     PluginService* plugin_service,
     net::URLRequest* request)
@@ -139,6 +123,46 @@ bool MimeTypeResourceHandler::OnResponseStarted(ResourceResponse* response,
 
   state_ = STATE_PROCESSING;
   return ProcessResponse(defer);
+}
+
+bool MimeTypeResourceHandler::OnWillStart(const GURL& url, bool* defer) {
+  const char* accept_value = nullptr;
+  switch (GetRequestInfo()->GetResourceType()) {
+    case RESOURCE_TYPE_MAIN_FRAME:
+    case RESOURCE_TYPE_SUB_FRAME:
+      accept_value = kFrameAcceptHeader;
+      break;
+    case RESOURCE_TYPE_STYLESHEET:
+      accept_value = kStylesheetAcceptHeader;
+      break;
+    case RESOURCE_TYPE_IMAGE:
+      accept_value = kImageAcceptHeader;
+      break;
+    case RESOURCE_TYPE_SCRIPT:
+    case RESOURCE_TYPE_FONT_RESOURCE:
+    case RESOURCE_TYPE_SUB_RESOURCE:
+    case RESOURCE_TYPE_OBJECT:
+    case RESOURCE_TYPE_MEDIA:
+    case RESOURCE_TYPE_WORKER:
+    case RESOURCE_TYPE_SHARED_WORKER:
+    case RESOURCE_TYPE_PREFETCH:
+    case RESOURCE_TYPE_FAVICON:
+    case RESOURCE_TYPE_XHR:
+    case RESOURCE_TYPE_PING:
+    case RESOURCE_TYPE_SERVICE_WORKER:
+    case RESOURCE_TYPE_CSP_REPORT:
+    case RESOURCE_TYPE_PLUGIN_RESOURCE:
+      accept_value = kDefaultAcceptHeader;
+      break;
+    case RESOURCE_TYPE_LAST_TYPE:
+      NOTREACHED();
+      break;
+  }
+
+  // The false parameter prevents overwriting an existing accept header value,
+  // which is needed because JS can manually set an accept header on an XHR.
+  request()->SetExtraRequestHeaderByName(kAcceptHeader, accept_value, false);
+  return next_handler_->OnWillStart(url, defer);
 }
 
 bool MimeTypeResourceHandler::OnResponseStarted(ResourceResponse* response,
@@ -267,8 +291,6 @@ bool MimeTypeResourceHandler::ShouldSniffContent() {
   bool we_would_like_to_sniff =
       net::ShouldSniffMimeType(request()->url(), mime_type);
 
-  RecordSnifferMetrics(sniffing_blocked, we_would_like_to_sniff, mime_type);
-
   if (!sniffing_blocked && we_would_like_to_sniff) {
     // We're going to look at the data before deciding what the content type
     // is.  That means we need to delay sending the ResponseStarted message
@@ -331,7 +353,7 @@ bool MimeTypeResourceHandler::SelectPluginHandler(bool* defer,
   if (has_plugin)
     plugin_path = plugin.path;
   std::string payload;
-  scoped_ptr<ResourceHandler> handler(host_->MaybeInterceptAsStream(
+  std::unique_ptr<ResourceHandler> handler(host_->MaybeInterceptAsStream(
       plugin_path, request(), response_.get(), &payload));
   if (handler) {
     *handled_by_plugin = true;
@@ -391,7 +413,7 @@ bool MimeTypeResourceHandler::SelectNextHandler(bool* defer) {
 
   // Install download handler
   info->set_is_download(true);
-  scoped_ptr<ResourceHandler> handler(
+  std::unique_ptr<ResourceHandler> handler(
       host_->CreateResourceHandlerForDownload(request(),
                                               true,  // is_content_initiated
                                               must_download));
@@ -399,7 +421,7 @@ bool MimeTypeResourceHandler::SelectNextHandler(bool* defer) {
 }
 
 bool MimeTypeResourceHandler::UseAlternateNextHandler(
-    scoped_ptr<ResourceHandler> new_handler,
+    std::unique_ptr<ResourceHandler> new_handler,
     const std::string& payload_for_old_handler) {
   if (response_->head.headers.get() &&  // Can be NULL if FTP.
       response_->head.headers->response_code() / 100 != 2) {

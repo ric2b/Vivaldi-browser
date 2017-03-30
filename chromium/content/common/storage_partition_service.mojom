@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-module content;
+module content.mojom;
 
 import "content/common/leveldb_wrapper.mojom";
+import "url/mojo/origin.mojom";
 
 // Returns services related to the current storage partition.
 interface StoragePartitionService {
-  OpenLocalStorage(string origin, LevelDBObserver observer,
+  OpenLocalStorage(url.mojom.Origin origin,
+                   LevelDBObserver observer,
                    LevelDBWrapper& database);
 };

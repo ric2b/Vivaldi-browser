@@ -29,11 +29,9 @@ namespace views {
 ////////////////////////////////////////////////////////////////////////////////
 // DialogDelegate:
 
-DialogDelegate::DialogDelegate() : supports_new_style_(true) {
-}
+DialogDelegate::DialogDelegate() : supports_new_style_(true) {}
 
-DialogDelegate::~DialogDelegate() {
-}
+DialogDelegate::~DialogDelegate() {}
 
 // static
 Widget* DialogDelegate::CreateDialogWidget(WidgetDelegate* delegate,
@@ -94,20 +92,12 @@ bool DialogDelegate::GetExtraViewPadding(int* padding) {
   return false;
 }
 
-View* DialogDelegate::CreateTitlebarExtraView() {
-  return NULL;
-}
-
 View* DialogDelegate::CreateFootnoteView() {
   return NULL;
 }
 
 bool DialogDelegate::Cancel() {
   return true;
-}
-
-bool DialogDelegate::Accept(bool window_closing) {
-  return Accept();
 }
 
 bool DialogDelegate::Accept() {
@@ -120,11 +110,13 @@ bool DialogDelegate::Close() {
       (buttons == ui::DIALOG_BUTTON_NONE)) {
     return Cancel();
   }
-  return Accept(true);
+  return Accept();
 }
 
-base::string16 DialogDelegate::GetDialogTitle() const {
-  return GetWindowTitle();
+void DialogDelegate::UpdateButton(LabelButton* button, ui::DialogButton type) {
+  button->SetText(GetDialogButtonLabel(type));
+  button->SetEnabled(IsDialogButtonEnabled(type));
+  button->SetIsDefault(type == GetDefaultDialogButton());
 }
 
 int DialogDelegate::GetDialogButtons() const {
@@ -206,10 +198,8 @@ NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
   border->set_use_theme_background_color(true);
   frame->SetBubbleBorder(std::move(border));
   DialogDelegate* delegate = widget->widget_delegate()->AsDialogDelegate();
-  if (delegate) {
-    frame->SetTitlebarExtraView(
-        make_scoped_ptr(delegate->CreateTitlebarExtraView()));
-  }
+  if (delegate)
+    frame->SetFootnoteView(delegate->CreateFootnoteView());
   return frame;
 }
 
@@ -256,7 +246,7 @@ View* DialogDelegateView::GetContentsView() {
 }
 
 void DialogDelegateView::GetAccessibleState(ui::AXViewState* state) {
-  state->name = GetDialogTitle();
+  state->name = GetWindowTitle();
   state->role = ui::AX_ROLE_DIALOG;
 }
 

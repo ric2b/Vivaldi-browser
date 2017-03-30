@@ -35,7 +35,7 @@ namespace blink {
 
 class CORE_EXPORT PseudoElement : public Element {
 public:
-    static PassRefPtrWillBeRawPtr<PseudoElement> create(Element* parent, PseudoId);
+    static RawPtr<PseudoElement> create(Element* parent, PseudoId);
 
     PassRefPtr<ComputedStyle> customStyleForLayoutObject() override;
     void attach(const AttachContext& = AttachContext()) override;
@@ -68,7 +68,7 @@ inline bool pseudoElementLayoutObjectIsNeeded(const ComputedStyle* style)
         return false;
     if (style->display() == NONE)
         return false;
-    if (style->styleType() == FIRST_LETTER || style->styleType() == BACKDROP)
+    if (style->styleType() == PseudoIdFirstLetter || style->styleType() == PseudoIdBackdrop)
         return true;
     return style->contentData();
 }

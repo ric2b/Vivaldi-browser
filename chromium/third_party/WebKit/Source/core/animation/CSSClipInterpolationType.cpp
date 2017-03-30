@@ -175,7 +175,7 @@ InterpolationValue CSSClipInterpolationType::maybeConvertNeutral(const Interpola
     return createClipValue(neutralBox, 1);
 }
 
-InterpolationValue CSSClipInterpolationType::maybeConvertInitial() const
+InterpolationValue CSSClipInterpolationType::maybeConvertInitial(const StyleResolverState&) const
 {
     return nullptr;
 }
@@ -226,7 +226,7 @@ InterpolationValue CSSClipInterpolationType::maybeConvertUnderlyingValue(const I
     return createClipValue(environment.state().style()->clip(), environment.state().style()->effectiveZoom());
 }
 
-PairwiseInterpolationValue CSSClipInterpolationType::mergeSingleConversions(InterpolationValue& start, InterpolationValue& end) const
+PairwiseInterpolationValue CSSClipInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
 {
     const ClipAutos& startAutos = toCSSClipNonInterpolableValue(*start.nonInterpolableValue).clipAutos();
     const ClipAutos& endAutos = toCSSClipNonInterpolableValue(*end.nonInterpolableValue).clipAutos();
@@ -235,7 +235,7 @@ PairwiseInterpolationValue CSSClipInterpolationType::mergeSingleConversions(Inte
     return PairwiseInterpolationValue(start.interpolableValue.release(), end.interpolableValue.release(), start.nonInterpolableValue.release());
 }
 
-void CSSClipInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value) const
+void CSSClipInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const
 {
     const ClipAutos& underlyingAutos = toCSSClipNonInterpolableValue(*underlyingValueOwner.value().nonInterpolableValue).clipAutos();
     const ClipAutos& autos = toCSSClipNonInterpolableValue(*value.nonInterpolableValue).clipAutos();

@@ -51,6 +51,7 @@ class RendererMediaPlayerInterface {
   virtual void OnConnectedToRemoteDevice(
       const std::string& remote_playback_message) = 0;
   virtual void OnDisconnectedFromRemoteDevice() = 0;
+  virtual void OnCancelledRemotePlaybackRequest() = 0;
   virtual void OnDidExitFullscreen() = 0;
   virtual void OnMediaPlayerPlay() = 0;
   virtual void OnMediaPlayerPause() = 0;
@@ -87,7 +88,8 @@ class RendererMediaPlayerManagerInterface {
                           int demuxer_client_id,
                           const GURL& frame_url,
                           bool allow_credentials,
-                          int delegate_id) = 0;
+                          int delegate_id,
+                          int media_session_id) = 0;
 
   // Starts the player.
   virtual void Start(int player_id) = 0;

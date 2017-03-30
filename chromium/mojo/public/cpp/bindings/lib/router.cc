@@ -8,9 +8,12 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/thread_task_runner_handle.h"
 
 namespace mojo {
 namespace internal {
@@ -19,25 +22,38 @@ namespace internal {
 
 namespace {
 
+void DCheckIfInvalid(const base::WeakPtr<Router>& router,
+                   const std::string& message) {
+  bool is_valid = router && !router->encountered_error() && router->is_valid();
+  DCHECK(!is_valid) << message;
+}
+
 class ResponderThunk : public MessageReceiverWithStatus {
  public:
   explicit ResponderThunk(const base::WeakPtr<Router>& router)
-      : router_(router), accept_was_invoked_(false) {}
+      : router_(router), accept_was_invoked_(false),
+        task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
   ~ResponderThunk() override {
     if (!accept_was_invoked_) {
       // The Mojo application handled a message that was expecting a response
       // but did not send a response.
-      if (router_) {
-        // We raise an error to signal the calling application that an error
-        // condition occurred. Without this the calling application would have
-        // no way of knowing it should stop waiting for a response.
-        router_->RaiseError();
+      if (task_runner_->RunsTasksOnCurrentThread()) {
+        if (router_) {
+          // We raise an error to signal the calling application that an error
+          // condition occurred. Without this the calling application would have
+          // no way of knowing it should stop waiting for a response.
+          router_->RaiseError();
+        }
+      } else {
+        task_runner_->PostTask(FROM_HERE,
+                               base::Bind(&Router::RaiseError, router_));
       }
     }
   }
 
   // MessageReceiver implementation:
   bool Accept(Message* message) override {
+    DCHECK(task_runner_->RunsTasksOnCurrentThread());
     accept_was_invoked_ = true;
     DCHECK(message->has_flag(kMessageIsResponse));
 
@@ -51,12 +67,23 @@ class ResponderThunk : public MessageReceiverWithStatus {
 
   // MessageReceiverWithStatus implementation:
   bool IsValid() override {
+    DCHECK(task_runner_->RunsTasksOnCurrentThread());
     return router_ && !router_->encountered_error() && router_->is_valid();
+  }
+
+  void DCheckInvalid(const std::string& message) override {
+    if (task_runner_->RunsTasksOnCurrentThread()) {
+      DCheckIfInvalid(router_, message);
+    } else {
+      task_runner_->PostTask(FROM_HERE,
+                             base::Bind(&DCheckIfInvalid, router_, message));
+    }
   }
 
  private:
   base::WeakPtr<Router> router_;
   bool accept_was_invoked_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 };
 
 }  // namespace
@@ -85,22 +112,21 @@ bool Router::HandleIncomingMessageThunk::Accept(Message* message) {
 
 Router::Router(ScopedMessagePipeHandle message_pipe,
                FilterChain filters,
-               bool expects_sync_requests,
-               const MojoAsyncWaiter* waiter)
+               bool expects_sync_requests)
     : thunk_(this),
       filters_(std::move(filters)),
-      connector_(std::move(message_pipe),
-                 Connector::SINGLE_THREADED_SEND,
-                 waiter),
+      connector_(std::move(message_pipe), Connector::SINGLE_THREADED_SEND),
       incoming_receiver_(nullptr),
       next_request_id_(0),
       testing_mode_(false),
       pending_task_for_messages_(false),
+      encountered_error_(false),
       weak_factory_(this) {
   filters_.SetSink(&thunk_);
   if (expects_sync_requests)
-    connector_.RegisterSyncHandleWatch();
+    connector_.AllowWokenUpBySyncWatchOnSameThread();
   connector_.set_incoming_receiver(filters_.GetHead());
+  connector_.set_connection_error_handler([this]() { OnConnectionError(); });
 }
 
 Router::~Router() {}
@@ -130,28 +156,23 @@ bool Router::AcceptWithResponder(Message* message, MessageReceiver* responder) {
     return true;
   }
 
-  if (!connector_.RegisterSyncHandleWatch())
-    return false;
-
   bool response_received = false;
   scoped_ptr<MessageReceiver> sync_responder(responder);
   sync_responses_.insert(std::make_pair(
       request_id, make_scoped_ptr(new SyncResponseInfo(&response_received))));
 
   base::WeakPtr<Router> weak_self = weak_factory_.GetWeakPtr();
-  bool result = connector_.RunSyncHandleWatch(&response_received);
+  connector_.SyncWatch(&response_received);
   // Make sure that this instance hasn't been destroyed.
   if (weak_self) {
     DCHECK(ContainsKey(sync_responses_, request_id));
     auto iter = sync_responses_.find(request_id);
     DCHECK_EQ(&response_received, iter->second->response_received);
-    if (result && response_received) {
+    if (response_received) {
       scoped_ptr<Message> response = std::move(iter->second->response);
       ignore_result(sync_responder->Accept(response.get()));
     }
     sync_responses_.erase(iter);
-
-    connector_.UnregisterSyncHandleWatch();
   }
 
   // Return true means that we take ownership of |responder|.
@@ -208,6 +229,12 @@ void Router::HandleQueuedMessages() {
   }
 
   pending_task_for_messages_ = false;
+
+  // We may have already seen a connection error from the connector, but
+  // haven't notified the user because we want to process all the queued
+  // messages first. We should do it now.
+  if (connector_.encountered_error() && !encountered_error_)
+    OnConnectionError();
 }
 
 bool Router::HandleMessageInternal(Message* message) {
@@ -251,6 +278,30 @@ bool Router::HandleMessageInternal(Message* message) {
 
     return incoming_receiver_->Accept(message);
   }
+}
+
+void Router::OnConnectionError() {
+  if (encountered_error_)
+    return;
+
+  if (!pending_messages_.empty()) {
+    // After all the pending messages are processed, we will check whether an
+    // error has been encountered and run the user's connection error handler
+    // if necessary.
+    DCHECK(pending_task_for_messages_);
+    return;
+  }
+
+  if (connector_.during_sync_handle_watcher_callback()) {
+    // We don't want the error handler to reenter an ongoing sync call.
+    base::MessageLoop::current()->PostTask(
+        FROM_HERE,
+        base::Bind(&Router::OnConnectionError, weak_factory_.GetWeakPtr()));
+    return;
+  }
+
+  encountered_error_ = true;
+  error_handler_.Run();
 }
 
 // ----------------------------------------------------------------------------

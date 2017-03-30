@@ -56,7 +56,7 @@ typedef RequestOrUSVString RequestInfo;
 class MODULES_EXPORT ServiceWorkerGlobalScope final : public WorkerGlobalScope {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static PassRefPtrWillBeRawPtr<ServiceWorkerGlobalScope> create(ServiceWorkerThread*, PassOwnPtr<WorkerThreadStartupData>);
+    static ServiceWorkerGlobalScope* create(ServiceWorkerThread*, PassOwnPtr<WorkerThreadStartupData>);
 
     ~ServiceWorkerGlobalScope() override;
     bool isServiceWorkerGlobalScope() const override { return true; }
@@ -74,12 +74,12 @@ public:
 
     ScriptPromise skipWaiting(ScriptState*);
 
-    void setRegistration(WebPassOwnPtr<WebServiceWorkerRegistration::Handle>);
+    void setRegistration(std::unique_ptr<WebServiceWorkerRegistration::Handle>);
 
     // EventTarget
     const AtomicString& interfaceName() const override;
 
-    void dispatchExtendableEvent(PassRefPtrWillBeRawPtr<Event>, WaitUntilObserver*);
+    void dispatchExtendableEvent(Event*, WaitUntilObserver*);
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(install);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(activate);
@@ -91,18 +91,18 @@ public:
 
 protected:
     // EventTarget
-    DispatchEventResult dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) override;
-    bool addEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, const EventListenerOptions&) override;
+    DispatchEventResult dispatchEventInternal(Event*) override;
+    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) override;
 
 private:
-    ServiceWorkerGlobalScope(const KURL&, const String& userAgent, ServiceWorkerThread*, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData>, PassOwnPtrWillBeRawPtr<WorkerClients>);
+    ServiceWorkerGlobalScope(const KURL&, const String& userAgent, ServiceWorkerThread*, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData>, WorkerClients*);
     void importScripts(const Vector<String>& urls, ExceptionState&) override;
-    PassOwnPtrWillBeRawPtr<CachedMetadataHandler> createWorkerScriptCachedMetadataHandler(const KURL& scriptURL, const Vector<char>* metaData) override;
+    CachedMetadataHandler* createWorkerScriptCachedMetadataHandler(const KURL& scriptURL, const Vector<char>* metaData) override;
     void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) override;
     void scriptLoaded(size_t scriptSize, size_t cachedMetadataSize) override;
 
-    PersistentWillBeMember<ServiceWorkerClients> m_clients;
-    PersistentWillBeMember<ServiceWorkerRegistration> m_registration;
+    Member<ServiceWorkerClients> m_clients;
+    Member<ServiceWorkerRegistration> m_registration;
     bool m_didEvaluateScript;
     bool m_hadErrorInTopLevelEventHandler;
     unsigned m_eventNestingLevel;

@@ -18,8 +18,10 @@
 #include "base/timer/timer.h"
 #include "content/common/content_export.h"
 #include "content/common/gpu/media/avda_state_provider.h"
+#include "content/common/gpu/media/gpu_video_decode_accelerator_helpers.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
-#include "media/base/android/media_drm_bridge.h"
+#include "gpu/command_buffer/service/gpu_preferences.h"
+#include "media/base/android/media_drm_bridge_cdm_context.h"
 #include "media/base/android/sdk_media_codec_bridge.h"
 #include "media/base/media_keys.h"
 #include "media/video/video_decode_accelerator.h"
@@ -40,7 +42,7 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
     : public media::VideoDecodeAccelerator,
       public AVDAStateProvider {
  public:
-  typedef std::map<int32_t, media::PictureBuffer> OutputBufferMap;
+  using OutputBufferMap = std::map<int32_t, media::PictureBuffer>;
 
   // A BackingStrategy is responsible for making a PictureBuffer's texture
   // contain the image that a MediaCodec decoder buffer tells it to.
@@ -66,6 +68,9 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
     // Return the GL texture target that the PictureBuffer textures use.
     virtual uint32_t GetTextureTarget() const = 0;
 
+    // Return the size to use when requesting picture buffers.
+    virtual gfx::Size GetPictureBufferSize() const = 0;
+
     // Make the provided PictureBuffer draw the image that is represented by
     // the decoded output buffer at codec_buffer_index.
     virtual void UseCodecBufferForPictureBuffer(
@@ -74,23 +79,24 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
 
     // Notify strategy that a picture buffer has been assigned.
     virtual void AssignOnePictureBuffer(
-        const media::PictureBuffer& picture_buffer) {}
+        const media::PictureBuffer& picture_buffer,
+        bool have_context) {}
 
     // Notify strategy that a picture buffer has been reused.
     virtual void ReuseOnePictureBuffer(
         const media::PictureBuffer& picture_buffer) {}
 
-    // Notify strategy that we are about to dismiss a picture buffer.
-    virtual void DismissOnePictureBuffer(
-        const media::PictureBuffer& picture_buffer) {}
+    // Release MediaCodec buffers.
+    virtual void ReleaseCodecBuffers(
+        const AndroidVideoDecodeAccelerator::OutputBufferMap& buffers) {}
+
+    // Attempts to free up codec output buffers by rendering early.
+    virtual void MaybeRenderEarly() {}
 
     // Notify strategy that we have a new android MediaCodec instance.  This
     // happens when we're starting up or re-configuring mid-stream.  Any
     // previously provided codec should no longer be referenced.
-    // For convenience, a container of PictureBuffers is provided in case
-    // per-image cleanup is needed.
-    virtual void CodecChanged(media::VideoCodecBridge* codec,
-                              const OutputBufferMap& buffer_map) = 0;
+    virtual void CodecChanged(media::VideoCodecBridge* codec) = 0;
 
     // Notify the strategy that a frame is available.  This callback can happen
     // on any thread at any time.
@@ -98,11 +104,19 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
 
     // Whether the pictures produced by this backing strategy are overlayable.
     virtual bool ArePicturesOverlayable() = 0;
+
+    // Size may have changed due to resolution change since the last time this
+    // PictureBuffer was used. Update the size of the picture buffer to
+    // |new_size| and also update any size-dependent state (e.g. size of
+    // associated texture). Callers should set the correct GL context prior to
+    // calling.
+    virtual void UpdatePictureBufferSize(media::PictureBuffer* picture_buffer,
+                                         const gfx::Size& new_size) = 0;
   };
 
   AndroidVideoDecodeAccelerator(
-      const base::WeakPtr<gpu::gles2::GLES2Decoder> decoder,
-      const base::Callback<bool(void)>& make_context_current);
+      const MakeGLContextCurrentCallback& make_context_current_cb,
+      const GetGLES2DecoderCallback& get_gles2_decoder_cb);
 
   ~AndroidVideoDecodeAccelerator() override;
 
@@ -116,16 +130,22 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   void Flush() override;
   void Reset() override;
   void Destroy() override;
-  bool CanDecodeOnIOThread() override;
+  bool TryToSetupDecodeOnSeparateThread(
+      const base::WeakPtr<Client>& decode_client,
+      const scoped_refptr<base::SingleThreadTaskRunner>& decode_task_runner)
+      override;
 
   // AVDAStateProvider implementation:
   const gfx::Size& GetSize() const override;
   const base::ThreadChecker& ThreadChecker() const override;
   base::WeakPtr<gpu::gles2::GLES2Decoder> GetGlDecoder() const override;
+  gpu::gles2::TextureRef* GetTextureForPicture(
+      const media::PictureBuffer& picture_buffer) override;
   void PostError(const ::tracked_objects::Location& from_here,
                  media::VideoDecodeAccelerator::Error error) override;
 
-  static media::VideoDecodeAccelerator::Capabilities GetCapabilities();
+  static media::VideoDecodeAccelerator::Capabilities GetCapabilities(
+      const gpu::GpuPreferences& gpu_preferences);
 
   // Notifies about SurfaceTexture::OnFrameAvailable.  This can happen on any
   // thread at any time!
@@ -138,12 +158,79 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   enum State {
     NO_ERROR,
     ERROR,
+    // Set when we are asynchronously constructing the codec.  Will transition
+    // to NO_ERROR or ERROR depending on success.
+    WAITING_FOR_CODEC,
+    // Set when we have a codec, but it doesn't yet have a key.
     WAITING_FOR_KEY,
-    WAITING_FOR_EOS,
   };
 
+  enum DrainType {
+    DRAIN_TYPE_NONE,
+    DRAIN_FOR_FLUSH,
+    DRAIN_FOR_RESET,
+    DRAIN_FOR_DESTROY,
+  };
+
+  // Configuration info for MediaCodec.
+  // This is used to shuttle configuration info between threads without needing
+  // to worry about the lifetime of the AVDA instance.  All of these should not
+  // be modified while |state_| is WAITING_FOR_CODEC.
+  class CodecConfig : public base::RefCountedThreadSafe<CodecConfig> {
+   public:
+    CodecConfig();
+
+    // Codec type. Used when we configure media codec.
+    media::VideoCodec codec_ = media::kUnknownVideoCodec;
+
+    // Whether encryption scheme requires to use protected surface.
+    bool needs_protected_surface_ = false;
+
+    // The surface that MediaCodec is configured to output to. It's created by
+    // the backing strategy.
+    gfx::ScopedJavaSurface surface_;
+
+    // The MediaCrypto object is used in the MediaCodec.configure() in case of
+    // an encrypted stream.
+    media::MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto_;
+
+    // Initial coded size.  The actual size might change at any time, so this
+    // is only a hint.
+    gfx::Size initial_expected_coded_size_;
+
+   protected:
+    friend class base::RefCountedThreadSafe<CodecConfig>;
+    virtual ~CodecConfig();
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(CodecConfig);
+  };
+
+  // A part of destruction process that is sometimes postponed after the drain.
+  void ActualDestroy();
+
   // Configures |media_codec_| with the given codec parameters from the client.
-  bool ConfigureMediaCodec();
+  // This configuration will (probably) not be complete before this call
+  // returns.  Multiple calls before completion will be ignored.  |state_|
+  // must be NO_ERROR or WAITING_FOR_CODEC.  Note that, once you call this,
+  // you should be careful to avoid modifying members of |codec_config_| until
+  // |state_| is no longer WAITING_FOR_CODEC.
+  void ConfigureMediaCodecAsynchronously();
+
+  // Like ConfigureMediaCodecAsynchronously, but synchronous.  Returns true if
+  // and only if |media_codec_| is non-null.  Since all configuration is done
+  // synchronously, there is no concern with modifying |codec_config_| after
+  // this returns.
+  bool ConfigureMediaCodecSynchronously();
+
+  // Instantiate a media codec using |codec_config|.
+  // This may be called on any thread.
+  static scoped_ptr<media::VideoCodecBridge> ConfigureMediaCodecOnAnyThread(
+      scoped_refptr<CodecConfig> codec_config);
+
+  // Called on the main thread to update |media_codec_| and complete codec
+  // configuration.  |media_codec| will be null if configuration failed.
+  void OnCodecConfigured(scoped_ptr<media::VideoCodecBridge> media_codec);
 
   // Sends the decoded frame specified by |codec_buffer_index| to the client.
   void SendDecodedFrameToClient(int32_t codec_buffer_index,
@@ -172,14 +259,15 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   void DecodeBuffer(const media::BitstreamBuffer& bitstream_buffer);
 
   // This callback is called after CDM obtained a MediaCrypto object.
-  void OnMediaCryptoReady(media::MediaDrmBridge::JavaObjectPtr media_crypto,
-                          bool needs_protected_surface);
+  void OnMediaCryptoReady(
+      media::MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto,
+      bool needs_protected_surface);
 
   // This callback is called when a new key is added to CDM.
   void OnKeyAdded();
 
-  // Notifies the client of the CDM setting result.
-  void NotifyCdmAttached(bool success);
+  // Notifies the client of the result of deferred initialization.
+  void NotifyInitializationComplete(bool success);
 
   // Notifies the client about the availability of a picture.
   void NotifyPictureReady(const media::Picture& picture);
@@ -207,18 +295,31 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   // start the timer.  Calling it with false may stop the timer.
   void ManageTimer(bool did_work);
 
+  // Start the MediaCodec drain process by adding end_of_stream() buffer to the
+  // encoded buffers queue. When we receive EOS from the output buffer the drain
+  // process completes and we perform the action depending on the |drain_type|.
+  void StartCodecDrain(DrainType drain_type);
+
+  // Returns true if we are currently draining the codec and doing that as part
+  // of Reset() or Destroy() VP8 workaround. (http://crbug.com/598963). We won't
+  // display any frames and disable normal errors handling.
+  bool IsDrainingForResetOrDestroy() const;
+
+  // A helper method that performs the operation required after the drain
+  // completion (usually when we receive EOS in the output). The operation
+  // itself depends on the |drain_type_|.
+  void OnDrainCompleted();
+
   // Resets MediaCodec and buffers/containers used for storing output. These
   // components need to be reset upon EOS to decode a later stream. Input state
   // (e.g. queued BitstreamBuffers) is not reset, as input following an EOS
-  // is still valid and should be processed.
-  void ResetCodecState();
-
-  // Dismiss all |output_picture_buffers_| in preparation for requesting new
-  // ones.
-  void DismissPictureBuffers();
+  // is still valid and should be processed. Upon competion calls |done_cb| that
+  // can be a null callback.
+  void ResetCodecState(const base::Closure& done_cb);
 
   // Return true if and only if we should use deferred rendering.
-  static bool UseDeferredRenderingStrategy();
+  static bool UseDeferredRenderingStrategy(
+      const gpu::GpuPreferences& gpu_preferences);
 
   // Used to DCHECK that we are called on the correct thread.
   base::ThreadChecker thread_checker_;
@@ -227,16 +328,13 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   Client* client_;
 
   // Callback to set the correct gl context.
-  base::Callback<bool(void)> make_context_current_;
+  MakeGLContextCurrentCallback make_context_current_cb_;
 
-  // Codec type. Used when we configure media codec.
-  media::VideoCodec codec_;
+  // Callback to get the GLES2Decoder instance.
+  GetGLES2DecoderCallback get_gles2_decoder_cb_;
 
   // Whether the stream is encrypted.
   bool is_encrypted_;
-
-  // Whether encryption scheme requires to use protected surface.
-  bool needs_protected_surface_;
 
   // The current state of this class. For now, this is used only for setting
   // error state.
@@ -250,17 +348,8 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   // decoded frames to the client.
   std::queue<int32_t> free_picture_ids_;
 
-  // Picture buffer ids which have been dismissed and not yet re-assigned.  Used
-  // to ignore ReusePictureBuffer calls that were in flight when the
-  // DismissPictureBuffer call was made.
-  std::set<int32_t> dismissed_picture_ids_;
-
   // The low-level decoder which Android SDK provides.
   scoped_ptr<media::VideoCodecBridge> media_codec_;
-
-  // The surface that MediaCodec is configured to output to. It's created by the
-  // backing strategy.
-  gfx::ScopedJavaSurface surface_;
 
   // Set to true after requesting picture buffers to the client.
   bool picturebuffers_requested_;
@@ -269,11 +358,8 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   gfx::Size size_;
 
   // Encoded bitstream buffers to be passed to media codec, queued until an
-  // input buffer is available, along with the time when they were first
-  // enqueued.
-  typedef std::queue<std::pair<media::BitstreamBuffer, base::Time> >
-      PendingBitstreamBuffers;
-  PendingBitstreamBuffers pending_bitstream_buffers_;
+  // input buffer is available.
+  std::queue<media::BitstreamBuffer> pending_bitstream_buffers_;
 
   // A map of presentation timestamp to bitstream buffer id for the bitstream
   // buffers that have been submitted to the decoder but haven't yet produced an
@@ -285,9 +371,6 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   // NotifyEndOfBitstreamBuffer() before getting output from the bitstream.
   std::list<int32_t> bitstreams_notified_in_advance_;
 
-  // Owner of the GL context. Used to restore the context state.
-  base::WeakPtr<gpu::gles2::GLES2Decoder> gl_decoder_;
-
   // Backing strategy that we'll use to connect PictureBuffers to frames.
   scoped_ptr<BackingStrategy> strategy_;
 
@@ -298,18 +381,24 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
   // Time at which we last did useful work on io_timer_.
   base::TimeTicks most_recent_work_;
 
+  // Type of a drain request. We need to distinguish between DRAIN_FOR_FLUSH
+  // and other types, see IsDrainingForResetOrDestroy().
+  DrainType drain_type_;
+
   // CDM related stuff.
 
-  // Holds a ref-count to the CDM.
-  scoped_refptr<media::MediaKeys> cdm_;
+  // Holds a ref-count to the CDM to avoid using the CDM after it's destroyed.
+  scoped_refptr<media::MediaKeys> cdm_for_reference_holding_only_;
+
+  media::MediaDrmBridgeCdmContext* media_drm_bridge_cdm_context_;
 
   // MediaDrmBridge requires registration/unregistration of the player, this
   // registration id is used for this.
   int cdm_registration_id_;
 
-  // The MediaCrypto object is used in the MediaCodec.configure() in case of
-  // an encrypted stream.
-  media::MediaDrmBridge::JavaObjectPtr media_crypto_;
+  // Configuration that we use for MediaCodec.
+  // Do not update any of its members while |state_| is WAITING_FOR_CODEC.
+  scoped_refptr<CodecConfig> codec_config_;
 
   // Index of the dequeued and filled buffer that we keep trying to enqueue.
   // Such buffer appears in MEDIA_CODEC_NO_KEY processing.
@@ -321,6 +410,10 @@ class CONTENT_EXPORT AndroidVideoDecodeAccelerator
 
   // PostError will defer sending an error if and only if this is true.
   bool defer_errors_;
+
+  // True if and only if VDA initialization is deferred, and we have not yet
+  // called NotifyInitializationComplete.
+  bool deferred_initialization_pending_;
 
   // WeakPtrFactory for posting tasks back to |this|.
   base::WeakPtrFactory<AndroidVideoDecodeAccelerator> weak_this_factory_;

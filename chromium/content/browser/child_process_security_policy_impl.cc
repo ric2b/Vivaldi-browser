@@ -13,7 +13,6 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
-#include "content/browser/plugin_process_host.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/public/browser/child_process_data.h"
@@ -609,7 +608,7 @@ bool ChildProcessSecurityPolicyImpl::CanRequestURL(
     if (base::LowerCaseEqualsASCII(url.spec(), url::kAboutBlankURL))
       return true;  // Every child process can request <about:blank>.
 
-    // URLs like <about:memory> and <about:crash> shouldn't be requestable by
+    // URLs like <about:version> and <about:crash> shouldn't be requestable by
     // any child process.  Also, this case covers <javascript:...>, which should
     // be handled internally by the process and not kicked up to the browser.
     return false;
@@ -825,8 +824,11 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(int child_id,
                                                             const GURL& gurl) {
   base::AutoLock lock(lock_);
   SecurityStateMap::iterator state = security_state_.find(child_id);
-  if (state == security_state_.end())
-    return false;
+  if (state == security_state_.end()) {
+    // TODO(nick): Returning true instead of false here is a temporary
+    // workaround for https://crbug.com/600441
+    return true;
+  }
   return state->second->CanAccessDataForOrigin(gurl);
 }
 

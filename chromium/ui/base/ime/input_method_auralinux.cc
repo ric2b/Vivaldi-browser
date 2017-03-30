@@ -65,6 +65,20 @@ void InputMethodAuraLinux::DispatchKeyEvent(ui::KeyEvent* event) {
     return;
   }
 
+  if (!event->HasNativeEvent() && sending_key_event_) {
+    // Faked key events that are sent from input.ime.sendKeyEvents.
+    ui::EventDispatchDetails details = DispatchKeyEventPostIME(event);
+    if (details.dispatcher_destroyed || details.target_destroyed ||
+        event->stopped_propagation()) {
+      return;
+    }
+    if ((event->is_char() || event->GetDomKey().IsCharacter()) &&
+        event->type() == ui::ET_KEY_PRESSED) {
+      GetTextInputClient()->InsertChar(*event);
+    }
+    return;
+  }
+
   suppress_next_result_ = false;
   composition_changed_ = false;
   result_text_.clear();
@@ -90,14 +104,29 @@ void InputMethodAuraLinux::DispatchKeyEvent(ui::KeyEvent* event) {
   if (text_input_type_ != TEXT_INPUT_TYPE_PASSWORD &&
       GetEngine() && GetEngine()->IsInterestedInKeyEvent() &&
       (!filtered || NeedInsertChar())) {
-    ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback =
-        base::Bind(&InputMethodAuraLinux::ProcessKeyEventDone,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   base::Owned(new ui::KeyEvent(*event)), filtered);
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback = base::Bind(
+        &InputMethodAuraLinux::ProcessKeyEventByEngineDone,
+        weak_ptr_factory_.GetWeakPtr(), base::Owned(new ui::KeyEvent(*event)),
+        filtered, composition_changed_,
+        base::Owned(new ui::CompositionText(composition_)),
+        base::Owned(new base::string16(result_text_)));
     GetEngine()->ProcessKeyEvent(*event, callback);
   } else {
     ProcessKeyEventDone(event, filtered, false);
   }
+}
+
+void InputMethodAuraLinux::ProcessKeyEventByEngineDone(
+    ui::KeyEvent* event,
+    bool filtered,
+    bool composition_changed,
+    ui::CompositionText* composition,
+    base::string16* result_text,
+    bool is_handled) {
+  composition_changed_ = composition_changed;
+  composition_.CopyFrom(*composition);
+  result_text_ = *result_text;
+  ProcessKeyEventDone(event, filtered, is_handled);
 }
 
 void InputMethodAuraLinux::ProcessKeyEventDone(ui::KeyEvent* event,
@@ -259,6 +288,10 @@ void InputMethodAuraLinux::OnCaretBoundsChanged(const TextInputClient* client) {
 void InputMethodAuraLinux::CancelComposition(const TextInputClient* client) {
   if (!IsTextInputClientFocused(client))
     return;
+
+  if (GetEngine())
+    GetEngine()->Reset();
+
   ResetContext();
 }
 

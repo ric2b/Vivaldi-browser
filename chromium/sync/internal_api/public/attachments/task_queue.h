@@ -6,7 +6,9 @@
 #define SYNC_INTERNAL_API_PUBLIC_ATTACHMENTS_TASK_QUEUE_H_
 
 #include <stddef.h>
+
 #include <deque>
+#include <memory>
 #include <set>
 #include <utility>
 
@@ -133,7 +135,7 @@ class TaskQueue : base::NonThreadSafe {
   // Use |timer| for scheduled events.
   //
   // Used in tests.  See also MockTimer.
-  void SetTimerForTest(scoped_ptr<base::Timer> timer);
+  void SetTimerForTest(std::unique_ptr<base::Timer> timer);
 
  private:
   void FinishTask(const T& task);
@@ -144,14 +146,14 @@ class TaskQueue : base::NonThreadSafe {
 
   const HandleTaskCallback process_callback_;
   net::BackoffEntry::Policy backoff_policy_;
-  scoped_ptr<net::BackoffEntry> backoff_entry_;
+  std::unique_ptr<net::BackoffEntry> backoff_entry_;
   // The number of tasks currently being handled.
   int num_in_progress_;
   std::deque<T> queue_;
   // The set of tasks in queue_ or currently being handled.
   std::set<T> tasks_;
   base::Closure dispatch_closure_;
-  scoped_ptr<base::Timer> backoff_timer_;
+  std::unique_ptr<base::Timer> backoff_timer_;
   base::TimeDelta delay_;
 
   // Must be last data member.
@@ -232,7 +234,7 @@ void TaskQueue<T>::ResetBackoff() {
 }
 
 template <typename T>
-void TaskQueue<T>::SetTimerForTest(scoped_ptr<base::Timer> timer) {
+void TaskQueue<T>::SetTimerForTest(std::unique_ptr<base::Timer> timer) {
   DCHECK(CalledOnValidThread());
   DCHECK(timer.get());
   backoff_timer_ = std::move(timer);

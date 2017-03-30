@@ -269,7 +269,7 @@
         "name": "sendKeyEvents",
         "type": "function",
         "description": "Sends the key events.  This function is expected to be used by virtual keyboards.  When key(s) on a virtual keyboard is pressed by a user, this function is used to propagate that event to the system.",
-        "platforms": ["chromeos"],
+        "platforms": ["chromeos", "win", "linux"],
         "parameters": [
           {
             "name": "parameters",
@@ -593,9 +593,49 @@
                 "name": "windowObject",
                 "type": "object",
                 "isInstanceOf": "Window",
-                "description": "The JavaScript 'window' object of the newly created IME window."
+                "description": "The JavaScript 'window' object of the newly created IME window. It contains the additional 'id' property for the parameters of the other functions like showWindow/hideWindow."
               }
             ]
+           }
+         ]
+      },
+      {
+        "name": "showWindow",
+        "type": "function",
+        "description": "Shows the IME window. This makes the hidden window visible.",
+        "platforms": ["win", "linux"],
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "The ID of the IME window."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "description": "Called when the operation completes.",
+            "parameters": []
+           }
+         ]
+      },
+      {
+        "name": "hideWindow",
+        "type": "function",
+        "description": "Hides the IME window. This doesn't close the window. Instead, it makes the window invisible. The extension can cache the window and show/hide it for better performance.",
+        "platforms": ["win", "linux"],
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "The ID of the IME window."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "description": "Called when the operation completes.",
+            "parameters": []
            }
          ]
       },
@@ -635,7 +675,7 @@
         "name": "onActivate",
         "type": "function",
         "description": "This event is sent when an IME is activated. It signals that the IME will be receiving onKeyPress events.",
-        "platforms": ["chromeos"],
+        "platforms": ["chromeos", "win", "linux"],
         "parameters": [
           {
             "type": "string",
@@ -704,7 +744,7 @@
       {
         "name": "onKeyEvent",
         "type": "function",
-        "description": "This event is sent if this extension owns the active IME.",
+        "description": "Fired when a key event is sent from the operating system. The event will be sent to the extension if this extension owns the active IME.",
         "platforms": ["chromeos", "win", "linux"],
         "options": {
           "supportsFilters": false,

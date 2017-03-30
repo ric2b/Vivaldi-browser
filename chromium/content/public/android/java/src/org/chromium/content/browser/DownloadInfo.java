@@ -16,17 +16,18 @@ public final class DownloadInfo {
     private final String mDescription;
     private final String mFilePath;
     private final String mReferer;
+    private final String mOriginalUrl;
     private final long mContentLength;
-    private final boolean mHasDownloadId;
-    private final int mDownloadId;
+    private final int mNotificationId;
+    private final String mDownloadGuid;
     private final boolean mHasUserGesture;
     private final String mContentDisposition;
     private final boolean mIsGETRequest;
-    private final boolean mIsSuccessful;
     private final int mPercentCompleted;
     private final long mTimeRemainingInMillis;
     private final boolean mIsResumable;
     private final boolean mIsPaused;
+    private final boolean mIsOffTheRecord;
 
     private DownloadInfo(Builder builder) {
         mUrl = builder.mUrl;
@@ -37,17 +38,18 @@ public final class DownloadInfo {
         mDescription = builder.mDescription;
         mFilePath = builder.mFilePath;
         mReferer = builder.mReferer;
+        mOriginalUrl = builder.mOriginalUrl;
         mContentLength = builder.mContentLength;
-        mHasDownloadId = builder.mHasDownloadId;
-        mDownloadId = builder.mDownloadId;
+        mNotificationId = builder.mNotificationId;
+        mDownloadGuid = builder.mDownloadGuid;
         mHasUserGesture = builder.mHasUserGesture;
-        mIsSuccessful = builder.mIsSuccessful;
         mIsGETRequest = builder.mIsGETRequest;
         mContentDisposition = builder.mContentDisposition;
         mPercentCompleted = builder.mPercentCompleted;
         mTimeRemainingInMillis = builder.mTimeRemainingInMillis;
         mIsResumable = builder.mIsResumable;
         mIsPaused = builder.mIsPaused;
+        mIsOffTheRecord = builder.mIsOffTheRecord;
     }
 
     public String getUrl() {
@@ -82,6 +84,10 @@ public final class DownloadInfo {
         return mReferer;
     }
 
+    public String getOriginalUrl() {
+        return mOriginalUrl;
+    }
+
     public long getContentLength() {
         return mContentLength;
     }
@@ -90,20 +96,16 @@ public final class DownloadInfo {
         return mIsGETRequest;
     }
 
-    public boolean hasDownloadId() {
-        return mHasDownloadId;
+    public int getNotificationId() {
+        return mNotificationId;
     }
 
-    public int getDownloadId() {
-        return mDownloadId;
+    public String getDownloadGuid() {
+        return mDownloadGuid;
     }
 
     public boolean hasUserGesture() {
         return mHasUserGesture;
-    }
-
-    public boolean isSuccessful() {
-        return mIsSuccessful;
     }
 
     public String getContentDisposition() {
@@ -129,6 +131,10 @@ public final class DownloadInfo {
         return mIsPaused;
     }
 
+    public boolean isOffTheRecord() {
+        return mIsOffTheRecord;
+    }
+
     /**
      * Helper class for building the DownloadInfo object.
      */
@@ -141,17 +147,18 @@ public final class DownloadInfo {
         private String mDescription;
         private String mFilePath;
         private String mReferer;
+        private String mOriginalUrl;
         private long mContentLength;
         private boolean mIsGETRequest;
-        private boolean mHasDownloadId;
-        private int mDownloadId;
+        private int mNotificationId;
+        private String mDownloadGuid;
         private boolean mHasUserGesture;
-        private boolean mIsSuccessful;
         private String mContentDisposition;
         private int mPercentCompleted = -1;
         private long mTimeRemainingInMillis;
         private boolean mIsResumable = true;
-        private boolean mIsPaused = false;
+        private boolean mIsPaused;
+        private boolean mIsOffTheRecord;
 
         public Builder setUrl(String url) {
             mUrl = url;
@@ -193,6 +200,11 @@ public final class DownloadInfo {
             return this;
         }
 
+        public Builder setOriginalUrl(String originalUrl) {
+            mOriginalUrl = originalUrl;
+            return this;
+        }
+
         public Builder setContentLength(long contentLength) {
             mContentLength = contentLength;
             return this;
@@ -203,23 +215,18 @@ public final class DownloadInfo {
             return this;
         }
 
-        public Builder setHasDownloadId(boolean hasDownloadId) {
-            mHasDownloadId = hasDownloadId;
+        public Builder setNotificationId(int notificationId) {
+            mNotificationId = notificationId;
             return this;
         }
 
-        public Builder setDownloadId(int downloadId) {
-            mDownloadId = downloadId;
+        public Builder setDownloadGuid(String downloadGuid) {
+            mDownloadGuid = downloadGuid;
             return this;
         }
 
         public Builder setHasUserGesture(boolean hasUserGesture) {
             mHasUserGesture = hasUserGesture;
-            return this;
-        }
-
-        public Builder setIsSuccessful(boolean isSuccessful) {
-            mIsSuccessful = isSuccessful;
             return this;
         }
 
@@ -249,6 +256,11 @@ public final class DownloadInfo {
             return this;
         }
 
+        public Builder setIsOffTheRecord(boolean isOffTheRecord) {
+            mIsOffTheRecord = isOffTheRecord;
+            return this;
+        }
+
         public DownloadInfo build() {
             return new DownloadInfo(this);
         }
@@ -268,17 +280,18 @@ public final class DownloadInfo {
                     .setDescription(downloadInfo.getDescription())
                     .setFilePath(downloadInfo.getFilePath())
                     .setReferer(downloadInfo.getReferer())
+                    .setOriginalUrl(downloadInfo.getOriginalUrl())
                     .setContentLength(downloadInfo.getContentLength())
-                    .setHasDownloadId(downloadInfo.hasDownloadId())
-                    .setDownloadId(downloadInfo.getDownloadId())
+                    .setNotificationId(downloadInfo.getNotificationId())
+                    .setDownloadGuid(downloadInfo.getDownloadGuid())
                     .setHasUserGesture(downloadInfo.hasUserGesture())
                     .setContentDisposition(downloadInfo.getContentDisposition())
                     .setIsGETRequest(downloadInfo.isGETRequest())
-                    .setIsSuccessful(downloadInfo.isSuccessful())
                     .setPercentCompleted(downloadInfo.getPercentCompleted())
                     .setTimeRemainingInMillis(downloadInfo.getTimeRemainingInMillis())
                     .setIsResumable(downloadInfo.isResumable())
-                    .setIsPaused(downloadInfo.isPaused());
+                    .setIsPaused(downloadInfo.isPaused())
+                    .setIsOffTheRecord(downloadInfo.isOffTheRecord());
             return builder;
         }
 

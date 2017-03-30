@@ -70,7 +70,7 @@ public class PartnerDisableIncognitoModeIntegrationTest extends
 
     private void waitForParentalControlsEnabledState(final boolean parentalControlsEnabled)
             throws InterruptedException {
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 // areParentalControlsEnabled is updated on a background thread, so we
@@ -162,13 +162,12 @@ public class PartnerDisableIncognitoModeIntegrationTest extends
             toggleActivityForegroundState();
             waitForParentalControlsEnabledState(true);
 
-            CriteriaHelper.pollForCriteria(
-                    new Criteria("Incognito tabs did not close as expected") {
-                        @Override
-                        public boolean isSatisfied() {
-                            return incognitoTabsCount() == 0;
-                        }
-                    });
+            CriteriaHelper.pollInstrumentationThread(Criteria.equals(0, new Callable<Integer>() {
+                @Override
+                public Integer call() {
+                    return incognitoTabsCount();
+                }
+            }));
         } finally {
             testServer.stopAndDestroyServer();
         }

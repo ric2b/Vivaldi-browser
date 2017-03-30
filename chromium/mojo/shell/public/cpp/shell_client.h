@@ -8,8 +8,9 @@
 #include <stdint.h>
 #include <string>
 
-#include "mojo/public/cpp/system/macros.h"
+#include "base/macros.h"
 #include "mojo/shell/public/cpp/connection.h"
+#include "mojo/shell/public/cpp/identity.h"
 
 namespace mojo {
 
@@ -26,15 +27,13 @@ class ShellClient {
   virtual ~ShellClient();
 
   // Called once a bidirectional connection with the shell has been established.
-  // |url| is the URL used to start the application.
+  // |identity| is the identity of the instance.
   // |id| is a unique identifier the shell uses to identify this specific
   // instance of the application.
-  // |user_id| identifies the user this instance is run as.
   // Called exactly once before any other method.
   virtual void Initialize(Connector* connector,
-                          const std::string& url,
-                          uint32_t id,
-                          uint32_t user_id = 0);
+                          const Identity& identity,
+                          uint32_t id);
 
   // Called when a connection to this client is brokered by the shell. Override
   // to expose services to the remote application. Return true if the connection
@@ -42,14 +41,18 @@ class ShellClient {
   // underlying pipe closed. The default implementation returns false.
   virtual bool AcceptConnection(Connection* connection);
 
-  // Called when ShellConnection's pipe to the Mojo Shell is closed.
-  //
-  // Returning true from this method will cause ...
-  // The default implementation returns true.
+  // Called when ShellConnection's ShellClient binding (i.e. the pipe the
+  // Mojo Shell has to talk to us over) is closed. A shell client may use this
+  // as a signal to terminate. Return true from this method to tell the
+  // ShellConnection to run its connection lost closure if it has one, false to
+  // prevent it from being run. The default implementation returns true.
+  // When used in conjunction with ApplicationRunner, returning true here quits
+  // the message loop created by ApplicationRunner, which results in the app
+  // quitting.
   virtual bool ShellConnectionLost();
 
  private:
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ShellClient);
+  DISALLOW_COPY_AND_ASSIGN(ShellClient);
 };
 
 }  // namespace mojo

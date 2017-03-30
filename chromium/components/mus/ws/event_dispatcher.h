@@ -12,19 +12,27 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/surfaces/surface_id.h"
-#include "components/mus/public/interfaces/input_event_constants.mojom.h"
 #include "components/mus/public/interfaces/input_event_matcher.mojom.h"
-#include "components/mus/public/interfaces/input_events.mojom.h"
-#include "components/mus/public/interfaces/input_key_codes.mojom.h"
 #include "components/mus/ws/server_window_observer.h"
 #include "ui/gfx/geometry/rect_f.h"
+
+namespace ui {
+class Event;
+class KeyEvent;
+class LocatedEvent;
+class PointerEvent;
+}
 
 namespace mus {
 namespace ws {
 
+class Accelerator;
 class EventDispatcherDelegate;
-class EventMatcher;
 class ServerWindow;
+
+namespace test {
+class EventDispatcherTestApi;
+}
 
 // Handles dispatching events to the right location as well as updating focus.
 class EventDispatcher : public ServerWindowObserver {
@@ -36,11 +44,22 @@ class EventDispatcher : public ServerWindowObserver {
 
   void set_surface_id(cc::SurfaceId surface_id) { surface_id_ = surface_id; }
 
+  // Cancels capture and stops tracking any pointer events. This does not send
+  // any events to the delegate.
+  void Reset();
+
+  void SetMousePointerScreenLocation(const gfx::Point& screen_location);
+  const gfx::Point& mouse_pointer_last_location() const {
+    return mouse_pointer_last_location_;
+  }
+
   // |capture_window_| will receive all input. See window_tree.mojom for
   // details.
   ServerWindow* capture_window() { return capture_window_; }
   const ServerWindow* capture_window() const { return capture_window_; }
-  void SetCaptureWindow(ServerWindow* capture_window, bool in_nonclient_area);
+  // Setting capture can fail if the window is blocked by a modal window
+  // (indicated by returning |false|).
+  bool SetCaptureWindow(ServerWindow* capture_window, bool in_nonclient_area);
 
   // Retrieves the ServerWindow of the last mouse move.
   ServerWindow* mouse_cursor_source_window() const {
@@ -60,10 +79,10 @@ class EventDispatcher : public ServerWindowObserver {
 
   // Processes the supplied event, informing the delegate as approriate. This
   // may result in generating any number of events.
-  void ProcessEvent(mojom::EventPtr event);
+  void ProcessEvent(const ui::Event& event);
 
  private:
-  friend class EventDispatcherTest;
+  friend class test::EventDispatcherTestApi;
 
   // Keeps track of state associated with an active pointer.
   struct PointerTarget {
@@ -85,7 +104,7 @@ class EventDispatcher : public ServerWindowObserver {
     bool is_pointer_down;
   };
 
-  void ProcessKeyEvent(mojom::EventPtr event);
+  void ProcessKeyEvent(const ui::KeyEvent& event);
 
   bool IsTrackingPointer(int32_t pointer_id) const {
     return pointer_targets_.count(pointer_id) > 0;
@@ -100,7 +119,7 @@ class EventDispatcher : public ServerWindowObserver {
   //   when no buttons on the mouse are down.
   // This also generates exit events as appropriate. For example, if the mouse
   // moves between one window to another an exit is generated on the first.
-  void ProcessPointerEvent(mojom::EventPtr event);
+  void ProcessPointerEvent(const ui::PointerEvent& event);
 
   // Adds |pointer_target| to |pointer_targets_|.
   void StartTrackingPointer(int32_t pointer_id,
@@ -112,17 +131,17 @@ class EventDispatcher : public ServerWindowObserver {
   // Starts tracking the pointer for |event|, or if already tracking the
   // pointer sends the appropriate event to the delegate and updates the
   // currently tracked PointerTarget appropriately.
-  void UpdateTargetForPointer(const mojom::Event& event);
+  void UpdateTargetForPointer(const ui::PointerEvent& event);
 
   // Returns a PointerTarget from the supplied Event.
-  PointerTarget PointerTargetForEvent(const mojom::Event& event) const;
+  PointerTarget PointerTargetForEvent(const ui::PointerEvent& event) const;
 
   // Returns true if any pointers are in the pressed/down state.
   bool AreAnyPointersDown() const;
 
   // If |target->window| is valid, then passes the event to the delegate.
   void DispatchToPointerTarget(const PointerTarget& target,
-                               mojom::EventPtr event);
+                               const ui::PointerEvent& event);
 
   // Stops sending pointer events to |window|. This does not remove the entry
   // for |window| from |pointer_targets_|, rather it nulls out the window. This
@@ -133,11 +152,10 @@ class EventDispatcher : public ServerWindowObserver {
   // observer for a window if any pointer events are targeting it.
   bool IsObservingWindow(ServerWindow* window);
 
-  // Looks to see if there is an accelerator bound to the specified code/flags.
-  // If there is one, sets |accelerator_id| to the id of the accelerator invoked
-  // and returns true. If there is none, returns false so normal key event
-  // processing can continue.
-  bool FindAccelerator(const mojom::Event& event, uint32_t* accelerator_id);
+  // Returns an Accelerator bound to the specified code/flags, and of the
+  // matching |phase|. Otherwise returns null.
+  Accelerator* FindAccelerator(const ui::KeyEvent& event,
+                               const mojom::AcceleratorPhase phase);
 
   // ServerWindowObserver:
   void OnWillChangeWindowHierarchy(ServerWindow* window,
@@ -160,8 +178,8 @@ class EventDispatcher : public ServerWindowObserver {
 
   cc::SurfaceId surface_id_;
 
-  using Entry = std::pair<uint32_t, EventMatcher>;
-  std::map<uint32_t, EventMatcher> accelerators_;
+  using Entry = std::pair<uint32_t, scoped_ptr<Accelerator>>;
+  std::map<uint32_t, scoped_ptr<Accelerator>> accelerators_;
 
   using PointerIdToTargetMap = std::map<int32_t, PointerTarget>;
   // |pointer_targets_| contains the active pointers. For a mouse based pointer

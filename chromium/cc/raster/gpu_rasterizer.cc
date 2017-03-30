@@ -12,7 +12,7 @@
 #include "cc/debug/devtools_instrumentation.h"
 #include "cc/debug/frame_viewer_instrumentation.h"
 #include "cc/output/context_provider.h"
-#include "cc/playback/display_list_raster_source.h"
+#include "cc/playback/raster_source.h"
 #include "cc/raster/raster_buffer.h"
 #include "cc/raster/scoped_gpu_raster.h"
 #include "cc/resources/resource.h"
@@ -40,10 +40,11 @@ GpuRasterizer::~GpuRasterizer() {
 
 void GpuRasterizer::RasterizeSource(
     ResourceProvider::ScopedWriteLockGr* write_lock,
-    const DisplayListRasterSource* raster_source,
+    const RasterSource* raster_source,
     const gfx::Rect& raster_full_rect,
     const gfx::Rect& playback_rect,
-    float scale) {
+    float scale,
+    const RasterSource::PlaybackSettings& playback_settings) {
   // Play back raster_source into temp SkPicture.
   SkPictureRecorder recorder;
   const gfx::Size size = write_lock->GetResourceSize();
@@ -52,10 +53,9 @@ void GpuRasterizer::RasterizeSource(
       recorder.beginRecording(size.width(), size.height(), NULL, flags));
   canvas->save();
   raster_source->PlaybackToCanvas(canvas.get(), raster_full_rect, playback_rect,
-                                  scale);
+                                  scale, playback_settings);
   canvas->restore();
-  skia::RefPtr<SkPicture> picture =
-      skia::AdoptRef(recorder.endRecordingAsPicture());
+  sk_sp<SkPicture> picture = recorder.finishRecordingAsPicture();
 
   // Turn on distance fields for layers that have ever animated.
   bool use_distance_field_text =

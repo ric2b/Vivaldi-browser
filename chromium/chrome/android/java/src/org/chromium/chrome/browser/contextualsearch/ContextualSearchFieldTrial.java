@@ -21,6 +21,10 @@ public class ContextualSearchFieldTrial {
     private static final String DISABLED_PARAM = "disabled";
     private static final String ENABLED_VALUE = "true";
 
+    static final String MANDATORY_PROMO_ENABLED = "mandatory_promo_enabled";
+    static final String MANDATORY_PROMO_LIMIT = "mandatory_promo_limit";
+    static final int MANDATORY_PROMO_DEFAULT_LIMIT = 10;
+
     private static final String PEEK_PROMO_FORCED = "peek_promo_forced";
     @VisibleForTesting
     static final String PEEK_PROMO_ENABLED = "peek_promo_enabled";
@@ -30,7 +34,7 @@ public class ContextualSearchFieldTrial {
     private static final String DISABLE_SEARCH_TERM_RESOLUTION = "disable_search_term_resolution";
     private static final String DISABLE_EXTRA_SEARCH_BAR_ANIMATIONS =
             "disable_extra_search_bar_animations";
-    private static final String ENABLE_DIGIT_BLACKLIST = "enable_digit_blacklist";
+    private static final String ENABLE_BLACKLIST = "enable_blacklist";
 
     // Translation.  All these members are private, except for usage by testing.
     // Master switch, needed to enable any translate code for Contextual Search.
@@ -60,9 +64,18 @@ public class ContextualSearchFieldTrial {
     // Quick Answers.
     private static final String ENABLE_QUICK_ANSWERS = "enable_quick_answers";
 
+    // Recent-scroll experiments.
+    // Enables collection of recent scroll seen/unseen histograms.
+    // TODO(donnd): remove all supporting code once short-lived data collection is done.
+    private static final String ENABLE_RECENT_SCROLL_COLLECTION = "enable_recent_scroll_collection";
+    // Set non-zero to establish an recent scroll suppression threshold for taps.
+    private static final String RECENT_SCROLL_DURATION_MS = "recent_scroll_duration_ms";
+
     // Cached values to avoid repeated and redundant JNI operations.
     private static Boolean sEnabled;
     private static Boolean sDisableSearchTermResolution;
+    private static Boolean sIsMandatoryPromoEnabled;
+    private static Integer sMandatoryPromoLimit;
     private static Boolean sIsPeekPromoEnabled;
     private static Integer sPeekPromoMaxCount;
     private static Boolean sIsTranslationEnabled;
@@ -73,6 +86,8 @@ public class ContextualSearchFieldTrial {
     private static Boolean sIsEnglishTargetTranslationEnabled;
     private static Boolean sIsServerControlledOneboxEnabled;
     private static Boolean sIsQuickAnswersEnabled;
+    private static Boolean sIsRecentScrollCollectionEnabled;
+    private static Integer sRecentScrollDurationMs;
 
     /**
      * Don't instantiate.
@@ -140,6 +155,28 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
+     * @return Whether the Mandatory Promo is enabled.
+     */
+    static boolean isMandatoryPromoEnabled() {
+        if (sIsMandatoryPromoEnabled == null) {
+            sIsMandatoryPromoEnabled = getBooleanParam(MANDATORY_PROMO_ENABLED);
+        }
+        return sIsMandatoryPromoEnabled.booleanValue();
+    }
+
+    /**
+     * @return The number of times the Promo should be seen before it becomes mandatory.
+     */
+    static int getMandatoryPromoLimit() {
+        if (sMandatoryPromoLimit == null) {
+            sMandatoryPromoLimit = getIntParamValueOrDefault(
+                    MANDATORY_PROMO_LIMIT,
+                    MANDATORY_PROMO_DEFAULT_LIMIT);
+        }
+        return sMandatoryPromoLimit.intValue();
+    }
+
+    /**
      * @return Whether the Peek Promo is forcibly enabled (used for testing).
      */
     static boolean isPeekPromoForced() {
@@ -164,10 +201,10 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
-     * @return Whether the digit blacklist is enabled.
+     * @return Whether the blacklist is enabled.
      */
-    static boolean isDigitBlacklistEnabled() {
-        return getBooleanParam(ENABLE_DIGIT_BLACKLIST);
+    static boolean isBlacklistEnabled() {
+        return getBooleanParam(ENABLE_BLACKLIST);
     }
 
     /**
@@ -264,6 +301,28 @@ public class ContextualSearchFieldTrial {
             sIsQuickAnswersEnabled = getBooleanParam(ENABLE_QUICK_ANSWERS);
         }
         return sIsQuickAnswersEnabled.booleanValue();
+    }
+
+    /**
+     * @return Whether collecting metrics for tap triggering after a scroll is enabled.
+     */
+    static boolean isRecentScrollCollectionEnabled() {
+        if (sIsRecentScrollCollectionEnabled == null) {
+            sIsRecentScrollCollectionEnabled = getBooleanParam(ENABLE_RECENT_SCROLL_COLLECTION);
+        }
+        return sIsRecentScrollCollectionEnabled.booleanValue();
+    }
+
+    /**
+     * Gets the duration to use for suppressing Taps after a recent scroll, or {@code 0} if no
+     * suppression is configured.
+     * @return The period of time after a scroll when tap triggering is suppressed.
+     */
+    static int getRecentScrollSuppressionDurationMs() {
+        if (sRecentScrollDurationMs == null) {
+            sRecentScrollDurationMs = getIntParamValueOrDefault(RECENT_SCROLL_DURATION_MS, 0);
+        }
+        return sRecentScrollDurationMs.intValue();
     }
 
     // --------------------------------------------------------------------------------------------

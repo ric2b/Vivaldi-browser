@@ -2,10 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/containers/mru_cache.h"
+
 #include <stddef.h>
 
-#include "base/containers/mru_cache.h"
+#include <memory>
+
+#include "base/memory/ptr_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace base {
 
 namespace {
 
@@ -187,15 +193,15 @@ TEST(MRUCacheTest, KeyReplacement) {
 
 // Make sure that the owning version release its pointers properly.
 TEST(MRUCacheTest, Owning) {
-  typedef base::OwningMRUCache<int, CachedItem*> Cache;
+  using Cache = base::MRUCache<int, std::unique_ptr<CachedItem>>;
   Cache cache(Cache::NO_AUTO_EVICT);
 
   int initial_count = cached_item_live_count;
 
   // First insert and item and then overwrite it.
   static const int kItem1Key = 1;
-  cache.Put(kItem1Key, new CachedItem(20));
-  cache.Put(kItem1Key, new CachedItem(22));
+  cache.Put(kItem1Key, WrapUnique(new CachedItem(20)));
+  cache.Put(kItem1Key, WrapUnique(new CachedItem(22)));
 
   // There should still be one item, and one extra live item.
   Cache::iterator iter = cache.Get(kItem1Key);
@@ -211,8 +217,8 @@ TEST(MRUCacheTest, Owning) {
   // go away.
   {
     Cache cache2(Cache::NO_AUTO_EVICT);
-    cache2.Put(1, new CachedItem(20));
-    cache2.Put(2, new CachedItem(20));
+    cache2.Put(1, WrapUnique(new CachedItem(20)));
+    cache2.Put(2, WrapUnique(new CachedItem(20)));
   }
 
   // There should be no objects leaked.
@@ -221,8 +227,8 @@ TEST(MRUCacheTest, Owning) {
   // Check that Clear() also frees things correctly.
   {
     Cache cache2(Cache::NO_AUTO_EVICT);
-    cache2.Put(1, new CachedItem(20));
-    cache2.Put(2, new CachedItem(20));
+    cache2.Put(1, WrapUnique(new CachedItem(20)));
+    cache2.Put(2, WrapUnique(new CachedItem(20)));
     EXPECT_EQ(initial_count + 2, cached_item_live_count);
     cache2.Clear();
     EXPECT_EQ(initial_count, cached_item_live_count);
@@ -230,7 +236,7 @@ TEST(MRUCacheTest, Owning) {
 }
 
 TEST(MRUCacheTest, AutoEvict) {
-  typedef base::OwningMRUCache<int, CachedItem*> Cache;
+  using Cache = base::MRUCache<int, std::unique_ptr<CachedItem>>;
   static const Cache::size_type kMaxSize = 3;
 
   int initial_count = cached_item_live_count;
@@ -239,10 +245,10 @@ TEST(MRUCacheTest, AutoEvict) {
     Cache cache(kMaxSize);
 
     static const int kItem1Key = 1, kItem2Key = 2, kItem3Key = 3, kItem4Key = 4;
-    cache.Put(kItem1Key, new CachedItem(20));
-    cache.Put(kItem2Key, new CachedItem(21));
-    cache.Put(kItem3Key, new CachedItem(22));
-    cache.Put(kItem4Key, new CachedItem(23));
+    cache.Put(kItem1Key, WrapUnique(new CachedItem(20)));
+    cache.Put(kItem2Key, WrapUnique(new CachedItem(21)));
+    cache.Put(kItem3Key, WrapUnique(new CachedItem(22)));
+    cache.Put(kItem4Key, WrapUnique(new CachedItem(23)));
 
     // The cache should only have kMaxSize items in it even though we inserted
     // more.
@@ -374,3 +380,5 @@ TEST(MRUCacheTest, Swap) {
     EXPECT_EQ(item1.value, iter->second.value);
   }
 }
+
+}  // namespace base

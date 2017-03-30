@@ -43,10 +43,10 @@ namespace ConsoleAgentState {
 static const char consoleMessagesEnabled[] = "consoleMessagesEnabled";
 }
 
-InspectorConsoleAgent::InspectorConsoleAgent(V8RuntimeAgent* runtimeAgent)
+InspectorConsoleAgent::InspectorConsoleAgent(V8RuntimeAgent* runtimeAgent, V8DebuggerAgent* debuggerAgent)
     : InspectorBaseAgent<InspectorConsoleAgent, protocol::Frontend::Console>("Console")
     , m_runtimeAgent(runtimeAgent)
-    , m_debuggerAgent(nullptr)
+    , m_debuggerAgent(debuggerAgent)
     , m_enabled(false)
 {
 }
@@ -70,7 +70,7 @@ void InspectorConsoleAgent::enable(ErrorString*)
 
     ConsoleMessageStorage* storage = messageStorage();
     if (storage->expiredCount()) {
-        RefPtrWillBeRawPtr<ConsoleMessage> expiredMessage = ConsoleMessage::create(OtherMessageSource, WarningMessageLevel, String::format("%d console messages are not shown.", storage->expiredCount()));
+        RawPtr<ConsoleMessage> expiredMessage = ConsoleMessage::create(OtherMessageSource, WarningMessageLevel, String::format("%d console messages are not shown.", storage->expiredCount()));
         expiredMessage->setTimestamp(0);
         sendConsoleMessageToFrontend(expiredMessage.get(), false);
     }
@@ -174,7 +174,7 @@ static String messageLevelValue(MessageLevel level)
 
 void InspectorConsoleAgent::sendConsoleMessageToFrontend(ConsoleMessage* consoleMessage, bool generatePreview)
 {
-    if (consoleMessage->workerGlobalScopeProxy())
+    if (consoleMessage->workerInspectorProxy())
         return;
 
     OwnPtr<protocol::Console::ConsoleMessage> jsonObj = protocol::Console::ConsoleMessage::create()
@@ -189,15 +189,15 @@ void InspectorConsoleAgent::sendConsoleMessageToFrontend(ConsoleMessage* console
     if (consoleMessage->scriptId())
         jsonObj->setScriptId(String::number(consoleMessage->scriptId()));
     jsonObj->setUrl(consoleMessage->url());
-    ScriptState* scriptState = consoleMessage->scriptState();
+    ScriptState* scriptState = consoleMessage->getScriptState();
     if (scriptState)
         jsonObj->setExecutionContextId(scriptState->contextIdInDebugger());
     if (consoleMessage->source() == NetworkMessageSource && consoleMessage->requestIdentifier())
         jsonObj->setNetworkRequestId(IdentifiersFactory::requestId(consoleMessage->requestIdentifier()));
-    RefPtrWillBeRawPtr<ScriptArguments> arguments = consoleMessage->scriptArguments();
+    RawPtr<ScriptArguments> arguments = consoleMessage->scriptArguments();
     if (arguments && arguments->argumentCount()) {
-        ScriptState::Scope scope(arguments->scriptState());
-        v8::Local<v8::Context> context = arguments->scriptState()->context();
+        ScriptState::Scope scope(arguments->getScriptState());
+        v8::Local<v8::Context> context = arguments->getScriptState()->context();
         OwnPtr<protocol::Array<protocol::Runtime::RemoteObject>> jsonArgs = protocol::Array<protocol::Runtime::RemoteObject>::create();
         if (consoleMessage->type() == TableMessageType && generatePreview) {
             v8::Local<v8::Value> table = arguments->argumentAt(0).v8Value();

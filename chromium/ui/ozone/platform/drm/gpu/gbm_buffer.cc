@@ -28,12 +28,26 @@ namespace ui {
 GbmBuffer::GbmBuffer(const scoped_refptr<GbmDevice>& gbm,
                      gbm_bo* bo,
                      gfx::BufferFormat format,
-                     gfx::BufferUsage usage)
-    : GbmBufferBase(gbm, bo, format, usage), format_(format), usage_(usage) {}
+                     gfx::BufferUsage usage,
+                     base::ScopedFD fd,
+                     int stride)
+    : GbmBufferBase(gbm, bo, format, usage),
+      format_(format),
+      usage_(usage),
+      fd_(std::move(fd)),
+      stride_(stride) {}
 
 GbmBuffer::~GbmBuffer() {
   if (bo())
     gbm_bo_destroy(bo());
+}
+
+int GbmBuffer::GetFd() const {
+  return fd_.get();
+}
+
+int GbmBuffer::GetStride() const {
+  return stride_;
 }
 
 // static
@@ -44,43 +58,61 @@ scoped_refptr<GbmBuffer> GbmBuffer::CreateBuffer(
     gfx::BufferUsage usage) {
   TRACE_EVENT2("drm", "GbmBuffer::CreateBuffer", "device",
                gbm->device_path().value(), "size", size.ToString());
-  bool use_scanout = (usage == gfx::BufferUsage::SCANOUT);
+
   unsigned flags = 0;
-  if (use_scanout)
-    flags = GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING;
+  switch (usage) {
+    case gfx::BufferUsage::GPU_READ:
+      break;
+    case gfx::BufferUsage::SCANOUT:
+      flags = GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING;
+      break;
+    case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
+    case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT:
+      flags = GBM_BO_USE_LINEAR;
+      break;
+  }
+
   gbm_bo* bo = gbm_bo_create(gbm->device(), size.width(), size.height(),
                              GetFourCCFormatFromBufferFormat(format), flags);
   if (!bo)
     return nullptr;
 
-  scoped_refptr<GbmBuffer> buffer(new GbmBuffer(gbm, bo, format, usage));
-  if (use_scanout && !buffer->GetFramebufferId())
+  // The fd returned by gbm_bo_get_fd is not ref-counted and need to be
+  // kept open for the lifetime of the buffer.
+  base::ScopedFD fd(gbm_bo_get_fd(bo));
+  if (!fd.is_valid()) {
+    PLOG(ERROR) << "Failed to export buffer to dma_buf";
+    gbm_bo_destroy(bo);
+    return nullptr;
+  }
+
+  scoped_refptr<GbmBuffer> buffer(new GbmBuffer(
+      gbm, bo, format, usage, std::move(fd), gbm_bo_get_stride(bo)));
+  if (usage == gfx::BufferUsage::SCANOUT && !buffer->GetFramebufferId())
     return nullptr;
 
   return buffer;
 }
 
-GbmPixmap::GbmPixmap(GbmSurfaceFactory* surface_manager)
-    : surface_manager_(surface_manager) {}
+// static
+scoped_refptr<GbmBuffer> GbmBuffer::CreateBufferFromFD(
+    const scoped_refptr<GbmDevice>& gbm,
+    gfx::BufferFormat format,
+    const gfx::Size& size,
+    base::ScopedFD fd,
+    int stride) {
+  TRACE_EVENT2("drm", "GbmBuffer::CreateBufferFromFD", "device",
+               gbm->device_path().value(), "size", size.ToString());
 
-void GbmPixmap::Initialize(base::ScopedFD dma_buf, int dma_buf_pitch) {
-  dma_buf_ = std::move(dma_buf);
-  dma_buf_pitch_ = dma_buf_pitch;
+  // TODO(reveman): Use gbm_bo_import after making buffers survive
+  // GPU process crashes. crbug.com/597932
+  return make_scoped_refptr(new GbmBuffer(
+      gbm, nullptr, format, gfx::BufferUsage::GPU_READ, std::move(fd), stride));
 }
 
-bool GbmPixmap::InitializeFromBuffer(const scoped_refptr<GbmBuffer>& buffer) {
-  // We want to use the GBM API because it's going to call into libdrm
-  // which might do some optimizations on buffer allocation,
-  // especially when sharing buffers via DMABUF.
-  base::ScopedFD dma_buf(gbm_bo_get_fd(buffer->bo()));
-  if (!dma_buf.is_valid()) {
-    PLOG(ERROR) << "Failed to export buffer to dma_buf";
-    return false;
-  }
-  Initialize(std::move(dma_buf), gbm_bo_get_stride(buffer->bo()));
-  buffer_ = buffer;
-  return true;
-}
+GbmPixmap::GbmPixmap(GbmSurfaceFactory* surface_manager,
+                     const scoped_refptr<GbmBuffer>& buffer)
+    : surface_manager_(surface_manager), buffer_(buffer) {}
 
 void GbmPixmap::SetProcessingCallback(
     const ProcessingCallback& processing_callback) {
@@ -91,14 +123,14 @@ void GbmPixmap::SetProcessingCallback(
 gfx::NativePixmapHandle GbmPixmap::ExportHandle() {
   gfx::NativePixmapHandle handle;
 
-  base::ScopedFD dmabuf_fd(HANDLE_EINTR(dup(dma_buf_.get())));
-  if (!dmabuf_fd.is_valid()) {
+  base::ScopedFD fd(HANDLE_EINTR(dup(buffer_->GetFd())));
+  if (!fd.is_valid()) {
     PLOG(ERROR) << "dup";
     return handle;
   }
 
-  handle.fd = base::FileDescriptor(dmabuf_fd.release(), true /* auto_close */);
-  handle.stride = dma_buf_pitch_;
+  handle.fd = base::FileDescriptor(fd.release(), true /* auto_close */);
+  handle.stride = buffer_->GetStride();
   return handle;
 }
 
@@ -110,11 +142,11 @@ void* GbmPixmap::GetEGLClientBuffer() const {
 }
 
 int GbmPixmap::GetDmaBufFd() const {
-  return dma_buf_.get();
+  return buffer_->GetFd();
 }
 
 int GbmPixmap::GetDmaBufPitch() const {
-  return dma_buf_pitch_;
+  return buffer_->GetStride();
 }
 
 gfx::BufferFormat GbmPixmap::GetBufferFormat() const {
@@ -130,16 +162,14 @@ bool GbmPixmap::ScheduleOverlayPlane(gfx::AcceleratedWidget widget,
                                      gfx::OverlayTransform plane_transform,
                                      const gfx::Rect& display_bounds,
                                      const gfx::RectF& crop_rect) {
-  // TODO(reveman): Add support for imported buffers. crbug.com/541558
-  if (!buffer_) {
-    PLOG(ERROR) << "ScheduleOverlayPlane requires a buffer.";
-    return false;
-  }
-
   DCHECK(buffer_->GetUsage() == gfx::BufferUsage::SCANOUT);
+  OverlayPlane::ProcessBufferCallback processing_callback;
+  if (!processing_callback_.is_null())
+    processing_callback = base::Bind(&GbmPixmap::ProcessBuffer, this);
+
   surface_manager_->GetSurface(widget)->QueueOverlayPlane(
       OverlayPlane(buffer_, plane_z_order, plane_transform, display_bounds,
-                   crop_rect, base::Bind(&GbmPixmap::ProcessBuffer, this)));
+                   crop_rect, processing_callback));
 
   return true;
 }
@@ -157,13 +187,13 @@ scoped_refptr<ScanoutBuffer> GbmPixmap::ProcessBuffer(const gfx::Size& size,
 
     scoped_refptr<GbmBuffer> buffer = GbmBuffer::CreateBuffer(
         buffer_->drm().get(), buffer_format, size, buffer_->GetUsage());
+    if (!buffer)
+      return nullptr;
 
     // ProcessBuffer is called on DrmThread. We could have used
     // CreateNativePixmap to initialize the pixmap, however it posts a
     // synchronous task to DrmThread resulting in a deadlock.
-    processed_pixmap_ = new GbmPixmap(surface_manager_);
-    if (!processed_pixmap_->InitializeFromBuffer(buffer))
-      return nullptr;
+    processed_pixmap_ = new GbmPixmap(surface_manager_, buffer);
   }
 
   DCHECK(!processing_callback_.is_null());

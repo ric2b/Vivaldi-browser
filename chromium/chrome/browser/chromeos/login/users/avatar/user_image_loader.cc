@@ -4,13 +4,14 @@
 
 #include "chrome/browser/chromeos/login/users/avatar/user_image_loader.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner_util.h"
@@ -44,6 +45,42 @@ struct ImageInfo {
   const LoadedCallback loaded_cb;
 };
 
+// Crops |image| to the square format and downsizes the image to
+// |target_size| in pixels. On success, returns true and stores the cropped
+// image in |bitmap| and the bytes representation in |byytes|.
+bool CropImage(const SkBitmap& image,
+               int target_size,
+               SkBitmap* bitmap,
+               user_manager::UserImage::Bytes* bytes) {
+  DCHECK_GT(target_size, 0);
+
+  SkBitmap final_image;
+  // Auto crop the image, taking the largest square in the center.
+  int pixels_per_side = std::min(image.width(), image.height());
+  int x = (image.width() - pixels_per_side) / 2;
+  int y = (image.height() - pixels_per_side) / 2;
+  SkBitmap cropped_image = SkBitmapOperations::CreateTiledBitmap(
+      image, x, y, pixels_per_side, pixels_per_side);
+  if (pixels_per_side > target_size) {
+    // Also downsize the image to save space and memory.
+    final_image = skia::ImageOperations::Resize(
+        cropped_image, skia::ImageOperations::RESIZE_LANCZOS3, target_size,
+        target_size);
+  } else {
+    final_image = cropped_image;
+  }
+
+  // Encode the cropped image to web-compatible bytes representation
+  std::unique_ptr<user_manager::UserImage::Bytes> encoded =
+      user_manager::UserImage::Encode(final_image);
+  if (!encoded)
+    return false;
+
+  bitmap->swap(final_image);
+  bytes->swap(*encoded);
+  return true;
+}
+
 // Handles the decoded image returned from ImageDecoder through the
 // ImageRequest interface.
 class UserImageRequest : public ImageDecoder::ImageRequest {
@@ -52,74 +89,91 @@ class UserImageRequest : public ImageDecoder::ImageRequest {
       const ImageInfo& image_info,
       const std::string& image_data,
       scoped_refptr<base::SequencedTaskRunner> background_task_runner)
-      : ImageRequest(background_task_runner),
-        image_info_(image_info),
+      : image_info_(image_info),
         image_data_(image_data.begin(), image_data.end()),
-        foreground_task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
+        background_task_runner_(background_task_runner),
+        weak_ptr_factory_(this) {}
   ~UserImageRequest() override {}
 
-  // ImageDecoder::ImageRequest implementation. These callbacks will only be
-  // invoked via background_task_runner passed to the constructor.
+  // ImageDecoder::ImageRequest implementation.
   void OnImageDecoded(const SkBitmap& decoded_image) override;
   void OnDecodeImageFailed() override;
 
+  // Called after the image is cropped (and downsized) as needed.
+  void OnImageCropped(SkBitmap* bitmap,
+                      user_manager::UserImage::Bytes* bytes,
+                      bool succeeded);
+
+  // Called after the image is finalized. |image_bytes_regenerated| is true
+  // if |image_bytes| is regenerated from the cropped image.
+  void OnImageFinalized(const SkBitmap& image,
+                        const user_manager::UserImage::Bytes& image_bytes,
+                        bool image_bytes_regenerated);
+
  private:
   const ImageInfo image_info_;
-  std::vector<unsigned char> image_data_;
-  scoped_refptr<base::SequencedTaskRunner> foreground_task_runner_;
+  const user_manager::UserImage::Bytes image_data_;
+  scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
+
+  // This should be the last member.
+  base::WeakPtrFactory<UserImageRequest> weak_ptr_factory_;
 };
 
 void UserImageRequest::OnImageDecoded(const SkBitmap& decoded_image) {
-  DCHECK(task_runner()->RunsTasksOnCurrentThread());
-
-  const int target_size = image_info_.pixels_per_side;
-  SkBitmap final_image = decoded_image;
-
+  int target_size = image_info_.pixels_per_side;
   if (target_size > 0) {
-    // Auto crop the image, taking the largest square in the center.
-    int pixels_per_side =
-        std::min(decoded_image.width(), decoded_image.height());
-    int x = (decoded_image.width() - pixels_per_side) / 2;
-    int y = (decoded_image.height() - pixels_per_side) / 2;
-    SkBitmap cropped_image = SkBitmapOperations::CreateTiledBitmap(
-        decoded_image, x, y, pixels_per_side, pixels_per_side);
-    if (pixels_per_side > target_size) {
-      // Also downsize the image to save space and memory.
-      final_image =
-          skia::ImageOperations::Resize(cropped_image,
-                                        skia::ImageOperations::RESIZE_LANCZOS3,
-                                        target_size,
-                                        target_size);
-    } else {
-      final_image = cropped_image;
-    }
+    // Cropping an image could be expensive, hence posting to the background
+    // thread.
+    SkBitmap* bitmap = new SkBitmap;
+    user_manager::UserImage::Bytes* bytes = new user_manager::UserImage::Bytes;
+    base::PostTaskAndReplyWithResult(
+        background_task_runner_.get(), FROM_HERE,
+        base::Bind(&CropImage, decoded_image, target_size, bitmap, bytes),
+        base::Bind(&UserImageRequest::OnImageCropped,
+                   weak_ptr_factory_.GetWeakPtr(), base::Owned(bitmap),
+                   base::Owned(bytes)));
+  } else {
+    OnImageFinalized(decoded_image, image_data_,
+                     false /* image_bytes_regenerated */);
   }
+}
+
+void UserImageRequest::OnImageCropped(SkBitmap* bitmap,
+                                      user_manager::UserImage::Bytes* bytes,
+                                      bool succeeded) {
+  DCHECK_GT(image_info_.pixels_per_side, 0);
+
+  if (!succeeded) {
+    OnDecodeImageFailed();
+    return;
+  }
+  OnImageFinalized(*bitmap, *bytes, true /* image_bytes_regenerated */);
+}
+
+void UserImageRequest::OnImageFinalized(
+    const SkBitmap& image,
+    const user_manager::UserImage::Bytes& image_bytes,
+    bool image_bytes_regenerated) {
+  SkBitmap final_image = image;
   // Make the SkBitmap immutable as we won't modify it. This is important
   // because otherwise it gets duplicated during painting, wasting memory.
   final_image.setImmutable();
   gfx::ImageSkia final_image_skia =
       gfx::ImageSkia::CreateFrom1xBitmap(final_image);
   final_image_skia.MakeThreadSafe();
-  user_manager::UserImage user_image(final_image_skia, image_data_);
-  user_image.set_file_path(image_info_.file_path);
-  if (image_info_.image_codec == ImageDecoder::ROBUST_JPEG_CODEC)
-    user_image.MarkAsSafe();
-  // TODO(satorux): Remove the foreground_task_runner_ stuff.
-  foreground_task_runner_->PostTask(
-      FROM_HERE, base::Bind(image_info_.loaded_cb, user_image));
-  foreground_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(base::Bind(&base::DeletePointer<UserImageRequest>, this)));
+  std::unique_ptr<user_manager::UserImage> user_image(
+      new user_manager::UserImage(final_image_skia, image_bytes));
+  user_image->set_file_path(image_info_.file_path);
+  if (image_info_.image_codec == ImageDecoder::ROBUST_JPEG_CODEC ||
+      image_bytes_regenerated)
+    user_image->MarkAsSafe();
+  image_info_.loaded_cb.Run(std::move(user_image));
+  delete this;
 }
 
 void UserImageRequest::OnDecodeImageFailed() {
-  DCHECK(task_runner()->RunsTasksOnCurrentThread());
-  // TODO(satorux): Remove the foreground_task_runner_ stuff.
-  foreground_task_runner_->PostTask(
-      FROM_HERE, base::Bind(image_info_.loaded_cb, user_manager::UserImage()));
-  foreground_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(base::Bind(&base::DeletePointer<UserImageRequest>, this)));
+  image_info_.loaded_cb.Run(base::WrapUnique(new user_manager::UserImage));
+  delete this;
 }
 
 // Starts decoding the image with ImageDecoder for the image |data| if
@@ -131,7 +185,9 @@ void DecodeImage(
     bool data_is_ready) {
   if (!data_is_ready) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(image_info.loaded_cb, user_manager::UserImage()));
+        FROM_HERE,
+        base::Bind(image_info.loaded_cb, base::Passed(base::WrapUnique(
+                                             new user_manager::UserImage))));
     return;
   }
 
@@ -160,7 +216,7 @@ void StartWithFilePath(
 
 void StartWithData(
     scoped_refptr<base::SequencedTaskRunner> background_task_runner,
-    scoped_ptr<std::string> data,
+    std::unique_ptr<std::string> data,
     ImageDecoder::ImageCodec image_codec,
     int pixels_per_side,
     const LoadedCallback& loaded_cb) {

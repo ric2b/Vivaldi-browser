@@ -27,8 +27,10 @@
 #include "core/editing/spellcheck/SpellChecker.h"
 
 #include "core/HTMLNames.h"
+#include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
+#include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
@@ -72,9 +74,9 @@ bool isSelectionInTextFormControl(const VisibleSelection& selection)
 
 } // namespace
 
-PassOwnPtrWillBeRawPtr<SpellChecker> SpellChecker::create(LocalFrame& frame)
+RawPtr<SpellChecker> SpellChecker::create(LocalFrame& frame)
 {
-    return adoptPtrWillBeNoop(new SpellChecker(frame));
+    return new SpellChecker(frame);
 }
 
 static SpellCheckerClient& emptySpellCheckerClient()
@@ -447,6 +449,23 @@ bool SpellChecker::isSpellCheckingEnabledInFocusedNode() const
     return isSpellCheckingEnabledFor(frame().selection().start().anchorNode());
 }
 
+bool SpellChecker::isSpellCheckingEnabledFor(const VisibleSelection& selection)
+{
+    if (selection.isNone())
+        return false;
+    // TODO(tkent): The following password type check should be done in
+    // HTMLElement::spellcheck(). crbug.com/371567
+    if (HTMLTextFormControlElement* textControl = enclosingTextFormControl(selection.start())) {
+        if (isHTMLInputElement(textControl) && toHTMLInputElement(textControl)->type() == InputTypeNames::password)
+            return false;
+    }
+    if (HTMLElement* element = Traversal<HTMLElement>::firstAncestorOrSelf(*selection.start().anchorNode())) {
+        if (element->spellcheck())
+            return true;
+    }
+    return false;
+}
+
 bool SpellChecker::markMisspellings(const VisibleSelection& selection)
 {
     return markMisspellingsOrBadGrammar(selection, true);
@@ -519,7 +538,7 @@ void SpellChecker::chunkAndMarkAllMisspellingsAndBadGrammar(TextCheckingTypeMask
     // Check the full paragraph instead if the paragraph is short, which saves
     // the cost on sentence boundary finding.
     if (fullParagraphToCheck.rangeLength() <= kChunkSize) {
-        RefPtrWillBeRawPtr<SpellCheckRequest> request = SpellCheckRequest::create(resolveTextCheckingTypeMask(textCheckingOptions), TextCheckingProcessBatch, paragraphRange, paragraphRange, 0);
+        RawPtr<SpellCheckRequest> request = SpellCheckRequest::create(resolveTextCheckingTypeMask(textCheckingOptions), TextCheckingProcessBatch, paragraphRange, paragraphRange, 0);
         if (request)
             m_spellCheckRequester->requestCheckingFor(request);
         return;
@@ -530,7 +549,7 @@ void SpellChecker::chunkAndMarkAllMisspellingsAndBadGrammar(TextCheckingTypeMask
         EphemeralRange chunkRange = checkRangeIterator.calculateCharacterSubrange(0, kChunkSize);
         EphemeralRange checkRange = requestNum ? expandEndToSentenceBoundary(chunkRange) : expandRangeToSentenceBoundary(chunkRange);
 
-        RefPtrWillBeRawPtr<SpellCheckRequest> request = SpellCheckRequest::create(resolveTextCheckingTypeMask(textCheckingOptions), TextCheckingProcessBatch, checkRange, paragraphRange, requestNum);
+        RawPtr<SpellCheckRequest> request = SpellCheckRequest::create(resolveTextCheckingTypeMask(textCheckingOptions), TextCheckingProcessBatch, checkRange, paragraphRange, requestNum);
         if (request)
             m_spellCheckRequester->requestCheckingFor(request);
 
@@ -544,7 +563,7 @@ void SpellChecker::chunkAndMarkAllMisspellingsAndBadGrammar(TextCheckingTypeMask
     }
 }
 
-void SpellChecker::markAndReplaceFor(PassRefPtrWillBeRawPtr<SpellCheckRequest> request, const Vector<TextCheckingResult>& results)
+void SpellChecker::markAndReplaceFor(RawPtr<SpellCheckRequest> request, const Vector<TextCheckingResult>& results)
 {
     TRACE_EVENT0("blink", "SpellChecker::markAndReplaceFor");
     ASSERT(request);
@@ -649,6 +668,8 @@ void SpellChecker::markMisspellingsAndBadGrammar(const VisibleSelection& spellin
 void SpellChecker::updateMarkersForWordsAffectedByEditing(bool doNotRemoveIfSelectionAtWordBoundary)
 {
     TRACE_EVENT0("blink", "SpellChecker::updateMarkersForWordsAffectedByEditing");
+    if (!isSpellCheckingEnabledFor(frame().selection().selection()))
+        return;
 
     // We want to remove the markers from a word if an editing command will change the word. This can happen in one of
     // several scenarios:
@@ -748,6 +769,8 @@ void SpellChecker::replaceMisspelledRange(const String& text)
 void SpellChecker::respondToChangedSelection(const VisibleSelection& oldSelection, FrameSelection::SetSelectionOptions options)
 {
     TRACE_EVENT0("blink", "SpellChecker::respondToChangedSelection");
+    if (!isSpellCheckingEnabledFor(oldSelection))
+        return;
 
     bool closeTyping = options & FrameSelection::CloseTyping;
     bool isContinuousSpellCheckingEnabled = this->isContinuousSpellCheckingEnabled();
@@ -781,7 +804,7 @@ void SpellChecker::respondToChangedSelection(const VisibleSelection& oldSelectio
             && closeTyping
             && !isSelectionInTextField(oldSelection)
             && (isSelectionInTextArea(oldSelection) || oldSelection.isContentEditable())
-            && oldSelection.start().inDocument()) {
+            && oldSelection.start().inShadowIncludingDocument()) {
             spellCheckOldSelection(oldSelection, newAdjacentWords);
         }
     }

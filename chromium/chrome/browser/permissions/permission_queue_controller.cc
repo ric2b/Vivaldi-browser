@@ -14,13 +14,10 @@
 #include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/storage/durable_storage_permission_infobar_delegate_android.h"
 #include "chrome/browser/tab_contents/tab_util.h"
-#include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/infobars/core/infobar.h"
-#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
@@ -67,8 +64,7 @@ class PermissionQueueController::PendingInfobarRequest {
   infobars::InfoBar* infobar() { return infobar_; }
 
   void RunCallback(ContentSetting content_setting);
-  void CreateInfoBar(PermissionQueueController* controller,
-                     const std::string& display_languages);
+  void CreateInfoBar(PermissionQueueController* controller);
 
  private:
   content::PermissionType type_;
@@ -109,8 +105,7 @@ void PermissionQueueController::PendingInfobarRequest::RunCallback(
 }
 
 void PermissionQueueController::PendingInfobarRequest::CreateInfoBar(
-    PermissionQueueController* controller,
-    const std::string& display_languages) {
+    PermissionQueueController* controller) {
   // Controller can be Unretained because the lifetime of the infobar
   // is tied to that of the queue controller. Before QueueController
   // is destroyed, all requests will be cancelled and so all delegates
@@ -124,30 +119,21 @@ void PermissionQueueController::PendingInfobarRequest::CreateInfoBar(
   switch (type_) {
     case content::PermissionType::GEOLOCATION:
       infobar_ = GeolocationInfoBarDelegateAndroid::Create(
-          GetInfoBarService(id_), requesting_frame_, display_languages,
-          callback);
+          GetInfoBarService(id_), requesting_frame_, callback);
       break;
 #if defined(ENABLE_NOTIFICATIONS)
     case content::PermissionType::NOTIFICATIONS:
       infobar_ = NotificationPermissionInfobarDelegate::Create(
-          GetInfoBarService(id_), requesting_frame_,
-          display_languages, callback);
+          GetInfoBarService(id_), requesting_frame_, callback);
       break;
 #endif  // ENABLE_NOTIFICATIONS
     case content::PermissionType::MIDI_SYSEX:
       infobar_ = MidiPermissionInfoBarDelegateAndroid::Create(
-          GetInfoBarService(id_), requesting_frame_, display_languages,
-          callback);
+          GetInfoBarService(id_), requesting_frame_, callback);
       break;
     case content::PermissionType::PROTECTED_MEDIA_IDENTIFIER:
       infobar_ = ProtectedMediaIdentifierInfoBarDelegateAndroid::Create(
-          GetInfoBarService(id_), requesting_frame_, display_languages,
-          callback);
-      break;
-    case content::PermissionType::DURABLE_STORAGE:
-      infobar_ = DurableStoragePermissionInfoBarDelegateAndroid::Create(
-          GetInfoBarService(id_), requesting_frame_, display_languages,
-          callback);
+          GetInfoBarService(id_), requesting_frame_, callback);
       break;
     default:
       NOTREACHED();
@@ -341,8 +327,7 @@ void PermissionQueueController::ShowQueuedInfoBarForTab(
        i != pending_infobar_requests_.end(); ++i) {
     if (ArePermissionRequestsForSameTab(i->id(), id) && !i->has_infobar()) {
       RegisterForInfoBarNotifications(infobar_service);
-      i->CreateInfoBar(
-          this, profile_->GetPrefs()->GetString(prefs::kAcceptLanguages));
+      i->CreateInfoBar(this);
       return;
     }
   }
@@ -399,12 +384,8 @@ void PermissionQueueController::UpdateContentSetting(
   ContentSetting content_setting =
       allowed ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK;
 
-  ContentSettingsPattern embedder_pattern =
-      (content_settings_type_ == CONTENT_SETTINGS_TYPE_NOTIFICATIONS)
-          ? ContentSettingsPattern::Wildcard()
-          : ContentSettingsPattern::FromURLNoWildcard(embedder.GetOrigin());
-
-  HostContentSettingsMapFactory::GetForProfile(profile_)->SetContentSetting(
-      ContentSettingsPattern::FromURLNoWildcard(requesting_frame.GetOrigin()),
-      embedder_pattern, content_settings_type_, std::string(), content_setting);
+  HostContentSettingsMapFactory::GetForProfile(profile_)
+      ->SetContentSettingDefaultScope(
+          requesting_frame.GetOrigin(), embedder.GetOrigin(),
+          content_settings_type_, std::string(), content_setting);
 }

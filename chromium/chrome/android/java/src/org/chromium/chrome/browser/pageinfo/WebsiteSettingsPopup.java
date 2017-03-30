@@ -907,7 +907,7 @@ public class WebsiteSettingsPopup implements OnClickListener {
         String offlinePageCreationDate = null;
 
         if (tab.isOfflinePage()) {
-            OfflinePageBridge offlinePageBridge = new OfflinePageBridge(tab.getProfile());
+            OfflinePageBridge offlinePageBridge = OfflinePageBridge.getForProfile(tab.getProfile());
             OfflinePageItem item =
                     offlinePageBridge.getPageByOfflineUrl(webContents.getVisibleUrl());
             if (item != null) {
@@ -918,7 +918,6 @@ public class WebsiteSettingsPopup implements OnClickListener {
                 offlinePageOriginalUrl = OfflinePageUtils.stripSchemeFromOnlineUrl(
                         tab.getOfflinePageOriginalUrl());
             }
-            offlinePageBridge.destroy();
         }
 
         new WebsiteSettingsPopup(activity, tab.getProfile(), webContents, offlinePageOriginalUrl,

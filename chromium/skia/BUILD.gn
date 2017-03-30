@@ -15,17 +15,17 @@ if (current_cpu == "mipsel" || current_cpu == "mips64el") {
 skia_support_gpu = !is_ios
 skia_support_pdf = !is_ios && (enable_basic_printing || enable_print_preview)
 
-# The list of Skia defines that are to be set for blink.
-gypi_blink_skia_defines =
+# The list of Skia defines that are to be set for chromium.
+gypi_chromium_skia_defines =
     exec_script("//build/gypi_to_gn.py",
                 [
                   rebase_path(
-                      "//third_party/WebKit/public/blink_skia_config.gypi"),
+                      "//skia/chromium_skia_defines.gypi"),
                   "--replace=<(skia_include_path)=//third_party/skia/include",
                   "--replace=<(skia_src_path)=//third_party/skia/src",
                 ],
                 "scope",
-                [ "//third_party/WebKit/public/blink_skia_config.gypi" ])
+                [ "//skia/chromium_skia_defines.gypi" ])
 
 # The list of Skia defines that are to be set for chromium.
 gypi_skia_defines =
@@ -137,7 +137,7 @@ config("skia_config") {
     "//third_party/skia/include/utils",
   ]
 
-  defines = gypi_blink_skia_defines.blink_skia_defines
+  defines = gypi_chromium_skia_defines.chromium_skia_defines
   defines += gypi_skia_defines.skia_for_chromium_defines
 
   defines += []
@@ -384,7 +384,6 @@ component("skia") {
     sources -= [
       "//third_party/skia/src/ports/SkOSFile_posix.cpp",
       "//third_party/skia/src/ports/SkTLS_pthread.cpp",
-      "//third_party/skia/src/ports/SkTime_Unix.cpp",
     ]
   } else {
     sources -= [
@@ -417,6 +416,15 @@ component("skia") {
     ]
   }
 
+  # Add the files for the SkFontMgr_Android. This is used to emulate android
+  # fonts on linux. See content/zygote/zygote_main_linux.cc
+  if (is_linux) {
+    sources += [
+      "//third_party/skia/src/ports/SkFontMgr_android.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_android_parser.cpp",
+    ]
+  }
+
   if (!is_linux && !is_android) {
     sources -= [
       "//third_party/skia/src/ports/SkFontHost_FreeType.cpp",
@@ -435,7 +443,7 @@ component("skia") {
     sources += [ "ext/bitmap_platform_device_skia.cc" ]
   }
 
-  if (is_clang) {
+  if (is_clang && !is_nacl) {
     # Skia won't compile with some of the more strict clang warnings.
     # e.g. it does:
     #  SkASSERT(!"sk_out_of_memory");
@@ -464,6 +472,7 @@ component("skia") {
     deps += [
       "//build/linux:fontconfig",
       "//build/linux:freetype2",
+      "//third_party/expat",
       "//third_party/icu:icuuc",
     ]
   }
@@ -482,6 +491,8 @@ component("skia") {
   if (skia_support_pdf) {
     deps += [ "//third_party/sfntly" ]
     sources += gypi_skia_pdf.sources
+  } else {
+    sources += [ "//third_party/skia/src/pdf/SkDocument_PDF_None.cpp" ]
   }
 
   if (is_android && !is_debug) {
@@ -622,7 +633,7 @@ source_set("skia_opts") {
         }
       }
     } else {
-      sources = gypi_skia_opts.none_sourcees
+      sources = gypi_skia_opts.none_sources
     }
   } else if (current_cpu == "arm64") {
     sources = gypi_skia_opts.arm64_sources

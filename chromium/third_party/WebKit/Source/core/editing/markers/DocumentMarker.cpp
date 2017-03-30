@@ -30,6 +30,8 @@
 
 #include "core/editing/markers/DocumentMarker.h"
 
+#include "wtf/StdLibExtras.h"
+
 namespace blink {
 
 DocumentMarkerDetails::~DocumentMarkerDetails()
@@ -38,7 +40,7 @@ DocumentMarkerDetails::~DocumentMarkerDetails()
 
 class DocumentMarkerDescription final : public DocumentMarkerDetails {
 public:
-    static PassRefPtrWillBeRawPtr<DocumentMarkerDescription> create(const String&);
+    static RawPtr<DocumentMarkerDescription> create(const String&);
 
     const String& description() const { return m_description; }
     bool isDescription() const override { return true; }
@@ -52,9 +54,9 @@ private:
     String m_description;
 };
 
-PassRefPtrWillBeRawPtr<DocumentMarkerDescription> DocumentMarkerDescription::create(const String& description)
+RawPtr<DocumentMarkerDescription> DocumentMarkerDescription::create(const String& description)
 {
-    return adoptRefWillBeNoop(new DocumentMarkerDescription(description));
+    return new DocumentMarkerDescription(description);
 }
 
 inline DocumentMarkerDescription* toDocumentMarkerDescription(DocumentMarkerDetails* details)
@@ -67,7 +69,7 @@ inline DocumentMarkerDescription* toDocumentMarkerDescription(DocumentMarkerDeta
 
 class DocumentMarkerTextMatch final : public DocumentMarkerDetails {
 public:
-    static PassRefPtrWillBeRawPtr<DocumentMarkerTextMatch> create(bool);
+    static RawPtr<DocumentMarkerTextMatch> create(bool);
 
     bool activeMatch() const { return m_match; }
     bool isTextMatch() const override { return true; }
@@ -81,11 +83,11 @@ private:
     bool m_match;
 };
 
-PassRefPtrWillBeRawPtr<DocumentMarkerTextMatch> DocumentMarkerTextMatch::create(bool match)
+RawPtr<DocumentMarkerTextMatch> DocumentMarkerTextMatch::create(bool match)
 {
-    DEFINE_STATIC_REF_WILL_BE_PERSISTENT(DocumentMarkerTextMatch, trueInstance, (adoptRefWillBeNoop(new DocumentMarkerTextMatch(true))));
-    DEFINE_STATIC_REF_WILL_BE_PERSISTENT(DocumentMarkerTextMatch, falseInstance, (adoptRefWillBeNoop(new DocumentMarkerTextMatch(false))));
-    return match ? trueInstance : falseInstance;
+    DEFINE_STATIC_LOCAL(DocumentMarkerTextMatch, trueInstance, (new DocumentMarkerTextMatch(true)));
+    DEFINE_STATIC_LOCAL(DocumentMarkerTextMatch, falseInstance, (new DocumentMarkerTextMatch(false)));
+    return match ? &trueInstance : &falseInstance;
 }
 
 inline DocumentMarkerTextMatch* toDocumentMarkerTextMatch(DocumentMarkerDetails* details)
@@ -97,7 +99,7 @@ inline DocumentMarkerTextMatch* toDocumentMarkerTextMatch(DocumentMarkerDetails*
 
 class TextCompositionMarkerDetails final : public DocumentMarkerDetails {
 public:
-    static PassRefPtrWillBeRawPtr<TextCompositionMarkerDetails> create(Color underlineColor, bool thick, Color backgroundColor);
+    static RawPtr<TextCompositionMarkerDetails> create(Color underlineColor, bool thick, Color backgroundColor);
 
     bool isComposition() const override { return true; }
     Color underlineColor() const { return m_underlineColor; }
@@ -117,9 +119,9 @@ private:
     bool m_thick;
 };
 
-PassRefPtrWillBeRawPtr<TextCompositionMarkerDetails> TextCompositionMarkerDetails::create(Color underlineColor, bool thick, Color backgroundColor)
+RawPtr<TextCompositionMarkerDetails> TextCompositionMarkerDetails::create(Color underlineColor, bool thick, Color backgroundColor)
 {
-    return adoptRefWillBeNoop(new TextCompositionMarkerDetails(underlineColor, thick, backgroundColor));
+    return new TextCompositionMarkerDetails(underlineColor, thick, backgroundColor);
 }
 
 inline TextCompositionMarkerDetails* toTextCompositionMarkerDetails(DocumentMarkerDetails* details)

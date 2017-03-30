@@ -30,7 +30,7 @@ class WebMediaSession;
 
 namespace media {
 
-class RestartableAudioRendererSink;
+class SwitchableAudioRendererSink;
 class MediaLog;
 class SurfaceManager;
 
@@ -52,7 +52,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
   // |context_3d_cb| may be null.
   WebMediaPlayerParams(
       const DeferLoadCB& defer_load_cb,
-      const scoped_refptr<RestartableAudioRendererSink>& audio_renderer_sink,
+      const scoped_refptr<SwitchableAudioRendererSink>& audio_renderer_sink,
       const scoped_refptr<MediaLog>& media_log,
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
       const IPCMediaPipelineHost::Creator& ipc_media_pipeline_host_creator,
@@ -70,7 +70,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
 
   DeferLoadCB defer_load_cb() const { return defer_load_cb_; }
 
-  const scoped_refptr<RestartableAudioRendererSink>& audio_renderer_sink()
+  const scoped_refptr<SwitchableAudioRendererSink>& audio_renderer_sink()
       const {
     return audio_renderer_sink_;
   }
@@ -114,7 +114,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
 
  private:
   DeferLoadCB defer_load_cb_;
-  scoped_refptr<RestartableAudioRendererSink> audio_renderer_sink_;
+  scoped_refptr<SwitchableAudioRendererSink> audio_renderer_sink_;
   scoped_refptr<MediaLog> media_log_;
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   IPCMediaPipelineHost::Creator ipc_media_pipeline_host_creator_;

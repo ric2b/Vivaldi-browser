@@ -56,7 +56,7 @@ std::string GenerateKey(const GURL& app_url) {
   std::string key;
   crypto::SHA256HashString(app_url.spec().c_str(), raw,
                            crypto::kSHA256Length);
-  base::Base64Encode(std::string(raw, crypto::kSHA256Length), &key);
+  base::Base64Encode(base::StringPiece(raw, crypto::kSHA256Length), &key);
   return key;
 }
 
@@ -102,7 +102,7 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
   }
 
   // Create the manifest
-  scoped_ptr<base::DictionaryValue> root(new base::DictionaryValue);
+  std::unique_ptr<base::DictionaryValue> root(new base::DictionaryValue);
   root->SetString(keys::kPublicKey, GenerateKey(web_app.app_url));
   root->SetString(keys::kName, base::UTF16ToUTF8(web_app.title));
   root->SetString(keys::kVersion, ConvertTimeToExtensionVersion(create_time));

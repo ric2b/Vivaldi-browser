@@ -218,9 +218,9 @@ void SetUsesEasyResizeTargeter(aura::Window* container) {
                            -kResizeOutsideBoundsSize);
   gfx::Insets touch_extend = mouse_extend.Scale(
       kResizeOutsideBoundsScaleForTouch);
-  container->SetEventTargeter(scoped_ptr<ui::EventTargeter>(
-      new ::wm::EasyResizeWindowTargeter(container, mouse_extend,
-                                         touch_extend)));
+  container->SetEventTargeter(
+      std::unique_ptr<ui::EventTargeter>(new ::wm::EasyResizeWindowTargeter(
+          container, mouse_extend, touch_extend)));
 }
 
 // A window delegate which does nothing. Used to create a window that
@@ -271,13 +271,6 @@ void RootWindowController::CreateForPrimaryDisplay(AshWindowTreeHost* host) {
 void RootWindowController::CreateForSecondaryDisplay(AshWindowTreeHost* host) {
   RootWindowController* controller = new RootWindowController(host);
   controller->Init(RootWindowController::SECONDARY, false /* first run */);
-}
-
-// static
-RootWindowController* RootWindowController::ForShelf(
-    const aura::Window* window) {
-  CHECK(Shell::HasInstance());
-  return GetRootWindowController(window->GetRootWindow());
 }
 
 // static
@@ -565,10 +558,10 @@ SystemTray* RootWindowController::GetSystemTray() {
 
 void RootWindowController::ShowContextMenu(const gfx::Point& location_in_screen,
                                            ui::MenuSourceType source_type) {
-  DCHECK(Shell::GetInstance()->delegate());
-  scoped_ptr<ui::MenuModel> menu_model(
-      Shell::GetInstance()->delegate()->CreateContextMenu(
-          GetRootWindow(), NULL, NULL));
+  ShellDelegate* delegate = Shell::GetInstance()->delegate();
+  DCHECK(delegate);
+  std::unique_ptr<ui::MenuModel> menu_model(
+      delegate->CreateContextMenu(shelf_->shelf(), nullptr));
   if (!menu_model)
     return;
 
@@ -803,11 +796,9 @@ void RootWindowController::InitLayoutManagers() {
                            -kResizeOutsideBoundsSize);
   gfx::Insets touch_extend = mouse_extend.Scale(
       kResizeOutsideBoundsScaleForTouch);
-  panel_container->SetEventTargeter(scoped_ptr<ui::EventTargeter>(
-      new AttachedPanelWindowTargeter(panel_container,
-                                      mouse_extend,
-                                      touch_extend,
-                                      panel_layout_manager_)));
+  panel_container->SetEventTargeter(
+      std::unique_ptr<ui::EventTargeter>(new AttachedPanelWindowTargeter(
+          panel_container, mouse_extend, touch_extend, panel_layout_manager_)));
 }
 
 void RootWindowController::InitTouchHuds() {

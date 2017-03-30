@@ -39,6 +39,7 @@ class FrameView;
 class HTMLOptionElement;
 class HTMLSelectElement;
 class LayoutMenuList;
+class LineLayoutItem;
 class Page;
 
 class CORE_EXPORT AXObjectCache : public GarbageCollectedFinalized<AXObjectCache> {
@@ -95,6 +96,7 @@ public:
     virtual void listboxOptionStateChanged(HTMLOptionElement*) = 0;
     virtual void listboxSelectedChildrenChanged(HTMLSelectElement*) = 0;
     virtual void listboxActiveIndexChanged(HTMLSelectElement*) = 0;
+    virtual void radiobuttonRemovedFromGroup(HTMLInputElement*) = 0;
 
     virtual void remove(LayoutObject*) = 0;
     virtual void remove(Node*) = 0;
@@ -122,7 +124,7 @@ public:
 
     virtual void setCanvasObjectBounds(Element*, const LayoutRect&) = 0;
 
-    virtual void inlineTextBoxesUpdated(LayoutObject*) = 0;
+    virtual void inlineTextBoxesUpdated(LineLayoutItem) = 0;
 
     // Called when the scroll offset changes.
     virtual void handleScrollPositionChanged(FrameView*) = 0;
@@ -159,7 +161,7 @@ public:
 private:
     explicit ScopedAXObjectCache(Document&);
 
-    RefPtrWillBePersistent<Document> m_document;
+    Persistent<Document> m_document;
     Persistent<AXObjectCache> m_cache;
 };
 

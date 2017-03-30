@@ -22,17 +22,20 @@
 #include <signal.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <tchar.h> // Must be before tpcshrd.h or for any use of _T macro
+#include <tpcshrd.h>
 #include <uiviewsettingsinterop.h>
 #include <windows.ui.viewmanagement.h>
 #include <winstring.h>
 #include <wrl/wrappers/corewrappers.h>
+
+#include <memory>
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -114,12 +117,14 @@ POWER_PLATFORM_ROLE GetPlatformRole() {
   return PowerDeterminePlatformRoleEx(POWER_PLATFORM_ROLE_V2);
 }
 
+}  // namespace
+
 // Uses the Windows 10 WRL API's to query the current system state. The API's
 // we are using in the function below are supported in Win32 apps as per msdn.
 // It looks like the API implementation is buggy at least on Surface 4 causing
 // it to always return UserInteractionMode_Touch which as per documentation
 // indicates tablet mode.
-bool IsWindows10TabletDevice() {
+bool IsWindows10TabletMode(HWND hwnd) {
   if (GetVersion() < VERSION_WIN10)
     return false;
 
@@ -178,7 +183,7 @@ bool IsWindows10TabletDevice() {
   // Avoid using GetForegroundWindow here and pass in the HWND of the window
   // intiating the request to display the keyboard.
   hr = view_settings_interop->GetForWindow(
-      ::GetForegroundWindow(),
+      hwnd,
       __uuidof(ABI::Windows::UI::ViewManagement::IUIViewSettings),
       view_settings.ReceiveVoid());
   if (FAILED(hr))
@@ -189,8 +194,6 @@ bool IsWindows10TabletDevice() {
   view_settings->get_UserInteractionMode(&mode);
   return mode == ABI::Windows::UI::ViewManagement::UserInteractionMode_Touch;
 }
-
-}  // namespace
 
 // Returns true if a physical keyboard is detected on Windows 8 and up.
 // Uses the Setup APIs to enumerate the attached keyboards and returns true
@@ -347,7 +350,7 @@ bool GetUserSidString(std::wstring* user_sid) {
   ScopedHandle token_scoped(token);
 
   DWORD size = sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE;
-  scoped_ptr<BYTE[]> user_bytes(new BYTE[size]);
+  std::unique_ptr<BYTE[]> user_bytes(new BYTE[size]);
   TOKEN_USER* user = reinterpret_cast<TOKEN_USER*>(user_bytes.get());
 
   if (!::GetTokenInformation(token, TokenUser, user, size, &size))
@@ -475,7 +478,7 @@ bool IsTabletDevice(std::string* reason) {
     return false;
   }
 
-  if (IsWindows10TabletDevice())
+  if (IsWindows10TabletMode(::GetForegroundWindow()))
     return true;
 
   if (GetSystemMetrics(SM_MAXIMUMTOUCHES) == 0) {
@@ -501,7 +504,9 @@ bool IsTabletDevice(std::string* reason) {
   bool slate_power_profile = (role == PlatformRoleSlate);
 
   bool is_tablet = false;
+  bool is_tablet_pc = false;
   if (mobile_power_profile || slate_power_profile) {
+    is_tablet_pc = !GetSystemMetrics(SM_TABLETPC);
     is_tablet = !GetSystemMetrics(SM_CONVERTIBLESLATEMODE);
     if (!is_tablet) {
       if (reason) {
@@ -519,7 +524,7 @@ bool IsTabletDevice(std::string* reason) {
     if (reason)
       *reason += "Device role is not mobile or slate.\n";
   }
-  return is_tablet;
+  return is_tablet && is_tablet_pc;
 }
 
 bool DisplayVirtualKeyboard() {
@@ -571,7 +576,7 @@ bool DisplayVirtualKeyboard() {
       // We then replace the %CommonProgramFiles% value with the actual common
       // files path found in the process.
       string16 common_program_files_path;
-      scoped_ptr<wchar_t[]> common_program_files_wow6432;
+      std::unique_ptr<wchar_t[]> common_program_files_wow6432;
       DWORD buffer_size =
           GetEnvironmentVariable(L"CommonProgramW6432", NULL, 0);
       if (buffer_size) {
@@ -690,6 +695,16 @@ bool GetLoadedModulesSnapshot(HANDLE process, std::vector<HMODULE>* snapshot) {
 
   DLOG(ERROR) << "Failed to enumerate modules.";
   return false;
+}
+
+void EnableFlicks(HWND hwnd) {
+  ::RemoveProp(hwnd, MICROSOFT_TABLETPENSERVICE_PROPERTY);
+}
+
+void DisableFlicks(HWND hwnd) {
+  ::SetProp(hwnd, MICROSOFT_TABLETPENSERVICE_PROPERTY,
+      reinterpret_cast<HANDLE>(TABLET_DISABLE_FLICKS |
+          TABLET_DISABLE_FLICKFALLBACKKEYS));
 }
 
 }  // namespace win

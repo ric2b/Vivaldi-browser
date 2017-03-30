@@ -4,9 +4,11 @@
 
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
 
+#include "base/mac/sdk_forward_declarations.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"  // IDC_*
+#include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/browser_list.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field.h"
@@ -15,8 +17,14 @@
 #include "chrome/grit/generated_resources.h"
 #import "ui/base/cocoa/find_pasteboard.h"
 #include "ui/base/l10n/l10n_util_mac.h"
+#include "ui/base/material_design/material_design_controller.h"
 
 namespace {
+
+// Set to true when an instance of this class is running a nested run loop.
+// Since this must always be run on the UI thread, there should never be two
+// simultaneous drags.
+bool gInDrag = false;
 
 // When too much data is put into a single-line text field, things get
 // janky due to the cost of computing the blink rect.  Sometimes users
@@ -43,6 +51,9 @@ BOOL ThePasteboardIsTooDamnBig() {
 
 }  // namespace
 
+@interface AutocompleteTextFieldEditor ()<NSDraggingSource>
+@end
+
 @implementation AutocompleteTextFieldEditor
 
 - (BOOL)shouldDrawInsertionPoint {
@@ -67,6 +78,42 @@ BOOL ThePasteboardIsTooDamnBig() {
   return self;
 }
 
+- (void)updateColorsToMatchTheme {
+  if (![[self window] inIncognitoMode]) {
+    return;
+  }
+
+  bool inDarkMode = [[self window] inIncognitoModeWithSystemTheme];
+  // Draw a light insertion point for MD Incognito.
+  NSColor* insertionPointColor =
+      inDarkMode ? [NSColor colorWithCalibratedWhite:1 alpha:0.75]
+                 : [NSColor blackColor];
+  [self setInsertionPointColor:insertionPointColor];
+
+  NSColor* textSelectionColor = [NSColor selectedTextBackgroundColor];
+  if (inDarkMode) {
+    // In MD Incognito the text is light gray against a dark background. When
+    // selected, the light gray text against the selection color is illegible.
+    // Rather than tweak or change the selection color, make the text black when
+    // selected.
+    [self setSelectedTextAttributes:@{
+      NSForegroundColorAttributeName : [NSColor blackColor],
+      NSBackgroundColorAttributeName : textSelectionColor
+    }];
+  } else {
+    [self setSelectedTextAttributes:@{
+      NSBackgroundColorAttributeName : textSelectionColor
+    }];
+  }
+}
+
+- (void)viewDidMoveToWindow {
+  // Only care about landing in a window when in Material Design mode.
+  if ([self window] && ui::MaterialDesignController::IsModeMaterial()) {
+    [self updateColorsToMatchTheme];
+  }
+}
+
 // If the entire field is selected, drag the same data as would be
 // dragged from the field's location icon.  In some cases the textual
 // contents will not contain relevant data (for instance, "http://" is
@@ -77,24 +124,37 @@ BOOL ThePasteboardIsTooDamnBig() {
   AutocompleteTextFieldObserver* observer = [self observer];
   DCHECK(observer);
   if (observer && observer->CanCopy()) {
-    NSPasteboard* pboard = [NSPasteboard pasteboardWithName:NSDragPboard];
-    observer->CopyToPasteboard(pboard);
-
     NSPoint p;
     NSImage* image = [self dragImageForSelectionWithEvent:event origin:&p];
 
-    [self dragImage:image
-                 at:p
-             offset:mouseOffset
-              event:event
-         pasteboard:pboard
-             source:self
-          slideBack:slideBack];
+    base::scoped_nsobject<NSPasteboardItem> item(
+        observer->CreatePasteboardItem());
+    base::scoped_nsobject<NSDraggingItem> dragItem(
+        [[NSDraggingItem alloc] initWithPasteboardWriter:item]);
+    NSRect draggingFrame =
+        NSMakeRect(0, 0, image.size.width, image.size.height);
+    [dragItem setDraggingFrame:draggingFrame contents:image];
+    [self beginDraggingSessionWithItems:@[ dragItem.get() ]
+                                  event:event
+                                 source:self];
+    DCHECK(!gInDrag);
+    gInDrag = true;
+    while (gInDrag) {
+      [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                               beforeDate:[NSDate distantFuture]];
+    }
+
     return YES;
   }
   return [super dragSelectionWithEvent:event
                                 offset:mouseOffset
                              slideBack:slideBack];
+}
+
+- (void)draggingSession:(NSDraggingSession*)session
+           endedAtPoint:(NSPoint)aPoint
+              operation:(NSDragOperation)operation {
+  gInDrag = false;
 }
 
 - (void)copy:(id)sender {
@@ -541,6 +601,18 @@ BOOL ThePasteboardIsTooDamnBig() {
   AutocompleteTextFieldObserver* observer = [self observer];
   if (observer)
     observer->OnDidDrawRect();
+}
+
+// ThemedWindowDrawing implementation.
+
+- (void)windowDidChangeTheme {
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    return;
+  }
+  [self updateColorsToMatchTheme];
+}
+
+- (void)windowDidChangeActive {
 }
 
 @end

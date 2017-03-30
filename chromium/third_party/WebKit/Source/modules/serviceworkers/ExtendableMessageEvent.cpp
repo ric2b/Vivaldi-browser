@@ -6,24 +6,38 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<ExtendableMessageEvent> ExtendableMessageEvent::create()
+ExtendableMessageEvent* ExtendableMessageEvent::create()
 {
-    return adoptRefWillBeNoop(new ExtendableMessageEvent);
+    return new ExtendableMessageEvent;
 }
 
-PassRefPtrWillBeRawPtr<ExtendableMessageEvent> ExtendableMessageEvent::create(const AtomicString& type, const ExtendableMessageEventInit& initializer)
+ExtendableMessageEvent* ExtendableMessageEvent::create(const AtomicString& type, const ExtendableMessageEventInit& initializer)
 {
-    return adoptRefWillBeNoop(new ExtendableMessageEvent(type, initializer));
+    return new ExtendableMessageEvent(type, initializer);
 }
 
-PassRefPtrWillBeRawPtr<ExtendableMessageEvent> ExtendableMessageEvent::create(const AtomicString& type, const ExtendableMessageEventInit& initializer, WaitUntilObserver* observer)
+ExtendableMessageEvent* ExtendableMessageEvent::create(const AtomicString& type, const ExtendableMessageEventInit& initializer, WaitUntilObserver* observer)
 {
-    return adoptRefWillBeNoop(new ExtendableMessageEvent(type, initializer, observer));
+    return new ExtendableMessageEvent(type, initializer, observer);
 }
 
-PassRefPtrWillBeRawPtr<ExtendableMessageEvent> ExtendableMessageEvent::create(PassRefPtr<SerializedScriptValue> data, const String& origin, MessagePortArray* ports, WaitUntilObserver* observer)
+ExtendableMessageEvent* ExtendableMessageEvent::create(PassRefPtr<SerializedScriptValue> data, const String& origin, MessagePortArray* ports, WaitUntilObserver* observer)
 {
-    return adoptRefWillBeNoop(new ExtendableMessageEvent(data, origin, ports, observer));
+    return new ExtendableMessageEvent(data, origin, ports, observer);
+}
+
+ExtendableMessageEvent* ExtendableMessageEvent::create(PassRefPtr<SerializedScriptValue> data, const String& origin, MessagePortArray* ports, ServiceWorkerClient* source, WaitUntilObserver* observer)
+{
+    ExtendableMessageEvent* event = new ExtendableMessageEvent(data, origin, ports, observer);
+    event->m_sourceAsClient = source;
+    return event;
+}
+
+ExtendableMessageEvent* ExtendableMessageEvent::create(PassRefPtr<SerializedScriptValue> data, const String& origin, MessagePortArray* ports, ServiceWorker* source, WaitUntilObserver* observer)
+{
+    ExtendableMessageEvent* event = new ExtendableMessageEvent(data, origin, ports, observer);
+    event->m_sourceAsServiceWorker = source;
+    return event;
 }
 
 MessagePortArray ExtendableMessageEvent::ports(bool& isNull) const
@@ -86,6 +100,8 @@ ExtendableMessageEvent::ExtendableMessageEvent(const AtomicString& type, const E
 {
     if (initializer.hasOrigin())
         m_origin = initializer.origin();
+    if (initializer.hasLastEventId())
+        m_lastEventId = initializer.lastEventId();
     if (initializer.hasSource()) {
         if (initializer.source().isClient())
             m_sourceAsClient = initializer.source().getAsClient();

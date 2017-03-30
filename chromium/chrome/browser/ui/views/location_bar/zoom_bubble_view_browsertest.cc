@@ -37,7 +37,7 @@ IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest, MAYBE_NonImmersiveFullscreen) {
   {
     // NOTIFICATION_FULLSCREEN_CHANGED is sent asynchronously. Wait for the
     // notification before testing the zoom bubble visibility.
-    scoped_ptr<FullscreenNotificationObserver> waiter(
+    std::unique_ptr<FullscreenNotificationObserver> waiter(
         new FullscreenNotificationObserver());
     browser()
         ->exclusive_access_manager()
@@ -57,7 +57,7 @@ IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest, MAYBE_NonImmersiveFullscreen) {
 
   // Exit fullscreen before ending the test for the sake of sanity.
   {
-    scoped_ptr<FullscreenNotificationObserver> waiter(
+    std::unique_ptr<FullscreenNotificationObserver> waiter(
         new FullscreenNotificationObserver());
     chrome::ToggleFullscreenMode(browser());
     waiter->Wait();
@@ -78,7 +78,7 @@ IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest, ImmersiveFullscreen) {
 
   // Enter immersive fullscreen.
   {
-    scoped_ptr<FullscreenNotificationObserver> waiter(
+    std::unique_ptr<FullscreenNotificationObserver> waiter(
         new FullscreenNotificationObserver());
     chrome::ToggleFullscreenMode(browser());
     waiter->Wait();
@@ -94,7 +94,7 @@ IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest, ImmersiveFullscreen) {
   EXPECT_FALSE(zoom_bubble->GetAnchorView());
 
   // An immersive reveal should hide the zoom bubble.
-  scoped_ptr<ImmersiveRevealedLock> immersive_reveal_lock(
+  std::unique_ptr<ImmersiveRevealedLock> immersive_reveal_lock(
       immersive_controller->GetRevealedLock(
           ImmersiveModeController::ANIMATE_REVEAL_NO));
   ASSERT_TRUE(immersive_controller->IsRevealed());
@@ -103,8 +103,8 @@ IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest, ImmersiveFullscreen) {
   // The zoom bubble should be anchored when it is shown in immersive fullscreen
   // and the top-of-window views are revealed.
   ZoomBubbleView::ShowBubble(web_contents, ZoomBubbleView::AUTOMATIC);
-  ASSERT_TRUE(ZoomBubbleView::GetZoomBubble());
   zoom_bubble = ZoomBubbleView::GetZoomBubble();
+  ASSERT_TRUE(zoom_bubble);
   EXPECT_TRUE(zoom_bubble->GetAnchorView());
 
   // The top-of-window views should not hide till the zoom bubble hides. (It
@@ -112,14 +112,14 @@ IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest, ImmersiveFullscreen) {
   // the zoom bubble was still visible.)
   immersive_reveal_lock.reset();
   EXPECT_TRUE(immersive_controller->IsRevealed());
-  ZoomBubbleView::CloseBubble();
+  ZoomBubbleView::CloseCurrentBubble();
   // The zoom bubble is deleted on a task.
   content::RunAllPendingInMessageLoop();
   EXPECT_FALSE(immersive_controller->IsRevealed());
 
   // Exit fullscreen before ending the test for the sake of sanity.
   {
-    scoped_ptr<FullscreenNotificationObserver> waiter(
+    std::unique_ptr<FullscreenNotificationObserver> waiter(
         new FullscreenNotificationObserver());
     chrome::ToggleFullscreenMode(browser());
     waiter->Wait();

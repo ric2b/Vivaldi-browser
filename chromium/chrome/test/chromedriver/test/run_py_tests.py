@@ -147,8 +147,6 @@ _ANDROID_NEGATIVE_FILTER['chrome_beta'] = (
 _ANDROID_NEGATIVE_FILTER['chromium'] = (
     _ANDROID_NEGATIVE_FILTER['chrome'] + [
         'ChromeDriverTest.testSwitchToWindow',
-        # https://crbug.com/579782
-        'ChromeDriverTest.testTouchLongPressElement',
     ]
 )
 _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
@@ -401,6 +399,21 @@ class ChromeDriverTest(ChromeDriverBaseTest):
     self.assertTrue('Two' in self._driver.GetPageSource())
     self._driver.SwitchToParentFrame()
     self.assertTrue('One' in self._driver.GetPageSource())
+
+  def testSwitchToNestedFrame(self):
+    self._driver.Load(self.GetHttpUrlForFile(
+        '/chromedriver/nested_frameset.html'))
+    self._driver.SwitchToFrameByIndex(0)
+    self.assertTrue(self._driver.FindElement("id", "link").IsDisplayed())
+    self._driver.SwitchToMainFrame()
+    self._driver.SwitchToFrame('2Frame')
+    self.assertTrue(self._driver.FindElement("id", "l1").IsDisplayed())
+    self._driver.SwitchToMainFrame()
+    self._driver.SwitchToFrame('fourth_frame')
+    self.assertTrue('One' in self._driver.GetPageSource())
+    self._driver.SwitchToMainFrame()
+    self._driver.SwitchToFrameByIndex(4)
+    self.assertTrue(self._driver.FindElement("id", "aa1").IsDisplayed())
 
   def testExecuteInRemovedFrame(self):
     self._driver.ExecuteScript(
@@ -1694,7 +1707,7 @@ class RemoteBrowserTest(ChromeDriverBaseTest):
     if process is None:
       raise RuntimeError('Chrome could not be started with debugging port')
     try:
-      driver = self.CreateDriver(debugger_address='127.0.0.1:%d' % port)
+      driver = self.CreateDriver(debugger_address='localhost:%d' % port)
       driver.ExecuteScript('console.info("%s")' % 'connecting at %d!' % port)
       driver.Quit()
     finally:

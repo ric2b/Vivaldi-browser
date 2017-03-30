@@ -11,7 +11,6 @@ import android.preference.PreferenceManager;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.crash.MinidumpUploadService.ProcessType;
-import org.chromium.chrome.browser.signin.SigninPromoUma;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 
 import java.util.Locale;
@@ -45,6 +44,7 @@ public class ChromePreferenceManager {
             "contextual_search_last_animation_time";
     private static final String ENABLE_CUSTOM_TABS = "enable_custom_tabs";
     private static final String HERB_FLAVOR_KEY = "herb_flavor";
+    private static final String FORCED_TO_MIGRATE_KEY = "forced_to_migrate";
 
     private static final String SUCCESS_UPLOAD_SUFFIX = "_crash_success_upload";
     private static final String FAILURE_UPLOAD_SUFFIX = "_crash_failure_upload";
@@ -240,8 +240,6 @@ public class ChromePreferenceManager {
     public void setShowSigninPromo(boolean shouldShow) {
         SharedPreferences.Editor sharedPreferencesEditor = mSharedPreferences.edit();
         sharedPreferencesEditor.putBoolean(SHOW_SIGNIN_PROMO, shouldShow).apply();
-
-        if (shouldShow) SigninPromoUma.recordAction(SigninPromoUma.SIGNIN_PROMO_ENABLED);
     }
 
     /**
@@ -337,6 +335,22 @@ public class ChromePreferenceManager {
      */
     public void setCachedHerbFlavor(String flavor) {
         writeString(HERB_FLAVOR_KEY, flavor);
+    }
+
+    /**
+     * @return Whether or not the user is being forced to migrate to tabbed mode.
+     */
+    public boolean getCachedIsForcedToMigrate() {
+        return mSharedPreferences.getBoolean(FORCED_TO_MIGRATE_KEY, false);
+    }
+
+    /**
+     * Caches whether or not the user is being forced to migrate to tabbed mode.
+     */
+    public void setCachedIsForcedToMigrate(boolean state) {
+        SharedPreferences.Editor ed = mSharedPreferences.edit();
+        ed.putBoolean(FORCED_TO_MIGRATE_KEY, state);
+        ed.apply();
     }
 
     /**

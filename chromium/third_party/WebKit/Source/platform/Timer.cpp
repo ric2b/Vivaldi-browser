@@ -47,7 +47,7 @@ TimerBase::TimerBase(WebTaskRunner* webTaskRunner)
     , m_repeatInterval(0)
     , m_cancellableTimerTask(nullptr)
     , m_webTaskRunner(webTaskRunner)
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     , m_thread(currentThread())
 #endif
 {
@@ -117,7 +117,9 @@ void TimerBase::runInternal()
         return;
 
     TRACE_EVENT0("blink", "TimerBase::run");
-    ASSERT_WITH_MESSAGE(m_thread == currentThread(), "Timer posted by %s %s was run on a different thread", m_location.functionName(), m_location.fileName());
+#if DCHECK_IS_ON()
+    DCHECK_EQ(m_thread, currentThread()) << "Timer posted by " << m_location.functionName() << " " << m_location.fileName() << " was run on a different thread";
+#endif
     TRACE_EVENT_SET_SAMPLING_STATE("blink", "BlinkInternal");
 
     if (m_repeatInterval) {
@@ -143,7 +145,7 @@ bool TimerBase::Comparator::operator()(const TimerBase* a, const TimerBase* b) c
 // static
 WebTaskRunner* TimerBase::UnthrottledWebTaskRunner()
 {
-    return Platform::current()->currentThread()->taskRunner();
+    return Platform::current()->currentThread()->getWebTaskRunner();
 }
 
 double TimerBase::timerMonotonicallyIncreasingTime() const

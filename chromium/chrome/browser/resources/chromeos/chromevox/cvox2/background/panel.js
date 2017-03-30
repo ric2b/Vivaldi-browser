@@ -8,6 +8,7 @@
 
 goog.provide('Panel');
 
+goog.require('ISearchUI');
 goog.require('Msgs');
 goog.require('PanelCommand');
 goog.require('PanelMenu');
@@ -34,6 +35,12 @@ Panel.init = function() {
 
   /** @type {Element} @private */
   this.brailleContainer_ = $('braille-container');
+
+  /** @type {Element} @private */
+  this.searchContainer_ = $('search-container');
+
+  /** @type {Element} @private */
+  this.searchInput_ = $('search');
 
   /** @type {Element} @private */
   this.brailleTextElement_ = $('braille-text');
@@ -72,6 +79,13 @@ Panel.init = function() {
    */
   this.pendingCallback_ = null;
 
+  /**
+   * True if we're currently in incremental search mode.
+   * @type {boolean}
+   * @private
+   */
+  this.searching_ = false;
+
   Panel.updateFromPrefs();
 
   Msgs.addTranslatedMessagesToDom(document);
@@ -93,12 +107,25 @@ Panel.init = function() {
 
   document.addEventListener('keydown', Panel.onKeyDown, false);
   document.addEventListener('mouseup', Panel.onMouseUp, false);
+
+  Panel.searchInput_.addEventListener('blur', Panel.onSearchInputBlur, false);
 };
 
 /**
  * Update the display based on prefs.
  */
 Panel.updateFromPrefs = function() {
+  if (Panel.searching_) {
+    this.speechContainer_.style.display = 'none';
+    this.brailleContainer_.style.display = 'none';
+    this.searchContainer_.style.display = 'block';
+    return;
+  }
+
+  this.speechContainer_.style.display = 'block';
+  this.brailleContainer_.style.display = 'block';
+  this.searchContainer_.style.display = 'none';
+
   if (localStorage['brailleCaptions'] === String(true)) {
     this.speechContainer_.style.visibility = 'hidden';
     this.brailleContainer_.style.visibility = 'visible';
@@ -159,6 +186,9 @@ Panel.exec = function(command) {
       break;
     case PanelCommandType.OPEN_MENUS:
       Panel.onOpenMenus();
+      break;
+    case PanelCommandType.SEARCH:
+      Panel.onSearch();
       break;
   }
 };
@@ -298,6 +328,18 @@ Panel.onOpenMenus = function(opt_event) {
 
   // Activate the first menu.
   Panel.activateMenu(Panel.menus_[0]);
+};
+
+/** Open incremental search. */
+Panel.onSearch = function() {
+  Panel.clearMenus();
+  Panel.pendingCallback_ = null;
+  Panel.searching_ = true;
+  Panel.updateFromPrefs();
+
+  window.location = '#focus';
+
+  ISearchUI.get(Panel.searchInput_);
 };
 
 /**
@@ -449,6 +491,21 @@ Panel.onKeyDown = function(event) {
 };
 
 /**
+ * Called when focus leaves the search input.
+ */
+Panel.onSearchInputBlur = function() {
+  if (Panel.searching_) {
+    if (document.activeElement != Panel.searchInput_ || !document.hasFocus()) {
+      Panel.searching_ = false;
+      if (window.location == '#focus')
+        window.location = '#';
+      Panel.updateFromPrefs();
+      Panel.searchInput_.value = '';
+    }
+  }
+};
+
+/**
  * Open the ChromeVox Options.
  */
 Panel.onOptions = function() {
@@ -492,4 +549,13 @@ Panel.closeMenusAndRestoreFocus = function() {
 
 window.addEventListener('load', function() {
   Panel.init();
+}, false);
+
+window.addEventListener('hashchange', function() {
+  if (location.hash == '#fullscreen' || location.hash == '#focus') {
+    this.originalStickyState_ = cvox.ChromeVox.isStickyPrefOn;
+    cvox.ChromeVox.isStickyPrefOn = false;
+  } else {
+    cvox.ChromeVox.isStickyPrefOn = this.originalStickyState_;
+  }
 }, false);

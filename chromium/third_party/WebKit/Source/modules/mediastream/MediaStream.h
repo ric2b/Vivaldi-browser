@@ -81,7 +81,7 @@ public:
 
     // EventTarget
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
     // URLRegistrable
     URLRegistry& registry() const override;
@@ -101,7 +101,7 @@ private:
 
     bool emptyOrOnlyEndedTracks();
 
-    void scheduleDispatchEvent(PassRefPtrWillBeRawPtr<Event>);
+    void scheduleDispatchEvent(Event*);
     void scheduledEventTimerFired(Timer<MediaStream>*);
 
     bool m_stopped;
@@ -111,7 +111,7 @@ private:
     Member<MediaStreamDescriptor> m_descriptor;
 
     Timer<MediaStream> m_scheduledEventTimer;
-    WillBeHeapVector<RefPtrWillBeMember<Event>> m_scheduledEvents;
+    HeapVector<Member<Event>> m_scheduledEvents;
 };
 
 typedef HeapVector<Member<MediaStream>> MediaStreamVector;

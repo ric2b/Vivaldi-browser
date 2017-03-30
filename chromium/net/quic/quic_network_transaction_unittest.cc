@@ -11,8 +11,8 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "net/base/chunked_upload_data_stream.h"
-#include "net/base/network_quality_estimator.h"
 #include "net/base/socket_performance_watcher.h"
+#include "net/base/socket_performance_watcher_factory.h"
 #include "net/base/test_completion_callback.h"
 #include "net/base/test_data_directory.h"
 #include "net/cert/mock_cert_verifier.h"
@@ -61,13 +61,13 @@ namespace {
 
 static const char kQuicAlternateProtocolHeader[] =
     "Alternate-Protocol: 443:quic\r\n\r\n";
-static const char kQuicAlternateProtocol50pctHeader[] =
+static const char kQuicAlternateProtocolWithProbabilityHeader[] =
     "Alternate-Protocol: 443:quic,p=.5\r\n\r\n";
 static const char kQuicAlternateProtocolDifferentPortHeader[] =
     "Alternate-Protocol: 137:quic\r\n\r\n";
 static const char kQuicAlternativeServiceHeader[] =
     "Alt-Svc: quic=\":443\"\r\n\r\n";
-static const char kQuicAlternativeService50pctHeader[] =
+static const char kQuicAlternativeServiceWithProbabilityHeader[] =
     "Alt-Svc: quic=\":443\";p=\".5\"\r\n\r\n";
 static const char kQuicAlternativeServiceDifferentPortHeader[] =
     "Alt-Svc: quic=\":137\"\r\n\r\n";
@@ -139,47 +139,53 @@ class ProxyHeadersHandler {
   bool was_called_;
 };
 
-class TestNetworkQualityEstimator : public NetworkQualityEstimator {
+class TestSocketPerformanceWatcher : public SocketPerformanceWatcher {
  public:
-  TestNetworkQualityEstimator()
-      : NetworkQualityEstimator(scoped_ptr<net::ExternalEstimateProvider>(),
-                                std::map<std::string, std::string>()),
-        watcher_count_(0) {}
+  explicit TestSocketPerformanceWatcher(bool* rtt_notification_received)
+      : rtt_notification_received_(rtt_notification_received) {}
+  ~TestSocketPerformanceWatcher() override {}
 
-  ~TestNetworkQualityEstimator() override {}
+  bool ShouldNotifyUpdatedRTT() const override { return true; }
 
+  void OnUpdatedRTTAvailable(const base::TimeDelta& rtt) override {
+    *rtt_notification_received_ = true;
+  }
+
+  void OnConnectionChanged() override {}
+
+ private:
+  bool* rtt_notification_received_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestSocketPerformanceWatcher);
+};
+
+class TestSocketPerformanceWatcherFactory
+    : public SocketPerformanceWatcherFactory {
+ public:
+  TestSocketPerformanceWatcherFactory()
+      : watcher_count_(0u), rtt_notification_received_(false) {}
+  ~TestSocketPerformanceWatcherFactory() override {}
+
+  // SocketPerformanceWatcherFactory implementation:
   scoped_ptr<SocketPerformanceWatcher> CreateSocketPerformanceWatcher(
       const Protocol protocol) override {
     if (protocol != PROTOCOL_QUIC) {
-      NOTIMPLEMENTED();
+      return nullptr;
     }
     ++watcher_count_;
-    return NetworkQualityEstimator::CreateSocketPerformanceWatcher(protocol);
+    return scoped_ptr<SocketPerformanceWatcher>(
+        new TestSocketPerformanceWatcher(&rtt_notification_received_));
   }
 
   size_t watcher_count() const { return watcher_count_; }
 
- private:
-  size_t watcher_count_;
-  DISALLOW_COPY_AND_ASSIGN(TestNetworkQualityEstimator);
-};
-
-class TestRTTObserver : public NetworkQualityEstimator::RTTObserver {
- public:
-  TestRTTObserver() : rtt_notification_received_(false) {}
-
   bool rtt_notification_received() const { return rtt_notification_received_; }
 
-  // NetworkQualityEstimator::RttObserver implementation:
-  void OnRTTObservation(
-      int32_t rtt_ms,
-      const base::TimeTicks& timestamp,
-      net::NetworkQualityEstimator::ObservationSource source) override {
-    rtt_notification_received_ = true;
-  }
-
  private:
+  size_t watcher_count_;
   bool rtt_notification_received_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestSocketPerformanceWatcherFactory);
 };
 
 class QuicNetworkTransactionTest
@@ -190,7 +196,6 @@ class QuicNetworkTransactionTest
       : clock_(new MockClock),
         maker_(GetParam(), 0, clock_, kDefaultServerHostName),
         cert_transparency_verifier_(new MultiLogCTVerifier()),
-        test_network_quality_estimator_(new TestNetworkQualityEstimator()),
         ssl_config_service_(new SSLConfigServiceDefaults),
         proxy_service_(ProxyService::CreateDirect()),
         auth_handler_factory_(
@@ -233,11 +238,30 @@ class QuicNetworkTransactionTest
     return maker_.MakeConnectionClosePacket(num);
   }
 
+  scoped_ptr<QuicEncryptedPacket> ConstructGoAwayPacket(
+      QuicPacketNumber num,
+      QuicErrorCode error_code,
+      std::string reason_phrase) {
+    return maker_.MakeGoAwayPacket(num, error_code, reason_phrase);
+  }
+
   scoped_ptr<QuicEncryptedPacket> ConstructAckPacket(
       QuicPacketNumber largest_received,
       QuicPacketNumber least_unacked) {
     return maker_.MakeAckPacket(2, largest_received, least_unacked,
                                 least_unacked, true);
+  }
+
+  scoped_ptr<QuicEncryptedPacket> ConstructAckAndRstPacket(
+      QuicPacketNumber num,
+      QuicStreamId stream_id,
+      QuicRstStreamErrorCode error_code,
+      QuicPacketNumber largest_received,
+      QuicPacketNumber ack_least_unacked,
+      QuicPacketNumber stop_least_unacked) {
+    return maker_.MakeAckAndRstPacket(num, false, stream_id, error_code,
+                                      largest_received, ack_least_unacked,
+                                      stop_least_unacked, true);
   }
 
   scoped_ptr<QuicEncryptedPacket> ConstructAckPacket(
@@ -423,7 +447,7 @@ class QuicNetworkTransactionTest
     params_.transport_security_state = &transport_security_state_;
     params_.cert_transparency_verifier = cert_transparency_verifier_.get();
     params_.socket_performance_watcher_factory =
-        test_network_quality_estimator_.get();
+        &test_socket_performance_watcher_factory_;
     params_.proxy_service = proxy_service_.get();
     params_.ssl_config_service = ssl_config_service_.get();
     params_.http_auth_handler_factory = auth_handler_factory_.get();
@@ -435,8 +459,6 @@ class QuicNetworkTransactionTest
           "mail.example.com"}) {
       params_.quic_host_whitelist.insert(host);
     }
-
-    test_network_quality_estimator_->AddRTTObserver(&rtt_observer_);
 
     session_.reset(new HttpNetworkSession(params_));
     session_->quic_stream_factory()->set_require_confirmation(false);
@@ -517,7 +539,7 @@ class QuicNetworkTransactionTest
     AlternativeService alternative_service(QUIC, host_port_pair.host(), 443);
     base::Time expiration = base::Time::Now() + base::TimeDelta::FromDays(1);
     http_server_properties_.SetAlternativeService(
-        host_port_pair, alternative_service, 1.0, expiration);
+        host_port_pair, alternative_service, expiration);
   }
 
   void AddQuicRemoteAlternativeServiceMapping(
@@ -529,7 +551,7 @@ class QuicNetworkTransactionTest
                                            alternative.port());
     base::Time expiration = base::Time::Now() + base::TimeDelta::FromDays(1);
     http_server_properties_.SetAlternativeService(
-        host_port_pair, alternative_service, 1.0, expiration);
+        host_port_pair, alternative_service, expiration);
   }
 
   void ExpectBrokenAlternateProtocolMapping() {
@@ -569,8 +591,7 @@ class QuicNetworkTransactionTest
   MockCertVerifier cert_verifier_;
   TransportSecurityState transport_security_state_;
   scoped_ptr<CTVerifier> cert_transparency_verifier_;
-  scoped_ptr<TestNetworkQualityEstimator> test_network_quality_estimator_;
-  TestRTTObserver rtt_observer_;
+  TestSocketPerformanceWatcherFactory test_socket_performance_watcher_factory_;
   scoped_refptr<SSLConfigServiceDefaults> ssl_config_service_;
   scoped_ptr<ProxyService> proxy_service_;
   scoped_ptr<HttpAuthHandlerFactory> auth_handler_factory_;
@@ -606,8 +627,8 @@ INSTANTIATE_TEST_CASE_P(Version,
                         ::testing::ValuesIn(QuicSupportedVersions()));
 
 TEST_P(QuicNetworkTransactionTest, ForceQuic) {
-  params_.origin_to_force_quic_on =
-      HostPortPair::FromString("mail.example.org:443");
+  params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
 
   MockQuicData mock_quic_data;
   mock_quic_data.AddWrite(
@@ -630,9 +651,11 @@ TEST_P(QuicNetworkTransactionTest, ForceQuic) {
   params_.enable_alternative_service_with_different_host = false;
   CreateSession();
 
-  EXPECT_FALSE(rtt_observer_.rtt_notification_received());
+  EXPECT_FALSE(
+      test_socket_performance_watcher_factory_.rtt_notification_received());
   SendRequestAndExpectQuicResponse("hello!");
-  EXPECT_TRUE(rtt_observer_.rtt_notification_received());
+  EXPECT_TRUE(
+      test_socket_performance_watcher_factory_.rtt_notification_received());
 
   // Check that the NetLog was filled reasonably.
   TestNetLogEntry::List entries;
@@ -692,7 +715,8 @@ TEST_P(QuicNetworkTransactionTest, QuicProxy) {
 
   mock_quic_data.AddSocketDataToFactory(&socket_factory_);
 
-  EXPECT_FALSE(rtt_observer_.rtt_notification_received());
+  EXPECT_FALSE(
+      test_socket_performance_watcher_factory_.rtt_notification_received());
   // There is no need to set up an alternate protocol job, because
   // no attempt will be made to speak to the proxy over TCP.
 
@@ -702,7 +726,8 @@ TEST_P(QuicNetworkTransactionTest, QuicProxy) {
   CreateSession();
 
   SendRequestAndExpectQuicResponseFromProxyOnPort("hello!", 70);
-  EXPECT_TRUE(rtt_observer_.rtt_notification_received());
+  EXPECT_TRUE(
+      test_socket_performance_watcher_factory_.rtt_notification_received());
 }
 
 // Regression test for https://crbug.com/492458.  Test that for an HTTP
@@ -794,8 +819,8 @@ TEST_P(QuicNetworkTransactionTest, AlternativeServicesDifferentHost) {
 }
 
 TEST_P(QuicNetworkTransactionTest, ForceQuicWithErrorConnecting) {
-  params_.origin_to_force_quic_on =
-      HostPortPair::FromString("mail.example.org:443");
+  params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
 
   MockQuicData mock_quic_data1;
   mock_quic_data1.AddRead(ASYNC, ERR_SOCKET_NOT_CONNECTED);
@@ -812,7 +837,7 @@ TEST_P(QuicNetworkTransactionTest, ForceQuicWithErrorConnecting) {
   params_.enable_alternative_service_with_different_host = false;
   CreateSession();
 
-  EXPECT_EQ(0U, test_network_quality_estimator_->watcher_count());
+  EXPECT_EQ(0U, test_socket_performance_watcher_factory_.watcher_count());
   for (size_t i = 0; i < 2; ++i) {
     scoped_ptr<HttpNetworkTransaction> trans(
         new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
@@ -820,14 +845,14 @@ TEST_P(QuicNetworkTransactionTest, ForceQuicWithErrorConnecting) {
     int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
     EXPECT_EQ(ERR_IO_PENDING, rv);
     EXPECT_EQ(ERR_CONNECTION_CLOSED, callback.WaitForResult());
-    EXPECT_EQ(1 + i, test_network_quality_estimator_->watcher_count());
+    EXPECT_EQ(1 + i, test_socket_performance_watcher_factory_.watcher_count());
   }
 }
 
 TEST_P(QuicNetworkTransactionTest, DoNotForceQuicForHttps) {
   // Attempt to "force" quic on 443, which will not be honored.
-  params_.origin_to_force_quic_on =
-      HostPortPair::FromString("www.google.com:443");
+  params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("www.google.com:443"));
 
   MockRead http_reads[] = {
       MockRead("HTTP/1.1 200 OK\r\n\r\n"), MockRead("hello world"),
@@ -844,12 +869,47 @@ TEST_P(QuicNetworkTransactionTest, DoNotForceQuicForHttps) {
   CreateSession();
 
   SendRequestAndExpectHttpResponse("hello world");
-  EXPECT_EQ(0U, test_network_quality_estimator_->watcher_count());
+  EXPECT_EQ(0U, test_socket_performance_watcher_factory_.watcher_count());
 }
 
 TEST_P(QuicNetworkTransactionTest, UseAlternativeServiceForQuic) {
   MockRead http_reads[] = {
       MockRead("HTTP/1.1 200 OK\r\n"), MockRead(kQuicAlternativeServiceHeader),
+      MockRead("hello world"),
+      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
+      MockRead(ASYNC, OK)};
+
+  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
+                                     0);
+  socket_factory_.AddSocketDataProvider(&http_data);
+  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
+
+  MockQuicData mock_quic_data;
+  mock_quic_data.AddWrite(
+      ConstructRequestHeadersPacket(1, kClientDataStreamId1, true, true,
+                                    GetRequestHeaders("GET", "https", "/")));
+  mock_quic_data.AddRead(ConstructResponseHeadersPacket(
+      1, kClientDataStreamId1, false, false, GetResponseHeaders("200 OK")));
+  mock_quic_data.AddRead(
+      ConstructDataPacket(2, kClientDataStreamId1, false, true, 0, "hello!"));
+  mock_quic_data.AddWrite(ConstructAckPacket(2, 1));
+  mock_quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // No more data to read
+  mock_quic_data.AddRead(ASYNC, 0);               // EOF
+
+  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  AddHangingNonAlternateProtocolSocketData();
+  CreateSession();
+
+  SendRequestAndExpectHttpResponse("hello world");
+  SendRequestAndExpectQuicResponse("hello!");
+}
+
+TEST_P(QuicNetworkTransactionTest,
+       UseAlternativeServiceWithProbabilityForQuic) {
+  MockRead http_reads[] = {
+      MockRead("HTTP/1.1 200 OK\r\n"),
+      MockRead(kQuicAlternativeServiceWithProbabilityHeader),
       MockRead("hello world"),
       MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
       MockRead(ASYNC, OK)};
@@ -913,6 +973,67 @@ TEST_P(QuicNetworkTransactionTest, UseAlternativeServiceQuicSupportedVersion) {
 
   SendRequestAndExpectHttpResponse("hello world");
   SendRequestAndExpectQuicResponse("hello!");
+}
+
+TEST_P(QuicNetworkTransactionTest, GoAwayWithConnectionMigrationOnPortsOnly) {
+  MockQuicData mock_quic_data;
+  mock_quic_data.AddWrite(
+      ConstructRequestHeadersPacket(1, kClientDataStreamId1, true, true,
+                                    GetRequestHeaders("GET", "https", "/")));
+  mock_quic_data.AddRead(ConstructResponseHeadersPacket(
+      1, kClientDataStreamId1, false, false, GetResponseHeaders("200 OK")));
+  // Read a GoAway packet with
+  // QuicErrorCode: QUIC_ERROR_MIGRATING_PORT from the peer.
+  mock_quic_data.AddRead(
+      ConstructGoAwayPacket(2, QUIC_ERROR_MIGRATING_PORT,
+                            "connection migration with port change only"));
+  mock_quic_data.AddWrite(ConstructAckPacket(2, 1));
+  mock_quic_data.AddRead(
+      ConstructDataPacket(3, kClientDataStreamId1, false, true, 0, "hello!"));
+  mock_quic_data.AddWrite(ConstructAckAndRstPacket(
+      3, kClientDataStreamId1, QUIC_STREAM_CANCELLED, 3, 3, 1));
+  mock_quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // No more data to read
+  mock_quic_data.AddRead(ASYNC, 0);               // EOF
+
+  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  // The non-alternate protocol job needs to hang in order to guarantee that
+  // the alternate-protocol job will "win".
+  AddHangingNonAlternateProtocolSocketData();
+
+  // In order for a new QUIC session to be established via alternate-protocol
+  // without racing an HTTP connection, we need the host resolution to happen
+  // synchronously.  Of course, even though QUIC *could* perform a 0-RTT
+  // connection to the the server, in this test we require confirmation
+  // before encrypting so the HTTP job will still start.
+  host_resolver_.set_synchronous_mode(true);
+  host_resolver_.rules()->AddIPLiteralRule("mail.example.org", "192.168.0.1",
+                                           "");
+  HostResolver::RequestInfo info(HostPortPair("mail.example.org", 443));
+  AddressList address;
+  host_resolver_.Resolve(info, DEFAULT_PRIORITY, &address, CompletionCallback(),
+                         nullptr, net_log_.bound());
+
+  CreateSession();
+  session_->quic_stream_factory()->set_require_confirmation(true);
+  AddQuicAlternateProtocolMapping(MockCryptoClientStream::ZERO_RTT);
+
+  scoped_ptr<HttpNetworkTransaction> trans(
+      new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
+  TestCompletionCallback callback;
+  int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
+  EXPECT_EQ(ERR_IO_PENDING, rv);
+
+  crypto_client_stream_factory_.last_stream()->SendOnCryptoHandshakeEvent(
+      QuicSession::HANDSHAKE_CONFIRMED);
+  EXPECT_EQ(OK, callback.WaitForResult());
+
+  // Check whether this transaction is correctly marked as received a go-away
+  // because of migrating port.
+  NetErrorDetails details;
+  EXPECT_FALSE(details.quic_port_migration_detected);
+  trans->PopulateNetErrorDetails(&details);
+  EXPECT_TRUE(details.quic_port_migration_detected);
 }
 
 TEST_P(QuicNetworkTransactionTest,
@@ -1352,84 +1473,6 @@ TEST_P(QuicNetworkTransactionTest, ConfirmAlternativeService) {
       alternative_service));
 }
 
-TEST_P(QuicNetworkTransactionTest, UseAlternativeServiceProbabilityForQuic) {
-  MockRead http_reads[] = {
-      MockRead("HTTP/1.1 200 OK\r\n"),
-      MockRead(kQuicAlternativeService50pctHeader), MockRead("hello world"),
-      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
-      MockRead(ASYNC, OK)};
-
-  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
-                                     0);
-  socket_factory_.AddSocketDataProvider(&http_data);
-  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
-
-  MockQuicData mock_quic_data;
-  mock_quic_data.AddWrite(
-      ConstructRequestHeadersPacket(1, kClientDataStreamId1, true, true,
-                                    GetRequestHeaders("GET", "https", "/")));
-  mock_quic_data.AddRead(ConstructResponseHeadersPacket(
-      1, kClientDataStreamId1, false, false, GetResponseHeaders("200 OK")));
-  mock_quic_data.AddRead(
-      ConstructDataPacket(2, kClientDataStreamId1, false, true, 0, "hello!"));
-  mock_quic_data.AddWrite(ConstructAckPacket(2, 1));
-  mock_quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // No more data to read
-  mock_quic_data.AddRead(ASYNC, 0);               // EOF
-
-  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
-
-  AddHangingNonAlternateProtocolSocketData();
-  params_.alternative_service_probability_threshold = 0.25;
-  CreateSession();
-
-  SendRequestAndExpectHttpResponse("hello world");
-  SendRequestAndExpectQuicResponse("hello!");
-}
-
-TEST_P(QuicNetworkTransactionTest,
-       DontUseAlternativeServiceProbabilityForQuic) {
-  MockRead http_reads[] = {
-      MockRead("HTTP/1.1 200 OK\r\n"),
-      MockRead(kQuicAlternativeService50pctHeader), MockRead("hello world"),
-      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
-      MockRead(ASYNC, OK)};
-
-  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
-                                     0);
-  socket_factory_.AddSocketDataProvider(&http_data);
-  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
-  socket_factory_.AddSocketDataProvider(&http_data);
-  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
-
-  params_.alternative_service_probability_threshold = 0.75;
-  CreateSession();
-
-  SendRequestAndExpectHttpResponse("hello world");
-  SendRequestAndExpectHttpResponse("hello world");
-}
-
-TEST_P(QuicNetworkTransactionTest,
-       DontUseAlternativeServiceWithBadProbabilityForQuic) {
-  MockRead http_reads[] = {
-      MockRead("HTTP/1.1 200 OK\r\n"),
-      MockRead("Alt-Svc: quic=\":443\";p=2\r\n\r\n"), MockRead("hello world"),
-      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
-      MockRead(ASYNC, OK)};
-
-  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
-                                     0);
-  socket_factory_.AddSocketDataProvider(&http_data);
-  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
-  socket_factory_.AddSocketDataProvider(&http_data);
-  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
-
-  params_.alternative_service_probability_threshold = 0.75;
-  CreateSession();
-
-  SendRequestAndExpectHttpResponse("hello world");
-  SendRequestAndExpectHttpResponse("hello world");
-}
-
 TEST_P(QuicNetworkTransactionTest, UseAlternativeServiceForQuicForHttps) {
   MockRead http_reads[] = {
       MockRead("HTTP/1.1 200 OK\r\n"), MockRead(kQuicAlternativeServiceHeader),
@@ -1465,6 +1508,45 @@ TEST_P(QuicNetworkTransactionTest, UseAlternativeServiceForQuicForHttps) {
 TEST_P(QuicNetworkTransactionTest, UseAlternateProtocolForQuic) {
   MockRead http_reads[] = {
       MockRead("HTTP/1.1 200 OK\r\n"), MockRead(kQuicAlternateProtocolHeader),
+      MockRead("hello world"),
+      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
+      MockRead(ASYNC, OK)};
+
+  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
+                                     0);
+  socket_factory_.AddSocketDataProvider(&http_data);
+  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
+
+  MockQuicData mock_quic_data;
+  mock_quic_data.AddWrite(
+      ConstructRequestHeadersPacket(1, kClientDataStreamId1, true, true,
+                                    GetRequestHeaders("GET", "https", "/")));
+  mock_quic_data.AddRead(ConstructResponseHeadersPacket(
+      1, kClientDataStreamId1, false, false, GetResponseHeaders("200 OK")));
+  mock_quic_data.AddRead(
+      ConstructDataPacket(2, kClientDataStreamId1, false, true, 0, "hello!"));
+  mock_quic_data.AddWrite(ConstructAckPacket(2, 1));
+  mock_quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // No more data to read
+  mock_quic_data.AddRead(ASYNC, 0);               // EOF
+
+  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  // The non-alternate protocol job needs to hang in order to guarantee that
+  // the alternate-protocol job will "win".
+  AddHangingNonAlternateProtocolSocketData();
+
+  params_.parse_alternative_services = false;
+  params_.parse_alternative_services = false;
+  CreateSession();
+
+  SendRequestAndExpectHttpResponse("hello world");
+  SendRequestAndExpectQuicResponse("hello!");
+}
+
+TEST_P(QuicNetworkTransactionTest, UseAlternateProtocolWithProbabilityForQuic) {
+  MockRead http_reads[] = {
+      MockRead("HTTP/1.1 200 OK\r\n"),
+      MockRead(kQuicAlternateProtocolWithProbabilityHeader),
       MockRead("hello world"),
       MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
       MockRead(ASYNC, OK)};
@@ -1587,90 +1669,6 @@ TEST_P(QuicNetworkTransactionTest, ConfirmAlternateProtocol) {
       alternative_service));
 }
 
-TEST_P(QuicNetworkTransactionTest, UseAlternateProtocolProbabilityForQuic) {
-  params_.parse_alternative_services = false;
-  MockRead http_reads[] = {
-      MockRead("HTTP/1.1 200 OK\r\n"),
-      MockRead(kQuicAlternateProtocol50pctHeader), MockRead("hello world"),
-      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
-      MockRead(ASYNC, OK)};
-
-  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
-                                     0);
-  socket_factory_.AddSocketDataProvider(&http_data);
-
-  MockQuicData mock_quic_data;
-  mock_quic_data.AddWrite(
-      ConstructRequestHeadersPacket(1, kClientDataStreamId1, true, true,
-                                    GetRequestHeaders("GET", "https", "/")));
-  mock_quic_data.AddRead(ConstructResponseHeadersPacket(
-      1, kClientDataStreamId1, false, false, GetResponseHeaders("200 OK")));
-  mock_quic_data.AddRead(
-      ConstructDataPacket(2, kClientDataStreamId1, false, true, 0, "hello!"));
-  mock_quic_data.AddWrite(ConstructAckPacket(2, 1));
-  mock_quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // No more data to read
-  mock_quic_data.AddRead(ASYNC, 0);               // EOF
-
-  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
-
-  // The non-alternate protocol job needs to hang in order to guarantee that
-  // the alternate-protocol job will "win".
-  AddHangingNonAlternateProtocolSocketData();
-
-  params_.alternative_service_probability_threshold = .25;
-  params_.parse_alternative_services = false;
-  CreateSession();
-
-  SendRequestAndExpectHttpResponse("hello world");
-  SendRequestAndExpectQuicResponse("hello!");
-}
-
-TEST_P(QuicNetworkTransactionTest, DontUseAlternateProtocolProbabilityForQuic) {
-  params_.parse_alternative_services = false;
-  MockRead http_reads[] = {
-      MockRead("HTTP/1.1 200 OK\r\n"),
-      MockRead(kQuicAlternateProtocol50pctHeader), MockRead("hello world"),
-      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
-      MockRead(ASYNC, OK)};
-
-  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
-                                     0);
-  socket_factory_.AddSocketDataProvider(&http_data);
-  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
-  socket_factory_.AddSocketDataProvider(&http_data);
-  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
-
-  params_.alternative_service_probability_threshold = .75;
-  CreateSession();
-
-  SendRequestAndExpectHttpResponse("hello world");
-  SendRequestAndExpectHttpResponse("hello world");
-}
-
-TEST_P(QuicNetworkTransactionTest,
-       DontUseAlternateProtocolWithBadProbabilityForQuic) {
-  params_.parse_alternative_services = false;
-  MockRead http_reads[] = {
-      MockRead("HTTP/1.1 200 OK\r\n"),
-      MockRead("Alternate-Protocol: 443:quic,p=2\r\n\r\n"),
-      MockRead("hello world"),
-      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
-      MockRead(ASYNC, OK)};
-
-  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
-                                     0);
-  socket_factory_.AddSocketDataProvider(&http_data);
-  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
-  socket_factory_.AddSocketDataProvider(&http_data);
-  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
-
-  params_.alternative_service_probability_threshold = .75;
-  CreateSession();
-
-  SendRequestAndExpectHttpResponse("hello world");
-  SendRequestAndExpectHttpResponse("hello world");
-}
-
 TEST_P(QuicNetworkTransactionTest, UseAlternateProtocolForQuicForHttps) {
   params_.parse_alternative_services = false;
   MockRead http_reads[] = {
@@ -1757,7 +1755,7 @@ class QuicAltSvcCertificateVerificationTest
     AlternativeService alternative_service(QUIC, alternative);
     base::Time expiration = base::Time::Now() + base::TimeDelta::FromDays(1);
     session_->http_server_properties()->SetAlternativeService(
-        origin, alternative_service, 1.0, expiration);
+        origin, alternative_service, expiration);
     scoped_ptr<HttpNetworkTransaction> trans(
         new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
     TestCompletionCallback callback;
@@ -2300,7 +2298,8 @@ TEST_P(QuicNetworkTransactionTest, ConnectionCloseDuringConnect) {
 
 TEST_P(QuicNetworkTransactionTest, SecureResourceOverSecureQuic) {
   maker_.set_hostname("www.example.org");
-  EXPECT_FALSE(rtt_observer_.rtt_notification_received());
+  EXPECT_FALSE(
+      test_socket_performance_watcher_factory_.rtt_notification_received());
   MockQuicData mock_quic_data;
   mock_quic_data.AddWrite(
       ConstructRequestHeadersPacket(1, kClientDataStreamId1, true, true,
@@ -2318,12 +2317,13 @@ TEST_P(QuicNetworkTransactionTest, SecureResourceOverSecureQuic) {
   CreateSession();
   AddQuicAlternateProtocolMapping(MockCryptoClientStream::CONFIRM_HANDSHAKE);
   SendRequestAndExpectQuicResponse("hello!");
-  EXPECT_TRUE(rtt_observer_.rtt_notification_received());
+  EXPECT_TRUE(
+      test_socket_performance_watcher_factory_.rtt_notification_received());
 }
 
 TEST_P(QuicNetworkTransactionTest, QuicUpload) {
-  params_.origin_to_force_quic_on =
-      HostPortPair::FromString("mail.example.org:443");
+  params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
 
   MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING, 0)};
   MockWrite writes[] = {MockWrite(SYNCHRONOUS, ERR_FAILED, 1)};

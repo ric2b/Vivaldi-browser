@@ -16,6 +16,7 @@ import org.chromium.chrome.browser.media.ui.MediaNotificationInfo;
 import org.chromium.chrome.browser.media.ui.MediaNotificationListener;
 import org.chromium.chrome.browser.media.ui.MediaNotificationManager;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.content_public.common.MediaMetadata;
 
 import javax.annotation.Nullable;
 
@@ -58,7 +59,7 @@ public class CastNotificationControl implements MediaRouteController.UiListener,
             if (sInstance == null) {
                 sInstance = new CastNotificationControl(context);
             }
-            sInstance.mMediaRouteController = mediaRouteController;
+            sInstance.setRouteController(mediaRouteController);
             return sInstance;
         }
     }
@@ -113,11 +114,16 @@ public class CastNotificationControl implements MediaRouteController.UiListener,
     }
 
     public void setRouteController(MediaRouteController controller) {
+        if (mMediaRouteController != null) mMediaRouteController.removeUiListener(this);
         mMediaRouteController = controller;
+        if (controller != null) controller.addUiListener(this);
     }
 
     private void updateNotification() {
-        mNotificationBuilder.setTitle(mTitle);
+        // Nothing shown yet, nothing to update.
+        if (mNotificationBuilder == null) return;
+
+        mNotificationBuilder.setMetadata(new MediaMetadata(mTitle, "", ""));
         if (mState == PlayerState.PAUSED || mState == PlayerState.PLAYING) {
             mNotificationBuilder.setPaused(mState != PlayerState.PLAYING);
             mNotificationBuilder.setActions(MediaNotificationInfo.ACTION_STOP
@@ -142,6 +148,8 @@ public class CastNotificationControl implements MediaRouteController.UiListener,
     // MediaRouteController.UiListener implementation.
     @Override
     public void onPlaybackStateChanged(PlayerState newState) {
+        if (mState == newState) return;
+
         mState = newState;
         updateNotification();
     }
@@ -173,7 +181,9 @@ public class CastNotificationControl implements MediaRouteController.UiListener,
 
     @Override
     public void onTitleChanged(String title) {
-        mTitle = (title == null) ? "" : title;
+        if (title == null || title.equals(mTitle)) return;
+
+        mTitle = title;
         updateNotification();
     }
 

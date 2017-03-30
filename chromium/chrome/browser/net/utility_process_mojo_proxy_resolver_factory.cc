@@ -42,6 +42,8 @@ UtilityProcessMojoProxyResolverFactory::
 
 void UtilityProcessMojoProxyResolverFactory::CreateProcessAndConnect() {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(!resolver_factory_);
+  DCHECK(!weak_utility_process_host_);
   DVLOG(1) << "Attempting to create utility process for proxy resolver";
   content::UtilityProcessHost* utility_process_host =
       content::UtilityProcessHost::Create(
@@ -49,7 +51,7 @@ void UtilityProcessMojoProxyResolverFactory::CreateProcessAndConnect() {
           base::ThreadTaskRunnerHandle::Get());
   utility_process_host->SetName(l10n_util::GetStringUTF16(
       IDS_UTILITY_PROCESS_PROXY_RESOLVER_NAME));
-  bool process_started = utility_process_host->StartMojoMode();
+  bool process_started = utility_process_host->Start();
   if (process_started) {
     content::ServiceRegistry* service_registry =
         utility_process_host->GetServiceRegistry();
@@ -91,6 +93,8 @@ UtilityProcessMojoProxyResolverFactory::CreateResolver(
 void UtilityProcessMojoProxyResolverFactory::OnConnectionError() {
   DVLOG(1) << "Disconnection from utility process detected";
   resolver_factory_.reset();
+  delete weak_utility_process_host_.get();
+  weak_utility_process_host_.reset();
 }
 
 void UtilityProcessMojoProxyResolverFactory::OnResolverDestroyed() {

@@ -31,6 +31,7 @@
 #ifndef Notification_h
 #define Notification_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
@@ -57,9 +58,9 @@ class NotificationOptions;
 class NotificationPermissionCallback;
 class ScriptState;
 
-class MODULES_EXPORT Notification final : public RefCountedGarbageCollectedEventTargetWithInlineData<Notification>, public ActiveDOMObject, public WebNotificationDelegate {
+class MODULES_EXPORT Notification final : public RefCountedGarbageCollectedEventTargetWithInlineData<Notification>, public ActiveScriptWrappable, public ActiveDOMObject, public WebNotificationDelegate {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(Notification);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(Notification);
+    USING_GARBAGE_COLLECTED_MIXIN(Notification);
     DEFINE_WRAPPERTYPEINFO();
 public:
     // Used for JavaScript instantiations of the Notification object. Will automatically schedule for
@@ -91,6 +92,7 @@ public:
     String body() const;
     String tag() const;
     String icon() const;
+    String badge() const;
     NavigatorVibration::VibrationPattern vibrate(bool& isNull) const;
     DOMTimeStamp timestamp() const;
     bool renotify() const;
@@ -107,18 +109,20 @@ public:
     static size_t maxActions();
 
     // EventTarget interface.
-    ExecutionContext* executionContext() const final { return ActiveDOMObject::executionContext(); }
+    ExecutionContext* getExecutionContext() const final { return ActiveDOMObject::getExecutionContext(); }
     const AtomicString& interfaceName() const override;
 
     // ActiveDOMObject interface.
     void stop() override;
-    bool hasPendingActivity() const override;
+
+    // ActiveScriptWrappable interface.
+    bool hasPendingActivity() const final;
 
     DECLARE_VIRTUAL_TRACE();
 
 protected:
     // EventTarget interface.
-    DispatchEventResult dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) final;
+    DispatchEventResult dispatchEventInternal(Event*) final;
 
 private:
     Notification(ExecutionContext*, const WebNotificationData&);

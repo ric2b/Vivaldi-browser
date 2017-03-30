@@ -26,7 +26,6 @@
 
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
@@ -36,7 +35,7 @@ class SegmentedString;
 class ScriptableDocumentParser;
 class TextResourceDecoder;
 
-class DocumentParser : public RefCountedWillBeGarbageCollectedFinalized<DocumentParser> {
+class DocumentParser : public GarbageCollectedFinalized<DocumentParser> {
 public:
     virtual ~DocumentParser();
     DECLARE_VIRTUAL_TRACE();
@@ -61,13 +60,8 @@ public:
 
     virtual void finish() = 0;
 
-    // FIXME: processingData() is only used by DocumentLoader::isLoadingInAPISense
-    // and is very unclear as to what it actually means.  The LegacyHTMLDocumentParser
-    // used to implement it.
-    virtual bool processingData() const { return false; }
-
     // document() will return 0 after detach() is called.
-    Document* document() const { ASSERT(m_document); return m_document; }
+    Document* document() const { DCHECK(m_document); return m_document; }
 
     bool isParsing() const { return m_state == ParsingState; }
     bool isStopping() const { return m_state == StoppingState; }
@@ -117,9 +111,9 @@ private:
 
     // Every DocumentParser needs a pointer back to the document.
     // m_document will be 0 after the parser is stopped.
-    RawPtrWillBeMember<Document> m_document;
+    Member<Document> m_document;
 
-    WillBeHeapHashSet<RawPtrWillBeWeakMember<DocumentParserClient>> m_clients;
+    HeapHashSet<WeakMember<DocumentParserClient>> m_clients;
 };
 
 } // namespace blink

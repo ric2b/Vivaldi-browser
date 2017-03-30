@@ -61,10 +61,12 @@ import org.chromium.chrome.browser.firstrun.FirstRunActivity;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
+import org.chromium.chrome.browser.incognito.IncognitoNotificationManager;
 import org.chromium.chrome.browser.metrics.ActivityStopMetrics;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
 import org.chromium.chrome.browser.metrics.StartupMetrics;
 import org.chromium.chrome.browser.metrics.UmaUtils;
+import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.ntp.NativePageAssassin;
 import org.chromium.chrome.browser.omaha.OmahaClient;
 import org.chromium.chrome.browser.omnibox.AutocompleteController;
@@ -73,10 +75,9 @@ import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomiza
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.preferences.ConnectionChangeReceiver;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.preferences.datareduction.DataReductionPreferences;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionPromoScreen;
-import org.chromium.chrome.browser.signin.SigninPromoScreen;
-import org.chromium.chrome.browser.snackbar.undo.UndoBarPopupController;
+import org.chromium.chrome.browser.signin.SigninPromoUtil;
+import org.chromium.chrome.browser.snackbar.undo.UndoBarController;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.ChromeTabCreator;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
@@ -172,7 +173,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
 
     private FindToolbarManager mFindToolbarManager;
 
-    private UndoBarPopupController mUndoBarPopupController;
+    private UndoBarController mUndoBarPopupController;
 
     private LayoutManagerChrome mLayoutManager;
 
@@ -229,12 +230,17 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
 
             mTabModelObserver = new EmptyTabModelObserver() {
                 @Override
-                public void didCloseTab(Tab tab) {
+                public void didCloseTab(int tabId, boolean incognito) {
                     closeIfNoTabsAndHomepageEnabled();
                 }
 
                 @Override
                 public void tabPendingClosure(Tab tab) {
+                    closeIfNoTabsAndHomepageEnabled();
+                }
+
+                @Override
+                public void tabRemoved(Tab tab) {
                     closeIfNoTabsAndHomepageEnabled();
                 }
 
@@ -271,7 +277,6 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
 
     private void refreshSignIn() {
         if (mIsOnFirstRun) return;
-        Log.i(TAG, "in refreshSignIn before starting the sign-in processor");
         FirstRunSignInProcessor.start(this);
     }
 
@@ -297,7 +302,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 if (preferenceManager.getPromosSkippedOnFirstStart()) {
                     // Data reduction promo should be temporarily suppressed if the sign in promo is
                     // shown to avoid nagging users too much.
-                    if (!SigninPromoScreen.launchSigninPromoIfNeeded(this)) {
+                    if (!SigninPromoUtil.launchSigninPromoIfNeeded(this)) {
                         DataReductionPromoScreen.launchDataReductionPromo(this);
                     }
                 } else {
@@ -315,12 +320,12 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
             getWindow().setFeatureInt(Window.FEATURE_INDETERMINATE_PROGRESS,
                     Window.PROGRESS_VISIBILITY_OFF);
 
-            super.finishNativeInitialization();
+            // Check for incognito tabs to handle the case where Chrome was swiped away in the
+            // background.
+            int incognitoCount = TabWindowManager.getInstance().getIncognitoTabCount();
+            if (incognitoCount == 0) IncognitoNotificationManager.dismissIncognitoNotification();
 
-            if (getActivityTab() != null) {
-                DataReductionPreferences.launchDataReductionSSLInfoBar(
-                        this, getActivityTab().getWebContents());
-            }
+            super.finishNativeInitialization();
         } finally {
             TraceEvent.end("ChromeTabbedActivity.finishNativeInitialization");
         }
@@ -469,9 +474,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 mTabModelSelectorImpl.getCurrentTab().setFullscreenManager(getFullscreenManager());
             }
 
-            mFindToolbarManager = new FindToolbarManager(this, getTabModelSelector(),
-                    getToolbarManager()
-                            .getActionModeController().getActionModeCallback());
+            mFindToolbarManager = new FindToolbarManager(this,
+                    getToolbarManager().getActionModeController().getActionModeCallback());
             if (getContextualSearchManager() != null) {
                 getContextualSearchManager().setFindToolbarManager(mFindToolbarManager);
             }
@@ -515,8 +519,6 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 }
             });
 
-            removeWindowBackground();
-
             if (isTablet()) {
                 EmptyBackgroundViewWrapper bgViewWrapper = new EmptyBackgroundViewWrapper(
                         getTabModelSelector(), getTabCreator(false), ChromeTabbedActivity.this,
@@ -552,9 +554,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
 
             Intent intent = getIntent();
 
-            if (!CipherFactory.getInstance().restoreFromBundle(getSavedInstanceState())) {
-                mTabModelSelectorImpl.clearEncryptedState();
-            }
+            CipherFactory.getInstance().restoreFromBundle(getSavedInstanceState());
 
             boolean noRestoreState =
                     CommandLine.getInstance().hasSwitch(ChromeSwitches.NO_RESTORE_STATE);
@@ -730,6 +730,9 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                         if (tabIndex != TabModel.INVALID_TAB_INDEX) {
                             getTabModelSelector().selectModel(otherModel.isIncognito());
                             TabModelUtils.setIndex(otherModel, tabIndex);
+                        } else {
+                            Log.e(TAG, "Failed to bring tab to front because it doesn't exist.");
+                            return;
                         }
                     } else {
                         TabModelUtils.setIndex(tabModel, tabIndex);
@@ -817,7 +820,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 newIntent.putExtra(Browser.EXTRA_APPLICATION_ID, getPackageName());
                 newIntent.putExtra(
                         CustomTabIntentDataProvider.EXTRA_IS_OPENED_BY_CHROME, true);
-                ChromeLauncherActivity.addHerbIntentExtras(ChromeTabbedActivity.this,
+                ChromeLauncherActivity.updateHerbIntent(ChromeTabbedActivity.this,
                         newIntent, Uri.parse(IntentHandler.getUrlFromIntent(newIntent)));
 
                 // Launch the Activity on top of this task.
@@ -910,7 +913,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         mContentContainer = (ViewGroup) findViewById(android.R.id.content);
         mControlContainer = (ToolbarControlContainer) findViewById(R.id.control_container);
 
-        mUndoBarPopupController = new UndoBarPopupController(this, mTabModelSelectorImpl,
+        mUndoBarPopupController = new UndoBarController(this, mTabModelSelectorImpl,
                 getSnackbarManager());
     }
 
@@ -932,10 +935,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
 
         final boolean isIntentActionMain = getIntent() != null
                 && TextUtils.equals(getIntent().getAction(), Intent.ACTION_MAIN);
-        Log.i(TAG, "begin FirstRunFlowSequencer.checkIfFirstRunIsNecessary");
         final Intent freIntent = FirstRunFlowSequencer.checkIfFirstRunIsNecessary(
                 this, isIntentActionMain);
-        Log.i(TAG, "end FirstRunFlowSequencer.checkIfFirstRunIsNecessary");
         if (freIntent == null) return;
 
         mIsOnFirstRun = true;
@@ -1009,7 +1010,9 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
     @Override
     public boolean onMenuOrKeyboardAction(final int id, boolean fromMenu) {
         final Tab currentTab = getActivityTab();
-        if (id == R.id.new_tab_menu_id) {
+        if (id == R.id.move_to_other_window_menu_id) {
+            if (currentTab != null) moveTabToOtherWindow(currentTab);
+        } else if (id == R.id.new_tab_menu_id) {
             Tab launchedTab = getTabCreator(false).launchUrl(
                     UrlConstants.NTP_URL, TabLaunchType.FROM_CHROME_UI);
             RecordUserAction.record("MobileMenuNewTab");
@@ -1083,6 +1086,18 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         RecordHistogram.recordEnumeratedHistogram(
                 "Android.Activity.ChromeTabbedActivity.SystemBackAction",
                 action, BACK_PRESSED_COUNT);
+    }
+
+    private void moveTabToOtherWindow(Tab tab) {
+        Class<? extends Activity> targetActivity =
+                MultiWindowUtils.getInstance().getOpenInOtherWindowActivity(this);
+        if (targetActivity == null) return;
+
+        Intent intent = new Intent(this, targetActivity);
+        intent.setClass(this, targetActivity);
+        intent.setFlags(MultiWindowUtils.FLAG_ACTIVITY_LAUNCH_ADJACENT);
+
+        tab.detachAndStartReparenting(intent, null, null);
     }
 
     @Override

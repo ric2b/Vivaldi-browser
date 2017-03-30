@@ -39,8 +39,6 @@ class TestUIModelTypeController : public UIModelTypeController {
                               model_type,
                               sync_client) {}
 
-  void InitializeProcessorInTest() { InitializeProcessor(); }
-
  private:
   ~TestUIModelTypeController() override {}
 };
@@ -145,10 +143,11 @@ class UIModelTypeControllerTest : public testing::Test,
   void SetUp() override {
     controller_ = new TestUIModelTypeController(
         ui_loop_.task_runner(), base::Closure(), syncer::DEVICE_INFO, this);
-    controller_->InitializeProcessorInTest();
+
+    // TODO(crbug.com/543407): Move the processor stuff out.
     type_processor_ =
-        ((syncer_v2::SharedModelTypeProcessor*)service_.change_processor())
-            ->AsWeakPtrForUI();
+        service_.SetUpProcessor(new syncer_v2::SharedModelTypeProcessor(
+            syncer::DEVICE_INFO, &service_));
   }
 
   void TearDown() override {
@@ -156,9 +155,9 @@ class UIModelTypeControllerTest : public testing::Test,
     RunQueuedUIThreadTasks();
   }
 
-  base::WeakPtr<syncer_v2::ModelTypeService> GetModelTypeServiceForType(
+  syncer_v2::ModelTypeService* GetModelTypeServiceForType(
       syncer::ModelType type) override {
-    return service_.AsWeakPtr();
+    return &service_;
   }
 
  protected:
@@ -184,19 +183,18 @@ class UIModelTypeControllerTest : public testing::Test,
     }
   }
 
+  void RegisterWithBackend() {
+    controller_->RegisterWithBackend(&configurer_);
+    if (auto_run_tasks_) {
+      RunAllTasks();
+    }
+  }
+
   void StartAssociating() {
     controller_->StartAssociating(base::Bind(
         &UIModelTypeControllerTest::AssociationDone, base::Unretained(this)));
     // The callback is expected to be promptly called.
     EXPECT_TRUE(association_callback_called_);
-  }
-
-  void ActivateDataType() {
-    DCHECK(association_callback_called_);
-    controller_->ActivateDataType(&configurer_);
-    if (auto_run_tasks_) {
-      RunAllTasks();
-    }
   }
 
   void DeactivateDataTypeAndStop() {
@@ -237,7 +235,7 @@ class UIModelTypeControllerTest : public testing::Test,
     association_callback_called_ = true;
   }
 
-  base::WeakPtr<syncer_v2::SharedModelTypeProcessor> type_processor_;
+  syncer_v2::SharedModelTypeProcessor* type_processor_;
   scoped_refptr<TestUIModelTypeController> controller_;
 
   bool auto_run_tasks_;
@@ -280,23 +278,21 @@ TEST_F(UIModelTypeControllerTest, ActivateDataTypeOnUIThread) {
   LoadModels();
   EXPECT_EQ(sync_driver::DataTypeController::MODEL_LOADED,
             controller_->state());
+  RegisterWithBackend();
+  TestTypeProcessor(true, true);  // enabled, connected.
 
   StartAssociating();
   EXPECT_EQ(sync_driver::DataTypeController::RUNNING, controller_->state());
-
-  ActivateDataType();
-  TestTypeProcessor(true, true);  // enabled, connected.
 }
 
 TEST_F(UIModelTypeControllerTest, Stop) {
   LoadModels();
-  StartAssociating();
-  ActivateDataType();
+  RegisterWithBackend();
   TestTypeProcessor(true, true);  // enabled, connected.
+  StartAssociating();
 
   DeactivateDataTypeAndStop();
   EXPECT_EQ(sync_driver::DataTypeController::NOT_RUNNING, controller_->state());
-  TestTypeProcessor(true, false);  // enabled, not connected.
 }
 
 }  // namespace sync_driver_v2

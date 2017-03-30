@@ -24,7 +24,7 @@ Element* elementForId(int elementId)
 }
 } // namespace
 
-PassRefPtrWillBeRawPtr<ScrollState> ScrollState::create(ScrollStateInit init)
+ScrollState* ScrollState::create(ScrollStateInit init)
 {
     OwnPtr<ScrollStateData> scrollStateData = adoptPtr(new ScrollStateData());
     scrollStateData->delta_x = init.deltaX();
@@ -41,13 +41,13 @@ PassRefPtrWillBeRawPtr<ScrollState> ScrollState::create(ScrollStateInit init)
     scrollStateData->is_direct_manipulation = init.isDirectManipulation();
     scrollStateData->delta_granularity = init.deltaGranularity();
     ScrollState* scrollState = new ScrollState(scrollStateData.release());
-    return adoptRefWillBeNoop(scrollState);
+    return scrollState;
 }
 
-PassRefPtrWillBeRawPtr<ScrollState> ScrollState::create(PassOwnPtr<ScrollStateData> data)
+ScrollState* ScrollState::create(PassOwnPtr<ScrollStateData> data)
 {
     ScrollState* scrollState = new ScrollState(data);
-    return adoptRefWillBeNoop(scrollState);
+    return scrollState;
 }
 
 ScrollState::ScrollState(PassOwnPtr<ScrollStateData> data)

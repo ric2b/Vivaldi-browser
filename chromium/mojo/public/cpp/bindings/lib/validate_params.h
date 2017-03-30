@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 
-#include "mojo/public/cpp/system/macros.h"
+#include "base/macros.h"
 
 namespace mojo {
 namespace internal {
@@ -42,7 +42,7 @@ class ArrayValidateParams {
   ArrayValidateParams* element_validate_params;
 
  private:
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ArrayValidateParams);
+  DISALLOW_COPY_AND_ASSIGN(ArrayValidateParams);
 };
 
 }  // namespace internal

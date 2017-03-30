@@ -7,15 +7,16 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/id_map.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/default_tick_clock.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "media/cast/cast_sender.h"
 #include "media/cast/logging/logging_defines.h"
-#include "media/cast/net/cast_transport_sender.h"
+#include "media/cast/net/cast_transport.h"
 #include "media/cast/net/udp_transport.h"
 
 namespace content {
@@ -34,10 +35,13 @@ class CastTransportHostFilter : public content::BrowserMessageFilter {
   // Status callback to create UdpTransport.
   void OnStatusChanged(int32_t channel_id,
                        media::cast::CastTransportStatus status);
-  void SendRtt(int32_t channel_id, uint32_t ssrc, base::TimeDelta rtt);
+  void SendRtt(int32_t channel_id,
+               uint32_t rtp_sender_ssrc,
+               base::TimeDelta rtt);
   void SendCastMessage(int32_t channel_id,
-                       uint32_t ssrc,
+                       uint32_t rtp_sender_ssrc,
                        const media::cast::RtcpCastMessage& cast_message);
+  void SendReceivedPli(int32_t channel_id, uint32_t rtp_sender_ssrc);
 
   // BrowserMessageFilter implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
@@ -61,10 +65,25 @@ class CastTransportHostFilter : public content::BrowserMessageFilter {
   void OnResendFrameForKickstart(int32_t channel_id,
                                  uint32_t ssrc,
                                  uint32_t frame_id);
-  void OnAddValidSsrc(int32_t channel_id, uint32_t ssrc);
-  void OnSendRtcpFromRtpReceiver(
+  void OnAddValidRtpReceiver(int32_t channel_id,
+                             uint32_t rtp_sender_ssrc,
+                             uint32_t rtp_receiver_ssrc);
+  void OnInitializeRtpReceiverRtcpBuilder(
       int32_t channel_id,
-      const media::cast::SendRtcpFromRtpReceiver_Params& params);
+      uint32_t rtp_receiver_ssrc,
+      const media::cast::RtcpTimeData& time_data);
+  void OnAddCastFeedback(int32_t channel_id,
+                         const media::cast::RtcpCastMessage& cast_message,
+                         base::TimeDelta target_delay);
+  void OnAddPli(int32_t channel_id,
+                const media::cast::RtcpPliMessage& pli_message);
+  void OnAddRtcpEvents(
+      int32_t channel_id,
+      const media::cast::ReceiverRtcpEventSubscriber::RtcpEvents& rtcp_events);
+  void OnAddRtpReceiverReport(
+      int32_t channel_id,
+      const media::cast::RtcpReportBlock& rtp_receiver_report_block);
+  void OnSendRtcpFromRtpReceiver(int32_t channel_id);
 
   void OnNew(int32_t channel_id,
              const net::IPEndPoint& local_end_point,
@@ -72,7 +91,7 @@ class CastTransportHostFilter : public content::BrowserMessageFilter {
              const base::DictionaryValue& options);
   void OnDelete(int32_t channel_id);
 
-  IDMap<media::cast::CastTransportSender, IDMapOwnPointer> id_map_;
+  IDMap<media::cast::CastTransport, IDMapOwnPointer> id_map_;
 
   // Clock used by Cast transport.
   base::DefaultTickClock clock_;
@@ -80,7 +99,7 @@ class CastTransportHostFilter : public content::BrowserMessageFilter {
   // While |id_map_| is non-empty, hold an instance of
   // content::PowerSaveBlocker.  This prevents Chrome from being suspended while
   // remoting content.
-  scoped_ptr<content::PowerSaveBlocker> power_save_blocker_;
+  std::unique_ptr<content::PowerSaveBlocker> power_save_blocker_;
 
   base::WeakPtrFactory<CastTransportHostFilter> weak_factory_;
 

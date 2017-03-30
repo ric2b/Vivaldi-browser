@@ -20,7 +20,8 @@ MaterialHistoryBrowserTest.prototype = {
 
   browsePreload: 'chrome://history',
 
-  commandLineSwitches: [{switchName: 'enable-md-history'}],
+  commandLineSwitches: [{switchName: 'enable-features',
+                         switchValue: 'MaterialDesignHistory'}],
 
   /** @override */
   runAccessibilityChecks: false,
@@ -31,8 +32,23 @@ MaterialHistoryBrowserTest.prototype = {
     'history_item_test.js',
     'history_overflow_menu_test.js',
     'history_supervised_user_test.js',
+    'history_synced_tabs_test.js',
     'history_toolbar_test.js'
-  ])
+  ]),
+
+  /** @override */
+  setUp: function() {
+    PolymerTest.prototype.setUp.call(this);
+
+    suiteSetup(function() {
+      // Wait for each of the top-level elements to be upgraded.
+      return Promise.all([
+        waitForUpgrade($('history-list')),
+        waitForUpgrade($('toolbar')),
+        waitForUpgrade($('history-synced-device-manager')),
+      ]);
+    });
+  },
 };
 
 TEST_F('MaterialHistoryBrowserTest', 'HistoryItemTest', function() {
@@ -52,6 +68,11 @@ TEST_F('MaterialHistoryBrowserTest', 'HistoryToolbarTest', function() {
 
 TEST_F('MaterialHistoryBrowserTest', 'HistoryOverflowMenuTest', function() {
   md_history.history_overflow_menu_test.registerTests();
+  mocha.run();
+});
+
+TEST_F('MaterialHistoryBrowserTest', 'SyncedTabsTest', function() {
+  md_history.history_synced_tabs_test.registerTests();
   mocha.run();
 });
 

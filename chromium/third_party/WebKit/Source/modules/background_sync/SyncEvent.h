@@ -17,17 +17,17 @@ namespace blink {
 class MODULES_EXPORT SyncEvent final : public ExtendableEvent {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static PassRefPtrWillBeRawPtr<SyncEvent> create()
+    static SyncEvent* create()
     {
-        return adoptRefWillBeNoop(new SyncEvent);
+        return new SyncEvent;
     }
-    static PassRefPtrWillBeRawPtr<SyncEvent> create(const AtomicString& type, const String& tag, bool lastChance, WaitUntilObserver* observer)
+    static SyncEvent* create(const AtomicString& type, const String& tag, bool lastChance, WaitUntilObserver* observer)
     {
-        return adoptRefWillBeNoop(new SyncEvent(type, tag, lastChance, observer));
+        return new SyncEvent(type, tag, lastChance, observer);
     }
-    static PassRefPtrWillBeRawPtr<SyncEvent> create(const AtomicString& type, const SyncEventInit& init)
+    static SyncEvent* create(const AtomicString& type, const SyncEventInit& init)
     {
-        return adoptRefWillBeNoop(new SyncEvent(type, init));
+        return new SyncEvent(type, init);
     }
 
     ~SyncEvent() override;

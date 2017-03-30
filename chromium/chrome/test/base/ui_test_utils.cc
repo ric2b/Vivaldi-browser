@@ -34,7 +34,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/find_bar/find_notification_details.h"
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
@@ -54,6 +53,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/geoposition.h"
@@ -142,7 +142,7 @@ bool GetCurrentTabTitle(const Browser* browser, base::string16* title) {
   NavigationEntry* last_entry = web_contents->GetController().GetActiveEntry();
   if (!last_entry)
     return false;
-  title->assign(last_entry->GetTitleForDisplay(std::string()));
+  title->assign(last_entry->GetTitleForDisplay());
   return true;
 }
 
@@ -395,8 +395,8 @@ void GetCookies(const GURL& url,
   *value_size = -1;
   if (url.is_valid() && contents) {
     scoped_refptr<net::URLRequestContextGetter> context_getter =
-        contents->GetBrowserContext()->GetRequestContextForRenderProcess(
-            contents->GetRenderProcessHost()->GetID());
+        contents->GetRenderProcessHost()->GetStoragePartition()->
+            GetURLRequestContext();
     base::WaitableEvent event(true /* manual reset */,
                               false /* not initially signaled */);
     CHECK(content::BrowserThread::PostTask(

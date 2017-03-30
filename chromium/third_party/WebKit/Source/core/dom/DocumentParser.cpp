@@ -37,7 +37,7 @@ DocumentParser::DocumentParser(Document* document)
     , m_documentWasLoadedAsPartOfNavigation(false)
     , m_document(document)
 {
-    ASSERT(document);
+    DCHECK(document);
 }
 
 DocumentParser::~DocumentParser()
@@ -46,16 +46,14 @@ DocumentParser::~DocumentParser()
     // Document is expected to call detach() before releasing its ref.
     // This ASSERT is slightly awkward for parsers with a fragment case
     // as there is no Document to release the ref.
-    ASSERT(!m_document);
+    DCHECK(!m_document);
 #endif
 }
 
 DEFINE_TRACE(DocumentParser)
 {
     visitor->trace(m_document);
-#if ENABLE(OILPAN)
     visitor->trace(m_clients);
-#endif
 }
 
 void DocumentParser::setDecoder(PassOwnPtr<TextResourceDecoder>)
@@ -70,7 +68,7 @@ TextResourceDecoder* DocumentParser::decoder()
 
 void DocumentParser::prepareToStopParsing()
 {
-    ASSERT(m_state == ParsingState);
+    DCHECK_EQ(m_state, ParsingState);
     m_state = StoppingState;
 }
 
@@ -79,7 +77,7 @@ void DocumentParser::stopParsing()
     m_state = StoppedState;
 
     // Clients may be removed while in the loop. Make a snapshot for iteration.
-    WillBeHeapVector<RawPtrWillBeMember<DocumentParserClient>> clientsSnapshot;
+    HeapVector<Member<DocumentParserClient>> clientsSnapshot;
     copyToVector(m_clients, clientsSnapshot);
 
     for (DocumentParserClient* client : clientsSnapshot) {

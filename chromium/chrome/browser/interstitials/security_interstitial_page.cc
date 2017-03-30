@@ -78,13 +78,8 @@ bool SecurityInterstitialPage::IsPrefEnabled(const char* pref) {
 }
 
 base::string16 SecurityInterstitialPage::GetFormattedHostName() const {
-  std::string languages;
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  if (profile)
-    languages = profile->GetPrefs()->GetString(prefs::kAcceptLanguages);
   return security_interstitials::common_string_util::GetFormattedHostName(
-      request_url_, languages);
+      request_url_);
 }
 
 std::string SecurityInterstitialPage::GetHTMLContents() {
@@ -113,6 +108,6 @@ SecurityInterstitialPage::metrics_helper() {
 }
 
 void SecurityInterstitialPage::set_metrics_helper(
-    scoped_ptr<security_interstitials::MetricsHelper> metrics_helper) {
+    std::unique_ptr<security_interstitials::MetricsHelper> metrics_helper) {
   controller_->set_metrics_helper(std::move(metrics_helper));
 }

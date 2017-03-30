@@ -18,8 +18,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/common/media/media_stream_options.h"
+#include "content/renderer/media/media_stream_constraints_util.h"
 #include "content/renderer/media/media_stream_source.h"
-#include "content/renderer/media/rtc_media_constraints.h"
 #include "media/audio/audio_parameters.h"
 #include "third_party/webrtc/modules/audio_processing/include/audio_processing.h"
 #include "third_party/webrtc/modules/audio_processing/typing_detection.h"
@@ -56,7 +56,7 @@ struct {
 } const kDefaultAudioConstraints[] = {
   { MediaAudioConstraints::kEchoCancellation, true },
   { MediaAudioConstraints::kGoogEchoCancellation, true },
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
   { MediaAudioConstraints::kGoogExperimentalEchoCancellation, false },
 #else
   // Enable the extended filter mode AEC on all non-mobile platforms.
@@ -137,24 +137,30 @@ bool ScanConstraintsForBoolean(
   return the_default;
 }
 
+void SetIfNotSet(rtc::Optional<bool>* field, bool value) {
+  if (!*field) {
+    *field = rtc::Optional<bool>(value);
+  }
+}
+
 }  // namespace
 
 // TODO(xians): Remove this method after the APM in WebRtc is deprecated.
 void MediaAudioConstraints::ApplyFixedAudioConstraints(
-    RTCMediaConstraints* constraints) {
-  for (size_t i = 0; i < arraysize(kDefaultAudioConstraints); ++i) {
-    bool already_set_value;
-    if (!webrtc::FindConstraint(constraints, kDefaultAudioConstraints[i].key,
-                                &already_set_value, NULL)) {
-      const std::string value = kDefaultAudioConstraints[i].value ?
-          webrtc::MediaConstraintsInterface::kValueTrue :
-          webrtc::MediaConstraintsInterface::kValueFalse;
-      constraints->AddOptional(kDefaultAudioConstraints[i].key, value, false);
-    } else {
-      DVLOG(1) << "Constraint " << kDefaultAudioConstraints[i].key
-               << " already set to " << already_set_value;
-    }
-  }
+    cricket::AudioOptions* options) {
+  SetIfNotSet(&options->echo_cancellation, true);
+#if defined(OS_ANDROID)
+  SetIfNotSet(&options->extended_filter_aec, false);
+#else
+  // Enable the extended filter mode AEC on all non-mobile platforms.
+  SetIfNotSet(&options->extended_filter_aec, true);
+#endif
+  SetIfNotSet(&options->auto_gain_control, true);
+  SetIfNotSet(&options->experimental_agc, true);
+  SetIfNotSet(&options->noise_suppression, true);
+  SetIfNotSet(&options->highpass_filter, true);
+  SetIfNotSet(&options->typing_detection, true);
+  SetIfNotSet(&options->experimental_ns, true);
 }
 
 MediaAudioConstraints::MediaAudioConstraints(
@@ -166,9 +172,12 @@ MediaAudioConstraints::MediaAudioConstraints(
   // - gUM has a specific kMediaStreamSource, which is used by tab capture
   //   and screen capture.
   // - |kEchoCancellation| is explicitly set to false.
-  std::string value_str;
+  bool echo_constraint;
   if (!constraints.basic().mediaStreamSource.isEmpty() ||
-      !constraints.basic().echoCancellation.matches(true)) {
+      (GetConstraintValueAsBoolean(
+           constraints, &blink::WebMediaTrackConstraintSet::echoCancellation,
+           &echo_constraint) &&
+       echo_constraint == false)) {
     default_audio_processing_constraint_value_ = false;
   }
 }
@@ -344,7 +353,7 @@ void EchoInformation::UpdateAecDelayStats(
 }
 
 void EnableEchoCancellation(AudioProcessing* audio_processing) {
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
   // Mobile devices are using AECM.
   CHECK_EQ(0, audio_processing->echo_control_mobile()->set_routing_mode(
                   webrtc::EchoControlMobile::kSpeakerphone));
@@ -403,7 +412,7 @@ void StopEchoCancellationDump(AudioProcessing* audio_processing) {
 }
 
 void EnableAutomaticGainControl(AudioProcessing* audio_processing) {
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
   const webrtc::GainControl::Mode mode = webrtc::GainControl::kFixedDigital;
 #else
   const webrtc::GainControl::Mode mode = webrtc::GainControl::kAdaptiveAnalog;

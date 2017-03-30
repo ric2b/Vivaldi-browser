@@ -56,7 +56,6 @@
           'dependencies': [
             'chromium/chrome/chrome.gyp:crash_service',
             'chromium/chrome/installer/mini_installer.gyp:mini_installer',
-            'chromium/content/content_shell_and_tests.gyp:copy_test_netscape_plugin',
             'chromium/courgette/courgette.gyp:courgette_unittests',
             'chromium/sandbox/sandbox.gyp:sbox_integration_tests',
             'chromium/sandbox/sandbox.gyp:sbox_unittests',

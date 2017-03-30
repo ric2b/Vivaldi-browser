@@ -6,11 +6,13 @@ package org.chromium.chrome.browser.sync;
 
 import android.accounts.Account;
 import android.app.Activity;
+import android.test.FlakyTest;
 import android.test.suitebuilder.annotation.LargeTest;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.signin.AccountIdProvider;
@@ -61,8 +63,13 @@ public class SyncTest extends SyncTestBase {
         SyncTestUtil.verifySyncIsActiveForAccount(mContext, account);
     }
 
-    @LargeTest
-    @Feature({"Sync"})
+    /*
+     * @FlakyTest
+     * @LargeTest
+     * @Feature({"Sync"})
+     * BUG = crbug.com/588050, crbug.com/595893
+     */
+    @DisabledTest
     public void testRename() throws InterruptedException {
         // The two accounts object that would represent the account rename.
         final Account oldAccount = setUpTestAccountAndSignInToSync();
@@ -99,7 +106,7 @@ public class SyncTest extends SyncTestBase {
             }
         });
 
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return newAccount.equals(ChromeSigninController.get(mContext).getSignedInUser());
@@ -120,8 +127,12 @@ public class SyncTest extends SyncTestBase {
         SyncTestUtil.verifySyncIsActiveForAccount(mContext, account);
     }
 
-    @LargeTest
-    @Feature({"Sync"})
+    /*
+     * @LargeTest
+     * @Feature({"Sync"})
+     * BUG = crbug.com/594558
+     */
+    @FlakyTest
     public void testStopAndStartSyncThroughAndroid() throws InterruptedException {
         Account account = setUpTestAccountAndSignInToSync();
         SyncTestUtil.waitForSyncActive();

@@ -59,6 +59,12 @@
 
 using base::win::RegKey;
 
+namespace vivaldi {
+
+base::string16 GetAppName(BrowserDistribution* dist);
+
+} // namespace vivaldi
+
 namespace {
 
 // An enum used to tell QuickIsChromeRegistered() which level of registration
@@ -359,14 +365,21 @@ void GetChromeProgIdEntries(BrowserDistribution* dist,
   app_info.file_type_icon_path = chrome_exe;
   app_info.file_type_icon_index = chrome_icon_index;
   app_info.command_line = ShellUtil::GetChromeShellOpenCmd(chrome_exe);
+
+  base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
+  bool is_standalone =
+      command_line.HasSwitch(installer::switches::kVivaldiStandalone);
+  if (is_standalone) {
+    app_info.app_id = dist->GetBaseAppId() + suffix;
+  } else {
   // For user-level installs: entries for the app id will be in HKCU; thus we
   // do not need a suffix on those entries.
   app_info.app_id = ShellUtil::GetBrowserModelId(
       dist, InstallUtil::IsPerUserInstall(chrome_exe));
-
+  }
   // TODO(grt): http://crbug.com/75152 Write a reference to a localized
   // resource for name, description, and company.
-  app_info.application_name = dist->GetDisplayName();
+  app_info.application_name = vivaldi::GetAppName(dist);
   app_info.application_icon_path = chrome_exe;
   app_info.application_icon_index = chrome_icon_index;
   app_info.application_description = dist->GetAppDescription();
@@ -421,7 +434,7 @@ void GetShellIntegrationEntries(BrowserDistribution* dist,
   // TODO(grt): http://crbug.com/75152 Also set LocalizedString; see
   // http://msdn.microsoft.com/en-us/library/windows/desktop/cc144109(v=VS.85).aspx#registering_the_display_name
   entries->push_back(
-      new RegistryEntry(start_menu_entry, dist->GetDisplayName()));
+      new RegistryEntry(start_menu_entry, vivaldi::GetAppName(dist)));
   // Register the "open" verb for launching Chrome via the "Internet" link.
   entries->push_back(new RegistryEntry(
       start_menu_entry + ShellUtil::kRegShellOpen, quoted_exe_path));
@@ -460,7 +473,7 @@ void GetShellIntegrationEntries(BrowserDistribution* dist,
   entries->push_back(new RegistryEntry(
       capabilities, ShellUtil::kRegApplicationIcon, icon_path));
   entries->push_back(new RegistryEntry(
-      capabilities, ShellUtil::kRegApplicationName, dist->GetDisplayName()));
+      capabilities, ShellUtil::kRegApplicationName, vivaldi::GetAppName(dist)));
 
   entries->push_back(new RegistryEntry(capabilities + L"\\Startmenu",
                                        L"StartMenuInternet", reg_app_name));
@@ -2028,6 +2041,8 @@ bool ShellUtil::RegisterChromeBrowser(BrowserDistribution* dist,
                  installer::switches::kRegisterChromeBrowserSuffix)) {
     suffix = command_line.GetSwitchValueNative(
         installer::switches::kRegisterChromeBrowserSuffix);
+  } else if (command_line.HasSwitch(installer::switches::kVivaldiStandalone)) {
+    vivaldi::GetPathSpecificSuffix(chrome_exe, &suffix);
   } else if (!GetInstallationSpecificSuffix(dist, chrome_exe, &suffix)) {
     return false;
   }
@@ -2043,16 +2058,13 @@ bool ShellUtil::RegisterChromeBrowser(BrowserDistribution* dist,
   // install is also present, it will lead IsChromeRegistered() to think this
   // system-level install isn't registered properly as it is shadowed by the
   // user-level install's registrations).
-  // NOTE(jarle):
-  //    Vivaldi can be standalone, so skip this step if we are not system-level.
-  if (!user_level) {
   uint32_t look_for_in = user_level ? RegistryEntry::LOOK_IN_HKCU_THEN_HKLM
                                     : RegistryEntry::LOOK_IN_HKLM;
 
   // Check if chrome is already registered with this suffix.
   if (IsChromeRegistered(dist, chrome_exe, suffix, look_for_in))
     return true;
-  }
+
   bool result = true;
   if (root == HKEY_CURRENT_USER || IsUserAnAdmin()) {
     // Do the full registration if we can do it at user-level or if the user is

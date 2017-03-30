@@ -49,6 +49,7 @@ namespace blink {
 
 inline SharedWorker::SharedWorker(ExecutionContext* context)
     : AbstractWorker(context)
+    , ActiveScriptWrappable(this)
     , m_isBeingConnected(false)
 {
 }
@@ -71,8 +72,8 @@ SharedWorker* SharedWorker::create(ExecutionContext* context, const String& url,
 
     // We don't currently support nested workers, so workers can only be created from documents.
     Document* document = toDocument(context);
-    if (!document->securityOrigin()->canAccessSharedWorkers()) {
-        exceptionState.throwSecurityError("Access to shared workers is denied to origin '" + document->securityOrigin()->toString() + "'.");
+    if (!document->getSecurityOrigin()->canAccessSharedWorkers()) {
+        exceptionState.throwSecurityError("Access to shared workers is denied to origin '" + document->getSecurityOrigin()->toString() + "'.");
         return nullptr;
     }
 
@@ -103,8 +104,8 @@ bool SharedWorker::hasPendingActivity() const
 DEFINE_TRACE(SharedWorker)
 {
     visitor->trace(m_port);
-    HeapSupplementable<SharedWorker>::trace(visitor);
     AbstractWorker::trace(visitor);
+    Supplementable<SharedWorker>::trace(visitor);
 }
 
 } // namespace blink

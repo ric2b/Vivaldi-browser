@@ -89,6 +89,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chromeos/attestation/attestation_constants.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/user_manager/user.h"
@@ -229,8 +230,9 @@ void ClearChannelIDsOnIOThread(
   net::ChannelIDService* channel_id_service =
       rq_context->GetURLRequestContext()->channel_id_service();
   channel_id_service->GetChannelIDStore()->DeleteAllCreatedBetween(
-      delete_begin, delete_end, base::Bind(&OnClearedChannelIDsOnIOThread,
-                                           std::move(rq_context), callback));
+      delete_begin, delete_end,
+      base::Bind(&OnClearedChannelIDsOnIOThread,
+                 base::RetainedRef(std::move(rq_context)), callback));
 }
 
 }  // namespace
@@ -300,6 +302,9 @@ BrowsingDataRemover::BrowsingDataRemover(
       is_removing_(false),
       main_context_getter_(browser_context->GetRequestContext()),
       media_context_getter_(browser_context->GetMediaRequestContext()),
+#if BUILDFLAG(ANDROID_JAVA_UI)
+      webapp_registry_(new WebappRegistry()),
+#endif
       weak_ptr_factory_(this) {
   DCHECK(browser_context);
 }
@@ -556,6 +561,14 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
           base::Bind(&BrowsingDataRemover::OnClearedPrecacheHistory,
                      weak_ptr_factory_.GetWeakPtr()));
     }
+
+    // Clear the history information (last launch time and origin URL) of any
+    // registered webapps. The webapp_registry makes a JNI call into a Java-side
+    // AsyncTask, so don't wait for the reply.
+    waiting_for_clear_webapp_history_ = true;
+    webapp_registry_->ClearWebappHistory(
+        base::Bind(&BrowsingDataRemover::OnClearedWebappHistory,
+          weak_ptr_factory_.GetWeakPtr()));
 #endif
 
     data_reduction_proxy::DataReductionProxySettings*
@@ -613,7 +626,7 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
         BrowserThread::PostTask(
             BrowserThread::IO, FROM_HERE,
             base::Bind(&ClearCookiesOnIOThread, delete_begin_, delete_end_,
-                       std::move(sb_context),
+                       base::RetainedRef(std::move(sb_context)),
                        UIThreadTrampoline(
                            base::Bind(&BrowsingDataRemover::OnClearedCookies,
                                       weak_ptr_factory_.GetWeakPtr()))));
@@ -714,13 +727,8 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
       auto on_cleared_passwords =
           base::Bind(&BrowsingDataRemover::OnClearedPasswords,
                      weak_ptr_factory_.GetWeakPtr());
-      if (remove_url.is_empty()) {
-        password_store->RemoveLoginsCreatedBetween(delete_begin_, delete_end_,
-                                                   on_cleared_passwords);
-      } else {
-        password_store->RemoveLoginsByOriginAndTime(
-            remove_origin, delete_begin_, delete_end_, on_cleared_passwords);
-      }
+      password_store->RemoveLoginsByURLAndTime(
+          same_origin_filter, delete_begin_, delete_end_, on_cleared_passwords);
     }
   }
 
@@ -828,6 +836,14 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
 
     storage_partition_remove_mask |=
         content::StoragePartition::REMOVE_DATA_MASK_WEBRTC_IDENTITY;
+
+    // When clearing cache, wipe accumulated network related data
+    // (TransportSecurityState and HttpServerPropertiesManager data).
+    waiting_for_clear_networking_history_ = true;
+    profile_->ClearNetworkingHistorySince(
+        delete_begin_,
+        base::Bind(&BrowsingDataRemover::OnClearedNetworkingHistory,
+                   weak_ptr_factory_.GetWeakPtr()));
   }
 
   if (remove_mask & REMOVE_WEBRTC_IDENTITY) {
@@ -886,7 +902,8 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
       chromeos::DBusThreadManager::Get()
           ->GetCryptohomeClient()
           ->TpmAttestationDeleteKeys(
-              chromeos::attestation::KEY_USER, user->email(),
+              chromeos::attestation::KEY_USER,
+              cryptohome::Identification(user->GetAccountId()),
               chromeos::attestation::kContentProtectionKeyPrefix,
               base::Bind(&BrowsingDataRemover::OnClearPlatformKeys,
                          weak_ptr_factory_.GetWeakPtr()));
@@ -899,14 +916,6 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
   // Remove omnibox zero-suggest cache results.
   if ((remove_mask & (REMOVE_CACHE | REMOVE_COOKIES)))
     prefs->SetString(omnibox::kZeroSuggestCachedResults, std::string());
-
-  // Always wipe accumulated network related data (TransportSecurityState and
-  // HttpServerPropertiesManager data).
-  waiting_for_clear_networking_history_ = true;
-  profile_->ClearNetworkingHistorySince(
-      delete_begin_,
-      base::Bind(&BrowsingDataRemover::OnClearedNetworkingHistory,
-                 weak_ptr_factory_.GetWeakPtr()));
 
   if (remove_mask & (REMOVE_COOKIES | REMOVE_HISTORY)) {
     domain_reliability::DomainReliabilityService* service =
@@ -929,8 +938,10 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
   if (remove_mask & REMOVE_WEBAPP_DATA) {
+    // Clear all data associated with registered webapps. The webapp_registry
+    // makes a JNI call into a Java-side AsyncTask, so don't wait for the reply.
     waiting_for_clear_webapp_data_ = true;
-    WebappRegistry::UnregisterWebapps(
+    webapp_registry_->UnregisterWebapps(
         base::Bind(&BrowsingDataRemover::OnClearedWebappData,
                    weak_ptr_factory_.GetWeakPtr()));
   }
@@ -954,6 +965,9 @@ void BrowsingDataRemover::RemoveImpl(const TimeRange& time_range,
     choice = ONLY_CACHE;
   }
 
+  // Notify in case all actions taken were synchronous.
+  NotifyIfDone();
+
   UMA_HISTOGRAM_ENUMERATION(
       "History.ClearBrowsingData.UserDeletedCookieOrCache",
       choice, MAX_CHOICE_VALUE);
@@ -971,6 +985,13 @@ void BrowsingDataRemover::OverrideStoragePartitionForTesting(
     content::StoragePartition* storage_partition) {
   storage_partition_for_testing_ = storage_partition;
 }
+
+#if BUILDFLAG(ANDROID_JAVA_UI)
+void BrowsingDataRemover::OverrideWebappRegistryForTesting(
+    scoped_ptr<WebappRegistry> webapp_registry) {
+  webapp_registry_.reset(webapp_registry.release());
+}
+#endif
 
 base::Time BrowsingDataRemover::CalculateBeginDeleteTime(
     TimePeriod time_period) {
@@ -1012,6 +1033,7 @@ bool BrowsingDataRemover::AllDone() {
 #if BUILDFLAG(ANDROID_JAVA_UI)
          !waiting_for_clear_precache_history_ &&
          !waiting_for_clear_webapp_data_ &&
+         !waiting_for_clear_webapp_history_ &&
          !waiting_for_clear_offline_page_data_ &&
 #endif
 #if defined(ENABLE_WEBRTC)
@@ -1208,6 +1230,12 @@ void BrowsingDataRemover::OnClearedPrecacheHistory() {
 void BrowsingDataRemover::OnClearedWebappData() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   waiting_for_clear_webapp_data_ = false;
+  NotifyIfDone();
+}
+
+void BrowsingDataRemover::OnClearedWebappHistory() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  waiting_for_clear_webapp_history_ = false;
   NotifyIfDone();
 }
 

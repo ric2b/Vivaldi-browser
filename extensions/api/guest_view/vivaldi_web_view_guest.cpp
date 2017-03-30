@@ -97,20 +97,24 @@ static std::string SSLStateToString(SecurityStateModel::SecurityLevel status) {
   return "unknown";
 }
 
-static std::string TabMediaStateToString(TabMediaState status) {
+static std::string TabAlertStateToString(TabAlertState status) {
   switch (status) {
-  case TAB_MEDIA_STATE_NONE:
+  case TabAlertState::NONE:
     return "none";
-  case TAB_MEDIA_STATE_RECORDING:
+  case TabAlertState::MEDIA_RECORDING:
     return "recording";
-  case TAB_MEDIA_STATE_CAPTURING:
+  case TabAlertState::TAB_CAPTURING:
     return "capturing";
-  case TAB_MEDIA_STATE_AUDIO_PLAYING:
+  case TabAlertState::AUDIO_PLAYING:
     return "playing";
-  case TAB_MEDIA_STATE_AUDIO_MUTING:
+  case TabAlertState::AUDIO_MUTING:
     return "muting";
+  case TabAlertState::BLUETOOTH_CONNECTED:
+    return "bluetooth";
+  case TabAlertState::USB_CONNECTED:
+    return "usb";
   }
-  NOTREACHED() << "Unknown TabMediaState Status.";
+  NOTREACHED() << "Unknown TabAlertState Status.";
   return "unknown";
 }
 #endif //VIVALDI_BUILD
@@ -124,7 +128,7 @@ WebContents::CreateParams WebViewGuest::GetWebContentsCreateParams(
   // partition, we should use the same SiteInstance so the existing tag and
   // the new tag can script each other.
   auto guest_view_manager = GuestViewManager::FromBrowserContext(context);
-  content::SiteInstance* guest_site_instance =
+  scoped_refptr<content::SiteInstance> guest_site_instance =
       guest_view_manager ? guest_view_manager->GetGuestSiteInstance(site)
                          : nullptr;
   if (!guest_site_instance) {
@@ -313,11 +317,11 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
 }
 
 #ifdef VIVALDI_BUILD
-void WebViewGuest::UpdateMediaState(TabMediaState state) {
+void WebViewGuest::UpdateMediaState(TabAlertState state) {
   if (state != media_state_) {
     scoped_ptr<base::DictionaryValue> args(new base::DictionaryValue());
 
-    args->SetString("activeMediaType", TabMediaStateToString(state));
+    args->SetString("activeMediaType", TabAlertStateToString(state));
 
     DispatchEventToView(make_scoped_ptr(
         new GuestViewEvent(webview::kEventMediaStateChanged, std::move(args))));
@@ -330,7 +334,7 @@ void WebViewGuest::NavigationStateChanged(
     content::WebContents* source,
     content::InvalidateTypes changed_flags) {
 #ifdef VIVALDI_BUILD
-  UpdateMediaState(chrome::GetTabMediaStateForContents(web_contents()));
+  UpdateMediaState(chrome::GetTabAlertStateForContents(web_contents()));
 
   // TODO(gisli):  This would normally be done in the browser, but until we get
   // Vivaldi browser object we do it here (as we did remove the webcontents
@@ -755,8 +759,9 @@ content::SecurityStyle WebViewGuest::GetSecurityStyle(
   }
 }
 
-void WebViewGuest::ShowCertificateViewerInDevTools(content::WebContents* web_contents, int cert_id) {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+void WebViewGuest::ShowCertificateViewerInDevTools(
+    content::WebContents *web_contents, int cert_id) {
+  Browser *browser = chrome::FindBrowserWithWebContents(web_contents);
   if (browser) {
     browser->ShowCertificateViewerInDevTools(web_contents, cert_id);
   }

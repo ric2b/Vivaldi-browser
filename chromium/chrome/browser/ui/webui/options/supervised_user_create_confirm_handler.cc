@@ -23,7 +23,6 @@
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/startup/startup_types.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -55,7 +54,7 @@ class SupervisedUserCreateConfirmHandler::ProfileUpdateObserver
   // affected profile and update or close as needed.
   void OnProfileWasRemoved(const base::FilePath& profile_path,
                            const base::string16& profile_name) override {
-    scoped_ptr<base::StringValue> profile_path_value(
+    std::unique_ptr<base::StringValue> profile_path_value(
         base::CreateFilePathValue(profile_path));
     create_confirm_handler_->web_ui()->CallJavascriptFunction(
         "SupervisedUserCreateConfirmOverlay.onDeletedProfile",
@@ -69,7 +68,7 @@ class SupervisedUserCreateConfirmHandler::ProfileUpdateObserver
         GetProfileAttributesWithPath(profile_path, &entry))
       return;
     base::string16 new_profile_name = entry->GetName();
-    scoped_ptr<base::StringValue> profile_path_value(
+    std::unique_ptr<base::StringValue> profile_path_value(
         base::CreateFilePathValue(profile_path));
     create_confirm_handler_->web_ui()->CallJavascriptFunction(
         "SupervisedUserCreateConfirmOverlay.onUpdatedProfileName",

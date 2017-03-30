@@ -43,6 +43,12 @@ void HostControlDispatcher::DeliverHostMessage(
   message_pipe()->Send(&control_message, base::Closure());
 }
 
+void HostControlDispatcher::SetVideoLayout(const VideoLayout& layout) {
+  ControlMessage message;
+  message.mutable_video_layout()->CopyFrom(layout);
+  message_pipe()->Send(&message, base::Closure());
+}
+
 void HostControlDispatcher::InjectClipboardEvent(const ClipboardEvent& event) {
   ControlMessage message;
   message.mutable_clipboard_event()->CopyFrom(event);
@@ -57,11 +63,11 @@ void HostControlDispatcher::SetCursorShape(
 }
 
 void HostControlDispatcher::OnIncomingMessage(
-    scoped_ptr<CompoundBuffer> buffer) {
+    std::unique_ptr<CompoundBuffer> buffer) {
   DCHECK(clipboard_stub_);
   DCHECK(host_stub_);
 
-  scoped_ptr<ControlMessage> message =
+  std::unique_ptr<ControlMessage> message =
       ParseMessage<ControlMessage>(buffer.get());
   if (!message)
     return;

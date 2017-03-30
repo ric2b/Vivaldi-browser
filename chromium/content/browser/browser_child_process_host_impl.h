@@ -54,6 +54,11 @@ class CONTENT_EXPORT BrowserChildProcessHostImpl
   // instance.
   static void TerminateAll();
 
+  // Copies kEnableFeatures and kDisableFeatures to the command line. Generates
+  // them from the FeatureList override state, to take into account overrides
+  // from FieldTrials.
+  static void CopyFeatureAndFieldTrialFlags(base::CommandLine* cmd_line);
+
   // BrowserChildProcessHost implementation:
   bool Send(IPC::Message* message) override;
   void Launch(SandboxedProcessLauncherDelegate* delegate,
@@ -88,9 +93,6 @@ class CONTENT_EXPORT BrowserChildProcessHostImpl
 
   // Adds an IPC message filter.
   void AddFilter(BrowserMessageFilter* filter);
-
-  // Called when an instance of a particular child is created in a page.
-  static void NotifyProcessInstanceCreated(const ChildProcessData& data);
 
   static void HistogramBadMessageTerminated(int process_type);
 
@@ -135,6 +137,7 @@ class CONTENT_EXPORT BrowserChildProcessHostImpl
 #endif
 
   bool is_channel_connected_;
+  bool notify_child_disconnected_;
 };
 
 }  // namespace content

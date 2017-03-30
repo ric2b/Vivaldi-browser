@@ -16,8 +16,10 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "ipc/ipc_message.h"
-#include "mojo/public/c/environment/async_waiter.h"
+#include "ipc/mojo/ipc.mojom.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/system/core.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 
 namespace IPC {
 namespace internal {
@@ -40,13 +42,12 @@ class AsyncHandleWaiter;
 // be called on any thread. All |Delegate| functions will be called on the IO
 // thread.
 //
-class MessagePipeReader {
+class MessagePipeReader : public mojom::Channel {
  public:
   class Delegate {
    public:
-    virtual void OnMessageReceived(Message& message) = 0;
-    virtual void OnPipeClosed(MessagePipeReader* reader) = 0;
-    virtual void OnPipeError(MessagePipeReader* reader) = 0;
+    virtual void OnMessageReceived(const Message& message) = 0;
+    virtual void OnPipeError() = 0;
   };
 
   // Delay the object deletion using the current message loop.
@@ -64,61 +65,55 @@ class MessagePipeReader {
     void operator()(MessagePipeReader* ptr) const;
   };
 
-  // Both parameters must be non-null.
-  // Build a reader that reads messages from |handle| and lets |delegate| know.
-  // Note that MessagePipeReader doesn't delete |delete|.
-  MessagePipeReader(mojo::ScopedMessagePipeHandle handle, Delegate* delegate);
-  virtual ~MessagePipeReader();
-
-  MojoHandle handle() const { return handle_copy_; }
-
-  // Returns received bytes.
-  const std::vector<char>& data_buffer() const {
-    return data_buffer_;
-  }
-
-  // Delegate received handles ownership. The subclass should take the
-  // ownership over in its OnMessageReceived(). They will leak otherwise.
-  void TakeHandleBuffer(std::vector<MojoHandle>* handle_buffer) {
-    handle_buffer_.swap(*handle_buffer);
-  }
+  // Builds a reader that reads messages from |receive_handle| and lets
+  // |delegate| know.
+  //
+  // |pipe| is the message pipe handle corresponding to the channel's master
+  // interface. This is the message pipe underlying both |sender| and
+  // |receiver|.
+  //
+  // Both |sender| and |receiver| must be non-null.
+  //
+  // Note that MessagePipeReader doesn't delete |delegate|.
+  MessagePipeReader(mojo::MessagePipeHandle pipe,
+                    mojom::ChannelAssociatedPtr sender,
+                    mojo::AssociatedInterfaceRequest<mojom::Channel> receiver,
+                    base::ProcessId peer_pid,
+                    Delegate* delegate);
+  ~MessagePipeReader() override;
 
   // Close and destroy the MessagePipe.
   void Close();
-  // Close the mesage pipe with notifying the client with the error.
-  void CloseWithError(MojoResult error);
-  void CloseWithErrorLater(MojoResult error);
-  void CloseWithErrorIfPending();
 
   // Return true if the MessagePipe is alive.
-  bool IsValid() { return pipe_.is_valid(); }
+  bool IsValid() { return sender_; }
 
+  // Sends an IPC::Message to the other end of the pipe. Safe to call from any
+  // thread.
   bool Send(scoped_ptr<Message> message);
-  void ReadMessagesThenWait();
 
- private:
-  void OnMessageReceived();
+  base::ProcessId GetPeerPid() const { return peer_pid_; }
+
+ protected:
   void OnPipeClosed();
   void OnPipeError(MojoResult error);
 
-  MojoResult ReadMessageBytes();
-  void PipeIsReady(MojoResult wait_result);
-  void ReadAvailableMessages();
+ private:
+  // mojom::Channel:
+  void Receive(mojo::Array<uint8_t> data,
+               mojo::Array<mojom::SerializedHandlePtr> handles) override;
 
-  std::vector<char>  data_buffer_;
-  std::vector<MojoHandle> handle_buffer_;
-  mojo::ScopedMessagePipeHandle pipe_;
-  // Constant copy of the message pipe handle. For use by Send(), which can run
-  // concurrently on non-IO threads.
-  // TODO(amistry): This isn't quite right because handles can be re-used and
-  // using this can run into the ABA problem. Currently, this is highly unlikely
-  // because Mojo internally uses an increasing uint32_t as handle values, but
-  // this could change. See crbug.com/524894.
-  const MojoHandle handle_copy_;
-  // |delegate_| and |async_waiter_| are null once the message pipe is closed.
+  // |delegate_| is null once the message pipe is closed.
   Delegate* delegate_;
-  scoped_ptr<AsyncHandleWaiter> async_waiter_;
-  base::subtle::Atomic32 pending_send_error_;
+  base::ProcessId peer_pid_;
+  mojom::ChannelAssociatedPtr sender_;
+  mojo::AssociatedBinding<mojom::Channel> binding_;
+
+  // Raw message pipe handle and interface ID we use to send legacy IPC messages
+  // over the associated pipe.
+  const uint32_t sender_interface_id_;
+  const mojo::MessagePipeHandle sender_pipe_;
+
   base::ThreadChecker thread_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(MessagePipeReader);

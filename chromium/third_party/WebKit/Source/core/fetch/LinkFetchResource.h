@@ -18,7 +18,7 @@ class LinkFetchResource final : public Resource {
 public:
     using ClientType = ResourceClient;
 
-    static PassRefPtrWillBeRawPtr<Resource> fetch(Resource::Type, FetchRequest&, ResourceFetcher*);
+    static Resource* fetch(Resource::Type, FetchRequest&, ResourceFetcher*);
     ~LinkFetchResource() override;
 
 private:
@@ -27,12 +27,12 @@ private:
         LinkResourceFactory(Resource::Type type)
             : ResourceFactory(type) { }
 
-        PassRefPtrWillBeRawPtr<Resource> create(const ResourceRequest& request, const String& charset) const override
+        Resource* create(const ResourceRequest& request, const ResourceLoaderOptions& options, const String& charset) const override
         {
-            return adoptRefWillBeNoop(new LinkFetchResource(request, type()));
+            return new LinkFetchResource(request, type(), options);
         }
     };
-    LinkFetchResource(const ResourceRequest&, Type);
+    LinkFetchResource(const ResourceRequest&, Type, const ResourceLoaderOptions&);
 };
 
 } // namespace blink

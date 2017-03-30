@@ -49,9 +49,9 @@ inline HTMLLabelElement::HTMLLabelElement(Document& document, HTMLFormElement* f
     FormAssociatedElement::associateByParser(form);
 }
 
-PassRefPtrWillBeRawPtr<HTMLLabelElement> HTMLLabelElement::create(Document& document, HTMLFormElement* form)
+RawPtr<HTMLLabelElement> HTMLLabelElement::create(Document& document, HTMLFormElement* form)
 {
-    RefPtrWillBeRawPtr<HTMLLabelElement> labelElement = adoptRefWillBeNoop(new HTMLLabelElement(document, form));
+    RawPtr<HTMLLabelElement> labelElement = new HTMLLabelElement(document, form);
     return labelElement.release();
 }
 
@@ -136,7 +136,7 @@ bool HTMLLabelElement::isInteractiveContent() const
 
 bool HTMLLabelElement::isInInteractiveContent(Node* node) const
 {
-    if (!containsIncludingShadowDOM(node))
+    if (!isShadowIncludingInclusiveAncestorOf(node))
         return false;
     while (node && this != node) {
         if (node->isHTMLElement() && toHTMLElement(node)->isInteractiveContent())
@@ -149,11 +149,11 @@ bool HTMLLabelElement::isInInteractiveContent(Node* node) const
 void HTMLLabelElement::defaultEventHandler(Event* evt)
 {
     if (evt->type() == EventTypeNames::click && !m_processingClick) {
-        RefPtrWillBeRawPtr<HTMLElement> element = control();
+        RawPtr<HTMLElement> element = control();
 
         // If we can't find a control or if the control received the click
         // event, then there's no need for us to do anything.
-        if (!element || (evt->target() && element->containsIncludingShadowDOM(evt->target()->toNode())))
+        if (!element || (evt->target() && element->isShadowIncludingInclusiveAncestorOf(evt->target()->toNode())))
             return;
 
         if (evt->target() && isInInteractiveContent(evt->target()->toNode()))
@@ -245,7 +245,7 @@ void HTMLLabelElement::accessKeyAction(bool sendMouseEvents)
 
 void HTMLLabelElement::updateLabel(TreeScope& scope, const AtomicString& oldForAttributeValue, const AtomicString& newForAttributeValue)
 {
-    if (!inDocument())
+    if (!inShadowIncludingDocument())
         return;
 
     if (oldForAttributeValue == newForAttributeValue)
@@ -268,7 +268,7 @@ Node::InsertionNotificationRequest HTMLLabelElement::insertedInto(ContainerNode*
     }
 
     // Trigger for elements outside of forms.
-    if (!formOwner() && insertionPoint->inDocument())
+    if (!formOwner() && insertionPoint->inShadowIncludingDocument())
         document().didAssociateFormControl(this);
 
     return result;

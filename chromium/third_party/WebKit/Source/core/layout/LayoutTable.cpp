@@ -335,7 +335,7 @@ LayoutUnit LayoutTable::convertStyleLogicalWidthToComputedWidth(const Length& st
     // HTML tables' width styles already include borders and paddings, but CSS tables' width styles do not.
     LayoutUnit borders;
     bool isCSSTable = !isHTMLTableElement(node());
-    if (isCSSTable && styleLogicalWidth.isSpecified() && styleLogicalWidth.isPositive() && style()->boxSizing() == CONTENT_BOX)
+    if (isCSSTable && styleLogicalWidth.isSpecified() && styleLogicalWidth.isPositive() && style()->boxSizing() == BoxSizingContentBox)
         borders = borderStart() + borderEnd() + (collapseBorders() ? LayoutUnit() : paddingStart() + paddingEnd());
 
     return minimumValueForLength(styleLogicalWidth, availableWidth) + borders;
@@ -351,7 +351,7 @@ LayoutUnit LayoutTable::convertStyleLogicalHeightToComputedHeight(const Length& 
         // HTML tables size as though CSS height includes border/padding, CSS tables do not.
         LayoutUnit borders = LayoutUnit();
         // FIXME: We cannot apply box-sizing: content-box on <table> which other browsers allow.
-        if (isHTMLTableElement(node()) || style()->boxSizing() == BORDER_BOX) {
+        if (isHTMLTableElement(node()) || style()->boxSizing() == BoxSizingBorderBox) {
             borders = borderAndPadding;
         }
         computedLogicalHeight = LayoutUnit(styleLogicalHeight.value() - borders);
@@ -489,7 +489,7 @@ void LayoutTable::layout()
         // FIXME: Collapse caption margin.
         if (!m_captions.isEmpty()) {
             for (unsigned i = 0; i < m_captions.size(); i++) {
-                if (m_captions[i]->style()->captionSide() == CAPBOTTOM)
+                if (m_captions[i]->style()->captionSide() == CaptionSideBottom)
                     continue;
                 layoutCaption(*m_captions[i]);
             }
@@ -556,7 +556,7 @@ void LayoutTable::layout()
         setLogicalHeight(logicalHeight() + borderAndPaddingAfter);
 
         for (unsigned i = 0; i < m_captions.size(); i++) {
-            if (m_captions[i]->style()->captionSide() != CAPBOTTOM)
+            if (m_captions[i]->style()->captionSide() != CaptionSideBottom)
                 continue;
             layoutCaption(*m_captions[i]);
         }
@@ -656,7 +656,7 @@ void LayoutTable::subtractCaptionRect(LayoutRect& rect) const
 {
     for (unsigned i = 0; i < m_captions.size(); i++) {
         LayoutUnit captionLogicalHeight = m_captions[i]->logicalHeight() + m_captions[i]->marginBefore() + m_captions[i]->marginAfter();
-        bool captionIsBefore = (m_captions[i]->style()->captionSide() != CAPBOTTOM) ^ style()->isFlippedBlocksWritingMode();
+        bool captionIsBefore = (m_captions[i]->style()->captionSide() != CaptionSideBottom) ^ style()->isFlippedBlocksWritingMode();
         if (style()->isHorizontalWritingMode()) {
             rect.setHeight(rect.height() - captionLogicalHeight);
             if (captionIsBefore)
@@ -927,42 +927,42 @@ int LayoutTable::calcBorderStart() const
     int borderWidth = 0;
 
     const BorderValue& tableStartBorder = style()->borderStart();
-    if (tableStartBorder.style() == BHIDDEN)
+    if (tableStartBorder.style() == BorderStyleHidden)
         return 0;
-    if (tableStartBorder.style() > BHIDDEN)
+    if (tableStartBorder.style() > BorderStyleHidden)
         borderWidth = tableStartBorder.width();
 
     // TODO(dgrogan): This logic doesn't properly account for the first column in the first column-group case.
     if (LayoutTableCol* column = colElementAtAbsoluteColumn(0).innermostColOrColGroup()) {
         // FIXME: We don't account for direction on columns and column groups.
         const BorderValue& columnAdjoiningBorder = column->style()->borderStart();
-        if (columnAdjoiningBorder.style() == BHIDDEN)
+        if (columnAdjoiningBorder.style() == BorderStyleHidden)
             return 0;
-        if (columnAdjoiningBorder.style() > BHIDDEN)
+        if (columnAdjoiningBorder.style() > BorderStyleHidden)
             borderWidth = std::max(borderWidth, columnAdjoiningBorder.width());
     }
 
     if (const LayoutTableSection* topNonEmptySection = this->topNonEmptySection()) {
         const BorderValue& sectionAdjoiningBorder = topNonEmptySection->borderAdjoiningTableStart();
-        if (sectionAdjoiningBorder.style() == BHIDDEN)
+        if (sectionAdjoiningBorder.style() == BorderStyleHidden)
             return 0;
 
-        if (sectionAdjoiningBorder.style() > BHIDDEN)
+        if (sectionAdjoiningBorder.style() > BorderStyleHidden)
             borderWidth = std::max(borderWidth, sectionAdjoiningBorder.width());
 
         if (const LayoutTableCell* adjoiningStartCell = topNonEmptySection->firstRowCellAdjoiningTableStart()) {
             // FIXME: Make this work with perpendicular and flipped cells.
             const BorderValue& startCellAdjoiningBorder = adjoiningStartCell->borderAdjoiningTableStart();
-            if (startCellAdjoiningBorder.style() == BHIDDEN)
+            if (startCellAdjoiningBorder.style() == BorderStyleHidden)
                 return 0;
 
             const BorderValue& firstRowAdjoiningBorder = adjoiningStartCell->row()->borderAdjoiningTableStart();
-            if (firstRowAdjoiningBorder.style() == BHIDDEN)
+            if (firstRowAdjoiningBorder.style() == BorderStyleHidden)
                 return 0;
 
-            if (startCellAdjoiningBorder.style() > BHIDDEN)
+            if (startCellAdjoiningBorder.style() > BorderStyleHidden)
                 borderWidth = std::max(borderWidth, startCellAdjoiningBorder.width());
-            if (firstRowAdjoiningBorder.style() > BHIDDEN)
+            if (firstRowAdjoiningBorder.style() > BorderStyleHidden)
                 borderWidth = std::max(borderWidth, firstRowAdjoiningBorder.width());
         }
     }
@@ -981,9 +981,9 @@ int LayoutTable::calcBorderEnd() const
     int borderWidth = 0;
 
     const BorderValue& tableEndBorder = style()->borderEnd();
-    if (tableEndBorder.style() == BHIDDEN)
+    if (tableEndBorder.style() == BorderStyleHidden)
         return 0;
-    if (tableEndBorder.style() > BHIDDEN)
+    if (tableEndBorder.style() > BorderStyleHidden)
         borderWidth = tableEndBorder.width();
 
     unsigned endColumn = numEffectiveColumns() - 1;
@@ -992,33 +992,33 @@ int LayoutTable::calcBorderEnd() const
     if (LayoutTableCol* column = colElementAtAbsoluteColumn(endColumn).innermostColOrColGroup()) {
         // FIXME: We don't account for direction on columns and column groups.
         const BorderValue& columnAdjoiningBorder = column->style()->borderEnd();
-        if (columnAdjoiningBorder.style() == BHIDDEN)
+        if (columnAdjoiningBorder.style() == BorderStyleHidden)
             return 0;
-        if (columnAdjoiningBorder.style() > BHIDDEN)
+        if (columnAdjoiningBorder.style() > BorderStyleHidden)
             borderWidth = std::max(borderWidth, columnAdjoiningBorder.width());
     }
 
     if (const LayoutTableSection* topNonEmptySection = this->topNonEmptySection()) {
         const BorderValue& sectionAdjoiningBorder = topNonEmptySection->borderAdjoiningTableEnd();
-        if (sectionAdjoiningBorder.style() == BHIDDEN)
+        if (sectionAdjoiningBorder.style() == BorderStyleHidden)
             return 0;
 
-        if (sectionAdjoiningBorder.style() > BHIDDEN)
+        if (sectionAdjoiningBorder.style() > BorderStyleHidden)
             borderWidth = std::max(borderWidth, sectionAdjoiningBorder.width());
 
         if (const LayoutTableCell* adjoiningEndCell = topNonEmptySection->firstRowCellAdjoiningTableEnd()) {
             // FIXME: Make this work with perpendicular and flipped cells.
             const BorderValue& endCellAdjoiningBorder = adjoiningEndCell->borderAdjoiningTableEnd();
-            if (endCellAdjoiningBorder.style() == BHIDDEN)
+            if (endCellAdjoiningBorder.style() == BorderStyleHidden)
                 return 0;
 
             const BorderValue& firstRowAdjoiningBorder = adjoiningEndCell->row()->borderAdjoiningTableEnd();
-            if (firstRowAdjoiningBorder.style() == BHIDDEN)
+            if (firstRowAdjoiningBorder.style() == BorderStyleHidden)
                 return 0;
 
-            if (endCellAdjoiningBorder.style() > BHIDDEN)
+            if (endCellAdjoiningBorder.style() > BorderStyleHidden)
                 borderWidth = std::max(borderWidth, endCellAdjoiningBorder.width());
-            if (firstRowAdjoiningBorder.style() > BHIDDEN)
+            if (firstRowAdjoiningBorder.style() > BorderStyleHidden)
                 borderWidth = std::max(borderWidth, firstRowAdjoiningBorder.width());
         }
     }
@@ -1061,9 +1061,9 @@ int LayoutTable::outerBorderBefore() const
             return 0; // Overridden by hidden
     }
     const BorderValue& tb = style()->borderBefore();
-    if (tb.style() == BHIDDEN)
+    if (tb.style() == BorderStyleHidden)
         return 0;
-    if (tb.style() > BHIDDEN)
+    if (tb.style() > BorderStyleHidden)
         borderWidth = std::max<int>(borderWidth, tb.width() / 2);
     return borderWidth;
 }
@@ -1080,9 +1080,9 @@ int LayoutTable::outerBorderAfter() const
             return 0; // Overridden by hidden
     }
     const BorderValue& tb = style()->borderAfter();
-    if (tb.style() == BHIDDEN)
+    if (tb.style() == BorderStyleHidden)
         return 0;
-    if (tb.style() > BHIDDEN)
+    if (tb.style() > BorderStyleHidden)
         borderWidth = std::max<int>(borderWidth, (tb.width() + 1) / 2);
     return borderWidth;
 }
@@ -1095,9 +1095,9 @@ int LayoutTable::outerBorderStart() const
     int borderWidth = 0;
 
     const BorderValue& tb = style()->borderStart();
-    if (tb.style() == BHIDDEN)
+    if (tb.style() == BorderStyleHidden)
         return 0;
-    if (tb.style() > BHIDDEN)
+    if (tb.style() > BorderStyleHidden)
         borderWidth = (tb.width() + (style()->isLeftToRightDirection() ? 0 : 1)) / 2;
 
     bool allHidden = true;
@@ -1122,9 +1122,9 @@ int LayoutTable::outerBorderEnd() const
     int borderWidth = 0;
 
     const BorderValue& tb = style()->borderEnd();
-    if (tb.style() == BHIDDEN)
+    if (tb.style() == BorderStyleHidden)
         return 0;
-    if (tb.style() > BHIDDEN)
+    if (tb.style() > BorderStyleHidden)
         borderWidth = (tb.width() + (style()->isLeftToRightDirection() ? 1 : 0)) / 2;
 
     bool allHidden = true;
@@ -1396,15 +1396,18 @@ const BorderValue& LayoutTable::tableEndBorderAdjoiningCell(const LayoutTableCel
     return style()->borderStart();
 }
 
-PaintInvalidationReason LayoutTable::invalidatePaintIfNeeded(PaintInvalidationState& paintInvalidationState, const LayoutBoxModelObject& paintInvalidationContainer)
+PaintInvalidationReason LayoutTable::invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState)
 {
     // Information of collapsed borders doesn't affect layout and are for painting only.
     // Do it now instead of during painting to invalidate table cells if needed.
     recalcCollapsedBordersIfNeeded();
-    return LayoutBlock::invalidatePaintIfNeeded(paintInvalidationState, paintInvalidationContainer);
+    if (collapseBorders() && !m_collapsedBorders.isEmpty())
+        paintInvalidationState.enclosingSelfPaintingLayer(*this).setNeedsPaintPhaseDescendantBlockBackgrounds();
+
+    return LayoutBlock::invalidatePaintIfNeeded(paintInvalidationState);
 }
 
-void LayoutTable::invalidatePaintOfSubtreesIfNeeded(PaintInvalidationState& childPaintInvalidationState)
+void LayoutTable::invalidatePaintOfSubtreesIfNeeded(const PaintInvalidationState& childPaintInvalidationState)
 {
     // Table cells paint background from the containing column group, column, section and row.
     // If background of any of them changed, we need to invalidate all affected cells.

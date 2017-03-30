@@ -5,6 +5,7 @@
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 
 #include "content/browser/gpu/gpu_data_manager_impl_private.h"
+#include "gpu/ipc/common/memory_stats.h"
 
 namespace content {
 
@@ -144,7 +145,7 @@ void GpuDataManagerImpl::UpdateGpuInfo(const gpu::GPUInfo& gpu_info) {
 }
 
 void GpuDataManagerImpl::UpdateVideoMemoryUsageStats(
-    const GPUVideoMemoryUsageStats& video_memory_usage_stats) {
+    const gpu::VideoMemoryUsageStats& video_memory_usage_stats) {
   base::AutoLock auto_lock(lock_);
   private_->UpdateVideoMemoryUsageStats(video_memory_usage_stats);
 }
@@ -156,15 +157,10 @@ void GpuDataManagerImpl::AppendRendererCommandLine(
 }
 
 void GpuDataManagerImpl::AppendGpuCommandLine(
-    base::CommandLine* command_line) const {
+    base::CommandLine* command_line,
+    gpu::GpuPreferences* gpu_preferences) const {
   base::AutoLock auto_lock(lock_);
-  private_->AppendGpuCommandLine(command_line);
-}
-
-void GpuDataManagerImpl::AppendPluginCommandLine(
-    base::CommandLine* command_line) const {
-  base::AutoLock auto_lock(lock_);
-  private_->AppendPluginCommandLine(command_line);
+  private_->AppendGpuCommandLine(command_line, gpu_preferences);
 }
 
 void GpuDataManagerImpl::UpdateRendererWebPrefs(
@@ -239,16 +235,6 @@ void GpuDataManagerImpl::DisableDomainBlockingFor3DAPIsForTesting() {
 size_t GpuDataManagerImpl::GetBlacklistedFeatureCount() const {
   base::AutoLock auto_lock(lock_);
   return private_->GetBlacklistedFeatureCount();
-}
-
-void GpuDataManagerImpl::SetDisplayCount(unsigned int display_count) {
-  base::AutoLock auto_lock(lock_);
-  private_->SetDisplayCount(display_count);
-}
-
-unsigned int GpuDataManagerImpl::GetDisplayCount() const {
-  base::AutoLock auto_lock(lock_);
-  return private_->GetDisplayCount();
 }
 
 bool GpuDataManagerImpl::UpdateActiveGpu(uint32_t vendor_id,

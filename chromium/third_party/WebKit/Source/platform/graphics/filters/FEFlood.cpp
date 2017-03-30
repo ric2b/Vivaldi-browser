@@ -38,9 +38,9 @@ FEFlood::FEFlood(Filter* filter, const Color& floodColor, float floodOpacity)
     FilterEffect::setOperatingColorSpace(ColorSpaceDeviceRGB);
 }
 
-PassRefPtrWillBeRawPtr<FEFlood> FEFlood::create(Filter* filter, const Color& floodColor, float floodOpacity)
+FEFlood* FEFlood::create(Filter* filter, const Color& floodColor, float floodOpacity)
 {
-    return adoptRefWillBeNoop(new FEFlood(filter, floodColor, floodOpacity));
+    return new FEFlood(filter, floodColor, floodOpacity);
 }
 
 Color FEFlood::floodColor() const
@@ -74,8 +74,8 @@ PassRefPtr<SkImageFilter> FEFlood::createImageFilter(SkiaImageFilterBuilder& bui
     Color color = floodColor().combineWithAlpha(floodOpacity());
 
     SkImageFilter::CropRect rect = getCropRect();
-    SkAutoTUnref<SkColorFilter> cf(SkColorFilter::CreateModeFilter(color.rgb(), SkXfermode::kSrc_Mode));
-    return adoptRef(SkColorFilterImageFilter::Create(cf, 0, &rect));
+    sk_sp<SkColorFilter> colorFilter = SkColorFilter::MakeModeFilter(color.rgb(), SkXfermode::kSrc_Mode);
+    return adoptRef(SkColorFilterImageFilter::Create(colorFilter.get(), 0, &rect));
 }
 
 TextStream& FEFlood::externalRepresentation(TextStream& ts, int indent) const

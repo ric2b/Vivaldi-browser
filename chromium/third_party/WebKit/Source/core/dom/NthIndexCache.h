@@ -9,17 +9,13 @@
 #include "core/dom/Element.h"
 #include "platform/heap/Handle.h"
 #include "wtf/HashMap.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
 class Document;
 
-class CORE_EXPORT NthIndexData final : public NoBaseWillBeGarbageCollected<NthIndexData> {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(NthIndexData);
+class CORE_EXPORT NthIndexData final : public GarbageCollected<NthIndexData> {
     WTF_MAKE_NONCOPYABLE(NthIndexData);
-    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(NthIndexData);
 public:
     NthIndexData(ContainerNode&);
     NthIndexData(ContainerNode&, const QualifiedName& type);
@@ -30,7 +26,7 @@ public:
     unsigned nthLastOfTypeIndex(Element&) const;
 
 private:
-    WillBeHeapHashMap<RawPtrWillBeMember<Element>, unsigned> m_elementIndexMap;
+    HeapHashMap<Member<Element>, unsigned> m_elementIndexMap;
     unsigned m_count = 0;
 
     DECLARE_TRACE();
@@ -49,20 +45,20 @@ public:
     static unsigned nthLastOfTypeIndex(Element&);
 
 private:
-    using IndexByType = WillBeHeapHashMap<String, OwnPtrWillBeMember<NthIndexData>>;
-    using ParentMap = WillBeHeapHashMap<RefPtrWillBeMember<Node>, OwnPtrWillBeMember<NthIndexData>>;
-    using ParentMapForType = WillBeHeapHashMap<RefPtrWillBeMember<Node>, OwnPtrWillBeMember<IndexByType>>;
+    using IndexByType = HeapHashMap<String, Member<NthIndexData>>;
+    using ParentMap = HeapHashMap<Member<Node>, Member<NthIndexData>>;
+    using ParentMapForType = HeapHashMap<Member<Node>, Member<IndexByType>>;
 
     void cacheNthIndexDataForParent(Element&);
     void cacheNthOfTypeIndexDataForParent(Element&);
     IndexByType& ensureTypeIndexMap(ContainerNode&);
     NthIndexData* nthTypeIndexDataForParent(Element&) const;
 
-    RawPtrWillBeMember<Document> m_document;
-    OwnPtrWillBeMember<ParentMap> m_parentMap;
-    OwnPtrWillBeMember<ParentMapForType> m_parentMapForType;
+    Member<Document> m_document;
+    Member<ParentMap> m_parentMap;
+    Member<ParentMapForType> m_parentMapForType;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     uint64_t m_domTreeVersion;
 #endif
 };

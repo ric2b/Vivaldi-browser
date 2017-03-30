@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "base/mac/bundle_locations.h"
+#include "base/mac/sdk_forward_declarations.h"
 #include "base/strings/sys_string_conversions.h"
 #import "chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
@@ -23,6 +24,8 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node_data.h"
 #import "components/bookmarks/managed/managed_bookmark_service.h"
+#include "ui/base/clipboard/clipboard_util_mac.h"
+#include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/theme_provider.h"
 
 using bookmarks::BookmarkModel;
@@ -496,14 +499,12 @@ NSRect GetFirstButtonFrameForHeight(CGFloat height) {
     // popping up from the bookmark bar itself.  In this case, start
     // BELOW the parent button.  Our left is the button left; our top
     // is bottom of button's parent view.
-    NSPoint buttonBottomLeftInScreen =
-        [[parentButton_ window]
-            convertBaseToScreen:[parentButton_
-                                    convertPoint:NSZeroPoint toView:nil]];
-    NSPoint bookmarkBarBottomLeftInScreen =
-        [[parentButton_ window]
-            convertBaseToScreen:[[parentButton_ superview]
-                                    convertPoint:NSZeroPoint toView:nil]];
+    NSPoint buttonBottomLeftInScreen = ui::ConvertPointFromWindowToScreen(
+        [parentButton_ window],
+        [parentButton_ convertPoint:NSZeroPoint toView:nil]);
+    NSPoint bookmarkBarBottomLeftInScreen = ui::ConvertPointFromWindowToScreen(
+        [parentButton_ window],
+        [[parentButton_ superview] convertPoint:NSZeroPoint toView:nil]);
     newWindowTopLeft = NSMakePoint(
         buttonBottomLeftInScreen.x + bookmarks::kBookmarkBarButtonOffset,
         bookmarkBarBottomLeftInScreen.y + bookmarks::kBookmarkBarMenuOffset);
@@ -538,9 +539,9 @@ NSRect GetFirstButtonFrameForHeight(CGFloat height) {
     NSPoint topOfWindow = NSMakePoint(0,
                                       NSMaxY([parentButton_ frame]) -
                                           bookmarks::kBookmarkVerticalPadding);
-    topOfWindow = [[parentButton_ window]
-                   convertBaseToScreen:[[parentButton_ superview]
-                                        convertPoint:topOfWindow toView:nil]];
+    topOfWindow = ui::ConvertPointFromWindowToScreen(
+        [parentButton_ window],
+        [[parentButton_ superview] convertPoint:topOfWindow toView:nil]);
     newWindowTopLeft.y = topOfWindow.y +
                          2 * bookmarks::kBookmarkVerticalPadding;
   }
@@ -1040,8 +1041,8 @@ NSRect GetFirstButtonFrameForHeight(CGFloat height) {
   NSButton* button = parentButton_.get();
   NSRect parentButtonGlobalFrame =
       [button convertRect:[button bounds] toView:nil];
-  parentButtonGlobalFrame.origin =
-      [[button window] convertBaseToScreen:parentButtonGlobalFrame.origin];
+  parentButtonGlobalFrame =
+      [[button window] convertRectToScreen:parentButtonGlobalFrame];
   for (NSScreen* screen in [NSScreen screens]) {
     if (NSIntersectsRect([screen frame], parentButtonGlobalFrame))
       return screen;
@@ -1064,19 +1065,19 @@ NSRect GetFirstButtonFrameForHeight(CGFloat height) {
 // Note [theEvent window] may not be our window, as we also get these messages
 // forwarded from BookmarkButton's mouse tracking loop.
 - (void)mouseMovedOrDragged:(NSEvent*)theEvent {
-  NSPoint eventScreenLocation =
-      [[theEvent window] convertBaseToScreen:[theEvent locationInWindow]];
+  NSPoint eventScreenLocation = ui::ConvertPointFromWindowToScreen(
+      [theEvent window], [theEvent locationInWindow]);
 
   // Base hot spot calculations on the positions of the scroll arrow views.
   NSRect testRect = [scrollDownArrowView_ frame];
   NSPoint testPoint = [visibleView_ convertPoint:testRect.origin
                                                   toView:nil];
-  testPoint = [[self window] convertBaseToScreen:testPoint];
+  testPoint = ui::ConvertPointFromWindowToScreen([self window], testPoint);
   CGFloat closeToTopOfScreen = testPoint.y;
 
   testRect = [scrollUpArrowView_ frame];
   testPoint = [visibleView_ convertPoint:testRect.origin toView:nil];
-  testPoint = [[self window] convertBaseToScreen:testPoint];
+  testPoint = ui::ConvertPointFromWindowToScreen([self window], testPoint);
   CGFloat closeToBottomOfScreen = testPoint.y + testRect.size.height;
   if (eventScreenLocation.y <= closeToBottomOfScreen &&
       ![scrollUpArrowView_ isHidden]) {
@@ -1332,10 +1333,11 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
 
 #pragma mark BookmarkButtonDelegate Protocol
 
-- (void)fillPasteboard:(NSPasteboard*)pboard
-       forDragOfButton:(BookmarkButton*)button {
-  [[self folderTarget] fillPasteboard:pboard forDragOfButton:button];
+- (NSPasteboardItem*)pasteboardItemForDragOfButton:(BookmarkButton*)button {
+  return [[self folderTarget] pasteboardItemForDragOfButton:button];
+}
 
+- (void)willBeginPasteboardDrag {
   // Close our folder menu and submenus since we know we're going to be dragged.
   [self closeBookmarkFolder:self];
 }
@@ -1454,7 +1456,8 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   // Don't allow drops that would result in cycles.
   if (button) {
     NSData* data = [[info draggingPasteboard]
-                    dataForType:kBookmarkButtonDragType];
+        dataForType:ui::ClipboardUtil::UTIForPasteboardType(
+                        kBookmarkButtonDragType)];
     if (data && [info draggingSource]) {
       BookmarkButton* sourceButton = nil;
       [data getBytes:&sourceButton length:sizeof(sourceButton)];

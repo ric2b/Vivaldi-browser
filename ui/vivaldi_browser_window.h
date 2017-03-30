@@ -16,7 +16,6 @@
 #endif
 
 class Browser;
-class DownloadShelfView;
 
 #if defined(OS_WIN)
 class JumpList;
@@ -98,10 +97,6 @@ class VivaldiBrowserWindow : public BrowserWindow {
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
   void ResetToolbarTabState(content::WebContents* contents) override {};
-#if defined(OS_WIN)
-  void SetMetroSnapMode(bool enable) override{}
-  bool IsInMetroSnapMode() const;
-#endif
   bool IsFullscreenBubbleVisible() const override;
   LocationBar* GetLocationBar() const override;
   void SetFocusToLocationBar(bool select_all) override{}
@@ -190,6 +185,11 @@ class VivaldiBrowserWindow : public BrowserWindow {
   gfx::Size GetContentsSize() const override;
   extensions::AppWindow* GetAppWindow() const;
 
+  void ShowImeWarningBubble(
+      const extensions::Extension* extension,
+      const base::Callback<void(ImeWarningBubblePermissionStatus status)>&
+        callback) override {}
+
  protected:
   void DestroyBrowser() override;
 
@@ -204,9 +204,6 @@ class VivaldiBrowserWindow : public BrowserWindow {
   // The custom JumpList for Windows 7.
   scoped_refptr<JumpList> jumplist_;
 #endif
-
-  // The download shelf view (view at the bottom of the page).
-  scoped_ptr<DownloadShelfView> download_shelf_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserWindow);
 };

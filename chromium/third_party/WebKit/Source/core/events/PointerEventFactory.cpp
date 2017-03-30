@@ -75,13 +75,13 @@ void PointerEventFactory::setIdTypeButtons(PointerEventInit &pointerEventInit,
     pointerEventInit.setIsPrimary(isPrimary(pointerId));
 }
 
-PassRefPtrWillBeRawPtr<PointerEvent> PointerEventFactory::create(
+PointerEvent* PointerEventFactory::create(
     const AtomicString& mouseEventName, const PlatformMouseEvent& mouseEvent,
-    PassRefPtrWillBeRawPtr<EventTarget> relatedTarget,
-    PassRefPtrWillBeRawPtr<AbstractView> view)
+    EventTarget* relatedTarget,
+    AbstractView* view)
 {
     AtomicString pointerEventName = pointerEventNameForMouseEventName(mouseEventName);
-    unsigned buttons = MouseEvent::platformModifiersToButtons(mouseEvent.modifiers());
+    unsigned buttons = MouseEvent::platformModifiersToButtons(mouseEvent.getModifiers());
     PointerEventInit pointerEventInit;
 
     setIdTypeButtons(pointerEventInit, mouseEvent.pointerProperties(), buttons);
@@ -90,6 +90,7 @@ PassRefPtrWillBeRawPtr<PointerEvent> PointerEventFactory::create(
     pointerEventInit.setScreenY(mouseEvent.globalPosition().y());
     pointerEventInit.setClientX(mouseEvent.position().x());
     pointerEventInit.setClientY(mouseEvent.position().y());
+
     if (pointerEventName == EventTypeNames::pointerdown
         || pointerEventName == EventTypeNames::pointerup) {
         pointerEventInit.setButton(mouseEvent.button());
@@ -101,7 +102,7 @@ PassRefPtrWillBeRawPtr<PointerEvent> PointerEventFactory::create(
     pointerEventInit.setPressure(getPointerEventPressure(
         mouseEvent.pointerProperties().force, pointerEventInit.buttons()));
 
-    UIEventWithKeyState::setFromPlatformModifiers(pointerEventInit, mouseEvent.modifiers());
+    UIEventWithKeyState::setFromPlatformModifiers(pointerEventInit, mouseEvent.getModifiers());
 
     // Make sure chorded buttons fire pointermove instead of pointerup/down.
     if ((pointerEventName == EventTypeNames::pointerdown
@@ -124,12 +125,12 @@ PassRefPtrWillBeRawPtr<PointerEvent> PointerEventFactory::create(
     return PointerEvent::create(pointerEventName, pointerEventInit);
 }
 
-PassRefPtrWillBeRawPtr<PointerEvent> PointerEventFactory::create(const AtomicString& type,
+PointerEvent* PointerEventFactory::create(const AtomicString& type,
     const PlatformTouchPoint& touchPoint, PlatformEvent::Modifiers modifiers,
     const double width, const double height,
     const double clientX, const double clientY)
 {
-    const PlatformTouchPoint::State pointState = touchPoint.state();
+    const PlatformTouchPoint::TouchState pointState = touchPoint.state();
 
     bool pointerReleasedOrCancelled =
         pointState == PlatformTouchPoint::TouchReleased
@@ -166,7 +167,7 @@ PassRefPtrWillBeRawPtr<PointerEvent> PointerEventFactory::create(const AtomicStr
 }
 
 
-PassRefPtrWillBeRawPtr<PointerEvent> PointerEventFactory::createPointerCancel(const PlatformTouchPoint& touchPoint)
+PointerEvent* PointerEventFactory::createPointerCancelEvent(const PlatformTouchPoint& touchPoint)
 {
     PointerEventInit pointerEventInit;
 
@@ -178,11 +179,33 @@ PassRefPtrWillBeRawPtr<PointerEvent> PointerEventFactory::createPointerCancel(co
     return PointerEvent::create(EventTypeNames::pointercancel, pointerEventInit);
 }
 
-PassRefPtrWillBeRawPtr<PointerEvent> PointerEventFactory::create(
-    PassRefPtrWillBeRawPtr<PointerEvent> pointerEvent,
-    const AtomicString& type,
-    PassRefPtrWillBeRawPtr<EventTarget> relatedTarget)
+PointerEvent* PointerEventFactory::createPointerCaptureEvent(
+    PointerEvent* pointerEvent,
+    const AtomicString& type)
 {
+    ASSERT(type == EventTypeNames::gotpointercapture
+        || type == EventTypeNames::lostpointercapture);
+
+    PointerEventInit pointerEventInit;
+    pointerEventInit.setPointerId(pointerEvent->pointerId());
+    pointerEventInit.setPointerType(pointerEvent->pointerType());
+    pointerEventInit.setIsPrimary(pointerEvent->isPrimary());
+    pointerEventInit.setBubbles(true);
+    pointerEventInit.setCancelable(false);
+
+    return PointerEvent::create(type, pointerEventInit);
+}
+
+PointerEvent* PointerEventFactory::createPointerTransitionEvent(
+    PointerEvent* pointerEvent,
+    const AtomicString& type,
+    EventTarget* relatedTarget)
+{
+    ASSERT(type == EventTypeNames::pointerout
+        || type == EventTypeNames::pointerleave
+        || type == EventTypeNames::pointerover
+        || type == EventTypeNames::pointerenter);
+
     PointerEventInit pointerEventInit;
 
     pointerEventInit.setPointerId(pointerEvent->pointerId());
@@ -266,13 +289,13 @@ int PointerEventFactory::addIdAndActiveButtons(const IncomingId p,
     return mappedId;
 }
 
-void PointerEventFactory::remove(
-    const PassRefPtrWillBeRawPtr<PointerEvent> pointerEvent)
+bool PointerEventFactory::remove(
+    const PointerEvent* pointerEvent)
 {
     int mappedId = pointerEvent->pointerId();
     // Do not remove mouse pointer id as it should always be there
     if (mappedId == s_mouseId || !m_pointerIdMapping.contains(mappedId))
-        return;
+        return false;
 
     IncomingId p = m_pointerIdMapping.get(mappedId).incomingId;
     int type = p.pointerType();
@@ -281,6 +304,7 @@ void PointerEventFactory::remove(
     if (m_primaryId[type] == mappedId)
         m_primaryId[type] = PointerEventFactory::s_invalidId;
     m_idCount[type]--;
+    return true;
 }
 
 bool PointerEventFactory::isPrimary(int mappedId) const
@@ -290,6 +314,16 @@ bool PointerEventFactory::isPrimary(int mappedId) const
 
     IncomingId p = m_pointerIdMapping.get(mappedId).incomingId;
     return m_primaryId[p.pointerType()] == mappedId;
+}
+
+WebPointerProperties::PointerType PointerEventFactory::getPointerType(
+    const int pointerId)
+{
+    if (m_pointerIdMapping.contains(pointerId)) {
+        return static_cast<WebPointerProperties::PointerType>(
+            m_pointerIdMapping.get(pointerId).incomingId.pointerType());
+    }
+    return WebPointerProperties::PointerType::Unknown;
 }
 
 bool PointerEventFactory::isActive(const int pointerId)

@@ -49,7 +49,7 @@ enum StorageType {
 };
 
 class MODULES_EXPORT StorageArea final : public GarbageCollectedFinalized<StorageArea>, public LocalFrameLifecycleObserver {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(StorageArea);
+    USING_GARBAGE_COLLECTED_MIXIN(StorageArea);
 public:
     static StorageArea* create(PassOwnPtr<WebStorageArea>, StorageType);
 
@@ -65,7 +65,6 @@ public:
     bool contains(const String& key, ExceptionState&, LocalFrame* sourceFrame);
 
     bool canAccessStorage(LocalFrame*);
-    size_t memoryBytesUsedByCache();
 
     static void dispatchLocalStorageEvent(const String& key, const String& oldValue, const String& newValue,
         SecurityOrigin*, const KURL& pageURL, WebStorageArea* sourceAreaInstance);

@@ -10,7 +10,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/url_constants.h"
@@ -46,11 +45,11 @@ void LoginUIService::LoginUIClosed(LoginUI* ui) {
 }
 
 void LoginUIService::SyncConfirmationUIClosed(
-    SyncConfirmationUIClosedResults results) {
+    SyncConfirmationUIClosedResult result) {
   FOR_EACH_OBSERVER(
       Observer,
       observer_list_,
-      OnSyncConfirmationUIClosed(results));
+      OnSyncConfirmationUIClosed(result));
 }
 
 void LoginUIService::UntrustedLoginUIShown() {

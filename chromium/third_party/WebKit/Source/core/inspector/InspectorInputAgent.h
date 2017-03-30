@@ -42,14 +42,12 @@ class InspectedFrames;
 class PlatformKeyboardEvent;
 class PlatformMouseEvent;
 
-typedef String ErrorString;
-
-class CORE_EXPORT InspectorInputAgent final : public InspectorBaseAgent<InspectorInputAgent, protocol::Frontend::Input>, public protocol::Dispatcher::InputCommandHandler {
+class CORE_EXPORT InspectorInputAgent final : public InspectorBaseAgent<InspectorInputAgent, protocol::Frontend::Input>, public protocol::Backend::Input {
     WTF_MAKE_NONCOPYABLE(InspectorInputAgent);
 public:
-    static PassOwnPtrWillBeRawPtr<InspectorInputAgent> create(InspectedFrames* inspectedFrames)
+    static RawPtr<InspectorInputAgent> create(InspectedFrames* inspectedFrames)
     {
-        return adoptPtrWillBeNoop(new InspectorInputAgent(inspectedFrames));
+        return new InspectorInputAgent(inspectedFrames);
     }
 
     ~InspectorInputAgent() override;
@@ -60,7 +58,7 @@ public:
 private:
     explicit InspectorInputAgent(InspectedFrames*);
 
-    RawPtrWillBeMember<InspectedFrames> m_inspectedFrames;
+    Member<InspectedFrames> m_inspectedFrames;
 };
 
 

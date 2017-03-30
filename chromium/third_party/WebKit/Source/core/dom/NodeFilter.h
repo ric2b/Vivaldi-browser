@@ -28,11 +28,10 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/NodeFilterCondition.h"
 #include "platform/heap/Handle.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
-class NodeFilter final : public RefCountedWillBeGarbageCollected<NodeFilter>, public ScriptWrappable {
+class NodeFilter final : public GarbageCollected<NodeFilter>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
     /**
@@ -67,19 +66,19 @@ public:
         SHOW_NOTATION                  = 0x00000800
     };
 
-    static PassRefPtrWillBeRawPtr<NodeFilter> create(PassRefPtrWillBeRawPtr<NodeFilterCondition> condition)
+    static RawPtr<NodeFilter> create(RawPtr<NodeFilterCondition> condition)
     {
-        return adoptRefWillBeNoop(new NodeFilter(condition));
+        return new NodeFilter(condition);
     }
 
-    static PassRefPtrWillBeRawPtr<NodeFilter> create()
+    static RawPtr<NodeFilter> create()
     {
-        return adoptRefWillBeNoop(new NodeFilter());
+        return new NodeFilter();
     }
 
     unsigned acceptNode(Node*, ExceptionState&) const;
 
-    void setCondition(PassRefPtrWillBeRawPtr<NodeFilterCondition> condition)
+    void setCondition(RawPtr<NodeFilterCondition> condition)
     {
         m_condition = condition;
     }
@@ -87,11 +86,11 @@ public:
     DECLARE_TRACE();
 
 private:
-    explicit NodeFilter(PassRefPtrWillBeRawPtr<NodeFilterCondition> condition) : m_condition(condition) { }
+    explicit NodeFilter(RawPtr<NodeFilterCondition> condition) : m_condition(condition) { }
 
     NodeFilter() { }
 
-    RefPtrWillBeMember<NodeFilterCondition> m_condition;
+    Member<NodeFilterCondition> m_condition;
 };
 
 } // namespace blink

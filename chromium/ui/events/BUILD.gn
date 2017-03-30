@@ -10,6 +10,10 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
+if (is_ios) {
+  import("//ios/build/config.gni")
+}
+
 static_library("dom_keycode_converter") {
   sources = [
     "keycodes/dom/dom_code.h",
@@ -50,8 +54,6 @@ component("events_base") {
     "keycodes/keyboard_code_conversion_win.cc",
     "keycodes/keyboard_code_conversion_win.h",
     "keycodes/keyboard_codes.h",
-    "keycodes/platform_key_map_win.cc",
-    "keycodes/platform_key_map_win.h",
     "latency_info.cc",
     "latency_info.h",
   ]
@@ -59,13 +61,12 @@ component("events_base") {
   defines = [ "EVENTS_BASE_IMPLEMENTATION" ]
 
   deps = [
-    ":dom_keycode_converter",
     "//base/third_party/dynamic_annotations",
-    "//ipc:param_traits",
     "//skia",
   ]
 
   public_deps = [
+    ":dom_keycode_converter",
     "//base",
     "//ui/events/platform",
     "//ui/gfx",
@@ -95,6 +96,10 @@ component("events_base") {
       "keycodes/xkb_keysym.h",
     ]
   }
+
+  if (!is_ios) {
+    deps += [ "//ipc:param_traits" ]
+  }
 }
 
 component("events") {
@@ -123,6 +128,8 @@ component("events") {
     "events_stub.cc",
     "gestures/gesture_recognizer_impl_mac.cc",
     "gestures/gesture_types.h",
+    "keycodes/platform_key_map_win.cc",
+    "keycodes/platform_key_map_win.h",
     "null_event_targeter.cc",
     "null_event_targeter.h",
     "scoped_target_handler.cc",
@@ -203,10 +210,15 @@ component("events") {
     sources += [
       "android/events_jni_registrar.cc",
       "android/events_jni_registrar.h",
+      "android/key_event_utils.cc",
+      "android/key_event_utils.h",
       "android/motion_event_android.cc",
       "android/motion_event_android.h",
     ]
-    deps += [ ":motionevent_jni_headers" ]
+    deps += [
+      ":keyevent_jni_headers",
+      ":motionevent_jni_headers",
+    ]
   }
 }
 
@@ -353,7 +365,6 @@ test("events_unittests") {
     "gesture_detection/touch_disposition_gesture_filter_unittest.cc",
     "gesture_detection/velocity_tracker_unittest.cc",
     "gestures/fling_curve_unittest.cc",
-    "ipc/latency_info_param_traits_unittest.cc",
     "keycodes/dom/keycode_converter_unittest.cc",
     "keycodes/keyboard_code_conversion_unittest.cc",
     "keycodes/platform_key_map_win_unittest.cc",
@@ -371,12 +382,11 @@ test("events_unittests") {
     ":test_support",
     "//base",
     "//base/test:run_all_unittests",
-    "//ipc:test_support",
+    "//base/test:test_support",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/events/devices",
-    "//ui/events/ipc:events_ipc",
     "//ui/events/platform",
     "//ui/gfx:test_support",
   ]
@@ -386,12 +396,15 @@ test("events_unittests") {
       "blink/input_handler_proxy_unittest.cc",
       "blink/input_scroll_elasticity_controller_unittest.cc",
       "gestures/blink/web_gesture_curve_impl_unittest.cc",
+      "ipc/latency_info_param_traits_unittest.cc",
     ]
     deps += [
       "//cc",
+      "//ipc:test_support",
       "//third_party/WebKit/public:blink_headers",
       "//ui/events/blink",
       "//ui/events/gestures/blink",
+      "//ui/events/ipc",
     ]
   }
 
@@ -450,11 +463,20 @@ test("events_unittests") {
   if (is_android) {
     sources += [ "android/motion_event_android_unittest.cc" ]
   }
+
+  if (is_ios) {
+    assert_no_deps = ios_assert_no_deps
+  }
 }
 
 if (is_android) {
   generate_jar_jni("motionevent_jni_headers") {
     jni_package = "ui"
     classes = [ "android/view/MotionEvent.class" ]
+  }
+
+  generate_jar_jni("keyevent_jni_headers") {
+    jni_package = "ui"
+    classes = [ "android/view/KeyEvent.class" ]
   }
 }

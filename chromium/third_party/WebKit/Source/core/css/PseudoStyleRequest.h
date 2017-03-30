@@ -60,13 +60,13 @@ public:
     // The spec disallows inheritance for ::backdrop.
     bool allowsInheritance(const ComputedStyle* parentStyle) const
     {
-        return parentStyle && pseudoId != BACKDROP;
+        return parentStyle && pseudoId != PseudoIdBackdrop;
     }
 
     PseudoId pseudoId;
     RequestType type;
     ScrollbarPart scrollbarPart;
-    RawPtrWillBeMember<LayoutScrollbar> scrollbar;
+    Member<LayoutScrollbar> scrollbar;
 };
 
 } // namespace blink

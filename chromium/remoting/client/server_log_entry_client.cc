@@ -55,10 +55,9 @@ const char* GetValueSessionState(ConnectionToHost::State state) {
       return "connection-failed";
     case ConnectionToHost::CLOSED:
       return kValueSessionStateClosed;
-    default:
-      NOTREACHED();
-      return nullptr;
   }
+  NOTREACHED();
+  return nullptr;
 }
 
 const char* GetValueError(ErrorCode error) {
@@ -83,20 +82,23 @@ const char* GetValueError(ErrorCode error) {
       return "network-failure";
     case protocol::HOST_OVERLOAD:
       return "host-overload";
+    case protocol::MAX_SESSION_LENGTH:
+      return "max-session-length";
+    case protocol::HOST_CONFIGURATION_ERROR:
+      return "host-configuration-error";
     case protocol::UNKNOWN_ERROR:
       return "unknown-error";
-    default:
-      NOTREACHED();
-      return nullptr;
   }
+  NOTREACHED();
+  return nullptr;
 }
 
 }  // namespace
 
-scoped_ptr<ServerLogEntry> MakeLogEntryForSessionStateChange(
+std::unique_ptr<ServerLogEntry> MakeLogEntryForSessionStateChange(
     ConnectionToHost::State state,
     ErrorCode error) {
-  scoped_ptr<ServerLogEntry> entry(new ServerLogEntry());
+  std::unique_ptr<ServerLogEntry> entry(new ServerLogEntry());
   entry->AddRoleField(kValueRoleClient);
   entry->AddEventNameField(kValueEventNameSessionState);
 
@@ -108,40 +110,40 @@ scoped_ptr<ServerLogEntry> MakeLogEntryForSessionStateChange(
   return entry;
 }
 
-scoped_ptr<ServerLogEntry> MakeLogEntryForStatistics(
+std::unique_ptr<ServerLogEntry> MakeLogEntryForStatistics(
     protocol::PerformanceTracker* perf_tracker) {
-  scoped_ptr<ServerLogEntry> entry(new ServerLogEntry());
+  std::unique_ptr<ServerLogEntry> entry(new ServerLogEntry());
   entry->AddRoleField(kValueRoleClient);
   entry->AddEventNameField(kValueEventNameStatistics);
 
   entry->Set("video-bandwidth",
              StringPrintf("%.2f", perf_tracker->video_bandwidth()));
   entry->Set("capture-latency",
-             StringPrintf("%.2f", perf_tracker->video_capture_ms()));
+             StringPrintf("%.2f", perf_tracker->video_capture_ms().Average()));
   entry->Set("encode-latency",
-             StringPrintf("%.2f", perf_tracker->video_encode_ms()));
+             StringPrintf("%.2f", perf_tracker->video_encode_ms().Average()));
   entry->Set("decode-latency",
-             StringPrintf("%.2f", perf_tracker->video_decode_ms()));
+             StringPrintf("%.2f", perf_tracker->video_decode_ms().Average()));
   entry->Set("render-latency",
-             StringPrintf("%.2f", perf_tracker->video_frame_rate()));
+             StringPrintf("%.2f", perf_tracker->video_paint_ms().Average()));
   entry->Set("roundtrip-latency",
-             StringPrintf("%.2f", perf_tracker->round_trip_ms()));
+             StringPrintf("%.2f", perf_tracker->round_trip_ms().Average()));
 
   return entry;
 }
 
-scoped_ptr<ServerLogEntry> MakeLogEntryForSessionIdOld(
+std::unique_ptr<ServerLogEntry> MakeLogEntryForSessionIdOld(
     const std::string& session_id) {
-  scoped_ptr<ServerLogEntry> entry(new ServerLogEntry());
+  std::unique_ptr<ServerLogEntry> entry(new ServerLogEntry());
   entry->AddRoleField(kValueRoleClient);
   entry->AddEventNameField(kValueEventNameSessionIdOld);
   AddSessionIdToLogEntry(entry.get(), session_id);
   return entry;
 }
 
-scoped_ptr<ServerLogEntry> MakeLogEntryForSessionIdNew(
+std::unique_ptr<ServerLogEntry> MakeLogEntryForSessionIdNew(
     const std::string& session_id) {
-  scoped_ptr<ServerLogEntry> entry(new ServerLogEntry());
+  std::unique_ptr<ServerLogEntry> entry(new ServerLogEntry());
   entry->AddRoleField(kValueRoleClient);
   entry->AddEventNameField(kValueEventNameSessionIdNew);
   AddSessionIdToLogEntry(entry.get(), session_id);

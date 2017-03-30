@@ -132,8 +132,6 @@ TEST_F(ChildProcessSecurityPolicyTest, IsWebSafeSchemeTest) {
   EXPECT_TRUE(p->IsWebSafeScheme("registered-web-safe-scheme"));
 
   EXPECT_FALSE(p->IsWebSafeScheme(kChromeUIScheme));
-  EXPECT_FALSE(p->IsWebSafeScheme(kExeScheme));
-  EXPECT_FALSE(p->IsWebSafeScheme(kMojoScheme));
 }
 
 TEST_F(ChildProcessSecurityPolicyTest, IsPseudoSchemeTest) {
@@ -205,21 +203,22 @@ TEST_F(ChildProcessSecurityPolicyTest, AboutTest) {
   EXPECT_TRUE(p->CanCommitURL(kRendererID, GURL("aBouT:BlAnK")));
   EXPECT_TRUE(p->CanCommitURL(kRendererID, GURL("aBouT:blank")));
 
-  EXPECT_FALSE(p->CanRequestURL(kRendererID, GURL("about:memory")));
   EXPECT_FALSE(p->CanRequestURL(kRendererID, GURL("about:crash")));
   EXPECT_FALSE(p->CanRequestURL(kRendererID, GURL("about:cache")));
   EXPECT_FALSE(p->CanRequestURL(kRendererID, GURL("about:hang")));
-  EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("about:memory")));
+  EXPECT_FALSE(p->CanRequestURL(kRendererID, GURL("about:version")));
   EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("about:crash")));
   EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("about:cache")));
   EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("about:hang")));
+  EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("about:version")));
 
-  EXPECT_FALSE(p->CanRequestURL(kRendererID, GURL("aBoUt:memory")));
+  EXPECT_FALSE(p->CanRequestURL(kRendererID, GURL("aBoUt:version")));
   EXPECT_FALSE(p->CanRequestURL(kRendererID, GURL("about:CrASh")));
   EXPECT_FALSE(p->CanRequestURL(kRendererID, GURL("abOuT:cAChe")));
-  EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("aBoUt:memory")));
+  EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("aBoUt:version")));
   EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("about:CrASh")));
   EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("abOuT:cAChe")));
+  EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("aBoUt:version")));
 
   // Requests for about: pages should be denied.
   p->GrantRequestURL(kRendererID, GURL("about:crash"));

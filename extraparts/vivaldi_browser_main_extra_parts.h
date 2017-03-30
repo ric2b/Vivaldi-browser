@@ -17,6 +17,7 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
 
 #if defined(OS_MACOSX)
   void PostEarlyInitializationMac();
+  void PreProfileInitMac();
 #endif
 #if defined(OS_WIN)
   void PostEarlyInitializationWin();

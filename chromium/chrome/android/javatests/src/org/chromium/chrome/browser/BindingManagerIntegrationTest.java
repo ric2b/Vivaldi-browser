@@ -15,6 +15,7 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
@@ -22,7 +23,9 @@ import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
+import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.ChromeTabUtils;
+import org.chromium.chrome.test.util.PrerenderTestHelper;
 import org.chromium.content.browser.BindingManager;
 import org.chromium.content.browser.ChildProcessConnection;
 import org.chromium.content.browser.ChildProcessLauncher;
@@ -51,7 +54,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
 
         void assertIsInForeground(final int pid) {
             try {
-                CriteriaHelper.pollForCriteria(new Criteria() {
+                CriteriaHelper.pollInstrumentationThread(new Criteria() {
                     @Override
                     public boolean isSatisfied() {
                         return mProcessInForegroundMap.get(pid);
@@ -64,7 +67,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
 
         void assertIsInBackground(final int pid) {
             try {
-                CriteriaHelper.pollForCriteria(new Criteria() {
+                CriteriaHelper.pollInstrumentationThread(new Criteria() {
                     @Override
                     public boolean isSatisfied() {
                         return !mProcessInForegroundMap.get(pid);
@@ -77,7 +80,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
 
         void assertSetInForegroundWasCalled(String message, final int pid) {
             try {
-                CriteriaHelper.pollForCriteria(new Criteria(message) {
+                CriteriaHelper.pollInstrumentationThread(new Criteria(message) {
                     @Override
                     public boolean isSatisfied() {
                         return mProcessInForegroundMap.indexOfKey(pid) >= 0;
@@ -90,7 +93,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
 
         void assertIsReleaseAllModerateBindingsCalled() {
             try {
-                CriteriaHelper.pollForCriteria(new Criteria() {
+                CriteriaHelper.pollInstrumentationThread(new Criteria() {
                     @Override
                     public boolean isSatisfied() {
                         return mIsReleaseAllModerateBindingsCalled;
@@ -154,7 +157,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
 
         @Override
         public void startModerateBindingManagement(
-                Context context, int maxSize, float lowReduceRatio, float highReduceRatio) {}
+                Context context, int maxSize, boolean moderateBindingTillBackgrounded) {}
 
         @Override
         public void releaseAllModerateBindings() {
@@ -166,6 +169,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
     private EmbeddedTestServer mTestServer;
 
     private static final String FILE_PATH = "/chrome/test/data/android/test.html";
+    private static final String FILE_PATH2 = "/chrome/test/data/android/simple.html";
     // about:version will always be handled by a different renderer than a local file.
     private static final String ABOUT_VERSION_PATH = "chrome://version/";
     private static final String SHARED_RENDERER_PAGE_PATH =
@@ -208,7 +212,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
         // Wait for the new tab animations on phones to finish.
         if (!DeviceFormFactor.isTablet(getActivity())) {
             final ChromeActivity activity = getActivity();
-            CriteriaHelper.pollForUIThreadCriteria(new Criteria("Did not finish animation") {
+            CriteriaHelper.pollUiThread(new Criteria("Did not finish animation") {
                 @Override
                 public boolean isSatisfied() {
                     Layout layout = activity.getCompositorViewHolder()
@@ -279,7 +283,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
         // Wait for the new tab animations on phones to finish.
         if (!DeviceFormFactor.isTablet(getActivity())) {
             final ChromeActivity activity = getActivity();
-            CriteriaHelper.pollForUIThreadCriteria(new Criteria("Did not finish animation") {
+            CriteriaHelper.pollUiThread(new Criteria("Did not finish animation") {
                 @Override
                 public boolean isSatisfied() {
                     Layout layout = activity.getCompositorViewHolder()
@@ -311,7 +315,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
         assertTrue(ChildProcessLauncher.crashProcessForTesting(
                 tabs[1].getContentViewCore().getCurrentRenderProcessId()));
 
-        CriteriaHelper.pollForCriteria(
+        CriteriaHelper.pollInstrumentationThread(
                 new Criteria("Renderer crash wasn't noticed by the browser.") {
                     @Override
                     public boolean isSatisfied() {
@@ -328,7 +332,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
         });
 
         // Wait until the process is spawned and its visibility is determined.
-        CriteriaHelper.pollForCriteria(
+        CriteriaHelper.pollInstrumentationThread(
                 new Criteria("Process for the crashed tab was not respawned.") {
                     @Override
                     public boolean isSatisfied() {
@@ -377,7 +381,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
         assertTrue(ChildProcessLauncher.crashProcessForTesting(
                 tab.getContentViewCore().getCurrentRenderProcessId()));
 
-        CriteriaHelper.pollForCriteria(
+        CriteriaHelper.pollInstrumentationThread(
                 new Criteria("Renderer crash wasn't noticed by the browser.") {
                     @Override
                     public boolean isSatisfied() {
@@ -394,7 +398,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
         });
 
         // Wait until the process is spawned and its visibility is determined.
-        CriteriaHelper.pollForCriteria(
+        CriteriaHelper.pollInstrumentationThread(
                 new Criteria("Process for the crashed tab was not respawned.") {
                     @Override
                     public boolean isSatisfied() {
@@ -489,6 +493,30 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
     }
 
     /**
+     * When a user navigates to a prererendered URL, the tab swaps in the prerender's render
+     * process and discards its old render process. Test that visibilityDetermined() is called for
+     * the swapped in render process.
+     */
+    @LargeTest
+    @Restriction({Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Feature({"ProcessManagement"})
+    public void testVisibilityDeterminedNavigateToPrerenderedPage() throws InterruptedException {
+        loadUrl(mTestServer.getURL(FILE_PATH));
+        Tab tab = getActivity().getActivityTab();
+        int pid1 = getRenderProcessId(tab);
+
+        String prerenderUrl = mTestServer.getURL(FILE_PATH2);
+        PrerenderTestHelper.prerenderUrl(prerenderUrl, tab);
+        assertEquals(TabLoadStatus.FULL_PRERENDERED_PAGE_LOAD, loadUrl(prerenderUrl));
+
+        int pid2 = getRenderProcessId(tab);
+        MoreAsserts.assertNotEqual(pid1, pid2);
+
+        assertTrue(mBindingManager.getVisibilityCalls(pid1).contains("DETERMINED;"));
+        assertTrue(mBindingManager.getVisibilityCalls(pid2).contains("DETERMINED;"));
+    }
+
+    /**
      * Verifies that BindingManager.releaseAllModerateBindings() is called once all the sandboxed
      * services are allocated.
      */
@@ -527,8 +555,10 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
         mBindingManager.assertIsReleaseAllModerateBindingsCalled();
     }
 
+    // Test crashes on tablets. See crbug.com/594407
     @LargeTest
     @Feature({"ProcessManagement"})
+    @Restriction(ChromeRestriction.RESTRICTION_TYPE_PHONE)
     public void testRestoreSharedRenderer() throws Exception {
         loadUrl(mTestServer.getURL(SHARED_RENDERER_PAGE_PATH));
 
@@ -536,7 +566,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
         tabs[0] = getActivity().getActivityTab();
         singleClickView(tabs[0].getView());
 
-        CriteriaHelper.pollForCriteria(new Criteria("Child tab isn't opened.") {
+        CriteriaHelper.pollInstrumentationThread(new Criteria("Child tab isn't opened.") {
             @Override
             public boolean isSatisfied() {
                 return getActivity().getCurrentTabModel().getCount() == 2
@@ -564,7 +594,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
         assertTrue(ChildProcessLauncher.crashProcessForTesting(
                 tabs[1].getContentViewCore().getCurrentRenderProcessId()));
 
-        CriteriaHelper.pollForCriteria(
+        CriteriaHelper.pollInstrumentationThread(
                 new Criteria("Renderer crash wasn't noticed by the browser.") {
                     @Override
                     public boolean isSatisfied() {
@@ -580,7 +610,7 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
         });
 
         // Wait until the process is spawned and its visibility is determined.
-        CriteriaHelper.pollForCriteria(
+        CriteriaHelper.pollInstrumentationThread(
                 new Criteria("Process for the crashed tab was not respawned.") {
                     @Override
                     public boolean isSatisfied() {
@@ -612,11 +642,11 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
 
     @Override
     protected void setUp() throws Exception {
-        super.setUp();
-
         // Hook in the test binding manager.
         mBindingManager = new MockBindingManager();
         ChildProcessLauncher.setBindingManagerForTesting(mBindingManager);
+
+        super.setUp();
 
         mTestServer = EmbeddedTestServer.createAndStartFileServer(
                 getInstrumentation().getContext(), Environment.getExternalStorageDirectory());

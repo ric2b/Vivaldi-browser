@@ -8,11 +8,13 @@
 #include <stdint.h>
 
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/non_thread_safe.h"
 #include "cc/output/context_provider.h"
 #include "components/mus/gles2/command_buffer_local_client.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gl/gl_surface.h"
 
 namespace gpu {
 
@@ -54,6 +56,10 @@ class SurfacesContextProvider : public cc::ContextProvider,
   void SetupLock() override;
   base::Lock* GetLock() override;
 
+  // SurfacesContextProvider API.
+  void SetSwapBuffersCompletionCallback(
+      gfx::GLSurface::SwapCompletionCallback callback);
+
  protected:
   friend class base::RefCountedThreadSafe<SurfacesContextProvider>;
   ~SurfacesContextProvider() override;
@@ -62,6 +68,7 @@ class SurfacesContextProvider : public cc::ContextProvider,
   // CommandBufferLocalClient:
   void UpdateVSyncParameters(int64_t timebase, int64_t interval) override;
   void DidLoseContext() override;
+  void GpuCompletedSwapBuffers(gfx::SwapResult result) override;
 
   // From GLES2Context:
   // Initialized in BindToCurrentThread.
@@ -75,6 +82,8 @@ class SurfacesContextProvider : public cc::ContextProvider,
   SurfacesContextProviderDelegate* delegate_;
   gfx::AcceleratedWidget widget_;
   CommandBufferLocal* command_buffer_local_;
+
+  gfx::GLSurface::SwapCompletionCallback swap_buffers_completion_callback_;
 
   base::Lock context_lock_;
 

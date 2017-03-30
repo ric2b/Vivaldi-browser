@@ -36,7 +36,7 @@ class Thread;
 // temporary file to target filename.
 //
 // If you want to know more about this approach and ext3/ext4 fsync issues, see
-// http://valhenson.livejournal.com/37921.html
+// http://blog.valerieaurora.org/2009/04/16/dont-panic-fsync-ext34-and-your-data/
 class BASE_EXPORT ImportantFileWriter : public NonThreadSafe {
  public:
   // Used by ScheduleSave to lazily provide the data to be saved. Allows us
@@ -63,11 +63,11 @@ class BASE_EXPORT ImportantFileWriter : public NonThreadSafe {
   // execute file I/O operations.
   // All non-const methods, ctor and dtor must be called on the same thread.
   ImportantFileWriter(const FilePath& path,
-                      const scoped_refptr<SequencedTaskRunner>& task_runner);
+                      scoped_refptr<SequencedTaskRunner> task_runner);
 
   // Same as above, but with a custom commit interval.
   ImportantFileWriter(const FilePath& path,
-                      const scoped_refptr<SequencedTaskRunner>& task_runner,
+                      scoped_refptr<SequencedTaskRunner> task_runner,
                       TimeDelta interval);
 
   // You have to ensure that there are no pending writes at the moment
@@ -82,7 +82,7 @@ class BASE_EXPORT ImportantFileWriter : public NonThreadSafe {
 
   // Save |data| to target filename. Does not block. If there is a pending write
   // scheduled by ScheduleWrite(), it is cancelled.
-  void WriteNow(scoped_ptr<std::string> data);
+  void WriteNow(std::unique_ptr<std::string> data);
 
   // Schedule a save to target filename. Data will be serialized and saved
   // to disk after the commit interval. If another ScheduleWrite is issued

@@ -26,7 +26,6 @@
 #include "bindings/core/v8/V8StringResource.h"
 
 #include "bindings/core/v8/V8Binding.h"
-#include "wtf/MainThread.h"
 
 namespace blink {
 
@@ -50,7 +49,7 @@ template<>
 struct StringTraits<AtomicString> {
     static AtomicString fromStringResource(WebCoreStringResourceBase* resource)
     {
-        return resource->atomicString();
+        return resource->getAtomicString();
     }
     template <typename V8StringTrait>
     static AtomicString fromV8String(v8::Local<v8::String>, int);

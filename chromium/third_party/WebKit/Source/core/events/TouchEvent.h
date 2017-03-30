@@ -41,28 +41,28 @@ public:
     ~TouchEvent() override;
 
     // We only initialize sourceCapabilities when we create TouchEvent from EventHandler, null if it is from JavaScript.
-    static PassRefPtrWillBeRawPtr<TouchEvent> create()
+    static TouchEvent* create()
     {
-        return adoptRefWillBeNoop(new TouchEvent);
+        return new TouchEvent;
     }
-    static PassRefPtrWillBeRawPtr<TouchEvent> create(TouchList* touches,
+    static TouchEvent* create(TouchList* touches,
         TouchList* targetTouches, TouchList* changedTouches,
-        const AtomicString& type, PassRefPtrWillBeRawPtr<AbstractView> view,
+        const AtomicString& type, AbstractView* view,
         PlatformEvent::Modifiers modifiers, bool cancelable, bool causesScrollingIfUncanceled,
         double platformTimeStamp)
     {
-        return adoptRefWillBeNoop(new TouchEvent(touches, targetTouches, changedTouches, type, view,
-            modifiers, cancelable, causesScrollingIfUncanceled, platformTimeStamp));
+        return new TouchEvent(touches, targetTouches, changedTouches, type, view,
+            modifiers, cancelable, causesScrollingIfUncanceled, platformTimeStamp);
     }
 
-    static PassRefPtrWillBeRawPtr<TouchEvent> create(const AtomicString& type, const TouchEventInit& initializer)
+    static TouchEvent* create(const AtomicString& type, const TouchEventInit& initializer)
     {
-        return adoptRefWillBeNoop(new TouchEvent(type, initializer));
+        return new TouchEvent(type, initializer);
     }
 
     void initTouchEvent(ScriptState*, TouchList* touches, TouchList* targetTouches,
         TouchList* changedTouches, const AtomicString& type,
-        PassRefPtrWillBeRawPtr<AbstractView>,
+        AbstractView*,
         int, int, int, int, // unused useless members of web exposed API
         bool ctrlKey, bool altKey, bool shiftKey, bool metaKey);
 
@@ -70,9 +70,9 @@ public:
     TouchList* targetTouches() const { return m_targetTouches.get(); }
     TouchList* changedTouches() const { return m_changedTouches.get(); }
 
-    void setTouches(PassRefPtrWillBeRawPtr<TouchList> touches) { m_touches = touches; }
-    void setTargetTouches(PassRefPtrWillBeRawPtr<TouchList> targetTouches) { m_targetTouches = targetTouches; }
-    void setChangedTouches(PassRefPtrWillBeRawPtr<TouchList> changedTouches) { m_changedTouches = changedTouches; }
+    void setTouches(TouchList* touches) { m_touches = touches; }
+    void setTargetTouches(TouchList* targetTouches) { m_targetTouches = targetTouches; }
+    void setChangedTouches(TouchList* changedTouches) { m_changedTouches = changedTouches; }
 
     bool causesScrollingIfUncanceled() const { return m_causesScrollingIfUncanceled; }
 
@@ -82,7 +82,7 @@ public:
 
     void preventDefault() override;
 
-    PassRefPtrWillBeRawPtr<EventDispatchMediator> createMediator() override;
+    EventDispatchMediator* createMediator() override;
 
     DECLARE_VIRTUAL_TRACE();
 
@@ -90,23 +90,23 @@ private:
     TouchEvent();
     TouchEvent(TouchList* touches, TouchList* targetTouches,
         TouchList* changedTouches, const AtomicString& type,
-        PassRefPtrWillBeRawPtr<AbstractView>, PlatformEvent::Modifiers,
+        AbstractView*, PlatformEvent::Modifiers,
         bool cancelable, bool causesScrollingIfUncanceled,
         double platformTimeStamp);
     TouchEvent(const AtomicString&, const TouchEventInit&);
 
-    RefPtrWillBeMember<TouchList> m_touches;
-    RefPtrWillBeMember<TouchList> m_targetTouches;
-    RefPtrWillBeMember<TouchList> m_changedTouches;
+    Member<TouchList> m_touches;
+    Member<TouchList> m_targetTouches;
+    Member<TouchList> m_changedTouches;
     bool m_causesScrollingIfUncanceled;
 };
 
 class TouchEventDispatchMediator final : public EventDispatchMediator {
 public:
-    static PassRefPtrWillBeRawPtr<TouchEventDispatchMediator> create(PassRefPtrWillBeRawPtr<TouchEvent>);
+    static TouchEventDispatchMediator* create(TouchEvent*);
 
 private:
-    explicit TouchEventDispatchMediator(PassRefPtrWillBeRawPtr<TouchEvent>);
+    explicit TouchEventDispatchMediator(TouchEvent*);
     TouchEvent& event() const;
     DispatchEventResult dispatchEvent(EventDispatcher&) const override;
 };

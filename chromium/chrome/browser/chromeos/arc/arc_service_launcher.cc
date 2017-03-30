@@ -5,8 +5,11 @@
 #include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/arc/arc_auth_service.h"
-#include "chrome/browser/chromeos/arc/arc_intent_helper_bridge.h"
+#include "chrome/browser/chromeos/arc/arc_policy_bridge.h"
+#include "chrome/browser/chromeos/arc/arc_process_service.h"
+#include "chrome/browser/chromeos/arc/arc_settings_service.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "components/arc/arc_bridge_service.h"
@@ -20,10 +23,14 @@ ArcServiceLauncher::~ArcServiceLauncher() {}
 void ArcServiceLauncher::Initialize() {
   // Create ARC service manager.
   arc_service_manager_.reset(new ArcServiceManager());
-  arc_service_manager_->AddService(make_scoped_ptr(
+  arc_service_manager_->AddService(base::WrapUnique(
       new ArcAuthService(arc_service_manager_->arc_bridge_service())));
-  arc_service_manager_->AddService(make_scoped_ptr(
-      new ArcIntentHelperBridge(arc_service_manager_->arc_bridge_service())));
+  arc_service_manager_->AddService(base::WrapUnique(
+      new ArcPolicyBridge(arc_service_manager_->arc_bridge_service())));
+  arc_service_manager_->AddService(base::WrapUnique(
+      new ArcProcessService(arc_service_manager_->arc_bridge_service())));
+  arc_service_manager_->AddService(base::WrapUnique(
+      new ArcSettingsService(arc_service_manager_->arc_bridge_service())));
 
   // Detect availiability.
   chromeos::SessionManagerClient* session_manager_client =
@@ -34,6 +41,7 @@ void ArcServiceLauncher::Initialize() {
 
 void ArcServiceLauncher::Shutdown() {
   DCHECK(arc_service_manager_);
+  arc_service_manager_->Shutdown();
   arc_service_manager_->arc_bridge_service()->Shutdown();
 }
 

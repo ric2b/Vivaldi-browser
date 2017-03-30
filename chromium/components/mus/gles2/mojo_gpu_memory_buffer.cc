@@ -18,11 +18,10 @@ MojoGpuMemoryBufferImpl::MojoGpuMemoryBufferImpl(
     const gfx::Size& size,
     gfx::BufferFormat format,
     scoped_ptr<base::SharedMemory> shared_memory)
-    : size_(size),
-      format_(format),
-      shared_memory_(std::move(shared_memory)),
-      mapped_(false) {}
+    : GpuMemoryBufferImpl(gfx::GenericSharedMemoryId(0), size, format),
+      shared_memory_(std::move(shared_memory)) {}
 
+// TODO(rjkroege): Support running a destructor callback as necessary.
 MojoGpuMemoryBufferImpl::~MojoGpuMemoryBufferImpl() {}
 
 scoped_ptr<gfx::GpuMemoryBuffer> MojoGpuMemoryBufferImpl::Create(
@@ -32,15 +31,8 @@ scoped_ptr<gfx::GpuMemoryBuffer> MojoGpuMemoryBufferImpl::Create(
   size_t bytes = gfx::BufferSizeForBufferFormat(size, format);
   scoped_ptr<base::SharedMemory> shared_memory(new base::SharedMemory);
 
-#if defined(OS_MACOSX)
-  // Mojo IPC does not yet support transfer of Mach primitives, so
-  // force the underlying primitive to be a POSIX fd. https://crbug.com/547243.
-  if (!shared_memory->CreateAnonymousPosix(bytes))
-    return nullptr;
-#else
   if (!shared_memory->CreateAnonymous(bytes))
     return nullptr;
-#endif  // defined(OS_MACOSX)
 
   return make_scoped_ptr<gfx::GpuMemoryBuffer>(
       new MojoGpuMemoryBufferImpl(size, format, std::move(shared_memory)));
@@ -76,22 +68,10 @@ void MojoGpuMemoryBufferImpl::Unmap() {
   mapped_ = false;
 }
 
-gfx::Size MojoGpuMemoryBufferImpl::GetSize() const {
-  return size_;
-}
-
-gfx::BufferFormat MojoGpuMemoryBufferImpl::GetFormat() const {
-  return format_;
-}
-
 int MojoGpuMemoryBufferImpl::stride(size_t plane) const {
   DCHECK_LT(plane, gfx::NumberOfPlanesForBufferFormat(format_));
   return base::checked_cast<int>(gfx::RowSizeForBufferFormat(
       size_.width(), format_, static_cast<int>(plane)));
-}
-
-gfx::GpuMemoryBufferId MojoGpuMemoryBufferImpl::GetId() const {
-  return gfx::GpuMemoryBufferId(0);
 }
 
 gfx::GpuMemoryBufferHandle MojoGpuMemoryBufferImpl::GetHandle() const {
@@ -101,11 +81,12 @@ gfx::GpuMemoryBufferHandle MojoGpuMemoryBufferImpl::GetHandle() const {
   handle.offset = 0;
   handle.stride = static_cast<int32_t>(
       gfx::RowSizeForBufferFormat(size_.width(), format_, 0));
+
   return handle;
 }
 
-ClientBuffer MojoGpuMemoryBufferImpl::AsClientBuffer() {
-  return reinterpret_cast<ClientBuffer>(this);
+gfx::GpuMemoryBufferType MojoGpuMemoryBufferImpl::GetBufferType() const {
+  return gfx::SHARED_MEMORY_BUFFER;
 }
 
 }  // namespace mus

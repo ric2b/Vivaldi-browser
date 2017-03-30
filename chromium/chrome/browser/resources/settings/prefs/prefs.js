@@ -16,9 +16,6 @@
  *    <settings-prefs prefs="{{prefs}}"></settings-prefs>
  *    <settings-checkbox pref="{{prefs.homepage_is_newtabpage}}">
  *    </settings-checkbox>
- *
- * @group Chrome Settings Elements
- * @element settings-prefs
  */
 
 (function() {
@@ -414,7 +411,7 @@
     getPrefKeyFromPath_: function(path) {
       // Skip the first token, which refers to the member variable (this.prefs).
       var parts = path.split('.');
-      assert(parts.shift() == 'prefs');
+      assert(parts.shift() == 'prefs', "Path doesn't begin with 'prefs'");
 
       for (let i = 1; i <= parts.length; i++) {
         let key = parts.slice(0, i).join('.');

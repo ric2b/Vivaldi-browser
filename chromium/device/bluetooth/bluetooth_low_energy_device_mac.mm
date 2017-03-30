@@ -35,21 +35,24 @@ BluetoothLowEnergyDeviceMac::BluetoothLowEnergyDeviceMac(
     CBPeripheral* peripheral,
     NSDictionary* advertisement_data,
     int rssi)
-    : BluetoothDeviceMac(adapter) {
+    : BluetoothDeviceMac(adapter),
+      peripheral_(peripheral, base::scoped_policy::RETAIN) {
   DCHECK(BluetoothAdapterMac::IsLowEnergyAvailable());
+  DCHECK(peripheral_.get());
   identifier_ = GetPeripheralIdentifier(peripheral);
   hash_address_ = GetPeripheralHashAddress(peripheral);
-  Update(peripheral, advertisement_data, rssi);
+  Update(advertisement_data, rssi);
 }
 
 BluetoothLowEnergyDeviceMac::~BluetoothLowEnergyDeviceMac() {
+  if (IsGattConnected()) {
+    GetMacAdapter()->DisconnectGatt(this);
+  }
 }
 
-void BluetoothLowEnergyDeviceMac::Update(CBPeripheral* peripheral,
-                                         NSDictionary* advertisement_data,
+void BluetoothLowEnergyDeviceMac::Update(NSDictionary* advertisement_data,
                                          int rssi) {
   last_update_time_.reset([[NSDate date] retain]);
-  peripheral_.reset([peripheral retain]);
   rssi_ = rssi;
   NSNumber* connectable =
       [advertisement_data objectForKey:CBAdvertisementDataIsConnectable];
@@ -134,7 +137,7 @@ bool BluetoothLowEnergyDeviceMac::IsConnectable() const {
 }
 
 bool BluetoothLowEnergyDeviceMac::IsConnecting() const {
-  return false;
+  return ([peripheral_ state] == CBPeripheralStateConnecting);
 }
 
 BluetoothDevice::UUIDList BluetoothLowEnergyDeviceMac::GetUUIDs() const {
@@ -220,12 +223,6 @@ void BluetoothLowEnergyDeviceMac::ConnectToServiceInsecurely(
   NOTIMPLEMENTED();
 }
 
-void BluetoothLowEnergyDeviceMac::CreateGattConnection(
-    const GattConnectionCallback& callback,
-    const ConnectErrorCallback& error_callback) {
-  NOTIMPLEMENTED();
-}
-
 NSDate* BluetoothLowEnergyDeviceMac::GetLastUpdateTime() const {
   return last_update_time_.get();
 }
@@ -235,15 +232,13 @@ std::string BluetoothLowEnergyDeviceMac::GetDeviceName() const {
 }
 
 void BluetoothLowEnergyDeviceMac::CreateGattConnectionImpl() {
-  // Mac implementation does not yet use the default CreateGattConnection
-  // implementation. http://crbug.com/520774
-  NOTIMPLEMENTED();
+  if (!IsGattConnected()) {
+    GetMacAdapter()->CreateGattConnection(this);
+  }
 }
 
 void BluetoothLowEnergyDeviceMac::DisconnectGatt() {
-  // Mac implementation does not yet use the default CreateGattConnection
-  // implementation. http://crbug.com/520774
-  NOTIMPLEMENTED();
+  GetMacAdapter()->DisconnectGatt(this);
 }
 
 // static
@@ -264,4 +259,22 @@ std::string BluetoothLowEnergyDeviceMac::GetPeripheralHashAddress(
                            sizeof(raw));
   std::string hash = base::HexEncode(raw, sizeof(raw));
   return BluetoothDevice::CanonicalizeAddress(hash);
+}
+
+device::BluetoothAdapterMac* BluetoothLowEnergyDeviceMac::GetMacAdapter() {
+  return static_cast<BluetoothAdapterMac*>(this->adapter_);
+}
+
+CBPeripheral* BluetoothLowEnergyDeviceMac::GetPeripheral() {
+  return peripheral_;
+}
+
+void BluetoothLowEnergyDeviceMac::DidDisconnectPeripheral(
+    BluetoothDevice::ConnectErrorCode error_code) {
+  if (create_gatt_connection_error_callbacks_.empty()) {
+    // TODO(http://crbug.com/585897): Need to pass the error.
+    DidDisconnectGatt();
+  } else {
+    DidFailToConnectGatt(error_code);
+  }
 }

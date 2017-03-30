@@ -49,7 +49,7 @@ void ListMarkerPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& pai
     if (m_layoutListMarker.style()->visibility() != VISIBLE)
         return;
 
-    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutListMarker, paintInfo.phase, paintOffset))
+    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutListMarker, paintInfo.phase))
         return;
 
     LayoutPoint boxOrigin(paintOffset + m_layoutListMarker.location());
@@ -60,7 +60,7 @@ void ListMarkerPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& pai
     if (!paintInfo.cullRect().intersectsCullRect(overflowRect))
         return;
 
-    LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutListMarker, paintInfo.phase, pixelSnappedOverflowRect, paintOffset);
+    LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutListMarker, paintInfo.phase, pixelSnappedOverflowRect);
 
     LayoutRect box(boxOrigin, m_layoutListMarker.size());
 
@@ -71,7 +71,7 @@ void ListMarkerPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& pai
 
     if (m_layoutListMarker.isImage()) {
         context.drawImage(m_layoutListMarker.image()->image(
-            &m_layoutListMarker, marker.size(), m_layoutListMarker.styleRef().effectiveZoom()).get(), marker);
+            m_layoutListMarker, marker.size(), m_layoutListMarker.styleRef().effectiveZoom()).get(), marker);
         if (m_layoutListMarker.getSelectionState() != SelectionNone) {
             LayoutRect selRect = m_layoutListMarker.localSelectionRect();
             selRect.moveBy(boxOrigin);
@@ -80,7 +80,7 @@ void ListMarkerPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& pai
         return;
     }
 
-    LayoutListMarker::ListStyleCategory styleCategory = m_layoutListMarker.listStyleCategory();
+    LayoutListMarker::ListStyleCategory styleCategory = m_layoutListMarker.getListStyleCategory();
     if (styleCategory == LayoutListMarker::ListStyleCategory::None)
         return;
 
@@ -113,7 +113,7 @@ void ListMarkerPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& pai
 
     TextRunPaintInfo textRunPaintInfo(textRun);
     textRunPaintInfo.bounds = marker;
-    IntPoint textOrigin = IntPoint(marker.x(), marker.y() + m_layoutListMarker.style()->fontMetrics().ascent());
+    IntPoint textOrigin = IntPoint(marker.x(), marker.y() + m_layoutListMarker.style()->getFontMetrics().ascent());
 
     // Text is not arbitrary. We can judge whether it's RTL from the first character,
     // and we only need to handle the direction RightToLeft for now.

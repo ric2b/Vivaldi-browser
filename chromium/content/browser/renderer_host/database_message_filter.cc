@@ -163,12 +163,11 @@ void DatabaseMessageFilter::OnDatabaseOpenFile(
   // database tracker.
   *handle = IPC::InvalidPlatformFileForTransit();
   if (file.IsValid()) {
-    *handle = IPC::TakeFileHandleForProcess(std::move(file), PeerHandle());
+    *handle = IPC::TakePlatformFileForTransit(std::move(file));
   } else if (tracked_file) {
     DCHECK(tracked_file->IsValid());
     *handle =
-        IPC::GetFileHandleForProcess(tracked_file->GetPlatformFile(),
-                                     PeerHandle(), false);
+        IPC::GetPlatformFileForTransit(tracked_file->GetPlatformFile(), false);
   }
 }
 
@@ -305,7 +304,7 @@ void DatabaseMessageFilter::OnDatabaseOpened(
     int64_t estimated_size) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
-  if (!DatabaseUtil::IsValidOriginIdentifier(origin_identifier)) {
+  if (!storage::IsValidOriginIdentifier(origin_identifier)) {
     bad_message::ReceivedBadMessage(this,
                                     bad_message::DBMF_INVALID_ORIGIN_ON_OPEN);
     return;
@@ -357,7 +356,7 @@ void DatabaseMessageFilter::OnHandleSqliteError(
     const base::string16& database_name,
     int error) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  if (!DatabaseUtil::IsValidOriginIdentifier(origin_identifier)) {
+  if (!storage::IsValidOriginIdentifier(origin_identifier)) {
     bad_message::ReceivedBadMessage(
         this, bad_message::DBMF_INVALID_ORIGIN_ON_SQLITE_ERROR);
     return;

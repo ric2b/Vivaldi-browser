@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -16,7 +16,6 @@
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -63,7 +62,7 @@ class UserCloudPolicyManagerTest : public LoginPolicyTestBase {
   UserCloudPolicyManagerTest() {}
 
   void GetMandatoryPoliciesValue(base::DictionaryValue* policy) const override {
-    scoped_ptr<base::ListValue> list(new base::ListValue);
+    std::unique_ptr<base::ListValue> list(new base::ListValue);
     list->AppendString("chrome://policy");
     list->AppendString("chrome://about");
 
@@ -104,7 +103,9 @@ IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest, StartSession) {
   }
 }
 
-IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest, ErrorLoadingPolicy) {
+// Test disabled. See crbug.com/600617.
+IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest,
+                       DISABLED_ErrorLoadingPolicy) {
   // Delete the policy file - this will cause a 500 error on policy requests.
   user_policy_helper()->DeletePolicyFile();
   SkipToLoginScreen();

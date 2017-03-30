@@ -15,7 +15,7 @@ from benchmarks import media_router_timeline_metric
 
 
 class _BaseCastBenchmark(perf_benchmark.PerfBenchmark):
-  options = {'page_repeat': 5}
+  options = {'page_repeat': 6}
 
   page_set = media_router_pages.MediaRouterPageSet
 
@@ -24,11 +24,16 @@ class _BaseCastBenchmark(perf_benchmark.PerfBenchmark):
     # TODO: find a better way to find extension location.
     options.AppendExtraBrowserArgs([
         '--load-extension=' + os.path.join(path_util.GetChromiumSrcDir(), 'out',
-                                 'Release', 'mr_extension'),
+                                 'Release', 'mr_extension', 'release'),
         '--whitelisted-extension-id=enhhojjnijigcajfphajepfemndkmdlo',
         '--media-router=1',
         '--enable-stats-collection-bindings'
     ])
+
+  @classmethod
+  def ValueCanBeAddedPredicate(cls, value, is_first_result):
+    """Only drops the first result."""
+    return not is_first_result
 
 
 class TraceEventCaseBenckmark(_BaseCastBenchmark):

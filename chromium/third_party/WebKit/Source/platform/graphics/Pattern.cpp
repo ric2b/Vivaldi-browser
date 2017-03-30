@@ -29,6 +29,7 @@
 
 #include "platform/graphics/ImagePattern.h"
 #include "platform/graphics/PicturePattern.h"
+#include "platform/graphics/skia/SkiaUtils.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/core/SkShader.h"
@@ -41,7 +42,7 @@ PassRefPtr<Pattern> Pattern::createImagePattern(PassRefPtr<Image> tileImage, Rep
     return ImagePattern::create(tileImage, repeatMode);
 }
 
-PassRefPtr<Pattern> Pattern::createPicturePattern(PassRefPtr<const SkPicture> picture,
+PassRefPtr<Pattern> Pattern::createPicturePattern(PassRefPtr<SkPicture> picture,
     RepeatMode repeatMode)
 {
     return PicturePattern::create(picture, repeatMode);
@@ -61,11 +62,10 @@ Pattern::~Pattern()
 
 void Pattern::applyToPaint(SkPaint& paint)
 {
-    if (!m_pattern) {
+    if (!m_pattern)
         m_pattern = createShader();
-    }
 
-    paint.setShader(m_pattern.get());
+    paint.setShader(m_pattern);
 }
 
 void Pattern::setPatternSpaceTransform(const AffineTransform& patternSpaceTransformation)
@@ -74,7 +74,7 @@ void Pattern::setPatternSpaceTransform(const AffineTransform& patternSpaceTransf
         return;
 
     m_patternSpaceTransformation = patternSpaceTransformation;
-    m_pattern.clear();
+    m_pattern.reset();
 }
 
 void Pattern::adjustExternalMemoryAllocated(int64_t delta)

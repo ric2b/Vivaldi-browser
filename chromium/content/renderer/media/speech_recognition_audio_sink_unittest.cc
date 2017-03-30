@@ -13,7 +13,6 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/renderer/media/media_stream_audio_source.h"
-#include "content/renderer/media/mock_media_constraint_factory.h"
 #include "content/renderer/media/webrtc/webrtc_local_audio_track_adapter.h"
 #include "content/renderer/media/webrtc_local_audio_track.h"
 #include "media/audio/audio_parameters.h"
@@ -188,15 +187,15 @@ class FakeSpeechRecognizer {
   bool is_responsive_;
 
   // Shared memory for the audio and synchronization.
-  scoped_ptr<base::SharedMemory> shared_memory_;
+  std::unique_ptr<base::SharedMemory> shared_memory_;
 
   // Fake sockets and their shared buffer.
-  scoped_ptr<MockSyncSocket::SharedBuffer> shared_buffer_;
-  scoped_ptr<MockSyncSocket> receiving_socket_;
+  std::unique_ptr<MockSyncSocket::SharedBuffer> shared_buffer_;
+  std::unique_ptr<MockSyncSocket> receiving_socket_;
   MockSyncSocket* sending_socket_;
 
   // Audio bus wrapping the shared memory from the renderer.
-  scoped_ptr<media::AudioBus> audio_track_bus_;
+  std::unique_ptr<media::AudioBus> audio_track_bus_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeSpeechRecognizer);
 };
@@ -244,7 +243,7 @@ class SpeechRecognitionAudioSinkTest : public testing::Test {
 
     // Get the native track from the blink track and initialize.
     native_track_ =
-        static_cast<WebRtcLocalAudioTrack*>(blink_track.extraData());
+        static_cast<WebRtcLocalAudioTrack*>(blink_track.getExtraData());
     native_track_->OnSetFormat(source_params_);
 
     // Create and initialize the consumer.
@@ -253,7 +252,8 @@ class SpeechRecognitionAudioSinkTest : public testing::Test {
     recognizer_->Initialize(blink_track, sink_params_, &foreign_memory_handle);
 
     // Create the producer.
-    scoped_ptr<base::SyncSocket> sending_socket(recognizer_->sending_socket());
+    std::unique_ptr<base::SyncSocket> sending_socket(
+        recognizer_->sending_socket());
     speech_audio_sink_.reset(new SpeechRecognitionAudioSink(
         blink_track, sink_params_, foreign_memory_handle,
         std::move(sending_socket),
@@ -275,26 +275,19 @@ class SpeechRecognitionAudioSinkTest : public testing::Test {
   static void PrepareBlinkTrackOfType(
       const MediaStreamType device_type,
       blink::WebMediaStreamTrack* blink_track) {
-    StreamDeviceInfo device_info(device_type, "Mock device",
-                                 "mock_device_id");
-    MockMediaConstraintFactory constraint_factory;
-    const blink::WebMediaConstraints constraints =
-        constraint_factory.CreateWebMediaConstraints();
-    scoped_refptr<WebRtcAudioCapturer> capturer(
-        WebRtcAudioCapturer::CreateCapturer(-1, device_info, constraints, NULL,
-                                            NULL));
     scoped_refptr<WebRtcLocalAudioTrackAdapter> adapter(
         WebRtcLocalAudioTrackAdapter::Create(std::string(), NULL));
-    scoped_ptr<WebRtcLocalAudioTrack> native_track(
-        new WebRtcLocalAudioTrack(adapter.get(), capturer, NULL));
+    std::unique_ptr<WebRtcLocalAudioTrack> native_track(
+        new WebRtcLocalAudioTrack(adapter.get()));
     blink::WebMediaStreamSource blink_audio_source;
     blink_audio_source.initialize(base::UTF8ToUTF16("dummy_source_id"),
                                   blink::WebMediaStreamSource::TypeAudio,
                                   base::UTF8ToUTF16("dummy_source_name"),
                                   false /* remote */, true /* readonly */);
     MediaStreamSource::SourceStoppedCallback cb;
-    blink_audio_source.setExtraData(
-        new MediaStreamAudioSource(-1, device_info, cb, NULL));
+    blink_audio_source.setExtraData(new MediaStreamAudioSource(
+        -1, StreamDeviceInfo(device_type, "Mock device", "mock_device_id"), cb,
+        nullptr));
     blink_track->initialize(blink::WebString::fromUTF8("dummy_track"),
                             blink_audio_source);
     blink_track->setExtraData(native_track.release());
@@ -306,7 +299,7 @@ class SpeechRecognitionAudioSinkTest : public testing::Test {
       const base::TimeTicks estimated_capture_time = first_frame_capture_time_ +
           (sample_frames_captured_ * base::TimeDelta::FromSeconds(1) /
                source_params_.sample_rate());
-      native_track()->Capture(*source_bus_, estimated_capture_time, false);
+      native_track()->Capture(*source_bus_, estimated_capture_time);
       sample_frames_captured_ += source_bus_->frames();
     }
   }
@@ -364,13 +357,13 @@ class SpeechRecognitionAudioSinkTest : public testing::Test {
 
  private:
   // Producer.
-  scoped_ptr<SpeechRecognitionAudioSink> speech_audio_sink_;
+  std::unique_ptr<SpeechRecognitionAudioSink> speech_audio_sink_;
 
   // Consumer.
-  scoped_ptr<FakeSpeechRecognizer> recognizer_;
+  std::unique_ptr<FakeSpeechRecognizer> recognizer_;
 
   // Audio related members.
-  scoped_ptr<media::AudioBus> source_bus_;
+  std::unique_ptr<media::AudioBus> source_bus_;
   media::AudioParameters source_params_;
   media::AudioParameters sink_params_;
   WebRtcLocalAudioTrack* native_track_;

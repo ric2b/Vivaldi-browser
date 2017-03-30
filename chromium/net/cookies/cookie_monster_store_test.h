@@ -18,8 +18,11 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_monster.h"
+
+class GURL;
 
 namespace base {
 class Time;
@@ -50,18 +53,41 @@ class LoadedCallbackTask
   DISALLOW_COPY_AND_ASSIGN(LoadedCallbackTask);
 };  // Wrapper class LoadedCallbackTask
 
-// Describes a call to one of the 3 functions of PersistentCookieStore.
+// Describes a call to one of the 5 functions of PersistentCookieStore.
 struct CookieStoreCommand {
   enum Type {
+    LOAD,
+    LOAD_COOKIES_FOR_KEY,
+    // UPDATE_ACCESS_TIME is not included in this list, because get cookie
+    // commands may or may not end updating the access time, unless they have
+    // the option set not to do so.
     ADD,
-    UPDATE_ACCESS_TIME,
     REMOVE,
   };
 
-  CookieStoreCommand(Type type, const CanonicalCookie& cookie)
-      : type(type), cookie(cookie) {}
+  // Constructor for LOAD and LOAD_COOKIES_FOR_KEY calls.  |key| should be empty
+  // for LOAD_COOKIES_FOR_KEY.
+  CookieStoreCommand(Type type,
+                     const CookieMonster::PersistentCookieStore::LoadedCallback&
+                         loaded_callback,
+                     const std::string& key);
+
+  // Constructor for ADD, UPDATE_ACCESS_TIME, and REMOVE calls.
+  CookieStoreCommand(Type type, const CanonicalCookie& cookie);
+
+  CookieStoreCommand(const CookieStoreCommand& other);
+
+  ~CookieStoreCommand();
 
   Type type;
+
+  // Only non-null for LOAD and LOAD_COOKIES_FOR_KEY.
+  CookieMonster::PersistentCookieStore::LoadedCallback loaded_callback;
+
+  // Only non-empty for LOAD_COOKIES_FOR_KEY.
+  std::string key;
+
+  // Only non-null for ADD, UPDATE_ACCESS_TIME, and REMOVE.
   CanonicalCookie cookie;
 };
 
@@ -73,6 +99,12 @@ class MockPersistentCookieStore : public CookieMonster::PersistentCookieStore {
   typedef std::vector<CookieStoreCommand> CommandList;
 
   MockPersistentCookieStore();
+
+  // When set, Load() and LoadCookiesForKey() calls are store in the command
+  // list, rather than being automatically executed. Defaults to false.
+  void set_store_load_commands(bool store_load_commands) {
+    store_load_commands_ = store_load_commands;
+  }
 
   void SetLoadExpectation(bool return_value,
                           const std::vector<CanonicalCookie*>& result);
@@ -99,6 +131,8 @@ class MockPersistentCookieStore : public CookieMonster::PersistentCookieStore {
 
  private:
   CommandList commands_;
+
+  bool store_load_commands_;
 
   // Deferred result to use when Load() is called.
   bool load_return_value_;
@@ -134,12 +168,13 @@ class MockCookieMonsterDelegate : public CookieMonsterDelegate {
 };
 
 // Helper to build a single CanonicalCookie.
-CanonicalCookie BuildCanonicalCookie(const std::string& key,
-                                     const std::string& cookie_line,
-                                     const base::Time& creation_time);
+scoped_ptr<CanonicalCookie> BuildCanonicalCookie(
+    const GURL& url,
+    const std::string& cookie_line,
+    const base::Time& creation_time);
 
 // Helper to build a list of CanonicalCookie*s.
-void AddCookieToList(const std::string& key,
+void AddCookieToList(const GURL& url,
                      const std::string& cookie_line,
                      const base::Time& creation_time,
                      std::vector<CanonicalCookie*>* out_list);
@@ -188,11 +223,12 @@ class MockSimplePersistentCookieStore
 // will be marked secure and non-secure, respectively. Do two SetCookies().
 // Return whether each of the two SetCookies() took longer than |gc_perf_micros|
 // to complete, and how many cookie were left in the store afterwards.
-CookieMonster* CreateMonsterFromStoreForGC(int num_secure_cookies,
-                                           int num_old_secure_cookies,
-                                           int num_non_secure_cookies,
-                                           int num_old_non_secure_cookies,
-                                           int days_old);
+scoped_ptr<CookieMonster> CreateMonsterFromStoreForGC(
+    int num_secure_cookies,
+    int num_old_secure_cookies,
+    int num_non_secure_cookies,
+    int num_old_non_secure_cookies,
+    int days_old);
 
 }  // namespace net
 

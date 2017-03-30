@@ -121,6 +121,8 @@
         'audio/android/opensles_input.h',
         'audio/android/opensles_output.cc',
         'audio/android/opensles_output.h',
+        'audio/android/opensles_util.cc',
+        'audio/android/opensles_util.h',
         'audio/android/opensles_wrapper.cc',
         'audio/audio_device_name.cc',
         'audio/audio_device_name.h',
@@ -240,6 +242,8 @@
         'base/audio_buffer_queue.cc',
         'base/audio_buffer_queue.h',
         'base/audio_capturer_source.h',
+        'base/audio_codecs.cc',
+        'base/audio_codecs.h',
         'base/audio_converter.cc',
         'base/audio_converter.h',
         'base/audio_decoder.cc',
@@ -308,6 +312,8 @@
         'base/data_buffer.h',
         'base/data_source.cc',
         'base/data_source.h',
+        'base/decode_status.cc',
+        'base/decode_status.h',
         'base/decoder_buffer.cc',
         'base/decoder_buffer.h',
         'base/decoder_buffer_queue.cc',
@@ -327,6 +333,8 @@
         'base/djb2.cc',
         'base/djb2.h',
         'base/eme_constants.h',
+        'base/encryption_scheme.cc',
+        'base/encryption_scheme.h',
         'base/key_system_info.cc',
         'base/key_system_info.h',
         'base/key_systems.cc',
@@ -344,6 +352,8 @@
         'base/mac/video_frame_mac.h',
         'base/mac/videotoolbox_glue.h',
         'base/mac/videotoolbox_glue.mm',
+        'base/mac/videotoolbox_helpers.cc',
+        'base/mac/videotoolbox_helpers.h',
         'base/media.cc',
         'base/media.h',
         'base/media_client.cc',
@@ -361,6 +371,10 @@
         'base/media_resources.h',
         'base/media_switches.cc',
         'base/media_switches.h',
+        'base/media_track.cc',
+        'base/media_track.h',
+        'base/media_tracks.cc',
+        'base/media_tracks.h',
         'base/media_util.cc',
         'base/media_util.h',
         'base/mime_util.cc',
@@ -373,7 +387,8 @@
         'base/multi_channel_resampler.h',
         'base/null_video_sink.cc',
         'base/null_video_sink.h',
-        'base/output_device.h',
+        'base/output_device_info.cc',
+        'base/output_device_info.h',
         'base/pipeline.h',
         'base/pipeline_impl.cc',
         'base/pipeline_impl.h',
@@ -524,10 +539,14 @@
         'filters/jpeg_parser.h',
         'filters/media_source_state.cc',
         'filters/media_source_state.h',
+        'filters/memory_data_source.cc',
+        'filters/memory_data_source.h',
         'filters/opus_audio_decoder.cc',
         'filters/opus_audio_decoder.h',
         'filters/opus_constants.cc',
         'filters/opus_constants.h',
+        'filters/pipeline_controller.cc',
+        'filters/pipeline_controller.h',
         'filters/source_buffer_range.cc',
         'filters/source_buffer_range.h',
         'filters/source_buffer_stream.cc',
@@ -578,8 +597,6 @@
         'formats/webm/webm_webvtt_parser.cc',
         'muxers/webm_muxer.cc',
         'muxers/webm_muxer.h',
-        'ozone/media_ozone_platform.cc',
-        'ozone/media_ozone_platform.h',
         'renderers/audio_renderer_impl.cc',
         'renderers/audio_renderer_impl.h',
         'renderers/default_renderer_factory.cc',
@@ -627,8 +644,6 @@
           'sources!': [
             'base/audio_video_metadata_extractor.cc',
             'base/audio_video_metadata_extractor.h',
-            'base/container_names.cc',
-            'base/container_names.h',
             'base/media_file_checker.cc',
             'base/media_file_checker.h',
             'ffmpeg/ffmpeg_common.cc',
@@ -664,7 +679,7 @@
         }],
         ['media_use_libvpx==1', {
           'dependencies': [
-            '<(DEPTH)/third_party/libvpx_new/libvpx.gyp:libvpx_new',
+            '<(DEPTH)/third_party/libvpx/libvpx.gyp:libvpx',
           ],
         }, {  # media_use_libvpx==0
           'defines': [
@@ -861,61 +876,8 @@
               'dependencies': [
                 '<(DEPTH)/device/udev_linux/udev.gyp:udev_linux',
               ],
-
-              'capture_sources': [
-                'capture/device_monitor_udev.cc',
-                'capture/device_monitor_udev.h',
-              ],
             }],
           ],
-        }],
-        ['use_ozone==1', {
-          'variables': {
-            'platform_list_txt_file': '<(SHARED_INTERMEDIATE_DIR)/ui/ozone/platform_list.txt',
-            'constructor_list_cc_file': '<(INTERMEDIATE_DIR)/media/ozone/constructor_list.cc',
-          },
-          'include_dirs': [
-              # Used for the generated listing header (ui/ozone/platform_list.h)
-              '<(SHARED_INTERMEDIATE_DIR)',
-          ],
-          'sources': [
-            '<(constructor_list_cc_file)',
-          ],
-          'dependencies': [
-            '../ui/ozone/ozone.gyp:ozone',
-          ],
-          'actions': [
-            {
-              # Ozone platform objects are auto-generated using similar
-              # patterns for naming and classes constructors. Here we build the
-              # object MediaOzonePlatform.
-              'action_name': 'generate_constructor_list',
-              'variables': {
-                'generator_path': '../ui/ozone/generate_constructor_list.py',
-              },
-              'inputs': [
-                '<(generator_path)',
-                '<(platform_list_txt_file)',
-              ],
-              'outputs': [
-                '<(constructor_list_cc_file)',
-              ],
-              'action': [
-                'python',
-                '<(generator_path)',
-                '--platform_list=<(platform_list_txt_file)',
-                '--output_cc=<(constructor_list_cc_file)',
-                '--namespace=media',
-                '--typename=MediaOzonePlatform',
-                '--include="media/ozone/media_ozone_platform.h"'
-              ],
-            },
-          ]
-        }, {
-          'sources!': [
-            'ozone/media_ozone_platform.cc',
-            'ozone/media_ozone_platform.h',
-          ]
         }],
         ['OS!="linux"', {
           'sources!': [
@@ -1025,7 +987,6 @@
               '$(SDKROOT)/System/Library/Frameworks/CoreAudio.framework',
               '$(SDKROOT)/System/Library/Frameworks/CoreVideo.framework',
               '$(SDKROOT)/System/Library/Frameworks/OpenGL.framework',
-              '$(SDKROOT)/System/Library/Frameworks/QTKit.framework',
             ],
           },
         }],
@@ -1037,6 +998,8 @@
               '-lmfplat.lib',
               '-lmfreadwrite.lib',
               '-lmfuuid.lib',
+              '-lsetupapi.lib',
+              '-lwinmm.lib',
             ],
           },
           # Specify delayload for media.dll.
@@ -1089,8 +1052,6 @@
             'formats/mp4/box_definitions.h',
             'formats/mp4/box_reader.cc',
             'formats/mp4/box_reader.h',
-            'formats/mp4/cenc.cc',
-            'formats/mp4/cenc.h',
             'formats/mp4/es_descriptor.cc',
             'formats/mp4/es_descriptor.h',
             'formats/mp4/mp4_stream_parser.cc',
@@ -1101,6 +1062,8 @@
             'formats/mp4/track_run_iterator.h',
             'formats/mpeg/adts_constants.cc',
             'formats/mpeg/adts_constants.h',
+            'formats/mpeg/adts_header_parser.cc',
+            'formats/mpeg/adts_header_parser.h',
             'formats/mpeg/adts_stream_parser.cc',
             'formats/mpeg/adts_stream_parser.h',
             'formats/mpeg/mpeg1_audio_stream_parser.cc',
@@ -1227,7 +1190,6 @@
         '<@(capture_unittests_sources)',
         'base/android/access_unit_queue_unittest.cc',
         'base/android/media_codec_decoder_unittest.cc',
-        'base/android/media_codec_player_unittest.cc',
         'base/android/media_drm_bridge_unittest.cc',
         'base/android/media_player_bridge_unittest.cc',
         'base/android/media_source_player_unittest.cc',
@@ -1325,6 +1287,8 @@
         'filters/in_memory_url_protocol_unittest.cc',
         'filters/ivf_parser_unittest.cc',
         'filters/jpeg_parser_unittest.cc',
+        'filters/memory_data_source_unittest.cc',
+        'filters/pipeline_controller_unittest.cc',
         'filters/source_buffer_stream_unittest.cc',
         'filters/video_cadence_estimator_unittest.cc',
         'filters/video_decoder_selector_unittest.cc',
@@ -1344,6 +1308,7 @@
         'formats/webm/webm_cluster_parser_unittest.cc',
         'formats/webm/webm_content_encodings_client_unittest.cc',
         'formats/webm/webm_parser_unittest.cc',
+        'formats/webm/webm_stream_parser_unittest.cc',
         'formats/webm/webm_tracks_parser_unittest.cc',
         'formats/webm/webm_webvtt_parser_unittest.cc',
         'muxers/webm_muxer_unittest.cc',
@@ -1395,13 +1360,6 @@
             'filters/ffmpeg_video_decoder_unittest.cc',
             'test/pipeline_integration_test.cc',
             'test/pipeline_integration_test_base.cc',
-
-            # These tests are confused by Android always having proprietary
-            # codecs enabled, but ffmpeg_branding=Chromium. These should be
-            # fixed, see http://crbug.com/570762.
-            'filters/audio_decoder_unittest.cc',
-            'filters/audio_file_reader_unittest.cc',
-            'filters/ffmpeg_demuxer_unittest.cc',
           ],
         }],
         ['OS=="android"', {
@@ -1435,6 +1393,7 @@
         }],
         ['proprietary_codecs==1', {
           'sources': [
+            'base/android/media_codec_player_unittest.cc',
             'cdm/cenc_utils_unittest.cc',
             'filters/ffmpeg_aac_bitstream_converter_unittest.cc',
             'filters/ffmpeg_h264_to_annex_b_bitstream_converter_unittest.cc',
@@ -1661,8 +1620,8 @@
         'base/fake_demuxer_stream.h',
         'base/fake_media_resources.cc',
         'base/fake_media_resources.h',
-        'base/fake_output_device.cc',
-        'base/fake_output_device.h',
+        'base/fake_single_thread_task_runner.cc',
+        'base/fake_single_thread_task_runner.h',
         'base/fake_text_track_stream.cc',
         'base/fake_text_track_stream.h',
         'base/gmock_callback_support.h',
@@ -1678,6 +1637,7 @@
         'base/test_data_util.h',
         'base/test_helpers.cc',
         'base/test_helpers.h',
+        'base/test_random.h',
         'renderers/mock_gpu_memory_buffer_video_frame_pool.cc',
         'renderers/mock_gpu_memory_buffer_video_frame_pool.h',
         'renderers/mock_gpu_video_accelerator_factories.cc',
@@ -1909,6 +1869,8 @@
             'base/android/media_decoder_job.h',
             'base/android/media_drm_bridge.cc',
             'base/android/media_drm_bridge.h',
+            'base/android/media_drm_bridge_cdm_context.cc',
+            'base/android/media_drm_bridge_cdm_context.h',
             'base/android/media_drm_bridge_delegate.cc',
             'base/android/media_drm_bridge_delegate.h',
             'base/android/media_jni_registrar.cc',
@@ -2102,6 +2064,8 @@
             'base/mac/video_frame_mac.h',
             'base/mac/videotoolbox_glue.h',
             'base/mac/videotoolbox_glue.mm',
+            'base/mac/videotoolbox_helpers.cc',
+            'base/mac/videotoolbox_helpers.h',
             'base/simd/convert_rgb_to_yuv.h',
             'base/simd/convert_rgb_to_yuv_c.cc',
             'base/simd/convert_yuv_to_rgb.h',

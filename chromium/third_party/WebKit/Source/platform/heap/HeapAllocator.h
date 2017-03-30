@@ -9,7 +9,6 @@
 #include "platform/heap/TraceTraits.h"
 #include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
-#include "wtf/Atomics.h"
 #include "wtf/Deque.h"
 #include "wtf/HashCountedSet.h"
 #include "wtf/HashMap.h"
@@ -42,8 +41,8 @@ public:
         ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
         ASSERT(state->isAllocationAllowed());
         size_t gcInfoIndex = GCInfoTrait<HeapVectorBacking<T, VectorTraits<T>>>::index();
-        NormalPageHeap* heap = static_cast<NormalPageHeap*>(state->vectorBackingHeap(gcInfoIndex));
-        return reinterpret_cast<T*>(heap->allocateObject(Heap::allocationSizeFromSize(size), gcInfoIndex));
+        NormalPageArena* arena = static_cast<NormalPageArena*>(state->vectorBackingArena(gcInfoIndex));
+        return reinterpret_cast<T*>(arena->allocateObject(Heap::allocationSizeFromSize(size), gcInfoIndex));
     }
     template <typename T>
     static T* allocateExpandedVectorBacking(size_t size)
@@ -51,8 +50,8 @@ public:
         ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
         ASSERT(state->isAllocationAllowed());
         size_t gcInfoIndex = GCInfoTrait<HeapVectorBacking<T, VectorTraits<T>>>::index();
-        NormalPageHeap* heap = static_cast<NormalPageHeap*>(state->expandedVectorBackingHeap(gcInfoIndex));
-        return reinterpret_cast<T*>(heap->allocateObject(Heap::allocationSizeFromSize(size), gcInfoIndex));
+        NormalPageArena* arena = static_cast<NormalPageArena*>(state->expandedVectorBackingArena(gcInfoIndex));
+        return reinterpret_cast<T*>(arena->allocateObject(Heap::allocationSizeFromSize(size), gcInfoIndex));
     }
     static void freeVectorBacking(void*);
     static bool expandVectorBacking(void*, size_t);
@@ -62,7 +61,10 @@ public:
     {
         size_t gcInfoIndex = GCInfoTrait<HeapVectorBacking<T, VectorTraits<T>>>::index();
         ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
-        return reinterpret_cast<T*>(Heap::allocateOnHeapIndex(state, size, BlinkGC::InlineVectorHeapIndex, gcInfoIndex));
+#define COMMA ,
+        const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(HeapVectorBacking<T COMMA VectorTraits<T>>);
+#undef COMMA
+        return reinterpret_cast<T*>(Heap::allocateOnArenaIndex(state, size, BlinkGC::InlineVectorArenaIndex, gcInfoIndex, typeName));
     }
     static void freeInlineVectorBacking(void*);
     static bool expandInlineVectorBacking(void*, size_t);
@@ -73,7 +75,8 @@ public:
     {
         size_t gcInfoIndex = GCInfoTrait<HeapHashTableBacking<HashTable>>::index();
         ThreadState* state = ThreadStateFor<ThreadingTrait<T>::Affinity>::state();
-        return reinterpret_cast<T*>(Heap::allocateOnHeapIndex(state, size, BlinkGC::HashTableHeapIndex, gcInfoIndex));
+        const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(HeapHashTableBacking<HashTable>);
+        return reinterpret_cast<T*>(Heap::allocateOnArenaIndex(state, size, BlinkGC::HashTableArenaIndex, gcInfoIndex, typeName));
     }
     template <typename T, typename HashTable>
     static T* allocateZeroedHashTableBacking(size_t size)
@@ -382,8 +385,7 @@ public:
     {
     }
 
-    // FIXME: Doesn't work if there is an inline buffer, due to crbug.com/360572
-    HeapDeque<T, 0>& operator=(const HeapDeque& other)
+    HeapDeque& operator=(const HeapDeque& other)
     {
         HeapDeque<T> copy(other);
         Deque<T, inlineCapacity, HeapAllocator>::swap(copy);

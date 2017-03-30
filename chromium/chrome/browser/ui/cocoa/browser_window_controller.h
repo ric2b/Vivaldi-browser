@@ -12,8 +12,9 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include <memory>
+
 #include "base/mac/scoped_nsobject.h"
-#include "base/memory/scoped_ptr.h"
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_controller.h"
@@ -71,9 +72,9 @@ class Command;
   // which they are destroyed. |browser_| needs to be destroyed last as most of
   // the other objects hold weak references to it or things it owns
   // (tab/toolbar/bookmark models, profiles, etc).
-  scoped_ptr<Browser> browser_;
+  std::unique_ptr<Browser> browser_;
   NSWindow* savedRegularWindow_;
-  scoped_ptr<BrowserWindowCocoa> windowShim_;
+  std::unique_ptr<BrowserWindowCocoa> windowShim_;
   base::scoped_nsobject<ToolbarController> toolbarController_;
   base::scoped_nsobject<TabStripController> tabStripController_;
   base::scoped_nsobject<FindBarCocoaController> findBarCocoaController_;
@@ -84,7 +85,7 @@ class Command;
   base::scoped_nsobject<OverlayableContentsController>
       overlayableContentsController_;
   base::scoped_nsobject<PresentationModeController> presentationModeController_;
-  scoped_ptr<ExclusiveAccessController> exclusiveAccessController_;
+  std::unique_ptr<ExclusiveAccessController> exclusiveAccessController_;
   base::scoped_nsobject<BrowserWindowFullscreenTransition>
       fullscreenTransition_;
 
@@ -94,7 +95,7 @@ class Command;
   // be shut down before our destructors are called.
   StatusBubbleMac* statusBubble_;
 
-  scoped_ptr<BookmarkBubbleObserverCocoa> bookmarkBubbleObserver_;
+  std::unique_ptr<BookmarkBubbleObserverCocoa> bookmarkBubbleObserver_;
   BookmarkBubbleController* bookmarkBubbleController_;  // Weak.
   BOOL initializing_;  // YES while we are currently in initWithBrowser:
   BOOL ownsBrowser_;  // Only ever NO when testing
@@ -161,8 +162,8 @@ class Command;
   // return nil.
   BOOL isUsingCustomAnimation_;
 
-  // True if the toolbar needs to be hidden in fullscreen.
-  BOOL shouldHideFullscreenToolbar_;
+  // True if the toolbar needs to be shown in fullscreen.
+  BOOL shouldShowFullscreenToolbar_;
 
   // True if AppKit has finished exiting fullscreen before the exit animation
   // is completed. This flag is used to ensure that |windowDidExitFullscreen|
@@ -195,7 +196,8 @@ class Command;
 
   // The Extension Command Registry used to determine which keyboard events to
   // handle.
-  scoped_ptr<ExtensionKeybindingRegistryCocoa> extension_keybinding_registry_;
+  std::unique_ptr<ExtensionKeybindingRegistryCocoa>
+      extension_keybinding_registry_;
 }
 
 // A convenience class method which gets the |BrowserWindowController| for a
@@ -385,12 +387,13 @@ class Command;
 - (void)executeExtensionCommand:(const std::string&)extension_id
                         command:(const extensions::Command&)command;
 
-// To set whether the window has a tab playing audio or muted audio playing.
-- (void)setMediaState:(TabMediaState)mediaState;
+// Sets the alert state of the tab e.g. audio playing, media recording, etc.
+// See TabUtils::TabAlertState for a list of all possible alert states.
+- (void)setAlertState:(TabAlertState)alertState;
 
-// Returns current media state, determined by the media state of tabs, set by
-// UpdateMediaState.
-- (TabMediaState)mediaState;
+// Returns current alert state, determined by the alert state of tabs, set by
+// UpdateAlertState.
+- (TabAlertState)alertState;
 
 @end  // @interface BrowserWindowController
 
@@ -542,10 +545,8 @@ class Command;
 // |bubbleType|.
 - (void)updateFullscreenExitBubble;
 
-// Toggles and updates the toolbar's visibility in fullscreen mode. This
-// function toggles between the sliding styles: OMNIBOX_TABS_PRESENT and
-// OMNIBOX_TABS_HIDDEN.
-- (void)setFullscreenToolbarHidden:(BOOL)isHidden;
+// Set the toolbar's visibility in fullscreen mode.
+- (void)setFullscreenToolbarVisible:(BOOL)visible;
 
 // Returns YES if the browser window is in or entering any fullscreen mode.
 - (BOOL)isInAnyFullscreenMode;
@@ -571,8 +572,8 @@ class Command;
 // Mode.
 - (BOOL)inPresentationMode;
 
-// Whether if the toolbar should be hidden in fullscreen.
-- (BOOL)shouldHideFullscreenToolbar;
+// Whether the toolbar should be shown in fullscreen.
+- (BOOL)shouldShowFullscreenToolbar;
 
 // Called by BrowserWindowFullscreenTransition when the exit animation is
 // finished.

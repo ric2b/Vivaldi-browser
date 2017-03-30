@@ -30,8 +30,6 @@
 #include <windows.h>
 #elif OS(MACOSX)
 #import <Carbon/Carbon.h>
-#else
-#include "platform/NotImplemented.h"
 #endif
 
 namespace blink {
@@ -43,7 +41,7 @@ static const unsigned short HIGHBITMASKSHORT = 0x8000;
 PlatformKeyboardEvent::OverrideCapsLockState PlatformKeyboardEvent::s_overrideCapsLockState =
     PlatformKeyboardEvent::OverrideCapsLockState::Default;
 
-void PlatformKeyboardEvent::disambiguateKeyDownEvent(Type type)
+void PlatformKeyboardEvent::disambiguateKeyDownEvent(EventType type)
 {
 #if OS(WIN)
     // No KeyDown events on Windows to disambiguate.
@@ -83,7 +81,7 @@ bool PlatformKeyboardEvent::currentCapsLockState()
 #elif OS(MACOSX)
             return GetCurrentKeyModifiers() & alphaLock;
 #else
-            notImplemented();
+            NOTIMPLEMENTED();
             return false;
 #endif
     case OverrideCapsLockState::On:
@@ -116,7 +114,7 @@ PlatformEvent::Modifiers PlatformKeyboardEvent::getCurrentModifierState()
         modifiers |= MetaKey;
 #else
     // See https://crbug.com/538289
-    notImplemented();
+    NOTIMPLEMENTED();
 #endif
     return static_cast<Modifiers>(modifiers);
 }

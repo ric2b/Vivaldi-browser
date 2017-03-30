@@ -32,14 +32,13 @@
 #define PresentationAttributeStyle_h
 
 #include "platform/heap/Handle.h"
-#include "wtf/RefPtr.h"
 
 namespace blink {
 
 class Element;
 class StylePropertySet;
 
-PassRefPtrWillBeRawPtr<StylePropertySet> computePresentationAttributeStyle(Element&);
+RawPtr<StylePropertySet> computePresentationAttributeStyle(Element&);
 
 } // namespace blink
 

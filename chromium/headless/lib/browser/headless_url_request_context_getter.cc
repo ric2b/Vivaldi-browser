@@ -4,14 +4,17 @@
 
 #include "headless/lib/browser/headless_url_request_context_getter.h"
 
+#include <memory>
+
 #include "base/command_line.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/worker_pool.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/common/content_switches.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cookies/cookie_store.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/mapped_host_resolver.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -40,7 +43,7 @@ void InstallProtocolHandlers(net::URLRequestJobFactoryImpl* job_factory,
   for (content::ProtocolHandlerMap::iterator it = protocol_handlers->begin();
        it != protocol_handlers->end(); ++it) {
     bool set_protocol = job_factory->SetProtocolHandler(
-        it->first, make_scoped_ptr(it->second.release()));
+        it->first, base::WrapUnique(it->second.release()));
     DCHECK(set_protocol);
   }
   protocol_handlers->clear();
@@ -72,24 +75,27 @@ HeadlessURLRequestContextGetter::HeadlessURLRequestContextGetter(
   // We must create the proxy config service on the UI loop on Linux because it
   // must synchronously run on the glib message loop. This will be passed to
   // the URLRequestContextStorage on the IO thread in GetURLRequestContext().
-  proxy_config_service_ = GetProxyConfigService();
+  if (options_.proxy_server.IsEmpty())
+    proxy_config_service_ = GetProxyConfigService();
 }
 
 HeadlessURLRequestContextGetter::~HeadlessURLRequestContextGetter() {}
 
-scoped_ptr<net::NetworkDelegate>
+std::unique_ptr<net::NetworkDelegate>
 HeadlessURLRequestContextGetter::CreateNetworkDelegate() {
   return nullptr;
 }
 
-scoped_ptr<net::ProxyConfigService>
+std::unique_ptr<net::ProxyConfigService>
 HeadlessURLRequestContextGetter::GetProxyConfigService() {
   return net::ProxyService::CreateSystemProxyConfigService(io_task_runner_,
                                                            file_task_runner_);
 }
 
-scoped_ptr<net::ProxyService>
+std::unique_ptr<net::ProxyService>
 HeadlessURLRequestContextGetter::GetProxyService() {
+  if (!options_.proxy_server.IsEmpty())
+    return net::ProxyService::CreateFixed(options_.proxy_server.ToString());
   return net::ProxyService::CreateUsingSystemProxyResolver(
       std::move(proxy_config_service_), 0, url_request_context_->net_log());
 }
@@ -110,29 +116,29 @@ HeadlessURLRequestContextGetter::GetURLRequestContext() {
         new net::URLRequestContextStorage(url_request_context_.get()));
     storage_->set_cookie_store(
         content::CreateCookieStore(content::CookieStoreConfig()));
-    storage_->set_channel_id_service(make_scoped_ptr(
+    storage_->set_channel_id_service(base::WrapUnique(
         new net::ChannelIDService(new net::DefaultChannelIDStore(nullptr),
                                   base::WorkerPool::GetTaskRunner(true))));
     // TODO(skyostil): Make language settings configurable.
-    storage_->set_http_user_agent_settings(make_scoped_ptr(
+    storage_->set_http_user_agent_settings(base::WrapUnique(
         new net::StaticHttpUserAgentSettings("en-us,en", options_.user_agent)));
 
-    scoped_ptr<net::HostResolver> host_resolver(
+    std::unique_ptr<net::HostResolver> host_resolver(
         net::HostResolver::CreateDefaultResolver(
             url_request_context_->net_log()));
 
     storage_->set_cert_verifier(net::CertVerifier::CreateDefault());
     storage_->set_transport_security_state(
-        make_scoped_ptr(new net::TransportSecurityState));
+        base::WrapUnique(new net::TransportSecurityState));
     storage_->set_proxy_service(GetProxyService());
     storage_->set_ssl_config_service(new net::SSLConfigServiceDefaults);
     storage_->set_http_auth_handler_factory(
         net::HttpAuthHandlerFactory::CreateDefault(host_resolver.get()));
     storage_->set_http_server_properties(
-        make_scoped_ptr(new net::HttpServerPropertiesImpl()));
+        base::WrapUnique(new net::HttpServerPropertiesImpl()));
 
     base::FilePath cache_path = base_path_.Append(FILE_PATH_LITERAL("Cache"));
-    scoped_ptr<net::HttpCache::DefaultBackend> main_backend(
+    std::unique_ptr<net::HttpCache::DefaultBackend> main_backend(
         new net::HttpCache::DefaultBackend(
             net::DISK_CACHE, net::CACHE_BACKEND_DEFAULT, cache_path, 0,
             content::BrowserThread::GetMessageLoopProxyForThread(
@@ -151,14 +157,13 @@ HeadlessURLRequestContextGetter::GetURLRequestContext() {
         url_request_context_->ssl_config_service();
     network_session_params.http_auth_handler_factory =
         url_request_context_->http_auth_handler_factory();
-    network_session_params.network_delegate = network_delegate_.get();
     network_session_params.http_server_properties =
         url_request_context_->http_server_properties();
     network_session_params.net_log = url_request_context_->net_log();
     network_session_params.ignore_certificate_errors =
         ignore_certificate_errors_;
     if (command_line.HasSwitch(switches::kHostResolverRules)) {
-      scoped_ptr<net::MappedHostResolver> mapped_host_resolver(
+      std::unique_ptr<net::MappedHostResolver> mapped_host_resolver(
           new net::MappedHostResolver(std::move(host_resolver)));
       mapped_host_resolver->SetRulesFromString(
           command_line.GetSwitchValueASCII(switches::kHostResolverRules));
@@ -171,21 +176,21 @@ HeadlessURLRequestContextGetter::GetURLRequestContext() {
         url_request_context_->host_resolver();
 
     storage_->set_http_network_session(
-        make_scoped_ptr(new net::HttpNetworkSession(network_session_params)));
-    storage_->set_http_transaction_factory(make_scoped_ptr(new net::HttpCache(
+        base::WrapUnique(new net::HttpNetworkSession(network_session_params)));
+    storage_->set_http_transaction_factory(base::WrapUnique(new net::HttpCache(
         storage_->http_network_session(), std::move(main_backend),
         true /* set_up_quic_server_info */)));
 
-    scoped_ptr<net::URLRequestJobFactoryImpl> job_factory(
+    std::unique_ptr<net::URLRequestJobFactoryImpl> job_factory(
         new net::URLRequestJobFactoryImpl());
 
     InstallProtocolHandlers(job_factory.get(), &protocol_handlers_);
     bool set_protocol = job_factory->SetProtocolHandler(
-        url::kDataScheme, make_scoped_ptr(new net::DataProtocolHandler));
+        url::kDataScheme, base::WrapUnique(new net::DataProtocolHandler));
     DCHECK(set_protocol);
     set_protocol = job_factory->SetProtocolHandler(
         url::kFileScheme,
-        make_scoped_ptr(new net::FileProtocolHandler(
+        base::WrapUnique(new net::FileProtocolHandler(
             content::BrowserThread::GetBlockingPool()
                 ->GetTaskRunnerWithShutdownBehavior(
                     base::SequencedWorkerPool::SKIP_ON_SHUTDOWN))));
@@ -193,12 +198,12 @@ HeadlessURLRequestContextGetter::GetURLRequestContext() {
 
     // Set up interceptors in the reverse order so that the last inceptor is at
     // the end of the linked list of job factories.
-    scoped_ptr<net::URLRequestJobFactory> top_job_factory =
+    std::unique_ptr<net::URLRequestJobFactory> top_job_factory =
         std::move(job_factory);
     for (auto i = request_interceptors_.rbegin();
          i != request_interceptors_.rend(); ++i) {
       top_job_factory.reset(new net::URLRequestInterceptingJobFactory(
-          std::move(top_job_factory), make_scoped_ptr(*i)));
+          std::move(top_job_factory), base::WrapUnique(*i)));
     }
     request_interceptors_.weak_clear();
     // Save the head of the job factory list at storage_.

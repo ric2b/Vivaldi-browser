@@ -33,9 +33,11 @@
 #include "core/loader/ThreadableLoaderClient.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/KURL.h"
+#include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebURLRequest.h"
 #include "wtf/Allocator.h"
 #include "wtf/Functional.h"
+#include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/StringBuilder.h"
@@ -56,12 +58,12 @@ public:
         return adoptRef(new WorkerScriptLoader());
     }
 
-    void loadSynchronously(ExecutionContext&, const KURL&, CrossOriginRequestPolicy);
+    void loadSynchronously(ExecutionContext&, const KURL&, CrossOriginRequestPolicy, WebAddressSpace);
     // TODO: |finishedCallback| is not currently guaranteed to be invoked if
     // used from worker context and the worker shuts down in the middle of an
     // operation. This will cause leaks when we support nested workers.
     // Note that callbacks could be invoked before loadAsynchronously() returns.
-    void loadAsynchronously(ExecutionContext&, const KURL&, CrossOriginRequestPolicy, PassOwnPtr<Closure> responseCallback, PassOwnPtr<Closure> finishedCallback);
+    void loadAsynchronously(ExecutionContext&, const KURL&, CrossOriginRequestPolicy, WebAddressSpace, PassOwnPtr<SameThreadClosure> responseCallback, PassOwnPtr<SameThreadClosure> finishedCallback);
 
     // This will immediately invoke |finishedCallback| if loadAsynchronously()
     // is in progress.
@@ -78,7 +80,9 @@ public:
     const Vector<char>* cachedMetadata() const { return m_cachedMetadata.get(); }
 
     ContentSecurityPolicy* contentSecurityPolicy() { return m_contentSecurityPolicy.get(); }
-    PassRefPtrWillBeRawPtr<ContentSecurityPolicy> releaseContentSecurityPolicy() { return m_contentSecurityPolicy.release(); }
+    ContentSecurityPolicy* releaseContentSecurityPolicy() { return m_contentSecurityPolicy.release(); }
+
+    WebAddressSpace responseAddressSpace() const { return m_responseAddressSpace; }
 
     // ThreadableLoaderClient
     void didReceiveResponse(unsigned long /*identifier*/, const ResourceResponse&, PassOwnPtr<WebDataConsumerHandle>) override;
@@ -96,17 +100,17 @@ private:
     WorkerScriptLoader();
     ~WorkerScriptLoader() override;
 
-    ResourceRequest createResourceRequest();
+    ResourceRequest createResourceRequest(WebAddressSpace);
     void notifyError();
     void notifyFinished();
 
     void processContentSecurityPolicy(const ResourceResponse&);
 
     // Callbacks for loadAsynchronously().
-    OwnPtr<Closure> m_responseCallback;
-    OwnPtr<Closure> m_finishedCallback;
+    OwnPtr<SameThreadClosure> m_responseCallback;
+    OwnPtr<SameThreadClosure> m_finishedCallback;
 
-    RefPtr<ThreadableLoader> m_threadableLoader;
+    OwnPtr<ThreadableLoader> m_threadableLoader;
     String m_responseEncoding;
     OwnPtr<TextResourceDecoder> m_decoder;
     StringBuilder m_script;
@@ -118,7 +122,8 @@ private:
     long long m_appCacheID;
     OwnPtr<Vector<char>> m_cachedMetadata;
     WebURLRequest::RequestContext m_requestContext;
-    RefPtrWillBePersistent<ContentSecurityPolicy> m_contentSecurityPolicy;
+    Persistent<ContentSecurityPolicy> m_contentSecurityPolicy;
+    WebAddressSpace m_responseAddressSpace;
 };
 
 } // namespace blink

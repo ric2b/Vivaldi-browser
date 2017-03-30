@@ -23,7 +23,7 @@ class BadClockUI {
              int cert_error,  // Should correspond to a NET_ERROR
              const net::SSLInfo& ssl_info,
              const base::Time& time_triggered,  // Time the error was triggered
-             const std::string& languages,
+             ssl_errors::ClockState clock_state,
              ControllerClient* controller_);
   ~BadClockUI();
 
@@ -37,8 +37,8 @@ class BadClockUI {
   const int cert_error_;
   const net::SSLInfo ssl_info_;
   const base::Time time_triggered_;
-  const std::string languages_;
   ControllerClient* controller_;
+  ssl_errors::ClockState clock_state_;
 
   DISALLOW_COPY_AND_ASSIGN(BadClockUI);
 };

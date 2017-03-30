@@ -14,7 +14,6 @@
 #include "mojo/message_pump/message_pump_mojo.h"
 #include "mojo/public/cpp/bindings/lib/message_builder.h"
 #include "mojo/public/cpp/bindings/tests/message_queue.h"
-#include "mojo/public/cpp/system/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace mojo {
@@ -206,7 +205,7 @@ TEST_F(ConnectorTest, Basic_TwoMessages) {
 
   const char* kText[] = {"hello", "world"};
 
-  for (size_t i = 0; i < MOJO_ARRAYSIZE(kText); ++i) {
+  for (size_t i = 0; i < arraysize(kText); ++i) {
     Message message;
     AllocMessage(kText[i], &message);
 
@@ -216,7 +215,7 @@ TEST_F(ConnectorTest, Basic_TwoMessages) {
   MessageAccumulator accumulator;
   connector1.set_incoming_receiver(&accumulator);
 
-  for (size_t i = 0; i < MOJO_ARRAYSIZE(kText); ++i) {
+  for (size_t i = 0; i < arraysize(kText); ++i) {
     if (accumulator.IsEmpty()) {
       base::RunLoop run_loop;
       accumulator.set_closure(run_loop.QuitClosure());
@@ -241,7 +240,7 @@ TEST_F(ConnectorTest, Basic_TwoMessages_Synchronous) {
 
   const char* kText[] = {"hello", "world"};
 
-  for (size_t i = 0; i < MOJO_ARRAYSIZE(kText); ++i) {
+  for (size_t i = 0; i < arraysize(kText); ++i) {
     Message message;
     AllocMessage(kText[i], &message);
 
@@ -406,7 +405,7 @@ TEST_F(ConnectorTest, WaitForIncomingMessageWithReentrancy) {
 
   const char* kText[] = {"hello", "world"};
 
-  for (size_t i = 0; i < MOJO_ARRAYSIZE(kText); ++i) {
+  for (size_t i = 0; i < arraysize(kText); ++i) {
     Message message;
     AllocMessage(kText[i], &message);
 
@@ -416,7 +415,7 @@ TEST_F(ConnectorTest, WaitForIncomingMessageWithReentrancy) {
   ReentrantMessageAccumulator accumulator(&connector1);
   connector1.set_incoming_receiver(&accumulator);
 
-  for (size_t i = 0; i < MOJO_ARRAYSIZE(kText); ++i) {
+  for (size_t i = 0; i < arraysize(kText); ++i) {
     if (accumulator.IsEmpty()) {
       base::RunLoop run_loop;
       accumulator.set_closure(run_loop.QuitClosure());

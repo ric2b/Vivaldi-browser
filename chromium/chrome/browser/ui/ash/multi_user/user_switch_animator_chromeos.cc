@@ -79,7 +79,7 @@ class MaximizedWindowAnimationWatcher : public ui::LayerAnimationObserver {
 
  private:
   ui::LayerAnimator* animator_;
-  scoped_ptr<ui::LayerTreeOwner> old_layer_;
+  std::unique_ptr<ui::LayerTreeOwner> old_layer_;
 
   DISALLOW_COPY_AND_ASSIGN(MaximizedWindowAnimationWatcher);
 };
@@ -381,15 +381,6 @@ void UserSwitchAnimatorChromeOS::TransitionWindows(
           if (client)
             client->ActivateWindow(window);
         }
-      } else {
-        // If the new user has no windows at all in his MRU windows list, we
-        // must deactivate any active window (by setting the active window to
-        // |nullptr|).
-        aura::Window* root_window = ash::Shell::GetPrimaryRootWindow();
-        aura::client::ActivationClient* client =
-            aura::client::GetActivationClient(root_window);
-        if (client)
-          client->ActivateWindow(nullptr);
       }
 
       owner_->notification_blocker()->ActiveUserChanged(new_account_id_);

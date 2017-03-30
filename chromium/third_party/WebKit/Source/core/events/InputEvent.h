@@ -14,14 +14,14 @@ class InputEvent final : public UIEvent {
     DEFINE_WRAPPERTYPEINFO();
 
 public:
-    static PassRefPtrWillBeRawPtr<InputEvent> create()
+    static InputEvent* create()
     {
-        return adoptRefWillBeNoop(new InputEvent);
+        return new InputEvent;
     }
 
-    static PassRefPtrWillBeRawPtr<InputEvent> create(const AtomicString& type, const InputEventInit& initializer)
+    static InputEvent* create(const AtomicString& type, const InputEventInit& initializer)
     {
-        return adoptRefWillBeNoop(new InputEvent(type, initializer));
+        return new InputEvent(type, initializer);
     }
 
     bool isInputEvent() const override;

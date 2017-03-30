@@ -40,7 +40,7 @@ SVGTransformList::~SVGTransformList()
 {
 }
 
-PassRefPtrWillBeRawPtr<SVGTransform> SVGTransformList::consolidate()
+SVGTransform* SVGTransformList::consolidate()
 {
     AffineTransform matrix;
     if (!concatenate(matrix))
@@ -153,9 +153,9 @@ SVGParseStatus parseTransformArgumentsForType(
     return SVGParseStatus::NoError;
 }
 
-PassRefPtrWillBeRawPtr<SVGTransform> createTransformFromValues(SVGTransformType type, const TransformArguments& arguments)
+SVGTransform* createTransformFromValues(SVGTransformType type, const TransformArguments& arguments)
 {
-    RefPtrWillBeRawPtr<SVGTransform> transform = SVGTransform::create();
+    SVGTransform* transform = SVGTransform::create();
     switch (type) {
     case SVG_TRANSFORM_SKEWX:
         transform->setSkewX(arguments[0]);
@@ -190,7 +190,7 @@ PassRefPtrWillBeRawPtr<SVGTransform> createTransformFromValues(SVGTransformType 
         ASSERT_NOT_REACHED();
         break;
     }
-    return transform.release();
+    return transform;
 }
 
 } // namespace
@@ -299,13 +299,13 @@ SVGParsingError SVGTransformList::setValueAsString(const String& value)
     return parseError;
 }
 
-PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGTransformList::cloneForAnimation(const String& value) const
+SVGPropertyBase* SVGTransformList::cloneForAnimation(const String& value) const
 {
     ASSERT(RuntimeEnabledFeatures::webAnimationsSVGEnabled());
     return SVGListPropertyHelper::cloneForAnimation(value);
 }
 
-PassRefPtrWillBeRawPtr<SVGTransformList> SVGTransformList::create(SVGTransformType transformType, const String& value)
+SVGTransformList* SVGTransformList::create(SVGTransformType transformType, const String& value)
 {
     TransformArguments arguments;
     bool atEndOfValue = false;
@@ -323,49 +323,49 @@ PassRefPtrWillBeRawPtr<SVGTransformList> SVGTransformList::create(SVGTransformTy
         atEndOfValue = !skipOptionalSVGSpaces(ptr, end);
     }
 
-    RefPtrWillBeRawPtr<SVGTransformList> svgTransformList = SVGTransformList::create();
+    SVGTransformList* svgTransformList = SVGTransformList::create();
     if (atEndOfValue && status == SVGParseStatus::NoError)
         svgTransformList->append(createTransformFromValues(transformType, arguments));
-    return svgTransformList.release();
+    return svgTransformList;
 }
 
-void SVGTransformList::add(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement* contextElement)
+void SVGTransformList::add(SVGPropertyBase* other, SVGElement* contextElement)
 {
     if (isEmpty())
         return;
 
-    RefPtrWillBeRawPtr<SVGTransformList> otherList = toSVGTransformList(other);
+    SVGTransformList* otherList = toSVGTransformList(other);
     if (length() != otherList->length())
         return;
 
     ASSERT(length() == 1);
-    RefPtrWillBeRawPtr<SVGTransform> fromTransform = at(0);
-    RefPtrWillBeRawPtr<SVGTransform> toTransform = otherList->at(0);
+    SVGTransform* fromTransform = at(0);
+    SVGTransform* toTransform = otherList->at(0);
 
     ASSERT(fromTransform->transformType() == toTransform->transformType());
     initialize(SVGTransformDistance::addSVGTransforms(fromTransform, toTransform));
 }
 
-void SVGTransformList::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> fromValue, PassRefPtrWillBeRawPtr<SVGPropertyBase> toValue, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDurationValue, SVGElement* contextElement)
+void SVGTransformList::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, SVGPropertyBase* fromValue, SVGPropertyBase* toValue, SVGPropertyBase* toAtEndOfDurationValue, SVGElement* contextElement)
 {
     ASSERT(animationElement);
-    bool isToAnimation = animationElement->animationMode() == ToAnimation;
+    bool isToAnimation = animationElement->getAnimationMode() == ToAnimation;
 
     // Spec: To animations provide specific functionality to get a smooth change from the underlying value to the
     // 'to' attribute value, which conflicts mathematically with the requirement for additive transform animations
     // to be post-multiplied. As a consequence, in SVG 1.1 the behavior of to animations for 'animateTransform' is undefined
     // FIXME: This is not taken into account yet.
-    RefPtrWillBeRawPtr<SVGTransformList> fromList = isToAnimation ? PassRefPtrWillBeRawPtr<SVGTransformList>(this) : toSVGTransformList(fromValue);
-    RefPtrWillBeRawPtr<SVGTransformList> toList = toSVGTransformList(toValue);
-    RefPtrWillBeRawPtr<SVGTransformList> toAtEndOfDurationList = toSVGTransformList(toAtEndOfDurationValue);
+    SVGTransformList* fromList = isToAnimation ? this : toSVGTransformList(fromValue);
+    SVGTransformList* toList = toSVGTransformList(toValue);
+    SVGTransformList* toAtEndOfDurationList = toSVGTransformList(toAtEndOfDurationValue);
 
     size_t toListSize = toList->length();
     if (!toListSize)
         return;
 
     // Get a reference to the from value before potentially cleaning it out (in the case of a To animation.)
-    RefPtrWillBeRawPtr<SVGTransform> toTransform = toList->at(0);
-    RefPtrWillBeRawPtr<SVGTransform> effectiveFrom = nullptr;
+    SVGTransform* toTransform = toList->at(0);
+    SVGTransform* effectiveFrom = nullptr;
     // If there's an existing 'from'/underlying value of the same type use that, else use a "zero transform".
     if (fromList->length() && fromList->at(0)->transformType() == toTransform->transformType())
         effectiveFrom = fromList->at(0);
@@ -376,21 +376,21 @@ void SVGTransformList::calculateAnimatedValue(SVGAnimationElement* animationElem
     if (!isEmpty() && (!animationElement->isAdditive() || isToAnimation))
         clear();
 
-    RefPtrWillBeRawPtr<SVGTransform> currentTransform = SVGTransformDistance(effectiveFrom, toTransform).scaledDistance(percentage).addToSVGTransform(effectiveFrom);
+    SVGTransform* currentTransform = SVGTransformDistance(effectiveFrom, toTransform).scaledDistance(percentage).addToSVGTransform(effectiveFrom);
     if (animationElement->isAccumulated() && repeatCount) {
-        RefPtrWillBeRawPtr<SVGTransform> effectiveToAtEnd = !toAtEndOfDurationList->isEmpty() ? PassRefPtrWillBeRawPtr<SVGTransform>(toAtEndOfDurationList->at(0)) : SVGTransform::create(toTransform->transformType(), SVGTransform::ConstructZeroTransform);
+        SVGTransform* effectiveToAtEnd = !toAtEndOfDurationList->isEmpty() ? toAtEndOfDurationList->at(0) : SVGTransform::create(toTransform->transformType(), SVGTransform::ConstructZeroTransform);
         append(SVGTransformDistance::addSVGTransforms(currentTransform, effectiveToAtEnd, repeatCount));
     } else {
         append(currentTransform);
     }
 }
 
-float SVGTransformList::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> toValue, SVGElement*)
+float SVGTransformList::calculateDistance(SVGPropertyBase* toValue, SVGElement*)
 {
     // FIXME: This is not correct in all cases. The spec demands that each component (translate x and y for example)
     // is paced separately. To implement this we need to treat each component as individual animation everywhere.
 
-    RefPtrWillBeRawPtr<SVGTransformList> toList = toSVGTransformList(toValue);
+    SVGTransformList* toList = toSVGTransformList(toValue);
     if (isEmpty() || length() != toList->length())
         return -1;
 

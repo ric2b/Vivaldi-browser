@@ -5,6 +5,8 @@
 #ifndef CHROMECAST_MEDIA_BASE_MEDIA_MESSAGE_LOOP_H_
 #define CHROMECAST_MEDIA_BASE_MEDIA_MESSAGE_LOOP_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
@@ -17,6 +19,8 @@ class Thread;
 namespace chromecast {
 namespace media {
 
+// DEPRECATED: This is being deprecated.
+// Get the media task runner from CastContentBrowserClient::GetMediaTaskRunner.
 class MediaMessageLoop {
  public:
   static scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner();
@@ -29,7 +33,7 @@ class MediaMessageLoop {
   MediaMessageLoop();
   ~MediaMessageLoop();
 
-  scoped_ptr<base::Thread> thread_;
+  std::unique_ptr<base::Thread> thread_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaMessageLoop);
 };

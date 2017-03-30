@@ -26,14 +26,14 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<OfflineAudioCompletionEvent> OfflineAudioCompletionEvent::create()
+OfflineAudioCompletionEvent* OfflineAudioCompletionEvent::create()
 {
-    return adoptRefWillBeNoop(new OfflineAudioCompletionEvent);
+    return new OfflineAudioCompletionEvent;
 }
 
-PassRefPtrWillBeRawPtr<OfflineAudioCompletionEvent> OfflineAudioCompletionEvent::create(AudioBuffer* renderedBuffer)
+OfflineAudioCompletionEvent* OfflineAudioCompletionEvent::create(AudioBuffer* renderedBuffer)
 {
-    return adoptRefWillBeNoop(new OfflineAudioCompletionEvent(renderedBuffer));
+    return new OfflineAudioCompletionEvent(renderedBuffer);
 }
 
 OfflineAudioCompletionEvent::OfflineAudioCompletionEvent()

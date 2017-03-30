@@ -22,7 +22,6 @@
 #ifndef FormController_h
 #define FormController_h
 
-#include "core/html/forms/RadioButtonGroupScope.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
 #include "wtf/Forward.h"
@@ -75,10 +74,9 @@ inline void FormControlState::append(const String& value)
 
 using SavedFormStateMap = HashMap<AtomicString, OwnPtr<SavedFormState>>;
 
-class DocumentState final : public RefCountedWillBeGarbageCollected<DocumentState> {
-    DECLARE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(DocumentState);
+class DocumentState final : public GarbageCollected<DocumentState> {
 public:
-    static PassRefPtrWillBeRawPtr<DocumentState> create();
+    static DocumentState* create();
     DECLARE_TRACE();
 
     void addControl(HTMLFormControlElementWithState*);
@@ -86,21 +84,18 @@ public:
     Vector<String> toStateVector();
 
 private:
-    using FormElementListHashSet = WillBeHeapListHashSet<RefPtrWillBeMember<HTMLFormControlElementWithState>, 64>;
+    using FormElementListHashSet = HeapListHashSet<Member<HTMLFormControlElementWithState>, 64>;
     FormElementListHashSet m_formControls;
 };
 
-class FormController final : public NoBaseWillBeGarbageCollectedFinalized<FormController> {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(FormController);
+class FormController final : public GarbageCollectedFinalized<FormController> {
 public:
-    static PassOwnPtrWillBeRawPtr<FormController> create()
+    static FormController* create()
     {
-        return adoptPtrWillBeNoop(new FormController);
+        return new FormController;
     }
     ~FormController();
     DECLARE_TRACE();
-
-    RadioButtonGroupScope& radioButtonGroupScope() { return m_radioButtonGroupScope; }
 
     void registerStatefulFormControl(HTMLFormControlElementWithState&);
     void unregisterStatefulFormControl(HTMLFormControlElementWithState&);
@@ -119,10 +114,9 @@ private:
     FormControlState takeStateForFormElement(const HTMLFormControlElementWithState&);
     static void formStatesFromStateVector(const Vector<String>&, SavedFormStateMap&);
 
-    RadioButtonGroupScope m_radioButtonGroupScope;
-    RefPtrWillBeMember<DocumentState> m_documentState;
+    Member<DocumentState> m_documentState;
     SavedFormStateMap m_savedFormStateMap;
-    OwnPtrWillBeMember<FormKeyGenerator> m_formKeyGenerator;
+    Member<FormKeyGenerator> m_formKeyGenerator;
 };
 
 } // namespace blink

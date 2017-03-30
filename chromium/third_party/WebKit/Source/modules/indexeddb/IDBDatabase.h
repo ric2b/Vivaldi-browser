@@ -26,6 +26,7 @@
 #ifndef IDBDatabase_h
 #define IDBDatabase_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/modules/v8/UnionTypesModules.h"
 #include "core/dom/ActiveDOMObject.h"
@@ -55,9 +56,10 @@ class ExecutionContext;
 
 class MODULES_EXPORT IDBDatabase final
     : public RefCountedGarbageCollectedEventTargetWithInlineData<IDBDatabase>
+    , public ActiveScriptWrappable
     , public ActiveDOMObject {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(IDBDatabase);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(IDBDatabase);
+    USING_GARBAGE_COLLECTED_MIXIN(IDBDatabase);
     DEFINE_WRAPPERTYPEINFO();
 public:
     static IDBDatabase* create(ExecutionContext*, PassOwnPtr<WebIDBDatabase>, IDBDatabaseCallbacks*);
@@ -73,7 +75,7 @@ public:
     // Implement the IDL
     const String& name() const { return m_metadata.name; }
     unsigned long long version() const { return m_metadata.version; }
-    PassRefPtrWillBeRawPtr<DOMStringList> objectStoreNames() const;
+    DOMStringList* objectStoreNames() const;
 
     IDBObjectStore* createObjectStore(const String& name, const IDBObjectStoreParameters& options, ExceptionState& exceptionState) { return createObjectStore(name, IDBKeyPath(options.keyPath()), options.autoIncrement(), exceptionState); }
     IDBTransaction* transaction(ScriptState*, const StringOrStringSequenceOrDOMStringList&, const String& mode, ExceptionState&);
@@ -90,18 +92,20 @@ public:
     void onAbort(int64_t, DOMException*);
     void onComplete(int64_t);
 
+    // ActiveScriptWrappable
+    bool hasPendingActivity() const final;
+
     // ActiveDOMObject
-    bool hasPendingActivity() const override;
     void stop() override;
 
     // EventTarget
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
     bool isClosePending() const { return m_closePending; }
     void forceClose();
     const IDBDatabaseMetadata& metadata() const { return m_metadata; }
-    void enqueueEvent(PassRefPtrWillBeRawPtr<Event>);
+    void enqueueEvent(Event*);
 
     int64_t findObjectStoreId(const String& name) const;
     bool containsObjectStore(const String& name) const
@@ -134,7 +138,7 @@ public:
 
 protected:
     // EventTarget
-    DispatchEventResult dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>) override;
+    DispatchEventResult dispatchEventInternal(Event*) override;
 
 private:
     IDBDatabase(ExecutionContext*, PassOwnPtr<WebIDBDatabase>, IDBDatabaseCallbacks*);
@@ -152,7 +156,7 @@ private:
 
     // Keep track of the versionchange events waiting to be fired on this
     // database so that we can cancel them if the database closes.
-    WillBeHeapVector<RefPtrWillBeMember<Event>> m_enqueuedEvents;
+    HeapVector<Member<Event>> m_enqueuedEvents;
 
     Member<IDBDatabaseCallbacks> m_databaseCallbacks;
 };

@@ -10,19 +10,19 @@ RelatedEvent::~RelatedEvent()
 {
 }
 
-PassRefPtrWillBeRawPtr<RelatedEvent> RelatedEvent::create()
+RelatedEvent* RelatedEvent::create()
 {
-    return adoptRefWillBeNoop(new RelatedEvent);
+    return new RelatedEvent;
 }
 
-PassRefPtrWillBeRawPtr<RelatedEvent> RelatedEvent::create(const AtomicString& type, bool canBubble, bool cancelable, EventTarget* relatedTarget)
+RelatedEvent* RelatedEvent::create(const AtomicString& type, bool canBubble, bool cancelable, EventTarget* relatedTarget)
 {
-    return adoptRefWillBeNoop(new RelatedEvent(type, canBubble, cancelable, relatedTarget));
+    return new RelatedEvent(type, canBubble, cancelable, relatedTarget);
 }
 
-PassRefPtrWillBeRawPtr<RelatedEvent> RelatedEvent::create(const AtomicString& type, const RelatedEventInit& initializer)
+RelatedEvent* RelatedEvent::create(const AtomicString& type, const RelatedEventInit& initializer)
 {
-    return adoptRefWillBeNoop(new RelatedEvent(type, initializer));
+    return new RelatedEvent(type, initializer);
 }
 
 RelatedEvent::RelatedEvent()
@@ -30,7 +30,7 @@ RelatedEvent::RelatedEvent()
 }
 
 RelatedEvent::RelatedEvent(const AtomicString& type, bool canBubble, bool cancelable, EventTarget* relatedTarget)
-    : Event(type, canBubble, cancelable)
+    : Event(type, canBubble, cancelable, relatedTarget)
     , m_relatedTarget(relatedTarget)
 {
 }

@@ -49,9 +49,7 @@ scoped_refptr<cc::Layer> ThumbnailLayer::layer() {
   return layer_;
 }
 
-ThumbnailLayer::ThumbnailLayer()
-    : layer_(
-          cc::UIResourceLayer::Create(content::Compositor::LayerSettings())) {
+ThumbnailLayer::ThumbnailLayer() : layer_(cc::UIResourceLayer::Create()) {
   layer_->SetIsDrawable(true);
 }
 

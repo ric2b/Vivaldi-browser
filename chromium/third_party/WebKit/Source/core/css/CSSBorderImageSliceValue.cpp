@@ -29,11 +29,12 @@
 
 namespace blink {
 
-CSSBorderImageSliceValue::CSSBorderImageSliceValue(PassRefPtrWillBeRawPtr<CSSQuadValue> slices, bool fill)
+CSSBorderImageSliceValue::CSSBorderImageSliceValue(CSSQuadValue* slices, bool fill)
     : CSSValue(BorderImageSliceClass)
     , m_slices(slices)
     , m_fill(fill)
 {
+    ASSERT(m_slices);
 }
 
 String CSSBorderImageSliceValue::customCSSText() const

@@ -123,16 +123,27 @@ class InstallerState {
   // flag is set is to be operated on.
   bool is_msi() const { return msi_; }
 
+  // True if the process is running at a reduced "background" priority.
+  bool is_background_mode() const { return background_mode_; }
+
+  // Indicate that the process is or is not running in the background.
+  void set_background_mode(bool bg) { background_mode_ = bg; }
+
   // True if this installer is started with the "--vivaldi" option
   bool is_vivaldi() const { return is_vivaldi_; }
 
-  // True if this installer is started with the "--vivaldi" option
+  // True if this installer is started with the "--vivaldi-standalone" option
   bool is_standalone() const { return is_standalone_; }
 
-  // True if this installer is started with the "--vivaldi" option
+  // True if this installer is started with the
+  // "--vivaldi-register-standalone" option
+  bool register_standalone() const { return register_standalone_; }
+
+  // True if this installer is started with the "--uninstall" option
   bool is_uninstall() const { return is_uninstall_; }
 
-  // True if this installer is started with the --vivaldi-ïnstall-dir=<install-dir> option
+  // True if this installer is started with the
+  // --vivaldi-ïnstall-dir=<install-dir> option
   bool install_dir_supplied() const { return install_dir_supplied_; };
 
   // True if the --verbose-logging command-line flag is set or if the
@@ -280,10 +291,12 @@ class InstallerState {
   HKEY root_key_;
 #endif
   bool msi_;
+  bool background_mode_;
   bool verbose_logging_;
 
   bool is_vivaldi_;
   bool is_standalone_;
+  bool register_standalone_;
   bool is_uninstall_;
   bool install_dir_supplied_;
 

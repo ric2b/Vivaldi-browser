@@ -6,6 +6,7 @@
 #define PPAPI_PROXY_INTERFACE_LIST_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/containers/scoped_ptr_hash_map.h"
@@ -80,7 +81,7 @@ class PPAPI_PROXY_EXPORT InterfaceList {
   // Give friendship for HashInterfaceName.
   friend class InterfaceInfo;
 
-  typedef base::ScopedPtrHashMap<std::string, scoped_ptr<InterfaceInfo>>
+  typedef base::ScopedPtrHashMap<std::string, std::unique_ptr<InterfaceInfo>>
       NameToInterfaceInfoMap;
 
   void AddProxy(ApiID id, InterfaceProxy::Factory factory);

@@ -48,8 +48,9 @@ namespace {
 
 // Version number of the current theme pack. We just throw out and rebuild
 // theme packs that aren't int-equal to this. Increment this number if you
-// change default theme assets.
-const int kThemePackVersion = 39;
+// change default theme assets or if you need themes to recreate their generated
+// images (which are cached).
+const int kThemePackVersion = 41;
 
 // IDs that are in the DataPack won't clash with the positive integer
 // uint16_t. kHeaderID should always have the maximum value because we want the
@@ -389,7 +390,7 @@ bool HasFrameBorder() {
 }
 
 // Returns a piece of memory with the contents of the file |path|.
-base::RefCountedMemory* ReadFileData(const base::FilePath& path) {
+scoped_refptr<base::RefCountedMemory> ReadFileData(const base::FilePath& path) {
   if (!path.empty()) {
     base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ);
     if (file.IsValid()) {
@@ -405,7 +406,7 @@ base::RefCountedMemory* ReadFileData(const base::FilePath& path) {
     }
   }
 
-  return NULL;
+  return nullptr;
 }
 
 // Shifts an image's HSL values. The caller is responsible for deleting
@@ -888,10 +889,8 @@ BrowserThemePack::BrowserThemePack()
       source_images_(NULL) {
   scale_factors_ = ui::GetSupportedScaleFactors();
   // On Windows HiDPI SCALE_FACTOR_100P may not be supported by default.
-  if (std::find(scale_factors_.begin(), scale_factors_.end(),
-                ui::SCALE_FACTOR_100P) == scale_factors_.end()) {
+  if (!ContainsValue(scale_factors_, ui::SCALE_FACTOR_100P))
     scale_factors_.push_back(ui::SCALE_FACTOR_100P);
-  }
 }
 
 void BrowserThemePack::BuildHeader(const Extension* extension) {

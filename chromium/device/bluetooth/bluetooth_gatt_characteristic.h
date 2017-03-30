@@ -158,6 +158,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattCharacteristic {
   virtual BluetoothGattDescriptor* GetDescriptor(
       const std::string& identifier) const = 0;
 
+  // Returns the GATT characteristic descriptors that match |uuid|. There may be
+  // multiple, as illustrated by Core Bluetooth Specification [V4.2 Vol 3 Part G
+  // 3.3.3.5 Characteristic Presentation Format].
+  std::vector<BluetoothGattDescriptor*> GetDescriptorsByUUID(
+      const BluetoothUUID& uuid);
+
   // Adds a characteristic descriptor to the locally hosted characteristic
   // represented by this instance. This method only makes sense for local
   // characteristics and won't have an effect if this instance represents a
@@ -181,6 +187,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattCharacteristic {
   // notifications/indications. On success, the characteristic starts sending
   // value notifications and |callback| is called with a session object whose
   // ownership belongs to the caller. |error_callback| is called on errors.
+  //
+  // Writes to the Client Characteristic Configuration descriptor to enable
+  // notifications/indications. Core Bluetooth Specification [V4.2 Vol 3 Part G
+  // Section 3.3.1.1. Characteristic Properties] requires this descriptor to be
+  // present when notifications/indications are supported. If the descriptor is
+  // not present |error_callback| will be run.
   virtual void StartNotifySession(const NotifySessionCallback& callback,
                                   const ErrorCallback& error_callback) = 0;
 

@@ -120,7 +120,11 @@ bool ChromeClassTester::InBannedDirectory(SourceLocation loc) {
 #if defined(LLVM_ON_UNIX)
   // Resolve the symlinktastic relative path and make it absolute.
   char resolvedPath[MAXPATHLEN];
-  if (realpath(filename.c_str(), resolvedPath)) {
+  if (options_.no_realpath) {
+    // Same reason as windows below, but we don't need to do
+    // the '\\' manipulation on linux.
+    filename.insert(filename.begin(), '/');
+  } else if (realpath(filename.c_str(), resolvedPath)) {
     filename = resolvedPath;
   }
 #endif
@@ -173,6 +177,21 @@ bool ChromeClassTester::InBannedNamespace(const Decl* record) {
 
 std::string ChromeClassTester::GetNamespace(const Decl* record) {
   return GetNamespaceImpl(record->getDeclContext(), "");
+}
+
+bool ChromeClassTester::HasIgnoredBases(const CXXRecordDecl* record) {
+  for (const auto& base : record->bases()) {
+    CXXRecordDecl* base_record = base.getType()->getAsCXXRecordDecl();
+    if (!base_record)
+      continue;
+
+    const std::string& base_name = base_record->getQualifiedNameAsString();
+    if (ignored_base_classes_.count(base_name) > 0)
+      return true;
+    if (HasIgnoredBases(base_record))
+      return true;
+  }
+  return false;
 }
 
 bool ChromeClassTester::InImplementationFile(SourceLocation record_location) {
@@ -273,6 +292,10 @@ void ChromeClassTester::BuildBannedLists() {
 
   // Enum type with _LAST members where _LAST doesn't mean last enum value.
   ignored_record_names_.emplace("ViewID");
+
+  // Ignore IPC::NoParams bases, since these structs are generated via
+  // macros and it makes it difficult to add explicit ctors.
+  ignored_base_classes_.emplace("IPC::NoParams");
 }
 
 std::string ChromeClassTester::GetNamespaceImpl(const DeclContext* context,

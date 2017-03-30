@@ -38,9 +38,9 @@ FileSystemApp::FileSystemApp() : lock_table_(new LockTable) {}
 FileSystemApp::~FileSystemApp() {}
 
 void FileSystemApp::Initialize(mojo::Connector* connector,
-                               const std::string& url,
-                               uint32_t id, uint32_t user_id) {
-  tracing_.Initialize(connector, url);
+                               const mojo::Identity& identity,
+                               uint32_t id) {
+  tracing_.Initialize(connector, identity.name());
 }
 
 bool FileSystemApp::AcceptConnection(mojo::Connection* connection) {
@@ -52,7 +52,7 @@ bool FileSystemApp::AcceptConnection(mojo::Connection* connection) {
 void FileSystemApp::Create(mojo::Connection* connection,
                            mojo::InterfaceRequest<FileSystem> request) {
   new FileSystemImpl(connection, std::move(request), GetUserDataDir(),
-                     lock_table_.get());
+                     lock_table_);
 }
 
 //static
@@ -65,23 +65,19 @@ base::FilePath FileSystemApp::GetUserDataDir() {
   } else {
 #if defined(OS_WIN)
     CHECK(PathService::Get(base::DIR_LOCAL_APP_DATA, &path));
-    path = path.Append(FILE_PATH_LITERAL("mandoline"));
-#elif defined(OS_LINUX)
-    scoped_ptr<base::Environment> env(base::Environment::Create());
-    base::FilePath config_dir(
-        base::nix::GetXDGDirectory(env.get(),
-                                   base::nix::kXdgConfigHomeEnvVar,
-                                   base::nix::kDotConfigDir));
-    path = config_dir.Append("mandoline");
 #elif defined(OS_MACOSX)
     CHECK(PathService::Get(base::DIR_APP_DATA, &path));
-    path = path.Append("Mandoline Shell");
 #elif defined(OS_ANDROID)
     CHECK(PathService::Get(base::DIR_ANDROID_APP_DATA, &path));
-    path = path.Append(FILE_PATH_LITERAL("mandoline"));
+#elif defined(OS_LINUX)
+    scoped_ptr<base::Environment> env(base::Environment::Create());
+    path = base::nix::GetXDGDirectory(env.get(),
+                                      base::nix::kXdgConfigHomeEnvVar,
+                                      base::nix::kDotConfigDir);
 #else
     NOTIMPLEMENTED();
 #endif
+    path = path.Append(FILE_PATH_LITERAL("filesystem"));
   }
 
   if (!base::PathExists(path))

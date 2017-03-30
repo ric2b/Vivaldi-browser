@@ -69,19 +69,19 @@ String MediaQuery::serialize() const
     return result.toString();
 }
 
-static bool expressionCompare(const OwnPtrWillBeMember<MediaQueryExp>& a, const OwnPtrWillBeMember<MediaQueryExp>& b)
+static bool expressionCompare(const Member<MediaQueryExp>& a, const Member<MediaQueryExp>& b)
 {
     return codePointCompare(a->serialize(), b->serialize()) < 0;
 }
 
-PassOwnPtrWillBeRawPtr<MediaQuery> MediaQuery::createNotAll()
+MediaQuery* MediaQuery::createNotAll()
 {
-    return adoptPtrWillBeNoop(new MediaQuery(MediaQuery::Not, MediaTypeNames::all, ExpressionHeapVector()));
+    return new MediaQuery(MediaQuery::Not, MediaTypeNames::all, ExpressionHeapVector());
 }
 
-PassOwnPtrWillBeRawPtr<MediaQuery> MediaQuery::create(RestrictorType restrictor, String mediaType, ExpressionHeapVector expressions)
+MediaQuery* MediaQuery::create(RestrictorType restrictor, String mediaType, ExpressionHeapVector expressions)
 {
-    return adoptPtrWillBeNoop(new MediaQuery(restrictor, std::move(mediaType), std::move(expressions)));
+    return new MediaQuery(restrictor, std::move(mediaType), std::move(expressions));
 }
 
 MediaQuery::MediaQuery(RestrictorType restrictor, String mediaType, ExpressionHeapVector expressions)
@@ -136,9 +136,7 @@ DEFINE_TRACE(MediaQuery)
 {
     // We don't support tracing of vectors of OwnPtrs (ie. OwnPtr<Vector<OwnPtr<MediaQuery>>>).
     // Since this is a transitional object we are just ifdef'ing it out when oilpan is not enabled.
-#if ENABLE(OILPAN)
     visitor->trace(m_expressions);
-#endif
 }
 
 } // namespace blink

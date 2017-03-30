@@ -42,18 +42,18 @@ public:
     typedef void TearOffType;
     typedef String PrimitiveType;
 
-    static PassRefPtrWillBeRawPtr<SVGString> create()
+    static SVGString* create()
     {
-        return adoptRefWillBeNoop(new SVGString());
+        return new SVGString();
     }
 
-    static PassRefPtrWillBeRawPtr<SVGString> create(const String& value)
+    static SVGString* create(const String& value)
     {
-        return adoptRefWillBeNoop(new SVGString(value));
+        return new SVGString(value);
     }
 
-    PassRefPtrWillBeRawPtr<SVGString> clone() const { return create(m_value); }
-    PassRefPtrWillBeRawPtr<SVGPropertyBase> cloneForAnimation(const String& value) const override
+    SVGString* clone() const { return create(m_value); }
+    SVGPropertyBase* cloneForAnimation(const String& value) const override
     {
         return create(value);
     }
@@ -65,9 +65,9 @@ public:
         return SVGParseStatus::NoError;
     }
 
-    void add(PassRefPtrWillBeRawPtr<SVGPropertyBase>, SVGElement*) override;
-    void calculateAnimatedValue(SVGAnimationElement*, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> from, PassRefPtrWillBeRawPtr<SVGPropertyBase> to, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDurationValue, SVGElement*) override;
-    float calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> to, SVGElement*) override;
+    void add(SVGPropertyBase*, SVGElement*) override;
+    void calculateAnimatedValue(SVGAnimationElement*, float percentage, unsigned repeatCount, SVGPropertyBase* from, SVGPropertyBase* to, SVGPropertyBase* toAtEndOfDurationValue, SVGElement*) override;
+    float calculateDistance(SVGPropertyBase* to, SVGElement*) override;
 
     const String& value() const { return m_value; }
     void setValue(const String& value) { m_value = value; }

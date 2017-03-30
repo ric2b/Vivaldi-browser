@@ -36,7 +36,7 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
                                  public IPC::Listener {
  public:
   IPCMediaPipelineHostImpl(
-      GpuChannelHost* channel,
+      gpu::GpuChannelHost* channel,
       const scoped_refptr<base::SequencedTaskRunner>& task_runner,
       media::GpuVideoAcceleratorFactories* factories,
       media::DataSource* data_source);
@@ -113,7 +113,7 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   media::DataSource* data_source_;
-  scoped_refptr<content::GpuChannelHost> channel_;
+  scoped_refptr<gpu::GpuChannelHost> channel_;
   int32_t routing_id_;
 
   InitializeCB init_callback_;

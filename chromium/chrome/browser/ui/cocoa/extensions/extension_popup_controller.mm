@@ -23,6 +23,7 @@
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "extensions/browser/notification_types.h"
+#include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/cocoa/window_size_constants.h"
 
 using content::BrowserContext;
@@ -56,7 +57,7 @@ BOOL gAnimationsEnabled = true;
                    devMode:(BOOL)devMode;
 
 // Set the ExtensionViewHost, taking ownership.
-- (void)setExtensionViewHost:(scoped_ptr<ExtensionViewHost>)host;
+- (void)setExtensionViewHost:(std::unique_ptr<ExtensionViewHost>)host;
 
 // Called when the extension's hosted NSView has been resized.
 - (void)extensionViewFrameChanged;
@@ -66,9 +67,6 @@ BOOL gAnimationsEnabled = true;
 
 // Called when the extension view is shown.
 - (void)onViewDidShow;
-
-// Called when the window moves or resizes. Notifies the extension.
-- (void)onWindowChanged;
 
 @end
 
@@ -176,7 +174,7 @@ class ExtensionPopupNotificationBridge : public content::NotificationObserver {
   if (!window.get())
     return nil;
 
-  anchoredAt = [parentWindow convertBaseToScreen:anchoredAt];
+  anchoredAt = ui::ConvertPointFromWindowToScreen(parentWindow, anchoredAt);
   if ((self = [super initWithWindow:window
                        parentWindow:parentWindow
                          anchoredAt:anchoredAt])) {
@@ -256,11 +254,11 @@ class ExtensionPopupNotificationBridge : public content::NotificationObserver {
   beingInspected_ = beingInspected;
 }
 
-+ (ExtensionPopupController*)host:(scoped_ptr<ExtensionViewHost>)host
++ (ExtensionPopupController*)host:(std::unique_ptr<ExtensionViewHost>)host
                         inBrowser:(Browser*)browser
                        anchoredAt:(NSPoint)anchoredAt
-                    arrowLocation:(info_bubble::BubbleArrowLocation)
-                                      arrowLocation
+                    arrowLocation:
+                        (info_bubble::BubbleArrowLocation)arrowLocation
                           devMode:(BOOL)devMode {
   DCHECK([NSThread isMainThread]);
   DCHECK(browser);
@@ -285,7 +283,7 @@ class ExtensionPopupNotificationBridge : public content::NotificationObserver {
   return gPopup;
 }
 
-- (void)setExtensionViewHost:(scoped_ptr<ExtensionViewHost>)host {
+- (void)setExtensionViewHost:(std::unique_ptr<ExtensionViewHost>)host {
   DCHECK(!host_);
   DCHECK(host);
   host_.swap(host);
@@ -403,27 +401,6 @@ class ExtensionPopupNotificationBridge : public content::NotificationObserver {
 
 - (void)onViewDidShow {
   [self onSizeChanged:pendingSize_];
-}
-
-- (void)onWindowChanged {
-  // The window is positioned before creating the host, to ensure the host is
-  // created with the correct screen information.
-  if (!host_)
-    return;
-
-  ExtensionViewMac* extensionView =
-      static_cast<ExtensionViewMac*>(host_->view());
-  // Let the extension view know, so that it can tell plugins.
-  if (extensionView)
-    extensionView->WindowFrameChanged();
-}
-
-- (void)windowDidResize:(NSNotification*)notification {
-  [self onWindowChanged];
-}
-
-- (void)windowDidMove:(NSNotification*)notification {
-  [self onWindowChanged];
 }
 
 // Private (TestingAPI)

@@ -16,6 +16,7 @@
 #include "chrome/common/safe_browsing/zip_analyzer.h"
 #include "chrome/common/safe_browsing/zip_analyzer_results.h"
 #include "chrome/utility/chrome_content_utility_ipc_whitelist.h"
+#include "chrome/utility/image_decoder_impl.h"
 #include "chrome/utility/safe_json_parser_handler.h"
 #include "chrome/utility/utility_message_handler.h"
 #include "content/public/child/image_decoder_utils.h"
@@ -25,14 +26,8 @@
 #include "courgette/courgette.h"
 #include "courgette/third_party/bsdiff.h"
 #include "ipc/ipc_channel.h"
-#include "skia/ext/image_operations.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/zlib/google/zip.h"
 #include "ui/gfx/geometry/size.h"
-
-#if defined(OS_CHROMEOS)
-#include "ui/gfx/chromeos/codec/jpeg_codec_robust_slow.h"
-#endif
 
 #if !defined(OS_ANDROID)
 #include "chrome/common/resource_usage_reporter.mojom.h"
@@ -43,7 +38,6 @@
 #endif
 
 #if defined(OS_WIN)
-#include "chrome/utility/font_cache_handler_win.h"
 #include "chrome/utility/shell_handler_win.h"
 #endif
 
@@ -80,17 +74,17 @@ void CreateProxyResolverFactory(
   new net::MojoProxyResolverFactoryImpl(std::move(request));
 }
 
-class ResourceUsageReporterImpl : public ResourceUsageReporter {
+class ResourceUsageReporterImpl : public mojom::ResourceUsageReporter {
  public:
   explicit ResourceUsageReporterImpl(
-      mojo::InterfaceRequest<ResourceUsageReporter> req)
+      mojo::InterfaceRequest<mojom::ResourceUsageReporter> req)
       : binding_(this, std::move(req)) {}
   ~ResourceUsageReporterImpl() override {}
 
  private:
-  void GetUsageData(
-      const mojo::Callback<void(ResourceUsageDataPtr)>& callback) override {
-    ResourceUsageDataPtr data = ResourceUsageData::New();
+  void GetUsageData(const mojo::Callback<void(mojom::ResourceUsageDataPtr)>&
+                        callback) override {
+    mojom::ResourceUsageDataPtr data = mojom::ResourceUsageData::New();
     size_t total_heap_size = net::ProxyResolverV8::GetTotalHeapSize();
     if (total_heap_size) {
       data->reports_v8_stats = true;
@@ -100,19 +94,21 @@ class ResourceUsageReporterImpl : public ResourceUsageReporter {
     callback.Run(std::move(data));
   }
 
-  mojo::StrongBinding<ResourceUsageReporter> binding_;
+  mojo::StrongBinding<mojom::ResourceUsageReporter> binding_;
 };
 
 void CreateResourceUsageReporter(
-    mojo::InterfaceRequest<ResourceUsageReporter> request) {
+    mojo::InterfaceRequest<mojom::ResourceUsageReporter> request) {
   new ResourceUsageReporterImpl(std::move(request));
 }
 #endif  // OS_ANDROID
 
-}  // namespace
+void CreateImageDecoder(mojo::InterfaceRequest<mojom::ImageDecoder> request) {
+  content::UtilityThread::Get()->EnsureBlinkInitialized();
+  new ImageDecoderImpl(std::move(request));
+}
 
-int64_t ChromeContentUtilityClient::max_ipc_message_size_ =
-    IPC::Channel::kMaximumMessageSize;
+}  // namespace
 
 ChromeContentUtilityClient::ChromeContentUtilityClient()
     : filter_messages_(false) {
@@ -131,7 +127,6 @@ ChromeContentUtilityClient::ChromeContentUtilityClient()
 
 #if defined(OS_WIN)
   handlers_.push_back(new ShellHandler());
-  handlers_.push_back(new FontCacheHandler());
 #endif
 
   handlers_.push_back(new SafeJsonParserHandler());
@@ -162,11 +157,6 @@ bool ChromeContentUtilityClient::OnMessageReceived(
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ChromeContentUtilityClient, message)
-    IPC_MESSAGE_HANDLER(ChromeUtilityMsg_DecodeImage, OnDecodeImage)
-#if defined(OS_CHROMEOS)
-    IPC_MESSAGE_HANDLER(ChromeUtilityMsg_RobustJPEGDecodeImage,
-                        OnRobustJPEGDecodeImage)
-#endif  // defined(OS_CHROMEOS)
     IPC_MESSAGE_HANDLER(ChromeUtilityMsg_PatchFileBsdiff,
                         OnPatchFileBsdiff)
     IPC_MESSAGE_HANDLER(ChromeUtilityMsg_PatchFileCourgette,
@@ -196,12 +186,21 @@ bool ChromeContentUtilityClient::OnMessageReceived(
 
 void ChromeContentUtilityClient::RegisterMojoServices(
     content::ServiceRegistry* registry) {
+  // When the utility process is running with elevated privileges, we need to
+  // filter messages so that only a whitelist of IPCs can run. In Mojo, there's
+  // no way of filtering individual messages. Instead, we can avoid adding
+  // non-whitelisted Mojo services to the ServiceRegistry.
+  // TODO(amistry): Use a whitelist once the whistlisted IPCs have been
+  // converted to Mojo.
+  if (filter_messages_)
+    return;
+
 #if !defined(OS_ANDROID)
   registry->AddService<net::interfaces::ProxyResolverFactory>(
       base::Bind(CreateProxyResolverFactory));
-  registry->AddService<ResourceUsageReporter>(
-      base::Bind(CreateResourceUsageReporter));
+  registry->AddService(base::Bind(CreateResourceUsageReporter));
 #endif
+  registry->AddService(base::Bind(&CreateImageDecoder));
 }
 
 void ChromeContentUtilityClient::AddHandler(
@@ -214,66 +213,6 @@ void ChromeContentUtilityClient::PreSandboxStartup() {
 #if defined(ENABLE_EXTENSIONS)
   extensions::ExtensionsHandler::PreSandboxStartup();
 #endif
-}
-
-// static
-SkBitmap ChromeContentUtilityClient::DecodeImage(
-    const std::vector<unsigned char>& encoded_data, bool shrink_to_fit) {
-  SkBitmap decoded_image;
-  if (encoded_data.empty())
-    return decoded_image;
-
-  decoded_image = content::DecodeImage(&encoded_data[0],
-                                       gfx::Size(),
-                                       encoded_data.size());
-
-  int64_t struct_size = sizeof(ChromeUtilityHostMsg_DecodeImage_Succeeded);
-  int64_t image_size = decoded_image.computeSize64();
-  int halves = 0;
-  while (struct_size + (image_size >> 2*halves) > max_ipc_message_size_)
-    halves++;
-  if (halves) {
-    if (shrink_to_fit) {
-      // If decoded image is too large for IPC message, shrink it by halves.
-      // This prevents quality loss, and should never overshrink on displays
-      // smaller than 3600x2400.
-      // TODO (Issue 416916): Instead of shrinking, return via shared memory
-      decoded_image = skia::ImageOperations::Resize(
-          decoded_image, skia::ImageOperations::RESIZE_LANCZOS3,
-          decoded_image.width() >> halves, decoded_image.height() >> halves);
-    } else {
-      // Image too big for IPC message, but caller didn't request resize;
-      // pre-delete image so DecodeImageAndSend() will send an error.
-      decoded_image.reset();
-      LOG(ERROR) << "Decoded image too large for IPC message";
-    }
-  }
-
-  return decoded_image;
-}
-
-// static
-void ChromeContentUtilityClient::DecodeImageAndSend(
-    const std::vector<unsigned char>& encoded_data,
-    bool shrink_to_fit,
-    int request_id) {
-  SkBitmap decoded_image = DecodeImage(encoded_data, shrink_to_fit);
-
-  if (decoded_image.empty()) {
-    Send(new ChromeUtilityHostMsg_DecodeImage_Failed(request_id));
-  } else {
-    Send(new ChromeUtilityHostMsg_DecodeImage_Succeeded(decoded_image,
-                                                        request_id));
-  }
-  ReleaseProcessIfNeeded();
-}
-
-void ChromeContentUtilityClient::OnDecodeImage(
-    const std::vector<unsigned char>& encoded_data,
-    bool shrink_to_fit,
-    int request_id) {
-  content::UtilityThread::Get()->EnsureBlinkInitialized();
-  DecodeImageAndSend(encoded_data, shrink_to_fit, request_id);
 }
 
 #if defined(OS_CHROMEOS)
@@ -304,27 +243,6 @@ void ChromeContentUtilityClient::OnCreateZipFile(
     Send(new ChromeUtilityHostMsg_CreateZipFile_Succeeded());
   else
     Send(new ChromeUtilityHostMsg_CreateZipFile_Failed());
-  ReleaseProcessIfNeeded();
-}
-#endif  // defined(OS_CHROMEOS)
-
-#if defined(OS_CHROMEOS)
-void ChromeContentUtilityClient::OnRobustJPEGDecodeImage(
-    const std::vector<unsigned char>& encoded_data,
-    int request_id) {
-  // Our robust jpeg decoding is using IJG libjpeg.
-  if (!encoded_data.empty()) {
-    scoped_ptr<SkBitmap> decoded_image(gfx::JPEGCodecRobustSlow::Decode(
-        &encoded_data[0], encoded_data.size()));
-    if (!decoded_image.get() || decoded_image->empty()) {
-      Send(new ChromeUtilityHostMsg_DecodeImage_Failed(request_id));
-    } else {
-      Send(new ChromeUtilityHostMsg_DecodeImage_Succeeded(*decoded_image,
-                                                          request_id));
-    }
-  } else {
-    Send(new ChromeUtilityHostMsg_DecodeImage_Failed(request_id));
-  }
   ReleaseProcessIfNeeded();
 }
 #endif  // defined(OS_CHROMEOS)

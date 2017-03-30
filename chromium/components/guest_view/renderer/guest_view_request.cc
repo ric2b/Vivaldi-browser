@@ -4,6 +4,7 @@
 
 #include "components/guest_view/renderer/guest_view_request.h"
 
+#include <tuple>
 #include <utility>
 
 #include "components/guest_view/common/guest_view_messages.h"
@@ -12,7 +13,6 @@
 #include "content/public/renderer/render_view.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebRemoteFrame.h"
-#include "third_party/WebKit/public/web/WebScopedMicrotaskSuppression.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
 namespace guest_view {
@@ -42,7 +42,8 @@ void GuestViewRequest::ExecuteCallbackIfAvailable(
     return;
 
   v8::Context::Scope context_scope(context);
-  blink::WebScopedMicrotaskSuppression suppression;
+  v8::MicrotasksScope microtasks(
+      isolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
 
   callback->Call(context->Global(), argc, argv.get());
 }
@@ -83,7 +84,7 @@ void GuestViewAttachRequest::HandleResponse(const IPC::Message& message) {
     return;
 
   content::RenderView* guest_proxy_render_view =
-      content::RenderView::FromRoutingID(base::get<1>(param));
+      content::RenderView::FromRoutingID(std::get<1>(param));
   // TODO(fsamuel): Should we be reporting an error to JavaScript or DCHECKing?
   if (!guest_proxy_render_view)
     return;

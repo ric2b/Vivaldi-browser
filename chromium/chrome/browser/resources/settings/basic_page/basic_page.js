@@ -12,9 +12,6 @@
  *      <settings-basic-page prefs="{{prefs}}"></settings-basic-page>
  *      ... other pages ...
  *    </iron-animated-pages>
- *
- * @group Chrome Settings Elements
- * @element settings-basic-page
  */
 Polymer({
   is: 'settings-basic-page',
@@ -49,7 +46,20 @@ Polymer({
 
   },
 
-  behaviors: [I18nBehavior, SettingsPageVisibility],
+  /**
+   * @type {string} Selector to get the sections.
+   * TODO(michaelpg): replace duplicate docs with @override once b/24294625
+   * is fixed.
+   */
+  sectionSelector: 'settings-section',
+
+  /** @override */
+  attached: function() {
+    /** @override */
+    this.scroller = this.parentElement;
+  },
+
+  behaviors: [I18nBehavior, SettingsPageVisibility, RoutableBehavior],
 
   onResetDone_: function() {
     this.showResetProfileBanner_ = false;

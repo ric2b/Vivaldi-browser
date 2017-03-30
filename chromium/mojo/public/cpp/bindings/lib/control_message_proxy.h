@@ -7,8 +7,8 @@
 
 #include <stdint.h>
 
+#include "base/macros.h"
 #include "mojo/public/cpp/bindings/callback.h"
-#include "mojo/public/cpp/system/macros.h"
 
 namespace mojo {
 
@@ -29,7 +29,7 @@ class ControlMessageProxy {
   // Not owned.
   MessageReceiverWithResponder* receiver_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ControlMessageProxy);
+  DISALLOW_COPY_AND_ASSIGN(ControlMessageProxy);
 };
 
 }  // namespace internal

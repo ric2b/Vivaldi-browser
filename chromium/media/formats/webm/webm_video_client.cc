@@ -33,7 +33,7 @@ void WebMVideoClient::Reset() {
 bool WebMVideoClient::InitializeConfig(
     const std::string& codec_id,
     const std::vector<uint8_t>& codec_private,
-    bool is_encrypted,
+    const EncryptionScheme& encryption_scheme,
     VideoDecoderConfig* config) {
   DCHECK(config);
 
@@ -44,7 +44,9 @@ bool WebMVideoClient::InitializeConfig(
     profile = VP8PROFILE_ANY;
   } else if (codec_id == "V_VP9") {
     video_codec = kCodecVP9;
-    profile = VP9PROFILE_ANY;
+    // TODO(servolk): Find a way to read actual VP9 profile from WebM.
+    // crbug.com/592074
+    profile = VP9PROFILE_PROFILE0;
   } else {
     MEDIA_LOG(ERROR, media_log_) << "Unsupported video codec_id " << codec_id;
     return false;
@@ -93,7 +95,7 @@ bool WebMVideoClient::InitializeConfig(
 
   config->Initialize(video_codec, profile, format, COLOR_SPACE_HD_REC709,
                      coded_size, visible_rect, natural_size, codec_private,
-                     is_encrypted);
+                     encryption_scheme);
   return config->IsValidConfig();
 }
 

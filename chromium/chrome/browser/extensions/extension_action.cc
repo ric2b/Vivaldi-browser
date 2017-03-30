@@ -34,7 +34,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_source.h"
-#include "ui/gfx/ipc/gfx_param_traits.h"
+#include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 #include "ui/gfx/skbitmap_operations.h"
 #include "url/gurl.h"
 
@@ -291,7 +291,7 @@ bool ExtensionAction::HasIcon(int tab_id) const {
 }
 
 void ExtensionAction::SetDefaultIconForTest(
-    scoped_ptr<ExtensionIconSet> default_icon) {
+    std::unique_ptr<ExtensionIconSet> default_icon) {
   default_icon_ = std::move(default_icon);
 }
 

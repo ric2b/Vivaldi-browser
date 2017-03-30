@@ -22,8 +22,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "cc/surfaces/surface_id.h"
-#include "content/browser/compositor/browser_compositor_view_mac.h"
-#include "content/browser/compositor/delegated_frame_host.h"
+#include "content/browser/renderer_host/browser_compositor_view_mac.h"
+#include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/input/mouse_wheel_rails_filter_mac.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/content_export.h"
@@ -80,8 +80,6 @@ class Layer;
 
   // Is YES if there was a mouse-down as yet unbalanced with a mouse-up.
   BOOL hasOpenMouseDown_;
-
-  NSWindow* lastWindow_;  // weak
 
   // The cursor for the page. This is passed up from the renderer.
   base::scoped_nsobject<NSCursor> currentCursor_;
@@ -143,12 +141,6 @@ class Layer;
   // etc.
   content::EditCommands editCommands_;
 
-  // The plugin that currently has focus (-1 if no plugin has focus).
-  int focusedPluginIdentifier_;
-
-  // Whether or not plugin IME is currently enabled active.
-  BOOL pluginImeActive_;
-
   // Whether the previous mouse event was ignored due to hitTest check.
   BOOL mouseEventWasIgnored_;
 
@@ -204,13 +196,6 @@ class Layer;
 - (void)cancelComposition;
 // Confirm ongoing composition.
 - (void)confirmComposition;
-// Enables or disables plugin IME.
-- (void)setPluginImeActive:(BOOL)active;
-// Updates the current plugin focus state.
-- (void)pluginFocusChanged:(BOOL)focused forPlugin:(int)pluginId;
-// Evaluates the event in the context of plugin IME, if plugin IME is enabled.
-// Returns YES if the event was handled.
-- (BOOL)postProcessEventForPluginIme:(NSEvent*)event;
 - (void)updateCursor:(NSCursor*)cursor;
 - (NSRect)firstViewRectForCharacterRange:(NSRange)theRange
                              actualRange:(NSRangePointer)actualRange;
@@ -285,8 +270,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   gfx::Rect GetViewBounds() const override;
   void SetShowingContextMenu(bool showing) override;
   void SetActive(bool active) override;
-  void SetWindowVisibility(bool visible) override;
-  void WindowFrameChanged() override;
   void ShowDefinitionForSelection() override;
   bool SupportsSpeech() const override;
   void SpeakSelection() override;
@@ -298,8 +281,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
                    const gfx::Rect& pos) override;
   void InitAsFullscreen(RenderWidgetHostView* reference_host_view) override;
-  void MovePluginWindows(const std::vector<WebPluginGeometry>& moves,
-                         const int owner_widget_id) override;
   void Focus() override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
@@ -334,10 +315,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
                              scoped_ptr<cc::CompositorFrame> frame) override;
   void ClearCompositorFrame() override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
-      BrowserAccessibilityDelegate* delegate) override;
+      BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
   gfx::Point AccessibilityOriginInScreen(const gfx::Rect& bounds) override;
-  bool PostProcessEventForPluginIme(
-      const NativeWebKeyboardEvent& event) override;
 
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
   void GetScreenInfo(blink::WebScreenInfo* results) override;
@@ -350,6 +329,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void UnlockMouse() override;
   void WheelEventAck(const blink::WebMouseWheelEvent& event,
                      InputEventAckState ack_result) override;
+  void GestureEventAck(const blink::WebGestureEvent& event,
+                       InputEventAckState ack_result) override;
 
   scoped_ptr<SyntheticGestureTarget> CreateSyntheticGestureTarget() override;
 
@@ -361,6 +342,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   bool ShouldRouteEvent(const blink::WebInputEvent& event) const;
   void ProcessMouseEvent(const blink::WebMouseEvent& event) override;
   void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) override;
+  void ProcessTouchEvent(const blink::WebTouchEvent& event,
+                         const ui::LatencyInfo& latency) override;
+  void ProcessGestureEvent(const blink::WebGestureEvent& event,
+                           const ui::LatencyInfo& latency) override;
   void TransformPointToLocalCoordSpace(const gfx::Point& point,
                                        cc::SurfaceId original_surface,
                                        gfx::Point* transformed_point) override;
@@ -380,9 +365,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void KillSelf();
 
   void SetTextInputActive(bool active);
-
-  // Sends completed plugin IME notification and text back to the renderer.
-  void PluginImeCompositionCompleted(const base::string16& text, int plugin_id);
 
   const std::string& selected_text() const { return selected_text_; }
   const gfx::Range& composition_range() const { return composition_range_; }
@@ -505,6 +487,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // DelegatedFrameHostClient implementation.
   ui::Layer* DelegatedFrameHostGetLayer() const override;
   bool DelegatedFrameHostIsVisible() const override;
+  SkColor DelegatedFrameHostGetGutterColor(SkColor color) const override;
   gfx::Size DelegatedFrameHostDesiredSizeInDIP() const override;
   bool DelegatedFrameCanCreateResizeLock() const override;
   scoped_ptr<ResizeLock> DelegatedFrameHostCreateResizeLock(
@@ -555,8 +538,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void DestroyBrowserCompositorView();
 
   // IPC message handlers.
-  void OnPluginFocusChanged(bool focused, int plugin_id);
-  void OnStartPluginIme();
   void OnGetRenderedTextCompleted(const std::string& text);
 
   // Send updated vsync parameters to the renderer.
@@ -585,6 +566,9 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // True when this view acts as a platform view hack for a
   // RenderWidgetHostViewGuest.
   bool is_guest_view_hack_;
+
+  // True if gestures are generated for mouse wheel events.
+  bool wheel_gestures_enabled_;
 
   // selected text on the renderer.
   std::string selected_text_;

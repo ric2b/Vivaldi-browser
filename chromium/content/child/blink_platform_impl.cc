@@ -6,13 +6,14 @@
 
 #include <math.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/rand_util.h"
@@ -42,7 +43,6 @@
 #include "content/child/child_thread_impl.h"
 #include "content/child/content_child_helpers.h"
 #include "content/child/geofencing/web_geofencing_provider_impl.h"
-#include "content/child/navigator_connect/service_port_provider.h"
 #include "content/child/notifications/notification_dispatcher.h"
 #include "content/child/notifications/notification_manager.h"
 #include "content/child/permissions/permission_dispatcher.h"
@@ -50,14 +50,13 @@
 #include "content/child/push_messaging/push_dispatcher.h"
 #include "content/child/push_messaging/push_provider.h"
 #include "content/child/thread_safe_sender.h"
-#include "content/child/web_discardable_memory_impl.h"
 #include "content/child/web_url_loader_impl.h"
 #include "content/child/web_url_request_util.h"
 #include "content/child/websocket_bridge.h"
 #include "content/child/worker_thread_registry.h"
 #include "content/public/common/content_client.h"
 #include "net/base/data_url.h"
-#include "net/base/ip_address_number.h"
+#include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/base/port_util.h"
 #include "third_party/WebKit/public/platform/WebData.h"
@@ -107,6 +106,8 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_AX_DATE_TIME_FIELD_EMPTY_VALUE_TEXT;
     case WebLocalizedString::AXDayOfMonthFieldText:
       return IDS_AX_DAY_OF_MONTH_FIELD_TEXT;
+    case WebLocalizedString::AXDefaultActionVerb:
+      return IDS_AX_DEFAULT_ACTION_VERB;
     case WebLocalizedString::AXHeadingText:
       return IDS_AX_ROLE_HEADING;
     case WebLocalizedString::AXHourFieldText:
@@ -197,6 +198,8 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_AX_MINUTE_FIELD_TEXT;
     case WebLocalizedString::AXMonthFieldText:
       return IDS_AX_MONTH_FIELD_TEXT;
+    case WebLocalizedString::AXPopUpButtonActionVerb:
+      return IDS_AX_POP_UP_BUTTON_ACTION_VERB;
     case WebLocalizedString::AXRadioButtonActionVerb:
       return IDS_AX_RADIO_BUTTON_ACTION_VERB;
     case WebLocalizedString::AXSecondFieldText:
@@ -223,6 +226,8 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_FORM_DATE_FORMAT_YEAR;
     case WebLocalizedString::DetailsLabel:
       return IDS_DETAILS_WITHOUT_SUMMARY_LABEL;
+    case WebLocalizedString::DownloadButtonLabel:
+      return IDS_DOWNLOAD_BUTTON_LABEL;
     case WebLocalizedString::FileButtonChooseFileLabel:
       return IDS_FORM_FILE_BUTTON_LABEL;
     case WebLocalizedString::FileButtonChooseMultipleFilesLabel:
@@ -393,7 +398,7 @@ void BlinkPlatformImpl::InternalInit() {
 void BlinkPlatformImpl::WaitUntilWebThreadTLSUpdate(
     scheduler::WebThreadBase* thread) {
   base::WaitableEvent event(false, false);
-  thread->TaskRunner()->PostTask(
+  thread->GetTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(&BlinkPlatformImpl::UpdateWebThreadTLS, base::Unretained(this),
                  base::Unretained(thread), base::Unretained(&event)));
@@ -416,7 +421,7 @@ WebURLLoader* BlinkPlatformImpl::createURLLoader() {
   // data URLs to bypass the ResourceDispatcher.
   return new WebURLLoaderImpl(
       child_thread ? child_thread->resource_dispatcher() : NULL,
-      make_scoped_ptr(currentThread()->taskRunner()->clone()));
+      base::WrapUnique(currentThread()->getWebTaskRunner()->clone()));
 }
 
 blink::WebSocketHandle* BlinkPlatformImpl::createWebSocketHandle() {
@@ -424,12 +429,7 @@ blink::WebSocketHandle* BlinkPlatformImpl::createWebSocketHandle() {
 }
 
 WebString BlinkPlatformImpl::userAgent() {
-  CR_DEFINE_STATIC_LOCAL(
-      blink::WebString, user_agent,
-      (blink::WebString::fromUTF8(GetContentClient()->GetUserAgent())));
-  DCHECK(user_agent ==
-         blink::WebString::fromUTF8(GetContentClient()->GetUserAgent()));
-  return user_agent;
+  return blink::WebString::fromUTF8(GetContentClient()->GetUserAgent());
 }
 
 WebData BlinkPlatformImpl::parseDataURL(const WebURL& url,
@@ -452,10 +452,10 @@ WebURLError BlinkPlatformImpl::cancelledError(
 
 bool BlinkPlatformImpl::isReservedIPAddress(
     const blink::WebString& host) const {
-  net::IPAddressNumber address;
-  if (!net::ParseURLHostnameToNumber(host.utf8(), &address))
+  net::IPAddress address;
+  if (!net::ParseURLHostnameToAddress(host.utf8(), &address))
     return false;
-  return net::IsIPAddressReserved(address);
+  return address.IsReserved();
 }
 
 bool BlinkPlatformImpl::portAllowed(const blink::WebURL& url) const {
@@ -467,8 +467,17 @@ bool BlinkPlatformImpl::portAllowed(const blink::WebURL& url) const {
   return net::IsPortAllowedForScheme(gurl.EffectiveIntPort(), gurl.scheme());
 }
 
+bool BlinkPlatformImpl::parseMultipartHeadersFromBody(
+    const char* bytes,
+    size_t size,
+    blink::WebURLResponse* response,
+    size_t* end) const {
+  return WebURLLoaderImpl::ParseMultipartHeadersFromBody(
+      bytes, size, response, end);
+}
+
 blink::WebThread* BlinkPlatformImpl::createThread(const char* name) {
-  scoped_ptr<WebThreadImplForWorkerScheduler> thread(
+  std::unique_ptr<WebThreadImplForWorkerScheduler> thread(
       new WebThreadImplForWorkerScheduler(name));
   thread->Init();
   WaitUntilWebThreadTLSUpdate(thread.get());
@@ -501,14 +510,14 @@ void BlinkPlatformImpl::addTraceLogEnabledStateObserver(
     TraceLogEnabledStateObserver* observer) {
   TraceLogObserverAdapter* adapter = new TraceLogObserverAdapter(observer);
   bool did_insert =
-      trace_log_observers_.add(observer, make_scoped_ptr(adapter)).second;
+      trace_log_observers_.add(observer, base::WrapUnique(adapter)).second;
   DCHECK(did_insert);
   base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(adapter);
 }
 
 void BlinkPlatformImpl::removeTraceLogEnabledStateObserver(
     TraceLogEnabledStateObserver* observer) {
-  scoped_ptr<TraceLogObserverAdapter> adapter =
+  std::unique_ptr<TraceLogObserverAdapter> adapter =
       trace_log_observers_.take_and_erase(observer);
   DCHECK(adapter);
   DCHECK(base::trace_event::TraceLog::GetInstance()->HasEnabledStateObserver(
@@ -885,11 +894,6 @@ blink::WebPushProvider* BlinkPlatformImpl::pushProvider() {
                                               push_dispatcher_.get());
 }
 
-blink::WebServicePortProvider* BlinkPlatformImpl::createServicePortProvider(
-    blink::WebServicePortProviderClient* client) {
-  return new ServicePortProvider(client, main_thread_task_runner_);
-}
-
 blink::WebPermissionClient* BlinkPlatformImpl::permissionClient() {
   if (!permission_client_.get())
     return nullptr;
@@ -942,7 +946,7 @@ long long BlinkPlatformImpl::databaseGetFileSize(
 }
 
 long long BlinkPlatformImpl::databaseGetSpaceAvailableForOrigin(
-    const blink::WebString& origin_identifier) {
+    const blink::WebSecurityOrigin& origin) {
   return 0;
 }
 
@@ -965,11 +969,6 @@ size_t BlinkPlatformImpl::actualMemoryUsageMB() {
 
 size_t BlinkPlatformImpl::numberOfProcessors() {
   return static_cast<size_t>(base::SysInfo::NumberOfProcessors());
-}
-
-blink::WebDiscardableMemory*
-BlinkPlatformImpl::allocateAndLockDiscardableMemory(size_t bytes) {
-  return content::WebDiscardableMemoryImpl::CreateLockedMemory(bytes).release();
 }
 
 size_t BlinkPlatformImpl::maxDecodedImageBytes() {

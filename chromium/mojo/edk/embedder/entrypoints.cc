@@ -42,6 +42,17 @@ MojoResult MojoWaitMany(const MojoHandle* handles,
                           signals_states);
 }
 
+MojoResult MojoWatch(MojoHandle handle,
+                     MojoHandleSignals signals,
+                     MojoWatchCallback callback,
+                     uintptr_t context) {
+  return g_core->Watch(handle, signals, callback, context);
+}
+
+MojoResult MojoCancelWatch(MojoHandle handle, uintptr_t context) {
+  return g_core->CancelWatch(handle, context);
+}
+
 MojoResult MojoCreateWaitSet(MojoHandle* wait_set_handle) {
   return g_core->CreateWaitSet(wait_set_handle);
 }
@@ -90,6 +101,10 @@ MojoResult MojoReadMessage(MojoHandle message_pipe_handle,
                            MojoReadMessageFlags flags) {
   return g_core->ReadMessage(
       message_pipe_handle, bytes, num_bytes, handles, num_handles, flags);
+}
+
+MojoResult MojoFuseMessagePipes(MojoHandle handle0, MojoHandle handle1) {
+  return g_core->FuseMessagePipes(handle0, handle1);
 }
 
 MojoResult MojoCreateDataPipe(const MojoCreateDataPipeOptions* options,

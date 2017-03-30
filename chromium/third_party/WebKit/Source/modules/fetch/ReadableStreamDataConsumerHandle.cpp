@@ -5,16 +5,15 @@
 #include "modules/fetch/ReadableStreamDataConsumerHandle.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ReadableStreamOperations.h"
 #include "bindings/core/v8/ScopedPersistent.h"
 #include "bindings/core/v8/ScriptFunction.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8BindingMacros.h"
 #include "bindings/core/v8/V8IteratorResultValue.h"
-#include "bindings/core/v8/V8RecursionScope.h"
 #include "bindings/core/v8/V8Uint8Array.h"
 #include "core/dom/DOMTypedArray.h"
+#include "core/streams/ReadableStreamOperations.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebThread.h"
@@ -50,7 +49,7 @@ public:
             bool done;
             v8::Local<v8::Value> item = v.v8Value();
             ASSERT(item->IsObject());
-            v8::Local<v8::Value> value = v8CallOrCrash(v8UnpackIteratorResult(v.scriptState(), item.As<v8::Object>(), &done));
+            v8::Local<v8::Value> value = v8CallOrCrash(v8UnpackIteratorResult(v.getScriptState(), item.As<v8::Object>(), &done));
             if (done) {
                 readingContext->onReadDone();
                 return v;
@@ -221,7 +220,7 @@ public:
     void notifyLater()
     {
         ASSERT(m_client);
-        Platform::current()->currentThread()->taskRunner()->postTask(BLINK_FROM_HERE, bind(&ReadingContext::notify, PassRefPtr<ReadingContext>(this)));
+        Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&ReadingContext::notify, PassRefPtr<ReadingContext>(this)));
     }
 
 private:

@@ -4,13 +4,14 @@
 
 #include "chrome/browser/profiles/off_the_record_profile_impl.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -73,7 +74,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #endif
 
-#if defined(ENABLE_CONFIGURATION_POLICY) && !defined(OS_CHROMEOS)
+#if !defined(OS_CHROMEOS)
 #include "chrome/browser/policy/cloud/user_cloud_policy_manager_factory.h"
 #endif
 
@@ -118,6 +119,7 @@ OffTheRecordProfileImpl::OffTheRecordProfileImpl(Profile* real_profile)
     : profile_(real_profile),
       prefs_(PrefServiceSyncableIncognitoFromProfile(real_profile)),
       start_time_(Time::Now()) {
+  BrowserContext::Initialize(this, profile_->GetPath());
   // Register on BrowserContext.
   user_prefs::UserPrefs::Set(this, prefs_);
 }
@@ -130,7 +132,7 @@ void OffTheRecordProfileImpl::Init() {
   // we have to instantiate OffTheRecordProfileIOData::Handle here after a ctor.
   InitIoData();
 
-#if defined(ENABLE_CONFIGURATION_POLICY) && !defined(OS_CHROMEOS)
+#if !defined(OS_CHROMEOS)
   // Because UserCloudPolicyManager is in a component, it cannot access
   // GetOriginalProfile. Instead, we have to inject this relation here.
   policy::UserCloudPolicyManagerFactory::RegisterForOffTheRecordBrowserContext(
@@ -243,10 +245,10 @@ base::FilePath OffTheRecordProfileImpl::GetPath() const {
   return profile_->GetPath();
 }
 
-scoped_ptr<content::ZoomLevelDelegate>
+std::unique_ptr<content::ZoomLevelDelegate>
 OffTheRecordProfileImpl::CreateZoomLevelDelegate(
     const base::FilePath& partition_path) {
-  return make_scoped_ptr(new ChromeZoomLevelOTRDelegate(
+  return base::WrapUnique(new ChromeZoomLevelOTRDelegate(
       ui_zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr()));
 }
 
@@ -325,14 +327,6 @@ net::URLRequestContextGetter* OffTheRecordProfileImpl::CreateRequestContext(
 }
 
 net::URLRequestContextGetter*
-    OffTheRecordProfileImpl::GetRequestContextForRenderProcess(
-        int renderer_child_id) {
-  content::RenderProcessHost* rph = content::RenderProcessHost::FromID(
-      renderer_child_id);
-  return rph->GetStoragePartition()->GetURLRequestContext();
-}
-
-net::URLRequestContextGetter*
     OffTheRecordProfileImpl::GetMediaRequestContext() {
   // In OTR mode, media request context is the same as the original one.
   return GetRequestContext();
@@ -342,7 +336,8 @@ net::URLRequestContextGetter*
     OffTheRecordProfileImpl::GetMediaRequestContextForRenderProcess(
         int renderer_child_id) {
   // In OTR mode, media request context is the same as the original one.
-  return GetRequestContextForRenderProcess(renderer_child_id);
+  return content::RenderProcessHost::FromID(renderer_child_id)->
+      GetStoragePartition()->GetURLRequestContext();
 }
 
 net::URLRequestContextGetter*
@@ -517,7 +512,7 @@ class GuestSessionProfile : public OffTheRecordProfileImpl {
 
  private:
   // The guest user should be able to customize Chrome OS preferences.
-  scoped_ptr<chromeos::Preferences> chromeos_preferences_;
+  std::unique_ptr<chromeos::Preferences> chromeos_preferences_;
 };
 #endif
 

@@ -25,14 +25,21 @@ using chromeos::AudioNode;
 using chromeos::AudioNodeList;
 
 const uint64_t kJabraSpeaker1Id = 30001;
+const uint64_t kJabraSpeaker1StableDeviceId = 80001;
 const uint64_t kJabraSpeaker2Id = 30002;
+const uint64_t kJabraSpeaker2StableDeviceId = 80002;
 const uint64_t kHDMIOutputId = 30003;
+const uint64_t kHDMIOutputStabeDevicelId = 80003;
 const uint64_t kJabraMic1Id = 40001;
+const uint64_t kJabraMic1StableDeviceId = 90001;
 const uint64_t kJabraMic2Id = 40002;
+const uint64_t kJabraMic2StableDeviceId = 90002;
 const uint64_t kWebcamMicId = 40003;
+const uint64_t kWebcamMicStableDeviceId = 90003;
 
 const AudioNode kJabraSpeaker1(false,
                                kJabraSpeaker1Id,
+                               kJabraSpeaker1StableDeviceId,
                                "Jabra Speaker",
                                "USB",
                                "Jabra Speaker 1",
@@ -41,6 +48,7 @@ const AudioNode kJabraSpeaker1(false,
 
 const AudioNode kJabraSpeaker2(false,
                                kJabraSpeaker2Id,
+                               kJabraSpeaker2StableDeviceId,
                                "Jabra Speaker",
                                "USB",
                                "Jabra Speaker 2",
@@ -49,20 +57,34 @@ const AudioNode kJabraSpeaker2(false,
 
 const AudioNode kHDMIOutput(false,
                             kHDMIOutputId,
+                            kHDMIOutputStabeDevicelId,
                             "HDMI output",
                             "HDMI",
                             "HDA Intel MID",
                             false,
                             0);
 
-const AudioNode
-    kJabraMic1(true, kJabraMic1Id, "Jabra Mic", "USB", "Jabra Mic 1", false, 0);
+const AudioNode kJabraMic1(true,
+                           kJabraMic1Id,
+                           kJabraMic1StableDeviceId,
+                           "Jabra Mic",
+                           "USB",
+                           "Jabra Mic 1",
+                           false,
+                           0);
 
-const AudioNode
-    kJabraMic2(true, kJabraMic2Id, "Jabra Mic", "USB", "Jabra Mic 2", false, 0);
+const AudioNode kJabraMic2(true,
+                           kJabraMic2Id,
+                           kJabraMic2StableDeviceId,
+                           "Jabra Mic",
+                           "USB",
+                           "Jabra Mic 2",
+                           false,
+                           0);
 
 const AudioNode kUSBCameraMic(true,
                               kWebcamMicId,
+                              kWebcamMicStableDeviceId,
                               "Webcam Mic",
                               "USB",
                               "Logitech Webcam",
@@ -187,7 +209,8 @@ IN_PROC_BROWSER_TEST_F(AudioApiTest, OnInputMuteChanged) {
 
   // Set the jabra mic to be the active input device.
   AudioDevice jabra_mic(kJabraMic1);
-  cras_audio_handler_->SwitchToDevice(jabra_mic, true);
+  cras_audio_handler_->SwitchToDevice(
+      jabra_mic, true, chromeos::CrasAudioHandler::ACTIVATE_BY_USER);
   EXPECT_EQ(kJabraMic1.id, cras_audio_handler_->GetPrimaryActiveInputNode());
 
   // Un-mute the input.

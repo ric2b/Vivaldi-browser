@@ -53,6 +53,13 @@ class CONTENT_EXPORT InputRouterClient {
 
   // Called when a renderer fling has terminated.
   virtual void DidStopFlinging() = 0;
+
+  // Called when the input router generates an event. It is intended that the
+  // client will do some processing on |gesture_event| and then send it back
+  // to the InputRouter via SendGestureEvent.
+  virtual void ForwardGestureEventWithLatencyInfo(
+      const blink::WebGestureEvent& gesture_event,
+      const ui::LatencyInfo& latency_info) = 0;
 };
 
 } // namespace content

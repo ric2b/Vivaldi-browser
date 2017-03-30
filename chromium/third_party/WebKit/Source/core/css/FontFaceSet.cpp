@@ -49,9 +49,9 @@ static const char defaultFontFamily[] = "sans-serif";
 
 class LoadFontPromiseResolver final : public FontFace::LoadFontCallback {
 public:
-    static PassRefPtrWillBeRawPtr<LoadFontPromiseResolver> create(FontFaceArray faces, ScriptState* scriptState)
+    static LoadFontPromiseResolver* create(FontFaceArray faces, ScriptState* scriptState)
     {
-        return adoptRefWillBeNoop(new LoadFontPromiseResolver(faces, scriptState));
+        return new LoadFontPromiseResolver(faces, scriptState);
     }
 
     void loadFonts(ExecutionContext*);
@@ -71,10 +71,10 @@ private:
         m_fontFaces.swap(faces);
     }
 
-    WillBeHeapVector<RefPtrWillBeMember<FontFace>> m_fontFaces;
+    HeapVector<Member<FontFace>> m_fontFaces;
     int m_numLoading;
     bool m_errorOccured;
-    PersistentWillBeMember<ScriptPromiseResolver> m_resolver;
+    Member<ScriptPromiseResolver> m_resolver;
 };
 
 void LoadFontPromiseResolver::loadFonts(ExecutionContext* context)
@@ -117,7 +117,7 @@ FontFaceSet::FontFaceSet(Document& document)
     : ActiveDOMObject(&document)
     , m_shouldFireLoadingEvent(false)
     , m_isLoading(false)
-    , m_ready(new ReadyProperty(executionContext(), this, ReadyProperty::Ready))
+    , m_ready(new ReadyProperty(getExecutionContext(), this, ReadyProperty::Ready))
     , m_asyncRunner(AsyncMethodRunner<FontFaceSet>::create(this, &FontFaceSet::handlePendingEventsAndPromises))
 {
     suspendIfNeeded();
@@ -132,12 +132,12 @@ FontFaceSet::~FontFaceSet()
 
 Document* FontFaceSet::document() const
 {
-    return toDocument(executionContext());
+    return toDocument(getExecutionContext());
 }
 
 bool FontFaceSet::inActiveDocumentContext() const
 {
-    ExecutionContext* context = executionContext();
+    ExecutionContext* context = getExecutionContext();
     return context && toDocument(context)->isActive();
 }
 
@@ -152,15 +152,15 @@ const AtomicString& FontFaceSet::interfaceName() const
     return EventTargetNames::FontFaceSet;
 }
 
-ExecutionContext* FontFaceSet::executionContext() const
+ExecutionContext* FontFaceSet::getExecutionContext() const
 {
-    return ActiveDOMObject::executionContext();
+    return ActiveDOMObject::getExecutionContext();
 }
 
 AtomicString FontFaceSet::status() const
 {
-    DEFINE_STATIC_LOCAL(AtomicString, loading, ("loading", AtomicString::ConstructFromLiteral));
-    DEFINE_STATIC_LOCAL(AtomicString, loaded, ("loaded", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(AtomicString, loading, ("loading"));
+    DEFINE_STATIC_LOCAL(AtomicString, loaded, ("loaded"));
     return m_isLoading ? loading : loaded;
 }
 
@@ -183,7 +183,7 @@ bool FontFaceSet::shouldSignalReady() const
 {
     if (!m_loadingFonts.isEmpty())
         return false;
-    return m_isLoading || m_ready->state() == ReadyProperty::Pending;
+    return m_isLoading || m_ready->getState() == ReadyProperty::Pending;
 }
 
 void FontFaceSet::handlePendingEventsAndPromises()
@@ -235,19 +235,19 @@ void FontFaceSet::loadError(FontFace* fontFace)
     removeFromLoadingFonts(fontFace);
 }
 
-void FontFaceSet::addToLoadingFonts(PassRefPtrWillBeRawPtr<FontFace> fontFace)
+void FontFaceSet::addToLoadingFonts(FontFace* fontFace)
 {
     if (!m_isLoading) {
         m_isLoading = true;
         m_shouldFireLoadingEvent = true;
-        if (m_ready->state() != ReadyProperty::Pending)
+        if (m_ready->getState() != ReadyProperty::Pending)
             m_ready->reset();
         handlePendingEventsAndPromisesSoon();
     }
     m_loadingFonts.add(fontFace);
 }
 
-void FontFaceSet::removeFromLoadingFonts(PassRefPtrWillBeRawPtr<FontFace> fontFace)
+void FontFaceSet::removeFromLoadingFonts(FontFace* fontFace)
 {
     m_loadingFonts.remove(fontFace);
     if (m_loadingFonts.isEmpty())
@@ -259,7 +259,7 @@ ScriptPromise FontFaceSet::ready(ScriptState* scriptState)
     return m_ready->promise(scriptState->world());
 }
 
-PassRefPtrWillBeRawPtr<FontFaceSet> FontFaceSet::addForBinding(ScriptState*, FontFace* fontFace, ExceptionState&)
+FontFaceSet* FontFaceSet::addForBinding(ScriptState*, FontFace* fontFace, ExceptionState&)
 {
     ASSERT(fontFace);
     if (!inActiveDocumentContext())
@@ -297,7 +297,7 @@ bool FontFaceSet::deleteForBinding(ScriptState*, FontFace* fontFace, ExceptionSt
     ASSERT(fontFace);
     if (!inActiveDocumentContext())
         return false;
-    WillBeHeapListHashSet<RefPtrWillBeMember<FontFace>>::iterator it = m_nonCSSConnectedFaces.find(fontFace);
+    HeapListHashSet<Member<FontFace>>::iterator it = m_nonCSSConnectedFaces.find(fontFace);
     if (it != m_nonCSSConnectedFaces.end()) {
         m_nonCSSConnectedFaces.remove(it);
         CSSFontSelector* fontSelector = document()->styleEngine().fontSelector();
@@ -318,7 +318,7 @@ bool FontFaceSet::hasForBinding(ScriptState*, FontFace* fontFace, ExceptionState
     return m_nonCSSConnectedFaces.contains(fontFace) || isCSSConnectedFontFace(fontFace);
 }
 
-const WillBeHeapListHashSet<RefPtrWillBeMember<FontFace>>& FontFaceSet::cssConnectedFontFaceList() const
+const HeapListHashSet<Member<FontFace>>& FontFaceSet::cssConnectedFontFaceList() const
 {
     Document* d = document();
     d->ensureStyleResolver(); // Flush pending style changes.
@@ -352,8 +352,8 @@ void FontFaceSet::fireDoneEventIfPossible()
         return;
 
     if (m_isLoading) {
-        RefPtrWillBeRawPtr<FontFaceSetLoadEvent> doneEvent = nullptr;
-        RefPtrWillBeRawPtr<FontFaceSetLoadEvent> errorEvent = nullptr;
+        FontFaceSetLoadEvent* doneEvent = nullptr;
+        FontFaceSetLoadEvent* errorEvent = nullptr;
         doneEvent = FontFaceSetLoadEvent::createForFontFaces(EventTypeNames::loadingdone, m_loadedFonts);
         m_loadedFonts.clear();
         if (!m_failedFonts.isEmpty()) {
@@ -366,7 +366,7 @@ void FontFaceSet::fireDoneEventIfPossible()
             dispatchEvent(errorEvent);
     }
 
-    if (m_ready->state() == ReadyProperty::Pending)
+    if (m_ready->getState() == ReadyProperty::Pending)
         m_ready->resolve(this);
 }
 
@@ -385,15 +385,15 @@ ScriptPromise FontFaceSet::load(ScriptState* scriptState, const String& fontStri
 
     FontFaceCache* fontFaceCache = document()->styleEngine().fontSelector()->fontFaceCache();
     FontFaceArray faces;
-    for (const FontFamily* f = &font.fontDescription().family(); f; f = f->next()) {
-        CSSSegmentedFontFace* segmentedFontFace = fontFaceCache->get(font.fontDescription(), f->family());
+    for (const FontFamily* f = &font.getFontDescription().family(); f; f = f->next()) {
+        CSSSegmentedFontFace* segmentedFontFace = fontFaceCache->get(font.getFontDescription(), f->family());
         if (segmentedFontFace)
             segmentedFontFace->match(text, faces);
     }
 
-    RefPtrWillBeRawPtr<LoadFontPromiseResolver> resolver = LoadFontPromiseResolver::create(faces, scriptState);
+    LoadFontPromiseResolver* resolver = LoadFontPromiseResolver::create(faces, scriptState);
     ScriptPromise promise = resolver->promise();
-    resolver->loadFonts(executionContext()); // After this, resolver->promise() may return null.
+    resolver->loadFonts(getExecutionContext()); // After this, resolver->promise() may return null.
     return promise;
 }
 
@@ -412,8 +412,8 @@ bool FontFaceSet::check(const String& fontString, const String& text, ExceptionS
     FontFaceCache* fontFaceCache = fontSelector->fontFaceCache();
 
     bool hasLoadedFaces = false;
-    for (const FontFamily* f = &font.fontDescription().family(); f; f = f->next()) {
-        CSSSegmentedFontFace* face = fontFaceCache->get(font.fontDescription(), f->family());
+    for (const FontFamily* f = &font.getFontDescription().family(); f; f = f->next()) {
+        CSSSegmentedFontFace* face = fontFaceCache->get(font.getFontDescription(), f->family());
         if (face) {
             if (!face->checkFont(text))
                 return false;
@@ -422,8 +422,8 @@ bool FontFaceSet::check(const String& fontString, const String& text, ExceptionS
     }
     if (hasLoadedFaces)
         return true;
-    for (const FontFamily* f = &font.fontDescription().family(); f; f = f->next()) {
-        if (fontSelector->isPlatformFontAvailable(font.fontDescription(), f->family()))
+    for (const FontFamily* f = &font.getFontDescription().family(); f; f = f->next()) {
+        if (fontSelector->isPlatformFontAvailable(font.getFontDescription(), f->family()))
             return true;
     }
     return false;
@@ -435,8 +435,8 @@ bool FontFaceSet::resolveFontStyle(const String& fontString, Font& font)
         return false;
 
     // Interpret fontString in the same way as the 'font' attribute of CanvasRenderingContext2D.
-    RefPtrWillBeRawPtr<MutableStylePropertySet> parsedStyle = MutableStylePropertySet::create(HTMLStandardMode);
-    CSSParser::parseValue(parsedStyle.get(), CSSPropertyFont, fontString, true, 0);
+    MutableStylePropertySet* parsedStyle = MutableStylePropertySet::create(HTMLStandardMode);
+    CSSParser::parseValue(parsedStyle, CSSPropertyFont, fontString, true, 0);
     if (parsedStyle->isEmpty())
         return false;
 
@@ -456,7 +456,7 @@ bool FontFaceSet::resolveFontStyle(const String& fontString, Font& font)
 
     style->setFontDescription(defaultFontDescription);
 
-    style->font().update(style->font().fontSelector());
+    style->font().update(style->font().getFontSelector());
 
     document()->ensureStyleResolver().computeFont(style.get(), *parsedStyle);
 
@@ -494,20 +494,20 @@ static const char* supplementName()
     return "FontFaceSet";
 }
 
-PassRefPtrWillBeRawPtr<FontFaceSet> FontFaceSet::from(Document& document)
+FontFaceSet* FontFaceSet::from(Document& document)
 {
-    RefPtrWillBeRawPtr<FontFaceSet> fonts = static_cast<FontFaceSet*>(SupplementType::from(document, supplementName()));
+    FontFaceSet* fonts = static_cast<FontFaceSet*>(Supplement<Document>::from(document, supplementName()));
     if (!fonts) {
         fonts = FontFaceSet::create(document);
-        SupplementType::provideTo(document, supplementName(), fonts);
+        Supplement<Document>::provideTo(document, supplementName(), fonts);
     }
 
-    return fonts.release();
+    return fonts;
 }
 
 void FontFaceSet::didLayout(Document& document)
 {
-    if (FontFaceSet* fonts = static_cast<FontFaceSet*>(SupplementType::from(document, supplementName())))
+    if (FontFaceSet* fonts = static_cast<FontFaceSet*>(Supplement<Document>::from(document, supplementName())))
         fonts->didLayout();
 }
 
@@ -516,9 +516,9 @@ FontFaceSetIterable::IterationSource* FontFaceSet::startIteration(ScriptState*, 
     // Setlike should iterate each item in insertion order, and items should
     // be keep on up to date. But since blink does not have a way to hook up CSS
     // modification, take a snapshot here, and make it ordered as follows.
-    WillBeHeapVector<RefPtrWillBeMember<FontFace>> fontFaces;
+    HeapVector<Member<FontFace>> fontFaces;
     if (inActiveDocumentContext()) {
-        const WillBeHeapListHashSet<RefPtrWillBeMember<FontFace>>& cssConnectedFaces = cssConnectedFontFaceList();
+        const HeapListHashSet<Member<FontFace>>& cssConnectedFaces = cssConnectedFontFaceList();
         fontFaces.reserveInitialCapacity(cssConnectedFaces.size() + m_nonCSSConnectedFaces.size());
         for (const auto& fontFace : cssConnectedFaces)
             fontFaces.append(fontFace);
@@ -528,7 +528,7 @@ FontFaceSetIterable::IterationSource* FontFaceSet::startIteration(ScriptState*, 
     return new IterationSource(fontFaces);
 }
 
-bool FontFaceSet::IterationSource::next(ScriptState*, RefPtrWillBeMember<FontFace>& key, RefPtrWillBeMember<FontFace>& value, ExceptionState&)
+bool FontFaceSet::IterationSource::next(ScriptState*, Member<FontFace>& key, Member<FontFace>& value, ExceptionState&)
 {
     if (m_fontFaces.size() <= m_index)
         return false;
@@ -538,16 +538,14 @@ bool FontFaceSet::IterationSource::next(ScriptState*, RefPtrWillBeMember<FontFac
 
 DEFINE_TRACE(FontFaceSet)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_ready);
     visitor->trace(m_loadingFonts);
     visitor->trace(m_loadedFonts);
     visitor->trace(m_failedFonts);
     visitor->trace(m_nonCSSConnectedFaces);
     visitor->trace(m_asyncRunner);
-    HeapSupplement<Document>::trace(visitor);
-#endif
     EventTargetWithInlineData::trace(visitor);
+    Supplement<Document>::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 

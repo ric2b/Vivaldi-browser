@@ -24,6 +24,7 @@
 #include "base/threading/thread.h"
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/command_buffer.h"
+#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/gpu_export.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/native_widget_types.h"
@@ -67,7 +68,7 @@ class SubscriptionRefSet;
 
 class CommandBufferServiceBase;
 class GpuMemoryBufferManager;
-class GpuScheduler;
+class CommandExecutor;
 class ImageFactory;
 class TransferBufferManagerInterface;
 
@@ -82,7 +83,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   explicit InProcessCommandBuffer(const scoped_refptr<Service>& service);
   ~InProcessCommandBuffer() override;
 
-  // If |surface| is not NULL, use it directly; in this case, the command
+  // If |surface| is not null, use it directly; in this case, the command
   // buffer gpu thread must be the same as the client thread. Otherwise create
   // a new GLSurface.
   bool Initialize(scoped_refptr<gfx::GLSurface> surface,
@@ -141,6 +142,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   class Service {
    public:
     Service();
+    explicit Service(const gpu::GpuPreferences& gpu_preferences);
     virtual ~Service();
 
     virtual void AddRef() const = 0;
@@ -159,6 +161,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
     virtual scoped_refptr<gles2::FramebufferCompletenessCache>
     framebuffer_completeness_cache() = 0;
     virtual SyncPointManager* sync_point_manager() = 0;
+    const GpuPreferences& gpu_preferences();
     scoped_refptr<gfx::GLShareGroup> share_group();
     scoped_refptr<gles2::MailboxManager> mailbox_manager();
     scoped_refptr<gles2::SubscriptionRefSet> subscription_ref_set();
@@ -166,6 +169,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
     gpu::gles2::ProgramCache* program_cache();
 
    private:
+    const GpuPreferences gpu_preferences_;
     scoped_refptr<gfx::GLShareGroup> share_group_;
     scoped_refptr<gles2::MailboxManager> mailbox_manager_;
     scoped_refptr<gles2::SubscriptionRefSet> subscription_ref_set_;
@@ -247,7 +251,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   // creation):
   bool context_lost_;
   scoped_refptr<TransferBufferManagerInterface> transfer_buffer_manager_;
-  scoped_ptr<GpuScheduler> gpu_scheduler_;
+  scoped_ptr<CommandExecutor> executor_;
   scoped_ptr<gles2::GLES2Decoder> decoder_;
   scoped_refptr<gfx::GLContext> context_;
   scoped_refptr<gfx::GLSurface> surface_;

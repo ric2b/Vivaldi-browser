@@ -61,40 +61,41 @@ template <typename T> class WebVector;
 
 class WebPlugin {
 public:
-    // Perform any initialization work given the container this plugin will use to
-    // communicate with renderer code. Plugins that return false here must
-    // subsequently return nullptr for the container() method.
+    // Initializes the plugin using |container| to communicate with the renderer
+    // code. |container| must own this plugin. |container| must not be nullptr.
+    //
+    // Returns true if a plugin (not necessarily this one) has been successfully
+    // initialized into |container|.
+    //
+    // NOTE: This method is subtle. This plugin may be marked for deletion via
+    // destroy() during initialization. When this occurs, container() will
+    // return nullptr. Because deletions during initialize() must be
+    // asynchronous, this object is still alive immediately after initialize().
+    //   1) If container() == nullptr and this method returns true, this plugin
+    //      has been replaced by another during initialization. This new plugin
+    //      may be accessed via container->plugin().
+    //   2) If container() == nullptr and this method returns false, this plugin
+    //      and the container have both been marked for deletion.
     virtual bool initialize(WebPluginContainer*) = 0;
 
     // Plugins must arrange for themselves to be deleted sometime during or after this
-    // method is called. This method is generally called by the owning
-    // WebPluginContainer. If the plugin has been detatched from a WebPluginContainer,
-    // i.e. been replaced by another plugin, it must be destroyed separately.
+    // method is called. This method is only called by the owning WebPluginContainer.
+    // The exception is if the plugin has been detached by a WebPluginContainer,
+    // i.e. been replaced by another plugin. Then it must be destroyed separately.
+    // Once this method has been called, container() must return nullptr.
     virtual void destroy() = 0;
 
     // Returns the container that this plugin has been initialized with.
+    // Must return nullptr if this plugin is scheduled for deletion.
     //
-    // Must return nullptr if the initialize() method returns false.
-    // Must also return nullptr this plugin is scheduled for deletion.
-    //
-    // Note: This container doesn't necessarily own this plugin. For example,
+    // NOTE: This container doesn't necessarily own this plugin. For example,
     // if the container has been assigned a new plugin, then the container will
     // own the new plugin, not this old plugin.
     virtual WebPluginContainer* container() const { return nullptr; }
     virtual void containerDidDetachFromParent() { }
 
-    virtual NPObject* scriptableObject() { return nullptr; }
-    virtual struct _NPP* pluginNPP() { return nullptr; }
-
-    // The same as scriptableObject() but allows to expose scriptable interface
-    // through plain v8 object instead of NPObject.
-    // If you override this function, you must return nullptr in scriptableObject().
     virtual v8::Local<v8::Object> v8ScriptableObject(v8::Isolate*) { return v8::Local<v8::Object>(); }
 
-    // Returns true if the form submission value is successfully obtained
-    // from the plugin. The value would be associated with the name attribute
-    // of the corresponding object element.
-    virtual bool getFormValue(WebString&) { return false; }
     virtual bool supportsKeyboardFocus() const { return false; }
     virtual bool supportsEditCommands() const { return false; }
     // Returns true if this plugin supports input method, which implements
@@ -116,7 +117,6 @@ public:
 
     virtual void updateVisibility(bool) = 0;
 
-    virtual bool acceptsInputEvents() = 0;
     virtual WebInputEventResult handleInputEvent(const WebInputEvent&, WebCursorInfo&) = 0;
 
     virtual bool handleDragStatusUpdate(WebDragStatus, const WebDragData&, WebDragOperationsMask, const WebPoint& position, const WebPoint& screenPosition) { return false; }

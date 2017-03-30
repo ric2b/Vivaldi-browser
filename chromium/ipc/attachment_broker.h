@@ -27,6 +27,7 @@
 
 namespace base {
 class SequencedTaskRunner;
+class SingleThreadTaskRunner;
 };
 
 namespace IPC {
@@ -94,13 +95,21 @@ class IPC_EXPORT AttachmentBroker : public Listener {
   // communicates attachment information with the broker process. In the broker
   // process, these channels must be registered and deregistered with the
   // Attachment Broker as they are created and destroyed.
-  virtual void RegisterCommunicationChannel(Endpoint* endpoint);
+  //
+  // Invocations of Send() on |endpoint| will occur on thread bound to |runner|.
+  virtual void RegisterCommunicationChannel(
+      Endpoint* endpoint,
+      scoped_refptr<base::SingleThreadTaskRunner> runner);
   virtual void DeregisterCommunicationChannel(Endpoint* endpoint);
 
   // In each unprivileged process, exactly one channel should be used to
   // communicate brokerable attachments with the broker process.
   virtual void RegisterBrokerCommunicationChannel(Endpoint* endpoint);
   virtual void DeregisterBrokerCommunicationChannel(Endpoint* endpoint);
+
+  // Informs the attachment broker that a channel endpoint has received its
+  // peer's PID.
+  virtual void ReceivedPeerPid(base::ProcessId peer_pid);
 
   // True if and only if this broker is privileged.
   virtual bool IsPrivilegedBroker();

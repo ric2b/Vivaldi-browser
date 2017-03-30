@@ -62,7 +62,7 @@ IDBCursor::IDBCursor(PassOwnPtr<WebIDBCursor> backend, WebIDBCursorDirection dir
 {
     ASSERT(m_backend);
     ASSERT(m_request);
-    ASSERT(m_source->type() == IDBAny::IDBObjectStoreType || m_source->type() == IDBAny::IDBIndexType);
+    ASSERT(m_source->getType() == IDBAny::IDBObjectStoreType || m_source->getType() == IDBAny::IDBIndexType);
     ASSERT(m_transaction);
 }
 
@@ -129,21 +129,20 @@ void IDBCursor::advance(unsigned count, ExceptionState& exceptionState)
         exceptionState.throwTypeError("A count argument with value 0 (zero) was supplied, must be greater than 0.");
         return;
     }
-    if (!m_gotValue) {
-        exceptionState.throwDOMException(InvalidStateError, IDBDatabase::noValueErrorMessage);
-        return;
-    }
-    if (isDeleted()) {
-        exceptionState.throwDOMException(InvalidStateError, IDBDatabase::sourceDeletedErrorMessage);
-        return;
-    }
-
     if (m_transaction->isFinished() || m_transaction->isFinishing()) {
         exceptionState.throwDOMException(TransactionInactiveError, IDBDatabase::transactionFinishedErrorMessage);
         return;
     }
     if (!m_transaction->isActive()) {
         exceptionState.throwDOMException(TransactionInactiveError, IDBDatabase::transactionInactiveErrorMessage);
+        return;
+    }
+    if (!m_gotValue) {
+        exceptionState.throwDOMException(InvalidStateError, IDBDatabase::noValueErrorMessage);
+        return;
+    }
+    if (isDeleted()) {
+        exceptionState.throwDOMException(InvalidStateError, IDBDatabase::sourceDeletedErrorMessage);
         return;
     }
 
@@ -168,7 +167,7 @@ void IDBCursor::continueFunction(ScriptState* scriptState, const ScriptValue& ke
 void IDBCursor::continuePrimaryKey(ScriptState* scriptState, const ScriptValue& keyValue, const ScriptValue& primaryKeyValue, ExceptionState& exceptionState)
 {
     IDB_TRACE("IDBCursor::continuePrimaryKey");
-    if (m_source->type() != IDBAny::IDBIndexType) {
+    if (m_source->getType() != IDBAny::IDBIndexType) {
         exceptionState.throwDOMException(InvalidAccessError, "The cursor's source is not an index.");
         return;
     }
@@ -359,14 +358,14 @@ void IDBCursor::setValueReady(IDBKey* key, IDBKey* primaryKey, PassRefPtr<IDBVal
 
 IDBObjectStore* IDBCursor::effectiveObjectStore() const
 {
-    if (m_source->type() == IDBAny::IDBObjectStoreType)
+    if (m_source->getType() == IDBAny::IDBObjectStoreType)
         return m_source->idbObjectStore();
     return m_source->idbIndex()->objectStore();
 }
 
 bool IDBCursor::isDeleted() const
 {
-    if (m_source->type() == IDBAny::IDBObjectStoreType)
+    if (m_source->getType() == IDBAny::IDBObjectStoreType)
         return m_source->idbObjectStore()->isDeleted();
     return m_source->idbIndex()->isDeleted();
 }

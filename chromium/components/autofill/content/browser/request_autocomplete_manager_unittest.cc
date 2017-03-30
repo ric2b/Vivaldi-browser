@@ -2,11 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/autofill/content/browser/request_autocomplete_manager.h"
+
 #include <stdint.h>
 
+#include <tuple>
+
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
-#include "components/autofill/content/browser/request_autocomplete_manager.h"
 #include "components/autofill/content/common/autofill_messages.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "content/public/browser/web_contents.h"
@@ -78,7 +82,7 @@ class TestContentAutofillDriver : public ContentAutofillDriver {
   TestContentAutofillDriver(content::RenderFrameHost* rfh,
                             AutofillClient* client)
       : ContentAutofillDriver(rfh, client, kAppLocale, kDownloadState) {
-    SetAutofillManager(make_scoped_ptr<AutofillManager>(
+    SetAutofillManager(base::WrapUnique<AutofillManager>(
         new TestAutofillManager(this, client)));
   }
   ~TestContentAutofillDriver() override {}
@@ -125,18 +129,18 @@ class RequestAutocompleteManagerTest :
         process()->sink().GetFirstMessageMatching(kMsgID);
     if (!message)
       return false;
-    base::Tuple<blink::WebFormElement::AutocompleteResult, base::string16,
-                FormData> autofill_param;
+    std::tuple<blink::WebFormElement::AutocompleteResult, base::string16,
+               FormData> autofill_param;
     AutofillMsg_RequestAutocompleteResult::Read(message, &autofill_param);
-    *result = base::get<0>(autofill_param);
+    *result = std::get<0>(autofill_param);
     process()->sink().ClearMessages();
     return true;
   }
 
  protected:
   CustomTestAutofillClient autofill_client_;
-  scoped_ptr<TestContentAutofillDriver> driver_;
-  scoped_ptr<RequestAutocompleteManager> request_autocomplete_manager_;
+  std::unique_ptr<TestContentAutofillDriver> driver_;
+  std::unique_ptr<RequestAutocompleteManager> request_autocomplete_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(RequestAutocompleteManagerTest);
 };

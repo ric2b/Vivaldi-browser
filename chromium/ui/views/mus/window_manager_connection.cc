@@ -11,7 +11,6 @@
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/converters/network/network_type_converters.h"
 #include "mojo/shell/public/cpp/connection.h"
 #include "mojo/shell/public/cpp/connector.h"
 #include "ui/views/mus/native_widget_mus.h"
@@ -41,6 +40,11 @@ WindowManagerConnection* WindowManagerConnection::Get() {
   WindowManagerConnection* connection = lazy_tls_ptr.Pointer()->Get();
   DCHECK(connection);
   return connection;
+}
+
+// static
+bool WindowManagerConnection::Exists() {
+  return !!lazy_tls_ptr.Pointer()->Get();
 }
 
 // static

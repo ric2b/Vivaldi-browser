@@ -70,7 +70,7 @@ static inline bool isValidNCName(const AtomicString& name)
     if (kNotFound != name.find(':'))
         return false;
 
-    if (!name.string().is8Bit()) {
+    if (!name.getString().is8Bit()) {
         const UChar32 c = name.characters16()[0];
         // These characters comes under CombiningChar in NCName and according to
         // NCName only BaseChar and Ideodgraphic can come as first chars.
@@ -80,7 +80,7 @@ static inline bool isValidNCName(const AtomicString& name)
             return false;
     }
 
-    return Document::isValidName(name.string());
+    return Document::isValidName(name.getString());
 }
 
 bool CustomElement::isValidName(const AtomicString& name, NameSet validNames)
@@ -102,11 +102,11 @@ bool CustomElement::isValidName(const AtomicString& name, NameSet validNames)
     return false;
 }
 
-void CustomElement::define(Element* element, PassRefPtrWillBeRawPtr<CustomElementDefinition> passDefinition)
+void CustomElement::define(Element* element, RawPtr<CustomElementDefinition> passDefinition)
 {
-    RefPtrWillBeRawPtr<CustomElementDefinition> definition(passDefinition);
+    RawPtr<CustomElementDefinition> definition(passDefinition);
 
-    switch (element->customElementState()) {
+    switch (element->getCustomElementState()) {
     case Element::NotCustomElement:
     case Element::Upgraded:
         ASSERT_NOT_REACHED();
@@ -121,13 +121,13 @@ void CustomElement::define(Element* element, PassRefPtrWillBeRawPtr<CustomElemen
 
 void CustomElement::attributeDidChange(Element* element, const AtomicString& name, const AtomicString& oldValue, const AtomicString& newValue)
 {
-    ASSERT(element->customElementState() == Element::Upgraded);
+    DCHECK_EQ(element->getCustomElementState(), Element::Upgraded);
     CustomElementScheduler::scheduleAttributeChangedCallback(element->customElementDefinition()->callbacks(), element, name, oldValue, newValue);
 }
 
 void CustomElement::didAttach(Element* element, const Document& document)
 {
-    ASSERT(element->customElementState() == Element::Upgraded);
+    DCHECK_EQ(element->getCustomElementState(), Element::Upgraded);
     if (!document.domWindow())
         return;
     CustomElementScheduler::scheduleCallback(element->customElementDefinition()->callbacks(), element, CustomElementLifecycleCallbacks::AttachedCallback);
@@ -135,7 +135,7 @@ void CustomElement::didAttach(Element* element, const Document& document)
 
 void CustomElement::didDetach(Element* element, const Document& document)
 {
-    ASSERT(element->customElementState() == Element::Upgraded);
+    DCHECK_EQ(element->getCustomElementState(), Element::Upgraded);
     if (!document.domWindow())
         return;
     CustomElementScheduler::scheduleCallback(element->customElementDefinition()->callbacks(), element, CustomElementLifecycleCallbacks::DetachedCallback);
@@ -143,7 +143,7 @@ void CustomElement::didDetach(Element* element, const Document& document)
 
 void CustomElement::wasDestroyed(Element* element)
 {
-    switch (element->customElementState()) {
+    switch (element->getCustomElementState()) {
     case Element::NotCustomElement:
         ASSERT_NOT_REACHED();
         break;

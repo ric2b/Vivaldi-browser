@@ -29,18 +29,21 @@ function pageUrl(letter) {
 
 function dumpProcess(process) {
   console.log("id          " + process.id);
-  console.log("title       " + process.title);
   console.log("osProcId    " + process.osProcessId);
   console.log("type        " + process.type);
   console.log("profile     " + process.profile);
-  console.log("tabs        " + process.tabs);
+  console.log("tasks       " + process.tasks);
+  for (var i = 0; i < process.tasks.length; ++i) {
+    console.log("task["+ i + "].title       " + process.tasks[i].title);
+    if ("tabId" in process.tasks[i])
+      console.log("task["+ i + "].tabId       " + process.tasks[i].tabId);
+  }
   console.log("cpu         " + process.cpu);
   console.log("privMem     " + process.privateMemory);
   console.log("network     " + process.network);
   console.log("jsMemAlloc  " + process.jsMemoryAllocated);
   console.log("jsMemUsed   " + process.jsMemoryUsed);
   console.log("sqliteMem   " + process.sqliteMemory);
-  console.log("fps         " + process.fps);
   console.log("naclDebugPort " + process.naclDebugPort);
   if ("imageCache" in process) {
     console.log("imageCache.size      " + process.imageCache.size);
@@ -59,17 +62,16 @@ function dumpProcess(process) {
 function validateProcessProperties(process, updating, memory_included) {
   // Always present.
   assertTrue("id" in process);
-  assertTrue("title" in process);
   assertTrue("naclDebugPort" in process);
   assertTrue("osProcessId" in process);
   assertTrue("type" in process);
   assertTrue("profile" in process);
-  assertTrue("tabs" in process);
+  assertTrue("tasks" in process);
+  assertTrue("title" in process.tasks[0]);
 
   // Present if onUpdate(WithMemory) listener is registered.
   assertEq(("cpu" in process), updating);
   assertEq(("network" in process), updating);
-  assertEq(("fps" in process), updating);
 
   // Present if memory details are requested.
   assertEq(("privateMemory" in process), memory_included);
@@ -148,9 +150,9 @@ chrome.test.runTests([
                   function (pl2) {
                     var proc1 = pl1[pid1];
                     var proc2 = pl2[pid2];
-                    assertTrue(proc1.tabs.length == proc2.tabs.length);
-                    for (var i = 0; i < proc1.tabs.length; ++i) {
-                      assertEq(proc1.tabs[i], proc2.tabs[i]);
+                    assertTrue(proc1.tasks.length == proc2.tasks.length);
+                    for (var i = 0; i < proc1.tasks.length; ++i) {
+                      assertEq(proc1.tasks[i], proc2.tasks[i]);
                     }
                   });
             });
@@ -167,6 +169,9 @@ chrome.test.runTests([
     }));
   },
 
+  // DISABLED: crbug.com/594318
+  // Fails in --site-per-process
+  /*
   function newTabPagesShareProcess() {
     getProcessId(tabs[3].id, pass(function(pid3) {
       getProcessId(tabs[4].id, pass(function(pid4) {
@@ -175,6 +180,7 @@ chrome.test.runTests([
       }));
     }));
   },
+  */
 
   function idsInUpdateEvent() {
     listenOnce(chrome.processes.onUpdated, function(processes) {
@@ -263,13 +269,15 @@ chrome.test.runTests([
   function testOnCreated() {
     listenOnce(chrome.processes.onCreated, function(process) {
       assertTrue("id" in process, "process doesn't have id property");
+      // We don't report the creation of the browser process, hence process.id
+      // is expected to be > 0.
       assertTrue(process.id > 0, "id is not positive " + process.id);
     });
     createTab(5, "chrome://newtab/");
   },
 
   // DISABLED: crbug.com/345411
-  // Hangs consistently.
+  // Hangs consistently (On Windows).
   /*
   function testOnExited() {
     listenOnce(chrome.processes.onExited,

@@ -5,7 +5,7 @@
 #ifndef CC_ANIMATION_LAYER_ANIMATION_CONTROLLER_H_
 #define CC_ANIMATION_LAYER_ANIMATION_CONTROLLER_H_
 
-#include <unordered_set>
+#include <bitset>
 #include <vector>
 
 #include "base/macros.h"
@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "cc/animation/animation.h"
 #include "cc/animation/layer_animation_event_observer.h"
+#include "cc/animation/target_property.h"
 #include "cc/base/cc_export.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/transform.h"
@@ -52,9 +53,8 @@ class CC_EXPORT LayerAnimationController
 
   // Ensures that the list of active animations on the main thread and the impl
   // thread are kept in sync. This function does not take ownership of the impl
-  // thread controller. This method is virtual for testing.
-  virtual void PushAnimationUpdatesTo(
-      LayerAnimationController* controller_impl);
+  // thread controller.
+  void PushAnimationUpdatesTo(LayerAnimationController* controller_impl);
 
   void Animate(base::TimeTicks monotonic_time);
   void AccumulatePropertyUpdates(base::TimeTicks monotonic_time,
@@ -170,14 +170,15 @@ class CC_EXPORT LayerAnimationController
     return needs_to_start_animations_;
   }
 
- protected:
+ private:
   friend class base::RefCounted<LayerAnimationController>;
 
   explicit LayerAnimationController(int id);
-  virtual ~LayerAnimationController();
+  ~LayerAnimationController();
 
- private:
-  using TargetProperties = std::unordered_set<int>;
+  // A set of target properties. TargetProperty must be 0-based enum.
+  using TargetProperties =
+      std::bitset<TargetProperty::LAST_TARGET_PROPERTY + 1>;
 
   void PushNewAnimationsToImplThread(
       LayerAnimationController* controller_impl) const;

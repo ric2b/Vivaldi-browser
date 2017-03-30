@@ -121,7 +121,7 @@ WebInspector.ElementsTreeElement.canShowInlineText = function(node)
 WebInspector.ElementsTreeElement.populateForcedPseudoStateItems = function(subMenu, node)
 {
     const pseudoClasses = ["active", "hover", "focus", "visited"];
-    var forcedPseudoState = WebInspector.CSSStyleModel.fromNode(node).pseudoState(node);
+    var forcedPseudoState = WebInspector.CSSModel.fromNode(node).pseudoState(node);
     for (var i = 0; i < pseudoClasses.length; ++i) {
         var pseudoClassForced = forcedPseudoState.indexOf(pseudoClasses[i]) >= 0;
         subMenu.appendCheckboxItem(":" + pseudoClasses[i], setPseudoStateCallback.bind(null, pseudoClasses[i], !pseudoClassForced), pseudoClassForced, false);
@@ -133,7 +133,7 @@ WebInspector.ElementsTreeElement.populateForcedPseudoStateItems = function(subMe
      */
     function setPseudoStateCallback(pseudoState, enabled)
     {
-        WebInspector.CSSStyleModel.fromNode(node).forcePseudoState(node, pseudoState, enabled);
+        WebInspector.CSSModel.fromNode(node).forcePseudoState(node, pseudoState, enabled);
     }
 }
 
@@ -538,7 +538,7 @@ WebInspector.ElementsTreeElement.prototype = {
         var openTagElement = this._node[this.treeOutline.treeElementSymbol()] || this;
         var isEditable = this.hasEditableNode();
         if (isEditable && !this._editing)
-            contextMenu.appendAction("elements.edit-as-html", WebInspector.UIString("Edit as HTML"));
+            contextMenu.appendItem(WebInspector.UIString("Edit as HTML"), this._editAsHTML.bind(this));
         var isShadowRoot = this._node.isShadowRoot();
 
         // Place it here so that all "Copy"-ing items stick together.
@@ -1087,7 +1087,10 @@ WebInspector.ElementsTreeElement.prototype = {
         }
 
         /** Keep it in sync with elementsTreeOutline.css **/
-        this._gutterContainer.style.left = (-12 * (depth - 2) - (this.isExpandable() ? 1 : 12)) + "px";
+        if (Runtime.experiments.isEnabled("reducedIndentation"))
+            this._gutterContainer.style.left = (-8 * (depth - 2) - (this.isExpandable() ? -2 : 8)) + "px";
+        else
+            this._gutterContainer.style.left = (-12 * (depth - 2) - (this.isExpandable() ? 1 : 12)) + "px";
 
         if (this.isClosingTag())
             return;
@@ -1610,6 +1613,12 @@ WebInspector.ElementsTreeElement.prototype = {
         }
 
         this._node.resolveToObject("", scrollIntoViewCallback);
+    },
+
+    _editAsHTML: function ()
+    {
+        var promise = WebInspector.Revealer.revealPromise(this.node());
+        promise.then(() => WebInspector.actionRegistry.action("elements.edit-as-html").execute());
     },
 
     __proto__: TreeElement.prototype

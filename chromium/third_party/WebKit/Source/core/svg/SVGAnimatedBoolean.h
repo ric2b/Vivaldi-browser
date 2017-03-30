@@ -31,21 +31,22 @@
 #ifndef SVGAnimatedBoolean_h
 #define SVGAnimatedBoolean_h
 
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/svg/SVGBoolean.h"
 #include "core/svg/properties/SVGAnimatedProperty.h"
 
 namespace blink {
 
-class SVGAnimatedBoolean final : public SVGAnimatedProperty<SVGBoolean> {
+class SVGAnimatedBoolean final : public SVGAnimatedProperty<SVGBoolean>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static PassRefPtrWillBeRawPtr<SVGAnimatedBoolean> create(SVGElement* contextElement, const QualifiedName& attributeName, PassRefPtrWillBeRawPtr<SVGBoolean> initialValue)
+    static SVGAnimatedBoolean* create(SVGElement* contextElement, const QualifiedName& attributeName, SVGBoolean* initialValue)
     {
-        return adoptRefWillBeNoop(new SVGAnimatedBoolean(contextElement, attributeName, initialValue));
+        return new SVGAnimatedBoolean(contextElement, attributeName, initialValue);
     }
 
 protected:
-    SVGAnimatedBoolean(SVGElement* contextElement, const QualifiedName& attributeName, PassRefPtrWillBeRawPtr<SVGBoolean> initialValue)
+    SVGAnimatedBoolean(SVGElement* contextElement, const QualifiedName& attributeName, SVGBoolean* initialValue)
         : SVGAnimatedProperty<SVGBoolean>(contextElement, attributeName, initialValue)
     {
     }

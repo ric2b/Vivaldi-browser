@@ -5,13 +5,15 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_HEADER_PAINTER_ASH_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_HEADER_PAINTER_ASH_H_
 
+#include <memory>
+
 #include "ash/frame/header_painter.h"
 #include "base/compiler_specific.h"  // override
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/animation/animation_delegate.h"
 
+class BrowserNonClientFrameViewAsh;
 class BrowserView;
 
 namespace ash {
@@ -36,12 +38,11 @@ class BrowserHeaderPainterAsh : public ash::HeaderPainter,
   ~BrowserHeaderPainterAsh() override;
 
   // BrowserHeaderPainterAsh does not take ownership of any of the parameters.
-  void Init(
-    views::Widget* frame,
-    BrowserView* browser_view,
-    views::View* header_view,
-    views::View* window_icon,
-    ash::FrameCaptionButtonContainerView* caption_button_container);
+  void Init(views::Widget* frame,
+            BrowserView* browser_view,
+            BrowserNonClientFrameViewAsh* header_view,
+            views::View* window_icon,
+            ash::FrameCaptionButtonContainerView* caption_button_container);
 
   // ash::HeaderPainter overrides:
   int GetMinimumHeaderWidth() const override;
@@ -56,23 +57,15 @@ class BrowserHeaderPainterAsh : public ash::HeaderPainter,
   // gfx::AnimationDelegate override:
   void AnimationProgressed(const gfx::Animation* animation) override;
 
+  // Paints the frame image for the |active| state based on the current value of
+  // the activation animation.
+  void PaintFrameImages(gfx::Canvas* canvas, bool active);
+
   // Paints highlight around the edge of the header for restored windows.
   void PaintHighlightForRestoredWindow(gfx::Canvas* canvas);
 
   // Paints the title bar, primarily the title string.
   void PaintTitleBar(gfx::Canvas* canvas);
-
-  // Gets the base image to paint for the frame. This may be null, in which case
-  // GetFrameColor() should be used instead.
-  gfx::ImageSkia GetFrameImage(Mode mode) const;
-
-  // Gets the overlay image to paint on top of the base image. This may be null,
-  // in which case nothing will be drawn.
-  gfx::ImageSkia GetFrameOverlayImage(Mode mode) const;
-
-  // Gets the color to use to paint the frame (when GetFrameImage() returns
-  // a null image).
-  SkColor GetFrameColor(Mode mode) const;
 
   // Updates the size and icons used for the minimize, restore, and close
   // buttons.
@@ -95,7 +88,7 @@ class BrowserHeaderPainterAsh : public ash::HeaderPainter,
   bool is_incognito_;
 
   // The header view.
-  views::View* view_;
+  BrowserNonClientFrameViewAsh* view_;
 
   views::View* window_icon_;
   ash::FrameCaptionButtonContainerView* caption_button_container_;
@@ -107,7 +100,7 @@ class BrowserHeaderPainterAsh : public ash::HeaderPainter,
   // Whether the header should be painted as active.
   Mode mode_;
 
-  scoped_ptr<gfx::SlideAnimation> activation_animation_;
+  std::unique_ptr<gfx::SlideAnimation> activation_animation_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserHeaderPainterAsh);
 };

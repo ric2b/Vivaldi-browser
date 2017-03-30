@@ -4,6 +4,7 @@
 
 #include "components/ui/zoom/zoom_controller.h"
 
+#include "app/vivaldi_apptools.h"
 #include "components/ui/zoom/zoom_event_manager.h"
 #include "components/ui/zoom/zoom_observer.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -160,7 +161,10 @@ bool ZoomController::SetZoomLevelByClient(
     }
 
     bool tabZoom = vivaldi::isTabZoomEnabled(web_contents());
-    if (tabZoom) {
+    std::string host =
+      net::GetHostOrSpecFromURL(web_contents()->GetURL());
+
+    if (tabZoom && !vivaldi::IsVivaldiApp(host)) {
       int render_process_id = web_contents()->GetRenderProcessHost()->GetID();
       int render_view_id = web_contents()->GetRenderViewHost()->GetRoutingID();
       zoom_map->SetTemporaryZoomLevel(

@@ -4,7 +4,9 @@
 
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/memory/tab_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/tabs.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -36,6 +38,17 @@ void VivaldiPrivateTabObserver::BroadcastEvent(
   if (event_router) {
     event_router->BroadcastEvent(std::move(event));
   }
+}
+
+content::WebContents* GetWebContentsFromTabStrip(int tab_id, Profile *profile) {
+  content::WebContents *contents = nullptr;
+  bool include_incognito = true;
+  Browser* browser;
+  int tab_index;
+  extensions::ExtensionTabUtil::GetTabById(tab_id, profile, include_incognito,
+                                           &browser, NULL, &contents,
+                                           &tab_index);
+  return contents;
 }
 
 VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
@@ -200,6 +213,37 @@ void VivaldiPrivateTabObserver::SetZoomLevelForTab(double level) {
   }
 }
 
+TabsPrivateDiscardFunction::TabsPrivateDiscardFunction() {}
+
+TabsPrivateDiscardFunction::~TabsPrivateDiscardFunction() {}
+
+bool TabsPrivateDiscardFunction::RunAsync() {
+  scoped_ptr<tabs_private::Discard::Params> params(
+      tabs_private::Discard::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  int tab_id = params->tab_id;
+
+  bool success = true;
+
+  content::WebContents *tabstrip_contents =
+      GetWebContentsFromTabStrip(tab_id, GetProfile());
+  if (tabstrip_contents) {
+    VivaldiPrivateTabObserver::FromWebContents(tabstrip_contents)
+        ->OnTabDiscarded(tabstrip_contents, true);
+
+    memory::TabManager* tab_manager = g_browser_process->GetTabManager();
+    int64_t web_content_id = reinterpret_cast<int64_t>(tabstrip_contents);
+    if (!tab_manager->DiscardTabById(web_content_id)) {
+      success = false;
+      error_ = "Error: WebContents not freed. Was active, played media or "
+               "already discarded.";
+    }
+  }
+  SendResponse(success);
+  return success;
+}
+
 TabsPrivateUpdateFunction::TabsPrivateUpdateFunction() {
 }
 
@@ -214,12 +258,9 @@ bool TabsPrivateUpdateFunction::RunAsync() {
   tabs_private::UpdateTabInfo* info = &params->tab_info;
   int tab_id = params->tab_id;
 
-  content::WebContents* tabstrip_contents = NULL;
-  bool include_incognito = true;
-  Browser* browser;
-  int tab_index;
-  if (extensions::ExtensionTabUtil::GetTabById(tab_id, GetProfile(),
-    include_incognito, &browser, NULL, &tabstrip_contents, &tab_index)) {
+  content::WebContents *tabstrip_contents =
+      GetWebContentsFromTabStrip(tab_id, GetProfile());
+  if (tabstrip_contents) {
 
     VivaldiPrivateTabObserver* tab_api =
         VivaldiPrivateTabObserver::FromWebContents(tabstrip_contents);
@@ -254,12 +295,9 @@ bool TabsPrivateGetFunction::RunAsync() {
   int tab_id = params->tab_id;
   tabs_private::UpdateTabInfo info;
 
-  content::WebContents* tabstrip_contents = NULL;
-  bool include_incognito = true;
-  Browser* browser;
-  int tab_index;
-  if (extensions::ExtensionTabUtil::GetTabById(tab_id, GetProfile(),
-    include_incognito, &browser, NULL, &tabstrip_contents, &tab_index)) {
+  content::WebContents *tabstrip_contents =
+      GetWebContentsFromTabStrip(tab_id, GetProfile());
+  if (tabstrip_contents) {
 
     VivaldiPrivateTabObserver* tab_api =
         VivaldiPrivateTabObserver::FromWebContents(tabstrip_contents);
@@ -302,6 +340,19 @@ void VivaldiPrivateTabObserver::OnFaviconUpdated(
       content_favicon_driver->web_contents()->GetBrowserContext());
 
   BroadcastEvent(tabs_private::OnFaviconUpdated::kEventName, args, profile);
+}
+
+void VivaldiPrivateTabObserver::OnTabDiscarded(content::WebContents *contents,
+                                               bool discarded) {
+  vivaldi::tabs_private::UpdateTabInfo info;
+  info.discarded.reset(new bool(discarded));
+  scoped_ptr<base::ListValue> args =
+      vivaldi::tabs_private::OnTabUpdated::Create(
+          extensions::ExtensionTabUtil::GetTabId(contents), info);
+  Profile *profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+
+  BroadcastEvent(vivaldi::tabs_private::OnTabUpdated::kEventName, args,
+                 profile);
 }
 
 }  // namespace extensions

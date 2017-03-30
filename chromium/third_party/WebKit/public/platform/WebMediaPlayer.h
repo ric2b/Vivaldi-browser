@@ -40,6 +40,12 @@
 #include "WebTimeRange.h"
 #include "third_party/skia/include/core/SkXfermode.h"
 
+namespace gpu {
+namespace gles2 {
+class GLES2Interface;
+}
+}
+
 namespace blink {
 
 class WebAudioSourceProvider;
@@ -49,7 +55,6 @@ class WebString;
 class WebURL;
 struct WebRect;
 struct WebSize;
-class WebGraphicsContext3D;
 
 class WebMediaPlayer {
 public:
@@ -97,6 +102,7 @@ public:
     };
 
     typedef unsigned TrackId;
+    enum TrackType { TextTrack, AudioTrack, VideoTrack };
 
     virtual ~WebMediaPlayer() { }
 
@@ -146,6 +152,7 @@ public:
     virtual NetworkState getNetworkState() const = 0;
     virtual ReadyState getReadyState() const = 0;
 
+    virtual WebString getErrorMessage() = 0;
     virtual bool didLoadingProgress() = 0;
 
     virtual bool hasSingleSecurityOrigin() const = 0;
@@ -156,24 +163,24 @@ public:
     virtual unsigned decodedFrameCount() const = 0;
     virtual unsigned droppedFrameCount() const = 0;
     virtual unsigned corruptedFrameCount() const { return 0; }
-    virtual unsigned audioDecodedByteCount() const = 0;
-    virtual unsigned videoDecodedByteCount() const = 0;
+    virtual size_t audioDecodedByteCount() const = 0;
+    virtual size_t videoDecodedByteCount() const = 0;
 
     virtual void paint(WebCanvas*, const WebRect&, unsigned char alpha, SkXfermode::Mode) = 0;
 
     // TODO(dshwang): remove non-|target| version. crbug.com/349871
-    virtual bool copyVideoTextureToPlatformTexture(WebGraphicsContext3D*, unsigned texture, unsigned internalFormat, unsigned type, bool premultiplyAlpha, bool flipY) { return false; }
+    virtual bool copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface*, unsigned texture, unsigned internalFormat, unsigned type, bool premultiplyAlpha, bool flipY) { return false; }
 
     // Do a GPU-GPU textures copy. If the copy is impossible or fails, it returns false.
-    virtual bool copyVideoTextureToPlatformTexture(WebGraphicsContext3D*, unsigned target,
+    virtual bool copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface*, unsigned target,
         unsigned texture, unsigned internalFormat, unsigned type, int level,
         bool premultiplyAlpha, bool flipY) { return false; }
     // Copy sub video frame texture to |texture|. If the copy is impossible or fails, it returns false.
-    virtual bool copyVideoSubTextureToPlatformTexture(WebGraphicsContext3D*, unsigned target,
+    virtual bool copyVideoSubTextureToPlatformTexture(gpu::gles2::GLES2Interface*, unsigned target,
         unsigned texture, int level, int xoffset, int yoffset, bool premultiplyAlpha,
         bool flipY) { return false; }
 
-    virtual WebAudioSourceProvider* audioSourceProvider() { return nullptr; }
+    virtual WebAudioSourceProvider* getAudioSourceProvider() { return nullptr; }
 
     virtual void setContentDecryptionModule(WebContentDecryptionModule* cdm, WebContentDecryptionModuleResult result) { result.completeWithError(WebContentDecryptionModuleExceptionNotSupportedError, 0, "ERROR"); }
 

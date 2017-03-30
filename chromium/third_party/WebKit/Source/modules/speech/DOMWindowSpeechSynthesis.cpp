@@ -41,8 +41,6 @@ DOMWindowSpeechSynthesis::DOMWindowSpeechSynthesis(LocalDOMWindow& window)
 {
 }
 
-DEFINE_EMPTY_DESTRUCTOR_WILL_BE_REMOVED(DOMWindowSpeechSynthesis);
-
 const char* DOMWindowSpeechSynthesis::supplementName()
 {
     return "DOMWindowSpeechSynthesis";
@@ -51,10 +49,10 @@ const char* DOMWindowSpeechSynthesis::supplementName()
 // static
 DOMWindowSpeechSynthesis& DOMWindowSpeechSynthesis::from(LocalDOMWindow& window)
 {
-    DOMWindowSpeechSynthesis* supplement = static_cast<DOMWindowSpeechSynthesis*>(WillBeHeapSupplement<LocalDOMWindow>::from(window, supplementName()));
+    DOMWindowSpeechSynthesis* supplement = static_cast<DOMWindowSpeechSynthesis*>(Supplement<LocalDOMWindow>::from(window, supplementName()));
     if (!supplement) {
         supplement = new DOMWindowSpeechSynthesis(window);
-        provideTo(window, supplementName(), adoptPtrWillBeNoop(supplement));
+        provideTo(window, supplementName(), supplement);
     }
     return *supplement;
 }
@@ -68,14 +66,14 @@ SpeechSynthesis* DOMWindowSpeechSynthesis::speechSynthesis(DOMWindow& window)
 SpeechSynthesis* DOMWindowSpeechSynthesis::speechSynthesis()
 {
     if (!m_speechSynthesis && frame())
-        m_speechSynthesis = SpeechSynthesis::create(frame()->domWindow()->executionContext());
+        m_speechSynthesis = SpeechSynthesis::create(frame()->domWindow()->getExecutionContext());
     return m_speechSynthesis;
 }
 
 DEFINE_TRACE(DOMWindowSpeechSynthesis)
 {
     visitor->trace(m_speechSynthesis);
-    WillBeHeapSupplement<LocalDOMWindow>::trace(visitor);
+    Supplement<LocalDOMWindow>::trace(visitor);
     DOMWindowProperty::trace(visitor);
 }
 

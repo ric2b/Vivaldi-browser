@@ -13,10 +13,8 @@ namespace blink {
 
 class Element;
 class IntersectionObserver;
-class Node;
 
-// TODO(oilpan): Switch to GarbageCollected<> after oilpan ships.
-class IntersectionObservation : public GarbageCollectedFinalized<IntersectionObservation> {
+class IntersectionObservation final : public GarbageCollected<IntersectionObservation> {
 public:
     IntersectionObservation(IntersectionObserver&, Element&, bool shouldReportRootBounds);
 
@@ -24,10 +22,13 @@ public:
         LayoutRect targetRect;
         LayoutRect intersectionRect;
         LayoutRect rootRect;
+        bool doesIntersect;
+
+        IntersectionGeometry() : doesIntersect(false) {}
     };
 
     IntersectionObserver& observer() const { return *m_observer; }
-    Element* target() const;
+    Element* target() const { return m_target; }
     unsigned lastThresholdIndex() const { return m_lastThresholdIndex; }
     void setLastThresholdIndex(unsigned index) { m_lastThresholdIndex = index; }
     bool shouldReportRootBounds() const { return m_shouldReportRootBounds; }
@@ -38,17 +39,19 @@ public:
     DECLARE_TRACE();
 
 private:
-    void initializeGeometry(IntersectionGeometry&);
-    void clipToRoot(LayoutRect&);
-    void clipToFrameView(IntersectionGeometry&);
-    bool computeGeometry(IntersectionGeometry&);
+    void applyRootMargin(LayoutRect&) const;
+    void initializeGeometry(IntersectionGeometry&) const;
+    void initializeTargetRect(LayoutRect&) const;
+    void initializeRootRect(LayoutRect&) const;
+    void clipToRoot(IntersectionGeometry&) const;
+    void mapTargetRectToTargetFrameCoordinates(LayoutRect&) const;
+    void mapRootRectToRootFrameCoordinates(LayoutRect&) const;
+    void mapRootRectToTargetFrameCoordinates(LayoutRect&) const;
+    bool computeGeometry(IntersectionGeometry&) const;
 
     Member<IntersectionObserver> m_observer;
 
-    // TODO(szager): Why Node instead of Element?  Because NodeIntersectionObserverData::createWeakPtr()
-    // returns a WeakPtr<Node>, which cannot be coerced into a WeakPtr<Element>.  When oilpan rolls out,
-    // this can be changed to WeakMember<Element>.
-    WeakPtrWillBeWeakMember<Node> m_target;
+    WeakMember<Element> m_target;
 
     unsigned m_shouldReportRootBounds : 1;
     unsigned m_lastThresholdIndex : 30;

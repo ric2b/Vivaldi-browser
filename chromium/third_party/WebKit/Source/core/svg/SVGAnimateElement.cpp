@@ -27,6 +27,7 @@
 #include "core/css/parser/CSSParser.h"
 #include "core/dom/Document.h"
 #include "core/dom/QualifiedName.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/svg/SVGAnimatedTypeAnimator.h"
 #include "core/svg/SVGDocumentExtensions.h"
 
@@ -38,9 +39,9 @@ SVGAnimateElement::SVGAnimateElement(const QualifiedName& tagName, Document& doc
 {
 }
 
-PassRefPtrWillBeRawPtr<SVGAnimateElement> SVGAnimateElement::create(Document& document)
+SVGAnimateElement* SVGAnimateElement::create(Document& document)
 {
-    return adoptRefWillBeNoop(new SVGAnimateElement(SVGNames::animateTag, document));
+    return new SVGAnimateElement(SVGNames::animateTag, document);
 }
 
 SVGAnimateElement::~SVGAnimateElement()
@@ -106,7 +107,7 @@ void SVGAnimateElement::calculateAnimatedValue(float percentage, unsigned repeat
     if (isSVGSetElement(*this))
         percentage = 1;
 
-    if (calcMode() == CalcModeDiscrete)
+    if (getCalcMode() == CalcModeDiscrete)
         percentage = percentage < 0.5 ? 0 : 1;
 
     // Target element might have changed.
@@ -142,11 +143,11 @@ bool SVGAnimateElement::calculateFromAndByValues(const String& fromString, const
     if (!targetElement)
         return false;
 
-    if (animationMode() == ByAnimation && !isAdditive())
+    if (getAnimationMode() == ByAnimation && !isAdditive())
         return false;
 
     // from-by animation may only be used with attributes that support addition (e.g. most numeric attributes).
-    if (animationMode() == FromByAnimation && !animatedPropertyTypeSupportsAddition())
+    if (getAnimationMode() == FromByAnimation && !animatedPropertyTypeSupportsAddition())
         return false;
 
     ASSERT(!isSVGSetElement(*this));
@@ -176,7 +177,7 @@ void SVGAnimateElement::resetAnimatedType()
 
     m_animator.reset(targetElement);
 
-    ShouldApplyAnimation shouldApply = shouldApplyAnimation(targetElement, attributeName);
+    ShouldApplyAnimationType shouldApply = shouldApplyAnimation(targetElement, attributeName);
 
     if (shouldApply == DontApplyAnimation)
         return;
@@ -232,7 +233,7 @@ static inline void removeCSSPropertyFromTarget(SVGElement* targetElement, CSSPro
 static inline void applyCSSPropertyToTargetAndInstances(SVGElement* targetElement, const QualifiedName& attributeName, const String& valueAsString)
 {
     ASSERT(targetElement);
-    if (attributeName == anyQName() || !targetElement->inDocument() || !targetElement->parentNode())
+    if (attributeName == anyQName() || !targetElement->inShadowIncludingDocument() || !targetElement->parentNode())
         return;
 
     CSSPropertyID id = cssPropertyID(attributeName.localName());
@@ -241,7 +242,7 @@ static inline void applyCSSPropertyToTargetAndInstances(SVGElement* targetElemen
     applyCSSPropertyToTarget(targetElement, id, valueAsString);
 
     // If the target element has instances, update them as well, w/o requiring the <use> tree to be rebuilt.
-    const WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement>>& instances = targetElement->instancesForElement();
+    const HeapHashSet<WeakMember<SVGElement>>& instances = targetElement->instancesForElement();
     for (SVGElement* shadowTreeElement : instances) {
         if (shadowTreeElement)
             applyCSSPropertyToTarget(shadowTreeElement, id, valueAsString);
@@ -251,7 +252,7 @@ static inline void applyCSSPropertyToTargetAndInstances(SVGElement* targetElemen
 static inline void removeCSSPropertyFromTargetAndInstances(SVGElement* targetElement, const QualifiedName& attributeName)
 {
     ASSERT(targetElement);
-    if (attributeName == anyQName() || !targetElement->inDocument() || !targetElement->parentNode())
+    if (attributeName == anyQName() || !targetElement->inShadowIncludingDocument() || !targetElement->parentNode())
         return;
 
     CSSPropertyID id = cssPropertyID(attributeName.localName());
@@ -260,7 +261,7 @@ static inline void removeCSSPropertyFromTargetAndInstances(SVGElement* targetEle
     removeCSSPropertyFromTarget(targetElement, id);
 
     // If the target element has instances, update them as well, w/o requiring the <use> tree to be rebuilt.
-    const WillBeHeapHashSet<RawPtrWillBeWeakMember<SVGElement>>& instances = targetElement->instancesForElement();
+    const HeapHashSet<WeakMember<SVGElement>>& instances = targetElement->instancesForElement();
     for (SVGElement* shadowTreeElement : instances) {
         if (shadowTreeElement)
             removeCSSPropertyFromTarget(shadowTreeElement, id);
@@ -279,7 +280,7 @@ static inline void notifyTargetAboutAnimValChange(SVGElement* targetElement, con
 static inline void notifyTargetAndInstancesAboutAnimValChange(SVGElement* targetElement, const QualifiedName& attributeName)
 {
     ASSERT(targetElement);
-    if (attributeName == anyQName() || !targetElement->inDocument() || !targetElement->parentNode())
+    if (attributeName == anyQName() || !targetElement->inShadowIncludingDocument() || !targetElement->parentNode())
         return;
 
     SVGElement::InstanceUpdateBlocker blocker(targetElement);
@@ -301,7 +302,7 @@ void SVGAnimateElement::clearAnimatedType()
         return;
     }
 
-    ShouldApplyAnimation shouldApply = shouldApplyAnimation(targetElement, attributeName());
+    ShouldApplyAnimationType shouldApply = shouldApplyAnimation(targetElement, attributeName());
     if (shouldApply == ApplyXMLandCSSAnimation) {
         removeCSSPropertyFromTargetAndInstances(targetElement, attributeName());
     } else if (m_animator.isAnimatingCSSProperty()) {
@@ -333,7 +334,7 @@ void SVGAnimateElement::applyResultsToTarget()
         return;
 
     // We do update the style and the animation property independent of each other.
-    ShouldApplyAnimation shouldApply = shouldApplyAnimation(targetElement(), attributeName());
+    ShouldApplyAnimationType shouldApply = shouldApplyAnimation(targetElement(), attributeName());
     if (shouldApply == ApplyXMLandCSSAnimation) {
         applyCSSPropertyToTargetAndInstances(targetElement(), attributeName(), m_animatedProperty->valueAsString());
     } else if (m_animator.isAnimatingCSSProperty()) {
@@ -366,7 +367,7 @@ bool SVGAnimateElement::animatedPropertyTypeSupportsAddition()
 
 bool SVGAnimateElement::isAdditive()
 {
-    if (animationMode() == ByAnimation || animationMode() == FromByAnimation) {
+    if (getAnimationMode() == ByAnimation || getAnimationMode() == FromByAnimation) {
         if (!animatedPropertyTypeSupportsAddition())
             return false;
     }

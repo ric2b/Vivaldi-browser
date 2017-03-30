@@ -33,11 +33,11 @@ class Document;
 class FetchRequest;
 class ResourceFetcher;
 
-class DocumentResource final : public Resource {
+class CORE_EXPORT DocumentResource final : public Resource {
 public:
     using ClientType = ResourceClient;
 
-    static PassRefPtrWillBeRawPtr<DocumentResource> fetchSVGDocument(FetchRequest&, ResourceFetcher*);
+    static DocumentResource* fetchSVGDocument(FetchRequest&, ResourceFetcher*);
     ~DocumentResource() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -53,24 +53,23 @@ private:
         SVGDocumentResourceFactory()
             : ResourceFactory(Resource::SVGDocument) { }
 
-        PassRefPtrWillBeRawPtr<Resource> create(const ResourceRequest& request, const String& charset) const override
+        Resource* create(const ResourceRequest& request, const ResourceLoaderOptions& options, const String& charset) const override
         {
-            return adoptRefWillBeNoop(new DocumentResource(request, Resource::SVGDocument));
+            return new DocumentResource(request, Resource::SVGDocument, options);
         }
     };
-    DocumentResource(const ResourceRequest&, Type);
+    DocumentResource(const ResourceRequest&, Type, const ResourceLoaderOptions&);
 
     bool mimeTypeAllowed() const;
-    PassRefPtrWillBeRawPtr<Document> createDocument(const KURL&);
+    Document* createDocument(const KURL&);
 
-    RefPtrWillBeMember<Document> m_document;
+    Member<Document> m_document;
     OwnPtr<TextResourceDecoder> m_decoder;
 };
 
-DEFINE_TYPE_CASTS(DocumentResource, Resource, resource, resource->getType() == Resource::SVGDocument, resource.getType() == Resource::SVGDocument); \
-inline DocumentResource* toDocumentResource(const RefPtrWillBeRawPtr<Resource>& ptr) { return toDocumentResource(ptr.get()); }
+DEFINE_TYPE_CASTS(DocumentResource, Resource, resource, resource->getType() == Resource::SVGDocument, resource.getType() == Resource::SVGDocument);
 
-class DocumentResourceClient : public ResourceClient {
+class CORE_EXPORT DocumentResourceClient : public ResourceClient {
 public:
     ~DocumentResourceClient() override {}
     static bool isExpectedType(ResourceClient* client) { return client->getResourceClientType() == DocumentType; }

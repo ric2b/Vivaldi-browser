@@ -47,9 +47,9 @@ ValidationMessageClientImpl::ValidationMessageClientImpl(WebViewImpl& webView)
 {
 }
 
-PassOwnPtrWillBeRawPtr<ValidationMessageClientImpl> ValidationMessageClientImpl::create(WebViewImpl& webView)
+ValidationMessageClientImpl* ValidationMessageClientImpl::create(WebViewImpl& webView)
 {
-    return adoptPtrWillBeNoop(new ValidationMessageClientImpl(webView));
+    return new ValidationMessageClientImpl(webView);
 }
 
 ValidationMessageClientImpl::~ValidationMessageClientImpl()
@@ -73,7 +73,7 @@ void ValidationMessageClientImpl::showValidationMessage(const Element& anchor, c
         hideValidationMessage(*m_currentAnchor);
     m_currentAnchor = &anchor;
     IntRect anchorInViewport = currentView()->contentsToViewport(anchor.pixelSnappedBoundingBox());
-    m_lastAnchorRectInScreen = currentView()->hostWindow()->viewportToScreen(anchorInViewport);
+    m_lastAnchorRectInScreen = currentView()->getHostWindow()->viewportToScreen(anchorInViewport, currentView());
     m_lastPageScaleFactor = m_webView.pageScaleFactor();
     m_message = message;
     const double minimumSecondToShowValidationMessage = 5.0;
@@ -113,7 +113,7 @@ void ValidationMessageClientImpl::documentDetached(const Document& document)
 
 void ValidationMessageClientImpl::checkAnchorStatus(Timer<ValidationMessageClientImpl>*)
 {
-    ASSERT(m_currentAnchor);
+    DCHECK(m_currentAnchor);
     if (monotonicallyIncreasingTime() >= m_finishTime || !currentView()) {
         hideValidationMessage(*m_currentAnchor);
         return;
@@ -132,7 +132,7 @@ void ValidationMessageClientImpl::checkAnchorStatus(Timer<ValidationMessageClien
         return;
     }
 
-    IntRect newAnchorRectInViewportInScreen = currentView()->hostWindow()->viewportToScreen(newAnchorRectInViewport);
+    IntRect newAnchorRectInViewportInScreen = currentView()->getHostWindow()->viewportToScreen(newAnchorRectInViewport, currentView());
     if (newAnchorRectInViewportInScreen == m_lastAnchorRectInScreen && m_webView.pageScaleFactor() == m_lastPageScaleFactor)
         return;
     m_lastAnchorRectInScreen = newAnchorRectInViewportInScreen;

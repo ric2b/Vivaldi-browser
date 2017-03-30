@@ -63,16 +63,14 @@ class PLATFORM_EXPORT GraphicsLayerClient {
 public:
     virtual ~GraphicsLayerClient() {}
 
-    // Callback for when compositor animation started.
-    virtual void notifyAnimationStarted(const GraphicsLayer*, double monotonicTime, int group) { }
-
     virtual void notifyFirstPaint() { }
     virtual void notifyFirstTextPaint() { }
     virtual void notifyFirstImagePaint() { }
 
     virtual IntRect computeInterestRect(const GraphicsLayer*, const IntRect& previousInterestRect) const = 0;
     virtual LayoutSize subpixelAccumulation() const { return LayoutSize(); }
-    virtual bool needsRepaint() const { return true; }
+    // Returns whether the client needs to be repainted with respect to the given graphics layer.
+    virtual bool needsRepaint(const GraphicsLayer&) const = 0;
     virtual void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect& interestRect) const = 0;
 
     virtual bool isTrackingPaintInvalidations() const { return false; }

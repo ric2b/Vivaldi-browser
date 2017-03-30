@@ -31,6 +31,9 @@
 #include "platform/animation/CompositorFloatAnimationCurve.h"
 #include "platform/graphics/CompositorFactory.h"
 #include "platform/scroll/ScrollableArea.h"
+#include "platform/testing/FakeGraphicsLayer.h"
+#include "platform/testing/FakeGraphicsLayerClient.h"
+#include "platform/testing/WebLayerTreeViewImplForTesting.h"
 #include "platform/transforms/Matrix3DTransformOperation.h"
 #include "platform/transforms/RotateTransformOperation.h"
 #include "platform/transforms/TranslateTransformOperation.h"
@@ -39,42 +42,24 @@
 #include "public/platform/WebGraphicsContext3D.h"
 #include "public/platform/WebLayer.h"
 #include "public/platform/WebLayerTreeView.h"
-#include "public/platform/WebUnitTestSupport.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
-namespace {
-
-class MockGraphicsLayerClient : public GraphicsLayerClient {
-public:
-    IntRect computeInterestRect(const GraphicsLayer*, const IntRect&) const { return IntRect(); }
-    void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect&) const override { }
-    String debugName(const GraphicsLayer*) const override { return String(); }
-};
-
-class GraphicsLayerForTesting : public GraphicsLayer {
-public:
-    explicit GraphicsLayerForTesting(GraphicsLayerClient* client)
-        : GraphicsLayer(client) { }
-};
-
-} // anonymous namespace
-
 class GraphicsLayerTest : public testing::Test {
 public:
     GraphicsLayerTest()
     {
-        m_clipLayer = adoptPtr(new GraphicsLayerForTesting(&m_client));
-        m_scrollElasticityLayer = adoptPtr(new GraphicsLayerForTesting(&m_client));
-        m_graphicsLayer = adoptPtr(new GraphicsLayerForTesting(&m_client));
+        m_clipLayer = adoptPtr(new FakeGraphicsLayer(&m_client));
+        m_scrollElasticityLayer = adoptPtr(new FakeGraphicsLayer(&m_client));
+        m_graphicsLayer = adoptPtr(new FakeGraphicsLayer(&m_client));
         m_clipLayer->addChild(m_scrollElasticityLayer.get());
         m_scrollElasticityLayer->addChild(m_graphicsLayer.get());
         m_graphicsLayer->platformLayer()->setScrollClipLayer(
             m_clipLayer->platformLayer());
         m_platformLayer = m_graphicsLayer->platformLayer();
-        m_layerTreeView = adoptPtr(Platform::current()->unitTestSupport()->createLayerTreeViewForTesting());
+        m_layerTreeView = adoptPtr(new WebLayerTreeViewImplForTesting);
         ASSERT(m_layerTreeView);
         m_layerTreeView->setRootLayer(*m_clipLayer->platformLayer());
         m_layerTreeView->registerViewportLayers(
@@ -92,13 +77,13 @@ public:
 
 protected:
     WebLayer* m_platformLayer;
-    OwnPtr<GraphicsLayerForTesting> m_graphicsLayer;
-    OwnPtr<GraphicsLayerForTesting> m_scrollElasticityLayer;
-    OwnPtr<GraphicsLayerForTesting> m_clipLayer;
+    OwnPtr<FakeGraphicsLayer> m_graphicsLayer;
+    OwnPtr<FakeGraphicsLayer> m_scrollElasticityLayer;
+    OwnPtr<FakeGraphicsLayer> m_clipLayer;
 
 private:
     OwnPtr<WebLayerTreeView> m_layerTreeView;
-    MockGraphicsLayerClient m_client;
+    FakeGraphicsLayerClient m_client;
 };
 
 class AnimationPlayerForTesting : public CompositorAnimationPlayerClient {
@@ -118,79 +103,58 @@ public:
 
 TEST_F(GraphicsLayerTest, updateLayerShouldFlattenTransformWithAnimations)
 {
-    ASSERT_FALSE(m_platformLayer->hasActiveAnimation());
+    ASSERT_FALSE(m_platformLayer->hasActiveAnimationForTesting());
 
     OwnPtr<CompositorFloatAnimationCurve> curve = adoptPtr(CompositorFactory::current().createFloatAnimationCurve());
     curve->add(CompositorFloatKeyframe(0.0, 0.0));
     OwnPtr<CompositorAnimation> floatAnimation(adoptPtr(CompositorFactory::current().createAnimation(*curve, CompositorTargetProperty::OPACITY)));
     int animationId = floatAnimation->id();
 
-    if (RuntimeEnabledFeatures::compositorAnimationTimelinesEnabled()) {
-        OwnPtr<CompositorAnimationTimeline> compositorTimeline = adoptPtr(CompositorFactory::current().createAnimationTimeline());
-        AnimationPlayerForTesting player;
+    OwnPtr<CompositorAnimationTimeline> compositorTimeline = adoptPtr(CompositorFactory::current().createAnimationTimeline());
+    AnimationPlayerForTesting player;
 
-        layerTreeView()->attachCompositorAnimationTimeline(compositorTimeline->animationTimeline());
-        compositorTimeline->playerAttached(player);
+    layerTreeView()->attachCompositorAnimationTimeline(compositorTimeline->animationTimeline());
+    compositorTimeline->playerAttached(player);
 
-        player.compositorPlayer()->attachLayer(m_platformLayer);
-        ASSERT_TRUE(player.compositorPlayer()->isLayerAttached());
+    player.compositorPlayer()->attachLayer(m_platformLayer);
+    ASSERT_TRUE(player.compositorPlayer()->isLayerAttached());
 
-        player.compositorPlayer()->addAnimation(floatAnimation.leakPtr());
+    player.compositorPlayer()->addAnimation(floatAnimation.leakPtr());
 
-        ASSERT_TRUE(m_platformLayer->hasActiveAnimation());
+    ASSERT_TRUE(m_platformLayer->hasActiveAnimationForTesting());
 
-        m_graphicsLayer->setShouldFlattenTransform(false);
+    m_graphicsLayer->setShouldFlattenTransform(false);
 
-        m_platformLayer = m_graphicsLayer->platformLayer();
-        ASSERT_TRUE(m_platformLayer);
+    m_platformLayer = m_graphicsLayer->platformLayer();
+    ASSERT_TRUE(m_platformLayer);
 
-        ASSERT_TRUE(m_platformLayer->hasActiveAnimation());
-        player.compositorPlayer()->removeAnimation(animationId);
-        ASSERT_FALSE(m_platformLayer->hasActiveAnimation());
+    ASSERT_TRUE(m_platformLayer->hasActiveAnimationForTesting());
+    player.compositorPlayer()->removeAnimation(animationId);
+    ASSERT_FALSE(m_platformLayer->hasActiveAnimationForTesting());
 
-        m_graphicsLayer->setShouldFlattenTransform(true);
+    m_graphicsLayer->setShouldFlattenTransform(true);
 
-        m_platformLayer = m_graphicsLayer->platformLayer();
-        ASSERT_TRUE(m_platformLayer);
+    m_platformLayer = m_graphicsLayer->platformLayer();
+    ASSERT_TRUE(m_platformLayer);
 
-        ASSERT_FALSE(m_platformLayer->hasActiveAnimation());
+    ASSERT_FALSE(m_platformLayer->hasActiveAnimationForTesting());
 
-        player.compositorPlayer()->detachLayer();
-        ASSERT_FALSE(player.compositorPlayer()->isLayerAttached());
+    player.compositorPlayer()->detachLayer();
+    ASSERT_FALSE(player.compositorPlayer()->isLayerAttached());
 
-        compositorTimeline->playerDestroyed(player);
-        layerTreeView()->detachCompositorAnimationTimeline(compositorTimeline->animationTimeline());
-    } else {
-        ASSERT_TRUE(m_platformLayer->addAnimation(floatAnimation->releaseCCAnimation()));
-
-        ASSERT_TRUE(m_platformLayer->hasActiveAnimation());
-
-        m_graphicsLayer->setShouldFlattenTransform(false);
-
-        m_platformLayer = m_graphicsLayer->platformLayer();
-        ASSERT_TRUE(m_platformLayer);
-
-        ASSERT_TRUE(m_platformLayer->hasActiveAnimation());
-        m_platformLayer->removeAnimation(animationId);
-        ASSERT_FALSE(m_platformLayer->hasActiveAnimation());
-
-        m_graphicsLayer->setShouldFlattenTransform(true);
-
-        m_platformLayer = m_graphicsLayer->platformLayer();
-        ASSERT_TRUE(m_platformLayer);
-
-        ASSERT_FALSE(m_platformLayer->hasActiveAnimation());
-    }
+    compositorTimeline->playerDestroyed(player);
+    layerTreeView()->detachCompositorAnimationTimeline(compositorTimeline->animationTimeline());
 }
 
-class FakeScrollableArea : public NoBaseWillBeGarbageCollectedFinalized<FakeScrollableArea>, public ScrollableArea {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(FakeScrollableArea);
+class FakeScrollableArea : public GarbageCollectedFinalized<FakeScrollableArea>, public ScrollableArea {
+    USING_GARBAGE_COLLECTED_MIXIN(FakeScrollableArea);
 public:
-    static PassOwnPtrWillBeRawPtr<FakeScrollableArea> create()
+    static FakeScrollableArea* create()
     {
-        return adoptPtrWillBeNoop(new FakeScrollableArea);
+        return new FakeScrollableArea;
     }
 
+    LayoutRect visualRectForScrollbarParts() const override { return LayoutRect(); }
     bool isActive() const override { return false; }
     int scrollSize(ScrollbarOrientation) const override { return 100; }
     bool isScrollCornerVisible() const override { return false; }
@@ -210,7 +174,6 @@ public:
         return IntPoint(contentsSize().width() - visibleWidth(), contentsSize().height() - visibleHeight());
     }
 
-    void setScrollOffset(const IntPoint& scrollOffset, ScrollType) override { m_scrollPosition = scrollOffset; }
     void setScrollOffset(const DoublePoint& scrollOffset, ScrollType) override { m_scrollPosition = scrollOffset; }
     DoublePoint scrollPositionDouble() const override { return m_scrollPosition; }
     IntPoint scrollPosition() const override { return flooredIntPoint(m_scrollPosition); }
@@ -226,8 +189,8 @@ private:
 
 TEST_F(GraphicsLayerTest, applyScrollToScrollableArea)
 {
-    OwnPtrWillBeRawPtr<FakeScrollableArea> scrollableArea = FakeScrollableArea::create();
-    m_graphicsLayer->setScrollableArea(scrollableArea.get(), false);
+    FakeScrollableArea* scrollableArea = FakeScrollableArea::create();
+    m_graphicsLayer->setScrollableArea(scrollableArea, false);
 
     WebDoublePoint scrollPosition(7, 9);
     m_platformLayer->setScrollPositionDouble(scrollPosition);

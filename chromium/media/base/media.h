@@ -40,11 +40,11 @@ MEDIA_EXPORT bool PlatformHasOpusSupport();
 // unified media pipeline is supported everywhere.  http://crbug.com/580626.
 MEDIA_EXPORT bool IsUnifiedMediaPipelineEnabled();
 
-// Similar to IsUnifiedMediaPipelineEnabled() but will also return true if
-// MediaCodec is not available (allowing the unified pipeline to take over for
-// cases where existing pipeline has no support). As above, codecs requiring
-// platform support may not be available.
-MEDIA_EXPORT bool IsUnifiedMediaPipelineEnabledForMse();
+// Returns whether the platform decoders are available for use.
+// This includes decoders being available on the platform and accessible, such
+// as via the GPU process. Should only be used for actual decoders
+// (e.g. MediaCodec) and not full-featured players (e.g. MediaPlayer).
+MEDIA_EXPORT bool ArePlatformDecodersAvailable();
 #endif
 
 }  // namespace media

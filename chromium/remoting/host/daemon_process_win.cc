@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/base_switches.h"
@@ -15,7 +16,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/process/process.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -45,14 +45,12 @@ using base::TimeDelta;
 
 namespace {
 
-// Duplicates |key| into |target_process| and returns the value that can be sent
-// over IPC.
+// Duplicates |key| and returns the value that can be sent over IPC.
 IPC::PlatformFileForTransit GetRegistryKeyForTransit(
-    base::ProcessHandle target_process,
     const base::win::RegKey& key) {
   base::PlatformFile handle =
       reinterpret_cast<base::PlatformFile>(key.Handle());
-  return IPC::GetFileHandleForProcess(handle, target_process, false);
+  return IPC::GetPlatformFileForTransit(handle, false);
 }
 
 }  // namespace
@@ -88,7 +86,7 @@ class DaemonProcessWin : public DaemonProcess {
 
  protected:
   // DaemonProcess implementation.
-  scoped_ptr<DesktopSession> DoCreateDesktopSession(
+  std::unique_ptr<DesktopSession> DoCreateDesktopSession(
       int terminal_id,
       const ScreenResolution& resolution,
       bool virtual_terminal) override;
@@ -107,7 +105,7 @@ class DaemonProcessWin : public DaemonProcess {
   bool OpenPairingRegistry();
 
  private:
-  scoped_ptr<WorkerProcessLauncher> network_launcher_;
+  std::unique_ptr<WorkerProcessLauncher> network_launcher_;
 
   // Handle of the network process.
   ScopedHandle network_process_;
@@ -192,7 +190,7 @@ bool DaemonProcessWin::OnDesktopSessionAgentAttached(
   return true;
 }
 
-scoped_ptr<DesktopSession> DaemonProcessWin::DoCreateDesktopSession(
+std::unique_ptr<DesktopSession> DaemonProcessWin::DoCreateDesktopSession(
     int terminal_id,
     const ScreenResolution& resolution,
     bool virtual_terminal) {
@@ -225,23 +223,22 @@ void DaemonProcessWin::LaunchNetworkProcess() {
     return;
   }
 
-  scoped_ptr<base::CommandLine> target(new base::CommandLine(host_binary));
+  std::unique_ptr<base::CommandLine> target(new base::CommandLine(host_binary));
   target->AppendSwitchASCII(kProcessTypeSwitchName, kProcessTypeHost);
   target->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),
                            kCopiedSwitchNames, arraysize(kCopiedSwitchNames));
 
-  scoped_ptr<UnprivilegedProcessDelegate> delegate(
+  std::unique_ptr<UnprivilegedProcessDelegate> delegate(
       new UnprivilegedProcessDelegate(io_task_runner(), std::move(target)));
   network_launcher_.reset(new WorkerProcessLauncher(std::move(delegate), this));
 }
 
-scoped_ptr<DaemonProcess> DaemonProcess::Create(
+std::unique_ptr<DaemonProcess> DaemonProcess::Create(
     scoped_refptr<AutoThreadTaskRunner> caller_task_runner,
     scoped_refptr<AutoThreadTaskRunner> io_task_runner,
     const base::Closure& stopped_callback) {
-  scoped_ptr<DaemonProcessWin> daemon_process(
-      new DaemonProcessWin(caller_task_runner, io_task_runner,
-                           stopped_callback));
+  std::unique_ptr<DaemonProcessWin> daemon_process(new DaemonProcessWin(
+      caller_task_runner, io_task_runner, stopped_callback));
   daemon_process->Initialize();
   return std::move(daemon_process);
 }
@@ -290,10 +287,10 @@ bool DaemonProcessWin::InitializePairingRegistry() {
 
   // Duplicate handles to the network process.
   IPC::PlatformFileForTransit privileged_key = GetRegistryKeyForTransit(
-      network_process_.Get(), pairing_registry_privileged_key_);
+      pairing_registry_privileged_key_);
   IPC::PlatformFileForTransit unprivileged_key = GetRegistryKeyForTransit(
-      network_process_.Get(), pairing_registry_unprivileged_key_);
-  if (!(privileged_key && unprivileged_key))
+      pairing_registry_unprivileged_key_);
+  if (!(privileged_key.IsValid() && unprivileged_key.IsValid()))
     return false;
 
   // Initialize the pairing registry in the network process. This has to be done

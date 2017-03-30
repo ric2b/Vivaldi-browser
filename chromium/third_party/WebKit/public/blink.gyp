@@ -31,12 +31,25 @@
     'includes': [
         '../Source/build/features.gypi',
     ],
+    'variables': {
+        'blink_mojo_sources': [
+            'platform/modules/bluetooth/web_bluetooth.mojom',
+            'platform/modules/geolocation/geolocation.mojom',
+            'platform/modules/notifications/notification.mojom',
+            'platform/modules/permissions/permission.mojom',
+            'platform/modules/permissions/permission_status.mojom',
+        ],
+        'blink_android_mojo_sources': [
+            'platform/modules/payments/payment_request.mojom',
+        ],
+    },
     'targets': [
         {
             # GN version: //third_party/WebKit/public:blink
             'target_name': 'blink',
             'type': 'none',
             'dependencies': [
+                'mojo_bindings',
                 '../Source/platform/blink_platform.gyp:blink_platform',
                 '../Source/web/web.gyp:blink_web',
                 '<(DEPTH)/mojo/mojo_edk.gyp:mojo_system_impl',
@@ -74,11 +87,74 @@
             'target_name': 'blink_test_support',
             'type': 'none',
             'dependencies': [
+                '../Source/platform/blink_platform_tests.gyp:blink_platform_test_support',
                 '../Source/web/web.gyp:blink_web_test_support',
             ],
             'export_dependent_settings': [
+                '../Source/platform/blink_platform_tests.gyp:blink_platform_test_support',
                 '../Source/web/web.gyp:blink_web_test_support',
             ],
         },
+        {
+            # GN version: //third_party/WebKit/public:mojo_bindings_blink
+            'target_name': 'mojo_bindings_blink_mojom',
+            'type': 'none',
+            'variables': {
+                'mojom_files': [
+                    '<@(blink_mojo_sources)',
+                    '<@(blink_android_mojo_sources)',
+                ],
+                'mojom_variant': 'wtf',
+                'for_blink': 'true',
+            },
+            'includes': [
+                '../../../mojo/mojom_bindings_generator_explicit.gypi',
+            ],
+        },
+        {
+            # GN version: //third_party/WebKit/public:mojo_bindings
+            'target_name': 'mojo_bindings_mojom',
+            'type': 'none',
+            'variables': {
+                'mojom_files': ['<@(blink_mojo_sources)'],
+            },
+            'includes': [
+                '../../../mojo/mojom_bindings_generator_explicit.gypi',
+            ],
+        },
+        {
+            'target_name': 'mojo_bindings',
+            'type': 'static_library',
+            'dependencies': [
+                'mojo_bindings_blink_mojom',
+                'mojo_bindings_mojom',
+                '../../../mojo/mojo_public.gyp:mojo_cpp_bindings',
+            ],
+        },
+    ],
+    'conditions': [
+        ['OS == "android"', {
+            'targets': [
+                {
+                    'target_name': 'android_mojo_bindings_mojom',
+                    'type': 'none',
+                    'variables': {
+                        'mojom_files': ['<@(blink_android_mojo_sources)'],
+                    },
+                    'includes': [
+                        '../../../mojo/mojom_bindings_generator_explicit.gypi',
+                    ],
+                },
+                {
+                    # GN version: //third_party/WebKit/public:android_mojo_bindings_java
+                    'target_name': 'android_mojo_bindings_java',
+                    'type': 'static_library',
+                    'dependencies': [
+                        'android_mojo_bindings_mojom',
+                        '../../../mojo/mojo_public.gyp:mojo_bindings_java',
+                    ],
+                },
+            ],
+        }],
     ],
 }

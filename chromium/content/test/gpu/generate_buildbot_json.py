@@ -212,6 +212,39 @@ FYI_WATERFALL = {
       'swarming': False,
       'os_type': 'win',
     },
+    'Win7 Release (NVIDIA GeForce 730)': {
+      'swarming_dimensions': {
+        'gpu': '10de:0f02',
+        'os': 'Windows-2008ServerR2-SP1'
+      },
+      'build_config': 'Release',
+      # This bot is a one-off and doesn't have similar slaves in the
+      # swarming pool.
+      'swarming': False,
+      'os_type': 'win',
+    },
+    'Win7 Release (New Intel)': {
+      'swarming_dimensions': {
+        'gpu': '8086:0412',
+        'os': 'Windows-2008ServerR2-SP1'
+      },
+      'build_config': 'Release',
+      # This bot is a one-off and doesn't have similar slaves in the
+      # swarming pool.
+      'swarming': False,
+      'os_type': 'win',
+    },
+    'Win7 Debug (New Intel)': {
+      'swarming_dimensions': {
+        'gpu': '8086:0412',
+        'os': 'Windows-2008ServerR2-SP1'
+      },
+      'build_config': 'Debug',
+      # This bot is a one-off and doesn't have similar slaves in the
+      # swarming pool.
+      'swarming': False,
+      'os_type': 'win',
+    },
     'Win7 x64 Release (NVIDIA)': {
       'swarming_dimensions': {
         'gpu': '10de:104a',
@@ -341,6 +374,17 @@ FYI_WATERFALL = {
       'swarming': False,
       'os_type': 'linux',
     },
+    'Linux Release (NVIDIA GeForce 730)': {
+      'swarming_dimensions': {
+        'gpu': '10de:0f02',
+        'os': 'Linux'
+      },
+      'build_config': 'Release',
+      # This bot is a one-off and doesn't have similar slaves in the
+      # swarming pool.
+      'swarming': False,
+      'os_type': 'linux',
+    },
     'Linux Debug (NVIDIA)': {
       'swarming_dimensions': {
         'gpu': '10de:104a',
@@ -348,6 +392,28 @@ FYI_WATERFALL = {
       },
       'build_config': 'Debug',
       'swarming': True,
+      'os_type': 'linux',
+    },
+    'Linux Release (New Intel)': {
+      'swarming_dimensions': {
+        'gpu': '8086:0412',
+        'os': 'Linux'
+      },
+      'build_config': 'Release',
+      # This bot is a one-off and doesn't have similar slaves in the
+      # swarming pool.
+      'swarming': False,
+      'os_type': 'linux',
+    },
+    'Linux Debug (New Intel)': {
+      'swarming_dimensions': {
+        'gpu': '8086:0412',
+        'os': 'Linux'
+      },
+      'build_config': 'Debug',
+      # This bot is a one-off and doesn't have similar slaves in the
+      # swarming pool.
+      'swarming': False,
       'os_type': 'linux',
     },
 
@@ -416,6 +482,27 @@ FYI_WATERFALL = {
 }
 
 COMMON_GTESTS = {
+  'angle_deqp_egl_tests': {
+    'tester_configs': [
+      {
+        'fyi_only': True,
+        # Run this on the optional tryservers.
+        'run_on_optional': True,
+        # Run only on the Win7 Release NVIDIA 32- and 64-bit bots
+        # (and trybots) for the time being, at least until more capacity is
+        # added.
+        # TODO(jmadill): Run on the Linux Release NVIDIA bots.
+        'build_configs': ['Release', 'Release_x64'],
+        'swarming_dimension_sets': [
+          {
+            'gpu': '10de:104a',
+            'os': 'Windows-2008ServerR2-SP1'
+          }
+        ],
+      },
+    ],
+  },
+
   'angle_deqp_gles2_tests': {
     'tester_configs': [
       {
@@ -438,7 +525,11 @@ COMMON_GTESTS = {
         ],
       },
     ],
-    'swarming_shards': 4
+    'swarming': {
+      'shards': 4,
+      'priority_adjustment': 'lower',
+      'expiration': 7200
+    }
   },
 
   'angle_deqp_gles3_tests': {
@@ -463,7 +554,11 @@ COMMON_GTESTS = {
         ],
       }
     ],
-    'swarming_shards': 12
+    'swarming': {
+      'shards': 12,
+      'priority_adjustment': 'lower',
+      'expiration': 7200
+    }
   },
 
   # Until we have more capacity, run angle_end2end_tests only on the
@@ -621,10 +716,19 @@ TELEMETRY_TESTS = {
     ],
     'disabled_tester_configs': [
       {
-        # BUG 555545: Disable webgl_conformance_gl_tests on Win/AMD
         'swarming_dimension_sets': [
+          # BUG 555545: Disable webgl_conformance_gl_tests on Win/AMD
           {
             'gpu': '1002:6779',
+            'os': 'Windows-2008ServerR2-SP1'
+          },
+          # BUG 590951: Disable webgl_conformance_gl_tests on Win/Intel
+          {
+            'gpu': '8086:041a',
+            'os': 'Windows-2008ServerR2-SP1'
+          },
+          {
+            'gpu': '8086:0412',
             'os': 'Windows-2008ServerR2-SP1'
           },
         ],
@@ -652,6 +756,15 @@ TELEMETRY_TESTS = {
       {
         'fyi_only': True,
         'run_on_optional': True,
+      },
+    ],
+    'disabled_tester_configs': [
+      {
+        'names': [
+          # http://crbug.com/599451: this test is currently too slow
+          # to run on x64 in Debug mode. Need to shard the tests.
+          'Win7 x64 Debug (NVIDIA)',
+        ],
       },
     ],
     'target_name': 'webgl_conformance',
@@ -741,15 +854,19 @@ def generate_gtest(tester_name, tester_config, test, test_config, is_fyi):
   else:
     # Put the swarming dimensions in anyway. If the tester is later
     # swarmed, they will come in handy.
-    result['swarming'] = {
+    if not 'swarming' in result:
+      result['swarming'] = {}
+    result['swarming'].update({
       'can_use_on_swarming_builders': True,
       'dimension_sets': [
         tester_config['swarming_dimensions']
       ],
-    }
-    if result.get('swarming_shards'):
-      result['swarming']['shards'] = result['swarming_shards']
-      result.pop('swarming_shards')
+    })
+  # This flag only has an effect on the Linux bots that run tests
+  # locally (as opposed to via Swarming), which are only those couple
+  # on the chromium.gpu.fyi waterfall. Still, there is no harm in
+  # specifying it everywhere.
+  result['use_xvfb'] = False
   return result
 
 def generate_telemetry_test(tester_name, tester_config,
@@ -795,7 +912,7 @@ def generate_telemetry_test(tester_name, tester_config,
       'dimension_sets': [
         tester_config['swarming_dimensions']
       ]
-    }
+    },
   }
   if 'non_precommit_args' in test_config:
     result['non_precommit_args'] = test_config['non_precommit_args']
@@ -833,18 +950,13 @@ def generate_all_tests(waterfall, is_fyi):
   for builder in waterfall['builders']:
     tests[builder] = {}
   for name, config in waterfall['testers'].iteritems():
-    gtests = []
-    gtests.extend(generate_gtests(name, config, COMMON_GTESTS, is_fyi))
-    isolated_scripts = []
-    isolated_scripts.extend(generate_telemetry_tests(
-        name, config, TELEMETRY_TESTS, is_fyi))
-    cur_tests = {}
-    if gtests:
-      cur_tests['gtest_tests'] = sorted(gtests, key=lambda x: x['test'])
-    if isolated_scripts:
-      cur_tests['isolated_scripts'] = sorted(
-          isolated_scripts, key=lambda x: x['name'])
-    tests[name] = cur_tests
+    gtests = generate_gtests(name, config, COMMON_GTESTS, is_fyi)
+    isolated_scripts = \
+        generate_telemetry_tests(name, config, TELEMETRY_TESTS, is_fyi)
+    tests[name] = {
+      'gtest_tests': sorted(gtests, key=lambda x: x['test']),
+      'isolated_scripts': sorted(isolated_scripts, key=lambda x: x['name'])
+    }
   tests['AAAAA1 AUTOGENERATED FILE DO NOT EDIT'] = {}
   tests['AAAAA2 See generate_buildbot_json.py to make changes'] = {}
   filename = 'chromium.gpu.fyi.json' if is_fyi else 'chromium.gpu.json'

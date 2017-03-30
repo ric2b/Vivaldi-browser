@@ -7,19 +7,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/debug/alias.h"
+#include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/rand_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "crypto/sha2.h"
+#include "gin/public/gin_features.h"
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
 #if defined(OS_ANDROID)
@@ -111,7 +114,8 @@ static bool MapV8File(base::PlatformFile platform_file,
                       base::MemoryMappedFile::Region region,
                       base::MemoryMappedFile** mmapped_file_out) {
   DCHECK(*mmapped_file_out == NULL);
-  scoped_ptr<base::MemoryMappedFile> mmapped_file(new base::MemoryMappedFile());
+  std::unique_ptr<base::MemoryMappedFile> mmapped_file(
+      new base::MemoryMappedFile());
   if (mmapped_file->Initialize(base::File(platform_file), region)) {
     *mmapped_file_out = mmapped_file.release();
     return true;
@@ -417,6 +421,11 @@ void V8Initializer::Initialize(IsolateHolder::ScriptMode mode,
   if (IsolateHolder::kStableAndExperimentalV8Extras == v8_extras_mode) {
     static const char flag[] = "--experimental_extras";
     v8::V8::SetFlagsFromString(flag, sizeof(flag) - 1);
+  }
+
+  if (base::FeatureList::IsEnabled(features::kV8Ignition)) {
+    std::string flag("--ignition");
+    v8::V8::SetFlagsFromString(flag.c_str(), static_cast<int>(flag.size()));
   }
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)

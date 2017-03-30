@@ -8,6 +8,7 @@
 
 #include "android_webview/browser/browser_view_renderer.h"
 #include "android_webview/browser/child_frame.h"
+#include "android_webview/browser/render_thread_manager.h"
 #include "base/location.h"
 #include "base/thread_task_runner_handle.h"
 #include "cc/output/compositor_frame.h"
@@ -26,8 +27,12 @@ RenderingTest::~RenderingTest() {
 
 void RenderingTest::SetUpTestHarness() {
   DCHECK(!browser_view_renderer_.get());
+  DCHECK(!render_thread_manager_.get());
+  render_thread_manager_.reset(
+      new RenderThreadManager(this, base::ThreadTaskRunnerHandle::Get()));
   browser_view_renderer_.reset(new BrowserViewRenderer(
       this, base::ThreadTaskRunnerHandle::Get(), false));
+  browser_view_renderer_->SetRenderThreadManager(render_thread_manager_.get());
   InitializeCompositor();
   Attach();
 }
@@ -40,8 +45,9 @@ void RenderingTest::InitializeCompositor() {
 }
 
 void RenderingTest::Attach() {
-  window_.reset(
-      new FakeWindow(browser_view_renderer_.get(), this, gfx::Rect(100, 100)));
+  window_.reset(new FakeWindow(browser_view_renderer_.get(),
+                               render_thread_manager_.get(), this,
+                               gfx::Rect(100, 100)));
 }
 
 void RenderingTest::RunTest() {
@@ -67,21 +73,22 @@ void RenderingTest::QuitMessageLoop() {
   message_loop_->QuitWhenIdle();
 }
 
-void RenderingTest::SetCompositorFrame() {
-  DCHECK(compositor_.get());
-  scoped_ptr<cc::CompositorFrame> compositor_frame(new cc::CompositorFrame);
-  scoped_ptr<cc::DelegatedFrameData> frame(new cc::DelegatedFrameData);
-  scoped_ptr<cc::RenderPass> root_pass(cc::RenderPass::Create());
+std::unique_ptr<cc::CompositorFrame> RenderingTest::ConstructEmptyFrame() {
+  std::unique_ptr<cc::CompositorFrame> compositor_frame(
+      new cc::CompositorFrame);
+  std::unique_ptr<cc::DelegatedFrameData> frame(new cc::DelegatedFrameData);
+  std::unique_ptr<cc::RenderPass> root_pass(cc::RenderPass::Create());
   gfx::Rect viewport(browser_view_renderer_->size());
   root_pass->SetNew(cc::RenderPassId(1, 1), viewport, viewport,
                     gfx::Transform());
   frame->render_pass_list.push_back(std::move(root_pass));
   compositor_frame->delegated_frame_data = std::move(frame);
-  compositor_->SetHardwareFrame(std::move(compositor_frame));
+  return compositor_frame;
 }
 
 void RenderingTest::WillOnDraw() {
-  SetCompositorFrame();
+  DCHECK(compositor_);
+  compositor_->SetHardwareFrame(0u, ConstructEmptyFrame());
 }
 
 bool RenderingTest::RequestDrawGL(bool wait_for_completion) {
@@ -89,7 +96,7 @@ bool RenderingTest::RequestDrawGL(bool wait_for_completion) {
   return true;
 }
 
-bool RenderingTest::WillDrawOnRT(SharedRendererState* functor,
+bool RenderingTest::WillDrawOnRT(RenderThreadManager* functor,
                                  AwDrawGLInfo* draw_info) {
   draw_info->width = window_->surface_size().width();
   draw_info->height = window_->surface_size().height();
@@ -103,7 +110,12 @@ void RenderingTest::OnNewPicture() {
 }
 
 void RenderingTest::PostInvalidate() {
-  window_->PostInvalidate();
+  if (window_)
+    window_->PostInvalidate();
+}
+
+void RenderingTest::OnParentDrawConstraintsUpdated() {
+  browser_view_renderer_->OnParentDrawConstraintsUpdated();
 }
 
 void RenderingTest::DetachFunctorFromView() {

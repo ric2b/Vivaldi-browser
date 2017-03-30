@@ -35,7 +35,7 @@
 
 namespace blink {
 
-SVGNumberOptionalNumber::SVGNumberOptionalNumber(PassRefPtrWillBeRawPtr<SVGNumber> firstNumber, PassRefPtrWillBeRawPtr<SVGNumber> secondNumber)
+SVGNumberOptionalNumber::SVGNumberOptionalNumber(SVGNumber* firstNumber, SVGNumber* secondNumber)
     : SVGPropertyBase(classType())
     , m_firstNumber(firstNumber)
     , m_secondNumber(secondNumber)
@@ -49,12 +49,12 @@ DEFINE_TRACE(SVGNumberOptionalNumber)
     SVGPropertyBase::trace(visitor);
 }
 
-PassRefPtrWillBeRawPtr<SVGNumberOptionalNumber> SVGNumberOptionalNumber::clone() const
+SVGNumberOptionalNumber* SVGNumberOptionalNumber::clone() const
 {
     return SVGNumberOptionalNumber::create(m_firstNumber->clone(), m_secondNumber->clone());
 }
 
-PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGNumberOptionalNumber::cloneForAnimation(const String& value) const
+SVGPropertyBase* SVGNumberOptionalNumber::cloneForAnimation(const String& value) const
 {
     float x, y;
     if (!parseNumberOptionalNumber(value, x, y)) {
@@ -87,21 +87,21 @@ SVGParsingError SVGNumberOptionalNumber::setValueAsString(const String& value)
     return parseStatus;
 }
 
-void SVGNumberOptionalNumber::add(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement*)
+void SVGNumberOptionalNumber::add(SVGPropertyBase* other, SVGElement*)
 {
-    RefPtrWillBeRawPtr<SVGNumberOptionalNumber> otherNumberOptionalNumber = toSVGNumberOptionalNumber(other);
+    SVGNumberOptionalNumber* otherNumberOptionalNumber = toSVGNumberOptionalNumber(other);
 
     m_firstNumber->setValue(m_firstNumber->value() + otherNumberOptionalNumber->m_firstNumber->value());
     m_secondNumber->setValue(m_secondNumber->value() + otherNumberOptionalNumber->m_secondNumber->value());
 }
 
-void SVGNumberOptionalNumber::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> from, PassRefPtrWillBeRawPtr<SVGPropertyBase> to, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDuration, SVGElement*)
+void SVGNumberOptionalNumber::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, SVGPropertyBase* from, SVGPropertyBase* to, SVGPropertyBase* toAtEndOfDuration, SVGElement*)
 {
     ASSERT(animationElement);
 
-    RefPtrWillBeRawPtr<SVGNumberOptionalNumber> fromNumber = toSVGNumberOptionalNumber(from);
-    RefPtrWillBeRawPtr<SVGNumberOptionalNumber> toNumber = toSVGNumberOptionalNumber(to);
-    RefPtrWillBeRawPtr<SVGNumberOptionalNumber> toAtEndOfDurationNumber = toSVGNumberOptionalNumber(toAtEndOfDuration);
+    SVGNumberOptionalNumber* fromNumber = toSVGNumberOptionalNumber(from);
+    SVGNumberOptionalNumber* toNumber = toSVGNumberOptionalNumber(to);
+    SVGNumberOptionalNumber* toAtEndOfDurationNumber = toSVGNumberOptionalNumber(toAtEndOfDuration);
 
     float x = m_firstNumber->value();
     float y = m_secondNumber->value();
@@ -111,7 +111,7 @@ void SVGNumberOptionalNumber::calculateAnimatedValue(SVGAnimationElement* animat
     m_secondNumber->setValue(y);
 }
 
-float SVGNumberOptionalNumber::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement*)
+float SVGNumberOptionalNumber::calculateDistance(SVGPropertyBase* other, SVGElement*)
 {
     // FIXME: Distance calculation is not possible for SVGNumberOptionalNumber right now. We need the distance for every single value.
     return -1;

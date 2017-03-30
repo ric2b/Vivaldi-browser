@@ -5,6 +5,7 @@
 #include "components/password_manager/core/browser/password_syncable_service.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -12,7 +13,6 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
@@ -203,13 +203,13 @@ class PasswordSyncableServiceWrapper {
   MockPasswordSyncableService* service() { return service_.get(); }
 
   // Returnes the scoped_ptr to |service_| thus NULLing out it.
-  scoped_ptr<syncer::SyncChangeProcessor> ReleaseSyncableService() {
+  std::unique_ptr<syncer::SyncChangeProcessor> ReleaseSyncableService() {
     return std::move(service_);
   }
 
  private:
   scoped_refptr<MockPasswordStore> password_store_;
-  scoped_ptr<MockPasswordSyncableService> service_;
+  std::unique_ptr<MockPasswordSyncableService> service_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordSyncableServiceWrapper);
 };
@@ -226,7 +226,7 @@ class PasswordSyncableServiceTest : public testing::Test {
 
  protected:
   base::MessageLoop message_loop_;
-  scoped_ptr<MockSyncChangeProcessor> processor_;
+  std::unique_ptr<MockSyncChangeProcessor> processor_;
 
  private:
   PasswordSyncableServiceWrapper wrapper_;
@@ -251,9 +251,9 @@ TEST_F(PasswordSyncableServiceTest, AdditionsInBoth) {
   EXPECT_CALL(*processor_, ProcessSyncChanges(_, ElementsAre(
       SyncChangeIs(SyncChange::ACTION_ADD, form))));
 
-  service()->MergeDataAndStartSyncing(syncer::PASSWORDS, list,
-                                      std::move(processor_),
-                                      scoped_ptr<syncer::SyncErrorFactory>());
+  service()->MergeDataAndStartSyncing(
+      syncer::PASSWORDS, list, std::move(processor_),
+      std::unique_ptr<syncer::SyncErrorFactory>());
 }
 
 // Sync has data that is not present in the password db.
@@ -269,9 +269,9 @@ TEST_F(PasswordSyncableServiceTest, AdditionOnlyInSync) {
   EXPECT_CALL(*password_store(), AddLoginImpl(PasswordIs(new_from_sync)));
   EXPECT_CALL(*processor_, ProcessSyncChanges(_, IsEmpty()));
 
-  service()->MergeDataAndStartSyncing(syncer::PASSWORDS, list,
-                                      std::move(processor_),
-                                      scoped_ptr<syncer::SyncErrorFactory>());
+  service()->MergeDataAndStartSyncing(
+      syncer::PASSWORDS, list, std::move(processor_),
+      std::unique_ptr<syncer::SyncErrorFactory>());
 }
 
 // Passwords db has data that is not present in sync.
@@ -292,9 +292,9 @@ TEST_F(PasswordSyncableServiceTest, AdditionOnlyInPasswordStore) {
   EXPECT_CALL(*processor_, ProcessSyncChanges(_, ElementsAre(
       SyncChangeIs(SyncChange::ACTION_ADD, form))));
 
-  service()->MergeDataAndStartSyncing(syncer::PASSWORDS, SyncDataList(),
-                                      std::move(processor_),
-                                      scoped_ptr<syncer::SyncErrorFactory>());
+  service()->MergeDataAndStartSyncing(
+      syncer::PASSWORDS, SyncDataList(), std::move(processor_),
+      std::unique_ptr<syncer::SyncErrorFactory>());
 }
 
 // Both passwords db and sync contain the same data.
@@ -313,7 +313,7 @@ TEST_F(PasswordSyncableServiceTest, BothInSync) {
 
   service()->MergeDataAndStartSyncing(
       syncer::PASSWORDS, SyncDataList(1, SyncDataFromPassword(form)),
-      std::move(processor_), scoped_ptr<syncer::SyncErrorFactory>());
+      std::move(processor_), std::unique_ptr<syncer::SyncErrorFactory>());
 }
 
 // Both passwords db and sync have the same data but they need to be merged
@@ -337,7 +337,7 @@ TEST_F(PasswordSyncableServiceTest, Merge) {
 
   service()->MergeDataAndStartSyncing(
       syncer::PASSWORDS, SyncDataList(1, SyncDataFromPassword(form2)),
-      std::move(processor_), scoped_ptr<syncer::SyncErrorFactory>());
+      std::move(processor_), std::unique_ptr<syncer::SyncErrorFactory>());
 }
 
 // Initiate sync due to local DB changes.
@@ -350,9 +350,9 @@ TEST_F(PasswordSyncableServiceTest, PasswordStoreChanges) {
       .WillOnce(Return(true));
   EXPECT_CALL(*password_store(), FillBlacklistLogins(_))
       .WillOnce(Return(true));
-  service()->MergeDataAndStartSyncing(syncer::PASSWORDS, SyncDataList(),
-                                      std::move(processor_),
-                                      scoped_ptr<syncer::SyncErrorFactory>());
+  service()->MergeDataAndStartSyncing(
+      syncer::PASSWORDS, SyncDataList(), std::move(processor_),
+      std::unique_ptr<syncer::SyncErrorFactory>());
 
   autofill::PasswordForm form1;
   form1.signon_realm = kSignonRealm;
@@ -469,10 +469,9 @@ TEST_F(PasswordSyncableServiceTest, MergeDataAndPushBack) {
   syncer::SyncDataList other_service_data =
       other_service_wrapper.service()->GetAllSyncData(syncer::PASSWORDS);
   service()->MergeDataAndStartSyncing(
-      syncer::PASSWORDS,
-      other_service_data,
+      syncer::PASSWORDS, other_service_data,
       other_service_wrapper.ReleaseSyncableService(),
-      scoped_ptr<syncer::SyncErrorFactory>());
+      std::unique_ptr<syncer::SyncErrorFactory>());
 }
 
 // Calls ActOnPasswordStoreChanges without SyncChangeProcessor. StartSyncFlare
@@ -499,7 +498,7 @@ TEST_F(PasswordSyncableServiceTest, StartSyncFlare) {
 // Start syncing with an error. Subsequent password store updates shouldn't be
 // propagated to Sync.
 TEST_F(PasswordSyncableServiceTest, FailedReadFromPasswordStore) {
-  scoped_ptr<syncer::SyncErrorFactoryMock> error_factory(
+  std::unique_ptr<syncer::SyncErrorFactoryMock> error_factory(
       new syncer::SyncErrorFactoryMock);
   syncer::SyncError error(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
                           "Failed to get passwords from store.",
@@ -530,7 +529,7 @@ TEST_F(PasswordSyncableServiceTest, FailedProcessSyncChanges) {
   form.signon_realm = kSignonRealm;
   form.username_value = base::ASCIIToUTF16(kUsername);
   form.password_value = base::ASCIIToUTF16(kPassword);
-  scoped_ptr<syncer::SyncErrorFactoryMock> error_factory(
+  std::unique_ptr<syncer::SyncErrorFactoryMock> error_factory(
       new syncer::SyncErrorFactoryMock);
   syncer::SyncError error(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
                           "There is a problem", syncer::PASSWORDS);
@@ -581,9 +580,9 @@ TEST_F(PasswordSyncableServiceTest, MergeEmptyPasswords) {
       SyncChangeIs(SyncChange::ACTION_DELETE, old_empty_form),
       SyncChangeIs(SyncChange::ACTION_DELETE, sync_empty_form))));
 
-  service()->MergeDataAndStartSyncing(syncer::PASSWORDS, sync_data,
-                                      std::move(processor_),
-                                      scoped_ptr<syncer::SyncErrorFactory>());
+  service()->MergeDataAndStartSyncing(
+      syncer::PASSWORDS, sync_data, std::move(processor_),
+      std::unique_ptr<syncer::SyncErrorFactory>());
 }
 
 // Serialize and deserialize empty federation_origin and make sure it's an empty
@@ -607,6 +606,108 @@ TEST_F(PasswordSyncableServiceTest, SerializeEmptyFederation) {
   specifics1.set_federation_url("null");
   form = PasswordFromSpecifics(specifics1);
   EXPECT_TRUE(form.federation_origin.unique());
+}
+
+// Serialize empty PasswordForm and make sure the Sync representation is
+// matching the expectations
+TEST_F(PasswordSyncableServiceTest, SerializeEmptyPasswordForm) {
+  autofill::PasswordForm form;
+  syncer::SyncData data = SyncDataFromPassword(form);
+  const sync_pb::PasswordSpecificsData& specifics = GetPasswordSpecifics(data);
+  EXPECT_TRUE(specifics.has_scheme());
+  EXPECT_EQ(0, specifics.scheme());
+  EXPECT_TRUE(specifics.has_signon_realm());
+  EXPECT_EQ("", specifics.signon_realm());
+  EXPECT_TRUE(specifics.has_origin());
+  EXPECT_EQ("", specifics.origin());
+  EXPECT_TRUE(specifics.has_action());
+  EXPECT_EQ("", specifics.action());
+  EXPECT_TRUE(specifics.has_username_element());
+  EXPECT_EQ("", specifics.username_element());
+  EXPECT_TRUE(specifics.has_username_value());
+  EXPECT_EQ("", specifics.username_value());
+  EXPECT_TRUE(specifics.has_password_element());
+  EXPECT_EQ("", specifics.password_element());
+  EXPECT_TRUE(specifics.has_password_value());
+  EXPECT_EQ("", specifics.password_value());
+  EXPECT_TRUE(specifics.has_ssl_valid());
+  EXPECT_FALSE(specifics.ssl_valid());
+  EXPECT_TRUE(specifics.has_preferred());
+  EXPECT_FALSE(specifics.preferred());
+  EXPECT_TRUE(specifics.has_date_created());
+  EXPECT_EQ(0, specifics.date_created());
+  EXPECT_TRUE(specifics.has_blacklisted());
+  EXPECT_FALSE(specifics.blacklisted());
+  EXPECT_TRUE(specifics.has_type());
+  EXPECT_EQ(0, specifics.type());
+  EXPECT_TRUE(specifics.has_times_used());
+  EXPECT_EQ(0, specifics.times_used());
+  EXPECT_TRUE(specifics.has_display_name());
+  EXPECT_EQ("", specifics.display_name());
+  EXPECT_TRUE(specifics.has_avatar_url());
+  EXPECT_EQ("", specifics.avatar_url());
+  EXPECT_TRUE(specifics.has_federation_url());
+  EXPECT_EQ("", specifics.federation_url());
+}
+
+// Serialize a PasswordForm with non-default member values and make sure the
+// Sync representation is matching the expectations.
+TEST_F(PasswordSyncableServiceTest, SerializeNonEmptyPasswordForm) {
+  autofill::PasswordForm form;
+  form.scheme = autofill::PasswordForm::SCHEME_USERNAME_ONLY;
+  form.signon_realm = "http://google.com/";
+  form.origin = GURL("https://google.com/origin");
+  form.action = GURL("https://google.com/action");
+  form.username_element = base::ASCIIToUTF16("username_element");
+  form.username_value = base::ASCIIToUTF16("god@google.com");
+  form.password_element = base::ASCIIToUTF16("password_element");
+  form.password_value = base::ASCIIToUTF16("!@#$%^&*()");
+  form.ssl_valid = true;
+  form.preferred = true;
+  form.date_created = base::Time::FromInternalValue(100);
+  form.blacklisted_by_user = true;
+  form.type = autofill::PasswordForm::TYPE_LAST;
+  form.times_used = 11;
+  form.display_name = base::ASCIIToUTF16("Great Peter");
+  form.icon_url = GURL("https://google.com/icon");
+  form.federation_origin = url::Origin(GURL("https://google.com/"));
+
+  syncer::SyncData data = SyncDataFromPassword(form);
+  const sync_pb::PasswordSpecificsData& specifics = GetPasswordSpecifics(data);
+  EXPECT_TRUE(specifics.has_scheme());
+  EXPECT_EQ(autofill::PasswordForm::SCHEME_USERNAME_ONLY, specifics.scheme());
+  EXPECT_TRUE(specifics.has_signon_realm());
+  EXPECT_EQ("http://google.com/", specifics.signon_realm());
+  EXPECT_TRUE(specifics.has_origin());
+  EXPECT_EQ("https://google.com/origin", specifics.origin());
+  EXPECT_TRUE(specifics.has_action());
+  EXPECT_EQ("https://google.com/action", specifics.action());
+  EXPECT_TRUE(specifics.has_username_element());
+  EXPECT_EQ("username_element", specifics.username_element());
+  EXPECT_TRUE(specifics.has_username_value());
+  EXPECT_EQ("god@google.com", specifics.username_value());
+  EXPECT_TRUE(specifics.has_password_element());
+  EXPECT_EQ("password_element", specifics.password_element());
+  EXPECT_TRUE(specifics.has_password_value());
+  EXPECT_EQ("!@#$%^&*()", specifics.password_value());
+  EXPECT_TRUE(specifics.has_ssl_valid());
+  EXPECT_TRUE(specifics.ssl_valid());
+  EXPECT_TRUE(specifics.has_preferred());
+  EXPECT_TRUE(specifics.preferred());
+  EXPECT_TRUE(specifics.has_date_created());
+  EXPECT_EQ(100, specifics.date_created());
+  EXPECT_TRUE(specifics.has_blacklisted());
+  EXPECT_TRUE(specifics.blacklisted());
+  EXPECT_TRUE(specifics.has_type());
+  EXPECT_EQ(autofill::PasswordForm::TYPE_LAST, specifics.type());
+  EXPECT_TRUE(specifics.has_times_used());
+  EXPECT_EQ(11, specifics.times_used());
+  EXPECT_TRUE(specifics.has_display_name());
+  EXPECT_EQ("Great Peter", specifics.display_name());
+  EXPECT_TRUE(specifics.has_avatar_url());
+  EXPECT_EQ("https://google.com/icon", specifics.avatar_url());
+  EXPECT_TRUE(specifics.has_federation_url());
+  EXPECT_EQ("https://google.com", specifics.federation_url());
 }
 
 }  // namespace

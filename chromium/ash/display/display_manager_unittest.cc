@@ -7,7 +7,6 @@
 #include "ash/accelerators/accelerator_commands.h"
 #include "ash/ash_switches.h"
 #include "ash/display/display_info.h"
-#include "ash/display/display_layout_builder.h"
 #include "ash/display/display_layout_store.h"
 #include "ash/display/display_util.h"
 #include "ash/display/mirror_window_controller.h"
@@ -26,6 +25,7 @@
 #include "ui/aura/env.h"
 #include "ui/aura/window_observer.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/display/manager/display_layout_builder.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/display.h"
 #include "ui/gfx/display_observer.h"
@@ -314,7 +314,8 @@ TEST_F(DisplayManagerTest, UpdateThreeDisplaysWithDefaultLayout) {
   EXPECT_EQ("960,0 400x300",
             display_manager()->GetDisplayAt(2).bounds().ToString());
 
-  DisplayPlacement default_placement(DisplayPlacement::BOTTOM, 10);
+  display::DisplayPlacement default_placement(display::DisplayPlacement::BOTTOM,
+                                              10);
   display_manager()->layout_store()->SetDefaultDisplayPlacement(
       default_placement);
 
@@ -330,37 +331,21 @@ TEST_F(DisplayManagerTest, UpdateThreeDisplaysWithDefaultLayout) {
             display_manager()->GetDisplayAt(2).bounds().ToString());
 }
 
-TEST_F(DisplayManagerTest, LayoutMorethanThreeDisplaysCrashTest) {
-  if (!SupportsMultipleDisplays())
-    return;
-
-  int64_t primary_id = gfx::Screen::GetScreen()->GetPrimaryDisplay().id();
-  DisplayIdList list =
-      ash::test::CreateDisplayIdList2(primary_id, primary_id + 1);
-
-  DisplayLayoutBuilder builder(primary_id);
-  builder.AddDisplayPlacement(list[1], primary_id, DisplayPlacement::LEFT, 10);
-  builder.AddDisplayPlacement(primary_id + 2, list[1], DisplayPlacement::TOP,
-                              10);
-  display_manager()->layout_store()->RegisterLayoutForDisplayIdList(
-      list, builder.Build());
-  UpdateDisplay("640x480, 500x500");
-}
-
 TEST_F(DisplayManagerTest, LayoutMorethanThreeDisplaysTest) {
   if (!SupportsMultipleDisplays())
     return;
 
   int64_t primary_id = gfx::Screen::GetScreen()->GetPrimaryDisplay().id();
-  DisplayIdList list = ash::test::CreateDisplayIdListN(
+  display::DisplayIdList list = ash::test::CreateDisplayIdListN(
       3, primary_id, primary_id + 1, primary_id + 2);
   {
     // Layout: [2]
     //         [1][P]
-    DisplayLayoutBuilder builder(primary_id);
-    builder.AddDisplayPlacement(list[1], primary_id, DisplayPlacement::LEFT,
-                                10);
-    builder.AddDisplayPlacement(list[2], list[1], DisplayPlacement::TOP, 10);
+    display::DisplayLayoutBuilder builder(primary_id);
+    builder.AddDisplayPlacement(list[1], primary_id,
+                                display::DisplayPlacement::LEFT, 10);
+    builder.AddDisplayPlacement(list[2], list[1],
+                                display::DisplayPlacement::TOP, 10);
     display_manager()->layout_store()->RegisterLayoutForDisplayIdList(
         list, builder.Build());
 
@@ -378,10 +363,11 @@ TEST_F(DisplayManagerTest, LayoutMorethanThreeDisplaysTest) {
   {
     // Layout: [1]
     //         [P][2]
-    DisplayLayoutBuilder builder(primary_id);
-    builder.AddDisplayPlacement(list[1], primary_id, DisplayPlacement::TOP, 10);
-    builder.AddDisplayPlacement(list[2], primary_id, DisplayPlacement::RIGHT,
-                                10);
+    display::DisplayLayoutBuilder builder(primary_id);
+    builder.AddDisplayPlacement(list[1], primary_id,
+                                display::DisplayPlacement::TOP, 10);
+    builder.AddDisplayPlacement(list[2], primary_id,
+                                display::DisplayPlacement::RIGHT, 10);
     display_manager()->layout_store()->RegisterLayoutForDisplayIdList(
         list, builder.Build());
 
@@ -400,10 +386,11 @@ TEST_F(DisplayManagerTest, LayoutMorethanThreeDisplaysTest) {
     // Layout: [P]
     //         [2]
     //         [1]
-    DisplayLayoutBuilder builder(primary_id);
-    builder.AddDisplayPlacement(list[1], list[2], DisplayPlacement::BOTTOM, 10);
-    builder.AddDisplayPlacement(list[2], primary_id, DisplayPlacement::BOTTOM,
-                                10);
+    display::DisplayLayoutBuilder builder(primary_id);
+    builder.AddDisplayPlacement(list[1], list[2],
+                                display::DisplayPlacement::BOTTOM, 10);
+    builder.AddDisplayPlacement(list[2], primary_id,
+                                display::DisplayPlacement::BOTTOM, 10);
     display_manager()->layout_store()->RegisterLayoutForDisplayIdList(
         list, builder.Build());
 
@@ -426,13 +413,15 @@ TEST_F(DisplayManagerTest, LayoutMorethanThreeDisplaysTest) {
     // Layout: [P][2]
     //      [3][4]
     //      [1]
-    DisplayLayoutBuilder builder(primary_id);
-    builder.AddDisplayPlacement(list[2], primary_id, DisplayPlacement::RIGHT,
-                                10);
-    builder.AddDisplayPlacement(list[1], list[3], DisplayPlacement::BOTTOM, 10);
-    builder.AddDisplayPlacement(list[3], list[4], DisplayPlacement::LEFT, 10);
-    builder.AddDisplayPlacement(list[4], primary_id, DisplayPlacement::BOTTOM,
-                                10);
+    display::DisplayLayoutBuilder builder(primary_id);
+    builder.AddDisplayPlacement(list[2], primary_id,
+                                display::DisplayPlacement::RIGHT, 10);
+    builder.AddDisplayPlacement(list[1], list[3],
+                                display::DisplayPlacement::BOTTOM, 10);
+    builder.AddDisplayPlacement(list[3], list[4],
+                                display::DisplayPlacement::LEFT, 10);
+    builder.AddDisplayPlacement(list[4], primary_id,
+                                display::DisplayPlacement::BOTTOM, 10);
     display_manager()->layout_store()->RegisterLayoutForDisplayIdList(
         list, builder.Build());
 
@@ -1501,6 +1490,21 @@ TEST_F(DisplayManagerTest, SoftwareMirroring) {
   gfx::Screen::GetScreen()->RemoveObserver(&display_observer);
 }
 
+TEST_F(DisplayManagerTest, RotateInSoftwareMirroring) {
+  if (!SupportsMultipleDisplays())
+    return;
+
+  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
+  UpdateDisplay("600x400,500x300");
+  display_manager->SetMirrorMode(true);
+
+  EXPECT_EQ(1U, display_manager->GetNumDisplays());
+  int64_t primary_id = gfx::Screen::GetScreen()->GetPrimaryDisplay().id();
+  display_manager->SetDisplayRotation(primary_id, gfx::Display::ROTATE_180,
+                                      gfx::Display::ROTATION_SOURCE_ACTIVE);
+  display_manager->SetMirrorMode(false);
+}
+
 TEST_F(DisplayManagerTest, SingleDisplayToSoftwareMirroring) {
   if (!SupportsMultipleDisplays())
     return;
@@ -1587,32 +1591,56 @@ TEST_F(DisplayManagerTest, MirroredLayout) {
 
 TEST_F(DisplayManagerTest, InvertLayout) {
   EXPECT_EQ("left, 0",
-            DisplayPlacement(DisplayPlacement::RIGHT, 0).Swap().ToString());
+            display::DisplayPlacement(display::DisplayPlacement::RIGHT, 0)
+                .Swap()
+                .ToString());
   EXPECT_EQ("left, -100",
-            DisplayPlacement(DisplayPlacement::RIGHT, 100).Swap().ToString());
+            display::DisplayPlacement(display::DisplayPlacement::RIGHT, 100)
+                .Swap()
+                .ToString());
   EXPECT_EQ("left, 50",
-            DisplayPlacement(DisplayPlacement::RIGHT, -50).Swap().ToString());
+            display::DisplayPlacement(display::DisplayPlacement::RIGHT, -50)
+                .Swap()
+                .ToString());
 
   EXPECT_EQ("right, 0",
-            DisplayPlacement(DisplayPlacement::LEFT, 0).Swap().ToString());
+            display::DisplayPlacement(display::DisplayPlacement::LEFT, 0)
+                .Swap()
+                .ToString());
   EXPECT_EQ("right, -90",
-            DisplayPlacement(DisplayPlacement::LEFT, 90).Swap().ToString());
+            display::DisplayPlacement(display::DisplayPlacement::LEFT, 90)
+                .Swap()
+                .ToString());
   EXPECT_EQ("right, 60",
-            DisplayPlacement(DisplayPlacement::LEFT, -60).Swap().ToString());
+            display::DisplayPlacement(display::DisplayPlacement::LEFT, -60)
+                .Swap()
+                .ToString());
 
   EXPECT_EQ("bottom, 0",
-            DisplayPlacement(DisplayPlacement::TOP, 0).Swap().ToString());
+            display::DisplayPlacement(display::DisplayPlacement::TOP, 0)
+                .Swap()
+                .ToString());
   EXPECT_EQ("bottom, -80",
-            DisplayPlacement(DisplayPlacement::TOP, 80).Swap().ToString());
+            display::DisplayPlacement(display::DisplayPlacement::TOP, 80)
+                .Swap()
+                .ToString());
   EXPECT_EQ("bottom, 70",
-            DisplayPlacement(DisplayPlacement::TOP, -70).Swap().ToString());
+            display::DisplayPlacement(display::DisplayPlacement::TOP, -70)
+                .Swap()
+                .ToString());
 
   EXPECT_EQ("top, 0",
-            DisplayPlacement(DisplayPlacement::BOTTOM, 0).Swap().ToString());
+            display::DisplayPlacement(display::DisplayPlacement::BOTTOM, 0)
+                .Swap()
+                .ToString());
   EXPECT_EQ("top, -70",
-            DisplayPlacement(DisplayPlacement::BOTTOM, 70).Swap().ToString());
+            display::DisplayPlacement(display::DisplayPlacement::BOTTOM, 70)
+                .Swap()
+                .ToString());
   EXPECT_EQ("top, 80",
-            DisplayPlacement(DisplayPlacement::BOTTOM, -80).Swap().ToString());
+            display::DisplayPlacement(display::DisplayPlacement::BOTTOM, -80)
+                .Swap()
+                .ToString());
 }
 
 TEST_F(DisplayManagerTest, NotifyPrimaryChange) {
@@ -1717,22 +1745,22 @@ TEST_F(DisplayManagerTest, UnifiedDesktopBasic) {
   gfx::Screen* screen = gfx::Screen::GetScreen();
   // The 2nd display is scaled so that it has the same height as 1st display.
   // 300 * 500 / 200  + 400 = 1150.
-  EXPECT_EQ("1150x500", screen->GetPrimaryDisplay().size().ToString());
+  EXPECT_EQ(gfx::Size(1150, 500), screen->GetPrimaryDisplay().size());
 
   display_manager()->SetMirrorMode(true);
-  EXPECT_EQ("400x500", screen->GetPrimaryDisplay().size().ToString());
+  EXPECT_EQ(gfx::Size(400, 500), screen->GetPrimaryDisplay().size());
 
   display_manager()->SetMirrorMode(false);
-  EXPECT_EQ("1150x500", screen->GetPrimaryDisplay().size().ToString());
+  EXPECT_EQ(gfx::Size(1150, 500), screen->GetPrimaryDisplay().size());
 
   // Switch to single desktop.
   UpdateDisplay("500x300");
-  EXPECT_EQ("500x300", screen->GetPrimaryDisplay().size().ToString());
+  EXPECT_EQ(gfx::Size(500, 300), screen->GetPrimaryDisplay().size());
 
   // Switch to unified desktop.
   UpdateDisplay("500x300,400x500");
   // 400 * 300 / 500 + 500 ~= 739.
-  EXPECT_EQ("739x300", screen->GetPrimaryDisplay().size().ToString());
+  EXPECT_EQ(gfx::Size(739, 300), screen->GetPrimaryDisplay().size());
 
   // The default should fit to the internal display.
   std::vector<DisplayInfo> display_info_list;
@@ -1743,13 +1771,21 @@ TEST_F(DisplayManagerTest, UnifiedDesktopBasic) {
     test::ScopedSetInternalDisplayId set_internal(11);
     display_manager()->OnNativeDisplaysChanged(display_info_list);
     // 500 * 500 / 300 + 400 ~= 1233.
-    EXPECT_EQ("1233x500", screen->GetPrimaryDisplay().size().ToString());
+    EXPECT_EQ(gfx::Size(1233, 500), screen->GetPrimaryDisplay().size());
   }
+
+  // Switch to 3 displays.
+  UpdateDisplay("500x300,400x500,500x300");
+  EXPECT_EQ(gfx::Size(1239, 300), screen->GetPrimaryDisplay().size());
 
   // Switch back to extended desktop.
   display_manager()->SetUnifiedDesktopEnabled(false);
-  EXPECT_EQ("500x300", screen->GetPrimaryDisplay().size().ToString());
-  EXPECT_EQ("400x500", ScreenUtil::GetSecondaryDisplay().size().ToString());
+  EXPECT_EQ(gfx::Size(500, 300), screen->GetPrimaryDisplay().size());
+  EXPECT_EQ(gfx::Size(400, 500), ScreenUtil::GetSecondaryDisplay().size());
+  EXPECT_EQ(gfx::Size(500, 300),
+            display_manager()
+                ->GetDisplayForId(ScreenUtil::GetSecondaryDisplay().id() + 1)
+                .size());
 }
 
 TEST_F(DisplayManagerTest, UnifiedDesktopWithHardwareMirroring) {
@@ -1775,8 +1811,8 @@ TEST_F(DisplayManagerTest, UnifiedDesktopWithHardwareMirroring) {
   // if the displays are configured to use mirroring when running on desktop.
   // This is a workdaround to force the display manager to forget
   // the mirroing layout.
-  DisplayIdList list = test::CreateDisplayIdList2(1, 2);
-  DisplayLayoutBuilder builder(
+  display::DisplayIdList list = test::CreateDisplayIdList2(1, 2);
+  display::DisplayLayoutBuilder builder(
       display_manager()->layout_store()->GetRegisteredDisplayLayout(list));
   builder.SetMirrored(false);
   display_manager()->layout_store()->RegisterLayoutForDisplayIdList(
@@ -1799,8 +1835,8 @@ TEST_F(DisplayManagerTest, UnifiedDesktopEnabledWithExtended) {
   Shell::GetPrimaryRootWindow()->RemoveObserver(this);
 
   UpdateDisplay("400x500,300x200");
-  DisplayIdList list = display_manager()->GetCurrentDisplayIdList();
-  DisplayLayoutBuilder builder(
+  display::DisplayIdList list = display_manager()->GetCurrentDisplayIdList();
+  display::DisplayLayoutBuilder builder(
       display_manager()->layout_store()->GetRegisteredDisplayLayout(list));
   builder.SetDefaultUnified(false);
   display_manager()->layout_store()->RegisterLayoutForDisplayIdList(
@@ -1963,7 +1999,7 @@ TEST_F(DisplayManagerTest, UnifiedWithDockWindows) {
 
   UpdateDisplay("400x500,300x200");
 
-  scoped_ptr<aura::Window> docked(
+  std::unique_ptr<aura::Window> docked(
       CreateTestWindowInShellWithBounds(gfx::Rect(10, 10, 50, 50)));
   docked->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_DOCKED);
   ASSERT_TRUE(wm::GetWindowState(docked.get())->IsDocked());
@@ -2016,6 +2052,19 @@ TEST_F(DisplayManagerTest, DockMode) {
   EXPECT_FALSE(SetDisplayUIScale(gfx::Display::kInvalidDisplayID, 1.0f));
 }
 
+// Make sure that bad layout information is ignored and does not crash.
+TEST_F(DisplayManagerTest, DontRegisterBadConfig) {
+  if (!SupportsMultipleDisplays())
+    return;
+  display::DisplayIdList list = ash::test::CreateDisplayIdList2(1, 2);
+  display::DisplayLayoutBuilder builder(1);
+  builder.AddDisplayPlacement(2, 1, display::DisplayPlacement::LEFT, 0);
+  builder.AddDisplayPlacement(3, 1, display::DisplayPlacement::BOTTOM, 0);
+
+  display_manager()->layout_store()->RegisterLayoutForDisplayIdList(
+      list, builder.Build());
+}
+
 class ScreenShutdownTest : public test::AshTestBase {
  public:
   ScreenShutdownTest() {
@@ -2045,7 +2094,6 @@ TEST_F(ScreenShutdownTest, ScreenAfterShutdown) {
     return;
   UpdateDisplay("500x300,800x400");
 }
-
 
 #if defined(OS_CHROMEOS)
 namespace {
@@ -2196,17 +2244,17 @@ TEST_F(DisplayManagerTest, RejectInvalidLayoutData) {
   int64_t id1 = 10001;
   int64_t id2 = 10002;
   ASSERT_TRUE(CompareDisplayIds(id1, id2));
-  DisplayLayoutBuilder good_builder(id1);
-  good_builder.SetSecondaryPlacement(id2, DisplayPlacement::LEFT, 0);
-  scoped_ptr<DisplayLayout> good(good_builder.Build());
+  display::DisplayLayoutBuilder good_builder(id1);
+  good_builder.SetSecondaryPlacement(id2, display::DisplayPlacement::LEFT, 0);
+  std::unique_ptr<display::DisplayLayout> good(good_builder.Build());
 
-  DisplayIdList good_list = test::CreateDisplayIdList2(id1, id2);
+  display::DisplayIdList good_list = test::CreateDisplayIdList2(id1, id2);
   layout_store->RegisterLayoutForDisplayIdList(good_list, good->Copy());
 
-  DisplayLayoutBuilder bad(id1);
-  bad.SetSecondaryPlacement(id2, DisplayPlacement::BOTTOM, 0);
+  display::DisplayLayoutBuilder bad(id1);
+  bad.SetSecondaryPlacement(id2, display::DisplayPlacement::BOTTOM, 0);
 
-  DisplayIdList bad_list(2);
+  display::DisplayIdList bad_list(2);
   bad_list[0] = id2;
   bad_list[1] = id1;
   layout_store->RegisterLayoutForDisplayIdList(bad_list, bad.Build());
@@ -2219,18 +2267,19 @@ TEST_F(DisplayManagerTest, GuessDisplayIdFieldsInDisplayLayout) {
   int64_t id1 = 10001;
   int64_t id2 = 10002;
 
-  scoped_ptr<DisplayLayout> old_layout(new DisplayLayout);
-  old_layout->placement_list.push_back(
-      new DisplayPlacement(DisplayPlacement::BOTTOM, 0));
+  std::unique_ptr<display::DisplayLayout> old_layout(
+      new display::DisplayLayout);
+  old_layout->placement_list.emplace_back(display::DisplayPlacement::BOTTOM, 0);
   old_layout->primary_id = id1;
 
   DisplayLayoutStore* layout_store = display_manager()->layout_store();
-  DisplayIdList list = test::CreateDisplayIdList2(id1, id2);
+  display::DisplayIdList list = test::CreateDisplayIdList2(id1, id2);
   layout_store->RegisterLayoutForDisplayIdList(list, std::move(old_layout));
-  const DisplayLayout& stored = layout_store->GetRegisteredDisplayLayout(list);
+  const display::DisplayLayout& stored =
+      layout_store->GetRegisteredDisplayLayout(list);
 
-  EXPECT_EQ(id1, stored.placement_list[0]->parent_display_id);
-  EXPECT_EQ(id2, stored.placement_list[0]->display_id);
+  EXPECT_EQ(id1, stored.placement_list[0].parent_display_id);
+  EXPECT_EQ(id2, stored.placement_list[0].display_id);
 }
 
 #endif  // OS_CHROMEOS

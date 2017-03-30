@@ -13,7 +13,7 @@
 #include "base/scoped_observer.h"
 #include "chrome/browser/ui/website_settings/chooser_bubble_controller.h"
 #include "components/bubble/bubble_reference.h"
-#include "components/webusb/public/interfaces/webusb_permission_bubble.mojom.h"
+#include "device/usb/public/interfaces/chooser_service.mojom.h"
 #include "device/usb/usb_service.h"
 #include "mojo/public/cpp/bindings/array.h"
 
@@ -34,7 +34,7 @@ class UsbChooserBubbleController : public ChooserBubbleController,
       content::RenderFrameHost* owner,
       mojo::Array<device::usb::DeviceFilterPtr> device_filters,
       content::RenderFrameHost* render_frame_host,
-      const webusb::WebUsbPermissionBubble::GetPermissionCallback& callback);
+      const device::usb::ChooserService::GetPermissionCallback& callback);
   ~UsbChooserBubbleController() override;
 
   // ChooserBubbleController:
@@ -49,14 +49,15 @@ class UsbChooserBubbleController : public ChooserBubbleController,
   void OnDeviceAdded(scoped_refptr<device::UsbDevice> device) override;
   void OnDeviceRemoved(scoped_refptr<device::UsbDevice> device) override;
 
-  void GotUsbDeviceList(
-      const std::vector<scoped_refptr<device::UsbDevice>>& devices);
-
   void set_bubble_reference(BubbleReference bubble_reference);
 
  private:
+  void GotUsbDeviceList(
+      const std::vector<scoped_refptr<device::UsbDevice>>& devices);
+  bool DisplayDevice(scoped_refptr<device::UsbDevice> device) const;
+
   content::RenderFrameHost* const render_frame_host_;
-  webusb::WebUsbPermissionBubble::GetPermissionCallback callback_;
+  device::usb::ChooserService::GetPermissionCallback callback_;
   ScopedObserver<device::UsbService, device::UsbService::Observer>
       usb_service_observer_;
   std::vector<device::UsbDeviceFilter> filters_;

@@ -36,10 +36,15 @@ CSSPropertyID AnimationInputHelpers::keyframeAttributeToCSSProperty(const String
         return CSSPropertyInvalid;
     if (property == "cssFloat")
         return CSSPropertyFloat;
+
     StringBuilder builder;
     for (size_t i = 0; i < property.length(); ++i) {
-        if (property[i] == '-')
-            Deprecation::countDeprecation(document, UseCounter::WebAnimationHyphenatedProperty);
+        // Disallow hyphenated properties.
+        if (property[i] == '-') {
+            if (cssPropertyID(property) != CSSPropertyInvalid)
+                Deprecation::countDeprecation(document, UseCounter::WebAnimationHyphenatedProperty);
+            return CSSPropertyInvalid;
+        }
         if (isASCIIUpper(property[i]))
             builder.append('-');
         builder.append(property[i]);
@@ -111,7 +116,6 @@ const AttributeNameMap& getSupportedAttributes()
             &SVGNames::modeAttr,
             &SVGNames::numOctavesAttr,
             &SVGNames::offsetAttr,
-            &SVGNames::opacityAttr,
             &SVGNames::operatorAttr,
             &SVGNames::orderAttr,
             &SVGNames::orientAttr,
@@ -165,8 +169,10 @@ const AttributeNameMap& getSupportedAttributes()
             &SVGNames::yChannelSelectorAttr,
             &SVGNames::zAttr,
         };
-        for (size_t i = 0; i < WTF_ARRAY_LENGTH(attributes); i++)
+        for (size_t i = 0; i < WTF_ARRAY_LENGTH(attributes); i++) {
+            ASSERT(!SVGElement::isAnimatableCSSProperty(*attributes[i]));
             supportedAttributes.set(*attributes[i], attributes[i]);
+        }
     }
     return supportedAttributes;
 }
@@ -196,17 +202,35 @@ const QualifiedName* AnimationInputHelpers::keyframeAttributeToSVGAttribute(cons
     return iter->value;
 }
 
-PassRefPtr<TimingFunction> AnimationInputHelpers::parseTimingFunction(const String& string)
+PassRefPtr<TimingFunction> AnimationInputHelpers::parseTimingFunction(const String& string, Document* document)
 {
     if (string.isEmpty())
         return nullptr;
 
-    RefPtrWillBeRawPtr<CSSValue> value = CSSParser::parseSingleValue(CSSPropertyTransitionTimingFunction, string);
+    CSSValue* value = CSSParser::parseSingleValue(CSSPropertyTransitionTimingFunction, string);
     if (!value || !value->isValueList()) {
         ASSERT(!value || value->isCSSWideKeyword());
+        if (document) {
+            if (string.startsWith("function")) {
+                // Due to a bug in old versions of the web-animations-next
+                // polyfill, in some circumstances the string passed in here
+                // may be a Javascript function instead of the allowed values
+                // from the spec
+                // (http://w3c.github.io/web-animations/#dom-animationeffecttimingreadonly-easing)
+                // This bug was fixed in
+                // https://github.com/web-animations/web-animations-next/pull/423
+                // and we want to track how often it is still being hit. The
+                // linear case is special because 'linear' is the default value
+                // for easing.
+                if (string == "function (a){return a}")
+                    UseCounter::count(*document, UseCounter::WebAnimationsEasingAsFunctionLinear);
+                else
+                    UseCounter::count(*document, UseCounter::WebAnimationsEasingAsFunctionOther);
+            }
+        }
         return nullptr;
     }
-    CSSValueList* valueList = toCSSValueList(value.get());
+    CSSValueList* valueList = toCSSValueList(value);
     if (valueList->length() > 1)
         return nullptr;
     return CSSToStyleMap::mapAnimationTimingFunction(*valueList->item(0), true);

@@ -7,22 +7,23 @@
 #include "ash/keyboard/keyboard_ui_observer.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
+#include "base/memory/ptr_util.h"
 #include "mojo/shell/public/cpp/connector.h"
 
 namespace ash {
 
 KeyboardUIMus::KeyboardUIMus(mojo::Connector* connector)
     : is_enabled_(false), observer_binding_(this) {
-  // TODO(sky): should be something like mojo://keyboard, but need mapping.
-  connector->ConnectToInterface("exe://chrome", &keyboard_);
+  // TODO(sky): should be something like mojo:keyboard, but need mapping.
+  connector->ConnectToInterface("exe:chrome", &keyboard_);
   keyboard_->AddObserver(observer_binding_.CreateInterfacePtrAndBind());
 }
 
 KeyboardUIMus::~KeyboardUIMus() {}
 
 // static
-scoped_ptr<KeyboardUI> KeyboardUIMus::Create(mojo::Connector* connector) {
-  return make_scoped_ptr(new KeyboardUIMus(connector));
+std::unique_ptr<KeyboardUI> KeyboardUIMus::Create(mojo::Connector* connector) {
+  return base::WrapUnique(new KeyboardUIMus(connector));
 }
 
 void KeyboardUIMus::Hide() {

@@ -74,9 +74,19 @@ void ChromeIdentityService::GetHostedDomainForIdentity(
     ChromeIdentity* identity,
     GetHostedDomainCallback callback) {}
 
+MDMDeviceStatus ChromeIdentityService::GetMDMDeviceStatus(
+    NSDictionary* user_info) {
+  return 0;
+}
+
 bool ChromeIdentityService::HandleMDMNotification(ChromeIdentity* identity,
                                                   NSDictionary* user_info,
                                                   MDMStatusCallback callback) {
+  return false;
+}
+
+bool ChromeIdentityService::IsMDMError(ChromeIdentity* identity,
+                                       NSError* error) {
   return false;
 }
 

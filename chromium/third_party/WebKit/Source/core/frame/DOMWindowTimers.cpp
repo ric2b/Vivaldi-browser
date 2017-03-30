@@ -67,7 +67,7 @@ static bool isAllowed(ScriptState* scriptState, ExecutionContext* executionConte
 
 int setTimeout(ScriptState* scriptState, EventTarget& eventTarget, const ScriptValue& handler, int timeout, const Vector<ScriptValue>& arguments)
 {
-    ExecutionContext* executionContext = eventTarget.executionContext();
+    ExecutionContext* executionContext = eventTarget.getExecutionContext();
     if (!isAllowed(scriptState, executionContext, false))
         return 0;
     if (timeout >= 0 && executionContext->isDocument()) {
@@ -75,13 +75,13 @@ int setTimeout(ScriptState* scriptState, EventTarget& eventTarget, const ScriptV
         // be done using the scheduler instead.
         V8GCForContextDispose::instance().notifyIdle();
     }
-    OwnPtrWillBeRawPtr<ScheduledAction> action = ScheduledAction::create(scriptState, handler, arguments);
-    return DOMTimer::install(executionContext, action.release(), timeout, true);
+    ScheduledAction* action = ScheduledAction::create(scriptState, handler, arguments);
+    return DOMTimer::install(executionContext, action, timeout, true);
 }
 
 int setTimeout(ScriptState* scriptState, EventTarget& eventTarget, const String& handler, int timeout, const Vector<ScriptValue>&)
 {
-    ExecutionContext* executionContext = eventTarget.executionContext();
+    ExecutionContext* executionContext = eventTarget.getExecutionContext();
     if (!isAllowed(scriptState, executionContext, true))
         return 0;
     // Don't allow setting timeouts to run empty functions.  Was historically a
@@ -93,41 +93,41 @@ int setTimeout(ScriptState* scriptState, EventTarget& eventTarget, const String&
         // be done using the scheduler instead.
         V8GCForContextDispose::instance().notifyIdle();
     }
-    OwnPtrWillBeRawPtr<ScheduledAction> action = ScheduledAction::create(scriptState, handler);
-    return DOMTimer::install(executionContext, action.release(), timeout, true);
+    ScheduledAction* action = ScheduledAction::create(scriptState, handler);
+    return DOMTimer::install(executionContext, action, timeout, true);
 }
 
 int setInterval(ScriptState* scriptState, EventTarget& eventTarget, const ScriptValue& handler, int timeout, const Vector<ScriptValue>& arguments)
 {
-    ExecutionContext* executionContext = eventTarget.executionContext();
+    ExecutionContext* executionContext = eventTarget.getExecutionContext();
     if (!isAllowed(scriptState, executionContext, false))
         return 0;
-    OwnPtrWillBeRawPtr<ScheduledAction> action = ScheduledAction::create(scriptState, handler, arguments);
-    return DOMTimer::install(executionContext, action.release(), timeout, false);
+    ScheduledAction* action = ScheduledAction::create(scriptState, handler, arguments);
+    return DOMTimer::install(executionContext, action, timeout, false);
 }
 
 int setInterval(ScriptState* scriptState, EventTarget& eventTarget, const String& handler, int timeout, const Vector<ScriptValue>&)
 {
-    ExecutionContext* executionContext = eventTarget.executionContext();
+    ExecutionContext* executionContext = eventTarget.getExecutionContext();
     if (!isAllowed(scriptState, executionContext, true))
         return 0;
     // Don't allow setting timeouts to run empty functions.  Was historically a
     // perfomance issue.
     if (handler.isEmpty())
         return 0;
-    OwnPtrWillBeRawPtr<ScheduledAction> action = ScheduledAction::create(scriptState, handler);
-    return DOMTimer::install(executionContext, action.release(), timeout, false);
+    ScheduledAction* action = ScheduledAction::create(scriptState, handler);
+    return DOMTimer::install(executionContext, action, timeout, false);
 }
 
 void clearTimeout(EventTarget& eventTarget, int timeoutID)
 {
-    if (ExecutionContext* context = eventTarget.executionContext())
+    if (ExecutionContext* context = eventTarget.getExecutionContext())
         DOMTimer::removeByID(context, timeoutID);
 }
 
 void clearInterval(EventTarget& eventTarget, int timeoutID)
 {
-    if (ExecutionContext* context = eventTarget.executionContext())
+    if (ExecutionContext* context = eventTarget.getExecutionContext())
         DOMTimer::removeByID(context, timeoutID);
 }
 

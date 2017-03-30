@@ -31,6 +31,7 @@
 #include "core/css/CSSContentDistributionValue.h"
 #include "core/css/CSSFontFeatureValue.h"
 #include "core/css/CSSFunctionValue.h"
+#include "core/css/CSSGridAutoRepeatValue.h"
 #include "core/css/CSSGridLineNamesValue.h"
 #include "core/css/CSSPathValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
@@ -142,9 +143,9 @@ static FontDescription::GenericFamilyType convertGenericFamily(CSSValueID valueI
 static bool convertFontFamilyName(StyleResolverState& state, CSSValue& value,
     FontDescription::GenericFamilyType& genericFamily, AtomicString& familyName)
 {
-    if (value.isCustomIdentValue()) {
+    if (value.isFontFamilyValue()) {
         genericFamily = FontDescription::NoFamily;
-        familyName = AtomicString(toCSSCustomIdentValue(value).value());
+        familyName = AtomicString(toCSSFontFamilyValue(value).value());
     } else if (state.document().settings()) {
         genericFamily = convertGenericFamily(toCSSPrimitiveValue(value).getValueID());
         familyName = state.fontBuilder().genericFontFamilyName(genericFamily);
@@ -201,16 +202,10 @@ PassRefPtr<FontFeatureSettings> StyleBuilderConverter::convertFontFeatureSetting
 
 static float computeFontSize(StyleResolverState& state, const CSSPrimitiveValue& primitiveValue, const FontDescription::Size& parentSize)
 {
-    float em = state.parentStyle()->specifiedFontSize();
-    float rem = state.rootElementStyle() ? state.rootElementStyle()->specifiedFontSize() : 1.0f;
-    CSSToLengthConversionData::FontSizes fontSizes(em, rem, &state.parentStyle()->font());
-    CSSToLengthConversionData::ViewportSize viewportSize(state.document().layoutView());
-
-    CSSToLengthConversionData conversionData(state.style(), fontSizes, viewportSize, 1.0f);
     if (primitiveValue.isLength())
-        return primitiveValue.computeLength<float>(conversionData);
+        return primitiveValue.computeLength<float>(state.fontSizeConversionData());
     if (primitiveValue.isCalculatedPercentageWithLength())
-        return primitiveValue.cssCalcValue()->toCalcValue(conversionData)->evaluate(parentSize.value);
+        return primitiveValue.cssCalcValue()->toCalcValue(state.fontSizeConversionData())->evaluate(parentSize.value);
 
     ASSERT_NOT_REACHED();
     return 0;
@@ -224,27 +219,17 @@ FontDescription::Size StyleBuilderConverter::convertFontSize(StyleResolverState&
 
     // FIXME: Find out when parentStyle could be 0?
     if (state.parentStyle())
-        parentSize = state.parentFontDescription().size();
+        parentSize = state.parentFontDescription().getSize();
 
     if (CSSValueID valueID = primitiveValue.getValueID()) {
-        switch (valueID) {
-        case CSSValueXxSmall:
-        case CSSValueXSmall:
-        case CSSValueSmall:
-        case CSSValueMedium:
-        case CSSValueLarge:
-        case CSSValueXLarge:
-        case CSSValueXxLarge:
-        case CSSValueWebkitXxxLarge:
+        if (FontSize::isValidValueID(valueID))
             return FontDescription::Size(FontSize::keywordSize(valueID), 0.0f, false);
-        case CSSValueLarger:
-            return FontDescription::largerSize(parentSize);
-        case CSSValueSmaller:
+        if (valueID == CSSValueSmaller)
             return FontDescription::smallerSize(parentSize);
-        default:
-            ASSERT_NOT_REACHED();
-            return FontBuilder::initialSize();
-        }
+        if (valueID == CSSValueLarger)
+            return FontDescription::largerSize(parentSize);
+        ASSERT_NOT_REACHED();
+        return FontBuilder::initialSize();
     }
 
     bool parentIsAbsoluteSize = state.parentFontDescription().isAbsoluteSize();
@@ -270,9 +255,9 @@ FontWeight StyleBuilderConverter::convertFontWeight(StyleResolverState& state, c
     const CSSPrimitiveValue& primitiveValue = toCSSPrimitiveValue(value);
     switch (primitiveValue.getValueID()) {
     case CSSValueBolder:
-        return FontDescription::bolderWeight(state.parentStyle()->fontDescription().weight());
+        return FontDescription::bolderWeight(state.parentStyle()->getFontDescription().weight());
     case CSSValueLighter:
-        return FontDescription::lighterWeight(state.parentStyle()->fontDescription().weight());
+        return FontDescription::lighterWeight(state.parentStyle()->getFontDescription().weight());
     default:
         return primitiveValue.convertTo<FontWeight>();
     }
@@ -467,7 +452,20 @@ GridTrackSize StyleBuilderConverter::convertGridTrackSize(StyleResolverState& st
     return GridTrackSize(minTrackBreadth, maxTrackBreadth);
 }
 
-void StyleBuilderConverter::convertGridTrackList(const CSSValue& value, Vector<GridTrackSize>& trackSizes, NamedGridLinesMap& namedGridLines, OrderedNamedGridLines& orderedNamedGridLines, StyleResolverState& state)
+static void convertGridLineNamesList(const CSSValue& value, size_t currentNamedGridLine, NamedGridLinesMap& namedGridLines, OrderedNamedGridLines& orderedNamedGridLines)
+{
+    ASSERT(value.isGridLineNamesValue());
+
+    for (auto& namedGridLineValue : toCSSValueList(value)) {
+        String namedGridLine = toCSSCustomIdentValue(*namedGridLineValue).value();
+        NamedGridLinesMap::AddResult result = namedGridLines.add(namedGridLine, Vector<size_t>());
+        result.storedValue->value.append(currentNamedGridLine);
+        OrderedNamedGridLines::AddResult orderedInsertionResult = orderedNamedGridLines.add(currentNamedGridLine, Vector<String>());
+        orderedInsertionResult.storedValue->value.append(namedGridLine);
+    }
+}
+
+void StyleBuilderConverter::convertGridTrackList(const CSSValue& value, Vector<GridTrackSize>& trackSizes, NamedGridLinesMap& namedGridLines, OrderedNamedGridLines& orderedNamedGridLines, Vector<GridTrackSize>& autoRepeatTrackSizes, NamedGridLinesMap& autoRepeatNamedGridLines, OrderedNamedGridLines& autoRepeatOrderedNamedGridLines, size_t& autoRepeatInsertionPoint, AutoRepeatType &autoRepeatType, StyleResolverState& state)
 {
     if (value.isPrimitiveValue()) {
         ASSERT(toCSSPrimitiveValue(value).getValueID() == CSSValueNone);
@@ -475,15 +473,27 @@ void StyleBuilderConverter::convertGridTrackList(const CSSValue& value, Vector<G
     }
 
     size_t currentNamedGridLine = 0;
-    for (auto& currValue : toCSSValueList(value)) {
+    for (auto currValue : toCSSValueList(value)) {
         if (currValue->isGridLineNamesValue()) {
-            for (auto& namedGridLineValue : toCSSGridLineNamesValue(*currValue)) {
-                String namedGridLine = toCSSCustomIdentValue(*namedGridLineValue).value();
-                NamedGridLinesMap::AddResult result = namedGridLines.add(namedGridLine, Vector<size_t>());
-                result.storedValue->value.append(currentNamedGridLine);
-                OrderedNamedGridLines::AddResult orderedInsertionResult = orderedNamedGridLines.add(currentNamedGridLine, Vector<String>());
-                orderedInsertionResult.storedValue->value.append(namedGridLine);
+            convertGridLineNamesList(*currValue, currentNamedGridLine, namedGridLines, orderedNamedGridLines);
+            continue;
+        }
+
+        if (currValue->isGridAutoRepeatValue()) {
+            ASSERT(autoRepeatTrackSizes.isEmpty());
+            size_t autoRepeatIndex = 0;
+            CSSValueID autoRepeatID = toCSSGridAutoRepeatValue(currValue.get())->autoRepeatID();
+            ASSERT(autoRepeatID == CSSValueAutoFill || autoRepeatID == CSSValueAutoFit);
+            autoRepeatType = autoRepeatID == CSSValueAutoFill ? AutoFill : AutoFit;
+            for (auto autoRepeatValue : toCSSValueList(*currValue)) {
+                if (autoRepeatValue->isGridLineNamesValue()) {
+                    convertGridLineNamesList(*autoRepeatValue, autoRepeatIndex, autoRepeatNamedGridLines, autoRepeatOrderedNamedGridLines);
+                    continue;
+                }
+                ++autoRepeatIndex;
+                autoRepeatTrackSizes.append(convertGridTrackSize(state, *autoRepeatValue));
             }
+            autoRepeatInsertionPoint = currentNamedGridLine++;
             continue;
         }
 
@@ -493,7 +503,7 @@ void StyleBuilderConverter::convertGridTrackList(const CSSValue& value, Vector<G
 
     // The parser should have rejected any <track-list> without any <track-size> as
     // this is not conformant to the syntax.
-    ASSERT(!trackSizes.isEmpty());
+    ASSERT(!trackSizes.isEmpty() || !autoRepeatTrackSizes.isEmpty());
 }
 
 void StyleBuilderConverter::convertOrderedNamedGridLinesMapToNamedGridLinesMap(const OrderedNamedGridLines& orderedNamedGridLines, NamedGridLinesMap& namedGridLines)
@@ -522,12 +532,12 @@ void StyleBuilderConverter::createImplicitNamedGridLinesFromGridArea(const Named
         GridSpan areaSpan = direction == ForRows ? namedGridAreaEntry.value.rows : namedGridAreaEntry.value.columns;
         {
             NamedGridLinesMap::AddResult startResult = namedGridLines.add(namedGridAreaEntry.key + "-start", Vector<size_t>());
-            startResult.storedValue->value.append(areaSpan.resolvedInitialPosition());
+            startResult.storedValue->value.append(areaSpan.startLine());
             std::sort(startResult.storedValue->value.begin(), startResult.storedValue->value.end());
         }
         {
             NamedGridLinesMap::AddResult endResult = namedGridLines.add(namedGridAreaEntry.key + "-end", Vector<size_t>());
-            endResult.storedValue->value.append(areaSpan.resolvedFinalPosition());
+            endResult.storedValue->value.append(areaSpan.endLine());
             std::sort(endResult.storedValue->value.begin(), endResult.storedValue->value.end());
         }
     }
@@ -655,7 +665,7 @@ StyleMotionRotation StyleBuilderConverter::convertMotionRotation(const CSSValue&
 }
 
 template <CSSValueID cssValueFor0, CSSValueID cssValueFor100>
-static Length convertPositionLength(StyleResolverState& state, const CSSValue& value)
+Length StyleBuilderConverter::convertPositionLength(StyleResolverState& state, const CSSValue& value)
 {
     if (value.isValuePair()) {
         const CSSValuePair& pair = toCSSValuePair(value);
@@ -704,25 +714,6 @@ float StyleBuilderConverter::convertPerspective(StyleResolverState& state, const
     if (primitiveValue.getValueID() == CSSValueNone)
         return ComputedStyle::initialPerspective();
     return convertPerspectiveLength(state, primitiveValue);
-}
-
-template <CSSValueID cssValueFor0, CSSValueID cssValueFor100>
-static Length convertOriginLength(StyleResolverState& state, const CSSPrimitiveValue& primitiveValue)
-{
-    if (primitiveValue.isValueID()) {
-        switch (primitiveValue.getValueID()) {
-        case cssValueFor0:
-            return Length(0, Percent);
-        case cssValueFor100:
-            return Length(100, Percent);
-        case CSSValueCenter:
-            return Length(50, Percent);
-        default:
-            ASSERT_NOT_REACHED();
-        }
-    }
-
-    return StyleBuilderConverter::convertLength(state, primitiveValue);
 }
 
 EPaintOrder StyleBuilderConverter::convertPaintOrder(StyleResolverState&, const CSSValue& cssPaintOrder)
@@ -802,7 +793,7 @@ PassRefPtr<ShadowList> StyleBuilderConverter::convertShadow(StyleResolverState& 
     return ShadowList::adopt(shadows);
 }
 
-PassRefPtrWillBeRawPtr<ShapeValue> StyleBuilderConverter::convertShapeValue(StyleResolverState& state, const CSSValue& value)
+ShapeValue* StyleBuilderConverter::convertShapeValue(StyleResolverState& state, const CSSValue& value)
 {
     if (value.isPrimitiveValue()) {
         ASSERT(toCSSPrimitiveValue(value).getValueID() == CSSValueNone);
@@ -882,8 +873,8 @@ TransformOrigin StyleBuilderConverter::convertTransformOrigin(StyleResolverState
     const CSSPrimitiveValue& primitiveValueZ = toCSSPrimitiveValue(*list.item(2));
 
     return TransformOrigin(
-        convertOriginLength<CSSValueLeft, CSSValueRight>(state, primitiveValueX),
-        convertOriginLength<CSSValueTop, CSSValueBottom>(state, primitiveValueY),
+        convertPositionLength<CSSValueLeft, CSSValueRight>(state, primitiveValueX),
+        convertPositionLength<CSSValueTop, CSSValueBottom>(state, primitiveValueY),
         StyleBuilderConverter::convertComputedLength<float>(state, primitiveValueZ)
     );
 }
@@ -937,7 +928,7 @@ PassRefPtr<TranslateTransformOperation> StyleBuilderConverter::convertTranslate(
     return TranslateTransformOperation::create(tx, ty, tz, TransformOperation::Translate3D);
 }
 
-PassRefPtr<RotateTransformOperation> StyleBuilderConverter::convertRotate(StyleResolverState& state, const CSSValue& value)
+Rotation StyleBuilderConverter::convertRotation(const CSSValue& value)
 {
     const CSSValueList& list = toCSSValueList(value);
     ASSERT(list.length() == 1 || list.length() == 4);
@@ -950,8 +941,12 @@ PassRefPtr<RotateTransformOperation> StyleBuilderConverter::convertRotate(StyleR
         y = toCSSPrimitiveValue(list.item(2))->getDoubleValue();
         z = toCSSPrimitiveValue(list.item(3))->getDoubleValue();
     }
+    return Rotation(FloatPoint3D(x, y, z), angle);
+}
 
-    return RotateTransformOperation::create(x, y, z, angle, TransformOperation::Rotate3D);
+PassRefPtr<RotateTransformOperation> StyleBuilderConverter::convertRotate(StyleResolverState& state, const CSSValue& value)
+{
+    return RotateTransformOperation::create(convertRotation(value), TransformOperation::Rotate3D);
 }
 
 PassRefPtr<ScaleTransformOperation> StyleBuilderConverter::convertScale(StyleResolverState& state, const CSSValue& value)
@@ -975,15 +970,10 @@ RespectImageOrientationEnum StyleBuilderConverter::convertImageOrientation(Style
     return primitiveValue.getValueID() == CSSValueFromImage ? RespectImageOrientation : DoNotRespectImageOrientation;
 }
 
-PassRefPtr<StylePath> StyleBuilderConverter::convertPath(StyleResolverState&, const CSSValue& value)
-{
-    return toCSSPathValue(value).stylePath();
-}
-
 PassRefPtr<StylePath> StyleBuilderConverter::convertPathOrNone(StyleResolverState& state, const CSSValue& value)
 {
     if (value.isPathValue())
-        return convertPath(state, value);
+        return toCSSPathValue(value).stylePath();
     ASSERT(value.isPrimitiveValue() && toCSSPrimitiveValue(value).getValueID() == CSSValueNone);
     return nullptr;
 }

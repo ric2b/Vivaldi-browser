@@ -19,7 +19,7 @@ namespace mojo {
 // if the client did not provide a message pipe.
 template <typename Interface>
 class InterfaceRequest {
-  MOJO_MOVE_ONLY_TYPE(InterfaceRequest)
+  MOVE_ONLY_TYPE_FOR_CPP_03(InterfaceRequest);
  public:
   // Constructs an empty InterfaceRequest, representing that the client is not
   // requesting an implementation of Interface.
@@ -107,17 +107,24 @@ InterfaceRequest<Interface> MakeRequest(ScopedMessagePipeHandle handle) {
 //   CollectorPtr collector = ...;  // Connect to Collector.
 //   SourcePtr source;
 //   InterfaceRequest<Source> source_request = GetProxy(&source);
-//   collector->RegisterSource(source.Pass());
-//   CreateSource(source_request.Pass());  // Create implementation locally.
+//   collector->RegisterSource(std::move(source));
+//   CreateSource(std::move(source_request));  // Create implementation locally.
 //
 template <typename Interface>
-InterfaceRequest<typename Interface::GenericInterface>
-GetProxy(InterfacePtr<Interface>* ptr) {
+InterfaceRequest<Interface> GetProxy(InterfacePtr<Interface>* ptr) {
   MessagePipe pipe;
-  ptr->Bind(InterfacePtrInfo<typename Interface::GenericInterface>(
-      std::move(pipe.handle0), 0u));
-  return MakeRequest<typename Interface::GenericInterface>(
-      std::move(pipe.handle1));
+  ptr->Bind(InterfacePtrInfo<Interface>(std::move(pipe.handle0), 0u));
+  return MakeRequest<Interface>(std::move(pipe.handle1));
+}
+
+// Fuses an InterfaceRequest<T> endpoint with an InterfacePtrInfo<T> endpoint.
+// Returns |true| on success or |false| on failure.
+template <typename Interface>
+bool FuseInterface(InterfaceRequest<Interface> request,
+                   InterfacePtrInfo<Interface> proxy_info) {
+  MojoResult result = FuseMessagePipes(request.PassMessagePipe(),
+                                       proxy_info.PassHandle());
+  return result == MOJO_RESULT_OK;
 }
 
 }  // namespace mojo

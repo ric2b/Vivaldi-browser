@@ -69,9 +69,25 @@ unsigned GetEventModifiers(int modifiers)
     return platformModifiers;
 }
 
+// Convert given protocol timestamp which is in seconds since unix epoch to a
+// platform event timestamp which is ticks since platform start. This conversion
+// is an estimate because these two clocks respond differently to user setting
+// time and NTP adjustments. If timestamp is empty then returns current
+// monotonic timestamp.
+double GetEventTimeStamp(const blink::protocol::Maybe<double>& timestamp)
+{
+    // Take a snapshot of difference between two clocks on first run and use it
+    // for the duration of the application.
+    static double epochToMonotonicTimeDelta = currentTime() - monotonicallyIncreasingTime();
+    if (timestamp.isJust())
+        return timestamp.fromJust() - epochToMonotonicTimeDelta;
+
+    return monotonicallyIncreasingTime();
+}
+
 class SyntheticInspectorTouchPoint : public blink::PlatformTouchPoint {
 public:
-    SyntheticInspectorTouchPoint(int id, State state, const blink::IntPoint& screenPos, const blink::IntPoint& pos, int radiusX, int radiusY, double rotationAngle, double force)
+    SyntheticInspectorTouchPoint(int id, TouchState state, const blink::IntPoint& screenPos, const blink::IntPoint& pos, int radiusX, int radiusY, double rotationAngle, double force)
     {
         m_pointerProperties.id = id;
         m_screenPos = screenPos;
@@ -85,7 +101,7 @@ public:
 
 class SyntheticInspectorTouchEvent : public blink::PlatformTouchEvent {
 public:
-    SyntheticInspectorTouchEvent(const blink::PlatformEvent::Type type, unsigned modifiers, double timestamp)
+    SyntheticInspectorTouchEvent(const blink::PlatformEvent::EventType type, unsigned modifiers, double timestamp)
     {
         m_type = type;
         m_modifiers = modifiers;
@@ -101,7 +117,7 @@ public:
 void ConvertInspectorPoint(blink::LocalFrame* frame, const blink::IntPoint& pointInFrame, blink::IntPoint* convertedPoint, blink::IntPoint* globalPoint)
 {
     *convertedPoint = frame->view()->convertToRootFrame(pointInFrame);
-    *globalPoint = frame->page()->chromeClient().viewportToScreen(blink::IntRect(pointInFrame, blink::IntSize(0, 0))).location();
+    *globalPoint = frame->page()->chromeClient().viewportToScreen(blink::IntRect(pointInFrame, blink::IntSize(0, 0)), frame->view()).location();
 }
 
 } // namespace
@@ -120,7 +136,7 @@ InspectorInputAgent::~InspectorInputAgent()
 
 void InspectorInputAgent::dispatchTouchEvent(ErrorString* error, const String& type, PassOwnPtr<protocol::Array<protocol::Input::TouchPoint>> touchPoints, const protocol::Maybe<int>& modifiers, const protocol::Maybe<double>& timestamp)
 {
-    PlatformEvent::Type convertedType;
+    PlatformEvent::EventType convertedType;
     if (type == "touchStart") {
         convertedType = PlatformEvent::TouchStart;
     } else if (type == "touchEnd") {
@@ -128,13 +144,13 @@ void InspectorInputAgent::dispatchTouchEvent(ErrorString* error, const String& t
     } else if (type == "touchMove") {
         convertedType = PlatformEvent::TouchMove;
     } else {
-        *error = "Unrecognized type: " + type;
+        *error = String("Unrecognized type: " + type);
         return;
     }
 
     unsigned convertedModifiers = GetEventModifiers(modifiers.fromMaybe(0));
 
-    SyntheticInspectorTouchEvent event(convertedType, convertedModifiers, timestamp.fromMaybe(currentTime()));
+    SyntheticInspectorTouchEvent event(convertedType, convertedModifiers, GetEventTimeStamp(timestamp));
 
     int autoId = 0;
     for (size_t i = 0; i < touchPoints->length(); ++i) {
@@ -158,7 +174,7 @@ void InspectorInputAgent::dispatchTouchEvent(ErrorString* error, const String& t
             return;
         }
 
-        PlatformTouchPoint::State convertedState;
+        PlatformTouchPoint::TouchState convertedState;
         String state = point->getState();
         if (state == "touchPressed") {
             convertedState = PlatformTouchPoint::TouchPressed;
@@ -171,7 +187,7 @@ void InspectorInputAgent::dispatchTouchEvent(ErrorString* error, const String& t
         } else if (state == "touchCancelled") {
             convertedState = PlatformTouchPoint::TouchCancelled;
         } else {
-            *error = "Unrecognized state: " + state;
+            *error = String("Unrecognized state: " + state);
             return;
         }
 

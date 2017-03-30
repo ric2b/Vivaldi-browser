@@ -79,6 +79,16 @@ remoting.ChromotingEvent = function(type) {
   this.render_latency;
   /** @type {number} */
   this.roundtrip_latency;
+  /** @type {number} */
+  this.max_capture_latency;
+  /** @type {number} */
+  this.max_encode_latency;
+  /** @type {number} */
+  this.max_decode_latency;
+  /** @type {number} */
+  this.max_render_latency;
+  /** @type {number} */
+  this.max_roundtrip_latency;
   /** @type {remoting.ChromotingEvent.Mode} */
   this.mode;
   /** @type {remoting.ChromotingEvent.SignalStrategyType} */
@@ -105,6 +115,11 @@ remoting.ChromotingEvent = function(type) {
    * @type {number}
    */
   this.host_last_heartbeat_elapsed_time;
+  /**
+    * To track features like number of ESC key press in a session.
+    * @type {remoting.ChromotingEvent.FeatureTracker}
+    */
+  this.feature_tracker;
   this.init_();
 };
 
@@ -205,6 +220,16 @@ remoting.ChromotingEvent.SessionSummary = function() {
   this.entry_point;
 };
 
+/**
+ * For tracking features like keypress count.
+ * All counting fields will be initialized to 0.
+ * @constructor
+ */
+remoting.ChromotingEvent.FeatureTracker = function() {
+  /** @type {number} */
+  this.fullscreen_esc_count = 0;
+};
+
 })();
 
 /**
@@ -219,7 +244,8 @@ remoting.ChromotingEvent.Type = {
   HEARTBEAT_REJECTED: 6,
   RESTART: 7,
   HOST_STATUS: 8,
-  SIGNAL_STRATEGY_PROGRESS: 9
+  SIGNAL_STRATEGY_PROGRESS: 9,
+  FEATURE_TRACKING: 10
 };
 
 /** @enum {number} */

@@ -7,7 +7,7 @@
 
 #include <list>
 #include <map>
-#include <set>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -16,23 +16,20 @@
 #include "ash/shelf/shelf_item_delegate.h"
 #include "ash/shelf/shelf_item_delegate_manager.h"
 #include "ash/shelf/shelf_item_types.h"
-#include "ash/shelf/shelf_layout_manager_observer.h"
 #include "ash/shelf/shelf_model_observer.h"
 #include "ash/shelf/shelf_types.h"
-#include "ash/shell_observer.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/app_icon_loader.h"
 #include "chrome/browser/ui/ash/app_sync_ui_state_observer.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_types.h"
+#include "chrome/browser/ui/ash/launcher/launcher_app_updater.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/syncable_prefs/pref_service_syncable_observer.h"
-#include "extensions/browser/extension_registry_observer.h"
 #include "extensions/common/constants.h"
 #include "ui/aura/window_observer.h"
 
@@ -87,14 +84,12 @@ typedef ScopedVector<ChromeLauncherAppMenuItem> ChromeLauncherAppMenuItems;
 class ChromeLauncherController
     : public ash::ShelfDelegate,
       public ash::ShelfModelObserver,
-      public ash::ShellObserver,
       public ash::WindowTreeHostManager::Observer,
-      public extensions::ExtensionRegistryObserver,
       public AppIconLoaderDelegate,
       public syncable_prefs::PrefServiceSyncableObserver,
       public AppSyncUIStateObserver,
       public ExtensionEnableFlowDelegate,
-      public ash::ShelfLayoutManagerObserver,
+      public LauncherAppUpdater::Delegate,
       public ash::ShelfItemDelegateManagerObserver {
  public:
   // Indicates if a shelf item is incognito or not.
@@ -249,18 +244,6 @@ class ChromeLauncherController
   // cases this might change over time.
   Profile* profile();
 
-  // Gets the shelf auto-hide behavior on |root_window|.
-  ash::ShelfAutoHideBehavior GetShelfAutoHideBehavior(
-      aura::Window* root_window) const;
-
-  // Returns |true| if the user is allowed to modify the shelf auto-hide
-  // behavior on |root_window|.
-  bool CanUserModifyShelfAutoHideBehavior(aura::Window* root_window) const;
-
-  // Toggles the shelf auto-hide behavior on |root_window|. Does nothing if the
-  // user is not allowed to modify the auto-hide behavior.
-  void ToggleShelfAutoHideBehavior(aura::Window* root_window);
-
   // Notify the controller that the state of an non platform app's tabs
   // have changed,
   void UpdateAppState(content::WebContents* contents, AppState app_state);
@@ -287,6 +270,8 @@ class ChromeLauncherController
   // ash::ShelfDelegate:
   void OnShelfCreated(ash::Shelf* shelf) override;
   void OnShelfDestroyed(ash::Shelf* shelf) override;
+  void OnShelfAlignmentChanged(ash::Shelf* shelf) override;
+  void OnShelfAutoHideBehaviorChanged(ash::Shelf* shelf) override;
   ash::ShelfID GetShelfIDForAppID(const std::string& app_id) override;
   bool HasShelfIDToAppIDMapping(ash::ShelfID id) const override;
   const std::string& GetAppIDForShelfID(ash::ShelfID id) override;
@@ -304,21 +289,17 @@ class ChromeLauncherController
   void ShelfItemRemoved(int index, ash::ShelfID id) override;
   void ShelfItemMoved(int start_index, int target_index) override;
   void ShelfItemChanged(int index, const ash::ShelfItem& old_item) override;
-  void ShelfStatusChanged() override;
-
-  // ash::ShellObserver:
-  void OnShelfAlignmentChanged(aura::Window* root_window) override;
 
   // ash::WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanged() override;
 
-  // ExtensionRegistryObserver:
-  void OnExtensionLoaded(content::BrowserContext* browser_context,
-                         const extensions::Extension* extension) override;
-  void OnExtensionUnloaded(
-      content::BrowserContext* browser_context,
-      const extensions::Extension* extension,
-      extensions::UnloadedExtensionInfo::Reason reason) override;
+  // LauncherAppUpdater:
+  void OnAppInstalled(content::BrowserContext* browser_context,
+                      const std::string& app_id) override;
+  void OnAppUpdated(content::BrowserContext* browser_context,
+                    const std::string& app_id) override;
+  void OnAppUninstalled(content::BrowserContext* browser_context,
+                        const std::string& app_id) override;
 
   // syncable_prefs::PrefServiceSyncableObserver:
   void OnIsSyncingChanged() override;
@@ -333,11 +314,6 @@ class ChromeLauncherController
   // AppIconLoaderDelegate:
   void OnAppImageUpdated(const std::string& app_id,
                          const gfx::ImageSkia& image) override;
-
-  // ash::ShelfLayoutManagerObserver:
-  void OnAutoHideBehaviorChanged(
-      aura::Window* root_window,
-      ash::ShelfAutoHideBehavior new_behavior) override;
 
   // Called when the active user has changed.
   void ActiveUserChanged(const std::string& user_email);
@@ -402,7 +378,7 @@ class ChromeLauncherController
 
   // Access to the AppWindowLauncherController for tests.
   AppWindowLauncherController* app_window_controller_for_test() {
-    return app_window_controller_.get();
+    return app_window_controllers_[0].get();
   }
 
   bool CanPin(const std::string& app_id);
@@ -417,7 +393,7 @@ class ChromeLauncherController
   // These are intended for testing.
   void SetAppTabHelperForTest(AppTabHelper* helper);
   void SetAppIconLoadersForTest(
-      std::vector<scoped_ptr<AppIconLoader>>& loaders);
+      std::vector<std::unique_ptr<AppIconLoader>>& loaders);
   const std::string& GetAppIdFromShelfIdForTest(ash::ShelfID id);
 
   // Sets the ash::ShelfItemDelegateManager only for unittests and doesn't
@@ -465,10 +441,6 @@ class ChromeLauncherController
 
   // Re-syncs shelf model with prefs::kPinnedLauncherApps.
   void UpdateAppLaunchersFromPref();
-
-  // Persists the shelf auto-hide behavior to prefs.
-  void SetShelfAutoHideBehaviorPrefs(ash::ShelfAutoHideBehavior behavior,
-                                     aura::Window* root_window);
 
   // Sets the shelf auto-hide behavior from prefs.
   void SetShelfAutoHideBehaviorFromPrefs();
@@ -571,29 +543,31 @@ class ChromeLauncherController
   WebContentsToAppIDMap web_contents_to_app_id_;
 
   // Used to track app windows.
-  scoped_ptr<AppWindowLauncherController> app_window_controller_;
+  std::vector<std::unique_ptr<AppWindowLauncherController>>
+      app_window_controllers_;
 
   // Used to get app info for tabs.
-  scoped_ptr<AppTabHelper> app_tab_helper_;
+  std::unique_ptr<AppTabHelper> app_tab_helper_;
 
   // Used to load the image for an extension app item.
-  std::vector<scoped_ptr<AppIconLoader>> app_icon_loaders_;
+  std::vector<std::unique_ptr<AppIconLoader>> app_icon_loaders_;
+
+  // Used to handle app load/unload events.
+  std::vector<std::unique_ptr<LauncherAppUpdater>> app_updaters_;
 
   PrefChangeRegistrar pref_change_registrar_;
 
   AppSyncUIState* app_sync_ui_state_;
 
-  scoped_ptr<ExtensionEnableFlow> extension_enable_flow_;
-
-  // Shelves that are currently being observed.
-  std::set<ash::Shelf*> shelves_;
+  std::unique_ptr<ExtensionEnableFlow> extension_enable_flow_;
 
   // The owned browser status monitor.
-  scoped_ptr<BrowserStatusMonitor> browser_status_monitor_;
+  std::unique_ptr<BrowserStatusMonitor> browser_status_monitor_;
 
 #if defined(OS_CHROMEOS)
   // A special observer class to detect user switches.
-  scoped_ptr<ChromeLauncherControllerUserSwitchObserver> user_switch_observer_;
+  std::unique_ptr<ChromeLauncherControllerUserSwitchObserver>
+      user_switch_observer_;
 #endif
 
   // If true, incoming pinned state changes should be ignored.

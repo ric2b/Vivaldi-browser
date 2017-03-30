@@ -30,14 +30,13 @@
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
-#include "bindings/core/v8/V8RecursionScope.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
 #include "core/frame/Deprecation.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "public/platform/Platform.h"
 #include "wtf/LeakAnnotations.h"
-#include "wtf/MainThread.h"
+#include <memory>
 
 namespace blink {
 
@@ -48,17 +47,10 @@ static void beforeCallEnteredCallback(v8::Isolate* isolate)
     RELEASE_ASSERT(!ScriptForbiddenScope::isScriptForbidden());
 }
 
-#if ENABLE(ASSERT)
-static void assertV8RecursionScope(v8::Isolate* isolate)
+static void microtasksCompletedCallback(v8::Isolate* isolate)
 {
-    ASSERT(V8RecursionScope::properlyUsed(isolate));
+    V8PerIsolateData::from(isolate)->runEndOfScopeTasks();
 }
-
-static bool runningUnitTest()
-{
-    return Platform::current()->unitTestSupport();
-}
-#endif
 
 static void useCounterCallback(v8::Isolate* isolate, v8::Isolate::UseCounterFeature feature)
 {
@@ -138,26 +130,17 @@ static void useCounterCallback(v8::Isolate* isolate, v8::Isolate::UseCounterFeat
 }
 
 V8PerIsolateData::V8PerIsolateData()
-    : m_destructionPending(false)
-    , m_isolateHolder(adoptPtr(new gin::IsolateHolder()))
+    : m_isolateHolder(adoptPtr(new gin::IsolateHolder()))
     , m_stringCache(adoptPtr(new StringCache(isolate())))
     , m_hiddenValue(V8HiddenValue::create())
     , m_constructorMode(ConstructorMode::CreateNewObject)
-    , m_recursionLevel(0)
     , m_isHandlingRecursionLevelError(false)
     , m_isReportingException(false)
-#if ENABLE(ASSERT)
-    , m_internalScriptRecursionLevel(0)
-#endif
-    , m_performingMicrotaskCheckpoint(false)
 {
     // FIXME: Remove once all v8::Isolate::GetCurrent() calls are gone.
     isolate()->Enter();
-#if ENABLE(ASSERT)
-    if (!runningUnitTest())
-        isolate()->AddCallCompletedCallback(&assertV8RecursionScope);
-#endif
     isolate()->AddBeforeCallEnteredCallback(&beforeCallEnteredCallback);
+    isolate()->AddMicrotasksCompletedCallback(&microtasksCompletedCallback);
     if (isMainThread())
         mainThreadPerIsolateData = this;
     isolate()->SetUseCounterCallback(&useCounterCallback);
@@ -184,7 +167,7 @@ v8::Isolate* V8PerIsolateData::initialize()
 
 void V8PerIsolateData::enableIdleTasks(v8::Isolate* isolate, PassOwnPtr<gin::V8IdleTaskRunner> taskRunner)
 {
-    from(isolate)->m_isolateHolder->EnableIdleTasks(scoped_ptr<gin::V8IdleTaskRunner>(taskRunner.leakPtr()));
+    from(isolate)->m_isolateHolder->EnableIdleTasks(std::unique_ptr<gin::V8IdleTaskRunner>(taskRunner.leakPtr()));
 }
 
 v8::Persistent<v8::Value>& V8PerIsolateData::ensureLiveRoot()
@@ -200,9 +183,6 @@ void V8PerIsolateData::willBeDestroyed(v8::Isolate* isolate)
 {
     V8PerIsolateData* data = from(isolate);
 
-    ASSERT(!data->m_destructionPending);
-    data->m_destructionPending = true;
-
     data->m_threadDebugger.clear();
     // Clear any data that may have handles into the heap,
     // prior to calling ThreadState::detach().
@@ -213,11 +193,8 @@ void V8PerIsolateData::willBeDestroyed(v8::Isolate* isolate)
 // gets called but before the Isolate exits.
 void V8PerIsolateData::destroy(v8::Isolate* isolate)
 {
-#if ENABLE(ASSERT)
-    if (!runningUnitTest())
-        isolate->RemoveCallCompletedCallback(&assertV8RecursionScope);
-#endif
     isolate->RemoveBeforeCallEnteredCallback(&beforeCallEnteredCallback);
+    isolate->RemoveMicrotasksCompletedCallback(&microtasksCompletedCallback);
     V8PerIsolateData* data = from(isolate);
 
     // Clear everything before exiting the Isolate.

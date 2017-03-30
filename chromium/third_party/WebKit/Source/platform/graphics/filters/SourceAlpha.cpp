@@ -29,13 +29,13 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<SourceAlpha> SourceAlpha::create(FilterEffect* sourceEffect)
+SourceAlpha* SourceAlpha::create(FilterEffect* sourceEffect)
 {
-    return adoptRefWillBeNoop(new SourceAlpha(sourceEffect));
+    return new SourceAlpha(sourceEffect);
 }
 
 SourceAlpha::SourceAlpha(FilterEffect* sourceEffect)
-    : FilterEffect(sourceEffect->filter())
+    : FilterEffect(sourceEffect->getFilter())
 {
     setOperatingColorSpace(sourceEffect->operatingColorSpace());
     inputEffects().append(sourceEffect);
@@ -55,7 +55,7 @@ PassRefPtr<SkImageFilter> SourceAlpha::createImageFilter(SkiaImageFilterBuilder&
         0, 0, 0, 0, 0,
         0, 0, 0, SK_Scalar1, 0
     };
-    RefPtr<SkColorFilter> colorFilter(adoptRef(SkColorMatrixFilter::Create(matrix)));
+    sk_sp<SkColorFilter> colorFilter = SkColorFilter::MakeMatrixFilterRowMajor255(matrix);
     return adoptRef(SkColorFilterImageFilter::Create(colorFilter.get(), sourceGraphic.get()));
 }
 

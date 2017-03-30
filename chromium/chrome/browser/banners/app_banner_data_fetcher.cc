@@ -6,6 +6,8 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/lazy_instance.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/banners/app_banner_debug_log.h"
@@ -30,7 +32,8 @@
 
 namespace {
 
-base::TimeDelta gTimeDeltaForTesting;
+base::LazyInstance<base::TimeDelta> gTimeDeltaForTesting =
+    LAZY_INSTANCE_INITIALIZER;
 int gCurrentRequestID = -1;
 const char kPngExtension[] = ".png";
 
@@ -63,12 +66,12 @@ namespace banners {
 
 // static
 base::Time AppBannerDataFetcher::GetCurrentTime() {
-  return base::Time::Now() + gTimeDeltaForTesting;
+  return base::Time::Now() + gTimeDeltaForTesting.Get();
 }
 
 // static
 void AppBannerDataFetcher::SetTimeDeltaForTesting(int days) {
-  gTimeDeltaForTesting = base::TimeDelta::FromDays(days);
+  gTimeDeltaForTesting.Get() = base::TimeDelta::FromDays(days);
 }
 
 AppBannerDataFetcher::AppBannerDataFetcher(content::WebContents* web_contents,
@@ -349,8 +352,16 @@ void AppBannerDataFetcher::OnHasServiceWorker(
   GURL icon_url = ManifestIconSelector::FindBestMatchingIcon(
       web_app_data_.icons, ideal_icon_size_in_dp_, minimum_icon_size_in_dp_);
 
-  if (!FetchAppIcon(web_contents, icon_url)) {
-    OutputDeveloperNotShownMessage(web_contents, kCannotDetermineBestIcon,
+  if (icon_url.is_empty()) {
+    OutputDeveloperNotShownMessage(
+        web_contents,
+        kNoIconMatchingRequirements,
+        base::IntToString(ManifestIconSelector::ConvertIconSizeFromDpToPx(
+            minimum_icon_size_in_dp_)),
+        is_debug_mode_);
+    Cancel();
+  } else if (!FetchAppIcon(web_contents, icon_url)) {
+    OutputDeveloperNotShownMessage(web_contents, kCannotDownloadIcon,
                                    is_debug_mode_);
     Cancel();
   }

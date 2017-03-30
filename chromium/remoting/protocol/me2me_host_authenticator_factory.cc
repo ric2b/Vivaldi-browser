@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/base64.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "remoting/base/rsa_key_pair.h"
 #include "remoting/protocol/channel_authenticator.h"
@@ -20,60 +21,56 @@ namespace remoting {
 namespace protocol {
 
 // static
-scoped_ptr<AuthenticatorFactory>
-Me2MeHostAuthenticatorFactory::CreateWithSharedSecret(
+std::unique_ptr<AuthenticatorFactory>
+Me2MeHostAuthenticatorFactory::CreateWithPin(
     bool use_service_account,
     const std::string& host_owner,
     const std::string& local_cert,
     scoped_refptr<RsaKeyPair> key_pair,
     const std::string& required_client_domain,
-    const SharedSecretHash& shared_secret_hash,
+    const std::string& pin_hash,
     scoped_refptr<PairingRegistry> pairing_registry) {
-  scoped_ptr<Me2MeHostAuthenticatorFactory> result(
+  std::unique_ptr<Me2MeHostAuthenticatorFactory> result(
       new Me2MeHostAuthenticatorFactory());
   result->use_service_account_ = use_service_account;
   result->host_owner_ = host_owner;
   result->local_cert_ = local_cert;
   result->key_pair_ = key_pair;
   result->required_client_domain_ = required_client_domain;
-  result->shared_secret_hash_ = shared_secret_hash;
+  result->pin_hash_ = pin_hash;
   result->pairing_registry_ = pairing_registry;
   return std::move(result);
 }
 
 
 // static
-scoped_ptr<AuthenticatorFactory>
+std::unique_ptr<AuthenticatorFactory>
 Me2MeHostAuthenticatorFactory::CreateWithThirdPartyAuth(
     bool use_service_account,
     const std::string& host_owner,
     const std::string& local_cert,
     scoped_refptr<RsaKeyPair> key_pair,
-      const std::string& required_client_domain,
-    scoped_ptr<TokenValidatorFactory>
-        token_validator_factory) {
-  scoped_ptr<Me2MeHostAuthenticatorFactory> result(
+    const std::string& required_client_domain,
+    scoped_refptr<TokenValidatorFactory> token_validator_factory) {
+  std::unique_ptr<Me2MeHostAuthenticatorFactory> result(
       new Me2MeHostAuthenticatorFactory());
   result->use_service_account_ = use_service_account;
   result->host_owner_ = host_owner;
   result->local_cert_ = local_cert;
   result->key_pair_ = key_pair;
   result->required_client_domain_ = required_client_domain;
-  result->token_validator_factory_ = std::move(token_validator_factory);
+  result->token_validator_factory_ = token_validator_factory;
   return std::move(result);
 }
 
-Me2MeHostAuthenticatorFactory::Me2MeHostAuthenticatorFactory() {
-}
+Me2MeHostAuthenticatorFactory::Me2MeHostAuthenticatorFactory() {}
 
-Me2MeHostAuthenticatorFactory::~Me2MeHostAuthenticatorFactory() {
-}
+Me2MeHostAuthenticatorFactory::~Me2MeHostAuthenticatorFactory() {}
 
-scoped_ptr<Authenticator> Me2MeHostAuthenticatorFactory::CreateAuthenticator(
+std::unique_ptr<Authenticator>
+Me2MeHostAuthenticatorFactory::CreateAuthenticator(
     const std::string& local_jid,
-    const std::string& remote_jid,
-    const buzz::XmlElement* first_message) {
-
+    const std::string& remote_jid) {
   std::string remote_jid_prefix;
 
   if (!use_service_account_) {
@@ -83,7 +80,7 @@ scoped_ptr<Authenticator> Me2MeHostAuthenticatorFactory::CreateAuthenticator(
     // account will have the same prefix.
     if (!SplitJidResource(local_jid, &remote_jid_prefix, nullptr)) {
       LOG(DFATAL) << "Invalid local JID:" << local_jid;
-      return make_scoped_ptr(
+      return base::WrapUnique(
           new RejectingAuthenticator(Authenticator::INVALID_CREDENTIALS));
     }
   } else {
@@ -99,7 +96,7 @@ scoped_ptr<Authenticator> Me2MeHostAuthenticatorFactory::CreateAuthenticator(
                         base::CompareCase::INSENSITIVE_ASCII)) {
     LOG(ERROR) << "Rejecting incoming connection from " << remote_jid
                << ": Prefix mismatch.";
-    return make_scoped_ptr(
+    return base::WrapUnique(
         new RejectingAuthenticator(Authenticator::INVALID_CREDENTIALS));
   }
 
@@ -115,25 +112,27 @@ scoped_ptr<Authenticator> Me2MeHostAuthenticatorFactory::CreateAuthenticator(
                         base::CompareCase::INSENSITIVE_ASCII)) {
       LOG(ERROR) << "Rejecting incoming connection from " << remote_jid
                  << ": Domain mismatch.";
-      return make_scoped_ptr(
+      return base::WrapUnique(
           new RejectingAuthenticator(Authenticator::INVALID_CREDENTIALS));
     }
   }
 
   if (!local_cert_.empty() && key_pair_.get()) {
+    std::string normalized_local_jid = NormalizeJid(local_jid);
+    std::string normalized_remote_jid = NormalizeJid(remote_jid);
+
     if (token_validator_factory_) {
       return NegotiatingHostAuthenticator::CreateWithThirdPartyAuth(
-          local_cert_, key_pair_,
-          token_validator_factory_->CreateTokenValidator(
-              local_jid, remote_jid));
+          normalized_local_jid, normalized_remote_jid, local_cert_, key_pair_,
+          token_validator_factory_);
     }
 
     return NegotiatingHostAuthenticator::CreateWithSharedSecret(
-        local_cert_, key_pair_, shared_secret_hash_.value,
-        shared_secret_hash_.hash_function, pairing_registry_);
+        normalized_local_jid, normalized_remote_jid, local_cert_, key_pair_,
+        pin_hash_, pairing_registry_);
   }
 
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new RejectingAuthenticator(Authenticator::INVALID_CREDENTIALS));
 }
 

@@ -24,12 +24,12 @@
 
 namespace {
 
-scoped_ptr<SkBitmap> GetElevationIcon() {
-  scoped_ptr<SkBitmap> icon;
+std::unique_ptr<SkBitmap> GetElevationIcon() {
+  std::unique_ptr<SkBitmap> icon;
 #if defined(OS_WIN)
   if ((base::win::GetVersion() < base::win::VERSION_VISTA) ||
       !base::win::UserAccountControlIsEnabled())
-    return icon.Pass();
+    return icon;
 
   SHSTOCKICONINFO icon_info = { sizeof(SHSTOCKICONINFO) };
   typedef HRESULT (STDAPICALLTYPE *GetStockIconInfo)(SHSTOCKICONID,
@@ -43,7 +43,7 @@ scoped_ptr<SkBitmap> GetElevationIcon() {
   // TODO(pkasting): Run on a background thread since this call spins a nested
   // message loop.
   if (FAILED((*func)(SIID_SHIELD, SHGSI_ICON | SHGSI_SMALLICON, &icon_info)))
-    return icon.Pass();
+    return icon;
 
   icon.reset(IconUtil::CreateSkBitmapFromHICON(
       icon_info.hIcon,
@@ -75,7 +75,7 @@ ElevationIconSetter::~ElevationIconSetter() {
 }
 
 void ElevationIconSetter::SetButtonIcon(const base::Closure& callback,
-                                        scoped_ptr<SkBitmap> icon) {
+                                        std::unique_ptr<SkBitmap> icon) {
   if (icon) {
     float device_scale_factor = 1.0f;
 #if defined(OS_WIN)

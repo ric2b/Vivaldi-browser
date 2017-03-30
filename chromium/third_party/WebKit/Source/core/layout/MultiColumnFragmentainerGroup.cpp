@@ -35,7 +35,7 @@ LayoutSize MultiColumnFragmentainerGroup::offsetFromColumnSet() const
 
 LayoutUnit MultiColumnFragmentainerGroup::blockOffsetInEnclosingFragmentationContext() const
 {
-    return logicalTop() + m_columnSet.logicalTop() + m_columnSet.multiColumnFlowThread()->blockOffsetInEnclosingFragmentationContext();
+    return logicalTop() + m_columnSet.logicalTopFromMulticolContentEdge() + m_columnSet.multiColumnFlowThread()->blockOffsetInEnclosingFragmentationContext();
 }
 
 void MultiColumnFragmentainerGroup::resetColumnHeight()
@@ -110,10 +110,11 @@ LayoutSize MultiColumnFragmentainerGroup::flowThreadTranslationAtOffset(LayoutUn
 
     LayoutSize enclosingTranslation;
     if (LayoutMultiColumnFlowThread* enclosingFlowThread = flowThread->enclosingFlowThread()) {
+        const MultiColumnFragmentainerGroup& firstRow = flowThread->firstMultiColumnSet()->firstFragmentainerGroup();
         // Translation that would map points in the coordinate space of the outermost flow thread to
         // visual points in the first column in the first fragmentainer group (row) in our multicol
         // container.
-        LayoutSize enclosingTranslationOrigin = enclosingFlowThread->flowThreadTranslationAtOffset(flowThread->blockOffsetInEnclosingFragmentationContext());
+        LayoutSize enclosingTranslationOrigin = enclosingFlowThread->flowThreadTranslationAtOffset(firstRow.blockOffsetInEnclosingFragmentationContext());
 
         // Translation that would map points in the coordinate space of the outermost flow thread to
         // visual points in the first column in this fragmentainer group.

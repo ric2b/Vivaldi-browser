@@ -236,9 +236,7 @@ class CookiesTreeModelTest : public testing::Test {
       if (expected_url.SchemeIsFile()) {
         EXPECT_FALSE(host->CanCreateContentException());
       } else {
-        cookie_settings->ResetCookieSetting(
-            ContentSettingsPattern::FromURLNoWildcard(expected_url),
-            ContentSettingsPattern::Wildcard());
+        cookie_settings->ResetCookieSetting(expected_url);
         EXPECT_FALSE(cookie_settings->IsCookieSessionOnly(expected_url));
 
         host->CreateContentException(cookie_settings,
@@ -1430,21 +1428,11 @@ TEST_F(CookiesTreeModelTest, ContentSettings) {
 
   EXPECT_EQ(1, origin->child_count());
   EXPECT_TRUE(origin->CanCreateContentException());
-  EXPECT_CALL(observer,
-              OnContentSettingsChanged(
-                  content_settings,
-                  CONTENT_SETTINGS_TYPE_COOKIES,
-                  false,
-                  ContentSettingsPattern::FromURLNoWildcard(host),
-                  ContentSettingsPattern::Wildcard(),
-                  false));
-  EXPECT_CALL(observer,
-              OnContentSettingsChanged(content_settings,
-                  CONTENT_SETTINGS_TYPE_COOKIES,
-                  false,
-                  ContentSettingsPattern::FromURL(host),
-                  ContentSettingsPattern::Wildcard(),
-                  false));
+  EXPECT_CALL(observer, OnContentSettingsChanged(
+                            content_settings, CONTENT_SETTINGS_TYPE_COOKIES,
+                            false, ContentSettingsPattern::FromURL(host),
+                            ContentSettingsPattern::Wildcard(), false))
+      .Times(2);
   origin->CreateContentException(
       cookie_settings, CONTENT_SETTING_SESSION_ONLY);
   EXPECT_TRUE(cookie_settings->IsReadingCookieAllowed(host, host));
@@ -1639,6 +1627,30 @@ TEST_F(CookiesTreeModelTest, CanonicalizeCookieSource) {
   CheckContentSettingsUrlForHostNodes(
       cookies_model.GetRoot(), CookieTreeNode::DetailedInfo::TYPE_ROOT,
       cookie_settings, GURL("http://example4.com"));
+}
+
+TEST_F(CookiesTreeModelTest, CookiesFilterWithoutSource) {
+  // CanonicalCookies don't persist their source_ field. This is a regression
+  // test for crbug.com/601582.
+  LocalDataContainer* container =
+      new LocalDataContainer(mock_browsing_data_cookie_helper_.get(),
+                             mock_browsing_data_database_helper_.get(),
+                             mock_browsing_data_local_storage_helper_.get(),
+                             mock_browsing_data_session_storage_helper_.get(),
+                             mock_browsing_data_appcache_helper_.get(),
+                             mock_browsing_data_indexed_db_helper_.get(),
+                             mock_browsing_data_file_system_helper_.get(),
+                             mock_browsing_data_quota_helper_.get(),
+                             mock_browsing_data_channel_id_helper_.get(),
+                             mock_browsing_data_service_worker_helper_.get(),
+                             mock_browsing_data_cache_storage_helper_.get(),
+                             mock_browsing_data_flash_lso_helper_.get());
+  CookiesTreeModel cookies_model(container, special_storage_policy(), false);
+
+  mock_browsing_data_cookie_helper_->
+      AddCookieSamples(GURL(), "A=1");
+  mock_browsing_data_cookie_helper_->Notify();
+  EXPECT_EQ("A", GetDisplayedCookies(&cookies_model));
 }
 
 }  // namespace

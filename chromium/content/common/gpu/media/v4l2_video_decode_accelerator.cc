@@ -15,16 +15,17 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "content/common/gpu/media/shared_memory_region.h"
 #include "content/common/gpu/media/v4l2_video_decode_accelerator.h"
 #include "media/base/media_switches.h"
 #include "media/filters/h264_parser.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gl/gl_context.h"
 #include "ui/gl/scoped_binders.h"
 
 #define NOTIFY_ERROR(x)                        \
@@ -65,14 +66,12 @@ struct V4L2VideoDecodeAccelerator::BitstreamBufferRef {
   BitstreamBufferRef(
       base::WeakPtr<Client>& client,
       scoped_refptr<base::SingleThreadTaskRunner>& client_task_runner,
-      base::SharedMemory* shm,
-      size_t size,
+      scoped_ptr<SharedMemoryRegion> shm,
       int32_t input_id);
   ~BitstreamBufferRef();
   const base::WeakPtr<Client> client;
   const scoped_refptr<base::SingleThreadTaskRunner> client_task_runner;
-  const scoped_ptr<base::SharedMemory> shm;
-  const size_t size;
+  const scoped_ptr<SharedMemoryRegion> shm;
   size_t bytes_used;
   const int32_t input_id;
 };
@@ -94,13 +93,11 @@ struct V4L2VideoDecodeAccelerator::PictureRecord {
 V4L2VideoDecodeAccelerator::BitstreamBufferRef::BitstreamBufferRef(
     base::WeakPtr<Client>& client,
     scoped_refptr<base::SingleThreadTaskRunner>& client_task_runner,
-    base::SharedMemory* shm,
-    size_t size,
+    scoped_ptr<SharedMemoryRegion> shm,
     int32_t input_id)
     : client(client),
       client_task_runner(client_task_runner),
-      shm(shm),
-      size(size),
+      shm(std::move(shm)),
       bytes_used(0),
       input_id(input_id) {}
 
@@ -157,14 +154,10 @@ V4L2VideoDecodeAccelerator::PictureRecord::~PictureRecord() {}
 
 V4L2VideoDecodeAccelerator::V4L2VideoDecodeAccelerator(
     EGLDisplay egl_display,
-    EGLContext egl_context,
-    const base::WeakPtr<Client>& io_client,
-    const base::Callback<bool(void)>& make_context_current,
-    const scoped_refptr<V4L2Device>& device,
-    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner)
+    const GetGLContextCallback& get_gl_context_cb,
+    const MakeGLContextCurrentCallback& make_context_current_cb,
+    const scoped_refptr<V4L2Device>& device)
     : child_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      io_task_runner_(io_task_runner),
-      io_client_(io_client),
       decoder_thread_("V4L2DecoderThread"),
       decoder_state_(kUninitialized),
       device_(device),
@@ -184,9 +177,9 @@ V4L2VideoDecodeAccelerator::V4L2VideoDecodeAccelerator(
       picture_clearing_count_(0),
       pictures_assigned_(false, false),
       device_poll_thread_("V4L2DevicePollThread"),
-      make_context_current_(make_context_current),
       egl_display_(egl_display),
-      egl_context_(egl_context),
+      get_gl_context_cb_(get_gl_context_cb),
+      make_context_current_cb_(make_context_current_cb),
       video_profile_(media::VIDEO_CODEC_PROFILE_UNKNOWN),
       output_format_fourcc_(0),
       weak_this_factory_(this) {
@@ -212,6 +205,11 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
   DCHECK(child_task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(decoder_state_, kUninitialized);
 
+  if (get_gl_context_cb_.is_null() || make_context_current_cb_.is_null()) {
+    NOTREACHED() << "GL callbacks are required for this VDA";
+    return false;
+  }
+
   if (config.is_encrypted) {
     NOTREACHED() << "Encrypted streams are not supported for this VDA";
     return false;
@@ -226,6 +224,14 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
 
   client_ptr_factory_.reset(new base::WeakPtrFactory<Client>(client));
   client_ = client_ptr_factory_->GetWeakPtr();
+  // If we haven't been set up to decode on separate thread via
+  // TryToSetupDecodeOnSeparateThread(), use the main thread/client for
+  // decode tasks.
+  if (!decode_task_runner_) {
+    decode_task_runner_ = child_task_runner_;
+    DCHECK(!decode_client_);
+    decode_client_ = client_;
+  }
 
   video_profile_ = config.profile;
 
@@ -235,7 +241,7 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
   }
 
   // We need the context to be initialized to query extensions.
-  if (!make_context_current_.Run()) {
+  if (!make_context_current_cb_.Run()) {
     LOG(ERROR) << "Initialize(): could not make context current";
     return false;
   }
@@ -296,7 +302,7 @@ void V4L2VideoDecodeAccelerator::Decode(
     const media::BitstreamBuffer& bitstream_buffer) {
   DVLOG(1) << "Decode(): input_id=" << bitstream_buffer.id()
            << ", size=" << bitstream_buffer.size();
-  DCHECK(io_task_runner_->BelongsToCurrentThread());
+  DCHECK(decode_task_runner_->BelongsToCurrentThread());
 
   if (bitstream_buffer.id() < 0) {
     LOG(ERROR) << "Invalid bitstream_buffer, id: " << bitstream_buffer.id();
@@ -328,7 +334,8 @@ void V4L2VideoDecodeAccelerator::AssignPictureBuffers(
     return;
   }
 
-  if (!make_context_current_.Run()) {
+  gfx::GLContext* gl_context = get_gl_context_cb_.Run();
+  if (!gl_context || !make_context_current_cb_.Run()) {
     LOG(ERROR) << "AssignPictureBuffers(): could not make context current";
     NOTIFY_ERROR(PLATFORM_FAILURE);
     return;
@@ -366,14 +373,11 @@ void V4L2VideoDecodeAccelerator::AssignPictureBuffers(
     DCHECK_EQ(output_record.egl_sync, EGL_NO_SYNC_KHR);
     DCHECK_EQ(output_record.picture_id, -1);
     DCHECK_EQ(output_record.cleared, false);
+    DCHECK_LE(1u, buffers[i].texture_ids().size());
 
-    EGLImageKHR egl_image = device_->CreateEGLImage(egl_display_,
-                                                    egl_context_,
-                                                    buffers[i].texture_id(),
-                                                    coded_size_,
-                                                    i,
-                                                    output_format_fourcc_,
-                                                    output_planes_count_);
+    EGLImageKHR egl_image = device_->CreateEGLImage(
+        egl_display_, gl_context->GetHandle(), buffers[i].texture_ids()[0],
+        coded_size_, i, output_format_fourcc_, output_planes_count_);
     if (egl_image == EGL_NO_IMAGE_KHR) {
       LOG(ERROR) << "AssignPictureBuffers(): could not create EGLImageKHR";
       // Ownership of EGLImages allocated in previous iterations of this loop
@@ -398,7 +402,7 @@ void V4L2VideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_buffer_id) {
   // Must be run on child thread, as we'll insert a sync in the EGL context.
   DCHECK(child_task_runner_->BelongsToCurrentThread());
 
-  if (!make_context_current_.Run()) {
+  if (!make_context_current_cb_.Run()) {
     LOG(ERROR) << "ReusePictureBuffer(): could not make context current";
     NOTIFY_ERROR(PLATFORM_FAILURE);
     return;
@@ -459,7 +463,13 @@ void V4L2VideoDecodeAccelerator::Destroy() {
   delete this;
 }
 
-bool V4L2VideoDecodeAccelerator::CanDecodeOnIOThread() { return true; }
+bool V4L2VideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
+    const base::WeakPtr<Client>& decode_client,
+    const scoped_refptr<base::SingleThreadTaskRunner>& decode_task_runner) {
+  decode_client_ = decode_client_;
+  decode_task_runner_ = decode_task_runner;
+  return true;
+}
 
 // static
 media::VideoDecodeAccelerator::SupportedProfiles
@@ -481,10 +491,11 @@ void V4L2VideoDecodeAccelerator::DecodeTask(
                bitstream_buffer.id());
 
   scoped_ptr<BitstreamBufferRef> bitstream_record(new BitstreamBufferRef(
-      io_client_, io_task_runner_,
-      new base::SharedMemory(bitstream_buffer.handle(), true),
-      bitstream_buffer.size(), bitstream_buffer.id()));
-  if (!bitstream_record->shm->Map(bitstream_buffer.size())) {
+      decode_client_, decode_task_runner_,
+      scoped_ptr<SharedMemoryRegion>(
+          new SharedMemoryRegion(bitstream_buffer, true)),
+      bitstream_buffer.id()));
+  if (!bitstream_record->shm->Map()) {
     LOG(ERROR) << "Decode(): could not map bitstream_buffer";
     NOTIFY_ERROR(UNREADABLE_INPUT);
     return;
@@ -543,54 +554,51 @@ void V4L2VideoDecodeAccelerator::DecodeBufferTask() {
     // Setup to use the next buffer.
     decoder_current_bitstream_buffer_.reset(buffer_ref.release());
     decoder_input_queue_.pop();
-    DVLOG(3) << "DecodeBufferTask(): reading input_id="
-             << decoder_current_bitstream_buffer_->input_id
-             << ", addr=" << (decoder_current_bitstream_buffer_->shm ?
-                              decoder_current_bitstream_buffer_->shm->memory() :
-                              NULL)
-             << ", size=" << decoder_current_bitstream_buffer_->size;
+    const auto& shm = decoder_current_bitstream_buffer_->shm;
+    if (shm) {
+      DVLOG(3) << "DecodeBufferTask(): reading input_id="
+               << decoder_current_bitstream_buffer_->input_id
+               << ", addr=" << shm->memory() << ", size=" << shm->size();
+    } else {
+      DCHECK_EQ(decoder_current_bitstream_buffer_->input_id, kFlushBufferId);
+      DVLOG(3) << "DecodeBufferTask(): reading input_id=kFlushBufferId";
+    }
   }
   bool schedule_task = false;
-  const size_t size = decoder_current_bitstream_buffer_->size;
   size_t decoded_size = 0;
-  if (size == 0) {
-    const int32_t input_id = decoder_current_bitstream_buffer_->input_id;
-    if (input_id >= 0) {
-      // This is a buffer queued from the client that has zero size.  Skip.
+  const auto& shm = decoder_current_bitstream_buffer_->shm;
+  if (!shm) {
+    // This is a dummy buffer, queued to flush the pipe.  Flush.
+    DCHECK_EQ(decoder_current_bitstream_buffer_->input_id, kFlushBufferId);
+    // Enqueue a buffer guaranteed to be empty.  To do that, we flush the
+    // current input, enqueue no data to the next frame, then flush that down.
+    schedule_task = true;
+    if (decoder_current_input_buffer_ != -1 &&
+        input_buffer_map_[decoder_current_input_buffer_].input_id !=
+            kFlushBufferId)
+      schedule_task = FlushInputFrame();
+
+    if (schedule_task && AppendToInputFrame(NULL, 0) && FlushInputFrame()) {
+      DVLOG(2) << "DecodeBufferTask(): enqueued flush buffer";
+      decoder_partial_frame_pending_ = false;
       schedule_task = true;
     } else {
-      // This is a buffer of zero size, queued to flush the pipe.  Flush.
-      DCHECK_EQ(decoder_current_bitstream_buffer_->shm.get(),
-                static_cast<base::SharedMemory*>(NULL));
-      // Enqueue a buffer guaranteed to be empty.  To do that, we flush the
-      // current input, enqueue no data to the next frame, then flush that down.
-      schedule_task = true;
-      if (decoder_current_input_buffer_ != -1 &&
-          input_buffer_map_[decoder_current_input_buffer_].input_id !=
-              kFlushBufferId)
-        schedule_task = FlushInputFrame();
-
-      if (schedule_task && AppendToInputFrame(NULL, 0) && FlushInputFrame()) {
-        DVLOG(2) << "DecodeBufferTask(): enqueued flush buffer";
-        decoder_partial_frame_pending_ = false;
-        schedule_task = true;
-      } else {
-        // If we failed to enqueue the empty buffer (due to pipeline
-        // backpressure), don't advance the bitstream buffer queue, and don't
-        // schedule the next task.  This bitstream buffer queue entry will get
-        // reprocessed when the pipeline frees up.
-        schedule_task = false;
-      }
+      // If we failed to enqueue the empty buffer (due to pipeline
+      // backpressure), don't advance the bitstream buffer queue, and don't
+      // schedule the next task.  This bitstream buffer queue entry will get
+      // reprocessed when the pipeline frees up.
+      schedule_task = false;
     }
+  } else if (shm->size() == 0) {
+    // This is a buffer queued from the client that has zero size.  Skip.
+    schedule_task = true;
   } else {
     // This is a buffer queued from the client, with actual contents.  Decode.
     const uint8_t* const data =
-        reinterpret_cast<const uint8_t*>(
-            decoder_current_bitstream_buffer_->shm->memory()) +
+        reinterpret_cast<const uint8_t*>(shm->memory()) +
         decoder_current_bitstream_buffer_->bytes_used;
     const size_t data_size =
-        decoder_current_bitstream_buffer_->size -
-        decoder_current_bitstream_buffer_->bytes_used;
+        shm->size() - decoder_current_bitstream_buffer_->bytes_used;
     if (!AdvanceFrameFragment(data, data_size, &decoded_size)) {
       NOTIFY_ERROR(UNREADABLE_INPUT);
       return;
@@ -619,8 +627,8 @@ void V4L2VideoDecodeAccelerator::DecodeBufferTask() {
 
   if (schedule_task) {
     decoder_current_bitstream_buffer_->bytes_used += decoded_size;
-    if (decoder_current_bitstream_buffer_->bytes_used ==
-        decoder_current_bitstream_buffer_->size) {
+    if ((shm ? shm->size() : 0) ==
+        decoder_current_bitstream_buffer_->bytes_used) {
       // Our current bitstream buffer is done; return it.
       int32_t input_id = decoder_current_bitstream_buffer_->input_id;
       DVLOG(3) << "DecodeBufferTask(): finished input_id=" << input_id;
@@ -1276,7 +1284,7 @@ void V4L2VideoDecodeAccelerator::FlushTask() {
   // Queue up an empty buffer -- this triggers the flush.
   decoder_input_queue_.push(
       linked_ptr<BitstreamBufferRef>(new BitstreamBufferRef(
-          io_client_, io_task_runner_, NULL, 0, kFlushBufferId)));
+          decode_client_, decode_task_runner_, nullptr, kFlushBufferId)));
   decoder_flushing_ = true;
   SendPictureReady();  // Send all pending PictureReady.
 
@@ -1880,9 +1888,9 @@ bool V4L2VideoDecodeAccelerator::CreateOutputBuffers() {
            << "buffer_count=" << buffer_count
            << ", coded_size=" << coded_size_.ToString();
   child_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&Client::ProvidePictureBuffers, client_,
-                            buffer_count, coded_size_,
-                            device_->GetTextureTarget()));
+      FROM_HERE,
+      base::Bind(&Client::ProvidePictureBuffers, client_, buffer_count, 1,
+                 coded_size_, device_->GetTextureTarget()));
 
   // Wait for the client to call AssignPictureBuffers() on the Child thread.
   // We do this, because if we continue decoding without finishing buffer
@@ -1999,10 +2007,12 @@ void V4L2VideoDecodeAccelerator::SendPictureReady() {
     bool cleared = pending_picture_ready_.front().cleared;
     const media::Picture& picture = pending_picture_ready_.front().picture;
     if (cleared && picture_clearing_count_ == 0) {
-      // This picture is cleared. Post it to IO thread to reduce latency. This
-      // should be the case after all pictures are cleared at the beginning.
-      io_task_runner_->PostTask(
-          FROM_HERE, base::Bind(&Client::PictureReady, io_client_, picture));
+      // This picture is cleared. It can be posted to a thread different than
+      // the main GPU thread to reduce latency. This should be the case after
+      // all pictures are cleared at the beginning.
+      decode_task_runner_->PostTask(
+          FROM_HERE,
+          base::Bind(&Client::PictureReady, decode_client_, picture));
       pending_picture_ready_.pop();
     } else if (!cleared || resetting_or_flushing) {
       DVLOG(3) << "SendPictureReady()"

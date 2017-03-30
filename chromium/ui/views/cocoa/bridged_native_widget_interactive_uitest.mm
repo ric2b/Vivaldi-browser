@@ -11,17 +11,40 @@
 #include "base/macros.h"
 #include "ui/base/hit_test.h"
 #import "ui/base/test/nswindow_fullscreen_notification_waiter.h"
+#include "ui/base/test/ui_controls.h"
 #import "ui/base/test/windowed_nsnotification_observer.h"
 #import "ui/events/test/cocoa_test_event_utils.h"
 #include "ui/views/test/widget_test.h"
+#include "ui/views/widget/native_widget_mac.h"
 #include "ui/views/window/native_frame_view.h"
 
 namespace views {
 namespace test {
+namespace {
+
+// Provide a resizable Widget by default. Starting in 10.11, OSX doesn't
+// correctly restore the window size when coming out of fullscreen if the window
+// is not user-sizable.
+class ResizableDelegateView : public WidgetDelegateView {
+ public:
+  ResizableDelegateView() {}
+
+  // WidgetDelgate:
+  bool CanResize() const override { return true; }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ResizableDelegateView);
+};
+
+}  // namespace
 
 class BridgedNativeWidgetUITest : public test::WidgetTest {
  public:
-  BridgedNativeWidgetUITest() {}
+  BridgedNativeWidgetUITest() {
+    // TODO(tapted): Remove this when these are absorbed into Chrome's
+    // interactive_ui_tests target. See http://crbug.com/403679.
+    ui_controls::EnableUIControls();
+  }
 
   // testing::Test:
   void SetUp() override {
@@ -29,6 +52,8 @@ class BridgedNativeWidgetUITest : public test::WidgetTest {
     Widget::InitParams init_params =
         CreateParams(Widget::InitParams::TYPE_WINDOW);
     init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+    init_params.bounds = gfx::Rect(100, 100, 300, 200);
+    init_params.delegate = new ResizableDelegateView;
     widget_.reset(new Widget);
     widget_->Init(init_params);
   }
@@ -52,8 +77,6 @@ class BridgedNativeWidgetUITest : public test::WidgetTest {
 // by the Widget code or elsewhere (e.g. by the user).
 TEST_F(BridgedNativeWidgetUITest, FullscreenSynchronousState) {
   EXPECT_FALSE(widget_->IsFullscreen());
-  if (base::mac::IsOSSnowLeopard())
-    return;
 
   // Allow user-initiated fullscreen changes on the Window.
   [test_window()
@@ -121,11 +144,6 @@ TEST_F(BridgedNativeWidgetUITest, FullscreenEnterAndExit) {
   EXPECT_FALSE(widget_->IsVisible());
   widget_->SetFullscreen(true);
   EXPECT_TRUE(widget_->IsVisible());
-  if (base::mac::IsOSSnowLeopard()) {
-    // On Snow Leopard, SetFullscreen() isn't implemented. But shouldn't crash.
-    EXPECT_FALSE(widget_->IsFullscreen());
-    return;
-  }
 
   EXPECT_TRUE(widget_->IsFullscreen());
   EXPECT_EQ(restored_bounds, widget_->GetRestoredBounds());
@@ -152,9 +170,6 @@ TEST_F(BridgedNativeWidgetUITest, FullscreenEnterAndExit) {
 
 // Test that Widget::Restore exits fullscreen.
 TEST_F(BridgedNativeWidgetUITest, FullscreenRestore) {
-  if (base::mac::IsOSSnowLeopard())
-    return;
-
   base::scoped_nsobject<NSWindowFullscreenNotificationWaiter> waiter(
       [[NSWindowFullscreenNotificationWaiter alloc]
           initWithWindow:test_window()]);

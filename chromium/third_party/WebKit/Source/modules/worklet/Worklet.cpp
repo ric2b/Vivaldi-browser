@@ -10,26 +10,19 @@
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/inspector/InspectorInstrumentation.h"
+#include "modules/worklet/WorkletGlobalScope.h"
 
 namespace blink {
 
-// static
-Worklet* Worklet::create(ExecutionContext* executionContext)
-{
-    Worklet* worklet = new Worklet(executionContext);
-    worklet->suspendIfNeeded();
-    return worklet;
-}
-
 Worklet::Worklet(ExecutionContext* executionContext)
     : ActiveDOMObject(executionContext)
-    , m_workletGlobalScope(WorkletGlobalScope::create(executionContext->url(), executionContext->userAgent(), executionContext->securityOrigin(), toIsolate(executionContext)))
 {
 }
 
 ScriptPromise Worklet::import(ScriptState* scriptState, const String& url)
 {
-    KURL scriptURL = executionContext()->completeURL(url);
+    KURL scriptURL = getExecutionContext()->completeURL(url);
     if (!scriptURL.isValid()) {
         return ScriptPromise::rejectWithDOMException(scriptState, DOMException::create(SyntaxError, "'" + url + "' is not a valid URL."));
     }
@@ -48,7 +41,8 @@ ScriptPromise Worklet::import(ScriptState* scriptState, const String& url)
     // NOTE: WorkerScriptLoader may synchronously invoke its callbacks
     // (resolving the promise) before we return it.
     m_scriptLoaders.append(WorkerScriptLoader::create());
-    m_scriptLoaders.last()->loadAsynchronously(*executionContext(), scriptURL, DenyCrossOriginRequests,
+    m_scriptLoaders.last()->loadAsynchronously(*getExecutionContext(), scriptURL, DenyCrossOriginRequests,
+        getExecutionContext()->securityContext().addressSpace(),
         bind(&Worklet::onResponse, this),
         bind(&Worklet::onFinished, this, m_scriptLoaders.last().get(), resolver));
 
@@ -69,7 +63,8 @@ void Worklet::onFinished(WorkerScriptLoader* scriptLoader, ScriptPromiseResolver
         // TODO(ikilpatrick): Worklets don't have the same error behaviour
         // as workers, etc. For a SyntaxError we should reject, however if
         // the script throws a normal error, resolve. For now just resolve.
-        m_workletGlobalScope->scriptController()->evaluate(ScriptSourceCode(scriptLoader->script(), scriptLoader->url()));
+        workletGlobalScope()->scriptController()->evaluate(ScriptSourceCode(scriptLoader->script(), scriptLoader->url()));
+        InspectorInstrumentation::scriptImported(workletGlobalScope(), scriptLoader->identifier(), scriptLoader->script());
         resolver->resolve();
     }
 
@@ -84,7 +79,7 @@ void Worklet::onFinished(WorkerScriptLoader* scriptLoader, ScriptPromiseResolver
 
 void Worklet::stop()
 {
-    m_workletGlobalScope->scriptController()->willScheduleExecutionTermination();
+    workletGlobalScope()->dispose();
 
     for (auto scriptLoader : m_scriptLoaders) {
         scriptLoader->cancel();
@@ -94,7 +89,6 @@ void Worklet::stop()
 DEFINE_TRACE(Worklet)
 {
     visitor->trace(m_resolvers);
-    visitor->trace(m_workletGlobalScope);
     ActiveDOMObject::trace(visitor);
 }
 

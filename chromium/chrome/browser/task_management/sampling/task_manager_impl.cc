@@ -4,6 +4,9 @@
 
 #include "chrome/browser/task_management/sampling/task_manager_impl.h"
 
+#include <string>
+#include <vector>
+
 #include "base/command_line.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
@@ -15,21 +18,18 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/task_management/providers/arc/arc_process_task_provider.h"
+#include "components/arc/arc_bridge_service.h"
 #endif  // defined(OS_CHROMEOS)
 
 namespace task_management {
 
 namespace {
 
-inline scoped_refptr<base::SequencedTaskRunner> GetBlockingPoolRunner() {
+scoped_refptr<base::SequencedTaskRunner> GetBlockingPoolRunner() {
   base::SequencedWorkerPool* blocking_pool =
       content::BrowserThread::GetBlockingPool();
-  base::SequencedWorkerPool::SequenceToken token =
-      blocking_pool->GetSequenceToken();
-
-  DCHECK(token.IsValid());
-
-  return blocking_pool->GetSequencedTaskRunner(token);
+  return blocking_pool->GetSequencedTaskRunner(
+      blocking_pool->GetSequenceToken());
 }
 
 base::LazyInstance<TaskManagerImpl> lazy_task_manager_instance =
@@ -38,7 +38,10 @@ base::LazyInstance<TaskManagerImpl> lazy_task_manager_instance =
 }  // namespace
 
 TaskManagerImpl::TaskManagerImpl()
-    : blocking_pool_runner_(GetBlockingPoolRunner()),
+    : on_background_data_ready_callback_(base::Bind(
+          &TaskManagerImpl::OnTaskGroupBackgroundCalculationsDone,
+          base::Unretained(this))),
+      blocking_pool_runner_(GetBlockingPoolRunner()),
       is_running_(false) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -90,6 +93,14 @@ int64_t TaskManagerImpl::GetPrivateMemoryUsage(TaskId task_id) const {
 
 int64_t TaskManagerImpl::GetSharedMemoryUsage(TaskId task_id) const {
   return GetTaskGroupByTaskId(task_id)->shared_bytes();
+}
+
+int64_t TaskManagerImpl::GetSwappedMemoryUsage(TaskId task_id) const {
+#if defined(OS_CHROMEOS)
+  return GetTaskGroupByTaskId(task_id)->swapped_bytes();
+#else
+  return -1;
+#endif
 }
 
 int64_t TaskManagerImpl::GetGpuMemoryUsage(TaskId task_id,
@@ -179,6 +190,20 @@ Task::Type TaskManagerImpl::GetType(TaskId task_id) const {
   return GetTaskByTaskId(task_id)->GetType();
 }
 
+int TaskManagerImpl::GetTabId(TaskId task_id) const {
+  return GetTaskByTaskId(task_id)->GetTabId();
+}
+
+int TaskManagerImpl::GetChildProcessUniqueId(TaskId task_id) const {
+  return GetTaskByTaskId(task_id)->GetChildProcessUniqueID();
+}
+
+void TaskManagerImpl::GetTerminationStatus(TaskId task_id,
+                                           base::TerminationStatus* out_status,
+                                           int* out_error_code) const {
+  GetTaskByTaskId(task_id)->GetTerminationStatus(out_status, out_error_code);
+}
+
 int64_t TaskManagerImpl::GetNetworkUsage(TaskId task_id) const {
   return GetTaskByTaskId(task_id)->network_usage();
 }
@@ -225,8 +250,9 @@ const TaskIdList& TaskManagerImpl::GetTaskIdsList() const {
 
     // Ensure browser process group of task IDs are at the beginning of the
     // list.
-    const TaskGroup* browser_group =
-        task_groups_by_proc_id_.at(base::GetCurrentProcId());
+    auto it = task_groups_by_proc_id_.find(base::GetCurrentProcId());
+    DCHECK(it != task_groups_by_proc_id_.end());
+    const TaskGroup* browser_group = it->second;
     browser_group->AppendSortedTaskIds(&sorted_task_ids_);
 
     for (const auto& groups_pair : task_groups_by_proc_id_) {
@@ -238,6 +264,16 @@ const TaskIdList& TaskManagerImpl::GetTaskIdsList() const {
   }
 
   return sorted_task_ids_;
+}
+
+TaskIdList TaskManagerImpl::GetIdsOfTasksSharingSameProcess(
+    TaskId task_id) const {
+  DCHECK(is_running_) << "Task manager is not running. You must observe the "
+      "task manager for it to start running";
+
+  TaskIdList result;
+  GetTaskGroupByTaskId(task_id)->AppendSortedTaskIds(&result);
+  return result;
 }
 
 size_t TaskManagerImpl::GetNumberOfTasksOnSameProcess(TaskId task_id) const {
@@ -255,6 +291,7 @@ void TaskManagerImpl::TaskAdded(Task* task) {
   if (itr == task_groups_by_proc_id_.end()) {
     task_group = new TaskGroup(task->process_handle(),
                                proc_id,
+                               on_background_data_ready_callback_,
                                blocking_pool_runner_);
     task_groups_by_proc_id_[proc_id] = task_group;
   } else {
@@ -282,7 +319,7 @@ void TaskManagerImpl::TaskRemoved(Task* task) {
 
   NotifyObserversOnTaskToBeRemoved(task_id);
 
-  TaskGroup* task_group = task_groups_by_proc_id_.at(proc_id);
+  TaskGroup* task_group = task_groups_by_proc_id_[proc_id];
   task_group->RemoveTask(task);
 
   task_groups_by_task_id_.erase(task_id);
@@ -296,8 +333,13 @@ void TaskManagerImpl::TaskRemoved(Task* task) {
   }
 }
 
+void TaskManagerImpl::TaskUnresponsive(Task* task) {
+  DCHECK(task);
+  NotifyObserversOnTaskUnresponsive(task->task_id());
+}
+
 void TaskManagerImpl::OnVideoMemoryUsageStatsUpdate(
-    const content::GPUVideoMemoryUsageStats& gpu_memory_stats) {
+    const gpu::VideoMemoryUsageStats& gpu_memory_stats) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   gpu_memory_stats_ = gpu_memory_stats;
@@ -371,7 +413,7 @@ void TaskManagerImpl::StopUpdating() {
 bool TaskManagerImpl::UpdateTasksWithBytesRead(const BytesReadParam& param) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  for (auto& task_provider : task_providers_) {
+  for (const auto& task_provider : task_providers_) {
     Task* task = task_provider->GetTaskOfUrlRequest(param.origin_pid,
                                                     param.child_id,
                                                     param.route_id);
@@ -386,13 +428,27 @@ bool TaskManagerImpl::UpdateTasksWithBytesRead(const BytesReadParam& param) {
 }
 
 TaskGroup* TaskManagerImpl::GetTaskGroupByTaskId(TaskId task_id) const {
-  DCHECK(ContainsKey(task_groups_by_task_id_, task_id));
-
-  return task_groups_by_task_id_.at(task_id);
+  auto it = task_groups_by_task_id_.find(task_id);
+  DCHECK(it != task_groups_by_task_id_.end());
+  return it->second;
 }
 
 Task* TaskManagerImpl::GetTaskByTaskId(TaskId task_id) const {
   return GetTaskGroupByTaskId(task_id)->GetTaskById(task_id);
+}
+
+void TaskManagerImpl::OnTaskGroupBackgroundCalculationsDone() {
+  // TODO(afakhry): There should be a better way for doing this!
+  bool are_all_processes_data_ready = true;
+  for (const auto& groups_itr : task_groups_by_proc_id_) {
+    are_all_processes_data_ready &=
+        groups_itr.second->AreBackgroundCalculationsDone();
+  }
+  if (are_all_processes_data_ready) {
+    NotifyObserversOnRefreshWithBackgroundCalculations(GetTaskIdsList());
+    for (const auto& groups_itr : task_groups_by_proc_id_)
+      groups_itr.second->ClearCurrentBackgroundCalculationsFlags();
+  }
 }
 
 }  // namespace task_management

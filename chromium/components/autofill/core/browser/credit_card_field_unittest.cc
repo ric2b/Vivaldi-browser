@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/autofill/core/browser/credit_card_field.h"
+
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/scoped_vector.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_scanner.h"
-#include "components/autofill/core/browser/credit_card_field.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -23,24 +26,24 @@ class CreditCardFieldTest : public testing::Test {
 
  protected:
   ScopedVector<AutofillField> list_;
-  scoped_ptr<const CreditCardField> field_;
+  std::unique_ptr<const CreditCardField> field_;
   FieldCandidatesMap field_candidates_map_;
 
   // Parses the contents of |list_| as a form, and stores the result into
   // |field_|.
   void Parse() {
     AutofillScanner scanner(list_.get());
-    scoped_ptr<FormField> field = CreditCardField::Parse(&scanner);
-    field_ = make_scoped_ptr(static_cast<CreditCardField*>(field.release()));
+    std::unique_ptr<FormField> field = CreditCardField::Parse(&scanner);
+    field_ = base::WrapUnique(static_cast<CreditCardField*>(field.release()));
   }
 
   void MultipleParses() {
-    scoped_ptr<FormField> field;
+    std::unique_ptr<FormField> field;
 
     AutofillScanner scanner(list_.get());
     while (!scanner.IsEnd()) {
       field = CreditCardField::Parse(&scanner);
-      field_ = make_scoped_ptr(static_cast<CreditCardField*>(field.release()));
+      field_ = base::WrapUnique(static_cast<CreditCardField*>(field.release()));
       if (field_ == nullptr) {
         scanner.Advance();
       } else {
@@ -171,7 +174,7 @@ TEST_F(CreditCardFieldTest, ParseFullCreditCard) {
             field_candidates_map_[ASCIIToUTF16("type")].BestHeuristicType());
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name")) !=
               field_candidates_map_.end());
-  EXPECT_EQ(CREDIT_CARD_NAME,
+  EXPECT_EQ(CREDIT_CARD_NAME_FULL,
             field_candidates_map_[ASCIIToUTF16("name")].BestHeuristicType());
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("number")) !=
               field_candidates_map_.end());
@@ -216,7 +219,7 @@ TEST_F(CreditCardFieldTest, ParseExpMonthYear) {
   AddClassifications();
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name1")) !=
               field_candidates_map_.end());
-  EXPECT_EQ(CREDIT_CARD_NAME,
+  EXPECT_EQ(CREDIT_CARD_NAME_FULL,
             field_candidates_map_[ASCIIToUTF16("name1")].BestHeuristicType());
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("number2")) !=
               field_candidates_map_.end());
@@ -257,7 +260,7 @@ TEST_F(CreditCardFieldTest, ParseExpMonthYear2) {
   AddClassifications();
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name1")) !=
               field_candidates_map_.end());
-  EXPECT_EQ(CREDIT_CARD_NAME,
+  EXPECT_EQ(CREDIT_CARD_NAME_FULL,
             field_candidates_map_[ASCIIToUTF16("name1")].BestHeuristicType());
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("number2")) !=
               field_candidates_map_.end());
@@ -294,7 +297,7 @@ TEST_F(CreditCardFieldTest, ParseExpField) {
   AddClassifications();
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name1")) !=
               field_candidates_map_.end());
-  EXPECT_EQ(CREDIT_CARD_NAME,
+  EXPECT_EQ(CREDIT_CARD_NAME_FULL,
             field_candidates_map_[ASCIIToUTF16("name1")].BestHeuristicType());
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("number2")) !=
               field_candidates_map_.end());
@@ -327,7 +330,7 @@ TEST_F(CreditCardFieldTest, ParseExpField2DigitYear) {
   AddClassifications();
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name1")) !=
               field_candidates_map_.end());
-  EXPECT_EQ(CREDIT_CARD_NAME,
+  EXPECT_EQ(CREDIT_CARD_NAME_FULL,
             field_candidates_map_[ASCIIToUTF16("name1")].BestHeuristicType());
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("number2")) !=
               field_candidates_map_.end());
@@ -361,7 +364,7 @@ TEST_F(CreditCardFieldTest, ParseExpField2DigitYearDueToMaxLength) {
   AddClassifications();
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name1")) !=
               field_candidates_map_.end());
-  EXPECT_EQ(CREDIT_CARD_NAME,
+  EXPECT_EQ(CREDIT_CARD_NAME_FULL,
             field_candidates_map_[ASCIIToUTF16("name1")].BestHeuristicType());
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("number2")) !=
               field_candidates_map_.end());
@@ -394,7 +397,7 @@ TEST_F(CreditCardFieldTest, ParseExpField4DigitYear) {
   AddClassifications();
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name1")) !=
               field_candidates_map_.end());
-  EXPECT_EQ(CREDIT_CARD_NAME,
+  EXPECT_EQ(CREDIT_CARD_NAME_FULL,
             field_candidates_map_[ASCIIToUTF16("name1")].BestHeuristicType());
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("number2")) !=
               field_candidates_map_.end());
@@ -419,7 +422,7 @@ TEST_F(CreditCardFieldTest, ParseCreditCardHolderNameWithCCFullName) {
   AddClassifications();
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name1")) !=
               field_candidates_map_.end());
-  EXPECT_EQ(CREDIT_CARD_NAME,
+  EXPECT_EQ(CREDIT_CARD_NAME_FULL,
             field_candidates_map_[ASCIIToUTF16("name1")].BestHeuristicType());
 }
 
@@ -588,12 +591,62 @@ TEST_F(CreditCardFieldTest, ParseMultipleCreditCardNumbers) {
 
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name1")) !=
               field_candidates_map_.end());
-  EXPECT_EQ(CREDIT_CARD_NAME,
+  EXPECT_EQ(CREDIT_CARD_NAME_FULL,
             field_candidates_map_[ASCIIToUTF16("name1")].BestHeuristicType());
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("number2")) !=
               field_candidates_map_.end());
   EXPECT_EQ(CREDIT_CARD_NUMBER,
             field_candidates_map_[ASCIIToUTF16("number2")].BestHeuristicType());
+  ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("number3")) !=
+              field_candidates_map_.end());
+  EXPECT_EQ(CREDIT_CARD_NUMBER,
+            field_candidates_map_[ASCIIToUTF16("number3")].BestHeuristicType());
+  ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("month4")) !=
+              field_candidates_map_.end());
+  EXPECT_EQ(CREDIT_CARD_EXP_MONTH,
+            field_candidates_map_[ASCIIToUTF16("month4")].BestHeuristicType());
+  ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("year5")) !=
+              field_candidates_map_.end());
+  EXPECT_EQ(CREDIT_CARD_EXP_4_DIGIT_YEAR,
+            field_candidates_map_[ASCIIToUTF16("year5")].BestHeuristicType());
+}
+
+TEST_F(CreditCardFieldTest, ParseFirstAndLastNames) {
+  FormFieldData field;
+  field.form_control_type = "text";
+
+  field.label = ASCIIToUTF16("First Name on Card");
+  field.name = ASCIIToUTF16("cc-fname");
+  list_.push_back(new AutofillField(field, ASCIIToUTF16("name1")));
+
+  field.label = ASCIIToUTF16("Last Name");
+  field.name = ASCIIToUTF16("cc-lname");
+  list_.push_back(new AutofillField(field, ASCIIToUTF16("name2")));
+
+  field.label = ASCIIToUTF16("Card Number");
+  field.name = ASCIIToUTF16("card_number");
+  list_.push_back(new AutofillField(field, ASCIIToUTF16("number3")));
+
+  field.label = ASCIIToUTF16("Exp Month");
+  field.name = ASCIIToUTF16("ccmonth");
+  list_.push_back(new AutofillField(field, ASCIIToUTF16("month4")));
+
+  field.label = ASCIIToUTF16("Exp Year");
+  field.name = ASCIIToUTF16("ccyear");
+  list_.push_back(new AutofillField(field, ASCIIToUTF16("year5")));
+
+  Parse();
+  ASSERT_NE(nullptr, field_.get());
+  AddClassifications();
+
+  ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name1")) !=
+              field_candidates_map_.end());
+  EXPECT_EQ(CREDIT_CARD_NAME_FIRST,
+            field_candidates_map_[ASCIIToUTF16("name1")].BestHeuristicType());
+  ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name2")) !=
+              field_candidates_map_.end());
+  EXPECT_EQ(CREDIT_CARD_NAME_LAST,
+            field_candidates_map_[ASCIIToUTF16("name2")].BestHeuristicType());
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("number3")) !=
               field_candidates_map_.end());
   EXPECT_EQ(CREDIT_CARD_NUMBER,
@@ -640,7 +693,7 @@ TEST_F(CreditCardFieldTest, ParseConsecutiveCvc) {
 
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name")) !=
               field_candidates_map_.end());
-  EXPECT_EQ(CREDIT_CARD_NAME,
+  EXPECT_EQ(CREDIT_CARD_NAME_FULL,
             field_candidates_map_[ASCIIToUTF16("name")].BestHeuristicType());
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("number")) !=
               field_candidates_map_.end());
@@ -700,7 +753,7 @@ TEST_F(CreditCardFieldTest, ParseNonConsecutiveCvc) {
 
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("name")) !=
               field_candidates_map_.end());
-  EXPECT_EQ(CREDIT_CARD_NAME,
+  EXPECT_EQ(CREDIT_CARD_NAME_FULL,
             field_candidates_map_[ASCIIToUTF16("name")].BestHeuristicType());
   ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("number")) !=
               field_candidates_map_.end());

@@ -13,12 +13,11 @@ import android.test.InstrumentationTestCase;
 import android.test.UiThreadTest;
 import android.test.suitebuilder.annotation.SmallTest;
 
-import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.test.util.Feature;
+import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
 import org.chromium.chrome.browser.preferences.website.GeolocationInfo;
-import org.chromium.content.browser.BrowserStartupController;
 
 /**
  * Tests for GeolocationHeader and GeolocationTracker.
@@ -33,8 +32,7 @@ public class GeolocationHeaderTest extends InstrumentationTestCase {
     @UiThreadTest
     public void testGeolocationHeader() throws ProcessInitException {
         Context targetContext = getInstrumentation().getTargetContext();
-        BrowserStartupController.get(targetContext, LibraryProcessType.PROCESS_BROWSER)
-                .startBrowserProcessesSync(false);
+        ChromeBrowserInitializer.getInstance(targetContext).handleSynchronousStartup();
 
         setMockLocation(20.3, 155.8, System.currentTimeMillis());
 

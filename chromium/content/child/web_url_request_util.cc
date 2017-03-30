@@ -14,12 +14,14 @@
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
+#include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebHTTPHeaderVisitor.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 
+using blink::WebCachePolicy;
 using blink::WebHTTPBody;
 using blink::WebString;
 using blink::WebURLRequest;
@@ -34,7 +36,7 @@ const char kThrottledErrorDescription[] =
 
 class HeaderFlattener : public blink::WebHTTPHeaderVisitor {
  public:
-  HeaderFlattener() : has_accept_header_(false) {}
+  HeaderFlattener() {}
 
   void visitHeader(const WebString& name, const WebString& value) override {
     // Headers are latin1.
@@ -46,47 +48,35 @@ class HeaderFlattener : public blink::WebHTTPHeaderVisitor {
     if (base::LowerCaseEqualsASCII(name_latin1, "referer"))
       return;
 
-    if (base::LowerCaseEqualsASCII(name_latin1, "accept"))
-      has_accept_header_ = true;
-
     if (!buffer_.empty())
       buffer_.append("\r\n");
     buffer_.append(name_latin1 + ": " + value_latin1);
   }
 
   const std::string& GetBuffer() {
-    // In some cases, WebKit doesn't add an Accept header, but not having the
-    // header confuses some web servers.  See bug 808613.
-    if (!has_accept_header_) {
-      if (!buffer_.empty())
-        buffer_.append("\r\n");
-      buffer_.append("Accept: */*");
-      has_accept_header_ = true;
-    }
     return buffer_;
   }
 
  private:
   std::string buffer_;
-  bool has_accept_header_;
 };
 
 }  // namespace
 
 ResourceType WebURLRequestToResourceType(const WebURLRequest& request) {
-  WebURLRequest::RequestContext requestContext = request.requestContext();
-  if (request.frameType() != WebURLRequest::FrameTypeNone) {
+  WebURLRequest::RequestContext requestContext = request.getRequestContext();
+  if (request.getFrameType() != WebURLRequest::FrameTypeNone) {
     DCHECK(requestContext == WebURLRequest::RequestContextForm ||
            requestContext == WebURLRequest::RequestContextFrame ||
            requestContext == WebURLRequest::RequestContextHyperlink ||
            requestContext == WebURLRequest::RequestContextIframe ||
            requestContext == WebURLRequest::RequestContextInternal ||
            requestContext == WebURLRequest::RequestContextLocation);
-    if (request.frameType() == WebURLRequest::FrameTypeTopLevel ||
-        request.frameType() == WebURLRequest::FrameTypeAuxiliary) {
+    if (request.getFrameType() == WebURLRequest::FrameTypeTopLevel ||
+        request.getFrameType() == WebURLRequest::FrameTypeAuxiliary) {
       return RESOURCE_TYPE_MAIN_FRAME;
     }
-    if (request.frameType() == WebURLRequest::FrameTypeNested)
+    if (request.getFrameType() == WebURLRequest::FrameTypeNested)
       return RESOURCE_TYPE_SUB_FRAME;
     NOTREACHED();
     return RESOURCE_TYPE_SUB_RESOURCE;
@@ -198,20 +188,19 @@ int GetLoadFlagsForWebURLRequest(const blink::WebURLRequest& request) {
   int load_flags = net::LOAD_NORMAL;
   GURL url = request.url();
   switch (request.getCachePolicy()) {
-    case WebURLRequest::ReloadIgnoringCacheData:
-      // Required by LayoutTests/http/tests/misc/refresh-headers.php
+    case WebCachePolicy::ValidatingCacheData:
       load_flags |= net::LOAD_VALIDATE_CACHE;
       break;
-    case WebURLRequest::ReloadBypassingCache:
+    case WebCachePolicy::BypassingCache:
       load_flags |= net::LOAD_BYPASS_CACHE;
       break;
-    case WebURLRequest::ReturnCacheDataElseLoad:
+    case WebCachePolicy::ReturnCacheDataElseLoad:
       load_flags |= net::LOAD_PREFERRING_CACHE;
       break;
-    case WebURLRequest::ReturnCacheDataDontLoad:
+    case WebCachePolicy::ReturnCacheDataDontLoad:
       load_flags |= net::LOAD_ONLY_FROM_CACHE;
       break;
-    case WebURLRequest::UseProtocolCachePolicy:
+    case WebCachePolicy::UseProtocolCachePolicy:
       break;
     default:
       NOTREACHED();
@@ -304,7 +293,7 @@ STATIC_ASSERT_ENUM(FETCH_REQUEST_MODE_NAVIGATE,
 
 FetchRequestMode GetFetchRequestModeForWebURLRequest(
     const blink::WebURLRequest& request) {
-  return static_cast<FetchRequestMode>(request.fetchRequestMode());
+  return static_cast<FetchRequestMode>(request.getFetchRequestMode());
 }
 
 STATIC_ASSERT_ENUM(FETCH_CREDENTIALS_MODE_OMIT,
@@ -313,10 +302,12 @@ STATIC_ASSERT_ENUM(FETCH_CREDENTIALS_MODE_SAME_ORIGIN,
                    WebURLRequest::FetchCredentialsModeSameOrigin);
 STATIC_ASSERT_ENUM(FETCH_CREDENTIALS_MODE_INCLUDE,
                    WebURLRequest::FetchCredentialsModeInclude);
+STATIC_ASSERT_ENUM(FETCH_CREDENTIALS_MODE_PASSWORD,
+                   WebURLRequest::FetchCredentialsModePassword);
 
 FetchCredentialsMode GetFetchCredentialsModeForWebURLRequest(
     const blink::WebURLRequest& request) {
-  return static_cast<FetchCredentialsMode>(request.fetchCredentialsMode());
+  return static_cast<FetchCredentialsMode>(request.getFetchCredentialsMode());
 }
 
 STATIC_ASSERT_ENUM(FetchRedirectMode::FOLLOW_MODE,
@@ -328,7 +319,7 @@ STATIC_ASSERT_ENUM(FetchRedirectMode::MANUAL_MODE,
 
 FetchRedirectMode GetFetchRedirectModeForWebURLRequest(
     const blink::WebURLRequest& request) {
-  return static_cast<FetchRedirectMode>(request.fetchRedirectMode());
+  return static_cast<FetchRedirectMode>(request.getFetchRedirectMode());
 }
 
 STATIC_ASSERT_ENUM(REQUEST_CONTEXT_FRAME_TYPE_AUXILIARY,
@@ -342,7 +333,7 @@ STATIC_ASSERT_ENUM(REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
 
 RequestContextFrameType GetRequestContextFrameTypeForWebURLRequest(
     const blink::WebURLRequest& request) {
-  return static_cast<RequestContextFrameType>(request.frameType());
+  return static_cast<RequestContextFrameType>(request.getFrameType());
 }
 
 STATIC_ASSERT_ENUM(REQUEST_CONTEXT_TYPE_UNSPECIFIED,
@@ -416,7 +407,7 @@ STATIC_ASSERT_ENUM(REQUEST_CONTEXT_TYPE_XSLT,
 
 RequestContextType GetRequestContextTypeForWebURLRequest(
     const blink::WebURLRequest& request) {
-  return static_cast<RequestContextType>(request.requestContext());
+  return static_cast<RequestContextType>(request.getRequestContext());
 }
 
 blink::WebURLError CreateWebURLError(const blink::WebURL& unreachable_url,

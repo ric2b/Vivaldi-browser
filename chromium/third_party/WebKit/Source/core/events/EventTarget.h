@@ -67,9 +67,8 @@ struct FiringEventIterator {
 };
 using FiringEventIteratorVector = Vector<FiringEventIterator, 1>;
 
-class CORE_EXPORT EventTargetData final : public NoBaseWillBeGarbageCollectedFinalized<EventTargetData> {
+class CORE_EXPORT EventTargetData final : public GarbageCollectedFinalized<EventTargetData> {
     WTF_MAKE_NONCOPYABLE(EventTargetData);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(EventTargetData);
 public:
     EventTargetData();
     ~EventTargetData();
@@ -102,7 +101,7 @@ public:
 //   very strange compiler errors.
 // - If you added an onfoo attribute, use DEFINE_ATTRIBUTE_EVENT_LISTENER(foo)
 //   in your class declaration.
-// - Override EventTarget::interfaceName() and executionContext(). The former
+// - Override EventTarget::interfaceName() and getExecutionContext(). The former
 //   will typically return EventTargetNames::YourClassName. The latter will
 //   return ActiveDOMObject::executionContext (if you are an ActiveDOMObject)
 //   or the document you're in.
@@ -112,7 +111,7 @@ public:
 //
 // Optionally, add a FooEvent.idl class, but that's outside the scope of this
 // comment (and much more straightforward).
-class CORE_EXPORT EventTarget : public NoBaseWillBeGarbageCollectedFinalized<EventTarget>, public ScriptWrappable {
+class CORE_EXPORT EventTarget : public GarbageCollectedFinalized<EventTarget>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
     virtual ~EventTarget();
@@ -123,32 +122,32 @@ public:
 #endif
 
     virtual const AtomicString& interfaceName() const = 0;
-    virtual ExecutionContext* executionContext() const = 0;
+    virtual ExecutionContext* getExecutionContext() const = 0;
 
     virtual Node* toNode();
     virtual const LocalDOMWindow* toDOMWindow() const;
     virtual LocalDOMWindow* toDOMWindow();
     virtual MessagePort* toMessagePort();
 
-    bool addEventListener(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, bool useCapture = false);
-    bool addEventListener(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, const EventListenerOptionsOrBoolean&);
-    bool addEventListener(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, EventListenerOptions&);
+    bool addEventListener(const AtomicString& eventType, EventListener*, bool useCapture = false);
+    bool addEventListener(const AtomicString& eventType, EventListener*, const EventListenerOptionsOrBoolean&);
+    bool addEventListener(const AtomicString& eventType, EventListener*, EventListenerOptions&);
 
-    bool removeEventListener(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, bool useCapture = false);
-    bool removeEventListener(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, const EventListenerOptionsOrBoolean&);
-    bool removeEventListener(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, EventListenerOptions&);
+    bool removeEventListener(const AtomicString& eventType, EventListener*, bool useCapture = false);
+    bool removeEventListener(const AtomicString& eventType, EventListener*, const EventListenerOptionsOrBoolean&);
+    bool removeEventListener(const AtomicString& eventType, EventListener*, EventListenerOptions&);
     virtual void removeAllEventListeners();
 
-    DispatchEventResult dispatchEvent(PassRefPtrWillBeRawPtr<Event>);
+    DispatchEventResult dispatchEvent(Event*);
 
     // dispatchEventForBindings is intended to only be called from
     // javascript originated calls. This method will validate and may adjust
     // the Event object before dispatching.
-    bool dispatchEventForBindings(PassRefPtrWillBeRawPtr<Event>, ExceptionState&);
+    bool dispatchEventForBindings(Event*, ExceptionState&);
     virtual void uncaughtExceptionInEventHandler();
 
     // Used for legacy "onEvent" attribute APIs.
-    bool setAttributeEventListener(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>);
+    bool setAttributeEventListener(const AtomicString& eventType, EventListener*);
     EventListener* getAttributeEventListener(const AtomicString& eventType);
 
     bool hasEventListeners() const;
@@ -168,9 +167,9 @@ public:
 protected:
     EventTarget();
 
-    virtual bool addEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, const EventListenerOptions&);
-    virtual bool removeEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, const EventListenerOptions&);
-    virtual DispatchEventResult dispatchEventInternal(PassRefPtrWillBeRawPtr<Event>);
+    virtual bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&);
+    virtual bool removeEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&);
+    virtual DispatchEventResult dispatchEventInternal(Event*);
 
     // Subclasses should likely not override these themselves; instead, they should subclass EventTargetWithInlineData.
     virtual EventTargetData* eventTargetData() = 0;
@@ -251,15 +250,15 @@ public:
 // macros to avoid causing so many header includes.
 #define DEFINE_ATTRIBUTE_EVENT_LISTENER(attribute) \
     EventListener* on##attribute() { return this->getAttributeEventListener(EventTypeNames::attribute); } \
-    void setOn##attribute(PassRefPtrWillBeRawPtr<EventListener> listener) { this->setAttributeEventListener(EventTypeNames::attribute, listener); } \
+    void setOn##attribute(EventListener* listener) { this->setAttributeEventListener(EventTypeNames::attribute, listener); } \
 
 #define DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(attribute) \
     static EventListener* on##attribute(EventTarget& eventTarget) { return eventTarget.getAttributeEventListener(EventTypeNames::attribute); } \
-    static void setOn##attribute(EventTarget& eventTarget, PassRefPtrWillBeRawPtr<EventListener> listener) { eventTarget.setAttributeEventListener(EventTypeNames::attribute, listener); } \
+    static void setOn##attribute(EventTarget& eventTarget, EventListener* listener) { eventTarget.setAttributeEventListener(EventTypeNames::attribute, listener); } \
 
 #define DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(attribute) \
     EventListener* on##attribute() { return document().getWindowAttributeEventListener(EventTypeNames::attribute); } \
-    void setOn##attribute(PassRefPtrWillBeRawPtr<EventListener> listener) { document().setWindowAttributeEventListener(EventTypeNames::attribute, listener); } \
+    void setOn##attribute(EventListener* listener) { document().setWindowAttributeEventListener(EventTypeNames::attribute, listener); } \
 
 #define DEFINE_STATIC_WINDOW_ATTRIBUTE_EVENT_LISTENER(attribute) \
     static EventListener* on##attribute(EventTarget& eventTarget) { \
@@ -268,7 +267,7 @@ public:
         ASSERT(eventTarget.toDOMWindow()); \
         return eventTarget.getAttributeEventListener(EventTypeNames::attribute); \
     } \
-    static void setOn##attribute(EventTarget& eventTarget, PassRefPtrWillBeRawPtr<EventListener> listener) { \
+    static void setOn##attribute(EventTarget& eventTarget, EventListener* listener) { \
         if (Node* node = eventTarget.toNode()) \
             node->document().setWindowAttributeEventListener(EventTypeNames::attribute, listener); \
         else { \
@@ -279,7 +278,7 @@ public:
 
 #define DEFINE_MAPPED_ATTRIBUTE_EVENT_LISTENER(attribute, eventName) \
     EventListener* on##attribute() { return getAttributeEventListener(EventTypeNames::eventName); } \
-    void setOn##attribute(PassRefPtrWillBeRawPtr<EventListener> listener) { setAttributeEventListener(EventTypeNames::eventName, listener); } \
+    void setOn##attribute(EventListener* listener) { setAttributeEventListener(EventTypeNames::eventName, listener); } \
 
 inline bool EventTarget::hasEventListeners() const
 {

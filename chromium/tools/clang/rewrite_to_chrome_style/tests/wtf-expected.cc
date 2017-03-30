@@ -5,13 +5,14 @@
 // Make sure things in namespace WTF are also renamed.
 namespace WTF {
 
-int making_globals_great_again = 0;
+int g_making_globals_great_again = 0;
 
 void RunTheThing(int chicken) {}
 
-struct XmlHTTPRequest {
+class XmlHTTPRequest {
   void SendSync();
 
+  static const bool kFoo = true;
   int ready_state_;
 };
 

@@ -11,6 +11,7 @@
 
 #include <vector>
 
+#include "base/memory/scoped_ptr.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/mac/scoped_audio_queue_ref.h"

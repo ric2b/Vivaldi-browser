@@ -155,7 +155,7 @@ static PassOwnPtr<protocol::Animation::KeyframesRule> buildObjectForAnimationKey
     return protocol::Animation::KeyframesRule::create().setKeyframes(keyframes.release()).build();
 }
 
-PassOwnPtr<protocol::Animation::Animation> InspectorAnimationAgent::buildObjectForAnimation(Animation& animation)
+PassOwnPtr<protocol::Animation::Animation> InspectorAnimationAgent::buildObjectForAnimation(blink::Animation& animation)
 {
     const Element* element = toKeyframeEffect(animation.effect())->target();
     CSSAnimations& cssAnimations = element->elementAnimations()->cssAnimations();
@@ -207,7 +207,7 @@ void InspectorAnimationAgent::setPlaybackRate(ErrorString*, double playbackRate)
 
 void InspectorAnimationAgent::getCurrentTime(ErrorString* errorString, const String& id, double* currentTime)
 {
-    Animation* animation = assertAnimation(errorString, id);
+    blink::Animation* animation = assertAnimation(errorString, id);
     if (!animation)
         return;
     if (m_idToAnimationClone.get(id))
@@ -225,10 +225,10 @@ void InspectorAnimationAgent::setPaused(ErrorString* errorString, PassOwnPtr<pro
 {
     for (size_t i = 0; i < animationIds->length(); ++i) {
         String animationId = animationIds->get(i);
-        Animation* animation = assertAnimation(errorString, animationId);
+        blink::Animation* animation = assertAnimation(errorString, animationId);
         if (!animation)
             return;
-        Animation* clone = animationClone(animation);
+        blink::Animation* clone = animationClone(animation);
         if (!clone) {
             *errorString = "Failed to clone detached animation";
             return;
@@ -244,7 +244,7 @@ void InspectorAnimationAgent::setPaused(ErrorString* errorString, PassOwnPtr<pro
     }
 }
 
-Animation* InspectorAnimationAgent::animationClone(Animation* animation)
+blink::Animation* InspectorAnimationAgent::animationClone(blink::Animation* animation)
 {
     const String id = String::number(animation->sequenceNumber());
     if (!m_idToAnimationClone.get(id)) {
@@ -278,12 +278,14 @@ Animation* InspectorAnimationAgent::animationClone(Animation* animation)
 
         KeyframeEffect* newEffect = KeyframeEffect::create(oldEffect->target(), newModel, oldEffect->specifiedTiming());
         m_isCloning = true;
-        Animation* clone = Animation::create(newEffect, animation->timeline());
+        blink::Animation* clone = blink::Animation::create(newEffect, animation->timeline());
         m_isCloning = false;
         m_idToAnimationClone.set(id, clone);
         m_idToAnimation.set(String::number(clone->sequenceNumber()), clone);
         clone->play();
         clone->setStartTime(animation->startTime());
+
+        animation->setEffectSuppressed(true);
     }
     return m_idToAnimationClone.get(id);
 }
@@ -292,10 +294,10 @@ void InspectorAnimationAgent::seekAnimations(ErrorString* errorString, PassOwnPt
 {
     for (size_t i = 0; i < animationIds->length(); ++i) {
         String animationId = animationIds->get(i);
-        Animation* animation = assertAnimation(errorString, animationId);
+        blink::Animation* animation = assertAnimation(errorString, animationId);
         if (!animation)
             return;
-        Animation* clone = animationClone(animation);
+        blink::Animation* clone = animationClone(animation);
         if (!clone) {
             *errorString = "Failed to clone a detached animation.";
             return;
@@ -310,7 +312,10 @@ void InspectorAnimationAgent::releaseAnimations(ErrorString* errorString, PassOw
 {
     for (size_t i = 0; i < animationIds->length(); ++i) {
         String animationId = animationIds->get(i);
-        Animation* clone = m_idToAnimationClone.get(animationId);
+        blink::Animation* animation = m_idToAnimation.get(animationId);
+        if (animation)
+            animation->setEffectSuppressed(false);
+        blink::Animation* clone = m_idToAnimationClone.get(animationId);
         if (clone)
             clone->cancel();
         m_idToAnimationClone.remove(animationId);
@@ -323,7 +328,7 @@ void InspectorAnimationAgent::releaseAnimations(ErrorString* errorString, PassOw
 
 void InspectorAnimationAgent::setTiming(ErrorString* errorString, const String& animationId, double duration, double delay)
 {
-    Animation* animation = assertAnimation(errorString, animationId);
+    blink::Animation* animation = assertAnimation(errorString, animationId);
     if (!animation)
         return;
 
@@ -359,7 +364,7 @@ void InspectorAnimationAgent::setTiming(ErrorString* errorString, const String& 
 
 void InspectorAnimationAgent::resolveAnimation(ErrorString* errorString, const String& animationId, OwnPtr<protocol::Runtime::RemoteObject>* result)
 {
-    Animation* animation = assertAnimation(errorString, animationId);
+    blink::Animation* animation = assertAnimation(errorString, animationId);
     if (!animation)
         return;
     if (m_idToAnimationClone.get(animationId))
@@ -402,7 +407,7 @@ static void addStringToDigestor(WebCryptoDigestor* digestor, const String& strin
     digestor->consume(reinterpret_cast<const unsigned char*>(string.ascii().data()), string.length());
 }
 
-String InspectorAnimationAgent::createCSSId(Animation& animation)
+String InspectorAnimationAgent::createCSSId(blink::Animation& animation)
 {
     String type = m_idToAnimationType.get(String::number(animation.sequenceNumber()));
     ASSERT(type != AnimationType::WebAnimation);
@@ -419,12 +424,12 @@ String InspectorAnimationAgent::createCSSId(Animation& animation)
     }
 
     Element* element = effect->target();
-    WillBeHeapVector<RefPtrWillBeMember<CSSStyleDeclaration>> styles = m_cssAgent->matchingStyles(element);
+    HeapVector<Member<CSSStyleDeclaration>> styles = m_cssAgent->matchingStyles(element);
     OwnPtr<WebCryptoDigestor> digestor = createDigestor(HashAlgorithmSha1);
     addStringToDigestor(digestor.get(), type);
     addStringToDigestor(digestor.get(), animation.id());
     for (CSSPropertyID property : cssProperties) {
-        RefPtrWillBeRawPtr<CSSStyleDeclaration> style = m_cssAgent->findEffectiveDeclaration(property, styles);
+        RawPtr<CSSStyleDeclaration> style = m_cssAgent->findEffectiveDeclaration(property, styles);
         // Ignore inline styles.
         if (!style || !style->parentStyleSheet() || !style->parentRule() || style->parentRule()->type() != CSSRule::STYLE_RULE)
             continue;
@@ -444,14 +449,14 @@ void InspectorAnimationAgent::didCreateAnimation(unsigned sequenceNumber)
     frontend()->animationCreated(String::number(sequenceNumber));
 }
 
-void InspectorAnimationAgent::animationPlayStateChanged(Animation* animation, Animation::AnimationPlayState oldPlayState, Animation::AnimationPlayState newPlayState)
+void InspectorAnimationAgent::animationPlayStateChanged(blink::Animation* animation, blink::Animation::AnimationPlayState oldPlayState, blink::Animation::AnimationPlayState newPlayState)
 {
     const String& animationId = String::number(animation->sequenceNumber());
     if (m_idToAnimation.get(animationId) || m_clearedAnimations.contains(animationId))
         return;
-    if (newPlayState == Animation::Running || newPlayState == Animation::Finished)
+    if (newPlayState == blink::Animation::Running || newPlayState == blink::Animation::Finished)
         frontend()->animationStarted(buildObjectForAnimation(*animation));
-    else if (newPlayState == Animation::Idle || newPlayState == Animation::Paused)
+    else if (newPlayState == blink::Animation::Idle || newPlayState == blink::Animation::Paused)
         frontend()->animationCanceled(animationId);
 }
 
@@ -463,9 +468,9 @@ void InspectorAnimationAgent::didClearDocumentOfWindowObject(LocalFrame* frame)
     frame->document()->timeline().setPlaybackRate(referenceTimeline().playbackRate());
 }
 
-Animation* InspectorAnimationAgent::assertAnimation(ErrorString* errorString, const String& id)
+blink::Animation* InspectorAnimationAgent::assertAnimation(ErrorString* errorString, const String& id)
 {
-    Animation* animation = m_idToAnimation.get(id);
+    blink::Animation* animation = m_idToAnimation.get(id);
     if (!animation) {
         *errorString = "Could not find animation with given id";
         return nullptr;
@@ -478,7 +483,7 @@ AnimationTimeline& InspectorAnimationAgent::referenceTimeline()
     return m_inspectedFrames->root()->document()->timeline();
 }
 
-double InspectorAnimationAgent::normalizedStartTime(Animation& animation)
+double InspectorAnimationAgent::normalizedStartTime(blink::Animation& animation)
 {
     if (referenceTimeline().playbackRate() == 0)
         return animation.startTime() + referenceTimeline().currentTime() - animation.timeline()->currentTime();
@@ -487,14 +492,12 @@ double InspectorAnimationAgent::normalizedStartTime(Animation& animation)
 
 DEFINE_TRACE(InspectorAnimationAgent)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_inspectedFrames);
     visitor->trace(m_domAgent);
     visitor->trace(m_cssAgent);
     visitor->trace(m_idToAnimation);
     visitor->trace(m_idToAnimationType);
     visitor->trace(m_idToAnimationClone);
-#endif
     InspectorBaseAgent::trace(visitor);
 }
 

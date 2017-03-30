@@ -6,9 +6,9 @@
 #define COMPONENTS_AUTOFILL_CONTENT_BROWSER_CONTENT_AUTOFILL_DRIVER_FACTORY_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/supports_user_data.h"
 #include "components/autofill/content/browser/request_autocomplete_manager.h"
 #include "components/autofill/core/browser/autofill_manager.h"
@@ -54,8 +54,8 @@ class ContentAutofillDriverFactory : public content::WebContentsObserver,
       content::RenderFrameHost* render_frame_host,
       const content::LoadCommittedDetails& details,
       const content::FrameNavigateParams& params) override;
-  void NavigationEntryCommitted(
-      const content::LoadCommittedDetails& load_details) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void WasHidden() override;
 
   static const char kContentAutofillDriverFactoryWebContentsUserDataKey[];
@@ -73,7 +73,7 @@ class ContentAutofillDriverFactory : public content::WebContentsObserver,
   std::string app_locale_;
   AutofillManager::AutofillDownloadManagerState enable_download_manager_;
 
-  std::map<content::RenderFrameHost*, scoped_ptr<ContentAutofillDriver>>
+  std::map<content::RenderFrameHost*, std::unique_ptr<ContentAutofillDriver>>
       frame_driver_map_;
 };
 

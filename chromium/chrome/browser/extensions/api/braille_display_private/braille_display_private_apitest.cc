@@ -169,8 +169,8 @@ class BrailleDisplayPrivateApiTest : public ExtensionApiTest {
   }
 
  private:
-  scoped_ptr<BrlapiConnection> CreateBrlapiConnection() {
-    return scoped_ptr<BrlapiConnection>(
+  std::unique_ptr<BrlapiConnection> CreateBrlapiConnection() {
+    return std::unique_ptr<BrlapiConnection>(
         new MockBrlapiConnection(&connection_data_));
   }
 
@@ -277,7 +277,9 @@ class BrailleDisplayPrivateAPIUserTest : public BrailleDisplayPrivateApiTest {
 
     int GetEventCount() { return event_count_; }
 
-    void BroadcastEvent(scoped_ptr<Event> event) override { ++event_count_; }
+    void BroadcastEvent(std::unique_ptr<Event> event) override {
+      ++event_count_;
+    }
     bool HasListener() override { return true; }
 
    private:
@@ -287,7 +289,7 @@ class BrailleDisplayPrivateAPIUserTest : public BrailleDisplayPrivateApiTest {
   MockEventDelegate* SetMockEventDelegate(BrailleDisplayPrivateAPI* api) {
     MockEventDelegate* delegate = new MockEventDelegate();
     api->SetEventDelegateForTest(
-        scoped_ptr<BrailleDisplayPrivateAPI::EventDelegate>(delegate));
+        std::unique_ptr<BrailleDisplayPrivateAPI::EventDelegate>(delegate));
     return delegate;
   }
 
@@ -318,9 +320,15 @@ class BrailleDisplayPrivateAPIUserTest : public BrailleDisplayPrivateApiTest {
   }
 };
 
+// Flakily times out on ChromeOS MSAN bots. See https://crbug.com/592893.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_KeyEventOnLockScreen DISABLED_KeyEventOnLockScreen
+#else
+#define MAYBE_KeyEventOnLockScreen KeyEventOnLockScreen
+#endif
 IN_PROC_BROWSER_TEST_F(BrailleDisplayPrivateAPIUserTest,
-                       KeyEventOnLockScreen) {
-  scoped_ptr<ScreenLockerTester> tester(ScreenLocker::GetTester());
+                       MAYBE_KeyEventOnLockScreen) {
+  std::unique_ptr<ScreenLockerTester> tester(ScreenLocker::GetTester());
   // Log in.
   user_manager::UserManager::Get()->UserLoggedIn(
       AccountId::FromUserEmail(kTestUserName), kTestUserName, true);

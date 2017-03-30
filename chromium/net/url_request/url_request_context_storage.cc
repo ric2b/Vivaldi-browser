@@ -8,11 +8,11 @@
 
 #include "base/logging.h"
 #include "net/base/network_delegate.h"
+#include "net/base/proxy_delegate.h"
 #include "net/base/sdch_manager.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cookies/cookie_store.h"
 #include "net/dns/host_resolver.h"
-#include "net/ftp/ftp_transaction_factory.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/http_transaction_factory.h"
@@ -81,15 +81,21 @@ void URLRequestContextStorage::set_network_delegate(
   network_delegate_ = std::move(network_delegate);
 }
 
+void URLRequestContextStorage::set_proxy_delegate(
+    scoped_ptr<ProxyDelegate> proxy_delegate) {
+  proxy_delegate_ = std::move(proxy_delegate);
+}
+
 void URLRequestContextStorage::set_http_server_properties(
     scoped_ptr<HttpServerProperties> http_server_properties) {
   http_server_properties_ = std::move(http_server_properties);
   context_->set_http_server_properties(http_server_properties_->GetWeakPtr());
 }
 
-void URLRequestContextStorage::set_cookie_store(CookieStore* cookie_store) {
-  context_->set_cookie_store(cookie_store);
-  cookie_store_ = cookie_store;
+void URLRequestContextStorage::set_cookie_store(
+    scoped_ptr<CookieStore> cookie_store) {
+  context_->set_cookie_store(cookie_store.get());
+  cookie_store_ = std::move(cookie_store);
 }
 
 void URLRequestContextStorage::set_transport_security_state(

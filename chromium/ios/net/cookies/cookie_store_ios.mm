@@ -292,18 +292,25 @@ CookieStoreIOS::CookieStoreIOS(
 CookieStoreIOS::CookieStoreIOS(
     net::CookieMonster::PersistentCookieStore* persistent_store,
     NSHTTPCookieStorage* system_store)
-    : system_store_(system_store),
+    : cookie_monster_(new net::CookieMonster(persistent_store, nullptr)),
+      system_store_([system_store retain]),
       creation_time_manager_(new CookieCreationTimeManager),
       metrics_enabled_(false),
       flush_delay_(base::TimeDelta::FromSeconds(10)),
       synchronization_state_(NOT_SYNCHRONIZED),
-      cookie_cache_(new CookieCache()) {
+      cookie_cache_(new CookieCache()),
+      weak_factory_(this) {
   DCHECK(system_store);
 
   NotificationTrampoline::GetInstance()->AddObserver(this);
-  cookie_monster_ = new net::CookieMonster(persistent_store, nullptr);
+
   cookie_monster_->SetPersistSessionCookies(true);
   cookie_monster_->SetForceKeepSessionState();
+}
+
+CookieStoreIOS::~CookieStoreIOS() {
+  NotificationTrampoline::GetInstance()->RemoveObserver(this);
+  STLDeleteContainerPairSecondPointers(hook_map_.begin(), hook_map_.end());
 }
 
 // static
@@ -320,7 +327,7 @@ void CookieStoreIOS::SetCookiePolicy(CookiePolicy setting) {
 }
 
 // static
-CookieStoreIOS* CookieStoreIOS::CreateCookieStore(
+std::unique_ptr<CookieStoreIOS> CookieStoreIOS::CreateCookieStore(
     NSHTTPCookieStorage* cookie_storage) {
   DCHECK(cookie_storage);
   // TODO(huey): Update this when CrNet supports multiple cookie jars.
@@ -328,7 +335,8 @@ CookieStoreIOS* CookieStoreIOS::CreateCookieStore(
 
   // Create a cookie store with no persistent store backing. Then, populate
   // it from the system's cookie jar.
-  CookieStoreIOS* cookie_store = new CookieStoreIOS(nullptr, cookie_storage);
+  std::unique_ptr<CookieStoreIOS> cookie_store(
+      new CookieStoreIOS(nullptr, cookie_storage));
   cookie_store->synchronization_state_ = SYNCHRONIZED;
   cookie_store->FlushStore(base::Closure());
   return cookie_store;
@@ -378,8 +386,9 @@ void CookieStoreIOS::SetCookieWithOptionsAsync(
       break;
     case SYNCHRONIZING:
       tasks_pending_synchronization_.push_back(
-          base::Bind(&CookieStoreIOS::SetCookieWithOptionsAsync, this, url,
-                     cookie_line, options, WrapSetCallback(callback)));
+          base::Bind(&CookieStoreIOS::SetCookieWithOptionsAsync,
+                     weak_factory_.GetWeakPtr(), url, cookie_line, options,
+                     WrapSetCallback(callback)));
       break;
     case SYNCHRONIZED:
       // The exclude_httponly() option would only be used by a javascript
@@ -440,7 +449,7 @@ void CookieStoreIOS::SetCookieWithDetailsAsync(
     base::Time last_access_time,
     bool secure,
     bool http_only,
-    bool same_site,
+    CookieSameSite same_site,
     bool enforce_strict_secure,
     CookiePriority priority,
     const SetCookiesCallback& callback) {
@@ -454,11 +463,12 @@ void CookieStoreIOS::SetCookieWithDetailsAsync(
           priority, WrapSetCallback(callback));
       break;
     case SYNCHRONIZING:
-      tasks_pending_synchronization_.push_back(base::Bind(
-          &CookieStoreIOS::SetCookieWithDetailsAsync, this, url, name, value,
-          domain, path, creation_time, expiration_time, last_access_time,
-          secure, http_only, same_site, enforce_strict_secure, priority,
-          WrapSetCallback(callback)));
+      tasks_pending_synchronization_.push_back(
+          base::Bind(&CookieStoreIOS::SetCookieWithDetailsAsync,
+                     weak_factory_.GetWeakPtr(), url, name, value, domain, path,
+                     creation_time, expiration_time, last_access_time, secure,
+                     http_only, same_site, enforce_strict_secure, priority,
+                     WrapSetCallback(callback)));
       break;
     case SYNCHRONIZED:
       // If cookies are not allowed, they are stashed in the CookieMonster, and
@@ -472,11 +482,10 @@ void CookieStoreIOS::SetCookieWithDetailsAsync(
 
       // First create a CanonicalCookie, to normalize the arguments,
       // particularly domain and path, and perform validation.
-      scoped_ptr<net::CanonicalCookie> canonical_cookie =
+      std::unique_ptr<net::CanonicalCookie> canonical_cookie =
           net::CanonicalCookie::Create(
               url, name, value, domain, path, creation_time, expiration_time,
-              secure, http_only, same_site, enforce_strict_secure,
-              priority);
+              secure, http_only, same_site, enforce_strict_secure, priority);
 
       if (canonical_cookie) {
         NSHTTPCookie* cookie =
@@ -509,8 +518,8 @@ void CookieStoreIOS::GetCookiesWithOptionsAsync(
       break;
     case SYNCHRONIZING:
       tasks_pending_synchronization_.push_back(
-          base::Bind(&CookieStoreIOS::GetCookiesWithOptionsAsync, this, url,
-                     options, callback));
+          base::Bind(&CookieStoreIOS::GetCookiesWithOptionsAsync,
+                     weak_factory_.GetWeakPtr(), url, options, callback));
       break;
     case SYNCHRONIZED:
       // If cookies are not allowed, they are stashed in the CookieMonster, and
@@ -542,8 +551,8 @@ void CookieStoreIOS::GetCookieListWithOptionsAsync(
       break;
     case SYNCHRONIZING:
       tasks_pending_synchronization_.push_back(
-          base::Bind(&CookieStoreIOS::GetCookieListWithOptionsAsync, this, url,
-                     options, callback));
+          base::Bind(&CookieStoreIOS::GetCookieListWithOptionsAsync,
+                     weak_factory_.GetWeakPtr(), url, options, callback));
       break;
     case SYNCHRONIZED:
       if (!SystemCookiesAllowed()) {
@@ -573,8 +582,9 @@ void CookieStoreIOS::GetAllCookiesAsync(const GetCookieListCallback& callback) {
       cookie_monster_->GetAllCookiesAsync(callback);
       break;
     case SYNCHRONIZING:
-      tasks_pending_synchronization_.push_back(base::Bind(
-          &CookieStoreIOS::GetAllCookiesAsync, this, callback));
+      tasks_pending_synchronization_.push_back(
+          base::Bind(&CookieStoreIOS::GetAllCookiesAsync,
+                     weak_factory_.GetWeakPtr(), callback));
       break;
     case SYNCHRONIZED:
       if (!SystemCookiesAllowed()) {
@@ -606,9 +616,9 @@ void CookieStoreIOS::DeleteCookieAsync(const GURL& url,
                                          WrapClosure(callback));
       break;
     case SYNCHRONIZING:
-      tasks_pending_synchronization_.push_back(
-          base::Bind(&CookieStoreIOS::DeleteCookieAsync, this, url, cookie_name,
-                     WrapClosure(callback)));
+      tasks_pending_synchronization_.push_back(base::Bind(
+          &CookieStoreIOS::DeleteCookieAsync, weak_factory_.GetWeakPtr(), url,
+          cookie_name, WrapClosure(callback)));
       break;
     case SYNCHRONIZED:
       NSArray* cookies = GetCookiesForURL(system_store_,
@@ -637,9 +647,9 @@ void CookieStoreIOS::DeleteCanonicalCookieAsync(
                                                   WrapDeleteCallback(callback));
       break;
     case SYNCHRONIZING:
-      tasks_pending_synchronization_.push_back(
-          base::Bind(&CookieStoreIOS::DeleteCanonicalCookieAsync, this, cookie,
-                     WrapDeleteCallback(callback)));
+      tasks_pending_synchronization_.push_back(base::Bind(
+          &CookieStoreIOS::DeleteCanonicalCookieAsync,
+          weak_factory_.GetWeakPtr(), cookie, WrapDeleteCallback(callback)));
       break;
     case SYNCHRONIZED:
       // This relies on the fact cookies are given unique creation dates.
@@ -665,8 +675,9 @@ void CookieStoreIOS::DeleteAllCreatedBetweenAsync(
       break;
     case SYNCHRONIZING:
       tasks_pending_synchronization_.push_back(
-          base::Bind(&CookieStoreIOS::DeleteAllCreatedBetweenAsync, this,
-                     delete_begin, delete_end, WrapDeleteCallback(callback)));
+          base::Bind(&CookieStoreIOS::DeleteAllCreatedBetweenAsync,
+                     weak_factory_.GetWeakPtr(), delete_begin, delete_end,
+                     WrapDeleteCallback(callback)));
       break;
     case SYNCHRONIZED:
       CookieFilterFunction filter =
@@ -692,9 +703,10 @@ void CookieStoreIOS::DeleteAllCreatedBetweenForHostAsync(
           delete_begin, delete_end, url, WrapDeleteCallback(callback));
       break;
     case SYNCHRONIZING:
-      tasks_pending_synchronization_.push_back(base::Bind(
-          &CookieStoreIOS::DeleteAllCreatedBetweenForHostAsync, this,
-          delete_begin, delete_end, url, WrapDeleteCallback(callback)));
+      tasks_pending_synchronization_.push_back(
+          base::Bind(&CookieStoreIOS::DeleteAllCreatedBetweenForHostAsync,
+                     weak_factory_.GetWeakPtr(), delete_begin, delete_end, url,
+                     WrapDeleteCallback(callback)));
       break;
     case SYNCHRONIZED:
       NSString* host = base::SysUTF8ToNSString(url.host());
@@ -717,8 +729,8 @@ void CookieStoreIOS::DeleteSessionCookiesAsync(const DeleteCallback& callback) {
       break;
     case SYNCHRONIZING:
       tasks_pending_synchronization_.push_back(
-          base::Bind(&CookieStoreIOS::DeleteSessionCookiesAsync, this,
-                     WrapDeleteCallback(callback)));
+          base::Bind(&CookieStoreIOS::DeleteSessionCookiesAsync,
+                     weak_factory_.GetWeakPtr(), WrapDeleteCallback(callback)));
       break;
     case SYNCHRONIZED:
       CookieFilterFunction filter = base::Bind(&IsCookieSessionCookie);
@@ -737,14 +749,6 @@ void CookieStoreIOS::FlushStore(const base::Closure& closure) {
   }
   cookie_monster_->FlushStore(closure);
   flush_closure_.Cancel();
-}
-
-#pragma mark -
-#pragma mark Protected methods
-
-CookieStoreIOS::~CookieStoreIOS() {
-  NotificationTrampoline::GetInstance()->RemoveObserver(this);
-  STLDeleteContainerPairSecondPointers(hook_map_.begin(), hook_map_.end());
 }
 
 #pragma mark -
@@ -777,8 +781,8 @@ void CookieStoreIOS::OnSystemCookiePolicyChanged() {
     DCHECK(![[system_store_ cookies] count]);
     DCHECK(synchronization_state_ != SYNCHRONIZING);
     synchronization_state_ = SYNCHRONIZING;
-    cookie_monster_->GetAllCookiesAsync(
-        base::Bind(&CookieStoreIOS::AddCookiesToSystemStore, this));
+    cookie_monster_->GetAllCookiesAsync(base::Bind(
+        &CookieStoreIOS::AddCookiesToSystemStore, weak_factory_.GetWeakPtr()));
   } else {
     DCHECK_EQ(NSHTTPCookieAcceptPolicyNever, policy);
     // FlushStore() does not write the cookies to disk when they are disabled.
@@ -832,7 +836,8 @@ void CookieStoreIOS::SetSynchronizedWithSystemStore(bool synchronized) {
       synchronization_state_ = SYNCHRONIZING;
       ClearSystemStore();
       cookie_monster_->GetAllCookiesAsync(
-          base::Bind(&CookieStoreIOS::AddCookiesToSystemStore, this));
+          base::Bind(&CookieStoreIOS::AddCookiesToSystemStore,
+                     weak_factory_.GetWeakPtr()));
       return;
     } else {
       // Copy the cookies from the global store to |cookie_monster_|.
@@ -970,12 +975,12 @@ void CookieStoreIOS::OnSystemCookiesChanged() {
     return;
 
   flush_closure_.Reset(base::Bind(&CookieStoreIOS::FlushStore,
-                                  base::Unretained(this), base::Closure()));
+                                  weak_factory_.GetWeakPtr(), base::Closure()));
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, flush_closure_.callback(), flush_delay_);
 }
 
-scoped_ptr<net::CookieStore::CookieChangedSubscription>
+std::unique_ptr<net::CookieStore::CookieChangedSubscription>
 CookieStoreIOS::AddCallbackForCookie(const GURL& gurl,
                                      const std::string& name,
                                      const CookieChangedCallback& callback) {
@@ -991,6 +996,10 @@ CookieStoreIOS::AddCallbackForCookie(const GURL& gurl,
 
   DCHECK(hook_map_.find(key) != hook_map_.end());
   return hook_map_[key]->Add(callback);
+}
+
+bool CookieStoreIOS::IsEphemeral() {
+  return cookie_monster_->IsEphemeral();
 }
 
 bool CookieStoreIOS::UpdateCacheForCookieFromSystem(
@@ -1065,8 +1074,9 @@ void CookieStoreIOS::DidClearNSHTTPCookieStorageCookies(
   DCHECK(client);
   auto sequenced_task_runner = client->GetTaskRunner();
   DCHECK(sequenced_task_runner);
-  auto callback = base::Bind(&CookieStoreIOS::DidClearBinaryCookiesFileCookies,
-                             this, delete_callback, num_deleted);
+  auto callback =
+      base::Bind(&CookieStoreIOS::DidClearBinaryCookiesFileCookies,
+                 weak_factory_.GetWeakPtr(), delete_callback, num_deleted);
   sequenced_task_runner.get()->PostTaskAndReply(
       FROM_HERE, base::Bind(&ClearAllCookiesFromBinaryCookiesFile), callback);
 }
@@ -1087,8 +1097,8 @@ void CookieStoreIOS::UpdateCachesFromCookieMonster() {
   DCHECK(thread_checker_.CalledOnValidThread());
   for (const auto& hook_map_entry : hook_map_) {
     std::pair<GURL, std::string> key = hook_map_entry.first;
-    GetCookieListCallback callback =
-        base::Bind(&CookieStoreIOS::GotCookieListFor, this, key);
+    GetCookieListCallback callback = base::Bind(
+        &CookieStoreIOS::GotCookieListFor, weak_factory_.GetWeakPtr(), key);
     cookie_monster_->GetAllCookiesForURLAsync(key.first, callback);
   }
 }
@@ -1131,18 +1141,21 @@ CookieStoreIOS::CanonicalCookieListFromSystemCookies(NSArray* cookies) {
 CookieStoreIOS::SetCookiesCallback CookieStoreIOS::WrapSetCallback(
     const SetCookiesCallback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return base::Bind(&CookieStoreIOS::UpdateCachesAfterSet, this, callback);
+  return base::Bind(&CookieStoreIOS::UpdateCachesAfterSet,
+                    weak_factory_.GetWeakPtr(), callback);
 }
 
 CookieStoreIOS::DeleteCallback CookieStoreIOS::WrapDeleteCallback(
     const DeleteCallback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return base::Bind(&CookieStoreIOS::UpdateCachesAfterDelete, this, callback);
+  return base::Bind(&CookieStoreIOS::UpdateCachesAfterDelete,
+                    weak_factory_.GetWeakPtr(), callback);
 }
 
 base::Closure CookieStoreIOS::WrapClosure(const base::Closure& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return base::Bind(&CookieStoreIOS::UpdateCachesAfterClosure, this, callback);
+  return base::Bind(&CookieStoreIOS::UpdateCachesAfterClosure,
+                    weak_factory_.GetWeakPtr(), callback);
 }
 
 }  // namespace net

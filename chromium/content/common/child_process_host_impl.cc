@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/hash.h"
 #include "base/logging.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/numerics/safe_math.h"
 #include "base/path_service.h"
@@ -21,10 +22,10 @@
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "build/build_config.h"
 #include "content/common/child_process_messages.h"
-#include "content/common/gpu/client/gpu_memory_buffer_impl_shared_memory.h"
 #include "content/public/common/child_process_host_delegate.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
+#include "gpu/ipc/client/gpu_memory_buffer_impl_shared_memory.h"
 #include "ipc/attachment_broker.h"
 #include "ipc/attachment_broker_privileged.h"
 #include "ipc/ipc_channel.h"
@@ -88,7 +89,7 @@ ChildProcessHostImpl::ChildProcessHostImpl(ChildProcessHostDelegate* delegate)
 #endif
 
 #if USE_ATTACHMENT_BROKER
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MACOSX)
   // On Mac, the privileged AttachmentBroker needs a reference to the Mach port
   // Provider, which is only available in the chrome/ module. The attachment
   // broker must already be created.
@@ -97,7 +98,7 @@ ChildProcessHostImpl::ChildProcessHostImpl(ChildProcessHostDelegate* delegate)
   // Construct the privileged attachment broker early in the life cycle of a
   // child process.
   IPC::AttachmentBrokerPrivileged::CreateBrokerIfNeeded();
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // defined(OS_MACOSX)
 #endif  // USE_ATTACHMENT_BROKER
 }
 
@@ -132,12 +133,17 @@ void ChildProcessHostImpl::ForceShutdown() {
 std::string ChildProcessHostImpl::CreateChannel() {
   channel_id_ = IPC::Channel::GenerateVerifiedChannelID(std::string());
   channel_ = IPC::Channel::CreateServer(channel_id_, this);
-  if (!channel_->Connect())
-    return std::string();
 #if USE_ATTACHMENT_BROKER
   IPC::AttachmentBroker::GetGlobal()->RegisterCommunicationChannel(
-      channel_.get());
+      channel_.get(), base::MessageLoopForIO::current()->task_runner());
 #endif
+  if (!channel_->Connect()) {
+#if USE_ATTACHMENT_BROKER
+    IPC::AttachmentBroker::GetGlobal()->DeregisterCommunicationChannel(
+        channel_.get());
+#endif
+    return std::string();
+  }
 
   for (size_t i = 0; i < filters_.size(); ++i)
     filters_[i]->OnFilterAdded(channel_.get());
@@ -316,8 +322,8 @@ void ChildProcessHostImpl::OnAllocateGpuMemoryBuffer(
   // AllocateForChildProcess() will check if |width| and |height| are valid
   // and handle failure in a controlled way when not. We just need to make
   // sure |usage| is supported here.
-  if (GpuMemoryBufferImplSharedMemory::IsUsageSupported(usage)) {
-    *handle = GpuMemoryBufferImplSharedMemory::AllocateForChildProcess(
+  if (gpu::GpuMemoryBufferImplSharedMemory::IsUsageSupported(usage)) {
+    *handle = gpu::GpuMemoryBufferImplSharedMemory::AllocateForChildProcess(
         id, gfx::Size(width, height), format, peer_process_.Handle());
   }
 }

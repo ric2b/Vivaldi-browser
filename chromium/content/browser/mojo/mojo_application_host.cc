@@ -15,10 +15,10 @@
 namespace content {
 namespace {
 
-class ApplicationSetupImpl : public ApplicationSetup {
+class ApplicationSetupImpl : public mojom::ApplicationSetup {
  public:
   ApplicationSetupImpl(ServiceRegistryImpl* service_registry,
-                       mojo::InterfaceRequest<ApplicationSetup> request)
+                       mojo::InterfaceRequest<mojom::ApplicationSetup> request)
       : binding_(this, std::move(request)),
         service_registry_(service_registry) {}
 
@@ -26,7 +26,7 @@ class ApplicationSetupImpl : public ApplicationSetup {
   }
 
  private:
-  // ApplicationSetup implementation.
+  // mojom::ApplicationSetup implementation.
   void ExchangeInterfaceProviders(
       mojo::shell::mojom::InterfaceProviderRequest services,
       mojo::shell::mojom::InterfaceProviderPtr exposed_services) override {
@@ -34,7 +34,7 @@ class ApplicationSetupImpl : public ApplicationSetup {
     service_registry_->BindRemoteServiceProvider(std::move(exposed_services));
   }
 
-  mojo::Binding<ApplicationSetup> binding_;
+  mojo::Binding<mojom::ApplicationSetup> binding_;
   ServiceRegistryImpl* service_registry_;
 };
 
@@ -42,8 +42,8 @@ class ApplicationSetupImpl : public ApplicationSetup {
 
 MojoApplicationHost::MojoApplicationHost() : did_activate_(false) {
 #if defined(OS_ANDROID)
-  service_registry_android_.reset(
-      new ServiceRegistryAndroid(&service_registry_));
+  service_registry_android_ =
+      ServiceRegistryAndroid::Create(&service_registry_);
 #endif
 }
 
@@ -70,7 +70,7 @@ bool MojoApplicationHost::Init() {
       channel_pair.PassServerHandle().release().handle, io_task_runner);
   application_setup_.reset(new ApplicationSetupImpl(
       &service_registry_,
-      mojo::MakeRequest<ApplicationSetup>(std::move(pipe))));
+      mojo::MakeRequest<mojom::ApplicationSetup>(std::move(pipe))));
   return true;
 }
 
@@ -81,7 +81,7 @@ void MojoApplicationHost::Activate(IPC::Sender* sender,
 
   base::PlatformFile client_file = client_handle_.release().handle;
   did_activate_ = sender->Send(new MojoMsg_Activate(
-      IPC::GetFileHandleForProcess(client_file, process_handle, true)));
+      IPC::GetPlatformFileForTransit(client_file, true)));
 }
 
 void MojoApplicationHost::OverrideIOTaskRunnerForTest(

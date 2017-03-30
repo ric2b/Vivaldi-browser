@@ -9,6 +9,7 @@
     "additional_compile_targets": [
       "accessibility_unittests",
       "app_list_unittests",
+      "app_list_shower_unittests",
       "aura_unittests",
       "browser_tests",
       "cacheinvalidation_unittests",
@@ -39,9 +40,7 @@
       "media_blink_unittests",
       "mojo_common_unittests",
       "mojo_public_bindings_unittests",
-      "mojo_public_environment_unittests",
       "mojo_public_system_unittests",
-      "mojo_public_utility_unittests",
       "mojo_system_unittests",
       "nacl_loader_unittests",
       "net_unittests",

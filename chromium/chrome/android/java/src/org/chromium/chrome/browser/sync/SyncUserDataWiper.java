@@ -4,15 +4,11 @@
 
 package org.chromium.chrome.browser.sync;
 
-import android.content.Context;
-import android.os.AsyncTask;
-
 import org.chromium.chrome.browser.BrowsingDataType;
 import org.chromium.chrome.browser.TimePeriod;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge.OnClearBrowsingDataListener;
-import org.chromium.chrome.browser.provider.ChromeBrowserProviderClient;
 
 /**
  * A class to wipe the user's bookmarks and all types of sync data.
@@ -30,20 +26,14 @@ public class SyncUserDataWiper {
      * Wipes the user's bookmarks and sync data.
      * @param callback Called when the data is cleared.
      */
-    public static void wipeSyncUserData(final Context context, final Runnable callback) {
+    public static void wipeSyncUserData(final Runnable callback) {
         final BookmarkModel model = new BookmarkModel();
 
-        // The ChromeBrowserProvider API currently enforces calls to not be on the UI thread.
-        // This is being reviewed in http://crbug.com/225050 and this code could be simplified.
-        new AsyncTask<Void, Void, Void>() {
+        model.runAfterBookmarkModelLoaded(new Runnable() {
             @Override
-            protected Void doInBackground(Void... arg0) {
-                ChromeBrowserProviderClient.removeAllUserBookmarks(context);
-                return null;
-            }
-
-            @Override
-            protected void onPostExecute(Void result) {
+            public void run() {
+                model.removeAllUserBookmarks();
+                model.destroy();
                 PrefServiceBridge.getInstance().clearBrowsingData(
                         new OnClearBrowsingDataListener(){
                             @Override
@@ -53,7 +43,7 @@ public class SyncUserDataWiper {
                         },
                         SYNC_DATA_TYPES, TimePeriod.EVERYTHING);
             }
-        }.execute();
+        });
     }
 }
 

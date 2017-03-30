@@ -2,13 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#import "chrome/browser/ui/cocoa/browser_window_cocoa.h"
+
+#include <memory>
+
 #include "base/mac/scoped_nsobject.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/fullscreen.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
-#import "chrome/browser/ui/cocoa/browser_window_cocoa.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #include "chrome/browser/ui/cocoa/cocoa_profile_test.h"
 #include "chrome/grit/generated_resources.h"
@@ -39,7 +41,7 @@ class BrowserWindowCocoaTest : public CocoaProfileTest {
 };
 
 TEST_F(BrowserWindowCocoaTest, TestBookmarkBarVisible) {
-  scoped_ptr<BrowserWindowCocoa> bwc(
+  std::unique_ptr<BrowserWindowCocoa> bwc(
       new BrowserWindowCocoa(browser(), controller_));
 
   bool before = bwc->IsBookmarkBarVisible();
@@ -51,7 +53,7 @@ TEST_F(BrowserWindowCocoaTest, TestBookmarkBarVisible) {
 }
 
 TEST_F(BrowserWindowCocoaTest, TestWindowTitle) {
-  scoped_ptr<BrowserWindowCocoa> bwc(
+  std::unique_ptr<BrowserWindowCocoa> bwc(
       new BrowserWindowCocoa(browser(), controller_));
   NSString* playing_emoji = @"🔊";
   NSString* muting_emoji = @"🔇";
@@ -59,13 +61,13 @@ TEST_F(BrowserWindowCocoaTest, TestWindowTitle) {
             [bwc->WindowTitle() rangeOfString:playing_emoji].location);
   EXPECT_EQ(static_cast<NSUInteger>(NSNotFound),
             [bwc->WindowTitle() rangeOfString:muting_emoji].location);
-  bwc->UpdateMediaState(TAB_MEDIA_STATE_AUDIO_PLAYING);
+  bwc->UpdateAlertState(TabAlertState::AUDIO_PLAYING);
   EXPECT_NE(static_cast<NSUInteger>(NSNotFound),
             [bwc->WindowTitle() rangeOfString:playing_emoji].location);
-  bwc->UpdateMediaState(TAB_MEDIA_STATE_AUDIO_MUTING);
+  bwc->UpdateAlertState(TabAlertState::AUDIO_MUTING);
   EXPECT_NE(static_cast<NSUInteger>(NSNotFound),
             [bwc->WindowTitle() rangeOfString:muting_emoji].location);
-  bwc->UpdateMediaState(TAB_MEDIA_STATE_NONE);
+  bwc->UpdateAlertState(TabAlertState::NONE);
   EXPECT_EQ(static_cast<NSUInteger>(NSNotFound),
             [bwc->WindowTitle() rangeOfString:playing_emoji].location);
   EXPECT_EQ(static_cast<NSUInteger>(NSNotFound),
@@ -75,7 +77,7 @@ TEST_F(BrowserWindowCocoaTest, TestWindowTitle) {
 // Test that IsMaximized() returns false when the browser window goes from
 // maximized to minimized state - http://crbug/452976.
 TEST_F(BrowserWindowCocoaTest, TestMinimizeState) {
-  scoped_ptr<BrowserWindowCocoa> bwc(
+  std::unique_ptr<BrowserWindowCocoa> bwc(
       new BrowserWindowCocoa(browser(), controller_));
 
   EXPECT_FALSE(bwc->IsMinimized());

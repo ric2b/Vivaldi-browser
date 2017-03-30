@@ -18,7 +18,6 @@
 #include "base/time/default_clock.h"
 #include "base/values.h"
 #include "content/public/browser/browser_thread.h"
-#include "extensions/browser/api/cast_channel/cast_auth_ica.h"
 #include "extensions/browser/api/cast_channel/cast_message_util.h"
 #include "extensions/browser/api/cast_channel/cast_socket.h"
 #include "extensions/browser/api/cast_channel/keep_alive_delegate.h"
@@ -26,6 +25,7 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/common/api/cast_channel/cast_channel.pb.h"
 #include "extensions/common/api/cast_channel/logging.pb.h"
+#include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 
@@ -101,8 +101,8 @@ bool IsValidConnectInfoPort(const ConnectInfo& connect_info) {
 }
 
 bool IsValidConnectInfoIpAddress(const ConnectInfo& connect_info) {
-  net::IPAddressNumber ip_address;
-  return net::ParseIPLiteralToNumber(connect_info.ip_address, &ip_address);
+  net::IPAddress ip_address;
+  return ip_address.AssignFromIPLiteral(connect_info.ip_address);
 }
 
 }  // namespace
@@ -246,8 +246,8 @@ CastChannelOpenFunction::~CastChannelOpenFunction() { }
 
 net::IPEndPoint* CastChannelOpenFunction::ParseConnectInfo(
     const ConnectInfo& connect_info) {
-  net::IPAddressNumber ip_address;
-  CHECK(net::ParseIPLiteralToNumber(connect_info.ip_address, &ip_address));
+  net::IPAddress ip_address;
+  CHECK(ip_address.AssignFromIPLiteral(connect_info.ip_address));
   return new net::IPEndPoint(ip_address,
                              static_cast<uint16_t>(connect_info.port));
 }
@@ -551,19 +551,12 @@ CastChannelSetAuthorityKeysFunction::~CastChannelSetAuthorityKeysFunction() {
 }
 
 bool CastChannelSetAuthorityKeysFunction::Prepare() {
-  params_ = cast_channel::SetAuthorityKeys::Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params_.get());
   return true;
 }
 
 void CastChannelSetAuthorityKeysFunction::AsyncWorkStart() {
-  std::string& keys = params_->keys;
-  std::string& signature = params_->signature;
-  if (signature.empty() || keys.empty() ||
-      !cast_channel::SetTrustedCertificateAuthorities(keys, signature)) {
-    SetError("Unable to set authority keys.");
-  }
-
+  // TODO(eroman): crbug.com/601171: Delete this once the API is
+  // removed. It is currently a no-op.
   AsyncWorkCompleted();
 }
 

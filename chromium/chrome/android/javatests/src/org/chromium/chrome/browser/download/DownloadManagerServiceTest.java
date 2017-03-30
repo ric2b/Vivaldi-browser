@@ -17,6 +17,7 @@ import android.test.suitebuilder.annotation.SmallTest;
 import android.util.Log;
 import android.util.Pair;
 
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
@@ -25,6 +26,7 @@ import org.chromium.content.browser.DownloadInfo;
 import org.chromium.content.browser.DownloadInfo.Builder;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.net.ConnectionType;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.Collections;
@@ -32,6 +34,7 @@ import java.util.HashSet;
 import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
@@ -57,11 +60,17 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
             DOWNLOAD_SUCCESSFUL,
             DOWNLOAD_FAILED,
             DOWNLOAD_PROGRESS,
-            CANCEL_DOWNLOAD_ID
+            DOWNLOAD_PAUSED,
+            CANCEL_DOWNLOAD_ID,
+            CLEAR_PENDING_DOWNLOADS
         }
 
         private final Queue<Pair<MethodID, Object>> mExpectedCalls =
                 new ConcurrentLinkedQueue<Pair<MethodID, Object>>();
+
+        public MockDownloadNotifier() {
+            expect(MethodID.CLEAR_PENDING_DOWNLOADS, null);
+        }
 
         public MockDownloadNotifier expect(MethodID method, Object param) {
             mExpectedCalls.clear();
@@ -71,7 +80,7 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
 
         public void waitTillExpectedCallsComplete() {
             try {
-                CriteriaHelper.pollForCriteria(
+                CriteriaHelper.pollInstrumentationThread(
                         new Criteria("Failed while waiting for all calls to complete.") {
                             @Override
                             public boolean isSatisfied() {
@@ -114,14 +123,23 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
         }
 
         @Override
-        public void notifyDownloadProgress(DownloadInfo downloadInfo, long startTime) {
+        public void notifyDownloadProgress(
+                DownloadInfo downloadInfo, long startTime, boolean canDownloadWhileMetered) {
             assertCorrectExpectedCall(MethodID.DOWNLOAD_PROGRESS, downloadInfo);
         }
 
         @Override
-        public void cancelNotification(int downloadId) {
-            assertCorrectExpectedCall(MethodID.CANCEL_DOWNLOAD_ID, downloadId);
+        public void notifyDownloadPaused(DownloadInfo downloadInfo, boolean isAutoResumable) {
+            assertCorrectExpectedCall(MethodID.DOWNLOAD_PAUSED, downloadInfo);
         }
+
+        @Override
+        public void cancelNotification(int notificationId, String downloadGuid) {
+            assertCorrectExpectedCall(MethodID.CANCEL_DOWNLOAD_ID, notificationId);
+        }
+
+        @Override
+        public void resumePendingDownloads() {}
     }
 
     /**
@@ -137,7 +155,7 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
 
         public void waitForSnackbarControllerToFinish(final boolean success) {
             try {
-                CriteriaHelper.pollForCriteria(
+                CriteriaHelper.pollInstrumentationThread(
                         new Criteria("Failed while waiting for all calls to complete.") {
                             @Override
                             public boolean isSatisfied() {
@@ -208,7 +226,6 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
     static class MockOMADownloadHandler extends OMADownloadHandler {
         protected boolean mSuccess;
         protected String mNofityURI;
-        protected DownloadInfo mDownloadInfo;
         protected long mDownloadId;
 
         MockOMADownloadHandler(Context context) {
@@ -220,7 +237,8 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
         }
 
         @Override
-        public void onDownloadCompleted(DownloadInfo downloadInfo, String notifyURI) {
+        public void onDownloadCompleted(
+                DownloadInfo downloadInfo, long downloadId, String notifyURI) {
             mSuccess = true;
             mNofityURI = notifyURI;
         }
@@ -231,13 +249,8 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
         }
 
         @Override
-        public DownloadInfo updateDownloadInfo(DownloadInfo downloadInfo, long newDownloadId) {
-            mDownloadInfo = downloadInfo;
+        public void updateDownloadInfo(long oldDownloadId, long newDownloadId) {
             mDownloadId = newDownloadId;
-            mDownloadInfo = DownloadInfo.Builder.fromDownloadInfo(downloadInfo)
-                      .setDownloadId((int) newDownloadId)
-                      .build();
-            return mDownloadInfo;
         }
 
         @Override
@@ -247,18 +260,32 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
     }
 
     private static class DownloadManagerServiceForTest extends DownloadManagerService {
+        boolean mResumed;
+
         public DownloadManagerServiceForTest(Context context, MockDownloadNotifier mockNotifier,
                 long updateDelayInMillis) {
             super(context, mockNotifier, getTestHandler(), updateDelayInMillis);
         }
 
         @Override
-        protected long addCompletedDownload(DownloadInfo downloadInfo) {
-            return 1L;
+        protected boolean addCompletedDownload(DownloadItem downloadItem) {
+            downloadItem.setSystemDownloadId(1L);
+            return true;
         }
 
         @Override
         protected void init() {}
+
+        @Override
+        protected void resumeDownload(DownloadItem item, boolean hasUserGesture) {
+            mResumed = true;
+        }
+    }
+
+    @Override
+    protected void setUp() throws Exception {
+        super.setUp();
+        RecordHistogram.disableForTests();
     }
 
     private static Handler getTestHandler() {
@@ -268,9 +295,9 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
     }
 
     private DownloadInfo getDownloadInfo() {
-        return new Builder().setContentLength(100)
-                .setDownloadId(mRandom.nextInt(1000))
-                .setHasDownloadId(true)
+        return new Builder()
+                .setContentLength(100)
+                .setDownloadGuid(UUID.randomUUID().toString())
                 .build();
     }
 
@@ -343,8 +370,7 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
                 getTestContext(), notifier, UPDATE_DELAY_FOR_TEST);
         dService.setDownloadSnackbarController(snackbarController);
         // Try calling download completed directly.
-        DownloadInfo successful = Builder.fromDownloadInfo(getDownloadInfo())
-                .setIsSuccessful(true).build();
+        DownloadInfo successful = getDownloadInfo();
 
         notifier.expect(MethodID.DOWNLOAD_SUCCESSFUL, successful);
 
@@ -352,25 +378,44 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
         notifier.waitTillExpectedCallsComplete();
         snackbarController.waitForSnackbarControllerToFinish(true);
 
-        // Now check that a download failure works.
-        DownloadInfo failure = Builder.fromDownloadInfo(getDownloadInfo())
-                .setIsSuccessful(false).build();
-        notifier.expect(MethodID.DOWNLOAD_FAILED, failure);
-        dService.onDownloadCompleted(failure);
-        notifier.waitTillExpectedCallsComplete();
-        snackbarController.waitForSnackbarControllerToFinish(false);
-
         // Now check that a successful notification appears after a download progress.
         DownloadInfo progress = getDownloadInfo();
-        successful = Builder.fromDownloadInfo(progress)
-                .setIsSuccessful(true).build();
         notifier.expect(MethodID.DOWNLOAD_PROGRESS, progress)
-                .andThen(MethodID.DOWNLOAD_SUCCESSFUL, successful);
+                .andThen(MethodID.DOWNLOAD_SUCCESSFUL, progress);
         dService.onDownloadUpdated(progress);
         Thread.sleep(DELAY_BETWEEN_CALLS);
-        dService.onDownloadCompleted(successful);
+        dService.onDownloadCompleted(progress);
         notifier.waitTillExpectedCallsComplete();
         snackbarController.waitForSnackbarControllerToFinish(true);
+    }
+
+    @MediumTest
+    @Feature({"Download"})
+    public void testDownloadFailedIsCalled() throws InterruptedException {
+        MockDownloadNotifier notifier = new MockDownloadNotifier();
+        DownloadManagerServiceForTest dService = new DownloadManagerServiceForTest(
+                getTestContext(), notifier, UPDATE_DELAY_FOR_TEST);
+        // Check that if an interrupted download cannot be resumed, it will trigger a download
+        // failure.
+        DownloadInfo failure =
+                Builder.fromDownloadInfo(getDownloadInfo()).setIsResumable(false).build();
+        notifier.expect(MethodID.DOWNLOAD_FAILED, failure);
+        dService.onDownloadInterrupted(failure, false);
+        notifier.waitTillExpectedCallsComplete();
+    }
+
+    @MediumTest
+    @Feature({"Download"})
+    public void testDownloadPausedIsCalled() throws InterruptedException {
+        MockDownloadNotifier notifier = new MockDownloadNotifier();
+        DownloadManagerServiceForTest dService = new DownloadManagerServiceForTest(
+                getTestContext(), notifier, UPDATE_DELAY_FOR_TEST);
+        DownloadManagerService.disableNetworkListenerForTest();
+        DownloadInfo paused =
+                Builder.fromDownloadInfo(getDownloadInfo()).setIsResumable(true).build();
+        notifier.expect(MethodID.DOWNLOAD_PAUSED, paused);
+        dService.onDownloadInterrupted(paused, true);
+        notifier.waitTillExpectedCallsComplete();
     }
 
     @MediumTest
@@ -397,25 +442,50 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
 
     @MediumTest
     @Feature({"Download"})
-    public void testInProgressDownloadsAreCancelled() {
+    public void testInterruptedDownloadAreAutoResumed() throws InterruptedException {
         MockDownloadNotifier notifier = new MockDownloadNotifier();
-        DownloadManagerServiceForTest dService = new DownloadManagerServiceForTest(
+        final DownloadManagerServiceForTest dService = new DownloadManagerServiceForTest(
                 getTestContext(), notifier, UPDATE_DELAY_FOR_TEST);
-
-        DownloadInfo download1 = getDownloadInfo();
-        DownloadInfo download2 = getDownloadInfo();
-        DownloadInfo download3 = getDownloadInfo();
-        OneTimeMatchSet matchSet = new OneTimeMatchSet(download1, download2, download3);
-        notifier.expect(MethodID.DOWNLOAD_PROGRESS, matchSet)
-                .andThen(MethodID.DOWNLOAD_PROGRESS, matchSet)
-                .andThen(MethodID.DOWNLOAD_PROGRESS, matchSet);
-
-        dService.onDownloadUpdated(download1);
-        dService.onDownloadUpdated(download2);
-        dService.onDownloadUpdated(download3);
-
+        DownloadManagerService.disableNetworkListenerForTest();
+        DownloadInfo paused =
+                Builder.fromDownloadInfo(getDownloadInfo()).setIsResumable(true).build();
+        notifier.expect(MethodID.DOWNLOAD_PROGRESS, paused)
+                .andThen(MethodID.DOWNLOAD_PAUSED, paused);
+        dService.onDownloadUpdated(paused);
+        Thread.sleep(DELAY_BETWEEN_CALLS);
+        dService.onDownloadInterrupted(paused, true);
         notifier.waitTillExpectedCallsComplete();
-        assertTrue("All downloads should be updated.", matchSet.mMatches.isEmpty());
+        int resumableIdCount = dService.mAutoResumableDownloadIds.size();
+        dService.onConnectionTypeChanged(ConnectionType.CONNECTION_WIFI);
+        assertEquals(resumableIdCount - 1, dService.mAutoResumableDownloadIds.size());
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return dService.mResumed;
+            }
+        });
+    }
+
+    @MediumTest
+    @Feature({"Download"})
+    public void testInterruptedUnmeteredDownloadCannotAutoResumeOnMeteredNetwork() throws
+            InterruptedException {
+        MockDownloadNotifier notifier = new MockDownloadNotifier();
+        final DownloadManagerServiceForTest dService = new DownloadManagerServiceForTest(
+                getTestContext(), notifier, UPDATE_DELAY_FOR_TEST);
+        DownloadManagerService.disableNetworkListenerForTest();
+        DownloadInfo paused =
+                Builder.fromDownloadInfo(getDownloadInfo()).setIsResumable(true).build();
+        notifier.expect(MethodID.DOWNLOAD_PROGRESS, paused)
+                .andThen(MethodID.DOWNLOAD_PAUSED, paused);
+        dService.onDownloadUpdated(paused);
+        Thread.sleep(DELAY_BETWEEN_CALLS);
+        dService.onDownloadInterrupted(paused, true);
+        notifier.waitTillExpectedCallsComplete();
+        DownloadManagerService.setIsNetworkMeteredForTest(true);
+        int resumableIdCount = dService.mAutoResumableDownloadIds.size();
+        dService.onConnectionTypeChanged(ConnectionType.CONNECTION_2G);
+        assertEquals(resumableIdCount, dService.mAutoResumableDownloadIds.size());
     }
 
     /**
@@ -438,7 +508,7 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
         dService.setOMADownloadHandler(handler);
         dService.addOMADownloadToSharedPrefs(String.valueOf(downloadId) + "," + INSTALL_NOTIFY_URI);
         dService.clearPendingOMADownloads();
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return handler.mSuccess;
@@ -461,7 +531,6 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
 
         try {
             DownloadInfo info = new DownloadInfo.Builder()
-                    .setDownloadId(0)
                     .setMimeType(OMADownloadHandler.OMA_DRM_MESSAGE_MIME)
                     .setFileName("test.gzip")
                     .setUrl(testServer.getURL("/chrome/test/data/android/download/test.gzip"))
@@ -473,14 +542,15 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
             final MockOMADownloadHandler handler = new MockOMADownloadHandler(context);
             dService.setOMADownloadHandler(handler);
             handler.setDownloadId(0);
-            dService.enqueueDownloadManagerRequest(info, true);
-            CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+            DownloadItem item = new DownloadItem(true, info);
+            item.setSystemDownloadId(0);
+            dService.enqueueDownloadManagerRequest(item, true);
+            CriteriaHelper.pollUiThread(new Criteria() {
                 @Override
                 public boolean isSatisfied() {
                     return handler.mDownloadId != 0;
                 }
             });
-            handler.mDownloadId = handler.mDownloadInfo.getDownloadId();
             Set<String> downloads = dService.getStoredDownloadInfo(
                     PreferenceManager.getDefaultSharedPreferences(context),
                     DownloadManagerService.PENDING_OMA_DOWNLOADS);
@@ -545,20 +615,6 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
                         .setContentDisposition("filename=test.pdf")
                         .setMimeType("application/pdf")
                         .setHasUserGesture(false)
-                        .build()));
-
-        // But should not open any PDFs with Content-Disposition: attachment.
-        assertFalse(
-                DownloadManagerService.shouldOpenAfterDownload(new DownloadInfo.Builder()
-                        .setContentDisposition("attachment")
-                        .setMimeType("application/pdf")
-                        .setHasUserGesture(true)
-                        .build()));
-        assertFalse(
-                DownloadManagerService.shouldOpenAfterDownload(new DownloadInfo.Builder()
-                        .setContentDisposition("attachment; filename=test.pdf")
-                        .setMimeType("application/pdf")
-                        .setHasUserGesture(true)
                         .build()));
     }
 }

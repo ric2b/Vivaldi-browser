@@ -5,13 +5,17 @@
 module arc;
 
 import "app.mojom";
+import "audio.mojom";
 import "auth.mojom";
+import "bluetooth.mojom";
 import "clipboard.mojom";
+import "crash_collector.mojom";
 import "ime.mojom";
 import "input.mojom";
 import "intent_helper.mojom";
 import "net.mojom";
 import "notifications.mojom";
+import "policy.mojom";
 import "power.mojom";
 import "process.mojom";
 import "video.mojom";
@@ -24,19 +28,29 @@ interface ArcBridgeHost {
   // Notifies Chrome that the AppInstance interface is ready.
   OnAppInstanceReady@100(AppInstance instance_ptr);
 
+  // Notifies Chrome that the AudioInstance interface is ready.
+  [MinVersion=8] OnAudioInstanceReady@115(AudioInstance instance_ptr);
+
   // Notifies Chrome that the AuthInstance interface is ready.
   [MinVersion=1] OnAuthInstanceReady@106(AuthInstance instance_ptr);
+
+  // Notifies Chrome that the BluetoothInstance interface is ready.
+  [MinVersion=9] OnBluetoothInstanceReady@113(BluetoothInstance instance_ptr);
 
   // Notifies Chrome that the ClipboardInstance interface is ready.
   [MinVersion=2] OnClipboardInstanceReady@109(ClipboardInstance instance_ptr);
 
+  // Notifies Chrome that the CrashCollectorInstance interface is ready.
+  [MinVersion=7] OnCrashCollectorInstanceReady@112(
+      CrashCollectorInstance instance_ptr);
+
   // Notifies Chrome that the ImeInstance interface is ready.
   [MinVersion=3] OnImeInstanceReady@110(ImeInstance instance_ptr);
 
-  // Notifies Chrome that the InputInstnace interface is ready.
+  // Notifies Chrome that the InputInstance interface is ready.
   OnInputInstanceReady@101(InputInstance instance_ptr);
 
-  // Notifies Chrome that the IntentHelpernstnace interface is ready.
+  // Notifies Chrome that the IntentHelperInstance interface is ready.
   [MinVersion=4] OnIntentHelperInstanceReady@111(
       IntentHelperInstance instance_ptr);
 
@@ -45,6 +59,9 @@ interface ArcBridgeHost {
 
   // Notifies Chrome that the NotificationsInstance interface is ready.
   OnNotificationsInstanceReady@102(NotificationsInstance instance_ptr);
+
+  // Notifies Chrome that the PolicyInstance interface is ready.
+  [MinVersion=7] OnPolicyInstanceReady@114(PolicyInstance instance_ptr);
 
   // Notifies Chrome that the PowerInstance interface is ready.
   OnPowerInstanceReady@103(PowerInstance instance_ptr);

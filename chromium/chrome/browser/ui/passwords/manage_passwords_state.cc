@@ -11,7 +11,6 @@
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
-#include "components/password_manager/core/common/credential_manager_types.h"
 
 using password_manager::PasswordFormManager;
 using autofill::PasswordFormMap;
@@ -41,7 +40,7 @@ ScopedPtrMapToVector(const Map& map) {
 }
 
 void AddRawPtrFromOwningVector(
-    const std::vector<scoped_ptr<autofill::PasswordForm>>& owning_vector,
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>& owning_vector,
     std::vector<const autofill::PasswordForm*>* destination) {
   destination->reserve(destination->size() + owning_vector.size());
   for (const auto& owning_ptr : owning_vector) {
@@ -106,24 +105,24 @@ ManagePasswordsState::ManagePasswordsState()
 ManagePasswordsState::~ManagePasswordsState() {}
 
 void ManagePasswordsState::OnPendingPassword(
-      scoped_ptr<password_manager::PasswordFormManager> form_manager) {
+    std::unique_ptr<password_manager::PasswordFormManager> form_manager) {
   ClearData();
   form_manager_ = std::move(form_manager);
   current_forms_weak_ = ScopedPtrMapToVector(form_manager_->best_matches());
   AddRawPtrFromOwningVector(form_manager_->federated_matches(),
                             &current_forms_weak_);
-  origin_ = form_manager_->pending_credentials().origin;
+  origin_ = form_manager_->observed_form().origin;
   SetState(password_manager::ui::PENDING_PASSWORD_STATE);
 }
 
 void ManagePasswordsState::OnUpdatePassword(
-    scoped_ptr<password_manager::PasswordFormManager> form_manager) {
+    std::unique_ptr<password_manager::PasswordFormManager> form_manager) {
   ClearData();
   form_manager_ = std::move(form_manager);
   current_forms_weak_ = ScopedPtrMapToVector(form_manager_->best_matches());
   AddRawPtrFromOwningVector(form_manager_->federated_matches(),
                             &current_forms_weak_);
-  origin_ = form_manager_->pending_credentials().origin;
+  origin_ = form_manager_->observed_form().origin;
   SetState(password_manager::ui::PENDING_PASSWORD_UPDATE_STATE);
 }
 
@@ -139,16 +138,16 @@ void ManagePasswordsState::OnRequestCredentials(
 }
 
 void ManagePasswordsState::OnAutoSignin(
-    ScopedVector<autofill::PasswordForm> local_forms) {
+    ScopedVector<autofill::PasswordForm> local_forms, const GURL& origin) {
   DCHECK(!local_forms.empty());
   ClearData();
   local_credentials_forms_ = ConstifyVector(&local_forms);
-  origin_ = local_credentials_forms_[0]->origin;
+  origin_ = origin;
   SetState(password_manager::ui::AUTO_SIGNIN_STATE);
 }
 
 void ManagePasswordsState::OnAutomaticPasswordSave(
-    scoped_ptr<PasswordFormManager> form_manager) {
+    std::unique_ptr<PasswordFormManager> form_manager) {
   ClearData();
   form_manager_ = std::move(form_manager);
   autofill::ConstPasswordFormMap current_forms;
@@ -160,20 +159,21 @@ void ManagePasswordsState::OnAutomaticPasswordSave(
   current_forms_weak_ = MapToVector(current_forms);
   AddRawPtrFromOwningVector(form_manager_->federated_matches(),
                             &current_forms_weak_);
-  origin_ = form_manager_->pending_credentials().origin;
+  origin_ = form_manager_->observed_form().origin;
   SetState(password_manager::ui::CONFIRMATION_STATE);
 }
 
 void ManagePasswordsState::OnPasswordAutofilled(
     const PasswordFormMap& password_form_map,
     const GURL& origin,
-    const std::vector<scoped_ptr<autofill::PasswordForm>>* federated_matches) {
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>*
+        federated_matches) {
   DCHECK(!password_form_map.empty());
   ClearData();
   bool only_PSL_matches =
       find_if(password_form_map.begin(), password_form_map.end(),
               [](const std::pair<const base::string16,
-                                 scoped_ptr<autofill::PasswordForm>>& p) {
+                                 std::unique_ptr<autofill::PasswordForm>>& p) {
                 return !p.second->is_public_suffix_match;
               }) == password_form_map.end();
   if (only_PSL_matches) {
@@ -208,7 +208,7 @@ void ManagePasswordsState::TransitionToState(
   DCHECK_EQ(password_manager::ui::MANAGE_STATE, state);
   if (state_ == password_manager::ui::CREDENTIAL_REQUEST_STATE) {
     if (!credentials_callback_.is_null()) {
-      credentials_callback_.Run(password_manager::CredentialInfo());
+      credentials_callback_.Run(nullptr);
       credentials_callback_.Reset();
     }
     federated_credentials_forms_.clear();
@@ -237,41 +237,11 @@ void ManagePasswordsState::ProcessLoginsChanged(
 }
 
 void ManagePasswordsState::ChooseCredential(
-    const autofill::PasswordForm& form,
-    password_manager::CredentialType credential_type) {
+    const autofill::PasswordForm* form) {
   DCHECK_EQ(password_manager::ui::CREDENTIAL_REQUEST_STATE, state());
   DCHECK(!credentials_callback().is_null());
 
-  // Here, |credential_type| refers to whether the credential was originally
-  // passed into ::OnRequestCredentials as part of the |local_credentials| or
-  // |federated_credentials| lists (e.g. whether it is an existing credential
-  // saved for this origin, or whether we should synthesize a new
-  // FederatedCredential).
-  //
-  // If |credential_type| is federated, the credential MUST be returned as
-  // a FederatedCredential in order to prevent password information leaking
-  // cross-origin.
-  //
-  // If |credential_type| is local, the credential MIGHT be a PasswordCredential
-  // or it MIGHT be a FederatedCredential. We inspect the |federation_origin|
-  // field to determine which we should return.
-  //
-  // TODO(mkwst): Clean this up. It is confusing.
-  password_manager::CredentialType type_to_return;
-  if (credential_type ==
-          password_manager::CredentialType::CREDENTIAL_TYPE_PASSWORD &&
-      form.federation_origin.unique()) {
-    type_to_return = password_manager::CredentialType::CREDENTIAL_TYPE_PASSWORD;
-  } else if (credential_type ==
-             password_manager::CredentialType::CREDENTIAL_TYPE_EMPTY) {
-    type_to_return = password_manager::CredentialType::CREDENTIAL_TYPE_EMPTY;
-  } else {
-    type_to_return =
-        password_manager::CredentialType::CREDENTIAL_TYPE_FEDERATED;
-  }
-  password_manager::CredentialInfo info =
-      password_manager::CredentialInfo(form, type_to_return);
-  credentials_callback().Run(info);
+  credentials_callback().Run(form);
   set_credentials_callback(ManagePasswordsState::CredentialsCallback());
 }
 

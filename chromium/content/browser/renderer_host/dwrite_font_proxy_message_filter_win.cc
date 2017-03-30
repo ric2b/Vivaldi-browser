@@ -142,13 +142,15 @@ void DWriteFontProxyMessageFilter::OnGetFamilyNames(
 
   mswr::ComPtr<IDWriteFontFamily> family;
   HRESULT hr = collection_->GetFontFamily(family_index, &family);
-  if (!SUCCEEDED(hr))
+  if (!SUCCEEDED(hr)) {
     return;
+  }
 
   mswr::ComPtr<IDWriteLocalizedStrings> localized_names;
   hr = family->GetFamilyNames(&localized_names);
-  if (!SUCCEEDED(hr))
+  if (!SUCCEEDED(hr)) {
     return;
+  }
 
   size_t string_count = localized_names->GetCount();
 
@@ -157,25 +159,29 @@ void DWriteFontProxyMessageFilter::OnGetFamilyNames(
   for (size_t index = 0; index < string_count; ++index) {
     UINT32 length = 0;
     hr = localized_names->GetLocaleNameLength(index, &length);
-    if (!SUCCEEDED(hr))
+    if (!SUCCEEDED(hr)) {
       return;
+    }
     ++length;  // Reserve space for the null terminator.
     locale.resize(length);
     hr = localized_names->GetLocaleName(index, locale.data(), length);
-    if (!SUCCEEDED(hr))
+    if (!SUCCEEDED(hr)) {
       return;
-    DCHECK_EQ(L'\0', locale[length - 1]);
+    }
+    CHECK_EQ(L'\0', locale[length - 1]);
 
     length = 0;
     hr = localized_names->GetStringLength(index, &length);
-    if (!SUCCEEDED(hr))
+    if (!SUCCEEDED(hr)) {
       return;
+    }
     ++length;  // Reserve space for the null terminator.
     name.resize(length);
     hr = localized_names->GetString(index, name.data(), length);
-    if (!SUCCEEDED(hr))
+    if (!SUCCEEDED(hr)) {
       return;
-    DCHECK_EQ(L'\0', name[length - 1]);
+    }
+    CHECK_EQ(L'\0', name[length - 1]);
 
     // Would be great to use emplace_back instead.
     family_names->push_back(std::pair<base::string16, base::string16>(
@@ -194,8 +200,9 @@ void DWriteFontProxyMessageFilter::OnGetFontFiles(
 
   mswr::ComPtr<IDWriteFontFamily> family;
   HRESULT hr = collection_->GetFontFamily(family_index, &family);
-  if (!SUCCEEDED(hr))
+  if (!SUCCEEDED(hr)) {
     return;
+  }
 
   UINT32 font_count = family->GetFontCount();
 
@@ -206,8 +213,9 @@ void DWriteFontProxyMessageFilter::OnGetFontFiles(
   for (UINT32 font_index = 0; font_index < font_count; ++font_index) {
     mswr::ComPtr<IDWriteFont> font;
     hr = family->GetFont(font_index, &font);
-    if (!SUCCEEDED(hr))
+    if (!SUCCEEDED(hr)) {
       return;
+    }
 
     AddFilesForFont(&path_set, font.Get());
   }
@@ -239,26 +247,30 @@ bool DWriteFontProxyMessageFilter::AddFilesForFont(
   mswr::ComPtr<IDWriteFontFace> font_face;
   HRESULT hr;
   hr = font->CreateFontFace(&font_face);
-  if (!SUCCEEDED(hr))
+  if (!SUCCEEDED(hr)) {
     return false;
+  }
 
   UINT32 file_count;
   hr = font_face->GetFiles(&file_count, nullptr);
-  if (!SUCCEEDED(hr))
+  if (!SUCCEEDED(hr)) {
     return false;
+  }
 
   std::vector<mswr::ComPtr<IDWriteFontFile>> font_files;
   font_files.resize(file_count);
   hr = font_face->GetFiles(
       &file_count, reinterpret_cast<IDWriteFontFile**>(font_files.data()));
-  if (!SUCCEEDED(hr))
+  if (!SUCCEEDED(hr)) {
     return false;
+  }
 
   for (unsigned int file_index = 0; file_index < file_count; ++file_index) {
     mswr::ComPtr<IDWriteFontFileLoader> loader;
     hr = font_files[file_index]->GetLoader(&loader);
-    if (!SUCCEEDED(hr))
+    if (!SUCCEEDED(hr)) {
       return false;
+    }
 
     mswr::ComPtr<IDWriteLocalFontFileLoader> local_loader;
     hr = loader.CopyTo(local_loader.GetAddressOf());  // QueryInterface.
@@ -271,10 +283,11 @@ bool DWriteFontProxyMessageFilter::AddFilesForFont(
       // for this font, forcing blink/skia to fall back to whatever font is
       // next). If we get telemetry indicating that this case actually
       // happens, we can implement this by exposing the loader via ipc. That
-      // will likely by loading the font data into shared memory, although we
-      // could proxy the stream reads directly instead.
+      // will likely be by loading the font data into shared memory, although
+      // we could proxy the stream reads directly instead.
       LogLoaderType(OTHER_LOADER);
       DCHECK(false);
+
       return false;
     } else if (!SUCCEEDED(hr)) {
       return false;
@@ -296,20 +309,23 @@ bool DWriteFontProxyMessageFilter::AddLocalFile(
   const void* key;
   UINT32 key_size;
   hr = font_file->GetReferenceKey(&key, &key_size);
-  if (!SUCCEEDED(hr))
+  if (!SUCCEEDED(hr)) {
     return false;
+  }
 
   UINT32 path_length = 0;
   hr = local_loader->GetFilePathLengthFromKey(key, key_size, &path_length);
-  if (!SUCCEEDED(hr))
+  if (!SUCCEEDED(hr)) {
     return false;
+  }
   ++path_length;  // Reserve space for the null terminator.
   std::vector<base::char16> file_path_chars;
   file_path_chars.resize(path_length);
   hr = local_loader->GetFilePathFromKey(key, key_size, file_path_chars.data(),
                                         path_length);
-  if (!SUCCEEDED(hr))
+  if (!SUCCEEDED(hr)) {
     return false;
+  }
 
   base::string16 file_path = base::i18n::FoldCase(file_path_chars.data());
   if (!base::StartsWith(file_path, windows_fonts_path_,
@@ -319,6 +335,12 @@ bool DWriteFontProxyMessageFilter::AddLocalFile(
     // this turns out to be a common case, we can either grant the renderer
     // access to these files (not sure if this is actually possible), or
     // load the file data ourselves and hand it to the renderer.
+
+    // Really, really, really want to know what families hit this. Current
+    // data indicates about 0.09% of families fall into this case. Nothing to
+    // worry about if it's random obscure fonts noone has ever heard of, but
+    // could be a problem if it's common fonts.
+
     LogLoaderType(FILE_OUTSIDE_SANDBOX);
     NOTREACHED();  // Not yet implemented.
     return false;

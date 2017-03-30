@@ -62,6 +62,7 @@ void UpdateCommandsForVivaldi(CommandUpdater &command_updater_) {
   command_updater_.UpdateCommandEnabled(IDC_VIV_COMMAND_OPEN_SESSION, true);
   command_updater_.UpdateCommandEnabled(IDC_VIV_COMMAND_SAVE_SESSION, true);
   command_updater_.UpdateCommandEnabled(IDC_VIV_COMMAND_SHOW_WELCOME, true);
+  command_updater_.UpdateCommandEnabled(IDC_VIV_FOCUS_ADDRESSFIELD, true);
 }
 
 bool ExecuteVivaldiCommands(Browser *browser, int id) {
@@ -111,6 +112,7 @@ bool ExecuteVivaldiCommands(Browser *browser, int id) {
     case IDC_VIV_COMMAND_OPEN_SESSION:
     case IDC_VIV_COMMAND_SAVE_SESSION:
     case IDC_VIV_COMMAND_SHOW_WELCOME:
+    case IDC_VIV_FOCUS_ADDRESSFIELD:
       extensions::ShowMenuAPI::GetFactoryInstance()
         ->Get(browser->profile())->CommandExecuted(id);
       break;

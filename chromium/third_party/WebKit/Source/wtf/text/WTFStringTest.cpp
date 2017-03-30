@@ -116,39 +116,39 @@ TEST(StringTest, ReplaceWithLiteral)
     // Cases for 8Bit source.
     String testString = "1224";
     EXPECT_TRUE(testString.is8Bit());
-    testString.replaceWithLiteral('2', "");
+    testString.replace('2', "");
     EXPECT_STREQ("14", testString.utf8().data());
 
     testString = "1224";
     EXPECT_TRUE(testString.is8Bit());
-    testString.replaceWithLiteral('2', "3");
+    testString.replace('2', "3");
     EXPECT_STREQ("1334", testString.utf8().data());
 
     testString = "1224";
     EXPECT_TRUE(testString.is8Bit());
-    testString.replaceWithLiteral('2', "555");
+    testString.replace('2', "555");
     EXPECT_STREQ("15555554", testString.utf8().data());
 
     testString = "1224";
     EXPECT_TRUE(testString.is8Bit());
-    testString.replaceWithLiteral('3', "NotFound");
+    testString.replace('3', "NotFound");
     EXPECT_STREQ("1224", testString.utf8().data());
 
     // Cases for 16Bit source.
     // U+00E9 (=0xC3 0xA9 in UTF-8) is e with accent.
     testString = String::fromUTF8("r\xC3\xA9sum\xC3\xA9");
     EXPECT_FALSE(testString.is8Bit());
-    testString.replaceWithLiteral(UChar(0x00E9), "e");
+    testString.replace(UChar(0x00E9), "e");
     EXPECT_STREQ("resume", testString.utf8().data());
 
     testString = String::fromUTF8("r\xC3\xA9sum\xC3\xA9");
     EXPECT_FALSE(testString.is8Bit());
-    testString.replaceWithLiteral(UChar(0x00E9), "");
+    testString.replace(UChar(0x00E9), "");
     EXPECT_STREQ("rsum", testString.utf8().data());
 
     testString = String::fromUTF8("r\xC3\xA9sum\xC3\xA9");
     EXPECT_FALSE(testString.is8Bit());
-    testString.replaceWithLiteral('3', "NotFound");
+    testString.replace('3', "NotFound");
     EXPECT_STREQ("r\xC3\xA9sum\xC3\xA9", testString.utf8().data());
 }
 
@@ -399,6 +399,31 @@ TEST(StringTest, Lower)
     EXPECT_STREQ("link", String("lInk").lower().ascii().data());
     EXPECT_STREQ("lin\xE1k", String("lIn\xC1k").lower().latin1().data());
     EXPECT_STREQ("link", String::fromUTF8("LIN\xE2\x84\xAA").lower().utf8().data());
+}
+
+CString toCStringThroughPrinter(const String& string)
+{
+    std::ostringstream output;
+    output << string;
+    const std::string& result = output.str();
+    return CString(result.data(), result.length());
+}
+
+TEST(StringTest, StringPrinter)
+{
+    EXPECT_EQ(CString("\"Hello!\""), toCStringThroughPrinter("Hello!"));
+    EXPECT_EQ(CString("\"\\\"\""), toCStringThroughPrinter("\""));
+    EXPECT_EQ(CString("\"\\\\\""), toCStringThroughPrinter("\\"));
+    EXPECT_EQ(CString("\"\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\""), toCStringThroughPrinter(String("\x00\x01\x02\x03\x04\x05\x06\x07", 8)));
+    EXPECT_EQ(CString("\"\\u0008\\t\\n\\u000B\\u000C\\r\\u000E\\u000F\""), toCStringThroughPrinter(String("\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F", 8)));
+    EXPECT_EQ(CString("\"\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\""), toCStringThroughPrinter(String("\x10\x11\x12\x13\x14\x15\x16\x17", 8)));
+    EXPECT_EQ(CString("\"\\u0018\\u0019\\u001A\\u001B\\u001C\\u001D\\u001E\\u001F\""), toCStringThroughPrinter(String("\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F", 8)));
+    EXPECT_EQ(CString("\"\\u007F\\u0080\\u0081\""), toCStringThroughPrinter("\x7F\x80\x81"));
+    EXPECT_EQ(CString("\"\""), toCStringThroughPrinter(emptyString()));
+    EXPECT_EQ(CString("<null>"), toCStringThroughPrinter(String()));
+
+    static const UChar unicodeSample[] = { 0x30C6, 0x30B9, 0x30C8 }; // "Test" in Japanese.
+    EXPECT_EQ(CString("\"\\u30C6\\u30B9\\u30C8\""), toCStringThroughPrinter(String(unicodeSample, WTF_ARRAY_LENGTH(unicodeSample))));
 }
 
 } // namespace WTF

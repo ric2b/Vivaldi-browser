@@ -6,13 +6,19 @@
 
 #include <utility>
 
+#include "base/base64.h"
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/task_runner_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "jingle/glue/thread_wrapper.h"
+#include "remoting/protocol/authenticator.h"
 #include "remoting/protocol/port_allocator_factory.h"
 #include "remoting/protocol/stream_message_pipe_adapter.h"
 #include "remoting/protocol/transport_context.h"
@@ -36,14 +42,37 @@ const int kTransportInfoSendDelayMs = 20;
 // XML namespace for the transport elements.
 const char kTransportNamespace[] = "google:remoting:webrtc";
 
+#if !defined(NDEBUG)
+// Command line switch used to disable signature verification.
+// TODO(sergeyu): Remove this flag.
+const char kDisableAuthenticationSwitchName[] = "disable-authentication";
+#endif
+
+bool IsValidSessionDescriptionType(const std::string& type) {
+  return type == webrtc::SessionDescriptionInterface::kOffer ||
+         type == webrtc::SessionDescriptionInterface::kAnswer;
+}
+
+// Normalizes the SDP message to make sure the text used for HMAC signatures
+// verifications is the same that was signed on the sending side. This is
+// necessary because WebRTC generates SDP with CRLF line endings which are
+// sometimes converted to LF after passing the signaling channel.
+std::string NormalizeSessionDescription(const std::string& sdp) {
+  // Split SDP lines. The CR symbols is removed by the TRIM_WHITESPACE flag.
+  std::vector<std::string> lines =
+      SplitString(sdp, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  return base::JoinString(lines, "\n") + "\n";
+}
+
 // A webrtc::CreateSessionDescriptionObserver implementation used to receive the
 // results of creating descriptions for this end of the PeerConnection.
 class CreateSessionDescriptionObserver
     : public webrtc::CreateSessionDescriptionObserver {
  public:
   typedef base::Callback<void(
-      scoped_ptr<webrtc::SessionDescriptionInterface> description,
-      const std::string& error)> ResultCallback;
+      std::unique_ptr<webrtc::SessionDescriptionInterface> description,
+      const std::string& error)>
+      ResultCallback;
 
   static CreateSessionDescriptionObserver* Create(
       const ResultCallback& result_callback) {
@@ -52,7 +81,7 @@ class CreateSessionDescriptionObserver
   }
   void OnSuccess(webrtc::SessionDescriptionInterface* desc) override {
     base::ResetAndReturn(&result_callback_)
-        .Run(make_scoped_ptr(desc), std::string());
+        .Run(base::WrapUnique(desc), std::string());
   }
   void OnFailure(const std::string& error) override {
     base::ResetAndReturn(&result_callback_).Run(nullptr, error);
@@ -113,13 +142,16 @@ WebrtcTransport::WebrtcTransport(
     : worker_thread_(worker_thread),
       transport_context_(transport_context),
       event_handler_(event_handler),
+      handshake_hmac_(crypto::HMAC::SHA256),
       outgoing_data_stream_adapter_(
           true,
           base::Bind(&WebrtcTransport::Close, base::Unretained(this))),
       incoming_data_stream_adapter_(
           false,
           base::Bind(&WebrtcTransport::Close, base::Unretained(this))),
-      weak_factory_(this) {}
+      weak_factory_(this) {
+  transport_context_->set_relay_mode(TransportContext::RelayMode::TURN);
+}
 
 WebrtcTransport::~WebrtcTransport() {}
 
@@ -136,7 +168,9 @@ void WebrtcTransport::Start(
 
   send_transport_info_callback_ = std::move(send_transport_info_callback);
 
-  // TODO(sergeyu): Use the |authenticator| to authenticate PeerConnection.
+  if (!handshake_hmac_.Init(authenticator->GetAuthKey())) {
+    LOG(FATAL) << "HMAC::Init() failed.";
+  }
 
   fake_audio_device_module_.reset(new webrtc::FakeAudioDeviceModule());
 
@@ -153,7 +187,7 @@ void WebrtcTransport::Start(
   constraints.AddMandatory(webrtc::MediaConstraintsInterface::kEnableDtlsSrtp,
                            webrtc::MediaConstraintsInterface::kValueTrue);
 
-  scoped_ptr<cricket::PortAllocator> port_allocator =
+  std::unique_ptr<cricket::PortAllocator> port_allocator =
       transport_context_->port_allocator_factory()->CreatePortAllocator(
           transport_context_);
   peer_connection_ = peer_connection_factory_->CreatePeerConnection(
@@ -187,19 +221,37 @@ bool WebrtcTransport::ProcessTransportInfo(XmlElement* transport_info) {
             ? webrtc::PeerConnectionInterface::kStable
             : webrtc::PeerConnectionInterface::kHaveLocalOffer;
     if (peer_connection_->signaling_state() != expected_state) {
-      LOG(ERROR) << "Received unexpected WebRTC session_description. ";
+      LOG(ERROR) << "Received unexpected WebRTC session_description.";
       return false;
     }
 
     std::string type = session_description->Attr(QName(std::string(), "type"));
-    std::string sdp = session_description->BodyText();
-    if (type.empty() || sdp.empty()) {
+    std::string sdp =
+        NormalizeSessionDescription(session_description->BodyText());
+    if (!IsValidSessionDescriptionType(type) || sdp.empty()) {
       LOG(ERROR) << "Incorrect session description format.";
       return false;
     }
 
+    std::string signature_base64 =
+        session_description->Attr(QName(std::string(), "signature"));
+    std::string signature;
+    if (!base::Base64Decode(signature_base64, &signature) ||
+        !handshake_hmac_.Verify(type + " " + sdp, signature)) {
+      LOG(WARNING) << "Received session-description with invalid signature.";
+      bool ignore_error = false;
+#if !defined(NDEBUG)
+      ignore_error = base::CommandLine::ForCurrentProcess()->HasSwitch(
+          kDisableAuthenticationSwitchName);
+#endif
+      if (!ignore_error) {
+        Close(AUTHENTICATION_FAILED);
+        return true;
+      }
+    }
+
     webrtc::SdpParseError error;
-    scoped_ptr<webrtc::SessionDescriptionInterface> session_description(
+    std::unique_ptr<webrtc::SessionDescriptionInterface> session_description(
         webrtc::CreateSessionDescription(type, sdp, &error));
     if (!session_description) {
       LOG(ERROR) << "Failed to parse the session description: "
@@ -233,7 +285,7 @@ bool WebrtcTransport::ProcessTransportInfo(XmlElement* transport_info) {
     }
 
     webrtc::SdpParseError error;
-    scoped_ptr<webrtc::IceCandidateInterface> candidate(
+    std::unique_ptr<webrtc::IceCandidateInterface> candidate(
         webrtc::CreateIceCandidate(sdp_mid, sdp_mlineindex, candidate_str,
                                    &error));
     if (!candidate) {
@@ -257,7 +309,7 @@ bool WebrtcTransport::ProcessTransportInfo(XmlElement* transport_info) {
 }
 
 void WebrtcTransport::OnLocalSessionDescriptionCreated(
-    scoped_ptr<webrtc::SessionDescriptionInterface> description,
+    std::unique_ptr<webrtc::SessionDescriptionInterface> description,
     const std::string& error) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -276,15 +328,25 @@ void WebrtcTransport::OnLocalSessionDescriptionCreated(
     Close(CHANNEL_CONNECTION_ERROR);
     return;
   }
+  description_sdp = NormalizeSessionDescription(description_sdp);
 
   // Format and send the session description to the peer.
-  scoped_ptr<XmlElement> transport_info(
+  std::unique_ptr<XmlElement> transport_info(
       new XmlElement(QName(kTransportNamespace, "transport"), true));
   XmlElement* offer_tag =
       new XmlElement(QName(kTransportNamespace, "session-description"));
   transport_info->AddElement(offer_tag);
   offer_tag->SetAttr(QName(std::string(), "type"), description->type());
   offer_tag->SetBodyText(description_sdp);
+
+  std::string digest;
+  digest.resize(handshake_hmac_.DigestLength());
+  CHECK(handshake_hmac_.Sign(description->type() + " " + description_sdp,
+                             reinterpret_cast<uint8_t*>(&(digest[0])),
+                             digest.size()));
+  std::string digest_base64;
+  base::Base64Encode(digest, &digest_base64);
+  offer_tag->SetAttr(QName(std::string(), "signature"), digest_base64);
 
   send_transport_info_callback_.Run(std::move(transport_info));
 
@@ -400,7 +462,7 @@ void WebrtcTransport::OnIceCandidate(
     const webrtc::IceCandidateInterface* candidate) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  scoped_ptr<XmlElement> candidate_element(
+  std::unique_ptr<XmlElement> candidate_element(
       new XmlElement(QName(kTransportNamespace, "candidate")));
   std::string candidate_str;
   if (!candidate->ToString(&candidate_str)) {

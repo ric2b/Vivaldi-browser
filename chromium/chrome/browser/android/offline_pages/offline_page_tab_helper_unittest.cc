@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
+
+#include <memory>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
-#include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
 #include "chrome/browser/android/offline_pages/test_offline_page_model_builder.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/offline_pages/offline_page_item.h"
@@ -27,7 +29,7 @@ namespace offline_pages {
 namespace {
 
 const GURL kTestPageUrl("http://test.org/page1");
-const int64_t kTestPageBookmarkId = 1234;
+const ClientId kTestPageBookmarkId = ClientId(BOOKMARK_NAMESPACE, "1234");
 const int64_t kTestFileSize = 876543LL;
 
 class TestNetworkChangeNotifier : public net::NetworkChangeNotifier {
@@ -72,17 +74,22 @@ class OfflinePageTabHelperTest :
     return offline_page_tab_helper_;
   }
 
+  int64_t offline_id() const { return offline_id_; }
+
  private:
   // OfflinePageTestArchiver::Observer implementation:
   void SetLastPathCreatedByArchiver(const base::FilePath& file_path) override;
 
-  scoped_ptr<OfflinePageTestArchiver> BuildArchiver(
+  std::unique_ptr<OfflinePageTestArchiver> BuildArchiver(
       const GURL& url,
       const base::FilePath& file_name);
-  void OnSavePageDone(OfflinePageModel::SavePageResult result);
+  void OnSavePageDone(OfflinePageModel::SavePageResult result,
+                      int64_t offline_id);
 
-  scoped_ptr<TestNetworkChangeNotifier> network_change_notifier_;
+  std::unique_ptr<TestNetworkChangeNotifier> network_change_notifier_;
   OfflinePageTabHelper* offline_page_tab_helper_;  // Not owned.
+
+  int64_t offline_id_;
 
   DISALLOW_COPY_AND_ASSIGN(OfflinePageTabHelperTest);
 };
@@ -95,6 +102,7 @@ void OfflinePageTabHelperTest::SetUp() {
       OfflinePageTabHelper::FromWebContents(web_contents());
 
   // Enables offline pages feature.
+  // TODO(jianli): Remove this once the feature is completely enabled.
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kEnableOfflinePages);
 
@@ -106,7 +114,7 @@ void OfflinePageTabHelperTest::SetUp() {
   // Saves an offline page.
   OfflinePageModel* model =
       OfflinePageModelFactory::GetForBrowserContext(browser_context());
-  scoped_ptr<OfflinePageTestArchiver> archiver(BuildArchiver(
+  std::unique_ptr<OfflinePageTestArchiver> archiver(BuildArchiver(
       kTestPageUrl, base::FilePath(FILE_PATH_LITERAL("page1.mhtml"))));
   model->SavePage(
       kTestPageUrl, kTestPageBookmarkId, std::move(archiver),
@@ -152,10 +160,10 @@ void OfflinePageTabHelperTest::SetLastPathCreatedByArchiver(
     const base::FilePath& file_path) {
 }
 
-scoped_ptr<OfflinePageTestArchiver> OfflinePageTabHelperTest::BuildArchiver(
-    const GURL& url,
-    const base::FilePath& file_name) {
-  scoped_ptr<OfflinePageTestArchiver> archiver(new OfflinePageTestArchiver(
+std::unique_ptr<OfflinePageTestArchiver>
+OfflinePageTabHelperTest::BuildArchiver(const GURL& url,
+                                        const base::FilePath& file_name) {
+  std::unique_ptr<OfflinePageTestArchiver> archiver(new OfflinePageTestArchiver(
       this, url, OfflinePageArchiver::ArchiverResult::SUCCESSFULLY_CREATED,
       kTestFileSize, base::ThreadTaskRunnerHandle::Get()));
   archiver->set_filename(file_name);
@@ -163,7 +171,9 @@ scoped_ptr<OfflinePageTestArchiver> OfflinePageTabHelperTest::BuildArchiver(
 }
 
 void OfflinePageTabHelperTest::OnSavePageDone(
-    OfflinePageModel::SavePageResult result) {
+    OfflinePageModel::SavePageResult result,
+    int64_t offline_id) {
+  offline_id_ = offline_id;
 }
 
 TEST_F(OfflinePageTabHelperTest, SwitchToOnlineFromOffline) {
@@ -171,7 +181,7 @@ TEST_F(OfflinePageTabHelperTest, SwitchToOnlineFromOffline) {
 
   OfflinePageModel* model =
       OfflinePageModelFactory::GetForBrowserContext(browser_context());
-  const OfflinePageItem* page = model->GetPageByBookmarkId(kTestPageBookmarkId);
+  const OfflinePageItem* page = model->GetPageByOfflineId(offline_id());
   GURL offline_url = page->GetOfflineURL();
   GURL online_url = page->url;
 
@@ -185,7 +195,7 @@ TEST_F(OfflinePageTabHelperTest, SwitchToOfflineFromOnline) {
 
   OfflinePageModel* model =
       OfflinePageModelFactory::GetForBrowserContext(browser_context());
-  const OfflinePageItem* page = model->GetPageByBookmarkId(kTestPageBookmarkId);
+  const OfflinePageItem* page = model->GetPageByOfflineId(offline_id());
   GURL offline_url = page->GetOfflineURL();
   GURL online_url = page->url;
 

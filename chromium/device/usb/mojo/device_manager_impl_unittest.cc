@@ -20,7 +20,7 @@
 #include "device/usb/mock_usb_device_handle.h"
 #include "device/usb/mock_usb_service.h"
 #include "device/usb/mojo/device_impl.h"
-#include "device/usb/mojo/fake_permission_provider.h"
+#include "device/usb/mojo/mock_permission_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::Invoke;
@@ -38,10 +38,8 @@ class USBDeviceManagerImplTest : public testing::Test {
 
  protected:
   DeviceManagerPtr ConnectToDeviceManager() {
-    PermissionProviderPtr permission_provider;
-    permission_provider_.Bind(mojo::GetProxy(&permission_provider));
     DeviceManagerPtr device_manager;
-    DeviceManagerImpl::Create(std::move(permission_provider),
+    DeviceManagerImpl::Create(permission_provider_.GetWeakPtr(),
                               mojo::GetProxy(&device_manager));
     return device_manager;
   }
@@ -49,7 +47,7 @@ class USBDeviceManagerImplTest : public testing::Test {
   MockDeviceClient device_client_;
 
  private:
-  FakePermissionProvider permission_provider_;
+  MockPermissionProvider permission_provider_;
   scoped_ptr<base::MessageLoop> message_loop_;
 };
 
@@ -210,6 +208,21 @@ TEST_F(USBDeviceManagerImplTest, GetDeviceChanges) {
     device_manager->GetDeviceChanges(base::Bind(&ExpectDeviceChangesAndThen,
                                                 added_guids, removed_guids,
                                                 loop.QuitClosure()));
+    loop.Run();
+  }
+
+  {
+    std::set<std::string> added_guids;
+    std::set<std::string> removed_guids;
+    added_guids.insert(device0->guid());
+    base::RunLoop loop;
+    device_manager->GetDeviceChanges(base::Bind(&ExpectDeviceChangesAndThen,
+                                                added_guids, removed_guids,
+                                                loop.QuitClosure()));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::Bind(&MockUsbService::AddDevice,
+                   base::Unretained(device_client_.usb_service()), device0));
     loop.Run();
   }
 }

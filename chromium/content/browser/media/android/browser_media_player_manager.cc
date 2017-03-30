@@ -10,7 +10,6 @@
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/media/android/browser_demuxer_android.h"
 #include "content/browser/media/android/media_resource_getter_impl.h"
-#include "content/browser/media/android/media_session.h"
 #include "content/browser/media/android/media_throttler.h"
 #include "content/browser/media/android/media_web_contents_observer_android.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -144,16 +143,13 @@ MediaPlayerAndroid* BrowserMediaPlayerManager::CreateMediaPlayer(
     case MEDIA_PLAYER_TYPE_URL: {
       const std::string user_agent = GetContentClient()->GetUserAgent();
       MediaPlayerBridge* media_player_bridge = new MediaPlayerBridge(
-          media_player_params.player_id,
-          media_player_params.url,
-          media_player_params.first_party_for_cookies,
-          user_agent,
-          hide_url_log,
+          media_player_params.player_id, media_player_params.url,
+          media_player_params.first_party_for_cookies, user_agent, hide_url_log,
           this,
           base::Bind(&BrowserMediaPlayerManager::OnDecoderResourcesReleased,
                      weak_ptr_factory_.GetWeakPtr()),
-          media_player_params.frame_url,
-          media_player_params.allow_credentials);
+          media_player_params.frame_url, media_player_params.allow_credentials,
+          media_player_params.media_session_id);
 
       if (media_player_params.type == MEDIA_PLAYER_TYPE_REMOTE_ONLY)
         return media_player_bridge;
@@ -190,20 +186,20 @@ MediaPlayerAndroid* BrowserMediaPlayerManager::CreateMediaPlayer(
     case MEDIA_PLAYER_TYPE_MEDIA_SOURCE: {
       if (media::UseMediaThreadForMediaPlayback()) {
         return new MediaCodecPlayer(
-            media_player_params.player_id,
-            weak_ptr_factory_.GetWeakPtr(),
+            media_player_params.player_id, weak_ptr_factory_.GetWeakPtr(),
             base::Bind(&BrowserMediaPlayerManager::OnDecoderResourcesReleased,
                        weak_ptr_factory_.GetWeakPtr()),
             demuxer->CreateDemuxer(media_player_params.demuxer_client_id),
-            media_player_params.frame_url);
+            media_player_params.frame_url,
+            media_player_params.media_session_id);
       } else {
         return new MediaSourcePlayer(
-            media_player_params.player_id,
-            this,
+            media_player_params.player_id, this,
             base::Bind(&BrowserMediaPlayerManager::OnDecoderResourcesReleased,
                        weak_ptr_factory_.GetWeakPtr()),
             demuxer->CreateDemuxer(media_player_params.demuxer_client_id),
-            media_player_params.frame_url);
+            media_player_params.frame_url,
+            media_player_params.media_session_id);
       }
     }
   }
@@ -642,8 +638,9 @@ void BrowserMediaPlayerManager::ReleaseResources(int player_id) {
     fullscreen_player_is_released_ = true;
 }
 
-scoped_ptr<media::MediaPlayerAndroid> BrowserMediaPlayerManager::SwapPlayer(
-      int player_id, media::MediaPlayerAndroid* player) {
+std::unique_ptr<media::MediaPlayerAndroid>
+BrowserMediaPlayerManager::SwapPlayer(int player_id,
+                                      media::MediaPlayerAndroid* player) {
   media::MediaPlayerAndroid* previous_player = NULL;
   for (ScopedVector<MediaPlayerAndroid>::iterator it = players_.begin();
       it != players_.end(); ++it) {
@@ -652,12 +649,15 @@ scoped_ptr<media::MediaPlayerAndroid> BrowserMediaPlayerManager::SwapPlayer(
 #if defined(VIDEO_HOLE)
       ReleaseExternalSurface(player_id);
 #endif
+      MediaWebContentsObserverAndroid::FromWebContents(web_contents_)
+          ->DisconnectMediaSession(render_frame_host_,
+                                   player_id_to_delegate_id_map_[player_id]);
       players_.weak_erase(it);
       players_.push_back(player);
       break;
     }
   }
-  return scoped_ptr<media::MediaPlayerAndroid>(previous_player);
+  return std::unique_ptr<media::MediaPlayerAndroid>(previous_player);
 }
 
 bool BrowserMediaPlayerManager::RequestDecoderResources(

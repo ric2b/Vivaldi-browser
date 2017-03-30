@@ -18,17 +18,22 @@ class CORE_EXPORT KeywordValue final : public StyleValue {
 public:
     static KeywordValue* create(const String& keyword, ExceptionState&);
 
-    StyleValueType type() const override { return KeywordValueType; }
+    StyleValueType type() const override { return KeywordType; }
 
     const String& keywordValue() const;
+    CSSValueID keywordValueID() const;
 
-    PassRefPtrWillBeRawPtr<CSSValue> toCSSValue() const override;
+    CSSValue* toCSSValue() const override;
 
 private:
     KeywordValue(const String& keyword) : m_keywordValue(keyword) {}
 
     String m_keywordValue;
 };
+
+DEFINE_TYPE_CASTS(KeywordValue, StyleValue, value,
+    value->type() == StyleValue::StyleValueType::KeywordType,
+    value.type() == StyleValue::StyleValueType::KeywordType);
 
 } // namespace blink
 

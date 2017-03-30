@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_request.h"
@@ -64,11 +65,13 @@ class PermissionContextBase : public KeyedService {
   ~PermissionContextBase() override;
 
   // A field trial used to enable the global permissions kill switch.
-  // This is public for testing purposes.
+  // This is public so permissions that don't yet inherit from
+  // PermissionContextBase can use it.
   static const char kPermissionsKillSwitchFieldStudy[];
 
   // The field trial param to enable the global permissions kill switch.
-  // This is public for testing purposes.
+  // This is public so permissions that don't yet inherit from
+  // PermissionContextBase can use it.
   static const char kPermissionsKillSwitchBlockedValue[];
 
   // The renderer is requesting permission to push messages.

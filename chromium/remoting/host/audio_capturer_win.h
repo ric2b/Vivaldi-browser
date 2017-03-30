@@ -8,8 +8,9 @@
 #include <audioclient.h>
 #include <mmdeviceapi.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
 #include "base/win/scoped_co_mem.h"
@@ -33,11 +34,21 @@ class AudioCapturerWin : public AudioCapturer {
   // to the network.
   void DoCapture();
 
+  // Returns current volume setting of the host, in range [0.0, 1.0]. If the
+  // audio has been muted, this function returns 0. If Windows API returns error
+  // (such as audio device has been disabled or unpluged), this function ignores
+  // host volume setting, and returns 1.0.
+  float GetAudioLevel();
+
+  // Processes a series of samples, and executes callback if the packet is
+  // qualified to be sent to client.
+  void ProcessSamples(uint8_t* data, size_t frames, int32_t flags);
+
   PacketCapturedCallback callback_;
 
   AudioPacket::SamplingRate sampling_rate_;
 
-  scoped_ptr<base::RepeatingTimer> capture_timer_;
+  std::unique_ptr<base::RepeatingTimer> capture_timer_;
   base::TimeDelta audio_device_period_;
 
   AudioSilenceDetector silence_detector_;
@@ -46,6 +57,7 @@ class AudioCapturerWin : public AudioCapturer {
   base::win::ScopedComPtr<IAudioCaptureClient> audio_capture_client_;
   base::win::ScopedComPtr<IAudioClient> audio_client_;
   base::win::ScopedComPtr<IMMDevice> mm_device_;
+  base::win::ScopedComPtr<ISimpleAudioVolume> audio_volume_;
 
   HRESULT last_capture_error_;
 

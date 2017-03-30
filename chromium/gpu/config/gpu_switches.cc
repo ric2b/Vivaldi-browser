@@ -31,4 +31,11 @@ const char kGpuTestingGLRenderer[] = "gpu-testing-gl-renderer";
 // Override gl version from the GpuInfoCollector.
 const char kGpuTestingGLVersion[] = "gpu-testing-gl-version";
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+// Attempts to turn on hardware accelerated video decoding. Relevant when
+// platform decoders are used.
+const char kEnablePlatformAcceleratedVideoDecoding[] =
+    "enable-platform-accelerated-video-decoding";
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+
 }  // namespace switches

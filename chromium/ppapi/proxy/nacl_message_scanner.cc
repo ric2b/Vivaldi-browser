@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -44,7 +45,7 @@ struct ScanningResults {
   // check for NULL before writing to it. In some cases, a ScanParam overload
   // may set this to NULL when it can determine that there are no parameters
   // that need conversion. (See the ResourceMessageReplyParams overload.)
-  scoped_ptr<IPC::Message> new_msg;
+  std::unique_ptr<IPC::Message> new_msg;
   // Resource id for resource messages. Save this when scanning resource replies
   // so when we audit the nested message, we know which resource it is for.
   PP_Resource pp_resource;
@@ -164,26 +165,26 @@ void ScanParam(const T& param, ScanningResults* results) {
 // The idea is to scan elements in the tuple which require special handling,
 // and write them into the |results| struct.
 template <class A>
-void ScanTuple(const base::Tuple<A>& t1, ScanningResults* results) {
-  ScanParam(base::get<0>(t1), results);
+void ScanTuple(const std::tuple<A>& t1, ScanningResults* results) {
+  ScanParam(std::get<0>(t1), results);
 }
 template <class A, class B>
-void ScanTuple(const base::Tuple<A, B>& t1, ScanningResults* results) {
-  ScanParam(base::get<0>(t1), results);
-  ScanParam(base::get<1>(t1), results);
+void ScanTuple(const std::tuple<A, B>& t1, ScanningResults* results) {
+  ScanParam(std::get<0>(t1), results);
+  ScanParam(std::get<1>(t1), results);
 }
 template <class A, class B, class C>
-void ScanTuple(const base::Tuple<A, B, C>& t1, ScanningResults* results) {
-  ScanParam(base::get<0>(t1), results);
-  ScanParam(base::get<1>(t1), results);
-  ScanParam(base::get<2>(t1), results);
+void ScanTuple(const std::tuple<A, B, C>& t1, ScanningResults* results) {
+  ScanParam(std::get<0>(t1), results);
+  ScanParam(std::get<1>(t1), results);
+  ScanParam(std::get<2>(t1), results);
 }
 template <class A, class B, class C, class D>
-void ScanTuple(const base::Tuple<A, B, C, D>& t1, ScanningResults* results) {
-  ScanParam(base::get<0>(t1), results);
-  ScanParam(base::get<1>(t1), results);
-  ScanParam(base::get<2>(t1), results);
-  ScanParam(base::get<3>(t1), results);
+void ScanTuple(const std::tuple<A, B, C, D>& t1, ScanningResults* results) {
+  ScanParam(std::get<0>(t1), results);
+  ScanParam(std::get<1>(t1), results);
+  ScanParam(std::get<2>(t1), results);
+  ScanParam(std::get<3>(t1), results);
 }
 
 template <class MessageType>
@@ -194,8 +195,7 @@ class MessageScannerImpl {
       : msg_(static_cast<const MessageType*>(msg)) {
   }
   bool ScanMessage(ScanningResults* results) {
-    typename base::TupleTypes<typename MessageType::Schema::Param>::ValueTuple
-        params;
+    typename MessageType::Param params;
     if (!MessageType::Read(msg_, &params))
       return false;
     ScanTuple(params, results);
@@ -203,8 +203,7 @@ class MessageScannerImpl {
   }
 
   bool ScanSyncMessage(ScanningResults* results) {
-    typename base::TupleTypes<typename MessageType::Schema::SendParam>
-        ::ValueTuple params;
+    typename MessageType::SendParam params;
     if (!MessageType::ReadSendParam(msg_, &params))
       return false;
     // If we need to rewrite the message, write the message id first.
@@ -218,8 +217,7 @@ class MessageScannerImpl {
   }
 
   bool ScanReply(ScanningResults* results) {
-    typename base::TupleTypes<typename MessageType::Schema::ReplyParam>
-        ::ValueTuple params;
+    typename MessageType::ReplyParam params;
     if (!MessageType::ReadReplyParam(msg_, &params))
       return false;
     // If we need to rewrite the message, write the message id first.
@@ -340,7 +338,7 @@ bool NaClMessageScanner::ScanMessage(
     const IPC::Message& msg,
     uint32_t type,
     std::vector<SerializedHandle>* handles,
-    scoped_ptr<IPC::Message>* new_msg_ptr) {
+    std::unique_ptr<IPC::Message>* new_msg_ptr) {
   DCHECK(handles);
   DCHECK(handles->empty());
   DCHECK(new_msg_ptr);
@@ -391,7 +389,7 @@ bool NaClMessageScanner::ScanMessage(
 
 void NaClMessageScanner::ScanUntrustedMessage(
     const IPC::Message& untrusted_msg,
-    scoped_ptr<IPC::Message>* new_msg_ptr) {
+    std::unique_ptr<IPC::Message>* new_msg_ptr) {
   // Audit FileIO and FileSystem messages to ensure that the plugin doesn't
   // exceed its file quota. If we find the message is malformed, just pass it
   // through - we only care about well formed messages to the host.

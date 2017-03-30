@@ -20,11 +20,11 @@ RemoteFrameView::~RemoteFrameView()
 {
 }
 
-PassRefPtrWillBeRawPtr<RemoteFrameView> RemoteFrameView::create(RemoteFrame* remoteFrame)
+RemoteFrameView* RemoteFrameView::create(RemoteFrame* remoteFrame)
 {
-    RefPtrWillBeRawPtr<RemoteFrameView> view = adoptRefWillBeNoop(new RemoteFrameView(remoteFrame));
+    RemoteFrameView* view = new RemoteFrameView(remoteFrame);
     view->show();
-    return view.release();
+    return view;
 }
 
 void RemoteFrameView::dispose()

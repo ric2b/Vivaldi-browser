@@ -4,6 +4,7 @@
 
 #include "headless/lib/browser/headless_browser_impl.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "content/public/app/content_main.h"
 #include "content/public/browser/browser_thread.h"
@@ -29,11 +30,19 @@ HeadlessBrowserImpl::HeadlessBrowserImpl(
 
 HeadlessBrowserImpl::~HeadlessBrowserImpl() {}
 
-scoped_ptr<HeadlessWebContents> HeadlessBrowserImpl::CreateWebContents(
+std::unique_ptr<HeadlessWebContents> HeadlessBrowserImpl::CreateWebContents(
+    const GURL& initial_url,
     const gfx::Size& size) {
   DCHECK(BrowserMainThread()->BelongsToCurrentThread());
-  return make_scoped_ptr(new HeadlessWebContentsImpl(
-      browser_context(), window_tree_host_->window(), size));
+  std::unique_ptr<HeadlessWebContentsImpl> web_contents =
+      base::WrapUnique(new HeadlessWebContentsImpl(
+          browser_context(), window_tree_host_->window(), size));
+  // We require the user to pass in an initial URL to ensure that the renderer
+  // gets initialized and eventually becomes ready to be inspected. See
+  // HeadlessWebContents::Observer::WebContentsReady.
+  if (!web_contents->OpenURL(initial_url))
+    return nullptr;
+  return std::move(web_contents);
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -74,10 +83,16 @@ void HeadlessBrowserImpl::RunOnStartCallback() {
   on_start_callback_ = base::Callback<void(HeadlessBrowser*)>();
 }
 
+void HeadlessBrowserImpl::SetOptionsForTesting(
+    const HeadlessBrowser::Options& options) {
+  options_ = options;
+  browser_context()->SetOptionsForTesting(options);
+}
+
 int HeadlessBrowserMain(
     const HeadlessBrowser::Options& options,
     const base::Callback<void(HeadlessBrowser*)>& on_browser_start_callback) {
-  scoped_ptr<HeadlessBrowserImpl> browser(
+  std::unique_ptr<HeadlessBrowserImpl> browser(
       new HeadlessBrowserImpl(on_browser_start_callback, options));
 
   // TODO(skyostil): Implement custom message pumps.

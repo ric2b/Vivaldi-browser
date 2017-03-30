@@ -39,16 +39,13 @@ class LayoutPart;
 class Widget;
 
 class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement, public FrameOwner {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(HTMLFrameOwnerElement);
+    USING_GARBAGE_COLLECTED_MIXIN(HTMLFrameOwnerElement);
 public:
     ~HTMLFrameOwnerElement() override;
 
     Frame* contentFrame() const { return m_contentFrame; }
     DOMWindow* contentWindow() const;
     Document* contentDocument() const;
-
-    void setContentFrame(Frame&);
-    void clearContentFrame();
 
     void disconnectContentFrame();
 
@@ -62,8 +59,8 @@ public:
     virtual bool loadedNonEmptyDocument() const { return false; }
     virtual void didLoadNonEmptyDocument() { }
 
-    void setWidget(PassRefPtrWillBeRawPtr<Widget>);
-    PassRefPtrWillBeRawPtr<Widget> releaseWidget();
+    void setWidget(RawPtr<Widget>);
+    RawPtr<Widget> releaseWidget();
     Widget* ownedWidget() const;
 
     class UpdateSuspendScope {
@@ -78,6 +75,9 @@ public:
 
     // FrameOwner overrides:
     bool isLocal() const override { return true; }
+    bool isRemote() const override { return false; }
+    void setContentFrame(Frame&) override;
+    void clearContentFrame() override;
     void dispatchLoad() override;
     SandboxFlags getSandboxFlags() const override { return m_sandboxFlags; }
     void renderFallbackContent() override { }
@@ -99,8 +99,8 @@ private:
 
     virtual ReferrerPolicy referrerPolicyAttribute() { return ReferrerPolicyDefault; }
 
-    RawPtrWillBeMember<Frame> m_contentFrame;
-    RefPtrWillBeMember<Widget> m_widget;
+    Member<Frame> m_contentFrame;
+    Member<Widget> m_widget;
     SandboxFlags m_sandboxFlags;
 };
 
@@ -136,9 +136,9 @@ public:
     }
 
 private:
-    CORE_EXPORT static WillBeHeapHashCountedSet<RawPtrWillBeMember<Node>>& disabledSubtreeRoots();
+    CORE_EXPORT static HeapHashCountedSet<Member<Node>>& disabledSubtreeRoots();
 
-    RawPtrWillBeMember<Node> m_root;
+    Member<Node> m_root;
 };
 
 DEFINE_TYPE_CASTS(HTMLFrameOwnerElement, FrameOwner, owner, owner->isLocal(), owner.isLocal());

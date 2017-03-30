@@ -131,11 +131,10 @@ void PrintJob::StartPrinting() {
 
   // Real work is done in PrintJobWorker::StartPrinting().
   worker_->PostTask(FROM_HERE,
-                    base::Bind(&HoldRefCallback,
-                               make_scoped_refptr(this),
+                    base::Bind(&HoldRefCallback, make_scoped_refptr(this),
                                base::Bind(&PrintJobWorker::StartPrinting,
                                           base::Unretained(worker_.get()),
-                                          document_)));
+                                          base::RetainedRef(document_))));
   // Set the flag right now.
   is_job_pending_ = true;
 
@@ -308,9 +307,7 @@ void PrintJob::OnPdfToEmfPageConverted(int page_number,
   }
 
   // Update the rendered document. It will send notifications to the listener.
-  document_->SetPage(page_number,
-                     emf.Pass(),
-                     scale_factor,
+  document_->SetPage(page_number, std::move(emf), scale_factor,
                      ptd_to_emf_state_->page_size(),
                      ptd_to_emf_state_->content_area());
 
@@ -334,11 +331,10 @@ void PrintJob::UpdatePrintedDocument(PrintedDocument* new_document) {
     DCHECK(!is_job_pending_);
     // Sync the document with the worker.
     worker_->PostTask(FROM_HERE,
-                      base::Bind(&HoldRefCallback,
-                                 make_scoped_refptr(this),
+                      base::Bind(&HoldRefCallback, make_scoped_refptr(this),
                                  base::Bind(&PrintJobWorker::OnDocumentChanged,
                                             base::Unretained(worker_.get()),
-                                            document_)));
+                                            base::RetainedRef(document_))));
   }
 }
 

@@ -257,27 +257,18 @@ void OverlayPanelLayer::SetProperties(
   }
 }
 
-OverlayPanelLayer::OverlayPanelLayer(
-    ui::ResourceManager* resource_manager)
+OverlayPanelLayer::OverlayPanelLayer(ui::ResourceManager* resource_manager)
     : resource_manager_(resource_manager),
-      layer_(cc::Layer::Create(content::Compositor::LayerSettings())),
-      panel_shadow_(
-          cc::NinePatchLayer::Create(content::Compositor::LayerSettings())),
-      bar_background_(
-          cc::SolidColorLayer::Create(content::Compositor::LayerSettings())),
-      bar_text_(
-          cc::UIResourceLayer::Create(content::Compositor::LayerSettings())),
-      bar_shadow_(
-          cc::UIResourceLayer::Create(content::Compositor::LayerSettings())),
-      panel_icon_(
-          cc::UIResourceLayer::Create(content::Compositor::LayerSettings())),
-      close_icon_(
-          cc::UIResourceLayer::Create(content::Compositor::LayerSettings())),
-      content_view_container_(
-          cc::SolidColorLayer::Create(content::Compositor::LayerSettings())),
-      text_container_(cc::Layer::Create(content::Compositor::LayerSettings())),
-      bar_border_(
-          cc::SolidColorLayer::Create(content::Compositor::LayerSettings())) {
+      layer_(cc::Layer::Create()),
+      panel_shadow_(cc::NinePatchLayer::Create()),
+      bar_background_(cc::SolidColorLayer::Create()),
+      bar_text_(cc::UIResourceLayer::Create()),
+      bar_shadow_(cc::UIResourceLayer::Create()),
+      panel_icon_(cc::UIResourceLayer::Create()),
+      close_icon_(cc::UIResourceLayer::Create()),
+      content_view_container_(cc::SolidColorLayer::Create()),
+      text_container_(cc::Layer::Create()),
+      bar_border_(cc::SolidColorLayer::Create()) {
   layer_->SetMasksToBounds(false);
   layer_->SetIsDrawable(true);
 

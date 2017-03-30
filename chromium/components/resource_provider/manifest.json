@@ -1,5 +1,10 @@
 {
-  "url": "mojo://resource_provider/",
-  "name": "Resource Provider",
-  "capabilities": { "*": [ "*" ] }
+  "manifest_version":  1,
+  "name": "mojo:resource_provider",
+  "display_name": "Resource Provider",
+  "capabilities": {
+    "required": {
+      "mojo:shell": { "classes": [ "all_users" ] }
+    }
+  }
 }

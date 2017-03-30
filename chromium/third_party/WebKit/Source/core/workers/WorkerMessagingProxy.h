@@ -54,10 +54,10 @@ class CORE_EXPORT WorkerMessagingProxy
 public:
     // Implementations of WorkerGlobalScopeProxy.
     // (Only use these methods in the worker object thread.)
-    void startWorkerGlobalScope(const KURL& scriptURL, const String& userAgent, const String& sourceCode, WorkerThreadStartMode) override;
+    void startWorkerGlobalScope(const KURL& scriptURL, const String& userAgent, const String& sourceCode) override;
     void terminateWorkerGlobalScope() override;
     void postMessageToWorkerGlobalScope(PassRefPtr<SerializedScriptValue>, PassOwnPtr<MessagePortChannelArray>) override;
-    bool hasPendingActivity() const override;
+    bool hasPendingActivity() const final;
     void workerObjectDestroyed() override;
 
     // These methods come from worker context thread via WorkerObjectProxy
@@ -67,21 +67,19 @@ public:
     void reportConsoleMessage(MessageSource, MessageLevel, const String& message, int lineNumber, const String& sourceURL);
     void postMessageToPageInspector(const String&);
     void postWorkerConsoleAgentEnabled();
-    WorkerInspectorProxy* workerInspectorProxy();
     void confirmMessageFromWorkerObject(bool hasPendingActivity);
     void reportPendingActivity(bool hasPendingActivity);
     void workerGlobalScopeClosed();
     void workerThreadTerminated();
+    void workerThreadCreated();
 
-    void workerThreadCreated(PassRefPtr<WorkerThread>);
-
-    ExecutionContext* executionContext() const { return m_executionContext.get(); }
+    ExecutionContext* getExecutionContext() const { return m_executionContext.get(); }
 
 protected:
-    WorkerMessagingProxy(InProcessWorkerBase*, PassOwnPtrWillBeRawPtr<WorkerClients>);
+    WorkerMessagingProxy(InProcessWorkerBase*, WorkerClients*);
     ~WorkerMessagingProxy() override;
 
-    virtual PassRefPtr<WorkerThread> createWorkerThread(double originTime) = 0;
+    virtual PassOwnPtr<WorkerThread> createWorkerThread(double originTime) = 0;
 
     PassRefPtr<WorkerLoaderProxy> loaderProxy() { return m_loaderProxy; }
     WorkerObjectProxy& workerObjectProxy() { return *m_workerObjectProxy.get(); }
@@ -96,11 +94,11 @@ private:
     void postTaskToLoader(PassOwnPtr<ExecutionContextTask>) override;
     bool postTaskToWorkerGlobalScope(PassOwnPtr<ExecutionContextTask>) override;
 
-    RefPtrWillBePersistent<ExecutionContext> m_executionContext;
+    Persistent<ExecutionContext> m_executionContext;
     OwnPtr<WorkerObjectProxy> m_workerObjectProxy;
     WeakPersistent<InProcessWorkerBase> m_workerObject;
     bool m_mayBeDestroyed;
-    RefPtr<WorkerThread> m_workerThread;
+    OwnPtr<WorkerThread> m_workerThread;
 
     unsigned m_unconfirmedMessageCount; // Unconfirmed messages from worker object to worker thread.
     bool m_workerThreadHadPendingActivity; // The latest confirmation from worker thread reported that it was still active.
@@ -108,9 +106,9 @@ private:
     bool m_askedToTerminate;
 
     Vector<OwnPtr<ExecutionContextTask>> m_queuedEarlyTasks; // Tasks are queued here until there's a thread object created.
-    OwnPtrWillBePersistent<WorkerInspectorProxy> m_workerInspectorProxy;
+    Persistent<WorkerInspectorProxy> m_workerInspectorProxy;
 
-    OwnPtrWillBePersistent<WorkerClients> m_workerClients;
+    Persistent<WorkerClients> m_workerClients;
 
     RefPtr<WorkerLoaderProxy> m_loaderProxy;
 };

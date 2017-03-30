@@ -13,11 +13,11 @@ class HTMLSlotElement;
 class Node;
 class ShadowRoot;
 
-class SlotAssignment final : public NoBaseWillBeGarbageCollected<SlotAssignment> {
+class SlotAssignment final : public GarbageCollected<SlotAssignment> {
 public:
-    static PassOwnPtrWillBeRawPtr<SlotAssignment> create()
+    static RawPtr<SlotAssignment> create()
     {
-        return adoptPtrWillBeNoop(new SlotAssignment);
+        return new SlotAssignment;
     }
 
     HTMLSlotElement* assignedSlotFor(const Node&) const;
@@ -29,7 +29,7 @@ private:
     SlotAssignment() { }
 
     void assign(Node&, HTMLSlotElement&);
-    WillBeHeapHashMap<RawPtrWillBeMember<Node>, RawPtrWillBeMember<HTMLSlotElement>> m_assignment;
+    HeapHashMap<Member<Node>, Member<HTMLSlotElement>> m_assignment;
 };
 
 } // namespace blink

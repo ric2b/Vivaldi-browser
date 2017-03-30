@@ -26,6 +26,7 @@
 #include "cc/surfaces/surface_manager.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/browser/compositor/browser_compositor_overlay_candidate_validator.h"
+#include "content/browser/compositor/gl_helper.h"
 #include "content/browser/compositor/gpu_browser_compositor_output_surface.h"
 #include "content/browser/compositor/gpu_surfaceless_browser_compositor_output_surface.h"
 #include "content/browser/compositor/offscreen_browser_compositor_output_surface.h"
@@ -34,27 +35,24 @@
 #include "content/browser/compositor/software_output_device_mus.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
-#include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_surface_tracker.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
-#include "content/common/gpu/client/gl_helper.h"
-#include "content/common/gpu/client/gpu_channel_host.h"
 #include "content/common/gpu/client/webgraphicscontext3d_command_buffer_impl.h"
-#include "content/common/gpu/gpu_process_launch_causes.h"
+#include "content/common/gpu_process_launch_causes.h"
 #include "content/common/host_shared_bitmap_manager.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_constants.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/native_widget_types.h"
 
 #if defined(MOJO_RUNNER_CLIENT)
 #include "content/common/mojo/mojo_shell_connection_impl.h"
@@ -100,7 +98,6 @@ GpuProcessTransportFactory::GpuProcessTransportFactory()
     : next_surface_id_namespace_(1u),
       task_graph_runner_(new cc::SingleThreadTaskGraphRunner),
       callback_factory_(this) {
-  ui::Layer::InitializeUILayerSettings();
   cc::SetClientNameForMetrics("Browser");
 
   surface_manager_ = make_scoped_ptr(new cc::SurfaceManager);
@@ -125,9 +122,9 @@ scoped_ptr<WebGraphicsContext3DCommandBufferImpl>
 GpuProcessTransportFactory::CreateOffscreenCommandBufferContext() {
   CauseForGpuLaunch cause =
       CAUSE_FOR_GPU_LAUNCH_WEBGRAPHICSCONTEXT3DCOMMANDBUFFERIMPL_INITIALIZE;
-  scoped_refptr<GpuChannelHost> gpu_channel_host(
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(
       BrowserGpuChannelHostFactory::instance()->EstablishGpuChannelSync(cause));
-  return CreateContextCommon(gpu_channel_host, 0);
+  return CreateContextCommon(gpu_channel_host, gpu::kNullSurfaceHandle);
 }
 
 scoped_ptr<cc::SoftwareOutputDevice>
@@ -280,20 +277,26 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
         shared_worker_context_provider_lost = true;
       }
     }
-    scoped_refptr<GpuChannelHost> gpu_channel_host =
+    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host =
         BrowserGpuChannelHostFactory::instance()->GetGpuChannel();
     if (gpu_channel_host.get()) {
+      GpuSurfaceTracker* tracker = GpuSurfaceTracker::Get();
+      gpu::SurfaceHandle surface_handle =
+          data->surface_id ? tracker->GetSurfaceHandle(data->surface_id)
+                           : gpu::kNullSurfaceHandle;
+      // This context is used for both the browser compositor and the display
+      // compositor.
       context_provider = ContextProviderCommandBuffer::Create(
           GpuProcessTransportFactory::CreateContextCommon(gpu_channel_host,
-                                                          data->surface_id),
-          BROWSER_COMPOSITOR_ONSCREEN_CONTEXT);
+                                                          surface_handle),
+          DISPLAY_COMPOSITOR_ONSCREEN_CONTEXT);
       if (context_provider && !context_provider->BindToCurrentThread())
         context_provider = nullptr;
       if (!shared_worker_context_provider_ ||
           shared_worker_context_provider_lost) {
         shared_worker_context_provider_ = ContextProviderCommandBuffer::Create(
-            GpuProcessTransportFactory::CreateContextCommon(gpu_channel_host,
-                                                            0),
+            GpuProcessTransportFactory::CreateContextCommon(
+                gpu_channel_host, gpu::kNullSurfaceHandle),
             BROWSER_WORKER_CONTEXT);
         if (shared_worker_context_provider_ &&
             !shared_worker_context_provider_->BindToCurrentThread())
@@ -340,7 +343,7 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
       GLenum format = GL_RGB;
 #if defined(OS_MACOSX)
       target = GL_TEXTURE_RECTANGLE_ARB;
-      format = GL_BGRA_EXT;
+      format = GL_RGBA;
 #endif
       surface =
           make_scoped_ptr(new GpuSurfacelessBrowserCompositorOutputSurface(
@@ -589,24 +592,13 @@ GpuProcessTransportFactory::CreatePerCompositorData(
   DCHECK(!per_compositor_data_[compositor]);
 
   gfx::AcceleratedWidget widget = compositor->widget();
-  GpuSurfaceTracker* tracker = GpuSurfaceTracker::Get();
 
   PerCompositorData* data = new PerCompositorData;
   if (compositor->widget() == gfx::kNullAcceleratedWidget) {
     data->surface_id = 0;
   } else {
+    GpuSurfaceTracker* tracker = GpuSurfaceTracker::Get();
     data->surface_id = tracker->AddSurfaceForNativeWidget(widget);
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
-    // On Mac and Android, we can't pass the AcceleratedWidget, which is
-    // process-local, so instead we pass the surface_id, so that we can look up
-    // the AcceleratedWidget on the GPU side or when we receive
-    // GpuHostMsg_AcceleratedSurfaceBuffersSwapped_Params.
-    gfx::PluginWindowHandle handle = data->surface_id;
-#else
-    gfx::PluginWindowHandle handle = widget;
-#endif
-    tracker->SetSurfaceHandle(data->surface_id,
-                              gfx::GLSurfaceHandle(handle, gfx::NATIVE_DIRECT));
   }
 
   per_compositor_data_[compositor] = data;
@@ -616,31 +608,46 @@ GpuProcessTransportFactory::CreatePerCompositorData(
 
 scoped_ptr<WebGraphicsContext3DCommandBufferImpl>
 GpuProcessTransportFactory::CreateContextCommon(
-    scoped_refptr<GpuChannelHost> gpu_channel_host,
-    int surface_id) {
+    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
+    gpu::SurfaceHandle surface_handle) {
   if (!GpuDataManagerImpl::GetInstance()->CanUseGpuBrowserCompositor())
-    return scoped_ptr<WebGraphicsContext3DCommandBufferImpl>();
-  blink::WebGraphicsContext3D::Attributes attrs;
-  attrs.shareResources = true;
-  attrs.depth = false;
-  attrs.stencil = false;
-  attrs.antialias = false;
-  attrs.noAutomaticFlushes = true;
-  bool lose_context_when_out_of_memory = true;
-  if (!gpu_channel_host.get()) {
+    return nullptr;
+  if (!gpu_channel_host) {
     LOG(ERROR) << "Failed to establish GPU channel.";
-    return scoped_ptr<WebGraphicsContext3DCommandBufferImpl>();
+    return nullptr;
   }
+
+  // This is called from a few places to create different contexts:
+  // - The shared main thread context (offscreen).
+  // - The compositor context, which is used by the browser compositor
+  //   (offscreen) for synchronization mostly, and by the display compositor
+  //   (onscreen) for actual GL drawing.
+  // - The compositor worker context (offscreen) used for GPU raster.
+  // So ask for capabilities needed by any of these cases (we can optimize by
+  // branching on |surface_handle| being null if these needs diverge).
+  //
+  // The default framebuffer for an offscreen context is not used, so it does
+  // not need alpha, stencil, depth, antialiasing. The display compositor does
+  // not use these things either, so we can request nothing here.
+  gpu::gles2::ContextCreationAttribHelper attributes;
+  attributes.alpha_size = -1;
+  attributes.depth_size = 0;
+  attributes.stencil_size = 0;
+  attributes.samples = 0;
+  attributes.sample_buffers = 0;
+  attributes.bind_generates_resource = false;
+  attributes.lose_context_when_out_of_memory = true;
+
+  bool share_resources = true;
+  bool automatic_flushes = false;
+
   GURL url("chrome://gpu/GpuProcessTransportFactory::CreateContextCommon");
   scoped_ptr<WebGraphicsContext3DCommandBufferImpl> context(
       new WebGraphicsContext3DCommandBufferImpl(
-          surface_id,
-          url,
-          gpu_channel_host.get(),
-          attrs,
-          lose_context_when_out_of_memory,
+          surface_handle, url, gpu_channel_host.get(), attributes,
+          gfx::PreferIntegratedGpu, share_resources, automatic_flushes,
           WebGraphicsContext3DCommandBufferImpl::SharedMemoryLimits(),
-          NULL));
+          nullptr));
   return context;
 }
 

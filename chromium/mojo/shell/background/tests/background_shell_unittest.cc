@@ -6,18 +6,17 @@
 
 #include "base/run_loop.h"
 #include "mojo/shell/background/tests/test.mojom.h"
-#include "mojo/shell/background/tests/test_application_catalog_store.h"
+#include "mojo/shell/background/tests/test_catalog_store.h"
 #include "mojo/shell/public/cpp/connector.h"
 #include "mojo/shell/public/cpp/shell_client.h"
 #include "mojo/shell/public/cpp/shell_connection.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "url/gurl.h"
 
 namespace mojo {
 namespace shell {
 namespace {
 
-const char kTestUrl[] = "mojo:test-app";
+const char kTestName[] = "mojo:test-app";
 
 class ShellClientImpl : public ShellClient {
  public:
@@ -28,10 +27,10 @@ class ShellClientImpl : public ShellClient {
   DISALLOW_COPY_AND_ASSIGN(ShellClientImpl);
 };
 
-scoped_ptr<TestApplicationCatalogStore> BuildTestApplicationCatalogStore() {
+scoped_ptr<TestCatalogStore> BuildTestCatalogStore() {
   scoped_ptr<base::ListValue> apps(new base::ListValue);
-  apps->Append(BuildPermissiveSerializedAppInfo(GURL(kTestUrl), "test"));
-  return make_scoped_ptr(new TestApplicationCatalogStore(std::move(apps)));
+  apps->Append(BuildPermissiveSerializedAppInfo(kTestName, "test"));
+  return make_scoped_ptr(new TestCatalogStore(std::move(apps)));
 }
 
 }  // namespace
@@ -39,22 +38,25 @@ scoped_ptr<TestApplicationCatalogStore> BuildTestApplicationCatalogStore() {
 // Uses BackgroundShell to start the shell in the background and connects to
 // background_shell_test_app, verifying we can send a message to the app.
 // An ApplicationCatalogStore is supplied to avoid using a manifest.
+#if defined(OS_ANDROID)
 // TODO(crbug.com/589784): This test is disabled, as it fails
 // on the Android GN bot.
-TEST(BackgroundShellTest, DISABLED_Basic) {
+#define MAYBE_Basic DISABLED_Basic
+#else
+#define MAYBE_Basic Basic
+#endif
+TEST(BackgroundShellTest, MAYBE_Basic) {
   base::MessageLoop message_loop;
   BackgroundShell background_shell;
   scoped_ptr<BackgroundShell::InitParams> init_params(
       new BackgroundShell::InitParams);
-  scoped_ptr<TestApplicationCatalogStore> store_ptr =
-      BuildTestApplicationCatalogStore();
-  TestApplicationCatalogStore* store = store_ptr.get();
-  init_params->app_catalog = std::move(store_ptr);
+  scoped_ptr<TestCatalogStore> store_ptr = BuildTestCatalogStore();
+  TestCatalogStore* store = store_ptr.get();
+  init_params->catalog_store = std::move(store_ptr);
   background_shell.Init(std::move(init_params));
   ShellClientImpl shell_client;
   ShellConnection shell_connection(
-      &shell_client, background_shell.CreateShellClientRequest(GURL(kTestUrl)));
-  shell_connection.WaitForInitialize();
+      &shell_client, background_shell.CreateShellClientRequest(kTestName));
   mojom::TestServicePtr test_service;
   shell_connection.connector()->ConnectToInterface(
       "mojo:background_shell_test_app", &test_service);

@@ -26,6 +26,7 @@
 #ifndef SpeechRecognition_h
 #define SpeechRecognition_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/page/PageLifecycleObserver.h"
 #include "modules/EventTargetModules.h"
@@ -45,9 +46,9 @@ class MediaStreamTrack;
 class SpeechRecognitionController;
 class SpeechRecognitionError;
 
-class MODULES_EXPORT SpeechRecognition final : public RefCountedGarbageCollectedEventTargetWithInlineData<SpeechRecognition>, public PageLifecycleObserver, public ActiveDOMObject {
+class MODULES_EXPORT SpeechRecognition final : public RefCountedGarbageCollectedEventTargetWithInlineData<SpeechRecognition>, public PageLifecycleObserver, public ActiveScriptWrappable, public ActiveDOMObject {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(SpeechRecognition);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(SpeechRecognition);
+    USING_GARBAGE_COLLECTED_MIXIN(SpeechRecognition);
     DEFINE_WRAPPERTYPEINFO();
 public:
     static SpeechRecognition* create(ExecutionContext*);
@@ -82,16 +83,18 @@ public:
     void didEndAudio();
     void didReceiveResults(const HeapVector<Member<SpeechRecognitionResult>>& newFinalResults, const HeapVector<Member<SpeechRecognitionResult>>& currentInterimResults);
     void didReceiveNoMatch(SpeechRecognitionResult*);
-    void didReceiveError(PassRefPtrWillBeRawPtr<SpeechRecognitionError>);
+    void didReceiveError(SpeechRecognitionError*);
     void didStart();
     void didEnd();
 
     // EventTarget.
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
+
+    // ActiveScriptWrappable.
+    bool hasPendingActivity() const final;
 
     // ActiveDOMObject.
-    bool hasPendingActivity() const override;
     void stop() override;
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(audiostart);
@@ -121,7 +124,7 @@ private:
     bool m_interimResults;
     unsigned long m_maxAlternatives;
 
-    RawPtrWillBeMember<SpeechRecognitionController> m_controller;
+    Member<SpeechRecognitionController> m_controller;
     bool m_stoppedByActiveDOMObject;
     bool m_started;
     bool m_stopping;

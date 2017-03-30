@@ -5,12 +5,12 @@
 #ifndef CHROME_BROWSER_MEDIA_ANDROID_REMOTE_REMOTE_MEDIA_PLAYER_MANAGER_H_
 #define CHROME_BROWSER_MEDIA_ANDROID_REMOTE_REMOTE_MEDIA_PLAYER_MANAGER_H_
 
+#include <memory>
 #include <set>
 #include <unordered_map>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "chrome/browser/media/android/remote/remote_media_player_bridge.h"
 #include "content/browser/media/android/browser_media_player_manager.h"
@@ -39,6 +39,9 @@ class RemoteMediaPlayerManager : public content::BrowserMediaPlayerManager {
 
   // Callback to trigger when the availability of remote routes changes.
   void OnRouteAvailabilityChanged(int tab_id, bool routes_available);
+
+  // Callback to trigger when the device picker dialog was dismissed.
+  void OnCancelledRemotePlaybackRequest(int player_id);
 
   void OnMediaMetadataChanged(int player_id,
                               base::TimeDelta duration,
@@ -101,7 +104,7 @@ class RemoteMediaPlayerManager : public content::BrowserMediaPlayerManager {
   // playing remotely.
   RemoteMediaPlayerBridge* GetRemotePlayer(int player_id);
 
-  void SwapCurrentPlayer(int player_id);
+  bool SwapCurrentPlayer(int player_id);
 
   void FetchPosterBitmap(int player_id);
 

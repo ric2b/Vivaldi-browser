@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
-#include "cc/animation/animation_registrar.h"
 #include "cc/base/cc_export.h"
 #include "cc/base/synced_property.h"
 #include "cc/debug/frame_timing_tracker.h"
@@ -23,7 +22,7 @@
 #include "cc/input/input_handler.h"
 #include "cc/input/scrollbar_animation_controller.h"
 #include "cc/input/top_controls_manager_client.h"
-#include "cc/layers/layer_lists.h"
+#include "cc/layers/layer_collections.h"
 #include "cc/layers/render_pass_sink.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/managed_memory_policy.h"
@@ -36,6 +35,7 @@
 #include "cc/scheduler/commit_earlyout_reason.h"
 #include "cc/scheduler/draw_result.h"
 #include "cc/scheduler/video_frame_controller.h"
+#include "cc/tiles/image_decode_controller.h"
 #include "cc/tiles/tile_manager.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "cc/trees/mutator_host_client.h"
@@ -166,10 +166,11 @@ class CC_EXPORT LayerTreeHostImpl
   InputHandler::ScrollStatus RootScrollBegin(
       ScrollState* scroll_state,
       InputHandler::ScrollInputType type) override;
+  ScrollStatus ScrollAnimatedBegin(const gfx::Point& viewport_point) override;
   InputHandler::ScrollStatus ScrollAnimated(
       const gfx::Point& viewport_point,
       const gfx::Vector2dF& scroll_delta) override;
-  void ApplyScroll(LayerImpl* layer, ScrollState* scroll_state);
+  void ApplyScroll(ScrollNode* scroll_node, ScrollState* scroll_state);
   InputHandlerScrollResult ScrollBy(ScrollState* scroll_state) override;
   bool ScrollVerticallyByPage(const gfx::Point& viewport_point,
                               ScrollDirection direction) override;
@@ -402,6 +403,9 @@ class CC_EXPORT LayerTreeHostImpl
   }
   ResourcePool* resource_pool() { return resource_pool_.get(); }
   Renderer* renderer() { return renderer_.get(); }
+  ImageDecodeController* image_decode_controller() {
+    return image_decode_controller_.get();
+  }
   const RendererCapabilitiesImpl& GetRendererCapabilities() const;
 
   virtual bool SwapBuffers(const FrameData& frame);
@@ -486,9 +490,6 @@ class CC_EXPORT LayerTreeHostImpl
     return task_runner_provider_;
   }
 
-  AnimationRegistrar* animation_registrar() const {
-    return animation_registrar_.get();
-  }
   AnimationHost* animation_host() const { return animation_host_.get(); }
 
   void SetDebugState(const LayerTreeDebugState& new_debug_state);
@@ -512,7 +513,7 @@ class CC_EXPORT LayerTreeHostImpl
 
   void AsValueWithFrameInto(FrameData* frame,
                             base::trace_event::TracedValue* value) const;
-  scoped_refptr<base::trace_event::ConvertableToTraceFormat> AsValueWithFrame(
+  scoped_ptr<base::trace_event::ConvertableToTraceFormat> AsValueWithFrame(
       FrameData* frame) const;
   void ActivationStateAsValueInto(base::trace_event::TracedValue* value) const;
 
@@ -534,6 +535,11 @@ class CC_EXPORT LayerTreeHostImpl
     gfx::Size size;
     bool opaque;
   };
+
+  // Returns the amount of delta that can be applied to scroll_node, taking
+  // page scale into account.
+  gfx::Vector2dF ComputeScrollDelta(ScrollNode* scroll_node,
+                                    const gfx::Vector2dF& delta);
 
   void ScheduleMicroBenchmark(scoped_ptr<MicroBenchmarkImpl> benchmark);
 
@@ -573,10 +579,17 @@ class CC_EXPORT LayerTreeHostImpl
     return frame_timing_tracker_.get();
   }
 
-  gfx::Vector2dF ScrollLayer(LayerImpl* layer_impl,
-                             const gfx::Vector2dF& delta,
-                             const gfx::Point& viewport_point,
-                             bool is_direct_manipulation);
+  gfx::Vector2dF ScrollSingleNode(ScrollNode* scroll_node,
+                                  const gfx::Vector2dF& delta,
+                                  const gfx::Point& viewport_point,
+                                  bool is_direct_manipulation,
+                                  ScrollTree* scroll_tree);
+
+  void set_output_is_secure(bool output_is_secure) {
+    output_is_secure_ = output_is_secure;
+  }
+
+  bool output_is_secure() const { return output_is_secure_; }
 
   // Record main frame timing information.
   // |start_of_main_frame_args| is the BeginFrameArgs of the beginning of the
@@ -608,6 +621,11 @@ class CC_EXPORT LayerTreeHostImpl
                                        const ScrollTree& scroll_tree,
                                        ScrollNode* scroll_node) const;
 
+  // Returns true if a scroll offset animation is created and false if we scroll
+  // by the desired amount without an animation.
+  bool ScrollAnimationCreate(ScrollNode* scroll_node,
+                             const gfx::Vector2dF& scroll_amount);
+
  protected:
   LayerTreeHostImpl(
       const LayerTreeSettings& settings,
@@ -635,10 +653,11 @@ class CC_EXPORT LayerTreeHostImpl
   BeginFrameTracker current_begin_frame_tracker_;
 
  private:
-  gfx::Vector2dF ScrollLayerWithViewportSpaceDelta(
-      LayerImpl* layer_impl,
+  gfx::Vector2dF ScrollNodeWithViewportSpaceDelta(
+      ScrollNode* scroll_node,
       const gfx::PointF& viewport_point,
-      const gfx::Vector2dF& viewport_delta);
+      const gfx::Vector2dF& viewport_delta,
+      ScrollTree* scroll_tree);
 
   void CreateAndSetRenderer();
   void CleanUpTileManagerAndUIResources();
@@ -705,9 +724,6 @@ class CC_EXPORT LayerTreeHostImpl
 
   void ScrollAnimationAbort(LayerImpl* layer_impl);
 
-  void ScrollAnimationCreate(ScrollNode* scroll_node,
-                             const gfx::ScrollOffset& target_offset,
-                             const gfx::ScrollOffset& current_offset);
   bool ScrollAnimationUpdateTarget(ScrollNode* scroll_node,
                                    const gfx::Vector2dF& scroll_delta);
 
@@ -731,6 +747,7 @@ class CC_EXPORT LayerTreeHostImpl
   scoped_ptr<TileTaskWorkerPool> tile_task_worker_pool_;
   scoped_ptr<ResourcePool> resource_pool_;
   scoped_ptr<Renderer> renderer_;
+  scoped_ptr<ImageDecodeController> image_decode_controller_;
 
   GlobalStateThatImpactsTilePriority global_tile_state_;
 
@@ -805,9 +822,10 @@ class CC_EXPORT LayerTreeHostImpl
   gfx::Rect viewport_rect_for_tile_priority_;
   bool resourceless_software_draw_;
 
+  bool output_is_secure_;
+
   gfx::Rect viewport_damage_rect_;
 
-  scoped_ptr<AnimationRegistrar> animation_registrar_;
   scoped_ptr<AnimationHost> animation_host_;
   std::set<VideoFrameController*> video_frame_controllers_;
 

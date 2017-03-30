@@ -80,7 +80,7 @@ public:
         return m_promise.isUndefined() || m_promise.isNull();
     }
 
-    ScriptValue scriptValue() const
+    ScriptValue getScriptValue() const
     {
         return m_promise;
     }
@@ -126,6 +126,9 @@ public:
     // Returns |value| itself if it is a Promise.
     static ScriptPromise cast(ScriptState*, const ScriptValue& /*value*/);
     static ScriptPromise cast(ScriptState*, v8::Local<v8::Value> /*value*/);
+
+    // Constructs and returns a ScriptPromise resolved with undefined.
+    static ScriptPromise castUndefined(ScriptState*);
 
     static ScriptPromise reject(ScriptState*, const ScriptValue&);
     static ScriptPromise reject(ScriptState*, v8::Local<v8::Value>);

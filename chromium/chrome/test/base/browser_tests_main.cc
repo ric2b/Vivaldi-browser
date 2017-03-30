@@ -8,15 +8,19 @@
 #include "chrome/test/base/chrome_test_launcher.h"
 #include "chrome/test/base/chrome_test_suite.h"
 
-class ChromeBrowserTestSuiteRunner : public ChromeTestSuiteRunner {
- public:
-  int RunTestSuite(int argc, char** argv) override {
-    return ChromeTestSuite(argc, argv).Run();
-  }
-};
+#if defined(MOJO_SHELL_CLIENT)
+#include "chrome/test/base/mash_browser_tests_main.h"
+#endif
 
 int main(int argc, char** argv) {
+#if defined(MOJO_SHELL_CLIENT)
+  int exit_code = 0;
+  if (RunMashBrowserTests(argc, argv, &exit_code))
+    return exit_code;
+#endif
+
   int default_jobs = std::max(1, base::SysInfo::NumberOfProcessors() / 2);
-  ChromeBrowserTestSuiteRunner runner;
-  return LaunchChromeTests(default_jobs, &runner, argc, argv);
+  ChromeTestSuiteRunner runner;
+  ChromeTestLauncherDelegate delegate(&runner);
+  return LaunchChromeTests(default_jobs, &delegate, argc, argv);
 }

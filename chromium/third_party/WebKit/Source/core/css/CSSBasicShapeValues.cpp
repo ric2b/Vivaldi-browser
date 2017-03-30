@@ -68,15 +68,15 @@ static String serializePositionOffset(const CSSValuePair& offset, const CSSValue
     return offset.cssText();
 }
 
-static PassRefPtrWillBeRawPtr<CSSValuePair> buildSerializablePositionOffset(PassRefPtrWillBeRawPtr<CSSValue> offset, CSSValueID defaultSide)
+static CSSValuePair* buildSerializablePositionOffset(CSSValue* offset, CSSValueID defaultSide)
 {
     CSSValueID side = defaultSide;
-    RefPtrWillBeRawPtr<CSSPrimitiveValue> amount = nullptr;
+    CSSPrimitiveValue* amount = nullptr;
 
     if (!offset) {
         side = CSSValueCenter;
-    } else if (offset->isPrimitiveValue() && toCSSPrimitiveValue(offset.get())->isValueID()) {
-        side = toCSSPrimitiveValue(offset.get())->getValueID();
+    } else if (offset->isPrimitiveValue() && toCSSPrimitiveValue(offset)->isValueID()) {
+        side = toCSSPrimitiveValue(offset)->getValueID();
     } else if (offset->isValuePair()) {
         side = toCSSPrimitiveValue(toCSSValuePair(*offset).first()).getValueID();
         amount = &toCSSPrimitiveValue(toCSSValuePair(*offset).second());
@@ -85,7 +85,7 @@ static PassRefPtrWillBeRawPtr<CSSValuePair> buildSerializablePositionOffset(Pass
             amount = cssValuePool().createValue(100 - amount->getFloatValue(), CSSPrimitiveValue::UnitType::Percentage);
         }
     } else {
-        amount = toCSSPrimitiveValue(offset.get());
+        amount = toCSSPrimitiveValue(offset);
     }
 
     if (side == CSSValueCenter) {
@@ -99,13 +99,13 @@ static PassRefPtrWillBeRawPtr<CSSValuePair> buildSerializablePositionOffset(Pass
         side = defaultSide;
     }
 
-    return CSSValuePair::create(cssValuePool().createIdentifierValue(side), amount.release(), CSSValuePair::KeepIdenticalValues);
+    return CSSValuePair::create(cssValuePool().createIdentifierValue(side), amount, CSSValuePair::KeepIdenticalValues);
 }
 
 String CSSBasicShapeCircleValue::customCSSText() const
 {
-    RefPtrWillBeRawPtr<CSSValuePair> normalizedCX = buildSerializablePositionOffset(m_centerX, CSSValueLeft);
-    RefPtrWillBeRawPtr<CSSValuePair> normalizedCY = buildSerializablePositionOffset(m_centerY, CSSValueTop);
+    CSSValuePair* normalizedCX = buildSerializablePositionOffset(m_centerX, CSSValueLeft);
+    CSSValuePair* normalizedCY = buildSerializablePositionOffset(m_centerY, CSSValueTop);
 
     String radius;
     if (m_radius && m_radius->getValueID() != CSSValueClosestSide)
@@ -164,8 +164,8 @@ static String buildEllipseString(const String& radiusX, const String& radiusY, c
 
 String CSSBasicShapeEllipseValue::customCSSText() const
 {
-    RefPtrWillBeRawPtr<CSSValuePair> normalizedCX = buildSerializablePositionOffset(m_centerX, CSSValueLeft);
-    RefPtrWillBeRawPtr<CSSValuePair> normalizedCY = buildSerializablePositionOffset(m_centerY, CSSValueTop);
+    CSSValuePair* normalizedCX = buildSerializablePositionOffset(m_centerX, CSSValueLeft);
+    CSSValuePair* normalizedCY = buildSerializablePositionOffset(m_centerY, CSSValueTop);
 
     String radiusX;
     String radiusY;

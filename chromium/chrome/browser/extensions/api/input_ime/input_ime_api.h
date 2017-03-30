@@ -17,6 +17,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/input_method/input_method_engine_base.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "content/public/browser/notification_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function.h"
@@ -32,6 +33,10 @@
 #endif  // defined(OS_CHROMEOS)
 
 class Profile;
+
+namespace content {
+class NotificationRegistrar;
+}
 
 namespace ui {
 class IMEEngineHandlerInterface;
@@ -67,7 +72,7 @@ class ImeObserver : public input_method::InputMethodEngineBase::Observer {
   virtual void DispatchEventToExtension(
       extensions::events::HistogramValue histogram_value,
       const std::string& event_name,
-      scoped_ptr<base::ListValue> args) = 0;
+      std::unique_ptr<base::ListValue> args) = 0;
 
   // Returns the type of the current screen.
   virtual std::string GetCurrentScreenType() = 0;
@@ -105,6 +110,7 @@ class InputImeEventRouterFactory {
  public:
   static InputImeEventRouterFactory* GetInstance();
   InputImeEventRouter* GetRouter(Profile* profile);
+  void RemoveProfile(Profile* profile);
 
  private:
   friend struct base::DefaultSingletonTraits<InputImeEventRouterFactory>;
@@ -151,9 +157,21 @@ class InputImeCommitTextFunction : public UIThreadExtensionFunction {
   ResponseAction Run() override;
 };
 
+class InputImeSendKeyEventsFunction : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("input.ime.sendKeyEvents", INPUT_IME_SENDKEYEVENTS)
+
+ protected:
+  ~InputImeSendKeyEventsFunction() override {}
+
+  // UIThreadExtensionFunction:
+  ResponseAction Run() override;
+};
+
 class InputImeAPI : public BrowserContextKeyedAPI,
                     public ExtensionRegistryObserver,
-                    public EventRouter::Observer {
+                    public EventRouter::Observer,
+                    public content::NotificationObserver {
  public:
   explicit InputImeAPI(content::BrowserContext* context);
   ~InputImeAPI() override;
@@ -171,6 +189,11 @@ class InputImeAPI : public BrowserContextKeyedAPI,
   // EventRouter::Observer implementation.
   void OnListenerAdded(const EventListenerInfo& details) override;
 
+  // content::NotificationObserver:
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override;
+
  private:
   friend class BrowserContextKeyedAPIFactory<InputImeAPI>;
   InputImeEventRouter* input_ime_event_router();
@@ -186,6 +209,8 @@ class InputImeAPI : public BrowserContextKeyedAPI,
   // Listen to extension load, unloaded notifications.
   ScopedObserver<ExtensionRegistry, ExtensionRegistryObserver>
       extension_registry_observer_;
+
+  content::NotificationRegistrar registrar_;
 };
 
 InputImeEventRouter* GetInputImeEventRouter(Profile* profile);

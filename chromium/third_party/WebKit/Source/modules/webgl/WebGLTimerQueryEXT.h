@@ -9,6 +9,12 @@
 
 #include "public/platform/WebThread.h"
 
+namespace gpu {
+namespace gles2 {
+class GLES2Interface;
+}
+}
+
 namespace blink {
 
 class WebGLTimerQueryEXT : public WebGLContextObject, public WebThread::TaskObserver {
@@ -25,7 +31,7 @@ public:
     GLenum target() const { return m_target; }
 
     void resetCachedResult();
-    void updateCachedResult(WebGraphicsContext3D*);
+    void updateCachedResult(gpu::gles2::GLES2Interface*);
 
     bool isQueryResultAvailable();
     GLuint64 getQueryResult();
@@ -35,7 +41,7 @@ protected:
 
 private:
     bool hasObject() const override { return m_queryId != 0; }
-    void deleteObjectImpl(WebGraphicsContext3D*) override;
+    void deleteObjectImpl(gpu::gles2::GLES2Interface*) override;
 
     void registerTaskObserver();
     void unregisterTaskObserver();

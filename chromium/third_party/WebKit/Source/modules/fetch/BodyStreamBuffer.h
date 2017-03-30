@@ -25,9 +25,9 @@ class ExecutionContext;
 class MODULES_EXPORT BodyStreamBuffer final : public GarbageCollectedFinalized<BodyStreamBuffer>, public UnderlyingSource, public WebDataConsumerHandle::Client {
     WTF_MAKE_NONCOPYABLE(BodyStreamBuffer);
     USING_GARBAGE_COLLECTED_MIXIN(BodyStreamBuffer);
+public:
     // Needed because we have to release |m_reader| promptly.
     EAGERLY_FINALIZE();
-public:
     // |handle| cannot be null and cannot be locked.
     explicit BodyStreamBuffer(PassOwnPtr<FetchDataConsumerHandle> /* handle */);
 

@@ -37,17 +37,18 @@
 #include "public/platform/WebRTCCertificate.h"
 #include "wtf/OwnPtr.h"
 
+#include <memory>
+
 namespace blink {
 
 class RTCCertificate final : public GarbageCollectedFinalized<RTCCertificate>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
 public:
     // Takes ownership of the certificate.
-    RTCCertificate(WebRTCCertificate*);
+    RTCCertificate(std::unique_ptr<WebRTCCertificate>);
 
-    // Returns a new WebRTCCertificate shallow copy that the caller is
-    // responsible for deleting.
-    WebRTCCertificate* certificateShallowCopy() const;
+    // Returns a new WebRTCCertificate shallow copy.
+    std::unique_ptr<WebRTCCertificate> certificateShallowCopy() const;
 
     DEFINE_INLINE_TRACE() {}
 

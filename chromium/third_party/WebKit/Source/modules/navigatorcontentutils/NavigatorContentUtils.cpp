@@ -86,13 +86,13 @@ static bool verifyCustomHandlerURL(const Document& document, const String& url, 
     KURL kurl = document.completeURL(url);
 
     if (kurl.isEmpty() || !kurl.isValid()) {
-        exceptionState.throwDOMException(SyntaxError, "The custom handler URL created by removing '%s' and prepending '" + document.baseURL().string() + "' is invalid.");
+        exceptionState.throwDOMException(SyntaxError, "The custom handler URL created by removing '%s' and prepending '" + document.baseURL().getString() + "' is invalid.");
         return false;
     }
 
     // The specification says that the API throws SecurityError exception if the
     // URL's origin differs from the document's origin.
-    if (!document.securityOrigin()->canRequest(kurl)) {
+    if (!document.getSecurityOrigin()->canRequest(kurl)) {
         exceptionState.throwSecurityError("Can only register custom handler in the document's origin.");
         return false;
     }
@@ -138,16 +138,16 @@ static bool verifyCustomHandlerScheme(const String& scheme, ExceptionState& exce
 
 NavigatorContentUtils* NavigatorContentUtils::from(LocalFrame& frame)
 {
-    return static_cast<NavigatorContentUtils*>(WillBeHeapSupplement<LocalFrame>::from(frame, supplementName()));
+    return static_cast<NavigatorContentUtils*>(Supplement<LocalFrame>::from(frame, supplementName()));
 }
 
 NavigatorContentUtils::~NavigatorContentUtils()
 {
 }
 
-PassOwnPtrWillBeRawPtr<NavigatorContentUtils> NavigatorContentUtils::create(PassOwnPtrWillBeRawPtr<NavigatorContentUtilsClient> client)
+NavigatorContentUtils* NavigatorContentUtils::create(NavigatorContentUtilsClient* client)
 {
-    return adoptPtrWillBeNoop(new NavigatorContentUtils(client));
+    return new NavigatorContentUtils(client);
 }
 
 void NavigatorContentUtils::registerProtocolHandler(Navigator& navigator, const String& scheme, const String& url, const String& title, ExceptionState& exceptionState)
@@ -229,7 +229,7 @@ const char* NavigatorContentUtils::supplementName()
     return "NavigatorContentUtils";
 }
 
-void provideNavigatorContentUtilsTo(LocalFrame& frame, PassOwnPtrWillBeRawPtr<NavigatorContentUtilsClient> client)
+void provideNavigatorContentUtilsTo(LocalFrame& frame, NavigatorContentUtilsClient* client)
 {
     NavigatorContentUtils::provideTo(frame, NavigatorContentUtils::supplementName(), NavigatorContentUtils::create(client));
 }

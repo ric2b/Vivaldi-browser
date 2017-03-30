@@ -19,6 +19,10 @@ class LayerAnimationObserver;
 
 namespace views {
 
+namespace test {
+class InkDropAnimationTestApi;
+}  // namespace test
+
 // Simple base class for animations that provide visual feedback for View state.
 // Manages the attached InkDropAnimationObservers.
 //
@@ -46,6 +50,10 @@ class VIEWS_EXPORT InkDropAnimation {
   InkDropAnimation();
   virtual ~InkDropAnimation();
 
+  // In the event that an animation is in progress for ink drop state 's1' and
+  // an animation to a new state 's2' is triggered, then
+  // AnimationEnded(s1, PRE_EMPTED) will be called before
+  // AnimationStarted(s2).
   void set_observer(InkDropAnimationObserver* observer) {
     observer_ = observer;
   }
@@ -76,6 +84,11 @@ class VIEWS_EXPORT InkDropAnimation {
   // the ink_drop_state() == HIDDEN because the ripple may be visible while it
   // animates to the target HIDDEN state.
   virtual bool IsVisible() const = 0;
+
+  // Returns a test api to access internals of this. Default implmentations
+  // should return nullptr and test specific subclasses can override to return
+  // an instance.
+  virtual test::InkDropAnimationTestApi* GetTestApi();
 
  protected:
   // Animates the ripple from the |old_ink_drop_state| to the

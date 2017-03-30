@@ -14,7 +14,8 @@
 #include "base/memory/singleton.h"
 #include "base/synchronization/lock.h"
 #include "content/common/content_export.h"
-#include "content/common/gpu/gpu_surface_lookup.h"
+#include "gpu/ipc/common/gpu_surface_lookup.h"
+#include "gpu/ipc/common/surface_handle.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -29,11 +30,15 @@ namespace content {
 // Note: The ID can exist before the actual native handle for the surface is
 // created, for example to allow giving a reference to it to a renderer, so that
 // it is unamibiguously identified.
-class CONTENT_EXPORT GpuSurfaceTracker : public GpuSurfaceLookup {
+class CONTENT_EXPORT GpuSurfaceTracker : public gpu::GpuSurfaceLookup {
  public:
   // GpuSurfaceLookup implementation:
   // Returns the native widget associated with a given surface_id.
   gfx::AcceleratedWidget AcquireNativeWidget(int surface_id) override;
+
+#if defined(OS_ANDROID)
+  gfx::ScopedJavaSurface AcquireJavaSurface(int surface_id) override;
+#endif
 
   // Gets the global instance of the surface tracker.
   static GpuSurfaceTracker* Get() { return GetInstance(); }
@@ -44,13 +49,9 @@ class CONTENT_EXPORT GpuSurfaceTracker : public GpuSurfaceLookup {
   // Removes a given existing surface.
   void RemoveSurface(int surface_id);
 
-  // Sets the native handle for the given surface.
-  // Note: This is an O(log N) lookup.
-  void SetSurfaceHandle(int surface_id, const gfx::GLSurfaceHandle& handle);
-
   // Gets the native handle for the given surface.
   // Note: This is an O(log N) lookup.
-  gfx::GLSurfaceHandle GetSurfaceHandle(int surface_id);
+  gpu::SurfaceHandle GetSurfaceHandle(int surface_id);
 
   // Returns the number of surfaces currently registered with the tracker.
   std::size_t GetSurfaceCount();
@@ -60,15 +61,7 @@ class CONTENT_EXPORT GpuSurfaceTracker : public GpuSurfaceLookup {
   static GpuSurfaceTracker* GetInstance();
 
  private:
-  struct SurfaceInfo {
-    SurfaceInfo();
-    SurfaceInfo(const gfx::AcceleratedWidget& native_widget,
-                const gfx::GLSurfaceHandle& handle);
-    ~SurfaceInfo();
-    gfx::AcceleratedWidget native_widget;
-    gfx::GLSurfaceHandle handle;
-  };
-  typedef std::map<int, SurfaceInfo> SurfaceMap;
+  typedef std::map<int, gfx::AcceleratedWidget> SurfaceMap;
 
   friend struct base::DefaultSingletonTraits<GpuSurfaceTracker>;
 

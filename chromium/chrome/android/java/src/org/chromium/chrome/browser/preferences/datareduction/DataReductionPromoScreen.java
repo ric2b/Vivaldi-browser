@@ -20,6 +20,8 @@ import android.widget.LinearLayout.LayoutParams;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge.AboutVersionStrings;
 import org.chromium.ui.widget.Toast;
 
 /**
@@ -27,7 +29,16 @@ import org.chromium.ui.widget.Toast;
  */
 public class DataReductionPromoScreen extends Dialog implements View.OnClickListener,
         DialogInterface.OnDismissListener {
+    /**
+     * Key used to save whether the promo screen is shown and the time in milliseconds since epoch,
+     * it was shown.
+     */
     private static final String SHARED_PREF_DISPLAYED_PROMO = "displayed_data_reduction_promo";
+    private static final String SHARED_PREF_DISPLAYED_PROMO_TIME_MS =
+            "displayed_data_reduction_promo_time_ms";
+    private static final String SHARED_PREF_DISPLAYED_PROMO_VERSION =
+            "displayed_data_reduction_promo_version";
+    private static final String SHARED_PREF_FRE_PROMO_OPT_OUT = "fre_promo_opt_out";
 
     private int mState;
 
@@ -119,7 +130,7 @@ public class DataReductionPromoScreen extends Dialog implements View.OnClickList
 
     @Override
     public void onDismiss(DialogInterface dialog) {
-        setDisplayedDataReductionPromo(getContext(), true);
+        saveDataReductionPromoDisplayed(getContext());
     }
 
     private void handleEnableButtonPressed() {
@@ -155,14 +166,34 @@ public class DataReductionPromoScreen extends Dialog implements View.OnClickList
     }
 
     /**
-     * Sets whether the Data Reduction Proxy promo has been displayed.
+     * Saves shared prefs indicating that the Data Reduction Proxy promo screen has been displayed
+     * at the current time.
      *
      * @param context An Android context.
-     * @param displayed Whether the Data Reduction Proxy was displayed.
      */
-    public static void setDisplayedDataReductionPromo(Context context, boolean displayed) {
-        PreferenceManager.getDefaultSharedPreferences(context).edit()
-                .putBoolean(SHARED_PREF_DISPLAYED_PROMO, displayed)
+    public static void saveDataReductionPromoDisplayed(Context context) {
+        AboutVersionStrings versionStrings =
+                PrefServiceBridge.getInstance().getAboutVersionStrings();
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putBoolean(SHARED_PREF_DISPLAYED_PROMO, true)
+                .putLong(SHARED_PREF_DISPLAYED_PROMO_TIME_MS, System.currentTimeMillis())
+                .putString(SHARED_PREF_DISPLAYED_PROMO_VERSION,
+                           versionStrings.getApplicationVersion())
+                .apply();
+    }
+
+    /**
+     * Saves shared prefs indicating that the Data Reduction Proxy First Run Experience promo screen
+     * was displayed and the user opted out.
+     *
+     * @param context An Android context.
+     * @param boolean Whether the user opted out of using the Data Reduction Proxy.
+     */
+    public static void saveDataReductionFrePromoOptOut(Context context, boolean optOut) {
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putBoolean(SHARED_PREF_FRE_PROMO_OPT_OUT, optOut)
                 .apply();
     }
 }

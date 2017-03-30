@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.offlinepages;
 
+import android.app.Activity;
 import android.content.Context;
 import android.os.Environment;
 
@@ -12,8 +13,10 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.snackbar.Snackbar;
+import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.components.offlinepages.FeatureMode;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.net.NetworkChangeNotifier;
@@ -24,8 +27,6 @@ import org.chromium.ui.base.PageTransition;
  */
 public class OfflinePageUtils {
     private static final String TAG = "OfflinePageUtils";
-    /** Snackbar button types */
-    public static final int RELOAD_BUTTON = 0;
 
     private static final int SNACKBAR_DURATION = 6 * 1000; // 6 second
 
@@ -123,25 +124,12 @@ public class OfflinePageUtils {
     }
 
     /**
-     * Whenever we reload an offline page, if we are online, load the online version of the page
-     * instead, on the theory that the user prefers the online version of the page.
-     */
-    public static void preferOnlineVersion(ChromeActivity activity, Tab tab, String newUrl) {
-        // If we are reloading an offline page, but are online, get the online version.
-        if (newUrl.equals(tab.getUrl()) && isConnected()) {
-            Log.i(TAG, "Refreshing to the online version of an offline page, since we are online");
-            LoadUrlParams params =
-                    new LoadUrlParams(tab.getOfflinePageOriginalUrl(), PageTransition.RELOAD);
-            tab.loadUrl(params);
-        }
-    }
-
-    /**
      * Strips scheme from the original URL of the offline page. This is meant to be used by UI.
      * @param onlineUrl an online URL to from which the scheme is removed
      * @return onlineUrl without the scheme
      */
     public static String stripSchemeFromOnlineUrl(String onlineUrl) {
+        onlineUrl = onlineUrl.trim();
         // Offline pages are only saved for https:// and http:// schemes.
         if (onlineUrl.startsWith("https://")) {
             return onlineUrl.substring(8);
@@ -158,48 +146,30 @@ public class OfflinePageUtils {
      * @param tab The current tab.
      */
     public static void showOfflineSnackbarIfNecessary(ChromeActivity activity, Tab tab) {
-        showOfflineSnackbarIfNecessary(activity, tab, null);
+        if (!OfflinePageBridge.isEnabled()) return;
+
+        if (OfflinePageTabObserver.getInstance() == null) {
+            SnackbarController snackbarController =
+                    createReloadSnackbarController(activity.getTabModelSelector());
+            OfflinePageTabObserver.init(
+                    activity.getBaseContext(), activity.getSnackbarManager(), snackbarController);
+        }
+
+        showOfflineSnackbarIfNecessary(tab);
     }
 
     /**
      * Shows the snackbar for the current tab to provide offline specific information if needed.
      * This method is used by testing for dependency injecting a snackbar controller.
-     * @param activity The activity owning the tab.
+     * @param context android context
+     * @param snackbarManager The snackbar manager to show and dismiss snackbars.
      * @param tab The current tab.
-     * @param snackbarController Class to show the snackbar.
+     * @param snackbarController The snackbar controller to control snackbar behavior.
      */
-    public static void showOfflineSnackbarIfNecessary(
-            ChromeActivity activity, Tab tab, SnackbarController snackbarController) {
-        Log.d(TAG, "showOfflineSnackbarIfNecessary, controller is " + snackbarController);
-        if (tab == null || tab.isFrozen()) return;
-
-        if (!OfflinePageBridge.isEnabled()) return;
-
-        // We only show a snackbar if we are seeing an offline page.
-        if (!tab.isOfflinePage()) return;
-
-        // Get a snackbar controller if we need one.
-        if (snackbarController == null) {
-            snackbarController = getSnackbarController(activity, tab);
-        }
-
-        final boolean connected = isConnected();
-
-        Log.d(TAG, "showOfflineSnackbarIfNecessary called, tabId " + tab.getId() + ", hidden "
-                        + tab.isHidden() + ", connected " + connected + ", controller "
-                        + snackbarController);
-
-        // If the tab is no longer hidden, and we have a connection while showing an offline
-        // page, offer to reload it now.
-        if (!tab.isHidden() && connected) {
-            Log.d(TAG, "Offering to reload page, controller " + snackbarController);
-            showReloadSnackbar(activity, snackbarController);
-            return;
-        }
-
-        // Set up the tab observer to watch for the tab being unhidden or connectivity.
-        OfflinePageTabObserver.addObserverForTab(activity, tab, connected, snackbarController);
-        return;
+    static void showOfflineSnackbarIfNecessary(Tab tab) {
+        // Set up the tab observer to watch for the tab being shown (not hidden) and a valid
+        // connection. When both conditions are met a snackbar is shown.
+        OfflinePageTabObserver.addObserverForTab(tab);
     }
 
     /**
@@ -207,34 +177,76 @@ public class OfflinePageUtils {
      * @param activity The activity owning the tab.
      * @param snackbarController Class to show the snackbar.
      */
-    public static void showReloadSnackbar(final ChromeActivity activity,
-            final SnackbarController snackbarController) {
+    public static void showReloadSnackbar(Context context, SnackbarManager snackbarManager,
+            final SnackbarController snackbarController, int tabId) {
+        if (tabId == Tab.INVALID_TAB_ID) return;
+
         Log.d(TAG, "showReloadSnackbar called with controller " + snackbarController);
-        Context context = activity.getBaseContext();
         final int snackbarTextId = getStringId(R.string.offline_pages_viewing_offline_page);
         Snackbar snackbar = Snackbar.make(context.getString(snackbarTextId), snackbarController,
                                             Snackbar.TYPE_ACTION)
                                     .setSingleLine(false)
-                                    .setAction(context.getString(R.string.reload), RELOAD_BUTTON);
-        Log.d(TAG, "made snackbar with controller " + snackbarController);
+                                    .setAction(context.getString(R.string.reload), tabId);
         snackbar.setDuration(SNACKBAR_DURATION);
-        activity.getSnackbarManager().showSnackbar(snackbar);
+        snackbarManager.showSnackbar(snackbar);
+    }
+
+    /**
+     * Creates a snackbar controller for a case where "Free up space" button is shown to clean up
+     * space taken by the offline pages.
+     */
+    public static SnackbarController createSnackbarControllerForFreeUpSpaceButton(
+            final OfflinePageBridge offlinePageBridge, final SnackbarManager snackbarManager,
+            final Activity activity) {
+        return new SnackbarController() {
+            @Override
+            public void onDismissNoAction(Object actionData) {
+                // This method will be called only if the snackbar is dismissed by timeout.
+                RecordUserAction.record(
+                        "OfflinePages.SaveStatusSnackbar.FreeUpSpaceButtonNotClicked");
+            }
+
+            @Override
+            public void onAction(Object actionData) {
+                RecordUserAction.record("OfflinePages.SaveStatusSnackbar.FreeUpSpaceButtonClicked");
+                OfflinePageStorageSpacePolicy policy =
+                        new OfflinePageStorageSpacePolicy(offlinePageBridge);
+                if (policy.hasPagesToCleanUp()) {
+                    OfflinePageFreeUpSpaceCallback callback = new OfflinePageFreeUpSpaceCallback() {
+                        @Override
+                        public void onFreeUpSpaceDone() {
+                            snackbarManager.showSnackbar(
+                                    OfflinePageFreeUpSpaceDialog.createStorageClearedSnackbar(
+                                            activity));
+                        }
+                        @Override
+                        public void onFreeUpSpaceCancelled() {}
+                    };
+                    OfflinePageFreeUpSpaceDialog dialog =
+                            OfflinePageFreeUpSpaceDialog.newInstance(offlinePageBridge, callback);
+                    dialog.show(activity.getFragmentManager(), null);
+                } else {
+                    OfflinePageOpenStorageSettingsDialog.showDialog(activity);
+                }
+            }
+        };
     }
 
     /**
      * Gets a snackbar controller that we can use to show our snackbar.
+     * @param tabModelSelector used to retrieve a tab by ID
      */
-    private static SnackbarController getSnackbarController(
-            final ChromeActivity activity, final Tab tab) {
-        final int tabId = tab.getId();
+    private static SnackbarController createReloadSnackbarController(
+            final TabModelSelector tabModelSelector) {
         Log.d(TAG, "building snackbar controller");
 
         return new SnackbarController() {
             @Override
             public void onAction(Object actionData) {
-                assert RELOAD_BUTTON == (int) actionData;
+                assert actionData != null;
+                int tabId = (int) actionData;
                 RecordUserAction.record("OfflinePages.ReloadButtonClicked");
-                Tab foundTab = activity.getTabModelSelector().getTabById(tabId);
+                Tab foundTab = tabModelSelector.getTabById(tabId);
                 if (foundTab == null) return;
 
                 LoadUrlParams params = new LoadUrlParams(

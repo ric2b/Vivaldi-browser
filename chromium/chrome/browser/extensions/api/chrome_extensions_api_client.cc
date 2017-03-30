@@ -6,11 +6,13 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/chrome_device_permissions_prompt.h"
 #include "chrome/browser/extensions/api/declarative_content/chrome_content_rules_registry.h"
 #include "chrome/browser/extensions/api/declarative_content/default_content_predicate_evaluators.h"
 #include "chrome/browser/extensions/api/management/chrome_management_api_delegate.h"
+#include "chrome/browser/extensions/api/storage/managed_value_store_cache.h"
 #include "chrome/browser/extensions/api/storage/sync_value_store_cache.h"
 #include "chrome/browser/extensions/api/web_request/chrome_extension_web_request_event_router_delegate.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
@@ -28,10 +30,6 @@
 #include "extensions/browser/api/virtual_keyboard_private/virtual_keyboard_delegate.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
-
-#if defined(ENABLE_CONFIGURATION_POLICY)
-#include "chrome/browser/extensions/api/storage/managed_value_store_cache.h"
-#endif
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/extensions/api/virtual_keyboard_private/chrome_virtual_keyboard_delegate.h"
@@ -54,7 +52,7 @@ ChromeExtensionsAPIClient::~ChromeExtensionsAPIClient() {}
 
 void ChromeExtensionsAPIClient::AddAdditionalValueStoreCaches(
     content::BrowserContext* context,
-    const scoped_refptr<SettingsStorageFactory>& factory,
+    const scoped_refptr<ValueStoreFactory>& factory,
     const scoped_refptr<base::ObserverListThreadSafe<SettingsObserver>>&
         observers,
     std::map<settings_namespace::Namespace, ValueStoreCache*>* caches) {
@@ -62,11 +60,9 @@ void ChromeExtensionsAPIClient::AddAdditionalValueStoreCaches(
   (*caches)[settings_namespace::SYNC] =
       new SyncValueStoreCache(factory, observers, context->GetPath());
 
-#if defined(ENABLE_CONFIGURATION_POLICY)
   // Add support for chrome.storage.managed.
   (*caches)[settings_namespace::MANAGED] =
       new ManagedValueStoreCache(context, factory, observers);
-#endif
 }
 
 void ChromeExtensionsAPIClient::AttachWebContentsHelpers(
@@ -81,9 +77,8 @@ void ChromeExtensionsAPIClient::AttachWebContentsHelpers(
 #endif  // defined(ENABLE_PRINT_PREVIEW)
 #endif  // defined(ENABLE_PRINTING)
   pdf::PDFWebContentsHelper::CreateForWebContentsWithClient(
-      web_contents,
-      scoped_ptr<pdf::PDFWebContentsHelperClient>(
-          new ChromePDFWebContentsHelperClient()));
+      web_contents, std::unique_ptr<pdf::PDFWebContentsHelperClient>(
+                        new ChromePDFWebContentsHelperClient()));
 
   extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
       web_contents);
@@ -100,16 +95,16 @@ ChromeExtensionsAPIClient::CreateExtensionOptionsGuestDelegate(
   return new ChromeExtensionOptionsGuestDelegate(guest);
 }
 
-scoped_ptr<guest_view::GuestViewManagerDelegate>
+std::unique_ptr<guest_view::GuestViewManagerDelegate>
 ChromeExtensionsAPIClient::CreateGuestViewManagerDelegate(
     content::BrowserContext* context) const {
-  return make_scoped_ptr(new ChromeGuestViewManagerDelegate(context));
+  return base::WrapUnique(new ChromeGuestViewManagerDelegate(context));
 }
 
-scoped_ptr<MimeHandlerViewGuestDelegate>
+std::unique_ptr<MimeHandlerViewGuestDelegate>
 ChromeExtensionsAPIClient::CreateMimeHandlerViewGuestDelegate(
     MimeHandlerViewGuest* guest) const {
-  return make_scoped_ptr(new ChromeMimeHandlerViewGuestDelegate());
+  return base::WrapUnique(new ChromeMimeHandlerViewGuestDelegate());
 }
 
 WebViewGuestDelegate* ChromeExtensionsAPIClient::CreateWebViewGuestDelegate(
@@ -140,16 +135,16 @@ ChromeExtensionsAPIClient::CreateContentRulesRegistry(
                      base::Unretained(browser_context))));
 }
 
-scoped_ptr<DevicePermissionsPrompt>
+std::unique_ptr<DevicePermissionsPrompt>
 ChromeExtensionsAPIClient::CreateDevicePermissionsPrompt(
     content::WebContents* web_contents) const {
-  return make_scoped_ptr(new ChromeDevicePermissionsPrompt(web_contents));
+  return base::WrapUnique(new ChromeDevicePermissionsPrompt(web_contents));
 }
 
-scoped_ptr<VirtualKeyboardDelegate>
+std::unique_ptr<VirtualKeyboardDelegate>
 ChromeExtensionsAPIClient::CreateVirtualKeyboardDelegate() const {
 #if defined(OS_CHROMEOS)
-  return make_scoped_ptr(new ChromeVirtualKeyboardDelegate());
+  return base::WrapUnique(new ChromeVirtualKeyboardDelegate());
 #else
   return nullptr;
 #endif

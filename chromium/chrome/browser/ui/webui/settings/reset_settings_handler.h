@@ -5,14 +5,14 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_RESET_SETTINGS_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_RESET_SETTINGS_HANDLER_H_
 
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
-#include "chrome/browser/ui/webui/settings/md_settings_ui.h"
+#include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 
 namespace base {
 class DictionaryValue;
@@ -50,27 +50,28 @@ class ResetSettingsHandler : public SettingsPageUIHandler {
   virtual ProfileResetter* GetResetter();
 
   // Javascript callback to start clearing data.
-  void HandleResetProfileSettings(const base::ListValue* value);
+  void HandleResetProfileSettings(const base::ListValue* args);
 
  private:
-  // Closes the dialog once all requested settings has been reset.
-  void OnResetProfileSettingsDone(bool send_feedback);
-
   // Called when the reset profile dialog is shown.
-  void OnShowResetProfileDialog(const base::ListValue* value);
+  void OnShowResetProfileDialog(const base::ListValue* args);
 
   // Called when the reset profile dialog is hidden.
-  void OnHideResetProfileDialog(const base::ListValue* value);
+  void OnHideResetProfileDialog(const base::ListValue* args);
 
   // Called when the reset profile banner is shown.
-  void OnHideResetProfileBanner(const base::ListValue* value);
+  void OnHideResetProfileBanner(const base::ListValue* args);
 
   // Called when BrandcodeConfigFetcher completed fetching settings.
   void OnSettingsFetched();
 
   // Resets profile settings to default values. |send_settings| is true if user
   // gave his consent to upload broken settings to Google for analysis.
-  void ResetProfile(bool send_settings);
+  void ResetProfile(std::string callback_id, bool send_settings);
+
+  // Closes the dialog once all requested settings has been reset.
+  void OnResetProfileSettingsDone(std::string callback_id,
+                                  bool send_feedback);
 
   // Sets new values for the feedback area.
   void UpdateFeedbackUI();
@@ -89,12 +90,12 @@ class ResetSettingsHandler : public SettingsPageUIHandler {
 
   Profile* const profile_;
 
-  scoped_ptr<ProfileResetter> resetter_;
+  std::unique_ptr<ProfileResetter> resetter_;
 
-  scoped_ptr<BrandcodeConfigFetcher> config_fetcher_;
+  std::unique_ptr<BrandcodeConfigFetcher> config_fetcher_;
 
   // Snapshot of settings before profile was reseted.
-  scoped_ptr<ResettableSettingsSnapshot> setting_snapshot_;
+  std::unique_ptr<ResettableSettingsSnapshot> setting_snapshot_;
 
   // Contains Chrome brand code; empty for organic Chrome.
   std::string brandcode_;

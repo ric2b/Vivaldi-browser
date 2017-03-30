@@ -116,7 +116,7 @@ TEST_F(CompositedLayerMappingTest, VerticalRightLeftWritingModeDocument)
     document().settings()->setMainFrameClipsContent(false);
 
     document().view()->updateAllLifecyclePhases();
-    document().view()->scrollTo(DoublePoint(-5000, 0));
+    document().view()->setScrollPosition(DoublePoint(-5000, 0), ProgrammaticScroll);
     document().view()->updateAllLifecyclePhases();
 
     PaintLayer* paintLayer = document().layoutView()->layer();
@@ -599,6 +599,31 @@ TEST_F(CompositedLayerMappingTest, InterestRectOfIframeWithContentBoxOffset)
     ASSERT_TRUE(frameDocument.view()->layoutView()->hasLayer());
     // The width is 485 pixels due to the size of the scrollbar.
     EXPECT_RECT_EQ(IntRect(0, 0, 500, 7500), recomputeInterestRect(frameDocument.view()->layoutView()->enclosingLayer()->graphicsLayerBacking()));
+}
+
+TEST_F(CompositedLayerMappingTest, ScrollingContentsAndForegroundLayerPaintingPhase)
+{
+    document().frame()->settings()->setPreferCompositingToLCDTextEnabled(true);
+    setBodyInnerHTML(
+        "<div id='container' style='position: relative; z-index: 1; overflow: scroll; width: 300px; height: 300px'>"
+        "    <div id='negative-composited-child' style='background-color: red; width: 1px; height: 1px; position: absolute; backface-visibility: hidden; z-index: -1'></div>"
+        "    <div style='background-color: blue; width: 2000px; height: 2000px; position: relative; top: 10px'></div>"
+        "</div>");
+
+    CompositedLayerMapping* mapping = toLayoutBlock(getLayoutObjectByElementId("container"))->layer()->compositedLayerMapping();
+    ASSERT_TRUE(mapping->scrollingContentsLayer());
+    EXPECT_EQ(static_cast<GraphicsLayerPaintingPhase>(GraphicsLayerPaintOverflowContents | GraphicsLayerPaintCompositedScroll), mapping->scrollingContentsLayer()->paintingPhase());
+    ASSERT_TRUE(mapping->foregroundLayer());
+    EXPECT_EQ(static_cast<GraphicsLayerPaintingPhase>(GraphicsLayerPaintForeground | GraphicsLayerPaintOverflowContents), mapping->foregroundLayer()->paintingPhase());
+
+    Element* negativeCompositedChild = document().getElementById("negative-composited-child");
+    negativeCompositedChild->parentNode()->removeChild(negativeCompositedChild);
+    document().view()->updateAllLifecyclePhases();
+
+    mapping = toLayoutBlock(getLayoutObjectByElementId("container"))->layer()->compositedLayerMapping();
+    ASSERT_TRUE(mapping->scrollingContentsLayer());
+    EXPECT_EQ(static_cast<GraphicsLayerPaintingPhase>(GraphicsLayerPaintOverflowContents | GraphicsLayerPaintCompositedScroll | GraphicsLayerPaintForeground), mapping->scrollingContentsLayer()->paintingPhase());
+    EXPECT_FALSE(mapping->foregroundLayer());
 }
 
 } // namespace blink

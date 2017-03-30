@@ -83,7 +83,7 @@ static bool shouldIgnoreElement(const Element& element)
 class SerializerMarkupAccumulator : public MarkupAccumulator {
     STACK_ALLOCATED();
 public:
-    SerializerMarkupAccumulator(FrameSerializer::Delegate&, const Document&, WillBeHeapVector<RawPtrWillBeMember<Node>>&);
+    SerializerMarkupAccumulator(FrameSerializer::Delegate&, const Document&, HeapVector<Member<Node>>&);
     ~SerializerMarkupAccumulator() override;
 
 protected:
@@ -103,19 +103,19 @@ private:
         const String& attributeValue);
 
     FrameSerializer::Delegate& m_delegate;
-    RawPtrWillBeMember<const Document> m_document;
+    Member<const Document> m_document;
 
     // FIXME: |FrameSerializer| uses |m_nodes| for collecting nodes in document
     // included into serialized text then extracts image, object, etc. The size
     // of this vector isn't small for large document. It is better to use
     // callback like functionality.
-    WillBeHeapVector<RawPtrWillBeMember<Node>>& m_nodes;
+    HeapVector<Member<Node>>& m_nodes;
 
     // Elements with links rewritten via appendAttribute method.
-    WillBeHeapHashSet<RawPtrWillBeMember<const Element>> m_elementsWithRewrittenLinks;
+    HeapHashSet<Member<const Element>> m_elementsWithRewrittenLinks;
 };
 
-SerializerMarkupAccumulator::SerializerMarkupAccumulator(FrameSerializer::Delegate& delegate, const Document& document, WillBeHeapVector<RawPtrWillBeMember<Node>>& nodes)
+SerializerMarkupAccumulator::SerializerMarkupAccumulator(FrameSerializer::Delegate& delegate, const Document& document, HeapVector<Member<Node>>& nodes)
     : MarkupAccumulator(ResolveAllURLs)
     , m_delegate(delegate)
     , m_document(&document)
@@ -260,7 +260,7 @@ void FrameSerializer::serializeFrame(const LocalFrame& frame)
         return;
     }
 
-    WillBeHeapVector<RawPtrWillBeMember<Node>> serializedNodes;
+    HeapVector<Member<Node>> serializedNodes;
     SerializerMarkupAccumulator accumulator(m_delegate, document, serializedNodes);
     String text = serializeNodes<EditingStrategy>(accumulator, document, IncludeNode);
 
@@ -392,7 +392,7 @@ bool FrameSerializer::shouldAddURL(const KURL& url)
 void FrameSerializer::addToResources(Resource* resource, PassRefPtr<SharedBuffer> data, const KURL& url)
 {
     if (!data) {
-        WTF_LOG_ERROR("No data for resource %s", url.string().utf8().data());
+        DLOG(ERROR) << "No data for resource " << url.getString();
         return;
     }
 
@@ -406,7 +406,7 @@ void FrameSerializer::addImageToResources(ImageResource* image, const KURL& url)
     if (!image || !image->hasImage() || image->errorOccurred() || !shouldAddURL(url))
         return;
 
-    RefPtr<SharedBuffer> data = image->image()->data();
+    RefPtr<SharedBuffer> data = image->getImage()->data();
     addToResources(image, data, url);
 }
 
@@ -430,8 +430,8 @@ void FrameSerializer::retrieveResourcesForProperties(const StylePropertySet* sty
     // image properties there might be.
     unsigned propertyCount = styleDeclaration->propertyCount();
     for (unsigned i = 0; i < propertyCount; ++i) {
-        RefPtrWillBeRawPtr<CSSValue> cssValue = styleDeclaration->propertyAt(i).value();
-        retrieveResourcesForCSSValue(cssValue.get(), document);
+        CSSValue* cssValue = styleDeclaration->propertyAt(i).value();
+        retrieveResourcesForCSSValue(cssValue, document);
     }
 }
 
@@ -467,7 +467,7 @@ String FrameSerializer::markOfTheWebDeclaration(const KURL& url)
 {
     StringBuilder builder;
     bool emitsMinus = false;
-    CString orignalUrl = url.string().ascii();
+    CString orignalUrl = url.getString().ascii();
     for (const char* string = orignalUrl.data(); *string; ++string) {
         const char ch = *string;
         if (ch == '-' && emitsMinus) {

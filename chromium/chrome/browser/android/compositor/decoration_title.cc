@@ -32,17 +32,14 @@ DecorationTitle::DecorationTitle(LayerTitleCache* layer_title_cache,
                                  int favicon_end_padding,
                                  bool is_incognito,
                                  bool is_rtl)
-    : layer_(cc::Layer::Create(content::Compositor::LayerSettings())),
-      layer_opaque_(
-          cc::UIResourceLayer::Create(content::Compositor::LayerSettings())),
-      layer_fade_(
-          cc::UIResourceLayer::Create(content::Compositor::LayerSettings())),
-      layer_favicon_(
-          cc::UIResourceLayer::Create(content::Compositor::LayerSettings())),
+    : layer_(cc::Layer::Create()),
+      layer_opaque_(cc::UIResourceLayer::Create()),
+      layer_fade_(cc::UIResourceLayer::Create()),
+      layer_favicon_(cc::UIResourceLayer::Create()),
       title_resource_id_(title_resource_id),
       favicon_resource_id_(favicon_resource_id),
       spinner_resource_id_(spinner_resource_id),
-      spinner_incognito_resource_id_(spinner_resource_id),
+      spinner_incognito_resource_id_(spinner_incognito_resource_id),
       fade_width_(fade_width),
       spinner_rotation_(0),
       favicon_start_padding_(favicon_start_padding),

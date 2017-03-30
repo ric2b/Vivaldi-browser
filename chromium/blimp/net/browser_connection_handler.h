@@ -5,8 +5,9 @@
 #ifndef BLIMP_NET_BROWSER_CONNECTION_HANDLER_H_
 #define BLIMP_NET_BROWSER_CONNECTION_HANDLER_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "blimp/common/proto/blimp_message.pb.h"
 #include "blimp/net/blimp_net_export.h"
 #include "blimp/net/connection_error_observer.h"
@@ -25,6 +26,8 @@ class BlimpMessageProcessor;
 // messages out via underlying BlimpConnection.
 // A BrowserConnectionHandler is created on browser startup, and persists for
 // the lifetime of the application.
+// BrowserConnectionHandler is created on the UI thread, and then used and
+// destroyed on the IO thread.
 class BLIMP_NET_EXPORT BrowserConnectionHandler
     : public ConnectionHandler,
       public ConnectionErrorObserver {
@@ -38,12 +41,12 @@ class BLIMP_NET_EXPORT BrowserConnectionHandler
   // this object is in-use.
   //
   // Returns a BlimpMessageProcessor object for sending messages of type |type|.
-  scoped_ptr<BlimpMessageProcessor> RegisterFeature(
+  virtual std::unique_ptr<BlimpMessageProcessor> RegisterFeature(
       BlimpMessage::Type type,
       BlimpMessageProcessor* incoming_processor);
 
   // ConnectionHandler implementation.
-  void HandleConnection(scoped_ptr<BlimpConnection> connection) override;
+  void HandleConnection(std::unique_ptr<BlimpConnection> connection) override;
 
   // ConnectionErrorObserver implementation.
   void OnConnectionError(int error) override;
@@ -52,21 +55,21 @@ class BLIMP_NET_EXPORT BrowserConnectionHandler
   void DropCurrentConnection();
 
   // Routes incoming messages to the relevant feature-specific handlers.
-  scoped_ptr<BlimpMessageDemultiplexer> demultiplexer_;
+  std::unique_ptr<BlimpMessageDemultiplexer> demultiplexer_;
 
   // Provides buffering of outgoing messages, for use in session-recovery.
-  scoped_ptr<BlimpMessageOutputBuffer> output_buffer_;
+  std::unique_ptr<BlimpMessageOutputBuffer> output_buffer_;
 
   // Routes outgoing messages from feature-specific handlers to a single
   // message stream.
-  scoped_ptr<BlimpMessageMultiplexer> multiplexer_;
+  std::unique_ptr<BlimpMessageMultiplexer> multiplexer_;
 
   // Dispatches checkpoint/ACK messages to the outgoing processor, as the
   // incoming processor completes processing them.
-  scoped_ptr<BlimpMessageCheckpointer> checkpointer_;
+  std::unique_ptr<BlimpMessageCheckpointer> checkpointer_;
 
   // Holds network resources while there is a Client connected.
-  scoped_ptr<BlimpConnection> connection_;
+  std::unique_ptr<BlimpConnection> connection_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserConnectionHandler);
 };

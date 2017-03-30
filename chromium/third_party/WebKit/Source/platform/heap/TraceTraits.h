@@ -8,6 +8,7 @@
 #include "platform/heap/GCInfo.h"
 #include "platform/heap/Heap.h"
 #include "platform/heap/InlinedGlobalMarkingVisitor.h"
+#include "platform/heap/StackFrameDepth.h"
 #include "platform/heap/Visitor.h"
 #include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
@@ -84,7 +85,7 @@ public:
         // the dangling pointer.
         // Release builds don't have the ASSERT, but it is OK because
         // release builds will crash at the following self->adjustAndMark
-        // because all the entries of the orphaned heaps are zeroed out and
+        // because all the entries of the orphaned arenas are zeroed out and
         // thus the item does not have a valid vtable.
         ASSERT(!pageFromObject(self)->orphaned());
         self->adjustAndMark(visitor);
@@ -170,7 +171,7 @@ template<typename T>
 void TraceTrait<T>::trace(Visitor* visitor, void* self)
 {
     static_assert(WTF::NeedsTracing<T>::value || WTF::IsWeak<T>::value, "T should be traced");
-    if (visitor->markingMode() == Visitor::GlobalMarking) {
+    if (visitor->getMarkingMode() == Visitor::GlobalMarking) {
         // Switch to inlined global marking dispatch.
         static_cast<T*>(self)->trace(InlinedGlobalMarkingVisitor(visitor));
     } else {

@@ -188,7 +188,7 @@ std::string FixupPath(const std::string& text) {
   GURL file_url = net::FilePathToFileURL(base::FilePath(filename));
   if (file_url.is_valid()) {
     return base::UTF16ToUTF8(url_formatter::FormatUrl(
-        file_url, std::string(), url_formatter::kFormatUrlOmitUsernamePassword,
+        file_url, url_formatter::kFormatUrlOmitUsernamePassword,
         net::UnescapeRule::NORMAL, nullptr, nullptr, nullptr));
   }
 
@@ -623,11 +623,13 @@ GURL FixupRelativeFile(const base::FilePath& base_dir,
 #if defined(OS_WIN)
     std::wstring unescaped = base::UTF8ToWide(net::UnescapeURLComponent(
         base::WideToUTF8(trimmed),
-        net::UnescapeRule::SPACES | net::UnescapeRule::URL_SPECIAL_CHARS));
+        net::UnescapeRule::SPACES | net::UnescapeRule::PATH_SEPARATORS |
+            net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS));
 #elif defined(OS_POSIX)
     std::string unescaped = net::UnescapeURLComponent(
         trimmed,
-        net::UnescapeRule::SPACES | net::UnescapeRule::URL_SPECIAL_CHARS);
+        net::UnescapeRule::SPACES | net::UnescapeRule::PATH_SEPARATORS |
+            net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
 #endif
 
     if (!ValidPathForFile(unescaped, &full_path))
@@ -642,8 +644,7 @@ GURL FixupRelativeFile(const base::FilePath& base_dir,
     GURL file_url = net::FilePathToFileURL(full_path);
     if (file_url.is_valid())
       return GURL(base::UTF16ToUTF8(url_formatter::FormatUrl(
-          file_url, std::string(),
-          url_formatter::kFormatUrlOmitUsernamePassword,
+          file_url, url_formatter::kFormatUrlOmitUsernamePassword,
           net::UnescapeRule::NORMAL, nullptr, nullptr, nullptr)));
     // Invalid files fall through to regular processing.
   }

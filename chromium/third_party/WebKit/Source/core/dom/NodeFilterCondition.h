@@ -26,14 +26,13 @@
 #define NodeFilterCondition_h
 
 #include "platform/heap/Handle.h"
-#include "wtf/RefCounted.h"
 
 namespace blink {
 
 class ExceptionState;
 class Node;
 
-class NodeFilterCondition : public RefCountedWillBeGarbageCollectedFinalized<NodeFilterCondition> {
+class NodeFilterCondition : public GarbageCollectedFinalized<NodeFilterCondition> {
 public:
     virtual ~NodeFilterCondition() { }
     virtual unsigned acceptNode(Node*, ExceptionState&) const = 0;

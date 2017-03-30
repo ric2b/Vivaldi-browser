@@ -15,6 +15,7 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/media_galleries/fileapi/mtp_device_async_delegate.h"
 
@@ -170,6 +171,7 @@ class MTPDeviceDelegateImplMac : public MTPDeviceAsyncDelegate {
                     const base::FilePath& snapshot_filename,
                     CreateSnapshotFileSuccessCallback success_cb,
                     ErrorCallback error_cb);
+    ReadFileRequest(const ReadFileRequest& other);
     ~ReadFileRequest();
 
     std::string request_file;
@@ -184,6 +186,7 @@ class MTPDeviceDelegateImplMac : public MTPDeviceAsyncDelegate {
     ReadDirectoryRequest(const base::FilePath& dir,
                          ReadDirectorySuccessCallback success_cb,
                          ErrorCallback error_cb);
+    ReadDirectoryRequest(const ReadDirectoryRequest& other);
     ~ReadDirectoryRequest();
 
     base::FilePath directory;

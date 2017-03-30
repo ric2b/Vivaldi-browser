@@ -4,66 +4,56 @@
 
 #include "core/origin_trials/OriginTrialContext.h"
 
-#include "core/dom/ElementTraversal.h"
-#include "core/dom/ExceptionCode.h"
-#include "core/html/HTMLHeadElement.h"
-#include "core/html/HTMLMetaElement.h"
+#include "core/dom/ExecutionContext.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebTrialTokenValidator.h"
 
 namespace blink {
 
 namespace {
 
-const char kTrialHeaderName[] = "origin-trial";
-
-String getCurrentOrigin(ExecutionContext* executionContext)
-{
-    return executionContext->securityOrigin()->toString();
-}
-
 String getDisabledMessage(const String& featureName)
 {
-    // TODO(chasej): Update message with URL to experiments site, when live
-    return "The '" + featureName + "' feature is currently enabled in limited trials. Please see [Phosphor console URL] for information on enabling a trial for your site.";
+    return "The '" + featureName + "' feature is currently enabled in limited trials. Please see https://bit.ly/OriginTrials for information on enabling a trial for your site.";
 }
 
-bool hasValidToken(ExecutionContext* executionContext, const String& featureName, String* errorMessage, WebTrialTokenValidator* validator)
+String getInvalidTokenMessage(const String& featureName)
 {
-    bool foundAnyToken = false;
-    String origin = getCurrentOrigin(executionContext);
-
-    // When in a document, the token is provided in a meta tag
-    if (executionContext->isDocument()) {
-        HTMLHeadElement* head = toDocument(executionContext)->head();
-        for (HTMLMetaElement* metaElement = head ? Traversal<HTMLMetaElement>::firstChild(*head) : 0; metaElement; metaElement = Traversal<HTMLMetaElement>::nextSibling(*metaElement)) {
-            if (equalIgnoringCase(metaElement->httpEquiv(), kTrialHeaderName)) {
-                foundAnyToken = true;
-                String tokenString = metaElement->content();
-                // Check with the validator service to verify the signature.
-                if (validator->validateToken(tokenString, origin, featureName)) {
-                    return true;
-                }
-            }
-        }
-    }
-
-    if (errorMessage) {
-        if (foundAnyToken) {
-            *errorMessage = "The provided token(s) are not valid for the '" + featureName + "' feature.";
-        } else {
-            *errorMessage = getDisabledMessage(featureName);
-        }
-    }
-    return false;
+    return "The provided token(s) are not valid for the '" + featureName + "' feature.";
 }
 
 } // namespace
 
+OriginTrialContext::OriginTrialContext(ExecutionContext* host) : m_host(host)
+{
+}
+
 // static
-bool OriginTrialContext::isFeatureEnabled(ExecutionContext* executionContext, const String& featureName, String* errorMessage, WebTrialTokenValidator* validator)
+const char* OriginTrialContext::supplementName()
+{
+    return "OriginTrialContext";
+}
+
+// static
+OriginTrialContext* OriginTrialContext::from(ExecutionContext* host)
+{
+    OriginTrialContext* originTrials = static_cast<OriginTrialContext*>(Supplement<ExecutionContext>::from(host, supplementName()));
+    if (!originTrials) {
+        originTrials = new OriginTrialContext(host);
+        Supplement<ExecutionContext>::provideTo(*host, supplementName(), originTrials);
+    }
+    return originTrials;
+}
+
+void OriginTrialContext::addToken(const String& token)
+{
+    m_tokens.append(token);
+}
+
+bool OriginTrialContext::isFeatureEnabled(const String& featureName, String* errorMessage, WebTrialTokenValidator* validator)
 {
     if (!RuntimeEnabledFeatures::experimentalFrameworkEnabled()) {
         // TODO(iclelland): Set an error message here, the first time the
@@ -71,16 +61,16 @@ bool OriginTrialContext::isFeatureEnabled(ExecutionContext* executionContext, co
         return false;
     }
 
-    if (!executionContext) {
-        ASSERT_NOT_REACHED();
-        return false;
-    }
-
     // Feature trials are only enabled for secure origins
     bool isSecure = errorMessage
-        ? executionContext->isSecureContext(*errorMessage)
-        : executionContext->isSecureContext();
+        ? m_host->isSecureContext(*errorMessage)
+        : m_host->isSecureContext();
     if (!isSecure) {
+        // The execution context should always set a message here, if a valid
+        // pointer was passed in. If it does not, then we should find out why
+        // not, and decide whether the OriginTrialContext should be using its
+        // own error messages for this case.
+        DCHECK(!errorMessage || !errorMessage->isEmpty());
         return false;
     }
 
@@ -93,7 +83,38 @@ bool OriginTrialContext::isFeatureEnabled(ExecutionContext* executionContext, co
         }
     }
 
-    return hasValidToken(executionContext, featureName, errorMessage, validator);
+
+    WebSecurityOrigin origin(m_host->getSecurityOrigin());
+    for (const String& token : m_tokens) {
+        // Check with the validator service to verify the signature.
+        if (validator->validateToken(token, origin, featureName)) {
+            return true;
+        }
+    }
+
+    if (!errorMessage)
+        return false;
+
+    // If an error message has already been generated in this context, for this
+    // feature, do not generate another one. (This avoids cluttering the console
+    // with error messages on every attempt to access the feature.)
+    if (m_errorMessageGeneratedForFeature.contains(featureName)) {
+        *errorMessage = "";
+        return false;
+    }
+
+    if (m_tokens.size()) {
+        *errorMessage = getInvalidTokenMessage(featureName);
+    } else {
+        *errorMessage = getDisabledMessage(featureName);
+    }
+    m_errorMessageGeneratedForFeature.add(featureName);
+    return false;
+}
+
+DEFINE_TRACE(OriginTrialContext)
+{
+    visitor->trace(m_host);
 }
 
 } // namespace blink

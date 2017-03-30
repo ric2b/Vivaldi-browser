@@ -26,6 +26,7 @@
 #ifndef MediaKeySession_h
 #define MediaKeySession_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/dom/DOMArrayPiece.h"
@@ -60,11 +61,12 @@ class MediaKeys;
 // The WebContentDecryptionModuleSession has the same lifetime as this object.
 class MediaKeySession final
     : public RefCountedGarbageCollectedEventTargetWithInlineData<MediaKeySession>
+    , public ActiveScriptWrappable
     , public ActiveDOMObject
     , private WebContentDecryptionModuleSession::Client {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(MediaKeySession);
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MediaKeySession);
+    USING_GARBAGE_COLLECTED_MIXIN(MediaKeySession);
 public:
     static MediaKeySession* create(ScriptState*, MediaKeys*, WebEncryptedMediaSessionType);
     ~MediaKeySession() override;
@@ -83,10 +85,12 @@ public:
 
     // EventTarget
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
+
+    // ActiveScriptWrappable
+    bool hasPendingActivity() const final;
 
     // ActiveDOMObject
-    bool hasPendingActivity() const override;
     void stop() override;
 
     // Oilpan: eagerly release owned m_session, which in turn
@@ -115,7 +119,7 @@ private:
     // Called by LoadSessionResult when the session has been loaded.
     void finishLoad();
 
-    OwnPtrWillBeMember<GenericEventQueue> m_asyncEventQueue;
+    Member<GenericEventQueue> m_asyncEventQueue;
     OwnPtr<WebContentDecryptionModuleSession> m_session;
 
     // Used to determine if MediaKeys is still active.

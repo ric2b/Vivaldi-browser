@@ -67,12 +67,16 @@ void PageLoadMetricsObserverTestHarness::PopulateRequiredTimingFields(
         inout_timing->load_event_start;
   }
   if (!inout_timing->first_layout.is_zero() &&
-      inout_timing->response_start.is_zero()) {
-    inout_timing->response_start = inout_timing->first_layout;
+      inout_timing->dom_loading.is_zero()) {
+    inout_timing->dom_loading = inout_timing->first_layout;
   }
   if (!inout_timing->dom_content_loaded_event_start.is_zero() &&
+      inout_timing->dom_loading.is_zero()) {
+    inout_timing->dom_loading = inout_timing->dom_content_loaded_event_start;
+  }
+  if (!inout_timing->dom_loading.is_zero() &&
       inout_timing->response_start.is_zero()) {
-    inout_timing->response_start = inout_timing->dom_content_loaded_event_start;
+    inout_timing->response_start = inout_timing->dom_loading;
   }
 }
 
@@ -95,9 +99,15 @@ void PageLoadMetricsObserverTestHarness::StartNavigation(const GURL& gurl) {
 
 void PageLoadMetricsObserverTestHarness::SimulateTimingUpdate(
     const PageLoadTiming& timing) {
-  observer_->OnMessageReceived(
-      PageLoadMetricsMsg_TimingUpdated(observer_->routing_id(), timing),
-      web_contents()->GetMainFrame());
+  SimulateTimingAndMetadataUpdate(timing, PageLoadMetadata());
+}
+
+void PageLoadMetricsObserverTestHarness::SimulateTimingAndMetadataUpdate(
+    const PageLoadTiming& timing,
+    const PageLoadMetadata& metadata) {
+  observer_->OnMessageReceived(PageLoadMetricsMsg_TimingUpdated(
+                                   observer_->routing_id(), timing, metadata),
+                               web_contents()->GetMainFrame());
 }
 
 const base::HistogramTester&

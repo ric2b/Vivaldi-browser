@@ -48,4 +48,3 @@
           RestoreOnStartupURLsPolicySpecified)
   DISABLE(StartupBrowserCreatorFirstRunTest, SyncPromoAllowed)
   DISABLE(StartupBrowserCreatorFirstRunTest, SyncPromoForbidden)
-

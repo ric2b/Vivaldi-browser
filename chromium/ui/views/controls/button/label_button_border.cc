@@ -69,13 +69,10 @@ gfx::Size LabelButtonBorder::GetMinimumSize() const {
 }
 
 LabelButtonAssetBorder::LabelButtonAssetBorder(Button::ButtonStyle style) {
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  const gfx::Insets insets(kButtonInsets,
-                           kButtonInsets,
-                           kButtonInsets,
-                           kButtonInsets);
-
   set_insets(GetDefaultInsetsForStyle(style));
+
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+  const gfx::Insets insets(kButtonInsets);
   if (style == Button::STYLE_BUTTON) {
     SetPainter(false, Button::STATE_NORMAL,
                Painter::CreateImagePainter(
@@ -116,9 +113,9 @@ gfx::Insets LabelButtonAssetBorder::GetDefaultInsetsForStyle(
     Button::ButtonStyle style) {
   gfx::Insets insets;
   if (style == Button::STYLE_BUTTON) {
-    insets = gfx::Insets(8, 13, 8, 13);
+    insets = gfx::Insets(8, 13);
   } else if (style == Button::STYLE_TEXTBUTTON) {
-    insets = gfx::Insets(5, 6, 5, 6);
+    insets = gfx::Insets(5, 6);
   } else {
     NOTREACHED();
   }
@@ -149,9 +146,7 @@ void LabelButtonAssetBorder::Paint(const View& view, gfx::Canvas* canvas) {
 
     SkPaint paint;
     double scale = animation->GetCurrentValue();
-    skia::RefPtr<SkXfermode> sk_arith_xfer =
-        skia::AdoptRef(SkArithmeticMode::Create(0.0f, scale, 1.0 - scale, 0.0));
-    paint.setXfermode(sk_arith_xfer.get());
+    paint.setXfermode(SkArithmeticMode::Make(0.0f, scale, 1.0 - scale, 0.0));
     canvas->sk_canvas()->saveLayer(&sk_rect, &paint);
     state = native_theme_delegate->GetForegroundThemeState(&extra);
     PaintHelper(this, canvas, state, rect, extra);

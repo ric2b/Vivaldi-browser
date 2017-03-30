@@ -281,6 +281,9 @@
 ## **gn check <out_dir> [<label_pattern>] [\--force]**
 
 ```
+  GN's include header checker validates that the includes for C-like
+  source files match the build dependency graph.
+
   "gn check" is the same thing as "gn gen" with the "--check" flag
   except that this command does not write out any build files. It's
   intended to be an easy way to manually trigger include file checking.
@@ -290,11 +293,6 @@
   only those matching targets will be checked. See
   "gn help label_pattern" for details.
 
-  The .gn file may specify a list of targets to be checked. Only these
-  targets will be checked if no label_pattern is specified on the
-  command line. Otherwise, the command-line list is used instead. See
-  "gn help dotfile".
-
 ```
 
 ### **Command-specific switches**
@@ -303,6 +301,94 @@
   --force
       Ignores specifications of "check_includes = false" and checks
       all target's files that match the target label.
+
+```
+
+### **What gets checked**
+
+```
+  The .gn file may specify a list of targets to be checked. Only these
+  targets will be checked if no label_pattern is specified on the
+  command line. Otherwise, the command-line list is used instead. See
+  "gn help dotfile".
+
+  Targets can opt-out from checking with "check_includes = false"
+  (see "gn help check_includes").
+
+  For targets being checked:
+
+    - GN opens all C-like source files in the targets to be checked and
+      scans the top for includes.
+
+    - Includes with a "nogncheck" annotation are skipped (see
+      "gn help nogncheck").
+
+    - Only includes using "quotes" are checked. <brackets> are assumed
+      to be system includes.
+
+    - Include paths are assumed to be relative to either the source root
+      or the "root_gen_dir" and must include all the path components.
+      (It might be nice in the future to incorporate GN's knowledge of
+      the include path to handle other include styles.)
+
+    - GN does not run the preprocessor so will not understand
+      conditional includes.
+
+    - Only includes matching known files in the build are checked:
+      includes matching unknown paths are ignored.
+
+  For an include to be valid:
+
+    - The included file must be in the current target, or there must
+      be a path following only public dependencies to a target with the
+      file in it ("gn path" is a good way to diagnose problems).
+
+    - There can be multiple targets with an included file: only one
+      needs to be valid for the include to be allowed.
+
+    - If there are only "sources" in a target, all are considered to
+      be public and can be included by other targets with a valid public
+      dependency path.
+
+    - If a target lists files as "public", only those files are
+      able to be included by other targets. Anything in the sources
+      will be considered private and will not be includable regardless
+      of dependency paths.
+
+    - Ouptuts from actions are treated like public sources on that
+      target.
+
+    - A target can include headers from a target that depends on it
+      if the other target is annotated accordingly. See
+      "gn help allow_circular_includes_from".
+
+```
+
+### **Advice on fixing problems**
+
+```
+  If you have a third party project that uses relative includes,
+  it's generally best to exclude that target from checking altogether
+  via "check_includes = false".
+
+  If you have conditional includes, make sure the build conditions
+  and the preprocessor conditions match, and annotate the line with
+  "nogncheck" (see "gn help nogncheck" for an example).
+
+  If two targets are hopelessly intertwined, use the
+  "allow_circular_includes_from" annotation. Ideally each should have
+  identical dependencies so configs inherited from those dependencies
+  are consistent (see "gn help allow_circular_includes_from").
+
+  If you have a standalone header file or files that need to be shared
+  between a few targets, you can consider making a source_set listing
+  only those headers as public sources. With only header files, the
+  source set will be a no-op from a build perspective, but will give a
+  central place to refer to those headers. That source set's files
+  will still need to pass "gn check" in isolation.
+
+  In rare cases it makes sense to list a header in more than one
+  target if it could be considered conceptually a member of both.
 
 ```
 
@@ -494,6 +580,16 @@
 ```
   Formats .gn file to a standard format.
 
+  The contents of some lists ('sources', 'deps', etc.) will be sorted to
+  a canonical order. To suppress this, you can add a comment of the form
+  "# NOSORT" immediately preceeding the assignment. e.g.
+
+  # NOSORT
+  sources = [
+    "z.cc",
+    "a.cc",
+  ]
+
 ```
 
 ### **Arguments**
@@ -532,7 +628,7 @@
 ## **gn gen**: Generate ninja files.
 
 ```
-  gn gen [--ide=<ide_name>] <out_dir>
+  gn gen [<ide options>] <out_dir>
 
   Generates ninja files from the current tree and puts them in the given
   output directory.
@@ -542,18 +638,72 @@
   Or it can be a directory relative to the current directory such as:
       out/foo
 
-  --ide=<ide_name>
-    Also generate files for an IDE. Currently supported values:
-      'vs' - Visual Studio project/solution files.
-
   See "gn help switches" for the common command-line switches.
+
+```
+
+### **IDE options**
+
+```
+  GN optionally generates files for IDE. Possibilities for <ide options>
+
+  --ide=<ide_name>
+      Generate files for an IDE. Currently supported values:
+      "eclipse" - Eclipse CDT settings file.
+      "vs" - Visual Studio project/solution files.
+             (default Visual Studio version: 2015)
+      "vs2013" - Visual Studio 2013 project/solution files.
+      "vs2015" - Visual Studio 2015 project/solution files.
+
+  --sln=<file_name>
+      Override default sln file name ("all"). Solution file is written
+      to the root build directory. Only for Visual Studio.
+
+  --filters=<path_prefixes>
+      Semicolon-separated list of label patterns used to limit the set
+      of generated projects (see "gn help label_pattern"). Only
+      matching targets will be included to the solution. Only for Visual
+      Studio.
+
+```
+
+### **Eclipse IDE Support**
+
+```
+  GN DOES NOT generate Eclipse CDT projects. Instead, it generates a
+  settings file which can be imported into an Eclipse CDT project. The
+  XML file contains a list of include paths and defines. Because GN does
+  not generate a full .cproject definition, it is not possible to
+  properly define includes/defines for each file individually.
+  Instead, one set of includes/defines is generated for the entire
+  project. This works fairly well but may still result in a few indexer
+  issues here and there.
 
 
 ```
 ## **gn help <anything>**
+
 ```
   Yo dawg, I heard you like help on your help so I put help on the help
   in the help.
+
+  You can also use "all" as the parameter to get all help at once.
+
+```
+
+### **Switches**
+
+```
+  --markdown
+      Format output in markdown syntax.
+
+```
+
+### **Example**
+
+```
+  gn help --markdown all
+      Dump all help to stdout in markdown format.
 
 
 ```
@@ -1021,6 +1171,65 @@
 
 
 ```
+## **bundle_data**: [iOS/OS X] Declare a target without output.
+
+```
+  This target type allows to declare data that is required at runtime.
+  It is used to inform "create_bundle" targets of the files to copy
+  into generated bundle, see "gn help create_bundle" for help.
+
+  The target must define a list of files as "sources" and a single
+  "outputs". If there are multiple files, source expansions must be
+  used to express the output. The output must reference a file inside
+  of {{bundle_root_dir}}.
+
+  This target can be used on all platforms though it is designed only to
+  generate iOS/OS X bundle. In cross-platform projects, it is advised to
+  put it behind iOS/Mac conditionals.
+
+  See "gn help create_bundle" for more information.
+
+```
+
+### **Variables**
+
+```
+  sources*, outputs*, deps, data_deps, public_deps, visibility
+  * = required
+
+```
+
+### **Examples**
+
+```
+  bundle_data("icudata") {
+    sources = [ "sources/data/in/icudtl.dat" ]
+    outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
+  }
+
+  bundle_data("base_unittests_bundle_data]") {
+    sources = [ "test/data" ]
+    outputs = [
+      "{{bundle_resources_dir}}/{{source_root_relative_dir}}/" +
+          "{{source_file_part}}"
+    ]
+  }
+
+  bundle_data("material_typography_bundle_data") {
+    sources = [
+      "src/MaterialTypography.bundle/Roboto-Bold.ttf",
+      "src/MaterialTypography.bundle/Roboto-Italic.ttf",
+      "src/MaterialTypography.bundle/Roboto-Regular.ttf",
+      "src/MaterialTypography.bundle/Roboto-Thin.ttf",
+    ]
+    outputs = [
+      "{{bundle_resources_dir}}/MaterialTypography.bundle/"
+          "{{source_file_part}}"
+    ]
+  }
+
+
+```
 ## **config**: Defines a configuration object.
 
 ```
@@ -1115,6 +1324,103 @@
     # corresponding file names in the gen dir. This will just copy each
     # file.
     outputs = [ "$target_gen_dir/{{source_file_part}}" ]
+  }
+
+
+```
+## **create_bundle**: [iOS/OS X] Build an OS X / iOS bundle.
+
+```
+  This target generates an iOS/OS X bundle (which is a directory with a
+  well-know structure). This target does not define any sources, instead
+  they are computed from all "bundle_data" target this one depends on
+  transitively (the recursion stops at "create_bundle" targets).
+
+  The "bundle_*_dir" properties must be defined. They will be used for
+  the expansion of {{bundle_*_dir}} rules in "bundle_data" outputs.
+
+  This target can be used on all platforms though it is designed only to
+  generate iOS/OS X bundle. In cross-platform projects, it is advised to
+  put it behind iOS/Mac conditionals.
+
+```
+
+### **Variables**
+
+```
+  bundle_root_dir*, bundle_resources_dir*, bundle_executable_dir*,
+  bundle_plugins_dir*, deps, data_deps, public_deps, visibility
+  * = required
+
+```
+
+### **Example**
+
+```
+  # Defines a template to create an application. On most platform, this
+  # is just an alias for an "executable" target, but on iOS/OS X, it
+  # builds an application bundle.
+  template("app") {
+    if (!is_ios && !is_mac) {
+      executable(target_name) {
+        forward_variables_from(invoker, "*")
+      }
+    } else {
+      app_name = target_name
+      gen_path = target_gen_dir
+
+      action("${app_name}_generate_info_plist") {
+        script = [ "//build/ios/ios_gen_plist.py" ]
+        sources = [ "templates/Info.plist" ]
+        outputs = [ "$gen_path/Info.plist" ]
+        args = rebase_path(sources, root_build_dir) +
+               rebase_path(outputs, root_build_dir)
+      }
+
+      bundle_data("${app_name}_bundle_info_plist") {
+        deps = [ ":${app_name}_generate_info_plist" ]
+        sources = [ "$gen_path/Info.plist" ]
+        outputs = [ "{{bundle_root_dir}}/Info.plist" ]
+      }
+
+      executable("${app_name}_generate_executable") {
+        forward_variables_from(invoker, "*", [
+                                                "output_name",
+                                                "visibility",
+                                               ])
+        output_name =
+            rebase_path("$gen_path/$app_name", root_build_dir)
+      }
+
+      bundle_data("${app_name}_bundle_executable") {
+        deps = [ ":${app_name}_generate_executable" ]
+        sources = [ "$gen_path/$app_name" ]
+        outputs = [ "{{bundle_executable_dir}}/$app_name" ]
+      }
+
+      create_bundle("${app_name}.app") {
+        deps = [
+          ":${app_name}_bundle_executable",
+          ":${app_name}_bundle_info_plist",
+        ]
+        if (is_ios) {
+          bundle_root_dir = "${root_build_dir}/$target_name"
+          bundle_resources_dir = bundle_root_dir
+          bundle_executable_dir = bundle_root_dir
+          bundle_plugins_dir = bundle_root_dir + "/Plugins"
+        } else {
+          bundle_root_dir = "${root_build_dir}/target_name/Contents"
+          bundle_resources_dir = bundle_root_dir + "/Resources"
+          bundle_executable_dir = bundle_root_dir + "/MacOS"
+          bundle_plugins_dir = bundle_root_dir + "/Plugins"
+        }
+      }
+
+      group(target_name) {
+        forward_variables_from(invoker, ["visibility"])
+        deps = [ ":${app_name}.app" ]
+      }
+    }
   }
 
 
@@ -1305,7 +1611,8 @@
   }
 
   Executes the loop contents block over each item in the list,
-  assigning the loop_var to each item in sequence.
+  assigning the loop_var to each item in sequence. The loop_var will be
+  a copy so assigning to it will not mutate the list.
 
   The block does not introduce a new scope, so that variable assignments
   inside the loop will be visible once the loop terminates.
@@ -2409,6 +2716,10 @@
       "stamp": Tool for creating stamp files
       "copy": Tool to copy files.
 
+    Platform specific tools:
+      "copy_bundle_data": [iOS, OS X] Tool to copy files in a bundle.
+      "compile_xcassets": [iOS, OS X] Tool to compile asset catalogs.
+
 ```
 
 ### **Tool variables**
@@ -2533,6 +2844,10 @@
         output_name if one is manually specified for it) if the prefix
         is not already there. The result will show up in the
         {{output_name}} substitution pattern.
+
+        Individual targets can opt-out of the output prefix by setting:
+          output_prefix_override = true
+        (see "gn help output_prefix_override").
 
         This is typically used to prepend "lib" to libraries on
         Posix systems:
@@ -2723,6 +3038,18 @@
   The copy tool allows the common compiler/linker substitutions, plus
   {{source}} which is the source of the copy. The stamp tool allows
   only the common tool substitutions.
+
+  The copy_bundle_data and compile_xcassets tools only allows the common
+  tool substitutions. Both tools are required to create iOS/OS X bundles
+  and need only be defined on those platforms.
+
+  The copy_bundle_data tool will be called with one source and needs to
+  copy (optionally optimizing the data representation) to its output. It
+  may be called with a directory as input and it needs to be recursively
+  copied.
+
+  The compile_xcassets tool will be called with one or more source (each
+  an asset catalog) that needs to be compiled to a single output.
 
 ```
 
@@ -3296,25 +3623,57 @@
   These targets will be permitted to include headers from the current
   target despite the dependency going in the opposite direction.
 
+  When you use this, both targets must be included in a final binary
+  for it to link. To keep linker errors from happening, it is good
+  practice to have all external dependencies depend only on one of
+  the two targets, and to set the visibility on the other to enforce
+  this. Thus the targets will always be linked together in any output.
+
 ```
 
-### **Tedious exposition**
+### **Details**
 
 ```
   Normally, for a file in target A to include a file from target B,
   A must list B as a dependency. This invariant is enforced by the
-  "gn check" command (and the --check flag to "gn gen").
+  "gn check" command (and the --check flag to "gn gen" -- see
+  "gn help check").
 
   Sometimes, two targets might be the same unit for linking purposes
   (two source sets or static libraries that would always be linked
-  together in a final executable or shared library). In this case,
-  you want A to be able to include B's headers, and B to include A's
-  headers.
+  together in a final executable or shared library) and they each
+  include headers from the other: you want A to be able to include B's
+  headers, and B to include A's headers. This is not an ideal situation
+  but is sometimes unavoidable.
 
   This list, if specified, lists which of the dependencies of the
   current target can include header files from the current target.
   That is, if A depends on B, B can only include headers from A if it is
-  in A's allow_circular_includes_from list.
+  in A's allow_circular_includes_from list. Normally includes must
+  follow the direction of dependencies, this flag allows them to go
+  in the opposite direction.
+
+```
+
+### **Danger**
+
+```
+  In the above example, A's headers are likely to include headers from
+  A's dependencies. Those dependencies may have public_configs that
+  apply flags, defines, and include paths that make those headers work
+  properly.
+
+  With allow_circular_includes_from, B can include A's headers, and
+  transitively from A's dependencies, without having the dependencies
+  that would bring in the public_configs those headers need. The result
+  may be errors or inconsistent builds.
+
+  So when you use allow_circular_includes_from, make sure that any
+  compiler settings, flags, and include directories are the same between
+  both targets (consider putting such things in a shared config they can
+  both reference). Make sure the dependencies are also the same (you
+  might consider a group to collect such dependencies they both
+  depend on).
 
 ```
 
@@ -3322,9 +3681,19 @@
 
 ```
   source_set("a") {
-    deps = [ ":b", ":c" ]
+    deps = [ ":b", ":a_b_shared_deps" ]
     allow_circular_includes_from = [ ":b" ]
     ...
+  }
+
+  source_set("b") {
+    deps = [ ":a_b_shared_deps" ]
+    # Sources here can include headers from a despite lack of deps.
+    ...
+  }
+
+  group("a_b_shared_deps") {
+    public_deps = [ ":c" ]
   }
 
 
@@ -3410,6 +3779,74 @@
       "//evil/*",  # Don't link any code from the evil directory.
       "//foo:test_support",  # This target is also disallowed.
     ]
+  }
+
+
+```
+## **bundle_executable_dir**: Expansion of {{bundle_executable_dir}} in create_bundle.
+
+```
+  A string corresponding to a path in $root_build_dir.
+
+  This string is used by the "create_bundle" target to expand the
+  {{bundle_executable_dir}} of the "bundle_data" target it depends on.
+  This must correspond to a path under "bundle_root_dir".
+
+  See "gn help bundle_root_dir" for examples.
+
+
+```
+## **bundle_plugins_dir**: Expansion of {{bundle_plugins_dir}} in create_bundle.
+
+```
+  A string corresponding to a path in $root_build_dir.
+
+  This string is used by the "create_bundle" target to expand the
+  {{bundle_plugins_dir}} of the "bundle_data" target it depends on.
+  This must correspond to a path under "bundle_root_dir".
+
+  See "gn help bundle_root_dir" for examples.
+
+
+```
+## **bundle_resources_dir**: Expansion of {{bundle_resources_dir}} in create_bundle.
+
+```
+  A string corresponding to a path in $root_build_dir.
+
+  This string is used by the "create_bundle" target to expand the
+  {{bundle_resources_dir}} of the "bundle_data" target it depends on.
+  This must correspond to a path under "bundle_root_dir".
+
+  See "gn help bundle_root_dir" for examples.
+
+
+```
+## **bundle_root_dir**: Expansion of {{bundle_root_dir}} in create_bundle.
+
+```
+  A string corresponding to a path in root_build_dir.
+
+  This string is used by the "create_bundle" target to expand the
+  {{bundle_root_dir}} of the "bundle_data" target it depends on.
+  This must correspond to a path under root_build_dir.
+
+```
+
+### **Example**
+
+```
+  bundle_data("info_plist") {
+    sources = [ "Info.plist" ]
+    outputs = [ "{{bundle_root_dir}}/Info.plist" ]
+  }
+
+  create_bundle("doom_melon.app") {
+    deps = [ ":info_plist" ]
+    bundle_root_dir = root_build_dir + "/doom_melon.app/Contents"
+    bundle_resources_dir = bundle_root_dir + "/Resources"
+    bundle_executable_dir = bundle_root_dir + "/MacOS"
+    bundle_plugins_dir = bundle_root_dir + "/PlugIns"
   }
 
 
@@ -3605,29 +4042,12 @@
   This does not affect other targets that depend on the current target,
   it just skips checking the includes of the current target's files.
 
-```
+  If there are a few conditionally included headers that trip up
+  checking, you can exclude headers individually by annotating them with
+  "nogncheck" (see "gn help nogncheck").
 
-### **Controlling includes individually**
-
-```
-  If only certain includes are problematic, you can annotate them
-  individually rather than disabling header checking on an entire
-  target. Add the string "nogncheck" to the include line:
-
-    #include "foo/something_weird.h"  // nogncheck (bug 12345)
-
-  It is good form to include a reference to a bug (if the include is
-  improper, or some other comment expressing why the header checker
-  doesn't work for this particular case.
-
-  The most common reason to need "nogncheck" is conditional includes.
-  The header checker does not understand the preprocessor, so may flag
-  some includes as improper even if the dependencies and #defines are
-  always matched correctly:
-
-    #if defined(ENABLE_DOOM_MELON)
-    #include "doom_melon/beam_controller.h"  // nogncheck
-    #endif
+  The topic "gn help check" has general information on how checking
+  works and advice on how to pass a check in problematic cases.
 
 ```
 
@@ -3658,6 +4078,9 @@
   for all dependencies in one complete package. Since GN does not unpack
   static libraries to forward their contents up the dependency chain,
   it is an error for complete static libraries to depend on other static
+
+  In rare cases it makes sense to list a header in more than one
+  target if it could be considered conceptually a member of both.
   libraries.
 
 ```
@@ -4011,7 +4434,7 @@
 ```
   For action and action_foreach targets, inputs should be the inputs to
   script that don't vary. These should be all .py files that the script
-  uses via imports (the main script itself will be an implcit dependency
+  uses via imports (the main script itself will be an implicit dependency
   of the action so need not be listed).
 
   For action targets, inputs and sources are treated the same, but from
@@ -4245,9 +4668,11 @@
   override the name (for example to use "libfreetype.so.6" instead
   of libfreetype.so on Linux).
 
-  This value should not include a leading dot. If undefined or empty,
-  the default_output_extension specified on the tool will be used.
-  The output_extension will be used in the "{{output_extension}}"
+  This value should not include a leading dot. If undefined, the default
+  specified on the tool will be used. If set to the empty string, no
+  output extension will be used.
+
+  The output_extension will be used to set the "{{output_extension}}"
   expansion which the linker tool will generally use to specify the
   output file name. See "gn help tool".
 
@@ -4301,6 +4726,35 @@
 ```
   static_library("doom_melon") {
     output_name = "fluffy_bunny"
+  }
+
+
+```
+## **output_prefix_override**: Don't use prefix for output name.
+
+```
+  A boolean that overrides the output prefix for a target. Defaults to
+  false.
+
+  Some systems use prefixes for the names of the final target output
+  file. The normal example is "libfoo.so" on Linux for a target
+  named "foo".
+
+  The output prefix for a given target type is specified on the linker
+  tool (see "gn help tool"). Sometimes this prefix is undesired.
+
+  See also "gn help output_extension".
+
+```
+
+### **Example**
+
+```
+  shared_library("doom_melon") {
+    # Normally this will produce "libdoom_melon.so" on Linux, setting
+    # Setting this flag will produce "doom_melon.so".
+    output_prefix_override = true
+    ...
   }
 
 
@@ -4712,6 +5166,29 @@
 
 
 ```
+## **write_runtime_deps**: Writes the target's runtime_deps to the given path.
+
+```
+  Does not synchronously write the file, but rather schedules it
+  to be written at the end of generation.
+
+  If the file exists and the contents are identical to that being
+  written, the file will not be updated. This will prevent unnecessary
+  rebuilds of targets that depend on this file.
+
+  Path must be within the output directory.
+
+  See "gn help runtime_deps" for how the runtime dependencies are
+  computed.
+
+  The format of this file will list one file per line with no escaping.
+  The files will be relative to the root_build_dir. The first line of
+  the file will be the main output file of the target itself. The file
+  contents will be the same as requesting the runtime deps be written on
+  the command line (see "gn help --runtime-deps-list-file").
+
+
+```
 ## **Build Arguments Overview**
 
 ```
@@ -5096,13 +5573,54 @@
 
 
 ```
+## **nogncheck**: Skip an include line from checking.
+
+```
+  GN's header checker helps validate that the includes match the build
+  dependency graph. Sometimes an include might be conditional or
+  otherwise problematic, but you want to specifically allow it. In this
+  case, it can be whitelisted.
+
+  Include lines containing the substring "nogncheck" will be excluded
+  from header checking. The most common case is a conditional include:
+
+    #if defined(ENABLE_DOOM_MELON)
+    #include "tools/doom_melon/doom_melon.h"  // nogncheck
+    #endif
+
+  If the build file has a conditional dependency on the corresponding
+  target that matches the conditional include, everything will always
+  link correctly:
+
+    source_set("mytarget") {
+      ...
+      if (enable_doom_melon) {
+        defines = [ "ENABLE_DOOM_MELON" ]
+        deps += [ "//tools/doom_melon" ]
+      }
+
+  But GN's header checker does not understand preprocessor directives,
+  won't know it matches the build dependencies, and will flag this
+  include as incorrect when the condition is false.
+
+```
+
+### **More information**
+
+```
+  The topic "gn help check" has general information on how checking
+  works and advice on fixing problems. Targets can also opt-out of
+  checking, see "gn help check_includes".
+
+
+```
 ## **Runtime dependencies**
 
 ```
   Runtime dependencies of a target are exposed via the "runtime_deps"
   category of "gn desc" (see "gn help desc") or they can be written
-  at build generation time via "--runtime-deps-list-file"
-  (see "gn help --runtime-deps-list-file").
+  at build generation time via write_runtime_deps(), or
+  --runtime-deps-list-file (see "gn help --runtime-deps-list-file").
 
   To a first approximation, the runtime dependencies of a target are
   the set of "data" files, data directories, and the shared libraries
@@ -5219,7 +5737,7 @@
   {{source_name_part}}
       The filename part of the source file with no directory or
       extension. This will generally be used for specifying a
-      transformation from a soruce file to a destination file with the
+      transformation from a source file to a destination file with the
       same name but different extension.
         "//foo/bar/baz.txt" => "baz"
 

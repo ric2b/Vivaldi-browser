@@ -2,14 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#define ENABLE_ASSERT 1
-
 #include "wtf/Assertions.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/text/StringBuilder.h"
 #include <stdio.h>
 
+#if !LOG_DISABLED
 namespace WTF {
 
 static const int kPrinterBufferSize = 256;
@@ -23,16 +22,9 @@ static void vprint(const char* format, va_list args)
         gBuilder.append(gBuffer);
 }
 
-class AssertionsTest : public testing::Test {
-protected:
-    AssertionsTest()
-    {
-        ScopedLogger::setPrintFuncForTests(vprint);
-    }
-};
-
-TEST_F(AssertionsTest, ScopedLogger)
+TEST(AssertionsTest, ScopedLogger)
 {
+    ScopedLogger::setPrintFuncForTests(vprint);
     {
         WTF_CREATE_SCOPED_LOGGER(a, "a1");
         {
@@ -57,5 +49,5 @@ TEST_F(AssertionsTest, ScopedLogger)
         ")\n", gBuilder.toString());
 };
 
-
 } // namespace WTF
+#endif // !LOG_DISABLED

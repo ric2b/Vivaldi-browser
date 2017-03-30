@@ -129,41 +129,55 @@ static VideoDecoderConfig GetTestConfig(VideoCodec codec,
   gfx::Rect visible_rect(coded_size.width(), coded_size.height());
   gfx::Size natural_size = coded_size;
 
-  return VideoDecoderConfig(codec, VIDEO_CODEC_PROFILE_UNKNOWN,
-                            PIXEL_FORMAT_YV12, COLOR_SPACE_UNSPECIFIED,
-                            coded_size, visible_rect, natural_size,
-                            EmptyExtraData(), is_encrypted);
+  return VideoDecoderConfig(
+      codec, VIDEO_CODEC_PROFILE_UNKNOWN, PIXEL_FORMAT_YV12,
+      COLOR_SPACE_UNSPECIFIED, coded_size, visible_rect, natural_size,
+      EmptyExtraData(),
+      is_encrypted ? AesCtrEncryptionScheme() : Unencrypted());
 }
 
 static const gfx::Size kNormalSize(320, 240);
 static const gfx::Size kLargeSize(640, 480);
 
+// static
 VideoDecoderConfig TestVideoConfig::Invalid() {
   return GetTestConfig(kUnknownVideoCodec, kNormalSize, false);
 }
 
+// static
 VideoDecoderConfig TestVideoConfig::Normal() {
   return GetTestConfig(kCodecVP8, kNormalSize, false);
 }
 
+// static
 VideoDecoderConfig TestVideoConfig::NormalEncrypted() {
   return GetTestConfig(kCodecVP8, kNormalSize, true);
 }
 
+// static
 VideoDecoderConfig TestVideoConfig::Large() {
   return GetTestConfig(kCodecVP8, kLargeSize, false);
 }
 
+// static
 VideoDecoderConfig TestVideoConfig::LargeEncrypted() {
   return GetTestConfig(kCodecVP8, kLargeSize, true);
 }
 
+// static
 gfx::Size TestVideoConfig::NormalCodedSize() {
   return kNormalSize;
 }
 
+// static
 gfx::Size TestVideoConfig::LargeCodedSize() {
   return kLargeSize;
+}
+
+// static
+AudioParameters TestAudioParameters::Normal() {
+  return AudioParameters(AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                         CHANNEL_LAYOUT_STEREO, 48000, 16, 2048);
 }
 
 template <class T>

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_APP_LIST_PREFS_H_
 #define CHROME_BROWSER_UI_APP_LIST_APP_LIST_PREFS_H_
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -45,9 +46,9 @@ class AppListPrefs : public KeyedService {
     AppListInfo();
     AppListInfo(const AppListInfo& other);
     ~AppListInfo();
-    scoped_ptr<base::DictionaryValue> CreateDictFromAppListInfo() const;
+    std::unique_ptr<base::DictionaryValue> CreateDictFromAppListInfo() const;
 
-    static scoped_ptr<AppListPrefs::AppListInfo> CreateAppListInfoFromDict(
+    static std::unique_ptr<AppListPrefs::AppListInfo> CreateAppListInfoFromDict(
         const base::DictionaryValue* item_dict);
 
     // The id of the folder containing this item.
@@ -77,7 +78,7 @@ class AppListPrefs : public KeyedService {
   void SetAppListInfo(const std::string& id, const AppListInfo& info);
 
   // Gets the app list info for |id|.
-  scoped_ptr<AppListInfo> GetAppListInfo(const std::string& id) const;
+  std::unique_ptr<AppListInfo> GetAppListInfo(const std::string& id) const;
 
   // Gets a map of all AppListInfo objects in the prefs.
   void GetAllAppListInfos(AppListInfoMap* out) const;

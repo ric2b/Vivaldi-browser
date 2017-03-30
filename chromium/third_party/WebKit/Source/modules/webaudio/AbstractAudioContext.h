@@ -25,6 +25,7 @@
 #ifndef AbstractAudioContext_h
 #define AbstractAudioContext_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/ActiveDOMObject.h"
@@ -39,7 +40,6 @@
 #include "platform/audio/AudioBus.h"
 #include "platform/heap/Handle.h"
 #include "wtf/HashSet.h"
-#include "wtf/MainThread.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Threading.h"
 #include "wtf/Vector.h"
@@ -81,9 +81,9 @@ class WaveShaperNode;
 // AbstractAudioContext is the cornerstone of the web audio API and all AudioNodes are created from it.
 // For thread safety between the audio thread and the main thread, it has a rendering graph locking mechanism.
 
-class MODULES_EXPORT AbstractAudioContext : public RefCountedGarbageCollectedEventTargetWithInlineData<AbstractAudioContext>, public ActiveDOMObject {
+class MODULES_EXPORT AbstractAudioContext : public RefCountedGarbageCollectedEventTargetWithInlineData<AbstractAudioContext>, public ActiveScriptWrappable, public ActiveDOMObject {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(AbstractAudioContext);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(AbstractAudioContext);
+    USING_GARBAGE_COLLECTED_MIXIN(AbstractAudioContext);
     DEFINE_WRAPPERTYPEINFO();
 public:
     // The state of an audio context.  On creation, the state is Suspended. The state is Running if
@@ -112,7 +112,7 @@ public:
 
     // Document notification
     void stop() final;
-    bool hasPendingActivity() const override;
+    bool hasPendingActivity() const final;
 
     AudioDestinationNode* destination() const { return m_destinationNode.get(); }
 
@@ -237,7 +237,7 @@ public:
 
     // EventTarget
     const AtomicString& interfaceName() const final;
-    ExecutionContext* executionContext() const final;
+    ExecutionContext* getExecutionContext() const final;
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(statechange);
 
@@ -250,7 +250,7 @@ public:
     virtual bool isContextClosed() const { return m_isCleared; }
 
     // Get the security origin for this audio context.
-    SecurityOrigin* securityOrigin() const;
+    SecurityOrigin* getSecurityOrigin() const;
 
     // Get the PeriodicWave for the specified oscillator type.  The table is initialized internally
     // if necessary.

@@ -297,6 +297,12 @@ class GLES2_IMPL_EXPORT GLES2Implementation
       kUnknownExtensionStatus
   };
 
+  enum Dimension {
+      k2D,
+      k3D,
+  };
+
+
   // Base class for mapped resources.
   struct MappedResource {
     MappedResource(GLenum _access, int _shm_id, void* mem, unsigned int offset)
@@ -652,7 +658,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   bool GetBoundPixelTransferBuffer(
       GLenum target, const char* function_name, GLuint* buffer_id);
-  BufferTracker::Buffer* GetBoundPixelUnpackTransferBufferIfValid(
+  BufferTracker::Buffer* GetBoundPixelTransferBufferIfValid(
       GLuint buffer_id,
       const char* function_name, GLuint offset, GLsizei size);
 
@@ -692,6 +698,8 @@ class GLES2_IMPL_EXPORT GLES2Implementation
                         const void* indices, const char* func_name);
   void UpdateCachedExtensionsIfNeeded();
   void InvalidateCachedExtensions();
+
+  PixelStoreParams GetUnpackParameters(Dimension dimension);
 
   GLES2Util util_;
   GLES2CmdHelper* helper_;
@@ -783,6 +791,9 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   // Used to check for single threaded access.
   int use_count_;
+
+  // Changed every time a flush or finish occurs.
+  uint32_t flush_id_;
 
   // Maximum amount of extra memory from the mapped memory pool to use when
   // needing to transfer something exceeding the default transfer buffer.

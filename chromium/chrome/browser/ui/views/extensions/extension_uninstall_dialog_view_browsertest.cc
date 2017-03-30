@@ -17,9 +17,10 @@ namespace {
 
 scoped_refptr<extensions::Extension> BuildTestExtension() {
   return extensions::ExtensionBuilder()
-      .SetManifest(std::move(extensions::DictionaryBuilder()
-                                 .Set("name", "foo")
-                                 .Set("version", "1.0")))
+      .SetManifest(extensions::DictionaryBuilder()
+                       .Set("name", "foo")
+                       .Set("version", "1.0")
+                       .Build())
       .Build();
 }
 
@@ -63,7 +64,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionUninstallDialogViewBrowserTest,
 
   base::RunLoop run_loop;
   TestExtensionUninstallDialogDelegate delegate(run_loop.QuitClosure());
-  scoped_ptr<extensions::ExtensionUninstallDialog> dialog(
+  std::unique_ptr<extensions::ExtensionUninstallDialog> dialog(
       extensions::ExtensionUninstallDialog::Create(
           browser()->profile(), browser()->window()->GetNativeWindow(),
           &delegate));

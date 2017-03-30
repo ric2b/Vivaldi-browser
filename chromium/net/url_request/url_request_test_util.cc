@@ -16,6 +16,7 @@
 #include "base/threading/worker_pool.h"
 #include "net/base/host_port_pair.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/ct_verifier.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_response_headers.h"
@@ -50,18 +51,13 @@ const int kStageDestruction = 1 << 10;
 
 }  // namespace
 
-TestURLRequestContext::TestURLRequestContext()
-    : initialized_(false),
-      client_socket_factory_(nullptr),
-      proxy_delegate_(nullptr),
-      context_storage_(this) {
-  Init();
-}
+TestURLRequestContext::TestURLRequestContext() : TestURLRequestContext(false) {}
 
 TestURLRequestContext::TestURLRequestContext(bool delay_initialization)
     : initialized_(false),
       client_socket_factory_(nullptr),
       proxy_delegate_(nullptr),
+      ct_policy_enforcer_(nullptr),
       context_storage_(this) {
   if (!delay_initialization)
     Init();
@@ -108,11 +104,13 @@ void TestURLRequestContext::Init() {
     params.proxy_delegate = proxy_delegate();
     params.host_resolver = host_resolver();
     params.cert_verifier = cert_verifier();
+    params.cert_transparency_verifier = cert_transparency_verifier();
+    if (ct_policy_enforcer())
+      params.ct_policy_enforcer = ct_policy_enforcer();
     params.transport_security_state = transport_security_state();
     params.proxy_service = proxy_service();
     params.ssl_config_service = ssl_config_service();
     params.http_auth_handler_factory = http_auth_handler_factory();
-    params.network_delegate = network_delegate();
     params.http_server_properties = http_server_properties();
     params.net_log = net_log();
     params.channel_id_service = channel_id_service();
@@ -123,8 +121,10 @@ void TestURLRequestContext::Init() {
                       HttpCache::DefaultBackend::InMemory(0), false)));
   }
   // In-memory cookie store.
-  if (!cookie_store())
-    context_storage_.set_cookie_store(new CookieMonster(nullptr, nullptr));
+  if (!cookie_store()) {
+    context_storage_.set_cookie_store(
+        make_scoped_ptr(new CookieMonster(nullptr, nullptr)));
+  }
   // In-memory Channel ID service.
   if (!channel_id_service()) {
     context_storage_.set_channel_id_service(make_scoped_ptr(

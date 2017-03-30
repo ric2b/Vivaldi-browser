@@ -65,10 +65,12 @@ enum FourCC {
   FOURCC_SAIO = 0x7361696f,
   FOURCC_SAIZ = 0x7361697a,
   FOURCC_SBGP = 0x73626770,
+  FOURCC_SBTL = 0x7362746c,
   FOURCC_SCHI = 0x73636869,
   FOURCC_SCHM = 0x7363686d,
   FOURCC_SDTP = 0x73647470,
   FOURCC_SEIG = 0x73656967,
+  FOURCC_SENC = 0x73656e63,
   FOURCC_SGPD = 0x73677064,
   FOURCC_SIDX = 0x73696478,
   FOURCC_SINF = 0x73696e66,
@@ -84,7 +86,9 @@ enum FourCC {
   FOURCC_STSZ = 0x7374737a,
   FOURCC_STTS = 0x73747473,
   FOURCC_STYP = 0x73747970,
+  FOURCC_SUBT = 0x73756274,
   FOURCC_TENC = 0x74656e63,
+  FOURCC_TEXT = 0x74657874,
   FOURCC_TFDT = 0x74666474,
   FOURCC_TFHD = 0x74666864,
   FOURCC_TKHD = 0x746b6864,
@@ -106,6 +110,17 @@ const inline std::string FourCCToString(FourCC fourcc) {
   buf[2] = (fourcc >> 8) & 0xff;
   buf[3] = (fourcc) & 0xff;
   buf[4] = 0;
+
+  // Return hex itself if characters can not be printed. Any character within
+  // the "C" locale is considered printable.
+  for (int i = 0; i < 4; ++i) {
+    if (!(buf[i] > 0x1f && buf[i] < 0x7f)) {
+      std::stringstream hex_string;
+      hex_string << "0x" << std::hex << fourcc;
+      return hex_string.str();
+    }
+  }
+
   return std::string(buf);
 }
 

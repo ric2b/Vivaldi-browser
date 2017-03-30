@@ -217,10 +217,6 @@ WebInspector.CSSMetadata._propertyDataMap = {
         "normal", "wider", "narrower", "ultra-condensed", "extra-condensed", "condensed", "semi-condensed",
         "semi-expanded", "expanded", "extra-expanded", "ultra-expanded"
     ] },
-    "-webkit-background-composite": { values: [
-        "highlight", "clear", "copy", "source-over", "source-in", "source-out", "source-atop", "destination-over",
-        "destination-in", "destination-out", "destination-atop", "xor", "plus-darker", "plus-lighter"
-    ] },
     "border-left-width": { values: [
         "medium", "thick", "thin"
     ] },
@@ -231,7 +227,7 @@ WebInspector.CSSMetadata._propertyDataMap = {
         "horizontal-tb", "vertical-rl", "vertical-lr"
     ] },
     "-webkit-writing-mode": { values: [
-        "lr", "rl", "tb", "lr-tb", "rl-tb", "tb-rl", "horizontal-tb", "vertical-rl", "vertical-lr", "horizontal-bt"
+        "lr", "rl", "tb", "lr-tb", "rl-tb", "tb-rl", "horizontal-tb", "vertical-rl", "vertical-lr"
     ] },
     "border-collapse": { values: [
         "collapse", "separate"

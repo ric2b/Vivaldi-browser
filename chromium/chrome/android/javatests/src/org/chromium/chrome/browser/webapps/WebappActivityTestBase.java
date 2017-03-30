@@ -89,9 +89,16 @@ public abstract class WebappActivityTestBase extends ChromeActivityTestCaseBase<
         super.setUp();
 
         // Register the webapp so when the data storage is opened, the test doesn't crash. There is
-        // no race condition with the retrival as AsyncTasks are run sequentially on the background
+        // no race condition with the retrieval as AsyncTasks are run sequentially on the background
         // thread.
-        WebappRegistry.registerWebapp(getInstrumentation().getTargetContext(), WEBAPP_ID);
+        WebappRegistry.registerWebapp(getInstrumentation().getTargetContext(), WEBAPP_ID,
+                new WebappRegistry.FetchWebappDataStorageCallback() {
+                    @Override
+                    public void onWebappDataStorageRetrieved(WebappDataStorage storage) {
+                        storage.updateFromShortcutIntent(createIntent());
+                    }
+                }
+        );
     }
 
     /**
@@ -126,7 +133,7 @@ public abstract class WebappActivityTestBase extends ChromeActivityTestCaseBase<
     protected void waitUntilIdle() {
         getInstrumentation().waitForIdleSync();
         try {
-            CriteriaHelper.pollForCriteria(new Criteria() {
+            CriteriaHelper.pollInstrumentationThread(new Criteria() {
                     @Override
                     public boolean isSatisfied() {
                         return getActivity().getActivityTab() != null
@@ -185,7 +192,7 @@ public abstract class WebappActivityTestBase extends ChromeActivityTestCaseBase<
      * Waits for the splash screen to be hidden.
      */
     protected void waitUntilSplashscreenHides() throws InterruptedException {
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return !getActivity().isSplashScreenVisibleForTests();
@@ -195,7 +202,7 @@ public abstract class WebappActivityTestBase extends ChromeActivityTestCaseBase<
 
     protected ViewGroup waitUntilSplashScreenAppears() {
         try {
-            CriteriaHelper.pollForCriteria(new Criteria() {
+            CriteriaHelper.pollInstrumentationThread(new Criteria() {
                 @Override
                 public boolean isSatisfied() {
                     return getActivity().getSplashScreenForTests() != null;

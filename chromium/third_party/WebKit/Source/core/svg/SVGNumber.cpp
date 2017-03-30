@@ -40,7 +40,7 @@ SVGNumber::SVGNumber(float value)
 {
 }
 
-PassRefPtrWillBeRawPtr<SVGNumber> SVGNumber::clone() const
+SVGNumber* SVGNumber::clone() const
 {
     return create(m_value);
 }
@@ -80,28 +80,28 @@ SVGParsingError SVGNumber::setValueAsString(const String& string)
     return parse(ptr, end);
 }
 
-void SVGNumber::add(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement*)
+void SVGNumber::add(SVGPropertyBase* other, SVGElement*)
 {
     setValue(m_value + toSVGNumber(other)->value());
 }
 
-void SVGNumber::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> from, PassRefPtrWillBeRawPtr<SVGPropertyBase> to, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDuration, SVGElement*)
+void SVGNumber::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, SVGPropertyBase* from, SVGPropertyBase* to, SVGPropertyBase* toAtEndOfDuration, SVGElement*)
 {
     ASSERT(animationElement);
 
-    RefPtrWillBeRawPtr<SVGNumber> fromNumber = toSVGNumber(from);
-    RefPtrWillBeRawPtr<SVGNumber> toNumber = toSVGNumber(to);
-    RefPtrWillBeRawPtr<SVGNumber> toAtEndOfDurationNumber = toSVGNumber(toAtEndOfDuration);
+    SVGNumber* fromNumber = toSVGNumber(from);
+    SVGNumber* toNumber = toSVGNumber(to);
+    SVGNumber* toAtEndOfDurationNumber = toSVGNumber(toAtEndOfDuration);
 
     animationElement->animateAdditiveNumber(percentage, repeatCount, fromNumber->value(), toNumber->value(), toAtEndOfDurationNumber->value(), m_value);
 }
 
-float SVGNumber::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement*)
+float SVGNumber::calculateDistance(SVGPropertyBase* other, SVGElement*)
 {
     return fabsf(m_value - toSVGNumber(other)->value());
 }
 
-PassRefPtrWillBeRawPtr<SVGNumber> SVGNumberAcceptPercentage::clone() const
+SVGNumber* SVGNumberAcceptPercentage::clone() const
 {
     return create(m_value);
 }

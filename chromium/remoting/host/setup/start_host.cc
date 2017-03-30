@@ -16,8 +16,8 @@
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "remoting/base/logging.h"
-#include "remoting/base/service_urls.h"
 #include "remoting/base/url_request_context_getter.h"
+#include "remoting/host/service_urls.h"
 #include "remoting/host/setup/host_starter.h"
 #include "remoting/host/setup/oauth_helper.h"
 #include "remoting/host/setup/pin_validator.h"
@@ -190,7 +190,7 @@ int main(int argc, char** argv) {
   net::URLFetcher::SetIgnoreCertificateRequests(true);
 
   // Start the host.
-  scoped_ptr<HostStarter> host_starter(HostStarter::Create(
+  std::unique_ptr<HostStarter> host_starter(HostStarter::Create(
       remoting::ServiceUrls::GetInstance()->directory_hosts_url(),
       url_request_context_getter.get()));
   if (redirect_url.empty()) {

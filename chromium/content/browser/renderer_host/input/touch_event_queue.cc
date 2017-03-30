@@ -46,8 +46,7 @@ TouchEventWithLatencyInfo ObtainCancelEventForTouchEvent(
 bool ShouldTouchTriggerTimeout(const WebTouchEvent& event) {
   return (event.type == WebInputEvent::TouchStart ||
           event.type == WebInputEvent::TouchMove) &&
-         WebInputEventTraits::WillReceiveAckFromRenderer(event) &&
-         event.cancelable;
+         event.dispatchType == WebInputEvent::Blocking;
 }
 
 // Compare all properties of touch points to determine the state.
@@ -604,7 +603,9 @@ void TouchEventQueue::ForwardNextEventToRenderer() {
   if (pending_async_touchmove_) {
     if (pending_async_touchmove_->CanCoalesceWith(touch)) {
       pending_async_touchmove_->CoalesceWith(touch);
-      pending_async_touchmove_->event.cancelable = !send_touch_events_async_;
+      pending_async_touchmove_->event.dispatchType =
+          send_touch_events_async_ ? WebInputEvent::EventNonBlocking
+                                   : WebInputEvent::Blocking;
       touch = *pending_async_touchmove_;
       pending_async_touchmove_.reset();
     } else {
@@ -617,7 +618,7 @@ void TouchEventQueue::ForwardNextEventToRenderer() {
   // platform scrolling and JS pinching. Touchend events, however, remain
   // uncancelable, mitigating the risk of jank when transitioning to a fling.
   if (send_touch_events_async_ && touch.event.type != WebInputEvent::TouchStart)
-    touch.event.cancelable = false;
+    touch.event.dispatchType = WebInputEvent::EventNonBlocking;
 
   SendTouchEventImmediately(&touch);
 }
@@ -626,7 +627,7 @@ void TouchEventQueue::FlushPendingAsyncTouchmove() {
   DCHECK(!dispatching_touch_);
   scoped_ptr<TouchEventWithLatencyInfo> touch =
       std::move(pending_async_touchmove_);
-  touch->event.cancelable = false;
+  touch->event.dispatchType = WebInputEvent::EventNonBlocking;
   touch_queue_.push_front(new CoalescedWebTouchEvent(*touch, true));
   SendTouchEventImmediately(touch.get());
 }
@@ -786,7 +787,7 @@ void TouchEventQueue::SendTouchEventImmediately(
   // timeout should not be started and the count also should not be increased.
   if (dispatching_touch_) {
     if (touch->event.type == WebInputEvent::TouchMove &&
-        !touch->event.cancelable) {
+        touch->event.dispatchType != WebInputEvent::Blocking) {
       // When we send out a uncancelable touch move, we increase the count and
       // we do not process input event ack any more, we will just ack to client
       // and wait for the ack from render. Also we will remove it from the front

@@ -14,6 +14,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_handle.h"
+#include "base/timer/elapsed_timer.h"
 #include "crypto/random.h"
 #include "mojo/edk/embedder/embedder_internal.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
@@ -21,6 +22,10 @@
 #include "mojo/edk/system/broker_host.h"
 #include "mojo/edk/system/core.h"
 #include "mojo/edk/system/ports_message.h"
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+#include "mojo/edk/system/mach_port_relay.h"
+#endif
 
 namespace mojo {
 namespace edk {
@@ -107,6 +112,15 @@ NodeController::NodeController(Core* core)
   DVLOG(1) << "Initializing node " << name_;
 }
 
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+void NodeController::CreateMachPortRelay(
+    base::PortProvider* port_provider) {
+  base::AutoLock lock(mach_port_relay_lock_);
+  DCHECK(!mach_port_relay_);
+  mach_port_relay_.reset(new MachPortRelay(port_provider));
+}
+#endif
+
 void NodeController::SetIOTaskRunner(
     scoped_refptr<base::TaskRunner> task_runner) {
   io_task_runner_ = task_runner;
@@ -127,11 +141,14 @@ void NodeController::ConnectToChild(base::ProcessHandle process_handle,
 
 void NodeController::ConnectToParent(ScopedPlatformHandle platform_handle) {
 // TODO(amistry): Consider the need for a broker on Windows.
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
   // On posix, use the bootstrap channel for the broker and receive the node's
   // channel synchronously as the first message from the broker.
+  base::ElapsedTimer timer;
   broker_.reset(new Broker(std::move(platform_handle)));
   platform_handle = broker_->GetParentPlatformHandle();
+  UMA_HISTOGRAM_TIMES("Mojo.System.GetParentPlatformHandleSyncTime",
+                      timer.Elapsed());
 #endif
 
   io_task_runner_->PostTask(
@@ -180,19 +197,45 @@ void NodeController::ReservePort(const std::string& token,
 
 void NodeController::MergePortIntoParent(const std::string& token,
                                          const ports::PortRef& port) {
-  scoped_refptr<NodeChannel> parent = GetParentChannel();
-  if (parent) {
-    parent->RequestPortMerge(port.name(), token);
-    return;
+  {
+    // This request may be coming from within the process that reserved the
+    // "parent" side (e.g. for Chrome single-process mode), so if this token is
+    // reserved locally, merge locally instead.
+    base::AutoLock lock(reserved_ports_lock_);
+    auto it = reserved_ports_.find(token);
+    if (it != reserved_ports_.end()) {
+      node_->MergePorts(port, name_, it->second.name());
+      reserved_ports_.erase(it);
+      return;
+    }
   }
 
-  base::AutoLock lock(pending_port_merges_lock_);
-  pending_port_merges_.push_back(std::make_pair(token, port));
+  scoped_refptr<NodeChannel> parent;
+  {
+    // Hold |pending_port_merges_lock_| while getting |parent|. Otherwise,
+    // there is a race where the parent can be set, and |pending_port_merges_|
+    // be processed between retrieving |parent| and adding the merge to
+    // |pending_port_merges_|.
+    base::AutoLock lock(pending_port_merges_lock_);
+    parent = GetParentChannel();
+    if (!parent) {
+      pending_port_merges_.push_back(std::make_pair(token, port));
+      return;
+    }
+  }
+  parent->RequestPortMerge(port.name(), token);
+}
+
+int NodeController::MergeLocalPorts(const ports::PortRef& port0,
+                                    const ports::PortRef& port1) {
+  int rv = node_->MergeLocalPorts(port0, port1);
+  AcceptIncomingMessages();
+  return rv;
 }
 
 scoped_refptr<PlatformSharedBuffer> NodeController::CreateSharedBuffer(
     size_t num_bytes) {
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
   // Shared buffer creation failure is fatal, so always use the broker when we
   // have one. This does mean that a non-root process that has children will use
   // the broker for shared buffer creation even though that process is
@@ -218,7 +261,7 @@ void NodeController::ConnectToChildOnIOThread(
     ScopedPlatformHandle platform_handle) {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
   PlatformChannelPair node_channel;
   // BrokerHost owns itself.
   BrokerHost* broker_host = new BrokerHost(std::move(platform_handle));
@@ -251,14 +294,16 @@ void NodeController::ConnectToParentOnIOThread(
     ScopedPlatformHandle platform_handle) {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
 
-  base::AutoLock lock(parent_lock_);
-  DCHECK(parent_name_ == ports::kInvalidNodeName);
+  {
+    base::AutoLock lock(parent_lock_);
+    DCHECK(parent_name_ == ports::kInvalidNodeName);
 
-  // At this point we don't know the parent's name, so we can't yet insert it
-  // into our |peers_| map. That will happen as soon as we receive an
-  // AcceptChild message from them.
-  bootstrap_parent_channel_ =
-      NodeChannel::Create(this, std::move(platform_handle), io_task_runner_);
+    // At this point we don't know the parent's name, so we can't yet insert it
+    // into our |peers_| map. That will happen as soon as we receive an
+    // AcceptChild message from them.
+    bootstrap_parent_channel_ =
+        NodeChannel::Create(this, std::move(platform_handle), io_task_runner_);
+  }
   bootstrap_parent_channel_->Start();
 }
 
@@ -379,7 +424,28 @@ void NodeController::SendPeerMessage(const ports::NodeName& name,
       return;
     }
   }
-#endif
+#elif defined(OS_MACOSX) && !defined(OS_IOS)
+  if (channel_message->has_mach_ports()) {
+    // Messages containing Mach ports are always routed through the broker, even
+    // if the broker process is the intended recipient.
+    bool use_broker = false;
+    {
+      base::AutoLock lock(parent_lock_);
+      use_broker = (bootstrap_parent_channel_ ||
+                    parent_name_ != ports::kInvalidNodeName);
+    }
+    if (use_broker) {
+      scoped_refptr<NodeChannel> broker = GetBrokerChannel();
+      if (broker) {
+        broker->RelayPortsMessage(name, std::move(channel_message));
+      } else {
+        base::AutoLock lock(broker_lock_);
+        pending_relay_messages_[name].emplace(std::move(channel_message));
+      }
+      return;
+    }
+  }
+#endif  // defined(OS_WIN)
 
   if (peer) {
     peer->PortsMessage(std::move(channel_message));
@@ -409,19 +475,22 @@ void NodeController::SendPeerMessage(const ports::NodeName& name,
 }
 
 void NodeController::AcceptIncomingMessages() {
-  std::queue<ports::ScopedMessage> messages;
   for (;;) {
     // TODO: We may need to be more careful to avoid starving the rest of the
     // thread here. Revisit this if it turns out to be a problem. One
     // alternative would be to schedule a task to continue pumping messages
     // after flushing once.
 
-    {
-      base::AutoLock lock(messages_lock_);
-      if (incoming_messages_.empty())
-        break;
-      std::swap(messages, incoming_messages_);
+    messages_lock_.Acquire();
+    if (incoming_messages_.empty()) {
+      messages_lock_.Release();
+      break;
     }
+    // libstdc++'s deque creates an internal buffer on construction, even when
+    // the size is 0. So avoid creating it until it is necessary.
+    std::queue<ports::ScopedMessage> messages;
+    std::swap(messages, incoming_messages_);
+    messages_lock_.Release();
 
     while (!messages.empty()) {
       node_->AcceptMessage(std::move(messages.front()));
@@ -434,15 +503,20 @@ void NodeController::AcceptIncomingMessages() {
 void NodeController::DropAllPeers() {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
 
+  std::vector<scoped_refptr<NodeChannel>> all_peers;
   {
     base::AutoLock lock(parent_lock_);
     if (bootstrap_parent_channel_) {
-      bootstrap_parent_channel_->ShutDown();
-      bootstrap_parent_channel_ = nullptr;
+      // |bootstrap_parent_channel_| isn't null'd here becuase we rely on its
+      // existence to determine whether or not this is the root node. Once
+      // bootstrap_parent_channel_->ShutDown() has been called,
+      // |bootstrap_parent_channel_| is essentially a dead object and it doesn't
+      // matter if it's deleted now or when |this| is deleted.
+      // Note: |bootstrap_parent_channel_| is only modified on the IO thread.
+      all_peers.push_back(bootstrap_parent_channel_);
     }
   }
 
-  std::vector<scoped_refptr<NodeChannel>> all_peers;
   {
     base::AutoLock lock(peers_lock_);
     for (const auto& peer : peers_)
@@ -629,7 +703,7 @@ void NodeController::OnBrokerClientAdded(const ports::NodeName& from_node,
   }
 
   // This should have come from our own broker.
-  if(GetBrokerChannel() != GetPeerChannel(from_node)) {
+  if (GetBrokerChannel() != GetPeerChannel(from_node)) {
     DLOG(ERROR) << "BrokerClientAdded from non-broker node " << from_node;
     return;
   }
@@ -697,7 +771,7 @@ void NodeController::OnAcceptBrokerClient(const ports::NodeName& from_node,
     pending_broker_clients.pop();
   }
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
   // Have the broker relay any messages we have waiting.
   for (auto& entry : pending_relay_messages) {
     const ports::NodeName& destination = entry.first;
@@ -712,20 +786,28 @@ void NodeController::OnAcceptBrokerClient(const ports::NodeName& from_node,
   DVLOG(1) << "Child " << name_ << " accepted by broker " << broker_name;
 }
 
-void NodeController::OnPortsMessage(Channel::MessagePtr channel_message) {
+void NodeController::OnPortsMessage(const ports::NodeName& from_node,
+                                    Channel::MessagePtr channel_message) {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
 
   void* data;
   size_t num_data_bytes;
   NodeChannel::GetPortsMessageData(
       channel_message.get(), &data, &num_data_bytes);
+  if (!num_data_bytes) {
+    DropPeer(from_node);
+    return;
+  }
 
   size_t num_header_bytes, num_payload_bytes, num_ports_bytes;
-  ports::Message::Parse(data,
-                        num_data_bytes,
-                        &num_header_bytes,
-                        &num_payload_bytes,
-                        &num_ports_bytes);
+  if (!ports::Message::Parse(data,
+                             num_data_bytes,
+                             &num_header_bytes,
+                             &num_payload_bytes,
+                             &num_ports_bytes)) {
+    DropPeer(from_node);
+    return;
+  }
 
   CHECK(channel_message);
   ports::ScopedMessage message(
@@ -736,7 +818,6 @@ void NodeController::OnPortsMessage(Channel::MessagePtr channel_message) {
 
   node_->AcceptMessage(std::move(message));
   AcceptIncomingMessages();
-  AttemptShutdownIfRequested();
 }
 
 void NodeController::OnRequestPortMerge(
@@ -807,11 +888,13 @@ void NodeController::OnIntroduce(const ports::NodeName& from_node,
   AddPeer(name, channel, true /* start_channel */);
 }
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
 void NodeController::OnRelayPortsMessage(const ports::NodeName& from_node,
                                          base::ProcessHandle from_process,
                                          const ports::NodeName& destination,
                                          Channel::MessagePtr message) {
+  DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
+
   if (GetBrokerChannel()) {
     // Only the broker should be asked to relay a message.
     LOG(ERROR) << "Non-broker refusing to relay message.";
@@ -822,6 +905,7 @@ void NodeController::OnRelayPortsMessage(const ports::NodeName& from_node,
   // The parent should always know which process this came from.
   DCHECK(from_process != base::kNullProcessHandle);
 
+#if defined(OS_WIN)
   // Rewrite the handles to this (the parent) process. If the message is
   // destined for another child process, the handles will be rewritten to that
   // process before going out (see NodeChannel::WriteChannelMessage).
@@ -833,10 +917,26 @@ void NodeController::OnRelayPortsMessage(const ports::NodeName& from_node,
                                         message->num_handles())) {
     DLOG(ERROR) << "Failed to relay one or more handles.";
   }
+#else
+  MachPortRelay* relay = GetMachPortRelay();
+  if (!relay) {
+    LOG(ERROR) << "Receiving Mach ports without a port relay from "
+               << from_node << ". Dropping message.";
+    return;
+  }
+  if (!relay->ExtractPortRights(message.get(), from_process)) {
+    // NodeChannel should ensure that MachPortRelay is ready for the remote
+    // process. At this point, if the port extraction failed, either something
+    // went wrong in the mach stuff, or the remote process died.
+    LOG(ERROR) << "Error on receiving Mach ports " << from_node
+               << ". Dropping message.";
+    return;
+  }
+#endif  // defined(OS_WIN)
 
   if (destination == name_) {
     // Great, we can deliver this message locally.
-    OnPortsMessage(std::move(message));
+    OnPortsMessage(from_node, std::move(message));
     return;
   }
 
@@ -858,6 +958,20 @@ void NodeController::OnChannelError(const ports::NodeName& from_node) {
                    from_node));
   }
 }
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+MachPortRelay* NodeController::GetMachPortRelay() {
+  {
+    base::AutoLock lock(parent_lock_);
+    // Return null if we're not the root.
+    if (bootstrap_parent_channel_ || parent_name_ != ports::kInvalidNodeName)
+      return nullptr;
+  }
+
+  base::AutoLock lock(mach_port_relay_lock_);
+  return mach_port_relay_.get();
+}
+#endif
 
 void NodeController::DestroyOnIOThreadShutdown() {
   destroy_on_io_thread_shutdown_ = true;

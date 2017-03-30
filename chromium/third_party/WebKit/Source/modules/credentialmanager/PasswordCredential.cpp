@@ -6,9 +6,12 @@
 
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/HTMLNames.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/URLSearchParams.h"
+#include "core/html/FormAssociatedElement.h"
 #include "core/html/FormData.h"
+#include "core/html/HTMLFormElement.h"
 #include "modules/credentialmanager/FormDataOptions.h"
 #include "modules/credentialmanager/PasswordCredentialData.h"
 #include "platform/credentialmanager/PlatformPasswordCredential.h"
@@ -41,8 +44,68 @@ PasswordCredential* PasswordCredential::create(const PasswordCredentialData& dat
     return new PasswordCredential(data.id(), data.password(), data.name(), iconURL);
 }
 
+// https://w3c.github.io/webappsec-credential-management/#passwordcredential-form-constructor
+PasswordCredential* PasswordCredential::create(HTMLFormElement* form, ExceptionState& exceptionState)
+{
+    // Extract data from the form, then use the extracted |formData| object's
+    // value to populate |data|.
+    FormData* formData = FormData::create(form);
+    PasswordCredentialData data;
+
+    AtomicString idName;
+    AtomicString passwordName;
+    for (FormAssociatedElement* element : form->associatedElements()) {
+        // If |element| isn't a "submittable element" with string data, then it
+        // won't have a matching value in |formData|, and we can safely skip it.
+        FileOrUSVString result;
+        formData->get(element->name(), result);
+        if (!result.isUSVString())
+            continue;
+
+        AtomicString autocomplete = toHTMLElement(element)->fastGetAttribute(HTMLNames::autocompleteAttr);
+        if (equalIgnoringCase(autocomplete, "current-password") || equalIgnoringCase(autocomplete, "new-password")) {
+            data.setPassword(result.getAsUSVString());
+            passwordName = element->name();
+        } else if (equalIgnoringCase(autocomplete, "photo")) {
+            data.setIconURL(result.getAsUSVString());
+        } else if (equalIgnoringCase(autocomplete, "name") || equalIgnoringCase(autocomplete, "nickname")) {
+            data.setName(result.getAsUSVString());
+        } else if (equalIgnoringCase(autocomplete, "username")) {
+            data.setId(result.getAsUSVString());
+            idName = element->name();
+        }
+    }
+
+    // Create a PasswordCredential using the data gathered above.
+    PasswordCredential* credential = PasswordCredential::create(data, exceptionState);
+    if (exceptionState.hadException())
+        return nullptr;
+    ASSERT(credential);
+
+    // After creating the Credential, populate its 'additionalData', 'idName', and 'passwordName' attributes.
+    // If the form's 'enctype' is anything other than multipart, generate a URLSearchParams using the
+    // data in |formData|.
+    credential->setIdName(idName);
+    credential->setPasswordName(passwordName);
+
+    FormDataOrURLSearchParams additionalData;
+    if (form->enctype() == "multipart/form-data") {
+        additionalData.setFormData(formData);
+    } else {
+        URLSearchParams* params = URLSearchParams::create(URLSearchParamsInit());
+        for (const FormData::Entry* entry : formData->entries()) {
+            if (entry->isString())
+                params->append(entry->name().data(), entry->value().data());
+        }
+        additionalData.setURLSearchParams(params);
+    }
+
+    credential->setAdditionalData(additionalData);
+    return credential;
+}
+
 PasswordCredential::PasswordCredential(WebPasswordCredential* webPasswordCredential)
-    : Credential(webPasswordCredential->platformCredential())
+    : Credential(webPasswordCredential->getPlatformCredential())
     , m_idName("username")
     , m_passwordName("password")
 {
@@ -69,7 +132,7 @@ PassRefPtr<EncodedFormData> PasswordCredential::encodeFormData(String& contentTy
         params->append(idName(), id());
         params->append(passwordName(), password());
 
-        contentType = AtomicString("application/x-www-form-urlencoded;charset=UTF-8", AtomicString::ConstructFromLiteral);
+        contentType = AtomicString("application/x-www-form-urlencoded;charset=UTF-8");
 
         return params->encodeFormData();
     }
@@ -93,7 +156,7 @@ PassRefPtr<EncodedFormData> PasswordCredential::encodeFormData(String& contentTy
     formData->append(passwordName(), password());
 
     RefPtr<EncodedFormData> encodedData = formData->encodeMultiPartFormData();
-    contentType = AtomicString("multipart/form-data; boundary=", AtomicString::ConstructFromLiteral) + encodedData->boundary().data();
+    contentType = AtomicString("multipart/form-data; boundary=") + encodedData->boundary().data();
     return encodedData.release();
 }
 

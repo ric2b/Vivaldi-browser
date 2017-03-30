@@ -44,6 +44,7 @@ gfx::NativeViewAccessible AXPlatformNodeBase::ChildAtIndex(int index) {
 // AXPlatformNode overrides.
 
 void AXPlatformNodeBase::Destroy() {
+  AXPlatformNode::Destroy();
   delegate_ = nullptr;
   delete this;
 }
@@ -92,7 +93,10 @@ bool AXPlatformNodeBase::IsDescendant(AXPlatformNodeBase* node) {
     return false;
   if (node == this)
     return true;
-  AXPlatformNodeBase* parent = FromNativeViewAccessible(node->GetParent());
+  gfx::NativeViewAccessible native_parent = node->GetParent();
+  if (!native_parent)
+    return false;
+  AXPlatformNodeBase* parent = FromNativeViewAccessible(native_parent);
   return IsDescendant(parent);
 }
 

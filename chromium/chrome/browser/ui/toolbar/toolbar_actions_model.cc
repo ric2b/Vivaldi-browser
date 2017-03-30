@@ -11,6 +11,7 @@
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_base.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/component_migration_helper.h"
@@ -22,7 +23,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
-#include "chrome/browser/ui/extensions/extension_toolbar_icon_surfacing_bubble_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
@@ -56,7 +56,6 @@ ToolbarActionsModel::ToolbarActionsModel(
       use_redesign_(extensions::FeatureSwitch::extension_action_redesign()
                         ->IsEnabled()),
       highlight_type_(HIGHLIGHT_NONE),
-      highlighting_for_toolbar_redesign_(false),
       extension_action_observer_(this),
       extension_registry_observer_(this),
       weak_ptr_factory_(this) {
@@ -174,11 +173,11 @@ ScopedVector<ToolbarActionViewController> ToolbarActionsModel::CreateActions(
   return action_list;
 }
 
-scoped_ptr<ToolbarActionViewController>
+std::unique_ptr<ToolbarActionViewController>
 ToolbarActionsModel::CreateActionForItem(Browser* browser,
                                          ToolbarActionsBar* bar,
                                          const ToolbarItem& item) {
-  scoped_ptr<ToolbarActionViewController> result;
+  std::unique_ptr<ToolbarActionViewController> result;
   switch (item.type) {
     case EXTENSION_ACTION: {
       // Get the extension.
@@ -265,7 +264,19 @@ void ToolbarActionsModel::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const extensions::Extension* extension,
     extensions::UnloadedExtensionInfo::Reason reason) {
+  size_t index = 0u;
+  while (toolbar_items().size() > index &&
+         toolbar_items()[index].id != extension->id())
+    ++index;
+  bool was_visible_and_has_overflow =
+      index < visible_icon_count() && !all_icons_visible();
   RemoveExtension(extension);
+  // If the extension was previously visible and there are overflowed
+  // extensions, and this extension is being uninstalled, we reduce the visible
+  // count so that we don't pop out a previously-hidden extension.
+  if (was_visible_and_has_overflow &&
+      reason == extensions::UnloadedExtensionInfo::REASON_UNINSTALL)
+    SetVisibleIconCount(visible_icon_count() - 1);
 }
 
 void ToolbarActionsModel::OnExtensionUninstalled(
@@ -294,15 +305,6 @@ void ToolbarActionsModel::OnReady() {
   // taken from prefs.
   extension_registry_observer_.Add(extension_registry_);
   extension_action_observer_.Add(extension_action_api_);
-
-  if (ExtensionToolbarIconSurfacingBubbleDelegate::ShouldShowForProfile(
-          profile_)) {
-    highlighting_for_toolbar_redesign_ = true;
-    std::vector<std::string> ids;
-    for (const ToolbarItem& action : toolbar_items_)
-      ids.push_back(action.id);
-    HighlightActions(ids, HIGHLIGHT_INFO);
-  }
 
   actions_initialized_ = true;
   FOR_EACH_OBSERVER(Observer, observers_, OnToolbarModelInitialized());
@@ -368,8 +370,7 @@ void ToolbarActionsModel::AddItem(const ToolbarItem& item, bool is_component) {
 
   // See if we have a last known good position for this extension.
   bool is_new_extension =
-      std::find(last_known_positions_.begin(), last_known_positions_.end(),
-                item.id) == last_known_positions_.end();
+      !ContainsValue(last_known_positions_, item.id);
 
   // New extensions go at the right (end) of the visible extensions. Other
   // extensions go at their previous position.
@@ -612,8 +613,7 @@ void ToolbarActionsModel::Populate() {
 }
 
 bool ToolbarActionsModel::HasItem(const ToolbarItem& item) const {
-  return std::find(toolbar_items_.begin(), toolbar_items_.end(), item) !=
-         toolbar_items_.end();
+  return ContainsValue(toolbar_items_, item);
 }
 
 bool ToolbarActionsModel::HasComponentAction(
@@ -736,8 +736,7 @@ void ToolbarActionsModel::OnActionToolbarPrefChange() {
   std::vector<std::string> pref_positions = extension_prefs_->GetToolbarOrder();
   size_t pref_position_size = pref_positions.size();
   for (size_t i = 0; i < last_known_positions_.size(); ++i) {
-    if (std::find(pref_positions.begin(), pref_positions.end(),
-                  last_known_positions_[i]) == pref_positions.end()) {
+    if (!ContainsValue(pref_positions, last_known_positions_[i])) {
       pref_positions.push_back(last_known_positions_[i]);
     }
   }
@@ -815,7 +814,6 @@ bool ToolbarActionsModel::HighlightActions(const std::vector<std::string>& ids,
 
 void ToolbarActionsModel::StopHighlighting() {
   if (is_highlighting()) {
-    highlighting_for_toolbar_redesign_ = false;
     // It's important that is_highlighting_ is changed immediately before the
     // observers are notified since it changes the result of toolbar_items().
     highlight_type_ = HIGHLIGHT_NONE;

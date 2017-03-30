@@ -100,6 +100,7 @@
     <!-- Contextual search dimensions -->
     <dimen name="contextual_search_peek_promo_height">48dp</dimen>
     <dimen name="contextual_search_peek_promo_padding">12dp</dimen>
+    <dimen name="contextual_search_caption_text_size">14sp</dimen>
 
     <!-- Overlay panel dimensions -->
     <dimen name="overlay_panel_bar_height">56dp</dimen>
@@ -127,18 +128,6 @@
     <dimen name="data_reduction_promo_button_text_size">13sp</dimen>
     <dimen name="data_reduction_promo_illustration_margin_bottom">30dp</dimen>
 
-    <!-- Text bubble dimensions -->
-    <!-- Tooltip min distance from the edge of the screen. -->
-    <dimen name="tooltip_min_edge_margin">3dp</dimen>
-    <!-- Tooltip margin above click target. -->
-    <dimen name="tooltip_top_margin">2dp</dimen>
-    <!-- Tooltip border width around the main content bubble. -->
-    <dimen name="tooltip_border_width">1dp</dimen>
-    <!-- Padding for tooltip content -->
-    <dimen name="tooltip_content_padding">5dp</dimen>
-    <!-- Tooltip x margin for text bubble -->
-    <dimen name="bubble_tip_margin">8dp</dimen>
-
     <!-- Compositor Tab Title Dimensions -->
     <dimen name="compositor_tab_title_bar_shadow_x_offset">0.6667dp</dimen>            <!-- 1px hdpi -->
     <dimen name="compositor_tab_title_bar_shadow_y_offset">0.6667dp</dimen>            <!-- 1px hdpi -->
@@ -164,7 +153,7 @@
     <!-- First Run Experience dimensions -->
     <dimen name="fre_content_margin">24dp</dimen>
     <dimen name="fre_vertical_spacing">32dp</dimen>
-    <dimen name="fre_button_bar_height">56dp</dimen>
+    <dimen name="fre_button_bar_height">52dp</dimen>
     <dimen name="fre_button_padding">12dp</dimen>
     <dimen name="fre_margin">24dp</dimen>
     <dimen name="fre_title_text_size">24sp</dimen>
@@ -177,11 +166,9 @@
     <!-- The Account Signin page appears in the First Run Experience (amongst other places), so uses
     a lot of the fre_* dimensions for consistency. -->
     <dimen name="signin_image_carousel_width">240dp</dimen>
-    <dimen name="signin_checkmark_size">38dp</dimen>
-
-    <!-- Sign-in promo dimensions -->
-    <dimen name="sign_in_promo_padding_bottom">16dp</dimen>
-
+    <dimen name="signin_chooser_padding">16dp</dimen>
+    <dimen name="signin_screen_top_padding">50dp</dimen>
+    
     <!-- Autofill card unmasking prompt dimensions -->
     <dimen name="autofill_card_unmask_tooltip_horizontal_padding">16dp</dimen>
     <dimen name="autofill_card_unmask_tooltip_vertical_padding">4dp</dimen>
@@ -233,6 +220,7 @@
     <dimen name="toolbar_tab_count_text_size_1_digit">12dp</dimen>
     <dimen name="toolbar_tab_count_text_size_2_digit">10dp</dimen>
     <dimen name="toolbar_height_no_shadow">56dp</dimen>
+    <dimen name="toolbar_button_width">48dp</dimen>
 
     <dimen name="location_bar_margin_top">5dp</dimen>
     <dimen name="location_bar_margin_bottom">5dp</dimen>
@@ -245,6 +233,8 @@
     <dimen name="omnibox_suggestion_list_padding_top">0dp</dimen>
     <dimen name="omnibox_suggestion_list_padding_bottom">0dp</dimen>
     <dimen name="location_bar_icon_width">36dp</dimen>
+    <dimen name="tablet_toolbar_start_padding">4dp</dimen>
+    <dimen name="tablet_toolbar_start_padding_no_buttons">6dp</dimen>
     <dimen name="tablet_toolbar_end_padding">6dp</dimen>
     <dimen name="location_bar_status_separator_width">1dp</dimen>
     <!-- Offset applied to the toolbar menu button in document mode to align with the menu
@@ -268,8 +258,9 @@
     <dimen name="ntp_list_item_min_height">48dp</dimen>
     <dimen name="ntp_list_item_text_size">16sp</dimen>
     <dimen name="ntp_shadow_height">9dp</dimen>
-    <dimen name="snippets_thumbnail_size">90dp</dimen>
-    
+    <dimen name="snippets_thumbnail_size">72dp</dimen>
+    <dimen name="snippets_vertical_space">2dp</dimen>
+
     <!-- Interests page -->
     <dimen name="ntp_interest_item_text_size">20sp</dimen>
     <dimen name="ntp_interest_item_min_height">180dp</dimen>
@@ -278,19 +269,11 @@
 
     <!-- Recent tabs page -->
     <dimen name="recent_tabs_visible_separator_padding">8dp</dimen>
-    <dimen name="recent_tabs_promo_padding">16dp</dimen>
 
     <!-- Snackbars -->
     <dimen name="snackbar_min_height">48dp</dimen>
-    <dimen name="snackbar_tablet_width">450dp</dimen>
-    <dimen name="snackbar_tablet_margin">24dp</dimen>
-
-    <!-- Bookmarks widget dimensions -->
-    <dimen name="widget_thumbnail_height">94dp</dimen>
-    <dimen name="widget_horizontal_spacing">6dp</dimen>
-    <dimen name="widget_vertical_spacing">6dp</dimen>
-    <dimen name="widget_column_width">80dp</dimen>
-    <dimen name="widget_favicon_size">16dp</dimen>
+    <dimen name="snackbar_width_tablet">450dp</dimen>
+    <dimen name="snackbar_margin_tablet">24dp</dimen>
 
     <!-- Bookmarks dimensions -->
     <dimen name="bookmark_item_corner_radius">3dp</dimen>
@@ -302,6 +285,10 @@
     <dimen name="bookmark_minimum_dialog_size_tablet">500dp</dimen>
     <dimen name="bookmark_drawer_drawable_padding">18dp</dimen>
 
+    <!-- Bookmark widget dimensions -->
+    <dimen name="bookmark_widget_min_width">64dp</dimen>
+    <dimen name="bookmark_widget_min_height">48dp</dimen>
+
     <!-- Custom Tabs dimensions -->
     <dimen name="custom_tabs_toolbar_maxWidth">60dp</dimen>
     <dimen name="custom_tabs_toolbar_vertical_padding">16dp</dimen>
@@ -309,6 +296,7 @@
     <dimen name="min_toolbar_icon_side_padding">6dp</dimen>
     <dimen name="custom_tabs_url_text_size">12sp</dimen>
     <dimen name="custom_tabs_title_text_size">16sp</dimen>
+    <dimen name="custom_tabs_bottom_bar_max_height">60dp</dimen>
 
     <!-- Favicon dimensions -->
     <dimen name="default_favicon_size">16dp</dimen>

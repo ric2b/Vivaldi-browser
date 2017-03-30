@@ -5,16 +5,18 @@
 #ifndef CHROMEOS_ATTESTATION_ATTESTATION_FLOW_H_
 #define CHROMEOS_ATTESTATION_ATTESTATION_FLOW_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chromeos/attestation/attestation_constants.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
+
+class AccountId;
 
 namespace cryptohome {
 
@@ -46,7 +48,7 @@ class CHROMEOS_EXPORT ServerProxy {
 // and the Chrome OS Privacy CA server.  Sample usage:
 //    AttestationFlow flow(AsyncMethodCaller::GetInstance(),
 //                         DBusThreadManager::Get().GetCryptohomeClient(),
-//                         my_server_proxy.Pass());
+//                         std::move(my_server_proxy));
 //    AttestationFlow::CertificateCallback callback = base::Bind(&MyCallback);
 //    flow.GetCertificate(ENTERPRISE_USER_CERTIFICATE, false, callback);
 class CHROMEOS_EXPORT AttestationFlow {
@@ -57,7 +59,7 @@ class CHROMEOS_EXPORT AttestationFlow {
 
   AttestationFlow(cryptohome::AsyncMethodCaller* async_caller,
                   CryptohomeClient* cryptohome_client,
-                  scoped_ptr<ServerProxy> server_proxy);
+                  std::unique_ptr<ServerProxy> server_proxy);
   virtual ~AttestationFlow();
 
   // Gets an attestation certificate for a hardware-protected key.  If a key for
@@ -69,9 +71,8 @@ class CHROMEOS_EXPORT AttestationFlow {
   // Parameters
   //   certificate_profile - Specifies what kind of certificate should be
   //                         requested from the CA.
-  //   user_id - Identifies the currently active user.  For normal GAIA users
-  //             this is a canonical email address.  This is ignored when using
-  //             the enterprise machine cert profile.
+  //   account_id - Identifies the currently active user. This is ignored when
+  //                using the enterprise machine cert profile.
   //   request_origin - For content protection profiles, certificate requests
   //                    are origin-specific.  This string must uniquely identify
   //                    the origin of the request.
@@ -82,7 +83,7 @@ class CHROMEOS_EXPORT AttestationFlow {
   //              On success |result| will be true and |data| will contain the
   //              PCA-issued certificate chain in PEM format.
   virtual void GetCertificate(AttestationCertificateProfile certificate_profile,
-                              const std::string& user_id,
+                              const AccountId& account_id,
                               const std::string& request_origin,
                               bool force_new_key,
                               const CertificateCallback& callback);
@@ -143,13 +144,13 @@ class CHROMEOS_EXPORT AttestationFlow {
   // Parameters
   //   certificate_profile - Specifies what kind of certificate should be
   //                         requested from the CA.
-  //   user_id - Identifies the active user.
+  //   account_id - Identifies the active user.
   //   request_origin - An identifier for the origin of this request.
   //   generate_new_key - If set to true a new key is generated.
   //   callback - Called when the operation completes.
   void StartCertificateRequest(
       const AttestationCertificateProfile certificate_profile,
-      const std::string& user_id,
+      const AccountId& account_id,
       const std::string& request_origin,
       bool generate_new_key,
       const CertificateCallback& callback);
@@ -160,13 +161,13 @@ class CHROMEOS_EXPORT AttestationFlow {
   //
   // Parameters
   //   key_type - The type of the key for which a certificate is requested.
-  //   user_id - Identifies the active user.
+  //   account_id - Identifies the active user.
   //   key_name - The name of the key for which a certificate is requested.
   //   callback - Called when the operation completes.
   //   success - The status of request creation.
   //   data - The request data for the Privacy CA.
   void SendCertificateRequestToPCA(AttestationKeyType key_type,
-                                   const std::string& user_id,
+                                   const AccountId& account_id,
                                    const std::string& key_name,
                                    const CertificateCallback& callback,
                                    bool success,
@@ -178,13 +179,13 @@ class CHROMEOS_EXPORT AttestationFlow {
   //
   // Parameters
   //   key_type - The type of the key for which a certificate is requested.
-  //   user_id - Identifies the active user.
+  //   account_id - Identifies the active user.
   //   key_name - The name of the key for which a certificate is requested.
   //   callback - Called when the operation completes.
   //   success - The status of the Privacy CA operation.
   //   data - The response data from the Privacy CA.
   void SendCertificateResponseToDaemon(AttestationKeyType key_type,
-                                       const std::string& user_id,
+                                       const AccountId& account_id,
                                        const std::string& key_name,
                                        const CertificateCallback& callback,
                                        bool success,
@@ -194,17 +195,17 @@ class CHROMEOS_EXPORT AttestationFlow {
   //
   // Parameters
   //   key_type - The type of the key for which a certificate is requested.
-  //   user_id - Identifies the active user.
+  //   account_id - Identifies the active user.
   //   key_name - The name of the key for which a certificate is requested.
   //   callback - Called when the operation completes.
   void GetExistingCertificate(AttestationKeyType key_type,
-                              const std::string& user_id,
+                              const AccountId& account_id,
                               const std::string& key_name,
                               const CertificateCallback& callback);
 
   cryptohome::AsyncMethodCaller* async_caller_;
   CryptohomeClient* cryptohome_client_;
-  scoped_ptr<ServerProxy> server_proxy_;
+  std::unique_ptr<ServerProxy> server_proxy_;
 
   base::WeakPtrFactory<AttestationFlow> weak_factory_;
 

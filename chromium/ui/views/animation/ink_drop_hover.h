@@ -10,7 +10,9 @@
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/transform.h"
 #include "ui/views/views_export.h"
 
 namespace ui {
@@ -19,17 +21,28 @@ class CallbackLayerAnimationObserver;
 }  // namespace ui
 
 namespace views {
+namespace test {
+class InkDropHoverTestApi;
+}  // namespace test
+
 class RoundedRectangleLayerDelegate;
+class InkDropHoverObserver;
 
 // Manages fade in/out animations for a painted Layer that is used to provide
 // visual feedback on ui::Views for mouse hover states.
 class VIEWS_EXPORT InkDropHover {
  public:
+  enum AnimationType { FADE_IN, FADE_OUT };
+
   InkDropHover(const gfx::Size& size,
                int corner_radius,
                const gfx::Point& center_point,
                SkColor color);
-  ~InkDropHover();
+  virtual ~InkDropHover();
+
+  void set_observer(InkDropHoverObserver* observer) { observer_ = observer; }
+
+  void set_explode_size(const gfx::Size& size) { explode_size_ = size; }
 
   // Returns true if the hover animation is either in the process of fading
   // in or is fully visible.
@@ -38,24 +51,51 @@ class VIEWS_EXPORT InkDropHover {
   // Fades in the hover visual over the given |duration|.
   void FadeIn(const base::TimeDelta& duration);
 
-  // Fades out the hover visual over the given |duration|.
-  void FadeOut(const base::TimeDelta& duration);
+  // Fades out the hover visual over the given |duration|. If |explode| is true
+  // then the hover will animate a size increase in addition to the fade out.
+  void FadeOut(const base::TimeDelta& duration, bool explode);
 
   // The root Layer that can be added in to a Layer tree.
   ui::Layer* layer() { return layer_.get(); }
 
- private:
-  enum HoverAnimationType { FADE_IN, FADE_OUT };
+  // Returns a test api to access internals of this. Default implmentations
+  // should return nullptr and test specific subclasses can override to return
+  // an instance.
+  virtual test::InkDropHoverTestApi* GetTestApi();
 
-  // Animates a fade in/out as specified by |animation_type| over the given
+ private:
+  friend class test::InkDropHoverTestApi;
+
+  // Animates a fade in/out as specified by |animation_type| combined with a
+  // transformation from the |initial_size| to the |target_size| over the given
   // |duration|.
-  void AnimateFade(HoverAnimationType animation_type,
-                   const base::TimeDelta& duration);
+  void AnimateFade(AnimationType animation_type,
+                   const base::TimeDelta& duration,
+                   const gfx::Size& initial_size,
+                   const gfx::Size& target_size);
+
+  // Calculates the Transform to apply to |layer_| for the given |size|.
+  gfx::Transform CalculateTransform(const gfx::Size& size) const;
+
+  // The callback that will be invoked when a fade in/out animation is started.
+  void AnimationStartedCallback(
+      AnimationType animation_type,
+      const ui::CallbackLayerAnimationObserver& observer);
 
   // The callback that will be invoked when a fade in/out animation is complete.
   bool AnimationEndedCallback(
-      HoverAnimationType animation_type,
+      AnimationType animation_type,
       const ui::CallbackLayerAnimationObserver& observer);
+
+  // The size of the hover shape when fully faded in.
+  gfx::Size size_;
+
+  // The target size of the hover shape when it expands during a fade out
+  // animation.
+  gfx::Size explode_size_;
+
+  // The center point of the hover shape in the parent Layer's coordinate space.
+  gfx::PointF center_point_;
 
   // True if the last animation to be initiated was a FADE_IN, and false
   // otherwise.
@@ -66,6 +106,8 @@ class VIEWS_EXPORT InkDropHover {
 
   // The visual hover layer that is painted by |layer_delegate_|.
   scoped_ptr<ui::Layer> layer_;
+
+  InkDropHoverObserver* observer_;
 
   DISALLOW_COPY_AND_ASSIGN(InkDropHover);
 };

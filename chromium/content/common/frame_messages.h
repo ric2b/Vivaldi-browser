@@ -46,6 +46,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
+#include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -222,6 +223,9 @@ IPC_STRUCT_BEGIN_WITH_PARENT(FrameHostMsg_DidCommitProvisionalLoad_Params,
   // Whether this commit created a new entry.
   IPC_STRUCT_MEMBER(bool, did_create_new_entry)
 
+  // Whether this commit should replace the current entry.
+  IPC_STRUCT_MEMBER(bool, should_replace_current_entry)
+
   // Information regarding the security of the connection (empty if the
   // connection was not secure).
   IPC_STRUCT_MEMBER(std::string, security_info)
@@ -289,6 +293,10 @@ IPC_STRUCT_BEGIN_WITH_PARENT(FrameHostMsg_DidCommitProvisionalLoad_Params,
   // checking.
   IPC_STRUCT_MEMBER(bool, should_enforce_strict_mixed_content_checking)
 
+  // True if the document for the load is a unique origin that should be
+  // considered potentially trustworthy.
+  IPC_STRUCT_MEMBER(bool, has_potentially_trustworthy_unique_origin)
+
   // True if the navigation originated as an srcdoc attribute.
   IPC_STRUCT_MEMBER(bool, is_srcdoc)
 IPC_STRUCT_END()
@@ -331,10 +339,10 @@ IPC_STRUCT_TRAITS_BEGIN(content::CommonNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(history_url_for_data_url)
   IPC_STRUCT_TRAITS_MEMBER(lofi_state)
   IPC_STRUCT_TRAITS_MEMBER(navigation_start)
+  IPC_STRUCT_TRAITS_MEMBER(method)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::BeginNavigationParams)
-  IPC_STRUCT_TRAITS_MEMBER(method)
   IPC_STRUCT_TRAITS_MEMBER(headers)
   IPC_STRUCT_TRAITS_MEMBER(load_flags)
   IPC_STRUCT_TRAITS_MEMBER(has_user_gesture)
@@ -343,7 +351,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::BeginNavigationParams)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::StartNavigationParams)
-  IPC_STRUCT_TRAITS_MEMBER(is_post)
   IPC_STRUCT_TRAITS_MEMBER(extra_headers)
   IPC_STRUCT_TRAITS_MEMBER(browser_initiated_post_data)
 #if defined(OS_ANDROID)
@@ -383,6 +390,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameReplicationState)
   IPC_STRUCT_TRAITS_MEMBER(unique_name)
   IPC_STRUCT_TRAITS_MEMBER(scope)
   IPC_STRUCT_TRAITS_MEMBER(should_enforce_strict_mixed_content_checking)
+  IPC_STRUCT_TRAITS_MEMBER(has_potentially_trustworthy_unique_origin)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_BEGIN(FrameMsg_NewFrame_WidgetParams)
@@ -734,10 +742,10 @@ IPC_MESSAGE_ROUTED1(FrameMsg_HideTransitionElements,
 IPC_MESSAGE_ROUTED1(FrameMsg_ShowTransitionElements,
                     std::string /* css_selector */)
 
-// Tells the renderer to reload the frame, optionally ignoring the cache while
+// Tells the renderer to reload the frame, optionally bypassing the cache while
 // doing so.
 IPC_MESSAGE_ROUTED1(FrameMsg_Reload,
-                    bool /* ignore_cache */)
+                    bool /* bypass_cache */)
 
 // Notifies the color chooser client that the user selected a color.
 IPC_MESSAGE_ROUTED2(FrameMsg_DidChooseColorResponse, unsigned, SkColor)
@@ -782,7 +790,9 @@ IPC_MESSAGE_ROUTED1(FrameMsg_EnforceStrictMixedContentChecking,
 
 // Update a proxy's replicated origin.  Used when the frame is navigated to a
 // new origin.
-IPC_MESSAGE_ROUTED1(FrameMsg_DidUpdateOrigin, url::Origin /* origin */)
+IPC_MESSAGE_ROUTED2(FrameMsg_DidUpdateOrigin,
+                    url::Origin /* origin */,
+                    bool /* is potentially trustworthy unique origin */)
 
 // Notifies this frame or proxy that it is now focused.  This is used to
 // support cross-process focused frame changes.
@@ -885,6 +895,14 @@ IPC_MESSAGE_ROUTED1(FrameMsg_UpdatePluginContentOriginWhitelist,
                     std::set<url::Origin> /* origin_whitelist */)
 #endif  // defined(ENABLE_PLUGINS)
 
+// Used to instruct the RenderFrame to go into "view source" mode. This should
+// only be sent to the main frame.
+IPC_MESSAGE_ROUTED0(FrameMsg_EnableViewSourceMode)
+
+// Tells the frame to suppress any further modal dialogs. This ensures that no
+// ScopedPageLoadDeferrer is on the stack for SwapOut.
+IPC_MESSAGE_ROUTED0(FrameMsg_SuppressFurtherDialogs)
+
 // -----------------------------------------------------------------------------
 // Messages sent from the renderer to the browser.
 
@@ -964,6 +982,13 @@ IPC_MESSAGE_ROUTED2(FrameHostMsg_DidChangeName,
 // can dynamically insert a <meta> tag that causes strict mixed content
 // checking to be enforced.
 IPC_MESSAGE_ROUTED0(FrameHostMsg_EnforceStrictMixedContentChecking)
+
+// Sent when the frame is set to a unique origin. TODO(estark): this IPC
+// only exists to support dynamic sandboxing via a CSP delivered in a
+// <meta> tag. This is not supposed to be allowed per the CSP spec and
+// should be ripped out. https://crbug.com/594645
+IPC_MESSAGE_ROUTED1(FrameHostMsg_UpdateToUniqueOrigin,
+                    bool /* is potentially trustworthy unique origin */)
 
 // Sent when the renderer changed the progress of a load.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_DidChangeLoadProgress,
@@ -1065,14 +1090,6 @@ IPC_SYNC_MESSAGE_CONTROL3_1(FrameHostMsg_Are3DAPIsBlocked,
                             content::ThreeDAPIType /* requester */,
                             bool /* blocked */)
 
-// Sent by the renderer process to indicate that a context was lost by
-// client 3D content (Pepper 3D, WebGL) running on the page at the
-// given URL.
-IPC_MESSAGE_CONTROL3(FrameHostMsg_DidLose3DContext,
-                     GURL /* top_origin_url */,
-                     content::ThreeDAPIType /* context_type */,
-                     int /* arb_robustness_status_code */)
-
 #if defined(ENABLE_PLUGINS)
 // Notification sent from a renderer to the browser that a Pepper plugin
 // instance is created in the DOM.
@@ -1124,18 +1141,6 @@ IPC_SYNC_MESSAGE_CONTROL4_3(FrameHostMsg_GetPluginInfo,
 // RenderFrame is destroyed.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_PluginContentOriginAllowed,
                     url::Origin /* content_origin */)
-
-// A renderer sends this to the browser process when it wants to
-// create a plugin.  The browser will create the plugin process if
-// necessary, and will return a handle to the channel on success.
-// On error an empty string is returned.
-IPC_SYNC_MESSAGE_CONTROL4_2(FrameHostMsg_OpenChannelToPlugin,
-                            int /* render_frame_id */,
-                            GURL /* url */,
-                            GURL /* page_url */,
-                            std::string /* mime_type */,
-                            IPC::ChannelHandle /* channel_handle */,
-                            content::WebPluginInfo /* info */)
 
 // A renderer sends this to the browser process when it wants to create a ppapi
 // plugin.  The browser will create the plugin process if necessary, and will
@@ -1276,9 +1281,8 @@ IPC_SYNC_MESSAGE_ROUTED4_2(FrameHostMsg_RunJavaScriptMessage,
 // Displays a dialog to confirm that the user wants to navigate away from the
 // page. Replies true if yes, and false otherwise. The reply string is ignored,
 // but is included so that we can use OnJavaScriptMessageBoxClosed.
-IPC_SYNC_MESSAGE_ROUTED3_2(FrameHostMsg_RunBeforeUnloadConfirm,
+IPC_SYNC_MESSAGE_ROUTED2_2(FrameHostMsg_RunBeforeUnloadConfirm,
                            GURL,           /* in - originating frame URL */
-                           base::string16  /* in - alert message */,
                            bool            /* in - is a reload */,
                            bool            /* out - success */,
                            base::string16  /* out - This is ignored.*/)

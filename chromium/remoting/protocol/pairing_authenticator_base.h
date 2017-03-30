@@ -48,26 +48,17 @@ class PairingAuthenticatorBase : public Authenticator {
   RejectionReason rejection_reason() const override;
   void ProcessMessage(const buzz::XmlElement* message,
                       const base::Closure& resume_callback) override;
-  scoped_ptr<buzz::XmlElement> GetNextMessage() override;
+  std::unique_ptr<buzz::XmlElement> GetNextMessage() override;
   const std::string& GetAuthKey() const override;
-  scoped_ptr<ChannelAuthenticator> CreateChannelAuthenticator() const override;
+  std::unique_ptr<ChannelAuthenticator> CreateChannelAuthenticator()
+      const override;
 
  protected:
-  typedef base::Callback<void(scoped_ptr<Authenticator> authenticator)>
-      SetAuthenticatorCallback;
-
-  static const buzz::StaticQName kPairingInfoTag;
-  static const buzz::StaticQName kClientIdAttribute;
-
-  // Create a V2 authenticator in the specified state, prompting the user for
-  // the PIN first if necessary.
-  virtual void CreateV2AuthenticatorWithPIN(
+  // Create a Spake2 authenticator in the specified state, prompting the user
+  // for the PIN first if necessary.
+  virtual void CreateSpakeAuthenticatorWithPin(
       State initial_state,
-      const SetAuthenticatorCallback& callback) = 0;
-
-  // Amend an authenticator message, for example to add client- or host-specific
-  // elements to it.
-  virtual void AddPairingElements(buzz::XmlElement* message) = 0;
+      const base::Closure& resume_callback) = 0;
 
   // A non-fatal error message that derived classes should set in order to
   // cause the peer to be notified that pairing has failed and that it should
@@ -75,27 +66,19 @@ class PairingAuthenticatorBase : public Authenticator {
   // nor is it currently used other than being logged.
   std::string error_message_;
 
-  // The underlying V2 authenticator, created with either the PIN or the
+  // The underlying SPAKE2 authenticator, created with either the PIN or the
   // Paired Secret by the derived class.
-  scoped_ptr<Authenticator> v2_authenticator_;
+  std::unique_ptr<Authenticator> spake2_authenticator_;
 
   // Derived classes must set this to True if the underlying authenticator is
   // using the Paired Secret.
-  bool using_paired_secret_;
+  bool using_paired_secret_ = false;
 
  private:
-  // Helper methods for ProcessMessage and GetNextMessage
+  // Helper methods for ProcessMessage() and GetNextMessage().
   void MaybeAddErrorMessage(buzz::XmlElement* message);
   bool HasErrorMessage(const buzz::XmlElement* message) const;
   void CheckForFailedSpakeExchange(const base::Closure& resume_callback);
-  void SetAuthenticatorAndProcessMessage(
-      const buzz::XmlElement* message,
-      const base::Closure& resume_callback,
-      scoped_ptr<Authenticator> authenticator);
-
-  // Set to true if a PIN-based authenticator has been requested but has not
-  // yet been set.
-  bool waiting_for_authenticator_;
 
   base::WeakPtrFactory<PairingAuthenticatorBase> weak_factory_;
 

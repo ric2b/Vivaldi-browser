@@ -5,6 +5,7 @@
 #ifndef CONTENT_CHILD_SERVICE_WORKER_WEB_SERVICE_WORKER_IMPL_H_
 #define CONTENT_CHILD_SERVICE_WORKER_WEB_SERVICE_WORKER_IMPL_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/compiler_specific.h"
@@ -13,7 +14,6 @@
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
 #include "third_party/WebKit/public/platform/WebMessagePortChannel.h"
-#include "third_party/WebKit/public/platform/WebPassOwnPtr.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorker.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 
@@ -38,7 +38,7 @@ class CONTENT_EXPORT WebServiceWorkerImpl
     : NON_EXPORTED_BASE(public blink::WebServiceWorker),
       public base::RefCounted<WebServiceWorkerImpl> {
  public:
-  WebServiceWorkerImpl(scoped_ptr<ServiceWorkerHandleReference> handle_ref,
+  WebServiceWorkerImpl(std::unique_ptr<ServiceWorkerHandleReference> handle_ref,
                        ThreadSafeSender* thread_safe_sender);
 
   void OnStateChanged(blink::WebServiceWorkerState new_state);
@@ -48,20 +48,22 @@ class CONTENT_EXPORT WebServiceWorkerImpl
   blink::WebServiceWorkerProxy* proxy() override;
   blink::WebURL url() const override;
   blink::WebServiceWorkerState state() const override;
-  void postMessage(const blink::WebString& message,
+  void postMessage(blink::WebServiceWorkerProvider* provider,
+                   const blink::WebString& message,
+                   const blink::WebSecurityOrigin& source_origin,
                    blink::WebMessagePortChannelArray* channels) override;
   void terminate() override;
 
   // Creates WebServiceWorker::Handle object that owns a reference to the given
   // WebServiceWorkerImpl object.
-  static blink::WebPassOwnPtr<blink::WebServiceWorker::Handle> CreateHandle(
+  static std::unique_ptr<blink::WebServiceWorker::Handle> CreateHandle(
       const scoped_refptr<WebServiceWorkerImpl>& worker);
 
  private:
   friend class base::RefCounted<WebServiceWorkerImpl>;
   ~WebServiceWorkerImpl() override;
 
-  scoped_ptr<ServiceWorkerHandleReference> handle_ref_;
+  std::unique_ptr<ServiceWorkerHandleReference> handle_ref_;
   blink::WebServiceWorkerState state_;
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
   blink::WebServiceWorkerProxy* proxy_;

@@ -76,6 +76,8 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   void SuspendTimerQueue() override;
   void ResumeTimerQueue() override;
   void SetTimerQueueSuspensionWhenBackgroundedEnabled(bool enabled) override;
+  void SetTopLevelBlameContext(
+      base::trace_event::BlameContext* blame_context) override;
 
   // RenderWidgetSignals::Observer implementation:
   void SetAllRenderWidgetsHidden(bool hidden) override;
@@ -117,6 +119,8 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   friend class RendererSchedulerImplTest;
   friend class RendererSchedulerImplForTest;
   friend class RenderWidgetSchedulingState;
+
+  enum class ExpensiveTaskPolicy { RUN, BLOCK, THROTTLE };
 
   enum class TimeDomainType {
     REAL,
@@ -182,9 +186,9 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
   void EndIdlePeriod();
 
   // Returns the serialized scheduler state for tracing.
-  scoped_refptr<base::trace_event::ConvertableToTraceFormat> AsValue(
+  scoped_ptr<base::trace_event::ConvertableToTraceFormat> AsValue(
       base::TimeTicks optional_now) const;
-  scoped_refptr<base::trace_event::ConvertableToTraceFormat> AsValueLocked(
+  scoped_ptr<base::trace_event::ConvertableToTraceFormat> AsValueLocked(
       base::TimeTicks optional_now) const;
 
   static bool ShouldPrioritizeInputEvent(
@@ -285,6 +289,9 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
                             const TaskQueuePolicy& old_task_queue_policy,
                             const TaskQueuePolicy& new_task_queue_policy) const;
 
+  static const char* ExpensiveTaskPolicyToString(
+      ExpensiveTaskPolicy expensive_task_policy);
+
   SchedulerHelper helper_;
   IdleHelper idle_helper_;
   scoped_ptr<ThrottlingHelper> throttling_helper_;
@@ -321,6 +328,7 @@ class SCHEDULER_EXPORT RendererSchedulerImpl
     base::TimeDelta longest_jank_free_task_duration;
     int timer_queue_suspend_count;  // TIMER_TASK_QUEUE suspended if non-zero.
     int navigation_task_expected_count;
+    ExpensiveTaskPolicy expensive_task_policy;
     bool renderer_hidden;
     bool renderer_backgrounded;
     bool timer_queue_suspension_when_backgrounded_enabled;

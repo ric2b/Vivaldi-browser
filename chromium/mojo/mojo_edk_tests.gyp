@@ -19,10 +19,8 @@
         'mojo_message_pipe_perftests',
         'mojo_public_bindings_perftests',
         'mojo_public_bindings_unittests',
-        'mojo_public_environment_unittests',
         'mojo_public_system_perftests',
         'mojo_public_system_unittests',
-        'mojo_public_utility_unittests',
         'mojo_system_unittests',
         'mojo_js_unittests',
         'mojo_js_integration_tests',
@@ -47,7 +45,6 @@
       'type': 'executable',
       'dependencies': [
         '../testing/gtest.gyp:gtest',
-        'mojo_base.gyp:mojo_environment_chromium',
         'mojo_edk.gyp:mojo_run_all_unittests',
         'mojo_public.gyp:mojo_cpp_bindings',
         'mojo_public.gyp:mojo_message_pump_lib',
@@ -58,9 +55,10 @@
         'mojo_public.gyp:mojo_public_test_interfaces_chromium',
         'mojo_public.gyp:mojo_public_test_interfaces_struct_traits',
         'mojo_public.gyp:mojo_public_test_utils',
-        'mojo_public.gyp:mojo_utility',
+        'mojo_public.gyp:mojo_public_test_variant',
       ],
       'sources': [
+        'public/cpp/bindings/tests/array_common_test.h',
         'public/cpp/bindings/tests/array_unittest.cc',
         'public/cpp/bindings/tests/associated_interface_unittest.cc',
         'public/cpp/bindings/tests/binding_callback_unittest.cc',
@@ -71,9 +69,11 @@
         'public/cpp/bindings/tests/connector_unittest.cc',
         'public/cpp/bindings/tests/constant_unittest.cc',
         'public/cpp/bindings/tests/container_test_util.cc',
+        'public/cpp/bindings/tests/container_test_util.h',
         'public/cpp/bindings/tests/equals_unittest.cc',
         'public/cpp/bindings/tests/handle_passing_unittest.cc',
         'public/cpp/bindings/tests/interface_ptr_unittest.cc',
+        'public/cpp/bindings/tests/macros_unittest.cc',
         'public/cpp/bindings/tests/map_unittest.cc',
         'public/cpp/bindings/tests/message_queue.cc',
         'public/cpp/bindings/tests/message_queue.h',
@@ -84,7 +84,9 @@
         'public/cpp/bindings/tests/pickled_struct_chromium.cc',
         'public/cpp/bindings/tests/pickled_struct_chromium.h',
         'public/cpp/bindings/tests/rect_blink.h',
+        'public/cpp/bindings/tests/rect_blink_traits.h',
         'public/cpp/bindings/tests/rect_chromium.h',
+        'public/cpp/bindings/tests/rect_chromium_traits.h',
         'public/cpp/bindings/tests/request_response_unittest.cc',
         'public/cpp/bindings/tests/router_test_util.cc',
         'public/cpp/bindings/tests/router_test_util.h',
@@ -97,10 +99,33 @@
         'public/cpp/bindings/tests/struct_unittest.cc',
         'public/cpp/bindings/tests/struct_with_traits_impl.cc',
         'public/cpp/bindings/tests/struct_with_traits_impl.h',
+        'public/cpp/bindings/tests/struct_with_traits_impl_traits.cc',
+        'public/cpp/bindings/tests/struct_with_traits_impl_traits.h',
         'public/cpp/bindings/tests/sync_method_unittest.cc',
         'public/cpp/bindings/tests/type_conversion_unittest.cc',
         'public/cpp/bindings/tests/union_unittest.cc',
         'public/cpp/bindings/tests/validation_unittest.cc',
+        'public/cpp/bindings/tests/variant_test_util.h',
+      ],
+    },
+    {
+      # GN version: //mojo/public/cpp/bindings/tests:for_blink_tests
+      'target_name': 'mojo_public_bindings_for_blink_tests',
+      'type': 'static_library',
+      'dependencies': [
+        '../testing/gtest.gyp:gtest',
+        'mojo_public.gyp:mojo_cpp_bindings',
+        'mojo_public.gyp:mojo_public_test_interfaces',
+        'mojo_public.gyp:mojo_public_test_wtf_types',
+        'mojo_public.gyp:mojo_public_test_wtf_types_blink',
+      ],
+      'sources': [
+        'public/cpp/bindings/tests/array_common_test.h',
+        'public/cpp/bindings/tests/container_test_util.cc',
+        'public/cpp/bindings/tests/container_test_util.h',
+        'public/cpp/bindings/tests/variant_test_util.h',
+        'public/cpp/bindings/tests/wtf_array_unittest.cc',
+        'public/cpp/bindings/tests/wtf_types_unittest.cc',
       ],
     },
     {
@@ -108,37 +133,19 @@
       'target_name': 'mojo_public_bindings_perftests',
       'type': 'executable',
       'dependencies': [
+        '../base/base.gyp:test_support_base',
         '../testing/gtest.gyp:gtest',
         'mojo_base.gyp:mojo_common_lib',
-        'mojo_edk.gyp:mojo_run_all_unittests',
+        'mojo_edk.gyp:mojo_run_all_perftests',
         'mojo_public.gyp:mojo_cpp_bindings',
-        'mojo_public.gyp:mojo_environment_standalone',
+        'mojo_public.gyp:mojo_message_pump_lib',
         'mojo_public.gyp:mojo_public_bindings_test_utils',
         'mojo_public.gyp:mojo_public_test_interfaces',
         'mojo_public.gyp:mojo_public_test_utils',
-        'mojo_public.gyp:mojo_utility',
       ],
       'sources': [
         'public/cpp/bindings/tests/bindings_perftest.cc',
-      ],
-    },
-    {
-      # GN version: //mojo/edk/test:mojo_public_environment_unittests
-      'target_name': 'mojo_public_environment_unittests',
-      'type': 'executable',
-      'dependencies': [
-        '../testing/gtest.gyp:gtest',
-        'mojo_edk.gyp:mojo_run_all_unittests',
-        'mojo_public.gyp:mojo_cpp_bindings',
-        'mojo_public.gyp:mojo_environment_standalone',
-        'mojo_public.gyp:mojo_public_test_utils',
-        'mojo_public.gyp:mojo_utility',
-      ],
-      'sources': [
-        'public/cpp/environment/tests/async_wait_unittest.cc',
-        'public/cpp/environment/tests/async_waiter_unittest.cc',
-        'public/cpp/environment/tests/logger_unittest.cc',
-        'public/cpp/environment/tests/logging_unittest.cc',
+        'public/cpp/bindings/tests/e2e_perftest.cc',
       ],
     },
     {
@@ -149,36 +156,11 @@
       'dependencies': [
         '../testing/gtest.gyp:gtest',
         'mojo_edk.gyp:mojo_run_all_unittests',
+        'mojo_public.gyp:mojo_cpp_system',
         'mojo_public.gyp:mojo_public_test_utils',
       ],
       'sources': [
         '<@(mojo_public_system_unittest_sources)',
-      ],
-    },
-    {
-      # GN version: //mojo/public/cpp/application/tests:mojo_public_utility_unittests
-      'target_name': 'mojo_public_utility_unittests',
-      'type': 'executable',
-      'dependencies': [
-        '../testing/gtest.gyp:gtest',
-        'mojo_edk.gyp:mojo_run_all_unittests',
-        'mojo_public.gyp:mojo_cpp_bindings',
-        'mojo_public.gyp:mojo_public_test_utils',
-        'mojo_public.gyp:mojo_utility',
-      ],
-      'sources': [
-        'public/cpp/utility/tests/mutex_unittest.cc',
-        'public/cpp/utility/tests/run_loop_unittest.cc',
-        'public/cpp/utility/tests/thread_unittest.cc',
-      ],
-      'conditions': [
-        # See crbug.com/342893:
-        ['OS=="win"', {
-          'sources!': [
-            'public/cpp/utility/tests/mutex_unittest.cc',
-            'public/cpp/utility/tests/thread_unittest.cc',
-          ],
-        }],
       ],
     },
     {
@@ -190,7 +172,6 @@
         '../testing/gtest.gyp:gtest',
         'mojo_edk.gyp:mojo_run_all_perftests',
         'mojo_public.gyp:mojo_public_test_utils',
-        'mojo_public.gyp:mojo_utility',
       ],
       'sources': [
         'public/c/system/tests/core_perftest.cc',
@@ -227,6 +208,7 @@
         'edk/system/waiter_test_utils.cc',
         'edk/system/waiter_test_utils.h',
         'edk/system/waiter_unittest.cc',
+        'edk/system/watch_unittest.cc',
       ],
       'conditions': [
         ['OS=="ios"', {
@@ -264,9 +246,7 @@
         'mojo_edk.gyp:mojo_common_test_support',
         'mojo_edk.gyp:mojo_run_all_unittests',
         'mojo_edk.gyp:mojo_js_lib',
-        'mojo_public.gyp:mojo_environment_standalone',
         'mojo_public.gyp:mojo_public_test_interfaces',
-        'mojo_public.gyp:mojo_utility',
       ],
       'sources': [
         'edk/js/handle_unittest.cc',
@@ -284,9 +264,7 @@
         'mojo_edk.gyp:mojo_js_lib',
         'mojo_edk.gyp:mojo_run_all_unittests',
         'mojo_js_to_cpp_bindings',
-        'mojo_public.gyp:mojo_environment_standalone',
         'mojo_public.gyp:mojo_public_test_interfaces',
-        'mojo_public.gyp:mojo_utility',
       ],
       'sources': [
         'edk/js/test/run_js_integration_tests.cc',
@@ -321,19 +299,6 @@
           ],
         },
         {
-          'target_name': 'mojo_public_environment_unittests_run',
-          'type': 'none',
-          'dependencies': [
-            'mojo_public_environment_unittests',
-          ],
-          'includes': [
-            '../build/isolate.gypi',
-          ],
-          'sources': [
-            'mojo_public_environment_unittests.isolate',
-          ],
-        },
-        {
           'target_name': 'mojo_public_system_unittests_run',
           'type': 'none',
           'dependencies': [
@@ -344,19 +309,6 @@
           ],
           'sources': [
             'mojo_public_system_unittests.isolate',
-          ],
-        },
-        {
-          'target_name': 'mojo_public_utility_unittests_run',
-          'type': 'none',
-          'dependencies': [
-            'mojo_public_utility_unittests',
-          ],
-          'includes': [
-            '../build/isolate.gypi',
-          ],
-          'sources': [
-            'mojo_public_utility_unittests.isolate',
           ],
         },
       ],

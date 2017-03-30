@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/json/string_escape.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -76,15 +77,18 @@ int ResponseWriter::Initialize(const net::CompletionCallback& callback) {
 int ResponseWriter::Write(net::IOBuffer* buffer,
                           int num_bytes,
                           const net::CompletionCallback& callback) {
+  std::string chunk = std::string(buffer->data(), num_bytes);
+  if (!base::IsStringUTF8(chunk))
+    return num_bytes;
+
   base::FundamentalValue* id = new base::FundamentalValue(stream_id_);
-  base::StringValue* chunk =
-      new base::StringValue(std::string(buffer->data(), num_bytes));
+  base::StringValue* chunkValue = new base::StringValue(chunk);
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
       base::Bind(&ShellDevToolsFrontend::CallClientFunction,
                  shell_devtools_, "DevToolsAPI.streamWrite",
-                 base::Owned(id), base::Owned(chunk), nullptr));
+                 base::Owned(id), base::Owned(chunkValue), nullptr));
   return num_bytes;
 }
 
@@ -262,18 +266,21 @@ void ShellDevToolsFrontend::DispatchProtocolMessage(
     DevToolsAgentHost* agent_host, const std::string& message) {
 
   if (message.length() < kMaxMessageChunkSize) {
-    base::string16 javascript = base::UTF8ToUTF16(
-        "DevToolsAPI.dispatchMessage(" + message + ");");
+    std::string param;
+    base::EscapeJSONString(message, true, &param);
+    std::string code = "DevToolsAPI.dispatchMessage(" + param + ");";
+    base::string16 javascript = base::UTF8ToUTF16(code);
     web_contents()->GetMainFrame()->ExecuteJavaScriptForTests(javascript);
     return;
   }
 
-  base::FundamentalValue total_size(static_cast<int>(message.length()));
+  size_t total_size = message.length();
   for (size_t pos = 0; pos < message.length(); pos += kMaxMessageChunkSize) {
     std::string param;
-    base::JSONWriter::Write(
-        base::StringValue(message.substr(pos, kMaxMessageChunkSize)), &param);
-    std::string code = "DevToolsAPI.dispatchMessageChunk(" + param + ");";
+    base::EscapeJSONString(message.substr(pos, kMaxMessageChunkSize), true,
+                           &param);
+    std::string code = "DevToolsAPI.dispatchMessageChunk(" + param + "," +
+                       std::to_string(pos ? 0 : total_size) + ");";
     base::string16 javascript = base::UTF8ToUTF16(code);
     web_contents()->GetMainFrame()->ExecuteJavaScriptForTests(javascript);
   }

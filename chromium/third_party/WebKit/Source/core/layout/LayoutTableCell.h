@@ -149,7 +149,7 @@ public:
 
         // In strict mode, box-sizing: content-box do the right thing and actually add in the border and padding.
         // Call computedCSSPadding* directly to avoid including implicitPadding.
-        if (!document().inQuirksMode() && style()->boxSizing() != BORDER_BOX)
+        if (!document().inQuirksMode() && style()->boxSizing() != BoxSizingBorderBox)
             styleLogicalHeight += (computedCSSPaddingBefore() + computedCSSPaddingAfter()).floor() + borderBefore() + borderAfter();
         return styleLogicalHeight;
     }
@@ -185,7 +185,7 @@ public:
     bool isBaselineAligned() const
     {
         EVerticalAlign va = style()->verticalAlign();
-        return va == BASELINE || va == TEXT_BOTTOM || va == TEXT_TOP || va == SUPER || va == SUB || va == LENGTH;
+        return va == VerticalAlignBaseline || va == VerticalAlignTextBottom || va == VerticalAlignTextTop || va == VerticalAlignSuper || va == VerticalAlignSub || va == VerticalAlignLength;
     }
 
     void computeIntrinsicPadding(int rowHeight, SubtreeLayoutScope&);
@@ -290,9 +290,9 @@ private:
 
     bool boxShadowShouldBeAppliedToBackground(BackgroundBleedAvoidance, const InlineFlowBox*) const override;
 
-    LayoutSize offsetFromContainer(const LayoutObject*, const LayoutPoint&, bool* offsetDependsOnPoint = nullptr) const override;
-    LayoutRect clippedOverflowRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer, const PaintInvalidationState* = nullptr) const override;
-    void mapToVisibleRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, const PaintInvalidationState*) const override;
+    LayoutSize offsetFromContainer(const LayoutObject*) const override;
+    LayoutRect localOverflowRectForPaintInvalidation() const override;
+    bool mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, VisualRectFlags = DefaultVisualRectFlags) const override;
 
     int borderHalfLeft(bool outer) const;
     int borderHalfRight(bool outer) const;

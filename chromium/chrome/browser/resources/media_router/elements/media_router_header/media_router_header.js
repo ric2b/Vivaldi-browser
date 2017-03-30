@@ -27,6 +27,30 @@ Polymer({
     },
 
     /**
+     * Title text for the back button.
+     * @private {string}
+     */
+    backButtonTitle_: {
+      type: String,
+      readOnly: true,
+      value: function() {
+        return loadTimeData.getString('backButtonTitle');
+      },
+    },
+
+    /**
+     * Title text for the close button.
+     * @private {string}
+     */
+    closeButtonTitle_: {
+      type: String,
+      readOnly: true,
+      value: function() {
+        return loadTimeData.getString('closeButtonTitle');
+      },
+    },
+
+    /**
      * The header text to show.
      * @type {string}
      */
@@ -43,6 +67,16 @@ Polymer({
       type: Number,
       readOnly: true,
       value: 62,
+    },
+
+    /**
+     * The height of the header when it doesn't show the user email.
+     * @private {number}
+     */
+    headerWithoutEmailHeight_: {
+      type: Number,
+      readOnly: true,
+      value: 52,
     },
 
     /**
@@ -88,14 +122,6 @@ Polymer({
     'focus': 'onFocus_',
   },
 
-  ready: function() {
-    // If this is not on a Mac platform, remove the placeholder. See
-    // onFocus_() for more details. ready() is only called once, so no need
-    // to check if the placeholder exist before removing.
-    if (!cr.isMac)
-      this.$$('#focus-placeholder').remove();
-  },
-
   attached: function() {
     // isRTL() only works after i18n_template.js runs to set <html dir>.
     // Set the back button icon based on text direction.
@@ -120,6 +146,17 @@ Polymer({
   computeArrowDropIconHidden_: function(view) {
     return view != media_router.MediaRouterView.SINK_LIST &&
         view != media_router.MediaRouterView.CAST_MODE_LIST;
+  },
+
+  /**
+   * @param {?media_router.MediaRouterView} view The current view.
+   * @return {string} The title text for the arrow drop button.
+   * @private
+   */
+  computeArrowDropTitle_: function(view) {
+    return view == media_router.MediaRouterView.CAST_MODE_LIST ?
+        loadTimeData.getString('viewDeviceListButtonTitle') :
+            loadTimeData.getString('viewCastModeListButtonTitle');
   },
 
   /**
@@ -164,28 +201,6 @@ Polymer({
   },
 
   /**
-   * Called when a focus event is triggered.
-   *
-   * @param {!Event} event The event object.
-   * @private
-   */
-  onFocus_: function(event) {
-    // If the focus event was not triggered by the user, remove focus from
-    // the element. This prevents unexpected focusing when the dialog is
-    // initially loaded.
-    // This only happens on mac.
-    if (cr.isMac && !event.sourceCapabilities) {
-      event.path[0].blur();
-      // Adding a focus placeholder element is part of the workaround for
-      // handling unexpected focusing, which only happens once on dialog open.
-      // Since #focus-placeholder initially is focus-enabled, as denoted by
-      // its tabindex value, the focus will not appear in other elements.
-      // Remove the placeholder since we have no more use for it.
-      this.$$('#focus-placeholder').remove();
-    }
-  },
-
-  /**
    * Handles a click on the arrow button by firing an arrow-click event.
    *
    * @private
@@ -201,11 +216,11 @@ Polymer({
    * Updates header height to accomodate email text. This is called on changes
    * to |showEmail| and will return early if the value has not changed.
    *
-   * @param {boolean} oldValue .
-   * @param {boolean} newValue .
+   * @param {boolean} newValue The new value of |showEmail|.
+   * @param {boolean} oldValue The previous value of |showEmail|.
    * @private
    */
-  maybeChangeHeaderHeight_: function(oldValue, newValue) {
+  maybeChangeHeaderHeight_: function(newValue, oldValue) {
     if (!!oldValue == !!newValue) {
       return;
     }
@@ -216,7 +231,8 @@ Polymer({
 
       this.$$('#header-toolbar').style.height =
           this.showEmail && !this.isEmptyOrWhitespace_(this.userEmail) ?
-              this.headerWithEmailHeight_ + 'px' : undefined;
+              this.headerWithEmailHeight_ + 'px' :
+                  this.headerWithoutEmailHeight_ + 'px';
 
       // Only fire if height actually changed.
       if (currentHeight != this.offsetHeight) {

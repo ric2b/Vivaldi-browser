@@ -160,7 +160,7 @@ class LocalFileSyncContextTest : public testing::Test {
         file_system_context, change, local_path, url,
         base::Bind(&LocalFileSyncContextTest::DidApplyRemoteChange,
                    base::Unretained(this),
-                   make_scoped_refptr(file_system_context), url));
+                   base::RetainedRef(file_system_context), url));
     base::MessageLoop::current()->Run();
     return status_;
   }
@@ -348,7 +348,7 @@ class LocalFileSyncContextTest : public testing::Test {
   }
 
   base::ScopedTempDir dir_;
-  scoped_ptr<leveldb::Env> in_memory_env_;
+  std::unique_ptr<leveldb::Env> in_memory_env_;
 
   // These need to remain until the very end.
   content::TestBrowserThreadBundle thread_bundle_;

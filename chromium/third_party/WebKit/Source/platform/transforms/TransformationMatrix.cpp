@@ -33,6 +33,7 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/transforms/AffineTransform.h"
+#include "platform/transforms/Rotation.h"
 
 #include "wtf/Assertions.h"
 #include "wtf/MathExtras.h"
@@ -850,6 +851,11 @@ TransformationMatrix& TransformationMatrix::scale3d(double sx, double sy, double
     return *this;
 }
 
+TransformationMatrix& TransformationMatrix::rotate3d(const Rotation& rotation)
+{
+    return rotate3d(rotation.axis.x(), rotation.axis.y(), rotation.axis.z(), rotation.angle);
+}
+
 TransformationMatrix& TransformationMatrix::rotate3d(double x, double y, double z, double angle)
 {
     // Normalize the axis of rotation
@@ -1396,6 +1402,17 @@ AffineTransform TransformationMatrix::toAffineTransform() const
 {
     return AffineTransform(m_matrix[0][0], m_matrix[0][1], m_matrix[1][0],
                            m_matrix[1][1], m_matrix[3][0], m_matrix[3][1]);
+}
+
+void TransformationMatrix::flattenTo2d()
+{
+    m_matrix[2][0] = 0;
+    m_matrix[2][1] = 0;
+    m_matrix[0][2] = 0;
+    m_matrix[1][2] = 0;
+    m_matrix[2][2] = 1;
+    m_matrix[3][2] = 0;
+    m_matrix[2][3] = 0;
 }
 
 static inline void blendFloat(double& from, double to, double progress)

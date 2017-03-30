@@ -240,7 +240,7 @@ bool CSSPropertyEquality::propertiesEqual(CSSPropertyID prop, const ComputedStyl
         return a.top() == b.top();
     case CSSPropertyVerticalAlign:
         return a.verticalAlign() == b.verticalAlign()
-            && (a.verticalAlign() != LENGTH || a.verticalAlignLength() == b.verticalAlignLength());
+            && (a.verticalAlign() != VerticalAlignLength || a.getVerticalAlignLength() == b.getVerticalAlignLength());
     case CSSPropertyVisibility:
         return a.visibility() == b.visibility();
     case CSSPropertyWebkitBorderHorizontalSpacing:
@@ -314,7 +314,7 @@ bool CSSPropertyEquality::propertiesEqual(CSSPropertyID prop, const ComputedStyl
     case CSSPropertyWordSpacing:
         return a.wordSpacing() == b.wordSpacing();
     case CSSPropertyD:
-        return a.svgStyle().d()->equals(*b.svgStyle().d());
+        return dataEquivalent(a.svgStyle().d(), b.svgStyle().d());
     case CSSPropertyCx:
         return a.svgStyle().cx() == b.svgStyle().cx();
     case CSSPropertyCy:

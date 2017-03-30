@@ -135,6 +135,8 @@ void ConvertConfigDescriptor(const libusb_config_descriptor* platform_config,
   configuration->extra_data.assign(
       platform_config->extra,
       platform_config->extra + platform_config->extra_length);
+
+  configuration->AssignFirstInterfaceNumbers();
 }
 
 }  // namespace
@@ -142,11 +144,15 @@ void ConvertConfigDescriptor(const libusb_config_descriptor* platform_config,
 UsbDeviceImpl::UsbDeviceImpl(
     scoped_refptr<UsbContext> context,
     PlatformUsbDevice platform_device,
-    uint16_t vendor_id,
-    uint16_t product_id,
+    const libusb_device_descriptor& descriptor,
     scoped_refptr<base::SequencedTaskRunner> blocking_task_runner)
-    : UsbDevice(vendor_id,
-                product_id,
+    : UsbDevice(descriptor.bcdUSB,
+                descriptor.bDeviceClass,
+                descriptor.bDeviceSubClass,
+                descriptor.bDeviceProtocol,
+                descriptor.idVendor,
+                descriptor.idProduct,
+                descriptor.bcdDevice,
                 base::string16(),
                 base::string16(),
                 base::string16()),
@@ -195,35 +201,23 @@ void UsbDeviceImpl::Open(const OpenCallback& callback) {
 #endif  // defined(OS_CHROMEOS)
 }
 
-void UsbDeviceImpl::Close(scoped_refptr<UsbDeviceHandle> handle) {
+void UsbDeviceImpl::HandleClosed(scoped_refptr<UsbDeviceHandle> handle) {
   DCHECK(thread_checker_.CalledOnValidThread());
-
-  for (HandlesVector::iterator it = handles_.begin(); it != handles_.end();
-       ++it) {
-    if (it->get() == handle.get()) {
-      (*it)->InternalClose();
-      handles_.erase(it);
-      return;
-    }
-  }
+  handles_.remove(handle.get());
 }
 
-const UsbConfigDescriptor* UsbDeviceImpl::GetActiveConfiguration() {
+const UsbConfigDescriptor* UsbDeviceImpl::GetActiveConfiguration() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return active_configuration_;
 }
 
 void UsbDeviceImpl::OnDisconnect() {
   DCHECK(thread_checker_.CalledOnValidThread());
-
-  // Swap the list of handles into a local variable because closing all open
-  // handles may release the last reference to this object.
-  HandlesVector handles;
-  swap(handles, handles_);
-
-  for (const scoped_refptr<UsbDeviceHandleImpl>& handle : handles_) {
-    handle->InternalClose();
-  }
+  // Swap out the handle list as HandleClosed() will try to modify it.
+  std::list<UsbDeviceHandle*> handles;
+  handles.swap(handles_);
+  for (UsbDeviceHandle* handle : handles)
+    handle->Close();
 }
 
 void UsbDeviceImpl::ReadAllConfigurations() {
@@ -331,7 +325,7 @@ void UsbDeviceImpl::Opened(PlatformUsbDeviceHandle platform_handle,
   DCHECK(thread_checker_.CalledOnValidThread());
   scoped_refptr<UsbDeviceHandleImpl> device_handle = new UsbDeviceHandleImpl(
       context_, this, platform_handle, blocking_task_runner_);
-  handles_.push_back(device_handle);
+  handles_.push_back(device_handle.get());
   callback.Run(device_handle);
 }
 

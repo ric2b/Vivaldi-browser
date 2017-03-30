@@ -11,11 +11,12 @@
 #include "base/task_runner.h"
 #include "mojo/edk/embedder/process_delegate.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
-#include "mojo/public/cpp/system/macros.h"
 
 namespace mojo {
 namespace edk {
 namespace test {
+
+base::TaskRunner* GetIoTaskRunner();
 
 namespace internal {
 
@@ -34,7 +35,7 @@ class ScopedIPCSupportHelper {
 
   base::RunLoop run_loop_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ScopedIPCSupportHelper);
+  DISALLOW_COPY_AND_ASSIGN(ScopedIPCSupportHelper);
 };
 
 }  // namespace internal
@@ -54,7 +55,7 @@ class ScopedIPCSupport : public ProcessDelegate {
 
   internal::ScopedIPCSupportHelper helper_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ScopedIPCSupport);
+  DISALLOW_COPY_AND_ASSIGN(ScopedIPCSupport);
 };
 
 }  // namespace test

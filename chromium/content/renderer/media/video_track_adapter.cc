@@ -43,7 +43,7 @@ void ReleaseOriginalFrame(const scoped_refptr<media::VideoFrame>& frame) {
 }
 
 void ResetCallbackOnMainRenderThread(
-    scoped_ptr<VideoCaptureDeliverFrameCB> callback) {
+    std::unique_ptr<VideoCaptureDeliverFrameCB> callback) {
   // |callback| will be deleted when this exits.
 }
 
@@ -184,7 +184,7 @@ void VideoTrackAdapter::VideoFrameResolutionAdapter::RemoveCallback(
       // Make sure the VideoCaptureDeliverFrameCB is released on the main
       // render thread since it was added on the main render thread in
       // VideoTrackAdapter::AddTrack.
-      scoped_ptr<VideoCaptureDeliverFrameCB> callback(
+      std::unique_ptr<VideoCaptureDeliverFrameCB> callback(
           new VideoCaptureDeliverFrameCB(it->second));
       callbacks_.erase(it);
       renderer_task_runner_->PostTask(
@@ -266,8 +266,8 @@ void VideoTrackAdapter::VideoFrameResolutionAdapter::DeliverFrame(
     const gfx::Rect region_in_frame =
         media::ComputeLetterboxRegion(frame->visible_rect(), desired_size);
 
-    video_frame =
-        media::VideoFrame::WrapVideoFrame(frame, region_in_frame, desired_size);
+    video_frame = media::VideoFrame::WrapVideoFrame(
+        frame, frame->format(), region_in_frame, desired_size);
     if (!video_frame)
       return;
     video_frame->AddDestructionObserver(

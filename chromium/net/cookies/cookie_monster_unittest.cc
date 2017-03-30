@@ -71,8 +71,8 @@ const char kTopLevelDomainPlus3[] = "http://www.bourbaki.math.harvard.edu";
 const char kOtherDomain[] = "http://www.mit.edu";
 
 struct CookieMonsterTestTraits {
-  static scoped_refptr<CookieStore> Create() {
-    return new CookieMonster(NULL, NULL);
+  static scoped_ptr<CookieStore> Create() {
+    return make_scoped_ptr(new CookieMonster(nullptr, nullptr));
   }
 
   static const bool supports_http_only = true;
@@ -85,8 +85,8 @@ struct CookieMonsterTestTraits {
 };
 
 struct CookieMonsterEnforcingStrictSecure {
-  static scoped_refptr<CookieStore> Create() {
-    return new CookieMonster(NULL, NULL);
+  static scoped_ptr<CookieStore> Create() {
+    return make_scoped_ptr(new CookieMonster(nullptr, nullptr));
   }
 
   static const bool supports_http_only = true;
@@ -100,10 +100,6 @@ struct CookieMonsterEnforcingStrictSecure {
 
 INSTANTIATE_TYPED_TEST_CASE_P(CookieMonster,
                               CookieStoreTest,
-                              CookieMonsterTestTraits);
-
-INSTANTIATE_TYPED_TEST_CASE_P(CookieMonster,
-                              MultiThreadedCookieStoreTest,
                               CookieMonsterTestTraits);
 
 INSTANTIATE_TYPED_TEST_CASE_P(CookieMonsterStrictSecure,
@@ -170,14 +166,14 @@ class CookieMonsterTestBase : public CookieStoreTest<T> {
 
   // Helper for DeleteAllForHost test; repopulates CM with same layout
   // each time.
-  void PopulateCmForDeleteAllForHost(scoped_refptr<CookieMonster> cm) {
+  void PopulateCmForDeleteAllForHost(CookieMonster* cm) {
     GURL url_top_level_domain_plus_1(kTopLevelDomainPlus1);
     GURL url_top_level_domain_plus_2(kTopLevelDomainPlus2);
     GURL url_top_level_domain_plus_2_secure(kTopLevelDomainPlus2Secure);
     GURL url_top_level_domain_plus_3(kTopLevelDomainPlus3);
     GURL url_other(kOtherDomain);
 
-    this->DeleteAll(cm.get());
+    this->DeleteAll(cm);
 
     // Static population for probe:
     //    * Three levels of domain cookie (.b.a, .c.b.a, .d.c.b.a)
@@ -190,75 +186,76 @@ class CookieMonsterTestBase : public CookieStoreTest<T> {
 
     // Domain cookies
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_1, "dom_1", "X", ".harvard.edu",
-        "/", base::Time(), base::Time(), base::Time(), false, false, false,
-        COOKIE_PRIORITY_DEFAULT));
+        cm, url_top_level_domain_plus_1, "dom_1", "X", ".harvard.edu", "/",
+        base::Time(), base::Time(), base::Time(), false, false,
+        CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_2, "dom_2", "X",
-        ".math.harvard.edu", "/", base::Time(), base::Time(), base::Time(),
-        false, false, false, COOKIE_PRIORITY_DEFAULT));
+        cm, url_top_level_domain_plus_2, "dom_2", "X", ".math.harvard.edu", "/",
+        base::Time(), base::Time(), base::Time(), false, false,
+        CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_3, "dom_3", "X",
+        cm, url_top_level_domain_plus_3, "dom_3", "X",
         ".bourbaki.math.harvard.edu", "/", base::Time(), base::Time(),
-        base::Time(), false, false, false, COOKIE_PRIORITY_DEFAULT));
+        base::Time(), false, false, CookieSameSite::DEFAULT_MODE,
+        COOKIE_PRIORITY_DEFAULT));
 
     // Host cookies
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_1, "host_1", "X", std::string(),
-        "/", base::Time(), base::Time(), base::Time(), false, false, false,
-        COOKIE_PRIORITY_DEFAULT));
+        cm, url_top_level_domain_plus_1, "host_1", "X", std::string(), "/",
+        base::Time(), base::Time(), base::Time(), false, false,
+        CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_2, "host_2", "X", std::string(),
-        "/", base::Time(), base::Time(), base::Time(), false, false, false,
-        COOKIE_PRIORITY_DEFAULT));
+        cm, url_top_level_domain_plus_2, "host_2", "X", std::string(), "/",
+        base::Time(), base::Time(), base::Time(), false, false,
+        CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_3, "host_3", "X", std::string(),
-        "/", base::Time(), base::Time(), base::Time(), false, false, false,
-        COOKIE_PRIORITY_DEFAULT));
+        cm, url_top_level_domain_plus_3, "host_3", "X", std::string(), "/",
+        base::Time(), base::Time(), base::Time(), false, false,
+        CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
 
     // http_only cookie
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_2, "httpo_check", "x",
-        std::string(), "/", base::Time(), base::Time(), base::Time(), false,
-        true, false, COOKIE_PRIORITY_DEFAULT));
+        cm, url_top_level_domain_plus_2, "httpo_check", "x", std::string(), "/",
+        base::Time(), base::Time(), base::Time(), false, true,
+        CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
 
     // same-site cookie
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_2, "firstp_check", "x",
-        std::string(), "/", base::Time(), base::Time(), base::Time(), false,
-        false, true, COOKIE_PRIORITY_DEFAULT));
+        cm, url_top_level_domain_plus_2, "firstp_check", "x", std::string(),
+        "/", base::Time(), base::Time(), base::Time(), false, false,
+        CookieSameSite::STRICT_MODE, COOKIE_PRIORITY_DEFAULT));
 
     // Secure cookies
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_2_secure, "sec_dom", "X",
+        cm, url_top_level_domain_plus_2_secure, "sec_dom", "X",
         ".math.harvard.edu", "/", base::Time(), base::Time(), base::Time(),
-        true, false, false, COOKIE_PRIORITY_DEFAULT));
+        true, false, CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_2_secure, "sec_host", "X",
-        std::string(), "/", base::Time(), base::Time(), base::Time(), true,
-        false, false, COOKIE_PRIORITY_DEFAULT));
+        cm, url_top_level_domain_plus_2_secure, "sec_host", "X", std::string(),
+        "/", base::Time(), base::Time(), base::Time(), true, false,
+        CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
 
     // Domain path cookies
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_2, "dom_path_1", "X",
-        ".math.harvard.edu", "/dir1", base::Time(), base::Time(), base::Time(),
-        false, false, false, COOKIE_PRIORITY_DEFAULT));
+        cm, url_top_level_domain_plus_2, "dom_path_1", "X", ".math.harvard.edu",
+        "/dir1", base::Time(), base::Time(), base::Time(), false, false,
+        CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_2, "dom_path_2", "X",
-        ".math.harvard.edu", "/dir1/dir2", base::Time(), base::Time(),
-        base::Time(), false, false, false, COOKIE_PRIORITY_DEFAULT));
+        cm, url_top_level_domain_plus_2, "dom_path_2", "X", ".math.harvard.edu",
+        "/dir1/dir2", base::Time(), base::Time(), base::Time(), false, false,
+        CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
 
     // Host path cookies
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_2, "host_path_1", "X",
-        std::string(), "/dir1", base::Time(), base::Time(), base::Time(), false,
-        false, false, COOKIE_PRIORITY_DEFAULT));
+        cm, url_top_level_domain_plus_2, "host_path_1", "X", std::string(),
+        "/dir1", base::Time(), base::Time(), base::Time(), false, false,
+        CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
     EXPECT_TRUE(this->SetCookieWithDetails(
-        cm.get(), url_top_level_domain_plus_2, "host_path_2", "X",
-        std::string(), "/dir1/dir2", base::Time(), base::Time(), base::Time(),
-        false, false, false, COOKIE_PRIORITY_DEFAULT));
+        cm, url_top_level_domain_plus_2, "host_path_2", "X", std::string(),
+        "/dir1/dir2", base::Time(), base::Time(), base::Time(), false, false,
+        CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
 
-    EXPECT_EQ(14U, this->GetAllCookies(cm.get()).size());
+    EXPECT_EQ(14U, this->GetAllCookies(cm).size());
   }
 
   Time GetFirstCookieAccessDate(CookieMonster* cm) {
@@ -287,7 +284,7 @@ class CookieMonsterTestBase : public CookieStoreTest<T> {
         (domain_max_cookies + domain_purge_cookies) * 2;
     // Add a bunch of cookies on a single host, should purge them.
     {
-      scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+      scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
       for (int i = 0; i < more_than_enough_cookies; ++i) {
         std::string cookie = base::StringPrintf("a%03d=b", i);
         EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), cookie));
@@ -305,7 +302,7 @@ class CookieMonsterTestBase : public CookieStoreTest<T> {
     // between them.  We shouldn't go above kDomainMaxCookies for both together.
     GURL url_google_specific(http_www_google_.Format("http://www.gmail.%D"));
     {
-      scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+      scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
       for (int i = 0; i < more_than_enough_cookies; ++i) {
         std::string cookie_general = base::StringPrintf("a%03d=b", i);
         EXPECT_TRUE(
@@ -365,6 +362,7 @@ class CookieMonsterTestBase : public CookieStoreTest<T> {
                               size_t expected_low_count,
                               size_t expected_medium_count,
                               size_t expected_high_count) {
+    SCOPED_TRACE(coded_priority_str);
     this->DeleteAll(cm);
     int next_cookie_id = 0;
     std::vector<CookiePriority> priority_list;
@@ -448,10 +446,10 @@ class CookieMonsterTestBase : public CookieStoreTest<T> {
                                 size_t expected_secure_cookies,
                                 size_t expected_non_secure_cookies,
                                 const AltHosts* alt_host_entries) {
-    scoped_refptr<CookieMonster> cm;
+    scoped_ptr<CookieMonster> cm;
 
     if (alt_host_entries == nullptr) {
-      cm = new CookieMonster(nullptr, nullptr);
+      cm.reset(new CookieMonster(nullptr, nullptr));
     } else {
       // When generating all of these cookies on alternate hosts, they need to
       // be all older than the max "safe" date for GC, which is currently 30
@@ -499,7 +497,7 @@ class CookieMonsterTestBase : public CookieStoreTest<T> {
     DCHECK_EQ(50U, CookieMonster::kDomainCookiesQuotaMedium);
     DCHECK_EQ(70U, CookieMonster::kDomainCookiesQuotaHigh);
 
-    scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+    scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
 
     // Each test case adds 181 cookies, so 31 cookies are evicted.
     // Cookie same priority, repeated for each priority.
@@ -625,7 +623,7 @@ struct CookiesInputInfo {
   const base::Time expiration_time;
   bool secure;
   bool http_only;
-  bool same_site;
+  CookieSameSite same_site;
   CookiePriority priority;
 };
 
@@ -717,14 +715,14 @@ class DeferredCookieTaskTest : public CookieMonsterTest {
  protected:
   DeferredCookieTaskTest() : expect_load_called_(false) {
     persistent_store_ = new NewMockPersistentCookieStore();
-    cookie_monster_ = new CookieMonster(persistent_store_.get(), NULL);
+    cookie_monster_.reset(new CookieMonster(persistent_store_.get(), nullptr));
   }
 
   // Defines a cookie to be returned from PersistentCookieStore::Load
-  void DeclareLoadedCookie(const std::string& key,
+  void DeclareLoadedCookie(const GURL& url,
                            const std::string& cookie_line,
                            const base::Time& creation_time) {
-    AddCookieToList(key, cookie_line, creation_time, &loaded_cookies_);
+    AddCookieToList(url, cookie_line, creation_time, &loaded_cookies_);
   }
 
   // Runs the message loop, waiting until PersistentCookieStore::Load is called.
@@ -806,13 +804,13 @@ class DeferredCookieTaskTest : public CookieMonsterTest {
   // Indicates whether ExpectLoadCall() has been called.
   bool expect_load_called_;
   // Stores the CookieMonster under test.
-  scoped_refptr<CookieMonster> cookie_monster_;
+  scoped_ptr<CookieMonster> cookie_monster_;
   // Stores the mock PersistentCookieStore.
   scoped_refptr<NewMockPersistentCookieStore> persistent_store_;
 };
 
 TEST_F(DeferredCookieTaskTest, DeferredGetCookies) {
-  DeclareLoadedCookie(http_www_google_.host(),
+  DeclareLoadedCookie(http_www_google_.url(),
                       "X=1; path=/; expires=Mon, 18-Apr-22 22:50:14 GMT",
                       Time::Now() + TimeDelta::FromDays(3));
 
@@ -858,14 +856,14 @@ TEST_F(DeferredCookieTaskTest, DeferredSetCookie) {
 TEST_F(DeferredCookieTaskTest, DeferredSetAllCookies) {
   MockSetCookiesCallback set_cookies_callback;
   CookieList list;
-  list.push_back(CanonicalCookie(http_www_google_.url(), "A", "B",
-                                 http_www_google_.domain(), "/",
-                                 base::Time::Now(), base::Time(), base::Time(),
-                                 false, true, false, COOKIE_PRIORITY_DEFAULT));
-  list.push_back(CanonicalCookie(http_www_google_.url(), "C", "D",
-                                 http_www_google_.domain(), "/",
-                                 base::Time::Now(), base::Time(), base::Time(),
-                                 false, true, false, COOKIE_PRIORITY_DEFAULT));
+  list.push_back(*CanonicalCookie::Create(
+      http_www_google_.url(), "A", "B", http_www_google_.domain(), "/",
+      base::Time::Now(), base::Time(), false, true,
+      CookieSameSite::DEFAULT_MODE, false, COOKIE_PRIORITY_DEFAULT));
+  list.push_back(*CanonicalCookie::Create(
+      http_www_google_.url(), "C", "D", http_www_google_.domain(), "/",
+      base::Time::Now(), base::Time(), false, true,
+      CookieSameSite::DEFAULT_MODE, false, COOKIE_PRIORITY_DEFAULT));
 
   BeginWith(
       SetAllCookiesAction(&cookie_monster(), list, &set_cookies_callback));
@@ -913,7 +911,7 @@ TEST_F(DeferredCookieTaskTest, DeferredSetCookieWithDetails) {
                                   base::Time(),
                                   false,
                                   false,
-                                  false,
+                                  CookieSameSite::DEFAULT_MODE,
                                   COOKIE_PRIORITY_DEFAULT};
   BeginWithForDomainKey(
       http_www_google_.domain(),
@@ -930,7 +928,7 @@ TEST_F(DeferredCookieTaskTest, DeferredSetCookieWithDetails) {
                                       base::Time(),
                                       false,
                                       false,
-                                      false,
+                                      CookieSameSite::DEFAULT_MODE,
                                       COOKIE_PRIORITY_DEFAULT};
   EXPECT_CALL(set_cookies_callback, Invoke(true))
       .WillOnce(SetCookieWithDetailsAction(&cookie_monster(), cookie_info_exp,
@@ -943,7 +941,7 @@ TEST_F(DeferredCookieTaskTest, DeferredSetCookieWithDetails) {
 }
 
 TEST_F(DeferredCookieTaskTest, DeferredGetAllCookies) {
-  DeclareLoadedCookie(http_www_google_.host(),
+  DeclareLoadedCookie(http_www_google_.url(),
                       "X=1; path=/; expires=Mon, 18-Apr-22 22:50:14 GMT",
                       Time::Now() + TimeDelta::FromDays(3));
 
@@ -965,7 +963,7 @@ TEST_F(DeferredCookieTaskTest, DeferredGetAllCookies) {
 }
 
 TEST_F(DeferredCookieTaskTest, DeferredGetAllForUrlCookies) {
-  DeclareLoadedCookie(http_www_google_.host(),
+  DeclareLoadedCookie(http_www_google_.url(),
                       "X=1; path=/; expires=Mon, 18-Apr-22 22:50:14 GMT",
                       Time::Now() + TimeDelta::FromDays(3));
 
@@ -991,7 +989,7 @@ TEST_F(DeferredCookieTaskTest, DeferredGetAllForUrlCookies) {
 }
 
 TEST_F(DeferredCookieTaskTest, DeferredGetAllForUrlWithOptionsCookies) {
-  DeclareLoadedCookie(http_www_google_.host(),
+  DeclareLoadedCookie(http_www_google_.url(),
                       "X=1; path=/; expires=Mon, 18-Apr-22 22:50:14 GMT",
                       Time::Now() + TimeDelta::FromDays(3));
 
@@ -1075,18 +1073,18 @@ TEST_F(DeferredCookieTaskTest, DeferredDeleteAllForHostCreatedBetweenCookies) {
 
 TEST_F(DeferredCookieTaskTest, DeferredDeleteCanonicalCookie) {
   std::vector<CanonicalCookie*> cookies;
-  CanonicalCookie cookie = BuildCanonicalCookie(
-      http_www_google_.host(), "X=1; path=/", base::Time::Now());
+  scoped_ptr<CanonicalCookie> cookie = BuildCanonicalCookie(
+      http_www_google_.url(), "X=1; path=/", base::Time::Now());
 
   MockDeleteCallback delete_cookie_callback;
 
-  BeginWith(DeleteCanonicalCookieAction(&cookie_monster(), cookie,
+  BeginWith(DeleteCanonicalCookieAction(&cookie_monster(), *cookie,
                                         &delete_cookie_callback));
 
   WaitForLoadCall();
 
   EXPECT_CALL(delete_cookie_callback, Invoke(0))
-      .WillOnce(DeleteCanonicalCookieAction(&cookie_monster(), cookie,
+      .WillOnce(DeleteCanonicalCookieAction(&cookie_monster(), *cookie,
                                             &delete_cookie_callback));
   base::RunLoop loop;
   EXPECT_CALL(delete_cookie_callback, Invoke(0)).WillOnce(QuitRunLoop(&loop));
@@ -1116,7 +1114,7 @@ TEST_F(DeferredCookieTaskTest, DeferredDeleteSessionCookies) {
 // the backing store and that new tasks received while the queued tasks are
 // being dispatched go to the end of the queue.
 TEST_F(DeferredCookieTaskTest, DeferredTaskOrder) {
-  DeclareLoadedCookie(http_www_google_.host(),
+  DeclareLoadedCookie(http_www_google_.url(),
                       "X=1; path=/; expires=Mon, 18-Apr-22 22:50:14 GMT",
                       Time::Now() + TimeDelta::FromDays(3));
 
@@ -1149,7 +1147,7 @@ TEST_F(DeferredCookieTaskTest, DeferredTaskOrder) {
 
 TEST_F(CookieMonsterTest, TestCookieDeleteAll) {
   scoped_refptr<MockPersistentCookieStore> store(new MockPersistentCookieStore);
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
   CookieOptions options;
   options.set_include_httponly();
 
@@ -1182,7 +1180,7 @@ TEST_F(CookieMonsterTest, TestCookieDeleteAll) {
 }
 
 TEST_F(CookieMonsterTest, TestCookieDeleteAllCreatedBetweenTimestamps) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
   Time now = Time::Now();
 
   // Nothing has been added so nothing should be deleted.
@@ -1221,11 +1219,14 @@ TEST_F(CookieMonsterTest, TestCookieDeleteAllCreatedBetweenTimestamps) {
   EXPECT_EQ(0, DeleteAll(cm.get()));
 }
 
-static const int kAccessDelayMs = kLastAccessThresholdMilliseconds + 20;
+static const base::TimeDelta kLastAccessThreshold =
+    base::TimeDelta::FromMilliseconds(200);
+static const base::TimeDelta kAccessDelay =
+    kLastAccessThreshold + base::TimeDelta::FromMilliseconds(20);
 
 TEST_F(CookieMonsterTest, TestLastAccess) {
-  scoped_refptr<CookieMonster> cm(
-      new CookieMonster(NULL, NULL, kLastAccessThresholdMilliseconds));
+  scoped_ptr<CookieMonster> cm(
+      new CookieMonster(nullptr, nullptr, kLastAccessThreshold));
 
   EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "A=B"));
   const Time last_access_date(GetFirstCookieAccessDate(cm.get()));
@@ -1238,8 +1239,7 @@ TEST_F(CookieMonsterTest, TestLastAccess) {
   // Reading after a short wait will update the access date, if the cookie
   // is requested with options that would update the access date. First, test
   // that the flag's behavior is respected.
-  base::PlatformThread::Sleep(
-      base::TimeDelta::FromMilliseconds(kAccessDelayMs));
+  base::PlatformThread::Sleep(kAccessDelay);
   CookieOptions options;
   options.set_do_not_update_access_time();
   EXPECT_EQ("A=B",
@@ -1272,8 +1272,8 @@ TEST_F(CookieMonsterTest, TestPriorityAwareGarbageCollection) {
 }
 
 TEST_F(CookieMonsterTest, SetCookieableSchemes) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
-  scoped_refptr<CookieMonster> cm_foo(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
+  scoped_ptr<CookieMonster> cm_foo(new CookieMonster(nullptr, nullptr));
 
   // Only cm_foo should allow foo:// cookies.
   std::vector<std::string> schemes;
@@ -1290,8 +1290,8 @@ TEST_F(CookieMonsterTest, SetCookieableSchemes) {
 }
 
 TEST_F(CookieMonsterTest, GetAllCookiesForURL) {
-  scoped_refptr<CookieMonster> cm(
-      new CookieMonster(NULL, NULL, kLastAccessThresholdMilliseconds));
+  scoped_ptr<CookieMonster> cm(
+      new CookieMonster(nullptr, nullptr, kLastAccessThreshold));
 
   // Create an httponly cookie.
   CookieOptions options;
@@ -1308,8 +1308,7 @@ TEST_F(CookieMonsterTest, GetAllCookiesForURL) {
 
   const Time last_access_date(GetFirstCookieAccessDate(cm.get()));
 
-  base::PlatformThread::Sleep(
-      base::TimeDelta::FromMilliseconds(kAccessDelayMs));
+  base::PlatformThread::Sleep(kAccessDelay);
 
   // Check cookies for url.
   CookieList cookies = GetAllCookiesForURL(cm.get(), http_www_google_.url());
@@ -1359,7 +1358,7 @@ TEST_F(CookieMonsterTest, GetAllCookiesForURL) {
 }
 
 TEST_F(CookieMonsterTest, GetAllCookiesForURLPathMatching) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
   CookieOptions options;
 
   EXPECT_TRUE(SetCookieWithOptions(cm.get(), www_google_foo_.url(),
@@ -1397,7 +1396,7 @@ TEST_F(CookieMonsterTest, GetAllCookiesForURLPathMatching) {
 }
 
 TEST_F(CookieMonsterTest, CookieSorting) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
 
   EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "B=B1; path=/"));
   EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "B=B2; path=/foo"));
@@ -1427,7 +1426,7 @@ TEST_F(CookieMonsterTest, CookieSorting) {
 }
 
 TEST_F(CookieMonsterTest, DeleteCookieByName) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
 
   EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "A=A1; path=/"));
   EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "A=A2; path=/foo"));
@@ -1466,20 +1465,20 @@ TEST_F(CookieMonsterTest, DontImportDuplicateCookies) {
   // dates. We expect only the most recent one to be preserved following
   // the import.
 
-  AddCookieToList("www.google.com",
+  AddCookieToList(GURL("http://www.google.com"),
                   "X=1; path=/; expires=Mon, 18-Apr-22 22:50:14 GMT",
                   Time::Now() + TimeDelta::FromDays(3), &initial_cookies);
 
-  AddCookieToList("www.google.com",
+  AddCookieToList(GURL("http://www.google.com"),
                   "X=2; path=/; expires=Mon, 18-Apr-22 22:50:14 GMT",
                   Time::Now() + TimeDelta::FromDays(1), &initial_cookies);
 
   // ===> This one is the WINNER (biggest creation time).  <====
-  AddCookieToList("www.google.com",
+  AddCookieToList(GURL("http://www.google.com"),
                   "X=3; path=/; expires=Mon, 18-Apr-22 22:50:14 GMT",
                   Time::Now() + TimeDelta::FromDays(4), &initial_cookies);
 
-  AddCookieToList("www.google.com",
+  AddCookieToList(GURL("http://www.google.com"),
                   "X=4; path=/; expires=Mon, 18-Apr-22 22:50:14 GMT",
                   Time::Now(), &initial_cookies);
 
@@ -1487,23 +1486,23 @@ TEST_F(CookieMonsterTest, DontImportDuplicateCookies) {
   // dates. We expect only the most recent one to be preserved the import.
 
   // ===> This one is the WINNER (biggest creation time).  <====
-  AddCookieToList("www.google.com",
+  AddCookieToList(GURL("http://www.google.com"),
                   "X=a1; path=/2; expires=Mon, 18-Apr-22 22:50:14 GMT",
                   Time::Now() + TimeDelta::FromDays(9), &initial_cookies);
 
-  AddCookieToList("www.google.com",
+  AddCookieToList(GURL("http://www.google.com"),
                   "X=a2; path=/2; expires=Mon, 18-Apr-22 22:50:14 GMT",
                   Time::Now() + TimeDelta::FromDays(2), &initial_cookies);
 
   // Insert 1 cookie with name "Y" on path "/".
-  AddCookieToList("www.google.com",
+  AddCookieToList(GURL("http://www.google.com"),
                   "Y=a; path=/; expires=Mon, 18-Apr-22 22:50:14 GMT",
                   Time::Now() + TimeDelta::FromDays(10), &initial_cookies);
 
   // Inject our initial cookies into the mock PersistentCookieStore.
   store->SetLoadExpectation(true, initial_cookies);
 
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
 
   // Verify that duplicates were not imported for path "/".
   // (If this had failed, GetCookies() would have also returned X=1, X=2, X=4).
@@ -1538,20 +1537,28 @@ TEST_F(CookieMonsterTest, DontImportDuplicateCreationTimes) {
   // two cookies remaining, but which two (other than that there should
   // be one from each set) will be random.
   std::vector<CanonicalCookie*> initial_cookies;
-  AddCookieToList("www.google.com", "X=1; path=/", now, &initial_cookies);
-  AddCookieToList("www.google.com", "X=2; path=/", now, &initial_cookies);
-  AddCookieToList("www.google.com", "X=3; path=/", now, &initial_cookies);
-  AddCookieToList("www.google.com", "X=4; path=/", now, &initial_cookies);
+  AddCookieToList(GURL("http://www.google.com"), "X=1; path=/", now,
+                  &initial_cookies);
+  AddCookieToList(GURL("http://www.google.com"), "X=2; path=/", now,
+                  &initial_cookies);
+  AddCookieToList(GURL("http://www.google.com"), "X=3; path=/", now,
+                  &initial_cookies);
+  AddCookieToList(GURL("http://www.google.com"), "X=4; path=/", now,
+                  &initial_cookies);
 
-  AddCookieToList("www.google.com", "Y=1; path=/", earlier, &initial_cookies);
-  AddCookieToList("www.google.com", "Y=2; path=/", earlier, &initial_cookies);
-  AddCookieToList("www.google.com", "Y=3; path=/", earlier, &initial_cookies);
-  AddCookieToList("www.google.com", "Y=4; path=/", earlier, &initial_cookies);
+  AddCookieToList(GURL("http://www.google.com"), "Y=1; path=/", earlier,
+                  &initial_cookies);
+  AddCookieToList(GURL("http://www.google.com"), "Y=2; path=/", earlier,
+                  &initial_cookies);
+  AddCookieToList(GURL("http://www.google.com"), "Y=3; path=/", earlier,
+                  &initial_cookies);
+  AddCookieToList(GURL("http://www.google.com"), "Y=4; path=/", earlier,
+                  &initial_cookies);
 
   // Inject our initial cookies into the mock PersistentCookieStore.
   store->SetLoadExpectation(true, initial_cookies);
 
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
 
   CookieList list(GetAllCookies(cm.get()));
   EXPECT_EQ(2U, list.size());
@@ -1567,8 +1574,7 @@ TEST_F(CookieMonsterTest, CookieMonsterDelegate) {
   scoped_refptr<MockPersistentCookieStore> store(new MockPersistentCookieStore);
   scoped_refptr<MockCookieMonsterDelegate> delegate(
       new MockCookieMonsterDelegate);
-  scoped_refptr<CookieMonster> cm(
-      new CookieMonster(store.get(), delegate.get()));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), delegate.get()));
 
   EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "A=B"));
   EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "C=D"));
@@ -1647,7 +1653,7 @@ TEST_F(CookieMonsterTest, CookieMonsterDelegate) {
 }
 
 TEST_F(CookieMonsterTest, DeleteAllForHost) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
 
   // Test probes:
   //    * Non-secure URL, mid-level (http://w.c.b.a)
@@ -1657,7 +1663,7 @@ TEST_F(CookieMonsterTest, DeleteAllForHost) {
   // the http_only cookie, the host secure cookie, and the two host
   // path cookies.  http_only, secure, and paths are ignored by
   // this call, and domain cookies arent touched.
-  PopulateCmForDeleteAllForHost(cm);
+  PopulateCmForDeleteAllForHost(cm.get());
   EXPECT_EQ("dom_1=X; dom_2=X; dom_3=X; host_3=X",
             GetCookies(cm.get(), GURL(kTopLevelDomainPlus3)));
   EXPECT_EQ("dom_1=X; dom_2=X; host_2=X; sec_dom=X; sec_host=X",
@@ -1685,7 +1691,7 @@ TEST_F(CookieMonsterTest, DeleteAllForHost) {
             GetCookies(cm.get(), GURL(kTopLevelDomainPlus2Secure +
                                       std::string("/dir1/dir2/xxx"))));
 
-  PopulateCmForDeleteAllForHost(cm);
+  PopulateCmForDeleteAllForHost(cm.get());
   EXPECT_EQ(6, DeleteAllCreatedBetweenForHost(
                    cm.get(), base::Time(), base::Time::Now(),
                    GURL(kTopLevelDomainPlus2Secure)));
@@ -1701,7 +1707,7 @@ TEST_F(CookieMonsterTest, DeleteAllForHost) {
             GetCookies(cm.get(), GURL(kTopLevelDomainPlus2Secure +
                                       std::string("/dir1/dir2/xxx"))));
 
-  PopulateCmForDeleteAllForHost(cm);
+  PopulateCmForDeleteAllForHost(cm.get());
   EXPECT_EQ(6,
             DeleteAllCreatedBetweenForHost(
                 cm.get(), base::Time(), base::Time::Now(),
@@ -1720,7 +1726,7 @@ TEST_F(CookieMonsterTest, DeleteAllForHost) {
 }
 
 TEST_F(CookieMonsterTest, UniqueCreationTime) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
   CookieOptions options;
 
   // Add in three cookies through every public interface to the
@@ -1747,15 +1753,15 @@ TEST_F(CookieMonsterTest, UniqueCreationTime) {
   EXPECT_TRUE(SetCookieWithDetails(
       cm.get(), http_www_google_.url(), "setCookieWithDetails1", "A",
       http_www_google_.Format(".%D"), "/", Time(), Time(), Time(), false, false,
-      false, COOKIE_PRIORITY_DEFAULT));
+      CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
   EXPECT_TRUE(SetCookieWithDetails(
       cm.get(), http_www_google_.url(), "setCookieWithDetails2", "A",
       http_www_google_.Format(".%D"), "/", Time(), Time(), Time(), false, false,
-      false, COOKIE_PRIORITY_DEFAULT));
+      CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
   EXPECT_TRUE(SetCookieWithDetails(
       cm.get(), http_www_google_.url(), "setCookieWithDetails3", "A",
       http_www_google_.Format(".%D"), "/", Time(), Time(), Time(), false, false,
-      false, COOKIE_PRIORITY_DEFAULT));
+      CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
 
   // Now we check
   CookieList cookie_list(GetAllCookies(cm.get()));
@@ -1783,7 +1789,7 @@ TEST_F(CookieMonsterTest, UniqueCreationTime) {
 // Mainly a test of GetEffectiveDomain, or more specifically, of the
 // expected behavior of GetEffectiveDomain within the CookieMonster.
 TEST_F(CookieMonsterTest, GetKey) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
 
   // This test is really only interesting if GetKey() actually does something.
   EXPECT_EQ("google.com", cm->GetKey("www.google.com"));
@@ -1815,41 +1821,19 @@ TEST_F(CookieMonsterTest, BackingStoreCommunication) {
   base::Time expires(base::Time::Now() + base::TimeDelta::FromSeconds(100));
 
   const CookiesInputInfo input_info[] = {
-      {GURL("http://a.b.google.com"),
-       "a",
-       "1",
-       "",
-       "/path/to/cookie",
-       expires,
-       false,
-       false,
-       false,
-       COOKIE_PRIORITY_DEFAULT},
-      {GURL("https://www.google.com"),
-       "b",
-       "2",
-       ".google.com",
-       "/path/from/cookie",
-       expires + TimeDelta::FromSeconds(10),
-       true,
-       true,
-       false,
-       COOKIE_PRIORITY_DEFAULT},
-      {GURL("https://google.com"),
-       "c",
-       "3",
-       "",
-       "/another/path/to/cookie",
-       base::Time::Now() + base::TimeDelta::FromSeconds(100),
-       true,
-       false,
-       true,
-       COOKIE_PRIORITY_DEFAULT}};
+      {GURL("http://a.b.google.com"), "a", "1", "", "/path/to/cookie", expires,
+       false, false, CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT},
+      {GURL("https://www.google.com"), "b", "2", ".google.com",
+       "/path/from/cookie", expires + TimeDelta::FromSeconds(10), true, true,
+       CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT},
+      {GURL("https://google.com"), "c", "3", "", "/another/path/to/cookie",
+       base::Time::Now() + base::TimeDelta::FromSeconds(100), true, false,
+       CookieSameSite::STRICT_MODE, COOKIE_PRIORITY_DEFAULT}};
   const int INPUT_DELETE = 1;
 
   // Create new cookies and flush them to the store.
   {
-    scoped_refptr<CookieMonster> cmout(new CookieMonster(store.get(), NULL));
+    scoped_ptr<CookieMonster> cmout(new CookieMonster(store.get(), nullptr));
     for (const CookiesInputInfo* p = input_info;
          p < &input_info[arraysize(input_info)]; p++) {
       EXPECT_TRUE(SetCookieWithDetails(
@@ -1865,7 +1849,7 @@ TEST_F(CookieMonsterTest, BackingStoreCommunication) {
 
   // Create a new cookie monster and make sure that everything is correct
   {
-    scoped_refptr<CookieMonster> cmin(new CookieMonster(store.get(), NULL));
+    scoped_ptr<CookieMonster> cmin(new CookieMonster(store.get(), nullptr));
     CookieList cookies(GetAllCookies(cmin.get()));
     ASSERT_EQ(2u, cookies.size());
     // Ordering is path length, then creation time.  So second cookie
@@ -1884,7 +1868,7 @@ TEST_F(CookieMonsterTest, BackingStoreCommunication) {
                 output->CreationDate().ToInternalValue());
       EXPECT_EQ(input->secure, output->IsSecure());
       EXPECT_EQ(input->http_only, output->IsHttpOnly());
-      EXPECT_EQ(input->same_site, output->IsSameSite());
+      EXPECT_EQ(input->same_site, output->SameSite());
       EXPECT_TRUE(output->IsPersistent());
       EXPECT_EQ(input->expiration_time.ToInternalValue(),
                 output->ExpiryDate().ToInternalValue());
@@ -1895,7 +1879,7 @@ TEST_F(CookieMonsterTest, BackingStoreCommunication) {
 TEST_F(CookieMonsterTest, CookieListOrdering) {
   // Put a random set of cookies into a monster and make sure
   // they're returned in the right order.
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
   EXPECT_TRUE(
       SetCookie(cm.get(), GURL("http://d.c.b.a.google.com/aa/x.html"), "c=1"));
   EXPECT_TRUE(SetCookie(cm.get(), GURL("http://b.a.google.com/aa/bb/cc/x.html"),
@@ -1952,7 +1936,7 @@ TEST_F(CookieMonsterTest, MAYBE_GarbageCollectionTriggers) {
   // First we check to make sure that a whole lot of recent cookies
   // doesn't get rid of anything after garbage collection is checked for.
   {
-    scoped_refptr<CookieMonster> cm(
+    scoped_ptr<CookieMonster> cm(
         CreateMonsterForGC(CookieMonster::kMaxCookies * 2));
     EXPECT_EQ(CookieMonster::kMaxCookies * 2, GetAllCookies(cm.get()).size());
     SetCookie(cm.get(), GURL("http://newdomain.com"), "b=2");
@@ -1994,9 +1978,9 @@ TEST_F(CookieMonsterTest, MAYBE_GarbageCollectionTriggers) {
 
   for (int ci = 0; ci < static_cast<int>(arraysize(test_cases)); ++ci) {
     const TestCase* test_case = &test_cases[ci];
-    scoped_refptr<CookieMonster> cm(CreateMonsterFromStoreForGC(
+    scoped_ptr<CookieMonster> cm = CreateMonsterFromStoreForGC(
         test_case->num_cookies, test_case->num_old_cookies, 0, 0,
-        CookieMonster::kSafeFromGlobalPurgeDays * 2));
+        CookieMonster::kSafeFromGlobalPurgeDays * 2);
     EXPECT_EQ(test_case->expected_initial_cookies,
               GetAllCookies(cm.get()).size())
         << "For test case " << ci;
@@ -2006,6 +1990,199 @@ TEST_F(CookieMonsterTest, MAYBE_GarbageCollectionTriggers) {
               GetAllCookies(cm.get()).size())
         << "For test case " << ci;
   }
+}
+
+// Tests that if the main load event happens before the loaded event for a
+// particular key, the tasks for that key run first.
+TEST_F(CookieMonsterTest, WhileLoadingLoadCompletesBeforeKeyLoadCompletes) {
+  const GURL kUrl = GURL(kTopLevelDomainPlus1);
+
+  scoped_refptr<MockPersistentCookieStore> store(new MockPersistentCookieStore);
+  store->set_store_load_commands(true);
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
+
+  // Get all cookies task that queues a task to set a cookie when executed.
+  ResultSavingCookieCallback<bool> set_cookie_callback;
+  cm->SetCookieWithOptionsAsync(
+      kUrl, "a=b", CookieOptions(),
+      base::Bind(&ResultSavingCookieCallback<bool>::Run,
+                 base::Unretained(&set_cookie_callback)));
+
+  GetCookieListCallback get_cookie_list_callback1;
+  cm->GetAllCookiesAsync(
+      base::Bind(&GetCookieListCallback::Run,
+                 base::Unretained(&get_cookie_list_callback1)));
+
+  // Two load events should have been queued.
+  ASSERT_EQ(2u, store->commands().size());
+  ASSERT_EQ(CookieStoreCommand::LOAD, store->commands()[0].type);
+  ASSERT_EQ(CookieStoreCommand::LOAD_COOKIES_FOR_KEY,
+            store->commands()[1].type);
+
+  // The main load completes first (With no cookies).
+  store->commands()[0].loaded_callback.Run(std::vector<CanonicalCookie*>());
+
+  // The tasks should run in order, and the get should see the cookies.
+
+  set_cookie_callback.WaitUntilDone();
+  EXPECT_TRUE(set_cookie_callback.result());
+
+  get_cookie_list_callback1.WaitUntilDone();
+  EXPECT_EQ(1u, get_cookie_list_callback1.cookies().size());
+
+  // The loaded for key event completes late, with not cookies (Since they
+  // were already loaded).
+  store->commands()[1].loaded_callback.Run(std::vector<CanonicalCookie*>());
+
+  // The just set cookie should still be in the store.
+  GetCookieListCallback get_cookie_list_callback2;
+  cm->GetAllCookiesAsync(
+      base::Bind(&GetCookieListCallback::Run,
+                 base::Unretained(&get_cookie_list_callback2)));
+  get_cookie_list_callback2.WaitUntilDone();
+  EXPECT_EQ(1u, get_cookie_list_callback2.cookies().size());
+}
+
+// Tests that case that DeleteAll is waiting for load to complete, and then a
+// get is queued. The get should wait to run until after all the cookies are
+// retrieved, and should return nothing, since all cookies were just deleted.
+TEST_F(CookieMonsterTest, WhileLoadingDeleteAllGetForURL) {
+  const GURL kUrl = GURL(kTopLevelDomainPlus1);
+
+  scoped_refptr<MockPersistentCookieStore> store(new MockPersistentCookieStore);
+  store->set_store_load_commands(true);
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
+
+  ResultSavingCookieCallback<int> delete_callback;
+  cm->DeleteAllAsync(base::Bind(&ResultSavingCookieCallback<int>::Run,
+                                base::Unretained(&delete_callback)));
+
+  GetCookieListCallback get_cookie_list_callback;
+  cm->GetCookieListWithOptionsAsync(
+      kUrl, CookieOptions(),
+      base::Bind(&GetCookieListCallback::Run,
+                 base::Unretained(&get_cookie_list_callback)));
+
+  // Only the main load should have been queued.
+  ASSERT_EQ(1u, store->commands().size());
+  ASSERT_EQ(CookieStoreCommand::LOAD, store->commands()[0].type);
+
+  std::vector<CanonicalCookie*> cookies;
+  // When passed to the CookieMonster, it takes ownership of the pointed to
+  // cookies.
+  cookies.push_back(
+      CanonicalCookie::Create(kUrl, "a=b", base::Time(), CookieOptions())
+          .release());
+  ASSERT_TRUE(cookies[0]);
+  store->commands()[0].loaded_callback.Run(cookies);
+
+  delete_callback.WaitUntilDone();
+  EXPECT_EQ(1, delete_callback.result());
+
+  get_cookie_list_callback.WaitUntilDone();
+  EXPECT_EQ(0u, get_cookie_list_callback.cookies().size());
+}
+
+// Tests that a set cookie call sandwiched between two get all cookies, all
+// before load completes, affects the first but not the second. The set should
+// also not trigger a LoadCookiesForKey (As that could complete only after the
+// main load for the store).
+TEST_F(CookieMonsterTest, WhileLoadingGetAllSetGetAll) {
+  const GURL kUrl = GURL(kTopLevelDomainPlus1);
+
+  scoped_refptr<MockPersistentCookieStore> store(new MockPersistentCookieStore);
+  store->set_store_load_commands(true);
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
+
+  GetCookieListCallback get_cookie_list_callback1;
+  cm->GetAllCookiesAsync(
+      base::Bind(&GetCookieListCallback::Run,
+                 base::Unretained(&get_cookie_list_callback1)));
+
+  ResultSavingCookieCallback<bool> set_cookie_callback;
+  cm->SetCookieWithOptionsAsync(
+      kUrl, "a=b", CookieOptions(),
+      base::Bind(&ResultSavingCookieCallback<bool>::Run,
+                 base::Unretained(&set_cookie_callback)));
+
+  GetCookieListCallback get_cookie_list_callback2;
+  cm->GetAllCookiesAsync(
+      base::Bind(&GetCookieListCallback::Run,
+                 base::Unretained(&get_cookie_list_callback2)));
+
+  // Only the main load should have been queued.
+  ASSERT_EQ(1u, store->commands().size());
+  ASSERT_EQ(CookieStoreCommand::LOAD, store->commands()[0].type);
+
+  // The load completes (With no cookies).
+  store->commands()[0].loaded_callback.Run(std::vector<CanonicalCookie*>());
+
+  get_cookie_list_callback1.WaitUntilDone();
+  EXPECT_EQ(0u, get_cookie_list_callback1.cookies().size());
+
+  set_cookie_callback.WaitUntilDone();
+  EXPECT_TRUE(set_cookie_callback.result());
+
+  get_cookie_list_callback2.WaitUntilDone();
+  EXPECT_EQ(1u, get_cookie_list_callback2.cookies().size());
+}
+
+namespace {
+
+void RunClosureOnCookieListReceived(const base::Closure& closure,
+                                    const CookieList& cookie_list) {
+  closure.Run();
+}
+
+}  // namespace
+
+// Tests that if a single cookie task is queued as a result of a task performed
+// on all cookies when loading completes, it will be run after any already
+// queued tasks.
+TEST_F(CookieMonsterTest, CheckOrderOfCookieTaskQueueWhenLoadingCompletes) {
+  const GURL kUrl = GURL(kTopLevelDomainPlus1);
+
+  scoped_refptr<MockPersistentCookieStore> store(new MockPersistentCookieStore);
+  store->set_store_load_commands(true);
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
+
+  // Get all cookies task that queues a task to set a cookie when executed.
+  ResultSavingCookieCallback<bool> set_cookie_callback;
+  cm->GetAllCookiesAsync(base::Bind(
+      &RunClosureOnCookieListReceived,
+      base::Bind(&CookieStore::SetCookieWithOptionsAsync,
+                 base::Unretained(cm.get()), kUrl, "a=b", CookieOptions(),
+                 base::Bind(&ResultSavingCookieCallback<bool>::Run,
+                            base::Unretained(&set_cookie_callback)))));
+
+  // Get cookie task. Queued before the delete task is executed, so should not
+  // see the set cookie.
+  GetCookieListCallback get_cookie_list_callback1;
+  cm->GetAllCookiesAsync(
+      base::Bind(&GetCookieListCallback::Run,
+                 base::Unretained(&get_cookie_list_callback1)));
+
+  // Only the main load should have been queued.
+  ASSERT_EQ(1u, store->commands().size());
+  ASSERT_EQ(CookieStoreCommand::LOAD, store->commands()[0].type);
+
+  // The load completes.
+  store->commands()[0].loaded_callback.Run(std::vector<CanonicalCookie*>());
+
+  // The get cookies call should see no cookies set.
+  get_cookie_list_callback1.WaitUntilDone();
+  EXPECT_EQ(0u, get_cookie_list_callback1.cookies().size());
+
+  set_cookie_callback.WaitUntilDone();
+  EXPECT_TRUE(set_cookie_callback.result());
+
+  // A subsequent get cookies call should see the new cookie.
+  GetCookieListCallback get_cookie_list_callback2;
+  cm->GetAllCookiesAsync(
+      base::Bind(&GetCookieListCallback::Run,
+                 base::Unretained(&get_cookie_list_callback2)));
+  get_cookie_list_callback2.WaitUntilDone();
+  EXPECT_EQ(1u, get_cookie_list_callback2.cookies().size());
 }
 
 namespace {
@@ -2069,7 +2246,7 @@ class CallbackCounter : public base::RefCountedThreadSafe<CallbackCounter> {
 TEST_F(CookieMonsterTest, FlushStore) {
   scoped_refptr<CallbackCounter> counter(new CallbackCounter());
   scoped_refptr<FlushablePersistentStore> store(new FlushablePersistentStore());
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
 
   ASSERT_EQ(0, store->flush_count());
   ASSERT_EQ(0, counter->callback_count());
@@ -2104,7 +2281,7 @@ TEST_F(CookieMonsterTest, FlushStore) {
   ASSERT_EQ(2, counter->callback_count());
 
   // If there's no backing store, FlushStore() is always a safe no-op.
-  cm = new CookieMonster(NULL, NULL);
+  cm.reset(new CookieMonster(nullptr, nullptr));
   GetAllCookies(cm.get());  // Force init.
   cm->FlushStore(base::Closure());
   base::MessageLoop::current()->RunUntilIdle();
@@ -2119,7 +2296,7 @@ TEST_F(CookieMonsterTest, FlushStore) {
 
 TEST_F(CookieMonsterTest, SetAllCookies) {
   scoped_refptr<FlushablePersistentStore> store(new FlushablePersistentStore());
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
   cm->SetPersistSessionCookies(true);
 
   EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "U=V; path=/"));
@@ -2127,18 +2304,18 @@ TEST_F(CookieMonsterTest, SetAllCookies) {
   EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "Y=Z; path=/"));
 
   CookieList list;
-  list.push_back(CanonicalCookie(http_www_google_.url(), "A", "B",
-                                 http_www_google_.url().host(), "/",
-                                 base::Time::Now(), base::Time(), base::Time(),
-                                 false, false, false, COOKIE_PRIORITY_DEFAULT));
-  list.push_back(CanonicalCookie(http_www_google_.url(), "W", "X",
-                                 http_www_google_.url().host(), "/bar",
-                                 base::Time::Now(), base::Time(), base::Time(),
-                                 false, false, false, COOKIE_PRIORITY_DEFAULT));
-  list.push_back(CanonicalCookie(http_www_google_.url(), "Y", "Z",
-                                 http_www_google_.url().host(), "/",
-                                 base::Time::Now(), base::Time(), base::Time(),
-                                 false, false, false, COOKIE_PRIORITY_DEFAULT));
+  list.push_back(*CanonicalCookie::Create(
+      http_www_google_.url(), "A", "B", http_www_google_.url().host(), "/",
+      base::Time::Now(), base::Time(), false, false,
+      CookieSameSite::DEFAULT_MODE, false, COOKIE_PRIORITY_DEFAULT));
+  list.push_back(*CanonicalCookie::Create(
+      http_www_google_.url(), "W", "X", http_www_google_.url().host(), "/bar",
+      base::Time::Now(), base::Time(), false, false,
+      CookieSameSite::DEFAULT_MODE, false, COOKIE_PRIORITY_DEFAULT));
+  list.push_back(*CanonicalCookie::Create(
+      http_www_google_.url(), "Y", "Z", http_www_google_.url().host(), "/",
+      base::Time::Now(), base::Time(), false, false,
+      CookieSameSite::DEFAULT_MODE, false, COOKIE_PRIORITY_DEFAULT));
 
   // SetAllCookies must not flush.
   ASSERT_EQ(0, store->flush_count());
@@ -2165,71 +2342,73 @@ TEST_F(CookieMonsterTest, SetAllCookies) {
 }
 
 TEST_F(CookieMonsterTest, ComputeCookieDiff) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
 
   base::Time now = base::Time::Now();
   base::Time creation_time = now - base::TimeDelta::FromSeconds(1);
 
-  CanonicalCookie cookie1(http_www_google_.url(), "A", "B",
-                          http_www_google_.url().host(), "/", creation_time,
-                          base::Time(), base::Time(), false, false, false,
-                          COOKIE_PRIORITY_DEFAULT);
-  CanonicalCookie cookie2(http_www_google_.url(), "C", "D",
-                          http_www_google_.url().host(), "/", creation_time,
-                          base::Time(), base::Time(), false, false, false,
-                          COOKIE_PRIORITY_DEFAULT);
-  CanonicalCookie cookie3(http_www_google_.url(), "E", "F",
-                          http_www_google_.url().host(), "/", creation_time,
-                          base::Time(), base::Time(), false, false, false,
-                          COOKIE_PRIORITY_DEFAULT);
-  CanonicalCookie cookie4(http_www_google_.url(), "G", "H",
-                          http_www_google_.url().host(), "/", creation_time,
-                          base::Time(), base::Time(), false, false, false,
-                          COOKIE_PRIORITY_DEFAULT);
-  CanonicalCookie cookie4_with_new_value(
+  scoped_ptr<CanonicalCookie> cookie1(CanonicalCookie::Create(
+      http_www_google_.url(), "A", "B", http_www_google_.url().host(), "/",
+      creation_time, base::Time(), false, false, CookieSameSite::DEFAULT_MODE,
+      false, COOKIE_PRIORITY_DEFAULT));
+  scoped_ptr<CanonicalCookie> cookie2(CanonicalCookie::Create(
+      http_www_google_.url(), "C", "D", http_www_google_.url().host(), "/",
+      creation_time, base::Time(), false, false, CookieSameSite::DEFAULT_MODE,
+      false, COOKIE_PRIORITY_DEFAULT));
+  scoped_ptr<CanonicalCookie> cookie3(CanonicalCookie::Create(
+      http_www_google_.url(), "E", "F", http_www_google_.url().host(), "/",
+      creation_time, base::Time(), false, false, CookieSameSite::DEFAULT_MODE,
+      false, COOKIE_PRIORITY_DEFAULT));
+  scoped_ptr<CanonicalCookie> cookie4(CanonicalCookie::Create(
+      http_www_google_.url(), "G", "H", http_www_google_.url().host(), "/",
+      creation_time, base::Time(), false, false, CookieSameSite::DEFAULT_MODE,
+      false, COOKIE_PRIORITY_DEFAULT));
+  scoped_ptr<CanonicalCookie> cookie4_with_new_value(CanonicalCookie::Create(
       http_www_google_.url(), "G", "iamnew", http_www_google_.url().host(), "/",
-      creation_time, base::Time(), base::Time(), false, false, false,
-      COOKIE_PRIORITY_DEFAULT);
-  CanonicalCookie cookie5(http_www_google_.url(), "I", "J",
-                          http_www_google_.url().host(), "/", creation_time,
-                          base::Time(), base::Time(), false, false, false,
-                          COOKIE_PRIORITY_DEFAULT);
-  CanonicalCookie cookie5_with_new_creation_time(
-      http_www_google_.url(), "I", "J", http_www_google_.url().host(), "/", now,
-      base::Time(), base::Time(), false, false, false, COOKIE_PRIORITY_DEFAULT);
-  CanonicalCookie cookie6(http_www_google_.url(), "K", "L",
-                          http_www_google_.url().host(), "/foo", creation_time,
-                          base::Time(), base::Time(), false, false, false,
-                          COOKIE_PRIORITY_DEFAULT);
-  CanonicalCookie cookie6_with_new_path(
+      creation_time, base::Time(), false, false, CookieSameSite::DEFAULT_MODE,
+      false, COOKIE_PRIORITY_DEFAULT));
+  scoped_ptr<CanonicalCookie> cookie5(CanonicalCookie::Create(
+      http_www_google_.url(), "I", "J", http_www_google_.url().host(), "/",
+      creation_time, base::Time(), false, false, CookieSameSite::DEFAULT_MODE,
+      false, COOKIE_PRIORITY_DEFAULT));
+  scoped_ptr<CanonicalCookie> cookie5_with_new_creation_time(
+      CanonicalCookie::Create(
+          http_www_google_.url(), "I", "J", http_www_google_.url().host(), "/",
+          now, base::Time(), false, false, CookieSameSite::DEFAULT_MODE, false,
+          COOKIE_PRIORITY_DEFAULT));
+  scoped_ptr<CanonicalCookie> cookie6(CanonicalCookie::Create(
+      http_www_google_.url(), "K", "L", http_www_google_.url().host(), "/foo",
+      creation_time, base::Time(), false, false, CookieSameSite::DEFAULT_MODE,
+      false, COOKIE_PRIORITY_DEFAULT));
+  scoped_ptr<CanonicalCookie> cookie6_with_new_path(CanonicalCookie::Create(
       http_www_google_.url(), "K", "L", http_www_google_.url().host(), "/bar",
-      creation_time, base::Time(), base::Time(), false, false, false,
-      COOKIE_PRIORITY_DEFAULT);
-  CanonicalCookie cookie7(http_www_google_.url(), "M", "N",
-                          http_www_google_.url().host(), "/foo", creation_time,
-                          base::Time(), base::Time(), false, false, false,
-                          COOKIE_PRIORITY_DEFAULT);
-  CanonicalCookie cookie7_with_new_path(
+      creation_time, base::Time(), false, false, CookieSameSite::DEFAULT_MODE,
+      false, COOKIE_PRIORITY_DEFAULT));
+  scoped_ptr<CanonicalCookie> cookie7(CanonicalCookie::Create(
+      http_www_google_.url(), "M", "N", http_www_google_.url().host(), "/foo",
+      creation_time, base::Time(), false, false, CookieSameSite::DEFAULT_MODE,
+      false, COOKIE_PRIORITY_DEFAULT));
+  scoped_ptr<CanonicalCookie> cookie7_with_new_path(CanonicalCookie::Create(
       http_www_google_.url(), "M", "N", http_www_google_.url().host(), "/bar",
-      creation_time, base::Time(), base::Time(), false, false, false,
-      COOKIE_PRIORITY_DEFAULT);
+      creation_time, base::Time(), false, false, CookieSameSite::DEFAULT_MODE,
+      false, COOKIE_PRIORITY_DEFAULT));
 
   CookieList old_cookies;
-  old_cookies.push_back(cookie1);
-  old_cookies.push_back(cookie2);
-  old_cookies.push_back(cookie4);
-  old_cookies.push_back(cookie5);
-  old_cookies.push_back(cookie6);
-  old_cookies.push_back(cookie7);
+  old_cookies.push_back(*cookie1);
+  old_cookies.push_back(*cookie2);
+  old_cookies.push_back(*cookie4);
+  old_cookies.push_back(*cookie5);
+  old_cookies.push_back(*cookie6);
+  old_cookies.push_back(*cookie7);
 
   CookieList new_cookies;
-  new_cookies.push_back(cookie1);
-  new_cookies.push_back(cookie3);
-  new_cookies.push_back(cookie4_with_new_value);
-  new_cookies.push_back(cookie5_with_new_creation_time);
-  new_cookies.push_back(cookie6_with_new_path);
-  new_cookies.push_back(cookie7);
-  new_cookies.push_back(cookie7_with_new_path);
+  new_cookies.push_back(*cookie1);
+  new_cookies.push_back(*cookie3);
+  new_cookies.push_back(*cookie4_with_new_value);
+  new_cookies.push_back(*cookie5_with_new_creation_time);
+  new_cookies.push_back(*cookie6_with_new_path);
+  new_cookies.push_back(*cookie7);
+  new_cookies.push_back(*cookie7_with_new_path);
 
   CookieList cookies_to_add;
   CookieList cookies_to_delete;
@@ -2238,51 +2417,51 @@ TEST_F(CookieMonsterTest, ComputeCookieDiff) {
                         &cookies_to_delete);
 
   // |cookie1| has not changed.
-  EXPECT_FALSE(IsCookieInList(cookie1, cookies_to_add));
-  EXPECT_FALSE(IsCookieInList(cookie1, cookies_to_delete));
+  EXPECT_FALSE(IsCookieInList(*cookie1, cookies_to_add));
+  EXPECT_FALSE(IsCookieInList(*cookie1, cookies_to_delete));
 
   // |cookie2| has been deleted.
-  EXPECT_FALSE(IsCookieInList(cookie2, cookies_to_add));
-  EXPECT_TRUE(IsCookieInList(cookie2, cookies_to_delete));
+  EXPECT_FALSE(IsCookieInList(*cookie2, cookies_to_add));
+  EXPECT_TRUE(IsCookieInList(*cookie2, cookies_to_delete));
 
   // |cookie3| has been added.
-  EXPECT_TRUE(IsCookieInList(cookie3, cookies_to_add));
-  EXPECT_FALSE(IsCookieInList(cookie3, cookies_to_delete));
+  EXPECT_TRUE(IsCookieInList(*cookie3, cookies_to_add));
+  EXPECT_FALSE(IsCookieInList(*cookie3, cookies_to_delete));
 
   // |cookie4| has a new value: new cookie overrides the old one (which does not
   // need to be explicitly removed).
-  EXPECT_FALSE(IsCookieInList(cookie4, cookies_to_add));
-  EXPECT_FALSE(IsCookieInList(cookie4, cookies_to_delete));
-  EXPECT_TRUE(IsCookieInList(cookie4_with_new_value, cookies_to_add));
-  EXPECT_FALSE(IsCookieInList(cookie4_with_new_value, cookies_to_delete));
+  EXPECT_FALSE(IsCookieInList(*cookie4, cookies_to_add));
+  EXPECT_FALSE(IsCookieInList(*cookie4, cookies_to_delete));
+  EXPECT_TRUE(IsCookieInList(*cookie4_with_new_value, cookies_to_add));
+  EXPECT_FALSE(IsCookieInList(*cookie4_with_new_value, cookies_to_delete));
 
   // |cookie5| has a new creation time: new cookie overrides the old one (which
   // does not need to be explicitly removed).
-  EXPECT_FALSE(IsCookieInList(cookie5, cookies_to_add));
-  EXPECT_FALSE(IsCookieInList(cookie5, cookies_to_delete));
-  EXPECT_TRUE(IsCookieInList(cookie5_with_new_creation_time, cookies_to_add));
+  EXPECT_FALSE(IsCookieInList(*cookie5, cookies_to_add));
+  EXPECT_FALSE(IsCookieInList(*cookie5, cookies_to_delete));
+  EXPECT_TRUE(IsCookieInList(*cookie5_with_new_creation_time, cookies_to_add));
   EXPECT_FALSE(
-      IsCookieInList(cookie5_with_new_creation_time, cookies_to_delete));
+      IsCookieInList(*cookie5_with_new_creation_time, cookies_to_delete));
 
   // |cookie6| has a new path: the new cookie does not overrides the old one,
   // which needs to be explicitly removed.
-  EXPECT_FALSE(IsCookieInList(cookie6, cookies_to_add));
-  EXPECT_TRUE(IsCookieInList(cookie6, cookies_to_delete));
-  EXPECT_TRUE(IsCookieInList(cookie6_with_new_path, cookies_to_add));
-  EXPECT_FALSE(IsCookieInList(cookie6_with_new_path, cookies_to_delete));
+  EXPECT_FALSE(IsCookieInList(*cookie6, cookies_to_add));
+  EXPECT_TRUE(IsCookieInList(*cookie6, cookies_to_delete));
+  EXPECT_TRUE(IsCookieInList(*cookie6_with_new_path, cookies_to_add));
+  EXPECT_FALSE(IsCookieInList(*cookie6_with_new_path, cookies_to_delete));
 
   // |cookie7| is kept and |cookie7_with_new_path| is added as a new cookie.
-  EXPECT_FALSE(IsCookieInList(cookie7, cookies_to_add));
-  EXPECT_FALSE(IsCookieInList(cookie7, cookies_to_delete));
-  EXPECT_TRUE(IsCookieInList(cookie7_with_new_path, cookies_to_add));
-  EXPECT_FALSE(IsCookieInList(cookie7_with_new_path, cookies_to_delete));
+  EXPECT_FALSE(IsCookieInList(*cookie7, cookies_to_add));
+  EXPECT_FALSE(IsCookieInList(*cookie7, cookies_to_delete));
+  EXPECT_TRUE(IsCookieInList(*cookie7_with_new_path, cookies_to_add));
+  EXPECT_FALSE(IsCookieInList(*cookie7_with_new_path, cookies_to_delete));
 }
 
 // Check that DeleteAll does flush (as a sanity check that flush_count()
 // works).
 TEST_F(CookieMonsterTest, DeleteAll) {
   scoped_refptr<FlushablePersistentStore> store(new FlushablePersistentStore());
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
   cm->SetPersistSessionCookies(true);
 
   EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "X=Y; path=/"));
@@ -2293,7 +2472,7 @@ TEST_F(CookieMonsterTest, DeleteAll) {
 }
 
 TEST_F(CookieMonsterTest, HistogramCheck) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
   // Should match call in InitializeHistograms, but doesn't really matter
   // since the histogram should have been initialized by the CM construction
   // above.
@@ -2306,7 +2485,7 @@ TEST_F(CookieMonsterTest, HistogramCheck) {
   ASSERT_TRUE(SetCookieWithDetails(
       cm.get(), GURL("http://fake.a.url"), "a", "b", "a.url", "/", base::Time(),
       base::Time::Now() + base::TimeDelta::FromMinutes(59), base::Time(), false,
-      false, false, COOKIE_PRIORITY_DEFAULT));
+      false, CookieSameSite::DEFAULT_MODE, COOKIE_PRIORITY_DEFAULT));
 
   scoped_ptr<base::HistogramSamples> samples2(
       expired_histogram->SnapshotSamples());
@@ -2318,330 +2497,6 @@ TEST_F(CookieMonsterTest, HistogramCheck) {
   scoped_ptr<base::HistogramSamples> samples3(
       expired_histogram->SnapshotSamples());
   EXPECT_EQ(samples2->TotalCount(), samples3->TotalCount());
-}
-
-namespace {
-
-class MultiThreadedCookieMonsterTest : public CookieMonsterTest {
- public:
-  MultiThreadedCookieMonsterTest() : other_thread_("CMTthread") {}
-
-  // Helper methods for calling the asynchronous CookieMonster methods
-  // from a different thread.
-
-  void GetAllCookiesTask(CookieMonster* cm, GetCookieListCallback* callback) {
-    cm->GetAllCookiesAsync(
-        base::Bind(&GetCookieListCallback::Run, base::Unretained(callback)));
-  }
-
-  void GetAllCookiesForURLTask(CookieMonster* cm,
-                               const GURL& url,
-                               GetCookieListCallback* callback) {
-    cm->GetAllCookiesForURLAsync(url, base::Bind(&GetCookieListCallback::Run,
-                                                 base::Unretained(callback)));
-  }
-
-  void GetAllCookiesForURLWithOptionsTask(CookieMonster* cm,
-                                          const GURL& url,
-                                          const CookieOptions& options,
-                                          GetCookieListCallback* callback) {
-    cm->GetCookieListWithOptionsAsync(
-        url, options,
-        base::Bind(&GetCookieListCallback::Run, base::Unretained(callback)));
-  }
-
-  void SetCookieWithDetailsTask(CookieMonster* cm,
-                                const GURL& url,
-                                ResultSavingCookieCallback<bool>* callback) {
-    // Define the parameters here instead of in the calling fucntion.
-    // The maximum number of parameters for Bind function is 6.
-    std::string name = "A";
-    std::string value = "B";
-    std::string domain = std::string();
-    std::string path = "/foo";
-    base::Time expiration_time = base::Time();
-    bool secure = false;
-    bool http_only = false;
-    bool same_site = false;
-    CookiePriority priority = COOKIE_PRIORITY_DEFAULT;
-    cm->SetCookieWithDetailsAsync(
-        url, name, value, domain, path, base::Time(), expiration_time,
-        base::Time(), secure, http_only, same_site,
-        false /* enforces strict secure cookies */, priority,
-        base::Bind(&ResultSavingCookieCallback<bool>::Run,
-                   base::Unretained(callback)));
-  }
-
-  void DeleteAllCreatedBetweenTask(CookieMonster* cm,
-                                   const base::Time& delete_begin,
-                                   const base::Time& delete_end,
-                                   ResultSavingCookieCallback<int>* callback) {
-    cm->DeleteAllCreatedBetweenAsync(
-        delete_begin, delete_end,
-        base::Bind(&ResultSavingCookieCallback<int>::Run,
-                   base::Unretained(callback)));
-  }
-
-  void DeleteAllCreatedBetweenForHostTask(
-      CookieMonster* cm,
-      const base::Time delete_begin,
-      const base::Time delete_end,
-      const GURL& url,
-      ResultSavingCookieCallback<int>* callback) {
-    cm->DeleteAllCreatedBetweenForHostAsync(
-        delete_begin, delete_end, url,
-        base::Bind(&ResultSavingCookieCallback<int>::Run,
-                   base::Unretained(callback)));
-  }
-
-  void DeleteCanonicalCookieTask(CookieMonster* cm,
-                                 const CanonicalCookie& cookie,
-                                 ResultSavingCookieCallback<int>* callback) {
-    cm->DeleteCanonicalCookieAsync(
-        cookie, base::Bind(&ResultSavingCookieCallback<int>::Run,
-                           base::Unretained(callback)));
-  }
-
- protected:
-  void RunOnOtherThread(const base::Closure& task) {
-    other_thread_.Start();
-    other_thread_.task_runner()->PostTask(FROM_HERE, task);
-    other_thread_.Stop();
-  }
-
-  Thread other_thread_;
-};
-
-}  // namespace
-
-TEST_F(MultiThreadedCookieMonsterTest, ThreadCheckGetAllCookies) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
-  EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "A=B"));
-  CookieList cookies = GetAllCookies(cm.get());
-  CookieList::const_iterator it = cookies.begin();
-  ASSERT_TRUE(it != cookies.end());
-  EXPECT_EQ(http_www_google_.host(), it->Domain());
-  EXPECT_EQ("A", it->Name());
-  ASSERT_TRUE(++it == cookies.end());
-  GetCookieListCallback callback(&other_thread_);
-  base::Closure task =
-      base::Bind(&MultiThreadedCookieMonsterTest::GetAllCookiesTask,
-                 base::Unretained(this), cm, &callback);
-  RunOnOtherThread(task);
-  callback.WaitUntilDone();
-  it = callback.cookies().begin();
-  ASSERT_TRUE(it != callback.cookies().end());
-  EXPECT_EQ(http_www_google_.host(), it->Domain());
-  EXPECT_EQ("A", it->Name());
-  ASSERT_TRUE(++it == callback.cookies().end());
-}
-
-TEST_F(MultiThreadedCookieMonsterTest, ThreadCheckGetAllCookiesForURL) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
-  EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "A=B"));
-  CookieList cookies = GetAllCookiesForURL(cm.get(), http_www_google_.url());
-  CookieList::const_iterator it = cookies.begin();
-  ASSERT_TRUE(it != cookies.end());
-  EXPECT_EQ(http_www_google_.host(), it->Domain());
-  EXPECT_EQ("A", it->Name());
-  ASSERT_TRUE(++it == cookies.end());
-  GetCookieListCallback callback(&other_thread_);
-  base::Closure task =
-      base::Bind(&MultiThreadedCookieMonsterTest::GetAllCookiesForURLTask,
-                 base::Unretained(this), cm, http_www_google_.url(), &callback);
-  RunOnOtherThread(task);
-  callback.WaitUntilDone();
-  it = callback.cookies().begin();
-  ASSERT_TRUE(it != callback.cookies().end());
-  EXPECT_EQ(http_www_google_.host(), it->Domain());
-  EXPECT_EQ("A", it->Name());
-  ASSERT_TRUE(++it == callback.cookies().end());
-}
-
-TEST_F(MultiThreadedCookieMonsterTest, ThreadCheckGetAllCookiesForURLWithOpt) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
-  EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(), "A=B"));
-  CookieOptions options;
-  CookieList cookies =
-      GetAllCookiesForURLWithOptions(cm.get(), http_www_google_.url(), options);
-  CookieList::const_iterator it = cookies.begin();
-  ASSERT_TRUE(it != cookies.end());
-  EXPECT_EQ(http_www_google_.host(), it->Domain());
-  EXPECT_EQ("A", it->Name());
-  ASSERT_TRUE(++it == cookies.end());
-  GetCookieListCallback callback(&other_thread_);
-  base::Closure task = base::Bind(
-      &MultiThreadedCookieMonsterTest::GetAllCookiesForURLWithOptionsTask,
-      base::Unretained(this), cm, http_www_google_.url(), options, &callback);
-  RunOnOtherThread(task);
-  callback.WaitUntilDone();
-  it = callback.cookies().begin();
-  ASSERT_TRUE(it != callback.cookies().end());
-  EXPECT_EQ(http_www_google_.host(), it->Domain());
-  EXPECT_EQ("A", it->Name());
-  ASSERT_TRUE(++it == callback.cookies().end());
-}
-
-TEST_F(MultiThreadedCookieMonsterTest, ThreadCheckSetCookieWithDetails) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
-  EXPECT_TRUE(SetCookieWithDetails(cm.get(), www_google_foo_.url(), "A", "B",
-                                   std::string(), "/foo", base::Time(),
-                                   base::Time(), base::Time(), false, false,
-                                   false, COOKIE_PRIORITY_DEFAULT));
-  ResultSavingCookieCallback<bool> callback(&other_thread_);
-  base::Closure task =
-      base::Bind(&MultiThreadedCookieMonsterTest::SetCookieWithDetailsTask,
-                 base::Unretained(this), cm, www_google_foo_.url(), &callback);
-  RunOnOtherThread(task);
-  callback.WaitUntilDone();
-  EXPECT_TRUE(callback.result());
-}
-
-TEST_F(MultiThreadedCookieMonsterTest, ThreadCheckDeleteAllCreatedBetween) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
-  CookieOptions options;
-  Time now = Time::Now();
-  EXPECT_TRUE(
-      SetCookieWithOptions(cm.get(), http_www_google_.url(), "A=B", options));
-  EXPECT_EQ(1, DeleteAllCreatedBetween(cm.get(), now - TimeDelta::FromDays(99),
-                                       Time()));
-  EXPECT_TRUE(
-      SetCookieWithOptions(cm.get(), http_www_google_.url(), "A=B", options));
-  ResultSavingCookieCallback<int> callback(&other_thread_);
-  base::Closure task =
-      base::Bind(&MultiThreadedCookieMonsterTest::DeleteAllCreatedBetweenTask,
-                 base::Unretained(this), cm, now - TimeDelta::FromDays(99),
-                 Time(), &callback);
-  RunOnOtherThread(task);
-  callback.WaitUntilDone();
-  EXPECT_EQ(1, callback.result());
-}
-
-TEST_F(MultiThreadedCookieMonsterTest,
-       ThreadCheckDeleteAllCreatedBetweenForHost) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
-  GURL url_not_google("http://www.notgoogle.com");
-
-  CookieOptions options;
-  Time now = Time::Now();
-  // ago1 < ago2 < ago3 < now.
-  Time ago1 = now - TimeDelta::FromDays(101);
-  Time ago2 = now - TimeDelta::FromDays(100);
-  Time ago3 = now - TimeDelta::FromDays(99);
-
-  // These 3 cookies match the first deletion.
-  EXPECT_TRUE(
-      SetCookieWithOptions(cm.get(), http_www_google_.url(), "A=B", options));
-  EXPECT_TRUE(
-      SetCookieWithOptions(cm.get(), http_www_google_.url(), "C=D", options));
-  EXPECT_TRUE(
-      SetCookieWithOptions(cm.get(), http_www_google_.url(), "Y=Z", options));
-
-  // This cookie does not match host.
-  EXPECT_TRUE(SetCookieWithOptions(cm.get(), url_not_google, "E=F", options));
-
-  // This cookie does not match time range: [ago3, inf], for first deletion, but
-  // matches for the second deletion.
-  EXPECT_TRUE(
-      cm->SetCookieWithCreationTime(http_www_google_.url(), "G=H", ago2));
-
-  // 1. First set of deletions.
-  EXPECT_EQ(3,  // Deletes A=B, C=D, Y=Z
-            DeleteAllCreatedBetweenForHost(cm.get(), ago3, Time::Max(),
-                                           http_www_google_.url()));
-
-  EXPECT_TRUE(
-      SetCookieWithOptions(cm.get(), http_www_google_.url(), "A=B", options));
-  ResultSavingCookieCallback<int> callback(&other_thread_);
-
-  // 2. Second set of deletions.
-  base::Closure task = base::Bind(
-      &MultiThreadedCookieMonsterTest::DeleteAllCreatedBetweenForHostTask,
-      base::Unretained(this), cm, ago1, Time(), http_www_google_.url(),
-      &callback);
-  RunOnOtherThread(task);
-  callback.WaitUntilDone();
-  EXPECT_EQ(2, callback.result());  // Deletes A=B, G=H.
-}
-
-TEST_F(MultiThreadedCookieMonsterTest, ThreadCheckDeleteCanonicalCookie) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
-  CookieOptions options;
-  EXPECT_TRUE(
-      SetCookieWithOptions(cm.get(), http_www_google_.url(), "A=B", options));
-  CookieList cookies = GetAllCookies(cm.get());
-  CookieList::iterator it = cookies.begin();
-  EXPECT_TRUE(DeleteCanonicalCookie(cm.get(), *it));
-
-  EXPECT_TRUE(
-      SetCookieWithOptions(cm.get(), http_www_google_.url(), "A=B", options));
-  ResultSavingCookieCallback<int> callback(&other_thread_);
-  cookies = GetAllCookies(cm.get());
-  it = cookies.begin();
-  base::Closure task =
-      base::Bind(&MultiThreadedCookieMonsterTest::DeleteCanonicalCookieTask,
-                 base::Unretained(this), cm, *it, &callback);
-  RunOnOtherThread(task);
-  callback.WaitUntilDone();
-  EXPECT_EQ(1, callback.result());
-}
-
-// Ensure that cookies for http, https, ws, and wss all share the same storage
-// and policies when GetAllCookiesForURLAsync is used. This test is part of
-// MultiThreadedCookieMonsterTest in order to test and use
-// GetAllCookiesForURLAsync, but it does not use any additional threads.
-TEST_F(MultiThreadedCookieMonsterTest, GetAllCookiesForURLEffectiveDomain) {
-  scoped_ptr<CanonicalCookie> cookie(CanonicalCookie::Create(
-      http_www_google_.url(), kValidCookieLine, Time::Now(), CookieOptions()));
-
-  // This cookie will be freed by the CookieMonster.
-  std::vector<CanonicalCookie*> cookies = {new CanonicalCookie(*cookie)};
-  scoped_refptr<NewMockPersistentCookieStore> store(
-      new NewMockPersistentCookieStore);
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
-
-  CookieMonster::PersistentCookieStore::LoadedCallback loaded_callback;
-  ::testing::StrictMock<::testing::MockFunction<void(int)>> checkpoint;
-  const std::string key = cookie_util::GetEffectiveDomain(
-      http_www_google_.url().scheme(), http_www_google_.url().host());
-
-  ::testing::InSequence s;
-  EXPECT_CALL(checkpoint, Call(0));
-  EXPECT_CALL(*store, Load(::testing::_));
-  EXPECT_CALL(*store, LoadCookiesForKey(key, ::testing::_))
-      .WillOnce(::testing::SaveArg<1>(&loaded_callback));
-  EXPECT_CALL(checkpoint, Call(1));
-  // LoadCookiesForKey will never be called after checkpoint.Call(1) although
-  // we will call GetAllCookiesForURLAsync again, because all URLs below share
-  // the same key.
-  EXPECT_CALL(*store, LoadCookiesForKey(::testing::_, ::testing::_)).Times(0);
-
-  GetCookieListCallback callback;
-  checkpoint.Call(0);
-  GetAllCookiesForURLTask(cm.get(), http_www_google_.url(), &callback);
-  checkpoint.Call(1);
-  // Pass the cookies to the CookieMonster.
-  loaded_callback.Run(cookies);
-  // Now GetAllCookiesForURLTask is done.
-  callback.WaitUntilDone();
-  // See that the callback was called with the cookies.
-  ASSERT_EQ(1u, callback.cookies().size());
-  EXPECT_TRUE(cookie->IsEquivalent(callback.cookies()[0]));
-
-  // All urls in |urls| should share the same cookie domain.
-  const GURL kUrls[] = {
-      http_www_google_.url(), https_www_google_.url(), ws_www_google_.url(),
-      wss_www_google_.url(),
-  };
-  for (const GURL& url : kUrls) {
-    // Call the function with |url| and verify it is done synchronously without
-    // calling LoadCookiesForKey.
-    GetCookieListCallback callback;
-    GetAllCookiesForURLTask(cm.get(), url, &callback);
-    callback.WaitUntilDone();
-    ASSERT_EQ(1u, callback.cookies().size());
-    EXPECT_TRUE(cookie->IsEquivalent(callback.cookies()[0]));
-  }
 }
 
 TEST_F(CookieMonsterTest, InvalidExpiryTime) {
@@ -2656,7 +2511,7 @@ TEST_F(CookieMonsterTest, InvalidExpiryTime) {
 // CookieStore if the "persist session cookies" option is on.
 TEST_F(CookieMonsterTest, PersistSessionCookies) {
   scoped_refptr<MockPersistentCookieStore> store(new MockPersistentCookieStore);
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
   cm->SetPersistSessionCookies(true);
 
   // All cookies set with SetCookie are session cookies.
@@ -2692,7 +2547,7 @@ TEST_F(CookieMonsterTest, PersistSessionCookies) {
 // Test the commands sent to the persistent cookie store.
 TEST_F(CookieMonsterTest, PersisentCookieStorageTest) {
   scoped_refptr<MockPersistentCookieStore> store(new MockPersistentCookieStore);
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
 
   // Add a cookie.
   EXPECT_TRUE(SetCookie(cm.get(), http_www_google_.url(),
@@ -2744,24 +2599,24 @@ TEST_F(CookieMonsterTest, ControlCharacterPurge) {
 
   std::vector<CanonicalCookie*> initial_cookies;
 
-  AddCookieToList(domain, "foo=bar; path=" + path, now1, &initial_cookies);
+  AddCookieToList(url, "foo=bar; path=" + path, now1, &initial_cookies);
 
   // We have to manually build this cookie because it contains a control
   // character, and our cookie line parser rejects control characters.
-  CanonicalCookie* cc =
-      new CanonicalCookie(url, "baz",
-                          "\x05"
-                          "boo",
-                          domain, path, now2, later, now2, false, false, false,
-                          COOKIE_PRIORITY_DEFAULT);
-  initial_cookies.push_back(cc);
+  scoped_ptr<CanonicalCookie> cc = CanonicalCookie::Create(
+      url, "baz",
+      "\x05"
+      "boo",
+      domain, path, now2, later, false, false, CookieSameSite::DEFAULT_MODE,
+      false, COOKIE_PRIORITY_DEFAULT);
+  initial_cookies.push_back(cc.release());
 
-  AddCookieToList(domain, "hello=world; path=" + path, now3, &initial_cookies);
+  AddCookieToList(url, "hello=world; path=" + path, now3, &initial_cookies);
 
   // Inject our initial cookies into the mock PersistentCookieStore.
   store->SetLoadExpectation(true, initial_cookies);
 
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
 
   EXPECT_EQ("foo=bar; hello=world", GetCookies(cm.get(), url));
 }
@@ -2772,7 +2627,7 @@ TEST_F(CookieMonsterTest, CookieSourceHistogram) {
   const std::string cookie_source_histogram = "Cookie.CookieSourceScheme";
 
   scoped_refptr<MockPersistentCookieStore> store(new MockPersistentCookieStore);
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
 
   histograms.ExpectTotalCount(cookie_source_histogram, 0);
 
@@ -2839,7 +2694,7 @@ TEST_F(CookieMonsterTest, CookieDeleteEquivalentHistogramTest) {
   const std::string cookie_source_histogram = "Cookie.CookieDeleteEquivalent";
 
   scoped_refptr<MockPersistentCookieStore> store(new MockPersistentCookieStore);
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
 
   // Set a secure cookie from a secure origin
   EXPECT_TRUE(SetCookie(cm.get(), https_www_google_.url(), "A=B; Secure"));
@@ -2904,7 +2759,7 @@ TEST_F(CookieMonsterTest, CookieDeleteEquivalentHistogramTest) {
 }
 
 TEST_F(CookieMonsterStrictSecureTest, SetSecureCookies) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
   GURL http_url("http://www.google.com");
   GURL http_superdomain_url("http://google.com");
   GURL https_url("https://www.google.com");
@@ -3097,7 +2952,7 @@ TEST_F(CookieMonsterStrictSecureTest, EvictSecureCookies) {
 // Tests that strict secure cookies doesn't trip equivalent cookie checks
 // accidentally. Regression test for https://crbug.com/569943.
 TEST_F(CookieMonsterStrictSecureTest, EquivalentCookies) {
-  scoped_refptr<CookieMonster> cm(new CookieMonster(NULL, NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(nullptr, nullptr));
   GURL http_url("http://www.google.com");
   GURL http_superdomain_url("http://google.com");
   GURL https_url("https://www.google.com");
@@ -3122,7 +2977,7 @@ TEST_F(CookieMonsterStrictSecureTest, CookieDeleteEquivalentHistogramTest) {
   const std::string cookie_source_histogram = "Cookie.CookieDeleteEquivalent";
 
   scoped_refptr<MockPersistentCookieStore> store(new MockPersistentCookieStore);
-  scoped_refptr<CookieMonster> cm(new CookieMonster(store.get(), NULL));
+  scoped_ptr<CookieMonster> cm(new CookieMonster(store.get(), nullptr));
 
   // Set a secure cookie from a secure origin
   EXPECT_TRUE(SetCookie(cm.get(), https_www_google_.url(), "A=B; Secure"));
@@ -3197,7 +3052,7 @@ class CookieMonsterNotificationTest : public CookieMonsterTest {
   CookieMonsterNotificationTest()
       : test_url_("http://www.google.com/foo"),
         store_(new MockPersistentCookieStore),
-        monster_(new CookieMonster(store_.get(), NULL)) {}
+        monster_(new CookieMonster(store_.get(), nullptr)) {}
 
   ~CookieMonsterNotificationTest() override {}
 
@@ -3208,7 +3063,7 @@ class CookieMonsterNotificationTest : public CookieMonsterTest {
 
  private:
   scoped_refptr<MockPersistentCookieStore> store_;
-  scoped_refptr<CookieMonster> monster_;
+  scoped_ptr<CookieMonster> monster_;
 };
 
 void RecordCookieChanges(std::vector<CanonicalCookie>* out_cookies,

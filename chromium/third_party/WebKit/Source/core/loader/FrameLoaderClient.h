@@ -35,12 +35,13 @@
 #include "core/dom/IconURL.h"
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "core/frame/FrameClient.h"
+#include "core/html/LinkResource.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/loader/NavigationPolicy.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/weborigin/Referrer.h"
-#include "public/platform/WebMediaPlayer.h"
+#include "public/platform/WebLoadingBehaviorFlag.h"
 #include "wtf/Forward.h"
 #include "wtf/Vector.h"
 #include <v8.h>
@@ -67,6 +68,7 @@ class SubstituteData;
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
 class WebCookieJar;
+class WebMediaPlayer;
 class WebMediaPlayerClient;
 class WebMediaSession;
 class WebRTCPeerConnectionHandler;
@@ -139,11 +141,16 @@ public:
     // Will be called when |PerformanceTiming| events are updated
     virtual void didChangePerformanceTiming() { }
 
+    // Will be called when a particular loading code path has been used. This
+    // propogates renderer loading behavior to the browser process for
+    // histograms.
+    virtual void didObserveLoadingBehavior(WebLoadingBehaviorFlag) { }
+
     // Transmits the change in the set of watched CSS selectors property
     // that match any element on the frame.
     virtual void selectorMatchChanged(const Vector<String>& addedSelectors, const Vector<String>& removedSelectors) = 0;
 
-    virtual PassRefPtrWillBeRawPtr<DocumentLoader> createDocumentLoader(LocalFrame*, const ResourceRequest&, const SubstituteData&) = 0;
+    virtual DocumentLoader* createDocumentLoader(LocalFrame*, const ResourceRequest&, const SubstituteData&) = 0;
 
     virtual String userAgent() = 0;
 
@@ -151,20 +158,20 @@ public:
 
     virtual void transitionToCommittedForNewPage() = 0;
 
-    virtual PassRefPtrWillBeRawPtr<LocalFrame> createFrame(const FrameLoadRequest&, const AtomicString& name, HTMLFrameOwnerElement*) = 0;
+    virtual LocalFrame* createFrame(const FrameLoadRequest&, const AtomicString& name, HTMLFrameOwnerElement*) = 0;
     // Whether or not plugin creation should fail if the HTMLPlugInElement isn't in the DOM after plugin initialization.
     enum DetachedPluginPolicy {
         FailOnDetachedPlugin,
         AllowDetachedPlugin,
     };
     virtual bool canCreatePluginWithoutRenderer(const String& mimeType) const = 0;
-    virtual PassRefPtrWillBeRawPtr<Widget> createPlugin(HTMLPlugInElement*, const KURL&, const Vector<String>&, const Vector<String>&, const String&, bool loadManually, DetachedPluginPolicy) = 0;
+    virtual Widget* createPlugin(HTMLPlugInElement*, const KURL&, const Vector<String>&, const Vector<String>&, const String&, bool loadManually, DetachedPluginPolicy) = 0;
 
-    virtual PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, WebMediaPlayer::LoadType, const WebURL&, WebMediaPlayerClient*) = 0;
+    virtual PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebURL&, WebMediaPlayerClient*) = 0;
 
     virtual PassOwnPtr<WebMediaSession> createWebMediaSession() = 0;
 
-    virtual ObjectContentType objectContentType(const KURL&, const String& mimeType, bool shouldPreferPlugInsForImages) = 0;
+    virtual ObjectContentType getObjectContentType(const KURL&, const String& mimeType, bool shouldPreferPlugInsForImages) = 0;
 
     virtual void didCreateNewDocument() = 0;
     virtual void dispatchDidClearWindowObjectInMainWorld() = 0;
@@ -208,6 +215,8 @@ public:
 
     virtual void didEnforceStrictMixedContentChecking() {}
 
+    virtual void didUpdateToUniqueOrigin() {}
+
     virtual void didChangeSandboxFlags(Frame* childFrame, SandboxFlags) { }
 
     virtual void didChangeFrameOwnerProperties(HTMLFrameElementBase*) { }
@@ -219,9 +228,6 @@ public:
     virtual void didRequestAutocomplete(HTMLFormElement*) = 0;
 
     virtual bool allowWebGL(bool enabledPerSettings) { return enabledPerSettings; }
-    // Informs the embedder that a WebGL canvas inside this frame received a lost context
-    // notification with the given GL_ARB_robustness guilt/innocence code (see Extensions3D.h).
-    virtual void didLoseWebGLContext(int) { }
 
     // If an HTML document is being loaded, informs the embedder that the document will have its <body> attached soon.
     virtual void dispatchWillInsertBody() { }
@@ -252,6 +258,8 @@ public:
         UnloadHandler,
     };
     virtual void suddenTerminationDisablerChanged(bool present, SuddenTerminationDisablerType) { }
+
+    virtual LinkResource* createServiceWorkerLinkResource(HTMLLinkElement*) { return nullptr; }
 
     // VB-6063:
     virtual void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) {}

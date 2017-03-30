@@ -17,8 +17,8 @@
 #include "components/mus/gles2/mojo_buffer_backing.h"
 #include "components/mus/gles2/mojo_gpu_memory_buffer.h"
 #include "gpu/command_buffer/common/command_buffer_id.h"
+#include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/sync_token.h"
-#include "gpu/command_buffer/service/image_factory.h"
 #include "mojo/platform_handle/platform_handle_functions.h"
 
 namespace gles2 {
@@ -68,7 +68,6 @@ void CommandBufferDelegate::ContextLost() {}
 CommandBufferClientImpl::CommandBufferClientImpl(
     CommandBufferDelegate* delegate,
     const std::vector<int32_t>& attribs,
-    const MojoAsyncWaiter* async_waiter,
     mojo::ScopedMessagePipeHandle command_buffer_handle)
     : delegate_(delegate),
       attribs_(attribs),
@@ -79,11 +78,9 @@ CommandBufferClientImpl::CommandBufferClientImpl(
       next_transfer_buffer_id_(0),
       next_image_id_(0),
       next_fence_sync_release_(1),
-      flushed_fence_sync_release_(0),
-      async_waiter_(async_waiter) {
+      flushed_fence_sync_release_(0) {
   command_buffer_.Bind(mojo::InterfacePtrInfo<mus::mojom::CommandBuffer>(
-                           std::move(command_buffer_handle), 0u),
-                       async_waiter);
+      std::move(command_buffer_handle), 0u));
   command_buffer_.set_connection_error_handler(
       [this]() { Destroyed(gpu::error::kUnknown, gpu::error::kLostContext); });
 }
@@ -104,7 +101,7 @@ bool CommandBufferClientImpl::Initialize() {
   shared_state()->Initialize();
 
   mus::mojom::CommandBufferClientPtr client_ptr;
-  client_binding_.Bind(GetProxy(&client_ptr), async_waiter_);
+  client_binding_.Bind(GetProxy(&client_ptr));
 
   mus::mojom::CommandBufferInitializeResultPtr initialize_result;
   command_buffer_->Initialize(
@@ -273,7 +270,7 @@ int32_t CommandBufferClientImpl::CreateGpuMemoryBufferImage(
     unsigned usage) {
   scoped_ptr<gfx::GpuMemoryBuffer> buffer(mus::MojoGpuMemoryBufferImpl::Create(
       gfx::Size(static_cast<int>(width), static_cast<int>(height)),
-      gpu::ImageFactory::DefaultBufferFormatForImageFormat(internalformat),
+      gpu::DefaultBufferFormatForImageFormat(internalformat),
       gfx::BufferUsage::SCANOUT));
   if (!buffer)
     return -1;

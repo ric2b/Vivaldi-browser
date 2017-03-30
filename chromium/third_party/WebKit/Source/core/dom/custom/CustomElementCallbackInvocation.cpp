@@ -38,7 +38,7 @@ namespace blink {
 
 class AttachedDetachedInvocation final : public CustomElementCallbackInvocation {
 public:
-    AttachedDetachedInvocation(PassRefPtrWillBeRawPtr<CustomElementLifecycleCallbacks>, CustomElementLifecycleCallbacks::CallbackType which);
+    AttachedDetachedInvocation(RawPtr<CustomElementLifecycleCallbacks>, CustomElementLifecycleCallbacks::CallbackType which);
 
 private:
     void dispatch(Element*) override;
@@ -46,11 +46,11 @@ private:
     CustomElementLifecycleCallbacks::CallbackType m_which;
 };
 
-AttachedDetachedInvocation::AttachedDetachedInvocation(PassRefPtrWillBeRawPtr<CustomElementLifecycleCallbacks> callbacks, CustomElementLifecycleCallbacks::CallbackType which)
+AttachedDetachedInvocation::AttachedDetachedInvocation(RawPtr<CustomElementLifecycleCallbacks> callbacks, CustomElementLifecycleCallbacks::CallbackType which)
     : CustomElementCallbackInvocation(callbacks)
     , m_which(which)
 {
-    ASSERT(m_which == CustomElementLifecycleCallbacks::AttachedCallback || m_which == CustomElementLifecycleCallbacks::DetachedCallback);
+    DCHECK(m_which == CustomElementLifecycleCallbacks::AttachedCallback || m_which == CustomElementLifecycleCallbacks::DetachedCallback);
 }
 
 void AttachedDetachedInvocation::dispatch(Element* element)
@@ -69,7 +69,7 @@ void AttachedDetachedInvocation::dispatch(Element* element)
 
 class AttributeChangedInvocation final : public CustomElementCallbackInvocation {
 public:
-    AttributeChangedInvocation(PassRefPtrWillBeRawPtr<CustomElementLifecycleCallbacks>, const AtomicString& name, const AtomicString& oldValue, const AtomicString& newValue);
+    AttributeChangedInvocation(RawPtr<CustomElementLifecycleCallbacks>, const AtomicString& name, const AtomicString& oldValue, const AtomicString& newValue);
 
 private:
     void dispatch(Element*) override;
@@ -79,7 +79,7 @@ private:
     AtomicString m_newValue;
 };
 
-AttributeChangedInvocation::AttributeChangedInvocation(PassRefPtrWillBeRawPtr<CustomElementLifecycleCallbacks> callbacks, const AtomicString& name, const AtomicString& oldValue, const AtomicString& newValue)
+AttributeChangedInvocation::AttributeChangedInvocation(RawPtr<CustomElementLifecycleCallbacks> callbacks, const AtomicString& name, const AtomicString& oldValue, const AtomicString& newValue)
     : CustomElementCallbackInvocation(callbacks)
     , m_name(name)
     , m_oldValue(oldValue)
@@ -94,7 +94,7 @@ void AttributeChangedInvocation::dispatch(Element* element)
 
 class CreatedInvocation final : public CustomElementCallbackInvocation {
 public:
-    explicit CreatedInvocation(PassRefPtrWillBeRawPtr<CustomElementLifecycleCallbacks> callbacks)
+    explicit CreatedInvocation(RawPtr<CustomElementLifecycleCallbacks> callbacks)
         : CustomElementCallbackInvocation(callbacks)
     {
     }
@@ -106,29 +106,29 @@ private:
 
 void CreatedInvocation::dispatch(Element* element)
 {
-    if (element->inDocument() && element->document().domWindow())
+    if (element->inShadowIncludingDocument() && element->document().domWindow())
         CustomElementScheduler::scheduleCallback(callbacks(), element, CustomElementLifecycleCallbacks::AttachedCallback);
     callbacks()->created(element);
 }
 
-PassOwnPtrWillBeRawPtr<CustomElementCallbackInvocation> CustomElementCallbackInvocation::createInvocation(PassRefPtrWillBeRawPtr<CustomElementLifecycleCallbacks> callbacks, CustomElementLifecycleCallbacks::CallbackType which)
+RawPtr<CustomElementCallbackInvocation> CustomElementCallbackInvocation::createInvocation(RawPtr<CustomElementLifecycleCallbacks> callbacks, CustomElementLifecycleCallbacks::CallbackType which)
 {
     switch (which) {
     case CustomElementLifecycleCallbacks::CreatedCallback:
-        return adoptPtrWillBeNoop(new CreatedInvocation(callbacks));
+        return new CreatedInvocation(callbacks);
 
     case CustomElementLifecycleCallbacks::AttachedCallback:
     case CustomElementLifecycleCallbacks::DetachedCallback:
-        return adoptPtrWillBeNoop(new AttachedDetachedInvocation(callbacks, which));
+        return new AttachedDetachedInvocation(callbacks, which);
     default:
         ASSERT_NOT_REACHED();
         return nullptr;
     }
 }
 
-PassOwnPtrWillBeRawPtr<CustomElementCallbackInvocation> CustomElementCallbackInvocation::createAttributeChangedInvocation(PassRefPtrWillBeRawPtr<CustomElementLifecycleCallbacks> callbacks, const AtomicString& name, const AtomicString& oldValue, const AtomicString& newValue)
+RawPtr<CustomElementCallbackInvocation> CustomElementCallbackInvocation::createAttributeChangedInvocation(RawPtr<CustomElementLifecycleCallbacks> callbacks, const AtomicString& name, const AtomicString& oldValue, const AtomicString& newValue)
 {
-    return adoptPtrWillBeNoop(new AttributeChangedInvocation(callbacks, name, oldValue, newValue));
+    return new AttributeChangedInvocation(callbacks, name, oldValue, newValue);
 }
 
 DEFINE_TRACE(CustomElementCallbackInvocation)

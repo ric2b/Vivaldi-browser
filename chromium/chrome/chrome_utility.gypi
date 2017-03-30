@@ -13,8 +13,8 @@
       'utility/cloud_print/bitmap_image.h',
       'utility/cloud_print/pwg_encoder.cc',
       'utility/cloud_print/pwg_encoder.h',
-      'utility/font_cache_handler_win.cc',
-      'utility/font_cache_handler_win.h',
+      'utility/image_decoder_impl.cc',
+      'utility/image_decoder_impl.h',
       'utility/printing_handler.cc',
       'utility/printing_handler.h',
       'utility/safe_json_parser_handler.cc',
@@ -83,18 +83,12 @@
       'utility/safe_browsing/mac/udif.h',
     ],
     'chrome_utility_shared_media_sources': [
-      'utility/media_galleries/image_metadata_extractor.cc',
-      'utility/media_galleries/image_metadata_extractor.h',
       'utility/media_galleries/ipc_data_source.cc',
       'utility/media_galleries/ipc_data_source.h',
       'utility/media_galleries/itunes_pref_parser_win.cc',
       'utility/media_galleries/itunes_pref_parser_win.h',
       'utility/media_galleries/media_metadata_parser.cc',
       'utility/media_galleries/media_metadata_parser.h',
-    ],
-    'chrome_utility_mac_media_gallery_sources': [
-      'utility/media_galleries/iphoto_library_parser.cc',
-      'utility/media_galleries/iphoto_library_parser.h',
     ],
     'chrome_utility_win_mac_media_gallery_sources': [
       'utility/media_galleries/iapps_xml_utils.cc',
@@ -177,7 +171,6 @@
         ['enable_extensions==1', {
           'dependencies': [
             '../extensions/extensions.gyp:extensions_utility',
-            '../third_party/libexif/libexif.gyp:libexif',
             'common/extensions/api/api.gyp:chrome_api',
           ],
           'export_dependent_settings': [
@@ -199,11 +192,6 @@
               'sources': [
                 'utility/image_writer/image_writer_stub.cc',
               ]
-            }],
-            ['OS=="mac"', {
-              'sources': [
-                '<@(chrome_utility_mac_media_gallery_sources)',
-              ],
             }],
           ],
         }],

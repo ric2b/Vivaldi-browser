@@ -5,9 +5,11 @@
 #include "sync/sessions/model_type_registry.h"
 
 #include <stddef.h>
+
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/observer_list.h"
 #include "base/thread_task_runner_handle.h"
 #include "sync/engine/commit_queue.h"
@@ -86,11 +88,15 @@ void ModelTypeRegistry::SetEnabledDirectoryTypes(
   directory_update_handlers_.clear();
   directory_commit_contributors_.clear();
 
+  enabled_directory_types_.Clear();
+
   // Create new ones and add them to the appropriate containers.
   for (ModelSafeRoutingInfo::const_iterator routing_iter = routing_info.begin();
        routing_iter != routing_info.end(); ++routing_iter) {
     ModelType type = routing_iter->first;
     ModelSafeGroup group = routing_iter->second;
+    if (group == GROUP_NON_BLOCKING)
+      continue;
     std::map<ModelSafeGroup, scoped_refptr<ModelSafeWorker> >::iterator
         worker_it = workers_map_.find(group);
     DCHECK(worker_it != workers_map_.end());
@@ -126,33 +132,36 @@ void ModelTypeRegistry::SetEnabledDirectoryTypes(
     bool inserted2 =
         commit_contributor_map_.insert(std::make_pair(type, committer)).second;
     DCHECK(inserted2) << "Attempt to override existing type handler in map";
+    enabled_directory_types_.Put(type);
   }
 
-  enabled_directory_types_ = GetRoutingInfoTypes(routing_info);
   DCHECK(Intersection(GetEnabledDirectoryTypes(),
                       GetEnabledNonBlockingTypes()).Empty());
 }
 
-void ModelTypeRegistry::ConnectSyncTypeToWorker(
+void ModelTypeRegistry::ConnectType(
     ModelType type,
-    scoped_ptr<syncer_v2::ActivationContext> activation_context) {
+    std::unique_ptr<syncer_v2::ActivationContext> activation_context) {
   DVLOG(1) << "Enabling an off-thread sync type: " << ModelTypeToString(type);
 
   // Initialize Worker -> Processor communication channel.
   syncer_v2::ModelTypeProcessor* type_processor =
       activation_context->type_processor.get();
 
-  scoped_ptr<Cryptographer> cryptographer_copy;
+  std::unique_ptr<Cryptographer> cryptographer_copy;
   if (encrypted_types_.Has(type))
     cryptographer_copy.reset(new Cryptographer(*cryptographer_));
 
-  scoped_ptr<syncer_v2::ModelTypeWorker> worker(new syncer_v2::ModelTypeWorker(
-      type, activation_context->data_type_state, std::move(cryptographer_copy),
-      nudge_handler_, std::move(activation_context->type_processor)));
+  std::unique_ptr<syncer_v2::ModelTypeWorker> worker(
+      new syncer_v2::ModelTypeWorker(
+          type, activation_context->data_type_state,
+          std::move(cryptographer_copy), nudge_handler_,
+          std::move(activation_context->type_processor)));
 
   // Initialize Processor -> Worker communication channel.
-  scoped_ptr<syncer_v2::CommitQueue> commit_queue_proxy(new CommitQueueProxy(
-      worker->AsWeakPtr(), scoped_refptr<base::SequencedTaskRunner>(
+  std::unique_ptr<syncer_v2::CommitQueue> commit_queue_proxy(
+      new CommitQueueProxy(worker->AsWeakPtr(),
+                           scoped_refptr<base::SequencedTaskRunner>(
                                base::ThreadTaskRunnerHandle::Get())));
 
   type_processor->ConnectSync(std::move(commit_queue_proxy));
@@ -170,7 +179,7 @@ void ModelTypeRegistry::ConnectSyncTypeToWorker(
                       GetEnabledNonBlockingTypes()).Empty());
 }
 
-void ModelTypeRegistry::DisconnectSyncWorker(ModelType type) {
+void ModelTypeRegistry::DisconnectType(ModelType type) {
   DVLOG(1) << "Disabling an off-thread sync type: " << ModelTypeToString(type);
   DCHECK(update_handler_map_.find(type) != update_handler_map_.end());
   DCHECK(commit_contributor_map_.find(type) != commit_contributor_map_.end());
@@ -285,19 +294,19 @@ void ModelTypeRegistry::OnEncryptionStateChanged() {
        it != model_type_workers_.end(); ++it) {
     if (encrypted_types_.Has((*it)->GetModelType())) {
       (*it)->UpdateCryptographer(
-          make_scoped_ptr(new Cryptographer(*cryptographer_)));
+          base::WrapUnique(new Cryptographer(*cryptographer_)));
     }
   }
 }
 
 ModelTypeSet ModelTypeRegistry::GetEnabledNonBlockingTypes() const {
-  ModelTypeSet enabled_off_thread_types;
+  ModelTypeSet enabled_non_blocking_types;
   for (ScopedVector<syncer_v2::ModelTypeWorker>::const_iterator it =
            model_type_workers_.begin();
        it != model_type_workers_.end(); ++it) {
-    enabled_off_thread_types.Put((*it)->GetModelType());
+    enabled_non_blocking_types.Put((*it)->GetModelType());
   }
-  return enabled_off_thread_types;
+  return enabled_non_blocking_types;
 }
 
 }  // namespace syncer

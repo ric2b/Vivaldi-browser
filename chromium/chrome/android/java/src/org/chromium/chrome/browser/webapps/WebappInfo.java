@@ -243,7 +243,10 @@ public class WebappInfo {
     public void setWebappIntentExtras(Intent intent) {
         intent.putExtra(ShortcutHelper.EXTRA_ID, id());
         intent.putExtra(ShortcutHelper.EXTRA_URL, uri().toString());
+        intent.putExtra(ShortcutHelper.EXTRA_SCOPE,
+                ShortcutHelper.getScopeFromUrl(uri().toString()));
         intent.putExtra(ShortcutHelper.EXTRA_ICON, encodedIcon());
+        intent.putExtra(ShortcutHelper.EXTRA_VERSION, ShortcutHelper.WEBAPP_SHORTCUT_VERSION);
         intent.putExtra(ShortcutHelper.EXTRA_NAME, name());
         intent.putExtra(ShortcutHelper.EXTRA_SHORT_NAME, shortName());
         intent.putExtra(ShortcutHelper.EXTRA_ORIENTATION, orientation());
@@ -251,5 +254,13 @@ public class WebappInfo {
         intent.putExtra(ShortcutHelper.EXTRA_THEME_COLOR, themeColor());
         intent.putExtra(ShortcutHelper.EXTRA_BACKGROUND_COLOR, backgroundColor());
         intent.putExtra(ShortcutHelper.EXTRA_IS_ICON_GENERATED, isIconGenerated());
+    }
+
+    /**
+     * Returns true if the WebappInfo was created for an Intent fired from a launcher shortcut (as
+     * opposed to an intent from a push notification or other internal source).
+     */
+    public boolean isLaunchedFromHomescreen() {
+        return source() != ShortcutSource.NOTIFICATION;
     }
 }

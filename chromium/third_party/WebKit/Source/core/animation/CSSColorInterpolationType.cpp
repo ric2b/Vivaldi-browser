@@ -5,6 +5,7 @@
 #include "core/animation/CSSColorInterpolationType.h"
 
 #include "core/animation/ColorPropertyFunctions.h"
+#include "core/css/CSSColorValue.h"
 #include "core/css/parser/CSSPropertyParser.h"
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/layout/LayoutTheme.h"
@@ -160,7 +161,7 @@ InterpolationValue CSSColorInterpolationType::maybeConvertNeutral(const Interpol
     return convertStyleColorPair(StyleColor(Color::transparent), StyleColor(Color::transparent));
 }
 
-InterpolationValue CSSColorInterpolationType::maybeConvertInitial() const
+InterpolationValue CSSColorInterpolationType::maybeConvertInitial(const StyleResolverState&) const
 {
     const StyleColor initialColor = ColorPropertyFunctions::getInitialColor(cssProperty());
     return convertStyleColorPair(initialColor, initialColor);

@@ -40,7 +40,7 @@ namespace blink {
 
 struct SameSizeAsNodeRareData {
     void* m_pointer;
-    RawPtrWillBeMember<void*> m_willbeMember[2];
+    Member<void*> m_willbeMember[2];
     unsigned m_bitfields;
 };
 
@@ -73,10 +73,10 @@ void NodeRareData::finalizeGarbageCollectedObject()
         this->~NodeRareData();
 }
 
-void NodeRareData::incrementConnectedSubframeCount(unsigned amount)
+void NodeRareData::incrementConnectedSubframeCount()
 {
-    RELEASE_ASSERT_WITH_SECURITY_IMPLICATION((m_connectedFrameCount + amount) <= FrameHost::maxNumberOfFrames);
-    m_connectedFrameCount += amount;
+    SECURITY_CHECK((m_connectedFrameCount + 1) <= FrameHost::maxNumberOfFrames);
+    ++m_connectedFrameCount;
 }
 
 // Ensure the 10 bits reserved for the m_connectedFrameCount cannot overflow

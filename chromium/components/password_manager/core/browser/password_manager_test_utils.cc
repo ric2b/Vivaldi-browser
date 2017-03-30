@@ -8,6 +8,7 @@
 #include <ostream>
 #include <string>
 
+#include "base/feature_list.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 
@@ -15,14 +16,26 @@ using autofill::PasswordForm;
 
 namespace password_manager {
 
+namespace {
+
+void GetFeatureOverridesAsCSV(const std::vector<const base::Feature*>& features,
+                              std::string* overrides) {
+  for (const base::Feature* feature : features) {
+    overrides->append(feature->name);
+    overrides->push_back(',');
+  }
+}
+
+}  // namespace
+
 const char kTestingIconUrlSpec[] = "https://accounts.google.com/Icon";
 const char kTestingFederationUrlSpec[] = "https://accounts.google.com/login";
 const int kTestingDaysAfterPasswordsAreSynced = 1;
 const wchar_t kTestingFederatedLoginMarker[] = L"__federated__";
 
-scoped_ptr<PasswordForm> CreatePasswordFormFromDataForTesting(
+std::unique_ptr<PasswordForm> CreatePasswordFormFromDataForTesting(
     const PasswordFormData& form_data) {
-  scoped_ptr<PasswordForm> form(new PasswordForm());
+  std::unique_ptr<PasswordForm> form(new PasswordForm());
   form->scheme = form_data.scheme;
   form->preferred = form_data.preferred;
   form->ssl_valid = form_data.ssl_valid;
@@ -93,6 +106,20 @@ bool ContainsEqualPasswordFormsUnordered(
   }
 
   return !had_mismatched_actual_form && remaining_expectations.empty();
+}
+
+void SetFeatures(const std::vector<const base::Feature*>& enable_features,
+                 const std::vector<const base::Feature*>& disable_features,
+                 std::unique_ptr<base::FeatureList> feature_list) {
+  std::string enable_overrides;
+  std::string disable_overrides;
+
+  GetFeatureOverridesAsCSV(enable_features, &enable_overrides);
+  GetFeatureOverridesAsCSV(disable_features, &disable_overrides);
+
+  base::FeatureList::ClearInstanceForTesting();
+  feature_list->InitializeFromCommandLine(enable_overrides, disable_overrides);
+  base::FeatureList::SetInstance(std::move(feature_list));
 }
 
 MockPasswordStoreObserver::MockPasswordStoreObserver() {}

@@ -116,7 +116,7 @@ static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}(const
 {% macro generate_argument_var_declaration(argument) %}
 {# FIXME: remove EventListener special case #}
 {% if argument.idl_type == 'EventListener' %}
-RefPtrWillBeRawPtr<{{argument.idl_type}}> {{argument.name}}
+RawPtr<{{argument.idl_type}}> {{argument.name}}
 {%- else %}
 {{argument.cpp_type}} {{argument.name}}
 {%- endif %}{# argument.idl_type == 'EventListener' #}
@@ -251,7 +251,7 @@ ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
 {% endif %}
 {% if method.is_call_with_script_arguments %}
 {# [CallWith=ScriptArguments] #}
-RefPtrWillBeRawPtr<ScriptArguments> scriptArguments(ScriptArguments::create(scriptState, info, {{method.number_of_arguments}}));
+RawPtr<ScriptArguments> scriptArguments(ScriptArguments::create(scriptState, info, {{method.number_of_arguments}}));
 {% endif %}
 {% if method.is_call_with_document %}
 {# [ConstructorCallWith=Document] #}
@@ -475,7 +475,7 @@ void postMessageImpl(const char* interfaceName, {{cpp_class}}* instance, const v
         exceptionState.throwIfNeeded();
         return;
     }
-    OwnPtrWillBeRawPtr<MessagePortArray> ports = adoptPtrWillBeNoop(new MessagePortArray);
+    RawPtr<MessagePortArray> ports = new MessagePortArray;
     ArrayBufferArray arrayBuffers;
     ImageBitmapArray imageBitmaps;
     if (info.Length() > 1) {
@@ -506,7 +506,7 @@ static void {{method.name}}MethodCallback{{world_suffix}}(const v8::FunctionCall
     {% if method.deprecate_as %}
     Deprecation::countDeprecationIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{method.deprecate_as}});
     {% endif %}
-    {% if method.is_origin_trial_enabled %}
+    {% if method.origin_trial_enabled_function %}
     {{check_origin_trial(method) | indent}}
     {% endif %}
     {% endif %}{# not method.overloads #}
@@ -538,12 +538,9 @@ static void {{method.name}}MethodCallback{{world_suffix}}(const v8::FunctionCall
 {% macro origin_safe_method_getter(method, world_suffix) %}
 static void {{method.name}}OriginSafeMethodGetter{{world_suffix}}(const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    {% set signature = 'v8::Local<v8::Signature>()'
-                       if method.is_do_not_check_signature else
-                       'v8::Signature::New(info.GetIsolate(), %s::domTemplate(info.GetIsolate()))' % v8_class %}
+    {% set signature = 'v8::Signature::New(info.GetIsolate(), %s::domTemplate(info.GetIsolate()))' % v8_class %}
     static int domTemplateKey; // This address is used for a key to look up the dom template.
     V8PerIsolateData* data = V8PerIsolateData::from(info.GetIsolate());
-    {# FIXME: 1 case of [DoNotCheckSignature] in Window.idl may differ #}
     v8::Local<v8::FunctionTemplate> domTemplate = data->domTemplate(&domTemplateKey, {{cpp_class}}V8Internal::{{method.name}}MethodCallback{{world_suffix}}, v8Undefined(), {{signature}}, {{method.length}});
 
     // It is unsafe to use info.Holder() because OriginSafeMethodGetter is called
@@ -691,7 +688,7 @@ V8DOMConfiguration::installMethod(isolate, {{instance_template}}, {{prototype_te
 {% macro install_conditionally_enabled_methods() %}
 {% if conditionally_enabled_methods %}
 {# Define operations with limited exposure #}
-v8::Local<v8::Signature> defaultSignature = v8::Signature::New(isolate, domTemplate(isolate));
+v8::Local<v8::Signature> signature = v8::Signature::New(isolate, domTemplate(isolate));
 ExecutionContext* executionContext = toExecutionContext(prototypeObject->CreationContext());
 ASSERT(executionContext);
 {% for method in conditionally_enabled_methods %}
@@ -702,7 +699,7 @@ ASSERT(executionContext);
                           if method.overloads else
                           method.runtime_enabled_function) %}
 const V8DOMConfiguration::MethodConfiguration {{method.name}}MethodConfiguration = {{method_configuration(method)}};
-V8DOMConfiguration::installMethod(isolate, v8::Local<v8::Object>(), prototypeObject, interfaceObject, defaultSignature, {{method.name}}MethodConfiguration);
+V8DOMConfiguration::installMethod(isolate, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, {{method.name}}MethodConfiguration);
 {% endfilter %}{# runtime_enabled() #}
 {% endfilter %}{# exposed() #}
 {% endfor %}

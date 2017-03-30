@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "content/public/browser/browser_context.h"
@@ -25,10 +26,6 @@ const char kWebstoreQueryPrefix[] = "webstore:";
 const char kPeopleQueryPrefix[] = "people:";
 
 }  // namespace
-
-void WebserviceCache::CacheDeletor::operator()(const Payload& payload) {
-  delete payload.result;
-}
 
 WebserviceCache::WebserviceCache(content::BrowserContext* context)
     : cache_(Cache::NO_AUTO_EVICT),
@@ -49,11 +46,11 @@ const CacheResult WebserviceCache::Get(QueryType type,
   std::string typed_query = PrependType(type, query);
   Cache::iterator iter = cache_.Get(typed_query);
   if (iter != cache_.end()) {
-    if (base::Time::Now() - iter->second.time <=
+    if (base::Time::Now() - iter->second->time <=
         base::TimeDelta::FromMinutes(kWebserviceCacheTimeLimitInMinutes)) {
-      return std::make_pair(FRESH, iter->second.result);
+      return std::make_pair(FRESH, iter->second->result.get());
     } else {
-      return std::make_pair(STALE, iter->second.result);
+      return std::make_pair(STALE, iter->second->result.get());
     }
   }
   return std::make_pair(STALE, static_cast<base::DictionaryValue*>(NULL));
@@ -61,18 +58,20 @@ const CacheResult WebserviceCache::Get(QueryType type,
 
 void WebserviceCache::Put(QueryType type,
                           const std::string& query,
-                          scoped_ptr<base::DictionaryValue> result) {
+                          std::unique_ptr<base::DictionaryValue> result) {
   if (result) {
     std::string typed_query = PrependType(type, query);
-    Payload payload(base::Time::Now(), result.release());
+    std::unique_ptr<Payload> scoped_payload(
+        new Payload(base::Time::Now(), std::move(result)));
+    Payload* payload = scoped_payload.get();
 
-    cache_.Put(typed_query, payload);
+    cache_.Put(typed_query, std::move(scoped_payload));
     // If the cache isn't loaded yet, we're fine with losing queries since
     // a 1000 entry cache should load really quickly so the chance of a user
     // already having typed a 3 character search before the cache has loaded is
     // very unlikely.
     if (cache_loaded_) {
-      data_store_->cached_dict()->Set(typed_query, DictFromPayload(payload));
+      data_store_->cached_dict()->Set(typed_query, DictFromPayload(*payload));
       data_store_->ScheduleWrite();
       if (cache_.size() > kWebserviceCacheMaxSize)
         TrimCache();
@@ -80,7 +79,7 @@ void WebserviceCache::Put(QueryType type,
   }
 }
 
-void WebserviceCache::OnCacheLoaded(scoped_ptr<base::DictionaryValue>) {
+void WebserviceCache::OnCacheLoaded(std::unique_ptr<base::DictionaryValue>) {
   if (!data_store_->cached_dict())
     return;
 
@@ -89,16 +88,16 @@ void WebserviceCache::OnCacheLoaded(scoped_ptr<base::DictionaryValue>) {
       !it.IsAtEnd();
       it.Advance()) {
     const base::DictionaryValue* payload_dict;
-    Payload payload;
+    std::unique_ptr<Payload> payload(new Payload);
     if (!it.value().GetAsDictionary(&payload_dict) ||
         !payload_dict ||
-        !PayloadFromDict(payload_dict, &payload)) {
+        !PayloadFromDict(payload_dict, payload.get())) {
       // In case we don't have a valid payload associated with a given query,
       // clean up that query from our data store.
       cleanup_keys.push_back(it.key());
       continue;
     }
-    cache_.Put(it.key(), payload);
+    cache_.Put(it.key(), std::move(payload));
   }
 
   if (!cleanup_keys.empty()) {
@@ -125,7 +124,7 @@ bool WebserviceCache::PayloadFromDict(const base::DictionaryValue* dict,
   // instead of returning the original reference. The new dictionary will be
   // owned by our MRU cache.
   *payload = Payload(base::Time::FromInternalValue(time_val),
-                     result->DeepCopy());
+                     base::WrapUnique(result->DeepCopy()));
   return true;
 }
 
@@ -161,6 +160,20 @@ std::string WebserviceCache::PrependType(
     default:
       return query;
   }
+}
+
+WebserviceCache::Payload::Payload(const base::Time& time,
+                                  std::unique_ptr<base::DictionaryValue> result)
+    : time(time), result(std::move(result)) {}
+
+WebserviceCache::Payload::Payload() = default;
+
+WebserviceCache::Payload::~Payload() = default;
+
+WebserviceCache::Payload& WebserviceCache::Payload::operator=(Payload&& other) {
+  time = std::move(other.time);
+  result = std::move(other.result);
+  return *this;
 }
 
 }  // namespace app_list

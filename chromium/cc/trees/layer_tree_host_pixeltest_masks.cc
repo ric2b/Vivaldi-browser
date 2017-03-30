@@ -61,7 +61,7 @@ class MaskContentLayerClient : public ContentLayerClient {
     scoped_refptr<DisplayItemList> display_list =
         DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
     display_list->CreateAndAppendItem<DrawingDisplayItem>(
-        PaintableRegion(), skia::AdoptRef(recorder.endRecordingAsPicture()));
+        PaintableRegion(), recorder.finishRecordingAsPicture());
 
     display_list->Finalize();
     return display_list;
@@ -81,8 +81,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfLayer) {
 
   gfx::Size mask_bounds(50, 50);
   MaskContentLayerClient client(mask_bounds);
-  scoped_refptr<PictureLayer> mask =
-      PictureLayer::Create(layer_settings(), &client);
+  scoped_refptr<PictureLayer> mask = PictureLayer::Create(&client);
   mask->SetBounds(mask_bounds);
   mask->SetIsDrawable(true);
   mask->SetIsMask(true);
@@ -98,14 +97,12 @@ TEST_P(LayerTreeHostMasksPixelTest, ImageMaskOfLayer) {
 
   gfx::Size mask_bounds(50, 50);
 
-  scoped_refptr<PictureImageLayer> mask =
-      PictureImageLayer::Create(layer_settings());
+  scoped_refptr<PictureImageLayer> mask = PictureImageLayer::Create();
   mask->SetIsDrawable(true);
   mask->SetIsMask(true);
   mask->SetBounds(mask_bounds);
 
-  skia::RefPtr<SkSurface> surface =
-      skia::AdoptRef(SkSurface::NewRasterN32Premul(200, 200));
+  sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(200, 200);
   SkCanvas* canvas = surface->getCanvas();
   canvas->scale(SkIntToScalar(4), SkIntToScalar(4));
   MaskContentLayerClient client(mask_bounds);
@@ -131,7 +128,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfClippedLayer) {
       gfx::Rect(100, 100), SK_ColorWHITE);
 
   // Clip to the top half of the green layer.
-  scoped_refptr<Layer> clip = Layer::Create(layer_settings());
+  scoped_refptr<Layer> clip = Layer::Create();
   clip->SetPosition(gfx::PointF());
   clip->SetBounds(gfx::Size(100, 50));
   clip->SetMasksToBounds(true);
@@ -143,8 +140,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfClippedLayer) {
 
   gfx::Size mask_bounds(50, 50);
   MaskContentLayerClient client(mask_bounds);
-  scoped_refptr<PictureLayer> mask =
-      PictureLayer::Create(layer_settings(), &client);
+  scoped_refptr<PictureLayer> mask = PictureLayer::Create(&client);
   mask->SetBounds(mask_bounds);
   mask->SetIsDrawable(true);
   mask->SetIsMask(true);
@@ -161,8 +157,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskWithReplica) {
 
   gfx::Size mask_bounds(50, 50);
   MaskContentLayerClient client(mask_bounds);
-  scoped_refptr<PictureLayer> mask =
-      PictureLayer::Create(layer_settings(), &client);
+  scoped_refptr<PictureLayer> mask = PictureLayer::Create(&client);
   mask->SetBounds(mask_bounds);
   mask->SetIsDrawable(true);
   mask->SetIsMask(true);
@@ -175,7 +170,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskWithReplica) {
   gfx::Transform replica_transform;
   replica_transform.Rotate(-90.0);
 
-  scoped_refptr<Layer> replica = Layer::Create(layer_settings());
+  scoped_refptr<Layer> replica = Layer::Create();
   replica->SetTransformOrigin(gfx::Point3F(25.f, 25.f, 0.f));
   replica->SetPosition(gfx::PointF(50.f, 50.f));
   replica->SetTransform(replica_transform);
@@ -191,15 +186,14 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskWithReplicaOfClippedLayer) {
 
   gfx::Size mask_bounds(50, 50);
   MaskContentLayerClient client(mask_bounds);
-  scoped_refptr<PictureLayer> mask =
-      PictureLayer::Create(layer_settings(), &client);
+  scoped_refptr<PictureLayer> mask = PictureLayer::Create(&client);
   mask->SetBounds(mask_bounds);
   mask->SetIsDrawable(true);
   mask->SetIsMask(true);
 
   // Clip to the bottom half of the green layer, and the left half of the
   // replica.
-  scoped_refptr<Layer> clip = Layer::Create(layer_settings());
+  scoped_refptr<Layer> clip = Layer::Create();
   clip->SetPosition(gfx::PointF(0.f, 25.f));
   clip->SetBounds(gfx::Size(75, 75));
   clip->SetMasksToBounds(true);
@@ -213,7 +207,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskWithReplicaOfClippedLayer) {
   gfx::Transform replica_transform;
   replica_transform.Rotate(-90.0);
 
-  scoped_refptr<Layer> replica = Layer::Create(layer_settings());
+  scoped_refptr<Layer> replica = Layer::Create();
   replica->SetTransformOrigin(gfx::Point3F(25.f, 25.f, 0.f));
   replica->SetPosition(gfx::PointF(50.f, 50.f));
   replica->SetTransform(replica_transform);
@@ -230,8 +224,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfReplica) {
 
   gfx::Size mask_bounds(50, 50);
   MaskContentLayerClient client(mask_bounds);
-  scoped_refptr<PictureLayer> mask =
-      PictureLayer::Create(layer_settings(), &client);
+  scoped_refptr<PictureLayer> mask = PictureLayer::Create(&client);
   mask->SetBounds(mask_bounds);
   mask->SetIsDrawable(true);
   mask->SetIsMask(true);
@@ -248,7 +241,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfReplica) {
   replica_transform.Rotate(180.0);
   replica_transform.Translate(50.0, 0.0);
 
-  scoped_refptr<Layer> replica = Layer::Create(layer_settings());
+  scoped_refptr<Layer> replica = Layer::Create();
   replica->SetTransformOrigin(gfx::Point3F(50.f, 50.f, 0.f));
   replica->SetPosition(gfx::PointF());
   replica->SetTransform(replica_transform);
@@ -265,14 +258,13 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfReplicaOfClippedLayer) {
 
   gfx::Size mask_bounds(50, 50);
   MaskContentLayerClient client(mask_bounds);
-  scoped_refptr<PictureLayer> mask =
-      PictureLayer::Create(layer_settings(), &client);
+  scoped_refptr<PictureLayer> mask = PictureLayer::Create(&client);
   mask->SetBounds(mask_bounds);
   mask->SetIsDrawable(true);
   mask->SetIsMask(true);
 
   // Clip to the bottom 3/4 of the green layer, and the top 3/4 of the replica.
-  scoped_refptr<Layer> clip = Layer::Create(layer_settings());
+  scoped_refptr<Layer> clip = Layer::Create();
   clip->SetPosition(gfx::PointF(0.f, 12.f));
   clip->SetBounds(gfx::Size(100, 75));
   clip->SetMasksToBounds(true);
@@ -290,7 +282,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfReplicaOfClippedLayer) {
   replica_transform.Rotate(180.0);
   replica_transform.Translate(50.0, 0.0);
 
-  scoped_refptr<Layer> replica = Layer::Create(layer_settings());
+  scoped_refptr<Layer> replica = Layer::Create();
   replica->SetTransformOrigin(gfx::Point3F(50.f, 50.f, 0.f));
   replica->SetPosition(gfx::PointF());
   replica->SetTransform(replica_transform);
@@ -336,7 +328,7 @@ class CheckerContentLayerClient : public ContentLayerClient {
     scoped_refptr<DisplayItemList> display_list =
         DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
     display_list->CreateAndAppendItem<DrawingDisplayItem>(
-        PaintableRegion(), skia::AdoptRef(recorder.endRecordingAsPicture()));
+        PaintableRegion(), recorder.finishRecordingAsPicture());
 
     display_list->Finalize();
     return display_list;
@@ -374,7 +366,7 @@ class CircleContentLayerClient : public ContentLayerClient {
     scoped_refptr<DisplayItemList> display_list =
         DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
     display_list->CreateAndAppendItem<DrawingDisplayItem>(
-        PaintableRegion(), skia::AdoptRef(recorder.endRecordingAsPicture()));
+        PaintableRegion(), recorder.finishRecordingAsPicture());
 
     display_list->Finalize();
     return display_list;
@@ -405,8 +397,7 @@ TEST_P(LayerTreeHostMasksForBackgroundFiltersPixelTest,
 
   gfx::Size picture_bounds(100, 100);
   CheckerContentLayerClient picture_client(picture_bounds, SK_ColorGREEN, true);
-  scoped_refptr<PictureLayer> picture =
-      PictureLayer::Create(layer_settings(), &picture_client);
+  scoped_refptr<PictureLayer> picture = PictureLayer::Create(&picture_client);
   picture->SetBounds(picture_bounds);
   picture->SetIsDrawable(true);
 
@@ -421,8 +412,7 @@ TEST_P(LayerTreeHostMasksForBackgroundFiltersPixelTest,
 
   gfx::Size mask_bounds(100, 100);
   CircleContentLayerClient mask_client(mask_bounds);
-  scoped_refptr<PictureLayer> mask =
-      PictureLayer::Create(layer_settings(), &mask_client);
+  scoped_refptr<PictureLayer> mask = PictureLayer::Create(&mask_client);
   mask->SetBounds(mask_bounds);
   mask->SetIsDrawable(true);
   mask->SetIsMask(true);
@@ -455,14 +445,14 @@ TEST_P(LayerTreeHostMasksForBackgroundFiltersPixelTest,
   CheckerContentLayerClient picture_client_vertical(
       picture_bounds, SK_ColorGREEN, true);
   scoped_refptr<PictureLayer> picture_vertical =
-      PictureLayer::Create(layer_settings(), &picture_client_vertical);
+      PictureLayer::Create(&picture_client_vertical);
   picture_vertical->SetBounds(picture_bounds);
   picture_vertical->SetIsDrawable(true);
 
   CheckerContentLayerClient picture_client_horizontal(
       picture_bounds, SK_ColorMAGENTA, false);
   scoped_refptr<PictureLayer> picture_horizontal =
-      PictureLayer::Create(layer_settings(), &picture_client_horizontal);
+      PictureLayer::Create(&picture_client_horizontal);
   picture_horizontal->SetBounds(picture_bounds);
   picture_horizontal->SetIsDrawable(true);
   picture_horizontal->SetContentsOpaque(false);
@@ -473,8 +463,7 @@ TEST_P(LayerTreeHostMasksForBackgroundFiltersPixelTest,
 
   gfx::Size mask_bounds(128, 128);
   CircleContentLayerClient mask_client(mask_bounds);
-  scoped_refptr<PictureLayer> mask =
-      PictureLayer::Create(layer_settings(), &mask_client);
+  scoped_refptr<PictureLayer> mask = PictureLayer::Create(&mask_client);
   mask->SetBounds(mask_bounds);
   mask->SetIsDrawable(true);
   mask->SetIsMask(true);

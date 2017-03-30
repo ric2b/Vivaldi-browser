@@ -23,17 +23,17 @@ InterpolationValue SVGPathInterpolationType::maybeConvertNeutral(const Interpola
     return PathInterpolationFunctions::maybeConvertNeutral(underlying, conversionCheckers);
 }
 
-PairwiseInterpolationValue SVGPathInterpolationType::mergeSingleConversions(InterpolationValue& start, InterpolationValue& end) const
+PairwiseInterpolationValue SVGPathInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
 {
-    return PathInterpolationFunctions::mergeSingleConversions(start, end);
+    return PathInterpolationFunctions::mergeSingleConversions(std::move(start), std::move(end));
 }
 
-void SVGPathInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value) const
+void SVGPathInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const
 {
     PathInterpolationFunctions::composite(underlyingValueOwner, underlyingFraction, *this, value);
 }
 
-PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGPathInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue* nonInterpolableValue) const
+SVGPropertyBase* SVGPathInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue* nonInterpolableValue) const
 {
     return SVGPath::create(CSSPathValue::create(PathInterpolationFunctions::appliedValue(interpolableValue, nonInterpolableValue)));
 }

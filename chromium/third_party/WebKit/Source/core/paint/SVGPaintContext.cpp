@@ -107,7 +107,7 @@ void SVGPaintContext::applyCompositingIfNecessary()
     WebBlendMode blendMode = style.hasBlendMode() && m_object.isBlendingAllowed() ?
         style.blendMode() : WebBlendModeNormal;
     if (opacity < 1 || blendMode != WebBlendModeNormal) {
-        const FloatRect compositingBounds = m_object.paintInvalidationRectInLocalCoordinates();
+        const FloatRect compositingBounds = m_object.paintInvalidationRectInLocalSVGCoordinates();
         m_compositingRecorder = adoptPtr(new CompositingRecorder(paintInfo().context, m_object,
             WebCoreCompositeToSkiaComposite(CompositeSourceOver, blendMode), opacity, &compositingBounds));
     }
@@ -119,7 +119,7 @@ bool SVGPaintContext::applyClipIfNecessary(SVGResources* resources)
     // m_object.style()->clipPath() corresponds to '-webkit-clip-path'.
     // FIXME: We should unify the clip-path and -webkit-clip-path codepaths.
     if (LayoutSVGResourceClipper* clipper = resources ? resources->clipper() : nullptr) {
-        if (!SVGClipPainter(*clipper).prepareEffect(m_object, m_object.objectBoundingBox(), m_object.paintInvalidationRectInLocalCoordinates(), paintInfo().context, m_clipperState))
+        if (!SVGClipPainter(*clipper).prepareEffect(m_object, m_object.objectBoundingBox(), m_object.paintInvalidationRectInLocalSVGCoordinates(), paintInfo().context, m_clipperState))
             return false;
         m_clipper = clipper;
     } else {
@@ -224,7 +224,7 @@ bool SVGPaintContext::paintForLayoutObject(const PaintInfo& paintInfo, const Com
     // something down the paint pipe may want to farther tweak the color
     // filter, which could yield incorrect results. (Consider just using
     // saveLayer() w/ this color filter explicitly instead.)
-    paint.setColorFilter(paintInfo.context.colorFilter());
+    paint.setColorFilter(sk_ref_sp(paintInfo.context.colorFilter()));
     return true;
 }
 

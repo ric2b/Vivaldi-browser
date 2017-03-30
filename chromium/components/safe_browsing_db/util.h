@@ -53,6 +53,33 @@ enum SBThreatType {
   SB_THREAT_TYPE_BLACKLISTED_RESOURCE,
 };
 
+// Metadata that indicates what kind of URL match this is.
+enum class ThreatPatternType {
+  NONE,          // Pattern type didn't appear in the metadata
+  LANDING,       // The match is a landing page
+  DISTRIBUTION,  // The match is a distribution page
+};
+
+// Metadata that was returned by a GetFullHash call. This is the parsed version
+// of the PB (from Pver3, or Pver4 local) or JSON (from Pver4 via GMSCore).
+// Some fields are only applicable to certain lists.
+struct ThreatMetadata {
+  ThreatMetadata();
+  ThreatMetadata(const ThreatMetadata& other);
+  ~ThreatMetadata();
+
+  // Type of blacklisted page. Used on malware and UwS lists.
+  // This will be NONE if it wasn't present in the reponse.
+  ThreatPatternType threat_pattern_type;
+
+  // List of permissions blocked. Used with threat_type API_ABUSE.
+  // This will be empty if it wasn't present in the response.
+  std::vector<std::string> api_permissions;
+
+  // Opaque base64 string used for user-population experiments in pver4.
+  // This will be empty if it wasn't present in the response.
+  std::string population_id;
+};
 
 // A truncated hash's type.
 typedef uint32_t SBPrefix;
@@ -68,7 +95,7 @@ struct SBFullHashResult {
   SBFullHash hash;
   // TODO(shess): Refactor to allow ListType here.
   int list_id;
-  std::string metadata;
+  ThreatMetadata metadata;
   // Used only for V4 results. The cache lifetime for this result. The response
   // must not be cached for more than this duration to avoid false positives.
   base::TimeDelta cache_duration;

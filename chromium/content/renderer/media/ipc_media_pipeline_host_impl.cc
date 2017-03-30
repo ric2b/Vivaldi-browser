@@ -212,7 +212,7 @@ void IPCMediaPipelineHostImpl::PictureBufferManager::
 
 class IPCMediaPipelineHostImpl::SharedData {
  public:
-  explicit SharedData(GpuChannelHost* channel);
+  explicit SharedData(gpu::GpuChannelHost* channel);
   ~SharedData();
 
   bool Prepare(size_t size);
@@ -224,11 +224,11 @@ class IPCMediaPipelineHostImpl::SharedData {
   int mapped_size() const;
 
  private:
-  GpuChannelHost* channel_;
+  gpu::GpuChannelHost* channel_;
   scoped_ptr<base::SharedMemory> memory_;
 };
 
-IPCMediaPipelineHostImpl::SharedData::SharedData(GpuChannelHost* channel)
+IPCMediaPipelineHostImpl::SharedData::SharedData(gpu::GpuChannelHost* channel)
     : channel_(channel) {
   DCHECK(channel_);
 }
@@ -275,7 +275,7 @@ int IPCMediaPipelineHostImpl::SharedData::mapped_size() const {
 }
 
 IPCMediaPipelineHostImpl::IPCMediaPipelineHostImpl(
-    GpuChannelHost* channel,
+    gpu::GpuChannelHost* channel,
     const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     media::GpuVideoAcceleratorFactories* factories,
     media::DataSource* data_source)

@@ -6,8 +6,8 @@
 <translation id="10614374240317010">Nooit opgeslagen</translation>
 <translation id="1061441684050139317">Chrome heeft microfoontoegang nodig om het item te delen met deze site.</translation>
 <translation id="1080790410959514870">Je logt uit van een account dat wordt beheerd door <ph name="DOMAIN_NAME" />. Hiermee worden de Chrome-gegevens verwijderd die zijn opgeslagen op dit apparaat, maar de gegevens blijven bewaard in je Google-account.</translation>
-<translation id="1095407227123756519">Voeg een account toe om je bladwijzers, geschiedenis, wachtwoorden en andere instellingen op al je apparaten te bekijken.</translation>
 <translation id="1098052486217676340">Afgelopen</translation>
+<translation id="1111673857033749125">Bladwijzers die je op andere apparaten hebt opgeslagen, worden hier weergegeven.</translation>
 <translation id="1121094540300013208">Gebruiks- en crashrapporten</translation>
 <translation id="1137305377394488060">het afgelopen uur</translation>
 <translation id="1178581264944972037">Onderbreken</translation>
@@ -19,12 +19,14 @@
 <translation id="1240668123557180468">Ontdek webpagina's die worden verzonden door objecten in de buurt. Chrome verzamelt webpagina's die zijn gekoppeld aan objecten om je heen, stuurt ze anoniem naar een Google-service om de nuttigste pagina's voor jou te vinden en geeft ze aan je weer.
 
 Je moet Bluetooth en Locatie hebben ingeschakeld om het Fysieke web te gebruiken.</translation>
+<translation id="1250508505624960884">Chrome Bèta-bladwijzers</translation>
 <translation id="1254090737195733114">Gegevens importeren?</translation>
 <translation id="1258753120186372309">Google-doodle: <ph name="DOODLE_DESCRIPTION" /></translation>
 <translation id="1272079795634619415">Stop</translation>
 <translation id="1285320974508926690">Deze site nooit vertalen</translation>
 <translation id="1291207594882862231">Geschiedenis, cookies, sitegegevens, cachegeheugen wissen…</translation>
 <translation id="129553762522093515">Recent gesloten</translation>
+<translation id="1326317727527857210">Log in bij Chrome om de tabbladen van je andere apparaten te bekijken.</translation>
 <translation id="13410144310025252">Bekijk ze in Chrome</translation>
 <translation id="1346090444609141578">Geen opgeslagen pagina's hier</translation>
 <translation id="1369915414381695676">Site <ph name="SITE_NAME" /> toegevoegd</translation>
@@ -40,10 +42,11 @@ Je moet Bluetooth en Locatie hebben ingeschakeld om het Fysieke web te gebruiken
 <translation id="1445680696957526815">Onderdelen van Chrome zijn incompatibel met elkaar. Chrome wordt mogelijk geüpgraded. Wacht enkele minuten. Als het probleem blijft optreden, verwijder je Chrome en installeer je het programma opnieuw.</translation>
 <translation id="1446450296470737166">Volledig beheer van MIDI-apparaten toestaan</translation>
 <translation id="145097072038377568">Uitgeschakeld in Android-instellingen</translation>
+<translation id="147006957810816598">Je wordt niet uitgelogd van je Google-account.</translation>
 <translation id="1477626028522505441">Downloaden van <ph name="FILE_NAME" /> is mislukt door serverproblemen.</translation>
 <translation id="1506061864768559482">Zoekmachine</translation>
 <translation id="1513352483775369820">Bladwijzers en webgeschiedenis</translation>
-<translation id="1546112724822176246">Wordt je apparaat niet weergegeven? <ph name="BEGIN_LINK" />Raadpleeg de Help<ph name="END_LINK" />.</translation>
+<translation id="1549000191223877751">Naar ander venster</translation>
 <translation id="1553358976309200471">Chrome updaten</translation>
 <translation id="1557201757634521564">Codering automatisch detecteren</translation>
 <translation id="1592483623187843893">Bladwijzer offline opgeslagen</translation>
@@ -62,6 +65,7 @@ Je moet Bluetooth en Locatie hebben ingeschakeld om het Fysieke web te gebruiken
 <translation id="1742134235943978220">Vertaald naar het <ph name="TARGET_LANGUAGE" />.</translation>
 <translation id="1749561566933687563">Synchroniseer je bladwijzers</translation>
 <translation id="17513872634828108">Geopende tabbladen</translation>
+<translation id="1756600373018374892">Tik op deze knop om snel toegang tot je tabbladen te krijgen.</translation>
 <translation id="1807246157184219062">Licht</translation>
 <translation id="1825719650605518411">Ervaring bij eerste uitvoering</translation>
 <translation id="1829244130665387512">Vinden op pagina</translation>
@@ -71,16 +75,21 @@ Je moet Bluetooth en Locatie hebben ingeschakeld om het Fysieke web te gebruiken
 <translation id="194341124344773587">Schakel het recht in voor Chrome via de <ph name="BEGIN_LINK" />Android-instellingen<ph name="END_LINK" />.</translation>
 <translation id="1943432128510653496">Wachtwoorden opslaan</translation>
 <translation id="1944384637046898011">Alles versleutelen met Google-wachtwoord vanaf <ph name="TIME" /></translation>
+<translation id="1946005195648379376">Beheer hoe Google je browsegeschiedenis gebruikt om Google Zoeken en andere Google-services te personaliseren.</translation>
+<translation id="1959930595721737608">JavaScript toestaan op de volgende site.</translation>
 <translation id="1966710179511230534">Update je inloggegevens.</translation>
 <translation id="1974060860693918893">Geavanceerd</translation>
+<translation id="1984321224716884559">Chrome Dev-bladwijzers</translation>
 <translation id="1984937141057606926">Toegestaan, behalve van derden</translation>
 <translation id="1994173015038366702">Site-URL</translation>
+<translation id="2001120796168634316">Gelinkte pagina opslaan voor later</translation>
 <translation id="200669432486043882">Bestand vervangen</translation>
 <translation id="2038563949887743358">'Desktopsite aanvragen' inschakelen</translation>
 <translation id="2073235970478114994">Afbeeldingen laden</translation>
 <translation id="2079545284768500474">Ongedaan maken</translation>
 <translation id="2082238445998314030">Resultaat <ph name="RESULT_NUMBER" /> van <ph name="TOTAL_RESULTS" /></translation>
 <translation id="2095887075102408547">Als deze functie is ingeschakeld, gebruikt Chrome Google-servers om pagina's die je bezoekt, te comprimeren voordat ze worden gedownload. Pagina's die worden geopend via privéverbindingen (HTTPS) of op incognitotabbladen, worden niet geoptimaliseerd of gezien door Google.</translation>
+<translation id="2096396629993765042">Je wordt niet uitgelogd van je Google-account. Voor je Google-account kunnen andere vormen van browsegeschiedenis beschikbaar zijn via <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />.</translation>
 <translation id="2100273922101894616">Automatisch inloggen</translation>
 <translation id="2126426811489709554">Mogelijk gemaakt door Chrome</translation>
 <translation id="213279576345780926"><ph name="TAB_TITLE" /> gesloten</translation>
@@ -92,10 +101,7 @@ Je moet Bluetooth en Locatie hebben ingeschakeld om het Fysieke web te gebruiken
 <translation id="2206488550163399966"><ph name="APP_NAME" />, webapp. <ph name="APP_URL" /></translation>
 <translation id="2268044343513325586">Verfijnen</translation>
 <translation id="2315043854645842844">Certificaatselectie aan clientzijde wordt niet ondersteund door het besturingssysteem.</translation>
-<translation id="2316129865977710310">Nee, bedankt</translation>
-<translation id="2319528413610359757">Voor lezers van <ph name="PUBLISHER" /></translation>
 <translation id="2321958826496381788">Sleep de schuifknop tot je deze tekst prettig kunt lezen. De tekst moet minimaal deze grootte hebben nadat je op een alinea hebt dubbelgetikt.</translation>
-<translation id="2329597144923131178">Log in om je bladwijzers, geschiedenis, wachtwoorden en andere instellingen op al je apparaten te gebruiken.</translation>
 <translation id="2343328333327081434">Installeren…</translation>
 <translation id="2351097562818989364">Je vertaalinstellingen zijn opnieuw ingesteld.</translation>
 <translation id="2359808026110333948">Doorgaan</translation>
@@ -133,9 +139,12 @@ Je moet Bluetooth en Locatie hebben ingeschakeld om het Fysieke web te gebruiken
 <translation id="2762000892062317888">zojuist</translation>
 <translation id="2770465223704140727">Verwijderen uit lijst</translation>
 <translation id="278029852808208386">Geen Bluetooth-apparaten gevonden. <ph name="BEGIN_LINK" />Zoek nogmaals<ph name="END_LINK" />.</translation>
+<translation id="2811892995384186721">Wordt je apparaat niet weergegeven? <ph name="BEGIN_LINK" />Raadpleeg de Help<ph name="END_LINK" /></translation>
+<translation id="2836148919159985482">Tik op de knop Terug om het volledige scherm te sluiten.</translation>
 <translation id="2842985007712546952">Bovenliggende map</translation>
 <translation id="2870560284913253234">Site</translation>
 <translation id="2888126860611144412">Over Chrome</translation>
+<translation id="2889768325388591707">Snel schakelen tussen tabbladen</translation>
 <translation id="2891154217021530873">Stoppen met het laden van de pagina</translation>
 <translation id="2902702728133930130">Kan Chrome niet starten door een onverwachte fout.</translation>
 <translation id="2903493209154104877">Adressen</translation>
@@ -153,6 +162,7 @@ Je moet Bluetooth en Locatie hebben ingeschakeld om het Fysieke web te gebruiken
 <translation id="307329814453917357">Aanbieden pagina's te vertalen met Google Translate</translation>
 <translation id="3089395242580810162">Openen op incognitotabblad</translation>
 <translation id="3090193911106258841">Audio- en video-invoer openen</translation>
+<translation id="3117051980354074377">Log in bij Chrome om de bladwijzers van je andere apparaten te bekijken.</translation>
 <translation id="3137521801621304719">Incognitomodus verlaten</translation>
 <translation id="3177909033752230686">Brontaal:</translation>
 <translation id="3190152372525844641">Schakel rechten in voor Chrome via de <ph name="BEGIN_LINK" />Android-instellingen<ph name="END_LINK" />.</translation>
@@ -178,6 +188,7 @@ Je logt in met een beheerd account en geeft de beheerder controle over je Chrome
 <translation id="3387650086002190359">Downloaden van <ph name="FILE_NAME" /> is mislukt door fouten in het bestandssysteem.</translation>
 <translation id="3414952576877147120">Grootte:</translation>
 <translation id="3435896845095436175">Inschakelen</translation>
+<translation id="3452612588551937789">Log in met je Google-account om je bladwijzers, geschiedenis, wachtwoorden en andere instellingen op al je apparaten te gebruiken.</translation>
 <translation id="3485544713029068372">Smart Lock voor wachtwoorden</translation>
 <translation id="3492207499832628349">Nieuw incognitotabblad</translation>
 <translation id="3501331331116143684">Pagina offline opgeslagen in <ph name="FOLDER_NAME" /></translation>
@@ -188,15 +199,15 @@ Je logt in met een beheerd account en geeft de beheerder controle over je Chrome
 <translation id="360480449234699036">Meer informatie over onderwerpen op websites zonder dat je de pagina hoeft te verlaten. 'Tikken om te zoeken' stuurt een woord en contextuele informatie voor het woord naar Google Zoeken, waarna er definities, afbeeldingen, zoekresultaten en andere gegevens worden geretourneerd.
 
 Als je de zoekterm wilt aanpassen, houd je deze aangeraakt om de term te selecteren. Als je je zoekopdracht wilt verfijnen, veeg je het deelvenster helemaal naar boven en tik je op het zoekvak.</translation>
+<translation id="3623048332793834136">Chrome Canary-bladwijzers</translation>
 <translation id="363596933471559332">Automatisch inloggen bij websites met de opgeslagen inloggegevens. Wanneer de functie is uitgeschakeld, word je elke keer om verificatie gevraagd voordat je wordt ingelogd bij een website.</translation>
-<translation id="3653742808139624888">Log in bij Chrome om al je bladwijzers op al je apparaten te bekijken</translation>
 <translation id="3656115297268584622">Schakel de locatie in de <ph name="BEGIN_LINK" />Android-instellingen<ph name="END_LINK" /> in.</translation>
 <translation id="3661699943263275414">Websites van derden kunnen cookiegegevens opslaan en lezen</translation>
 <translation id="3672452749423051839">Suggesties bij navigatiefouten</translation>
 <translation id="3716158070938632480">Webpagina's in de buurt</translation>
 <translation id="3732088672634061408">Kan interesses niet ophalen.</translation>
 <translation id="3738139272394829648">Tikken om te zoeken</translation>
-<translation id="3774280986422214650">Als je deze functie inschakelt, maak je deel uit van een experiment dat HTTPS-pagina's via proxy overdraagt via de servers van Google.</translation>
+<translation id="3744111561329211289">Synchronisatie op de achtergrond</translation>
 <translation id="3809549525127675114">'<ph name="VIDEO_TITLE" />' is afgelopen</translation>
 <translation id="3828029223314399057">Zoeken in bladwijzers</translation>
 <translation id="3871171699884605801">Browsegeschiedenis kan niet worden verwijderd bij accounts voor kinderen</translation>
@@ -213,7 +224,6 @@ Als je de zoekterm wilt aanpassen, houd je deze aangeraakt om de term te selecte
 <translation id="4035611068038188272">Bladwijzers nemen momenteel <ph name="TOTAL_OFFLINE_STORAGE_SIZE" /> in beslag.</translation>
 <translation id="4042870126885713738">Suggesties weergeven wanneer een webadres onjuist is of er geen verbinding kan worden gemaakt</translation>
 <translation id="4056223980640387499">Sepia</translation>
-<translation id="4059119910594077751">Tik op de knop Terug om het volledige scherm te sluiten.</translation>
 <translation id="4062305924942672200">Juridische informatie</translation>
 <translation id="4089831646916293264">Deze functie kan problemen veroorzaken met toegang tot premium gegevensservices geleverd door je provider.</translation>
 <translation id="4099578267706723511">Verzend automatisch gebruiksstatistieken en crashmeldingen naar Google.</translation>
@@ -225,6 +235,7 @@ Als je de zoekterm wilt aanpassen, houd je deze aangeraakt om de term te selecte
 <translation id="4195643157523330669">Openen op nieuw tabblad</translation>
 <translation id="4198229475320555619"><ph name="PAGE_SIZE_STRING" /> bladwijzer offline opgeslagen</translation>
 <translation id="423410644998903704">Chrome heeft rechten nodig om het item te delen met deze site.</translation>
+<translation id="4242533952199664413">Instellingen openen</translation>
 <translation id="424864128008805179">Uitloggen bij Chrome?</translation>
 <translation id="4254813446494774748">Doeltaal:</translation>
 <translation id="4256782883801055595">Open-sourcelicenties</translation>
@@ -256,6 +267,7 @@ Als je de zoekterm wilt aanpassen, houd je deze aangeraakt om de term te selecte
 <translation id="4645575059429386691">Beheerd door je ouder</translation>
 <translation id="4663756553811254707"><ph name="NUMBER_OF_BOOKMARKS" /> bladwijzers verwijderd</translation>
 <translation id="4665282149850138822"><ph name="NAME" /> is toegevoegd aan je startscherm</translation>
+<translation id="4668044310199835006">Work Chrome-bladwijzers</translation>
 <translation id="4684427112815847243">Alles synchroniseren</translation>
 <translation id="4686372254213217147">Oorspronkelijke grootte</translation>
 <translation id="4690286298542128877">Tabbladen worden verplaatst naar een tabbladschakelaar in Chrome.</translation>
@@ -271,22 +283,19 @@ Als je de zoekterm wilt aanpassen, houd je deze aangeraakt om de term te selecte
 <translation id="4816465935029283692">Gegevenstypen</translation>
 <translation id="4827948050554950725">Een creditcard toevoegen</translation>
 <translation id="4836364883164334657">Je verbinding met deze site is niet privé. Aanvallers kunnen mogelijk je informatie (bijvoorbeeld foto's, wachtwoorden, berichten en creditcardgegevens) stelen van <ph name="DOMAIN_NAME" />.</translation>
-<translation id="4842511359652954519">Meer informatie</translation>
 <translation id="4850886885716139402">Weergave</translation>
 <translation id="4875622588773761625">Wil je dat <ph name="PASSWORD_MANAGER_BRAND" /> je wachtwoord voor deze site updatet?</translation>
 <translation id="4881695831933465202">Openen</translation>
 <translation id="4885273946141277891">Niet-ondersteund aantal Chrome-instanties.</translation>
 <translation id="4927198283430892231">Opgeslagen pagina's nemen momenteel <ph name="TOTAL_OFFLINE_STORAGE_SIZE" /> in beslag.</translation>
 <translation id="4943872375798546930">Geen resultaten</translation>
-<translation id="4970484396410298643">Bekijk hier de tabbladen die je op je computer hebt geopend.
-
-Open Chrome op je computer, ga naar het menu en selecteer 'Inloggen bij Chrome'.</translation>
 <translation id="497421865427891073">Naar voren gaan</translation>
 <translation id="4996978546172906250">Delen via</translation>
 <translation id="5000922062037820727">Geblokkeerd (aanbevolen)</translation>
 <translation id="5016205925109358554">Serif</translation>
 <translation id="5039804452771397117">Toestaan</translation>
 <translation id="5040262127954254034">Privacy</translation>
+<translation id="5056549851600133418">Artikelen voor jou</translation>
 <translation id="5063480226653192405">Gebruik</translation>
 <translation id="5100237604440890931">Samengevouwen; klik om uit te vouwen.</translation>
 <translation id="5107381076085091558">Download onderbroken.</translation>
@@ -303,20 +312,19 @@ Open Chrome op je computer, ga naar het menu en selecteer 'Inloggen bij Chrome'.
 <translation id="5184329579814168207">Openen in Chrome</translation>
 <translation id="5199929503336119739">Werkprofiel</translation>
 <translation id="5210365745912300556">Tabblad sluiten</translation>
-<translation id="5210714456814679336">Tabbladen die je op andere apparaten in Chrome hebt geopend, worden hier weergegeven.</translation>
 <translation id="5222676887888702881">Uitloggen</translation>
-<translation id="5228579091201413441">Synchronisatie inschakelen</translation>
 <translation id="5233638681132016545">Nieuw tabblad</translation>
 <translation id="5271967389191913893">Het apparaat kan de inhoud niet openen die moet worden gedownload.</translation>
 <translation id="5275558766013849309">Tabbladen worden samen bewaard met recent gebruikte apps.</translation>
+<translation id="528192093759286357">Sleep vanaf de bovenkant en tik op de knop Terug om het volledige scherm te sluiten.</translation>
 <translation id="5284584623296338184">Wijzigingen in je bladwijzers, geschiedenis, wachtwoorden en andere instellingen worden niet meer gesynchroniseerd met je Google-account. Je bestaande gegevens blijven echter opgeslagen in je Google-account.</translation>
 <translation id="5301954838959518834">OK</translation>
 <translation id="5302048478445481009">Taal</translation>
 <translation id="5304593522240415983">Dit veld mag niet leeg zijn</translation>
+<translation id="5308380583665731573">Verbinding maken</translation>
 <translation id="5308933389783727448">Zoeken in opgeslagen pagina's</translation>
 <translation id="5313967007315987356">Site toevoegen</translation>
 <translation id="5317780077021120954">Opslaan</translation>
-<translation id="5323972449344932352">Chrome starten</translation>
 <translation id="5324858694974489420">Instellingen voor ouders</translation>
 <translation id="5327248766486351172">Naam</translation>
 <translation id="5345040418939504969"><ph name="BOOKMARK_TITLE" /> is verwijderd</translation>
@@ -337,6 +345,7 @@ Open Chrome op je computer, ga naar het menu en selecteer 'Inloggen bij Chrome'.
 <translation id="5556459405103347317">Opnieuw laden</translation>
 <translation id="5565871407246142825">Creditcards</translation>
 <translation id="5578795271662203820">Zoeken op <ph name="SEARCH_ENGINE" /> naar afbeelding</translation>
+<translation id="5579997910517802656">Geen apparaten gevonden.</translation>
 <translation id="5595485650161345191">Adres bewerken</translation>
 <translation id="5596627076506792578">Meer opties</translation>
 <translation id="5626134646977739690">Naam:</translation>
@@ -349,10 +358,6 @@ Open Chrome op je computer, ga naar het menu en selecteer 'Inloggen bij Chrome'.
 <translation id="5677928146339483299">Geblokkeerd</translation>
 <translation id="5684874026226664614">Deze pagina kan niet worden vertaald.</translation>
 <translation id="5708031556037168012">Bestaande gegevens op je apparaat behouden en de gegevens permanent importeren in <ph name="TO_ACCOUNT" />.</translation>
-<translation id="5712189971979076230">Help ons prioriteit aan te geven aan de functies en verbeteringen waaraan we moeten werken door Google informatie te sturen over de bestanden, apps en services die worden uitgevoerd op het moment dat er een crash plaatsvindt.
-
-Gebruiksstatistieken omvatten informatie zoals voorkeuren, klikken op knoppen en geheugengebruik. Ze bevatten geen URL's van webpagina's of persoonlijke gegevens. Crashrapporten bevatten systeeminformatie ten tijde van de crash en kunnen URL's van webpagina's of persoonlijke gegevens bevatten, afhankelijk van wat er gebeurde op het moment van de crash.</translation>
-<translation id="5715468759630044318">Account kiezen</translation>
 <translation id="5719837394786370183">Pagina's die je bekijkt op incognitotabbladen, blijven niet in de geschiedenis, cookie-opslag of zoekgeschiedenis van je browser staan nadat je alle incognitotabbladen hebt gesloten. Bestanden die je downloadt of bladwijzers die je instelt, blijven behouden.
 
 Je bent echter niet onzichtbaar. Als je incognito bent, wordt je browsegeschiedenis niet verborgen voor je werkgever, je internetprovider of de websites die je bezoekt.</translation>
@@ -369,13 +374,11 @@ Je bent echter niet onzichtbaar. Als je incognito bent, wordt je browsegeschiede
 <translation id="585027516397408832">Databesparing ingeschakeld</translation>
 <translation id="5860033963881614850">Uit</translation>
 <translation id="5869522115854928033">Opgeslagen wachtwoorden</translation>
-<translation id="588258955323874662">Volledig scherm</translation>
 <translation id="5899349522111170522">Nieuw bestand maken</translation>
 <translation id="5902828464777634901">Alle lokale gegevens die zijn opgeslagen door deze website, inclusief cookies, worden verwijderd.</translation>
 <translation id="5911030830365207728">Google Translate</translation>
 <translation id="5916664084637901428">Aan</translation>
 <translation id="5939518447894949180">Terugzetten</translation>
-<translation id="5965336165840183977">Hiermee worden de gesynchroniseerde gegevens gewist op alle apparaten. Je wordt niet uitgelogd van je Google-account. Opgeslagen site-instellingen worden niet verwijderd en kunnen je browsegedrag weerspiegelen.</translation>
 <translation id="5968595432776860642">'<ph name="VIDEO_TITLE" />' afspelen</translation>
 <translation id="6010869025736512584">Video-invoer openen</translation>
 <translation id="6012342843556706400">Chrome heeft locatietoegang nodig om het item te delen met deze site.</translation>
@@ -395,8 +398,6 @@ Je bent echter niet onzichtbaar. Als je incognito bent, wordt je browsegeschiede
 <translation id="6159335304067198720"><ph name="PERCENT" /> besparing van data</translation>
 <translation id="6165508094623778733">Meer informatie</translation>
 <translation id="6192792657125177640">Uitzonderingen</translation>
-<translation id="6208263165776660488">Chrome-tabbladen zijn verplaatst</translation>
-<translation id="6231464350722415003">JavaScript toestaan op websites die jij opgeeft terwijl dit voor de rest van internet wordt geblokkeerd</translation>
 <translation id="6232535412751077445">Als je 'Niet bijhouden' inschakelt, wordt hiervoor een verzoek opgenomen in je browseverkeer. Het resultaat daarvan hangt af van of een website reageert op het verzoek en hoe het verzoek wordt geïnterpreteerd.
 
 Zo kunnen sommige websites op dit verzoek reageren door advertenties weer te geven die niet zijn gebaseerd op andere websites die je hebt bezocht. Toch blijven veel websites je browsegegevens nog verzamelen en gebruiken, bijvoorbeeld om de beveiliging te verbeteren, om content, services, advertenties en aanbevelingen te leveren en om rapportagestatistieken te genereren.</translation>
@@ -419,10 +420,12 @@ Zo kunnen sommige websites op dit verzoek reageren door advertenties weer te gev
 <translation id="6464825623202322042">Dit apparaat</translation>
 <translation id="6476911854266661814">'<ph name="VIDEO_TITLE" />' onderbroken</translation>
 <translation id="6482749332252372425">Downloaden van <ph name="FILE_NAME" /> is mislukt door te weinig opslagruimte.</translation>
+<translation id="6541922744811587456">Chrome-bladwijzers</translation>
 <translation id="654446541061731451">Selecteer een tabblad om te beamen</translation>
 <translation id="6550675742724504774">Opties</translation>
 <translation id="656628257199996201">Altijd <ph name="SOURCE_LANGUAGE" /> vertalen</translation>
 <translation id="6571070086367343653">Creditcard bewerken</translation>
+<translation id="6573431926118603307">Tabbladen die je op andere apparaten in Chrome hebt geopend, worden hier weergegeven.</translation>
 <translation id="6575643671698722332">Herstel mislukt. Kijk of apparaat online is en probeer opnieuw.</translation>
 <translation id="6600954340915313787">Gekopieerd naar Chrome</translation>
 <translation id="6612358246767739896">Beveiligde inhoud</translation>
@@ -432,12 +435,12 @@ Zo kunnen sommige websites op dit verzoek reageren door advertenties weer te gev
 <translation id="6656545060687952787">Chrome heeft locatietoegang nodig om naar apparaten te zoeken. <ph name="BEGIN_LINK" />Rechten updaten<ph name="END_LINK" /></translation>
 <translation id="666268767214822976">Een voorspellingsservice gebruiken om gerelateerde zoekopdrachten en populaire websites te tonen terwijl je in de adresbalk typt</translation>
 <translation id="666981079809192359">Privacybeleid van Chrome</translation>
+<translation id="6683720003467092441">Synchronisatie op de achtergrond toestaan op de volgende site.</translation>
 <translation id="6697251040310467641">Pagina offline opgeslagen</translation>
 <translation id="6698801883190606802">Gesynchroniseerde gegevens beheren</translation>
 <translation id="6699351163704950317">Alle opgeslagen pagina's</translation>
 <translation id="6710213216561001401">Vorige</translation>
 <translation id="6720988912937197322">Opgeslagen pagina niet offline beschikbaar</translation>
-<translation id="6722992508235227685">Je bladwijzers, geschiedenis, wachtwoorden en andere instellingen worden gesynchroniseerd met je Google-account, zodat je ze op al je apparaten kunt gebruiken. Je kunt via <ph name="BEGIN_LINK1" />Instellingen<ph name="END_LINK1" /> aangeven wat je wilt synchroniseren.</translation>
 <translation id="6738867403308150051">Downloaden...</translation>
 <translation id="6762156594045689028">Als je deze instelling wilt wijzigen, <ph name="BEGIN_LINK" />stel je de synchronisatie opnieuw in<ph name="END_LINK" /></translation>
 <translation id="6770414673596662518">Het Safe Browsing-systeem van Chrome wordt ook gebruikt om onveilige pagina's te detecteren en je te beschermen tegen phishing, malware en andere schadelijke downloads.</translation>
@@ -454,6 +457,7 @@ Zo kunnen sommige websites op dit verzoek reageren door advertenties weer te gev
 <translation id="6857778194843072568">Alleen verzenden via wifi</translation>
 <translation id="6865313869410766144">Formuliergegevens voor Automatisch aanvullen</translation>
 <translation id="6868088497967843822">Log in om je bladwijzers, geschiedenis, wachtwoorden en andere instellingen op al je apparaten te gebruiken</translation>
+<translation id="6879008316532205713">Schakel in je account bij instellingen van Android 'Gegevens automatisch synchroniseren' in om de tabbladen op je andere apparaten te bekijken.</translation>
 <translation id="6945221475159498467">Selecteren</translation>
 <translation id="6963766334940102469">Bladwijzers verwijderen</translation>
 <translation id="6965382102122355670">OK</translation>
@@ -484,9 +488,6 @@ Zo kunnen sommige websites op dit verzoek reageren door advertenties weer te gev
 <translation id="7244362611678346589"><ph name="SEARCH_ENGINE_URL" /> gebruikt je locatie om lokale zoekresultaten weer te geven</translation>
 <translation id="7299441085833132046"><ph name="BEGIN_LINK" />Help<ph name="END_LINK" /></translation>
 <translation id="7299721129597238157">Bladwijzer verwijderen</translation>
-<translation id="7324738665594301612">We testen het via proxy overdragen van HTTPS-pagina's via servers van Google als onderdeel van een experiment.</translation>
-<translation id="7346217184097589238">Opgeslagen site-instellingen worden niet verwijderd en kunnen je browsegedrag weerspiegelen.</translation>
-<translation id="7346909386216857016">OK</translation>
 <translation id="7347770551817603360">Offline content</translation>
 <translation id="7363354739009474003">'<ph name="VIDEO_TITLE" />' laden</translation>
 <translation id="7366340029385295517">Casten naar <ph name="SCREEN_NAME" /></translation>
@@ -497,19 +498,23 @@ Zo kunnen sommige websites op dit verzoek reageren door advertenties weer te gev
 <translation id="7408644312175185557">Bekijk je tabbladen met andere recente apps op het overzichtsscherm van je telefoon.</translation>
 <translation id="7423098979219808738">Eerst vragen</translation>
 <translation id="7437998757836447326">Uitloggen bij Chrome</translation>
+<translation id="7464701184726199289">Hiermee worden gesynchroniseerde gegevens van alle apparaten gewist. Opgeslagen site-instellingen worden niet verwijderd en kunnen je browsegedrag weerspiegelen. <ph name="BEGIN_LINK" />Meer informatie<ph name="END_LINK" /></translation>
 <translation id="7473891865547856676">Nee, bedankt</translation>
 <translation id="7475192538862203634">Als je deze melding vaker ziet, kun je deze <ph name="BEGIN_LINK" />suggesties<ph name="END_LINK" /> proberen.</translation>
 <translation id="748127970106343339">Verwijderen van apparaatinloggegevens bevestigen</translation>
+<translation id="7487352416683556407">De geselecteerde gegevens zijn verwijderd uit Chrome en van je gesynchroniseerde apparaten.
+
+Voor je Google-account kunnen andere vormen van browsegeschiedenis (zoals zoekopdrachten en activiteit uit andere Google-services) beschikbaar zijn via <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />.</translation>
 <translation id="7493994139787901920"><ph name="VERSION" /> (geüpdatet: <ph name="TIME_SINCE_UPDATE" />)</translation>
 <translation id="7498271377022651285">Een ogenblik geduld…</translation>
 <translation id="7499262814309712782">Synchronisatieaccount</translation>
 <translation id="7501135638693251872">Alle bladwijzers</translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7562080006725997899">Browsegegevens wissen</translation>
+<translation id="756809126120519699">Chrome-gegevens gewist</translation>
 <translation id="7588950540487816470">Fysieke web</translation>
 <translation id="7596558890252710462">Besturingssysteem</translation>
 <translation id="7599840151813361502">Je wordt niet uitgelogd van je <ph name="BEGIN_LINK" />Google-accounts<ph name="END_LINK" /></translation>
-<translation id="7603403729818446828">Bekijk je tabbladen met andere recente apps op het overzichtsscherm van je telefoon. Je kunt dit beheren via <ph name="BEGIN_LINK" />Instellingen<ph name="END_LINK" />.</translation>
 <translation id="7607002721634913082">Onderbroken</translation>
 <translation id="7612619742409846846">Ingelogd bij Google als</translation>
 <translation id="7619072057915878432">Downloaden van <ph name="FILE_NAME" /> is mislukt door netwerkfouten.</translation>
@@ -548,7 +553,8 @@ Je bent echter niet onzichtbaar. Als je incognito bent, wordt je browsegeschiede
 <translation id="8050319187894766337">Pagina offline opgeslagen. Opslag bijna vol.</translation>
 <translation id="8068648041423924542">Kan certificaat niet selecteren.</translation>
 <translation id="8069239273282989646">Na compressie</translation>
-<translation id="8084156870963450514">Log in zodat al je online items toegankelijk zijn vanaf elk apparaat</translation>
+<translation id="8073388330009372546">Openen op nieuw tabblad</translation>
+<translation id="8076014560081431679">Opgeslagen site-instellingen worden niet verwijderd en kunnen je browsegedrag weerspiegelen. <ph name="BEGIN_LINK" />Meer informatie<ph name="END_LINK" /></translation>
 <translation id="8087000398470557479">Deze content is afkomstig van <ph name="DOMAIN_NAME" />, geleverd door Google.</translation>
 <translation id="8098570222830891427">Apparaten bij je in de buurt verzenden webpagina's via Bluetooth. Chrome zoekt naar pagina's en geeft ze weer wanneer je je apparaat activeert uit de slaapstand. Deze pagina's worden verwerkt door een Google-servcice om de kwaliteit van paginaresultaten te verbeteren.
 
@@ -561,6 +567,7 @@ Je kunt het Fysieke web beheren via de instellingen van Chrome.</translation>
 <translation id="8173098127580644436">het eerste gebruik</translation>
 <translation id="8200772114523450471">Hervatten</translation>
 <translation id="8209050860603202033">Afbeelding openen</translation>
+<translation id="8215250379351058554"><ph name="SITE" /> wil verbinden met:</translation>
 <translation id="8218346974737627104">Inloggen bevestigen</translation>
 <translation id="8218934717680664417">Je kunt nu zoeken met één tik</translation>
 <translation id="8223946939421658889">Gegevens wissen van</translation>
@@ -580,6 +587,7 @@ Je kunt het Fysieke web beheren via de instellingen van Chrome.</translation>
 <translation id="8497726226069778601">Hier is nog niets te zien</translation>
 <translation id="8514577642972634246">Incognitomodus starten</translation>
 <translation id="8518901949365209398">Deze site gebruikt een zwakke beveiligingsconfiguratie (SHA-1-handtekeningen), dus je verbinding is mogelijk niet privé.</translation>
+<translation id="8525306231823319788">Volledig scherm</translation>
 <translation id="854522910157234410">Deze pagina openen</translation>
 <translation id="8562452229998620586">Opgeslagen wachtwoorden worden hier weergegeven.</translation>
 <translation id="856481929701340285">Desktopversie opvragen</translation>
@@ -591,6 +599,7 @@ Je kunt het Fysieke web beheren via de instellingen van Chrome.</translation>
 <translation id="862875433388403934">Inhoud (films, muziek, enzovoort) die is gedownload in andere apps kan mogelijk niet langer worden afgespeeld, totdat die apps opnieuw licenties verkrijgen op basis van nieuwe apparaatinloggegevens.
 
 Maak verbinding met internet en speel je gedownloade inhoud af om nieuwe licenties te krijgen.</translation>
+<translation id="8636825310635137004">Schakel synchronisatie in om de tabbladen op je andere apparaten te bekijken</translation>
 <translation id="8660471606262461360">Van Google Payments</translation>
 <translation id="8676374126336081632">Invoer wissen</translation>
 <translation id="869891660844655955">Vervaldatum</translation>
@@ -602,6 +611,7 @@ Maak verbinding met internet en speel je gedownloade inhoud af om nieuwe licenti
 <translation id="8737542153238017984">Opgeslagen pagina niet offline beschikbaar. Opslagruimte is bijna vol.</translation>
 <translation id="8793430725658173476">URL kopiëren</translation>
 <translation id="8798099450830957504">Standaard</translation>
+<translation id="8812942424849541387">Beheer hoe dit werkt via <ph name="BEGIN_LINK1" />Instellingen<ph name="END_LINK1" /></translation>
 <translation id="8820817407110198400">Bladwijzers</translation>
 <translation id="8829678271838353305"><ph name="ACCOUNT_EMAIL_LAST" /> is ingelogd. Inloggen met <ph name="ACCOUNT_EMAIL_NEW" /> voegt gesynchroniseerde gegevens zoals bladwijzers samen tussen accounts. Als je deze informatie gescheiden wilt houden, moet je de browsegegevens wissen in de <ph name="BEGIN_LINK" />Instellingen<ph name="END_LINK" />.</translation>
 <translation id="8853345339104747198"><ph name="TAB_TITLE" />, tabblad</translation>
@@ -611,11 +621,13 @@ Maak verbinding met internet en speel je gedownloade inhoud af om nieuwe licenti
 <translation id="8912362522468806198">Google-account</translation>
 <translation id="8920114477895755567">Wachten op gegevens van ouders.</translation>
 <translation id="8931159598799892500">Chrome + Fysieke web</translation>
-<translation id="8934455786738644694">Sleep vanaf de bovenkant en tik op de knop Terug om het volledige scherm te sluiten.</translation>
 <translation id="8941248009481596111">Je verbinding met deze site is privé.</translation>
 <translation id="8941729603749328384">www.example.com</translation>
+<translation id="8942627711005830162">Openen in een ander venster</translation>
 <translation id="8959122750345127698">Navigatie is onbereikbaar: <ph name="URL" /></translation>
 <translation id="8979340629087822094">de afgelopen dag</translation>
+<translation id="8981454092730389528">Google-activiteitsopties</translation>
+<translation id="8986494364107987395">Automatisch gebruiksstatistieken en crashrapporten naar Google verzenden</translation>
 <translation id="8987061207681586800">Personaliseer Chrome voor jou</translation>
 <translation id="9019902583201351841">Beheerd door je ouders</translation>
 <translation id="9020607083536754075">Het huidige tabblad sluiten en teruggaan naar de vorige app</translation>

@@ -2,17 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/extensions/activity_log/activity_log.h"
+
 #include <stddef.h>
+
+#include <memory>
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/activity_log/activity_action_constants.h"
-#include "chrome/browser/extensions/activity_log/activity_log.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/prerender/prerender_handle.h"
@@ -84,12 +86,12 @@ class ActivityLogTest : public ChromeRenderViewHostTestHarness {
   }
 
   static void RetrieveActions_LogAndFetchActions0(
-      scoped_ptr<std::vector<scoped_refptr<Action> > > i) {
+      std::unique_ptr<std::vector<scoped_refptr<Action>>> i) {
     ASSERT_EQ(0, static_cast<int>(i->size()));
   }
 
   static void RetrieveActions_LogAndFetchActions2(
-      scoped_ptr<std::vector<scoped_refptr<Action> > > i) {
+      std::unique_ptr<std::vector<scoped_refptr<Action>>> i) {
     ASSERT_EQ(2, static_cast<int>(i->size()));
   }
 
@@ -112,7 +114,7 @@ class ActivityLogTest : public ChromeRenderViewHostTestHarness {
   }
 
   static void Arguments_Prerender(
-      scoped_ptr<std::vector<scoped_refptr<Action> > > i) {
+      std::unique_ptr<std::vector<scoped_refptr<Action>>> i) {
     ASSERT_EQ(1U, i->size());
     scoped_refptr<Action> last = i->front();
 
@@ -129,7 +131,7 @@ class ActivityLogTest : public ChromeRenderViewHostTestHarness {
   }
 
   static void RetrieveActions_ArgUrlExtraction(
-      scoped_ptr<std::vector<scoped_refptr<Action> > > i) {
+      std::unique_ptr<std::vector<scoped_refptr<Action>>> i) {
     const base::DictionaryValue* other = NULL;
     int dom_verb = -1;
 
@@ -168,7 +170,7 @@ class ActivityLogTest : public ChromeRenderViewHostTestHarness {
   }
 
   static void RetrieveActions_ArgUrlApiCalls(
-      scoped_ptr<std::vector<scoped_refptr<Action> > > actions) {
+      std::unique_ptr<std::vector<scoped_refptr<Action>>> actions) {
     size_t api_calls_size = arraysize(kUrlApiCalls);
     const base::DictionaryValue* other = NULL;
     int dom_verb = -1;
@@ -196,7 +198,7 @@ class ActivityLogTest : public ChromeRenderViewHostTestHarness {
 #if defined OS_CHROMEOS
   chromeos::ScopedTestDeviceSettingsService test_device_settings_service_;
   chromeos::ScopedTestCrosSettings test_cros_settings_;
-  scoped_ptr<chromeos::ScopedTestUserManager> test_user_manager_;
+  std::unique_ptr<chromeos::ScopedTestUserManager> test_user_manager_;
 #endif
 };
 
@@ -207,7 +209,7 @@ TEST_F(ActivityLogTest, Construct) {
 
 TEST_F(ActivityLogTest, LogAndFetchActions) {
   ActivityLog* activity_log = ActivityLog::GetInstance(profile());
-  scoped_ptr<base::ListValue> args(new base::ListValue());
+  std::unique_ptr<base::ListValue> args(new base::ListValue());
   ASSERT_TRUE(GetDatabaseEnabled());
 
   // Write some API calls
@@ -236,10 +238,11 @@ TEST_F(ActivityLogTest, LogAndFetchActions) {
 TEST_F(ActivityLogTest, LogPrerender) {
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(std::move(DictionaryBuilder()
-                                     .Set("name", "Test extension")
-                                     .Set("version", "1.0.0")
-                                     .Set("manifest_version", 2)))
+          .SetManifest(DictionaryBuilder()
+                           .Set("name", "Test extension")
+                           .Set("version", "1.0.0")
+                           .Set("manifest_version", 2)
+                           .Build())
           .Build();
   extension_service_->AddExtension(extension.get());
   ActivityLog* activity_log = ActivityLog::GetInstance(profile());
@@ -251,7 +254,7 @@ TEST_F(ActivityLogTest, LogPrerender) {
           Profile::FromBrowserContext(profile()));
 
   const gfx::Size kSize(640, 480);
-  scoped_ptr<prerender::PrerenderHandle> prerender_handle(
+  std::unique_ptr<prerender::PrerenderHandle> prerender_handle(
       prerender_manager->AddPrerenderFromOmnibox(
           url,
           web_contents()->GetController().GetDefaultSessionStorageNamespace(),
@@ -283,7 +286,7 @@ TEST_F(ActivityLogTest, LogPrerender) {
 
 TEST_F(ActivityLogTest, ArgUrlExtraction) {
   ActivityLog* activity_log = ActivityLog::GetInstance(profile());
-  scoped_ptr<base::ListValue> args(new base::ListValue());
+  std::unique_ptr<base::ListValue> args(new base::ListValue());
 
   base::Time now = base::Time::Now();
 
@@ -330,10 +333,11 @@ TEST_F(ActivityLogTest, ArgUrlExtraction) {
                       now - base::TimeDelta::FromSeconds(3),
                       Action::ACTION_API_CALL,
                       "windows.create");
-  action->set_args(ListBuilder()
-                       .Append(std::move(DictionaryBuilder().Set(
-                           "url", "http://www.google.co.uk")))
-                       .Build());
+  action->set_args(
+      ListBuilder()
+          .Append(
+              DictionaryBuilder().Set("url", "http://www.google.co.uk").Build())
+          .Build());
   activity_log->LogAction(action);
 
   activity_log->GetFilteredActions(
@@ -349,14 +353,15 @@ TEST_F(ActivityLogTest, ArgUrlExtraction) {
 TEST_F(ActivityLogTest, UninstalledExtension) {
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(std::move(DictionaryBuilder()
-                                     .Set("name", "Test extension")
-                                     .Set("version", "1.0.0")
-                                     .Set("manifest_version", 2)))
+          .SetManifest(DictionaryBuilder()
+                           .Set("name", "Test extension")
+                           .Set("version", "1.0.0")
+                           .Set("manifest_version", 2)
+                           .Build())
           .Build();
 
   ActivityLog* activity_log = ActivityLog::GetInstance(profile());
-  scoped_ptr<base::ListValue> args(new base::ListValue());
+  std::unique_ptr<base::ListValue> args(new base::ListValue());
   ASSERT_TRUE(GetDatabaseEnabled());
 
   // Write some API calls
@@ -385,7 +390,7 @@ TEST_F(ActivityLogTest, UninstalledExtension) {
 
 TEST_F(ActivityLogTest, ArgUrlApiCalls) {
   ActivityLog* activity_log = ActivityLog::GetInstance(profile());
-  scoped_ptr<base::ListValue> args(new base::ListValue());
+  std::unique_ptr<base::ListValue> args(new base::ListValue());
   base::Time now = base::Time::Now();
   int api_calls_size = arraysize(kUrlApiCalls);
   scoped_refptr<Action> action;

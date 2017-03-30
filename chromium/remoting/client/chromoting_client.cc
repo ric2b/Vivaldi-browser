@@ -6,7 +6,9 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "remoting/base/capabilities.h"
+#include "remoting/base/constants.h"
 #include "remoting/client/audio_decode_scheduler.h"
 #include "remoting/client/audio_player.h"
 #include "remoting/client/client_context.h"
@@ -16,17 +18,20 @@
 #include "remoting/protocol/host_stub.h"
 #include "remoting/protocol/ice_connection_to_host.h"
 #include "remoting/protocol/jingle_session_manager.h"
+#include "remoting/protocol/negotiating_client_authenticator.h"
 #include "remoting/protocol/session_config.h"
 #include "remoting/protocol/transport_context.h"
 #include "remoting/protocol/video_renderer.h"
 #include "remoting/protocol/webrtc_connection_to_host.h"
+#include "remoting/signaling/jid_util.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 
 namespace remoting {
 
 ChromotingClient::ChromotingClient(ClientContext* client_context,
                                    ClientUserInterface* user_interface,
                                    protocol::VideoRenderer* video_renderer,
-                                   scoped_ptr<AudioPlayer> audio_player)
+                                   std::unique_ptr<AudioPlayer> audio_player)
     : user_interface_(user_interface), video_renderer_(video_renderer) {
   DCHECK(client_context->main_task_runner()->BelongsToCurrentThread());
   if (audio_player) {
@@ -42,25 +47,25 @@ ChromotingClient::~ChromotingClient() {
 }
 
 void ChromotingClient::set_protocol_config(
-    scoped_ptr<protocol::CandidateSessionConfig> config) {
+    std::unique_ptr<protocol::CandidateSessionConfig> config) {
   protocol_config_ = std::move(config);
 }
 
 void ChromotingClient::SetConnectionToHostForTests(
-    scoped_ptr<protocol::ConnectionToHost> connection_to_host) {
+    std::unique_ptr<protocol::ConnectionToHost> connection_to_host) {
   connection_ = std::move(connection_to_host);
 }
 
 void ChromotingClient::Start(
     SignalStrategy* signal_strategy,
-    scoped_ptr<protocol::Authenticator> authenticator,
+    const protocol::ClientAuthenticationConfig& client_auth_config,
     scoped_refptr<protocol::TransportContext> transport_context,
     const std::string& host_jid,
     const std::string& capabilities) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!session_manager_);  // Start must be called more than once.
 
-  host_jid_ = host_jid;
+  host_jid_ = NormalizeJid(host_jid);
   local_capabilities_ = capabilities;
 
   if (!protocol_config_)
@@ -71,11 +76,11 @@ void ChromotingClient::Start(
   if (!connection_) {
     if (protocol_config_->webrtc_supported()) {
       DCHECK(!protocol_config_->ice_supported());
-#if defined(OS_NACL)
-      LOG(FATAL) << "WebRTC is not supported in webapp.";
-#else   // defined(OS_NACL)
+#if !defined(ENABLE_WEBRTC_REMOTING_CLIENT)
+      LOG(FATAL) << "WebRTC is not supported.";
+#else
       connection_.reset(new protocol::WebrtcConnectionToHost());
-#endif  // !defined(OS_NACL)
+#endif
     } else {
       DCHECK(protocol_config_->ice_supported());
       connection_.reset(new protocol::IceConnectionToHost());
@@ -89,7 +94,7 @@ void ChromotingClient::Start(
   session_manager_.reset(new protocol::JingleSessionManager(signal_strategy));
   session_manager_->set_protocol_config(std::move(protocol_config_));
 
-  authenticator_ = std::move(authenticator);
+  client_auth_config_ = client_auth_config;
   transport_context_ = transport_context;
 
   signal_strategy_ = signal_strategy;
@@ -143,6 +148,35 @@ void ChromotingClient::DeliverHostMessage(
   DCHECK(thread_checker_.CalledOnValidThread());
 
   user_interface_->DeliverHostMessage(message);
+}
+
+void ChromotingClient::SetVideoLayout(const protocol::VideoLayout& layout) {
+  int num_video_tracks = layout.video_track_size();
+  if (num_video_tracks < 1) {
+    LOG(ERROR) << "Received VideoLayout message with 0 tracks.";
+    return;
+  }
+
+  if (num_video_tracks > 2) {
+    LOG(WARNING) << "Received VideoLayout message with " << num_video_tracks
+                 << " tracks. Only one track is supported.";
+  }
+
+  const protocol::VideoTrackLayout& track_layout = layout.video_track(0);
+  int x_dpi = track_layout.has_x_dpi() ? track_layout.x_dpi() : kDefaultDpi;
+  int y_dpi = track_layout.has_y_dpi() ? track_layout.y_dpi() : kDefaultDpi;
+
+  webrtc::DesktopSize size_dips(track_layout.width(), track_layout.height());
+  webrtc::DesktopSize size_pixels(size_dips.width() * x_dpi / kDefaultDpi,
+                                  size_dips.height() * y_dpi / kDefaultDpi);
+  user_interface_->SetDesktopSize(size_pixels,
+                                  webrtc::DesktopVector(x_dpi, y_dpi));
+
+  mouse_input_scaler_.set_input_size(size_pixels);
+  mouse_input_scaler_.set_output_size(
+      connection_->config().protocol() == protocol::SessionConfig::Protocol::ICE
+          ? size_pixels
+          : size_dips);
 }
 
 void ChromotingClient::InjectClipboardEvent(
@@ -212,7 +246,11 @@ bool ChromotingClient::OnSignalStrategyIncomingStanza(
 void ChromotingClient::StartConnection() {
   DCHECK(thread_checker_.CalledOnValidThread());
   connection_->Connect(
-      session_manager_->Connect(host_jid_, std::move(authenticator_)),
+      session_manager_->Connect(
+          host_jid_,
+          base::WrapUnique(new protocol::NegotiatingClientAuthenticator(
+              NormalizeJid(signal_strategy_->GetLocalJid()), host_jid_,
+              client_auth_config_))),
       transport_context_, this);
 }
 
@@ -233,6 +271,8 @@ void ChromotingClient::OnChannelsConnected() {
   protocol::Capabilities capabilities;
   capabilities.set_capabilities(local_capabilities_);
   connection_->host_stub()->SetCapabilities(capabilities);
+
+  mouse_input_scaler_.set_input_stub(connection_->input_stub());
 }
 
 }  // namespace remoting

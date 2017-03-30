@@ -43,6 +43,7 @@ from webkitpy.common.checkout.scm.scm import SCM
 
 
 class SCMTestBase(unittest.TestCase):
+
     def __init__(self, *args, **kwargs):
         super(SCMTestBase, self).__init__(*args, **kwargs)
         self.scm = None
@@ -151,6 +152,7 @@ class SCMTestBase(unittest.TestCase):
 
 
 class GitTest(SCMTestBase):
+
     def setUp(self):
         super(GitTest, self).setUp()
         self._set_up_git_checkouts()
@@ -224,7 +226,9 @@ Date:   Mon Sep 28 19:10:30 2015 -0700
         scm = self.tracking_scm
         scm.most_recent_log_matching(scm._commit_position_regex_for_timestamp(), scm.checkout_root)
 
+
 class GitTestWithMock(SCMTestBase):
+
     def make_scm(self):
         scm = Git(cwd=".", executive=MockExecutive(), filesystem=MockFileSystem())
         scm.read_git_config = lambda *args, **kw: "MOCKKEY:MOCKVALUE"

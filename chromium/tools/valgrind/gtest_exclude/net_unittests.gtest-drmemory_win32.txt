@@ -19,9 +19,6 @@ SSLClientSocketTest.*
 # DrM-i#1465
 URLRequestTest.ResolveShortcutTest
 
-# Crashes, http://crbug.com/369840
-ProxyResolverV8TracingTest.MultipleResolvers
-
 # http://crbug.com/400521
 HttpServerTest.RequestWithTooLargeBody
 
@@ -34,3 +31,6 @@ MDnsTest.RefreshQuery
 # http://crbug.com/557993
 ProxyResolverV8TracingTest.*
 ProxyResolverV8TracingWrapperTest.*
+
+# https://crbug.com/598953
+*QuicConnectionTest.TooManyReceivedPackets*

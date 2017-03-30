@@ -13,15 +13,17 @@
 #include "mojo/edk/system/core.h"
 #include "mojo/edk/system/node_controller.h"
 #include "mojo/edk/system/ports_message.h"
-#include "mojo/public/c/system/macros.h"
+#include "mojo/edk/system/request_context.h"
 
 namespace mojo {
 namespace edk {
 
 namespace {
 
+#pragma pack(push, 1)
+
 // Header attached to every message sent over a message pipe.
-struct MOJO_ALIGNAS(8) MessageHeader {
+struct MessageHeader {
   // The number of serialized dispatchers included in this header.
   uint32_t num_dispatchers;
 
@@ -29,8 +31,10 @@ struct MOJO_ALIGNAS(8) MessageHeader {
   uint32_t header_size;
 };
 
+static_assert(sizeof(MessageHeader) % 8 == 0, "Invalid MessageHeader size.");
+
 // Header for each dispatcher, immediately following the message header.
-struct MOJO_ALIGNAS(8) DispatcherHeader {
+struct DispatcherHeader {
   // The type of the dispatcher, correpsonding to the Dispatcher::Type enum.
   int32_t type;
 
@@ -44,10 +48,19 @@ struct MOJO_ALIGNAS(8) DispatcherHeader {
   uint32_t num_platform_handles;
 };
 
-struct MOJO_ALIGNAS(8) SerializedState {
+static_assert(sizeof(DispatcherHeader) % 8 == 0,
+              "Invalid DispatcherHeader size.");
+
+struct SerializedState {
   uint64_t pipe_id;
   int8_t endpoint;
+  char padding[7];
 };
+
+static_assert(sizeof(SerializedState) % 8 == 0,
+              "Invalid SerializedState size.");
+
+#pragma pack(pop)
 
 }  // namespace
 
@@ -86,6 +99,31 @@ MessagePipeDispatcher::MessagePipeDispatcher(NodeController* node_controller,
       make_scoped_refptr(new PortObserverThunk(this)));
 }
 
+bool MessagePipeDispatcher::Fuse(MessagePipeDispatcher* other) {
+  node_controller_->SetPortObserver(port_, nullptr);
+  node_controller_->SetPortObserver(other->port_, nullptr);
+
+  ports::PortRef port0;
+  {
+    base::AutoLock lock(signal_lock_);
+    port0 = port_;
+    port_closed_ = true;
+    awakables_.CancelAll();
+  }
+
+  ports::PortRef port1;
+  {
+    base::AutoLock lock(other->signal_lock_);
+    port1 = other->port_;
+    other->port_closed_ = true;
+    other->awakables_.CancelAll();
+  }
+
+  // Both ports are always closed by this call.
+  int rv = node_controller_->MergeLocalPorts(port0, port1);
+  return rv == ports::OK;
+}
+
 Dispatcher::Type MessagePipeDispatcher::GetType() const {
   return Type::MESSAGE_PIPE;
 }
@@ -95,6 +133,27 @@ MojoResult MessagePipeDispatcher::Close() {
   DVLOG(1) << "Closing message pipe " << pipe_id_ << " endpoint " << endpoint_
            << " [port=" << port_.name() << "]";
   return CloseNoLock();
+}
+
+MojoResult MessagePipeDispatcher::Watch(MojoHandleSignals signals,
+                                        const Watcher::WatchCallback& callback,
+                                        uintptr_t context) {
+  base::AutoLock lock(signal_lock_);
+
+  if (port_closed_ || in_transit_)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  return awakables_.AddWatcher(
+      signals, callback, context, GetHandleSignalsStateNoLock());
+}
+
+MojoResult MessagePipeDispatcher::CancelWatch(uintptr_t context) {
+  base::AutoLock lock(signal_lock_);
+
+  if (port_closed_ || in_transit_)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  return awakables_.RemoveWatcher(context);
 }
 
 MojoResult MessagePipeDispatcher::WriteMessage(
@@ -481,6 +540,7 @@ bool MessagePipeDispatcher::EndSerialize(void* destination,
   SerializedState* state = static_cast<SerializedState*>(destination);
   state->pipe_id = pipe_id_;
   state->endpoint = static_cast<int8_t>(endpoint_);
+  memset(state->padding, 0, sizeof(state->padding));
   ports[0] = port_.name();
   return true;
 }
@@ -579,6 +639,8 @@ HandleSignalsState MessagePipeDispatcher::GetHandleSignalsStateNoLock() const {
 }
 
 void MessagePipeDispatcher::OnPortStatusChanged() {
+  DCHECK(RequestContext::current());
+
   base::AutoLock lock(signal_lock_);
 
   // We stop observing our port as soon as it's transferred, but this can race

@@ -10,6 +10,7 @@
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
+#include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
@@ -441,7 +442,7 @@ ExtensionActionUtilsGetToolbarExtensionsFunction::
 }
 
 bool ExtensionActionUtilsGetToolbarExtensionsFunction::RunAsync() {
-  std::vector<linked_ptr<vivaldi::extension_action_utils::ExtensionInfo>>
+  std::vector<vivaldi::extension_action_utils::ExtensionInfo>
       toolbar_extensionactions;
 
   const extensions::ExtensionSet& extensions =
@@ -457,13 +458,13 @@ bool ExtensionActionUtilsGetToolbarExtensionsFunction::RunAsync() {
     ExtensionAction* action = action_manager->GetExtensionAction(*extension);
 
     if (!extension->ShouldNotBeVisible()) {
-      linked_ptr<vivaldi::extension_action_utils::ExtensionInfo> info(
+      scoped_ptr<vivaldi::extension_action_utils::ExtensionInfo> info(
           new vivaldi::extension_action_utils::ExtensionInfo());
 
       if (ExtensionActionUtil::FillInfoForTabId(*info.get(), action,
                                                 ExtensionAction::kDefaultTabId,
                                                 GetProfile())) {
-        toolbar_extensionactions.push_back(info);
+        toolbar_extensionactions.push_back(std::move(*info));
       }
     }
   }
@@ -516,12 +517,17 @@ bool ExtensionActionUtilsExecuteExtensionActionFunction::RunAsync() {
   vivaldi::extension_action_utils::ExtensionInfo info;
   info.id = extension->id();
 
-  if (browser && extensions::ExtensionActionAPI::Get(GetProfile())
-          ->ExecuteExtensionAction(extension, browser, true) ==
+  if (browser) {
+    content::WebContents* web_contents =
+          browser->tab_strip_model()->GetActiveWebContents();
+    ExtensionActionRunner* action_runner =
+          ExtensionActionRunner::GetForWebContents(web_contents);
+    if (action_runner && action_runner->RunAction(extension, true) ==
       ExtensionAction::ACTION_SHOW_POPUP) {
-    GURL popup_url = action->GetPopupUrl(SessionTabHelper::IdForTab(
-        browser->tab_strip_model()->GetActiveWebContents()));
-    info.popup_url.reset(new std::string(popup_url.spec()));
+      GURL popup_url = action->GetPopupUrl(SessionTabHelper::IdForTab(
+          browser->tab_strip_model()->GetActiveWebContents()));
+      info.popup_url.reset(new std::string(popup_url.spec()));
+    }
   }
 
   results_ =

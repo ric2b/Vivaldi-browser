@@ -11,6 +11,7 @@ import shutil
 import sys
 import urlparse
 
+
 def ParseJSONFile(filename):
   with open(filename) as json_file:
     try:
@@ -19,23 +20,55 @@ def ParseJSONFile(filename):
       print "%s is not a valid JSON document" % filename
       return None
 
+
+def MergeDicts(left, right):
+  for k, v in right.iteritems():
+    if k not in left:
+      left[k] = v
+    else:
+      if isinstance(v, dict):
+        assert isinstance(left[k], dict)
+        MergeDicts(left[k], v)
+      elif isinstance(v, list):
+        assert isinstance(left[k], list)
+        left[k].extend(v)
+      else:
+        raise "Refusing to merge conflicting non-collection values."
+  return left
+
+
+def MergeBaseManifest(parent, base):
+  MergeDicts(parent["capabilities"], base["capabilities"])
+
+
 def main():
   parser = argparse.ArgumentParser(
       description="Collate Mojo application manifests.")
   parser.add_argument("--parent")
   parser.add_argument("--output")
   parser.add_argument("--application-name")
+  parser.add_argument("--base-manifest", default=None)
   args, children = parser.parse_known_args()
 
   parent = ParseJSONFile(args.parent)
   if parent == None:
     return 1
 
-  parsed = urlparse.urlparse(parent['url'])
-  if args.application_name != parsed.hostname:
+  if args.base_manifest:
+    base = ParseJSONFile(args.base_manifest)
+    if base == None:
+      return 1
+    MergeBaseManifest(parent, base)
+
+  app_path = parent['name'].split(':')[1]
+  if app_path.startswith('//'):
+    raise ValueError("Application name path component '%s' must not start " \
+                     "with //" % app_path)
+
+  if args.application_name != app_path:
     raise ValueError("Application name '%s' specified in build file does not " \
                      "match application name '%s' specified in manifest." %
-                     (args.application_name, parsed.hostname))
+                     (args.application_name, app_path))
 
   applications = []
   for child in children:

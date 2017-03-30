@@ -103,12 +103,12 @@ void WaylandCanvasSurface::PresentCanvas(const gfx::Rect& damage) {
   // draw to the buffer at any time, even if it is being used by the Wayland
   // compositor. Instead, we should track buffer releases and frame callbacks
   // from Wayland to ensure perfect frames (while minimizing copies).
-  wl_surface* surface = window_->GetSurface();
+  wl_surface* surface = window_->surface();
   wl_surface_damage(surface, damage.x(), damage.y(), damage.width(),
                     damage.height());
   wl_surface_attach(surface, buffer_.get(), 0, 0);
   wl_surface_commit(surface);
-  display_->Flush();
+  display_->ScheduleFlush();
 }
 
 scoped_ptr<gfx::VSyncProvider> WaylandCanvasSurface::CreateVSyncProvider() {
@@ -160,6 +160,8 @@ scoped_refptr<NativePixmap> WaylandSurfaceFactory::CreateNativePixmap(
 }
 
 scoped_refptr<NativePixmap> WaylandSurfaceFactory::CreateNativePixmapFromHandle(
+    gfx::Size size,
+    gfx::BufferFormat format,
     const gfx::NativePixmapHandle& handle) {
   NOTIMPLEMENTED();
   return nullptr;

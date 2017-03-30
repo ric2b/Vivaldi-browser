@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <limits>
+#include <tuple>
 
 #include "base/files/file_util_proxy.h"
 #include "base/sequenced_task_runner.h"
@@ -69,10 +70,9 @@ int SandboxFileStreamWriter::Write(
   if (local_file_writer_)
     return WriteInternal(buf, buf_len, callback);
 
-  net::CompletionCallback write_task =
-      base::Bind(&SandboxFileStreamWriter::DidInitializeForWrite,
-                 weak_factory_.GetWeakPtr(),
-                 make_scoped_refptr(buf), buf_len, callback);
+  net::CompletionCallback write_task = base::Bind(
+      &SandboxFileStreamWriter::DidInitializeForWrite,
+      weak_factory_.GetWeakPtr(), base::RetainedRef(buf), buf_len, callback);
   file_system_context_->operation_runner()->CreateSnapshotFile(
       url_, base::Bind(&SandboxFileStreamWriter::DidCreateSnapshotFile,
                        weak_factory_.GetWeakPtr(), write_task));
@@ -227,7 +227,7 @@ void SandboxFileStreamWriter::DidWrite(
     if (overlapped < 0)
       overlapped = 0;
     observers_.Notify(&FileUpdateObserver::OnUpdate,
-                      base::MakeTuple(url_, write_response - overlapped));
+                      std::make_tuple(url_, write_response - overlapped));
   }
   total_bytes_written_ += write_response;
 

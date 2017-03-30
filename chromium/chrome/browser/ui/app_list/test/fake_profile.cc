@@ -7,11 +7,13 @@
 
 FakeProfile::FakeProfile(const std::string& name)
     : name_(name) {
+  BrowserContext::Initialize(this, base::FilePath());
 }
 
 FakeProfile::FakeProfile(const std::string& name, const base::FilePath& path)
     : name_(name),
       path_(path) {
+  BrowserContext::Initialize(this, path_);
 }
 
 std::string FakeProfile::GetProfileUserName() const {
@@ -26,8 +28,8 @@ base::FilePath FakeProfile::GetPath() const {
   return path_;
 }
 
-scoped_ptr<content::ZoomLevelDelegate> FakeProfile::CreateZoomLevelDelegate(
-    const base::FilePath& partition_path) {
+std::unique_ptr<content::ZoomLevelDelegate>
+FakeProfile::CreateZoomLevelDelegate(const base::FilePath& partition_path) {
   return nullptr;
 }
 
@@ -36,11 +38,6 @@ bool FakeProfile::IsOffTheRecord() const {
 }
 
 content::DownloadManagerDelegate* FakeProfile::GetDownloadManagerDelegate() {
-  return nullptr;
-}
-
-net::URLRequestContextGetter* FakeProfile::GetRequestContextForRenderProcess(
-    int renderer_child_id) {
   return nullptr;
 }
 
@@ -86,6 +83,21 @@ content::PermissionManager* FakeProfile::GetPermissionManager() {
 }
 
 content::BackgroundSyncController* FakeProfile::GetBackgroundSyncController() {
+  return nullptr;
+}
+
+net::URLRequestContextGetter* FakeProfile::CreateRequestContext(
+    content::ProtocolHandlerMap* protocol_handlers,
+    content::URLRequestInterceptorScopedVector request_interceptors) {
+  return nullptr;
+}
+
+net::URLRequestContextGetter*
+FakeProfile::CreateRequestContextForStoragePartition(
+    const base::FilePath& partition_path,
+    bool in_memory,
+    content::ProtocolHandlerMap* protocol_handlers,
+    content::URLRequestInterceptorScopedVector request_interceptors) {
   return nullptr;
 }
 
@@ -154,21 +166,6 @@ bool FakeProfile::IsSameProfile(Profile* profile) {
 
 base::Time FakeProfile::GetStartTime() const {
   return base::Time();
-}
-
-net::URLRequestContextGetter* FakeProfile::CreateRequestContext(
-    content::ProtocolHandlerMap* protocol_handlers,
-    content::URLRequestInterceptorScopedVector request_interceptors) {
-  return nullptr;
-}
-
-net::URLRequestContextGetter*
-FakeProfile::CreateRequestContextForStoragePartition(
-    const base::FilePath& partition_path,
-    bool in_memory,
-    content::ProtocolHandlerMap* protocol_handlers,
-    content::URLRequestInterceptorScopedVector request_interceptors) {
-  return nullptr;
 }
 
 base::FilePath FakeProfile::last_selected_directory() {

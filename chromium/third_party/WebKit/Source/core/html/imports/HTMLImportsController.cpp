@@ -48,9 +48,9 @@ const char* HTMLImportsController::supplementName()
 
 void HTMLImportsController::provideTo(Document& master)
 {
-    OwnPtrWillBeRawPtr<HTMLImportsController> controller = adoptPtrWillBeNoop(new HTMLImportsController(master));
+    RawPtr<HTMLImportsController> controller = new HTMLImportsController(master);
     master.setImportsController(controller.get());
-    WillBeHeapSupplement<Document>::provideTo(master, supplementName(), controller.release());
+    Supplement<Document>::provideTo(master, supplementName(), controller.release());
 }
 
 void HTMLImportsController::removeFrom(Document& master)
@@ -58,7 +58,7 @@ void HTMLImportsController::removeFrom(Document& master)
     HTMLImportsController* controller = master.importsController();
     ASSERT(controller);
     controller->dispose();
-    static_cast<WillBeHeapSupplementable<Document>&>(master).removeSupplement(supplementName());
+    static_cast<Supplementable<Document>&>(master).removeSupplement(supplementName());
     master.setImportsController(nullptr);
 }
 
@@ -104,7 +104,7 @@ HTMLImportChild* HTMLImportsController::createChild(const KURL& url, HTMLImportL
     if (mode == HTMLImport::Async)
         UseCounter::count(root()->document(), UseCounter::HTMLImportsAsyncAttribute);
 
-    OwnPtrWillBeRawPtr<HTMLImportChild> child = adoptPtrWillBeNoop(new HTMLImportChild(url, loader, mode));
+    RawPtr<HTMLImportChild> child = new HTMLImportChild(url, loader, mode);
     child->setClient(client);
     parent->appendImport(child.get());
     loader->addImport(child.get());
@@ -124,8 +124,8 @@ HTMLImportChild* HTMLImportsController::load(HTMLImport* parent, HTMLImportChild
         return child;
     }
 
-    request.setCrossOriginAccessControl(master()->securityOrigin(), CrossOriginAttributeAnonymous);
-    RefPtrWillBeRawPtr<RawResource> resource = RawResource::fetchImport(request, parent->document()->fetcher());
+    request.setCrossOriginAccessControl(master()->getSecurityOrigin(), CrossOriginAttributeAnonymous);
+    RawPtr<RawResource> resource = RawResource::fetchImport(request, parent->document()->fetcher());
     if (!resource)
         return nullptr;
 
@@ -176,7 +176,7 @@ DEFINE_TRACE(HTMLImportsController)
 {
     visitor->trace(m_root);
     visitor->trace(m_loaders);
-    WillBeHeapSupplement<Document>::trace(visitor);
+    Supplement<Document>::trace(visitor);
 }
 
 } // namespace blink

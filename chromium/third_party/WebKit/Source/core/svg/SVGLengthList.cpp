@@ -35,18 +35,18 @@ SVGLengthList::~SVGLengthList()
 {
 }
 
-PassRefPtrWillBeRawPtr<SVGLengthList> SVGLengthList::clone()
+SVGLengthList* SVGLengthList::clone()
 {
-    RefPtrWillBeRawPtr<SVGLengthList> ret = SVGLengthList::create(m_mode);
+    SVGLengthList* ret = SVGLengthList::create(m_mode);
     ret->deepCopy(this);
-    return ret.release();
+    return ret;
 }
 
-PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGLengthList::cloneForAnimation(const String& value) const
+SVGPropertyBase* SVGLengthList::cloneForAnimation(const String& value) const
 {
-    RefPtrWillBeRawPtr<SVGLengthList> ret = SVGLengthList::create(m_mode);
+    SVGLengthList* ret = SVGLengthList::create(m_mode);
     ret->setValueAsString(value);
-    return ret.release();
+    return ret;
 }
 
 String SVGLengthList::valueAsString() const
@@ -82,7 +82,7 @@ SVGParsingError SVGLengthList::parseInternal(const CharType*& ptr, const CharTyp
         if (valueString.isEmpty())
             break;
 
-        RefPtrWillBeRawPtr<SVGLength> length = SVGLength::create(m_mode);
+        SVGLength* length = SVGLength::create(m_mode);
         SVGParsingError lengthParseStatus = length->setValueAsString(valueString);
         if (lengthParseStatus != SVGParseStatus::NoError)
             return lengthParseStatus.offsetWith(start - listStart);
@@ -109,9 +109,9 @@ SVGParsingError SVGLengthList::setValueAsString(const String& value)
     return parseInternal(ptr, end);
 }
 
-void SVGLengthList::add(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElement* contextElement)
+void SVGLengthList::add(SVGPropertyBase* other, SVGElement* contextElement)
 {
-    RefPtrWillBeRawPtr<SVGLengthList> otherList = toSVGLengthList(other);
+    SVGLengthList* otherList = toSVGLengthList(other);
 
     if (length() != otherList->length())
         return;
@@ -121,16 +121,16 @@ void SVGLengthList::add(PassRefPtrWillBeRawPtr<SVGPropertyBase> other, SVGElemen
         at(i)->setValue(at(i)->value(lengthContext) + otherList->at(i)->value(lengthContext), lengthContext);
 }
 
-PassRefPtrWillBeRawPtr<SVGLength> SVGLengthList::createPaddingItem() const
+SVGLength* SVGLengthList::createPaddingItem() const
 {
     return SVGLength::create(m_mode);
 }
 
-void SVGLengthList::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> fromValue, PassRefPtrWillBeRawPtr<SVGPropertyBase> toValue, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDurationValue, SVGElement* contextElement)
+void SVGLengthList::calculateAnimatedValue(SVGAnimationElement* animationElement, float percentage, unsigned repeatCount, SVGPropertyBase* fromValue, SVGPropertyBase* toValue, SVGPropertyBase* toAtEndOfDurationValue, SVGElement* contextElement)
 {
-    RefPtrWillBeRawPtr<SVGLengthList> fromList = toSVGLengthList(fromValue);
-    RefPtrWillBeRawPtr<SVGLengthList> toList = toSVGLengthList(toValue);
-    RefPtrWillBeRawPtr<SVGLengthList> toAtEndOfDurationList = toSVGLengthList(toAtEndOfDurationValue);
+    SVGLengthList* fromList = toSVGLengthList(fromValue);
+    SVGLengthList* toList = toSVGLengthList(toValue);
+    SVGLengthList* toAtEndOfDurationList = toSVGLengthList(toAtEndOfDurationValue);
 
     SVGLengthContext lengthContext(contextElement);
     ASSERT(m_mode == SVGLength::lengthModeForAnimatedLengthAttribute(animationElement->attributeName()));
@@ -139,7 +139,7 @@ void SVGLengthList::calculateAnimatedValue(SVGAnimationElement* animationElement
     size_t toLengthListSize = toList->length();
     size_t toAtEndOfDurationListSize = toAtEndOfDurationList->length();
 
-    if (!adjustFromToListValues(fromList, toList, percentage, animationElement->animationMode()))
+    if (!adjustFromToListValues(fromList, toList, percentage, animationElement->getAnimationMode()))
         return;
 
     for (size_t i = 0; i < toLengthListSize; ++i) {
@@ -160,7 +160,7 @@ void SVGLengthList::calculateAnimatedValue(SVGAnimationElement* animationElement
     }
 }
 
-float SVGLengthList::calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> to, SVGElement*)
+float SVGLengthList::calculateDistance(SVGPropertyBase* to, SVGElement*)
 {
     // FIXME: Distance calculation is not possible for SVGLengthList right now. We need the distance for every single value.
     return -1;

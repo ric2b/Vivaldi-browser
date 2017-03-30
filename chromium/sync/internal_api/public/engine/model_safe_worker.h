@@ -6,12 +6,12 @@
 #define SYNC_INTERNAL_API_PUBLIC_ENGINE_MODEL_SAFE_WORKER_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
@@ -42,7 +42,10 @@ enum ModelSafeGroup {
   GROUP_PASSWORD,      // Models that live on the password thread and are
                        // being synced.  On windows and linux, this runs on the
                        // DB thread.
-  MODEL_SAFE_GROUP_COUNT,
+  GROUP_NON_BLOCKING,  // Models that correspond to non-blocking types. These
+                       // models always stay in GROUP_NON_BLOCKING; changes are
+                       // forwarded to these models without ModelSafeWorker/
+                       // SyncBackendRegistrar involvement.
 };
 
 SYNC_EXPORT std::string ModelSafeGroupToString(ModelSafeGroup group);
@@ -149,7 +152,7 @@ class SYNC_EXPORT ModelSafeWorker
 typedef std::map<ModelType, ModelSafeGroup> ModelSafeRoutingInfo;
 
 // Caller takes ownership of return value.
-SYNC_EXPORT scoped_ptr<base::DictionaryValue> ModelSafeRoutingInfoToValue(
+SYNC_EXPORT std::unique_ptr<base::DictionaryValue> ModelSafeRoutingInfoToValue(
     const ModelSafeRoutingInfo& routing_info);
 
 SYNC_EXPORT std::string ModelSafeRoutingInfoToString(

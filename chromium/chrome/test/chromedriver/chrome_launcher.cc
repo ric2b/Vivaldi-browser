@@ -471,6 +471,8 @@ Status LaunchAndroidChrome(
     switches.SetUnparsedSwitch(common_switch);
   for (auto android_switch : kAndroidSwitches)
     switches.SetUnparsedSwitch(android_switch);
+  for (auto excluded_switch : capabilities.exclude_switches)
+    switches.RemoveSwitch(excluded_switch);
   status = device->SetUp(capabilities.android_package,
                          capabilities.android_activity,
                          capabilities.android_process,
@@ -491,6 +493,14 @@ Status LaunchAndroidChrome(
   if (status.IsError()) {
     device->TearDown();
     return status;
+  }
+
+  std::string package = devtools_http_client->browser_info()->android_package;
+  if (package != capabilities.android_package) {
+    device->TearDown();
+    return Status(
+        kSessionNotCreatedException,
+        base::StringPrintf("please close %s and try again", package.c_str()));
   }
 
   scoped_ptr<DevToolsClient> devtools_websocket_client;

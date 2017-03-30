@@ -36,6 +36,7 @@
 #include "core/dom/NthIndexCache.h"
 #include "core/dom/SelectorQuery.h"
 #include "core/dom/StaticNodeList.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
@@ -77,15 +78,15 @@ static void collectChildrenAndRemoveFromOldParent(Node& node, NodeVector& nodes,
 #if !ENABLE(OILPAN)
 void ContainerNode::removeDetachedChildren()
 {
-    ASSERT(!connectedSubframeCount());
-    ASSERT(needsAttach());
+    DCHECK(!connectedSubframeCount());
+    DCHECK(needsAttach());
     removeDetachedChildrenInContainer(*this);
 }
 #endif
 
 void ContainerNode::parserTakeAllChildrenFrom(ContainerNode& oldParent)
 {
-    while (RefPtrWillBeRawPtr<Node> child = oldParent.firstChild()) {
+    while (RawPtr<Node> child = oldParent.firstChild()) {
         // Explicitly remove since appending can fail, but this loop shouldn't be infinite.
         oldParent.parserRemoveChild(*child);
         parserAppendChild(child.get());
@@ -94,7 +95,7 @@ void ContainerNode::parserTakeAllChildrenFrom(ContainerNode& oldParent)
 
 ContainerNode::~ContainerNode()
 {
-    ASSERT(needsAttach());
+    DCHECK(needsAttach());
 #if !ENABLE(OILPAN)
     willBeDeletedFromDocument();
     removeDetachedChildren();
@@ -130,7 +131,7 @@ bool ContainerNode::checkAcceptChild(const Node* newChild, const Node* oldChild,
 
     // Use common case fast path if possible.
     if ((newChild->isElementNode() || newChild->isTextNode()) && isElementNode()) {
-        ASSERT(isChildTypeAllowed(*newChild));
+        DCHECK(isChildTypeAllowed(*newChild));
         if (containsConsideringHostElements(*newChild)) {
             exceptionState.throwDOMException(HierarchyRequestError, "The new child element contains the parent.");
             return false;
@@ -139,7 +140,7 @@ bool ContainerNode::checkAcceptChild(const Node* newChild, const Node* oldChild,
     }
 
     // This should never happen, but also protect release builds from tree corruption.
-    ASSERT(!newChild->isPseudoElement());
+    DCHECK(!newChild->isPseudoElement());
     if (newChild->isPseudoElement()) {
         exceptionState.throwDOMException(HierarchyRequestError, "The new child element is a pseudo-element.");
         return false;
@@ -163,15 +164,15 @@ bool ContainerNode::checkAcceptChildGuaranteedNodeTypes(const Node& newChild, co
     return true;
 }
 
-PassRefPtrWillBeRawPtr<Node> ContainerNode::insertBefore(PassRefPtrWillBeRawPtr<Node> newChild, Node* refChild, ExceptionState& exceptionState)
+RawPtr<Node> ContainerNode::insertBefore(RawPtr<Node> newChild, Node* refChild, ExceptionState& exceptionState)
 {
 #if !ENABLE(OILPAN)
     // Check that this node is not "floating".
     // If it is, it can be deleted as a side effect of sending mutation events.
-    ASSERT(refCount() || parentOrShadowHostNode());
+    DCHECK(refCount() || parentOrShadowHostNode());
 #endif
 
-    RefPtrWillBeRawPtr<Node> protect(this);
+    RawPtr<Node> protect(this);
 
     // insertBefore(node, 0) is equivalent to appendChild(node)
     if (!refChild) {
@@ -184,7 +185,7 @@ PassRefPtrWillBeRawPtr<Node> ContainerNode::insertBefore(PassRefPtrWillBeRawPtr<
             return nullptr;
         return newChild;
     }
-    ASSERT(newChild);
+    DCHECK(newChild);
 
     // NotFoundError: Raised if refChild is not a child of this node
     if (refChild->parentNode() != this) {
@@ -196,7 +197,7 @@ PassRefPtrWillBeRawPtr<Node> ContainerNode::insertBefore(PassRefPtrWillBeRawPtr<
     if (refChild->previousSibling() == newChild || refChild == newChild)
         return newChild;
 
-    RefPtrWillBeRawPtr<Node> next = refChild;
+    RawPtr<Node> next = refChild;
 
     NodeVector targets;
     collectChildrenAndRemoveFromOldParent(*newChild, targets, exceptionState);
@@ -216,7 +217,7 @@ PassRefPtrWillBeRawPtr<Node> ContainerNode::insertBefore(PassRefPtrWillBeRawPtr<
 
     ChildListMutationScope mutation(*this);
     for (const auto& targetNode : targets) {
-        ASSERT(targetNode);
+        DCHECK(targetNode);
         Node& child = *targetNode;
 
         // Due to arbitrary code running in response to a DOM mutation event it's
@@ -249,20 +250,20 @@ void ContainerNode::insertBeforeCommon(Node& nextChild, Node& newChild)
     EventDispatchForbiddenScope assertNoEventDispatch;
     ScriptForbiddenScope forbidScript;
 
-    ASSERT(!newChild.parentNode()); // Use insertBefore if you need to handle reparenting (and want DOM mutation events).
-    ASSERT(!newChild.nextSibling());
-    ASSERT(!newChild.previousSibling());
-    ASSERT(!newChild.isShadowRoot());
+    DCHECK(!newChild.parentNode()); // Use insertBefore if you need to handle reparenting (and want DOM mutation events).
+    DCHECK(!newChild.nextSibling());
+    DCHECK(!newChild.previousSibling());
+    DCHECK(!newChild.isShadowRoot());
 
     Node* prev = nextChild.previousSibling();
-    ASSERT(m_lastChild != prev);
+    DCHECK_NE(m_lastChild, prev);
     nextChild.setPreviousSibling(&newChild);
     if (prev) {
-        ASSERT(firstChild() != nextChild);
-        ASSERT(prev->nextSibling() == nextChild);
+        DCHECK_NE(firstChild(), nextChild);
+        DCHECK_EQ(prev->nextSibling(), nextChild);
         prev->setNextSibling(&newChild);
     } else {
-        ASSERT(firstChild() == nextChild);
+        DCHECK(firstChild() == nextChild);
         m_firstChild = &newChild;
     }
     newChild.setParentOrShadowHostNode(this);
@@ -293,12 +294,12 @@ bool ContainerNode::checkParserAcceptChild(const Node& newChild) const
     return toDocument(*this).canAcceptChild(newChild, nullptr, IGNORE_EXCEPTION);
 }
 
-void ContainerNode::parserInsertBefore(PassRefPtrWillBeRawPtr<Node> newChild, Node& nextChild)
+void ContainerNode::parserInsertBefore(RawPtr<Node> newChild, Node& nextChild)
 {
-    ASSERT(newChild);
-    ASSERT(nextChild.parentNode() == this);
-    ASSERT(!newChild->isDocumentFragment());
-    ASSERT(!isHTMLTemplateElement(this));
+    DCHECK(newChild);
+    DCHECK_EQ(nextChild.parentNode(), this);
+    DCHECK(!newChild->isDocumentFragment());
+    DCHECK(!isHTMLTemplateElement(this));
 
     if (nextChild.previousSibling() == newChild || &nextChild == newChild) // nothing to do
         return;
@@ -306,12 +307,12 @@ void ContainerNode::parserInsertBefore(PassRefPtrWillBeRawPtr<Node> newChild, No
     if (!checkParserAcceptChild(*newChild))
         return;
 
-    RefPtrWillBeRawPtr<Node> protect(this);
+    RawPtr<Node> protect(this);
 
     // FIXME: parserRemoveChild can run script which could then insert the
     // newChild back into the page. Loop until the child is actually removed.
     // See: fast/parser/execute-script-during-adoption-agency-removal.html
-    while (RefPtrWillBeRawPtr<ContainerNode> parent = newChild->parentNode())
+    while (RawPtr<ContainerNode> parent = newChild->parentNode())
         parent->parserRemoveChild(*newChild);
 
     if (nextChild.parentNode() != this)
@@ -326,22 +327,22 @@ void ContainerNode::parserInsertBefore(PassRefPtrWillBeRawPtr<Node> newChild, No
 
         treeScope().adoptIfNeeded(*newChild);
         insertBeforeCommon(nextChild, *newChild);
-        newChild->updateAncestorConnectedSubframeCountForInsertion();
+        DCHECK_EQ(newChild->connectedSubframeCount(), 0u);
         ChildListMutationScope(*this).childAdded(*newChild);
     }
 
     notifyNodeInserted(*newChild, ChildrenChangeSourceParser);
 }
 
-PassRefPtrWillBeRawPtr<Node> ContainerNode::replaceChild(PassRefPtrWillBeRawPtr<Node> newChild, PassRefPtrWillBeRawPtr<Node> oldChild, ExceptionState& exceptionState)
+RawPtr<Node> ContainerNode::replaceChild(RawPtr<Node> newChild, RawPtr<Node> oldChild, ExceptionState& exceptionState)
 {
 #if !ENABLE(OILPAN)
     // Check that this node is not "floating".
     // If it is, it can be deleted as a side effect of sending mutation events.
-    ASSERT(refCount() || parentOrShadowHostNode());
+    DCHECK(refCount() || parentOrShadowHostNode());
 #endif
 
-    RefPtrWillBeRawPtr<Node> protect(this);
+    RawPtr<Node> protect(this);
 
     if (oldChild == newChild) // Nothing to do.
         return oldChild;
@@ -351,7 +352,7 @@ PassRefPtrWillBeRawPtr<Node> ContainerNode::replaceChild(PassRefPtrWillBeRawPtr<
         return nullptr;
     }
 
-    RefPtrWillBeRawPtr<Node> child = oldChild;
+    RawPtr<Node> child = oldChild;
 
     // Make sure replacing the old child with the new is OK.
     if (!checkAcceptChild(newChild.get(), child.get(), exceptionState)) {
@@ -368,7 +369,7 @@ PassRefPtrWillBeRawPtr<Node> ContainerNode::replaceChild(PassRefPtrWillBeRawPtr<
 
     ChildListMutationScope mutation(*this);
 
-    RefPtrWillBeRawPtr<Node> next = child->nextSibling();
+    RawPtr<Node> next = child->nextSibling();
 
     // Remove the node we're replacing.
     removeChild(child, exceptionState);
@@ -401,7 +402,7 @@ PassRefPtrWillBeRawPtr<Node> ContainerNode::replaceChild(PassRefPtrWillBeRawPtr<
 
     // Add the new child(ren).
     for (const auto& targetNode : targets) {
-        ASSERT(targetNode);
+        DCHECK(targetNode);
         Node& child = *targetNode;
 
         // Due to arbitrary code running in response to a DOM mutation event it's
@@ -433,7 +434,7 @@ PassRefPtrWillBeRawPtr<Node> ContainerNode::replaceChild(PassRefPtrWillBeRawPtr<
 
 void ContainerNode::willRemoveChild(Node& child)
 {
-    ASSERT(child.parentNode() == this);
+    DCHECK_EQ(child.parentNode(), this);
     ChildListMutationScope(*this).willRemoveChild(child);
     child.notifyMutationObserversNodeWillDetach();
     dispatchChildRemovalEvents(child);
@@ -459,7 +460,7 @@ void ContainerNode::willRemoveChildren()
 
     ChildListMutationScope mutation(*this);
     for (const auto& node : children) {
-        ASSERT(node);
+        DCHECK(node);
         Node& child = *node;
         mutation.willRemoveChild(child);
         child.notifyMutationObserversNodeWillDetach();
@@ -513,7 +514,7 @@ void ContainerNode::addChildNodesToDeletionQueue(Node*& head, Node*& tail, Conta
             next->setPreviousSibling(nullptr);
 
         if (!n->refCount()) {
-            if (n->inDocument())
+            if (n->inShadowIncludingDocument())
                 container.document().decrementNodeCount();
 
 #if ENABLE(SECURITY_ASSERT)
@@ -528,9 +529,9 @@ void ContainerNode::addChildNodesToDeletionQueue(Node*& head, Node*& tail, Conta
 
             tail = n;
         } else {
-            RefPtrWillBeRawPtr<Node> protect(n); // removedFromDocument may remove all references to this node.
+            RawPtr<Node> protect(n); // removedFromDocument may remove all references to this node.
             container.document().adoptIfNeeded(*n);
-            if (n->inDocument())
+            if (n->inShadowIncludingDocument())
                 container.notifyNodeRemoved(*n);
         }
     }
@@ -546,26 +547,26 @@ DEFINE_TRACE(ContainerNode)
     Node::trace(visitor);
 }
 
-PassRefPtrWillBeRawPtr<Node> ContainerNode::removeChild(PassRefPtrWillBeRawPtr<Node> oldChild, ExceptionState& exceptionState)
+RawPtr<Node> ContainerNode::removeChild(RawPtr<Node> oldChild, ExceptionState& exceptionState)
 {
 #if !ENABLE(OILPAN)
     // Check that this node is not "floating".
     // If it is, it can be deleted as a side effect of sending mutation events.
-    ASSERT(refCount() || parentOrShadowHostNode());
+    DCHECK(refCount() || parentOrShadowHostNode());
 #endif
 
-    RefPtrWillBeRawPtr<Node> protect(this);
+    RawPtr<Node> protect(this);
 
     // NotFoundError: Raised if oldChild is not a child of this node.
     // FIXME: We should never really get PseudoElements in here, but editing will sometimes
     // attempt to remove them still. We should fix that and enable this ASSERT.
-    // ASSERT(!oldChild->isPseudoElement())
+    // DCHECK(!oldChild->isPseudoElement())
     if (!oldChild || oldChild->parentNode() != this || oldChild->isPseudoElement()) {
         exceptionState.throwDOMException(NotFoundError, "The node to be removed is not a child of this node.");
         return nullptr;
     }
 
-    RefPtrWillBeRawPtr<Node> child = oldChild;
+    RawPtr<Node> child = oldChild;
 
     document().removeFocusedElementOfSubtree(child.get());
 
@@ -602,7 +603,7 @@ void ContainerNode::removeBetween(Node* previousChild, Node* nextChild, Node& ol
 {
     EventDispatchForbiddenScope assertNoEventDispatch;
 
-    ASSERT(oldChild.parentNode() == this);
+    DCHECK_EQ(oldChild.parentNode(), this);
 
     AttachContext context;
     context.clearInvalidation = true;
@@ -627,8 +628,8 @@ void ContainerNode::removeBetween(Node* previousChild, Node* nextChild, Node& ol
 
 void ContainerNode::parserRemoveChild(Node& oldChild)
 {
-    ASSERT(oldChild.parentNode() == this);
-    ASSERT(!oldChild.isDocumentFragment());
+    DCHECK_EQ(oldChild.parentNode(), this);
+    DCHECK(!oldChild.isDocumentFragment());
 
     // This may cause arbitrary Javascript execution via onunload handlers.
     if (oldChild.connectedSubframeCount())
@@ -659,7 +660,7 @@ void ContainerNode::removeChildren(SubtreeModificationAction action)
         return;
 
     // The container node can be removed from event handlers.
-    RefPtrWillBeRawPtr<ContainerNode> protect(this);
+    RawPtr<ContainerNode> protect(this);
 
     // Do any prep work needed before actually starting to detach
     // and remove... e.g. stop loading frames, fire unload events.
@@ -698,7 +699,7 @@ void ContainerNode::removeChildren(SubtreeModificationAction action)
 #if !ENABLE(OILPAN)
             removedChildren.reserveInitialCapacity(countChildren());
 #endif
-            while (RefPtrWillBeRawPtr<Node> child = m_firstChild) {
+            while (RawPtr<Node> child = m_firstChild) {
                 removeBetween(0, child->nextSibling(), *child);
 #if !ENABLE(OILPAN)
                 removedChildren.append(child.get());
@@ -715,14 +716,14 @@ void ContainerNode::removeChildren(SubtreeModificationAction action)
         dispatchSubtreeModifiedEvent();
 }
 
-PassRefPtrWillBeRawPtr<Node> ContainerNode::appendChild(PassRefPtrWillBeRawPtr<Node> newChild, ExceptionState& exceptionState)
+RawPtr<Node> ContainerNode::appendChild(RawPtr<Node> newChild, ExceptionState& exceptionState)
 {
-    RefPtrWillBeRawPtr<ContainerNode> protect(this);
+    RawPtr<ContainerNode> protect(this);
 
 #if !ENABLE(OILPAN)
     // Check that this node is not "floating".
     // If it is, it can be deleted as a side effect of sending mutation events.
-    ASSERT(refCount() || parentOrShadowHostNode());
+    DCHECK(refCount() || parentOrShadowHostNode());
 #endif
 
     // Make sure adding the new child is ok
@@ -731,7 +732,7 @@ PassRefPtrWillBeRawPtr<Node> ContainerNode::appendChild(PassRefPtrWillBeRawPtr<N
             return nullptr;
         return newChild;
     }
-    ASSERT(newChild);
+    DCHECK(newChild);
 
     if (newChild == m_lastChild) // nothing to do
         return newChild;
@@ -756,7 +757,7 @@ PassRefPtrWillBeRawPtr<Node> ContainerNode::appendChild(PassRefPtrWillBeRawPtr<N
     // Now actually add the child(ren).
     ChildListMutationScope mutation(*this);
     for (const auto& targetNode : targets) {
-        ASSERT(targetNode);
+        DCHECK(targetNode);
         Node& child = *targetNode;
 
         // If the child has a parent again, just stop what we're doing, because
@@ -780,21 +781,21 @@ PassRefPtrWillBeRawPtr<Node> ContainerNode::appendChild(PassRefPtrWillBeRawPtr<N
     return newChild;
 }
 
-void ContainerNode::parserAppendChild(PassRefPtrWillBeRawPtr<Node> newChild)
+void ContainerNode::parserAppendChild(RawPtr<Node> newChild)
 {
-    ASSERT(newChild);
-    ASSERT(!newChild->isDocumentFragment());
-    ASSERT(!isHTMLTemplateElement(this));
+    DCHECK(newChild);
+    DCHECK(!newChild->isDocumentFragment());
+    DCHECK(!isHTMLTemplateElement(this));
 
     if (!checkParserAcceptChild(*newChild))
         return;
 
-    RefPtrWillBeRawPtr<Node> protect(this);
+    RawPtr<Node> protect(this);
 
     // FIXME: parserRemoveChild can run script which could then insert the
     // newChild back into the page. Loop until the child is actually removed.
     // See: fast/parser/execute-script-during-adoption-agency-removal.html
-    while (RefPtrWillBeRawPtr<ContainerNode> parent = newChild->parentNode())
+    while (RawPtr<ContainerNode> parent = newChild->parentNode())
         parent->parserRemoveChild(*newChild);
 
     if (document() != newChild->document())
@@ -806,7 +807,7 @@ void ContainerNode::parserAppendChild(PassRefPtrWillBeRawPtr<Node> newChild)
 
         treeScope().adoptIfNeeded(*newChild);
         appendChildCommon(*newChild);
-        newChild->updateAncestorConnectedSubframeCountForInsertion();
+        DCHECK_EQ(newChild->connectedSubframeCount(), 0u);
         ChildListMutationScope(*this).childAdded(*newChild);
     }
 
@@ -815,13 +816,15 @@ void ContainerNode::parserAppendChild(PassRefPtrWillBeRawPtr<Node> newChild)
 
 void ContainerNode::notifyNodeInserted(Node& root, ChildrenChangeSource source)
 {
-    ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
-    ASSERT(!root.isShadowRoot());
+#if DCHECK_IS_ON()
+    DCHECK(!EventDispatchForbiddenScope::isEventDispatchForbidden());
+#endif
+    DCHECK(!root.isShadowRoot());
 
     InspectorInstrumentation::didInsertDOMNode(&root);
 
-    RefPtrWillBeRawPtr<Node> protect(this);
-    RefPtrWillBeRawPtr<Node> protectNode(root);
+    RawPtr<Node> protect(this);
+    RawPtr<Node> protectNode(root);
 
     NodeVector postInsertionNotificationTargets;
     notifyNodeInsertedInternal(root, postInsertionNotificationTargets);
@@ -829,7 +832,7 @@ void ContainerNode::notifyNodeInserted(Node& root, ChildrenChangeSource source)
     childrenChanged(ChildrenChange::forInsertion(root, source));
 
     for (const auto& targetNode : postInsertionNotificationTargets) {
-        if (targetNode->inDocument())
+        if (targetNode->inShadowIncludingDocument())
             targetNode->didNotifySubtreeInsertionsToDocument();
     }
 }
@@ -842,7 +845,7 @@ void ContainerNode::notifyNodeInsertedInternal(Node& root, NodeVector& postInser
     for (Node& node : NodeTraversal::inclusiveDescendantsOf(root)) {
         // As an optimization we don't notify leaf nodes when when inserting
         // into detached subtrees that are not in a shadow tree.
-        if (!inDocument() && !isInShadowTree() && !node.isContainerNode())
+        if (!inShadowIncludingDocument() && !isInShadowTree() && !node.isContainerNode())
             continue;
         if (Node::InsertionShouldCallDidNotifySubtreeInsertions == node.insertedInto(this))
             postInsertionNotificationTargets.append(&node);
@@ -874,7 +877,9 @@ void ContainerNode::attach(const AttachContext& context)
     childrenContext.resolvedStyle = nullptr;
 
     for (Node* child = firstChild(); child; child = child->nextSibling()) {
-        ASSERT(child->needsAttach() || childAttachedAllowedWhenAttachingChildren(this));
+#if DCHECK_IS_ON()
+        DCHECK(child->needsAttach() || childAttachedAllowedWhenAttachingChildren(this));
+#endif
         if (child->needsAttach())
             child->attach(childrenContext);
     }
@@ -946,7 +951,7 @@ bool ContainerNode::getUpperLeftCorner(FloatPoint& point) const
             if (!o)
                 break;
         }
-        ASSERT(o);
+        DCHECK(o);
 
         if (!o->isInline() || o->isAtomicInlineLevel()) {
             point = o->localToAbsolute(FloatPoint(), UseTransforms);
@@ -963,7 +968,7 @@ bool ContainerNode::getUpperLeftCorner(FloatPoint& point) const
                     point.move(toLayoutText(o)->linesBoundingBox().x(), toLayoutText(o)->firstTextBox()->root().lineTop().toFloat());
                 point = o->localToAbsolute(point, UseTransforms);
             } else {
-                ASSERT(o->isBox());
+                DCHECK(o->isBox());
                 LayoutBox* box = toLayoutBox(o);
                 point.moveBy(box->location());
                 point = o->container()->localToAbsolute(point, UseTransforms);
@@ -1045,7 +1050,7 @@ bool ContainerNode::getLowerRightCorner(FloatPoint& point) const
             }
             o = prev;
         }
-        ASSERT(o);
+        DCHECK(o);
         if (o->isText() || o->isAtomicInlineLevel()) {
             point = FloatPoint();
             if (o->isText()) {
@@ -1098,7 +1103,7 @@ void ContainerNode::focusStateChanged()
         return;
 
     if (computedStyle()->affectedByFocus()) {
-        StyleChangeType changeType = computedStyle()->hasPseudoStyle(FIRST_LETTER) ? SubtreeStyleChange : LocalStyleChange;
+        StyleChangeType changeType = computedStyle()->hasPseudoStyle(PseudoIdFirstLetter) ? SubtreeStyleChange : LocalStyleChange;
         setNeedsStyleRecalc(changeType, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Focus));
     }
     if (isElementNode() && toElement(this)->childrenOrSiblingsAffectedByFocus())
@@ -1151,7 +1156,7 @@ void ContainerNode::setActive(bool down)
     // FIXME: Why does this not need to handle the display: none transition like :hover does?
     if (layoutObject()) {
         if (computedStyle()->affectedByActive()) {
-            StyleChangeType changeType = computedStyle()->hasPseudoStyle(FIRST_LETTER) ? SubtreeStyleChange : LocalStyleChange;
+            StyleChangeType changeType = computedStyle()->hasPseudoStyle(PseudoIdFirstLetter) ? SubtreeStyleChange : LocalStyleChange;
             setNeedsStyleRecalc(changeType, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Active));
         }
         if (isElementNode() && toElement(this)->childrenOrSiblingsAffectedByActive())
@@ -1180,7 +1185,7 @@ void ContainerNode::setHovered(bool over)
     }
 
     if (computedStyle()->affectedByHover()) {
-        StyleChangeType changeType = computedStyle()->hasPseudoStyle(FIRST_LETTER) ? SubtreeStyleChange : LocalStyleChange;
+        StyleChangeType changeType = computedStyle()->hasPseudoStyle(PseudoIdFirstLetter) ? SubtreeStyleChange : LocalStyleChange;
         setNeedsStyleRecalc(changeType, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Hover));
     }
     if (isElementNode() && toElement(this)->childrenOrSiblingsAffectedByHover())
@@ -1189,7 +1194,7 @@ void ContainerNode::setHovered(bool over)
     LayoutTheme::theme().controlStateChanged(*layoutObject(), HoverControlState);
 }
 
-PassRefPtrWillBeRawPtr<HTMLCollection> ContainerNode::children()
+RawPtr<HTMLCollection> ContainerNode::children()
 {
     return ensureCachedCollection<HTMLCollection>(NodeChildren);
 }
@@ -1203,7 +1208,7 @@ unsigned ContainerNode::countChildren() const
     return count;
 }
 
-PassRefPtrWillBeRawPtr<Element> ContainerNode::querySelector(const AtomicString& selectors, ExceptionState& exceptionState)
+RawPtr<Element> ContainerNode::querySelector(const AtomicString& selectors, ExceptionState& exceptionState)
 {
     if (selectors.isEmpty()) {
         exceptionState.throwDOMException(SyntaxError, "The provided selector is empty.");
@@ -1218,7 +1223,7 @@ PassRefPtrWillBeRawPtr<Element> ContainerNode::querySelector(const AtomicString&
     return selectorQuery->queryFirst(*this);
 }
 
-PassRefPtrWillBeRawPtr<StaticElementList> ContainerNode::querySelectorAll(const AtomicString& selectors, ExceptionState& exceptionState)
+RawPtr<StaticElementList> ContainerNode::querySelectorAll(const AtomicString& selectors, ExceptionState& exceptionState)
 {
     if (selectors.isEmpty()) {
         exceptionState.throwDOMException(SyntaxError, "The provided selector is empty.");
@@ -1238,16 +1243,18 @@ static void dispatchChildInsertionEvents(Node& child)
     if (child.isInShadowTree())
         return;
 
-    ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
+#if DCHECK_IS_ON()
+    DCHECK(!EventDispatchForbiddenScope::isEventDispatchForbidden());
+#endif
 
-    RefPtrWillBeRawPtr<Node> c(child);
-    RefPtrWillBeRawPtr<Document> document(child.document());
+    RawPtr<Node> c(child);
+    RawPtr<Document> document(child.document());
 
     if (c->parentNode() && document->hasListenerType(Document::DOMNODEINSERTED_LISTENER))
         c->dispatchScopedEvent(MutationEvent::create(EventTypeNames::DOMNodeInserted, true, c->parentNode()));
 
     // dispatch the DOMNodeInsertedIntoDocument event to all descendants
-    if (c->inDocument() && document->hasListenerType(Document::DOMNODEINSERTEDINTODOCUMENT_LISTENER)) {
+    if (c->inShadowIncludingDocument() && document->hasListenerType(Document::DOMNODEINSERTEDINTODOCUMENT_LISTENER)) {
         for (; c; c = NodeTraversal::next(*c, &child))
             c->dispatchScopedEvent(MutationEvent::create(EventTypeNames::DOMNodeInsertedIntoDocument, false));
     }
@@ -1260,12 +1267,14 @@ static void dispatchChildRemovalEvents(Node& child)
         return;
     }
 
-    ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
+#if DCHECK_IS_ON()
+    DCHECK(!EventDispatchForbiddenScope::isEventDispatchForbidden());
+#endif
 
     InspectorInstrumentation::willRemoveDOMNode(&child);
 
-    RefPtrWillBeRawPtr<Node> c(child);
-    RefPtrWillBeRawPtr<Document> document(child.document());
+    RawPtr<Node> c(child);
+    RawPtr<Document> document(child.document());
 
     // Dispatch pre-removal mutation events.
     if (c->parentNode() && document->hasListenerType(Document::DOMNODEREMOVED_LISTENER)) {
@@ -1274,7 +1283,7 @@ static void dispatchChildRemovalEvents(Node& child)
     }
 
     // Dispatch the DOMNodeRemovedFromDocument event to all descendants.
-    if (c->inDocument() && document->hasListenerType(Document::DOMNODEREMOVEDFROMDOCUMENT_LISTENER)) {
+    if (c->inShadowIncludingDocument() && document->hasListenerType(Document::DOMNODEREMOVEDFROMDOCUMENT_LISTENER)) {
         NodeChildRemovalTracker scope(child);
         for (; c; c = NodeTraversal::next(*c, &child))
             c->dispatchScopedEvent(MutationEvent::create(EventTypeNames::DOMNodeRemovedFromDocument, false));
@@ -1284,8 +1293,8 @@ static void dispatchChildRemovalEvents(Node& child)
 void ContainerNode::updateTreeAfterInsertion(Node& child)
 {
 #if !ENABLE(OILPAN)
-    ASSERT(refCount());
-    ASSERT(child.refCount());
+    DCHECK(refCount());
+    DCHECK(child.refCount());
 #endif
 
     ChildListMutationScope(*this).childAdded(child);
@@ -1307,15 +1316,15 @@ bool ContainerNode::hasRestyleFlagsInternal() const
 
 void ContainerNode::setRestyleFlag(DynamicRestyleFlags mask)
 {
-    ASSERT(isElementNode() || isShadowRoot());
+    DCHECK(isElementNode() || isShadowRoot());
     ensureRareData().setRestyleFlag(mask);
 }
 
 void ContainerNode::recalcChildStyle(StyleRecalcChange change)
 {
-    ASSERT(document().inStyleRecalc());
-    ASSERT(change >= UpdatePseudoElements || childNeedsStyleRecalc());
-    ASSERT(!needsStyleRecalc());
+    DCHECK(document().inStyleRecalc());
+    DCHECK(change >= UpdatePseudoElements || childNeedsStyleRecalc());
+    DCHECK(!needsStyleRecalc());
 
     // This loop is deliberately backwards because we use insertBefore in the layout tree, and want to avoid
     // a potentially n^2 loop to find the insertion point while resolving style. Having us start from the last
@@ -1362,7 +1371,7 @@ void ContainerNode::checkForSiblingStyleChanges(SiblingCheckType changeType, Nod
     // In the DOM case, we only need to do something if |afterChange| is not 0.
     // |afterChange| is 0 in the parser case, so it works out that we'll skip this block.
     if (childrenAffectedByFirstChildRules() && nodeAfterChange) {
-        ASSERT(changeType != FinishedParsingChildren);
+        DCHECK_NE(changeType, FinishedParsingChildren);
         // Find our new first child element.
         Element* firstChildElement = ElementTraversal::firstChild(*this);
 
@@ -1434,14 +1443,14 @@ void ContainerNode::invalidateNodeListCachesInAncestors(const QualifiedName* att
     }
 }
 
-PassRefPtrWillBeRawPtr<TagCollection> ContainerNode::getElementsByTagName(const AtomicString& localName)
+RawPtr<TagCollection> ContainerNode::getElementsByTagName(const AtomicString& localName)
 {
     if (document().isHTMLDocument())
         return ensureCachedCollection<HTMLTagCollection>(HTMLTagCollectionType, localName);
     return ensureCachedCollection<TagCollection>(TagCollectionType, localName);
 }
 
-PassRefPtrWillBeRawPtr<TagCollection> ContainerNode::getElementsByTagNameNS(const AtomicString& namespaceURI, const AtomicString& localName)
+RawPtr<TagCollection> ContainerNode::getElementsByTagNameNS(const AtomicString& namespaceURI, const AtomicString& localName)
 {
     if (namespaceURI == starAtom)
         return getElementsByTagName(localName);
@@ -1451,21 +1460,21 @@ PassRefPtrWillBeRawPtr<TagCollection> ContainerNode::getElementsByTagNameNS(cons
 
 // Takes an AtomicString in argument because it is common for elements to share the same name attribute.
 // Therefore, the NameNodeList factory function expects an AtomicString type.
-PassRefPtrWillBeRawPtr<NameNodeList> ContainerNode::getElementsByName(const AtomicString& elementName)
+RawPtr<NameNodeList> ContainerNode::getElementsByName(const AtomicString& elementName)
 {
     return ensureCachedCollection<NameNodeList>(NameNodeListType, elementName);
 }
 
 // Takes an AtomicString in argument because it is common for elements to share the same set of class names.
 // Therefore, the ClassNodeList factory function expects an AtomicString type.
-PassRefPtrWillBeRawPtr<ClassCollection> ContainerNode::getElementsByClassName(const AtomicString& classNames)
+RawPtr<ClassCollection> ContainerNode::getElementsByClassName(const AtomicString& classNames)
 {
     return ensureCachedCollection<ClassCollection>(ClassCollectionType, classNames);
 }
 
-PassRefPtrWillBeRawPtr<RadioNodeList> ContainerNode::radioNodeList(const AtomicString& name, bool onlyMatchImgElements)
+RawPtr<RadioNodeList> ContainerNode::radioNodeList(const AtomicString& name, bool onlyMatchImgElements)
 {
-    ASSERT(isHTMLFormElement(this) || isHTMLFieldSetElement(this));
+    DCHECK(isHTMLFormElement(this) || isHTMLFieldSetElement(this));
     CollectionType type = onlyMatchImgElements ? RadioImgNodeListType : RadioNodeListType;
     return ensureCachedCollection<RadioNodeList>(type, name);
 }
@@ -1495,7 +1504,7 @@ NodeListsNodeData& ContainerNode::ensureNodeLists()
     return ensureRareData().ensureNodeLists();
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool childAttachedAllowedWhenAttachingChildren(ContainerNode* node)
 {
     if (node->isShadowRoot())

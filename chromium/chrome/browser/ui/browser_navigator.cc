@@ -24,7 +24,6 @@
 #include "chrome/browser/ui/browser_instant_controller.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/search/instant_search_prerenderer.h"
 #include "chrome/browser/ui/singleton_tabs.h"
@@ -55,6 +54,8 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 using content::GlobalRequestID;
 using content::NavigationController;
@@ -331,7 +332,7 @@ class ScopedTargetContentsOwner {
 
  private:
   chrome::NavigateParams* params_;
-  scoped_ptr<WebContents> target_contents_owner_;
+  std::unique_ptr<WebContents> target_contents_owner_;
   DISALLOW_COPY_AND_ASSIGN(ScopedTargetContentsOwner);
 };
 
@@ -339,7 +340,9 @@ content::WebContents* CreateTargetContents(const chrome::NavigateParams& params,
                                            const GURL& url) {
   WebContents::CreateParams create_params(
       params.browser->profile(),
-      tab_util::GetSiteInstanceForNewTab(params.browser->profile(), url));
+      params.source_site_instance && !vivaldi::IsVivaldiRunning()
+          ? params.source_site_instance
+          : tab_util::GetSiteInstanceForNewTab(params.browser->profile(), url));
   if (params.source_contents) {
     create_params.initial_size =
         params.source_contents->GetContainerBounds().size();

@@ -50,8 +50,8 @@ class AudioMediaCodecDecoder : public MediaCodecDecoder {
  protected:
   bool IsCodecReconfigureNeeded(const DemuxerConfigs& next) const override;
   ConfigStatus ConfigureInternal(jobject media_crypto) override;
-  void OnOutputFormatChanged() override;
-  void Render(int buffer_index,
+  bool OnOutputFormatChanged() override;
+  bool Render(int buffer_index,
               size_t offset,
               size_t size,
               RenderMode render_mode,
@@ -73,12 +73,11 @@ class AudioMediaCodecDecoder : public MediaCodecDecoder {
   // Requested volume
   double volume_;
 
-  // Number of bytes per audio frame. Depends on the output format and the
-  // number of channels.
-  int bytes_per_frame_;
-
   // The sampling rate received from decoder.
   int output_sampling_rate_;
+
+  // The number of audio channels received from decoder.
+  int output_num_channels_;
 
   // Frame count to sync with audio codec output.
   int64_t frame_count_;

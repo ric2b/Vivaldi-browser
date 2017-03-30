@@ -266,6 +266,9 @@ public:
     void showLineTreeAndMark(const InlineBox* = nullptr, const char* = nullptr, const InlineBox* = nullptr, const char* = nullptr, const LayoutObject* = nullptr) const;
 #endif
 
+protected:
+    bool recalcNormalFlowChildOverflowIfNeeded(LayoutObject*);
+public:
     bool recalcChildOverflowAfterStyleChange();
     bool recalcOverflowAfterStyleChange();
 
@@ -313,7 +316,6 @@ public:
 
     // FIXME-BLOCKFLOW: Remove virtualization when all callers have moved to LayoutBlockFlow
     virtual void paintFloats(const PaintInfo&, const LayoutPoint&) const { }
-    virtual void paintSelection(const PaintInfo&, const LayoutPoint&) const { }
 
 protected:
     virtual void adjustInlineDirectionLineBounds(unsigned /* expansionOpportunityCount */, LayoutUnit& /* logicalLeft */, LayoutUnit& /* logicalWidth */) const { }
@@ -347,7 +349,7 @@ protected:
     // happen after all layout is done, i.e. during updateLayerPositionsAfterLayout. However,
     // that currently fails a layout test. To fix this bug in time for M50, we use this temporary
     // hack. The real fix is tracked in crbug.com/600036
-    typedef WTF::HashMap<PaintLayerScrollableArea*, DoublePoint> ScrollPositionMap;
+    typedef PersistentHeapHashMap<Member<PaintLayerScrollableArea>, DoublePoint> ScrollPositionMap;
     static void startDelayUpdateScrollInfo();
     static bool finishDelayUpdateScrollInfo(SubtreeLayoutScope*, ScrollPositionMap*);
 
@@ -355,6 +357,11 @@ protected:
 
     void styleWillChange(StyleDifference, const ComputedStyle& newStyle) override;
     void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
+    void updateFromStyle() override;
+
+    // Returns true if non-visible overflow should be respected. Otherwise hasOverflowClip() will be
+    // false and we won't create scrollable area for this object even if overflow is non-visible.
+    virtual bool allowsOverflowClip() const;
 
     virtual bool hasLineIfEmpty() const;
 
@@ -380,7 +387,6 @@ protected:
     // isInline.
     bool isInlineBlockOrInlineTable() const final { return isInline() && isAtomicInlineLevel(); }
 
-    void invalidatePaintOfSubtreesIfNeeded(PaintInvalidationState& childPaintInvalidationState) override;
     void invalidateDisplayItemClients(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason) const override;
 
 private:
@@ -406,6 +412,7 @@ private:
 
     Node* nodeForHitTest() const;
 
+    // Returns true if the positioned movement-only layout succeeded.
     bool tryLayoutDoingPositionedMovementOnly();
 
     bool avoidsFloats() const override { return true; }
@@ -425,7 +432,7 @@ private:
     bool isSelectionRoot() const;
 
     void absoluteRects(Vector<IntRect>&, const LayoutPoint& accumulatedOffset) const override;
-    void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed) const override;
+    void absoluteQuads(Vector<FloatQuad>&) const override;
 
 public:
     bool hasCursorCaret() const;

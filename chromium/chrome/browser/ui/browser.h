@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -15,7 +16,6 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
@@ -27,7 +27,6 @@
 #include "chrome/browser/ui/chrome_bubble_manager.h"
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
 #include "chrome/browser/ui/search/search_tab_helper_delegate.h"
 #include "chrome/browser/ui/search_engines/search_engine_tab_helper_delegate.h"
@@ -66,6 +65,7 @@ class BrowserWindow;
 class FindBarController;
 class PrefService;
 class Profile;
+class ScopedKeepAlive;
 class SearchDelegate;
 class SearchModel;
 class StatusBubble;
@@ -239,9 +239,6 @@ class Browser : public TabStripModelObserver,
   bool is_session_restore() const {
     return is_session_restore_;
   }
-  chrome::HostDesktopType host_desktop_type() const {
-    return host_desktop_type_;
-  }
 
   // Accessors ////////////////////////////////////////////////////////////////
 
@@ -259,7 +256,7 @@ class Browser : public TabStripModelObserver,
   ToolbarModel* toolbar_model() { return toolbar_model_.get(); }
   const ToolbarModel* toolbar_model() const { return toolbar_model_.get(); }
 #if defined(UNIT_TEST)
-  void swap_toolbar_models(scoped_ptr<ToolbarModel>* toolbar_model) {
+  void swap_toolbar_models(std::unique_ptr<ToolbarModel>* toolbar_model) {
     toolbar_model->swap(toolbar_model_);
   }
 #endif
@@ -288,6 +285,9 @@ class Browser : public TabStripModelObserver,
   }
   extensions::HostedAppBrowserController* hosted_app_controller() {
     return hosted_app_controller_.get();
+  }
+  SigninViewController* signin_view_controller() {
+    return &signin_view_controller_;
   }
 
   // Will lazy create the bubble manager.
@@ -383,11 +383,6 @@ class Browser : public TabStripModelObserver,
   // FullscreenController::ToggleFullscreenModeWithExtension.
   void ToggleFullscreenModeWithExtension(const GURL& extension_url);
 
-#if defined(OS_WIN)
-  // See the description of FullscreenController::ToggleMetroSnapMode.
-  void SetMetroSnapMode(bool enable);
-#endif
-
   // Returns true if the Browser supports the specified feature. The value of
   // this varies during the lifetime of the browser. For example, if the window
   // is fullscreen this may return a different value. If you only care about
@@ -431,6 +426,12 @@ class Browser : public TabStripModelObserver,
   // sync and gives them a chance to abort signin under the tab modal signin
   // flow.
   void ShowModalSyncConfirmationWindow();
+
+  // Used to register a KeepAlive to affect the Chrome lifetime. The KeepAlive
+  // is registered when the browser is added to the browser list, and unregisted
+  // when it is removed from it.
+  void RegisterKeepAlive();
+  void UnregisterKeepAlive();
 
   // Interface implementations ////////////////////////////////////////////////
 
@@ -489,10 +490,13 @@ class Browser : public TabStripModelObserver,
   void ShowCertificateViewerInDevTools(
       content::WebContents* web_contents,
       int cert_id) override;
-  scoped_ptr<content::BluetoothChooser> RunBluetoothChooser(
+  std::unique_ptr<content::BluetoothChooser> RunBluetoothChooser(
       content::RenderFrameHost* frame,
       const content::BluetoothChooser::EventHandler& event_handler) override;
-  bool RequestAppBanner(content::WebContents* web_contents) override;
+  void RequestAppBannerFromDevTools(
+      content::WebContents* web_contents) override;
+
+  bool RequestAppBanner(content::WebContents* web_contents);
 
   bool is_type_tabbed() const { return type_ == TYPE_TABBED; }
   bool is_type_popup() const { return type_ == TYPE_POPUP; }
@@ -831,8 +835,8 @@ class Browser : public TabStripModelObserver,
                          int index,
                          DetachType type);
 
-  // Shared code between Reload() and ReloadIgnoringCache().
-  void ReloadInternal(WindowOpenDisposition disposition, bool ignore_cache);
+  // Shared code between Reload() and ReloadBypassingCache().
+  void ReloadInternal(WindowOpenDisposition disposition, bool bypass_cache);
 
   // Returns true if the Browser window supports a location bar. Having support
   // for the location bar does not mean it will be visible.
@@ -896,8 +900,8 @@ class Browser : public TabStripModelObserver,
   // This Browser's window.
   BrowserWindow* window_;
 
-  scoped_ptr<TabStripModelDelegate> tab_strip_model_delegate_;
-  scoped_ptr<TabStripModel> tab_strip_model_;
+  std::unique_ptr<TabStripModelDelegate> tab_strip_model_delegate_;
+  std::unique_ptr<TabStripModel> tab_strip_model_;
 
   // The application name that is also the name of the window to the shell.
   // This name should be set when:
@@ -925,14 +929,14 @@ class Browser : public TabStripModelObserver,
   const SessionID session_id_;
 
   // The model for the toolbar view.
-  scoped_ptr<ToolbarModel> toolbar_model_;
+  std::unique_ptr<ToolbarModel> toolbar_model_;
 
   // The model for the "active" search state.  There are per-tab search models
   // as well.  When a tab is active its model is kept in sync with this one.
   // When a new tab is activated its model state is propagated to this active
   // model.  This way, observers only have to attach to this single model for
   // updates, and don't have to worry about active tab changes directly.
-  scoped_ptr<SearchModel> search_model_;
+  std::unique_ptr<SearchModel> search_model_;
 
   // UI update coalescing and handling ////////////////////////////////////////
 
@@ -971,16 +975,14 @@ class Browser : public TabStripModelObserver,
   // Tracks when this browser is being created by session restore.
   bool is_session_restore_;
 
-  const chrome::HostDesktopType host_desktop_type_;
+  std::unique_ptr<chrome::UnloadController> unload_controller_;
+  std::unique_ptr<chrome::FastUnloadController> fast_unload_controller_;
 
-  scoped_ptr<chrome::UnloadController> unload_controller_;
-  scoped_ptr<chrome::FastUnloadController> fast_unload_controller_;
-
-  scoped_ptr<ChromeBubbleManager> bubble_manager_;
+  std::unique_ptr<ChromeBubbleManager> bubble_manager_;
 
   // The Find Bar. This may be NULL if there is no Find Bar, and if it is
   // non-NULL, it may or may not be visible.
-  scoped_ptr<FindBarController> find_bar_controller_;
+  std::unique_ptr<FindBarController> find_bar_controller_;
 
   // Dialog box used for opening and saving files.
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
@@ -989,41 +991,44 @@ class Browser : public TabStripModelObserver,
   BooleanPrefMember encoding_auto_detect_;
 
   // Helper which implements the ContentSettingBubbleModel interface.
-  scoped_ptr<BrowserContentSettingBubbleModelDelegate>
+  std::unique_ptr<BrowserContentSettingBubbleModelDelegate>
       content_setting_bubble_model_delegate_;
 
   // Helper which implements the ToolbarModelDelegate interface.
-  scoped_ptr<BrowserToolbarModelDelegate> toolbar_model_delegate_;
+  std::unique_ptr<BrowserToolbarModelDelegate> toolbar_model_delegate_;
 
   // A delegate that handles the details of updating the "active"
   // |search_model_| state with the tab's state.
-  scoped_ptr<SearchDelegate> search_delegate_;
+  std::unique_ptr<SearchDelegate> search_delegate_;
 
   // Helper which implements the LiveTabContext interface.
-  scoped_ptr<BrowserLiveTabContext> live_tab_context_;
+  std::unique_ptr<BrowserLiveTabContext> live_tab_context_;
 
   // Helper which implements the SyncedWindowDelegate interface.
-  scoped_ptr<BrowserSyncedWindowDelegate> synced_window_delegate_;
+  std::unique_ptr<BrowserSyncedWindowDelegate> synced_window_delegate_;
 
-  scoped_ptr<BrowserInstantController> instant_controller_;
+  std::unique_ptr<BrowserInstantController> instant_controller_;
 
   // Helper which handles bookmark app specific browser configuration.
-  scoped_ptr<extensions::HostedAppBrowserController> hosted_app_controller_;
+  std::unique_ptr<extensions::HostedAppBrowserController>
+      hosted_app_controller_;
 
   BookmarkBar::State bookmark_bar_state_;
 
-  scoped_ptr<ExclusiveAccessManager> exclusive_access_manager_;
+  std::unique_ptr<ExclusiveAccessManager> exclusive_access_manager_;
 
-  scoped_ptr<extensions::WindowController> extension_window_controller_;
+  std::unique_ptr<extensions::WindowController> extension_window_controller_;
 
-  scoped_ptr<chrome::BrowserCommandController> command_controller_;
+  std::unique_ptr<chrome::BrowserCommandController> command_controller_;
 
   // True if the browser window has been shown at least once.
   bool window_has_shown_;
 
-  scoped_ptr<ValidationMessageBubble> validation_message_bubble_;
+  std::unique_ptr<ValidationMessageBubble> validation_message_bubble_;
 
   SigninViewController signin_view_controller_;
+
+  std::unique_ptr<ScopedKeepAlive> keep_alive_;
 
   // The following factory is used for chrome update coalescing.
   base::WeakPtrFactory<Browser> chrome_updater_factory_;

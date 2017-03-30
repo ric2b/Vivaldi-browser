@@ -43,7 +43,8 @@
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebUnitTestSupport.h"
+#include "public/platform/WebURLLoaderMockFactory.h"
+#include "public/web/WebCache.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebHitTestResult.h"
@@ -112,7 +113,8 @@ public:
 
     void TearDown() override
     {
-        Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
+        Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+        WebCache::clear();
     }
 
 protected:
@@ -143,7 +145,7 @@ void TouchActionTest::runTouchActionTest(std::string file)
     // scenario.
     WebView* webView = setupTest(file, client);
 
-    RefPtrWillBePersistent<Document> document = static_cast<PassRefPtrWillBeRawPtr<Document>>(webView->mainFrame()->document());
+    Persistent<Document> document = static_cast<Document*>(webView->mainFrame()->document());
     runTestOnTree(document.get(), webView, client);
 
     m_webViewHelper.reset(); // Explicitly reset to break dependency on locally scoped client.
@@ -158,8 +160,8 @@ void TouchActionTest::runShadowDOMTest(std::string file)
     TrackExceptionState es;
 
     // Oilpan: see runTouchActionTest() comment why these are persistent references.
-    RefPtrWillBePersistent<Document> document = static_cast<PassRefPtrWillBeRawPtr<Document>>(webView->mainFrame()->document());
-    RefPtrWillBePersistent<StaticElementList> hostNodes = document->querySelectorAll("[shadow-host]", es);
+    Persistent<Document> document = static_cast<Document*>(webView->mainFrame()->document());
+    Persistent<StaticElementList> hostNodes = document->querySelectorAll("[shadow-host]", es);
     ASSERT_FALSE(es.hadException());
     ASSERT_GE(hostNodes->length(), 1u);
 
@@ -184,7 +186,7 @@ void TouchActionTest::runIFrameTest(std::string file)
 
     for (; curFrame; curFrame = curFrame->nextSibling()) {
         // Oilpan: see runTouchActionTest() comment why these are persistent references.
-        RefPtrWillBePersistent<Document> contentDoc = static_cast<PassRefPtrWillBeRawPtr<Document>>(curFrame->document());
+        Persistent<Document> contentDoc = static_cast<Document*>(curFrame->document());
         runTestOnTree(contentDoc.get(), webView, client);
     }
 
@@ -202,7 +204,7 @@ WebView* TouchActionTest::setupTest(std::string file, TouchActionTrackingWebView
 
     // Scroll to verify the code properly transforms windows to client co-ords.
     const int kScrollOffset = 100;
-    RefPtrWillBeRawPtr<Document> document = static_cast<PassRefPtrWillBeRawPtr<Document>>(webView->mainFrame()->document());
+    Document* document = static_cast<Document*>(webView->mainFrame()->document());
     document->frame()->view()->setScrollPosition(IntPoint(0, kScrollOffset), ProgrammaticScroll);
 
     return webView;
@@ -214,7 +216,7 @@ void TouchActionTest::runTestOnTree(ContainerNode* root, WebView* webView, Touch
     TrackExceptionState es;
 
     // Oilpan: see runTouchActionTest() comment why these are persistent references.
-    RefPtrWillBePersistent<StaticElementList> elements = root->querySelectorAll("[expected-action]", es);
+    Persistent<StaticElementList> elements = root->querySelectorAll("[expected-action]", es);
     ASSERT_FALSE(es.hadException());
 
     for (unsigned index = 0; index < elements->length(); index++) {
@@ -327,7 +329,7 @@ void TouchActionTest::sendTouchEvent(WebView* webView, WebInputEvent::Type type,
     WebTouchEvent webTouchEvent;
     webTouchEvent.type = type;
     if (type == WebInputEvent::TouchCancel)
-        webTouchEvent.cancelable = false;
+        webTouchEvent.dispatchType = WebInputEvent::EventNonBlocking;
     webTouchEvent.touchesLength = 1;
     webTouchEvent.touches[0].state = (type == WebInputEvent::TouchStart ?
         WebTouchPoint::StatePressed :

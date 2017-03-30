@@ -33,24 +33,24 @@ class SVGRect : public SVGPropertyHelper<SVGRect> {
 public:
     typedef SVGRectTearOff TearOffType;
 
-    static PassRefPtrWillBeRawPtr<SVGRect> create()
+    static SVGRect* create()
     {
-        return adoptRefWillBeNoop(new SVGRect());
+        return new SVGRect();
     }
 
-    static PassRefPtrWillBeRawPtr<SVGRect> createInvalid()
+    static SVGRect* createInvalid()
     {
-        RefPtrWillBeRawPtr<SVGRect> rect = adoptRefWillBeNoop(new SVGRect());
+        SVGRect* rect = new SVGRect();
         rect->setInvalid();
-        return rect.release();
+        return rect;
     }
 
-    static PassRefPtrWillBeRawPtr<SVGRect> create(const FloatRect& rect)
+    static SVGRect* create(const FloatRect& rect)
     {
-        return adoptRefWillBeNoop(new SVGRect(rect));
+        return new SVGRect(rect);
     }
 
-    PassRefPtrWillBeRawPtr<SVGRect> clone() const;
+    SVGRect* clone() const;
 
     const FloatRect& value() const { return m_value; }
     void setValue(const FloatRect& v) { m_value = v; }
@@ -67,9 +67,9 @@ public:
     String valueAsString() const override;
     SVGParsingError setValueAsString(const String&);
 
-    void add(PassRefPtrWillBeRawPtr<SVGPropertyBase>, SVGElement*) override;
-    void calculateAnimatedValue(SVGAnimationElement*, float percentage, unsigned repeatCount, PassRefPtrWillBeRawPtr<SVGPropertyBase> from, PassRefPtrWillBeRawPtr<SVGPropertyBase> to, PassRefPtrWillBeRawPtr<SVGPropertyBase> toAtEndOfDurationValue, SVGElement* contextElement) override;
-    float calculateDistance(PassRefPtrWillBeRawPtr<SVGPropertyBase> to, SVGElement* contextElement) override;
+    void add(SVGPropertyBase*, SVGElement*) override;
+    void calculateAnimatedValue(SVGAnimationElement*, float percentage, unsigned repeatCount, SVGPropertyBase* from, SVGPropertyBase* to, SVGPropertyBase* toAtEndOfDurationValue, SVGElement* contextElement) override;
+    float calculateDistance(SVGPropertyBase* to, SVGElement* contextElement) override;
 
     bool isValid() const { return m_isValid; }
     void setInvalid();

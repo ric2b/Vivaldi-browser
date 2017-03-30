@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "content/renderer/media/media_stream_video_track.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/video_util.h"
 #include "media/base/yuv_convert.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/c/ppb_media_stream_video_track.h"
@@ -228,7 +229,6 @@ PepperMediaStreamVideoTrackHost::PepperMediaStreamVideoTrackHost(
     const blink::WebMediaStreamTrack& track)
     : PepperMediaStreamTrackHostBase(host, instance, resource),
       track_(track),
-      connected_(false),
       number_of_buffers_(kDefaultNumberOfBuffers),
       source_frame_format_(PP_VIDEOFRAME_FORMAT_UNKNOWN),
       plugin_frame_format_(PP_VIDEOFRAME_FORMAT_UNKNOWN),
@@ -244,7 +244,6 @@ PepperMediaStreamVideoTrackHost::PepperMediaStreamVideoTrackHost(
     PP_Instance instance,
     PP_Resource resource)
     : PepperMediaStreamTrackHostBase(host, instance, resource),
-      connected_(false),
       number_of_buffers_(kDefaultNumberOfBuffers),
       source_frame_format_(PP_VIDEOFRAME_FORMAT_UNKNOWN),
       plugin_frame_format_(PP_VIDEOFRAME_FORMAT_UNKNOWN),
@@ -256,12 +255,12 @@ PepperMediaStreamVideoTrackHost::PepperMediaStreamVideoTrackHost(
   DCHECK(!track_.isNull());
 }
 
-bool PepperMediaStreamVideoTrackHost::IsMediaStreamVideoTrackHost() {
-  return true;
-}
-
 PepperMediaStreamVideoTrackHost::~PepperMediaStreamVideoTrackHost() {
   OnClose();
+}
+
+bool PepperMediaStreamVideoTrackHost::IsMediaStreamVideoTrackHost() {
+  return true;
 }
 
 void PepperMediaStreamVideoTrackHost::InitBuffers() {
@@ -306,11 +305,8 @@ void PepperMediaStreamVideoTrackHost::InitBuffers() {
 }
 
 void PepperMediaStreamVideoTrackHost::OnClose() {
-  if (connected_) {
-    MediaStreamVideoSink::RemoveFromVideoTrack(this, track_);
-    weak_factory_.InvalidateWeakPtrs();
-    connected_ = false;
-  }
+  MediaStreamVideoSink::DisconnectFromTrack();
+  weak_factory_.InvalidateWeakPtrs();
 }
 
 int32_t PepperMediaStreamVideoTrackHost::OnHostMsgEnqueueBuffer(
@@ -370,10 +366,14 @@ int32_t PepperMediaStreamVideoTrackHost::SendFrameToTrack(int32_t index) {
 }
 
 void PepperMediaStreamVideoTrackHost::OnVideoFrame(
-    const scoped_refptr<VideoFrame>& frame,
+    const scoped_refptr<VideoFrame>& video_frame,
     base::TimeTicks estimated_capture_time) {
-  DCHECK(frame.get());
+  DCHECK(video_frame.get());
   // TODO(penghuang): Check |frame->end_of_stream()| and close the track.
+  scoped_refptr<media::VideoFrame> frame = video_frame;
+  // Drop alpha channel since we do not support it yet.
+  if (frame->format() == media::PIXEL_FORMAT_YV12A)
+    frame = media::WrapAsI420VideoFrame(video_frame);
   PP_VideoFrame_Format ppformat = ToPpapiFormat(frame->format());
   if (ppformat == PP_VIDEOFRAME_FORMAT_UNKNOWN)
     return;
@@ -442,16 +442,14 @@ void PepperMediaStreamVideoTrackHost::StopSourceImpl() {
 }
 
 void PepperMediaStreamVideoTrackHost::DidConnectPendingHostToResource() {
-  if (!connected_) {
-    MediaStreamVideoSink::AddToVideoTrack(
-        this,
-        media::BindToCurrentLoop(
-            base::Bind(
-                &PepperMediaStreamVideoTrackHost::OnVideoFrame,
-                weak_factory_.GetWeakPtr())),
-        track_);
-    connected_ = true;
-  }
+  if (!MediaStreamVideoSink::connected_track().isNull())
+    return;
+  MediaStreamVideoSink::ConnectToTrack(
+      track_,
+      media::BindToCurrentLoop(
+          base::Bind(
+              &PepperMediaStreamVideoTrackHost::OnVideoFrame,
+              weak_factory_.GetWeakPtr())));
 }
 
 int32_t PepperMediaStreamVideoTrackHost::OnResourceMessageReceived(

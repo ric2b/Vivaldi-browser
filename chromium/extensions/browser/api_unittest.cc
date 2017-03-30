@@ -44,12 +44,13 @@ void ApiUnitTest::SetUp() {
       content::TestBrowserThreadBundle::DEFAULT));
   user_prefs::UserPrefs::Set(browser_context(), &testing_pref_service_);
 
-  extension_ =
-      ExtensionBuilder()
-          .SetManifest(std::move(
-              DictionaryBuilder().Set("name", "Test").Set("version", "1.0")))
-          .SetLocation(Manifest::UNPACKED)
-          .Build();
+  extension_ = ExtensionBuilder()
+                   .SetManifest(DictionaryBuilder()
+                                    .Set("name", "Test")
+                                    .Set("version", "1.0")
+                                    .Build())
+                   .SetLocation(Manifest::UNPACKED)
+                   .Build();
 }
 
 void ApiUnitTest::CreateBackgroundPage() {
@@ -57,10 +58,10 @@ void ApiUnitTest::CreateBackgroundPage() {
     GURL url = BackgroundInfo::GetBackgroundURL(extension());
     if (url.is_empty())
       url = GURL(url::kAboutBlankURL);
-    content::SiteInstance* site_instance =
-        content::SiteInstance::CreateForURL(browser_context(), url);
-    contents_.reset(content::WebContents::Create(
-        content::WebContents::CreateParams(browser_context(), site_instance)));
+    contents_.reset(
+        content::WebContents::Create(content::WebContents::CreateParams(
+            browser_context(),
+            content::SiteInstance::CreateForURL(browser_context(), url))));
   }
 }
 

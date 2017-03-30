@@ -40,7 +40,7 @@ class AwContentsClientBridge : public AwContentsClientBridgeBase {
                              bool* cancel_request) override;
   void SelectClientCertificate(
       net::SSLCertRequestInfo* cert_request_info,
-      scoped_ptr<content::ClientCertificateDelegate> delegate) override;
+      std::unique_ptr<content::ClientCertificateDelegate> delegate) override;
 
   void RunJavaScriptDialog(
       content::JavaScriptMessageType message_type,
@@ -51,7 +51,6 @@ class AwContentsClientBridge : public AwContentsClientBridgeBase {
       override;
   void RunBeforeUnloadDialog(
       const GURL& origin_url,
-      const base::string16& message_text,
       const content::JavaScriptDialogManager::DialogClosedCallback& callback)
       override;
   bool ShouldOverrideUrlLoading(const base::string16& url,

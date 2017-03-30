@@ -17,7 +17,9 @@
 namespace ui {
 
 InputMethodBase::InputMethodBase()
-    : delegate_(NULL), text_input_client_(NULL) {}
+    : sending_key_event_(false),
+      delegate_(nullptr),
+      text_input_client_(nullptr) {}
 
 InputMethodBase::~InputMethodBase() {
   FOR_EACH_OBSERVER(InputMethodObserver,
@@ -32,20 +34,25 @@ void InputMethodBase::SetDelegate(internal::InputMethodDelegate* delegate) {
   delegate_ = delegate;
 }
 
-void InputMethodBase::OnFocus() {}
+void InputMethodBase::OnFocus() {
+  if (ui::IMEBridge::Get())
+    ui::IMEBridge::Get()->SetInputContextHandler(this);
+}
 
-void InputMethodBase::OnBlur() {}
+void InputMethodBase::OnBlur() {
+  if (ui::IMEBridge::Get() &&
+      ui::IMEBridge::Get()->GetInputContextHandler() == this)
+    ui::IMEBridge::Get()->SetInputContextHandler(nullptr);
+}
 
 void InputMethodBase::SetFocusedTextInputClient(TextInputClient* client) {
   SetFocusedTextInputClientInternal(client);
-  if (ui::IMEBridge::Get())
-    ui::IMEBridge::Get()->SetInputContextHandler(this);
 }
 
 void InputMethodBase::DetachTextInputClient(TextInputClient* client) {
   if (text_input_client_ != client)
     return;
-  SetFocusedTextInputClientInternal(NULL);
+  SetFocusedTextInputClientInternal(nullptr);
 }
 
 TextInputClient* InputMethodBase::GetTextInputClient() const {
@@ -131,7 +138,7 @@ void InputMethodBase::SetFocusedTextInputClientInternal(
   if (old == client)
     return;
   OnWillChangeFocusedClient(old, client);
-  text_input_client_ = client;  // NULL allowed.
+  text_input_client_ = client;  // nullptr allowed.
   OnDidChangeFocusedClient(old, client);
   NotifyTextInputStateChanged(text_input_client_);
 }
@@ -176,11 +183,11 @@ void InputMethodBase::CommitText(const std::string& text) {
 void InputMethodBase::UpdateCompositionText(const CompositionText& composition_,
                                             uint32_t cursor_pos,
                                             bool visible) {
-  if (IsTextInputTypeNone() || composition_.text.empty())
+  if (IsTextInputTypeNone())
     return;
 
   if (!SendFakeProcessKeyEvent(true)) {
-    if (visible)
+    if (visible && !composition_.text.empty())
       GetTextInputClient()->SetCompositionText(composition_);
     else
       GetTextInputClient()->ClearCompositionText();
@@ -189,5 +196,11 @@ void InputMethodBase::UpdateCompositionText(const CompositionText& composition_,
 }
 
 void InputMethodBase::DeleteSurroundingText(int32_t offset, uint32_t length) {}
+
+void InputMethodBase::SendKeyEvent(KeyEvent* event) {
+  sending_key_event_ = true;
+  DispatchKeyEvent(event);
+  sending_key_event_ = false;
+}
 
 }  // namespace ui

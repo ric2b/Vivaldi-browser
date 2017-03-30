@@ -32,6 +32,7 @@
 #ifndef EventSource_h
 #define EventSource_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/events/EventTarget.h"
 #include "core/loader/ThreadableLoader.h"
@@ -41,7 +42,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/Forward.h"
-#include "wtf/RefPtr.h"
+#include "wtf/OwnPtr.h"
 
 namespace blink {
 
@@ -49,7 +50,7 @@ class EventSourceInit;
 class ExceptionState;
 class ResourceResponse;
 
-class CORE_EXPORT EventSource final : public RefCountedGarbageCollectedEventTargetWithInlineData<EventSource>, private ThreadableLoaderClient, public ActiveDOMObject, public EventSourceParser::Client {
+class CORE_EXPORT EventSource final : public RefCountedGarbageCollectedEventTargetWithInlineData<EventSource>, private ThreadableLoaderClient, public ActiveScriptWrappable, public ActiveDOMObject, public EventSourceParser::Client {
     DEFINE_WRAPPERTYPEINFO();
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(EventSource);
     USING_GARBAGE_COLLECTED_MIXIN(EventSource);
@@ -77,7 +78,7 @@ public:
     void close();
 
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
     // ActiveDOMObject
     //
@@ -87,7 +88,8 @@ public:
     // asynchronous events from the loader won't be invoked.
     void stop() override;
 
-    bool hasPendingActivity() const override;
+    // ActiveScriptWrappable
+    bool hasPendingActivity() const final;
 
     DECLARE_VIRTUAL_TRACE();
 
@@ -111,12 +113,17 @@ private:
     void connectTimerFired(Timer<EventSource>*);
     void abortConnectionAttempt();
 
-    KURL m_url;
+    // The original URL specified when constructing EventSource instance. Used
+    // for the 'url' attribute getter.
+    const KURL m_url;
+    // The URL used to connect to the server, which may be different from
+    // |m_url| as it may be redirected.
+    KURL m_currentURL;
     bool m_withCredentials;
     State m_state;
 
     Member<EventSourceParser> m_parser;
-    RefPtr<ThreadableLoader> m_loader;
+    OwnPtr<ThreadableLoader> m_loader;
     Timer<EventSource> m_connectTimer;
 
     unsigned long long m_reconnectDelay;

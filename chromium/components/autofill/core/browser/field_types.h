@@ -72,7 +72,7 @@ enum ServerFieldType {
 
   // ADDRESS_SHIPPING values [44,50] are deprecated.
 
-  CREDIT_CARD_NAME = 51,
+  CREDIT_CARD_NAME_FULL = 51,
   CREDIT_CARD_NUMBER = 52,
   CREDIT_CARD_EXP_MONTH = 53,
   CREDIT_CARD_EXP_2_DIGIT_YEAR = 54,
@@ -149,10 +149,19 @@ enum ServerFieldType {
   PROBABLY_NEW_PASSWORD = 89,
   NOT_NEW_PASSWORD = 90,
 
+  // Additional field types for credit card fields.
+  CREDIT_CARD_NAME_FIRST = 91,
+  CREDIT_CARD_NAME_LAST = 92,
+
+  PHONE_HOME_EXTENSION = 93,
+
+  // The first password field in a form that looks like account creation form
+  // for local heuristics.
+  PROBABLY_ACCOUNT_CREATION_PASSWORD = 94,
+
   // No new types can be added without a corresponding change to the Autofill
   // server.
-
-  MAX_VALID_FIELD_TYPE = 91,
+  MAX_VALID_FIELD_TYPE = 95,
 };
 
 // The list of all HTML autocomplete field type hints supported by Chrome.
@@ -184,7 +193,9 @@ enum HtmlFieldType {
   HTML_TYPE_FULL_ADDRESS,  // The complete address, formatted for display.
 
   // Credit card types.
-  HTML_TYPE_CREDIT_CARD_NAME,
+  HTML_TYPE_CREDIT_CARD_NAME_FULL,
+  HTML_TYPE_CREDIT_CARD_NAME_FIRST,
+  HTML_TYPE_CREDIT_CARD_NAME_LAST,
   HTML_TYPE_CREDIT_CARD_NUMBER,
   HTML_TYPE_CREDIT_CARD_EXP,
   HTML_TYPE_CREDIT_CARD_EXP_MONTH,
@@ -200,6 +211,7 @@ enum HtmlFieldType {
   HTML_TYPE_TEL_LOCAL,
   HTML_TYPE_TEL_LOCAL_PREFIX,
   HTML_TYPE_TEL_LOCAL_SUFFIX,
+  HTML_TYPE_TEL_EXTENSION,
 
   // Email.
   HTML_TYPE_EMAIL,

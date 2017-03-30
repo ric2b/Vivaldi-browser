@@ -38,7 +38,6 @@ WebStateImpl::WebStateImpl(BrowserState* browser_state)
       web_controller_(nil),
       navigation_manager_(this, browser_state),
       interstitial_(nullptr),
-      cache_mode_(net::RequestTracker::CACHE_NORMAL),
       weak_factory_(this) {
   GlobalWebStateEventTracker::GetInstance()->OnWebStateCreated(this);
 }
@@ -258,7 +257,7 @@ void WebStateImpl::ClearWebUI() {
 }
 
 bool WebStateImpl::HasWebUI() {
-  return web_ui_;
+  return !!web_ui_;
 }
 
 void WebStateImpl::ProcessWebUIMessage(const GURL& source_url,
@@ -279,11 +278,7 @@ const base::string16& WebStateImpl::GetTitle() const {
   // match the WebContents implementation of this method.
   DCHECK(Configured());
   web::NavigationItem* item = navigation_manager_.GetLastCommittedItem();
-  if (item) {
-    return item->GetTitleForDisplay(
-        web::GetWebClient()->GetAcceptLangs(GetBrowserState()));
-  }
-  return empty_string16_;
+  return item ? item->GetTitleForDisplay() : empty_string16_;
 }
 
 void WebStateImpl::ShowTransientContentView(CRWContentView* content_view) {
@@ -439,14 +434,6 @@ RequestTrackerImpl* WebStateImpl::GetRequestTracker() {
   return request_tracker_.get();
 }
 
-net::RequestTracker::CacheMode WebStateImpl::GetCacheMode() {
-  return cache_mode_;
-}
-
-void WebStateImpl::SetCacheMode(net::RequestTracker::CacheMode mode) {
-  cache_mode_ = mode;
-}
-
 NSString* WebStateImpl::GetRequestGroupID() {
   if (request_group_id_.get() == nil)
     request_group_id_.reset([GenerateNewRequestGroupID() copy]);
@@ -477,10 +464,6 @@ base::WeakPtr<WebState> WebStateImpl::AsWeakPtr() {
 
 UIView* WebStateImpl::GetView() {
   return [web_controller_ view];
-}
-
-WebViewType WebStateImpl::GetWebViewType() const {
-  return [web_controller_ webViewType];
 }
 
 BrowserState* WebStateImpl::GetBrowserState() const {
@@ -559,6 +542,11 @@ void WebStateImpl::OnProvisionalNavigationStarted(const GURL& url) {
 // NavigationControllerIO::GoBack() actually goes back.
 void WebStateImpl::NavigateToPendingEntry() {
   [web_controller_ loadCurrentURL];
+}
+
+void WebStateImpl::LoadURLWithParams(
+    const NavigationManager::WebLoadParams& params) {
+  [web_controller_ loadWithParams:params];
 }
 
 void WebStateImpl::OnNavigationItemsPruned(size_t pruned_item_count) {

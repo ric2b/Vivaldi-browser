@@ -9,6 +9,8 @@
 #include <stdint.h>
 
 #include <list>
+#include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -16,6 +18,7 @@
 #include "net/http/http_stream.h"
 #include "net/quic/quic_chromium_client_session.h"
 #include "net/quic/quic_chromium_client_stream.h"
+#include "net/quic/quic_client_push_promise_index.h"
 
 namespace net {
 
@@ -29,6 +32,7 @@ class QuicHttpStreamPeer;
 class NET_EXPORT_PRIVATE QuicHttpStream
     : public QuicChromiumClientSession::Observer,
       public QuicChromiumClientStream::Delegate,
+      public QuicClientPushPromiseIndex::Delegate,
       public HttpStream {
  public:
   explicit QuicHttpStream(
@@ -77,13 +81,21 @@ class NET_EXPORT_PRIVATE QuicHttpStream
 
   // QuicChromiumClientSession::Observer implementation
   void OnCryptoHandshakeConfirmed() override;
-  void OnSessionClosed(int error) override;
+  void OnSessionClosed(int error, bool port_migration_detected) override;
+
+  // QuicClientPushPromiseIndex::Delegate implementation
+  bool CheckVary(const SpdyHeaderBlock& client_request,
+                 const SpdyHeaderBlock& promise_request,
+                 const SpdyHeaderBlock& promise_response) override;
+  void OnRendezvousResult(QuicSpdyStream* stream) override;
 
  private:
   friend class test::QuicHttpStreamPeer;
 
   enum State {
     STATE_NONE,
+    STATE_REQUEST_STREAM,
+    STATE_SET_REQUEST_PRIORITY,
     STATE_SEND_HEADERS,
     STATE_SEND_HEADERS_COMPLETE,
     STATE_READ_REQUEST_BODY,
@@ -97,7 +109,9 @@ class NET_EXPORT_PRIVATE QuicHttpStream
   void OnIOComplete(int rv);
   void DoCallback(int rv);
 
-  int DoLoop(int);
+  int DoLoop(int rv);
+  int DoStreamRequest();
+  int DoSetRequestPriority();
   int DoSendHeaders();
   int DoSendHeadersComplete(int rv);
   int DoReadRequestBody();
@@ -110,8 +124,11 @@ class NET_EXPORT_PRIVATE QuicHttpStream
   int ProcessResponseHeaders(const SpdyHeaderBlock& headers);
 
   int ReadAvailableData(IOBuffer* buf, int buf_len);
+  void EnterStateSendHeaders();
+  int HandlePromise();
 
   void ResetStream();
+  bool CancelPromiseIfHasBody();
 
   State next_state_;
 
@@ -177,6 +194,16 @@ class NET_EXPORT_PRIVATE QuicHttpStream
 
   // SSLInfo from the underlying QuicSession.
   SSLInfo ssl_info_;
+
+  // True when this stream receives a go away from server due to port migration.
+  bool port_migration_detected_;
+
+  bool found_promise_;
+  // |QuicClientPromisedInfo| owns this. It will be set when |Try()|
+  // is asynchronous, i.e. it returned QUIC_PENDING, and remains valid
+  // until |OnRendezvouResult()| fires or |push_handle_->Cancel()| is
+  // invoked.
+  QuicClientPushPromiseIndex::TryHandle* push_handle_;
 
   base::WeakPtrFactory<QuicHttpStream> weak_factory_;
 

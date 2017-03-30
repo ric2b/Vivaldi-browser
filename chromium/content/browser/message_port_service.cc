@@ -198,10 +198,6 @@ void MessagePortService::PostMessageTo(
     }
     entangled_port.queued_messages.push_back(
         std::make_pair(message, sent_message_ports));
-
-    if (entangled_port.delegate)
-      entangled_port.delegate->MessageWasHeld(entangled_port.route_id);
-
     return;
   }
 
@@ -293,6 +289,13 @@ void MessagePortService::HoldMessages(int message_port_id) {
       HoldMessages(sent_port.id);
 
   message_ports_[message_port_id].hold_messages_for_destination = true;
+}
+
+bool MessagePortService::AreMessagesHeld(int message_port_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (!message_ports_.count(message_port_id))
+    return false;
+  return message_ports_[message_port_id].hold_messages_for_destination;
 }
 
 void MessagePortService::ClosePort(int message_port_id) {

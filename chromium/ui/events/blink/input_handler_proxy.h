@@ -80,6 +80,8 @@ class InputHandlerProxy
   void SynchronouslyAnimate(base::TimeTicks time) override;
   void SynchronouslySetRootScrollOffset(
       const gfx::ScrollOffset& root_offset) override;
+  void SynchronouslyZoomBy(float magnify_delta,
+                           const gfx::Point& anchor) override;
 
   // blink::WebGestureCurveTarget implementation.
   bool scrollBy(const blink::WebFloatSize& offset,
@@ -88,6 +90,10 @@ class InputHandlerProxy
   bool gesture_scroll_on_impl_thread_for_testing() const {
     return gesture_scroll_on_impl_thread_;
   }
+
+ protected:
+  void RecordMainThreadScrollingReasons(blink::WebInputEvent::Type type,
+                                        uint32_t reasons);
 
  private:
   friend class test::InputHandlerProxyTest;
@@ -138,7 +144,12 @@ class InputHandlerProxy
       const cc::InputHandlerScrollResult& scroll_result);
 
   // Whether to use a smooth scroll animation for this event.
-  bool ShouldAnimate(const blink::WebMouseWheelEvent& event) const;
+  bool ShouldAnimate(bool has_precise_scroll_deltas) const;
+
+  // Update the elastic overscroll controller with |gesture_event|.
+  void HandleScrollElasticityOverscroll(
+      const blink::WebGestureEvent& gesture_event,
+      const cc::InputHandlerScrollResult& scroll_result);
 
   scoped_ptr<blink::WebGestureCurve> fling_curve_;
   // Parameters for the active fling animation, stored in case we need to

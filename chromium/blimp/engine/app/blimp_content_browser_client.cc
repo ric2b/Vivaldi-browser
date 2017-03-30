@@ -4,7 +4,9 @@
 
 #include "blimp/engine/app/blimp_content_browser_client.h"
 #include "blimp/engine/app/blimp_browser_main_parts.h"
-#include "blimp/engine/common/blimp_browser_context.h"
+#include "blimp/engine/app/settings_manager.h"
+#include "blimp/engine/mojo/blob_channel_service.h"
+#include "content/public/common/service_registry.h"
 
 namespace blimp {
 namespace engine {
@@ -20,19 +22,27 @@ content::BrowserMainParts* BlimpContentBrowserClient::CreateBrowserMainParts(
   return blimp_browser_main_parts_;
 }
 
-net::URLRequestContextGetter* BlimpContentBrowserClient::CreateRequestContext(
-    content::BrowserContext* content_browser_context,
-    content::ProtocolHandlerMap* protocol_handlers,
-    content::URLRequestInterceptorScopedVector request_interceptors) {
-  BlimpBrowserContext* blimp_context =
-      static_cast<BlimpBrowserContext*>(content_browser_context);
-  return blimp_context->CreateRequestContext(protocol_handlers,
-                                             std::move(request_interceptors))
-      .get();
+void BlimpContentBrowserClient::OverrideWebkitPrefs(
+    content::RenderViewHost* render_view_host,
+    content::WebPreferences* prefs) {
+  if (!blimp_browser_main_parts_)
+    return;
+
+  if (!blimp_browser_main_parts_->GetSettingsManager())
+    return;
+
+  blimp_browser_main_parts_->GetSettingsManager()->UpdateWebkitPreferences(
+      prefs);
 }
 
 BlimpBrowserContext* BlimpContentBrowserClient::GetBrowserContext() {
   return blimp_browser_main_parts_->GetBrowserContext();
+}
+
+void BlimpContentBrowserClient::RegisterRenderProcessMojoServices(
+    content::ServiceRegistry* registry) {
+  registry->AddService<mojom::BlobChannel>(
+      base::Bind(&BlobChannelService::Create));
 }
 
 }  // namespace engine

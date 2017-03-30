@@ -96,7 +96,7 @@ CompositedTouchHandleDrawable::CompositedTouchHandleDrawable(
     jobject context)
     : dpi_scale_(dpi_scale),
       orientation_(ui::TouchHandleOrientation::UNDEFINED),
-      layer_(cc::UIResourceLayer::Create(Compositor::LayerSettings())) {
+      layer_(cc::UIResourceLayer::Create()) {
   g_selection_resources.Get().LoadIfNecessary(context);
   drawable_horizontal_padding_ratio_ =
       g_selection_resources.Get().GetDrawableHorizontalPaddingRatio();

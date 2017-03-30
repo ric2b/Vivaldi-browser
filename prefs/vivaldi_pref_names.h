@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vivaldi Technologies
+// Copyright (c) 2015-2016 Vivaldi Technologies. All Rights Reserved.
 
 #ifndef VIVALDI_PREF_NAMES_H_
 #define VIVALDI_PREF_NAMES_H_
@@ -13,6 +13,7 @@ extern const char kSmoothScrollingEnabled[];
 extern const char kVivaldiTabsToLinks[];
 extern const char kVivaldiLastTopSitesVacuumDate[];
 extern const char kVivaldiTabZoom[];
+extern const char kVivaldiHomepage[];
 
 #if defined(OS_MACOSX)
 extern const char kAppleKeyboardUIMode[];

@@ -152,14 +152,13 @@ public:
     void updateElementIdAndCompositorMutableProperties();
 
     // GraphicsLayerClient interface
-    void notifyAnimationStarted(const GraphicsLayer*, double monotonicTime, int group) override;
     void notifyFirstPaint() override;
     void notifyFirstTextPaint() override;
     void notifyFirstImagePaint() override;
 
     IntRect computeInterestRect(const GraphicsLayer*, const IntRect& previousInterestRect) const override;
     LayoutSize subpixelAccumulation() const final;
-    bool needsRepaint() const override;
+    bool needsRepaint(const GraphicsLayer&) const override;
     void paintContents(const GraphicsLayer*, GraphicsContext&, GraphicsLayerPaintingPhase, const IntRect& interestRect) const override;
 
     bool isTrackingPaintInvalidations() const override;
@@ -221,6 +220,11 @@ private:
 
     static const GraphicsLayerPaintInfo* containingSquashedLayer(const LayoutObject*,  const Vector<GraphicsLayerPaintInfo>& layers, unsigned maxSquashedLayerIndex);
 
+    // Paints the scrollbar part associated with the given graphics layer into the given context.
+    void paintScrollableArea(const GraphicsLayer*, GraphicsContext&, const IntRect& interestRect) const;
+    // Returns whether the given layer is part of the scrollable area, if any, associated with this mapping.
+    bool isScrollableAreaLayer(const GraphicsLayer*) const;
+
     // Helper methods to updateGraphicsLayerGeometry:
     void computeGraphicsLayerParentLocation(const PaintLayer* compositingContainer, const IntRect& ancestorCompositingBounds, IntPoint& graphicsLayerParentLocation);
     void updateSquashingLayerGeometry(const LayoutPoint& offsetFromCompositedAncestor, const IntPoint& graphicsLayerParentLocation, const PaintLayer& referenceLayer, Vector<GraphicsLayerPaintInfo>& layers, GraphicsLayer*, LayoutPoint* offsetFromTransformedAncestor, Vector<PaintLayer*>& layersNeedingPaintInvalidation);
@@ -255,9 +259,9 @@ private:
     bool updateBackgroundLayer(bool needsBackgroundLayer);
     bool updateMaskLayer(bool needsMaskLayer);
     void updateChildClippingMaskLayer(bool needsChildClippingMaskLayer);
-    bool requiresHorizontalScrollbarLayer() const { return m_owningLayer.scrollableArea() && m_owningLayer.scrollableArea()->horizontalScrollbar(); }
-    bool requiresVerticalScrollbarLayer() const { return m_owningLayer.scrollableArea() && m_owningLayer.scrollableArea()->verticalScrollbar(); }
-    bool requiresScrollCornerLayer() const { return m_owningLayer.scrollableArea() && !m_owningLayer.scrollableArea()->scrollCornerAndResizerRect().isEmpty(); }
+    bool requiresHorizontalScrollbarLayer() const { return m_owningLayer.getScrollableArea() && m_owningLayer.getScrollableArea()->horizontalScrollbar(); }
+    bool requiresVerticalScrollbarLayer() const { return m_owningLayer.getScrollableArea() && m_owningLayer.getScrollableArea()->verticalScrollbar(); }
+    bool requiresScrollCornerLayer() const { return m_owningLayer.getScrollableArea() && !m_owningLayer.getScrollableArea()->scrollCornerAndResizerRect().isEmpty(); }
     bool updateScrollingLayers(bool scrollingLayers);
     void updateScrollParent(const PaintLayer*);
     void updateClipParent(const PaintLayer* scrollParent);

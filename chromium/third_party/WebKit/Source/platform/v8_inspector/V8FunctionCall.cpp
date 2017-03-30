@@ -30,6 +30,7 @@
 
 #include "platform/v8_inspector/V8FunctionCall.h"
 
+#include "platform/v8_inspector/V8DebuggerImpl.h"
 #include "platform/v8_inspector/V8StringUtil.h"
 #include "platform/v8_inspector/public/V8DebuggerClient.h"
 #include "wtf/PassOwnPtr.h"
@@ -38,8 +39,8 @@
 
 namespace blink {
 
-V8FunctionCall::V8FunctionCall(V8DebuggerClient* client, v8::Local<v8::Context> context, v8::Local<v8::Value> value, const String& name)
-    : m_client(client)
+V8FunctionCall::V8FunctionCall(V8DebuggerImpl* debugger, v8::Local<v8::Context> context, v8::Local<v8::Value> value, const String16& name)
+    : m_debugger(debugger)
     , m_context(context)
     , m_name(toV8String(context->GetIsolate(), name))
     , m_value(value)
@@ -51,7 +52,7 @@ void V8FunctionCall::appendArgument(v8::Local<v8::Value> value)
     m_arguments.append(value);
 }
 
-void V8FunctionCall::appendArgument(const String& argument)
+void V8FunctionCall::appendArgument(const String16& argument)
 {
     m_arguments.append(toV8String(m_context->GetIsolate(), argument));
 }
@@ -89,6 +90,10 @@ v8::Local<v8::Value> V8FunctionCall::call()
 
 v8::Local<v8::Value> V8FunctionCall::callWithoutExceptionHandling()
 {
+    // TODO(dgozman): get rid of this check.
+    if (!m_debugger->client()->isExecutionAllowed())
+        return v8::Local<v8::Value>();
+
     v8::Local<v8::Object> thisObject = v8::Local<v8::Object>::Cast(m_value);
     v8::Local<v8::Value> value;
     if (!thisObject->Get(m_context, m_name).ToLocal(&value))
@@ -103,8 +108,9 @@ v8::Local<v8::Value> V8FunctionCall::callWithoutExceptionHandling()
         ASSERT(!info[i].IsEmpty());
     }
 
+    v8::MicrotasksScope microtasksScope(m_context->GetIsolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
     v8::Local<v8::Value> result;
-    if (!m_client->callFunction(function, m_context, thisObject, m_arguments.size(), info.get()).ToLocal(&result))
+    if (!function->Call(m_context, thisObject, m_arguments.size(), info.get()).ToLocal(&result))
         return v8::Local<v8::Value>();
     return result;
 }

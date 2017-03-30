@@ -40,9 +40,9 @@ protected:
     WebGLVertexArrayObjectBase(WebGLRenderingContextBase*, VaoType);
 
 private:
-    void dispatchDetached(WebGraphicsContext3D*);
+    void dispatchDetached(gpu::gles2::GLES2Interface*);
     bool hasObject() const override { return m_object != 0; }
-    void deleteObjectImpl(WebGraphicsContext3D*) override;
+    void deleteObjectImpl(gpu::gles2::GLES2Interface*) override;
 
     Platform3DObject m_object;
 

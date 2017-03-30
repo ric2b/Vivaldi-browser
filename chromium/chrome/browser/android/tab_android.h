@@ -8,10 +8,11 @@
 #include <jni.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/android/jni_weak_ref.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/search/instant_service_observer.h"
 #include "chrome/browser/sync/glue/synced_tab_delegate_android.h"
@@ -122,7 +123,6 @@ class TabAndroid : public CoreTabHelperDelegate,
 
   bool HasOfflinePages() const;
   void ShowOfflinePages();
-  void LoadOfflineCopy(const GURL& url);
 
   // Notifies this TabAndroid that a Lo-Fi response has been received. The
   // TabAndroid then handles showing Lo-Fi UI if this is the first Lo-Fi
@@ -267,8 +267,6 @@ class TabAndroid : public CoreTabHelperDelegate,
  private:
   prerender::PrerenderManager* GetPrerenderManager() const;
 
-  int64_t GetBookmarkIdHelper(bool only_editable) const;
-
   JavaObjectWeakGlobalRef weak_java_tab_;
 
   // The identifier used by session restore for this tab.
@@ -282,11 +280,11 @@ class TabAndroid : public CoreTabHelperDelegate,
   scoped_refptr<cc::Layer> content_layer_;
   chrome::android::TabContentManager* tab_content_manager_;
 
-  scoped_ptr<content::WebContents> web_contents_;
-  scoped_ptr<chrome::android::TabWebContentsDelegateAndroid>
+  std::unique_ptr<content::WebContents> web_contents_;
+  std::unique_ptr<chrome::android::TabWebContentsDelegateAndroid>
       web_contents_delegate_;
 
-  scoped_ptr<browser_sync::SyncedTabDelegateAndroid> synced_tab_delegate_;
+  std::unique_ptr<browser_sync::SyncedTabDelegateAndroid> synced_tab_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(TabAndroid);
 };

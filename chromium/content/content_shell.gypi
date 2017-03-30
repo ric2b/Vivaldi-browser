@@ -25,14 +25,13 @@
         'content.gyp:content_browser',
         'content.gyp:content_common',
         'content.gyp:content_gpu',
-        'content.gyp:content_plugin',
         'content.gyp:content_ppapi_plugin',
         'content.gyp:content_renderer',
         'content.gyp:content_resources',
         'content.gyp:content_utility',
         'content_shell_resources',
+        'content_shell_mojo_bindings',
         'content_test_mojo_bindings',
-        'copy_test_netscape_plugin',
         'layouttest_support_content',
         '../base/base.gyp:base',
         '../base/base.gyp:base_static',
@@ -55,6 +54,7 @@
         '../media/media.gyp:media',
         '../net/net.gyp:net',
         '../net/net.gyp:net_resources',
+        '../ppapi/ppapi_internal.gyp:blink_deprecated_test_plugin',
         '../ppapi/ppapi_internal.gyp:blink_test_plugin',
         '../skia/skia.gyp:skia',
         '../storage/storage_browser.gyp:storage',
@@ -68,8 +68,10 @@
         '../ui/gfx/gfx.gyp:gfx',
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../ui/gfx/ipc/gfx_ipc.gyp:gfx_ipc',
+        '../ui/gfx/ipc/skia/gfx_ipc_skia.gyp:gfx_ipc_skia',
         '../ui/gl/gl.gyp:gl',
         '../url/url.gyp:url_lib',
+        '../url/ipc/url_ipc.gyp:url_ipc',
         '../v8/tools/gyp/v8.gyp:v8',
       ],
       'include_dirs': [
@@ -99,6 +101,8 @@
         'shell/browser/layout_test/blink_test_controller.h',
         'shell/browser/layout_test/layout_test_android.cc',
         'shell/browser/layout_test/layout_test_android.h',
+        'shell/browser/layout_test/layout_test_bluetooth_fake_adapter_setter_impl.cc',
+        'shell/browser/layout_test/layout_test_bluetooth_fake_adapter_setter_impl.h',
         'shell/browser/layout_test/layout_test_bluetooth_adapter_provider.cc',
         'shell/browser/layout_test/layout_test_bluetooth_adapter_provider.h',
         'shell/browser/layout_test/layout_test_bluetooth_chooser_factory.cc',
@@ -119,8 +123,6 @@
         'shell/browser/layout_test/layout_test_javascript_dialog_manager.h',
         'shell/browser/layout_test/layout_test_message_filter.cc',
         'shell/browser/layout_test/layout_test_message_filter.h',
-        'shell/browser/layout_test/layout_test_navigator_connect_service_factory.cc',
-        'shell/browser/layout_test/layout_test_navigator_connect_service_factory.h',
         'shell/browser/layout_test/layout_test_notification_manager.cc',
         'shell/browser/layout_test/layout_test_notification_manager.h',
         'shell/browser/layout_test/layout_test_permission_manager.cc',
@@ -193,8 +195,12 @@
         'shell/browser/shell_web_contents_view_delegate_creator.h',
         'shell/browser/shell_web_contents_view_delegate_mac.mm',
         'shell/browser/shell_web_contents_view_delegate_win.cc',
+        'shell/common/layout_test/layout_test_content_client.cc',
+        'shell/common/layout_test/layout_test_content_client.h',
         'shell/common/layout_test/layout_test_messages.cc',
         'shell/common/layout_test/layout_test_messages.h',
+        'shell/common/layout_test/layout_test_switches.cc',
+        'shell/common/layout_test/layout_test_switches.h',
         'shell/common/leak_detection_result.h',
         'shell/common/shell_content_client.cc',
         'shell/common/shell_content_client.h',
@@ -541,103 +547,25 @@
       ],
     },
     {
-      'target_name': 'test_netscape_plugin',
-      'conditions': [
-        ['OS != "win" and OS != "mac"', {
-          'type': 'none',
-        }, {  # OS=="win" or OS=="mac"
-          'type': 'loadable_module',
-          'sources': [
-            'shell/tools/plugin/PluginObject.cpp',
-            'shell/tools/plugin/PluginObject.h',
-            'shell/tools/plugin/PluginTest.cpp',
-            'shell/tools/plugin/PluginTest.h',
-            'shell/tools/plugin/TestObject.cpp',
-            'shell/tools/plugin/Tests/EvaluateJSAfterRemovingPluginElement.cpp',
-            'shell/tools/plugin/Tests/FormValue.cpp',
-            'shell/tools/plugin/Tests/GetUserAgentWithNullNPPFromNPPNew.cpp',
-            'shell/tools/plugin/Tests/LeakWindowScriptableObject.cpp',
-            'shell/tools/plugin/Tests/LogNPPSetWindow.cpp',
-            'shell/tools/plugin/Tests/NPDeallocateCalledBeforeNPShutdown.cpp',
-            'shell/tools/plugin/Tests/NPPNewFails.cpp',
-            'shell/tools/plugin/Tests/NPRuntimeCallsWithNullNPP.cpp',
-            'shell/tools/plugin/Tests/NPRuntimeObjectFromDestroyedPlugin.cpp',
-            'shell/tools/plugin/Tests/NPRuntimeRemoveProperty.cpp',
-            'shell/tools/plugin/Tests/NullNPPGetValuePointer.cpp',
-            'shell/tools/plugin/Tests/PassDifferentNPPStruct.cpp',
-            'shell/tools/plugin/Tests/PluginScriptableNPObjectInvokeDefault.cpp',
-            'shell/tools/plugin/Tests/PluginScriptableObjectOverridesAllProperties.cpp',
-            'shell/tools/plugin/main.cpp',
-            'shell/tools/plugin/test_object.h',
-          ],
-          'include_dirs': [
-            '<(DEPTH)',
-            '<(DEPTH)/content/shell/tools/plugin/',
-          ],
-          'dependencies': [
-            '../base/base.gyp:base',
-            '../third_party/npapi/npapi.gyp:npapi',
-          ],
-          'conditions': [
-            ['OS=="mac"', {
-              'mac_bundle': 1,
-              'product_extension': 'plugin',
-              'link_settings': {
-                'libraries': [
-                  '$(SDKROOT)/System/Library/Frameworks/Carbon.framework',
-                  '$(SDKROOT)/System/Library/Frameworks/Cocoa.framework',
-                  '$(SDKROOT)/System/Library/Frameworks/QuartzCore.framework',
-                ]
-              },
-              'xcode_settings': {
-                'GCC_SYMBOLS_PRIVATE_EXTERN': 'NO',
-                'INFOPLIST_FILE': 'shell/tools/plugin/mac/Info.plist',
-              },
-            }],
-            ['OS=="win"', {
-              'conditions': [
-                ['MSVS_VERSION < "2015"', {
-                  'defines': [
-                    # This seems like a hack, but this is what Safari Win does.
-                    # Luckily it is no longer needed/allowed with VS 2015.
-                    'snprintf=_snprintf',
-                  ],
-                }],
-              ],
-              'sources': [
-                'shell/tools/plugin/win/TestNetscapePlugin.def',
-                'shell/tools/plugin/win/TestNetscapePlugin.rc',
-              ],
-              # The .rc file requires that the name of the dll is np_test_netscape_plugin.dll.
-              'product_name': 'np_test_netscape_plugin',
-              # Disable c4267 warnings until we fix size_t to int truncations.
-              'msvs_disabled_warnings': [ 4267, ],
-            }],
-          ],
-        }],
-      ],
+       'target_name': 'content_shell_mojo_bindings_mojom',
+       'type': 'none',
+       'variables': {
+         'mojom_files': [
+           'shell/common/layout_test/layout_test_bluetooth_fake_adapter_setter.mojom'
+         ],
+       },
+       'includes': [
+         '../mojo/mojom_bindings_generator_explicit.gypi',
+       ],
     },
     {
-      'target_name': 'copy_test_netscape_plugin',
-      'type': 'none',
-      'dependencies': [
-        'test_netscape_plugin',
-      ],
-      'conditions': [
-        ['OS=="win"', {
-          'copies': [{
-            'destination': '<(PRODUCT_DIR)/plugins',
-            'files': ['<(PRODUCT_DIR)/np_test_netscape_plugin.dll'],
-          }],
-        }],
-        ['OS=="mac"', {
-          'copies': [{
-            'destination': '<(PRODUCT_DIR)/plugins/',
-            'files': ['<(PRODUCT_DIR)/test_netscape_plugin.plugin/'],
-          }],
-        }],
-      ],
-    }
+        'target_name': 'content_shell_mojo_bindings',
+        'type': 'static_library',
+        'dependencies': [
+          'content_shell_mojo_bindings_mojom',
+          '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+        ],
+    },
   ],
   'conditions': [
     ['OS=="mac"', {
@@ -705,6 +633,7 @@
               # that corresponds to Content Shell Framework.framework.
               'destination': '<(PRODUCT_DIR)/$(CONTENTS_FOLDER_PATH)',
               'files': [
+                '<(PRODUCT_DIR)/blink_deprecated_test_plugin.plugin',
                 '<(PRODUCT_DIR)/blink_test_plugin.plugin',
               ],
             },

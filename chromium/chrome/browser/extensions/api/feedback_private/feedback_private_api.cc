@@ -4,11 +4,12 @@
 
 #include "chrome/browser/extensions/api/feedback_private/feedback_private_api.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -19,6 +20,7 @@
 #include "chrome/browser/extensions/api/feedback_private/feedback_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feedback/tracing_manager.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -28,6 +30,7 @@
 #include "ui/base/webui/web_ui_util.h"
 #include "url/url_util.h"
 
+using extensions::api::feedback_private::SystemInformation;
 using feedback::FeedbackData;
 
 namespace {
@@ -50,8 +53,7 @@ namespace feedback_private = api::feedback_private;
 
 using feedback_private::SystemInformation;
 using feedback_private::FeedbackInfo;
-
-char kFeedbackExtensionId[] = "gfdkimpbcpahaombhbimeihdjnejgicl";
+using feedback_private::FeedbackFlow;
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<FeedbackPrivateAPI> >
     g_factory = LAZY_INSTANCE_INITIALIZER;
@@ -79,27 +81,38 @@ void FeedbackPrivateAPI::RequestFeedback(
     const std::string& description_template,
     const std::string& category_tag,
     const GURL& page_url) {
+  RequestFeedbackForFlow(description_template, category_tag, page_url,
+                         FeedbackFlow::FEEDBACK_FLOW_REGULAR);
+}
+
+void FeedbackPrivateAPI::RequestFeedbackForFlow(
+    const std::string& description_template,
+    const std::string& category_tag,
+    const GURL& page_url,
+    api::feedback_private::FeedbackFlow flow) {
   if (browser_context_ && EventRouter::Get(browser_context_)) {
     FeedbackInfo info;
     info.description = description_template;
-    info.category_tag = make_scoped_ptr(new std::string(category_tag));
-    info.page_url = make_scoped_ptr(new std::string(page_url.spec()));
+    info.category_tag = base::WrapUnique(new std::string(category_tag));
+    info.page_url = base::WrapUnique(new std::string(page_url.spec()));
     info.system_information.reset(new SystemInformationList);
     // The manager is only available if tracing is enabled.
     if (TracingManager* manager = TracingManager::Get()) {
       info.trace_id.reset(new int(manager->RequestTrace()));
     }
+    info.flow = flow;
 
-    scoped_ptr<base::ListValue> args(new base::ListValue());
-    args->Append(info.ToValue().release());
+    std::unique_ptr<base::ListValue> args =
+        feedback_private::OnFeedbackRequested::Create(info);
 
-    scoped_ptr<Event> event(new Event(
+    std::unique_ptr<Event> event(new Event(
         events::FEEDBACK_PRIVATE_ON_FEEDBACK_REQUESTED,
         feedback_private::OnFeedbackRequested::kEventName, std::move(args)));
     event->restrict_to_browser_context = browser_context_;
 
     EventRouter::Get(browser_context_)
-        ->DispatchEventToExtension(kFeedbackExtensionId, std::move(event));
+        ->DispatchEventToExtension(extension_misc::kFeedbackExtensionId,
+                                   std::move(event));
   }
 }
 
@@ -179,7 +192,7 @@ void FeedbackPrivateGetSystemInformationFunction::OnCompleted(
 }
 
 bool FeedbackPrivateSendFeedbackFunction::RunAsync() {
-  scoped_ptr<feedback_private::SendFeedback::Params> params(
+  std::unique_ptr<feedback_private::SendFeedback::Params> params(
       feedback_private::SendFeedback::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -220,13 +233,12 @@ bool FeedbackPrivateSendFeedbackFunction::RunAsync() {
     feedback_data->set_trace_id(*feedback_info.trace_id.get());
   }
 
-  scoped_ptr<FeedbackData::SystemLogsMap> sys_logs(
+  std::unique_ptr<FeedbackData::SystemLogsMap> sys_logs(
       new FeedbackData::SystemLogsMap);
   SystemInformationList* sys_info = feedback_info.system_information.get();
   if (sys_info) {
-    for (SystemInformationList::iterator it = sys_info->begin();
-         it != sys_info->end(); ++it)
-      (*sys_logs.get())[it->get()->key] = it->get()->value;
+    for (const SystemInformation& info : *sys_info)
+      (*sys_logs)[info.key] = info.value;
   }
   feedback_data->SetAndCompressSystemInfo(std::move(sys_logs));
 
@@ -235,7 +247,7 @@ bool FeedbackPrivateSendFeedbackFunction::RunAsync() {
   DCHECK(service);
 
   if (feedback_info.send_histograms) {
-    scoped_ptr<std::string> histograms(new std::string);
+    std::unique_ptr<std::string> histograms(new std::string);
     *histograms = base::StatisticsRecorder::ToJSON(std::string());
     if (!histograms->empty())
       feedback_data->SetAndCompressHistograms(std::move(histograms));

@@ -6,14 +6,18 @@ package org.chromium.chrome.browser.compositor.bottombar.contextualsearch;
 
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
+import org.chromium.chrome.browser.contextualsearch.ContextualSearchBlacklist.BlacklistReason;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchUma;
+import org.chromium.chrome.browser.contextualsearch.TapSuppressionHeuristics;
 
 /**
  * This class is responsible for all the logging related to Contextual Search.
  */
 public class ContextualSearchPanelMetrics {
+    private static final int MILLISECONDS_TO_NANOSECONDS = 1000000;
 
     // Flags for logging.
+    private BlacklistReason mBlacklistReason;
     private boolean mDidSearchInvolvePromo;
     private boolean mWasSearchContentViewSeen;
     private boolean mIsPromoActive;
@@ -26,8 +30,23 @@ public class ContextualSearchPanelMetrics {
     private boolean mWasActivatedByTap;
     private boolean mIsSearchPanelFullyPreloaded;
     private boolean mWasIconSpriteAnimated;
-    private long mSearchStartTimeNs;
-    private long mSearchViewStartTimeNs;
+    private boolean mWasPanelOpenedBeyondPeek;
+    private boolean mWasSelectionPartOfUrl;
+    // Time when the panel peeks into view (not reset by a chained search).
+    // Used to log total time the panel is showing (not closed).
+    private long mFirstPeekTimeNs;
+    // Time when the panel contents come into view (when the panel is opened).
+    // Used to log preload effectiveness info -- additional time needed to fully render the
+    // content in the overlay.
+    private long mContentFirstViewTimeNs;
+    // Time when a search request was started. Reset by chained searches.
+    // Used to log the time it takes for a Search Result to become available.
+    private long mSearchRequestStartTimeNs;
+    // Time when the panel was opened beyond peeked. Reset when the panel is closed.
+    // Used to log how long the panel was open.
+    private long mPanelOpenedBeyondPeekTimeNs;
+    // The current set of heuristics that should be logged with results seen when the panel closes.
+    private TapSuppressionHeuristics mResultsSeenExperiments;
 
     /**
      * Log information when the panel's state has changed.
@@ -50,6 +69,9 @@ public class ContextualSearchPanelMetrics {
         boolean isFirstExitFromMaximized = fromState == PanelState.MAXIMIZED && !mHasExitedMaximized
                 && !isSameState;
         boolean isFirstSearchView = isFirstExitFromPeeking && toState != PanelState.CLOSED;
+        boolean isContentVisible =
+                toState == PanelState.MAXIMIZED || toState == PanelState.EXPANDED;
+        boolean isExitingPanelOpenedBeyondPeeked = mWasPanelOpenedBeyondPeek && !isContentVisible;
         // This variable is needed for logging and gets reset in an isStartingSearch block below,
         // so a local copy is created before the reset.
         boolean isSearchPanelFullyPreloaded = mIsSearchPanelFullyPreloaded;
@@ -57,7 +79,8 @@ public class ContextualSearchPanelMetrics {
         if (isEndingSearch) {
             if (!mDidSearchInvolvePromo) {
                 // Measure duration only when the promo is not involved.
-                long durationMs = (System.nanoTime() - mSearchStartTimeNs) / 1000000;
+                long durationMs =
+                        (System.nanoTime() - mFirstPeekTimeNs) / MILLISECONDS_TO_NANOSECONDS;
                 ContextualSearchUma.logDuration(mWasSearchContentViewSeen, isChained, durationMs);
             }
             if (mIsPromoActive) {
@@ -67,14 +90,38 @@ public class ContextualSearchPanelMetrics {
                 ContextualSearchUma.logResultsSeen(mWasSearchContentViewSeen, mWasActivatedByTap);
             }
 
+            if (mWasSelectionPartOfUrl) {
+                ContextualSearchUma.logResultsSeenSelectionIsUrl(mWasSearchContentViewSeen,
+                        mWasActivatedByTap);
+            }
+
+            ContextualSearchUma.logBlacklistSeen(mBlacklistReason, mWasSearchContentViewSeen);
+
             ContextualSearchUma.logIconSpriteAnimated(mWasIconSpriteAnimated,
                     mWasSearchContentViewSeen, mWasActivatedByTap);
+
+            if (mResultsSeenExperiments != null) {
+                mResultsSeenExperiments.logResultsSeen(
+                        mWasSearchContentViewSeen, mWasActivatedByTap);
+                mResultsSeenExperiments = null;
+            }
         }
+
+        if (isExitingPanelOpenedBeyondPeeked) {
+            assert mPanelOpenedBeyondPeekTimeNs != 0;
+            long durationPanelOpen = (System.nanoTime() - mPanelOpenedBeyondPeekTimeNs)
+                    / MILLISECONDS_TO_NANOSECONDS;
+            ContextualSearchUma.logPanelOpenDuration(durationPanelOpen);
+            mPanelOpenedBeyondPeekTimeNs = 0;
+            mWasPanelOpenedBeyondPeek = false;
+        }
+
         if (isStartingSearch) {
-            mSearchStartTimeNs = System.nanoTime();
-            mSearchViewStartTimeNs = 0;
+            mFirstPeekTimeNs = System.nanoTime();
+            mContentFirstViewTimeNs = 0;
             mIsSearchPanelFullyPreloaded = false;
             mWasActivatedByTap = reason == StateChangeReason.TEXT_SELECT_TAP;
+            mBlacklistReason = BlacklistReason.NONE;
         }
         if (isFirstSearchView) {
             onSearchPanelFirstView();
@@ -130,10 +177,19 @@ public class ContextualSearchPanelMetrics {
             mHasExitedExpanded = false;
             mHasExitedMaximized = false;
             mIsSerpNavigation = false;
+            mWasSelectionPartOfUrl = false;
         }
 
         // TODO(manzagop): When the user opts in, we should replay his actions for the current
         // contextual search for the standard (non promo) UMA histograms.
+    }
+
+    /**
+     * Sets the reason why the current selection was blacklisted.
+     * @param reason The given reason.
+     */
+    public void setBlacklistReason(BlacklistReason reason) {
+        mBlacklistReason = reason;
     }
 
     /**
@@ -148,6 +204,8 @@ public class ContextualSearchPanelMetrics {
      */
     public void setWasSearchContentViewSeen() {
         mWasSearchContentViewSeen = true;
+        mWasPanelOpenedBeyondPeek = true;
+        mPanelOpenedBeyondPeekTimeNs = System.nanoTime();
     }
 
     /**
@@ -165,10 +223,26 @@ public class ContextualSearchPanelMetrics {
     }
 
     /**
-     * Gets whether the promo is active.
+     * @param wasPartOfUrl Whether the selected text was part of a URL.
      */
-    private boolean getIsPromoActive() {
-        return mIsPromoActive;
+    public void setWasSelectionPartOfUrl(boolean wasPartOfUrl) {
+        mWasSelectionPartOfUrl = wasPartOfUrl;
+    }
+
+    /**
+     * Called to record the time when a search request started, for resolve and prefetch timing.
+     */
+    public void onSearchRequestStarted() {
+        mSearchRequestStartTimeNs = System.nanoTime();
+    }
+
+    /**
+     * Called when a Search Term has been resolved.
+     */
+    public void onSearchTermResolved() {
+        long durationMs =
+                (System.nanoTime() - mSearchRequestStartTimeNs) / MILLISECONDS_TO_NANOSECONDS;
+        ContextualSearchUma.logSearchTermResolutionDuration(durationMs);
     }
 
     /**
@@ -178,13 +252,32 @@ public class ContextualSearchPanelMetrics {
     public void onSearchResultsLoaded(boolean wasPrefetch) {
         if (mHasExpanded || mHasMaximized) {
             // Already opened, log how long it took.
-            assert mSearchViewStartTimeNs != 0;
-            long durationMs = (System.nanoTime() - mSearchViewStartTimeNs) / 1000000;
+            assert mContentFirstViewTimeNs != 0;
+            long durationMs =
+                    (System.nanoTime() - mContentFirstViewTimeNs) / MILLISECONDS_TO_NANOSECONDS;
             logSearchPanelLoadDuration(wasPrefetch, durationMs);
         }
 
         // Not yet opened, wait till an open to log.
         mIsSearchPanelFullyPreloaded = true;
+    }
+
+    /**
+     * Called after the panel has navigated to prefetched Search Results.
+     * This is the point where the search result starts to render in the panel.
+     */
+    public void onPanelNavigatedToPrefetchedSearch(boolean didResolve) {
+        long durationMs =
+                (System.nanoTime() - mSearchRequestStartTimeNs) / MILLISECONDS_TO_NANOSECONDS;
+        ContextualSearchUma.logPrefetchedSearchNavigatedDuration(durationMs, didResolve);
+    }
+
+    /**
+     * Sets the experiments to log with results seen.
+     * @param resultsSeenExperiments The experiments to log when the panel results are known.
+     */
+    public void setResultsSeenExperiments(TapSuppressionHeuristics resultsSeenExperiments) {
+        mResultsSeenExperiments = resultsSeenExperiments;
     }
 
     /**
@@ -196,7 +289,7 @@ public class ContextualSearchPanelMetrics {
             logSearchPanelLoadDuration(true, 0);
         } else {
             // Start a loading timer.
-            mSearchViewStartTimeNs = System.nanoTime();
+            mContentFirstViewTimeNs = System.nanoTime();
         }
     }
 

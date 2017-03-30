@@ -45,10 +45,11 @@
 #include "WebNavigatorContentUtilsClient.h"
 #include "WebSandboxFlags.h"
 #include "WebTextDirection.h"
+#include "public/platform/BlameContext.h"
 #include "public/platform/WebCommon.h"
 #include "public/platform/WebFileSystem.h"
 #include "public/platform/WebFileSystemType.h"
-#include "public/platform/WebMediaPlayer.h"
+#include "public/platform/WebLoadingBehaviorFlag.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebSetSinkIdCallbacks.h"
 #include "public/platform/WebStorageQuotaCallbacks.h"
@@ -60,6 +61,7 @@
 namespace blink {
 
 enum class WebTreeScopeType;
+class ServiceRegistry;
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
 class WebAppBannerClient;
@@ -75,6 +77,8 @@ class WebExternalPopupMenu;
 class WebExternalPopupMenuClient;
 class WebFormElement;
 class WebGeolocationClient;
+class WebInstalledAppClient;
+class WebMediaPlayer;
 class WebMediaPlayerClient;
 class WebMediaPlayerEncryptedMediaClient;
 class WebMediaSession;
@@ -113,7 +117,7 @@ public:
 
     // May return null.
     // WebContentDecryptionModule* may be null if one has not yet been set.
-    virtual WebMediaPlayer* createMediaPlayer(WebMediaPlayer::LoadType, const WebURL&, WebMediaPlayerClient*, WebMediaPlayerEncryptedMediaClient*, WebContentDecryptionModule*, const WebString& sinkId, WebMediaSession*) { return 0; }
+    virtual WebMediaPlayer* createMediaPlayer(const WebURL&, WebMediaPlayerClient*, WebMediaPlayerEncryptedMediaClient*, WebContentDecryptionModule*, const WebString& sinkId, WebMediaSession*) { return 0; }
 
     // May return null.
     virtual WebMediaSession* createMediaSession() { return 0; }
@@ -139,6 +143,8 @@ public:
     // WebKitPlatformSupport::cookieJar() will be called to access cookies.
     virtual WebCookieJar* cookieJar() { return 0; }
 
+    // Returns a blame context for attributing work belonging to this frame.
+    virtual BlameContext* frameBlameContext() { return nullptr; }
 
     // General notifications -----------------------------------------------
 
@@ -180,6 +186,14 @@ public:
 
     // This frame has been set to enforce strict mixed content checking.
     virtual void didEnforceStrictMixedContentChecking() {}
+
+    // This frame has been updated to a unique origin, which should be
+    // considered potentially trustworthy if
+    // |isPotentiallyTrustworthyUniqueOrigin| is true. TODO(estark):
+    // this method only exists to support dynamic sandboxing via a CSP
+    // delivered in a <meta> tag. This is not supposed to be allowed per
+    // the CSP spec and should be ripped out. https://crbug.com/594645
+    virtual void didUpdateToUniqueOrigin(bool isPotentiallyTrustworthyUniqueOrigin) {}
 
     // The sandbox flags have changed for a child frame of this frame.
     virtual void didChangeSandboxFlags(WebFrame* childFrame, WebSandboxFlags flags) { }
@@ -369,6 +383,10 @@ public:
     // Used to access the embedder for the Presentation API.
     virtual WebPresentationClient* presentationClient() { return 0; }
 
+    // InstalledApp API ----------------------------------------------------
+
+    // Used to access the embedder for the InstalledApp API.
+    virtual WebInstalledAppClient* installedAppClient() { return nullptr; }
 
     // Editing -------------------------------------------------------------
 
@@ -408,12 +426,10 @@ public:
         const WebString& message, const WebString& defaultValue,
         WebString* actualValue) { return false; }
 
-    // Displays a modal confirmation dialog containing the given message as
-    // description and OK/Cancel choices, where 'OK' means that it is okay
-    // to proceed with closing the view. Returns true if the user selects
-    // 'OK' or false otherwise.
-    virtual bool runModalBeforeUnloadDialog(
-        bool isReload, const WebString& message) { return true; }
+    // Displays a modal confirmation dialog with OK/Cancel choices, where 'OK'
+    // means that it is okay to proceed with closing the view. Returns true if
+    // the user selects 'OK' or false otherwise.
+    virtual bool runModalBeforeUnloadDialog(bool isReload) { return true; }
 
 
     // UI ------------------------------------------------------------------
@@ -476,6 +492,10 @@ public:
 
     // A performance timing event (e.g. first paint) occurred
     virtual void didChangePerformanceTiming() { }
+
+    // Blink exhibited a certain loading behavior that the browser process will
+    // use for segregated histograms.
+    virtual void didObserveLoadingBehavior(WebLoadingBehaviorFlag) { }
 
 
     // Script notifications ------------------------------------------------
@@ -607,12 +627,6 @@ public:
     // content/ APIs.
     virtual bool allowWebGL(bool defaultValue) { return defaultValue; }
 
-    // Notifies the client that a WebGL context was lost on this page with the
-    // given reason (one of the GL_ARB_robustness status codes; see
-    // Extensions3D.h in WebCore/platform/graphics).
-    virtual void didLoseWebGLContext(int) { }
-
-
     // Screen Orientation --------------------------------------------------
 
     // Access the embedder API for (client-based) screen orientation client .
@@ -710,7 +724,16 @@ public:
 
     // Checks that the given audio sink exists and is authorized. The result is provided via the callbacks.
     // This method takes ownership of the callbacks pointer.
-    virtual void checkIfAudioSinkExistsAndIsAuthorized(const WebString& sinkId, const WebSecurityOrigin&, WebSetSinkIdCallbacks*) { BLINK_ASSERT_NOT_REACHED(); }
+    virtual void checkIfAudioSinkExistsAndIsAuthorized(const WebString& sinkId, const WebSecurityOrigin&, WebSetSinkIdCallbacks* callbacks)
+    {
+        if (callbacks) {
+            callbacks->onError(WebSetSinkIdError::NotSupported);
+            delete callbacks;
+        }
+    }
+
+    // Mojo ----------------------------------------------------------------
+    virtual ServiceRegistry* serviceRegistry() { return nullptr; }
 
 protected:
     virtual ~WebFrameClient() { }

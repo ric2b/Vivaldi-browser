@@ -23,7 +23,7 @@
 
 #include "core/SVGNames.h"
 #include "core/fetch/ImageResource.h"
-#include "core/fetch/ImageResourceClient.h"
+#include "core/fetch/ResourceClient.h"
 #include "core/svg/SVGAnimatedPreserveAspectRatio.h"
 #include "core/svg/SVGFilterPrimitiveStandardAttributes.h"
 #include "core/svg/SVGURIReference.h"
@@ -33,9 +33,9 @@ namespace blink {
 
 class SVGFEImageElement final : public SVGFilterPrimitiveStandardAttributes,
                                 public SVGURIReference,
-                                public ImageResourceClient {
+                                public ResourceClient {
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(SVGFEImageElement);
+    USING_GARBAGE_COLLECTED_MIXIN(SVGFEImageElement);
 public:
     DECLARE_NODE_FACTORY(SVGFEImageElement);
 
@@ -55,7 +55,7 @@ private:
     void notifyFinished(Resource*) override;
     String debugName() const override { return "SVGFEImageElement"; }
 
-    PassRefPtrWillBeRawPtr<FilterEffect> build(SVGFilterBuilder*, Filter*) override;
+    FilterEffect* build(SVGFilterBuilder*, Filter*) override;
 
     void clearResourceReferences();
     void fetchImageResource();
@@ -64,9 +64,9 @@ private:
     InsertionNotificationRequest insertedInto(ContainerNode*) override;
     void removedFrom(ContainerNode*) override;
 
-    RefPtrWillBeMember<SVGAnimatedPreserveAspectRatio> m_preserveAspectRatio;
+    Member<SVGAnimatedPreserveAspectRatio> m_preserveAspectRatio;
 
-    RefPtrWillBeMember<ImageResource> m_cachedImage;
+    Member<ImageResource> m_cachedImage;
 };
 
 } // namespace blink

@@ -7,6 +7,9 @@
 #import <Cocoa/Cocoa.h>
 
 #import "base/mac/scoped_nsautorelease_pool.h"
+#include "ui/base/test/scoped_fake_nswindow_focus.h"
+#include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
+#include "ui/base/test/ui_controls.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/views/test/event_generator_delegate_mac.h"
 #include "ui/views/widget/widget.h"
@@ -31,6 +34,18 @@ ViewsTestHelperMac::ViewsTestHelperMac()
 }
 
 ViewsTestHelperMac::~ViewsTestHelperMac() {
+}
+
+void ViewsTestHelperMac::SetUp() {
+  ViewsTestHelper::SetUp();
+  // Assume that if the methods in the ui_controls.h test header are enabled
+  // then the test runner is in a non-sharded mode, and will use "real"
+  // activations and fullscreen mode. This allows interactive_ui_tests to test
+  // the actual OS window activation and fullscreen codepaths.
+  if (!ui_controls::IsUIControlsEnabled()) {
+    faked_focus_.reset(new ui::test::ScopedFakeNSWindowFocus);
+    faked_fullscreen_.reset(new ui::test::ScopedFakeNSWindowFullscreen);
+  }
 }
 
 void ViewsTestHelperMac::TearDown() {

@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/free_deleter.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/sha1.h"
 #include "base/strings/string_util.h"
@@ -25,8 +26,6 @@
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_certificate_known_roots_win.h"
-
-#pragma comment(lib, "crypt32.lib")
 
 #if !defined(CERT_TRUST_HAS_WEAK_SIGNATURE)
 // This was introduced in Windows 8 / Windows Server 2012, but retroactively

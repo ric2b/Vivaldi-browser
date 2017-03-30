@@ -125,7 +125,7 @@ bool CustomElementConstructorBuilder::validateOptions(const AtomicString& type, 
     return true;
 }
 
-PassRefPtrWillBeRawPtr<CustomElementLifecycleCallbacks> CustomElementConstructorBuilder::createCallbacks()
+RawPtr<CustomElementLifecycleCallbacks> CustomElementConstructorBuilder::createCallbacks()
 {
     ASSERT(!m_prototype.IsEmpty());
 
@@ -230,11 +230,11 @@ bool CustomElementConstructorBuilder::prototypeIsValid(const AtomicString& type,
     return true;
 }
 
-bool CustomElementConstructorBuilder::didRegisterDefinition(CustomElementDefinition* definition) const
+bool CustomElementConstructorBuilder::didRegisterDefinition() const
 {
     ASSERT(!m_constructor.IsEmpty());
 
-    return m_callbacks->setBinding(definition, CustomElementBinding::create(m_scriptState->isolate(), m_prototype));
+    return m_callbacks->setBinding(CustomElementBinding::create(m_scriptState->isolate(), m_prototype));
 }
 
 ScriptValue CustomElementConstructorBuilder::bindingsReturnValue() const
@@ -282,7 +282,7 @@ static void constructCustomElement(const v8::FunctionCallbackInfo<v8::Value>& in
 
     ExceptionState exceptionState(ExceptionState::ConstructionContext, "CustomElement", info.Holder(), info.GetIsolate());
     CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;
-    RefPtrWillBeRawPtr<Element> element = document->createElementNS(namespaceURI, tagName, maybeType->IsNull() ? nullAtom : type, exceptionState);
+    RawPtr<Element> element = document->createElementNS(namespaceURI, tagName, maybeType->IsNull() ? nullAtom : type, exceptionState);
     if (exceptionState.throwIfNeeded())
         return;
     v8SetReturnValueFast(info, element.release(), document);

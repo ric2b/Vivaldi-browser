@@ -17,7 +17,7 @@
 
 namespace blink {
 
-RemoteFontFaceSource::RemoteFontFaceSource(PassRefPtrWillBeRawPtr<FontResource> font, PassRefPtrWillBeRawPtr<FontLoader> fontLoader, FontDisplay display)
+RemoteFontFaceSource::RemoteFontFaceSource(FontResource* font, FontLoader* fontLoader, FontDisplay display)
     : m_font(font)
     , m_fontLoader(fontLoader)
     , m_display(display)
@@ -69,7 +69,7 @@ void RemoteFontFaceSource::pruneTable()
 
 bool RemoteFontFaceSource::isLoading() const
 {
-    return !m_font->stillNeedsLoad() && !m_font->isLoaded();
+    return m_font->isLoading();
 }
 
 bool RemoteFontFaceSource::isLoaded() const

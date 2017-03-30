@@ -17,11 +17,13 @@
 #include "device/bluetooth/test/bluetooth_test_android.h"
 #elif defined(OS_MACOSX)
 #include "device/bluetooth/test/bluetooth_test_mac.h"
+#elif defined(OS_WIN)
+#include "device/bluetooth/test/bluetooth_test_win.h"
 #endif
 
 namespace device {
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_MACOSX) || defined(OS_WIN)
 class BluetoothGattCharacteristicTest : public BluetoothTest {
  public:
   // Creates adapter_, device_, service_, characteristic1_, & characteristic2_.
@@ -50,6 +52,7 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
   enum class StartNotifySetupError {
     CHARACTERISTIC_PROPERTIES,
     CONFIG_DESCRIPTOR_MISSING,
+    CONFIG_DESCRIPTOR_DUPLICATE,
     SET_NOTIFY,
     WRITE_DESCRIPTOR,
     NONE
@@ -67,13 +70,23 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
     }
     ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(properties));
 
+    size_t expected_descriptors_count = 0;
     if (error != StartNotifySetupError::CONFIG_DESCRIPTOR_MISSING) {
       SimulateGattDescriptor(
           characteristic1_,
-          /* Client Characteristic Configuration descriptor's standard UUID: */
-          "00002902-0000-1000-8000-00805F9B34FB");
-      ASSERT_EQ(1u, characteristic1_->GetDescriptors().size());
+          BluetoothGattDescriptor::ClientCharacteristicConfigurationUuid()
+              .canonical_value());
+      expected_descriptors_count++;
     }
+    if (error == StartNotifySetupError::CONFIG_DESCRIPTOR_DUPLICATE) {
+      SimulateGattDescriptor(
+          characteristic1_,
+          BluetoothGattDescriptor::ClientCharacteristicConfigurationUuid()
+              .canonical_value());
+      expected_descriptors_count++;
+    }
+    ASSERT_EQ(expected_descriptors_count,
+              characteristic1_->GetDescriptors().size());
 
     if (error == StartNotifySetupError::SET_NOTIFY) {
       SimulateGattCharacteristicSetNotifyWillFailSynchronouslyOnce(
@@ -96,9 +109,9 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
         GetNotifyCallback(Call::EXPECTED),
         GetGattErrorCallback(Call::NOT_EXPECTED));
 
-    EXPECT_EQ(1, gatt_notify_characteristic_attempts_);
     EXPECT_EQ(0, callback_count_);
     SimulateGattNotifySessionStarted(characteristic1_);
+    EXPECT_EQ(1, gatt_notify_characteristic_attempts_);
     EXPECT_EQ(1, callback_count_);
     EXPECT_EQ(0, error_callback_count_);
     ASSERT_EQ(1u, notify_sessions_.size());
@@ -123,7 +136,7 @@ class BluetoothGattCharacteristicTest : public BluetoothTest {
 };
 #endif
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 TEST_F(BluetoothGattCharacteristicTest, GetIdentifier) {
   InitWithFakeAdapter();
   StartLowEnergyDiscoverySession();
@@ -184,9 +197,9 @@ TEST_F(BluetoothGattCharacteristicTest, GetIdentifier) {
 
   EXPECT_NE(char5->GetIdentifier(), char6->GetIdentifier());
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 TEST_F(BluetoothGattCharacteristicTest, GetUUID) {
   InitWithFakeAdapter();
   StartLowEnergyDiscoverySession();
@@ -222,9 +235,9 @@ TEST_F(BluetoothGattCharacteristicTest, GetUUID) {
   EXPECT_EQ(uuid2, char2->GetUUID());
   EXPECT_EQ(uuid2, char3->GetUUID());
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 TEST_F(BluetoothGattCharacteristicTest, GetProperties) {
   InitWithFakeAdapter();
   StartLowEnergyDiscoverySession();
@@ -250,9 +263,9 @@ TEST_F(BluetoothGattCharacteristicTest, GetProperties) {
   EXPECT_EQ(0, properties1);
   EXPECT_EQ(7, properties2);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests GetService.
 TEST_F(BluetoothGattCharacteristicTest, GetService) {
   ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
@@ -260,68 +273,75 @@ TEST_F(BluetoothGattCharacteristicTest, GetService) {
   EXPECT_EQ(service_, characteristic1_->GetService());
   EXPECT_EQ(service_, characteristic2_->GetService());
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests ReadRemoteCharacteristic and GetValue with empty value buffer.
 TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_Empty) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_READ));
 
   characteristic1_->ReadRemoteCharacteristic(
       GetReadValueCallback(Call::EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
-  EXPECT_EQ(1, gatt_read_characteristic_attempts_);
   std::vector<uint8_t> empty_vector;
   SimulateGattCharacteristicRead(characteristic1_, empty_vector);
 
   // Duplicate read reported from OS shouldn't cause a problem:
   SimulateGattCharacteristicRead(characteristic1_, empty_vector);
 
+  EXPECT_EQ(1, gatt_read_characteristic_attempts_);
   EXPECT_EQ(empty_vector, last_read_value_);
   EXPECT_EQ(empty_vector, characteristic1_->GetValue());
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests WriteRemoteCharacteristic with empty value buffer.
 TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_Empty) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_WRITE));
 
   std::vector<uint8_t> empty_vector;
   characteristic1_->WriteRemoteCharacteristic(
       empty_vector, GetCallback(Call::EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
+  SimulateGattCharacteristicWrite(characteristic1_);
   EXPECT_EQ(1, gatt_write_characteristic_attempts_);
+
+  // Duplicate write reported from OS shouldn't cause a problem:
   SimulateGattCharacteristicWrite(characteristic1_);
 
   EXPECT_EQ(empty_vector, last_write_value_);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests ReadRemoteCharacteristic completing after Chrome objects are deleted.
 TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_AfterDeleted) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_READ));
 
   characteristic1_->ReadRemoteCharacteristic(
       GetReadValueCallback(Call::NOT_EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
 
   RememberCharacteristicForSubsequentAction(characteristic1_);
-  DeleteDevice(device_);
+  DeleteDevice(device_);  // TODO(576906) delete only the characteristic.
 
   std::vector<uint8_t> empty_vector;
   SimulateGattCharacteristicRead(/* use remembered characteristic */ nullptr,
                                  empty_vector);
   EXPECT_TRUE("Did not crash!");
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests WriteRemoteCharacteristic completing after Chrome objects are deleted.
 TEST_F(BluetoothGattCharacteristicTest,
        WriteRemoteCharacteristic_AfterDeleted) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_WRITE));
 
   std::vector<uint8_t> empty_vector;
   characteristic1_->WriteRemoteCharacteristic(
@@ -329,22 +349,22 @@ TEST_F(BluetoothGattCharacteristicTest,
       GetGattErrorCallback(Call::NOT_EXPECTED));
 
   RememberCharacteristicForSubsequentAction(characteristic1_);
-  DeleteDevice(device_);
+  DeleteDevice(device_);  // TODO(576906) delete only the characteristic.
 
   SimulateGattCharacteristicWrite(/* use remembered characteristic */ nullptr);
   EXPECT_TRUE("Did not crash!");
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests ReadRemoteCharacteristic and GetValue with non-empty value buffer.
 TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_READ));
 
   characteristic1_->ReadRemoteCharacteristic(
       GetReadValueCallback(Call::EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
-  EXPECT_EQ(1, gatt_read_characteristic_attempts_);
 
   uint8_t values[] = {0, 1, 2, 3, 4, 0xf, 0xf0, 0xff};
   std::vector<uint8_t> test_vector(values, values + arraysize(values));
@@ -354,42 +374,45 @@ TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic) {
   std::vector<uint8_t> empty_vector;
   SimulateGattCharacteristicRead(characteristic1_, empty_vector);
 
+  EXPECT_EQ(1, gatt_read_characteristic_attempts_);
   EXPECT_EQ(test_vector, last_read_value_);
   EXPECT_EQ(test_vector, characteristic1_->GetValue());
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests WriteRemoteCharacteristic with non-empty value buffer.
 TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_WRITE));
 
   uint8_t values[] = {0, 1, 2, 3, 4, 0xf, 0xf0, 0xff};
   std::vector<uint8_t> test_vector(values, values + arraysize(values));
   characteristic1_->WriteRemoteCharacteristic(
       test_vector, GetCallback(Call::EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
-  EXPECT_EQ(1, gatt_write_characteristic_attempts_);
 
   SimulateGattCharacteristicWrite(characteristic1_);
 
+  EXPECT_EQ(1, gatt_write_characteristic_attempts_);
   EXPECT_EQ(test_vector, last_write_value_);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests ReadRemoteCharacteristic and GetValue multiple times.
 TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_Twice) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_READ));
 
   characteristic1_->ReadRemoteCharacteristic(
       GetReadValueCallback(Call::EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
-  EXPECT_EQ(1, gatt_read_characteristic_attempts_);
 
   uint8_t values[] = {0, 1, 2, 3, 4, 0xf, 0xf0, 0xff};
   std::vector<uint8_t> test_vector(values, values + arraysize(values));
   SimulateGattCharacteristicRead(characteristic1_, test_vector);
+  EXPECT_EQ(1, gatt_read_characteristic_attempts_);
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(test_vector, last_read_value_);
@@ -400,29 +423,30 @@ TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_Twice) {
   characteristic1_->ReadRemoteCharacteristic(
       GetReadValueCallback(Call::EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
-  EXPECT_EQ(1, gatt_read_characteristic_attempts_);
   std::vector<uint8_t> empty_vector;
   SimulateGattCharacteristicRead(characteristic1_, empty_vector);
+  EXPECT_EQ(1, gatt_read_characteristic_attempts_);
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(empty_vector, last_read_value_);
   EXPECT_EQ(empty_vector, characteristic1_->GetValue());
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests WriteRemoteCharacteristic multiple times.
 TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_Twice) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_WRITE));
 
   uint8_t values[] = {0, 1, 2, 3, 4, 0xf, 0xf0, 0xff};
   std::vector<uint8_t> test_vector(values, values + arraysize(values));
   characteristic1_->WriteRemoteCharacteristic(
       test_vector, GetCallback(Call::EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
-  EXPECT_EQ(1, gatt_write_characteristic_attempts_);
 
   SimulateGattCharacteristicWrite(characteristic1_);
+  EXPECT_EQ(1, gatt_write_characteristic_attempts_);
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(test_vector, last_write_value_);
@@ -433,19 +457,21 @@ TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_Twice) {
   characteristic1_->WriteRemoteCharacteristic(
       empty_vector, GetCallback(Call::EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
-  EXPECT_EQ(1, gatt_write_characteristic_attempts_);
+
   SimulateGattCharacteristicWrite(characteristic1_);
+  EXPECT_EQ(1, gatt_write_characteristic_attempts_);
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(empty_vector, last_write_value_);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests ReadRemoteCharacteristic on two characteristics.
 TEST_F(BluetoothGattCharacteristicTest,
        ReadRemoteCharacteristic_MultipleCharacteristics) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_READ));
 
   characteristic1_->ReadRemoteCharacteristic(
       GetReadValueCallback(Call::EXPECTED),
@@ -453,7 +479,6 @@ TEST_F(BluetoothGattCharacteristicTest,
   characteristic2_->ReadRemoteCharacteristic(
       GetReadValueCallback(Call::EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
-  EXPECT_EQ(2, gatt_read_characteristic_attempts_);
   EXPECT_EQ(0, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
 
@@ -467,49 +492,65 @@ TEST_F(BluetoothGattCharacteristicTest,
   SimulateGattCharacteristicRead(characteristic2_, test_vector2);
   EXPECT_EQ(test_vector2, last_read_value_);
 
+  EXPECT_EQ(2, gatt_read_characteristic_attempts_);
   EXPECT_EQ(2, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(test_vector1, characteristic1_->GetValue());
   EXPECT_EQ(test_vector2, characteristic2_->GetValue());
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests WriteRemoteCharacteristic on two characteristics.
 TEST_F(BluetoothGattCharacteristicTest,
        WriteRemoteCharacteristic_MultipleCharacteristics) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_WRITE));
 
   std::vector<uint8_t> test_vector1;
   test_vector1.push_back(111);
   characteristic1_->WriteRemoteCharacteristic(
       test_vector1, GetCallback(Call::EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
+#ifdef OS_ANDROID
   EXPECT_EQ(test_vector1, last_write_value_);
+#endif
 
   std::vector<uint8_t> test_vector2;
   test_vector2.push_back(222);
   characteristic2_->WriteRemoteCharacteristic(
       test_vector2, GetCallback(Call::EXPECTED),
       GetGattErrorCallback(Call::NOT_EXPECTED));
+#ifdef OS_ANDROID
   EXPECT_EQ(test_vector2, last_write_value_);
+#endif
 
-  EXPECT_EQ(2, gatt_write_characteristic_attempts_);
   EXPECT_EQ(0, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
 
   SimulateGattCharacteristicWrite(characteristic1_);
-  SimulateGattCharacteristicWrite(characteristic2_);
+#ifndef OS_ANDROID
+  EXPECT_EQ(test_vector1, last_write_value_);
+#endif
 
+  SimulateGattCharacteristicWrite(characteristic2_);
+#ifndef OS_ANDROID
+  EXPECT_EQ(test_vector2, last_write_value_);
+#endif
+
+  EXPECT_EQ(2, gatt_write_characteristic_attempts_);
   EXPECT_EQ(2, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
-}
-#endif  // defined(OS_ANDROID)
 
-#if defined(OS_ANDROID)
+  // TODO(591740): Remove if define for OS_ANDROID in this test.
+}
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
+
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests ReadRemoteCharacteristic asynchronous error.
 TEST_F(BluetoothGattCharacteristicTest, ReadError) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_READ));
 
   characteristic1_->ReadRemoteCharacteristic(
       GetReadValueCallback(Call::NOT_EXPECTED),
@@ -521,12 +562,13 @@ TEST_F(BluetoothGattCharacteristicTest, ReadError) {
   EXPECT_EQ(BluetoothGattService::GATT_ERROR_INVALID_LENGTH,
             last_gatt_error_code_);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests WriteRemoteCharacteristic asynchronous error.
 TEST_F(BluetoothGattCharacteristicTest, WriteError) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_WRITE));
 
   std::vector<uint8_t> empty_vector;
   characteristic1_->WriteRemoteCharacteristic(
@@ -540,7 +582,7 @@ TEST_F(BluetoothGattCharacteristicTest, WriteError) {
   EXPECT_EQ(BluetoothGattService::GATT_ERROR_INVALID_LENGTH,
             last_gatt_error_code_);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
 #if defined(OS_ANDROID)
 // Tests ReadRemoteCharacteristic synchronous error.
@@ -598,10 +640,11 @@ TEST_F(BluetoothGattCharacteristicTest, WriteSynchronousError) {
 }
 #endif  // defined(OS_ANDROID)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests ReadRemoteCharacteristic error with a pending read operation.
 TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_ReadPending) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_READ));
 
   characteristic1_->ReadRemoteCharacteristic(
       GetReadValueCallback(Call::EXPECTED),
@@ -624,13 +667,14 @@ TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_ReadPending) {
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests WriteRemoteCharacteristic error with a pending write operation.
 TEST_F(BluetoothGattCharacteristicTest,
        WriteRemoteCharacteristic_WritePending) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_WRITE));
 
   std::vector<uint8_t> empty_vector;
   characteristic1_->WriteRemoteCharacteristic(
@@ -653,12 +697,14 @@ TEST_F(BluetoothGattCharacteristicTest,
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests ReadRemoteCharacteristic error with a pending write operation.
 TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_WritePending) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_READ |
+      BluetoothGattCharacteristic::PROPERTY_WRITE));
 
   std::vector<uint8_t> empty_vector;
   characteristic1_->WriteRemoteCharacteristic(
@@ -681,12 +727,14 @@ TEST_F(BluetoothGattCharacteristicTest, ReadRemoteCharacteristic_WritePending) {
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests WriteRemoteCharacteristic error with a pending Read operation.
 TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_ReadPending) {
-  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate(
+      BluetoothGattCharacteristic::PROPERTY_READ |
+      BluetoothGattCharacteristic::PROPERTY_WRITE));
 
   std::vector<uint8_t> empty_vector;
   characteristic1_->ReadRemoteCharacteristic(
@@ -708,9 +756,9 @@ TEST_F(BluetoothGattCharacteristicTest, WriteRemoteCharacteristic_ReadPending) {
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // StartNotifySession fails if characteristic doesn't have Notify or Indicate
 // property.
 TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoNotifyOrIndicate) {
@@ -725,10 +773,12 @@ TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoNotifyOrIndicate) {
   EXPECT_EQ(0, error_callback_count_);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, error_callback_count_);
+  EXPECT_EQ(BluetoothGattService::GATT_ERROR_NOT_SUPPORTED,
+            last_gatt_error_code_);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // StartNotifySession fails if the characteristic is missing the Client
 // Characteristic Configuration descriptor.
 TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoConfigDescriptor) {
@@ -743,13 +793,37 @@ TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_NoConfigDescriptor) {
   EXPECT_EQ(0, error_callback_count_);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, error_callback_count_);
+  EXPECT_EQ(BluetoothGattService::GATT_ERROR_NOT_SUPPORTED,
+            last_gatt_error_code_);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
+
+#if defined(OS_ANDROID) || defined(OS_WIN)
+// StartNotifySession fails if the characteristic has multiple Client
+// Characteristic Configuration descriptors.
+TEST_F(BluetoothGattCharacteristicTest,
+       StartNotifySession_MultipleConfigDescriptor) {
+  ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
+      /* properties: NOTIFY */ 0x10,
+      /* expected_config_descriptor_value: NOTIFY */ 1,
+      StartNotifySetupError::CONFIG_DESCRIPTOR_DUPLICATE));
+
+  EXPECT_EQ(0, gatt_notify_characteristic_attempts_);
+
+  // The expected error callback is asynchronous:
+  EXPECT_EQ(0, error_callback_count_);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1, error_callback_count_);
+  EXPECT_EQ(BluetoothGattService::GATT_ERROR_FAILED, last_gatt_error_code_);
+}
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
 #if defined(OS_ANDROID)
 // StartNotifySession fails synchronously when failing to set a characteristic
 // to enable notifications.
 // Android: This is mBluetoothGatt.setCharacteristicNotification failing.
+// Windows: Synchronous Test Not Applicable: OS calls are all made
+// asynchronously from BluetoothTaskManagerWin.
 TEST_F(BluetoothGattCharacteristicTest,
        StartNotifySession_FailToSetCharacteristicNotification) {
   ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
@@ -769,6 +843,8 @@ TEST_F(BluetoothGattCharacteristicTest,
 
 #if defined(OS_ANDROID)
 // Tests StartNotifySession descriptor write synchronous failure.
+// Windows: Synchronous Test Not Applicable: OS calls are all made
+// asynchronously from BluetoothTaskManagerWin.
 TEST_F(BluetoothGattCharacteristicTest,
        StartNotifySession_WriteDescriptorSynchronousError) {
   ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
@@ -786,25 +862,25 @@ TEST_F(BluetoothGattCharacteristicTest,
 }
 #endif  // defined(OS_ANDROID)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests StartNotifySession success on a characteristic enabling Notify.
 TEST_F(BluetoothGattCharacteristicTest, StartNotifySession) {
   ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
       /* properties: NOTIFY */ 0x10,
       /* expected_config_descriptor_value: NOTIFY */ 1));
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests StartNotifySession success on a characteristic enabling Indicate.
 TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_OnIndicate) {
   ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
       /* properties: INDICATE */ 0x20,
       /* expected_config_descriptor_value: INDICATE */ 2));
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests StartNotifySession success on a characteristic enabling Notify &
 // Indicate.
 TEST_F(BluetoothGattCharacteristicTest,
@@ -813,9 +889,97 @@ TEST_F(BluetoothGattCharacteristicTest,
       /* properties: NOTIFY and INDICATE bits set */ 0x30,
       /* expected_config_descriptor_value: NOTIFY */ 1));
 }
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
+
+#if defined(OS_ANDROID) || defined(OS_WIN)
+// Tests multiple StartNotifySession success.
+TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_Multiple) {
+  ASSERT_NO_FATAL_FAILURE(
+      FakeCharacteristicBoilerplate(/* properties: NOTIFY */ 0x10));
+  SimulateGattDescriptor(
+      characteristic1_,
+      BluetoothGattDescriptor::ClientCharacteristicConfigurationUuid()
+          .canonical_value());
+  ASSERT_EQ(1u, characteristic1_->GetDescriptors().size());
+
+  characteristic1_->StartNotifySession(
+      GetNotifyCallback(Call::EXPECTED),
+      GetGattErrorCallback(Call::NOT_EXPECTED));
+  characteristic1_->StartNotifySession(
+      GetNotifyCallback(Call::EXPECTED),
+      GetGattErrorCallback(Call::NOT_EXPECTED));
+  EXPECT_EQ(0, callback_count_);
+  SimulateGattNotifySessionStarted(characteristic1_);
+  EXPECT_EQ(1, gatt_notify_characteristic_attempts_);
+  EXPECT_EQ(2, callback_count_);
+  EXPECT_EQ(0, error_callback_count_);
+  ASSERT_EQ(2u, notify_sessions_.size());
+  ASSERT_TRUE(notify_sessions_[0]);
+  ASSERT_TRUE(notify_sessions_[1]);
+  EXPECT_EQ(characteristic1_->GetIdentifier(),
+            notify_sessions_[0]->GetCharacteristicIdentifier());
+  EXPECT_EQ(characteristic1_->GetIdentifier(),
+            notify_sessions_[1]->GetCharacteristicIdentifier());
+  EXPECT_TRUE(notify_sessions_[0]->IsActive());
+  EXPECT_TRUE(notify_sessions_[1]->IsActive());
+}
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
+
+#if defined(OS_ANDROID)
+// Tests multiple StartNotifySessions pending and then an error.
+TEST_F(BluetoothGattCharacteristicTest, StartNotifySessionError_Multiple) {
+  ASSERT_NO_FATAL_FAILURE(
+      FakeCharacteristicBoilerplate(/* properties: NOTIFY */ 0x10));
+  SimulateGattDescriptor(
+      characteristic1_,
+      BluetoothGattDescriptor::ClientCharacteristicConfigurationUuid()
+          .canonical_value());
+  ASSERT_EQ(1u, characteristic1_->GetDescriptors().size());
+
+  characteristic1_->StartNotifySession(GetNotifyCallback(Call::NOT_EXPECTED),
+                                       GetGattErrorCallback(Call::EXPECTED));
+  characteristic1_->StartNotifySession(GetNotifyCallback(Call::NOT_EXPECTED),
+                                       GetGattErrorCallback(Call::EXPECTED));
+  EXPECT_EQ(1, gatt_notify_characteristic_attempts_);
+  EXPECT_EQ(0, callback_count_);
+  SimulateGattNotifySessionStartError(characteristic1_,
+                                      BluetoothGattService::GATT_ERROR_FAILED);
+  EXPECT_EQ(0, callback_count_);
+  EXPECT_EQ(2, error_callback_count_);
+  ASSERT_EQ(0u, notify_sessions_.size());
+  EXPECT_EQ(BluetoothGattService::GATT_ERROR_FAILED, last_gatt_error_code_);
+}
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID)
+// Tests StartNotifySession completing after chrome objects are deleted.
+TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_AfterDeleted) {
+  ASSERT_NO_FATAL_FAILURE(
+      FakeCharacteristicBoilerplate(/* properties: NOTIFY */ 0x10));
+  SimulateGattDescriptor(
+      characteristic1_,
+      BluetoothGattDescriptor::ClientCharacteristicConfigurationUuid()
+          .canonical_value());
+  ASSERT_EQ(1u, characteristic1_->GetDescriptors().size());
+
+  characteristic1_->StartNotifySession(GetNotifyCallback(Call::NOT_EXPECTED),
+                                       GetGattErrorCallback(Call::EXPECTED));
+  EXPECT_EQ(1, gatt_notify_characteristic_attempts_);
+  EXPECT_EQ(0, callback_count_);
+
+  RememberCharacteristicForSubsequentAction(characteristic1_);
+  RememberCCCDescriptorForSubsequentAction(characteristic1_);
+  DeleteDevice(device_);  // TODO(576906) delete only the characteristic.
+
+  SimulateGattNotifySessionStarted(/* use remembered characteristic */ nullptr);
+  EXPECT_EQ(0, callback_count_);
+  EXPECT_EQ(1, error_callback_count_);
+  ASSERT_EQ(0u, notify_sessions_.size());
+  EXPECT_EQ(BluetoothGattService::GATT_ERROR_FAILED, last_gatt_error_code_);
+}
+#endif  // defined(OS_ANDROID)
+
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests Characteristic Value changes during a Notify Session.
 TEST_F(BluetoothGattCharacteristicTest, GattCharacteristicValueChanged) {
   ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
@@ -836,9 +1000,9 @@ TEST_F(BluetoothGattCharacteristicTest, GattCharacteristicValueChanged) {
   EXPECT_EQ(2, observer.gatt_characteristic_value_changed_count());
   EXPECT_EQ(test_vector2, characteristic1_->GetValue());
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 // Tests Characteristic Value changing after a Notify Session and objects being
 // destroyed.
 TEST_F(BluetoothGattCharacteristicTest,
@@ -846,67 +1010,28 @@ TEST_F(BluetoothGattCharacteristicTest,
   ASSERT_NO_FATAL_FAILURE(StartNotifyBoilerplate(
       /* properties: NOTIFY */ 0x10,
       /* expected_config_descriptor_value: NOTIFY */ 1));
+  TestBluetoothAdapterObserver observer(adapter_);
 
   RememberCharacteristicForSubsequentAction(characteristic1_);
-  DeleteDevice(device_);
+  DeleteDevice(device_);  // TODO(576906) delete only the characteristic.
 
   std::vector<uint8_t> empty_vector;
   SimulateGattCharacteristicChanged(/* use remembered characteristic */ nullptr,
                                     empty_vector);
   EXPECT_TRUE("Did not crash!");
+  EXPECT_EQ(0, observer.gatt_characteristic_value_changed_count());
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
-// Tests multiple StartNotifySession success.
-TEST_F(BluetoothGattCharacteristicTest, StartNotifySession_Multiple) {
-  ASSERT_NO_FATAL_FAILURE(
-      FakeCharacteristicBoilerplate(/* properties: NOTIFY */ 0x10));
-  SimulateGattDescriptor(
-      characteristic1_,
-      /* Client Characteristic Configuration descriptor's standard UUID: */
-      "00002902-0000-1000-8000-00805F9B34FB");
-  ASSERT_EQ(1u, characteristic1_->GetDescriptors().size());
-
-  characteristic1_->StartNotifySession(
-      GetNotifyCallback(Call::EXPECTED),
-      GetGattErrorCallback(Call::NOT_EXPECTED));
-  characteristic1_->StartNotifySession(
-      GetNotifyCallback(Call::EXPECTED),
-      GetGattErrorCallback(Call::NOT_EXPECTED));
-#if defined(OS_ANDROID)
-  // TODO(crbug.com/551634): Decide when implementing IsNotifying if Android
-  // should trust the notification request always worked, or if we should always
-  // redundantly set the value to the OS.
-  EXPECT_EQ(2, gatt_notify_characteristic_attempts_);
-#else
-  EXPECT_EQ(1, gatt_notify_characteristic_attempts_);
-#endif
-  EXPECT_EQ(0, callback_count_);
-  SimulateGattNotifySessionStarted(characteristic1_);
-  EXPECT_EQ(2, callback_count_);
-  EXPECT_EQ(0, error_callback_count_);
-  ASSERT_EQ(2u, notify_sessions_.size());
-  ASSERT_TRUE(notify_sessions_[0]);
-  ASSERT_TRUE(notify_sessions_[1]);
-  EXPECT_EQ(characteristic1_->GetIdentifier(),
-            notify_sessions_[0]->GetCharacteristicIdentifier());
-  EXPECT_EQ(characteristic1_->GetIdentifier(),
-            notify_sessions_[1]->GetCharacteristicIdentifier());
-  EXPECT_TRUE(notify_sessions_[0]->IsActive());
-  EXPECT_TRUE(notify_sessions_[1]->IsActive());
-}
-#endif  // defined(OS_ANDROID)
-
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 TEST_F(BluetoothGattCharacteristicTest, GetDescriptors_FindNone) {
   ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
 
   EXPECT_EQ(0u, characteristic1_->GetDescriptors().size());
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_WIN)
 TEST_F(BluetoothGattCharacteristicTest, GetDescriptors_and_GetDescriptor) {
   ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
 
@@ -949,6 +1074,36 @@ TEST_F(BluetoothGattCharacteristicTest, GetDescriptors_and_GetDescriptor) {
   // ... but not uuid 3
   EXPECT_FALSE(c1_uuid1 == uuid3 || c1_uuid2 == uuid3);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
+
+#if defined(OS_ANDROID) || defined(OS_WIN)
+TEST_F(BluetoothGattCharacteristicTest, GetDescriptorsByUUID) {
+  ASSERT_NO_FATAL_FAILURE(FakeCharacteristicBoilerplate());
+
+  // Add several Descriptors:
+  BluetoothUUID id1("11111111-0000-1000-8000-00805f9b34fb");
+  BluetoothUUID id2("22222222-0000-1000-8000-00805f9b34fb");
+  BluetoothUUID id3("33333333-0000-1000-8000-00805f9b34fb");
+  SimulateGattDescriptor(characteristic1_, id1.canonical_value());
+  SimulateGattDescriptor(characteristic1_, id2.canonical_value());
+  SimulateGattDescriptor(characteristic2_, id3.canonical_value());
+  SimulateGattDescriptor(characteristic2_, id3.canonical_value());
+
+  EXPECT_NE(characteristic2_->GetDescriptorsByUUID(id3).at(0)->GetIdentifier(),
+            characteristic2_->GetDescriptorsByUUID(id3).at(1)->GetIdentifier());
+
+  EXPECT_EQ(id1, characteristic1_->GetDescriptorsByUUID(id1).at(0)->GetUUID());
+  EXPECT_EQ(id2, characteristic1_->GetDescriptorsByUUID(id2).at(0)->GetUUID());
+  EXPECT_EQ(id3, characteristic2_->GetDescriptorsByUUID(id3).at(0)->GetUUID());
+  EXPECT_EQ(id3, characteristic2_->GetDescriptorsByUUID(id3).at(1)->GetUUID());
+  EXPECT_EQ(1u, characteristic1_->GetDescriptorsByUUID(id1).size());
+  EXPECT_EQ(1u, characteristic1_->GetDescriptorsByUUID(id2).size());
+  EXPECT_EQ(2u, characteristic2_->GetDescriptorsByUUID(id3).size());
+
+  EXPECT_EQ(0u, characteristic2_->GetDescriptorsByUUID(id1).size());
+  EXPECT_EQ(0u, characteristic2_->GetDescriptorsByUUID(id2).size());
+  EXPECT_EQ(0u, characteristic1_->GetDescriptorsByUUID(id3).size());
+}
+#endif  // defined(OS_ANDROID) || defined(OS_WIN)
 
 }  // namespace device

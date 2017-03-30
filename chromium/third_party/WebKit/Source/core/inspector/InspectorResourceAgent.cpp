@@ -50,6 +50,7 @@
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
+#include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/inspector/NetworkResourcesData.h"
 #include "core/loader/DocumentLoader.h"
@@ -70,6 +71,7 @@
 #include "platform/network/WebSocketHandshakeRequest.h"
 #include "platform/network/WebSocketHandshakeResponse.h"
 #include "platform/weborigin/KURL.h"
+#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/RefPtr.h"
@@ -77,7 +79,7 @@
 
 namespace blink {
 
-using GetResponseBodyCallback = protocol::Dispatcher::NetworkCommandHandler::GetResponseBodyCallback;
+using GetResponseBodyCallback = protocol::Backend::Network::GetResponseBodyCallback;
 
 namespace ResourceAgentState {
 static const char resourceAgentEnabled[] = "resourceAgentEnabled";
@@ -86,12 +88,19 @@ static const char cacheDisabled[] = "cacheDisabled";
 static const char userAgentOverride[] = "userAgentOverride";
 static const char monitoringXHR[] = "monitoringXHR";
 static const char blockedURLs[] = "blockedURLs";
+static const char totalBufferSize[] = "totalBufferSize";
+static const char resourceBufferSize[] = "resourceBufferSize";
 }
 
 namespace {
+// 100MB
+static size_t maximumTotalBufferSize = 100 * 1000 * 1000;
 
-// Keep in sync with kDevToolsRequestInitiator defined in devtools_network_controller.cc
-const char kDevToolsEmulateNetworkConditionsClientId[] = "X-DevTools-Emulate-Network-Conditions-Client-Id";
+// 10MB
+static size_t maximumResourceBufferSize = 10 * 1000 * 1000;
+}
+
+namespace {
 
 // Pattern may contain stars ('*') which match to any (possibly empty) string.
 // Stars implicitly assumed at the begin/end of pattern.
@@ -111,17 +120,17 @@ bool matches(const String& url, const String& pattern)
 
 static PassOwnPtr<protocol::Network::Headers> buildObjectForHeaders(const HTTPHeaderMap& headers)
 {
-    RefPtr<protocol::DictionaryValue> headersObject = protocol::DictionaryValue::create();
+    OwnPtr<protocol::DictionaryValue> headersObject = protocol::DictionaryValue::create();
     for (const auto& header : headers)
-        headersObject->setString(header.key.string(), header.value);
+        headersObject->setString(header.key.getString(), header.value);
     protocol::ErrorSupport errors;
-    return protocol::Network::Headers::parse(headersObject, &errors);
+    return protocol::Network::Headers::parse(headersObject.get(), &errors);
 }
 
 class InspectorFileReaderLoaderClient final : public FileReaderLoaderClient {
     WTF_MAKE_NONCOPYABLE(InspectorFileReaderLoaderClient);
 public:
-    InspectorFileReaderLoaderClient(PassRefPtr<BlobDataHandle> blob, PassOwnPtr<TextResourceDecoder> decoder, PassRefPtr<GetResponseBodyCallback> callback)
+    InspectorFileReaderLoaderClient(PassRefPtr<BlobDataHandle> blob, PassOwnPtr<TextResourceDecoder> decoder, PassOwnPtr<GetResponseBodyCallback> callback)
         : m_blob(blob)
         , m_decoder(decoder)
         , m_callback(callback)
@@ -182,7 +191,7 @@ private:
 
     RefPtr<BlobDataHandle> m_blob;
     OwnPtr<TextResourceDecoder> m_decoder;
-    RefPtr<GetResponseBodyCallback> m_callback;
+    OwnPtr<GetResponseBodyCallback> m_callback;
     OwnPtr<FileReaderLoader> m_loader;
     OwnPtr<ArrayBufferBuilder> m_rawData;
 };
@@ -247,8 +256,11 @@ String buildBlockedReason(ResourceRequestBlockedReason reason)
 
 void InspectorResourceAgent::restore()
 {
-    if (m_state->booleanProperty(ResourceAgentState::resourceAgentEnabled, false))
-        enable();
+    if (m_state->booleanProperty(ResourceAgentState::resourceAgentEnabled, false)) {
+        enable(
+            m_state->numberProperty(ResourceAgentState::totalBufferSize, maximumTotalBufferSize),
+            m_state->numberProperty(ResourceAgentState::resourceBufferSize, maximumResourceBufferSize));
+    }
 }
 
 static PassOwnPtr<protocol::Network::ResourceTiming> buildObjectForTiming(const ResourceLoadTiming& timing)
@@ -274,7 +286,7 @@ static PassOwnPtr<protocol::Network::ResourceTiming> buildObjectForTiming(const 
 static PassOwnPtr<protocol::Network::Request> buildObjectForResourceRequest(const ResourceRequest& request)
 {
     OwnPtr<protocol::Network::Request> requestObject = protocol::Network::Request::create()
-        .setUrl(urlWithoutFragment(request.url()).string())
+        .setUrl(urlWithoutFragment(request.url()).getString())
         .setMethod(request.httpMethod())
         .setHeaders(buildObjectForHeaders(request.httpHeaderFields()))
         .setInitialPriority(resourcePriorityJSON(request.priority())).build();
@@ -300,7 +312,6 @@ static PassOwnPtr<protocol::Network::Response> buildObjectForResourceResponse(co
         status = response.httpStatusCode();
         statusText = response.httpStatusText();
     }
-    RefPtr<protocol::DictionaryValue> headers;
     HTTPHeaderMap headersMap;
     if (response.resourceLoadInfo() && response.resourceLoadInfo()->responseHeaders.size())
         headersMap = response.resourceLoadInfo()->responseHeaders;
@@ -310,7 +321,7 @@ static PassOwnPtr<protocol::Network::Response> buildObjectForResourceResponse(co
     int64_t encodedDataLength = response.resourceLoadInfo() ? response.resourceLoadInfo()->encodedDataLength : -1;
 
     String securityState = protocol::Security::SecurityStateEnum::Unknown;
-    switch (response.securityStyle()) {
+    switch (response.getSecurityStyle()) {
     case ResourceResponse::SecurityStyleUnknown:
         securityState = protocol::Security::SecurityStateEnum::Unknown;
         break;
@@ -337,7 +348,7 @@ static PassOwnPtr<protocol::Network::Response> buildObjectForResourceResponse(co
         *isEmpty = !status && mimeType.isEmpty() && !headersMap.size();
 
     OwnPtr<protocol::Network::Response> responseObject = protocol::Network::Response::create()
-        .setUrl(urlWithoutFragment(response.url()).string())
+        .setUrl(urlWithoutFragment(response.url()).getString())
         .setStatus(status)
         .setStatusText(statusText)
         .setHeaders(buildObjectForHeaders(headersMap))
@@ -387,10 +398,10 @@ static PassOwnPtr<protocol::Network::Response> buildObjectForResourceResponse(co
     }
     responseObject->setProtocol(protocol);
 
-    if (response.securityStyle() != ResourceResponse::SecurityStyleUnknown
-        && response.securityStyle() != ResourceResponse::SecurityStyleUnauthenticated) {
+    if (response.getSecurityStyle() != ResourceResponse::SecurityStyleUnknown
+        && response.getSecurityStyle() != ResourceResponse::SecurityStyleUnauthenticated) {
 
-        const ResourceResponse::SecurityDetails* responseSecurityDetails = response.securityDetails();
+        const ResourceResponse::SecurityDetails* responseSecurityDetails = response.getSecurityDetails();
 
         int numUnknownSCTs = safeCast<int>(responseSecurityDetails->numUnknownSCTs);
         int numInvalidSCTs = safeCast<int>(responseSecurityDetails->numInvalidSCTs);
@@ -439,12 +450,14 @@ DEFINE_TRACE(InspectorResourceAgent)
 
 bool InspectorResourceAgent::shouldBlockRequest(const ResourceRequest& request)
 {
-    RefPtr<protocol::DictionaryValue> blockedURLs = m_state->getObject(ResourceAgentState::blockedURLs);
+    protocol::DictionaryValue* blockedURLs = m_state->getObject(ResourceAgentState::blockedURLs);
     if (!blockedURLs)
         return false;
-    String url = request.url().string();
-    for (const auto& entry : *blockedURLs) {
-        if (matches(url, entry.key))
+
+    String url = request.url().getString();
+    for (size_t i = 0; i < blockedURLs->size(); ++i) {
+        auto entry = blockedURLs->at(i);
+        if (matches(url, entry.first))
             return true;
     }
     return false;
@@ -464,7 +477,7 @@ void InspectorResourceAgent::willSendRequestInternal(LocalFrame* frame, unsigned
 {
     String requestId = IdentifiersFactory::requestId(identifier);
     String loaderId = IdentifiersFactory::loaderId(loader);
-    m_resourcesData->resourceCreated(requestId, loaderId);
+    m_resourcesData->resourceCreated(requestId, loaderId, request.url());
 
     InspectorPageAgent::ResourceType type = InspectorPageAgent::OtherResource;
     if (initiatorInfo.name == FetchInitiatorTypeNames::xmlhttprequest) {
@@ -488,7 +501,7 @@ void InspectorResourceAgent::willSendRequestInternal(LocalFrame* frame, unsigned
     requestInfo->setMixedContentType(mixedContentTypeForContextType(MixedContentChecker::contextTypeForInspector(frame, request)));
 
     String resourceType = InspectorPageAgent::resourceTypeJson(type);
-    frontend()->requestWillBeSent(requestId, frameId, loaderId, urlWithoutFragment(loader->url()).string(), requestInfo.release(), monotonicallyIncreasingTime(), currentTime(), initiatorObject.release(), buildObjectForResourceResponse(redirectResponse), resourceType);
+    frontend()->requestWillBeSent(requestId, frameId, loaderId, urlWithoutFragment(loader->url()).getString(), requestInfo.release(), monotonicallyIncreasingTime(), currentTime(), initiatorObject.release(), buildObjectForResourceResponse(redirectResponse), resourceType);
     if (m_pendingXHRReplayData && !m_pendingXHRReplayData->async())
         frontend()->flush();
 }
@@ -502,26 +515,27 @@ void InspectorResourceAgent::willSendRequest(LocalFrame* frame, unsigned long id
     if (initiatorInfo.name == FetchInitiatorTypeNames::document && loader->substituteData().isValid())
         return;
 
-    RefPtr<protocol::DictionaryValue> headers = m_state->getObject(ResourceAgentState::extraRequestHeaders);
+    protocol::DictionaryValue* headers = m_state->getObject(ResourceAgentState::extraRequestHeaders);
     if (headers) {
-        for (const auto& header : *headers) {
-            String value;
-            if (header.value->asString(&value))
-                request.setHTTPHeaderField(AtomicString(header.key), AtomicString(value));
+        for (size_t i = 0; i < headers->size(); ++i) {
+            auto header = headers->at(i);
+            String16 value;
+            if (header.second->asString(&value))
+                request.setHTTPHeaderField(AtomicString(header.first), AtomicString(String(value)));
         }
     }
 
     request.setReportRawHeaders(true);
 
     if (m_state->booleanProperty(ResourceAgentState::cacheDisabled, false)) {
-        request.setCachePolicy(ReloadBypassingCache);
+        request.setCachePolicy(WebCachePolicy::BypassingCache);
         request.setShouldResetAppCache(true);
     }
 
     willSendRequestInternal(frame, identifier, loader, request, redirectResponse, initiatorInfo);
 
     if (!m_hostId.isEmpty())
-        request.addHTTPHeaderField(kDevToolsEmulateNetworkConditionsClientId, AtomicString(m_hostId));
+        request.addHTTPHeaderField(InspectorInstrumentation::kInspectorEmulateNetworkConditionsClientId, AtomicString(m_hostId));
 }
 
 void InspectorResourceAgent::markResourceAsCached(unsigned long identifier)
@@ -647,7 +661,7 @@ void InspectorResourceAgent::willLoadXHR(XMLHttpRequest* xhr, ThreadableLoaderCl
     ASSERT(!m_pendingRequest);
     m_pendingRequest = client;
     m_pendingRequestType = InspectorPageAgent::XHRResource;
-    m_pendingXHRReplayData = XHRReplayData::create(xhr->executionContext(), method, urlWithoutFragment(url), async, formData.get(), includeCredentials);
+    m_pendingXHRReplayData = XHRReplayData::create(xhr->getExecutionContext(), method, urlWithoutFragment(url), async, formData.get(), includeCredentials);
     for (const auto& header : headers)
         m_pendingXHRReplayData->addHeader(header.key, header.value);
 }
@@ -687,7 +701,7 @@ void InspectorResourceAgent::didFinishXHRInternal(ExecutionContext* context, XML
 
     if (m_state->booleanProperty(ResourceAgentState::monitoringXHR, false)) {
         String message = (success ? "XHR finished loading: " : "XHR failed loading: ") + method + " \"" + url + "\".";
-        RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(NetworkMessageSource, DebugMessageLevel, message);
+        RawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(NetworkMessageSource, DebugMessageLevel, message);
         consoleMessage->setRequestIdentifier(it->value);
         m_inspectedFrames->root()->host()->consoleMessageStorage().reportMessage(context, consoleMessage.release());
     }
@@ -714,7 +728,7 @@ void InspectorResourceAgent::didFinishFetch(ExecutionContext* context, Threadabl
 
     if (m_state->booleanProperty(ResourceAgentState::monitoringXHR, false)) {
         String message = "Fetch complete: " + method + " \"" + url + "\".";
-        RefPtrWillBeRawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(NetworkMessageSource, DebugMessageLevel, message);
+        RawPtr<ConsoleMessage> consoleMessage = ConsoleMessage::create(NetworkMessageSource, DebugMessageLevel, message);
         consoleMessage->setRequestIdentifier(it->value);
         m_inspectedFrames->root()->host()->consoleMessageStorage().reportMessage(context, consoleMessage.release());
     }
@@ -733,7 +747,7 @@ void InspectorResourceAgent::willDispatchEventSourceEvent(ThreadableLoaderClient
     ThreadableLoaderClientRequestIdMap::iterator it = m_knownRequestIdMap.find(eventSource);
     if (it == m_knownRequestIdMap.end())
         return;
-    frontend()->eventSourceMessageReceived(IdentifiersFactory::requestId(it->value), monotonicallyIncreasingTime(), eventName.string(), eventId.string(), data);
+    frontend()->eventSourceMessageReceived(IdentifiersFactory::requestId(it->value), monotonicallyIncreasingTime(), eventName.getString(), eventId.getString(), data);
 }
 
 void InspectorResourceAgent::didFinishEventSourceRequest(ThreadableLoaderClient* eventSource)
@@ -744,19 +758,27 @@ void InspectorResourceAgent::didFinishEventSourceRequest(ThreadableLoaderClient*
 
 void InspectorResourceAgent::removedResourceFromMemoryCache(Resource* cachedResource)
 {
-    String content;
-    bool base64Encoded;
-    bool hasContent = InspectorPageAgent::cachedResourceContent(cachedResource, &content, &base64Encoded);
-    Vector<String> requestIds = m_resourcesData->removeResource(cachedResource);
-    if (hasContent && !isErrorStatusCode(cachedResource->response().httpStatusCode())) {
-        for (auto& request : requestIds)
-            m_resourcesData->setResourceContent(request, content, base64Encoded);
+    // Mark loaded resources or resources without the buffer as loaded.
+    if (cachedResource->isLoaded() || !cachedResource->resourceBuffer()) {
+        String content;
+        bool base64Encoded;
+        bool hasContent = InspectorPageAgent::cachedResourceContent(cachedResource, &content, &base64Encoded);
+        Vector<String> requestIds = m_resourcesData->removeResource(cachedResource);
+        if (hasContent && !isErrorStatusCode(cachedResource->response().httpStatusCode())) {
+            for (auto& request : requestIds)
+                m_resourcesData->setResourceContent(request, content, base64Encoded);
+        }
+        return;
     }
+    // We could be evicting resource being loaded, save the loaded part, the rest will be appended.
+    Vector<String> requestIds = m_resourcesData->removeResource(cachedResource);
+    for (auto& request : requestIds)
+        m_resourcesData->maybeAddResourceData(request, cachedResource->resourceBuffer()->data(), cachedResource->resourceBuffer()->size());
 }
 
 void InspectorResourceAgent::applyUserAgentOverride(String* userAgent)
 {
-    String userAgentOverride;
+    String16 userAgentOverride;
     m_state->getString(ResourceAgentState::userAgentOverride, &userAgentOverride);
     if (!userAgentOverride.isEmpty())
         *userAgent = userAgentOverride;
@@ -794,7 +816,7 @@ PassOwnPtr<protocol::Network::Initiator> InspectorResourceAgent::buildInitiatorO
     if (document && document->scriptableDocumentParser()) {
         OwnPtr<protocol::Network::Initiator> initiatorObject = protocol::Network::Initiator::create()
             .setType(protocol::Network::Initiator::TypeEnum::Parser).build();
-        initiatorObject->setUrl(urlWithoutFragment(document->url()).string());
+        initiatorObject->setUrl(urlWithoutFragment(document->url()).getString());
         if (TextPosition::belowRangePosition() != initiatorInfo.position)
             initiatorObject->setLineNumber(initiatorInfo.position.m_line.oneBasedInt());
         else
@@ -811,7 +833,7 @@ PassOwnPtr<protocol::Network::Initiator> InspectorResourceAgent::buildInitiatorO
 
 void InspectorResourceAgent::didCreateWebSocket(Document*, unsigned long identifier, const KURL& requestURL, const String&)
 {
-    frontend()->webSocketCreated(IdentifiersFactory::requestId(identifier), urlWithoutFragment(requestURL).string());
+    frontend()->webSocketCreated(IdentifiersFactory::requestId(identifier), urlWithoutFragment(requestURL).getString());
 }
 
 void InspectorResourceAgent::willSendWebSocketHandshakeRequest(Document*, unsigned long identifier, const WebSocketHandshakeRequest* request)
@@ -868,16 +890,19 @@ void InspectorResourceAgent::didReceiveWebSocketFrameError(unsigned long identif
     frontend()->webSocketFrameError(IdentifiersFactory::requestId(identifier), monotonicallyIncreasingTime(), errorMessage);
 }
 
-void InspectorResourceAgent::enable(ErrorString*)
+void InspectorResourceAgent::enable(ErrorString*, const Maybe<int>& totalBufferSize, const Maybe<int>& resourceBufferSize)
 {
-    enable();
+    enable(totalBufferSize.fromMaybe(maximumTotalBufferSize), resourceBufferSize.fromMaybe(maximumResourceBufferSize));
 }
 
-void InspectorResourceAgent::enable()
+void InspectorResourceAgent::enable(int totalBufferSize, int resourceBufferSize)
 {
     if (!frontend())
         return;
+    m_resourcesData->setResourcesDataSizeLimits(totalBufferSize, resourceBufferSize);
     m_state->setBoolean(ResourceAgentState::resourceAgentEnabled, true);
+    m_state->setNumber(ResourceAgentState::totalBufferSize, totalBufferSize);
+    m_state->setNumber(ResourceAgentState::resourceBufferSize, resourceBufferSize);
     m_instrumentingAgents->setInspectorResourceAgent(this);
 }
 
@@ -901,27 +926,29 @@ void InspectorResourceAgent::setExtraHTTPHeaders(ErrorString*, const PassOwnPtr<
     m_state->setObject(ResourceAgentState::extraRequestHeaders, headers->serialize());
 }
 
-bool InspectorResourceAgent::getResponseBodyBlob(const String& requestId, PassRefPtr<GetResponseBodyCallback> callback)
+bool InspectorResourceAgent::canGetResponseBodyBlob(const String& requestId)
 {
     NetworkResourcesData::ResourceData const* resourceData = m_resourcesData->data(requestId);
-    if (!resourceData)
+    BlobDataHandle* blob = resourceData ? resourceData->downloadedFileBlob() : nullptr;
+    if (!blob)
         return false;
-    if (BlobDataHandle* blob = resourceData->downloadedFileBlob()) {
-        if (LocalFrame* frame = IdentifiersFactory::frameById(m_inspectedFrames, resourceData->frameId())) {
-            if (Document* document = frame->document()) {
-                InspectorFileReaderLoaderClient* client = new InspectorFileReaderLoaderClient(blob, InspectorPageAgent::createResourceTextDecoder(resourceData->mimeType(), resourceData->textEncodingName()), callback);
-                client->start(document);
-                return true;
-            }
-        }
-    }
-    return false;
+    LocalFrame* frame = IdentifiersFactory::frameById(m_inspectedFrames, resourceData->frameId());
+    return frame && frame->document();
 }
 
-
-void InspectorResourceAgent::getResponseBody(ErrorString* errorString, const String& requestId, PassRefPtr<GetResponseBodyCallback> passCallback)
+void InspectorResourceAgent::getResponseBodyBlob(const String& requestId, PassOwnPtr<GetResponseBodyCallback> callback)
 {
-    RefPtr<GetResponseBodyCallback> callback = passCallback;
+    NetworkResourcesData::ResourceData const* resourceData = m_resourcesData->data(requestId);
+    BlobDataHandle* blob = resourceData->downloadedFileBlob();
+    LocalFrame* frame = IdentifiersFactory::frameById(m_inspectedFrames, resourceData->frameId());
+    Document* document = frame->document();
+    InspectorFileReaderLoaderClient* client = new InspectorFileReaderLoaderClient(blob, InspectorPageAgent::createResourceTextDecoder(resourceData->mimeType(), resourceData->textEncodingName()), callback);
+    client->start(document);
+}
+
+void InspectorResourceAgent::getResponseBody(ErrorString* errorString, const String& requestId, PassOwnPtr<GetResponseBodyCallback> passCallback)
+{
+    OwnPtr<GetResponseBodyCallback> callback = passCallback;
     NetworkResourcesData::ResourceData const* resourceData = m_resourcesData->data(requestId);
     if (!resourceData) {
         callback->sendFailure("No resource with given identifier found");
@@ -929,8 +956,10 @@ void InspectorResourceAgent::getResponseBody(ErrorString* errorString, const Str
     }
 
     // XHR with ResponseTypeBlob should be returned as blob.
-    if (resourceData->xhrReplayData() && getResponseBodyBlob(requestId, callback))
+    if (resourceData->xhrReplayData() && canGetResponseBodyBlob(requestId)) {
+        getResponseBodyBlob(requestId, callback.release());
         return;
+    }
 
     if (resourceData->hasContent()) {
         callback->sendSuccess(resourceData->content(), resourceData->base64Encoded());
@@ -959,25 +988,28 @@ void InspectorResourceAgent::getResponseBody(ErrorString* errorString, const Str
         }
     }
 
-    if (getResponseBodyBlob(requestId, callback))
+    if (canGetResponseBodyBlob(requestId)) {
+        getResponseBodyBlob(requestId, callback.release());
         return;
+    }
 
     callback->sendFailure("No data found for resource with given identifier");
 }
 
 void InspectorResourceAgent::addBlockedURL(ErrorString*, const String& url)
 {
-    RefPtr<protocol::DictionaryValue> blockedURLs = m_state->getObject(ResourceAgentState::blockedURLs);
+    protocol::DictionaryValue* blockedURLs = m_state->getObject(ResourceAgentState::blockedURLs);
     if (!blockedURLs) {
-        blockedURLs = protocol::DictionaryValue::create();
-        m_state->setObject(ResourceAgentState::blockedURLs, blockedURLs);
+        OwnPtr<protocol::DictionaryValue> newList = protocol::DictionaryValue::create();
+        blockedURLs = newList.get();
+        m_state->setObject(ResourceAgentState::blockedURLs, newList.release());
     }
     blockedURLs->setBoolean(url, true);
 }
 
 void InspectorResourceAgent::removeBlockedURL(ErrorString*, const String& url)
 {
-    RefPtr<protocol::DictionaryValue> blockedURLs = m_state->getObject(ResourceAgentState::blockedURLs);
+    protocol::DictionaryValue* blockedURLs = m_state->getObject(ResourceAgentState::blockedURLs);
     if (blockedURLs)
         blockedURLs->remove(url);
 }
@@ -990,7 +1022,7 @@ void InspectorResourceAgent::replayXHR(ErrorString*, const String& requestId)
     if (!xhrReplayData)
         return;
 
-    ExecutionContext* executionContext = xhrReplayData->executionContext();
+    ExecutionContext* executionContext = xhrReplayData->getExecutionContext();
     if (!executionContext) {
         m_resourcesData->setXHRReplayData(requestId, 0);
         return;
@@ -1079,7 +1111,7 @@ bool InspectorResourceAgent::fetchResourceContent(Document* document, const KURL
 
     // Then fall back to resource data.
     for (auto& resource : m_resourcesData->resources()) {
-        if (resource->url() == url) {
+        if (resource->requestedURL() == url) {
             *content = resource->content();
             *base64Encoded = resource->base64Encoded();
             return true;
@@ -1096,7 +1128,7 @@ void InspectorResourceAgent::removeFinishedReplayXHRFired(Timer<InspectorResourc
 InspectorResourceAgent::InspectorResourceAgent(InspectedFrames* inspectedFrames)
     : InspectorBaseAgent<InspectorResourceAgent, protocol::Frontend::Network>("Network")
     , m_inspectedFrames(inspectedFrames)
-    , m_resourcesData(NetworkResourcesData::create())
+    , m_resourcesData(NetworkResourcesData::create(maximumTotalBufferSize, maximumResourceBufferSize))
     , m_pendingRequest(nullptr)
     , m_isRecalculatingStyle(false)
     , m_removeFinishedReplayXHRTimer(this, &InspectorResourceAgent::removeFinishedReplayXHRFired)

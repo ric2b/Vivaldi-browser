@@ -26,7 +26,6 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/Document.h"
-#include "wtf/PassRefPtr.h"
 
 namespace blink {
 
@@ -39,13 +38,12 @@ class HTMLDocument;
 class KURL;
 class XMLDocument;
 
-class CORE_EXPORT DOMImplementation final : public NoBaseWillBeGarbageCollected<DOMImplementation>, public ScriptWrappable {
+class CORE_EXPORT DOMImplementation final : public GarbageCollected<DOMImplementation>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
-    USING_FAST_MALLOC_WILL_BE_REMOVED(DOMImplementation);
 public:
-    static PassOwnPtrWillBeRawPtr<DOMImplementation> create(Document& document)
+    static RawPtr<DOMImplementation> create(Document& document)
     {
-        return adoptPtrWillBeNoop(new DOMImplementation(document));
+        return new DOMImplementation(document);
     }
 
 #if !ENABLE(OILPAN)
@@ -56,14 +54,14 @@ public:
 
     // DOM methods & attributes for DOMImplementation
     bool hasFeature() { return true; }
-    PassRefPtrWillBeRawPtr<DocumentType> createDocumentType(const AtomicString& qualifiedName, const String& publicId, const String& systemId, ExceptionState&);
-    PassRefPtrWillBeRawPtr<XMLDocument> createDocument(const AtomicString& namespaceURI, const AtomicString& qualifiedName, DocumentType*, ExceptionState&);
+    RawPtr<DocumentType> createDocumentType(const AtomicString& qualifiedName, const String& publicId, const String& systemId, ExceptionState&);
+    RawPtr<XMLDocument> createDocument(const AtomicString& namespaceURI, const AtomicString& qualifiedName, DocumentType*, ExceptionState&);
 
     // From the HTMLDOMImplementation interface
-    PassRefPtrWillBeRawPtr<HTMLDocument> createHTMLDocument(const String& title);
+    RawPtr<HTMLDocument> createHTMLDocument(const String& title);
 
     // Other methods (not part of DOM)
-    static PassRefPtrWillBeRawPtr<Document> createDocument(const String& mimeType, const DocumentInit&, bool inViewSourceMode);
+    static RawPtr<Document> createDocument(const String& mimeType, const DocumentInit&, bool inViewSourceMode);
 
     static bool isXMLMIMEType(const String&);
     static bool isTextMIMEType(const String&);
@@ -74,7 +72,7 @@ public:
 private:
     explicit DOMImplementation(Document&);
 
-    RawPtrWillBeMember<Document> m_document;
+    Member<Document> m_document;
 };
 
 } // namespace blink

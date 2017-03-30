@@ -94,7 +94,10 @@ PassRefPtr<SkImage> DeferredImageDecoder::createFrameAtIndex(size_t index)
         // performance boost if this frame is opaque.
         ASSERT(m_frameGenerator);
         frameData->m_hasAlpha = m_frameGenerator->hasAlpha(index);
-        frameData->m_frameBytes = m_size.area() * sizeof(ImageFrame::PixelData);
+        if (m_actualDecoder)
+            frameData->m_frameBytes = m_actualDecoder->frameBytesAtIndex(index);
+        else
+            frameData->m_frameBytes = m_size.area() * sizeof(ImageFrame::PixelData);
         return createFrameImageAtIndex(index, !frameData->m_hasAlpha);
     }
 
@@ -102,7 +105,7 @@ PassRefPtr<SkImage> DeferredImageDecoder::createFrameAtIndex(size_t index)
         return nullptr;
 
     ImageFrame* frame = m_actualDecoder->frameBufferAtIndex(index);
-    if (!frame || frame->status() == ImageFrame::FrameEmpty)
+    if (!frame || frame->getStatus() == ImageFrame::FrameEmpty)
         return nullptr;
 
     return adoptRef(SkImage::NewFromBitmap(frame->bitmap()));

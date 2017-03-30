@@ -48,8 +48,9 @@
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/component_updater/cld_component_installer.h"
 #include "chrome/browser/component_updater/ev_whitelist_component_installer.h"
-#include "chrome/browser/component_updater/flash_component_installer.h"
+#include "chrome/browser/component_updater/pepper_flash_component_installer.h"
 #include "chrome/browser/component_updater/recovery_component_installer.h"
+#include "chrome/browser/component_updater/sth_set_component_installer.h"
 #include "chrome/browser/component_updater/supervised_user_whitelist_installer.h"
 #include "chrome/browser/component_updater/swiftshader_component_installer.h"
 #include "chrome/browser/component_updater/widevine_cdm_component_installer.h"
@@ -74,6 +75,8 @@
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service_factory.h"
 #include "chrome/browser/process_singleton.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/shell_integration.h"
@@ -83,7 +86,6 @@
 #include "chrome/browser/ui/app_modal/chrome_javascript_native_dialog_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/startup/bad_flags_prompt.h"
 #include "chrome/browser/ui/startup/default_browser_prompt.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
@@ -91,6 +93,7 @@
 #include "chrome/browser/ui/webui/chrome_web_ui_controller_factory.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/common/chrome_switches.h"
@@ -142,6 +145,7 @@
 #include "content/public/browser/power_usage_monitor.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
 #include "grit/platform_locale_settings.h"
@@ -171,7 +175,6 @@
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include "chrome/browser/first_run/upgrade_util_linux.h"
-#include "chrome/browser/sxs_linux.h"
 #endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
 
 #if defined(OS_CHROMEOS)
@@ -252,6 +255,11 @@
 #if !defined(OS_ANDROID)
 #include "chrome/browser/chrome_webusb_browser_client.h"
 #include "components/webusb/webusb_detector.h"
+#endif
+
+#if defined(MOJO_SHELL_CLIENT)
+#include "chrome/browser/lifetime/application_lifetime.h"
+#include "content/public/common/mojo_shell_connection.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -403,12 +411,11 @@ Profile* CreatePrimaryProfile(const content::MainFunctionParams& parameters,
   if (switches::IsNewProfileManagement() &&
       profile &&
       !profile->IsGuestSession()) {
-    ProfileInfoCache& cache =
-        g_browser_process->profile_manager()->GetProfileInfoCache();
-    size_t profile_index = cache.GetIndexOfProfileWithPath(profile_path);
-
-    if (profile_index != std::string::npos &&
-        cache.ProfileIsSigninRequiredAtIndex(profile_index)) {
+    ProfileAttributesEntry* entry;
+    bool has_entry = g_browser_process->profile_manager()->
+                         GetProfileAttributesStorage().
+                         GetProfileAttributesWithPath(profile_path, &entry);
+    if (has_entry && entry->IsSigninRequired()) {
       profile = g_browser_process->profile_manager()->GetProfile(
           ProfileManager::GetGuestProfilePath());
     }
@@ -484,6 +491,11 @@ void RegisterComponentsForUpdate() {
     // 1. Android: Because it currently does not have the EV indicator.
     // 2. Chrome OS: On Chrome OS this registration is delayed until user login.
     RegisterEVWhitelistComponent(cus, path);
+
+    // Registration of the STH set fetcher here is not done for:
+    // Android: Because the story around CT on Mobile is not finalized yet.
+    // Chrome OS: On Chrome OS this registration is delayed until user login.
+    RegisterSTHSetComponent(cus, path);
 #endif  // defined(OS_ANDROID)
   }
 
@@ -541,7 +553,7 @@ void LaunchDevToolsHandlerIfNeeded(const base::CommandLine& command_line) {
     int port;
     if (base::StringToInt(port_str, &port) && port >= 0 && port < 65535) {
       g_browser_process->CreateDevToolsHttpProtocolHandler(
-          "127.0.0.1", static_cast<uint16_t>(port));
+          "", static_cast<uint16_t>(port));
     } else {
       DLOG(WARNING) << "Invalid http debugger port number " << port;
     }
@@ -658,6 +670,8 @@ void ChromeBrowserMainParts::SetupMetricsAndFieldTrials() {
   // Initialize FieldTrialList to support FieldTrials that use one-time
   // randomization.
   metrics::MetricsService* metrics = browser_process_->metrics_service();
+  // TODO(asvitkine): Turn into a DCHECK after http://crbug.com/359406 is fixed.
+  CHECK(!field_trial_list_);
   field_trial_list_.reset(
       new base::FieldTrialList(metrics->CreateEntropyProvider().release()));
 
@@ -963,6 +977,14 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   }
 #endif  // !defined(OS_CHROMEOS)
 
+#if defined(OS_MACOSX)
+  // The MaterialDesignController needs to look at command line flags, which
+  // are not available until this point. Now that they are, proceed with
+  // (conditionally) loading the Material Design resource packs. See
+  // https://crbug.com/585290 .
+  ui::ResourceBundle::GetSharedInstance().LoadMaterialDesignResources();
+#endif
+
 #if defined(OS_WIN)
   // This is needed to enable ETW exporting when requested in about:flags.
   // Normally, we enable it in ContentMainRunnerImpl::Initialize when the flag
@@ -1101,11 +1123,11 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   }
 #endif  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 
-#if defined(OS_LINUX) || defined(OS_OPENBSD) || defined(OS_MACOSX)
+#if defined(OS_LINUX) || defined(OS_OPENBSD)
   // Set the product channel for crash reports.
   base::debug::SetCrashKeyValue(crash_keys::kChannel,
                                 chrome::GetChannelString());
-#endif  // defined(OS_LINUX) || defined(OS_OPENBSD) || defined(OS_MACOSX)
+#endif  // defined(OS_LINUX) || defined(OS_OPENBSD)
 
   // Initialize tracking synchronizer system.
   tracking_synchronizer_ = new metrics::TrackingSynchronizer(
@@ -1140,6 +1162,13 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
 }
 
 void ChromeBrowserMainParts::PreMainMessageLoopRun() {
+#if defined(MOJO_SHELL_CLIENT)
+  if (content::MojoShellConnection::Get() &&
+      content::MojoShellConnection::Get()->UsingExternalShell()) {
+    content::MojoShellConnection::Get()->SetConnectionLostClosure(
+        base::Bind(&chrome::SessionEnding));
+  }
+#endif
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreMainMessageLoopRun");
   TRACK_SCOPED_REGION(
       "Startup", "ChromeBrowserMainParts::PreMainMessageLoopRun");
@@ -1207,6 +1236,28 @@ void ChromeBrowserMainParts::PreBrowserStart() {
 
   three_d_observer_.reset(new ThreeDAPIObserver());
 
+#if defined(SYZYASAN)
+  // Enable the deferred free mechanism in the syzyasan module, which helps the
+  // performance by deferring some work on the critical path to a background
+  // thread.
+  if (base::FeatureList::IsEnabled(features::kSyzyasanDeferredFree)) {
+    typedef VOID(WINAPI * SyzyasanEnableDeferredFreeThreadFunc)(VOID);
+    HMODULE syzyasan_handle = ::GetModuleHandle(L"syzyasan_rtl.dll");
+    bool success = false;
+    if (syzyasan_handle) {
+      SyzyasanEnableDeferredFreeThreadFunc syzyasan_enable_deferred_free =
+          reinterpret_cast<SyzyasanEnableDeferredFreeThreadFunc>(
+              ::GetProcAddress(syzyasan_handle,
+                               "asan_EnableDeferredFreeThread"));
+      if (syzyasan_enable_deferred_free) {
+        syzyasan_enable_deferred_free();
+        success = true;
+      }
+    }
+    UMA_HISTOGRAM_BOOLEAN("Syzyasan.DeferredFreeWasEnabled", success);
+  }
+#endif
+
 // Start the tab manager here so that we give the most amount of time for the
 // other services to start up before we start adjusting the oom priority.
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
@@ -1234,9 +1285,11 @@ void ChromeBrowserMainParts::PostBrowserStart() {
 
 #if !defined(OS_ANDROID)
   // WebUSB is an experimental web API. The sites these notifications will link
-  // to will only work if the experiment is enabled.
+  // to will only work if the experiment is enabled and WebUSB feature is
+  // enabled.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableExperimentalWebPlatformFeatures)) {
+          switches::kEnableExperimentalWebPlatformFeatures) &&
+      base::FeatureList::IsEnabled(features::kWebUsb)) {
     webusb_browser_client_.reset(new ChromeWebUsbBrowserClient());
     webusb_detector_.reset(
         new webusb::WebUsbDetector(webusb_browser_client_.get()));
@@ -1450,11 +1503,6 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   if (ChromeBrowserMainPartsWin::CheckMachineLevelInstall())
     return chrome::RESULT_CODE_MACHINE_LEVEL_INSTALL_EXISTS;
 #endif  // defined(OS_WIN)
-
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  if (sxs_linux::ShouldMigrateUserDataDir())
-    return sxs_linux::MigrateUserDataDir();
-#endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
 
   // Desktop construction occurs here, (required before profile creation).
   PreProfileInit();
@@ -1763,8 +1811,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   browser_creator_.reset();
 
 #if !defined(OS_LINUX) || defined(OS_CHROMEOS)  // http://crbug.com/426393
-  if (g_browser_process->metrics_service()->reporting_active())
-    content::StartPowerUsageMonitor();
+  content::StartPowerUsageMonitor();
 #endif  // !defined(OS_LINUX) || defined(OS_CHROMEOS)
 
   process_power_collector_.reset(new ProcessPowerCollector);
@@ -1872,6 +1919,23 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
 
   restart_last_session_ = browser_shutdown::ShutdownPreThreadsStop();
   browser_process_->StartTearDown();
+
+#if defined(SYZYASAN)
+  // Disable the deferred free mechanism in the syzyasan module. This is needed
+  // to avoid a potential crash when the syzyasan module is unloaded.
+  if (base::FeatureList::IsEnabled(features::kSyzyasanDeferredFree)) {
+    typedef VOID(WINAPI * SyzyasanDisableDeferredFreeThreadFunc)(VOID);
+    HMODULE syzyasan_handle = ::GetModuleHandle(L"syzyasan_rtl.dll");
+    if (syzyasan_handle) {
+      SyzyasanDisableDeferredFreeThreadFunc syzyasan_disable_deferred_free =
+          reinterpret_cast<SyzyasanDisableDeferredFreeThreadFunc>(
+              ::GetProcAddress(syzyasan_handle,
+                               "asan_DisableDeferredFreeThread"));
+      if (syzyasan_disable_deferred_free)
+        syzyasan_disable_deferred_free();
+    }
+  }
+#endif  // defined(SYZYASAN)
 #endif  // defined(OS_ANDROID)
 }
 

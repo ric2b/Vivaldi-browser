@@ -111,7 +111,7 @@ CPP_SPECIAL_CONVERSION_RULES = {
     'Date': 'double',
     'Dictionary': 'Dictionary',
     'EventHandler': 'EventListener*',
-    'NodeFilter': 'RefPtrWillBeRawPtr<NodeFilter>',
+    'NodeFilter': 'RawPtr<NodeFilter>',
     'Promise': 'ScriptPromise',
     'ScriptValue': 'ScriptValue',
     # FIXME: Eliminate custom bindings for XPathNSResolver  http://crbug.com/345529
@@ -144,10 +144,12 @@ def cpp_type(idl_type, extended_attributes=None, raw_type=False, used_as_rvalue_
     def string_mode():
         if extended_attributes.get('TreatNullAs') == 'EmptyString':
             return 'TreatNullAsEmptyString'
-        if idl_type.is_nullable or extended_attributes.get('TreatNullAs') == 'NullString':
+        if extended_attributes.get('TreatNullAs') == 'NullString':
             if extended_attributes.get('TreatUndefinedAs') == 'NullString':
                 return 'TreatNullAndUndefinedAsNullString'
             return 'TreatNullAsNullString'
+        if idl_type.is_nullable:
+            return 'TreatNullAndUndefinedAsNullString'
         return ''
 
     extended_attributes = extended_attributes or {}
@@ -256,10 +258,6 @@ def cpp_template_type(template, inner_type):
 def cpp_ptr_type(old_type, new_type, gc_type):
     if gc_type == 'GarbageCollectedObject':
         return new_type
-    if gc_type == 'WillBeGarbageCollectedObject':
-        if old_type == 'Vector':
-            return 'WillBe' + new_type
-        return old_type + 'WillBe' + new_type
     return old_type
 
 
@@ -303,31 +301,16 @@ IdlType.set_garbage_collected_types = classmethod(
         cls.garbage_collected_types.update(new_garbage_collected_types))
 
 
-# [WillBeGarbageCollected]
-IdlType.will_be_garbage_collected_types = set()
-
-IdlType.is_will_be_garbage_collected = property(
-    lambda self: self.base_type in IdlType.will_be_garbage_collected_types)
-
-IdlType.set_will_be_garbage_collected_types = classmethod(
-    lambda cls, new_will_be_garbage_collected_types:
-        cls.will_be_garbage_collected_types.update(new_will_be_garbage_collected_types))
-
-
 def gc_type(idl_type):
     if idl_type.is_garbage_collected or idl_type.is_dictionary or idl_type.is_union_type:
         return 'GarbageCollectedObject'
-    if idl_type.is_will_be_garbage_collected:
-        return 'WillBeGarbageCollectedObject'
     return 'RefCountedObject'
 
 IdlTypeBase.gc_type = property(gc_type)
 
 
 def is_traceable(idl_type):
-    return (idl_type.is_garbage_collected
-            or idl_type.is_will_be_garbage_collected
-            or idl_type.is_dictionary)
+    return (idl_type.is_garbage_collected or idl_type.is_dictionary)
 
 IdlTypeBase.is_traceable = property(is_traceable)
 IdlUnionType.is_traceable = property(lambda self: True)
@@ -884,7 +867,7 @@ CPP_VALUE_TO_V8_VALUE = {
     'StringOrNull': '{cpp_value}.isNull() ? v8::Local<v8::Value>(v8::Null({isolate})) : v8String({isolate}, {cpp_value})',
     # Special cases
     'Dictionary': '{cpp_value}.v8Value()',
-    'EventHandler': '{cpp_value} ? v8::Local<v8::Value>(V8AbstractEventListener::cast({cpp_value})->getListenerObject(impl->executionContext())) : v8::Local<v8::Value>(v8::Null({isolate}))',
+    'EventHandler': '{cpp_value} ? v8::Local<v8::Value>(V8AbstractEventListener::cast({cpp_value})->getListenerObject(impl->getExecutionContext())) : v8::Local<v8::Value>(v8::Null({isolate}))',
     'ScriptValue': '{cpp_value}.v8Value()',
     'SerializedScriptValue': '{cpp_value} ? {cpp_value}->deserialize() : v8::Local<v8::Value>(v8::Null({isolate}))',
     # General

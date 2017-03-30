@@ -13,6 +13,7 @@
 #include "base/values.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/picture_layer.h"
+#include "cc/trees/draw_property_utils.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "ui/gfx/geometry/rect.h"
@@ -63,16 +64,21 @@ InvalidationBenchmark::~InvalidationBenchmark() {
 }
 
 void InvalidationBenchmark::DidUpdateLayers(LayerTreeHost* host) {
-  LayerTreeHostCommon::CallFunctionForSubtree(
-      host->root_layer(),
-      [this](Layer* layer) { layer->RunMicroBenchmark(this); });
+  LayerTreeHostCommon::CallFunctionForEveryLayer(
+      host, [this](Layer* layer) { layer->RunMicroBenchmark(this); },
+      CallFunctionLayerType::ALL_LAYERS);
 }
 
 void InvalidationBenchmark::RunOnLayer(PictureLayer* layer) {
+  PropertyTrees* property_trees = layer->layer_tree_host()->property_trees();
+  LayerList update_list;
+  update_list.push_back(layer);
+  draw_property_utils::ComputeVisibleRectsForTesting(
+      property_trees, property_trees->non_root_surfaces_enabled, &update_list);
+  gfx::Rect visible_layer_rect = layer->visible_layer_rect_for_testing();
   switch (mode_) {
     case FIXED_SIZE: {
       // Invalidation with a random position and fixed size.
-      gfx::Rect visible_layer_rect = layer->visible_layer_rect();
       int x = LCGRandom() * (visible_layer_rect.width() - width_);
       int y = LCGRandom() * (visible_layer_rect.height() - height_);
       gfx::Rect invalidation_rect(x, y, width_, height_);
@@ -86,7 +92,6 @@ void InvalidationBenchmark::RunOnLayer(PictureLayer* layer) {
     }
     case RANDOM: {
       // Random invalidation inside the viewport.
-      gfx::Rect visible_layer_rect = layer->visible_layer_rect();
       int x_min = LCGRandom() * visible_layer_rect.width();
       int x_max = LCGRandom() * visible_layer_rect.width();
       int y_min = LCGRandom() * visible_layer_rect.height();
@@ -101,7 +106,7 @@ void InvalidationBenchmark::RunOnLayer(PictureLayer* layer) {
     }
     case VIEWPORT: {
       // Invalidate entire viewport.
-      layer->SetNeedsDisplayRect(layer->visible_layer_rect());
+      layer->SetNeedsDisplayRect(layer->visible_layer_rect_for_testing());
       break;
     }
   }

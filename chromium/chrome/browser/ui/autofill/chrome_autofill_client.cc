@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/risk_util.h"
@@ -34,7 +35,6 @@
 #include "chrome/common/url_constants.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/common/autofill_messages.h"
-#include "components/autofill/core/browser/autofill_cc_infobar_delegate.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_view.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
@@ -176,10 +176,10 @@ void ChromeAutofillClient::ConfirmSaveCreditCardLocally(
     const CreditCard& card,
     const base::Closure& callback) {
 #if defined(OS_ANDROID)
-  InfoBarService::FromWebContents(web_contents())->AddInfoBar(
-      CreateSaveCardInfoBarMobile(
-          make_scoped_ptr(new AutofillSaveCardInfoBarDelegateMobile(
-              false, card, scoped_ptr<base::DictionaryValue>(nullptr),
+  InfoBarService::FromWebContents(web_contents())
+      ->AddInfoBar(CreateSaveCardInfoBarMobile(
+          base::WrapUnique(new AutofillSaveCardInfoBarDelegateMobile(
+              false, card, std::unique_ptr<base::DictionaryValue>(nullptr),
               callback))));
 #else
   // Do lazy initialization of SaveCardBubbleControllerImpl.
@@ -193,12 +193,12 @@ void ChromeAutofillClient::ConfirmSaveCreditCardLocally(
 
 void ChromeAutofillClient::ConfirmSaveCreditCardToCloud(
     const CreditCard& card,
-    scoped_ptr<base::DictionaryValue> legal_message,
+    std::unique_ptr<base::DictionaryValue> legal_message,
     const base::Closure& callback) {
 #if defined(OS_ANDROID)
-  InfoBarService::FromWebContents(web_contents())->AddInfoBar(
-      CreateSaveCardInfoBarMobile(
-          make_scoped_ptr(new AutofillSaveCardInfoBarDelegateMobile(
+  InfoBarService::FromWebContents(web_contents())
+      ->AddInfoBar(CreateSaveCardInfoBarMobile(
+          base::WrapUnique(new AutofillSaveCardInfoBarDelegateMobile(
               true, card, std::move(legal_message), callback))));
 #else
   // Do lazy initialization of SaveCardBubbleControllerImpl.

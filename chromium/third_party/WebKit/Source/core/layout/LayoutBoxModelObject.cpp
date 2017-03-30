@@ -115,7 +115,7 @@ LayoutBoxModelObject::LayoutBoxModelObject(ContainerNode* node)
 
 bool LayoutBoxModelObject::usesCompositedScrolling() const
 {
-    return hasOverflowClip() && hasLayer() && layer()->scrollableArea()->usesCompositedScrolling();
+    return hasOverflowClip() && hasLayer() && layer()->getScrollableArea()->usesCompositedScrolling();
 }
 
 LayoutBoxModelObject::~LayoutBoxModelObject()
@@ -233,13 +233,13 @@ void LayoutBoxModelObject::styleDidChange(StyleDifference diff, const ComputedSt
         // from the style.
         layer()->setLayerType(type);
 
-        layer()->styleChanged(diff, oldStyle);
+        layer()->styleDidChange(diff, oldStyle);
         if (hadLayer && layer()->isSelfPaintingLayer() != layerWasSelfPainting)
             setChildNeedsLayout();
     }
 
     if (oldStyle && wasHorizontalWritingMode != isHorizontalWritingMode()) {
-        // Changing the writingMode() may change isOrthogonalWritingModeRoot()
+        // Changing the getWritingMode() may change isOrthogonalWritingModeRoot()
         // of children. Make sure all children are marked/unmarked as orthogonal
         // writing-mode roots.
         bool newHorizontalWritingMode = isHorizontalWritingMode();
@@ -312,9 +312,9 @@ bool LayoutBoxModelObject::hasSelfPaintingLayer() const
     return m_layer && m_layer->isSelfPaintingLayer();
 }
 
-PaintLayerScrollableArea* LayoutBoxModelObject::scrollableArea() const
+PaintLayerScrollableArea* LayoutBoxModelObject::getScrollableArea() const
 {
-    return m_layer ? m_layer->scrollableArea() : 0;
+    return m_layer ? m_layer->getScrollableArea() : 0;
 }
 
 void LayoutBoxModelObject::addLayerHitTestRects(LayerHitTestRects& rects, const PaintLayer* currentLayer, const LayoutPoint& layerOffset, const LayoutRect& containerRect) const
@@ -346,33 +346,29 @@ static bool hasPercentageTransform(const ComputedStyle& style)
         || (style.transformOriginY() != Length(50, Percent) && style.transformOriginY().hasPercent());
 }
 
-void LayoutBoxModelObject::invalidateTreeIfNeeded(PaintInvalidationState& paintInvalidationState)
+void LayoutBoxModelObject::invalidateTreeIfNeeded(const PaintInvalidationState& paintInvalidationState)
 {
     ASSERT(!needsLayout());
 
-    if (!shouldCheckForPaintInvalidation(paintInvalidationState))
+    PaintInvalidationState newPaintInvalidationState(paintInvalidationState, *this);
+    if (!shouldCheckForPaintInvalidation(newPaintInvalidationState))
         return;
 
-    bool establishesNewPaintInvalidationContainer = isPaintInvalidationContainer();
-    const LayoutBoxModelObject& newPaintInvalidationContainer = establishesNewPaintInvalidationContainer ? *this : paintInvalidationState.paintInvalidationContainer();
-    // FIXME: This assert should be re-enabled when we move paint invalidation to after compositing update. crbug.com/360286
-    // ASSERT(&newPaintInvalidationContainer == &containerForPaintInvalidation());
-
     LayoutRect previousPaintInvalidationRect = this->previousPaintInvalidationRect();
-
-    PaintInvalidationReason reason = invalidatePaintIfNeeded(paintInvalidationState, newPaintInvalidationContainer);
-    clearPaintInvalidationState(paintInvalidationState);
+    PaintInvalidationReason reason = invalidatePaintIfNeeded(newPaintInvalidationState);
+    clearPaintInvalidationFlags(newPaintInvalidationState);
 
     if (reason == PaintInvalidationDelayedFull)
         paintInvalidationState.pushDelayedPaintInvalidationTarget(*this);
 
-    PaintInvalidationState childTreeWalkState(paintInvalidationState, *this, newPaintInvalidationContainer);
     if (reason == PaintInvalidationLocationChange)
-        childTreeWalkState.setForceSubtreeInvalidationWithinContainer();
+        newPaintInvalidationState.setForceSubtreeInvalidationWithinContainer();
+
+    // TODO(wangxianzhu): Combine this function into LayoutObject::invalidateTreeIfNeeded() when removing the following workarounds.
 
     // TODO(wangxianzhu): This is a workaround for crbug.com/533277. Will remove when we enable paint offset caching.
     if (reason != PaintInvalidationNone && hasPercentageTransform(styleRef()))
-        childTreeWalkState.setForceSubtreeInvalidationWithinContainer();
+        newPaintInvalidationState.setForceSubtreeInvalidationWithinContainer();
 
     // TODO(wangxianzhu): This is a workaround for crbug.com/490725. We don't have enough saved information to do accurate check
     // of clipping change. Will remove when we remove rect-based paint invalidation.
@@ -380,9 +376,10 @@ void LayoutBoxModelObject::invalidateTreeIfNeeded(PaintInvalidationState& paintI
         && previousPaintInvalidationRect != this->previousPaintInvalidationRect()
         && !usesCompositedScrolling()
         && hasOverflowClip())
-        childTreeWalkState.setForceSubtreeInvalidationRectUpdateWithinContainer();
+        newPaintInvalidationState.setForceSubtreeInvalidationRectUpdateWithinContainer();
 
-    invalidatePaintOfSubtreesIfNeeded(childTreeWalkState);
+    newPaintInvalidationState.updateForChildren();
+    invalidatePaintOfSubtreesIfNeeded(newPaintInvalidationState);
 }
 
 void LayoutBoxModelObject::setBackingNeedsPaintInvalidationInRect(const LayoutRect& r, PaintInvalidationReason invalidationReason) const
@@ -680,93 +677,6 @@ LayoutUnit LayoutBoxModelObject::computedCSSPadding(const Length& padding) const
     return minimumValueForLength(padding, w);
 }
 
-static inline LayoutUnit resolveWidthForRatio(LayoutUnit height, const FloatSize& intrinsicRatio)
-{
-    return LayoutUnit(height * intrinsicRatio.width() / intrinsicRatio.height());
-}
-
-static inline LayoutUnit resolveHeightForRatio(LayoutUnit width, const FloatSize& intrinsicRatio)
-{
-    return LayoutUnit(width * intrinsicRatio.height() / intrinsicRatio.width());
-}
-
-static inline LayoutSize resolveAgainstIntrinsicWidthOrHeightAndRatio(const LayoutSize& size, const FloatSize& intrinsicRatio, LayoutUnit useWidth, LayoutUnit useHeight)
-{
-    if (intrinsicRatio.isEmpty()) {
-        if (useWidth)
-            return LayoutSize(useWidth, size.height());
-        return LayoutSize(size.width(), useHeight);
-    }
-
-    if (useWidth)
-        return LayoutSize(useWidth, resolveHeightForRatio(useWidth, intrinsicRatio));
-    return LayoutSize(resolveWidthForRatio(useHeight, intrinsicRatio), useHeight);
-}
-
-static inline LayoutSize resolveAgainstIntrinsicRatio(const LayoutSize& size, const FloatSize& intrinsicRatio)
-{
-    // Two possible solutions: (size.width(), solutionHeight) or (solutionWidth, size.height())
-    // "... must be assumed to be the largest dimensions..." = easiest answer: the rect with the largest surface area.
-
-    LayoutUnit solutionWidth = resolveWidthForRatio(size.height(), intrinsicRatio);
-    LayoutUnit solutionHeight = resolveHeightForRatio(size.width(), intrinsicRatio);
-    if (solutionWidth <= size.width()) {
-        if (solutionHeight <= size.height()) {
-            // If both solutions fit, choose the one covering the larger area.
-            LayoutUnit areaOne = solutionWidth * size.height();
-            LayoutUnit areaTwo = size.width() * solutionHeight;
-            if (areaOne < areaTwo)
-                return LayoutSize(size.width(), solutionHeight);
-            return LayoutSize(solutionWidth, size.height());
-        }
-
-        // Only the first solution fits.
-        return LayoutSize(solutionWidth, size.height());
-    }
-
-    // Only the second solution fits, assert that.
-    ASSERT(solutionHeight <= size.height());
-    return LayoutSize(size.width(), solutionHeight);
-}
-
-LayoutSize LayoutBoxModelObject::calculateImageIntrinsicDimensions(StyleImage* image, const LayoutSize& positioningAreaSize, ScaleByEffectiveZoomOrNot shouldScaleOrNot) const
-{
-    // A generated image without a fixed size, will always return the container size as intrinsic size.
-    if (image->isGeneratedImage() && image->usesImageContainerSize())
-        return positioningAreaSize;
-
-    FloatSize intrinsicSize;
-    FloatSize intrinsicRatio;
-    image->computeIntrinsicDimensions(this, intrinsicSize, intrinsicRatio);
-
-    LayoutSize resolvedSize(intrinsicSize);
-    LayoutSize minimumSize(resolvedSize.width() > LayoutUnit() ? LayoutUnit(1) : LayoutUnit(),
-        resolvedSize.height() > LayoutUnit() ? LayoutUnit(1) : LayoutUnit());
-    if (shouldScaleOrNot == ScaleByEffectiveZoom)
-        resolvedSize.scale(style()->effectiveZoom());
-    resolvedSize.clampToMinimumSize(minimumSize);
-
-    if (!resolvedSize.isEmpty())
-        return resolvedSize;
-
-    // If the image has one of either an intrinsic width or an intrinsic height:
-    // * and an intrinsic aspect ratio, then the missing dimension is calculated from the given dimension and the ratio.
-    // * and no intrinsic aspect ratio, then the missing dimension is assumed to be the size of the rectangle that
-    //   establishes the coordinate system for the 'background-position' property.
-    if (resolvedSize.width() > LayoutUnit() || resolvedSize.height() > LayoutUnit())
-        return resolveAgainstIntrinsicWidthOrHeightAndRatio(positioningAreaSize, intrinsicRatio, resolvedSize.width(), resolvedSize.height());
-
-    // If the image has no intrinsic dimensions and has an intrinsic ratio the dimensions must be assumed to be the
-    // largest dimensions at that ratio such that neither dimension exceeds the dimensions of the rectangle that
-    // establishes the coordinate system for the 'background-position' property.
-    if (!intrinsicRatio.isEmpty())
-        return resolveAgainstIntrinsicRatio(positioningAreaSize, intrinsicRatio);
-
-    // If the image has no intrinsic ratio either, then the dimensions must be assumed to be the rectangle that
-    // establishes the coordinate system for the 'background-position' property.
-    return positioningAreaSize;
-}
-
 bool LayoutBoxModelObject::boxShadowShouldBeAppliedToBackground(BackgroundBleedAvoidance bleedAvoidance, const InlineFlowBox* inlineFlowBox) const
 {
     if (bleedAvoidance != BackgroundBleedNone)
@@ -916,42 +826,16 @@ LayoutRect LayoutBoxModelObject::localCaretRectForEmptyElement(LayoutUnit width,
     }
     x = std::min(x, (maxX - caretWidth()).clampNegativeToZero());
 
-    LayoutUnit height = LayoutUnit(style()->fontMetrics().height());
+    const Font& font = style()->font();
+    const SimpleFontData* fontData = font.primaryFont();
+    LayoutUnit height;
+    // crbug.com/595692 This check should not be needed but sometimes
+    // primaryFont is null.
+    if (fontData)
+        height = LayoutUnit(fontData->getFontMetrics().height());
     LayoutUnit verticalSpace = lineHeight(true, currentStyle.isHorizontalWritingMode() ? HorizontalLine : VerticalLine,  PositionOfInteriorLineBoxes) - height;
     LayoutUnit y = paddingTop() + borderTop() + (verticalSpace / 2);
     return currentStyle.isHorizontalWritingMode() ? LayoutRect(x, y, caretWidth(), height) : LayoutRect(y, x, height, caretWidth());
-}
-
-void LayoutBoxModelObject::mapAbsoluteToLocalPoint(MapCoordinatesFlags mode, TransformState& transformState) const
-{
-    LayoutObject* o = container();
-    if (!o)
-        return;
-
-    o->mapAbsoluteToLocalPoint(mode, transformState);
-
-    LayoutSize containerOffset = offsetFromContainer(o, LayoutPoint());
-
-    if (o->isLayoutFlowThread()) {
-        // Descending into a flow thread. Convert to the local coordinate space, i.e. flow thread coordinates.
-        const LayoutFlowThread* flowThread = toLayoutFlowThread(o);
-        LayoutPoint visualPoint = LayoutPoint(transformState.mappedPoint());
-        transformState.move(visualPoint - flowThread->visualPointToFlowThreadPoint(visualPoint));
-        // |containerOffset| is also in visual coordinates. Convert to flow thread coordinates.
-        // TODO(mstensho): Wouldn't it be better add a parameter to instruct offsetFromContainer()
-        // to return flowthread coordinates in the first place? We're effectively performing two
-        // conversions here, when in fact none is needed.
-        containerOffset = toLayoutSize(flowThread->visualPointToFlowThreadPoint(toLayoutPoint(containerOffset)));
-    }
-
-    bool preserve3D = mode & UseTransforms && (o->style()->preserves3D() || style()->preserves3D());
-    if (mode & UseTransforms && shouldUseTransformFromContainer(o)) {
-        TransformationMatrix t;
-        getTransformFromContainer(o, containerOffset, t);
-        transformState.applyTransform(t, preserve3D ? TransformState::AccumulateTransform : TransformState::FlattenTransform);
-    } else {
-        transformState.move(containerOffset.width(), containerOffset.height(), preserve3D ? TransformState::AccumulateTransform : TransformState::FlattenTransform);
-    }
 }
 
 const LayoutObject* LayoutBoxModelObject::pushMappingToContainer(const LayoutBoxModelObject* ancestorToStopAt, LayoutGeometryMap& geometryMap) const
@@ -974,8 +858,14 @@ const LayoutObject* LayoutBoxModelObject::pushMappingToContainer(const LayoutBox
         adjustmentForSkippedAncestor = -ancestorToStopAt->offsetFromAncestorContainer(container);
     }
 
-    bool offsetDependsOnPoint = false;
-    LayoutSize containerOffset = offsetFromContainer(container, LayoutPoint(), &offsetDependsOnPoint);
+    LayoutSize containerOffset = offsetFromContainer(container);
+    bool offsetDependsOnPoint;
+    if (isLayoutFlowThread()) {
+        containerOffset += columnOffset(LayoutPoint());
+        offsetDependsOnPoint = true;
+    } else {
+        offsetDependsOnPoint = container->style()->isFlippedBlocksWritingMode() && container->isBox();
+    }
 
     bool preserve3D = container->style()->preserves3D() || style()->preserves3D();
     GeometryInfoFlags flags = 0;

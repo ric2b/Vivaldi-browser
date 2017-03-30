@@ -6,11 +6,11 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <set>
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -41,6 +41,9 @@ DeviceLocalAccount::DeviceLocalAccount(Type type,
       kiosk_app_id(kiosk_app_id),
       kiosk_app_update_url(kiosk_app_update_url) {
 }
+
+DeviceLocalAccount::DeviceLocalAccount(const DeviceLocalAccount& other) =
+    default;
 
 DeviceLocalAccount::~DeviceLocalAccount() {
 }
@@ -101,7 +104,7 @@ void SetDeviceLocalAccounts(chromeos::OwnerSettingsServiceChromeOS* service,
   base::ListValue list;
   for (std::vector<DeviceLocalAccount>::const_iterator it = accounts.begin();
        it != accounts.end(); ++it) {
-    scoped_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
+    std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
     entry->SetStringWithoutPathExpansion(
         chromeos::kAccountsPrefDeviceLocalAccountsKeyId,
         it->account_id);

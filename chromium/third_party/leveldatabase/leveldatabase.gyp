@@ -387,7 +387,7 @@
         'leveldb_testutil',
       ],
       'sources': [
-        'src/db/leveldb_main.cc',
+        'src/db/leveldbutil.cc',
       ],
     },
   ],

@@ -209,7 +209,7 @@ bool ParseContentScript(const ContentScriptDetails& script_value,
 }
 
 bool ParseContentScripts(
-    std::vector<linked_ptr<ContentScriptDetails>> content_script_list,
+    const std::vector<ContentScriptDetails>& content_script_list,
     const extensions::Extension* extension,
     const HostID& host_id,
     bool incognito_enabled,
@@ -220,9 +220,8 @@ bool ParseContentScripts(
     return false;
 
   std::set<std::string> names;
-  for (const linked_ptr<ContentScriptDetails> script_value :
-       content_script_list) {
-    const std::string& name = script_value->name;
+  for (const ContentScriptDetails& script_value : content_script_list) {
+    const std::string& name = script_value.name;
     if (!names.insert(name).second) {
       // The name was already in the list.
       *error = kDuplicatedContentScriptNamesError;
@@ -230,7 +229,7 @@ bool ParseContentScripts(
     }
 
     UserScript script;
-    if (!ParseContentScript(*script_value, extension, owner_base_url, &script,
+    if (!ParseContentScript(script_value, extension, owner_base_url, &script,
                             error))
       return false;
 
@@ -263,6 +262,10 @@ bool WebViewInternalExtensionFunction::RunAsync() {
   return RunAsyncSafe(guest);
 }
 
+WebViewInternalCaptureVisibleRegionFunction::
+    WebViewInternalCaptureVisibleRegionFunction()
+    : is_guest_transparent_(false) {}
+
 bool WebViewInternalCaptureVisibleRegionFunction::RunAsyncSafe(
     WebViewGuest* guest) {
   using api::extension_types::ImageDetails;
@@ -278,6 +281,7 @@ bool WebViewInternalCaptureVisibleRegionFunction::RunAsyncSafe(
     image_details = ImageDetails::FromValue(*spec);
   }
 
+  is_guest_transparent_ = guest->allow_transparency();
   return CaptureAsync(guest->web_contents(), image_details.get(),
                       base::Bind(&WebViewInternalCaptureVisibleRegionFunction::
                                      CopyFromBackingStoreComplete,
@@ -286,6 +290,10 @@ bool WebViewInternalCaptureVisibleRegionFunction::RunAsyncSafe(
 bool WebViewInternalCaptureVisibleRegionFunction::IsScreenshotEnabled() {
   // TODO(wjmaclean): Is it ok to always return true here?
   return true;
+}
+
+bool WebViewInternalCaptureVisibleRegionFunction::ClientAllowsTransparency() {
+  return is_guest_transparent_;
 }
 
 void WebViewInternalCaptureVisibleRegionFunction::OnCaptureSuccess(

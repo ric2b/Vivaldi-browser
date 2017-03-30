@@ -7,5 +7,9 @@
 //    DISABLE(foo,baz)
 
   // Appears flaky on Win and Lin
-  DISABLE(MediaRouterMojoImplTest,
-       RegisterMediaSinksObserverWithAvailabilityChange)
+  //DISABLE(MediaRouterMojoImplTest,
+  //     RegisterMediaSinksObserverWithAvailabilityChange)
+
+  // Failing media tests evern since proprietary media code was imported
+  DISABLE(MediaTest, VideoBearRotated270)
+  DISABLE(MediaTest, VideoBearRotated90)

@@ -4,11 +4,15 @@
 
 #include "media/audio/mac/audio_low_latency_input_mac.h"
 #include <CoreServices/CoreServices.h>
+#include <mach/mach.h>
+#include <string>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/mac/mac_logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
+#include "base/sys_info.h"
 #include "base/time/time.h"
 #include "media/audio/mac/audio_manager_mac.h"
 #include "media/base/audio_bus.h"
@@ -23,11 +27,32 @@ const int kNumberOfBlocksBufferInFifo = 2;
 // The stream will be stopped as soon as this time limit is passed.
 const int kMaxErrorTimeoutInSeconds = 1;
 
+// A repeating timer is created and started in Start() and it triggers calls
+// to CheckIfInputStreamIsAlive() where we do periodic checks to see if the
+// input data callback sequence is active or not. If the stream seems dead,
+// up to |kMaxNumberOfRestartAttempts| restart attempts tries to bring the
+// stream back to life.
+const int kCheckInputIsAliveTimeInSeconds = 5;
+
+// Number of restart indications required to actually trigger a restart
+// attempt.
+const int kNumberOfIndicationsToTriggerRestart = 1;
+
+// Max number of times we try to restart a stream when it has been categorized
+// as dead. Note that we can do many restarts during an audio session and this
+// limitation is per detected problem. Once a restart has succeeded, a new
+// sequence of |kMaxNumberOfRestartAttempts| number of restart attempts can be
+// done.
+const int kMaxNumberOfRestartAttempts = 1;
+
 // A one-shot timer is created and started in Start() and it triggers
 // CheckInputStartupSuccess() after this amount of time. UMA stats marked
 // Media.Audio.InputStartupSuccessMac is then updated where true is added
-// if input callbacks have started, and false otherwise.
-const int kInputCallbackStartTimeoutInSeconds = 5;
+// if input callbacks have started, and false otherwise. Note that the value
+// is larger than |kCheckInputIsAliveTimeInSeconds| to ensure that at least one
+// restart attempt can be done before storing the result.
+const int kInputCallbackStartTimeoutInSeconds =
+    kCheckInputIsAliveTimeInSeconds + 3;
 
 // Returns true if the format flags in |format_flags| has the "non-interleaved"
 // flag (kAudioFormatFlagIsNonInterleaved) cleared (set to 0).
@@ -74,6 +99,8 @@ const AudioObjectPropertyAddress
 // Maps internal enumerator values (e.g. kAudioDevicePropertyDeviceHasChanged)
 // into local values that are suitable for UMA stats.
 // See AudioObjectPropertySelector in CoreAudio/AudioHardware.h for details.
+// TODO(henrika): ensure that the "other" bucket contains as few counts as
+// possible by adding more valid enumerators below.
 enum AudioDevicePropertyResult {
   PROPERTY_OTHER = 0,  // Use for all non-supported property changes
   PROPERTY_DEVICE_HAS_CHANGED = 1,
@@ -88,7 +115,49 @@ enum AudioDevicePropertyResult {
   PROPERTY_DEVICE_IS_RUNNING = 10,
   PROPERTY_DEVICE_IS_ALIVE = 11,
   PROPERTY_STREAM_PHYSICAL_FORMAT = 12,
-  PROPERTY_MAX = PROPERTY_STREAM_PHYSICAL_FORMAT
+  PROPERTY_JACK_IS_CONNECTED = 13,
+  PROPERTY_PROCESSOR_OVERLOAD = 14,
+  PROPERTY_DATA_SOURCES = 15,
+  PROPERTY_DATA_SOURCE = 16,
+  PROPERTY_VOLUME_DECIBELS = 17,
+  PROPERTY_VOLUME_SCALAR = 18,
+  PROPERTY_MUTE = 19,
+  PROPERTY_PLUGIN = 20,
+  PROPERTY_USES_VARIABLE_BUFFER_FRAME_SIZES = 21,
+  PROPERTY_IO_CYCLE_USAGE = 22,
+  PROPERTY_IO_PROC_STREAM_USAGE = 23,
+  PROPERTY_CONFIGURATION_APPLICATION = 24,
+  PROPERTY_DEVICE_UID = 25,
+  PROPERTY_MODE_UID = 26,
+  PROPERTY_TRANSPORT_TYPE = 27,
+  PROPERTY_RELATED_DEVICES = 28,
+  PROPERTY_CLOCK_DOMAIN = 29,
+  PROPERTY_DEVICE_CAN_BE_DEFAULT_DEVICE = 30,
+  PROPERTY_DEVICE_CAN_BE_DEFAULT_SYSTEM_DEVICE = 31,
+  PROPERTY_LATENCY = 32,
+  PROPERTY_STREAMS = 33,
+  PROPERTY_CONTROL_LIST = 34,
+  PROPERTY_SAFETY_OFFSET = 35,
+  PROPERTY_AVAILABLE_NOMINAL_SAMPLE_RATES = 36,
+  PROPERTY_ICON = 37,
+  PROPERTY_IS_HIDDEN = 38,
+  PROPERTY_PREFERRED_CHANNELS_FOR_STEREO = 39,
+  PROPERTY_PREFERRED_CHANNEL_LAYOUT = 40,
+  PROPERTY_VOLUME_RANGE_DECIBELS = 41,
+  PROPERTY_VOLUME_SCALAR_TO_DECIBELS = 42,
+  PROPERTY_VOLUME_DECIBEL_TO_SCALAR = 43,
+  PROPERTY_STEREO_PAN = 44,
+  PROPERTY_STEREO_PAN_CHANNELS = 45,
+  PROPERTY_SOLO = 46,
+  PROPERTY_PHANTOM_POWER = 47,
+  PROPERTY_PHASE_INVERT = 48,
+  PROPERTY_CLIP_LIGHT = 49,
+  PROPERTY_TALKBACK = 50,
+  PROPERTY_LISTENBACK = 51,
+  PROPERTY_CLOCK_SOURCE = 52,
+  PROPERTY_CLOCK_SOURCES = 53,
+  PROPERTY_SUB_MUTE = 54,
+  PROPERTY_MAX = PROPERTY_SUB_MUTE
 };
 
 // Add the provided value in |result| to a UMA histogram.
@@ -118,6 +187,51 @@ static OSStatus GetInputDeviceStreamFormat(
   return result;
 }
 
+// Returns the number of physical processors on the device.
+static int NumberOfPhysicalProcessors() {
+  mach_port_t mach_host = mach_host_self();
+  host_basic_info hbi = {};
+  mach_msg_type_number_t info_count = HOST_BASIC_INFO_COUNT;
+  kern_return_t kr =
+      host_info(mach_host, HOST_BASIC_INFO, reinterpret_cast<host_info_t>(&hbi),
+                &info_count);
+  mach_port_deallocate(mach_task_self(), mach_host);
+
+  int n_physical_cores = 0;
+  if (kr != KERN_SUCCESS) {
+    n_physical_cores = 1;
+    LOG(ERROR) << "Failed to determine number of physical cores, assuming 1";
+  } else {
+    n_physical_cores = hbi.physical_cpu;
+  }
+  DCHECK_EQ(HOST_BASIC_INFO_COUNT, info_count);
+  return n_physical_cores;
+}
+
+// Adds extra system information to Media.AudioXXXMac UMA statistics.
+// Only called when it has been detected that audio callbacks does not start
+// as expected.
+static void AddSystemInfoToUMA(bool is_on_battery, int num_resumes) {
+  // Logs true or false depending on if the machine is on battery power or not.
+  UMA_HISTOGRAM_BOOLEAN("Media.Audio.IsOnBatteryPowerMac", is_on_battery);
+  // Number of logical processors/cores on the current machine.
+  UMA_HISTOGRAM_COUNTS("Media.Audio.LogicalProcessorsMac",
+                       base::SysInfo::NumberOfProcessors());
+  // Number of physical processors/cores on the current machine.
+  UMA_HISTOGRAM_COUNTS("Media.Audio.PhysicalProcessorsMac",
+                       NumberOfPhysicalProcessors());
+  // Counts number of times the system has resumed from power suspension.
+  UMA_HISTOGRAM_COUNTS_1000("Media.Audio.ResumeEventsMac", num_resumes);
+  // System uptime in hours.
+  UMA_HISTOGRAM_COUNTS_1000("Media.Audio.UptimeMac",
+                            base::SysInfo::Uptime().InHours());
+  DVLOG(1) << "uptime: " << base::SysInfo::Uptime().InHours();
+  DVLOG(1) << "logical processors: " << base::SysInfo::NumberOfProcessors();
+  DVLOG(1) << "physical processors: " << NumberOfPhysicalProcessors();
+  DVLOG(1) << "battery power: " << is_on_battery;
+  DVLOG(1) << "resume events: " << num_resumes;
+}
+
 // See "Technical Note TN2091 - Device input using the HAL Output Audio Unit"
 // http://developer.apple.com/library/mac/#technotes/tn2091/_index.html
 // for more details and background regarding this implementation.
@@ -142,11 +256,16 @@ AUAudioInputStream::AUAudioInputStream(AudioManagerMac* manager,
       buffer_size_was_changed_(false),
       audio_unit_render_has_worked_(false),
       device_listener_is_active_(false),
+      started_(false),
       last_sample_time_(0.0),
       last_number_of_frames_(0),
       total_lost_frames_(0),
       largest_glitch_frames_(0),
-      glitches_detected_(0) {
+      glitches_detected_(0),
+      number_of_restart_indications_(0),
+      number_of_restart_attempts_(0),
+      total_number_of_restart_attempts_(0),
+      weak_factory_(this) {
   DCHECK(manager_);
 
   // Set up the desired (output) format specified by the client.
@@ -404,23 +523,23 @@ bool AUAudioInputStream::Open() {
 
 void AUAudioInputStream::Start(AudioInputCallback* callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DVLOG(1) << "Start";
   DCHECK(callback);
   DCHECK(!sink_);
   DLOG_IF(ERROR, !audio_unit_) << "Open() has not been called successfully";
-  DVLOG(1) << "Start";
   if (IsRunning())
     return;
 
   // Check if we should defer Start() for http://crbug.com/160920.
   if (manager_->ShouldDeferStreamStart()) {
+    LOG(WARNING) << "Start of input audio is deferred";
     start_was_deferred_ = true;
     // Use a cancellable closure so that if Stop() is called before Start()
     // actually runs, we can cancel the pending start.
     deferred_start_cb_.Reset(base::Bind(
         &AUAudioInputStream::Start, base::Unretained(this), callback));
     manager_->GetTaskRunner()->PostDelayedTask(
-        FROM_HERE,
-        deferred_start_cb_.callback(),
+        FROM_HERE, deferred_start_cb_.callback(),
         base::TimeDelta::FromSeconds(
             AudioManagerMac::kStartDelayInSecsForPowerEvents));
     return;
@@ -428,54 +547,68 @@ void AUAudioInputStream::Start(AudioInputCallback* callback) {
 
   sink_ = callback;
   last_success_time_ = base::TimeTicks::Now();
+  last_callback_time_ = base::TimeTicks::Now();
   audio_unit_render_has_worked_ = false;
   StartAgc();
   OSStatus result = AudioOutputUnitStart(audio_unit_);
-  if (result == noErr) {
+  started_ = true;
+  if (started_) {
+    DCHECK(IsRunning()) << "Audio unit is started but not yet running";
     // For UMA stat purposes, start a one-shot timer which detects when input
     // callbacks starts indicating if input audio recording works as intended.
     // CheckInputStartupSuccess() will check if |input_callback_is_active_| is
-    // true when the timer expires. This timer delay is currently set to
-    // 5 seconds to avoid false alarms.
+    // true when the timer expires.
     input_callback_timer_.reset(new base::OneShotTimer());
     input_callback_timer_->Start(
         FROM_HERE,
         base::TimeDelta::FromSeconds(kInputCallbackStartTimeoutInSeconds), this,
         &AUAudioInputStream::CheckInputStartupSuccess);
   }
-  OSSTATUS_DLOG_IF(ERROR, result != noErr, result)
+
+  number_of_restart_indications_ = 0;
+  number_of_restart_attempts_ = 0;
+  check_alive_timer_.reset(new base::RepeatingTimer());
+  check_alive_timer_->Start(
+      FROM_HERE, base::TimeDelta::FromSeconds(kCheckInputIsAliveTimeInSeconds),
+      this, &AUAudioInputStream::CheckIfInputStreamIsAlive);
+
+  OSSTATUS_DLOG_IF(ERROR, !started_, result)
       << "Failed to start acquiring data";
 }
 
 void AUAudioInputStream::Stop() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DVLOG(1) << "Stop";
-  if (!IsRunning())
-    return;
-
   StopAgc();
+  if (check_alive_timer_ != nullptr) {
+    check_alive_timer_->Stop();
+    check_alive_timer_.reset();
+  }
   input_callback_timer_.reset();
 
-  // Stop the I/O audio unit.
-  OSStatus result = AudioOutputUnitStop(audio_unit_);
-  DCHECK_EQ(result, noErr);
-  // Add a DCHECK here just in case. AFAIK, the call to AudioOutputUnitStop()
-  // seems to set this state synchronously, hence it should always report false
-  // after a successful call.
-  DCHECK(!IsRunning()) << "Audio unit is stopped but still running";
+  if (audio_unit_ != nullptr) {
+    // Stop the I/O audio unit.
+    OSStatus result = AudioOutputUnitStop(audio_unit_);
+    DCHECK_EQ(result, noErr);
+    // Add a DCHECK here just in case. AFAIK, the call to AudioOutputUnitStop()
+    // seems to set this state synchronously, hence it should always report
+    // false after a successful call.
+    DCHECK(!IsRunning()) << "Audio unit is stopped but still running";
 
-  // Reset the audio unit’s render state. This function clears memory.
-  // It does not allocate or free memory resources.
-  result = AudioUnitReset(audio_unit_, kAudioUnitScope_Global, 0);
-  DCHECK_EQ(result, noErr);
+    // Reset the audio unit’s render state. This function clears memory.
+    // It does not allocate or free memory resources.
+    result = AudioUnitReset(audio_unit_, kAudioUnitScope_Global, 0);
+    DCHECK_EQ(result, noErr);
+    OSSTATUS_DLOG_IF(ERROR, result != noErr, result)
+        << "Failed to stop acquiring data";
+  }
 
   SetInputCallbackIsActive(false);
   ReportAndResetStats();
+  started_ = false;
   sink_ = nullptr;
   fifo_.Clear();
   io_buffer_frame_size_ = 0;
-  OSSTATUS_DLOG_IF(ERROR, result != noErr, result)
-      << "Failed to stop acquiring data";
 }
 
 void AUAudioInputStream::Close() {
@@ -483,17 +616,30 @@ void AUAudioInputStream::Close() {
   DVLOG(1) << "Close";
   // It is valid to call Close() before calling open or Start().
   // It is also valid to call Close() after Start() has been called.
-  if (IsRunning()) {
-    Stop();
-  }
+  Stop();
   // Uninitialize and dispose the audio unit.
   CloseAudioUnit();
   // Disable the listener for device property changes.
   DeRegisterDeviceChangeListener();
-  // Check if any device property changes are added by filtering out a selected
-  // set of the |device_property_changes_map_| map. Add UMA stats if valuable
-  // data is found.
-  AddDevicePropertyChangesToUMA(false);
+  // Add more UMA stats but only if AGC was activated, i.e. for e.g. WebRTC
+  // audio input streams.
+  if (GetAutomaticGainControl()) {
+    // Check if any device property changes are added by filtering out a
+    // selected set of the |device_property_changes_map_| map. Add UMA stats
+    // if valuable data is found.
+    AddDevicePropertyChangesToUMA(false);
+    // Log whether call to Start() was deferred or not. To be compared with
+    // Media.Audio.InputStartWasDeferredMac which logs the same value but only
+    // when input audio fails to start.
+    UMA_HISTOGRAM_BOOLEAN("Media.Audio.InputStartWasDeferredAudioWorkedMac",
+                          start_was_deferred_);
+    // Log if a change of I/O buffer size was required. To be compared with
+    // Media.Audio.InputBufferSizeWasChangedMac which logs the same value but
+    // only when input audio fails to start.
+    UMA_HISTOGRAM_BOOLEAN("Media.Audio.InputBufferSizeWasChangedAudioWorkedMac",
+                          buffer_size_was_changed_);
+    // TODO(henrika): possibly add more values here...
+  }
   // Inform the audio manager that we have been closed. This will cause our
   // destruction.
   manager_->ReleaseInputStream(this);
@@ -670,6 +816,13 @@ OSStatus AUAudioInputStream::OnDataIsAvailable(
     const AudioTimeStamp* time_stamp,
     UInt32 bus_number,
     UInt32 number_of_frames) {
+  // Update |last_callback_time_| on the main browser thread. Its value is used
+  // by CheckIfInputStreamIsAlive() to detect if the stream is dead or alive.
+  manager_->GetTaskRunner()->PostTask(
+      FROM_HERE,
+      base::Bind(&AUAudioInputStream::UpdateDataCallbackTimeOnMainThread,
+                 weak_factory_.GetWeakPtr(), base::TimeTicks::Now()));
+
   // Indicate that input callbacks have started on the internal AUHAL IO
   // thread. The |input_callback_is_active_| member is read from the creating
   // thread when a timer fires once and set to false in Stop() on the same
@@ -717,7 +870,13 @@ OSStatus AUAudioInputStream::OnDataIsAvailable(
     audio_unit_render_has_worked_ = true;
   }
   if (result) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Media.AudioInputCbErrorMac", result);
+    // Only upload UMA histograms for the case when AGC is enabled. The reason
+    // is that we want to compare these stats with others in this class and
+    // they are only stored for "AGC streams", e.g. WebRTC audio streams.
+    const bool add_uma_histogram = GetAutomaticGainControl();
+    if (add_uma_histogram) {
+      UMA_HISTOGRAM_SPARSE_SLOWLY("Media.AudioInputCbErrorMac", result);
+    }
     OSSTATUS_LOG(ERROR, result) << "AudioUnitRender() failed ";
     if (result == kAudioUnitErr_TooManyFramesToProcess ||
         result == kAudioUnitErr_CannotDoInCurrentContext) {
@@ -745,7 +904,8 @@ OSStatus AUAudioInputStream::OnDataIsAvailable(
 
       // Add some extra UMA stat to track down if we see this particular error
       // in combination with a previous change of buffer size "on the fly".
-      if (result == kAudioUnitErr_CannotDoInCurrentContext) {
+      if (result == kAudioUnitErr_CannotDoInCurrentContext &&
+          add_uma_histogram) {
         UMA_HISTOGRAM_BOOLEAN("Media.Audio.RenderFailsWhenBufferSizeChangesMac",
                               new_buffer_size_detected);
         UMA_HISTOGRAM_BOOLEAN("Media.Audio.AudioUnitRenderHasWorkedMac",
@@ -825,6 +985,19 @@ OSStatus AUAudioInputStream::Provide(UInt32 number_of_frames,
   return noErr;
 }
 
+void AUAudioInputStream::DevicePropertyChangedOnMainThread(
+    const std::vector<UInt32>& properties) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(device_listener_is_active_);
+  // Use property as key to a map and increase its value. We are not
+  // interested in all property changes but store all here anyhow.
+  // Filtering will be done later in AddDevicePropertyChangesToUMA();
+  for (auto property : properties) {
+    DVLOG(2) << "=> " << FourCharFormatCodeToString(property);
+    ++device_property_changes_map_[property];
+  }
+}
+
 OSStatus AUAudioInputStream::OnDevicePropertyChanged(
     AudioObjectID object_id,
     UInt32 num_addresses,
@@ -843,14 +1016,18 @@ OSStatus AUAudioInputStream::DevicePropertyChanged(
 
   // Listeners will be called when possibly many properties have changed.
   // Consequently, the implementation of a listener must go through the array of
-  // addresses to see what exactly has changed.
+  // addresses to see what exactly has changed. Copy values into a local vector
+  // and update the |device_property_changes_map_| on the main thread to avoid
+  // potential race conditions.
+  std::vector<UInt32> properties;
+  properties.reserve(num_addresses);
   for (UInt32 i = 0; i < num_addresses; ++i) {
-    const UInt32 property = addresses[i].mSelector;
-    // Use selector as key to a map and increase its value. We are not
-    // interested in all property changes but store all here anyhow.
-    // Filtering will be done later in AddDevicePropertyChangesToUMA();
-    ++device_property_changes_map_[property];
+    properties.push_back(addresses[i].mSelector);
   }
+  manager_->GetTaskRunner()->PostTask(
+      FROM_HERE,
+      base::Bind(&AUAudioInputStream::DevicePropertyChangedOnMainThread,
+                 weak_factory_.GetWeakPtr(), properties));
   return noErr;
 }
 
@@ -984,6 +1161,7 @@ bool AUAudioInputStream::IsRunning() {
                            kAudioUnitScope_Global, 0, &is_running, &size);
   OSSTATUS_DLOG_IF(ERROR, error != noErr, error)
       << "AudioUnitGetProperty(kAudioOutputUnitProperty_IsRunning) failed";
+  DVLOG(1) << "IsRunning: " << is_running;
   return (error == noErr && is_running);
 }
 
@@ -993,8 +1171,8 @@ void AUAudioInputStream::HandleError(OSStatus err) {
   // carries one extra level of information.
   UMA_HISTOGRAM_SPARSE_SLOWLY("Media.InputErrorMac",
                               GetInputCallbackIsActive() ? err : (err * -1));
-  NOTREACHED() << "error " << GetMacOSStatusErrorString(err) << " (" << err
-               << ")";
+  NOTREACHED() << "error " << logging::DescriptionFromOSStatus(err) << " ("
+               << err << ")";
   if (sink_)
     sink_->OnError(this);
 }
@@ -1019,9 +1197,10 @@ bool AUAudioInputStream::GetInputCallbackIsActive() {
 
 void AUAudioInputStream::CheckInputStartupSuccess() {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(IsRunning());
   // Only add UMA stat related to failing input audio for streams where
   // the AGC has been enabled, e.g. WebRTC audio input streams.
-  if (IsRunning() && GetAutomaticGainControl()) {
+  if (GetAutomaticGainControl()) {
     // Check if we have called Start() and input callbacks have actually
     // started in time as they should. If that is not the case, we have a
     // problem and the stream is considered dead.
@@ -1037,6 +1216,64 @@ void AUAudioInputStream::CheckInputStartupSuccess() {
   }
 }
 
+void AUAudioInputStream::UpdateDataCallbackTimeOnMainThread(
+    base::TimeTicks now_tick) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  last_callback_time_ = now_tick;
+}
+
+void AUAudioInputStream::CheckIfInputStreamIsAlive() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  // Avoid checking stream state if we are suspended.
+  if (manager_->IsSuspending())
+    return;
+  // Restrict usage of the restart mechanism to "AGC streams" only.
+  // TODO(henrika): if the restart scheme works well, we might include it
+  // for all types of input streams.
+  if (!GetAutomaticGainControl())
+    return;
+
+  // Measure time since last callback. |last_callback_time_| is set the first
+  // time in Start() and then updated in each data callback, hence if
+  // |time_since_last_callback| is large (>1) and growing for each check, the
+  // callback sequence has stopped. A typical value under normal/working
+  // conditions is a few milliseconds.
+  base::TimeDelta time_since_last_callback =
+      base::TimeTicks::Now() - last_callback_time_;
+  DVLOG(2) << "time since last callback: "
+           << time_since_last_callback.InSecondsF();
+
+  // Increase a counter if it has been too long since the last data callback.
+  // A non-zero value of this counter is a strong indication of a "dead" input
+  // stream. Reset the same counter if the stream is alive.
+  if (time_since_last_callback.InSecondsF() >
+      0.5 * kCheckInputIsAliveTimeInSeconds) {
+    ++number_of_restart_indications_;
+  } else {
+    number_of_restart_indications_ = 0;
+  }
+
+  // Restart the audio stream if two conditions are met. First, the number of
+  // restart indicators must be larger than a threshold, and secondly, only a
+  // fixed number of restart attempts is allowed.
+  // Note that, the threshold is different depending on if the stream is seen
+  // as dead directly at the first call to Start() (i.e. it has never started)
+  // or if the stream has started OK at least once but then stopped for some
+  // reason (e.g by placing the device in sleep mode). One restart indication
+  // is sufficient for the first case (threshold is zero), while a larger value
+  // (threshold > 0) is required for the second case to avoid false alarms when
+  // e.g. resuming from a suspended state.
+  const size_t restart_threshold =
+      GetInputCallbackIsActive() ? kNumberOfIndicationsToTriggerRestart : 0;
+  if (number_of_restart_indications_ > restart_threshold &&
+      number_of_restart_attempts_ < kMaxNumberOfRestartAttempts) {
+    RestartAudio();
+    ++total_number_of_restart_attempts_;
+    ++number_of_restart_attempts_;
+    number_of_restart_indications_ = 0;
+  }
+}
+
 void AUAudioInputStream::CloseAudioUnit() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DVLOG(1) << "CloseAudioUnit";
@@ -1049,6 +1286,26 @@ void AUAudioInputStream::CloseAudioUnit() {
   OSSTATUS_DLOG_IF(ERROR, result != noErr, result)
       << "AudioComponentInstanceDispose() failed.";
   audio_unit_ = 0;
+}
+
+void AUAudioInputStream::RestartAudio() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DVLOG(1) << "RestartAudio";
+  LOG_IF(ERROR, IsRunning())
+      << "Stream is reported dead but actually seems alive";
+  if (!audio_unit_)
+    return;
+
+  // Store the existing  callback instance for upcoming call to Start().
+  AudioInputCallback* sink = sink_;
+  // Do a best-effort attempt to restart the presumably dead input audio stream.
+  // TODO(henrika): initial tests shows that the scheme below works well but
+  // there might be corner cases that I have missed.
+  Stop();
+  CloseAudioUnit();
+  DeRegisterDeviceChangeListener();
+  Open();
+  Start(sink);
 }
 
 void AUAudioInputStream::AddHistogramsForFailedStartup() {
@@ -1089,6 +1346,10 @@ void AUAudioInputStream::AddHistogramsForFailedStartup() {
   // set of the |device_property_changes_map_| map. Add UMA stats if valuable
   // data is found.
   AddDevicePropertyChangesToUMA(true);
+  // Add information about things like number of logical processors, number
+  // of system resume events etc.
+  AddSystemInfoToUMA(manager_->IsOnBatteryPower(),
+                     manager_->GetNumberOfResumeNotifications());
 }
 
 void AUAudioInputStream::AddDevicePropertyChangesToUMA(bool startup_failed) {
@@ -1097,10 +1358,9 @@ void AUAudioInputStream::AddDevicePropertyChangesToUMA(bool startup_failed) {
   // Scan the map of all available property changes (notification types) and
   // filter out some that make sense to add to UMA stats.
   // TODO(henrika): figure out if the set of stats is sufficient or not.
-  for (auto it = device_property_changes_map_.begin();
-       it != device_property_changes_map_.end(); ++it) {
-    UInt32 device_property = it->first;
-    int change_count = it->second;
+  for (const auto& entry : device_property_changes_map_) {
+    UInt32 device_property = entry.first;
+    int change_count = entry.second;
     AudioDevicePropertyResult uma_result = PROPERTY_OTHER;
     switch (device_property) {
       case kAudioDevicePropertyDeviceHasChanged:
@@ -1151,6 +1411,174 @@ void AUAudioInputStream::AddDevicePropertyChangesToUMA(bool startup_failed) {
         uma_result = PROPERTY_STREAM_PHYSICAL_FORMAT;
         DVLOG(1) << "kAudioStreamPropertyPhysicalFormat";
         break;
+      case kAudioDevicePropertyJackIsConnected:
+        uma_result = PROPERTY_JACK_IS_CONNECTED;
+        DVLOG(1) << "kAudioDevicePropertyJackIsConnected";
+        break;
+      case kAudioDeviceProcessorOverload:
+        uma_result = PROPERTY_PROCESSOR_OVERLOAD;
+        DVLOG(1) << "kAudioDeviceProcessorOverload";
+        break;
+      case kAudioDevicePropertyDataSources:
+        uma_result = PROPERTY_DATA_SOURCES;
+        DVLOG(1) << "kAudioDevicePropertyDataSources";
+        break;
+      case kAudioDevicePropertyDataSource:
+        uma_result = PROPERTY_DATA_SOURCE;
+        DVLOG(1) << "kAudioDevicePropertyDataSource";
+        break;
+      case kAudioDevicePropertyVolumeDecibels:
+        uma_result = PROPERTY_VOLUME_DECIBELS;
+        DVLOG(1) << "kAudioDevicePropertyVolumeDecibels";
+        break;
+      case kAudioDevicePropertyVolumeScalar:
+        uma_result = PROPERTY_VOLUME_SCALAR;
+        DVLOG(1) << "kAudioDevicePropertyVolumeScalar";
+        break;
+      case kAudioDevicePropertyMute:
+        uma_result = PROPERTY_MUTE;
+        DVLOG(1) << "kAudioDevicePropertyMute";
+        break;
+      case kAudioDevicePropertyPlugIn:
+        uma_result = PROPERTY_PLUGIN;
+        DVLOG(1) << "kAudioDevicePropertyPlugIn";
+        break;
+      case kAudioDevicePropertyUsesVariableBufferFrameSizes:
+        uma_result = PROPERTY_USES_VARIABLE_BUFFER_FRAME_SIZES;
+        DVLOG(1) << "kAudioDevicePropertyUsesVariableBufferFrameSizes";
+        break;
+      case kAudioDevicePropertyIOCycleUsage:
+        uma_result = PROPERTY_IO_CYCLE_USAGE;
+        DVLOG(1) << "kAudioDevicePropertyIOCycleUsage";
+        break;
+      case kAudioDevicePropertyIOProcStreamUsage:
+        uma_result = PROPERTY_IO_PROC_STREAM_USAGE;
+        DVLOG(1) << "kAudioDevicePropertyIOProcStreamUsage";
+        break;
+      case kAudioDevicePropertyConfigurationApplication:
+        uma_result = PROPERTY_CONFIGURATION_APPLICATION;
+        DVLOG(1) << "kAudioDevicePropertyConfigurationApplication";
+        break;
+      case kAudioDevicePropertyDeviceUID:
+        uma_result = PROPERTY_DEVICE_UID;
+        DVLOG(1) << "kAudioDevicePropertyDeviceUID";
+        break;
+      case kAudioDevicePropertyModelUID:
+        uma_result = PROPERTY_MODE_UID;
+        DVLOG(1) << "kAudioDevicePropertyModelUID";
+        break;
+      case kAudioDevicePropertyTransportType:
+        uma_result = PROPERTY_TRANSPORT_TYPE;
+        DVLOG(1) << "kAudioDevicePropertyTransportType";
+        break;
+      case kAudioDevicePropertyRelatedDevices:
+        uma_result = PROPERTY_RELATED_DEVICES;
+        DVLOG(1) << "kAudioDevicePropertyRelatedDevices";
+        break;
+      case kAudioDevicePropertyClockDomain:
+        uma_result = PROPERTY_CLOCK_DOMAIN;
+        DVLOG(1) << "kAudioDevicePropertyClockDomain";
+        break;
+      case kAudioDevicePropertyDeviceCanBeDefaultDevice:
+        uma_result = PROPERTY_DEVICE_CAN_BE_DEFAULT_DEVICE;
+        DVLOG(1) << "kAudioDevicePropertyDeviceCanBeDefaultDevice";
+        break;
+      case kAudioDevicePropertyDeviceCanBeDefaultSystemDevice:
+        uma_result = PROPERTY_DEVICE_CAN_BE_DEFAULT_SYSTEM_DEVICE;
+        DVLOG(1) << "kAudioDevicePropertyDeviceCanBeDefaultSystemDevice";
+        break;
+      case kAudioDevicePropertyLatency:
+        uma_result = PROPERTY_LATENCY;
+        DVLOG(1) << "kAudioDevicePropertyLatency";
+        break;
+      case kAudioDevicePropertyStreams:
+        uma_result = PROPERTY_STREAMS;
+        DVLOG(1) << "kAudioDevicePropertyStreams";
+        break;
+      case kAudioObjectPropertyControlList:
+        uma_result = PROPERTY_CONTROL_LIST;
+        DVLOG(1) << "kAudioObjectPropertyControlList";
+        break;
+      case kAudioDevicePropertySafetyOffset:
+        uma_result = PROPERTY_SAFETY_OFFSET;
+        DVLOG(1) << "kAudioDevicePropertySafetyOffset";
+        break;
+      case kAudioDevicePropertyAvailableNominalSampleRates:
+        uma_result = PROPERTY_AVAILABLE_NOMINAL_SAMPLE_RATES;
+        DVLOG(1) << "kAudioDevicePropertyAvailableNominalSampleRates";
+        break;
+      case kAudioDevicePropertyIcon:
+        uma_result = PROPERTY_ICON;
+        DVLOG(1) << "kAudioDevicePropertyIcon";
+        break;
+      case kAudioDevicePropertyIsHidden:
+        uma_result = PROPERTY_IS_HIDDEN;
+        DVLOG(1) << "kAudioDevicePropertyIsHidden";
+        break;
+      case kAudioDevicePropertyPreferredChannelsForStereo:
+        uma_result = PROPERTY_PREFERRED_CHANNELS_FOR_STEREO;
+        DVLOG(1) << "kAudioDevicePropertyPreferredChannelsForStereo";
+        break;
+      case kAudioDevicePropertyPreferredChannelLayout:
+        uma_result = PROPERTY_PREFERRED_CHANNEL_LAYOUT;
+        DVLOG(1) << "kAudioDevicePropertyPreferredChannelLayout";
+        break;
+      case kAudioDevicePropertyVolumeRangeDecibels:
+        uma_result = PROPERTY_VOLUME_RANGE_DECIBELS;
+        DVLOG(1) << "kAudioDevicePropertyVolumeRangeDecibels";
+        break;
+      case kAudioDevicePropertyVolumeScalarToDecibels:
+        uma_result = PROPERTY_VOLUME_SCALAR_TO_DECIBELS;
+        DVLOG(1) << "kAudioDevicePropertyVolumeScalarToDecibels";
+        break;
+      case kAudioDevicePropertyVolumeDecibelsToScalar:
+        uma_result = PROPERTY_VOLUME_DECIBEL_TO_SCALAR;
+        DVLOG(1) << "kAudioDevicePropertyVolumeDecibelsToScalar";
+        break;
+      case kAudioDevicePropertyStereoPan:
+        uma_result = PROPERTY_STEREO_PAN;
+        DVLOG(1) << "kAudioDevicePropertyStereoPan";
+        break;
+      case kAudioDevicePropertyStereoPanChannels:
+        uma_result = PROPERTY_STEREO_PAN_CHANNELS;
+        DVLOG(1) << "kAudioDevicePropertyStereoPanChannels";
+        break;
+      case kAudioDevicePropertySolo:
+        uma_result = PROPERTY_SOLO;
+        DVLOG(1) << "kAudioDevicePropertySolo";
+        break;
+      case kAudioDevicePropertyPhantomPower:
+        uma_result = PROPERTY_PHANTOM_POWER;
+        DVLOG(1) << "kAudioDevicePropertyPhantomPower";
+        break;
+      case kAudioDevicePropertyPhaseInvert:
+        uma_result = PROPERTY_PHASE_INVERT;
+        DVLOG(1) << "kAudioDevicePropertyPhaseInvert";
+        break;
+      case kAudioDevicePropertyClipLight:
+        uma_result = PROPERTY_CLIP_LIGHT;
+        DVLOG(1) << "kAudioDevicePropertyClipLight";
+        break;
+      case kAudioDevicePropertyTalkback:
+        uma_result = PROPERTY_TALKBACK;
+        DVLOG(1) << "kAudioDevicePropertyTalkback";
+        break;
+      case kAudioDevicePropertyListenback:
+        uma_result = PROPERTY_LISTENBACK;
+        DVLOG(1) << "kAudioDevicePropertyListenback";
+        break;
+      case kAudioDevicePropertyClockSource:
+        uma_result = PROPERTY_CLOCK_SOURCE;
+        DVLOG(1) << "kAudioDevicePropertyClockSource";
+        break;
+      case kAudioDevicePropertyClockSources:
+        uma_result = PROPERTY_CLOCK_SOURCES;
+        DVLOG(1) << "kAudioDevicePropertyClockSources";
+        break;
+      case kAudioDevicePropertySubMute:
+        uma_result = PROPERTY_SUB_MUTE;
+        DVLOG(1) << "kAudioDevicePropertySubMute";
+        break;
       default:
         uma_result = PROPERTY_OTHER;
         DVLOG(1) << "Property change is ignored";
@@ -1193,6 +1621,10 @@ void AUAudioInputStream::ReportAndResetStats() {
   if (last_sample_time_ == 0)
     return;  // No stats gathered to report.
 
+  // TODO(henrika): perhaps add this value to UMA stats as well.
+  DVLOG(1) << "Total number of restart attempts: "
+           << total_number_of_restart_attempts_;
+
   // A value of 0 indicates that we got the buffer size we asked for.
   UMA_HISTOGRAM_COUNTS_10000("Media.Audio.Capture.FramesProvided",
                              number_of_frames_provided_);
@@ -1213,7 +1645,7 @@ void AUAudioInputStream::ReportAndResetStats() {
         50);
     DLOG(WARNING) << "Total glitches=" << glitches_detected_
                   << ". Total frames lost=" << total_lost_frames_ << " ("
-                  << lost_frames_ms;
+                  << lost_frames_ms << ")";
   }
 
   number_of_frames_provided_ = 0;

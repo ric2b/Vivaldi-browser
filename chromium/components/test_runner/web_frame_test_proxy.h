@@ -5,282 +5,288 @@
 #ifndef COMPONENTS_TEST_RUNNER_WEB_FRAME_TEST_PROXY_H_
 #define COMPONENTS_TEST_RUNNER_WEB_FRAME_TEST_PROXY_H_
 
+#include <utility>
+
+#include "base/logging.h"
 #include "base/macros.h"
-#include "components/test_runner/mock_screen_orientation_client.h"
-#include "components/test_runner/web_test_delegate.h"
-#include "components/test_runner/web_test_interfaces.h"
-#include "components/test_runner/web_test_proxy.h"
-#include "components/test_runner/web_test_runner.h"
+#include "base/memory/scoped_ptr.h"
+#include "components/test_runner/test_runner_export.h"
+#include "components/test_runner/web_frame_test_client.h"
 #include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/web/WebFrameClient.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 
 namespace test_runner {
 
-// Templetized wrapper around RenderFrameImpl objects, which implement
-// the WebFrameClient interface.
-template <class Base, typename P>
-class WebFrameTestProxy : public Base {
+class TEST_RUNNER_EXPORT WebFrameTestProxyBase {
  public:
-  explicit WebFrameTestProxy(P p) : Base(p), base_proxy_(NULL) {}
+  void set_test_client(scoped_ptr<WebFrameTestClient> client) {
+    DCHECK(client);
+    DCHECK(!test_client_);
+    test_client_ = std::move(client);
+  }
+
+ protected:
+  WebFrameTestProxyBase();
+  ~WebFrameTestProxyBase();
+  blink::WebFrameClient* test_client() { return test_client_.get(); }
+
+ private:
+  scoped_ptr<WebFrameTestClient> test_client_;
+
+  DISALLOW_COPY_AND_ASSIGN(WebFrameTestProxyBase);
+};
+
+// WebTestProxy is used during LayoutTests and always instantiated, at time of
+// writing with Base=RenderFrameImpl. It does not directly inherit from it for
+// layering purposes.
+template <class Base, typename P>
+class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
+ public:
+  explicit WebFrameTestProxy(P p) : Base(p) {}
 
   virtual ~WebFrameTestProxy() {}
 
-  void set_base_proxy(WebTestProxyBase* proxy) { base_proxy_ = proxy; }
-
   // WebFrameClient implementation.
-  virtual blink::WebPlugin* createPlugin(blink::WebLocalFrame* frame,
-                                         const blink::WebPluginParams& params) {
-    blink::WebPlugin* plugin = base_proxy_->CreatePlugin(frame, params);
+  blink::WebPlugin* createPlugin(
+      blink::WebLocalFrame* frame,
+      const blink::WebPluginParams& params) override {
+    blink::WebPlugin* plugin = test_client()->createPlugin(frame, params);
     if (plugin)
       return plugin;
     return Base::createPlugin(frame, params);
   }
 
-  virtual blink::WebScreenOrientationClient* webScreenOrientationClient() {
-    return base_proxy_->GetScreenOrientationClientMock();
+  blink::WebScreenOrientationClient* webScreenOrientationClient() override {
+    return test_client()->webScreenOrientationClient();
   }
 
-  virtual void didAddMessageToConsole(const blink::WebConsoleMessage& message,
-                                      const blink::WebString& source_name,
-                                      unsigned source_line,
-                                      const blink::WebString& stack_trace) {
-    base_proxy_->DidAddMessageToConsole(message, source_name, source_line);
+  void didAddMessageToConsole(const blink::WebConsoleMessage& message,
+                              const blink::WebString& source_name,
+                              unsigned source_line,
+                              const blink::WebString& stack_trace) override {
+    test_client()->didAddMessageToConsole(message, source_name, source_line,
+                                          stack_trace);
     Base::didAddMessageToConsole(
         message, source_name, source_line, stack_trace);
   }
 
-  virtual bool canCreatePluginWithoutRenderer(
-      const blink::WebString& mime_type) {
-    using blink::WebString;
-
-    const CR_DEFINE_STATIC_LOCAL(
-        WebString, suffix, ("-can-create-without-renderer"));
-    return mime_type.utf8().find(suffix.utf8()) != std::string::npos;
+  bool canCreatePluginWithoutRenderer(
+      const blink::WebString& mime_type) override {
+    const char suffix[] = "-can-create-without-renderer";
+    return mime_type.utf8().find(suffix) != std::string::npos;
   }
 
-  virtual void loadURLExternally(const blink::WebURLRequest& request,
-                                 blink::WebNavigationPolicy policy,
-                                 const blink::WebString& suggested_name,
-                                 bool replaces_current_history_item) {
-    base_proxy_->LoadURLExternally(request, policy, suggested_name,
-                                   replaces_current_history_item);
+  void loadURLExternally(const blink::WebURLRequest& request,
+                         blink::WebNavigationPolicy policy,
+                         const blink::WebString& suggested_name,
+                         bool replaces_current_history_item) override {
+    test_client()->loadURLExternally(request, policy, suggested_name,
+                                     replaces_current_history_item);
     Base::loadURLExternally(request, policy, suggested_name,
                             replaces_current_history_item);
   }
 
-  virtual void didStartProvisionalLoad(blink::WebLocalFrame* frame,
-                                       double triggeringEventTime) {
-    base_proxy_->DidStartProvisionalLoad(frame);
+  void didStartProvisionalLoad(blink::WebLocalFrame* frame,
+                               double triggeringEventTime) override {
+    test_client()->didStartProvisionalLoad(frame, triggeringEventTime);
     Base::didStartProvisionalLoad(
         frame, triggeringEventTime);
   }
 
-  virtual void didReceiveServerRedirectForProvisionalLoad(
-      blink::WebLocalFrame* frame) {
-    base_proxy_->DidReceiveServerRedirectForProvisionalLoad(frame);
+  void didReceiveServerRedirectForProvisionalLoad(
+      blink::WebLocalFrame* frame) override {
+    test_client()->didReceiveServerRedirectForProvisionalLoad(frame);
     Base::didReceiveServerRedirectForProvisionalLoad(frame);
   }
 
-  virtual void didFailProvisionalLoad(
+  void didFailProvisionalLoad(
       blink::WebLocalFrame* frame,
       const blink::WebURLError& error,
-      blink::WebHistoryCommitType commit_type) {
+      blink::WebHistoryCommitType commit_type) override {
+    test_client()->didFailProvisionalLoad(frame, error, commit_type);
     // If the test finished, don't notify the embedder of the failed load,
     // as we already destroyed the document loader.
-    if (base_proxy_->DidFailProvisionalLoad(frame, error, commit_type))
+    if (!frame->provisionalDataSource())
       return;
     Base::didFailProvisionalLoad(frame, error, commit_type);
   }
 
-  virtual void didCommitProvisionalLoad(
+  void didCommitProvisionalLoad(
       blink::WebLocalFrame* frame,
       const blink::WebHistoryItem& item,
-      blink::WebHistoryCommitType commit_type) {
-    base_proxy_->DidCommitProvisionalLoad(frame, item, commit_type);
+      blink::WebHistoryCommitType commit_type) override {
+    test_client()->didCommitProvisionalLoad(frame, item, commit_type);
     Base::didCommitProvisionalLoad(frame, item, commit_type);
   }
 
-  virtual void didReceiveTitle(blink::WebLocalFrame* frame,
-                               const blink::WebString& title,
-                               blink::WebTextDirection direction) {
-    base_proxy_->DidReceiveTitle(frame, title, direction);
+  void didReceiveTitle(blink::WebLocalFrame* frame,
+                       const blink::WebString& title,
+                       blink::WebTextDirection direction) override {
+    test_client()->didReceiveTitle(frame, title, direction);
     Base::didReceiveTitle(frame, title, direction);
   }
 
-  virtual void didChangeIcon(blink::WebLocalFrame* frame,
-                             blink::WebIconURL::Type icon_type) {
-    base_proxy_->DidChangeIcon(frame, icon_type);
+  void didChangeIcon(blink::WebLocalFrame* frame,
+                     blink::WebIconURL::Type icon_type) override {
+    test_client()->didChangeIcon(frame, icon_type);
     Base::didChangeIcon(frame, icon_type);
   }
 
-  virtual void didFinishDocumentLoad(blink::WebLocalFrame* frame) {
-    base_proxy_->DidFinishDocumentLoad(frame);
+  void didFinishDocumentLoad(blink::WebLocalFrame* frame) override {
+    test_client()->didFinishDocumentLoad(frame);
     Base::didFinishDocumentLoad(frame);
   }
 
-  virtual void didHandleOnloadEvents(blink::WebLocalFrame* frame) {
-    base_proxy_->DidHandleOnloadEvents(frame);
+  void didHandleOnloadEvents(blink::WebLocalFrame* frame) override {
+    test_client()->didHandleOnloadEvents(frame);
     Base::didHandleOnloadEvents(frame);
   }
 
-  virtual void didFailLoad(blink::WebLocalFrame* frame,
-                           const blink::WebURLError& error,
-                           blink::WebHistoryCommitType commit_type) {
-    base_proxy_->DidFailLoad(frame, error, commit_type);
+  void didFailLoad(blink::WebLocalFrame* frame,
+                   const blink::WebURLError& error,
+                   blink::WebHistoryCommitType commit_type) override {
+    test_client()->didFailLoad(frame, error, commit_type);
     Base::didFailLoad(frame, error, commit_type);
   }
 
-  virtual void didFinishLoad(blink::WebLocalFrame* frame) {
+  void didFinishLoad(blink::WebLocalFrame* frame) override {
     Base::didFinishLoad(frame);
-    base_proxy_->DidFinishLoad(frame);
+    test_client()->didFinishLoad(frame);
   }
 
-  virtual void didChangeSelection(bool is_selection_empty) {
-    base_proxy_->DidChangeSelection(is_selection_empty);
+  void didChangeSelection(bool is_selection_empty) override {
+    test_client()->didChangeSelection(is_selection_empty);
     Base::didChangeSelection(is_selection_empty);
   }
 
-  virtual blink::WebColorChooser* createColorChooser(
+  blink::WebColorChooser* createColorChooser(
       blink::WebColorChooserClient* client,
       const blink::WebColor& initial_color,
-      const blink::WebVector<blink::WebColorSuggestion>& suggestions) {
-    return base_proxy_->CreateColorChooser(client, initial_color, suggestions);
+      const blink::WebVector<blink::WebColorSuggestion>& suggestions) override {
+    return test_client()->createColorChooser(client, initial_color,
+                                             suggestions);
   }
 
-  virtual void runModalAlertDialog(const blink::WebString& message) {
-    base_proxy_->GetDelegate()->PrintMessage(std::string("ALERT: ") +
-                                             message.utf8().data() + "\n");
+  void runModalAlertDialog(const blink::WebString& message) override {
+    test_client()->runModalAlertDialog(message);
   }
 
-  virtual bool runModalConfirmDialog(const blink::WebString& message) {
-    base_proxy_->GetDelegate()->PrintMessage(std::string("CONFIRM: ") +
-                                             message.utf8().data() + "\n");
-    return true;
+  bool runModalConfirmDialog(const blink::WebString& message) override {
+    return test_client()->runModalConfirmDialog(message);
   }
 
-  virtual bool runModalPromptDialog(const blink::WebString& message,
-                                    const blink::WebString& default_value,
-                                    blink::WebString*) {
-    base_proxy_->GetDelegate()->PrintMessage(
-        std::string("PROMPT: ") + message.utf8().data() + ", default text: " +
-        default_value.utf8().data() + "\n");
-    return true;
+  bool runModalPromptDialog(const blink::WebString& message,
+                            const blink::WebString& default_value,
+                            blink::WebString* actual_value) override {
+    return test_client()->runModalPromptDialog(message, default_value,
+                                               actual_value);
   }
 
-  virtual bool runModalBeforeUnloadDialog(bool is_reload,
-                                          const blink::WebString& message) {
-    base_proxy_->GetDelegate()->PrintMessage(
-        std::string("CONFIRM NAVIGATION: ") + message.utf8().data() + "\n");
-    return !base_proxy_->GetInterfaces()
-                ->TestRunner()
-                ->ShouldStayOnPageAfterHandlingBeforeUnload();
+  bool runModalBeforeUnloadDialog(bool is_reload) override {
+    return test_client()->runModalBeforeUnloadDialog(is_reload);
   }
 
-  virtual void showContextMenu(
-      const blink::WebContextMenuData& context_menu_data) {
-    base_proxy_->ShowContextMenu(context_menu_data);
+  void showContextMenu(
+      const blink::WebContextMenuData& context_menu_data) override {
+    test_client()->showContextMenu(context_menu_data);
     Base::showContextMenu(context_menu_data);
   }
 
-  virtual void didDetectXSS(const blink::WebURL& insecure_url,
-                            bool did_block_entire_page) {
+  void didDetectXSS(const blink::WebURL& insecure_url,
+                    bool did_block_entire_page) override {
     // This is not implemented in RenderFrameImpl, so need to explicitly call
     // into the base proxy.
-    base_proxy_->DidDetectXSS(insecure_url, did_block_entire_page);
+    test_client()->didDetectXSS(insecure_url, did_block_entire_page);
     Base::didDetectXSS(insecure_url, did_block_entire_page);
   }
 
-  virtual void didDispatchPingLoader(const blink::WebURL& url) {
+  void didDispatchPingLoader(const blink::WebURL& url) override {
     // This is not implemented in RenderFrameImpl, so need to explicitly call
     // into the base proxy.
-    base_proxy_->DidDispatchPingLoader(url);
+    test_client()->didDispatchPingLoader(url);
     Base::didDispatchPingLoader(url);
   }
 
-  virtual void didCreateDataSource(blink::WebLocalFrame* frame,
-                                   blink::WebDataSource* ds) {
-    Base::didCreateDataSource(frame, ds);
-  }
-
-  virtual void willSendRequest(blink::WebLocalFrame* frame,
-                               unsigned identifier,
-                               blink::WebURLRequest& request,
-                               const blink::WebURLResponse& redirect_response) {
+  void willSendRequest(
+      blink::WebLocalFrame* frame,
+      unsigned identifier,
+      blink::WebURLRequest& request,
+      const blink::WebURLResponse& redirect_response) override {
     Base::willSendRequest(frame, identifier, request, redirect_response);
-    base_proxy_->WillSendRequest(frame, identifier, request, redirect_response);
+    test_client()->willSendRequest(frame, identifier, request,
+                                   redirect_response);
   }
 
-  virtual void didReceiveResponse(unsigned identifier,
-                                  const blink::WebURLResponse& response) {
-    base_proxy_->DidReceiveResponse(identifier, response);
+  void didReceiveResponse(unsigned identifier,
+                          const blink::WebURLResponse& response) override {
+    test_client()->didReceiveResponse(identifier, response);
     Base::didReceiveResponse(identifier, response);
   }
 
-  virtual void didChangeResourcePriority(
-      unsigned identifier,
-      const blink::WebURLRequest::Priority& priority,
-      int intra_priority_value) {
+  void didChangeResourcePriority(unsigned identifier,
+                                 const blink::WebURLRequest::Priority& priority,
+                                 int intra_priority_value) override {
     // This is not implemented in RenderFrameImpl, so need to explicitly call
     // into the base proxy.
-    base_proxy_->DidChangeResourcePriority(
-        identifier, priority, intra_priority_value);
+    test_client()->didChangeResourcePriority(identifier, priority,
+                                             intra_priority_value);
     Base::didChangeResourcePriority(
         identifier, priority, intra_priority_value);
   }
 
-  virtual void didFinishResourceLoad(blink::WebLocalFrame* frame,
-                                     unsigned identifier) {
-    base_proxy_->DidFinishResourceLoad(frame, identifier);
+  void didFinishResourceLoad(blink::WebLocalFrame* frame,
+                             unsigned identifier) override {
+    test_client()->didFinishResourceLoad(frame, identifier);
   }
 
-  virtual blink::WebNavigationPolicy decidePolicyForNavigation(
-      const blink::WebFrameClient::NavigationPolicyInfo& info) {
-    blink::WebNavigationPolicy policy = base_proxy_->DecidePolicyForNavigation(
-        info);
+  blink::WebNavigationPolicy decidePolicyForNavigation(
+      const blink::WebFrameClient::NavigationPolicyInfo& info) override {
+    blink::WebNavigationPolicy policy =
+        test_client()->decidePolicyForNavigation(info);
     if (policy == blink::WebNavigationPolicyIgnore)
       return policy;
 
     return Base::decidePolicyForNavigation(info);
   }
 
-  virtual void willStartUsingPeerConnectionHandler(
-      blink::WebRTCPeerConnectionHandler* handler) {
+  void willStartUsingPeerConnectionHandler(
+      blink::WebRTCPeerConnectionHandler* handler) override {
     // RenderFrameImpl::willStartUsingPeerConnectionHandler can not be mocked.
     // See http://crbug/363285.
   }
 
-  virtual blink::WebUserMediaClient* userMediaClient() {
-    return base_proxy_->GetUserMediaClient();
+  blink::WebUserMediaClient* userMediaClient() override {
+    return test_client()->userMediaClient();
   }
 
-  virtual bool willCheckAndDispatchMessageEvent(
+  bool willCheckAndDispatchMessageEvent(
       blink::WebLocalFrame* source_frame,
       blink::WebFrame* target_frame,
       blink::WebSecurityOrigin target,
-      blink::WebDOMMessageEvent event) {
-    if (base_proxy_->WillCheckAndDispatchMessageEvent(
+      blink::WebDOMMessageEvent event) override {
+    if (test_client()->willCheckAndDispatchMessageEvent(
             source_frame, target_frame, target, event))
       return true;
     return Base::willCheckAndDispatchMessageEvent(
         source_frame, target_frame, target, event);
   }
 
-  virtual void postAccessibilityEvent(const blink::WebAXObject& object,
-                                      blink::WebAXEvent event) {
-    base_proxy_->PostAccessibilityEvent(object, event);
+  void postAccessibilityEvent(const blink::WebAXObject& object,
+                              blink::WebAXEvent event) override {
+    test_client()->postAccessibilityEvent(object, event);
     Base::postAccessibilityEvent(object, event);
   }
 
-  virtual void checkIfAudioSinkExistsAndIsAuthorized(
+  void checkIfAudioSinkExistsAndIsAuthorized(
       const blink::WebString& sink_id,
       const blink::WebSecurityOrigin& security_origin,
-      blink::WebSetSinkIdCallbacks* web_callbacks) {
-    base_proxy_->CheckIfAudioSinkExistsAndIsAuthorized(sink_id, security_origin,
-                                                       web_callbacks);
+      blink::WebSetSinkIdCallbacks* web_callbacks) override {
+    test_client()->checkIfAudioSinkExistsAndIsAuthorized(
+        sink_id, security_origin, web_callbacks);
   }
 
  private:
-  WebTestProxyBase* base_proxy_;
-
   DISALLOW_COPY_AND_ASSIGN(WebFrameTestProxy);
 };
 

@@ -891,7 +891,13 @@ bool MediaCodecDecoder::DepleteOutputBufferQueue() {
       case MEDIA_CODEC_OUTPUT_FORMAT_CHANGED:
         DVLOG(2) << class_name() << "::" << __FUNCTION__
                  << " MEDIA_CODEC_OUTPUT_FORMAT_CHANGED";
-        OnOutputFormatChanged();
+        if (!OnOutputFormatChanged()) {
+          DVLOG(1) << class_name() << "::" << __FUNCTION__
+                   << ": OnOutputFormatChanged failed, stopping frame"
+                   << " processing";
+          media_task_runner_->PostTask(FROM_HERE, internal_error_cb_);
+          return false;
+        }
         break;
 
       case MEDIA_CODEC_OK:
@@ -906,7 +912,13 @@ bool MediaCodecDecoder::DepleteOutputBufferQueue() {
         else
           render_mode = kRenderNow;
 
-        Render(buffer_index, offset, size, render_mode, pts, eos_encountered);
+        if (!Render(buffer_index, offset, size, render_mode, pts,
+                    eos_encountered)) {
+          DVLOG(1) << class_name() << "::" << __FUNCTION__
+                   << " Render failed, stopping frame processing";
+          media_task_runner_->PostTask(FROM_HERE, internal_error_cb_);
+          return false;
+        }
 
         if (render_mode == kRenderAfterPreroll) {
           DVLOG(1) << class_name() << "::" << __FUNCTION__ << " pts " << pts

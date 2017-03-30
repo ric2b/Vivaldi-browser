@@ -5,12 +5,14 @@
 #include "jingle/glue/proxy_resolving_client_socket.h"
 
 #include <stdint.h>
+#include <string>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "net/base/io_buffer.h"
+#include "net/base/ip_address.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_auth_controller.h"
@@ -66,7 +68,6 @@ ProxyResolvingClientSocket::ProxyResolvingClientSocket(
   session_params.ssl_config_service = request_context->ssl_config_service();
   session_params.http_auth_handler_factory =
       request_context->http_auth_handler_factory();
-  session_params.network_delegate = request_context->network_delegate();
   session_params.http_server_properties =
       request_context->http_server_properties();
   session_params.net_log = request_context->net_log();
@@ -139,6 +140,7 @@ int ProxyResolvingClientSocket::Connect(
   // First we try and resolve the proxy.
   int status = network_session_->proxy_service()->ResolveProxy(
       proxy_url_,
+      std::string(),
       net::LOAD_NORMAL,
       &proxy_info_,
       proxy_resolve_callback_,
@@ -290,7 +292,7 @@ int ProxyResolvingClientSocket::ReconsiderProxyAfterError(int error) {
   }
 
   int rv = network_session_->proxy_service()->ReconsiderProxyAfterError(
-      proxy_url_, net::LOAD_NORMAL, error, &proxy_info_,
+      proxy_url_, std::string(), net::LOAD_NORMAL, error, &proxy_info_,
       proxy_resolve_callback_, &pac_request_, NULL, bound_net_log_);
   if (rv == net::OK || rv == net::ERR_IO_PENDING) {
     CloseTransportSocket();
@@ -353,13 +355,13 @@ int ProxyResolvingClientSocket::GetPeerAddress(
   if (proxy_info_.is_direct())
     return transport_->socket()->GetPeerAddress(address);
 
-  net::IPAddressNumber ip_number;
-  if (!net::ParseIPLiteralToNumber(dest_host_port_pair_.host(), &ip_number)) {
+  net::IPAddress ip_address;
+  if (!ip_address.AssignFromIPLiteral(dest_host_port_pair_.host())) {
     // Do not expose the proxy IP address to the caller.
     return net::ERR_NAME_NOT_RESOLVED;
   }
 
-  *address = net::IPEndPoint(ip_number, dest_host_port_pair_.port());
+  *address = net::IPEndPoint(ip_address, dest_host_port_pair_.port());
   return net::OK;
 }
 
@@ -395,13 +397,6 @@ void ProxyResolvingClientSocket::SetOmniboxSpeculation() {
 bool ProxyResolvingClientSocket::WasEverUsed() const {
   if (transport_.get() && transport_->socket())
     return transport_->socket()->WasEverUsed();
-  NOTREACHED();
-  return false;
-}
-
-bool ProxyResolvingClientSocket::UsingTCPFastOpen() const {
-  if (transport_.get() && transport_->socket())
-    return transport_->socket()->UsingTCPFastOpen();
   NOTREACHED();
   return false;
 }

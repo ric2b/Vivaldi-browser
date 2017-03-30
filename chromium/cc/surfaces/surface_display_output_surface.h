@@ -28,8 +28,8 @@ class CC_SURFACES_EXPORT SurfaceDisplayOutputSurface
   SurfaceDisplayOutputSurface(
       SurfaceManager* surface_manager,
       SurfaceIdAllocator* allocator,
-      const scoped_refptr<ContextProvider>& context_provider,
-      const scoped_refptr<ContextProvider>& worker_context_provider);
+      scoped_refptr<ContextProvider> context_provider,
+      scoped_refptr<ContextProvider> worker_context_provider);
   ~SurfaceDisplayOutputSurface() override;
 
   void set_display_client(OnscreenDisplayClient* display_client) {
@@ -43,11 +43,11 @@ class CC_SURFACES_EXPORT SurfaceDisplayOutputSurface
   void SwapBuffers(CompositorFrame* frame) override;
   bool BindToClient(OutputSurfaceClient* client) override;
   void ForceReclaimResources() override;
+  void DetachFromClient() override;
 
   // SurfaceFactoryClient implementation.
   void ReturnResources(const ReturnedResourceArray& resources) override;
-  void SetBeginFrameSource(SurfaceId surface_id,
-                           BeginFrameSource* begin_frame_source) override;
+  void SetBeginFrameSource(BeginFrameSource* begin_frame_source) override;
 
  private:
   void SwapBuffersComplete(SurfaceDrawStatus drawn);

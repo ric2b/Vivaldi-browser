@@ -10,7 +10,9 @@ from webkitpy.layout_tests.port import builders
 from webkitpy.tool.commands.commandtest import CommandsTest
 from webkitpy.tool.mocktool import MockTool, MockOptions
 
+
 class FakeBotTestExpectations(object):
+
     def expectation_lines(self, only_ignore_very_flaky=False):
         return []
 
@@ -47,6 +49,7 @@ class FakeBotTestExpectationsFactory(object):
 
 
 class FlakyTestsTest(CommandsTest):
+
     def test_merge_lines(self):
         command = flakytests.FlakyTests()
         factory = FakeBotTestExpectationsFactory()
@@ -64,7 +67,6 @@ class FlakyTestsTest(CommandsTest):
             self.assertEqual(lines[0].specifiers, ['Mac', 'Linux'])
         finally:
             builders._exact_matches = old_builders
-
 
     def test_integration(self):
         command = flakytests.FlakyTests()

@@ -34,7 +34,7 @@ InterpolationValue CSSShadowListInterpolationType::maybeConvertNeutral(const Int
     return createNeutralValue();
 }
 
-InterpolationValue CSSShadowListInterpolationType::maybeConvertInitial() const
+InterpolationValue CSSShadowListInterpolationType::maybeConvertInitial(const StyleResolverState&) const
 {
     return convertShadowList(ShadowListPropertyFunctions::getInitialShadowList(cssProperty()), 1);
 }
@@ -89,9 +89,9 @@ InterpolationValue CSSShadowListInterpolationType::maybeConvertValue(const CSSVa
     });
 }
 
-PairwiseInterpolationValue CSSShadowListInterpolationType::mergeSingleConversions(InterpolationValue& start, InterpolationValue& end) const
+PairwiseInterpolationValue CSSShadowListInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
 {
-    return ListInterpolationFunctions::mergeSingleConversions(start, end, ShadowInterpolationFunctions::mergeSingleConversions);
+    return ListInterpolationFunctions::mergeSingleConversions(std::move(start), std::move(end), ShadowInterpolationFunctions::mergeSingleConversions);
 }
 
 InterpolationValue CSSShadowListInterpolationType::maybeConvertUnderlyingValue(const InterpolationEnvironment& environment) const
@@ -101,7 +101,7 @@ InterpolationValue CSSShadowListInterpolationType::maybeConvertUnderlyingValue(c
     return convertShadowList(ShadowListPropertyFunctions::getShadowList(cssProperty(), *environment.state().style()), environment.state().style()->effectiveZoom());
 }
 
-void CSSShadowListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value) const
+void CSSShadowListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const
 {
     ListInterpolationFunctions::composite(underlyingValueOwner, underlyingFraction, *this, value,
         ShadowInterpolationFunctions::nonInterpolableValuesAreCompatible,

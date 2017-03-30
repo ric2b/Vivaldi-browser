@@ -10,22 +10,23 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
+#include "base/format_macros.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "jingle/glue/thread_wrapper.h"
 #include "net/socket/client_socket_factory.h"
 #include "remoting/base/chromium_url_request.h"
-#include "remoting/base/service_urls.h"
 #include "remoting/client/audio_player.h"
 #include "remoting/client/client_status_logger.h"
 #include "remoting/client/jni/android_keymap.h"
 #include "remoting/client/jni/chromoting_jni_runtime.h"
 #include "remoting/client/jni/jni_frame_consumer.h"
 #include "remoting/client/software_video_renderer.h"
-#include "remoting/client/token_fetcher_proxy.h"
 #include "remoting/protocol/chromium_port_allocator_factory.h"
 #include "remoting/protocol/chromium_socket_factory.h"
+#include "remoting/protocol/client_authentication_config.h"
 #include "remoting/protocol/host_stub.h"
-#include "remoting/protocol/negotiating_client_authenticator.h"
 #include "remoting/protocol/network_settings.h"
 #include "remoting/protocol/performance_tracker.h"
 #include "remoting/protocol/transport_context.h"
@@ -40,6 +41,8 @@ namespace {
 const char* const kXmppServer = "talk.google.com";
 const int kXmppPort = 5222;
 const bool kXmppUseTls = true;
+
+const char kDirectoryBotJid[] = "remoting@bot.talk.google.com";
 
 // Interval at which to log performance statistics, if enabled.
 const int kPerfStatsIntervalMs = 60000;
@@ -57,11 +60,8 @@ ChromotingJniInstance::ChromotingJniInstance(ChromotingJniRuntime* jni_runtime,
                                              const std::string& capabilities,
                                              const std::string& flags)
     : jni_runtime_(jni_runtime),
-      host_id_(host_id),
       host_jid_(host_jid),
       flags_(flags),
-      create_pairing_(false),
-      stats_logging_enabled_(false),
       capabilities_(capabilities),
       weak_factory_(this) {
   DCHECK(jni_runtime_->ui_task_runner()->BelongsToCurrentThread());
@@ -73,25 +73,14 @@ ChromotingJniInstance::ChromotingJniInstance(ChromotingJniRuntime* jni_runtime,
   xmpp_config_.username = username;
   xmpp_config_.auth_token = auth_token;
 
-  // Initialize |authenticator_|.
-  scoped_ptr<protocol::ThirdPartyClientAuthenticator::TokenFetcher>
-      token_fetcher(new TokenFetcherProxy(
-          base::Bind(&ChromotingJniInstance::FetchThirdPartyToken,
-                     weak_factory_.GetWeakPtr()),
-          host_pubkey));
-
-  std::vector<protocol::AuthenticationMethod> auth_methods;
-  auth_methods.push_back(protocol::AuthenticationMethod::Spake2Pair());
-  auth_methods.push_back(protocol::AuthenticationMethod::Spake2(
-      protocol::AuthenticationMethod::HMAC_SHA256));
-  auth_methods.push_back(protocol::AuthenticationMethod::Spake2(
-      protocol::AuthenticationMethod::NONE));
-  auth_methods.push_back(protocol::AuthenticationMethod::ThirdParty());
-
-  authenticator_.reset(new protocol::NegotiatingClientAuthenticator(
-      pairing_id, pairing_secret, host_id_,
-      base::Bind(&ChromotingJniInstance::FetchSecret, this),
-      std::move(token_fetcher), auth_methods));
+  client_auth_config_.host_id = host_id;
+  client_auth_config_.pairing_client_id = pairing_id;
+  client_auth_config_.pairing_secret = pairing_secret;
+  client_auth_config_.fetch_secret_callback = base::Bind(
+      &ChromotingJniInstance::FetchSecret, weak_factory_.GetWeakPtr());
+  client_auth_config_.fetch_third_party_token_callback =
+      base::Bind(&ChromotingJniInstance::FetchThirdPartyToken,
+                 weak_factory_.GetWeakPtr(), host_pubkey);
 
   // Post a task to start connection
   jni_runtime_->network_task_runner()->PostTask(
@@ -106,7 +95,6 @@ ChromotingJniInstance::~ChromotingJniInstance() {
   DCHECK(!view_);
   DCHECK(!client_context_);
   DCHECK(!video_renderer_);
-  DCHECK(!authenticator_);
   DCHECK(!client_);
   DCHECK(!signaling_);
   DCHECK(!client_status_logger_);
@@ -120,8 +108,6 @@ void ChromotingJniInstance::Disconnect() {
     return;
   }
 
-  host_id_.clear();
-
   stats_logging_enabled_ = false;
 
   // |client_| must be torn down before |signaling_|.
@@ -129,32 +115,28 @@ void ChromotingJniInstance::Disconnect() {
   client_status_logger_.reset();
   video_renderer_.reset();
   view_.reset();
-  authenticator_.reset();
   signaling_.reset();
   perf_tracker_.reset();
   client_context_.reset();
 }
 
 void ChromotingJniInstance::FetchThirdPartyToken(
-    const GURL& token_url,
-    const std::string& client_id,
+    const std::string& host_public_key,
+    const std::string& token_url,
     const std::string& scope,
-    base::WeakPtr<TokenFetcherProxy> token_fetcher_proxy) {
+    const protocol::ThirdPartyTokenFetchedCallback& token_fetched_callback) {
   DCHECK(jni_runtime_->network_task_runner()->BelongsToCurrentThread());
-  DCHECK(!token_fetcher_proxy_.get());
+  DCHECK(third_party_token_fetched_callback_.is_null());
 
   __android_log_print(ANDROID_LOG_INFO,
                       "ThirdPartyAuth",
                       "Fetching Third Party Token from user.");
 
-  token_fetcher_proxy_ = token_fetcher_proxy;
+  third_party_token_fetched_callback_ = token_fetched_callback;
   jni_runtime_->ui_task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(&ChromotingJniRuntime::FetchThirdPartyToken,
-                 base::Unretained(jni_runtime_),
-                 token_url,
-                 client_id,
-                 scope));
+      FROM_HERE, base::Bind(&ChromotingJniRuntime::FetchThirdPartyToken,
+                            base::Unretained(jni_runtime_), token_url,
+                            host_public_key, scope));
 }
 
 void ChromotingJniInstance::HandleOnThirdPartyTokenFetched(
@@ -165,9 +147,9 @@ void ChromotingJniInstance::HandleOnThirdPartyTokenFetched(
   __android_log_print(
       ANDROID_LOG_INFO, "ThirdPartyAuth", "Third Party Token Fetched.");
 
-  if (token_fetcher_proxy_.get()) {
-    token_fetcher_proxy_->OnTokenFetched(token, shared_secret);
-    token_fetcher_proxy_.reset();
+  if (!third_party_token_fetched_callback_.is_null()) {
+    base::ResetAndReturn(&third_party_token_fetched_callback_)
+        .Run(token, shared_secret);
   } else {
     __android_log_print(
         ANDROID_LOG_WARN,
@@ -348,30 +330,31 @@ void ChromotingJniInstance::OnRouteChanged(
 
 void ChromotingJniInstance::SetCapabilities(const std::string& capabilities) {
   jni_runtime_->ui_task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(&ChromotingJniRuntime::SetCapabilities,
-                 base::Unretained(jni_runtime_),
-                 capabilities));
+      FROM_HERE, base::Bind(&ChromotingJniRuntime::SetCapabilities,
+                            base::Unretained(jni_runtime_), capabilities));
 }
 
 void ChromotingJniInstance::SetPairingResponse(
     const protocol::PairingResponse& response) {
-
   jni_runtime_->ui_task_runner()->PostTask(
       FROM_HERE,
       base::Bind(&ChromotingJniRuntime::CommitPairingCredentials,
-                 base::Unretained(jni_runtime_),
-                 host_id_, response.client_id(), response.shared_secret()));
+                 base::Unretained(jni_runtime_), client_auth_config_.host_id,
+                 response.client_id(), response.shared_secret()));
 }
 
 void ChromotingJniInstance::DeliverHostMessage(
     const protocol::ExtensionMessage& message) {
   jni_runtime_->ui_task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(&ChromotingJniRuntime::HandleExtensionMessage,
-                 base::Unretained(jni_runtime_),
-                 message.type(),
-                 message.data()));
+      FROM_HERE, base::Bind(&ChromotingJniRuntime::HandleExtensionMessage,
+                            base::Unretained(jni_runtime_), message.type(),
+                            message.data()));
+}
+
+void ChromotingJniInstance::SetDesktopSize(const webrtc::DesktopSize& size,
+                                           const webrtc::DesktopVector& dpi) {
+  // JniFrameConsumer get size from the frames and it doesn't use DPI, so this
+  // call can be ignored.
 }
 
 protocol::ClipboardStub* ChromotingJniInstance::GetClipboardStub() {
@@ -413,38 +396,37 @@ void ChromotingJniInstance::ConnectToHostOnNetworkThread() {
   video_renderer_.reset(new SoftwareVideoRenderer(
       client_context_->decode_task_runner(), view_.get(), perf_tracker_.get()));
 
-  client_.reset(new ChromotingClient(
-      client_context_.get(), this, video_renderer_.get(), nullptr));
+  client_.reset(new ChromotingClient(client_context_.get(), this,
+                                     video_renderer_.get(), nullptr));
 
-  signaling_.reset(new XmppSignalStrategy(
-      net::ClientSocketFactory::GetDefaultFactory(),
-      jni_runtime_->url_requester(), xmpp_config_));
+  signaling_.reset(
+      new XmppSignalStrategy(net::ClientSocketFactory::GetDefaultFactory(),
+                             jni_runtime_->url_requester(), xmpp_config_));
 
-  client_status_logger_.reset(
-      new ClientStatusLogger(ServerLogEntry::ME2ME,
-                             signaling_.get(),
-                             ServiceUrls::GetInstance()->directory_bot_jid()));
+  client_status_logger_.reset(new ClientStatusLogger(
+      ServerLogEntry::ME2ME, signaling_.get(), kDirectoryBotJid));
 
   scoped_refptr<protocol::TransportContext> transport_context =
       new protocol::TransportContext(
           signaling_.get(),
-          make_scoped_ptr(new protocol::ChromiumPortAllocatorFactory()),
-          make_scoped_ptr(
+          base::WrapUnique(new protocol::ChromiumPortAllocatorFactory()),
+          base::WrapUnique(
               new ChromiumUrlRequestFactory(jni_runtime_->url_requester())),
           protocol::NetworkSettings(
               protocol::NetworkSettings::NAT_TRAVERSAL_FULL),
           protocol::TransportRole::CLIENT);
 
+#if defined(ENABLE_WEBRTC_REMOTING_CLIENT)
   if (flags_.find("useWebrtc") != std::string::npos) {
     VLOG(0) << "Attempting to connect using WebRTC.";
-    scoped_ptr<protocol::CandidateSessionConfig> protocol_config =
+    std::unique_ptr<protocol::CandidateSessionConfig> protocol_config =
         protocol::CandidateSessionConfig::CreateEmpty();
     protocol_config->set_webrtc_supported(true);
     protocol_config->set_ice_supported(false);
     client_->set_protocol_config(std::move(protocol_config));
   }
-
-  client_->Start(signaling_.get(), std::move(authenticator_), transport_context,
+#endif  // defined(ENABLE_WEBRTC_REMOTING_CLIENT)
+  client_->Start(signaling_.get(), client_auth_config_, transport_context,
                  host_jid_, capabilities_);
 }
 
@@ -459,7 +441,7 @@ void ChromotingJniInstance::FetchSecret(
   }
 
   // Delete pairing credentials if they exist.
-  jni_runtime_->CommitPairingCredentials(host_id_, "", "");
+  jni_runtime_->CommitPairingCredentials(client_auth_config_.host_id, "", "");
 
   pin_callback_ = callback;
   jni_runtime_->DisplayAuthenticationPrompt(pairable);
@@ -510,12 +492,20 @@ void ChromotingJniInstance::LogPerfStats() {
 
   __android_log_print(
       ANDROID_LOG_INFO, "stats",
-      "Bandwidth:%.0f FrameRate:%.1f Capture:%.1f Encode:%.1f "
-      "Decode:%.1f Render:%.1f Latency:%.0f",
+      "Bandwidth:%.0f FrameRate:%.1f;"
+      " (Avg, Max) Capture:%.1f, %" PRId64 " Encode:%.1f, %" PRId64
+      " Decode:%.1f, %" PRId64 " Render:%.1f, %" PRId64 " RTL:%.0f, %" PRId64,
       perf_tracker_->video_bandwidth(), perf_tracker_->video_frame_rate(),
-      perf_tracker_->video_capture_ms(), perf_tracker_->video_encode_ms(),
-      perf_tracker_->video_decode_ms(), perf_tracker_->video_paint_ms(),
-      perf_tracker_->round_trip_ms());
+      perf_tracker_->video_capture_ms().Average(),
+      perf_tracker_->video_capture_ms().Max(),
+      perf_tracker_->video_encode_ms().Average(),
+      perf_tracker_->video_encode_ms().Max(),
+      perf_tracker_->video_decode_ms().Average(),
+      perf_tracker_->video_decode_ms().Max(),
+      perf_tracker_->video_paint_ms().Average(),
+      perf_tracker_->video_paint_ms().Max(),
+      perf_tracker_->round_trip_ms().Average(),
+      perf_tracker_->round_trip_ms().Max());
 
   client_status_logger_->LogStatistics(perf_tracker_.get());
 

@@ -99,8 +99,6 @@ class CONTENT_EXPORT FrameTreeNode {
     return replication_state_.name;
   }
 
-  const url::Origin& frame_origin() const { return replication_state_.origin; }
-
   size_t child_count() const {
     return children_.size();
   }
@@ -138,7 +136,8 @@ class CONTENT_EXPORT FrameTreeNode {
   }
 
   // Set the current origin and notify proxies about the update.
-  void SetCurrentOrigin(const url::Origin& origin);
+  void SetCurrentOrigin(const url::Origin& origin,
+                        bool is_potentially_trustworthy_unique_origin);
 
   // Set the current name and notify proxies about the update.
   void SetFrameName(const std::string& name, const std::string& unique_name);
@@ -278,6 +277,8 @@ class CONTENT_EXPORT FrameTreeNode {
   class OpenerDestroyedObserver;
 
   void set_parent(FrameTreeNode* parent) { parent_ = parent; }
+
+  void TraceSnapshot() const;
 
   // The next available browser-global FrameTreeNode ID.
   static int next_frame_tree_node_id_;

@@ -72,14 +72,14 @@ void InspectorHeapProfilerAgent::HeapStatsUpdateTask::startTimer()
     m_timer.startRepeating(0.05, BLINK_FROM_HERE);
 }
 
-PassOwnPtrWillBeRawPtr<InspectorHeapProfilerAgent> InspectorHeapProfilerAgent::create(v8::Isolate* isolate, V8RuntimeAgent* runtimeAgent)
+RawPtr<InspectorHeapProfilerAgent> InspectorHeapProfilerAgent::create(v8::Isolate* isolate, V8HeapProfilerAgent* agent)
 {
-    return adoptPtrWillBeNoop(new InspectorHeapProfilerAgent(isolate, runtimeAgent));
+    return new InspectorHeapProfilerAgent(isolate, agent);
 }
 
-InspectorHeapProfilerAgent::InspectorHeapProfilerAgent(v8::Isolate* isolate, V8RuntimeAgent* runtimeAgent)
+InspectorHeapProfilerAgent::InspectorHeapProfilerAgent(v8::Isolate* isolate, V8HeapProfilerAgent* agent)
     : InspectorBaseAgent<InspectorHeapProfilerAgent, protocol::Frontend::HeapProfiler>("HeapProfiler")
-    , m_v8HeapProfilerAgent(V8HeapProfilerAgent::create(isolate, runtimeAgent))
+    , m_v8HeapProfilerAgent(agent)
     , m_isolate(isolate)
 {
 }
@@ -89,7 +89,7 @@ InspectorHeapProfilerAgent::~InspectorHeapProfilerAgent()
 }
 
 // InspectorBaseAgent overrides.
-void InspectorHeapProfilerAgent::setState(PassRefPtr<protocol::DictionaryValue> state)
+void InspectorHeapProfilerAgent::setState(protocol::DictionaryValue* state)
 {
     InspectorBaseAgent::setState(state);
     m_v8HeapProfilerAgent->setInspectorState(m_state);
@@ -136,7 +136,7 @@ void InspectorHeapProfilerAgent::startUpdateStatsTimer()
 {
     if (m_heapStatsUpdateTask)
         return;
-    m_heapStatsUpdateTask = adoptPtr(new HeapStatsUpdateTask(m_v8HeapProfilerAgent.get()));
+    m_heapStatsUpdateTask = adoptPtr(new HeapStatsUpdateTask(m_v8HeapProfilerAgent));
     m_heapStatsUpdateTask->startTimer();
 }
 
@@ -164,10 +164,10 @@ void InspectorHeapProfilerAgent::takeHeapSnapshot(ErrorString* errorString, cons
     m_v8HeapProfilerAgent->takeHeapSnapshot(errorString, reportProgress);
 }
 
-void InspectorHeapProfilerAgent::getObjectByHeapObjectId(ErrorString* error, const String& heapSnapshotObjectId, const protocol::Maybe<String>& objectGroup, OwnPtr<protocol::Runtime::RemoteObject>* result)
+void InspectorHeapProfilerAgent::getObjectByHeapObjectId(ErrorString* error, const String16& heapSnapshotObjectId, const protocol::Maybe<String16>& objectGroup, OwnPtr<protocol::Runtime::RemoteObject>* result)
 {
     bool ok;
-    unsigned id = heapSnapshotObjectId.toUInt(&ok);
+    int id = heapSnapshotObjectId.toInt(&ok);
     if (!ok) {
         *error = "Invalid heap snapshot object id";
         return;
@@ -181,10 +181,10 @@ void InspectorHeapProfilerAgent::getObjectByHeapObjectId(ErrorString* error, con
     m_v8HeapProfilerAgent->getObjectByHeapObjectId(error, heapSnapshotObjectId, objectGroup, result);
 }
 
-void InspectorHeapProfilerAgent::addInspectedHeapObject(ErrorString* error, const String& inspectedHeapObjectId)
+void InspectorHeapProfilerAgent::addInspectedHeapObject(ErrorString* error, const String16& inspectedHeapObjectId)
 {
     bool ok;
-    unsigned id = inspectedHeapObjectId.toUInt(&ok);
+    int id = inspectedHeapObjectId.toInt(&ok);
     if (!ok) {
         *error = "Invalid heap snapshot object id";
         return;
@@ -198,16 +198,16 @@ void InspectorHeapProfilerAgent::addInspectedHeapObject(ErrorString* error, cons
     m_v8HeapProfilerAgent->addInspectedHeapObject(error, inspectedHeapObjectId);
 }
 
-void InspectorHeapProfilerAgent::getHeapObjectId(ErrorString* errorString, const String& objectId, String* heapSnapshotObjectId)
+void InspectorHeapProfilerAgent::getHeapObjectId(ErrorString* errorString, const String16& objectId, String16* heapSnapshotObjectId)
 {
     m_v8HeapProfilerAgent->getHeapObjectId(errorString, objectId, heapSnapshotObjectId);
 }
 
-bool InspectorHeapProfilerAgent::isInspectableHeapObject(unsigned id)
+bool InspectorHeapProfilerAgent::isInspectableHeapObject(int id)
 {
     v8::HandleScope scope(m_isolate);
     v8::HeapProfiler* profiler = m_isolate->GetHeapProfiler();
-    v8::Local<v8::Value> value = profiler->FindObjectById(id);
+    v8::Local<v8::Value> value = profiler->FindObjectById(static_cast<unsigned>(id));
     if (value.IsEmpty() || !value->IsObject())
         return false;
     v8::Local<v8::Object> object = value.As<v8::Object>();

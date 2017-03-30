@@ -17,6 +17,8 @@
 #include "device/core/device_client.h"
 #include "device/usb/mock_usb_device.h"
 #include "device/usb/mock_usb_service.h"
+#include "device/usb/mojo/type_converters.h"
+#include "device/usb/public/interfaces/device.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/button/menu_button.h"
@@ -147,7 +149,7 @@ class WebsiteSettingsPopupViewTest : public testing::Test {
   views::ScopedViewsTestHelper views_helper_;
 
   views::Widget* parent_window_ = nullptr;  // Weak. Owned by the NativeWidget.
-  scoped_ptr<test::WebsiteSettingsPopupViewTestApi> api_;
+  std::unique_ptr<test::WebsiteSettingsPopupViewTestApi> api_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WebsiteSettingsPopupViewTest);
@@ -164,7 +166,7 @@ TEST_F(WebsiteSettingsPopupViewTest, SetPermissionInfo) {
   list.back().is_incognito = false;
 
   const int kExpectedChildren =
-      ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled() ? 10 : 12;
+      ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled() ? 11 : 13;
   EXPECT_EQ(kExpectedChildren, api_->permissions_content()->child_count());
 
   list.back().setting = CONTENT_SETTING_ALLOW;
@@ -214,7 +216,7 @@ TEST_F(WebsiteSettingsPopupViewTest, SetPermissionInfo) {
 // Test UI construction and reconstruction with USB devices.
 TEST_F(WebsiteSettingsPopupViewTest, SetPermissionInfoWithUsbDevice) {
   const int kExpectedChildren =
-      ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled() ? 10 : 12;
+      ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled() ? 11 : 13;
   EXPECT_EQ(kExpectedChildren, api_->permissions_content()->child_count());
 
   const GURL origin = GURL(kUrl).GetOrigin();
@@ -249,5 +251,6 @@ TEST_F(WebsiteSettingsPopupViewTest, SetPermissionInfoWithUsbDevice) {
   button_listener->ButtonPressed(button, event);
   api_->SetPermissionInfo(list);
   EXPECT_EQ(kExpectedChildren, api_->permissions_content()->child_count());
-  EXPECT_FALSE(store->HasDevicePermission(origin, origin, device->guid()));
+  EXPECT_FALSE(store->HasDevicePermission(
+      origin, origin, *device::usb::DeviceInfo::From(*device)));
 }

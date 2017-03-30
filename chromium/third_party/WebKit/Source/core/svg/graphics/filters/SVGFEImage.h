@@ -35,12 +35,12 @@ class LayoutObject;
 
 class FEImage final : public FilterEffect {
 public:
-    static PassRefPtrWillBeRawPtr<FEImage> createWithImage(Filter*, PassRefPtr<Image>, PassRefPtrWillBeRawPtr<SVGPreserveAspectRatio>);
-    static PassRefPtrWillBeRawPtr<FEImage> createWithIRIReference(Filter*, TreeScope&, const String&, PassRefPtrWillBeRawPtr<SVGPreserveAspectRatio>);
+    static FEImage* createWithImage(Filter*, PassRefPtr<Image>, SVGPreserveAspectRatio*);
+    static FEImage* createWithIRIReference(Filter*, TreeScope&, const String&, SVGPreserveAspectRatio*);
 
     FloatRect determineAbsolutePaintRect(const FloatRect& requestedRect) override;
 
-    FilterEffectType filterEffectType() const override { return FilterEffectTypeImage; }
+    FilterEffectType getFilterEffectType() const override { return FilterEffectTypeImage; }
 
     // feImage does not perform color interpolation of any kind, so doesn't
     // depend on the value of color-interpolation-filters.
@@ -53,8 +53,8 @@ public:
 
 private:
     ~FEImage() override {}
-    FEImage(Filter*, PassRefPtr<Image>, PassRefPtrWillBeRawPtr<SVGPreserveAspectRatio>);
-    FEImage(Filter*, TreeScope&, const String&, PassRefPtrWillBeRawPtr<SVGPreserveAspectRatio>);
+    FEImage(Filter*, PassRefPtr<Image>, SVGPreserveAspectRatio*);
+    FEImage(Filter*, TreeScope&, const String&, SVGPreserveAspectRatio*);
     LayoutObject* referencedLayoutObject() const;
 
     PassRefPtr<SkImageFilter> createImageFilterForLayoutObject(const LayoutObject&);
@@ -62,9 +62,9 @@ private:
     RefPtr<Image> m_image;
 
     // m_treeScope will never be a dangling reference. See https://bugs.webkit.org/show_bug.cgi?id=99243
-    RawPtrWillBeMember<TreeScope> m_treeScope;
+    Member<TreeScope> m_treeScope;
     String m_href;
-    RefPtrWillBeMember<SVGPreserveAspectRatio> m_preserveAspectRatio;
+    Member<SVGPreserveAspectRatio> m_preserveAspectRatio;
 };
 
 } // namespace blink

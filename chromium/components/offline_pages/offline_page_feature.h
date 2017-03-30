@@ -5,11 +5,13 @@
 #ifndef COMPONENTS_OFFLINE_PAGES_OFFLINE_PAGE_FEATURE_H_
 #define COMPONENTS_OFFLINE_PAGES_OFFLINE_PAGE_FEATURE_H_
 
+#include "base/feature_list.h"
 #include "build/build_config.h"
 
-#if defined(OS_ANDROID)
-
 namespace offline_pages {
+
+extern const base::Feature kOffliningRecentPagesFeature;
+extern const base::Feature kOfflinePagesBackgroundLoadingFeature;
 
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.offlinepages
 enum class FeatureMode {
@@ -27,8 +29,12 @@ FeatureMode GetOfflinePageFeatureMode();
 // Returns true if offline pages is enabled.
 bool IsOfflinePagesEnabled();
 
-}  // namespace offline_pages
+// Returns true if offlining of recent pages (aka 'Last N pages') is enabled.
+bool IsOffliningRecentPagesEnabled();
 
-#endif  // defined(OS_ANDROID)
+// Returns true if saving offline pages in the background is enabled.
+bool IsOfflinePagesBackgroundLoadingEnabled();
+
+}  // namespace offline_pages
 
 #endif  // COMPONENTS_OFFLINE_PAGES_OFFLINE_PAGE_FEATURE_H_

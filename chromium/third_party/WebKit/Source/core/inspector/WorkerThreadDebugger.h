@@ -40,20 +40,27 @@ class WorkerThread;
 class WorkerThreadDebugger final : public ThreadDebugger {
     WTF_MAKE_NONCOPYABLE(WorkerThreadDebugger);
 public:
-    explicit WorkerThreadDebugger(WorkerThread*);
+    explicit WorkerThreadDebugger(WorkerThread*, v8::Isolate*);
     ~WorkerThreadDebugger() override;
 
-    static void setContextDebugData(v8::Local<v8::Context>);
-    static int contextGroupId();
+    static WorkerThreadDebugger* from(v8::Isolate*);
+
+    int contextGroupId();
+    void contextCreated(v8::Local<v8::Context>);
+    void contextWillBeDestroyed(v8::Local<v8::Context>);
 
     // V8DebuggerClient implementation.
     void runMessageLoopOnPause(int contextGroupId) override;
     void quitMessageLoopOnPause() override;
+    void muteWarningsAndDeprecations() override { };
+    void unmuteWarningsAndDeprecations() override { };
+    void muteConsole() override { };
+    void unmuteConsole() override { };
     bool callingContextCanAccessContext(v8::Local<v8::Context> calling, v8::Local<v8::Context> target) override;
+    int ensureDefaultContextInGroup(int contextGroupId) override;
 
 private:
     WorkerThread* m_workerThread;
-    bool m_paused;
 };
 
 } // namespace blink

@@ -40,13 +40,13 @@ class PepperMediaStreamVideoTrackHost : public PepperMediaStreamTrackHostBase,
                                   PP_Instance instance,
                                   PP_Resource resource);
 
+  ~PepperMediaStreamVideoTrackHost() override;
+
   bool IsMediaStreamVideoTrackHost() override;
 
   blink::WebMediaStreamTrack track() { return track_; }
 
  private:
-  ~PepperMediaStreamVideoTrackHost() override;
-
   void InitBuffers();
 
   // PepperMediaStreamTrackHostBase overrides:
@@ -93,9 +93,6 @@ class PepperMediaStreamVideoTrackHost : public PepperMediaStreamTrackHostBase,
                       const blink::WebString& result_name);
 
   blink::WebMediaStreamTrack track_;
-
-  // True if it has been added to |blink::WebMediaStreamTrack| as a sink.
-  bool connected_;
 
   // Number of buffers.
   int32_t number_of_buffers_;

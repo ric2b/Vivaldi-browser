@@ -7,36 +7,6 @@
 
 #include <stddef.h>
 
-// Annotate a variable indicating it's okay if it's unused.
-// Use like:
-//   int x = ...;
-//   MOJO_ALLOW_UNUSED_LOCAL(x);
-#define MOJO_ALLOW_UNUSED_LOCAL(x) false ? (void)x : (void)0
-
-// Annotate a function indicating that the caller must examine the return value.
-// Use like:
-//   int foo() MOJO_WARN_UNUSED_RESULT;
-// Note that it can only be used on the prototype, and not the definition.
-#if defined(__GNUC__)
-#define MOJO_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
-#else
-#define MOJO_WARN_UNUSED_RESULT
-#endif
-
-#ifdef __cplusplus
-// Used to explicitly mark the return value of a function as unused. If you are
-// really sure you don't want to do anything with the return value of a function
-// that has been marked WARN_UNUSED_RESULT, wrap it with this. Example:
-//
-//   scoped_ptr<MyType> my_var = ...;
-//   if (TakeOwnership(my_var.get()) == SUCCESS)
-//     mojo_ignore_result(my_var.release());
-//
-template <typename T>
-inline void mojo_ignore_result(const T&) {
-}
-#endif
-
 // Assert things at compile time. (|msg| should be a valid identifier name.)
 // This macro is currently C++-only, but we want to use it in the C core.h.
 // Use like:

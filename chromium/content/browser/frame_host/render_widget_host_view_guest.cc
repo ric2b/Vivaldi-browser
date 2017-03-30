@@ -22,11 +22,11 @@
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/common/browser_plugin/browser_plugin_messages.h"
 #include "content/common/frame_messages.h"
-#include "content/common/gpu/gpu_messages.h"
 #include "content/common/input/web_touch_event_traits.h"
+#include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
-#include "content/common/webplugin_geometry.h"
 #include "content/public/common/content_switches.h"
+#include "gpu/ipc/common/gpu_messages.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/WebScreenInfo.h"
 
@@ -52,8 +52,7 @@ RenderWidgetHostViewGuest::RenderWidgetHostViewGuest(
   host_->set_scale_input_to_viewport(false);
 }
 
-RenderWidgetHostViewGuest::~RenderWidgetHostViewGuest() {
-}
+RenderWidgetHostViewGuest::~RenderWidgetHostViewGuest() {}
 
 bool RenderWidgetHostViewGuest::OnMessageReceivedFromEmbedder(
     const IPC::Message& message,
@@ -154,24 +153,6 @@ void RenderWidgetHostViewGuest::ProcessTouchEvent(
   host_->ForwardTouchEventWithLatencyInfo(event, latency);
 }
 
-void RenderWidgetHostViewGuest::RegisterSurfaceNamespaceId() {
-  DCHECK(host_);
-  if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
-    RenderWidgetHostInputEventRouter* router =
-        host_->delegate()->GetInputEventRouter();
-    if (!router->is_registered(GetSurfaceIdNamespace()))
-      router->AddSurfaceIdNamespaceOwner(GetSurfaceIdNamespace(), this);
-  }
-}
-
-void RenderWidgetHostViewGuest::UnregisterSurfaceNamespaceId() {
-  DCHECK(host_);
-  if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
-    host_->delegate()->GetInputEventRouter()->RemoveSurfaceIdNamespaceOwner(
-        GetSurfaceIdNamespace());
-  }
-}
-
 gfx::Rect RenderWidgetHostViewGuest::GetViewBounds() const {
   if (!guest_)
     return gfx::Rect();
@@ -182,6 +163,10 @@ gfx::Rect RenderWidgetHostViewGuest::GetViewBounds() const {
     embedder_bounds = rwhv->GetViewBounds();
   return gfx::Rect(
       guest_->GetScreenCoordinates(embedder_bounds.origin()), size_);
+}
+
+gfx::Rect RenderWidgetHostViewGuest::GetBoundsInRootWindow() {
+  return GetViewBounds();
 }
 
 void RenderWidgetHostViewGuest::RenderProcessGone(
@@ -222,6 +207,8 @@ void RenderWidgetHostViewGuest::SetTooltipText(
 void RenderWidgetHostViewGuest::OnSwapCompositorFrame(
     uint32_t output_surface_id,
     scoped_ptr<cc::CompositorFrame> frame) {
+  TRACE_EVENT0("content", "RenderWidgetHostViewGuest::OnSwapCompositorFrame");
+
   last_scroll_offset_ = frame->metadata.root_scroll_offset;
 
   cc::RenderPass* root_pass =
@@ -340,12 +327,6 @@ gfx::NativeViewAccessible RenderWidgetHostViewGuest::GetNativeViewAccessible() {
   return rwhv->GetNativeViewAccessible();
 }
 
-void RenderWidgetHostViewGuest::MovePluginWindows(
-    const std::vector<WebPluginGeometry>& moves,
-    const int owner_view_id) {
-  platform_view_->MovePluginWindows(moves, owner_view_id);
-}
-
 void RenderWidgetHostViewGuest::UpdateCursor(const WebCursor& cursor) {
   // InterstitialPages are not WebContents so we cannot intercept
   // ViewHostMsg_SetCursor for interstitial pages in BrowserPluginGuest.
@@ -353,10 +334,14 @@ void RenderWidgetHostViewGuest::UpdateCursor(const WebCursor& cursor) {
   // and so we will always hit this code path.
   if (!guest_)
     return;
-  guest_->SendMessageToEmbedder(
-      new BrowserPluginMsg_SetCursor(guest_->browser_plugin_instance_id(),
-                                     cursor));
-
+  if (SiteIsolationPolicy::AreCrossProcessFramesPossible()) {
+    RenderWidgetHostViewBase* rwhvb = GetOwnerRenderWidgetHostView();
+    if (rwhvb)
+      rwhvb->UpdateCursor(cursor);
+  } else {
+    guest_->SendMessageToEmbedder(new BrowserPluginMsg_SetCursor(
+        guest_->browser_plugin_instance_id(), cursor));
+  }
 }
 
 void RenderWidgetHostViewGuest::SetIsLoading(bool is_loading) {
@@ -461,14 +446,6 @@ void RenderWidgetHostViewGuest::SetActive(bool active) {
   platform_view_->SetActive(active);
 }
 
-void RenderWidgetHostViewGuest::SetWindowVisibility(bool visible) {
-  platform_view_->SetWindowVisibility(visible);
-}
-
-void RenderWidgetHostViewGuest::WindowFrameChanged() {
-  platform_view_->WindowFrameChanged();
-}
-
 void RenderWidgetHostViewGuest::ShowDefinitionForSelection() {
   if (!guest_)
     return;
@@ -507,12 +484,6 @@ bool RenderWidgetHostViewGuest::IsSpeaking() const {
 void RenderWidgetHostViewGuest::StopSpeaking() {
   platform_view_->StopSpeaking();
 }
-
-bool RenderWidgetHostViewGuest::PostProcessEventForPluginIme(
-    const NativeWebKeyboardEvent& event) {
-  return false;
-}
-
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_ANDROID) || defined(USE_AURA)
@@ -530,19 +501,11 @@ void RenderWidgetHostViewGuest::UnlockCompositingSurface() {
   NOTIMPLEMENTED();
 }
 
-#if defined(OS_WIN)
-void RenderWidgetHostViewGuest::SetParentNativeViewAccessible(
-    gfx::NativeViewAccessible accessible_parent) {
-}
-
-gfx::NativeViewId RenderWidgetHostViewGuest::GetParentForWindowlessPlugin()
-    const {
-  return NULL;
-}
-#endif
-
 void RenderWidgetHostViewGuest::DestroyGuestView() {
-  UnregisterSurfaceNamespaceId();
+  // Let our observers know we're going away, since we don't want any event
+  // processing calls coming in after we release host_.
+  NotifyObserversAboutShutdown();
+
   host_->SetView(NULL);
   host_ = NULL;
   base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);

@@ -6,14 +6,6 @@
   'includes': [
     '../../build/win_precompile.gypi',
   ],
-  'variables': {
-    'enabled_libjingle_device_manager%': 0,
-    'libjingle_additional_deps%': [],
-    'libjingle_peerconnection_additional_deps%': [],
-    'libjingle_source%': "source",
-    'webrtc_p2p': "../webrtc/p2p",
-    'webrtc_xmpp': "../webrtc/libjingle/xmpp",
-  },
   # Most of these settings have been split according to their scope into
   # :jingle_unexported_configs and :jingle_public_config in the GN build.
   'target_defaults': {
@@ -23,6 +15,7 @@
       'FEATURE_ENABLE_SSL',
       'GTEST_RELATIVE_PATH',
       'HAVE_OPENSSL_SSL_H',
+      'HAVE_SCTP',
       'HAVE_SRTP',
       'HAVE_WEBRTC_VIDEO',
       'HAVE_WEBRTC_VOICE',
@@ -37,7 +30,7 @@
     'include_dirs': [
       './overrides',
       '../../third_party/webrtc_overrides',
-      './<(libjingle_source)',
+      './source',
       '../..',
       '../../testing/gtest/include',
       '../../third_party',
@@ -58,7 +51,7 @@
       'include_dirs': [
         '../../third_party/webrtc_overrides',
         './overrides',
-        './<(libjingle_source)',
+        './source',
         '../..',
         '../../testing/gtest/include',
         '../../third_party',
@@ -218,35 +211,11 @@
       'target_name': 'libjingle',
       'type': 'static_library',
       'includes': [ 'libjingle_common.gypi' ],
-      'sources!' : [
-        # Compiled as part of libjingle_p2p_constants.
-        '<(webrtc_p2p)/base/constants.cc',
-        '<(webrtc_p2p)/base/constants.h',
-      ],
       'dependencies': [
         '<(DEPTH)/third_party/webrtc/base/base.gyp:rtc_base',
         '<(DEPTH)/third_party/webrtc/libjingle/xmllite/xmllite.gyp:rtc_xmllite',
-        'libjingle_p2p_constants',
-        '<@(libjingle_additional_deps)',
       ],
     },  # target libjingle
-    # This has to be is a separate project due to a bug in MSVS 2008 and the
-    # current toolset on android.  The problem is that we have two files named
-    # "constants.cc" and MSVS/android doesn't handle this properly.
-    # GYP currently has guards to catch this, so if you want to remove it,
-    # run GYP and if GYP has removed the validation check, then we can assume
-    # that the toolchains have been fixed (we currently use VS2010 and later,
-    # so VS2008 isn't a concern anymore).
-    #
-    # GN version: //third_party/libjingle:libjingle_p2p_constants
-    {
-      'target_name': 'libjingle_p2p_constants',
-      'type': 'static_library',
-      'sources': [
-        '<(webrtc_p2p)/base/constants.cc',
-        '<(webrtc_p2p)/base/constants.h',
-      ],
-    },  # target libjingle_p2p_constants
   ],
   'conditions': [
     ['enable_webrtc==1', {
@@ -298,8 +267,6 @@
             '<(DEPTH)/third_party/webrtc/api/remoteaudiosource.h',
             '<(DEPTH)/third_party/webrtc/api/remoteaudiotrack.cc',
             '<(DEPTH)/third_party/webrtc/api/remoteaudiotrack.h',
-            '<(DEPTH)/third_party/webrtc/api/remotevideocapturer.cc',
-            '<(DEPTH)/third_party/webrtc/api/remotevideocapturer.h',
             '<(DEPTH)/third_party/webrtc/api/rtpreceiver.cc',
             '<(DEPTH)/third_party/webrtc/api/rtpreceiver.h',
             '<(DEPTH)/third_party/webrtc/api/rtpreceiverinterface.h',
@@ -314,14 +281,13 @@
             '<(DEPTH)/third_party/webrtc/api/statstypes.h',
             '<(DEPTH)/third_party/webrtc/api/streamcollection.h',
             '<(DEPTH)/third_party/webrtc/api/umametrics.h',
-            '<(DEPTH)/third_party/webrtc/api/videosource.cc',
-            '<(DEPTH)/third_party/webrtc/api/videosource.h',
-            '<(DEPTH)/third_party/webrtc/api/videosourceinterface.h',
+            '<(DEPTH)/third_party/webrtc/api/videocapturertracksource.cc',
+            '<(DEPTH)/third_party/webrtc/api/videocapturertracksource.h',
             '<(DEPTH)/third_party/webrtc/api/videosourceproxy.h',
             '<(DEPTH)/third_party/webrtc/api/videotrack.cc',
             '<(DEPTH)/third_party/webrtc/api/videotrack.h',
-            '<(DEPTH)/third_party/webrtc/api/videotrackrenderers.cc',
-            '<(DEPTH)/third_party/webrtc/api/videotrackrenderers.h',
+            '<(DEPTH)/third_party/webrtc/api/videotracksource.cc',
+            '<(DEPTH)/third_party/webrtc/api/videotracksource.h',
             '<(DEPTH)/third_party/webrtc/api/webrtcsdp.cc',
             '<(DEPTH)/third_party/webrtc/api/webrtcsdp.h',
             '<(DEPTH)/third_party/webrtc/api/webrtcsession.cc',
@@ -329,17 +295,13 @@
             '<(DEPTH)/third_party/webrtc/api/webrtcsessiondescriptionfactory.cc',
             '<(DEPTH)/third_party/webrtc/api/webrtcsessiondescriptionfactory.h',
             '<(DEPTH)/third_party/webrtc/media/base/audiorenderer.h',
-            '<(DEPTH)/third_party/webrtc/media/base/capturemanager.cc',
-            '<(DEPTH)/third_party/webrtc/media/base/capturemanager.h',
-            '<(DEPTH)/third_party/webrtc/media/base/capturerenderadapter.cc',
-            '<(DEPTH)/third_party/webrtc/media/base/capturerenderadapter.h',
             '<(DEPTH)/third_party/webrtc/media/base/codec.cc',
             '<(DEPTH)/third_party/webrtc/media/base/codec.h',
-            '<(DEPTH)/third_party/webrtc/media/base/constants.cc',
-            '<(DEPTH)/third_party/webrtc/media/base/constants.h',
             '<(DEPTH)/third_party/webrtc/media/base/cryptoparams.h',
             '<(DEPTH)/third_party/webrtc/media/base/hybriddataengine.h',
             '<(DEPTH)/third_party/webrtc/media/base/mediachannel.h',
+            '<(DEPTH)/third_party/webrtc/media/base/mediaconstants.cc',
+            '<(DEPTH)/third_party/webrtc/media/base/mediaconstants.h',
             '<(DEPTH)/third_party/webrtc/media/base/mediaengine.cc',
             '<(DEPTH)/third_party/webrtc/media/base/mediaengine.h',
             '<(DEPTH)/third_party/webrtc/media/base/rtpdataengine.cc',
@@ -364,14 +326,24 @@
             '<(DEPTH)/third_party/webrtc/media/base/videoframe.h',
             '<(DEPTH)/third_party/webrtc/media/base/videoframefactory.cc',
             '<(DEPTH)/third_party/webrtc/media/base/videoframefactory.h',
-            '<(DEPTH)/third_party/webrtc/media/devices/dummydevicemanager.cc',
-            '<(DEPTH)/third_party/webrtc/media/devices/dummydevicemanager.h',
+            '<(DEPTH)/third_party/webrtc/media/base/videosourcebase.cc',
+            '<(DEPTH)/third_party/webrtc/media/base/videosourcebase.h',
+            '<(DEPTH)/third_party/webrtc/media/engine/simulcast.cc',
+            '<(DEPTH)/third_party/webrtc/media/engine/simulcast.h',
             '<(DEPTH)/third_party/webrtc/media/engine/webrtccommon.h',
+            '<(DEPTH)/third_party/webrtc/media/engine/webrtcmediaengine.cc',
+            '<(DEPTH)/third_party/webrtc/media/engine/webrtcmediaengine.h',
+            '<(DEPTH)/third_party/webrtc/media/engine/webrtcvideoengine2.cc',
+            '<(DEPTH)/third_party/webrtc/media/engine/webrtcvideoengine2.h',
             '<(DEPTH)/third_party/webrtc/media/engine/webrtcvideoframe.cc',
             '<(DEPTH)/third_party/webrtc/media/engine/webrtcvideoframe.h',
             '<(DEPTH)/third_party/webrtc/media/engine/webrtcvideoframefactory.cc',
             '<(DEPTH)/third_party/webrtc/media/engine/webrtcvideoframefactory.h',
             '<(DEPTH)/third_party/webrtc/media/engine/webrtcvoe.h',
+            '<(DEPTH)/third_party/webrtc/media/engine/webrtcvoiceengine.cc',
+            '<(DEPTH)/third_party/webrtc/media/engine/webrtcvoiceengine.h',
+            '<(DEPTH)/third_party/webrtc/media/sctp/sctpdataengine.cc',
+            '<(DEPTH)/third_party/webrtc/media/sctp/sctpdataengine.h',
             '<(DEPTH)/third_party/webrtc/pc/audiomonitor.cc',
             '<(DEPTH)/third_party/webrtc/pc/audiomonitor.h',
             '<(DEPTH)/third_party/webrtc/pc/bundlefilter.cc',
@@ -395,71 +367,14 @@
             '<(DEPTH)/third_party/webrtc/pc/srtpfilter.h',
             '<(DEPTH)/third_party/webrtc/pc/voicechannel.h',
           ],
-          'conditions': [
-            # TODO(mallinath) - Enable SCTP for iOS.
-            ['OS!="ios"', {
-              'defines': [
-                'HAVE_SCTP',
-              ],
-              'sources': [
-                '<(DEPTH)/third_party/webrtc/media/sctp/sctpdataengine.cc',
-                '<(DEPTH)/third_party/webrtc/media/sctp/sctpdataengine.h',
-              ],
-              'dependencies': [
-                '<(DEPTH)/third_party/usrsctp/usrsctp.gyp:usrsctplib',
-              ],
-            }],
-            ['enabled_libjingle_device_manager==1', {
-              'sources!': [
-                '<(DEPTH)/third_party/webrtc/media/devices/dummydevicemanager.cc',
-                '<(DEPTH)/third_party/webrtc/media/devices/dummydevicemanager.h',
-              ],
-              'sources': [
-                '<(DEPTH)/third_party/webrtc/media/devices/devicemanager.cc',
-                '<(DEPTH)/third_party/webrtc/media/devices/devicemanager.h',
-              ],
-              'conditions': [
-                ['OS=="win"', {
-                  'sources': [
-                    '<(DEPTH)/third_party/webrtc/media/devices/win32deviceinfo.cc',
-                    '<(DEPTH)/third_party/webrtc/media/devices/win32devicemanager.cc',
-                    '<(DEPTH)/third_party/webrtc/media/devices/win32devicemanager.h',
-                  ],
-                }],
-                ['OS=="linux"', {
-                  'sources': [
-                    '<(DEPTH)/third_party/webrtc/media/devices/libudevsymboltable.cc',
-                    '<(DEPTH)/third_party/webrtc/media/devices/libudevsymboltable.h',
-                    '<(DEPTH)/third_party/webrtc/media/devices/linuxdeviceinfo.cc',
-                    '<(DEPTH)/third_party/webrtc/media/devices/linuxdevicemanager.cc',
-                    '<(DEPTH)/third_party/webrtc/media/devices/linuxdevicemanager.h',
-                    '<(DEPTH)/third_party/webrtc/media/devices/v4llookup.cc',
-                    '<(DEPTH)/third_party/webrtc/media/devices/v4llookup.h',
-                  ],
-                }],
-                ['OS=="mac"', {
-                  'sources': [
-                    '<(DEPTH)/third_party/webrtc/media/devices/macdeviceinfo.cc',
-                    '<(DEPTH)/third_party/webrtc/media/devices/macdevicemanager.cc',
-                    '<(DEPTH)/third_party/webrtc/media/devices/macdevicemanager.h',
-                    '<(DEPTH)/third_party/webrtc/media/devices/macdevicemanagermm.mm',
-                  ],
-                  'xcode_settings': {
-                    'WARNING_CFLAGS': [
-                      # Suppres warnings about using deprecated functions in
-                      # macdevicemanager.cc.
-                      '-Wno-deprecated-declarations',
-                    ],
-                  },
-                }],
-              ],
-            }],
-          ],
           'dependencies': [
             '<(DEPTH)/third_party/libsrtp/libsrtp.gyp:libsrtp',
+            '<(DEPTH)/third_party/usrsctp/usrsctp.gyp:usrsctplib',
             '<(DEPTH)/third_party/webrtc/modules/modules.gyp:media_file',
             '<(DEPTH)/third_party/webrtc/modules/modules.gyp:video_capture',
             '<(DEPTH)/third_party/webrtc/modules/modules.gyp:video_render',
+            '<(DEPTH)/third_party/webrtc/voice_engine/voice_engine.gyp:voice_engine',
+            '<(DEPTH)/third_party/webrtc/webrtc.gyp:webrtc',
             'libjingle',
           ],
         },  # target libjingle_webrtc_common
@@ -476,33 +391,6 @@
             'libjingle_webrtc_common',
           ],
         },
-        {
-          # GN version: //third_party/libjingle:libpeerconnection
-          'target_name': 'libpeerconnection',
-          'type': 'static_library',
-          'sources': [
-            # Note: sources list duplicated in GN build.
-            '<(DEPTH)/third_party/webrtc/media/engine/simulcast.cc',
-            '<(DEPTH)/third_party/webrtc/media/engine/simulcast.h',
-            '<(DEPTH)/third_party/webrtc/media/engine/webrtcmediaengine.cc',
-            '<(DEPTH)/third_party/webrtc/media/engine/webrtcmediaengine.h',
-            '<(DEPTH)/third_party/webrtc/media/engine/webrtcvideoengine2.cc',
-            '<(DEPTH)/third_party/webrtc/media/engine/webrtcvideoengine2.h',
-            '<(DEPTH)/third_party/webrtc/media/engine/webrtcvoiceengine.cc',
-            '<(DEPTH)/third_party/webrtc/media/engine/webrtcvoiceengine.h',
-          ],
-          'dependencies': [
-            '<(DEPTH)/third_party/webrtc/voice_engine/voice_engine.gyp:voice_engine',
-            '<(DEPTH)/third_party/webrtc/webrtc.gyp:webrtc',
-            '<@(libjingle_peerconnection_additional_deps)',
-            'libjingle_webrtc_common',
-          ],
-          'conditions': [
-            ['OS=="android"', {
-              'standalone_static_library': 1,
-            }],
-          ],
-        },  # target libpeerconnection
       ],
     }],
   ],

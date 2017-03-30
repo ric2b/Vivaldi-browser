@@ -18,12 +18,12 @@ void VRController::provideTo(LocalFrame& frame, WebVRClient* client)
     ASSERT(RuntimeEnabledFeatures::webVREnabled());
 
     VRController* controller = new VRController(frame, client);
-    WillBeHeapSupplement<LocalFrame>::provideTo(frame, supplementName(), adoptPtrWillBeNoop(controller));
+    Supplement<LocalFrame>::provideTo(frame, supplementName(), controller);
 }
 
 VRController* VRController::from(LocalFrame& frame)
 {
-    return static_cast<VRController*>(WillBeHeapSupplement<LocalFrame>::from(frame, supplementName()));
+    return static_cast<VRController*>(Supplement<LocalFrame>::from(frame, supplementName()));
 }
 
 VRController::VRController(LocalFrame& frame, WebVRClient* client)
@@ -73,7 +73,7 @@ void VRController::willDetachFrameHost()
 
 DEFINE_TRACE(VRController)
 {
-    WillBeHeapSupplement<LocalFrame>::trace(visitor);
+    Supplement<LocalFrame>::trace(visitor);
     LocalFrameLifecycleObserver::trace(visitor);
 }
 

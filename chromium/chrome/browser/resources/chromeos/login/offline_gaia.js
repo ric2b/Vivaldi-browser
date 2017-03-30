@@ -20,7 +20,15 @@ Polymer((function() {
         value: false
       },
 
-      enterpriseInfo: String,
+      showEnterpriseMessage: {
+        type: Boolean,
+        value: false
+      },
+
+      domain: {
+        type: String,
+        observer: 'onDomainChanged_'
+      },
 
       emailDomain: String
     },
@@ -46,6 +54,12 @@ Polymer((function() {
 
     back: function() {
       this.switchToEmailCard(true /* animated */);
+    },
+
+    onDomainChanged_: function() {
+      this.$.managedBy.textContent =
+        loadTimeData.getStringF('enterpriseInfoMessage', this.domain);
+      this.showEnterpriseMessage = !!this.domain.length;
     },
 
     onAnimationFinish_: function() {

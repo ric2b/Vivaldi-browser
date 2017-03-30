@@ -7,9 +7,9 @@
 
 #include <stdint.h>
 
+#include <list>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
@@ -20,8 +20,9 @@
 #include "device/usb/webusb_descriptors.h"
 
 struct libusb_device;
-struct libusb_config_descriptor;
+struct libusb_device_descriptor;
 struct libusb_device_handle;
+struct libusb_config_descriptor;
 
 namespace base {
 class SequencedTaskRunner;
@@ -47,7 +48,7 @@ class UsbDeviceImpl : public UsbDevice {
   void CheckUsbAccess(const ResultCallback& callback) override;
 #endif  // OS_CHROMEOS
   void Open(const OpenCallback& callback) override;
-  const UsbConfigDescriptor* GetActiveConfiguration() override;
+  const UsbConfigDescriptor* GetActiveConfiguration() const override;
 
   // These functions are used during enumeration only. The values must not
   // change during the object's lifetime.
@@ -76,8 +77,7 @@ class UsbDeviceImpl : public UsbDevice {
   // Called by UsbServiceImpl only;
   UsbDeviceImpl(scoped_refptr<UsbContext> context,
                 PlatformUsbDevice platform_device,
-                uint16_t vendor_id,
-                uint16_t product_id,
+                const libusb_device_descriptor& descriptor,
                 scoped_refptr<base::SequencedTaskRunner> blocking_task_runner);
 
   ~UsbDeviceImpl() override;
@@ -89,7 +89,7 @@ class UsbDeviceImpl : public UsbDevice {
   void ReadAllConfigurations();
 
   // Called by UsbDeviceHandleImpl.
-  void Close(scoped_refptr<UsbDeviceHandle> handle);
+  void HandleClosed(scoped_refptr<UsbDeviceHandle> handle);
   void RefreshActiveConfiguration();
 
  private:
@@ -124,8 +124,7 @@ class UsbDeviceImpl : public UsbDevice {
   scoped_refptr<UsbContext> context_;
 
   // Opened handles.
-  typedef std::vector<scoped_refptr<UsbDeviceHandleImpl> > HandlesVector;
-  HandlesVector handles_;
+  std::list<UsbDeviceHandle*> handles_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;

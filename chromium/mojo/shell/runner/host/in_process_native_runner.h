@@ -30,16 +30,12 @@ class InProcessNativeRunner : public NativeRunner,
   ~InProcessNativeRunner() override;
 
   // NativeRunner:
-  void Start(
+  mojom::ShellClientPtr Start(
       const base::FilePath& app_path,
       const Identity& target,
       bool start_sandboxed,
-      InterfaceRequest<mojom::ShellClient> request,
       const base::Callback<void(base::ProcessId)>& pid_available_callback,
       const base::Closure& app_completed_callback) override;
-  void InitHost(
-      ScopedHandle channel,
-      InterfaceRequest<mojom::ShellClient> request) override;
 
  private:
   // |base::DelegateSimpleThread::Delegate| method:

@@ -14,6 +14,7 @@
 #include "base/files/file_path_watcher.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/free_deleter.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_split.h"
@@ -26,13 +27,12 @@
 #include "base/win/registry.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/windows_version.h"
+#include "net/base/ip_address.h"
 #include "net/base/network_change_notifier.h"
 #include "net/dns/dns_hosts.h"
 #include "net/dns/dns_protocol.h"
 #include "net/dns/serial_worker.h"
 #include "url/url_canon.h"
-
-#pragma comment(lib, "iphlpapi.lib")
 
 namespace net {
 
@@ -128,7 +128,7 @@ scoped_ptr<IP_ADAPTER_ADDRESSES, base::FreeDeleter> ReadIpHelper(ULONG flags) {
   }
   if (rv != NO_ERROR)
     out.reset();
-  return out.Pass();
+  return out;
 }
 
 // Converts a base::string16 domain name to ASCII, possibly using punycode.
@@ -220,13 +220,8 @@ ConfigParseWinResult ReadSystemSettings(DnsSystemSettings* settings) {
 // Default address of "localhost" and local computer name can be overridden
 // by the HOSTS file, but if it's not there, then we need to fill it in.
 HostsParseWinResult AddLocalhostEntries(DnsHosts* hosts) {
-  const unsigned char kIPv4Localhost[] = { 127, 0, 0, 1 };
-  const unsigned char kIPv6Localhost[] = { 0, 0, 0, 0, 0, 0, 0, 0,
-                                           0, 0, 0, 0, 0, 0, 0, 1 };
-  IPAddressNumber loopback_ipv4(kIPv4Localhost,
-                                kIPv4Localhost + arraysize(kIPv4Localhost));
-  IPAddressNumber loopback_ipv6(kIPv6Localhost,
-                                kIPv6Localhost + arraysize(kIPv6Localhost));
+  IPAddress loopback_ipv4 = IPAddress::IPv4Localhost();
+  IPAddress loopback_ipv6 = IPAddress::IPv6Localhost();
 
   // This does not override any pre-existing entries from the HOSTS file.
   hosts->insert(std::make_pair(DnsHostsKey("localhost", ADDRESS_FAMILY_IPV4),
@@ -280,12 +275,10 @@ HostsParseWinResult AddLocalhostEntries(DnsHosts* hosts) {
       }
       if (!have_ipv4 && (ipe.GetFamily() == ADDRESS_FAMILY_IPV4)) {
         have_ipv4 = true;
-        (*hosts)[DnsHostsKey(localname, ADDRESS_FAMILY_IPV4)] =
-            ipe.address().bytes();
+        (*hosts)[DnsHostsKey(localname, ADDRESS_FAMILY_IPV4)] = ipe.address();
       } else if (!have_ipv6 && (ipe.GetFamily() == ADDRESS_FAMILY_IPV6)) {
         have_ipv6 = true;
-        (*hosts)[DnsHostsKey(localname, ADDRESS_FAMILY_IPV6)] =
-            ipe.address().bytes();
+        (*hosts)[DnsHostsKey(localname, ADDRESS_FAMILY_IPV6)] = ipe.address();
       }
     }
   }
@@ -332,15 +325,12 @@ class RegistryWatcher : public base::NonThreadSafe {
 // Returns true iff |address| is DNS address from IPv6 stateless discovery,
 // i.e., matches fec0:0:0:ffff::{1,2,3}.
 // http://tools.ietf.org/html/draft-ietf-ipngwg-dns-discovery
-bool IsStatelessDiscoveryAddress(const IPAddressNumber& address) {
-  if (address.size() != kIPv6AddressSize)
+bool IsStatelessDiscoveryAddress(const IPAddress& address) {
+  if (!address.IsIPv6())
     return false;
-  const uint8_t kPrefix[] = {
-      0xfe, 0xc0, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  };
-  return std::equal(kPrefix, kPrefix + arraysize(kPrefix),
-                    address.begin()) && (address.back() < 4);
+  const uint8_t kPrefix[] = {0xfe, 0xc0, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
+                             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  return IPAddressStartsWith(address, kPrefix) && (address.bytes().back() < 4);
 }
 
 // Returns the path to the HOSTS file.
@@ -514,7 +504,7 @@ ConfigParseWinResult ConvertSettingsToDnsConfig(
       IPEndPoint ipe;
       if (ipe.FromSockAddr(address->Address.lpSockaddr,
                            address->Address.iSockaddrLength)) {
-        if (IsStatelessDiscoveryAddress(ipe.address().bytes()))
+        if (IsStatelessDiscoveryAddress(ipe.address()))
           continue;
         // Override unset port.
         if (!ipe.port())

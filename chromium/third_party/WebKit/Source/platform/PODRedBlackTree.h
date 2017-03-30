@@ -245,7 +245,7 @@ public:
     }
 #endif
 
-    enum Color {
+    enum NodeColor {
         Red = 1,
         Black
     };
@@ -269,8 +269,8 @@ public:
 
         virtual ~Node() { }
 
-        Color color() const { return m_color; }
-        void setColor(Color color) { m_color = color; }
+        NodeColor color() const { return m_color; }
+        void setColor(NodeColor color) { m_color = color; }
 
         // Fetches the user data.
         T& data() { return m_data; }
@@ -296,7 +296,7 @@ public:
         Node* m_left;
         Node* m_right;
         Node* m_parent;
-        Color m_color;
+        NodeColor m_color;
         T m_data;
     };
 
@@ -791,7 +791,7 @@ private:
     void logIfVerbose(const char* output) const
     {
         if (m_verboseDebugging)
-            WTF_LOG_ERROR("%s", output);
+            DLOG(ERROR) << output;
     }
 #endif
 
@@ -808,7 +808,7 @@ private:
             builder.append(ValueToString<T>::string(node->data()));
             builder.append((node->color() == Black) ? " (black)" : " (red)");
         }
-        WTF_LOG_ERROR("%s", builder.toString().ascii().data());
+        DLOG(ERROR) << builder.toString();
         if (node) {
             dumpFromNode(node->left(), indentation + 2);
             dumpFromNode(node->right(), indentation + 2);

@@ -10,7 +10,6 @@
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -21,7 +20,9 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/suggestions/blacklist_store.h"
+#include "components/suggestions/image_manager.h"
 #include "components/suggestions/suggestions_store.h"
+#include "components/sync_driver/sync_service.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/oauth2_token_service.h"
@@ -35,13 +36,43 @@
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_status.h"
 
-using base::CancelableClosure;
 using base::TimeDelta;
 using base::TimeTicks;
 
 namespace suggestions {
 
 namespace {
+
+// Establishes the different sync states that matter to SuggestionsService.
+// There are three different concepts in the sync service: initialized, sync
+// enabled and history sync enabled.
+enum SyncState {
+  // State: Sync service is not initialized, yet not disabled. History sync
+  //     state is unknown (since not initialized).
+  // Behavior: Does not issue a server request, but serves from cache if
+  //     available.
+  NOT_INITIALIZED_ENABLED,
+
+  // State: Sync service is initialized, sync is enabled and history sync is
+  //     enabled.
+  // Behavior: Update suggestions from the server. Serve from cache on timeout.
+  INITIALIZED_ENABLED_HISTORY,
+
+  // State: Sync service is disabled or history sync is disabled.
+  // Behavior: Do not issue a server request. Clear the cache. Serve empty
+  //     suggestions.
+  SYNC_OR_HISTORY_SYNC_DISABLED,
+};
+
+SyncState GetSyncState(sync_driver::SyncService* sync) {
+  if (!sync || !sync->CanSyncStart())
+    return SYNC_OR_HISTORY_SYNC_DISABLED;
+  if (!sync->IsSyncActive() || !sync->ConfigurationDone())
+    return NOT_INITIALIZED_ENABLED;
+  return sync->GetActiveDataTypes().Has(syncer::HISTORY_DELETE_DIRECTIVES)
+             ? INITIALIZED_ENABLED_HISTORY
+             : SYNC_OR_HISTORY_SYNC_DISABLED;
+}
 
 // Used to UMA log the state of the last response from the server.
 enum SuggestionsResponseState {
@@ -55,19 +86,6 @@ enum SuggestionsResponseState {
 void LogResponseState(SuggestionsResponseState state) {
   UMA_HISTOGRAM_ENUMERATION("Suggestions.ResponseState", state,
                             RESPONSE_STATE_SIZE);
-}
-
-// Runs each callback in |requestors| on |suggestions|, then deallocates
-// |requestors|.
-void DispatchRequestsAndClear(
-    const SuggestionsProfile& suggestions,
-    std::vector<SuggestionsService::ResponseCallback>* requestors) {
-  std::vector<SuggestionsService::ResponseCallback> temp_requestors;
-  temp_requestors.swap(*requestors);
-  std::vector<SuggestionsService::ResponseCallback>::iterator it;
-  for (it = temp_requestors.begin(); it != temp_requestors.end(); ++it) {
-    if (!it->is_null()) it->Run(suggestions);
-  }
 }
 
 // Default delay used when scheduling a request.
@@ -118,10 +136,6 @@ const char kPingURL[] =
 
 // The default expiry timeout is 168 hours.
 const int64_t kDefaultExpiryUsec = 168 * base::Time::kMicrosecondsPerHour;
-
-const base::Feature kOAuth2AuthenticationFeature {
-  "SuggestionsServiceOAuth2", base::FEATURE_ENABLED_BY_DEFAULT
-};
 
 }  // namespace
 
@@ -181,44 +195,51 @@ class SuggestionsService::AccessTokenFetcher
 SuggestionsService::SuggestionsService(
     const SigninManagerBase* signin_manager,
     OAuth2TokenService* token_service,
+    sync_driver::SyncService* sync_service,
     net::URLRequestContextGetter* url_request_context,
     scoped_ptr<SuggestionsStore> suggestions_store,
     scoped_ptr<ImageManager> thumbnail_manager,
     scoped_ptr<BlacklistStore> blacklist_store)
-    : url_request_context_(url_request_context),
+    : sync_service_(sync_service),
+      sync_service_observer_(this),
+      url_request_context_(url_request_context),
       suggestions_store_(std::move(suggestions_store)),
       thumbnail_manager_(std::move(thumbnail_manager)),
       blacklist_store_(std::move(blacklist_store)),
       scheduling_delay_(TimeDelta::FromSeconds(kDefaultSchedulingDelaySec)),
       token_fetcher_(new AccessTokenFetcher(signin_manager, token_service)),
-      weak_ptr_factory_(this) {}
+      weak_ptr_factory_(this) {
+  // |sync_service_| is null if switches::kDisableSync is set (tests use that).
+  if (sync_service_)
+    sync_service_observer_.Add(sync_service_);
+  // Immediately get the current sync state, so we'll flush the cache if
+  // necessary.
+  OnStateChanged();
+}
 
 SuggestionsService::~SuggestionsService() {}
 
-void SuggestionsService::FetchSuggestionsData(
-    SyncState sync_state,
-    const ResponseCallback& callback) {
+bool SuggestionsService::FetchSuggestionsData() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  waiting_requestors_.push_back(callback);
-  switch (sync_state) {
-    case SYNC_OR_HISTORY_SYNC_DISABLED:
-      // Cancel any ongoing request, to stop interacting with the server.
-      pending_request_.reset(nullptr);
-      suggestions_store_->ClearSuggestions();
-      DispatchRequestsAndClear(SuggestionsProfile(), &waiting_requestors_);
-      break;
-    case INITIALIZED_ENABLED_HISTORY:
-    case NOT_INITIALIZED_ENABLED:
-      // TODO(treib): For NOT_INITIALIZED_ENABLED, we shouldn't issue a network
-      // request. Verify that that won't break anything.
-      // Sync is enabled. Serve previously cached suggestions if available, else
-      // an empty set of suggestions.
-      ServeFromCache();
+  // If sync state allows, issue a network request to refresh the suggestions.
+  if (GetSyncState(sync_service_) != INITIALIZED_ENABLED_HISTORY)
+    return false;
+  IssueRequestIfNoneOngoing(BuildSuggestionsURL());
+  return true;
+}
 
-      // Issue a network request to refresh the suggestions in the cache.
-      IssueRequestIfNoneOngoing(BuildSuggestionsURL());
-      break;
-  }
+SuggestionsProfile SuggestionsService::GetSuggestionsDataFromCache() const {
+  SuggestionsProfile suggestions;
+  // In case of empty cache or error, |suggestions| stays empty.
+  suggestions_store_->LoadSuggestions(&suggestions);
+  thumbnail_manager_->Initialize(suggestions);
+  blacklist_store_->FilterSuggestions(&suggestions);
+  return suggestions;
+}
+
+scoped_ptr<SuggestionsService::ResponseCallbackList::Subscription>
+SuggestionsService::AddCallback(const ResponseCallback& callback) {
+  return callback_list_.Add(callback);
 }
 
 void SuggestionsService::GetPageThumbnail(const GURL& url,
@@ -234,29 +255,23 @@ void SuggestionsService::GetPageThumbnailWithURL(
   GetPageThumbnail(url, callback);
 }
 
-void SuggestionsService::BlacklistURL(const GURL& candidate_url,
-                                      const ResponseCallback& callback,
-                                      const base::Closure& fail_callback) {
+bool SuggestionsService::BlacklistURL(const GURL& candidate_url) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (!blacklist_store_->BlacklistUrl(candidate_url)) {
-    if (!fail_callback.is_null())
-      fail_callback.Run();
-    return;
-  }
+  if (!blacklist_store_->BlacklistUrl(candidate_url))
+    return false;
 
-  waiting_requestors_.push_back(callback);
-  ServeFromCache();
+  callback_list_.Notify(GetSuggestionsDataFromCache());
+
   // Blacklist uploads are scheduled on any request completion, so only schedule
   // an upload if there is no ongoing request.
-  if (!pending_request_.get()) {
+  if (!pending_request_.get())
     ScheduleBlacklistUpload();
-  }
+
+  return true;
 }
 
-void SuggestionsService::UndoBlacklistURL(const GURL& url,
-                                          const ResponseCallback& callback,
-                                          const base::Closure& fail_callback) {
+bool SuggestionsService::UndoBlacklistURL(const GURL& url) {
   DCHECK(thread_checker_.CalledOnValidThread());
   TimeDelta time_delta;
   if (blacklist_store_->GetTimeUntilURLReadyForUpload(url, &time_delta) &&
@@ -264,20 +279,17 @@ void SuggestionsService::UndoBlacklistURL(const GURL& url,
       blacklist_store_->RemoveUrl(url)) {
     // The URL was not yet candidate for upload to the server and could be
     // removed from the blacklist.
-    waiting_requestors_.push_back(callback);
-    ServeFromCache();
-    return;
+    callback_list_.Notify(GetSuggestionsDataFromCache());
+    return true;
   }
-  if (!fail_callback.is_null())
-    fail_callback.Run();
+  return false;
 }
 
-void SuggestionsService::ClearBlacklist(const ResponseCallback& callback) {
+void SuggestionsService::ClearBlacklist() {
   DCHECK(thread_checker_.CalledOnValidThread());
   blacklist_store_->ClearBlacklist();
+  callback_list_.Notify(GetSuggestionsDataFromCache());
   IssueRequestIfNoneOngoing(BuildSuggestionsBlacklistClearURL());
-  waiting_requestors_.push_back(callback);
-  ServeFromCache();
 }
 
 // static
@@ -310,11 +322,6 @@ void SuggestionsService::RegisterProfilePrefs(
 }
 
 // static
-bool SuggestionsService::UseOAuth2() {
-  return base::FeatureList::IsEnabled(kOAuth2AuthenticationFeature);
-}
-
-// static
 GURL SuggestionsService::BuildSuggestionsURL() {
   return GURL(base::StringPrintf(kSuggestionsURLFormat,
                                  GetGoogleBaseURL().spec().c_str(),
@@ -341,6 +348,26 @@ GURL SuggestionsService::BuildSuggestionsBlacklistClearURL() {
                                  kDeviceType));
 }
 
+void SuggestionsService::OnStateChanged() {
+  switch (GetSyncState(sync_service_)) {
+    case SYNC_OR_HISTORY_SYNC_DISABLED:
+      // Cancel any ongoing request, to stop interacting with the server.
+      pending_request_.reset(nullptr);
+      suggestions_store_->ClearSuggestions();
+      callback_list_.Notify(SuggestionsProfile());
+      break;
+    case NOT_INITIALIZED_ENABLED:
+      // Keep the cache (if any), but don't refresh.
+      break;
+    case INITIALIZED_ENABLED_HISTORY:
+      // If we have any observers, issue a network request to refresh the
+      // suggestions in the cache.
+      if (!callback_list_.empty())
+        IssueRequestIfNoneOngoing(BuildSuggestionsURL());
+      break;
+  }
+}
+
 void SuggestionsService::SetDefaultExpiryTimestamp(
     SuggestionsProfile* suggestions,
     int64_t default_timestamp_usec) {
@@ -359,24 +386,19 @@ void SuggestionsService::IssueRequestIfNoneOngoing(const GURL& url) {
   if (pending_request_.get()) {
     return;
   }
-  if (UseOAuth2()) {
-    // If there is an ongoing token request, also wait for that.
-    if (token_fetcher_->HasPendingRequest()) {
-      return;
-    }
-    token_fetcher_->GetAccessToken(
-        base::Bind(&SuggestionsService::IssueSuggestionsRequest,
-                   base::Unretained(this), url));
-  } else {
-    // No access token required.
-    IssueSuggestionsRequest(url, std::string());
+  // If there is an ongoing token request, also wait for that.
+  if (token_fetcher_->HasPendingRequest()) {
+    return;
   }
+  token_fetcher_->GetAccessToken(
+      base::Bind(&SuggestionsService::IssueSuggestionsRequest,
+                 base::Unretained(this), url));
 }
 
 void SuggestionsService::IssueSuggestionsRequest(
     const GURL& url,
     const std::string& access_token) {
-  if (UseOAuth2() && access_token.empty()) {
+  if (access_token.empty()) {
     UpdateBlacklistDelay(false);
     ScheduleBlacklistUpload();
     return;
@@ -392,10 +414,9 @@ scoped_ptr<net::URLFetcher> SuggestionsService::CreateSuggestionsRequest(
       net::URLFetcher::Create(0, url, net::URLFetcher::GET, this);
   data_use_measurement::DataUseUserData::AttachToFetcher(
       request.get(), data_use_measurement::DataUseUserData::SUGGESTIONS);
-  int load_flags = net::LOAD_DISABLE_CACHE;
-  if (UseOAuth2()) {
-    load_flags |= net::LOAD_DO_NOT_SEND_COOKIES | net::LOAD_DO_NOT_SAVE_COOKIES;
-  }
+  int load_flags = net::LOAD_DISABLE_CACHE | net::LOAD_DO_NOT_SEND_COOKIES |
+                   net::LOAD_DO_NOT_SAVE_COOKIES;
+
   request->SetLoadFlags(load_flags);
   request->SetRequestContext(url_request_context_);
   // Add Chrome experiment state to the request headers.
@@ -403,7 +424,7 @@ scoped_ptr<net::URLFetcher> SuggestionsService::CreateSuggestionsRequest(
   variations::AppendVariationHeaders(request->GetOriginalURL(), false, false,
                                      &headers);
   request->SetExtraRequestHeaders(headers.ToString());
-  if (UseOAuth2() && !access_token.empty()) {
+  if (!access_token.empty()) {
     request->AddExtraRequestHeader(
         base::StringPrintf(kAuthorizationHeaderFormat, access_token.c_str()));
   }
@@ -473,6 +494,8 @@ void SuggestionsService::OnURLFetchComplete(const net::URLFetcher* source) {
     LogResponseState(RESPONSE_INVALID);
   }
 
+  callback_list_.Notify(GetSuggestionsDataFromCache());
+
   UpdateBlacklistDelay(true);
   ScheduleBlacklistUpload();
 }
@@ -497,22 +520,8 @@ void SuggestionsService::PopulateExtraData(SuggestionsProfile* suggestions) {
 }
 
 void SuggestionsService::Shutdown() {
-  // Cancel pending request, then serve existing requestors from cache.
+  // Cancel pending request.
   pending_request_.reset(nullptr);
-  ServeFromCache();
-}
-
-void SuggestionsService::ServeFromCache() {
-  SuggestionsProfile suggestions;
-  // In case of empty cache or error, |suggestions| stays empty.
-  suggestions_store_->LoadSuggestions(&suggestions);
-  thumbnail_manager_->Initialize(suggestions);
-  FilterAndServe(&suggestions);
-}
-
-void SuggestionsService::FilterAndServe(SuggestionsProfile* suggestions) {
-  blacklist_store_->FilterSuggestions(suggestions);
-  DispatchRequestsAndClear(*suggestions, &waiting_requestors_);
 }
 
 void SuggestionsService::ScheduleBlacklistUpload() {

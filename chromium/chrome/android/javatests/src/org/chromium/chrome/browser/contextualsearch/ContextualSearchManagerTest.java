@@ -19,7 +19,6 @@ import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.test.FlakyTest;
 import android.test.suitebuilder.annotation.SmallTest;
-import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -63,6 +62,7 @@ import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.touch_selection.SelectionEventType;
 
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeoutException;
 
 // TODO(pedrosimonetti): Create class with limited API to encapsulate the internals of simulations.
@@ -172,12 +172,12 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      * @param text The string to wait for the selection to become.
      */
     public void waitForSelectionToBe(final String text) throws InterruptedException {
-        CriteriaHelper.pollForCriteria(new Criteria("Bar never showed desired text.") {
+        CriteriaHelper.pollInstrumentationThread(Criteria.equals(text, new Callable<String>() {
             @Override
-            public boolean isSatisfied() {
-                return TextUtils.equals(text, getSelectedText());
+            public String call() {
+                return getSelectedText();
             }
-        }, TEST_TIMEOUT, DEFAULT_POLLING_INTERVAL);
+        }), TEST_TIMEOUT, DEFAULT_POLLING_INTERVAL);
     }
 
     /**
@@ -186,12 +186,13 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      */
     public void waitForSearchTermResolutionToStart(
             final ContextualSearchFakeServer.FakeTapSearch search) throws InterruptedException {
-        CriteriaHelper.pollForCriteria(new Criteria("Fake Search Term Resolution never started.") {
-            @Override
-            public boolean isSatisfied() {
-                return search.didStartSearchTermResolution();
-            }
-        }, TEST_TIMEOUT, DEFAULT_POLLING_INTERVAL);
+        CriteriaHelper.pollInstrumentationThread(
+                new Criteria("Fake Search Term Resolution never started.") {
+                    @Override
+                    public boolean isSatisfied() {
+                        return search.didStartSearchTermResolution();
+                    }
+                }, TEST_TIMEOUT, DEFAULT_POLLING_INTERVAL);
     }
 
     /**
@@ -200,7 +201,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      */
     public void waitForSearchTermResolutionToFinish(
             final ContextualSearchFakeServer.FakeTapSearch search) throws InterruptedException {
-        CriteriaHelper.pollForCriteria(new Criteria("Fake Search was never ready.") {
+        CriteriaHelper.pollInstrumentationThread(new Criteria("Fake Search was never ready.") {
             @Override
             public boolean isSatisfied() {
                 return search.didFinishSearchTermResolution();
@@ -627,7 +628,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      */
     private void waitForPanelToEnterState(final PanelState state)
             throws InterruptedException {
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 if (mPanel == null) return false;
@@ -668,12 +669,13 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      * @throws InterruptedException
      */
     private void waitForGestureProcessing() throws InterruptedException {
-        CriteriaHelper.pollForCriteria(new Criteria("Gesture processing did not complete.") {
-            @Override
-            public boolean isSatisfied() {
-                return !mSelectionController.wasAnyTapGestureDetected();
-            }
-        }, TEST_TIMEOUT, DEFAULT_POLLING_INTERVAL);
+        CriteriaHelper.pollInstrumentationThread(
+                new Criteria("Gesture processing did not complete.") {
+                    @Override
+                    public boolean isSatisfied() {
+                        return !mSelectionController.wasAnyTapGestureDetected();
+                    }
+                }, TEST_TIMEOUT, DEFAULT_POLLING_INTERVAL);
     }
 
     /**
@@ -698,7 +700,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      * and a subsequent tap may think there's a current selection until it has been dissolved.
      */
     private void waitForSelectionDissolved() throws InterruptedException {
-        CriteriaHelper.pollForCriteria(new Criteria("Selection never dissolved.") {
+        CriteriaHelper.pollInstrumentationThread(new Criteria("Selection never dissolved.") {
             @Override
             public boolean isSatisfied() {
                 return !mSelectionController.isSelectionEstablished();
@@ -1372,7 +1374,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
         });
 
         // Give the panelState time to change
-        CriteriaHelper.pollForCriteria(new Criteria(){
+        CriteriaHelper.pollInstrumentationThread(new Criteria(){
             @Override
             public boolean isSatisfied() {
                 PanelState panelState = mPanel.getPanelState();
@@ -1676,14 +1678,13 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      * Asserts whether the App Menu is visible.
      */
     private void assertAppMenuVisibility(final boolean isVisible) throws InterruptedException {
-        CriteriaHelper.pollForCriteria(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                if (getActivity()
-                        .getAppMenuHandler().isAppMenuShowing() == isVisible) return true;
-                return false;
-            }
-        });
+        CriteriaHelper.pollInstrumentationThread(
+                Criteria.equals(isVisible, new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() {
+                        return getActivity().getAppMenuHandler().isAppMenuShowing();
+                    }
+                }));
     }
 
     /**
@@ -1896,13 +1897,13 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
 
     private void assertWaitForSelectActionBarVisible(final boolean visible)
             throws InterruptedException {
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(Criteria.equals(visible, new Callable<Boolean>() {
             @Override
-            public boolean isSatisfied() {
-                return visible == getActivity().getActivityTab().getContentViewCore()
+            public Boolean call() {
+                return getActivity().getActivityTab().getContentViewCore()
                         .isSelectActionBarShowing();
             }
-        });
+        }));
     }
 
     /**

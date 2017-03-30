@@ -29,7 +29,10 @@ const int kTimerTaskEstimationSampleCount = 1000;
 const double kTimerTaskEstimationPercentile = 99;
 const int kShortIdlePeriodDurationSampleCount = 10;
 const double kShortIdlePeriodDurationPercentile = 50;
-}
+// Amount of idle time left in a frame (as a ratio of the vsync interval) above
+// which main thread compositing can be considered fast.
+const double kFastCompositingIdleTimeThreshold = .2;
+}  // namespace
 
 RendererSchedulerImpl::RendererSchedulerImpl(
     scoped_refptr<SchedulerTqmDelegate> main_task_runner)
@@ -112,6 +115,7 @@ RendererSchedulerImpl::MainThreadOnly::MainThreadOnly(
       current_use_case(UseCase::NONE),
       timer_queue_suspend_count(0),
       navigation_task_expected_count(0),
+      expensive_task_policy(ExpensiveTaskPolicy::RUN),
       renderer_hidden(false),
       renderer_backgrounded(false),
       timer_queue_suspension_when_backgrounded_enabled(false),
@@ -656,8 +660,15 @@ void RendererSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
     MainThreadOnly().current_policy_expiration_time = base::TimeTicks();
   }
 
+  // Avoid prioritizing main thread compositing (e.g., rAF) if it is extremely
+  // slow, because that can cause starvation in other task sources.
+  bool main_thread_compositing_is_fast =
+      MainThreadOnly().idle_time_estimator.GetExpectedIdleDuration(
+          MainThreadOnly().compositor_frame_interval) >
+      MainThreadOnly().compositor_frame_interval *
+          kFastCompositingIdleTimeThreshold;
+
   Policy new_policy;
-  enum class ExpensiveTaskPolicy { RUN, BLOCK, THROTTLE };
   ExpensiveTaskPolicy expensive_task_policy = ExpensiveTaskPolicy::RUN;
   switch (use_case) {
     case UseCase::COMPOSITOR_GESTURE:
@@ -675,7 +686,9 @@ void RendererSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
       break;
 
     case UseCase::SYNCHRONIZED_GESTURE:
-      new_policy.compositor_queue_policy.priority = TaskQueue::HIGH_PRIORITY;
+      new_policy.compositor_queue_policy.priority =
+          main_thread_compositing_is_fast ? TaskQueue::HIGH_PRIORITY
+                                          : TaskQueue::NORMAL_PRIORITY;
       if (touchstart_expected_soon) {
         expensive_task_policy = ExpensiveTaskPolicy::BLOCK;
       } else {
@@ -688,7 +701,9 @@ void RendererSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
       // things we should be prioritizing, so we don't attempt to block
       // expensive tasks because we don't know whether they were integral to the
       // page's functionality or not.
-      new_policy.compositor_queue_policy.priority = TaskQueue::HIGH_PRIORITY;
+      new_policy.compositor_queue_policy.priority =
+          main_thread_compositing_is_fast ? TaskQueue::HIGH_PRIORITY
+                                          : TaskQueue::NORMAL_PRIORITY;
       break;
 
     case UseCase::TOUCHSTART:
@@ -746,6 +761,8 @@ void RendererSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
       }
       break;
   }
+
+  MainThreadOnly().expensive_task_policy = expensive_task_policy;
 
   if (MainThreadOnly().timer_queue_suspend_count != 0 ||
       MainThreadOnly().timer_queue_suspended_when_backgrounded) {
@@ -842,7 +859,8 @@ RendererSchedulerImpl::UseCase RendererSchedulerImpl::ComputeCurrentUseCase(
   any_thread_lock_.AssertAcquired();
   // Special case for flings. This is needed because we don't get notification
   // of a fling ending (although we do for cancellation).
-  if (AnyThread().fling_compositor_escalation_deadline > now) {
+  if (AnyThread().fling_compositor_escalation_deadline > now &&
+      !AnyThread().awaiting_touch_start_response) {
     *expected_use_case_duration =
         AnyThread().fling_compositor_escalation_deadline - now;
     return UseCase::COMPOSITOR_GESTURE;
@@ -959,27 +977,44 @@ void RendererSchedulerImpl::SetTimerQueueSuspensionWhenBackgroundedEnabled(
   MainThreadOnly().timer_queue_suspension_when_backgrounded_enabled = enabled;
 }
 
-scoped_refptr<base::trace_event::ConvertableToTraceFormat>
+scoped_ptr<base::trace_event::ConvertableToTraceFormat>
 RendererSchedulerImpl::AsValue(base::TimeTicks optional_now) const {
   base::AutoLock lock(any_thread_lock_);
   return AsValueLocked(optional_now);
 }
 
-scoped_refptr<base::trace_event::ConvertableToTraceFormat>
+// static
+const char* RendererSchedulerImpl::ExpensiveTaskPolicyToString(
+    ExpensiveTaskPolicy expensive_task_policy) {
+  switch (expensive_task_policy) {
+    case ExpensiveTaskPolicy::RUN:
+      return "RUN";
+    case ExpensiveTaskPolicy::BLOCK:
+      return "BLOCK";
+    case ExpensiveTaskPolicy::THROTTLE:
+      return "THROTTLE";
+    default:
+      NOTREACHED();
+      return nullptr;
+  }
+}
+
+scoped_ptr<base::trace_event::ConvertableToTraceFormat>
 RendererSchedulerImpl::AsValueLocked(base::TimeTicks optional_now) const {
   helper_.CheckOnValidThread();
   any_thread_lock_.AssertAcquired();
 
   if (optional_now.is_null())
     optional_now = helper_.scheduler_tqm_delegate()->NowTicks();
-  scoped_refptr<base::trace_event::TracedValue> state =
-      new base::trace_event::TracedValue();
-
+  scoped_ptr<base::trace_event::TracedValue> state(
+      new base::trace_event::TracedValue());
   state->SetBoolean(
       "has_visible_render_widget_with_touch_handler",
       MainThreadOnly().has_visible_render_widget_with_touch_handler);
   state->SetString("current_use_case",
                    UseCaseToString(MainThreadOnly().current_use_case));
+  state->SetBoolean("expensive_task_blocking_allowed",
+                    MainThreadOnly().expensive_task_blocking_allowed);
   state->SetBoolean("loading_tasks_seem_expensive",
                     MainThreadOnly().loading_tasks_seem_expensive);
   state->SetBoolean("timer_tasks_seem_expensive",
@@ -1046,10 +1081,15 @@ RendererSchedulerImpl::AsValueLocked(base::TimeTicks optional_now) const {
       (MainThreadOnly().estimated_next_frame_begin - base::TimeTicks())
           .InMillisecondsF());
   state->SetBoolean("in_idle_period", AnyThread().in_idle_period);
+
+  state->SetString(
+      "expensive_task_policy",
+      ExpensiveTaskPolicyToString(MainThreadOnly().expensive_task_policy));
+
   AnyThread().user_model.AsValueInto(state.get());
   render_widget_scheduler_signals_.AsValueInto(state.get());
 
-  return state;
+  return std::move(state);
 }
 
 void RendererSchedulerImpl::OnIdlePeriodStarted() {
@@ -1128,6 +1168,22 @@ void RendererSchedulerImpl::ResetForNavigationLocked() {
   UpdatePolicyLocked(UpdateType::MAY_EARLY_OUT_IF_POLICY_UNCHANGED);
 }
 
+void RendererSchedulerImpl::SetTopLevelBlameContext(
+    base::trace_event::BlameContext* blame_context) {
+  // Any task that runs in the default task runners belongs to the context of
+  // all frames (as opposed to a particular frame). Note that the task itself
+  // may still enter a more specific blame context if necessary.
+  //
+  // Per-frame task runners (loading, timers, etc.) are configured with a more
+  // specific blame context by WebFrameSchedulerImpl.
+  control_task_runner_->SetBlameContext(blame_context);
+  DefaultTaskRunner()->SetBlameContext(blame_context);
+  default_loading_task_runner_->SetBlameContext(blame_context);
+  default_timer_task_runner_->SetBlameContext(blame_context);
+  compositor_task_runner_->SetBlameContext(blame_context);
+  idle_helper_.IdleTaskRunner()->SetBlameContext(blame_context);
+}
+
 void RendererSchedulerImpl::RegisterTimeDomain(TimeDomain* time_domain) {
   helper_.RegisterTimeDomain(time_domain);
 }
@@ -1169,7 +1225,9 @@ void RendererSchedulerImpl::OnTriedToExecuteBlockedTask(
   if (!MainThreadOnly().have_reported_blocking_intervention_in_current_policy) {
     MainThreadOnly().have_reported_blocking_intervention_in_current_policy =
         true;
-    TRACE_TASK_EXECUTION("RendererSchedulerImpl::TaskBlocked", task);
+    TRACE_EVENT_INSTANT0("renderer.scheduler",
+                         "RendererSchedulerImpl::TaskBlocked",
+                         TRACE_EVENT_SCOPE_THREAD);
   }
 
   if (!MainThreadOnly().have_reported_blocking_intervention_since_navigation) {

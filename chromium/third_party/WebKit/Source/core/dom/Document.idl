@@ -26,6 +26,9 @@ enum DocumentReadyState { "loading", "interactive", "complete" };
 // http://www.w3.org/TR/page-visibility/#VisibilityState
 enum VisibilityState { "hidden", "visible", "prerender", "unloaded" };
 
+// https://mikewest.github.io/cors-rfc1918/#feature-detect
+enum AddressSpace { "local", "private", "public" };
+
 // https://dom.spec.whatwg.org/#interface-document
 
 // FIXME: Document should have a constructor. crbug.com/238234
@@ -107,18 +110,17 @@ interface Document : Node {
     [SameObject] readonly attribute HTMLCollection forms;
     [SameObject] readonly attribute HTMLCollection scripts;
     [PerWorldBindings] NodeList getElementsByName(DOMString elementName);
-    readonly attribute HTMLScriptElement? currentScript;
+    [ImplementedAs=currentScriptForBinding] readonly attribute HTMLScriptElement? currentScript;
 
     // dynamic markup insertion
     // FIXME: There are two open() methods in the spec.
     [Custom, CustomElementCallbacks, RaisesException] void open();
     [RaisesException] void close();
-    [CallWith=FirstWindow, CustomElementCallbacks, RaisesException] void write(DOMString... text);
-    [CallWith=FirstWindow, CustomElementCallbacks, RaisesException] void writeln(DOMString... text);
+    [CallWith=EnteredWindow, CustomElementCallbacks, RaisesException] void write(DOMString... text);
+    [CallWith=EnteredWindow, CustomElementCallbacks, RaisesException] void writeln(DOMString... text);
 
     // user interaction
     [ImplementedAs=domWindow] readonly attribute Window? defaultView;
-    readonly attribute Element? activeElement;
     boolean hasFocus();
     [CustomElementCallbacks, MeasureAs=DocumentDesignMode] attribute DOMString designMode;
     [CustomElementCallbacks, RaisesException] boolean execCommand(DOMString commandId, optional boolean showUI = false, optional DOMString value = "");
@@ -142,20 +144,14 @@ interface Document : Node {
 
     // CSS Object Model (CSSOM)
     // http://dev.w3.org/csswg/cssom/#extensions-to-the-document-interface
-    [SameObject] readonly attribute StyleSheetList styleSheets;
     attribute DOMString? selectedStylesheetSet;
     readonly attribute DOMString? preferredStylesheetSet;
 
-    // CSSOM View Module
-    // http://dev.w3.org/csswg/cssom-view/#extensions-to-the-document-interface
-    // FIXME: The x and y arguments should be of type double.
-    Element? elementFromPoint(long x, long y);
-    sequence<Element> elementsFromPoint(long x, long y);
     readonly attribute Element? scrollingElement;
 
-    // Selection API
-    // http://w3c.github.io/selection-api/#extensions-to-document-interface
-    Selection? getSelection();
+    // Visual Viewport API
+    // https://github.com/WICG/ViewportAPI
+    [RuntimeEnabled=VisualViewportAPI] readonly attribute VisualViewport? visualViewport;
 
     // Pointer Lock
     // https://dvcs.w3.org/hg/pointerlock/raw-file/default/index.html#extensions-to-the-document-interface
@@ -194,6 +190,10 @@ interface Document : Node {
     readonly attribute boolean hidden;
     readonly attribute VisibilityState visibilityState;
 
+    // CORS and RFC1918
+    // https://mikewest.github.io/cors-rfc1918/#feature-detect
+    [RuntimeEnabled=CorsRFC1918, ImplementedAs=addressSpaceForBindings] readonly attribute AddressSpace addressSpace;
+
     // Non-standard APIs
     [MeasureAs=DocumentCaretRangeFromPoint] Range caretRangeFromPoint([Default=Undefined] optional long x, [Default=Undefined] optional long y);
 
@@ -220,3 +220,4 @@ interface Document : Node {
 Document implements GlobalEventHandlers;
 Document implements ParentNode;
 Document implements NonElementParentNode;
+Document implements DocumentOrShadowRoot;

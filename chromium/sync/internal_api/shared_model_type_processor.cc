@@ -9,10 +9,12 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram.h"
 #include "base/thread_task_runner_handle.h"
 #include "sync/engine/commit_queue.h"
 #include "sync/internal_api/public/activation_context.h"
-#include "sync/internal_api/public/model_type_entity.h"
+#include "sync/internal_api/public/processor_entity_tracker.h"
 #include "sync/syncable/syncable_util.h"
 
 namespace syncer_v2 {
@@ -26,7 +28,8 @@ class ModelTypeProcessorProxy : public ModelTypeProcessor {
       const scoped_refptr<base::SequencedTaskRunner>& processor_task_runner);
   ~ModelTypeProcessorProxy() override;
 
-  void ConnectSync(scoped_ptr<CommitQueue> worker) override;
+  void ConnectSync(std::unique_ptr<CommitQueue> worker) override;
+  void DisconnectSync() override;
   void OnCommitCompleted(const sync_pb::DataTypeState& type_state,
                          const CommitResponseDataList& response_list) override;
   void OnUpdateReceived(const sync_pb::DataTypeState& type_state,
@@ -44,10 +47,15 @@ ModelTypeProcessorProxy::ModelTypeProcessorProxy(
 
 ModelTypeProcessorProxy::~ModelTypeProcessorProxy() {}
 
-void ModelTypeProcessorProxy::ConnectSync(scoped_ptr<CommitQueue> worker) {
+void ModelTypeProcessorProxy::ConnectSync(std::unique_ptr<CommitQueue> worker) {
   processor_task_runner_->PostTask(
       FROM_HERE, base::Bind(&ModelTypeProcessor::ConnectSync, processor_,
                             base::Passed(std::move(worker))));
+}
+
+void ModelTypeProcessorProxy::DisconnectSync() {
+  processor_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&ModelTypeProcessor::DisconnectSync, processor_));
 }
 
 void ModelTypeProcessorProxy::OnCommitCompleted(
@@ -73,14 +81,22 @@ SharedModelTypeProcessor::SharedModelTypeProcessor(syncer::ModelType type,
     : type_(type),
       is_metadata_loaded_(false),
       service_(service),
-      weak_ptr_factory_(this),
-      weak_ptr_factory_for_sync_(this) {
+      weak_ptr_factory_(this) {
   DCHECK(service);
 }
 
 SharedModelTypeProcessor::~SharedModelTypeProcessor() {}
 
-void SharedModelTypeProcessor::OnSyncStarting(StartCallback start_callback) {
+// static
+std::unique_ptr<ModelTypeChangeProcessor>
+SharedModelTypeProcessor::CreateAsChangeProcessor(syncer::ModelType type,
+                                                  ModelTypeService* service) {
+  return std::unique_ptr<ModelTypeChangeProcessor>(
+      new SharedModelTypeProcessor(type, service));
+}
+
+void SharedModelTypeProcessor::OnSyncStarting(
+    const StartCallback& start_callback) {
   DCHECK(CalledOnValidThread());
   DCHECK(start_callback_.is_null());
   DCHECK(!IsConnected());
@@ -91,7 +107,7 @@ void SharedModelTypeProcessor::OnSyncStarting(StartCallback start_callback) {
 }
 
 void SharedModelTypeProcessor::OnMetadataLoaded(
-    scoped_ptr<MetadataBatch> batch) {
+    std::unique_ptr<MetadataBatch> batch) {
   DCHECK(CalledOnValidThread());
   DCHECK(entities_.empty());
   DCHECK(!is_metadata_loaded_);
@@ -105,8 +121,8 @@ void SharedModelTypeProcessor::OnMetadataLoaded(
     std::vector<std::string> entities_to_commit;
 
     for (auto it = metadata_map.begin(); it != metadata_map.end(); it++) {
-      scoped_ptr<ModelTypeEntity> entity =
-          ModelTypeEntity::CreateFromMetadata(it->first, &it->second);
+      std::unique_ptr<ProcessorEntityTracker> entity =
+          ProcessorEntityTracker::CreateFromMetadata(it->first, &it->second);
       if (entity->RequiresCommitData()) {
         entities_to_commit.push_back(entity->client_tag());
       }
@@ -129,11 +145,12 @@ void SharedModelTypeProcessor::OnMetadataLoaded(
   ConnectIfReady();
 }
 
-void SharedModelTypeProcessor::OnDataLoaded(syncer::SyncError error,
-                                            scoped_ptr<DataBatch> data_batch) {
+void SharedModelTypeProcessor::OnDataLoaded(
+    syncer::SyncError error,
+    std::unique_ptr<DataBatch> data_batch) {
   while (data_batch->HasNext()) {
     TagAndData data = data_batch->Next();
-    ModelTypeEntity* entity = GetEntityForTag(data.first);
+    ProcessorEntityTracker* entity = GetEntityForTag(data.first);
     // If the entity wasn't deleted or updated with new commit.
     if (entity != nullptr && entity->RequiresCommitData()) {
       entity->CacheCommitData(data.second.get());
@@ -149,12 +166,12 @@ void SharedModelTypeProcessor::ConnectIfReady() {
     return;
   }
 
-  scoped_ptr<ActivationContext> activation_context =
-      make_scoped_ptr(new ActivationContext);
+  std::unique_ptr<ActivationContext> activation_context =
+      base::WrapUnique(new ActivationContext);
   activation_context->data_type_state = data_type_state_;
-  activation_context->type_processor = make_scoped_ptr(
-      new ModelTypeProcessorProxy(weak_ptr_factory_for_sync_.GetWeakPtr(),
-                                  base::ThreadTaskRunnerHandle::Get()));
+  activation_context->type_processor =
+      base::WrapUnique(new ModelTypeProcessorProxy(
+          weak_ptr_factory_.GetWeakPtr(), base::ThreadTaskRunnerHandle::Get()));
 
   start_callback_.Run(syncer::SyncError(), std::move(activation_context));
   start_callback_.Reset();
@@ -171,7 +188,7 @@ bool SharedModelTypeProcessor::IsConnected() const {
 
 void SharedModelTypeProcessor::Disable() {
   DCHECK(CalledOnValidThread());
-  scoped_ptr<MetadataChangeList> change_list =
+  std::unique_ptr<MetadataChangeList> change_list =
       service_->CreateMetadataChangeList();
   for (auto it = entities_.begin(); it != entities_.end(); ++it) {
     change_list->ClearMetadata(it->second->client_tag());
@@ -185,26 +202,8 @@ void SharedModelTypeProcessor::Disable() {
   service_->clear_change_processor();
 }
 
-void SharedModelTypeProcessor::DisconnectSync() {
-  DCHECK(CalledOnValidThread());
-  DCHECK(IsConnected());
-
-  DVLOG(1) << "Disconnecting sync for " << ModelTypeToString(type_);
-  weak_ptr_factory_for_sync_.InvalidateWeakPtrs();
-  worker_.reset();
-
-  for (auto it = entities_.begin(); it != entities_.end(); ++it) {
-    it->second->ClearTransientSyncState();
-  }
-}
-
-base::WeakPtr<SharedModelTypeProcessor>
-SharedModelTypeProcessor::AsWeakPtrForUI() {
-  DCHECK(CalledOnValidThread());
-  return weak_ptr_factory_.GetWeakPtr();
-}
-
-void SharedModelTypeProcessor::ConnectSync(scoped_ptr<CommitQueue> worker) {
+void SharedModelTypeProcessor::ConnectSync(
+    std::unique_ptr<CommitQueue> worker) {
   DCHECK(CalledOnValidThread());
   DVLOG(1) << "Successfully connected " << ModelTypeToString(type_);
 
@@ -213,8 +212,21 @@ void SharedModelTypeProcessor::ConnectSync(scoped_ptr<CommitQueue> worker) {
   FlushPendingCommitRequests();
 }
 
+void SharedModelTypeProcessor::DisconnectSync() {
+  DCHECK(CalledOnValidThread());
+  DCHECK(IsConnected());
+
+  DVLOG(1) << "Disconnecting sync for " << ModelTypeToString(type_);
+  weak_ptr_factory_.InvalidateWeakPtrs();
+  worker_.reset();
+
+  for (auto it = entities_.begin(); it != entities_.end(); ++it) {
+    it->second->ClearTransientSyncState();
+  }
+}
+
 void SharedModelTypeProcessor::Put(const std::string& tag,
-                                   scoped_ptr<EntityData> data,
+                                   std::unique_ptr<EntityData> data,
                                    MetadataChangeList* metadata_change_list) {
   DCHECK(IsAllowingChanges());
   DCHECK(data.get());
@@ -233,7 +245,7 @@ void SharedModelTypeProcessor::Put(const std::string& tag,
     data->modification_time = base::Time::Now();
   }
 
-  ModelTypeEntity* entity = GetEntityForTagHash(data->client_tag_hash);
+  ProcessorEntityTracker* entity = GetEntityForTagHash(data->client_tag_hash);
 
   if (entity == nullptr) {
     // The service is creating a new entity.
@@ -241,10 +253,11 @@ void SharedModelTypeProcessor::Put(const std::string& tag,
       data->creation_time = data->modification_time;
     }
     entity = CreateEntity(tag, *data);
+  } else if (entity->MatchesSpecificsHash(data->specifics)) {
+    // Ignore changes that don't actually change anything.
+    return;
   }
 
-  // TODO(stanisc): crbug.com/561829: Avoid committing a change if there is no
-  // actual change.
   entity->MakeLocalChange(std::move(data));
   metadata_change_list->UpdateMetadata(tag, entity->metadata());
 
@@ -261,7 +274,7 @@ void SharedModelTypeProcessor::Delete(
     return;
   }
 
-  ModelTypeEntity* entity = GetEntityForTag(tag);
+  ProcessorEntityTracker* entity = GetEntityForTag(tag);
   if (entity == nullptr) {
     // That's unusual, but not necessarily a bad thing.
     // Missing is as good as deleted as far as the model is concerned.
@@ -271,6 +284,7 @@ void SharedModelTypeProcessor::Delete(
   }
 
   entity->Delete();
+
   metadata_change_list->UpdateMetadata(tag, entity->metadata());
   FlushPendingCommitRequests();
 }
@@ -292,7 +306,7 @@ void SharedModelTypeProcessor::FlushPendingCommitRequests() {
 
   // TODO(rlarocque): Do something smarter than iterate here.
   for (auto it = entities_.begin(); it != entities_.end(); ++it) {
-    ModelTypeEntity* entity = it->second.get();
+    ProcessorEntityTracker* entity = it->second.get();
     if (entity->RequiresCommitRequest()) {
       DCHECK(!entity->RequiresCommitData());
       CommitRequestData request;
@@ -308,14 +322,14 @@ void SharedModelTypeProcessor::FlushPendingCommitRequests() {
 void SharedModelTypeProcessor::OnCommitCompleted(
     const sync_pb::DataTypeState& type_state,
     const CommitResponseDataList& response_list) {
-  scoped_ptr<MetadataChangeList> change_list =
+  std::unique_ptr<MetadataChangeList> change_list =
       service_->CreateMetadataChangeList();
 
   data_type_state_ = type_state;
   change_list->UpdateDataTypeState(data_type_state_);
 
   for (const CommitResponseData& data : response_list) {
-    ModelTypeEntity* entity = GetEntityForTagHash(data.client_tag_hash);
+    ProcessorEntityTracker* entity = GetEntityForTagHash(data.client_tag_hash);
     if (entity == nullptr) {
       NOTREACHED() << "Received commit response for missing item."
                    << " type: " << type_
@@ -326,10 +340,13 @@ void SharedModelTypeProcessor::OnCommitCompleted(
     entity->ReceiveCommitResponse(data.id, data.sequence_number,
                                   data.response_version,
                                   data_type_state_.encryption_key_name());
-    // TODO(stanisc): crbug.com/573333: Delete case.
-    // This might be the right place to clear a metadata entry that has
-    // been deleted locally and confirmed deleted by the server.
-    change_list->UpdateMetadata(entity->client_tag(), entity->metadata());
+
+    if (entity->CanClearMetadata()) {
+      change_list->ClearMetadata(entity->client_tag());
+      entities_.erase(entity->metadata().client_tag_hash());
+    } else {
+      change_list->UpdateMetadata(entity->client_tag(), entity->metadata());
+    }
   }
 
   // TODO(stanisc): crbug.com/570085: Error handling.
@@ -344,7 +361,7 @@ void SharedModelTypeProcessor::OnUpdateReceived(
     return;
   }
 
-  scoped_ptr<MetadataChangeList> metadata_changes =
+  std::unique_ptr<MetadataChangeList> metadata_changes =
       service_->CreateMetadataChangeList();
   EntityChangeList entity_changes;
 
@@ -358,7 +375,7 @@ void SharedModelTypeProcessor::OnUpdateReceived(
     const EntityData& data = update.entity.value();
     const std::string& client_tag_hash = data.client_tag_hash;
 
-    ModelTypeEntity* entity = GetEntityForTagHash(client_tag_hash);
+    ProcessorEntityTracker* entity = GetEntityForTagHash(client_tag_hash);
     if (entity == nullptr) {
       if (data.is_deleted()) {
         DLOG(WARNING) << "Received remote delete for a non-existing item."
@@ -369,26 +386,32 @@ void SharedModelTypeProcessor::OnUpdateReceived(
       entity = CreateEntity(data);
       entity_changes.push_back(
           EntityChange::CreateAdd(entity->client_tag(), update.entity));
+      entity->RecordAcceptedUpdate(update);
+    } else if (entity->UpdateIsReflection(update.response_version)) {
+      // Seen this update before; just ignore it.
+      continue;
+    } else if (entity->IsUnsynced()) {
+      ConflictResolution::Type resolution_type =
+          ResolveConflict(update, entity, &entity_changes);
+      UMA_HISTOGRAM_ENUMERATION("Sync.ResolveConflict", resolution_type,
+                                ConflictResolution::TYPE_SIZE);
+    } else if (data.is_deleted()) {
+      // The entity was deleted; inform the service. Note that the local data
+      // can never be deleted at this point because it would have either been
+      // acked (the add case) or pending (the conflict case).
+      DCHECK(!entity->metadata().is_deleted());
+      entity_changes.push_back(
+          EntityChange::CreateDelete(entity->client_tag()));
+      entity->RecordAcceptedUpdate(update);
+    } else if (!entity->MatchesSpecificsHash(data.specifics)) {
+      // Specifics have changed, so update the service.
+      entity_changes.push_back(
+          EntityChange::CreateUpdate(entity->client_tag(), update.entity));
+      entity->RecordAcceptedUpdate(update);
     } else {
-      if (data.is_deleted()) {
-        entity_changes.push_back(
-            EntityChange::CreateDelete(entity->client_tag()));
-      } else {
-        // TODO(stanisc): crbug.com/561829: Avoid sending an update to the
-        // service if there is no actual change.
-        entity_changes.push_back(
-            EntityChange::CreateUpdate(entity->client_tag(), update.entity));
-      }
+      // No data change; still record that the update was received.
+      entity->RecordAcceptedUpdate(update);
     }
-
-    entity->ApplyUpdateFromServer(update);
-    // TODO(stanisc): crbug.com/573333: Delete case.
-    // This might be the right place to clear metadata entry instead of
-    // updating it.
-    metadata_changes->UpdateMetadata(entity->client_tag(), entity->metadata());
-
-    // TODO(stanisc): crbug.com/521867: Do something special when conflicts are
-    // detected.
 
     // If the received entity has out of date encryption, we schedule another
     // commit to fix it.
@@ -396,9 +419,18 @@ void SharedModelTypeProcessor::OnUpdateReceived(
       DVLOG(2) << ModelTypeToString(type_) << ": Requesting re-encrypt commit "
                << update.encryption_key_name << " -> "
                << data_type_state_.encryption_key_name();
-      auto it2 = entities_.find(client_tag_hash);
-      it2->second->UpdateDesiredEncryptionKey(
+      entity->UpdateDesiredEncryptionKey(
           data_type_state_.encryption_key_name());
+    }
+
+    if (entity->CanClearMetadata()) {
+      metadata_changes->ClearMetadata(entity->client_tag());
+      entities_.erase(entity->metadata().client_tag_hash());
+    } else {
+      // TODO(stanisc): crbug.com/521867: Do something special when conflicts
+      // are detected.
+      metadata_changes->UpdateMetadata(entity->client_tag(),
+                                       entity->metadata());
     }
   }
 
@@ -417,6 +449,55 @@ void SharedModelTypeProcessor::OnUpdateReceived(
   FlushPendingCommitRequests();
 }
 
+ConflictResolution::Type SharedModelTypeProcessor::ResolveConflict(
+    const UpdateResponseData& update,
+    ProcessorEntityTracker* entity,
+    EntityChangeList* changes) {
+  // There is a pending commit in conflict with the update.
+  // For now we require that pending commit data be loaded in this
+  // situation. This may be relaxed in the future if necessary.
+  DCHECK(!entity->RequiresCommitData());
+  const EntityData& data = update.entity.value();
+
+  if (entity->MatchesData(data)) {
+    // Record the update and squash the pending commit.
+    entity->RecordForcedUpdate(update);
+    return ConflictResolution::CHANGES_MATCH;
+  }
+
+  // There's a real data conflict here; let the service resolve it.
+  ConflictResolution resolution =
+      service_->ResolveConflict(entity->commit_data().value(), data);
+  switch (resolution.type()) {
+    case ConflictResolution::USE_LOCAL:
+      // Record that we received the update from the server but leave the
+      // pending commit intact.
+      entity->RecordIgnoredUpdate(update);
+      break;
+    case ConflictResolution::USE_REMOTE:
+      // Squash the pending commit.
+      entity->RecordForcedUpdate(update);
+      // Update client data to match server.
+      changes->push_back(
+          EntityChange::CreateUpdate(entity->client_tag(), update.entity));
+      break;
+    case ConflictResolution::USE_NEW:
+      // Record that we received the update.
+      entity->RecordIgnoredUpdate(update);
+      // Make a new pending commit to update the server.
+      entity->MakeLocalChange(resolution.ExtractData());
+      // Update the client with the new entity.
+      changes->push_back(EntityChange::CreateUpdate(entity->client_tag(),
+                                                    entity->commit_data()));
+      break;
+    case ConflictResolution::CHANGES_MATCH:
+    case ConflictResolution::TYPE_SIZE:
+      NOTREACHED();
+      break;
+  }
+  return resolution.type();
+}
+
 void SharedModelTypeProcessor::OnInitialUpdateReceived(
     const sync_pb::DataTypeState& data_type_state,
     const UpdateResponseDataList& updates) {
@@ -426,7 +507,7 @@ void SharedModelTypeProcessor::OnInitialUpdateReceived(
   DCHECK(!data_type_state_.initial_sync_done());
   DCHECK(data_type_state.initial_sync_done());
 
-  scoped_ptr<MetadataChangeList> metadata_changes =
+  std::unique_ptr<MetadataChangeList> metadata_changes =
       service_->CreateMetadataChangeList();
   EntityDataMap data_map;
 
@@ -434,9 +515,9 @@ void SharedModelTypeProcessor::OnInitialUpdateReceived(
   metadata_changes->UpdateDataTypeState(data_type_state_);
 
   for (const UpdateResponseData& update : updates) {
-    ModelTypeEntity* entity = CreateEntity(update.entity.value());
+    ProcessorEntityTracker* entity = CreateEntity(update.entity.value());
     const std::string& tag = entity->client_tag();
-    entity->ApplyUpdateFromServer(update);
+    entity->RecordAcceptedUpdate(update);
     metadata_changes->UpdateMetadata(tag, entity->metadata());
     data_map[tag] = update.entity;
   }
@@ -453,29 +534,30 @@ std::string SharedModelTypeProcessor::GetHashForTag(const std::string& tag) {
   return syncer::syncable::GenerateSyncableHash(type_, tag);
 }
 
-ModelTypeEntity* SharedModelTypeProcessor::GetEntityForTag(
+ProcessorEntityTracker* SharedModelTypeProcessor::GetEntityForTag(
     const std::string& tag) {
   return GetEntityForTagHash(GetHashForTag(tag));
 }
 
-ModelTypeEntity* SharedModelTypeProcessor::GetEntityForTagHash(
+ProcessorEntityTracker* SharedModelTypeProcessor::GetEntityForTagHash(
     const std::string& tag_hash) {
   auto it = entities_.find(tag_hash);
   return it != entities_.end() ? it->second.get() : nullptr;
 }
 
-ModelTypeEntity* SharedModelTypeProcessor::CreateEntity(
+ProcessorEntityTracker* SharedModelTypeProcessor::CreateEntity(
     const std::string& tag,
     const EntityData& data) {
   DCHECK(entities_.find(data.client_tag_hash) == entities_.end());
-  scoped_ptr<ModelTypeEntity> entity = ModelTypeEntity::CreateNew(
-      tag, data.client_tag_hash, data.id, data.creation_time);
-  ModelTypeEntity* entity_ptr = entity.get();
+  std::unique_ptr<ProcessorEntityTracker> entity =
+      ProcessorEntityTracker::CreateNew(tag, data.client_tag_hash, data.id,
+                                        data.creation_time);
+  ProcessorEntityTracker* entity_ptr = entity.get();
   entities_[data.client_tag_hash] = std::move(entity);
   return entity_ptr;
 }
 
-ModelTypeEntity* SharedModelTypeProcessor::CreateEntity(
+ProcessorEntityTracker* SharedModelTypeProcessor::CreateEntity(
     const EntityData& data) {
   // Let the service define |client_tag| based on the entity data.
   const std::string tag = service_->GetClientTag(data);

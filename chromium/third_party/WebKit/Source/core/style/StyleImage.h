@@ -38,10 +38,11 @@ namespace blink {
 class ImageResource;
 class CSSValue;
 class LayoutObject;
+class SVGImage;
 
 typedef void* WrappedImagePtr;
 
-class CORE_EXPORT StyleImage : public RefCountedWillBeGarbageCollectedFinalized<StyleImage> {
+class CORE_EXPORT StyleImage : public GarbageCollectedFinalized<StyleImage> {
 public:
     virtual ~StyleImage() { }
 
@@ -50,22 +51,27 @@ public:
         return data() == other.data();
     }
 
-    virtual PassRefPtrWillBeRawPtr<CSSValue> cssValue() const = 0;
-    virtual PassRefPtrWillBeRawPtr<CSSValue> computedCSSValue() const = 0;
+    virtual CSSValue* cssValue() const = 0;
+    virtual CSSValue* computedCSSValue() const = 0;
 
     virtual bool canRender() const { return true; }
     virtual bool isLoaded() const { return true; }
     virtual bool errorOccurred() const { return false; }
-    virtual LayoutSize imageSize(const LayoutObject*, float multiplier) const = 0;
-    virtual void computeIntrinsicDimensions(const LayoutObject*, FloatSize& intrinsicSize, FloatSize& intrinsicRatio) = 0;
+    // Note that the defaultObjectSize is assumed to be in the
+    // effective zoom level given by multiplier, i.e. if multiplier is
+    // the constant 1 the defaultObjectSize should be unzoomed.
+    virtual LayoutSize imageSize(const LayoutObject&, float multiplier, const LayoutSize& defaultObjectSize) const = 0;
     virtual bool imageHasRelativeSize() const = 0;
     virtual bool usesImageContainerSize() const = 0;
     virtual void addClient(LayoutObject*) = 0;
     virtual void removeClient(LayoutObject*) = 0;
-    virtual PassRefPtr<Image> image(const LayoutObject*, const IntSize&, float) const = 0;
+    // Note that the containerSize is assumed to be in the effective
+    // zoom level given by multiplier, i.e if the multiplier is the
+    // constant 1 the containerSize should be unzoomed.
+    virtual PassRefPtr<Image> image(const LayoutObject&, const IntSize& containerSize, float multiplier) const = 0;
     virtual WrappedImagePtr data() const = 0;
     virtual float imageScaleFactor() const { return 1; }
-    virtual bool knownToBeOpaque(const LayoutObject*) const = 0;
+    virtual bool knownToBeOpaque(const LayoutObject&) const = 0;
     virtual ImageResource* cachedImage() const { return 0; }
 
     ALWAYS_INLINE bool isImageResource() const { return m_isImageResource; }
@@ -90,11 +96,14 @@ protected:
     bool m_isGeneratedImage:1;
     bool m_isImageResourceSet:1;
     bool m_isInvalidImage:1;
+
+    static LayoutSize applyZoom(const LayoutSize&, float multiplier);
+    LayoutSize imageSizeForSVGImage(SVGImage*, float multiplier, const LayoutSize& defaultObjectSize) const;
 };
 
 #define DEFINE_STYLE_IMAGE_TYPE_CASTS(thisType, function) \
     DEFINE_TYPE_CASTS(thisType, StyleImage, styleImage, styleImage->function, styleImage.function); \
-    inline thisType* to##thisType(const RefPtrWillBeMember<StyleImage>& styleImage) { return to##thisType(styleImage.get()); } \
+    inline thisType* to##thisType(const Member<StyleImage>& styleImage) { return to##thisType(styleImage.get()); } \
     typedef int NeedsSemiColonAfterDefineStyleImageTypeCasts
 
 } // namespace blink

@@ -7,14 +7,15 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/inspector_protocol/Frontend.h"
-#include "wtf/Forward.h"
 #include "wtf/PassOwnPtr.h"
 
 #include <v8.h>
 
 namespace blink {
 
+class V8ContextInfo;
 class V8DebuggerClient;
+class V8InspectorSession;
 class V8StackTrace;
 
 namespace protocol {
@@ -22,12 +23,11 @@ class DictionaryValue;
 }
 
 class PLATFORM_EXPORT V8Debugger {
-    USING_FAST_MALLOC(V8Debugger);
 public:
     template <typename T>
     class Agent {
     public:
-        virtual void setInspectorState(PassRefPtr<protocol::DictionaryValue>) = 0;
+        virtual void setInspectorState(protocol::DictionaryValue*) = 0;
         virtual void setFrontend(T*) = 0;
         virtual void clearFrontend() = 0;
         virtual void restore() = 0;
@@ -36,14 +36,20 @@ public:
     static PassOwnPtr<V8Debugger> create(v8::Isolate*, V8DebuggerClient*);
     virtual ~V8Debugger() { }
 
-    // Each v8::Context is a part of a group. The group id is used to find approapriate
-    // V8DebuggerAgent to notify about events in the context.
-    // |contextGroupId| must be non-0.
-    static void setContextDebugData(v8::Local<v8::Context>, const String& type, int contextGroupId);
+    // TODO(dgozman): make this non-static?
     static int contextId(v8::Local<v8::Context>);
 
-    static v8::Local<v8::Symbol> commandLineAPISymbol(v8::Isolate*);
-    static bool isCommandLineAPIMethod(const AtomicString& name);
+    virtual void contextCreated(const V8ContextInfo&) = 0;
+    virtual void contextDestroyed(v8::Local<v8::Context>) = 0;
+    // TODO(dgozman): remove this one.
+    virtual void resetContextGroup(int contextGroupId) = 0;
+
+    virtual PassOwnPtr<V8InspectorSession> connect(int contextGroupId) = 0;
+
+    static v8::Local<v8::Symbol> scopeExtensionSymbol(v8::Isolate*);
+    static bool isCommandLineAPIMethod(const String16& name);
+    static bool isCommandLineAPIGetter(const String16& name);
+    static bool isRemoteObjectAPIMethod(const String16& name);
 
     virtual PassOwnPtr<V8StackTrace> createStackTrace(v8::Local<v8::StackTrace>, size_t maxStackSize) = 0;
     virtual PassOwnPtr<V8StackTrace> captureStackTrace(size_t maxStackSize) = 0;

@@ -28,6 +28,7 @@
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/context_menu_params.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_api_frame_id_map.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/state_store.h"
@@ -90,11 +91,11 @@ MenuItem::List MenuItemsFromValue(const std::string& extension_id,
   return items;
 }
 
-scoped_ptr<base::Value> MenuItemsToValue(const MenuItem::List& items) {
-  scoped_ptr<base::ListValue> list(new base::ListValue());
+std::unique_ptr<base::Value> MenuItemsToValue(const MenuItem::List& items) {
+  std::unique_ptr<base::ListValue> list(new base::ListValue());
   for (size_t i = 0; i < items.size(); ++i)
     list->Append(items[i]->ToValue().release());
-  return scoped_ptr<base::Value>(list.release());
+  return std::unique_ptr<base::Value>(list.release());
 }
 
 bool GetStringList(const base::DictionaryValue& dict,
@@ -196,8 +197,8 @@ void MenuItem::AddChild(MenuItem* item) {
   children_.push_back(item);
 }
 
-scoped_ptr<base::DictionaryValue> MenuItem::ToValue() const {
-  scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue);
+std::unique_ptr<base::DictionaryValue> MenuItem::ToValue() const {
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue);
   // Should only be called for extensions with event pages, which only have
   // string IDs for items.
   DCHECK_EQ(0, id_.uid);
@@ -253,8 +254,8 @@ MenuItem* MenuItem::Populate(const std::string& extension_id,
   if (!contexts.Populate(*contexts_value))
     return NULL;
 
-  scoped_ptr<MenuItem> result(new MenuItem(
-      id, title, checked, enabled, type, contexts));
+  std::unique_ptr<MenuItem> result(
+      new MenuItem(id, title, checked, enabled, type, contexts));
 
   std::vector<std::string> document_url_patterns;
   if (!GetStringList(value, kDocumentURLPatternsKey, &document_url_patterns))
@@ -271,7 +272,7 @@ MenuItem* MenuItem::Populate(const std::string& extension_id,
 
   // parent_id is filled in from the value, but it might not be valid. It's left
   // to be validated upon being added (via AddChildItem) to the menu manager.
-  scoped_ptr<Id> parent_id(
+  std::unique_ptr<Id> parent_id(
       new Id(incognito, MenuItem::ExtensionKey(extension_id)));
   if (value.HasKey(kParentUIDKey)) {
     if (!value.GetString(kParentUIDKey, &parent_id->string_uid))
@@ -619,6 +620,7 @@ static void AddURLProperty(base::DictionaryValue* dictionary,
 
 void MenuManager::ExecuteCommand(content::BrowserContext* context,
                                  WebContents* web_contents,
+                                 content::RenderFrameHost* render_frame_host,
                                  const content::ContextMenuParams& params,
                                  const MenuItem::Id& menu_item_id) {
   EventRouter* event_router = EventRouter::Get(context);
@@ -636,7 +638,7 @@ void MenuManager::ExecuteCommand(content::BrowserContext* context,
   if (item->type() == MenuItem::RADIO)
     RadioItemSelected(item);
 
-  scoped_ptr<base::ListValue> args(new base::ListValue());
+  std::unique_ptr<base::ListValue> args(new base::ListValue());
 
   base::DictionaryValue* properties = new base::DictionaryValue();
   SetIdKeyValue(properties, "menuItemId", item->id());
@@ -685,6 +687,10 @@ void MenuManager::ExecuteCommand(content::BrowserContext* context,
   if (!extension || !extension->is_platform_app()) {
     // Note: web_contents are NULL in unit tests :(
     if (web_contents) {
+      int frame_id = ExtensionApiFrameIdMap::GetFrameId(render_frame_host);
+      if (frame_id != ExtensionApiFrameIdMap::kInvalidFrameId)
+        properties->SetInteger("frameId", frame_id);
+
       args->Append(
           ExtensionTabUtil::CreateTabObject(web_contents)->ToValue().release());
     } else {
@@ -719,11 +725,11 @@ void MenuManager::ExecuteCommand(content::BrowserContext* context,
   {
     // Dispatch to menu item's .onclick handler (this is the legacy API, from
     // before chrome.contextMenus.onClicked existed).
-    scoped_ptr<Event> event(
+    std::unique_ptr<Event> event(
         new Event(webview_guest ? events::WEB_VIEW_INTERNAL_CONTEXT_MENUS
                                 : events::CONTEXT_MENUS,
                   webview_guest ? kOnWebviewContextMenus : kOnContextMenus,
-                  scoped_ptr<base::ListValue>(args->DeepCopy())));
+                  std::unique_ptr<base::ListValue>(args->DeepCopy())));
     event->restrict_to_browser_context = context;
     event->user_gesture = EventRouter::USER_GESTURE_ENABLED;
     event_router->DispatchEventToExtension(item->extension_id(),
@@ -731,7 +737,7 @@ void MenuManager::ExecuteCommand(content::BrowserContext* context,
   }
   {
     // Dispatch to .contextMenus.onClicked handler.
-    scoped_ptr<Event> event(new Event(
+    std::unique_ptr<Event> event(new Event(
         webview_guest ? events::CHROME_WEB_VIEW_INTERNAL_ON_CLICKED
                       : events::CONTEXT_MENUS_ON_CLICKED,
         webview_guest ? api::chrome_web_view_internal::OnClicked::kEventName
@@ -826,7 +832,7 @@ void MenuManager::WriteToStorage(const Extension* extension,
 }
 
 void MenuManager::ReadFromStorage(const std::string& extension_id,
-                                  scoped_ptr<base::Value> value) {
+                                  std::unique_ptr<base::Value> value) {
   const Extension* extension = ExtensionRegistry::Get(browser_context_)
                                    ->enabled_extensions()
                                    .GetByID(extension_id);
@@ -842,7 +848,7 @@ void MenuManager::ReadFromStorage(const std::string& extension_id,
       // they have not yet been validated. Separate them out here.
       // Because of the order in which we store items in the prefs, parents will
       // precede children, so we should already know about any parent items.
-      scoped_ptr<MenuItem::Id> parent_id;
+      std::unique_ptr<MenuItem::Id> parent_id;
       parent_id.swap(items[i]->parent_id_);
       added = AddChildItem(*parent_id, items[i]);
     } else {

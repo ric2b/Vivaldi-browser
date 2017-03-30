@@ -32,9 +32,9 @@
 #define V8DebuggerImpl_h
 
 #include "platform/inspector_protocol/TypeBuilder.h"
+#include "platform/v8_inspector/JavaScriptCallFrame.h"
 #include "platform/v8_inspector/V8DebuggerScript.h"
 #include "platform/v8_inspector/public/V8Debugger.h"
-#include "wtf/Forward.h"
 #include "wtf/PassOwnPtr.h"
 
 #include <v8-debug.h>
@@ -44,31 +44,31 @@ namespace blink {
 
 using protocol::Maybe;
 
-class JavaScriptCallFrame;
 struct ScriptBreakpoint;
+class InspectedContext;
 class V8DebuggerAgentImpl;
+class V8InspectorSessionImpl;
+class V8RuntimeAgentImpl;
 
 class V8DebuggerImpl : public V8Debugger {
-    WTF_MAKE_NONCOPYABLE(V8DebuggerImpl);
+    PROTOCOL_DISALLOW_COPY(V8DebuggerImpl);
 public:
     V8DebuggerImpl(v8::Isolate*, V8DebuggerClient*);
     ~V8DebuggerImpl() override;
 
     bool enabled() const;
 
-    void addAgent(int contextGroupId, V8DebuggerAgentImpl*);
-    void removeAgent(int contextGroupId);
-
-    String setBreakpoint(const String& sourceID, const ScriptBreakpoint&, int* actualLineNumber, int* actualColumnNumber, bool interstatementLocation);
-    void removeBreakpoint(const String& breakpointId);
+    String16 setBreakpoint(const String16& sourceID, const ScriptBreakpoint&, int* actualLineNumber, int* actualColumnNumber, bool interstatementLocation);
+    void removeBreakpoint(const String16& breakpointId);
     void setBreakpointsActivated(bool);
+    bool breakpointsActivated() const { return m_breakpointsActivated; }
 
     enum PauseOnExceptionsState {
         DontPauseOnExceptions,
         PauseOnAllExceptions,
         PauseOnUncaughtExceptions
     };
-    PauseOnExceptionsState pauseOnExceptionsState();
+    PauseOnExceptionsState getPauseOnExceptionsState();
     void setPauseOnExceptionsState(PauseOnExceptionsState);
     void setPauseOnNextStatement(bool);
     bool pausingOnNextStatement();
@@ -80,11 +80,15 @@ public:
     void stepOutOfFunction();
     void clearStepping();
 
-    bool setScriptSource(const String& sourceID, const String& newContent, bool preview, String* error, Maybe<protocol::Debugger::SetScriptSourceError>*, v8::Global<v8::Object>* newCallFrames, Maybe<bool>* stackChanged);
-    v8::Local<v8::Object> currentCallFrames();
-    v8::Local<v8::Object> currentCallFramesForAsyncStack();
-    PassRefPtr<JavaScriptCallFrame> callFrameNoScopes(int index);
-    int frameCount();
+    bool setScriptSource(const String16& sourceID, const String16& newContent, bool preview, ErrorString*, Maybe<protocol::Debugger::SetScriptSourceError>*, JavaScriptCallFrames* newCallFrames, Maybe<bool>* stackChanged);
+    JavaScriptCallFrames currentCallFrames(int limit = 0);
+
+    // Each script inherits debug data from v8::Context where it has been compiled.
+    // Only scripts whose debug data matches |contextGroupId| will be reported.
+    // Passing 0 will result in reporting all scripts.
+    void getCompiledScripts(int contextGroupId, protocol::Vector<V8DebuggerParsedScript>&);
+    void debuggerAgentEnabled();
+    void debuggerAgentDisabled();
 
     bool isPaused();
     v8::Local<v8::Context> pausedContext() { return m_pausedContext; }
@@ -92,26 +96,34 @@ public:
     v8::MaybeLocal<v8::Value> functionScopes(v8::Local<v8::Function>);
     v8::Local<v8::Value> generatorObjectDetails(v8::Local<v8::Object>&);
     v8::Local<v8::Value> collectionEntries(v8::Local<v8::Object>&);
-    v8::MaybeLocal<v8::Value> setFunctionVariableValue(v8::Local<v8::Value> functionValue, int scopeNumber, const String& variableName, v8::Local<v8::Value> newValue);
 
     v8::Isolate* isolate() const { return m_isolate; }
     V8DebuggerClient* client() { return m_client; }
 
-    v8::Local<v8::Script> compileInternalScript(v8::Local<v8::Context>, v8::Local<v8::String>, const String& fileName);
+    v8::MaybeLocal<v8::Value> runCompiledScript(v8::Local<v8::Context>, v8::Local<v8::Script>);
+    v8::MaybeLocal<v8::Value> callFunction(v8::Local<v8::Function>, v8::Local<v8::Context>, v8::Local<v8::Value> receiver, int argc, v8::Local<v8::Value> info[]);
+    v8::MaybeLocal<v8::Value> compileAndRunInternalScript(v8::Local<v8::Context>, v8::Local<v8::String>);
+    v8::Local<v8::Script> compileInternalScript(v8::Local<v8::Context>, v8::Local<v8::String>, const String16& fileName);
     v8::Local<v8::Context> regexContext();
 
     // V8Debugger implementation
+    PassOwnPtr<V8InspectorSession> connect(int contextGroupId) override;
+    void contextCreated(const V8ContextInfo&) override;
+    void contextDestroyed(v8::Local<v8::Context>) override;
+    void resetContextGroup(int contextGroupId) override;
     PassOwnPtr<V8StackTrace> createStackTrace(v8::Local<v8::StackTrace>, size_t maxStackSize) override;
     PassOwnPtr<V8StackTrace> captureStackTrace(size_t maxStackSize) override;
+
+    using ContextByIdMap = protocol::HashMap<int, OwnPtr<InspectedContext>>;
+    void discardInspectedContext(int contextGroupId, int contextId);
+    const ContextByIdMap* contextGroup(int contextGroupId);
+    void disconnect(V8InspectorSessionImpl*);
 
 private:
     void enable();
     void disable();
-    // Each script inherits debug data from v8::Context where it has been compiled.
-    // Only scripts whose debug data matches |contextGroupId| will be reported.
-    // Passing 0 will result in reporting all scripts.
-    void getCompiledScripts(int contextGroupId, Vector<V8DebuggerParsedScript>&);
-    V8DebuggerAgentImpl* getAgentForContext(v8::Local<v8::Context>);
+    V8DebuggerAgentImpl* findEnabledDebuggerAgent(int contextGroupId);
+    V8DebuggerAgentImpl* findEnabledDebuggerAgent(v8::Local<v8::Context>);
 
     void compileDebuggerScript();
     v8::MaybeLocal<v8::Value> callDebuggerMethod(const char* functionName, int argc, v8::Local<v8::Value> argv[]);
@@ -128,25 +140,19 @@ private:
 
     v8::Local<v8::String> v8InternalizedString(const char*) const;
 
-    enum ScopeInfoDetails {
-        AllScopes,
-        FastAsyncScopes,
-        NoScopes // Should be the last option.
-    };
-    v8::Local<v8::Object> currentCallFramesInner(ScopeInfoDetails);
-    PassRefPtr<JavaScriptCallFrame> wrapCallFrames(int maximumLimit, ScopeInfoDetails);
     void handleV8AsyncTaskEvent(V8DebuggerAgentImpl*, v8::Local<v8::Context>, v8::Local<v8::Object> executionState, v8::Local<v8::Object> eventData);
-    void handleV8PromiseEvent(V8DebuggerAgentImpl*, v8::Local<v8::Context>, v8::Local<v8::Object> executionState, v8::Local<v8::Object> eventData);
 
     v8::Isolate* m_isolate;
     V8DebuggerClient* m_client;
-    using AgentsMap = HashMap<int, V8DebuggerAgentImpl*>;
-    AgentsMap m_agentsMap;
+    using ContextsByGroupMap = protocol::HashMap<int, OwnPtr<ContextByIdMap>>;
+    ContextsByGroupMap m_contexts;
+    using SessionMap = protocol::HashMap<int, V8InspectorSessionImpl*>;
+    SessionMap m_sessions;
+    int m_enabledAgentsCount;
     bool m_breakpointsActivated;
     v8::Global<v8::FunctionTemplate> m_breakProgramCallbackTemplate;
     v8::Global<v8::Object> m_debuggerScript;
     v8::Global<v8::Context> m_debuggerContext;
-    v8::Global<v8::FunctionTemplate> m_callFrameWrapperTemplate;
     v8::Local<v8::Object> m_executionState;
     v8::Local<v8::Context> m_pausedContext;
     bool m_runningNestedMessageLoop;

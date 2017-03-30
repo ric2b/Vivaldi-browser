@@ -3002,21 +3002,23 @@ cr.define('login', function() {
         if (this.pods.length == 1)
           return null;
 
-        // The desktop User Manager can send the index of a pod that should be
-        // initially focused in url hash.
-        var podIndex = parseInt(window.location.hash.substr(1));
-        if (isNaN(podIndex) || podIndex >= this.pods.length)
-          return null;
-        return this.pods[podIndex];
+        // The desktop User Manager can send an URI encoded profile path in the
+        // url hash, that indicates a pod that should be initially focused.
+        var focusedProfilePath =
+            decodeURIComponent(window.location.hash.substr(1));
+        for (var i = 0, pod; pod = this.pods[i]; ++i) {
+          if (focusedProfilePath === pod.user.profilePath)
+            return pod;
+        }
+        return null;
       }
 
       var lockedPod = this.lockedPod;
       if (lockedPod)
         return lockedPod;
-      for (var i = 0, pod; pod = this.pods[i]; ++i) {
-        if (!pod.multiProfilesPolicyApplied) {
+      for (i = 0; pod = this.pods[i]; ++i) {
+        if (!pod.multiProfilesPolicyApplied)
           return pod;
-        }
       }
       return this.pods[0];
     },
@@ -3243,14 +3245,18 @@ cr.define('login', function() {
      * Called right after the pod row is shown.
      */
     handleAfterShow: function() {
+      var focusedPod = this.focusedPod_;
+
       // Without timeout changes in pods positions will be animated even though
       // it happened when 'flying-pods' class was disabled.
       setTimeout(function() {
         Oobe.getInstance().toggleClass('flying-pods', true);
+        if (focusedPod)
+          ensureTransitionEndEvent(focusedPod);
       }, 0);
+
       // Force input focus for user pod on show and once transition ends.
-      if (this.focusedPod_) {
-        var focusedPod = this.focusedPod_;
+      if (focusedPod) {
         var screen = this.parentNode;
         var self = this;
         focusedPod.addEventListener('webkitTransitionEnd', function f(e) {
@@ -3259,8 +3265,6 @@ cr.define('login', function() {
           // Notify screen that it is ready.
           screen.onShow();
         });
-        // Guard timer for 1 second -- it would conver all possible animations.
-        ensureTransitionEndEvent(focusedPod, 1000);
       }
     },
 

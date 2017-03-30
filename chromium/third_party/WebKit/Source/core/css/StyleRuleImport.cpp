@@ -30,12 +30,12 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<StyleRuleImport> StyleRuleImport::create(const String& href, PassRefPtrWillBeRawPtr<MediaQuerySet> media)
+StyleRuleImport* StyleRuleImport::create(const String& href, MediaQuerySet* media)
 {
-    return adoptRefWillBeNoop(new StyleRuleImport(href, media));
+    return new StyleRuleImport(href, media);
 }
 
-StyleRuleImport::StyleRuleImport(const String& href, PassRefPtrWillBeRawPtr<MediaQuerySet> media)
+StyleRuleImport::StyleRuleImport(const String& href, MediaQuerySet* media)
     : StyleRuleBase(Import)
     , m_parentStyleSheet(nullptr)
     , m_styleSheetClient(this)
@@ -93,7 +93,7 @@ void StyleRuleImport::setCSSStyleSheet(const String& href, const KURL& baseURL, 
 
     m_styleSheet = StyleSheetContents::create(this, href, context);
 
-    m_styleSheet->parseAuthorStyleSheet(cachedStyleSheet, document ? document->securityOrigin() : 0);
+    m_styleSheet->parseAuthorStyleSheet(cachedStyleSheet, document ? document->getSecurityOrigin() : 0);
 
     m_loading = false;
 

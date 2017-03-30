@@ -52,10 +52,7 @@ BookmarkPermanentNode* AsMutable(const BookmarkPermanentNode* node) {
 
 // Comparator used when sorting permanent nodes. Nodes that are initially
 // visible are sorted before nodes that are initially hidden.
-class VisibilityComparator
-    : public std::binary_function<const BookmarkPermanentNode*,
-                                  const BookmarkPermanentNode*,
-                                  bool> {
+class VisibilityComparator {
  public:
   explicit VisibilityComparator(BookmarkClient* client) : client_(client) {}
 
@@ -73,9 +70,7 @@ class VisibilityComparator
 
 // Comparator used when sorting bookmarks. Folders are sorted first, then
 // bookmarks.
-class SortComparator : public std::binary_function<const BookmarkNode*,
-                                                   const BookmarkNode*,
-                                                   bool> {
+class SortComparator {
  public:
   explicit SortComparator(icu::Collator* collator) : collator_(collator) {}
 
@@ -158,7 +153,6 @@ void BookmarkModel::Shutdown() {
 
 void BookmarkModel::Load(
     PrefService* pref_service,
-    const std::string& accept_languages,
     const base::FilePath& profile_path,
     const scoped_refptr<base::SequencedTaskRunner>& io_task_runner,
     const scoped_refptr<base::SequencedTaskRunner>& ui_task_runner) {
@@ -174,7 +168,7 @@ void BookmarkModel::Load(
 
   // Load the bookmarks. BookmarkStorage notifies us when done.
   store_.reset(new BookmarkStorage(this, profile_path, io_task_runner.get()));
-  store_->LoadBookmarks(CreateLoadDetails(accept_languages), ui_task_runner);
+  store_->LoadBookmarks(CreateLoadDetails(), ui_task_runner);
 }
 
 const BookmarkNode* BookmarkModel::GetParentForNewNodes() {
@@ -1184,8 +1178,7 @@ int64_t BookmarkModel::generate_next_node_id() {
   return next_node_id_++;
 }
 
-scoped_ptr<BookmarkLoadDetails> BookmarkModel::CreateLoadDetails(
-    const std::string& accept_languages) {
+scoped_ptr<BookmarkLoadDetails> BookmarkModel::CreateLoadDetails() {
   BookmarkPermanentNode* bb_node =
       CreatePermanentNode(BookmarkNode::BOOKMARK_BAR);
   BookmarkPermanentNode* other_node =
@@ -1202,7 +1195,7 @@ scoped_ptr<BookmarkLoadDetails> BookmarkModel::CreateLoadDetails(
       mobile_node,
       trash_node,
       client_->GetLoadExtraNodesCallback(),
-      new BookmarkIndex(client_.get(), accept_languages),
+      new BookmarkIndex(client_.get()),
       next_node_id_));
 }
 

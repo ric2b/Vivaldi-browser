@@ -1,11 +1,14 @@
-<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
+<if expr="chromeos">
 <link rel="import" href="chrome://md-settings/controls/settings_checkbox.html">
+</if>
 <link rel="import" href="chrome://md-settings/settings_shared_css.html">
 
 <dom-module id="settings-a11y-page">
   <template>
     <style include="settings-shared"></style>
+<if expr="chromeos">
     <div class="settings-box row first">
       <span i18n-content="a11yExplanation"></span>
       <a i18n-values="href:a11yLearnMoreUrl" i18n-content="learnMore"
@@ -39,33 +42,53 @@
           pref="{{prefs.settings.a11y.autoclick}}">
       </settings-checkbox>
 
-      <div class="list-frame">
-        <div class="list-item">
-          <div i18n-content="delayBeforeClickLabel"></div>
-          <select
-              value="{{prefs.settings.a11y.autoclick_delay_ms::change}}">
-            <option value="200" i18n-content="delayBeforeClickExtremelyShort">
-            </option>
-            <option value="400" i18n-content="delayBeforeClickVeryShort">
-            </option>
-            <option value="600" i18n-content="delayBeforeClickShort">
-            </option>
-            <option value="800" i18n-content="delayBeforeClickLong">
-            </option>
-            <option value="1000" i18n-content="delayBeforeClickVeryLong">
-            </option>
-          </select>
-        </div>
+      <div class="list-item settings-checkbox-spacer">
+        <div i18n-content="delayBeforeClickLabel"></div>
+        <select value="{{prefs.settings.a11y.autoclick_delay_ms::change}}">
+          <option value="200" i18n-content="delayBeforeClickExtremelyShort">
+          </option>
+          <option value="400" i18n-content="delayBeforeClickVeryShort">
+          </option>
+          <option value="600" i18n-content="delayBeforeClickShort">
+          </option>
+          <option value="800" i18n-content="delayBeforeClickLong">
+          </option>
+          <option value="1000" i18n-content="delayBeforeClickVeryLong">
+          </option>
+        </select>
       </div>
 
       <settings-checkbox pref="{{prefs.settings.a11y.virtual_keyboard}}"
           i18n-values="label:onScreenKeyboardLabel">
       </settings-checkbox>
+      <template is="dom-if" if="[[showExperimentalFeatures_]]">
+        <settings-checkbox pref="{{prefs.settings.a11y.caret_highlight}}"
+            i18n-values="label:caretHighlightLabel">
+        </settings-checkbox>
+        <settings-checkbox pref="{{prefs.settings.a11y.cursor_highlight}}"
+            i18n-values="label:cursorHighlightLabel">
+        </settings-checkbox>
+        <settings-checkbox pref="{{prefs.settings.a11y.focus_highlight}}"
+            i18n-values="label:focusHighlightLabel">
+        </settings-checkbox>
+        <settings-checkbox pref="{{prefs.settings.a11y.select_to_speak}}"
+            i18n-values="label:selectToSpeakLabel">
+        </settings-checkbox>
+        <settings-checkbox pref="{{prefs.settings.a11y.switch_access}}"
+            i18n-values="label:switchAccessLabel">
+        </settings-checkbox>
+      </template>
     </div>
+</if>
 
+<if expr="chromeos">
     <div class="settings-box">
+</if>
+<if expr="not chromeos">
+    <div class="settings-box first">
+</if>
       <div class="button-strip">
-        <paper-button i18n-content="moreFeaturesLink"
+        <paper-button i18n-content="moreFeaturesLink" class="primary-button"
             on-tap="onMoreFeaturesTap_"></paper-button>
       </div>
     </div>

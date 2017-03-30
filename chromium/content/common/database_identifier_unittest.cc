@@ -35,6 +35,9 @@ TEST(DatabaseIdentifierTest, CreateIdentifierFromOrigin) {
     {"data:", "__0"},
     {"about:blank", "__0"},
     {"non-standard://foobar.com", "__0"},
+    {"http://[::1]:8080", "http_[__1]_8080"},
+    {"http://[3ffe:2a00:100:7031::1]", "http_[3ffe_2a00_100_7031__1]_0"},
+    {"http://[::ffff:8190:3426]", "http_[__ffff_8190_3426]_0"},
   };
 
   for (size_t i = 0; i < arraysize(cases); ++i) {
@@ -203,6 +206,13 @@ TEST(DatabaseIdentifierTest, ExtractOriginDataFromIdentifier) {
     {"http_dot.com_0", "http", "dot.com", 0, GURL("http://dot.com"), false},
     {"http_escaped%3Dfun.com_0", "http", "escaped%3dfun.com", 0,
       GURL("http://escaped%3dfun.com"), false},
+    {"http_[__1]_8080",
+     "http", "[::1]", 8080, GURL("http://[::1]:8080"), false},
+    {"http_[3ffe_2a00_100_7031__1]_0",
+     "http", "[3ffe:2a00:100:7031::1]", 0,
+      GURL("http://[3ffe:2a00:100:7031::1]"), false},
+    {"http_[__ffff_8190_3426]_0",
+     "http", "[::ffff:8190:3426]", 0, GURL("http://[::ffff:8190:3426]"), false},
   };
 
   for (size_t i = 0; i < arraysize(valid_cases); ++i) {
@@ -243,6 +253,34 @@ TEST(DatabaseIdentifierTest, ExtractOriginDataFromIdentifier) {
     EXPECT_EQ(true, identifier.is_unique())
         << "test case " << bogus_components[i];
   }
+}
+
+static GURL ToAndFromOriginIdentifier(const GURL origin_url) {
+  std::string id = storage::GetIdentifierFromOrigin(origin_url);
+  return storage::GetOriginFromIdentifier(id);
+}
+
+static void TestValidOriginIdentifier(bool expected_result,
+                                      const std::string& id) {
+  EXPECT_EQ(expected_result,
+            storage::IsValidOriginIdentifier(id));
+}
+
+TEST(DatabaseIdentifierTest, OriginIdentifiers) {
+  const GURL kFileOrigin(GURL("file:///").GetOrigin());
+  const GURL kHttpOrigin(GURL("http://bar/").GetOrigin());
+  EXPECT_EQ(kFileOrigin, ToAndFromOriginIdentifier(kFileOrigin));
+  EXPECT_EQ(kHttpOrigin, ToAndFromOriginIdentifier(kHttpOrigin));
+}
+
+TEST(DatabaseIdentifierTest, IsValidOriginIdentifier) {
+  TestValidOriginIdentifier(true,  "http_bar_0");
+  TestValidOriginIdentifier(false,  "");
+  TestValidOriginIdentifier(false, "bad..id");
+  TestValidOriginIdentifier(false, "bad/id");
+  TestValidOriginIdentifier(false, "bad\\id");
+  TestValidOriginIdentifier(false, "http_bad:0_2");
+  TestValidOriginIdentifier(false, std::string("bad\0id", 6));
 }
 
 }  // namespace

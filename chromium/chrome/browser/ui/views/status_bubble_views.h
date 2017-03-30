@@ -5,9 +5,10 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_STATUS_BUBBLE_VIEWS_H_
 #define CHROME_BROWSER_UI_VIEWS_STATUS_BUBBLE_VIEWS_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/status_bubble.h"
@@ -55,7 +56,7 @@ class StatusBubbleViews : public StatusBubble {
 
   // Overridden from StatusBubble:
   void SetStatus(const base::string16& status) override;
-  void SetURL(const GURL& url, const std::string& languages) override;
+  void SetURL(const GURL& url) override;
   void Hide() override;
   void MouseMoved(const gfx::Point& location, bool left_content) override;
   void UpdateDownloadShelfVisibility(bool visible) override;
@@ -106,9 +107,6 @@ class StatusBubbleViews : public StatusBubble {
   // The original, non-elided URL.
   GURL url_;
 
-  // Used to elide the original URL again when we expand it.
-  std::string languages_;
-
   // Position relative to the base_view_.
   gfx::Point original_position_;
   // original_position_ adjusted according to the current RTL.
@@ -126,13 +124,13 @@ class StatusBubbleViews : public StatusBubble {
 
   // We use a HWND for the popup so that it may float above any HWNDs in our
   // UI (the location bar, for example).
-  scoped_ptr<views::Widget> popup_;
+  std::unique_ptr<views::Widget> popup_;
 
   views::View* base_view_;
   StatusView* view_;
 
   // Manages the expansion of a status bubble to fit a long URL.
-  scoped_ptr<StatusViewExpander> expand_view_;
+  std::unique_ptr<StatusViewExpander> expand_view_;
 
   // If the download shelf is visible, do not obscure it.
   bool download_shelf_is_visible_;

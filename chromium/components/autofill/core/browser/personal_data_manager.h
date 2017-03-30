@@ -11,7 +11,6 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
@@ -100,7 +99,7 @@ class PersonalDataManager : public KeyedService,
   // Returns |true| if sufficient address or credit card data was found.
   bool ImportFormData(const FormStructure& form,
                       bool should_return_local_card,
-                      scoped_ptr<CreditCard>* imported_credit_card);
+                      std::unique_ptr<CreditCard>* imported_credit_card);
 
   // Called to indicate |data_model| was used (to fill in a form). Updates
   // the database accordingly. Can invalidate |data_model|, particularly if
@@ -232,14 +231,10 @@ class PersonalDataManager : public KeyedService,
   // will only update when Chrome is restarted.
   virtual const std::string& GetDefaultCountryCodeForNewAddress() const;
 
-  // Returns true if the wallet integration feature is enabled. Note that the
-  // feature can still disabled by a user pref.
-  bool IsExperimentalWalletIntegrationEnabled() const;
-
-  // De-dupe credit card suggestions. Full server cards are prefered over their
+  // De-dupe credit card to suggest. Full server cards are prefered over their
   // local duplicates, and local cards are preferred over their masked server
   // card duplicate.
-  static void DedupeCreditCardSuggestions(
+  static void DedupeCreditCardToSuggest(
       std::list<const CreditCard*>* cards_to_suggest);
 
  protected:
@@ -294,9 +289,13 @@ class PersonalDataManager : public KeyedService,
   // Notifies observers that personal data has changed.
   void NotifyPersonalDataChanged();
 
-  // The first time this is called, logs an UMA metrics for the number of
+  // The first time this is called, logs an UMA metric for the number of
   // profiles the user has. On subsequent calls, does nothing.
   void LogProfileCount() const;
+
+  // The first time this is called, logs an UMA metric for the number of local
+  // credit cards the user has. On subsequent calls, does nothing.
+  void LogLocalCreditCardCount() const;
 
   // Returns the value of the AutofillEnabled pref.
   virtual bool IsAutofillEnabled() const;
@@ -365,10 +364,16 @@ class PersonalDataManager : public KeyedService,
   // Called when the value of prefs::kAutofillEnabled changes.
   void EnabledPrefChanged();
 
-  // Go through the |form| fields and attempt to extract and import an address
-  // profile. Returns true on extraction success. There are many reasons that
-  // extraction may fail (see implementation).
-  bool ImportAddressProfile(const FormStructure& form);
+  // Go through the |form| fields and attempt to extract and import valid
+  // address profiles. Returns true on extraction success of at least one
+  // profile. There are many reasons that extraction may fail (see
+  // implementation).
+  bool ImportAddressProfiles(const FormStructure& form);
+
+  // Helper method for ImportAddressProfiles which only considers the fields for
+  // a specified |section|.
+  bool ImportAddressProfileForSection(const FormStructure& form,
+                                      const std::string& section);
 
   // Go through the |form| fields and attempt to extract a new credit card in
   // |imported_credit_card|, or update an existing card.
@@ -377,13 +382,20 @@ class PersonalDataManager : public KeyedService,
   // new card to import, or having merged with an existing card.
   bool ImportCreditCard(const FormStructure& form,
                         bool should_return_local_card,
-                        scoped_ptr<CreditCard>* imported_credit_card);
+                        std::unique_ptr<CreditCard>* imported_credit_card);
 
   // Functionally equivalent to GetProfiles(), but also records metrics if
   // |record_metrics| is true. Metrics should be recorded when the returned
   // profiles will be used to populate the fields shown in an Autofill popup.
   const std::vector<AutofillProfile*>& GetProfiles(
       bool record_metrics) const;
+
+  // Returns credit card suggestions based on the |cards_to_suggest| and the
+  // |type| and |field_contents| of the credit card field.
+  std::vector<Suggestion> GetSuggestionsForCards(
+      const AutofillType& type,
+      const base::string16& field_contents,
+      const std::list<const CreditCard*>& cards_to_suggest) const;
 
   const std::string app_locale_;
 
@@ -407,11 +419,15 @@ class PersonalDataManager : public KeyedService,
   // Whether we have already logged the number of profiles this session.
   mutable bool has_logged_profile_count_;
 
+  // Whether we have already logged the number of local credit cards this
+  // session.
+  mutable bool has_logged_credit_card_count_;
+
   // An observer to listen for changes to prefs::kAutofillEnabled.
-  scoped_ptr<BooleanPrefMember> enabled_pref_;
+  std::unique_ptr<BooleanPrefMember> enabled_pref_;
 
   // An observer to listen for changes to prefs::kAutofillWalletImportEnabled.
-  scoped_ptr<BooleanPrefMember> wallet_enabled_pref_;
+  std::unique_ptr<BooleanPrefMember> wallet_enabled_pref_;
 
   DISALLOW_COPY_AND_ASSIGN(PersonalDataManager);
 };

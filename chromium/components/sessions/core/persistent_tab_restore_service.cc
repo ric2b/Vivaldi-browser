@@ -1046,8 +1046,7 @@ std::vector<LiveTab*> PersistentTabRestoreService::RestoreMostRecentEntry(
 
 // gisli@vivaldi.com: Added RestorePreviousSession.
 std::vector<LiveTab*> PersistentTabRestoreService::RestorePreviousSession(
-    LiveTabContext* context,
-    chrome::HostDesktopType host_desktop_type) {
+    LiveTabContext* context) {
 
   int count = delegate_->previous_active_entries_count();
   TabRestoreService::Entries previous_entries;

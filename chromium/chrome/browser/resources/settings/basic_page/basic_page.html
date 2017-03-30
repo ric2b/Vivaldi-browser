@@ -1,7 +1,8 @@
-<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://md-settings/appearance_page/appearance_page.html">
 <link rel="import" href="chrome://md-settings/search_page/search_page.html">
+<link rel="import" href="chrome://md-settings/settings_page/main_page_behavior.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_page_visibility.html">
 <link rel="import" href="chrome://md-settings/settings_page/settings_section.html">
 <link rel="import" href="chrome://md-settings/on_startup_page/on_startup_page.html">
@@ -20,16 +21,10 @@
 <dom-module id="settings-basic-page">
   <link rel="import" type="css" href="chrome://md-settings/settings_page.css">
   <template>
+    <style include="main-page-styles"></style>
     <template is="dom-if" if="[[showResetProfileBanner_]]">
       <settings-reset-profile-banner on-reset-done="onResetDone_">
       </settings-reset-profile-banner>
-    </template>
-    <template is="dom-if" if="[[showPage(pageVisibility.people)]]" restamp>
-      <settings-section page-title="[[i18n('peoplePageTitle')]]"
-          current-route="[[currentRoute]]" section="people">
-        <settings-people-page prefs="{{prefs}}" current-route="{{currentRoute}}">
-        </settings-people-page>
-      </settings-section>
     </template>
 <if expr="chromeos">
     <template is="dom-if" if="[[showPage(pageVisibility.internet)]]" restamp>
@@ -40,11 +35,19 @@
       </settings-section>
     </template>
 </if>
+    <template is="dom-if" if="[[showPage(pageVisibility.people)]]" restamp>
+      <settings-section page-title="[[i18n('peoplePageTitle')]]"
+          current-route="[[currentRoute]]" section="people">
+        <settings-people-page prefs="{{prefs}}"
+            current-route="{{currentRoute}}">
+        </settings-people-page>
+      </settings-section>
+    </template>
     <template is="dom-if" if="[[showPage(pageVisibility.appearance)]]" restamp>
       <settings-section page-title="[[i18n('appearancePageTitle')]]"
           current-route="[[currentRoute]]" section="appearance">
         <settings-appearance-page prefs="{{prefs}}"
-            current-route="[[currentRoute]]">
+            current-route="{{currentRoute}}">
         </settings-appearance-page>
       </settings-section>
     </template>
@@ -58,14 +61,6 @@
       </settings-section>
     </template>
 </if>
-    <template is="dom-if" if="[[showPage(pageVisibility.onStartup)]]" restamp>
-      <settings-section page-title="[[i18n('onStartup')]]"
-          current-route="[[currentRoute]]" section="onStartup">
-        <settings-on-startup-page prefs="{{prefs}}"
-            current-route="{{currentRoute}}">
-        </settings-on-startup-page>
-      </settings-section>
-    </template>
     <template is="dom-if" if="[[showPage(pageVisibility.search)]]" restamp>
       <settings-section page-title="[[i18n('searchPageTitle')]]"
           current-route="[[currentRoute]]" section="search">
@@ -84,6 +79,14 @@
       </settings-section>
     </template>
 </if>
+    <template is="dom-if" if="[[showPage(pageVisibility.onStartup)]]" restamp>
+      <settings-section page-title="[[i18n('onStartup')]]"
+          current-route="[[currentRoute]]" section="onStartup">
+        <settings-on-startup-page prefs="{{prefs}}"
+            current-route="{{currentRoute}}">
+        </settings-on-startup-page>
+      </settings-section>
+    </template>
   </template>
   <script src="basic_page.js"></script>
 </dom-module>

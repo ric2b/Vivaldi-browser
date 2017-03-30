@@ -18,7 +18,6 @@
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/child/geofencing/web_geofencing_provider_impl.h"
-#include "content/common/gpu/image_transport_surface.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/public/common/page_state.h"
 #include "content/public/renderer/renderer_gamepad_provider.h"
@@ -31,6 +30,7 @@
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "content/shell/common/shell_switches.h"
 #include "device/bluetooth/bluetooth_adapter.h"
+#include "gpu/ipc/service/image_transport_surface.h"
 #include "third_party/WebKit/public/platform/WebGamepads.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceMotionData.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceOrientationData.h"
@@ -41,7 +41,6 @@
 #include "content/browser/frame_host/popup_menu_helper_mac.h"
 #elif defined(OS_WIN)
 #include "content/child/font_warmup_win.h"
-#include "content/public/common/dwrite_font_platform_win.h"
 #include "third_party/WebKit/public/web/win/WebFontRendering.h"
 #include "third_party/skia/include/ports/SkFontMgr.h"
 #include "third_party/skia/include/ports/SkTypeface_win.h"
@@ -59,28 +58,24 @@ namespace content {
 
 namespace {
 
-base::LazyInstance<
-    base::Callback<void(RenderView*, test_runner::WebTestProxyBase*)>>::Leaky
-    g_callback = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<ViewProxyCreationCallback>::Leaky
+    g_view_test_proxy_callback = LAZY_INSTANCE_INITIALIZER;
+
+base::LazyInstance<FrameProxyCreationCallback>::Leaky
+    g_frame_test_proxy_callback = LAZY_INSTANCE_INITIALIZER;
+
+using WebTestProxyType = test_runner::WebTestProxy<RenderViewImpl,
+                                                   CompositorDependencies*,
+                                                   const ViewMsg_New_Params&>;
 
 RenderViewImpl* CreateWebTestProxy(CompositorDependencies* compositor_deps,
                                    const ViewMsg_New_Params& params) {
-  typedef test_runner::WebTestProxy<RenderViewImpl, CompositorDependencies*,
-                                    const ViewMsg_New_Params&> ProxyType;
-  ProxyType* render_view_proxy = new ProxyType(compositor_deps, params);
-  if (g_callback == 0)
+  WebTestProxyType* render_view_proxy =
+      new WebTestProxyType(compositor_deps, params);
+  if (g_view_test_proxy_callback == 0)
     return render_view_proxy;
-  g_callback.Get().Run(render_view_proxy, render_view_proxy);
+  g_view_test_proxy_callback.Get().Run(render_view_proxy, render_view_proxy);
   return render_view_proxy;
-}
-
-test_runner::WebTestProxyBase* GetWebTestProxyBase(
-    RenderViewImpl* render_view) {
-  typedef test_runner::WebTestProxy<RenderViewImpl, const ViewMsg_New_Params&>
-      ViewProxy;
-
-  ViewProxy* render_view_proxy = static_cast<ViewProxy*>(render_view);
-  return static_cast<test_runner::WebTestProxyBase*>(render_view_proxy);
 }
 
 RenderFrameImpl* CreateWebFrameTestProxy(
@@ -89,8 +84,9 @@ RenderFrameImpl* CreateWebFrameTestProxy(
       RenderFrameImpl, const RenderFrameImpl::CreateParams&> FrameProxy;
 
   FrameProxy* render_frame_proxy = new FrameProxy(params);
-  render_frame_proxy->set_base_proxy(GetWebTestProxyBase(params.render_view));
-
+  if (g_frame_test_proxy_callback == 0)
+    return render_frame_proxy;
+  g_frame_test_proxy_callback.Get().Run(render_frame_proxy, render_frame_proxy);
   return render_frame_proxy;
 }
 
@@ -98,14 +94,11 @@ RenderFrameImpl* CreateWebFrameTestProxy(
 // DirectWrite only has access to %WINDIR%\Fonts by default. For developer
 // side-loading, support kRegisterFontFiles to allow access to additional fonts.
 void RegisterSideloadedTypefaces(SkFontMgr* fontmgr) {
-  RenderThreadImpl::current()->EnsureWebKitInitialized();
   std::vector<std::string> files = switches::GetSideloadFontFiles();
   for (std::vector<std::string>::const_iterator i(files.begin());
        i != files.end();
        ++i) {
     SkTypeface* typeface = fontmgr->createFromFile(i->c_str());
-    if (!ShouldUseDirectWriteFontProxyFieldTrial())
-      DoPreSandboxWarmupForTypeface(typeface);
     blink::WebFontRendering::addSideloadedFontForTesting(typeface);
   }
 }
@@ -113,10 +106,17 @@ void RegisterSideloadedTypefaces(SkFontMgr* fontmgr) {
 
 }  // namespace
 
+test_runner::WebTestProxyBase* GetWebTestProxyBase(RenderView* render_view) {
+  WebTestProxyType* render_view_proxy =
+      static_cast<WebTestProxyType*>(render_view);
+  return static_cast<test_runner::WebTestProxyBase*>(render_view_proxy);
+}
+
 void EnableWebTestProxyCreation(
-    const base::Callback<void(RenderView*, test_runner::WebTestProxyBase*)>&
-        callback) {
-  g_callback.Get() = callback;
+    const ViewProxyCreationCallback& view_proxy_creation_callback,
+    const FrameProxyCreationCallback& frame_proxy_creation_callback) {
+  g_view_test_proxy_callback.Get() = view_proxy_creation_callback;
+  g_frame_test_proxy_callback.Get() = frame_proxy_creation_callback;
   RenderViewImpl::InstallCreateHook(CreateWebTestProxy);
   RenderFrameImpl::InstallCreateHook(CreateWebFrameTestProxy);
 }
@@ -170,17 +170,14 @@ void EnableRendererLayoutTestMode() {
 
 #if defined(OS_WIN)
   if (gfx::win::ShouldUseDirectWrite()) {
-    if (ShouldUseDirectWriteFontProxyFieldTrial())
-      RegisterSideloadedTypefaces(SkFontMgr_New_DirectWrite());
-    else
-      RegisterSideloadedTypefaces(GetPreSandboxWarmupFontMgr());
+    RegisterSideloadedTypefaces(SkFontMgr_New_DirectWrite());
   }
 #endif
 }
 
 void EnableBrowserLayoutTestMode() {
 #if defined(OS_MACOSX)
-  ImageTransportSurface::SetAllowOSMesaForTesting(true);
+  gpu::ImageTransportSurface::SetAllowOSMesaForTesting(true);
   PopupMenuHelper::DontShowPopupMenuForTesting();
 #endif
   RenderWidgetHostImpl::DisableResizeAckCheckForTesting();
@@ -217,8 +214,7 @@ void SetDeviceScaleFactor(RenderView* render_view, float factor) {
 
 void SetDeviceColorProfile(RenderView* render_view, const std::string& name) {
   if (name == "reset") {
-    static_cast<RenderViewImpl*>(render_view)->
-        ResetDeviceColorProfileForTesting();
+    render_view->GetWidget()->ResetDeviceColorProfileForTesting();
     return;
   }
 
@@ -350,8 +346,7 @@ void SetDeviceColorProfile(RenderView* render_view, const std::string& name) {
     color_profile.assign(test.data(), test.data() + test.size());
   }
 
-  static_cast<RenderViewImpl*>(render_view)->
-      SetDeviceColorProfileForTesting(color_profile);
+  render_view->GetWidget()->SetDeviceColorProfileForTesting(color_profile);
 }
 
 void SetBluetoothAdapter(int render_process_id,

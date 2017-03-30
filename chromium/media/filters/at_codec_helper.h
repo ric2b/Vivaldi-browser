@@ -8,6 +8,8 @@
 #define MEDIA_FILTERS_AT_CODEC_HELPER_H_
 
 #include "base/callback.h"
+#include "base/memory/free_deleter.h"
+#include "base/memory/scoped_ptr.h"
 
 struct AudioChannelLayout;
 struct AudioStreamBasicDescription;

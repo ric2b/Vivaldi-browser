@@ -67,34 +67,34 @@ using namespace HTMLNames;
 static void printBorderStyle(TextStream& ts, const EBorderStyle borderStyle)
 {
     switch (borderStyle) {
-    case BNONE:
+    case BorderStyleNone:
         ts << "none";
         break;
-    case BHIDDEN:
+    case BorderStyleHidden:
         ts << "hidden";
         break;
-    case INSET:
+    case BorderStyleInset:
         ts << "inset";
         break;
-    case GROOVE:
+    case BorderStyleGroove:
         ts << "groove";
         break;
-    case RIDGE:
+    case BorderStyleRidge:
         ts << "ridge";
         break;
-    case OUTSET:
+    case BorderStyleOutset:
         ts << "outset";
         break;
-    case DOTTED:
+    case BorderStyleDotted:
         ts << "dotted";
         break;
-    case DASHED:
+    case BorderStyleDashed:
         ts << "dashed";
         break;
-    case SOLID:
+    case BorderStyleSolid:
         ts << "solid";
         break;
-    case DOUBLE:
+    case BorderStyleDouble:
         ts << "double";
         break;
     }
@@ -310,7 +310,7 @@ void LayoutTreeAsText::writeLayoutObject(TextStream& ts, const LayoutObject& o, 
 
     if (o.isDetailsMarker()) {
         ts << ": ";
-        switch (toLayoutDetailsMarker(&o)->orientation()) {
+        switch (toLayoutDetailsMarker(&o)->getOrientation()) {
         case LayoutDetailsMarker::Left:
             ts << "left";
             break;
@@ -420,9 +420,9 @@ static void writeInlineTextBox(TextStream& ts, const InlineTextBox& textBox, int
 {
     writeInlineBox(ts, textBox, indent);
     String value = textBox.text();
-    value.replaceWithLiteral('\\', "\\\\");
-    value.replaceWithLiteral('\n', "\\n");
-    value.replaceWithLiteral('"', "\\\"");
+    value.replace('\\', "\\\\");
+    value.replace('\n', "\\n");
+    value.replace('"', "\\\"");
     ts << " range=(" << textBox.start() << "," << (textBox.start() + textBox.len()) << ")"
         << " \"" << value << "\"";
 }
@@ -600,7 +600,7 @@ static void write(TextStream& ts, PaintLayer& layer,
         if (reportFrameScrollInfo)
             scrollableArea = toLayoutView(layer.layoutObject())->frameView();
         else
-            scrollableArea = layer.scrollableArea();
+            scrollableArea = layer.getScrollableArea();
 
         DoublePoint adjustedScrollOffset = scrollableArea->scrollPositionDouble() + toDoubleSize(scrollableArea->scrollOrigin());
         if (adjustedScrollOffset.x())
@@ -825,23 +825,19 @@ static void writeCounterValuesFromChildren(TextStream& stream, LayoutObject* par
 
 String counterValueForElement(Element* element)
 {
-    // Make sure the element is not freed during the layout.
-    RefPtrWillBeRawPtr<Element> protector(element);
     element->document().updateLayout();
     TextStream stream;
     bool isFirstCounter = true;
     // The counter layoutObjects should be children of :before or :after pseudo-elements.
-    if (LayoutObject* before = element->pseudoElementLayoutObject(BEFORE))
+    if (LayoutObject* before = element->pseudoElementLayoutObject(PseudoIdBefore))
         writeCounterValuesFromChildren(stream, before, isFirstCounter);
-    if (LayoutObject* after = element->pseudoElementLayoutObject(AFTER))
+    if (LayoutObject* after = element->pseudoElementLayoutObject(PseudoIdAfter))
         writeCounterValuesFromChildren(stream, after, isFirstCounter);
     return stream.release();
 }
 
 String markerTextForListItem(Element* element)
 {
-    // Make sure the element is not freed during the layout.
-    RefPtrWillBeRawPtr<Element> protector(element);
     element->document().updateLayout();
 
     LayoutObject* layoutObject = element->layoutObject();

@@ -15,7 +15,6 @@
 #include "cc/output/compositor_frame_ack.h"
 #include "cc/output/managed_memory_policy.h"
 #include "cc/output/output_surface_client.h"
-#include "content/common/gpu/client/command_buffer_proxy_impl.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/gpu/client/webgraphicscontext3d_command_buffer_impl.h"
 #include "content/common/view_messages.h"
@@ -24,6 +23,7 @@
 #include "content/renderer/render_thread_impl.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "ipc/ipc_sync_channel.h"
 
 namespace content {
@@ -33,16 +33,22 @@ CompositorOutputSurface::CompositorOutputSurface(
     uint32_t output_surface_id,
     const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
     const scoped_refptr<ContextProviderCommandBuffer>& worker_context_provider,
+#if defined(ENABLE_VULKAN)
+    const scoped_refptr<cc::VulkanContextProvider>& vulkan_context_provider,
+#endif
     scoped_ptr<cc::SoftwareOutputDevice> software_device,
     scoped_refptr<FrameSwapMessageQueue> swap_frame_message_queue,
     bool use_swap_compositor_frame_message)
     : OutputSurface(context_provider,
                     worker_context_provider,
+#if defined(ENABLE_VULKAN)
+                    vulkan_context_provider,
+#endif
                     std::move(software_device)),
       output_surface_id_(output_surface_id),
       use_swap_compositor_frame_message_(use_swap_compositor_frame_message),
-      output_surface_filter_(RenderThreadImpl::current()
-                                 ->compositor_message_filter()),
+      output_surface_filter_(
+          RenderThreadImpl::current()->compositor_message_filter()),
       frame_swap_message_queue_(swap_frame_message_queue),
       routing_id_(routing_id),
       layout_test_mode_(RenderThreadImpl::current()->layout_test_mode()),

@@ -14,12 +14,11 @@ import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.SuppressFBWarnings;
-import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.chrome.browser.ntp.snippets.SnippetsController;
+import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
+import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsLauncher;
-import org.chromium.content.app.ContentApplication;
-import org.chromium.content.browser.BrowserStartupController;
+import org.chromium.chrome.browser.precache.PrecacheController;
 
 /**
  * {@link ChromeBackgroundService} is scheduled through the {@link GcmNetworkManager} when the
@@ -30,33 +29,36 @@ public class ChromeBackgroundService extends GcmTaskService {
     private static final String TAG = "BackgroundService";
 
     @Override
-    public int onRunTask(TaskParams params) {
-        Log.i(TAG, "Woken up at " + new java.util.Date().toString());
-        handleRunTask(params.getTag());
-        return GcmNetworkManager.RESULT_SUCCESS;
-    }
-
     @VisibleForTesting
-    public void handleRunTask(final String tag) {
+    public int onRunTask(final TaskParams params) {
+        Log.i(TAG, "Woken up at " + new java.util.Date().toString());
         final Context context = this;
         ThreadUtils.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                switch(tag) {
+                switch(params.getTag()) {
                     case BackgroundSyncLauncher.TASK_TAG:
                         handleBackgroundSyncEvent(context);
                         break;
 
-                    case SnippetsLauncher.TASK_TAG:
+                    case SnippetsLauncher.TASK_TAG_WIFI_CHARGING:
+                    case SnippetsLauncher.TASK_TAG_WIFI:
+                    case SnippetsLauncher.TASK_TAG_FALLBACK:
                         handleFetchSnippets(context);
                         break;
 
+                    case PrecacheController.PERIODIC_TASK_TAG:
+                    case PrecacheController.CONTINUATION_TASK_TAG:
+                        handlePrecache(context, params.getTag());
+                        break;
+
                     default:
-                        Log.i(TAG, "Unknown task tag " + tag);
+                        Log.i(TAG, "Unknown task tag " + params.getTag());
                         break;
                 }
             }
         });
+        return GcmNetworkManager.RESULT_SUCCESS;
     }
 
     private void handleBackgroundSyncEvent(Context context) {
@@ -75,17 +77,37 @@ public class ChromeBackgroundService extends GcmTaskService {
         if (!SnippetsLauncher.hasInstance()) {
             launchBrowser(context);
         }
-        SnippetsController.get(context).fetchSnippets(true);
+        fetchSnippets();
+    }
+
+    @VisibleForTesting
+    protected void fetchSnippets() {
+        SnippetsBridge.fetchSnippets();
+    }
+
+    private void handlePrecache(Context context, String tag) {
+        if (!hasPrecacheInstance()) {
+            launchBrowser(context);
+        }
+        precache(context, tag);
+    }
+
+    @VisibleForTesting
+    protected boolean hasPrecacheInstance() {
+        return PrecacheController.hasInstance();
+    }
+
+    @VisibleForTesting
+    protected void precache(Context context, String tag) {
+        PrecacheController.get(context).precache(tag);
     }
 
     @VisibleForTesting
     @SuppressFBWarnings("DM_EXIT")
     protected void launchBrowser(Context context) {
         Log.i(TAG, "Launching browser");
-        ContentApplication.initCommandLine(context);
         try {
-            BrowserStartupController.get(context, LibraryProcessType.PROCESS_BROWSER)
-                    .startBrowserProcessesSync(false);
+            ChromeBrowserInitializer.getInstance(this).handleSynchronousStartup();
         } catch (ProcessInitException e) {
             Log.e(TAG, "ProcessInitException while starting the browser process");
             // Since the library failed to initialize nothing in the application
@@ -97,5 +119,6 @@ public class ChromeBackgroundService extends GcmTaskService {
     @Override
     public void onInitializeTasks() {
         BackgroundSyncLauncher.rescheduleTasksOnUpgrade(this);
+        PrecacheController.rescheduleTasksOnUpgrade(this);
     }
 }

@@ -44,14 +44,14 @@ std::string WrapForJavascriptAndExtract(const char* javascript_expression) {
       javascript_expression + ")";
 }
 
-scoped_ptr<net::test_server::HttpResponse> HandleExpectAndSetCookieRequest(
+std::unique_ptr<net::test_server::HttpResponse> HandleExpectAndSetCookieRequest(
     const net::EmbeddedTestServer* test_server,
     const net::test_server::HttpRequest& request) {
   if (!base::StartsWith(request.relative_url, "/expect-and-set-cookie?",
                         base::CompareCase::SENSITIVE))
-    return scoped_ptr<net::test_server::HttpResponse>();
+    return std::unique_ptr<net::test_server::HttpResponse>();
 
-  scoped_ptr<net::test_server::BasicHttpResponse> http_response(
+  std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
       new net::test_server::BasicHttpResponse);
   http_response->set_code(net::HTTP_OK);
 
@@ -72,17 +72,17 @@ scoped_ptr<net::test_server::HttpResponse> HandleExpectAndSetCookieRequest(
     std::string escaped_value(
         query_string.substr(value_pos.begin, value_pos.len));
 
-    std::string key =
-        net::UnescapeURLComponent(escaped_key,
-                                  net::UnescapeRule::NORMAL |
-                                  net::UnescapeRule::SPACES |
-                                  net::UnescapeRule::URL_SPECIAL_CHARS);
+    std::string key = net::UnescapeURLComponent(
+        escaped_key,
+        net::UnescapeRule::NORMAL | net::UnescapeRule::SPACES |
+            net::UnescapeRule::PATH_SEPARATORS |
+            net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
 
-    std::string value =
-        net::UnescapeURLComponent(escaped_value,
-                                  net::UnescapeRule::NORMAL |
-                                  net::UnescapeRule::SPACES |
-                                  net::UnescapeRule::URL_SPECIAL_CHARS);
+    std::string value = net::UnescapeURLComponent(
+        escaped_value,
+        net::UnescapeRule::NORMAL | net::UnescapeRule::SPACES |
+            net::UnescapeRule::PATH_SEPARATORS |
+            net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
 
     if (key == "expect") {
       if (request_cookies.find(value) == std::string::npos)
@@ -199,14 +199,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedAppTest, CrossProcessClientRedirect) {
 // TODO(ajwong): Also test what happens if an app spans multiple sites in its
 // extent.  These origins should also be isolated, but still have origin-based
 // separation as you would expect.
-//
-// This test is disabled due to being flaky. http://crbug.com/86562
-#if defined(OS_WIN)
-#define MAYBE_CookieIsolation DISABLED_CookieIsolation
-#else
-#define MAYBE_CookieIsolation CookieIsolation
-#endif
-IN_PROC_BROWSER_TEST_F(IsolatedAppTest, MAYBE_CookieIsolation) {
+IN_PROC_BROWSER_TEST_F(IsolatedAppTest, CookieIsolation) {
   host_resolver()->AddRule("*", "127.0.0.1");
   ASSERT_TRUE(embedded_test_server()->Start());
 

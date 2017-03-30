@@ -136,7 +136,7 @@ ToolbarView::ToolbarView(Browser* browser)
   set_id(VIEW_ID_TOOLBAR);
 
   SetEventTargeter(
-      scoped_ptr<views::ViewTargeter>(new views::ViewTargeter(this)));
+      std::unique_ptr<views::ViewTargeter>(new views::ViewTargeter(this)));
 
   chrome::AddCommandObserver(browser_, IDC_BACK, this);
   chrome::AddCommandObserver(browser_, IDC_FORWARD, this);
@@ -177,6 +177,7 @@ void ToolbarView::Init() {
   back_ = new BackButton(
       browser_->profile(), this,
       new BackForwardMenuModel(browser_, BackForwardMenuModel::BACKWARD_MENU));
+  back_->set_hide_ink_drop_when_showing_context_menu(false);
   back_->set_triggerable_event_flags(
       ui::EF_LEFT_MOUSE_BUTTON | ui::EF_MIDDLE_MOUSE_BUTTON);
   back_->set_tag(IDC_BACK);
@@ -188,6 +189,7 @@ void ToolbarView::Init() {
   forward_ = new ToolbarButton(
       browser_->profile(), this,
       new BackForwardMenuModel(browser_, BackForwardMenuModel::FORWARD_MENU));
+  forward_->set_hide_ink_drop_when_showing_context_menu(false);
   forward_->set_triggerable_event_flags(
       ui::EF_LEFT_MOUSE_BUTTON | ui::EF_MIDDLE_MOUSE_BUTTON);
   forward_->set_tag(IDC_FORWARD);
@@ -397,11 +399,6 @@ void ToolbarView::ShowWebsiteSettings(
     const GURL& url,
     const security_state::SecurityStateModel::SecurityInfo& security_info) {
   chrome::ShowWebsiteSettings(browser_, web_contents, url, security_info);
-}
-
-views::Widget* ToolbarView::CreateViewsBubble(
-    views::BubbleDelegateView* bubble_delegate) {
-  return views::BubbleDelegateView::CreateBubble(bubble_delegate);
 }
 
 PageActionImageView* ToolbarView::CreatePageActionImageView(
@@ -803,7 +800,9 @@ void ToolbarView::OnShowHomeButtonChanged() {
 }
 
 int ToolbarView::content_shadow_height() const {
-  return GetLayoutConstant(
-      (browser_->host_desktop_type() == chrome::HOST_DESKTOP_TYPE_ASH) ?
-          TOOLBAR_CONTENT_SHADOW_HEIGHT_ASH : TOOLBAR_CONTENT_SHADOW_HEIGHT);
+#if defined(USE_ASH)
+  return GetLayoutConstant(TOOLBAR_CONTENT_SHADOW_HEIGHT_ASH);
+#else
+  return GetLayoutConstant(TOOLBAR_CONTENT_SHADOW_HEIGHT);
+#endif
 }

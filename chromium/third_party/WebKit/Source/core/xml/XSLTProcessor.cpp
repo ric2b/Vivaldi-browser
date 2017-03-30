@@ -40,8 +40,8 @@ namespace blink {
 static inline void transformTextStringToXHTMLDocumentString(String& text)
 {
     // Modify the output so that it is a well-formed XHTML document with a <pre> tag enclosing the text.
-    text.replaceWithLiteral('&', "&amp;");
-    text.replaceWithLiteral('<', "&lt;");
+    text.replace('&', "&amp;");
+    text.replace('<', "&lt;");
     text = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
         "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
@@ -54,20 +54,16 @@ static inline void transformTextStringToXHTMLDocumentString(String& text)
 
 XSLTProcessor::~XSLTProcessor()
 {
-#if !ENABLE(OILPAN)
-    // Stylesheet shouldn't outlive its root node.
-    ASSERT(!m_stylesheetRootNode || !m_stylesheet || m_stylesheet->hasOneRef());
-#endif
 }
 
-PassRefPtrWillBeRawPtr<Document> XSLTProcessor::createDocumentFromSource(const String& sourceString,
+RawPtr<Document> XSLTProcessor::createDocumentFromSource(const String& sourceString,
     const String& sourceEncoding, const String& sourceMIMEType, Node* sourceNode, LocalFrame* frame)
 {
-    RefPtrWillBeRawPtr<Document> ownerDocument(sourceNode->document());
+    RawPtr<Document> ownerDocument(sourceNode->document());
     bool sourceIsDocument = (sourceNode == ownerDocument.get());
     String documentSource = sourceString;
 
-    RefPtrWillBeRawPtr<Document> result = nullptr;
+    RawPtr<Document> result = nullptr;
     DocumentInit init(sourceIsDocument ? ownerDocument->url() : KURL(), frame);
 
     bool forceXHTML = sourceMIMEType == "text/plain";
@@ -75,7 +71,7 @@ PassRefPtrWillBeRawPtr<Document> XSLTProcessor::createDocumentFromSource(const S
         transformTextStringToXHTMLDocumentString(documentSource);
 
     if (frame) {
-        RefPtrWillBeRawPtr<Document> oldDocument = frame->document();
+        RawPtr<Document> oldDocument = frame->document();
         // Before parsing, we need to save & detach the old document and get the new document
         // in place. Document::detach() tears down the FrameView, so remember whether or not
         // there was one.
@@ -88,10 +84,10 @@ PassRefPtrWillBeRawPtr<Document> XSLTProcessor::createDocumentFromSource(const S
 
         if (oldDocument) {
             DocumentXSLT::from(*result).setTransformSourceDocument(oldDocument.get());
-            result->updateSecurityOrigin(oldDocument->securityOrigin());
+            result->updateSecurityOrigin(oldDocument->getSecurityOrigin());
             result->setCookieURL(oldDocument->cookieURL());
 
-            RefPtrWillBeRawPtr<ContentSecurityPolicy> csp = ContentSecurityPolicy::create();
+            RawPtr<ContentSecurityPolicy> csp = ContentSecurityPolicy::create();
             csp->copyStateFrom(oldDocument->contentSecurityPolicy());
             result->initContentSecurityPolicy(csp);
         }
@@ -107,7 +103,7 @@ PassRefPtrWillBeRawPtr<Document> XSLTProcessor::createDocumentFromSource(const S
     return result.release();
 }
 
-PassRefPtrWillBeRawPtr<Document> XSLTProcessor::transformToDocument(Node* sourceNode)
+RawPtr<Document> XSLTProcessor::transformToDocument(Node* sourceNode)
 {
     String resultMIMEType;
     String resultString;
@@ -117,7 +113,7 @@ PassRefPtrWillBeRawPtr<Document> XSLTProcessor::transformToDocument(Node* source
     return createDocumentFromSource(resultString, resultEncoding, resultMIMEType, sourceNode, 0);
 }
 
-PassRefPtrWillBeRawPtr<DocumentFragment> XSLTProcessor::transformToFragment(Node* sourceNode, Document* outputDoc)
+RawPtr<DocumentFragment> XSLTProcessor::transformToFragment(Node* sourceNode, Document* outputDoc)
 {
     String resultMIMEType;
     String resultString;

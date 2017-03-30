@@ -4,12 +4,13 @@
 
 """Common utilities used in unit tests, within this directory."""
 
+import dependency_graph
 import devtools_monitor
-import loading_model
 import loading_trace
 import page_track
 import request_track
 import tracing
+import user_satisfied_lens
 
 
 class FakeRequestTrack(devtools_monitor.Track):
@@ -42,6 +43,41 @@ class FakePageTrack(devtools_monitor.Track):
     return event['frame_id']
 
 
+def MakeRequestWithTiming(
+    url, source_url, timing_dict, magic_content_type=False,
+    initiator_type='other'):
+  """Make a dependent request.
+
+  Args:
+    url: a url, or number which will be used as a url.
+    source_url: a url or number which will be used as the source (initiating)
+      url. If the source url is not present, then url will be a root. The
+      convention in tests is to use a source_url of 'null' in this case.
+    timing_dict: (dict) Suitable to be passed to request_track.TimingFromDict().
+    initiator_type: the initiator type to use.
+
+  Returns:
+    A request_track.Request.
+  """
+  assert initiator_type in ('other', 'parser')
+  timing = request_track.TimingFromDict(timing_dict)
+  rq = request_track.Request.FromJsonDict({
+      'timestamp': timing.request_time,
+      'request_id': str(MakeRequestWithTiming._next_request_id),
+      'url': 'http://' + str(url),
+      'initiator': {'type': initiator_type, 'url': 'http://' + str(source_url)},
+      'response_headers': {'Content-Type':
+                           'null' if not magic_content_type
+                           else 'magic-debug-content' },
+      'timing': request_track.TimingAsList(timing)
+  })
+  MakeRequestWithTiming._next_request_id += 1
+  return rq
+
+
+MakeRequestWithTiming._next_request_id = 0
+
+
 def MakeRequest(
     url, source_url, start_time=None, headers_time=None, end_time=None,
     magic_content_type=False, initiator_type='other'):
@@ -63,7 +99,6 @@ def MakeRequest(
 
   Returns:
     A request_track.Request.
-
   """
   assert ((start_time is None and
            headers_time is None and
@@ -75,36 +110,23 @@ def MakeRequest(
   if start_time is None:
     # Use the request id in seconds for timestamps. This guarantees increasing
     # times which makes request dependencies behave as expected.
-    start_time = headers_time = end_time = MakeRequest._next_request_id * 1000
-  assert initiator_type in ('other', 'parser')
-  timing = request_track.TimingAsList(request_track.TimingFromDict({
+    start_time = headers_time = end_time = (
+        MakeRequestWithTiming._next_request_id * 1000)
+  timing_dict = {
       # connectEnd should be ignored.
       'connectEnd': (end_time - start_time) / 2,
       'receiveHeadersEnd': headers_time - start_time,
       'loadingFinished': end_time - start_time,
-      'requestTime': start_time / 1000.0}))
-  rq = request_track.Request.FromJsonDict({
-      'timestamp': start_time / 1000.0,
-      'request_id': str(MakeRequest._next_request_id),
-      'url': 'http://' + str(url),
-      'initiator': {'type': initiator_type, 'url': 'http://' + str(source_url)},
-      'response_headers': {'Content-Type':
-                           'null' if not magic_content_type
-                           else 'magic-debug-content' },
-      'timing': timing
-  })
-  MakeRequest._next_request_id += 1
-  return rq
-
-
-MakeRequest._next_request_id = 0
+      'requestTime': start_time / 1000.0}
+  return MakeRequestWithTiming(
+      url, source_url, timing_dict, magic_content_type, initiator_type)
 
 
 def LoadingTraceFromEvents(requests, page_events=None, trace_events=None):
   """Returns a LoadingTrace instance from a list of requests and page events."""
   request = FakeRequestTrack(requests)
   page_event_track = FakePageTrack(page_events if page_events else [])
-  if trace_events:
+  if trace_events is not None:
     tracing_track = tracing.TracingTrack(None)
     tracing_track.Handle('Tracing.dataCollected',
                          {'params': {'value': [e for e in trace_events]}})
@@ -135,10 +157,58 @@ class SimpleLens(object):
     return deps
 
 
-class TestResourceGraph(loading_model.ResourceGraph):
-  """Replace the default request lens in a ResourceGraph with our SimpleLens."""
-  REQUEST_LENS = SimpleLens
+class TestDependencyGraph(dependency_graph.RequestDependencyGraph):
+  """A dependency graph created from requests using a simple lens."""
+  def __init__(self, requests):
+    lens = SimpleLens(LoadingTraceFromEvents(requests))
+    super(TestDependencyGraph, self).__init__(requests, lens)
 
-  @classmethod
-  def FromRequestList(cls, requests, page_events=None, trace_events=None):
-    return cls(LoadingTraceFromEvents(requests, page_events, trace_events))
+
+class MockConnection(object):
+  """Mock out connection for testing.
+
+  Use Expect* for requests expecting a repsonse. SyncRequestNoResponse puts
+  requests into no_response_requests_seen.
+
+  TODO(mattcary): use a standard mock system (the back-ported python3
+  unittest.mock? devil.utils.mock_calls?)
+
+  """
+  def __init__(self, test_case):
+    # List of (method, params) tuples.
+    self.no_response_requests_seen = []
+
+    self._test_case = test_case
+    self._expected_responses = {}
+
+  def ExpectSyncRequest(self, response, method, params=None):
+    """Test method when the connection is expected to make a SyncRequest.
+
+    Args:
+      response: (dict) the response to generate.
+      method: (str) the expected method in the call.
+      params: (dict) the expected params in the call.
+    """
+    self._expected_responses.setdefault(method, []).append((params, response))
+
+  def AllExpectationsUsed(self):
+    """Returns true when all expectations where used."""
+    return not self._expected_responses
+
+  def SyncRequestNoResponse(self, method, params):
+    """Mocked method."""
+    self.no_response_requests_seen.append((method, params))
+
+  def SyncRequest(self, method, params=None):
+    """Mocked method."""
+    expected_params, response = self._expected_responses[method].pop(0)
+    if not self._expected_responses[method]:
+      del self._expected_responses[method]
+    self._test_case.assertEqual(expected_params, params)
+    return response
+
+
+class MockUserSatisfiedLens(user_satisfied_lens._UserSatisfiedLens):
+  def _CalculateTimes(self, _):
+    self._satisfied_msec = float('inf')
+    self._event_msec = float('inf')

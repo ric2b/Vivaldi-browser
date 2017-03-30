@@ -45,7 +45,7 @@ namespace blink {
 
 class WebDataSourceImpl final : public DocumentLoader, public WebDataSource {
 public:
-    static PassRefPtrWillBeRawPtr<WebDataSourceImpl> create(LocalFrame*, const ResourceRequest&, const SubstituteData&);
+    static WebDataSourceImpl* create(LocalFrame*, const ResourceRequest&, const SubstituteData&);
 
     static WebDataSourceImpl* fromDocumentLoader(DocumentLoader* loader)
     {
@@ -63,7 +63,7 @@ public:
     bool isClientRedirect() const override;
     bool replacesCurrentHistoryItem() const override;
     WebNavigationType navigationType() const override;
-    ExtraData* extraData() const override;
+    ExtraData* getExtraData() const override;
     void setExtraData(ExtraData*) override;
     void setNavigationStartTime(double) override;
 

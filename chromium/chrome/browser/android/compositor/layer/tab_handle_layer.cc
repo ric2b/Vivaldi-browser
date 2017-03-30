@@ -178,13 +178,10 @@ scoped_refptr<cc::Layer> TabHandleLayer::layer() {
 
 TabHandleLayer::TabHandleLayer(LayerTitleCache* layer_title_cache)
     : layer_title_cache_(layer_title_cache),
-      layer_(cc::Layer::Create(content::Compositor::LayerSettings())),
-      close_button_(
-          cc::UIResourceLayer::Create(content::Compositor::LayerSettings())),
-      decoration_tab_(
-          cc::NinePatchLayer::Create(content::Compositor::LayerSettings())),
-      border_(
-          cc::SolidColorLayer::Create(content::Compositor::LayerSettings())),
+      layer_(cc::Layer::Create()),
+      close_button_(cc::UIResourceLayer::Create()),
+      decoration_tab_(cc::NinePatchLayer::Create()),
+      border_(cc::SolidColorLayer::Create()),
       brightness_(1.0f),
       foreground_(false) {
   decoration_tab_->SetIsDrawable(true);

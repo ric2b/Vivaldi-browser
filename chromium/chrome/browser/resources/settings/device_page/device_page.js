@@ -5,16 +5,9 @@
 /**
  * @fileoverview 'settings-device-page' is the settings page for device and
  * peripheral settings.
- *
- * @group Chrome Settings Elements
- * @element settings-device-page
  */
 Polymer({
   is: 'settings-device-page',
-
-  behaviors: [
-    I18nBehavior,
-  ],
 
   properties: {
     /** The current active route. */
@@ -36,5 +29,21 @@ Polymer({
    */
   onTouchpadTap_: function() {
     this.$.pages.setSubpageChain(['touchpad']);
+  },
+
+  /**
+   * Handler for tapping the Keyboard settings menu item.
+   * @private
+   */
+  onKeyboardTap_: function() {
+    this.$.pages.setSubpageChain(['keyboard']);
+  },
+
+  /**
+   * Handler for tapping the Display settings menu item.
+   * @private
+   */
+  onDisplayTap_: function() {
+    this.$.pages.setSubpageChain(['display']);
   },
 });

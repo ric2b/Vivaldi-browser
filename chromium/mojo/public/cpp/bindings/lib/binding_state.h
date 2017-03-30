@@ -11,7 +11,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "mojo/public/c/environment/async_waiter.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/callback.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
@@ -39,8 +38,6 @@ class BindingState;
 template <typename Interface>
 class BindingState<Interface, false> {
  public:
-  using GenericInterface = typename Interface::GenericInterface;
-
   explicit BindingState(Interface* impl) : impl_(impl) {
     stub_.set_sink(impl_);
   }
@@ -50,14 +47,14 @@ class BindingState<Interface, false> {
       Close();
   }
 
-  void Bind(ScopedMessagePipeHandle handle, const MojoAsyncWaiter* waiter) {
+  void Bind(ScopedMessagePipeHandle handle) {
     DCHECK(!router_);
     internal::FilterChain filters;
     filters.Append<internal::MessageHeaderValidator>();
     filters.Append<typename Interface::RequestValidator_>();
 
     router_ = new internal::Router(std::move(handle), std::move(filters),
-                                   Interface::HasSyncMethods_, waiter);
+                                   Interface::HasSyncMethods_);
     router_->set_incoming_receiver(&stub_);
     router_->set_connection_error_handler(
         [this]() { connection_error_handler_.Run(); });
@@ -86,9 +83,9 @@ class BindingState<Interface, false> {
     DestroyRouter();
   }
 
-  InterfaceRequest<GenericInterface> Unbind() {
-    InterfaceRequest<GenericInterface> request =
-        MakeRequest<GenericInterface>(router_->PassMessagePipe());
+  InterfaceRequest<Interface> Unbind() {
+    InterfaceRequest<Interface> request =
+        MakeRequest<Interface>(router_->PassMessagePipe());
     DestroyRouter();
     return std::move(request);
   }
@@ -135,8 +132,6 @@ class BindingState<Interface, false> {
 template <typename Interface>
 class BindingState<Interface, true> {
  public:
-  using GenericInterface = typename Interface::GenericInterface;
-
   explicit BindingState(Interface* impl) : impl_(impl) {
     stub_.set_sink(impl_);
   }
@@ -146,15 +141,16 @@ class BindingState<Interface, true> {
       Close();
   }
 
-  void Bind(ScopedMessagePipeHandle handle, const MojoAsyncWaiter* waiter) {
+  void Bind(ScopedMessagePipeHandle handle) {
     DCHECK(!router_);
 
-    router_ = new internal::MultiplexRouter(false, std::move(handle), waiter);
+    router_ = new internal::MultiplexRouter(false, std::move(handle));
     stub_.serialization_context()->router = router_;
 
     endpoint_client_.reset(new internal::InterfaceEndpointClient(
         router_->CreateLocalEndpointHandle(internal::kMasterInterfaceId),
-        &stub_, make_scoped_ptr(new typename Interface::RequestValidator_())));
+        &stub_, make_scoped_ptr(new typename Interface::RequestValidator_()),
+        Interface::HasSyncMethods_));
 
     endpoint_client_->set_connection_error_handler(
         [this]() { connection_error_handler_.Run(); });
@@ -187,13 +183,13 @@ class BindingState<Interface, true> {
     connection_error_handler_.reset();
   }
 
-  InterfaceRequest<GenericInterface> Unbind() {
+  InterfaceRequest<Interface> Unbind() {
     endpoint_client_.reset();
-    InterfaceRequest<GenericInterface> request =
-        MakeRequest<GenericInterface>(router_->PassMessagePipe());
+    InterfaceRequest<Interface> request =
+        MakeRequest<Interface>(router_->PassMessagePipe());
     router_ = nullptr;
     connection_error_handler_.reset();
-    return request.Pass();
+    return request;
   }
 
   void set_connection_error_handler(const Closure& error_handler) {

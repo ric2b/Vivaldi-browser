@@ -45,7 +45,7 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate {
   };
 
   VivaldiMenuController(Delegate* delegate,
-      std::vector<linked_ptr<vivaldi::show_menu::MenuItem>>* menu_items);
+      std::vector<vivaldi::show_menu::MenuItem>* menu_items);
   ~VivaldiMenuController() override;
 
   void Show(content::WebContents* web_contents,
@@ -68,6 +68,7 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate {
   const vivaldi::show_menu::MenuItem* getItemByCommandId(int command_id) const;
   void PopulateModel(const vivaldi::show_menu::MenuItem* menuitem,
       ui::SimpleMenuModel* menu_model);
+  void SanitizeModel(ui::SimpleMenuModel* menu_model);
   bool HasDeveloperTools();
   bool IsDeveloperTools(int command_id) const;
   void HandleDeveloperToolsCommand(int command_id);
@@ -82,7 +83,7 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate {
 
   Delegate* delegate_;
   content::ContextMenuParams menu_params_;
-  std::vector<linked_ptr<vivaldi::show_menu::MenuItem>>*
+  std::vector<vivaldi::show_menu::MenuItem>*
       menu_items_;  // Not owned by us.
   ui::SimpleMenuModel menu_model_;
   scoped_ptr<::vivaldi::VivaldiContextMenu> menu_;

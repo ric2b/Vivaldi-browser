@@ -36,10 +36,15 @@ IPC_ENUM_TRAITS_MAX_VALUE(
     content::PlatformNotificationData::Direction,
     content::PlatformNotificationData::DIRECTION_LAST)
 
+IPC_ENUM_TRAITS_MAX_VALUE(content::PlatformNotificationActionType,
+                          content::PLATFORM_NOTIFICATION_ACTION_TYPE_TEXT)
+
 IPC_STRUCT_TRAITS_BEGIN(content::PlatformNotificationAction)
+  IPC_STRUCT_TRAITS_MEMBER(type)
   IPC_STRUCT_TRAITS_MEMBER(action)
   IPC_STRUCT_TRAITS_MEMBER(title)
   IPC_STRUCT_TRAITS_MEMBER(icon)
+  IPC_STRUCT_TRAITS_MEMBER(placeholder)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::PlatformNotificationData)
@@ -49,6 +54,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::PlatformNotificationData)
   IPC_STRUCT_TRAITS_MEMBER(body)
   IPC_STRUCT_TRAITS_MEMBER(tag)
   IPC_STRUCT_TRAITS_MEMBER(icon)
+  IPC_STRUCT_TRAITS_MEMBER(badge)
   IPC_STRUCT_TRAITS_MEMBER(vibration_pattern)
   IPC_STRUCT_TRAITS_MEMBER(timestamp)
   IPC_STRUCT_TRAITS_MEMBER(renotify)
@@ -60,6 +66,7 @@ IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::NotificationResources)
   IPC_STRUCT_TRAITS_MEMBER(notification_icon)
+  IPC_STRUCT_TRAITS_MEMBER(badge)
   IPC_STRUCT_TRAITS_MEMBER(action_icons)
 IPC_STRUCT_TRAITS_END()
 

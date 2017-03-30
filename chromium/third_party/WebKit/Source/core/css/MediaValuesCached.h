@@ -76,9 +76,9 @@ public:
         }
     };
 
-    static PassRefPtrWillBeRawPtr<MediaValuesCached> create();
-    static PassRefPtrWillBeRawPtr<MediaValuesCached> create(const MediaValuesCachedData&);
-    PassRefPtrWillBeRawPtr<MediaValues> copy() const override;
+    static MediaValuesCached* create();
+    static MediaValuesCached* create(const MediaValuesCachedData&);
+    MediaValues* copy() const override;
     bool computeLength(double value, CSSPrimitiveValue::UnitType, int& result) const override;
     bool computeLength(double value, CSSPrimitiveValue::UnitType, double& result) const override;
 
@@ -100,8 +100,7 @@ public:
     const String mediaType() const override;
     WebDisplayMode displayMode() const override;
 
-    void setViewportWidth(double);
-    void setViewportHeight(double);
+    void overrideViewportDimensions(double width, double height) override;
 
 protected:
     MediaValuesCached();

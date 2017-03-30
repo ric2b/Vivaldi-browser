@@ -38,8 +38,6 @@ class FullscreenControllerTestWindow : public TestBrowserWindow,
   enum WindowState {
     NORMAL,
     FULLSCREEN,
-    // No TO_ state for METRO_SNAP, the windows implementation is synchronous.
-    METRO_SNAP,
     TO_NORMAL,
     TO_FULLSCREEN,
   };
@@ -53,10 +51,6 @@ class FullscreenControllerTestWindow : public TestBrowserWindow,
   bool SupportsFullscreenWithToolbar() const override;
   void UpdateFullscreenWithToolbar(bool with_toolbar) override;
   bool IsFullscreenWithToolbar() const override;
-#if defined(OS_WIN)
-  void SetMetroSnapMode(bool enable) override;
-  bool IsInMetroSnapMode() const override;
-#endif
   static const char* GetWindowStateString(WindowState state);
   WindowState state() const { return state_; }
   void set_browser(Browser* browser) { browser_ = browser; }
@@ -145,27 +139,12 @@ bool FullscreenControllerTestWindow::IsFullscreenWithToolbar() const {
   return IsFullscreen() && mac_with_toolbar_mode_;
 }
 
-#if defined(OS_WIN)
-void FullscreenControllerTestWindow::SetMetroSnapMode(bool enable) {
-  if (enable != IsInMetroSnapMode())
-    state_ = enable ? METRO_SNAP : NORMAL;
-
-  if (FullscreenControllerStateTest::IsWindowFullscreenStateChangedReentrant())
-    ChangeWindowFullscreenState();
-}
-
-bool FullscreenControllerTestWindow::IsInMetroSnapMode() const {
-  return state_ == METRO_SNAP;
-}
-#endif
-
 // static
 const char* FullscreenControllerTestWindow::GetWindowStateString(
     WindowState state) {
   switch (state) {
     ENUM_TO_STRING(NORMAL);
     ENUM_TO_STRING(FULLSCREEN);
-    ENUM_TO_STRING(METRO_SNAP);
     ENUM_TO_STRING(TO_FULLSCREEN);
     ENUM_TO_STRING(TO_NORMAL);
     default:
@@ -314,13 +293,6 @@ void FullscreenControllerStateUnitTest::VerifyWindowState() {
       EXPECT_EQ(FullscreenControllerTestWindow::FULLSCREEN,
                 window_->state()) << GetAndClearDebugLog();
       break;
-
-#if defined(OS_WIN)
-    case STATE_METRO_SNAP:
-      EXPECT_EQ(FullscreenControllerTestWindow::METRO_SNAP,
-                window_->state()) << GetAndClearDebugLog();
-      break;
-#endif
 
     case STATE_TO_NORMAL:
       EXPECT_EQ(FullscreenControllerTestWindow::TO_NORMAL,
@@ -513,7 +485,7 @@ TEST_F(FullscreenControllerStateUnitTest, ExitTabFullscreenViaDetachingTab) {
   ASSERT_TRUE(InvokeEvent(WINDOW_CHANGE));
   ASSERT_TRUE(browser()->window()->IsFullscreen());
 
-  scoped_ptr<content::WebContents> web_contents(
+  std::unique_ptr<content::WebContents> web_contents(
       browser()->tab_strip_model()->DetachWebContentsAt(0));
   ChangeWindowFullscreenState();
   EXPECT_FALSE(browser()->window()->IsFullscreen());
@@ -530,9 +502,8 @@ TEST_F(FullscreenControllerStateUnitTest, ExitTabFullscreenViaReplacingTab) {
 
   content::WebContents* new_web_contents = content::WebContents::Create(
       content::WebContents::CreateParams(profile()));
-  scoped_ptr<content::WebContents> old_web_contents(
-      browser()->tab_strip_model()->ReplaceWebContentsAt(
-          0, new_web_contents));
+  std::unique_ptr<content::WebContents> old_web_contents(
+      browser()->tab_strip_model()->ReplaceWebContentsAt(0, new_web_contents));
   ChangeWindowFullscreenState();
   EXPECT_FALSE(browser()->window()->IsFullscreen());
 }
@@ -858,8 +829,9 @@ TEST_F(FullscreenControllerStateUnitTest,
   EXPECT_FALSE(GetFullscreenController()->IsWindowFullscreenForTabOrPending());
 
   // Create the second browser window.
-  const scoped_ptr<BrowserWindow> second_browser_window(CreateBrowserWindow());
-  const scoped_ptr<Browser> second_browser(
+  const std::unique_ptr<BrowserWindow> second_browser_window(
+      CreateBrowserWindow());
+  const std::unique_ptr<Browser> second_browser(
       CreateBrowser(browser()->profile(), browser()->type(), false,
                     second_browser_window.get()));
   AddTab(second_browser.get(), GURL(url::kAboutBlankURL));

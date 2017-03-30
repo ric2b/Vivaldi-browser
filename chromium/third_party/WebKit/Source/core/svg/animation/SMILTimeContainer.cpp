@@ -91,9 +91,9 @@ void SMILTimeContainer::schedule(SVGSMILElement* animation, SVGElement* target, 
 #endif
 
     ElementAttributePair key(target, attributeName);
-    OwnPtrWillBeMember<AnimationsLinkedHashSet>& scheduled = m_scheduledAnimations.add(key, nullptr).storedValue->value;
+    Member<AnimationsLinkedHashSet>& scheduled = m_scheduledAnimations.add(key, nullptr).storedValue->value;
     if (!scheduled)
-        scheduled = adoptPtrWillBeNoop(new AnimationsLinkedHashSet);
+        scheduled = new AnimationsLinkedHashSet;
     ASSERT(!scheduled->contains(animation));
     scheduled->add(animation);
 
@@ -386,7 +386,7 @@ void SMILTimeContainer::updateDocumentOrderIndexes()
 
 struct PriorityCompare {
     PriorityCompare(SMILTime elapsed) : m_elapsed(elapsed) {}
-    bool operator()(const RefPtrWillBeMember<SVGSMILElement>& a, const RefPtrWillBeMember<SVGSMILElement>& b)
+    bool operator()(const Member<SVGSMILElement>& a, const Member<SVGSMILElement>& b)
     {
         // FIXME: This should also consider possible timing relations between the elements.
         SMILTime aBegin = a->intervalBegin();
@@ -470,8 +470,8 @@ SMILTime SMILTimeContainer::updateAnimations(SMILTime elapsed, bool seekToTime)
     if (m_documentOrderIndexesDirty)
         updateDocumentOrderIndexes();
 
-    WillBeHeapHashSet<ElementAttributePair> invalidKeys;
-    using AnimationsVector = WillBeHeapVector<RefPtrWillBeMember<SVGSMILElement>>;
+    HeapHashSet<ElementAttributePair> invalidKeys;
+    using AnimationsVector = HeapVector<Member<SVGSMILElement>>;
     AnimationsVector animationsToApply;
     AnimationsVector scheduledAnimationsInSameGroup;
     for (const auto& entry : m_scheduledAnimations) {
@@ -532,17 +532,17 @@ SMILTime SMILTimeContainer::updateAnimations(SMILTime elapsed, bool seekToTime)
 #endif
 
     for (unsigned i = 0; i < animationsToApplySize; ++i) {
-        if (animationsToApply[i]->inDocument() && animationsToApply[i]->isSVGDiscardElement()) {
-            RefPtrWillBeRawPtr<SVGSMILElement> animDiscard = animationsToApply[i];
-            RefPtrWillBeRawPtr<SVGElement> targetElement = animDiscard->targetElement();
-            if (targetElement && targetElement->inDocument()) {
+        if (animationsToApply[i]->inShadowIncludingDocument() && animationsToApply[i]->isSVGDiscardElement()) {
+            SVGSMILElement* animDiscard = animationsToApply[i];
+            SVGElement* targetElement = animDiscard->targetElement();
+            if (targetElement && targetElement->inShadowIncludingDocument()) {
                 targetElement->remove(IGNORE_EXCEPTION);
-                ASSERT(!targetElement->inDocument());
+                ASSERT(!targetElement->inShadowIncludingDocument());
             }
 
-            if (animDiscard->inDocument()) {
+            if (animDiscard->inShadowIncludingDocument()) {
                 animDiscard->remove(IGNORE_EXCEPTION);
-                ASSERT(!animDiscard->inDocument());
+                ASSERT(!animDiscard->inShadowIncludingDocument());
             }
         }
     }
@@ -556,9 +556,7 @@ void SMILTimeContainer::advanceFrameForTesting()
 
 DEFINE_TRACE(SMILTimeContainer)
 {
-#if ENABLE(OILPAN)
     visitor->trace(m_scheduledAnimations);
-#endif
     visitor->trace(m_ownerSVGElement);
 }
 

@@ -27,6 +27,7 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
+#include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/page/SpatialNavigation.h"
 #include "platform/text/PlatformLocale.h"
@@ -36,18 +37,18 @@ namespace blink {
 
 namespace {
 
-HTMLElement* nextElement(const HTMLElement& element, HTMLFormElement* stayWithin, bool forward)
+HTMLInputElement* nextInputElement(const HTMLInputElement& element, const HTMLFormElement* stayWithin, bool forward)
 {
-    return forward ? Traversal<HTMLElement>::next(element, (Node* )stayWithin) : Traversal<HTMLElement>::previous(element, (Node* )stayWithin);
+    return forward ? Traversal<HTMLInputElement>::next(element, stayWithin) : Traversal<HTMLInputElement>::previous(element, stayWithin);
 }
 
 } // namespace
 
 using namespace HTMLNames;
 
-PassRefPtrWillBeRawPtr<InputType> RadioInputType::create(HTMLInputElement& element)
+InputType* RadioInputType::create(HTMLInputElement& element)
 {
-    return adoptRefWillBeNoop(new RadioInputType(element));
+    return new RadioInputType(element);
 }
 
 const AtomicString& RadioInputType::formControlType() const
@@ -72,12 +73,8 @@ void RadioInputType::handleClickEvent(MouseEvent* event)
 
 HTMLInputElement* RadioInputType::findNextFocusableRadioButtonInGroup(HTMLInputElement* currentElement, bool forward)
 {
-    HTMLElement* htmlElement;
-    for (htmlElement = nextElement(*currentElement, element().form(), forward); htmlElement; htmlElement = nextElement(*htmlElement, element().form(), forward)) {
-        if (!isHTMLInputElement(*htmlElement))
-            continue;
-        HTMLInputElement* inputElement = toHTMLInputElement(htmlElement);
-        if (element().form() == inputElement->form() && inputElement->type() == InputTypeNames::radio && inputElement->name() == element().name() && inputElement->isFocusable())
+    for (HTMLInputElement* inputElement = nextRadioButtonInGroup(currentElement, forward); inputElement; inputElement = nextRadioButtonInGroup(inputElement, forward)) {
+        if (inputElement->isFocusable())
             return inputElement;
     }
     return nullptr;
@@ -119,7 +116,6 @@ void RadioInputType::handleKeydownEvent(KeyboardEvent* event)
         }
     }
     if (inputElement) {
-        RefPtrWillBeRawPtr<HTMLInputElement> protector(inputElement);
         document.setFocusedElement(inputElement, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
         inputElement->dispatchSimulatedClick(event, SendNoEvents);
         event->setDefaultHandled();
@@ -168,7 +164,7 @@ bool RadioInputType::shouldSendChangeEventAfterCheckedChanged()
     return element().checked();
 }
 
-PassOwnPtrWillBeRawPtr<ClickHandlingState> RadioInputType::willDispatchClick()
+ClickHandlingState* RadioInputType::willDispatchClick()
 {
     // An event handler can use preventDefault or "return false" to reverse the selection we do here.
     // The ClickHandlingState object contains what we need to undo what we did here in didDispatchClick.
@@ -177,13 +173,13 @@ PassOwnPtrWillBeRawPtr<ClickHandlingState> RadioInputType::willDispatchClick()
     // Therefore if nothing is currently selected, we won't allow the upcoming action to be "undone", since
     // we want some object in the radio group to actually get selected.
 
-    OwnPtrWillBeRawPtr<ClickHandlingState> state = adoptPtrWillBeNoop(new ClickHandlingState);
+    ClickHandlingState* state = new ClickHandlingState;
 
     state->checked = element().checked();
     state->checkedRadioButton = element().checkedRadioButtonForGroup();
     element().setChecked(true, DispatchChangeEvent);
     m_isInClickHandler = true;
-    return state.release();
+    return state;
 }
 
 void RadioInputType::didDispatchClick(Event* event, const ClickHandlingState& state)
@@ -209,6 +205,19 @@ void RadioInputType::didDispatchClick(Event* event, const ClickHandlingState& st
 bool RadioInputType::shouldAppearIndeterminate() const
 {
     return !element().checkedRadioButtonForGroup();
+}
+
+HTMLInputElement* RadioInputType::nextRadioButtonInGroup(HTMLInputElement* current, bool forward)
+{
+    // TODO(tkent): Staying within form() is incorrect.  This code ignore input
+    // elements associated by |form| content attribute.
+    // TODO(tkent): Comparing name() with == is incorrect.  It should be
+    // case-insensitive.
+    for (HTMLInputElement* inputElement = nextInputElement(*current, current->form(), forward); inputElement; inputElement = nextInputElement(*inputElement, current->form(), forward)) {
+        if (current->form() == inputElement->form() && inputElement->type() == InputTypeNames::radio && inputElement->name() == current->name())
+            return inputElement;
+    }
+    return nullptr;
 }
 
 } // namespace blink

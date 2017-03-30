@@ -54,6 +54,7 @@ class IconLabelBubbleView : public views::InkDropHostView {
  protected:
   views::ImageView* image() { return image_; }
   views::Label* label() { return label_; }
+  const views::Label* label() const { return label_; }
 
   // Gets the color for displaying text.
   virtual SkColor GetTextColor() const = 0;
@@ -70,44 +71,57 @@ class IconLabelBubbleView : public views::InkDropHostView {
   // full-width view and can be used to animate the width of the view.
   virtual double WidthMultiplier() const;
 
+  // Returns true when animation is in progress and is shrinking.
+  virtual bool IsShrinking() const;
+
   // Returns the amount of horizontal space needed to draw the image and its
   // padding before the label.
   virtual int GetImageAndPaddingWidth() const;
 
+  // The view has been activated by a user gesture such as spacebar. Returns
+  // true if some handling was performed.
+  virtual bool OnActivate();
+
   // views::View:
   gfx::Size GetPreferredSize() const override;
   void Layout() override;
+  bool OnKeyPressed(const ui::KeyEvent& event) override;
+  bool OnKeyReleased(const ui::KeyEvent& event) override;
   void OnNativeThemeChanged(const ui::NativeTheme* native_theme) override;
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
-  scoped_ptr<views::InkDropHover> CreateInkDropHover() const override;
+  std::unique_ptr<views::InkDropHover> CreateInkDropHover() const override;
   SkColor GetInkDropBaseColor() const override;
 
   const gfx::FontList& font_list() const { return label_->font_list(); }
 
   SkColor GetParentBackgroundColor() const;
 
-  gfx::Size GetSizeForLabelWidth(int width) const;
+  gfx::Size GetSizeForLabelWidth(int label_width) const;
+
+  // Returns the minimum width the view can be to show the complete image when
+  // the background is showing.
+  int MinimumWidthForImageWithBackgroundShown() const;
 
  private:
   // Sets a background color on |label_| based on |chip_background_color| and
   // the parent's bg color.
   void SetLabelBackgroundColor(SkColor chip_background_color);
 
-  // Amount of padding at the edges of the bubble.  If |leading| is true, this
-  // is the padding at the beginning of the bubble (left in LTR), otherwise it's
-  // the end padding.
-  int GetBubbleOuterPadding(bool leading) const;
+  // Amount of padding from the leading edge of the view to the leading edge of
+  // the image (if |leading| is true), or from the trailing edge of the label
+  // (or image, if the label is invisible) to the trailing edge of the view.
+  int GetOuterPadding(bool leading) const;
 
-  // As above, but for Material Design. TODO(estade): remove/replace the above.
-  int GetBubbleOuterPaddingMd(bool leading) const;
+  // Spacing between the image and the label.
+  int GetInternalSpacing() const;
 
   // views::View:
   const char* GetClassName() const override;
   void OnPaint(gfx::Canvas* canvas) override;
 
   // For painting the background. TODO(estade): remove post MD launch.
-  scoped_ptr<views::Painter> background_painter_;
+  std::unique_ptr<views::Painter> background_painter_;
 
   // The contents of the bubble.
   views::ImageView* image_;

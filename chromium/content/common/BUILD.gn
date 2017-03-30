@@ -126,9 +126,11 @@ if (is_mac) {
 }
 
 source_set("common") {
-  # Only the public target should depend on this. All other targets (even
-  # internal content ones) should depend on the public one.
-  visibility = [ "//content/public/common:common_sources" ]
+  # Targets external to content should always link to the public API.
+  # In addition, targets outside of the content component (shell and tests)
+  # must not link to this because it will duplicate the code in the component
+  # build.
+  visibility = [ "//content/*" ]
 
   sources = rebase_path(content_common_gypi_values.private_common_sources,
                         ".",
@@ -141,69 +143,76 @@ source_set("common") {
   ]
 
   public_deps = [
+    ":mojo_bindings",
     "//gpu/command_buffer/common",
     "//ipc",
     "//third_party/WebKit/public:blink_headers",
   ]
   deps = [
     "//base",
+    "//base/third_party/dynamic_annotations",
     "//build/util:webkit_version",
+    "//cc",
+    "//cc/blink",
+    "//cc/surfaces",
     "//components/mus/public/interfaces",
     "//components/tracing",
     "//components/tracing:startup_tracing",
+    "//device/bluetooth",
+
+    # TODO: the dependency on gl_in_process_context should be decoupled from
+    # content and moved to android_webview. See crbug.com/365797.
+    "//gpu",
+    "//gpu/blink",
+    "//gpu/command_buffer/client:gl_in_process_context",
+    "//gpu/command_buffer/client:gles2_c_lib",
+    "//gpu/command_buffer/client:gles2_cmd_helper",
+    "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/command_buffer/common:gles2_utils",
-    "//mojo/converters/network",
+    "//gpu/command_buffer/service",
+    "//gpu/ipc/client",
+    "//gpu/ipc/common",
+
+    # TODO(markdittmer): This should be removed once content/common/gpu/media
+    # is refactored into media/ipc.
+    "//gpu/ipc/service",
+    "//gpu/skia_bindings",
+    "//ipc",
+    "//ipc/mojo",
+    "//media",
+    "//media:shared_memory_support",
+    "//media/gpu/ipc/client",
+    "//media/gpu/ipc/common",
+    "//media/midi",
+    "//mojo/common:common_base",
+    "//mojo/edk/system",
+    "//mojo/shell",
     "//mojo/shell/public/cpp",
-    "//mojo/shell/runner/child:lib",
+    "//mojo/shell/public/interfaces",
+    "//mojo/shell/runner/common",
     "//net",
+    "//sandbox",
     "//skia",
+    "//storage/common",
     "//third_party/WebKit/public:blink",
+    "//third_party/boringssl",
     "//third_party/icu",
     "//third_party/libjingle",
+    "//third_party/webrtc/base:rtc_base",
     "//ui/accessibility",
     "//ui/base",
     "//ui/base/ime",
-    "//ui/events/ipc:events_ipc",
+    "//ui/events/ipc",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gfx/ipc",
+    "//ui/gfx/ipc/skia",
+    "//ui/gl",
     "//ui/shell_dialogs",
     "//url",
+    "//url/ipc:url_ipc",
   ]
-
-  if (!is_ios) {
-    deps += [
-      "//cc",
-      "//device/bluetooth",
-      "//ipc",
-      "//ipc/mojo",
-
-      # TODO: the dependency on gl_in_process_context should be decoupled from
-      # content and moved to android_webview. See crbug.com/365797.
-      "//gpu/blink",
-      "//gpu/command_buffer/client:gl_in_process_context",
-      "//gpu/command_buffer/client:gles2_c_lib",
-      "//gpu/command_buffer/client:gles2_cmd_helper",
-      "//gpu/command_buffer/client:gles2_implementation",
-      "//gpu/command_buffer/service",
-      "//gpu/ipc",
-      "//gpu/skia_bindings",
-      "//media",
-      "//media:shared_memory_support",
-      "//media/midi",
-      "//mojo/common:common_base",
-      "//mojo/edk/system",
-      "//mojo/environment:chromium",
-      "//mojo/shell/public/interfaces",
-      "//sandbox",
-      "//storage/common",
-      "//third_party/boringssl",
-      "//ui/gl",
-    ]
-
-    public_deps += [ ":mojo_bindings" ]
-  }
 
   defines = []
   include_dirs = []
@@ -221,16 +230,12 @@ source_set("common") {
 
   if (is_mac) {
     sources += [
-                 "gpu/client/gpu_memory_buffer_impl_io_surface.cc",
-                 "gpu/client/gpu_memory_buffer_impl_io_surface.h",
-                 "gpu/gpu_memory_buffer_factory_io_surface.cc",
-                 "gpu/gpu_memory_buffer_factory_io_surface.h",
                  "gpu/media/vt_mac.h",
                  "gpu/media/vt_video_decode_accelerator_mac.cc",
                  "gpu/media/vt_video_decode_accelerator_mac.h",
+                 "gpu/media/vt_video_encode_accelerator_mac.cc",
+                 "gpu/media/vt_video_encode_accelerator_mac.h",
                ] + get_target_outputs(":libvt_generate_stubs")
-
-    sources -= [ "plugin_list_posix.cc" ]
 
     deps += [
       ":libvt_generate_stubs",
@@ -242,6 +247,9 @@ source_set("common") {
     ]
     lib_dirs = [ "$mac_sdk_path/usr/lib" ]
     libs += [
+      "AVFoundation.framework",
+      "CoreMedia.framework",
+      "CoreVideo.framework",
       "IOSurface.framework",
       "OpenGL.framework",
       "QuartzCore.framework",
@@ -250,13 +258,6 @@ source_set("common") {
   }
 
   if (is_android) {
-    sources += [
-      "gpu/client/gpu_memory_buffer_impl_surface_texture.cc",
-      "gpu/client/gpu_memory_buffer_impl_surface_texture.h",
-      "gpu/gpu_memory_buffer_factory_surface_texture.cc",
-      "gpu/gpu_memory_buffer_factory_surface_texture.h",
-    ]
-
     deps += [
       "//content/public/android:common_aidl",
       "//content/public/android:jni",
@@ -272,23 +273,12 @@ source_set("common") {
     deps += [ "//ppapi/proxy:ipc_sources" ]
   }
 
-  if (is_ios) {
-    sources -= [ "user_agent.cc" ]
-    assert(false, "Need to add lots of conditions here")
-  }
-
   if (use_ozone) {
-    configs += [ "//ui/ozone:vgem_map" ]
-
     deps += [ "//ui/ozone" ]
   } else {
     sources -= [
       "cursors/webcursor_ozone.cc",
       "font_list_ozone.cc",
-      "gpu/client/gpu_memory_buffer_impl_ozone_native_pixmap.cc",
-      "gpu/client/gpu_memory_buffer_impl_ozone_native_pixmap.h",
-      "gpu/gpu_memory_buffer_factory_ozone_native_pixmap.cc",
-      "gpu/gpu_memory_buffer_factory_ozone_native_pixmap.h",
     ]
   }
 
@@ -311,17 +301,6 @@ source_set("common") {
     sources -= [ "font_list_pango.cc" ]
   }
 
-  if (use_x11) {
-    configs += [
-      "//build/config/linux:xcomposite",
-      "//third_party/khronos:khronos_headers",
-    ]
-
-    if (current_cpu != "arm" || !is_chromeos) {
-      sources += [ "gpu/x_util.h" ]
-    }
-  }
-
   if (enable_plugins) {
     deps += [ "//ppapi/shared_impl" ]
   } else {
@@ -335,7 +314,6 @@ source_set("common") {
       "pepper_renderer_instance_data.h",
       "plugin_list.cc",
       "plugin_list.h",
-      "plugin_list_posix.cc",
       "sandbox_util.cc",
     ]
   }
@@ -519,19 +497,32 @@ source_set("common") {
   }
 }
 
+# See comment at the top of //content/BUILD.gn for how this works.
+group("for_content_tests") {
+  visibility = [ "//content/test/*" ]
+  if (!is_component_build) {
+    public_deps = [
+      ":common",
+    ]
+  }
+}
+
 mojom("mojo_bindings") {
+  # This interface is internal to content. However, this is not exported from
+  # the content component shared library. Code in content but outside of the
+  # content component (content/test or content/shell) should link to this
+  # directly.
+  visibility = [ "//content/*" ]
+
   sources = [
     "application_setup.mojom",
     "background_sync_service.mojom",
-    "geolocation_service.mojom",
     "image_downloader/image_downloader.mojom",
     "leveldb_wrapper.mojom",
-    "permission_service.mojom",
     "presentation/presentation_service.mojom",
     "process_control.mojom",
     "render_frame_setup.mojom",
     "render_widget_window_tree_client_factory.mojom",
-    "service_port_service.mojom",
     "service_worker/embedded_worker_setup.mojom",
     "storage_partition_service.mojom",
     "vr_service.mojom",
@@ -540,12 +531,16 @@ mojom("mojo_bindings") {
 
   import_dirs = [ "//mojo/services" ]
 
+  typemaps = [ "//url/mojo/origin.typemap" ]
+
   public_deps = [
     "//components/leveldb/public/interfaces",
     "//components/mus/public/interfaces",
     "//content/public/common:mojo_bindings",
     "//mojo/shell/public/interfaces",
     "//skia/public/interfaces",
+    "//third_party/WebKit/public:mojo_bindings",
     "//ui/mojo/geometry:interfaces",
+    "//url/mojo:url_mojom_origin",
   ]
 }

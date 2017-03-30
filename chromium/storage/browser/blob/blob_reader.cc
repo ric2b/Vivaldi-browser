@@ -6,11 +6,14 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
@@ -36,20 +39,39 @@ bool IsFileType(DataElement::Type type) {
       return false;
   }
 }
+
+int ConvertBlobErrorToNetError(IPCBlobCreationCancelCode reason) {
+  switch (reason) {
+    case IPCBlobCreationCancelCode::UNKNOWN:
+      return net::ERR_FAILED;
+    case IPCBlobCreationCancelCode::OUT_OF_MEMORY:
+      return net::ERR_OUT_OF_MEMORY;
+    case IPCBlobCreationCancelCode::FILE_WRITE_FAILED:
+      return net::ERR_FILE_NO_SPACE;
+    case IPCBlobCreationCancelCode::SOURCE_DIED_IN_TRANSIT:
+      return net::ERR_UNEXPECTED;
+    case IPCBlobCreationCancelCode::BLOB_DEREFERENCED_WHILE_BUILDING:
+      return net::ERR_UNEXPECTED;
+    case IPCBlobCreationCancelCode::REFERENCED_BLOB_BROKEN:
+      return net::ERR_INVALID_HANDLE;
+  }
+  NOTREACHED();
+  return net::ERR_FAILED;
+}
 }  // namespace
 
 BlobReader::FileStreamReaderProvider::~FileStreamReaderProvider() {}
 
 BlobReader::BlobReader(
     const BlobDataHandle* blob_handle,
-    scoped_ptr<FileStreamReaderProvider> file_stream_provider,
+    std::unique_ptr<FileStreamReaderProvider> file_stream_provider,
     base::SequencedTaskRunner* file_task_runner)
     : file_stream_provider_(std::move(file_stream_provider)),
       file_task_runner_(file_task_runner),
       net_error_(net::OK),
       weak_factory_(this) {
-  if (blob_handle) {
-    blob_data_ = blob_handle->CreateSnapshot();
+  if (blob_handle && !blob_handle->IsBroken()) {
+    blob_handle_.reset(new BlobDataHandle(*blob_handle));
   }
 }
 
@@ -61,58 +83,20 @@ BlobReader::Status BlobReader::CalculateSize(
     const net::CompletionCallback& done) {
   DCHECK(!total_size_calculated_);
   DCHECK(size_callback_.is_null());
-  if (!blob_data_.get()) {
+  if (!blob_handle_.get() || blob_handle_->IsBroken()) {
     return ReportError(net::ERR_FILE_NOT_FOUND);
   }
-
-  net_error_ = net::OK;
-  total_size_ = 0;
-  const auto& items = blob_data_->items();
-  item_length_list_.resize(items.size());
-  pending_get_file_info_count_ = 0;
-  for (size_t i = 0; i < items.size(); ++i) {
-    const BlobDataItem& item = *items.at(i);
-    if (IsFileType(item.type())) {
-      ++pending_get_file_info_count_;
-      storage::FileStreamReader* const reader = GetOrCreateFileReaderAtIndex(i);
-      if (!reader) {
-        return ReportError(net::ERR_FAILED);
-      }
-      int64_t length_output = reader->GetLength(base::Bind(
-          &BlobReader::DidGetFileItemLength, weak_factory_.GetWeakPtr(), i));
-      if (length_output == net::ERR_IO_PENDING) {
-        continue;
-      }
-      if (length_output < 0) {
-        return ReportError(length_output);
-      }
-      // We got the length right away
-      --pending_get_file_info_count_;
-      uint64_t resolved_length;
-      if (!ResolveFileItemLength(item, length_output, &resolved_length)) {
-        return ReportError(net::ERR_FILE_NOT_FOUND);
-      }
-      if (!AddItemLength(i, resolved_length)) {
-        return ReportError(net::ERR_FAILED);
-      }
-      continue;
-    }
-
-    if (!AddItemLength(i, item.length()))
-      return ReportError(net::ERR_FAILED);
+  if (blob_handle_->IsBeingBuilt()) {
+    blob_handle_->RunOnConstructionComplete(base::Bind(
+        &BlobReader::AsyncCalculateSize, weak_factory_.GetWeakPtr(), done));
+    return Status::IO_PENDING;
   }
-
-  if (pending_get_file_info_count_ == 0) {
-    DidCountSize();
-    return Status::DONE;
-  }
-  // Note: We only set the callback if we know that we're an async operation.
-  size_callback_ = done;
-  return Status::IO_PENDING;
+  blob_data_ = blob_handle_->CreateSnapshot();
+  return CalculateSizeImpl(done);
 }
 
 BlobReader::Status BlobReader::SetReadRange(uint64_t offset, uint64_t length) {
-  if (!blob_data_.get()) {
+  if (!blob_handle_.get() || blob_handle_->IsBroken()) {
     return ReportError(net::ERR_FILE_NOT_FOUND);
   }
   if (!total_size_calculated_) {
@@ -217,6 +201,79 @@ void BlobReader::InvalidateCallbacksAndDone(int net_error,
 BlobReader::Status BlobReader::ReportError(int net_error) {
   net_error_ = net_error;
   return Status::NET_ERROR;
+}
+
+void BlobReader::AsyncCalculateSize(const net::CompletionCallback& done,
+                                    bool async_succeeded,
+                                    IPCBlobCreationCancelCode reason) {
+  if (!async_succeeded) {
+    InvalidateCallbacksAndDone(ConvertBlobErrorToNetError(reason), done);
+    return;
+  }
+  DCHECK(!blob_handle_->IsBroken()) << "Callback should have returned false.";
+  blob_data_ = blob_handle_->CreateSnapshot();
+  Status size_status = CalculateSizeImpl(done);
+  switch (size_status) {
+    case Status::NET_ERROR:
+      InvalidateCallbacksAndDone(net_error_, done);
+      return;
+    case Status::DONE:
+      done.Run(net::OK);
+      return;
+    case Status::IO_PENDING:
+      return;
+  }
+}
+
+BlobReader::Status BlobReader::CalculateSizeImpl(
+    const net::CompletionCallback& done) {
+  DCHECK(!total_size_calculated_);
+  DCHECK(size_callback_.is_null());
+
+  net_error_ = net::OK;
+  total_size_ = 0;
+  const auto& items = blob_data_->items();
+  item_length_list_.resize(items.size());
+  pending_get_file_info_count_ = 0;
+  for (size_t i = 0; i < items.size(); ++i) {
+    const BlobDataItem& item = *items.at(i);
+    if (IsFileType(item.type())) {
+      ++pending_get_file_info_count_;
+      storage::FileStreamReader* const reader = GetOrCreateFileReaderAtIndex(i);
+      if (!reader) {
+        return ReportError(net::ERR_FAILED);
+      }
+      int64_t length_output = reader->GetLength(base::Bind(
+          &BlobReader::DidGetFileItemLength, weak_factory_.GetWeakPtr(), i));
+      if (length_output == net::ERR_IO_PENDING) {
+        continue;
+      }
+      if (length_output < 0) {
+        return ReportError(length_output);
+      }
+      // We got the length right away
+      --pending_get_file_info_count_;
+      uint64_t resolved_length;
+      if (!ResolveFileItemLength(item, length_output, &resolved_length)) {
+        return ReportError(net::ERR_FILE_NOT_FOUND);
+      }
+      if (!AddItemLength(i, resolved_length)) {
+        return ReportError(net::ERR_FAILED);
+      }
+      continue;
+    }
+
+    if (!AddItemLength(i, item.length()))
+      return ReportError(net::ERR_FAILED);
+  }
+
+  if (pending_get_file_info_count_ == 0) {
+    DidCountSize();
+    return Status::DONE;
+  }
+  // Note: We only set the callback if we know that we're an async operation.
+  size_callback_ = done;
+  return Status::IO_PENDING;
 }
 
 bool BlobReader::AddItemLength(size_t index, uint64_t item_length) {
@@ -437,7 +494,8 @@ void BlobReader::ContinueAsyncReadLoop() {
 }
 
 void BlobReader::DeleteCurrentFileReader() {
-  SetFileReaderAtIndex(current_item_index_, scoped_ptr<FileStreamReader>());
+  SetFileReaderAtIndex(current_item_index_,
+                       std::unique_ptr<FileStreamReader>());
 }
 
 BlobReader::Status BlobReader::ReadDiskCacheEntryItem(const BlobDataItem& item,
@@ -512,7 +570,7 @@ FileStreamReader* BlobReader::GetOrCreateFileReaderAtIndex(size_t index) {
     DCHECK(it->second);
     return it->second;
   }
-  scoped_ptr<FileStreamReader> reader = CreateFileStreamReader(item, 0);
+  std::unique_ptr<FileStreamReader> reader = CreateFileStreamReader(item, 0);
   FileStreamReader* ret_value = reader.get();
   if (!ret_value)
     return nullptr;
@@ -520,7 +578,7 @@ FileStreamReader* BlobReader::GetOrCreateFileReaderAtIndex(size_t index) {
   return ret_value;
 }
 
-scoped_ptr<FileStreamReader> BlobReader::CreateFileStreamReader(
+std::unique_ptr<FileStreamReader> BlobReader::CreateFileStreamReader(
     const BlobDataItem& item,
     uint64_t additional_offset) {
   DCHECK(IsFileType(item.type()));
@@ -549,8 +607,9 @@ scoped_ptr<FileStreamReader> BlobReader::CreateFileStreamReader(
   return nullptr;
 }
 
-void BlobReader::SetFileReaderAtIndex(size_t index,
-                                      scoped_ptr<FileStreamReader> reader) {
+void BlobReader::SetFileReaderAtIndex(
+    size_t index,
+    std::unique_ptr<FileStreamReader> reader) {
   auto found = index_to_reader_.find(current_item_index_);
   if (found != index_to_reader_.end()) {
     if (found->second) {

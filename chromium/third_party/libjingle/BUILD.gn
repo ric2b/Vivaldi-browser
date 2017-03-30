@@ -127,11 +127,11 @@ static_library("libjingle") {
     "$p2p_dir/base/basicpacketsocketfactory.h",
     "$p2p_dir/base/candidate.h",
     "$p2p_dir/base/common.h",
-    "$p2p_dir/base/constants.cc",
-    "$p2p_dir/base/constants.h",
     "$p2p_dir/base/dtlstransport.h",
     "$p2p_dir/base/dtlstransportchannel.cc",
     "$p2p_dir/base/dtlstransportchannel.h",
+    "$p2p_dir/base/p2pconstants.cc",
+    "$p2p_dir/base/p2pconstants.h",
     "$p2p_dir/base/p2ptransport.cc",
     "$p2p_dir/base/p2ptransport.h",
     "$p2p_dir/base/p2ptransportchannel.cc",
@@ -220,11 +220,6 @@ static_library("libjingle") {
     "$xmpp_dir/xmpptask.cc",
     "$xmpp_dir/xmpptask.h",
   ]
-  sources -= [
-    # Compiled as part of libjingle_p2p_constants.
-    "$p2p_dir/base/constants.cc",
-    "$p2p_dir/base/constants.h",
-  ]
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
@@ -233,7 +228,6 @@ static_library("libjingle") {
     ":jingle_deps",
   ]
   deps = [
-    ":libjingle_p2p_constants",
     "//third_party/webrtc/base:rtc_base",
   ]
 
@@ -257,28 +251,6 @@ static_library("libjingle") {
   public_configs = [ ":jingle_public_configs" ]
 }
 
-# This has to be is a separate project due to a bug in MSVS 2008 and the
-# current toolset on android.  The problem is that we have two files named
-# "constants.cc" and MSVS/android doesn't handle this properly.
-# GYP currently has guards to catch this, so if you want to remove it,
-# run GYP and if GYP has removed the validation check, then we can assume
-# that the toolchains have been fixed (we currently use VS2010 and later,
-# so VS2008 isn't a concern anymore).
-#
-# GYP version: third_party/libjingle.gyp:libjingle_p2p_constants
-static_library("libjingle_p2p_constants") {
-  p2p_dir = "../webrtc/p2p"
-  sources = [
-    "$p2p_dir/base/constants.cc",
-    "$p2p_dir/base/constants.h",
-  ]
-  public_deps = [
-    ":jingle_deps",
-  ]
-  configs += [ ":jingle_unexported_configs" ]
-  public_configs = [ ":jingle_public_configs" ]
-}
-
 if (enable_webrtc) {
   source_set("libjingle_webrtc") {
     sources = [
@@ -292,8 +264,6 @@ if (enable_webrtc) {
     ]
   }
 
-  # Note: this does not support the shared library build of libpeerconnection
-  # as is supported in the GYP build. It's not clear what this is used for.
   source_set("libjingle_webrtc_common") {
     sources = [
       "../webrtc/api/audiotrack.cc",
@@ -338,8 +308,6 @@ if (enable_webrtc) {
       "../webrtc/api/remoteaudiosource.h",
       "../webrtc/api/remoteaudiotrack.cc",
       "../webrtc/api/remoteaudiotrack.h",
-      "../webrtc/api/remotevideocapturer.cc",
-      "../webrtc/api/remotevideocapturer.h",
       "../webrtc/api/rtpreceiver.cc",
       "../webrtc/api/rtpreceiver.h",
       "../webrtc/api/rtpreceiverinterface.h",
@@ -354,14 +322,13 @@ if (enable_webrtc) {
       "../webrtc/api/statstypes.h",
       "../webrtc/api/streamcollection.h",
       "../webrtc/api/umametrics.h",
-      "../webrtc/api/videosource.cc",
-      "../webrtc/api/videosource.h",
-      "../webrtc/api/videosourceinterface.h",
+      "../webrtc/api/videocapturertracksource.cc",
+      "../webrtc/api/videocapturertracksource.h",
       "../webrtc/api/videosourceproxy.h",
       "../webrtc/api/videotrack.cc",
       "../webrtc/api/videotrack.h",
-      "../webrtc/api/videotrackrenderers.cc",
-      "../webrtc/api/videotrackrenderers.h",
+      "../webrtc/api/videotracksource.cc",
+      "../webrtc/api/videotracksource.h",
       "../webrtc/api/webrtcsdp.cc",
       "../webrtc/api/webrtcsdp.h",
       "../webrtc/api/webrtcsession.cc",
@@ -369,17 +336,13 @@ if (enable_webrtc) {
       "../webrtc/api/webrtcsessiondescriptionfactory.cc",
       "../webrtc/api/webrtcsessiondescriptionfactory.h",
       "../webrtc/media/base/audiorenderer.h",
-      "../webrtc/media/base/capturemanager.cc",
-      "../webrtc/media/base/capturemanager.h",
-      "../webrtc/media/base/capturerenderadapter.cc",
-      "../webrtc/media/base/capturerenderadapter.h",
       "../webrtc/media/base/codec.cc",
       "../webrtc/media/base/codec.h",
-      "../webrtc/media/base/constants.cc",
-      "../webrtc/media/base/constants.h",
       "../webrtc/media/base/cryptoparams.h",
       "../webrtc/media/base/hybriddataengine.h",
       "../webrtc/media/base/mediachannel.h",
+      "../webrtc/media/base/mediaconstants.cc",
+      "../webrtc/media/base/mediaconstants.h",
       "../webrtc/media/base/mediaengine.cc",
       "../webrtc/media/base/mediaengine.h",
       "../webrtc/media/base/rtpdataengine.cc",
@@ -404,14 +367,22 @@ if (enable_webrtc) {
       "../webrtc/media/base/videoframe.h",
       "../webrtc/media/base/videoframefactory.cc",
       "../webrtc/media/base/videoframefactory.h",
-      "../webrtc/media/devices/dummydevicemanager.cc",
-      "../webrtc/media/devices/dummydevicemanager.h",
+      "../webrtc/media/base/videosourcebase.cc",
+      "../webrtc/media/base/videosourcebase.h",
+      "../webrtc/media/engine/simulcast.cc",
+      "../webrtc/media/engine/simulcast.h",
       "../webrtc/media/engine/webrtccommon.h",
+      "../webrtc/media/engine/webrtcmediaengine.cc",
+      "../webrtc/media/engine/webrtcmediaengine.h",
+      "../webrtc/media/engine/webrtcvideoengine2.cc",
+      "../webrtc/media/engine/webrtcvideoengine2.h",
       "../webrtc/media/engine/webrtcvideoframe.cc",
       "../webrtc/media/engine/webrtcvideoframe.h",
       "../webrtc/media/engine/webrtcvideoframefactory.cc",
       "../webrtc/media/engine/webrtcvideoframefactory.h",
       "../webrtc/media/engine/webrtcvoe.h",
+      "../webrtc/media/engine/webrtcvoiceengine.cc",
+      "../webrtc/media/engine/webrtcvoiceengine.h",
       "../webrtc/pc/audiomonitor.cc",
       "../webrtc/pc/audiomonitor.h",
       "../webrtc/pc/bundlefilter.cc",
@@ -445,9 +416,12 @@ if (enable_webrtc) {
     deps = [
       ":libjingle",
       "//third_party/libsrtp",
+      "//third_party/webrtc",
       "//third_party/webrtc/modules/media_file",
       "//third_party/webrtc/modules/video_capture",
       "//third_party/webrtc/modules/video_render",
+      "//third_party/webrtc/system_wrappers",
+      "//third_party/webrtc/voice_engine",
     ]
 
     if (!is_ios) {
@@ -459,35 +433,6 @@ if (enable_webrtc) {
       defines = [ "HAVE_SCTP" ]
       deps += [ "//third_party/usrsctp" ]
     }
-  }
-
-  # Note: this does not support the shared library build of libpeerconnection
-  # as is supported in the GYP build. It's not clear what this is used for.
-  source_set("libpeerconnection") {
-    sources = [
-      "../webrtc/media/engine/simulcast.cc",
-      "../webrtc/media/engine/simulcast.h",
-      "../webrtc/media/engine/webrtcmediaengine.cc",
-      "../webrtc/media/engine/webrtcmediaengine.h",
-      "../webrtc/media/engine/webrtcvideoengine2.cc",
-      "../webrtc/media/engine/webrtcvideoengine2.h",
-      "../webrtc/media/engine/webrtcvoiceengine.cc",
-      "../webrtc/media/engine/webrtcvoiceengine.h",
-    ]
-
-    configs += [ ":jingle_unexported_configs" ]
-    public_configs = [ ":jingle_public_configs" ]
-    configs -= [ "//build/config/compiler:chromium_code" ]
-    configs += [ "//build/config/compiler:no_chromium_code" ]
-
-    deps = [
-      # TODO(GYP): crbug.com/481633. Consider depending on :libjingle_webrtc
-      # instead.
-      ":libjingle_webrtc_common",
-      "//third_party/webrtc",
-      "//third_party/webrtc/system_wrappers",
-      "//third_party/webrtc/voice_engine",
-    ]
   }
 
   source_set("libstunprober") {

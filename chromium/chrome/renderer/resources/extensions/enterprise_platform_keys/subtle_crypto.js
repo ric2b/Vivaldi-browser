@@ -6,7 +6,6 @@ var utils = require('utils');
 var internalAPI = require('enterprise.platformKeys.internalAPI');
 var intersect = require('platformKeys.utils').intersect;
 var subtleCryptoModule = require('platformKeys.SubtleCrypto');
-var SubtleCrypto = subtleCryptoModule.SubtleCrypto;
 var SubtleCryptoImpl = subtleCryptoModule.SubtleCryptoImpl;
 var KeyPair = require('enterprise.platformKeys.KeyPair').KeyPair;
 var KeyUsage = require('platformKeys.Key').KeyUsage;
@@ -17,7 +16,7 @@ var normalizeAlgorithm =
 // This error is thrown by the internal and public API's token functions and
 // must be rethrown by this custom binding. Keep this in sync with the C++ part
 // of this API.
-var errorInvalidToken = "The token is not valid.";
+var errorInvalidToken = 'The token is not valid.';
 
 // The following errors are specified in WebCrypto.
 // TODO(pneubeck): These should be DOMExceptions.
@@ -77,12 +76,12 @@ function equalsStandardPublicExponent(array) {
  * @param {string} tokenId The id of the backing Token.
  * @constructor
  */
-var EnterpriseSubtleCryptoImpl = function(tokenId) {
-  SubtleCryptoImpl.call(this, tokenId);
-};
+function EnterpriseSubtleCryptoImpl(tokenId) {
+  $Function.call(SubtleCryptoImpl, this, tokenId);
+}
 
 EnterpriseSubtleCryptoImpl.prototype =
-    Object.create(SubtleCryptoImpl.prototype);
+    $Object.create(SubtleCryptoImpl.prototype);
 
 EnterpriseSubtleCryptoImpl.prototype.generateKey =
     function(algorithm, extractable, keyUsages) {
@@ -133,11 +132,15 @@ EnterpriseSubtleCryptoImpl.prototype.generateKey =
   });
 };
 
-exports.SubtleCrypto =
-    utils.expose('SubtleCrypto',
-                 EnterpriseSubtleCryptoImpl,
-                 {
-                   superclass: SubtleCrypto,
-                   functions: ['generateKey']
-                   // ['sign', 'exportKey'] are exposed by the base class
-                 });
+function SubtleCrypto() {
+  privates(SubtleCrypto).constructPrivate(this, arguments);
+}
+utils.expose(SubtleCrypto, EnterpriseSubtleCryptoImpl, {
+  superclass: subtleCryptoModule.SubtleCrypto,
+  functions: [
+    'generateKey',
+    // 'sign', 'exportKey' are exposed by the base class
+  ],
+});
+
+exports.$set('SubtleCrypto', SubtleCrypto);

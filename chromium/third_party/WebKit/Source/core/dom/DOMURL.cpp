@@ -30,23 +30,37 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/URLSearchParams.h"
 #include "core/fetch/MemoryCache.h"
 #include "core/fileapi/Blob.h"
+#include "core/frame/Deprecation.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/PublicURLManager.h"
 #include "platform/blob/BlobURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "wtf/MainThread.h"
+#include "wtf/TemporaryChange.h"
 
 namespace blink {
 
 DOMURL::DOMURL(const String& url, const KURL& base, ExceptionState& exceptionState)
 {
-    if (!base.isValid())
+    if (!base.isValid()) {
         exceptionState.throwTypeError("Invalid base URL");
+        return;
+    }
 
     m_url = KURL(base, url);
     if (!m_url.isValid())
         exceptionState.throwTypeError("Invalid URL");
+}
+
+DOMURL::~DOMURL()
+{
+}
+
+DEFINE_TRACE(DOMURL)
+{
+    visitor->trace(m_searchParams);
 }
 
 void DOMURL::setInput(const String& value)
@@ -59,13 +73,27 @@ void DOMURL::setInput(const String& value)
         m_url = KURL();
         m_input = value;
     }
+    update();
+}
+
+void DOMURL::setSearch(const String& value)
+{
+    DOMURLUtils::setSearch(value);
+    if (!value.isEmpty() && value[0] == '?')
+        updateSearchParams(value.substring(1));
+    else
+        updateSearchParams(value);
 }
 
 String DOMURL::createObjectURL(ExecutionContext* executionContext, Blob* blob, ExceptionState& exceptionState)
 {
-    ASSERT(blob);
+    DCHECK(blob);
     if (!executionContext)
         return String();
+
+    if (executionContext->isServiceWorkerGlobalScope())
+        Deprecation::countDeprecation(executionContext, UseCounter::URLMethodCreateObjectURLServiceWorker);
+
     if (blob->hasBeenClosed()) {
         exceptionState.throwDOMException(InvalidStateError, String(blob->isFile() ? "File" : "Blob") + " has been closed.");
         return String();
@@ -75,19 +103,22 @@ String DOMURL::createObjectURL(ExecutionContext* executionContext, Blob* blob, E
 
 String DOMURL::createPublicURL(ExecutionContext* executionContext, URLRegistrable* registrable, const String& uuid)
 {
-    KURL publicURL = BlobURL::createPublicURL(executionContext->securityOrigin());
+    KURL publicURL = BlobURL::createPublicURL(executionContext->getSecurityOrigin());
     if (publicURL.isEmpty())
         return String();
 
-    executionContext->publicURLManager().registerURL(executionContext->securityOrigin(), publicURL, registrable, uuid);
+    executionContext->publicURLManager().registerURL(executionContext->getSecurityOrigin(), publicURL, registrable, uuid);
 
-    return publicURL.string();
+    return publicURL.getString();
 }
 
 void DOMURL::revokeObjectURL(ExecutionContext* executionContext, const String& urlString)
 {
     if (!executionContext)
         return;
+
+    if (executionContext->isServiceWorkerGlobalScope())
+        Deprecation::countDeprecation(executionContext, UseCounter::URLMethodRevokeObjectURLServiceWorker);
 
     KURL url(KURL(), urlString);
     executionContext->removeURLFromMemoryCache(url);
@@ -100,6 +131,29 @@ void DOMURL::revokeObjectUUID(ExecutionContext* executionContext, const String& 
         return;
 
     executionContext->publicURLManager().revoke(uuid);
+}
+
+URLSearchParams* DOMURL::searchParams()
+{
+    if (!m_searchParams)
+        m_searchParams = URLSearchParams::create(url().query(), this);
+
+    return m_searchParams;
+}
+
+void DOMURL::update()
+{
+    updateSearchParams(url().query());
+}
+
+void DOMURL::updateSearchParams(const String& queryString)
+{
+    if (!m_searchParams)
+        return;
+
+    TemporaryChange<bool> scope(m_isInUpdate, true);
+    ASSERT(m_searchParams->urlObject() == this);
+    m_searchParams->setInput(queryString);
 }
 
 } // namespace blink

@@ -7,8 +7,9 @@
 
 #import <Foundation/Foundation.h>
 
+#include <memory>
+
 #include "base/mac/scoped_nsobject.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "ios/web/navigation/navigation_item_facade_delegate.h"
 #include "ios/web/public/favicon_status.h"
@@ -36,7 +37,7 @@ class NavigationItemImpl : public web::NavigationItem {
   // NOTE: to minimize facade synchronization code, NavigationItems take
   // ownership of their facade delegates.
   void SetFacadeDelegate(
-      scoped_ptr<NavigationItemFacadeDelegate> facade_delegate);
+      std::unique_ptr<NavigationItemFacadeDelegate> facade_delegate);
   NavigationItemFacadeDelegate* GetFacadeDelegate() const;
 
   // NavigationItem implementation:
@@ -51,8 +52,7 @@ class NavigationItemImpl : public web::NavigationItem {
   const base::string16& GetTitle() const override;
   void SetPageDisplayState(const PageDisplayState& display_state) override;
   const PageDisplayState& GetPageDisplayState() const override;
-  const base::string16& GetTitleForDisplay(
-      const std::string& languages) const override;
+  const base::string16& GetTitleForDisplay() const override;
   void SetTransitionType(ui::PageTransition transition_type) override;
   ui::PageTransition GetTransitionType() const override;
   const FaviconStatus& GetFavicon() const override;
@@ -139,7 +139,7 @@ class NavigationItemImpl : public web::NavigationItem {
   mutable base::string16 cached_display_title_;
 
   // Weak pointer to the facade delegate.
-  scoped_ptr<NavigationItemFacadeDelegate> facade_delegate_;
+  std::unique_ptr<NavigationItemFacadeDelegate> facade_delegate_;
 
   // Copy and assignment is explicitly allowed for this class.
 };

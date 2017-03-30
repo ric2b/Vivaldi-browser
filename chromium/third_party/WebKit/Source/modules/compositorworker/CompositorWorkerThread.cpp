@@ -72,7 +72,7 @@ public:
         --m_workerCount;
         if (m_workerCount == 0) {
             m_thread->shutdown();
-            Platform::current()->mainThread()->taskRunner()->postTask(
+            Platform::current()->mainThread()->getWebTaskRunner()->postTask(
                 BLINK_FROM_HERE, threadSafeBind(destroyThread, AllowCrossThreadAccess(m_thread.leakPtr())));
         }
     }
@@ -108,7 +108,7 @@ public:
     void terminateV8Execution()
     {
         MutexLocker lock(m_mutex);
-        ASSERT(isMainThread());
+        ASSERT(isMainThread() || m_thread->isCurrentThread());
         if (m_workerCount > 1)
             return;
 
@@ -137,11 +137,11 @@ private:
 
 } // namespace
 
-PassRefPtr<CompositorWorkerThread> CompositorWorkerThread::create(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, WorkerObjectProxy& workerObjectProxy, double timeOrigin)
+PassOwnPtr<CompositorWorkerThread> CompositorWorkerThread::create(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, WorkerObjectProxy& workerObjectProxy, double timeOrigin)
 {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("compositor-worker"), "CompositorWorkerThread::create");
     ASSERT(isMainThread());
-    return adoptRef(new CompositorWorkerThread(workerLoaderProxy, workerObjectProxy, timeOrigin));
+    return adoptPtr(new CompositorWorkerThread(workerLoaderProxy, workerObjectProxy, timeOrigin));
 }
 
 CompositorWorkerThread::CompositorWorkerThread(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, WorkerObjectProxy& workerObjectProxy, double timeOrigin)
@@ -160,7 +160,7 @@ WebThreadSupportingGC* CompositorWorkerThread::sharedBackingThread()
     return CompositorWorkerSharedState::instance().compositorWorkerThread();
 }
 
-PassRefPtrWillBeRawPtr<WorkerGlobalScope> CompositorWorkerThread::createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData> startupData)
+WorkerGlobalScope*CompositorWorkerThread::createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData> startupData)
 {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("compositor-worker"), "CompositorWorkerThread::createWorkerGlobalScope");
     return CompositorWorkerGlobalScope::create(this, startupData, m_timeOrigin);

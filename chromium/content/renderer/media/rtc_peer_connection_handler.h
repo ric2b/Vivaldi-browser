@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
@@ -26,6 +27,7 @@
 
 namespace blink {
 class WebFrame;
+class WebRTCAnswerOptions;
 class WebRTCDataChannelHandler;
 class WebRTCOfferOptions;
 class WebRTCPeerConnectionHandlerClient;
@@ -37,7 +39,6 @@ class PeerConnectionDependencyFactory;
 class PeerConnectionTracker;
 class RemoteMediaStreamImpl;
 class RtcDataChannelHandler;
-class RTCMediaConstraints;
 class WebRtcMediaStreamAdapter;
 
 // Mockable wrapper for blink::WebRTCStatsResponse
@@ -100,10 +101,6 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
   // Destroy all existing RTCPeerConnectionHandler objects.
   static void DestructAllHandlers();
 
-  static void ConvertOfferOptionsToConstraints(
-      const blink::WebRTCOfferOptions& options,
-      RTCMediaConstraints* output);
-
   void associateWithFrame(blink::WebFrame* frame);
 
   // Initialize method only used for unit test.
@@ -123,6 +120,8 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
 
   void createAnswer(const blink::WebRTCSessionDescriptionRequest& request,
                     const blink::WebMediaConstraints& options) override;
+  void createAnswer(const blink::WebRTCSessionDescriptionRequest& request,
+                    const blink::WebRTCAnswerOptions& options) override;
 
   void setLocalDescription(
       const blink::WebRTCVoidRequest& request,
@@ -134,8 +133,8 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
   blink::WebRTCSessionDescription localDescription() override;
   blink::WebRTCSessionDescription remoteDescription() override;
 
-  bool updateICE(const blink::WebRTCConfiguration& server_configuration,
-                 const blink::WebMediaConstraints& options) override;
+  bool updateICE(
+      const blink::WebRTCConfiguration& server_configuration) override;
   bool addICECandidate(const blink::WebRTCICECandidate& candidate) override;
   bool addICECandidate(const blink::WebRTCVoidRequest& request,
                        const blink::WebRTCICECandidate& candidate) override;
@@ -182,10 +181,10 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
   void OnIceGatheringChange(
       webrtc::PeerConnectionInterface::IceGatheringState new_state);
   void OnRenegotiationNeeded();
-  void OnAddStream(scoped_ptr<RemoteMediaStreamImpl> stream);
+  void OnAddStream(std::unique_ptr<RemoteMediaStreamImpl> stream);
   void OnRemoveStream(
       const scoped_refptr<webrtc::MediaStreamInterface>& stream);
-  void OnDataChannel(scoped_ptr<RtcDataChannelHandler> handler);
+  void OnDataChannel(std::unique_ptr<RtcDataChannelHandler> handler);
   void OnIceCandidate(const std::string& sdp, const std::string& sdp_mid,
       int sdp_mline_index, int component, int address_family);
 
@@ -266,8 +265,8 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
   // remote side to record UMA stats once both are set.  We only check
   // for the first offer or answer.  "pranswer"s and "unknown"s (from
   // unit tests) are ignored.
-  scoped_ptr<FirstSessionDescription> first_local_description_;
-  scoped_ptr<FirstSessionDescription> first_remote_description_;
+  std::unique_ptr<FirstSessionDescription> first_local_description_;
+  std::unique_ptr<FirstSessionDescription> first_remote_description_;
 
   typedef std::map<webrtc::MediaStreamInterface*,
       content::RemoteMediaStreamImpl*> RemoteStreamMap;

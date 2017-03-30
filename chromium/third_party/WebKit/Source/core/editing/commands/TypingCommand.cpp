@@ -39,6 +39,7 @@
 #include "core/editing/commands/InsertParagraphSeparatorCommand.h"
 #include "core/editing/commands/InsertTextCommand.h"
 #include "core/editing/spellcheck/SpellChecker.h"
+#include "core/events/BeforeTextInsertedEvent.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/layout/LayoutObject.h"
@@ -47,41 +48,8 @@ namespace blink {
 
 using namespace HTMLNames;
 
-class TypingCommandLineOperation {
-    STACK_ALLOCATED();
-public:
-    TypingCommandLineOperation(TypingCommand* typingCommand, bool selectInsertedText, const String& text)
-    : m_typingCommand(typingCommand)
-    , m_selectInsertedText(selectInsertedText)
-    , m_text(text)
-    { }
-
-    void operator()(size_t lineOffset, size_t lineLength, bool isLastLine, EditingState* editingState) const
-    {
-        if (isLastLine) {
-            if (!lineOffset || lineLength > 0) {
-                m_typingCommand->insertTextRunWithoutNewlines(m_text.substring(lineOffset, lineLength), m_selectInsertedText, editingState);
-                if (editingState->isAborted())
-                    return;
-            }
-        } else {
-            if (lineLength > 0) {
-                m_typingCommand->insertTextRunWithoutNewlines(m_text.substring(lineOffset, lineLength), false, editingState);
-                if (editingState->isAborted())
-                    return;
-            }
-            m_typingCommand->insertParagraphSeparator(editingState);
-        }
-    }
-
-private:
-    RawPtrWillBeMember<TypingCommand> m_typingCommand;
-    bool m_selectInsertedText;
-    const String& m_text;
-};
-
 TypingCommand::TypingCommand(Document& document, ETypingCommand commandType, const String &textToInsert, Options options, TextGranularity granularity, TextCompositionType compositionType)
-    : TextInsertionBaseCommand(document)
+    : CompositeEditCommand(document)
     , m_commandType(commandType)
     , m_textToInsert(textToInsert)
     , m_openForMoreTyping(true)
@@ -105,7 +73,7 @@ void TypingCommand::deleteSelection(Document& document, Options options)
     if (!frame->selection().isRange())
         return;
 
-    if (RefPtrWillBeRawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(frame)) {
+    if (RawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(frame)) {
         updateSelectionIfDifferentFromCurrentSelection(lastTypingCommand.get(), frame);
 
         lastTypingCommand->setShouldPreventSpellChecking(options & PreventSpellChecking);
@@ -122,7 +90,7 @@ void TypingCommand::deleteKeyPressed(Document& document, Options options, TextGr
 {
     if (granularity == CharacterGranularity) {
         LocalFrame* frame = document.frame();
-        if (RefPtrWillBeRawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(frame)) {
+        if (RawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(frame)) {
             // If the last typing command is not Delete, open a new typing command.
             // We need to group continuous delete commands alone in a single typing command.
             if (lastTypingCommand->commandTypeOfOpenCommand() == DeleteKey) {
@@ -143,7 +111,7 @@ void TypingCommand::forwardDeleteKeyPressed(Document& document, EditingState* ed
     // FIXME: Forward delete in TextEdit appears to open and close a new typing command.
     if (granularity == CharacterGranularity) {
         LocalFrame* frame = document.frame();
-        if (RefPtrWillBeRawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(frame)) {
+        if (RawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(frame)) {
             updateSelectionIfDifferentFromCurrentSelection(lastTypingCommand.get(), frame);
             lastTypingCommand->setShouldPreventSpellChecking(options & PreventSpellChecking);
             lastTypingCommand->forwardDeleteKeyPressed(granularity, options & KillRing, editingState);
@@ -165,6 +133,23 @@ void TypingCommand::updateSelectionIfDifferentFromCurrentSelection(TypingCommand
     typingCommand->setEndingSelection(currentSelection);
 }
 
+static String dispatchBeforeTextInsertedEvent(const String& text, const VisibleSelection& selectionForInsertion, bool insertionIsForUpdatingComposition)
+{
+    if (insertionIsForUpdatingComposition)
+        return text;
+
+    String newText = text;
+    if (Node* startNode = selectionForInsertion.start().computeContainerNode()) {
+        if (startNode->rootEditableElement()) {
+            // Send BeforeTextInsertedEvent. The event handler will update text if necessary.
+            RawPtr<BeforeTextInsertedEvent> evt = BeforeTextInsertedEvent::create(text);
+            startNode->rootEditableElement()->dispatchEvent(evt);
+            newText = evt->text();
+        }
+    }
+    return newText;
+}
+
 void TypingCommand::insertText(Document& document, const String& text, Options options, TextCompositionType composition)
 {
     LocalFrame* frame = document.frame();
@@ -179,7 +164,7 @@ void TypingCommand::insertText(Document& document, const String& text, Options o
 // FIXME: We shouldn't need to take selectionForInsertion. It should be identical to FrameSelection's current selection.
 void TypingCommand::insertText(Document& document, const String& text, const VisibleSelection& selectionForInsertion, Options options, TextCompositionType compositionType)
 {
-    RefPtrWillBeRawPtr<LocalFrame> frame = document.frame();
+    RawPtr<LocalFrame> frame = document.frame();
     ASSERT(frame);
 
     VisibleSelection currentSelection = frame->selection().selection();
@@ -189,7 +174,7 @@ void TypingCommand::insertText(Document& document, const String& text, const Vis
     // Set the starting and ending selection appropriately if we are using a selection
     // that is different from the current selection.  In the future, we should change EditCommand
     // to deal with custom selections in a general way that can be used by all of the commands.
-    if (RefPtrWillBeRawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(frame.get())) {
+    if (RawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(frame.get())) {
         if (!equalSelectionsInDOMTree(lastTypingCommand->endingSelection(), selectionForInsertion)) {
             lastTypingCommand->setStartingSelection(selectionForInsertion);
             lastTypingCommand->setEndingSelection(selectionForInsertion);
@@ -204,13 +189,22 @@ void TypingCommand::insertText(Document& document, const String& text, const Vis
         return;
     }
 
-    RefPtrWillBeRawPtr<TypingCommand> cmd = TypingCommand::create(document, InsertText, newText, options, compositionType);
-    applyTextInsertionCommand(frame.get(), cmd, selectionForInsertion, currentSelection);
+    RawPtr<TypingCommand> command = TypingCommand::create(document, InsertText, newText, options, compositionType);
+    bool changeSelection = !equalSelectionsInDOMTree(selectionForInsertion, currentSelection);
+    if (changeSelection) {
+        command->setStartingSelection(selectionForInsertion);
+        command->setEndingSelection(selectionForInsertion);
+    }
+    command->apply();
+    if (changeSelection) {
+        command->setEndingSelection(currentSelection);
+        frame->selection().setSelection(currentSelection);
+    }
 }
 
 bool TypingCommand::insertLineBreak(Document& document)
 {
-    if (RefPtrWillBeRawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(document.frame())) {
+    if (RawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(document.frame())) {
         lastTypingCommand->setShouldRetainAutocorrectionIndicator(false);
         EditingState editingState;
         lastTypingCommand->insertLineBreak(&editingState);
@@ -222,7 +216,7 @@ bool TypingCommand::insertLineBreak(Document& document)
 
 bool TypingCommand::insertParagraphSeparatorInQuotedContent(Document& document)
 {
-    if (RefPtrWillBeRawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(document.frame())) {
+    if (RawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(document.frame())) {
         EditingState editingState;
         lastTypingCommand->insertParagraphSeparatorInQuotedContent(&editingState);
         return !editingState.isAborted();
@@ -233,7 +227,7 @@ bool TypingCommand::insertParagraphSeparatorInQuotedContent(Document& document)
 
 bool TypingCommand::insertParagraphSeparator(Document& document)
 {
-    if (RefPtrWillBeRawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(document.frame())) {
+    if (RawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(document.frame())) {
         lastTypingCommand->setShouldRetainAutocorrectionIndicator(false);
         EditingState editingState;
         lastTypingCommand->insertParagraphSeparator(&editingState);
@@ -243,11 +237,11 @@ bool TypingCommand::insertParagraphSeparator(Document& document)
     return TypingCommand::create(document, InsertParagraphSeparator, "", 0)->apply();
 }
 
-PassRefPtrWillBeRawPtr<TypingCommand> TypingCommand::lastTypingCommandIfStillOpenForTyping(LocalFrame* frame)
+RawPtr<TypingCommand> TypingCommand::lastTypingCommandIfStillOpenForTyping(LocalFrame* frame)
 {
     ASSERT(frame);
 
-    RefPtrWillBeRawPtr<CompositeEditCommand> lastEditCommand = frame->editor().lastEditCommand();
+    RawPtr<CompositeEditCommand> lastEditCommand = frame->editor().lastEditCommand();
     if (!lastEditCommand || !lastEditCommand->isTypingCommand() || !static_cast<TypingCommand*>(lastEditCommand.get())->isOpenForMoreTyping())
         return nullptr;
 
@@ -256,7 +250,7 @@ PassRefPtrWillBeRawPtr<TypingCommand> TypingCommand::lastTypingCommandIfStillOpe
 
 void TypingCommand::closeTyping(LocalFrame* frame)
 {
-    if (RefPtrWillBeRawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(frame))
+    if (RawPtr<TypingCommand> lastTypingCommand = lastTypingCommandIfStillOpenForTyping(frame))
         lastTypingCommand->closeTyping();
 }
 
@@ -310,6 +304,8 @@ void TypingCommand::markMisspellingsAfterTyping(ETypingCommand commandType)
 
     if (!frame->spellChecker().isContinuousSpellCheckingEnabled())
         return;
+    if (!SpellChecker::isSpellCheckingEnabledFor(endingSelection()))
+        return;
 
     frame->spellChecker().cancelCheck();
 
@@ -349,24 +345,62 @@ void TypingCommand::typingAddedToOpenCommand(ETypingCommand commandTypeForAddedT
 
 void TypingCommand::insertText(const String &text, bool selectInsertedText, EditingState* editingState)
 {
+    if (text.isEmpty()) {
+        insertTextRunWithoutNewlines(text, selectInsertedText, editingState);
+        return;
+    }
     // FIXME: Need to implement selectInsertedText for cases where more than one insert is involved.
     // This requires support from insertTextRunWithoutNewlines and insertParagraphSeparator for extending
     // an existing selection; at the moment they can either put the caret after what's inserted or
     // select what's inserted, but there's no way to "extend selection" to include both an old selection
     // that ends just before where we want to insert text and the newly inserted text.
-    TypingCommandLineOperation operation(this, selectInsertedText, text);
-    forEachLineInString(text, operation, editingState);
+    unsigned offset = 0;
+    size_t newline;
+    while ((newline = text.find('\n', offset)) != kNotFound) {
+        if (newline > offset) {
+            const bool notSelectInsertedText = false;
+            insertTextRunWithoutNewlines(text.substring(offset, newline - offset), notSelectInsertedText, editingState);
+            if (editingState->isAborted())
+                return;
+        }
+
+        insertParagraphSeparator(editingState);
+        if (editingState->isAborted())
+            return;
+
+        offset = newline + 1;
+    }
+
+    if (!offset) {
+        insertTextRunWithoutNewlines(text, selectInsertedText, editingState);
+        return;
+    }
+
+    if (text.length() > offset)
+        insertTextRunWithoutNewlines(text.substring(offset, text.length() - offset), selectInsertedText, editingState);
+
 }
 
 void TypingCommand::insertTextRunWithoutNewlines(const String &text, bool selectInsertedText, EditingState* editingState)
 {
-    RefPtrWillBeRawPtr<InsertTextCommand> command = InsertTextCommand::create(document(), text, selectInsertedText,
+    RawPtr<InsertTextCommand> command = InsertTextCommand::create(document(), text, selectInsertedText,
         m_compositionType == TextCompositionNone ? InsertTextCommand::RebalanceLeadingAndTrailingWhitespaces : InsertTextCommand::RebalanceAllWhitespaces);
 
     applyCommandToComposite(command, endingSelection(), editingState);
     if (editingState->isAborted())
         return;
     typingAddedToOpenCommand(InsertText);
+}
+
+static bool canAppendNewLineFeedToSelection(const VisibleSelection& selection)
+{
+    Element* element = selection.rootEditableElement();
+    if (!element)
+        return false;
+
+    RawPtr<BeforeTextInsertedEvent> event = BeforeTextInsertedEvent::create(String("\n"));
+    element->dispatchEvent(event);
+    return event->text().length();
 }
 
 void TypingCommand::insertLineBreak(EditingState* editingState)
@@ -461,7 +495,7 @@ void TypingCommand::deleteKeyPressed(TextGranularity granularity, bool killRing,
 
         m_smartDelete = false;
 
-        OwnPtrWillBeRawPtr<FrameSelection> selection = FrameSelection::create();
+        RawPtr<FrameSelection> selection = FrameSelection::create();
         selection->setSelection(endingSelection());
         selection->modify(FrameSelection::AlterationExtend, DirectionBackward, granularity);
         if (killRing && selection->isCaret() && granularity != CharacterGranularity)
@@ -571,7 +605,7 @@ void TypingCommand::forwardDeleteKeyPressed(TextGranularity granularity, bool ki
         // Handle delete at beginning-of-block case.
         // Do nothing in the case that the caret is at the start of a
         // root editable element or at the start of a document.
-        OwnPtrWillBeRawPtr<FrameSelection> selection = FrameSelection::create();
+        RawPtr<FrameSelection> selection = FrameSelection::create();
         selection->setSelection(endingSelection());
         selection->modify(FrameSelection::AlterationExtend, DirectionForward, granularity);
         if (killRing && selection->isCaret() && granularity != CharacterGranularity)

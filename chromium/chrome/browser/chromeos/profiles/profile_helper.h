@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_CHROMEOS_PROFILES_PROFILE_HELPER_H_
 #define CHROME_BROWSER_CHROMEOS_PROFILES_PROFILE_HELPER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,8 @@ class MultiUserWindowManagerChromeOSTest;
 }  // namespace ash
 
 namespace chromeos {
+
+class FileFlusher;
 
 // This helper class is used on Chrome OS to keep track of currently
 // active user profile.
@@ -84,11 +87,14 @@ class ProfileHelper
   static bool IsSigninProfile(const Profile* profile);
 
   // Returns true when |profile| corresponds to owner's profile.
-  static bool IsOwnerProfile(Profile* profile);
+  static bool IsOwnerProfile(const Profile* profile);
 
   // Returns true when |profile| corresponds to the primary user profile
   // of the current session.
   static bool IsPrimaryProfile(const Profile* profile);
+
+  // Returns true when |profile| is for an ephemeral user.
+  static bool IsEphemeralUserProfile(const Profile* profile);
 
   // Initialize a bunch of services that are tied to a browser profile.
   // TODO(dzhioev): Investigate whether or not this method is needed.
@@ -128,6 +134,9 @@ class ProfileHelper
 
   static std::string GetUserIdHashByUserIdForTesting(
       const std::string& user_id);
+
+  // Flushes all files of |profile|.
+  void FlushProfile(Profile* profile);
 
  private:
   // TODO(nkostylev): Create a test API class that will be the only one allowed
@@ -205,6 +214,8 @@ class ProfileHelper
   // If true and enable_profile_to_user_testing is true then primary user will
   // always be returned by GetUserByProfile().
   static bool always_return_primary_user_for_testing;
+
+  std::unique_ptr<FileFlusher> profile_flusher_;
 
   base::WeakPtrFactory<ProfileHelper> weak_factory_;
 

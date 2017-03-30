@@ -105,7 +105,7 @@ void PassThroughDecoderImpl<StreamType>::Decode(
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(IsValidConfig(config_));
 
-  typename DecoderType::Status status = DecoderType::kOk;
+  typename media::DecodeStatus status = media::DecodeStatus::OK;
 
   if (!buffer->end_of_stream()) {
     scoped_refptr<OutputType> output;
@@ -117,7 +117,7 @@ void PassThroughDecoderImpl<StreamType>::Decode(
     if (output)
       task_runner_->PostTask(FROM_HERE, base::Bind(output_cb_, output));
     else
-      status = DecoderType::kDecodeError;
+      status = media::DecodeStatus::DECODE_ERROR;
   }
 
   task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));

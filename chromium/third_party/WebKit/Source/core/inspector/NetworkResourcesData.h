@@ -51,11 +51,11 @@ class SharedBuffer;
 class TextResourceDecoder;
 
 class XHRReplayData final
-    : public RefCountedWillBeGarbageCollectedFinalized<XHRReplayData>
+    : public GarbageCollectedFinalized<XHRReplayData>
     , public ContextLifecycleObserver {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(XHRReplayData);
+    USING_GARBAGE_COLLECTED_MIXIN(XHRReplayData);
 public:
-    static PassRefPtrWillBeRawPtr<XHRReplayData> create(ExecutionContext*, const AtomicString& method, const KURL&, bool async, PassRefPtr<EncodedFormData>, bool includeCredentials);
+    static RawPtr<XHRReplayData> create(ExecutionContext*, const AtomicString& method, const KURL&, bool async, PassRefPtr<EncodedFormData>, bool includeCredentials);
 
     void addHeader(const AtomicString& key, const AtomicString& value);
     const AtomicString& method() const { return m_method; }
@@ -78,14 +78,12 @@ private:
     bool m_includeCredentials;
 };
 
-class NetworkResourcesData final : public NoBaseWillBeGarbageCollectedFinalized<NetworkResourcesData> {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(NetworkResourcesData);
+class NetworkResourcesData final : public GarbageCollectedFinalized<NetworkResourcesData> {
 public:
-    class ResourceData final : public NoBaseWillBeGarbageCollectedFinalized<ResourceData> {
-        USING_FAST_MALLOC_WILL_BE_REMOVED(ResourceData);
+    class ResourceData final : public GarbageCollectedFinalized<ResourceData> {
         friend class NetworkResourcesData;
     public:
-        ResourceData(const String& requestId, const String& loaderId);
+        ResourceData(const String& requestId, const String& loaderId, const KURL&);
 
         String requestId() const { return m_requestId; }
         String loaderId() const { return m_loaderId; }
@@ -93,8 +91,7 @@ public:
         String frameId() const { return m_frameId; }
         void setFrameId(const String& frameId) { m_frameId = frameId; }
 
-        KURL url() const { return m_url; }
-        void setUrl(const KURL& url) { m_url = url; }
+        KURL requestedURL() const { return m_requestedURL; }
 
         bool hasContent() const { return !m_content.isNull(); }
         String content() const { return m_content; }
@@ -143,9 +140,9 @@ public:
         String m_requestId;
         String m_loaderId;
         String m_frameId;
-        KURL m_url;
+        KURL m_requestedURL;
         String m_content;
-        RefPtrWillBeMember<XHRReplayData> m_xhrReplayData;
+        Member<XHRReplayData> m_xhrReplayData;
         bool m_base64Encoded;
         RefPtr<SharedBuffer> m_dataBuffer;
         bool m_isContentEvicted;
@@ -157,17 +154,17 @@ public:
         OwnPtr<TextResourceDecoder> m_decoder;
 
         RefPtr<SharedBuffer> m_buffer;
-        RefPtrWillBeMember<Resource> m_cachedResource;
+        Member<Resource> m_cachedResource;
         RefPtr<BlobDataHandle> m_downloadedFileBlob;
     };
 
-    static PassOwnPtrWillBeRawPtr<NetworkResourcesData> create()
+    static RawPtr<NetworkResourcesData> create(size_t totalBufferSize, size_t resourceBufferSize)
     {
-        return adoptPtrWillBeNoop(new NetworkResourcesData);
+        return new NetworkResourcesData(totalBufferSize, resourceBufferSize);
     }
     ~NetworkResourcesData();
 
-    void resourceCreated(const String& requestId, const String& loaderId);
+    void resourceCreated(const String& requestId, const String& loaderId, const KURL&);
     void responseReceived(const String& requestId, const String& frameId, const ResourceResponse&);
     void setResourceType(const String& requestId, InspectorPageAgent::ResourceType);
     InspectorPageAgent::ResourceType resourceType(const String& requestId);
@@ -182,11 +179,11 @@ public:
     void setResourcesDataSizeLimits(size_t maximumResourcesContentSize, size_t maximumSingleResourceContentSize);
     void setXHRReplayData(const String& requestId, XHRReplayData*);
     XHRReplayData* xhrReplayData(const String& requestId);
-    WillBeHeapVector<RawPtrWillBeMember<ResourceData>> resources();
+    HeapVector<Member<ResourceData>> resources();
 
     DECLARE_TRACE();
 private:
-    NetworkResourcesData();
+    NetworkResourcesData(size_t totalBufferSize, size_t resourceBufferSize);
 
     ResourceData* resourceDataForRequestId(const String& requestId);
     void ensureNoDataForRequestId(const String& requestId);
@@ -196,7 +193,7 @@ private:
 
     typedef HashMap<String, String> ReusedRequestIds;
     ReusedRequestIds m_reusedXHRReplayDataRequestIds;
-    typedef WillBeHeapHashMap<String, RawPtrWillBeMember<ResourceData>> ResourceDataMap;
+    typedef HeapHashMap<String, Member<ResourceData>> ResourceDataMap;
     ResourceDataMap m_requestIdToResourceDataMap;
     size_t m_contentSize;
     size_t m_maximumResourcesContentSize;

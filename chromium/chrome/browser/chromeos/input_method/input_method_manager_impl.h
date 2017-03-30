@@ -8,15 +8,16 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
 #include "chrome/browser/chromeos/input_method/candidate_window_controller.h"
 #include "chrome/browser/chromeos/input_method/input_method_util.h"
+#include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
 #include "chrome/browser/profiles/profile.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/chromeos/input_method_whitelist.h"
@@ -36,7 +37,8 @@ class ImeKeyboard;
 
 // The implementation of InputMethodManager.
 class InputMethodManagerImpl : public InputMethodManager,
-                               public CandidateWindowController::Observer {
+                               public CandidateWindowController::Observer,
+                               public UserAddingScreen::Observer {
  public:
   class StateImpl : public InputMethodManager::State {
    public:
@@ -93,7 +95,8 @@ class InputMethodManagerImpl : public InputMethodManager,
         const std::vector<std::string>& initial_layouts) override;
     void EnableLockScreenLayouts() override;
     void GetInputMethodExtensions(InputMethodDescriptors* result) override;
-    scoped_ptr<InputMethodDescriptors> GetActiveInputMethods() const override;
+    std::unique_ptr<InputMethodDescriptors> GetActiveInputMethods()
+        const override;
     const std::vector<std::string>& GetActiveInputMethodIds() const override;
     const InputMethodDescriptor* GetInputMethodFromId(
         const std::string& input_method_id) const override;
@@ -141,7 +144,7 @@ class InputMethodManagerImpl : public InputMethodManager,
   // Constructs an InputMethodManager instance. The client is responsible for
   // calling |SetUISessionState| in response to relevant changes in browser
   // state.
-  InputMethodManagerImpl(scoped_ptr<InputMethodDelegate> delegate,
+  InputMethodManagerImpl(std::unique_ptr<InputMethodDelegate> delegate,
                          bool enable_extension_loading);
   ~InputMethodManagerImpl() override;
 
@@ -160,10 +163,18 @@ class InputMethodManagerImpl : public InputMethodManager,
       InputMethodManager::CandidateWindowObserver* observer) override;
   void RemoveImeMenuObserver(
       InputMethodManager::ImeMenuObserver* observer) override;
-  scoped_ptr<InputMethodDescriptors> GetSupportedInputMethods() const override;
+  std::unique_ptr<InputMethodDescriptors> GetSupportedInputMethods()
+      const override;
   void ActivateInputMethodMenuItem(const std::string& key) override;
   bool IsISOLevel5ShiftUsedByCurrentInputMethod() const override;
   bool IsAltGrUsedByCurrentInputMethod() const override;
+  void NotifyImeMenuItemsChanged(
+      const std::string& engine_id,
+      const std::vector<InputMethodManager::MenuItem>& items) override;
+
+  // chromeos::UserAddingScreen:
+  void OnUserAddingStarted() override;
+  void OnUserAddingFinished() override;
 
   ImeKeyboard* GetImeKeyboard() override;
   InputMethodUtil* GetInputMethodUtil() override;
@@ -187,7 +198,7 @@ class InputMethodManagerImpl : public InputMethodManager,
   void SetImeKeyboardForTesting(ImeKeyboard* keyboard);
   // Initialize |component_extension_manager_|.
   void InitializeComponentExtensionForTesting(
-      scoped_ptr<ComponentExtensionIMEManagerDelegate> delegate);
+      std::unique_ptr<ComponentExtensionIMEManagerDelegate> delegate);
 
  private:
   friend class InputMethodManagerImplTest;
@@ -242,7 +253,7 @@ class InputMethodManagerImpl : public InputMethodManager,
   // changed.
   void NotifyImeMenuListChanged();
 
-  scoped_ptr<InputMethodDelegate> delegate_;
+  std::unique_ptr<InputMethodDelegate> delegate_;
 
   // The current UI session status.
   UISessionState ui_session_;
@@ -256,22 +267,25 @@ class InputMethodManagerImpl : public InputMethodManager,
 
   // The candidate window.  This will be deleted when the APP_TERMINATING
   // message is sent.
-  scoped_ptr<CandidateWindowController> candidate_window_controller_;
+  std::unique_ptr<CandidateWindowController> candidate_window_controller_;
 
   // An object which provides miscellaneous input method utility functions. Note
   // that |util_| is required to initialize |keyboard_|.
   InputMethodUtil util_;
 
   // An object which provides component extension ime management functions.
-  scoped_ptr<ComponentExtensionIMEManager> component_extension_ime_manager_;
+  std::unique_ptr<ComponentExtensionIMEManager>
+      component_extension_ime_manager_;
 
   // An object for switching XKB layouts and keyboard status like caps lock and
   // auto-repeat interval.
-  scoped_ptr<ImeKeyboard> keyboard_;
-
+  std::unique_ptr<ImeKeyboard> keyboard_;
 
   // Whether load IME extensions.
   bool enable_extension_loading_;
+
+  // Whether the expanded IME menu is activated.
+  bool is_ime_menu_activated_;
 
   // The engine map from extension_id to an engine.
   typedef std::map<std::string, ui::IMEEngineHandlerInterface*> EngineMap;

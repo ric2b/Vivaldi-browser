@@ -12,10 +12,11 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/free_deleter.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -86,7 +87,7 @@ void OverflowTestsSoftExpectTrue(bool overflow_detected) {
   }
 }
 
-#if defined(OS_IOS) || defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_IOS) || defined(OS_WIN) || defined(OS_LINUX)
 #define MAYBE_NewOverflow DISABLED_NewOverflow
 #else
 #define MAYBE_NewOverflow NewOverflow
@@ -94,7 +95,6 @@ void OverflowTestsSoftExpectTrue(bool overflow_detected) {
 // Test array[TooBig][X] and array[X][TooBig] allocations for int overflows.
 // IOS doesn't honor nothrow, so disable the test there.
 // Crashes on Windows Dbg builds, disable there as well.
-// Fails on Mac 10.8 http://crbug.com/227092
 // Disabled on Linux because failing Linux Valgrind bot, and Valgrind exclusions
 // are not currently read. See http://crbug.com/582398
 TEST(SecurityTest, MAYBE_NewOverflow) {
@@ -109,8 +109,8 @@ TEST(SecurityTest, MAYBE_NewOverflow) {
   const size_t kArraySize2 = kMaxSizeT / kArraySize + 10;
   const size_t kDynamicArraySize2 = HideValueFromCompiler(kArraySize2);
   {
-    scoped_ptr<char[][kArraySize]> array_pointer(new (nothrow)
-        char[kDynamicArraySize2][kArraySize]);
+    std::unique_ptr<char[][kArraySize]> array_pointer(
+        new (nothrow) char[kDynamicArraySize2][kArraySize]);
     OverflowTestsSoftExpectTrue(!array_pointer);
   }
   // On windows, the compiler prevents static array sizes of more than
@@ -119,8 +119,8 @@ TEST(SecurityTest, MAYBE_NewOverflow) {
   ALLOW_UNUSED_LOCAL(kDynamicArraySize);
 #else
   {
-    scoped_ptr<char[][kArraySize2]> array_pointer(new (nothrow)
-        char[kDynamicArraySize][kArraySize2]);
+    std::unique_ptr<char[][kArraySize2]> array_pointer(
+        new (nothrow) char[kDynamicArraySize][kArraySize2]);
     OverflowTestsSoftExpectTrue(!array_pointer);
   }
 #endif  // !defined(OS_WIN) || !defined(ARCH_CPU_64_BITS)
@@ -156,7 +156,7 @@ TEST(SecurityTest, MALLOC_OVERFLOW_TEST(RandomMemoryAllocations)) {
   // 1 MB should get us past what TCMalloc pre-allocated before initializing
   // the sophisticated allocators.
   size_t kAllocSize = 1<<20;
-  scoped_ptr<char, base::FreeDeleter> ptr(
+  std::unique_ptr<char, base::FreeDeleter> ptr(
       static_cast<char*>(malloc(kAllocSize)));
   ASSERT_TRUE(ptr != NULL);
   // If two pointers are separated by less than 512MB, they are considered

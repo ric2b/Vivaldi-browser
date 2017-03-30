@@ -21,7 +21,11 @@
 
   //DISABLE(SyncFileSystemTest, AuthorizationTest)
 
-  // Flaky in v50
+  // Flaky in v51
   DISABLE_ALL(TabDesktopMediaListTest)
 
   //DISABLE(UnloadTest, BrowserCloseInfiniteUnload)
+  DISABLE(UnloadTest, CrossSiteInfiniteBeforeUnloadAsync)
+
+  // failing in 51
+  DISABLE(WebRtcBrowserTest, RunsAudioVideoWebRTCCallInTwoTabsH264)

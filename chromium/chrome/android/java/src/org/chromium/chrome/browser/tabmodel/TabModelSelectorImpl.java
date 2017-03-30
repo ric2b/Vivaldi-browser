@@ -13,7 +13,6 @@ import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.ntp.NativePageFactory;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabIdManager;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabPersistentStoreObserver;
@@ -278,8 +277,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
      * tabs shall not be restored until {@link #restoreTabs} is called.
      */
     public void loadState() {
-        int nextId = mTabSaver.loadState();
-        if (nextId >= 0) TabIdManager.getInstance().incrementIdCounterTo(nextId);
+        mTabSaver.loadState();
     }
 
     /**
@@ -314,10 +312,6 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
         mTabSaver.clearState();
     }
 
-    public void clearEncryptedState() {
-        mTabSaver.clearEncryptedState();
-    }
-
     @Override
     public void destroy() {
         mTabSaver.destroy();
@@ -348,7 +342,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
             TabModelImpl.startTabSwitchLatencyTiming(type);
         }
         if (mVisibleTab != null && mVisibleTab != tab && !mVisibleTab.needsReload()) {
-            if (mVisibleTab.isInitialized()) {
+            if (mVisibleTab.isInitialized() && !mVisibleTab.isDetachedForReparenting()) {
                 // TODO(dtrainor): Once we figure out why we can't grab a snapshot from the current
                 // tab when we have other tabs loading from external apps remove the checks for
                 // FROM_EXTERNAL_APP/FROM_NEW.

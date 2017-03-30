@@ -4,25 +4,34 @@
 
 #include "sync/internal_api/public/test/fake_model_type_service.h"
 
+#include "base/bind.h"
+#include "base/memory/ptr_util.h"
+#include "sync/internal_api/public/shared_model_type_processor.h"
+
 namespace syncer_v2 {
 
-FakeModelTypeService::FakeModelTypeService() {}
+FakeModelTypeService::FakeModelTypeService()
+    : ModelTypeService(
+          base::Bind(&FakeModelTypeService::CreateProcessorForTestWrapper,
+                     base::Unretained(this)),
+          syncer::PREFERENCES),
+      processor_(nullptr) {}
 
 FakeModelTypeService::~FakeModelTypeService() {}
 
-scoped_ptr<MetadataChangeList>
+std::unique_ptr<MetadataChangeList>
 FakeModelTypeService::CreateMetadataChangeList() {
-  return scoped_ptr<MetadataChangeList>();
+  return std::unique_ptr<MetadataChangeList>();
 }
 
 syncer::SyncError FakeModelTypeService::MergeSyncData(
-    scoped_ptr<MetadataChangeList> metadata_change_list,
+    std::unique_ptr<MetadataChangeList> metadata_change_list,
     EntityDataMap entity_data_map) {
   return syncer::SyncError();
 }
 
 syncer::SyncError FakeModelTypeService::ApplySyncChanges(
-    scoped_ptr<MetadataChangeList> metadata_change_list,
+    std::unique_ptr<MetadataChangeList> metadata_change_list,
     EntityChangeList entity_changes) {
   return syncer::SyncError();
 }
@@ -37,5 +46,23 @@ std::string FakeModelTypeService::GetClientTag(const EntityData& entity_data) {
 }
 
 void FakeModelTypeService::OnChangeProcessorSet() {}
+
+ModelTypeChangeProcessor* FakeModelTypeService::CreateProcessorForTest(
+    syncer::ModelType type,
+    ModelTypeService* service) {
+  return processor_;
+}
+
+std::unique_ptr<ModelTypeChangeProcessor>
+FakeModelTypeService::CreateProcessorForTestWrapper(syncer::ModelType type,
+                                                    ModelTypeService* service) {
+  return base::WrapUnique(CreateProcessorForTest(type, service));
+}
+
+SharedModelTypeProcessor* FakeModelTypeService::SetUpProcessor(
+    ModelTypeChangeProcessor* processor) {
+  processor_ = processor;
+  return static_cast<SharedModelTypeProcessor*>(GetOrCreateChangeProcessor());
+}
 
 }  // namespace syncer_v2

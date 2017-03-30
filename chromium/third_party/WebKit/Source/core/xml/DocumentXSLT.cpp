@@ -21,17 +21,12 @@
 namespace blink {
 
 class DOMContentLoadedListener final : public V8AbstractEventListener, public ProcessingInstruction::DetachableEventListener {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(DOMContentLoadedListener);
+    USING_GARBAGE_COLLECTED_MIXIN(DOMContentLoadedListener);
 public:
-    static PassRefPtrWillBeRawPtr<DOMContentLoadedListener> create(ScriptState* scriptState, ProcessingInstruction* pi)
+    static RawPtr<DOMContentLoadedListener> create(ScriptState* scriptState, ProcessingInstruction* pi)
     {
-        return adoptRefWillBeNoop(new DOMContentLoadedListener(scriptState, pi));
+        return new DOMContentLoadedListener(scriptState, pi);
     }
-
-#if !ENABLE(OILPAN)
-    using V8AbstractEventListener::ref;
-    using V8AbstractEventListener::deref;
-#endif
 
     bool operator==(const EventListener&) const override
     {
@@ -44,7 +39,7 @@ public:
         ASSERT(event->type() == "DOMContentLoaded");
         ScriptState::Scope scope(scriptState);
 
-        Document& document = *toDocument(scriptState->executionContext());
+        Document& document = *toDocument(scriptState->getExecutionContext());
         ASSERT(!document.parsing());
 
         // Processing instruction (XML documents only).
@@ -84,11 +79,6 @@ private:
     {
     }
 
-#if !ENABLE(OILPAN)
-    void refDetachableEventListener() override { ref(); }
-    void derefDetachableEventListener() override { deref(); }
-#endif
-
     virtual v8::Local<v8::Value> callListenerFunction(ScriptState*, v8::Local<v8::Value>, Event*)
     {
         ASSERT_NOT_REACHED();
@@ -98,7 +88,7 @@ private:
     // If this event listener is attached to a ProcessingInstruction, keep a
     // weak reference back to it. That ProcessingInstruction is responsible for
     // detaching itself and clear out the reference.
-    RawPtrWillBeMember<ProcessingInstruction> m_processingInstruction;
+    Member<ProcessingInstruction> m_processingInstruction;
 };
 
 DocumentXSLT::DocumentXSLT()
@@ -151,7 +141,7 @@ bool DocumentXSLT::processingInstructionInsertedIntoDocument(Document& document,
     ScriptState* scriptState = ScriptState::forMainWorld(document.frame());
     if (!scriptState)
         return false;
-    RefPtrWillBeRawPtr<DOMContentLoadedListener> listener = DOMContentLoadedListener::create(scriptState, pi);
+    RawPtr<DOMContentLoadedListener> listener = DOMContentLoadedListener::create(scriptState, pi);
     document.addEventListener(EventTypeNames::DOMContentLoaded, listener, false);
     ASSERT(!pi->eventListenerForXSLT());
     pi->setEventListenerForXSLT(listener.release());
@@ -192,16 +182,16 @@ const char* DocumentXSLT::supplementName()
 
 bool DocumentXSLT::hasTransformSourceDocument(Document& document)
 {
-    return static_cast<DocumentXSLT*>(WillBeHeapSupplement<Document>::from(document, supplementName()));
+    return static_cast<DocumentXSLT*>(Supplement<Document>::from(document, supplementName()));
 }
 
 
-DocumentXSLT& DocumentXSLT::from(WillBeHeapSupplementable<Document>& document)
+DocumentXSLT& DocumentXSLT::from(Supplementable<Document>& document)
 {
-    DocumentXSLT* supplement = static_cast<DocumentXSLT*>(WillBeHeapSupplement<Document>::from(document, supplementName()));
+    DocumentXSLT* supplement = static_cast<DocumentXSLT*>(Supplement<Document>::from(document, supplementName()));
     if (!supplement) {
-        supplement = new DocumentXSLT();
-        WillBeHeapSupplement<Document>::provideTo(document, supplementName(), adoptPtrWillBeNoop(supplement));
+        supplement = new DocumentXSLT;
+        Supplement<Document>::provideTo(document, supplementName(), supplement);
     }
     return *supplement;
 }
@@ -209,7 +199,7 @@ DocumentXSLT& DocumentXSLT::from(WillBeHeapSupplementable<Document>& document)
 DEFINE_TRACE(DocumentXSLT)
 {
     visitor->trace(m_transformSourceDocument);
-    WillBeHeapSupplement<Document>::trace(visitor);
+    Supplement<Document>::trace(visitor);
 }
 
 } // namespace blink

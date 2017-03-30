@@ -39,6 +39,7 @@ _log = logutils.get_logger(__file__)
 
 
 class ConfirmDiff(AbstractStep):
+
     @classmethod
     def options(cls):
         return AbstractStep.options() + [
@@ -52,8 +53,8 @@ class ConfirmDiff(AbstractStep):
         try:
             pretty_patch = PrettyPatch(self._tool.executive)
             pretty_diff_file = pretty_patch.pretty_diff_file(self.diff())
-            url = "file://%s" % urllib.quote(pretty_diff_file.name)
-            self._tool.user.open_url(url)
+            self._open_pretty_diff(pretty_diff_file.name)
+
             # We return the pretty_diff_file here because we need to keep the
             # file alive until the user has had a chance to confirm the diff.
             return pretty_diff_file
@@ -62,10 +63,18 @@ class ConfirmDiff(AbstractStep):
         except OSError, e:
             _log.warning("PrettyPatch unavailable.")
 
+    def _open_pretty_diff(self, file_path):
+        if self._tool.platform.is_cygwin():
+            assert file_path.endswith('.html')
+            self._tool.executive.run_command(['cygstart', file_path])
+            return
+        url = "file://%s" % urllib.quote(file_path)
+        self._tool.user.open_url(url)
+
     def diff(self):
         changed_files = self._tool.scm().changed_files(self._options.git_commit)
         return self._tool.scm().create_patch(self._options.git_commit,
-            changed_files=changed_files)
+                                             changed_files=changed_files)
 
     def run(self, state):
         if not self._options.confirm:

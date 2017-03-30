@@ -300,7 +300,6 @@ bool Zygote::HandleRequestFromBrowser(int fd) {
   return false;
 }
 
-// TODO(jln): remove callers to this broken API. See crbug.com/274855.
 void Zygote::HandleReapRequest(int fd, base::PickleIterator iter) {
   base::ProcessId child;
 
@@ -436,9 +435,15 @@ int Zygote::ForkWithRealPid(const std::string& process_type,
       DLOG(ERROR) << "Failed to find kPrimaryIPCChannel in FD mapping";
       return -1;
     }
+    int mojo_channel_fd = LookUpFd(fd_mapping, kMojoIPCChannel);
+    if (mojo_channel_fd < 0) {
+      DLOG(ERROR) << "Failed to find kMojoIPCChannel in FD mapping";
+      return -1;
+    }
     std::vector<int> fds;
     fds.push_back(ipc_channel_fd);  // kBrowserFDIndex
     fds.push_back(pid_oracle.get());  // kPIDOracleFDIndex
+    fds.push_back(mojo_channel_fd);  // kMojoParentFDIndex
     pid = helper->Fork(process_type, fds, channel_id);
 
     // Helpers should never return in the child process.

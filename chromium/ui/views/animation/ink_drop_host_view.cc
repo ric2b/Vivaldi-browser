@@ -5,24 +5,38 @@
 #include "ui/views/animation/ink_drop_host_view.h"
 
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/geometry/size_conversions.h"
 #include "ui/views/animation/ink_drop_hover.h"
 #include "ui/views/animation/square_ink_drop_animation.h"
 
 namespace views {
 
 // Default sizes for ink drop effects.
-const int kInkDropLargeSize = 32;
+const int kInkDropSize = 24;
 const int kInkDropLargeCornerRadius = 4;
-const int kInkDropSmallSize = 24;
-const int kInkDropSmallCornerRadius = 2;
 
-InkDropHostView::InkDropHostView() {}
+// The scale factor to compute the large ink drop size.
+const float kLargeInkDropScale = 1.333f;
+
+namespace {
+
+gfx::Size CalculateLargeInkDropSize(const gfx::Size small_size) {
+  return gfx::ScaleToCeiledSize(gfx::Size(small_size), kLargeInkDropScale);
+}
+
+}  // namespace
+
+// static
+const int InkDropHostView::kInkDropSmallCornerRadius = 2;
+
+InkDropHostView::InkDropHostView()
+    : ink_drop_size_(kInkDropSize, kInkDropSize) {}
 
 InkDropHostView::~InkDropHostView() {}
 
 void InkDropHostView::AddInkDropLayer(ui::Layer* ink_drop_layer) {
   SetPaintToLayer(true);
-  SetFillsBoundsOpaquely(false);
+  layer()->SetFillsBoundsOpaquely(false);
   layer()->Add(ink_drop_layer);
   layer()->StackAtBottom(ink_drop_layer);
 }
@@ -34,17 +48,17 @@ void InkDropHostView::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
 
 scoped_ptr<InkDropAnimation> InkDropHostView::CreateInkDropAnimation() const {
   scoped_ptr<InkDropAnimation> animation(new SquareInkDropAnimation(
-      gfx::Size(kInkDropLargeSize, kInkDropLargeSize),
-      kInkDropLargeCornerRadius,
-      gfx::Size(kInkDropSmallSize, kInkDropSmallSize),
-      kInkDropSmallCornerRadius, GetInkDropCenter(), GetInkDropBaseColor()));
+      CalculateLargeInkDropSize(ink_drop_size_), kInkDropLargeCornerRadius,
+      ink_drop_size_, kInkDropSmallCornerRadius, GetInkDropCenter(),
+      GetInkDropBaseColor()));
   return animation;
 }
 
 scoped_ptr<InkDropHover> InkDropHostView::CreateInkDropHover() const {
-  scoped_ptr<InkDropHover> hover(new InkDropHover(
-      gfx::Size(kInkDropSmallSize, kInkDropSmallSize),
-      kInkDropSmallCornerRadius, GetInkDropCenter(), GetInkDropBaseColor()));
+  scoped_ptr<InkDropHover> hover(
+      new InkDropHover(ink_drop_size_, kInkDropSmallCornerRadius,
+                       GetInkDropCenter(), GetInkDropBaseColor()));
+  hover->set_explode_size(CalculateLargeInkDropSize(ink_drop_size_));
   return hover;
 }
 

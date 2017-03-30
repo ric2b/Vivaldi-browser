@@ -10,6 +10,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/cocoa/cocoa_profile_test.h"
@@ -203,7 +205,7 @@ TEST_F(ProfileMenuControllerTest, SetActiveAndRemove) {
 
   // Create a browser and "show" it.
   Browser::CreateParams profile2_params(profile2);
-  scoped_ptr<Browser> p2_browser(
+  std::unique_ptr<Browser> p2_browser(
       chrome::CreateBrowserWithTestWindowForParams(&profile2_params));
   BrowserList::SetLastActive(p2_browser.get());
   VerifyProfileNamedIsActive(@"Profile 2", __LINE__);
@@ -214,7 +216,7 @@ TEST_F(ProfileMenuControllerTest, SetActiveAndRemove) {
 
   // Open a new browser and make sure it takes effect.
   Browser::CreateParams profile3_params(profile3);
-  scoped_ptr<Browser> p3_browser(
+  std::unique_ptr<Browser> p3_browser(
       chrome::CreateBrowserWithTestWindowForParams(&profile3_params));
   BrowserList::SetLastActive(p3_browser.get());
   VerifyProfileNamedIsActive(@"Profile 3", __LINE__);
@@ -249,16 +251,17 @@ TEST_F(ProfileMenuControllerTest, DeleteActiveProfile) {
 TEST_F(ProfileMenuControllerTest, SupervisedProfile) {
   TestingProfileManager* manager = testing_profile_manager();
   TestingProfile* supervised_profile = manager->CreateTestingProfile(
-      "test1", scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
+      "test1", std::unique_ptr<syncable_prefs::PrefServiceSyncable>(),
       base::ASCIIToUTF16("Supervised User"), 0, "TEST_ID",
       TestingProfile::TestingFactories());
   // The supervised profile is initially marked as omitted from the avatar menu
   // (in non-test code, until we have confirmation that it has actually been
-  // created on the server). For the test, just tell the cache to un-hide it.
-  ProfileInfoCache* cache = manager->profile_info_cache();
-  size_t index =
-      cache->GetIndexOfProfileWithPath(supervised_profile->GetPath());
-  cache->SetIsOmittedProfileAtIndex(index, false);
+  // created on the server). For the test, just tell the profile attribute
+  // storage to un-hide it.
+  ProfileAttributesEntry* entry;
+  ASSERT_TRUE(manager->profile_attributes_storage()->
+      GetProfileAttributesWithPath(supervised_profile->GetPath(), &entry));
+  entry->SetIsOmitted(false);
 
   BrowserList::SetLastActive(browser());
 
@@ -280,7 +283,7 @@ TEST_F(ProfileMenuControllerTest, SupervisedProfile) {
 
   // Open a new browser for the supervised user and switch to it.
   Browser::CreateParams supervised_profile_params(supervised_profile);
-  scoped_ptr<Browser> supervised_browser(
+  std::unique_ptr<Browser> supervised_browser(
       chrome::CreateBrowserWithTestWindowForParams(&supervised_profile_params));
   BrowserList::SetLastActive(supervised_browser.get());
 

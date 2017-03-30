@@ -19,6 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
+#include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
@@ -28,6 +29,8 @@
 #include "net/cert/ct_verifier.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/single_request_host_resolver.h"
+#include "net/http/bidirectional_stream_impl.h"
+#include "net/quic/bidirectional_stream_quic_impl.h"
 #include "net/quic/crypto/channel_id_chromium.h"
 #include "net/quic/crypto/proof_verifier_chromium.h"
 #include "net/quic/crypto/properties_based_quic_server_info.h"
@@ -38,6 +41,7 @@
 #include "net/quic/quic_chromium_connection_helper.h"
 #include "net/quic/quic_chromium_packet_reader.h"
 #include "net/quic/quic_chromium_packet_writer.h"
+#include "net/quic/quic_client_promised_info.h"
 #include "net/quic/quic_clock.h"
 #include "net/quic/quic_connection.h"
 #include "net/quic/quic_crypto_client_stream_factory.h"
@@ -46,6 +50,7 @@
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_server_id.h"
 #include "net/socket/client_socket_factory.h"
+#include "net/ssl/token_binding.h"
 #include "net/udp/udp_client_socket.h"
 
 #if defined(OS_WIN)
@@ -60,6 +65,7 @@
 #endif
 
 using std::min;
+using std::vector;
 using NetworkHandle = net::NetworkChangeNotifier::NetworkHandle;
 
 namespace net {
@@ -79,6 +85,8 @@ enum QuicConnectionMigrationStatus {
   MIGRATION_STATUS_INTERNAL_ERROR,
   MIGRATION_STATUS_TOO_MANY_CHANGES,
   MIGRATION_STATUS_SUCCESS,
+  MIGRATION_STATUS_NON_MIGRATABLE_STREAM,
+  MIGRATION_STATUS_DISABLED,
   MIGRATION_STATUS_MAX
 };
 
@@ -127,10 +135,9 @@ class QuicStreamFactory::Job {
  public:
   Job(QuicStreamFactory* factory,
       HostResolver* host_resolver,
-      const HostPortPair& host_port_pair,
+      const QuicServerId& server_id,
       bool server_and_origin_have_same_host,
       bool was_alternative_service_recently_broken,
-      PrivacyMode privacy_mode,
       int cert_verify_flags,
       bool is_post,
       QuicServerInfo* server_info,
@@ -204,10 +211,9 @@ class QuicStreamFactory::Job {
 
 QuicStreamFactory::Job::Job(QuicStreamFactory* factory,
                             HostResolver* host_resolver,
-                            const HostPortPair& host_port_pair,
+                            const QuicServerId& server_id,
                             bool server_and_origin_have_same_host,
                             bool was_alternative_service_recently_broken,
-                            PrivacyMode privacy_mode,
                             int cert_verify_flags,
                             bool is_post,
                             QuicServerInfo* server_info,
@@ -215,7 +221,7 @@ QuicStreamFactory::Job::Job(QuicStreamFactory* factory,
     : io_state_(STATE_RESOLVE_HOST),
       factory_(factory),
       host_resolver_(host_resolver),
-      server_id_(host_port_pair, privacy_mode),
+      server_id_(server_id),
       cert_verify_flags_(cert_verify_flags),
       server_and_origin_have_same_host_(server_and_origin_have_same_host),
       is_post_(is_post),
@@ -261,6 +267,7 @@ int QuicStreamFactory::Job::Run(const CompletionCallback& callback) {
 }
 
 int QuicStreamFactory::Job::DoLoop(int rv) {
+  TRACE_EVENT0("net", "QuicStreamFactory::Job::DoLoop");
   do {
     IoState state = io_state_;
     io_state_ = STATE_NONE;
@@ -315,8 +322,9 @@ void QuicStreamFactory::Job::RunAuxilaryJob() {
 void QuicStreamFactory::Job::Cancel() {
   callback_.Reset();
   if (session_)
-    session_->connection()->SendConnectionCloseWithDetails(
-        QUIC_CONNECTION_CANCELLED, "New job canceled.");
+    session_->connection()->CloseConnection(
+        QUIC_CONNECTION_CANCELLED, "New job canceled.",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
 }
 
 void QuicStreamFactory::Job::CancelWaitForDataReadyCallback() {
@@ -483,9 +491,9 @@ int QuicStreamFactory::Job::DoConnectComplete(int rv) {
   // existing session instead.
   AddressList address(session_->connection()->peer_address());
   if (factory_->OnResolution(server_id_, address)) {
-    session_->connection()->SendConnectionCloseWithDetails(
-        QUIC_CONNECTION_IP_POOLED,
-        "An active session exists for the given IP.");
+    session_->connection()->CloseConnection(
+        QUIC_CONNECTION_IP_POOLED, "An active session exists for the given IP.",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
     session_ = nullptr;
     return OK;
   }
@@ -506,17 +514,17 @@ QuicStreamRequest::~QuicStreamRequest() {
 int QuicStreamRequest::Request(const HostPortPair& host_port_pair,
                                PrivacyMode privacy_mode,
                                int cert_verify_flags,
-                               base::StringPiece origin_host,
+                               const GURL& url,
                                base::StringPiece method,
                                const BoundNetLog& net_log,
                                const CompletionCallback& callback) {
-  DCHECK(!stream_);
   DCHECK(callback_.is_null());
   DCHECK(factory_);
-  origin_host_ = origin_host.as_string();
+  origin_host_ = url.host();
   privacy_mode_ = privacy_mode;
+
   int rv = factory_->Create(host_port_pair, privacy_mode, cert_verify_flags,
-                            origin_host, method, net_log, this);
+                            url, method, net_log, this);
   if (rv == ERR_IO_PENDING) {
     host_port_pair_ = host_port_pair;
     net_log_ = net_log;
@@ -525,13 +533,13 @@ int QuicStreamRequest::Request(const HostPortPair& host_port_pair,
     factory_ = nullptr;
   }
   if (rv == OK)
-    DCHECK(stream_);
+    DCHECK(session_);
   return rv;
 }
 
-void QuicStreamRequest::set_stream(scoped_ptr<QuicHttpStream> stream) {
-  DCHECK(stream);
-  stream_ = std::move(stream);
+void QuicStreamRequest::SetSession(QuicChromiumClientSession* session) {
+  DCHECK(session);
+  session_ = session->GetWeakPtr();
 }
 
 void QuicStreamRequest::OnRequestComplete(int rv) {
@@ -546,9 +554,17 @@ base::TimeDelta QuicStreamRequest::GetTimeDelayForWaitingJob() const {
       QuicServerId(host_port_pair_, privacy_mode_));
 }
 
-scoped_ptr<QuicHttpStream> QuicStreamRequest::ReleaseStream() {
-  DCHECK(stream_);
-  return std::move(stream_);
+scoped_ptr<QuicHttpStream> QuicStreamRequest::CreateStream() {
+  if (!session_)
+    return nullptr;
+  return make_scoped_ptr(new QuicHttpStream(session_));
+}
+
+scoped_ptr<BidirectionalStreamImpl>
+QuicStreamRequest::CreateBidirectionalStreamImpl() {
+  if (!session_)
+    return nullptr;
+  return make_scoped_ptr(new BidirectionalStreamQuicImpl(session_));
 }
 
 QuicStreamFactory::QuicStreamFactory(
@@ -588,7 +604,8 @@ QuicStreamFactory::QuicStreamFactory(
     int idle_connection_timeout_seconds,
     bool migrate_sessions_on_network_change,
     bool migrate_sessions_early,
-    const QuicTagVector& connection_options)
+    const QuicTagVector& connection_options,
+    bool enable_token_binding)
     : require_confirmation_(true),
       host_resolver_(host_resolver),
       client_socket_factory_(client_socket_factory),
@@ -642,6 +659,7 @@ QuicStreamFactory::QuicStreamFactory(
       port_seed_(random_generator_->RandUint64()),
       check_persisted_supports_quic_(true),
       has_initialized_data_(false),
+      num_push_streams_created_(0),
       status_(OPEN),
       task_runner_(nullptr),
       weak_factory_(this) {
@@ -659,6 +677,8 @@ QuicStreamFactory::QuicStreamFactory(
     crypto_config_.SetChannelIDSource(
         new ChannelIDSourceChromium(channel_id_service));
   }
+  if (enable_token_binding && channel_id_service && IsTokenBindingSupported())
+    crypto_config_.tb_key_params.push_back(kP256);
 #if defined(USE_OPENSSL)
   crypto::EnsureOpenSSLInit();
   bool has_aes_hardware_support = !!EVP_has_aes_hardware();
@@ -761,19 +781,37 @@ bool QuicStreamFactory::CanUseExistingSession(QuicServerId server_id,
 int QuicStreamFactory::Create(const HostPortPair& host_port_pair,
                               PrivacyMode privacy_mode,
                               int cert_verify_flags,
-                              base::StringPiece origin_host,
+                              const GURL& url,
                               base::StringPiece method,
                               const BoundNetLog& net_log,
                               QuicStreamRequest* request) {
+  // Enforce session affinity for promised streams.
+  QuicClientPromisedInfo* promised =
+      push_promise_index_.GetPromised(url.spec());
+  if (promised) {
+    QuicChromiumClientSession* session =
+        static_cast<QuicChromiumClientSession*>(promised->session());
+    DCHECK(session);
+    if (session->server_id().privacy_mode() == privacy_mode) {
+      request->SetSession(session);
+      ++num_push_streams_created_;
+      return OK;
+    }
+    // This should happen extremely rarely (if ever), but if somehow a
+    // request comes in with a mismatched privacy mode, consider the
+    // promise borked.
+    promised->Cancel();
+  }
+
   QuicServerId server_id(host_port_pair, privacy_mode);
   // TODO(rtenneti): crbug.com/498823 - delete active_sessions_.empty() checks.
   if (!active_sessions_.empty()) {
     SessionMap::iterator it = active_sessions_.find(server_id);
     if (it != active_sessions_.end()) {
       QuicChromiumClientSession* session = it->second;
-      if (!session->CanPool(origin_host.as_string(), privacy_mode))
+      if (!session->CanPool(url.host(), privacy_mode))
         return ERR_ALTERNATIVE_CERT_NOT_VALID_FOR_ORIGIN;
-      request->set_stream(CreateFromSession(session));
+      request->SetSession(session);
       return OK;
     }
   }
@@ -793,8 +831,7 @@ int QuicStreamFactory::Create(const HostPortPair& host_port_pair,
   if (quic_server_info_factory_.get()) {
     bool load_from_disk_cache = !disable_disk_cache_;
     MaybeInitialize();
-    if (!ContainsKey(quic_supported_servers_at_startup_,
-                     server_id.host_port_pair())) {
+    if (!ContainsKey(quic_supported_servers_at_startup_, host_port_pair)) {
       // If there is no entry for QUIC, consider that as a new server and
       // don't wait for Cache thread to load the data for that server.
       load_from_disk_cache = false;
@@ -804,11 +841,11 @@ int QuicStreamFactory::Create(const HostPortPair& host_port_pair,
     }
   }
 
-  bool server_and_origin_have_same_host = host_port_pair.host() == origin_host;
-  scoped_ptr<Job> job(new Job(
-      this, host_resolver_, host_port_pair, server_and_origin_have_same_host,
-      WasQuicRecentlyBroken(server_id), privacy_mode, cert_verify_flags,
-      method == "POST" /* is_post */, quic_server_info, net_log));
+  bool server_and_origin_have_same_host = host_port_pair.host() == url.host();
+  scoped_ptr<Job> job(
+      new Job(this, host_resolver_, server_id, server_and_origin_have_same_host,
+              WasQuicRecentlyBroken(server_id), cert_verify_flags,
+              method == "POST" /* is_post */, quic_server_info, net_log));
   int rv = job->Run(base::Bind(&QuicStreamFactory::OnJobComplete,
                                base::Unretained(this), job.get()));
   if (rv == ERR_IO_PENDING) {
@@ -827,9 +864,9 @@ int QuicStreamFactory::Create(const HostPortPair& host_port_pair,
     if (it == active_sessions_.end())
       return ERR_QUIC_PROTOCOL_ERROR;
     QuicChromiumClientSession* session = it->second;
-    if (!session->CanPool(origin_host.as_string(), privacy_mode))
+    if (!session->CanPool(url.host(), privacy_mode))
       return ERR_ALTERNATIVE_CERT_NOT_VALID_FOR_ORIGIN;
-    request->set_stream(CreateFromSession(session));
+    request->SetSession(session);
   }
   return rv;
 }
@@ -839,10 +876,10 @@ void QuicStreamFactory::CreateAuxilaryJob(const QuicServerId server_id,
                                           bool server_and_origin_have_same_host,
                                           bool is_post,
                                           const BoundNetLog& net_log) {
-  Job* aux_job = new Job(
-      this, host_resolver_, server_id.host_port_pair(),
-      server_and_origin_have_same_host, WasQuicRecentlyBroken(server_id),
-      server_id.privacy_mode(), cert_verify_flags, is_post, nullptr, net_log);
+  Job* aux_job =
+      new Job(this, host_resolver_, server_id, server_and_origin_have_same_host,
+              WasQuicRecentlyBroken(server_id), cert_verify_flags, is_post,
+              nullptr, net_log);
   active_jobs_[server_id].insert(aux_job);
   task_runner_->PostTask(FROM_HERE,
                          base::Bind(&QuicStreamFactory::Job::RunAuxilaryJob,
@@ -907,7 +944,7 @@ void QuicStreamFactory::OnJobComplete(Job* job, int rv) {
         request->OnRequestComplete(ERR_ALTERNATIVE_CERT_NOT_VALID_FOR_ORIGIN);
         continue;
       }
-      request->set_stream(CreateFromSession(session));
+      request->SetSession(session);
       ++request_it;
     }
   }
@@ -1299,6 +1336,7 @@ void QuicStreamFactory::MaybeMigrateOrCloseSessions(NetworkHandle network,
     }
     // If session has active streams, mark it as going away.
     OnSessionGoingAway(session);
+
     if (new_network == NetworkChangeNotifier::kInvalidNetworkHandle) {
       // No new network was found.
       if (force_close) {
@@ -1307,13 +1345,37 @@ void QuicStreamFactory::MaybeMigrateOrCloseSessions(NetworkHandle network,
       }
       continue;
     }
+    if (session->config()->DisableConnectionMigration()) {
+      // Do not migrate sessions where connection migration is disabled by
+      // config.
+      if (force_close) {
+        // Close sessions where connection migration is disabled.
+        session->CloseSessionOnError(ERR_NETWORK_CHANGED,
+                                     QUIC_IP_ADDRESS_CHANGED);
+        HistogramMigrationStatus(MIGRATION_STATUS_DISABLED);
+      }
+      continue;
+    }
+    if (session->HasNonMigratableStreams()) {
+      // Do not migrate sessions with non-migratable streams.
+      if (force_close) {
+        // Close sessions with non-migratable streams.
+        session->CloseSessionOnError(
+            ERR_NETWORK_CHANGED,
+            QUIC_CONNECTION_MIGRATION_NON_MIGRATABLE_STREAM);
+        HistogramMigrationStatus(MIGRATION_STATUS_NON_MIGRATABLE_STREAM);
+      }
+      continue;
+    }
+
     MigrateSessionToNetwork(session, new_network);
   }
 }
 
 void QuicStreamFactory::MaybeMigrateSessionEarly(
     QuicChromiumClientSession* session) {
-  if (!migrate_sessions_early_) {
+  if (!migrate_sessions_early_ || session->HasNonMigratableStreams() ||
+      session->config()->DisableConnectionMigration()) {
     return;
   }
   NetworkHandle new_network =
@@ -1401,19 +1463,24 @@ int QuicStreamFactory::ConfigureSocket(DatagramClientSocket* socket,
 #endif
   }
 
-  // If caller leaves network unspecified, use current default.
+#if defined(OS_WIN)
+  // TODO(rtenneti): Delete the check for TSVIPCli.dll loaded and the histogram.
+  bool tsvipcli_loaded = ::GetModuleHandle(L"TSVIPCli.dll") != NULL;
+  UMA_HISTOGRAM_BOOLEAN("Net.QuicStreamFactory.TSVIPCliIsLoaded",
+                        tsvipcli_loaded);
+#endif
+
   int rv;
   if (migrate_sessions_on_network_change_) {
+    // If caller leaves network unspecified, use current default network.
     if (network == NetworkChangeNotifier::kInvalidNetworkHandle) {
-      rv = socket->BindToDefaultNetwork();
+      rv = socket->ConnectUsingDefaultNetwork(addr);
     } else {
-      rv = socket->BindToNetwork(network);
+      rv = socket->ConnectUsingNetwork(network, addr);
     }
-    if (rv != OK)
-      return rv;
+  } else {
+    rv = socket->Connect(addr);
   }
-
-  rv = socket->Connect(addr);
   if (rv != OK) {
     HistogramCreateSessionFailure(CREATION_ERROR_CONNECTING_SOCKET);
     return rv;
@@ -1454,6 +1521,7 @@ int QuicStreamFactory::CreateSession(const QuicServerId& server_id,
                                      base::TimeTicks dns_resolution_end_time,
                                      const BoundNetLog& net_log,
                                      QuicChromiumClientSession** session) {
+  TRACE_EVENT0("net", "QuicStreamFactory::CreateSession");
   IPEndPoint addr = *address_list.begin();
   bool enable_port_selection = enable_port_selection_;
   if (enable_port_selection && ContainsKey(gone_away_aliases_, server_id)) {
@@ -1621,7 +1689,8 @@ void QuicStreamFactory::InitializeCachedStateInCryptoConfig(
 
   cached->Initialize(server_info->state().server_config,
                      server_info->state().source_address_token,
-                     server_info->state().certs, "",
+                     server_info->state().certs, server_info->state().cert_sct,
+                     server_info->state().chlo_hash,
                      server_info->state().server_config_sig, clock_->WallNow());
 }
 
@@ -1648,12 +1717,18 @@ void QuicStreamFactory::MaybeInitialize() {
   if (http_server_properties_->max_server_configs_stored_in_properties() == 0)
     return;
   // Create a temporary QuicServerInfo object to deserialize and to populate the
-  // in-memory crypto server config cache.
+  // in-memory crypto server config cache in the MRU order.
   scoped_ptr<QuicServerInfo> server_info;
   CompletionCallback callback;
-  for (const auto& key_value :
-       http_server_properties_->quic_server_info_map()) {
-    const QuicServerId& server_id = key_value.first;
+  // Get the list of servers to be deserialized first because WaitForDataReady
+  // touches quic_server_info_map.
+  const QuicServerInfoMap& quic_server_info_map =
+      http_server_properties_->quic_server_info_map();
+  vector<QuicServerId> server_list(quic_server_info_map.size());
+  for (const auto& key_value : quic_server_info_map)
+    server_list.push_back(key_value.first);
+  for (auto it = server_list.rbegin(); it != server_list.rend(); ++it) {
+    const QuicServerId& server_id = *it;
     server_info.reset(quic_server_info_factory_->GetForServer(server_id));
     if (server_info->WaitForDataReady(callback) == OK) {
       DVLOG(1) << "Initialized server config for: " << server_id.ToString();

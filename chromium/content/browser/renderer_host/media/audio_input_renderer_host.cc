@@ -16,6 +16,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "content/browser/media/capture/desktop_capture_device_uma_types.h"
 #include "content/browser/media/capture/web_contents_audio_input_stream.h"
 #include "content/browser/media/media_internals.h"
 #include "content/browser/media/webrtc/webrtc_internals.h"
@@ -35,7 +36,7 @@ namespace {
 const base::FilePath::CharType kDebugRecordingFileNameAddition[] =
     FILE_PATH_LITERAL("source_input");
 const base::FilePath::CharType kDebugRecordingFileNameExtension[] =
-    FILE_PATH_LITERAL("pcm");
+    FILE_PATH_LITERAL("wav");
 #endif
 
 void LogMessage(int stream_id, const std::string& msg, bool add_prefix) {
@@ -65,7 +66,7 @@ void CloseFile(base::File file) {
 }
 
 void DeleteInputDebugWriterOnFileThread(
-    scoped_ptr<AudioInputDebugWriter> writer) {
+    std::unique_ptr<AudioInputDebugWriter> writer) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
   // |writer| must be closed and destroyed on FILE thread.
 }
@@ -90,11 +91,11 @@ struct AudioInputRendererHost::AudioEntry {
 
   // The synchronous writer to be used by the controller. We have the
   // ownership of the writer.
-  scoped_ptr<AudioInputSyncWriter> writer;
+  std::unique_ptr<AudioInputSyncWriter> writer;
 
   // Must be deleted on the file thread. Must be posted for deletion and nulled
   // before the AudioEntry is deleted.
-  scoped_ptr<AudioInputDebugWriter> input_debug_writer;
+  std::unique_ptr<AudioInputDebugWriter> input_debug_writer;
 
   // Set to true after we called Close() for the controller.
   bool pending_close;
@@ -173,35 +174,25 @@ void AudioInputRendererHost::OnDestruct() const {
 void AudioInputRendererHost::OnCreated(
     media::AudioInputController* controller) {
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(
-          &AudioInputRendererHost::DoCompleteCreation,
-          this,
-          make_scoped_refptr(controller)));
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&AudioInputRendererHost::DoCompleteCreation, this,
+                 base::RetainedRef(controller)));
 }
 
 void AudioInputRendererHost::OnRecording(
     media::AudioInputController* controller) {
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(
-          &AudioInputRendererHost::DoSendRecordingMessage,
-          this,
-          make_scoped_refptr(controller)));
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&AudioInputRendererHost::DoSendRecordingMessage, this,
+                 base::RetainedRef(controller)));
 }
 
 void AudioInputRendererHost::OnError(media::AudioInputController* controller,
     media::AudioInputController::ErrorCode error_code) {
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(
-          &AudioInputRendererHost::DoHandleError,
-          this,
-          make_scoped_refptr(controller),
-          error_code));
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&AudioInputRendererHost::DoHandleError, this,
+                 base::RetainedRef(controller), error_code));
 }
 
 void AudioInputRendererHost::OnData(media::AudioInputController* controller,
@@ -211,12 +202,9 @@ void AudioInputRendererHost::OnData(media::AudioInputController* controller,
 
 void AudioInputRendererHost::OnLog(media::AudioInputController* controller,
                                    const std::string& message) {
-  BrowserThread::PostTask(BrowserThread::IO,
-                          FROM_HERE,
-                          base::Bind(&AudioInputRendererHost::DoLog,
-                                     this,
-                                     make_scoped_refptr(controller),
-                                     message));
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::Bind(&AudioInputRendererHost::DoLog, this,
+                                     base::RetainedRef(controller), message));
 }
 
 void AudioInputRendererHost::set_renderer_pid(int32_t renderer_pid) {
@@ -395,6 +383,7 @@ void AudioInputRendererHost::DoCreateStream(
     audio_params.set_format(media::AudioParameters::AUDIO_FAKE);
 
   // Check if we have the permission to open the device and which device to use.
+  MediaStreamType type = MEDIA_NO_SERVICE;
   std::string device_name;
   std::string device_id = media::AudioManagerBase::kDefaultDeviceId;
   if (audio_params.format() != media::AudioParameters::AUDIO_FAKE) {
@@ -407,14 +396,14 @@ void AudioInputRendererHost::DoCreateStream(
       MaybeUnregisterKeyboardMicStream(config);
       return;
     }
-
+    type = info->device.type;
     device_id = info->device.id;
     device_name = info->device.name;
     oss << ": device_name=" << device_name;
   }
 
   // Create a new AudioEntry structure.
-  scoped_ptr<AudioEntry> entry(new AudioEntry());
+  std::unique_ptr<AudioEntry> entry(new AudioEntry());
 
   const uint32_t segment_size =
       (sizeof(media::AudioInputBufferParameters) +
@@ -433,7 +422,7 @@ void AudioInputRendererHost::DoCreateStream(
     return;
   }
 
-  scoped_ptr<AudioInputSyncWriter> writer(new AudioInputSyncWriter(
+  std::unique_ptr<AudioInputSyncWriter> writer(new AudioInputSyncWriter(
       entry->shared_memory.memory(), entry->shared_memory.requested_size(),
       entry->shared_memory_segment_count, audio_params));
 
@@ -457,6 +446,9 @@ void AudioInputRendererHost::DoCreateStream(
             audio_mirroring_manager_),
         entry->writer.get(),
         user_input_monitor_);
+    // Only count for captures from desktop media picker dialog.
+    if (entry->controller.get() && type == MEDIA_DESKTOP_AUDIO_CAPTURE)
+      IncrementDesktopCaptureCounter(TAB_AUDIO_CAPTURER_CREATED);
   } else {
     // We call CreateLowLatency regardless of the value of
     // |audio_params.format|. Low latency can currently mean different things in
@@ -472,6 +464,13 @@ void AudioInputRendererHost::DoCreateStream(
         user_input_monitor_,
         config.automatic_gain_control);
     oss << ", AGC=" << config.automatic_gain_control;
+
+    // Only count for captures from desktop media picker dialog and system loop
+    // back audio.
+    if (entry->controller.get() && type == MEDIA_DESKTOP_AUDIO_CAPTURE &&
+        device_id == media::AudioManagerBase::kLoopbackInputDeviceId) {
+      IncrementDesktopCaptureCounter(SYSTEM_LOOPBACK_AUDIO_CAPTURER_CREATED);
+    }
   }
 
   if (!entry->controller.get()) {
@@ -602,7 +601,7 @@ void AudioInputRendererHost::DeleteEntry(AudioEntry* entry) {
 #endif
 
   // Delete the entry when this method goes out of scope.
-  scoped_ptr<AudioEntry> entry_deleter(entry);
+  std::unique_ptr<AudioEntry> entry_deleter(entry);
 
   // Erase the entry from the map.
   audio_entries_.erase(entry->stream_id);

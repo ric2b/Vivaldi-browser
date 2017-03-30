@@ -35,7 +35,7 @@ public:
     static const double IndeterminatePosition;
     static const double InvalidPosition;
 
-    static PassRefPtrWillBeRawPtr<HTMLProgressElement> create(Document&);
+    static RawPtr<HTMLProgressElement> create(Document&);
 
     double value() const;
     void setValue(double);
@@ -54,7 +54,6 @@ private:
     ~HTMLProgressElement() override;
 
     bool areAuthorShadowsAllowed() const override { return false; }
-    void willAddFirstAuthorShadowRoot() override;
     bool shouldAppearIndeterminate() const override;
     bool supportLabels() const override { return true; }
 
@@ -69,7 +68,7 @@ private:
     void didAddUserAgentShadowRoot(ShadowRoot&) override;
     bool isDeterminate() const;
 
-    RawPtrWillBeMember<ProgressValueElement> m_value;
+    Member<ProgressValueElement> m_value;
 };
 
 } // namespace blink

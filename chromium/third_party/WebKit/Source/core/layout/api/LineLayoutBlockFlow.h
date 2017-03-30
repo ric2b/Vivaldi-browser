@@ -27,7 +27,7 @@ public:
     explicit LineLayoutBlockFlow(const LineLayoutItem& item)
         : LineLayoutBox(item)
     {
-        ASSERT(!item || item.isLayoutBlockFlow());
+        ASSERT_WITH_SECURITY_IMPLICATION(!item || item.isLayoutBlockFlow());
     }
 
     explicit LineLayoutBlockFlow(std::nullptr_t) : LineLayoutBox(nullptr) { }
@@ -201,6 +201,31 @@ public:
     LayoutBlock* blockBeforeWithinSelectionRoot(LayoutSize& offset) const
     {
         return toBlockFlow()->blockBeforeWithinSelectionRoot(offset);
+    }
+
+    InlineBox* createAndAppendRootInlineBox()
+    {
+        return toBlockFlow()->createAndAppendRootInlineBox();
+    }
+
+    InlineFlowBox* lastLineBox()
+    {
+        return toBlockFlow()->lastLineBox();
+    }
+
+    InlineFlowBox* firstLineBox()
+    {
+        return toBlockFlow()->firstLineBox();
+    }
+
+    RootInlineBox* firstRootBox() const
+    {
+        return toBlockFlow()->firstRootBox();
+    }
+
+    RootInlineBox* lastRootBox() const
+    {
+        return toBlockFlow()->lastRootBox();
     }
 
 private:

@@ -63,6 +63,7 @@ component("shared_impl") {
     "ppb_crypto_shared.cc",
     "ppb_device_ref_shared.cc",
     "ppb_device_ref_shared.h",
+    "ppb_flash_font_file_shared.h",
     "ppb_gamepad_shared.cc",
     "ppb_gamepad_shared.h",
     "ppb_graphics_3d_shared.cc",
@@ -206,12 +207,14 @@ source_set("test_support") {
     "test_utils.h",
   ]
 
+  public_deps = [
+    "//ppapi/shared_impl",
+  ]
   deps = [
     "//base/test:test_support",
     "//ipc",
     "//ipc:test_support",
     "//ppapi/proxy",
-    "//ppapi/shared_impl",
     "//testing/gmock",
     "//testing/gtest",
   ]

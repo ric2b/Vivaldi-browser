@@ -32,11 +32,11 @@
 #define ScrollAnimator_h
 
 #include "platform/Timer.h"
+#include "platform/animation/CompositorAnimationDelegate.h"
 #include "platform/animation/CompositorAnimationPlayerClient.h"
 #include "platform/animation/CompositorScrollOffsetAnimationCurve.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
-#include "public/platform/WebCompositorAnimationDelegate.h"
 
 namespace blink {
 
@@ -49,9 +49,9 @@ public:
     ~ScrollAnimator() override;
 
     bool hasRunningAnimation() const override;
-    float computeDeltaToConsume(ScrollbarOrientation, float pixelDelta) const override;
+    FloatSize computeDeltaToConsume(const FloatSize& delta) const override;
 
-    ScrollResultOneDimensional userScroll(ScrollbarOrientation, ScrollGranularity, float step, float delta) override;
+    ScrollResult userScroll(ScrollGranularity, const FloatSize& delta) override;
     void scrollToOffsetWithoutAnimation(const FloatPoint&) override;
     FloatPoint desiredTargetPosition() const override;
 
@@ -74,7 +74,7 @@ protected:
     void notifyAnimationTakeover(
         double monotonicTime,
         double animationStartTime,
-        scoped_ptr<cc::AnimationCurve>) override;
+        std::unique_ptr<cc::AnimationCurve>) override;
 
     OwnPtr<CompositorScrollOffsetAnimationCurve> m_animationCurve;
     double m_startTime;

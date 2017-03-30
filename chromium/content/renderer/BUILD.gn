@@ -10,7 +10,10 @@ import("//media/media_options.gni")
 source_set("renderer") {
   # Only the public target should depend on this. All other targets (even
   # internal content ones) should depend on the public one.
-  visibility = [ "//content/public/renderer:renderer_sources" ]
+  visibility = [
+    ":for_content_tests",
+    "//content/public/renderer:renderer_sources",
+  ]
 
   sources = rebase_path(content_renderer_gypi_values.private_renderer_sources,
                         ".",
@@ -23,6 +26,7 @@ source_set("renderer") {
   ]
   defines = []
 
+  public_deps = []
   deps = [
     "//base:i18n",
     "//cc",
@@ -32,9 +36,9 @@ source_set("renderer") {
     "//cc/surfaces:surface_id",
     "//components/scheduler:scheduler",
     "//components/url_formatter",
-    "//components/webusb",
     "//content:resources",
-    "//content/common:mojo_bindings",
+    "//content/common",
+    "//content/gpu:gpu_sources",
     "//content/public/child:child_sources",
     "//content/public/common:common_sources",
     "//content/public/common:feature_h264_with_openh264_ffmpeg",
@@ -53,11 +57,12 @@ source_set("renderer") {
     "//jingle:jingle_glue",
     "//media",
     "//media/blink",
+    "//media/gpu/ipc/client",
+    "//media/gpu/ipc/common",
     "//media/midi",
     "//mojo/common",
     "//mojo/converters/geometry",
     "//mojo/edk/js",
-    "//mojo/environment:chromium",
     "//mojo/public/cpp/bindings",
     "//mojo/public/js",
     "//mojo/shell/public/cpp",
@@ -72,7 +77,6 @@ source_set("renderer") {
     "//third_party/icu",
     "//third_party/libjingle",
     "//third_party/libyuv",
-    "//third_party/npapi",
     "//third_party/widevine/cdm:version_h",
     "//ui/accessibility",
     "//ui/base",
@@ -88,7 +92,7 @@ source_set("renderer") {
   allow_circular_includes_from = []
 
   if (use_aura) {
-    deps += [ "//content/renderer/mus" ]
+    public_deps += [ "//content/renderer/mus" ]
     allow_circular_includes_from += [ "//content/renderer/mus" ]
   }
 
@@ -158,9 +162,8 @@ source_set("renderer") {
     deps += [
       "//crypto",
       "//third_party/libjingle:libjingle_webrtc",
-      "//third_party/libjingle:libpeerconnection",
       "//third_party/libjingle:libstunprober",
-      "//third_party/libvpx_new",
+      "//third_party/libvpx",
       "//third_party/webrtc/base:rtc_base",
       "//third_party/webrtc/common_video",
       "//third_party/webrtc/modules/audio_device",
@@ -184,7 +187,7 @@ source_set("renderer") {
       "//ppapi/host",
       "//ppapi/proxy",
       "//ppapi/shared_impl",
-      "//third_party/libvpx_new",
+      "//third_party/libvpx",
       "//third_party/opus",
     ]
   }
@@ -227,6 +230,8 @@ source_set("renderer") {
 
     deps += [
       "//media/mojo/interfaces",
+
+      # Defines in mojo_media_config are also pulled in here.
       "//media/mojo/services:proxy",
     ]
   }
@@ -246,5 +251,21 @@ source_set("renderer") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
+  }
+}
+
+# See comment at the top of //content/BUILD.gn for how this works.
+group("for_content_tests") {
+  visibility = [ "//content/test/*" ]
+
+  if (enable_mojo_media) {
+    # For the defines in mojo_media_config.
+    public_configs = [ "//media/mojo/services:mojo_media_config" ]
+  }
+
+  if (!is_component_build) {
+    public_deps = [
+      ":renderer",
+    ]
   }
 }

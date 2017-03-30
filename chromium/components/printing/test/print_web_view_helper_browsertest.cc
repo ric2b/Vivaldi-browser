@@ -4,6 +4,8 @@
 
 #include <stddef.h>
 
+#include <tuple>
+
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
@@ -136,19 +138,20 @@ class DidPreviewPageListener : public IPC::Listener {
 
 class PrintWebViewHelperTestBase : public content::RenderViewTest {
  public:
-  PrintWebViewHelperTestBase() : print_render_thread_(NULL) {}
+  PrintWebViewHelperTestBase() : print_render_thread_(nullptr) {}
   ~PrintWebViewHelperTestBase() override {}
 
  protected:
+  // content::RenderViewTest:
+  content::ContentRendererClient* CreateContentRendererClient() override {
+    return new PrintTestContentRendererClient();
+  }
+
   void SetUp() override {
     print_render_thread_ = new PrintMockRenderThread();
     render_thread_.reset(print_render_thread_);
 
     content::RenderViewTest::SetUp();
-  }
-
-  content::ContentRendererClient* CreateContentRendererClient() override {
-    return new PrintTestContentRendererClient();
   }
 
   void TearDown() override {
@@ -157,6 +160,7 @@ class PrintWebViewHelperTestBase : public content::RenderViewTest {
     // http://crbug.com/328552
     __lsan_do_leak_check();
 #endif
+
     content::RenderViewTest::TearDown();
   }
 
@@ -164,6 +168,7 @@ class PrintWebViewHelperTestBase : public content::RenderViewTest {
     ExecuteJavaScriptForTests("window.print();");
     ProcessPendingMessages();
   }
+
   // The renderer should be done calculating the number of rendered pages
   // according to the specified settings defined in the mock render thread.
   // Verify the page count is correct.
@@ -180,7 +185,7 @@ class PrintWebViewHelperTestBase : public content::RenderViewTest {
     PrintHostMsg_DidGetPrintedPagesCount::Param post_page_count_param;
     PrintHostMsg_DidGetPrintedPagesCount::Read(page_cnt_msg,
                                                &post_page_count_param);
-    EXPECT_EQ(count, base::get<1>(post_page_count_param));
+    EXPECT_EQ(count, std::get<1>(post_page_count_param));
 #endif  // defined(OS_CHROMEOS)
   }
 
@@ -196,7 +201,7 @@ class PrintWebViewHelperTestBase : public content::RenderViewTest {
     PrintHostMsg_DidGetPreviewPageCount::Param post_page_count_param;
     PrintHostMsg_DidGetPreviewPageCount::Read(page_cnt_msg,
                                               &post_page_count_param);
-    EXPECT_EQ(count, base::get<0>(post_page_count_param).page_count);
+    EXPECT_EQ(count, std::get<0>(post_page_count_param).page_count);
   }
 #endif  // defined(ENABLE_PRINT_PREVIEW)
 
@@ -205,12 +210,12 @@ class PrintWebViewHelperTestBase : public content::RenderViewTest {
     const IPC::Message* print_msg =
         render_thread_->sink().GetUniqueMessageMatching(
             PrintHostMsg_DidPrintPage::ID);
-    bool did_print_msg = (NULL != print_msg);
+    bool did_print_msg = !!print_msg;
     ASSERT_EQ(printed, did_print_msg);
     if (printed) {
       PrintHostMsg_DidPrintPage::Param post_did_print_page_param;
       PrintHostMsg_DidPrintPage::Read(print_msg, &post_did_print_page_param);
-      EXPECT_EQ(0, base::get<0>(post_did_print_page_param).page_number);
+      EXPECT_EQ(0, std::get<0>(post_did_print_page_param).page_number);
     }
   }
 
@@ -226,7 +231,7 @@ class PrintWebViewHelperTestBase : public content::RenderViewTest {
     const IPC::Message* print_msg =
         render_thread_->sink().GetUniqueMessageMatching(
             PrintHostMsg_SetupScriptedPrintPreview::ID);
-    bool did_print_msg = (NULL != print_msg);
+    bool did_print_msg = !!print_msg;
     ASSERT_EQ(requested, did_print_msg);
   }
 
@@ -422,24 +427,21 @@ struct TestPageData {
 #if defined(OS_MACOSX) && defined(ENABLE_BASIC_PRINTING)
 const TestPageData kTestPages[] = {
     {
-     "<html>"
-     "<head>"
-     "<meta"
-     "  http-equiv=\"Content-Type\""
-     "  content=\"text/html; charset=utf-8\"/>"
-     "<title>Test 1</title>"
-     "</head>"
-     "<body style=\"background-color: white;\">"
-     "<p style=\"font-family: arial;\">Hello World!</p>"
-     "</body>",
-     1,
-     // Mac printing code compensates for the WebKit scale factor while
-     // generating the metafile, so we expect smaller pages. (On non-Mac
-     // platforms, this would be 675x900).
-     600,
-     780,
-     NULL,
-     NULL,
+        "<html>"
+        "<head>"
+        "<meta"
+        "  http-equiv=\"Content-Type\""
+        "  content=\"text/html; charset=utf-8\"/>"
+        "<title>Test 1</title>"
+        "</head>"
+        "<body style=\"background-color: white;\">"
+        "<p style=\"font-family: arial;\">Hello World!</p>"
+        "</body>",
+        1,
+        // Mac printing code compensates for the WebKit scale factor while
+        // generating the metafile, so we expect smaller pages. (On non-Mac
+        // platforms, this would be 675x900).
+        600, 780, nullptr, nullptr,
     },
 };
 #endif  // defined(OS_MACOSX) && defined(ENABLE_BASIC_PRINTING)
@@ -453,7 +455,7 @@ const TestPageData kTestPages[] = {
 TEST_F(MAYBE_PrintWebViewHelperTest, PrintLayoutTest) {
   bool baseline = false;
 
-  EXPECT_TRUE(print_render_thread_->printer() != NULL);
+  EXPECT_TRUE(print_render_thread_->printer());
   for (size_t i = 0; i < arraysize(kTestPages); ++i) {
     // Load an HTML page and print it.
     LoadHTML(kTestPages[i].page);
@@ -525,15 +527,15 @@ class MAYBE_PrintWebViewHelperPreviewTest : public PrintWebViewHelperTestBase {
  protected:
   void VerifyPrintPreviewCancelled(bool did_cancel) {
     bool print_preview_cancelled =
-        (render_thread_->sink().GetUniqueMessageMatching(
-             PrintHostMsg_PrintPreviewCancelled::ID) != NULL);
+        !!render_thread_->sink().GetUniqueMessageMatching(
+            PrintHostMsg_PrintPreviewCancelled::ID);
     EXPECT_EQ(did_cancel, print_preview_cancelled);
   }
 
   void VerifyPrintPreviewFailed(bool did_fail) {
     bool print_preview_failed =
-        (render_thread_->sink().GetUniqueMessageMatching(
-             PrintHostMsg_PrintPreviewFailed::ID) != NULL);
+        !!render_thread_->sink().GetUniqueMessageMatching(
+            PrintHostMsg_PrintPreviewFailed::ID);
     EXPECT_EQ(did_fail, print_preview_failed);
   }
 
@@ -541,27 +543,27 @@ class MAYBE_PrintWebViewHelperPreviewTest : public PrintWebViewHelperTestBase {
     const IPC::Message* preview_msg =
         render_thread_->sink().GetUniqueMessageMatching(
             PrintHostMsg_MetafileReadyForPrinting::ID);
-    bool did_get_preview_msg = (NULL != preview_msg);
+    bool did_get_preview_msg = !!preview_msg;
     ASSERT_EQ(generated_preview, did_get_preview_msg);
     if (did_get_preview_msg) {
       PrintHostMsg_MetafileReadyForPrinting::Param preview_param;
       PrintHostMsg_MetafileReadyForPrinting::Read(preview_msg, &preview_param);
-      EXPECT_NE(0, base::get<0>(preview_param).document_cookie);
-      EXPECT_NE(0, base::get<0>(preview_param).expected_pages_count);
-      EXPECT_NE(0U, base::get<0>(preview_param).data_size);
+      EXPECT_NE(0, std::get<0>(preview_param).document_cookie);
+      EXPECT_NE(0, std::get<0>(preview_param).expected_pages_count);
+      EXPECT_NE(0U, std::get<0>(preview_param).data_size);
     }
   }
 
   void VerifyPrintFailed(bool did_fail) {
-    bool print_failed = (render_thread_->sink().GetUniqueMessageMatching(
-                             PrintHostMsg_PrintingFailed::ID) != NULL);
+    bool print_failed = !!render_thread_->sink().GetUniqueMessageMatching(
+        PrintHostMsg_PrintingFailed::ID);
     EXPECT_EQ(did_fail, print_failed);
   }
 
   void VerifyPrintPreviewInvalidPrinterSettings(bool settings_invalid) {
     bool print_preview_invalid_printer_settings =
-        (render_thread_->sink().GetUniqueMessageMatching(
-             PrintHostMsg_PrintPreviewInvalidPrinterSettings::ID) != NULL);
+        !!render_thread_->sink().GetUniqueMessageMatching(
+            PrintHostMsg_PrintPreviewInvalidPrinterSettings::ID);
     EXPECT_EQ(settings_invalid, print_preview_invalid_printer_settings);
   }
 
@@ -574,12 +576,12 @@ class MAYBE_PrintWebViewHelperPreviewTest : public PrintWebViewHelperTestBase {
       if (msg->type() == PrintHostMsg_DidPreviewPage::ID) {
         PrintHostMsg_DidPreviewPage::Param page_param;
         PrintHostMsg_DidPreviewPage::Read(msg, &page_param);
-        if (base::get<0>(page_param).page_number == page_number) {
+        if (std::get<0>(page_param).page_number == page_number) {
           msg_found = true;
           if (generate_draft_pages)
-            EXPECT_NE(0U, base::get<0>(page_param).data_size);
+            EXPECT_NE(0U, std::get<0>(page_param).data_size);
           else
-            EXPECT_EQ(0U, base::get<0>(page_param).data_size);
+            EXPECT_EQ(0U, std::get<0>(page_param).data_size);
           break;
         }
       }
@@ -597,18 +599,18 @@ class MAYBE_PrintWebViewHelperPreviewTest : public PrintWebViewHelperTestBase {
     const IPC::Message* default_page_layout_msg =
         render_thread_->sink().GetUniqueMessageMatching(
             PrintHostMsg_DidGetDefaultPageLayout::ID);
-    bool did_get_default_page_layout_msg = (NULL != default_page_layout_msg);
+    bool did_get_default_page_layout_msg = !!default_page_layout_msg;
     if (did_get_default_page_layout_msg) {
       PrintHostMsg_DidGetDefaultPageLayout::Param param;
       PrintHostMsg_DidGetDefaultPageLayout::Read(default_page_layout_msg,
                                                  &param);
-      EXPECT_EQ(content_width, base::get<0>(param).content_width);
-      EXPECT_EQ(content_height, base::get<0>(param).content_height);
-      EXPECT_EQ(margin_top, base::get<0>(param).margin_top);
-      EXPECT_EQ(margin_right, base::get<0>(param).margin_right);
-      EXPECT_EQ(margin_left, base::get<0>(param).margin_left);
-      EXPECT_EQ(margin_bottom, base::get<0>(param).margin_bottom);
-      EXPECT_EQ(page_has_print_css, base::get<2>(param));
+      EXPECT_EQ(content_width, std::get<0>(param).content_width);
+      EXPECT_EQ(content_height, std::get<0>(param).content_height);
+      EXPECT_EQ(margin_top, std::get<0>(param).margin_top);
+      EXPECT_EQ(margin_right, std::get<0>(param).margin_right);
+      EXPECT_EQ(margin_left, std::get<0>(param).margin_left);
+      EXPECT_EQ(margin_bottom, std::get<0>(param).margin_bottom);
+      EXPECT_EQ(page_has_print_css, std::get<2>(param));
     }
   }
 

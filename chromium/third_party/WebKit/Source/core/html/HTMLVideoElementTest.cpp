@@ -40,14 +40,15 @@ public:
     double currentTime() const override { return 0.0; };
     NetworkState getNetworkState() const override { return NetworkStateEmpty; };
     ReadyState getReadyState() const override { return ReadyStateHaveNothing; };
+    WebString getErrorMessage() override { return WebString(); };
     bool didLoadingProgress() override { return false; };
     bool hasSingleSecurityOrigin() const override { return true; };
     bool didPassCORSAccessCheck() const override { return true; };
     double mediaTimeForTimeValue(double timeValue) const override { return timeValue; };
     unsigned decodedFrameCount() const override { return 0; };
     unsigned droppedFrameCount() const override { return 0; };
-    unsigned audioDecodedByteCount() const override { return 0; };
-    unsigned videoDecodedByteCount() const override { return 0; };
+    size_t audioDecodedByteCount() const override { return 0; };
+    size_t videoDecodedByteCount() const override { return 0; };
     void paint(WebCanvas*, const WebRect&, unsigned char alpha, SkXfermode::Mode) override { };
 };
 
@@ -58,12 +59,12 @@ public:
 
 class StubFrameLoaderClient : public EmptyFrameLoaderClient {
 public:
-    static PassOwnPtrWillBeRawPtr<StubFrameLoaderClient> create()
+    static RawPtr<StubFrameLoaderClient> create()
     {
-        return adoptPtrWillBeNoop(new StubFrameLoaderClient);
+        return new StubFrameLoaderClient;
     }
 
-    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, WebMediaPlayer::LoadType, const WebURL&, WebMediaPlayerClient*) override
+    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebURL&, WebMediaPlayerClient*) override
     {
         return adoptPtr(new MockWebMediaPlayer);
     }
@@ -93,7 +94,7 @@ protected:
     }
 
     OwnPtr<DummyPageHolder> m_dummyPageHolder;
-    RefPtrWillBePersistent<HTMLVideoElement> m_video;
+    Persistent<HTMLVideoElement> m_video;
 };
 
 TEST_F(HTMLVideoElementTest, setBufferingStrategy_NonUserPause)

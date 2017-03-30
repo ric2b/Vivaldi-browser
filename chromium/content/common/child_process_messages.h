@@ -16,12 +16,20 @@
 #include "build/build_config.h"
 #include "cc/resources/shared_bitmap_manager.h"
 #include "content/common/content_export.h"
+#include "content/common/content_param_traits_macros.h"
+#include "content/common/gpu_process_launch_causes.h"
 #include "content/common/host_discardable_shared_memory_manager.h"
 #include "gpu/command_buffer/common/sync_token.h"
+#include "gpu/ipc/common/gpu_param_traits_macros.h"
+#include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_platform_file.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
+#include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
+
+IPC_ENUM_TRAITS_MAX_VALUE(content::CauseForGpuLaunch,
+                          content::CAUSE_FOR_GPU_LAUNCH_MAX_ENUM - 1)
 
 IPC_ENUM_TRAITS_MAX_VALUE(tracked_objects::ThreadData::Status,
                           tracked_objects::ThreadData::STATUS_LAST)
@@ -62,26 +70,6 @@ IPC_STRUCT_TRAITS_BEGIN(tracked_objects::ProcessDataSnapshot)
   IPC_STRUCT_TRAITS_MEMBER(process_id)
 IPC_STRUCT_TRAITS_END()
 
-IPC_ENUM_TRAITS_MAX_VALUE(gfx::GpuMemoryBufferType,
-                          gfx::GPU_MEMORY_BUFFER_TYPE_LAST)
-
-IPC_STRUCT_TRAITS_BEGIN(gfx::GpuMemoryBufferHandle)
-  IPC_STRUCT_TRAITS_MEMBER(id)
-  IPC_STRUCT_TRAITS_MEMBER(type)
-  IPC_STRUCT_TRAITS_MEMBER(handle)
-  IPC_STRUCT_TRAITS_MEMBER(offset)
-  IPC_STRUCT_TRAITS_MEMBER(stride)
-#if defined(USE_OZONE)
-  IPC_STRUCT_TRAITS_MEMBER(native_pixmap_handle)
-#elif defined(OS_MACOSX)
-  IPC_STRUCT_TRAITS_MEMBER(mach_port)
-#endif
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(gfx::GpuMemoryBufferId)
-  IPC_STRUCT_TRAITS_MEMBER(id)
-IPC_STRUCT_TRAITS_END()
-
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
 
@@ -114,8 +102,16 @@ IPC_MESSAGE_CONTROL2(ChildProcessMsg_GetChildProfilerData,
 IPC_MESSAGE_CONTROL1(ChildProcessMsg_ProfilingPhaseCompleted,
                      int /* profiling_phase */)
 
+// Sent to set the shared memory buffer to be used for storing histograms that
+// are to be reported by the browser process to UMA. The following message
+// (GetChildNonPersistentHistogramData) will return any histograms created
+// before this message is received but not any histograms created afterward.
+IPC_MESSAGE_CONTROL2(ChildProcessMsg_SetHistogramMemory,
+                     base::SharedMemoryHandle /* shm_handle */,
+                     int /* shm_size */)
+
 // Send to all the child processes to send back histogram data.
-IPC_MESSAGE_CONTROL1(ChildProcessMsg_GetChildHistogramData,
+IPC_MESSAGE_CONTROL1(ChildProcessMsg_GetChildNonPersistentHistogramData,
                      int /* sequence_number */)
 
 // Sent to child processes to tell them to enter or leave background mode.
@@ -126,14 +122,21 @@ IPC_MESSAGE_CONTROL1(ChildProcessMsg_SetProcessBackgrounded,
 IPC_MESSAGE_CONTROL1(ChildProcessMsg_SetMojoParentPipeHandle,
                      IPC::PlatformFileForTransit /* handle */)
 
-#if defined(USE_OZONE)
-// Sent to child processes to initialize ClientNativePixmapFactory using
-// a device file descriptor.
-IPC_MESSAGE_CONTROL1(ChildProcessMsg_InitializeClientNativePixmapFactory,
-                     base::FileDescriptor /* device_fd */)
-#endif
 ////////////////////////////////////////////////////////////////////////////////
 // Messages sent from the child process to the browser.
+
+// A renderer sends this when it wants to create a connection to the GPU
+// process. The browser will create the GPU process if necessary, and will
+// return a handle to the channel via a GpuChannelEstablished message.
+IPC_SYNC_MESSAGE_CONTROL1_3(ChildProcessHostMsg_EstablishGpuChannel,
+                            content::CauseForGpuLaunch,
+                            int /* client id */,
+                            IPC::ChannelHandle /* handle to channel */,
+                            gpu::GPUInfo /* stats about GPU process*/)
+
+// A renderer sends this when it wants to know whether a gpu process exists.
+IPC_SYNC_MESSAGE_CONTROL0_1(ChildProcessHostMsg_HasGpuProcess,
+                            bool /* result */)
 
 IPC_MESSAGE_CONTROL0(ChildProcessHostMsg_ShutdownRequest)
 

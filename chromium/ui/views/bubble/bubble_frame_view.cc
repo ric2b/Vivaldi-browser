@@ -12,6 +12,8 @@
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/compositor/paint_context.h"
+#include "ui/compositor/paint_recorder.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/screen.h"
@@ -75,7 +77,6 @@ BubbleFrameView::BubbleFrameView(const gfx::Insets& title_margins,
       title_icon_(new views::ImageView()),
       title_(nullptr),
       close_(nullptr),
-      titlebar_extra_view_(nullptr),
       footnote_container_(nullptr),
       close_button_clicked_(false) {
   AddChildView(title_icon_);
@@ -132,6 +133,20 @@ gfx::Rect BubbleFrameView::GetWindowBoundsForClientBounds(
   return bubble_border_->GetBounds(gfx::Rect(), size);
 }
 
+bool BubbleFrameView::GetClientMask(const gfx::Size& size,
+                                    gfx::Path* path) const {
+  const int radius = bubble_border_->GetBorderCornerRadius();
+  gfx::Insets content_insets = GetInsets();
+  // If the client bounds don't touch the edges, no need to mask.
+  if (std::min({content_insets.top(), content_insets.left(),
+                content_insets.bottom(), content_insets.right()}) > radius) {
+    return false;
+  }
+  gfx::RectF rect((gfx::Rect(size)));
+  path->addRoundRect(gfx::RectFToSkRect(rect), radius, radius);
+  return true;
+}
+
 int BubbleFrameView::NonClientHitTest(const gfx::Point& point) {
   if (!bounds().Contains(point))
     return HTNOWHERE;
@@ -139,7 +154,8 @@ int BubbleFrameView::NonClientHitTest(const gfx::Point& point) {
     return HTCLOSE;
 
   // Allow dialogs to show the system menu and be dragged.
-  if (GetWidget()->widget_delegate()->AsDialogDelegate()) {
+  if (GetWidget()->widget_delegate()->AsDialogDelegate() &&
+      !GetWidget()->widget_delegate()->AsBubbleDialogDelegate()) {
     gfx::Rect bounds(GetContentsBounds());
     bounds.Inset(title_margins_);
     gfx::Rect sys_rect(0, 0, bounds.x(), bounds.y());
@@ -214,6 +230,10 @@ void BubbleFrameView::SizeConstraintsChanged() {}
 
 void BubbleFrameView::SetTitleFontList(const gfx::FontList& font_list) {
   title_->SetFontList(font_list);
+}
+
+const char* BubbleFrameView::GetClassName() const {
+  return kViewClassName;
 }
 
 gfx::Insets BubbleFrameView::GetInsets() const {
@@ -301,19 +321,6 @@ void BubbleFrameView::Layout() {
   bounds.set_width(title_->bounds().right() - bounds.x());
   bounds.set_height(title_height);
 
-  if (titlebar_extra_view_) {
-    const int extra_width = close_->x() - bounds.right();
-    gfx::Size size = titlebar_extra_view_->GetPreferredSize();
-    size.SetToMin(gfx::Size(std::max(0, extra_width), size.height()));
-    gfx::Rect titlebar_extra_view_bounds(
-        close_->x() - size.width(),
-        bounds.y(),
-        size.width(),
-        bounds.height());
-    titlebar_extra_view_bounds.Subtract(bounds);
-    titlebar_extra_view_->SetBoundsRect(titlebar_extra_view_bounds);
-  }
-
   if (footnote_container_) {
     gfx::Rect local_bounds = GetContentsBounds();
     int height = footnote_container_->GetHeightForWidth(local_bounds.width());
@@ -321,15 +328,6 @@ void BubbleFrameView::Layout() {
                                    local_bounds.bottom() - height,
                                    local_bounds.width(), height);
   }
-}
-
-const char* BubbleFrameView::GetClassName() const {
-  return kViewClassName;
-}
-
-void BubbleFrameView::ChildPreferredSizeChanged(View* child) {
-  if (child == titlebar_extra_view_ || child == title_)
-    Layout();
 }
 
 void BubbleFrameView::OnThemeChanged() {
@@ -344,6 +342,19 @@ void BubbleFrameView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
         GetSystemColor(ui::NativeTheme::kColorId_DialogBackground));
     SchedulePaint();
   }
+}
+
+void BubbleFrameView::OnPaint(gfx::Canvas* canvas) {
+  OnPaintBackground(canvas);
+  // Border comes after children.
+}
+
+void BubbleFrameView::PaintChildren(const ui::PaintContext& context) {
+  NonClientFrameView::PaintChildren(context);
+
+  ui::PaintCache paint_cache;
+  ui::PaintRecorder recorder(context, size(), &paint_cache);
+  OnPaintBorder(recorder.canvas());
 }
 
 void BubbleFrameView::ButtonPressed(Button* sender, const ui::Event& event) {
@@ -361,21 +372,11 @@ void BubbleFrameView::SetBubbleBorder(scoped_ptr<BubbleBorder> border) {
   set_background(new views::BubbleBackground(bubble_border_));
 }
 
-void BubbleFrameView::SetTitlebarExtraView(scoped_ptr<View> view) {
-  if (!view)
-    return;
-
-  DCHECK(!titlebar_extra_view_);
-  titlebar_extra_view_ = view.release();
-  AddChildView(titlebar_extra_view_);
-}
-
-void BubbleFrameView::SetFootnoteView(scoped_ptr<View> view) {
+void BubbleFrameView::SetFootnoteView(View* view) {
   if (!view)
     return;
 
   DCHECK(!footnote_container_);
-
   footnote_container_ = new views::View();
   footnote_container_->SetLayoutManager(
       new BoxLayout(BoxLayout::kVertical, content_margins_.left(),
@@ -384,7 +385,7 @@ void BubbleFrameView::SetFootnoteView(scoped_ptr<View> view) {
       Background::CreateSolidBackground(kFootnoteBackgroundColor));
   footnote_container_->SetBorder(
       Border::CreateSolidSidedBorder(1, 0, 0, 0, kFootnoteBorderColor));
-  footnote_container_->AddChildView(view.release());
+  footnote_container_->AddChildView(view);
   AddChildView(footnote_container_);
 }
 
@@ -504,8 +505,6 @@ gfx::Size BubbleFrameView::GetSizeForClientSize(
   title_bar_width += title_icon_size.width();
   if (close_->visible())
     title_bar_width += close_->width() + 1;
-  if (titlebar_extra_view_)
-    title_bar_width += titlebar_extra_view_->GetPreferredSize().width();
 
   gfx::Size size(client_size);
   gfx::Insets client_insets = GetInsets();

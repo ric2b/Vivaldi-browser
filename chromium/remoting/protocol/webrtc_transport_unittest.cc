@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/strings/string_util.h"
 #include "jingle/glue/thread_wrapper.h"
 #include "net/base/io_buffer.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -28,6 +29,7 @@ namespace protocol {
 namespace {
 
 const char kChannelName[] = "test_channel";
+const char kAuthKey[] = "test_auth_key";
 
 class TestTransportEventHandler : public WebrtcTransport::EventHandler {
  public:
@@ -92,11 +94,20 @@ class WebrtcTransportTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  void ProcessTransportInfo(scoped_ptr<WebrtcTransport>* target_transport,
-                            scoped_ptr<buzz::XmlElement> transport_info) {
+  void ProcessTransportInfo(std::unique_ptr<WebrtcTransport>* target_transport,
+                            bool normalize_line_endings,
+                            std::unique_ptr<buzz::XmlElement> transport_info) {
     ASSERT_TRUE(target_transport);
-    EXPECT_TRUE((*target_transport)
-                    ->ProcessTransportInfo(transport_info.get()));
+
+    // Reformat the message to normalize line endings by removing CR symbol.
+    if (normalize_line_endings) {
+      std::string xml = transport_info->Str();
+      base::ReplaceChars(xml, "\r", std::string(), &xml);
+      transport_info.reset(buzz::XmlElement::ForStr(xml));
+    }
+
+    EXPECT_TRUE(
+        (*target_transport)->ProcessTransportInfo(transport_info.get()));
   }
 
   void InitializeConnection() {
@@ -106,6 +117,7 @@ class WebrtcTransportTest : public testing::Test {
                             &host_event_handler_));
     host_authenticator_.reset(new FakeAuthenticator(
         FakeAuthenticator::HOST, 0, FakeAuthenticator::ACCEPT, false));
+    host_authenticator_->set_auth_key(kAuthKey);
 
     client_transport_.reset(
         new WebrtcTransport(jingle_glue::JingleThreadWrapper::current(),
@@ -113,6 +125,7 @@ class WebrtcTransportTest : public testing::Test {
                             &client_event_handler_));
     client_authenticator_.reset(new FakeAuthenticator(
         FakeAuthenticator::CLIENT, 0, FakeAuthenticator::ACCEPT, false));
+    client_authenticator_->set_auth_key(kAuthKey);
   }
 
   void StartConnection() {
@@ -130,11 +143,11 @@ class WebrtcTransportTest : public testing::Test {
     host_transport_->Start(
         host_authenticator_.get(),
         base::Bind(&WebrtcTransportTest::ProcessTransportInfo,
-                   base::Unretained(this), &client_transport_));
+                   base::Unretained(this), &client_transport_, true));
     client_transport_->Start(
         client_authenticator_.get(),
         base::Bind(&WebrtcTransportTest::ProcessTransportInfo,
-                   base::Unretained(this), &host_transport_));
+                   base::Unretained(this), &host_transport_, false));
   }
 
   void WaitUntilConnected() {
@@ -168,13 +181,13 @@ class WebrtcTransportTest : public testing::Test {
                                  base::Unretained(this)));
   }
 
-  void OnClientChannelCreated(scoped_ptr<MessagePipe> pipe) {
+  void OnClientChannelCreated(std::unique_ptr<MessagePipe> pipe) {
     client_message_pipe_ = std::move(pipe);
     if (run_loop_ && host_message_pipe_)
       run_loop_->Quit();
   }
 
-  void OnHostChannelCreated(scoped_ptr<MessagePipe> pipe) {
+  void OnHostChannelCreated(std::unique_ptr<MessagePipe> pipe) {
     host_message_pipe_ = std::move(pipe);
     if (run_loop_ && client_message_pipe_)
       run_loop_->Quit();
@@ -206,20 +219,20 @@ class WebrtcTransportTest : public testing::Test {
 
  protected:
   base::MessageLoopForIO message_loop_;
-  scoped_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<base::RunLoop> run_loop_;
 
   NetworkSettings network_settings_;
 
-  scoped_ptr<WebrtcTransport> host_transport_;
+  std::unique_ptr<WebrtcTransport> host_transport_;
   TestTransportEventHandler host_event_handler_;
-  scoped_ptr<FakeAuthenticator> host_authenticator_;
+  std::unique_ptr<FakeAuthenticator> host_authenticator_;
 
-  scoped_ptr<WebrtcTransport> client_transport_;
+  std::unique_ptr<WebrtcTransport> client_transport_;
   TestTransportEventHandler client_event_handler_;
-  scoped_ptr<FakeAuthenticator> client_authenticator_;
+  std::unique_ptr<FakeAuthenticator> client_authenticator_;
 
-  scoped_ptr<MessagePipe> client_message_pipe_;
-  scoped_ptr<MessagePipe> host_message_pipe_;
+  std::unique_ptr<MessagePipe> client_message_pipe_;
+  std::unique_ptr<MessagePipe> host_message_pipe_;
 
   ErrorCode client_error_ = OK;
   ErrorCode host_error_ = OK;
@@ -231,6 +244,17 @@ TEST_F(WebrtcTransportTest, Connects) {
   InitializeConnection();
   StartConnection();
   WaitUntilConnected();
+}
+
+TEST_F(WebrtcTransportTest, InvalidAuthKey) {
+  InitializeConnection();
+  client_authenticator_->set_auth_key("Incorrect Key");
+  StartConnection();
+
+  run_loop_.reset(new base::RunLoop());
+  run_loop_->Run();
+
+  EXPECT_EQ(AUTHENTICATION_FAILED, client_error_);
 }
 
 TEST_F(WebrtcTransportTest, DataStream) {

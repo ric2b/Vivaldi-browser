@@ -44,7 +44,7 @@ using BaseWeekInputType = BaseChooserOnlyDateAndTimeInputType;
 
 class WeekInputType final : public BaseWeekInputType {
 public:
-    static PassRefPtrWillBeRawPtr<InputType> create(HTMLInputElement&);
+    static InputType* create(HTMLInputElement&);
 
 private:
     explicit WeekInputType(HTMLInputElement& element) : BaseWeekInputType(element) { }

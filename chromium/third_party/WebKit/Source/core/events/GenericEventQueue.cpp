@@ -31,9 +31,9 @@
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<GenericEventQueue> GenericEventQueue::create(EventTarget* owner)
+GenericEventQueue* GenericEventQueue::create(EventTarget* owner)
 {
-    return adoptPtrWillBeNoop(new GenericEventQueue(owner));
+    return new GenericEventQueue(owner);
 }
 
 GenericEventQueue::GenericEventQueue(EventTarget* owner)
@@ -54,7 +54,7 @@ DEFINE_TRACE(GenericEventQueue)
     EventQueue::trace(visitor);
 }
 
-bool GenericEventQueue::enqueueEvent(PassRefPtrWillBeRawPtr<Event> event)
+bool GenericEventQueue::enqueueEvent(Event* event)
 {
     if (m_isClosed)
         return false;
@@ -62,8 +62,9 @@ bool GenericEventQueue::enqueueEvent(PassRefPtrWillBeRawPtr<Event> event)
     if (event->target() == m_owner)
         event->setTarget(nullptr);
 
-    TRACE_EVENT_ASYNC_BEGIN1("event", "GenericEventQueue:enqueueEvent", event.get(), "type", event->type().ascii());
-    InspectorInstrumentation::didEnqueueEvent(event->target() ? event->target() : m_owner.get(), event.get());
+    TRACE_EVENT_ASYNC_BEGIN1("event", "GenericEventQueue:enqueueEvent", event, "type", event->type().ascii());
+    EventTarget* target = event->target() ? event->target() : m_owner.get();
+    InspectorInstrumentation::asyncTaskScheduled(target->getExecutionContext(), event->type(), event);
     m_pendingEvents.append(event);
 
     if (!m_timer.isActive())
@@ -77,7 +78,8 @@ bool GenericEventQueue::cancelEvent(Event* event)
     bool found = m_pendingEvents.contains(event);
 
     if (found) {
-        InspectorInstrumentation::didRemoveEvent(event->target() ? event->target() : m_owner.get(), event);
+        EventTarget* target = event->target() ? event->target() : m_owner.get();
+        InspectorInstrumentation::asyncTaskCanceled(target->getExecutionContext(), event);
         m_pendingEvents.remove(m_pendingEvents.find(event));
         TRACE_EVENT_ASYNC_END2("event", "GenericEventQueue:enqueueEvent", event, "type", event->type().ascii(), "status", "cancelled");
     }
@@ -93,18 +95,17 @@ void GenericEventQueue::timerFired(Timer<GenericEventQueue>*)
     ASSERT(!m_timer.isActive());
     ASSERT(!m_pendingEvents.isEmpty());
 
-    WillBeHeapVector<RefPtrWillBeMember<Event>> pendingEvents;
+    HeapVector<Member<Event>> pendingEvents;
     m_pendingEvents.swap(pendingEvents);
 
-    RefPtrWillBeRawPtr<EventTarget> protect(m_owner.get());
     for (const auto& pendingEvent : pendingEvents) {
         Event* event = pendingEvent.get();
         EventTarget* target = event->target() ? event->target() : m_owner.get();
         CString type(event->type().ascii());
+        InspectorInstrumentation::AsyncTask asyncTask(target->getExecutionContext(), event);
         TRACE_EVENT_ASYNC_STEP_INTO1("event", "GenericEventQueue:enqueueEvent", event, "dispatch", "type", type);
         target->dispatchEvent(pendingEvent);
         TRACE_EVENT_ASYNC_END1("event", "GenericEventQueue:enqueueEvent", event, "type", type);
-        InspectorInstrumentation::didRemoveEvent(target, event);
     }
 }
 
@@ -121,7 +122,8 @@ void GenericEventQueue::cancelAllEvents()
     for (const auto& pendingEvent : m_pendingEvents) {
         Event* event = pendingEvent.get();
         TRACE_EVENT_ASYNC_END2("event", "GenericEventQueue:enqueueEvent", event, "type", event->type().ascii(), "status", "cancelled");
-        InspectorInstrumentation::didRemoveEvent(event->target() ? event->target() : m_owner.get(), event);
+        EventTarget* target = event->target() ? event->target() : m_owner.get();
+        InspectorInstrumentation::asyncTaskCanceled(target->getExecutionContext(), event);
     }
     m_pendingEvents.clear();
 }

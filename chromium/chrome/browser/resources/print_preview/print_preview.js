@@ -651,8 +651,7 @@ cr.define('print_preview', function() {
       this.appState_.setInitialized();
 
       $('document-title').innerText = settings.documentTitle;
-      this.hideSystemDialogLink_ = settings.hidePrintWithSystemDialogLink ||
-                                   settings.isInAppKioskMode;
+      this.hideSystemDialogLink_ = settings.isInAppKioskMode;
       if ($('system-dialog-link')) {
         setIsVisible($('system-dialog-link'),
                      this.shouldShowSystemDialogLink_());
@@ -890,8 +889,8 @@ cr.define('print_preview', function() {
         return;
       }
 
-      // On Mac, Cmd- should close the print dialog.
-      if (cr.isMac && e.keyCode == 189 && e.metaKey) {
+      // On Mac, Cmd-. should close the print dialog.
+      if (cr.isMac && e.keyCode == 190 && e.metaKey) {
         this.close_();
         e.preventDefault();
         return;

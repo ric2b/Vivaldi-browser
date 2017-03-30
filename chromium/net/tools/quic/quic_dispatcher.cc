@@ -17,10 +17,10 @@
 #include "net/tools/quic/quic_simple_server_session.h"
 #include "net/tools/quic/quic_time_wait_list_manager.h"
 
-namespace net {
-
-using std::make_pair;
 using base::StringPiece;
+using std::string;
+
+namespace net {
 
 namespace {
 
@@ -30,11 +30,7 @@ class DeleteSessionsAlarm : public QuicAlarm::Delegate {
   explicit DeleteSessionsAlarm(QuicDispatcher* dispatcher)
       : dispatcher_(dispatcher) {}
 
-  QuicTime OnAlarm() override {
-    dispatcher_->DeleteSessions();
-    // Let the dispatcher register the alarm at appropriate time.
-    return QuicTime::Zero();
-  }
+  void OnAlarm() override { dispatcher_->DeleteSessions(); }
 
  private:
   // Not owned.
@@ -51,6 +47,8 @@ QuicDispatcher::QuicDispatcher(const QuicConfig& config,
                                QuicConnectionHelperInterface* helper)
     : config_(config),
       crypto_config_(crypto_config),
+      compressed_certs_cache_(
+          QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
       helper_(helper),
       delete_sessions_alarm_(
           helper_->CreateAlarm(new DeleteSessionsAlarm(this))),
@@ -76,7 +74,7 @@ void QuicDispatcher::InitializeWithWriter(QuicPacketWriter* writer) {
 
 void QuicDispatcher::ProcessPacket(const IPEndPoint& server_address,
                                    const IPEndPoint& client_address,
-                                   const QuicEncryptedPacket& packet) {
+                                   const QuicReceivedPacket& packet) {
   current_server_address_ = server_address;
   current_client_address_ = client_address;
   current_packet_ = &packet;
@@ -90,6 +88,8 @@ void QuicDispatcher::ProcessPacket(const IPEndPoint& server_address,
 
 bool QuicDispatcher::OnUnauthenticatedPublicHeader(
     const QuicPacketPublicHeader& header) {
+  current_connection_id_ = header.connection_id;
+
   // Port zero is only allowed for unidirectional UDP, so is disallowed by QUIC.
   // Given that we can't even send a reply rejecting the packet, just drop the
   // packet.
@@ -137,12 +137,24 @@ bool QuicDispatcher::OnUnauthenticatedPublicHeader(
     if (framer_.IsSupportedVersion(packet_version)) {
       version = packet_version;
     } else {
-      // Packets set to be processed but having an unsupported version will
-      // cause a connection to be created.  The connection will handle
-      // sending a version negotiation packet.
-      // TODO(ianswett): This will malfunction if the full header of the packet
-      // causes a parsing error when parsed using the server's preferred
-      // version.
+      if (FLAGS_quic_stateless_version_negotiation) {
+        if (ShouldCreateSessionForUnknownVersion(framer_.last_version_tag())) {
+          return true;
+        }
+        // Since the version is not supported, send a version negotiation
+        // packet and stop processing the current packet.
+        time_wait_list_manager()->SendVersionNegotiationPacket(
+            connection_id, supported_versions_, current_server_address_,
+            current_client_address_);
+        return false;
+      } else {
+        // Packets set to be processed but having an unsupported version will
+        // cause a connection to be created.  The connection will handle
+        // sending a version negotiation packet.
+        // TODO(ianswett): This will malfunction if the full header of the
+        // packet causes a parsing error when parsed using the server's
+        // preferred version.
+      }
     }
   }
   // Set the framer's version and continue processing.
@@ -271,8 +283,9 @@ bool QuicDispatcher::HasPendingWrites() const {
 void QuicDispatcher::Shutdown() {
   while (!session_map_.empty()) {
     QuicServerSessionBase* session = session_map_.begin()->second;
-    session->connection()->SendConnectionCloseWithDetails(
-        QUIC_PEER_GOING_AWAY, "Server shutdown imminent");
+    session->connection()->CloseConnection(
+        QUIC_PEER_GOING_AWAY, "Server shutdown imminent",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
     // Validate that the session removes itself from the session map on close.
     DCHECK(session_map_.empty() || session_map_.begin()->second != session);
   }
@@ -280,7 +293,8 @@ void QuicDispatcher::Shutdown() {
 }
 
 void QuicDispatcher::OnConnectionClosed(QuicConnectionId connection_id,
-                                        QuicErrorCode error) {
+                                        QuicErrorCode error,
+                                        const string& error_details) {
   SessionMap::iterator it = session_map_.find(connection_id);
   if (it == session_map_.end()) {
     QUIC_BUG << "ConnectionId " << connection_id
@@ -292,7 +306,8 @@ void QuicDispatcher::OnConnectionClosed(QuicConnectionId connection_id,
 
   DVLOG_IF(1, error != QUIC_NO_ERROR)
       << "Closing connection (" << connection_id
-      << ") due to error: " << QuicUtils::ErrorToString(error);
+      << ") due to error: " << QuicUtils::ErrorToString(error)
+      << ", with details: " << error_details;
 
   if (closed_session_list_.empty()) {
     delete_sessions_alarm_->Cancel();
@@ -334,8 +349,21 @@ void QuicDispatcher::OnError(QuicFramer* framer) {
   DVLOG(1) << QuicUtils::ErrorToString(error);
 }
 
+bool QuicDispatcher::ShouldCreateSessionForUnknownVersion(QuicTag version_tag) {
+  return false;
+}
+
 bool QuicDispatcher::OnProtocolVersionMismatch(
     QuicVersion /*received_version*/) {
+  if (FLAGS_quic_stateless_version_negotiation) {
+    QUIC_BUG_IF(
+        !time_wait_list_manager_->IsConnectionIdInTimeWait(
+            current_connection_id_) &&
+        !ShouldCreateSessionForUnknownVersion(framer_.last_version_tag()))
+        << "Unexpected version mismatch: "
+        << QuicUtils::TagToString(framer_.last_version_tag());
+  }
+
   // Keep processing after protocol mismatch - this will be dealt with by the
   // time wait list or connection that we will create.
   return true;
@@ -358,14 +386,6 @@ void QuicDispatcher::OnDecryptedPacket(EncryptionLevel level) {
 bool QuicDispatcher::OnPacketHeader(const QuicPacketHeader& /*header*/) {
   DCHECK(false);
   return false;
-}
-
-void QuicDispatcher::OnRevivedPacket() {
-  DCHECK(false);
-}
-
-void QuicDispatcher::OnFecProtectedPayload(StringPiece /*payload*/) {
-  DCHECK(false);
 }
 
 bool QuicDispatcher::OnStreamFrame(const QuicStreamFrame& /*frame*/) {
@@ -420,10 +440,6 @@ bool QuicDispatcher::OnPathCloseFrame(const QuicPathCloseFrame& frame) {
   return false;
 }
 
-void QuicDispatcher::OnFecData(StringPiece /*redundancy*/) {
-  DCHECK(false);
-}
-
 void QuicDispatcher::OnPacketComplete() {
   DCHECK(false);
 }
@@ -436,8 +452,8 @@ QuicServerSessionBase* QuicDispatcher::CreateQuicSession(
       connection_id, client_address, helper_.get(), CreatePerConnectionWriter(),
       /* owns_writer= */ true, Perspective::IS_SERVER, supported_versions_);
 
-  QuicServerSessionBase* session =
-      new QuicSimpleServerSession(config_, connection, this, crypto_config_);
+  QuicServerSessionBase* session = new QuicSimpleServerSession(
+      config_, connection, this, crypto_config_, &compressed_certs_cache_);
   session->Initialize();
   return session;
 }

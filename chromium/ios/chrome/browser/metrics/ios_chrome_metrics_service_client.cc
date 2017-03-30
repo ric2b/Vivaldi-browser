@@ -14,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/process/process_metrics.h"
 #include "base/rand_util.h"
@@ -36,6 +37,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_status_metrics_provider.h"
+#include "components/sync_driver/device_count_metrics_provider.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "ios/chrome/browser/application_context.h"
@@ -44,6 +46,7 @@
 #include "ios/chrome/browser/metrics/ios_chrome_stability_metrics_provider.h"
 #include "ios/chrome/browser/metrics/mobile_session_shutdown_metrics_provider.h"
 #include "ios/chrome/browser/signin/ios_chrome_signin_status_metrics_provider_delegate.h"
+#include "ios/chrome/browser/sync/ios_chrome_sync_client.h"
 #include "ios/chrome/browser/tab_parenting_global_observer.h"
 #include "ios/chrome/browser/ui/browser_otr_state.h"
 #include "ios/chrome/common/channel_info.h"
@@ -89,12 +92,13 @@ IOSChromeMetricsServiceClient::~IOSChromeMetricsServiceClient() {
 }
 
 // static
-scoped_ptr<IOSChromeMetricsServiceClient> IOSChromeMetricsServiceClient::Create(
+std::unique_ptr<IOSChromeMetricsServiceClient>
+IOSChromeMetricsServiceClient::Create(
     metrics::MetricsStateManager* state_manager,
     PrefService* local_state) {
   // Perform two-phase initialization so that |client->metrics_service_| only
   // receives pointers to fully constructed objects.
-  scoped_ptr<IOSChromeMetricsServiceClient> client(
+  std::unique_ptr<IOSChromeMetricsServiceClient> client(
       new IOSChromeMetricsServiceClient(state_manager));
   client->Initialize();
 
@@ -172,10 +176,10 @@ void IOSChromeMetricsServiceClient::CollectFinalMetricsForLog(
   }
 }
 
-scoped_ptr<metrics::MetricsLogUploader>
+std::unique_ptr<metrics::MetricsLogUploader>
 IOSChromeMetricsServiceClient::CreateUploader(
     const base::Callback<void(int)>& on_upload_complete) {
-  return scoped_ptr<metrics::MetricsLogUploader>(
+  return std::unique_ptr<metrics::MetricsLogUploader>(
       new metrics::NetMetricsLogUploader(
           GetApplicationContext()->GetSystemURLRequestContext(),
           metrics::kDefaultMetricsServerUrl, metrics::kDefaultMetricsMimeType,
@@ -212,48 +216,54 @@ void IOSChromeMetricsServiceClient::Initialize() {
 
   // Register metrics providers.
   metrics_service_->RegisterMetricsProvider(
-      scoped_ptr<metrics::MetricsProvider>(new metrics::NetworkMetricsProvider(
-          web::WebThread::GetBlockingPool())));
+      std::unique_ptr<metrics::MetricsProvider>(
+          new metrics::NetworkMetricsProvider(
+              web::WebThread::GetBlockingPool())));
 
   // Currently, we configure OmniboxMetricsProvider to not log events to UMA
   // if there is a single incognito session visible. In the future, it may
   // be worth revisiting this to still log events from non-incognito sessions.
   metrics_service_->RegisterMetricsProvider(
-      scoped_ptr<metrics::MetricsProvider>(new OmniboxMetricsProvider(
+      std::unique_ptr<metrics::MetricsProvider>(new OmniboxMetricsProvider(
           base::Bind(&::IsOffTheRecordSessionActive))));
 
   stability_metrics_provider_ = new IOSChromeStabilityMetricsProvider(
       GetApplicationContext()->GetLocalState());
   metrics_service_->RegisterMetricsProvider(
-      scoped_ptr<metrics::MetricsProvider>(stability_metrics_provider_));
+      std::unique_ptr<metrics::MetricsProvider>(stability_metrics_provider_));
 
   metrics_service_->RegisterMetricsProvider(
-      scoped_ptr<metrics::MetricsProvider>(
+      std::unique_ptr<metrics::MetricsProvider>(
           new metrics::ScreenInfoMetricsProvider));
 
   drive_metrics_provider_ = new metrics::DriveMetricsProvider(
       web::WebThread::GetTaskRunnerForThread(web::WebThread::FILE),
       ios::FILE_LOCAL_STATE);
   metrics_service_->RegisterMetricsProvider(
-      scoped_ptr<metrics::MetricsProvider>(drive_metrics_provider_));
+      std::unique_ptr<metrics::MetricsProvider>(drive_metrics_provider_));
 
   profiler_metrics_provider_ =
       new metrics::ProfilerMetricsProvider(base::Bind(&IsCellularLogicEnabled));
   metrics_service_->RegisterMetricsProvider(
-      scoped_ptr<metrics::MetricsProvider>(profiler_metrics_provider_));
+      std::unique_ptr<metrics::MetricsProvider>(profiler_metrics_provider_));
 
   metrics_service_->RegisterMetricsProvider(
-      scoped_ptr<metrics::MetricsProvider>(
+      std::unique_ptr<metrics::MetricsProvider>(
           new metrics::CallStackProfileMetricsProvider));
 
   metrics_service_->RegisterMetricsProvider(
-      scoped_ptr<metrics::MetricsProvider>(
-          SigninStatusMetricsProvider::CreateInstance(make_scoped_ptr(
+      std::unique_ptr<metrics::MetricsProvider>(
+          SigninStatusMetricsProvider::CreateInstance(base::WrapUnique(
               new IOSChromeSigninStatusMetricsProviderDelegate))));
 
   metrics_service_->RegisterMetricsProvider(
-      scoped_ptr<metrics::MetricsProvider>(
+      std::unique_ptr<metrics::MetricsProvider>(
           new MobileSessionShutdownMetricsProvider(metrics_service_.get())));
+
+  metrics_service_->RegisterMetricsProvider(
+      std::unique_ptr<metrics::MetricsProvider>(
+          new sync_driver::DeviceCountMetricsProvider(
+              base::Bind(&IOSChromeSyncClient::GetDeviceInfoTrackers))));
 }
 
 void IOSChromeMetricsServiceClient::OnInitTaskGotDriveMetrics() {
@@ -301,7 +311,7 @@ void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
   // shared between the iOS port's usage and
   // ChromeMetricsServiceClient::CollectFinalHistograms()'s usage of
   // MetricsMemoryDetails.
-  scoped_ptr<base::ProcessMetrics> process_metrics(
+  std::unique_ptr<base::ProcessMetrics> process_metrics(
       base::ProcessMetrics::CreateProcessMetrics(
           base::GetCurrentProcessHandle()));
   UMA_HISTOGRAM_MEMORY_KB("Memory.Browser",

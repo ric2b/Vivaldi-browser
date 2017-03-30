@@ -12,6 +12,8 @@
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/signin/easy_unlock_service_signin_chromeos.h"
+#include "chromeos/login/user_names.h"
+#include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "crypto/random.h"
 #include "google_apis/gaia/gaia_constants.h"
@@ -165,7 +167,7 @@ void BootstrapUserContextInitializer::OnRefreshTokenResponse(
 }
 
 void BootstrapUserContextInitializer::OnGetUserInfoResponse(
-    scoped_ptr<base::DictionaryValue> user_info) {
+    std::unique_ptr<base::DictionaryValue> user_info) {
   std::string email;
   std::string gaia_id;
   if (!user_info->GetString("email", &email) ||
@@ -175,8 +177,8 @@ void BootstrapUserContextInitializer::OnGetUserInfoResponse(
     return;
   }
 
-  user_context_.SetUserID(email);
-  user_context_.SetGaiaID(gaia_id);
+  user_context_.SetAccountId(user_manager::known_user::GetAccountId(
+      login::CanonicalizeUserID(email), gaia_id));
   StartCheckExistingKeys();
 }
 

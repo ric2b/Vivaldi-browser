@@ -8,15 +8,16 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/time/time.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -48,11 +49,15 @@ class ArcAppListPrefs : public KeyedService,
     AppInfo(const std::string& name,
             const std::string& package_name,
             const std::string& activity,
+            const base::Time& last_launch_time,
+            bool sticky,
             bool ready);
 
     std::string name;
     std::string package_name;
     std::string activity;
+    base::Time last_launch_time;
+    bool sticky;
     bool ready;
   };
 
@@ -97,7 +102,7 @@ class ArcAppListPrefs : public KeyedService,
 
   // Extracts attributes of an app based on its id. Returns NULL if the app is
   // not found.
-  scoped_ptr<AppInfo> GetApp(const std::string& app_id) const;
+  std::unique_ptr<AppInfo> GetApp(const std::string& app_id) const;
 
   // Constructs path to app local data.
   base::FilePath GetAppPath(const std::string& app_id) const;
@@ -105,6 +110,9 @@ class ArcAppListPrefs : public KeyedService,
   // Constructs path to app icon for specific scale factor.
   base::FilePath GetIconPath(const std::string& app_id,
                              ui::ScaleFactor scale_factor) const;
+
+  // Sets last launched time for the requested app.
+  void SetLastLaunchTime(const std::string& app_id, const base::Time& time);
 
   // Requests to load an app icon for specific scale factor. If the app or Arc
   // bridge service is not ready, then defer this request until the app gets
@@ -151,10 +159,6 @@ class ArcAppListPrefs : public KeyedService,
   // Owned by the BrowserContext.
   PrefService* prefs_;
 
-  // Unowned pointer. arc::ArcBridgeService exists during whole user session
-  // and owned by arc::ArcServiceManager.
-  arc::ArcBridgeService* const bridge_service_;
-
   // List of observers.
   base::ObserverList<Observer> observer_list_;
   // Keeps root folder where ARC app icons for different scale factor are
@@ -166,6 +170,8 @@ class ArcAppListPrefs : public KeyedService,
   // for different scale factor. Scale factor is defined by specific bit
   // position.
   std::map<std::string, uint32_t> request_icon_deferred_;
+  // True if this preference has been initialized once.
+  bool is_initialized_ = false;
 
   mojo::Binding<arc::AppHost> binding_;
 

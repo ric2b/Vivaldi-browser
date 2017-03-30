@@ -8,18 +8,17 @@
 #include "components/mus/ws/server_window.h"
 
 namespace mus {
-
 namespace ws {
 
-// TODO(sky): document why this differs from default for each case. Maybe want
-// to subclass DefaultAccessPolicy.
-
-WindowManagerAccessPolicy::WindowManagerAccessPolicy(
-    ConnectionSpecificId connection_id,
-    AccessPolicyDelegate* delegate)
-    : connection_id_(connection_id), delegate_(delegate) {}
+WindowManagerAccessPolicy::WindowManagerAccessPolicy() {}
 
 WindowManagerAccessPolicy::~WindowManagerAccessPolicy() {}
+
+void WindowManagerAccessPolicy::Init(ConnectionSpecificId connection_id,
+                                     AccessPolicyDelegate* delegate) {
+  connection_id_ = connection_id;
+  delegate_ = delegate;
+}
 
 bool WindowManagerAccessPolicy::CanRemoveWindowFromParent(
     const ServerWindow* window) const {
@@ -38,6 +37,11 @@ bool WindowManagerAccessPolicy::CanAddTransientWindow(
 }
 
 bool WindowManagerAccessPolicy::CanRemoveTransientWindowFromParent(
+    const ServerWindow* window) const {
+  return true;
+}
+
+bool WindowManagerAccessPolicy::CanSetModal(
     const ServerWindow* window) const {
   return true;
 }
@@ -64,16 +68,22 @@ bool WindowManagerAccessPolicy::CanDescendIntoWindowForWindowTree(
   return true;
 }
 
-bool WindowManagerAccessPolicy::CanEmbed(const ServerWindow* window,
-                                         uint32_t policy_bitmask) const {
+bool WindowManagerAccessPolicy::CanEmbed(const ServerWindow* window) const {
   return !delegate_->HasRootForAccessPolicy(window);
 }
 
 bool WindowManagerAccessPolicy::CanChangeWindowVisibility(
     const ServerWindow* window) const {
-  // The WindowManager can change the visibility of the root too.
-  return window->id().connection_id == connection_id_ ||
-         (window->GetRoot() == window);
+  if (window->id().connection_id == connection_id_)
+    return true;
+  // The WindowManager can change the visibility of the WindowManager root.
+  const ServerWindow* root = window->GetRoot();
+  return root && window->parent() == root;
+}
+
+bool WindowManagerAccessPolicy::CanChangeWindowOpacity(
+    const ServerWindow* window) const {
+  return window->id().connection_id == connection_id_;
 }
 
 bool WindowManagerAccessPolicy::CanSetWindowSurface(
@@ -82,7 +92,7 @@ bool WindowManagerAccessPolicy::CanSetWindowSurface(
   if (surface_type == mojom::SurfaceType::UNDERLAY)
     return window->id().connection_id == connection_id_;
 
-  if (delegate_->IsWindowRootOfAnotherConnectionForAccessPolicy(window))
+  if (delegate_->IsWindowRootOfAnotherTreeForAccessPolicy(window))
     return false;
   return window->id().connection_id == connection_id_ ||
          (delegate_->HasRootForAccessPolicy(window));
@@ -150,6 +160,14 @@ bool WindowManagerAccessPolicy::IsWindowKnown(
   return delegate_->IsWindowKnownForAccessPolicy(window);
 }
 
-}  // namespace ws
+bool WindowManagerAccessPolicy::IsValidIdForNewWindow(
+    const ClientWindowId& id) const {
+  // The WindowManager see windows created from other clients. If the WM doesn't
+  // use the connection id when creating windows the WM could end up with two
+  // windows with the same id. Because of this the wm must use the same
+  // connection id for all windows it creates.
+  return WindowIdFromTransportId(id.id).connection_id == connection_id_;
+}
 
+}  // namespace ws
 }  // namespace mus

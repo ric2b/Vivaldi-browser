@@ -9,17 +9,19 @@
 
 #if defined(OS_ANDROID)
 #include <android/native_window_jni.h>
+#include "content/browser/android/child_process_launcher_android.h"
+#include "ui/gl/android/scoped_java_surface.h"
 #endif  // defined(OS_ANDROID)
 
 namespace content {
 
 GpuSurfaceTracker::GpuSurfaceTracker()
     : next_surface_id_(1) {
-  GpuSurfaceLookup::InitInstance(this);
+  gpu::GpuSurfaceLookup::InitInstance(this);
 }
 
 GpuSurfaceTracker::~GpuSurfaceTracker() {
-  GpuSurfaceLookup::InitInstance(NULL);
+  gpu::GpuSurfaceLookup::InitInstance(NULL);
 }
 
 GpuSurfaceTracker* GpuSurfaceTracker::GetInstance() {
@@ -30,7 +32,7 @@ int GpuSurfaceTracker::AddSurfaceForNativeWidget(
     gfx::AcceleratedWidget widget) {
   base::AutoLock lock(lock_);
   int surface_id = next_surface_id_++;
-  surface_map_[surface_id] = SurfaceInfo(widget, gfx::GLSurfaceHandle());
+  surface_map_[surface_id] = widget;
   return surface_id;
 }
 
@@ -40,20 +42,24 @@ void GpuSurfaceTracker::RemoveSurface(int surface_id) {
   surface_map_.erase(surface_id);
 }
 
-void GpuSurfaceTracker::SetSurfaceHandle(int surface_id,
-                                         const gfx::GLSurfaceHandle& handle) {
+gpu::SurfaceHandle GpuSurfaceTracker::GetSurfaceHandle(int surface_id) {
+  DCHECK(surface_id);
+#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if DCHECK_IS_ON()
   base::AutoLock lock(lock_);
   DCHECK(surface_map_.find(surface_id) != surface_map_.end());
-  SurfaceInfo& info = surface_map_[surface_id];
-  info.handle = handle;
-}
-
-gfx::GLSurfaceHandle GpuSurfaceTracker::GetSurfaceHandle(int surface_id) {
+#endif
+  // On Mac and Android, we can't pass the AcceleratedWidget, which is
+  // process-local, so instead we pass the surface_id, so that we can look up
+  // the AcceleratedWidget on the GPU side or when we receive
+  // GpuHostMsg_AcceleratedSurfaceBuffersSwapped_Params.
+  return surface_id;
+#else
   base::AutoLock lock(lock_);
   SurfaceMap::iterator it = surface_map_.find(surface_id);
-  if (it == surface_map_.end())
-    return gfx::GLSurfaceHandle();
-  return it->second.handle;
+  DCHECK(it != surface_map_.end());
+  return it->second;
+#endif
 }
 
 gfx::AcceleratedWidget GpuSurfaceTracker::AcquireNativeWidget(int surface_id) {
@@ -63,27 +69,22 @@ gfx::AcceleratedWidget GpuSurfaceTracker::AcquireNativeWidget(int surface_id) {
     return gfx::kNullAcceleratedWidget;
 
 #if defined(OS_ANDROID)
-  if (it->second.native_widget != gfx::kNullAcceleratedWidget)
-    ANativeWindow_acquire(it->second.native_widget);
+  if (it->second != gfx::kNullAcceleratedWidget)
+    ANativeWindow_acquire(it->second);
 #endif  // defined(OS_ANDROID)
 
-  return it->second.native_widget;
+  return it->second;
 }
+
+#if defined(OS_ANDROID)
+gfx::ScopedJavaSurface GpuSurfaceTracker::AcquireJavaSurface(int surface_id) {
+  return GetViewSurface(surface_id);
+}
+#endif
 
 std::size_t GpuSurfaceTracker::GetSurfaceCount() {
   base::AutoLock lock(lock_);
   return surface_map_.size();
 }
-
-GpuSurfaceTracker::SurfaceInfo::SurfaceInfo()
-    : native_widget(gfx::kNullAcceleratedWidget) {}
-
-GpuSurfaceTracker::SurfaceInfo::SurfaceInfo(
-    const gfx::AcceleratedWidget& native_widget,
-    const gfx::GLSurfaceHandle& handle)
-    : native_widget(native_widget), handle(handle) {}
-
-GpuSurfaceTracker::SurfaceInfo::~SurfaceInfo() { }
-
 
 }  // namespace content

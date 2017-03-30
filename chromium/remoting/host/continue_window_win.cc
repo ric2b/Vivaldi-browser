@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "remoting/host/continue_window.h"
+
 #include <windows.h>
 
 #include "base/bind.h"
@@ -10,10 +12,10 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/process/memory.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "remoting/host/continue_window.h"
+#include "base/win/current_module.h"
 #include "remoting/host/win/core_resource.h"
 
 namespace remoting {
@@ -55,9 +57,8 @@ void ContinueWindowWin::ShowUi() {
   DCHECK(CalledOnValidThread());
   DCHECK(!hwnd_);
 
-  HMODULE instance = base::GetModuleFromAddress(&DialogProc);
-  hwnd_ = CreateDialogParam(instance, MAKEINTRESOURCE(IDD_CONTINUE), nullptr,
-                            (DLGPROC)DialogProc, (LPARAM)this);
+  hwnd_ = CreateDialogParam(CURRENT_MODULE(), MAKEINTRESOURCE(IDD_CONTINUE),
+                            nullptr, (DLGPROC)DialogProc, (LPARAM) this);
   if (!hwnd_) {
     LOG(ERROR) << "Unable to create Disconnect dialog for remoting.";
     return;
@@ -129,8 +130,8 @@ void ContinueWindowWin::EndDialog() {
 }  // namespace
 
 // static
-scoped_ptr<HostWindow> HostWindow::CreateContinueWindow() {
-  return make_scoped_ptr(new ContinueWindowWin());
+std::unique_ptr<HostWindow> HostWindow::CreateContinueWindow() {
+  return base::WrapUnique(new ContinueWindowWin());
 }
 
 }  // namespace remoting

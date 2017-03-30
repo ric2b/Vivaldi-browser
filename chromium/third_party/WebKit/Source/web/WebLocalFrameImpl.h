@@ -38,6 +38,7 @@
 #include "public/web/WebLocalFrame.h"
 #include "web/FrameLoaderClientImpl.h"
 #include "web/UserMediaClientImpl.h"
+#include "web/WebExport.h"
 #include "web/WebFrameImplBase.h"
 #include "wtf/Compiler.h"
 #include "wtf/OwnPtr.h"
@@ -67,13 +68,14 @@ class WebScriptExecutionCallback;
 class WebSuspendableTask;
 class WebView;
 class WebViewImpl;
+enum class WebFrameLoadType;
 struct FrameLoadRequest;
 struct WebPrintParams;
 
 template <typename T> class WebVector;
 
 // Implementation of WebFrame, note that this is a reference counted object.
-class WebLocalFrameImpl final : public WebFrameImplBase, public WebLocalFrame {
+class WEB_EXPORT WebLocalFrameImpl final : public WebFrameImplBase, WTF_NON_EXPORTED_BASE(public WebLocalFrame) {
 public:
     // WebFrame methods:
     void close() override;
@@ -92,14 +94,10 @@ public:
     bool hasHorizontalScrollbar() const override;
     bool hasVerticalScrollbar() const override;
     WebView* view() const override;
-    void setOpener(WebFrame*) override;
     WebDocument document() const override;
     WebPerformance performance() const override;
     bool dispatchBeforeUnloadEvent() override;
     void dispatchUnloadEvent() override;
-    NPObject* windowObject() const override;
-    void bindToWindowObject(const WebString& name, NPObject*) override;
-    void bindToWindowObject(const WebString& name, NPObject*, void*) override;
     void executeScript(const WebScriptSource&) override;
     void executeScriptInIsolatedWorld(
         int worldID, const WebScriptSource* sources, unsigned numSources,
@@ -125,12 +123,12 @@ public:
         int argc,
         v8::Local<v8::Value> argv[]) override;
     v8::Local<v8::Context> mainWorldScriptContext() const override;
-    void reload(bool ignoreCache) override;
-    void reloadWithOverrideURL(const WebURL& overrideUrl, bool ignoreCache) override;
+    void reload(WebFrameLoadType) override;
+    void reloadWithOverrideURL(const WebURL& overrideUrl, WebFrameLoadType) override;
     void reloadImage(const WebNode&) override;
     void reloadLoFiImages() override;
     void loadRequest(const WebURLRequest&) override;
-    void loadHistoryItem(const WebHistoryItem&, WebHistoryLoadType, WebURLRequest::CachePolicy) override;
+    void loadHistoryItem(const WebHistoryItem&, WebHistoryLoadType, WebCachePolicy) override;
     void loadHTMLString(
         const WebData& html, const WebURL& baseURL, const WebURL& unreachableURL,
         bool replace) override;
@@ -217,8 +215,7 @@ public:
     WebLocalFrame* traversePreviousLocal(bool wrap) const override;
     WebLocalFrame* traverseNextLocal(bool wrap) const override;
     void sendPings(const WebNode& contextNode, const WebURL& destinationURL) override;
-    WebURLRequest requestFromHistoryItem(const WebHistoryItem&, WebURLRequest::CachePolicy)
-        const override;
+    WebURLRequest requestFromHistoryItem(const WebHistoryItem&, WebCachePolicy) const override;
     WebURLRequest requestForReload(WebFrameLoadType, const WebURL&) const override;
     void load(const WebURLRequest&, WebFrameLoadType, const WebHistoryItem&,
         WebHistoryLoadType, bool isClientRedirect) override;
@@ -228,7 +225,7 @@ public:
         const WebHistoryItem&, WebHistoryLoadType, bool isClientRedirect) override;
     bool isLoading() const override;
     bool isResourceLoadInProgress() const override;
-    bool isNavigationScheduled() const override;
+    bool isNavigationScheduledWithin(double interval) const override;
     void setCommittedFirstRealLoad() override;
     void sendOrientationChangeEvent() override;
     void willShowInstallBannerPrompt(int requestId, const WebVector<WebString>& platforms, WebAppBannerPromptReply*) override;
@@ -261,11 +258,11 @@ public:
     void willBeDetached();
     void willDetachParent();
 
-    static WebLocalFrameImpl* create(WebTreeScopeType, WebFrameClient*);
+    static WebLocalFrameImpl* create(WebTreeScopeType, WebFrameClient*, WebFrame* opener);
     static WebLocalFrameImpl* createProvisional(WebFrameClient*, WebRemoteFrame*, WebSandboxFlags, const WebFrameOwnerProperties&);
     ~WebLocalFrameImpl() override;
 
-    PassRefPtrWillBeRawPtr<LocalFrame> createChildFrame(const FrameLoadRequest&, const AtomicString& name, HTMLFrameOwnerElement*);
+    LocalFrame* createChildFrame(const FrameLoadRequest&, const AtomicString& name, HTMLFrameOwnerElement*);
 
     void didChangeContentsSize(const IntSize&);
 
@@ -362,21 +359,21 @@ private:
     WebRemoteFrame* toWebRemoteFrame() override;
 
     // Sets the local core frame and registers destruction observers.
-    void setCoreFrame(PassRefPtrWillBeRawPtr<LocalFrame>);
+    void setCoreFrame(LocalFrame*);
 
     void loadJavaScriptURL(const KURL&);
 
     WebPlugin* focusedPluginIfInputMethodSupported();
     ScrollableArea* layoutViewportScrollableArea() const;
 
-    OwnPtrWillBeMember<FrameLoaderClientImpl> m_frameLoaderClientImpl;
+    Member<FrameLoaderClientImpl> m_frameLoaderClientImpl;
 
     // The embedder retains a reference to the WebCore LocalFrame while it is active in the DOM. This
     // reference is released when the frame is removed from the DOM or the entire page is closed.
     // FIXME: These will need to change to WebFrame when we introduce WebFrameProxy.
-    RefPtrWillBeMember<LocalFrame> m_frame;
+    Member<LocalFrame> m_frame;
 
-    OwnPtrWillBeMember<WebDevToolsAgentImpl> m_devToolsAgent;
+    Member<WebDevToolsAgentImpl> m_devToolsAgent;
 
     // This is set if the frame is the root of a local frame tree, and requires a widget for layout.
     WebFrameWidget* m_frameWidget;
@@ -387,11 +384,11 @@ private:
     OwnPtr<SharedWorkerRepositoryClientImpl> m_sharedWorkerRepositoryClient;
 
     // Will be initialized after first call to find() or scopeStringMatches().
-    OwnPtrWillBeMember<TextFinder> m_textFinder;
+    Member<TextFinder> m_textFinder;
 
     // Valid between calls to BeginPrint() and EndPrint(). Containts the print
     // information. Is used by PrintPage().
-    OwnPtrWillBeMember<ChromePrintContext> m_printContext;
+    Member<ChromePrintContext> m_printContext;
 
     // Stores the additional input events offset and scale when device metrics emulation is enabled.
     IntSize m_inputEventsOffsetForEmulation;
@@ -399,7 +396,7 @@ private:
 
     UserMediaClientImpl m_userMediaClientImpl;
 
-    OwnPtrWillBeMember<GeolocationClientProxy> m_geolocationClientProxy;
+    Member<GeolocationClientProxy> m_geolocationClientProxy;
 
     WebDevToolsFrontendImpl* m_webDevToolsFrontend;
 

@@ -145,7 +145,8 @@
     unsigned long activeDOMObjectCount(Document document);
     unsigned long wheelEventHandlerCount(Document document);
     unsigned long scrollEventHandlerCount(Document document);
-    unsigned long touchEventHandlerCount(Document document);
+    unsigned long touchStartOrMoveEventHandlerCount(Document document);
+    unsigned long touchEndOrCancelEventHandlerCount(Document document);
     [RaisesException] LayerRectList touchEventTargetLayerRects(Document document);
 
     [RaisesException] boolean executeCommand(Document document, DOMString name, DOMString value);
@@ -214,6 +215,7 @@
     [RaisesException] void setIsCursorVisible(Document document, boolean isVisible);
 
     double effectiveMediaVolume(HTMLMediaElement mediaElement);
+    DOMString effectivePreload(HTMLMediaElement mediaElement);
     void mediaPlayerRemoteRouteAvailabilityChanged(HTMLMediaElement mediaElement, boolean available);
     void mediaPlayerPlayingRemotelyChanged(HTMLMediaElement mediaElement, boolean remote);
     void setAllowHiddenVolumeControls(HTMLMediaElement mediaElement, boolean allow);
@@ -358,5 +360,7 @@
     // TODO(liberato): remove once autoplay gesture override experiment concludes.
     void triggerAutoplayViewportCheck(HTMLMediaElement mediaElement);
 
-    int getScrollAnimationState(Node node);
+    DOMString getScrollAnimationState(Node node);
+
+    DOMString getProgrammaticScrollAnimationState(Node node);
 };

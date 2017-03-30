@@ -33,13 +33,14 @@ class CC_EXPORT LayerProtoConverter {
   // the first deserialize.
   static scoped_refptr<Layer> DeserializeLayerHierarchy(
       const scoped_refptr<Layer> existing_root,
-      const proto::LayerNode& root_node);
+      const proto::LayerNode& root_node,
+      LayerTreeHost* layer_tree_host);
 
-  // Starting at |root_layer|, serializes the properties of all the dirty nodes
-  // in the Layer hierarchy. The proto::LayerUpdate will contain all nodes that
-  // either are dirty or have dirty descendants. Only nodes that are dirty will
-  // contain the list of dirty properties.
-  static void SerializeLayerProperties(Layer* root_layer,
+  // Serializes the properties of all the dirty nodes in the Layer hierarchy.
+  // The proto::LayerUpdate will contain all nodes that are dirty. These nodes
+  // will contain the list of dirty properties. This function also resets the
+  // layers that need push properties set.
+  static void SerializeLayerProperties(LayerTreeHost* host,
                                        proto::LayerUpdate* layer_update);
 
   // Iterate over all updated layers from the LayerUpdate, and update the
@@ -67,9 +68,11 @@ class CC_EXPORT LayerProtoConverter {
       proto::LayerUpdate* layer_update);
 
   using LayerIdMap = std::unordered_map<int, scoped_refptr<Layer>>;
-  // Start at |layer| and recursively add |layer| and all its children and
-  // special layers to |layer_id_map|.
-  static void RecursivelyFindAllLayers(const scoped_refptr<Layer>& layer,
+  // Start at |root_layer| and recursively add the layer and all its children
+  // and special layers to |layer_id_map|.
+  // TODO(vmpstr): LayerIdMap ref counts layers, so this function needs to deal
+  // with ref counted objects instead of iterating over raw pointers.
+  static void RecursivelyFindAllLayers(Layer* root_layer,
                                        LayerIdMap* layer_id_map);
 };
 

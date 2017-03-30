@@ -8,7 +8,6 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/rand_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -656,9 +655,10 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, OnDeleteValueAfterAutofill) {
 
 // Test that an input field is not rendered with the yellow autofilled
 // background color when choosing an option from the datalist suggestion list.
-#if defined(OS_MACOSX)
-// Flakily triggers and assert on Mac.
-// http://crbug.com/419868
+#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
+// Flakily triggers and assert on Mac; flakily gets empty string instead
+// of "Adam" on ChromeOS.
+// http://crbug.com/419868, http://crbug.com/595385.
 #define MAYBE_OnSelectOptionFromDatalist DISABLED_OnSelectOptionFromDatalist
 #else
 #define MAYBE_OnSelectOptionFromDatalist OnSelectOptionFromDatalist

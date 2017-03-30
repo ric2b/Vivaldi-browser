@@ -52,6 +52,8 @@ public:
     AtomicString standardFontFamilyName() const;
     AtomicString genericFontFamilyName(FontDescription::GenericFamilyType) const;
 
+    float fontSizeForKeyword(unsigned keyword, bool isMonospace) const;
+
     void setWeight(FontWeight);
     void setSize(const FontDescription::Size&);
     void setSizeAdjust(const float aspectValue);
@@ -67,9 +69,9 @@ public:
     void setFontSmoothing(FontSmoothingMode);
 
     // FIXME: These need to just vend a Font object eventually.
-    void createFont(PassRefPtrWillBeRawPtr<FontSelector>, ComputedStyle&);
+    void createFont(FontSelector*, ComputedStyle&);
 
-    void createFontForDocument(PassRefPtrWillBeRawPtr<FontSelector>, ComputedStyle&);
+    void createFontForDocument(FontSelector*, ComputedStyle&);
 
     bool fontDirty() const { return m_flags; }
 
@@ -101,7 +103,7 @@ private:
 
     float getComputedSizeFromSpecifiedSize(FontDescription&, float effectiveZoom, float specifiedSize);
 
-    RawPtrWillBeMember<const Document> m_document;
+    Member<const Document> m_document;
     FontDescription m_fontDescription;
 
     enum class PropertySetFlag {

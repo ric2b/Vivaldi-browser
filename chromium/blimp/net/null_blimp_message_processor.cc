@@ -4,6 +4,7 @@
 
 #include "blimp/net/null_blimp_message_processor.h"
 
+#include "blimp/common/logging.h"
 #include "blimp/net/common.h"
 
 namespace blimp {
@@ -11,7 +12,7 @@ namespace blimp {
 NullBlimpMessageProcessor::~NullBlimpMessageProcessor() {}
 
 void NullBlimpMessageProcessor::ProcessMessage(
-    scoped_ptr<BlimpMessage> message,
+    std::unique_ptr<BlimpMessage> message,
     const net::CompletionCallback& callback) {
   DVLOG(2) << "Dropped message: " << *message;
   if (!callback.is_null())

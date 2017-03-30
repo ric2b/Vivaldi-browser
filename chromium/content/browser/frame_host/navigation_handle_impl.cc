@@ -35,9 +35,11 @@ scoped_ptr<NavigationHandleImpl> NavigationHandleImpl::Create(
     FrameTreeNode* frame_tree_node,
     bool is_synchronous,
     bool is_srcdoc,
-    const base::TimeTicks& navigation_start) {
-  return scoped_ptr<NavigationHandleImpl>(new NavigationHandleImpl(
-      url, frame_tree_node, is_synchronous, is_srcdoc, navigation_start));
+    const base::TimeTicks& navigation_start,
+    int pending_nav_entry_id) {
+  return scoped_ptr<NavigationHandleImpl>(
+      new NavigationHandleImpl(url, frame_tree_node, is_synchronous, is_srcdoc,
+                               navigation_start, pending_nav_entry_id));
 }
 
 NavigationHandleImpl::NavigationHandleImpl(
@@ -45,7 +47,8 @@ NavigationHandleImpl::NavigationHandleImpl(
     FrameTreeNode* frame_tree_node,
     bool is_synchronous,
     bool is_srcdoc,
-    const base::TimeTicks& navigation_start)
+    const base::TimeTicks& navigation_start,
+    int pending_nav_entry_id)
     : url_(url),
       is_post_(false),
       has_user_gesture_(false),
@@ -61,7 +64,8 @@ NavigationHandleImpl::NavigationHandleImpl(
       is_transferring_(false),
       frame_tree_node_(frame_tree_node),
       next_index_(0),
-      navigation_start_(navigation_start) {
+      navigation_start_(navigation_start),
+      pending_nav_entry_id_(pending_nav_entry_id) {
   DCHECK(!navigation_start.is_null());
   GetDelegate()->DidStartNavigation(this);
 }
@@ -198,7 +202,7 @@ void NavigationHandleImpl::Resume() {
     // If the navigation is about to proceed after processing the response, then
     // it's ready to commit.
     if (result == NavigationThrottle::PROCEED)
-      ReadyToCommitNavigation(render_frame_host_, response_headers_);
+      ReadyToCommitNavigation(render_frame_host_);
   }
 
   if (result != NavigationThrottle::DEFER)
@@ -339,7 +343,7 @@ void NavigationHandleImpl::WillProcessResponse(
 
   // If the navigation is about to proceed, then it's ready to commit.
   if (result == NavigationThrottle::PROCEED)
-    ReadyToCommitNavigation(render_frame_host, response_headers);
+    ReadyToCommitNavigation(render_frame_host);
 
   // If the navigation is not deferred, run the callback.
   if (result != NavigationThrottle::DEFER)
@@ -347,11 +351,9 @@ void NavigationHandleImpl::WillProcessResponse(
 }
 
 void NavigationHandleImpl::ReadyToCommitNavigation(
-    RenderFrameHostImpl* render_frame_host,
-    scoped_refptr<net::HttpResponseHeaders> response_headers) {
+    RenderFrameHostImpl* render_frame_host) {
   DCHECK(!render_frame_host_ || render_frame_host_ == render_frame_host);
   render_frame_host_ = render_frame_host;
-  response_headers_ = response_headers;
   state_ = READY_TO_COMMIT;
 
   // Only notify the WebContentsObservers when PlzNavigate is enabled, as

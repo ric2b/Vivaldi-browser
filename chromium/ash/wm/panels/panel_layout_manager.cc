@@ -69,6 +69,7 @@ class CalloutWidgetBackground : public views::Background {
     SkPath path;
     switch (alignment_) {
       case SHELF_ALIGNMENT_BOTTOM:
+      case SHELF_ALIGNMENT_BOTTOM_LOCKED:
         path.moveTo(SkIntToScalar(0), SkIntToScalar(0));
         path.lineTo(SkIntToScalar(kArrowWidth / 2),
                     SkIntToScalar(kArrowHeight));
@@ -78,11 +79,6 @@ class CalloutWidgetBackground : public views::Background {
         path.moveTo(SkIntToScalar(kArrowHeight), SkIntToScalar(kArrowWidth));
         path.lineTo(SkIntToScalar(0), SkIntToScalar(kArrowWidth / 2));
         path.lineTo(SkIntToScalar(kArrowHeight), SkIntToScalar(0));
-        break;
-      case SHELF_ALIGNMENT_TOP:
-        path.moveTo(SkIntToScalar(0), SkIntToScalar(kArrowHeight));
-        path.lineTo(SkIntToScalar(kArrowWidth / 2), SkIntToScalar(0));
-        path.lineTo(SkIntToScalar(kArrowWidth), SkIntToScalar(kArrowHeight));
         break;
       case SHELF_ALIGNMENT_RIGHT:
         path.moveTo(SkIntToScalar(0), SkIntToScalar(0));
@@ -98,13 +94,9 @@ class CalloutWidgetBackground : public views::Background {
     canvas->DrawPath(path, paint);
   }
 
-  ShelfAlignment alignment() {
-    return alignment_;
-  }
+  ShelfAlignment alignment() { return alignment_; }
 
-  void set_alignment(ShelfAlignment alignment) {
-    alignment_ = alignment;
-  }
+  void set_alignment(ShelfAlignment alignment) { alignment_ = alignment; }
 
  private:
   ShelfAlignment alignment_;
@@ -183,20 +175,12 @@ bool BoundsAdjacent(const gfx::Rect& bounds1, const gfx::Rect& bounds2) {
 
 gfx::Vector2d GetSlideInAnimationOffset(ShelfAlignment alignment) {
   gfx::Vector2d offset;
-  switch (alignment) {
-    case SHELF_ALIGNMENT_BOTTOM:
-      offset.set_y(kPanelSlideInOffset);
-      break;
-    case SHELF_ALIGNMENT_LEFT:
-      offset.set_x(-kPanelSlideInOffset);
-      break;
-    case SHELF_ALIGNMENT_RIGHT:
-      offset.set_x(kPanelSlideInOffset);
-      break;
-    case SHELF_ALIGNMENT_TOP:
-      offset.set_y(-kPanelSlideInOffset);
-      break;
-  }
+  if (alignment == SHELF_ALIGNMENT_LEFT)
+    offset.set_x(-kPanelSlideInOffset);
+  else if (alignment == SHELF_ALIGNMENT_RIGHT)
+    offset.set_x(kPanelSlideInOffset);
+  else
+    offset.set_y(kPanelSlideInOffset);
   return offset;
 }
 
@@ -211,8 +195,7 @@ class PanelCalloutWidget : public views::Widget {
 
   void SetAlignment(ShelfAlignment alignment) {
     gfx::Rect callout_bounds = GetWindowBoundsInScreen();
-    if (alignment == SHELF_ALIGNMENT_BOTTOM ||
-        alignment == SHELF_ALIGNMENT_TOP) {
+    if (IsHorizontalAlignment(alignment)) {
       callout_bounds.set_width(kArrowWidth);
       callout_bounds.set_height(kArrowHeight);
     } else {
@@ -311,8 +294,8 @@ void PanelLayoutManager::SetShelf(Shelf* shelf) {
   DCHECK(!shelf_layout_manager_);
   shelf_ = shelf;
   shelf_->AddIconObserver(this);
-  if (shelf_->shelf_widget()) {
-    shelf_layout_manager_ = shelf_->shelf_widget()->shelf_layout_manager();
+  if (shelf_->shelf_layout_manager()) {
+    shelf_layout_manager_ = shelf_->shelf_layout_manager();
     WillChangeVisibilityState(shelf_layout_manager_->visibility_state());
     shelf_layout_manager_->AddObserver(this);
   }
@@ -543,7 +526,7 @@ void PanelLayoutManager::WillChangeVisibilityState(
   bool shelf_hidden = new_state == ash::SHELF_HIDDEN;
   if (!shelf_hidden) {
     if (restore_windows_on_shelf_visible_) {
-      scoped_ptr<aura::WindowTracker> restore_windows(
+      std::unique_ptr<aura::WindowTracker> restore_windows(
           std::move(restore_windows_on_shelf_visible_));
       for (aura::Window::Windows::const_iterator iter =
                restore_windows->windows().begin();
@@ -556,7 +539,8 @@ void PanelLayoutManager::WillChangeVisibilityState(
 
   if (restore_windows_on_shelf_visible_)
     return;
-  scoped_ptr<aura::WindowTracker> minimized_windows(new aura::WindowTracker);
+  std::unique_ptr<aura::WindowTracker> minimized_windows(
+      new aura::WindowTracker);
   for (PanelList::iterator iter = panel_windows_.begin();
        iter != panel_windows_.end();) {
     aura::Window* window = iter->window;
@@ -584,8 +568,7 @@ void PanelLayoutManager::MinimizePanel(aura::Window* panel) {
   panel_slide_settings.SetTransitionDuration(
       base::TimeDelta::FromMilliseconds(kPanelSlideDurationMilliseconds));
   gfx::Rect bounds(panel->bounds());
-  bounds.Offset(GetSlideInAnimationOffset(
-      shelf_->shelf_widget()->GetAlignment()));
+  bounds.Offset(GetSlideInAnimationOffset(shelf_->alignment()));
   SetChildBoundsDirect(panel, bounds);
   panel->Hide();
   layer->SetOpacity(0);
@@ -618,9 +601,8 @@ void PanelLayoutManager::Relayout() {
     return;
   base::AutoReset<bool> auto_reset_in_layout(&in_layout_, true);
 
-  ShelfAlignment alignment = shelf_->shelf_widget()->GetAlignment();
-  bool horizontal = alignment == SHELF_ALIGNMENT_TOP ||
-                    alignment == SHELF_ALIGNMENT_BOTTOM;
+  const ShelfAlignment alignment = shelf_->alignment();
+  const bool horizontal = shelf_->IsHorizontalAlignment();
   gfx::Rect shelf_bounds = ash::ScreenUtil::ConvertRectFromScreen(
       panel_container_, shelf_->shelf_widget()->GetWindowBoundsInScreen());
   int panel_start_bounds = kPanelIdealSpacing;
@@ -713,20 +695,12 @@ void PanelLayoutManager::Relayout() {
       continue;
     bool slide_in = visible_panels[i].slide_in;
     gfx::Rect bounds = visible_panels[i].window->GetTargetBounds();
-    switch (alignment) {
-      case SHELF_ALIGNMENT_BOTTOM:
-        bounds.set_y(shelf_bounds.y() - bounds.height());
-        break;
-      case SHELF_ALIGNMENT_LEFT:
-        bounds.set_x(shelf_bounds.right());
-        break;
-      case SHELF_ALIGNMENT_RIGHT:
-        bounds.set_x(shelf_bounds.x() - bounds.width());
-        break;
-      case SHELF_ALIGNMENT_TOP:
-        bounds.set_y(shelf_bounds.bottom());
-        break;
-    }
+    if (alignment == SHELF_ALIGNMENT_LEFT)
+      bounds.set_x(shelf_bounds.right());
+    else if (alignment == SHELF_ALIGNMENT_RIGHT)
+      bounds.set_x(shelf_bounds.x() - bounds.width());
+    else
+      bounds.set_y(shelf_bounds.y() - bounds.height());
     bool on_shelf = visible_panels[i].window->GetTargetBounds() == bounds;
 
     if (horizontal) {
@@ -778,10 +752,6 @@ void PanelLayoutManager::UpdateStacking(aura::Window* active_panel) {
     active_panel = last_active_panel_;
   }
 
-  ShelfAlignment alignment = shelf_->alignment();
-  bool horizontal = alignment == SHELF_ALIGNMENT_TOP ||
-                    alignment == SHELF_ALIGNMENT_BOTTOM;
-
   // We want to to stack the panels like a deck of cards:
   // ,--,--,--,-------.--.--.
   // |  |  |  |       |  |  |
@@ -792,6 +762,7 @@ void PanelLayoutManager::UpdateStacking(aura::Window* active_panel) {
   // the titlebar--even though it doesn't update the shelf icon positions, we
   // still want the visual effect.
   std::map<int, aura::Window*> window_ordering;
+  const bool horizontal = shelf_->IsHorizontalAlignment();
   for (PanelList::const_iterator it = panel_windows_.begin();
        it != panel_windows_.end(); ++it) {
     gfx::Rect bounds = it->window->bounds();
@@ -826,10 +797,7 @@ void PanelLayoutManager::UpdateStacking(aura::Window* active_panel) {
 }
 
 void PanelLayoutManager::UpdateCallouts() {
-  ShelfAlignment alignment = shelf_->alignment();
-  bool horizontal = alignment == SHELF_ALIGNMENT_TOP ||
-                    alignment == SHELF_ALIGNMENT_BOTTOM;
-
+  const bool horizontal = shelf_->IsHorizontalAlignment();
   for (PanelList::iterator iter = panel_windows_.begin();
        iter != panel_windows_.end(); ++iter) {
     aura::Window* panel = iter->window;
@@ -865,20 +833,12 @@ void PanelLayoutManager::UpdateCallouts() {
           current_bounds.y() - callout_bounds.y(),
           callout_bounds.bottom() - current_bounds.bottom());
     }
-    switch (alignment) {
-      case SHELF_ALIGNMENT_BOTTOM:
-        callout_bounds.set_y(bounds.bottom());
-        break;
-      case SHELF_ALIGNMENT_LEFT:
-        callout_bounds.set_x(bounds.x() - callout_bounds.width());
-        break;
-      case SHELF_ALIGNMENT_RIGHT:
-        callout_bounds.set_x(bounds.right());
-        break;
-      case SHELF_ALIGNMENT_TOP:
-        callout_bounds.set_y(bounds.y() - callout_bounds.height());
-        break;
-    }
+    if (shelf_->alignment() == SHELF_ALIGNMENT_LEFT)
+      callout_bounds.set_x(bounds.x() - callout_bounds.width());
+    else if (shelf_->alignment() == SHELF_ALIGNMENT_RIGHT)
+      callout_bounds.set_x(bounds.right());
+    else
+      callout_bounds.set_y(bounds.bottom());
     callout_bounds = ScreenUtil::ConvertRectFromScreen(
         callout_widget->GetNativeWindow()->parent(),
         callout_bounds);

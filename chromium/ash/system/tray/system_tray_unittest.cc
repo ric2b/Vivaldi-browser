@@ -365,6 +365,15 @@ TEST_F(SystemTrayTest, TrayBoundsInWidget) {
   EXPECT_TRUE(window_bounds.x() >= tray_bounds.x());
   EXPECT_TRUE(window_bounds.y() >= tray_bounds.y());
 
+  // Test in locked alignment.
+  manager->SetAlignment(SHELF_ALIGNMENT_BOTTOM_LOCKED);
+  window_bounds = widget->GetWindowBoundsInScreen();
+  tray_bounds = tray->GetBoundsInScreen();
+  EXPECT_TRUE(window_bounds.bottom() >= tray_bounds.bottom());
+  EXPECT_TRUE(window_bounds.right() >= tray_bounds.right());
+  EXPECT_TRUE(window_bounds.x() >= tray_bounds.x());
+  EXPECT_TRUE(window_bounds.y() >= tray_bounds.y());
+
   // Test in the left alignment.
   manager->SetAlignment(SHELF_ALIGNMENT_LEFT);
   window_bounds = widget->GetWindowBoundsInScreen();
@@ -391,7 +400,7 @@ TEST_F(SystemTrayTest, PersistentBubble) {
   TestItem* test_item = new TestItem;
   tray->AddTrayItem(test_item);
 
-  scoped_ptr<aura::Window> window(CreateTestWindowInShellWithId(0));
+  std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithId(0));
 
   // Tests for usual default view.
   // Activating window.
@@ -477,7 +486,7 @@ TEST_F(SystemTrayTest, SetVisibleDuringHideAnimation) {
   SystemTray* tray = GetSystemTray();
   ASSERT_TRUE(tray->visible());
 
-  scoped_ptr<ui::ScopedAnimationDurationScaleMode> animation_duration;
+  std::unique_ptr<ui::ScopedAnimationDurationScaleMode> animation_duration;
   animation_duration.reset(
       new ui::ScopedAnimationDurationScaleMode(
           ui::ScopedAnimationDurationScaleMode::SLOW_DURATION));

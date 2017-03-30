@@ -5,6 +5,7 @@
 #include "mash/wm/window_manager.h"
 
 #include <stdint.h>
+
 #include <utility>
 
 #include "components/mus/common/types.h"
@@ -39,7 +40,7 @@ WindowManager::~WindowManager() {
 }
 
 void WindowManager::Initialize(RootWindowController* root_controller,
-                               mash::shell::mojom::ShellPtr shell) {
+                               session::mojom::Session* session) {
   DCHECK(root_controller);
   DCHECK(!root_controller_);
   root_controller_ = root_controller;
@@ -66,7 +67,8 @@ void WindowManager::Initialize(RootWindowController* root_controller,
   window_manager_client_->SetFrameDecorationValues(
       std::move(frame_decoration_values));
 
-  shell->AddScreenlockStateListener(binding_.CreateInterfacePtrAndBind());
+  if (session)
+    session->AddScreenlockStateListener(binding_.CreateInterfacePtrAndBind());
 }
 
 gfx::Rect WindowManager::CalculateDefaultBounds(mus::Window* window) const {
@@ -112,9 +114,8 @@ mus::Window* WindowManager::NewTopLevelWindow(
   root_controller_->GetWindowForContainer(container)->AddChild(window);
 
   if (provide_non_client_frame) {
-    // NonClientFrameController deletes itself when |window| is destroyed.
-    new NonClientFrameController(root_controller_->GetConnector(), window,
-                                 root_controller_->window_manager_client());
+    NonClientFrameController::Create(root_controller_->GetConnector(), window,
+                                     root_controller_->window_manager_client());
   }
 
   root_controller_->IncrementWindowCount();
@@ -146,12 +147,13 @@ bool WindowManager::OnWmSetBounds(mus::Window* window, gfx::Rect* bounds) {
 bool WindowManager::OnWmSetProperty(
     mus::Window* window,
     const std::string& name,
-    scoped_ptr<std::vector<uint8_t>>* new_data) {
+    std::unique_ptr<std::vector<uint8_t>>* new_data) {
   // TODO(sky): constrain this to set of keys we know about, and allowed
   // values.
   return name == mus::mojom::WindowManager::kShowState_Property ||
          name == mus::mojom::WindowManager::kPreferredSize_Property ||
          name == mus::mojom::WindowManager::kResizeBehavior_Property ||
+         name == mus::mojom::WindowManager::kWindowAppIcon_Property ||
          name == mus::mojom::WindowManager::kWindowTitle_Property;
 }
 
@@ -160,7 +162,7 @@ mus::Window* WindowManager::OnWmCreateTopLevelWindow(
   return NewTopLevelWindow(properties);
 }
 
-void WindowManager::OnAccelerator(uint32_t id, mus::mojom::EventPtr event) {
+void WindowManager::OnAccelerator(uint32_t id, const ui::Event& event) {
   root_controller_->OnAccelerator(id, std::move(event));
 }
 

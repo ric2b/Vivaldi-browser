@@ -12,7 +12,7 @@
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/cpp/window_tree_host_factory.h"
-#include "mash/shell/public/interfaces/shell.mojom.h"
+#include "mash/session/public/interfaces/session.mojom.h"
 #include "mash/wm/background_layout.h"
 #include "mash/wm/fill_layout.h"
 #include "mash/wm/screenlock_layout.h"
@@ -34,16 +34,6 @@ void AssertTrue(bool success) {
 }
 
 }  // namespace
-
-// static
-RootWindowController* RootWindowController::CreateUsingWindowTreeHost(
-    WindowManagerApplication* app) {
-  RootWindowController* controller = new RootWindowController(app);
-  mus::CreateWindowTreeHost(app->connector(), controller,
-                            &controller->window_tree_host_,
-                            controller->window_manager_.get());
-  return controller;
-}
 
 // static
 RootWindowController* RootWindowController::CreateFromDisplay(
@@ -92,14 +82,13 @@ mus::WindowManagerClient* RootWindowController::window_manager_client() {
   return window_manager_->window_manager_client();
 }
 
-void RootWindowController::OnAccelerator(uint32_t id,
-                                         mus::mojom::EventPtr event) {
+void RootWindowController::OnAccelerator(uint32_t id, const ui::Event& event) {
   switch (id) {
     case kWindowSwitchAccelerator:
       window_manager_client()->ActivateNextWindow();
       break;
     default:
-      app_->OnAccelerator(id, std::move(event));
+      app_->OnAccelerator(id, event);
       break;
   }
 }
@@ -140,13 +129,15 @@ void RootWindowController::OnEmbed(mus::Window* root) {
   mus::Window* window = GetWindowForContainer(mojom::Container::USER_WINDOWS);
   layout_manager_[window].reset(new WindowLayout(window));
   window_manager_client()->AddActivationParent(window);
-  window_tree_host_->SetTitle("Mash");
+
+  // Bubble windows must be allowed to activate because some of them rely on
+  // deactivation to close.
+  mus::Window* bubbles = GetWindowForContainer(mojom::Container::BUBBLES);
+  window_manager_client()->AddActivationParent(bubbles);
 
   AddAccelerators();
 
-  mash::shell::mojom::ShellPtr shell;
-  app_->connector()->ConnectToInterface("mojo:mash_shell", &shell);
-  window_manager_->Initialize(this, std::move(shell));
+  window_manager_->Initialize(this, app_->session());
 
   shadow_controller_.reset(new ShadowController(root->connection()));
 
@@ -207,6 +198,7 @@ void RootWindowController::CreateContainers() {
   CreateContainer(mojom::Container::LOGIN_APP, mojom::Container::LOGIN_WINDOWS);
   CreateContainer(mojom::Container::LOGIN_SHELF,
                   mojom::Container::LOGIN_WINDOWS);
+  CreateContainer(mojom::Container::BUBBLES, mojom::Container::ROOT);
   CreateContainer(mojom::Container::SYSTEM_MODAL_WINDOWS,
                   mojom::Container::ROOT);
   CreateContainer(mojom::Container::KEYBOARD, mojom::Container::ROOT);

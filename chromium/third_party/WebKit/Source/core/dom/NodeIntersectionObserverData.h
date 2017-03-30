@@ -19,29 +19,17 @@ public:
     NodeIntersectionObserverData();
     ~NodeIntersectionObserverData();
 
-    bool hasIntersectionObserver() const;
-    bool hasIntersectionObservation() const;
     IntersectionObservation* getObservationFor(IntersectionObserver&);
     void addObservation(IntersectionObservation&);
     void removeObservation(IntersectionObserver&);
     void activateValidIntersectionObservers(Node&);
     void deactivateAllIntersectionObservers(Node&);
 
-#if !ENABLE(OILPAN)
-    void dispose();
-#endif
-
-    WeakPtrWillBeRawPtr<Node> createWeakPtr(Node*);
-
 private:
     // IntersectionObservers for which the Node owning this data is root.
     HeapHashSet<WeakMember<IntersectionObserver>> m_intersectionObservers;
     // IntersectionObservations for which the Node owning this data is target.
     HeapHashMap<Member<IntersectionObserver>, Member<IntersectionObservation>> m_intersectionObservations;
-
-#if !ENABLE(OILPAN)
-    OwnPtr<WeakPtrFactory<Node>> m_weakPointerFactory;
-#endif
 };
 
 } // namespace blink

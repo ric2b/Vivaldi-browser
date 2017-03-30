@@ -27,34 +27,77 @@
 #include "platform/fonts/FontPlatformData.h"
 #include "platform/fonts/SimpleFontData.h"
 #include "public/platform/linux/WebFallbackFont.h"
-#include "public/platform/linux/WebFontInfo.h"
 #include "public/platform/linux/WebSandboxSupport.h"
 #include "public/platform/Platform.h"
+#include "ui/gfx/font_fallback_linux.h"
 #include "wtf/text/CString.h"
 
 namespace blink {
 
+FontCache::FontCache()
+    : m_purgePreventCount(0)
+{
+    if (s_fontManager) {
+        adopted(s_fontManager);
+        m_fontManager = s_fontManager;
+    } else {
+        m_fontManager = nullptr;
+    }
+}
+
 void FontCache::getFontForCharacter(UChar32 c, const char* preferredLocale, FontCache::PlatformFallbackFont* fallbackFont)
 {
-    WebFallbackFont webFallbackFont;
-    if (Platform::current()->sandboxSupport())
+    if (Platform::current()->sandboxSupport()) {
+        WebFallbackFont webFallbackFont;
         Platform::current()->sandboxSupport()->getFallbackFontForCharacter(c, preferredLocale, &webFallbackFont);
-    else
-        WebFontInfo::fallbackFontForChar(c, preferredLocale, &webFallbackFont);
-    fallbackFont->name = String::fromUTF8(CString(webFallbackFont.name));
-    fallbackFont->filename = webFallbackFont.filename;
-    fallbackFont->fontconfigInterfaceId = webFallbackFont.fontconfigInterfaceId;
-    fallbackFont->ttcIndex = webFallbackFont.ttcIndex;
-    fallbackFont->isBold = webFallbackFont.isBold;
-    fallbackFont->isItalic = webFallbackFont.isItalic;
+        fallbackFont->name = String::fromUTF8(CString(webFallbackFont.name));
+        fallbackFont->filename = webFallbackFont.filename;
+        fallbackFont->fontconfigInterfaceId = webFallbackFont.fontconfigInterfaceId;
+        fallbackFont->ttcIndex = webFallbackFont.ttcIndex;
+        fallbackFont->isBold = webFallbackFont.isBold;
+        fallbackFont->isItalic = webFallbackFont.isItalic;
+    } else {
+        std::string locale = preferredLocale ? preferredLocale : std::string();
+        gfx::FallbackFontData fallbackData = gfx::GetFallbackFontForChar(c, locale);
+        fallbackFont->name = String::fromUTF8(fallbackData.name.data(), fallbackData.name.length());
+        fallbackFont->filename = CString(fallbackData.filename.data(), fallbackData.filename.length());
+        fallbackFont->fontconfigInterfaceId = 0;
+        fallbackFont->ttcIndex = fallbackData.ttc_index;
+        fallbackFont->isBold = fallbackData.is_bold;
+        fallbackFont->isItalic = fallbackData.is_italic;
+    }
 }
 
 #if !OS(ANDROID)
-PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(const FontDescription& fontDescription, UChar32 c, const SimpleFontData*)
+PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(
+    const FontDescription& fontDescription,
+    UChar32 c,
+    const SimpleFontData*,
+    FontFallbackPriority fallbackPriority)
 {
+    // The m_fontManager is set only if it was provided by the embedder with WebFontRendering::setSkiaFontManager. This is
+    // used to emulate android fonts on linux so we always request the family from the font manager and if none is found, we return
+    // the LastResort fallback font and avoid using FontCache::getFontForCharacter which would use sandbox support to
+    // query the underlying system for the font family.
+    if (m_fontManager) {
+        AtomicString familyName = getFamilyNameForCharacter(m_fontManager.get(), c, fontDescription, fallbackPriority);
+        if (familyName.isEmpty())
+            return getLastResortFallbackFont(fontDescription, DoNotRetain);
+        return fontDataFromFontPlatformData(getFontPlatformData(fontDescription, FontFaceCreationParams(familyName)), DoNotRetain);
+    }
+
+    if (fallbackPriority == FontFallbackPriority::EmojiEmoji) {
+        // FIXME crbug.com/591346: We're overriding the fallback character here
+        // with the FAMILY emoji in the hope to find a suitable emoji font.
+        // This should be improved by supporting fallback for character
+        // sequences like DIGIT ONE + COMBINING keycap etc.
+        c = familyCharacter;
+    }
+
     // First try the specified font with standard style & weight.
-    if (fontDescription.style() == FontStyleItalic
-        || fontDescription.weight() >= FontWeight600) {
+    if (fallbackPriority != FontFallbackPriority::EmojiEmoji
+        && (fontDescription.style() == FontStyleItalic
+        || fontDescription.weight() >= FontWeight600)) {
         RefPtr<SimpleFontData> fontData = fallbackOnStandardFontStyle(
             fontDescription, c);
         if (fontData)

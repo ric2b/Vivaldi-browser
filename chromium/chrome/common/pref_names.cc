@@ -18,6 +18,8 @@ namespace prefs {
 const char kArcApps[] = "arc.apps";
 // A preference to keep Android apps enabled state.
 const char kArcEnabled[] = "arc.enabled";
+// A preference that indicates status of Android sign-in.
+const char kArcSignedIn[] = "arc.signedin";
 #endif
 
 // A bool pref that keeps whether the child status for this profile was already
@@ -385,8 +387,12 @@ const char kContextualSearchEnabled[] = "search.contextual_search_enabled";
 // window when the user is attempting to quit. Mac only.
 const char kConfirmToQuitEnabled[] = "browser.confirm_to_quit";
 
-// Boolean that indicates whether the browser should hide the toolbar when it's
+// Boolean that indicates whether the browser should show the toolbar when it's
 // in fullscreen. Mac only.
+const char kShowFullscreenToolbar[] = "browser.show_fullscreen_toolbar";
+
+// TODO(spqchan): Remove this, see crbug.com/590827.
+// This is being migrated to kShowFullscreenToolbar.
 const char kHideFullscreenToolbar[] = "browser.hide_fullscreen_toolbar";
 #endif
 
@@ -592,6 +598,21 @@ const char kAccessibilityAutoclickEnabled[] = "settings.a11y.autoclick";
 // stops and when an autoclick is triggered.
 const char kAccessibilityAutoclickDelayMs[] =
     "settings.a11y.autoclick_delay_ms";
+// A boolean pref which determines whether caret highlighting is enabled.
+const char kAccessibilityCaretHighlightEnabled[] =
+    "settings.a11y.caret_highlight";
+// A boolean pref which determines whether cursor highlighting is enabled.
+const char kAccessibilityCursorHighlightEnabled[] =
+    "settings.a11y.cursor_highlight";
+// A boolean pref which determines whether focus highlighting is enabled.
+const char kAccessibilityFocusHighlightEnabled[] =
+    "settings.a11y.focus_highlight";
+// A boolean pref which determines whether select-to-speak is enabled.
+const char kAccessibilitySelectToSpeakEnabled[] =
+    "settings.a11y.select_to_speak";
+// A boolean pref which determines whether switch access is enabled.
+const char kAccessibilitySwitchAccessEnabled[] =
+    "settings.a11y.switch_access";
 // A boolean pref which determines whether the accessibility menu shows
 // regardless of the state of a11y features.
 const char kShouldAlwaysShowAccessibilityMenu[] = "settings.a11y.enable_menu";
@@ -859,6 +880,8 @@ const char kDeauthorizeContentLicenses[] =
 const char kDeleteTimePeriod[] = "browser.clear_data.time_period";
 const char kLastClearBrowsingDataTime[] =
     "browser.last_clear_browsing_data_time";
+const char kClearBrowsingDataHistoryNoticeShownTimes[] =
+    "browser.clear_data.history_notice_shown_times";
 
 // Boolean pref to define the default values for using spellchecker.
 const char kEnableContinuousSpellcheck[] = "browser.enable_spellchecking";
@@ -926,12 +949,6 @@ const char kPluginsDisabledPluginsExceptions[] =
 // List pref containing names of plugins that are enabled by policy.
 const char kPluginsEnabledPlugins[] = "plugins.plugins_enabled";
 
-// When bundled NPAPI Flash is removed, if at that point it is enabled while
-// Pepper Flash is disabled, we would like to turn on Pepper Flash. And we will
-// want to do so in M45, once, for realz.
-const char kNpapiFlashMigratedToPepperFlash[] =
-    "plugins.npapi_flash_migrated_to_pepper_flash";
-
 #if defined(ENABLE_PLUGINS)
 // Whether about:plugins is shown in the details mode or not.
 const char kPluginsShowDetails[] = "plugins.show_details";
@@ -952,11 +969,12 @@ const char kPluginsMetadata[] = "plugins.metadata";
 const char kPluginsResourceCacheUpdate[] = "plugins.resource_cache_update";
 #endif
 
-// Boolean that indicates whether we should check if we are the default browser
-// on start-up.
-const char kCheckDefaultBrowser[] = "browser.check_default_browser";
-// Boolean that indicates whether the kCheckDefaultBrowser preference should be
-// reset on start-up.
+// Int64 containing the internal value of the time at which the default browser
+// infobar was last dismissed by the user.
+const char kDefaultBrowserLastDeclined[] =
+    "browser.default_browser_infobar_last_declined";
+// Boolean that indicates whether the kDefaultBrowserLastDeclined preference
+// should be reset on start-up.
 const char kResetCheckDefaultBrowser[] =
     "browser.should_reset_check_default_browser";
 
@@ -1268,6 +1286,13 @@ const char kCrashReportingEnabled[] =
     "user_experience_metrics_crash.reporting_enabled";
 #endif
 
+// An enum value indicating the default value of the enable metrics reporting
+// checkbox shown during first-run. If it's opt-in, then the checkbox defaulted
+// to unchecked, if it's opt-out, then it defaulted to checked. This value is
+// only recorded during first-run, so older clients will not set it. The enum
+// used for the value is metrics::MetricsServiceClient::EnableMetricsDefault.
+const char kMetricsDefaultOptIn[] = "user_experience_metrics.default_opt_in";
+
 // This is the location of a list of dictionaries of plugin stability stats.
 const char kStabilityPluginStats[] =
     "user_experience_metrics.stability.plugin_stats2";
@@ -1378,15 +1403,6 @@ const char kDefaultTasksBySuffix[] =
 // Extensions which should be opened upon completion.
 const char kDownloadExtensionsToOpen[] = "download.extensions_to_open";
 
-// Integer which specifies the frequency in milliseconds for detecting whether
-// plugin windows are hung.
-const char kHungPluginDetectFrequency[] = "browser.hung_plugin_detect_freq";
-
-// Integer which specifies the timeout value to be used for SendMessageTimeout
-// to detect a hung plugin window.
-const char kPluginMessageResponseTimeout[] =
-    "browser.plugin_message_response_timeout";
-
 // String which represents the dictionary name for our spell-checker.
 // This is an old preference that is being migrated to kSpellCheckDictionaries.
 const char kSpellCheckDictionary[] = "spellcheck.dictionary";
@@ -1425,15 +1441,14 @@ const char kShutdownNumProcessesSlow[] = "shutdown.num_processes_slow";
 const char kRestartLastSessionOnShutdown[] = "restart.last.session.on.shutdown";
 
 #if !defined(OS_ANDROID)
+// Boolean that specifies whether or not showing the unsupported OS warning is
+// suppressed. False by default. Controlled by the SuppressUnsupportedOSWarning
+// policy setting.
+const char kSuppressUnsupportedOSWarning[] =
+    "browser.suppress_unsupported_os_warning";
+
 // Set before autorestarting Chrome, cleared on clean exit.
 const char kWasRestarted[] = "was.restarted";
-#endif
-
-#if defined(OS_WIN)
-// Preference to be used while relaunching Chrome. This preference dictates if
-// Chrome should be launched in Metro or Desktop mode.
-// For more info take a look at ChromeRelaunchMode enum.
-const char kRelaunchMode[] = "relaunch.mode";
 #endif
 
 // Whether Extensions are enabled.
@@ -1570,12 +1585,6 @@ const char kWebAppCreateInQuickLaunchBar[] =
 // Dictionary that maps Geolocation network provider server URLs to
 // corresponding access token.
 const char kGeolocationAccessToken[] = "geolocation.access_token";
-
-#if BUILDFLAG(ENABLE_GOOGLE_NOW)
-// Boolean that is true when Google services can use the user's location.
-const char kGoogleGeolocationAccessEnabled[] =
-    "googlegeolocationaccess.enabled";
-#endif
 
 // Boolean that specifies whether to enable the Google Now Launcher extension.
 // Note: This is not the notifications component gated by ENABLE_GOOGLE_NOW.
@@ -1861,6 +1870,12 @@ const char kDebuggingFeaturesRequested[] = "DebuggingFeaturesRequested";
 // kResolveTimezoneByGeolocation
 const char kResolveDeviceTimezoneByGeolocation[] =
     "settings.resolve_device_timezone_by_geolocation";
+
+// This is policy-controlled preference.
+// It has values defined in policy enum
+// SystemTimezoneAutomaticDetectionProto_AutomaticTimezoneDetectionType;
+const char kSystemTimezoneAutomaticDetectionPolicy[] =
+    "settings.resolve_device_timezone_by_geolocation_policy";
 #endif  // defined(OS_CHROMEOS)
 
 // *************** SERVICE PREFS ***************
@@ -1973,9 +1988,6 @@ const char kMediaGalleriesUniqueId[] = "media_galleries.gallery_id";
 // gallery.
 const char kMediaGalleriesRememberedGalleries[] =
     "media_galleries.remembered_galleries";
-
-// The last time a media scan completed.
-const char kMediaGalleriesLastScanTime[] = "media_galleries.last_scan_time";
 #endif  // !defined(OS_ANDROID)
 
 #if defined(USE_ASH)

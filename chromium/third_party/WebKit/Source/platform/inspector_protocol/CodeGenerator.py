@@ -33,27 +33,30 @@ import jinja2
 
 cmdline_parser = optparse.OptionParser()
 cmdline_parser.add_option("--output_dir")
-cmdline_parser.add_option("--template_dir")
+cmdline_parser.add_option("--generate_dispatcher")
 
 try:
     arg_options, arg_values = cmdline_parser.parse_args()
-    if (len(arg_values) != 1):
-        raise Exception("Exactly one plain argument expected (found %s)" % len(arg_values))
-    input_json_filename = arg_values[0]
+    if (len(arg_values) == 0):
+        raise Exception("At least one plain argument expected (found %s)" % len(arg_values))
     output_dirname = arg_options.output_dir
+    generate_dispatcher = arg_options.generate_dispatcher
     if not output_dirname:
         raise Exception("Output directory must be specified")
 except Exception:
     # Work with python 2 and 3 http://docs.python.org/py3k/howto/pyporting.html
     exc = sys.exc_info()[1]
     sys.stderr.write("Failed to parse command-line arguments: %s\n\n" % exc)
-    sys.stderr.write("Usage: <script> --output_dir <output_dir> protocol.json\n")
+    sys.stderr.write("Usage: <script> --output_dir <output_dir> blink_protocol.json v8_protocol.json ...\n")
     exit(1)
 
-input_file = open(input_json_filename, "r")
-json_string = input_file.read()
-json_api = json.loads(json_string)
+json_api = {"domains": []}
 
+for filename in arg_values:
+    input_file = open(filename, "r")
+    json_string = input_file.read()
+    parsed_json = json.loads(json_string)
+    json_api["domains"] += parsed_json["domains"]
 
 def to_title_case(name):
     return name[:1].upper() + name[1:]
@@ -90,6 +93,8 @@ def patch_full_qualified_refs():
         if not isinstance(json, dict):
             return
         for key in json:
+            if key == "type" and json[key] == "string":
+                json[key] = domain_name + ".string"
             if key != "$ref":
                 patch_full_qualified_refs_in_domain(json[key], domain_name)
                 continue
@@ -115,43 +120,55 @@ def create_user_type_definition(domain_name, type):
 
 def create_object_type_definition():
     return {
-        "return_type": "PassRefPtr<protocol::DictionaryValue>",
-        "pass_type": "PassRefPtr<protocol::DictionaryValue>",
-        "to_raw_type": "%s",
+        "return_type": "PassOwnPtr<protocol::DictionaryValue>",
+        "pass_type": "PassOwnPtr<protocol::DictionaryValue>",
+        "to_raw_type": "%s.get()",
         "to_pass_type": "%s.release()",
-        "type": "RefPtr<protocol::DictionaryValue>",
-        "raw_type": "RefPtr<protocol::DictionaryValue>",
-        "raw_pass_type": "PassRefPtr<protocol::DictionaryValue>",
-        "raw_return_type": "RefPtr<protocol::DictionaryValue>",
+        "type": "OwnPtr<protocol::DictionaryValue>",
+        "raw_type": "protocol::DictionaryValue",
+        "raw_pass_type": "protocol::DictionaryValue*",
+        "raw_return_type": "protocol::DictionaryValue*",
     }
 
 
 def create_any_type_definition():
     return {
-        "return_type": "PassRefPtr<protocol::Value>",
-        "pass_type": "PassRefPtr<protocol::Value>",
+        "return_type": "PassOwnPtr<protocol::Value>",
+        "pass_type": "PassOwnPtr<protocol::Value>",
+        "to_raw_type": "%s.get()",
         "to_pass_type": "%s.release()",
+        "type": "OwnPtr<protocol::Value>",
+        "raw_type": "protocol::Value",
+        "raw_pass_type": "protocol::Value*",
+        "raw_return_type": "protocol::Value*",
+    }
+
+
+def create_string_type_definition(domain):
+    if domain in ["Runtime", "Debugger", "Profiler", "HeapProfiler"]:
+        return {
+            "return_type": "String16",
+            "pass_type": "const String16&",
+            "to_pass_type": "%s",
+            "to_raw_type": "%s",
+            "type": "String16",
+            "raw_type": "String16",
+            "raw_pass_type": "const String16&",
+            "raw_return_type": "String16",
+        }
+    return {
+        "return_type": "String",
+        "pass_type": "const String&",
+        "to_pass_type": "%s",
         "to_raw_type": "%s",
-        "type": "RefPtr<protocol::Value>",
-        "raw_type": "RefPtr<protocol::Value>",
-        "raw_pass_type": "PassRefPtr<protocol::Value>",
-        "raw_return_type": "RefPtr<protocol::Value>",
+        "type": "String",
+        "raw_type": "String",
+        "raw_pass_type": "const String&",
+        "raw_return_type": "String",
     }
 
 
 def create_primitive_type_definition(type):
-    if type == "string":
-        return {
-            "return_type": "String",
-            "pass_type": "const String&",
-            "to_pass_type": "%s",
-            "to_raw_type": "%s",
-            "type": "String",
-            "raw_type": "String",
-            "raw_pass_type": "const String&",
-            "raw_return_type": "String",
-        }
-
     typedefs = {
         "number": "double",
         "integer": "int",
@@ -174,13 +191,11 @@ def create_primitive_type_definition(type):
     }
 
 type_definitions = {}
-type_definitions["string"] = create_primitive_type_definition("string")
 type_definitions["number"] = create_primitive_type_definition("number")
 type_definitions["integer"] = create_primitive_type_definition("integer")
 type_definitions["boolean"] = create_primitive_type_definition("boolean")
 type_definitions["object"] = create_object_type_definition()
 type_definitions["any"] = create_any_type_definition()
-
 
 def wrap_array_definition(type):
     return {
@@ -199,6 +214,7 @@ def wrap_array_definition(type):
 
 def create_type_definitions():
     for domain in json_api["domains"]:
+        type_definitions[domain["domain"] + ".string"] = create_string_type_definition(domain["domain"])
         if not ("types" in domain):
             continue
         for type in domain["types"]:
@@ -207,6 +223,8 @@ def create_type_definitions():
             elif type["type"] == "array":
                 items_type = type["items"]["type"]
                 type_definitions[domain["domain"] + "." + type["id"]] = wrap_array_definition(type_definitions[items_type])
+            elif type["type"] == domain["domain"] + ".string":
+                type_definitions[domain["domain"] + "." + type["id"]] = create_string_type_definition(domain["domain"])
             else:
                 type_definitions[domain["domain"] + "." + type["id"]] = create_primitive_type_definition(type["type"])
 
@@ -253,6 +271,7 @@ def generate(class_name):
 
 
 jinja_env = initialize_jinja_env(output_dirname)
+generate("Backend")
 generate("Dispatcher")
 generate("Frontend")
 generate("TypeBuilder")

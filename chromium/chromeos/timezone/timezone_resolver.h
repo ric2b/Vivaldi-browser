@@ -5,6 +5,8 @@
 #ifndef CHROMEOS_TIMEZONE_TIMEZONE_RESOLVER_H_
 #define CHROMEOS_TIMEZONE_TIMEZONE_RESOLVER_H_
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
@@ -32,11 +34,24 @@ class CHROMEOS_EXPORT TimeZoneResolver {
   // restrictions.
   using DelayNetworkCallClosure = base::Callback<void(const base::Closure&)>;
 
+  class Delegate {
+   public:
+    Delegate();
+    virtual ~Delegate();
+
+    // Returns true if TimeZoneResolver should include WiFi data in request.
+    virtual bool ShouldSendWiFiGeolocationData() = 0;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(Delegate);
+  };
+
   // This is a LocalState preference to store base::Time value of the last
   // request. It is used to limit request rate on browser restart.
   static const char kLastTimeZoneRefreshTime[];
 
-  TimeZoneResolver(scoped_refptr<net::URLRequestContextGetter> context,
+  TimeZoneResolver(Delegate* delegate,
+                   scoped_refptr<net::URLRequestContextGetter> context,
                    const GURL& url,
                    const ApplyTimeZoneCallback& apply_timezone,
                    const DelayNetworkCallClosure& delay_network_call,
@@ -64,12 +79,17 @@ class CHROMEOS_EXPORT TimeZoneResolver {
 
   PrefService* local_state() const { return local_state_; }
 
+  // Proxy call to Delegate::ShouldSendWiFiGeolocationData().
+  bool ShouldSendWiFiGeolocationData() const;
+
   // Expose internal fuctions for testing.
   static int MaxRequestsCountForIntervalForTesting(
       const double interval_seconds);
   static int IntervalForNextRequestForTesting(const int requests);
 
  private:
+  Delegate* delegate_;
+
   scoped_refptr<net::URLRequestContextGetter> context_;
   const GURL url_;
 
@@ -77,7 +97,9 @@ class CHROMEOS_EXPORT TimeZoneResolver {
   const DelayNetworkCallClosure delay_network_call_;
   PrefService* local_state_;
 
-  scoped_ptr<TimeZoneResolverImpl> implementation_;
+  std::unique_ptr<TimeZoneResolverImpl> implementation_;
+
+  bool send_wifi_data_to_geolocation_api_;
 
   base::ThreadChecker thread_checker_;
 

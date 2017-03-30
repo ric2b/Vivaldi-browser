@@ -4,6 +4,8 @@
 
 #include "platform/web_process_memory_dump_impl.h"
 
+#include "base/memory/discardable_memory.h"
+#include "base/test/test_discardable_memory_allocator.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event_argument.h"
@@ -18,16 +20,16 @@ namespace blink {
 // behaves correctly, performs the right transfers of memory ownerships and
 // doesn't leak objects.
 TEST(WebProcessMemoryDumpImplTest, IntegrationTest) {
-  scoped_refptr<base::trace_event::TracedValue> traced_value(
-      new base::trace_event::TracedValue());
+  std::unique_ptr<base::trace_event::TracedValue> traced_value(
+          new base::trace_event::TracedValue());
 
-  scoped_ptr<WebProcessMemoryDumpImpl> wpmd1(new WebProcessMemoryDumpImpl());
+  std::unique_ptr<WebProcessMemoryDumpImpl> wpmd1(new WebProcessMemoryDumpImpl());
   auto wmad1 = wpmd1->createMemoryAllocatorDump("1/1");
   auto wmad2 = wpmd1->createMemoryAllocatorDump("1/2");
   ASSERT_EQ(wmad1, wpmd1->getMemoryAllocatorDump("1/1"));
   ASSERT_EQ(wmad2, wpmd1->getMemoryAllocatorDump("1/2"));
 
-  scoped_ptr<WebProcessMemoryDumpImpl> wpmd2(new WebProcessMemoryDumpImpl());
+  std::unique_ptr<WebProcessMemoryDumpImpl> wpmd2(new WebProcessMemoryDumpImpl());
   wpmd2->createMemoryAllocatorDump("2/1");
   wpmd2->createMemoryAllocatorDump("2/2");
 
@@ -90,7 +92,7 @@ TEST(WebProcessMemoryDumpImplTest, IntegrationTest) {
   ASSERT_NE(null_wmad, wpmd1->getMemoryAllocatorDump("2/2"));
 
   // Check that AsValueInto() doesn't cause a crash.
-  traced_value = new base::trace_event::TracedValue();
+  traced_value.reset(new base::trace_event::TracedValue);
   wpmd1->process_memory_dump()->AsValueInto(traced_value.get());
 
   // Check that clear() actually works.
@@ -100,7 +102,7 @@ TEST(WebProcessMemoryDumpImplTest, IntegrationTest) {
   ASSERT_EQ(nullptr, wpmd1->process_memory_dump()->GetAllocatorDump("2/1"));
 
   // Check that AsValueInto() doesn't cause a crash.
-  traced_value = new base::trace_event::TracedValue();
+  traced_value.reset(new base::trace_event::TracedValue);
   wpmd1->process_memory_dump()->AsValueInto(traced_value.get());
 
   // Check if a WebMemoryAllocatorDump created with guid, has correct guid.
@@ -118,6 +120,18 @@ TEST(WebProcessMemoryDumpImplTest, IntegrationTest) {
   ASSERT_EQ(1u, allocator_dumps_edges.size());
   ASSERT_EQ(wmad4->guid(), allocator_dumps_edges[0].source.ToUint64());
   ASSERT_EQ(guid, allocator_dumps_edges[0].target.ToUint64());
+
+  // Check that createDumpAdapterForSkia() works.
+  auto skia_trace_memory_dump = wpmd1->createDumpAdapterForSkia("1/skia");
+  ASSERT_TRUE(skia_trace_memory_dump);
+
+  // Check that createDiscardableMemoryAllocatorDump() works.
+  base::TestDiscardableMemoryAllocator discardable_memory_allocator;
+  auto discardable_memory =
+      discardable_memory_allocator.AllocateLockedDiscardableMemory(1024);
+  wpmd1->createDiscardableMemoryAllocatorDump("1/discardable",
+                                              discardable_memory.get());
+  discardable_memory->Unlock();
 
   wpmd1.reset();
 }

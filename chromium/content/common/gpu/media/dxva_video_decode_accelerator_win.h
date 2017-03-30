@@ -7,6 +7,7 @@
 
 #include <d3d11.h>
 #include <d3d9.h>
+#include <initguid.h>
 #include <stdint.h>
 // Work around bug in this header by disabling the relevant warning for it.
 // https://connect.microsoft.com/VisualStudio/feedback/details/911260/dxva2api-h-in-win8-sdk-triggers-c4201-with-w4
@@ -29,6 +30,8 @@
 #include "base/threading/thread.h"
 #include "base/win/scoped_comptr.h"
 #include "content/common/content_export.h"
+#include "content/common/gpu/media/gpu_video_decode_accelerator_helpers.h"
+#include "media/filters/h264_parser.h"
 #include "media/video/video_decode_accelerator.h"
 
 interface IMFSample;
@@ -44,6 +47,43 @@ typedef HRESULT (WINAPI* CreateDXGIDeviceManager)(
 
 namespace content {
 
+// Provides functionality to detect H.264 stream configuration changes.
+// TODO(ananta)
+// Move this to a common place so that all VDA's can use this.
+class H264ConfigChangeDetector {
+ public:
+  H264ConfigChangeDetector();
+  ~H264ConfigChangeDetector();
+
+  // Detects stream configuration changes.
+  // Returns false on failure.
+  bool DetectConfig(const uint8_t* stream, unsigned int size);
+
+  bool config_changed() const {
+    return config_changed_;
+  }
+
+ private:
+  // These fields are used to track the SPS/PPS in the H.264 bitstream and
+  // are eventually compared against the SPS/PPS in the bitstream to detect
+  // a change.
+  int last_sps_id_;
+  std::vector<uint8_t> last_sps_;
+  int last_pps_id_;
+  std::vector<uint8_t> last_pps_;
+  // Set to true if we detect a stream configuration change.
+  bool config_changed_;
+  // We want to indicate configuration changes only after we see IDR slices.
+  // This flag tracks that we potentially have a configuration change which
+  // we want to honor after we see an IDR slice.
+  bool pending_config_changed_;
+
+  scoped_ptr<media::H264Parser> parser_;
+
+  DISALLOW_COPY_AND_ASSIGN(H264ConfigChangeDetector);
+};
+
+
 // Class to provide a DXVA 2.0 based accelerator using the Microsoft Media
 // foundation APIs via the VideoDecodeAccelerator interface.
 // This class lives on a single thread and DCHECKs that it is never accessed
@@ -57,12 +97,14 @@ class CONTENT_EXPORT DXVAVideoDecodeAccelerator
     kResetting,                   // upon received Reset(), before ResetDone()
     kStopped,                     // upon output EOS received.
     kFlushing,                    // upon flush request received.
+    kConfigChange,                // stream configuration change detected.
   };
 
   // Does not take ownership of |client| which must outlive |*this|.
-  explicit DXVAVideoDecodeAccelerator(
-      const base::Callback<bool(void)>& make_context_current,
-      gfx::GLContext* gl_context);
+  DXVAVideoDecodeAccelerator(
+      const GetGLContextCallback& get_gl_context_cb,
+      const MakeGLContextCurrentCallback& make_context_current_cb,
+      bool enable_accelerated_vpx_decode);
   ~DXVAVideoDecodeAccelerator() override;
 
   // media::VideoDecodeAccelerator implementation.
@@ -74,7 +116,10 @@ class CONTENT_EXPORT DXVAVideoDecodeAccelerator
   void Flush() override;
   void Reset() override;
   void Destroy() override;
-  bool CanDecodeOnIOThread() override;
+  bool TryToSetupDecodeOnSeparateThread(
+      const base::WeakPtr<Client>& decode_client,
+      const scoped_refptr<base::SingleThreadTaskRunner>& decode_task_runner)
+      override;
   GLenum GetSurfaceInternalFormat() const override;
 
   static media::VideoDecodeAccelerator::SupportedProfiles
@@ -86,6 +131,23 @@ class CONTENT_EXPORT DXVAVideoDecodeAccelerator
  private:
   typedef void* EGLConfig;
   typedef void* EGLSurface;
+
+  // Returns the minimum resolution for the |profile| passed in.
+  static std::pair<int, int> GetMinResolution(
+    const media::VideoCodecProfile profile);
+
+  // Returns the maximum resolution for the |profile| passed in.
+  static std::pair<int, int> GetMaxResolution(
+    const media::VideoCodecProfile profile);
+
+  // Returns the maximum resolution for H264 video.
+  static std::pair<int, int> GetMaxH264Resolution();
+
+  // Certain AMD GPU drivers like R600, R700, Evergreen and Cayman and
+  // some second generation Intel GPU drivers crash if we create a video
+  // device with a resolution higher then 1920 x 1088. This function
+  // checks if the GPU is in this list and if yes returns true.
+  static bool IsLegacyGPU(ID3D11Device* device);
 
   // Creates and initializes an instance of the D3D device and the
   // corresponding device manager. The device manager instance is eventually
@@ -178,7 +240,7 @@ class CONTENT_EXPORT DXVAVideoDecodeAccelerator
   typedef std::map<int32_t, linked_ptr<DXVAPictureBuffer>> OutputBuffers;
 
   // Tells the client to dismiss the stale picture buffers passed in.
-  void DismissStaleBuffers();
+  void DismissStaleBuffers(bool force);
 
   // Called after the client indicates we can recycle a stale picture buffer.
   void DeferredDismissStaleBuffer(int32_t picture_buffer_id);
@@ -190,10 +252,6 @@ class CONTENT_EXPORT DXVAVideoDecodeAccelerator
   // Gets the state of the decoder. Can be called from the main thread and
   // the decoder thread. Thread safe.
   State GetState();
-
-  // Worker function for the Decoder Reset functionality. Executes on the
-  // decoder thread and queues tasks on the main thread as needed.
-  void ResetHelper();
 
   // Starts the thread used for decoding.
   void StartDecoderThread();
@@ -262,6 +320,18 @@ class CONTENT_EXPORT DXVAVideoDecodeAccelerator
                               const GUID& output_type,
                               int width,
                               int height);
+
+  // Checks if the resolution, bitrate etc of the stream changed. We do this
+  // by keeping track of the SPS/PPS frames and if they change we assume
+  // that the configuration changed.
+  // Returns S_OK or S_FALSE on succcess.
+  // The |config_changed| parameter is set to true if we detect a change in the
+  // stream.
+  HRESULT CheckConfigChanged(IMFSample* sample, bool* config_changed);
+
+  // Called when we detect a stream configuration change. We reinitialize the
+  // decoder here.
+  void ConfigChanged(const Config& config);
 
   // To expose client callbacks from VideoDecodeAccelerator.
   media::VideoDecodeAccelerator::Client* client_;
@@ -346,8 +416,10 @@ class CONTENT_EXPORT DXVAVideoDecodeAccelerator
   typedef std::list<base::win::ScopedComPtr<IMFSample>> PendingInputs;
   PendingInputs pending_input_buffers_;
 
+  // Callback to get current GLContext.
+  GetGLContextCallback get_gl_context_cb_;
   // Callback to set the correct gl context.
-  base::Callback<bool(void)> make_context_current_;
+  MakeGLContextCurrentCallback make_context_current_cb_;
 
   // Which codec we are decoding with hardware acceleration.
   media::VideoCodec codec_;
@@ -387,11 +459,21 @@ class CONTENT_EXPORT DXVAVideoDecodeAccelerator
   // be initialized. Defaults to true.
   bool dx11_video_format_converter_media_type_needs_init_;
 
-  // The GLContext to be used by the decoder.
-  scoped_refptr<gfx::GLContext> gl_context_;
-
   // Set to true if we are sharing ANGLE's device.
   bool using_angle_device_;
+
+  // Enables experimental hardware acceleration for VP8/VP9 video decoding.
+  const bool enable_accelerated_vpx_decode_;
+
+  // The media foundation H.264 decoder has problems handling changes like
+  // resolution change, bitrate change etc. If we reinitialize the decoder
+  // when these changes occur then, the decoder works fine. The
+  // H264ConfigChangeDetector class provides functionality to check if the
+  // stream configuration changed.
+  scoped_ptr<H264ConfigChangeDetector> config_change_detector_;
+
+  // Contains the initialization parameters for the video.
+  Config config_;
 
   // WeakPtrFactory for posting tasks back to |this|.
   base::WeakPtrFactory<DXVAVideoDecodeAccelerator> weak_this_factory_;

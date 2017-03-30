@@ -40,8 +40,8 @@ class ActivityLogApiTest : public ExtensionApiTest {
     command_line->AppendSwitch(switches::kEnableExtensionActivityLogging);
   }
 
-  scoped_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
-    scoped_ptr<BasicHttpResponse> response(new BasicHttpResponse);
+  std::unique_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
+    std::unique_ptr<BasicHttpResponse> response(new BasicHttpResponse);
     response->set_code(net::HTTP_OK);
     response->set_content("<html><head><title>ActivityLogTest</title>"
                           "</head><body>Hello World</body></html>");
@@ -62,12 +62,6 @@ class ActivityLogApiTest : public ExtensionApiTest {
 // The test extension sends a message to its 'friend'. The test completes
 // if it successfully sees the 'friend' receive the message.
 IN_PROC_BROWSER_TEST_F(ActivityLogApiTest, MAYBE_TriggerEvent) {
-#if defined(OS_MACOSX)
-  if (base::mac::IsOSSnowLeopard()) {
-    // This test flakes on 10.6 only. http://crbug.com/499176
-    return;
-  }
-#endif
   ActivityLog::GetInstance(profile())->SetWatchdogAppActiveForTesting(true);
 
   host_resolver()->AddRule("*", "127.0.0.1");

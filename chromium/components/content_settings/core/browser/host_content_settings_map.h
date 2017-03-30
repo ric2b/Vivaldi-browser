@@ -134,19 +134,41 @@ class HostContentSettingsMap : public content_settings::Observer,
   // Sets the content |setting| for the given patterns, |content_type| and
   // |resource_identifier|. Setting the value to CONTENT_SETTING_DEFAULT causes
   // the default setting for that type to be used when loading pages matching
-  // this pattern.
+  // this pattern. Unless adding a custom-scoped setting, most developers will
+  // want to use SetContentSettingDefaultScope() instead.
+  //
   // NOTICE: This is just a convenience method for content types that use
   // |CONTENT_SETTING| as their data type. For content types that use other
   // data types please use the method SetWebsiteSettingDefaultScope().
   //
   // This should only be called on the UI thread.
-  // TODO(raymes): Create a version of this function which uses the default
-  // scope.
-  void SetContentSetting(const ContentSettingsPattern& primary_pattern,
-                         const ContentSettingsPattern& secondary_pattern,
-                         ContentSettingsType content_type,
-                         const std::string& resource_identifier,
-                         ContentSetting setting);
+  void SetContentSettingCustomScope(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsType content_type,
+      const std::string& resource_identifier,
+      ContentSetting setting);
+
+  // Sets the content |setting| for the default scope of the url that is
+  // appropriate for the given |content_type| and |resource_identifier|.
+  // Setting the value to CONTENT_SETTING_DEFAULT causes the default setting
+  // for that type to be used.
+  //
+  // NOTICE: This is just a convenience method for content types that use
+  // |CONTENT_SETTING| as their data type. For content types that use other
+  // data types please use the method SetWebsiteSettingDefaultScope().
+  //
+  // This should only be called on the UI thread.
+  //
+  // Internally this will call SetContentSettingCustomScope() with the default
+  // scope patterns for the given |content_type|. Developers will generally want
+  // to use this function instead of SetContentSettingCustomScope() unless they
+  // need to specify custom scoping.
+  void SetContentSettingDefaultScope(const GURL& primary_url,
+                                     const GURL& secondary_url,
+                                     ContentSettingsType content_type,
+                                     const std::string& resource_identifier,
+                                     ContentSetting setting);
 
   // Sets the |value| for the default scope of the url that is appropriate for
   // the given |content_type| and |resource_identifier|. Setting the value to
@@ -258,7 +280,8 @@ class HostContentSettingsMap : public content_settings::Observer,
 
  private:
   friend class base::RefCountedThreadSafe<HostContentSettingsMap>;
-  friend class HostContentSettingsMapTest_NonDefaultSettings_Test;
+  friend class HostContentSettingsMapTest_MigrateOldSettings_Test;
+
   friend class content_settings::TestUtils;
 
   typedef std::map<ProviderType, content_settings::ProviderInterface*>
@@ -271,6 +294,17 @@ class HostContentSettingsMap : public content_settings::Observer,
   ContentSetting GetDefaultContentSettingFromProvider(
       ContentSettingsType content_type,
       content_settings::ProviderInterface* provider) const;
+
+  // Migrate old settings for ContentSettingsTypes which only use a primary
+  // pattern. Settings which only used a primary pattern were inconsistent in
+  // what they did with the secondary pattern. Some stored a
+  // ContentSettingsPattern::Wildcard() whereas others stored the same pattern
+  // twice. This function migrates all such settings to use
+  // ContentSettingsPattern::Wildcard(). This allows us to make the scoping code
+  // consistent across different settings.
+  // TODO(lshang): Remove this when clients have migrated (~M53). We should
+  // leave in some code to remove old-format settings for a long time.
+  void MigrateOldSettings();
 
   // Adds content settings for |content_type| and |resource_identifier|,
   // provided by |provider|, into |settings|. If |incognito| is true, adds only

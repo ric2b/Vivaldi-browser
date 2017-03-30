@@ -335,13 +335,11 @@ class CONTENT_EXPORT RenderFrameHostManager
   void DidChangeOpener(int opener_routing_id,
                        SiteInstance* source_site_instance);
 
-  // Creates and initializes a RenderFrameHost. If |flags| has the
-  // CREATE_RF_SWAPPED_OUT bit set from the CreateRenderFrameFlags enum, it will
-  // initially be placed on the swapped out hosts list. If |view_routing_id_ptr|
+  // Creates and initializes a RenderFrameHost. If |view_routing_id_ptr|
   // is not nullptr it will be set to the routing id of the view associated with
   // the frame.
   scoped_ptr<RenderFrameHostImpl> CreateRenderFrame(SiteInstance* instance,
-                                                    int flags,
+                                                    bool hidden,
                                                     int* view_routing_id_ptr);
 
   // Helper method to create and initialize a RenderFrameProxyHost and return
@@ -386,8 +384,9 @@ class CONTENT_EXPORT RenderFrameHostManager
   RenderFrameProxyHost* GetRenderFrameProxyHost(
       SiteInstance* instance) const;
 
-  // Returns whether |render_frame_host| is on the pending deletion list.
-  bool IsPendingDeletion(RenderFrameHostImpl* render_frame_host);
+  // Returns whether |render_view_host| will be deleted when its main
+  // RenderFrameHost is deleted from the pending deletion list.
+  bool IsViewPendingDeletion(RenderViewHostImpl* render_view_host);
 
   // If |render_frame_host| is on the pending deletion list, this deletes it.
   // Returns whether it was deleted.
@@ -409,7 +408,7 @@ class CONTENT_EXPORT RenderFrameHostManager
   // Notifies the RenderFrameHostManager that a new NavigationRequest has been
   // created and set in the FrameTreeNode so that it can speculatively create a
   // new RenderFrameHost (and potentially a new process) if needed.
-  void DidCreateNavigationRequest(const NavigationRequest& request);
+  void DidCreateNavigationRequest(NavigationRequest* request);
 
   // PlzNavigate
   // Called (possibly several times) during a navigation to select or create an
@@ -444,7 +443,8 @@ class CONTENT_EXPORT RenderFrameHostManager
 
   // Send updated origin to all frame proxies when the frame navigates to a new
   // origin.
-  void OnDidUpdateOrigin(const url::Origin& origin);
+  void OnDidUpdateOrigin(const url::Origin& origin,
+                         bool is_potentially_trustworthy_unique_origin);
 
   void EnsureRenderViewInitialized(RenderViewHostImpl* render_view_host,
                                    SiteInstance* instance);
@@ -487,6 +487,10 @@ class CONTENT_EXPORT RenderFrameHostManager
   // Returns the number of RenderFrameProxyHosts for this frame.
   int GetProxyCount();
 
+  // Sends an IPC message to every process in the FrameTree. This should only be
+  // called in the top-level RenderFrameHostManager.
+  void SendPageMessage(IPC::Message* msg);
+
   // Returns a const reference to the map of proxy hosts. The keys are
   // SiteInstance IDs, the values are RenderFrameProxyHosts.
   const std::unordered_map<int32_t, scoped_ptr<RenderFrameProxyHost>>&
@@ -498,10 +502,26 @@ class CONTENT_EXPORT RenderFrameHostManager
   void ActiveFrameCountIsZero(SiteInstanceImpl* site_instance) override;
   void RenderProcessGone(SiteInstanceImpl* site_instance) override;
 
+  // Sets up the necessary state for a new RenderViewHost.  If |proxy| is not
+  // null, it creates a RenderFrameProxy in the target renderer process which is
+  // used to route IPC messages when in swapped out state.  Returns early if the
+  // RenderViewHost has already been initialized for another RenderFrameHost.
+  bool InitRenderView(RenderViewHostImpl* render_view_host,
+    RenderFrameProxyHost* proxy);
+
  private:
   friend class NavigatorTestWithBrowserSideNavigation;
   friend class RenderFrameHostManagerTest;
   friend class TestWebContents;
+
+  enum class SiteInstanceRelation {
+    // A SiteInstance in a different browsing instance from the current.
+    UNRELATED,
+    // A SiteInstance in the same browsing instance as the current.
+    RELATED,
+    // The default subframe SiteInstance for the current browsing instance.
+    RELATED_DEFAULT_SUBFRAME,
+  };
 
   // Stores information regarding a SiteInstance targeted at a specific URL to
   // allow for comparisons without having to actually create new instances. It
@@ -510,11 +530,11 @@ class CONTENT_EXPORT RenderFrameHostManager
   struct CONTENT_EXPORT SiteInstanceDescriptor {
     explicit SiteInstanceDescriptor(content::SiteInstance* site_instance)
         : existing_site_instance(site_instance),
-          new_is_related_to_current(false) {}
+          relation(SiteInstanceRelation::UNRELATED) {}
 
     SiteInstanceDescriptor(BrowserContext* browser_context,
                            GURL dest_url,
-                           bool related_to_current);
+                           SiteInstanceRelation relation_to_current);
 
     // Set with an existing SiteInstance to be reused.
     content::SiteInstance* existing_site_instance;
@@ -522,9 +542,9 @@ class CONTENT_EXPORT RenderFrameHostManager
     // In case |existing_site_instance| is null, specify a new site URL.
     GURL new_site_url;
 
-    // In case |existing_site_instance| is null, specify if the new site should
-    // be created in a new BrowsingInstance or not.
-    bool new_is_related_to_current;
+    // In case |existing_site_instance| is null, specify how the new site is
+    // related to the current BrowsingInstance.
+    SiteInstanceRelation relation;
   };
 
   // Create a RenderFrameProxyHost owned by this object.
@@ -559,13 +579,14 @@ class CONTENT_EXPORT RenderFrameHostManager
       bool new_is_view_source_mode) const;
 
   // Returns the SiteInstance to use for the navigation.
-  SiteInstance* GetSiteInstanceForNavigation(const GURL& dest_url,
-                                             SiteInstance* source_instance,
-                                             SiteInstance* dest_instance,
-                                             SiteInstance* candidate_instance,
-                                             ui::PageTransition transition,
-                                             bool dest_is_restore,
-                                             bool dest_is_view_source_mode);
+  scoped_refptr<SiteInstance> GetSiteInstanceForNavigation(
+      const GURL& dest_url,
+      SiteInstance* source_instance,
+      SiteInstance* dest_instance,
+      SiteInstance* candidate_instance,
+      ui::PageTransition transition,
+      bool dest_is_restore,
+      bool dest_is_view_source_mode);
 
   // Returns a descriptor of the appropriate SiteInstance object for the given
   // |dest_url|, possibly reusing the current, source or destination
@@ -594,12 +615,13 @@ class CONTENT_EXPORT RenderFrameHostManager
   // Converts a SiteInstanceDescriptor to the actual SiteInstance it describes.
   // If a |candidate_instance| is provided (is not nullptr) and it matches the
   // description, it is returned as is.
-  SiteInstance* ConvertToSiteInstance(const SiteInstanceDescriptor& descriptor,
-                                      SiteInstance* candidate_instance);
+  scoped_refptr<SiteInstance> ConvertToSiteInstance(
+      const SiteInstanceDescriptor& descriptor,
+      SiteInstance* candidate_instance);
 
-  // Determines the appropriate url to use as the current url for SiteInstance
-  // selection.
-  const GURL& GetCurrentURLForSiteInstance(SiteInstance* current_instance);
+  // Returns true if |candidate| is currently on the same web site as dest_url.
+  bool IsCurrentlySameSite(RenderFrameHostImpl* candidate,
+                           const GURL& dest_url);
 
   // Creates a new RenderFrameHostImpl for the |new_instance| and assign it to
   // |pending_render_frame_host_| while respecting the opener route if needed
@@ -640,7 +662,7 @@ class CONTENT_EXPORT RenderFrameHostManager
       int32_t view_routing_id,
       int32_t frame_routing_id,
       int32_t widget_routing_id,
-      int flags);
+      bool hidden);
 
   // PlzNavigate
   // Create and initialize a speculative RenderFrameHost for an ongoing
@@ -648,13 +670,6 @@ class CONTENT_EXPORT RenderFrameHostManager
   // is redirected to a different SiteInstance.
   bool CreateSpeculativeRenderFrameHost(SiteInstance* old_instance,
                                         SiteInstance* new_instance);
-
-  // Sets up the necessary state for a new RenderViewHost.  If |proxy| is not
-  // null, it creates a RenderFrameProxy in the target renderer process which is
-  // used to route IPC messages when in swapped out state.  Returns early if the
-  // RenderViewHost has already been initialized for another RenderFrameHost.
-  bool InitRenderView(RenderViewHostImpl* render_view_host,
-                      RenderFrameProxyHost* proxy);
 
   // Initialization for RenderFrameHost uses the same sequence as InitRenderView
   // above.

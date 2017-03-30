@@ -48,8 +48,7 @@ namespace net {
 namespace test {
 namespace {
 
-const IPEndPoint kIpEndPoint =
-    IPEndPoint(IPAddress(std::vector<uint8_t>(kIPv4AddressSize, 0)), 0);
+const IPEndPoint kIpEndPoint = IPEndPoint(IPAddress::IPv4AllZeros(), 0);
 const char kServerHostname[] = "test.example.com";
 const uint16_t kServerPort = 443;
 const size_t kMaxReadersPerQuicSession = 5;
@@ -368,7 +367,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocket) {
   iov[0].iov_base = data;
   iov[0].iov_len = 4;
   session_->WritevData(5, QuicIOVector(iov, arraysize(iov), 4), 0, false,
-                       MAY_FEC_PROTECT, nullptr);
+                       nullptr);
 
   EXPECT_TRUE(socket_data.AllReadDataConsumed());
   EXPECT_TRUE(socket_data.AllWriteDataConsumed());

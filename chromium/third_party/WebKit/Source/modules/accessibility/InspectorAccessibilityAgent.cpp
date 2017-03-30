@@ -81,7 +81,7 @@ void fillGlobalStates(AXObject* axObject, protocol::Array<AXProperty>* propertie
         properties->addItem(createProperty(AXGlobalStatesEnum::HiddenRoot, createRelatedNodeListValue(hiddenRoot)));
     }
 
-    InvalidState invalidState = axObject->invalidState();
+    InvalidState invalidState = axObject->getInvalidState();
     switch (invalidState) {
     case InvalidStateUndefined:
         break;
@@ -256,7 +256,7 @@ PassOwnPtr<AXProperty> createRelatedNodeListProperty(const String& key, AXObject
 {
     OwnPtr<AXValue> nodeListValue = createRelatedNodeListValue(nodes);
     const AtomicString& attrValue = axObject->getAttribute(attr);
-    nodeListValue->setValue(protocol::StringValue::create(attrValue).get());
+    nodeListValue->setValue(protocol::StringValue::create(attrValue));
     return createProperty(key, nodeListValue.release());
 }
 

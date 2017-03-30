@@ -27,7 +27,7 @@
     'public/android/java/src/org/chromium/content/browser/input/PopupTouchHandleDrawable.java',
     'public/android/java/src/org/chromium/content/browser/InterstitialPageDelegateAndroid.java',
     'public/android/java/src/org/chromium/content/browser/LocationProviderAdapter.java',
-    'public/android/java/src/org/chromium/content/browser/MediaSession.java',
+    'public/android/java/src/org/chromium/content/browser/MediaSessionDelegate.java',
     'public/android/java/src/org/chromium/content/browser/MediaResourceGetter.java',
     'public/android/java/src/org/chromium/content/browser/MediaThrottler.java',
     'public/android/java/src/org/chromium/content/browser/MotionEventSynthesizer.java',
@@ -42,6 +42,7 @@
     'public/android/java/src/org/chromium/content/browser/webcontents/WebContentsImpl.java',
     'public/android/java/src/org/chromium/content/browser/webcontents/WebContentsObserverProxy.java',
     'public/android/java/src/org/chromium/content_public/browser/LoadUrlParams.java',
+    'public/android/java/src/org/chromium/content_public/common/MediaMetadata.java',
    ],
   'variables': {
     'jni_gen_package': 'content',

@@ -18,10 +18,9 @@ group("service") {
 }
 
 source_set("service_sources") {
-  visibility = [
-    "//gpu/*",
-    "//mojo/gles2:gles2",
-  ]
+  # External code should depend on this via //gpu/command_buffer/service above
+  # rather than depending on this directly or the component build will break.
+  visibility = [ "//gpu/*" ]
 
   sources = [
     "buffer_manager.cc",
@@ -31,6 +30,8 @@ source_set("service_sources") {
     "cmd_parser.h",
     "command_buffer_service.cc",
     "command_buffer_service.h",
+    "command_executor.cc",
+    "command_executor.h",
     "common_decoder.cc",
     "common_decoder.h",
     "context_group.cc",
@@ -64,8 +65,8 @@ source_set("service_sources") {
     "gles2_cmd_validation.h",
     "gles2_cmd_validation_autogen.h",
     "gles2_cmd_validation_implementation_autogen.h",
-    "gpu_scheduler.cc",
-    "gpu_scheduler.h",
+    "gpu_preferences.cc",
+    "gpu_preferences.h",
     "gpu_state_tracer.cc",
     "gpu_state_tracer.h",
     "gpu_switches.cc",
@@ -143,6 +144,8 @@ source_set("service_sources") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//crypto",
+    "//gpu/command_buffer/client:client_sources",
+    "//gpu/command_buffer/common:gles2_utils",
     "//gpu/config:config_sources",
     "//third_party/angle:commit_id",
     "//third_party/angle:translator",

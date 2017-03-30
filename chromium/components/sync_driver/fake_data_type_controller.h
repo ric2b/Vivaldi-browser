@@ -25,7 +25,10 @@ class FakeDataTypeController : public DirectoryDataTypeController {
  public:
   explicit FakeDataTypeController(syncer::ModelType type);
 
+  // DirectoryDataTypeController implementation.
+  bool ShouldLoadModelBeforeConfigure() const override;
   void LoadModels(const ModelLoadCallback& model_load_callback) override;
+  void RegisterWithBackend(BackendDataTypeConfigurer* configurer) override;
   void StartAssociating(const StartCallback& start_callback) override;
   void Stop() override;
   syncer::ModelType type() const override;
@@ -47,6 +50,12 @@ class FakeDataTypeController : public DirectoryDataTypeController {
 
   void SetReadyForStart(bool ready);
 
+  void SetShouldLoadModelBeforeConfigure(bool value);
+
+  int register_with_backend_call_count() const {
+    return register_with_backend_call_count_;
+  }
+
  protected:
   ~FakeDataTypeController() override;
 
@@ -58,6 +67,8 @@ class FakeDataTypeController : public DirectoryDataTypeController {
   ModelLoadCallback model_load_callback_;
   syncer::SyncError load_error_;
   bool ready_for_start_;
+  bool should_load_model_before_configure_;
+  int register_with_backend_call_count_;
 };
 
 }  // namespace sync_driver

@@ -46,7 +46,7 @@ WorkerConsole::~WorkerConsole()
 {
 }
 
-void WorkerConsole::reportMessageToConsole(PassRefPtrWillBeRawPtr<ConsoleMessage> consoleMessage)
+void WorkerConsole::reportMessageToConsole(ConsoleMessage* consoleMessage)
 {
     m_scope->addConsoleMessage(consoleMessage);
 }
@@ -55,7 +55,7 @@ ExecutionContext* WorkerConsole::context()
 {
     if (!m_scope)
         return nullptr;
-    return m_scope->executionContext();
+    return m_scope->getExecutionContext();
 }
 
 DEFINE_TRACE(WorkerConsole)

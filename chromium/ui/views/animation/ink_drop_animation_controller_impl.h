@@ -11,6 +11,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/animation/ink_drop_animation_controller.h"
 #include "ui/views/animation/ink_drop_animation_observer.h"
+#include "ui/views/animation/ink_drop_hover_observer.h"
 #include "ui/views/views_export.h"
 
 namespace base {
@@ -18,6 +19,10 @@ class Timer;
 }  // namespace base
 
 namespace views {
+namespace test {
+class InkDropAnimationControllerImplTestApi;
+}  // namespace test
+
 class InkDropAnimation;
 class InkDropHost;
 class InkDropHover;
@@ -26,7 +31,8 @@ class InkDropAnimationControllerFactoryTest;
 // A functional implementation of an InkDropAnimationController.
 class VIEWS_EXPORT InkDropAnimationControllerImpl
     : public InkDropAnimationController,
-      public InkDropAnimationObserver {
+      public InkDropAnimationObserver,
+      public InkDropHoverObserver {
  public:
   // Constructs an ink drop controller that will attach the ink drop to the
   // given |ink_drop_host|.
@@ -41,12 +47,10 @@ class VIEWS_EXPORT InkDropAnimationControllerImpl
   void SetHovered(bool is_hovered) override;
 
  private:
-  friend class InkDropAnimationControllerFactoryTest;
-  friend class InkDropAnimationControllerImplTest;
+  friend class test::InkDropAnimationControllerImplTestApi;
 
-  // Forcibly transition to the HIDDEN state if completing the current animation
-  // sequence would eventually be HIDDEN.
-  void CompleteHiddenTargetedAnimations();
+  // Destroys |ink_drop_animation_| if it's targeted to the HIDDEN state.
+  void DestroyHiddenTargetedAnimations();
 
   // Creates a new InkDropAnimation and sets it to |ink_drop_animation_|. If
   // |ink_drop_animation_| wasn't null then it will be destroyed using
@@ -63,19 +67,35 @@ class VIEWS_EXPORT InkDropAnimationControllerImpl
   // Destroys the current |hover_|.
   void DestroyInkDropHover();
 
+  // Adds the |root_layer_| to the |ink_drop_host_| if it hasn't already been
+  // added.
+  void AddRootLayerToHostIfNeeded();
+
+  // Removes the |root_layer_| from the |ink_drop_host_| if no ink drop ripple
+  // or hover is active.
+  void RemoveRootLayerFromHostIfNeeded();
+
   // Returns true if the hover animation is in the process of fading in or
   // is visible.
   bool IsHoverFadingInOrVisible() const;
 
   // views::InkDropAnimationObserver:
-  void InkDropAnimationStarted(InkDropState ink_drop_state) override;
-  void InkDropAnimationEnded(InkDropState ink_drop_state,
-                             InkDropAnimationEndedReason reason) override;
+  void AnimationStarted(InkDropState ink_drop_state) override;
+  void AnimationEnded(InkDropState ink_drop_state,
+                      InkDropAnimationEndedReason reason) override;
+
+  // views::InkDropHoverObserver:
+  void AnimationStarted(InkDropHover::AnimationType animation_type) override;
+  void AnimationEnded(InkDropHover::AnimationType animation_type,
+                      InkDropAnimationEndedReason reason) override;
 
   // Enables or disables the hover state based on |is_hovered| and if an
   // animation is triggered it will be scheduled to have the given
-  // |animation_duration|.
-  void SetHoveredInternal(bool is_hovered, base::TimeDelta animation_duration);
+  // |animation_duration|. If |explode| is true the hover will expand as it
+  // fades out. |explode| is ignored when |is_hovered| is true.
+  void SetHoveredInternal(bool is_hovered,
+                          base::TimeDelta animation_duration,
+                          bool explode);
 
   // Starts the |hover_after_animation_timer_| timer. This will stop the current
   // |hover_after_animation_timer_| instance if it exists.
@@ -95,6 +115,9 @@ class VIEWS_EXPORT InkDropAnimationControllerImpl
   // InkDropHover layers. The |root_layer_| is the one that is added and removed
   // from the InkDropHost.
   scoped_ptr<ui::Layer> root_layer_;
+
+  // True when the |root_layer_| has been added to the |ink_drop_host_|.
+  bool root_layer_added_to_host_;
 
   // The current InkDropHover. Lazily created using CreateInkDropHover();
   scoped_ptr<InkDropHover> hover_;

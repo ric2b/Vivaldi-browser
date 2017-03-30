@@ -4,13 +4,13 @@
 
 #include "content/browser/media/capture/web_contents_audio_input_stream.h"
 
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "content/browser/media/capture/audio_mirroring_manager.h"
 #include "content/browser/media/capture/web_contents_tracker.h"
@@ -101,7 +101,7 @@ class WebContentsAudioInputStream::Impl
   const scoped_refptr<WebContentsTracker> tracker_;
   // The AudioInputStream implementation that handles the audio conversion and
   // mixing details.
-  const scoped_ptr<media::VirtualAudioInputStream> mixer_stream_;
+  const std::unique_ptr<media::VirtualAudioInputStream> mixer_stream_;
 
   State state_;
 
@@ -131,8 +131,8 @@ WebContentsAudioInputStream::Impl::Impl(
       is_target_lost_(false),
       callback_(NULL) {
   DCHECK(mirroring_manager_);
-  DCHECK(tracker_.get());
-  DCHECK(mixer_stream_.get());
+  DCHECK(tracker_);
+  DCHECK(mixer_stream_);
 
   // WAIS::Impl can be constructed on any thread, but will DCHECK that all
   // its methods from here on are called from the same thread.
@@ -228,23 +228,19 @@ void WebContentsAudioInputStream::Impl::ReportError() {
 void WebContentsAudioInputStream::Impl::StartMirroring() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&AudioMirroringManager::StartMirroring,
-                 base::Unretained(mirroring_manager_),
-                 make_scoped_refptr(this)));
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::Bind(&AudioMirroringManager::StartMirroring,
+                                     base::Unretained(mirroring_manager_),
+                                     base::RetainedRef(this)));
 }
 
 void WebContentsAudioInputStream::Impl::StopMirroring() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&AudioMirroringManager::StopMirroring,
-                 base::Unretained(mirroring_manager_),
-                 make_scoped_refptr(this)));
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::Bind(&AudioMirroringManager::StopMirroring,
+                                     base::Unretained(mirroring_manager_),
+                                     base::RetainedRef(this)));
 }
 
 void WebContentsAudioInputStream::Impl::UnmuteWebContentsAudio() {

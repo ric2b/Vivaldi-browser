@@ -65,21 +65,21 @@ class PipelineIntegrationTestBase {
   PipelineIntegrationTestBase();
   virtual ~PipelineIntegrationTestBase();
 
-  bool WaitUntilOnEnded();
-  PipelineStatus WaitUntilEndedOrError();
+  // Test types for advanced testing and benchmarking (e.g., underflow is
+  // disabled to ensure consistent hashes). May be combined using the bitwise
+  // or operator (and as such must have values that are powers of two).
+  enum TestTypeFlags { kNormal = 0, kHashed = 1, kClockless = 2 };
 
-  // Starts the pipeline (optionally with a CdmContext), returning the final
-  // status code after it has started. |filename| points at a test file located
-  // under media/test/data/.
+  // Starts the pipeline with a file specified by |filename|, optionally with a
+  // CdmContext or a |test_type|, returning the final status code after it has
+  // started. |filename| points at a test file located under media/test/data/.
   PipelineStatus Start(const std::string& filename);
   PipelineStatus Start(const std::string& filename, CdmContext* cdm_context);
-
-  // Starts the pipeline in a particular mode for advanced testing and
-  // benchmarking purposes (e.g., underflow is disabled to ensure consistent
-  // hashes).  May be combined using the bitwise or operator (and as such must
-  // have values that are powers of two).
-  enum TestTypeFlags { kNormal = 0, kHashed = 1, kClockless = 2 };
   PipelineStatus Start(const std::string& filename, uint8_t test_type);
+
+  // Starts the pipeline with |data| (with |size| bytes). The |data| will be
+  // valid throughtout the lifetime of this test.
+  PipelineStatus Start(const uint8_t* data, size_t size, uint8_t test_type);
 
   void Play();
   void Pause();
@@ -87,7 +87,13 @@ class PipelineIntegrationTestBase {
   bool Suspend();
   bool Resume(base::TimeDelta seek_time);
   void Stop();
+
+  // Fails the test with |status|.
+  void FailTest(PipelineStatus status);
+
   bool WaitUntilCurrentTimeIsAfter(const base::TimeDelta& wait_time);
+  bool WaitUntilOnEnded();
+  PipelineStatus WaitUntilEndedOrError();
 
   // Returns the MD5 hash of all video frames seen.  Should only be called once
   // after playback completes.  First time hashes should be generated with
@@ -103,6 +109,13 @@ class PipelineIntegrationTestBase {
   // Returns the time taken to render the complete audio file.
   // Pipeline must have been started with clockless playback enabled.
   base::TimeDelta GetAudioTime();
+
+  // Sets a callback to handle EME "encrypted" event. Must be called to test
+  // potentially encrypted media.
+  void set_encrypted_media_init_data_cb(
+      const Demuxer::EncryptedMediaInitDataCB& encrypted_media_init_data_cb) {
+    encrypted_media_init_data_cb_ = encrypted_media_init_data_cb;
+  }
 
  protected:
   class DecodingMockVDA;
@@ -133,21 +146,27 @@ class PipelineIntegrationTestBase {
   PipelineMetadata metadata_;
   std::string filename_;
 
+  PipelineStatus StartInternal(scoped_ptr<DataSource> data_source,
+                               CdmContext* cdm_context,
+                               uint8_t test_type);
+
+  PipelineStatus StartWithFile(const std::string& filename,
+                               CdmContext* cdm_context,
+                               uint8_t test_type);
+
   void OnSeeked(base::TimeDelta seek_time, PipelineStatus status);
   void OnStatusCallback(PipelineStatus status);
   void DemuxerEncryptedMediaInitDataCB(EmeInitDataType type,
                                        const std::vector<uint8_t>& init_data);
-  void set_encrypted_media_init_data_cb(
-      const Demuxer::EncryptedMediaInitDataCB& encrypted_media_init_data_cb) {
-    encrypted_media_init_data_cb_ = encrypted_media_init_data_cb;
-  }
+
+  void DemuxerMediaTracksUpdatedCB(scoped_ptr<MediaTracks> tracks);
 
   void OnEnded();
   void OnError(PipelineStatus status);
   void QuitAfterCurrentTimeTask(const base::TimeDelta& quit_time);
 
   // Creates Demuxer and sets |demuxer_|.
-  virtual void CreateDemuxer(const std::string& filename);
+  virtual void CreateDemuxer(scoped_ptr<DataSource> data_source);
 
   // Creates and returns a Renderer.
   virtual scoped_ptr<Renderer> CreateRenderer(const base::FilePath& file_path);

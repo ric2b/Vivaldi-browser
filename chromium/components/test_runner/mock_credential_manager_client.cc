@@ -4,13 +4,15 @@
 
 #include "components/test_runner/mock_credential_manager_client.h"
 
+#include <memory>
+#include <utility>
+
 #include "third_party/WebKit/public/platform/WebCredential.h"
-#include "third_party/WebKit/public/platform/WebPassOwnPtr.h"
 
 namespace test_runner {
 
-MockCredentialManagerClient::MockCredentialManagerClient() {
-}
+MockCredentialManagerClient::MockCredentialManagerClient()
+    : error_(blink::WebCredentialManagerNoError) {}
 
 MockCredentialManagerClient::~MockCredentialManagerClient() {
 }
@@ -18,6 +20,17 @@ MockCredentialManagerClient::~MockCredentialManagerClient() {
 void MockCredentialManagerClient::SetResponse(
     blink::WebCredential* credential) {
   credential_.reset(credential);
+}
+
+void MockCredentialManagerClient::SetError(const std::string& error) {
+  if (error == "pending")
+    error_ = blink::WebCredentialManagerPendingRequestError;
+  if (error == "disabled")
+    error_ = blink::WebCredentialManagerDisabledError;
+  if (error == "unknown")
+    error_ = blink::WebCredentialManagerUnknownError;
+  if (error.empty())
+    error_ = blink::WebCredentialManagerNoError;
 }
 
 void MockCredentialManagerClient::dispatchStore(
@@ -38,7 +51,10 @@ void MockCredentialManagerClient::dispatchGet(
     bool include_passwords,
     const blink::WebVector<blink::WebURL>& federations,
     RequestCallbacks* callbacks) {
-  callbacks->onSuccess(adoptWebPtr(credential_.release()));
+  if (error_ != blink::WebCredentialManagerNoError)
+    callbacks->onError(error_);
+  else
+    callbacks->onSuccess(std::move(credential_));
   delete callbacks;
 }
 

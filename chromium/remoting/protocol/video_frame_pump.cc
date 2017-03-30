@@ -5,15 +5,17 @@
 #include "remoting/protocol/video_frame_pump.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner_util.h"
 #include "base/time/time.h"
+#include "remoting/base/constants.h"
 #include "remoting/proto/control.pb.h"
 #include "remoting/proto/video.pb.h"
 #include "remoting/protocol/video_stub.h"
@@ -34,8 +36,8 @@ VideoFramePump::FrameTimestamps::FrameTimestamps() {}
 VideoFramePump::FrameTimestamps::~FrameTimestamps() {}
 
 VideoFramePump::PacketWithTimestamps::PacketWithTimestamps(
-    scoped_ptr<VideoPacket> packet,
-    scoped_ptr<FrameTimestamps> timestamps)
+    std::unique_ptr<VideoPacket> packet,
+    std::unique_ptr<FrameTimestamps> timestamps)
     : packet(std::move(packet)), timestamps(std::move(timestamps)) {}
 
 VideoFramePump::PacketWithTimestamps::~PacketWithTimestamps() {}
@@ -47,8 +49,8 @@ void VideoFramePump::EnableTimestampsForTests() {
 
 VideoFramePump::VideoFramePump(
     scoped_refptr<base::SingleThreadTaskRunner> encode_task_runner,
-    scoped_ptr<webrtc::DesktopCapturer> capturer,
-    scoped_ptr<VideoEncoder> encoder,
+    std::unique_ptr<webrtc::DesktopCapturer> capturer,
+    std::unique_ptr<VideoEncoder> encoder,
     protocol::VideoStub* video_stub)
     : encode_task_runner_(encode_task_runner),
       capturer_(std::move(capturer)),
@@ -122,10 +124,16 @@ void VideoFramePump::OnCaptureCompleted(webrtc::DesktopFrame* frame) {
 
   captured_frame_timestamps_->capture_ended_time = base::TimeTicks::Now();
 
-  if (frame && !frame_size_.equals(frame->size())) {
-    frame_size_ = frame->size();
-    if (!size_callback_.is_null())
-      size_callback_.Run(frame_size_);
+  if (frame) {
+    webrtc::DesktopVector dpi =
+        frame->dpi().is_zero() ? webrtc::DesktopVector(kDefaultDpi, kDefaultDpi)
+                               : frame->dpi();
+    if (!frame_size_.equals(frame->size()) || !frame_dpi_.equals(dpi)) {
+      frame_size_ = frame->size();
+      frame_dpi_ = dpi;
+      if (!size_callback_.is_null())
+        size_callback_.Run(frame_size_, frame_dpi_);
+    }
   }
 
   // Even when |frame| is nullptr we still need to post it to the encode thread
@@ -134,7 +142,7 @@ void VideoFramePump::OnCaptureCompleted(webrtc::DesktopFrame* frame) {
   base::PostTaskAndReplyWithResult(
       encode_task_runner_.get(), FROM_HERE,
       base::Bind(&VideoFramePump::EncodeFrame, encoder_.get(),
-                 base::Passed(make_scoped_ptr(frame)),
+                 base::Passed(base::WrapUnique(frame)),
                  base::Passed(&captured_frame_timestamps_)),
       base::Bind(&VideoFramePump::OnFrameEncoded, weak_factory_.GetWeakPtr()));
 }
@@ -155,13 +163,13 @@ void VideoFramePump::CaptureNextFrame() {
 }
 
 // static
-scoped_ptr<VideoFramePump::PacketWithTimestamps> VideoFramePump::EncodeFrame(
-    VideoEncoder* encoder,
-    scoped_ptr<webrtc::DesktopFrame> frame,
-    scoped_ptr<FrameTimestamps> timestamps) {
+std::unique_ptr<VideoFramePump::PacketWithTimestamps>
+VideoFramePump::EncodeFrame(VideoEncoder* encoder,
+                            std::unique_ptr<webrtc::DesktopFrame> frame,
+                            std::unique_ptr<FrameTimestamps> timestamps) {
   timestamps->encode_started_time = base::TimeTicks::Now();
 
-  scoped_ptr<VideoPacket> packet;
+  std::unique_ptr<VideoPacket> packet;
   // If |frame| is non-NULL then let the encoder process it.
   if (frame)
     packet = encoder->Encode(*frame);
@@ -179,11 +187,12 @@ scoped_ptr<VideoFramePump::PacketWithTimestamps> VideoFramePump::EncodeFrame(
       (timestamps->encode_ended_time - timestamps->encode_started_time)
           .InMilliseconds());
 
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new PacketWithTimestamps(std::move(packet), std::move(timestamps)));
 }
 
-void VideoFramePump::OnFrameEncoded(scoped_ptr<PacketWithTimestamps> packet) {
+void VideoFramePump::OnFrameEncoded(
+    std::unique_ptr<PacketWithTimestamps> packet) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   capture_scheduler_.OnFrameEncoded(packet->packet.get());
@@ -195,7 +204,7 @@ void VideoFramePump::OnFrameEncoded(scoped_ptr<PacketWithTimestamps> packet) {
   }
 }
 
-void VideoFramePump::SendPacket(scoped_ptr<PacketWithTimestamps> packet) {
+void VideoFramePump::SendPacket(std::unique_ptr<PacketWithTimestamps> packet) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!send_pending_);
 
@@ -245,7 +254,7 @@ void VideoFramePump::OnVideoPacketSent() {
 
   // Send next packet if any.
   if (!pending_packets_.empty()) {
-    scoped_ptr<PacketWithTimestamps> next(pending_packets_.front());
+    std::unique_ptr<PacketWithTimestamps> next(pending_packets_.front());
     pending_packets_.weak_erase(pending_packets_.begin());
     SendPacket(std::move(next));
   }
@@ -255,7 +264,7 @@ void VideoFramePump::SendKeepAlivePacket() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   video_stub_->ProcessVideoPacket(
-      make_scoped_ptr(new VideoPacket()),
+      base::WrapUnique(new VideoPacket()),
       base::Bind(&VideoFramePump::OnKeepAlivePacketSent,
                  weak_factory_.GetWeakPtr()));
 }

@@ -1,8 +1,10 @@
 include_rules = [
   "+components/keyed_service/core",
+  "+components/prefs",
   "+components/signin",
+  "+components/suggestions",
   "+net/base",
   "+net/http",
   "+net/url_request",
-  "+google_apis/gaia",
+  "+google_apis",
 ]

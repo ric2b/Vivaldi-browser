@@ -42,26 +42,29 @@ MediaStream* HTMLCanvasElementCapture::captureStream(HTMLCanvasElement& element,
     }
 
     WebMediaStreamTrack track;
-    WebSize size(element.width(), element.height());
+    const WebSize size(element.width(), element.height());
     OwnPtr<WebCanvasCaptureHandler> handler;
     if (givenFrameRate)
         handler = adoptPtr(Platform::current()->createCanvasCaptureHandler(size, frameRate, &track));
     else
         handler = adoptPtr(Platform::current()->createCanvasCaptureHandler(size, kDefaultFrameRate, &track));
-    ASSERT(handler);
+
     if (!handler) {
         exceptionState.throwDOMException(NotSupportedError, "No CanvasCapture handler can be created.");
         return nullptr;
     }
 
-    MediaStreamTrackVector tracks;
+    CanvasCaptureMediaStreamTrack* canvasTrack;
     if (givenFrameRate)
-        tracks.append(CanvasCaptureMediaStreamTrack::create(track, &element, handler.release(), frameRate));
+        canvasTrack = CanvasCaptureMediaStreamTrack::create(track, &element, handler.release(), frameRate);
     else
-        tracks.append(CanvasCaptureMediaStreamTrack::create(track, &element, handler.release()));
-    // We want to capture one frame in the beginning.
-    element.notifyListenersCanvasChanged();
-    return MediaStream::create(element.executionContext(), tracks);
+        canvasTrack = CanvasCaptureMediaStreamTrack::create(track, &element, handler.release());
+    // We want to capture a frame in the beginning.
+    canvasTrack->requestFrame();
+
+    MediaStreamTrackVector tracks;
+    tracks.append(canvasTrack);
+    return MediaStream::create(element.getExecutionContext(), tracks);
 }
 
 } // namespace blink

@@ -39,10 +39,10 @@ class PasswordManagerHandler : public OptionsPageUIHandler,
       const std::string& username,
       const base::string16& password_value) override;
   void SetPasswordList(
-      const std::vector<scoped_ptr<autofill::PasswordForm>>& password_list,
-      bool show_passwords) override;
+      const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list)
+      override;
   void SetPasswordExceptionList(
-      const std::vector<scoped_ptr<autofill::PasswordForm>>&
+      const std::vector<std::unique_ptr<autofill::PasswordForm>>&
           password_exception_list) override;
 #if !defined(OS_ANDROID)
   gfx::NativeWindow GetNativeWindow() const override;
@@ -63,9 +63,6 @@ class PasswordManagerHandler : public OptionsPageUIHandler,
   // Requests the plain text password for an entry to be revealed.
   // |index| The index of the entry.
   void HandleRequestShowPassword(const base::ListValue* args);
-
-  // User pref for storing accept languages.
-  std::string languages_;
 
   // The PasswordManagerPresenter object owned by the this view.
   PasswordManagerPresenter password_manager_presenter_;

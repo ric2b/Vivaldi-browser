@@ -23,6 +23,7 @@
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../ui/gl/gl.gyp:gl',
         '../ui/views/views.gyp:views',
+        '../ui/wm/wm.gyp:wm',
       ],
       'export_dependent_settings': [
         '../ui/views/views.gyp:views',
@@ -67,12 +68,15 @@
           ],
           'dependencies': [
             '../base/base.gyp:base',
+            '../ipc/ipc.gyp:ipc',
             '../skia/skia.gyp:skia',
             '../third_party/wayland-protocols/wayland-protocols.gyp:scaler_protocol',
+            '../third_party/wayland-protocols/wayland-protocols.gyp:secure_output_protocol',
             '../third_party/wayland-protocols/wayland-protocols.gyp:xdg_shell_protocol',
             '../third_party/wayland/wayland.gyp:wayland_server',
             '../ui/events/events.gyp:dom_keycode_converter',
             '../ui/events/events.gyp:events_base',
+            '../ui/views/views.gyp:views',
             'exo',
           ],
           'sources': [
@@ -85,7 +89,9 @@
           'conditions': [
             ['use_ozone==1', {
               'dependencies': [
+                '../build/linux/system.gyp:libdrm',
                 '../third_party/mesa/mesa.gyp:wayland_drm_protocol',
+                '../third_party/wayland-protocols/wayland-protocols.gyp:linux_dmabuf_protocol',
               ],
             }],
             ['use_xkbcommon==1', {

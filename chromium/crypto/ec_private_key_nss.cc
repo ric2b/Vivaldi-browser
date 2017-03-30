@@ -17,8 +17,9 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "crypto/nss_util.h"
 #include "crypto/nss_util_internal.h"
 #include "crypto/scoped_nss_types.h"
@@ -26,10 +27,9 @@ extern "C" {
 
 namespace {
 
-// Copied from rsa_private_key_nss.cc.
-static bool ReadAttribute(SECKEYPrivateKey* key,
-                          CK_ATTRIBUTE_TYPE type,
-                          std::vector<uint8_t>* output) {
+static bool AppendAttribute(SECKEYPrivateKey* key,
+                            CK_ATTRIBUTE_TYPE type,
+                            std::vector<uint8_t>* output) {
   SECItem item;
   SECStatus rv;
   rv = PK11_ReadRawAttribute(PK11_TypePrivKey, key, type, &item);
@@ -38,7 +38,7 @@ static bool ReadAttribute(SECKEYPrivateKey* key,
     return false;
   }
 
-  output->assign(item.data, item.data + item.len);
+  output->insert(output->end(), item.data, item.data + item.len);
   SECITEM_FreeItem(&item, PR_FALSE);
   return true;
 }
@@ -62,7 +62,7 @@ ECPrivateKey* ECPrivateKey::Create() {
   if (!slot)
     return nullptr;
 
-  scoped_ptr<ECPrivateKey> result(new ECPrivateKey);
+  std::unique_ptr<ECPrivateKey> result(new ECPrivateKey);
 
   SECOidData* oid_data = SECOID_FindOIDByTag(SEC_OID_SECG_EC_SECP256R1);
   if (!oid_data) {
@@ -112,7 +112,7 @@ ECPrivateKey* ECPrivateKey::CreateFromEncryptedPrivateKeyInfo(
   if (!slot)
     return nullptr;
 
-  scoped_ptr<ECPrivateKey> result(new ECPrivateKey);
+  std::unique_ptr<ECPrivateKey> result(new ECPrivateKey);
 
   SECItem encoded_spki = {
     siBuffer,
@@ -225,7 +225,7 @@ bool ECPrivateKey::ImportFromEncryptedPrivateKeyInfo(
 }
 
 ECPrivateKey* ECPrivateKey::Copy() const {
-  scoped_ptr<ECPrivateKey> copy(new ECPrivateKey);
+  std::unique_ptr<ECPrivateKey> copy(new ECPrivateKey);
   if (key_) {
     copy->key_ = SECKEY_CopyPrivateKey(key_);
     if (!copy->key_)
@@ -311,12 +311,14 @@ bool ECPrivateKey::ExportRawPublicKey(std::string* output) {
   return true;
 }
 
-bool ECPrivateKey::ExportValue(std::vector<uint8_t>* output) {
-  return ReadAttribute(key_, CKA_VALUE, output);
-}
-
-bool ECPrivateKey::ExportECParams(std::vector<uint8_t>* output) {
-  return ReadAttribute(key_, CKA_EC_PARAMS, output);
+bool ECPrivateKey::ExportValueForTesting(std::vector<uint8_t>* output) {
+  // This serialization format is purely for testing equality, so just
+  // concatenate the raw private key (always 32 bytes for P-256) with the
+  // parameters.
+  output->clear();
+  return AppendAttribute(key_, CKA_VALUE, output) &&
+         output->size() == 32 &&
+         AppendAttribute(key_, CKA_EC_PARAMS, output);
 }
 
 ECPrivateKey::ECPrivateKey() : key_(NULL), public_key_(NULL) {}

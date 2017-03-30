@@ -6,8 +6,8 @@
 #define MOJO_PUBLIC_CPP_BINDINGS_LIB_VALIDATION_ERRORS_H_
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "mojo/public/cpp/bindings/callback.h"
-#include "mojo/public/cpp/system/macros.h"
 
 namespace mojo {
 namespace internal {
@@ -87,7 +87,7 @@ class ValidationErrorObserverForTesting {
   ValidationError last_error_;
   Callback<void()> callback_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ValidationErrorObserverForTesting);
+  DISALLOW_COPY_AND_ASSIGN(ValidationErrorObserverForTesting);
 };
 
 // Used only by MOJO_INTERNAL_DLOG_SERIALIZATION_WARNING. Don't use it directly.
@@ -109,7 +109,7 @@ class SerializationWarningObserverForTesting {
  private:
   ValidationError last_warning_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(SerializationWarningObserverForTesting);
+  DISALLOW_COPY_AND_ASSIGN(SerializationWarningObserverForTesting);
 };
 
 }  // namespace internal

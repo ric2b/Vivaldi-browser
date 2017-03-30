@@ -14,7 +14,9 @@ namespace blink {
 void ClipDisplayItem::replay(GraphicsContext& context) const
 {
     context.save();
-    context.clipRect(m_clipRect, AntiAliased);
+    // TODO(chrishtr): make this AntiAliased. Not anti-aliasing here is a workaround for a PDF rendering issue.
+    // See crbug.com/590971.
+    context.clipRect(m_clipRect, NotAntiAliased);
 
     for (const FloatRoundedRect& roundedRect : m_roundedRectClips)
         context.clipRoundedRect(roundedRect);
@@ -24,7 +26,7 @@ void ClipDisplayItem::appendToWebDisplayItemList(const IntRect& visualRect, WebD
 {
     WebVector<SkRRect> webRoundedRects(m_roundedRectClips.size());
     for (size_t i = 0; i < m_roundedRectClips.size(); ++i) {
-        FloatRoundedRect::Radii rectRadii = m_roundedRectClips[i].radii();
+        FloatRoundedRect::Radii rectRadii = m_roundedRectClips[i].getRadii();
         SkVector skRadii[4];
         skRadii[SkRRect::kUpperLeft_Corner].set(SkIntToScalar(rectRadii.topLeft().width()),
             SkIntToScalar(rectRadii.topLeft().height()));

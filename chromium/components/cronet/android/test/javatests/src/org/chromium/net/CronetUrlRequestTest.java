@@ -5,6 +5,7 @@
 package org.chromium.net;
 
 import android.os.ConditionVariable;
+import android.test.FlakyTest;
 import android.test.MoreAsserts;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.util.Log;
@@ -1515,8 +1516,12 @@ public class CronetUrlRequestTest extends CronetTestBase {
                 callback.mOnCanceledCalled);
     }
 
+    /*
     @SmallTest
     @Feature({"Cronet"})
+    https://crbug.com/592444
+    */
+    @FlakyTest
     public void testFailures() throws Exception {
         throwOrCancel(FailureType.CANCEL_SYNC, ResponseStep.ON_RECEIVED_REDIRECT,
                 false, false);
@@ -1717,6 +1722,26 @@ public class CronetUrlRequestTest extends CronetTestBase {
         checkSpecificErrorCode(
                 -109, UrlRequestException.ERROR_ADDRESS_UNREACHABLE, "ADDRESS_UNREACHABLE", false);
         checkSpecificErrorCode(-2, UrlRequestException.ERROR_OTHER, "FAILED", false);
+    }
+
+    /*
+     * Verifies no cookies are saved or sent by default.
+     */
+    @SmallTest
+    @Feature({"Cronet"})
+    public void testCookiesArentSavedOrSent() throws Exception {
+        // Make a request to a url that sets the cookie
+        String url = NativeTestServer.getFileURL("/set_cookie.html");
+        TestUrlRequestCallback callback = startAndWaitForComplete(url);
+        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
+        assertEquals("A=B", callback.mResponseInfo.getAllHeaders().get("Set-Cookie").get(0));
+
+        // Make a request that check that cookie header isn't sent.
+        String headerName = "Cookie";
+        String url2 = NativeTestServer.getEchoHeaderURL(headerName);
+        TestUrlRequestCallback callback2 = startAndWaitForComplete(url2);
+        assertEquals(200, callback2.mResponseInfo.getHttpStatusCode());
+        assertEquals("Header not found. :(", callback2.mResponseAsString);
     }
 
     private void checkSpecificErrorCode(int netError, int errorCode, String name,

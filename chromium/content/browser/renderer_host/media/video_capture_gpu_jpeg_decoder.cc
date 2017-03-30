@@ -16,10 +16,10 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
-#include "content/common/gpu/client/gpu_jpeg_decode_accelerator_host.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "media/base/video_frame.h"
+#include "media/gpu/ipc/client/gpu_jpeg_decode_accelerator_host.h"
 
 namespace content {
 
@@ -80,7 +80,7 @@ void VideoCaptureGpuJpegDecoder::DecodeCapturedData(
     size_t in_buffer_size,
     const media::VideoCaptureFormat& frame_format,
     const base::TimeTicks& timestamp,
-    scoped_ptr<media::VideoCaptureDevice::Client::Buffer> out_buffer) {
+    std::unique_ptr<media::VideoCaptureDevice::Client::Buffer> out_buffer) {
   DCHECK(CalledOnValidThread());
   DCHECK(decoder_);
 
@@ -120,7 +120,7 @@ void VideoCaptureGpuJpegDecoder::DecodeCapturedData(
   // Mask against 30 bits, to avoid (undefined) wraparound on signed integer.
   next_bitstream_buffer_id_ = (next_bitstream_buffer_id_ + 1) & 0x3FFFFFFF;
 
-#if defined(OS_POSIX) && !(defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_POSIX) && !defined(OS_MACOSX)
   const gfx::Size dimensions = frame_format.frame_size;
   base::SharedMemoryHandle out_handle = out_buffer->AsPlatformFile();
   scoped_refptr<media::VideoFrame> out_frame =
@@ -209,7 +209,7 @@ void VideoCaptureGpuJpegDecoder::GpuChannelEstablishedOnUIThread(
     base::WeakPtr<VideoCaptureGpuJpegDecoder> weak_this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  scoped_refptr<GpuChannelHost> gpu_channel_host(
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(
       BrowserGpuChannelHostFactory::instance()->GetGpuChannel());
   task_runner->PostTask(
       FROM_HERE, base::Bind(&VideoCaptureGpuJpegDecoder::FinishInitialization,
@@ -217,14 +217,28 @@ void VideoCaptureGpuJpegDecoder::GpuChannelEstablishedOnUIThread(
 }
 
 void VideoCaptureGpuJpegDecoder::FinishInitialization(
-    scoped_refptr<GpuChannelHost> gpu_channel_host) {
+    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) {
+  TRACE_EVENT0("gpu", "VideoCaptureGpuJpegDecoder::FinishInitialization");
   DCHECK(CalledOnValidThread());
   base::AutoLock lock(lock_);
   if (!gpu_channel_host) {
     LOG(ERROR) << "Failed to establish GPU channel for JPEG decoder";
   } else if (gpu_channel_host->gpu_info().jpeg_decode_accelerator_supported) {
     gpu_channel_host_ = std::move(gpu_channel_host);
-    decoder_ = gpu_channel_host_->CreateJpegDecoder(this);
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
+        BrowserGpuChannelHostFactory::instance()->GetIOThreadTaskRunner();
+
+    int32_t route_id = gpu_channel_host_->GenerateRouteID();
+    std::unique_ptr<media::GpuJpegDecodeAcceleratorHost> decoder(
+        new media::GpuJpegDecodeAcceleratorHost(gpu_channel_host_.get(),
+                                                route_id, io_task_runner));
+    if (decoder->Initialize(this)) {
+      gpu_channel_host_->AddRouteWithTaskRunner(
+          route_id, decoder->GetReceiver(), io_task_runner);
+      decoder_ = std::move(decoder);
+    } else {
+      DLOG(ERROR) << "Failed to initialize JPEG decoder";
+    }
   }
   decoder_status_ = decoder_ ? INIT_PASSED : FAILED;
   RecordInitDecodeUMA_Locked();

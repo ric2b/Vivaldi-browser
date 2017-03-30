@@ -18,9 +18,9 @@ ConsoleMessageStorage::ConsoleMessageStorage()
 {
 }
 
-void ConsoleMessageStorage::reportMessage(ExecutionContext* context, PassRefPtrWillBeRawPtr<ConsoleMessage> prpMessage)
+void ConsoleMessageStorage::reportMessage(ExecutionContext* context, RawPtr<ConsoleMessage> prpMessage)
 {
-    RefPtrWillBeRawPtr<ConsoleMessage> message = prpMessage;
+    RawPtr<ConsoleMessage> message = prpMessage;
     message->collectCallStack();
 
     if (message->type() == ClearMessageType)
@@ -51,11 +51,11 @@ Vector<unsigned> ConsoleMessageStorage::argumentCounts() const
     return result;
 }
 
-void ConsoleMessageStorage::adoptWorkerMessagesAfterTermination(WorkerGlobalScopeProxy* workerGlobalScopeProxy)
+void ConsoleMessageStorage::adoptWorkerMessagesAfterTermination(WorkerInspectorProxy* workerInspectorProxy)
 {
     for (size_t i = 0; i < m_messages.size(); ++i) {
-        if (m_messages[i]->workerGlobalScopeProxy() == workerGlobalScopeProxy)
-            m_messages[i]->setWorkerGlobalScopeProxy(nullptr);
+        if (m_messages[i]->workerInspectorProxy() == workerInspectorProxy)
+            m_messages[i]->setWorkerInspectorProxy(nullptr);
     }
 }
 

@@ -82,8 +82,6 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   gfx::Rect GetViewBounds() const override;
 #if defined(OS_MACOSX)
   void SetActive(bool active) override;
-  void SetWindowVisibility(bool visible) override {}
-  void WindowFrameChanged() override {}
   void ShowDefinitionForSelection() override {}
   bool SupportsSpeech() const override;
   void SpeakSelection() override;
@@ -98,8 +96,6 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
                    const gfx::Rect& bounds) override {}
   void InitAsFullscreen(RenderWidgetHostView* reference_host_view) override {}
-  void MovePluginWindows(const std::vector<WebPluginGeometry>& moves,
-      const int owner_wiew_id) override {}
   void Focus() override {}
   void SetIsLoading(bool is_loading) override {}
   void UpdateCursor(const WebCursor& cursor) override {}
@@ -126,10 +122,6 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
       const base::Callback<void(const gfx::Rect&, bool)>& callback) override;
   bool CanCopyToVideoFrame() const override;
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
-#if defined(OS_MACOSX)
-  bool PostProcessEventForPluginIme(
-      const NativeWebKeyboardEvent& event) override;
-#endif
   void LockCompositingSurface() override {}
   void UnlockCompositingSurface() override {}
   void GetScreenInfo(blink::WebScreenInfo* results) override {}
@@ -137,11 +129,6 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   gfx::Rect GetBoundsInRootWindow() override;
   bool LockMouse() override;
   void UnlockMouse() override;
-#if defined(OS_WIN)
-  void SetParentNativeViewAccessible(
-      gfx::NativeViewAccessible accessible_parent) override;
-  gfx::NativeViewId GetParentForWindowlessPlugin() const override;
-#endif
 
   bool is_showing() const { return is_showing_; }
   bool is_occluded() const { return is_occluded_; }

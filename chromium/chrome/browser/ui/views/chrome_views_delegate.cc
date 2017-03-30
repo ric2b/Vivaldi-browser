@@ -4,12 +4,15 @@
 
 #include "chrome/browser/ui/views/chrome_views_delegate.h"
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/lifetime/keep_alive_types.h"
+#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_window_state.h"
 #include "components/prefs/pref_service.h"
@@ -192,7 +195,7 @@ void ChromeViewsDelegate::SaveWindowPlacement(const views::Widget* window,
   if (!prefs)
     return;
 
-  scoped_ptr<DictionaryPrefUpdate> pref_update =
+  std::unique_ptr<DictionaryPrefUpdate> pref_update =
       chrome::GetWindowPlacementDictionaryReadWrite(window_name, prefs);
   base::DictionaryValue* window_preferences = pref_update->Get();
   window_preferences->SetInteger("left", bounds.x());
@@ -262,10 +265,6 @@ views::ViewsDelegate::ProcessMenuAcceleratorResult
 ChromeViewsDelegate::ProcessAcceleratorWhileMenuShowing(
     const ui::Accelerator& accelerator) {
 #if defined(USE_ASH)
-  // Handle ash accelerators only when a menu is opened on an ash desktop.
-  if (chrome::GetActiveDesktop() != chrome::HOST_DESKTOP_TYPE_ASH)
-    return views::ViewsDelegate::ProcessMenuAcceleratorResult::LEAVE_MENU_OPEN;
-
   ash::AcceleratorController* accelerator_controller =
       ash::Shell::GetInstance()->accelerator_controller();
 
@@ -311,11 +310,12 @@ views::NonClientFrameView* ChromeViewsDelegate::CreateDefaultNonClientFrameView(
 #endif
 
 void ChromeViewsDelegate::AddRef() {
-  g_browser_process->AddRefModule();
+  keep_alive_.reset(new ScopedKeepAlive(KeepAliveOrigin::CHROME_VIEWS_DELEGATE,
+                                        KeepAliveRestartOption::DISABLED));
 }
 
 void ChromeViewsDelegate::ReleaseRef() {
-  g_browser_process->ReleaseModule();
+  keep_alive_.reset();
 }
 
 void ChromeViewsDelegate::OnBeforeWidgetInit(
@@ -375,8 +375,7 @@ void ChromeViewsDelegate::OnBeforeWidgetInit(
     // windows for most things (they get blended via WS_EX_COMPOSITED, which
     // allows for animation effects, but also exceeding the bounds of the parent
     // window).
-    if (chrome::GetActiveDesktop() != chrome::HOST_DESKTOP_TYPE_ASH &&
-        params->parent &&
+    if (params->parent &&
         params->type != views::Widget::InitParams::TYPE_CONTROL &&
         params->type != views::Widget::InitParams::TYPE_WINDOW) {
       // When we set this to false, we get a DesktopNativeWidgetAura from the
@@ -392,7 +391,7 @@ void ChromeViewsDelegate::OnBeforeWidgetInit(
   }
 #endif  // USE_AURA
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || defined(USE_ASH)
   // When we are doing straight chromeos builds, we still need to handle the
   // toplevel window case.
   // There may be a few remaining widgets in Chrome OS that are not top level,
@@ -410,23 +409,7 @@ void ChromeViewsDelegate::OnBeforeWidgetInit(
   // existence of a global WindowTreeClient, if this window is toplevel, it's
   // possible that there is no contextual state that we can use.
   if (params->parent == NULL && params->context == NULL && !params->child) {
-    // We need to make a decision about where to place this window based on the
-    // desktop type.
-    switch (chrome::GetActiveDesktop()) {
-      case chrome::HOST_DESKTOP_TYPE_NATIVE:
-        // If we're native, we should give this window its own toplevel desktop
-        // widget.
-        params->native_widget = new views::DesktopNativeWidgetAura(delegate);
-        break;
-#if defined(USE_ASH)
-      case chrome::HOST_DESKTOP_TYPE_ASH:
-        // If we're in ash, give this window the context of the main monitor.
-        params->context = ash::Shell::GetPrimaryRootWindow();
-        break;
-#endif
-      default:
-        NOTREACHED();
-    }
+    params->native_widget = new views::DesktopNativeWidgetAura(delegate);
   } else if (use_non_toplevel_window) {
     views::NativeWidgetAura* native_widget =
         new views::NativeWidgetAura(delegate);

@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/win_util.h"
+#include "ipc/attachment_broker.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "remoting/host/win/security_descriptor.h"
@@ -29,7 +30,7 @@ bool CreateConnectedIpcChannel(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     IPC::Listener* listener,
     base::File* client_out,
-    scoped_ptr<IPC::ChannelProxy>* server_out) {
+    std::unique_ptr<IPC::ChannelProxy>* server_out) {
   // presubmit: allow wstring
   std::wstring user_sid;
   if (!base::win::GetUserSidString(&user_sid)) {
@@ -56,11 +57,12 @@ bool CreateConnectedIpcChannel(
   }
 
   // Wrap the pipe into an IPC channel.
-  scoped_ptr<IPC::ChannelProxy> server =
-      IPC::ChannelProxy::Create(IPC::ChannelHandle(pipe.Get()),
-                                IPC::Channel::MODE_SERVER,
-                                listener,
-                                io_task_runner);
+  std::unique_ptr<IPC::ChannelProxy> server(
+      new IPC::ChannelProxy(listener, io_task_runner));
+  IPC::AttachmentBroker::GetGlobal()->RegisterCommunicationChannel(
+      server.get(), io_task_runner);
+  server->Init(IPC::ChannelHandle(pipe.Get()), IPC::Channel::MODE_SERVER,
+                true);
 
   // Convert the channel name to the pipe name.
   std::string pipe_name(kChromePipeNamePrefix);

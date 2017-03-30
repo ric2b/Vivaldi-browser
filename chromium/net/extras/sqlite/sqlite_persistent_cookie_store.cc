@@ -181,6 +181,10 @@ class SQLitePersistentCookieStore::Backend
   // that have been loaded from DB since last IO notification.
   void Notify(const LoadedCallback& loaded_callback, bool load_success);
 
+  // Flushes (Commits) pending operations on the background runner, and invokes
+  // |callback| on the client thread when done.
+  void FlushAndNotifyInBackground(const base::Closure& callback);
+
   // Sends notification when the entire store is loaded, and reports metrics
   // for the total time to load and aggregated results from any priority loads
   // that occurred.
@@ -369,6 +373,41 @@ CookiePriority DBCookiePriorityToCookiePriority(DBCookiePriority value) {
   return COOKIE_PRIORITY_DEFAULT;
 }
 
+// Possible values for the 'samesite' column
+enum DBCookieSameSite {
+  kCookieSameSiteNoRestriction = 0,
+  kCookieSameSiteLax = 1,
+  kCookieSameSiteStrict = 2,
+};
+
+DBCookieSameSite CookieSameSiteToDBCookieSameSite(CookieSameSite value) {
+  switch (value) {
+    case CookieSameSite::NO_RESTRICTION:
+      return kCookieSameSiteNoRestriction;
+    case CookieSameSite::LAX_MODE:
+      return kCookieSameSiteLax;
+    case CookieSameSite::STRICT_MODE:
+      return kCookieSameSiteStrict;
+  }
+
+  NOTREACHED();
+  return kCookieSameSiteNoRestriction;
+}
+
+CookieSameSite DBCookieSameSiteToCookieSameSite(DBCookieSameSite value) {
+  switch (value) {
+    case kCookieSameSiteNoRestriction:
+      return CookieSameSite::NO_RESTRICTION;
+    case kCookieSameSiteLax:
+      return CookieSameSite::LAX_MODE;
+    case kCookieSameSiteStrict:
+      return CookieSameSite::STRICT_MODE;
+  }
+
+  NOTREACHED();
+  return CookieSameSite::DEFAULT_MODE;
+}
+
 // Increments a specified TimeDelta by the duration between this object's
 // constructor and destructor. Not thread safe. Multiple instances may be
 // created with the same delta instance as long as their lifetimes are nested.
@@ -410,8 +449,9 @@ bool InitTable(sql::Connection* db) {
       "persistent INTEGER NOT NULL DEFAULT 1,"
       "priority INTEGER NOT NULL DEFAULT %d,"
       "encrypted_value BLOB DEFAULT '',"
-      "firstpartyonly INTEGER NOT NULL DEFAULT 0)",
-      CookiePriorityToDBCookiePriority(COOKIE_PRIORITY_DEFAULT)));
+      "firstpartyonly INTEGER NOT NULL DEFAULT %d)",
+      CookiePriorityToDBCookiePriority(COOKIE_PRIORITY_DEFAULT),
+      CookieSameSiteToDBCookieSameSite(CookieSameSite::DEFAULT_MODE)));
   if (!db->Execute(stmt.c_str()))
     return false;
 
@@ -506,6 +546,13 @@ void SQLitePersistentCookieStore::Backend::LoadKeyAndNotifyInBackground(
       base::Bind(
           &SQLitePersistentCookieStore::Backend::CompleteLoadForKeyInForeground,
           this, loaded_callback, success, posted_at));
+}
+
+void SQLitePersistentCookieStore::Backend::FlushAndNotifyInBackground(
+    const base::Closure& callback) {
+  Commit();
+  if (!callback.is_null())
+    PostClientTask(FROM_HERE, callback);
 }
 
 void SQLitePersistentCookieStore::Backend::CompleteLoadForKeyInForeground(
@@ -784,7 +831,8 @@ void SQLitePersistentCookieStore::Backend::MakeCookiesFromSQLStatement(
         Time::FromInternalValue(smt.ColumnInt64(10)),  // last_access_utc
         smt.ColumnInt(7) != 0,                         // secure
         smt.ColumnInt(8) != 0,                         // httponly
-        smt.ColumnInt(9) != 0,                         // firstpartyonly
+        DBCookieSameSiteToCookieSameSite(
+            static_cast<DBCookieSameSite>(smt.ColumnInt(9))),  // samesite
         DBCookiePriorityToCookiePriority(
             static_cast<DBCookiePriority>(smt.ColumnInt(13)))));  // priority
     DLOG_IF(WARNING, cc->CreationDate() > Time::Now())
@@ -1119,7 +1167,8 @@ void SQLitePersistentCookieStore::Backend::Commit() {
         add_smt.BindInt64(6, po->cc().ExpiryDate().ToInternalValue());
         add_smt.BindInt(7, po->cc().IsSecure());
         add_smt.BindInt(8, po->cc().IsHttpOnly());
-        add_smt.BindInt(9, po->cc().IsSameSite());
+        add_smt.BindInt(9,
+                        CookieSameSiteToDBCookieSameSite(po->cc().SameSite()));
         add_smt.BindInt64(10, po->cc().LastAccessDate().ToInternalValue());
         add_smt.BindInt(11, po->cc().IsPersistent());
         add_smt.BindInt(12, po->cc().IsPersistent());
@@ -1159,14 +1208,8 @@ void SQLitePersistentCookieStore::Backend::Commit() {
 void SQLitePersistentCookieStore::Backend::Flush(
     const base::Closure& callback) {
   DCHECK(!background_task_runner_->RunsTasksOnCurrentThread());
-  PostBackgroundTask(FROM_HERE, base::Bind(&Backend::Commit, this));
-
-  if (!callback.is_null()) {
-    // We want the completion task to run immediately after Commit() returns.
-    // Posting it from here means there is less chance of another task getting
-    // onto the message queue first, than if we posted it from Commit() itself.
-    PostBackgroundTask(FROM_HERE, callback);
-  }
+  PostBackgroundTask(FROM_HERE, base::Bind(&Backend::FlushAndNotifyInBackground,
+                                           this, callback));
 }
 
 // Fire off a close message to the background runner.  We could still have a
@@ -1357,6 +1400,7 @@ void SQLitePersistentCookieStore::Close(const base::Closure& callback) {
 }
 
 void SQLitePersistentCookieStore::Load(const LoadedCallback& loaded_callback) {
+  DCHECK(!loaded_callback.is_null());
   if (backend_)
     backend_->Load(loaded_callback);
   else
@@ -1366,6 +1410,7 @@ void SQLitePersistentCookieStore::Load(const LoadedCallback& loaded_callback) {
 void SQLitePersistentCookieStore::LoadCookiesForKey(
     const std::string& key,
     const LoadedCallback& loaded_callback) {
+  DCHECK(!loaded_callback.is_null());
   if (backend_)
     backend_->LoadCookiesForKey(key, loaded_callback);
   else

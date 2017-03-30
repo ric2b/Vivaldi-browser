@@ -58,30 +58,55 @@ enum PrintColorAdjust {
 enum PseudoId {
     // The order must be NOP ID, public IDs, and then internal IDs.
     // If you add or remove a public ID, you must update _pseudoBits in ComputedStyle.
-    NOPSEUDO, FIRST_LINE, FIRST_LETTER, BEFORE, AFTER, BACKDROP, SELECTION, FIRST_LINE_INHERITED, SCROLLBAR,
+    PseudoIdNone,
+    PseudoIdFirstLine,
+    PseudoIdFirstLetter,
+    PseudoIdBefore,
+    PseudoIdAfter,
+    PseudoIdBackdrop,
+    PseudoIdSelection,
+    PseudoIdFirstLineInherited,
+    PseudoIdScrollbar,
     // Internal IDs follow:
-    SCROLLBAR_THUMB, SCROLLBAR_BUTTON, SCROLLBAR_TRACK, SCROLLBAR_TRACK_PIECE, SCROLLBAR_CORNER, RESIZER, INPUT_LIST_BUTTON,
+    PseudoIdScrollbarThumb,
+    PseudoIdScrollbarButton,
+    PseudoIdScrollbarTrack,
+    PseudoIdScrollbarTrackPiece,
+    PseudoIdScrollbarCorner,
+    PseudoIdResizer,
+    PseudoIdInputListButton,
     // Special values follow:
-    AFTER_LAST_INTERNAL_PSEUDOID,
-    FIRST_PUBLIC_PSEUDOID = FIRST_LINE,
-    FIRST_INTERNAL_PSEUDOID = SCROLLBAR_THUMB,
-    PUBLIC_PSEUDOID_MASK = ((1 << FIRST_INTERNAL_PSEUDOID) - 1) & ~((1 << FIRST_PUBLIC_PSEUDOID) - 1),
-    PSEUDO_ELEMENT_MASK = (1 << (BEFORE - 1)) | (1 << (AFTER - 1)) | (1 << (BACKDROP - 1))
+    AfterLastInternalPseudoId,
+    FirstPublicPseudoId = PseudoIdFirstLine,
+    FirstInternalPseudoId = PseudoIdScrollbarThumb,
+    PublicPseudoIdMask = ((1 << FirstInternalPseudoId) - 1) & ~((1 << FirstPublicPseudoId) - 1),
+    ElementPseudoIdMask = (1 << (PseudoIdBefore - 1)) | (1 << (PseudoIdAfter - 1)) | (1 << (PseudoIdBackdrop - 1))
 };
 
 enum ColumnFill { ColumnFillBalance, ColumnFillAuto };
 
 enum ColumnSpan { ColumnSpanNone = 0, ColumnSpanAll };
 
-enum EBorderCollapse { BSEPARATE = 0, BCOLLAPSE = 1 };
+enum EBorderCollapse { BorderCollapseSeparate = 0, BorderCollapseCollapse = 1 };
 
 // These have been defined in the order of their precedence for border-collapsing. Do
 // not change this order! This order also must match the order in CSSValueKeywords.in.
-enum EBorderStyle { BNONE, BHIDDEN, INSET, GROOVE, OUTSET, RIDGE, DOTTED, DASHED, SOLID, DOUBLE };
+enum EBorderStyle {
+    BorderStyleNone,
+    BorderStyleHidden,
+    BorderStyleInset,
+    BorderStyleGroove,
+    BorderStyleOutset,
+    BorderStyleRidge,
+    BorderStyleDotted,
+    BorderStyleDashed,
+    BorderStyleSolid,
+    BorderStyleDouble
+};
 
-enum EBorderPrecedence { BOFF, BTABLE, BCOLGROUP, BCOL, BROWGROUP, BROW, BCELL };
+enum EBorderPrecedence { BorderPrecedenceOff, BorderPrecedenceTable, BorderPrecedenceColumnGroup, BorderPrecedenceColumn, BorderPrecedenceRowGroup, BorderPrecedenceRow, BorderPrecedenceCell };
 
-enum OutlineIsAuto { AUTO_OFF = 0, AUTO_ON };
+enum OutlineIsAuto { OutlineIsAutoOff = 0, OutlineIsAutoOn };
 
 enum EPosition {
     StaticPosition = 0,
@@ -96,33 +121,41 @@ enum EFloat {
     NoFloat, LeftFloat, RightFloat
 };
 
-enum EMarginCollapse { MCOLLAPSE, MSEPARATE, MDISCARD };
+enum EMarginCollapse { MarginCollapseCollapse, MarginCollapseSeparate, MarginCollapseDiscard };
 
 // Box decoration attributes. Not inherited.
 
-enum EBoxDecorationBreak { DSLICE, DCLONE };
+enum EBoxDecorationBreak { BoxDecorationBreakSlice, BoxDecorationBreakClone };
 
 // Box attributes. Not inherited.
 
-enum EBoxSizing { CONTENT_BOX, BORDER_BOX };
+enum EBoxSizing { BoxSizingContentBox, BoxSizingBorderBox };
 
 // Random visual rendering model attributes. Not inherited.
 
 enum EOverflow {
-    OVISIBLE, OHIDDEN, OSCROLL, OAUTO, OOVERLAY, OPAGEDX, OPAGEDY
+    OverflowVisible, OverflowHidden, OverflowScroll, OverflowAuto, OverflowOverlay, OverflowPagedX, OverflowPagedY
 };
 
 enum EVerticalAlign {
-    BASELINE, MIDDLE, SUB, SUPER, TEXT_TOP,
-    TEXT_BOTTOM, TOP, BOTTOM, BASELINE_MIDDLE, LENGTH
+    VerticalAlignBaseline,
+    VerticalAlignMiddle,
+    VerticalAlignSub,
+    VerticalAlignSuper,
+    VerticalAlignTextTop,
+    VerticalAlignTextBottom,
+    VerticalAlignTop,
+    VerticalAlignBottom,
+    VerticalAlignBaselineMiddle,
+    VerticalAlignLength
 };
 
 enum EClear {
-    CNONE = 0, CLEFT = 1, CRIGHT = 2, CBOTH = 3
+    ClearNone = 0, ClearLeft = 1, ClearRight = 2, ClearBoth = 3
 };
 
 enum ETableLayout {
-    TAUTO, TFIXED
+    TableLayoutAuto, TableLayoutFixed
 };
 
 enum TextCombine {
@@ -339,15 +372,15 @@ enum EBreak {
     BreakAlways // Only needed by {page,-webkit-column}-break-{after,before} shorthands.
 };
 
-enum EEmptyCell {
-    SHOW, HIDE
+enum EEmptyCells {
+    EmptyCellsShow, EmptyCellsHide
 };
 
 enum ECaptionSide {
-    CAPTOP, CAPBOTTOM, CAPLEFT, CAPRIGHT
+    CaptionSideTop, CaptionSideBottom, CaptionSideLeft, CaptionSideRight
 };
 
-enum EListStylePosition { OUTSIDE, INSIDE };
+enum EListStylePosition { ListStylePositionOutside, ListStylePositionInside };
 
 enum EVisibility { VISIBLE, HIDDEN, COLLAPSE };
 
@@ -570,6 +603,12 @@ enum ScrollSnapType {
     ScrollSnapTypeNone,
     ScrollSnapTypeMandatory,
     ScrollSnapTypeProximity
+};
+
+enum AutoRepeatType {
+    NoAutoRepeat,
+    AutoFill,
+    AutoFit
 };
 
 } // namespace blink

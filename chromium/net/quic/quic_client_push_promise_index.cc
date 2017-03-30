@@ -4,10 +4,13 @@
 
 #include "net/quic/quic_client_push_promise_index.h"
 
+#include <string>
+
 #include "net/quic/quic_client_promised_info.h"
 #include "net/quic/spdy_utils.h"
 
 using net::SpdyHeaderBlock;
+using std::string;
 
 namespace net {
 
@@ -16,6 +19,15 @@ QuicClientPushPromiseIndex::QuicClientPushPromiseIndex() {}
 QuicClientPushPromiseIndex::~QuicClientPushPromiseIndex() {}
 
 QuicClientPushPromiseIndex::TryHandle::~TryHandle() {}
+
+QuicClientPromisedInfo* QuicClientPushPromiseIndex::GetPromised(
+    const string& url) {
+  QuicPromisedByUrlMap::iterator it = promised_by_url_.find(url);
+  if (it == promised_by_url_.end()) {
+    return nullptr;
+  }
+  return it->second;
+}
 
 QuicAsyncStatus QuicClientPushPromiseIndex::Try(
     const SpdyHeaderBlock& request,

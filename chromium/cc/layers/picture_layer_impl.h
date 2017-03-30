@@ -17,8 +17,6 @@
 #include "cc/tiles/picture_layer_tiling.h"
 #include "cc/tiles/picture_layer_tiling_set.h"
 #include "cc/tiles/tiling_set_eviction_queue.h"
-#include "skia/ext/refptr.h"
-#include "third_party/skia/include/core/SkPicture.h"
 
 namespace cc {
 
@@ -30,13 +28,10 @@ class CC_EXPORT PictureLayerImpl
     : public LayerImpl,
       NON_EXPORTED_BASE(public PictureLayerTilingClient) {
  public:
-  static scoped_ptr<PictureLayerImpl> Create(
-      LayerTreeImpl* tree_impl,
-      int id,
-      bool is_mask,
-      scoped_refptr<SyncedScrollOffset> scroll_offset) {
-    return make_scoped_ptr(
-        new PictureLayerImpl(tree_impl, id, is_mask, scroll_offset));
+  static scoped_ptr<PictureLayerImpl> Create(LayerTreeImpl* tree_impl,
+                                             int id,
+                                             bool is_mask) {
+    return make_scoped_ptr(new PictureLayerImpl(tree_impl, id, is_mask));
   }
   ~PictureLayerImpl() override;
 
@@ -52,7 +47,6 @@ class CC_EXPORT PictureLayerImpl
   void DidBeginTracing() override;
   void ReleaseResources() override;
   void RecreateResources() override;
-  skia::RefPtr<SkPicture> GetPicture() override;
   Region GetInvalidationRegionForDebugging() override;
 
   // PictureLayerTilingClient overrides.
@@ -68,7 +62,7 @@ class CC_EXPORT PictureLayerImpl
   void set_gpu_raster_max_texture_size(gfx::Size gpu_raster_max_texture_size) {
     gpu_raster_max_texture_size_ = gpu_raster_max_texture_size;
   }
-  void UpdateRasterSource(scoped_refptr<DisplayListRasterSource> raster_source,
+  void UpdateRasterSource(scoped_refptr<RasterSource> raster_source,
                           Region* new_invalidation,
                           const PictureLayerTilingSet* pending_set);
   bool UpdateTiles();
@@ -95,18 +89,13 @@ class CC_EXPORT PictureLayerImpl
   bool IsOnActiveOrPendingTree() const;
 
   // Used for benchmarking
-  DisplayListRasterSource* GetRasterSource() const {
-    return raster_source_.get();
-  }
+  RasterSource* GetRasterSource() const { return raster_source_.get(); }
 
  protected:
   friend class LayerRasterTileIterator;
   using TileRequirementCheck = bool (PictureLayerTiling::*)(const Tile*) const;
 
-  PictureLayerImpl(LayerTreeImpl* tree_impl,
-                   int id,
-                   bool is_mask,
-                   scoped_refptr<SyncedScrollOffset> scroll_offset);
+  PictureLayerImpl(LayerTreeImpl* tree_impl, int id, bool is_mask);
   PictureLayerTiling* AddTiling(float contents_scale);
   void RemoveAllTilings();
   void AddTilingsForRasterScale();
@@ -136,7 +125,7 @@ class CC_EXPORT PictureLayerImpl
   PictureLayerImpl* twin_layer_;
 
   scoped_ptr<PictureLayerTilingSet> tilings_;
-  scoped_refptr<DisplayListRasterSource> raster_source_;
+  scoped_refptr<RasterSource> raster_source_;
   Region invalidation_;
 
   float ideal_page_scale_;

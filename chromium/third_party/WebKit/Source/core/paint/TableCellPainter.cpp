@@ -16,37 +16,42 @@ namespace blink {
 inline const CollapsedBorderValue* TableCellPainter::cachedCollapsedLeftBorder(const ComputedStyle& styleForCellFlow) const
 {
     if (styleForCellFlow.isHorizontalWritingMode()) {
-        return styleForCellFlow.isLeftToRightDirection() ?  m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSStart)
+        return styleForCellFlow.isLeftToRightDirection()
+            ? m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSStart)
             : m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSEnd);
     }
-    return styleForCellFlow.isFlippedBlocksWritingMode() ?  m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSAfter)
+    return styleForCellFlow.isFlippedBlocksWritingMode()
+        ? m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSAfter)
         : m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSBefore);
 }
 
 inline const CollapsedBorderValue* TableCellPainter::cachedCollapsedRightBorder(const ComputedStyle& styleForCellFlow) const
 {
     if (styleForCellFlow.isHorizontalWritingMode()) {
-        return styleForCellFlow.isLeftToRightDirection() ?  m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSEnd)
+        return styleForCellFlow.isLeftToRightDirection()
+            ? m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSEnd)
             : m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSStart);
     }
-    return styleForCellFlow.isFlippedBlocksWritingMode() ?  m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSBefore)
+    return styleForCellFlow.isFlippedBlocksWritingMode()
+        ? m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSBefore)
         : m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSAfter);
 }
 
 inline const CollapsedBorderValue* TableCellPainter::cachedCollapsedTopBorder(const ComputedStyle& styleForCellFlow) const
 {
     if (styleForCellFlow.isHorizontalWritingMode())
-        return styleForCellFlow.isFlippedBlocksWritingMode() ?  m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSAfter) : m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSBefore);
-    return styleForCellFlow.isLeftToRightDirection() ?  m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSStart) : m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSEnd);
+        return m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSBefore);
+    return styleForCellFlow.isLeftToRightDirection()
+        ? m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSStart)
+        : m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSEnd);
 }
 
 inline const CollapsedBorderValue* TableCellPainter::cachedCollapsedBottomBorder(const ComputedStyle& styleForCellFlow) const
 {
-    if (styleForCellFlow.isHorizontalWritingMode()) {
-        return styleForCellFlow.isFlippedBlocksWritingMode() ?  m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSBefore)
-            : m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSAfter);
-    }
-    return styleForCellFlow.isLeftToRightDirection() ?  m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSEnd)
+    if (styleForCellFlow.isHorizontalWritingMode())
+        return m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSAfter);
+    return styleForCellFlow.isLeftToRightDirection()
+        ? m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSEnd)
         : m_layoutTableCell.section()->cachedCollapsedBorder(&m_layoutTableCell, CBSStart);
 }
 
@@ -57,10 +62,10 @@ void TableCellPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& pain
 
 static EBorderStyle collapsedBorderStyle(EBorderStyle style)
 {
-    if (style == OUTSET)
-        return GROOVE;
-    if (style == INSET)
-        return RIDGE;
+    if (style == BorderStyleOutset)
+        return BorderStyleGroove;
+    if (style == BorderStyleInset)
+        return BorderStyleRidge;
     return style;
 }
 
@@ -105,7 +110,6 @@ void TableCellPainter::paintCollapsedBorders(const PaintInfo& paintInfo, const L
 
     // Adjust our x/y/width/height so that we paint the collapsed borders at the correct location.
     LayoutRect paintRect = paintBounds(paintOffset, AddOffsetFromParent);
-    LayoutPoint adjustedPaintOffset = paintRect.location();
     IntRect borderRect = pixelSnappedIntRect(paintRect.x() - leftWidth / 2,
         paintRect.y() - topWidth / 2,
         paintRect.width() + leftWidth / 2 + (rightWidth + 1) / 2,
@@ -115,10 +119,10 @@ void TableCellPainter::paintCollapsedBorders(const PaintInfo& paintInfo, const L
         return;
 
     GraphicsContext& graphicsContext = paintInfo.context;
-    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(graphicsContext, m_layoutTableCell, static_cast<DisplayItem::Type>(displayItemType), adjustedPaintOffset))
+    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(graphicsContext, m_layoutTableCell, static_cast<DisplayItem::Type>(displayItemType)))
         return;
 
-    LayoutObjectDrawingRecorder recorder(graphicsContext, m_layoutTableCell, static_cast<DisplayItem::Type>(displayItemType), borderRect, adjustedPaintOffset);
+    LayoutObjectDrawingRecorder recorder(graphicsContext, m_layoutTableCell, static_cast<DisplayItem::Type>(displayItemType), borderRect);
     Color cellColor = m_layoutTableCell.resolveColor(CSSPropertyColor);
 
     // We never paint diagonals at the joins.  We simply let the border with the highest
@@ -150,7 +154,7 @@ void TableCellPainter::paintBackgroundsBehindCell(const PaintInfo& paintInfo, co
         return;
 
     LayoutTable* tableElt = m_layoutTableCell.table();
-    if (!tableElt->collapseBorders() && m_layoutTableCell.style()->emptyCells() == HIDE && !m_layoutTableCell.firstChild())
+    if (!tableElt->collapseBorders() && m_layoutTableCell.style()->emptyCells() == EmptyCellsHide && !m_layoutTableCell.firstChild())
         return;
 
     LayoutRect paintRect = paintBounds(paintOffset, backgroundObject != &m_layoutTableCell ? AddOffsetFromParent : DoNotAddOffsetFromParent);
@@ -158,10 +162,9 @@ void TableCellPainter::paintBackgroundsBehindCell(const PaintInfo& paintInfo, co
     // Record drawing only if the cell is painting background from containers.
     Optional<LayoutObjectDrawingRecorder> recorder;
     if (backgroundObject != &m_layoutTableCell) {
-        LayoutPoint adjustedPaintOffset = paintRect.location();
-        if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutTableCell, type, adjustedPaintOffset))
+        if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutTableCell, type))
             return;
-        recorder.emplace(paintInfo.context, m_layoutTableCell, type, paintRect, adjustedPaintOffset);
+        recorder.emplace(paintInfo.context, m_layoutTableCell, type, paintRect);
     } else {
         ASSERT(paintRect.location() == paintOffset);
     }
@@ -185,20 +188,20 @@ void TableCellPainter::paintBackgroundsBehindCell(const PaintInfo& paintInfo, co
 void TableCellPainter::paintBoxDecorationBackground(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     LayoutTable* table = m_layoutTableCell.table();
-    if (!table->collapseBorders() && m_layoutTableCell.style()->emptyCells() == HIDE && !m_layoutTableCell.firstChild())
+    if (!table->collapseBorders() && m_layoutTableCell.style()->emptyCells() == EmptyCellsHide && !m_layoutTableCell.firstChild())
         return;
 
     bool needsToPaintBorder = m_layoutTableCell.styleRef().hasBorderDecoration() && !table->collapseBorders();
     if (!m_layoutTableCell.hasBackground() && !m_layoutTableCell.styleRef().boxShadow() && !needsToPaintBorder)
         return;
 
-    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutTableCell, DisplayItem::BoxDecorationBackground, paintOffset))
+    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutTableCell, DisplayItem::BoxDecorationBackground))
         return;
 
     LayoutRect visualOverflowRect = m_layoutTableCell.visualOverflowRect();
     visualOverflowRect.moveBy(paintOffset);
     // TODO(chrishtr): the pixel-snapping here is likely incorrect.
-    LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutTableCell, DisplayItem::BoxDecorationBackground, pixelSnappedIntRect(visualOverflowRect), paintOffset);
+    LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutTableCell, DisplayItem::BoxDecorationBackground, pixelSnappedIntRect(visualOverflowRect));
 
     LayoutRect paintRect = paintBounds(paintOffset, DoNotAddOffsetFromParent);
 
@@ -221,14 +224,14 @@ void TableCellPainter::paintMask(const PaintInfo& paintInfo, const LayoutPoint& 
         return;
 
     LayoutTable* tableElt = m_layoutTableCell.table();
-    if (!tableElt->collapseBorders() && m_layoutTableCell.style()->emptyCells() == HIDE && !m_layoutTableCell.firstChild())
+    if (!tableElt->collapseBorders() && m_layoutTableCell.style()->emptyCells() == EmptyCellsHide && !m_layoutTableCell.firstChild())
         return;
 
-    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutTableCell, paintInfo.phase, paintOffset))
+    if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutTableCell, paintInfo.phase))
         return;
 
     LayoutRect paintRect = paintBounds(paintOffset, DoNotAddOffsetFromParent);
-    LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutTableCell, paintInfo.phase, paintRect, paintOffset);
+    LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutTableCell, paintInfo.phase, paintRect);
     BoxPainter(m_layoutTableCell).paintMaskImages(paintInfo, paintRect);
 }
 

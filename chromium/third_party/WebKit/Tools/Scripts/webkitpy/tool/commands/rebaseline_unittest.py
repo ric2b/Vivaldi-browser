@@ -108,9 +108,12 @@ class TestCopyExistingBaselinesInternal(_BaseTestCase):
     def test_copying_overwritten_baseline(self):
         self.tool.executive = MockExecutive2()
 
-        # FIXME: crbug.com/279494. it's confusing that this is the test- port, and not the regular mac10.10 port. Really all of the tests should be using the test ports.
+        # FIXME: crbug.com/279494. it's confusing that this is the test- port, and
+        # not the regular mac10.10 port. Really all of the tests should be using
+        # the test ports.
         port = self.tool.port_factory.get('test-mac-mac10.10')
-        self._write(port._filesystem.join(port.layout_tests_dir(), 'platform/test-mac-mac10.10/failures/expected/image-expected.txt'), 'original mac10.11 result')
+        self._write(port._filesystem.join(port.layout_tests_dir(),
+                                          'platform/test-mac-mac10.10/failures/expected/image-expected.txt'), 'original mac10.11 result')
 
         old_exact_matches = builders._exact_matches
         oc = OutputCapture()
@@ -120,7 +123,8 @@ class TestCopyExistingBaselinesInternal(_BaseTestCase):
                 "MOCK Mac10.11": {"port_name": "test-mac-mac10.11", "specifiers": set(["mock-specifier"])},
             }
 
-            options = MockOptions(builder="MOCK Mac10.11", suffixes="txt", verbose=True, test="failures/expected/image.html", results_directory=None)
+            options = MockOptions(builder="MOCK Mac10.11", suffixes="txt", verbose=True,
+                                  test="failures/expected/image.html", results_directory=None)
 
             oc.capture_output()
             self.command.execute(options, [], self.tool)
@@ -128,15 +132,19 @@ class TestCopyExistingBaselinesInternal(_BaseTestCase):
             out, _, _ = oc.restore_output()
             builders._exact_matches = old_exact_matches
 
-        self.assertMultiLineEqual(self._read(self.tool.filesystem.join(port.layout_tests_dir(), 'platform/test-mac-mac10.10/failures/expected/image-expected.txt')), 'original mac10.11 result')
+        self.assertMultiLineEqual(self._read(self.tool.filesystem.join(port.layout_tests_dir(),
+                                                                       'platform/test-mac-mac10.10/failures/expected/image-expected.txt')), 'original mac10.11 result')
         self.assertMultiLineEqual(out, '{"add": [], "remove-lines": [], "delete": []}\n')
 
     def test_copying_overwritten_baseline_to_multiple_locations(self):
         self.tool.executive = MockExecutive2()
 
-        # FIXME: crbug.com/279494. it's confusing that this is the test- port, and not the regular win port. Really all of the tests should be using the test ports.
+        # FIXME: crbug.com/279494. it's confusing that this is the test- port, and
+        # not the regular win port. Really all of the tests should be using the
+        # test ports.
         port = self.tool.port_factory.get('test-win-win7')
-        self._write(port._filesystem.join(port.layout_tests_dir(), 'platform/test-win-win7/failures/expected/image-expected.txt'), 'original win7 result')
+        self._write(port._filesystem.join(port.layout_tests_dir(),
+                                          'platform/test-win-win7/failures/expected/image-expected.txt'), 'original win7 result')
 
         old_exact_matches = builders._exact_matches
         oc = OutputCapture()
@@ -148,7 +156,8 @@ class TestCopyExistingBaselinesInternal(_BaseTestCase):
                 "MOCK Win7": {"port_name": "test-win-win7", "specifiers": set(["mock-specifier"])},
             }
 
-            options = MockOptions(builder="MOCK Win7", suffixes="txt", verbose=True, test="failures/expected/image.html", results_directory=None)
+            options = MockOptions(builder="MOCK Win7", suffixes="txt", verbose=True,
+                                  test="failures/expected/image.html", results_directory=None)
 
             oc.capture_output()
             self.command.execute(options, [], self.tool)
@@ -156,17 +165,22 @@ class TestCopyExistingBaselinesInternal(_BaseTestCase):
             out, _, _ = oc.restore_output()
             builders._exact_matches = old_exact_matches
 
-        self.assertMultiLineEqual(self._read(self.tool.filesystem.join(port.layout_tests_dir(), 'platform/test-linux-trusty/failures/expected/image-expected.txt')), 'original win7 result')
-        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(port.layout_tests_dir(), 'platform/test-linux-precise/userscripts/another-test-expected.txt')))
-        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(port.layout_tests_dir(), 'platform/test-mac-mac10.10/userscripts/another-test-expected.txt')))
+        self.assertMultiLineEqual(self._read(self.tool.filesystem.join(port.layout_tests_dir(),
+                                                                       'platform/test-linux-trusty/failures/expected/image-expected.txt')), 'original win7 result')
+        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
+            port.layout_tests_dir(), 'platform/test-linux-precise/userscripts/another-test-expected.txt')))
+        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
+            port.layout_tests_dir(), 'platform/test-mac-mac10.10/userscripts/another-test-expected.txt')))
         self.assertMultiLineEqual(out, '{"add": [], "remove-lines": [], "delete": []}\n')
 
     def test_no_copy_existing_baseline(self):
         self.tool.executive = MockExecutive2()
 
-        # FIXME: it's confusing that this is the test- port, and not the regular win port. Really all of the tests should be using the test ports.
+        # FIXME: it's confusing that this is the test- port, and not the regular
+        # win port. Really all of the tests should be using the test ports.
         port = self.tool.port_factory.get('test-win-win7')
-        self._write(port._filesystem.join(port.layout_tests_dir(), 'platform/test-win-win7/failures/expected/image-expected.txt'), 'original win7 result')
+        self._write(port._filesystem.join(port.layout_tests_dir(),
+                                          'platform/test-win-win7/failures/expected/image-expected.txt'), 'original win7 result')
 
         old_exact_matches = builders._exact_matches
         oc = OutputCapture()
@@ -177,7 +191,8 @@ class TestCopyExistingBaselinesInternal(_BaseTestCase):
                 "MOCK Win7": {"port_name": "test-win-win7", "specifiers": set(["mock-specifier"])},
             }
 
-            options = MockOptions(builder="MOCK Win7", suffixes="txt", verbose=True, test="failures/expected/image.html", results_directory=None)
+            options = MockOptions(builder="MOCK Win7", suffixes="txt", verbose=True,
+                                  test="failures/expected/image.html", results_directory=None)
 
             oc.capture_output()
             self.command.execute(options, [], self.tool)
@@ -185,9 +200,12 @@ class TestCopyExistingBaselinesInternal(_BaseTestCase):
             out, _, _ = oc.restore_output()
             builders._exact_matches = old_exact_matches
 
-        self.assertMultiLineEqual(self._read(self.tool.filesystem.join(port.layout_tests_dir(), 'platform/test-linux-trusty/failures/expected/image-expected.txt')), 'original win7 result')
-        self.assertMultiLineEqual(self._read(self.tool.filesystem.join(port.layout_tests_dir(), 'platform/test-win-win7/failures/expected/image-expected.txt')), 'original win7 result')
-        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(port.layout_tests_dir(), 'platform/test-mac-mac10.10/userscripts/another-test-expected.txt')))
+        self.assertMultiLineEqual(self._read(self.tool.filesystem.join(port.layout_tests_dir(),
+                                                                       'platform/test-linux-trusty/failures/expected/image-expected.txt')), 'original win7 result')
+        self.assertMultiLineEqual(self._read(self.tool.filesystem.join(port.layout_tests_dir(),
+                                                                       'platform/test-win-win7/failures/expected/image-expected.txt')), 'original win7 result')
+        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
+            port.layout_tests_dir(), 'platform/test-mac-mac10.10/userscripts/another-test-expected.txt')))
         self.assertMultiLineEqual(out, '{"add": [], "remove-lines": [], "delete": []}\n')
 
     def test_no_copy_skipped_test(self):
@@ -209,7 +227,8 @@ class TestCopyExistingBaselinesInternal(_BaseTestCase):
                 "MOCK Win7": {"port_name": "test-win-win7", "specifiers": set(["mock-specifier"])},
             }
 
-            options = MockOptions(builder="MOCK Win7", suffixes="txt", verbose=True, test="failures/expected/image.html", results_directory=None)
+            options = MockOptions(builder="MOCK Win7", suffixes="txt", verbose=True,
+                                  test="failures/expected/image.html", results_directory=None)
 
             oc.capture_output()
             self.command.execute(options, [], self.tool)
@@ -219,7 +238,8 @@ class TestCopyExistingBaselinesInternal(_BaseTestCase):
 
         self.assertFalse(fs.exists(fs.join(port.layout_tests_dir(), 'platform/test-mac-mac10.10/failures/expected/image-expected.txt')))
         self.assertFalse(fs.exists(fs.join(port.layout_tests_dir(), 'platform/test-linux-trusty/failures/expected/image-expected.txt')))
-        self.assertFalse(fs.exists(fs.join(port.layout_tests_dir(), 'platform/test-linux-precise/failures/expected/image-expected.txt')))
+        self.assertFalse(fs.exists(fs.join(port.layout_tests_dir(),
+                                           'platform/test-linux-precise/failures/expected/image-expected.txt')))
         self.assertEqual(self._read(fs.join(port.layout_tests_dir(), 'platform/test-win-win7/failures/expected/image-expected.txt')),
                          'original win7 result')
 
@@ -229,14 +249,19 @@ class TestRebaselineTest(_BaseTestCase):
 
     def setUp(self):
         super(TestRebaselineTest, self).setUp()
-        self.options = MockOptions(builder="WebKit Mac10.11", test="userscripts/another-test.html", suffixes="txt", results_directory=None)
+        self.options = MockOptions(builder="WebKit Mac10.11", test="userscripts/another-test.html",
+                                   suffixes="txt", results_directory=None)
 
     def test_baseline_directory(self):
         command = self.command
-        self.assertMultiLineEqual(command._baseline_directory("WebKit Mac10.11"), "/mock-checkout/third_party/WebKit/LayoutTests/platform/mac")
-        self.assertMultiLineEqual(command._baseline_directory("WebKit Mac10.10"), "/mock-checkout/third_party/WebKit/LayoutTests/platform/mac-mac10.10")
-        self.assertMultiLineEqual(command._baseline_directory("WebKit Linux Trusty"), "/mock-checkout/third_party/WebKit/LayoutTests/platform/linux")
-        self.assertMultiLineEqual(command._baseline_directory("WebKit Linux"), "/mock-checkout/third_party/WebKit/LayoutTests/platform/linux-precise")
+        self.assertMultiLineEqual(command._baseline_directory("WebKit Mac10.11"),
+                                  "/mock-checkout/third_party/WebKit/LayoutTests/platform/mac")
+        self.assertMultiLineEqual(command._baseline_directory("WebKit Mac10.10"),
+                                  "/mock-checkout/third_party/WebKit/LayoutTests/platform/mac-mac10.10")
+        self.assertMultiLineEqual(command._baseline_directory("WebKit Linux Trusty"),
+                                  "/mock-checkout/third_party/WebKit/LayoutTests/platform/linux")
+        self.assertMultiLineEqual(command._baseline_directory("WebKit Linux"),
+                                  "/mock-checkout/third_party/WebKit/LayoutTests/platform/linux-precise")
 
     def test_rebaseline_updates_expectations_file_noop(self):
         self._zero_out_test_expectations()
@@ -251,9 +276,9 @@ Bug(A) [ Debug ] : fast/css/large-list-of-rules-crash.html [ Failure ]
         self.command._rebaseline_test_and_update_expectations(self.options)
 
         self.assertItemsEqual(self.tool.web.urls_fetched,
-            [self.WEB_PREFIX + '/userscripts/another-test-actual.png',
-             self.WEB_PREFIX + '/userscripts/another-test-actual.wav',
-             self.WEB_PREFIX + '/userscripts/another-test-actual.txt'])
+                              [self.WEB_PREFIX + '/userscripts/another-test-actual.png',
+                               self.WEB_PREFIX + '/userscripts/another-test-actual.wav',
+                               self.WEB_PREFIX + '/userscripts/another-test-actual.txt'])
         new_expectations = self._read(self.mac_expectations_path)
         self.assertMultiLineEqual(new_expectations, """Bug(B) [ Mac Linux Win7 Debug ] fast/dom/Window/window-postmessage-clone-really-deep-array.html [ Pass ]
 Bug(A) [ Debug ] : fast/css/large-list-of-rules-crash.html [ Failure ]
@@ -265,7 +290,8 @@ Bug(A) [ Debug ] : fast/css/large-list-of-rules-crash.html [ Failure ]
 
     def test_rebaseline_test_with_results_directory(self):
         self._write("userscripts/another-test.html", "test data")
-        self._write(self.mac_expectations_path, "Bug(x) [ Mac ] userscripts/another-test.html [ Failure ]\nbug(z) [ Linux ] userscripts/another-test.html [ Failure ]\n")
+        self._write(self.mac_expectations_path,
+                    "Bug(x) [ Mac ] userscripts/another-test.html [ Failure ]\nbug(z) [ Linux ] userscripts/another-test.html [ Failure ]\n")
         self.options.results_directory = '/tmp'
         self.command._rebaseline_test_and_update_expectations(self.options)
         self.assertItemsEqual(self.tool.web.urls_fetched, ['file:///tmp/userscripts/another-test-actual.txt'])
@@ -274,7 +300,7 @@ Bug(A) [ Debug ] : fast/css/large-list-of-rules-crash.html [ Failure ]
         self._write("userscripts/another-test.html", "test data")
         self._write("userscripts/another-test-expected.html", "generic result")
         OutputCapture().assert_outputs(self, self.command._rebaseline_test_and_update_expectations, args=[self.options],
-            expected_logs="Cannot rebaseline reftest: userscripts/another-test.html\n")
+                                       expected_logs="Cannot rebaseline reftest: userscripts/another-test.html\n")
         self.assertDictEqual(self.command._scm_changes, {'add': [], 'remove-lines': [], "delete": []})
 
     def test_rebaseline_test_and_print_scm_changes(self):
@@ -284,14 +310,17 @@ Bug(A) [ Debug ] : fast/css/large-list-of-rules-crash.html [ Failure ]
 
         self.command._rebaseline_test("WebKit Linux Trusty", "userscripts/another-test.html", "txt", None)
 
-        self.assertDictEqual(self.command._scm_changes, {'add': ['/mock-checkout/third_party/WebKit/LayoutTests/platform/linux/userscripts/another-test-expected.txt'], 'delete': []})
+        self.assertDictEqual(self.command._scm_changes, {
+                             'add': ['/mock-checkout/third_party/WebKit/LayoutTests/platform/linux/userscripts/another-test-expected.txt'], 'delete': []})
 
     def test_rebaseline_test_internal_with_port_that_lacks_buildbot(self):
         self.tool.executive = MockExecutive2()
 
-        # FIXME: it's confusing that this is the test- port, and not the regular win port. Really all of the tests should be using the test ports.
+        # FIXME: it's confusing that this is the test- port, and not the regular
+        # win port. Really all of the tests should be using the test ports.
         port = self.tool.port_factory.get('test-win-win7')
-        self._write(port._filesystem.join(port.layout_tests_dir(), 'platform/test-win-win10/failures/expected/image-expected.txt'), 'original win10 result')
+        self._write(port._filesystem.join(port.layout_tests_dir(),
+                                          'platform/test-win-win10/failures/expected/image-expected.txt'), 'original win10 result')
 
         old_exact_matches = builders._exact_matches
         oc = OutputCapture()
@@ -302,7 +331,7 @@ Bug(A) [ Debug ] : fast/css/large-list-of-rules-crash.html [ Failure ]
             }
 
             options = MockOptions(optimize=True, builder="MOCK Win10", suffixes="txt",
-                verbose=True, test="failures/expected/image.html", results_directory=None)
+                                  verbose=True, test="failures/expected/image.html", results_directory=None)
 
             oc.capture_output()
             self.command.execute(options, [], self.tool)
@@ -310,9 +339,12 @@ Bug(A) [ Debug ] : fast/css/large-list-of-rules-crash.html [ Failure ]
             out, _, _ = oc.restore_output()
             builders._exact_matches = old_exact_matches
 
-        self.assertMultiLineEqual(self._read(self.tool.filesystem.join(port.layout_tests_dir(), 'platform/test-win-win10/failures/expected/image-expected.txt')), 'MOCK Web result, convert 404 to None=True')
-        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(port.layout_tests_dir(), 'platform/test-win-win7/failures/expected/image-expected.txt')))
-        self.assertMultiLineEqual(out, '{"add": [], "remove-lines": [{"test": "failures/expected/image.html", "builder": "MOCK Win10"}], "delete": []}\n')
+        self.assertMultiLineEqual(self._read(self.tool.filesystem.join(port.layout_tests_dir(
+        ), 'platform/test-win-win10/failures/expected/image-expected.txt')), 'MOCK Web result, convert 404 to None=True')
+        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
+            port.layout_tests_dir(), 'platform/test-win-win7/failures/expected/image-expected.txt')))
+        self.assertMultiLineEqual(
+            out, '{"add": [], "remove-lines": [{"test": "failures/expected/image.html", "builder": "MOCK Win10"}], "delete": []}\n')
 
 
 class TestAbstractParallelRebaselineCommand(_BaseTestCase):
@@ -328,7 +360,8 @@ class TestAbstractParallelRebaselineCommand(_BaseTestCase):
                 "MOCK Win7 (dbg)(2)": {"port_name": "test-win-win7"},
             }
 
-            builders_to_fetch = self.command._builders_to_fetch_from(["MOCK Win10", "MOCK Win7 (dbg)(1)", "MOCK Win7 (dbg)(2)", "MOCK Win7"])
+            builders_to_fetch = self.command._builders_to_fetch_from(
+                ["MOCK Win10", "MOCK Win7 (dbg)(1)", "MOCK Win7 (dbg)(2)", "MOCK Win7"])
             self.assertEqual(builders_to_fetch, ["MOCK Win7", "MOCK Win10"])
         finally:
             builders._exact_matches = old_exact_matches
@@ -373,61 +406,62 @@ class TestRebaselineJson(_BaseTestCase):
         self._write(self.mac_expectations_path, "Bug(x) userscripts/first-test.html [ Failure ]\n")
         self._write("userscripts/first-test.html", "Dummy test contents")
 
-        self.command._rebaseline(options,  {"userscripts/first-test.html": {"MOCK builder": ["txt", "png"]}})
+        self.command._rebaseline(options, {"userscripts/first-test.html": {"MOCK builder": ["txt", "png"]}})
 
-        # Note that we have one run_in_parallel() call followed by a run_command()
-        self.assertEqual(self.tool.executive.calls,
-            [[['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', '', 'userscripts/first-test.html', '--verbose']]])
+        self.assertEqual(self.tool.executive.calls, [])
 
     def test_rebaseline_all(self):
         self._setup_mock_builder_data()
 
         options = MockOptions(optimize=True, verbose=True, results_directory=None)
         self._write("userscripts/first-test.html", "Dummy test contents")
-        self.command._rebaseline(options,  {"userscripts/first-test.html": {"MOCK builder": ["txt", "png"]}})
+        self.command._rebaseline(options, {"userscripts/first-test.html": {"MOCK builder": ["txt", "png"]}})
 
         # Note that we have one run_in_parallel() call followed by a run_command()
         self.assertEqual(self.tool.executive.calls,
-            [[['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--verbose']],
-             [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--verbose']],
-             [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt,png', 'userscripts/first-test.html', '--verbose']]])
+                         [[['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--verbose']],
+                          [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder',
+                            'MOCK builder', '--test', 'userscripts/first-test.html', '--verbose']],
+                             [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt,png', 'userscripts/first-test.html', '--verbose']]])
 
     def test_rebaseline_debug(self):
         self._setup_mock_builder_data()
 
         options = MockOptions(optimize=True, verbose=True, results_directory=None)
         self._write("userscripts/first-test.html", "Dummy test contents")
-        self.command._rebaseline(options,  {"userscripts/first-test.html": {"MOCK builder (Debug)": ["txt", "png"]}})
+        self.command._rebaseline(options, {"userscripts/first-test.html": {"MOCK builder (Debug)": ["txt", "png"]}})
 
         # Note that we have one run_in_parallel() call followed by a run_command()
         self.assertEqual(self.tool.executive.calls,
-            [[['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder (Debug)', '--test', 'userscripts/first-test.html', '--verbose']],
-             [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder (Debug)', '--test', 'userscripts/first-test.html', '--verbose']],
-             [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt,png', 'userscripts/first-test.html', '--verbose']]])
+                         [[['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder (Debug)', '--test', 'userscripts/first-test.html', '--verbose']],
+                          [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder',
+                            'MOCK builder (Debug)', '--test', 'userscripts/first-test.html', '--verbose']],
+                             [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt,png', 'userscripts/first-test.html', '--verbose']]])
 
     def test_no_optimize(self):
         self._setup_mock_builder_data()
 
         options = MockOptions(optimize=False, verbose=True, results_directory=None)
         self._write("userscripts/first-test.html", "Dummy test contents")
-        self.command._rebaseline(options,  {"userscripts/first-test.html": {"MOCK builder (Debug)": ["txt", "png"]}})
+        self.command._rebaseline(options, {"userscripts/first-test.html": {"MOCK builder (Debug)": ["txt", "png"]}})
 
         # Note that we have only one run_in_parallel() call
         self.assertEqual(self.tool.executive.calls,
-            [[['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder (Debug)', '--test', 'userscripts/first-test.html', '--verbose']],
-             [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder (Debug)', '--test', 'userscripts/first-test.html', '--verbose']]])
+                         [[['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder (Debug)', '--test', 'userscripts/first-test.html', '--verbose']],
+                          [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder (Debug)', '--test', 'userscripts/first-test.html', '--verbose']]])
 
     def test_results_directory(self):
         self._setup_mock_builder_data()
 
         options = MockOptions(optimize=False, verbose=True, results_directory='/tmp')
         self._write("userscripts/first-test.html", "Dummy test contents")
-        self.command._rebaseline(options,  {"userscripts/first-test.html": {"MOCK builder": ["txt", "png"]}})
+        self.command._rebaseline(options, {"userscripts/first-test.html": {"MOCK builder": ["txt", "png"]}})
 
         # Note that we have only one run_in_parallel() call
         self.assertEqual(self.tool.executive.calls,
-            [[['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--results-directory', '/tmp', '--verbose']],
-             [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--results-directory', '/tmp', '--verbose']]])
+                         [[['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--results-directory', '/tmp', '--verbose']],
+                          [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--results-directory', '/tmp', '--verbose']]])
+
 
 class TestRebaselineJsonUpdatesExpectationsFiles(_BaseTestCase):
     command_constructor = RebaselineJson
@@ -450,14 +484,16 @@ class TestRebaselineJsonUpdatesExpectationsFiles(_BaseTestCase):
     def test_rebaseline_updates_expectations_file(self):
         options = MockOptions(optimize=False, verbose=True, results_directory=None)
 
-        self._write(self.mac_expectations_path, "Bug(x) [ Mac ] userscripts/first-test.html [ Failure ]\nbug(z) [ Linux ] userscripts/first-test.html [ Failure ]\n")
+        self._write(self.mac_expectations_path,
+                    "Bug(x) [ Mac ] userscripts/first-test.html [ Failure ]\nbug(z) [ Linux ] userscripts/first-test.html [ Failure ]\n")
         self._write("userscripts/first-test.html", "Dummy test contents")
         self._setup_mock_builder_data()
 
-        self.command._rebaseline(options,  {"userscripts/first-test.html": {"WebKit Mac10.11": ["txt", "png"]}})
+        self.command._rebaseline(options, {"userscripts/first-test.html": {"WebKit Mac10.11": ["txt", "png"]}})
 
         new_expectations = self._read(self.mac_expectations_path)
-        self.assertMultiLineEqual(new_expectations, "Bug(x) [ Mac10.10 Mac10.9 Retina ] userscripts/first-test.html [ Failure ]\nbug(z) [ Linux ] userscripts/first-test.html [ Failure ]\n")
+        self.assertMultiLineEqual(
+            new_expectations, "Bug(x) [ Mac10.10 Mac10.9 Retina ] userscripts/first-test.html [ Failure ]\nbug(z) [ Linux ] userscripts/first-test.html [ Failure ]\n")
 
     def test_rebaseline_updates_expectations_file_all_platforms(self):
         options = MockOptions(optimize=False, verbose=True, results_directory=None)
@@ -466,10 +502,11 @@ class TestRebaselineJsonUpdatesExpectationsFiles(_BaseTestCase):
         self._write("userscripts/first-test.html", "Dummy test contents")
         self._setup_mock_builder_data()
 
-        self.command._rebaseline(options,  {"userscripts/first-test.html": {"WebKit Mac10.11": ["txt", "png"]}})
+        self.command._rebaseline(options, {"userscripts/first-test.html": {"WebKit Mac10.11": ["txt", "png"]}})
 
         new_expectations = self._read(self.mac_expectations_path)
-        self.assertMultiLineEqual(new_expectations, "Bug(x) [ Android Linux Mac10.10 Mac10.9 Retina Win ] userscripts/first-test.html [ Failure ]\n")
+        self.assertMultiLineEqual(
+            new_expectations, "Bug(x) [ Android Linux Mac10.10 Mac10.9 Retina Win ] userscripts/first-test.html [ Failure ]\n")
 
     def test_rebaseline_handles_platform_skips(self):
         # This test is just like test_rebaseline_updates_expectations_file_all_platforms(),
@@ -482,10 +519,11 @@ class TestRebaselineJsonUpdatesExpectationsFiles(_BaseTestCase):
         self._write("userscripts/first-test.html", "Dummy test contents")
         self._setup_mock_builder_data()
 
-        self.command._rebaseline(options,  {"userscripts/first-test.html": {"WebKit Mac10.11": ["txt", "png"]}})
+        self.command._rebaseline(options, {"userscripts/first-test.html": {"WebKit Mac10.11": ["txt", "png"]}})
 
         new_expectations = self._read(self.mac_expectations_path)
-        self.assertMultiLineEqual(new_expectations, "Bug(x) [ Linux Mac10.10 Mac10.9 Retina Win ] userscripts/first-test.html [ Failure ]\n")
+        self.assertMultiLineEqual(
+            new_expectations, "Bug(x) [ Linux Mac10.10 Mac10.9 Retina Win ] userscripts/first-test.html [ Failure ]\n")
 
     def test_rebaseline_handles_skips_in_file(self):
         # This test is like test_Rebaseline_handles_platform_skips, except that the
@@ -496,12 +534,12 @@ class TestRebaselineJsonUpdatesExpectationsFiles(_BaseTestCase):
         options = MockOptions(optimize=False, verbose=True, results_directory=None)
 
         self._write(self.mac_expectations_path,
-            ("Bug(x) [ Linux Mac Win ] userscripts/first-test.html [ Failure ]\n"
-             "Bug(y) [ Android ] userscripts/first-test.html [ Skip ]\n"))
+                    ("Bug(x) [ Linux Mac Win ] userscripts/first-test.html [ Failure ]\n"
+                     "Bug(y) [ Android ] userscripts/first-test.html [ Skip ]\n"))
         self._write("userscripts/first-test.html", "Dummy test contents")
         self._setup_mock_builder_data()
 
-        self.command._rebaseline(options,  {"userscripts/first-test.html": {"WebKit Mac10.11": ["txt", "png"]}})
+        self.command._rebaseline(options, {"userscripts/first-test.html": {"WebKit Mac10.11": ["txt", "png"]}})
 
         new_expectations = self._read(self.mac_expectations_path)
         self.assertMultiLineEqual(
@@ -521,10 +559,11 @@ class TestRebaselineJsonUpdatesExpectationsFiles(_BaseTestCase):
         self._write("userscripts/first-test.html", "Dummy test contents")
         self._setup_mock_builder_data()
 
-        self.command._rebaseline(options,  {"userscripts/first-test.html": {"WebKit Mac10.11": ["txt", "png"]}})
+        self.command._rebaseline(options, {"userscripts/first-test.html": {"WebKit Mac10.11": ["txt", "png"]}})
 
         new_expectations = self._read(self.mac_expectations_path)
-        self.assertMultiLineEqual(new_expectations, "Bug(x) [ Linux Mac10.10 Mac10.9 Retina Win ] userscripts/first-test.html [ Failure ]\n")
+        self.assertMultiLineEqual(
+            new_expectations, "Bug(x) [ Linux Mac10.10 Mac10.9 Retina Win ] userscripts/first-test.html [ Failure ]\n")
 
 
 class TestRebaseline(_BaseTestCase):
@@ -545,14 +584,15 @@ class TestRebaseline(_BaseTestCase):
             builders._exact_matches = {
                 "MOCK builder": {"port_name": "test-mac-mac10.10", "specifiers": set(["mock-specifier"])},
             }
-            self.command.execute(MockOptions(results_directory=False, optimize=False, builders=None, suffixes="txt,png", verbose=True), ['userscripts/first-test.html'], self.tool)
+            self.command.execute(MockOptions(results_directory=False, optimize=False, builders=None,
+                                             suffixes="txt,png", verbose=True), ['userscripts/first-test.html'], self.tool)
         finally:
             builders._exact_matches = old_exact_matches
 
         calls = filter(lambda x: x != ['qmake', '-v'] and x[0] != 'perl', self.tool.executive.calls)
         self.assertEqual(calls,
-            [[['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--verbose']],
-             [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--verbose']]])
+                         [[['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--verbose']],
+                          [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--verbose']]])
 
     def test_rebaseline_directory(self):
         self.command._builders_to_pull_from = lambda: [MockBuilder('MOCK builder')]
@@ -567,19 +607,21 @@ class TestRebaseline(_BaseTestCase):
             builders._exact_matches = {
                 "MOCK builder": {"port_name": "test-mac-mac10.10", "specifiers": set(["mock-specifier"])},
             }
-            self.command.execute(MockOptions(results_directory=False, optimize=False, builders=None, suffixes="txt,png", verbose=True), ['userscripts'], self.tool)
+            self.command.execute(MockOptions(results_directory=False, optimize=False, builders=None,
+                                             suffixes="txt,png", verbose=True), ['userscripts'], self.tool)
         finally:
             builders._exact_matches = old_exact_matches
 
         calls = filter(lambda x: x != ['qmake', '-v'] and x[0] != 'perl', self.tool.executive.calls)
         self.assertEqual(calls,
-            [[['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--verbose'],
-              ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/second-test.html', '--verbose']],
-             [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--verbose'],
-              ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/second-test.html', '--verbose']]])
+                         [[['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--verbose'],
+                           ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/second-test.html', '--verbose']],
+                             [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/first-test.html', '--verbose'],
+                              ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK builder', '--test', 'userscripts/second-test.html', '--verbose']]])
 
 
 class MockLineRemovingExecutive(MockExecutive):
+
     def run_in_parallel(self, commands):
         assert len(commands)
 
@@ -602,7 +644,8 @@ class TestRebaselineExpectations(_BaseTestCase):
 
     def setUp(self):
         super(TestRebaselineExpectations, self).setUp()
-        self.options = MockOptions(optimize=False, builders=None, suffixes=['txt'], verbose=False, platform=None, results_directory=None)
+        self.options = MockOptions(optimize=False, builders=None, suffixes=[
+                                   'txt'], verbose=False, platform=None, results_directory=None)
 
     def _write_test_file(self, port, path, contents):
         abs_path = self.tool.filesystem.join(port.layout_tests_dir(), path)
@@ -668,16 +711,24 @@ class TestRebaselineExpectations(_BaseTestCase):
         calls = filter(lambda x: x != ['qmake', '-v'], self.tool.executive.calls)
         self.assertEqual(self.tool.executive.calls, [
             [
-                ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt', '--builder', 'MOCK Mac10.10', '--test', 'userscripts/another-test.html'],
-                ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt', '--builder', 'MOCK Mac10.11', '--test', 'userscripts/another-test.html'],
-                ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'png', '--builder', 'MOCK Mac10.10', '--test', 'userscripts/images.svg'],
-                ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'png', '--builder', 'MOCK Mac10.11', '--test', 'userscripts/images.svg'],
+                ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt',
+                    '--builder', 'MOCK Mac10.10', '--test', 'userscripts/another-test.html'],
+                ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt',
+                    '--builder', 'MOCK Mac10.11', '--test', 'userscripts/another-test.html'],
+                ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'png',
+                    '--builder', 'MOCK Mac10.10', '--test', 'userscripts/images.svg'],
+                ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'png',
+                    '--builder', 'MOCK Mac10.11', '--test', 'userscripts/images.svg'],
             ],
             [
-                ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt', '--builder', 'MOCK Mac10.10', '--test', 'userscripts/another-test.html'],
-                ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt', '--builder', 'MOCK Mac10.11', '--test', 'userscripts/another-test.html'],
-                ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'png', '--builder', 'MOCK Mac10.10', '--test', 'userscripts/images.svg'],
-                ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'png', '--builder', 'MOCK Mac10.11', '--test', 'userscripts/images.svg'],
+                ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt',
+                    '--builder', 'MOCK Mac10.10', '--test', 'userscripts/another-test.html'],
+                ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt',
+                    '--builder', 'MOCK Mac10.11', '--test', 'userscripts/another-test.html'],
+                ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'png',
+                    '--builder', 'MOCK Mac10.10', '--test', 'userscripts/images.svg'],
+                ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'png',
+                    '--builder', 'MOCK Mac10.11', '--test', 'userscripts/images.svg'],
             ],
         ])
 
@@ -705,13 +756,15 @@ class TestRebaselineExpectations(_BaseTestCase):
                           'Bug(y) userscripts/test.html [ Crash ]\n')}
         self._write('/userscripts/another-test.html', '')
 
-        self.assertDictEqual(self.command._tests_to_rebaseline(self.mac_port), {'userscripts/another-test.html': set(['png', 'txt', 'wav'])})
+        self.assertDictEqual(self.command._tests_to_rebaseline(self.mac_port), {
+                             'userscripts/another-test.html': set(['png', 'txt', 'wav'])})
         self.assertEqual(self._read(self.mac_expectations_path), '')
 
     def test_rebaseline_without_other_expectations(self):
         self._write("userscripts/another-test.html", "Dummy test contents")
         self._write(self.mac_expectations_path, "Bug(x) userscripts/another-test.html [ Rebaseline ]\n")
-        self.assertDictEqual(self.command._tests_to_rebaseline(self.mac_port), {'userscripts/another-test.html': ('png', 'wav', 'txt')})
+        self.assertDictEqual(self.command._tests_to_rebaseline(self.mac_port), {
+                             'userscripts/another-test.html': ('png', 'wav', 'txt')})
 
     def test_rebaseline_test_passes_everywhere(self):
         test_port = self._setup_test_port()
@@ -763,6 +816,7 @@ Bug(foo) [ Linux Win ] fast/dom/prototype-taco.html [ Rebaseline ]
 
 
 class _FakeOptimizer(BaselineOptimizer):
+
     def read_results_by_directory(self, baseline_name):
         if baseline_name.endswith('txt'):
             return {'LayoutTests/passes/text.html': '123456'}
@@ -803,8 +857,10 @@ class TestOptimizeBaselines(_BaseTestCase):
         finally:
             builders._exact_matches = old_exact_matches
 
-        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(test_port.layout_tests_dir(), 'platform/mac/another/test-expected.txt')))
-        self.assertTrue(self.tool.filesystem.exists(self.tool.filesystem.join(test_port.layout_tests_dir(), 'another/test-expected.txt')))
+        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
+            test_port.layout_tests_dir(), 'platform/mac/another/test-expected.txt')))
+        self.assertTrue(self.tool.filesystem.exists(self.tool.filesystem.join(
+            test_port.layout_tests_dir(), 'another/test-expected.txt')))
 
     def test_no_modify_scm(self):
         test_port = self.tool.port_factory.get('test')
@@ -825,8 +881,10 @@ class TestOptimizeBaselines(_BaseTestCase):
         finally:
             builders._exact_matches = old_exact_matches
 
-        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(test_port.layout_tests_dir(), 'platform/mac/another/test-expected.txt')))
-        self.assertTrue(self.tool.filesystem.exists(self.tool.filesystem.join(test_port.layout_tests_dir(), 'another/test-expected.txt')))
+        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
+            test_port.layout_tests_dir(), 'platform/mac/another/test-expected.txt')))
+        self.assertTrue(self.tool.filesystem.exists(self.tool.filesystem.join(
+            test_port.layout_tests_dir(), 'another/test-expected.txt')))
 
     def test_optimize_all_suffixes_by_default(self):
         test_port = self.tool.port_factory.get('test')
@@ -851,10 +909,14 @@ class TestOptimizeBaselines(_BaseTestCase):
             builders._exact_matches = old_exact_matches
 
         self.assertEquals(out, '{"add": [], "remove-lines": [], "delete": ["/mock-checkout/third_party/WebKit/LayoutTests/platform/mac-mac10.10/another/test-expected.txt", "/mock-checkout/third_party/WebKit/LayoutTests/platform/mac-mac10.10/another/test-expected.png"]}\n')
-        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(test_port.layout_tests_dir(), 'platform/mac/another/test-expected.txt')))
-        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(test_port.layout_tests_dir(), 'platform/mac/another/test-expected.png')))
-        self.assertTrue(self.tool.filesystem.exists(self.tool.filesystem.join(test_port.layout_tests_dir(), 'another/test-expected.txt')))
-        self.assertTrue(self.tool.filesystem.exists(self.tool.filesystem.join(test_port.layout_tests_dir(), 'another/test-expected.png')))
+        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
+            test_port.layout_tests_dir(), 'platform/mac/another/test-expected.txt')))
+        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
+            test_port.layout_tests_dir(), 'platform/mac/another/test-expected.png')))
+        self.assertTrue(self.tool.filesystem.exists(self.tool.filesystem.join(
+            test_port.layout_tests_dir(), 'another/test-expected.txt')))
+        self.assertTrue(self.tool.filesystem.exists(self.tool.filesystem.join(
+            test_port.layout_tests_dir(), 'another/test-expected.png')))
 
 
 class TestAnalyzeBaselines(_BaseTestCase):
@@ -866,20 +928,21 @@ class TestAnalyzeBaselines(_BaseTestCase):
         self.tool.port_factory.get = (lambda port_name=None, options=None: self.port)
         self.lines = []
         self.command._optimizer_class = _FakeOptimizer
-        self.command._write = (lambda msg: self.lines.append(msg))  # pylint bug warning about unnecessary lambda? pylint: disable=W0108
+        # pylint bug warning about unnecessary lambda? pylint: disable=W0108
+        self.command._write = (lambda msg: self.lines.append(msg))
 
     def test_default(self):
         self.command.execute(MockOptions(suffixes='txt', missing=False, platform=None), ['passes/text.html'], self.tool)
         self.assertEqual(self.lines,
-            ['passes/text-expected.txt:',
-             '  (generic): 123456'])
+                         ['passes/text-expected.txt:',
+                          '  (generic): 123456'])
 
     def test_missing_baselines(self):
         self.command.execute(MockOptions(suffixes='png,txt', missing=True, platform=None), ['passes/text.html'], self.tool)
         self.assertEqual(self.lines,
-            ['passes/text-expected.png: (no baselines found)',
-             'passes/text-expected.txt:',
-             '  (generic): 123456'])
+                         ['passes/text-expected.png: (no baselines found)',
+                          'passes/text-expected.txt:',
+                          '  (generic): 123456'])
 
 
 class TestAutoRebaseline(_BaseTestCase):
@@ -902,6 +965,12 @@ class TestAutoRebaseline(_BaseTestCase):
         self.tool.port_factory.get = get_test_port
 
         return test_port
+
+    def _execute_command_with_mock_options(self, auth_refresh_token_json=None, commit_author=None, dry_run=False):
+        self.command.execute(MockOptions(
+            optimize=True, verbose=False, results_directory=False, auth_refresh_token_json=auth_refresh_token_json,
+            commit_author=commit_author, dry_run=dry_run),
+            [], self.tool)
 
     def setUp(self):
         super(TestAutoRebaseline, self).setUp()
@@ -936,12 +1005,13 @@ class TestAutoRebaseline(_BaseTestCase):
 
         min_revision = 9000
         self.assertEqual(self.command.tests_to_rebaseline(self.tool, min_revision, print_revisions=False), (
-                set(['path/to/rebaseline-without-bug-number.html', 'path/to/rebaseline-with-modifiers.html', 'path/to/rebaseline-without-modifiers.html']),
-                5678,
-                '624c3081c0',
-                'foobarbaz1@chromium.org',
-                set(['24182', '234']),
-                True))
+            set(['path/to/rebaseline-without-bug-number.html',
+                 'path/to/rebaseline-with-modifiers.html', 'path/to/rebaseline-without-modifiers.html']),
+            5678,
+            '624c3081c0',
+            'foobarbaz1@chromium.org',
+            set(['24182', '234']),
+            True))
 
     def test_tests_to_rebaseline_over_limit(self):
         def blame(path):
@@ -957,12 +1027,12 @@ class TestAutoRebaseline(_BaseTestCase):
 
         min_revision = 9000
         self.assertEqual(self.command.tests_to_rebaseline(self.tool, min_revision, print_revisions=False), (
-                set(expected_list_of_tests),
-                5678,
-                '624c3081c0',
-                'foobarbaz1@chromium.org',
-                set(['24182']),
-                True))
+            set(expected_list_of_tests),
+            5678,
+            '624c3081c0',
+            'foobarbaz1@chromium.org',
+            set(['24182']),
+            True))
 
     def test_commit_message(self):
         author = "foo@chromium.org"
@@ -970,7 +1040,7 @@ class TestAutoRebaseline(_BaseTestCase):
         commit = "abcd567"
         bugs = set()
         self.assertEqual(self.command.commit_message(author, revision, commit, bugs),
-            """Auto-rebaseline for r1234
+                         """Auto-rebaseline for r1234
 
 https://chromium.googlesource.com/chromium/src/+/abcd567
 
@@ -979,7 +1049,7 @@ TBR=foo@chromium.org
 
         bugs = set(["234", "345"])
         self.assertEqual(self.command.commit_message(author, revision, commit, bugs),
-            """Auto-rebaseline for r1234
+                         """Auto-rebaseline for r1234
 
 https://chromium.googlesource.com/chromium/src/+/abcd567
 
@@ -994,7 +1064,7 @@ TBR=foo@chromium.org
 """
         self.tool.scm().blame = blame
 
-        self.command.execute(MockOptions(optimize=True, verbose=False, results_directory=False), [], self.tool)
+        self._execute_command_with_mock_options()
         self.assertEqual(self.tool.executive.calls, [])
 
     def test_execute(self):
@@ -1066,29 +1136,39 @@ crbug.com/24182 path/to/locally-changed-lined.html [ NeedsRebaseline ]
             }
 
             self.command.tree_status = lambda: 'closed'
-            self.command.execute(MockOptions(optimize=True, verbose=False, results_directory=False, auth_refresh_token_json=None), [], self.tool)
+            self._execute_command_with_mock_options()
             self.assertEqual(self.tool.executive.calls, [])
 
             self.command.tree_status = lambda: 'open'
             self.tool.executive.calls = []
-            self.command.execute(MockOptions(optimize=True, verbose=False, results_directory=False, auth_refresh_token_json=None), [], self.tool)
+            self._execute_command_with_mock_options()
 
             self.assertEqual(self.tool.executive.calls, [
                 [
-                    ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png', '--builder', 'MOCK Mac10.10', '--test', 'fast/dom/prototype-chocolate.html'],
-                    ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'png', '--builder', 'MOCK Mac10.11', '--test', 'fast/dom/prototype-strawberry.html'],
-                    ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt', '--builder', 'MOCK Mac10.10', '--test', 'fast/dom/prototype-taco.html'],
-                    ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt', '--builder', 'MOCK Mac10.11', '--test', 'fast/dom/prototype-taco.html'],
+                    ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt,png',
+                        '--builder', 'MOCK Mac10.10', '--test', 'fast/dom/prototype-chocolate.html'],
+                    ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'png',
+                        '--builder', 'MOCK Mac10.11', '--test', 'fast/dom/prototype-strawberry.html'],
+                    ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt',
+                        '--builder', 'MOCK Mac10.10', '--test', 'fast/dom/prototype-taco.html'],
+                    ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt',
+                        '--builder', 'MOCK Mac10.11', '--test', 'fast/dom/prototype-taco.html'],
                 ],
                 [
-                    ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK Mac10.10', '--test', 'fast/dom/prototype-chocolate.html'],
-                    ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'png', '--builder', 'MOCK Mac10.11', '--test', 'fast/dom/prototype-strawberry.html'],
-                    ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt', '--builder', 'MOCK Mac10.10', '--test', 'fast/dom/prototype-taco.html'],
-                    ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt', '--builder', 'MOCK Mac10.11', '--test', 'fast/dom/prototype-taco.html'],
+                    ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png',
+                        '--builder', 'MOCK Mac10.10', '--test', 'fast/dom/prototype-chocolate.html'],
+                    ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'png', '--builder',
+                        'MOCK Mac10.11', '--test', 'fast/dom/prototype-strawberry.html'],
+                    ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt',
+                        '--builder', 'MOCK Mac10.10', '--test', 'fast/dom/prototype-taco.html'],
+                    ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt',
+                        '--builder', 'MOCK Mac10.11', '--test', 'fast/dom/prototype-taco.html'],
                 ],
                 [
-                    ['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt,png', 'fast/dom/prototype-chocolate.html'],
-                    ['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'png', 'fast/dom/prototype-strawberry.html'],
+                    ['python', 'echo', 'optimize-baselines', '--no-modify-scm',
+                        '--suffixes', 'txt,png', 'fast/dom/prototype-chocolate.html'],
+                    ['python', 'echo', 'optimize-baselines', '--no-modify-scm',
+                        '--suffixes', 'png', 'fast/dom/prototype-strawberry.html'],
                     ['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt', 'fast/dom/prototype-taco.html'],
                 ],
                 ['git', 'cl', 'upload', '-f'],
@@ -1155,14 +1235,16 @@ Bug(foo) fast/dom/prototype-taco.html [ NeedsRebaseline ]
             self.command.tree_status = lambda: 'open'
             self.tool.executive = MockExecutive()
             self.tool.executive.calls = []
-            self.command.execute(MockOptions(optimize=True, verbose=False, results_directory=False, auth_refresh_token_json=None), [], self.tool)
+            self._execute_command_with_mock_options()
 
             self.assertEqual(self.tool.executive.calls, [
                 [
-                    ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt', '--builder', 'MOCK Mac10.11', '--test', 'fast/dom/prototype-taco.html'],
+                    ['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt',
+                        '--builder', 'MOCK Mac10.11', '--test', 'fast/dom/prototype-taco.html'],
                 ],
                 [
-                    ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt', '--builder', 'MOCK Mac10.11', '--test', 'fast/dom/prototype-taco.html'],
+                    ['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt',
+                        '--builder', 'MOCK Mac10.11', '--test', 'fast/dom/prototype-taco.html'],
                 ],
                 [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt', 'fast/dom/prototype-taco.html']],
                 ['git', 'cl', 'upload', '-f'],
@@ -1215,9 +1297,8 @@ Bug(foo) fast/dom/prototype-taco.html [ NeedsRebaseline ]
             }
 
             self.command.tree_status = lambda: 'open'
-            self.command.execute(MockOptions(optimize=True, verbose=False, results_directory=False, auth_refresh_token_json=None), [], self.tool)
+            self._execute_command_with_mock_options()
             self.assertEqual(self.tool.executive.calls, [
-                [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', '', 'fast/dom/prototype-taco.html']],
                 ['git', 'cl', 'upload', '-f'],
                 ['git', 'pull'],
                 ['git', 'cl', 'land', '-f', '-v'],
@@ -1277,9 +1358,8 @@ Bug(foo) fast/dom/prototype-taco.html [ NeedsRebaseline ]
 
             self.command.tree_status = lambda: 'open'
             webkitpy.tool.commands.rebaseline._get_branch_name_or_ref = lambda x: 'auto-rebaseline-temporary-branch'
-            self.command.execute(MockOptions(optimize=True, verbose=False, results_directory=False, auth_refresh_token_json=None), [], self.tool)
+            self._execute_command_with_mock_options()
             self.assertEqual(self.tool.executive.calls, [
-                [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', '', 'fast/dom/prototype-taco.html']],
                 ['git', 'cl', 'upload', '-f'],
                 ['git', 'pull'],
                 ['git', 'cl', 'land', '-f', '-v'],
@@ -1339,9 +1419,8 @@ Bug(foo) fast/dom/prototype-taco.html [ NeedsRebaseline ]
 
             self.command.tree_status = lambda: 'open'
             webkitpy.tool.commands.rebaseline._get_branch_name_or_ref = lambda x: 'auto-rebaseline-alt-temporary-branch'
-            self.command.execute(MockOptions(optimize=True, verbose=False, results_directory=False, auth_refresh_token_json=None), [], self.tool)
+            self._execute_command_with_mock_options()
             self.assertEqual(self.tool.executive.calls, [
-                [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', '', 'fast/dom/prototype-taco.html']],
                 ['git', 'cl', 'upload', '-f'],
                 ['git', 'pull'],
                 ['git', 'cl', 'land', '-f', '-v'],
@@ -1355,9 +1434,7 @@ Bug(foo) [ Linux Mac Win10 ] fast/dom/prototype-taco.html [ NeedsRebaseline ]
             builders._exact_matches = old_exact_matches
             webkitpy.tool.commands.rebaseline._get_branch_name_or_ref = old_branch_name
 
-    def test_execute_with_rietveld_auth_refresh_token(self):
-        RIETVELD_REFRESH_TOKEN = '/creds/refresh_tokens/test_rietveld_token'
-
+    def _basic_execute_test(self, expected_executive_calls, auth_refresh_token_json=None, commit_author=None, dry_run=False):
         def blame(path):
             return """
 6469e754a1 path/to/TestExpectations                   (<foobarbaz1@chromium.org> 2013-04-28 04:52:41 +0000   13) Bug(foo) fast/dom/prototype-taco.html [ NeedsRebaseline ]
@@ -1402,14 +1479,9 @@ Bug(foo) fast/dom/prototype-taco.html [ NeedsRebaseline ]
             }
 
             self.command.tree_status = lambda: 'open'
-            self.command.execute(MockOptions(optimize=True, verbose=False, results_directory=False, auth_refresh_token_json=RIETVELD_REFRESH_TOKEN), [], self.tool)
-            self.assertEqual(self.tool.executive.calls, [
-                [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', '', 'fast/dom/prototype-taco.html']],
-                ['git', 'cl', 'upload', '-f', '--auth-refresh-token-json', RIETVELD_REFRESH_TOKEN],
-                ['git', 'pull'],
-                ['git', 'cl', 'land', '-f', '-v', '--auth-refresh-token-json', RIETVELD_REFRESH_TOKEN],
-                ['git', 'config', 'branch.auto-rebaseline-temporary-branch.rietveldissue'],
-            ])
+            self._execute_command_with_mock_options(auth_refresh_token_json=auth_refresh_token_json,
+                                                    commit_author=commit_author, dry_run=dry_run)
+            self.assertEqual(self.tool.executive.calls, expected_executive_calls)
 
             # The mac ports should both be removed since they're the only ones in builders._exact_matches.
             self.assertEqual(self.tool.filesystem.read_text_file(test_port.path_to_generic_test_expectations_file()), """
@@ -1417,6 +1489,21 @@ Bug(foo) [ Linux Win ] fast/dom/prototype-taco.html [ NeedsRebaseline ]
 """)
         finally:
             builders._exact_matches = old_exact_matches
+
+    def test_execute_with_rietveld_auth_refresh_token(self):
+        RIETVELD_REFRESH_TOKEN = '/creds/refresh_tokens/test_rietveld_token'
+        self._basic_execute_test(
+            [
+                ['git', 'cl', 'upload', '-f', '--auth-refresh-token-json', RIETVELD_REFRESH_TOKEN],
+                ['git', 'pull'],
+                ['git', 'cl', 'land', '-f', '-v', '--auth-refresh-token-json', RIETVELD_REFRESH_TOKEN],
+                ['git', 'config', 'branch.auto-rebaseline-temporary-branch.rietveldissue'],
+            ],
+            auth_refresh_token_json=RIETVELD_REFRESH_TOKEN)
+
+    def test_execute_with_dry_run(self):
+        self._basic_execute_test([], dry_run=True)
+        self.assertEqual(self.tool.scm().local_commits(), [])
 
 
 class TestRebaselineOMatic(_BaseTestCase):

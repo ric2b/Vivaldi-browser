@@ -4,10 +4,11 @@
 
 #include "platform/v8_inspector/V8ProfilerAgentImpl.h"
 
+#include "platform/v8_inspector/Atomics.h"
 #include "platform/v8_inspector/V8DebuggerImpl.h"
+#include "platform/v8_inspector/V8InspectorSessionImpl.h"
 #include "platform/v8_inspector/V8StackTraceImpl.h"
 #include "platform/v8_inspector/V8StringUtil.h"
-#include "wtf/Atomics.h"
 #include <v8-profiler.h>
 
 namespace blink {
@@ -26,7 +27,7 @@ PassOwnPtr<protocol::Array<protocol::Profiler::PositionTickInfo>> buildInspector
     if (!lineCount)
         return array.release();
 
-    Vector<v8::CpuProfileNode::LineTick> entries(lineCount);
+    protocol::Vector<v8::CpuProfileNode::LineTick> entries(lineCount);
     if (node->GetLineTicks(&entries[0], lineCount)) {
         for (unsigned i = 0; i < lineCount; i++) {
             OwnPtr<protocol::Profiler::PositionTickInfo> line = protocol::Profiler::PositionTickInfo::create()
@@ -53,9 +54,9 @@ PassOwnPtr<protocol::Profiler::CPUProfileNode> buildInspectorObjectFor(v8::Isola
     OwnPtr<protocol::Array<protocol::Profiler::PositionTickInfo>> positionTicks = buildInspectorObjectForPositionTicks(node);
 
     OwnPtr<protocol::Profiler::CPUProfileNode> result = protocol::Profiler::CPUProfileNode::create()
-        .setFunctionName(toWTFString(node->GetFunctionName()))
-        .setScriptId(String::number(node->GetScriptId()))
-        .setUrl(toWTFString(node->GetScriptResourceName()))
+        .setFunctionName(toProtocolString(node->GetFunctionName()))
+        .setScriptId(String16::number(node->GetScriptId()))
+        .setUrl(toProtocolString(node->GetScriptResourceName()))
         .setLineNumber(node->GetLineNumber())
         .setColumnNumber(node->GetColumnNumber())
         .setHitCount(node->GetHitCount())
@@ -112,20 +113,15 @@ volatile int s_lastProfileId = 0;
 
 class V8ProfilerAgentImpl::ProfileDescriptor {
 public:
-    ProfileDescriptor(const String& id, const String& title)
+    ProfileDescriptor(const String16& id, const String16& title)
         : m_id(id)
         , m_title(title) { }
-    String m_id;
-    String m_title;
+    String16 m_id;
+    String16 m_title;
 };
 
-PassOwnPtr<V8ProfilerAgent> V8ProfilerAgent::create(V8Debugger* debugger)
-{
-    return adoptPtr(new V8ProfilerAgentImpl(debugger));
-}
-
-V8ProfilerAgentImpl::V8ProfilerAgentImpl(V8Debugger* debugger)
-    : m_debugger(static_cast<V8DebuggerImpl*>(debugger))
+V8ProfilerAgentImpl::V8ProfilerAgentImpl(V8InspectorSessionImpl* session)
+    : m_debugger(session->debugger())
     , m_isolate(m_debugger->isolate())
     , m_state(nullptr)
     , m_frontend(nullptr)
@@ -138,22 +134,22 @@ V8ProfilerAgentImpl::~V8ProfilerAgentImpl()
 {
 }
 
-void V8ProfilerAgentImpl::consoleProfile(const String& title)
+void V8ProfilerAgentImpl::consoleProfile(const String16& title)
 {
     ASSERT(m_frontend && m_enabled);
-    String id = nextProfileId();
+    String16 id = nextProfileId();
     m_startedProfiles.append(ProfileDescriptor(id, title));
     startProfiling(id);
     m_frontend->consoleProfileStarted(id, currentDebugLocation(m_debugger), title);
 }
 
-void V8ProfilerAgentImpl::consoleProfileEnd(const String& title)
+void V8ProfilerAgentImpl::consoleProfileEnd(const String16& title)
 {
     ASSERT(m_frontend && m_enabled);
-    String id;
-    String resolvedTitle;
+    String16 id;
+    String16 resolvedTitle;
     // Take last started profile if no title was passed.
-    if (title.isNull()) {
+    if (title.isEmpty()) {
         if (m_startedProfiles.isEmpty())
             return;
         id = m_startedProfiles.last().m_id;
@@ -185,8 +181,8 @@ void V8ProfilerAgentImpl::enable(ErrorString*)
 
 void V8ProfilerAgentImpl::disable(ErrorString* errorString)
 {
-    for (Vector<ProfileDescriptor>::reverse_iterator it = m_startedProfiles.rbegin(); it != m_startedProfiles.rend(); ++it)
-        stopProfiling(it->m_id, false);
+    for (size_t i = m_startedProfiles.size(); i > 0; --i)
+        stopProfiling(m_startedProfiles[i - 1].m_id, false);
     m_startedProfiles.clear();
     stop(nullptr, nullptr);
     m_enabled = false;
@@ -251,22 +247,22 @@ void V8ProfilerAgentImpl::stop(ErrorString* errorString, OwnPtr<protocol::Profil
         if (!profile->get() && errorString)
             *errorString = "Profile is not found";
     }
-    m_frontendInitiatedProfileId = String();
+    m_frontendInitiatedProfileId = String16();
     m_state->setBoolean(ProfilerAgentState::userInitiatedProfiling, false);
 }
 
-String V8ProfilerAgentImpl::nextProfileId()
+String16 V8ProfilerAgentImpl::nextProfileId()
 {
-    return String::number(atomicIncrement(&s_lastProfileId));
+    return String16::number(atomicIncrement(&s_lastProfileId));
 }
 
-void V8ProfilerAgentImpl::startProfiling(const String& title)
+void V8ProfilerAgentImpl::startProfiling(const String16& title)
 {
     v8::HandleScope handleScope(m_isolate);
     m_isolate->GetCpuProfiler()->StartProfiling(toV8String(m_isolate, title), true);
 }
 
-PassOwnPtr<protocol::Profiler::CPUProfile> V8ProfilerAgentImpl::stopProfiling(const String& title, bool serialize)
+PassOwnPtr<protocol::Profiler::CPUProfile> V8ProfilerAgentImpl::stopProfiling(const String16& title, bool serialize)
 {
     v8::HandleScope handleScope(m_isolate);
     v8::CpuProfile* profile = m_isolate->GetCpuProfiler()->StopProfiling(toV8String(m_isolate, title));

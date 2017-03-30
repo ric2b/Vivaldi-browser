@@ -25,11 +25,15 @@ namespace content {
 class CONTENT_EXPORT MediaStreamVideoCapturerSource
     : public MediaStreamVideoSource {
  public:
-  MediaStreamVideoCapturerSource(const SourceStoppedCallback& stop_callback,
-                                 scoped_ptr<media::VideoCapturerSource> source);
+  MediaStreamVideoCapturerSource(
+      const SourceStoppedCallback& stop_callback,
+      std::unique_ptr<media::VideoCapturerSource> source);
   MediaStreamVideoCapturerSource(const SourceStoppedCallback& stop_callback,
                                  const StreamDeviceInfo& device_info);
   ~MediaStreamVideoCapturerSource() override;
+
+  // Implements MediaStreamVideoSource.
+  void RequestRefreshFrame() override;
 
  private:
   friend class CanvasCaptureHandlerTest;
@@ -53,7 +57,7 @@ class CONTENT_EXPORT MediaStreamVideoCapturerSource
   const char* GetPowerLineFrequencyForTesting() const;
 
   // The source that provides video frames.
-  const scoped_ptr<media::VideoCapturerSource> source_;
+  const std::unique_ptr<media::VideoCapturerSource> source_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaStreamVideoCapturerSource);
 };

@@ -53,17 +53,18 @@ void WebViewSchedulerImpl::setPageVisible(bool page_visible) {
 }
 
 scoped_ptr<WebFrameSchedulerImpl>
-WebViewSchedulerImpl::createWebFrameSchedulerImpl() {
+WebViewSchedulerImpl::createWebFrameSchedulerImpl(
+    base::trace_event::BlameContext* blame_context) {
   scoped_ptr<WebFrameSchedulerImpl> frame_scheduler(
-      new WebFrameSchedulerImpl(renderer_scheduler_, this));
+      new WebFrameSchedulerImpl(renderer_scheduler_, this, blame_context));
   frame_scheduler->setPageVisible(page_visible_);
   frame_schedulers_.insert(frame_scheduler.get());
   return frame_scheduler;
 }
 
-blink::WebPassOwnPtr<blink::WebFrameScheduler>
-WebViewSchedulerImpl::createFrameScheduler() {
-  return blink::adoptWebPtr(createWebFrameSchedulerImpl().release());
+std::unique_ptr<blink::WebFrameScheduler>
+WebViewSchedulerImpl::createFrameScheduler(blink::BlameContext* blame_context) {
+  return createWebFrameSchedulerImpl(blame_context);
 }
 
 void WebViewSchedulerImpl::Unregister(WebFrameSchedulerImpl* frame_scheduler) {

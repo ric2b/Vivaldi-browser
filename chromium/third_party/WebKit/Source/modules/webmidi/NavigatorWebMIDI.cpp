@@ -47,13 +47,9 @@ NavigatorWebMIDI::NavigatorWebMIDI(LocalFrame* frame)
 {
 }
 
-NavigatorWebMIDI::~NavigatorWebMIDI()
-{
-}
-
 DEFINE_TRACE(NavigatorWebMIDI)
 {
-    HeapSupplement<Navigator>::trace(visitor);
+    Supplement<Navigator>::trace(visitor);
     DOMWindowProperty::trace(visitor);
 }
 
@@ -64,7 +60,7 @@ const char* NavigatorWebMIDI::supplementName()
 
 NavigatorWebMIDI& NavigatorWebMIDI::from(Navigator& navigator)
 {
-    NavigatorWebMIDI* supplement = static_cast<NavigatorWebMIDI*>(HeapSupplement<Navigator>::from(navigator, supplementName()));
+    NavigatorWebMIDI* supplement = static_cast<NavigatorWebMIDI*>(Supplement<Navigator>::from(navigator, supplementName()));
     if (!supplement) {
         supplement = new NavigatorWebMIDI(navigator.frame());
         provideTo(navigator, supplementName(), supplement);

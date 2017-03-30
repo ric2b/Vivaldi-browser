@@ -15,17 +15,7 @@ namespace test {
 // static
 size_t QuicStreamSequencerPeer::GetNumBufferedBytes(
     QuicStreamSequencer* sequencer) {
-  return sequencer->buffered_frames_->BytesBuffered();
-}
-
-// static
-bool QuicStreamSequencerPeer::FrameOverlapsBufferedData(
-    QuicFrameList* buffer,
-    const QuicStreamFrame& frame) {
-  list<QuicFrameList::FrameData>::iterator it =
-      buffer->FindInsertionPoint(frame.offset, frame.frame_length);
-  return buffer->FrameOverlapsBufferedData(frame.offset, frame.frame_length,
-                                           it);
+  return sequencer->buffered_frames_.BytesBuffered();
 }
 
 // static

@@ -32,6 +32,7 @@
 #define WebPrivatePtr_h
 
 #include "WebCommon.h"
+#include "base/logging.h"
 
 #if INSIDE_BLINK
 #include "platform/heap/Handle.h"
@@ -69,7 +70,8 @@ enum LifetimeManagementType {
 };
 
 template<typename T>
-class LifetimeOf {
+struct LifetimeOf {
+private:
     static const bool isGarbageCollected = WTF::IsSubclassOfTemplate<T, GarbageCollected>::value || IsGarbageCollectedMixin<T>::value;
     static const bool isRefCountedGarbageCollected = WTF::IsSubclassOfTemplate<T, RefCountedGarbageCollected>::value;
 public:
@@ -174,7 +176,7 @@ private:
 template<typename T, WebPrivatePtrDestruction crossThreadDestruction, WebPrivatePtrStrength strongOrWeak>
 class PtrStorageImpl<T, crossThreadDestruction, strongOrWeak, RefCountedGarbageCollectedLifetime> : public PtrStorageImpl<T, crossThreadDestruction, strongOrWeak, GarbageCollectedLifetime> {
 public:
-    void assign(const PassRefPtrWillBeRawPtr<T>& val) { PtrStorageImpl<T, crossThreadDestruction, strongOrWeak, GarbageCollectedLifetime>::assign(val.get()); }
+    void assign(const RawPtr<T>& val) { PtrStorageImpl<T, crossThreadDestruction, strongOrWeak, GarbageCollectedLifetime>::assign(val.get()); }
 
     void assign(const PtrStorageImpl& other) { PtrStorageImpl<T, crossThreadDestruction, strongOrWeak, GarbageCollectedLifetime>::assign(other.get()); }
 };
@@ -247,7 +249,7 @@ public:
         // want to expose destructors of core classes to embedders. We should
         // call reset() manually in destructors of classes with WebPrivatePtr
         // members.
-        BLINK_ASSERT(!m_storage);
+        DCHECK(!m_storage);
     }
 
     bool isNull() const { return !m_storage; }

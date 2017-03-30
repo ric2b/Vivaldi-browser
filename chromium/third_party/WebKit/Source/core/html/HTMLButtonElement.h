@@ -31,7 +31,7 @@ namespace blink {
 class HTMLButtonElement final : public HTMLFormControlElement {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static PassRefPtrWillBeRawPtr<HTMLButtonElement> create(Document&, HTMLFormElement*);
+    static RawPtr<HTMLButtonElement> create(Document&, HTMLFormElement*);
 
     void setType(const AtomicString&);
 
@@ -62,6 +62,7 @@ private:
     bool supportLabels() const override { return true; }
     bool isInteractiveContent() const override;
     bool supportsAutofocus() const override;
+    bool matchesDefaultPseudoClass() const override;
 
     bool canBeSuccessfulSubmitButton() const override;
     bool isActivatedSubmit() const override;

@@ -25,6 +25,7 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
 #include "net/cert/x509_certificate.h"
+#include "net/socket/ssl_server_socket.h"
 #include "net/socket/stream_socket.h"
 #include "net/socket/tcp_server_socket.h"
 #include "net/ssl/ssl_server_config.h"
@@ -65,7 +66,7 @@ struct HttpRequest;
 //   http_response->set_code(test_server::SUCCESS);
 //   http_response->set_content("hello");
 //   http_response->set_content_type("text/plain");
-//   return http_response.Pass();
+//   return http_response;
 // }
 //
 // For a test that spawns another process such as browser_tests, it is
@@ -243,6 +244,10 @@ class EmbeddedTestServer {
   void HandleRequest(HttpConnection* connection,
                      scoped_ptr<HttpRequest> request);
 
+  // Initializes the SSLServerContext so that SSLServerSocket connections may
+  // share the same cache
+  void InitializeSSLServerContext();
+
   HttpConnection* FindConnection(StreamSocket* socket);
 
   // Posts a task to the |io_thread_| and waits for a reply.
@@ -272,6 +277,7 @@ class EmbeddedTestServer {
 
   net::SSLServerConfig ssl_config_;
   ServerCertificate cert_;
+  scoped_ptr<SSLServerContext> context_;
 
   base::WeakPtrFactory<EmbeddedTestServer> weak_factory_;
 

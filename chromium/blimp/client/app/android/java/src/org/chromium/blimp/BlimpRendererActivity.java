@@ -7,13 +7,14 @@ package org.chromium.blimp;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.TextUtils;
 
 import org.chromium.base.Log;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.blimp.auth.RetryingTokenSource;
 import org.chromium.blimp.auth.TokenSource;
 import org.chromium.blimp.auth.TokenSourceImpl;
-import org.chromium.blimp.input.TextInputFeature;
+import org.chromium.blimp.input.WebInputBox;
 import org.chromium.blimp.session.BlimpClientSession;
 import org.chromium.blimp.session.TabControlFeature;
 import org.chromium.blimp.toolbar.Toolbar;
@@ -37,7 +38,7 @@ public class BlimpRendererActivity extends Activity
     private Toolbar mToolbar;
     private BlimpClientSession mBlimpClientSession;
     private TabControlFeature mTabControlFeature;
-    private TextInputFeature mTextInputFeature;
+    private WebInputBox mWebInputBox;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,6 +78,11 @@ public class BlimpRendererActivity extends Activity
         if (mToolbar != null) {
             mToolbar.destroy();
             mToolbar = null;
+        }
+
+        if (mWebInputBox != null) {
+            mWebInputBox.destroy();
+            mWebInputBox = null;
         }
 
         if (mTokenSource != null) {
@@ -135,10 +141,45 @@ public class BlimpRendererActivity extends Activity
         mToolbar = (Toolbar) findViewById(R.id.toolbar);
         mToolbar.initialize(mBlimpClientSession);
 
-        mTabControlFeature = new TabControlFeature(mBlimpClientSession, mBlimpView);
-        mToolbar.loadUrl("http://www.google.com/");
+        mWebInputBox = (WebInputBox) findViewById(R.id.editText);
+        mWebInputBox.initialize(mBlimpClientSession);
 
-        mTextInputFeature = (TextInputFeature) findViewById(R.id.editText);
+        mTabControlFeature = new TabControlFeature(mBlimpClientSession, mBlimpView);
+
+        handleUrl(getUrlFromIntent(getIntent()));
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleUrl(getUrlFromIntent(intent));
+    }
+
+    /**
+     * Retrieve the URL from the Intent.
+     * @param intent Intent to examine.
+     * @return URL from the Intent, or null if a valid URL couldn't be found.
+     */
+    private String getUrlFromIntent(Intent intent) {
+        if (intent == null) return null;
+
+        String url = intent.getDataString();
+        if (url == null) return null;
+
+        url = url.trim();
+        return TextUtils.isEmpty(url) ? null : url;
+    }
+
+    /**
+     * Loads the url in the browser.
+     * @param url URL to load. If null, browser loads a default page.
+     */
+    private void handleUrl(String url) {
+        if (url == null) {
+            mToolbar.loadUrl("http://www.google.com/");
+        } else {
+            mToolbar.loadUrl(url);
+        }
     }
 
     // TokenSource.Callback implementation.
@@ -163,5 +204,18 @@ public class BlimpRendererActivity extends Activity
     @Override
     public void onAssignmentReceived(int result, int suggestedMessageResourceId) {
         Toast.makeText(this, suggestedMessageResourceId, Toast.LENGTH_LONG).show();
+    }
+
+    @Override
+    public void onConnected() {
+        Toast.makeText(this, R.string.network_connected, Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onDisconnected(String reason) {
+        Toast.makeText(this,
+                     String.format(getResources().getString(R.string.network_disconnected), reason),
+                     Toast.LENGTH_LONG)
+                .show();
     }
 }

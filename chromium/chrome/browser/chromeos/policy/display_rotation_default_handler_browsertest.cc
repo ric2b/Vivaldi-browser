@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/chromeos/policy/display_rotation_default_handler.h"
+
 #include <stdint.h>
+
+#include <memory>
 
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
@@ -10,13 +14,11 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
-#include "chrome/browser/chromeos/policy/display_rotation_default_handler.h"
 #include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -30,6 +32,7 @@
 #include "chromeos/settings/cros_settings_names.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/display/manager/display_layout.h"
 #include "ui/gfx/display.h"
 
 namespace em = enterprise_management;
@@ -56,7 +59,7 @@ gfx::Display::Rotation GetRotationOfSecondDisplay() {
         << "Requested rotation of second display while there was only one.";
     return gfx::Display::ROTATE_0;
   }
-  const ash::DisplayIdList display_id_pair =
+  const display::DisplayIdList display_id_pair =
       display_manager->GetCurrentDisplayIdList();
   const gfx::Display& second_display =
       display_manager->GetDisplayForId(display_id_pair[1]);
@@ -126,11 +129,11 @@ class DisplayRotationDefaultTest
   void RefreshPolicyAndWaitUntilDeviceSettingsUpdated() {
     base::RunLoop run_loop;
     // For calls from SetPolicy().
-    scoped_ptr<chromeos::CrosSettings::ObserverSubscription> observer =
+    std::unique_ptr<chromeos::CrosSettings::ObserverSubscription> observer =
         chromeos::CrosSettings::Get()->AddSettingsObserver(
             chromeos::kDisplayRotationDefault, run_loop.QuitClosure());
     // For calls from SetADifferentPolicy().
-    scoped_ptr<chromeos::CrosSettings::ObserverSubscription> observer2 =
+    std::unique_ptr<chromeos::CrosSettings::ObserverSubscription> observer2 =
         chromeos::CrosSettings::Get()->AddSettingsObserver(
             chromeos::kSystemUse24HourClock, run_loop.QuitClosure());
     RefreshDevicePolicy();
@@ -265,10 +268,10 @@ class DisplayRotationBootTest
 
   void SetUpInProcessBrowserTestFixture() override {
     chromeos::DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
-        scoped_ptr<chromeos::SessionManagerClient>(
+        std::unique_ptr<chromeos::SessionManagerClient>(
             fake_session_manager_client_));
     chromeos::DBusThreadManager::GetSetterForTesting()->SetCryptohomeClient(
-        scoped_ptr<chromeos::CryptohomeClient>(
+        std::unique_ptr<chromeos::CryptohomeClient>(
             new chromeos::FakeCryptohomeClient));
 
     test_helper_.InstallOwnerKey();
@@ -290,7 +293,7 @@ IN_PROC_BROWSER_TEST_P(DisplayRotationBootTest, PRE_Reboot) {
   proto.mutable_display_rotation_default()->set_display_rotation_default(
       static_cast<em::DisplayRotationDefaultProto::Rotation>(policy_rotation));
   base::RunLoop run_loop;
-  scoped_ptr<chromeos::CrosSettings::ObserverSubscription> observer =
+  std::unique_ptr<chromeos::CrosSettings::ObserverSubscription> observer =
       chromeos::CrosSettings::Get()->AddSettingsObserver(
           chromeos::kDisplayRotationDefault, run_loop.QuitClosure());
   device_policy->SetDefaultSigningKey();

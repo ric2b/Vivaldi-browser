@@ -91,19 +91,24 @@ class TracingTrack(devtools_monitor.Track):
   def ToJsonDict(self):
     return {'events': [e.ToJsonDict() for e in self._events]}
 
-  def TracingTrackForThread(self, pid_tid):
-    """Returns a new TracingTrack with only the events from a given thread.
+  def Filter(self, pid=None, tid=None, categories=None):
+    """Returns a new TracingTrack with a subset of the events.
 
     Args:
-      pid_tid: ((int, int) PID and TID.
-
-    Returns:
-      A new instance of TracingTrack.
+      pid: (int or None) Selects events from this PID.
+      tid: (int or None) Selects events from this TID.
+      categories: (set([str]) or None) Selects events belonging to one of the
+                  categories.
     """
-    (pid, tid) = pid_tid
-    events = [e for e in self._events
-              if (e.tracing_event['pid'] == pid
-                  and e.tracing_event['tid'] == tid)]
+    events = self._events
+    if pid is not None:
+      events = filter(lambda e : e.tracing_event['pid'] == pid, events)
+    if tid is not None:
+      events = filter(lambda e : e.tracing_event['tid'] == tid, events)
+    if categories is not None:
+      events = filter(
+          lambda e : set(e.category.split(',')).intersection(categories),
+          events)
     tracing_track = TracingTrack(None)
     tracing_track._events = events
     return tracing_track
@@ -122,6 +127,43 @@ class TracingTrack(devtools_monitor.Track):
       if e.start_msec < tracing_track._base_msec:
         tracing_track._base_msec = e.start_msec
     return tracing_track
+
+  def OverlappingEvents(self, start_msec, end_msec):
+    self._IndexEvents()
+    return self._interval_tree.OverlappingEvents(start_msec, end_msec)
+
+  def EventsEndingBetween(self, start_msec, end_msec):
+    """Gets the list of events ending within an interval.
+
+    Args:
+      start_msec: the start of the range to query, in milliseconds, inclusive.
+      end_msec: the end of the range to query, in milliseconds, inclusive.
+
+    Returns:
+      See OverlappingEvents() above.
+    """
+    overlapping_events = self.OverlappingEvents(start_msec, end_msec)
+    return [e for e in overlapping_events
+            if start_msec <= e.end_msec <= end_msec]
+
+  def EventFromStep(self, step_event):
+    """Returns the Event associated with a step event, or None.
+
+    Args:
+      step_event: (Event) Step event.
+
+    Returns:
+      an Event that matches the step event, or None.
+    """
+    self._IndexEvents()
+    assert 'step' in step_event.args and step_event.tracing_event['ph'] == 'T'
+    candidates = self._interval_tree.EventsAt(step_event.start_msec)
+    for event in candidates:
+      # IDs are only unique within a process (often they are pointers).
+      if (event.pid == step_event.pid and event.tracing_event['ph'] != 'T'
+          and event.name == step_event.name and event.id == step_event.id):
+        return event
+    return None
 
   def _IndexEvents(self, strict=False):
     if self._interval_tree:
@@ -144,24 +186,6 @@ class TracingTrack(devtools_monitor.Track):
           'Pending spanning events: %s' %
           '\n'.join([str(e) for e in spanning_events.PendingEvents()]))
 
-  def OverlappingEvents(self, start_msec, end_msec):
-    self._IndexEvents()
-    return self._interval_tree.OverlappingEvents(start_msec, end_msec)
-
-  def EventsEndingBetween(self, start_msec, end_msec):
-    """Gets the list of events ending within an interval.
-
-    Args:
-      start_msec: the start of the range to query, in milliseconds, inclusive.
-      end_msec: the end of the range to query, in milliseconds, inclusive.
-
-    Returns:
-      See OverlappingEvents() above.
-    """
-    overlapping_events = self.OverlappingEvents(start_msec, end_msec)
-    return [e for e in overlapping_events
-            if start_msec <= e.end_msec <= end_msec]
-
   def _GetEvents(self):
     self._IndexEvents()
     return self._interval_tree.GetEvents()
@@ -183,6 +207,9 @@ class TracingTrack(devtools_monitor.Track):
           'M': self._Ignore,
           'X': self._Ignore,
           'R': self._Ignore,
+          'p': self._Ignore,
+          '(': self._Ignore, # Context events.
+          ')': self._Ignore, # Ditto.
           None: self._Ignore,
           }
 
@@ -287,9 +314,6 @@ class Event(object):
     if not synthetic and tracing_event['ph'] in ['s', 't', 'f']:
       raise devtools_monitor.DevToolsConnectionException(
           'Unsupported event: %s' % tracing_event)
-    if not synthetic and tracing_event['ph'] in ['p']:
-      raise devtools_monitor.DevToolsConnectionException(
-          'Deprecated event: %s' % tracing_event)
 
     self._tracing_event = tracing_event
     # Note tracing event times are in microseconds.
@@ -339,6 +363,21 @@ class Event(object):
   def __str__(self):
     return ''.join([str(self._tracing_event),
                     '[%s,%s]' % (self.start_msec, self.end_msec)])
+
+  def Matches(self, category, name):
+    """Match tracing events.
+
+    Args:
+      category: a tracing category (event['cat']).
+      name: the tracing event name (event['name']).
+
+    Returns:
+      True if the event matches and False otherwise.
+    """
+    if name != self.name:
+      return False
+    categories = self.category.split(',')
+    return category in categories
 
   def IsIndexable(self):
     """True iff the event can be indexed by time."""

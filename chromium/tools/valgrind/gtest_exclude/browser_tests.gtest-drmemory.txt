@@ -123,3 +123,37 @@ PredictorBrowserTest.PreconnectCORSAndFetchNonCORS
 # https://crbug.com/587669
 ClipboardApiTest.ExtensionNoPermission
 
+# https://crbug.com/1310994
+MetricsServiceBrowserTest.CrashRenderers
+
+# https://crbug.com/592900: Timeouts
+AppViewTest.TestAppViewWithUndefinedDataShouldSucceed
+BasicExtensionSettingsWebUITest.testNonEmptyExtensionList
+BookmarkBubbleSignInDelegateTest.OnSignInLinkClickedReusesBlank
+BrowserOptionsOverlayWebUITest.testNavigationInBackground
+ChromeSitePerProcessTest*
+CrashRecoveryBrowserTest*
+CrExtensions*
+CrSettings*
+DeferredMediaBrowserTest*
+DownloadTestWithShelf.IncognitoDownload
+DurableStorageBrowserTest.Incognito
+ExtensionTabUtil*
+ExtensionLoadingTest*
+HostedAppTest*
+ImageWriterPrivateApiTest.TestWriteFromFile
+InlineInstallPrivateApiTestApp*
+InstallGoodExtensionSettingsWebUITest.showOptions
+MaterialHistoryBrowserTest*
+MimeHandlerViewTest.Abort
+MimeHandlerViewTest.EmbeddedDataUrlObject
+MultilanguageOptionsWebUI*
+PDFExtensionTest*
+PasswordsPrivateApiTest.RequestPlaintextPassword
+PolicyPref*
+ProfileWindow*
+PushMessagingBrowserTest.SubscribeWithoutKeySuccessNotificationsGranted
+SubframeTaskBrowserTest.TaskManagerShowsSubframeTasks
+SyncSetupWebUITestAsync.RestoreSyncDataTypes
+WebUIWebView*
+ZoomControllerBrowserTest.NavigationResetsManualMode

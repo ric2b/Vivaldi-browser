@@ -14,7 +14,6 @@
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/message_port_types.h"
-#include "content/public/common/navigator_connect_client.h"
 #include "content/public/common/platform_notification_data.h"
 #include "content/public/common/push_event_payload.h"
 #include "ipc/ipc_message_macros.h"
@@ -55,6 +54,11 @@ IPC_ENUM_TRAITS_MAX_VALUE(content::ServiceWorkerProviderType,
 IPC_ENUM_TRAITS_MAX_VALUE(content::ServiceWorkerFetchType,
                           content::ServiceWorkerFetchType::LAST)
 
+IPC_STRUCT_TRAITS_BEGIN(content::ExtendableMessageEventSource)
+  IPC_STRUCT_TRAITS_MEMBER(client_info)
+  IPC_STRUCT_TRAITS_MEMBER(service_worker_info)
+IPC_STRUCT_TRAITS_END()
+
 IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerFetchRequest)
   IPC_STRUCT_TRAITS_MEMBER(mode)
   IPC_STRUCT_TRAITS_MEMBER(is_main_resource_load)
@@ -86,6 +90,9 @@ IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerResponse)
   IPC_STRUCT_TRAITS_MEMBER(blob_size)
   IPC_STRUCT_TRAITS_MEMBER(stream_url)
   IPC_STRUCT_TRAITS_MEMBER(error)
+  IPC_STRUCT_TRAITS_MEMBER(response_time)
+  IPC_STRUCT_TRAITS_MEMBER(is_in_cache_storage)
+  IPC_STRUCT_TRAITS_MEMBER(cache_storage_cache_name)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerObjectInfo)
@@ -121,6 +128,14 @@ IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerClientQueryOptions)
   IPC_STRUCT_TRAITS_MEMBER(include_uncontrolled)
 IPC_STRUCT_TRAITS_END()
 
+IPC_STRUCT_BEGIN(ServiceWorkerMsg_ExtendableMessageEvent_Params)
+  IPC_STRUCT_MEMBER(base::string16, message)
+  IPC_STRUCT_MEMBER(url::Origin, source_origin)
+  IPC_STRUCT_MEMBER(std::vector<content::TransferredMessagePort>, message_ports)
+  IPC_STRUCT_MEMBER(std::vector<int>, new_routing_ids)
+  IPC_STRUCT_MEMBER(content::ExtendableMessageEventSource, source)
+IPC_STRUCT_END()
+
 IPC_STRUCT_BEGIN(ServiceWorkerMsg_MessageToDocument_Params)
   IPC_STRUCT_MEMBER(int, thread_id)
   IPC_STRUCT_MEMBER(int, provider_id)
@@ -132,12 +147,6 @@ IPC_STRUCT_END()
 
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebGeofencingEventType,
                           blink::WebGeofencingEventTypeLast)
-
-IPC_STRUCT_TRAITS_BEGIN(content::NavigatorConnectClient)
-  IPC_STRUCT_TRAITS_MEMBER(target_url)
-  IPC_STRUCT_TRAITS_MEMBER(origin)
-  IPC_STRUCT_TRAITS_MEMBER(message_port_id)
-IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::PushEventPayload)
   IPC_STRUCT_TRAITS_MEMBER(data)
@@ -183,10 +192,12 @@ IPC_MESSAGE_CONTROL3(ServiceWorkerHostMsg_GetRegistrationForReady,
                      int /* provider_id */)
 
 // Sends ExtendableMessageEvent to a service worker (renderer->browser).
-IPC_MESSAGE_CONTROL3(
+IPC_MESSAGE_CONTROL5(
     ServiceWorkerHostMsg_PostMessageToWorker,
     int /* handle_id */,
+    int /* provider_id */,
     base::string16 /* message */,
+    url::Origin /* source_origin */,
     std::vector<content::TransferredMessagePort> /* sent_message_ports */)
 
 // Sends MessageEvent to a service worker (renderer->browser).
@@ -467,12 +478,9 @@ IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_InstallEvent,
                      int /* request_id */)
 IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_ActivateEvent,
                      int /* request_id */)
-IPC_MESSAGE_CONTROL4(
-    ServiceWorkerMsg_ExtendableMessageEvent,
-    int /* request_id */,
-    base::string16 /* message */,
-    std::vector<content::TransferredMessagePort> /* sent_message_ports */,
-    std::vector<int> /* new_routing_ids */)
+IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_ExtendableMessageEvent,
+                     int /* request_id */,
+                     ServiceWorkerMsg_ExtendableMessageEvent_Params)
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_FetchEvent,
                      int /* request_id */,
                      content::ServiceWorkerFetchRequest)
@@ -502,12 +510,6 @@ IPC_MESSAGE_CONTROL3(
     std::vector<content::TransferredMessagePort> /* sent_message_ports */,
     std::vector<int> /* new_routing_ids */)
 
-IPC_MESSAGE_CONTROL4(
-    ServiceWorkerMsg_CrossOriginMessageToWorker,
-    content::NavigatorConnectClient /* client */,
-    base::string16 /* message */,
-    std::vector<content::TransferredMessagePort> /* sent_message_ports */,
-    std::vector<int> /* new_routing_ids */)
 IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_DidSkipWaiting,
                      int /* request_id */)
 IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_DidClaimClients,

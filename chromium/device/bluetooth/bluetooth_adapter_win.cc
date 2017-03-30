@@ -158,6 +158,11 @@ void BluetoothAdapterWin::DiscoveryStopped() {
   MaybePostStartDiscoveryTask();
 }
 
+BluetoothAdapter::UUIDList BluetoothAdapterWin::GetUUIDs() const {
+  NOTIMPLEMENTED();
+  return UUIDList();
+}
+
 void BluetoothAdapterWin::CreateRfcommService(
     const BluetoothUUID& uuid,
     const ServiceOptions& options,
@@ -346,6 +351,8 @@ void BluetoothAdapterWin::InitForTest(
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
     scoped_refptr<base::SequencedTaskRunner> bluetooth_task_runner) {
   ui_task_runner_ = ui_task_runner;
+  if (ui_task_runner_ == nullptr)
+    ui_task_runner_ = base::ThreadTaskRunnerHandle::Get();
   task_manager_ =
       new BluetoothTaskManagerWin(ui_task_runner_);
   task_manager_->AddObserver(this);

@@ -5,16 +5,24 @@
 #include "chrome/browser/extensions/api/input_ime/input_ime_api.h"
 
 #include "base/lazy_instance.h"
+#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/common/extensions/api/input_ime.h"
+#include "content/public/browser/notification_registrar.h"
+#include "content/public/browser/notification_service.h"
 #include "extensions/browser/extension_registry.h"
 
 namespace input_ime = extensions::api::input_ime;
 namespace KeyEventHandled = extensions::api::input_ime::KeyEventHandled;
 namespace SetComposition = extensions::api::input_ime::SetComposition;
 namespace CommitText = extensions::api::input_ime::CommitText;
+namespace SendKeyEvents = extensions::api::input_ime::SendKeyEvents;
 using ui::IMEEngineHandlerInterface;
 using input_method::InputMethodEngineBase;
 
+namespace {
+const char kErrorEngineNotAvailable[] = "Engine is not available";
+const char kErrorSetKeyEventsFail[] = "Could not send key events";
+}
 namespace ui {
 
 ImeObserver::ImeObserver(const std::string& extension_id, Profile* profile)
@@ -24,9 +32,8 @@ void ImeObserver::OnActivate(const std::string& component_id) {
   if (extension_id_.empty() || !HasListener(input_ime::OnActivate::kEventName))
     return;
 
-  scoped_ptr<base::ListValue> args(input_ime::OnActivate::Create(
-    component_id,
-    input_ime::ParseScreenType(GetCurrentScreenType())));
+  std::unique_ptr<base::ListValue> args(input_ime::OnActivate::Create(
+      component_id, input_ime::ParseScreenType(GetCurrentScreenType())));
 
   DispatchEventToExtension(extensions::events::INPUT_IME_ON_ACTIVATE,
                            input_ime::OnActivate::kEventName,
@@ -46,7 +53,8 @@ void ImeObserver::OnFocus(
   context_value.auto_complete = ConvertInputContextAutoComplete(context);
   context_value.spell_check = ConvertInputContextSpellCheck(context);
 
-  scoped_ptr<base::ListValue> args(input_ime::OnFocus::Create(context_value));
+  std::unique_ptr<base::ListValue> args(
+      input_ime::OnFocus::Create(context_value));
 
   DispatchEventToExtension(extensions::events::INPUT_IME_ON_FOCUS,
                            input_ime::OnFocus::kEventName, std::move(args));
@@ -56,7 +64,7 @@ void ImeObserver::OnBlur(int context_id) {
   if (extension_id_.empty() || !HasListener(input_ime::OnBlur::kEventName))
     return;
 
-  scoped_ptr<base::ListValue> args(input_ime::OnBlur::Create(context_id));
+  std::unique_ptr<base::ListValue> args(input_ime::OnBlur::Create(context_id));
 
   DispatchEventToExtension(extensions::events::INPUT_IME_ON_BLUR,
                            input_ime::OnBlur::kEventName, std::move(args));
@@ -97,7 +105,7 @@ void ImeObserver::OnKeyEvent(
   key_data_value.shift_key.reset(new bool(event.shift_key));
   key_data_value.caps_lock.reset(new bool(event.caps_lock));
 
-  scoped_ptr<base::ListValue> args(
+  std::unique_ptr<base::ListValue> args(
       input_ime::OnKeyEvent::Create(component_id, key_data_value));
 
   DispatchEventToExtension(extensions::events::INPUT_IME_ON_KEY_EVENT,
@@ -108,7 +116,8 @@ void ImeObserver::OnReset(const std::string& component_id) {
   if (extension_id_.empty() || !HasListener(input_ime::OnReset::kEventName))
     return;
 
-  scoped_ptr<base::ListValue> args(input_ime::OnReset::Create(component_id));
+  std::unique_ptr<base::ListValue> args(
+      input_ime::OnReset::Create(component_id));
 
   DispatchEventToExtension(extensions::events::INPUT_IME_ON_RESET,
                            input_ime::OnReset::kEventName, std::move(args));
@@ -119,7 +128,7 @@ void ImeObserver::OnDeactivated(const std::string& component_id) {
       !HasListener(input_ime::OnDeactivated::kEventName))
     return;
 
-  scoped_ptr<base::ListValue> args(
+  std::unique_ptr<base::ListValue> args(
       input_ime::OnDeactivated::Create(component_id));
 
   DispatchEventToExtension(extensions::events::INPUT_IME_ON_DEACTIVATED,
@@ -150,8 +159,8 @@ void ImeObserver::OnSurroundingTextChanged(const std::string& component_id,
   info.focus = cursor_pos;
   info.anchor = anchor_pos;
   info.offset = offset_pos;
-  scoped_ptr<base::ListValue> args(
-    input_ime::OnSurroundingTextChanged::Create(component_id, info));
+  std::unique_ptr<base::ListValue> args(
+      input_ime::OnSurroundingTextChanged::Create(component_id, info));
 
   DispatchEventToExtension(
     extensions::events::INPUT_IME_ON_SURROUNDING_TEXT_CHANGED,
@@ -251,8 +260,18 @@ InputImeEventRouter* InputImeEventRouterFactory::GetRouter(Profile* profile) {
   return router;
 }
 
+void InputImeEventRouterFactory::RemoveProfile(Profile* profile) {
+  if (!profile || router_map_.empty())
+    return;
+  auto it = router_map_.find(profile);
+  if (it != router_map_.end() && it->first == profile) {
+    delete it->second;
+    router_map_.erase(it);
+  }
+}
+
 ExtensionFunction::ResponseAction InputImeKeyEventHandledFunction::Run() {
-  scoped_ptr<KeyEventHandled::Params> params(
+  std::unique_ptr<KeyEventHandled::Params> params(
       KeyEventHandled::Params::Create(*args_));
   InputImeEventRouter* event_router =
       GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()));
@@ -272,24 +291,21 @@ ExtensionFunction::ResponseAction InputImeSetCompositionFunction::Run() {
   InputMethodEngineBase* engine =
       event_router ? event_router->GetActiveEngine(extension_id()) : nullptr;
   if (engine) {
-    scoped_ptr<SetComposition::Params> parent_params(
+    std::unique_ptr<SetComposition::Params> parent_params(
         SetComposition::Params::Create(*args_));
     const SetComposition::Params::Parameters& params =
         parent_params->parameters;
     std::vector<InputMethodEngineBase::SegmentInfo> segments;
     if (params.segments) {
-      const std::vector<
-          linked_ptr<SetComposition::Params::Parameters::SegmentsType>>&
-          segments_args = *params.segments;
-      for (const auto& segments_arg : segments_args) {
-        EXTENSION_FUNCTION_VALIDATE(segments_arg->style !=
+      for (const auto& segments_arg : *params.segments) {
+        EXTENSION_FUNCTION_VALIDATE(segments_arg.style !=
                                     input_ime::UNDERLINE_STYLE_NONE);
         InputMethodEngineBase::SegmentInfo segment_info;
-        segment_info.start = segments_arg->start;
-        segment_info.end = segments_arg->end;
-        if (segments_arg->style == input_ime::UNDERLINE_STYLE_UNDERLINE) {
+        segment_info.start = segments_arg.start;
+        segment_info.end = segments_arg.end;
+        if (segments_arg.style == input_ime::UNDERLINE_STYLE_UNDERLINE) {
           segment_info.style = InputMethodEngineBase::SEGMENT_STYLE_UNDERLINE;
-        } else if (segments_arg->style ==
+        } else if (segments_arg.style ==
                    input_ime::UNDERLINE_STYLE_DOUBLEUNDERLINE) {
           segment_info.style =
               InputMethodEngineBase::SEGMENT_STYLE_DOUBLE_UNDERLINE;
@@ -308,7 +324,8 @@ ExtensionFunction::ResponseAction InputImeSetCompositionFunction::Run() {
                                      selection_start, selection_end,
                                      params.cursor, segments, &error_);
   }
-  scoped_ptr<base::ListValue> output = SetComposition::Results::Create(success);
+  std::unique_ptr<base::ListValue> output =
+      SetComposition::Results::Create(success);
   return RespondNow(ArgumentList(std::move(output)));
 }
 
@@ -319,14 +336,46 @@ ExtensionFunction::ResponseAction InputImeCommitTextFunction::Run() {
   InputMethodEngineBase* engine =
       event_router ? event_router->GetActiveEngine(extension_id()) : nullptr;
   if (engine) {
-    scoped_ptr<CommitText::Params> parent_params(
+    std::unique_ptr<CommitText::Params> parent_params(
         CommitText::Params::Create(*args_));
     const CommitText::Params::Parameters& params = parent_params->parameters;
     success =
         engine->CommitText(params.context_id, params.text.c_str(), &error_);
   }
-  scoped_ptr<base::ListValue> output = CommitText::Results::Create(success);
+  std::unique_ptr<base::ListValue> output =
+      CommitText::Results::Create(success);
   return RespondNow(ArgumentList(std::move(output)));
+}
+
+ExtensionFunction::ResponseAction InputImeSendKeyEventsFunction::Run() {
+  InputImeEventRouter* event_router =
+      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()));
+  InputMethodEngineBase* engine =
+      event_router ? event_router->GetActiveEngine(extension_id()) : nullptr;
+  if (!engine)
+    return RespondNow(Error(kErrorEngineNotAvailable));
+
+  std::unique_ptr<SendKeyEvents::Params> parent_params(
+      SendKeyEvents::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(parent_params);
+  const SendKeyEvents::Params::Parameters& params = parent_params->parameters;
+  std::vector<InputMethodEngineBase::KeyboardEvent> key_data_out;
+
+  for (const auto& key_event : params.key_data) {
+    key_data_out.push_back(InputMethodEngineBase::KeyboardEvent());
+    InputMethodEngineBase::KeyboardEvent& event = key_data_out.back();
+    event.type = input_ime::ToString(key_event.type);
+    event.key = key_event.key;
+    event.code = key_event.code;
+    event.key_code = key_event.key_code.get() ? *(key_event.key_code) : 0;
+    event.alt_key = key_event.alt_key ? *(key_event.alt_key) : false;
+    event.ctrl_key = key_event.ctrl_key ? *(key_event.ctrl_key) : false;
+    event.shift_key = key_event.shift_key ? *(key_event.shift_key) : false;
+    event.caps_lock = key_event.caps_lock ? *(key_event.caps_lock) : false;
+  }
+  if (!engine->SendKeyEvents(params.context_id, key_data_out))
+    return RespondNow(Error(kErrorSetKeyEventsFail));
+  return RespondNow(NoArguments());
 }
 
 InputImeAPI::InputImeAPI(content::BrowserContext* context)
@@ -335,10 +384,22 @@ InputImeAPI::InputImeAPI(content::BrowserContext* context)
 
   EventRouter* event_router = EventRouter::Get(browser_context_);
   event_router->RegisterObserver(this, input_ime::OnFocus::kEventName);
+  registrar_.Add(this, chrome::NOTIFICATION_PROFILE_DESTROYED,
+                 content::NotificationService::AllSources());
+}
+
+void InputImeAPI::Observe(int type,
+                          const content::NotificationSource& source,
+                          const content::NotificationDetails& details) {
+  if (type == chrome::NOTIFICATION_PROFILE_DESTROYED) {
+    extensions::InputImeEventRouterFactory::GetInstance()->RemoveProfile(
+        content::Source<Profile>(source).ptr());
+  }
 }
 
 InputImeAPI::~InputImeAPI() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
+  registrar_.RemoveAll();
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<InputImeAPI> >

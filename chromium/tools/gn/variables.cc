@@ -354,29 +354,68 @@ const char kAllowCircularIncludesFrom_Help[] =
     "  These targets will be permitted to include headers from the current\n"
     "  target despite the dependency going in the opposite direction.\n"
     "\n"
-    "Tedious exposition\n"
+    "  When you use this, both targets must be included in a final binary\n"
+    "  for it to link. To keep linker errors from happening, it is good\n"
+    "  practice to have all external dependencies depend only on one of\n"
+    "  the two targets, and to set the visibility on the other to enforce\n"
+    "  this. Thus the targets will always be linked together in any output.\n"
+    "\n"
+    "Details\n"
     "\n"
     "  Normally, for a file in target A to include a file from target B,\n"
     "  A must list B as a dependency. This invariant is enforced by the\n"
-    "  \"gn check\" command (and the --check flag to \"gn gen\").\n"
+    "  \"gn check\" command (and the --check flag to \"gn gen\" -- see\n"
+    "  \"gn help check\").\n"
     "\n"
     "  Sometimes, two targets might be the same unit for linking purposes\n"
     "  (two source sets or static libraries that would always be linked\n"
-    "  together in a final executable or shared library). In this case,\n"
-    "  you want A to be able to include B's headers, and B to include A's\n"
-    "  headers.\n"
+    "  together in a final executable or shared library) and they each\n"
+    "  include headers from the other: you want A to be able to include B's\n"
+    "  headers, and B to include A's headers. This is not an ideal situation\n"
+    "  but is sometimes unavoidable.\n"
     "\n"
     "  This list, if specified, lists which of the dependencies of the\n"
     "  current target can include header files from the current target.\n"
     "  That is, if A depends on B, B can only include headers from A if it is\n"
-    "  in A's allow_circular_includes_from list.\n"
+    "  in A's allow_circular_includes_from list. Normally includes must\n"
+    "  follow the direction of dependencies, this flag allows them to go\n"
+    "  in the opposite direction.\n"
+    "\n"
+    "Danger\n"
+    "\n"
+    "  In the above example, A's headers are likely to include headers from\n"
+    "  A's dependencies. Those dependencies may have public_configs that\n"
+    "  apply flags, defines, and include paths that make those headers work\n"
+    "  properly.\n"
+    "\n"
+    "  With allow_circular_includes_from, B can include A's headers, and\n"
+    "  transitively from A's dependencies, without having the dependencies\n"
+    "  that would bring in the public_configs those headers need. The result\n"
+    "  may be errors or inconsistent builds.\n"
+    "\n"
+    "  So when you use allow_circular_includes_from, make sure that any\n"
+    "  compiler settings, flags, and include directories are the same between\n"
+    "  both targets (consider putting such things in a shared config they can\n"
+    "  both reference). Make sure the dependencies are also the same (you\n"
+    "  might consider a group to collect such dependencies they both\n"
+    "  depend on).\n"
     "\n"
     "Example\n"
     "\n"
     "  source_set(\"a\") {\n"
-    "    deps = [ \":b\", \":c\" ]\n"
+    "    deps = [ \":b\", \":a_b_shared_deps\" ]\n"
     "    allow_circular_includes_from = [ \":b\" ]\n"
     "    ...\n"
+    "  }\n"
+    "\n"
+    "  source_set(\"b\") {\n"
+    "    deps = [ \":a_b_shared_deps\" ]\n"
+    "    # Sources here can include headers from a despite lack of deps.\n"
+    "    ...\n"
+    "  }\n"
+    "\n"
+    "  group(\"a_b_shared_deps\") {\n"
+    "    public_deps = [ \":c\" ]\n"
     "  }\n";
 
 const char kArgs[] = "args";
@@ -433,6 +472,81 @@ const char kAssertNoDeps_Help[] =
     "      \"//foo:test_support\",  # This target is also disallowed.\n"
     "    ]\n"
     "  }\n";
+
+const char kBundleRootDir[] = "bundle_root_dir";
+const char kBundleRootDir_HelpShort[] =
+    "bundle_root_dir: Expansion of {{bundle_root_dir}} in create_bundle.";
+const char kBundleRootDir_Help[] =
+    "bundle_root_dir: Expansion of {{bundle_root_dir}} in create_bundle.\n"
+    "\n"
+    "  A string corresponding to a path in root_build_dir.\n"
+    "\n"
+    "  This string is used by the \"create_bundle\" target to expand the\n"
+    "  {{bundle_root_dir}} of the \"bundle_data\" target it depends on.\n"
+    "  This must correspond to a path under root_build_dir.\n"
+    "\n"
+    "Example\n"
+    "\n"
+    "  bundle_data(\"info_plist\") {\n"
+    "    sources = [ \"Info.plist\" ]\n"
+    "    outputs = [ \"{{bundle_root_dir}}/Info.plist\" ]\n"
+    "  }\n"
+    "\n"
+    "  create_bundle(\"doom_melon.app\") {\n"
+    "    deps = [ \":info_plist\" ]\n"
+    "    bundle_root_dir = root_build_dir + \"/doom_melon.app/Contents\"\n"
+    "    bundle_resources_dir = bundle_root_dir + \"/Resources\"\n"
+    "    bundle_executable_dir = bundle_root_dir + \"/MacOS\"\n"
+    "    bundle_plugins_dir = bundle_root_dir + \"/PlugIns\"\n"
+    "  }\n";
+
+const char kBundleResourcesDir[] = "bundle_resources_dir";
+const char kBundleResourcesDir_HelpShort[] =
+    "bundle_resources_dir: "
+        "Expansion of {{bundle_resources_dir}} in create_bundle.";
+const char kBundleResourcesDir_Help[] =
+    "bundle_resources_dir: "
+        "Expansion of {{bundle_resources_dir}} in create_bundle.\n"
+    "\n"
+    "  A string corresponding to a path in $root_build_dir.\n"
+    "\n"
+    "  This string is used by the \"create_bundle\" target to expand the\n"
+    "  {{bundle_resources_dir}} of the \"bundle_data\" target it depends on.\n"
+    "  This must correspond to a path under \"bundle_root_dir\".\n"
+    "\n"
+    "  See \"gn help bundle_root_dir\" for examples.\n";
+
+const char kBundleExecutableDir[] = "bundle_executable_dir";
+const char kBundleExecutableDir_HelpShort[] =
+    "bundle_executable_dir: "
+        "Expansion of {{bundle_executable_dir}} in create_bundle";
+const char kBundleExecutableDir_Help[] =
+    "bundle_executable_dir: "
+        "Expansion of {{bundle_executable_dir}} in create_bundle.\n"
+    "\n"
+    "  A string corresponding to a path in $root_build_dir.\n"
+    "\n"
+    "  This string is used by the \"create_bundle\" target to expand the\n"
+    "  {{bundle_executable_dir}} of the \"bundle_data\" target it depends on.\n"
+    "  This must correspond to a path under \"bundle_root_dir\".\n"
+    "\n"
+    "  See \"gn help bundle_root_dir\" for examples.\n";
+
+const char kBundlePlugInsDir[] = "bundle_plugins_dir";
+const char kBundlePlugInsDir_HelpShort[] =
+    "bundle_plugins_dir: "
+        "Expansion of {{bundle_plugins_dir}} in create_bundle.";
+const char kBundlePlugInsDir_Help[] =
+    "bundle_plugins_dir: "
+        "Expansion of {{bundle_plugins_dir}} in create_bundle.\n"
+    "\n"
+    "  A string corresponding to a path in $root_build_dir.\n"
+    "\n"
+    "  This string is used by the \"create_bundle\" target to expand the\n"
+    "  {{bundle_plugins_dir}} of the \"bundle_data\" target it depends on.\n"
+    "  This must correspond to a path under \"bundle_root_dir\".\n"
+    "\n"
+    "  See \"gn help bundle_root_dir\" for examples.\n";
 
 const char kCflags[] = "cflags";
 const char kCflags_HelpShort[] =
@@ -500,26 +614,12 @@ const char kCheckIncludes_Help[] =
     "  This does not affect other targets that depend on the current target,\n"
     "  it just skips checking the includes of the current target's files.\n"
     "\n"
-    "Controlling includes individually\n"
+    "  If there are a few conditionally included headers that trip up\n"
+    "  checking, you can exclude headers individually by annotating them with\n"
+    "  \"nogncheck\" (see \"gn help nogncheck\").\n"
     "\n"
-    "  If only certain includes are problematic, you can annotate them\n"
-    "  individually rather than disabling header checking on an entire\n"
-    "  target. Add the string \"nogncheck\" to the include line:\n"
-    "\n"
-    "    #include \"foo/something_weird.h\"  // nogncheck (bug 12345)\n"
-    "\n"
-    "  It is good form to include a reference to a bug (if the include is\n"
-    "  improper, or some other comment expressing why the header checker\n"
-    "  doesn't work for this particular case.\n"
-    "\n"
-    "  The most common reason to need \"nogncheck\" is conditional includes.\n"
-    "  The header checker does not understand the preprocessor, so may flag\n"
-    "  some includes as improper even if the dependencies and #defines are\n"
-    "  always matched correctly:\n"
-    "\n"
-    "    #if defined(ENABLE_DOOM_MELON)\n"
-    "    #include \"doom_melon/beam_controller.h\"  // nogncheck\n"
-    "    #endif\n"
+    "  The topic \"gn help check\" has general information on how checking\n"
+    "  works and advice on how to pass a check in problematic cases.\n"
     "\n"
     "Example\n"
     "\n"
@@ -548,6 +648,9 @@ const char kCompleteStaticLib_Help[] =
     "  for all dependencies in one complete package. Since GN does not unpack\n"
     "  static libraries to forward their contents up the dependency chain,\n"
     "  it is an error for complete static libraries to depend on other static\n"
+    "\n"
+    "  In rare cases it makes sense to list a header in more than one\n"
+    "  target if it could be considered conceptually a member of both.\n"
     "  libraries.\n"
     "\n"
     "Example\n"
@@ -824,7 +927,8 @@ const char kInputs_Help[] =
     "\n"
     "  For action and action_foreach targets, inputs should be the inputs to\n"
     "  script that don't vary. These should be all .py files that the script\n"
-    "  uses via imports (the main script itself will be an implcit dependency\n"
+    "  uses via imports (the main script itself will be an implicit dependency"
+                                                                            "\n"
     "  of the action so need not be listed).\n"
     "\n"
     "  For action targets, inputs and sources are treated the same, but from\n"
@@ -988,9 +1092,11 @@ const char kOutputExtension_Help[] =
     "  override the name (for example to use \"libfreetype.so.6\" instead\n"
     "  of libfreetype.so on Linux).\n"
     "\n"
-    "  This value should not include a leading dot. If undefined or empty,\n"
-    "  the default_output_extension specified on the tool will be used.\n"
-    "  The output_extension will be used in the \"{{output_extension}}\"\n"
+    "  This value should not include a leading dot. If undefined, the default\n"
+    "  specified on the tool will be used. If set to the empty string, no\n"
+    "  output extension will be used.\n"
+    "\n"
+    "  The output_extension will be used to set the \"{{output_extension}}\"\n"
     "  expansion which the linker tool will generally use to specify the\n"
     "  output file name. See \"gn help tool\".\n"
     "\n"
@@ -1039,6 +1145,33 @@ const char kOutputName_Help[] =
     "\n"
     "  static_library(\"doom_melon\") {\n"
     "    output_name = \"fluffy_bunny\"\n"
+    "  }\n";
+
+const char kOutputPrefixOverride[] = "output_prefix_override";
+const char kOutputPrefixOverride_HelpShort[] =
+    "output_prefix_override: [boolean] Don't use prefix for output name.";
+const char kOutputPrefixOverride_Help[] =
+    "output_prefix_override: Don't use prefix for output name.\n"
+    "\n"
+    "  A boolean that overrides the output prefix for a target. Defaults to\n"
+    "  false.\n"
+    "\n"
+    "  Some systems use prefixes for the names of the final target output\n"
+    "  file. The normal example is \"libfoo.so\" on Linux for a target\n"
+    "  named \"foo\".\n"
+    "\n"
+    "  The output prefix for a given target type is specified on the linker\n"
+    "  tool (see \"gn help tool\"). Sometimes this prefix is undesired.\n"
+    "\n"
+    "  See also \"gn help output_extension\".\n"
+    "\n"
+    "Example\n"
+    "\n"
+    "  shared_library(\"doom_melon\") {\n"
+    "    # Normally this will produce \"libdoom_melon.so\" on Linux, setting\n"
+    "    # Setting this flag will produce \"doom_melon.so\".\n"
+    "    output_prefix_override = true\n"
+    "    ...\n"
     "  }\n";
 
 const char kOutputs[] = "outputs";
@@ -1412,6 +1545,30 @@ const char kVisibility_Help[] =
     "  any targets in \"//bar/\" and any subdirectory thereof.\n"
     "    visibility = [ \"./*\", \"//bar/*\" ]\n";
 
+const char kWriteRuntimeDeps[] = "write_runtime_deps";
+const char kWriteRuntimeDeps_HelpShort[] =
+    "write_runtime_deps: Writes the target's runtime_deps to the given path.";
+const char kWriteRuntimeDeps_Help[] =
+    "write_runtime_deps: Writes the target's runtime_deps to the given path.\n"
+    "\n"
+    "  Does not synchronously write the file, but rather schedules it\n"
+    "  to be written at the end of generation.\n"
+    "\n"
+    "  If the file exists and the contents are identical to that being\n"
+    "  written, the file will not be updated. This will prevent unnecessary\n"
+    "  rebuilds of targets that depend on this file.\n"
+    "\n"
+    "  Path must be within the output directory.\n"
+    "\n"
+    "  See \"gn help runtime_deps\" for how the runtime dependencies are\n"
+    "  computed.\n"
+    "\n"
+    "  The format of this file will list one file per line with no escaping.\n"
+    "  The files will be relative to the root_build_dir. The first line of\n"
+    "  the file will be the main output file of the target itself. The file\n"
+    "  contents will be the same as requesting the runtime deps be written on\n"
+    "  the command line (see \"gn help --runtime-deps-list-file\").\n";
+
 // -----------------------------------------------------------------------------
 
 VariableInfo::VariableInfo()
@@ -1456,6 +1613,10 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(Args)
     INSERT_VARIABLE(Asmflags)
     INSERT_VARIABLE(AssertNoDeps)
+    INSERT_VARIABLE(BundleRootDir)
+    INSERT_VARIABLE(BundleResourcesDir)
+    INSERT_VARIABLE(BundleExecutableDir)
+    INSERT_VARIABLE(BundlePlugInsDir)
     INSERT_VARIABLE(Cflags)
     INSERT_VARIABLE(CflagsC)
     INSERT_VARIABLE(CflagsCC)
@@ -1477,6 +1638,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(LibDirs)
     INSERT_VARIABLE(OutputExtension)
     INSERT_VARIABLE(OutputName)
+    INSERT_VARIABLE(OutputPrefixOverride)
     INSERT_VARIABLE(Outputs)
     INSERT_VARIABLE(PrecompiledHeader)
     INSERT_VARIABLE(PrecompiledSource)
@@ -1488,6 +1650,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(Sources)
     INSERT_VARIABLE(Testonly)
     INSERT_VARIABLE(Visibility)
+    INSERT_VARIABLE(WriteRuntimeDeps)
   }
   return info_map;
 }

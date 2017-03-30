@@ -5,6 +5,8 @@
 #ifndef MASH_WM_ROOT_WINDOW_CONTROLLER_H_
 #define MASH_WM_ROOT_WINDOW_CONTROLLER_H_
 
+#include <memory>
+
 #include "components/mus/public/cpp/window_observer.h"
 #include "components/mus/public/cpp/window_tree_delegate.h"
 #include "components/mus/public/interfaces/window_manager_constants.mojom.h"
@@ -18,6 +20,10 @@ class Connector;
 
 namespace mus {
 class WindowManagerClient;
+}
+
+namespace ui {
+class Event;
 }
 
 namespace mash {
@@ -35,8 +41,6 @@ class WindowManagerApplication;
 class RootWindowController : public mus::WindowObserver,
                              public mus::WindowTreeDelegate {
  public:
-  static RootWindowController* CreateUsingWindowTreeHost(
-      WindowManagerApplication* app);
   static RootWindowController* CreateFromDisplay(
       WindowManagerApplication* app,
       mus::mojom::DisplayPtr display,
@@ -60,7 +64,7 @@ class RootWindowController : public mus::WindowObserver,
 
   mus::WindowManagerClient* window_manager_client();
 
-  void OnAccelerator(uint32_t id, mus::mojom::EventPtr event);
+  void OnAccelerator(uint32_t id, const ui::Event& event);
 
  private:
   explicit RootWindowController(WindowManagerApplication* app);
@@ -84,13 +88,11 @@ class RootWindowController : public mus::WindowObserver,
   mus::Window* root_;
   int window_count_;
 
-  scoped_ptr<WindowManager> window_manager_;
+  std::unique_ptr<WindowManager> window_manager_;
 
-  std::map<mus::Window*, scoped_ptr<LayoutManager>> layout_manager_;
+  std::map<mus::Window*, std::unique_ptr<LayoutManager>> layout_manager_;
 
-  scoped_ptr<ShadowController> shadow_controller_;
-
-  mus::mojom::WindowTreeHostPtr window_tree_host_;
+  std::unique_ptr<ShadowController> shadow_controller_;
 
   mus::mojom::DisplayPtr display_;
 

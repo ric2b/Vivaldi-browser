@@ -96,9 +96,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   gfx::NativeView GetNativeView() const override;
   gfx::NativeViewId GetNativeViewId() const override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
-  void MovePluginWindows(
-      const std::vector<WebPluginGeometry>& moves,
-      const int owner_wiew_id) override;
   void Focus() override;
   bool HasFocus() const override;
   bool IsSurfaceAvailableForCopy() const override;
@@ -106,6 +103,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void Hide() override;
   bool IsShowing() override;
   gfx::Rect GetViewBounds() const override;
+  gfx::Size GetVisibleViewportSize() const override;
   gfx::Size GetPhysicalBackingSize() const override;
   bool DoTopControlsShrinkBlinkSize() const override;
   float GetTopControlsHeight() const override;
@@ -150,7 +148,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void GestureEventAck(const blink::WebGestureEvent& event,
                        InputEventAckState ack_result) override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
-      BrowserAccessibilityDelegate* delegate) override;
+      BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
   bool LockMouse() override;
   void UnlockMouse() override;
   void OnSwapCompositorFrame(uint32_t output_surface_id,
@@ -171,8 +169,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   // cc::SurfaceFactoryClient implementation.
   void ReturnResources(const cc::ReturnedResourceArray& resources) override;
-  void SetBeginFrameSource(cc::SurfaceId surface_id,
-                           cc::BeginFrameSource* begin_frame_source) override;
+  void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source) override;
 
   // ui::GestureProviderClient implementation.
   void OnGestureEvent(const ui::GestureEventData& gesture) override;
@@ -292,13 +289,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       const gfx::Size& dst_size_in_pixel,
       SkColorType color_type,
       const base::TimeTicks& start_time,
-      const ReadbackRequestCallback& callback,
-      scoped_ptr<cc::CopyOutputResult> result);
-  static void PrepareTextureCopyOutputResultForDelegatedReadback(
-      const gfx::Size& dst_size_in_pixel,
-      SkColorType color_type,
-      const base::TimeTicks& start_time,
-      scoped_refptr<cc::Layer> readback_layer,
       const ReadbackRequestCallback& callback,
       scoped_ptr<cc::CopyOutputResult> result);
 

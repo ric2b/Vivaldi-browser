@@ -53,12 +53,15 @@ public:
 
     DECLARE_VIRTUAL_TRACE();
 
+protected:
+    void buildJSONValue(V8ObjectBuilder&) const override;
+
 private:
     PerformanceRenderTiming(Document* requestingDocument, unsigned sourceFrame, double startTime, double finishTime);
     ~PerformanceRenderTiming() override;
 
     unsigned m_sourceFrame;
-    RefPtrWillBeMember<Document> m_requestingDocument;
+    Member<Document> m_requestingDocument;
 };
 
 } // namespace blink

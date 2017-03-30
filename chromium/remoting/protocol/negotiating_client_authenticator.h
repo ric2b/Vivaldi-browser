@@ -5,14 +5,14 @@
 #ifndef REMOTING_PROTOCOL_NEGOTIATING_CLIENT_AUTHENTICATOR_H_
 #define REMOTING_PROTOCOL_NEGOTIATING_CLIENT_AUTHENTICATOR_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "remoting/protocol/authentication_method.h"
 #include "remoting/protocol/authenticator.h"
+#include "remoting/protocol/client_authentication_config.h"
 #include "remoting/protocol/negotiating_authenticator_base.h"
 #include "remoting/protocol/third_party_client_authenticator.h"
 
@@ -23,21 +23,16 @@ namespace protocol {
 // See comments in negotiating_authenticator_base.h for a general explanation.
 class NegotiatingClientAuthenticator : public NegotiatingAuthenticatorBase {
  public:
-  // TODO(jamiewalch): Pass ClientConfig instead of separate parameters.
-  NegotiatingClientAuthenticator(
-      const std::string& client_pairing_id,
-      const std::string& shared_secret,
-      const std::string& authentication_tag,
-      const FetchSecretCallback& fetch_secret_callback,
-      scoped_ptr<ThirdPartyClientAuthenticator::TokenFetcher> token_fetcher_,
-      const std::vector<AuthenticationMethod>& methods);
-
+  explicit NegotiatingClientAuthenticator(
+      const std::string& local_id,
+      const std::string& remote_id,
+      const ClientAuthenticationConfig& config);
   ~NegotiatingClientAuthenticator() override;
 
   // Overriden from Authenticator.
   void ProcessMessage(const buzz::XmlElement* message,
                       const base::Closure& resume_callback) override;
-  scoped_ptr<buzz::XmlElement> GetNextMessage() override;
+  std::unique_ptr<buzz::XmlElement> GetNextMessage() override;
 
  private:
   // (Asynchronously) creates an authenticator, and stores it in
@@ -59,28 +54,21 @@ class NegotiatingClientAuthenticator : public NegotiatingAuthenticatorBase {
   // message.
   void CreatePreferredAuthenticator();
 
-  // Creates a V2Authenticator in state |initial_state| with the given
-  // |shared_secret|, then runs |resume_callback|.
-  void CreateV2AuthenticatorWithSecret(
-      Authenticator::State initial_state,
-      const base::Closure& resume_callback,
-      const std::string& shared_secret);
+  // Creates a shared-secret authenticator in state |initial_state| with the
+  // given |shared_secret|, then runs |resume_callback|.
+  void CreateSharedSecretAuthenticator(Authenticator::State initial_state,
+                                       const base::Closure& resume_callback,
+                                       const std::string& shared_secret);
 
-  // Used for pairing authenticators
-  std::string client_pairing_id_;
-  std::string shared_secret_;
+  bool is_paired();
 
-  // Used for all authenticators.
-  std::string authentication_tag_;
+  std::string local_id_;
+  std::string remote_id_;
 
-  // Used for shared secret authenticators.
-  FetchSecretCallback fetch_secret_callback_;
-
-  // Used for third party authenticators.
-  scoped_ptr<ThirdPartyClientAuthenticator::TokenFetcher> token_fetcher_;
+  ClientAuthenticationConfig config_;
 
   // Internal NegotiatingClientAuthenticator data.
-  bool method_set_by_host_;
+  bool method_set_by_host_ = false;
   base::WeakPtrFactory<NegotiatingClientAuthenticator> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NegotiatingClientAuthenticator);

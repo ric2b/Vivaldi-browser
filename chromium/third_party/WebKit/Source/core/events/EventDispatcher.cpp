@@ -41,7 +41,7 @@
 
 namespace blink {
 
-DispatchEventResult EventDispatcher::dispatchEvent(Node& node, PassRefPtrWillBeRawPtr<EventDispatchMediator> mediator)
+DispatchEventResult EventDispatcher::dispatchEvent(Node& node, EventDispatchMediator* mediator)
 {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("blink.debug"), "EventDispatcher::dispatchEvent");
     ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
@@ -49,7 +49,7 @@ DispatchEventResult EventDispatcher::dispatchEvent(Node& node, PassRefPtrWillBeR
     return mediator->dispatchEvent(dispatcher);
 }
 
-EventDispatcher::EventDispatcher(Node& node, PassRefPtrWillBeRawPtr<Event> event)
+EventDispatcher::EventDispatcher(Node& node, Event* event)
     : m_node(node)
     , m_event(event)
 #if ENABLE(ASSERT)
@@ -61,7 +61,7 @@ EventDispatcher::EventDispatcher(Node& node, PassRefPtrWillBeRawPtr<Event> event
     m_event->initEventPath(*m_node);
 }
 
-void EventDispatcher::dispatchScopedEvent(Node& node, PassRefPtrWillBeRawPtr<EventDispatchMediator> mediator)
+void EventDispatcher::dispatchScopedEvent(Node& node, EventDispatchMediator* mediator)
 {
     // We need to set the target here because it can go away by the time we actually fire the event.
     mediator->event().setTarget(EventPath::eventTargetRespectingTargetRules(node));
@@ -73,15 +73,15 @@ void EventDispatcher::dispatchSimulatedClick(Node& node, Event* underlyingEvent,
     // This persistent vector doesn't cause leaks, because added Nodes are removed
     // before dispatchSimulatedClick() returns. This vector is here just to prevent
     // the code from running into an infinite recursion of dispatchSimulatedClick().
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<WillBeHeapHashSet<RawPtrWillBeMember<Node>>>, nodesDispatchingSimulatedClicks, (adoptPtrWillBeNoop(new WillBeHeapHashSet<RawPtrWillBeMember<Node>>())));
+    DEFINE_STATIC_LOCAL(HeapHashSet<Member<Node>>, nodesDispatchingSimulatedClicks, (new HeapHashSet<Member<Node>>));
 
     if (isDisabledFormControl(&node))
         return;
 
-    if (nodesDispatchingSimulatedClicks->contains(&node))
+    if (nodesDispatchingSimulatedClicks.contains(&node))
         return;
 
-    nodesDispatchingSimulatedClicks->add(&node);
+    nodesDispatchingSimulatedClicks.add(&node);
 
     if (mouseEventOptions == SendMouseOverUpDownEvents)
         EventDispatcher(node, MouseEvent::create(EventTypeNames::mouseover, node.document().domWindow(), underlyingEvent, creationScope)).dispatch();
@@ -98,7 +98,7 @@ void EventDispatcher::dispatchSimulatedClick(Node& node, Event* underlyingEvent,
     // always send click
     EventDispatcher(node, MouseEvent::create(EventTypeNames::click, node.document().domWindow(), underlyingEvent, creationScope)).dispatch();
 
-    nodesDispatchingSimulatedClicks->remove(&node);
+    nodesDispatchingSimulatedClicks.remove(&node);
 }
 
 DispatchEventResult EventDispatcher::dispatch()

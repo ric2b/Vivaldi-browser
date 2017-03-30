@@ -57,7 +57,7 @@ class ProgressTracker;
 class ResourceError;
 class SerializedScriptValue;
 class SubstituteData;
-
+enum class WebCachePolicy;
 struct FrameLoadRequest;
 
 CORE_EXPORT bool isBackForwardLoadType(FrameLoadType);
@@ -66,7 +66,7 @@ class CORE_EXPORT FrameLoader final {
     WTF_MAKE_NONCOPYABLE(FrameLoader);
     DISALLOW_NEW();
 public:
-    static ResourceRequest resourceRequestFromHistoryItem(HistoryItem*, ResourceRequestCachePolicy);
+    static ResourceRequest resourceRequestFromHistoryItem(HistoryItem*, WebCachePolicy);
 
     FrameLoader(LocalFrame*);
     ~FrameLoader();
@@ -74,7 +74,7 @@ public:
     void init();
 
     ResourceRequest resourceRequestForReload(FrameLoadType, const KURL& overrideURL = KURL(),
-        ClientRedirectPolicy = NotClientRedirect);
+        ClientRedirectPolicy = ClientRedirectPolicy::NotClientRedirect);
 
     ProgressTracker& progress() const { return *m_progressTracker; }
 
@@ -110,7 +110,7 @@ public:
     DocumentLoader* documentLoader() const { return m_documentLoader.get(); }
     DocumentLoader* provisionalDocumentLoader() const { return m_provisionalDocumentLoader.get(); }
 
-    void receivedMainResourceError(DocumentLoader*, const ResourceError&);
+    void loadFailed(DocumentLoader*, const ResourceError&);
 
     bool isLoadingMainFrame() const;
 
@@ -216,16 +216,16 @@ private:
 
     void scheduleCheckCompleted();
 
-    void detachDocumentLoader(RefPtrWillBeMember<DocumentLoader>&);
+    void detachDocumentLoader(Member<DocumentLoader>&);
 
-    RawPtrWillBeMember<LocalFrame> m_frame;
+    Member<LocalFrame> m_frame;
 
     // FIXME: These should be OwnPtr<T> to reduce build times and simplify
     // header dependencies unless performance testing proves otherwise.
     // Some of these could be lazily created for memory savings on devices.
     mutable FrameLoaderStateMachine m_stateMachine;
 
-    OwnPtrWillBeMember<ProgressTracker> m_progressTracker;
+    Member<ProgressTracker> m_progressTracker;
 
     FrameLoadType m_loadType;
 
@@ -233,18 +233,18 @@ private:
     // a new request is being loaded, the old document loader may still be referenced.
     // E.g. while a new request is in the "policy" state, the old document loader may
     // be consulted in particular as it makes sense to imply certain settings on the new loader.
-    RefPtrWillBeMember<DocumentLoader> m_documentLoader;
-    RefPtrWillBeMember<DocumentLoader> m_provisionalDocumentLoader;
+    Member<DocumentLoader> m_documentLoader;
+    Member<DocumentLoader> m_provisionalDocumentLoader;
 
-    RefPtrWillBeMember<HistoryItem> m_currentItem;
-    RefPtrWillBeMember<HistoryItem> m_provisionalItem;
+    Member<HistoryItem> m_currentItem;
+    Member<HistoryItem> m_provisionalItem;
 
-    class DeferredHistoryLoad : public NoBaseWillBeGarbageCollectedFinalized<DeferredHistoryLoad> {
+    class DeferredHistoryLoad : public GarbageCollectedFinalized<DeferredHistoryLoad> {
         WTF_MAKE_NONCOPYABLE(DeferredHistoryLoad);
     public:
-        static PassOwnPtrWillBeRawPtr<DeferredHistoryLoad> create(ResourceRequest request, HistoryItem* item, FrameLoadType loadType, HistoryLoadType historyLoadType)
+        static DeferredHistoryLoad* create(ResourceRequest request, HistoryItem* item, FrameLoadType loadType, HistoryLoadType historyLoadType)
         {
-            return adoptPtrWillBeNoop(new DeferredHistoryLoad(request, item, loadType, historyLoadType));
+            return new DeferredHistoryLoad(request, item, loadType, historyLoadType);
         }
 
         DeferredHistoryLoad(ResourceRequest request, HistoryItem* item, FrameLoadType loadType,
@@ -262,12 +262,12 @@ private:
         }
 
         ResourceRequest m_request;
-        RefPtrWillBeMember<HistoryItem> m_item;
+        Member<HistoryItem> m_item;
         FrameLoadType m_loadType;
         HistoryLoadType m_historyLoadType;
     };
 
-    OwnPtrWillBeMember<DeferredHistoryLoad> m_deferredHistoryLoad;
+    Member<DeferredHistoryLoad> m_deferredHistoryLoad;
 
     bool m_inStopAllLoaders;
 

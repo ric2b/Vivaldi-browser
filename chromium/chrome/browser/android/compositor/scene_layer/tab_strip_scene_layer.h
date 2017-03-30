@@ -5,13 +5,13 @@
 #ifndef CHROME_BROWSER_ANDROID_COMPOSITOR_SCENE_LAYER_TAB_STRIP_SCENE_LAYER_H_
 #define CHROME_BROWSER_ANDROID_COMPOSITOR_SCENE_LAYER_TAB_STRIP_SCENE_LAYER_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/ui_resource_layer.h"
 #include "chrome/browser/android/compositor/scene_layer/scene_layer.h"
@@ -41,6 +41,7 @@ class TabStripSceneLayer : public SceneLayer {
   void BeginBuildingFrame(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& jobj,
                           jboolean visible);
+
   void FinishBuildingFrame(JNIEnv* env,
                            const base::android::JavaParamRef<jobject>& jobj);
 
@@ -52,6 +53,7 @@ class TabStripSceneLayer : public SceneLayer {
                            jfloat background_tab_brightness,
                            jfloat brightness,
                            jboolean should_readd_background);
+
   void UpdateNewTabButton(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jobj,
@@ -62,6 +64,7 @@ class TabStripSceneLayer : public SceneLayer {
       jfloat height,
       jboolean visible,
       const base::android::JavaParamRef<jobject>& jresource_manager);
+
   void UpdateModelSelectorButton(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jobj,
@@ -73,6 +76,21 @@ class TabStripSceneLayer : public SceneLayer {
       jboolean incognito,
       jboolean visible,
       const base::android::JavaParamRef<jobject>& jresource_manager);
+
+  void UpdateTabStripLeftFade(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      jint resource_id,
+      jfloat opacity,
+      const base::android::JavaParamRef<jobject>& jresource_manager);
+
+  void UpdateTabStripRightFade(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      jint resource_id,
+      jfloat opacity,
+      const base::android::JavaParamRef<jobject>& jresource_manager);
+
   void PutStripTabLayer(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jobj,
@@ -101,7 +119,10 @@ class TabStripSceneLayer : public SceneLayer {
   typedef std::vector<scoped_refptr<TabHandleLayer>> TabHandleLayerList;
 
   scoped_refptr<cc::SolidColorLayer> tab_strip_layer_;
+  scoped_refptr<cc::Layer> scrollable_strip_layer_;
   scoped_refptr<cc::UIResourceLayer> new_tab_button_;
+  scoped_refptr<cc::UIResourceLayer> left_fade_;
+  scoped_refptr<cc::UIResourceLayer> right_fade_;
   scoped_refptr<cc::UIResourceLayer> model_selector_button_;
 
   float background_tab_brightness_;

@@ -162,10 +162,36 @@ enum VideoCodecProfile {
   VP8PROFILE_MIN = 11,
   VP8PROFILE_ANY = VP8PROFILE_MIN,
   VP8PROFILE_MAX = VP8PROFILE_ANY,
-  VP9PROFILE_MIN = 12,
-  VP9PROFILE_ANY = VP9PROFILE_MIN,
-  VP9PROFILE_MAX = VP9PROFILE_ANY,
+  VP9PROFILE_MIN,
+  VP9PROFILE_PROFILE0 = VP9PROFILE_MIN,
+  VP9PROFILE_PROFILE1,
+  VP9PROFILE_PROFILE2,
+  VP9PROFILE_PROFILE3,
+  VP9PROFILE_MAX = VP9PROFILE_PROFILE3,
   VIDEO_CODEC_PROFILE_MAX = VP9PROFILE_MAX,
+};
+
+// See media/base/encryption_scheme.h.
+// Kept in sync with media::CipherMode via static_asserts.
+enum CipherMode {
+  UNENCRYPTED = 0,
+  AES_CTR,
+  AES_CBC,
+  MAX = AES_CBC
+};
+
+// This defines a mojo transport format for media::EncryptionScheme::Pattern
+// See media/base/encryption_scheme.h for description.
+struct Pattern {
+  uint32 encrypt_blocks;
+  uint32 skip_blocks;
+};
+
+// This defines a mojo transport format for media::EncryptionScheme.
+// See media/base/encryption_scheme.h for description.
+struct EncryptionScheme {
+  CipherMode mode;
+  Pattern pattern;
 };
 
 // This defines a mojo transport format for media::AudioDecoderConfig.
@@ -178,7 +204,7 @@ struct AudioDecoderConfig {
   array<uint8>? extra_data;
   int64 seek_preroll_usec;
   int32 codec_delay;
-  bool is_encrypted;
+  EncryptionScheme encryption_scheme;
 };
 
 // This defines a mojo transport format for media::VideoDecoderConfig.
@@ -192,7 +218,7 @@ struct VideoDecoderConfig {
   mojo.Rect visible_rect;
   mojo.Size natural_size;
   array<uint8>? extra_data;
-  bool is_encrypted;
+  EncryptionScheme encryption_scheme;
 };
 
 // This defines a mojo transport format for media::SubsampleEntry.
@@ -266,8 +292,6 @@ struct AudioBuffer {
 };
 
 // This defines a mojo transport format for media::VideoFrame.
-// TODO(jrummell): Support shared memory based VideoFrame to avoid copying
-// the data multiple times.
 struct VideoFrame {
   // Format of the frame.
   VideoFormat format;
@@ -287,8 +311,16 @@ struct VideoFrame {
   // Timestamp in microseconds of the associated frame.
   int64 timestamp_usec;
 
-  // Frame data for each plane. Will be null for EOS buffers.
-  array<uint8>? y_data;
-  array<uint8>? u_data;
-  array<uint8>? v_data;
+  // Reference to the shared memory containing the frame's data.
+  handle<shared_buffer> frame_data;
+  uint64 frame_data_size;
+
+  // Stride and offsets for each plane. Offsets are relative to the start
+  // of |frame_data|.
+  int32 y_stride;
+  int32 u_stride;
+  int32 v_stride;
+  uint64 y_offset;
+  uint64 u_offset;
+  uint64 v_offset;
 };

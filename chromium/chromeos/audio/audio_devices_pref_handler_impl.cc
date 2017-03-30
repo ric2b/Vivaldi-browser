@@ -25,16 +25,16 @@ const int kPrefMuteOff = 0;
 const int kPrefMuteOn = 1;
 
 // Gets the device id string for storing audio preference. The format of
-// device string is a string consisting of 3 parts.
-// |device_name| : |integer from lower 32 bit of device id| :
+// device string is a string consisting of 2 parts.
+// |integer from lower 32 bit of device id| :
 // |0(output device) or 1(input device)|
 // If an audio device has both integrated input and output devices, the first 2
 // parts of the string could be identical, only the last part will differentiate
 // them.
 std::string GetDeviceIdString(const chromeos::AudioDevice& device) {
   std::string device_id_string =
-      device.device_name + " : " +
-      base::Uint64ToString(device.id & static_cast<uint64_t>(0xffffffff)) +
+      base::Uint64ToString(device.stable_device_id &
+                           static_cast<uint64_t>(0xffffffff)) +
       " : " + (device.is_input ? "1" : "0");
   // Replace any periods from the device id string with a space, since setting
   // names cannot contain periods.
@@ -68,8 +68,6 @@ void AudioDevicesPrefHandlerImpl::SetVolumeGainValue(
 }
 
 bool AudioDevicesPrefHandlerImpl::GetMuteValue(const AudioDevice& device) {
-  UpdateDevicesMutePref();
-
   std::string device_id_str = GetDeviceIdString(device);
   if (!device_mute_settings_->HasKey(device_id_str))
     MigrateDeviceMuteSettings(device_id_str);
@@ -85,6 +83,45 @@ void AudioDevicesPrefHandlerImpl::SetMuteValue(const AudioDevice& device,
   device_mute_settings_->SetInteger(GetDeviceIdString(device),
                                     mute ? kPrefMuteOn : kPrefMuteOff);
   SaveDevicesMutePref();
+}
+
+void AudioDevicesPrefHandlerImpl::SetDeviceActive(const AudioDevice& device,
+                                                  bool active,
+                                                  bool activate_by_user) {
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  dict->SetBoolean("active", active);
+  if (active)
+    dict->SetBoolean("activate_by_user", activate_by_user);
+
+  device_state_settings_->Set(GetDeviceIdString(device), std::move(dict));
+  SaveDevicesStatePref();
+}
+
+bool AudioDevicesPrefHandlerImpl::GetDeviceActive(const AudioDevice& device,
+                                                  bool* active,
+                                                  bool* activate_by_user) {
+  const std::string device_id_str = GetDeviceIdString(device);
+  if (!device_state_settings_->HasKey(device_id_str))
+    return false;
+
+  base::DictionaryValue* dict = NULL;
+  if (!device_state_settings_->GetDictionary(device_id_str, &dict)) {
+    LOG(ERROR) << "Could not get device state for device:" << device.ToString();
+    return false;
+  }
+  if (!dict->GetBoolean("active", active)) {
+    LOG(ERROR) << "Could not get active value for device:" << device.ToString();
+    return false;
+  }
+
+  if (*active && !dict->GetBoolean("activate_by_user", activate_by_user)) {
+    LOG(ERROR) << "Could not get activate_by_user value for previously "
+                  "active device:"
+               << device.ToString();
+    return false;
+  }
+
+  return true;
 }
 
 bool AudioDevicesPrefHandlerImpl::GetAudioOutputAllowedValue() {
@@ -103,8 +140,6 @@ void AudioDevicesPrefHandlerImpl::RemoveAudioPrefObserver(
 
 double AudioDevicesPrefHandlerImpl::GetVolumeGainPrefValue(
     const AudioDevice& device) {
-  UpdateDevicesVolumePref();
-
   std::string device_id_str = GetDeviceIdString(device);
   if (!device_volume_settings_->HasKey(device_id_str))
     MigrateDeviceVolumeSettings(device_id_str);
@@ -132,11 +167,13 @@ AudioDevicesPrefHandlerImpl::AudioDevicesPrefHandlerImpl(
     PrefService* local_state)
     : device_mute_settings_(new base::DictionaryValue()),
       device_volume_settings_(new base::DictionaryValue()),
+      device_state_settings_(new base::DictionaryValue()),
       local_state_(local_state) {
   InitializePrefObservers();
 
-  UpdateDevicesMutePref();
-  UpdateDevicesVolumePref();
+  LoadDevicesMutePref();
+  LoadDevicesVolumePref();
+  LoadDevicesStatePref();
 }
 
 AudioDevicesPrefHandlerImpl::~AudioDevicesPrefHandlerImpl() {
@@ -150,7 +187,7 @@ void AudioDevicesPrefHandlerImpl::InitializePrefObservers() {
   pref_change_registrar_.Add(prefs::kAudioOutputAllowed, callback);
 }
 
-void AudioDevicesPrefHandlerImpl::UpdateDevicesMutePref() {
+void AudioDevicesPrefHandlerImpl::LoadDevicesMutePref() {
   const base::DictionaryValue* mute_prefs =
       local_state_->GetDictionary(prefs::kAudioDevicesMute);
   if (mute_prefs)
@@ -159,16 +196,10 @@ void AudioDevicesPrefHandlerImpl::UpdateDevicesMutePref() {
 
 void AudioDevicesPrefHandlerImpl::SaveDevicesMutePref() {
   DictionaryPrefUpdate dict_update(local_state_, prefs::kAudioDevicesMute);
-  base::DictionaryValue::Iterator it(*device_mute_settings_);
-  while (!it.IsAtEnd()) {
-    int mute = kPrefMuteOff;
-    it.value().GetAsInteger(&mute);
-    dict_update->SetInteger(it.key(), mute);
-    it.Advance();
-  }
+  dict_update->MergeDictionary(device_mute_settings_.get());
 }
 
-void AudioDevicesPrefHandlerImpl::UpdateDevicesVolumePref() {
+void AudioDevicesPrefHandlerImpl::LoadDevicesVolumePref() {
   const base::DictionaryValue* volume_prefs =
       local_state_->GetDictionary(prefs::kAudioDevicesVolumePercent);
   if (volume_prefs)
@@ -178,14 +209,20 @@ void AudioDevicesPrefHandlerImpl::UpdateDevicesVolumePref() {
 void AudioDevicesPrefHandlerImpl::SaveDevicesVolumePref() {
   DictionaryPrefUpdate dict_update(local_state_,
                                    prefs::kAudioDevicesVolumePercent);
-  base::DictionaryValue::Iterator it(*device_volume_settings_);
-  while (!it.IsAtEnd()) {
-    double volume = kDefaultOutputVolumePercent;
-    bool success = it.value().GetAsDouble(&volume);
-    DCHECK(success);
-    dict_update->SetDouble(it.key(), volume);
-    it.Advance();
-  }
+  dict_update->MergeDictionary(device_volume_settings_.get());
+}
+
+void AudioDevicesPrefHandlerImpl::LoadDevicesStatePref() {
+  const base::DictionaryValue* state_prefs =
+      local_state_->GetDictionary(prefs::kAudioDevicesState);
+  if (state_prefs)
+    device_state_settings_.reset(state_prefs->DeepCopy());
+}
+
+void AudioDevicesPrefHandlerImpl::SaveDevicesStatePref() {
+  DictionaryPrefUpdate dict_update(local_state_, prefs::kAudioDevicesState);
+  base::DictionaryValue::Iterator it(*device_state_settings_);
+  dict_update->MergeDictionary(device_state_settings_.get());
 }
 
 void AudioDevicesPrefHandlerImpl::MigrateDeviceMuteSettings(
@@ -212,6 +249,7 @@ void AudioDevicesPrefHandlerImpl::NotifyAudioPolicyChange() {
 void AudioDevicesPrefHandlerImpl::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kAudioDevicesVolumePercent);
   registry->RegisterDictionaryPref(prefs::kAudioDevicesMute);
+  registry->RegisterDictionaryPref(prefs::kAudioDevicesState);
 
   // Register the prefs backing the audio muting policies.
   // Policy for audio input is handled by kAudioCaptureAllowed in the Chrome

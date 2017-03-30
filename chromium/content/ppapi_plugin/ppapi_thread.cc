@@ -36,7 +36,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/pepper_plugin_info.h"
 #include "content/public/common/sandbox_init.h"
-#include "content/public/plugin/content_plugin_client.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_platform_file.h"
 #include "ipc/ipc_sync_channel.h"
@@ -118,7 +117,7 @@ PpapiThread::PpapiThread(const base::CommandLine& command_line, bool is_broker)
       command_line.GetSwitchValueASCII(switches::kPpapiFlashArgs));
 
   blink_platform_impl_.reset(new PpapiBlinkPlatformImpl);
-  blink::initializeWithoutV8(blink_platform_impl_.get());
+  blink::Platform::initialize(blink_platform_impl_.get());
 
   if (!is_broker_) {
     scoped_refptr<ppapi::proxy::PluginMessageFilter> plugin_filter(
@@ -146,7 +145,7 @@ void PpapiThread::Shutdown() {
   if (plugin_entry_points_.shutdown_module)
     plugin_entry_points_.shutdown_module();
   blink_platform_impl_->Shutdown();
-  blink::shutdownWithoutV8();
+  blink::Platform::shutdown();
 }
 
 bool PpapiThread::Send(IPC::Message* msg) {
@@ -196,8 +195,7 @@ IPC::PlatformFileForTransit PpapiThread::ShareHandleWithRemote(
 #if defined(OS_WIN)
   if (peer_handle_.IsValid()) {
     DCHECK(is_broker_);
-    return IPC::GetFileHandleForProcess(handle, peer_handle_.Get(),
-                                        should_close_source);
+    return IPC::GetPlatformFileForTransit(handle, should_close_source);
   }
 #endif
 
@@ -394,11 +392,10 @@ void PpapiThread::OnLoadPlugin(const base::FilePath& path,
 
     WarmupWindowsLocales(permissions);
 
-#if defined(ADDRESS_SANITIZER)
-    // Bind and leak dbghelp.dll before the token is lowered, otherwise
-    // AddressSanitizer will crash when trying to symbolize a report.
-    LoadLibraryA("dbghelp.dll");
-#endif
+    if (!base::win::IsUser32AndGdi32Available() &&
+        permissions.HasPermission(ppapi::PERMISSION_FLASH)) {
+      PatchGdiFontEnumeration(path);
+    }
 
     g_target_services->LowerToken();
   }
@@ -551,13 +548,6 @@ bool PpapiThread::SetupRendererChannel(base::ProcessId renderer_pid,
 void PpapiThread::SavePluginName(const base::FilePath& path) {
   ppapi::proxy::PluginGlobals::Get()->set_plugin_name(
       path.BaseName().AsUTF8Unsafe());
-
-  // plugin() is NULL when in-process, which is fine, because this is
-  // just a hook for setting the process name.
-  if (GetContentClient()->plugin()) {
-    GetContentClient()->plugin()->PluginProcessStarted(
-        path.BaseName().RemoveExtension().LossyDisplayName());
-  }
 }
 
 static std::string GetHistogramName(bool is_broker,

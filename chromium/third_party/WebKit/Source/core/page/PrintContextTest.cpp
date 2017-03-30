@@ -49,23 +49,18 @@ public:
 
     MockCanvas() : SkCanvas(kPageWidth, kPageHeight) { }
 
-    void onDrawRect(const SkRect& rect, const SkPaint& paint) override
+    void onDrawAnnotation(const SkRect& rect, const char key[], SkData* value) override
     {
-        if (!paint.getAnnotation())
-            return;
-        Operation operation = { DrawRect, rect };
-        getTotalMatrix().mapRect(&operation.rect);
-        m_recordedOperations.append(operation);
-    }
-
-    void onDrawPoints(PointMode mode, size_t count, const SkPoint pts[], const SkPaint& paint) override
-    {
-        if (!paint.getAnnotation())
-            return;
-        ASSERT_EQ(1u, count); // Only called from drawPoint().
-        SkPoint point = getTotalMatrix().mapXY(pts[0].x(), pts[0].y());
-        Operation operation = { DrawPoint, SkRect::MakeXYWH(point.x(), point.y(), 0, 0) };
-        m_recordedOperations.append(operation);
+        if (rect.width() == 0 && rect.height() == 0) {
+            SkPoint point = getTotalMatrix().mapXY(rect.x(), rect.y());
+            Operation operation = {
+                DrawPoint, SkRect::MakeXYWH(point.x(), point.y(), 0, 0) };
+            m_recordedOperations.append(operation);
+        } else {
+            Operation operation = { DrawRect, rect };
+            getTotalMatrix().mapRect(&operation.rect);
+            m_recordedOperations.append(operation);
+        }
     }
 
     const Vector<Operation>& recordedOperations() const { return m_recordedOperations; }
@@ -76,13 +71,13 @@ private:
 
 class PrintContextTest : public RenderingTest {
 protected:
-    explicit PrintContextTest(PassOwnPtrWillBeRawPtr<FrameLoaderClient> frameLoaderClient = nullptr)
+    explicit PrintContextTest(FrameLoaderClient* frameLoaderClient = nullptr)
         : RenderingTest(frameLoaderClient) { }
 
     void SetUp() override
     {
         RenderingTest::SetUp();
-        m_printContext = adoptPtrWillBeNoop(new MockPrintContext(document().frame()));
+        m_printContext = new MockPrintContext(document().frame());
     }
 
     MockPrintContext& printContext() { return *m_printContext.get(); }
@@ -134,7 +129,7 @@ protected:
 
 private:
     OwnPtr<DummyPageHolder> m_pageHolder;
-    OwnPtrWillBePersistent<MockPrintContext> m_printContext;
+    Persistent<MockPrintContext> m_printContext;
 };
 
 class PrintContextFrameTest : public PrintContextTest {

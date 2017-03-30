@@ -174,11 +174,13 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         }
 
         /**
-         * Returns whether the sign-in flow activity was set but is no longer valid.
+         * Returns whether the sign-in flow activity was set but is no longer visible to the user.
          */
-        private boolean isActivityDestroyed() {
+        private boolean isActivityInvisible() {
             return activity != null
-                    && ApplicationStatus.getStateForActivity(activity) == ActivityState.DESTROYED;
+                    && (ApplicationStatus.getStateForActivity(activity) == ActivityState.STOPPED
+                               || ApplicationStatus.getStateForActivity(activity)
+                                       == ActivityState.DESTROYED);
         }
     }
 
@@ -388,7 +390,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
             return;
         }
 
-        if (mSignInState.isActivityDestroyed()) {
+        if (mSignInState.isActivityInvisible()) {
             abortSignIn();
             return;
         }
@@ -407,9 +409,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
 
     @CalledByNative
     private void onPolicyCheckedBeforeSignIn(String managementDomain) {
-        if (mSignInState == null) {
-            Log.w(TAG, "Sign in request was canceled; aborting onPolicyCheckedBeforeSignIn().");
-        }
+        assert mSignInState != null;
 
         if (managementDomain == null) {
             Log.d(TAG, "Account doesn't have policy");
@@ -417,7 +417,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
             return;
         }
 
-        if (mSignInState.isActivityDestroyed()) {
+        if (mSignInState.isActivityInvisible()) {
             abortSignIn();
             return;
         }
@@ -458,10 +458,8 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
     }
 
     private void finishSignIn() {
-        if (mSignInState == null) {
-            Log.w(TAG, "Sign in request was canceled; aborting finishSignIn().");
-            return;
-        }
+        // This method should be called at most once per sign-in flow.
+        assert mSignInState != null;
 
         // Tell the native side that sign-in has completed.
         nativeOnSignInCompleted(mNativeSigninManagerAndroid, mSignInState.account.name);
@@ -560,13 +558,9 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      * Package protected to allow dialog fragments to abort the signin flow.
      */
     void abortSignIn() {
-        if (mSignInState == null) {
-            Log.w(TAG, "Ignoring signin abort request as no pending sign in.");
-            return;
-        }
-
         // Ensure this function can only run once per signin flow.
         SignInState signInState = mSignInState;
+        assert signInState != null;
         mSignInState = null;
 
         if (signInState.displayedDialog != null) {
@@ -576,6 +570,8 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         if (signInState.callback != null) {
             signInState.callback.onSignInAborted();
         }
+
+        nativeAbortSignIn(mNativeSigninManagerAndroid);
 
         Log.d(TAG, "Signin flow aborted.");
         notifySignInAllowedChanged();
@@ -639,6 +635,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
     private native void nativeCheckPolicyBeforeSignIn(
             long nativeSigninManagerAndroid, String username);
     private native void nativeFetchPolicyBeforeSignIn(long nativeSigninManagerAndroid);
+    private native void nativeAbortSignIn(long nativeSigninManagerAndroid);
     private native void nativeOnSignInCompleted(long nativeSigninManagerAndroid, String username);
     private native void nativeSignOut(long nativeSigninManagerAndroid);
     private native String nativeGetManagementDomain(long nativeSigninManagerAndroid);

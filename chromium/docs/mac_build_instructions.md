@@ -5,13 +5,8 @@
 ## Prerequisites
 
 *   A Mac running 10.9+.
-*   [Xcode](https://developer.apple.com/xcode), 5+.
-*   Install
-    [gclient](http://dev.chromium.org/developers/how-tos/install-depot-tools),
-    part of the
-    [depot_tools](http://dev.chromium.org/developers/how-tos/depottools) package
-    ([download](http://dev.chromium.org/developers/how-tos/install-depot-tools)).
-    gclient is a wrapper around svn that we use to manage our working copies.
+*   [Xcode](https://developer.apple.com/xcode) 5+.
+*   [depot\_tools](http://dev.chromium.org/developers/how-tos/depottools).
 *   Install Xcode's "Command Line Tools" via Xcode menu -> Preferences ->
     Downloads
 *   The OSX 10.10 SDK. Run
@@ -23,9 +18,8 @@
 
 ## Getting the code
 
-[Check out the source code](http://dev.chromium.org/developers/how-tos/get-the-code)
-using Git. If you're new to the project, you can skip all the information about
-git-svn, since you will not be committing directly to the repository.
+[Check out the source code](https://www.chromium.org/developers/how-tos/get-the-code)
+using Git.
 
 Before checking out, go to the
 [waterfall](http://build.chromium.org/buildbot/waterfall/) and check that the
@@ -137,23 +131,46 @@ information about writing code for Chromium and contributing it.
 ## Using Xcode-Ninja Hybrid
 
 While using Xcode is unsupported, GYP supports a hybrid approach of using ninja
-for building, but Xcode for editing and driving compliation.  Xcode can still be
+for building, but Xcode for editing and driving compilation. Xcode can still be
 slow, but it runs fairly well even **with indexing enabled**.
 
 With hybrid builds, compilation is still handled by ninja, and can be run by the
 command line (e.g. ninja -C out/Debug chrome) or by choosing the chrome target
 in the hybrid workspace and choosing build.
 
-To use Xcode-Ninja Hybrid, set `GYP_GENERATORS=ninja,xcode-ninja`.
+To use Xcode-Ninja Hybrid, set GYP\_GENERATORS like the following:
+
+```shell
+export GYP_GENERATORS="ninja,xcode-ninja"
+```
 
 Due to the way Xcode parses ninja output paths, it's also necessary to change
 the main gyp location to anything two directories deep. Otherwise Xcode build
-output will not be clickable. Adding
-`xcode_ninja_main_gyp=src/build/ninja/all.ninja.gyp` to your
-`GYP_GENERATOR_FLAGS` will fix this.
+output will not be clickable.
+To make this change permanent, you can edit `chromium.gyp_env` (or create it if
+it does not exists) and define GYP\_GENERATOR\_FLAGS. In general, to use hybrid
+mode, your `chromium.gyp_env` could contain the following:
 
-After generating the project files with gclient runhooks, open
-`src/build/ninja/all.ninja.xcworkspace`.
+```json
+{
+  "GYP_GENERATORS"     : "ninja,xcode-ninja",
+  "GYP_GENERATOR_FLAGS":
+      "xcode_project_version=3.2 " +
+      "xcode_ninja_main_gyp=src/build/ninja/all.ninja.gyp",
+}
+```
+
+After, generate the project files with:
+
+```shell
+gclient runhooks
+```
+
+And finally, open it:
+
+```shell
+open build/ninja/all.ninja.xcworkspace
+```
 
 You may run into a problem where http://YES is opened as a new tab every time
 you launch Chrome. To fix this, open the scheme editor for the Run scheme,

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_ANDROID_DATA_USAGE_DATA_USE_MATCHER_H_
 #define CHROME_BROWSER_ANDROID_DATA_USAGE_DATA_USE_MATCHER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -12,13 +13,11 @@
 #include "base/containers/hash_tables.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/data_usage/data_use_tab_model.h"
 
 namespace base {
-class SingleThreadTaskRunner;
 class TickClock;
 }
 
@@ -32,7 +31,7 @@ namespace chrome {
 
 namespace android {
 
-class ExternalDataUseObserver;
+class ExternalDataUseObserverBridge;
 
 // DataUseMatcher stores the matching URL patterns and package names along with
 // the labels. It also provides functionality to get the matching label for a
@@ -41,8 +40,7 @@ class DataUseMatcher {
  public:
   DataUseMatcher(
       const base::WeakPtr<DataUseTabModel>& data_use_tab_model,
-      const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
-      const base::WeakPtr<ExternalDataUseObserver>& external_data_use_observer,
+      const ExternalDataUseObserverBridge* external_data_use_observer_bridge,
       const base::TimeDelta& default_matching_rule_expiration_duration);
 
   ~DataUseMatcher();
@@ -67,7 +65,7 @@ class DataUseMatcher {
                              std::string* label) const WARN_UNUSED_RESULT;
 
   // Fetches the matching rules asynchronously from
-  // |external_data_use_observer_|.
+  // |external_data_use_observer_bridge_|.
   void FetchMatchingRules();
 
   // Returns true if there is any valid matching rule.
@@ -86,7 +84,7 @@ class DataUseMatcher {
   class MatchingRule {
    public:
     MatchingRule(const std::string& app_package_name,
-                 scoped_ptr<re2::RE2> pattern,
+                 std::unique_ptr<re2::RE2> pattern,
                  const std::string& label,
                  const base::TimeTicks& expiration);
     ~MatchingRule();
@@ -101,7 +99,7 @@ class DataUseMatcher {
     const std::string app_package_name_;
 
     // RE2 pattern to match against URLs.
-    scoped_ptr<re2::RE2> pattern_;
+    std::unique_ptr<re2::RE2> pattern_;
 
     // Opaque label that uniquely identifies this matching rule.
     const std::string label_;
@@ -125,7 +123,7 @@ class DataUseMatcher {
 
   base::ThreadChecker thread_checker_;
 
-  std::vector<scoped_ptr<MatchingRule>> matching_rules_;
+  std::vector<std::unique_ptr<MatchingRule>> matching_rules_;
 
   // |data_use_tab_model_| is notified if a label is removed from the set of
   // matching labels.
@@ -136,13 +134,14 @@ class DataUseMatcher {
   const base::TimeDelta default_matching_rule_expiration_duration_;
 
   // TickClock used for obtaining the current time.
-  scoped_ptr<base::TickClock> tick_clock_;
-  // |io_task_runner_| is used to call ExternalDataUseObserver methods on
-  // IO thread.
-  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
+  std::unique_ptr<base::TickClock> tick_clock_;
 
-  // |external_data_use_observer_| is notified when matching rules are fetched.
-  base::WeakPtr<ExternalDataUseObserver> external_data_use_observer_;
+  // Pointer to the ExternalDataUseObserverBridge owned by
+  // ExternalDataUseObserver. DataUseTabModel (owner of |this|) and
+  // ExternalDataUseObserverBridge are owned by ExternalDataUseObserver, and are
+  // destroyed in that order. So |external_data_use_observer_bridge_| is
+  // guaranteed to be non-null.
+  const ExternalDataUseObserverBridge* external_data_use_observer_bridge_;
 
   DISALLOW_COPY_AND_ASSIGN(DataUseMatcher);
 };

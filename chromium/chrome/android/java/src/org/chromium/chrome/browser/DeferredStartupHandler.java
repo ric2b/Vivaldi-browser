@@ -14,7 +14,7 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.bookmarkswidget.BookmarkThumbnailWidgetProviderBase;
+import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
 import org.chromium.chrome.browser.crash.CrashFileManager;
 import org.chromium.chrome.browser.crash.MinidumpUploadService;
 import org.chromium.chrome.browser.media.MediaCaptureNotificationService;
@@ -30,11 +30,6 @@ import org.chromium.content.browser.ChildProcessLauncher;
  * Handler for application level tasks to be completed on deferred startup.
  */
 public class DeferredStartupHandler {
-    // Low reduce ratio of moderate binding.
-    private static final float MODERATE_BINDING_LOW_REDUCE_RATIO = 0.25f;
-    // High reduce ratio of moderate binding.
-    private static final float MODERATE_BINDING_HIGH_REDUCE_RATIO = 0.5f;
-
     private static DeferredStartupHandler sDeferredStartupHandler;
     private boolean mDeferredStartupComplete;
 
@@ -84,7 +79,7 @@ public class DeferredStartupHandler {
                     // Force a widget refresh in order to wake up any possible zombie widgets.
                     // This is needed to ensure the right behavior when the process is suddenly
                     // killed.
-                    BookmarkThumbnailWidgetProviderBase.refreshAllWidgets(application);
+                    BookmarkWidgetProvider.refreshAllWidgets(application);
 
                     // Initialize whether or not precaching is enabled.
                     PrecacheLauncher.updatePrecachingEnabled(application);
@@ -124,12 +119,7 @@ public class DeferredStartupHandler {
         }
 
         // Start or stop Physical Web
-        if (PhysicalWeb.shouldStartOnLaunch(application)) {
-            PhysicalWeb.startPhysicalWeb(application);
-            PhysicalWeb.uploadDeferredMetrics(application);
-        } else {
-            PhysicalWeb.stopPhysicalWeb(application);
-        }
+        PhysicalWeb.onChromeStart(application);
 
         mDeferredStartupComplete = true;
     }
@@ -146,8 +136,11 @@ public class DeferredStartupHandler {
         // Moderate binding doesn't apply to low end devices.
         if (SysUtils.isLowEndDevice()) return;
 
+        boolean moderateBindingTillBackgrounded =
+                FieldTrialList.findFullName("ModerateBindingOnBackgroundTabCreation")
+                        .equals("Enabled");
         ChildProcessLauncher.startModerateBindingManagement(
-                context, MODERATE_BINDING_LOW_REDUCE_RATIO, MODERATE_BINDING_HIGH_REDUCE_RATIO);
+                context, moderateBindingTillBackgrounded);
     }
 
     /**

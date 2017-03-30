@@ -368,7 +368,7 @@ Object.defineProperty(Visit.prototype, 'dropDown', {
 Visit.prototype.addHighlightedText_ = function(node, content, highlightText) {
   var i = 0;
   if (highlightText) {
-    var re = new RegExp(Visit.pregQuote_(highlightText), 'gim');
+    var re = new RegExp(quoteString(highlightText), 'gim');
     var match;
     while (match = re.exec(content)) {
       if (match.index > i)
@@ -536,18 +536,6 @@ Visit.prototype.removeEntryFromHistory_ = function(e) {
   e.preventDefault();
 };
 
-// Visit, private, static: ----------------------------------------------------
-
-/**
- * Quote a string so it can be used in a regular expression.
- * @param {string} str The source string.
- * @return {string} The escaped string.
- * @private
- */
-Visit.pregQuote_ = function(str) {
-  return str.replace(/([\\\.\+\*\?\[\^\]\$\(\)\{\}\=\!\<\>\|\:])/g, '\\$1');
-};
-
 ///////////////////////////////////////////////////////////////////////////////
 // HistoryModel:
 
@@ -654,12 +642,6 @@ HistoryModel.prototype.addResults = function(info, results) {
     var isSameDay = lastDay == thisDay;
     this.visits_.push(new Visit(result, isSameDay, this));
     lastDay = thisDay;
-  }
-
-  if (loadTimeData.getBoolean('isUserSignedIn')) {
-    var message = loadTimeData.getString(
-        info.hasSyncedResults ? 'hasSyncedResults' : 'noSyncedResults');
-    this.view_.showNotification(message);
   }
 
   this.updateSearch_();
@@ -1179,6 +1161,31 @@ HistoryView.prototype.showNotification = function(innerHTML, isWarning) {
 };
 
 /**
+ * Shows a notification about whether there are any synced results, and whether
+ * there are other forms of browsing history on the server.
+ * @param {boolean} hasSyncedResults Whether there are synced results.
+ * @param {boolean} includeOtherFormsOfBrowsingHistory Whether to include
+ *     a sentence about the existence of other forms of browsing history.
+ */
+HistoryView.prototype.showWebHistoryNotification = function(
+    hasSyncedResults, includeOtherFormsOfBrowsingHistory) {
+  var message = '';
+
+  if (loadTimeData.getBoolean('isUserSignedIn')) {
+    message += '<span>' + loadTimeData.getString(
+        hasSyncedResults ? 'hasSyncedResults' : 'noSyncedResults') + '</span>';
+  }
+
+  if (includeOtherFormsOfBrowsingHistory) {
+    message += ' ' /* A whitespace to separate <span>s. */ + '<span>' +
+        loadTimeData.getString('otherFormsOfBrowsingHistory') + '</span>';
+  }
+
+  if (message)
+    this.showNotification(message, false /* isWarning */);
+};
+
+/**
  * @param {Visit} visit The visit about to be removed from this view.
  */
 HistoryView.prototype.onBeforeRemove = function(visit) {
@@ -1286,15 +1293,15 @@ HistoryView.prototype.onEntryRemoved = function() {
  */
 HistoryView.prototype.positionNotificationBar = function() {
   var bar = $('notification-bar');
+  var container = $('top-container');
 
-  // If the bar does not fit beside the editing controls, put it into the
-  // overflow state.
-  if (bar.getBoundingClientRect().top >=
-      $('editing-controls').getBoundingClientRect().bottom) {
-    bar.classList.add('alone');
-  } else {
-    bar.classList.remove('alone');
-  }
+  // If the bar does not fit beside the editing controls, or if it contains
+  // more than one message, put it into the overflow state.
+  var shouldOverflow =
+      (bar.getBoundingClientRect().top >=
+           $('editing-controls').getBoundingClientRect().bottom) ||
+      bar.childElementCount > 1;
+  container.classList.toggle('overflow', shouldOverflow);
 };
 
 /**
@@ -2355,6 +2362,19 @@ function getFilteringStatusDOM(filteringBehavior) {
  */
 function historyResult(info, results) {
   historyModel.addResults(info, results);
+}
+
+/**
+ * Called by the history backend after receiving results and after discovering
+ * the existence of other forms of browsing history.
+ * @param {boolean} hasSyncedResults Whether there are synced results.
+ * @param {boolean} includeOtherFormsOfBrowsingHistory Whether to include
+ *     a sentence about the existence of other forms of browsing history.
+ */
+function showNotification(
+    hasSyncedResults, includeOtherFormsOfBrowsingHistory) {
+  historyView.showWebHistoryNotification(
+      hasSyncedResults, includeOtherFormsOfBrowsingHistory);
 }
 
 /**

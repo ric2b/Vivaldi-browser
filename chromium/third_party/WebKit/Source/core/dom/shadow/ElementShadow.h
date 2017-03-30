@@ -36,19 +36,17 @@
 #include "wtf/DoublyLinkedList.h"
 #include "wtf/HashMap.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
-class CORE_EXPORT ElementShadow final : public NoBaseWillBeGarbageCollectedFinalized<ElementShadow> {
+class CORE_EXPORT ElementShadow final : public GarbageCollectedFinalized<ElementShadow> {
     WTF_MAKE_NONCOPYABLE(ElementShadow);
-    USING_FAST_MALLOC_WILL_BE_REMOVED(ElementShadow);
 public:
-    static PassOwnPtrWillBeRawPtr<ElementShadow> create();
+    static RawPtr<ElementShadow> create();
     ~ElementShadow();
 
     Element* host() const;
-    ShadowRoot& youngestShadowRoot() const { ASSERT(m_shadowRoots.head()); return *m_shadowRoots.head(); }
+    ShadowRoot& youngestShadowRoot() const { DCHECK(m_shadowRoots.head()); return *m_shadowRoots.head(); }
     ShadowRoot* oldestShadowRoot() const { return m_shadowRoots.tail(); }
     ElementShadow* containingShadow() const;
 
@@ -61,7 +59,7 @@ public:
 
     HTMLSlotElement* assignedSlotFor(const Node& node) const
     {
-        ASSERT(m_slotAssignment);
+        DCHECK(m_slotAssignment);
         return m_slotAssignment->assignedSlotFor(node);
     }
 
@@ -124,12 +122,12 @@ private:
     bool m_needsSelectFeatureSet;
 
     // TODO(hayato): ShadowRoot should be an owner of SlotAssigment
-    OwnPtrWillBeMember<SlotAssignment> m_slotAssignment;
+    Member<SlotAssignment> m_slotAssignment;
 };
 
 inline Element* ElementShadow::host() const
 {
-    ASSERT(!m_shadowRoots.isEmpty());
+    DCHECK(!m_shadowRoots.isEmpty());
     return youngestShadowRoot().host();
 }
 

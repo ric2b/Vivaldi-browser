@@ -27,7 +27,6 @@
         '../device/serial/serial.gyp:device_serial',
         '../device/serial/serial.gyp:device_serial_test_util',
         '../mojo/mojo_base.gyp:mojo_application_bindings',
-        '../mojo/mojo_base.gyp:mojo_environment_chromium',
         '../mojo/mojo_edk.gyp:mojo_js_lib',
         '../mojo/mojo_edk.gyp:mojo_system_impl',
         '../mojo/mojo_public.gyp:mojo_cpp_bindings',
@@ -60,6 +59,11 @@
           ],
           'sources': [
             'browser/api/webcam_private/visca_webcam_unittest.cc',
+          ],
+        }],
+        ['enable_wifi_display==1', {
+          'sources': [
+            '<@(extensions_unittests_sources_wifi_display)',
           ],
         }],
       ],

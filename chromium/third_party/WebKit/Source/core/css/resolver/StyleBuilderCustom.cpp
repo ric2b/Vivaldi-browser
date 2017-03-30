@@ -116,7 +116,7 @@ void StyleBuilder::applyProperty(CSSPropertyID id, StyleResolverState& state, CS
         return;
     }
 
-    ASSERT_WITH_MESSAGE(!isShorthandProperty(id), "Shorthand property id = %d wasn't expanded at parsing time", id);
+    DCHECK(!isShorthandProperty(id)) << "Shorthand property id = " << id << " wasn't expanded at parsing time";
 
     bool isInherit = state.parentNode() && value->isInheritedValue();
     bool isInitial = value->isInitialValue() || (!state.parentNode() && value->isInheritedValue());
@@ -424,8 +424,8 @@ void StyleBuilderFunctions::applyValueCSSPropertyTextAlign(StyleResolverState& s
 void StyleBuilderFunctions::applyInheritCSSPropertyTextIndent(StyleResolverState& state)
 {
     state.style()->setTextIndent(state.parentStyle()->textIndent());
-    state.style()->setTextIndentLine(state.parentStyle()->textIndentLine());
-    state.style()->setTextIndentType(state.parentStyle()->textIndentType());
+    state.style()->setTextIndentLine(state.parentStyle()->getTextIndentLine());
+    state.style()->setTextIndentType(state.parentStyle()->getTextIndentType());
 }
 
 void StyleBuilderFunctions::applyInitialCSSPropertyTextIndent(StyleResolverState& state)
@@ -470,8 +470,8 @@ void StyleBuilderFunctions::applyInheritCSSPropertyVerticalAlign(StyleResolverSt
 {
     EVerticalAlign verticalAlign = state.parentStyle()->verticalAlign();
     state.style()->setVerticalAlign(verticalAlign);
-    if (verticalAlign == LENGTH)
-        state.style()->setVerticalAlignLength(state.parentStyle()->verticalAlignLength());
+    if (verticalAlign == VerticalAlignLength)
+        state.style()->setVerticalAlignLength(state.parentStyle()->getVerticalAlignLength());
 }
 
 void StyleBuilderFunctions::applyValueCSSPropertyVerticalAlign(StyleResolverState& state, CSSValue* value)
@@ -560,8 +560,8 @@ void StyleBuilderFunctions::applyInitialCSSPropertyWebkitTextEmphasisStyle(Style
 
 void StyleBuilderFunctions::applyInheritCSSPropertyWebkitTextEmphasisStyle(StyleResolverState& state)
 {
-    state.style()->setTextEmphasisFill(state.parentStyle()->textEmphasisFill());
-    state.style()->setTextEmphasisMark(state.parentStyle()->textEmphasisMark());
+    state.style()->setTextEmphasisFill(state.parentStyle()->getTextEmphasisFill());
+    state.style()->setTextEmphasisMark(state.parentStyle()->getTextEmphasisMark());
     state.style()->setTextEmphasisCustomMark(state.parentStyle()->textEmphasisCustomMark());
 }
 
@@ -657,81 +657,60 @@ void StyleBuilderFunctions::applyInheritCSSPropertyContent(StyleResolverState&)
 
 void StyleBuilderFunctions::applyValueCSSPropertyContent(StyleResolverState& state, CSSValue* value)
 {
-    // list of string, uri, counter, attr, i
+    state.style()->clearContent();
+    if (value->isPrimitiveValue()) {
+        ASSERT(toCSSPrimitiveValue(*value).getValueID() == CSSValueNormal || toCSSPrimitiveValue(*value).getValueID() == CSSValueNone);
+        return;
+    }
 
-    bool didSet = false;
+    // TODO(timloh): This logic shouldn't be split across here and ComputedStyle.cpp
     for (auto& item : toCSSValueList(*value)) {
         if (item->isImageGeneratorValue()) {
-            state.style()->setContent(StyleGeneratedImage::create(toCSSImageGeneratorValue(*item)), didSet);
-            didSet = true;
+            state.style()->setContent(StyleGeneratedImage::create(toCSSImageGeneratorValue(*item)));
         } else if (item->isImageSetValue()) {
-            state.style()->setContent(state.elementStyleResources().setOrPendingFromValue(CSSPropertyContent, toCSSImageSetValue(*item)), didSet);
-            didSet = true;
-        }
-
-        if (item->isImageValue()) {
-            state.style()->setContent(state.elementStyleResources().cachedOrPendingFromValue(CSSPropertyContent, toCSSImageValue(*item)), didSet);
-            didSet = true;
-            continue;
-        }
-
-        if (item->isCounterValue()) {
+            state.style()->setContent(state.elementStyleResources().setOrPendingFromValue(CSSPropertyContent, toCSSImageSetValue(*item)));
+        } else if (item->isImageValue()) {
+            state.style()->setContent(state.elementStyleResources().cachedOrPendingFromValue(CSSPropertyContent, toCSSImageValue(*item)));
+        } else if (item->isCounterValue()) {
             CSSCounterValue* counterValue = toCSSCounterValue(item.get());
             EListStyleType listStyleType = NoneListStyle;
             CSSValueID listStyleIdent = counterValue->listStyle();
             if (listStyleIdent != CSSValueNone)
                 listStyleType = static_cast<EListStyleType>(listStyleIdent - CSSValueDisc);
             OwnPtr<CounterContent> counter = adoptPtr(new CounterContent(AtomicString(counterValue->identifier()), listStyleType, AtomicString(counterValue->separator())));
-            state.style()->setContent(counter.release(), didSet);
-            didSet = true;
-        }
-
-        if (item->isFunctionValue()) {
+            state.style()->setContent(counter.release());
+        } else if (item->isFunctionValue()) {
             CSSFunctionValue* functionValue = toCSSFunctionValue(item.get());
             ASSERT(functionValue->functionType() == CSSValueAttr);
             // FIXME: Can a namespace be specified for an attr(foo)?
-            if (state.style()->styleType() == NOPSEUDO)
+            if (state.style()->styleType() == PseudoIdNone)
                 state.style()->setUnique();
             else
                 state.parentStyle()->setUnique();
             QualifiedName attr(nullAtom, AtomicString(toCSSCustomIdentValue(functionValue->item(0))->value()), nullAtom);
             const AtomicString& value = state.element()->getAttribute(attr);
-            state.style()->setContent(value.isNull() ? emptyString() : value.string(), didSet);
-            didSet = true;
-        }
-
-        if (!item->isPrimitiveValue() && !item->isStringValue())
-            continue;
-
-        if (item->isStringValue()) {
-            state.style()->setContent(toCSSStringValue(*item).value().impl(), didSet);
-            didSet = true;
+            state.style()->setContent(value.isNull() ? emptyString() : value.getString());
+        } else if (item->isStringValue()) {
+            state.style()->setContent(toCSSStringValue(*item).value().impl());
         } else {
             switch (toCSSPrimitiveValue(*item).getValueID()) {
             case CSSValueOpenQuote:
-                state.style()->setContent(OPEN_QUOTE, didSet);
-                didSet = true;
+                state.style()->setContent(OPEN_QUOTE);
                 break;
             case CSSValueCloseQuote:
-                state.style()->setContent(CLOSE_QUOTE, didSet);
-                didSet = true;
+                state.style()->setContent(CLOSE_QUOTE);
                 break;
             case CSSValueNoOpenQuote:
-                state.style()->setContent(NO_OPEN_QUOTE, didSet);
-                didSet = true;
+                state.style()->setContent(NO_OPEN_QUOTE);
                 break;
             case CSSValueNoCloseQuote:
-                state.style()->setContent(NO_CLOSE_QUOTE, didSet);
-                didSet = true;
+                state.style()->setContent(NO_CLOSE_QUOTE);
                 break;
             default:
-                // normal and none do not have any effect.
-                { }
+                ASSERT_NOT_REACHED();
             }
         }
     }
-    if (!didSet)
-        state.style()->clearContent();
 }
 
 void StyleBuilderFunctions::applyValueCSSPropertyWebkitLocale(StyleResolverState& state, CSSValue* value)

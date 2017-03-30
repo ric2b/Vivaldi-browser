@@ -22,6 +22,7 @@
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/signin/about_signin_internals_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
+#include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/chrome_sync_client.h"
@@ -104,6 +105,7 @@ ProfileSyncServiceFactory::ProfileSyncServiceFactory()
   DependsOn(autofill::PersonalDataManagerFactory::GetInstance());
   DependsOn(BookmarkModelFactory::GetInstance());
   DependsOn(ChromeSigninClientFactory::GetInstance());
+  DependsOn(GaiaCookieManagerServiceFactory::GetInstance());
 #if !defined(OS_ANDROID)
   DependsOn(GlobalErrorServiceFactory::GetInstance());
 #endif
@@ -152,9 +154,10 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
 
   init_params.signin_wrapper =
       make_scoped_ptr(new SupervisedUserSigninManagerWrapper(profile, signin));
-
   init_params.oauth2_token_service =
       ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
+  init_params.gaia_cookie_manager_service =
+      GaiaCookieManagerServiceFactory::GetForProfile(profile);
 
   // TODO(tim): Currently, AUTO/MANUAL settings refer to the *first* time sync
   // is set up and *not* a browser restart for a manual-start platform (where
@@ -163,8 +166,8 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
   // need to take care that ProfileSyncService doesn't get tripped up between
   // those two cases. Bug 88109.
   init_params.start_behavior = browser_defaults::kSyncAutoStarts
-                                   ? browser_sync::AUTO_START
-                                   : browser_sync::MANUAL_START;
+                                   ? ProfileSyncService::AUTO_START
+                                   : ProfileSyncService::MANUAL_START;
 
   init_params.sync_client =
       make_scoped_ptr(new browser_sync::ChromeSyncClient(profile));

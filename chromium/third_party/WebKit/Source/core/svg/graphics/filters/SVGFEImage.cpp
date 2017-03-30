@@ -41,7 +41,7 @@
 
 namespace blink {
 
-FEImage::FEImage(Filter* filter, PassRefPtr<Image> image, PassRefPtrWillBeRawPtr<SVGPreserveAspectRatio> preserveAspectRatio)
+FEImage::FEImage(Filter* filter, PassRefPtr<Image> image, SVGPreserveAspectRatio* preserveAspectRatio)
     : FilterEffect(filter)
     , m_image(image)
     , m_treeScope(nullptr)
@@ -50,7 +50,7 @@ FEImage::FEImage(Filter* filter, PassRefPtr<Image> image, PassRefPtrWillBeRawPtr
     FilterEffect::setOperatingColorSpace(ColorSpaceDeviceRGB);
 }
 
-FEImage::FEImage(Filter* filter, TreeScope& treeScope, const String& href, PassRefPtrWillBeRawPtr<SVGPreserveAspectRatio> preserveAspectRatio)
+FEImage::FEImage(Filter* filter, TreeScope& treeScope, const String& href, SVGPreserveAspectRatio* preserveAspectRatio)
     : FilterEffect(filter)
     , m_treeScope(&treeScope)
     , m_href(href)
@@ -66,20 +66,20 @@ DEFINE_TRACE(FEImage)
     FilterEffect::trace(visitor);
 }
 
-PassRefPtrWillBeRawPtr<FEImage> FEImage::createWithImage(Filter* filter, PassRefPtr<Image> image, PassRefPtrWillBeRawPtr<SVGPreserveAspectRatio> preserveAspectRatio)
+FEImage* FEImage::createWithImage(Filter* filter, PassRefPtr<Image> image, SVGPreserveAspectRatio* preserveAspectRatio)
 {
-    return adoptRefWillBeNoop(new FEImage(filter, image, preserveAspectRatio));
+    return new FEImage(filter, image, preserveAspectRatio);
 }
 
-PassRefPtrWillBeRawPtr<FEImage> FEImage::createWithIRIReference(Filter* filter, TreeScope& treeScope, const String& href, PassRefPtrWillBeRawPtr<SVGPreserveAspectRatio> preserveAspectRatio)
+FEImage* FEImage::createWithIRIReference(Filter* filter, TreeScope& treeScope, const String& href, SVGPreserveAspectRatio* preserveAspectRatio)
 {
-    return adoptRefWillBeNoop(new FEImage(filter, treeScope, href, preserveAspectRatio));
+    return new FEImage(filter, treeScope, href, preserveAspectRatio);
 }
 
 static FloatRect getLayoutObjectRepaintRect(LayoutObject* layoutObject)
 {
-    return layoutObject->localToParentTransform().mapRect(
-        layoutObject->paintInvalidationRectInLocalCoordinates());
+    return layoutObject->localToSVGParentTransform().mapRect(
+        layoutObject->paintInvalidationRectInLocalSVGCoordinates());
 }
 
 AffineTransform makeMapBetweenRects(const FloatRect& source, const FloatRect& dest)
@@ -100,7 +100,7 @@ FloatRect FEImage::determineAbsolutePaintRect(const FloatRect& originalRequested
     if (clipsToBounds())
         requestedRect.intersect(maxEffectRect());
 
-    FloatRect destRect = filter()->mapLocalRectToAbsoluteRect(filterPrimitiveSubregion());
+    FloatRect destRect = getFilter()->mapLocalRectToAbsoluteRect(filterPrimitiveSubregion());
     FloatRect srcRect;
     if (layoutObject) {
         srcRect = getLayoutObjectRepaintRect(layoutObject);
@@ -114,7 +114,7 @@ FloatRect FEImage::determineAbsolutePaintRect(const FloatRect& originalRequested
                 srcRect = makeMapBetweenRects(FloatRect(FloatPoint(), viewportSize), destRect).mapRect(srcRect);
             }
         } else {
-            srcRect = filter()->mapLocalRectToAbsoluteRect(srcRect);
+            srcRect = getFilter()->mapLocalRectToAbsoluteRect(srcRect);
             srcRect.move(destRect.x(), destRect.y());
         }
         destRect.intersect(srcRect);

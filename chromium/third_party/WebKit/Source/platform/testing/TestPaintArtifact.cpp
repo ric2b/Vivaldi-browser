@@ -4,9 +4,12 @@
 
 #include "platform/testing/TestPaintArtifact.h"
 
+#include "cc/layers/layer.h"
 #include "platform/graphics/paint/DisplayItemClient.h"
 #include "platform/graphics/paint/DrawingDisplayItem.h"
+#include "platform/graphics/paint/ForeignLayerDisplayItem.h"
 #include "platform/graphics/paint/PaintArtifact.h"
+#include "platform/graphics/skia/SkiaUtils.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
@@ -33,7 +36,7 @@ PassRefPtr<SkPicture> TestPaintArtifact::DummyRectClient::makePicture() const
     SkPaint paint;
     paint.setColor(m_color.rgb());
     canvas->drawRect(m_rect, paint);
-    return adoptRef(recorder.endRecordingAsPicture());
+    return fromSkSp(recorder.finishRecordingAsPicture());
 }
 
 TestPaintArtifact::TestPaintArtifact()
@@ -73,6 +76,16 @@ TestPaintArtifact& TestPaintArtifact::rectDrawing(const FloatRect& bounds, Color
     OwnPtr<DummyRectClient> client = adoptPtr(new DummyRectClient(bounds, color));
     m_displayItemList.allocateAndConstruct<DrawingDisplayItem>(
         *client, DisplayItem::DrawingFirst, client->makePicture());
+    m_dummyClients.append(client.release());
+    return *this;
+}
+
+TestPaintArtifact& TestPaintArtifact::foreignLayer(const FloatPoint& location, const IntSize& size, scoped_refptr<cc::Layer> layer)
+{
+    FloatRect floatBounds(location, FloatSize(size));
+    OwnPtr<DummyRectClient> client = adoptPtr(new DummyRectClient(floatBounds, Color::transparent));
+    m_displayItemList.allocateAndConstruct<ForeignLayerDisplayItem>(
+        *client, DisplayItem::ForeignLayerFirst, std::move(layer), location, size);
     m_dummyClients.append(client.release());
     return *this;
 }

@@ -87,7 +87,7 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
       compositor_lock_(NULL),
       layer_animator_collection_(this),
       weak_ptr_factory_(this) {
-  root_web_layer_ = cc::Layer::Create(Layer::UILayerSettings());
+  root_web_layer_ = cc::Layer::Create();
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
@@ -172,9 +172,6 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   // thread.
   settings.image_decode_tasks_enabled = false;
 
-  settings.use_compositor_animation_timelines = !command_line->HasSwitch(
-      switches::kUIDisableCompositorAnimationTimelines);
-
 #if !defined(OS_ANDROID)
   // TODO(sohanjg): Revisit this memory usage in tile manager.
   cc::ManagedMemoryPolicy policy(
@@ -197,11 +194,10 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   UMA_HISTOGRAM_TIMES("GPU.CreateBrowserCompositor",
                       base::TimeTicks::Now() - before_create);
 
-  if (settings.use_compositor_animation_timelines) {
-    animation_timeline_ = cc::AnimationTimeline::Create(
-        cc::AnimationIdProvider::NextTimelineId());
-    host_->animation_host()->AddAnimationTimeline(animation_timeline_.get());
-  }
+  animation_timeline_ =
+      cc::AnimationTimeline::Create(cc::AnimationIdProvider::NextTimelineId());
+  host_->animation_host()->AddAnimationTimeline(animation_timeline_.get());
+
   host_->SetRootLayer(root_web_layer_);
   host_->set_surface_id_namespace(surface_id_allocator_->id_namespace());
   host_->SetVisible(true);
@@ -470,6 +466,11 @@ void Compositor::DidAbortSwapBuffers() {
   FOR_EACH_OBSERVER(CompositorObserver,
                     observer_list_,
                     OnCompositingAborted(this));
+}
+
+void Compositor::SetOutputIsSecure(bool output_is_secure) {
+  host_->SetOutputIsSecure(output_is_secure);
+  host_->SetNeedsRedraw();
 }
 
 void Compositor::SendBeginFramesToChildren(const cc::BeginFrameArgs& args) {

@@ -41,29 +41,29 @@ InterpolationValue SVGPointListInterpolationType::maybeConvertSVGValue(const SVG
     return InterpolationValue(result.release());
 }
 
-PairwiseInterpolationValue SVGPointListInterpolationType::mergeSingleConversions(InterpolationValue& start, InterpolationValue& end) const
+PairwiseInterpolationValue SVGPointListInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
 {
     size_t startLength = toInterpolableList(*start.interpolableValue).length();
     size_t endLength = toInterpolableList(*end.interpolableValue).length();
     if (startLength != endLength)
         return nullptr;
 
-    return InterpolationType::mergeSingleConversions(start, end);
+    return InterpolationType::mergeSingleConversions(std::move(start), std::move(end));
 }
 
-void SVGPointListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value) const
+void SVGPointListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const
 {
     size_t startLength = toInterpolableList(*underlyingValueOwner.value().interpolableValue).length();
     size_t endLength = toInterpolableList(*value.interpolableValue).length();
     if (startLength == endLength)
-        InterpolationType::composite(underlyingValueOwner, underlyingFraction, value);
+        InterpolationType::composite(underlyingValueOwner, underlyingFraction, value, interpolationFraction);
     else
         underlyingValueOwner.set(*this, value);
 }
 
-PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGPointListInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue*) const
+SVGPropertyBase* SVGPointListInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue*) const
 {
-    RefPtrWillBeRawPtr<SVGPointList> result = SVGPointList::create();
+    SVGPointList* result = SVGPointList::create();
 
     const InterpolableList& list = toInterpolableList(interpolableValue);
     ASSERT(list.length() % 2 == 0);
@@ -74,7 +74,7 @@ PassRefPtrWillBeRawPtr<SVGPropertyBase> SVGPointListInterpolationType::appliedSV
         result->append(SVGPoint::create(point));
     }
 
-    return result.release();
+    return result;
 }
 
 } // namespace blink

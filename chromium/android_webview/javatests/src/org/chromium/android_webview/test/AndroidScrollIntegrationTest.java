@@ -23,7 +23,6 @@ import org.chromium.ui.gfx.DeviceDisplayInfo;
 
 import java.util.Locale;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -258,7 +257,7 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
     private void assertScrollInJs(final AwContents awContents,
             final TestAwContentsClient contentsClient,
             final int xCss, final int yCss) throws Exception {
-        poll(new Callable<Boolean>() {
+        pollInstrumentationThread(new Callable<Boolean>() {
             @Override
             public Boolean call() throws Exception {
                 String x = executeJavaScriptAndWaitForResult(awContents, contentsClient,
@@ -275,7 +274,7 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
             final TestAwContentsClient contentsClient) throws Exception {
         final String isBottomScript = "window.scrollY == "
                 + "(window.document.documentElement.scrollHeight - window.innerHeight)";
-        poll(new Callable<Boolean>() {
+        pollInstrumentationThread(new Callable<Boolean>() {
             @Override
             public Boolean call() throws Exception {
                 String r = executeJavaScriptAndWaitForResult(awContents, contentsClient,
@@ -472,8 +471,7 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
         AwTestTouchUtils.dragCompleteView(testContainerView,
                 0, -targetScrollXPix, // these need to be negative as we're scrolling down.
                 0, -targetScrollYPix,
-                dragSteps,
-                null /* completionLatch */);
+                dragSteps);
 
         for (int i = 1; i <= dragSteps; ++i) {
             onScrollToCallbackHelper.waitForCallback(scrollToCallCount, i);
@@ -483,38 +481,6 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
         assertScrollOnMainSync(testContainerView, maxScrollXPix, maxScrollYPix);
         assertScrollInJs(testContainerView.getAwContents(), contentsClient,
                 maxScrollXCss, maxScrollYCss);
-    }
-
-    @SmallTest
-    @Feature({"AndroidWebView"})
-    public void testNoSpuriousOverScrolls() throws Throwable {
-        final TestAwContentsClient contentsClient = new TestAwContentsClient();
-        final ScrollTestContainerView testContainerView =
-                (ScrollTestContainerView) createAwTestContainerViewOnMainSync(contentsClient);
-        enableJavaScriptOnUiThread(testContainerView.getAwContents());
-
-        final int dragSteps = 1;
-        final int targetScrollYPix = 40;
-
-        setMaxScrollOnMainSync(testContainerView, 0, 0);
-
-        loadTestPageAndWaitForFirstFrame(testContainerView, contentsClient, null, "");
-
-        final CallbackHelper onScrollToCallbackHelper =
-                testContainerView.getOnScrollToCallbackHelper();
-        final int scrollToCallCount = onScrollToCallbackHelper.getCallCount();
-        CountDownLatch scrollingCompleteLatch = new CountDownLatch(1);
-        AwTestTouchUtils.dragCompleteView(testContainerView,
-                0, 0, // these need to be negative as we're scrolling down.
-                0, -targetScrollYPix,
-                dragSteps,
-                scrollingCompleteLatch);
-        try {
-            scrollingCompleteLatch.await();
-        } catch (InterruptedException ex) {
-            // ignore
-        }
-        assertEquals(scrollToCallCount + 1, onScrollToCallbackHelper.getCallCount());
     }
 
     @SmallTest
@@ -538,8 +504,7 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
         AwTestTouchUtils.dragCompleteView(testContainerView,
                 0, overScrollDeltaX,
                 0, 0,
-                oneStep,
-                null /* completionLatch */);
+                oneStep);
         overScrollByCallbackHelper.waitForCallback(overScrollCallCount);
         // Unfortunately the gesture detector seems to 'eat' some number of pixels. For now
         // checking that the value is < 0 (overscroll is reported as negative values) will have to
@@ -569,8 +534,7 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
         AwTestTouchUtils.dragCompleteView(testContainerView,
                 0, 0,
                 0, overScrollDeltaY,
-                oneStep,
-                null /* completionLatch */);
+                oneStep);
         overScrollByCallbackHelper.waitForCallback(overScrollCallCount);
         assertEquals(0, overScrollByCallbackHelper.getDeltaX());
         assertTrue(0 > overScrollByCallbackHelper.getDeltaY());
@@ -802,8 +766,7 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
         AwTestTouchUtils.dragCompleteView(testContainerView,
                 0, -targetScrollXPix, // these need to be negative as we're scrolling down.
                 0, -targetScrollYPix,
-                dragSteps,
-                null /* completionLatch */);
+                dragSteps);
         onScrollUpdateGestureConsumedHelper.waitForCallback(callCount);
     }
 
@@ -864,7 +827,13 @@ public class AndroidScrollIntegrationTest extends AwTestBase {
                 "Scroll range should increase after zoom (%d) > (%d)",
                 atomicNewScrollRange.get(), atomicOldScrollRange.get()),
                 atomicNewScrollRange.get() > atomicOldScrollRange.get());
-        assertEquals(atomicContentHeight.get(), atomicOldContentHeightApproximation.get());
-        assertEquals(atomicContentHeight.get(), atomicNewContentHeightApproximation.get());
+        assertTrue(String.format(Locale.ENGLISH, "Old content height should be close (%d) ~= (%d)",
+                           atomicContentHeight.get(), atomicOldContentHeightApproximation.get()),
+                Math.abs(atomicContentHeight.get() - atomicOldContentHeightApproximation.get())
+                        <= 1);
+        assertTrue(String.format(Locale.ENGLISH, "New content height should be close (%d) ~= (%d)",
+                           atomicContentHeight.get(), atomicNewContentHeightApproximation.get()),
+                Math.abs(atomicContentHeight.get() - atomicNewContentHeightApproximation.get())
+                        <= 1);
     }
 }

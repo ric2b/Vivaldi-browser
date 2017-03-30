@@ -848,7 +848,6 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kMediaRouterPrivate);
   skip.insert(APIPermission::kMetricsPrivate);
   skip.insert(APIPermission::kPreferencesPrivate);
-  skip.insert(APIPermission::kPrincipalsPrivate);
   skip.insert(APIPermission::kImageWriterPrivate);
   skip.insert(APIPermission::kResourcesPrivate);
   skip.insert(APIPermission::kRtcPrivate);
@@ -1313,7 +1312,7 @@ testing::AssertionResult ShowsAllHostsWarning(const std::string& pattern) {
               DictionaryBuilder()
                   .Set("name", "TLDWildCardTest")
                   .Set("version", "0.1.0")
-                  .Set("permissions", std::move(ListBuilder().Append(pattern)))
+                  .Set("permissions", ListBuilder().Append(pattern).Build())
                   .Build())
           .Build();
 

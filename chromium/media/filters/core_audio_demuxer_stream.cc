@@ -12,6 +12,7 @@
 #include "base/logging.h"
 #include "base/mac/mac_util.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/media_util.h"
 #include "media/base/video_decoder_config.h"
 #include "media/filters/core_audio_demuxer.h"
 
@@ -174,7 +175,7 @@ void CoreAudioDemuxerStream::InitializeAudioDecoderConfig() {
                            channel_layout,
                            input_format_.mSampleRate,
                            extra_data,
-                           false,
+                           Unencrypted(),
                            base::TimeDelta(),
                            0);
 }

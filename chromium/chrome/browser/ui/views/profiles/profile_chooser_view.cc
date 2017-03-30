@@ -222,7 +222,7 @@ class HostView : public views::View {
 
   // The title itself and the overlaped widget that contains it.
   views::View* title_view_ = nullptr;  // Not owned.
-  scoped_ptr<views::Widget> title_widget_;
+  std::unique_ptr<views::Widget> title_widget_;
 
   DISALLOW_COPY_AND_ASSIGN(HostView);
 };
@@ -389,18 +389,24 @@ class EditableProfileName : public views::View,
   EditableProfileName(views::TextfieldController* controller,
                       const base::string16& text,
                       bool is_editing_allowed)
-      : button_(new RightAlignedIconLabelButton(this, text)),
-        profile_name_textfield_(new views::Textfield()) {
+      : button_(nullptr), label_(nullptr), profile_name_textfield_(nullptr) {
+    SetLayoutManager(
+        new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0));
+
     ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
     const gfx::FontList& medium_font_list =
         rb->GetFontList(ui::ResourceBundle::MediumFont);
-    button_->SetFontList(medium_font_list);
 
     if (!is_editing_allowed) {
-      button_->SetBorder(views::Border::CreateEmptyBorder(2, 0, 2, 0));
+      label_ = new views::Label(text);
+      label_->SetBorder(views::Border::CreateEmptyBorder(2, 0, 2, 0));
+      label_->SetFontList(medium_font_list);
+      AddChildView(label_);
       return;
     }
 
+    button_ = new RightAlignedIconLabelButton(this, text);
+    button_->SetFontList(medium_font_list);
     // Show an "edit" pencil icon when hovering over. In the default state,
     // we need to create an empty placeholder of the correct size, so that
     // the text doesn't jump around when the hovered icon appears.
@@ -422,16 +428,14 @@ class EditableProfileName : public views::View,
     const int kIconTextLabelButtonSpacing = 5;
     button_->SetBorder(views::Border::CreateEmptyBorder(
         2, kIconSize + kIconTextLabelButtonSpacing, 2, 0));
+    AddChildView(button_);
 
+    profile_name_textfield_ = new views::Textfield();
     // Textfield that overlaps the button.
     profile_name_textfield_->set_controller(controller);
     profile_name_textfield_->SetFontList(medium_font_list);
     profile_name_textfield_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
     profile_name_textfield_->SetVisible(false);
-
-    SetLayoutManager(
-        new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0));
-    AddChildView(button_);
     AddChildView(profile_name_textfield_);
   }
 
@@ -465,7 +469,14 @@ class EditableProfileName : public views::View,
     return false;
   }
 
+  // The label button which shows the profile name, and can handle the event to
+  // make it editable. Can be NULL if the profile name isn't allowed to be
+  // edited.
   RightAlignedIconLabelButton* button_;
+
+  // The label which shows when the profile name cannot be edited (e.g. for
+  // supervised user). Can be NULL if the profile name is allowed to be edited.
+  views::Label* label_;
 
   // Textfield that is shown when editing the profile name. Can be NULL if
   // the profile name isn't allowed to be edited (e.g. for guest profiles).
@@ -1433,7 +1444,7 @@ views::View* ProfileChooserView::CreateGuestProfileView() {
   gfx::Image guest_icon =
       ui::ResourceBundle::GetSharedInstance().GetImageNamed(
           profiles::GetPlaceholderAvatarIconResourceID());
-  AvatarMenu::Item guest_avatar_item(0, 0, guest_icon);
+  AvatarMenu::Item guest_avatar_item(0, base::FilePath(), guest_icon);
   guest_avatar_item.active = true;
   guest_avatar_item.name = l10n_util::GetStringUTF16(
       IDS_PROFILES_GUEST_PROFILE_NAME);

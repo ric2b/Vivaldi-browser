@@ -54,7 +54,7 @@ double CubicBezierTimingFunction::evaluate(double fraction, double accuracy) con
 {
     if (!m_bezier)
         m_bezier = adoptPtr(new UnitBezier(m_x1, m_y1, m_x2, m_y2));
-    return m_bezier->solve(fraction, accuracy);
+    return m_bezier->solveWithEpsilon(fraction, accuracy);
 }
 
 // This works by taking taking the derivative of the cubic bezier, on the y
@@ -109,8 +109,8 @@ void CubicBezierTimingFunction::range(double* minValue, double* maxValue) const
 
     // Since our input values can be out of the range 0->1 so we must also
     // consider the minimum and maximum points.
-    double solutionMin = m_bezier->solve(*minValue, std::numeric_limits<double>::epsilon());
-    double solutionMax = m_bezier->solve(*maxValue, std::numeric_limits<double>::epsilon());
+    double solutionMin = m_bezier->solveWithEpsilon(*minValue, std::numeric_limits<double>::epsilon());
+    double solutionMax = m_bezier->solveWithEpsilon(*maxValue, std::numeric_limits<double>::epsilon());
     *minValue = std::min(std::min(solutionMin, solutionMax), 0.0);
     *maxValue = std::max(std::max(solutionMin, solutionMax), 1.0);
     *minValue = std::min(std::min(*minValue, solution1), solution2);
@@ -253,7 +253,7 @@ void CubicBezierTimingFunction::partition(Vector<PartitionRegion>& regions) cons
 String StepsTimingFunction::toString() const
 {
     const char* positionString = nullptr;
-    switch (stepAtPosition()) {
+    switch (getStepAtPosition()) {
     case Start:
         positionString = "start";
         break;
@@ -347,12 +347,12 @@ void StepsTimingFunction::partition(Vector<PartitionRegion>& regions) const
 // Equals operators
 bool operator==(const LinearTimingFunction& lhs, const TimingFunction& rhs)
 {
-    return rhs.type() == TimingFunction::LinearFunction;
+    return rhs.type() == TimingFunction::kLinearFunction;
 }
 
 bool operator==(const CubicBezierTimingFunction& lhs, const TimingFunction& rhs)
 {
-    if (rhs.type() != TimingFunction::CubicBezierFunction)
+    if (rhs.type() != TimingFunction::kCubicBezierFunction)
         return false;
 
     const CubicBezierTimingFunction& ctf = toCubicBezierTimingFunction(rhs);
@@ -364,11 +364,11 @@ bool operator==(const CubicBezierTimingFunction& lhs, const TimingFunction& rhs)
 
 bool operator==(const StepsTimingFunction& lhs, const TimingFunction& rhs)
 {
-    if (rhs.type() != TimingFunction::StepsFunction)
+    if (rhs.type() != TimingFunction::kStepsFunction)
         return false;
 
     const StepsTimingFunction& stf = toStepsTimingFunction(rhs);
-    return (lhs.numberOfSteps() == stf.numberOfSteps()) && (lhs.stepAtPosition() == stf.stepAtPosition());
+    return (lhs.numberOfSteps() == stf.numberOfSteps()) && (lhs.getStepAtPosition() == stf.getStepAtPosition());
 }
 
 // The generic operator== *must* come after the
@@ -376,15 +376,15 @@ bool operator==(const StepsTimingFunction& lhs, const TimingFunction& rhs)
 bool operator==(const TimingFunction& lhs, const TimingFunction& rhs)
 {
     switch (lhs.type()) {
-    case TimingFunction::LinearFunction: {
+    case TimingFunction::kLinearFunction: {
         const LinearTimingFunction& linear = toLinearTimingFunction(lhs);
         return (linear == rhs);
     }
-    case TimingFunction::CubicBezierFunction: {
+    case TimingFunction::kCubicBezierFunction: {
         const CubicBezierTimingFunction& cubic = toCubicBezierTimingFunction(lhs);
         return (cubic == rhs);
     }
-    case TimingFunction::StepsFunction: {
+    case TimingFunction::kStepsFunction: {
         const StepsTimingFunction& step = toStepsTimingFunction(lhs);
         return (step == rhs);
     }

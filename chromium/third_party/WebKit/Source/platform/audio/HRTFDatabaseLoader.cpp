@@ -32,7 +32,6 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebTraceLocation.h"
-#include "wtf/MainThread.h"
 
 namespace blink {
 
@@ -95,7 +94,7 @@ void HRTFDatabaseLoader::loadAsynchronously()
         // Start the asynchronous database loading process.
         m_thread = adoptPtr(Platform::current()->createThread("HRTF database loader"));
         // TODO(alexclarke): Should this be posted as a loading task?
-        m_thread->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&HRTFDatabaseLoader::loadTask, AllowCrossThreadAccess(this)));
+        m_thread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&HRTFDatabaseLoader::loadTask, AllowCrossThreadAccess(this)));
     }
 }
 
@@ -119,7 +118,7 @@ void HRTFDatabaseLoader::waitForLoaderThreadCompletion()
 
     TaskSynchronizer sync;
     // TODO(alexclarke): Should this be posted as a loading task?
-    m_thread->taskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&HRTFDatabaseLoader::cleanupTask, AllowCrossThreadAccess(this), AllowCrossThreadAccess(&sync)));
+    m_thread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&HRTFDatabaseLoader::cleanupTask, AllowCrossThreadAccess(this), AllowCrossThreadAccess(&sync)));
     sync.waitForTaskCompletion();
     m_thread.clear();
 }

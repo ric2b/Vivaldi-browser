@@ -19,7 +19,7 @@ class InspectorWorkerAgent;
 
 class CORE_EXPORT InspectorTracingAgent final
     : public InspectorBaseAgent<InspectorTracingAgent, protocol::Frontend::Tracing>
-    , public protocol::Dispatcher::TracingCommandHandler {
+    , public protocol::Backend::Tracing {
     WTF_MAKE_NONCOPYABLE(InspectorTracingAgent);
 public:
     class Client {
@@ -30,9 +30,9 @@ public:
         virtual void disableTracing() { }
     };
 
-    static PassOwnPtrWillBeRawPtr<InspectorTracingAgent> create(Client* client, InspectorWorkerAgent* workerAgent, InspectedFrames* inspectedFrames)
+    static RawPtr<InspectorTracingAgent> create(Client* client, InspectorWorkerAgent* workerAgent, InspectedFrames* inspectedFrames)
     {
-        return adoptPtrWillBeNoop(new InspectorTracingAgent(client, workerAgent, inspectedFrames));
+        return new InspectorTracingAgent(client, workerAgent, inspectedFrames);
     }
 
     DECLARE_VIRTUAL_TRACE();
@@ -42,8 +42,8 @@ public:
     void disable(ErrorString*) override;
 
     // Protocol method implementations.
-    void start(ErrorString*, const Maybe<String>& categories, const Maybe<String>& options, const Maybe<double>& bufferUsageReportingInterval, const Maybe<String>& transferMode, PassRefPtr<StartCallback>) override;
-    void end(ErrorString*, PassRefPtr<EndCallback>) override;
+    void start(ErrorString*, const Maybe<String>& categories, const Maybe<String>& options, const Maybe<double>& bufferUsageReportingInterval, const Maybe<String>& transferMode, const Maybe<protocol::Tracing::TraceConfig>&, PassOwnPtr<StartCallback>) override;
+    void end(ErrorString*, PassOwnPtr<EndCallback>) override;
 
     // Methods for other agents to use.
     void setLayerTreeId(int);
@@ -57,8 +57,8 @@ private:
 
     int m_layerTreeId;
     Client* m_client;
-    RawPtrWillBeMember<InspectorWorkerAgent> m_workerAgent;
-    RawPtrWillBeMember<InspectedFrames> m_inspectedFrames;
+    Member<InspectorWorkerAgent> m_workerAgent;
+    Member<InspectedFrames> m_inspectedFrames;
 };
 
 } // namespace blink

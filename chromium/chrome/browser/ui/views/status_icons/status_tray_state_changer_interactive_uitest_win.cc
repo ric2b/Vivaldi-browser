@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/ui/views/status_icons/status_tray_state_changer_win.h"
+#include <memory>
+#include <utility>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/status_icons/status_icon.h"
 #include "chrome/browser/ui/views/status_icons/status_icon_win.h"
+#include "chrome/browser/ui/views/status_icons/status_tray_state_changer_win.h"
 #include "chrome/browser/ui/views/status_icons/status_tray_win.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -47,17 +48,17 @@ class StatusTrayStateChangerWinTest : public testing::Test {
   HWND icon_window() { return status_icon_win_->window(); }
   UINT icon_id() { return status_icon_win_->icon_id(); }
 
-  scoped_ptr<NOTIFYITEM> SetupAndGetCurrentNotifyItem() {
+  std::unique_ptr<NOTIFYITEM> SetupAndGetCurrentNotifyItem() {
     EXPECT_TRUE(CallCreateTrayNotify());
 
     EXPECT_TRUE(IsInterfaceKnown());
 
-    scoped_ptr<NOTIFYITEM> notify_item = GetNotifyItem();
+    std::unique_ptr<NOTIFYITEM> notify_item = GetNotifyItem();
     EXPECT_TRUE(notify_item.get() != NULL);
     DCHECK_EQ(notify_item->hwnd, icon_window());
     DCHECK_EQ(notify_item->id, icon_id());
 
-    return notify_item.Pass();
+    return notify_item;
   }
 
   bool CallCreateTrayNotify() { return tray_watcher_->CreateTrayNotify(); }
@@ -67,16 +68,16 @@ class StatusTrayStateChangerWinTest : public testing::Test {
            tray_watcher_->interface_version_;
   }
 
-  void SendNotifyItemUpdate(scoped_ptr<NOTIFYITEM> notify_item) {
-    tray_watcher_->SendNotifyItemUpdate(notify_item.Pass());
+  void SendNotifyItemUpdate(std::unique_ptr<NOTIFYITEM> notify_item) {
+    tray_watcher_->SendNotifyItemUpdate(std::move(notify_item));
   }
 
-  scoped_ptr<NOTIFYITEM> GetNotifyItem() {
+  std::unique_ptr<NOTIFYITEM> GetNotifyItem() {
     return tray_watcher_->RegisterCallback();
   }
 
-  scoped_ptr<base::win::ScopedCOMInitializer> com_;
-  scoped_ptr<StatusTrayWin> status_tray_;
+  std::unique_ptr<base::win::ScopedCOMInitializer> com_;
+  std::unique_ptr<StatusTrayWin> status_tray_;
   scoped_refptr<StatusTrayStateChangerWin> tray_watcher_;
 
   StatusIconWin* status_icon_win_;
@@ -89,7 +90,7 @@ class StatusTrayStateChangerWinTest : public testing::Test {
 TEST_F(StatusTrayStateChangerWinTest, DISABLED_Setup) {
   // This tests the code path that will read the NOTIFYITEM data structure for
   // use in future tests.
-  scoped_ptr<NOTIFYITEM> notify_item = SetupAndGetCurrentNotifyItem();
+  std::unique_ptr<NOTIFYITEM> notify_item = SetupAndGetCurrentNotifyItem();
   EXPECT_FALSE(notify_item.get() == NULL);
 }
 
@@ -98,7 +99,7 @@ TEST_F(StatusTrayStateChangerWinTest, DISABLED_Setup) {
 TEST_F(StatusTrayStateChangerWinTest, DISABLED_ComApiTest) {
 
   // Setup code to read the current preference.
-  scoped_ptr<NOTIFYITEM> notify_item = SetupAndGetCurrentNotifyItem();
+  std::unique_ptr<NOTIFYITEM> notify_item = SetupAndGetCurrentNotifyItem();
   ASSERT_TRUE(notify_item.get() != NULL);
 
   // Store the current pref.
@@ -106,20 +107,20 @@ TEST_F(StatusTrayStateChangerWinTest, DISABLED_ComApiTest) {
 
   // Ensure that running our code will do something.
   if (notify_item->preference != PREFERENCE_SHOW_WHEN_ACTIVE) {
-    scoped_ptr<NOTIFYITEM> notify_item_copy(new NOTIFYITEM(*notify_item));
+    std::unique_ptr<NOTIFYITEM> notify_item_copy(new NOTIFYITEM(*notify_item));
     notify_item_copy->preference = PREFERENCE_SHOW_WHEN_ACTIVE;
-    SendNotifyItemUpdate(notify_item_copy.Pass());
+    SendNotifyItemUpdate(std::move(notify_item_copy));
   }
 
   // Run the interesting code.
   tray_watcher_->EnsureTrayIconVisible();
 
   EXPECT_EQ(PREFERENCE_SHOW_ALWAYS, GetNotifyItem()->preference);
-  SendNotifyItemUpdate(notify_item.Pass());
+  SendNotifyItemUpdate(std::move(notify_item));
   notify_item = GetNotifyItem();
 
   EXPECT_EQ(notify_item->preference, current_preference);
-};
+}
 
 // Test is disabled due to multiple COM initialization errors.  See
 // http//crbug.com/367199 for details.
@@ -131,7 +132,7 @@ TEST_F(StatusTrayStateChangerWinTest, DISABLED_TraySizeApiTest) {
     return;
 
   // Used to reset operating system state afterwards.
-  scoped_ptr<NOTIFYITEM> notify_item = SetupAndGetCurrentNotifyItem();
+  std::unique_ptr<NOTIFYITEM> notify_item = SetupAndGetCurrentNotifyItem();
   // We can't actually run this test if we're already showing the icon.
   if (notify_item->preference == PREFERENCE_SHOW_ALWAYS)
     return;
@@ -161,7 +162,7 @@ TEST_F(StatusTrayStateChangerWinTest, DISABLED_TraySizeApiTest) {
 
   EXPECT_GT(new_width, width);
 
-  SendNotifyItemUpdate(notify_item.Pass());
+  SendNotifyItemUpdate(std::move(notify_item));
   ::GetWindowRect(tray_notify_hwnd, &new_tray_notify_rect);
   new_width = new_tray_notify_rect.right - new_tray_notify_rect.left;
   EXPECT_EQ(width, new_width);

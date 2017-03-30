@@ -2,17 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/password_manager/content/renderer/credential_manager_client.h"
+
 #include <stdint.h>
 
+#include <memory>
+#include <tuple>
+
 #include "components/password_manager/content/common/credential_manager_messages.h"
-#include "components/password_manager/content/renderer/credential_manager_client.h"
 #include "content/public/test/render_view_test.h"
 #include "ipc/ipc_test_sink.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebCredential.h"
 #include "third_party/WebKit/public/platform/WebCredentialManagerClient.h"
 #include "third_party/WebKit/public/platform/WebCredentialManagerError.h"
-#include "third_party/WebKit/public/platform/WebPassOwnPtr.h"
 #include "third_party/WebKit/public/platform/WebPasswordCredential.h"
 
 namespace password_manager {
@@ -56,23 +59,23 @@ class CredentialManagerClientTest : public content::RenderViewTest {
 
     switch (message_id) {
       case CredentialManagerHostMsg_Store::ID: {
-        base::Tuple<int, CredentialInfo> param;
+        std::tuple<int, CredentialInfo> param;
         CredentialManagerHostMsg_Store::Read(message, &param);
-        request_id = base::get<0>(param);
+        request_id = std::get<0>(param);
         break;
       }
 
       case CredentialManagerHostMsg_RequireUserMediation::ID: {
-        base::Tuple<int> param;
+        std::tuple<int> param;
         CredentialManagerHostMsg_RequireUserMediation::Read(message, &param);
-        request_id = base::get<0>(param);
+        request_id = std::get<0>(param);
         break;
       }
 
       case CredentialManagerHostMsg_RequestCredential::ID: {
-        base::Tuple<int, bool, bool, std::vector<GURL>> param;
+        std::tuple<int, bool, bool, std::vector<GURL>> param;
         CredentialManagerHostMsg_RequestCredential::Read(message, &param);
-        request_id = base::get<0>(param);
+        request_id = std::get<0>(param);
         break;
       }
 
@@ -89,7 +92,7 @@ class CredentialManagerClientTest : public content::RenderViewTest {
   void set_callback_succeeded(bool state) { callback_succeeded_ = state; }
 
  protected:
-  scoped_ptr<CredentialManagerClient> client_;
+  std::unique_ptr<CredentialManagerClient> client_;
 
   // True if a message's callback's 'onSuccess'/'onError' methods were called,
   // false otherwise. We put these on the test object rather than on the
@@ -99,7 +102,7 @@ class CredentialManagerClientTest : public content::RenderViewTest {
   bool callback_errored_;
   bool callback_succeeded_;
 
-  scoped_ptr<blink::WebPasswordCredential> credential_;
+  std::unique_ptr<blink::WebPasswordCredential> credential_;
 };
 
 class TestNotificationCallbacks
@@ -128,7 +131,7 @@ class TestRequestCallbacks
 
   ~TestRequestCallbacks() override {}
 
-  void onSuccess(blink::WebPassOwnPtr<blink::WebCredential>) override {
+  void onSuccess(std::unique_ptr<blink::WebCredential>) override {
     test_->set_callback_succeeded(true);
   }
 
@@ -147,7 +150,7 @@ TEST_F(CredentialManagerClientTest, SendStore) {
   EXPECT_FALSE(
       ExtractRequestId(CredentialManagerHostMsg_Store::ID, request_id));
 
-  scoped_ptr<TestNotificationCallbacks> callbacks(
+  std::unique_ptr<TestNotificationCallbacks> callbacks(
       new TestNotificationCallbacks(this));
   client_->dispatchStore(*credential(), callbacks.release());
 
@@ -163,7 +166,7 @@ TEST_F(CredentialManagerClientTest, SendRequestUserMediation) {
   EXPECT_FALSE(ExtractRequestId(
       CredentialManagerHostMsg_RequireUserMediation::ID, request_id));
 
-  scoped_ptr<TestNotificationCallbacks> callbacks(
+  std::unique_ptr<TestNotificationCallbacks> callbacks(
       new TestNotificationCallbacks(this));
   client_->dispatchRequireUserMediation(callbacks.release());
 
@@ -180,7 +183,8 @@ TEST_F(CredentialManagerClientTest, SendRequestCredential) {
   EXPECT_FALSE(ExtractRequestId(CredentialManagerHostMsg_RequestCredential::ID,
                                 request_id));
 
-  scoped_ptr<TestRequestCallbacks> callbacks(new TestRequestCallbacks(this));
+  std::unique_ptr<TestRequestCallbacks> callbacks(
+      new TestRequestCallbacks(this));
   std::vector<GURL> federations;
   client_->dispatchGet(false, true, federations, callbacks.release());
 
@@ -199,7 +203,8 @@ TEST_F(CredentialManagerClientTest, SendRequestCredentialEmpty) {
   EXPECT_FALSE(ExtractRequestId(CredentialManagerHostMsg_RequestCredential::ID,
                                 request_id));
 
-  scoped_ptr<TestRequestCallbacks> callbacks(new TestRequestCallbacks(this));
+  std::unique_ptr<TestRequestCallbacks> callbacks(
+      new TestRequestCallbacks(this));
   std::vector<GURL> federations;
   client_->dispatchGet(false, true, federations, callbacks.release());
 

@@ -2,10 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <unistd.h>
-#include <linux/android/binder.h>
-
 #include "base/message_loop/message_loop.h"
+#include "chromeos/binder/binder_driver_api.h"
 #include "chromeos/binder/command_stream.h"
 #include "chromeos/binder/constants.h"
 #include "chromeos/binder/driver.h"
@@ -27,7 +25,7 @@ class BinderCommandStreamTest : public ::testing::Test,
   // CommandStream::IncomingCommandHandler override:
   bool OnTransaction(const TransactionData& data) override { return false; }
 
-  void OnReply(scoped_ptr<TransactionData> data) override {
+  void OnReply(std::unique_ptr<TransactionData> data) override {
     received_response_ = RESPONSE_REPLY;
     ASSERT_TRUE(data);
     EXPECT_FALSE(data->HasStatus());  // No error.

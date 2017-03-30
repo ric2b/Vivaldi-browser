@@ -14,8 +14,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "chrome/browser/extensions/active_script_controller.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
+#include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
@@ -56,6 +56,8 @@ const char kNoTabError[] = "No tab with id: *.";
 const char kOpenPopupError[] =
     "Failed to show popup either because there is an existing popup or another "
     "error occurred.";
+const char kInvalidColorError[] =
+    "The color specification could not be parsed.";
 
 }  // namespace
 
@@ -168,53 +170,6 @@ void ExtensionActionAPI::SetBrowserActionVisibility(
       extension_id, visible));
 }
 
-ExtensionAction::ShowAction ExtensionActionAPI::ExecuteExtensionAction(
-    const Extension* extension,
-    Browser* browser,
-    bool grant_active_tab_permissions) {
-  content::WebContents* web_contents =
-      browser->tab_strip_model()->GetActiveWebContents();
-  if (!web_contents)
-    return ExtensionAction::ACTION_NONE;
-
-  int tab_id = SessionTabHelper::IdForTab(web_contents);
-
-  ActiveScriptController* active_script_controller =
-      ActiveScriptController::GetForWebContents(web_contents);
-  bool has_pending_scripts = false;
-  if (active_script_controller &&
-      active_script_controller->WantsToRun(extension)) {
-    has_pending_scripts = true;
-  }
-
-  // Grant active tab if appropriate.
-  if (grant_active_tab_permissions) {
-    TabHelper::FromWebContents(web_contents)->active_tab_permission_granter()->
-        GrantIfRequested(extension);
-  }
-
-  // If this was a request to run a script, it will have been run once active
-  // tab was granted. Return without executing the action, since we should only
-  // run pending scripts OR the extension action, not both.
-  if (has_pending_scripts)
-    return ExtensionAction::ACTION_NONE;
-
-  ExtensionAction* extension_action =
-      ExtensionActionManager::Get(browser_context_)->GetExtensionAction(
-          *extension);
-
-  // Anything that gets here should have a page or browser action.
-  DCHECK(extension_action);
-  if (!extension_action->GetIsVisible(tab_id))
-    return ExtensionAction::ACTION_NONE;
-
-  if (extension_action->HasPopup(tab_id))
-    return ExtensionAction::ACTION_SHOW_POPUP;
-
-  ExtensionActionExecuted(*extension_action, web_contents);
-  return ExtensionAction::ACTION_NONE;
-}
-
 bool ExtensionActionAPI::ShowExtensionActionPopup(
     const Extension* extension,
     Browser* browser,
@@ -246,23 +201,6 @@ bool ExtensionActionAPI::ShowExtensionActionPopup(
              extension->id(), grant_active_tab_permissions);
 }
 
-bool ExtensionActionAPI::PageActionWantsToRun(
-    const Extension* extension,
-    content::WebContents* web_contents) {
-  ExtensionAction* page_action =
-      ExtensionActionManager::Get(browser_context_)->GetPageAction(*extension);
-  return page_action &&
-         page_action->GetIsVisible(SessionTabHelper::IdForTab(web_contents));
-}
-
-bool ExtensionActionAPI::HasBeenBlocked(const Extension* extension,
-                                        content::WebContents* web_contents) {
-  ActiveScriptController* active_script_controller =
-      ActiveScriptController::GetForWebContents(web_contents);
-  return active_script_controller &&
-         active_script_controller->WantsToRun(extension);
-}
-
 void ExtensionActionAPI::NotifyChange(ExtensionAction* extension_action,
                                       content::WebContents* web_contents,
                                       content::BrowserContext* context) {
@@ -273,6 +211,37 @@ void ExtensionActionAPI::NotifyChange(ExtensionAction* extension_action,
 
   if (extension_action->action_type() == ActionInfo::TYPE_PAGE)
     NotifyPageActionsChanged(web_contents);
+}
+
+void ExtensionActionAPI::DispatchExtensionActionClicked(
+    const ExtensionAction& extension_action,
+    WebContents* web_contents) {
+  events::HistogramValue histogram_value = events::UNKNOWN;
+  const char* event_name = NULL;
+  switch (extension_action.action_type()) {
+    case ActionInfo::TYPE_BROWSER:
+      histogram_value = events::BROWSER_ACTION_ON_CLICKED;
+      event_name = "browserAction.onClicked";
+      break;
+    case ActionInfo::TYPE_PAGE:
+      histogram_value = events::PAGE_ACTION_ON_CLICKED;
+      event_name = "pageAction.onClicked";
+      break;
+    case ActionInfo::TYPE_SYSTEM_INDICATOR:
+      // The System Indicator handles its own clicks.
+      NOTREACHED();
+      break;
+  }
+
+  if (event_name) {
+    std::unique_ptr<base::ListValue> args(new base::ListValue());
+    args->Append(
+        ExtensionTabUtil::CreateTabObject(web_contents)->ToValue().release());
+
+    DispatchEventToExtension(web_contents->GetBrowserContext(),
+                             extension_action.extension_id(), histogram_value,
+                             event_name, std::move(args));
+  }
 }
 
 void ExtensionActionAPI::ClearAllValuesForTab(
@@ -310,47 +279,16 @@ void ExtensionActionAPI::DispatchEventToExtension(
     const std::string& extension_id,
     events::HistogramValue histogram_value,
     const std::string& event_name,
-    scoped_ptr<base::ListValue> event_args) {
+    std::unique_ptr<base::ListValue> event_args) {
   if (!EventRouter::Get(context))
     return;
 
-  scoped_ptr<Event> event(
+  std::unique_ptr<Event> event(
       new Event(histogram_value, event_name, std::move(event_args)));
   event->restrict_to_browser_context = context;
   event->user_gesture = EventRouter::USER_GESTURE_ENABLED;
   EventRouter::Get(context)
       ->DispatchEventToExtension(extension_id, std::move(event));
-}
-
-void ExtensionActionAPI::ExtensionActionExecuted(
-    const ExtensionAction& extension_action,
-    WebContents* web_contents) {
-  events::HistogramValue histogram_value = events::UNKNOWN;
-  const char* event_name = NULL;
-  switch (extension_action.action_type()) {
-    case ActionInfo::TYPE_BROWSER:
-      histogram_value = events::BROWSER_ACTION_ON_CLICKED;
-      event_name = "browserAction.onClicked";
-      break;
-    case ActionInfo::TYPE_PAGE:
-      histogram_value = events::PAGE_ACTION_ON_CLICKED;
-      event_name = "pageAction.onClicked";
-      break;
-    case ActionInfo::TYPE_SYSTEM_INDICATOR:
-      // The System Indicator handles its own clicks.
-      NOTREACHED();
-      break;
-  }
-
-  if (event_name) {
-    scoped_ptr<base::ListValue> args(new base::ListValue());
-    args->Append(
-        ExtensionTabUtil::CreateTabObject(web_contents)->ToValue().release());
-
-    DispatchEventToExtension(web_contents->GetBrowserContext(),
-                             extension_action.extension_id(), histogram_value,
-                             event_name, std::move(args));
-  }
 }
 
 void ExtensionActionAPI::NotifyPageActionsChanged(
@@ -586,8 +524,10 @@ bool ExtensionActionSetBadgeBackgroundColorFunction::RunExtensionAction() {
   } else if (color_value->IsType(base::Value::TYPE_STRING)) {
     std::string color_string;
     EXTENSION_FUNCTION_VALIDATE(details_->GetString("color", &color_string));
-    if (!image_util::ParseCssColorString(color_string, &color))
+    if (!image_util::ParseCssColorString(color_string, &color)) {
+      error_ = kInvalidColorError;
       return false;
+    }
   }
 
   extension_action_->SetBadgeBackgroundColor(tab_id_, color);

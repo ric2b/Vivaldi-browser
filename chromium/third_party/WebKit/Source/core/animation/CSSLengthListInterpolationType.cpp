@@ -16,7 +16,7 @@ namespace blink {
 
 CSSLengthListInterpolationType::CSSLengthListInterpolationType(CSSPropertyID property)
     : CSSInterpolationType(property)
-    , m_valueRange(LengthListPropertyFunctions::valueRange(property))
+    , m_valueRange(LengthListPropertyFunctions::getValueRange(property))
 {
 }
 
@@ -43,9 +43,12 @@ static InterpolationValue maybeConvertLengthList(const Vector<Length>& lengthLis
     });
 }
 
-InterpolationValue CSSLengthListInterpolationType::maybeConvertInitial() const
+InterpolationValue CSSLengthListInterpolationType::maybeConvertInitial(const StyleResolverState&) const
 {
-    return maybeConvertLengthList(LengthListPropertyFunctions::getInitialLengthList(cssProperty()), 1);
+    Vector<Length> initialLengthList;
+    if (!LengthListPropertyFunctions::getInitialLengthList(cssProperty(), initialLengthList))
+        return nullptr;
+    return maybeConvertLengthList(initialLengthList, 1);
 }
 
 class ParentLengthListChecker : public InterpolationType::ConversionChecker {
@@ -65,7 +68,9 @@ private:
 
     bool isValid(const InterpolationEnvironment& environment, const InterpolationValue& underlying) const final
     {
-        return m_inheritedLengthList == LengthListPropertyFunctions::getLengthList(m_property, *environment.state().parentStyle());
+        Vector<Length> inheritedLengthList;
+        LengthListPropertyFunctions::getLengthList(m_property, *environment.state().parentStyle(), inheritedLengthList);
+        return m_inheritedLengthList == inheritedLengthList;
     }
 
     CSSPropertyID m_property;
@@ -74,11 +79,11 @@ private:
 
 InterpolationValue CSSLengthListInterpolationType::maybeConvertInherit(const StyleResolverState& state, ConversionCheckers& conversionCheckers) const
 {
-    if (!state.parentStyle())
-        return nullptr;
-
-    Vector<Length> inheritedLengthList = LengthListPropertyFunctions::getLengthList(cssProperty(), *state.parentStyle());
+    Vector<Length> inheritedLengthList;
+    bool success = LengthListPropertyFunctions::getLengthList(cssProperty(), *state.parentStyle(), inheritedLengthList);
     conversionCheckers.append(ParentLengthListChecker::create(cssProperty(), inheritedLengthList));
+    if (!success)
+        return nullptr;
     return maybeConvertLengthList(inheritedLengthList, state.parentStyle()->effectiveZoom());
 }
 
@@ -93,18 +98,20 @@ InterpolationValue CSSLengthListInterpolationType::maybeConvertValue(const CSSVa
     });
 }
 
-PairwiseInterpolationValue CSSLengthListInterpolationType::mergeSingleConversions(InterpolationValue& start, InterpolationValue& end) const
+PairwiseInterpolationValue CSSLengthListInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
 {
-    return ListInterpolationFunctions::mergeSingleConversions(start, end, CSSLengthInterpolationType::staticMergeSingleConversions);
+    return ListInterpolationFunctions::mergeSingleConversions(std::move(start), std::move(end), CSSLengthInterpolationType::staticMergeSingleConversions);
 }
 
 InterpolationValue CSSLengthListInterpolationType::maybeConvertUnderlyingValue(const InterpolationEnvironment& environment) const
 {
-    Vector<Length> underlyingLengthList = LengthListPropertyFunctions::getLengthList(cssProperty(), *environment.state().style());
+    Vector<Length> underlyingLengthList;
+    if (!LengthListPropertyFunctions::getLengthList(cssProperty(), *environment.state().style(), underlyingLengthList))
+        return nullptr;
     return maybeConvertLengthList(underlyingLengthList, environment.state().style()->effectiveZoom());
 }
 
-void CSSLengthListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value) const
+void CSSLengthListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const
 {
     ListInterpolationFunctions::composite(underlyingValueOwner, underlyingFraction, *this, value,
         CSSLengthInterpolationType::nonInterpolableValuesAreCompatible,

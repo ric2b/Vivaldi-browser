@@ -9,6 +9,9 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
+#include "media/base/media_track.h"
+#include "media/base/media_tracks.h"
 #include "media/base/timestamp_constants.h"
 #include "media/formats/webm/webm_cluster_parser.h"
 #include "media/formats/webm/webm_constants.h"
@@ -222,9 +225,9 @@ int WebMStreamParser::ParseInfoAndTracks(const uint8_t* data, int size) {
   if (video_config.is_encrypted())
     OnEncryptedMediaInitData(tracks_parser.video_encryption_key_id());
 
-  if (!config_cb_.Run(audio_config,
-                      video_config,
-                      tracks_parser.text_tracks())) {
+  scoped_ptr<MediaTracks> media_tracks = tracks_parser.media_tracks();
+  CHECK(media_tracks.get());
+  if (!config_cb_.Run(std::move(media_tracks), tracks_parser.text_tracks())) {
     DVLOG(1) << "New config data isn't allowed.";
     return -1;
   }
@@ -239,8 +242,15 @@ int WebMStreamParser::ParseInfoAndTracks(const uint8_t* data, int size) {
       tracks_parser.video_encryption_key_id(), audio_config.codec(),
       media_log_));
 
-  if (!init_cb_.is_null())
+  if (!init_cb_.is_null()) {
+    params.detected_audio_track_count =
+        tracks_parser.detected_audio_track_count();
+    params.detected_video_track_count =
+        tracks_parser.detected_video_track_count();
+    params.detected_text_track_count =
+        tracks_parser.detected_text_track_count();
     base::ResetAndReturn(&init_cb_).Run(params);
+  }
 
   return bytes_parsed;
 }

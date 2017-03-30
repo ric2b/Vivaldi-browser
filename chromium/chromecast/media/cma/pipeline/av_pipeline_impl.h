@@ -9,12 +9,12 @@
 #include <stdint.h>
 
 #include <list>
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "chromecast/media/cma/pipeline/av_pipeline_client.h"
@@ -54,6 +54,10 @@ class AvPipelineImpl : MediaPipelineBackend::Decoder::Delegate {
 
   virtual void UpdateStatistics() = 0;
 
+  int bytes_decoded_since_last_update() const {
+    return bytes_decoded_since_last_update_;
+  }
+
  protected:
   // Pipeline states.
   enum State {
@@ -75,11 +79,12 @@ class AvPipelineImpl : MediaPipelineBackend::Decoder::Delegate {
       const ::media::VideoDecoderConfig& video_config) = 0;
 
   // Setting the frame provider must be done in the |kUninitialized| state.
-  void SetCodedFrameProvider(scoped_ptr<CodedFrameProvider> frame_provider,
+  void SetCodedFrameProvider(std::unique_ptr<CodedFrameProvider> frame_provider,
                              size_t max_buffer_size,
                              size_t max_frame_size);
 
   ::media::PipelineStatistics previous_stats_;
+  int bytes_decoded_since_last_update_;
 
  private:
   void OnFlushDone();
@@ -146,7 +151,7 @@ class AvPipelineImpl : MediaPipelineBackend::Decoder::Delegate {
   std::list<scoped_refptr<DecoderBufferBase> > non_playable_frames_;
 
   // Buffer provider.
-  scoped_ptr<BufferingFrameProvider> frame_provider_;
+  std::unique_ptr<BufferingFrameProvider> frame_provider_;
 
   // Indicate whether the frame fetching process is active.
   bool enable_feeding_;

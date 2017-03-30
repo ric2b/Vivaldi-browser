@@ -28,6 +28,7 @@
 #include "core/page/Page.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "platform/weborigin/Suborigin.h"
 
 namespace blink {
 
@@ -44,13 +45,13 @@ v8::Local<v8::Object> DOMWindow::wrap(v8::Isolate*, v8::Local<v8::Object> creati
 {
     // DOMWindow must never be wrapped with wrap method.  The wrappers must be
     // created at WindowProxy::installDOMWindow().
-    RELEASE_ASSERT_NOT_REACHED();
+    RELEASE_NOTREACHED();
     return v8::Local<v8::Object>();
 }
 
 v8::Local<v8::Object> DOMWindow::associateWithWrapper(v8::Isolate*, const WrapperTypeInfo*, v8::Local<v8::Object> wrapper)
 {
-    RELEASE_ASSERT_NOT_REACHED(); // same as wrap method
+    RELEASE_NOTREACHED(); // same as wrap method
     return v8::Local<v8::Object>();
 }
 
@@ -123,7 +124,7 @@ DOMWindow* DOMWindow::anonymousIndexedGetter(uint32_t index) const
 bool DOMWindow::isCurrentlyDisplayedInFrame() const
 {
     if (frame())
-        RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(frame()->domWindow() == this);
+        SECURITY_CHECK(frame()->domWindow() == this);
     return frame() && frame()->host();
 }
 
@@ -141,7 +142,7 @@ bool DOMWindow::isInsecureScriptAccess(LocalDOMWindow& callingWindow, const Stri
 
         // FIXME: The name canAccess seems to be a roundabout way to ask "can execute script".
         // Can we name the SecurityOrigin function better to make this more clear?
-        if (callingWindow.document()->securityOrigin()->canAccessCheckSuborigins(frame()->securityContext()->securityOrigin()))
+        if (callingWindow.document()->getSecurityOrigin()->canAccessCheckSuborigins(frame()->securityContext()->getSecurityOrigin()))
             return false;
     }
 
@@ -180,7 +181,7 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const Mes
     if (targetOrigin == "/") {
         if (!sourceDocument)
             return;
-        target = sourceDocument->securityOrigin();
+        target = sourceDocument->getSecurityOrigin();
     } else if (targetOrigin != "*") {
         target = SecurityOrigin::createFromString(targetOrigin);
         // It doesn't make sense target a postMessage at a unique origin
@@ -191,7 +192,7 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const Mes
         }
     }
 
-    OwnPtr<MessagePortChannelArray> channels = MessagePort::disentanglePorts(executionContext(), ports, exceptionState);
+    OwnPtr<MessagePortChannelArray> channels = MessagePort::disentanglePorts(getExecutionContext(), ports, exceptionState);
     if (exceptionState.hadException())
         return;
 
@@ -199,20 +200,25 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const Mes
     // in order to capture the source of the message correctly.
     if (!sourceDocument)
         return;
-    String sourceOrigin = sourceDocument->securityOrigin()->toString();
-    String sourceSuborigin = sourceDocument->securityOrigin()->suboriginName();
 
-    KURL targetUrl = isLocalDOMWindow() ? document()->url() : KURL(KURL(), frame()->securityContext()->securityOrigin()->toString());
-    if (MixedContentChecker::isMixedContent(sourceDocument->securityOrigin(), targetUrl))
+    const SecurityOrigin* securityOrigin = sourceDocument->getSecurityOrigin();
+    bool hasSuborigin = sourceDocument->getSecurityOrigin()->hasSuborigin();
+    Suborigin::SuboriginPolicyOptions unsafeSendOpt = Suborigin::SuboriginPolicyOptions::UnsafePostMessageSend;
+
+    String sourceOrigin = (hasSuborigin && securityOrigin->suborigin()->policyContains(unsafeSendOpt)) ? securityOrigin->toPhysicalOriginString() : securityOrigin->toString();
+    String sourceSuborigin = hasSuborigin ? securityOrigin->suborigin()->name() : String();
+
+    KURL targetUrl = isLocalDOMWindow() ? document()->url() : KURL(KURL(), frame()->securityContext()->getSecurityOrigin()->toString());
+    if (MixedContentChecker::isMixedContent(sourceDocument->getSecurityOrigin(), targetUrl))
         UseCounter::count(frame(), UseCounter::PostMessageFromSecureToInsecure);
-    else if (MixedContentChecker::isMixedContent(frame()->securityContext()->securityOrigin(), sourceDocument->url()))
+    else if (MixedContentChecker::isMixedContent(frame()->securityContext()->getSecurityOrigin(), sourceDocument->url()))
         UseCounter::count(frame(), UseCounter::PostMessageFromInsecureToSecure);
 
-    RefPtrWillBeRawPtr<MessageEvent> event = MessageEvent::create(channels.release(), message, sourceOrigin, String(), source, sourceSuborigin);
+    MessageEvent* event = MessageEvent::create(channels.release(), message, sourceOrigin, String(), source, sourceSuborigin);
     // Give the embedder a chance to intercept this postMessage.  If the
     // target is a remote frame, the message will be forwarded through the
     // browser process.
-    if (frame()->client()->willCheckAndDispatchMessageEvent(target.get(), event.get(), source->document()->frame()))
+    if (frame()->client()->willCheckAndDispatchMessageEvent(target.get(), event, source->document()->frame()))
         return;
 
     // Capture stack trace only when inspector front-end is loaded as it may be time consuming.
@@ -237,9 +243,7 @@ String DOMWindow::sanitizedCrossDomainAccessErrorMessage(const LocalDOMWindow* c
     if (callingWindowURL.isNull())
         return String();
 
-    ASSERT(!callingWindow->document()->securityOrigin()->canAccessCheckSuborigins(frame()->securityContext()->securityOrigin()));
-
-    const SecurityOrigin* activeOrigin = callingWindow->document()->securityOrigin();
+    const SecurityOrigin* activeOrigin = callingWindow->document()->getSecurityOrigin();
     String message = "Blocked a frame with origin \"" + activeOrigin->toString() + "\" from accessing a cross-origin frame.";
 
     // FIXME: Evaluate which details from 'crossDomainAccessErrorMessage' may safely be reported to JavaScript.
@@ -257,8 +261,8 @@ String DOMWindow::crossDomainAccessErrorMessage(const LocalDOMWindow* callingWin
         return String();
 
     // FIXME: This message, and other console messages, have extra newlines. Should remove them.
-    const SecurityOrigin* activeOrigin = callingWindow->document()->securityOrigin();
-    const SecurityOrigin* targetOrigin = frame()->securityContext()->securityOrigin();
+    const SecurityOrigin* activeOrigin = callingWindow->document()->getSecurityOrigin();
+    const SecurityOrigin* targetOrigin = frame()->securityContext()->getSecurityOrigin();
     // It's possible for a remote frame to be same origin with respect to a
     // local frame, but it must still be treated as a disallowed cross-domain
     // access. See https://crbug.com/601629.
@@ -331,7 +335,7 @@ void DOMWindow::close(ExecutionContext* context)
     if (!frame()->shouldClose())
         return;
 
-    InspectorInstrumentation::willCloseWindow(context);
+    InspectorInstrumentation::allowNativeBreakpoint(context, "close", true);
 
     page->chromeClient().closeWindowSoon();
 

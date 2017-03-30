@@ -7,9 +7,10 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/webui/mojo_web_ui_handler.h"
 #include "chrome/browser/ui/webui/omnibox/omnibox.mojom.h"
@@ -26,24 +27,24 @@ class Profile;
 // AutocompleteController to OnResultChanged() and passes those results to
 // the OmniboxPage.
 class OmniboxUIHandler : public AutocompleteControllerDelegate,
-                         public OmniboxUIHandlerMojo,
+                         public mojom::OmniboxUIHandlerMojo,
                          public MojoWebUIHandler {
  public:
   // OmniboxUIHandler is deleted when the supplied pipe is destroyed.
   OmniboxUIHandler(Profile* profile,
-                   mojo::InterfaceRequest<OmniboxUIHandlerMojo> request);
+                   mojo::InterfaceRequest<mojom::OmniboxUIHandlerMojo> request);
   ~OmniboxUIHandler() override;
 
   // AutocompleteControllerDelegate overrides:
   void OnResultChanged(bool default_match_changed) override;
 
-  // OmniboxUIHandlerMojo overrides:
+  // mojom::OmniboxUIHandlerMojo overrides:
   void StartOmniboxQuery(const mojo::String& input_string,
                          int32_t cursor_position,
                          bool prevent_inline_autocomplete,
                          bool prefer_keyword,
                          int32_t page_classification,
-                         OmniboxPagePtr page) override;
+                         mojom::OmniboxPagePtr page) override;
 
  private:
   // Looks up whether the hostname is a typed host (i.e., has received
@@ -57,7 +58,7 @@ class OmniboxUIHandler : public AutocompleteControllerDelegate,
 
   // The omnibox AutocompleteController that collects/sorts/dup-
   // eliminates the results as they come in.
-  scoped_ptr<AutocompleteController> controller_;
+  std::unique_ptr<AutocompleteController> controller_;
 
   // Time the user's input was sent to the omnibox to start searching.
   // Needed because we also pass timing information in the object we
@@ -68,12 +69,12 @@ class OmniboxUIHandler : public AutocompleteControllerDelegate,
   AutocompleteInput input_;
 
   // Handle back to the page by which we can pass results.
-  OmniboxPagePtr page_;
+  mojom::OmniboxPagePtr page_;
 
   // The Profile* handed to us in our constructor.
   Profile* profile_;
 
-  mojo::Binding<OmniboxUIHandlerMojo> binding_;
+  mojo::Binding<mojom::OmniboxUIHandlerMojo> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxUIHandler);
 };

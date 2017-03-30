@@ -37,9 +37,9 @@ class ExclusiveAccessContext {
   // Currently only supported on Mac.
   virtual void UpdateFullscreenWithToolbar(bool with_toolbar);
 
-  // Toggles the toolbar state to be hidden or shown in fullscreen. Updates
-  // the preference accordingly. Only supported on Mac.
-  virtual void ToggleFullscreenToolbar();
+  // Updates the toolbar state to be hidden or shown in fullscreen according to
+  // the preference's state. Only supported on Mac.
+  virtual void UpdateFullscreenToolbar();
 
   // Returns true if the window is fullscreen with additional UI elements. See
   // EnterFullscreen |with_toolbar|.
@@ -63,14 +63,6 @@ class ExclusiveAccessContext {
   // Informs the exclusive access system of some user input, which may update
   // internal timers and/or re-display the bubble.
   virtual void OnExclusiveAccessUserInput() = 0;
-
-#if defined(OS_WIN)
-  // Sets state for entering or exiting Win8 Metro snap mode.
-  virtual void SetMetroSnapMode(bool enable);
-
-  // Returns whether the window is currently in Win8 Metro snap mode.
-  virtual bool IsInMetroSnapMode() const;
-#endif  // defined(OS_WIN)
 
   // Returns the currently active WebContents, or nullptr if there is none.
   virtual content::WebContents* GetActiveWebContents() = 0;

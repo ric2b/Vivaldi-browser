@@ -18,6 +18,7 @@
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
+#include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/network_change_notifier.h"
 
@@ -93,13 +94,13 @@ class P2PSocketDispatcherHost
 
   void DoGetNetworkList();
   void SendNetworkList(const net::NetworkInterfaceList& list,
-                       const net::IPAddressNumber& default_ipv4_local_address,
-                       const net::IPAddressNumber& default_ipv6_local_address);
+                       const net::IPAddress& default_ipv4_local_address,
+                       const net::IPAddress& default_ipv6_local_address);
 
   // This connects a UDP socket to a public IP address and gets local
   // address. Since it binds to the "any" address (0.0.0.0 or ::) internally, it
   // retrieves the default local address.
-  net::IPAddressNumber GetDefaultLocalAddress(int family);
+  net::IPAddress GetDefaultLocalAddress(int family);
 
   void OnAddressResolved(DnsRequest* request,
                          const net::IPAddressList& addresses);
@@ -116,8 +117,8 @@ class P2PSocketDispatcherHost
   std::set<DnsRequest*> dns_requests_;
   P2PMessageThrottler throttler_;
 
-  net::IPAddressNumber default_ipv4_local_address_;
-  net::IPAddressNumber default_ipv6_local_address_;
+  net::IPAddress default_ipv4_local_address_;
+  net::IPAddress default_ipv6_local_address_;
 
   bool dump_incoming_rtp_packet_;
   bool dump_outgoing_rtp_packet_;

@@ -2,6 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ms">
 <translation id="101438888985615157">Putar skrin 180 darjah</translation>
+<translation id="1015272884520659144">Menentukan senarai peranti USB yang dibenarkan untuk ditanggalkan daripada pemacu inti peranti tersebut untuk digunakan menerusi API chrome.usb terus dalam aplikasi web. Entri ialah pasangan Pengecam Vendor USB dan Pengecam Produk untuk mengenal pasti perkakasan khusus.
+
+      Jika dasar ini tidak dikonfigurasikan, senarai peranti USB yang boleh ditanggalkan akan dianggap sebagai kosong.</translation>
 <translation id="1017967144265860778">Pengurusan kuasa pada skrin log masuk</translation>
 <translation id="1019101089073227242">Tetapkan direktori data pengguna</translation>
 <translation id="1022361784792428773">ID sambungan pengguna perlu dihalang daripada memasang (atau * untuk semua)</translation>
@@ -69,8 +72,6 @@
 
       Jika dasar ini tidak ditetapkan atau ditetapkan kepada palsu, maka suit sifer RC4 dalam TLS tidak akan didayakan. Jika tidak, dasar mungkin ditetapkan kepada benar untuk mengekalkan keserasian dengan pelayan yang sudah lapuk. Ini adalah langkah sementara dan pelayan harus dikonfigurasi semula.</translation>
 <translation id="1297182715641689552">Gunakan skrip proksi .pac</translation>
-<translation id="1300635491585192248">Ramalkan tindakan rangkaian pada mana-mana rangkaian yang bukan
-          selular</translation>
 <translation id="1304973015437969093">ID Sambungan/Apl dan URL kemas kini untuk dipasang secara senyap</translation>
 <translation id="1310699457130669094">Anda boleh menetapkan URL untuk fail .pac proksi di sini.
 
@@ -96,6 +97,7 @@
 <translation id="1359553908012294236">Jika dasar ini ditetapkan kepada benar atau tidak dikonfigurasi, <ph name="PRODUCT_NAME" /> akan mendayakan log masuk tetamu. Log masuk tetamu merupakan profil <ph name="PRODUCT_NAME" /> yang semua tetingkapnya dalam mod inkognito.
 
       Jika dasar ini ditetapkan kepada palsu, <ph name="PRODUCT_NAME" /> tidak akan membenarkan profil tetamu dimulakan.</translation>
+<translation id="1363275621236827384">Dayakan pertanyaan ke Pelayan Quirks untuk mendapatkan profil perkakasan</translation>
 <translation id="1397855852561539316">Pembekal carian lalai mencadangkan URL</translation>
 <translation id="1398889361882383850">Membolehkan anda menetapkan sama ada laman web dibenarkan menjalankan pemalam secara automatik. Menjalankan pemalam secara automatik boleh ditetapkan sama ada dibenarkan untuk semua laman web atau dinafikan untuk semua laman web.
 
@@ -238,7 +240,17 @@
       Jika anda melumpuhkan tetapan ini, apabila pengguna melaksanakan tindakan yang akan mengancam dialog pemilihan fail (seperti mengimport penanda halaman, memuat naik fail, menyimpan pautan, dsb.), mesej akan dipaparkan sebagai ganti dan pengguna dianggap telah mengklik Batal pada dialog pemilihan fail.
 
       Jika tetapan ini tidak ditetapkan, penggguna boleh membuka dialog pemilihan fail seperti biasa.</translation>
+<translation id="1879485426724769439">Menentukan zon waktu yang hendak digunakan untuk peranti. Pengguna boleh menolak zon waktu yang ditentukan untuk sesi semasa. Namun demikian, peranti akan ditetapkan semula kepada zon waktu yang ditentukan apabila anda log keluar. Jika nilai yang tidak sah diberikan, dasar ini masih akan diaktifkan menggunakan "GMT" sebagai ganti. Dasar ini akan dibatalkan jika rentetan yang kosong diberikan.
+
+      Jika dasar ini tidak digunakan, zon waktu yang sedang aktif akan terus digunakan, namun begitu, pengguna boleh menukar zon waktu dan perubahan ini berterusan. Oleh itu, perubahan yang dibuat oleh seorang pengguna memberi kesan kepada skrin log masuk dan semua pengguna lain.
+
+      Peranti baharu bermula dengan zon waktu yang ditetapkan kepada "AS/Pasifik".
+
+      Format nilai mengikut nama zon waktu dalam "Pangkalan Data Zon Waktu IANA" (lihat "https://en.wikipedia.org/wiki/Tz_database"). Secara khususnya, kebanyakan zon waktu boleh dirujuk mengikut "continent/large_city" atau "ocean/large_city".
+
+      Zon waktu automatik yang diselesaikan oleh lokasi peranti akan dilumpuhkan sepenuhnya apabila dasar ini ditetapkan. Langkah ini turut mengatasi dasar SystemTimezoneAutomaticDetection.</translation>
 <translation id="1897365952389968758">Benarkan semua tapak untuk menjalankan JavaScript</translation>
+<translation id="193259052151668190">Senarai putih peranti boleh tanggal USB</translation>
 <translation id="1933378685401357864">Imej hias latar</translation>
 <translation id="193900697589383153">Menambahkan butang log keluar pada dulang sistem.
 
@@ -590,14 +602,6 @@
           Jika dasar ini ditetapkan kepada Benar atau tidak ditetapkan, pengguna tidak dianggap sebagai melahu semasa audio dimainkan. Ini menghalang tamat masa melahu dicapai dan menghalang tindakan melahu daripada dilaksanakan. Bagaimanapun, pemalapan skrin, pemadaman skrin dan kunci skrin akan dilaksanakan selepas tamat masa yang dikonfigurasi, tanpa mengambil kira aktiviti audio.
 
           Jika dasar ini ditetapkan kepada Palsu, aktiviti audio tidak menghalang pengguna daripada dianggap sebagai melahu.</translation>
-<translation id="2948381198510798695"><ph name="PRODUCT_NAME" /> akan melangkau mana-mana proksi untuk senarai hos yang dinyatakan di sini.
-
-          Dasar ini hanya berkuat kuasa jika anda telah memilih tetapan proksi manual di 'Pilih cara hendak menentukan tetapan pelayan proksi'.
-
-          Anda harus membiarkan dasar ini tanpa ditetapkan jika anda telah memilih mana-mana mod lain untuk menetapkan dasar proksi.
-
-          Untuk melihat contoh terperinci, lawati:
-          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="2956777931324644324">Dasar ini telah dihentikan mengikut <ph name="PRODUCT_NAME" /> versi 36.
 
       Menyatakan sama ada sambungan sijil hala domain TLS harus didayakan.
@@ -725,6 +729,20 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 
           Jika dasar ini dibiarkan tanpa ditetapkan, nilai lalai global akan digunakan untuk semua tapak, sama ada daripada dasar 'DefaultKeygenSetting' jika ditetapkan atau konfigurasi peribadi pengguna jika tidak ditetapkan.</translation>
 <translation id="3381968327636295719">Gunakan penyemak imbas hos secara lalai</translation>
+<translation id="3398137877608138703">Benarkan atau tolak rakaman video.
+
+      Jika didayakan atau tidak dikonfigurasikan (lalai), pengguna akan digesa supaya memberikan
+      akses rakaman video kecuali untuk URL yang dikonfigurasi dalam
+      senarai VideoCaptureAllowedUrls yang akan diberikan akses tanpa memberi gesaan.
+      Apl ARC akan dapat mengakses kamera jika telah diberikan
+      kebenaran.
+
+      Apabila dasar ini dilumpuhkan, pengguna tidak akan digesa dan rakaman
+      video hanya tersedia untuk URL yang dikonfigurasi dalam VideoCaptureAllowedUrls.
+      Apl ARC tidak akan dapat mengakses kamera.
+
+      Di luar apl ARC, dasar ini memberi kesan kepada semua jenis input video
+      dan bukan sahaja kamera terbina dalam.</translation>
 <translation id="3417418267404583991">Jika dasar ini ditetapkan kepada benar atau tidak dikonfigurasi, <ph name="PRODUCT_OS_NAME" /> akan mendayakan log masuk tetamu. Log masuk tetamu adalah sesi pengguna tanpa nama dan tidak memerlukan kata laluan.
 
       Jika dasar ini ditetapkan kepada palsu, <ph name="PRODUCT_OS_NAME" /> tidak akan membenarkan sesi tetamu dimulakan.</translation>
@@ -742,6 +760,25 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 <translation id="3478024346823118645">Hapuskan data pengguna semasa log keluar</translation>
 <translation id="348495353354674884">Dayakan papan kekunci maya</translation>
 <translation id="3496296378755072552">Pengurus kata laluan</translation>
+<translation id="349667858031092827">Jangan sekali-kali kesan zon waktu secara automatik.</translation>
+<translation id="3502472987829488885">Membolehkan anda menentukan pelayan proksi yang digunakan oleh <ph name="PRODUCT_NAME" /> dan apl ARC serta menghalang pengguna daripada mengubah tetapan proksi.
+
+          Jika anda memilih untuk tidak menggunakan pelayan proksi selama-lamanya dan sentiasa menyambung secara terus, semua pilihan lain akan diabaikan. Apl ARC akan menggunakan pelayan proksi lalai rangkaian semasa jika ada.
+
+          Jika anda memilih untuk menggunakan tetapan proksi sistem, semua pilihan lain akan diabaikan. Apl ARC akan menggunakan pelayan proksi lalai rangkaian semasa jika ada.
+
+          Jika anda memilih untuk mengesan pelayan proksi secara automatik, semua pilihan lain akan diabaikan.
+
+          Jika anda memilih mod proksi pelayan tetap, anda boleh menentukan pilihan lanjut dalam 'Alamat atau URL pelayan proksi' dan 'Senarai dipisahkan koma bagi peraturan pintas proksi'. Apl ARC hanya akan menggunakan pelayan proksi HTTP dengan keutamaan tertinggi.
+
+          Jika anda memilih untuk menggunakan skrip proksi .pac, anda mesti menentukan URL ke skrip dalam 'URL ke fail .pac proksi'.
+
+          Untuk melihat contoh terperinci, sila lawati:
+          <ph name="PROXY_HELP_URL" />
+
+          Jika anda mendayakan tetapan ini, <ph name="PRODUCT_NAME" /> dan apl ARC akan mengabaikan semua pilihan berkaitan proksi yang ditentukan daripada baris perintah.
+
+          Tindakan membiarkan dasar ini tidak ditetapkan akan membolehkan pengguna memilih sendiri tetapan proksi mereka.</translation>
 <translation id="3504791027627803580">Menentukan URL enjin carian yang digunakan untuk menyediakan carian imej. Permintaan carian akan dihantar menggunakan kaedah GET. Sebaliknya, jika dasar DefaultSearchProviderImageURLPostParams ditetapkan, maka permintaan carian imej akan menggunakan kaedah POST.
 
           Dasar ini tidak wajib. Jika tidak ditetapkan, tiada carian imej akan digunakan.
@@ -758,8 +795,16 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 
       Nilai dasar perlu ditetapkan dalam milisaat. Nilai dibataskan kepada julat 30 saat sehingga 24 jam.</translation>
 <translation id="3528000905991875314">Dayakan halaman ralat ganti</translation>
+<translation id="3538538104630456270">Tetapan yang berkaitan telah digunakan sebelum pengesahan semula bagi melihat kata laluan diperkenalkan. Sejak itu, tetapan dan dasar ini tidak memberi kesan terhadap gelagat Chrome. Kini, gelagat semasa Chrome adalah sama seperti jika dasar ditetapkan untuk melumpuhkan paparan kata laluan dalam teks yang jelas dalam halaman tetapan pengurus kata laluan. Ini bermakna halaman tetapan hanya mengandungi pemegang tempat dan Chrome menunjukkan kata laluan hanya apabila pengguna mengklik "Tunjukkan" (dan melakukan pengesahan semula jika berkenaan). Perihalan asal adalah seperti d bawah.
+
+          Mengawal sama ada pengguna boleh menunjukkan kata laluan dalam teks jelas dalam pengurus kata laluan.
+
+          Jika anda melumpuhkan tetapan ini, pengurus kata laluan tidak membenarkan anda menunjukkan kata laluan yang disimpan dalam teks yang jelas dalam tetingkap pengurus kata laluan.
+
+          Jika anda mendayakan atau tidak menetapkan dasar ini, pengguna boleh melihat kata laluan mereka dalam teks yang jelas dalam pengurus kata laluan.</translation>
 <translation id="3547954654003013442">Tetapan proksi</translation>
 <translation id="3570008976476035109">Sekat pemalam pada tapak ini</translation>
+<translation id="3591584750136265240">Konfigurasikan gelagat pengesahan log masuk</translation>
 <translation id="3627678165642179114">Dayakan atau lumpuhkan perkhidmatan web penyemakan ejaan</translation>
 <translation id="3646859102161347133">Tetapkan jenis penggadang skrin</translation>
 <translation id="3653237928288822292">Ikon pembekal carian lalai</translation>
@@ -848,15 +893,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 
       Setiap masukan senarai mengandungi kamus yang mesti merangkumi ID sambungan dalam medan 'extension-id' dan URL kemas kininya dalam medan 'update-url'.</translation>
 <translation id="3891357445869647828">Dayakan JavaScript</translation>
-<translation id="389421284571827139">Membenarkan anda menentukan pelayan proksi yang digunakan oleh <ph name="PRODUCT_NAME" /> dan menghalang pengguna daripada menukar tetapan proksi.
-
-          Jika anda memilih untuk langsung tidak menggunakan pelayan proksi dan sentiasa disambung secara terus, semua pilihan lain diabaikan.
-
-          Jika anda memilih untuk auto kesan pelayan proksi, semua pilihan lain diabaikan.
-
-          Untuk melihat contoh terperinci, lawati: <ph name="PROXY_HELP_URL" />
-
-          Jika anda mendayakan tetapan ini, <ph name="PRODUCT_NAME" /> mengabaikan semua pilihan berkaitan proksi yang ditentukan daripada baris perintah. Membiarkan dasar ini tanpa ditetapkan akan membolehkan pengguna memilih sendiri tetapan proksi mereka.</translation>
 <translation id="3907986150060929099">Tetapkan penempatan yang disyorkan untuk sesi awam</translation>
 <translation id="391531815696899618">Melumpuhkan penyegerakan Google Drive dalam apl Fail <ph name="PRODUCT_OS_NAME" /> apabila ditetapkan kepada Benar. Jika ini berlaku, tiada data akan dimuat naik ke Google Drive.
 
@@ -885,11 +921,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 <translation id="4039085364173654945">Mengawal sama ada kandungan kecil pihak ketiga pada halaman dibenarkan untuk menimbulkan kotak dialog Pengesahan Asas HTTP.
 
           Biasanya perkara ini dilumpuhkan sebagai perlindungan daripada pemancingan data. Jika dasar ini tidak ditetapkan, tetapan ini dilumpuhkan dan kandungan kecil pihak ketiga tidak akan dibenarkan untuk menimbulkan kotak dialog Pengesahan Asas HTTP.</translation>
-<translation id="4052765007567912447">Mengawal sama ada pengguna boleh memaparkan kata laluan menggunakan teks jelas dalam pengurus kata laluan.
-
-          Jika anda melumpuhkan tetapan ini, pengurus kata laluan tidak membenarkan pemaparan kata laluan yang disimpan menggunakan teks jelas dalam tetingkap pengurus kata laluan.
-
-          Jika anda mendayakan atau tidak menetapkan dasar ini, pengguna boleh melihat kata laluan mereka dalam teks jelas dalam pengurus kata laluan.</translation>
 <translation id="4056910949759281379">Lumpuhkan protokol SPDY</translation>
 <translation id="4088589230932595924">Mod Inkognito dipaksa</translation>
 <translation id="4088983553732356374">Membenarkan anda menetapkan sama ada tapak web dibenarkan untuk menetapkan data setempat. Penetapan data setempat boleh dibenarkan untuk semua tapak web atau dinafikan untuk semua tapak web.
@@ -897,6 +928,23 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
           Jika dasar ini ditetapkan kepada 'Keep cookies for the duration of the session', maka kuki akan dikosongkan apabila sesi ditutup. Beri perhatian bahawa jika <ph name="PRODUCT_NAME" /> sedang dijalankan dalam 'background mode', sesi itu mungkin tidak ditutup apabila tetingkap terakhir ditutup. Sila lihat dasar 'BackgroundModeEnabled' untuk mendapatkan maklumat lanjut tentang mengkonfigurasi gelagat ini.
 
           Jika dasar ini dibiarkan tanpa ditetapkan, 'AllowCookies' akan digunakan dan pengguna akan dapat mengubahnya.</translation>
+<translation id="4098957623809244159">Dasar ini telah ditamatkan, gunakan ProxyMode sebagai ganti.
+
+          Membolehkan anda menentukan pelayan proksi yang digunakan oleh <ph name="PRODUCT_NAME" /> dan apl ARC serta menghalang pengguna daripada menukar tetapan proksi.
+
+          Jika anda memilih untuk tidak akan menggunakan pelayan proksi dan sentiasa menyambung secara terus, semua pilihan lain akan diabaikan.
+
+          Jika anda memilih untuk menggunakan tetapan proksi sistem atau mengesan pelayan proksi secara automatik, semua pilihan lain akan diabaikan.
+
+          Jika anda memilih tetapan proksi manual, anda boleh menentukan pilihan lanjut dalam ''Alamat atau URL pelayan proksi', ''URL ke fail .pac proksi' dan ''Senarai peraturan pintasan proksi yang dipisahkan koma'.
+
+          Untuk melihat contoh terperinci, lawati:
+          <ph name="PROXY_HELP_URL" />
+
+          Jika anda mendayakan tetapan ini, <ph name="PRODUCT_NAME" /> mengabaikan semua pilihan berkaitan proksi yang ditentukan daripada baris perintah.
+
+          Apabila dasar ini tidak ditetapkan, pengguna akan dibenarkan untuk memilih sendiri tetapan proksi mereka.</translation>
+<translation id="4103289232974211388">Ubah hala ke SAML IdP selepas pengesahan pengguna</translation>
 <translation id="410478022164847452">Menyatakan panjang masa tanpa input pengguna dan tindakan melahu akan dilaksanakan selepas tamat masa tersebut apabila dijalan dengan kuasa AC.
 
           Apabila dasar ini ditetapkan, ia menyatakan panjang masa pengguna melahu sebelum <ph name="PRODUCT_OS_NAME" /> melaksanakan tindakan melahu, yang boleh dikonfigurasi secara berasingan.
@@ -1108,17 +1156,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
           Nilai tersebut mestilah tatasusunan pelbagai kamus JSON yang berentetan. Setiap kamus mestilah berbentuk { "pattern": "$URL_PATTERN", "filter" : $FILTER }, dengan $URL_PATTERN ialah pola tetapan kandungan. $FILTER menyekat yang daripadanya sijil pelanggan akan dipilih secara automatik oleh penyemak imbas. Tanpa bergantung kepada penapis, hanya sijil akan dipilih apabila sepadan dengan permintaan sijil pelayan. Jika $FILTER berbentuk { "ISSUER": { "CN": "$ISSUER_CN" } }, selain itu hanya sijil pelanggan dipilih yang dikeluarkan oleh sijil dengan CommonName $ISSUER_CN. Jika $FILTER ialah kamus kosong {}, pemilihan sijil pelanggan tidak dihadkan sebagai tambahan.
 
           Jika dasar ini dibiarkan tanpa ditetapkan, tiada auto pilihan akan dibuat untuk mana-mana tapak.</translation>
-<translation id="4980301635509504364">Benarkan atau tolak tangkapan video.
-
-      Jika didayakan atau tidak dikonfigurasi (lalai), pengguna akan diminta untuk
-      akses tangkapan video kecuali URL yang dikonfigurasikan dalam senarai
-      VideoCaptureAllowedUrls yang akan diberikan akses tanpa gesaan.
-
-      Apabila dasar ini dilumpuhkan, pengguna tidak akan digesa dan tangkapan video
-      hanya tersedia untuk URL yang dikonfigurasi dalam VideoCaptureAllowedUrls.
-      
-      Dasar ini memberi kesan kepada semua jenis input video dan bukan sahaja
-      kamera terbina dalam.</translation>
 <translation id="4980635395568992380">Jenis data:</translation>
 <translation id="4983201894483989687">Benarkan pemalam yang lapuk dijalankan</translation>
 <translation id="4988291787868618635">Tindakan yang perlu diambil apabila kelewatan melahu dicapai</translation>
@@ -1291,7 +1328,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
       Jika ditetapkan, parameter pertanyaan yang dipanggil 'hadkan' akan ditambahkan kepada URL yang digunakan untuk mengambil benih Variasi. Nilai yang dinyatakan dalam dasar ini akan menjadi nilai parameter.
 
       Jika tidak ditetapkan, URL benih Variasi tidak akan diubah suai.</translation>
-<translation id="5564962323737505851">Mengkonfigurasi pengurus kata laluan. Jika pengurus kata laluan didayakan, maka anda boleh memilih untuk mendayakan atau melumpuhkan sama ada pengguna boleh menunjukkan kata laluan yang disimpan dalam teks yang jelas.</translation>
 <translation id="556941986578702361">Mengawal penyembunyian automatik rak <ph name="PRODUCT_OS_NAME" />.
 
       Jika dasar ini ditetapkan kepada 'AlwaysAutoHideShelf', rak akan sentiasa disembunyikan secara automatik.
@@ -1331,7 +1367,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 
       Jika dasar ini tidak ditetapkan atau ditetapkan kepada palsu, maka <ph name="PRODUCT_NAME" /> akan menggunakan tetapan semakan pembatalan dalam talian yang sedia ada.</translation>
 <translation id="5732972008943405952">Import data borang autolengkap daripada penyemak imbas lalai pada kali pertama menjalankannya</translation>
-<translation id="5761030451068906335">Mengkonfigurasi tetapan proksi untuk <ph name="PRODUCT_NAME" />. Dasar ini belum sedia untuk digunakan lagi, jangan gunakannya.</translation>
 <translation id="5765780083710877561">Huraian:</translation>
 <translation id="5770738360657678870">Saluran Dev (mungkin tidak stabil)</translation>
 <translation id="5774856474228476867">URL carian pembekal carian lalai</translation>
@@ -1356,13 +1391,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
       Lihat http://www.chromium.org/administrators/policy-list-3/user-data-directory-variables untuk mendapatkan senarai pemboleh ubah yang boleh digunakan.
 
       Jika tetapan ini dibiarkan tanpa ditetapkan, direktori profil lalai akan digunakan.</translation>
-<translation id="5819660021114910752">Menentukan zon waktu yang akan digunakan untuk peranti. Pengguna boleh membatalkan zon waktu yang ditentukan untuk sesi semasa. Walau bagaimanapun, semasa log keluar, zon waktu akan ditetapkan semula ke zon waktu yang ditentukan. Sebaliknya, jika nilai tidak sah diberikan, dasar ini masih diaktifkan menggunakan "GMT". Jika rentetan kosong diberikan, dasar ini akan diabaikan.
-
-      Jika dasar ini tidak digunakan, zon waktu yang sedang aktif akan kekal digunakan namun pengguna boleh menukar zon waktu dan perubahan adalah berterusan. Oleh itu, perubahan oleh seorang pengguna mempengaruhi skrin log masuk dan semua pengguna lain.
-
-      Peranti baharu bermula dengan zon waktu yang ditetapkan kepada "AS/Pasifik".
-
-      Nilai diformatkan mengikut nama zon waktu dalam "Pangkalan Data Zon Waktu IANA" (lihat "https://en.wikipedia.org/wiki/Tz_database"). Secara khususnya, kebanyakan zon waktu boleh dirujuk mengikut "continent/large_city" atau "ocean/large_city".</translation>
 <translation id="5826047473100157858">Menentukan sama ada pengguna boleh membuka halaman dalam mod Inkognito dalam <ph name="PRODUCT_NAME" />.
 
       Jika 'Didayakan' dipilih atau dasar ini dibiarkan tanpa ditetapkan, halaman akan boleh dibuka dalam mod Inkognito.
@@ -1402,7 +1430,14 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 <translation id="5893553533827140852">Jika tetapan ini didayakan, maka permintaan pengesahan gnubby akan diproksikan merentas sambungan hos jauh.
 
           Jika tetapan ini dilumpuhkan atau tidak dikonfigurasikan, permintaan pengesahan gnubby tidak akan diproksikan.</translation>
-<translation id="5912364507361265851">Benarkan pengguna menunjukkan kata laluan dalam Pengurus Kata Laluan</translation>
+<translation id="5900959132054596599"><ph name="PRODUCT_NAME" /> dan apl ARC akan melangkau mana-mana proksi untuk senarai hos yang dinyatakan di sini.
+
+          Dasar ini hanya berkuat kuasa jika anda telah memilih tetapan proksi manual di 'Pilih cara untuk menentukan tetapan pelayan proksi'.
+
+          Anda harus membiarkan dasar ini tanpa ditetapkan jika anda telah memilih mana-mana mod lain untuk menetapkan dasar proksi.
+
+          Untuk melihat contoh terperinci, lawati:
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="5921713479449475707">Benarkan muat turun auto kemas kini melalui HTTP</translation>
 <translation id="5921888683953999946">Tetapkan keadaan lalai ciri kebolehcapaian kursor besar pada skrin log masuk. 
 
@@ -1554,6 +1589,7 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 <translation id="637934607141010488">Laporkan senarai pengguna peranti yang telah log masuk baru-baru ini.
 
       Jika dasar ini tidak ditetapkan atau ditetapkan kepada tidak benar, pengguna tidak akan dilaporkan.</translation>
+<translation id="639009029157091157">Biarkan pengguna membuat keputusan.</translation>
 <translation id="6392973646875039351">Mendayakan ciri Auto Isi <ph name="PRODUCT_NAME" /> dan membolehkan pengguna melengkapkan borang web secara automatik dengan menggunakan maklumat yang disimpan sebelum ini seperti alamat atau maklumat kad kredit.
 
       Jika anda melumpuhkan tetapan ini, Auto Isi tidak akan boleh diakses oleh pengguna.
@@ -1574,20 +1610,7 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
       Jika anda melumpuhkan tetapan ini, pengguna tidak akan dibenarkan menggunakan Smart Lock.
 
       Jika dasar ini dibiarkan tanpa ditetapkan, tetapan lalai tidak dibenarkan untuk pengguna diurus perusahaan dan dibenarkan untuk pengguna tidak diurus.</translation>
-<translation id="6513756852541213407">Membenarkan anda untuk menentukan pelayan proksi yang digunakan oleh <ph name="PRODUCT_NAME" /> dan menghalang pengguna daripada menukar tetapan proksi.
-
-          Jika anda memilih untuk langsung tidak menggunakan pelayan proksi dan sentiasa disambung secara terus, semua pilihan lain diabaikan.
-
-          Jika anda memilih untuk menggunakan tetapan proksi sistem atau auto kesan pelayan proksi, semua pilihan lain diabaikan.
-
-          Jika anda memilih mod proksi pelayan tetap, anda boleh menentukan pilihan lanjut dalam 'Alamat atau URL pelayan  proksi' dan 'Senarai diasingkan koma bagi peraturan memintas proksi'.
-
-          Jika anda memilih untuk menggunakan skrip proksi .pac, anda hendaklah menyatakan URL untuk skrip dalam 'URL untuk fail .pac proksi'.
-
-          Untuk melihat contoh terperinci, lawati:
-          <ph name="PROXY_HELP_URL" />
-
-          Jika anda mendayakan tetapan ini, <ph name="PRODUCT_NAME" /> mengabaikan semua pilihan berkaitan proksi yang ditentukan daripada baris perintah. Membiarkan dasar ini tanpa ditetapkan akan membolehkan pengguna memilih sendiri tetapan proxsi mereka.</translation>
+<translation id="6491139795995924304">Benarkan bluetooth pada peranti</translation>
 <translation id="6520802717075138474">Import enjin carian daripada penyemak imbas lalai pada kali pertama menjalankannya</translation>
 <translation id="653608967792832033">Menetapkan panjang masa tanpa input daripada pengguna yang akan mengunci skrin selepas tempoh tersebut apabila dijalankan dengan kuasa bateri.
 
@@ -1667,22 +1690,6 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 
       Jika dasar ini dibiarkan tanpa ditetapkan, ramalan rangkaian akan didayakan tetapi pengguna akan boleh mengubahnya.</translation>
 <translation id="6658245400435704251">Menyatakan bilangan saat sehingga peranti boleh melambatkan muat turun kemas kini secara rawak dari masa kemas kini mula ditolak keluar ke pelayan. Peranti mungkin menunggu sebahagian masa ini dari segi masa jam dinding dan bahagian yang selebihnya dari segi bilangan semakan kemas kini. Dalam apa jua keadaan, serakan atas disempadani oleh jumlah masa yang tetap supaya peranti tidak sekali-kali akan tersekat menunggu selama-lamanya untuk memuat turun kemas kini.</translation>
-<translation id="6672934768721876104">Dasar ini dikecam, sebaliknya gunakan ProxyMode.
-
-          Membolehkan anda menentukan pelayan proksi yang digunakan oleh <ph name="PRODUCT_NAME" /> dan menghalang pengguna daripada mengubah tetapan proksi.
-
-          Jika anda memilih untuk langsung tidak menggunakan pelayan proksi dan sentiasa disambungkan secara terus, semua pilihan lain diabaikan.
-
-          Jika anda memilih untuk menggunakan tetapan proksi sistem atau auto kesan pelayan proksi, semua pilihan lain diabaikan.
-
-          Jika anda memilih tetapan proksi manual, anda boleh menentukan pilihan lanjut dalam 'Alamat atau URL pelayan proksi', 'URL untuk fail .pac proksi' dan 'Senarai diasingkan koma bagi peraturan memintas proksi'.
-
-          Untuk melihat contoh terperinci, lawati:
-          <ph name="PROXY_HELP_URL" />
-
-          Jika anda mendayakan tetapan ini, <ph name="PRODUCT_NAME" /> mengabaikan semua pilihan berkaitan proksi yang ditentukan dari baris perintah.
-
-          Membiarkan dasar ini tanpa ditetapkan akan membolehkan pengguna memilih sendiri tetapan proksi mereka.</translation>
 <translation id="6689792153960219308">Laporkan status perkakasan</translation>
 <translation id="6693751878507293182">Jika anda menetapkan tetapan ini kepada didayakan, carian automatik dan pemasangan pemalam yang tiada akan dilumpuhkan dalam <ph name="PRODUCT_NAME" />.
 
@@ -1826,6 +1833,7 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 
       Jika dasar ini tidak ditetapkan, pengguna boleh menukar senarai apl berpin dalam pelancar.</translation>
 <translation id="7132877481099023201">URL yang akan diberikan akses kepada peranti tangkapan video tanpa gesaan</translation>
+<translation id="7167436895080860385">Benarkan pengguna menunjukkan kata laluan dalam Pengurus Kata Laluan (ditamatkan)</translation>
 <translation id="7173856672248996428">Profil tidak kekal</translation>
 <translation id="7187256234726597551">Jika benar, pembuktian jauh dibenarkan untuk peranti dan sijil akan dihasilkan secara automatik dan dimuat naik ke Pelayan Pengurusan Peranti.
 
@@ -1847,6 +1855,11 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 
           Jika dasar "RestoreOnStartup" ditetapkan untuk memulihkan URL daripada sesi sebelumnya, dasar ini tidak akan dilaksanakan dan kuki akan disimpan secara kekal untuk tapak tersebut.</translation>
 <translation id="7207095846245296855">Paksa Google SafeSearch</translation>
+<translation id="7213425178181578730">Jika dasar ini ditetapkan kepada salah, <ph name="PRODUCT_OS_NAME" /> akan melumpuhkan Bluetooth dan pengguna tidak akan dapat mendayakannya semula.
+
+      Jika dasar ini ditetapkan kepada benar atau dibiarkan tidak ditetapkan, pengguna akan dapat mendayakan atau melumpuhkan Bluetooth semahunya.
+
+      Jika dasar ini ditetapkan, pengguna tidak boleh mengubah atau membatalkannya.</translation>
 <translation id="7216442368414164495">Benarkan pengguna ikut serta untuk pelaporan lanjutan Penyemakan Imbas Selamat</translation>
 <translation id="7227967227357489766">Mentakrifkan senarai pengguna yang dibenarkan untuk log masuk ke peranti. Masukan ialah dalam bentuk <ph name="USER_WHITELIST_ENTRY_FORMAT" />, seperti <ph name="USER_WHITELIST_ENTRY_EXAMPLE" />. Untuk membenarkan pengguna rambang pada domain, gunakan masukan dalam bentuk <ph name="USER_WHITELIST_ENTRY_WILDCARD" />.
 
@@ -1932,6 +1945,11 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 
           Jika dasar ini dibiarkan tanpa ditetapkan, nilai lalai global akan digunakan untuk semua tapak sama ada dari dasar 'DefaultPopupsSetting' jika ia ditetapkan atau konfigurasi peribadi pengguna jika sebaliknya.</translation>
 <translation id="7529144158022474049">Faktor berserak kemas kini automatik</translation>
+<translation id="7553535237300701827">Apabila dasar ini ditetapkan, aliran pengesahan log masuk akan dilakukan dengan satu daripada cara berikut bergantung pada nilai tetapan:
+
+      Jika ditetapkan kepada GAIA, log masuk akan dilakukan melalui aliran pengesahan GAIA yang biasa.
+
+      Jika ditetapkan kepada SAML_INTERSTITIAL, log masuk akan menunjukkan skrin ruang antara yang memberi peluang kepada pengguna supaya meneruskan dengan pengesahan melalui SAML IdP domain pendaftaran peranti atau kembali kepada aliran log masuk GAIA yang biasa.</translation>
 <translation id="7567380065339179813">Benarkan pemalam pada tapak ini</translation>
 <translation id="7593523670408385997">Mengkonfigurasikan saiz cache yang <ph name="PRODUCT_NAME" /> akan gunakan untuk menyimpan fail cache pada cakera.
 
@@ -1950,6 +1968,9 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 
       Jika tetapan ini dilumpuhkan atau tidak dikonfigurasi, <ph name="PRODUCT_NAME" /> menggunakan sama ada penempatan pilihan yang ditentukan pengguna (jika dikonfigurasi), penempatan sistem atau penempatan bertahan 'en-US'.</translation>
 <translation id="7651739109954974365">Menentukan sama ada data perayauan perlu didayakan untuk peranti. Jika ditetapkan kepada benar, perayauan data dibenarkan. Jika dibiarkan tanpa dikonfigurasi atau ditetapkan kepada palsu, perayauan data tidak akan tersedia.</translation>
+<translation id="7667184304362487902">Mengkonfigurasi tetapan proksi untuk <ph name="PRODUCT_NAME" /> dan apl ACR.
+
+      Dasar ini belum sedia untuk digunakan lagi, oleh itu jangan gunakannya.</translation>
 <translation id="76810863974142048">URL di mana pelanggan akses jauh harus mendapatkan token pengesahan mereka.
 
           Jika dasar ini ditetapkan, hos akses jauh memerlukan pelanggan yang mengesahkan supaya mendapatkan token pengesahan daripada URL ini agar dapat menyambung.  Hendaklah digunakan bersama dengan RemoteAccessHostTokenValidationUrl.
@@ -2024,10 +2045,36 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 <translation id="7848840259379156480">Membenarkan anda untuk mengkonfigurasi pemapar HTML lalai apabila <ph name="PRODUCT_FRAME_NAME" /> dipasang.
       Tetapan lalai adalah untuk membenarkan hos penyemak imbas melakukan paparan, tetapi anda
       boleh memilih untuk membatalkan ini dan mengaturkan supaya <ph name="PRODUCT_FRAME_NAME" /> memaparkan halaman HTML secara lalai.</translation>
+<translation id="7853178359124471330">Apabila dasar ini ditetapkan, aliran pengesanan zon waktu automatik akan menjadi satu daripada cara berikut bergantung pada nilai tetapan:
+
+      Jika ditetapkan kepada TimezoneAutomaticDetectionUsersDecide, pengguna akan dapat mengawal pengesanan zon waktu automatik menggunakan kawalan biasa dalam chrome://settings.
+
+      Jika ditetapkan kepada TimezoneAutomaticDetectionDisabled, kawalan zon waktu automatik dalam chrome://settings akan dilumpuhkan. Pengesanan zon waktu automatik akan sentiasa dimatikan.
+
+      Jika ditetapkan kepada TimezoneAutomaticDetectionIPOnly, kawalan zon waktu dalam chrome://settings akan dilumpuhkan. Pengesanan zon waktu automatik akan sentiasa dihidupkan. Pengesanan zon waktu akan menggunakan kaedah IP sahaja untuk menyelesaikan lokasi.
+
+      Jika ditetapkan kepada TimezoneAutomaticDetectionSendWiFiAccessPoints, kawalan zon waktu dalam chrome://settings akan dilumpuhkan. Pengesanan zon waktu automatik akan sentiasa dihidupkan. Senarai pusat akses Wi-Fi yang kelihatan akan sentiasa dihantar ke pelayan API Geolokasi untuk pengesanan zon waktu yang terperinci.
+
+      Jika dasar ini tidak ditetapkan, dasar ini akan berkelakuan seolah-olah TimezoneAutomaticDetectionUsersDecide ditetapkan.
+
+      Jika dasar SystemTimezone ditetapkan, dasar tersebut akan melangkau dasar ini. Dalam hal ini, pengesanan zon waktu automatik dilumpuhkan sepenuhnya.</translation>
 <translation id="7882585827992171421">Dasar ini aktif dalam mod runcit sahaja.
 
       Menentukan id sambungan untuk digunakan sebagai penyelamat skrin pada skrin log masuk. Sambungan mestilah sebahagian daripada AppPack yang dikonfigurasikan untuk domain ini melalui dasar DeviceAppPack.</translation>
+<translation id="7882890448959833986">Sekat amaran OS yang tidak disokong</translation>
 <translation id="7912255076272890813">Konfigurasi jenis apl/sambungan yang dibenarkan</translation>
+<translation id="7928112526630078979">Membolehkan anda menentukan pelayan proksi yang digunakan oleh <ph name="PRODUCT_NAME" /> dan apl ARC serta menghalang pengguna daripada mengubah tetapan proksi.
+
+      Jika anda memilih untuk tidak menggunakan pelayan proksi selama-lamanya dan sentiasa menyambung secara terus, semua pilihan lain akan diabaikan. Apl ARC akan menggunakan pelayan proksi lalai rangkaian semasa jika ada.
+
+      Jika anda memilih untuk mengesan pelayan proksi secara automatik, semua pilihan lain akan diabaikan.
+
+      Untuk melihat contoh terperinci, sila lawati:
+      <ph name="PROXY_HELP_URL" />
+
+      Jika anda mendayakan tetapan ini, <ph name="PRODUCT_NAME" /> dan apl ARC akan mengabaikan semua pilihan berkaitan proksi yang ditentukan daripada baris perintah.
+
+      Tindakan membiarkan dasar ini tidak ditetapkan akan membolehkan pengguna memilih sendiri tetapan proksi mereka.</translation>
 <translation id="793134539373873765">Menentukan sama ada p2p akan digunakan untuk beban bayar kemas kini OS. Jika ditetapkan kepada Benar, peranti akan berkongsi dan cuba menggunakan beban bayar kemas kini pada LAN, berkemungkinan mengurangkan penggunaan dan kesesakan lebar jalur Internet. Jika beban bayar kemas kini tidak tersedia pada LAN, peranti ini akan kembali kepada memuat turun dari pelayan kemas kini. Jika ditetapkan kepada Palsu atau tidak dikonfigurasi, p2p tidak akan digunakan.</translation>
 <translation id="7933141401888114454">Dayakan penghasilan pengguna di bawah seliaan</translation>
 <translation id="7936098023732125869">Membolehkan penggunaan penyedia carian lalai.
@@ -2065,6 +2112,7 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 
           Jika dasar ini tidak ditetapkan, tetapan akan didayakan.</translation>
 <translation id="8073243368829195">Membenarkan Smart Lock digunakan</translation>
+<translation id="8074052133552427532">Sentiasa gunakan pengesanan zon waktu kasar.</translation>
 <translation id="8099880303030573137">Kelewatan melahu apabila dijalankan dengan kuasa bateri</translation>
 <translation id="8102913158860568230">Tetapan mediastream lalai</translation>
 <translation id="8104962233214241919">Memilih sijil klien secara automatik untuk tapak ini</translation>
@@ -2089,6 +2137,7 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 
       Jika dasar ditetapkan sebagai tidak benar, senarai antara muka tidak akan dilaporkan.</translation>
 <translation id="8146727383888924340">Benarkan pengguna menebus tawaran melalui Pendaftaran OS Chrome</translation>
+<translation id="8148785525797916822">Menyekat amaran yang dipaparkan semasa <ph name="PRODUCT_NAME" /> dijalankan pada komputer atau sistem pengendalian yang tidak disokong lagi.</translation>
 <translation id="8148901634826284024">Dayakan ciri kebolehcapaian mod kontras tinggi.
 
           Jika dasar ini ditetapkan kepada benar, mod kontras tinggi akan sentiasa didayakan.
@@ -2138,6 +2187,7 @@ Halaman yang dibuka semasa permulaan dikawal oleh dasar RestoreOnStartup.
 <translation id="8197918588508433925">Dasar ini menentukan sambungan yang dibenarkan menggunakan API Enterprise Platform Keys chrome.enterprise.platformKeysPrivate.challengeUserKey() untuk pembuktian jauh. Sambungan hendaklah ditambahkan pada senarai ini untuk penggunakan API tersebut.
 
           Jika sambungan tidak terdapat dalam senarai atau senarai tidak ditetapkan, panggilan kepada API tersebut akan gagal dengan kod ralat.</translation>
+<translation id="8214600119442850823">Mengkonfigurasi pengurus kata laluan.</translation>
 <translation id="8244525275280476362">Kelewatan pengambilan maksimum selepas pentaksahan dasar</translation>
 <translation id="8256688113167012935">Mengawal nama akaun yang <ph name="PRODUCT_OS_NAME" /> paparkan pada skrin log masuk untuk akaun setempat peranti yang sepadan.
 
@@ -2320,17 +2370,32 @@ Jika dasar ini dibiarkan tidak ditetapkan mana-mana pemalam yang sepadan dengan 
       Jika dasar ini ditetapkan kepada palsu, pengguna mahupun mana-mana apl atau sambungan tidak boleh memasuki mod skrin penuh.
 
       Pada semua platform kecuali <ph name="PRODUCT_OS_NAME" />, mod kios tiada apabila mod skrin penuh dilumpuhkan.</translation>
+<translation id="8795495354632096254">Sentiasa hantar pusat akses Wi-Fi ke pelayan semasa menyelesaikan zon waktu.</translation>
 <translation id="8818173863808665831">Laporkan lokasi geografi peranti.
 
       Jika dasar ini tidak ditetapkan atau ditetapkan kepada palsu, lokasi tersebut tidak akan dilaporkan.</translation>
+<translation id="8818768076343557335">Ramal tindakan rangkaian pada mana-mana rangkaian yang bukan selular.
+          (Ditamatkan dalam 50, dialih keluar dalam 52. Selepas 52, jika nilai 1 ditetapkan, nilai ini akan dianggap sebagai 0 - ramal tindakan rangkaian pada mana-mana sambungan rangkaian.)</translation>
 <translation id="8828766846428537606">Menkonfigurasi halaman utama lalai dalam <ph name="PRODUCT_NAME" /> dan menghalang pengguna daripada mengubahnya.
 
       Tetapan halaman utama pengguna hanya dikunci sepenuhnya, jika anda memilih halaman utama sebagai halaman tab baharu atau pun menetapkannya sebagai URL dan menetapkan URL halaman utama. Jika anda tidak menetapkan URL halaman utama, maka pengguna masih boleh menetapkan halaman utama kepada halaman tab baharu dengan menetapkan 'chrome://newtab'.</translation>
+<translation id="8833109046074170275">Pengesahan melalui aliran GAIA lalai</translation>
 <translation id="8838303810937202360"><ph name="PRODUCT_OS_NAME" /> mengcache Apps dan Sambungan untuk pemasangan oleh berbilang pengguna bagi peranti tunggal untuk mengelakkan daripada memuat turun semula untuk setiap pengguna.
      Jika dasar ini tidak dikonfigurasikan atau nilai tersebut lebih rendah daripada 1 MB, <ph name="PRODUCT_OS_NAME" /> akan menggunakan saiz cache lalai.</translation>
 <translation id="8858642179038618439">Paksa Mod Keselamatan YouTube</translation>
 <translation id="8864975621965365890">Menyekat gesaan penolakan yang dipaparkan apabila tapak dipaparkan oleh <ph name="PRODUCT_FRAME_NAME" /> .</translation>
 <translation id="8870318296973696995">Halaman utama</translation>
+<translation id="8889588091638298603">Pelayan Quirks menyediakan fail konfigurasi khusus perkakasan seperti
+      profil paparan ICC untuk melaras penentukuran monitor.
+
+      Apabila dasar ini ditetapkan kepada palsu, peranti tersebut tidak akan cuba
+      menghubungi Pelayan Quirks untuk memuat turun fail konfigurasi.
+
+      Jika dasar ini benar atau tidak dikonfigurasikan, maka
+      <ph name="PRODUCT_OS_NAME" /> akan
+      menghubungi Pelayan Quirks secara automatik dan memuat turun fail konfigurasi,
+      jika ada dan menyimpannya pada peranti.  Fail sedemikian boleh
+      digunakan untuk meningkatkan kualiti paparan monitor yang dipasang, sebagai contoh.</translation>
 <translation id="8905426178924715309">Dasar ini ditamatkan, sebaliknya sila gunakan ForceGoogleSafeSearch dan ForceYouTubeSafetyMode. Dasar ini akan diabaikan jika dasar ForceGoogleSafeSearch atau ForceYouTubeSafetyMode ditetapkan.
 
       Memaksa pertanyaan dalam Carian Web Google dilakukan dengan SafeSearch ditetapkan kepada aktif dan menghalang pengguna daripada mengubah tetapan ini. Tetapan ini turut memaksa Mod Keselamatan di YouTube.
@@ -2372,6 +2437,7 @@ Jika dasar ini dibiarkan tidak ditetapkan mana-mana pemalam yang sepadan dengan 
 <translation id="9042911395677044526">Membenarkan penolakan konfigurasi rangkaian digunakan untuk setiap pengguna pada peranti <ph name="PRODUCT_OS_NAME" />. Konfigurasi rangkaian ialah rentetan berformat JSON seperti yang ditakrifkan oleh format Konfigurasi Rangkaian Terbuka yang dihuraikan di <ph name="ONC_SPEC_URL" /></translation>
 <translation id="9084985621503260744">Menyatakan sama ada aktiviti video menjejaskan pengurusan kuasa</translation>
 <translation id="9088433379343318874">Dayakan penyedia kandungan pengguna di bawah seliaan</translation>
+<translation id="9088444059179765143">Konfigurasi kaedah pengesanan zon waktu automatik</translation>
 <translation id="9096086085182305205">Senarai putih pelayan pengesahan</translation>
 <translation id="9098553063150791878">Dasar untuk pengesahan HTTP</translation>
 <translation id="9104138886225968319">Hantar degupan jantung pemantauan ke pelayan pengurusan, untuk membenarkan

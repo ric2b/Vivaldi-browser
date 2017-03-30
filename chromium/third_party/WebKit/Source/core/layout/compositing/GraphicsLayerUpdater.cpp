@@ -57,7 +57,7 @@ public:
 
     const PaintLayer* compositingContainer(const PaintLayer& layer) const
     {
-        return layer.stackingNode()->isTreatedAsOrStackingContext() ? m_compositingStackingContext : m_compositingAncestor;
+        return layer.stackingNode()->isStacked() ? m_compositingStackingContext : m_compositingAncestor;
     }
 
     const PaintLayer* compositingStackingContext() const
@@ -99,7 +99,7 @@ void GraphicsLayerUpdater::updateRecursive(PaintLayer& layer, UpdateType updateT
                 m_needsRebuildTree = true;
 
             mapping->updateGraphicsLayerGeometry(compositingContainer, context.compositingStackingContext(), layersNeedingPaintInvalidation);
-            if (PaintLayerScrollableArea* scrollableArea = layer.scrollableArea())
+            if (PaintLayerScrollableArea* scrollableArea = layer.getScrollableArea())
                 scrollableArea->positionOverflowControls();
             updateType = mapping->updateTypeForChildren(updateType);
             mapping->clearNeedsGraphicsLayerUpdate();

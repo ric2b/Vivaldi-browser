@@ -41,6 +41,7 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/mock_render_process_host.h"
+#include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_utils.h"
 #include "content/test/test_content_browser_client.h"
 #include "content/test/test_content_client.h"
@@ -51,6 +52,7 @@
 #include "net/test/cert_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "url/url_constants.h"
 
 namespace content {
 namespace {
@@ -353,12 +355,14 @@ class FakeValidationMessageDelegate : public WebContentsDelegate {
 TEST_F(WebContentsImplTest, UpdateTitle) {
   NavigationControllerImpl& cont =
       static_cast<NavigationControllerImpl&>(controller());
+  cont.LoadURL(GURL(url::kAboutBlankURL), Referrer(), ui::PAGE_TRANSITION_TYPED,
+               std::string());
+
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   InitNavigateParams(&params, 0, 0, true, GURL(url::kAboutBlankURL),
                      ui::PAGE_TRANSITION_TYPED);
 
-  LoadCommittedDetails details;
-  cont.RendererDidNavigate(contents()->GetMainFrame(), params, &details);
+  contents()->GetMainFrame()->SendNavigateWithParams(&params);
 
   contents()->UpdateTitle(contents()->GetMainFrame(), 0,
                           base::ASCIIToUTF16("    Lots O' Whitespace\n"),
@@ -412,16 +416,15 @@ TEST_F(WebContentsImplTest, NTPViewSource) {
   cont.LoadURL(
       kGURL, Referrer(), ui::PAGE_TRANSITION_TYPED, std::string());
   int entry_id = cont.GetPendingEntry()->GetUniqueID();
-  rvh()->GetDelegate()->RenderViewCreated(rvh());
   // Did we get the expected message?
   EXPECT_TRUE(process()->sink().GetFirstMessageMatching(
-      ViewMsg_EnableViewSourceMode::ID));
+      FrameMsg_EnableViewSourceMode::ID));
 
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
   InitNavigateParams(&params, 0, entry_id, true, kGURL,
                      ui::PAGE_TRANSITION_TYPED);
-  LoadCommittedDetails details;
-  cont.RendererDidNavigate(contents()->GetMainFrame(), params, &details);
+  contents()->GetMainFrame()->PrepareForCommit();
+  contents()->GetMainFrame()->SendNavigateWithParams(&params);
   // Also check title and url.
   EXPECT_EQ(base::ASCIIToUTF16(kUrl), contents()->GetTitle());
 }
@@ -488,7 +491,7 @@ TEST_F(WebContentsImplTest, SimpleNavigation) {
 TEST_F(WebContentsImplTest, NavigateToExcessivelyLongURL) {
   // Construct a URL that's kMaxURLChars + 1 long of all 'a's.
   const GURL url(std::string("http://example.org/").append(
-      kMaxURLChars + 1, 'a'));
+      url::kMaxURLChars + 1, 'a'));
 
   controller().LoadURL(
       url, Referrer(), ui::PAGE_TRANSITION_GENERATED, std::string());
@@ -587,10 +590,6 @@ TEST_F(WebContentsImplTest, CrossSiteBoundaries) {
   if (IsBrowserSideNavigationEnabled())
     contents()->GetMainFrame()->PrepareForCommit();
   TestRenderFrameHost* goback_rfh = contents()->GetPendingMainFrame();
-  if (!SiteIsolationPolicy::IsSwappedOutStateForbidden()) {
-    // Recycling the rfh is a behavior specific to swappedout://
-    EXPECT_EQ(orig_rfh, goback_rfh);
-  }
   EXPECT_TRUE(contents()->CrossProcessNavigationPending());
 
   // Navigations should be suspended in goback_rfh until BeforeUnloadACK.
@@ -973,20 +972,15 @@ TEST_F(WebContentsImplTest, FindOpenerRVHWhenPending) {
       popup->GetRenderManager()->GetOpenerRoutingID(instance);
   RenderFrameProxyHost* proxy =
       contents()->GetRenderManager()->GetRenderFrameProxyHost(instance);
-  if (SiteIsolationPolicy::IsSwappedOutStateForbidden()) {
-    EXPECT_TRUE(proxy);
-    EXPECT_EQ(proxy->GetRoutingID(), opener_frame_routing_id);
+  EXPECT_TRUE(proxy);
+  EXPECT_EQ(proxy->GetRoutingID(), opener_frame_routing_id);
 
-    // Ensure that committing the navigation removes the proxy.
-    int entry_id = controller().GetPendingEntry()->GetUniqueID();
-    contents()->TestDidNavigate(pending_rfh, 2, entry_id, true, url2,
-                                ui::PAGE_TRANSITION_TYPED);
-    EXPECT_FALSE(
-        contents()->GetRenderManager()->GetRenderFrameProxyHost(instance));
-  } else {
-    EXPECT_FALSE(proxy);
-    EXPECT_EQ(pending_rfh->GetRoutingID(), opener_frame_routing_id);
-  }
+  // Ensure that committing the navigation removes the proxy.
+  entry_id = controller().GetPendingEntry()->GetUniqueID();
+  contents()->TestDidNavigate(pending_rfh, 2, entry_id, true, url2,
+                              ui::PAGE_TRANSITION_TYPED);
+  EXPECT_FALSE(
+      contents()->GetRenderManager()->GetRenderFrameProxyHost(instance));
 }
 
 // Tests that WebContentsImpl uses the current URL, not the SiteInstance's site,
@@ -1401,6 +1395,7 @@ TEST_F(WebContentsImplTest, CrossSiteNotPreemptedDuringBeforeUnload) {
       url, Referrer(), ui::PAGE_TRANSITION_TYPED, std::string());
   int entry1_id = controller().GetPendingEntry()->GetUniqueID();
   TestRenderFrameHost* orig_rfh = contents()->GetMainFrame();
+  orig_rfh->PrepareForCommit();
   EXPECT_FALSE(contents()->CrossProcessNavigationPending());
 
   // Navigate to new site, with the beforeunload request in flight.
@@ -3046,7 +3041,6 @@ TEST_F(WebContentsImplTestWithSiteIsolation, StartStopEventsBalance) {
   controller().LoadURL(
       main_url, Referrer(), ui::PAGE_TRANSITION_TYPED, std::string());
   int entry_id = controller().GetPendingEntry()->GetUniqueID();
-  orig_rfh->PrepareForCommit();
   orig_rfh->OnMessageReceived(
       FrameHostMsg_DidStartLoading(orig_rfh->GetRoutingID(), false));
   contents()->TestDidNavigate(orig_rfh, 1, entry_id, true, main_url,
@@ -3062,7 +3056,6 @@ TEST_F(WebContentsImplTestWithSiteIsolation, StartStopEventsBalance) {
   // Navigate the child frame to about:blank, which will send both
   // DidStartLoading and DidStopLoading messages.
   {
-    subframe->SendRendererInitiatedNavigationRequest(initial_url, false);
     subframe->OnMessageReceived(
         FrameHostMsg_DidStartLoading(subframe->GetRoutingID(), true));
     subframe->SendNavigateWithTransition(1, 0, false, initial_url,
@@ -3372,6 +3365,9 @@ TEST_F(WebContentsImplTest, LoadResourceFromMemoryCacheWithBadSecurityInfo) {
 // does not mistakenly think it has seen a good certificate and thus forget any
 // user exceptions for that host. See https://crbug.com/516808.
 TEST_F(WebContentsImplTest, LoadResourceFromMemoryCacheWithEmptySecurityInfo) {
+  WebContentsImplTestBrowserClient browser_client;
+  SetBrowserClientForTesting(&browser_client);
+
   scoped_refptr<net::X509Certificate> cert =
       net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
   SSLPolicyBackend* backend = contents()->controller_.ssl_manager()->backend();
@@ -3384,7 +3380,11 @@ TEST_F(WebContentsImplTest, LoadResourceFromMemoryCacheWithEmptySecurityInfo) {
                                                RESOURCE_TYPE_MAIN_FRAME);
 
   EXPECT_TRUE(backend->HasAllowException(test_url.host()));
+
+  DeleteContents();
 }
+
+namespace {
 
 class TestJavaScriptDialogManager : public JavaScriptDialogManager {
  public:
@@ -3397,7 +3397,6 @@ class TestJavaScriptDialogManager : public JavaScriptDialogManager {
 
   void RunJavaScriptDialog(WebContents* web_contents,
                            const GURL& origin_url,
-                           const std::string& accept_lang,
                            JavaScriptMessageType javascript_message_type,
                            const base::string16& message_text,
                            const base::string16& default_prompt_text,
@@ -3407,7 +3406,6 @@ class TestJavaScriptDialogManager : public JavaScriptDialogManager {
   };
 
   void RunBeforeUnloadDialog(WebContents* web_contents,
-                             const base::string16& message_text,
                              bool is_reload,
                              const DialogClosedCallback& callback) override {}
 
@@ -3427,26 +3425,23 @@ class TestJavaScriptDialogManager : public JavaScriptDialogManager {
   DISALLOW_COPY_AND_ASSIGN(TestJavaScriptDialogManager);
 };
 
+}  // namespace
+
 TEST_F(WebContentsImplTest, ResetJavaScriptDialogOnUserNavigate) {
-  scoped_ptr<TestJavaScriptDialogManager> delegate(
-      new TestJavaScriptDialogManager());
-  contents()->SetJavaScriptDialogManagerForTesting(delegate.get());
+  TestJavaScriptDialogManager dialog_manager;
+  contents()->SetJavaScriptDialogManagerForTesting(&dialog_manager);
 
   // A user-initiated navigation.
-
-  contents()->GetMainFrame()->PrepareForCommit();
   contents()->TestDidNavigate(contents()->GetMainFrame(), 1, 0, true,
                               GURL("about:whatever"),
                               ui::PAGE_TRANSITION_TYPED);
-  EXPECT_EQ(1u, delegate->reset_count());
+  EXPECT_EQ(1u, dialog_manager.reset_count());
 
   // An automatic navigation.
-
-  contents()->GetMainFrame()->PrepareForCommit();
   contents()->GetMainFrame()->SendNavigateWithModificationCallback(
       2, 0, true, GURL(url::kAboutBlankURL), base::Bind(SetAsNonUserGesture));
 
-  EXPECT_EQ(1u, delegate->reset_count());
+  EXPECT_EQ(1u, dialog_manager.reset_count());
 
   contents()->SetJavaScriptDialogManagerForTesting(nullptr);
 }

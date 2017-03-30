@@ -32,7 +32,6 @@
 #include "content/common/content_switches_internal.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/dwrite_font_platform_win.h"
 #include "content/public/common/sandbox_init.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "sandbox/win/src/process_mitigations.h"
@@ -341,8 +340,8 @@ bool AddGenericPolicy(sandbox::TargetPolicy* policy) {
     return false;
 #endif  // NDEBUG
 
-  // Add the policy for read-only PDB file access for AddressSanitizer.
-#if defined(ADDRESS_SANITIZER)
+  // Add the policy for read-only PDB file access for stack traces.
+#if !defined(OFFICIAL_BUILD)
   base::FilePath exe;
   if (!PathService::Get(base::FILE_EXE, &exe))
     return false;
@@ -414,6 +413,7 @@ bool AddPolicyForSandboxedProcess(sandbox::TargetPolicy* policy) {
   // Prevents the renderers from manipulating low-integrity processes.
   policy->SetDelayedIntegrityLevel(sandbox::INTEGRITY_LEVEL_UNTRUSTED);
   policy->SetIntegrityLevel(sandbox::INTEGRITY_LEVEL_LOW);
+  policy->SetLockdownDefaultDacl();
 
   if (sandbox::SBOX_ALL_OK !=  policy->SetAlternateDesktop(true)) {
     DLOG(WARNING) << "Failed to apply desktop security to the renderer";
@@ -695,7 +695,7 @@ base::Process StartSandboxedProcess(
 
     // TODO(rvargas) crbug.com/417532: Don't share a raw handle.
     g_broker_services->AddTargetPeer(process.Handle());
-    return process.Pass();
+    return process;
   }
 
   sandbox::TargetPolicy* policy = g_broker_services->CreatePolicy();
@@ -757,24 +757,6 @@ base::Process StartSandboxedProcess(
                   true,
                   sandbox::TargetPolicy::FILES_ALLOW_READONLY,
                   policy);
-
-      if (!ShouldUseDirectWriteFontProxyFieldTrial()) {
-        // If DirectWrite is enabled for font rendering then open the font
-        // cache section which is created by the browser and pass the handle to
-        // the renderer process. This is needed because renderer processes on
-        // Windows 8+ may be running in an AppContainer sandbox and hence their
-        // kernel object namespace may be partitioned.
-        std::string name(content::kFontCacheSharedSectionName);
-        name.append(base::UintToString(base::GetCurrentProcId()));
-
-        if (direct_write_font_cache_section.Open(name, true)) {
-          HANDLE handle = direct_write_font_cache_section.handle().GetHandle();
-          policy->AddHandleToShare(handle);
-          cmd_line->AppendSwitchASCII(
-              switches::kFontCacheSharedHandle,
-              base::UintToString(base::win::HandleToUint32(handle)));
-        }
-      }
     }
   }
 #endif

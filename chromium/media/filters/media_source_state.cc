@@ -6,6 +6,8 @@
 
 #include "base/callback_helpers.h"
 #include "base/stl_util.h"
+#include "media/base/media_track.h"
+#include "media/base/media_tracks.h"
 #include "media/filters/chunk_demuxer.h"
 #include "media/filters/frame_processor.h"
 #include "media/filters/source_buffer_stream.h"
@@ -98,6 +100,7 @@ MediaSourceState::MediaSourceState(
       video_(NULL),
       frame_processor_(frame_processor.release()),
       media_log_(media_log),
+      state_(UNINITIALIZED),
       auto_update_timestamp_offset_(false) {
   DCHECK(!create_demuxer_stream_cb_.is_null());
   DCHECK(frame_processor_);
@@ -115,9 +118,11 @@ void MediaSourceState::Init(
     bool allow_video,
     const StreamParser::EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
     const NewTextTrackCB& new_text_track_cb) {
+  DCHECK_EQ(state_, UNINITIALIZED);
   new_text_track_cb_ = new_text_track_cb;
   init_cb_ = init_cb;
 
+  state_ = PENDING_PARSER_CONFIG;
   stream_parser_->Init(
       base::Bind(&MediaSourceState::OnSourceInitDone, base::Unretained(this)),
       base::Bind(&MediaSourceState::OnNewConfigs, base::Unretained(this),
@@ -143,21 +148,24 @@ void MediaSourceState::SetGroupStartTimestampIfInSequenceMode(
   frame_processor_->SetGroupStartTimestampIfInSequenceMode(timestamp_offset);
 }
 
-bool MediaSourceState::Append(
-    const uint8_t* data,
-    size_t length,
-    TimeDelta append_window_start,
-    TimeDelta append_window_end,
-    TimeDelta* timestamp_offset,
-    const InitSegmentReceivedCB& init_segment_received_cb) {
+void MediaSourceState::SetTracksWatcher(
+    const Demuxer::MediaTracksUpdatedCB& tracks_updated_cb) {
+  DCHECK(init_segment_received_cb_.is_null());
+  init_segment_received_cb_ = tracks_updated_cb;
+  DCHECK(!init_segment_received_cb_.is_null());
+}
+
+bool MediaSourceState::Append(const uint8_t* data,
+                              size_t length,
+                              TimeDelta append_window_start,
+                              TimeDelta append_window_end,
+                              TimeDelta* timestamp_offset) {
+  append_in_progress_ = true;
   DCHECK(timestamp_offset);
   DCHECK(!timestamp_offset_during_append_);
-  DCHECK(!init_segment_received_cb.is_null());
-  DCHECK(init_segment_received_cb_.is_null());
   append_window_start_during_append_ = append_window_start;
   append_window_end_during_append_ = append_window_end;
   timestamp_offset_during_append_ = timestamp_offset;
-  init_segment_received_cb_ = init_segment_received_cb;
 
   // TODO(wolenetz/acolwell): Curry and pass a NewBuffersCB here bound with
   // append window and timestamp offset pointer. See http://crbug.com/351454.
@@ -170,7 +178,7 @@ bool MediaSourceState::Append(
         << " append_window_end=" << append_window_end.InSecondsF();
   }
   timestamp_offset_during_append_ = NULL;
-  init_segment_received_cb_.Reset();
+  append_in_progress_ = false;
   return result;
 }
 
@@ -468,13 +476,20 @@ bool MediaSourceState::IsSeekWaitingForData() const {
 bool MediaSourceState::OnNewConfigs(
     bool allow_audio,
     bool allow_video,
-    const AudioDecoderConfig& audio_config,
-    const VideoDecoderConfig& video_config,
+    scoped_ptr<MediaTracks> tracks,
     const StreamParser::TextTrackConfigMap& text_configs) {
+  DCHECK_GE(state_, PENDING_PARSER_CONFIG);
+  DCHECK(tracks.get());
+  media_tracks_ = std::move(tracks);
+  const AudioDecoderConfig& audio_config = media_tracks_->getFirstAudioConfig();
+  const VideoDecoderConfig& video_config = media_tracks_->getFirstVideoConfig();
+
   DVLOG(1) << "OnNewConfigs(" << allow_audio << ", " << allow_video << ", "
            << audio_config.IsValidConfig() << ", "
            << video_config.IsValidConfig() << ")";
-  DCHECK(!init_segment_received_cb_.is_null());
+  // MSE spec allows new configs to be emitted only during Append, but not
+  // during Flush or parser reset operations.
+  CHECK(append_in_progress_);
 
   if (!audio_config.IsValidConfig() && !video_config.IsValidConfig()) {
     DVLOG(1) << "OnNewConfigs() : Audio & video config are not valid!";
@@ -637,14 +652,19 @@ bool MediaSourceState::OnNewConfigs(
   frame_processor_->SetAllTrackBuffersNeedRandomAccessPoint();
 
   DVLOG(1) << "OnNewConfigs() : " << (success ? "success" : "failed");
-  if (success)
-    init_segment_received_cb_.Run();
+  if (success) {
+    if (state_ == PENDING_PARSER_CONFIG)
+      state_ = PENDING_PARSER_INIT;
+    DCHECK(!init_segment_received_cb_.is_null());
+    init_segment_received_cb_.Run(std::move(media_tracks_));
+  }
 
   return success;
 }
 
 void MediaSourceState::OnNewMediaSegment() {
   DVLOG(2) << "OnNewMediaSegment()";
+  DCHECK_EQ(state_, PARSER_INITIALIZED);
   parsing_media_segment_ = true;
   media_segment_contained_audio_frame_ = false;
   media_segment_contained_video_frame_ = false;
@@ -652,6 +672,7 @@ void MediaSourceState::OnNewMediaSegment() {
 
 void MediaSourceState::OnEndOfMediaSegment() {
   DVLOG(2) << "OnEndOfMediaSegment()";
+  DCHECK_EQ(state_, PARSER_INITIALIZED);
   parsing_media_segment_ = false;
 
   const bool missing_audio = audio_ && !media_segment_contained_audio_frame_;
@@ -674,6 +695,7 @@ bool MediaSourceState::OnNewBuffers(
     const StreamParser::BufferQueue& video_buffers,
     const StreamParser::TextBufferQueueMap& text_map) {
   DVLOG(2) << "OnNewBuffers()";
+  DCHECK_EQ(state_, PARSER_INITIALIZED);
   DCHECK(timestamp_offset_during_append_);
   DCHECK(parsing_media_segment_);
 
@@ -717,6 +739,8 @@ bool MediaSourceState::OnNewBuffers(
 
 void MediaSourceState::OnSourceInitDone(
     const StreamParser::InitParameters& params) {
+  DCHECK_EQ(state_, PENDING_PARSER_INIT);
+  state_ = PARSER_INITIALIZED;
   auto_update_timestamp_offset_ = params.auto_update_timestamp_offset;
   base::ResetAndReturn(&init_cb_).Run(params);
 }

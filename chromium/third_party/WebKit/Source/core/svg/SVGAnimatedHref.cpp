@@ -11,9 +11,9 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<SVGAnimatedHref> SVGAnimatedHref::create(SVGElement* contextElement)
+SVGAnimatedHref* SVGAnimatedHref::create(SVGElement* contextElement)
 {
-    return adoptRefWillBeNoop(new SVGAnimatedHref(contextElement));
+    return new SVGAnimatedHref(contextElement);
 }
 
 DEFINE_TRACE(SVGAnimatedHref)
@@ -64,8 +64,7 @@ void SVGAnimatedHref::setBaseVal(const String& value, ExceptionState& exceptionS
 String SVGAnimatedHref::animVal()
 {
     UseCounter::count(contextElement()->document(), UseCounter::SVGHrefAnimVal);
-    // We should only animate (non-XLink) 'href'.
-    return SVGAnimatedString::animVal();
+    return backingString()->SVGAnimatedString::animVal();
 }
 
 SVGAnimatedString* SVGAnimatedHref::backingString()

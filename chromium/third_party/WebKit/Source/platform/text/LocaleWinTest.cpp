@@ -70,7 +70,7 @@ protected:
         Spanish = 0x040A, // es
     };
 
-    DateComponents dateComponents(int year, int month, int day)
+    DateComponents getDateComponents(int year, int month, int day)
     {
         DateComponents date;
         date.setMillisecondsSinceEpochForDate(msForDate(year, month, day));
@@ -85,7 +85,7 @@ protected:
     String formatDate(LCID lcid, int year, int month, int day)
     {
         OwnPtr<LocaleWin> locale = LocaleWin::create(lcid, true /* defaultsForLocale */);
-        return locale->formatDateTime(dateComponents(year, month, day));
+        return locale->formatDateTime(getDateComponents(year, month, day));
     }
 
     unsigned firstDayOfWeek(LCID lcid)
@@ -215,7 +215,7 @@ TEST_F(LocaleWinTest, monthFormat)
     // Month format for EnglishUS:
     //  "MMMM, yyyy" on Windows 7 or older.
     //  "MMMM yyyy" on Window 8 or later.
-    EXPECT_STREQ("MMMM yyyy", monthFormat(EnglishUS).replaceWithLiteral(',', "").utf8().data());
+    EXPECT_STREQ("MMMM yyyy", monthFormat(EnglishUS).replace(',', "").utf8().data());
     EXPECT_STREQ("MMMM yyyy", monthFormat(FrenchFR).utf8().data());
     EXPECT_STREQ("yyyy\xE5\xB9\xB4M\xE6\x9C\x88", monthFormat(JapaneseJP).utf8().data());
 }

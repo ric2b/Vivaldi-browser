@@ -45,9 +45,7 @@
 #include "wtf/text/WTFString.h"
 #include <limits.h>
 
-#if OS(WIN)
 #include "SkFontMgr.h"
-#endif
 
 class SkTypeface;
 
@@ -76,7 +74,10 @@ public:
 
     // This method is implemented by the plaform and used by
     // FontFastPath to lookup the font for a given character.
-    PassRefPtr<SimpleFontData> fallbackFontForCharacter(const FontDescription&, UChar32, const SimpleFontData* fontDataToSubstitute);
+    PassRefPtr<SimpleFontData> fallbackFontForCharacter(const FontDescription&,
+        UChar32,
+        const SimpleFontData* fontDataToSubstitute,
+        FontFallbackPriority = FontFallbackPriority::Text);
 
     // Also implemented by the platform.
     void platformInit();
@@ -86,12 +87,6 @@ public:
     SimpleFontData* getNonRetainedLastResortFallbackFont(const FontDescription&);
     bool isPlatformFontAvailable(const FontDescription&, const AtomicString&);
 
-    // Returns the list of available emoji and symbol fonts.  Does not return a
-    // null pointer and should return at least one available font for each
-    // category. The returned list is lazy initialized by checking a list of
-    // font candidates for local availability.
-    const Vector<AtomicString>* fontListForFallbackPriority(const FontDescription&, FontFallbackPriority);
-
     // Returns the ShapeCache instance associated with the given cache key.
     // Creates a new instance as needed and as such is guaranteed not to return
     // a nullptr. Instances are managed by FontCache and are only guaranteed to
@@ -100,22 +95,23 @@ public:
     ShapeCache* getShapeCache(const FallbackListCompositeKey&);
 
     void addClient(FontCacheClient*);
-#if !ENABLE(OILPAN)
-    void removeClient(FontCacheClient*);
-#endif
 
     unsigned short generation();
     void invalidate();
 
+    SkFontMgr* fontManager() { return m_fontManager.get(); }
+    static void setFontManager(const RefPtr<SkFontMgr>&);
+
 #if OS(WIN)
     bool useSubpixelPositioning() const { return s_useSubpixelPositioning; }
-    SkFontMgr* fontManager() { return m_fontManager.get(); }
     static bool useDirectWrite() { return s_useDirectWrite; }
+    static bool antialiasedTextEnabled() { return s_antialiasedTextEnabled; }
+    static bool lcdTextEnabled() { return s_lcdTextEnabled; }
     static float deviceScaleFactor() { return s_deviceScaleFactor; }
     static void setUseDirectWrite(bool useDirectWrite) { s_useDirectWrite = useDirectWrite; }
-    static void setFontManager(const RefPtr<SkFontMgr>&);
+    static void setAntialiasedTextEnabled(bool enabled) { s_antialiasedTextEnabled = enabled; }
+    static void setLCDTextEnabled(bool enabled) { s_lcdTextEnabled = enabled; }
     static void setDeviceScaleFactor(float deviceScaleFactor) { s_deviceScaleFactor = deviceScaleFactor; }
-    static void setUseSubpixelPositioning(bool useSubpixelPositioning) { s_useSubpixelPositioning = useSubpixelPositioning; }
     static void addSideloadedFontForTesting(SkTypeface*);
     // Functions to cache and retrieve the system font metrics.
     static void setMenuFontMetrics(const wchar_t* familyName, int32_t fontHeight);
@@ -178,20 +174,23 @@ private:
     // Implemented on skia platforms.
     PassRefPtr<SkTypeface> createTypeface(const FontDescription&, const FontFaceCreationParams&, CString& name);
 
+#if OS(ANDROID) || OS(LINUX)
+    static AtomicString getFamilyNameForCharacter(SkFontMgr*, UChar32, const FontDescription&, FontFallbackPriority);
+#endif
+
     PassRefPtr<SimpleFontData> fallbackOnStandardFontStyle(const FontDescription&, UChar32);
-
-    template <FontFallbackPriority fallbackPriority>
-    const Vector<AtomicString>* initAndGetFontListForFallbackPriority(const FontDescription&);
-
-    const Vector<AtomicString> platformFontListForFallbackPriority(FontFallbackPriority) const;
 
     // Don't purge if this count is > 0;
     int m_purgePreventCount;
 
-#if OS(WIN)
     RefPtr<SkFontMgr> m_fontManager;
-    static bool s_useDirectWrite;
+
     static SkFontMgr* s_fontManager;
+
+#if OS(WIN)
+    static bool s_useDirectWrite;
+    static bool s_antialiasedTextEnabled;
+    static bool s_lcdTextEnabled;
     static float s_deviceScaleFactor;
     static bool s_useSubpixelPositioning;
     static HashMap<String, RefPtr<SkTypeface>>* s_sideloadedFonts;

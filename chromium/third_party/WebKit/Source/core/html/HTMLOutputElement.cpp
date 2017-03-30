@@ -50,15 +50,20 @@ HTMLOutputElement::~HTMLOutputElement()
 #endif
 }
 
-PassRefPtrWillBeRawPtr<HTMLOutputElement> HTMLOutputElement::create(Document& document, HTMLFormElement* form)
+RawPtr<HTMLOutputElement> HTMLOutputElement::create(Document& document, HTMLFormElement* form)
 {
-    return adoptRefWillBeNoop(new HTMLOutputElement(document, form));
+    return new HTMLOutputElement(document, form);
 }
 
 const AtomicString& HTMLOutputElement::formControlType() const
 {
-    DEFINE_STATIC_LOCAL(const AtomicString, output, ("output", AtomicString::ConstructFromLiteral));
+    DEFINE_STATIC_LOCAL(const AtomicString, output, ("output"));
     return output;
+}
+
+bool HTMLOutputElement::isDisabledFormControl() const
+{
+    return false;
 }
 
 bool HTMLOutputElement::supportsFocus() const

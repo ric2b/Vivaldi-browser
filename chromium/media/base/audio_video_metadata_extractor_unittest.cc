@@ -121,7 +121,7 @@ TEST(AudioVideoMetadataExtractorTest, VideoWebM) {
   EXPECT_EQ(0u, extractor->attached_images_bytes().size());
 }
 
-#if 0 && defined(USE_PROPRIETARY_CODECS)
+#if defined(USE_PROPRIETARY_CODECS)
 TEST(AudioVideoMetadataExtractorTest, AndroidRotatedMP4Video) {
   scoped_ptr<AudioVideoMetadataExtractor> extractor =
       GetExtractor("90rotation.mp4", true, true, 0, 1920, 1080);

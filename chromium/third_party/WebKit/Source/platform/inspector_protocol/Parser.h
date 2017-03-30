@@ -6,15 +6,15 @@
 #define Parser_h
 
 #include "platform/PlatformExport.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/text/WTFString.h"
+#include "platform/inspector_protocol/String16.h"
+#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 namespace protocol {
 
 class Value;
 
-PLATFORM_EXPORT PassRefPtr<Value> parseJSON(const String& json);
+PLATFORM_EXPORT PassOwnPtr<Value> parseJSON(const String16& json);
 
 } // namespace platform
 } // namespace blink

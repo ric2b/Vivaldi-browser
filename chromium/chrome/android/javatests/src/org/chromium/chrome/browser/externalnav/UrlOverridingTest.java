@@ -34,6 +34,7 @@ import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
 
 import java.io.UnsupportedEncodingException;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -194,7 +195,7 @@ public class UrlOverridingTest extends ChromeActivityTestCaseBase<ChromeActivity
         // For sub frames, the |loadFailCallback| run through different threads
         // from the ExternalNavigationHandler. As a result, there is no guarantee
         // when url override result would come.
-        CriteriaHelper.pollForUIThreadCriteria(
+        CriteriaHelper.pollUiThread(
                 new Criteria() {
                     @Override
                     public boolean isSatisfied() {
@@ -323,12 +324,12 @@ public class UrlOverridingTest extends ChromeActivityTestCaseBase<ChromeActivity
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         targetContext.startActivity(intent);
 
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(Criteria.equals(1, new Callable<Integer>() {
             @Override
-            public boolean isSatisfied() {
-                return mActivityMonitor.getHits() == 1;
+            public Integer call() {
+                return mActivityMonitor.getHits();
             }
-        });
+        }));
     }
 
     @Override

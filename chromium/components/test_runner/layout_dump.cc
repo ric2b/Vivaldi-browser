@@ -53,13 +53,14 @@ std::string DumpFrameScrollPosition(WebFrame* frame) {
 
 }  // namespace
 
-std::string DumpLayout(WebLocalFrame* frame, const LayoutDumpFlags& flags) {
+std::string DumpLayout(WebLocalFrame* frame,
+                       const LayoutTestRuntimeFlags& flags) {
   DCHECK(frame);
   std::string result;
 
-  if (flags.dump_as_text) {
+  if (flags.dump_as_text()) {
     result = DumpFrameHeaderIfNeeded(frame);
-    if (flags.is_printing && frame->document().isHTMLDocument()) {
+    if (flags.is_printing() && frame->document().isHTMLDocument()) {
       result += WebFrameContentDumper::dumpLayoutTreeAsText(
                     frame, WebFrameContentDumper::LayoutAsTextPrinting)
                     .utf8();
@@ -67,8 +68,8 @@ std::string DumpLayout(WebLocalFrame* frame, const LayoutDumpFlags& flags) {
       result += frame->document().contentAsTextForTesting().utf8();
     }
     result += "\n";
-  } else if (flags.dump_as_markup) {
-    DCHECK(!flags.is_printing);
+  } else if (flags.dump_as_markup()) {
+    DCHECK(!flags.is_printing());
     result = DumpFrameHeaderIfNeeded(frame);
     result += WebFrameContentDumper::dumpAsMarkup(frame).utf8();
     result += "\n";
@@ -76,13 +77,8 @@ std::string DumpLayout(WebLocalFrame* frame, const LayoutDumpFlags& flags) {
     if (frame->parent() == nullptr) {
       WebFrameContentDumper::LayoutAsTextControls layout_text_behavior =
           WebFrameContentDumper::LayoutAsTextNormal;
-      if (flags.is_printing)
+      if (flags.is_printing())
         layout_text_behavior |= WebFrameContentDumper::LayoutAsTextPrinting;
-      if (flags.debug_render_tree)
-        layout_text_behavior |= WebFrameContentDumper::LayoutAsTextDebug;
-      if (flags.dump_line_box_trees)
-        layout_text_behavior |=
-            WebFrameContentDumper::LayoutAsTextWithLineTrees;
       result = WebFrameContentDumper::dumpLayoutTreeAsText(frame,
                                                            layout_text_behavior)
                    .utf8();

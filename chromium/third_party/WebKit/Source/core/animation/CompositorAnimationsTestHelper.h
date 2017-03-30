@@ -80,13 +80,13 @@ public:
     MOCK_CONST_METHOD0(timeOffset, double());
     MOCK_METHOD1(setTimeOffset, void(double));
 
-    MOCK_CONST_METHOD0(direction, Direction());
+    MOCK_CONST_METHOD0(getDirection, Direction());
     MOCK_METHOD1(setDirection, void(Direction));
 
     MOCK_CONST_METHOD0(playbackRate, double());
     MOCK_METHOD1(setPlaybackRate, void(double));
 
-    MOCK_CONST_METHOD0(fillMode, FillMode());
+    MOCK_CONST_METHOD0(getFillMode, FillMode());
     MOCK_METHOD1(setFillMode, void(FillMode));
 
     MOCK_METHOD0(delete_, void());
@@ -135,15 +135,6 @@ public:
         MOCK_METHOD0(createAnimationPlayer, CompositorAnimationPlayer*());
         MOCK_METHOD0(createAnimationTimeline, CompositorAnimationTimeline*());
     };
-
-private:
-    TestingPlatformSupport m_proxyPlatform;
-
-protected:
-    void SetUp() override
-    {
-        Platform::initialize(&m_proxyPlatform);
-    }
 };
 
 } // namespace blink

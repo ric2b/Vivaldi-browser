@@ -24,7 +24,7 @@ struct FrameLoadRequest;
 
 class CORE_EXPORT RemoteFrame: public Frame {
 public:
-    static PassRefPtrWillBeRawPtr<RemoteFrame> create(RemoteFrameClient*, FrameHost*, FrameOwner*);
+    static RemoteFrame* create(RemoteFrameClient*, FrameHost*, FrameOwner*);
 
     ~RemoteFrame() override;
 
@@ -39,7 +39,6 @@ public:
     void detach(FrameDetachType) override;
     RemoteSecurityContext* securityContext() const override;
     void printNavigationErrorMessage(const Frame&, const char* reason) override { }
-    void disconnectOwnerElement() override;
     bool prepareForCommit() override;
     bool shouldClose() override;
 
@@ -56,7 +55,7 @@ public:
 
     void advanceFocus(WebFocusType, LocalFrame* source);
 
-    void setView(PassRefPtrWillBeRawPtr<RemoteFrameView>);
+    void setView(RemoteFrameView*);
     void createView();
 
     RemoteFrameView* view() const;
@@ -65,14 +64,14 @@ private:
     RemoteFrame(RemoteFrameClient*, FrameHost*, FrameOwner*);
 
     // Internal Frame helper overrides:
-    WindowProxyManager* windowProxyManager() const override { return m_windowProxyManager.get(); }
+    WindowProxyManager* getWindowProxyManager() const override { return m_windowProxyManager.get(); }
 
     RemoteFrameClient* remoteFrameClient() const;
 
-    RefPtrWillBeMember<RemoteFrameView> m_view;
-    RefPtrWillBeMember<RemoteSecurityContext> m_securityContext;
-    RefPtrWillBeMember<RemoteDOMWindow> m_domWindow;
-    OwnPtrWillBeMember<WindowProxyManager> m_windowProxyManager;
+    Member<RemoteFrameView> m_view;
+    Member<RemoteSecurityContext> m_securityContext;
+    Member<RemoteDOMWindow> m_domWindow;
+    Member<WindowProxyManager> m_windowProxyManager;
     WebLayer* m_remotePlatformLayer;
 };
 

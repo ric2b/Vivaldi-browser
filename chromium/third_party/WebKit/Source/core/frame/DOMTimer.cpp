@@ -51,11 +51,11 @@ static inline bool shouldForwardUserGesture(int interval, int nestingLevel)
         && nestingLevel == 1; // Gestures should not be forwarded to nested timers.
 }
 
-int DOMTimer::install(ExecutionContext* context, PassOwnPtrWillBeRawPtr<ScheduledAction> action, int timeout, bool singleShot)
+int DOMTimer::install(ExecutionContext* context, ScheduledAction* action, int timeout, bool singleShot)
 {
     int timeoutID = context->timers()->installNewTimeout(context, action, timeout, singleShot);
     TRACE_EVENT_INSTANT1("devtools.timeline", "TimerInstall", TRACE_EVENT_SCOPE_THREAD, "data", InspectorTimerInstallEvent::data(context, timeoutID, timeout, singleShot));
-    InspectorInstrumentation::didInstallTimer(context, timeoutID, timeout, singleShot);
+    InspectorInstrumentation::allowNativeBreakpoint(context, "setTimer", true);
     return timeoutID;
 }
 
@@ -63,10 +63,10 @@ void DOMTimer::removeByID(ExecutionContext* context, int timeoutID)
 {
     context->timers()->removeTimeoutByID(timeoutID);
     TRACE_EVENT_INSTANT1("devtools.timeline", "TimerRemove", TRACE_EVENT_SCOPE_THREAD, "data", InspectorTimerRemoveEvent::data(context, timeoutID));
-    InspectorInstrumentation::didRemoveTimer(context, timeoutID);
+    InspectorInstrumentation::allowNativeBreakpoint(context, "clearTimer", true);
 }
 
-DOMTimer::DOMTimer(ExecutionContext* context, PassOwnPtrWillBeRawPtr<ScheduledAction> action, int interval, bool singleShot, int timeoutID)
+DOMTimer::DOMTimer(ExecutionContext* context, ScheduledAction* action, int interval, bool singleShot, int timeoutID)
     : SuspendableTimer(context)
     , m_timeoutID(timeoutID)
     , m_nestingLevel(context->timers()->timerNestingLevel() + 1)
@@ -75,6 +75,8 @@ DOMTimer::DOMTimer(ExecutionContext* context, PassOwnPtrWillBeRawPtr<ScheduledAc
     ASSERT(timeoutID > 0);
     if (shouldForwardUserGesture(interval, m_nestingLevel))
         m_userGestureToken = UserGestureIndicator::currentToken();
+
+    InspectorInstrumentation::asyncTaskScheduled(context, singleShot ? "setTimeout" : "setInterval", this, !singleShot);
 
     double intervalMilliseconds = std::max(oneMillisecond, interval * oneMillisecond);
     if (intervalMilliseconds < minimumInterval && m_nestingLevel >= maxTimerNestingLevel)
@@ -98,7 +100,7 @@ void DOMTimer::disposeTimer()
 
 void DOMTimer::fired()
 {
-    ExecutionContext* context = executionContext();
+    ExecutionContext* context = getExecutionContext();
     ASSERT(context);
     context->timers()->setTimerNestingLevel(m_nestingLevel);
     ASSERT(!context->activeDOMObjectsAreSuspended());
@@ -106,7 +108,8 @@ void DOMTimer::fired()
     UserGestureIndicator gestureIndicator(m_userGestureToken.release());
 
     TRACE_EVENT1("devtools.timeline", "TimerFire", "data", InspectorTimerFireEvent::data(context, m_timeoutID));
-    InspectorInstrumentationCookie cookie = InspectorInstrumentation::willFireTimer(context, m_timeoutID);
+    InspectorInstrumentationCookie cookie = InspectorInstrumentation::allowNativeBreakpoint(context, "timerFired", false);
+    InspectorInstrumentation::AsyncTask asyncTask(context, this);
 
     // Simple case for non-one-shot timers.
     if (isActive()) {
@@ -118,31 +121,28 @@ void DOMTimer::fired()
 
         // No access to member variables after this point, it can delete the timer.
         m_action->execute(context);
-
-        InspectorInstrumentation::didFireTimer(cookie);
-
+        InspectorInstrumentation::cancelPauseOnNextStatement(cookie);
         return;
     }
 
-    RefPtrWillBeRawPtr<DOMTimer> protect(this);
-
     // Unregister the timer from ExecutionContext before executing the action
     // for one-shot timers.
-    OwnPtrWillBeRawPtr<ScheduledAction> action = m_action.release();
+    ScheduledAction* action = m_action.release();
     context->timers()->removeTimeoutByID(m_timeoutID);
 
     action->execute(context);
+    InspectorInstrumentation::cancelPauseOnNextStatement(cookie);
 
-    InspectorInstrumentation::didFireTimer(cookie);
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateCounters", TRACE_EVENT_SCOPE_THREAD, "data", InspectorUpdateCountersEvent::data());
 
     // ExecutionContext might be already gone when we executed action->execute().
-    if (executionContext())
-        executionContext()->timers()->setTimerNestingLevel(0);
+    if (getExecutionContext())
+        getExecutionContext()->timers()->setTimerNestingLevel(0);
 }
 
 void DOMTimer::stop()
 {
+    InspectorInstrumentation::asyncTaskCanceled(getExecutionContext(), this);
     SuspendableTimer::stop();
     // Need to release JS objects potentially protected by ScheduledAction
     // because they can form circular references back to the ExecutionContext
@@ -152,7 +152,7 @@ void DOMTimer::stop()
 
 WebTaskRunner* DOMTimer::timerTaskRunner() const
 {
-    return executionContext()->timers()->timerTaskRunner();
+    return getExecutionContext()->timers()->timerTaskRunner();
 }
 
 DEFINE_TRACE(DOMTimer)

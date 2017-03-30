@@ -12,7 +12,6 @@
 #include <GLES3/gl3.h>
 
 #include "base/numerics/safe_math.h"
-#include "gpu/command_buffer/common/gles2_cmd_format.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 
 namespace gpu {
@@ -217,11 +216,13 @@ int GLES2Util::GLGetNumValuesReturned(int id) const {
       return 1;
     case GL_TRANSFORM_FEEDBACK_BUFFER_BINDING:
       return 1;
-    case GL_UNIFORM_BUFFER_BINDING:
+    case GL_TRANSFORM_FEEDBACK_BUFFER_MODE:
       return 1;
     case GL_TRANSFORM_FEEDBACK_BUFFER_SIZE:
       return 1;
     case GL_TRANSFORM_FEEDBACK_BUFFER_START:
+      return 1;
+    case GL_UNIFORM_BUFFER_BINDING:
       return 1;
     case GL_UNIFORM_BUFFER_SIZE:
       return 1;
@@ -795,6 +796,10 @@ uint32_t GLES2Util::GetElementCountForUniformType(int type) {
   }
 }
 
+size_t GLES2Util::GetGLTypeSizeForTextures(uint32_t type) {
+  return static_cast<size_t>(BytesPerElement(type));
+}
+
 size_t GLES2Util::GetGLTypeSizeForBuffers(uint32_t type) {
   switch (type) {
     case GL_BYTE:
@@ -979,7 +984,9 @@ size_t GLES2Util::GLTargetToFaceIndex(uint32_t target) {
 }
 
 uint32_t GLES2Util::GetGLReadPixelsImplementationFormat(
-    uint32_t internal_format) {
+    uint32_t internal_format,
+    uint32_t texture_type,
+    bool supports_bgra) {
   switch (internal_format) {
     case GL_R8:
     case GL_R16F:
@@ -1018,6 +1025,14 @@ uint32_t GLES2Util::GetGLReadPixelsImplementationFormat(
     case GL_RGBA32UI:
     case GL_RGBA32I:
       return GL_RGBA_INTEGER;
+    case GL_BGRA_EXT:
+    case GL_BGRA8_EXT:
+      // If the internal format is BGRA, we prefer reading back BGRA if
+      // possible.
+      if (texture_type == GL_UNSIGNED_BYTE && supports_bgra)
+        return GL_BGRA_EXT;
+      else
+        return GL_RGBA;
     default:
       return GL_RGBA;
   }
@@ -1414,6 +1429,9 @@ ContextCreationAttribHelper::ContextCreationAttribHelper()
       fail_if_major_perf_caveat(false),
       lose_context_when_out_of_memory(false),
       context_type(CONTEXT_TYPE_OPENGLES2) {}
+
+ContextCreationAttribHelper::ContextCreationAttribHelper(
+    const ContextCreationAttribHelper& other) = default;
 
 void ContextCreationAttribHelper::Serialize(
     std::vector<int32_t>* attribs) const {

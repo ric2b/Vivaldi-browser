@@ -4,6 +4,7 @@
 
 #include "modules/imagebitmap/ImageBitmapRenderingContext.h"
 
+#include "bindings/modules/v8/UnionTypesModules.h"
 #include "core/frame/ImageBitmap.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/StaticBitmapImage.h"
@@ -19,6 +20,11 @@ ImageBitmapRenderingContext::ImageBitmapRenderingContext(HTMLCanvasElement* canv
 
 ImageBitmapRenderingContext::~ImageBitmapRenderingContext() { }
 
+void ImageBitmapRenderingContext::setCanvasGetContextResult(RenderingContext& result)
+{
+    result.setImageBitmapRenderingContext(this);
+}
+
 void ImageBitmapRenderingContext::transferImageBitmap(ImageBitmap* imageBitmap)
 {
     m_image = imageBitmap->bitmapImage();
@@ -28,7 +34,7 @@ void ImageBitmapRenderingContext::transferImageBitmap(ImageBitmap* imageBitmap)
     RefPtr<SkImage> skImage = m_image->imageForCurrentFrame();
     if (skImage->isTextureBacked()) {
         // TODO(junov): crbug.com/585607 Eliminate this readback and use an ExternalTextureLayer
-        RefPtr<SkSurface> surface = adoptRef(SkSurface::NewRasterN32Premul(skImage->width(), skImage->height()));
+        sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(skImage->width(), skImage->height());
         if (!surface) {
             // silent failure
             m_image.clear();
@@ -52,11 +58,11 @@ bool ImageBitmapRenderingContext::paint(GraphicsContext& gc, const IntRect& r)
     return true;
 }
 
-PassOwnPtrWillBeRawPtr<CanvasRenderingContext> ImageBitmapRenderingContext::Factory::create(HTMLCanvasElement* canvas, const CanvasContextCreationAttributes& attrs, Document& document)
+CanvasRenderingContext* ImageBitmapRenderingContext::Factory::create(HTMLCanvasElement* canvas, const CanvasContextCreationAttributes& attrs, Document& document)
 {
     if (!RuntimeEnabledFeatures::experimentalCanvasFeaturesEnabled())
         return nullptr;
-    return adoptPtrWillBeNoop(new ImageBitmapRenderingContext(canvas, attrs, document));
+    return new ImageBitmapRenderingContext(canvas, attrs, document);
 }
 
 void ImageBitmapRenderingContext::stop()

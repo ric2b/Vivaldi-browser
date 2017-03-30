@@ -54,14 +54,14 @@ MessageEvent::MessageEvent(const AtomicString& type, const MessageEventInit& ini
         m_origin = initializer.origin();
     if (initializer.hasLastEventId())
         m_lastEventId = initializer.lastEventId();
-    if (initializer.hasSource() && isValidSource(initializer.source().get()))
+    if (initializer.hasSource() && isValidSource(initializer.source()))
         m_source = initializer.source();
     if (initializer.hasPorts())
         m_ports = new MessagePortArray(initializer.ports());
     ASSERT(isValidSource(m_source.get()));
 }
 
-MessageEvent::MessageEvent(const String& origin, const String& lastEventId, PassRefPtrWillBeRawPtr<EventTarget> source, MessagePortArray* ports, const String& suborigin)
+MessageEvent::MessageEvent(const String& origin, const String& lastEventId, EventTarget* source, MessagePortArray* ports, const String& suborigin)
     : Event(EventTypeNames::message, false, false)
     , m_dataType(DataTypeScriptValue)
     , m_origin(origin)
@@ -72,7 +72,7 @@ MessageEvent::MessageEvent(const String& origin, const String& lastEventId, Pass
     ASSERT(isValidSource(m_source.get()));
 }
 
-MessageEvent::MessageEvent(PassRefPtr<SerializedScriptValue> data, const String& origin, const String& lastEventId, PassRefPtrWillBeRawPtr<EventTarget> source, MessagePortArray* ports, const String& suborigin)
+MessageEvent::MessageEvent(PassRefPtr<SerializedScriptValue> data, const String& origin, const String& lastEventId, EventTarget* source, MessagePortArray* ports, const String& suborigin)
     : Event(EventTypeNames::message, false, false)
     , m_dataType(DataTypeSerializedScriptValue)
     , m_dataAsSerializedScriptValue(data)
@@ -86,7 +86,7 @@ MessageEvent::MessageEvent(PassRefPtr<SerializedScriptValue> data, const String&
     ASSERT(isValidSource(m_source.get()));
 }
 
-MessageEvent::MessageEvent(PassRefPtr<SerializedScriptValue> data, const String& origin, const String& lastEventId, PassRefPtrWillBeRawPtr<EventTarget> source, PassOwnPtr<MessagePortChannelArray> channels, const String& suborigin)
+MessageEvent::MessageEvent(PassRefPtr<SerializedScriptValue> data, const String& origin, const String& lastEventId, EventTarget* source, PassOwnPtr<MessagePortChannelArray> channels, const String& suborigin)
     : Event(EventTypeNames::message, false, false)
     , m_dataType(DataTypeSerializedScriptValue)
     , m_dataAsSerializedScriptValue(data)
@@ -129,13 +129,13 @@ MessageEvent::~MessageEvent()
 {
 }
 
-PassRefPtrWillBeRawPtr<MessageEvent> MessageEvent::create(const AtomicString& type, const MessageEventInit& initializer, ExceptionState& exceptionState)
+MessageEvent* MessageEvent::create(const AtomicString& type, const MessageEventInit& initializer, ExceptionState& exceptionState)
 {
-    if (initializer.source().get() && !isValidSource(initializer.source().get())) {
+    if (initializer.source() && !isValidSource(initializer.source())) {
         exceptionState.throwTypeError("The optional 'source' property is neither a Window nor MessagePort.");
         return nullptr;
     }
-    return adoptRefWillBeNoop(new MessageEvent(type, initializer));
+    return new MessageEvent(type, initializer);
 }
 
 void MessageEvent::initMessageEvent(const AtomicString& type, bool canBubble, bool cancelable, ScriptValue data, const String& origin, const String& lastEventId, DOMWindow* source, MessagePortArray* ports)
@@ -207,9 +207,7 @@ DEFINE_TRACE(MessageEvent)
 {
     visitor->trace(m_dataAsBlob);
     visitor->trace(m_source);
-#if ENABLE(OILPAN)
     visitor->trace(m_ports);
-#endif
     Event::trace(visitor);
 }
 

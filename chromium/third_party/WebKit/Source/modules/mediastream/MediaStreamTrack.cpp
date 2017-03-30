@@ -49,7 +49,8 @@ MediaStreamTrack* MediaStreamTrack::create(ExecutionContext* context, MediaStrea
 }
 
 MediaStreamTrack::MediaStreamTrack(ExecutionContext* context, MediaStreamComponent* component)
-    : ActiveDOMObject(context)
+    : ActiveScriptWrappable(this)
+    , ActiveDOMObject(context)
     , m_readyState(MediaStreamSource::ReadyStateLive)
     , m_isIteratingRegisteredMediaStreams(false)
     , m_stopped(false)
@@ -74,7 +75,7 @@ String MediaStreamTrack::kind() const
         return videoKind;
     }
 
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return audioKind;
 }
 
@@ -133,7 +134,7 @@ String MediaStreamTrack::readyState() const
         return "ended";
     }
 
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return String();
 }
 
@@ -179,7 +180,7 @@ void MediaStreamTrack::sourceChangedState()
     if (ended())
         return;
 
-    m_readyState = m_component->source()->readyState();
+    m_readyState = m_component->source()->getReadyState();
     switch (m_readyState) {
     case MediaStreamSource::ReadyStateLive:
         m_component->setMuted(false);
@@ -198,6 +199,7 @@ void MediaStreamTrack::sourceChangedState()
 
 void MediaStreamTrack::propagateTrackEnded()
 {
+    // TODO(mcasas): Substitute with CHECK, see https://crbug.com/599867.
     RELEASE_ASSERT(!m_isIteratingRegisteredMediaStreams);
     m_isIteratingRegisteredMediaStreams = true;
     for (HeapHashSet<Member<MediaStream>>::iterator iter = m_registeredMediaStreams.begin(); iter != m_registeredMediaStreams.end(); ++iter)
@@ -234,6 +236,7 @@ PassOwnPtr<AudioSourceProvider> MediaStreamTrack::createWebAudioSource()
 
 void MediaStreamTrack::registerMediaStream(MediaStream* mediaStream)
 {
+    // TODO(mcasas): Substitute with CHECK, see https://crbug.com/599867.
     RELEASE_ASSERT(!m_isIteratingRegisteredMediaStreams);
     RELEASE_ASSERT(!m_registeredMediaStreams.contains(mediaStream));
     m_registeredMediaStreams.add(mediaStream);
@@ -241,6 +244,7 @@ void MediaStreamTrack::registerMediaStream(MediaStream* mediaStream)
 
 void MediaStreamTrack::unregisterMediaStream(MediaStream* mediaStream)
 {
+    // TODO(mcasas): Substitute with CHECK, see https://crbug.com/599867.
     RELEASE_ASSERT(!m_isIteratingRegisteredMediaStreams);
     HeapHashSet<Member<MediaStream>>::iterator iter = m_registeredMediaStreams.find(mediaStream);
     RELEASE_ASSERT(iter != m_registeredMediaStreams.end());
@@ -252,9 +256,9 @@ const AtomicString& MediaStreamTrack::interfaceName() const
     return EventTargetNames::MediaStreamTrack;
 }
 
-ExecutionContext* MediaStreamTrack::executionContext() const
+ExecutionContext* MediaStreamTrack::getExecutionContext() const
 {
-    return ActiveDOMObject::executionContext();
+    return ActiveDOMObject::getExecutionContext();
 }
 
 DEFINE_TRACE(MediaStreamTrack)

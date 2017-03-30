@@ -22,9 +22,9 @@
 #include "content/renderer/media/webmediaplayer_ms_compositor.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
-#include "gpu/blink/webgraphicscontext3d_impl.h"
 #include "media/base/media_log.h"
 #include "media/base/video_frame.h"
+#include "media/blink/webmediaplayer_util.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
@@ -37,7 +37,7 @@ WebMediaPlayerMS::WebMediaPlayerMS(
     blink::WebMediaPlayerClient* client,
     base::WeakPtr<media::WebMediaPlayerDelegate> delegate,
     media::MediaLog* media_log,
-    scoped_ptr<MediaStreamRendererFactory> factory,
+    std::unique_ptr<MediaStreamRendererFactory> factory,
     const scoped_refptr<base::SingleThreadTaskRunner>& compositor_task_runner,
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
     const scoped_refptr<base::TaskRunner>& worker_task_runner,
@@ -66,7 +66,7 @@ WebMediaPlayerMS::WebMediaPlayerMS(
                                    : url::Origin(security_origin)),
       volume_(1.0),
       volume_multiplier_(1.0),
-      paused_on_hidden_(false) {
+      should_play_upon_shown_(false) {
   DVLOG(1) << __FUNCTION__;
   DCHECK(client);
   if (delegate_)
@@ -128,6 +128,9 @@ void WebMediaPlayerMS::load(LoadType load_type,
   RenderFrame* const frame = RenderFrame::FromWebFrame(frame_);
 
   if (frame) {
+    // Report UMA and RAPPOR metrics.
+    media::ReportMetrics(load_type, GURL(url), frame_->getSecurityOrigin());
+
     audio_renderer_ = renderer_factory_->GetAudioRenderer(
         url, frame->GetRoutingID(), initial_audio_output_device_id_,
         initial_security_origin_);
@@ -183,9 +186,7 @@ void WebMediaPlayerMS::pause() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  // Always clear |paused_on_hidden_| since manual pause() should clear it and
-  // an OnHidden() pause will set it appropriately after this call.
-  paused_on_hidden_ = false;
+  should_play_upon_shown_ = false;
   media_log_->AddEvent(media_log_->CreateEvent(media::MediaLogEvent::PAUSE));
   if (paused_)
     return;
@@ -232,11 +233,11 @@ void WebMediaPlayerMS::setSinkId(
     blink::WebSetSinkIdCallbacks* web_callback) {
   DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
-  const media::SwitchOutputDeviceCB callback =
-      media::ConvertToSwitchOutputDeviceCB(web_callback);
-  if (audio_renderer_ && audio_renderer_->GetOutputDevice()) {
-    audio_renderer_->GetOutputDevice()->SwitchOutputDevice(
-        sink_id.utf8(), security_origin, callback);
+  const media::OutputDeviceStatusCB callback =
+      media::ConvertToOutputDeviceStatusCB(web_callback);
+  if (audio_renderer_) {
+    audio_renderer_->SwitchOutputDevice(sink_id.utf8(), security_origin,
+                                        callback);
   } else {
     callback.Run(media::OUTPUT_DEVICE_STATUS_ERROR_INTERNAL);
   }
@@ -298,6 +299,10 @@ blink::WebMediaPlayer::ReadyState WebMediaPlayerMS::getReadyState() const {
   return ready_state_;
 }
 
+blink::WebString WebMediaPlayerMS::getErrorMessage() {
+  return blink::WebString::fromUTF8(media_log_->GetLastErrorMessage());
+}
+
 blink::WebTimeRanges WebMediaPlayerMS::buffered() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return buffered_;
@@ -320,7 +325,8 @@ void WebMediaPlayerMS::paint(blink::WebCanvas* canvas,
   DVLOG(3) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  const scoped_refptr<media::VideoFrame> frame = compositor_->GetCurrentFrame();
+  const scoped_refptr<media::VideoFrame> frame =
+      compositor_->GetCurrentFrameWithoutUpdatingStatistics();
 
   media::Context3D context_3d;
   if (frame && frame->HasTextures()) {
@@ -361,19 +367,19 @@ unsigned WebMediaPlayerMS::droppedFrameCount() const {
   return compositor_->dropped_frame_count();
 }
 
-unsigned WebMediaPlayerMS::audioDecodedByteCount() const {
+size_t WebMediaPlayerMS::audioDecodedByteCount() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   NOTIMPLEMENTED();
   return 0;
 }
 
-unsigned WebMediaPlayerMS::videoDecodedByteCount() const {
+size_t WebMediaPlayerMS::videoDecodedByteCount() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   NOTIMPLEMENTED();
   return 0;
 }
 
-void WebMediaPlayerMS::OnHidden(bool must_suspend) {
+void WebMediaPlayerMS::OnHidden() {
 #if defined(OS_ANDROID)
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -385,18 +391,8 @@ void WebMediaPlayerMS::OnHidden(bool must_suspend) {
   // can't rely on |render_frame_suspended_| being false here.
 
   render_frame_suspended_ = true;
-  if (must_suspend) {
-    if (!paused_) {
-      pause();
-      paused_on_hidden_ = true;
-    }
-
-    if (delegate_)
-      delegate_->PlayerGone(delegate_id_);
-  } else if (!paused_) {
-    // pause() will make its own copy in the block above otherwise.
+  if (!paused_)
     compositor_->ReplaceCurrentFrameWithACopy();
-  }
 #endif  // defined(OS_ANDROID)
 }
 
@@ -406,10 +402,27 @@ void WebMediaPlayerMS::OnShown() {
 
   render_frame_suspended_ = false;
 
-  // Resume playback on visibility. play() clears |paused_on_hidden_|.
-  if (paused_on_hidden_)
+  // Resume playback on visibility. play() clears |should_play_upon_shown_|.
+  if (should_play_upon_shown_)
     play();
 #endif  // defined(OS_ANDROID)
+}
+
+void WebMediaPlayerMS::OnSuspendRequested(bool must_suspend) {
+#if defined(OS_ANDROID)
+  if (!must_suspend)
+    return;
+
+  if (!paused_) {
+    pause();
+    should_play_upon_shown_ = true;
+  }
+
+  if (delegate_)
+    delegate_->PlayerGone(delegate_id_);
+
+  render_frame_suspended_ = true;
+#endif
 }
 
 void WebMediaPlayerMS::OnPlay() {
@@ -428,7 +441,7 @@ void WebMediaPlayerMS::OnVolumeMultiplierUpdate(double multiplier) {
 }
 
 bool WebMediaPlayerMS::copyVideoTextureToPlatformTexture(
-    blink::WebGraphicsContext3D* web_graphics_context,
+    gpu::gles2::GLES2Interface* gl,
     unsigned int texture,
     unsigned int internal_format,
     unsigned int type,
@@ -437,18 +450,14 @@ bool WebMediaPlayerMS::copyVideoTextureToPlatformTexture(
   TRACE_EVENT0("media", "WebMediaPlayerMS:copyVideoTextureToPlatformTexture");
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  scoped_refptr<media::VideoFrame> video_frame = compositor_->GetCurrentFrame();
+  scoped_refptr<media::VideoFrame> video_frame =
+      compositor_->GetCurrentFrameWithoutUpdatingStatistics();
 
-  if (!video_frame.get() || video_frame->HasTextures() ||
+  if (!video_frame.get() || !video_frame->HasTextures() ||
       media::VideoFrame::NumPlanes(video_frame->format()) != 1) {
     return false;
   }
 
-  // TODO(dshwang): need more elegant way to convert WebGraphicsContext3D to
-  // GLES2Interface.
-  gpu::gles2::GLES2Interface* const gl =
-      static_cast<gpu_blink::WebGraphicsContext3DImpl*>(web_graphics_context)
-          ->GetGLInterface();
   media::SkCanvasVideoRenderer::CopyVideoFrameSingleTextureToGLTexture(
       gl, video_frame.get(), texture, internal_format, type, premultiply_alpha,
       flip_y);
@@ -479,23 +488,14 @@ void WebMediaPlayerMS::OnFrameAvailable(
 
     if (video_frame_provider_.get()) {
       video_weblayer_.reset(new cc_blink::WebLayerImpl(
-          cc::VideoLayer::Create(cc_blink::WebLayerImpl::LayerSettings(),
-                                 compositor_.get(), media::VIDEO_ROTATION_0)));
-      video_weblayer_->layer()->SetContentsOpaque(true);
+          cc::VideoLayer::Create(compositor_.get(), media::VIDEO_ROTATION_0)));
+      video_weblayer_->layer()->SetContentsOpaque(false);
       video_weblayer_->SetContentsOpaqueIsFixed(true);
       get_client()->setWebLayer(video_weblayer_.get());
     }
   }
 
-  // As EnqueueFrame can potentially change |current_frame_|, we need to do
-  // the size change check before it. Otherwise, we are running the risk of not
-  // detecting a size change event.
-  const bool size_changed =
-      compositor_->GetCurrentSize() != frame->natural_size();
-
   compositor_->EnqueueFrame(frame);
-  if (size_changed)
-    get_client()->sizeChanged();
 }
 
 void WebMediaPlayerMS::RepaintInternal() {
@@ -531,6 +531,10 @@ media::SkCanvasVideoRenderer* WebMediaPlayerMS::GetSkCanvasVideoRenderer() {
 void WebMediaPlayerMS::ResetCanvasCache() {
   DCHECK(thread_checker_.CalledOnValidThread());
   video_renderer_.ResetCache();
+}
+
+void WebMediaPlayerMS::TriggerResize() {
+  get_client()->sizeChanged();
 }
 
 }  // namespace content

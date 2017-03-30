@@ -6,8 +6,6 @@
 
 #include <stddef.h>
 
-#include "ash/shelf/shelf_model.h"
-#include "ash/shell.h"
 #include "ash/wm/window_util.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item.h"
@@ -22,7 +20,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
@@ -204,13 +201,6 @@ AppShortcutLauncherItemController::ItemSelected(const ui::Event& event) {
 
 base::string16 AppShortcutLauncherItemController::GetTitle() {
   return GetAppTitle();
-}
-
-ui::MenuModel* AppShortcutLauncherItemController::CreateContextMenu(
-    aura::Window* root_window) {
-  ash::ShelfItem item =
-      *(launcher_controller()->model()->ItemByID(shelf_id()));
-  return new LauncherContextMenu(launcher_controller(), &item, root_window);
 }
 
 ash::ShelfMenuModel* AppShortcutLauncherItemController::CreateApplicationMenu(

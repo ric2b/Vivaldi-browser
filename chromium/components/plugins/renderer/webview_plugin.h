@@ -83,6 +83,8 @@ class WebViewPlugin : public blink::WebPlugin,
 
   // WebPlugin methods:
   blink::WebPluginContainer* container() const override;
+  // The WebViewPlugin, by design, never fails to initialize. It's used to
+  // display placeholders and error messages, so it must never fail.
   bool initialize(blink::WebPluginContainer*) override;
   void destroy() override;
 
@@ -101,7 +103,6 @@ class WebViewPlugin : public blink::WebPlugin,
   void updateFocus(bool foucsed, blink::WebFocusType focus_type) override;
   void updateVisibility(bool) override {}
 
-  bool acceptsInputEvents() override;
   blink::WebInputEventResult handleInputEvent(
       const blink::WebInputEvent& event,
       blink::WebCursorInfo& cursor_info) override;
@@ -178,6 +179,7 @@ class WebViewPlugin : public blink::WebPlugin,
   bool finished_loading_;
   bool focused_;
   bool is_painting_;
+  bool is_resizing_;
 };
 
 #endif  // COMPONENTS_PLUGINS_RENDERER_WEBVIEW_PLUGIN_H_

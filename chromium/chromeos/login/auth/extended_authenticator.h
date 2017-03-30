@@ -5,15 +5,17 @@
 #ifndef CHROMEOS_LOGIN_AUTH_EXTENDED_AUTHENTICATOR_H_
 #define CHROMEOS_LOGIN_AUTH_EXTENDED_AUTHENTICATOR_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
+
+class AccountId;
 
 namespace chromeos {
 
@@ -68,12 +70,13 @@ class CHROMEOS_EXPORT ExtendedAuthenticator
   virtual void AuthenticateToCheck(const UserContext& context,
                                    const base::Closure& success_callback) = 0;
 
-  // This call will create and mount the home dir for |user_id| with the given
-  // |keys| if the home dir is missing. If the home dir exists already, a mount
-  // attempt will be performed using the first key in |keys| for authentication.
-  // Note that all |keys| should have been transformed from plain text already.
+  // This call will create and mount the home dir for |account_id| with the
+  // given |keys| if the home dir is missing. If the home dir exists already, a
+  // mount attempt will be performed using the first key in |keys| for
+  // authentication.  Note that all |keys| should have been transformed from
+  // plain text already.
   // This method does not alter them.
-  virtual void CreateMount(const std::string& user_id,
+  virtual void CreateMount(const AccountId& account_id,
                            const std::vector<cryptohome::KeyDefinition>& keys,
                            const ResultCallback& success_callback) = 0;
 

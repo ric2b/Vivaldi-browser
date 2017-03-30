@@ -178,7 +178,7 @@ gfx::Size CalculateDefaultTileSize(float initial_device_scale_factor) {
     if (numTiles >= 40)
       default_tile_size = 512;
   }
-#elif defined(OS_CHROMEOS)
+#elif defined(OS_CHROMEOS) || defined(OS_MACOSX)
   // Use 512 for high DPI (dsf=2.0f) devices.
   if (initial_device_scale_factor >= 2.0f)
     default_tile_size = 512;
@@ -249,14 +249,6 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
   settings.main_frame_before_activation_enabled =
       cmd->HasSwitch(cc::switches::kEnableMainFrameBeforeActivation) &&
       !cmd->HasSwitch(cc::switches::kDisableMainFrameBeforeActivation);
-  settings.accelerated_animation_enabled =
-      compositor_deps_->IsThreadedAnimationEnabled();
-
-  settings.use_compositor_animation_timelines =
-      !cmd->HasSwitch(switches::kDisableCompositorAnimationTimelines);
-  blink::WebRuntimeFeatures::enableCompositorAnimationTimelines(
-      settings.use_compositor_animation_timelines);
-
   settings.use_mouse_wheel_gestures = UseGestureBasedWheelScrolling();
 
   settings.default_tile_size = CalculateDefaultTileSize(device_scale_factor);
@@ -373,9 +365,6 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
         &settings.initial_debug_state.slow_down_raster_scale_factor);
   }
 
-  settings.strict_layer_property_change_checking =
-      cmd->HasSwitch(cc::switches::kStrictLayerPropertyChangeChecking);
-
 #if defined(OS_ANDROID)
   DCHECK(!SynchronousCompositorFactory::GetInstance() ||
          !cmd->HasSwitch(switches::kIPCSyncCompositing));
@@ -473,6 +462,9 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
 
   cc::ManagedMemoryPolicy current = settings.memory_policy_;
   settings.memory_policy_ = GetGpuMemoryPolicy(current);
+
+  settings.use_cached_picture_raster = !cmd->HasSwitch(
+      cc::switches::kDisableCachedPictureRaster);
 
   scoped_refptr<base::SingleThreadTaskRunner> compositor_thread_task_runner =
       compositor_deps_->GetCompositorImplThreadTaskRunner();
@@ -693,11 +685,6 @@ void RenderWidgetCompositor::didStopFlinging() {
   layer_tree_host_->DidStopFlinging();
 }
 
-void RenderWidgetCompositor::registerForAnimations(blink::WebLayer* layer) {
-  cc::Layer* cc_layer = static_cast<cc_blink::WebLayerImpl*>(layer)->layer();
-  cc_layer->RegisterForAnimations(layer_tree_host_->animation_registrar());
-}
-
 void RenderWidgetCompositor::registerViewportLayers(
     const blink::WebLayer* overscrollElasticityLayer,
     const blink::WebLayer* pageScaleLayer,
@@ -743,10 +730,10 @@ void RenderWidgetCompositor::clearSelection() {
   layer_tree_host_->RegisterSelection(empty_selection);
 }
 
-static_assert(
-    static_cast<cc::EventListenerClass>(blink::WebEventListenerClass::Touch) ==
-        cc::EventListenerClass::kTouch,
-    "EventListenerClass and WebEventListenerClass enums must match");
+static_assert(static_cast<cc::EventListenerClass>(
+                  blink::WebEventListenerClass::TouchStartOrMove) ==
+                  cc::EventListenerClass::kTouchStartOrMove,
+              "EventListenerClass and WebEventListenerClass enums must match");
 static_assert(static_cast<cc::EventListenerClass>(
                   blink::WebEventListenerClass::MouseWheel) ==
                   cc::EventListenerClass::kMouseWheel,
@@ -1017,8 +1004,8 @@ void RenderWidgetCompositor::DidCompletePageScaleAnimation() {
   delegate_->DidCompletePageScaleAnimation();
 }
 
-void RenderWidgetCompositor::ScheduleAnimation() {
-  delegate_->ScheduleAnimation();
+void RenderWidgetCompositor::RequestScheduleAnimation() {
+  delegate_->RequestScheduleAnimation();
 }
 
 void RenderWidgetCompositor::DidPostSwapBuffers() {

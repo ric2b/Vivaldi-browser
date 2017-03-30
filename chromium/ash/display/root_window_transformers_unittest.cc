@@ -4,6 +4,8 @@
 
 #include "ash/display/root_window_transformers.h"
 
+#include <memory>
+
 #include "ash/display/display_info.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/display_util.h"
@@ -21,6 +23,7 @@
 #include "ui/aura/env.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tracker.h"
+#include "ui/display/manager/display_layout.h"
 #include "ui/events/event_handler.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/display.h"
@@ -114,7 +117,7 @@ float GetStoredUIScale(int64_t id) {
       GetEffectiveUIScale();
 }
 
-scoped_ptr<RootWindowTransformer>
+std::unique_ptr<RootWindowTransformer>
 CreateCurrentRootWindowTransformerForMirroring() {
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
   DCHECK(display_manager->IsInMirrorMode());
@@ -122,7 +125,7 @@ CreateCurrentRootWindowTransformerForMirroring() {
       display_manager->GetDisplayInfo(display_manager->mirroring_display_id());
   const DisplayInfo& source_display_info = display_manager->GetDisplayInfo(
       gfx::Screen::GetScreen()->GetPrimaryDisplay().id());
-  return scoped_ptr<RootWindowTransformer>(
+  return std::unique_ptr<RootWindowTransformer>(
       CreateRootWindowTransformerForMirroredDisplay(source_display_info,
                                                     mirror_display_info));
 }
@@ -193,7 +196,7 @@ TEST_F(RootWindowTransformersTest, MAYBE_RotateAndMagnify) {
   magnifier->SetEnabled(false);
 
   display_manager->SetLayoutForCurrentDisplays(
-      test::CreateDisplayLayout(DisplayPlacement::BOTTOM, 50));
+      test::CreateDisplayLayout(display::DisplayPlacement::BOTTOM, 50));
   EXPECT_EQ("50,120 150x200",
             ScreenUtil::GetSecondaryDisplay().bounds().ToString());
 
@@ -408,7 +411,7 @@ TEST_F(RootWindowTransformersTest, LetterBoxPillarBox) {
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
   display_manager->SetMultiDisplayMode(DisplayManager::MIRRORING);
   UpdateDisplay("400x200,500x500");
-  scoped_ptr<RootWindowTransformer> transformer(
+  std::unique_ptr<RootWindowTransformer> transformer(
       CreateCurrentRootWindowTransformerForMirroring());
   // Y margin must be margin is (500 - 500/400 * 200) / 2 = 125.
   EXPECT_EQ("0,125,0,125", transformer->GetHostInsets().ToString());

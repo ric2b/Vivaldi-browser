@@ -26,7 +26,7 @@
 
 #include "core/frame/FrameView.h"
 #include "core/layout/LayoutPart.h"
-#include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/Page.h"
@@ -36,7 +36,8 @@
 #include "public/platform/WebLayer.h"
 #include "public/platform/WebLayerPositionConstraint.h"
 #include "public/platform/WebLayerTreeView.h"
-#include "public/platform/WebUnitTestSupport.h"
+#include "public/platform/WebURLLoaderMockFactory.h"
+#include "public/web/WebCache.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebViewClient.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -63,7 +64,8 @@ public:
 
     ~ScrollingCoordinatorTest() override
     {
-        Platform::current()->unitTestSupport()->unregisterAllMockedURLs();
+        Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+        WebCache::clear();
     }
 
     void navigateTo(const std::string& url)
@@ -83,9 +85,9 @@ public:
 
     WebLayer* getRootScrollLayer()
     {
-        PaintLayerCompositor* compositor = frame()->contentLayoutObject()->compositor();
-        ASSERT(compositor);
-        ASSERT(compositor->scrollLayer());
+        PaintLayerCompositor* compositor = frame()->contentLayoutItem().compositor();
+        DCHECK(compositor);
+        DCHECK(compositor->scrollLayer());
 
         WebLayer* webScrollLayer = compositor->scrollLayer()->platformLayer();
         return webScrollLayer;
@@ -126,7 +128,7 @@ TEST_F(ScrollingCoordinatorTest, fastScrollingByDefault)
     WebLayer* rootScrollLayer = getRootScrollLayer();
     ASSERT_TRUE(rootScrollLayer->scrollable());
     ASSERT_FALSE(rootScrollLayer->shouldScrollOnMainThread());
-    ASSERT_EQ(WebEventListenerProperties::Nothing, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::Touch));
+    ASSERT_EQ(WebEventListenerProperties::Nothing, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::TouchStartOrMove));
     ASSERT_EQ(WebEventListenerProperties::Nothing, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::MouseWheel));
 }
 
@@ -157,7 +159,7 @@ TEST_F(ScrollingCoordinatorTest, fastFractionalScrollingDiv)
 
     Document* document = frame()->document();
     Element* scrollableElement = document->getElementById("scroller");
-    ASSERT(scrollableElement);
+    DCHECK(scrollableElement);
 
     scrollableElement->setScrollTop(1.0);
     scrollableElement->setScrollLeft(1.0);
@@ -175,7 +177,7 @@ TEST_F(ScrollingCoordinatorTest, fastFractionalScrollingDiv)
     ASSERT_TRUE(box->usesCompositedScrolling());
     CompositedLayerMapping* compositedLayerMapping = box->layer()->compositedLayerMapping();
     ASSERT_TRUE(compositedLayerMapping->hasScrollingLayer());
-    ASSERT(compositedLayerMapping->scrollingContentsLayer());
+    DCHECK(compositedLayerMapping->scrollingContentsLayer());
     WebLayer* webScrollLayer = compositedLayerMapping->scrollingContentsLayer()->platformLayer();
     ASSERT_TRUE(webScrollLayer);
     ASSERT_NEAR(1.2, webScrollLayer->scrollPositionDouble().x, 0.01);
@@ -199,27 +201,6 @@ static WebLayer* webLayerFromElement(Element* element)
     if (!graphicsLayer)
         return 0;
     return graphicsLayer->platformLayer();
-}
-
-
-TEST_F(ScrollingCoordinatorTest, fractionalScrollingNonLayerFixedPosition)
-{
-    registerMockedHttpURLLoad("fractional-scroll-fixed-position.html");
-    navigateTo(m_baseURL + "fractional-scroll-fixed-position.html");
-    // Prevent fixed-position element from getting its own layer.
-    webViewImpl()->settings()->setPreferCompositingToLCDTextEnabled(false);
-    forceFullCompositingUpdate();
-
-    FrameView* frameView = frame()->view();
-    frameView->scrollTo(DoublePoint(1.5, 1.5));
-    WebLayer* rootScrollLayer = getRootScrollLayer();
-    // Scroll on main if there is non-composited fixed position element.
-    // And the containing scroll layer should not get fractional scroll offset.
-    ASSERT_TRUE(rootScrollLayer->shouldScrollOnMainThread());
-    ASSERT_EQ(1.0, rootScrollLayer->scrollPositionDouble().x);
-    ASSERT_EQ(1.0, rootScrollLayer->scrollPositionDouble().y);
-    ASSERT_EQ(0.0, rootScrollLayer->position().x);
-    ASSERT_EQ(0.0, rootScrollLayer->position().y);
 }
 
 TEST_F(ScrollingCoordinatorTest, fastScrollingForFixedPosition)
@@ -313,7 +294,7 @@ TEST_F(ScrollingCoordinatorTest, touchEventHandler)
     navigateTo(m_baseURL + "touch-event-handler.html");
     forceFullCompositingUpdate();
 
-    ASSERT_EQ(WebEventListenerProperties::Blocking, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::Touch));
+    ASSERT_EQ(WebEventListenerProperties::Blocking, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::TouchStartOrMove));
 }
 
 TEST_F(ScrollingCoordinatorTest, touchEventHandlerPassive)
@@ -322,7 +303,7 @@ TEST_F(ScrollingCoordinatorTest, touchEventHandlerPassive)
     navigateTo(m_baseURL + "touch-event-handler-passive.html");
     forceFullCompositingUpdate();
 
-    ASSERT_EQ(WebEventListenerProperties::Passive, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::Touch));
+    ASSERT_EQ(WebEventListenerProperties::Passive, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::TouchStartOrMove));
 }
 
 TEST_F(ScrollingCoordinatorTest, touchEventHandlerBoth)
@@ -331,7 +312,7 @@ TEST_F(ScrollingCoordinatorTest, touchEventHandlerBoth)
     navigateTo(m_baseURL + "touch-event-handler-both.html");
     forceFullCompositingUpdate();
 
-    ASSERT_EQ(WebEventListenerProperties::BlockingAndPassive, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::Touch));
+    ASSERT_EQ(WebEventListenerProperties::BlockingAndPassive, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::TouchStartOrMove));
 }
 
 TEST_F(ScrollingCoordinatorTest, wheelEventHandler)
@@ -400,7 +381,7 @@ TEST_F(ScrollingCoordinatorTest, overflowScrolling)
     // Verify the properties of the accelerated scrolling element starting from the LayoutObject
     // all the way to the WebLayer.
     Element* scrollableElement = frame()->document()->getElementById("scrollable");
-    ASSERT(scrollableElement);
+    DCHECK(scrollableElement);
 
     LayoutObject* layoutObject = scrollableElement->layoutObject();
     ASSERT_TRUE(layoutObject->isBox());
@@ -412,10 +393,10 @@ TEST_F(ScrollingCoordinatorTest, overflowScrolling)
 
     CompositedLayerMapping* compositedLayerMapping = box->layer()->compositedLayerMapping();
     ASSERT_TRUE(compositedLayerMapping->hasScrollingLayer());
-    ASSERT(compositedLayerMapping->scrollingContentsLayer());
+    DCHECK(compositedLayerMapping->scrollingContentsLayer());
 
     GraphicsLayer* graphicsLayer = compositedLayerMapping->scrollingContentsLayer();
-    ASSERT_EQ(box->layer()->scrollableArea(), graphicsLayer->scrollableArea());
+    ASSERT_EQ(box->layer()->getScrollableArea(), graphicsLayer->getScrollableArea());
 
     WebLayer* webScrollLayer = compositedLayerMapping->scrollingContentsLayer()->platformLayer();
     ASSERT_TRUE(webScrollLayer->scrollable());
@@ -440,7 +421,7 @@ TEST_F(ScrollingCoordinatorTest, overflowHidden)
     // Verify the properties of the accelerated scrolling element starting from the LayoutObject
     // all the way to the WebLayer.
     Element* overflowElement = frame()->document()->getElementById("unscrollable-y");
-    ASSERT(overflowElement);
+    DCHECK(overflowElement);
 
     LayoutObject* layoutObject = overflowElement->layoutObject();
     ASSERT_TRUE(layoutObject->isBox());
@@ -452,10 +433,10 @@ TEST_F(ScrollingCoordinatorTest, overflowHidden)
 
     CompositedLayerMapping* compositedLayerMapping = box->layer()->compositedLayerMapping();
     ASSERT_TRUE(compositedLayerMapping->hasScrollingLayer());
-    ASSERT(compositedLayerMapping->scrollingContentsLayer());
+    DCHECK(compositedLayerMapping->scrollingContentsLayer());
 
     GraphicsLayer* graphicsLayer = compositedLayerMapping->scrollingContentsLayer();
-    ASSERT_EQ(box->layer()->scrollableArea(), graphicsLayer->scrollableArea());
+    ASSERT_EQ(box->layer()->getScrollableArea(), graphicsLayer->getScrollableArea());
 
     WebLayer* webScrollLayer = compositedLayerMapping->scrollingContentsLayer()->platformLayer();
     ASSERT_TRUE(webScrollLayer->scrollable());
@@ -463,22 +444,22 @@ TEST_F(ScrollingCoordinatorTest, overflowHidden)
     ASSERT_FALSE(webScrollLayer->userScrollableVertical());
 
     overflowElement = frame()->document()->getElementById("unscrollable-x");
-    ASSERT(overflowElement);
+    DCHECK(overflowElement);
 
     layoutObject = overflowElement->layoutObject();
     ASSERT_TRUE(layoutObject->isBox());
     ASSERT_TRUE(layoutObject->hasLayer());
 
     box = toLayoutBox(layoutObject);
-    ASSERT_TRUE(box->scrollableArea()->usesCompositedScrolling());
+    ASSERT_TRUE(box->getScrollableArea()->usesCompositedScrolling());
     ASSERT_EQ(PaintsIntoOwnBacking, box->layer()->compositingState());
 
     compositedLayerMapping = box->layer()->compositedLayerMapping();
     ASSERT_TRUE(compositedLayerMapping->hasScrollingLayer());
-    ASSERT(compositedLayerMapping->scrollingContentsLayer());
+    DCHECK(compositedLayerMapping->scrollingContentsLayer());
 
     graphicsLayer = compositedLayerMapping->scrollingContentsLayer();
-    ASSERT_EQ(box->layer()->scrollableArea(), graphicsLayer->scrollableArea());
+    ASSERT_EQ(box->layer()->getScrollableArea(), graphicsLayer->getScrollableArea());
 
     webScrollLayer = compositedLayerMapping->scrollingContentsLayer()->platformLayer();
     ASSERT_TRUE(webScrollLayer->scrollable());
@@ -516,7 +497,7 @@ TEST_F(ScrollingCoordinatorTest, iframeScrolling)
     ASSERT_TRUE(innerCompositor->scrollLayer());
 
     GraphicsLayer* scrollLayer = innerCompositor->scrollLayer();
-    ASSERT_EQ(innerFrameView, scrollLayer->scrollableArea());
+    ASSERT_EQ(innerFrameView, scrollLayer->getScrollableArea());
 
     WebLayer* webScrollLayer = scrollLayer->platformLayer();
     ASSERT_TRUE(webScrollLayer->scrollable());
@@ -560,7 +541,7 @@ TEST_F(ScrollingCoordinatorTest, rtlIframe)
     ASSERT_TRUE(innerCompositor->scrollLayer());
 
     GraphicsLayer* scrollLayer = innerCompositor->scrollLayer();
-    ASSERT_EQ(innerFrameView, scrollLayer->scrollableArea());
+    ASSERT_EQ(innerFrameView, scrollLayer->getScrollableArea());
 
     WebLayer* webScrollLayer = scrollLayer->platformLayer();
     ASSERT_TRUE(webScrollLayer->scrollable());
@@ -586,7 +567,7 @@ TEST_F(ScrollingCoordinatorTest, scrollbarsForceMainThreadOrHaveWebScrollbarLaye
 
     Document* document = frame()->document();
     Element* scrollableElement = document->getElementById("scroller");
-    ASSERT(scrollableElement);
+    DCHECK(scrollableElement);
 
     LayoutObject* layoutObject = scrollableElement->layoutObject();
     ASSERT_TRUE(layoutObject->isBox());

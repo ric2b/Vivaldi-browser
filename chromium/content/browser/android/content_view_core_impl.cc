@@ -19,6 +19,7 @@
 #include "cc/layers/layer.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/output/begin_frame_args.h"
+#include "cc/output/viewport_selection_bound.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/android/gesture_event_type.h"
 #include "content/browser/android/interstitial_page_delegate_android.h"
@@ -55,6 +56,7 @@
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 #include "ui/events/android/motion_event_android.h"
+#include "ui/events/blink/blink_event_util.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -212,7 +214,7 @@ ContentViewCoreImpl::ContentViewCoreImpl(
     : WebContentsObserver(web_contents),
       java_ref_(env, obj),
       web_contents_(static_cast<WebContentsImpl*>(web_contents)),
-      root_layer_(cc::SolidColorLayer::Create(Compositor::LayerSettings())),
+      root_layer_(cc::SolidColorLayer::Create()),
       page_scale_(1),
       dpi_scale_(ui::GetScaleFactorForNativeView(this)),
       window_android_(window_android),
@@ -419,7 +421,8 @@ void ContentViewCoreImpl::UpdateFrameInfo(
     const gfx::SizeF& viewport_size,
     const gfx::Vector2dF& controls_offset,
     const gfx::Vector2dF& content_offset,
-    bool is_mobile_optimized_hint) {
+    bool is_mobile_optimized_hint,
+    const cc::ViewportSelectionBound& selection_start) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null() || !window_android_)
@@ -429,6 +432,18 @@ void ContentViewCoreImpl::UpdateFrameInfo(
       gfx::ScaleVector2d(content_offset, dpi_scale_));
 
   page_scale_ = page_scale_factor;
+
+  // The CursorAnchorInfo API in Android only supports zero width selection
+  // bounds.
+  const jboolean has_insertion_marker =
+      selection_start.type == cc::SELECTION_BOUND_CENTER;
+  const jboolean is_insertion_marker_visible = selection_start.visible;
+  const jfloat insertion_marker_horizontal =
+      has_insertion_marker ? selection_start.edge_top.x() : 0.0f;
+  const jfloat insertion_marker_top =
+      has_insertion_marker ? selection_start.edge_top.y() : 0.0f;
+  const jfloat insertion_marker_bottom =
+      has_insertion_marker ? selection_start.edge_bottom.y() : 0.0f;
 
   Java_ContentViewCore_updateFrameInfo(
       env, obj.obj(),
@@ -443,7 +458,12 @@ void ContentViewCoreImpl::UpdateFrameInfo(
       viewport_size.height(),
       controls_offset.y(),
       content_offset.y(),
-      is_mobile_optimized_hint);
+      is_mobile_optimized_hint,
+      has_insertion_marker,
+      is_insertion_marker_visible,
+      insertion_marker_horizontal,
+      insertion_marker_top,
+      insertion_marker_bottom);
 }
 
 void ContentViewCoreImpl::SetTitle(const base::string16& title) {
@@ -750,6 +770,22 @@ ScopedJavaLocalRef<jobject> ContentViewCoreImpl::GetContext() const {
   return Java_ContentViewCore_getContext(env, obj.obj());
 }
 
+gfx::Size ContentViewCoreImpl::GetViewSizeWithOSKHidden() const {
+  gfx::Size size_pix;
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> j_obj = java_ref_.get(env);
+  if (j_obj.is_null())
+    return size_pix = gfx::Size();
+  size_pix = gfx::Size(
+      Java_ContentViewCore_getViewportWidthPix(env, j_obj.obj()),
+      Java_ContentViewCore_getViewportHeightWithOSKHiddenPix(env, j_obj.obj()));
+
+  gfx::Size size_dip = gfx::ScaleToCeiledSize(size_pix, 1.0f / dpi_scale());
+  if (DoTopControlsShrinkBlinkSize())
+    size_dip.Enlarge(0, -GetTopControlsHeightDip());
+  return size_dip;
+}
+
 gfx::Size ContentViewCoreImpl::GetViewSize() const {
   gfx::Size size = GetViewportSizeDip();
   if (DoTopControlsShrinkBlinkSize())
@@ -981,7 +1017,8 @@ jboolean ContentViewCoreImpl::SendMouseMoveEvent(
     const JavaParamRef<jobject>& obj,
     jlong time_ms,
     jfloat x,
-    jfloat y) {
+    jfloat y,
+    jint tool_type) {
   RenderWidgetHostViewAndroid* rwhv = GetRenderWidgetHostViewAndroid();
   if (!rwhv)
     return false;
@@ -989,7 +1026,8 @@ jboolean ContentViewCoreImpl::SendMouseMoveEvent(
   blink::WebMouseEvent event = WebMouseEventBuilder::Build(
       WebInputEvent::MouseMove,
       blink::WebMouseEvent::ButtonNone,
-      time_ms / 1000.0, x / dpi_scale(), y / dpi_scale(), 0, 1);
+      time_ms / 1000.0, x / dpi_scale(), y / dpi_scale(), 0, 1,
+      ui::ToWebPointerType(static_cast<ui::MotionEvent::ToolType>(tool_type)));
 
   rwhv->SendMouseEvent(event);
   return true;
@@ -1262,9 +1300,7 @@ void ContentViewCoreImpl::WasResized(JNIEnv* env,
   root_layer_->SetBounds(physical_size);
 
   if (view) {
-    RenderWidgetHostImpl* host = RenderWidgetHostImpl::From(
-        view->GetRenderWidgetHost());
-    host->SendScreenRects();
+    web_contents_->SendScreenRects();
     view->WasResized();
   }
 }
@@ -1452,10 +1488,6 @@ void ContentViewCoreImpl::OnShowUnhandledTapUIIfNeeded(int x_dip, int y_dip) {
   Java_ContentViewCore_onShowUnhandledTapUIIfNeeded(
       env, obj.obj(), static_cast<jint>(x_dip * dpi_scale()),
       static_cast<jint>(y_dip * dpi_scale()));
-}
-
-float ContentViewCoreImpl::GetScaleFactor() const {
-  return page_scale_ * dpi_scale_;
 }
 
 void ContentViewCoreImpl::OnSmartClipDataExtracted(

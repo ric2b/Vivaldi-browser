@@ -66,13 +66,13 @@ static void appendMailtoPostFormDataToURL(KURL& url, const EncodedFormData& data
 
     if (equalIgnoringCase(encodingType, "text/plain")) {
         // Convention seems to be to decode, and s/&/\r\n/. Also, spaces are encoded as %20.
-        body = decodeURLEscapeSequences(body.replaceWithLiteral('&', "\r\n").replace('+', ' ') + "\r\n");
+        body = decodeURLEscapeSequences(body.replace('&', "\r\n").replace('+', ' ') + "\r\n");
     }
 
     Vector<char> bodyData;
     bodyData.append("body=", 5);
     FormDataEncoder::encodeStringAsFormData(bodyData, body.utf8());
-    body = String(bodyData.data(), bodyData.size()).replaceWithLiteral('+', "%20");
+    body = String(bodyData.data(), bodyData.size()).replace('+', "%20");
 
     StringBuilder query;
     query.append(url.query());
@@ -91,10 +91,10 @@ void FormSubmission::Attributes::parseAction(const String& action)
 AtomicString FormSubmission::Attributes::parseEncodingType(const String& type)
 {
     if (equalIgnoringCase(type, "multipart/form-data"))
-        return AtomicString("multipart/form-data", AtomicString::ConstructFromLiteral);
+        return AtomicString("multipart/form-data");
     if (equalIgnoringCase(type, "text/plain"))
-        return AtomicString("text/plain", AtomicString::ConstructFromLiteral);
-    return AtomicString("application/x-www-form-urlencoded", AtomicString::ConstructFromLiteral);
+        return AtomicString("text/plain");
+    return AtomicString("application/x-www-form-urlencoded");
 }
 
 void FormSubmission::Attributes::updateEncodingType(const String& type)
@@ -103,7 +103,7 @@ void FormSubmission::Attributes::updateEncodingType(const String& type)
     m_isMultiPartForm = (m_encodingType == "multipart/form-data");
 }
 
-FormSubmission::Method FormSubmission::Attributes::parseMethodType(const String& type)
+FormSubmission::SubmitMethod FormSubmission::Attributes::parseMethodType(const String& type)
 {
     if (equalIgnoringCase(type, "post"))
         return FormSubmission::PostMethod;
@@ -117,7 +117,7 @@ void FormSubmission::Attributes::updateMethodType(const String& type)
     m_method = parseMethodType(type);
 }
 
-String FormSubmission::Attributes::methodString(Method method)
+String FormSubmission::Attributes::methodString(SubmitMethod method)
 {
     switch (method) {
     case GetMethod:
@@ -142,7 +142,7 @@ void FormSubmission::Attributes::copyFrom(const Attributes& other)
     m_acceptCharset = other.m_acceptCharset;
 }
 
-inline FormSubmission::FormSubmission(Method method, const KURL& action, const AtomicString& target, const AtomicString& contentType, HTMLFormElement* form, PassRefPtr<EncodedFormData> data, const String& boundary, PassRefPtrWillBeRawPtr<Event> event)
+inline FormSubmission::FormSubmission(SubmitMethod method, const KURL& action, const AtomicString& target, const AtomicString& contentType, HTMLFormElement* form, PassRefPtr<EncodedFormData> data, const String& boundary, Event* event)
     : m_method(method)
     , m_action(action)
     , m_target(target)
@@ -160,7 +160,7 @@ inline FormSubmission::FormSubmission(const String& result)
 {
 }
 
-PassRefPtrWillBeRawPtr<FormSubmission> FormSubmission::create(HTMLFormElement* form, const Attributes& attributes, PassRefPtrWillBeRawPtr<Event> event)
+FormSubmission* FormSubmission::create(HTMLFormElement* form, const Attributes& attributes, Event* event)
 {
     ASSERT(form);
 
@@ -190,12 +190,12 @@ PassRefPtrWillBeRawPtr<FormSubmission> FormSubmission::create(HTMLFormElement* f
 
     if (copiedAttributes.method() == DialogMethod) {
         if (submitButton)
-            return adoptRefWillBeNoop(new FormSubmission(submitButton->resultForDialogSubmit()));
-        return adoptRefWillBeNoop(new FormSubmission(""));
+            return new FormSubmission(submitButton->resultForDialogSubmit());
+        return new FormSubmission("");
     }
 
     Document& document = form->document();
-    KURL actionURL = document.completeURL(copiedAttributes.action().isEmpty() ? document.url().string() : copiedAttributes.action());
+    KURL actionURL = document.completeURL(copiedAttributes.action().isEmpty() ? document.url().getString() : copiedAttributes.action());
     bool isMailtoForm = actionURL.protocolIs("mailto");
     bool isMultiPartForm = false;
     AtomicString encodingType = copiedAttributes.encodingType();
@@ -203,7 +203,7 @@ PassRefPtrWillBeRawPtr<FormSubmission> FormSubmission::create(HTMLFormElement* f
     if (copiedAttributes.method() == PostMethod) {
         isMultiPartForm = copiedAttributes.isMultiPartForm();
         if (isMultiPartForm && isMailtoForm) {
-            encodingType = AtomicString("application/x-www-form-urlencoded", AtomicString::ConstructFromLiteral);
+            encodingType = AtomicString("application/x-www-form-urlencoded");
             isMultiPartForm = false;
         }
     }
@@ -242,7 +242,7 @@ PassRefPtrWillBeRawPtr<FormSubmission> FormSubmission::create(HTMLFormElement* f
     formData->setIdentifier(generateFormDataIdentifier());
     formData->setContainsPasswordData(containsPasswordData);
     AtomicString targetOrBaseTarget = copiedAttributes.target().isEmpty() ? document.baseTarget() : copiedAttributes.target();
-    return adoptRefWillBeNoop(new FormSubmission(copiedAttributes.method(), actionURL, targetOrBaseTarget, encodingType, form, formData.release(), boundary, event));
+    return new FormSubmission(copiedAttributes.method(), actionURL, targetOrBaseTarget, encodingType, form, formData.release(), boundary, event);
 }
 
 DEFINE_TRACE(FormSubmission)

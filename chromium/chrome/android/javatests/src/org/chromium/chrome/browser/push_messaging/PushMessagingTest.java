@@ -14,6 +14,7 @@ import android.test.MoreAsserts;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
 
+import org.chromium.base.PathUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.notifications.NotificationTestBase;
@@ -38,8 +39,8 @@ public class PushMessagingTest
     private static final String PUSH_TEST_PAGE =
             "/chrome/test/data/push_messaging/push_messaging_test_android.html";
     private static final String ABOUT_BLANK = "about:blank";
-    private static final String SENDER_ID_BUNDLE_KEY = "from";
     private static final int TITLE_UPDATE_TIMEOUT_SECONDS = (int) scaleTimeout(5);
+    private static final String PRIVATE_DATA_DIRECTORY_SUFFIX = "chrome";
 
     private final CallbackHelper mMessageHandledHelper;
     private String mPushTestPage;
@@ -172,8 +173,8 @@ public class PushMessagingTest
             public void run() {
                 Context context = getInstrumentation().getTargetContext().getApplicationContext();
                 Bundle extras = new Bundle();
-                extras.putString(SENDER_ID_BUNDLE_KEY, senderId);
-                GCMDriver.onMessageReceived(context, appId, extras);
+                PathUtils.setPrivateDataDirectorySuffix(PRIVATE_DATA_DIRECTORY_SUFFIX, context);
+                GCMDriver.onMessageReceived(context, appId, senderId, extras);
             }
         });
         mMessageHandledHelper.waitForCallback(mMessageHandledHelper.getCallCount());

@@ -15,11 +15,6 @@
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<ProgrammaticScrollAnimator> ProgrammaticScrollAnimator::create(ScrollableArea* scrollableArea)
-{
-    return adoptPtrWillBeNoop(new ProgrammaticScrollAnimator(scrollableArea));
-}
-
 ProgrammaticScrollAnimator::ProgrammaticScrollAnimator(ScrollableArea* scrollableArea)
     : m_scrollableArea(scrollableArea)
     , m_startTime(0.0)
@@ -121,6 +116,9 @@ void ProgrammaticScrollAnimator::updateCompositorAnimations()
     }
 
     if (m_runState == RunState::WaitingToSendToCompositor) {
+        if (!m_compositorAnimationAttachedToLayerId)
+            reattachCompositorPlayerIfNeeded(getScrollableArea()->compositorAnimationTimeline());
+
         bool sentToCompositor = false;
 
         if (!m_scrollableArea->shouldScrollOnMainThread()) {

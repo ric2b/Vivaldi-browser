@@ -7,20 +7,18 @@
 
 #include <deque>
 #include <utility>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "media/base/android/media_codec_bridge.h"
+#include "media/base/android/media_drm_bridge_cdm_context.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/audio_decoder_config.h"
-
-namespace base {
-class SingleThreadTaskRunner;
-}
-
-namespace media {
+#include "media/base/media_export.h"
 
 // MediaCodecAudioDecoder is based on Android's MediaCodec API.
 // The MediaCodec API is required to play encrypted (as in EME) content on
@@ -97,10 +95,18 @@ namespace media {
 //                 |                          |             |
 //              [Error]                    [Ready]       [Error]
 
-class MediaCodecAudioDecoder : public AudioDecoder {
+namespace base {
+class SingleThreadTaskRunner;
+}
+
+namespace media {
+
+class AudioTimestampHelper;
+
+class MEDIA_EXPORT MediaCodecAudioDecoder : public AudioDecoder {
  public:
   explicit MediaCodecAudioDecoder(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~MediaCodecAudioDecoder() override;
 
   // AudioDecoder implementation.
@@ -118,6 +124,7 @@ class MediaCodecAudioDecoder : public AudioDecoder {
   // Possible states.
   enum State {
     STATE_UNINITIALIZED,
+    STATE_WAITING_FOR_MEDIA_CRYPTO,
     STATE_READY,
     STATE_WAITING_FOR_KEY,
     STATE_DRAINING,
@@ -142,6 +149,15 @@ class MediaCodecAudioDecoder : public AudioDecoder {
     bool is_key_frame;
   };
 
+  // A helper method to start CDM initialization.
+  void SetCdm(CdmContext* cdm_context, const InitCB& init_cb);
+
+  // This callback is called after CDM obtained a MediaCrypto object.
+  void OnMediaCryptoReady(
+      const InitCB& init_cb,
+      media::MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto,
+      bool needs_protected_surface);
+
   // Callback called when a new key is available after the codec received
   // the status MEDIA_CODEC_NO_KEY.
   void OnKeyAdded();
@@ -150,9 +166,14 @@ class MediaCodecAudioDecoder : public AudioDecoder {
   // dequeues output buffers.
   void DoIOTask();
 
-  // Enqueues one pending input buffer into MediaCodec if MediaCodec has room.
+  // Enqueues pending input buffers into MediaCodec as long as it can happen
+  // without delay in dequeuing and enqueueing input buffers.
   // Returns true if any input was processed.
   bool QueueInput();
+
+  // Enqueues one pending input buffer into MediaCodec if MediaCodec has room.
+  // Returns true if any input was processed.
+  bool QueueOneInputBuffer();
 
   // A helper method for QueueInput(). Dequeues an empty input buffer from the
   // codec and returns the information about it. OutputBufferInfo.buf_index is
@@ -170,7 +191,7 @@ class MediaCodecAudioDecoder : public AudioDecoder {
 
   // Calls DecodeCB with |decode_status| for every frame in |input_queue| and
   // then clears it.
-  void ClearInputQueue(Status decode_status);
+  void ClearInputQueue(DecodeStatus decode_status);
 
   // Dequeues all output buffers from MediaCodec that are immediately available.
   // Returns true if any output buffer was received from MediaCodec.
@@ -217,10 +238,15 @@ class MediaCodecAudioDecoder : public AudioDecoder {
   // Cached decoder config.
   AudioDecoderConfig config_;
 
+  // Actual channel count that comes from decoder may be different than config.
+  int channel_count_;
+
   // Callback that delivers output frames.
   OutputCB output_cb_;
 
   scoped_ptr<MediaCodecBridge> media_codec_;
+
+  scoped_ptr<AudioTimestampHelper> timestamp_helper_;
 
   // Repeating timer that kicks MediaCodec operation.
   base::RepeatingTimer io_timer_;
@@ -232,6 +258,22 @@ class MediaCodecAudioDecoder : public AudioDecoder {
   // Such buffer appears in MEDIA_CODEC_NO_KEY processing. The -1 value means
   // there is no such buffer.
   int pending_input_buf_index_;
+
+  // CDM related stuff.
+
+  // CDM context that knowns about MediaCrypto. Owned by CDM which is external
+  // to this decoder.
+  MediaDrmBridgeCdmContext* media_drm_bridge_cdm_context_;
+
+  // MediaDrmBridge requires registration/unregistration of the player, this
+  // registration id is used for this.
+  int cdm_registration_id_;
+
+  // The MediaCrypto object is used in the MediaCodec.configure() in case of
+  // an encrypted stream.
+  media::MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto_;
+
+  base::WeakPtrFactory<MediaCodecAudioDecoder> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaCodecAudioDecoder);
 };

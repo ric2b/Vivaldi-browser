@@ -8,7 +8,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "third_party/WebKit/public/web/WebSettings.h"
-#include "third_party/icu/source/common/unicode/uchar.h"
 
 using blink::WebSettings;
 
@@ -90,7 +89,6 @@ WebPreferences::WebPreferences()
       flash_3d_enabled(true),
       flash_stage3d_enabled(false),
       flash_stage3d_baseline_enabled(false),
-      gl_multisampling_enabled(true),
       privileged_webgl_extensions_enabled(false),
       webgl_errors_to_console_enabled(true),
       mock_scrollbars_enabled(false),
@@ -160,11 +158,13 @@ WebPreferences::WebPreferences()
       navigate_on_drag_drop(true),
       v8_cache_options(V8_CACHE_OPTIONS_DEFAULT),
       inert_visual_viewport(false),
+      record_whole_document(false),
       serve_resources_only_from_cache(false),
       cookie_enabled(true),
       pepper_accelerated_video_decode_enabled(false),
       animation_policy(IMAGE_ANIMATION_POLICY_ALLOWED),
       user_gesture_required_for_presentation(true),
+      text_track_margin_percentage(0.0f),
 #if defined(OS_ANDROID)
       text_autosizing_enabled(true),
       font_scale_factor(1.0f),
@@ -185,7 +185,7 @@ WebPreferences::WebPreferences()
       clobber_user_agent_initial_scale_quirk(false),
       ignore_main_frame_overflow_hidden_quirk(false),
       report_screen_size_in_physical_pixels_quirk(false),
-      record_whole_document(false),
+      resue_global_for_unowned_main_frame(false),
 #endif
 #if defined(OS_ANDROID)
       default_minimum_page_scale_factor(0.25f),

@@ -2,112 +2,27 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/ntp_snippets/ntp_snippet.h"
 #include "components/ntp_snippets/ntp_snippets_fetcher.h"
 #include "components/ntp_snippets/ntp_snippets_service.h"
-#include "components/signin/core/browser/account_tracker_service.h"
-#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
-#include "components/signin/core/browser/fake_signin_manager.h"
-#include "components/signin/core/browser/test_signin_client.h"
+#include "components/prefs/testing_pref_service.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ntp_snippets {
 
-class SnippetObserver : public NTPSnippetsServiceObserver {
- public:
-  SnippetObserver() : loaded_(false), shutdown_(false) {}
-  ~SnippetObserver() override {}
+namespace {
 
-  void NTPSnippetsServiceLoaded(NTPSnippetsService* service) override {
-    loaded_ = true;
-  }
-
-  void NTPSnippetsServiceShutdown(NTPSnippetsService* service) override {
-    shutdown_ = true;
-    loaded_ = false;
-  }
-
-  bool loaded_;
-  bool shutdown_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SnippetObserver);
-};
-
-class NTPSnippetsServiceTest : public testing::Test {
- public:
-  NTPSnippetsServiceTest() {}
-  ~NTPSnippetsServiceTest() override {}
-
-  void SetUp() override {
-    signin_client_.reset(new TestSigninClient(nullptr));
-    account_tracker_.reset(new AccountTrackerService());
-  }
-
- protected:
-  scoped_ptr<NTPSnippetsService> CreateSnippetService() {
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner(
-        base::ThreadTaskRunnerHandle::Get());
-    scoped_refptr<net::TestURLRequestContextGetter> request_context_getter =
-        new net::TestURLRequestContextGetter(task_runner.get());
-    FakeProfileOAuth2TokenService* token_service =
-        new FakeProfileOAuth2TokenService();
-    FakeSigninManagerBase* signin_manager =  new FakeSigninManagerBase(
-        signin_client_.get(), account_tracker_.get());
-
-    scoped_ptr<NTPSnippetsService> service(
-        new NTPSnippetsService(task_runner.get(), std::string("fr"), nullptr,
-          make_scoped_ptr(new NTPSnippetsFetcher(task_runner.get(),
-            signin_manager, token_service, request_context_getter,
-            base::FilePath()))));
-    return service;
-  }
-
- private:
-  scoped_ptr<AccountTrackerService> account_tracker_;
-  scoped_ptr<TestSigninClient> signin_client_;
-  base::MessageLoop message_loop_;
-  DISALLOW_COPY_AND_ASSIGN(NTPSnippetsServiceTest);
-};
-
-TEST_F(NTPSnippetsServiceTest, Create) {
-  scoped_ptr<NTPSnippetsService> service(CreateSnippetService());
-  EXPECT_FALSE(service->is_loaded());
-}
-
-TEST_F(NTPSnippetsServiceTest, Loop) {
-  scoped_ptr<NTPSnippetsService> service(CreateSnippetService());
-
-  EXPECT_FALSE(service->is_loaded());
-
-  std::string json_str(
-      "{ \"recos\": [ "
-      "{ \"contentInfo\": { \"url\" : \"http://localhost/foobar\" }}"
-      "]}");
-  EXPECT_TRUE(service->LoadFromJSONString(json_str));
-
-  EXPECT_TRUE(service->is_loaded());
-
-  // The same for loop without the '&' should not compile.
-  for (auto& snippet : *service) {
-    // Snippet here is a const.
-    EXPECT_EQ(snippet.url(), GURL("http://localhost/foobar"));
-  }
-  // Without the const, this should not compile.
-  for (const NTPSnippet& snippet : *service) {
-    EXPECT_EQ(snippet.url(), GURL("http://localhost/foobar"));
-  }
-}
-
-TEST_F(NTPSnippetsServiceTest, Full) {
-  scoped_ptr<NTPSnippetsService> service(CreateSnippetService());
-
-  std::string json_str(
+std::string GetTestJson(const std::string& content_creation_time_str,
+                        const std::string& expiry_time_str) {
+  char json_str_format[] =
       "{ \"recos\": [ "
       "{ \"contentInfo\": {"
       "\"url\" : \"http://localhost/foobar\","
@@ -116,13 +31,128 @@ TEST_F(NTPSnippetsServiceTest, Full) {
       "\"title\" : \"Title\","
       "\"snippet\" : \"Snippet\","
       "\"thumbnailUrl\" : \"http://localhost/salient_image\","
-      "\"creationTimestampSec\" : 1448459205"
+      "\"creationTimestampSec\" : \"%s\","
+      "\"expiryTimestampSec\" : \"%s\""
       "}}"
+      "]}";
+
+  return base::StringPrintf(json_str_format, content_creation_time_str.c_str(),
+                            expiry_time_str.c_str());
+}
+
+std::string GetTestJson(const std::string& content_creation_time_str) {
+  int64_t expiry_time =
+      (base::Time::Now() + base::TimeDelta::FromHours(1)).ToJavaTime() /
+      base::Time::kMillisecondsPerSecond;
+
+  return GetTestJson(content_creation_time_str,
+                     base::Int64ToString(expiry_time));
+}
+
+std::string GetTestJson(int64_t content_creation_time_sec) {
+  int64_t expiry_time =
+      (base::Time::Now() + base::TimeDelta::FromHours(1)).ToJavaTime() /
+      base::Time::kMillisecondsPerSecond;
+
+  return GetTestJson(base::Int64ToString(content_creation_time_sec),
+                     base::Int64ToString(expiry_time));
+}
+
+std::string GetTestExpiredJson(int64_t content_creation_time_sec) {
+  int64_t expiry_time =
+      (base::Time::Now()).ToJavaTime() / base::Time::kMillisecondsPerSecond;
+
+  return GetTestJson(base::Int64ToString(content_creation_time_sec),
+                     base::Int64ToString(expiry_time));
+}
+
+void ParseJson(
+    const std::string& json,
+    const ntp_snippets::NTPSnippetsService::SuccessCallback& success_callback,
+    const ntp_snippets::NTPSnippetsService::ErrorCallback& error_callback) {
+  base::JSONReader json_reader;
+  scoped_ptr<base::Value> value = json_reader.ReadToValue(json);
+  if (value) {
+    success_callback.Run(std::move(value));
+  } else {
+    error_callback.Run(json_reader.GetErrorMessage());
+  }
+}
+
+}  // namespace
+
+class NTPSnippetsServiceTest : public testing::Test {
+ public:
+  NTPSnippetsServiceTest()
+      : pref_service_(new TestingPrefServiceSimple()) {}
+  ~NTPSnippetsServiceTest() override {}
+
+  void SetUp() override {
+    NTPSnippetsService::RegisterProfilePrefs(pref_service_->registry());
+
+    CreateSnippetsService();
+  }
+
+  void CreateSnippetsService() {
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner(
+        base::ThreadTaskRunnerHandle::Get());
+    scoped_refptr<net::TestURLRequestContextGetter> request_context_getter =
+        new net::TestURLRequestContextGetter(task_runner.get());
+
+    service_.reset(new NTPSnippetsService(
+        pref_service_.get(), nullptr, task_runner, std::string("fr"), nullptr,
+        make_scoped_ptr(new NTPSnippetsFetcher(
+            task_runner, std::move(request_context_getter), true)),
+        base::Bind(&ParseJson)));
+  }
+
+ protected:
+  NTPSnippetsService* service() {
+    return service_.get();
+  }
+
+  bool LoadFromJSONString(const std::string& json) {
+    scoped_ptr<base::Value> value = base::JSONReader::Read(json);
+    if (!value)
+      return false;
+
+    return service_->LoadFromValue(*value);
+  }
+
+ private:
+  base::MessageLoop message_loop_;
+  scoped_ptr<TestingPrefServiceSimple> pref_service_;
+  scoped_ptr<NTPSnippetsService> service_;
+
+  DISALLOW_COPY_AND_ASSIGN(NTPSnippetsServiceTest);
+};
+
+TEST_F(NTPSnippetsServiceTest, Loop) {
+  std::string json_str(
+      "{ \"recos\": [ "
+      "{ \"contentInfo\": { \"url\" : \"http://localhost/foobar\" }}"
       "]}");
-  EXPECT_TRUE(service->LoadFromJSONString(json_str));
+  ASSERT_TRUE(LoadFromJSONString(json_str));
 
   // The same for loop without the '&' should not compile.
-  for (auto& snippet : *service) {
+  for (auto& snippet : *service()) {
+    // Snippet here is a const.
+    EXPECT_EQ(snippet.url(), GURL("http://localhost/foobar"));
+  }
+  // Without the const, this should not compile.
+  for (const NTPSnippet& snippet : *service()) {
+    EXPECT_EQ(snippet.url(), GURL("http://localhost/foobar"));
+  }
+}
+
+TEST_F(NTPSnippetsServiceTest, Full) {
+  std::string json_str(GetTestJson(1448459205));
+
+  ASSERT_TRUE(LoadFromJSONString(json_str));
+  EXPECT_EQ(service()->size(), 1u);
+
+  // The same for loop without the '&' should not compile.
+  for (auto& snippet : *service()) {
     // Snippet here is a const.
     EXPECT_EQ(snippet.url(), GURL("http://localhost/foobar"));
     EXPECT_EQ(snippet.site_title(), "Site Title");
@@ -137,37 +167,55 @@ TEST_F(NTPSnippetsServiceTest, Full) {
   }
 }
 
-TEST_F(NTPSnippetsServiceTest, ObserverNotLoaded) {
-  scoped_ptr<NTPSnippetsService> service(CreateSnippetService());
-
-  SnippetObserver observer;
-  service->AddObserver(&observer);
-  EXPECT_FALSE(observer.loaded_);
-
+TEST_F(NTPSnippetsServiceTest, Discard) {
   std::string json_str(
-      "{ \"recos\": [ "
-      "{ \"contentInfo\": { \"url\" : \"http://localhost/foobar\" }}"
-      "]}");
-  EXPECT_TRUE(service->LoadFromJSONString(json_str));
-  EXPECT_TRUE(observer.loaded_);
+      "{ \"recos\": [ { \"contentInfo\": { \"url\" : \"http://site.com\" }}]}");
+  ASSERT_TRUE(LoadFromJSONString(json_str));
 
-  service->RemoveObserver(&observer);
+  ASSERT_EQ(1u, service()->size());
+
+  // Discarding a non-existent snippet shouldn't do anything.
+  EXPECT_FALSE(service()->DiscardSnippet(GURL("http://othersite.com")));
+  EXPECT_EQ(1u, service()->size());
+
+  // Discard the snippet.
+  EXPECT_TRUE(service()->DiscardSnippet(GURL("http://site.com")));
+  EXPECT_EQ(0u, service()->size());
+
+  // Make sure that fetching the same snippet again does not re-add it.
+  ASSERT_TRUE(LoadFromJSONString(json_str));
+  EXPECT_EQ(0u, service()->size());
+
+  // The snippet should stay discarded even after re-creating the service.
+  CreateSnippetsService();
+  // Init the service, so the prefs get loaded.
+  // TODO(treib): This should happen in CreateSnippetsService.
+  service()->Init(true);
+  ASSERT_TRUE(LoadFromJSONString(json_str));
+  EXPECT_EQ(0u, service()->size());
 }
 
-TEST_F(NTPSnippetsServiceTest, ObserverLoaded) {
-  scoped_ptr<NTPSnippetsService> service(CreateSnippetService());
+TEST_F(NTPSnippetsServiceTest, CreationTimestampParseFail) {
+  std::string json_str(GetTestJson("aaa1448459205"));
 
-  std::string json_str(
-      "{ \"recos\": [ "
-      "{ \"contentInfo\": { \"url\" : \"http://localhost/foobar\" }}"
-      "]}");
-  EXPECT_TRUE(service->LoadFromJSONString(json_str));
+  ASSERT_TRUE(LoadFromJSONString(json_str));
+  EXPECT_EQ(service()->size(), 1u);
 
-  SnippetObserver observer;
-  service->AddObserver(&observer);
-
-  EXPECT_TRUE(observer.loaded_);
-
-  service->RemoveObserver(&observer);
+  // The same for loop without the '&' should not compile.
+  for (auto& snippet : *service()) {
+    // Snippet here is a const.
+    EXPECT_EQ(snippet.url(), GURL("http://localhost/foobar"));
+    EXPECT_EQ(snippet.title(), "Title");
+    EXPECT_EQ(snippet.snippet(), "Snippet");
+    EXPECT_EQ(base::Time::UnixEpoch(), snippet.publish_date());
+  }
 }
+
+TEST_F(NTPSnippetsServiceTest, RemoveExpiredContent) {
+  std::string json_str(GetTestExpiredJson(1448459205));
+
+  ASSERT_TRUE(LoadFromJSONString(json_str));
+  EXPECT_EQ(service()->size(), 0u);
+}
+
 }  // namespace ntp_snippets

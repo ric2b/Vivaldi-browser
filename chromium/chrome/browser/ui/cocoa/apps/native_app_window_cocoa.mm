@@ -17,7 +17,6 @@
 #include "chrome/browser/ui/cocoa/extensions/extension_view_mac.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/native_web_keyboard_event.h"
-#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/extension.h"
 #include "skia/ext/skia_utils_mac.h"
@@ -82,9 +81,9 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
   if (regions.empty()) {
     result.push_back(gfx::Rect(0, 0, width, height));
   } else {
-    scoped_ptr<SkRegion> draggable(
+    std::unique_ptr<SkRegion> draggable(
         AppWindow::RawDraggableRegionsToSkRegion(regions));
-    scoped_ptr<SkRegion> non_draggable(new SkRegion);
+    std::unique_ptr<SkRegion> non_draggable(new SkRegion);
     non_draggable->op(0, 0, width, height, SkRegion::kUnion_Op);
     non_draggable->op(*draggable, SkRegion::kDifference_Op);
     for (SkRegion::Iterator it(*non_draggable); !it.done(); it.next()) {
@@ -201,7 +200,10 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
 
 @end
 
-@interface AppFramelessNSWindow : AppNSWindow
+@interface AppFramelessNSWindow : AppNSWindow {
+@private
+  NativeAppWindowCocoa* appWindowCocoa_;
+}
 @end
 
 @implementation AppFramelessNSWindow
@@ -222,6 +224,78 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
 
 - (NSRect)contentRectForFrameRect:(NSRect)frameRect {
   return frameRect;
+}
+
+- (void)VivaldiSetAppWindowCocoa:(NativeAppWindowCocoa*)appWindowCocoa {
+  appWindowCocoa_ = appWindowCocoa;
+}
+
+- (NSView*)VivaldiGetTouchView {
+  NSView* view = nil;
+  content::WebContents* webContents = appWindowCocoa_->VivaldiWebContents();
+  if (webContents) {
+    for (NSView* subview in [webContents->GetNativeView() subviews]) {
+      if ([subview respondsToSelector:@selector(vivaldiTouchMarker)]) {
+        view = subview;
+        break;
+      }
+    }
+  }
+  return view;
+}
+
+// NOTE(espen@vivaldi.com) Reimplemented for swipe workaround.
+- (void)sendEvent:(NSEvent*)event {
+  // NOTE(espen@vivaldi.com). Brute force workaround for swiping in frameless
+  // mode. This functionality stopped working properly with chrome 51 because
+  // the touches***WithEvent: functions are not called by the NSWindow
+  // (happens when the view is reparented to be a child of
+  // [[window() contentView] superview]). The swipe state machine depends on
+  // them with 51. Code below will signal directly to the
+  // RenderWidgetHostViewCocoa which is the view that normally receive these
+  // calls (works fine in framed window mode). This need to be tested for each
+  // chrome upgrade.
+  if (vivaldi::IsVivaldiRunning()) {
+    // 10.11 and later has changed to use phase to determine state.
+    if (base::mac::IsOSElCapitanOrLater()) {
+      if (event.type == NSEventTypeGesture) {
+        NSView* view = [self VivaldiGetTouchView];
+        static bool phase_has_begun = false;
+        if (event.phase == NSTouchPhaseBegan) {
+          phase_has_begun = true;
+          [view touchesBeganWithEvent:event];
+        } else if (event.phase == NSTouchPhaseEnded) {
+          phase_has_begun = false;
+          [view touchesEndedWithEvent:event];
+        } else {
+          int count = [[event touchesMatchingPhase:NSTouchPhaseAny
+                                            inView:nil] count];
+          if (count > 0) {
+            if (!phase_has_begun) {
+              [view touchesBeganWithEvent:event];
+              phase_has_begun = true;
+            }
+            [view touchesMovedWithEvent:event];
+          }
+        }
+      }
+    } else {
+      // 10.9 and 10.10 (we do not support any older version).
+      if (event.type == NSEventTypeGesture ||
+          event.type == NSEventTypeBeginGesture ||
+          event.type == NSEventTypeEndGesture) {
+        NSView* view = [self VivaldiGetTouchView];
+        if (event.type == NSEventTypeGesture)
+          [view touchesMovedWithEvent:event];
+        else if (event.type == NSEventTypeBeginGesture)
+          [view touchesBeganWithEvent:event];
+        else
+          [view touchesEndedWithEvent:event];
+      }
+    }
+  }
+
+  [super sendEvent:event];
 }
 
 @end
@@ -276,16 +350,16 @@ NativeAppWindowCocoa::NativeAppWindowCocoa(
                                         backing:NSBackingStoreBuffered
                                           defer:NO];
 
+  if (vivaldi::IsVivaldiRunning() && !has_frame_) {
+    [(AppFramelessNSWindow*)window VivaldiSetAppWindowCocoa:this];
+  }
+
   std::string name;
   const extensions::Extension* extension = app_window_->GetExtension();
   if (extension)
     name = extension->name();
   [window setTitle:base::SysUTF8ToNSString(name)];
   [[window contentView] setWantsLayer:YES];
-
-  if (base::mac::IsOSSnowLeopard() &&
-      [window respondsToSelector:@selector(setBottomCornerRounded:)])
-    [window setBottomCornerRounded:NO];
 
   if (params.always_on_top)
     gfx::SetNSWindowAlwaysOnTop(window, true);
@@ -398,74 +472,37 @@ void NativeAppWindowCocoa::SetFullscreen(int fullscreen_types) {
   bool fullscreen = (fullscreen_types != AppWindow::FULLSCREEN_TYPE_NONE);
   if (fullscreen == is_fullscreen_)
     return;
-  is_fullscreen_ = fullscreen;
 
-  if (base::mac::IsOSLionOrLater()) {
-    // If going fullscreen, but the window is constrained (fullscreen UI control
-    // is disabled), temporarily enable it. It will be disabled again on leaving
-    // fullscreen.
-    if (fullscreen && !shows_fullscreen_controls_)
-      gfx::SetNSWindowCanFullscreen(window(), true);
+  // 10.11 posts an _endLiveResize event just before exiting fullscreen, so
+  // ensure the window reports as fullscreen while the window is transitioning
+  // to ensure the window bounds are not incorrectly captured as the last known
+  // restored bounds.
+  if (fullscreen)
+    is_fullscreen_ = true;
 
-    // NOTE(tomas@vivaldi.com): If the window is not native (has no frame)
-    // make sure that the native title is not shown.
-    // The superview of the standard buttons is the titlebar view.
-    if (vivaldi::IsVivaldiRunning() && !has_frame_) {
-      if (fullscreen) {
-        [window() toggleFullScreen:nil];
-        [[[window() standardWindowButton:NSWindowZoomButton] superview]
-            setHidden:NO];
-      } else {
-        [[[window() standardWindowButton:NSWindowZoomButton] superview]
-            setHidden:YES];
-        [window() toggleFullScreen:nil];
-      }
-      return;
+  // If going fullscreen, but the window is constrained (fullscreen UI control
+  // is disabled), temporarily enable it. It will be disabled again on leaving
+  // fullscreen.
+  if (fullscreen && !shows_fullscreen_controls_)
+    gfx::SetNSWindowCanFullscreen(window(), true);
+
+  // NOTE(tomas@vivaldi.com): If the window is not native (has no frame)
+  // make sure that the native title is not shown.
+  // The superview of the standard buttons is the titlebar view.
+  if (vivaldi::IsVivaldiRunning() && !has_frame_) {
+    if (fullscreen) {
+      [window() toggleFullScreen:nil];
+      [[[window() standardWindowButton:NSWindowZoomButton] superview]
+       setHidden:NO];
+    } else {
+      [[[window() standardWindowButton:NSWindowZoomButton] superview]
+       setHidden:YES];
+      [window() toggleFullScreen:nil];
     }
-
-    [window() toggleFullScreen:nil];
-    return;
   }
-
-  DCHECK(base::mac::IsOSSnowLeopard());
-
-  // Fade to black.
-  const CGDisplayReservationInterval kFadeDurationSeconds = 0.6;
-  bool did_fade_out = false;
-  CGDisplayFadeReservationToken token;
-  if (CGAcquireDisplayFadeReservation(kFadeDurationSeconds, &token) ==
-      kCGErrorSuccess) {
-    did_fade_out = true;
-    CGDisplayFade(token, kFadeDurationSeconds / 2, kCGDisplayBlendNormal,
-        kCGDisplayBlendSolidColor, 0.0, 0.0, 0.0, /*synchronous=*/true);
-  }
-
-  // Since frameless windows insert the WebContentsView into the NSThemeFrame
-  // ([[window contentView] superview]), and since that NSThemeFrame is
-  // destroyed and recreated when we change the styleMask of the window, we
-  // need to remove the view from the window when we change the style, and
-  // add it back afterwards.
-  UninstallView();
-  if (fullscreen) {
-    UpdateRestoredBounds();
-    [window() setStyleMask:NSBorderlessWindowMask];
-    [window() setFrame:[window()
-        frameRectForContentRect:[[window() screen] frame]]
-               display:YES];
-    base::mac::RequestFullScreen(base::mac::kFullScreenModeAutoHideAll);
-  } else {
-    base::mac::ReleaseFullScreen(base::mac::kFullScreenModeAutoHideAll);
-    [window() setStyleMask:GetWindowStyleMask()];
-    [window() setFrame:restored_bounds_ display:YES];
-  }
-  InstallView();
-
-  // Fade back in.
-  if (did_fade_out) {
-    CGDisplayFade(token, kFadeDurationSeconds / 2, kCGDisplayBlendSolidColor,
-        kCGDisplayBlendNormal, 0.0, 0.0, 0.0, /*synchronous=*/false);
-    CGReleaseDisplayFadeReservation(token);
-  }
+  else
+  [window() toggleFullScreen:nil];
+  is_fullscreen_ = fullscreen;
 }
 
 bool NativeAppWindowCocoa::IsFullscreenOrPending() const {
@@ -612,7 +649,7 @@ void NativeAppWindowCocoa::UpdateWindowTitle() {
   [window() setTitle:base::SysUTF16ToNSString(title)];
 }
 
-void NativeAppWindowCocoa::UpdateShape(scoped_ptr<SkRegion> region) {
+void NativeAppWindowCocoa::UpdateShape(std::unique_ptr<SkRegion> region) {
   NOTIMPLEMENTED();
 }
 
@@ -771,10 +808,6 @@ void NativeAppWindowCocoa::WindowWillClose() {
 }
 
 void NativeAppWindowCocoa::WindowDidBecomeKey() {
-  content::RenderWidgetHostView* rwhv =
-      WebContents()->GetRenderWidgetHostView();
-  if (rwhv)
-    rwhv->SetActive(true);
   app_window_->OnNativeWindowActivated();
 
   WebContents()->RestoreFocus();
@@ -789,11 +822,6 @@ void NativeAppWindowCocoa::WindowDidResignKey() {
     return;
 
   WebContents()->StoreFocus();
-
-  content::RenderWidgetHostView* rwhv =
-      WebContents()->GetRenderWidgetHostView();
-  if (rwhv)
-    rwhv->SetActive(false);
 }
 
 void NativeAppWindowCocoa::WindowDidFinishResize() {

@@ -27,7 +27,7 @@
 #include "platform/LayoutTestSupport.h"
 #include "platform/LayoutUnit.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/fonts/Character.h"
+#include "platform/fonts/CharacterRange.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontFallbackIterator.h"
 #include "platform/fonts/FontFallbackList.h"
@@ -40,13 +40,13 @@
 #include "platform/fonts/shaping/SimpleShaper.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/text/BidiResolver.h"
+#include "platform/text/Character.h"
 #include "platform/text/TextRun.h"
 #include "platform/text/TextRunIterator.h"
 #include "platform/transforms/AffineTransform.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
-#include "wtf/MainThread.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/CharacterNames.h"
 #include "wtf/text/Unicode.h"
@@ -86,8 +86,8 @@ Font& Font::operator=(const Font& other)
 
 bool Font::operator==(const Font& other) const
 {
-    FontSelector* first = m_fontFallbackList ? m_fontFallbackList->fontSelector() : 0;
-    FontSelector* second = other.m_fontFallbackList ? other.m_fontFallbackList->fontSelector() : 0;
+    FontSelector* first = m_fontFallbackList ? m_fontFallbackList->getFontSelector() : 0;
+    FontSelector* second = other.m_fontFallbackList ? other.m_fontFallbackList->getFontSelector() : 0;
 
     return first == second
         && m_fontDescription == other.m_fontDescription
@@ -95,7 +95,7 @@ bool Font::operator==(const Font& other) const
         && (m_fontFallbackList ? m_fontFallbackList->generation() : 0) == (other.m_fontFallbackList ? other.m_fontFallbackList->generation() : 0);
 }
 
-void Font::update(PassRefPtrWillBeRawPtr<FontSelector> fontSelector) const
+void Font::update(FontSelector* fontSelector) const
 {
     // FIXME: It is pretty crazy that we are willing to just poke into a RefPtr, but it ends up
     // being reasonably safe (because inherited fonts in the render tree pick up the new
@@ -255,7 +255,7 @@ public:
         , m_hasVerticalOffsets(buffer.hasVerticalOffsets())
         , m_index(0)
         , m_blobCount(0)
-        , m_rotation(buffer.isEmpty() ? NoRotation : blobRotation(buffer.fontDataAt(0)))
+        , m_rotation(buffer.isEmpty() ? NoRotation : computeBlobRotation(buffer.fontDataAt(0)))
     { }
 
     bool done() const { return m_index >= m_buffer.size(); }
@@ -270,7 +270,7 @@ public:
             const SimpleFontData* fontData = m_buffer.fontDataAt(m_index);
             ASSERT(fontData);
 
-            const BlobRotation newRotation = blobRotation(fontData);
+            const BlobRotation newRotation = computeBlobRotation(fontData);
             if (newRotation != m_rotation) {
                 // We're switching to an orientation which requires a different rotation
                 //   => emit the pending blob (and start a new one with the new rotation).
@@ -290,7 +290,7 @@ public:
     }
 
 private:
-    static BlobRotation blobRotation(const SimpleFontData* font)
+    static BlobRotation computeBlobRotation(const SimpleFontData* font)
     {
         // For vertical upright text we need to compensate the inherited 90deg CW rotation
         // (using a 90deg CCW rotation).
@@ -317,8 +317,8 @@ private:
         } else {
             ASSERT(m_hasVerticalOffsets);
 
-            const float verticalBaselineXOffset = fontData->fontMetrics().floatAscent()
-                - fontData->fontMetrics().floatAscent(IdeographicBaseline);
+            const float verticalBaselineXOffset = fontData->getFontMetrics().floatAscent()
+                - fontData->getFontMetrics().floatAscent(IdeographicBaseline);
 
             // TODO(fmalita): why don't we apply this adjustment when building the glyph buffer?
             for (unsigned i = 0; i < 2 * count; i += 2) {
@@ -401,7 +401,7 @@ int Font::offsetForPosition(const TextRun& run, float x, bool includePartialGlyp
 {
     FontCachePurgePreventer purgePreventer;
 
-    if (codePath(TextRunPaintInfo(run)) != ComplexPath && !fontDescription().typesettingFeatures())
+    if (codePath(TextRunPaintInfo(run)) != ComplexPath && !getFontDescription().getTypesettingFeatures())
         return offsetForPositionForSimpleText(run, x, includePartialGlyphs);
 
     return offsetForPositionForComplexText(run, x, includePartialGlyphs);
@@ -420,7 +420,7 @@ CodePath Font::codePath(const TextRunPaintInfo& runInfo) const
 
     const TextRun& run = runInfo.run;
 
-    if (fontDescription().typesettingFeatures() && (runInfo.from || runInfo.to != run.length()))
+    if (getFontDescription().getTypesettingFeatures() && (runInfo.from || runInfo.to != run.length()))
         return ComplexPath;
 
     if (m_fontDescription.featureSettings() && m_fontDescription.featureSettings()->size() > 0)
@@ -432,13 +432,13 @@ CodePath Font::codePath(const TextRunPaintInfo& runInfo) const
     if (m_fontDescription.widthVariant() != RegularWidth)
         return ComplexPath;
 
-    if (run.length() > 1 && fontDescription().typesettingFeatures())
+    if (run.length() > 1 && getFontDescription().getTypesettingFeatures())
         return ComplexPath;
 
     // FIXME: This really shouldn't be needed but for some reason the
     // TextRendering setting doesn't propagate to typesettingFeatures in time
     // for the prefs width calculation.
-    if (fontDescription().textRendering() == OptimizeLegibility || fontDescription().textRendering() == GeometricPrecision)
+    if (getFontDescription().textRendering() == OptimizeLegibility || getFontDescription().textRendering() == GeometricPrecision)
         return ComplexPath;
 
     if (run.is8Bit())
@@ -459,19 +459,19 @@ bool Font::canShapeWordByWord() const
 
 bool Font::computeCanShapeWordByWord() const
 {
-    if (!fontDescription().typesettingFeatures())
+    if (!getFontDescription().getTypesettingFeatures())
         return true;
 
     const FontPlatformData& platformData = primaryFont()->platformData();
-    TypesettingFeatures features = fontDescription().typesettingFeatures();
+    TypesettingFeatures features = getFontDescription().getTypesettingFeatures();
     return !platformData.hasSpaceInLigaturesOrKerning(features);
 };
 
 void Font::willUseFontData(UChar32 character) const
 {
-    const FontFamily& family = fontDescription().family();
-    if (m_fontFallbackList && m_fontFallbackList->fontSelector() && !family.familyIsEmpty())
-        m_fontFallbackList->fontSelector()->willUseFontData(fontDescription(), family.family(), character);
+    const FontFamily& family = getFontDescription().family();
+    if (m_fontFallbackList && m_fontFallbackList->getFontSelector() && !family.familyIsEmpty())
+        m_fontFallbackList->getFontSelector()->willUseFontData(getFontDescription(), family.family(), character);
 }
 
 static inline GlyphData glyphDataForNonCJKCharacterWithGlyphOrientation(UChar32 character, bool isUpright, GlyphData& data, unsigned pageNumber)
@@ -508,9 +508,12 @@ static inline GlyphData glyphDataForNonCJKCharacterWithGlyphOrientation(UChar32 
     return data;
 }
 
-PassRefPtr<FontFallbackIterator> Font::createFontFallbackIterator() const
+PassRefPtr<FontFallbackIterator> Font::createFontFallbackIterator(
+    FontFallbackPriority fallbackPriority) const
 {
-    return FontFallbackIterator::create(m_fontDescription, m_fontFallbackList);
+    return FontFallbackIterator::create(m_fontDescription,
+        m_fontFallbackList,
+        fallbackPriority);
 }
 
 GlyphData Font::glyphDataForCharacter(UChar32& c, bool mirror, bool normalizeSpace, FontDataVariant variant) const
@@ -689,7 +692,7 @@ int Font::emphasisMarkAscent(const AtomicString& mark) const
     if (!markFontData)
         return 0;
 
-    return markFontData->fontMetrics().ascent();
+    return markFontData->getFontMetrics().ascent();
 }
 
 int Font::emphasisMarkDescent(const AtomicString& mark) const
@@ -705,7 +708,7 @@ int Font::emphasisMarkDescent(const AtomicString& mark) const
     if (!markFontData)
         return 0;
 
-    return markFontData->fontMetrics().descent();
+    return markFontData->getFontMetrics().descent();
 }
 
 int Font::emphasisMarkHeight(const AtomicString& mark) const
@@ -721,7 +724,7 @@ int Font::emphasisMarkHeight(const AtomicString& mark) const
     if (!markFontData)
         return 0;
 
-    return markFontData->fontMetrics().height();
+    return markFontData->getFontMetrics().height();
 }
 
 float Font::floatWidthForComplexText(const TextRun& run, HashSet<const SimpleFontData*>* fallbackFonts, FloatRect* glyphBounds) const
@@ -744,7 +747,20 @@ FloatRect Font::selectionRectForComplexText(const TextRun& run,
     const FloatPoint& point, int height, int from, int to) const
 {
     CachingWordShaper shaper(m_fontFallbackList->shapeCache(m_fontDescription));
-    return shaper.selectionRect(this, run, point, height, from, to);
+    CharacterRange range = shaper.getCharacterRange(this, run, from, to);
+    return FloatRect(point.x() + range.start, point.y(), range.width(), height);
+}
+
+Vector<CharacterRange> Font::individualCharacterRanges(const TextRun& run) const
+{
+    // TODO(pdr): Android is temporarily (crbug.com/577306) using the old simple
+    // shaper and using the complex shaper here can show differences between
+    // the two shapers. This function is currently only called through SVG
+    // which now exclusively uses the complex shaper, so the primary difference
+    // will be improved shaping in SVG when compared to HTML.
+    FontCachePurgePreventer purgePreventer;
+    CachingWordShaper shaper(m_fontFallbackList->shapeCache(m_fontDescription));
+    return shaper.individualCharacterRanges(this, run);
 }
 
 float Font::floatWidthForSimpleText(const TextRun& run, HashSet<const SimpleFontData*>* fallbackFonts, FloatRect* glyphBounds) const

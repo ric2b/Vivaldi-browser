@@ -88,6 +88,9 @@
         "test": "app_list_unittests"
       },
       {
+        "test": "app_list_shower_unittests"
+      },
+      {
         "test": "display_unittests"
       },
       {
@@ -205,6 +208,7 @@
   "Chromium OS Builder (valgrind)": {
     "additional_compile_targets": [
       "app_list_unittests",
+      "app_list_shower_unittests",
       "ash_unittests",
       "aura_unittests",
       "base_unittests",
@@ -243,6 +247,7 @@
       "accessibility_unittests",
       "angle_unittests",
       "app_list_unittests",
+      "app_list_shower_unittests",
       "aura_unittests",
       "base_unittests",
       "blink_heap_unittests",
@@ -277,9 +282,7 @@
       "midi_unittests",
       "mojo_system_unittests",
       "mojo_public_system_unittests",
-      "mojo_public_utility_unittests",
       "mojo_public_bindings_unittests",
-      "mojo_public_environment_unittests",
       "mojo_common_unittests",
       "net_unittests",
       "printing_unittests",
@@ -294,6 +297,7 @@
       "accessibility_unittests",
       "angle_unittests",
       "app_list_unittests",
+      "app_list_shower_unittests",
       "aura_unittests",
       "base_unittests",
       "blink_heap_unittests",
@@ -316,9 +320,7 @@
       "cacheinvalidation_unittests",
       "mojo_system_unittests",
       "mojo_public_system_unittests",
-      "mojo_public_utility_unittests",
       "mojo_public_bindings_unittests",
-      "mojo_public_environment_unittests",
       "mojo_common_unittests",
       "cast_unittests",
       "cc_unittests",
@@ -349,6 +351,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "accessibility_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "app_list_shower_unittests"
       },
       {
         "swarming": {
@@ -536,19 +544,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "mojo_public_environment_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "mojo_public_system_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "mojo_public_utility_unittests"
       },
       {
         "test": "mojo_system_unittests"
@@ -646,6 +642,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "accessibility_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "app_list_shower_unittests"
       },
       {
         "swarming": {
@@ -838,19 +840,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "mojo_public_environment_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "mojo_public_system_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "mojo_public_utility_unittests"
       },
       {
         "test": "mojo_system_unittests"
@@ -960,6 +950,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "accessibility_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "app_list_shower_unittests"
       },
       {
         "swarming": {
@@ -2115,13 +2111,7 @@
         "test": "mojo_public_bindings_unittests"
       },
       {
-        "test": "mojo_public_environment_unittests"
-      },
-      {
         "test": "mojo_public_system_unittests"
-      },
-      {
-        "test": "mojo_public_utility_unittests"
       },
       {
         "test": "mojo_system_unittests"
@@ -2243,6 +2233,9 @@
         "test": "app_list_unittests"
       },
       {
+        "test": "app_list_shower_unittests"
+      },
+      {
         "test": "aura_unittests"
       },
       {
@@ -2308,6 +2301,9 @@
       },
       {
         "test": "app_list_unittests"
+      },
+      {
+        "test": "app_list_shower_unittests"
       },
       {
         "test": "aura_unittests"
@@ -2412,13 +2408,7 @@
         "test": "mojo_public_bindings_unittests"
       },
       {
-        "test": "mojo_public_environment_unittests"
-      },
-      {
         "test": "mojo_public_system_unittests"
-      },
-      {
-        "test": "mojo_public_utility_unittests"
       },
       {
         "test": "mojo_system_unittests"
@@ -2453,6 +2443,9 @@
       },
       {
         "test": "app_list_unittests"
+      },
+      {
+        "test": "app_list_shower_unittests"
       },
       {
         "test": "aura_unittests"
@@ -2548,13 +2541,7 @@
         "test": "mojo_public_bindings_unittests"
       },
       {
-        "test": "mojo_public_environment_unittests"
-      },
-      {
         "test": "mojo_public_system_unittests"
-      },
-      {
-        "test": "mojo_public_utility_unittests"
       },
       {
         "test": "mojo_system_unittests"

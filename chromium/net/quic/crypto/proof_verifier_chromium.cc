@@ -63,7 +63,10 @@ class ProofVerifierChromium::Job {
   // Starts the proof verification.  If |QUIC_PENDING| is returned, then
   // |callback| will be invoked asynchronously when the verification completes.
   QuicAsyncStatus VerifyProof(const std::string& hostname,
+                              const uint16_t port,
                               const std::string& server_config,
+                              QuicVersion quic_version,
+                              base::StringPiece chlo_hash,
                               const std::vector<std::string>& certs,
                               const std::string& cert_sct,
                               const std::string& signature,
@@ -84,6 +87,8 @@ class ProofVerifierChromium::Job {
   int DoVerifyCertComplete(int result);
 
   bool VerifySignature(const std::string& signed_data,
+                       QuicVersion quic_version,
+                       StringPiece chlo_hash,
                        const std::string& signature,
                        const std::string& cert);
 
@@ -102,6 +107,8 @@ class ProofVerifierChromium::Job {
 
   // |hostname| specifies the hostname for which |certs| is a valid chain.
   std::string hostname_;
+  // |port| specifies the target port for the connection.
+  uint16_t port_;
 
   scoped_ptr<ProofVerifierCallback> callback_;
   scoped_ptr<ProofVerifyDetailsChromium> verify_details_;
@@ -154,7 +161,10 @@ ProofVerifierChromium::Job::~Job() {
 
 QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
     const string& hostname,
+    const uint16_t port,
     const string& server_config,
+    QuicVersion quic_version,
+    StringPiece chlo_hash,
     const vector<string>& certs,
     const std::string& cert_sct,
     const string& signature,
@@ -208,7 +218,8 @@ QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
 
   // We call VerifySignature first to avoid copying of server_config and
   // signature.
-  if (!VerifySignature(server_config, signature, certs[0])) {
+  if (!VerifySignature(server_config, quic_version, chlo_hash, signature,
+                       certs[0])) {
     *error_details = "Failed to verify signature of server config";
     DLOG(WARNING) << *error_details;
     verify_details_->cert_verify_result.cert_status = CERT_STATUS_INVALID;
@@ -217,6 +228,7 @@ QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
   }
 
   hostname_ = hostname;
+  port_ = port;
 
   next_state_ = STATE_VERIFY_CERT;
   switch (DoLoop(OK)) {
@@ -316,12 +328,11 @@ int ProofVerifierChromium::Job::DoVerifyCertComplete(int result) {
             verify_details_->ct_verify_result.verified_scts, net_log_);
   }
 
-  // TODO(estark): replace 0 below with the port of the connection.
   if (transport_security_state_ &&
       (result == OK ||
        (IsCertificateError(result) && IsCertStatusMinorError(cert_status))) &&
       !transport_security_state_->CheckPublicKeyPins(
-          HostPortPair(hostname_, 0),
+          HostPortPair(hostname_, port_),
           cert_verify_result.is_issued_by_known_root,
           cert_verify_result.public_key_hashes, cert_.get(),
           cert_verify_result.verified_cert.get(),
@@ -343,6 +354,8 @@ int ProofVerifierChromium::Job::DoVerifyCertComplete(int result) {
 }
 
 bool ProofVerifierChromium::Job::VerifySignature(const string& signed_data,
+                                                 QuicVersion quic_version,
+                                                 StringPiece chlo_hash,
                                                  const string& signature,
                                                  const string& cert) {
   StringPiece spki;
@@ -371,27 +384,11 @@ bool ProofVerifierChromium::Job::VerifySignature(const string& signed_data,
       return false;
     }
   } else if (type == X509Certificate::kPublicKeyTypeECDSA) {
-    // This is the algorithm ID for ECDSA with SHA-256. Parameters are ABSENT.
-    // RFC 5758:
-    //   ecdsa-with-SHA256 OBJECT IDENTIFIER ::= { iso(1) member-body(2)
-    //        us(840) ansi-X9-62(10045) signatures(4) ecdsa-with-SHA2(3) 2 }
-    //   ...
-    //   When the ecdsa-with-SHA224, ecdsa-with-SHA256, ecdsa-with-SHA384, or
-    //   ecdsa-with-SHA512 algorithm identifier appears in the algorithm field
-    //   as an AlgorithmIdentifier, the encoding MUST omit the parameters
-    //   field.  That is, the AlgorithmIdentifier SHALL be a SEQUENCE of one
-    //   component, the OID ecdsa-with-SHA224, ecdsa-with-SHA256, ecdsa-with-
-    //   SHA384, or ecdsa-with-SHA512.
-    // See also RFC 5480, Appendix A.
-    static const uint8_t kECDSAWithSHA256AlgorithmID[] = {
-        0x30, 0x0a, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02,
-    };
-
-    if (!verifier.VerifyInit(
-            kECDSAWithSHA256AlgorithmID, sizeof(kECDSAWithSHA256AlgorithmID),
-            reinterpret_cast<const uint8_t*>(signature.data()),
-            signature.size(), reinterpret_cast<const uint8_t*>(spki.data()),
-            spki.size())) {
+    if (!verifier.VerifyInit(crypto::SignatureVerifier::ECDSA_SHA256,
+                             reinterpret_cast<const uint8_t*>(signature.data()),
+                             signature.size(),
+                             reinterpret_cast<const uint8_t*>(spki.data()),
+                             spki.size())) {
       DLOG(WARNING) << "VerifyInit failed";
       return false;
     }
@@ -400,8 +397,20 @@ bool ProofVerifierChromium::Job::VerifySignature(const string& signed_data,
     return false;
   }
 
-  verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(kProofSignatureLabel),
-                        sizeof(kProofSignatureLabel));
+  if (quic_version <= QUIC_VERSION_30) {
+    verifier.VerifyUpdate(
+        reinterpret_cast<const uint8_t*>(kProofSignatureLabelOld),
+        sizeof(kProofSignatureLabelOld));
+  } else {
+    verifier.VerifyUpdate(
+        reinterpret_cast<const uint8_t*>(kProofSignatureLabel),
+        sizeof(kProofSignatureLabel));
+    uint32_t len = chlo_hash.length();
+    verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(&len), sizeof(len));
+    verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(chlo_hash.data()),
+                          len);
+  }
+
   verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(signed_data.data()),
                         signed_data.size());
 
@@ -430,7 +439,10 @@ ProofVerifierChromium::~ProofVerifierChromium() {
 
 QuicAsyncStatus ProofVerifierChromium::VerifyProof(
     const std::string& hostname,
+    const uint16_t port,
     const std::string& server_config,
+    QuicVersion quic_version,
+    base::StringPiece chlo_hash,
     const std::vector<std::string>& certs,
     const std::string& cert_sct,
     const std::string& signature,
@@ -448,9 +460,9 @@ QuicAsyncStatus ProofVerifierChromium::VerifyProof(
       new Job(this, cert_verifier_, ct_policy_enforcer_,
               transport_security_state_, cert_transparency_verifier_,
               chromium_context->cert_verify_flags, chromium_context->net_log));
-  QuicAsyncStatus status =
-      job->VerifyProof(hostname, server_config, certs, cert_sct, signature,
-                       error_details, verify_details, callback);
+  QuicAsyncStatus status = job->VerifyProof(
+      hostname, port, server_config, quic_version, chlo_hash, certs, cert_sct,
+      signature, error_details, verify_details, callback);
   if (status == QUIC_PENDING) {
     active_jobs_.insert(job.release());
   }

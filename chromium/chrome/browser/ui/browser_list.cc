@@ -18,7 +18,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/user_metrics.h"
 
@@ -55,7 +54,7 @@ void BrowserList::AddBrowser(Browser* browser) {
   DCHECK(browser);
   GetInstance()->browsers_.push_back(browser);
 
-  g_browser_process->AddRefModule();
+  browser->RegisterKeepAlive();
 
   content::NotificationService::current()->Notify(
       chrome::NOTIFICATION_BROWSER_OPENED,
@@ -82,7 +81,7 @@ void BrowserList::RemoveBrowser(Browser* browser) {
   FOR_EACH_OBSERVER(chrome::BrowserListObserver, observers_.Get(),
                     OnBrowserRemoved(browser));
 
-  g_browser_process->ReleaseModule();
+  browser->UnregisterKeepAlive();
 
   // If we're exiting, send out the APP_TERMINATING notification to allow other
   // modules to shut themselves down.

@@ -27,6 +27,8 @@ class ShelfDelegateMus : public ShelfDelegate,
   // ShelfDelegate:
   void OnShelfCreated(Shelf* shelf) override;
   void OnShelfDestroyed(Shelf* shelf) override;
+  void OnShelfAlignmentChanged(Shelf* shelf) override;
+  void OnShelfAutoHideBehaviorChanged(Shelf* shelf) override;
   ShelfID GetShelfIDForAppID(const std::string& app_id) override;
   bool HasShelfIDToAppIDMapping(ShelfID id) const override;
   const std::string& GetAppIDForShelfID(ShelfID id) override;
@@ -41,6 +43,8 @@ class ShelfDelegateMus : public ShelfDelegate,
   void OnUserWindowRemoved(uint32_t window_id) override;
   void OnUserWindowTitleChanged(uint32_t window_id,
                                 const mojo::String& window_title) override;
+  void OnUserWindowAppIconChanged(uint32_t window_id,
+                                  mojo::Array<uint8_t> app_icon) override;
   void OnUserWindowFocusChanged(uint32_t window_id, bool has_focus) override;
 
   ShelfModel* model_;

@@ -250,11 +250,8 @@ ToolsMenuModel::~ToolsMenuModel() {}
 // - Option to enable profiling.
 void ToolsMenuModel::Build(Browser* browser) {
   bool show_create_shortcuts = true;
-#if defined(OS_CHROMEOS) || defined(OS_MACOSX)
+#if defined(OS_CHROMEOS) || defined(OS_MACOSX) || defined(USE_ASH)
   show_create_shortcuts = false;
-#elif defined(USE_ASH)
-  if (browser->host_desktop_type() == chrome::HOST_DESKTOP_TYPE_ASH)
-    show_create_shortcuts = false;
 #endif
   AddItemWithStringId(IDC_SAVE_PAGE, IDS_SAVE_PAGE);
   if (extensions::util::IsNewBookmarkAppsEnabled()) {
@@ -263,8 +260,7 @@ void ToolsMenuModel::Build(Browser* browser) {
     string_id = IDS_ADD_TO_APPLICATIONS;
 #endif
 #if defined(USE_ASH)
-    if (browser->host_desktop_type() == chrome::HOST_DESKTOP_TYPE_ASH)
-      string_id = IDS_ADD_TO_SHELF;
+    string_id = IDS_ADD_TO_SHELF;
 #endif  // defined(USE_ASH)
     AddItemWithStringId(IDC_CREATE_HOSTED_APP, string_id);
   } else if (show_create_shortcuts) {
@@ -478,6 +474,12 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
       if (!uma_action_recorded_)
         UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.Print", delta);
       LogMenuAction(MENU_ACTION_PRINT);
+      break;
+
+    case IDC_ROUTE_MEDIA:
+      if (!uma_action_recorded_)
+        UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.Cast", delta);
+      LogMenuAction(MENU_ACTION_CAST);
       break;
 
     // Edit menu.
@@ -810,10 +812,8 @@ void AppMenuModel::Build() {
 
   CreateZoomMenu();
   AddItemWithStringId(IDC_PRINT, IDS_PRINT);
-  if (!browser()->profile()->IsOffTheRecord() &&
-      media_router::MediaRouterEnabled(browser()->profile())) {
+  if (media_router::MediaRouterEnabled(browser()->profile()))
     AddItemWithStringId(IDC_ROUTE_MEDIA, IDS_MEDIA_ROUTER_MENU_ITEM_TITLE);
-  }
 
   AddItemWithStringId(IDC_FIND, IDS_FIND);
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -880,8 +880,9 @@ bool AppMenuModel::AddGlobalErrorMenuItems() {
 void AppMenuModel::CreateActionToolbarOverflowMenu() {
   // We only add the extensions overflow container if there are any icons that
   // aren't shown in the main container.
-  // browser_->window() can return null during startup.
-  if (browser_->window() &&
+  // browser_->window() can return null during startup, and
+  // GetToolbarActionsBar() can be null in testing.
+  if (browser_->window() && browser_->window()->GetToolbarActionsBar() &&
       browser_->window()->GetToolbarActionsBar()->NeedsOverflow()) {
 #if defined(OS_MACOSX)
     // There's a bug in AppKit menus, where if a menu item with a custom view

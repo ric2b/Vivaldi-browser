@@ -275,7 +275,7 @@ static ARIARoleMap* createARIARoleMap()
     ARIARoleMap* roleMap = new ARIARoleMap;
 
     for (size_t i = 0; i < WTF_ARRAY_LENGTH(roles); ++i)
-        roleMap->set(roles[i].ariaRole, roles[i].webcoreRole);
+        roleMap->set(String(roles[i].ariaRole), roles[i].webcoreRole);
     return roleMap;
 }
 
@@ -465,7 +465,7 @@ bool AXObject::isMenuRelated() const
 
 bool AXObject::isPasswordFieldAndShouldHideValue() const
 {
-    Settings* settings = document()->settings();
+    Settings* settings = getDocument()->settings();
     if (!settings || settings->accessibilityPasswordValuesEnabled())
         return false;
 
@@ -563,10 +563,10 @@ bool AXObject::isInertOrAriaHidden() const
 
 bool AXObject::computeIsInertOrAriaHidden(IgnoredReasons* ignoredReasons) const
 {
-    if (node()) {
-        if (node()->isInert()) {
+    if (getNode()) {
+        if (getNode()->isInert()) {
             if (ignoredReasons) {
-                HTMLDialogElement* dialog = getActiveDialogElement(node());
+                HTMLDialogElement* dialog = getActiveDialogElement(getNode());
                 if (dialog) {
                     AXObject* dialogObject = axObjectCache().getOrCreate(dialog);
                     if (dialogObject)
@@ -703,7 +703,7 @@ String AXObject::name(AXNameFrom& nameFrom, AXObject::AXObjectVector* nameObject
     String text = textAlternative(false, false, visited, nameFrom, &relatedObjects, nullptr);
 
     AccessibilityRole role = roleValue();
-    if (!node() || (!isHTMLBRElement(node()) && role != StaticTextRole && role != InlineTextBoxRole))
+    if (!getNode() || (!isHTMLBRElement(getNode()) && role != StaticTextRole && role != InlineTextBoxRole))
         text = collapseWhitespace(text);
 
     if (nameObjects) {
@@ -736,17 +736,17 @@ bool AXObject::isHiddenForTextAlternativeCalculation() const
     if (equalIgnoringCase(getAttribute(aria_hiddenAttr), "false"))
         return false;
 
-    if (layoutObject())
-        return layoutObject()->style()->visibility() != VISIBLE;
+    if (getLayoutObject())
+        return getLayoutObject()->style()->visibility() != VISIBLE;
 
     // This is an obscure corner case: if a node has no LayoutObject, that means it's not rendered,
     // but we still may be exploring it as part of a text alternative calculation, for example if it
     // was explicitly referenced by aria-labelledby. So we need to explicitly call the style resolver
     // to check whether it's invisible or display:none, rather than relying on the style cached in the
     // LayoutObject.
-    Document* doc = document();
-    if (doc && doc->frame() && node() && node()->isElementNode()) {
-        RefPtr<ComputedStyle> style = doc->ensureStyleResolver().styleForElement(toElement(node()));
+    Document* doc = getDocument();
+    if (doc && doc->frame() && getNode() && getNode()->isElementNode()) {
+        RefPtr<ComputedStyle> style = doc->ensureStyleResolver().styleForElement(toElement(getNode()));
         return style->display() == NONE || style->visibility() != VISIBLE;
     }
 
@@ -825,7 +825,7 @@ String AXObject::ariaTextAlternative(bool recursive, bool inAriaLabelledByTraver
     return textAlternative;
 }
 
-String AXObject::textFromElements(bool inAriaLabelledbyTraversal, AXObjectSet& visited, WillBeHeapVector<RawPtrWillBeMember<Element>>& elements, AXRelatedObjectVector* relatedObjects) const
+String AXObject::textFromElements(bool inAriaLabelledbyTraversal, AXObjectSet& visited, HeapVector<Member<Element>>& elements, AXRelatedObjectVector* relatedObjects) const
 {
     StringBuilder accumulatedText;
     bool foundValidElement = false;
@@ -854,11 +854,11 @@ String AXObject::textFromElements(bool inAriaLabelledbyTraversal, AXObjectSet& v
 
 void AXObject::tokenVectorFromAttribute(Vector<String>& tokens, const QualifiedName& attribute) const
 {
-    Node* node = this->node();
+    Node* node = this->getNode();
     if (!node || !node->isElementNode())
         return;
 
-    String attributeValue = getAttribute(attribute).string();
+    String attributeValue = getAttribute(attribute).getString();
     if (attributeValue.isEmpty())
         return;
 
@@ -866,21 +866,21 @@ void AXObject::tokenVectorFromAttribute(Vector<String>& tokens, const QualifiedN
     attributeValue.split(' ', tokens);
 }
 
-void AXObject::elementsFromAttribute(WillBeHeapVector<RawPtrWillBeMember<Element>>& elements, const QualifiedName& attribute) const
+void AXObject::elementsFromAttribute(HeapVector<Member<Element>>& elements, const QualifiedName& attribute) const
 {
     Vector<String> ids;
     tokenVectorFromAttribute(ids, attribute);
     if (ids.isEmpty())
         return;
 
-    TreeScope& scope = node()->treeScope();
+    TreeScope& scope = getNode()->treeScope();
     for (const auto& id : ids) {
         if (Element* idElement = scope.getElementById(AtomicString(id)))
             elements.append(idElement);
     }
 }
 
-void AXObject::ariaLabelledbyElementVector(WillBeHeapVector<RawPtrWillBeMember<Element>>& elements) const
+void AXObject::ariaLabelledbyElementVector(HeapVector<Member<Element>>& elements) const
 {
     // Try both spellings, but prefer aria-labelledby, which is the official spec.
     elementsFromAttribute(elements, aria_labelledbyAttr);
@@ -890,7 +890,7 @@ void AXObject::ariaLabelledbyElementVector(WillBeHeapVector<RawPtrWillBeMember<E
 
 String AXObject::textFromAriaLabelledby(AXObjectSet& visited, AXRelatedObjectVector* relatedObjects) const
 {
-    WillBeHeapVector<RawPtrWillBeMember<Element>> elements;
+    HeapVector<Member<Element>> elements;
     ariaLabelledbyElementVector(elements);
     return textFromElements(true, visited, elements, relatedObjects);
 }
@@ -898,7 +898,7 @@ String AXObject::textFromAriaLabelledby(AXObjectSet& visited, AXRelatedObjectVec
 String AXObject::textFromAriaDescribedby(AXRelatedObjectVector* relatedObjects) const
 {
     AXObjectSet visited;
-    WillBeHeapVector<RawPtrWillBeMember<Element>> elements;
+    HeapVector<Member<Element>> elements;
     elementsFromAttribute(elements, aria_describedbyAttr);
     return textFromElements(true, visited, elements, relatedObjects);
 }
@@ -917,7 +917,8 @@ static String queryString(WebLocalizedString::Name name)
 
 String AXObject::actionVerb() const
 {
-    // FIXME: Need to add verbs for select elements.
+    if (!actionElement())
+        return emptyString();
 
     switch (roleValue()) {
     case ButtonRole:
@@ -933,13 +934,9 @@ String AXObject::actionVerb() const
     case LinkRole:
         return queryString(WebLocalizedString::AXLinkActionVerb);
     case PopUpButtonRole:
-        // FIXME: Implement.
-        return String();
-    case MenuListPopupRole:
-        // FIXME: Implement.
-        return String();
+        return queryString(WebLocalizedString::AXPopUpButtonActionVerb);
     default:
-        return emptyString();
+        return queryString(WebLocalizedString::AXDefaultActionVerb);
     }
 }
 
@@ -961,7 +958,7 @@ AccessibilityButtonState AXObject::checkboxOrRadioValue() const
 
 bool AXObject::isMultiline() const
 {
-    Node* node = this->node();
+    Node* node = this->getNode();
     if (!node)
         return false;
 
@@ -1013,7 +1010,7 @@ bool AXObject::supportsSetSizeAndPosInSet() const
     if ((role == ListBoxOptionRole && parentRole == ListBoxRole)
         || (role == ListItemRole && parentRole == ListRole)
         || (role == MenuItemRole && parentRole == MenuRole)
-        || (role == RadioButtonRole && parentRole == RadioGroupRole)
+        || (role == RadioButtonRole)
         || (role == TabRole && parentRole == TabListRole)
         || (role == TreeItemRole && parentRole == TreeRole))
         return true;
@@ -1085,6 +1082,11 @@ IntPoint AXObject::clickPoint()
     return roundedIntPoint(LayoutPoint(rect.x() + rect.width() / 2, rect.y() + rect.height() / 2));
 }
 
+SkMatrix44 AXObject::transformFromLocalParentFrame() const
+{
+    return SkMatrix44();
+}
+
 IntRect AXObject::boundingBoxForQuads(LayoutObject* obj, const Vector<FloatQuad>& quads)
 {
     ASSERT(obj);
@@ -1110,16 +1112,10 @@ IntRect AXObject::boundingBoxForQuads(LayoutObject* obj, const Vector<FloatQuad>
 
 AXObject* AXObject::elementAccessibilityHitTest(const IntPoint& point) const
 {
-    // Check if there are any mock elements or child frames that need to be handled.
+    // Check if there are any mock elements that need to be handled.
     for (const auto& child : m_children) {
         if (child->isMockObject() && child->elementRect().contains(point))
             return child->elementAccessibilityHitTest(point);
-
-        if (child->isWebArea()) {
-            FrameView* frameView = child->documentFrameView();
-            if (frameView)
-                return child->accessibilityHitTest(IntPoint(point - frameView->frameRect().location()));
-        }
     }
 
     return const_cast<AXObject*>(this);
@@ -1182,7 +1178,7 @@ void AXObject::clearChildren()
     m_haveChildren = false;
 }
 
-Document* AXObject::document() const
+Document* AXObject::getDocument() const
 {
     FrameView* frameView = documentFrameView();
     if (!frameView)
@@ -1213,7 +1209,7 @@ String AXObject::language() const
 
     // as a last resort, fall back to the content language specified in the meta tag
     if (!parent) {
-        Document* doc = document();
+        Document* doc = getDocument();
         if (doc)
             return doc->contentLanguage();
         return nullAtom;
@@ -1224,7 +1220,7 @@ String AXObject::language() const
 
 bool AXObject::hasAttribute(const QualifiedName& attribute) const
 {
-    Node* elementNode = node();
+    Node* elementNode = getNode();
     if (!elementNode)
         return false;
 
@@ -1237,7 +1233,7 @@ bool AXObject::hasAttribute(const QualifiedName& attribute) const
 
 const AtomicString& AXObject::getAttribute(const QualifiedName& attribute) const
 {
-    Node* elementNode = node();
+    Node* elementNode = getNode();
     if (!elementNode)
         return nullAtom;
 
@@ -1531,12 +1527,12 @@ void AXObject::selectionChanged()
 
 int AXObject::lineForPosition(const VisiblePosition& position) const
 {
-    if (position.isNull() || !node())
+    if (position.isNull() || !getNode())
         return -1;
 
     // If the position is not in the same editable region as this AX object, return -1.
     Node* containerNode = position.deepEquivalent().computeContainerNode();
-    if (!containerNode->containsIncludingShadowDOM(node()) && !node()->containsIncludingShadowDOM(containerNode))
+    if (!containerNode->isShadowIncludingInclusiveAncestorOf(getNode()) && !getNode()->isShadowIncludingInclusiveAncestorOf(containerNode))
         return -1;
 
     int lineCount = -1;

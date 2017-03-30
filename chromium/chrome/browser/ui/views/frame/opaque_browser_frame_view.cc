@@ -133,8 +133,6 @@ OpaqueBrowserFrameView::OpaqueBrowserFrameView(BrowserFrame* frame,
   window_title_->set_id(VIEW_ID_WINDOW_TITLE);
   AddChildView(window_title_);
 
-  UpdateAvatar();
-
   platform_observer_.reset(OpaqueBrowserFrameViewPlatformSpecific::Create(
       this, layout_,
       ThemeServiceFactory::GetForProfile(browser_view->browser()->profile())));
@@ -392,7 +390,7 @@ bool OpaqueBrowserFrameView::IsRegularOrGuestSession() const {
 }
 
 gfx::ImageSkia OpaqueBrowserFrameView::GetOTRAvatarIcon() const {
-  return browser_view()->GetOTRAvatarIcon();
+  return BrowserNonClientFrameView::GetOTRAvatarIcon();
 }
 
 bool OpaqueBrowserFrameView::IsMaximized() const {
@@ -573,8 +571,11 @@ bool OpaqueBrowserFrameView::ShouldShowWindowTitleBar() const {
 }
 
 int OpaqueBrowserFrameView::GetTopAreaHeight() const {
-  const gfx::ImageSkia* const frame_image = GetFrameImage();
-  int top_area_height = frame_image->height();
+  // The top area height in dp (only used when there's no frame image).
+  // TODO(pkasting): investigate removing this constant. See crbug.com/590301
+  const int kHeight = 64;
+  const gfx::ImageSkia frame_image = GetFrameImage();
+  int top_area_height = frame_image.isNull() ? kHeight : frame_image.height();
   if (browser_view()->IsTabStripVisible()) {
     top_area_height =
         std::max(top_area_height,
@@ -660,9 +661,8 @@ void OpaqueBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) const {
     canvas->sk_canvas()->clipRect(gfx::RectToSkRect(tabstrip_bounds),
                                   SkRegion::kDifference_Op);
     separator_rect.set_y(tabstrip_bounds.bottom());
-    BrowserView::Paint1pxHorizontalLine(
-        canvas, tp->GetColor(ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR),
-        separator_rect, true);
+    BrowserView::Paint1pxHorizontalLine(canvas, GetToolbarTopSeparatorColor(),
+                                        separator_rect, true);
 
     // Toolbar/content separator.
     toolbar_bounds.Inset(kClientEdgeThickness, 0);
@@ -755,10 +755,8 @@ void OpaqueBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) const {
                           client_bounds.height());
 
       // Shadow.
-      BrowserView::Paint1pxHorizontalLine(
-          canvas, ThemeProperties::GetDefaultColor(
-                      ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR, incognito),
-          client_bounds, true);
+      BrowserView::Paint1pxHorizontalLine(canvas, GetToolbarTopSeparatorColor(),
+                                          client_bounds, true);
     } else {
       // Ensure the client edge rects are drawn to the top of the location bar.
       img_y_offset = kClientEdgeThickness;

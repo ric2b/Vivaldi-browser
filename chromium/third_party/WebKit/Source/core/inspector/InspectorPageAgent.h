@@ -52,11 +52,9 @@ class LocalFrame;
 class SharedBuffer;
 class TextResourceDecoder;
 
-typedef String ErrorString;
-
 using blink::protocol::Maybe;
 
-class CORE_EXPORT InspectorPageAgent final : public InspectorBaseAgent<InspectorPageAgent, protocol::Frontend::Page>, public protocol::Dispatcher::PageCommandHandler {
+class CORE_EXPORT InspectorPageAgent final : public InspectorBaseAgent<InspectorPageAgent, protocol::Frontend::Page>, public protocol::Backend::Page {
     WTF_MAKE_NONCOPYABLE(InspectorPageAgent);
 public:
     class Client {
@@ -83,9 +81,9 @@ public:
         OtherResource
     };
 
-    static PassOwnPtrWillBeRawPtr<InspectorPageAgent> create(InspectedFrames*, Client*, InspectorResourceContentLoader*, InspectorDebuggerAgent*);
+    static RawPtr<InspectorPageAgent> create(InspectedFrames*, Client*, InspectorResourceContentLoader*, InspectorDebuggerAgent*);
 
-    static WillBeHeapVector<RawPtrWillBeMember<Document>> importsForFrame(LocalFrame*);
+    static HeapVector<Member<Document>> importsForFrame(LocalFrame*);
     static bool cachedResourceContent(Resource*, String* result, bool* base64Encoded);
     static bool sharedBufferContent(PassRefPtr<SharedBuffer>, const String& textEncodingName, bool withBase64Encode, String* result);
 
@@ -102,11 +100,11 @@ public:
     void addScriptToEvaluateOnLoad(ErrorString*, const String& scriptSource, String* identifier) override;
     void removeScriptToEvaluateOnLoad(ErrorString*, const String& identifier) override;
     void setAutoAttachToCreatedPages(ErrorString*, bool autoAttach) override;
-    void reload(ErrorString*, const Maybe<bool>& ignoreCache, const Maybe<String>& scriptToEvaluateOnLoad) override;
+    void reload(ErrorString*, const Maybe<bool>& bypassCache, const Maybe<String>& scriptToEvaluateOnLoad) override;
     void navigate(ErrorString*, const String& url, String* frameId) override;
     void getResourceTree(ErrorString*, OwnPtr<protocol::Page::FrameResourceTree>* frameTree) override;
-    void getResourceContent(ErrorString*, const String& frameId, const String& url, PassRefPtr<GetResourceContentCallback>) override;
-    void searchInResource(ErrorString*, const String& frameId, const String& url, const String& query, const Maybe<bool>& caseSensitive, const Maybe<bool>& isRegex, PassRefPtr<SearchInResourceCallback>) override;
+    void getResourceContent(ErrorString*, const String& frameId, const String& url, PassOwnPtr<GetResourceContentCallback>) override;
+    void searchInResource(ErrorString*, const String& frameId, const String& url, const String& query, const Maybe<bool>& caseSensitive, const Maybe<bool>& isRegex, PassOwnPtr<SearchInResourceCallback>) override;
     void setDocumentContent(ErrorString*, const String& frameId, const String& html) override;
     void startScreencast(ErrorString*, const Maybe<String>& format, const Maybe<int>& quality, const Maybe<int>& maxWidth, const Maybe<int>& maxHeight, const Maybe<int>& everyNthFrame) override;
     void stopScreencast(ErrorString*) override;
@@ -140,15 +138,15 @@ private:
     InspectorPageAgent(InspectedFrames*, Client*, InspectorResourceContentLoader*, InspectorDebuggerAgent*);
 
     void finishReload();
-    void getResourceContentAfterResourcesContentLoaded(const String& frameId, const String& url, PassRefPtr<GetResourceContentCallback>);
-    void searchContentAfterResourcesContentLoaded(const String& frameId, const String& url, const String& query, bool caseSensitive, bool isRegex, PassRefPtr<SearchInResourceCallback>);
+    void getResourceContentAfterResourcesContentLoaded(const String& frameId, const String& url, PassOwnPtr<GetResourceContentCallback>);
+    void searchContentAfterResourcesContentLoaded(const String& frameId, const String& url, const String& query, bool caseSensitive, bool isRegex, PassOwnPtr<SearchInResourceCallback>);
 
     static bool dataContent(const char* data, unsigned size, const String& textEncodingName, bool withBase64Encode, String* result);
 
     PassOwnPtr<protocol::Page::Frame> buildObjectForFrame(LocalFrame*);
     PassOwnPtr<protocol::Page::FrameResourceTree> buildObjectForFrameTree(LocalFrame*);
-    RawPtrWillBeMember<InspectedFrames> m_inspectedFrames;
-    RawPtrWillBeMember<InspectorDebuggerAgent> m_debuggerAgent;
+    Member<InspectedFrames> m_inspectedFrames;
+    Member<InspectorDebuggerAgent> m_debuggerAgent;
     Client* m_client;
     long m_lastScriptIdentifier;
     String m_pendingScriptToEvaluateOnLoadOnce;
@@ -156,7 +154,7 @@ private:
     bool m_enabled;
     bool m_reloading;
 
-    RawPtrWillBeMember<InspectorResourceContentLoader> m_inspectorResourceContentLoader;
+    Member<InspectorResourceContentLoader> m_inspectorResourceContentLoader;
 };
 
 

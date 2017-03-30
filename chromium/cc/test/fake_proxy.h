@@ -23,7 +23,6 @@ class FakeProxy : public Proxy {
   void SetOutputSurface(OutputSurface* output_surface) override {}
   void ReleaseOutputSurface() override;
   void SetVisible(bool visible) override {}
-  void SetThrottleFrameProduction(bool throttle) override {}
   const RendererCapabilities& GetRendererCapabilities() const override;
   void SetNeedsAnimate() override {}
   void SetNeedsUpdateLayers() override {}
@@ -46,6 +45,7 @@ class FakeProxy : public Proxy {
   void UpdateTopControlsState(TopControlsState constraints,
                               TopControlsState current,
                               bool animate) override {}
+  void SetOutputIsSecure(bool output_is_secure) override {}
 
   virtual RendererCapabilities& GetRendererCapabilities();
 

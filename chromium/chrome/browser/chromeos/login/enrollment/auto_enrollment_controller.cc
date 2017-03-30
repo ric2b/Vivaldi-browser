@@ -111,23 +111,30 @@ void AutoEnrollmentController::Start() {
   // auto-enrollment check can start. This happens either after the EULA is
   // accepted, or right after a reboot if the EULA has already been accepted.
 
-  // Do not communicate auto-enrollment data to the server if
-  // 1. we are running telemetry tests.
-  // 2. modulus configuration is not present.
-  // 3. Auto-enrollment is disabled via the command line.
-  // 4. This is the first boot ever, so re-enrollment checks are pointless. This
-  //    also enables factories to start full guest sessions for testing, see
-  //    http://crbug.com/397354 for more context.
-
+  // Skip if GAIA is disabled or modulus configuration is not present.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(chromeos::switches::kDisableGaiaServices) ||
       (!command_line->HasSwitch(
            chromeos::switches::kEnterpriseEnrollmentInitialModulus) &&
        !command_line->HasSwitch(
-           chromeos::switches::kEnterpriseEnrollmentModulusLimit)) ||
-      GetMode() == MODE_NONE ||
-      IsFirstDeviceSetup()) {
-    LOG(WARNING) << "Auto-enrollment disabled.";
+           chromeos::switches::kEnterpriseEnrollmentModulusLimit))) {
+    LOG(WARNING) << "Auto-enrollment disabled: " << "command line.";
+    UpdateState(policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT);
+    return;
+  }
+
+  // Skip if mode comes up as none.
+  if (GetMode() == MODE_NONE) {
+    LOG(WARNING) << "Auto-enrollment disabled: " << "no mode.";
+    UpdateState(policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT);
+    return;
+  }
+
+  // Skip if this is the first boot ever, and thus re-enrollment checks are
+  // pointless. This also enables factories to start full guest sessions for
+  // testing, see http://crbug.com/397354 for more context.
+  if (IsFirstDeviceSetup()) {
+    LOG(WARNING) << "Auto-enrollment disabled: " << "first setup.";
     UpdateState(policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT);
     return;
   }
@@ -170,7 +177,7 @@ void AutoEnrollmentController::Retry() {
     Start();
 }
 
-scoped_ptr<AutoEnrollmentController::ProgressCallbackList::Subscription>
+std::unique_ptr<AutoEnrollmentController::ProgressCallbackList::Subscription>
 AutoEnrollmentController::RegisterProgressCallback(
     const ProgressCallbackList::CallbackType& callback) {
   return progress_callbacks_.Add(callback);
@@ -189,8 +196,7 @@ void AutoEnrollmentController::OnOwnershipStatusCheckDone(
       break;
     }
     case DeviceSettingsService::OWNERSHIP_TAKEN: {
-      // This is part of normal operation.  Logging as "WARNING" nevertheless to
-      // make sure it's preserved in the logs.
+      // Logging as "WARNING" to make sure it's preserved in the logs.
       LOG(WARNING) << "Device already owned, skipping auto-enrollment check.";
       UpdateState(policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT);
       break;

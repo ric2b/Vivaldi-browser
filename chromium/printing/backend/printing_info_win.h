@@ -9,7 +9,8 @@
 #include <stdint.h>
 #include <winspool.h>
 
-#include "base/memory/scoped_ptr.h"
+#include <memory>
+
 #include "printing/printing_export.h"
 
 namespace printing {
@@ -26,7 +27,7 @@ class PrinterInfo {
  public:
   bool Init(HANDLE printer) {
     buffer_.reset(GetPrinterInfo(printer, level));
-    return buffer_;
+    return buffer_ != nullptr;
   }
 
   const PrinterInfoType* get() const {
@@ -34,7 +35,7 @@ class PrinterInfo {
   }
 
  private:
-  scoped_ptr<uint8_t[]> buffer_;
+  std::unique_ptr<uint8_t[]> buffer_;
 };
 
 // This class is designed to work with DRIVER_INFO_X structures
@@ -44,7 +45,7 @@ class DriverInfo {
  public:
   bool Init(HANDLE printer) {
     buffer_.reset(GetDriverInfo(printer, level));
-    return buffer_;
+    return buffer_ != nullptr;
   }
 
   const DriverInfoType* get() const {
@@ -52,7 +53,7 @@ class DriverInfo {
   }
 
  private:
-  scoped_ptr<uint8_t[]> buffer_;
+  std::unique_ptr<uint8_t[]> buffer_;
 };
 
 }  // namespace internal

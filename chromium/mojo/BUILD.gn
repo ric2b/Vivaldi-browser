@@ -37,15 +37,12 @@ group("tests") {
     "//mojo/edk/js/test:js_unittests",
     "//mojo/edk/system:mojo_message_pipe_perftests",
     "//mojo/edk/system:mojo_system_unittests",
+    "//mojo/edk/test:mojo_public_bindings_perftests",
     "//mojo/edk/test:mojo_public_bindings_unittests",
-    "//mojo/edk/test:mojo_public_environment_unittests",
     "//mojo/edk/test:mojo_public_system_perftests",
     "//mojo/edk/test:mojo_public_system_unittests",
-    "//mojo/edk/test:mojo_public_utility_unittests",
-    "//mojo/services/network:apptests",
     "//mojo/shell/public/cpp/tests:mojo_public_application_unittests",
     "//mojo/shell/runner/host:mojo_runner_host_unittests",
-    "//mojo/shell/tests:apptests",
-    "//mojo/shell/tests:mojo_shell_unittests",
+    "//mojo/shell/tests",
   ]
 }

@@ -27,40 +27,39 @@
 #include "core/html/HTMLMediaElement.h"
 #include "modules/mediastream/MediaStream.h"
 #include "platform/weborigin/KURL.h"
-#include "wtf/MainThread.h"
 
 namespace blink {
 
 MediaStreamRegistry& MediaStreamRegistry::registry()
 {
     // Since WebWorkers cannot obtain MediaStream objects, we should be on the main thread.
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     DEFINE_STATIC_LOCAL(MediaStreamRegistry, instance, ());
     return instance;
 }
 
 void MediaStreamRegistry::registerURL(SecurityOrigin*, const KURL& url, URLRegistrable* stream)
 {
-    ASSERT(&stream->registry() == this);
-    ASSERT(isMainThread());
-    m_streamDescriptors.set(url.string(), static_cast<MediaStream*>(stream)->descriptor());
+    DCHECK(&stream->registry() == this);
+    DCHECK(isMainThread());
+    m_streamDescriptors.set(url.getString(), static_cast<MediaStream*>(stream)->descriptor());
 }
 
 void MediaStreamRegistry::unregisterURL(const KURL& url)
 {
-    ASSERT(isMainThread());
-    m_streamDescriptors.remove(url.string());
+    DCHECK(isMainThread());
+    m_streamDescriptors.remove(url.getString());
 }
 
 bool MediaStreamRegistry::contains(const String& url)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     return m_streamDescriptors.contains(url);
 }
 
 MediaStreamDescriptor* MediaStreamRegistry::lookupMediaStreamDescriptor(const String& url)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     return m_streamDescriptors.get(url);
 }
 

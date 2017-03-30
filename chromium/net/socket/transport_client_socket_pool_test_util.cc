@@ -15,6 +15,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
+#include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/load_timing_info_test_util.h"
@@ -27,10 +28,10 @@ namespace net {
 
 namespace {
 
-IPAddressNumber ParseIP(const std::string& ip) {
-  IPAddressNumber number;
-  CHECK(ParseIPLiteralToNumber(ip, &number));
-  return number;
+IPAddress ParseIP(const std::string& ip) {
+  IPAddress address;
+  CHECK(address.AssignFromIPLiteral(ip));
+  return address;
 }
 
 // A StreamSocket which connects synchronously and successfully.
@@ -39,8 +40,7 @@ class MockConnectClientSocket : public StreamSocket {
   MockConnectClientSocket(const AddressList& addrlist, net::NetLog* net_log)
       : connected_(false),
         addrlist_(addrlist),
-        net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_SOCKET)),
-        use_tcp_fastopen_(false) {}
+        net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_SOCKET)) {}
 
   // StreamSocket implementation.
   int Connect(const CompletionCallback& callback) override {
@@ -69,8 +69,7 @@ class MockConnectClientSocket : public StreamSocket {
   void SetSubresourceSpeculation() override {}
   void SetOmniboxSpeculation() override {}
   bool WasEverUsed() const override { return false; }
-  void EnableTCPFastOpenIfSupported() override { use_tcp_fastopen_ = true; }
-  bool UsingTCPFastOpen() const override { return use_tcp_fastopen_; }
+  void EnableTCPFastOpenIfSupported() override {}
   bool WasNpnNegotiated() const override { return false; }
   NextProto GetNegotiatedProtocol() const override { return kProtoUnknown; }
   bool GetSSLInfo(SSLInfo* ssl_info) override { return false; }
@@ -102,7 +101,6 @@ class MockConnectClientSocket : public StreamSocket {
   bool connected_;
   const AddressList addrlist_;
   BoundNetLog net_log_;
-  bool use_tcp_fastopen_;
 
   DISALLOW_COPY_AND_ASSIGN(MockConnectClientSocket);
 };
@@ -111,8 +109,7 @@ class MockFailingClientSocket : public StreamSocket {
  public:
   MockFailingClientSocket(const AddressList& addrlist, net::NetLog* net_log)
       : addrlist_(addrlist),
-        net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_SOCKET)),
-        use_tcp_fastopen_(false) {}
+        net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_SOCKET)) {}
 
   // StreamSocket implementation.
   int Connect(const CompletionCallback& callback) override {
@@ -134,8 +131,7 @@ class MockFailingClientSocket : public StreamSocket {
   void SetSubresourceSpeculation() override {}
   void SetOmniboxSpeculation() override {}
   bool WasEverUsed() const override { return false; }
-  void EnableTCPFastOpenIfSupported() override { use_tcp_fastopen_ = true; }
-  bool UsingTCPFastOpen() const override { return use_tcp_fastopen_; }
+  void EnableTCPFastOpenIfSupported() override {}
   bool WasNpnNegotiated() const override { return false; }
   NextProto GetNegotiatedProtocol() const override { return kProtoUnknown; }
   bool GetSSLInfo(SSLInfo* ssl_info) override { return false; }
@@ -169,7 +165,6 @@ class MockFailingClientSocket : public StreamSocket {
  private:
   const AddressList addrlist_;
   BoundNetLog net_log_;
-  bool use_tcp_fastopen_;
 
   DISALLOW_COPY_AND_ASSIGN(MockFailingClientSocket);
 };
@@ -185,7 +180,6 @@ class MockTriggerableClientSocket : public StreamSocket {
         is_connected_(false),
         addrlist_(addrlist),
         net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_SOCKET)),
-        use_tcp_fastopen_(false),
         weak_factory_(this) {}
 
   // Call this method to get a closure which will trigger the connect callback
@@ -263,8 +257,7 @@ class MockTriggerableClientSocket : public StreamSocket {
   void SetSubresourceSpeculation() override {}
   void SetOmniboxSpeculation() override {}
   bool WasEverUsed() const override { return false; }
-  void EnableTCPFastOpenIfSupported() override { use_tcp_fastopen_ = true; }
-  bool UsingTCPFastOpen() const override { return use_tcp_fastopen_; }
+  void EnableTCPFastOpenIfSupported() override {}
   bool WasNpnNegotiated() const override { return false; }
   NextProto GetNegotiatedProtocol() const override { return kProtoUnknown; }
   bool GetSSLInfo(SSLInfo* ssl_info) override { return false; }
@@ -307,7 +300,6 @@ class MockTriggerableClientSocket : public StreamSocket {
   const AddressList addrlist_;
   BoundNetLog net_log_;
   CompletionCallback callback_;
-  bool use_tcp_fastopen_;
   ConnectionAttempts connection_attempts_;
 
   base::WeakPtrFactory<MockTriggerableClientSocket> weak_factory_;

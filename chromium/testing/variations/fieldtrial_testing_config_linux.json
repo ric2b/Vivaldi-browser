@@ -43,12 +43,12 @@
             "group_name": "Enabled"
         }
     ],
-    "DataReductionProxyConfigService": [
+    "DocumentWriteEvaluator": [
         {
-            "group_name": "Enabled",
-            "params": {
-                "minimum_refresh_interval_on_success_msec": "21600000"
-            }
+            "enable_features": [
+                "DocumentWriteEvaluator"
+            ],
+            "group_name": "Enabled"
         }
     ],
     "EnableGoogleCachedCopyTextExperiment": [
@@ -108,6 +108,9 @@
     ],
     "RenderingPipelineThrottling": [
         {
+            "enable_features": [
+                "RenderingPipelineThrottling"
+            ],
             "group_name": "Enabled"
         }
     ],
@@ -138,6 +141,19 @@
         },
         {
             "group_name": "DontShowAndDontSend"
+        }
+    ],
+    "ResourcePriorities": [
+        {
+            "group_name": "AllExceptAsyncScripts_11011_1_1_10"
+        },
+        {
+            "group_name": "Control"
+        }
+    ],
+    "SSLCommonNameMismatchHandling": [
+        {
+            "group_name": "Enabled"
         }
     ],
     "SafeBrowsingReportPhishingErrorLink": [
@@ -179,9 +195,9 @@
             "group_name": "Enabled"
         }
     ],
-    "SpdyEnableDependencies": [
+    "SimpleCacheTrial": [
         {
-            "group_name": "Enable"
+            "group_name": "ExperimentYes"
         }
     ],
     "StrictSecureCookies": [
@@ -202,6 +218,23 @@
             "group_name": "Enabled"
         }
     ],
+    "TokenBinding": [
+        {
+            "enable_features": [
+                "token-binding"
+            ],
+            "group_name": "TokenBinding"
+        }
+    ],
+    "V8SerializeOptions": [
+        {
+            "enable_features": [
+                "V8_Serialize_Eager",
+                "V8_Serialize_Age_Code"
+            ],
+            "group_name": "SerializeEagerAndAgeCode"
+        }
+    ],
     "VarationsServiceControl": [
         {
             "group_name": "Interval_30min",
@@ -212,6 +245,14 @@
     ],
     "WebFontsIntervention": [
         {
+            "group_name": "Enabled"
+        }
+    ],
+    "WebRTC-H264WithOpenH264FFmpeg": [
+        {
+            "enable_features": [
+                "WebRTC-H264WithOpenH264FFmpeg"
+            ],
             "group_name": "Enabled"
         }
     ],

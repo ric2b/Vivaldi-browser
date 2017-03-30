@@ -47,7 +47,7 @@ void WebSurroundingText::initialize(const WebNode& webNode, const WebPoint& node
 
 void WebSurroundingText::initialize(const WebRange& webRange, size_t maxLength)
 {
-    if (RefPtrWillBeRawPtr<Range> range = static_cast<PassRefPtrWillBeRawPtr<Range>>(webRange))
+    if (Range* range = static_cast<Range*>(webRange))
         m_private.reset(new SurroundingText(*range, maxLength));
 }
 
@@ -58,7 +58,7 @@ WebString WebSurroundingText::textContent() const
 
 size_t WebSurroundingText::hitOffsetInTextContent() const
 {
-    ASSERT(m_private->startOffsetInContent() == m_private->endOffsetInContent());
+    DCHECK_EQ(m_private->startOffsetInContent(), m_private->endOffsetInContent());
     return m_private->startOffsetInContent();
 }
 

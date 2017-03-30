@@ -2575,7 +2575,7 @@ TEST_F(SearchProviderTest, FieldTrialTriggeredParsing) {
     ProvidersInfo providers_info;
     provider_->AddProviderInfo(&providers_info);
     ASSERT_EQ(1U, providers_info.size());
-    EXPECT_EQ(1, providers_info[0].field_trial_triggered_size());
+    EXPECT_EQ(0, providers_info[0].field_trial_triggered_size());
     EXPECT_EQ(0, providers_info[0].field_trial_triggered_in_session_size());
   }
 }
@@ -2749,7 +2749,7 @@ TEST_F(SearchProviderTest, NavigationInline) {
     SearchSuggestionParser::NavigationResult result(
         ChromeAutocompleteSchemeClassifier(&profile_), GURL(cases[i].url),
         AutocompleteMatchType::NAVSUGGEST, base::string16(), std::string(),
-        false, 0, false, ASCIIToUTF16(cases[i].input), std::string());
+        false, 0, false, ASCIIToUTF16(cases[i].input));
     result.set_received_after_last_keystroke(false);
     AutocompleteMatch match(provider_->NavigationToMatch(result));
     EXPECT_EQ(ASCIIToUTF16(cases[i].inline_autocompletion),
@@ -2763,7 +2763,7 @@ TEST_F(SearchProviderTest, NavigationInline) {
     SearchSuggestionParser::NavigationResult result_prevent_inline(
         ChromeAutocompleteSchemeClassifier(&profile_), GURL(cases[i].url),
         AutocompleteMatchType::NAVSUGGEST, base::string16(), std::string(),
-        false, 0, false, ASCIIToUTF16(cases[i].input), std::string());
+        false, 0, false, ASCIIToUTF16(cases[i].input));
     result_prevent_inline.set_received_after_last_keystroke(false);
     AutocompleteMatch match_prevent_inline(
         provider_->NavigationToMatch(result_prevent_inline));
@@ -2783,7 +2783,7 @@ TEST_F(SearchProviderTest, NavigationInlineSchemeSubstring) {
   SearchSuggestionParser::NavigationResult result(
       ChromeAutocompleteSchemeClassifier(&profile_), GURL(url),
       AutocompleteMatchType::NAVSUGGEST,
-      base::string16(), std::string(), false, 0, false, input, std::string());
+      base::string16(), std::string(), false, 0, false, input);
   result.set_received_after_last_keystroke(false);
 
   // Check the offset and strings when inline autocompletion is allowed.
@@ -2808,8 +2808,7 @@ TEST_F(SearchProviderTest, NavigationInlineDomainClassify) {
   SearchSuggestionParser::NavigationResult result(
       ChromeAutocompleteSchemeClassifier(&profile_),
       GURL("http://www.wow.com"), AutocompleteMatchType::NAVSUGGEST,
-      base::string16(), std::string(), false, 0, false, ASCIIToUTF16("w"),
-      std::string());
+      base::string16(), std::string(), false, 0, false, ASCIIToUTF16("w"));
   result.set_received_after_last_keystroke(false);
   AutocompleteMatch match(provider_->NavigationToMatch(result));
   EXPECT_EQ(ASCIIToUTF16("ow.com"), match.inline_autocompletion);

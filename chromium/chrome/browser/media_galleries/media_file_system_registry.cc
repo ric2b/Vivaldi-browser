@@ -22,7 +22,6 @@
 #include "chrome/browser/media_galleries/media_galleries_dialog_controller.h"
 #include "chrome/browser/media_galleries/media_galleries_histograms.h"
 #include "chrome/browser/media_galleries/media_galleries_preferences_factory.h"
-#include "chrome/browser/media_galleries/media_scan_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -595,12 +594,6 @@ MediaGalleriesPreferences* MediaFileSystemRegistry::GetPreferences(
   return MediaGalleriesPreferencesFactory::GetForProfile(profile);
 }
 
-MediaScanManager* MediaFileSystemRegistry::media_scan_manager() {
-  if (!media_scan_manager_)
-    media_scan_manager_.reset(new MediaScanManager);
-  return media_scan_manager_.get();
-}
-
 GalleryWatchManager* MediaFileSystemRegistry::gallery_watch_manager() {
   if (!gallery_watch_manager_)
     gallery_watch_manager_.reset(new GalleryWatchManager);
@@ -726,10 +719,6 @@ class MediaFileSystemRegistry::MediaFileSystemContextImpl
       ImportedMediaGalleryRegistry* registry =
           ImportedMediaGalleryRegistry::GetInstance();
       result = registry->RegisterPicasaFilesystemOnUIThread(fs_name, path);
-    } else if (StorageInfo::IsIPhotoDevice(device_id)) {
-      ImportedMediaGalleryRegistry* registry =
-          ImportedMediaGalleryRegistry::GetInstance();
-      result = registry->RegisterIPhotoFilesystemOnUIThread(fs_name, path);
     } else {
       result = ExternalMountPoints::GetSystemInstance()->RegisterFileSystem(
           fs_name,

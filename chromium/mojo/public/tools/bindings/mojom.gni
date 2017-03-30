@@ -46,11 +46,6 @@ mojom_generator_sources = [
 #   import_dirs (optional)
 #       List of import directories that will get added when processing sources.
 #
-#   with_environment (optional)
-#       Set to |false| to omit an implicit bindings dependency on the Chromium
-#       Mojo environment implementation. Defaults to |true| and in general
-#       should only be overridden by mojom targets within the Mojo EDK.
-#
 #   typemaps (optional)
 #       A list of typemap files to apply during bindings generation.
 #
@@ -64,6 +59,9 @@ mojom_generator_sources = [
 #   testonly (optional)
 #
 #   visibility (optional)
+#
+#   for_blink (optional, C++ only)
+#       Use WTF types as generated type for mojo string/array/map.
 template("mojom") {
   assert(
       defined(invoker.sources) || defined(invoker.deps) ||
@@ -163,6 +161,10 @@ template("mojom") {
         }
         inputs += invoker.typemaps
       }
+
+      if (defined(invoker.for_blink) && invoker.for_blink) {
+        args += [ "--for_blink" ]
+      }
     }
   }
 
@@ -207,17 +209,22 @@ template("mojom") {
     all_deps += invoker.public_deps
   }
 
-  group("${target_name}__is_mojom") {
+  if (defined(invoker.variant)) {
+    variant_suffix = "of_variant_${invoker.variant}"
+  } else {
+    variant_suffix = "of_no_variant"
+  }
+  group("${target_name}__is_mojom_${variant_suffix}") {
   }
 
   # Explicitly ensure that all dependencies (invoker.deps and
-  # invoker.public_deps) are mojom targets themselves.
-  group("${target_name}__check_deps_are_all_mojom") {
+  # invoker.public_deps) are mojom targets of the same variant themselves.
+  group("${target_name}__check_deps_are_all_mojom_${variant_suffix}") {
     deps = []
     foreach(d, all_deps) {
       name = get_label_info(d, "label_no_toolchain")
       toolchain = get_label_info(d, "toolchain")
-      deps += [ "${name}__is_mojom(${toolchain})" ]
+      deps += [ "${name}__is_mojom_${variant_suffix}(${toolchain})" ]
     }
   }
 
@@ -250,13 +257,13 @@ template("mojom") {
         full_name = get_label_info(d, "label_no_toolchain")
         deps += [ "${full_name}_${cpp_sources_suffix}" ]
       }
-      if (!defined(invoker.with_environment) || invoker.with_environment) {
-        deps += [ "//mojo/environment:chromium" ]
+      if (defined(invoker.for_blink) && invoker.for_blink) {
+        public_deps += [ "//mojo/public/cpp/bindings:wtf_support" ]
       }
     }
   }
 
-  if (is_android && !defined(invoker.variant)) {
+  if (is_android && !cpp_only) {
     import("//build/config/android/rules.gni")
 
     java_srcjar_target_name = target_name + "_java_sources"

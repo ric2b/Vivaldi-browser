@@ -29,7 +29,10 @@ VideoCodec VideoCodecProfileToVideoCodec(VideoCodecProfile profile) {
       return kCodecH264;
     case VP8PROFILE_ANY:
       return kCodecVP8;
-    case VP9PROFILE_ANY:
+    case VP9PROFILE_PROFILE0:
+    case VP9PROFILE_PROFILE1:
+    case VP9PROFILE_PROFILE2:
+    case VP9PROFILE_PROFILE3:
       return kCodecVP9;
   }
   NOTREACHED();
@@ -39,20 +42,20 @@ VideoCodec VideoCodecProfileToVideoCodec(VideoCodecProfile profile) {
 VideoDecoderConfig::VideoDecoderConfig()
     : codec_(kUnknownVideoCodec),
       profile_(VIDEO_CODEC_PROFILE_UNKNOWN),
-      format_(PIXEL_FORMAT_UNKNOWN),
-      is_encrypted_(false) {}
+      format_(PIXEL_FORMAT_UNKNOWN) {}
 
-VideoDecoderConfig::VideoDecoderConfig(VideoCodec codec,
-                                       VideoCodecProfile profile,
-                                       VideoPixelFormat format,
-                                       ColorSpace color_space,
-                                       const gfx::Size& coded_size,
-                                       const gfx::Rect& visible_rect,
-                                       const gfx::Size& natural_size,
-                                       const std::vector<uint8_t>& extra_data,
-                                       bool is_encrypted) {
+VideoDecoderConfig::VideoDecoderConfig(
+    VideoCodec codec,
+    VideoCodecProfile profile,
+    VideoPixelFormat format,
+    ColorSpace color_space,
+    const gfx::Size& coded_size,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    const std::vector<uint8_t>& extra_data,
+    const EncryptionScheme& encryption_scheme) {
   Initialize(codec, profile, format, color_space, coded_size, visible_rect,
-             natural_size, extra_data, is_encrypted);
+             natural_size, extra_data, encryption_scheme);
 }
 
 VideoDecoderConfig::VideoDecoderConfig(const VideoDecoderConfig& other) =
@@ -68,7 +71,7 @@ void VideoDecoderConfig::Initialize(VideoCodec codec,
                                     const gfx::Rect& visible_rect,
                                     const gfx::Size& natural_size,
                                     const std::vector<uint8_t>& extra_data,
-                                    bool is_encrypted) {
+                                    const EncryptionScheme& encryption_scheme) {
   codec_ = codec;
   profile_ = profile;
   format_ = format;
@@ -77,7 +80,7 @@ void VideoDecoderConfig::Initialize(VideoCodec codec,
   visible_rect_ = visible_rect;
   natural_size_ = natural_size;
   extra_data_ = extra_data;
-  is_encrypted_ = is_encrypted;
+  encryption_scheme_ = encryption_scheme;
 }
 
 bool VideoDecoderConfig::IsValidConfig() const {
@@ -89,14 +92,13 @@ bool VideoDecoderConfig::IsValidConfig() const {
 }
 
 bool VideoDecoderConfig::Matches(const VideoDecoderConfig& config) const {
-  return ((codec() == config.codec()) &&
-          (format() == config.format()) &&
+  return ((codec() == config.codec()) && (format() == config.format()) &&
           (profile() == config.profile()) &&
           (coded_size() == config.coded_size()) &&
           (visible_rect() == config.visible_rect()) &&
           (natural_size() == config.natural_size()) &&
           (extra_data() == config.extra_data()) &&
-          (is_encrypted() == config.is_encrypted()));
+          (encryption_scheme().Matches(config.encryption_scheme())));
 }
 
 std::string VideoDecoderConfig::AsHumanReadableString() const {

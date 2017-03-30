@@ -23,10 +23,10 @@
 
 #include "core/fetch/ImageResource.h"
 
-#include "core/fetch/ImageResourceClient.h"
+#include "core/fetch/ImageResourceObserver.h"
 #include "core/fetch/MemoryCache.h"
 #include "core/fetch/ResourceClient.h"
-#include "core/fetch/ResourceClientWalker.h"
+#include "core/fetch/ResourceClientOrObserverWalker.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ResourceLoader.h"
 #include "core/svg/graphics/SVGImage.h"
@@ -36,12 +36,16 @@
 #include "platform/TraceEvent.h"
 #include "platform/graphics/BitmapImage.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebCachePolicy.h"
+#include "wtf/CheckedNumeric.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/StdLibExtras.h"
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<ImageResource> ImageResource::fetch(FetchRequest& request, ResourceFetcher* fetcher)
+using ImageResourceObserverWalker = ResourceClientOrObserverWalker<ImageResourceObserver, ImageResourceObserver>;
+
+ImageResource* ImageResource::fetch(FetchRequest& request, ResourceFetcher* fetcher)
 {
     if (request.resourceRequest().requestContext() == WebURLRequest::RequestContextUnspecified)
         request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextImage);
@@ -52,43 +56,34 @@ PassRefPtrWillBeRawPtr<ImageResource> ImageResource::fetch(FetchRequest& request
         return nullptr;
     }
 
-    if (fetcher->clientDefersImage(request.resourceRequest().url()))
-        request.setDefer(FetchRequest::DeferredByClient);
-
     return toImageResource(fetcher->requestResource(request, ImageResourceFactory()));
 }
 
-ImageResource::ImageResource(const ResourceRequest& resourceRequest)
-    : Resource(resourceRequest, Image)
+ImageResource::ImageResource(const ResourceRequest& resourceRequest, const ResourceLoaderOptions& options)
+    : Resource(resourceRequest, Image, options)
     , m_devicePixelRatioHeaderValue(1.0)
     , m_image(nullptr)
     , m_hasDevicePixelRatioHeaderValue(false)
 {
     WTF_LOG(Timers, "new ImageResource(ResourceRequest) %p", this);
-    setStatus(Unknown);
-    setCustomAcceptHeader();
 }
 
-ImageResource::ImageResource(blink::Image* image)
-    : Resource(ResourceRequest(""), Image)
+ImageResource::ImageResource(blink::Image* image, const ResourceLoaderOptions& options)
+    : Resource(ResourceRequest(""), Image, options)
     , m_devicePixelRatioHeaderValue(1.0)
     , m_image(image)
     , m_hasDevicePixelRatioHeaderValue(false)
 {
     WTF_LOG(Timers, "new ImageResource(Image) %p", this);
     setStatus(Cached);
-    setLoading(false);
-    setCustomAcceptHeader();
 }
 
-ImageResource::ImageResource(const ResourceRequest& resourceRequest, blink::Image* image)
-    : Resource(resourceRequest, Image)
+ImageResource::ImageResource(const ResourceRequest& resourceRequest, blink::Image* image, const ResourceLoaderOptions& options)
+    : Resource(resourceRequest, Image, options)
     , m_image(image)
 {
     WTF_LOG(Timers, "new ImageResource(ResourceRequest, Image) %p", this);
     setStatus(Cached);
-    setLoading(false);
-    setCustomAcceptHeader();
 }
 
 ImageResource::~ImageResource()
@@ -99,38 +94,103 @@ ImageResource::~ImageResource()
 
 DEFINE_TRACE(ImageResource)
 {
+    visitor->trace(m_multipartParser);
     Resource::trace(visitor);
     ImageObserver::trace(visitor);
+    MultipartImageResourceParser::Client::trace(visitor);
 }
 
-void ImageResource::load(ResourceFetcher* fetcher, const ResourceLoaderOptions& options)
+void ImageResource::checkNotify()
 {
-    if (!fetcher || fetcher->autoLoadImages())
-        Resource::load(fetcher, options);
-    else
-        setLoading(false);
+    if (isLoading())
+        return;
+
+    ImageResourceObserverWalker walker(m_observers);
+    while (auto* observer = walker.next()) {
+        observer->imageNotifyFinished(this);
+    }
+
+    Resource::checkNotify();
 }
 
-void ImageResource::didAddClient(ResourceClient* c)
+void ImageResource::markClientsAndObserversFinished()
 {
+    while (!m_observers.isEmpty()) {
+        HashCountedSet<ImageResourceObserver*>::iterator it = m_observers.begin();
+        for (int i = it->value; i; i--) {
+            m_finishedObservers.add(it->key);
+            m_observers.remove(it);
+        }
+    }
+
+    Resource::markClientsAndObserversFinished();
+}
+
+void ImageResource::addObserver(ImageResourceObserver* observer)
+{
+    willAddClientOrObserver();
+
+    m_observers.add(observer);
+
+    if (!m_revalidatingRequest.isNull())
+        return;
+
     if (m_data && !m_image && !errorOccurred()) {
         createImage();
         m_image->setData(m_data, true);
     }
 
-    ASSERT(ImageResourceClient::isExpectedType(c));
-    if (m_image && !m_image->isNull())
-        static_cast<ImageResourceClient*>(c)->imageChanged(this);
+    if (m_image && !m_image->isNull()) {
+        observer->imageChanged(this);
+    }
 
-    Resource::didAddClient(c);
+    if (isLoaded()) {
+        observer->imageNotifyFinished(this);
+        if (m_observers.contains(observer)) {
+            m_finishedObservers.add(observer);
+            m_observers.remove(observer);
+        }
+    }
 }
 
-void ImageResource::didRemoveClient(ResourceClient* c)
+void ImageResource::removeObserver(ImageResourceObserver* observer)
 {
-    ASSERT(c);
-    ASSERT(ImageResourceClient::isExpectedType(c));
+    ASSERT(observer);
 
-    Resource::didRemoveClient(c);
+    if (m_observers.contains(observer))
+        m_observers.remove(observer);
+    else if (m_finishedObservers.contains(observer))
+        m_finishedObservers.remove(observer);
+    else
+        ASSERT_NOT_REACHED();
+
+    didRemoveClientOrObserver();
+}
+
+static void priorityFromObserver(const ImageResourceObserver* observer, ResourcePriority& priority)
+{
+    ResourcePriority nextPriority = observer->computeResourcePriority();
+    if (nextPriority.visibility == ResourcePriority::NotVisible)
+        return;
+    priority.visibility = ResourcePriority::Visible;
+    priority.intraPriorityValue += nextPriority.intraPriorityValue;
+}
+
+ResourcePriority ImageResource::priorityFromObservers()
+{
+    ResourcePriority priority;
+
+    ImageResourceObserverWalker finishedWalker(m_finishedObservers);
+    while (const auto* observer = finishedWalker.next()) {
+        priorityFromObserver(observer, priority);
+    }
+
+    ImageResourceObserverWalker walker(m_observers);
+    while (const auto* observer = walker.next()) {
+        priorityFromObserver(observer, priority);
+    }
+
+    return priority;
 }
 
 bool ImageResource::isSafeToUnlock() const
@@ -147,7 +207,7 @@ void ImageResource::destroyDecodedDataForFailedRevalidation()
 
 void ImageResource::destroyDecodedDataIfPossible()
 {
-    if (!hasClients() && !isLoading() && (!m_image || (m_image->hasOneRef() && m_image->isBitmapImage()))) {
+    if (!hasClientsOrObservers() && !isLoading() && (!m_image || (m_image->hasOneRef() && m_image->isBitmapImage()))) {
         m_image = nullptr;
         setDecodedSize(0);
     } else if (m_image && !errorOccurred()) {
@@ -155,11 +215,23 @@ void ImageResource::destroyDecodedDataIfPossible()
     }
 }
 
-void ImageResource::allClientsRemoved()
+void ImageResource::allClientsAndObserversRemoved()
 {
     if (m_image && !errorOccurred())
         m_image->resetAnimation();
-    Resource::allClientsRemoved();
+    if (m_multipartParser)
+        m_multipartParser->cancel();
+    Resource::allClientsAndObserversRemoved();
+}
+
+void ImageResource::appendData(const char* data, size_t length)
+{
+    if (m_multipartParser) {
+        m_multipartParser->appendData(data, length);
+    } else {
+        Resource::appendData(data, length);
+        updateImage(false);
+    }
 }
 
 std::pair<blink::Image*, float> ImageResource::brokenImage(float deviceScaleFactor)
@@ -178,7 +250,7 @@ bool ImageResource::willPaintBrokenImage() const
     return errorOccurred();
 }
 
-blink::Image* ImageResource::image()
+blink::Image* ImageResource::getImage()
 {
     ASSERT(!isPurgeable());
 
@@ -239,21 +311,17 @@ LayoutSize ImageResource::imageSize(RespectImageOrientationEnum shouldRespectIma
     return size;
 }
 
-void ImageResource::computeIntrinsicDimensions(FloatSize& intrinsicSize, FloatSize& intrinsicRatio)
-{
-    if (m_image)
-        m_image->computeIntrinsicDimensions(intrinsicSize, intrinsicRatio);
-}
-
 void ImageResource::notifyObservers(const IntRect* changeRect)
 {
-    ResourceClientWalker<ImageResourceClient> w(m_clients);
-    while (ImageResourceClient* c = w.next())
-        c->imageChanged(this, changeRect);
+    ImageResourceObserverWalker finishedWalker(m_finishedObservers);
+    while (auto* observer = finishedWalker.next()) {
+        observer->imageChanged(this, changeRect);
+    }
 
-    ResourceClientWalker<ImageResourceClient> w2(m_finishedClients);
-    while (ImageResourceClient* c = w2.next())
-        c->imageChanged(this, changeRect);
+    ImageResourceObserverWalker walker(m_observers);
+    while (auto* observer = walker.next()) {
+        observer->imageChanged(this, changeRect);
+    }
 }
 
 void ImageResource::clear()
@@ -261,12 +329,6 @@ void ImageResource::clear()
     prune();
     clearImage();
     setEncodedSize(0);
-}
-
-void ImageResource::setCustomAcceptHeader()
-{
-    DEFINE_STATIC_LOCAL(const AtomicString, acceptImages, ("image/webp,image/*,*/*;q=0.8", AtomicString::ConstructFromLiteral));
-    setAccept(acceptImages);
 }
 
 inline void ImageResource::createImage()
@@ -291,13 +353,6 @@ inline void ImageResource::clearImage()
     // before dropping our reference.
     m_image->setImageObserver(nullptr);
     m_image.clear();
-}
-
-void ImageResource::appendData(const char* data, size_t length)
-{
-    Resource::appendData(data, length);
-    if (!loadingMultipartContent())
-        updateImage(false);
 }
 
 void ImageResource::updateImage(bool allDataReceived)
@@ -333,18 +388,25 @@ void ImageResource::updateImage(bool allDataReceived)
     }
 }
 
-void ImageResource::finishOnePart()
+void ImageResource::finish()
 {
-    if (loadingMultipartContent())
-        clear();
-    updateImage(true);
-    if (loadingMultipartContent())
-        m_data.clear();
-    Resource::finishOnePart();
+    if (m_multipartParser) {
+        m_multipartParser->finish();
+        if (m_data) {
+            clearImage();
+            updateImage(true);
+            m_data.clear();
+        }
+    } else {
+        updateImage(true);
+    }
+    Resource::finish();
 }
 
 void ImageResource::error(Resource::Status status)
 {
+    if (m_multipartParser)
+        m_multipartParser->cancel();
     clear();
     Resource::error(status);
     notifyObservers();
@@ -352,8 +414,11 @@ void ImageResource::error(Resource::Status status)
 
 void ImageResource::responseReceived(const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
 {
-    if (loadingMultipartContent() && m_data)
-        finishOnePart();
+    ASSERT(!handle);
+    ASSERT(!m_multipartParser);
+    // If there's no boundary, just handle the request normally.
+    if (response.isMultipart() && !response.multipartBoundary().isEmpty())
+        m_multipartParser = new MultipartImageResourceParser(response, response.multipartBoundary(), this);
     Resource::responseReceived(response, handle);
     if (RuntimeEnabledFeatures::clientHintsEnabled()) {
         m_devicePixelRatioHeaderValue = m_response.httpHeaderField(HTTPNames::Content_DPR).toFloat(&m_hasDevicePixelRatioHeaderValue);
@@ -370,9 +435,9 @@ void ImageResource::decodedSizeChanged(const blink::Image* image, int delta)
     if (!image || image != m_image)
         return;
 
-    // TODO(bsep): Crash on underflow, which is possible if an error causes
-    // decodedSize to be 0.
-    setDecodedSize(decodedSize() + delta);
+    CheckedNumeric<intptr_t> signedDecodedSize(decodedSize());
+    signedDecodedSize += delta;
+    setDecodedSize(safeCast<size_t>(signedDecodedSize.ValueOrDie()));
 }
 
 void ImageResource::didDraw(const blink::Image* image)
@@ -391,15 +456,15 @@ bool ImageResource::shouldPauseAnimation(const blink::Image* image)
     if (!image || image != m_image)
         return false;
 
-    ResourceClientWalker<ImageResourceClient> w(m_clients);
-    while (ImageResourceClient* c = w.next()) {
-        if (c->willRenderImage(this))
+    ImageResourceObserverWalker finishedWalker(m_finishedObservers);
+    while (auto* observer = finishedWalker.next()) {
+        if (observer->willRenderImage())
             return false;
     }
 
-    ResourceClientWalker<ImageResourceClient> w2(m_finishedClients);
-    while (ImageResourceClient* c = w2.next()) {
-        if (c->willRenderImage(this))
+    ImageResourceObserverWalker walker(m_observers);
+    while (auto* observer = walker.next()) {
+        if (observer->willRenderImage())
             return false;
     }
 
@@ -419,15 +484,16 @@ void ImageResource::updateImageAnimationPolicy()
         return;
 
     ImageAnimationPolicy newPolicy = ImageAnimationPolicyAllowed;
-    ResourceClientWalker<ImageResourceClient> w(m_clients);
-    while (ImageResourceClient* c = w.next()) {
-        if (c->getImageAnimationPolicy(this, newPolicy))
+
+    ImageResourceObserverWalker finishedWalker(m_finishedObservers);
+    while (auto* observer = finishedWalker.next()) {
+        if (observer->getImageAnimationPolicy(newPolicy))
             break;
     }
 
-    ResourceClientWalker<ImageResourceClient> w2(m_finishedClients);
-    while (ImageResourceClient* c = w2.next()) {
-        if (c->getImageAnimationPolicy(this, newPolicy))
+    ImageResourceObserverWalker walker(m_observers);
+    while (auto* observer = walker.next()) {
+        if (observer->getImageAnimationPolicy(newPolicy))
             break;
     }
 
@@ -441,10 +507,10 @@ void ImageResource::reloadIfLoFi(ResourceFetcher* fetcher)
 {
     if (!m_response.httpHeaderField("chrome-proxy").contains("q=low"))
         return;
-    m_resourceRequest.setCachePolicy(ResourceRequestCachePolicy::ReloadBypassingCache);
+    m_resourceRequest.setCachePolicy(WebCachePolicy::BypassingCache);
     m_resourceRequest.setLoFiState(WebURLRequest::LoFiOff);
     error(Resource::LoadError);
-    load(fetcher, fetcher->defaultResourceOptions());
+    load(fetcher);
 }
 
 void ImageResource::changedInRect(const blink::Image* image, const IntRect& rect)
@@ -454,20 +520,46 @@ void ImageResource::changedInRect(const blink::Image* image, const IntRect& rect
     notifyObservers(&rect);
 }
 
+void ImageResource::onePartInMultipartReceived(const ResourceResponse& response)
+{
+    ASSERT(m_multipartParser);
+
+    m_response = response;
+    if (m_multipartParsingState == MultipartParsingState::WaitingForFirstPart) {
+        // We have nothing to do because we don't have any data.
+        m_multipartParsingState = MultipartParsingState::ParsingFirstPart;
+        return;
+    }
+    clear();
+    updateImage(true);
+    m_data.clear();
+
+    if (m_multipartParsingState == MultipartParsingState::ParsingFirstPart) {
+        m_multipartParsingState = MultipartParsingState::FinishedParsingFirstPart;
+        // Notify finished when the first part ends.
+        if (!errorOccurred())
+            setStatus(Cached);
+        checkNotify();
+        if (m_loader)
+            m_loader->didFinishLoadingOnePart(0, WebURLLoaderClient::kUnknownEncodedDataLength);
+    }
+}
+
+void ImageResource::multipartDataReceived(const char* bytes, size_t size)
+{
+    ASSERT(m_multipartParser);
+    Resource::appendData(bytes, size);
+}
+
 bool ImageResource::isAccessAllowed(SecurityOrigin* securityOrigin)
 {
     if (response().wasFetchedViaServiceWorker())
         return response().serviceWorkerResponseType() != WebServiceWorkerResponseTypeOpaque;
-    if (!image()->currentFrameHasSingleSecurityOrigin())
+    if (!getImage()->currentFrameHasSingleSecurityOrigin())
         return false;
     if (passesAccessControlCheck(securityOrigin))
         return true;
     return !securityOrigin->taintsCanvas(response().url());
-}
-
-bool ImageResource::loadingMultipartContent() const
-{
-    return m_loader && m_loader->loadingMultipartContent();
 }
 
 } // namespace blink

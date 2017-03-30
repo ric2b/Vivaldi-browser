@@ -80,8 +80,8 @@ void GeolocationDispatcher::requestPermission(
   int permission_request_id = pending_permissions_->add(permissionRequest);
 
   permission_service_->RequestPermission(
-      PermissionName::GEOLOCATION,
-      permissionRequest.securityOrigin().toString().utf8(),
+      blink::mojom::PermissionName::GEOLOCATION,
+      permissionRequest.getSecurityOrigin().toString().utf8(),
       base::Bind(&GeolocationDispatcher::OnPermissionSet,
                  base::Unretained(this), permission_request_id));
 }
@@ -95,12 +95,13 @@ void GeolocationDispatcher::cancelPermissionRequest(
 // Permission for using geolocation has been set.
 void GeolocationDispatcher::OnPermissionSet(
     int permission_request_id,
-    PermissionStatus status) {
+    blink::mojom::PermissionStatus status) {
   WebGeolocationPermissionRequest permissionRequest;
   if (!pending_permissions_->remove(permission_request_id, permissionRequest))
     return;
 
-  permissionRequest.setIsAllowed(status == PermissionStatus::GRANTED);
+  permissionRequest.setIsAllowed(status ==
+                                 blink::mojom::PermissionStatus::GRANTED);
 }
 
 void GeolocationDispatcher::QueryNextPosition() {
@@ -110,7 +111,8 @@ void GeolocationDispatcher::QueryNextPosition() {
                  base::Unretained(this)));
 }
 
-void GeolocationDispatcher::OnPositionUpdate(MojoGeopositionPtr geoposition) {
+void GeolocationDispatcher::OnPositionUpdate(
+    blink::mojom::GeopositionPtr geoposition) {
   QueryNextPosition();
 
   if (geoposition->valid) {
@@ -131,10 +133,10 @@ void GeolocationDispatcher::OnPositionUpdate(MojoGeopositionPtr geoposition) {
   } else {
     WebGeolocationError::Error code;
     switch (geoposition->error_code) {
-      case MojoGeoposition::ErrorCode::PERMISSION_DENIED:
+      case blink::mojom::Geoposition::ErrorCode::PERMISSION_DENIED:
         code = WebGeolocationError::ErrorPermissionDenied;
         break;
-      case MojoGeoposition::ErrorCode::POSITION_UNAVAILABLE:
+      case blink::mojom::Geoposition::ErrorCode::POSITION_UNAVAILABLE:
         code = WebGeolocationError::ErrorPositionUnavailable;
         break;
       default:

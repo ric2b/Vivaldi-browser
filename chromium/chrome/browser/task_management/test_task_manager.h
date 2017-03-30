@@ -28,6 +28,7 @@ class TestTaskManager : public TaskManagerInterface {
   int64_t GetPhysicalMemoryUsage(TaskId task_id) const override;
   int64_t GetPrivateMemoryUsage(TaskId task_id) const override;
   int64_t GetSharedMemoryUsage(TaskId task_id) const override;
+  int64_t GetSwappedMemoryUsage(TaskId task_id) const override;
   int64_t GetGpuMemoryUsage(TaskId task_id,
                             bool* has_duplicates) const override;
   int GetIdleWakeupsPerSecond(TaskId task_id) const override;
@@ -47,6 +48,11 @@ class TestTaskManager : public TaskManagerInterface {
   const base::ProcessHandle& GetProcessHandle(TaskId task_id) const override;
   const base::ProcessId& GetProcessId(TaskId task_id) const override;
   Task::Type GetType(TaskId task_id) const override;
+  int GetTabId(TaskId task_id) const override;
+  int GetChildProcessUniqueId(TaskId task_id) const override;
+  void GetTerminationStatus(TaskId task_id,
+                            base::TerminationStatus* out_status,
+                            int* out_error_code) const override;
   int64_t GetNetworkUsage(TaskId task_id) const override;
   int64_t GetProcessTotalNetworkUsage(TaskId task_id) const override;
   int64_t GetSqliteMemoryUsed(TaskId task_id) const override;
@@ -57,6 +63,7 @@ class TestTaskManager : public TaskManagerInterface {
       TaskId task_id,
       blink::WebCache::ResourceTypeStats* stats) const override;
   const TaskIdList& GetTaskIdsList() const override;
+  TaskIdList GetIdsOfTasksSharingSameProcess(TaskId task_id) const override;
   size_t GetNumberOfTasksOnSameProcess(TaskId task_id) const override;
 
   base::TimeDelta GetRefreshTime();

@@ -29,11 +29,8 @@ bool IsPathNameValid(const std::string& name) {
 
 }  // namespace
 
-base::FilePath GetPathForApplicationUrl(const std::string& application_url) {
-  // We don't want to use GURL because it can behave differently depending on
-  // whether mojo:// has been registered as a standard scheme or not. Also, we
-  // can get mojo:foo or mojo://foo urls here.
-  std::string path = application_url;
+base::FilePath GetPathForApplicationName(const std::string& application_name) {
+  std::string path = application_name;
   const bool is_mojo =
       base::StartsWith(path, "mojo:", base::CompareCase::INSENSITIVE_ASCII);
   const bool is_exe =
@@ -72,7 +69,9 @@ base::FilePath GetPathForApplicationUrl(const std::string& application_url) {
 #else
   PathService::Get(base::DIR_EXE, &base_path);
 #endif
-  return base_path.AppendASCII(path).AppendASCII("resources");
+  // TODO(beng): this won't handle user-specific components.
+  return base_path.AppendASCII("Mojo Applications").AppendASCII(path).
+      AppendASCII("resources");
 }
 
 base::FilePath GetPathForResourceNamed(const base::FilePath& app_path,

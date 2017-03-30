@@ -18,20 +18,10 @@ void ExclusiveAccessContext::UpdateFullscreenWithToolbar(bool with_toolbar) {
   NOTIMPLEMENTED();
 }
 
-void ExclusiveAccessContext::ToggleFullscreenToolbar() {
+void ExclusiveAccessContext::UpdateFullscreenToolbar() {
   NOTIMPLEMENTED();
 }
 
 bool ExclusiveAccessContext::IsFullscreenWithToolbar() const {
   return false;
 }
-
-#if defined(OS_WIN)
-void ExclusiveAccessContext::SetMetroSnapMode(bool enable) {
-  NOTIMPLEMENTED();
-}
-
-bool ExclusiveAccessContext::IsInMetroSnapMode() const {
-  return false;
-}
-#endif  // defined(OS_WIN)

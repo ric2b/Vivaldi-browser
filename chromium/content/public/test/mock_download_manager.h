@@ -30,11 +30,15 @@ class MockDownloadManager : public DownloadManager {
   // Structure to make it possible to match more than 10 arguments on
   // CreateDownloadItem.
   struct CreateDownloadItemAdapter {
+    std::string guid;
     uint32_t id;
     base::FilePath current_path;
     base::FilePath target_path;
     std::vector<GURL> url_chain;
     GURL referrer_url;
+    GURL site_url;
+    GURL tab_url;
+    GURL tab_referrer_url;
     std::string mime_type;
     std::string original_mime_type;
     base::Time start_time;
@@ -43,16 +47,21 @@ class MockDownloadManager : public DownloadManager {
     std::string last_modified;
     int64_t received_bytes;
     int64_t total_bytes;
+    std::string hash;
     DownloadItem::DownloadState state;
     DownloadDangerType danger_type;
     DownloadInterruptReason interrupt_reason;
     bool opened;
 
-    CreateDownloadItemAdapter(uint32_t id,
+    CreateDownloadItemAdapter(const std::string& guid,
+                              uint32_t id,
                               const base::FilePath& current_path,
                               const base::FilePath& target_path,
                               const std::vector<GURL>& url_chain,
                               const GURL& referrer_url,
+                              const GURL& site_url,
+                              const GURL& tab_url,
+                              const GURL& tab_refererr_url,
                               const std::string& mime_type,
                               const std::string& original_mime_type,
                               const base::Time& start_time,
@@ -61,6 +70,7 @@ class MockDownloadManager : public DownloadManager {
                               const std::string& last_modified,
                               int64_t received_bytes,
                               int64_t total_bytes,
+                              const std::string& hash,
                               DownloadItem::DownloadState state,
                               DownloadDangerType danger_type,
                               DownloadInterruptReason interrupt_reason,
@@ -103,11 +113,15 @@ class MockDownloadManager : public DownloadManager {
   MOCK_METHOD1(RemoveObserver, void(Observer* observer));
 
   // Redirects to mock method to get around gmock 10 argument limit.
-  DownloadItem* CreateDownloadItem(uint32_t id,
+  DownloadItem* CreateDownloadItem(const std::string& guid,
+                                   uint32_t id,
                                    const base::FilePath& current_path,
                                    const base::FilePath& target_path,
                                    const std::vector<GURL>& url_chain,
                                    const GURL& referrer_url,
+                                   const GURL& site_url,
+                                   const GURL& tab_url,
+                                   const GURL& tab_refererr_url,
                                    const std::string& mime_type,
                                    const std::string& original_mime_type,
                                    const base::Time& start_time,
@@ -116,6 +130,7 @@ class MockDownloadManager : public DownloadManager {
                                    const std::string& last_modified,
                                    int64_t received_bytes,
                                    int64_t total_bytes,
+                                   const std::string& hash,
                                    DownloadItem::DownloadState state,
                                    DownloadDangerType danger_type,
                                    DownloadInterruptReason interrupt_reason,
@@ -129,6 +144,7 @@ class MockDownloadManager : public DownloadManager {
   MOCK_CONST_METHOD0(GetBrowserContext, BrowserContext*());
   MOCK_METHOD0(CheckForHistoryFilesRemoval, void());
   MOCK_METHOD1(GetDownload, DownloadItem*(uint32_t id));
+  MOCK_METHOD1(GetDownloadByGuid, DownloadItem*(const std::string&));
 };
 
 }  // namespace content

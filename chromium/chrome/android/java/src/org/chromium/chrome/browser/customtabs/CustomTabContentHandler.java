@@ -4,9 +4,11 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import android.app.PendingIntent;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.IBinder;
+import android.widget.RemoteViews;
 
 import org.chromium.content_public.browser.LoadUrlParams;
 
@@ -42,4 +44,11 @@ public interface CustomTabContentHandler {
      * @return Whether the action button has been updated.
      */
     boolean updateCustomButton(int id, Bitmap bitmap, String description);
+
+    /**
+     * Updates the {@link RemoteViews} shown on the secondary toolbar.
+     * @return Whether this update is successful.
+     */
+    boolean updateRemoteViews(RemoteViews remoteViews, int[] clickableIDs,
+            PendingIntent pendingIntent);
 }

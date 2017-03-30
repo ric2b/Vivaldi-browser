@@ -35,6 +35,7 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/WindowFeatures.h"
 #include "public/web/WebNavigationPolicy.h"
+#include "web/WebExport.h"
 #include "wtf/PassOwnPtr.h"
 
 namespace blink {
@@ -45,9 +46,9 @@ class WebViewImpl;
 struct WebCursorInfo;
 
 // Handles window-level notifications from core on behalf of a WebView.
-class ChromeClientImpl final : public ChromeClient {
+class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
 public:
-    static PassOwnPtrWillBeRawPtr<ChromeClientImpl> create(WebViewImpl*);
+    static ChromeClientImpl* create(WebViewImpl*);
     ~ChromeClientImpl() override;
 
     void* webView() const override;
@@ -81,7 +82,7 @@ public:
         const String& message, unsigned lineNumber,
         const String& sourceID, const String& stackTrace) override;
     bool canOpenBeforeUnloadConfirmPanel() override;
-    bool openBeforeUnloadConfirmPanelDelegate(LocalFrame*, const String&, bool isReload) override;
+    bool openBeforeUnloadConfirmPanelDelegate(LocalFrame*, bool isReload) override;
     void closeWindowSoon() override;
     bool openJavaScriptAlertDelegate(LocalFrame*, const String&) override;
     bool openJavaScriptConfirmDelegate(LocalFrame*, const String&) override;
@@ -93,7 +94,7 @@ public:
     IntRect windowResizerRect() const override;
     void invalidateRect(const IntRect&) override;
     void scheduleAnimation(Widget*) override;
-    IntRect viewportToScreen(const IntRect&) const override;
+    IntRect viewportToScreen(const IntRect&, const Widget*) const override;
     float windowToViewportScalar(const float) const override;
     WebScreenInfo screenInfo() const override;
     void contentsSizeChanged(LocalFrame*, const IntSize&) const override;
@@ -105,19 +106,17 @@ public:
     void dispatchViewportPropertiesDidChange(const ViewportDescription&) const override;
     void printDelegate(LocalFrame*) override;
     void annotatedRegionsChanged() override;
-    PassOwnPtrWillBeRawPtr<ColorChooser> openColorChooser(LocalFrame*, ColorChooserClient*, const Color&) override;
-    PassRefPtrWillBeRawPtr<DateTimeChooser> openDateTimeChooser(DateTimeChooserClient*, const DateTimeChooserParameters&) override;
+    ColorChooser* openColorChooser(LocalFrame*, ColorChooserClient*, const Color&) override;
+    DateTimeChooser* openDateTimeChooser(DateTimeChooserClient*, const DateTimeChooserParameters&) override;
     void openFileChooser(LocalFrame*, PassRefPtr<FileChooser>) override;
     void enumerateChosenDirectory(FileChooser*) override;
     void setCursor(const Cursor&, LocalFrame* localRoot) override;
     Cursor lastSetCursorForTesting() const override;
     void setEventListenerProperties(WebEventListenerClass, WebEventListenerProperties) override;
     WebEventListenerProperties eventListenerProperties(WebEventListenerClass) const override;
-    void setHaveScrollEventHandlers(bool hasEventHandlers) override;
-    bool haveScrollEventHandlers() const override;
+    void setHasScrollEventHandlers(bool hasEventHandlers) override;
+    bool hasScrollEventHandlers() const override;
     void setTouchAction(TouchAction) override;
-
-    GraphicsLayerFactory* graphicsLayerFactory() const override;
 
     // Pass 0 as the GraphicsLayer to detatch the root layer.
     void attachRootGraphicsLayer(GraphicsLayer*, LocalFrame* localRoot) override;
@@ -143,7 +142,7 @@ public:
     void setCursorOverridden(bool);
 
     bool hasOpenedPopup() const override;
-    PassRefPtrWillBeRawPtr<PopupMenu> openPopupMenu(LocalFrame&, HTMLSelectElement&) override;
+    PopupMenu* openPopupMenu(LocalFrame&, HTMLSelectElement&) override;
     PagePopup* openPagePopup(PagePopupClient*);
     void closePagePopup(PagePopup*);
     DOMWindow* pagePopupWindowForTesting() const override;
@@ -154,7 +153,7 @@ public:
     void requestPointerUnlock() override;
 
     // AutofillClient pass throughs:
-    void didAssociateFormControls(const WillBeHeapVector<RefPtrWillBeMember<Element>>&, LocalFrame*) override;
+    void didAssociateFormControls(const HeapVector<Member<Element>>&, LocalFrame*) override;
     void handleKeyboardEventOnTextField(HTMLInputElement&, KeyboardEvent&) override;
     void didChangeValueInTextField(HTMLFormControlElement&) override;
     void didEndEditingOnTextField(HTMLInputElement&) override;
@@ -177,7 +176,7 @@ public:
 
     void didObserveNonGetFetchFromScript() const override;
 
-    PassOwnPtr<WebFrameScheduler> createFrameScheduler() override;
+    PassOwnPtr<WebFrameScheduler> createFrameScheduler(BlameContext*) override;
 
 private:
     explicit ChromeClientImpl(WebViewImpl*);

@@ -6,15 +6,12 @@
  * @fileoverview
  * 'settings-reset-page' is the settings page containing reset
  * settings.
- *
- * @group Chrome Settings Elements
- * @element settings-reset-page
  */
 Polymer({
   is: 'settings-powerwash-dialog',
 
   open: function() {
-    chrome.send('onPowerwashDialogShow');
+    settings.ResetBrowserProxyImpl.getInstance().onPowerwashDialogShow();
     this.$.dialog.open();
   },
 
@@ -25,6 +22,6 @@ Polymer({
 
   /** @private */
   onRestartTap_: function() {
-    chrome.send('requestFactoryResetRestart');
+    settings.ResetBrowserProxyImpl.getInstance().requestFactoryResetRestart();
   },
 });

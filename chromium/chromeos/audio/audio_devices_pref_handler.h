@@ -38,6 +38,20 @@ class CHROMEOS_EXPORT AudioDevicesPrefHandler
   // Sets the audio mute value to prefs for a device.
   virtual void SetMuteValue(const AudioDevice& device, bool mute_on) = 0;
 
+  // Sets the device active state in prefs.
+  // Note: |activate_by_user| indicates whether |device| is set to active
+  // by user or by priority, and it only matters when |active| is true.
+  virtual void SetDeviceActive(const AudioDevice& device,
+                               bool active,
+                               bool activate_by_user) = 0;
+  // Returns false if it fails to get device active state from prefs.
+  // Otherwise, returns true, pass the active state data in |*active|
+  // and |*activate_by_user|.
+  // Note: |*activate_by_user| only matters when |*active| is true.
+  virtual bool GetDeviceActive(const AudioDevice& device,
+                               bool* active,
+                               bool* activate_by_user) = 0;
+
   // Reads the audio output allowed value from prefs.
   virtual bool GetAudioOutputAllowedValue() = 0;
 

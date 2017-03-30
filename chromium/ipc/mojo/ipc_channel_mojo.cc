@@ -20,7 +20,6 @@
 #include "ipc/ipc_logging.h"
 #include "ipc/ipc_message_attachment_set.h"
 #include "ipc/ipc_message_macros.h"
-#include "ipc/mojo/client_channel.mojom.h"
 #include "ipc/mojo/ipc_mojo_bootstrap.h"
 #include "ipc/mojo/ipc_mojo_handle_attachment.h"
 #include "mojo/edk/embedder/embedder.h"
@@ -30,140 +29,58 @@
 #include "ipc/ipc_platform_file_attachment_posix.h"
 #endif
 
+#if defined(OS_MACOSX)
+#include "ipc/mach_port_attachment_mac.h"
+#endif
+
+#if defined(OS_WIN)
+#include "ipc/handle_attachment_win.h"
+#endif
+
 namespace IPC {
 
 namespace {
 
-// TODO(jam): do more tests on using channel on same thread if it supports it (
-// i.e. with use-new-edk and Windows). Also see message_pipe_dispatcher.cc
-bool g_use_channel_on_io_thread_only = true;
-
 class MojoChannelFactory : public ChannelFactory {
  public:
-  MojoChannelFactory(scoped_refptr<base::TaskRunner> io_runner,
-                     ChannelHandle channel_handle,
-                     Channel::Mode mode)
-      : io_runner_(io_runner), channel_handle_(channel_handle), mode_(mode) {}
+  MojoChannelFactory(mojo::ScopedMessagePipeHandle handle, Channel::Mode mode)
+      : handle_(std::move(handle)), mode_(mode) {}
 
-  std::string GetName() const override {
-    return channel_handle_.name;
-  }
+  std::string GetName() const override { return ""; }
 
   scoped_ptr<Channel> BuildChannel(Listener* listener) override {
-    return ChannelMojo::Create(io_runner_, channel_handle_, mode_, listener);
+    return ChannelMojo::Create(std::move(handle_), mode_, listener);
   }
 
  private:
-  scoped_refptr<base::TaskRunner> io_runner_;
-  ChannelHandle channel_handle_;
-  Channel::Mode mode_;
+  mojo::ScopedMessagePipeHandle handle_;
+  const Channel::Mode mode_;
+
+  DISALLOW_COPY_AND_ASSIGN(MojoChannelFactory);
 };
 
-//------------------------------------------------------------------------------
+mojom::SerializedHandlePtr CreateSerializedHandle(
+    mojo::ScopedHandle handle,
+    mojom::SerializedHandle::Type type) {
+  mojom::SerializedHandlePtr serialized_handle = mojom::SerializedHandle::New();
+  serialized_handle->the_handle = std::move(handle);
+  serialized_handle->type = type;
+  return serialized_handle;
+}
 
-class ClientChannelMojo : public ChannelMojo, public ClientChannel {
- public:
-  ClientChannelMojo(scoped_refptr<base::TaskRunner> io_runner,
-                    const ChannelHandle& handle,
-                    Listener* listener)
-      : ChannelMojo(io_runner, handle, Channel::MODE_CLIENT, listener),
-        binding_(this),
-        weak_factory_(this) {
-  }
-  ~ClientChannelMojo() override {}
+MojoResult WrapPlatformHandle(mojo::edk::ScopedPlatformHandle handle,
+                              mojom::SerializedHandle::Type type,
+                              mojom::SerializedHandlePtr* serialized) {
+  MojoHandle wrapped_handle;
+  MojoResult wrap_result = mojo::edk::CreatePlatformHandleWrapper(
+      std::move(handle), &wrapped_handle);
+  if (wrap_result != MOJO_RESULT_OK)
+    return wrap_result;
 
-  // MojoBootstrap::Delegate implementation
-  void OnPipeAvailable(mojo::edk::ScopedPlatformHandle handle,
-                       int32_t peer_pid) override {
-    BindPipe(mojo::edk::CreateMessagePipe(std::move(handle)));
-  }
-
-  // ClientChannel implementation
-  void Init(
-      mojo::ScopedMessagePipeHandle pipe,
-      int32_t peer_pid,
-      const mojo::Callback<void(int32_t)>& callback) override {
-    InitMessageReader(std::move(pipe), static_cast<base::ProcessId>(peer_pid));
-   callback.Run(GetSelfPID());
-  }
-
- private:
-  void BindPipe(mojo::ScopedMessagePipeHandle handle) {
-    binding_.Bind(std::move(handle));
-  }
-  void OnConnectionError() {
-    listener()->OnChannelError();
-  }
-
-  mojo::Binding<ClientChannel> binding_;
-  base::WeakPtrFactory<ClientChannelMojo> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(ClientChannelMojo);
-};
-
-//------------------------------------------------------------------------------
-
-class ServerChannelMojo : public ChannelMojo {
- public:
-  ServerChannelMojo(scoped_refptr<base::TaskRunner> io_runner,
-                    const ChannelHandle& handle,
-                    Listener* listener)
-      : ChannelMojo(io_runner, handle, Channel::MODE_SERVER, listener),
-        weak_factory_(this) {
-  }
-  ~ServerChannelMojo() override {
-    Close();
-  }
-
-  // MojoBootstrap::Delegate implementation
-  void OnPipeAvailable(mojo::edk::ScopedPlatformHandle handle,
-                       int32_t peer_pid) override {
-    mojo::ScopedMessagePipeHandle peer;
-    MojoResult create_result =
-        mojo::CreateMessagePipe(nullptr, &message_pipe_, &peer);
-    if (create_result != MOJO_RESULT_OK) {
-      LOG(WARNING) << "mojo::CreateMessagePipe failed: " << create_result;
-      listener()->OnChannelError();
-      return;
-    }
-    InitClientChannel(std::move(peer),
-                      mojo::edk::CreateMessagePipe(std::move(handle)));
-  }
-  // Channel override
-  void Close() override {
-    client_channel_.reset();
-    message_pipe_.reset();
-    ChannelMojo::Close();
-  }
-
- private:
-  void InitClientChannel(mojo::ScopedMessagePipeHandle peer_handle,
-                         mojo::ScopedMessagePipeHandle handle) {
-    client_channel_.Bind(
-        mojo::InterfacePtrInfo<ClientChannel>(std::move(handle), 0u));
-    client_channel_.set_connection_error_handler(base::Bind(
-        &ServerChannelMojo::OnConnectionError, base::Unretained(this)));
-    client_channel_->Init(
-        std::move(peer_handle), static_cast<int32_t>(GetSelfPID()),
-        base::Bind(&ServerChannelMojo::ClientChannelWasInitialized,
-                   base::Unretained(this)));
-  }
-
-  void OnConnectionError() {
-    listener()->OnChannelError();
-  }
-
-  // ClientChannelClient implementation
-  void ClientChannelWasInitialized(int32_t peer_pid) {
-    InitMessageReader(std::move(message_pipe_), peer_pid);
-  }
-
-  mojo::InterfacePtr<ClientChannel> client_channel_;
-  mojo::ScopedMessagePipeHandle message_pipe_;
-  base::WeakPtrFactory<ServerChannelMojo> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServerChannelMojo);
-};
+  *serialized = CreateSerializedHandle(
+      mojo::MakeScopedHandle(mojo::Handle(wrapped_handle)), type);
+  return MOJO_RESULT_OK;
+}
 
 #if defined(OS_POSIX) && !defined(OS_NACL)
 
@@ -174,174 +91,254 @@ base::ScopedFD TakeOrDupFile(internal::PlatformFileAttachment* attachment) {
 
 #endif
 
+MojoResult WrapAttachmentImpl(MessageAttachment* attachment,
+                              mojom::SerializedHandlePtr* serialized) {
+  if (attachment->GetType() == MessageAttachment::TYPE_MOJO_HANDLE) {
+    *serialized = CreateSerializedHandle(
+        static_cast<internal::MojoHandleAttachment&>(*attachment).TakeHandle(),
+        mojom::SerializedHandle::Type::MOJO_HANDLE);
+    return MOJO_RESULT_OK;
+  }
+#if defined(OS_POSIX) && !defined(OS_NACL)
+  if (attachment->GetType() == MessageAttachment::TYPE_PLATFORM_FILE) {
+    // We dup() the handles in IPC::Message to transmit.
+    // IPC::MessageAttachmentSet has intricate lifecycle semantics
+    // of FDs, so just to dup()-and-own them is the safest option.
+    base::ScopedFD file = TakeOrDupFile(
+        static_cast<IPC::internal::PlatformFileAttachment*>(attachment));
+    if (!file.is_valid()) {
+      DPLOG(WARNING) << "Failed to dup FD to transmit.";
+      return MOJO_RESULT_UNKNOWN;
+    }
+
+    return WrapPlatformHandle(mojo::edk::ScopedPlatformHandle(
+                                  mojo::edk::PlatformHandle(file.release())),
+                              mojom::SerializedHandle::Type::MOJO_HANDLE,
+                              serialized);
+  }
+#endif
+#if defined(OS_MACOSX)
+  DCHECK_EQ(attachment->GetType(),
+            MessageAttachment::TYPE_BROKERABLE_ATTACHMENT);
+  DCHECK_EQ(static_cast<BrokerableAttachment&>(*attachment).GetBrokerableType(),
+            BrokerableAttachment::MACH_PORT);
+  internal::MachPortAttachmentMac& mach_port_attachment =
+      static_cast<internal::MachPortAttachmentMac&>(*attachment);
+  MojoResult result = WrapPlatformHandle(
+      mojo::edk::ScopedPlatformHandle(
+          mojo::edk::PlatformHandle(mach_port_attachment.get_mach_port())),
+      mojom::SerializedHandle::Type::MACH_PORT, serialized);
+  mach_port_attachment.reset_mach_port_ownership();
+  return result;
+#elif defined(OS_WIN)
+  DCHECK_EQ(attachment->GetType(),
+            MessageAttachment::TYPE_BROKERABLE_ATTACHMENT);
+  DCHECK_EQ(static_cast<BrokerableAttachment&>(*attachment).GetBrokerableType(),
+            BrokerableAttachment::WIN_HANDLE);
+  internal::HandleAttachmentWin& handle_attachment =
+      static_cast<internal::HandleAttachmentWin&>(*attachment);
+  MojoResult result = WrapPlatformHandle(
+      mojo::edk::ScopedPlatformHandle(
+          mojo::edk::PlatformHandle(handle_attachment.get_handle())),
+      mojom::SerializedHandle::Type::WIN_HANDLE, serialized);
+  handle_attachment.reset_handle_ownership();
+  return result;
+#else
+  NOTREACHED();
+  return MOJO_RESULT_UNKNOWN;
+#endif  // defined(OS_MACOSX)
+}
+
+MojoResult WrapAttachment(MessageAttachment* attachment,
+                          mojo::Array<mojom::SerializedHandlePtr>* handles) {
+  mojom::SerializedHandlePtr serialized_handle;
+  MojoResult wrap_result = WrapAttachmentImpl(attachment, &serialized_handle);
+  if (wrap_result != MOJO_RESULT_OK) {
+    LOG(WARNING) << "Pipe failed to wrap handles. Closing: " << wrap_result;
+    return wrap_result;
+  }
+  handles->push_back(std::move(serialized_handle));
+  return MOJO_RESULT_OK;
+}
+
+MojoResult UnwrapAttachment(mojom::SerializedHandlePtr handle,
+                            scoped_refptr<MessageAttachment>* attachment) {
+  if (handle->type == mojom::SerializedHandle::Type::MOJO_HANDLE) {
+    *attachment =
+        new IPC::internal::MojoHandleAttachment(std::move(handle->the_handle));
+    return MOJO_RESULT_OK;
+  }
+  mojo::edk::ScopedPlatformHandle platform_handle;
+  MojoResult unwrap_result = mojo::edk::PassWrappedPlatformHandle(
+          handle->the_handle.release().value(), &platform_handle);
+  if (unwrap_result != MOJO_RESULT_OK)
+    return unwrap_result;
+#if defined(OS_MACOSX)
+  if (handle->type == mojom::SerializedHandle::Type::MACH_PORT &&
+      platform_handle.get().type == mojo::edk::PlatformHandle::Type::MACH) {
+    *attachment = new internal::MachPortAttachmentMac(
+        platform_handle.release().port,
+        internal::MachPortAttachmentMac::FROM_WIRE);
+    return MOJO_RESULT_OK;
+  }
+#endif  // defined(OS_MACOSX)
+#if defined(OS_WIN)
+  if (handle->type == mojom::SerializedHandle::Type::WIN_HANDLE) {
+    *attachment = new internal::HandleAttachmentWin(
+        platform_handle.release().handle,
+        internal::HandleAttachmentWin::FROM_WIRE);
+    return MOJO_RESULT_OK;
+  }
+#endif  // defined(OS_WIN)
+  NOTREACHED();
+  return MOJO_RESULT_UNKNOWN;
+}
+
 }  // namespace
 
 //------------------------------------------------------------------------------
 
 // static
-bool ChannelMojo::ShouldBeUsed() {
-  // TODO(rockot): Investigate performance bottlenecks and hopefully reenable
-  // this at some point. http://crbug.com/500019
-  return false;
-}
-
-// static
 scoped_ptr<ChannelMojo> ChannelMojo::Create(
-    scoped_refptr<base::TaskRunner> io_runner,
-    const ChannelHandle& channel_handle,
+    mojo::ScopedMessagePipeHandle handle,
     Mode mode,
     Listener* listener) {
-  switch (mode) {
-    case Channel::MODE_CLIENT:
-      return make_scoped_ptr(
-          new ClientChannelMojo(io_runner, channel_handle, listener));
-    case Channel::MODE_SERVER:
-      return make_scoped_ptr(
-          new ServerChannelMojo(io_runner, channel_handle, listener));
-    default:
-      NOTREACHED();
-      return nullptr;
-  }
+  return make_scoped_ptr(new ChannelMojo(std::move(handle), mode, listener));
 }
 
 // static
 scoped_ptr<ChannelFactory> ChannelMojo::CreateServerFactory(
-    scoped_refptr<base::TaskRunner> io_runner,
-    const ChannelHandle& channel_handle) {
+    mojo::ScopedMessagePipeHandle handle) {
   return make_scoped_ptr(
-      new MojoChannelFactory(io_runner, channel_handle, Channel::MODE_SERVER));
+      new MojoChannelFactory(std::move(handle), Channel::MODE_SERVER));
 }
 
 // static
 scoped_ptr<ChannelFactory> ChannelMojo::CreateClientFactory(
-    scoped_refptr<base::TaskRunner> io_runner,
-    const ChannelHandle& channel_handle) {
+    mojo::ScopedMessagePipeHandle handle) {
   return make_scoped_ptr(
-      new MojoChannelFactory(io_runner, channel_handle, Channel::MODE_CLIENT));
+      new MojoChannelFactory(std::move(handle), Channel::MODE_CLIENT));
 }
 
-ChannelMojo::ChannelMojo(scoped_refptr<base::TaskRunner> io_runner,
-                         const ChannelHandle& handle,
+ChannelMojo::ChannelMojo(mojo::ScopedMessagePipeHandle handle,
                          Mode mode,
                          Listener* listener)
-    : listener_(listener),
-      peer_pid_(base::kNullProcessId),
-      io_runner_(io_runner),
+    : pipe_(handle.get()),
+      listener_(listener),
       waiting_connect_(true),
       weak_factory_(this) {
   // Create MojoBootstrap after all members are set as it touches
   // ChannelMojo from a different thread.
-  bootstrap_ = MojoBootstrap::Create(handle, mode, this);
-  if (!g_use_channel_on_io_thread_only ||
-      io_runner == base::MessageLoop::current()->task_runner()) {
-    InitOnIOThread();
-  } else {
-    io_runner->PostTask(FROM_HERE, base::Bind(&ChannelMojo::InitOnIOThread,
-                                              base::Unretained(this)));
-  }
+  bootstrap_ = MojoBootstrap::Create(std::move(handle), mode, this);
 }
 
 ChannelMojo::~ChannelMojo() {
   Close();
 }
 
-void ChannelMojo::InitOnIOThread() {
-  ipc_support_.reset(
-      new ScopedIPCSupport(base::MessageLoop::current()->task_runner()));
-}
-
 bool ChannelMojo::Connect() {
+  WillConnect();
+  base::AutoLock lock(lock_);
+  DCHECK(!task_runner_);
+  task_runner_ = base::ThreadTaskRunnerHandle::Get();
   DCHECK(!message_reader_);
-  return bootstrap_->Connect();
+  bootstrap_->Connect();
+  return true;
 }
 
 void ChannelMojo::Close() {
-  scoped_ptr<internal::MessagePipeReader, ReaderDeleter> to_be_deleted;
-
+  scoped_ptr<internal::MessagePipeReader, ReaderDeleter> reader;
   {
-    // |message_reader_| has to be cleared inside the lock,
-    // but the instance has to be deleted outside.
-    base::AutoLock l(lock_);
-    to_be_deleted = std::move(message_reader_);
+    base::AutoLock lock(lock_);
+    if (!message_reader_)
+      return;
+    // The reader's destructor may re-enter Close, so we swap it out first to
+    // avoid deadlock when freeing it below.
+    std::swap(message_reader_, reader);
+
     // We might Close() before we Connect().
     waiting_connect_ = false;
   }
 
-  ipc_support_.reset();
-  to_be_deleted.reset();
+  reader.reset();
+}
+
+// MojoBootstrap::Delegate implementation
+void ChannelMojo::OnPipesAvailable(
+    mojom::ChannelAssociatedPtrInfo send_channel,
+    mojom::ChannelAssociatedRequest receive_channel,
+    int32_t peer_pid) {
+  InitMessageReader(std::move(send_channel), std::move(receive_channel),
+                    peer_pid);
 }
 
 void ChannelMojo::OnBootstrapError() {
   listener_->OnChannelError();
 }
 
-namespace {
+void ChannelMojo::InitMessageReader(mojom::ChannelAssociatedPtrInfo sender,
+                                    mojom::ChannelAssociatedRequest receiver,
+                                    base::ProcessId peer_pid) {
+  mojom::ChannelAssociatedPtr sender_ptr;
+  sender_ptr.Bind(std::move(sender));
+  scoped_ptr<internal::MessagePipeReader, ChannelMojo::ReaderDeleter> reader(
+      new internal::MessagePipeReader(pipe_, std::move(sender_ptr),
+                                      std::move(receiver), peer_pid, this));
 
-// ClosingDeleter calls |CloseWithErrorIfPending| before deleting the
-// |MessagePipeReader|.
-struct ClosingDeleter {
-  typedef std::default_delete<internal::MessagePipeReader> DefaultType;
-
-  void operator()(internal::MessagePipeReader* ptr) const {
-    ptr->CloseWithErrorIfPending();
-    delete ptr;
-  }
-};
-
-} // namespace
-
-void ChannelMojo::InitMessageReader(mojo::ScopedMessagePipeHandle pipe,
-                                    int32_t peer_pid) {
-  scoped_ptr<internal::MessagePipeReader, ClosingDeleter> reader(
-      new internal::MessagePipeReader(std::move(pipe), this));
-
+  bool connected = true;
   {
-    base::AutoLock l(lock_);
+    base::AutoLock lock(lock_);
     for (size_t i = 0; i < pending_messages_.size(); ++i) {
-      bool sent = reader->Send(make_scoped_ptr(pending_messages_[i]));
-      pending_messages_[i] = nullptr;
-      if (!sent) {
-        // OnChannelError() is notified through ClosingDeleter.
+      if (!reader->Send(std::move(pending_messages_[i]))) {
+        LOG(ERROR) << "Failed to flush pending messages";
         pending_messages_.clear();
-        LOG(ERROR)  << "Failed to flush pending messages";
-        return;
+        connected = false;
+        break;
       }
     }
 
-    // We set |message_reader_| here and won't get any |pending_messages_|
-    // hereafter. Although we might have some if there is an error, we don't
-    // care. They cannot be sent anyway.
-    message_reader_.reset(reader.release());
-    pending_messages_.clear();
-    waiting_connect_ = false;
+    if (connected) {
+      // We set |message_reader_| here and won't get any |pending_messages_|
+      // hereafter. Although we might have some if there is an error, we don't
+      // care. They cannot be sent anyway.
+      message_reader_ = std::move(reader);
+      pending_messages_.clear();
+      waiting_connect_ = false;
+    }
   }
 
-  set_peer_pid(peer_pid);
-  listener_->OnChannelConnected(static_cast<int32_t>(GetPeerPID()));
-  if (message_reader_)
-    message_reader_->ReadMessagesThenWait();
+  if (connected)
+    listener_->OnChannelConnected(static_cast<int32_t>(GetPeerPID()));
+  else
+    OnPipeError();
 }
 
-void ChannelMojo::OnPipeClosed(internal::MessagePipeReader* reader) {
-  Close();
+void ChannelMojo::OnPipeError() {
+  DCHECK(task_runner_);
+  if (task_runner_->RunsTasksOnCurrentThread()) {
+    listener_->OnChannelError();
+  } else {
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&ChannelMojo::OnPipeError, weak_factory_.GetWeakPtr()));
+  }
 }
 
-void ChannelMojo::OnPipeError(internal::MessagePipeReader* reader) {
-  listener_->OnChannelError();
-}
-
-
-// Warning: Keep the implementation thread-safe.
 bool ChannelMojo::Send(Message* message) {
-  base::AutoLock l(lock_);
+  base::AutoLock lock(lock_);
   if (!message_reader_) {
-    pending_messages_.push_back(message);
+    pending_messages_.push_back(make_scoped_ptr(message));
     // Counts as OK before the connection is established, but it's an
     // error otherwise.
     return waiting_connect_;
   }
 
-  return message_reader_->Send(make_scoped_ptr(message));
+  if (!message_reader_->Send(make_scoped_ptr(message))) {
+    OnPipeError();
+    return false;
+  }
+
+  return true;
 }
 
 bool ChannelMojo::IsSendThreadSafe() const {
@@ -349,17 +346,25 @@ bool ChannelMojo::IsSendThreadSafe() const {
 }
 
 base::ProcessId ChannelMojo::GetPeerPID() const {
-  return peer_pid_;
+  base::AutoLock lock(lock_);
+  if (!message_reader_)
+    return base::kNullProcessId;
+
+  return message_reader_->GetPeerPid();
 }
 
 base::ProcessId ChannelMojo::GetSelfPID() const {
   return bootstrap_->GetSelfPID();
 }
 
-void ChannelMojo::OnMessageReceived(Message& message) {
+void ChannelMojo::OnMessageReceived(const Message& message) {
   TRACE_EVENT2("ipc,toplevel", "ChannelMojo::OnMessageReceived",
                "class", IPC_MESSAGE_ID_CLASS(message.type()),
                "line", IPC_MESSAGE_ID_LINE(message.type()));
+  if (AttachmentBroker* broker = AttachmentBroker::GetGlobal()) {
+    if (broker->OnMessageReceived(message))
+      return;
+  }
   listener_->OnMessageReceived(message);
   if (message.dispatch_error())
     listener_->OnBadMessageReceived(message);
@@ -367,92 +372,64 @@ void ChannelMojo::OnMessageReceived(Message& message) {
 
 #if defined(OS_POSIX) && !defined(OS_NACL)
 int ChannelMojo::GetClientFileDescriptor() const {
-  return bootstrap_->GetClientFileDescriptor();
+  return -1;
 }
 
 base::ScopedFD ChannelMojo::TakeClientFileDescriptor() {
-  return bootstrap_->TakeClientFileDescriptor();
+  return base::ScopedFD(GetClientFileDescriptor());
 }
 #endif  // defined(OS_POSIX) && !defined(OS_NACL)
 
 // static
 MojoResult ChannelMojo::ReadFromMessageAttachmentSet(
     Message* message,
-    std::vector<MojoHandle>* handles) {
-  // We dup() the handles in IPC::Message to transmit.
-  // IPC::MessageAttachmentSet has intricate lifecycle semantics
-  // of FDs, so just to dup()-and-own them is the safest option.
+    mojo::Array<mojom::SerializedHandlePtr>* handles) {
   if (message->HasAttachments()) {
     MessageAttachmentSet* set = message->attachment_set();
     for (unsigned i = 0; i < set->num_non_brokerable_attachments(); ++i) {
-      scoped_refptr<MessageAttachment> attachment =
-          set->GetNonBrokerableAttachmentAt(i);
-      switch (attachment->GetType()) {
-        case MessageAttachment::TYPE_PLATFORM_FILE:
-#if defined(OS_POSIX) && !defined(OS_NACL)
-        {
-          base::ScopedFD file =
-              TakeOrDupFile(static_cast<IPC::internal::PlatformFileAttachment*>(
-                  attachment.get()));
-          if (!file.is_valid()) {
-            DPLOG(WARNING) << "Failed to dup FD to transmit.";
-            set->CommitAllDescriptors();
-            return MOJO_RESULT_UNKNOWN;
-          }
-
-          MojoHandle wrapped_handle;
-          MojoResult wrap_result = mojo::edk::CreatePlatformHandleWrapper(
-              mojo::edk::ScopedPlatformHandle(
-                  mojo::edk::PlatformHandle(file.release())),
-              &wrapped_handle);
-          if (MOJO_RESULT_OK != wrap_result) {
-            LOG(WARNING) << "Pipe failed to wrap handles. Closing: "
-                         << wrap_result;
-            set->CommitAllDescriptors();
-            return wrap_result;
-          }
-
-          handles->push_back(wrapped_handle);
-        }
-#else
-          NOTREACHED();
-#endif  //  defined(OS_POSIX) && !defined(OS_NACL)
-        break;
-        case MessageAttachment::TYPE_MOJO_HANDLE: {
-          mojo::ScopedHandle handle =
-              static_cast<IPC::internal::MojoHandleAttachment*>(
-                  attachment.get())->TakeHandle();
-          handles->push_back(handle.release().value());
-        } break;
-        case MessageAttachment::TYPE_BROKERABLE_ATTACHMENT:
-          // Brokerable attachments are handled by the AttachmentBroker so
-          // there's no need to do anything here.
-          NOTREACHED();
-          break;
+      MojoResult result = WrapAttachment(
+              set->GetNonBrokerableAttachmentAt(i).get(), handles);
+      if (result != MOJO_RESULT_OK) {
+        set->CommitAllDescriptors();
+        return result;
       }
     }
-
+    for (unsigned i = 0; i < set->num_brokerable_attachments(); ++i) {
+      MojoResult result =
+          WrapAttachment(set->GetBrokerableAttachmentAt(i).get(), handles);
+      if (result != MOJO_RESULT_OK) {
+        set->CommitAllDescriptors();
+        return result;
+      }
+    }
     set->CommitAllDescriptors();
   }
-
   return MOJO_RESULT_OK;
 }
 
 // static
 MojoResult ChannelMojo::WriteToMessageAttachmentSet(
-    const std::vector<MojoHandle>& handle_buffer,
+    mojo::Array<mojom::SerializedHandlePtr> handle_buffer,
     Message* message) {
   for (size_t i = 0; i < handle_buffer.size(); ++i) {
+    scoped_refptr<MessageAttachment> unwrapped_attachment;
+    MojoResult unwrap_result = UnwrapAttachment(std::move(handle_buffer[i]),
+                                                    &unwrapped_attachment);
+    if (unwrap_result != MOJO_RESULT_OK) {
+      LOG(WARNING) << "Pipe failed to unwrap handles. Closing: "
+                   << unwrap_result;
+      return unwrap_result;
+    }
+    DCHECK(unwrapped_attachment);
+
     bool ok = message->attachment_set()->AddAttachment(
-        new IPC::internal::MojoHandleAttachment(
-            mojo::MakeScopedHandle(mojo::Handle(handle_buffer[i]))));
+        std::move(unwrapped_attachment));
     DCHECK(ok);
     if (!ok) {
       LOG(ERROR) << "Failed to add new Mojo handle.";
       return MOJO_RESULT_UNKNOWN;
     }
   }
-
   return MOJO_RESULT_OK;
 }
 

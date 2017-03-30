@@ -23,9 +23,9 @@
 #include "components/gcm_driver/gcm_client.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/push_messaging_service.h"
-#include "content/public/common/permission_status.mojom.h"
 #include "content/public/common/push_event_payload.h"
 #include "content/public/common/push_messaging_status.h"
+#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
 #include "third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h"
 
 #if defined(ENABLE_NOTIFICATIONS)
@@ -35,6 +35,7 @@
 class Profile;
 class PushMessagingAppIdentifier;
 class PushMessagingServiceObserver;
+struct PushSubscriptionOptions;
 
 namespace gcm {
 class GCMDriver;
@@ -74,16 +75,14 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
   void SubscribeFromDocument(
       const GURL& requesting_origin,
       int64_t service_worker_registration_id,
-      const std::string& sender_id,
       int renderer_id,
       int render_frame_id,
-      bool user_visible,
+      const content::PushSubscriptionOptions& options,
       const content::PushMessagingService::RegisterCallback& callback) override;
   void SubscribeFromWorker(
       const GURL& requesting_origin,
       int64_t service_worker_registration_id,
-      const std::string& sender_id,
-      bool user_visible,
+      const content::PushSubscriptionOptions& options,
       const content::PushMessagingService::RegisterCallback& callback) override;
   void GetEncryptionInfo(
       const GURL& origin,
@@ -119,6 +118,7 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
       const base::Closure& callback);
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(PushMessagingServiceTest, NormalizeSenderInfo);
   FRIEND_TEST_ALL_PREFIXES(PushMessagingServiceTest, PayloadEncryptionTest);
 
   // A subscription is pending until it has succeeded or failed.
@@ -165,9 +165,9 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
 
   void DidRequestPermission(
       const PushMessagingAppIdentifier& app_identifier,
-      const std::string& sender_id,
+      const content::PushSubscriptionOptions& options,
       const content::PushMessagingService::RegisterCallback& callback,
-      content::PermissionStatus permission_status);
+      blink::mojom::PermissionStatus permission_status);
 
   // GetEncryptionInfo method --------------------------------------------------
 
@@ -196,6 +196,11 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
       bool not_found);
 
   // Helper methods ------------------------------------------------------------
+
+  // Normalizes the |sender_info|. In most cases the |sender_info| will be
+  // passed through to the GCM Driver as-is, but NIST P-256 application server
+  // keys have to be encoded using the URL-safe variant of the base64 encoding.
+  std::string NormalizeSenderInfo(const std::string& sender_info) const;
 
   // Checks if a given origin is allowed to use Push.
   bool IsPermissionSet(const GURL& origin);

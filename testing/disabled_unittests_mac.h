@@ -6,20 +6,31 @@
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
 
-  DISABLE(BrowserTest, BeforeUnloadVsBeforeReload)
+  //DISABLE(BrowserTest, BeforeUnloadVsBeforeReload)
 
+  // Disabled in v51 due to flakiness
+  DISABLE(BrowserWindowControllerTest,
+          FullscreenToolbarIsVisibleAccordingToPrefs)
+
+  /*
   DISABLE(DevToolsSanityTest, TestNetworkSize)
   DISABLE(DevToolsSanityTest, TestNetworkRawHeadersText)
 
   DISABLE(DumpAccessibilityTreeTest, AccessibilityInputDate)
+  */
   DISABLE(DumpAccessibilityTreeTest, AccessibilityInputTime)
 
-  DISABLE(SearchProviderTest, TestIsSearchProviderInstalled)
 
+  DISABLE(SearchProviderTest, TestIsSearchProviderInstalled)
+  /*
   DISABLE(SitePerProcessBrowserTest, FrameOwnerPropertiesPropagationScrolling)
 
   DISABLE(TabCaptureApiTest, GrantForChromePages)
+  */
 
+  DISABLE(WebRtcAudioDebugRecordingsBrowserTest, CallWithAudioDebugRecordings)
+
+  /*
   DISABLE(WebViewInteractiveTest, NewWindow_WebViewNameTakesPrecedence)
   DISABLE(WebViewInteractiveTest, NewWindow_Redirect)
 
@@ -45,22 +56,25 @@
   DISABLE(DevToolsSanityTest, TestNetworkSyncSize)
   DISABLE(DumpAccessibilityTreeTest, AccessibilityContenteditableDescendants)
   DISABLE(DumpAccessibilityTreeTest, AccessibilityContenteditableDescendantsWithSelection)
+  */
 
   DISABLE(ExtensionApiTest, Bookmarks)
+
+  /*
   DISABLE(ExtensionApiTest, FocusWindowDoesNotExitFullscreen)
 
   DISABLE(ExtensionInstallUIBrowserTest, TestInstallThemeInFullScreen)
-
+  */
   DISABLE(FullscreenControllerTest, PermissionContentSettings)
-
+  /*
   DISABLE(MediaScanManagerTest, MergeRedundantVerifyNoOvercount)
   DISABLE(MediaScanManagerTest, SingleResult)
-
+  */
   DISABLE_MULTI(NativeAppWindowCocoaBrowserTest, Minimize)
   DISABLE_MULTI(NativeAppWindowCocoaBrowserTest, MinimizeMaximize)
 
   DISABLE(PlatformAppBrowserTest, WindowsApiProperties)
-
+  /*
   DISABLE(PolicyTest, Disable3DAPIs)
 
   DISABLE(PrerenderBrowserTest, PrerenderExcessiveMemory)
@@ -77,3 +91,11 @@
 
   DISABLE(StackedPanelBrowserTest, AddNewPanelNotWithSystemMinimizedDetachedPanel)
   DISABLE(StackedPanelBrowserTest, AddNewPanelNotWithSystemMinimizedStack)
+*/
+
+  DISABLE(PipelineIntegrationTest, BasicPlayback_MediaSource_VideoOnly_MP4_AVC3)
+  DISABLE(PipelineIntegrationTest, EncryptedPlayback_MP4_CENC_KeyRotation_Video)
+  DISABLE(PipelineIntegrationTest, EncryptedPlayback_MP4_CENC_SENC_Video)
+  DISABLE(PipelineIntegrationTest, EncryptedPlayback_MP4_CENC_VideoOnly)
+  DISABLE(PipelineIntegrationTest,
+          EncryptedPlayback_NoEncryptedFrames_MP4_CENC_VideoOnly)

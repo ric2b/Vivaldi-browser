@@ -14,6 +14,11 @@
 #include "wtf/Forward.h"
 #include "wtf/Functional.h"
 
+namespace v8 {
+class Function;
+template<typename T> class Local;
+}
+
 namespace WTF {
 class TextPosition;
 }
@@ -273,12 +278,16 @@ namespace InspectorEvaluateScriptEvent {
 PassOwnPtr<TracedValue> data(LocalFrame*, const String& url, const WTF::TextPosition&);
 }
 
+namespace InspectorParseScriptEvent {
+PassOwnPtr<TracedValue> data(unsigned long identifier, const String& url);
+}
+
 namespace InspectorCompileScriptEvent {
 PassOwnPtr<TracedValue> data(const String& url, const WTF::TextPosition&);
 }
 
 namespace InspectorFunctionCallEvent {
-PassOwnPtr<TracedValue> data(ExecutionContext*, int scriptId, const String& scriptName, int scriptLine);
+PassOwnPtr<TracedValue> data(ExecutionContext*, const v8::Local<v8::Function>&);
 }
 
 namespace InspectorUpdateCountersEvent {

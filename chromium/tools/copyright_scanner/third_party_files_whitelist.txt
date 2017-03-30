@@ -113,7 +113,7 @@ content/renderer/history_entry.cc
 # Copyright Google Inc, no license. Not used on Android.
 google_update/google_update_idl.idl
 # Copyright WebM Project authors; BSD license. Copied and modified from
-# third_party/libvpx_new. Not used on Android.
+# third_party/libvpx. Not used on Android.
 media/filters/vp8_bool_decoder.h
 media/filters/vp8_bool_decoder.cc
 # Native client not used in Android. Contains the word "Copyright"
@@ -241,10 +241,6 @@ content/browser/appcache/appcache_manifest_parser.cc
 # code is taken from WebKit, the license for which we already pick up from
 # webkit/.
 content/browser/appcache/appcache_manifest_parser.h
-# Copyright The Chromium Authors and Netscape Communications Corporation; BSD
-# and (MPL, GPL v2 or LGPL v2) licenses. This third-party code is taken from
-# Mozilla, the license for which we already pick up from third_party/npapi/.
-content/child/multipart_response_delegate.h
 # String 'copyright' used in code.
 ui/webui/resources/js/cr/ui/array_data_model.js
 # Copyright The Chromium Authors and Apple Inc; BSD license. This third-party

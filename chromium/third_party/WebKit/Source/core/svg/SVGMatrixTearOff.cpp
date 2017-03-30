@@ -97,70 +97,70 @@ DEFINE_SETTER(F);
 
 #undef DEFINE_SETTER
 
-PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGMatrixTearOff::translate(double tx, double ty)
+SVGMatrixTearOff* SVGMatrixTearOff::translate(double tx, double ty)
 {
-    RefPtrWillBeRawPtr<SVGMatrixTearOff> matrix = create(value());
+    SVGMatrixTearOff* matrix = create(value());
     matrix->mutableValue()->translate(tx, ty);
-    return matrix.release();
+    return matrix;
 }
 
-PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGMatrixTearOff::scale(double s)
+SVGMatrixTearOff* SVGMatrixTearOff::scale(double s)
 {
-    RefPtrWillBeRawPtr<SVGMatrixTearOff> matrix = create(value());
+    SVGMatrixTearOff* matrix = create(value());
     matrix->mutableValue()->scale(s, s);
-    return matrix.release();
+    return matrix;
 }
 
-PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGMatrixTearOff::scaleNonUniform(double sx, double sy)
+SVGMatrixTearOff* SVGMatrixTearOff::scaleNonUniform(double sx, double sy)
 {
-    RefPtrWillBeRawPtr<SVGMatrixTearOff> matrix = create(value());
+    SVGMatrixTearOff* matrix = create(value());
     matrix->mutableValue()->scale(sx, sy);
-    return matrix.release();
+    return matrix;
 }
 
-PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGMatrixTearOff::rotate(double d)
+SVGMatrixTearOff* SVGMatrixTearOff::rotate(double d)
 {
-    RefPtrWillBeRawPtr<SVGMatrixTearOff> matrix = create(value());
+    SVGMatrixTearOff* matrix = create(value());
     matrix->mutableValue()->rotate(d);
-    return matrix.release();
+    return matrix;
 }
 
-PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGMatrixTearOff::flipX()
+SVGMatrixTearOff* SVGMatrixTearOff::flipX()
 {
-    RefPtrWillBeRawPtr<SVGMatrixTearOff> matrix = create(value());
+    SVGMatrixTearOff* matrix = create(value());
     matrix->mutableValue()->flipX();
-    return matrix.release();
+    return matrix;
 }
 
-PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGMatrixTearOff::flipY()
+SVGMatrixTearOff* SVGMatrixTearOff::flipY()
 {
-    RefPtrWillBeRawPtr<SVGMatrixTearOff> matrix = create(value());
+    SVGMatrixTearOff* matrix = create(value());
     matrix->mutableValue()->flipY();
-    return matrix.release();
+    return matrix;
 }
 
-PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGMatrixTearOff::skewX(double angle)
+SVGMatrixTearOff* SVGMatrixTearOff::skewX(double angle)
 {
-    RefPtrWillBeRawPtr<SVGMatrixTearOff> matrix = create(value());
+    SVGMatrixTearOff* matrix = create(value());
     matrix->mutableValue()->skewX(angle);
-    return matrix.release();
+    return matrix;
 }
 
-PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGMatrixTearOff::skewY(double angle)
+SVGMatrixTearOff* SVGMatrixTearOff::skewY(double angle)
 {
-    RefPtrWillBeRawPtr<SVGMatrixTearOff> matrix = create(value());
+    SVGMatrixTearOff* matrix = create(value());
     matrix->mutableValue()->skewY(angle);
-    return matrix.release();
+    return matrix;
 }
 
-PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGMatrixTearOff::multiply(PassRefPtrWillBeRawPtr<SVGMatrixTearOff> other)
+SVGMatrixTearOff* SVGMatrixTearOff::multiply(SVGMatrixTearOff* other)
 {
-    RefPtrWillBeRawPtr<SVGMatrixTearOff> matrix = create(value());
+    SVGMatrixTearOff* matrix = create(value());
     *matrix->mutableValue() *= other->value();
-    return matrix.release();
+    return matrix;
 }
 
-PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGMatrixTearOff::inverse(ExceptionState& exceptionState)
+SVGMatrixTearOff* SVGMatrixTearOff::inverse(ExceptionState& exceptionState)
 {
     AffineTransform transform = value().inverse();
     if (!value().isInvertible())
@@ -169,7 +169,7 @@ PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGMatrixTearOff::inverse(ExceptionStat
     return create(transform);
 }
 
-PassRefPtrWillBeRawPtr<SVGMatrixTearOff> SVGMatrixTearOff::rotateFromVector(double x, double y, ExceptionState& exceptionState)
+SVGMatrixTearOff* SVGMatrixTearOff::rotateFromVector(double x, double y, ExceptionState& exceptionState)
 {
     if (!x || !y)
         exceptionState.throwDOMException(InvalidAccessError, "Arguments cannot be zero.");

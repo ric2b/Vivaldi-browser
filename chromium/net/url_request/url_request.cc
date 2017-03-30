@@ -21,7 +21,6 @@
 #include "base/synchronization/lock.h"
 #include "base/values.h"
 #include "net/base/auth.h"
-#include "net/base/chunked_upload_data_stream.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
 #include "net/base/load_timing_info.h"
@@ -191,22 +190,6 @@ URLRequest::~URLRequest() {
   net_log_.EndEventWithNetErrorCode(NetLog::TYPE_REQUEST_ALIVE, net_error);
 }
 
-void URLRequest::EnableChunkedUpload() {
-  DCHECK(!upload_data_stream_ || upload_data_stream_->is_chunked());
-  if (!upload_data_stream_) {
-    upload_chunked_data_stream_ = new ChunkedUploadDataStream(0);
-    upload_data_stream_.reset(upload_chunked_data_stream_);
-  }
-}
-
-void URLRequest::AppendChunkToUpload(const char* bytes,
-                                     int bytes_len,
-                                     bool is_last_chunk) {
-  DCHECK(upload_data_stream_);
-  DCHECK(upload_data_stream_->is_chunked());
-  upload_chunked_data_stream_->AppendData(bytes, bytes_len, is_last_chunk);
-}
-
 void URLRequest::set_upload(scoped_ptr<UploadDataStream> upload) {
   upload_data_stream_ = std::move(upload);
 }
@@ -370,7 +353,8 @@ UploadProgress URLRequest::GetUploadProgress() const {
   return job_->GetUploadProgress();
 }
 
-void URLRequest::GetResponseHeaderByName(const string& name, string* value) {
+void URLRequest::GetResponseHeaderByName(const string& name,
+                                         string* value) const {
   DCHECK(value);
   if (response_info_.headers.get()) {
     response_info_.headers->GetNormalizedHeader(name, value);
@@ -524,7 +508,6 @@ void URLRequest::Start() {
   load_timing_info_.request_start_time = response_info_.request_time;
   load_timing_info_.request_start = base::TimeTicks::Now();
 
-  // Only notify the delegate for the initial request.
   if (network_delegate_) {
     // TODO(mmenke): Remove ScopedTracker below once crbug.com/456327 is fixed.
     tracked_objects::ScopedTracker tracking_profile25(
@@ -989,6 +972,7 @@ int URLRequest::Redirect(const RedirectInfo& redirect_info) {
 
   referrer_ = redirect_info.new_referrer;
   first_party_for_cookies_ = redirect_info.new_first_party_for_cookies;
+  token_binding_referrer_ = redirect_info.referred_token_binding_host;
 
   url_chain_.push_back(redirect_info.new_url);
   --redirect_limit_;

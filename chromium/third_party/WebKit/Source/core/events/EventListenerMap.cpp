@@ -106,7 +106,7 @@ Vector<AtomicString> EventListenerMap::eventTypes() const
     return types;
 }
 
-static bool addListenerToVector(EventListenerVector* vector, PassRefPtrWillBeRawPtr<EventListener> listener, const EventListenerOptions& options)
+static bool addListenerToVector(EventListenerVector* vector, EventListener* listener, const EventListenerOptions& options)
 {
     RegisteredEventListener registeredListener(listener, options);
 
@@ -117,7 +117,7 @@ static bool addListenerToVector(EventListenerVector* vector, PassRefPtrWillBeRaw
     return true;
 }
 
-bool EventListenerMap::add(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener> listener, const EventListenerOptions& options)
+bool EventListenerMap::add(const AtomicString& eventType, EventListener* listener, const EventListenerOptions& options)
 {
     assertNoActiveIterators();
 
@@ -126,7 +126,7 @@ bool EventListenerMap::add(const AtomicString& eventType, PassRefPtrWillBeRawPtr
             return addListenerToVector(entry.second.get(), listener, options);
     }
 
-    m_entries.append(std::make_pair(eventType, adoptPtrWillBeNoop(new EventListenerVector)));
+    m_entries.append(std::make_pair(eventType, new EventListenerVector));
     return addListenerToVector(m_entries.last().second.get(), listener, options);
 }
 

@@ -47,9 +47,8 @@ class SVGTextLayoutAttributesBuilder {
 public:
     SVGTextLayoutAttributesBuilder();
     bool buildLayoutAttributesForForSubtree(LayoutSVGText&);
-    void buildLayoutAttributesForText(LayoutSVGInlineText*);
 
-    void rebuildMetricsForTextLayoutObject(LayoutSVGInlineText*);
+    void rebuildMetricsForTextLayoutObject(LayoutSVGText&, LayoutSVGInlineText&);
 
     // Invoked whenever the underlying DOM tree changes, so that m_textPositions is rebuild.
     void clearTextPositioningElements() { m_textPositions.clear(); }
@@ -67,7 +66,7 @@ public:
 
         DECLARE_TRACE();
 
-        RawPtrWillBeMember<SVGTextPositioningElement> element;
+        Member<SVGTextPositioningElement> element;
         unsigned start;
         unsigned length;
     };
@@ -79,7 +78,7 @@ private:
 
 private:
     unsigned m_textLength;
-    WillBePersistentHeapVector<TextPosition> m_textPositions;
+    PersistentHeapVector<TextPosition> m_textPositions;
     SVGCharacterDataMap m_characterDataMap;
 };
 

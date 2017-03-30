@@ -40,9 +40,9 @@ class WorkerGlobalScope;
 
 class WorkerRuntimeAgent final : public InspectorRuntimeAgent {
 public:
-    static PassOwnPtrWillBeRawPtr<WorkerRuntimeAgent> create(V8Debugger* debugger, WorkerGlobalScope* context, InspectorRuntimeAgent::Client* client)
+    static RawPtr<WorkerRuntimeAgent> create(V8RuntimeAgent* agent, WorkerGlobalScope* context, InspectorRuntimeAgent::Client* client)
     {
-        return adoptPtrWillBeNoop(new WorkerRuntimeAgent(debugger, context, client));
+        return new WorkerRuntimeAgent(agent, context, client);
     }
     ~WorkerRuntimeAgent() override;
     DECLARE_VIRTUAL_TRACE();
@@ -50,11 +50,9 @@ public:
     void enable(ErrorString*) final;
 
 private:
-    WorkerRuntimeAgent(V8Debugger*, WorkerGlobalScope*, InspectorRuntimeAgent::Client*);
-    ScriptState* defaultScriptState() override;
-    void muteConsole() override;
-    void unmuteConsole() override;
-    RawPtrWillBeMember<WorkerGlobalScope> m_workerGlobalScope;
+    WorkerRuntimeAgent(V8RuntimeAgent*, WorkerGlobalScope*, InspectorRuntimeAgent::Client*);
+
+    Member<WorkerGlobalScope> m_workerGlobalScope;
 };
 
 } // namespace blink

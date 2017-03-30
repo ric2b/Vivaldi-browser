@@ -7,10 +7,16 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/command_updater.h"
 #import "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
+#import "chrome/browser/ui/cocoa/themed_window.h"
 #include "chrome/grit/generated_resources.h"
 #include "grit/components_strings.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util_mac.h"
+#include "ui/base/material_design/material_design_controller.h"
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/image/image_skia_util_mac.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 
 namespace {
 
@@ -25,17 +31,35 @@ const CGFloat kStarPointYOffset = 2.0;
 StarDecoration::StarDecoration(CommandUpdater* command_updater)
     : command_updater_(command_updater) {
   SetVisible(true);
-  SetStarred(false);
+  SetStarred(false, false);
 }
 
 StarDecoration::~StarDecoration() {
 }
 
-void StarDecoration::SetStarred(bool starred) {
+void StarDecoration::SetStarred(bool starred, bool locationBarIsDark) {
   starred_ = starred;
   const int image_id = starred ? IDR_STAR_LIT : IDR_STAR;
   const int tip_id = starred ? IDS_TOOLTIP_STARRED : IDS_TOOLTIP_STAR;
-  SetImage(OmniboxViewMac::ImageForResource(image_id));
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    NSImage* theImage;
+    gfx::VectorIconId iconId = starred_ ?
+        gfx::VectorIconId::LOCATION_BAR_STAR_ACTIVE :
+        gfx::VectorIconId::LOCATION_BAR_STAR;
+    SkColor starColor = gfx::kPlaceholderColor;
+    if (locationBarIsDark) {
+      starColor = SK_ColorWHITE;
+    } else if (starred_) {
+      starColor = gfx::kGoogleBlue500;
+    } else {
+      starColor = gfx::kChromeIconGrey;
+    }
+    theImage = NSImageFromImageSkia(gfx::CreateVectorIcon(
+        iconId, 16, starColor));
+    SetImage(theImage);
+  } else {
+    SetImage(OmniboxViewMac::ImageForResource(image_id));
+  }
   tooltip_.reset([l10n_util::GetNSStringWithFixup(tip_id) retain]);
 }
 

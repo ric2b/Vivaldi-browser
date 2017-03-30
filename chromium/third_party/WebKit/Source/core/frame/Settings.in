@@ -80,7 +80,6 @@ allowScriptsToCloseWindows initial=false
 downloadableBinaryFontsEnabled initial=true
 
 xssAuditorEnabled initial=false
-unsafePluginPastingEnabled initial=false
 
 preferCompositingToLCDTextEnabled initial=false, invalidate=AcceleratedCompositing
 
@@ -214,6 +213,12 @@ useWideViewport initial=true, invalidate=ViewportDescription
 # For android.webkit.WebSettings.setLoadWithOverviewMode()
 # http://developer.android.com/reference/android/webkit/WebSettings.html#setLoadWithOverviewMode(boolean)
 loadWithOverviewMode initial=true, invalidate=ViewportDescription
+
+# Used by android_webview to support legacy apps that inject script into a top-level initial empty
+# document and expect it to persist on navigation, even though the origin is unique. Note that this
+# behavior violates the requirements described by [Initialising a new Document object] in
+# https://html.spec.whatwg.org/multipage/browsers.html#navigating-across-documents.
+shouldReuseGlobalForUnownedMainFrame initial=false
 
 ######## End of settings used by Android WebView ########
 
@@ -357,9 +362,11 @@ textTrackTextColor type=String
 textTrackTextShadow type=String
 textTrackTextSize type=String
 
-lowPriorityIframes initial=false
+# Margin for title-safe placement of cues with overscan, gives top and bottom margin size as
+# percentage of video element height (for horizontal text) into which cues will not be placed.
+textTrackMarginPercentage type=double, initial=0
 
-reportWheelOverscroll initial=false
+lowPriorityIframes initial=false
 
 mainResourceOnlyProgress initial=false
 
@@ -380,7 +387,11 @@ fetchIncreaseAsyncScriptPriority initial=false
 fetchIncreasePriorities initial=false
 
 # Whether to disallow network fetches for parser blocking scripts in the main
-# frame inserted via document.write.
+# frame inserted via document.write, for users on slow connections.
+disallowFetchForDocWrittenScriptsInMainFrameOnSlowConnections initial=false
+
+# Whether to disallow network fetches for parser blocking scripts in the main
+# frame inserted via document.write, regardless of connection type.
 disallowFetchForDocWrittenScriptsInMainFrame initial=false
 
 # The autoplay gesture override experiment is described in crbug.com/487345 .
@@ -389,3 +400,7 @@ autoplayExperimentMode type=String, initial="off"
 # When DevTools is emulating mobile device, frame resize may mean device size has changed,
 # which in turn affects media queries.
 resizeIsDeviceSizeChange initial=false
+
+# Whether the browser process sends gesture events for wheel events.
+# Can be removed when crbug.com/598798 is fixed.
+wheelGesturesEnabled initial=false

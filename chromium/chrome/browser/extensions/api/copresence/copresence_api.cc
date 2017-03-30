@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/lazy_instance.h"
-#include "base/memory/linked_ptr.h"
 #include "chrome/browser/copresence/chrome_whispernet_client.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
@@ -93,7 +92,7 @@ void CopresenceService::set_auth_token(const std::string& app_id,
 }
 
 void CopresenceService::set_manager_for_testing(
-    scoped_ptr<copresence::CopresenceManager> manager) {
+    std::unique_ptr<copresence::CopresenceManager> manager) {
   manager_ = std::move(manager);
 }
 
@@ -136,20 +135,20 @@ void CopresenceService::HandleMessages(
   }
 
   int message_count = messages.size();
-  std::vector<linked_ptr<api::copresence::Message>> api_messages(
-      message_count);
+  std::vector<api::copresence::Message> api_messages(message_count);
 
-  for (int m = 0; m < message_count; ++m) {
-    api_messages[m].reset(new api::copresence::Message);
-    api_messages[m]->type = messages[m].type().type();
-    api_messages[m]->payload.assign(messages[m].payload().begin(),
-                                    messages[m].payload().end());
-    DVLOG(2) << "Dispatching message of type " << api_messages[m]->type << ":\n"
-             << messages[m].payload();
+  for (const copresence::Message& message : messages) {
+    api::copresence::Message api_message;
+    api_message.type = message.type().type();
+    api_message.payload.assign(message.payload().begin(),
+                               message.payload().end());
+    api_messages.push_back(std::move(api_message));
+    DVLOG(2) << "Dispatching message of type " << api_message.type << ":\n"
+             << message.payload();
   }
 
   // Send the messages to the client app.
-  scoped_ptr<Event> event(new Event(
+  std::unique_ptr<Event> event(new Event(
       events::COPRESENCE_ON_MESSAGES_RECEIVED, OnMessagesReceived::kEventName,
       OnMessagesReceived::Create(subscription_id, api_messages),
       browser_context_));
@@ -162,7 +161,7 @@ void CopresenceService::HandleMessages(
 void CopresenceService::HandleStatusUpdate(
     copresence::CopresenceStatus status) {
   DCHECK_EQ(copresence::AUDIO_FAIL, status);
-  scoped_ptr<Event> event(new Event(
+  std::unique_ptr<Event> event(new Event(
       events::COPRESENCE_ON_STATUS_UPDATED, OnStatusUpdated::kEventName,
       OnStatusUpdated::Create(api::copresence::STATUS_AUDIOFAILED),
       browser_context_));
@@ -241,7 +240,7 @@ BrowserContextKeyedAPIFactory<CopresenceService>::DeclareFactoryDependencies() {
 
 // CopresenceExecuteFunction implementation.
 ExtensionFunction::ResponseAction CopresenceExecuteFunction::Run() {
-  scoped_ptr<Execute::Params> params(Execute::Params::Create(*args_));
+  std::unique_ptr<Execute::Params> params(Execute::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   CopresenceService* service =
@@ -279,7 +278,7 @@ void CopresenceExecuteFunction::SendResult(
 
 // CopresenceSetApiKeyFunction implementation.
 ExtensionFunction::ResponseAction CopresenceSetApiKeyFunction::Run() {
-  scoped_ptr<SetApiKey::Params> params(SetApiKey::Params::Create(*args_));
+  std::unique_ptr<SetApiKey::Params> params(SetApiKey::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   LOG(WARNING) << "copresence.setApiKey() is deprecated. "
@@ -293,7 +292,8 @@ ExtensionFunction::ResponseAction CopresenceSetApiKeyFunction::Run() {
 
 // CopresenceSetAuthTokenFunction implementation
 ExtensionFunction::ResponseAction CopresenceSetAuthTokenFunction::Run() {
-  scoped_ptr<SetAuthToken::Params> params(SetAuthToken::Params::Create(*args_));
+  std::unique_ptr<SetAuthToken::Params> params(
+      SetAuthToken::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   // The token may be set to empty, to clear it.

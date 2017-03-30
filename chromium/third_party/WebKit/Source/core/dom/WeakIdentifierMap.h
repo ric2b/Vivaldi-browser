@@ -39,7 +39,6 @@ template<typename T, typename Generator, typename Traits> class WeakIdentifierMa
     USING_FAST_MALLOC(WeakIdentifierMap);
 public:
     using IdentifierType = typename Generator::IdentifierType;
-    using ReferenceType = RawPtr<WeakIdentifierMap<T, Generator, Traits, false>>;
 
     static IdentifierType identifier(T* object)
     {
@@ -69,7 +68,7 @@ private:
 
     void put(T* object, IdentifierType identifier)
     {
-        ASSERT(object && !m_objectToIdentifier.contains(object));
+        DCHECK(object && !m_objectToIdentifier.contains(object));
         m_objectToIdentifier.set(object, identifier);
         m_identifierToObject.set(identifier, object);
         Traits::addedToIdentifierMap(object);
@@ -93,7 +92,6 @@ template<typename T, typename Generator, typename Traits> class WeakIdentifierMa
     : public GarbageCollected<WeakIdentifierMap<T, Generator, Traits, true>> {
 public:
     using IdentifierType = typename Generator::IdentifierType;
-    using ReferenceType = Persistent<WeakIdentifierMap<T, Generator, Traits, true>>;
 
     static IdentifierType identifier(T* object)
     {
@@ -130,7 +128,7 @@ private:
 
     void put(T* object, IdentifierType identifier)
     {
-        ASSERT(object && !m_objectToIdentifier->contains(object));
+        DCHECK(object && !m_objectToIdentifier->contains(object));
         m_objectToIdentifier->set(object, identifier);
         m_identifierToObject->set(identifier, object);
     }
@@ -146,14 +144,15 @@ private:
     template<> WeakIdentifierMap<T, ##__VA_ARGS__>& WeakIdentifierMap<T, ##__VA_ARGS__>::instance(); \
     extern template class WeakIdentifierMap<T, ##__VA_ARGS__>;
 
-#define DEFINE_WEAK_IDENTIFIER_MAP(T, ...) \
+#define DEFINE_WEAK_IDENTIFIER_MAP(T, ...)   \
     template class WeakIdentifierMap<T, ##__VA_ARGS__>; \
     template<> WeakIdentifierMap<T, ##__VA_ARGS__>& WeakIdentifierMap<T, ##__VA_ARGS__>::instance() \
     { \
-        using RefType = WeakIdentifierMap<T, ##__VA_ARGS__>::ReferenceType; \
+        using RefType = WeakIdentifierMap<T, ##__VA_ARGS__>; \
         DEFINE_STATIC_LOCAL(RefType, mapInstance, (new WeakIdentifierMap<T, ##__VA_ARGS__>())); \
-        return *mapInstance; \
+        return mapInstance; \
     }
+
 } // namespace blink
 
 #endif // WeakIdentifierMap_h

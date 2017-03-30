@@ -230,10 +230,10 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
     }
   }
 
-  bool FindInterfaceByEndpoint(uint8_t endpoint_address,
-                               uint8_t* interface_number) {
+  const UsbInterfaceDescriptor* FindInterfaceByEndpoint(
+      uint8_t endpoint_address) {
     NOTIMPLEMENTED();
-    return false;
+    return nullptr;
   }
 
   template <class D>
@@ -396,8 +396,13 @@ template <class T>
 class MockUsbDevice : public UsbDevice {
  public:
   MockUsbDevice()
-      : UsbDevice(0,
-                  0,
+      : UsbDevice(0x0200,  // usb_version
+                  0,       // device_class
+                  0,       // device_subclass
+                  0,       // device_protocol
+                  0,       // vendor_id
+                  0,       // product_id
+                  0x0100,  // device_version
                   base::UTF8ToUTF16(kDeviceManufacturer),
                   base::UTF8ToUTF16(kDeviceModel),
                   base::UTF8ToUTF16(kDeviceSerial)),
@@ -421,7 +426,7 @@ class MockUsbDevice : public UsbDevice {
                                             new MockUsbDeviceHandle<T>(this))));
   }
 
-  const UsbConfigDescriptor* GetActiveConfiguration() override {
+  const UsbConfigDescriptor* GetActiveConfiguration() const override {
     return T::kConfigured ? &config_desc_ : nullptr;
   }
 

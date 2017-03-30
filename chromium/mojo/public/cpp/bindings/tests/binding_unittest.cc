@@ -10,11 +10,11 @@
 #include <stdint.h>
 #include <utility>
 
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "mojo/message_pump/message_pump_mojo.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "mojo/public/cpp/system/macros.h"
 #include "mojo/public/interfaces/bindings/tests/sample_interfaces.mojom.h"
 #include "mojo/public/interfaces/bindings/tests/sample_service.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -32,7 +32,7 @@ class BindingTestBase : public testing::Test {
  private:
   base::MessageLoop loop_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(BindingTestBase);
+  DISALLOW_COPY_AND_ASSIGN(BindingTestBase);
 };
 
 class ServiceImpl : public sample::Service {
@@ -56,7 +56,7 @@ class ServiceImpl : public sample::Service {
 
   bool* const was_deleted_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ServiceImpl);
+  DISALLOW_COPY_AND_ASSIGN(ServiceImpl);
 };
 
 // BindingTest -----------------------------------------------------------------
@@ -181,7 +181,7 @@ class ServiceImplWithBinding : public ServiceImpl {
   Binding<sample::Service> binding_;
   base::Closure closure_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ServiceImplWithBinding);
+  DISALLOW_COPY_AND_ASSIGN(ServiceImplWithBinding);
 };
 
 // Tests that the binding may be deleted in the connection error handler.
@@ -251,7 +251,7 @@ class IntegerAccessorImpl : public sample::IntegerAccessor {
   }
   void SetInteger(int64_t data, sample::Enum type) override {}
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(IntegerAccessorImpl);
+  DISALLOW_COPY_AND_ASSIGN(IntegerAccessorImpl);
 };
 
 TEST_F(BindingTest, SetInterfacePtrVersion) {
@@ -362,7 +362,7 @@ class ServiceImplWithStrongBinding : public ServiceImpl {
  private:
   StrongBinding<sample::Service> binding_;
 
-  MOJO_DISALLOW_COPY_AND_ASSIGN(ServiceImplWithStrongBinding);
+  DISALLOW_COPY_AND_ASSIGN(ServiceImplWithStrongBinding);
 };
 
 // Tests the typical case, where the implementation object owns the

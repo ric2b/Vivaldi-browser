@@ -26,6 +26,7 @@
 #ifndef HTMLDocumentParser_h
 #define HTMLDocumentParser_h
 
+#include "bindings/core/v8/DocumentWriteEvaluator.h"
 #include "core/dom/ParserContentPolicy.h"
 #include "core/dom/ScriptableDocumentParser.h"
 #include "core/fetch/ResourceClient.h"
@@ -67,12 +68,11 @@ class ParsedChunkQueue;
 class PumpSession;
 
 class HTMLDocumentParser :  public ScriptableDocumentParser, private HTMLScriptRunnerHost {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(HTMLDocumentParser);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(HTMLDocumentParser);
+    USING_GARBAGE_COLLECTED_MIXIN(HTMLDocumentParser);
 public:
-    static PassRefPtrWillBeRawPtr<HTMLDocumentParser> create(HTMLDocument& document, bool reportErrors, ParserSynchronizationPolicy backgroundParsingPolicy)
+    static RawPtr<HTMLDocumentParser> create(HTMLDocument& document, bool reportErrors, ParserSynchronizationPolicy backgroundParsingPolicy)
     {
-        return adoptRefWillBeNoop(new HTMLDocumentParser(document, reportErrors, backgroundParsingPolicy));
+        return new HTMLDocumentParser(document, reportErrors, backgroundParsingPolicy);
     }
     ~HTMLDocumentParser() override;
     DECLARE_VIRTUAL_TRACE();
@@ -96,12 +96,15 @@ public:
     public:
         OwnPtr<CompactHTMLTokenStream> tokens;
         PreloadRequestStream preloads;
+        ViewportDescriptionWrapper viewport;
         XSSInfoStream xssInfos;
         HTMLTokenizer::State tokenizerState;
         HTMLTreeBuilderSimulator::State treeBuilderState;
         HTMLInputCheckpoint inputCheckpoint;
         TokenPreloadScannerCheckpoint preloadScannerCheckpoint;
         bool startingScript;
+        // Indices into |tokens|.
+        Vector<int> likelyDocumentWriteScriptIndices;
     };
     void notifyPendingParsedChunks();
     void didReceiveEncodingDataFromBackgroundParser(const DocumentEncodingData&);
@@ -109,8 +112,6 @@ public:
     void appendBytes(const char* bytes, size_t length) override;
     void flush() final;
     void setDecoder(PassOwnPtr<TextResourceDecoder>) final;
-
-    UseCounter* useCounter() { return UseCounter::getFrom(contextForParsingSession()); }
 
 protected:
     void insert(const SegmentedString&) final;
@@ -125,15 +126,14 @@ protected:
     void forcePlaintextForTextDocument();
 
 private:
-    static PassRefPtrWillBeRawPtr<HTMLDocumentParser> create(DocumentFragment* fragment, Element* contextElement, ParserContentPolicy parserContentPolicy)
+    static RawPtr<HTMLDocumentParser> create(DocumentFragment* fragment, Element* contextElement, ParserContentPolicy parserContentPolicy)
     {
-        return adoptRefWillBeNoop(new HTMLDocumentParser(fragment, contextElement, parserContentPolicy));
+        return new HTMLDocumentParser(fragment, contextElement, parserContentPolicy);
     }
 
     // DocumentParser
     void detach() final;
     bool hasInsertionPoint() final;
-    bool processingData() const final;
     void prepareToStopParsing() final;
     void stopParsing() final;
     bool isWaitingForScripts() const final;
@@ -152,8 +152,6 @@ private:
     void discardSpeculationsAndResumeFrom(PassOwnPtr<ParsedChunk> lastChunk, PassOwnPtr<HTMLToken>, PassOwnPtr<HTMLTokenizer>);
     size_t processParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk>);
     void pumpPendingSpeculations();
-
-    Document* contextForParsingSession();
 
     bool canTakeNextToken();
     void pumpTokenizer();
@@ -176,6 +174,13 @@ private:
     bool inPumpSession() const { return m_pumpSessionNestingLevel > 0; }
     bool shouldDelayEnd() const { return inPumpSession() || isWaitingForScripts() || isScheduledForResume() || isExecutingScript(); }
 
+    void pumpPreloadQueue();
+
+    PassOwnPtr<HTMLPreloadScanner> createPreloadScanner();
+
+    int preloadInsertion(const SegmentedString& source);
+    void evaluateAndPreloadScriptForDocumentWrite(const String& source);
+
     HTMLToken& token() { return *m_token; }
 
     HTMLParserOptions m_options;
@@ -183,12 +188,12 @@ private:
 
     OwnPtr<HTMLToken> m_token;
     OwnPtr<HTMLTokenizer> m_tokenizer;
-    OwnPtrWillBeMember<HTMLScriptRunner> m_scriptRunner;
-    OwnPtrWillBeMember<HTMLTreeBuilder> m_treeBuilder;
+    Member<HTMLScriptRunner> m_scriptRunner;
+    Member<HTMLTreeBuilder> m_treeBuilder;
     OwnPtr<HTMLPreloadScanner> m_preloadScanner;
     OwnPtr<HTMLPreloadScanner> m_insertionPreloadScanner;
     OwnPtr<WebTaskRunner> m_loadingTaskRunner;
-    OwnPtrWillBeMember<HTMLParserScheduler> m_parserScheduler;
+    Member<HTMLParserScheduler> m_parserScheduler;
     HTMLSourceTracker m_sourceTracker;
     TextPosition m_textPosition;
     XSSAuditor m_xssAuditor;
@@ -200,9 +205,11 @@ private:
     Deque<OwnPtr<ParsedChunk>> m_speculations;
     WeakPtrFactory<HTMLDocumentParser> m_weakFactory;
     WeakPtr<BackgroundHTMLParser> m_backgroundParser;
-    OwnPtrWillBeMember<HTMLResourcePreloader> m_preloader;
+    Member<HTMLResourcePreloader> m_preloader;
     PreloadRequestStream m_queuedPreloads;
+    Vector<String> m_queuedDocumentWriteScripts;
     RefPtr<ParsedChunkQueue> m_parsedChunkQueue;
+    OwnPtr<DocumentWriteEvaluator> m_evaluator;
 
     bool m_shouldUseThreading;
     bool m_endWasDelayed;
@@ -211,6 +218,7 @@ private:
     unsigned m_pumpSessionNestingLevel;
     unsigned m_pumpSpeculationsSessionNestingLevel;
     bool m_isParsingAtLineNumber;
+    bool m_triedLoadingLinkHeaders;
 };
 
 } // namespace blink

@@ -6,6 +6,7 @@
 #define COMPONENTS_UPDATE_CLIENT_UTILS_H_
 
 #include <string>
+#include <vector>
 
 #include "base/memory/scoped_ptr.h"
 
@@ -94,6 +95,15 @@ std::string GetCrxComponentID(const CrxComponent& component);
 // |expected_hash|.
 bool VerifyFileHash256(const base::FilePath& filepath,
                        const std::string& expected_hash);
+
+// Returns true if the |brand| parameter matches ^[a-zA-Z]{4}?$ .
+bool IsValidBrand(const std::string& brand);
+
+// Returns true if the |ap| parameter matches ^[-+_=a-zA-Z0-9]{0,256}$ .
+bool IsValidAp(const std::string& ap);
+
+// Removes the unsecure urls in the |urls| parameter.
+void RemoveUnsecureUrls(std::vector<GURL>* urls);
 
 }  // namespace update_client
 

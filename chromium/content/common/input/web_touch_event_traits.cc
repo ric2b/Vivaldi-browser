@@ -52,7 +52,9 @@ void WebTouchEventTraits::ResetType(WebInputEvent::Type type,
                                     WebTouchEvent* event) {
   DCHECK(WebInputEvent::isTouchEventType(type));
   event->type = type;
-  event->cancelable = (type != WebInputEvent::TouchCancel);
+  event->dispatchType = type == WebInputEvent::TouchCancel
+                            ? WebInputEvent::EventNonBlocking
+                            : WebInputEvent::Blocking;
   event->timeStampSeconds = timestamp_sec;
 }
 

@@ -41,15 +41,15 @@ namespace ProfilerAgentState {
 static const char profilerEnabled[] = "profilerEnabled";
 }
 
-PassOwnPtrWillBeRawPtr<InspectorProfilerAgent> InspectorProfilerAgent::create(V8Debugger* debugger, Client* client)
+RawPtr<InspectorProfilerAgent> InspectorProfilerAgent::create(V8ProfilerAgent* agent, Client* client)
 {
-    return adoptPtrWillBeNoop(new InspectorProfilerAgent(debugger, client));
+    return new InspectorProfilerAgent(agent, client);
 }
 
-InspectorProfilerAgent::InspectorProfilerAgent(V8Debugger* debugger, Client* client)
+InspectorProfilerAgent::InspectorProfilerAgent(V8ProfilerAgent* agent, Client* client)
     : InspectorBaseAgent<InspectorProfilerAgent, protocol::Frontend::Profiler>("Profiler")
     , m_client(client)
-    , m_v8ProfilerAgent(V8ProfilerAgent::create(debugger))
+    , m_v8ProfilerAgent(agent)
 {
 }
 
@@ -58,7 +58,7 @@ InspectorProfilerAgent::~InspectorProfilerAgent()
 }
 
 // InspectorBaseAgent overrides.
-void InspectorProfilerAgent::setState(PassRefPtr<protocol::DictionaryValue> state)
+void InspectorProfilerAgent::setState(protocol::DictionaryValue* state)
 {
     InspectorBaseAgent::setState(state);
     m_v8ProfilerAgent->setInspectorState(m_state);
@@ -86,13 +86,13 @@ void InspectorProfilerAgent::restore()
 }
 
 // Protocol implementation.
-void InspectorProfilerAgent::consoleProfile(ExecutionContext* context, const String& title)
+void InspectorProfilerAgent::consoleProfile(ExecutionContext* context, const String16& title)
 {
     UseCounter::count(context, UseCounter::DevToolsConsoleProfile);
     m_v8ProfilerAgent->consoleProfile(title);
 }
 
-void InspectorProfilerAgent::consoleProfileEnd(const String& title)
+void InspectorProfilerAgent::consoleProfileEnd(const String16& title)
 {
     m_v8ProfilerAgent->consoleProfileEnd(title);
 }
@@ -119,7 +119,7 @@ void InspectorProfilerAgent::setSamplingInterval(ErrorString* error, int interva
 void InspectorProfilerAgent::start(ErrorString* error)
 {
     m_v8ProfilerAgent->start(error);
-    if (m_client && !*error)
+    if (m_client && error->isEmpty())
         m_client->profilingStarted();
 }
 

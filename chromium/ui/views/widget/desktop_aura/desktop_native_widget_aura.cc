@@ -820,9 +820,6 @@ void DesktopNativeWidgetAura::SetOpacity(unsigned char opacity) {
     desktop_window_tree_host_->SetOpacity(opacity);
 }
 
-void DesktopNativeWidgetAura::SetUseDragFrame(bool use_drag_frame) {
-}
-
 void DesktopNativeWidgetAura::FlashFrame(bool flash_frame) {
   if (content_window_)
     desktop_window_tree_host_->FlashFrame(flash_frame);
@@ -1049,7 +1046,7 @@ void DesktopNativeWidgetAura::OnScrollEvent(ui::ScrollEvent* event) {
       return;
 
     // Convert unprocessed scroll events into wheel events.
-    ui::MouseWheelEvent mwe(*static_cast<ui::ScrollEvent*>(event));
+    ui::MouseWheelEvent mwe(*event->AsScrollEvent());
     native_widget_delegate_->OnMouseEvent(&mwe);
     if (mwe.handled())
       event->SetHandled();

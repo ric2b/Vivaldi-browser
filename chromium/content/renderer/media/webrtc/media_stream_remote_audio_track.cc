@@ -109,18 +109,20 @@ class MediaStreamRemoteAudioSource::AudioSink
   std::list<SinkInfo> sinks_;
   base::ThreadChecker thread_checker_;
   media::AudioParameters params_;  // Only used on the callback thread.
-  scoped_ptr<media::AudioBus> audio_bus_;  // Only used on the callback thread.
+  std::unique_ptr<media::AudioBus>
+      audio_bus_;  // Only used on the callback thread.
 };
 
 MediaStreamRemoteAudioTrack::MediaStreamRemoteAudioTrack(
     const blink::WebMediaStreamSource& source, bool enabled)
     : MediaStreamAudioTrack(false), source_(source), enabled_(enabled) {
-  DCHECK(source.extraData());  // Make sure the source has a native source.
+  DCHECK(source.getExtraData());  // Make sure the source has a native source.
 }
 
 MediaStreamRemoteAudioTrack::~MediaStreamRemoteAudioTrack() {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
-  source()->RemoveAll(this);
+  // Ensure the track is stopped.
+  MediaStreamAudioTrack::Stop();
 }
 
 void MediaStreamRemoteAudioTrack::SetEnabled(bool enabled) {
@@ -139,8 +141,12 @@ void MediaStreamRemoteAudioTrack::SetEnabled(bool enabled) {
   source()->SetSinksEnabled(this, enabled);
 }
 
-void MediaStreamRemoteAudioTrack::Stop() {
+void MediaStreamRemoteAudioTrack::OnStop() {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
+  DVLOG(1) << "MediaStreamRemoteAudioTrack::OnStop()";
+
+  source()->RemoveAll(this);
+
   // Stop means that a track should be stopped permanently. But
   // since there is no proper way of doing that on a remote track, we can
   // at least disable the track. Blink will not call down to the content layer
@@ -172,7 +178,7 @@ webrtc::AudioTrackInterface* MediaStreamRemoteAudioTrack::GetAudioAdapter() {
 }
 
 MediaStreamRemoteAudioSource* MediaStreamRemoteAudioTrack::source() const {
-  return static_cast<MediaStreamRemoteAudioSource*>(source_.extraData());
+  return static_cast<MediaStreamRemoteAudioSource*>(source_.getExtraData());
 }
 
 MediaStreamRemoteAudioSource::MediaStreamRemoteAudioSource(

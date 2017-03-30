@@ -10,7 +10,7 @@
 
 namespace blink {
 
-V8Regex::V8Regex(V8DebuggerImpl* debugger, const String& pattern, TextCaseSensitivity caseSensitivity, MultilineMode multilineMode)
+V8Regex::V8Regex(V8DebuggerImpl* debugger, const String16& pattern, bool caseSensitive, bool multiline)
     : m_debugger(debugger)
 {
     v8::Isolate* isolate = m_debugger->isolate();
@@ -20,9 +20,9 @@ V8Regex::V8Regex(V8DebuggerImpl* debugger, const String& pattern, TextCaseSensit
     v8::TryCatch tryCatch(isolate);
 
     unsigned flags = v8::RegExp::kNone;
-    if (caseSensitivity == TextCaseInsensitive)
+    if (!caseSensitive)
         flags |= v8::RegExp::kIgnoreCase;
-    if (multilineMode == MultilineEnabled)
+    if (multiline)
         flags |= v8::RegExp::kMultiline;
 
     v8::Local<v8::RegExp> regex;
@@ -30,12 +30,12 @@ V8Regex::V8Regex(V8DebuggerImpl* debugger, const String& pattern, TextCaseSensit
         m_regex.Reset(isolate, regex);
 }
 
-int V8Regex::match(const String& string, int startFrom, int* matchLength) const
+int V8Regex::match(const String16& string, int startFrom, int* matchLength) const
 {
     if (matchLength)
         *matchLength = 0;
 
-    if (m_regex.IsEmpty() || string.isNull())
+    if (m_regex.IsEmpty() || string.isEmpty())
         return -1;
 
     // v8 strings are limited to int.
@@ -45,7 +45,7 @@ int V8Regex::match(const String& string, int startFrom, int* matchLength) const
     v8::Isolate* isolate = m_debugger->isolate();
     v8::HandleScope handleScope(isolate);
     v8::Local<v8::Context> context = m_debugger->regexContext();
-    v8::Context::Scope contextScope(context);
+    v8::MicrotasksScope microtasks(isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
     v8::TryCatch tryCatch(isolate);
 
     v8::Local<v8::RegExp> regex = m_regex.Get(isolate);
@@ -54,7 +54,7 @@ int V8Regex::match(const String& string, int startFrom, int* matchLength) const
         return -1;
     v8::Local<v8::Value> argv[] = { toV8String(isolate, string.substring(startFrom)) };
     v8::Local<v8::Value> returnValue;
-    if (!m_debugger->client()->callInternalFunction(exec.As<v8::Function>(), regex, WTF_ARRAY_LENGTH(argv), argv).ToLocal(&returnValue))
+    if (!exec.As<v8::Function>()->Call(context, regex, WTF_ARRAY_LENGTH(argv), argv).ToLocal(&returnValue))
         return -1;
 
     // RegExp#exec returns null if there's no match, otherwise it returns an

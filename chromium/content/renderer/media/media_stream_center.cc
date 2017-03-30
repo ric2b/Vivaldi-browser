@@ -15,6 +15,7 @@
 #include "content/public/renderer/media_stream_audio_sink.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/media/media_stream.h"
+#include "content/renderer/media/media_stream_audio_track.h"
 #include "content/renderer/media/media_stream_source.h"
 #include "content/renderer/media/media_stream_video_source.h"
 #include "content/renderer/media/media_stream_video_track.h"
@@ -40,9 +41,9 @@ namespace {
 void CreateNativeAudioMediaStreamTrack(
     const blink::WebMediaStreamTrack& track,
     PeerConnectionDependencyFactory* factory) {
-  DCHECK(!track.extraData());
+  DCHECK(!MediaStreamAudioTrack::From(track));
   blink::WebMediaStreamSource source = track.source();
-  DCHECK_EQ(source.type(), blink::WebMediaStreamSource::TypeAudio);
+  DCHECK_EQ(source.getType(), blink::WebMediaStreamSource::TypeAudio);
   if (source.remote()) {
     factory->CreateRemoteAudioTrack(track);
   } else {
@@ -52,9 +53,9 @@ void CreateNativeAudioMediaStreamTrack(
 
 void CreateNativeVideoMediaStreamTrack(
     const blink::WebMediaStreamTrack& track) {
-  DCHECK(track.extraData() == NULL);
+  DCHECK(track.getExtraData() == NULL);
   blink::WebMediaStreamSource source = track.source();
-  DCHECK_EQ(source.type(), blink::WebMediaStreamSource::TypeVideo);
+  DCHECK_EQ(source.getType(), blink::WebMediaStreamSource::TypeVideo);
   MediaStreamVideoSource* native_source =
       MediaStreamVideoSource::GetVideoSource(source);
   DCHECK(native_source);
@@ -75,10 +76,10 @@ void CreateNativeVideoMediaStreamTrack(
 
 void CreateNativeMediaStreamTrack(const blink::WebMediaStreamTrack& track,
                                   PeerConnectionDependencyFactory* factory) {
-  DCHECK(!track.isNull() && !track.extraData());
+  DCHECK(!track.isNull() && !track.getExtraData());
   DCHECK(!track.source().isNull());
 
-  switch (track.source().type()) {
+  switch (track.source().getType()) {
     case blink::WebMediaStreamSource::TypeAudio:
       CreateNativeAudioMediaStreamTrack(track, factory);
       break;
@@ -131,14 +132,14 @@ MediaStreamCenter::createWebAudioSourceFromMediaStreamTrack(
     const blink::WebMediaStreamTrack& track) {
   DVLOG(1) << "MediaStreamCenter::createWebAudioSourceFromMediaStreamTrack";
   MediaStreamTrack* media_stream_track =
-      static_cast<MediaStreamTrack*>(track.extraData());
+      static_cast<MediaStreamTrack*>(track.getExtraData());
   if (!media_stream_track) {
     DLOG(ERROR) << "Native track missing for webaudio source.";
     return nullptr;
   }
 
   blink::WebMediaStreamSource source = track.source();
-  DCHECK_EQ(source.type(), blink::WebMediaStreamSource::TypeAudio);
+  DCHECK_EQ(source.getType(), blink::WebMediaStreamSource::TypeAudio);
 
   // TODO(tommi): Rename WebRtcLocalAudioSourceProvider to
   // WebRtcAudioSourceProvider since it's not specific to local.

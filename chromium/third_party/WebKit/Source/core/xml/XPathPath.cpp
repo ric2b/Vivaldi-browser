@@ -112,7 +112,7 @@ Value LocationPath::evaluate(EvaluationContext& evaluationContext) const
     // logical treatment of where you would expect the "root" to be.
     Node* context = evaluationContext.node.get();
     if (m_absolute && context->getNodeType() != Node::DOCUMENT_NODE)  {
-        if (context->inDocument())
+        if (context->inShadowIncludingDocument())
             context = context->ownerDocument();
         else
             context = &NodeTraversal::highestAncestorOrSelf(*context);
@@ -132,16 +132,16 @@ void LocationPath::evaluate(EvaluationContext& context, NodeSet& nodes) const
     for (unsigned i = 0; i < m_steps.size(); i++) {
         Step* step = m_steps[i];
         NodeSet* newNodes = NodeSet::create();
-        WillBeHeapHashSet<RawPtrWillBeMember<Node>> newNodesSet;
+        HeapHashSet<Member<Node>> newNodesSet;
 
-        bool needToCheckForDuplicateNodes = !nodes.subtreesAreDisjoint() || (step->axis() != Step::ChildAxis && step->axis() != Step::SelfAxis
-            && step->axis() != Step::DescendantAxis && step->axis() != Step::DescendantOrSelfAxis && step->axis() != Step::AttributeAxis);
+        bool needToCheckForDuplicateNodes = !nodes.subtreesAreDisjoint() || (step->getAxis() != Step::ChildAxis && step->getAxis() != Step::SelfAxis
+            && step->getAxis() != Step::DescendantAxis && step->getAxis() != Step::DescendantOrSelfAxis && step->getAxis() != Step::AttributeAxis);
 
         if (needToCheckForDuplicateNodes)
             resultIsSorted = false;
 
         // This is a simplified check that can be improved to handle more cases.
-        if (nodes.subtreesAreDisjoint() && (step->axis() == Step::ChildAxis || step->axis() == Step::SelfAxis))
+        if (nodes.subtreesAreDisjoint() && (step->getAxis() == Step::ChildAxis || step->getAxis() == Step::SelfAxis))
             newNodes->markSubtreesDisjoint(true);
 
         for (unsigned j = 0; j < nodes.size(); j++) {

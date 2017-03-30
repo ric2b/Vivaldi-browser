@@ -5,12 +5,12 @@
 #ifndef CONTENT_RENDERER_MEDIA_MOCK_PEER_CONNECTION_IMPL_H_
 #define CONTENT_RENDERER_MEDIA_MOCK_PEER_CONNECTION_IMPL_H_
 
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/webrtc/api/peerconnectioninterface.h"
 
@@ -69,12 +69,10 @@ class MockPeerConnectionImpl : public webrtc::PeerConnectionInterface {
       const override;
 
   // JSEP01 APIs
-  void CreateOffer(
-      webrtc::CreateSessionDescriptionObserver* observer,
-      const webrtc::MediaConstraintsInterface* constraints) override;
-  void CreateAnswer(
-      webrtc::CreateSessionDescriptionObserver* observer,
-      const webrtc::MediaConstraintsInterface* constraints) override;
+  void CreateOffer(webrtc::CreateSessionDescriptionObserver* observer,
+                   const RTCOfferAnswerOptions& options) override;
+  void CreateAnswer(webrtc::CreateSessionDescriptionObserver* observer,
+                    const RTCOfferAnswerOptions& options) override;
   MOCK_METHOD2(SetLocalDescription,
                void(webrtc::SetSessionDescriptionObserver* observer,
                     webrtc::SessionDescriptionInterface* desc));
@@ -87,8 +85,7 @@ class MockPeerConnectionImpl : public webrtc::PeerConnectionInterface {
   void SetRemoteDescriptionWorker(
       webrtc::SetSessionDescriptionObserver* observer,
       webrtc::SessionDescriptionInterface* desc);
-  bool UpdateIce(const IceServers& configuration,
-                 const webrtc::MediaConstraintsInterface* constraints) override;
+  bool UpdateIce(const IceServers& configuration) override;
   bool AddIceCandidate(const webrtc::IceCandidateInterface* candidate) override;
   void RegisterUMAObserver(webrtc::UMAObserver* observer) override;
 
@@ -120,9 +117,10 @@ class MockPeerConnectionImpl : public webrtc::PeerConnectionInterface {
   std::string stream_label_;
   rtc::scoped_refptr<MockStreamCollection> local_streams_;
   rtc::scoped_refptr<MockStreamCollection> remote_streams_;
-  scoped_ptr<webrtc::SessionDescriptionInterface> local_desc_;
-  scoped_ptr<webrtc::SessionDescriptionInterface> remote_desc_;
-  scoped_ptr<webrtc::SessionDescriptionInterface> created_sessiondescription_;
+  std::unique_ptr<webrtc::SessionDescriptionInterface> local_desc_;
+  std::unique_ptr<webrtc::SessionDescriptionInterface> remote_desc_;
+  std::unique_ptr<webrtc::SessionDescriptionInterface>
+      created_sessiondescription_;
   bool hint_audio_;
   bool hint_video_;
   bool getstats_result_;

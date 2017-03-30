@@ -7,8 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
-#include "base/memory/scoped_ptr.h"
 #import "ios/web/net/crw_request_tracker_delegate.h"
+#import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/web_state/crw_web_user_interface_delegate.h"
 #import "ios/web/public/web_state/js/crw_js_injection_evaluator.h"
 #import "ios/web/public/web_state/ui/crw_web_delegate.h"
@@ -28,18 +28,6 @@ enum LoadPhase {
   // In the PAGE_LOADED phase, either the page had loaded and is available for
   // use, the load was cancelled, or the UIWebView is new and ready for a load.
   PAGE_LOADED = 2
-};
-
-// Policy for web page dialog handling.
-enum PageDialogOpenPolicy {
-  // Default policy. Dialogs are allowed, clients are not notified on display.
-  DIALOG_POLICY_ALLOW = 0,
-  // Dialogs are allowed, clients are notified when dialog will display with
-  // -[WebDelegate webControllerWillShowDialog:] delegate method call.
-  DIALOG_POLICY_NOTIFY_FIRST,
-  // Dialogs are not allowed, client are notified when dialog did block with
-  // -[WebDelegate webControllerDidSuppressDialog:] delegate method call.
-  DIALOG_POLICY_SUPPRESS
 };
 
 // The accessibility identifier of the top-level container view.
@@ -79,7 +67,6 @@ class WebStateImpl;
 @interface CRWWebController : NSObject<CRWJSInjectionEvaluator,
                                        CRWRequestTrackerDelegate,
                                        CRWTouchTrackingDelegate,
-                                       CRWWebControllerScripting,
                                        UIGestureRecognizerDelegate>
 
 // Whether or not a UIWebView is allowed to exist in this CRWWebController.
@@ -122,8 +109,10 @@ class WebStateImpl;
 // Returns whether the top of the content is visible.
 @property(nonatomic, readonly) BOOL atTop;
 
-// Whether or not content can programmatically display the keyboard.
-@property(nonatomic, assign) BOOL keyboardDisplayRequiresUserAction;
+// YES if JavaScript dialogs, HTTP authentication dialogs and window.open
+// calls should be suppressed. Default is NO. When dialog is suppressed
+// |CRWWebDelegate webControllerDidSuppressDialog:| will be called.
+@property(nonatomic, assign) BOOL shouldSuppressDialogs;
 
 // Return an image to use as replacement of a missing snapshot.
 + (UIImage*)defaultSnapshotImage;
@@ -180,15 +169,22 @@ class WebStateImpl;
 
 // Start loading the URL specified in |originalParams|, with the specified
 // settings.  Always resets the openedByScript property to NO.
-- (void)loadWithParams:(const web::WebLoadParams&)originalParams;
+- (void)loadWithParams:(const web::NavigationManager::WebLoadParams&)params;
 
 // Loads the URL indicated by current session state.
 - (void)loadCurrentURL;
-// Loads the HTML into the page.
-- (void)loadHTML:(NSString*)html;
+
 // Loads HTML in the page and presents it as if it was originating from an
 // application specific URL.
 - (void)loadHTML:(NSString*)HTML forAppSpecificURL:(const GURL&)URL;
+
+// Loads HTML in the page and presents it as if it was originating from the
+// URL itself. Should be used only in specific cases, where the injected html
+// is guaranteed to be some derived representation of the original content.
+- (void)loadHTMLForCurrentURL:(NSString*)HTML;
+
+// Stops loading the page.
+- (void)stopLoading;
 
 // Causes the page to start loading immediately if there is a pending load;
 // normally if the web view has been paged out for memory reasons, loads are
@@ -228,16 +224,9 @@ class WebStateImpl;
 // TODO(stuartmorgan): When revisiting the methods above, revisit this as well.
 - (void)requirePageReload;
 
-// Sets the closed property to true for the child window with the given name.
-- (void)childWindowClosed:(NSString*)windowName;
-
 // Show overlay, don't reload web page. Used when the view will be
 // visible only briefly (e.g., tablet side swipe).
 - (void)setOverlayPreviewMode:(BOOL)overlayPreviewMode;
-
-// Sets policy for web page dialog handling. Controls dialog suppression and
-// notifying the WebDelegate.
-- (void)setPageDialogOpenPolicy:(web::PageDialogOpenPolicy)policy;
 
 // Records the state (scroll position, form values, whatever can be harvested)
 // from the current page into the current session entry.
@@ -291,12 +280,6 @@ class WebStateImpl;
 // from the native provider. Call |loadNativeViewWithSuccess:NO| to load the
 // native controller.
 - (void)loadErrorInNativeView:(NSError*)error;
-
-// Resets the state of a page where a load was rejected. This method must
-// be called if an embedder rejected the page load (e.g. by returning NO from
-// |-[WebDelegate shouldOpenURL:linkClicked:]|) but wants to continue working
-// with CRWWebController.
-- (void)restoreStateAfterURLRejection;
 
 // Helper method called at the end of history navigation methods goBack,
 // goForward, and goDelta.  Loads a new URL if the current entry is not from a

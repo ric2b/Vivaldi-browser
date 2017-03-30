@@ -181,23 +181,6 @@ class WebViewPrivateGetPageHistoryFunction
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetPageHistoryFunction);
 };
 
-class WebViewPrivateDiscardPageFunction
-    : public WebViewInternalExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewPrivate.discardPage",
-                             WEBVIEWINTERNAL_DISCARDPAGE);
-
-  WebViewPrivateDiscardPageFunction();
-
- protected:
-  ~WebViewPrivateDiscardPageFunction() override;
-
- private:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
-
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateDiscardPageFunction);
-};
-
 class WebViewPrivateSetExtensionHostFunction
     : public WebViewInternalExtensionFunction {
  public:

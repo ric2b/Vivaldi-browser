@@ -13,7 +13,7 @@
 #include "chrome/browser/chromeos/login/screens/user_image_model.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/chromeos/login/users/default_user_image/default_user_images.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
+#include "chrome/browser/ui/webui/chromeos/login/oobe_screen.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -77,7 +77,7 @@ void UserImageScreenHandler::Show() {
     return;
   }
   screen_show_time_ = base::Time::Now();
-  ShowScreen(OobeUI::kScreenUserImagePicker, NULL);
+  ShowScreen(OobeScreen::SCREEN_USER_IMAGE_PICKER);
 
   // When shown, query camera presence.
   if (model_ && is_ready_)
@@ -133,7 +133,8 @@ void UserImageScreenHandler::HandleGetImages() {
   base::ListValue image_urls;
   for (int i = default_user_image::kFirstDefaultImageIndex;
        i < default_user_image::kDefaultImagesCount; ++i) {
-    scoped_ptr<base::DictionaryValue> image_data(new base::DictionaryValue);
+    std::unique_ptr<base::DictionaryValue> image_data(
+        new base::DictionaryValue);
     image_data->SetString("url", default_user_image::GetDefaultImageUrl(i));
     image_data->SetString("author",
                           l10n_util::GetStringUTF16(

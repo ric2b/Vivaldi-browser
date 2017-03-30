@@ -73,12 +73,9 @@ class AudioRendererImplTest : public ::testing::Test {
         demuxer_stream_(DemuxerStream::AUDIO),
         decoder_(new MockAudioDecoder()),
         ended_(false) {
-    AudioDecoderConfig audio_config(kCodec,
-                                    kSampleFormat,
-                                    kChannelLayout,
-                                    kInputSamplesPerSecond,
-                                    EmptyExtraData(),
-                                    false);
+    AudioDecoderConfig audio_config(kCodec, kSampleFormat, kChannelLayout,
+                                    kInputSamplesPerSecond, EmptyExtraData(),
+                                    Unencrypted());
     demuxer_stream_.set_audio_decoder_config(audio_config);
 
     // Used to save callbacks and run them at a later time.
@@ -262,7 +259,7 @@ class AudioRendererImplTest : public ::testing::Test {
                                next_timestamp_->GetTimestamp());
     next_timestamp_->AddFrames(frames.value);
 
-    DeliverBuffer(AudioDecoder::kOk, buffer);
+    DeliverBuffer(DecodeStatus::OK, buffer);
   }
 
   void DeliverEndOfStream() {
@@ -276,13 +273,13 @@ class AudioRendererImplTest : public ::testing::Test {
     // Satify pending |decode_cb_| to trigger a new DemuxerStream::Read().
     message_loop_.PostTask(
         FROM_HERE,
-        base::Bind(base::ResetAndReturn(&decode_cb_), AudioDecoder::kOk));
+        base::Bind(base::ResetAndReturn(&decode_cb_), DecodeStatus::OK));
 
     WaitForPendingRead();
 
     message_loop_.PostTask(
         FROM_HERE,
-        base::Bind(base::ResetAndReturn(&decode_cb_), AudioDecoder::kOk));
+        base::Bind(base::ResetAndReturn(&decode_cb_), DecodeStatus::OK));
 
     base::RunLoop().RunUntilIdle();
     EXPECT_EQ(last_statistics_.audio_memory_usage,
@@ -402,7 +399,7 @@ class AudioRendererImplTest : public ::testing::Test {
     message_loop_.PostTask(FROM_HERE, reset_cb);
   }
 
-  void DeliverBuffer(AudioDecoder::Status status,
+  void DeliverBuffer(DecodeStatus status,
                      const scoped_refptr<AudioBuffer>& buffer) {
     CHECK(!decode_cb_.is_null());
 
@@ -653,7 +650,7 @@ TEST_F(AudioRendererImplTest, ConfigChangeDrainsConverter) {
   EXPECT_EQ(0, converter_input_frames_left().value);
 }
 
-TEST_F(AudioRendererImplTest, TimeUpdatesOnFirstBuffer) {
+TEST_F(AudioRendererImplTest, CurrentMediaTimeBehavior) {
   Initialize();
   Preroll();
   StartTicking();
@@ -661,11 +658,19 @@ TEST_F(AudioRendererImplTest, TimeUpdatesOnFirstBuffer) {
   AudioTimestampHelper timestamp_helper(kOutputSamplesPerSecond);
   timestamp_helper.SetBaseTimestamp(base::TimeDelta());
 
-  // Time should be the starting timestamp as nothing's been consumed yet.
+  // Time should be the starting timestamp as nothing has been consumed yet.
+  EXPECT_EQ(timestamp_helper.GetTimestamp(), CurrentMediaTime());
+
+  const OutputFrames frames_to_consume(frames_buffered().value / 3);
+  const base::TimeDelta kConsumptionDuration =
+      timestamp_helper.GetFrameDuration(frames_to_consume.value);
+
+  // Render() has not be called yet, thus no data has been consumed, so
+  // advancing tick clock must not change the media time.
+  tick_clock_->Advance(kConsumptionDuration);
   EXPECT_EQ(timestamp_helper.GetTimestamp(), CurrentMediaTime());
 
   // Consume some audio data.
-  OutputFrames frames_to_consume(frames_buffered().value / 2);
   EXPECT_TRUE(ConsumeBufferedData(frames_to_consume));
   WaitForPendingRead();
 
@@ -673,11 +678,38 @@ TEST_F(AudioRendererImplTest, TimeUpdatesOnFirstBuffer) {
   // data to the hardware.
   EXPECT_EQ(timestamp_helper.GetTimestamp(), CurrentMediaTime());
 
+  // Advancing the tick clock now should result in an estimated media time.
+  tick_clock_->Advance(kConsumptionDuration);
+  EXPECT_EQ(timestamp_helper.GetTimestamp() + kConsumptionDuration,
+            CurrentMediaTime());
+
   // Consume some more audio data.
-  frames_to_consume = frames_buffered();
   EXPECT_TRUE(ConsumeBufferedData(frames_to_consume));
 
-  // Now time should change now that the audio hardware has called back.
+  // Time should change now that Render() has been called a second time.
+  timestamp_helper.AddFrames(frames_to_consume.value);
+  EXPECT_EQ(timestamp_helper.GetTimestamp(), CurrentMediaTime());
+
+  // Advance current time well past all played audio to simulate an irregular or
+  // delayed OS callback. The value should be clamped to whats been rendered.
+  timestamp_helper.AddFrames(frames_to_consume.value);
+  tick_clock_->Advance(kConsumptionDuration * 2);
+  const base::TimeDelta last_media_time = CurrentMediaTime();
+  EXPECT_EQ(timestamp_helper.GetTimestamp(), last_media_time);
+
+  // Consume some more audio data, but provide a delay value which is at odds
+  // with the amount of time advanced so far; this would normally cause the
+  // media time to go backwards relative to its last value.
+  EXPECT_TRUE(ConsumeBufferedData(frames_to_consume, 1));
+
+  // Current time should never go backwards even for irregular OS callbacks and
+  // those with odd / wrong delay values.
+  EXPECT_EQ(last_media_time, CurrentMediaTime());
+
+  // Stop ticking, the media time should be clamped to what's been rendered.
+  StopTicking();
+  EXPECT_EQ(timestamp_helper.GetTimestamp(), CurrentMediaTime());
+  tick_clock_->Advance(kConsumptionDuration * 2);
   timestamp_helper.AddFrames(frames_to_consume.value);
   EXPECT_EQ(timestamp_helper.GetTimestamp(), CurrentMediaTime());
 }
@@ -753,7 +785,7 @@ TEST_F(AudioRendererImplTest, OnRenderErrorCausesDecodeError) {
   Preroll();
   StartTicking();
 
-  EXPECT_CALL(*this, OnError(PIPELINE_ERROR_DECODE));
+  EXPECT_CALL(*this, OnError(AUDIO_RENDERER_ERROR));
   sink_->OnRenderError();
   base::RunLoop().RunUntilIdle();
 }
@@ -845,6 +877,10 @@ TEST_F(AudioRendererImplTest, TimeSourceBehavior) {
             ConvertMediaTime(base::TimeDelta(), &is_time_moving));
   EXPECT_TRUE(is_time_moving);
 
+  // Store current media time before advancing the tick clock since the call is
+  // compensated based on TimeTicks::Now().
+  const base::TimeDelta current_media_time = renderer_->CurrentMediaTime();
+
   // The current wall clock time should change as our tick clock advances, up
   // until we've reached the end of played out frames.
   const int kSteps = 4;
@@ -860,7 +896,7 @@ TEST_F(AudioRendererImplTest, TimeSourceBehavior) {
 
   // Converting the current media time should be relative to wall clock zero.
   EXPECT_EQ(wall_clock_time_zero + kSteps * kAdvanceDelta,
-            ConvertMediaTime(renderer_->CurrentMediaTime(), &is_time_moving));
+            ConvertMediaTime(current_media_time, &is_time_moving));
   EXPECT_TRUE(is_time_moving);
 
   // Advancing once more will exceed the amount of played out frames finally.

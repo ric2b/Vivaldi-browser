@@ -34,7 +34,7 @@ const int kMaxFrameBurst = 5;
 
 FrameSender::FrameSender(scoped_refptr<CastEnvironment> cast_environment,
                          bool is_audio,
-                         CastTransportSender* const transport_sender,
+                         CastTransport* const transport_sender,
                          int rtp_timebase,
                          uint32_t ssrc,
                          double max_frame_rate,
@@ -59,6 +59,7 @@ FrameSender::FrameSender(scoped_refptr<CastEnvironment> cast_environment,
       latest_acked_frame_id_(0),
       duplicate_ack_counter_(0),
       congestion_control_(congestion_control),
+      picture_lost_at_receiver_(false),
       rtp_timebase_(rtp_timebase),
       is_audio_(is_audio),
       weak_factory_(this) {
@@ -219,8 +220,20 @@ void FrameSender::SendEncodedFrame(
           << last_sent_frame_id_ << ", latest_acked=" << latest_acked_frame_id_;
 
   const uint32_t frame_id = encoded_frame->frame_id;
-
   const bool is_first_frame_to_be_sent = last_send_time_.is_null();
+
+  if (picture_lost_at_receiver_ &&
+      (encoded_frame->dependency == EncodedFrame::KEY)) {
+    picture_lost_at_receiver_ = false;
+    DCHECK(frame_id > latest_acked_frame_id_);
+    // Cancel sending remaining frames.
+    std::vector<uint32_t> cancel_sending_frames;
+    for (uint32_t id = latest_acked_frame_id_ + 1; id < frame_id; ++id) {
+      cancel_sending_frames.push_back(id);
+    }
+    transport_sender_->CancelSendingFrames(ssrc_, cancel_sending_frames);
+  }
+
   last_send_time_ = cast_environment_->Clock()->NowTicks();
   last_sent_frame_id_ = frame_id;
   // If this is the first frame about to be sent, fake the value of
@@ -313,7 +326,8 @@ void FrameSender::OnReceivedCastFeedback(const RtcpCastMessage& cast_feedback) {
   if (last_send_time_.is_null())
     return;  // Cannot get an ACK without having first sent a frame.
 
-  if (cast_feedback.missing_frames_and_packets.empty()) {
+  if (cast_feedback.missing_frames_and_packets.empty() &&
+      cast_feedback.received_later_frames.empty()) {
     if (latest_acked_frame_id_ == cast_feedback.ack_frame_id) {
       VLOG(1) << SENDER_SSRC << "Received duplicate ACK for frame "
               << latest_acked_frame_id_;
@@ -341,6 +355,11 @@ void FrameSender::OnReceivedCastFeedback(const RtcpCastMessage& cast_feedback) {
 
   base::TimeTicks now = cast_environment_->Clock()->NowTicks();
   congestion_control_->AckFrame(cast_feedback.ack_frame_id, now);
+  if (!cast_feedback.received_later_frames.empty()) {
+    // Ack the received frames.
+    congestion_control_->AckLaterFrames(cast_feedback.received_later_frames,
+                                        now);
+  }
 
   scoped_ptr<FrameEvent> ack_event(new FrameEvent());
   ack_event->timestamp = now;
@@ -379,6 +398,10 @@ void FrameSender::OnReceivedCastFeedback(const RtcpCastMessage& cast_feedback) {
     transport_sender_->CancelSendingFrames(ssrc_, cancel_sending_frames);
     latest_acked_frame_id_ = cast_feedback.ack_frame_id;
   }
+}
+
+void FrameSender::OnReceivedPli() {
+  picture_lost_at_receiver_ = true;
 }
 
 bool FrameSender::ShouldDropNextFrame(base::TimeDelta frame_duration) const {

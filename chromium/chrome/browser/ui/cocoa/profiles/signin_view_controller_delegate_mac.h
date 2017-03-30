@@ -15,7 +15,6 @@
 
 @class ConstrainedWindowCustomWindow;
 class ConstrainedWindowMac;
-@class NavigationButtonClickedHandler;
 class Profile;
 
 namespace content {
@@ -34,47 +33,61 @@ enum class AccessPoint;
 class SigninViewControllerDelegateMac : public ConstrainedWindowMacDelegate,
                                         public SigninViewControllerDelegate {
  public:
-  SigninViewControllerDelegateMac(SigninViewController* signin_view_controller,
-                                  scoped_ptr<content::WebContents> web_contents,
-                                  content::WebContents* host_web_contents,
-                                  NSRect frame);
-
-  static
-  SigninViewControllerDelegateMac* CreateModalSigninDelegateWithNavigation(
+  // Creates and displays a constrained window off of |host_web_contents|,
+  // containing |web_contents|. If |wait_for_size| is true, the delegate will
+  // wait for ResizeNativeView() to be called by the base class before
+  // displaying the constrained window. Otherwise, the window's dimensions will
+  // be |frame|.
+  SigninViewControllerDelegateMac(
       SigninViewController* signin_view_controller,
-      scoped_ptr<content::WebContents> web_contents,
+      std::unique_ptr<content::WebContents> web_contents,
       content::WebContents* host_web_contents,
-      NSRect frame);
+      NSRect frame,
+      bool wait_for_size);
 
-  void ButtonClicked();
   void OnConstrainedWindowClosed(ConstrainedWindowMac* window) override;
 
   // Creates the web view that contains the signin flow in |mode| using
   // |profile| as the web content's profile, then sets |delegate| as the created
   // web content's delegate.
-  static scoped_ptr<content::WebContents> CreateGaiaWebContents(
+  static std::unique_ptr<content::WebContents> CreateGaiaWebContents(
       content::WebContentsDelegate* delegate,
       profiles::BubbleViewMode mode,
       Profile* profile,
       signin_metrics::AccessPoint access_point);
 
-  static scoped_ptr<content::WebContents> CreateSyncConfirmationWebContents(
-      Profile* profile);
+  static std::unique_ptr<content::WebContents>
+  CreateSyncConfirmationWebContents(Profile* profile);
 
  private:
-  void ShowBackArrow() override;
-  void ShowCloseButton() override;
   void PerformClose() override;
+  void ResizeNativeView(int height) override;
+
+  void DisplayModal();
+
+  void HandleKeyboardEvent(
+      content::WebContents* source,
+      const content::NativeWebKeyboardEvent& event) override;
 
   ~SigninViewControllerDelegateMac() override;
-  void AddNavigationButton();
 
-  base::scoped_nsobject<NSButton> back_button_;
-  base::scoped_nsobject<NSView> host_view_;
-  scoped_ptr<ConstrainedWindowMac> constrained_window_;
-  scoped_ptr<content::WebContents> web_contents_;
+  // The constrained window opened by this delegate to display signin flow
+  // content.
+  std::unique_ptr<ConstrainedWindowMac> constrained_window_;
+
+  // The web contents displayed in the constrained window.
+  std::unique_ptr<content::WebContents> web_contents_;
   base::scoped_nsobject<ConstrainedWindowCustomWindow> window_;
-  base::scoped_nsobject<NavigationButtonClickedHandler> handler_;
+
+  // wait_for_size_ stores whether the dialog should only be shown after its
+  // content's size has been laid out and measured so that the constrained
+  // window is sized to the content.
+  bool wait_for_size_;
+
+  // The web contents that the constrained window is displayed off of.
+  // Typically, this is going to be the active tab when the window is shown.
+  content::WebContents* host_web_contents_;
+  NSRect window_frame_;
 
   DISALLOW_COPY_AND_ASSIGN(SigninViewControllerDelegateMac);
 };

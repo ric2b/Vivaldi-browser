@@ -6,10 +6,11 @@ package org.chromium.chrome.browser.compositor.scene_layer;
 
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
+import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchBarControl;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchIconSpriteControl;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPeekPromoControl;
+import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPromoControl;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.ui.resources.ResourceManager;
 
@@ -33,27 +34,25 @@ public class ContextualSearchSceneLayer extends SceneLayer {
      * Update the scene layer to draw an OverlayPanel.
      * @param resourceManager Manager to get view and image resources.
      * @param panel The OverlayPanel to render.
-     * @param searchContextViewId The ID of the view for Contextual Search's context.
-     * @param searchTermViewId The ID of the view containing the Contextual Search search term.
-     * @param peekPromoControl The peeking promotion for Contextual Search; optional if
-     *                         "panelType" is READER_MODE_PANEL.
-     * @param searchContextOpacity The opacity of the text specified by "searchContextViewId".
-     * @param searchTermOpacity The opacity of the text specified by "searchTermViewId".
-     * @param spriteControl The object controling the "G" animation for Contextual Search; optional
-     *                      if "panelType" is READER_MODE_PANEL.
+     * @param searchBarControl The Search Bar control.
+     * @param peekPromoControl The peeking promotion for Contextual Search.
+     * @param spriteControl The object controlling the "G" animation for Contextual Search.
      */
     public void update(ResourceManager resourceManager,
-            OverlayPanel panel,
-            int searchContextViewId,
-            int searchTermViewId,
+            ContextualSearchPanel panel,
+            ContextualSearchBarControl searchBarControl,
             ContextualSearchPeekPromoControl peekPromoControl,
-            float searchContextOpacity,
-            float searchTermOpacity,
+            ContextualSearchPromoControl promoControl,
             ContextualSearchIconSpriteControl spriteControl) {
 
-        boolean searchPromoVisible = panel.getPromoVisible();
-        float searchPromoHeightPx = panel.getPromoHeightPx();
-        float searchPromoOpacity = panel.getPromoOpacity();
+        int searchContextViewId = searchBarControl.getSearchContextViewId();
+        int searchTermViewId = searchBarControl.getSearchTermViewId();
+        int searchCaptionViewId = searchBarControl.getCaptionViewId();
+
+        int searchPromoViewId = promoControl.getViewId();
+        boolean searchPromoVisible = promoControl.isVisible();
+        float searchPromoHeightPx = promoControl.getHeightPx();
+        float searchPromoOpacity = promoControl.getOpacity();
 
         int searchPeekPromoTextViewId = peekPromoControl.getViewId();
         boolean searchPeekPromoVisible = peekPromoControl.isVisible();
@@ -73,6 +72,10 @@ public class ContextualSearchSceneLayer extends SceneLayer {
 
         float searchBarMarginSide = panel.getBarMarginSide();
         float searchBarHeight = panel.getBarHeight();
+
+        float searchContextOpacity = searchBarControl.getSearchBarContextOpacity();
+        float searchTermOpacity = searchBarControl.getSearchBarTermOpacity();
+        float searchCaptionOpacity = searchBarControl.getCaptionOpacity();
 
         boolean searchBarBorderVisible = panel.isBarBorderVisible();
         float searchBarBorderHeight = panel.getBarBorderHeight();
@@ -95,6 +98,7 @@ public class ContextualSearchSceneLayer extends SceneLayer {
                 R.drawable.contextual_search_bar_background,
                 searchContextViewId,
                 searchTermViewId,
+                searchCaptionViewId,
                 R.drawable.contextual_search_bar_shadow,
                 R.drawable.google_icon_sprite,
                 R.raw.google_icon_sprite,
@@ -102,7 +106,7 @@ public class ContextualSearchSceneLayer extends SceneLayer {
                 ContextualSearchPanel.CLOSE_ICON_DRAWABLE_ID,
                 R.drawable.progress_bar_background,
                 R.drawable.progress_bar_foreground,
-                R.id.contextual_search_opt_out_promo,
+                searchPromoViewId,
                 R.drawable.contextual_search_promo_ripple,
                 searchPeekPromoTextViewId,
                 mDpToPx,
@@ -124,6 +128,7 @@ public class ContextualSearchSceneLayer extends SceneLayer {
                 searchBarHeight * mDpToPx,
                 searchContextOpacity,
                 searchTermOpacity,
+                searchCaptionOpacity,
                 searchBarBorderVisible,
                 searchBarBorderHeight * mDpToPx,
                 searchBarShadowVisible,
@@ -163,6 +168,7 @@ public class ContextualSearchSceneLayer extends SceneLayer {
             int searchBarBackgroundResourceId,
             int searchContextResourceId,
             int searchTermResourceId,
+            int searchCaptionResourceId,
             int searchBarShadowResourceId,
             int panelIconResourceId,
             int searchProviderIconSpriteMetadataResourceId,
@@ -192,6 +198,7 @@ public class ContextualSearchSceneLayer extends SceneLayer {
             float searchBarHeight,
             float searchContextOpacity,
             float searchTermOpacity,
+            float searchCaptionOpacity,
             boolean searchBarBorderVisible,
             float searchBarBorderHeight,
             boolean searchBarShadowVisible,

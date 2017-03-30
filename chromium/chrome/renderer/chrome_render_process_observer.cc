@@ -28,7 +28,6 @@
 #include "build/build_config.h"
 #include "chrome/common/child_process_logging.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/media/media_resource_provider.h"
 #include "chrome/common/net/net_resource_provider.h"
 #include "chrome/common/render_messages.h"
@@ -128,10 +127,11 @@ class RendererResourceDelegate : public content::ResourceDispatcherDelegate {
 
 static const int kWaitForWorkersStatsTimeoutMS = 20;
 
-class ResourceUsageReporterImpl : public ResourceUsageReporter {
+class ResourceUsageReporterImpl : public mojom::ResourceUsageReporter {
  public:
-  ResourceUsageReporterImpl(base::WeakPtr<ChromeRenderProcessObserver> observer,
-                            mojo::InterfaceRequest<ResourceUsageReporter> req)
+  ResourceUsageReporterImpl(
+      base::WeakPtr<ChromeRenderProcessObserver> observer,
+      mojo::InterfaceRequest<mojom::ResourceUsageReporter> req)
       : workers_to_go_(0),
         binding_(this, std::move(req)),
         observer_(observer),
@@ -172,25 +172,25 @@ class ResourceUsageReporterImpl : public ResourceUsageReporter {
     workers_to_go_ = 0;
   }
 
-  void GetUsageData(
-      const mojo::Callback<void(ResourceUsageDataPtr)>& callback) override {
+  void GetUsageData(const mojo::Callback<void(mojom::ResourceUsageDataPtr)>&
+                        callback) override {
     DCHECK(callback_.is_null());
     weak_factory_.InvalidateWeakPtrs();
-    usage_data_ = ResourceUsageData::New();
+    usage_data_ = mojom::ResourceUsageData::New();
     usage_data_->reports_v8_stats = true;
     callback_ = callback;
 
     // Since it is not safe to call any Blink or V8 functions until Blink has
     // been initialized (which also initializes V8), early out and send 0 back
     // for all resources.
-    if (!observer_ || !observer_->webkit_initialized()) {
+    if (!observer_) {
       SendResults();
       return;
     }
 
     WebCache::ResourceTypeStats stats;
     WebCache::getResourceTypeStats(&stats);
-    usage_data_->web_cache_stats = ResourceTypeStats::From(stats);
+    usage_data_->web_cache_stats = mojom::ResourceTypeStats::From(stats);
 
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
     if (isolate) {
@@ -216,10 +216,10 @@ class ResourceUsageReporterImpl : public ResourceUsageReporter {
     }
   }
 
-  ResourceUsageDataPtr usage_data_;
-  mojo::Callback<void(ResourceUsageDataPtr)> callback_;
+  mojom::ResourceUsageDataPtr usage_data_;
+  mojo::Callback<void(mojom::ResourceUsageDataPtr)> callback_;
   int workers_to_go_;
-  mojo::StrongBinding<ResourceUsageReporter> binding_;
+  mojo::StrongBinding<mojom::ResourceUsageReporter> binding_;
   base::WeakPtr<ChromeRenderProcessObserver> observer_;
 
   base::WeakPtrFactory<ResourceUsageReporterImpl> weak_factory_;
@@ -229,7 +229,7 @@ class ResourceUsageReporterImpl : public ResourceUsageReporter {
 
 void CreateResourceUsageReporter(
     base::WeakPtr<ChromeRenderProcessObserver> observer,
-    mojo::InterfaceRequest<ResourceUsageReporter> request) {
+    mojo::InterfaceRequest<mojom::ResourceUsageReporter> request) {
   new ResourceUsageReporterImpl(observer, std::move(request));
 }
 
@@ -238,7 +238,7 @@ void CreateResourceUsageReporter(
 bool ChromeRenderProcessObserver::is_incognito_process_ = false;
 
 ChromeRenderProcessObserver::ChromeRenderProcessObserver()
-    : webkit_initialized_(false), weak_factory_(this) {
+    : weak_factory_(this) {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
 
@@ -246,25 +246,12 @@ ChromeRenderProcessObserver::ChromeRenderProcessObserver()
   WebRuntimeFeatures::enableRequestAutocomplete(true);
 #endif
 
-  if (command_line.HasSwitch(switches::kDisableJavaScriptHarmonyShipping)) {
-    std::string flag("--noharmony-shipping");
-    v8::V8::SetFlagsFromString(flag.c_str(), static_cast<int>(flag.size()));
-  }
-
-  if (command_line.HasSwitch(switches::kJavaScriptHarmony)) {
-    std::string flag("--harmony");
-    v8::V8::SetFlagsFromString(flag.c_str(), static_cast<int>(flag.size()));
-  }
-
   RenderThread* thread = RenderThread::Get();
   resource_delegate_.reset(new RendererResourceDelegate());
   thread->SetResourceDispatcherDelegate(resource_delegate_.get());
 
-  content::ServiceRegistry* service_registry = thread->GetServiceRegistry();
-  if (service_registry) {
-    service_registry->AddService<ResourceUsageReporter>(
-        base::Bind(CreateResourceUsageReporter, weak_factory_.GetWeakPtr()));
-  }
+  thread->GetServiceRegistry()->AddService(
+      base::Bind(CreateResourceUsageReporter, weak_factory_.GetWeakPtr()));
 
   // Configure modules that need access to resources.
   net::NetModule::SetResourceProvider(chrome_common_net::NetResourceProvider);
@@ -272,6 +259,19 @@ ChromeRenderProcessObserver::ChromeRenderProcessObserver()
       chrome_common_media::LocalizedStringProvider);
 
   InitFieldTrialObserving(command_line);
+
+  // chrome-native: is a scheme used for placeholder navigations that allow
+  // UIs to be drawn with platform native widgets instead of HTML.  These pages
+  // should not be accessible, and should also be treated as empty documents
+  // that can commit synchronously.  No code should be runnable in these pages,
+  // so it should not need to access anything nor should it allow javascript
+  // URLs since it should never be visible to the user.
+  WebString native_scheme(base::ASCIIToUTF16(chrome::kChromeNativeScheme));
+  WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(native_scheme);
+  WebSecurityPolicy::registerURLSchemeAsEmptyDocument(native_scheme);
+  WebSecurityPolicy::registerURLSchemeAsNoAccess(native_scheme);
+  WebSecurityPolicy::registerURLSchemeAsNotAllowingJavascriptURLs(
+      native_scheme);
 }
 
 ChromeRenderProcessObserver::~ChromeRenderProcessObserver() {}
@@ -318,26 +318,6 @@ bool ChromeRenderProcessObserver::OnControlMessageReceived(
   return handled;
 }
 
-void ChromeRenderProcessObserver::WebKitInitialized() {
-  webkit_initialized_ = true;
-  // chrome-native: is a scheme used for placeholder navigations that allow
-  // UIs to be drawn with platform native widgets instead of HTML.  These pages
-  // should not be accessible, and should also be treated as empty documents
-  // that can commit synchronously.  No code should be runnable in these pages,
-  // so it should not need to access anything nor should it allow javascript
-  // URLs since it should never be visible to the user.
-  WebString native_scheme(base::ASCIIToUTF16(chrome::kChromeNativeScheme));
-  WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(native_scheme);
-  WebSecurityPolicy::registerURLSchemeAsEmptyDocument(native_scheme);
-  WebSecurityPolicy::registerURLSchemeAsNoAccess(native_scheme);
-  WebSecurityPolicy::registerURLSchemeAsNotAllowingJavascriptURLs(
-      native_scheme);
-}
-
-void ChromeRenderProcessObserver::OnRenderProcessShutdown() {
-  webkit_initialized_ = false;
-}
-
 void ChromeRenderProcessObserver::OnSetIsIncognitoProcess(
     bool is_incognito_process) {
   is_incognito_process_ = is_incognito_process;
@@ -361,6 +341,11 @@ void ChromeRenderProcessObserver::OnSetFieldTrialGroup(
                                           << sender_pid;
   base::FieldTrial* trial =
       base::FieldTrialList::CreateFieldTrial(field_trial_name, group_name);
+  // TODO(asvitkine): To avoid crashes on M51 stable, simply return in this
+  // case. This should be removed and cleaned up when http://crbug.com/359406 is
+  // resolved.
+  if (!trial)
+    return;
   // TODO(asvitkine): Remove this after http://crbug.com/359406 is fixed.
   if (!trial) {
     // Log the --force-fieldtrials= switch value for debugging purposes. Take

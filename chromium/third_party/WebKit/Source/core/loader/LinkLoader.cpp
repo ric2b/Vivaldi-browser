@@ -31,6 +31,8 @@
 
 #include "core/loader/LinkLoader.h"
 
+#include "core/css/MediaList.h"
+#include "core/css/MediaQueryEvaluator.h"
 #include "core/dom/Document.h"
 #include "core/fetch/FetchInitiatorTypeNames.h"
 #include "core/fetch/FetchRequest.h"
@@ -40,6 +42,7 @@
 #include "core/frame/UseCounter.h"
 #include "core/html/CrossOriginAttribute.h"
 #include "core/html/LinkRelAttribute.h"
+#include "core/html/parser/HTMLPreloadScanner.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/LinkHeader.h"
@@ -159,7 +162,7 @@ static void preconnectIfNeeded(const LinkRelAttribute& relAttribute, const KURL&
         ASSERT(RuntimeEnabledFeatures::linkPreconnectEnabled());
         Settings* settings = document.settings();
         if (settings && settings->logDnsPrefetchAndPreconnect()) {
-            document.addConsoleMessage(ConsoleMessage::create(OtherMessageSource, DebugMessageLevel, String("Preconnect triggered for ") + href.string()));
+            document.addConsoleMessage(ConsoleMessage::create(OtherMessageSource, DebugMessageLevel, String("Preconnect triggered for ") + href.getString()));
             if (crossOrigin != CrossOriginAttributeNotSet) {
                 document.addConsoleMessage(ConsoleMessage::create(OtherMessageSource, DebugMessageLevel,
                     String("Preconnect CORS setting is ") + String((crossOrigin == CrossOriginAttributeAnonymous) ? "anonymous" : "use-credentials")));
@@ -171,17 +174,18 @@ static void preconnectIfNeeded(const LinkRelAttribute& relAttribute, const KURL&
 
 bool LinkLoader::getResourceTypeFromAsAttribute(const String& as, Resource::Type& type)
 {
-    if (equalIgnoringCase(as, "image")) {
+    ASSERT(as.lower() == as);
+    if (as == "image") {
         type = Resource::Image;
-    } else if (equalIgnoringCase(as, "script")) {
+    } else if (as == "script") {
         type = Resource::Script;
-    } else if (equalIgnoringCase(as, "style")) {
+    } else if (as == "style") {
         type = Resource::CSSStyleSheet;
-    } else if (equalIgnoringCase(as, "audio") || equalIgnoringCase(as, "video")) {
+    } else if (as == "media") {
         type = Resource::Media;
-    } else if (equalIgnoringCase(as, "font")) {
+    } else if (as == "font") {
         type = Resource::Font;
-    } else if (equalIgnoringCase(as, "track")) {
+    } else if (as == "track") {
         type = Resource::TextTrack;
     } else {
         type = Resource::LinkPreload;
@@ -246,7 +250,7 @@ static bool isSupportedType(Resource::Type resourceType, const String& mimeType)
 }
 
 static Resource* preloadIfNeeded(const LinkRelAttribute& relAttribute, const KURL& href, Document& document, const String& as, const String& mimeType,
-    CrossOriginAttributeValue crossOrigin, LinkCaller caller, bool& errorOccurred)
+    const String& media, CrossOriginAttributeValue crossOrigin, LinkCaller caller, bool& errorOccurred, ViewportDescription* viewportDescription)
 {
     if (!document.loader() || !relAttribute.isLinkPreload())
         return nullptr;
@@ -258,6 +262,17 @@ static Resource* preloadIfNeeded(const LinkRelAttribute& relAttribute, const KUR
         return nullptr;
     }
 
+    if (!media.isEmpty()) {
+        MediaValues* mediaValues = MediaValues::createDynamicIfFrameExists(document.frame());
+        if (viewportDescription)
+            mediaValues->overrideViewportDimensions(viewportDescription->maxWidth.getFloatValue(), viewportDescription->maxHeight.getFloatValue());
+
+        // Preload only if media matches
+        MediaQuerySet* mediaQueries = MediaQuerySet::create(media);
+        MediaQueryEvaluator evaluator(*mediaValues);
+        if (!evaluator.eval(mediaQueries))
+            return nullptr;
+    }
     if (caller == LinkCalledFromHeader)
         UseCounter::count(document, UseCounter::LinkHeaderPreload);
     Resource::Type resourceType;
@@ -277,7 +292,7 @@ static Resource* preloadIfNeeded(const LinkRelAttribute& relAttribute, const KUR
 
     linkRequest.setPriority(document.fetcher()->loadPriority(resourceType, linkRequest));
     if (crossOrigin != CrossOriginAttributeNotSet)
-        linkRequest.setCrossOriginAccessControl(document.securityOrigin(), crossOrigin);
+        linkRequest.setCrossOriginAccessControl(document.getSecurityOrigin(), crossOrigin);
     Settings* settings = document.settings();
     if (settings && settings->logPreload())
         document.addConsoleMessage(ConsoleMessage::create(OtherMessageSource, DebugMessageLevel, String("Preload triggered for " + href.host() + href.path())));
@@ -286,14 +301,15 @@ static Resource* preloadIfNeeded(const LinkRelAttribute& relAttribute, const KUR
     return document.loader()->startPreload(resourceType, linkRequest);
 }
 
-bool LinkLoader::loadLinkFromHeader(const String& headerValue, const KURL& baseURL, Document* document, const NetworkHintsInterface& networkHintsInterface, CanLoadResources canLoadResources)
+void LinkLoader::loadLinksFromHeader(const String& headerValue, const KURL& baseURL, Document* document, const NetworkHintsInterface& networkHintsInterface,
+    CanLoadResources canLoadResources, ViewportDescriptionWrapper* viewportDescriptionWrapper)
 {
-    if (!document)
-        return false;
+    if (!document || headerValue.isEmpty())
+        return;
     LinkHeaderSet headerSet(headerValue);
     for (auto& header : headerSet) {
         if (!header.valid() || header.url().isEmpty() || header.rel().isEmpty())
-            return false;
+            continue;
 
         LinkRelAttribute relAttribute(header.rel());
         KURL url(baseURL, header.url());
@@ -306,15 +322,17 @@ bool LinkLoader::loadLinkFromHeader(const String& headerValue, const KURL& baseU
         }
         if (canLoadResources != DoNotLoadResources) {
             bool errorOccurred = false;
-            if (RuntimeEnabledFeatures::linkPreloadEnabled())
-                preloadIfNeeded(relAttribute, url, *document, header.as(), header.mimeType(), header.crossOrigin(), LinkCalledFromHeader, errorOccurred);
+            if (RuntimeEnabledFeatures::linkPreloadEnabled()) {
+                ViewportDescription* viewportDescription = (viewportDescriptionWrapper && viewportDescriptionWrapper->set) ? &(viewportDescriptionWrapper->description) : nullptr;
+                preloadIfNeeded(relAttribute, url, *document, header.as(), header.mimeType(), header.media(), header.crossOrigin(), LinkCalledFromHeader, errorOccurred, viewportDescription);
+            }
         }
         // TODO(yoav): Add more supported headers as needed.
     }
-    return true;
 }
 
-bool LinkLoader::loadLink(const LinkRelAttribute& relAttribute, CrossOriginAttributeValue crossOrigin, const String& type, const String& as, const KURL& href, Document& document, const NetworkHintsInterface& networkHintsInterface)
+bool LinkLoader::loadLink(const LinkRelAttribute& relAttribute, CrossOriginAttributeValue crossOrigin, const String& type,
+    const String& as, const String& media, const KURL& href, Document& document, const NetworkHintsInterface& networkHintsInterface)
 {
     // TODO(yoav): Do all links need to load only after they're in document???
 
@@ -326,7 +344,7 @@ bool LinkLoader::loadLink(const LinkRelAttribute& relAttribute, CrossOriginAttri
 
     bool errorOccurred = false;
     if (m_client->shouldLoadLink())
-        createLinkPreloadResourceClient(preloadIfNeeded(relAttribute, href, document, as, type, crossOrigin, LinkCalledFromMarkup, errorOccurred));
+        createLinkPreloadResourceClient(preloadIfNeeded(relAttribute, href, document, as, type, media, crossOrigin, LinkCalledFromMarkup, errorOccurred, nullptr));
     if (errorOccurred)
         m_linkLoadingErrorTimer.startOneShot(0, BLINK_FROM_HERE);
 
@@ -341,7 +359,7 @@ bool LinkLoader::loadLink(const LinkRelAttribute& relAttribute, CrossOriginAttri
 
         FetchRequest linkRequest(ResourceRequest(document.completeURL(href)), FetchInitiatorTypeNames::link);
         if (crossOrigin != CrossOriginAttributeNotSet)
-            linkRequest.setCrossOriginAccessControl(document.securityOrigin(), crossOrigin);
+            linkRequest.setCrossOriginAccessControl(document.getSecurityOrigin(), crossOrigin);
         setResource(LinkFetchResource::fetch(Resource::LinkPrefetch, linkRequest, document.fetcher()));
     }
 
@@ -378,6 +396,7 @@ DEFINE_TRACE(LinkLoader)
     visitor->trace(m_prerender);
     visitor->trace(m_linkPreloadResourceClient);
     ResourceOwner<Resource, ResourceClient>::trace(visitor);
+    PrerenderClient::trace(visitor);
 }
 
 } // namespace blink

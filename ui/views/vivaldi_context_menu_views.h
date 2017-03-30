@@ -12,6 +12,7 @@
 #ifndef VIVALDI_UI_VIEWS_VIVALDI_CONTEXT_MENU_VIEWS_H_
 #define VIVALDI_UI_VIEWS_VIVALDI_CONTEXT_MENU_VIEWS_H_
 
+#include "base/memory/scoped_ptr.h"
 #include "content/public/common/context_menu_params.h"
 #include "ui/vivaldi_context_menu.h"
 

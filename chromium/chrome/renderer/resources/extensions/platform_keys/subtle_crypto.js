@@ -14,7 +14,7 @@ var normalizeAlgorithm =
 // This error is thrown by the internal and public API's token functions and
 // must be rethrown by this custom binding. Keep this in sync with the C++ part
 // of this API.
-var errorInvalidToken = "The token is not valid.";
+var errorInvalidToken = 'The token is not valid.';
 
 // The following errors are specified in WebCrypto.
 // TODO(pneubeck): These should be DOMExceptions.
@@ -55,9 +55,10 @@ function catchInvalidTokenError(reject) {
  * @param {string} tokenId The id of the backing Token.
  * @constructor
  */
-var SubtleCryptoImpl = function(tokenId) {
+function SubtleCryptoImpl(tokenId) {
   this.tokenId = tokenId;
-};
+}
+$Object.setPrototypeOf(SubtleCryptoImpl.prototype, null);
 
 SubtleCryptoImpl.prototype.sign = function(algorithm, key, dataView) {
   var subtleCrypto = this;
@@ -110,10 +111,16 @@ SubtleCryptoImpl.prototype.exportKey = function(format, key) {
   });
 };
 
-// Required for subclassing.
-exports.SubtleCryptoImpl = SubtleCryptoImpl
+function SubtleCrypto() {
+  privates(SubtleCrypto).constructPrivate(this, arguments);
+}
+utils.expose(SubtleCrypto, SubtleCryptoImpl, {
+  functions: [
+    'sign',
+    'exportKey',
+  ],
+});
 
-exports.SubtleCrypto =
-    utils.expose('SubtleCrypto',
-                 SubtleCryptoImpl,
-                 {functions:['sign', 'exportKey']});
+// Required for subclassing.
+exports.$set('SubtleCryptoImpl', SubtleCryptoImpl);
+exports.$set('SubtleCrypto', SubtleCrypto);

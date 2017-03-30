@@ -35,7 +35,6 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/PingLoader.h"
 #include "core/page/ChromeClient.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/network/NetworkHints.h"
 #include "platform/weborigin/SecurityPolicy.h"
 
@@ -51,9 +50,9 @@ HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tagName, Document& doc
 {
 }
 
-PassRefPtrWillBeRawPtr<HTMLAnchorElement> HTMLAnchorElement::create(Document& document)
+RawPtr<HTMLAnchorElement> HTMLAnchorElement::create(Document& document)
 {
-    return adoptRefWillBeNoop(new HTMLAnchorElement(aTag, document));
+    return new HTMLAnchorElement(aTag, document);
 }
 
 HTMLAnchorElement::~HTMLAnchorElement()
@@ -258,7 +257,7 @@ KURL HTMLAnchorElement::url() const
 
 void HTMLAnchorElement::setURL(const KURL& url)
 {
-    setHref(AtomicString(url.string()));
+    setHref(AtomicString(url.getString()));
 }
 
 String HTMLAnchorElement::input() const
@@ -338,13 +337,13 @@ void HTMLAnchorElement::handleClick(Event* event)
     request.setInputPerfMetricReportPolicy(InputToLoadPerfMetricReportPolicy::ReportLink);
 
     ReferrerPolicy policy;
-    if (RuntimeEnabledFeatures::referrerPolicyAttributeEnabled() && hasAttribute(referrerpolicyAttr) && SecurityPolicy::referrerPolicyFromString(fastGetAttribute(referrerpolicyAttr), &policy) && !hasRel(RelationNoReferrer)) {
+    if (hasAttribute(referrerpolicyAttr) && SecurityPolicy::referrerPolicyFromString(fastGetAttribute(referrerpolicyAttr), &policy) && !hasRel(RelationNoReferrer)) {
         request.setHTTPReferrer(SecurityPolicy::generateReferrer(policy, completedURL, document().outgoingReferrer()));
     }
 
     if (hasAttribute(downloadAttr)) {
         request.setRequestContext(WebURLRequest::RequestContextDownload);
-        bool isSameOrigin = completedURL.protocolIsData() || document().securityOrigin()->canRequest(completedURL);
+        bool isSameOrigin = completedURL.protocolIsData() || document().getSecurityOrigin()->canRequest(completedURL);
         const AtomicString& suggestedName = (isSameOrigin ? fastGetAttribute(downloadAttr) : nullAtom);
 
         frame->loader().client()->loadURLExternally(request, NavigationPolicyDownload, suggestedName, false);
@@ -358,6 +357,8 @@ void HTMLAnchorElement::handleClick(Event* event)
         }
         if (hasRel(RelationNoOpener))
             frameRequest.setShouldSetOpener(NeverSetOpener);
+        // TODO(japhet): Link clicks can be emulated via JS without a user gesture.
+        // Why doesn't this go through NavigationScheduler?
         frame->loader().load(frameRequest);
     }
 }

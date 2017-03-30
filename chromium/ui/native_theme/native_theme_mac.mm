@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #import "skia/ext/skia_utils_mac.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/native_theme/common_theme.h"
@@ -25,12 +26,13 @@ namespace {
 // value between 0.0 and 1.0 (i.e. divide by 255.0). Then,
 // alpha = (P2 - P1 + B1 - B2) / (B1 - B2)
 // color = (P1 - B1 + alpha * B1) / alpha.
-const SkColor kMenuPopupBackgroundColor = SkColorSetARGB(255, 255, 255, 255);
-const SkColor kMenuSeparatorColor = SkColorSetARGB(243, 228, 228, 228);
+const SkColor kMenuPopupBackgroundColor = SkColorSetARGB(245, 255, 255, 255);
+const SkColor kMenuSeparatorColor = SkColorSetARGB(255, 217, 217, 217);
 const SkColor kMenuBorderColor = SkColorSetARGB(60, 0, 0, 0);
 
-const SkColor kMenuPopupBackgroundColorYosemite =
-    SkColorSetARGB(255, 230, 230, 230);
+const SkColor kMenuPopupBackgroundColorMavericks =
+    SkColorSetARGB(255, 255, 255, 255);
+const SkColor kMenuSeparatorColorMavericks = SkColorSetARGB(243, 228, 228, 228);
 
 // Hardcoded color used for some existing dialogs in Chrome's Cocoa UI.
 const SkColor kDialogBackgroundColor = SkColorSetRGB(251, 251, 251);
@@ -171,7 +173,8 @@ SkColor NativeThemeMac::GetSystemColor(ColorId color_id) const {
     case kColorId_MenuBackgroundColor:
       return kMenuPopupBackgroundColor;
     case kColorId_MenuSeparatorColor:
-      return kMenuSeparatorColor;
+      return base::mac::IsOSMavericks() ? kMenuSeparatorColorMavericks
+                                        : kMenuSeparatorColor;
     case kColorId_MenuBorderColor:
       return kMenuBorderColor;
 
@@ -232,8 +235,8 @@ void NativeThemeMac::PaintMenuPopupBackground(
     const MenuBackgroundExtraParams& menu_background) const {
   SkPaint paint;
   paint.setAntiAlias(true);
-  if (base::mac::IsOSYosemiteOrLater())
-    paint.setColor(kMenuPopupBackgroundColorYosemite);
+  if (base::mac::IsOSMavericks())
+    paint.setColor(kMenuPopupBackgroundColorMavericks);
   else
     paint.setColor(kMenuPopupBackgroundColor);
   const SkScalar radius = SkIntToScalar(menu_background.corner_radius);
@@ -264,6 +267,36 @@ void NativeThemeMac::PaintMenuItemBackground(
       NOTREACHED();
       break;
   }
+}
+
+// static
+sk_sp<SkShader> NativeThemeMac::GetButtonBackgroundShader(
+    NativeTheme::State state, int height) {
+  typedef SkColor ColorByState[NativeTheme::State::kNumStates];
+  SkPoint gradient_points[2];
+  gradient_points[0].iset(0, 0);
+  gradient_points[1].iset(0, height);
+
+  SkScalar gradient_positions[] = { 0.0, 0.38, 1.0 };
+
+  ColorByState start_colors;
+  start_colors[NativeTheme::State::kDisabled] = gfx::kMaterialGrey300;
+  start_colors[NativeTheme::State::kHovered] = gfx::kMaterialBlue300;
+  start_colors[NativeTheme::State::kNormal] = gfx::kMaterialBlue300;
+  start_colors[NativeTheme::State::kPressed] = gfx::kMaterialBlue300;
+  ColorByState end_colors;
+  end_colors[NativeTheme::State::kDisabled] = gfx::kMaterialGrey300;
+  end_colors[NativeTheme::State::kHovered] = gfx::kMaterialBlue700;
+  end_colors[NativeTheme::State::kNormal] = gfx::kMaterialBlue700;
+  end_colors[NativeTheme::State::kPressed] = gfx::kMaterialBlue700;
+
+  SkColor gradient_colors[] = {
+    start_colors[state], start_colors[state], end_colors[state]
+  };
+
+  return SkGradientShader::MakeLinear(
+      gradient_points, gradient_colors, gradient_positions, 3,
+      SkShader::kClamp_TileMode);
 }
 
 NativeThemeMac::NativeThemeMac() {

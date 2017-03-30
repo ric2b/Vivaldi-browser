@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "core/dom/ActiveDOMObject.h"
+
 #include "core/dom/Document.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -36,7 +38,7 @@
 namespace blink {
 
 class MockActiveDOMObject final : public GarbageCollectedFinalized<MockActiveDOMObject>, public ActiveDOMObject {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MockActiveDOMObject);
+    USING_GARBAGE_COLLECTED_MIXIN(MockActiveDOMObject);
 public:
     explicit MockActiveDOMObject(ExecutionContext* context) : ActiveDOMObject(context) { }
 

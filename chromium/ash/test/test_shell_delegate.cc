@@ -31,10 +31,6 @@
 #include "ash/system/tray/system_tray_notifier.h"
 #endif
 
-namespace content {
-class BrowserContext;
-}
-
 namespace ash {
 namespace test {
 namespace {
@@ -144,6 +140,8 @@ void TestShellDelegate::RemoveVirtualKeyboardStateObserver(
   keyboard_state_observer_list_.RemoveObserver(observer);
 }
 
+void TestShellDelegate::OpenUrl(const GURL& url) {}
+
 app_list::AppListViewDelegate* TestShellDelegate::GetAppListViewDelegate() {
   if (!app_list_view_delegate_)
     app_list_view_delegate_.reset(new app_list::test::AppListTestViewDelegate);
@@ -179,10 +177,9 @@ MediaDelegate* TestShellDelegate::CreateMediaDelegate() {
 }
 
 ui::MenuModel* TestShellDelegate::CreateContextMenu(
-    aura::Window* root,
-    ash::ShelfItemDelegate* item_delegate,
-    ash::ShelfItem* item) {
-  return NULL;
+    ash::Shelf* shelf,
+    const ash::ShelfItem* item) {
+  return nullptr;
 }
 
 GPUSupport* TestShellDelegate::CreateGPUSupport() {

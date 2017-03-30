@@ -31,6 +31,7 @@
 
 #include "core/timing/PerformanceRenderTiming.h"
 
+#include "bindings/core/v8/V8ObjectBuilder.h"
 #include "core/dom/Document.h"
 #include "core/loader/DocumentLoader.h"
 
@@ -43,7 +44,7 @@ static double monotonicTimeToDocumentMilliseconds(Document* document, double sec
 }
 
 PerformanceRenderTiming::PerformanceRenderTiming(Document* requestingDocument, unsigned sourceFrame, double startTime, double finishTime)
-    : PerformanceEntry(requestingDocument->url().string(), "render", monotonicTimeToDocumentMilliseconds(requestingDocument, startTime), monotonicTimeToDocumentMilliseconds(requestingDocument, finishTime))
+    : PerformanceEntry(requestingDocument->url().getString(), "render", monotonicTimeToDocumentMilliseconds(requestingDocument, startTime), monotonicTimeToDocumentMilliseconds(requestingDocument, finishTime))
     , m_sourceFrame(sourceFrame)
     , m_requestingDocument(requestingDocument)
 {
@@ -56,6 +57,12 @@ PerformanceRenderTiming::~PerformanceRenderTiming()
 unsigned PerformanceRenderTiming::sourceFrame() const
 {
     return m_sourceFrame;
+}
+
+void PerformanceRenderTiming::buildJSONValue(V8ObjectBuilder& builder) const
+{
+    PerformanceEntry::buildJSONValue(builder);
+    builder.addNumber("sourceFrame", sourceFrame());
 }
 
 DEFINE_TRACE(PerformanceRenderTiming)

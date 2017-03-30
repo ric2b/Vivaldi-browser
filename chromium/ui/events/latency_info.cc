@@ -37,6 +37,7 @@ const char* GetComponentName(ui::LatencyComponentType type) {
     CASE_TYPE(INPUT_EVENT_LATENCY_RENDERER_SWAP_COMPONENT);
     CASE_TYPE(INPUT_EVENT_BROWSER_RECEIVED_RENDERER_SWAP_COMPONENT);
     CASE_TYPE(INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT);
+    CASE_TYPE(INPUT_EVENT_LATENCY_GENERATE_SCROLL_UPDATE_FROM_MOUSE_WHEEL);
     CASE_TYPE(INPUT_EVENT_LATENCY_TERMINATED_MOUSE_COMPONENT);
     CASE_TYPE(INPUT_EVENT_LATENCY_TERMINATED_MOUSE_WHEEL_COMPONENT);
     CASE_TYPE(INPUT_EVENT_LATENCY_TERMINATED_KEYBOARD_COMPONENT);
@@ -84,7 +85,7 @@ bool IsInputLatencyBeginComponent(ui::LatencyComponentType type) {
 class LatencyInfoTracedValue
     : public base::trace_event::ConvertableToTraceFormat {
  public:
-  static scoped_refptr<ConvertableToTraceFormat> FromValue(
+  static scoped_ptr<ConvertableToTraceFormat> FromValue(
       scoped_ptr<base::Value> value);
 
   void AppendAsTraceFormat(std::string* out) const override;
@@ -98,9 +99,9 @@ class LatencyInfoTracedValue
   DISALLOW_COPY_AND_ASSIGN(LatencyInfoTracedValue);
 };
 
-scoped_refptr<base::trace_event::ConvertableToTraceFormat>
+scoped_ptr<base::trace_event::ConvertableToTraceFormat>
 LatencyInfoTracedValue::FromValue(scoped_ptr<base::Value> value) {
-  return scoped_refptr<base::trace_event::ConvertableToTraceFormat>(
+  return scoped_ptr<base::trace_event::ConvertableToTraceFormat>(
       new LatencyInfoTracedValue(value.release()));
 }
 
@@ -143,19 +144,16 @@ LatencyInfo::InputCoordinate::InputCoordinate(float x, float y) : x(x), y(y) {
 
 LatencyInfo::LatencyInfo()
     : input_coordinates_size_(0),
-      coalesced_events_size_(0),
       trace_id_(-1),
-      terminated_(false) {
-}
+      coalesced_(false),
+      terminated_(false) {}
 
 LatencyInfo::LatencyInfo(const LatencyInfo& other) = default;
 
-LatencyInfo::~LatencyInfo() {
-}
+LatencyInfo::~LatencyInfo() {}
 
 LatencyInfo::LatencyInfo(int64_t trace_id, bool terminated)
     : input_coordinates_size_(0),
-      coalesced_events_size_(0),
       trace_id_(trace_id),
       terminated_(terminated) {}
 
@@ -317,7 +315,7 @@ void LatencyInfo::AddLatencyNumberWithTimestampImpl(
   }
 }
 
-scoped_refptr<base::trace_event::ConvertableToTraceFormat>
+scoped_ptr<base::trace_event::ConvertableToTraceFormat>
 LatencyInfo::AsTraceableData() {
   scoped_ptr<base::DictionaryValue> record_data(new base::DictionaryValue());
   for (const auto& lc : latency_components_) {
@@ -337,7 +335,7 @@ LatencyInfo::AsTraceableData() {
   return LatencyInfoTracedValue::FromValue(std::move(record_data));
 }
 
-scoped_refptr<base::trace_event::ConvertableToTraceFormat>
+scoped_ptr<base::trace_event::ConvertableToTraceFormat>
 LatencyInfo::CoordinatesAsTraceableData() {
   scoped_ptr<base::ListValue> coordinates(new base::ListValue());
   for (size_t i = 0; i < input_coordinates_size_; i++) {
@@ -379,13 +377,6 @@ bool LatencyInfo::AddInputCoordinate(const InputCoordinate& input_coordinate) {
   if (input_coordinates_size_ >= kMaxInputCoordinates)
     return false;
   input_coordinates_[input_coordinates_size_++] = input_coordinate;
-  return true;
-}
-
-bool LatencyInfo::AddCoalescedEventTimestamp(double timestamp) {
-  if (coalesced_events_size_ >= kMaxCoalescedEventTimestamps)
-    return false;
-  timestamps_of_coalesced_events_[coalesced_events_size_++] = timestamp;
   return true;
 }
 

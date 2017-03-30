@@ -12,7 +12,7 @@
 class OmniboxUIHandler;
 
 // The UI for chrome://omnibox/
-class OmniboxUI : public MojoWebUIController<OmniboxUIHandlerMojo> {
+class OmniboxUI : public MojoWebUIController<mojom::OmniboxUIHandlerMojo> {
  public:
   explicit OmniboxUI(content::WebUI* contents);
   ~OmniboxUI() override;
@@ -20,9 +20,9 @@ class OmniboxUI : public MojoWebUIController<OmniboxUIHandlerMojo> {
  private:
   // MojoWebUIController overrides:
   void BindUIHandler(
-      mojo::InterfaceRequest<OmniboxUIHandlerMojo> request) override;
+      mojo::InterfaceRequest<mojom::OmniboxUIHandlerMojo> request) override;
 
-  scoped_ptr<OmniboxUIHandler> omnibox_ui_handler_;
+  std::unique_ptr<OmniboxUIHandler> omnibox_ui_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxUI);
 };

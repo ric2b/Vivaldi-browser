@@ -8,6 +8,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.preference.PreferenceManager;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.view.View;
@@ -15,6 +16,9 @@ import android.view.View;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
@@ -22,12 +26,13 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.ShortcutSource;
 import org.chromium.chrome.browser.document.DocumentActivity;
+import org.chromium.chrome.browser.preferences.DocumentModeManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabIdManager;
 import org.chromium.chrome.test.MultiActivityTestBase;
 import org.chromium.chrome.test.util.ActivityUtils;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
-import org.chromium.chrome.test.util.DisableInTabbedMode;
+import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.browser.TabLoadObserver;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
@@ -61,8 +66,7 @@ public class WebappModeTest extends MultiActivityTestBase {
             + "IWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH3wQIFB4cxOfiSQAAABl0RVh0Q29tbWVudABDcmVhdGVkIHdpdG"
             + "ggR0lNUFeBDhcAAAAMSURBVAjXY2AUawEAALcAnI/TkI8AAAAASUVORK5CYII=";
 
-    private void fireWebappIntent(String id, String url, String title, String icon,
-            boolean addMac) throws Exception {
+    private Intent createIntent(String id, String url, String title, String icon, boolean addMac) {
         Intent intent = new Intent();
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.setPackage(getInstrumentation().getTargetContext().getPackageName());
@@ -80,6 +84,13 @@ public class WebappModeTest extends MultiActivityTestBase {
                 ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING, false);
         webappInfo.setWebappIntentExtras(intent);
 
+        return intent;
+    }
+
+    private void fireWebappIntent(String id, String url, String title, String icon,
+            boolean addMac) throws Exception {
+        Intent intent = createIntent(id, url, title, icon, addMac);
+
         getInstrumentation().getTargetContext().startActivity(intent);
         getInstrumentation().waitForIdleSync();
         ApplicationTestUtils.waitUntilChromeInForeground();
@@ -90,10 +101,26 @@ public class WebappModeTest extends MultiActivityTestBase {
         super.setUp();
 
         // Register the webapps so when the data storage is opened, the test doesn't crash. There is
-        // no race condition with the retrival as AsyncTasks are run sequentially on the background
+        // no race condition with the retrieval as AsyncTasks are run sequentially on the background
         // thread.
-        WebappRegistry.registerWebapp(getInstrumentation().getTargetContext(), WEBAPP_1_ID);
-        WebappRegistry.registerWebapp(getInstrumentation().getTargetContext(), WEBAPP_2_ID);
+        WebappRegistry.registerWebapp(getInstrumentation().getTargetContext(), WEBAPP_1_ID,
+                new WebappRegistry.FetchWebappDataStorageCallback() {
+                    @Override
+                    public void onWebappDataStorageRetrieved(WebappDataStorage storage) {
+                        storage.updateFromShortcutIntent(createIntent(
+                                WEBAPP_1_ID, WEBAPP_1_URL, WEBAPP_1_TITLE, WEBAPP_ICON, true));
+                    }
+                }
+        );
+        WebappRegistry.registerWebapp(getInstrumentation().getTargetContext(), WEBAPP_2_ID,
+                new WebappRegistry.FetchWebappDataStorageCallback() {
+                    @Override
+                    public void onWebappDataStorageRetrieved(WebappDataStorage storage) {
+                        storage.updateFromShortcutIntent(createIntent(
+                                WEBAPP_1_ID, WEBAPP_1_URL, WEBAPP_1_TITLE, WEBAPP_ICON, true));
+                    }
+                }
+        );
     }
 
     /**
@@ -107,7 +134,7 @@ public class WebappModeTest extends MultiActivityTestBase {
 
         // Firing a different Intent should start a new WebappActivity instance.
         fireWebappIntent(WEBAPP_2_ID, WEBAPP_2_URL, WEBAPP_2_TITLE, WEBAPP_ICON, true);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 Activity lastActivity = ApplicationStatus.getLastTrackedFocusedActivity();
@@ -121,7 +148,7 @@ public class WebappModeTest extends MultiActivityTestBase {
         // Firing the first Intent should bring back the first WebappActivity instance, or at least
         // a WebappActivity with the same tab if the other one was killed by Android mid-test.
         fireWebappIntent(WEBAPP_1_ID, WEBAPP_1_URL, WEBAPP_1_TITLE, WEBAPP_ICON, true);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 Activity lastActivity = ApplicationStatus.getLastTrackedFocusedActivity();
@@ -175,7 +202,7 @@ public class WebappModeTest extends MultiActivityTestBase {
         // it should have the same Tab ID.
         getInstrumentation().waitForIdleSync();
         ApplicationTestUtils.waitUntilChromeInForeground();
-        CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 Activity lastActivity = ApplicationStatus.getLastTrackedFocusedActivity();
@@ -194,7 +221,7 @@ public class WebappModeTest extends MultiActivityTestBase {
     public void testWebappRequiresValidMac() throws Exception {
         // Try to start a WebappActivity.  Fail because the Intent is insecure.
         fireWebappIntent(WEBAPP_1_ID, WEBAPP_1_URL, WEBAPP_1_TITLE, WEBAPP_ICON, false);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 Activity lastActivity = ApplicationStatus.getLastTrackedFocusedActivity();
@@ -208,7 +235,7 @@ public class WebappModeTest extends MultiActivityTestBase {
 
         // Firing a correct Intent should start a WebappActivity instance instead of the browser.
         fireWebappIntent(WEBAPP_2_ID, WEBAPP_2_URL, WEBAPP_2_TITLE, WEBAPP_ICON, true);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return isWebappActivityReady(ApplicationStatus.getLastTrackedFocusedActivity());
@@ -219,10 +246,11 @@ public class WebappModeTest extends MultiActivityTestBase {
     /**
      * Tests that WebappActivities handle window.open() properly in document mode.
      */
-    @DisableInTabbedMode
-    @MediumTest
+    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
+    @Restriction(ChromeRestriction.RESTRICTION_TYPE_PHONE)
+    @DisabledTest
     public void testWebappHandlesWindowOpenInDocumentMode() throws Exception {
-        triggerWindowOpenAndWaitForLoad(DocumentActivity.class, ONCLICK_LINK, true);
+        triggerWindowOpenAndWaitForDocumentLoad(ONCLICK_LINK, true);
     }
 
     /**
@@ -237,10 +265,11 @@ public class WebappModeTest extends MultiActivityTestBase {
     /**
      * Tests that WebappActivities handle suppressed window.open() properly in document mode.
      */
-    @DisableInTabbedMode
-    @MediumTest
+    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
+    @Restriction(ChromeRestriction.RESTRICTION_TYPE_PHONE)
+    @DisabledTest
     public void testWebappHandlesSuppressedWindowOpenInDocumentMode() throws Exception {
-        triggerWindowOpenAndWaitForLoad(DocumentActivity.class, HREF_NO_REFERRER_LINK, false);
+        triggerWindowOpenAndWaitForDocumentLoad(HREF_NO_REFERRER_LINK, false);
     }
 
     /**
@@ -250,6 +279,24 @@ public class WebappModeTest extends MultiActivityTestBase {
     @MediumTest
     public void testWebappHandlesSuppressedWindowOpenInTabbedMode() throws Exception {
         triggerWindowOpenAndWaitForLoad(ChromeTabbedActivity.class, HREF_NO_REFERRER_LINK, false);
+    }
+
+    private void triggerWindowOpenAndWaitForDocumentLoad(
+            String linkHtml, boolean checkContents) throws Exception {
+        // We default to tabbed mode. To have the WebappActivity launch a DocumentActivity,
+        // we have to explicitly override that default here.
+        DocumentModeManager documentModeManager = DocumentModeManager.getInstance(
+                getInstrumentation().getTargetContext());
+        boolean previouslyOptedOut = documentModeManager.isOptedOutOfDocumentMode();
+        documentModeManager.setOptedOutState(DocumentModeManager.OPT_OUT_PROMO_DISMISSED);
+        try {
+            triggerWindowOpenAndWaitForLoad(DocumentActivity.class, linkHtml, checkContents);
+        } finally {
+            if (previouslyOptedOut) {
+                documentModeManager.setOptedOutState(
+                        DocumentModeManager.OPTED_OUT_OF_DOCUMENT_MODE);
+            }
+        }
     }
 
     private <T extends ChromeActivity> void triggerWindowOpenAndWaitForLoad(
@@ -289,7 +336,7 @@ public class WebappModeTest extends MultiActivityTestBase {
         // Close the child window to kick the user back to the WebappActivity.
         JavaScriptUtils.executeJavaScript(
                 secondActivity.getActivityTab().getWebContents(), "window.close()");
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 Activity lastActivity = ApplicationStatus.getLastTrackedFocusedActivity();
@@ -310,7 +357,7 @@ public class WebappModeTest extends MultiActivityTestBase {
     private WebappActivity startWebappActivity(String id, String url, String title, String icon)
             throws Exception {
         fireWebappIntent(id, url, title, icon, true);
-        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 Activity lastActivity = ApplicationStatus.getLastTrackedFocusedActivity();

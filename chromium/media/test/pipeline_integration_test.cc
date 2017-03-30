@@ -21,6 +21,7 @@
 #include "media/base/media.h"
 #include "media/base/media_keys.h"
 #include "media/base/media_switches.h"
+#include "media/base/media_tracks.h"
 #include "media/base/test_data_util.h"
 #include "media/base/timestamp_constants.h"
 #include "media/cdm/aes_decryptor.h"
@@ -551,9 +552,7 @@ class MockMediaSource {
 
     chunk_demuxer_->AppendData(
         kSourceId, file_data_->data() + current_position_, size,
-        base::TimeDelta(), kInfiniteDuration(), &last_timestamp_offset_,
-        base::Bind(&MockMediaSource::InitSegmentReceived,
-                   base::Unretained(this)));
+        base::TimeDelta(), kInfiniteDuration(), &last_timestamp_offset_);
     current_position_ += size;
   }
 
@@ -562,9 +561,7 @@ class MockMediaSource {
                     int size) {
     CHECK(!chunk_demuxer_->IsParsingMediaSegment(kSourceId));
     chunk_demuxer_->AppendData(kSourceId, pData, size, base::TimeDelta(),
-                               kInfiniteDuration(), &timestamp_offset,
-                               base::Bind(&MockMediaSource::InitSegmentReceived,
-                                          base::Unretained(this)));
+                               kInfiniteDuration(), &timestamp_offset);
     last_timestamp_offset_ = timestamp_offset;
   }
 
@@ -575,9 +572,7 @@ class MockMediaSource {
                               int size) {
     CHECK(!chunk_demuxer_->IsParsingMediaSegment(kSourceId));
     chunk_demuxer_->AppendData(kSourceId, pData, size, append_window_start,
-                               append_window_end, &timestamp_offset,
-                               base::Bind(&MockMediaSource::InitSegmentReceived,
-                                          base::Unretained(this)));
+                               append_window_end, &timestamp_offset);
     last_timestamp_offset_ = timestamp_offset;
   }
 
@@ -638,6 +633,9 @@ class MockMediaSource {
     }
 
     CHECK_EQ(chunk_demuxer_->AddId(kSourceId, type, codecs), ChunkDemuxer::kOk);
+    chunk_demuxer_->SetTracksWatcher(
+        kSourceId, base::Bind(&MockMediaSource::InitSegmentReceivedWrapper,
+                              base::Unretained(this)));
 
     AppendData(initial_append_size_);
   }
@@ -653,7 +651,12 @@ class MockMediaSource {
     return last_timestamp_offset_;
   }
 
-  MOCK_METHOD0(InitSegmentReceived, void(void));
+  // A workaround for gtest mocks not allowing moving scoped_ptrs.
+  void InitSegmentReceivedWrapper(scoped_ptr<MediaTracks> tracks) {
+    InitSegmentReceived(tracks);
+  }
+
+  MOCK_METHOD1(InitSegmentReceived, void(scoped_ptr<MediaTracks>&));
 
  private:
   scoped_refptr<DecoderBuffer> file_data_;
@@ -712,7 +715,7 @@ class PipelineIntegrationTest : public PipelineIntegrationTestHost {
     EnableMockVDA();
 #endif
 
-    EXPECT_CALL(*source, InitSegmentReceived()).Times(AtLeast(1));
+    EXPECT_CALL(*source, InitSegmentReceived(_)).Times(AtLeast(1));
     EXPECT_CALL(*this, OnMetadata(_))
         .Times(AtMost(1))
         .WillRepeatedly(SaveArg<0>(&metadata_));
@@ -750,7 +753,7 @@ class PipelineIntegrationTest : public PipelineIntegrationTestHost {
     EnableMockVDA();
 #endif
 
-    EXPECT_CALL(*source, InitSegmentReceived()).Times(AtLeast(1));
+    EXPECT_CALL(*source, InitSegmentReceived(_)).Times(AtLeast(1));
     EXPECT_CALL(*this, OnMetadata(_))
         .Times(AtMost(1))
         .WillRepeatedly(SaveArg<0>(&metadata_));
@@ -1334,7 +1337,7 @@ TEST_F(PipelineIntegrationTest,
   source.EndOfStream();
 
   message_loop_.Run();
-  EXPECT_EQ(PIPELINE_ERROR_DECODE, pipeline_status_);
+  EXPECT_EQ(CHUNK_DEMUXER_ERROR_APPEND_FAILED, pipeline_status_);
 
   EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());
   EXPECT_EQ(0, pipeline_->GetBufferedTimeRanges().start(0).InMilliseconds());
@@ -1344,7 +1347,7 @@ TEST_F(PipelineIntegrationTest,
 
   Play();
 
-  EXPECT_EQ(PIPELINE_ERROR_DECODE, WaitUntilEndedOrError());
+  EXPECT_EQ(CHUNK_DEMUXER_ERROR_APPEND_FAILED, WaitUntilEndedOrError());
   source.Shutdown();
 }
 
@@ -1372,11 +1375,11 @@ TEST_F(PipelineIntegrationTest,
 
   Play();
 
-  EXPECT_EQ(PIPELINE_ERROR_DECODE, WaitUntilEndedOrError());
+  EXPECT_EQ(CHUNK_DEMUXER_ERROR_APPEND_FAILED, WaitUntilEndedOrError());
   source.Shutdown();
 }
 
-#if !defined(OS_LINUX) && defined(USE_PROPRIETARY_CODECS)
+#if defined(USE_PROPRIETARY_CODECS) && defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
 TEST_F(PipelineIntegrationTest, BasicPlaybackHi10P) {
   ASSERT_EQ(PIPELINE_OK, Start("bear-320x180-hi10p.mp4", kClockless));
@@ -1767,7 +1770,7 @@ TEST_F(PipelineIntegrationTest,
   source.EndOfStream();
 
   message_loop_.Run();
-  EXPECT_EQ(PIPELINE_ERROR_DECODE, pipeline_status_);
+  EXPECT_EQ(CHUNK_DEMUXER_ERROR_APPEND_FAILED, pipeline_status_);
 
   EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());
   EXPECT_EQ(0, pipeline_->GetBufferedTimeRanges().start(0).InMilliseconds());
@@ -1777,7 +1780,7 @@ TEST_F(PipelineIntegrationTest,
 
   Play();
 
-  EXPECT_EQ(PIPELINE_ERROR_DECODE, WaitUntilEndedOrError());
+  EXPECT_EQ(CHUNK_DEMUXER_ERROR_APPEND_FAILED, WaitUntilEndedOrError());
   source.Shutdown();
 }
 
@@ -1805,7 +1808,7 @@ TEST_F(PipelineIntegrationTest,
 
   Play();
 
-  EXPECT_EQ(PIPELINE_ERROR_DECODE, WaitUntilEndedOrError());
+  EXPECT_EQ(CHUNK_DEMUXER_ERROR_APPEND_FAILED, WaitUntilEndedOrError());
   source.Shutdown();
 }
 
@@ -1874,7 +1877,7 @@ TEST_F(PipelineIntegrationTest,
   Stop();
 }
 
-#if !defined(OS_LINUX) && defined(USE_PROPRIETARY_CODECS)
+#if defined(USE_PROPRIETARY_CODECS) && defined(USE_SYSTEM_PROPRIETARY_CODECS)
 TEST_F(PipelineIntegrationTest,
        MAYBE_EME(EncryptedPlayback_MP4_CENC_VideoOnly)) {
   MockMediaSource source("bear-1280x720-v_frag-cenc.mp4", kMP4Video,
@@ -1931,6 +1934,23 @@ TEST_F(PipelineIntegrationTest,
   MockMediaSource source("bear-1280x720-a_frag-cenc_clear-all.mp4", kMP4Audio,
                          kAppendWholeFile);
   FakeEncryptedMedia encrypted_media(new NoResponseApp());
+  StartPipelineWithEncryptedMedia(&source, &encrypted_media);
+
+  source.EndOfStream();
+  ASSERT_EQ(PIPELINE_OK, pipeline_status_);
+
+  Play();
+
+  ASSERT_TRUE(WaitUntilOnEnded());
+  source.Shutdown();
+  Stop();
+}
+
+TEST_F(PipelineIntegrationTest,
+       MAYBE_EME(EncryptedPlayback_MP4_CENC_SENC_Video)) {
+  MockMediaSource source("bear-640x360-v_frag-cenc-senc.mp4", kMP4Video,
+                         kAppendWholeFile);
+  FakeEncryptedMedia encrypted_media(new KeyProvidingApp());
   StartPipelineWithEncryptedMedia(&source, &encrypted_media);
 
   source.EndOfStream();
@@ -2072,10 +2092,9 @@ TEST_F(PipelineIntegrationTest, SuspendWhilePlaying) {
   ASSERT_TRUE(WaitUntilOnEnded());
 }
 
-#if !defined(OS_LINUX) && defined(USE_PROPRIETARY_CODECS)
 // USE_SYSTEM_PROPRIETARY_CODECS requires a different test setup for non-MSE
 // tests, see PlatformMediaPipelineIntegrationTest.
-#if !defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if 0
 TEST_F(PipelineIntegrationTest, Rotated_Metadata_0) {
   ASSERT_EQ(PIPELINE_OK, Start("bear_rotate_0.mp4"));
   ASSERT_EQ(VIDEO_ROTATION_0, metadata_.video_rotation);
@@ -2096,7 +2115,6 @@ TEST_F(PipelineIntegrationTest, Rotated_Metadata_270) {
   ASSERT_EQ(VIDEO_ROTATION_270, metadata_.video_rotation);
 }
 #endif  // !defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#endif  // defined(USE_PROPRIETARY_CODECS)
 
 // Verify audio decoder & renderer can handle aborted demuxer reads.
 TEST_F(PipelineIntegrationTest, ChunkDemuxerAbortRead_AudioOnly) {

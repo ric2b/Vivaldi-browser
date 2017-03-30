@@ -33,8 +33,32 @@ cr.define('settings', function() {
     ASK: 3,
   };
 
+  /**
+   * Contains the possible string values for a given contentSettingsType.
+   * @enum {string}
+   */
+  var PermissionStringValues = {
+    ALLOW: 'allow',
+    BLOCK: 'block',
+  };
+
+  /**
+   * A category value to use for the All Sites list.
+   * @const {number}
+   */
+  var ALL_SITES = -1;
+
+  /**
+   * An invalid subtype value.
+   * @const {number}
+   */
+  var INVALID_CATEGORY_SUBTYPE = -1;
+
   return {
     ContentSettingsTypes: ContentSettingsTypes,
     PermissionValues: PermissionValues,
+    PermissionStringValues: PermissionStringValues,
+    ALL_SITES: ALL_SITES,
+    INVALID_CATEGORY_SUBTYPE: INVALID_CATEGORY_SUBTYPE,
   };
 });

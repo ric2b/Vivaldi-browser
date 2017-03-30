@@ -5,8 +5,9 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_VIEW_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/command_observer.h"
 #include "chrome/browser/ui/toolbar/app_menu_badge_controller.h"
@@ -112,8 +113,6 @@ class ToolbarView : public views::AccessiblePaneView,
   content::WebContents* GetWebContents() override;
   ToolbarModel* GetToolbarModel() override;
   const ToolbarModel* GetToolbarModel() const override;
-  views::Widget* CreateViewsBubble(
-      views::BubbleDelegateView* bubble_delegate) override;
   PageActionImageView* CreatePageActionImageView(
       LocationBarView* owner,
       ExtensionAction* action) override;

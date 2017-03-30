@@ -6,10 +6,11 @@
 
 #include "base/mac/scoped_block.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/memory/ptr_util.h"
 #include "ios/web/public/test/scoped_testing_web_client.h"
 #include "ios/web/public/test/test_browser_state.h"
 #import "ios/web/public/test/test_web_client.h"
-#include "ios/web/public/test/web_test_util.h"
+#import "ios/web/public/web_view_creation_util.h"
 #import "ios/web/test/web_test.h"
 #include "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
@@ -28,12 +29,11 @@ id GetScriptMessageMock(WKWebView* web_view, NSString* name) {
 class CRWWKScriptMessageRouterTest : public web::WebTest {
  public:
   CRWWKScriptMessageRouterTest()
-      : web_client_(make_scoped_ptr(new web::WebClient)) {}
+      : web_client_(base::WrapUnique(new web::WebClient)) {}
 
  protected:
   void SetUp() override {
     web::WebTest::SetUp();
-    CR_TEST_REQUIRES_WK_WEB_VIEW();
     // Mock WKUserContentController object.
     controller_mock_.reset(
         [[OCMockObject mockForClass:[WKUserContentController class]] retain]);
@@ -89,15 +89,11 @@ class CRWWKScriptMessageRouterTest : public web::WebTest {
 
 // Tests CRWWKScriptMessageRouter designated initializer.
 TEST_F(CRWWKScriptMessageRouterTest, Initialization) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-
   EXPECT_TRUE(router_);
 }
 
 // Tests registration/deregistation of message handlers.
 TEST_F(CRWWKScriptMessageRouterTest, HandlerRegistration) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-
   [[controller_mock_ expect] addScriptMessageHandler:router_ name:name1_];
   [[controller_mock_ expect] addScriptMessageHandler:router_ name:name2_];
 
@@ -117,8 +113,6 @@ TEST_F(CRWWKScriptMessageRouterTest, HandlerRegistration) {
 // WKScriptMessageHandler is not removed if CRWWKScriptMessageRouter has valid
 // message handlers.
 TEST_F(CRWWKScriptMessageRouterTest, HandlerRegistrationLeak) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-
   [[controller_mock_ expect] addScriptMessageHandler:router_ name:name1_];
 
   // -removeScriptMessageHandlerForName must not be called.
@@ -131,8 +125,6 @@ TEST_F(CRWWKScriptMessageRouterTest, HandlerRegistrationLeak) {
 
 // Tests deregistation of all message handlers.
 TEST_F(CRWWKScriptMessageRouterTest, RemoveAllHandlers) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-
   [[controller_mock_ expect] addScriptMessageHandler:router_ name:name1_];
   [[controller_mock_ expect] addScriptMessageHandler:router_ name:name2_];
 
@@ -151,8 +143,6 @@ TEST_F(CRWWKScriptMessageRouterTest, RemoveAllHandlers) {
 // WKScriptMessageHandler is not removed if CRWWKScriptMessageRouter has valid
 // message handlers.
 TEST_F(CRWWKScriptMessageRouterTest, RemoveAllHandlersLeak) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-
   [[controller_mock_ expect] addScriptMessageHandler:router_ name:name1_];
   [[controller_mock_ expect] addScriptMessageHandler:router_ name:name2_];
   [[controller_mock_ expect] addScriptMessageHandler:router_ name:name3_];
@@ -171,8 +161,6 @@ TEST_F(CRWWKScriptMessageRouterTest, RemoveAllHandlersLeak) {
 // Tests proper routing of WKScriptMessage object depending on message name and
 // web view.
 TEST_F(CRWWKScriptMessageRouterTest, Routing) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-
   // It's expected that messages handlers will be called once and in order.
   __block NSInteger last_called_handler = 0;
   id message1 = GetScriptMessageMock(web_view1_, name1_);

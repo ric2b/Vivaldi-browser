@@ -25,6 +25,9 @@
 
 #include "modules/webgl/WebGLObject.h"
 
+#include "modules/webgl/WebGLRenderingContextBase.h"
+#include "public/platform/WebGraphicsContext3D.h"
+
 namespace blink {
 
 WebGLObject::WebGLObject(WebGLRenderingContextBase*)
@@ -39,7 +42,7 @@ WebGLObject::~WebGLObject()
     ASSERT(m_deleted);
 }
 
-void WebGLObject::deleteObject(WebGraphicsContext3D* context3d)
+void WebGLObject::deleteObject(gpu::gles2::GLES2Interface* gl)
 {
     m_deleted = true;
     if (!hasObject())
@@ -49,11 +52,10 @@ void WebGLObject::deleteObject(WebGraphicsContext3D* context3d)
         return;
 
     if (!m_attachmentCount) {
-        if (!context3d)
-            context3d = getAWebGraphicsContext3D();
-
-        if (context3d) {
-            deleteObjectImpl(context3d);
+        if (!gl)
+            gl = getAGLInterface();
+        if (gl) {
+            deleteObjectImpl(gl);
             // Ensure the inherited class no longer claims to have a valid object
             ASSERT(!hasObject());
         }
@@ -76,12 +78,12 @@ void WebGLObject::detachAndDeleteObject()
     deleteObject(nullptr);
 }
 
-void WebGLObject::onDetached(WebGraphicsContext3D* context3d)
+void WebGLObject::onDetached(gpu::gles2::GLES2Interface* gl)
 {
     if (m_attachmentCount)
         --m_attachmentCount;
     if (m_deleted)
-        deleteObject(context3d);
+        deleteObject(gl);
 }
 
 } // namespace blink

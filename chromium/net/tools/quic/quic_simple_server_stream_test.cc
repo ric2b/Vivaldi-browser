@@ -84,30 +84,34 @@ class MockQuicSimpleServerSession : public QuicSimpleServerSession {
  public:
   const size_t kMaxStreamsForTest = 100;
 
-  explicit MockQuicSimpleServerSession(QuicConnection* connection,
-                                       MockQuicServerSessionVisitor* owner,
-                                       QuicCryptoServerConfig* crypto_config)
-      : QuicSimpleServerSession(::net::test::DefaultQuicConfig(),
+  explicit MockQuicSimpleServerSession(
+      QuicConnection* connection,
+      MockQuicServerSessionVisitor* owner,
+      QuicCryptoServerConfig* crypto_config,
+      QuicCompressedCertsCache* compressed_certs_cache)
+      : QuicSimpleServerSession(DefaultQuicConfig(),
                                 connection,
                                 owner,
-                                crypto_config) {
+                                crypto_config,
+                                compressed_certs_cache) {
     set_max_open_incoming_streams(kMaxStreamsForTest);
     set_max_open_outgoing_streams(kMaxStreamsForTest);
-    ON_CALL(*this, WritevData(_, _, _, _, _, _))
+    ON_CALL(*this, WritevData(_, _, _, _, _))
         .WillByDefault(testing::Return(QuicConsumedData(0, false)));
   }
 
   ~MockQuicSimpleServerSession() override {}
 
-  MOCK_METHOD2(OnConnectionClosed,
-               void(QuicErrorCode error, ConnectionCloseSource source));
+  MOCK_METHOD3(OnConnectionClosed,
+               void(QuicErrorCode error,
+                    const string& error_details,
+                    ConnectionCloseSource source));
   MOCK_METHOD1(CreateIncomingDynamicStream, QuicSpdyStream*(QuicStreamId id));
-  MOCK_METHOD6(WritevData,
+  MOCK_METHOD5(WritevData,
                QuicConsumedData(QuicStreamId id,
                                 QuicIOVector data,
                                 QuicStreamOffset offset,
                                 bool fin,
-                                FecProtection fec_protection,
                                 QuicAckListenerInterface*));
   MOCK_METHOD2(OnStreamHeaders,
                void(QuicStreamId stream_id, StringPiece headers_data));
@@ -153,7 +157,12 @@ class QuicSimpleServerStreamTest
             QuicCryptoServerConfig::TESTING,
             QuicRandom::GetInstance(),
             ::net::test::CryptoTestUtils::ProofSourceForTesting())),
-        session_(connection_, session_owner_, crypto_config_.get()),
+        compressed_certs_cache_(
+            QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
+        session_(connection_,
+                 session_owner_,
+                 crypto_config_.get(),
+                 &compressed_certs_cache_),
         body_("hello world") {
     FLAGS_quic_always_log_bugs_for_tests = true;
     SpdyHeaderBlock request_headers;
@@ -198,6 +207,7 @@ class QuicSimpleServerStreamTest
   StrictMock<MockConnection>* connection_;
   StrictMock<MockQuicServerSessionVisitor>* session_owner_;
   std::unique_ptr<QuicCryptoServerConfig> crypto_config_;
+  QuicCompressedCertsCache compressed_certs_cache_;
   StrictMock<MockQuicSimpleServerSession> session_;
   QuicSimpleServerStreamPeer* stream_;  // Owned by session_.
   string headers_string_;
@@ -209,7 +219,7 @@ INSTANTIATE_TEST_CASE_P(Tests,
                         ::testing::ValuesIn(QuicSupportedVersions()));
 
 TEST_P(QuicSimpleServerStreamTest, TestFraming) {
-  EXPECT_CALL(session_, WritevData(_, _, _, _, _, _))
+  EXPECT_CALL(session_, WritevData(_, _, _, _, _))
       .Times(AnyNumber())
       .WillRepeatedly(Invoke(MockQuicSpdySession::ConsumeAllData));
   stream_->OnStreamHeaders(headers_string_);
@@ -223,7 +233,7 @@ TEST_P(QuicSimpleServerStreamTest, TestFraming) {
 }
 
 TEST_P(QuicSimpleServerStreamTest, TestFramingOnePacket) {
-  EXPECT_CALL(session_, WritevData(_, _, _, _, _, _))
+  EXPECT_CALL(session_, WritevData(_, _, _, _, _))
       .Times(AnyNumber())
       .WillRepeatedly(Invoke(MockQuicSpdySession::ConsumeAllData));
 
@@ -238,7 +248,7 @@ TEST_P(QuicSimpleServerStreamTest, TestFramingOnePacket) {
 }
 
 TEST_P(QuicSimpleServerStreamTest, SendQuicRstStreamNoErrorInStopReading) {
-  EXPECT_CALL(session_, WritevData(_, _, _, _, _, _))
+  EXPECT_CALL(session_, WritevData(_, _, _, _, _))
       .Times(AnyNumber())
       .WillRepeatedly(Invoke(MockQuicSpdySession::ConsumeAllData));
 
@@ -261,7 +271,7 @@ TEST_P(QuicSimpleServerStreamTest, TestFramingExtraData) {
 
   // We'll automatically write out an error (headers + body)
   EXPECT_CALL(session_, WriteHeaders(_, _, _, _, _));
-  EXPECT_CALL(session_, WritevData(_, _, _, _, _, _))
+  EXPECT_CALL(session_, WritevData(_, _, _, _, _))
       .WillOnce(Invoke(MockQuicSpdySession::ConsumeAllData));
   EXPECT_CALL(session_, SendRstStream(_, QUIC_STREAM_NO_ERROR, _)).Times(0);
 
@@ -279,7 +289,7 @@ TEST_P(QuicSimpleServerStreamTest, TestFramingExtraData) {
 }
 
 TEST_P(QuicSimpleServerStreamTest, SendResponseWithIllegalResponseStatus) {
-  // Send a illegal response with response status not supported by HTTP/2.
+  // Send an illegal response with response status not supported by HTTP/2.
   SpdyHeaderBlock* request_headers = stream_->mutable_headers();
   (*request_headers)[":path"] = "/bar";
   (*request_headers)[":authority"] = "www.google.com";
@@ -298,7 +308,38 @@ TEST_P(QuicSimpleServerStreamTest, SendResponseWithIllegalResponseStatus) {
 
   InSequence s;
   EXPECT_CALL(session_, WriteHeaders(stream_->id(), _, false, _, nullptr));
-  EXPECT_CALL(session_, WritevData(_, _, _, _, _, _))
+  EXPECT_CALL(session_, WritevData(_, _, _, _, _))
+      .Times(1)
+      .WillOnce(Return(QuicConsumedData(
+          strlen(QuicSimpleServerStream::kErrorResponseBody), true)));
+
+  QuicSimpleServerStreamPeer::SendResponse(stream_);
+  EXPECT_FALSE(ReliableQuicStreamPeer::read_side_closed(stream_));
+  EXPECT_TRUE(stream_->reading_stopped());
+  EXPECT_TRUE(stream_->write_side_closed());
+}
+
+TEST_P(QuicSimpleServerStreamTest, SendResponseWithIllegalResponseStatus2) {
+  // Send an illegal response with response status not supported by HTTP/2.
+  SpdyHeaderBlock* request_headers = stream_->mutable_headers();
+  (*request_headers)[":path"] = "/bar";
+  (*request_headers)[":authority"] = "www.google.com";
+  (*request_headers)[":version"] = "HTTP/1.1";
+  (*request_headers)[":method"] = "GET";
+
+  response_headers_[":version"] = "HTTP/1.1";
+  // HTTP/2 only supports 3-digit-integer, so "+200" is illegal.
+  response_headers_[":status"] = "+200";
+  response_headers_["content-length"] = "5";
+  string body = "Yummm";
+  QuicInMemoryCache::GetInstance()->AddResponse("www.google.com", "/bar",
+                                                response_headers_, body);
+
+  stream_->set_fin_received(true);
+
+  InSequence s;
+  EXPECT_CALL(session_, WriteHeaders(stream_->id(), _, false, _, nullptr));
+  EXPECT_CALL(session_, WritevData(_, _, _, _, _))
       .Times(1)
       .WillOnce(Return(QuicConsumedData(
           strlen(QuicSimpleServerStream::kErrorResponseBody), true)));
@@ -355,7 +396,7 @@ TEST_P(QuicSimpleServerStreamTest, SendResponseWithValidHeaders) {
 
   InSequence s;
   EXPECT_CALL(session_, WriteHeaders(stream_->id(), _, false, _, nullptr));
-  EXPECT_CALL(session_, WritevData(_, _, _, _, _, _))
+  EXPECT_CALL(session_, WritevData(_, _, _, _, _))
       .Times(1)
       .WillOnce(Return(QuicConsumedData(body.length(), true)));
 
@@ -394,7 +435,7 @@ TEST_P(QuicSimpleServerStreamTest, SendReponseWithPushResources) {
                                              ::net::test::kClientDataStreamId1,
                                              *request_headers));
   EXPECT_CALL(session_, WriteHeaders(stream_->id(), _, false, _, nullptr));
-  EXPECT_CALL(session_, WritevData(_, _, _, _, _, _))
+  EXPECT_CALL(session_, WritevData(_, _, _, _, _))
       .Times(1)
       .WillOnce(Return(QuicConsumedData(body.length(), true)));
   QuicSimpleServerStreamPeer::SendResponse(stream_);
@@ -440,7 +481,7 @@ TEST_P(QuicSimpleServerStreamTest, PushResponseOnServerInitiatedStream) {
   EXPECT_CALL(session_,
               WriteHeaders(kServerInitiatedStreamId, _, false,
                            server_initiated_stream->priority(), nullptr));
-  EXPECT_CALL(session_, WritevData(kServerInitiatedStreamId, _, _, _, _, _))
+  EXPECT_CALL(session_, WritevData(kServerInitiatedStreamId, _, _, _, _))
       .Times(1)
       .WillOnce(Return(QuicConsumedData(kBody.size(), true)));
   server_initiated_stream->PushResponse(headers);
@@ -462,7 +503,7 @@ TEST_P(QuicSimpleServerStreamTest, TestSendErrorResponse) {
 
   InSequence s;
   EXPECT_CALL(session_, WriteHeaders(_, _, _, _, _));
-  EXPECT_CALL(session_, WritevData(_, _, _, _, _, _))
+  EXPECT_CALL(session_, WritevData(_, _, _, _, _))
       .Times(1)
       .WillOnce(Return(QuicConsumedData(3, true)));
 
@@ -482,7 +523,7 @@ TEST_P(QuicSimpleServerStreamTest, InvalidMultipleContentLength) {
   headers_string_ = SpdyUtils::SerializeUncompressedHeaders(request_headers);
 
   EXPECT_CALL(session_, WriteHeaders(_, _, _, _, _));
-  EXPECT_CALL(session_, WritevData(_, _, _, _, _, _))
+  EXPECT_CALL(session_, WritevData(_, _, _, _, _))
       .Times(AnyNumber())
       .WillRepeatedly(Invoke(MockQuicSpdySession::ConsumeAllData));
   stream_->OnStreamHeaders(headers_string_);
@@ -503,7 +544,7 @@ TEST_P(QuicSimpleServerStreamTest, InvalidLeadingNullContentLength) {
   headers_string_ = SpdyUtils::SerializeUncompressedHeaders(request_headers);
 
   EXPECT_CALL(session_, WriteHeaders(_, _, _, _, _));
-  EXPECT_CALL(session_, WritevData(_, _, _, _, _, _))
+  EXPECT_CALL(session_, WritevData(_, _, _, _, _))
       .Times(AnyNumber())
       .WillRepeatedly(Invoke(MockQuicSpdySession::ConsumeAllData));
   stream_->OnStreamHeaders(headers_string_);
@@ -537,7 +578,7 @@ TEST_P(QuicSimpleServerStreamTest, SendQuicRstStreamNoErrorWithEarlyResponse) {
 
   InSequence s;
   EXPECT_CALL(session_, WriteHeaders(stream_->id(), _, _, _, _));
-  EXPECT_CALL(session_, WritevData(_, _, _, _, _, _))
+  EXPECT_CALL(session_, WritevData(_, _, _, _, _))
       .Times(1)
       .WillOnce(Return(QuicConsumedData(3, true)));
   if (GetParam() > QUIC_VERSION_28) {

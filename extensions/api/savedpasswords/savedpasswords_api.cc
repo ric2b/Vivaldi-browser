@@ -12,47 +12,46 @@
 #include "extensions/schema/savedpasswords.h"
 
 namespace extensions {
-  namespace passwords = vivaldi::savedpasswords;
-  using passwords::SavedPasswordItem;
+namespace passwords = vivaldi::savedpasswords;
+using passwords::SavedPasswordItem;
 
-  SavedpasswordsGetListFunction::SavedpasswordsGetListFunction()
-  :password_manager_presenter_(this)
+SavedpasswordsGetListFunction::SavedpasswordsGetListFunction()
+  : password_manager_presenter_(this)
 {
 }
 
-  bool SavedpasswordsGetListFunction::RunAsync() {
+bool SavedpasswordsGetListFunction::RunAsync() {
   AddRef();
   password_manager_presenter_.Initialize();
   password_manager_presenter_.UpdatePasswordLists();
   return true;
 }
 
-  SavedpasswordsGetListFunction::~SavedpasswordsGetListFunction() {
+SavedpasswordsGetListFunction::~SavedpasswordsGetListFunction() {
 }
 
-  Profile* SavedpasswordsGetListFunction::GetProfile() {
+Profile* SavedpasswordsGetListFunction::GetProfile() {
  return ChromeUIThreadExtensionFunction::GetProfile();
 }
 
 #if !defined(OS_ANDROID)
-  gfx::NativeWindow SavedpasswordsGetListFunction::GetNativeWindow() const {
+gfx::NativeWindow SavedpasswordsGetListFunction::GetNativeWindow() const {
   return NULL;
 }
 #endif
 
-  void SavedpasswordsGetListFunction::SetPasswordList(
-      const std::vector<scoped_ptr<autofill::PasswordForm>>& password_list,
-      bool show_passwords) {
+void SavedpasswordsGetListFunction::SetPasswordList(
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list) {
 
-  std::vector<linked_ptr<SavedPasswordItem> > svd_pwd_entries;
+  std::vector<SavedPasswordItem> svd_pwd_entries;
   base::ListValue entries;
   languages_ = GetProfile()->GetPrefs()->GetString(prefs::kAcceptLanguages);
 
   for (size_t i = 0; i < password_list.size(); ++i) {
-    linked_ptr<vivaldi::savedpasswords::SavedPasswordItem> new_node(
+    scoped_ptr<SavedPasswordItem> new_node(
           GetSavedPasswordItem(password_list[i], i));
-    svd_pwd_entries.push_back(new_node);
-    }
+    svd_pwd_entries.push_back(std::move(*new_node));
+  }
 
   results_ = vivaldi::savedpasswords::GetList::Results::Create(svd_pwd_entries);
   SendAsyncResponse();
@@ -64,7 +63,7 @@ SavedPasswordItem* SavedpasswordsGetListFunction::GetSavedPasswordItem(
   SavedPasswordItem* notes_tree_node = new SavedPasswordItem();
   notes_tree_node->username =  base::UTF16ToUTF8(form->username_value);
   notes_tree_node->origin = base::UTF16ToUTF8(
-        url_formatter::FormatUrl(form->origin, languages_));
+        url_formatter::FormatUrl(form->origin));
   notes_tree_node->id = base::Int64ToString(id);
 
   return notes_tree_node;
@@ -126,8 +125,7 @@ void SavedpasswordsRemoveFunction::ShowPassword(size_t index,
 }
 
 void SavedpasswordsRemoveFunction::SetPasswordList(
-  const std::vector<scoped_ptr<autofill::PasswordForm>>& password_list,
-  bool show_passwords){
+  const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list){
 
   password_manager_presenter_.RemoveSavedPassword(
           static_cast<size_t>(idToRemove));
@@ -136,7 +134,7 @@ void SavedpasswordsRemoveFunction::SetPasswordList(
   SendAsyncResponse();
 }
 void SavedpasswordsRemoveFunction::SetPasswordExceptionList(
-  const std::vector<scoped_ptr<autofill::PasswordForm>>&
+  const std::vector<std::unique_ptr<autofill::PasswordForm>>&
             password_exception_list){}
 
 #if !defined(OS_ANDROID)

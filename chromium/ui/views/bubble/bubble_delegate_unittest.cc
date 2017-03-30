@@ -277,6 +277,7 @@ TEST_F(BubbleDelegateTest, CloseReasons) {
         anchor_widget->GetContentsView(), BubbleBorder::NONE);
     bubble_delegate->set_close_on_deactivate(true);
     Widget* bubble_widget = BubbleDelegateView::CreateBubble(bubble_delegate);
+    anchor_widget->Show();
     bubble_widget->Show();
     anchor_widget->Activate();
     EXPECT_TRUE(bubble_widget->IsClosed());

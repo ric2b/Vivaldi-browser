@@ -81,6 +81,21 @@ const char kPropertyAutoclickEnabled[] = "a11yAutoClickEnabled";
 // Key which corresponds to the auto click A11Y property in JS.
 const char kPropertyVirtualKeyboardEnabled[] = "a11yVirtualKeyboardEnabled";
 
+// Key which corresponds to the caret highlight A11Y property in JS.
+const char kPropertyCaretHighlightEnabled[] = "a11yCaretHighlightEnabled";
+
+// Key which corresponds to the cursor highlight A11Y property in JS.
+const char kPropertyCursorHighlightEnabled[] = "a11yCursorHighlightEnabled";
+
+// Key which corresponds to the focus highlight A11Y property in JS.
+const char kPropertyFocusHighlightEnabled[] = "a11yFocusHighlightEnabled";
+
+// Key which corresponds to the select-to-speak A11Y property in JS.
+const char kPropertySelectToSpeakEnabled[] = "a11ySelectToSpeakEnabled";
+
+// Key which corresponds to the switch access A11Y property in JS.
+const char kPropertySwitchAccessEnabled[] = "a11ySwitchAccessEnabled";
+
 // Key which corresponds to the send-function-keys property in JS.
 const char kPropertySendFunctionsKeys[] = "sendFunctionKeys";
 
@@ -91,17 +106,25 @@ const struct {
   const char* api_name;
   const char* preference_name;
 } kPreferencesMap[] = {
-      {kPropertyLargeCursorEnabled, prefs::kAccessibilityLargeCursorEnabled},
-      {kPropertyStickyKeysEnabled, prefs::kAccessibilityStickyKeysEnabled},
-      {kPropertySpokenFeedbackEnabled,
-       prefs::kAccessibilitySpokenFeedbackEnabled},
-      {kPropertyHighContrastEnabled, prefs::kAccessibilityHighContrastEnabled},
-      {kPropertyScreenMagnifierEnabled,
-       prefs::kAccessibilityScreenMagnifierEnabled},
-      {kPropertyAutoclickEnabled, prefs::kAccessibilityAutoclickEnabled},
-      {kPropertyVirtualKeyboardEnabled,
-       prefs::kAccessibilityVirtualKeyboardEnabled},
-      {kPropertySendFunctionsKeys, prefs::kLanguageSendFunctionKeys}};
+    {kPropertyLargeCursorEnabled, prefs::kAccessibilityLargeCursorEnabled},
+    {kPropertyStickyKeysEnabled, prefs::kAccessibilityStickyKeysEnabled},
+    {kPropertySpokenFeedbackEnabled,
+     prefs::kAccessibilitySpokenFeedbackEnabled},
+    {kPropertyHighContrastEnabled, prefs::kAccessibilityHighContrastEnabled},
+    {kPropertyScreenMagnifierEnabled,
+     prefs::kAccessibilityScreenMagnifierEnabled},
+    {kPropertyAutoclickEnabled, prefs::kAccessibilityAutoclickEnabled},
+    {kPropertyVirtualKeyboardEnabled,
+     prefs::kAccessibilityVirtualKeyboardEnabled},
+    {kPropertyCaretHighlightEnabled,
+     prefs::kAccessibilityCaretHighlightEnabled},
+    {kPropertyCursorHighlightEnabled,
+     prefs::kAccessibilityCursorHighlightEnabled},
+    {kPropertyFocusHighlightEnabled,
+     prefs::kAccessibilityFocusHighlightEnabled},
+    {kPropertySelectToSpeakEnabled, prefs::kAccessibilitySelectToSpeakEnabled},
+    {kPropertySwitchAccessEnabled, prefs::kAccessibilitySwitchAccessEnabled},
+    {kPropertySendFunctionsKeys, prefs::kLanguageSendFunctionKeys}};
 
 const char* GetBoolPrefNameForApiProperty(const char* api_name) {
   for (size_t i = 0;
@@ -140,7 +163,7 @@ ChromeosInfoPrivateGetFunction::~ChromeosInfoPrivateGetFunction() {
 bool ChromeosInfoPrivateGetFunction::RunAsync() {
   base::ListValue* list = NULL;
   EXTENSION_FUNCTION_VALIDATE(args_->GetList(0, &list));
-  scoped_ptr<base::DictionaryValue> result(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
   for (size_t i = 0; i < list->GetSize(); ++i) {
     std::string property_name;
     EXTENSION_FUNCTION_VALIDATE(list->GetString(i, &property_name));
@@ -190,7 +213,8 @@ base::Value* ChromeosInfoPrivateGetFunction::GetValue(
     return chromeos::CrosSettings::Get()->GetPref(
             chromeos::kSystemTimezone)->DeepCopy();
   } else if (property_name == kPropertySupportedTimezones) {
-    scoped_ptr<base::ListValue> values = chromeos::system::GetTimezoneList();
+    std::unique_ptr<base::ListValue> values =
+        chromeos::system::GetTimezoneList();
     return values.release();
   } else {
     const char* pref_name =

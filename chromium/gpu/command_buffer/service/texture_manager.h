@@ -60,6 +60,15 @@ class GPU_EXPORT Texture {
     COPIED
   };
 
+  struct CompatibilitySwizzle {
+    GLenum format;
+    GLenum dest_format;
+    GLenum red;
+    GLenum green;
+    GLenum blue;
+    GLenum alpha;
+  };
+
   explicit Texture(GLuint service_id);
 
   const SamplerState& sampler_state() const {
@@ -113,6 +122,14 @@ class GPU_EXPORT Texture {
   GLint max_level() const {
     return max_level_;
   }
+
+  GLenum swizzle_r() const { return swizzle_r_; }
+
+  GLenum swizzle_g() const { return swizzle_g_; }
+
+  GLenum swizzle_b() const { return swizzle_b_; }
+
+  GLenum swizzle_a() const { return swizzle_a_; }
 
   int num_uncleared_mips() const {
     return num_uncleared_mips_;
@@ -250,6 +267,8 @@ class GPU_EXPORT Texture {
                        uint64_t client_tracing_id,
                        const std::string& dump_name) const;
 
+  void ApplyFormatWorkarounds(FeatureInfo* feature_info);
+
  private:
   friend class MailboxManagerImpl;
   friend class MailboxManagerSync;
@@ -300,6 +319,7 @@ class GPU_EXPORT Texture {
 
   struct FaceInfo {
     FaceInfo();
+    FaceInfo(const FaceInfo& other);
     ~FaceInfo();
 
     // This is relative to base_level and max_level of a texture.
@@ -485,6 +505,9 @@ class GPU_EXPORT Texture {
   // overridden by SetUnownedServiceId.
   GLuint owned_service_id() const { return owned_service_id_; }
 
+  GLenum GetCompatibilitySwizzleForChannel(GLenum channel);
+  void SetCompatibilitySwizzle(const CompatibilitySwizzle* swizzle);
+
   MailboxManager* mailbox_manager_;
 
   // Info about each face and level of texture.
@@ -525,6 +548,10 @@ class GPU_EXPORT Texture {
   GLenum usage_;
   GLint base_level_;
   GLint max_level_;
+  GLenum swizzle_r_;
+  GLenum swizzle_g_;
+  GLenum swizzle_b_;
+  GLenum swizzle_a_;
 
   // The maximum level that has been set.
   GLint max_level_set_;
@@ -562,6 +589,8 @@ class GPU_EXPORT Texture {
 
   // Whether we have initialized TEXTURE_MAX_ANISOTROPY to 1.
   bool texture_max_anisotropy_initialized_;
+
+  const CompatibilitySwizzle* compatibility_swizzle_;
 
   DISALLOW_COPY_AND_ASSIGN(Texture);
 };
@@ -616,7 +645,9 @@ struct DecoderTextureState {
             workarounds.texsubimage_faster_than_teximage),
         force_cube_map_positive_x_allocation(
             workarounds.force_cube_map_positive_x_allocation),
-        force_cube_complete(workarounds.force_cube_complete) {}
+        force_cube_complete(workarounds.force_cube_complete),
+        unpack_alignment_workaround_with_unpack_buffer(
+            workarounds.unpack_alignment_workaround_with_unpack_buffer) {}
 
   // This indicates all the following texSubImage*D calls that are part of the
   // failed texImage*D call should be ignored. The client calls have a lock
@@ -631,6 +662,7 @@ struct DecoderTextureState {
   bool texsubimage_faster_than_teximage;
   bool force_cube_map_positive_x_allocation;
   bool force_cube_complete;
+  bool unpack_alignment_workaround_with_unpack_buffer;
 };
 
 // This class keeps track of the textures and their sizes so we can do NPOT and
@@ -925,6 +957,7 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
     GLenum type;
     const void* pixels;
     uint32_t pixels_size;
+    uint32_t padding;
     TexImageCommandType command_type;
   };
 
@@ -961,6 +994,7 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
     GLenum type;
     const void* pixels;
     uint32_t pixels_size;
+    uint32_t padding;
     TexSubImageCommandType command_type;
   };
 
@@ -985,10 +1019,11 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
   TextureRef* GetTextureInfoForTargetUnlessDefault(
       ContextState* state, GLenum target);
 
-  // Note that internal_format is only checked in relation to the format
-  // parameter, so that this function may be used to validate texSubImage2D.
+  // This function is used to validate TexImage2D and TexSubImage2D and their
+  // variants. But internal_format only checked for callers of TexImage2D and
+  // its variants (tex_image_call is true).
   bool ValidateTextureParameters(
-    ErrorState* error_state, const char* function_name,
+    ErrorState* error_state, const char* function_name, bool tex_image_call,
     GLenum format, GLenum type, GLint internal_format, GLint level);
 
   // base::trace_event::MemoryDumpProvider implementation.
@@ -1008,6 +1043,9 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
   uint32_t GetServiceIdGeneration() const;
   void IncrementServiceIdGeneration();
 
+  GLenum AdjustTexInternalFormat(GLenum format) const;
+  GLenum AdjustTexFormat(GLenum format) const;
+
  private:
   friend class Texture;
   friend class TextureRef;
@@ -1018,12 +1056,17 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
       GLuint* black_texture);
 
   void DoTexImage(
-    DecoderTextureState* texture_state,
-    ErrorState* error_state,
-    DecoderFramebufferState* framebuffer_state,
-    const char* function_name,
-    TextureRef* texture_ref,
-    const DoTexImageArguments& args);
+      DecoderTextureState* texture_state,
+      ContextState* state,
+      DecoderFramebufferState* framebuffer_state,
+      const char* function_name,
+      TextureRef* texture_ref,
+      const DoTexImageArguments& args);
+
+  void DoTexSubImageWithAlignmentWorkaround(
+      DecoderTextureState* texture_state,
+      ContextState* state,
+      const DoTexSubImageArguments& args);
 
   void StartTracking(TextureRef* texture);
   void StopTracking(TextureRef* texture);
@@ -1034,8 +1077,6 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
                                 Texture::CanRenderCondition new_condition);
   void UpdateNumImages(int delta);
   void IncFramebufferStateChangeCount();
-
-  GLenum AdjustTexFormat(GLenum format) const;
 
   // Helper function called by OnMemoryDump.
   void DumpTextureRef(base::trace_event::ProcessMemoryDump* pmd,

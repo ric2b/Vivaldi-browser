@@ -214,7 +214,7 @@ EphemeralRange firstEphemeralRangeOf(const VisibleSelection& selection)
     return EphemeralRange(start, end);
 }
 
-PassRefPtrWillBeRawPtr<Range> firstRangeOf(const VisibleSelection& selection)
+RawPtr<Range> firstRangeOf(const VisibleSelection& selection)
 {
     return createRange(firstEphemeralRangeOf(selection));
 }
@@ -827,7 +827,7 @@ void VisibleSelectionTemplate<Strategy>::didChange()
 template <typename Strategy>
 static bool isValidPosition(const PositionTemplate<Strategy>& position)
 {
-    if (!position.inDocument())
+    if (!position.inShadowIncludingDocument())
         return false;
 
     if (!position.isOffsetInAnchor())

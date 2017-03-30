@@ -178,12 +178,13 @@ LayoutMultiColumnSet* LayoutMultiColumnSet::previousSiblingMultiColumnSet() cons
     return nullptr;
 }
 
-bool LayoutMultiColumnSet::hasFragmentainerGroupForColumnAt(LayoutUnit bottomOffsetInFlowThread) const
+bool LayoutMultiColumnSet::hasFragmentainerGroupForColumnAt(LayoutUnit offsetInFlowThread, PageBoundaryRule pageBoundaryRule) const
 {
     const MultiColumnFragmentainerGroup& lastRow = lastFragmentainerGroup();
-    if (lastRow.logicalTopInFlowThread() > bottomOffsetInFlowThread)
-        return true;
-    return bottomOffsetInFlowThread - lastRow.logicalTopInFlowThread() <= lastRow.logicalHeight() * usedColumnCount();
+    LayoutUnit maxLogicalBottomInFlowThread = lastRow.logicalTopInFlowThread() + lastRow.logicalHeight() * usedColumnCount();
+    if (pageBoundaryRule == AssociateWithFormerPage)
+        return offsetInFlowThread <= maxLogicalBottomInFlowThread;
+    return offsetInFlowThread < maxLogicalBottomInFlowThread;
 }
 
 MultiColumnFragmentainerGroup& LayoutMultiColumnSet::appendNewFragmentainerGroup()
@@ -271,7 +272,7 @@ bool LayoutMultiColumnSet::heightIsAuto() const
         // column-fill is auto also matches the old multicol implementation, which has no support
         // for this property.
         if (RuntimeEnabledFeatures::columnFillEnabled()) {
-            if (multiColumnBlockFlow()->style()->columnFill() == ColumnFillBalance)
+            if (multiColumnBlockFlow()->style()->getColumnFill() == ColumnFillBalance)
                 return true;
         }
         if (LayoutBox* next = nextSiblingBox()) {
@@ -376,7 +377,7 @@ LayoutUnit LayoutMultiColumnSet::columnGap() const
 {
     LayoutBlockFlow* parentBlock = multiColumnBlockFlow();
     if (parentBlock->style()->hasNormalColumnGap())
-        return LayoutUnit(parentBlock->style()->fontDescription().computedPixelSize()); // "1em" is recommended as the normal gap setting. Matches <p> margins.
+        return LayoutUnit(parentBlock->style()->getFontDescription().computedPixelSize()); // "1em" is recommended as the normal gap setting. Matches <p> margins.
     return LayoutUnit(parentBlock->style()->columnGap());
 }
 

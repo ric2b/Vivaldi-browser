@@ -6,15 +6,18 @@
 
 #import <Foundation/Foundation.h>
 
+#include <memory>
+
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/thread_task_runner_handle.h"
 #include "ios/web/public/test/scoped_testing_web_client.h"
 #include "ios/web/public/web_client.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#import "third_party/ocmock/OCMock/OCMock.h"
 
 namespace web {
 
@@ -50,12 +53,12 @@ class WebHTTPProtocolHandlerDelegateTest : public testing::Test {
       : context_getter_(new net::TestURLRequestContextGetter(
             base::ThreadTaskRunnerHandle::Get())),
         delegate_(new WebHTTPProtocolHandlerDelegate(context_getter_.get())),
-        web_client_(make_scoped_ptr(new AppSpecificURLTestWebClient)) {}
+        web_client_(base::WrapUnique(new AppSpecificURLTestWebClient)) {}
 
  protected:
   base::MessageLoop message_loop_;
   scoped_refptr<net::URLRequestContextGetter> context_getter_;
-  scoped_ptr<WebHTTPProtocolHandlerDelegate> delegate_;
+  std::unique_ptr<WebHTTPProtocolHandlerDelegate> delegate_;
   web::ScopedTestingWebClient web_client_;
 };
 
@@ -117,6 +120,42 @@ TEST_F(WebHTTPProtocolHandlerDelegateTest, IsRequestSupportedMalformed) {
   ASSERT_TRUE([[request URL] scheme]);
   ASSERT_FALSE([[[request URL] scheme] length]);
   EXPECT_FALSE(delegate_->IsRequestSupported(request));
+}
+
+// Tests that requests for images are considered as static file requests,
+// regardless of the user agent.
+TEST_F(WebHTTPProtocolHandlerDelegateTest, TestIsStaticImageRequestTrue) {
+  // Empty dictionary so User-Agent check fails.
+  NSDictionary* headers = @{};
+  NSURL* url = [NSURL URLWithString:@"file:///show/this.png"];
+  id mock_request = [OCMockObject mockForClass:[NSURLRequest class]];
+  [[[mock_request stub] andReturn:headers] allHTTPHeaderFields];
+  [[[mock_request stub] andReturn:url] URL];
+  EXPECT_TRUE(IsStaticFileRequest(mock_request));
+}
+
+// Tests that requests for files are considered as static file requests if they
+// have the static file user agent.
+TEST_F(WebHTTPProtocolHandlerDelegateTest, TestIsStaticFileRequestTrue) {
+  NSDictionary* headers =
+      @{ @"User-Agent" : @"UIWebViewForStaticFileContent foo" };
+  NSURL* url = [NSURL URLWithString:@"file:///some/random/url.html"];
+  id mock_request = [OCMockObject mockForClass:[NSURLRequest class]];
+  [[[mock_request stub] andReturn:headers] allHTTPHeaderFields];
+  [[[mock_request stub] andReturn:url] URL];
+  EXPECT_TRUE(IsStaticFileRequest(mock_request));
+}
+
+// Tests that arbitrary files cannot be retrieved by a web view for
+// static file content.
+TEST_F(WebHTTPProtocolHandlerDelegateTest, TestIsStaticFileRequestFalse) {
+  // Empty dictionary so User-Agent check fails.
+  NSDictionary* headers = @{};
+  NSURL* url = [NSURL URLWithString:@"file:///steal/this/file.html"];
+  id mock_request = [OCMockObject mockForClass:[NSURLRequest class]];
+  [[[mock_request stub] andReturn:headers] allHTTPHeaderFields];
+  [[[mock_request stub] andReturn:url] URL];
+  EXPECT_FALSE(IsStaticFileRequest(mock_request));
 }
 
 }  // namespace web

@@ -62,6 +62,7 @@ void StartActiveWorkerOnIO(
     // it from being deleted while starting the worker. If the refcount of
     // |registration| is 1, it will be deleted after WorkerStarted is called.
     registration->active_version()->StartWorker(
+        ServiceWorkerMetrics::EventType::UNKNOWN,
         base::Bind(WorkerStarted, callback));
     return;
   }
@@ -210,10 +211,8 @@ void ServiceWorkerContextWrapper::RegisterServiceWorker(
     return;
   }
   if (!context_core_) {
-    BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(continuation, false));
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::Bind(continuation, false));
     return;
   }
   context()->RegisterServiceWorker(
@@ -246,10 +245,8 @@ void ServiceWorkerContextWrapper::UnregisterServiceWorker(
     return;
   }
   if (!context_core_) {
-    BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(continuation, false));
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::Bind(continuation, false));
     return;
   }
 
@@ -295,19 +292,17 @@ void ServiceWorkerContextWrapper::StartServiceWorker(
 }
 
 void ServiceWorkerContextWrapper::SetForceUpdateOnPageLoad(
-    int64_t registration_id,
     bool force_update_on_page_load) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::Bind(&ServiceWorkerContextWrapper::SetForceUpdateOnPageLoad, this,
-                   registration_id, force_update_on_page_load));
+                   force_update_on_page_load));
     return;
   }
   if (!context_core_)
     return;
-  context_core_->SetForceUpdateOnPageLoad(registration_id,
-                                          force_update_on_page_load);
+  context_core_->set_force_update_on_page_load(force_update_on_page_load);
 }
 
 void ServiceWorkerContextWrapper::GetAllOriginsInfo(
@@ -677,15 +672,11 @@ void ServiceWorkerContextWrapper::InitInternal(
     storage::SpecialStoragePolicy* special_storage_policy) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
     BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(&ServiceWorkerContextWrapper::InitInternal,
-                   this,
-                   user_data_directory,
-                   base::Passed(&database_task_manager),
-                   disk_cache_thread,
-                   make_scoped_refptr(quota_manager_proxy),
-                   make_scoped_refptr(special_storage_policy)));
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(&ServiceWorkerContextWrapper::InitInternal, this,
+                   user_data_directory, base::Passed(&database_task_manager),
+                   disk_cache_thread, base::RetainedRef(quota_manager_proxy),
+                   base::RetainedRef(special_storage_policy)));
     return;
   }
   // TODO(pkasting): Remove ScopedTracker below once crbug.com/477117 is fixed.

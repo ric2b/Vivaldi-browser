@@ -41,6 +41,7 @@
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebAddressSpace.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -54,7 +55,7 @@ namespace {
 KURL mainResourceUrlForFrame(Frame* frame)
 {
     if (frame->isRemoteFrame())
-        return KURL(KURL(), frame->securityContext()->securityOrigin()->toString());
+        return KURL(KURL(), frame->securityContext()->getSecurityOrigin()->toString());
     return toLocalFrame(frame)->document()->url();
 }
 
@@ -66,7 +67,7 @@ static void measureStricterVersionOfIsMixedContent(Frame* frame, const KURL& url
     // What about other "secure" contexts the SchemeRegistry knows about? We'll
     // use this method to measure the occurance of non-webby mixed content to
     // make sure we're not breaking the world without realizing it.
-    SecurityOrigin* origin = frame->securityContext()->securityOrigin();
+    SecurityOrigin* origin = frame->securityContext()->getSecurityOrigin();
     if (MixedContentChecker::isMixedContent(origin, url)) {
         if (origin->protocol() != "https")
             UseCounter::count(frame, UseCounter::MixedContentInNonHTTPSFrameThatRestrictsMixedContent);
@@ -100,12 +101,12 @@ Frame* MixedContentChecker::inWhichFrameIsContentMixed(Frame* frame, WebURLReque
     // Check the top frame first.
     if (Frame* top = frame->tree().top()) {
         measureStricterVersionOfIsMixedContent(top, url);
-        if (isMixedContent(top->securityContext()->securityOrigin(), url))
+        if (isMixedContent(top->securityContext()->getSecurityOrigin(), url))
             return top;
     }
 
     measureStricterVersionOfIsMixedContent(frame, url);
-    if (isMixedContent(frame->securityContext()->securityOrigin(), url))
+    if (isMixedContent(frame->securityContext()->getSecurityOrigin(), url))
         return frame;
 
     // No mixed content, no problem.
@@ -320,7 +321,7 @@ bool MixedContentChecker::shouldBlockFetch(LocalFrame* frame, WebURLRequest::Req
     // distinguish mixed content signals from different frames on the
     // same page.
     FrameLoaderClient* client = frame->loader().client();
-    SecurityOrigin* securityOrigin = mixedFrame->securityContext()->securityOrigin();
+    SecurityOrigin* securityOrigin = mixedFrame->securityContext()->getSecurityOrigin();
     bool allowed = false;
 
     // If we're in strict mode, we'll automagically fail everything, and intentionally skip
@@ -354,7 +355,7 @@ bool MixedContentChecker::shouldBlockFetch(LocalFrame* frame, WebURLRequest::Req
         // allowing an insecure script to run on https://a.com and not
         // realizing that they are in fact allowing an insecure script on
         // https://b.com.
-        if (!settings->allowRunningOfInsecureContent() && requestIsSubframeSubresource(effectiveFrame, frameType) && isMixedContent(frame->securityContext()->securityOrigin(), url)) {
+        if (!settings->allowRunningOfInsecureContent() && requestIsSubframeSubresource(effectiveFrame, frameType) && isMixedContent(frame->securityContext()->getSecurityOrigin(), url)) {
             UseCounter::count(mixedFrame, UseCounter::BlockableMixedContentInSubframeBlocked);
             allowed = false;
             break;
@@ -410,7 +411,7 @@ bool MixedContentChecker::shouldBlockWebSocket(LocalFrame* frame, const KURL& ur
     // distinguish mixed content signals from different frames on the
     // same page.
     FrameLoaderClient* client = frame->loader().client();
-    SecurityOrigin* securityOrigin = mixedFrame->securityContext()->securityOrigin();
+    SecurityOrigin* securityOrigin = mixedFrame->securityContext()->getSecurityOrigin();
     bool allowed = false;
 
     // If we're in strict mode, we'll automagically fail everything, and intentionally skip
@@ -464,7 +465,7 @@ void MixedContentChecker::checkMixedPrivatePublic(LocalFrame* frame, const Atomi
         return;
 
     // Just count these for the moment, don't block them.
-    if (Platform::current()->isReservedIPAddress(resourceIPAddress) && !frame->document()->isHostedInReservedIPRange())
+    if (Platform::current()->isReservedIPAddress(resourceIPAddress) && frame->document()->addressSpace() == WebAddressSpacePublic)
         UseCounter::count(frame->document(), UseCounter::MixedContentPrivateHostnameInPublicHostname);
 }
 

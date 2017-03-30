@@ -70,7 +70,7 @@ public:
             }
 
             if (U_FAILURE(openStatus)) {
-                WTF_LOG_ERROR("icu::BreakIterator construction failed with status %d", openStatus);
+                DLOG(ERROR) << "icu::BreakIterator construction failed with status " << openStatus;
                 return 0;
             }
         }
@@ -82,7 +82,7 @@ public:
 
     void put(icu::BreakIterator* iterator)
     {
-        ASSERT_ARG(iterator, m_vendedIterators.contains(iterator));
+        DCHECK(m_vendedIterators.contains(iterator));
 
         if (m_pool.size() == capacity) {
             delete(m_pool[0].second);
@@ -475,7 +475,7 @@ static TextBreakIterator* wordBreakIterator(const LChar* string, int length)
     static TextBreakIterator* breakIter = 0;
     if (!breakIter) {
         breakIter = icu::BreakIterator::createWordInstance(icu::Locale(currentTextBreakLocaleID()), errorCode);
-        ASSERT_WITH_MESSAGE(U_SUCCESS(errorCode), "ICU could not open a break iterator: %s (%d)", u_errorName(errorCode), errorCode);
+        DCHECK(U_SUCCESS(errorCode)) << "ICU could not open a break iterator: " << u_errorName(errorCode) << " (" << errorCode << ")";
         if (!breakIter)
             return 0;
     }
@@ -488,14 +488,14 @@ static TextBreakIterator* wordBreakIterator(const LChar* string, int length)
     UErrorCode openStatus = U_ZERO_ERROR;
     UText* text = textOpenLatin1(&textLocal, string, length, 0, 0, &openStatus);
     if (U_FAILURE(openStatus)) {
-        WTF_LOG_ERROR("textOpenLatin1 failed with status %d", openStatus);
+        DLOG(ERROR) << "textOpenLatin1 failed with status " << openStatus;
         return 0;
     }
 
     UErrorCode setTextStatus = U_ZERO_ERROR;
     breakIter->setText(text, setTextStatus);
     if (U_FAILURE(setTextStatus))
-        WTF_LOG_ERROR("BreakIterator::seText failed with status %d", setTextStatus);
+        DLOG(ERROR) << "BreakIterator::seText failed with status " << setTextStatus;
 
     utext_close(text);
 
@@ -518,7 +518,7 @@ TextBreakIterator* wordBreakIterator(const UChar* string, int length)
     static TextBreakIterator* breakIter = 0;
     if (!breakIter) {
         breakIter = icu::BreakIterator::createWordInstance(icu::Locale(currentTextBreakLocaleID()), errorCode);
-        ASSERT_WITH_MESSAGE(U_SUCCESS(errorCode), "ICU could not open a break iterator: %s (%d)", u_errorName(errorCode), errorCode);
+        DCHECK(U_SUCCESS(errorCode)) << "ICU could not open a break iterator: " << u_errorName(errorCode) << " (" << errorCode << ")";
         if (!breakIter)
             return 0;
     }
@@ -549,14 +549,14 @@ TextBreakIterator* acquireLineBreakIterator(const LChar* string, int length, con
     UErrorCode openStatus = U_ZERO_ERROR;
     UText* text = textOpenLatin1(&textLocal, string, length, priorContext, priorContextLength, &openStatus);
     if (U_FAILURE(openStatus)) {
-        WTF_LOG_ERROR("textOpenLatin1 failed with status %d", openStatus);
+        DLOG(ERROR) << "textOpenLatin1 failed with status " << openStatus;
         return 0;
     }
 
     UErrorCode setTextStatus = U_ZERO_ERROR;
     iterator->setText(text, setTextStatus);
     if (U_FAILURE(setTextStatus)) {
-        WTF_LOG_ERROR("ubrk_setUText failed with status %d", setTextStatus);
+        DLOG(ERROR) << "ubrk_setUText failed with status " << setTextStatus;
         return 0;
     }
 
@@ -576,14 +576,14 @@ TextBreakIterator* acquireLineBreakIterator(const UChar* string, int length, con
     UErrorCode openStatus = U_ZERO_ERROR;
     UText* text = textOpenUTF16(&textLocal, string, length, priorContext, priorContextLength, &openStatus);
     if (U_FAILURE(openStatus)) {
-        WTF_LOG_ERROR("textOpenUTF16 failed with status %d", openStatus);
+        DLOG(ERROR) << "textOpenUTF16 failed with status " << openStatus;
         return 0;
     }
 
     UErrorCode setTextStatus = U_ZERO_ERROR;
     iterator->setText(text, setTextStatus);
     if (U_FAILURE(setTextStatus)) {
-        WTF_LOG_ERROR("ubrk_setUText failed with status %d", setTextStatus);
+        DLOG(ERROR) << "ubrk_setUText failed with status " << setTextStatus;
         return 0;
     }
 
@@ -594,8 +594,7 @@ TextBreakIterator* acquireLineBreakIterator(const UChar* string, int length, con
 
 void releaseLineBreakIterator(TextBreakIterator* iterator)
 {
-    ASSERT_ARG(iterator, iterator);
-
+    DCHECK(iterator);
     LineBreakIteratorPool::sharedPool().put(iterator);
 }
 
@@ -650,7 +649,7 @@ void NonSharedCharacterBreakIterator::createIteratorForBuffer(const UChar* buffe
     if (!createdIterator) {
         UErrorCode errorCode = U_ZERO_ERROR;
         m_iterator = icu::BreakIterator::createCharacterInstance(icu::Locale(currentTextBreakLocaleID()), errorCode);
-        ASSERT_WITH_MESSAGE(U_SUCCESS(errorCode), "ICU could not open a break iterator: %s (%d)", u_errorName(errorCode), errorCode);
+        DCHECK(U_SUCCESS(errorCode)) << "ICU could not open a break iterator: " << u_errorName(errorCode) << " (" << errorCode << ")";
     }
 
     setText16(m_iterator, buffer, length);
@@ -716,7 +715,7 @@ TextBreakIterator* sentenceBreakIterator(const UChar* string, int length)
     static TextBreakIterator* iterator = 0;
     if (!iterator) {
         iterator =  icu::BreakIterator::createSentenceInstance(icu::Locale(currentTextBreakLocaleID()), openStatus);
-        ASSERT_WITH_MESSAGE(U_SUCCESS(openStatus), "ICU could not open a break iterator: %s (%d)", u_errorName(openStatus), openStatus);
+        DCHECK(U_SUCCESS(openStatus)) << "ICU could not open a break iterator: " << u_errorName(openStatus) << " (" << openStatus << ")";
         if (!iterator)
             return 0;
     }
@@ -745,7 +744,7 @@ static TextBreakIterator* setUpIteratorWithRules(const char* breakRules, const U
         String(breakRules).appendTo(rules);
 
         iterator = new icu::RuleBasedBreakIterator(icu::UnicodeString(rules.data(), rules.size()), parseStatus, openStatus);
-        ASSERT_WITH_MESSAGE(U_SUCCESS(openStatus), "ICU could not open a break iterator: %s (%d)", u_errorName(openStatus), openStatus);
+        DCHECK(U_SUCCESS(openStatus)) << "ICU could not open a break iterator: " << u_errorName(openStatus) << " (" << openStatus << ")";
         if (!iterator)
             return 0;
     }

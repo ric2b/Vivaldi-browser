@@ -1,6 +1,8 @@
 # Blink GC API reference
 
-This document is work in progress.
+This is a through document for Oilpan API usage.
+If you want to learn the API usage quickly, look at
+[this tutorial](https://docs.google.com/presentation/d/1XPu03ymz8W295mCftEC9KshH9Icxfq81YwIJQzQrvxo/edit#slide=id.p).
 
 [TOC]
 
@@ -232,13 +234,8 @@ void someFunction()
 *** aside
 *Transitional only*
 
-`RawPtr<T>` is a simple wrapper of a raw pointer `T*` equipped with common member functions defined in other smart
-pointer templates, such as `get()` or `clear()`. `RawPtr<T>` is only meant to be used during the transition period;
-it is only used in the forms like `OwnPtrWillBeRawPtr<T>` or `RefPtrWillBeRawPtr<T>` so you can share as much code
-as possible in both pre- and post-Oilpan worlds.
-
-`RawPtr<T>` is declared and defined in `wtf/RawPtr.h`.
-***
+`RawPtr<T>` is a simple wrapper of a raw pointer `T*` used in the transitional period.
+Most`RawPtr<T>`s will be replaced with raw pointers.
 
 ### Member, WeakMember
 

@@ -120,6 +120,11 @@ class QuicClientBase {
   // connection.
   void UpdateStats();
 
+  // The number of server config updates received.  We assume no
+  // updates can be sent during a previously, statelessly rejected
+  // connection, so only the latest session is taken into account.
+  int GetNumReceivedServerConfigUpdates();
+
   // Returns any errors that occurred at the connection-level (as
   // opposed to the session-level).  When a stateless reject occurs,
   // the error of the last session may not reflect the overall state
@@ -151,6 +156,12 @@ class QuicClientBase {
 
   ProofVerifier* proof_verifier() const;
 
+  void set_session(QuicClientSession* session) { session_.reset(session); }
+
+  QuicClientPushPromiseIndex* push_promise_index() {
+    return &push_promise_index_;
+  }
+
  protected:
   virtual QuicClientSession* CreateQuicClientSession(
       QuicConnection* connection);
@@ -169,6 +180,14 @@ class QuicClientBase {
   virtual QuicConnectionId GenerateNewConnectionId();
 
   QuicConnectionHelperInterface* helper() { return helper_.get(); }
+
+  void set_num_sent_client_hellos(int num_sent_client_hellos) {
+    num_sent_client_hellos_ = num_sent_client_hellos;
+  }
+
+  void set_num_stateless_rejects_received(int num_stateless_rejects_received) {
+    num_stateless_rejects_received_ = num_stateless_rejects_received;
+  }
 
  private:
   // |server_id_| is a tuple (hostname, port, is_https) of the server.

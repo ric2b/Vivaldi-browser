@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/free_deleter.h"
 #include "base/strings/string16.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/win/scoped_handle.h"
@@ -30,7 +30,7 @@ sandbox::SboxTestResult CreateProcessHelper(const base::string16& exe,
   if (!exe.empty())
     exe_name = exe.c_str();
 
-  scoped_ptr<wchar_t, base::FreeDeleter>  writable_command(
+  std::unique_ptr<wchar_t, base::FreeDeleter> writable_command(
       _wcsdup(command.c_str()));
 
   // Create the process with the unicode version of the API.
@@ -270,6 +270,10 @@ SBOX_TESTS_COMMAND int Process_OpenToken(int argc, wchar_t **argv) {
   return SBOX_TEST_FAILED;
 }
 
+SBOX_TESTS_COMMAND int Process_Crash(int argc, wchar_t **argv) {
+  __debugbreak();
+  return SBOX_TEST_FAILED;
+}
 // Generate a event name, used to test thread creation.
 std::wstring GenerateEventName(DWORD pid) {
   wchar_t buff[30] = {0};
@@ -339,6 +343,43 @@ SBOX_TESTS_COMMAND int Process_CreateThread(int argc, wchar_t** argv) {
   return SBOX_TEST_SUCCEEDED;
 }
 
+// Creates a process and checks its exit code. Succeeds on exit code 0.
+SBOX_TESTS_COMMAND int Process_CheckExitCode(int argc, wchar_t **argv) {
+  if (argc != 3)
+    return SBOX_TEST_FAILED_TO_EXECUTE_COMMAND;
+
+  if ((nullptr == argv) || (nullptr == argv[0]) ||
+      (nullptr == argv[1]) || (nullptr == argv[2])) {
+    return SBOX_TEST_FAILED_TO_EXECUTE_COMMAND;
+  }
+
+  base::string16 path = MakePathToSys(argv[0], false);
+  base::string16 cmdline = argv[1];
+  base::string16 cwd = argv[2];
+
+  STARTUPINFOW si = {sizeof(si)};
+
+  PROCESS_INFORMATION temp_process_info = {};
+  if (!::CreateProcessW(path.c_str(), &cmdline[0], nullptr, nullptr, FALSE, 0,
+                        nullptr, cwd.c_str(), &si, &temp_process_info)) {
+    return SBOX_TEST_FAILED;
+  }
+  base::win::ScopedProcessInformation pi(temp_process_info);
+  DWORD ret = WaitForSingleObject(pi.process_handle(), 1000);
+  if (ret != WAIT_OBJECT_0)
+    return SBOX_TEST_FAILED;
+
+  DWORD exit_code;
+  if (!GetExitCodeProcess(pi.process_handle(), &exit_code))
+    return SBOX_TEST_FAILED;
+
+  if (exit_code != 0)
+    return SBOX_TEST_FAILED;
+
+  return SBOX_TEST_SUCCEEDED;
+}
+
+
 TEST(ProcessPolicyTest, TestAllAccess) {
   // Check if the "all access" rule fails to be added when the token is too
   // powerful.
@@ -407,6 +448,34 @@ TEST(ProcessPolicyTest, CreateProcessAW) {
             runner.RunTest(L"Process_RunApp5 findstr.exe"));
   EXPECT_EQ(SBOX_TEST_SUCCEEDED,
             runner.RunTest(L"Process_RunApp6 findstr.exe"));
+}
+
+// Tests that the broker correctly handles a process crashing within the job.
+TEST(ProcessPolicyTest, CreateProcessCrashy) {
+  TestRunner runner;
+  EXPECT_EQ(static_cast<int>(STATUS_BREAKPOINT),
+            runner.RunTest(L"Process_Crash"));
+}
+
+TEST(ProcessPolicyTest, CreateProcessWithCWD) {
+  TestRunner runner;
+  base::string16 sys_path = MakePathToSys(L"", false);
+  while (!sys_path.empty() && sys_path.back() == L'\\')
+    sys_path.erase(sys_path.length() - 1);
+
+  base::string16 exe_path = MakePathToSys(L"cmd.exe", false);
+  base::string16 cmd_line = L"\"/c if \\\"%CD%\\\" NEQ \\\"" +
+                            sys_path + L"\\\" exit 1\"";
+
+  ASSERT_TRUE(!exe_path.empty());
+  EXPECT_TRUE(runner.AddRule(TargetPolicy::SUBSYS_PROCESS,
+                             TargetPolicy::PROCESS_MIN_EXEC,
+                             exe_path.c_str()));
+
+  base::string16 command = L"Process_CheckExitCode cmd.exe " +
+                           cmd_line + L" " + sys_path;
+  EXPECT_EQ(SBOX_TEST_SUCCEEDED,
+            runner.RunTest(command.c_str()));
 }
 
 TEST(ProcessPolicyTest, OpenToken) {

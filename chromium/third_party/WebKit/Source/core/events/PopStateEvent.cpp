@@ -57,19 +57,19 @@ PopStateEvent::~PopStateEvent()
 {
 }
 
-PassRefPtrWillBeRawPtr<PopStateEvent> PopStateEvent::create()
+PopStateEvent* PopStateEvent::create()
 {
-    return adoptRefWillBeNoop(new PopStateEvent);
+    return new PopStateEvent;
 }
 
-PassRefPtrWillBeRawPtr<PopStateEvent> PopStateEvent::create(PassRefPtr<SerializedScriptValue> serializedState, History* history)
+PopStateEvent* PopStateEvent::create(PassRefPtr<SerializedScriptValue> serializedState, History* history)
 {
-    return adoptRefWillBeNoop(new PopStateEvent(serializedState, history));
+    return new PopStateEvent(serializedState, history);
 }
 
-PassRefPtrWillBeRawPtr<PopStateEvent> PopStateEvent::create(const AtomicString& type, const PopStateEventInit& initializer)
+PopStateEvent* PopStateEvent::create(const AtomicString& type, const PopStateEventInit& initializer)
 {
-    return adoptRefWillBeNoop(new PopStateEvent(type, initializer));
+    return new PopStateEvent(type, initializer);
 }
 
 const AtomicString& PopStateEvent::interfaceName() const

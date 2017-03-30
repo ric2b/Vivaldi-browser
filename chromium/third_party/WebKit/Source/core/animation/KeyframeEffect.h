@@ -57,9 +57,9 @@ public:
 
     static KeyframeEffect* create(Element*, EffectModel*, const Timing&, Priority = DefaultPriority, EventDelegate* = nullptr);
     // Web Animations API Bindings constructors.
-    static KeyframeEffect* create(Element*, const EffectModelOrDictionarySequenceOrDictionary& effectInput, double duration, ExceptionState&);
-    static KeyframeEffect* create(Element*, const EffectModelOrDictionarySequenceOrDictionary& effectInput, const KeyframeEffectOptions& timingInput, ExceptionState&);
-    static KeyframeEffect* create(Element*, const EffectModelOrDictionarySequenceOrDictionary& effectInput, ExceptionState&);
+    static KeyframeEffect* create(ExecutionContext*, Element*, const EffectModelOrDictionarySequenceOrDictionary& effectInput, double duration, ExceptionState&);
+    static KeyframeEffect* create(ExecutionContext*, Element*, const EffectModelOrDictionarySequenceOrDictionary& effectInput, const KeyframeEffectOptions& timingInput, ExceptionState&);
+    static KeyframeEffect* create(ExecutionContext*, Element*, const EffectModelOrDictionarySequenceOrDictionary& effectInput, ExceptionState&);
 
     ~KeyframeEffect() override;
 
@@ -73,9 +73,6 @@ public:
     Element* target() const { return m_target; }
 
     void notifySampledEffectRemovedFromAnimationStack();
-#if !ENABLE(OILPAN)
-    void notifyElementDestroyed();
-#endif
 
     bool isCandidateForAnimationOnCompositor(double animationPlaybackRate) const;
     // Must only be called once.
@@ -110,7 +107,7 @@ protected:
 private:
     KeyframeEffect(Element*, EffectModel*, const Timing&, Priority, EventDelegate*);
 
-    RawPtrWillBeMember<Element> m_target;
+    Member<Element> m_target;
     Member<EffectModel> m_model;
     Member<SampledEffect> m_sampledEffect;
 

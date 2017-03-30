@@ -35,29 +35,23 @@
 #include "bindings/core/v8/ScriptState.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalFrame.h"
-#include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InstrumentingAgents.h"
 #include "core/page/Page.h"
-#include "platform/v8_inspector/public/V8RuntimeAgent.h"
 #include "platform/weborigin/SecurityOrigin.h"
 
 using blink::protocol::Runtime::ExceptionDetails;
 
 namespace blink {
 
-PageRuntimeAgent::PageRuntimeAgent(Client* client, V8Debugger* debugger, InspectedFrames* inspectedFrames)
-    : InspectorRuntimeAgent(debugger, client)
+PageRuntimeAgent::PageRuntimeAgent(Client* client, V8RuntimeAgent* agent, InspectedFrames* inspectedFrames)
+    : InspectorRuntimeAgent(agent, client)
     , m_inspectedFrames(inspectedFrames)
-    , m_mainWorldContextCreated(false)
 {
 }
 
 PageRuntimeAgent::~PageRuntimeAgent()
 {
-#if !ENABLE(OILPAN)
-    m_instrumentingAgents->setPageRuntimeAgent(0);
-#endif
 }
 
 DEFINE_TRACE(PageRuntimeAgent)
@@ -66,24 +60,17 @@ DEFINE_TRACE(PageRuntimeAgent)
     InspectorRuntimeAgent::trace(visitor);
 }
 
-void PageRuntimeAgent::init()
-{
-    InspectorRuntimeAgent::init();
-    m_instrumentingAgents->setPageRuntimeAgent(this);
-}
-
 void PageRuntimeAgent::enable(ErrorString* errorString)
 {
     if (m_enabled)
         return;
 
+    m_instrumentingAgents->setPageRuntimeAgent(this);
+    if (m_inspectedFrames->root()->loader().stateMachine()->committedFirstRealDocumentLoad()) {
+        for (const LocalFrame* frame : *m_inspectedFrames)
+            frame->script().initializeMainWorld();
+    }
     InspectorRuntimeAgent::enable(errorString);
-
-    // Only report existing contexts if the page did commit load, otherwise we may
-    // unintentionally initialize contexts in the frames which may trigger some listeners
-    // that are expected to be triggered only after the load is committed, see http://crbug.com/131623
-    if (m_mainWorldContextCreated)
-        reportExecutionContextCreation();
 }
 
 void PageRuntimeAgent::disable(ErrorString* errorString)
@@ -91,85 +78,12 @@ void PageRuntimeAgent::disable(ErrorString* errorString)
     if (!m_enabled)
         return;
     InspectorRuntimeAgent::disable(errorString);
+    m_instrumentingAgents->setPageRuntimeAgent(nullptr);
 }
 
 void PageRuntimeAgent::didClearDocumentOfWindowObject(LocalFrame* frame)
 {
-    m_mainWorldContextCreated = true;
-
-    if (!m_enabled)
-        return;
-    ASSERT(frontend());
-
-    if (frame == m_inspectedFrames->root())
-        m_v8RuntimeAgent->clearInspectedObjects();
     frame->script().initializeMainWorld();
-}
-
-void PageRuntimeAgent::didCreateScriptContext(LocalFrame* frame, ScriptState* scriptState, SecurityOrigin* origin, int worldId)
-{
-    if (!m_enabled)
-        return;
-    ASSERT(frontend());
-    bool isMainWorld = worldId == MainWorldId;
-    String originString = origin ? origin->toRawString() : "";
-    String frameId = IdentifiersFactory::frameId(frame);
-    reportExecutionContext(scriptState, isMainWorld, originString, frameId);
-}
-
-void PageRuntimeAgent::willReleaseScriptContext(LocalFrame* frame, ScriptState* scriptState)
-{
-    reportExecutionContextDestroyed(scriptState);
-}
-
-ScriptState* PageRuntimeAgent::defaultScriptState()
-{
-    ScriptState* scriptState = ScriptState::forMainWorld(m_inspectedFrames->root());
-    ASSERT(scriptState);
-    return scriptState;
-}
-
-void PageRuntimeAgent::muteConsole()
-{
-    FrameConsole::mute();
-}
-
-void PageRuntimeAgent::unmuteConsole()
-{
-    FrameConsole::unmute();
-}
-
-void PageRuntimeAgent::reportExecutionContextCreation()
-{
-    Vector<std::pair<ScriptState*, SecurityOrigin*>> isolatedContexts;
-    for (LocalFrame* frame : *m_inspectedFrames) {
-        if (!frame->script().canExecuteScripts(NotAboutToExecuteScript))
-            continue;
-        String frameId = IdentifiersFactory::frameId(frame);
-
-        // Ensure execution context is created.
-        // If initializeMainWorld returns true, then is registered by didCreateScriptContext
-        if (!frame->script().initializeMainWorld()) {
-            ScriptState* scriptState = ScriptState::forMainWorld(frame);
-            reportExecutionContext(scriptState, true, "", frameId);
-        }
-        frame->script().collectIsolatedContexts(isolatedContexts);
-        if (isolatedContexts.isEmpty())
-            continue;
-        for (const auto& pair : isolatedContexts) {
-            String originString = pair.second ? pair.second->toRawString() : "";
-            reportExecutionContext(pair.first, false, originString, frameId);
-        }
-        isolatedContexts.clear();
-    }
-}
-
-void PageRuntimeAgent::reportExecutionContext(ScriptState* scriptState, bool isPageContext, const String& origin, const String& frameId)
-{
-    DOMWrapperWorld& world = scriptState->world();
-    String humanReadableName = world.isIsolatedWorld() ? world.isolatedWorldHumanReadableName() : "";
-    String type = isPageContext ? "" : "Extension";
-    InspectorRuntimeAgent::reportExecutionContextCreated(scriptState, type, origin, humanReadableName, frameId);
 }
 
 } // namespace blink

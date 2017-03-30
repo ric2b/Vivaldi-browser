@@ -229,7 +229,7 @@ class QuicP2PSessionTest : public ::testing::Test {
     QuicChromiumPacketWriter* writer =
         new QuicChromiumPacketWriter(socket.get());
     scoped_ptr<QuicConnection> quic_connection1(new QuicConnection(
-        0, IPEndPoint(IPAddress(0, 0, 0, 0), 0), &quic_helper_, writer,
+        0, IPEndPoint(IPAddress::IPv4AllZeros(), 0), &quic_helper_, writer,
         true /* owns_writer */, perspective, QuicSupportedVersions()));
     writer->SetConnection(quic_connection1.get());
 
@@ -328,8 +328,8 @@ TEST_F(QuicP2PSessionTest, DestroySocketWhenClosed) {
 
   // The socket must be destroyed when connection is closed.
   EXPECT_TRUE(socket1_);
-  session1_->connection()->CloseConnection(QUIC_NO_ERROR,
-                                           ConnectionCloseSource::FROM_SELF);
+  session1_->connection()->CloseConnection(
+      QUIC_NO_ERROR, "test", ConnectionCloseBehavior::SILENT_CLOSE);
   EXPECT_FALSE(socket1_);
 }
 

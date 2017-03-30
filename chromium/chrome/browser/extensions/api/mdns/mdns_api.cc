@@ -63,7 +63,7 @@ BrowserContextKeyedAPIFactory<MDnsAPI>* MDnsAPI::GetFactoryInstance() {
 }
 
 void MDnsAPI::SetDnsSdRegistryForTesting(
-    scoped_ptr<DnsSdRegistry> dns_sd_registry) {
+    std::unique_ptr<DnsSdRegistry> dns_sd_registry) {
   dns_sd_registry_ = std::move(dns_sd_registry);
   if (dns_sd_registry_.get())
     dns_sd_registry_.get()->AddObserver(this);
@@ -144,9 +144,8 @@ void MDnsAPI::OnDnsSdEvent(const std::string& service_type,
                            const DnsSdRegistry::DnsSdServiceList& services) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::vector<linked_ptr<mdns::MDnsService> > args;
-  for (DnsSdRegistry::DnsSdServiceList::const_iterator it = services.begin();
-       it != services.end(); ++it) {
+  std::vector<mdns::MDnsService> args;
+  for (const DnsSdService& service : services) {
     if (static_cast<int>(args.size()) ==
         api::mdns::MAX_SERVICE_INSTANCES_PER_EVENT) {
       // TODO(reddaly): This is not the most meaningful way of notifying the
@@ -163,19 +162,18 @@ void MDnsAPI::OnDnsSdEvent(const std::string& service_type,
                          api::mdns::MAX_SERVICE_INSTANCES_PER_EVENT));
       break;
     }
-    linked_ptr<mdns::MDnsService> mdns_service =
-        make_linked_ptr(new mdns::MDnsService);
-    mdns_service->service_name = (*it).service_name;
-    mdns_service->service_host_port = (*it).service_host_port;
-    mdns_service->ip_address = (*it).ip_address;
-    mdns_service->service_data = (*it).service_data;
-    args.push_back(mdns_service);
+    mdns::MDnsService mdns_service;
+    mdns_service.service_name = service.service_name;
+    mdns_service.service_host_port = service.service_host_port;
+    mdns_service.ip_address = service.ip_address;
+    mdns_service.service_data = service.service_data;
+    args.push_back(std::move(mdns_service));
   }
 
-  scoped_ptr<base::ListValue> results = mdns::OnServiceList::Create(args);
-  scoped_ptr<Event> event(new Event(events::MDNS_ON_SERVICE_LIST,
-                                    mdns::OnServiceList::kEventName,
-                                    std::move(results)));
+  std::unique_ptr<base::ListValue> results = mdns::OnServiceList::Create(args);
+  std::unique_ptr<Event> event(new Event(events::MDNS_ON_SERVICE_LIST,
+                                         mdns::OnServiceList::kEventName,
+                                         std::move(results)));
   event->restrict_to_browser_context = browser_context_;
   event->filter_info.SetServiceType(service_type);
 

@@ -50,14 +50,14 @@ double clampNumber(double value, ValueRange range)
 AnimatableLength::AnimatableLength(const Length& length, float zoom)
 {
     ASSERT(zoom);
-    PixelsAndPercent pixelsAndPercent = length.pixelsAndPercent();
+    PixelsAndPercent pixelsAndPercent = length.getPixelsAndPercent();
     m_pixels = pixelsAndPercent.pixels / zoom;
     m_percent = pixelsAndPercent.percent;
     m_hasPixels = length.type() != Percent;
     m_hasPercent = !length.isFixed();
 }
 
-Length AnimatableLength::length(float zoom, ValueRange range) const
+Length AnimatableLength::getLength(float zoom, ValueRange range) const
 {
     if (!m_hasPercent)
         return Length(clampNumber(m_pixels, range) * zoom, Fixed);

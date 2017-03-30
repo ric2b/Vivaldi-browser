@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/id_map.h"
@@ -118,7 +119,7 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
   // Returns the existing service worker or a newly created one with the given
   // handle reference. Returns nullptr if the given reference is invalid.
   scoped_refptr<WebServiceWorkerImpl> GetOrCreateServiceWorker(
-      scoped_ptr<ServiceWorkerHandleReference> handle_ref);
+      std::unique_ptr<ServiceWorkerHandleReference> handle_ref);
 
   // Returns the existing registration or a newly created one. When a new one is
   // created, increments interprocess references to the registration and its
@@ -253,9 +254,9 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
 
   // Assumes that the given object information retains an interprocess handle
   // reference passed from the browser process, and adopts it.
-  scoped_ptr<ServiceWorkerRegistrationHandleReference> Adopt(
+  std::unique_ptr<ServiceWorkerRegistrationHandleReference> Adopt(
       const ServiceWorkerRegistrationObjectInfo& info);
-  scoped_ptr<ServiceWorkerHandleReference> Adopt(
+  std::unique_ptr<ServiceWorkerHandleReference> Adopt(
       const ServiceWorkerObjectInfo& info);
 
   RegistrationCallbackMap pending_registration_callbacks_;

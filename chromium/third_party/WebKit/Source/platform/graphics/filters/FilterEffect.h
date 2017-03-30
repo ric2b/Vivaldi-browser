@@ -44,7 +44,7 @@ class TextStream;
 
 class SkiaImageFilterBuilder;
 
-typedef WillBeHeapVector<RefPtrWillBeMember<FilterEffect>> FilterEffectVector;
+typedef HeapVector<Member<FilterEffect>> FilterEffectVector;
 
 enum FilterEffectType {
     FilterEffectTypeUnknown,
@@ -61,7 +61,7 @@ enum DetermineSubregionFlag {
 
 typedef int DetermineSubregionFlags;
 
-class PLATFORM_EXPORT FilterEffect : public RefCountedWillBeGarbageCollectedFinalized<FilterEffect> {
+class PLATFORM_EXPORT FilterEffect : public GarbageCollectedFinalized<FilterEffect> {
     WTF_MAKE_NONCOPYABLE(FilterEffect);
 public:
     virtual ~FilterEffect();
@@ -92,18 +92,18 @@ public:
     // destination rect. Note that these are not necessarily the inverse of
     // each other. For example, for FEGaussianBlur, they are the same
     // transformation.
-    virtual FloatRect mapRect(const FloatRect& rect, bool forward = true) { return rect; }
+    virtual FloatRect mapRect(const FloatRect& rect, bool forward = true) const { return rect; }
     // A version of the above that is used for calculating paint rects. We can't
     // use mapRect above for that, because that is also used for calculating effect
     // regions for CSS filters and has undesirable effects for tile and
     // displacement map.
-    virtual FloatRect mapPaintRect(const FloatRect& rect, bool forward)
+    virtual FloatRect mapPaintRect(const FloatRect& rect, bool forward) const
     {
         return mapRect(rect, forward);
     }
-    FloatRect mapRectRecursive(const FloatRect&);
+    FloatRect mapRectRecursive(const FloatRect&) const;
 
-    virtual FilterEffectType filterEffectType() const { return FilterEffectTypeUnknown; }
+    virtual FilterEffectType getFilterEffectType() const { return FilterEffectTypeUnknown; }
 
     virtual TextStream& externalRepresentation(TextStream&, int indention = 0) const;
 
@@ -128,8 +128,8 @@ public:
     void setEffectBoundaries(const FloatRect& effectBoundaries) { m_effectBoundaries = effectBoundaries; }
     FloatRect applyEffectBoundaries(const FloatRect&) const;
 
-    Filter* filter() { return m_filter; }
-    const Filter* filter() const { return m_filter; }
+    Filter* getFilter() { return m_filter; }
+    const Filter* getFilter() const { return m_filter; }
 
     bool clipsToBounds() const { return m_clipsToBounds; }
     void setClipsToBounds(bool value) { m_clipsToBounds = value; }
@@ -149,6 +149,11 @@ public:
     SkImageFilter* getImageFilter(ColorSpace, bool requiresPMColorValidation) const;
     void setImageFilter(ColorSpace, bool requiresPMColorValidation, PassRefPtr<SkImageFilter>);
 
+    bool originTainted() const { return m_originTainted; }
+    void setOriginTainted() { m_originTainted = true; }
+
+    bool inputsTaintOrigin() const;
+
 protected:
     FilterEffect(Filter*);
 
@@ -161,8 +166,6 @@ protected:
     void addAbsolutePaintRect(const FloatRect& absolutePaintRect);
 
 private:
-    bool hasConnectedInput() const;
-
     FilterEffectVector m_inputEffects;
 
     IntRect m_absolutePaintRect;
@@ -170,7 +173,7 @@ private:
     // The maximum size of a filter primitive. In SVG this is the primitive subregion in absolute coordinate space.
     // The absolute paint rect should never be bigger than m_maxEffectRect.
     FloatRect m_maxEffectRect;
-    RawPtrWillBeMember<Filter> m_filter;
+    Member<Filter> m_filter;
 
     // The following member variables are SVG specific and will move to LayoutSVGResourceFilterPrimitive.
     // See bug https://bugs.webkit.org/show_bug.cgi?id=45614.
@@ -189,6 +192,8 @@ private:
 
     // Should the effect clip to its primitive region, or expand to use the combined region of its inputs.
     bool m_clipsToBounds;
+
+    bool m_originTainted;
 
     ColorSpace m_operatingColorSpace;
 

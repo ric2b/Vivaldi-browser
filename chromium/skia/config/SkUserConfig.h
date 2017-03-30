@@ -83,11 +83,6 @@
 //#define SK_ZLIB_INCLUDE <zlib.h>
 #define SK_ZLIB_INCLUDE "third_party/zlib/zlib.h"
 
-/*  Define this to allow PDF scalars above 32k.  The PDF/A spec doesn't allow
-    them, but modern PDF interpreters should handle them just fine.
- */
-//#define SK_ALLOW_LARGE_PDF_SCALARS
-
 /*  Define this to provide font subsetter for font subsetting when generating
     PDF documents.
  */
@@ -235,8 +230,32 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_IGNORE_GPU_DITHER
 #endif
 
+#ifndef    SK_SUPPORT_LEGACY_IMAGEFACTORY
+#   define SK_SUPPORT_LEGACY_IMAGEFACTORY
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_IMAGEFILTER_PTR
+#   define SK_SUPPORT_LEGACY_IMAGEFILTER_PTR
+#endif
+
 #ifndef    SK_SUPPORT_LEGACY_EVAL_CUBIC
 #   define SK_SUPPORT_LEGACY_EVAL_CUBIC
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_PEEKPIXELS_PARMS
+#   define SK_SUPPORT_LEGACY_PEEKPIXELS_PARMS
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_SETSHADER_PTR
+#   define SK_SUPPORT_LEGACY_SETSHADER_PTR
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_TYPEFACE_PTR
+#   define SK_SUPPORT_LEGACY_TYPEFACE_PTR
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_MASKFILTER_PTR
+#   define SK_SUPPORT_LEGACY_MASKFILTER_PTR
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
@@ -250,9 +269,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
  */
 #define SK_GDI_ALWAYS_USE_TEXTMETRICS_FOR_FONT_METRICS
 
-#ifndef SK_IGNORE_GL_TEXTURE_TARGET
-#   define SK_IGNORE_GL_TEXTURE_TARGET
-#endif
 #define SK_IGNORE_BLURRED_RRECT_OPT
 #define SK_USE_DISCARDABLE_SCALEDIMAGECACHE
 #define SK_WILL_NEVER_DRAW_PERSPECTIVE_TEXT

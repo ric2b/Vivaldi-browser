@@ -47,6 +47,7 @@
 #include "base/format_macros.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "net/cookies/cookie_util.h"
 #include "net/cookies/parsed_cookie.h"
@@ -133,7 +134,7 @@ CanonicalCookie::CanonicalCookie(const GURL& url,
                                  const base::Time& last_access,
                                  bool secure,
                                  bool httponly,
-                                 bool same_site,
+                                 CookieSameSite same_site,
                                  CookiePriority priority)
     : source_(url.SchemeIsFile() ? url : url.GetOrigin()),
       name_(name),
@@ -147,34 +148,6 @@ CanonicalCookie::CanonicalCookie(const GURL& url,
       httponly_(httponly),
       same_site_(same_site),
       priority_(priority) {}
-
-CanonicalCookie::CanonicalCookie(const GURL& url, const ParsedCookie& pc)
-    : source_(url.SchemeIsFile() ? url : url.GetOrigin()),
-      name_(pc.Name()),
-      value_(pc.Value()),
-      path_(CanonPath(url, pc)),
-      creation_date_(Time::Now()),
-      last_access_date_(Time()),
-      secure_(pc.IsSecure()),
-      httponly_(pc.IsHttpOnly()),
-      same_site_(pc.IsSameSite()),
-      priority_(pc.Priority()) {
-  if (pc.HasExpires())
-    expiry_date_ = CanonExpiration(pc, creation_date_, creation_date_);
-
-  // Do the best we can with the domain.
-  std::string cookie_domain;
-  std::string domain_string;
-  if (pc.HasDomain()) {
-    domain_string = pc.Domain();
-  }
-  bool result
-      = cookie_util::GetCookieDomainWithString(url, domain_string,
-                                                &cookie_domain);
-  // Caller is responsible for passing in good arguments.
-  DCHECK(result);
-  domain_ = cookie_domain;
-}
 
 CanonicalCookie::CanonicalCookie(const CanonicalCookie& other) = default;
 
@@ -276,7 +249,7 @@ scoped_ptr<CanonicalCookie> CanonicalCookie::Create(
       url, parsed_cookie.Name(), parsed_cookie.Value(), cookie_domain,
       cookie_path, creation_time, cookie_expires, creation_time,
       parsed_cookie.IsSecure(), parsed_cookie.IsHttpOnly(),
-      parsed_cookie.IsSameSite(), parsed_cookie.Priority()));
+      parsed_cookie.SameSite(), parsed_cookie.Priority()));
 }
 
 // static
@@ -290,7 +263,7 @@ scoped_ptr<CanonicalCookie> CanonicalCookie::Create(
     const base::Time& expiration,
     bool secure,
     bool http_only,
-    bool same_site,
+    CookieSameSite same_site,
     bool enforce_strict_secure,
     CookiePriority priority) {
   // Expect valid attribute tokens and values, as defined by the ParsedCookie
@@ -349,15 +322,14 @@ bool CanonicalCookie::IsOnPath(const std::string& url_path) const {
   // was longer, the same length, or shorter than the length of the url path.
   // I think the approach below is simpler.
 
-  // Make sure the cookie path is a prefix of the url path.  If the
-  // url path is shorter than the cookie path, then the cookie path
-  // can't be a prefix.
-  if (url_path.find(path_) != 0)
+  // Make sure the cookie path is a prefix of the url path.  If the url path is
+  // shorter than the cookie path, then the cookie path can't be a prefix.
+  if (!base::StartsWith(url_path, path_, base::CompareCase::SENSITIVE))
     return false;
 
-  // Now we know that url_path is >= cookie_path, and that cookie_path
-  // is a prefix of url_path.  If they are the are the same length then
-  // they are identical, otherwise we need an additional check:
+  // |url_path| is >= |path_|, and |path_| is a prefix of |url_path|.  If they
+  // are the are the same length then they are identical, otherwise need an
+  // additional check:
 
   // In order to avoid in correctly matching a cookie path of /blah
   // with a request path of '/blahblah/', we need to make sure that either
@@ -365,8 +337,9 @@ bool CanonicalCookie::IsOnPath(const std::string& url_path) const {
   // in the url path.  Since we know that the url path length is greater
   // than the cookie path length, it's safe to index one byte past.
   if (path_.length() != url_path.length() && path_.back() != '/' &&
-      url_path[path_.length()] != '/')
+      url_path[path_.length()] != '/') {
     return false;
+  }
 
   return true;
 }
@@ -421,8 +394,22 @@ bool CanonicalCookie::IncludeForRequestURL(const GURL& url,
   if (!IsOnPath(url.path()))
     return false;
   // Don't include same-site cookies for cross-site requests.
-  if (IsSameSite() && !options.include_same_site())
-    return false;
+  switch (SameSite()) {
+    case CookieSameSite::STRICT_MODE:
+      if (options.same_site_cookie_mode() !=
+          CookieOptions::SameSiteCookieMode::INCLUDE_STRICT_AND_LAX) {
+        return false;
+      }
+      break;
+    case CookieSameSite::LAX_MODE:
+      if (options.same_site_cookie_mode() ==
+          CookieOptions::SameSiteCookieMode::DO_NOT_INCLUDE) {
+        return false;
+      }
+      break;
+    default:
+      break;
+  }
 
   return true;
 }

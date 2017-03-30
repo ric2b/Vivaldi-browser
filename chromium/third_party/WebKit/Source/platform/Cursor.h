@@ -100,12 +100,12 @@ public:
     Cursor& operator=(const Cursor&);
 
     explicit Cursor(Type);
-    Type type() const
+    Type getType() const
     {
         ASSERT(m_type >= 0 && m_type <= Custom);
         return m_type;
     }
-    Image* image() const { return m_image.get(); }
+    Image* getImage() const { return m_image.get(); }
     const IntPoint& hotSpot() const { return m_hotSpot; }
     // Image scale in image pixels per logical (UI) pixel.
     float imageScaleFactor() const { return m_imageScaleFactor; }

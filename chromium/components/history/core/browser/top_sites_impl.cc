@@ -109,7 +109,10 @@ const int kTopSitesImageQuality = 100;
 const char kMostVisitedURLsBlacklist[] = "ntp.most_visited_blacklist";
 
 // Vivaldi: How many days between each vacuuming of the top sites database.
-const int kTopSitesVacuumDays = 30;
+const int kTopSitesVacuumDays = 14;
+
+// Vivaldi: We need them to be smaller as we store many more of them
+const int kVivaldiTopSitesImageQuality = 80;
 
 }  // namespace
 
@@ -234,9 +237,10 @@ void TopSitesImpl::GetMostVisitedURLs(
     if (!loaded_) {
       // A request came in before we finished loading. Store the callback and
       // we'll run it on current thread when we finish loading.
-      pending_callbacks_.push_back(base::Bind(
-          &RunOrPostGetMostVisitedURLsCallback,
-          base::ThreadTaskRunnerHandle::Get(), include_forced_urls, callback));
+      pending_callbacks_.push_back(
+          base::Bind(&RunOrPostGetMostVisitedURLsCallback,
+                     base::RetainedRef(base::ThreadTaskRunnerHandle::Get()),
+                     include_forced_urls, callback));
       return;
     }
     if (include_forced_urls) {
@@ -553,8 +557,14 @@ bool TopSitesImpl::EncodeBitmap(const gfx::Image& bitmap,
     return false;
   *bytes = new base::RefCountedBytes();
   std::vector<unsigned char> data;
+  if (vivaldi::IsVivaldiRunning()) {
+    if (!gfx::JPEG1xEncodedDataFromImage(bitmap, kVivaldiTopSitesImageQuality,
+                                         &data))
+      return false;
+  } else {
   if (!gfx::JPEG1xEncodedDataFromImage(bitmap, kTopSitesImageQuality, &data))
     return false;
+  }
 
   // As we're going to cache this data, make sure the vector is only as big as
   // it needs to be, as JPEGCodec::Encode() over-allocates data.capacity().
@@ -986,6 +996,19 @@ void TopSitesImpl::Vacuum() {
 void TopSitesImpl::VacuumOnDBThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::DB);
   backend_->VacuumDatabase();
+}
+
+void TopSitesImpl::RemoveThumbnailForUrl(const GURL& url) {
+  // DB access must happen on the DB thread.
+  content::BrowserThread::PostTask(
+      content::BrowserThread::DB, FROM_HERE,
+      base::Bind(&TopSitesImpl::RemoveThumbnailForUrlOnDBThread,
+                 base::Unretained(this), url));
+}
+
+void TopSitesImpl::RemoveThumbnailForUrlOnDBThread(const GURL& url) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::DB);
+  backend_->RemoveThumbnailForUrl(url);
 }
 
 }  // namespace history

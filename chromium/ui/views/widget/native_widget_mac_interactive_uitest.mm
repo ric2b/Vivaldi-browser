@@ -9,6 +9,7 @@
 #import "base/mac/mac_util.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
+#include "ui/base/test/ui_controls.h"
 #import "ui/base/test/windowed_nsnotification_observer.h"
 #include "ui/views/test/test_widget_observer.h"
 #include "ui/views/test/widget_test.h"
@@ -25,7 +26,11 @@ class NativeWidgetMacInteractiveUITest
   class Observer;
 
   NativeWidgetMacInteractiveUITest()
-      : activationCount_(0), deactivationCount_(0) {}
+      : activationCount_(0), deactivationCount_(0) {
+    // TODO(tapted): Remove this when these are absorbed into Chrome's
+    // interactive_ui_tests target. See http://crbug.com/403679.
+    ui_controls::EnableUIControls();
+  }
 
   Widget* MakeWidget() {
     return GetParam() ? CreateTopLevelFramelessPlatformWidget()
@@ -159,10 +164,6 @@ NSData* ViewAsTIFF(NSView* view) {
 // Test that parent windows keep their traffic lights enabled when showing
 // dialogs.
 TEST_F(NativeWidgetMacInteractiveUITest, ParentWindowTrafficLights) {
-  // Snow leopard doesn't have -[NSWindow _sharesParentKeyState].
-  if (base::mac::IsOSSnowLeopard())
-    return;
-
   Widget* parent_widget = CreateTopLevelPlatformWidget();
   parent_widget->SetBounds(gfx::Rect(100, 100, 100, 100));
   ShowKeyWindow(parent_widget);

@@ -6,21 +6,15 @@
 
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/ui/host_desktop.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 
 bool IsAppLauncherEnabled() {
 #if !defined(ENABLE_APP_LIST)
   return false;
-
-#elif defined(OS_CHROMEOS)
+#elif defined(OS_CHROMEOS) || defined(USE_ASH)
   return true;
-
-#else  // defined(ENABLE_APP_LIST) && !defined(OS_CHROMEOS)
-  if (chrome::GetActiveDesktop() == chrome::HOST_DESKTOP_TYPE_ASH)
-    return true;
-
+#else
   PrefService* prefs = g_browser_process->local_state();
   // In some tests, the prefs aren't initialised.
   return prefs && prefs->GetBoolean(prefs::kAppLauncherHasBeenEnabled);
@@ -28,14 +22,6 @@ bool IsAppLauncherEnabled() {
 }
 
 bool ShouldShowAppLauncherPromo() {
-#if defined(OS_WIN)
-  PrefService* local_state = g_browser_process->local_state();
-  // In some tests, the prefs aren't initialised.
-  if (!local_state)
-    return false;
-  return !IsAppLauncherEnabled() &&
-      local_state->GetBoolean(prefs::kShowAppLauncherPromo);
-#else
+  // Never promote. TODO(tapted): Delete this function and supporting code.
   return false;
-#endif
-}  // namespace apps
+}

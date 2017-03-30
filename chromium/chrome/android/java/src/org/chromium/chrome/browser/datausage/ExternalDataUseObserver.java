@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.datausage;
 
 import android.content.Context;
+import android.text.TextUtils;
 
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
@@ -37,6 +38,10 @@ public class ExternalDataUseObserver {
             mInstalled = false;
             ApplicationStatus.registerApplicationStateListener(this);
             checkAndNotifyPackageInstallState();
+            if (!mInstalled) {
+                // Notify the state when the control app is not installed on startup.
+                nativeOnControlAppInstallStateChange(mNativeExternalDataUseObserverBridge, false);
+            }
         }
 
         @Override
@@ -56,16 +61,17 @@ public class ExternalDataUseObserver {
             if (mNativeExternalDataUseObserverBridge == 0) {
                 return;
             }
-            if (mControlAppPackageName != null && !mControlAppPackageName.isEmpty()) {
-                boolean isControlAppInstalled =
-                        PackageUtils.getPackageVersion(
-                                ApplicationStatus.getApplicationContext(), mControlAppPackageName)
-                        != -1;
-                if (isControlAppInstalled != mInstalled) {
-                    mInstalled = isControlAppInstalled;
-                    nativeOnControlAppInstallStateChange(
-                            mNativeExternalDataUseObserverBridge, mInstalled);
-                }
+            if (TextUtils.isEmpty(mControlAppPackageName)) {
+                return;
+            }
+            boolean isControlAppInstalled =
+                    PackageUtils.getPackageVersion(
+                            ApplicationStatus.getApplicationContext(), mControlAppPackageName)
+                    != -1;
+            if (isControlAppInstalled != mInstalled) {
+                mInstalled = isControlAppInstalled;
+                nativeOnControlAppInstallStateChange(
+                        mNativeExternalDataUseObserverBridge, mInstalled);
             }
         }
     }
@@ -95,11 +101,22 @@ public class ExternalDataUseObserver {
     }
 
     /**
-     * Sets the package name of the control app.
-     * @param controlAppPackageName package name of the control app.
+     * @return the default control app package name.
+     */
+    protected String getDefaultControlAppPackageName() {
+        return "";
+    }
+
+    /**
+     * Initializes the control app manager with package name of the control app.
+     * @param controlAppPackageName package name of the control app. If this is empty the default
+     * control app package name from {@link getDefaultControlAppPackageName} will be used.
      */
     @CalledByNative
-    protected void setControlAppPackageName(String controlAppPackageName) {
+    protected void initControlAppManager(String controlAppPackageName) {
+        if (TextUtils.isEmpty(controlAppPackageName)) {
+            controlAppPackageName = getDefaultControlAppPackageName();
+        }
         mControlAppManager = new ControlAppManager(controlAppPackageName);
     }
 
@@ -112,9 +129,10 @@ public class ExternalDataUseObserver {
     }
 
     /**
-    * Fetches matching rules and returns them via {@link #fetchMatchingRulesDone}. While the
-    * fetch is underway, it is illegal to make calls to this method.
-    */
+     * Fetches matching rules and returns them via {@link #fetchMatchingRulesDone}. subsequent
+     * calls to this method While the fetch is underway, may cause the {@link
+     * #fetchMatchingRulesDone} callback to be missed for the subsequent call.
+     */
     @CalledByNative
     protected void fetchMatchingRules() {
         fetchMatchingRulesDone(null, null, null);

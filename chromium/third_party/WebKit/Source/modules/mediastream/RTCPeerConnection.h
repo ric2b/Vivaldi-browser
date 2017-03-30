@@ -31,6 +31,7 @@
 #ifndef RTCPeerConnection_h
 #define RTCPeerConnection_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ActiveDOMObject.h"
@@ -46,6 +47,7 @@
 namespace blink {
 class ExceptionState;
 class MediaStreamTrack;
+class RTCAnswerOptions;
 class RTCConfiguration;
 class RTCDTMFSender;
 class RTCDataChannel;
@@ -62,17 +64,21 @@ class VoidCallback;
 class RTCPeerConnection final
     : public RefCountedGarbageCollectedEventTargetWithInlineData<RTCPeerConnection>
     , public WebRTCPeerConnectionHandlerClient
+    , public ActiveScriptWrappable
     , public ActiveDOMObject {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(RTCPeerConnection);
     DEFINE_WRAPPERTYPEINFO();
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(RTCPeerConnection);
+    USING_GARBAGE_COLLECTED_MIXIN(RTCPeerConnection);
 public:
     // TODO(hbos): Create with expired RTCCertificate should fail, see crbug.com/565278.
     static RTCPeerConnection* create(ExecutionContext*, const Dictionary&, const Dictionary&, ExceptionState&);
     ~RTCPeerConnection() override;
 
-    void createOffer(ExecutionContext*, RTCSessionDescriptionCallback*, RTCPeerConnectionErrorCallback*, const Dictionary&, ExceptionState&);
-    void createAnswer(ExecutionContext*, RTCSessionDescriptionCallback*, RTCPeerConnectionErrorCallback*, const Dictionary&, ExceptionState&);
+    ScriptPromise createOffer(ScriptState*, const RTCOfferOptions&);
+    ScriptPromise createOffer(ScriptState*, RTCSessionDescriptionCallback*, RTCPeerConnectionErrorCallback*, const Dictionary&);
+
+    ScriptPromise createAnswer(ScriptState*, const RTCAnswerOptions&);
+    ScriptPromise createAnswer(ScriptState*, RTCSessionDescriptionCallback*, RTCPeerConnectionErrorCallback*, const Dictionary&);
 
     ScriptPromise setLocalDescription(ScriptState*, const RTCSessionDescriptionInit&);
     ScriptPromise setLocalDescription(ScriptState*, RTCSessionDescription*, VoidCallback*, RTCPeerConnectionErrorCallback*);
@@ -141,14 +147,16 @@ public:
 
     // EventTarget
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
 
     // ActiveDOMObject
     void suspend() override;
     void resume() override;
     void stop() override;
+
+    // ActiveScriptWrappable
     // We keep the this object alive until either stopped or closed.
-    bool hasPendingActivity() const override
+    bool hasPendingActivity() const final
     {
         return !m_closed && !m_stopped;
     }
@@ -161,14 +169,14 @@ private:
     typedef Function<bool()> BoolFunction;
     class EventWrapper : public GarbageCollectedFinalized<EventWrapper> {
     public:
-        EventWrapper(PassRefPtrWillBeRawPtr<Event>, PassOwnPtr<BoolFunction>);
+        EventWrapper(Event*, PassOwnPtr<BoolFunction>);
         // Returns true if |m_setupFunction| returns true or it is null.
         // |m_event| will only be fired if setup() returns true;
         bool setup();
 
         DECLARE_TRACE();
 
-        RefPtrWillBeMember<Event> m_event;
+        Member<Event> m_event;
 
     private:
         OwnPtr<BoolFunction> m_setupFunction;
@@ -176,11 +184,8 @@ private:
 
     RTCPeerConnection(ExecutionContext*, RTCConfiguration*, WebMediaConstraints, ExceptionState&);
 
-    static RTCConfiguration* parseConfiguration(const Dictionary&, ExceptionState&);
-    static RTCOfferOptions* parseOfferOptions(const Dictionary&, ExceptionState&);
-
-    void scheduleDispatchEvent(PassRefPtrWillBeRawPtr<Event>);
-    void scheduleDispatchEvent(PassRefPtrWillBeRawPtr<Event>, PassOwnPtr<BoolFunction>);
+    void scheduleDispatchEvent(Event*);
+    void scheduleDispatchEvent(Event*, PassOwnPtr<BoolFunction>);
     void dispatchScheduledEvent();
     bool hasLocalStreamWithTrackId(const String& trackId);
 

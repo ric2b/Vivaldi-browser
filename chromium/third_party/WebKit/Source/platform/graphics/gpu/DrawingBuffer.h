@@ -46,11 +46,15 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 
+namespace gpu {
+namespace gles2 {
+class GLES2Interface;
+}
+}
+
 namespace WTF {
-
 class ArrayBufferContents;
-
-} // namespace WTF
+}
 
 namespace blink {
 
@@ -59,6 +63,7 @@ class ImageBuffer;
 class WebExternalBitmap;
 class WebExternalTextureLayer;
 class WebGraphicsContext3D;
+class WebGraphicsContext3DProvider;
 class WebLayer;
 
 // Manages a rendering target (framebuffer + attachment) for a canvas.  Can publish its rendering
@@ -71,7 +76,15 @@ public:
         Discard
     };
 
-    static PassRefPtr<DrawingBuffer> create(PassOwnPtr<WebGraphicsContext3D>, const IntSize&, PreserveDrawingBuffer, WebGraphicsContext3D::Attributes requestedAttributes);
+    static PassRefPtr<DrawingBuffer> create(
+        PassOwnPtr<WebGraphicsContext3DProvider>,
+        const IntSize&,
+        bool premultipliedAlpha,
+        bool wantAlphaChannel,
+        bool wantDepthBuffer,
+        bool wantStencilBuffer,
+        bool wantAntialiasing,
+        PreserveDrawingBuffer);
     static void forceNextDrawingBufferCreationToFail();
 
     ~DrawingBuffer() override;
@@ -87,11 +100,13 @@ public:
     // in the situation where the end user only asked for a depth buffer. In this case, we need to
     // upgrade clears of the depth buffer to clears of the depth and stencil buffers in order to
     // avoid performance problems on some GPUs.
-    bool hasImplicitStencilBuffer() const;
+    bool hasImplicitStencilBuffer() const { return m_hasImplicitStencilBuffer; }
+    bool hasDepthBuffer() const { return !!m_depthStencilBuffer; }
+    bool hasStencilBuffer() const { return !!m_depthStencilBuffer; }
 
     // Given the desired buffer size, provides the largest dimensions that will fit in the pixel budget.
     static IntSize adjustSize(const IntSize& desiredSize, const IntSize& curSize, int maxTextureSize);
-    bool reset(const IntSize&);
+    bool reset(const IntSize&, bool wantDepthOrStencilBuffer);
     void bind(GLenum target);
     IntSize size() const { return m_size; }
 
@@ -105,11 +120,11 @@ public:
 
     // The DrawingBuffer needs to track the texture bound to texture unit 0.
     // The bound texture is tracked to avoid costly queries during rendering.
-    void setTexture2DBinding(Platform3DObject texture) { m_texture2DBinding = texture; }
+    void setTexture2DBinding(GLuint texture) { m_texture2DBinding = texture; }
 
     // The DrawingBuffer needs to track the currently bound framebuffer so it
     // restore the binding when needed.
-    void setFramebufferBinding(GLenum target, Platform3DObject fbo)
+    void setFramebufferBinding(GLenum target, GLuint fbo)
     {
         switch (target) {
         case GL_FRAMEBUFFER:
@@ -133,7 +148,7 @@ public:
 
     bool multisample() const;
 
-    Platform3DObject framebuffer() const;
+    GLuint framebuffer() const;
 
     bool discardFramebufferSupported() const { return m_discardFramebufferSupported; }
 
@@ -146,17 +161,15 @@ public:
     WebLayer* platformLayer();
 
     WebGraphicsContext3D* context();
-
-    // Returns the actual context attributes for this drawing buffer which may differ from the
-    // requested context attributes due to implementation limits.
-    WebGraphicsContext3D::Attributes getActualAttributes() const { return m_actualAttributes; }
+    gpu::gles2::GLES2Interface* contextGL();
+    WebGraphicsContext3DProvider* contextProvider();
 
     // WebExternalTextureLayerClient implementation.
     bool prepareMailbox(WebExternalTextureMailbox*, WebExternalBitmap*) override;
     void mailboxReleased(const WebExternalTextureMailbox&, bool lostResource = false) override;
 
     // Destroys the TEXTURE_2D binding for the owned context
-    bool copyToPlatformTexture(WebGraphicsContext3D*, Platform3DObject texture, GLenum internalFormat,
+    bool copyToPlatformTexture(WebGraphicsContext3D*, gpu::gles2::GLES2Interface*, GLuint texture, GLenum internalFormat,
         GLenum destType, GLint level, bool premultiplyAlpha, bool flipY, SourceDrawingBuffer);
 
     void setPackAlignment(GLint param);
@@ -170,26 +183,26 @@ public:
     // Otherwise, bind to the default FBO.
     void restoreFramebufferBindings();
 
-    void addNewMailboxCallback(PassOwnPtr<Closure> closure) { m_newMailboxCallback = std::move(closure); }
+    void addNewMailboxCallback(PassOwnPtr<SameThreadClosure> closure) { m_newMailboxCallback = std::move(closure); }
 
 protected: // For unittests
     DrawingBuffer(
-        PassOwnPtr<WebGraphicsContext3D>,
+        PassOwnPtr<WebGraphicsContext3DProvider>,
         PassOwnPtr<Extensions3DUtil>,
-        bool multisampleExtensionSupported,
         bool discardFramebufferSupported,
-        PreserveDrawingBuffer,
-        WebGraphicsContext3D::Attributes requestedAttributes);
+        bool wantAlphaChannel,
+        bool premultipliedAlpha,
+        PreserveDrawingBuffer);
 
-    bool initialize(const IntSize&);
+    bool initialize(const IntSize&, bool wantDepthBuffer, bool wantStencilBuffer, bool useMultisampling);
 
 private:
     struct TextureParameters {
         DISALLOW_NEW();
-        WGC3Denum target;
-        WGC3Denum internalColorFormat;
-        WGC3Denum colorFormat;
-        WGC3Denum internalRenderbufferFormat;
+        GLenum target;
+        GLenum internalColorFormat;
+        GLenum colorFormat;
+        GLenum internalRenderbufferFormat;
 
         TextureParameters()
             : target(0)
@@ -204,8 +217,8 @@ private:
     // we need to know the mapping from texture id to image.
     struct TextureInfo {
         DISALLOW_NEW();
-        Platform3DObject textureId;
-        WGC3Duint imageId;
+        GLuint textureId;
+        GLuint imageId;
         TextureParameters parameters;
 
         TextureInfo()
@@ -242,12 +255,12 @@ private:
     // Creates and binds a texture with the given parameters. Returns 0 on
     // failure, or the newly created texture id on success. The caller takes
     // ownership of the newly created texture.
-    WebGLId createColorTexture(const TextureParameters&);
+    GLuint createColorTexture(const TextureParameters&);
 
     // Create the depth/stencil and multisample buffers, if needed.
     void createSecondaryBuffers();
-    bool resizeFramebuffer(const IntSize&);
-    bool resizeMultisampleFramebuffer(const IntSize&);
+    bool resizeFramebuffer(const IntSize&, bool wantDepthOrStencilBuffer);
+    bool resizeMultisampleFramebuffer(const IntSize&, bool wantDepthOrStencilBuffer);
     void resizeDepthStencil(const IntSize&);
 
     void clearPlatformLayer();
@@ -291,20 +304,23 @@ private:
 
     void attachColorBufferToCurrentFBO();
 
-    PreserveDrawingBuffer m_preserveDrawingBuffer;
+    const PreserveDrawingBuffer m_preserveDrawingBuffer;
     bool m_scissorEnabled;
-    Platform3DObject m_texture2DBinding;
-    Platform3DObject m_drawFramebufferBinding;
-    Platform3DObject m_readFramebufferBinding;
+    GLuint m_texture2DBinding;
+    GLuint m_drawFramebufferBinding;
+    GLuint m_readFramebufferBinding;
     GLenum m_activeTextureUnit;
 
-    OwnPtr<WebGraphicsContext3D> m_context;
+    OwnPtr<WebGraphicsContext3DProvider> m_contextProvider;
+    WebGraphicsContext3D* m_context; // Lifetime is tied to the m_contextProvider.
+    gpu::gles2::GLES2Interface* m_gl; // Lifetime is tied to the m_contextProvider.
     OwnPtr<Extensions3DUtil> m_extensionsUtil;
     IntSize m_size;
-    WebGraphicsContext3D::Attributes m_requestedAttributes;
-    bool m_multisampleExtensionSupported;
-    bool m_discardFramebufferSupported;
-    Platform3DObject m_fbo;
+    const bool m_discardFramebufferSupported;
+    const bool m_wantAlphaChannel;
+    const bool m_premultipliedAlpha;
+    bool m_hasImplicitStencilBuffer;
+    GLuint m_fbo;
     // DrawingBuffer's output is double-buffered. m_colorBuffer is the back buffer.
     TextureInfo m_colorBuffer;
     struct FrontBufferInfo {
@@ -313,14 +329,14 @@ private:
     };
     FrontBufferInfo m_frontColorBuffer;
 
-    OwnPtr<Closure> m_newMailboxCallback;
+    OwnPtr<SameThreadClosure> m_newMailboxCallback;
 
     // This is used when the user requests either a depth or stencil buffer.
-    Platform3DObject m_depthStencilBuffer;
+    GLuint m_depthStencilBuffer;
 
     // For multisampling.
-    Platform3DObject m_multisampleFBO;
-    Platform3DObject m_multisampleColorBuffer;
+    GLuint m_multisampleFBO;
+    GLuint m_multisampleColorBuffer;
 
     // True if our contents have been modified since the last presentation of this buffer.
     bool m_contentsChanged;
@@ -338,7 +354,6 @@ private:
 
     AntialiasingMode m_antiAliasingMode;
 
-    WebGraphicsContext3D::Attributes m_actualAttributes;
     int m_maxTextureSize;
     int m_sampleCount;
     int m_packAlignment;

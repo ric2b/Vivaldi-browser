@@ -4,7 +4,10 @@
 
 #include "google_apis/gcm/engine/connection_factory_impl.h"
 
+#include <string>
+
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/profiler/scoped_tracker.h"
@@ -307,6 +310,7 @@ void ConnectionFactoryImpl::ConnectImpl() {
   RebuildNetworkSessionAuthCache();
   int status = gcm_network_session_->proxy_service()->ResolveProxy(
       current_endpoint,
+      std::string(),
       net::LOAD_NORMAL,
       &proxy_info_,
       base::Bind(&ConnectionFactoryImpl::OnProxyResolveDone,
@@ -329,21 +333,19 @@ void ConnectionFactoryImpl::InitHandler() {
   connection_handler_->Init(login_request, socket_handle_.socket());
 }
 
-scoped_ptr<net::BackoffEntry> ConnectionFactoryImpl::CreateBackoffEntry(
+std::unique_ptr<net::BackoffEntry> ConnectionFactoryImpl::CreateBackoffEntry(
     const net::BackoffEntry::Policy* const policy) {
-  return scoped_ptr<net::BackoffEntry>(new net::BackoffEntry(policy));
+  return std::unique_ptr<net::BackoffEntry>(new net::BackoffEntry(policy));
 }
 
-scoped_ptr<ConnectionHandler> ConnectionFactoryImpl::CreateConnectionHandler(
+std::unique_ptr<ConnectionHandler>
+ConnectionFactoryImpl::CreateConnectionHandler(
     base::TimeDelta read_timeout,
     const ConnectionHandler::ProtoReceivedCallback& read_callback,
     const ConnectionHandler::ProtoSentCallback& write_callback,
     const ConnectionHandler::ConnectionChangedCallback& connection_callback) {
-  return make_scoped_ptr<ConnectionHandler>(
-      new ConnectionHandlerImpl(read_timeout,
-                                read_callback,
-                                write_callback,
-                                connection_callback));
+  return base::WrapUnique<ConnectionHandler>(new ConnectionHandlerImpl(
+      read_timeout, read_callback, write_callback, connection_callback));
 }
 
 base::TimeTicks ConnectionFactoryImpl::NowTicks() {
@@ -530,7 +532,8 @@ int ConnectionFactoryImpl::ReconsiderProxyAfterError(int error) {
   }
 
   int status = gcm_network_session_->proxy_service()->ReconsiderProxyAfterError(
-      GetCurrentEndpoint(), net::LOAD_NORMAL, error, &proxy_info_,
+      GetCurrentEndpoint(),
+      std::string(), net::LOAD_NORMAL, error, &proxy_info_,
       base::Bind(&ConnectionFactoryImpl::OnProxyResolveDone,
                  weak_ptr_factory_.GetWeakPtr()),
       &pac_request_,

@@ -15,7 +15,9 @@
 #include "ash/test/test_shell_delegate.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/maximize_mode/maximize_mode_window_manager.h"
+#include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_state.h"
+#include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
@@ -262,12 +264,12 @@ class MultiUserWindowManagerChromeOSTest : public AshTestBase {
 
   chromeos::FakeChromeUserManager* fake_user_manager_;  // Not owned.
 
-  scoped_ptr<TestingProfileManager> profile_manager_;
+  std::unique_ptr<TestingProfileManager> profile_manager_;
 
   chromeos::ScopedUserManagerEnabler user_manager_enabler_;
 
   // The maximized window manager (if enabled).
-  scoped_ptr<MaximizeModeWindowManager> maximize_mode_window_manager_;
+  std::unique_ptr<MaximizeModeWindowManager> maximize_mode_window_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(MultiUserWindowManagerChromeOSTest);
 };
@@ -347,8 +349,8 @@ MultiUserWindowManagerChromeOSTest::GetOwnersOfVisibleWindowsAsString() {
   multi_user_window_manager_->GetOwnersOfVisibleWindows(&owners);
 
   std::vector<std::string> owner_list;
-  std::transform(owners.begin(), owners.end(), std::back_inserter(owner_list),
-                 std::mem_fun_ref(&AccountId::GetUserEmail));
+  for (auto& owner : owners)
+    owner_list.push_back(owner.GetUserEmail());
   return base::JoinString(owner_list, " ");
 }
 
@@ -1474,6 +1476,57 @@ TEST_F(MultiUserWindowManagerChromeOSTest, TeleportedWindowActivatableTests) {
   multi_user_window_manager()->ActiveUserChanged(user2);
   EXPECT_TRUE(::wm::CanActivateWindow(window(0)));
   EXPECT_TRUE(::wm::CanActivateWindow(window(1)));
+}
+
+// Tests that the window order is preserved when switching between users. Also
+// tests that the window's activation is restored correctly if one user's MRU
+// window list is empty.
+TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
+  SetUpForThisManyWindows(3);
+
+  const AccountId account_id_A(AccountId::FromUserEmail("A"));
+  const AccountId account_id_B(AccountId::FromUserEmail("B"));
+  AddTestUser(account_id_A);
+  AddTestUser(account_id_B);
+  session_state_delegate()->set_logged_in_users(2);
+  user_manager()->SwitchActiveUser(account_id_A);
+  multi_user_window_manager()->ActiveUserChanged(account_id_A);
+
+  // Set the windows owner.
+  aura::client::ActivationClient* activation_client =
+      aura::client::GetActivationClient(window(0)->GetRootWindow());
+  multi_user_window_manager()->SetWindowOwner(window(0), account_id_A);
+  multi_user_window_manager()->SetWindowOwner(window(1), account_id_A);
+  multi_user_window_manager()->SetWindowOwner(window(2), account_id_A);
+  EXPECT_EQ("S[A], S[A], S[A]", GetStatus());
+
+  // Activate the windows one by one.
+  activation_client->ActivateWindow(window(2));
+  activation_client->ActivateWindow(window(1));
+  activation_client->ActivateWindow(window(0));
+  EXPECT_EQ(wm::GetActiveWindow(), window(0));
+
+  ash::MruWindowTracker::WindowList mru_list =
+      ash::Shell::GetInstance()->mru_window_tracker()->BuildMruWindowList();
+  EXPECT_EQ(mru_list[0], window(0));
+  EXPECT_EQ(mru_list[1], window(1));
+  EXPECT_EQ(mru_list[2], window(2));
+
+  user_manager()->SwitchActiveUser(account_id_B);
+  multi_user_window_manager()->ActiveUserChanged(account_id_B);
+  EXPECT_EQ("H[A], H[A], H[A]", GetStatus());
+  EXPECT_EQ(wm::GetActiveWindow(), nullptr);
+
+  user_manager()->SwitchActiveUser(account_id_A);
+  multi_user_window_manager()->ActiveUserChanged(account_id_A);
+  EXPECT_EQ("S[A], S[A], S[A]", GetStatus());
+  EXPECT_EQ(wm::GetActiveWindow(), window(0));
+
+  mru_list =
+      ash::Shell::GetInstance()->mru_window_tracker()->BuildMruWindowList();
+  EXPECT_EQ(mru_list[0], window(0));
+  EXPECT_EQ(mru_list[1], window(1));
+  EXPECT_EQ(mru_list[2], window(2));
 }
 
 }  // namespace test

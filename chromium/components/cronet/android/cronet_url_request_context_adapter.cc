@@ -6,6 +6,7 @@
 
 #include <limits.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <map>
 #include <utility>
 
@@ -16,6 +17,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
@@ -38,12 +40,14 @@
 #include "net/base/network_delegate_impl.h"
 #include "net/base/url_util.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cookies/cookie_monster.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_server_properties_manager.h"
 #include "net/log/write_to_file_net_log_observer.h"
 #include "net/proxy/proxy_config_service_android.h"
 #include "net/proxy/proxy_service.h"
 #include "net/sdch/sdch_owner.h"
+#include "net/ssl/channel_id_service.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_interceptor.h"
@@ -54,7 +58,19 @@
 
 namespace {
 
+// Use a global NetLog instance. See crbug.com/486120.
+static base::LazyInstance<net::NetLog>::Leaky g_net_log =
+    LAZY_INSTANCE_INITIALIZER;
+
 const char kHttpServerProperties[] = "net.http_server_properties";
+// Current version of disk storage.
+const int32_t kStorageVersion = 1;
+// Version number used when the version of disk storage is unknown.
+const uint32_t kStorageVersionUnknown = 0;
+// Name of preference directory.
+const char kPrefsDirectoryName[] = "prefs";
+// Name of preference file.
+const char kPrefsFileName[] = "local_prefs.json";
 
 // Connects the HttpServerPropertiesManager's storage to the prefs.
 class PrefServiceAdapter
@@ -246,12 +262,14 @@ class BasicNetworkDelegate : public net::NetworkDelegateImpl {
 
   bool OnCanGetCookies(const net::URLRequest& request,
                        const net::CookieList& cookie_list) override {
+    // Disallow sending cookies by default.
     return false;
   }
 
   bool OnCanSetCookie(const net::URLRequest& request,
                       const std::string& cookie_line,
                       net::CookieOptions* options) override {
+    // Disallow saving cookies by default.
     return false;
   }
 
@@ -262,6 +280,69 @@ class BasicNetworkDelegate : public net::NetworkDelegateImpl {
 
   DISALLOW_COPY_AND_ASSIGN(BasicNetworkDelegate);
 };
+
+// Helper method that takes a Java string that can be null, in which case it
+// will get converted to an empty string.
+std::string ConvertNullableJavaStringToUTF8(JNIEnv* env,
+                                            const JavaParamRef<jstring>& jstr) {
+  std::string str;
+  if (!jstr.is_null())
+    base::android::ConvertJavaStringToUTF8(env, jstr, &str);
+  return str;
+}
+
+bool IsCurrentVersion(const base::FilePath& version_filepath) {
+  if (!base::PathExists(version_filepath))
+    return false;
+  base::File version_file(version_filepath,
+                          base::File::FLAG_OPEN | base::File::FLAG_READ);
+  uint32_t version = kStorageVersionUnknown;
+  int bytes_read =
+      version_file.Read(0, reinterpret_cast<char*>(&version), sizeof(version));
+  if (bytes_read != sizeof(version)) {
+    DLOG(WARNING) << "Cannot read from version file.";
+    return false;
+  }
+  return version == kStorageVersion;
+}
+
+// TODO(xunjieli): Handle failures.
+void InitializeStorageDirectory(const base::FilePath& dir) {
+  // Checks version file and clear old storage.
+  base::FilePath version_filepath = dir.Append("version");
+  if (IsCurrentVersion(version_filepath)) {
+    // The version is up-to-date, so there is nothing to do.
+    return;
+  }
+  // Delete old directory recursively and create a new directory.
+  // base::DeleteFile returns true if the directory does not exist, so it is
+  // fine if there is nothing on disk.
+  if (!(base::DeleteFile(dir, true) && base::CreateDirectory(dir))) {
+    DLOG(WARNING) << "Cannot purge directory.";
+    return;
+  }
+  base::File new_version_file(version_filepath, base::File::FLAG_CREATE_ALWAYS |
+                                                    base::File::FLAG_WRITE);
+
+  if (!new_version_file.IsValid()) {
+    DLOG(WARNING) << "Cannot create a version file.";
+    return;
+  }
+
+  DCHECK(new_version_file.created());
+  uint32_t new_version = kStorageVersion;
+  int bytes_written = new_version_file.Write(
+      0, reinterpret_cast<char*>(&new_version), sizeof(new_version));
+  if (bytes_written != sizeof(new_version)) {
+    DLOG(WARNING) << "Cannot write to version file.";
+    return;
+  }
+  base::FilePath prefs_dir = dir.Append(FILE_PATH_LITERAL(kPrefsDirectoryName));
+  if (!base::CreateDirectory(prefs_dir)) {
+    DLOG(WARNING) << "Cannot create prefs directory";
+    return;
+  }
+}
 
 }  // namespace
 
@@ -404,7 +485,6 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
   context_builder.set_http_network_session_params(
       custom_http_network_session_params);
 
-  net_log_.reset(new net::NetLog);
   scoped_ptr<net::NetworkDelegate> network_delegate(new BasicNetworkDelegate());
 #if defined(DATA_REDUCTION_PROXY_SUPPORT)
   DCHECK(!data_reduction_proxy_);
@@ -415,29 +495,37 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
         config->data_reduction_proxy_key, config->data_reduction_primary_proxy,
         config->data_reduction_fallback_proxy,
         config->data_reduction_secure_proxy_check_url, config->user_agent,
-        GetNetworkTaskRunner(), net_log_.get()));
+        GetNetworkTaskRunner(), g_net_log.Pointer()));
     network_delegate = data_reduction_proxy_->CreateNetworkDelegate(
         std::move(network_delegate));
+    context_builder.set_proxy_delegate(
+        data_reduction_proxy_->CreateProxyDelegate());
     std::vector<scoped_ptr<net::URLRequestInterceptor>> interceptors;
     interceptors.push_back(data_reduction_proxy_->CreateInterceptor());
     context_builder.SetInterceptors(std::move(interceptors));
   }
 #endif  // defined(DATA_REDUCTION_PROXY_SUPPORT)
   context_builder.set_network_delegate(std::move(network_delegate));
-  context_builder.set_net_log(net_log_.get());
+  context_builder.set_net_log(g_net_log.Pointer());
 
   // Android provides a local HTTP proxy server that handles proxying when a PAC
   // URL is present. Create a proxy service without a resolver and rely on this
   // local HTTP proxy. See: crbug.com/432539.
   context_builder.set_proxy_service(
       net::ProxyService::CreateWithoutProxyResolver(
-          std::move(proxy_config_service_), net_log_.get()));
-  config->ConfigureURLRequestContextBuilder(&context_builder, net_log_.get());
+          std::move(proxy_config_service_), g_net_log.Pointer()));
+
+  config->ConfigureURLRequestContextBuilder(
+      &context_builder, g_net_log.Pointer(), GetFileThread()->task_runner());
 
   // Set up pref file if storage path is specified.
   if (!config->storage_path.empty()) {
-    base::FilePath filepath(config->storage_path);
-    filepath = filepath.Append(FILE_PATH_LITERAL("local_prefs.json"));
+    base::FilePath storage_path(config->storage_path);
+    // Make sure storage directory has correct version.
+    InitializeStorageDirectory(storage_path);
+    base::FilePath filepath =
+        storage_path.Append(FILE_PATH_LITERAL(kPrefsDirectoryName))
+            .Append(FILE_PATH_LITERAL(kPrefsFileName));
     json_pref_store_ = new JsonPrefStore(
         filepath, GetFileThread()->task_runner(), scoped_ptr<PrefFilter>());
     context_builder.SetFileTaskRunner(GetFileThread()->task_runner());
@@ -465,10 +553,11 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
   // of HPKP by specifying transport_security_persister_path in the future.
   context_builder.set_transport_security_persister_path(base::FilePath());
 
+  // Disable net::CookieStore and net::ChannelIDService.
+  context_builder.SetCookieAndChannelIdStores(nullptr, nullptr);
+
   context_ = context_builder.Build();
 
-  default_load_flags_ = net::LOAD_DO_NOT_SAVE_COOKIES |
-                        net::LOAD_DO_NOT_SEND_COOKIES;
   if (config->load_disable_cache)
     default_load_flags_ |= net::LOAD_DISABLE_CACHE;
 
@@ -482,10 +571,7 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
     }
   }
 
-  // Currently (circa M39) enabling QUIC requires setting probability threshold.
   if (config->enable_quic) {
-    context_->http_server_properties()
-        ->SetAlternativeServiceProbabilityThreshold(0.0f);
     for (auto hint = config->quic_hints.begin();
          hint != config->quic_hints.end(); ++hint) {
       const URLRequestContextConfig::QuicHint& quic_hint = **hint;
@@ -522,8 +608,7 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
           net::AlternateProtocol::QUIC, "",
           static_cast<uint16_t>(quic_hint.alternate_port));
       context_->http_server_properties()->SetAlternativeService(
-          quic_hint_host_port_pair, alternative_service, 1.0f,
-          base::Time::Max());
+          quic_hint_host_port_pair, alternative_service, base::Time::Max());
     }
   }
 
@@ -701,20 +786,19 @@ static jlong CreateRequestContextConfig(
     jlong jmock_cert_verifier) {
   return reinterpret_cast<jlong>(new URLRequestContextConfig(
       jquic_enabled,
-      base::android::ConvertJavaStringToUTF8(env, jquic_default_user_agent_id),
+      ConvertNullableJavaStringToUTF8(env, jquic_default_user_agent_id),
       jhttp2_enabled, jsdch_enabled,
       static_cast<URLRequestContextConfig::HttpCacheType>(jhttp_cache_mode),
       jhttp_cache_max_size, jdisable_cache,
-      base::android::ConvertJavaStringToUTF8(env, jstorage_path),
-      base::android::ConvertJavaStringToUTF8(env, juser_agent),
-      base::android::ConvertJavaStringToUTF8(
-          env, jexperimental_quic_connection_options),
-      base::android::ConvertJavaStringToUTF8(env, jdata_reduction_proxy_key),
-      base::android::ConvertJavaStringToUTF8(
-          env, jdata_reduction_proxy_primary_proxy),
-      base::android::ConvertJavaStringToUTF8(
-          env, jdata_reduction_proxy_fallback_proxy),
-      base::android::ConvertJavaStringToUTF8(
+      ConvertNullableJavaStringToUTF8(env, jstorage_path),
+      ConvertNullableJavaStringToUTF8(env, juser_agent),
+      ConvertNullableJavaStringToUTF8(env,
+                                      jexperimental_quic_connection_options),
+      ConvertNullableJavaStringToUTF8(env, jdata_reduction_proxy_key),
+      ConvertNullableJavaStringToUTF8(env, jdata_reduction_proxy_primary_proxy),
+      ConvertNullableJavaStringToUTF8(env,
+                                      jdata_reduction_proxy_fallback_proxy),
+      ConvertNullableJavaStringToUTF8(
           env, jdata_reduction_proxy_secure_proxy_check_url),
       make_scoped_ptr(
           reinterpret_cast<net::CertVerifier*>(jmock_cert_verifier))));

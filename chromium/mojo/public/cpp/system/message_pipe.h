@@ -12,12 +12,12 @@
 #ifndef MOJO_PUBLIC_CPP_SYSTEM_MESSAGE_PIPE_H_
 #define MOJO_PUBLIC_CPP_SYSTEM_MESSAGE_PIPE_H_
 
-#include <assert.h>
 #include <stdint.h>
 
+#include "base/compiler_specific.h"
+#include "base/logging.h"
 #include "mojo/public/c/system/message_pipe.h"
 #include "mojo/public/cpp/system/handle.h"
-#include "mojo/public/cpp/system/macros.h"
 
 namespace mojo {
 
@@ -43,8 +43,8 @@ static_assert(sizeof(ScopedMessagePipeHandle) == sizeof(MessagePipeHandle),
 inline MojoResult CreateMessagePipe(const MojoCreateMessagePipeOptions* options,
                                     ScopedMessagePipeHandle* message_pipe0,
                                     ScopedMessagePipeHandle* message_pipe1) {
-  assert(message_pipe0);
-  assert(message_pipe1);
+  DCHECK(message_pipe0);
+  DCHECK(message_pipe1);
   MessagePipeHandle handle0;
   MessagePipeHandle handle1;
   MojoResult rv = MojoCreateMessagePipe(
@@ -88,6 +88,14 @@ inline MojoResult ReadMessageRaw(MessagePipeHandle message_pipe,
       message_pipe.value(), bytes, num_bytes, handles, num_handles, flags);
 }
 
+// Fuses two message pipes together at the given handles. See
+// |MojoFuseMessagePipes()| for complete documentation.
+inline MojoResult FuseMessagePipes(ScopedMessagePipeHandle message_pipe0,
+                                   ScopedMessagePipeHandle message_pipe1) {
+  return MojoFuseMessagePipes(message_pipe0.release().value(),
+                              message_pipe1.release().value());
+}
+
 // A wrapper class that automatically creates a message pipe and owns both
 // handles.
 class MessagePipe {
@@ -102,14 +110,12 @@ class MessagePipe {
 
 inline MessagePipe::MessagePipe() {
   MojoResult result = CreateMessagePipe(nullptr, &handle0, &handle1);
-  MOJO_ALLOW_UNUSED_LOCAL(result);
-  assert(result == MOJO_RESULT_OK);
+  DCHECK_EQ(MOJO_RESULT_OK, result);
 }
 
 inline MessagePipe::MessagePipe(const MojoCreateMessagePipeOptions& options) {
   MojoResult result = CreateMessagePipe(&options, &handle0, &handle1);
-  MOJO_ALLOW_UNUSED_LOCAL(result);
-  assert(result == MOJO_RESULT_OK);
+  DCHECK_EQ(MOJO_RESULT_OK, result);
 }
 
 inline MessagePipe::~MessagePipe() {

@@ -7,9 +7,17 @@ import("//build/config/ui.gni")
 import("//content/child/child.gni")
 
 source_set("child") {
-  # Only the public target should depend on this. All other targets (even
-  # internal content ones) should depend on the public one.
-  visibility = [ "//content/public/child:child_sources" ]
+  # Targets external to content should always link to the public API.
+  # Internal targets can link to this but only if they're child processes
+  # (i.e. not content/browser or content/common) and only if they're inside the
+  # content component (i.e. not content/test or content/shell).
+  visibility = [
+    "//content/gpu/*",
+    "//content/ppapi_plugin/*",
+    "//content/public/child:child_sources",
+    "//content/renderer/*",
+    "//content/utility/*",
+  ]
 
   sources = rebase_path(content_child_gypi_values.private_child_sources,
                         ".",
@@ -21,22 +29,31 @@ source_set("child") {
   ]
 
   public_deps = [
+    "//gpu/ipc/client:client",
     "//mojo/edk/system",
   ]
 
   deps = [
     "//base",
     "//components/mime_util",
+    "//components/scheduler:scheduler",
     "//components/tracing",
     "//components/tracing:startup_tracing",
     "//components/webcrypto",
-    "//content/common:mojo_bindings",
+    "//content/app/resources",
+    "//content/app/strings",
+    "//content/common",
+    "//crypto:platform",
     "//mojo/common",
-    "//mojo/environment:chromium",
     "//mojo/message_pump",
     "//mojo/shell/public/interfaces",
+    "//mojo/shell/runner/common",
     "//net",
     "//skia",
+    "//storage/common",
+    "//third_party/WebKit/public:blink_headers",
+    "//third_party/WebKit/public:image_resources",
+    "//third_party/WebKit/public:resources",
     "//third_party/icu",
     "//ui/base",
     "//ui/events/gestures/blink",
@@ -60,72 +77,11 @@ source_set("child") {
   if (enable_plugins) {
     deps += [ "//ppapi/proxy" ]
   } else {
-    sources -= [
-      "browser_font_resource_trusted.cc",
-      "npapi/plugin_host.cc",
-      "npapi/plugin_host.h",
-      "npapi/plugin_instance.cc",
-      "npapi/plugin_instance.h",
-      "npapi/plugin_lib.cc",
-      "npapi/plugin_lib.h",
-      "npapi/webplugin.h",
-      "npapi/webplugin_delegate.h",
-      "npapi/webplugin_delegate_impl.cc",
-      "npapi/webplugin_delegate_impl.h",
-      "npapi/webplugin_resource_client.h",
-    ]
-
-    if (is_mac) {
-      sources -= [
-        "npapi/plugin_instance_mac.mm",
-        "npapi/plugin_web_event_converter_mac.h",
-        "npapi/plugin_web_event_converter_mac.mm",
-        "npapi/webplugin_accelerated_surface_mac.h",
-        "npapi/webplugin_delegate_impl_mac.mm",
-      ]
-    } else if (is_win) {
-      sources -= [
-        "npapi/webplugin_delegate_impl_win.cc",
-        "npapi/webplugin_ime_win.cc",
-        "npapi/webplugin_ime_win.h",
-      ]
-    } else if (is_android) {
-      sources -= [ "npapi/webplugin_delegate_impl_android.cc" ]
-    }
-    if (use_aura) {
-      sources -= [ "npapi/webplugin_delegate_impl_aura.cc" ]
-    }
+    sources -= [ "browser_font_resource_trusted.cc" ]
   }
 
   configs += [
     "//content:content_implementation",
     "//build/config/compiler:no_size_t_to_int_warning",
   ]
-
-  if (is_ios) {
-    # iOS only needs a small portion of content; exclude all the
-    # implementation, and re-include what is used.
-    sources = []
-  } else {
-    deps += [
-      "//components/scheduler:scheduler",
-      "//content/app/resources",
-      "//content/app/strings",
-      "//crypto:platform",
-      "//storage/common",
-      "//third_party/WebKit/public:blink_headers",
-      "//third_party/WebKit/public:image_resources",
-      "//third_party/WebKit/public:resources",
-      "//third_party/npapi",
-    ]
-  }
-
-  if (use_aura && is_mac) {
-    # This file is already excluded on non-Mac.
-    sources -= [ "npapi/webplugin_delegate_impl_mac.mm" ]
-  }
-
-  if (is_win || !use_aura) {
-    sources -= [ "npapi/webplugin_delegate_impl_aura.cc" ]
-  }
 }

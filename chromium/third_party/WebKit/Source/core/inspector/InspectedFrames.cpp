@@ -32,7 +32,7 @@ bool InspectedFrames::contains(LocalFrame* frame) const
 LocalFrame* InspectedFrames::frameWithSecurityOrigin(const String& originRawString)
 {
     for (LocalFrame* frame : *this) {
-        if (frame->document()->securityOrigin()->toRawString() == originRawString)
+        if (frame->document()->getSecurityOrigin()->toRawString() == originRawString)
             return frame;
     }
     return nullptr;
@@ -77,6 +77,11 @@ bool InspectedFrames::Iterator::operator==(const Iterator& other)
 bool InspectedFrames::Iterator::operator!=(const Iterator& other)
 {
     return !(*this == other);
+}
+
+DEFINE_TRACE(InspectedFrames)
+{
+    visitor->trace(m_root);
 }
 
 } // namespace blink

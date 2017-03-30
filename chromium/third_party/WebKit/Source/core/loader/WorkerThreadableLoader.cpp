@@ -46,7 +46,6 @@
 #include "platform/network/ResourceTimingInfo.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/Platform.h"
-#include "wtf/MainThread.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/Vector.h"
 
@@ -73,7 +72,7 @@ WorkerThreadableLoader::WorkerThreadableLoader(WorkerGlobalScope& workerGlobalSc
 
 void WorkerThreadableLoader::loadResourceSynchronously(WorkerGlobalScope& workerGlobalScope, const ResourceRequest& request, ThreadableLoaderClient& client, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
 {
-    RefPtr<WorkerThreadableLoader> loader = adoptRef(new WorkerThreadableLoader(workerGlobalScope, &client, options, resourceLoaderOptions, LoadSynchronously));
+    OwnPtr<WorkerThreadableLoader> loader = adoptPtr(new WorkerThreadableLoader(workerGlobalScope, &client, options, resourceLoaderOptions, LoadSynchronously));
     loader->start(request);
 }
 
@@ -86,7 +85,10 @@ WorkerThreadableLoader::~WorkerThreadableLoader()
 
 void WorkerThreadableLoader::start(const ResourceRequest& request)
 {
-    m_bridge->start(request, *m_workerGlobalScope);
+    ResourceRequest requestToPass(request);
+    if (!requestToPass.didSetHTTPReferrer())
+        requestToPass.setHTTPReferrer(SecurityPolicy::generateReferrer(m_workerGlobalScope->getReferrerPolicy(), request.url(), m_workerGlobalScope->outgoingReferrer()));
+    m_bridge->start(requestToPass, *m_workerGlobalScope);
     m_workerClientWrapper->setResourceTimingClient(this);
 }
 
@@ -131,15 +133,11 @@ void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadCreateLoader(Thread
     ASSERT(m_mainThreadLoader);
 }
 
-void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadStart(PassOwnPtr<CrossThreadResourceRequestData> requestData, const ReferrerPolicy referrerPolicy, const String& outgoingReferrer)
+void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadStart(PassOwnPtr<CrossThreadResourceRequestData> requestData)
 {
     ASSERT(isMainThread());
     ASSERT(m_mainThreadLoader);
-
-    ResourceRequest request(requestData.get());
-    if (!request.didSetHTTPReferrer())
-        request.setHTTPReferrer(SecurityPolicy::generateReferrer(referrerPolicy, request.url(), outgoingReferrer));
-    m_mainThreadLoader->start(request);
+    m_mainThreadLoader->start(ResourceRequest(requestData.get()));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::createLoaderInMainThread(const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
@@ -149,7 +147,7 @@ void WorkerThreadableLoader::MainThreadBridgeBase::createLoaderInMainThread(cons
 
 void WorkerThreadableLoader::MainThreadBridgeBase::startInMainThread(const ResourceRequest& request, const WorkerGlobalScope& workerGlobalScope)
 {
-    loaderProxy()->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadStart, this, request, workerGlobalScope.getReferrerPolicy(), workerGlobalScope.url().strippedForUseAsReferrer()));
+    loaderProxy()->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadStart, this, request));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadDestroy(ExecutionContext* context)

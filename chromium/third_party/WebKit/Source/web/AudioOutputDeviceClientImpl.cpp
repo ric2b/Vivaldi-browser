@@ -11,9 +11,9 @@
 
 namespace blink {
 
-PassOwnPtrWillBeRawPtr<AudioOutputDeviceClientImpl> AudioOutputDeviceClientImpl::create()
+AudioOutputDeviceClientImpl* AudioOutputDeviceClientImpl::create()
 {
-    return adoptPtrWillBeNoop(new AudioOutputDeviceClientImpl());
+    return new AudioOutputDeviceClientImpl();
 }
 
 AudioOutputDeviceClientImpl::AudioOutputDeviceClientImpl()
@@ -26,10 +26,11 @@ AudioOutputDeviceClientImpl::~AudioOutputDeviceClientImpl()
 
 void AudioOutputDeviceClientImpl::checkIfAudioSinkExistsAndIsAuthorized(ExecutionContext* context, const WebString& sinkId, PassOwnPtr<WebSetSinkIdCallbacks> callbacks)
 {
-    ASSERT(context && context->isDocument());
+    DCHECK(context);
+    DCHECK(context->isDocument());
     Document* document = toDocument(context);
     WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(document->frame());
-    webFrame->client()->checkIfAudioSinkExistsAndIsAuthorized(sinkId, WebSecurityOrigin(context->securityOrigin()), callbacks.leakPtr());
+    webFrame->client()->checkIfAudioSinkExistsAndIsAuthorized(sinkId, WebSecurityOrigin(context->getSecurityOrigin()), callbacks.leakPtr());
 }
 
 } // namespace blink

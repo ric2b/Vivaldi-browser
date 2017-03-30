@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -332,35 +333,30 @@ void FindBarView::Layout() {
     if (view_width && view_width < panel_width)
       panel_width = view_width;
 
-    // First we draw the close button on the far right.
-    gfx::Size sz = close_button_->GetPreferredSize();
-    close_button_->SetBounds(panel_width - sz.width() -
-                                 kMarginRightOfCloseButton,
-                             (height() - sz.height()) / 2,
-                             sz.width(),
-                             sz.height());
     // Set the color.
     OnThemeChanged();
 
-    // Next, the FindNext button to the left the close button.
-    sz = find_next_button_->GetPreferredSize();
-    find_next_button_->SetBounds(close_button_->x() -
-                                     find_next_button_->width() -
-                                     kMarginLeftOfCloseButton,
-                                 (height() - sz.height()) / 2,
-                                  sz.width(),
-                                  sz.height());
+    // First we position the close button on the far right.
+    close_button_->SizeToPreferredSize();
+    close_button_->SetPosition(gfx::Point(
+        panel_width - close_button_->width() - kMarginRightOfCloseButton,
+        (height() - close_button_->height()) / 2));
 
-    // Then, the FindPrevious button to the left the FindNext button.
-    sz = find_previous_button_->GetPreferredSize();
-    find_previous_button_->SetBounds(find_next_button_->x() -
-                                         find_previous_button_->width(),
-                                     (height() - sz.height()) / 2,
-                                     sz.width(),
-                                     sz.height());
+    // Then, the next button to the left of the close button.
+    find_next_button_->SizeToPreferredSize();
+    find_next_button_->SetPosition(
+        gfx::Point(close_button_->x() - find_next_button_->width() -
+                       kMarginLeftOfCloseButton,
+                   (height() - find_next_button_->height()) / 2));
+
+    // Then, the previous button to the left of the next button.
+    find_previous_button_->SizeToPreferredSize();
+    find_previous_button_->SetPosition(gfx::Point(
+        find_next_button_->x() - find_previous_button_->width(),
+        (height() - find_previous_button_->height()) / 2));
 
     // Then the label showing the match count number.
-    sz = match_count_text_->GetPreferredSize();
+    gfx::Size sz = match_count_text_->GetPreferredSize();
     // We extend the label bounds a bit to give the background highlighting a
     // bit of breathing room (margins around the text).
     sz.Enlarge(kMatchCountExtraWidth, 0);
@@ -545,13 +541,13 @@ void FindBarView::InitViewsForNonMaterial() {
 
 void FindBarView::InitViewsForMaterial() {
   // The background color is not used since there's no arrow.
-  SetBorder(make_scoped_ptr(new views::BubbleBorder(
+  SetBorder(base::WrapUnique(new views::BubbleBorder(
       views::BubbleBorder::NONE, views::BubbleBorder::SMALL_SHADOW,
       SK_ColorGREEN)));
 
   match_count_text_ = new MatchCountLabel();
   match_count_text_->SetEventTargeter(
-      make_scoped_ptr(new views::ViewTargeter(this)));
+      base::WrapUnique(new views::ViewTargeter(this)));
   AddChildViewAt(match_count_text_, 1);
 
   separator_ = new views::Separator(views::Separator::VERTICAL);

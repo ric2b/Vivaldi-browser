@@ -4,12 +4,12 @@
 
 #include "remoting/protocol/webrtc_video_renderer_adapter.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "remoting/protocol/frame_consumer.h"
@@ -41,23 +41,23 @@ WebrtcVideoRendererAdapter::WebrtcVideoRendererAdapter(
     LOG(WARNING) << "Received media stream with multiple video tracks.";
   }
 
-  video_tracks[0]->AddRenderer(this);
+  video_tracks[0]->AddOrUpdateSink(this, rtc::VideoSinkWants());
 }
 
 WebrtcVideoRendererAdapter::~WebrtcVideoRendererAdapter() {
   DCHECK(task_runner_->BelongsToCurrentThread());
 }
 
-void WebrtcVideoRendererAdapter::RenderFrame(const cricket::VideoFrame* frame) {
-  // TODO(sergeyu): WebRTC calls RenderFrame on a separate thread it creates.
+void WebrtcVideoRendererAdapter::OnFrame(const cricket::VideoFrame& frame) {
+  // TODO(sergeyu): WebRTC calls OnFrame on a separate thread it creates.
   // FrameConsumer normally expects to be called on the network thread, so we
   // cannot call FrameConsumer::AllocateFrame() here and instead
   // BasicDesktopFrame is created directly. This will not work correctly with
   // all FrameConsumer implementations. Fix this somehow.
-  scoped_ptr<webrtc::DesktopFrame> rgb_frame(new webrtc::BasicDesktopFrame(
-      webrtc::DesktopSize(frame->GetWidth(), frame->GetHeight())));
+  std::unique_ptr<webrtc::DesktopFrame> rgb_frame(new webrtc::BasicDesktopFrame(
+      webrtc::DesktopSize(frame.GetWidth(), frame.GetHeight())));
 
-  frame->ConvertToRgbBuffer(
+  frame.ConvertToRgbBuffer(
       output_format_fourcc_, rgb_frame->data(),
       std::abs(rgb_frame->stride()) * rgb_frame->size().height(),
       rgb_frame->stride());
@@ -70,7 +70,7 @@ void WebrtcVideoRendererAdapter::RenderFrame(const cricket::VideoFrame* frame) {
 }
 
 void WebrtcVideoRendererAdapter::DrawFrame(
-    scoped_ptr<webrtc::DesktopFrame> frame) {
+    std::unique_ptr<webrtc::DesktopFrame> frame) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   frame_consumer_->DrawFrame(std::move(frame), base::Closure());
 }

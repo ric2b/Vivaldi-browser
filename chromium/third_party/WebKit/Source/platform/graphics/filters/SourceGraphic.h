@@ -31,12 +31,12 @@ namespace blink {
 
 class PLATFORM_EXPORT SourceGraphic final : public FilterEffect {
 public:
-    static PassRefPtrWillBeRawPtr<SourceGraphic> create(Filter*);
+    static SourceGraphic* create(Filter*);
     ~SourceGraphic() override;
 
     FloatRect determineAbsolutePaintRect(const FloatRect& requestedRect) override;
 
-    FilterEffectType filterEffectType() const override { return FilterEffectTypeSourceInput; }
+    FilterEffectType getFilterEffectType() const override { return FilterEffectTypeSourceInput; }
 
     TextStream& externalRepresentation(TextStream&, int indention) const override;
     PassRefPtr<SkImageFilter> createImageFilter(SkiaImageFilterBuilder&) override;

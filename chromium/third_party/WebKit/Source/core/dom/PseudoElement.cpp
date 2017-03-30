@@ -35,27 +35,27 @@
 
 namespace blink {
 
-PassRefPtrWillBeRawPtr<PseudoElement> PseudoElement::create(Element* parent, PseudoId pseudoId)
+RawPtr<PseudoElement> PseudoElement::create(Element* parent, PseudoId pseudoId)
 {
-    return adoptRefWillBeNoop(new PseudoElement(parent, pseudoId));
+    return new PseudoElement(parent, pseudoId);
 }
 
 const QualifiedName& pseudoElementTagName(PseudoId pseudoId)
 {
     switch (pseudoId) {
-    case AFTER: {
+    case PseudoIdAfter: {
         DEFINE_STATIC_LOCAL(QualifiedName, after, (nullAtom, "<pseudo:after>", nullAtom));
         return after;
     }
-    case BEFORE: {
+    case PseudoIdBefore: {
         DEFINE_STATIC_LOCAL(QualifiedName, before, (nullAtom, "<pseudo:before>", nullAtom));
         return before;
     }
-    case BACKDROP: {
+    case PseudoIdBackdrop: {
         DEFINE_STATIC_LOCAL(QualifiedName, backdrop, (nullAtom, "<pseudo:backdrop>", nullAtom));
         return backdrop;
     }
-    case FIRST_LETTER: {
+    case PseudoIdFirstLetter: {
         DEFINE_STATIC_LOCAL(QualifiedName, firstLetter, (nullAtom, "<pseudo:first-letter>", nullAtom));
         return firstLetter;
     }
@@ -72,9 +72,9 @@ String PseudoElement::pseudoElementNameForEvents(PseudoId pseudoId)
     DEFINE_STATIC_LOCAL(const String, after, ("::after"));
     DEFINE_STATIC_LOCAL(const String, before, ("::before"));
     switch (pseudoId) {
-    case AFTER:
+    case PseudoIdAfter:
         return after;
-    case BEFORE:
+    case PseudoIdBefore:
         return before;
     default:
         return emptyString();
@@ -85,11 +85,11 @@ PseudoElement::PseudoElement(Element* parent, PseudoId pseudoId)
     : Element(pseudoElementTagName(pseudoId), &parent->document(), CreateElement)
     , m_pseudoId(pseudoId)
 {
-    ASSERT(pseudoId != NOPSEUDO);
+    DCHECK_NE(pseudoId, PseudoIdNone);
     parent->treeScope().adoptIfNeeded(*this);
     setParentOrShadowHostNode(parent);
     setHasCustomStyleCallbacks();
-    if ((pseudoId == BEFORE || pseudoId == AFTER) && parent->hasTagName(HTMLNames::inputTag))
+    if ((pseudoId == PseudoIdBefore || pseudoId == PseudoIdAfter) && parent->hasTagName(HTMLNames::inputTag))
         UseCounter::count(parent->document(), UseCounter::PseudoBeforeAfterForInputElement);
 }
 
@@ -100,15 +100,15 @@ PassRefPtr<ComputedStyle> PseudoElement::customStyleForLayoutObject()
 
 void PseudoElement::dispose()
 {
-    ASSERT(parentOrShadowHostElement());
+    DCHECK(parentOrShadowHostElement());
 
     InspectorInstrumentation::pseudoElementDestroyed(this);
 
-    ASSERT(!nextSibling());
-    ASSERT(!previousSibling());
+    DCHECK(!nextSibling());
+    DCHECK(!previousSibling());
 
     detach();
-    RefPtrWillBeRawPtr<Element> parent = parentOrShadowHostElement();
+    RawPtr<Element> parent = parentOrShadowHostElement();
     document().adoptIfNeeded(*this);
     setParentOrShadowHostNode(0);
     removedFrom(parent.get());
@@ -116,7 +116,7 @@ void PseudoElement::dispose()
 
 void PseudoElement::attach(const AttachContext& context)
 {
-    ASSERT(!layoutObject());
+    DCHECK(!layoutObject());
 
     Element::attach(context);
 
@@ -125,9 +125,9 @@ void PseudoElement::attach(const AttachContext& context)
         return;
 
     ComputedStyle& style = layoutObject->mutableStyleRef();
-    if (style.styleType() != BEFORE && style.styleType() != AFTER)
+    if (style.styleType() != PseudoIdBefore && style.styleType() != PseudoIdAfter)
         return;
-    ASSERT(style.contentData());
+    DCHECK(style.contentData());
 
     for (const ContentData* content = style.contentData(); content; content = content->next()) {
         LayoutObject* child = content->createLayoutObject(document(), style);
@@ -177,17 +177,17 @@ Node* PseudoElement::findAssociatedNode() const
     // The ::backdrop element is parented to the LayoutView, not to the node
     // that it's associated with. We need to make sure ::backdrop sends the
     // events to the parent node correctly.
-    if (getPseudoId() == BACKDROP)
+    if (getPseudoId() == PseudoIdBackdrop)
         return parentOrShadowHostNode();
 
-    ASSERT(layoutObject());
-    ASSERT(layoutObject()->parent());
+    DCHECK(layoutObject());
+    DCHECK(layoutObject()->parent());
 
     // We can have any number of anonymous layout objects inserted between
     // us and our parent so make sure we skip over them.
     LayoutObject* ancestor = layoutObject()->parent();
     while (ancestor->isAnonymous() || (ancestor->node() && ancestor->node()->isPseudoElement())) {
-        ASSERT(ancestor->parent());
+        DCHECK(ancestor->parent());
         ancestor = ancestor->parent();
     }
     return ancestor->node();

@@ -36,8 +36,8 @@ class RTCIceCandidateEvent final : public Event {
 public:
     ~RTCIceCandidateEvent() override;
 
-    static PassRefPtrWillBeRawPtr<RTCIceCandidateEvent> create();
-    static PassRefPtrWillBeRawPtr<RTCIceCandidateEvent> create(bool canBubble, bool cancelable, RTCIceCandidate*);
+    static RTCIceCandidateEvent* create();
+    static RTCIceCandidateEvent* create(bool canBubble, bool cancelable, RTCIceCandidate*);
 
     RTCIceCandidate* candidate() const;
 
@@ -49,7 +49,7 @@ private:
     RTCIceCandidateEvent();
     RTCIceCandidateEvent(bool canBubble, bool cancelable, RTCIceCandidate*);
 
-    PersistentWillBeMember<RTCIceCandidate> m_candidate;
+    Member<RTCIceCandidate> m_candidate;
 };
 
 } // namespace blink

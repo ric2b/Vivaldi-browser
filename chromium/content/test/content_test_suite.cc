@@ -6,6 +6,7 @@
 
 #include "base/base_paths.h"
 #include "base/base_switches.h"
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "build/build_config.h"
@@ -14,7 +15,9 @@
 #include "content/public/test/test_content_client_initializer.h"
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_util.h"
+#include "media/base/media.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gl/test/gl_surface_test_support.h"
 
 #if defined(OS_WIN)
 #include "ui/gfx/win/dpi.h"
@@ -22,16 +25,7 @@
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
-#if !defined(OS_IOS)
 #include "base/test/mock_chrome_application_mac.h"
-#endif
-#endif
-
-#if !defined(OS_IOS)
-#include "base/base_switches.h"
-#include "base/command_line.h"
-#include "media/base/media.h"
-#include "ui/gl/test/gl_surface_test_support.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -40,7 +34,6 @@
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/client_native_pixmap_factory.h"
-#include "ui/ozone/public/ozone_platform.h"
 #endif
 
 namespace content {
@@ -78,9 +71,7 @@ ContentTestSuite::~ContentTestSuite() {
 void ContentTestSuite::Initialize() {
 #if defined(OS_MACOSX)
   base::mac::ScopedNSAutoreleasePool autorelease_pool;
-#if !defined(OS_IOS)
   mock_cr_app::RegisterMockCrApp();
-#endif
 #endif
 
 #if defined(OS_WIN)
@@ -93,7 +84,6 @@ void ContentTestSuite::Initialize() {
     ContentTestSuiteBase::RegisterContentSchemes(&client);
   }
   RegisterPathProvider();
-#if !defined(OS_IOS)
   media::InitializeMediaLibrary();
   // When running in a child process for Mac sandbox tests, the sandbox exists
   // to initialize GL, so don't do it here.
@@ -106,12 +96,11 @@ void ContentTestSuite::Initialize() {
                                       base::CommandLine::ForCurrentProcess());
     gfx::GLSurfaceTestSupport::InitializeOneOff();
   }
-#endif
   testing::TestEventListeners& listeners =
       testing::UnitTest::GetInstance()->listeners();
   listeners.Append(new TestInitializationListener);
 #if defined(OS_ANDROID)
-  SurfaceTextureManager::SetInstance(
+  gpu::SurfaceTextureManager::SetInstance(
       InProcessSurfaceTextureManager::GetInstance());
 #endif
 #if defined(USE_OZONE)
@@ -119,8 +108,6 @@ void ContentTestSuite::Initialize() {
     client_native_pixmap_factory_ = ui::ClientNativePixmapFactory::Create();
     ui::ClientNativePixmapFactory::SetInstance(
         client_native_pixmap_factory_.get());
-    ui::ClientNativePixmapFactory::GetInstance()->Initialize(
-        ui::OzonePlatform::GetInstance()->OpenClientNativePixmapDevice());
   }
 #endif
 }

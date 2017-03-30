@@ -14,6 +14,7 @@
 #include "base/time/time.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state_handler.h"
+#include "chromeos/network/network_type_pattern.h"
 #include "chromeos/network/network_util.h"
 #include "chromeos/network/onc/onc_utils.h"
 #include "components/arc/arc_bridge_service.h"
@@ -52,11 +53,36 @@ void ArcNetHostImpl::OnNetInstanceReady() {
   arc_bridge_service()->net_instance()->Init(std::move(host));
 }
 
-void ArcNetHostImpl::GetNetworks(bool configured_only,
-                                 bool visible_only,
+void ArcNetHostImpl::GetNetworksDeprecated(
+    bool configured_only,
+    bool visible_only,
+    const GetNetworksDeprecatedCallback& callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (configured_only && visible_only) {
+    VLOG(1) << "Illegal arguments - both configured and visible networks "
+               "requested.";
+    return;
+  }
+
+  GetNetworksRequestType type = GetNetworksRequestType::CONFIGURED_ONLY;
+  if (visible_only) {
+    type = GetNetworksRequestType::VISIBLE_ONLY;
+  }
+
+  GetNetworks(type, callback);
+}
+
+void ArcNetHostImpl::GetNetworks(GetNetworksRequestType type,
                                  const GetNetworksCallback& callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
   NetworkDataPtr data = NetworkData::New();
-  data->status = NetworkResult::SUCCESS;
+  bool configured_only = true;
+  bool visible_only = false;
+  if (type == GetNetworksRequestType::VISIBLE_ONLY) {
+    configured_only = false;
+    visible_only = true;
+  }
 
   // Retrieve list of nearby wifi networks
   chromeos::NetworkTypePattern network_pattern =
@@ -67,6 +93,11 @@ void ArcNetHostImpl::GetNetworks(bool configured_only,
           kGetNetworksListLimit);
 
   // Extract info for each network and add it to the list.
+  // Even if there's no WiFi, an empty (size=0) list must be returned and not a
+  // null one. The explicitly sized New() constructor ensures the non-null
+  // property.
+  mojo::Array<WifiConfigurationPtr> networks =
+      mojo::Array<WifiConfigurationPtr>::New(0);
   for (base::Value* value : *network_properties_list) {
     WifiConfigurationPtr wc = WifiConfiguration::New();
 
@@ -79,6 +110,11 @@ void ArcNetHostImpl::GetNetworks(bool configured_only,
     network_dict->GetString(onc::network_config::kName, &tmp);
     DCHECK(!tmp.empty());
     wc->ssid = tmp;
+
+    tmp.clear();
+    network_dict->GetString(onc::network_config::kGUID, &tmp);
+    DCHECK(!tmp.empty());
+    wc->guid = tmp;
 
     base::DictionaryValue* wifi_dict = nullptr;
     network_dict->GetDictionary(onc::network_config::kWiFi, &wifi_dict);
@@ -100,9 +136,9 @@ void ArcNetHostImpl::GetNetworks(bool configured_only,
     DCHECK(!tmp.empty());
     wc->bssid = tmp;
 
-    data->networks.push_back(std::move(wc));
+    networks.push_back(std::move(wc));
   }
-
+  data->networks = std::move(networks);
   callback.Run(std::move(data));
 }
 
@@ -110,8 +146,28 @@ void ArcNetHostImpl::GetWifiEnabledState(
     const GetWifiEnabledStateCallback& callback) {
   bool is_enabled = GetStateHandler()->IsTechnologyEnabled(
       chromeos::NetworkTypePattern::WiFi());
-
   callback.Run(is_enabled);
+}
+
+void ArcNetHostImpl::SetWifiEnabledState(
+    bool is_enabled,
+    const SetWifiEnabledStateCallback& callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  chromeos::NetworkStateHandler::TechnologyState state =
+      GetStateHandler()->GetTechnologyState(
+          chromeos::NetworkTypePattern::WiFi());
+  // WiFi can't be enabled or disabled in these states.
+  if ((state == chromeos::NetworkStateHandler::TECHNOLOGY_PROHIBITED) ||
+      (state == chromeos::NetworkStateHandler::TECHNOLOGY_UNINITIALIZED) ||
+      (state == chromeos::NetworkStateHandler::TECHNOLOGY_UNAVAILABLE)) {
+    VLOG(1) << "SetWifiEnabledState failed due to WiFi state: " << state;
+    callback.Run(false);
+  } else {
+    GetStateHandler()->SetTechnologyEnabled(
+        chromeos::NetworkTypePattern::WiFi(), is_enabled,
+        chromeos::network_handler::ErrorCallback());
+    callback.Run(true);
+  }
 }
 
 void ArcNetHostImpl::StartScan() {

@@ -23,6 +23,7 @@ class BubbleFrameView;
 
 // BubbleDelegateView creates frame and client views for bubble Widgets.
 // BubbleDelegateView itself is the client's contents view.
+// TODO(estade): remove this in favor of BubbleDialogDelegateView.
 class VIEWS_EXPORT BubbleDelegateView : public WidgetDelegateView,
                                         public WidgetObserver {
  public:
@@ -112,7 +113,7 @@ class VIEWS_EXPORT BubbleDelegateView : public WidgetDelegateView,
                                         Widget* widget) const;
 
   // Creates and returns a view to be displayed at the bottom of the bubble.
-  virtual scoped_ptr<View> CreateFootnoteView();
+  virtual View* CreateFootnoteView();
 
   // Sets |margins_| to a default picked for smaller bubbles.
   void UseCompactMargins();

@@ -41,7 +41,7 @@ InterpolationValue CSSImageListInterpolationType::maybeConvertNeutral(const Inte
     return underlying.clone();
 }
 
-InterpolationValue CSSImageListInterpolationType::maybeConvertInitial() const
+InterpolationValue CSSImageListInterpolationType::maybeConvertInitial(const StyleResolverState&) const
 {
     StyleImageList initialImageList;
     ImageListPropertyFunctions::getInitialImageList(cssProperty(), initialImageList);
@@ -100,7 +100,7 @@ InterpolationValue CSSImageListInterpolationType::maybeConvertValue(const CSSVal
     if (value.isPrimitiveValue() && toCSSPrimitiveValue(value).getValueID() == CSSValueNone)
         return nullptr;
 
-    RefPtrWillBeRawPtr<CSSValueList> tempList = nullptr;
+    CSSValueList* tempList = nullptr;
     if (!value.isBaseValueList()) {
         tempList = CSSValueList::createCommaSeparated();
         tempList->append(const_cast<CSSValue*>(&value)); // Take ref.
@@ -120,9 +120,9 @@ InterpolationValue CSSImageListInterpolationType::maybeConvertValue(const CSSVal
     return InterpolationValue(interpolableList.release(), NonInterpolableList::create(nonInterpolableValues));
 }
 
-PairwiseInterpolationValue CSSImageListInterpolationType::mergeSingleConversions(InterpolationValue& start, InterpolationValue& end) const
+PairwiseInterpolationValue CSSImageListInterpolationType::mergeSingleConversions(InterpolationValue&& start, InterpolationValue&& end) const
 {
-    return ListInterpolationFunctions::mergeSingleConversions(start, end, CSSImageInterpolationType::staticMergeSingleConversions);
+    return ListInterpolationFunctions::mergeSingleConversions(std::move(start), std::move(end), CSSImageInterpolationType::staticMergeSingleConversions);
 }
 
 InterpolationValue CSSImageListInterpolationType::maybeConvertUnderlyingValue(const InterpolationEnvironment& environment) const
@@ -132,7 +132,7 @@ InterpolationValue CSSImageListInterpolationType::maybeConvertUnderlyingValue(co
     return maybeConvertStyleImageList(underlyingImageList);
 }
 
-void CSSImageListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value) const
+void CSSImageListInterpolationType::composite(UnderlyingValueOwner& underlyingValueOwner, double underlyingFraction, const InterpolationValue& value, double interpolationFraction) const
 {
     underlyingValueOwner.set(*this, value);
 }

@@ -37,6 +37,7 @@
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThread.h"
+#include "public/platform/WebAddressSpace.h"
 #include "public/web/WebContentSecurityPolicy.h"
 #include "public/web/WebDevToolsAgentClient.h"
 #include "public/web/WebFrameClient.h"
@@ -76,7 +77,7 @@ public:
     // WorkerReportingProxy methods:
     void reportException(
         const WTF::String&, int, int, const WTF::String&, int) override;
-    void reportConsoleMessage(PassRefPtrWillBeRawPtr<ConsoleMessage>) override;
+    void reportConsoleMessage(ConsoleMessage*) override;
     void postMessageToPageInspector(const WTF::String&) override;
     void postWorkerConsoleAgentEnabled() override { }
     void didEvaluateWorkerScript(bool success) override { }
@@ -97,7 +98,7 @@ public:
     void resumeStartup() override;
 
     // WebSharedWorker methods:
-    void startWorkerContext(const WebURL&, const WebString& name, const WebString& contentSecurityPolicy, WebContentSecurityPolicyType) override;
+    void startWorkerContext(const WebURL&, const WebString& name, const WebString& contentSecurityPolicy, WebContentSecurityPolicyType, WebAddressSpace) override;
     void connect(WebMessagePortChannel*) override;
     void terminateWorkerContext() override;
 
@@ -110,7 +111,6 @@ public:
 private:
     ~WebSharedWorkerImpl() override;
 
-    void setWorkerThread(PassRefPtr<WorkerThread> thread) { m_workerThread = thread; }
     WorkerThread* workerThread() { return m_workerThread.get(); }
 
     // Shuts down the worker thread.
@@ -135,17 +135,17 @@ private:
     bool postTaskToWorkerGlobalScope(PassOwnPtr<ExecutionContextTask>);
 
     // 'shadow page' - created to proxy loading requests from the worker.
-    RefPtrWillBePersistent<ExecutionContext> m_loadingDocument;
+    Persistent<ExecutionContext> m_loadingDocument;
     WebView* m_webView;
-    RefPtrWillBePersistent<WebLocalFrameImpl> m_mainFrame;
+    Persistent<WebLocalFrameImpl> m_mainFrame;
     bool m_askedToTerminate;
 
     // This one is bound to and used only on the main thread.
     OwnPtr<WebServiceWorkerNetworkProvider> m_networkProvider;
 
-    OwnPtrWillBePersistent<WorkerInspectorProxy> m_workerInspectorProxy;
+    Persistent<WorkerInspectorProxy> m_workerInspectorProxy;
 
-    RefPtr<WorkerThread> m_workerThread;
+    OwnPtr<WorkerThread> m_workerThread;
 
     WebSharedWorkerClient* m_client;
 
@@ -159,6 +159,7 @@ private:
 
     WebURL m_url;
     WebString m_name;
+    WebAddressSpace m_creationAddressSpace;
 };
 
 } // namespace blink

@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include "base/macros.h"
 #include "storage/browser/blob/internal_blob_data.h"
 #include "storage/browser/storage_browser_export.h"
+#include "storage/common/blob_storage/blob_storage_constants.h"
 
 class GURL;
 
@@ -30,28 +32,37 @@ namespace storage {
 //   uuid. The user must keep track of these.
 class STORAGE_EXPORT BlobStorageRegistry {
  public:
+  // True means the blob was constructed successfully, and false means that
+  // there was an error, which is reported in the second argument.
+  using BlobConstructedCallback =
+      base::Callback<void(bool, IPCBlobCreationCancelCode)>;
+
   enum class BlobState {
-    // First the renderer reserves the uuid.
-    RESERVED = 1,
-    // Second, we are asynchronously transporting data to the browser.
-    ASYNC_TRANSPORTATION,
-    // Third, we construct the blob when we have all of the data.
-    CONSTRUCTION,
-    // Finally, the blob is built.
-    ACTIVE
+    // The blob is pending transportation from the renderer. This is the default
+    // state on entry construction.
+    PENDING,
+    // The blob is complete and can be read from.
+    COMPLETE,
+    // The blob is broken and no longer holds data. This happens when there was
+    // a problem constructing the blob, or we've run out of memory.
+    BROKEN
   };
 
   struct STORAGE_EXPORT Entry {
     size_t refcount;
     BlobState state;
-    std::vector<base::Callback<void(bool)>> construction_complete_callbacks;
+    std::vector<BlobConstructedCallback> build_completion_callbacks;
 
-    // Flags
-    bool exceeded_memory;
+    // Only applicable if the state == BROKEN.
+    IPCBlobCreationCancelCode broken_reason =
+        IPCBlobCreationCancelCode::UNKNOWN;
 
     // data and data_builder are mutually exclusive.
-    scoped_ptr<InternalBlobData> data;
-    scoped_ptr<InternalBlobData::Builder> data_builder;
+    std::unique_ptr<InternalBlobData> data;
+    std::unique_ptr<InternalBlobData::Builder> data_builder;
+
+    std::string content_type;
+    std::string content_disposition;
 
     Entry() = delete;
     Entry(int refcount, BlobState state);
@@ -66,17 +77,22 @@ class STORAGE_EXPORT BlobStorageRegistry {
   BlobStorageRegistry();
   ~BlobStorageRegistry();
 
-  // Creates the blob entry with a refcount of 1 and a state of RESERVED. If
+  // Creates the blob entry with a refcount of 1 and a state of PENDING. If
   // the blob is already in use, we return null.
-  Entry* CreateEntry(const std::string& uuid);
+  Entry* CreateEntry(const std::string& uuid,
+                     const std::string& content_type,
+                     const std::string& content_disposition);
 
   // Removes the blob entry with the given uuid. This does not unmap any
   // URLs that are pointing to this uuid. Returns if the entry existed.
   bool DeleteEntry(const std::string& uuid);
 
+  bool HasEntry(const std::string& uuid) const;
+
   // Gets the blob entry for the given uuid. Returns nullptr if the entry
   // does not exist.
   Entry* GetEntry(const std::string& uuid);
+  const Entry* GetEntry(const std::string& uuid) const;
 
   // Creates a url mapping from blob uuid to the given url. Returns false if
   // the uuid isn't mapped to an entry or if there already is a map for the URL.
@@ -97,7 +113,8 @@ class STORAGE_EXPORT BlobStorageRegistry {
   size_t url_count() const { return url_to_uuid_.size(); }
 
  private:
-  using BlobMap = base::ScopedPtrHashMap<std::string, scoped_ptr<Entry>>;
+  friend class ViewBlobInternalsJob;
+  using BlobMap = base::ScopedPtrHashMap<std::string, std::unique_ptr<Entry>>;
   using URLMap = std::map<GURL, std::string>;
 
   BlobMap blob_map_;

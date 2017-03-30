@@ -39,16 +39,16 @@ class Document;
 
 class CSSFontFaceSrcValue : public CSSValue {
 public:
-    static PassRefPtrWillBeRawPtr<CSSFontFaceSrcValue> create(const String& resource, ContentSecurityPolicyDisposition shouldCheckContentSecurityPolicy)
+    static CSSFontFaceSrcValue* create(const String& specifiedResource, const String& absoluteResource, ContentSecurityPolicyDisposition shouldCheckContentSecurityPolicy)
     {
-        return adoptRefWillBeNoop(new CSSFontFaceSrcValue(resource, false, shouldCheckContentSecurityPolicy));
+        return new CSSFontFaceSrcValue(specifiedResource, absoluteResource, false, shouldCheckContentSecurityPolicy);
     }
-    static PassRefPtrWillBeRawPtr<CSSFontFaceSrcValue> createLocal(const String& resource, ContentSecurityPolicyDisposition shouldCheckContentSecurityPolicy)
+    static CSSFontFaceSrcValue* createLocal(const String& absoluteResource, ContentSecurityPolicyDisposition shouldCheckContentSecurityPolicy)
     {
-        return adoptRefWillBeNoop(new CSSFontFaceSrcValue(resource, true, shouldCheckContentSecurityPolicy));
+        return new CSSFontFaceSrcValue(emptyString(), absoluteResource, true, shouldCheckContentSecurityPolicy);
     }
 
-    const String& resource() const { return m_resource; }
+    const String& resource() const { return m_absoluteResource; }
     const String& format() const { return m_format; }
     bool isLocal() const { return m_isLocal; }
 
@@ -72,9 +72,10 @@ public:
     }
 
 private:
-    CSSFontFaceSrcValue(const String& resource, bool local, ContentSecurityPolicyDisposition shouldCheckContentSecurityPolicy)
+    CSSFontFaceSrcValue(const String& specifiedResource, const String& absoluteResource, bool local, ContentSecurityPolicyDisposition shouldCheckContentSecurityPolicy)
         : CSSValue(FontFaceSrcClass)
-        , m_resource(resource)
+        , m_absoluteResource(absoluteResource)
+        , m_specifiedResource(specifiedResource)
         , m_isLocal(local)
         , m_shouldCheckContentSecurityPolicy(shouldCheckContentSecurityPolicy)
     {
@@ -82,32 +83,33 @@ private:
 
     void restoreCachedResourceIfNeeded(Document*);
 
-    String m_resource;
+    String m_absoluteResource;
+    String m_specifiedResource;
     String m_format;
     Referrer m_referrer;
     bool m_isLocal;
     ContentSecurityPolicyDisposition m_shouldCheckContentSecurityPolicy;
 
 
-    class FontResourceHelper : public NoBaseWillBeGarbageCollectedFinalized<FontResourceHelper>, public ResourceOwner<FontResource> {
-        WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(FontResourceHelper);
+    class FontResourceHelper : public GarbageCollectedFinalized<FontResourceHelper>, public ResourceOwner<FontResource> {
+        USING_GARBAGE_COLLECTED_MIXIN(FontResourceHelper);
     public:
-        static PassOwnPtrWillBeRawPtr<FontResourceHelper> create(PassRefPtrWillBeRawPtr<FontResource> resource)
+        static FontResourceHelper* create(FontResource* resource)
         {
-            return adoptPtrWillBeNoop(new FontResourceHelper(resource));
+            return new FontResourceHelper(resource);
         }
 
         DEFINE_INLINE_VIRTUAL_TRACE() { ResourceOwner<FontResource>::trace(visitor); }
 
     private:
-        FontResourceHelper(PassRefPtrWillBeRawPtr<FontResource> resource)
+        FontResourceHelper(FontResource* resource)
         {
             setResource(resource);
         }
 
         String debugName() const override { return "CSSFontFaceSrcValue::FontResourceHelper"; }
     };
-    OwnPtrWillBeMember<FontResourceHelper> m_fetched;
+    Member<FontResourceHelper> m_fetched;
 };
 
 DEFINE_CSS_VALUE_TYPE_CASTS(CSSFontFaceSrcValue, isFontFaceSrcValue());

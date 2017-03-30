@@ -79,10 +79,23 @@ ProxyImpl::ProxyImpl(ChannelImpl* channel_impl,
           CompositorTimingHistory::RENDERER_UMA,
           rendering_stats_instrumentation_));
 
-  scheduler_ = Scheduler::Create(this, scheduler_settings, layer_tree_host_id_,
-                                 task_runner_provider_->ImplThreadTaskRunner(),
-                                 external_begin_frame_source_.get(),
-                                 std::move(compositor_timing_history));
+  BeginFrameSource* frame_source = external_begin_frame_source_.get();
+  if (!scheduler_settings.throttle_frame_production) {
+    // Unthrottled source takes precedence over external sources.
+    unthrottled_begin_frame_source_.reset(new BackToBackBeginFrameSource(
+        task_runner_provider_->ImplThreadTaskRunner()));
+    frame_source = unthrottled_begin_frame_source_.get();
+  }
+  if (!frame_source) {
+    synthetic_begin_frame_source_.reset(new SyntheticBeginFrameSource(
+        task_runner_provider_->ImplThreadTaskRunner(),
+        BeginFrameArgs::DefaultInterval()));
+    frame_source = synthetic_begin_frame_source_.get();
+  }
+  scheduler_ =
+      Scheduler::Create(this, scheduler_settings, layer_tree_host_id_,
+                        task_runner_provider_->ImplThreadTaskRunner(),
+                        frame_source, std::move(compositor_timing_history));
 
   DCHECK_EQ(scheduler_->visible(), layer_tree_host_impl_->visible());
 }
@@ -99,18 +112,13 @@ ProxyImpl::~ProxyImpl() {
 
   scheduler_ = nullptr;
   external_begin_frame_source_ = nullptr;
+  unthrottled_begin_frame_source_ = nullptr;
+  synthetic_begin_frame_source_ = nullptr;
   layer_tree_host_impl_ = nullptr;
   // We need to explicitly shutdown the notifier to destroy any weakptrs it is
   // holding while still on the compositor thread. This also ensures any
   // callbacks holding a ProxyImpl pointer are cancelled.
   smoothness_priority_expiration_notifier_.Shutdown();
-}
-
-void ProxyImpl::SetThrottleFrameProductionOnImpl(bool throttle) {
-  TRACE_EVENT1("cc", "ProxyImpl::SetThrottleFrameProductionOnImplThread",
-               "throttle", throttle);
-  DCHECK(IsImplThread());
-  scheduler_->SetThrottleFrameProduction(throttle);
 }
 
 void ProxyImpl::UpdateTopControlsStateOnImpl(TopControlsState constraints,
@@ -283,7 +291,14 @@ void ProxyImpl::DidLoseOutputSurfaceOnImplThread() {
 void ProxyImpl::CommitVSyncParameters(base::TimeTicks timebase,
                                       base::TimeDelta interval) {
   DCHECK(IsImplThread());
-  scheduler_->CommitVSyncParameters(timebase, interval);
+  if (!synthetic_begin_frame_source_)
+    return;
+
+  if (interval == base::TimeDelta()) {
+    // TODO(brianderson): We should not be receiving 0 intervals.
+    interval = BeginFrameArgs::DefaultInterval();
+  }
+  synthetic_begin_frame_source_->OnUpdateVSyncParameters(timebase, interval);
 }
 
 void ProxyImpl::SetEstimatedParentDrawTime(base::TimeDelta draw_time) {

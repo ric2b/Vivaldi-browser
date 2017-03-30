@@ -204,6 +204,13 @@ public abstract class ChromeSwitches {
             "enable-autofill-keyboard-accessory-view";
 
     /**
+     * Enables overscroll of the on screen keyboard. With this flag on, the OSK will only resize the
+     * visual viewport.
+     * Native switch - switches::kEnableOSKOverscroll
+     */
+    public static final String ENABLE_OSK_OVERSCROLL = "enable-osk-overscroll";
+
+    /**
      * Enables hung renderer InfoBar activation for unresponsive web content.
      * Native switch - switches::kEnableHungRendererInfoBar
      */
@@ -233,6 +240,8 @@ public abstract class ChromeSwitches {
     public static final String HERB_FLAVOR_BASIL_SWITCH = "tab-management-experiment-type-basil";
     public static final String HERB_FLAVOR_CHIVE_SWITCH = "tab-management-experiment-type-chive";
     public static final String HERB_FLAVOR_DILL_SWITCH = "tab-management-experiment-type-dill";
+    public static final String HERB_FLAVOR_ELDERBERRY_SWITCH =
+            "tab-management-experiment-type-elderberry";
 
     public static final String HERB_FLAVOR_DEFAULT = "Default";
     public static final String HERB_FLAVOR_CONTROL = "Control";
@@ -241,12 +250,18 @@ public abstract class ChromeSwitches {
     public static final String HERB_FLAVOR_BASIL = "Basil";
     public static final String HERB_FLAVOR_CHIVE = "Chive";
     public static final String HERB_FLAVOR_DILL = "Dill";
+    public static final String HERB_FLAVOR_ELDERBERRY = "Elderberry";
 
     /**
      * Enable tab switcher in document mode (merged tabs and apps option).
      */
     public static final String ENABLE_TAB_SWITCHER_IN_DOCUMENT_MODE =
             "enable-tab-switcher-in-document-mode";
+
+    /**
+     * Set the partner-defined homepage URL, for testing.
+     */
+    public static final String PARTNER_HOMEPAGE_FOR_TESTING = "partner-homepage-for-testing";
 
     // Prevent instantiation.
     private ChromeSwitches() {}

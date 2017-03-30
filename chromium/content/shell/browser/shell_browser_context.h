@@ -45,8 +45,6 @@ class ShellBrowserContext : public BrowserContext {
   bool IsOffTheRecord() const override;
   DownloadManagerDelegate* GetDownloadManagerDelegate() override;
   net::URLRequestContextGetter* GetRequestContext() override;
-  net::URLRequestContextGetter* GetRequestContextForRenderProcess(
-      int renderer_child_id) override;
   net::URLRequestContextGetter* GetMediaRequestContext() override;
   net::URLRequestContextGetter* GetMediaRequestContextForRenderProcess(
       int renderer_child_id) override;
@@ -60,15 +58,14 @@ class ShellBrowserContext : public BrowserContext {
   SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   PermissionManager* GetPermissionManager() override;
   BackgroundSyncController* GetBackgroundSyncController() override;
-
   net::URLRequestContextGetter* CreateRequestContext(
       ProtocolHandlerMap* protocol_handlers,
-      URLRequestInterceptorScopedVector request_interceptors);
+      URLRequestInterceptorScopedVector request_interceptors) override;
   net::URLRequestContextGetter* CreateRequestContextForStoragePartition(
       const base::FilePath& partition_path,
       bool in_memory,
       ProtocolHandlerMap* protocol_handlers,
-      URLRequestInterceptorScopedVector request_interceptors);
+      URLRequestInterceptorScopedVector request_interceptors) override;
 
  protected:
   // Contains URLRequestContextGetter required for resource loading.

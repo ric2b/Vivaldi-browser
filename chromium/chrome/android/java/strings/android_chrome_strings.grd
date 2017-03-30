@@ -128,6 +128,9 @@ CHAR-LIMIT guidelines:
       <message name="IDS_OK" desc="Label for a confirm button. Used in multiple contexts. [CHAR-LIMIT=20]">
         OK
       </message>
+      <message name="IDS_OK_GOT_IT" desc="Label of a button by which the user confirms that they read and understood the information or instructions. Used in multiple contexts. [CHAR-LIMIT=20]">
+        OK, got it
+      </message>
       <message name="IDS_CANCEL" desc="Label for a cancel button. Used in multiple contexts. [CHAR-LIMIT=20]">
         Cancel
       </message>
@@ -209,6 +212,12 @@ CHAR-LIMIT guidelines:
       </message>
       <message name="IDS_SIGN_IN_TO_CHROME_SUMMARY" desc="Summary for the button to sign in to Chrome, explaining benefits of signing in.">
         Sign in to get your bookmarks, history, passwords, and other settings on all your devices
+      </message>
+      <message name="IDS_SIGN_IN_GOOGLE_ACTIVITY_CONTROLS" desc="Title of Google activity controls preference in signed in accouts settings screen">
+        Google Activity Controls
+      </message>
+      <message name="IDS_SIGN_IN_GOOGLE_ACTIVITY_CONTROLS_MESSAGE" desc="Message of Google activity controls preference in signed in accouts settings screen">
+        Control how Google uses your browsing history to personalize Search and other Google services.
       </message>
 
       <!-- Search engine preferences -->
@@ -368,7 +377,7 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_CONTEXTUAL_SEARCH_SHORT_DESCRIPTION" desc="A promo message shown to users who have Touch to Search enabled to explain the new behavior and provide an option to opt out">
         Touch to Search sends the selected word and the current page as context to Google Search. You can turn it off in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
-      <message name="IDS_CONTEXTUAL_SEARCH_GOT_IT_BUTTON" desc="A button to confirm and dismiss opt out promo">
+      <message name="IDS_CONTEXTUAL_SEARCH_ALLOW_BUTTON" desc="A button to confirm and dismiss opt out promo">
         Allow
       </message>
       <message name="IDS_CONTEXTUAL_SEARCH_NO_THANKS_BUTTON" desc="A button to confirm and dismiss opt out promo">
@@ -415,11 +424,25 @@ For example, some websites may respond to this request by showing you ads that a
       <message name="IDS_CLEAR_BROWSING_DATA_SUMMARY" desc="Summary of the settings item that opens the Clear Browsing Data dialog.">
         Clear history, cookies, site data, cache…
       </message>
-      <message name="IDS_CLEAR_BROWSING_DATA_FOOTNOTE" desc="A summary string at the bottom of the Clear Browsing Data dialog, informing the user that not all data can be cleared through this dialog.">
-        Saved site settings will not be deleted and may reflect your browsing habits.
+      <message name="IDS_CLEAR_BROWSING_DATA_FOOTNOTE_SITE_SETTINGS" desc="A summary string at the bottom of the Clear Browsing Data dialog, informing the user that not all data can be cleared through this dialog.">
+        Saved site settings will not be deleted and may reflect your browsing habits. <ph name="BEGIN_LINK">&lt;link&gt;</ph>Learn more<ph name="END_LINK">&lt;/link&gt;</ph>
       </message>
-      <message name="IDS_CLEAR_BROWSING_DATA_FOOTNOTE_SIGNED" desc="A summary string at the bottom of the Clear Browsing Data dialog, informing the user that synced data types are deleted across devices, and that not all data can be cleared through this dialog.">
-        This clears synced data from all devices. You won’t be signed out of your Google account. Saved site settings will not be deleted and may reflect your browsing habits.
+      <message name="IDS_CLEAR_BROWSING_DATA_FOOTNOTE_SYNC_AND_SITE_SETTINGS" desc="A summary string at the bottom of the Clear Browsing Data dialog, informing the user that synced data types are deleted across devices, and also that not all data can be cleared through this dialog.">
+        This clears synced data from all devices. Saved site settings will not be deleted and may reflect your browsing habits. <ph name="BEGIN_LINK">&lt;link&gt;</ph>Learn more<ph name="END_LINK">&lt;/link&gt;</ph>
+      </message>
+      <message name="IDS_CLEAR_BROWSING_DATA_FOOTNOTE_SIGNED" desc="A summary string at the bottom of the Clear Browsing Data dialog, informing the user that deleting cookies will not sign them out of their Google account.">
+        You won’t be signed out of your Google account.
+      </message>
+      <message name="IDS_CLEAR_BROWSING_DATA_FOOTNOTE_SIGNED_AND_OTHER_FORMS_OF_HISTORY" desc="A summary string at the bottom of the Clear Browsing Data dialog, informing the user that deleting cookies will not sign them out of their Google account, and also that there are other forms of browsing history present.">
+        You won’t be signed out of your Google account. Your Google account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;link&gt;</ph>history.google.com<ph name="END_LINK">&lt;/link&gt;</ph>.
+      </message>
+      <message name="IDS_CLEAR_BROWSING_DATA_HISTORY_DIALOG_TITLE" desc="Title of a dialog that is shown after the deletion of browsing history finished.">
+        Cleared Chrome data
+      </message>
+      <message name="IDS_CLEAR_BROWSING_DATA_HISTORY_DIALOG_DATA_TEXT" desc="Text of the dialog that is shown after the deletion of browsing history items finished, indicating that the selected data has been removed, but there may be other forms of browsing history still present in user's Google account.">
+        The selected data has been removed from Chrome and your synced devices.
+
+Your Google account may have other forms of browsing history like searches and activity from other Google services at <ph name="BEGIN_LINK">&lt;link&gt;</ph>history.google.com<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
       <message name="IDS_CLEAR_CACHE_TITLE" desc="Title for Clear Cache in Clear Browsing Data dialog">
         Cached images and files
@@ -444,9 +467,6 @@ For example, some websites may respond to this request by showing you ads that a
       </message>
       <message name="IDS_CLEAR_FORM_DATA_TITLE" desc="Title for Clear Form Data in Clear Browsing Data preference">
         Autofill form data
-      </message>
-      <message name="IDS_CLEAR_BOOKMARKS_TITLE" desc="Title for Clear Bookmarks data in Clear Synced Data dialog">
-        Bookmarks
       </message>
       <message name="IDS_CLEAR_BROWSING_DATA_PROGRESS_TITLE" desc='Title for the progress dialog used when waiting for "clear browsing data" to complete.'>
         Clearing browsing data
@@ -483,9 +503,7 @@ For example, some websites may respond to this request by showing you ads that a
         Usage and crash reports
       </message>
       <message name="IDS_USAGE_AND_CRASH_REPORTS_DESCRIPTION" desc="Description for 'Usage and crash reports' preference">
-        Help us prioritize the features and improvements we should work on by sending Google information about the files, applications, and services running whenever you experience a crash.
-
-Usage statistics include information such as preferences, button clicks, and memory usage. They do not include webpage URLs or any personal information. Crash reports contain system information at the time of the crash, and may contain web page URLs or personal information, depending on what was happening at the time of the crash.
+        Automatically send usage statistics and crash reports to Google
       </message>
 
       <!-- Accessibility preferences -->
@@ -536,6 +554,9 @@ Usage statistics include information such as preferences, button clicks, and mem
       <message name="IDS_MIDI_SYSEX_PERMISSION_TITLE" desc="Title of the permission that allows a website to get full control of MIDI devices [CHAR-LIMIT=32]">
         Allow full control of MIDI devices
       </message>
+      <message name="IDS_BACKGROUND_SYNC_PERMISSION_TITLE" desc="Title of the permission that allows websites to queue an operation for the next time the device is online[CHAR-LIMIT=32]">
+        Background sync
+      </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE" desc="The label for the button to add a new website to the exception list.">
         Add site
       </message>
@@ -549,7 +570,10 @@ Usage statistics include information such as preferences, button clicks, and mem
         Site <ph name="SITE_NAME">%1$s<ex>google.com</ex></ph> added
       </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_JAVASCRIPT" desc="The description for the allow Javascript for website dialog.">
-        Allow JavaScript on websites you specify while blocking it for the rest of the web
+        Allow JavaScript on the following site.
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_BACKGROUND_SYNC" desc="The description for the allow Background Sync for website dialog.">
+        Allow Background Sync on the following site.
       </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_SITE_URL" desc="The label for the input field where the user can type a website URL.">
         Site URL
@@ -737,10 +761,10 @@ To obtain new licenses, connect to the internet and play your downloaded content
 
       <!-- Fullscreen preferences -->
       <message name="IDS_WEBSITE_SETTINGS_FULLSCREEN" desc="Title for Fullscreen settings, which control which websites can enter fullscreen without popup alert.">
-        Fullscreen
+        Full screen
       </message>
       <message name="IDS_FULLSCREEN_PERMISSION_TITLE" desc="Title for the permission of entering fullscreen without popup alert [CHAR-LIMIT=32]">
-        Fullscreen
+        Full screen
       </message>
 
       <!-- Data Saver -->
@@ -782,15 +806,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_DATA_REDUCTION_CAVEATS_DESCRIPTION" desc="Description text for usage caveats">
         This feature may interfere with access to premium data services provided by your carrier.
-      </message>
-      <message name="IDS_DATA_REDUCTION_EXPERIMENT_DESCRIPTION" desc="Text to be displayed in settings when an experiment is running">
-        If you enable this feature, you will be part of an experiment that proxies HTTPS pages through Google servers.
-      </message>
-      <message name="IDS_DATA_REDUCTION_EXPERIMENT_LINK_URL" desc="A link provided in settings when an experiment is running" translateable="false">
-        <!-- Intentionally empty. This is overridden downstream. -->
-      </message>
-      <message name="IDS_DATA_REDUCTION_INFOBAR_TEXT" desc="Text to be displayed in the data reduction proxy infobar">
-        We are testing the proxying of HTTPS pages through Google servers as part of an experiment.
       </message>
 
       <!-- Data Saver Promo and FRE card -->
@@ -971,8 +986,39 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_SIGNOUT_DIALOG_POSITIVE_BUTTON" desc="Button to sign out of Chrome">
         Sign out
       </message>
+      <message name="IDS_SIGN_IN_BUTTON" desc="Label for a button to sign in">
+        Sign in
+      </message>
 
       <!-- Sync strings -->
+      <message name="IDS_SYNC_YOUR_BOOKMARKS" desc="Title for the prompt to signin and enable sync to sync their bookmarks">
+        Sync your bookmarks
+      </message>
+      <message name="IDS_BOOKMARK_SIGN_IN_PROMO_DESCRIPTION" desc="Description for bookmark UI sign-in promotion.">
+        To get your bookmarks your other devices, sign in to Chrome.
+      </message>
+      <message name="IDS_RECENT_TABS_SIGN_IN_PROMO_DESCRIPTION" desc="Description for recent tabs UI sign-in promotion.">
+        To get your tabs from your other devices, sign in to Chrome.
+      </message>
+      <message name="IDS_ENABLE_SYNC_BUTTON" desc="Text that displayed or button that allows the user to open Chrome settings to enable sync.">
+        Open settings
+      </message>
+      <message name="IDS_OPEN_SETTINGS_BUTTON" desc="Text that displayed or button that allows the open Android settings to enable sync.">
+        Open settings
+      </message>
+      <message name="IDS_BOOKMARKS_SYNC_PROMO_ENABLE_SYNC" desc="Text that displayed in a textview encouraging the user to enable sync.">
+        Bookmarks saved on your other devices will appear here.
+      </message>
+      <message name="IDS_RECENT_TABS_SYNC_PROMO_ENABLE_CHROME_SYNC" desc="Text that displayed in a textview encouraging the user to enable sync.">
+        To get your tabs from your other devices, turn on sync.
+      </message>
+      <message name="IDS_RECENT_TABS_SYNC_PROMO_ENABLE_ANDROID_SYNC" desc="Text that displayed in a textview encouraging the user to enable sync in the android settings.">
+        To get your tabs from your other devices, turn on "Auto-sync data" in Android account setting.
+      </message>
+      <message name="IDS_NTP_RECENT_TABS_SYNC_PROMO_INSTRUCTIONS" desc="Information about sync displayed on the NTP when the user has signed in on mobile but not on desktop">
+        Tabs that you've opened in Chrome on your other devices will appear here.
+      </message>
+      
       <message name="IDS_SIGN_IN_SYNC" desc="Sync preference title in signed-in prefs and prefix for notification related to sync [CHAR-LIMIT=32]">
         Sync
       </message>
@@ -1099,9 +1145,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_BLUETOOTH_CONFIRM_BUTTON" desc="The button to confirm association of a website with a Bluetooth device. Use the same term as in 'Pair this Bluetooth headset with your phone.'">
         Pair
-      </message>
-      <message name="IDS_BLUETOOTH_NOT_SEEING_IT" desc="The message to show at the bottom of the dialog when Bluetooth scanning has uncovered some items but is still scanning for others.">
-        Not seeing your device? <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
       <message name="IDS_BLUETOOTH_NOT_SEEING_IT_IDLE_NONE_FOUND" desc="The message to show at the bottom of the dialog when Bluetooth scanning has not uncovered any devices and it is no longer discovering devices.">
         <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>
@@ -1304,6 +1347,9 @@ You are signing in with a managed account and giving its administrator control o
       </message>
 
       <!-- ContextMenu -->
+      <message name="IDS_CONTEXTMENU_OPEN_IN_OTHER_WINDOW" desc="Context sensitive menu item to open the selected link in the other window. [CHAR-LIMIT=30]">
+        Open in other window
+      </message>
       <message name="IDS_CONTEXTMENU_OPEN_IN_NEW_TAB" desc="Context sensitive menu item to open the selected link in a new tab. [CHAR-LIMIT=30]">
         Open in new tab
       </message>
@@ -1322,11 +1368,17 @@ You are signing in with a managed account and giving its administrator control o
       <message name="IDS_CONTEXTMENU_SAVE_LINK" desc="Context sensitive menu item for saving the target of a link [CHAR-LIMIT=30]">
         Save link
       </message>
+      <message name="IDS_CONTEXTMENU_SAVE_OFFLINE" desc="Context sensitive menu item for saving an offline version of the page that this link is targeting [CHAR-LIMIT=30]">
+        Save linked page for later
+      </message>
       <message name="IDS_CONTEXTMENU_SAVE_IMAGE" desc="Context sensitive menu item for saving the selected image. [CHAR-LIMIT=30]">
         Save image
       </message>
       <message name="IDS_CONTEXTMENU_OPEN_IMAGE" desc="Context sensitive menu item for opening/viewing the selected image. [CHAR-LIMIT=30]">
         Open image
+      </message>
+      <message name="IDS_CONTEXTMENU_OPEN_IMAGE_IN_NEW_TAB" desc="Context sensitive menu item for opening/viewing the selected image in a new tab. [CHAR-LIMIT=30]">
+        Open image in new tab
       </message>
       <message name="IDS_CONTEXTMENU_LOAD_IMAGES" desc="Context sensitive menu item for Data Saver low fidelity placeholder images that reloads the page with the original images. [CHAR-LIMIT=30]">
         Load images
@@ -1496,11 +1548,11 @@ You are signing in with a managed account and giving its administrator control o
 
       <!-- Fullscreen -->
       <message name="IDS_IMMERSIVE_FULLSCREEN_API_NOTIFICATION" desc="Notification message when a site has entered immersive fullscreen and the directions of how to exit.">
-        Drag from top and touch the back button to exit fullscreen.
+        Drag from top and touch the back button to exit full screen.
       </message>
 
       <message name="IDS_FULLSCREEN_API_NOTIFICATION" desc="Notification message when a site has entered non-immsersive fullscreen and the directions of how to exit.">
-        Touch the back button to exit fullscreen.
+        Touch the back button to exit full screen.
       </message>
 
       <!-- Download UI -->
@@ -1590,15 +1642,6 @@ You are signing in with a managed account and giving its administrator control o
       <message name="IDS_TABS_AND_APPS_TITLE" desc="The title of a preference which controls whether your tabs are shown within Chrome or in system app switcher.">
         Merge tabs and apps
       </message>
-      <message name="IDS_TABS_AND_APPS_OPT_OUT_TITLE" desc="A title for the promo message shown to users who have document mode enabled to explain the new location for the tabs and provide an option to opt out.">
-        Chrome tabs have moved
-      </message>
-      <message name="IDS_TABS_AND_APPS_OPT_OUT_TEXT" desc="A promo message shown to users who have document mode enabled to explain the new location for the tabs and provide an option to opt out">
-        See your tabs with other recent apps on your phone’s Overview screen. You can control this in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
-      </message>
-      <message name="IDS_TABS_AND_APPS_GOT_IT_BUTTON" desc="A button to confirm and dismiss opt out promo">
-        Ok, got it
-      </message>
       <message name="IDS_TABS_AND_APPS_SETTINGS_DESCRIPTION" desc="A message shown on settings screen from which you can enable/disable the feature that combines Chrome tabs with recent applications and shows them together in the system app switcher.">
         See your tabs with other recent apps on your phone’s Overview screen.
       </message>
@@ -1667,8 +1710,11 @@ You are signing in with a managed account and giving its administrator control o
       <message name="IDS_CHOOSE_ACCOUNT_SIGN_IN" desc="Sign in button for choose google account dialog [CHAR-LIMIT=20]">
         Sign in
       </message>
+      <message name="IDS_CONTINUE_SIGN_IN" desc="Sign in button for proceed sign in with selected account [CHAR-LIMIT=20]">
+        Continue
+      </message>
       <message name="IDS_SIGNIN_ACCOUNT_CHOICE_DESCRIPTION" desc="Text for account chooser page">
-        Sign in to get your bookmarks, history, passwords, and other settings on all your devices.
+        Sign in with your Google Account to get your bookmarks, history, passwords, and other settings on all your devices.
       </message>
       <message name="IDS_SIGNIN_ACCEPT" desc="Text for button to accept being signed in">
         OK, got it
@@ -1679,23 +1725,14 @@ You are signing in with a managed account and giving its administrator control o
       <message name="IDS_MAKE_CHROME_YOURS" desc="Title for the signin promo that prompts the user to sign in to Chrome to have a personalized experirence. [CHAR-LIMIT=24]">
         Make Chrome yours
       </message>
-      <message name="IDS_SIGNIN_NO_ACCOUNT_CHOICE_DESCRIPTION" desc="Text for account chooser page when there are no accounts on the device.">
-        Add an account to get your bookmarks, history, passwords, and other settings on all your devices.
-      </message>
-      <message name="IDS_SIGNIN_SIGN_IN_TO_CHROME_SUMMARY_VARIANT" desc="A variant of summary for the signin promo; lists reasons to sign in to Chrome.">
-        Sign in to access all your web stuff from any device
-      </message>
       <message name="IDS_SIGNIN_HI_NAME" desc="Title welcoming the user by their name after they have signed in.">
         Hi, <ph name="FULL_NAME">%1$s<ex>John Smith</ex></ph>
-      </message>
-      <message name="IDS_SIGNIN_SIGNED_IN_DESCRIPTION" desc="Explanation of what gets synced after the user signed in">
-        Your bookmarks, history, passwords, and other settings will be synced to your Google Account so you can use them on all your devices. You can choose what to sync in <ph name="BEGIN_LINK1">&lt;LINK1&gt;</ph>Settings<ph name="END_LINK1">&lt;/LINK1&gt;</ph>.
       </message>
       <message name="IDS_SIGNIN_SIGNED_IN_DESCRIPTION_UCA_ADDENDUM" desc="Additional explanation for child accounts that synced settings are managed by parents.">
         Your parents help manage these settings.
       </message>
-      <message name="IDS_ACCESSIBILITY_SIGNIN_ACCOUNT_SPINNER" desc="Content description for the first run account drop down spinner.">
-        Choose account
+      <message name="IDS_SIGNIN_SIGNED_IN_SETTINGS_DESCRIPTION" desc="Label of the section containing the link to go to the settings page.">
+        Control how this works in <ph name="BEGIN_LINK1">&lt;LINK1&gt;</ph>Settings<ph name="END_LINK1">&lt;/LINK1&gt;</ph>
       </message>
 
       <!-- External Navigation Strings -->
@@ -1782,17 +1819,6 @@ You are signing in with a managed account and giving its administrator control o
       <message name="IDS_NTP_RECENT_TABS_SYNC_PROMO_TITLE" desc="Header for the promo explaining how users can see the list of tabs open on their other devices">
         Other devices
       </message>
-      <message name="IDS_NTP_RECENT_TABS_SYNC_PROMO_INSTRUCTIONS" desc="Information about sync displayed on the NTP when the user has signed in on mobile but not on desktop">
-        Access the tabs you have open on your computer, right here.
-
-Just open Chrome on your computer, go to the menu, and select “Sign in to Chrome…”
-      </message>
-      <message name="IDS_NTP_RECENT_TABS_SYNC_ENABLE_SYNC" desc="Text that displayed in a textview encouraging the user to enable sync.">
-        Tabs you have opened in Chrome on your other devices will appear here.
-      </message>
-      <message name="IDS_NTP_RECENT_TABS_SYNC_ENABLE_SYNC_BUTTON" desc="Text that displayed or button that allows the user to enable sync.">
-        Enable sync
-      </message>
       <message name="IDS_NTP_RECENT_TABS_LAST_SYNCED" desc="Label for the time since a device was last synced">
         Last synced: <ph name="WHEN">%1$s<ex>4 hours ago</ex></ph>
       </message>
@@ -1833,10 +1859,7 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
         Remove all
       </message>
       <message name="IDS_SNIPPETS_HEADER" desc="Header for a group of content snippets">
-        For readers of <ph name="PUBLISHER">%1$s<ex>The New York Times</ex></ph>
-      </message>
-      <message name="IDS_SNIPPETS_NTP_READ_MORE_LINK_TEXT" desc="Link to an article this snippet is describing">
-        Read more
+        Articles for you
       </message>
 
       <!-- Toolbar button strings -->
@@ -1856,6 +1879,9 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
       </message>
       <message name="IDS_MENU_UPDATE_SUMMARY_NEW_FEATURES" desc="Summary string for update menu item explaining that new features are available. [CHAR-LIMIT=30]">
         Get the latest features
+      </message>
+      <message name="IDS_MENU_MOVE_TO_OTHER_WINDOW" desc="Menu item for moving the current tab into the other window. [CHAR-LIMIT=27]">
+        Move to other window
       </message>
       <message name="IDS_MENU_NEW_TAB" desc="Menu item for opening a new tab. [CHAR-LIMIT=27]">
         New tab
@@ -1906,18 +1932,6 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
       </message>
       <message name="IDS_BOOKMARKS_FOLDER_EMPTY" desc="Text explaining that the currently selected bookmarks folder is empty.">
         No bookmarks here
-      </message>
-      <message name="IDS_BOOKMARK_SIGN_IN_PROMO_TITLE" desc="Promo title encouraging the user to sign in to Chrome to improve their bookmarks experience. It means that after signing-in, bookmarks will become synced across devices and possible to search.">
-        Sync your bookmarks
-      </message>
-      <message name="IDS_BOOKMARK_SIGN_IN_PROMO_DESCRIPTION" desc="Description for bookmark UI sign-in promotion.">
-        To get your bookmarks on all your devices, sign in to Chrome
-      </message>
-      <message name="IDS_BOOKMARK_SIGN_IN_PROMO_NO_THANKS" desc="Text for the decline button in the bookmark UI">
-        No, thanks
-      </message>
-      <message name="IDS_BOOKMARK_SIGN_IN_PROMO_SIGN_IN" desc="Text for the sign-in button in promotion in the bookmark UI">
-        Sign in
       </message>
       <message name="IDS_BOOKMARK_PAGE_SAVED" desc="Message shown after user adds a new bookmark. [CHAR-LIMIT=32]">
         Bookmarked
@@ -2017,6 +2031,24 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
       </message>
       <message name="IDS_ACCESSIBILITY_BOOKMARK_DRAWER_TOGGLE_BTN_CLOSE" desc="Content description for the button to close the navigation drawer.">
         Close navigation drawer
+      </message>
+
+      <!-- Bookmark widget -->
+      <!-- TODO(ianwen): delete these strings once GYP is no longer used -->
+      <message name="IDS_BOOKMARK_WIDGET_TITLE_STABLE" desc="Title for the widget that shows bookmarks from Chrome.">
+        Chrome bookmarks
+      </message>
+      <message name="IDS_BOOKMARK_WIDGET_TITLE_BETA" desc="Title for the widget that shows bookmarks from Chrome Beta.">
+        Chrome Beta bookmarks
+      </message>
+      <message name="IDS_BOOKMARK_WIDGET_TITLE_DEV" desc="Title for the widget that shows bookmarks from Chrome Dev.">
+        Chrome Dev bookmarks
+      </message>
+      <message name="IDS_BOOKMARK_WIDGET_TITLE_CANARY" desc="Title for the widget that shows bookmarks from Chrome Canary.">
+        Chrome Canary bookmarks
+      </message>
+      <message name="IDS_BOOKMARK_WIDGET_TITLE_WORK" desc="Title for the widget that shows bookmarks from Work Chrome (Chrome for Enterprise).">
+        Work Chrome bookmarks
       </message>
 
       <!-- Offline pages -->
@@ -2250,9 +2282,6 @@ Just open Chrome on your computer, go to the menu, and select “Sign in to Chro
       <message name="IDS_ACCESSIBILITY_OMNIBOX_BTN_REFINE" desc="Content description for the omnibox refine button.">
         Refine
       </message>
-      <message name="IDS_ACCESSIBILITY_BOOKMARK_WIDGET_THUMB_LAUNCH_CHROME" desc="Content description for the button in the bookmark widget that launches Chrome.">
-        Launch Chrome
-      </message>
       <message name="IDS_ACCESSIBILITY_BOOKMARK_CANCEL_SELECTION" desc="Content description for the cancel selection button that deselects the selected bookmarks.">
         Cancel selection
       </message>
@@ -2403,6 +2432,28 @@ You can control the Physical Web in Chrome Settings.
       </message>
       <message name="IDS_UPDATE_PASSWORD_FOR_ACCOUNT" desc="A message shown to users to allow updating a saved password for a site, where user has multiple credentials saved, shown in an infobar that appears after user uses new password to sign in to the site or uses a password change form.">
         Do you want <ph name="PASSWORD_MANAGER_BRAND">^1<ex>Google Chrome</ex></ph> to update the password for <ph name="USERNAME">^2<ex>don.john.lemon@example.com</ex></ph> for this site?
+      </message>
+
+      <!-- WebUsb Picker UI strings -->
+      <message name="IDS_USB_CHOOSER_DIALOG_PROMPT" desc="The text that is used to introduce the USB chooser dialog to the user.">
+        <ph name="SITE">%1$s<ex>https://www.google.com</ex></ph> wants to connect to:
+      </message>
+      <message name="IDS_USB_CHOOSER_DIALOG_NO_DEVICES_FOUND_PROMPT" desc="The text that is used to inform the user that no devices found in the USB chooser dialog.">
+        No devices found.
+      </message>
+      <message name="IDS_USB_CHOOSER_DIALOG_CONNECT_BUTTON_TEXT" desc="The text that is shown on the connect button in the USB chooser dialog.">
+        Connect
+      </message>
+      <message name="IDS_USB_CHOOSER_DIALOG_FOOTNOTE_TEXT" desc="This text is shown at the bottom of the USB chooser dialog with a link to part of its text.">
+        Not seeing your device? <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>
+      </message>
+
+      <!-- Migration strings -->
+      <message name="IDS_TAB_SWITCHER_CALLOUT_HEADER" desc="Header for the Tab Switcher callout.">
+        Quickly switch tabs
+      </message>
+      <message name="IDS_TAB_SWITCHER_CALLOUT_BODY" desc="Indicates that clicking the tab switcher button gives you quick access to your tabs.">
+        Tap this button for quick access to your tabs.
       </message>
     </messages>
   </release>

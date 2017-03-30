@@ -5,6 +5,7 @@
 #include "components/update_client/test_configurator.h"
 
 #include "base/version.h"
+#include "components/prefs/pref_service.h"
 #include "components/update_client/component_patcher_operation.h"
 #include "url/gurl.h"
 
@@ -25,6 +26,7 @@ TestConfigurator::TestConfigurator(
     const scoped_refptr<base::SequencedTaskRunner>& worker_task_runner,
     const scoped_refptr<base::SingleThreadTaskRunner>& network_task_runner)
     : worker_task_runner_(worker_task_runner),
+      brand_("TEST"),
       initial_time_(0),
       ondemand_time_(0),
       use_cup_signing_(false),
@@ -54,10 +56,16 @@ int TestConfigurator::UpdateDelay() const {
 }
 
 std::vector<GURL> TestConfigurator::UpdateUrl() const {
+  if (!update_check_url_.is_empty())
+    return std::vector<GURL>(1, update_check_url_);
+
   return MakeDefaultUrls();
 }
 
 std::vector<GURL> TestConfigurator::PingUrl() const {
+  if (!ping_url_.is_empty())
+    return std::vector<GURL>(1, ping_url_);
+
   return UpdateUrl();
 }
 
@@ -68,6 +76,10 @@ base::Version TestConfigurator::GetBrowserVersion() const {
 
 std::string TestConfigurator::GetChannel() const {
   return "fake_channel_string";
+}
+
+std::string TestConfigurator::GetBrand() const {
+  return brand_;
 }
 
 std::string TestConfigurator::GetLang() const {
@@ -107,6 +119,10 @@ bool TestConfigurator::UseCupSigning() const {
   return use_cup_signing_;
 }
 
+void TestConfigurator::SetBrand(const std::string& brand) {
+  brand_ = brand;
+}
+
 void TestConfigurator::SetOnDemandTime(int seconds) {
   ondemand_time_ = seconds;
 }
@@ -124,10 +140,22 @@ void TestConfigurator::SetDownloadPreference(
   download_preference_ = download_preference;
 }
 
+void TestConfigurator::SetUpdateCheckUrl(const GURL& url) {
+  update_check_url_ = url;
+}
+
+void TestConfigurator::SetPingUrl(const GURL& url) {
+  ping_url_ = url;
+}
+
 scoped_refptr<base::SequencedTaskRunner>
 TestConfigurator::GetSequencedTaskRunner() const {
   DCHECK(worker_task_runner_.get());
   return worker_task_runner_;
+}
+
+PrefService* TestConfigurator::GetPrefService() const {
+  return nullptr;
 }
 
 }  // namespace update_client

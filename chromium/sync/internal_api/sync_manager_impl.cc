@@ -33,13 +33,11 @@
 #include "sync/internal_api/public/internal_components_factory.h"
 #include "sync/internal_api/public/read_node.h"
 #include "sync/internal_api/public/read_transaction.h"
-#include "sync/internal_api/public/sync_context.h"
-#include "sync/internal_api/public/sync_context_proxy.h"
 #include "sync/internal_api/public/user_share.h"
 #include "sync/internal_api/public/util/experiments.h"
 #include "sync/internal_api/public/write_node.h"
 #include "sync/internal_api/public/write_transaction.h"
-#include "sync/internal_api/sync_context_proxy_impl.h"
+#include "sync/internal_api/sync_context_proxy.h"
 #include "sync/internal_api/syncapi_internal.h"
 #include "sync/internal_api/syncapi_server_connection_manager.h"
 #include "sync/protocol/proto_value_conversions.h"
@@ -260,7 +258,7 @@ void SyncManagerImpl::Init(InitArgs* args) {
   base::FilePath absolute_db_path = database_path_;
   DCHECK(absolute_db_path.IsAbsolute());
 
-  scoped_ptr<syncable::DirectoryBackingStore> backing_store =
+  std::unique_ptr<syncable::DirectoryBackingStore> backing_store =
       args->internal_components_factory->BuildDirectoryBackingStore(
           InternalComponentsFactory::STORAGE_ON_DISK,
           args->credentials.account_id, absolute_db_path);
@@ -312,15 +310,6 @@ void SyncManagerImpl::Init(InitArgs* args) {
   model_type_registry_.reset(
       new ModelTypeRegistry(args->workers, directory(), this));
   sync_encryption_handler_->AddObserver(model_type_registry_.get());
-
-  // Bind the SyncContext WeakPtr to this thread.  This helps us crash earlier
-  // if the pointer is misused in debug mode.
-  base::WeakPtr<syncer_v2::SyncContext> weak_core =
-      model_type_registry_->AsWeakPtr();
-  weak_core.get();
-
-  sync_context_proxy_.reset(new syncer_v2::SyncContextProxyImpl(
-      base::ThreadTaskRunnerHandle::Get(), weak_core));
 
   // Build a SyncSessionContext and store the worker in it.
   DVLOG(1) << "Sync is bringing up SyncSessionContext.";
@@ -734,7 +723,7 @@ void SyncManagerImpl::SetExtraChangeRecordData(
     sync_pb::EntitySpecifics original_specifics(original.ref(SPECIFICS));
     if (type == PASSWORDS) {
       // Passwords must use their own legacy ExtraPasswordChangeRecordData.
-      scoped_ptr<sync_pb::PasswordSpecificsData> data(
+      std::unique_ptr<sync_pb::PasswordSpecificsData> data(
           DecryptPasswordSpecifics(original_specifics, cryptographer));
       if (!data) {
         NOTREACHED();
@@ -880,7 +869,7 @@ void SyncManagerImpl::SetJsEventHandler(
   js_sync_encryption_handler_observer_.SetJsEventHandler(event_handler);
 }
 
-scoped_ptr<base::ListValue> SyncManagerImpl::GetAllNodesForType(
+std::unique_ptr<base::ListValue> SyncManagerImpl::GetAllNodesForType(
     syncer::ModelType type) {
   DirectoryTypeDebugInfoEmitterMap* emitter_map =
       model_type_registry_->directory_type_debug_info_emitter_map();
@@ -891,7 +880,7 @@ scoped_ptr<base::ListValue> SyncManagerImpl::GetAllNodesForType(
     // when it doesn't really know which types are enabled or disabled.
     DLOG(WARNING) << "Asked to return debug info for invalid type "
                   << ModelTypeToString(type);
-    return scoped_ptr<base::ListValue>(new base::ListValue());
+    return std::unique_ptr<base::ListValue>(new base::ListValue());
   }
 
   return it->second->GetAllNodes();
@@ -907,7 +896,7 @@ void SyncManagerImpl::SetInvalidatorEnabled(bool invalidator_enabled) {
 
 void SyncManagerImpl::OnIncomingInvalidation(
     syncer::ModelType type,
-    scoped_ptr<InvalidationInterface> invalidation) {
+    std::unique_ptr<InvalidationInterface> invalidation) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   allstatus_.IncrementNotificationsReceived();
@@ -938,9 +927,10 @@ UserShare* SyncManagerImpl::GetUserShare() {
   return &share_;
 }
 
-syncer_v2::SyncContextProxy* SyncManagerImpl::GetSyncContextProxy() {
+scoped_ptr<syncer_v2::SyncContext> SyncManagerImpl::GetSyncContextProxy() {
   DCHECK(initialized_);
-  return sync_context_proxy_.get();
+  return make_scoped_ptr(new syncer_v2::SyncContextProxy(
+      base::ThreadTaskRunnerHandle::Get(), model_type_registry_->AsWeakPtr()));
 }
 
 const std::string SyncManagerImpl::cache_guid() {
@@ -990,17 +980,6 @@ bool SyncManagerImpl::ReceivedExperiment(Experiments* experiments) {
     }
   }
 
-  ReadNode wallet_sync_node(&trans);
-  if (wallet_sync_node.InitByClientTagLookup(
-          syncer::EXPERIMENTS, syncer::kWalletSyncTag) == BaseNode::INIT_OK) {
-    const sync_pb::WalletSyncFlags& wallet_sync =
-        wallet_sync_node.GetExperimentsSpecifics().wallet_sync();
-    if (wallet_sync.has_enabled()) {
-      experiments->wallet_sync_enabled = wallet_sync.enabled();
-      found_experiment = true;
-    }
-  }
-
   return found_experiment;
 }
 
@@ -1042,6 +1021,11 @@ void SyncManagerImpl::ClearServerData(const ClearServerDataCallback& callback) {
   scheduler_->Start(SyncScheduler::CLEAR_SERVER_DATA_MODE, base::Time());
   ClearParams params(callback);
   scheduler_->ScheduleClearServerData(params);
+}
+
+void SyncManagerImpl::OnCookieJarChanged(bool account_mismatch) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  session_context_->set_cookie_jar_mismatch(account_mismatch);
 }
 
 }  // namespace syncer

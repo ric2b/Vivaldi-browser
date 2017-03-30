@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//mojo/public/tools/bindings/mojom.gni")
 import("//third_party/WebKit/Source/config.gni")
 import("//tools/grit/grit_rule.gni")
 
@@ -46,13 +47,16 @@ group("blink_for_unittests") {
 # GYP version: WebKit/public/blink.gyp:blink_minimal
 group("blink_minimal") {
   public_deps = [
+    ":blink_headers",
     "//third_party/WebKit/Source/platform:blink_common",
   ]
 }
 
 # GYP version: WebKit/public/blink.gyp:blink_test_support
 group("test_support") {
+  testonly = true
   public_deps = [
+    "//third_party/WebKit/Source/platform:test_support",
     "//third_party/WebKit/Source/web:test_support",
   ]
 }
@@ -83,7 +87,10 @@ group("all_blink") {
 }
 
 config("blink_headers_config") {
-  include_dirs = [ ".." ]
+  include_dirs = [
+    "..",
+    "$root_gen_dir/third_party/WebKit",
+  ]
 
   # Allow :blink_headers to include v8.h without linking to it.
   configs = [ "//v8:external_config" ]
@@ -120,9 +127,6 @@ source_set("blink_headers") {
 
     # Blink exposes icu headers in the public API.
     "//third_party/icu:icu_config",
-
-    # Blink exposes NPAPI headers in the public API.
-    "//third_party/npapi:npapi_config",
   ]
   sources = blink_headers_values.blink_public_sources
 }
@@ -168,4 +172,38 @@ grit("image_resources") {
     "blink_image_resources_100_percent.pak",
     "blink_image_resources_200_percent.pak",
   ]
+}
+
+# GYP version: WebKit/public/blink.gyp:mojo_bindings_blink_mojom
+mojom("mojo_bindings_blink") {
+  sources = [
+    "platform/modules/bluetooth/web_bluetooth.mojom",
+    "platform/modules/geolocation/geolocation.mojom",
+    "platform/modules/notifications/notification.mojom",
+    "platform/modules/payments/payment_request.mojom",
+    "platform/modules/permissions/permission.mojom",
+    "platform/modules/permissions/permission_status.mojom",
+  ]
+  for_blink = true
+  variant = "wtf"
+}
+
+# GYP version: WebKit/public/blink.gyp:mojo_bindings_mojom
+mojom("mojo_bindings") {
+  sources = [
+    "platform/modules/bluetooth/web_bluetooth.mojom",
+    "platform/modules/geolocation/geolocation.mojom",
+    "platform/modules/notifications/notification.mojom",
+    "platform/modules/permissions/permission.mojom",
+    "platform/modules/permissions/permission_status.mojom",
+  ]
+}
+
+if (is_android) {
+  # GYP version: WebKit/public/blink.gyp:android_mojo_bindings_java
+  mojom("android_mojo_bindings") {
+    sources = [
+      "platform/modules/payments/payment_request.mojom",
+    ]
+  }
 }

@@ -32,6 +32,7 @@
 
 #include "public/platform/Platform.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
+#include "skia/ext/texture_handle.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/RefPtr.h"
@@ -51,8 +52,8 @@ AcceleratedImageBufferSurface::AcceleratedImageBufferSurface(const IntSize& size
     SkAlphaType alphaType = (Opaque == opacityMode) ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
     SkImageInfo info = SkImageInfo::MakeN32(size.width(), size.height(), alphaType);
     SkSurfaceProps disableLCDProps(0, kUnknown_SkPixelGeometry);
-    m_surface = adoptPtr(SkSurface::NewRenderTarget(grContext, SkSurface::kYes_Budgeted, info, 0 /* sampleCount */,
-        Opaque == opacityMode ? nullptr : &disableLCDProps));
+    m_surface = SkSurface::MakeRenderTarget(grContext, SkBudgeted::kYes, info, 0 /* sampleCount */,
+        Opaque == opacityMode ? nullptr : &disableLCDProps);
     if (!m_surface.get())
         return;
     clear();
@@ -67,7 +68,7 @@ Platform3DObject AcceleratedImageBufferSurface::getBackingTextureHandleForOverwr
 {
     if (!m_surface)
         return 0;
-    return m_surface->getTextureHandle(SkSurface::kDiscardWrite_TextureHandleAccess);
+    return skia::GrBackendObjectToGrGLTextureInfo(m_surface->getTextureHandle(SkSurface::kDiscardWrite_TextureHandleAccess))->fID;
 }
 
 } // namespace blink

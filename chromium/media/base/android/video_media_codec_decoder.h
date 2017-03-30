@@ -67,8 +67,8 @@ class VideoMediaCodecDecoder : public MediaCodecDecoder {
   ConfigStatus ConfigureInternal(jobject media_crypto) override;
   void AssociateCurrentTimeWithPTS(base::TimeDelta pts) override;
   void DissociatePTSFromTime() override;
-  void OnOutputFormatChanged() override;
-  void Render(int buffer_index,
+  bool OnOutputFormatChanged() override;
+  bool Render(int buffer_index,
               size_t offset,
               size_t size,
               RenderMode render_mode,

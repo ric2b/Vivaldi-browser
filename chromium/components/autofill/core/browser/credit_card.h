@@ -17,6 +17,9 @@
 
 namespace autofill {
 
+// A midline horizontal ellipsis (U+22EF).
+extern const base::char16 kMidlineEllipsis[];
+
 // A form group that stores credit card information.
 class CreditCard : public AutofillDataModel {
  public:
@@ -167,10 +170,6 @@ class CreditCard : public AutofillDataModel {
 
   // Returns true if there are no values (field types) set.
   bool IsEmpty(const std::string& app_locale) const;
-
-  // Returns true if all field types have valid values set. Server masked cards
-  // will not be complete. MASKED_SERVER_CARDs will never be complete.
-  bool IsComplete() const;
 
   // Returns true if all field types have valid values set and the card is not
   // expired. MASKED_SERVER_CARDs will never be valid because the number is

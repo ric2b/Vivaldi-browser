@@ -43,10 +43,10 @@ const char* DeviceOrientationController::supplementName()
 
 DeviceOrientationController& DeviceOrientationController::from(Document& document)
 {
-    DeviceOrientationController* controller = static_cast<DeviceOrientationController*>(WillBeHeapSupplement<Document>::from(document, supplementName()));
+    DeviceOrientationController* controller = static_cast<DeviceOrientationController*>(Supplement<Document>::from(document, supplementName()));
     if (!controller) {
         controller = new DeviceOrientationController(document);
-        WillBeHeapSupplement<Document>::provideTo(document, supplementName(), adoptPtrWillBeNoop(controller));
+        Supplement<Document>::provideTo(document, supplementName(), controller);
     }
     return *controller;
 }
@@ -94,7 +94,7 @@ void DeviceOrientationController::unregisterWithDispatcher()
     dispatcherInstance().removeController(this);
 }
 
-PassRefPtrWillBeRawPtr<Event> DeviceOrientationController::lastEvent() const
+Event* DeviceOrientationController::lastEvent() const
 {
     return DeviceOrientationEvent::create(eventTypeName(), lastData());
 }
@@ -135,7 +135,7 @@ DEFINE_TRACE(DeviceOrientationController)
 {
     visitor->trace(m_overrideOrientationData);
     DeviceSingleWindowEventController::trace(visitor);
-    WillBeHeapSupplement<Document>::trace(visitor);
+    Supplement<Document>::trace(visitor);
 }
 
 } // namespace blink

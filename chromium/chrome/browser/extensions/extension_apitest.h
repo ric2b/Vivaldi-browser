@@ -72,6 +72,11 @@ class ExtensionApiTest : public ExtensionBrowserTest {
   // |extension_name| is a directory in "test/data/extensions/api_test".
   bool RunExtensionTest(const std::string& extension_name);
 
+  // Similar to RunExtensionTest, except sets an additional string argument
+  // |customArg| to the test config object.
+  bool RunExtensionTestWithArg(const std::string& extension_name,
+                               const char* custom_arg);
+
   // Same as RunExtensionTest, but enables the extension for incognito mode.
   bool RunExtensionTestIncognito(const std::string& extension_name);
 
@@ -166,13 +171,13 @@ class ExtensionApiTest : public ExtensionBrowserTest {
 
   // Hold details of the test, set in C++, which can be accessed by
   // javascript using chrome.test.getConfig().
-  scoped_ptr<base::DictionaryValue> test_config_;
+  std::unique_ptr<base::DictionaryValue> test_config_;
 
   // Hold the test WebSocket server.
-  scoped_ptr<net::SpawnedTestServer> websocket_server_;
+  std::unique_ptr<net::SpawnedTestServer> websocket_server_;
 
   // Hold the test FTP server.
-  scoped_ptr<net::SpawnedTestServer> ftp_server_;
+  std::unique_ptr<net::SpawnedTestServer> ftp_server_;
 };
 
 #endif  // CHROME_BROWSER_EXTENSIONS_EXTENSION_APITEST_H_

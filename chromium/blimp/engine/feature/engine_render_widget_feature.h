@@ -8,14 +8,16 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/atomic_sequence_num.h"
 #include "base/containers/small_map.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "blimp/engine/app/settings_manager.h"
 #include "blimp/net/blimp_message_processor.h"
 #include "blimp/net/input_message_converter.h"
+#include "ui/base/ime/text_input_client.h"
 
 namespace blink {
 class WebGestureEvent;
@@ -26,6 +28,7 @@ class RenderWidgetHost;
 }
 
 namespace blimp {
+namespace engine {
 
 // Handles all incoming and outgoing protobuf message types tied to a specific
 // RenderWidget. This includes BlimpMessage::INPUT, BlimpMessage::COMPOSITOR,
@@ -33,7 +36,8 @@ namespace blimp {
 // notified of incoming messages. This class automatically handles dropping
 // stale BlimpMessage::RENDER_WIDGET messages from the client after a
 // RenderWidgetMessage::INITIALIZE message is sent.
-class EngineRenderWidgetFeature : public BlimpMessageProcessor {
+class EngineRenderWidgetFeature : public BlimpMessageProcessor,
+                                  public SettingsManager::Observer {
  public:
   // A delegate to be notified of specific RenderWidget related incoming events.
   class RenderWidgetMessageDelegate {
@@ -41,7 +45,7 @@ class EngineRenderWidgetFeature : public BlimpMessageProcessor {
     // Called when the client is sending a WebGestureEvent to the engine.
     virtual void OnWebGestureEvent(
         content::RenderWidgetHost* render_widget_host,
-        scoped_ptr<blink::WebGestureEvent> event) = 0;
+        std::unique_ptr<blink::WebGestureEvent> event) = 0;
 
     // Called when the client sent a CompositorMessage.  These messages should
     // be sent to the engine's render process so they can be processed by the
@@ -51,17 +55,20 @@ class EngineRenderWidgetFeature : public BlimpMessageProcessor {
         const std::vector<uint8_t>& message) = 0;
   };
 
-  EngineRenderWidgetFeature();
+  explicit EngineRenderWidgetFeature(SettingsManager* settings);
   ~EngineRenderWidgetFeature() override;
 
   void set_render_widget_message_sender(
-      scoped_ptr<BlimpMessageProcessor> message_processor);
+      std::unique_ptr<BlimpMessageProcessor> message_processor);
 
   void set_input_message_sender(
-      scoped_ptr<BlimpMessageProcessor> message_processor);
+      std::unique_ptr<BlimpMessageProcessor> message_processor);
 
   void set_compositor_message_sender(
-      scoped_ptr<BlimpMessageProcessor> message_processor);
+      std::unique_ptr<BlimpMessageProcessor> message_processor);
+
+  void set_ime_message_sender(
+      std::unique_ptr<BlimpMessageProcessor> message_processor);
 
   // Notifes the client that a new RenderWidget for a particular WebContents has
   // been created. This will trigger the creation of the BlimpCompositor for
@@ -83,6 +90,13 @@ class EngineRenderWidgetFeature : public BlimpMessageProcessor {
   void OnRenderWidgetDeleted(const int tab_id,
                              content::RenderWidgetHost* render_widget_host);
 
+  // Notifies the client to show/hide IME.
+  void SendShowImeRequest(const int tab_id,
+                          content::RenderWidgetHost* render_widget_host,
+                          const ui::TextInputClient* client);
+  void SendHideImeRequest(const int tab_id,
+                          content::RenderWidgetHost* render_widget_host);
+
   // Sends a CompositorMessage for |tab_id| to the client.
   void SendCompositorMessage(const int tab_id,
                              content::RenderWidgetHost* render_widget_host,
@@ -95,8 +109,11 @@ class EngineRenderWidgetFeature : public BlimpMessageProcessor {
   void RemoveDelegate(const int tab_id);
 
   // BlimpMessageProcessor implementation.
-  void ProcessMessage(scoped_ptr<BlimpMessage> message,
+  void ProcessMessage(std::unique_ptr<BlimpMessage> message,
                       const net::CompletionCallback& callback) override;
+
+  // Settings::Observer implementation.
+  void OnWebPreferencesChanged() override;
 
  private:
   typedef base::SmallMap<std::map<int, RenderWidgetMessageDelegate*> >
@@ -134,6 +151,10 @@ class EngineRenderWidgetFeature : public BlimpMessageProcessor {
   content::RenderWidgetHost* GetRenderWidgetHost(const int tab_id,
                                                  const int render_widget_id);
 
+  // Inserts the text entered by the user into the |client|.
+  // The existing text in the box gets replaced by the new text from IME.
+  void SetTextFromIME(ui::TextInputClient* client, std::string text);
+
   DelegateMap delegates_;
   TabMap tabs_;
 
@@ -151,14 +172,18 @@ class EngineRenderWidgetFeature : public BlimpMessageProcessor {
 
   InputMessageConverter input_message_converter_;
 
+  SettingsManager* settings_manager_;
+
   // Outgoing message processors for RENDER_WIDGET, COMPOSITOR and INPUT types.
-  scoped_ptr<BlimpMessageProcessor> render_widget_message_sender_;
-  scoped_ptr<BlimpMessageProcessor> compositor_message_sender_;
-  scoped_ptr<BlimpMessageProcessor> input_message_sender_;
+  std::unique_ptr<BlimpMessageProcessor> render_widget_message_sender_;
+  std::unique_ptr<BlimpMessageProcessor> compositor_message_sender_;
+  std::unique_ptr<BlimpMessageProcessor> input_message_sender_;
+  std::unique_ptr<BlimpMessageProcessor> ime_message_sender_;
 
   DISALLOW_COPY_AND_ASSIGN(EngineRenderWidgetFeature);
 };
 
+}  // namespace engine
 }  // namespace blimp
 
 #endif  // BLIMP_ENGINE_FEATURE_ENGINE_RENDER_WIDGET_FEATURE_H_

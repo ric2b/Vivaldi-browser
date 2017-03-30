@@ -38,6 +38,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.ChromeTabbedActivity2;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.IntentHandler.TabOpenType;
 import org.chromium.chrome.browser.ShortcutHelper;
@@ -46,6 +47,7 @@ import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
+import org.chromium.chrome.browser.customtabs.SeparateTaskCustomTabActivity;
 import org.chromium.chrome.browser.externalnav.IntentWithGesturesHandler;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
@@ -59,10 +61,12 @@ import org.chromium.chrome.browser.preferences.DocumentModeManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabIdManager;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
+import org.chromium.chrome.browser.tabmodel.DocumentModeAssassin;
 import org.chromium.chrome.browser.tabmodel.document.ActivityDelegate;
 import org.chromium.chrome.browser.tabmodel.document.AsyncTabCreationParams;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModel;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
+import org.chromium.chrome.browser.upgrade.UpgradeActivity;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
@@ -74,6 +78,7 @@ import org.chromium.ui.base.PageTransition;
 import java.lang.ref.WeakReference;
 import java.net.URI;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Dispatches incoming intents to the appropriate activity based on the current configuration and
@@ -92,12 +97,6 @@ public class ChromeLauncherActivity extends Activity
      */
     public static final String EXTRA_IS_ALLOWED_TO_RETURN_TO_PARENT =
             "org.chromium.chrome.browser.document.IS_ALLOWED_TO_RETURN_TO_PARENT";
-
-    /**
-     * Action fired when the user selects the "Close all incognito tabs" notification.
-     */
-    static final String ACTION_CLOSE_ALL_INCOGNITO =
-            "com.google.android.apps.chrome.document.CLOSE_ALL_INCOGNITO";
 
     private static final String TAG = "document_CLActivity";
 
@@ -129,7 +128,7 @@ public class ChromeLauncherActivity extends Activity
             new LaunchMetrics.SparseHistogramSample("Launch.IntentFlags");
 
     private IntentHandler mIntentHandler;
-    private boolean mIsInMultiInstanceMode;
+    private boolean mIsInLegacyMultiInstanceMode;
     private boolean mIsFinishDelayed;
 
     private boolean mIsCustomTabIntent;
@@ -172,7 +171,8 @@ public class ChromeLauncherActivity extends Activity
         maybePerformMigrationTasks();
         recordIntentMetrics();
 
-        mIsInMultiInstanceMode = MultiWindowUtils.getInstance().shouldRunInMultiInstanceMode(this);
+        mIsInLegacyMultiInstanceMode =
+                MultiWindowUtils.getInstance().shouldRunInLegacyMultiInstanceMode(this);
         mIntentHandler = new IntentHandler(this, getPackageName());
         mIsCustomTabIntent = isCustomTabIntent();
         if (!mIsCustomTabIntent) {
@@ -217,13 +217,6 @@ public class ChromeLauncherActivity extends Activity
             return;
         }
 
-        // Check if we're just closing all of the Incognito tabs.
-        if (TextUtils.equals(intent.getAction(), ACTION_CLOSE_ALL_INCOGNITO)) {
-            ChromeApplication.getDocumentTabModelSelector().getModel(true).closeAllTabs();
-            ApiCompatibilityUtils.finishAndRemoveTask(this);
-            return;
-        }
-
         // Check if we should launch the FirstRunActivity.  This occurs after the check to launch
         // ChromeTabbedActivity because ChromeTabbedActivity handles FRE in its own way.
         if (launchFirstRunExperience()) return;
@@ -234,8 +227,16 @@ public class ChromeLauncherActivity extends Activity
             return;
         }
 
-        // Launch a DocumentActivity to handle the Intent.
-        handleDocumentActivityIntent();
+        if (DocumentModeAssassin.getInstance().isMigrationNecessary()) {
+            Log.d(TAG, "Diverting to UpgradeActivity via ChromeLauncherActivity.");
+            UpgradeActivity.launchInstance(this, intent);
+            ApiCompatibilityUtils.finishAndRemoveTask(this);
+            return;
+        } else {
+            // Launch a DocumentActivity to handle the Intent.
+            handleDocumentActivityIntent();
+        }
+
         if (!mIsFinishDelayed) ApiCompatibilityUtils.finishAndRemoveTask(this);
     }
 
@@ -339,6 +340,16 @@ public class ChromeLauncherActivity extends Activity
         if (TextUtils.isEmpty(flavor)
                 || TextUtils.equals(ChromeSwitches.HERB_FLAVOR_DISABLED, flavor)) {
             return false;
+        } else if (TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_ELDERBERRY)) {
+            boolean isAllowedToReturnToExternalApp = IntentUtils.safeGetBooleanExtra(getIntent(),
+                    ChromeLauncherActivity.EXTRA_IS_ALLOWED_TO_RETURN_TO_PARENT, true);
+
+            if (isAllowedToReturnToExternalApp
+                    && (getIntent().getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0
+                        || (getIntent().getFlags() & Intent.FLAG_ACTIVITY_NEW_DOCUMENT) != 0) {
+                getIntent().addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+            }
+            return isAllowedToReturnToExternalApp;
         } else if (TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_ANISE)
                 || TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_BASIL)
                 || TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_DILL)) {
@@ -361,12 +372,30 @@ public class ChromeLauncherActivity extends Activity
     /**
      * Adds extras to the Intent that are needed by Herb.
      */
-    public static void addHerbIntentExtras(Context context, Intent newIntent, Uri uri) {
-        Bundle herbBundle = new Bundle();
+    public static void updateHerbIntent(Context context, Intent newIntent, Uri uri) {
+        // For Elderberry flavored Herbs that are to be launched in a separate task, add a random
+        // UUID to try and prevent Android from refocusing/clobbering items that share the same
+        // base intent.  If we do support refocusing of existing Herbs, we need to do it on the
+        // current URL and not the URL that it was triggered with.
+        if (TextUtils.equals(
+                FeatureUtilities.getHerbFlavor(), ChromeSwitches.HERB_FLAVOR_ELDERBERRY)
+                && (newIntent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0
+                        || (newIntent.getFlags() & Intent.FLAG_ACTIVITY_NEW_DOCUMENT) != 0) {
+            newIntent.setClassName(context, SeparateTaskCustomTabActivity.class.getName());
+
+            String url = IntentHandler.getUrlFromIntent(newIntent);
+            assert url != null;
+
+            newIntent.setData(new Uri.Builder().scheme(UrlConstants.CUSTOM_TAB_SCHEME)
+                    .authority(UUID.randomUUID().toString())
+                    .query(url).build());
+        }
+
+        Bundle herbActionButtonBundle = new Bundle();
 
         Bitmap herbIcon =
                 BitmapFactory.decodeResource(context.getResources(), R.drawable.btn_open_in_chrome);
-        herbBundle.putParcelable(CustomTabsIntent.KEY_ICON, herbIcon);
+        herbActionButtonBundle.putParcelable(CustomTabsIntent.KEY_ICON, herbIcon);
 
         // Fallback in case the Custom Tab fails to trigger opening in Chrome.
         Intent intent = new Intent(Intent.ACTION_VIEW, uri);
@@ -375,13 +404,14 @@ public class ChromeLauncherActivity extends Activity
 
         PendingIntent pendingIntent =
                 PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_ONE_SHOT);
-        herbBundle.putParcelable(CustomTabsIntent.KEY_PENDING_INTENT, pendingIntent);
+        herbActionButtonBundle.putParcelable(CustomTabsIntent.KEY_PENDING_INTENT, pendingIntent);
 
         String openString = context.getString(
                 R.string.menu_open_in_product, BuildInfo.getPackageLabel(context));
-        herbBundle.putString(CustomTabsIntent.KEY_DESCRIPTION, openString);
+        herbActionButtonBundle.putString(CustomTabsIntent.KEY_DESCRIPTION, openString);
 
-        newIntent.putExtra(CustomTabsIntent.EXTRA_ACTION_BUTTON_BUNDLE, herbBundle);
+        newIntent.putExtra(CustomTabsIntent.EXTRA_ACTION_BUTTON_BUNDLE, herbActionButtonBundle);
+        newIntent.putExtra(CustomTabsIntent.EXTRA_TINT_ACTION_BUTTON, true);
         newIntent.putExtra(CustomTabsIntent.EXTRA_DEFAULT_SHARE_MENU_ITEM, true);
         newIntent.putExtra(CustomTabIntentDataProvider.EXTRA_IS_OPENED_BY_CHROME, true);
         newIntent.putExtra(CustomTabIntentDataProvider.EXTRA_SHOW_STAR_ICON, true);
@@ -417,7 +447,7 @@ public class ChromeLauncherActivity extends Activity
         newIntent.setAction(Intent.ACTION_VIEW);
         newIntent.setClassName(context, CustomTabActivity.class.getName());
         newIntent.setData(uri);
-        if (addHerbExtras) addHerbIntentExtras(context, newIntent, uri);
+        if (addHerbExtras) updateHerbIntent(context, newIntent, uri);
 
         return newIntent;
     }
@@ -513,11 +543,11 @@ public class ChromeLauncherActivity extends Activity
 
         // Bring the last viewed tab to the foreground, unless we're in Samsung's multi-instance
         // mode -- a MAIN Intent in that case results in the creation of a second default page.
-        if (!mIsInMultiInstanceMode && launchLastViewedActivity()) return;
+        if (!mIsInLegacyMultiInstanceMode && launchLastViewedActivity()) return;
 
         // Launch the default page asynchronously because the homepage URL needs to be queried.
         // This is obviously not ideal, but we don't have a choice.
-        mIsFinishDelayed = mIsInMultiInstanceMode;
+        mIsFinishDelayed = mIsInLegacyMultiInstanceMode;
         PartnerBrowserCustomizations.setOnInitializeAsyncFinished(new Runnable() {
             @Override
             public void run() {
@@ -527,8 +557,8 @@ public class ChromeLauncherActivity extends Activity
                 AsyncTabCreationParams asyncParams = new AsyncTabCreationParams(
                         new LoadUrlParams(url, PageTransition.AUTO_TOPLEVEL));
                 asyncParams.setDocumentStartedBy(DocumentMetricIds.STARTED_BY_LAUNCHER);
-                asyncParams.setDocumentLaunchMode(
-                        mIsInMultiInstanceMode ? LAUNCH_MODE_FOREGROUND : LAUNCH_MODE_RETARGET);
+                asyncParams.setDocumentLaunchMode(mIsInLegacyMultiInstanceMode
+                        ? LAUNCH_MODE_FOREGROUND : LAUNCH_MODE_RETARGET);
                 launchDocumentInstance(ChromeLauncherActivity.this, false, asyncParams);
 
                 if (mIsFinishDelayed) finish();
@@ -680,9 +710,9 @@ public class ChromeLauncherActivity extends Activity
         // Remove any flags from the Intent that would prevent a second instance of Chrome from
         // appearing.
         if (context instanceof ChromeLauncherActivity
-                && ((ChromeLauncherActivity) context).mIsInMultiInstanceMode) {
-            MultiWindowUtils.getInstance().makeMultiInstanceIntent((ChromeLauncherActivity) context,
-                    intent);
+                && ((ChromeLauncherActivity) context).mIsInLegacyMultiInstanceMode) {
+            MultiWindowUtils.getInstance().makeLegacyMultiInstanceIntent(
+                    (ChromeLauncherActivity) context, intent);
         }
 
         // Store parameters for the new DocumentActivity, which are retrieved immediately after the
@@ -724,18 +754,6 @@ public class ChromeLauncherActivity extends Activity
         }
 
         return true;
-    }
-
-    /**
-     * Get an intent that will close all incognito tabs through {@link ChromeLauncherActivity}.
-     * @param context The context to use for creating the {@link PendingIntent}.
-     * @return {@link PendingIntent} to use for closing all incognito tabs.
-     */
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    public static PendingIntent getRemoveAllIncognitoTabsIntent(Context context) {
-        Intent intent = new Intent(
-                ACTION_CLOSE_ALL_INCOGNITO, null, context, ChromeLauncherActivity.class);
-        return PendingIntent.getActivity(context, 0, intent, 0);
     }
 
     static String getDocumentClassName(boolean isIncognito) {
@@ -780,8 +798,12 @@ public class ChromeLauncherActivity extends Activity
         maybePrefetchDnsInBackground();
 
         Intent newIntent = new Intent(getIntent());
-        newIntent.setClassName(getApplicationContext().getPackageName(),
-                ChromeTabbedActivity.class.getName());
+        String className = ChromeTabbedActivity.class.getName();
+        if (newIntent.hasExtra(IntentHandler.EXTRA_WINDOW_ID)
+                && IntentUtils.safeGetIntExtra(newIntent, IntentHandler.EXTRA_WINDOW_ID, 0) == 2) {
+            className = ChromeTabbedActivity2.class.getName();
+        }
+        newIntent.setClassName(getApplicationContext().getPackageName(), className);
         newIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             newIntent.addFlags(Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
@@ -790,8 +812,8 @@ public class ChromeLauncherActivity extends Activity
         if (uri != null && "content".equals(uri.getScheme())) {
             newIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         }
-        if (mIsInMultiInstanceMode) {
-            MultiWindowUtils.getInstance().makeMultiInstanceIntent(this, newIntent);
+        if (mIsInLegacyMultiInstanceMode) {
+            MultiWindowUtils.getInstance().makeLegacyMultiInstanceIntent(this, newIntent);
         }
         startActivity(newIntent);
     }

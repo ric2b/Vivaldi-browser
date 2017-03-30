@@ -4,7 +4,6 @@
 
 import("//build/config/chromecast_build.gni")
 import("//build/config/features.gni")
-import("//build/config/headless_build.gni")
 
 declare_args() {
   # Allows distributions to link pulseaudio directly (DT_NEEDED) instead of
@@ -57,7 +56,7 @@ declare_args() {
   use_alsa = false
 
   # Alsa should be used on non-Android, non-Mac POSIX systems.
-  if (is_posix && !is_headless && !is_android && !is_mac) {
+  if (is_posix && !is_android && !is_mac) {
     use_alsa = true
 
     # Pulse is not supported on Chromecast platforms.
@@ -72,7 +71,7 @@ declare_args() {
   # |mojo_media_services|). When enabled, selected mojo paths will be enabled in
   # the media pipeline and corresponding services will hosted in the selected
   # remote process (e.g. "utility" process, see |mojo_media_host|).
-  enable_mojo_media = false
+  enable_mojo_media = is_android
 
   # Enable the TestMojoMediaClient to be used in MojoMediaApplication. This is
   # for testing only and will override the default platform MojoMediaClient.
@@ -85,12 +84,12 @@ declare_args() {
   # A list of mojo media services that should be used in the media pipeline.
   # Must not be empty if |enable_mojo_media| is true.
   # Valid entries in the list are:
-  # - "renderer": Use mojo based media Renderer service.
-  # - "cdm": Use mojo based Content Decryption Module.
-  # - "audio_decoder": Use mojo based audio decoder in the default media
+  # - "renderer": Use mojo-based media Renderer service.
+  # - "cdm": Use mojo-based Content Decryption Module.
+  # - "audio_decoder": Use mojo-based audio decoder in the default media
   #                    Renderer. Cannot be used with the mojo Renderer above.
-  # TODO(xhwang): Support mojo base video decoders here.
-  # See http://crbug.com/542910 and http://crbug.com/522298
+  # - "video_decoder": Use mojo-based video decoder in the default media
+  #                    Renderer. Cannot be used with the mojo Renderer above.
   mojo_media_services = []
 
   # The process to host the mojo media application.

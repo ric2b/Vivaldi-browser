@@ -5,11 +5,28 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/logging.h"
 #include "ui/gfx/image/image.h"
+
+
+struct Environment {
+  Environment() {
+    // Disable noisy logging.
+    logging::SetMinLogLevel(logging::LOG_FATAL);
+  }
+};
+
+Environment* env = new Environment();
+
 
 // Entry point for LibFuzzer.
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  gfx::Image::CreateFrom1xPNGBytes(data, size);
+  gfx::Image image = gfx::Image::CreateFrom1xPNGBytes(data, size);
+
+  if (image.IsEmpty())
+    return 0;
+
+  image.ToSkBitmap();
+
   return 0;
 }
-

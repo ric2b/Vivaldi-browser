@@ -11,14 +11,13 @@
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/trees/draw_property_utils.h"
 #include "cc/trees/layer_tree_host_common.h"
+#include "cc/trees/property_tree_builder.h"
 
 namespace cc {
 LayerTreeHostCommonTestBase::LayerTreeHostCommonTestBase(
     const LayerTreeSettings& settings)
     : LayerTestCommon::LayerImplTest(settings),
       render_surface_layer_list_count_(0) {
-  layer_settings_.use_compositor_animation_timelines =
-      settings.use_compositor_animation_timelines;
 }
 
 LayerTreeHostCommonTestBase::~LayerTreeHostCommonTestBase() {
@@ -85,12 +84,12 @@ void LayerTreeHostCommonTestBase::ExecuteCalculateDrawProperties(
   // We are probably not testing what is intended if the root_layer bounds are
   // empty.
   DCHECK(!root_layer->bounds().IsEmpty());
-  LayerTreeHostCommon::CalcDrawPropsMainInputs inputs(root_layer,
-                                                      device_viewport_size);
+  LayerTreeHostCommon::CalcDrawPropsMainInputsForTesting inputs(
+      root_layer, device_viewport_size);
   inputs.device_scale_factor = device_scale_factor;
   inputs.page_scale_factor = page_scale_factor;
   inputs.page_scale_layer = page_scale_layer;
-  LayerTreeHostCommon::CalculateDrawProperties(&inputs);
+  LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 }
 
 void LayerTreeHostCommonTestBase::
@@ -117,13 +116,22 @@ void LayerTreeHostCommonTestBase::
   gfx::Size device_viewport_size =
       gfx::Size(root_layer->bounds().width() * device_scale_factor,
                 root_layer->bounds().height() * device_scale_factor);
-  BuildPropertyTreesAndComputeVisibleRects(
+  PropertyTrees* property_trees =
+      root_layer->layer_tree_host()->property_trees();
+  update_layer_list_.clear();
+  PropertyTreeBuilder::BuildPropertyTrees(
       root_layer, page_scale_layer, inner_viewport_scroll_layer,
       outer_viewport_scroll_layer, overscroll_elasticity_layer,
       elastic_overscroll, page_scale_factor, device_scale_factor,
-      gfx::Rect(device_viewport_size), identity_transform,
-      can_render_to_separate_surface,
-      root_layer->layer_tree_host()->property_trees(), &update_layer_list_);
+      gfx::Rect(device_viewport_size), identity_transform, property_trees);
+  draw_property_utils::UpdateRenderSurfaces(root_layer, property_trees);
+  draw_property_utils::UpdatePropertyTrees(property_trees,
+                                           can_render_to_separate_surface);
+  draw_property_utils::FindLayersThatNeedUpdates(
+      root_layer->layer_tree_host(), property_trees->transform_tree,
+      property_trees->effect_tree, &update_layer_list_);
+  draw_property_utils::ComputeVisibleRectsForTesting(
+      property_trees, can_render_to_separate_surface, &update_layer_list_);
 }
 
 void LayerTreeHostCommonTestBase::
@@ -151,7 +159,7 @@ void LayerTreeHostCommonTestBase::
       gfx::Size(root_layer->bounds().width() * device_scale_factor,
                 root_layer->bounds().height() * device_scale_factor);
   update_layer_list_impl_.reset(new LayerImplList);
-  BuildPropertyTreesAndComputeVisibleRects(
+  draw_property_utils::BuildPropertyTreesAndComputeVisibleRects(
       root_layer, page_scale_layer, inner_viewport_scroll_layer,
       outer_viewport_scroll_layer, overscroll_elasticity_layer,
       elastic_overscroll, page_scale_factor, device_scale_factor,
@@ -168,8 +176,7 @@ void LayerTreeHostCommonTestBase::ExecuteCalculateDrawProperties(
     LayerImpl* page_scale_layer,
     bool can_use_lcd_text,
     bool layers_always_allowed_lcd_text) {
-  host_impl()->active_tree()->SetDeviceScaleFactor(device_scale_factor);
-  host_impl()->active_tree()->SetPageScaleOnActiveTree(page_scale_factor);
+  root_layer->layer_tree_impl()->SetDeviceScaleFactor(device_scale_factor);
 
   gfx::Transform identity_matrix;
   gfx::Size device_viewport_size =
@@ -228,15 +235,8 @@ bool LayerTreeHostCommonTestBase::UpdateLayerListContains(int id) const {
   return false;
 }
 
-class LayerTreeSettingsForCommonTest : public LayerTreeSettings {
- public:
-  LayerTreeSettingsForCommonTest() {
-    use_compositor_animation_timelines = true;
-  }
-};
-
 LayerTreeHostCommonTest::LayerTreeHostCommonTest()
-    : LayerTreeHostCommonTestBase(LayerTreeSettingsForCommonTest()) {}
+    : LayerTreeHostCommonTestBase(LayerTreeSettings()) {}
 
 LayerTreeHostCommonTest::LayerTreeHostCommonTest(
     const LayerTreeSettings& settings)

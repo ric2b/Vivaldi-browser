@@ -57,20 +57,19 @@ static bool operator!=(const PresentationAttributeCacheKey& a, const Presentatio
     return a.attributesAndValues != b.attributesAndValues;
 }
 
-struct PresentationAttributeCacheEntry final : public NoBaseWillBeGarbageCollectedFinalized<PresentationAttributeCacheEntry> {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(PresentationAttributeCacheEntry);
+struct PresentationAttributeCacheEntry final : public GarbageCollectedFinalized<PresentationAttributeCacheEntry> {
 public:
     DEFINE_INLINE_TRACE() { visitor->trace(value); }
 
     PresentationAttributeCacheKey key;
-    RefPtrWillBeMember<StylePropertySet> value;
+    Member<StylePropertySet> value;
 };
 
-using PresentationAttributeCache = WillBeHeapHashMap<unsigned, OwnPtrWillBeMember<PresentationAttributeCacheEntry>, AlreadyHashed>;
+using PresentationAttributeCache = HeapHashMap<unsigned, Member<PresentationAttributeCacheEntry>, AlreadyHashed>;
 static PresentationAttributeCache& presentationAttributeCache()
 {
-    DEFINE_STATIC_LOCAL(OwnPtrWillBePersistent<PresentationAttributeCache>, cache, (adoptPtrWillBeNoop(new PresentationAttributeCache())));
-    return *cache;
+    DEFINE_STATIC_LOCAL(PresentationAttributeCache, cache, (new PresentationAttributeCache));
+    return cache;
 }
 
 class PresentationAttributeCacheCleaner {
@@ -149,16 +148,16 @@ static unsigned computePresentationAttributeCacheHash(const PresentationAttribut
 {
     if (!key.tagName)
         return 0;
-    ASSERT(key.attributesAndValues.size());
+    DCHECK(key.attributesAndValues.size());
     unsigned attributeHash = StringHasher::hashMemory(key.attributesAndValues.data(), key.attributesAndValues.size() * sizeof(key.attributesAndValues[0]));
     return WTF::hashInts(key.tagName->existingHash(), attributeHash);
 }
 
-PassRefPtrWillBeRawPtr<StylePropertySet> computePresentationAttributeStyle(Element& element)
+RawPtr<StylePropertySet> computePresentationAttributeStyle(Element& element)
 {
     DEFINE_STATIC_LOCAL(PresentationAttributeCacheCleaner, cacheCleaner, ());
 
-    ASSERT(element.isStyledElement());
+    DCHECK(element.isStyledElement());
 
     PresentationAttributeCacheKey cacheKey;
     makePresentationAttributeCacheKey(element, cacheKey);
@@ -174,7 +173,7 @@ PassRefPtrWillBeRawPtr<StylePropertySet> computePresentationAttributeStyle(Eleme
         cacheValue = nullptr;
     }
 
-    RefPtrWillBeRawPtr<StylePropertySet> style = nullptr;
+    StylePropertySet* style = nullptr;
     if (cacheHash && cacheValue->value) {
         style = cacheValue->value->value;
         cacheCleaner.didHitPresentationAttributeCache();
@@ -186,9 +185,9 @@ PassRefPtrWillBeRawPtr<StylePropertySet> computePresentationAttributeStyle(Eleme
     }
 
     if (!cacheHash || cacheValue->value)
-        return style.release();
+        return style;
 
-    OwnPtrWillBeRawPtr<PresentationAttributeCacheEntry> newEntry = adoptPtrWillBeNoop(new PresentationAttributeCacheEntry);
+    RawPtr<PresentationAttributeCacheEntry> newEntry = new PresentationAttributeCacheEntry;
     newEntry->key = cacheKey;
     newEntry->value = style;
 
@@ -202,7 +201,7 @@ PassRefPtrWillBeRawPtr<StylePropertySet> computePresentationAttributeStyle(Eleme
         cacheValue->value = newEntry.release();
     }
 
-    return style.release();
+    return style;
 }
 
 } // namespace blink

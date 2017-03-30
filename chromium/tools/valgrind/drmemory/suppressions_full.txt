@@ -1154,7 +1154,7 @@ name=bug_115419_1
 *!gpu::gles2::GLES2DecoderImpl::HandleReadPixels
 *!gpu::gles2::GLES2DecoderImpl::DoCommand
 *!gpu::CommandParser::ProcessCommand
-*!gpu::GpuScheduler::PutChanged
+*!gpu::CommandExecutor::PutChanged
 *!webkit::gpu::GLInProcessContext::PumpCommands
 
 UNINITIALIZED READ
@@ -1173,7 +1173,7 @@ name=bug_115419_2
 *!gpu::gles2::GLES2DecoderImpl::HandleLinkProgram*
 *!gpu::gles2::GLES2DecoderImpl::DoCommand
 *!gpu::CommandParser::ProcessCommand
-*!gpu::GpuScheduler::PutChanged
+*!gpu::CommandExecutor::PutChanged
 *!webkit::gpu::GLInProcessContext::PumpCommands
 
 UNINITIALIZED READ
@@ -1576,7 +1576,7 @@ osmesa.dll!_mesa_readpixels
 ...
 gpu.dll!gpu::gles2::GLES2DecoderImpl::DoCommand
 gpu.dll!gpu::CommandParser::ProcessCommand
-gpu.dll!gpu::GpuScheduler::PutChanged
+gpu.dll!gpu::CommandExecutor::PutChanged
 
 UNINITIALIZED READ
 name=bug_347967,bug_348357
@@ -1768,18 +1768,6 @@ v8.dll!v8::internal::SweeperThread::SweeperThread
 blink_web.dll!blink::WorkerScriptController::WorkerScriptController
 blink_web.dll!blink::WorkerGlobalScope::WorkerGlobalScope
 blink_web.dll!blink::ServiceWorkerGlobalScope::ServiceWorkerGlobalScope
-
-
-HANDLE LEAK
-name=bug_403681
-system call NtCreateTimer
-KERNELBASE.dll!CreateWaitableTimerExW
-KERNEL32.dll!CreateWaitableTimerW
-content.dll!rtc::Timing::Timing
-content.dll!content::RenderProcessHostImpl::CreateMessageFilters
-content.dll!content::RenderProcessHostImpl::Init
-...
-content.dll!content::NavigationControllerImpl::LoadEntry
 
 UNINITIALIZED READ
 name=bug_414268
@@ -1988,11 +1976,26 @@ base.dll!base::`anonymous namespace'::ThreadFunc
 KERNEL32.dll!BaseThreadInitThunk
 
 UNINITIALIZED READ
-name=bug_508794
-MSVCR120.dll!mbtowc_l
-MSVCR120.dll!fputwc_nolock
-MSVCR120.dll!vsnwprintf_s_l
-MSVCR120.dll!vsnwprintf_s
+name=bug_508794a
+...
+ucrtbase.dll!ismbblead
+ucrtbase.dll!free_base
+ucrtbase.dll!_stdio_common_vsnwprintf_s
+ucrtbase.dll!_stdio_common_vsnwprintf_s
+*!base::vswprintf
+*!base::`anonymous namespace'::StringAppendVT<>
+*!base::StringPrintf
+*!content::AccessibilityTreeFormatterWin::ToString
+*!content::AccessibilityTreeFormatter::RecursiveFormatAccessibilityTree
+
+UNADDRESSABLE ACCESS
+name=bug_508794b
+ucrtbase.dll!wcsnlen
+ucrtbase.dll!ismbblead
+ucrtbase.dll!free_base
+ucrtbase.dll!_stdio_common_vsnwprintf_s
+ucrtbase.dll!_stdio_common_vsnwprintf_s
+*!base::vswprintf
 *!base::`anonymous namespace'::StringAppendVT<>
 *!base::StringPrintf
 *!content::AccessibilityTreeFormatterWin::ToString
@@ -2090,7 +2093,6 @@ content.dll!content::RenderWidgetHostViewAura::UpdateCursorIfOverSelf
 content.dll!content::RenderWidgetHostViewAura::SetIsLoading
 content.dll!content::RenderWidgetHostImpl::SetIsLoading
 content.dll!content::RenderFrameHostManager::SetIsLoading
-content.dll!content::WebContentsImpl::SetIsLoading
 
 HANDLE LEAK
 name=bug_571554_a
@@ -2117,3 +2119,118 @@ content.dll!content::PPB_ImageData_Impl::Init
 content.dll!content::PepperGraphics2DHost::Init
 content.dll!content::PepperGraphics2DHost::Create
 content.dll!content::ContentRendererPepperHostFactory::CreateResourceHost
+
+UNINITIALIZED READ
+name=bug_591092
+webcore_shared.dll!std::_Equal<>
+webcore_shared.dll!WTF::operator==<>
+webcore_shared.dll!blink::CSSVariableData::operator==
+webcore_shared.dll!blink::dataEquivalent<>
+webcore_shared.dll!blink::dataEquivalent<>
+...
+webcore_shared.dll!blink::Document::updateStyle
+webcore_shared.dll!blink::Document::updateLayoutTree
+
+UNINITIALIZED READ
+name=bug_593594
+blink_platform.dll!qcms_transform_data_rgba_out_lut_sse2
+blink_platform.dll!qcms_transform_data_type
+blink_platform.dll!blink::JPEGImageDecoder::outputScanlines
+blink_platform.dll!blink::JPEGImageReader::decode
+
+UNINITIALIZED READ
+name=bug_594657
+*!std::_Tree<>::_Eqrange<>
+*!courgette::adjustment_method_2::AssignmentProblem::Declassify
+*!courgette::adjustment_method_2::AssignmentProblem::AssignOne
+*!courgette::adjustment_method_2::AssignmentProblem::FindAndAssignBestLeader
+*!courgette::adjustment_method_2::AssignmentProblem::Solve
+*!courgette::adjustment_method_2::Adjuster::Solve
+*!courgette::adjustment_method_2::Adjuster::Finish
+*!courgette::adjustment_method_2::Adjuster::Adjust
+*!courgette::Adjust
+
+UNINITIALIZED READ
+name=bug_594781a
+chromium_sqlite3.dll!PSCreateMemoryPropertyStore
+...
+chromium_sqlite3.dll!StgDeserializePropVariant
+
+UNADDRESSABLE ACCESS
+name=bug_594781b
+...
+chromium_sqlite3.dll!PropVariantToGUID
+sql.dll!sql::Connection::GetUniqueStatement
+
+HANDLE LEAK
+name=bug_594829a
+system call NtDuplicateObject
+KERNELBASE.dll!DuplicateHandle
+KERNEL32.dll!DuplicateHandle
+*!sandbox::BrokerServicesBase::AddTargetPeer
+content.dll!content::StartSandboxedProcess
+
+HANDLE LEAK
+name=bug_594829b
+system call NtCreateUserProcess
+KERNEL32.dll!CreateProcessInternalW
+KERNEL32.dll!CreateProcessW
+base.dll!base::LaunchProcess
+base.dll!base::LaunchProcess
+content.dll!content::StartSandboxedProcess
+
+HANDLE LEAK
+name=bug_595093a
+system call NtCreateFile
+KERNELBASE.dll!CreateFileW
+KERNEL32.dll!CreateFileW
+net.dll!disk_cache::File::Init
+net.dll!disk_cache::MappedFile::Init
+net.dll!disk_cache::BackendImpl::InitBackingStore
+net.dll!disk_cache::BackendImpl::SyncInit
+net.dll!disk_cache::BackendIO::ExecuteBackendOperation
+
+HANDLE LEAK
+name=bug_595093b
+system call NtCreateSection
+KERNELBASE.dll!CreateFileMappingW
+net.dll!disk_cache::MappedFile::Init
+net.dll!disk_cache::BackendImpl::InitBackingStore
+net.dll!disk_cache::BackendImpl::SyncInit
+net.dll!disk_cache::BackendIO::ExecuteBackendOperation
+
+HANDLE LEAK
+name=bug_595105
+system call NtDuplicateObject
+KERNELBASE.dll!DuplicateHandle
+KERNEL32.dll!DuplicateHandle
+base.dll!`anonymous namespace'::CreateFileMappingWithReducedPermissions
+base.dll!base::SharedMemory::Create
+base.dll!base::SharedMemory::CreateAndMapAnonymous
+content.dll!content::GpuMemoryBufferImplSharedMemory::Create
+content.dll!content::BrowserGpuMemoryBufferManager::HandleCreateGpuMemoryBufferOnIO
+
+HANDLE LEAK
+name=bug_595146
+system call NtCreateFile
+KERNELBASE.dll!CreateFileW
+KERNEL32.dll!CreateFileW
+base.dll!base::File::DoInitialize
+base.dll!base::File::Initialize
+net.dll!net::FileStream::Context::OpenFileImpl
+
+HANDLE LEAK
+name=bug_595149
+system call NtCreateIoCompletion
+KERNELBASE.dll!CreateIoCompletionPort
+base.dll!base::MessagePumpForIO::MessagePumpForIO
+
+HANDLE LEAK
+name=bug_598364
+system call NtGdiCreateDIBSection
+GDI32.dll!CreateDIBSection
+skia.dll!`anonymous namespace'::CreateHBitmap
+skia.dll!skia::BitmapPlatformDevice::Create
+...
+webcore_shared.dll!blink::ScriptController::createPluginWrapper
+webcore_shared.dll!blink::HTMLPlugInElement::pluginWrapper

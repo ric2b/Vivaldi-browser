@@ -77,6 +77,8 @@
 #include "chrome/browser/ui/app_list/google_now_extension.h"
 #endif
 
+#include "extensions/browser/extension_prefs.h"
+
 using content::BrowserThread;
 
 namespace extensions {
@@ -96,13 +98,12 @@ std::string GenerateId(const base::DictionaryValue* manifest,
 }
 
 #if defined(OS_CHROMEOS)
-scoped_ptr<base::DictionaryValue>
-LoadManifestOnFileThread(
+std::unique_ptr<base::DictionaryValue> LoadManifestOnFileThread(
     const base::FilePath& root_directory,
     const base::FilePath::CharType* manifest_filename) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
   std::string error;
-  scoped_ptr<base::DictionaryValue> manifest(
+  std::unique_ptr<base::DictionaryValue> manifest(
       file_util::LoadManifest(root_directory, manifest_filename, &error));
   if (!manifest) {
     LOG(ERROR) << "Can't load "
@@ -167,7 +168,7 @@ void ComponentLoader::LoadAll() {
 base::DictionaryValue* ComponentLoader::ParseManifest(
     const std::string& manifest_contents) const {
   JSONStringValueDeserializer deserializer(manifest_contents);
-  scoped_ptr<base::Value> manifest = deserializer.Deserialize(NULL, NULL);
+  std::unique_ptr<base::Value> manifest = deserializer.Deserialize(NULL, NULL);
 
   if (!manifest.get() || !manifest->IsType(base::Value::TYPE_DICTIONARY)) {
     LOG(ERROR) << "Failed to parse extension manifest.";
@@ -246,7 +247,7 @@ std::string ComponentLoader::Add(const base::DictionaryValue* parsed_manifest,
 std::string ComponentLoader::AddOrReplace(const base::FilePath& path) {
   base::FilePath absolute_path = base::MakeAbsoluteFilePath(path);
   std::string error;
-  scoped_ptr<base::DictionaryValue> manifest(
+  std::unique_ptr<base::DictionaryValue> manifest(
       file_util::LoadManifest(absolute_path, &error));
   if (!manifest) {
     LOG(ERROR) << "Could not load extension from '" <<
@@ -388,8 +389,11 @@ void ComponentLoader::AddNetworkSpeechSynthesisExtension() {
 }
 
 void ComponentLoader::AddVivaldiApp() {
-  Add(VIVALDI_MAINFEST_JS,
-      base::FilePath(FILE_PATH_LITERAL("vivaldi")));
+  // Make sure that Vivaldi can access the extension preferences. See
+  // <URL://https://developer.chrome.com/extensions/types#ChromeSetting>
+  ExtensionPrefs::Get(this->profile_)
+      ->RegisterExtensionForPrefs(Add(
+          VIVALDI_MAINFEST_JS, base::FilePath(FILE_PATH_LITERAL("vivaldi"))));
 }
 
 void ComponentLoader::AddGoogleNowExtension() {
@@ -810,7 +814,7 @@ void ComponentLoader::FinishAddWithManifestFile(
     const base::FilePath& root_directory,
     const char* extension_id,
     const base::Closure& done_cb,
-    scoped_ptr<base::DictionaryValue> manifest) {
+    std::unique_ptr<base::DictionaryValue> manifest) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!manifest)
     return;  // Error already logged.

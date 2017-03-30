@@ -13,7 +13,11 @@ var FEEDBACK_WIDTH = 500;
  */
 var FEEDBACK_HEIGHT = 585;
 
-var initialFeedbackInfo = null;
+/**
+ * @type {string}
+ * @const
+ */
+var FEEDBACK_DEFAULT_WINDOW_ID = 'default_window';
 
 // To generate a hashed extension ID, use a sha-256 hash, all in lower case.
 // Example:
@@ -75,6 +79,117 @@ var whitelistedExtensionIds = [
   '3BC3740BFC58F06088B300274B4CFBEA20136342', // http://crbug.com/541769
 ];
 
+/**
+ * Used to generate unique IDs for FeedbackRequest objects.
+ * @type {number}
+ */
+var lastUsedId = 0;
+
+/**
+ * A FeedbackRequest object represents a unique feedback report, requested by an
+ * instance of the feedback window. It contains the system information specific
+ * to this report, the full feedbackInfo, and callbacks to send the report upon
+ * request.
+ */
+class FeedbackRequest {
+  constructor(feedbackInfo) {
+    this.id_ = ++lastUsedId;
+    this.feedbackInfo_ = feedbackInfo;
+    this.onSystemInfoReadyCallback_ = null;
+    this.isSystemInfoReady_ = false;
+    this.reportIsBeingSent_ = false;
+    this.isRequestCanceled_ = false;
+    this.useSystemInfo_ = false;
+  }
+
+  /**
+   * Called when the system information is sent from the C++ side.
+   * @param {Object} sysInfo The received system information.
+   */
+  getSystemInformationCallback(sysInfo) {
+    if (this.isRequestCanceled_) {
+      // If the window had been closed before the system information was
+      // received, we skip the rest of the operations and return immediately.
+      return;
+    }
+
+    this.isSystemInfoReady_ = true;
+
+    // Combine the newly received system information with whatever system
+    // information we have in the feedback info (if any).
+    if (this.feedbackInfo_.systemInformation) {
+      this.feedbackInfo_.systemInformation =
+          this.feedbackInfo_.systemInformation.concat(sysInfo);
+    } else {
+      this.feedbackInfo_.systemInformation = sysInfo;
+    }
+
+    if (this.onSystemInfoReadyCallback_ != null) {
+      this.onSystemInfoReadyCallback_();
+      this.onSystemInfoReadyCallback_ = null;
+    }
+  }
+
+  /**
+   * Retrieves the system information for this request object.
+   * @param {function()} callback Invoked to notify the listener that the system
+   * information has been received.
+   */
+  getSystemInformation(callback) {
+    if (this.isSystemInfoReady_) {
+      callback();
+      return;
+    }
+
+    this.onSystemInfoReadyCallback_ = callback;
+    // The C++ side must reply to the callback specific to this object.
+    var boundCallback = this.getSystemInformationCallback.bind(this);
+    chrome.feedbackPrivate.getSystemInformation(boundCallback);
+  }
+
+  /**
+   * Sends the feedback report represented by the object, either now if system
+   * information is ready, or later once it is.
+   * @param {boolean} useSystemInfo True if the user would like the system
+   * information to be sent with the report.
+   */
+  sendReport(useSystemInfo) {
+    this.reportIsBeingSent_ = true;
+    this.useSystemInfo_ = useSystemInfo;
+    if (useSystemInfo && !this.isSystemInfoReady_) {
+      this.onSystemInfoReadyCallback_ = this.sendReportNow;
+      return;
+    }
+
+    this.sendReportNow();
+  }
+
+  /**
+   * Sends the report immediately and removes this object once the report is
+   * sent.
+   */
+  sendReportNow() {
+    if (!this.useSystemInfo_) {
+      // Clear the system information if the user doesn't want it to be sent.
+      this.feedbackInfo_.systemInformation = null;
+    }
+
+    /** @const */ var ID = this.id_;
+    chrome.feedbackPrivate.sendFeedback(this.feedbackInfo_,
+        function(result) {
+          console.log('Feedback: Report sent for request with ID ' + ID);
+        });
+  }
+
+  /**
+   * Handles the event when the feedback UI window corresponding to this
+   * FeedbackRequest instance is closed.
+   */
+  onWindowClosed() {
+    if (!this.reportIsBeingSent_)
+      this.isRequestCanceled_ = true;
+  }
+};
 
 /**
  * Function to determine whether or not a given extension id is whitelisted to
@@ -109,12 +224,9 @@ function senderWhitelisted(id, startFeedbackCallback, feedbackInfo) {
  * @param {function(Object)} sendResponse Callback for sending a response.
  */
 function feedbackReadyHandler(request, sender, sendResponse) {
-  if (request.ready) {
-    chrome.runtime.sendMessage(
-        {sentFromEventPage: true, data: initialFeedbackInfo});
-  }
+  if (request.ready)
+    chrome.runtime.sendMessage({sentFromEventPage: true});
 }
-
 
 /**
  * Callback which gets notified if another extension is requesting feedback.
@@ -132,20 +244,44 @@ function requestFeedbackHandler(request, sender, sendResponse) {
  * @param {Object} feedbackInfo Object containing any initial feedback info.
  */
 function startFeedbackUI(feedbackInfo) {
-  initialFeedbackInfo = feedbackInfo;
-  var win = chrome.app.window.get('default_window');
+  var win = chrome.app.window.get(FEEDBACK_DEFAULT_WINDOW_ID);
   if (win) {
     win.show();
     return;
   }
   chrome.app.window.create('html/default.html', {
       frame: 'none',
-      id: 'default_window',
+      id: FEEDBACK_DEFAULT_WINDOW_ID,
       width: FEEDBACK_WIDTH,
       height: FEEDBACK_HEIGHT,
       hidden: true,
       resizable: false },
-      function(appWindow) {});
+      function(appWindow) {
+        var request = new FeedbackRequest(feedbackInfo);
+
+        // The feedbackInfo member of the new window should refer to the one in
+        // its corresponding FeedbackRequest object to avoid copying and
+        // duplicatations.
+        appWindow.contentWindow.feedbackInfo = request.feedbackInfo_;
+
+        // Define some functions for the new window so that it can call back
+        // into here.
+
+        // Define a function for the new window to get the system information.
+        appWindow.contentWindow.getSystemInformation = function(callback) {
+          request.getSystemInformation(callback);
+        };
+
+        // Define a function to request sending the feedback report.
+        appWindow.contentWindow.sendFeedbackReport = function(useSystemInfo) {
+          request.sendReport(useSystemInfo);
+        };
+
+        // Observe when the window is closed.
+        appWindow.onClosed.addListener(function() {
+          request.onWindowClosed();
+        });
+      });
 }
 
 chrome.runtime.onMessage.addListener(feedbackReadyHandler);

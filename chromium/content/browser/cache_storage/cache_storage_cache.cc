@@ -42,7 +42,7 @@ namespace {
 class CacheStorageCacheDataHandle
     : public storage::BlobDataBuilder::DataHandle {
  public:
-  CacheStorageCacheDataHandle(const scoped_refptr<CacheStorageCache>& cache,
+  CacheStorageCacheDataHandle(scoped_refptr<CacheStorageCache> cache,
                               disk_cache::ScopedEntryPtr entry)
       : cache_(cache), entry_(std::move(entry)) {}
 
@@ -106,11 +106,10 @@ CacheResponse::ResponseType WebResponseTypeToProtoResponseType(
 // Copy headers out of a cache entry and into a protobuf. The callback is
 // guaranteed to be run.
 void ReadMetadata(disk_cache::Entry* entry, const MetadataCallback& callback);
-void ReadMetadataDidReadMetadata(
-    disk_cache::Entry* entry,
-    const MetadataCallback& callback,
-    const scoped_refptr<net::IOBufferWithSize>& buffer,
-    int rv);
+void ReadMetadataDidReadMetadata(disk_cache::Entry* entry,
+                                 const MetadataCallback& callback,
+                                 scoped_refptr<net::IOBufferWithSize> buffer,
+                                 int rv);
 
 bool VaryMatches(const ServiceWorkerHeaderMap& request,
                  const ServiceWorkerHeaderMap& cached_request,
@@ -166,11 +165,10 @@ void ReadMetadata(disk_cache::Entry* entry, const MetadataCallback& callback) {
     read_header_callback.Run(read_rv);
 }
 
-void ReadMetadataDidReadMetadata(
-    disk_cache::Entry* entry,
-    const MetadataCallback& callback,
-    const scoped_refptr<net::IOBufferWithSize>& buffer,
-    int rv) {
+void ReadMetadataDidReadMetadata(disk_cache::Entry* entry,
+                                 const MetadataCallback& callback,
+                                 scoped_refptr<net::IOBufferWithSize> buffer,
+                                 int rv) {
   if (rv != buffer->size()) {
     callback.Run(scoped_ptr<CacheMetadata>());
     return;
@@ -286,26 +284,30 @@ struct CacheStorageCache::PutContext {
 // static
 scoped_refptr<CacheStorageCache> CacheStorageCache::CreateMemoryCache(
     const GURL& origin,
-    const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
-    const scoped_refptr<storage::QuotaManagerProxy>& quota_manager_proxy,
+    const std::string& cache_name,
+    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+    scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
     base::WeakPtr<storage::BlobStorageContext> blob_context) {
-  return make_scoped_refptr(
-      new CacheStorageCache(origin, base::FilePath(), request_context_getter,
-                            quota_manager_proxy, blob_context));
+  return make_scoped_refptr(new CacheStorageCache(
+      origin, cache_name, base::FilePath(), std::move(request_context_getter),
+      std::move(quota_manager_proxy), blob_context));
 }
 
 // static
 scoped_refptr<CacheStorageCache> CacheStorageCache::CreatePersistentCache(
     const GURL& origin,
+    const std::string& cache_name,
     const base::FilePath& path,
-    const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
-    const scoped_refptr<storage::QuotaManagerProxy>& quota_manager_proxy,
+    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+    scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
     base::WeakPtr<storage::BlobStorageContext> blob_context) {
   return make_scoped_refptr(new CacheStorageCache(
-      origin, path, request_context_getter, quota_manager_proxy, blob_context));
+      origin, cache_name, path, std::move(request_context_getter),
+      std::move(quota_manager_proxy), blob_context));
 }
 
 CacheStorageCache::~CacheStorageCache() {
+  quota_manager_proxy_->NotifyOriginNoLongerInUse(origin_);
 }
 
 base::WeakPtr<CacheStorageCache> CacheStorageCache::AsWeakPtr() {
@@ -443,14 +445,9 @@ void CacheStorageCache::Size(const SizeCallback& callback) {
     return;
   }
 
-  // If the cache isn't already initialized, wait for it.
   if (initializing_) {
-    SizeCallback pending_callback =
-        base::Bind(&CacheStorageCache::PendingSizeCallback,
-                   weak_ptr_factory_.GetWeakPtr(), callback);
-    scheduler_->ScheduleOperation(base::Bind(&CacheStorageCache::SizeImpl,
-                                             weak_ptr_factory_.GetWeakPtr(),
-                                             pending_callback));
+    // Note that Size doesn't use the scheduler, see header comments for why.
+    pending_size_callbacks_.push_back(callback);
     return;
   }
 
@@ -479,18 +476,24 @@ void CacheStorageCache::GetSizeThenClose(const SizeCallback& callback) {
 
 CacheStorageCache::CacheStorageCache(
     const GURL& origin,
+    const std::string& cache_name,
     const base::FilePath& path,
-    const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
-    const scoped_refptr<storage::QuotaManagerProxy>& quota_manager_proxy,
+    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+    scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
     base::WeakPtr<storage::BlobStorageContext> blob_context)
     : origin_(origin),
+      cache_name_(cache_name),
       path_(path),
-      request_context_getter_(request_context_getter),
-      quota_manager_proxy_(quota_manager_proxy),
+      request_context_getter_(std::move(request_context_getter)),
+      quota_manager_proxy_(std::move(quota_manager_proxy)),
       blob_storage_context_(blob_context),
       scheduler_(new CacheStorageScheduler()),
       memory_only_(path.empty()),
       weak_ptr_factory_(this) {
+  DCHECK(!origin_.is_empty());
+  DCHECK(quota_manager_proxy_.get());
+
+  quota_manager_proxy_->NotifyOriginInUse(origin_);
 }
 
 bool CacheStorageCache::LazyInitialize() {
@@ -773,7 +776,9 @@ void CacheStorageCache::Put(const CacheStorageBatchOperation& operation,
       operation.response.status_text, operation.response.response_type,
       operation.response.headers, operation.response.blob_uuid,
       operation.response.blob_size, operation.response.stream_url,
-      operation.response.error));
+      operation.response.error, operation.response.response_time,
+      false /* is_in_cache_storage */,
+      std::string() /* cache_storage_cache_name */));
 
   scoped_ptr<storage::BlobDataHandle> blob_data_handle;
 
@@ -898,6 +903,8 @@ void CacheStorageCache::PutDidCreateEntry(
   response_metadata->set_response_type(
       WebResponseTypeToProtoResponseType(put_context->response->response_type));
   response_metadata->set_url(put_context->response->url.spec());
+  response_metadata->set_response_time(
+      put_context->response->response_time.ToInternalValue());
   for (ServiceWorkerHeaderMap::const_iterator it =
            put_context->response->headers.begin();
        it != put_context->response->headers.end(); ++it) {
@@ -970,7 +977,7 @@ void CacheStorageCache::PutDidWriteHeaders(scoped_ptr<PutContext> put_context,
       std::move(put_context->blob_data_handle);
 
   blob_to_cache->StreamBlobToCache(
-      std::move(entry), INDEX_RESPONSE_BODY, request_context_getter_,
+      std::move(entry), INDEX_RESPONSE_BODY, request_context_getter_.get(),
       std::move(blob_data_handle),
       base::Bind(&CacheStorageCache::PutDidWriteBlobToCache,
                  weak_ptr_factory_.GetWeakPtr(),
@@ -1296,6 +1303,10 @@ void CacheStorageCache::InitGotCacheSize(CacheStorageError cache_create_error,
                        ? BACKEND_OPEN
                        : BACKEND_CLOSED;
 
+  for (const SizeCallback& callback : pending_size_callbacks_)
+    SizeImpl(callback);
+  pending_size_callbacks_.clear();
+
   UMA_HISTOGRAM_ENUMERATION("ServiceWorkerCache.InitBackendResult",
                             cache_create_error, CACHE_STORAGE_ERROR_LAST + 1);
 
@@ -1371,7 +1382,9 @@ void CacheStorageCache::PopulateResponseMetadata(
       metadata.response().status_text(),
       ProtoResponseTypeToWebResponseType(metadata.response().response_type()),
       ServiceWorkerHeaderMap(), "", 0, GURL(),
-      blink::WebServiceWorkerResponseErrorUnknown);
+      blink::WebServiceWorkerResponseErrorUnknown,
+      base::Time::FromInternalValue(metadata.response().response_time()),
+      true /* is_in_cache_storage */, cache_name_);
 
   for (int i = 0; i < metadata.response().headers_size(); ++i) {
     const CacheHeaderMap header = metadata.response().headers(i);

@@ -5,6 +5,7 @@
 #include "net/quic/quic_multipath_received_packet_manager.h"
 
 #include "net/quic/quic_connection_stats.h"
+#include "net/quic/quic_flags.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/test/gtest_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -100,14 +101,6 @@ TEST_F(QuicMultipathReceivedPacketManagerTest, RecordPacketReceived) {
                 "Received a packet on a non-existent path");
 }
 
-TEST_F(QuicMultipathReceivedPacketManagerTest, RecordPacketRevived) {
-  EXPECT_CALL(*manager_0_, RecordPacketRevived(_)).Times(1);
-  multipath_manager_.RecordPacketRevived(kDefaultPathId, header_.packet_number);
-  EXPECT_DFATAL(
-      multipath_manager_.RecordPacketRevived(kPathId2, header_.packet_number),
-      "Revived a packet on a non-existent path");
-}
-
 TEST_F(QuicMultipathReceivedPacketManagerTest, IsMissing) {
   EXPECT_CALL(*manager_0_, IsMissing(header_.packet_number))
       .WillOnce(Return(true));
@@ -132,25 +125,6 @@ TEST_F(QuicMultipathReceivedPacketManagerTest, IsAwaitingPacket) {
   EXPECT_DFATAL(
       multipath_manager_.IsAwaitingPacket(kPathId2, header_.packet_number),
       "Check whether a packet is awaited on a non-existent path");
-}
-
-TEST_F(QuicMultipathReceivedPacketManagerTest, UpdateReceivedPacketInfo) {
-  std::vector<QuicAckFrame> ack_frames;
-  EXPECT_EQ(static_cast<size_t>(0), ack_frames.size());
-  EXPECT_CALL(*manager_0_, ack_frame_updated()).WillOnce(Return(false));
-  EXPECT_CALL(*manager_1_, ack_frame_updated()).WillRepeatedly(Return(false));
-  multipath_manager_.UpdateReceivedPacketInfo(&ack_frames, QuicTime::Zero(),
-                                              /*force_all_paths=*/false);
-  EXPECT_EQ(static_cast<size_t>(0), ack_frames.size());
-  EXPECT_CALL(*manager_0_, ack_frame_updated()).WillOnce(Return(true));
-  multipath_manager_.UpdateReceivedPacketInfo(&ack_frames, QuicTime::Zero(),
-                                              /*force_all_paths=*/false);
-  EXPECT_EQ(static_cast<size_t>(1), ack_frames.size());
-
-  std::vector<QuicAckFrame> ack_frames_all;
-  multipath_manager_.UpdateReceivedPacketInfo(&ack_frames_all, QuicTime::Zero(),
-                                              /*force_all_paths=*/true);
-  EXPECT_EQ(static_cast<size_t>(2), ack_frames_all.size());
 }
 
 TEST_F(QuicMultipathReceivedPacketManagerTest,

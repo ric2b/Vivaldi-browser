@@ -21,7 +21,7 @@ class PluginConsumer : public ASTConsumer {
       : visitor_(*instance, options) {}
 
   void HandleTranslationUnit(clang::ASTContext& context) override {
-    visitor_.TraverseDecl(context.getTranslationUnitDecl());
+    visitor_.Traverse(context);
   }
 
  private:
@@ -61,6 +61,10 @@ bool FindBadConstructsAction::ParseArgs(const CompilerInstance& instance,
       options_.follow_macro_expansion = true;
     } else if (args[i] == "check-implicit-copy-ctors") {
       options_.check_implicit_copy_ctors = true;
+    } else if (args[i] == "no-realpath") {
+      options_.no_realpath = true;
+    } else if (args[i] == "check-ipc") {
+      options_.check_ipc = true;
     } else {
       parsed = false;
       llvm::errs() << "Unknown clang plugin argument: " << args[i] << "\n";

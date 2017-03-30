@@ -62,12 +62,11 @@ class ResourceRequest;
 class SecurityOrigin;
 
 typedef int SandboxFlags;
-typedef Vector<OwnPtr<CSPDirectiveList>> CSPDirectiveListVector;
-typedef WillBeHeapVector<RefPtrWillBeMember<ConsoleMessage>> ConsoleMessageVector;
+typedef HeapVector<Member<CSPDirectiveList>> CSPDirectiveListVector;
+typedef HeapVector<Member<ConsoleMessage>> ConsoleMessageVector;
 typedef std::pair<String, ContentSecurityPolicyHeaderType> CSPHeaderAndType;
 
-class CORE_EXPORT ContentSecurityPolicy : public RefCountedWillBeGarbageCollectedFinalized<ContentSecurityPolicy> {
-    USING_FAST_MALLOC_WILL_BE_REMOVED(ContentSecurityPolicy);
+class CORE_EXPORT ContentSecurityPolicy : public GarbageCollectedFinalized<ContentSecurityPolicy> {
 public:
     // CSP Level 1 Directives
     static const char ConnectSrc[];
@@ -102,9 +101,8 @@ public:
     // https://w3c.github.io/webappsec/specs/upgrade/
     static const char UpgradeInsecureRequests[];
 
-    // Suborigin Directive
-    // https://metromoxie.github.io/webappsec/specs/suborigins/index.html
-    static const char Suborigin[];
+    // https://mikewest.github.io/cors-rfc1918/#csp
+    static const char TreatAsPublicAddress[];
 
     enum ReportingStatus {
         SendReport,
@@ -133,9 +131,9 @@ public:
         URLViolation
     };
 
-    static PassRefPtrWillBeRawPtr<ContentSecurityPolicy> create()
+    static ContentSecurityPolicy* create()
     {
-        return adoptRefWillBeNoop(new ContentSecurityPolicy());
+        return new ContentSecurityPolicy();
     }
     ~ContentSecurityPolicy();
     DECLARE_TRACE();
@@ -200,6 +198,8 @@ public:
     bool allowScriptWithHash(const String& source) const;
     bool allowStyleWithHash(const String& source) const;
 
+    bool allowRequest(WebURLRequest::RequestContext, const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
+
     void usesScriptHashAlgorithms(uint8_t ContentSecurityPolicyHashAlgorithm);
     void usesStyleHashAlgorithms(uint8_t ContentSecurityPolicyHashAlgorithm);
 
@@ -214,7 +214,7 @@ public:
 
     // If a frame is passed in, the message will be logged to its active document's console.
     // Otherwise, the message will be logged to this object's |m_executionContext|.
-    void logToConsole(PassRefPtrWillBeRawPtr<ConsoleMessage>, LocalFrame* = nullptr);
+    void logToConsole(ConsoleMessage*, LocalFrame* = nullptr);
 
     void reportDirectiveAsSourceExpression(const String& directiveName, const String& sourceExpression);
     void reportDuplicateDirective(const String&);
@@ -222,16 +222,15 @@ public:
     void reportInvalidPathCharacter(const String& directiveName, const String& value, const char);
     void reportInvalidPluginTypes(const String&);
     void reportInvalidSandboxFlags(const String&);
-    void reportInvalidSuboriginFlags(const String&);
     void reportInvalidSourceExpression(const String& directiveName, const String& source);
     void reportInvalidReflectedXSS(const String&);
     void reportMissingReportURI(const String&);
     void reportUnsupportedDirective(const String&);
     void reportInvalidInReportOnly(const String&);
+    void reportInvalidDirectiveInMeta(const String& directiveName);
     void reportInvalidReferrer(const String&);
     void reportReportOnlyInMeta(const String&);
     void reportMetaOutsideHead(const String&);
-    void reportSuboriginInMeta(const String&);
     void reportValueForEmptyDirective(const String& directiveName, const String& value);
 
     // If a frame is passed in, the report will be sent using it as a context. If no frame is
@@ -243,8 +242,8 @@ public:
 
     const KURL url() const;
     void enforceSandboxFlags(SandboxFlags);
-    void enforceSuborigin(const String&);
     void enforceStrictMixedContentChecking();
+    void treatAsPublicAddress();
     String evalDisabledErrorMessage() const;
 
     void setInsecureRequestsPolicy(SecurityContext::InsecureRequestsPolicy);
@@ -262,15 +261,6 @@ public:
 
     static bool isDirectiveName(const String&);
 
-    // These functions are used to debug using ResourceContext to apply
-    // CSP directives instead of Resource::Type, by checking that the
-    // ResourceContext is as expected. See crbug.com/474412
-    static bool isScriptResource(const ResourceRequest&);
-    static bool isStyleResource(const ResourceRequest&);
-    static bool isImageResource(const ResourceRequest&);
-    static bool isFontResource(const ResourceRequest&);
-    static bool isMediaResource(const ResourceRequest&);
-
     Document* document() const;
 
 private:
@@ -278,7 +268,7 @@ private:
 
     void applyPolicySideEffectsToExecutionContext();
 
-    SecurityOrigin* securityOrigin() const;
+    SecurityOrigin* getSecurityOrigin() const;
     KURL completeURL(const String&) const;
 
     void logToConsole(const String& message, MessageLevel = ErrorMessageLevel);
@@ -287,7 +277,7 @@ private:
     bool shouldSendViolationReport(const String&) const;
     void didSendViolationReport(const String&);
 
-    RawPtrWillBeMember<ExecutionContext> m_executionContext;
+    Member<ExecutionContext> m_executionContext;
     bool m_overrideInlineStyleAllowed;
     CSPDirectiveListVector m_policies;
     ConsoleMessageVector m_consoleMessages;
@@ -302,13 +292,13 @@ private:
 
     // State flags used to configure the environment after parsing a policy.
     SandboxFlags m_sandboxMask;
-    String m_suboriginName;
     bool m_enforceStrictMixedContentChecking;
     ReferrerPolicy m_referrerPolicy;
+    bool m_treatAsPublicAddress;
     String m_disableEvalErrorMessage;
     SecurityContext::InsecureRequestsPolicy m_insecureRequestsPolicy;
 
-    OwnPtr<CSPSource> m_selfSource;
+    Member<CSPSource> m_selfSource;
     String m_selfProtocol;
 };
 

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/policy/consumer_enrollment_handler_factory.h"
 
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -41,27 +42,33 @@ class ConsumerEnrollmentHandlerFactoryTest : public testing::Test {
     BrowserPolicyConnectorChromeOS* connector =
         g_browser_process->platform_part()->browser_policy_connector_chromeos();
     connector->SetConsumerManagementServiceForTesting(
-        make_scoped_ptr(fake_service_));
+        base::WrapUnique(fake_service_));
 
     // Set up FakeChromeUserManager.
-    fake_user_manager_->AddUser(AccountId::FromUserEmail(kTestOwner));
-    fake_user_manager_->AddUser(AccountId::FromUserEmail(kTestUser));
-    fake_user_manager_->set_owner_id(AccountId::FromUserEmail(kTestOwner));
+    fake_user_manager_->AddUser(owner_account_id);
+    fake_user_manager_->AddUser(test_account_id);
+    fake_user_manager_->set_owner_id(owner_account_id);
   }
 
   void SetUp() override {
+    testing::Test::SetUp();
+
     ASSERT_TRUE(testing_profile_manager_->SetUp());
   }
+
+  const AccountId owner_account_id = AccountId::FromUserEmail(kTestOwner);
+  const AccountId test_account_id = AccountId::FromUserEmail(kTestUser);
 
   content::TestBrowserThreadBundle thread_bundle_;
   FakeConsumerManagementService* fake_service_;
   chromeos::FakeChromeUserManager* fake_user_manager_;
   chromeos::ScopedUserManagerEnabler scoped_user_manager_enabler_;
-  scoped_ptr<TestingProfileManager> testing_profile_manager_;
+  std::unique_ptr<TestingProfileManager> testing_profile_manager_;
 };
 
 TEST_F(ConsumerEnrollmentHandlerFactoryTest, ServiceIsCreated) {
-  Profile* profile = testing_profile_manager_->CreateTestingProfile(kTestOwner);
+  Profile* profile = testing_profile_manager_->CreateTestingProfile(
+      owner_account_id.GetUserEmail());
   EXPECT_TRUE(ConsumerEnrollmentHandlerFactory::GetForBrowserContext(profile));
 }
 

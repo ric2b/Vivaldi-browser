@@ -22,9 +22,13 @@ Options::Options(int argc, const char** argv)
       user_agent(content::BuildUserAgentFromProduct(kProductName)),
       message_pump(nullptr) {}
 
+Options::Options(const Options& other) = default;
+
 Options::~Options() {}
 
 Builder::Builder(int argc, const char** argv) : options_(argc, argv) {}
+
+Builder::Builder() : options_(0, nullptr) {}
 
 Builder::~Builder() {}
 
@@ -40,6 +44,11 @@ Builder& Builder::EnableDevToolsServer(const net::IPEndPoint& endpoint) {
 
 Builder& Builder::SetMessagePump(base::MessagePump* message_pump) {
   options_.message_pump = message_pump;
+  return *this;
+}
+
+Builder& Builder::SetProxyServer(const net::HostPortPair& proxy_server) {
+  options_.proxy_server = proxy_server;
   return *this;
 }
 

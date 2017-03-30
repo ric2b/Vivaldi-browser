@@ -24,7 +24,7 @@ class EventCapturer : public ui::EventHandler {
 
   void OnEvent(ui::Event* event) override {
     if (event->IsKeyEvent())
-      events_.push_back(new ui::KeyEvent(static_cast<ui::KeyEvent&>(*event)));
+      events_.push_back(new ui::KeyEvent(*event->AsKeyEvent()));
   }
 
   const ScopedVector<ui::KeyEvent>& captured_events() const { return events_; }
@@ -72,7 +72,7 @@ class SpokenFeedbackEventRewriterTest : public ash::test::AshTestBase {
         spoken_feedback_event_rewriter_(new SpokenFeedbackEventRewriter()) {
     delegate_ = new TestDelegate();
     spoken_feedback_event_rewriter_->SetDelegateForTest(
-        scoped_ptr<TestDelegate>(delegate_));
+        std::unique_ptr<TestDelegate>(delegate_));
   }
 
   void SetUp() override {
@@ -97,7 +97,7 @@ class SpokenFeedbackEventRewriterTest : public ash::test::AshTestBase {
   EventCapturer event_capturer_;
 
  private:
-  scoped_ptr<SpokenFeedbackEventRewriter> spoken_feedback_event_rewriter_;
+  std::unique_ptr<SpokenFeedbackEventRewriter> spoken_feedback_event_rewriter_;
 
   DISALLOW_COPY_AND_ASSIGN(SpokenFeedbackEventRewriterTest);
 };

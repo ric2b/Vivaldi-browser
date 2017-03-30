@@ -5,6 +5,7 @@
 #ifndef NetworkInformation_h
 #define NetworkInformation_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/events/EventTarget.h"
 #include "core/page/NetworkStateNotifier.h"
@@ -16,10 +17,11 @@ class ExecutionContext;
 
 class NetworkInformation final
     : public RefCountedGarbageCollectedEventTargetWithInlineData<NetworkInformation>
+    , public ActiveScriptWrappable
     , public ActiveDOMObject
     , public NetworkStateNotifier::NetworkStateObserver {
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(NetworkInformation);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(NetworkInformation);
+    USING_GARBAGE_COLLECTED_MIXIN(NetworkInformation);
     DEFINE_WRAPPERTYPEINFO();
 public:
     static NetworkInformation* create(ExecutionContext*);
@@ -33,11 +35,13 @@ public:
 
     // EventTarget overrides.
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override;
+    ExecutionContext* getExecutionContext() const override;
     void removeAllEventListeners() override;
 
+    // ActiveScriptWrappable
+    bool hasPendingActivity() const final;
+
     // ActiveDOMObject overrides.
-    bool hasPendingActivity() const override;
     void stop() override;
 
     DECLARE_VIRTUAL_TRACE();
@@ -47,8 +51,8 @@ public:
 
 protected:
     // EventTarget overrides.
-    bool addEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, const EventListenerOptions&) override;
-    bool removeEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener>, const EventListenerOptions&) override;
+    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) override;
+    bool removeEventListenerInternal(const AtomicString& eventType, EventListener*, const EventListenerOptions&) override;
 
 private:
     explicit NetworkInformation(ExecutionContext*);

@@ -356,7 +356,7 @@ class KioskAppData::WebstoreDataParser
     // Takes ownership of |parsed_manifest|.
     extensions::Manifest manifest(
         extensions::Manifest::INVALID_LOCATION,
-        scoped_ptr<base::DictionaryValue>(parsed_manifest));
+        std::unique_ptr<base::DictionaryValue>(parsed_manifest));
 
     if (!IsValidKioskAppManifest(manifest)) {
       ReportFailure();
@@ -395,14 +395,15 @@ class KioskAppData::WebstoreDataParser
 
 KioskAppData::KioskAppData(KioskAppDataDelegate* delegate,
                            const std::string& app_id,
-                           const std::string& user_id,
-                           const GURL& update_url)
+                           const AccountId& account_id,
+                           const GURL& update_url,
+                           const base::FilePath& cached_crx)
     : delegate_(delegate),
       status_(STATUS_INIT),
       app_id_(app_id),
-      user_id_(user_id),
-      update_url_(update_url) {
-}
+      account_id_(account_id),
+      update_url_(update_url),
+      crx_file_(cached_crx) {}
 
 KioskAppData::~KioskAppData() {}
 
@@ -460,7 +461,7 @@ void KioskAppData::SetCachedCrx(const base::FilePath& crx_file) {
     return;
 
   crx_file_ = crx_file;
-  MaybeLoadFromCrx();
+  LoadFromCrx();
 }
 
 bool KioskAppData::IsLoading() const {
@@ -613,7 +614,7 @@ void KioskAppData::OnWebstoreParseFailure() {
 
 void KioskAppData::StartFetch() {
   if (!IsFromWebStore()) {
-    MaybeLoadFromCrx();
+    LoadFromCrx();
     return;
   }
 
@@ -631,7 +632,7 @@ void KioskAppData::OnWebstoreRequestFailure() {
 }
 
 void KioskAppData::OnWebstoreResponseParseSuccess(
-      scoped_ptr<base::DictionaryValue> webstore_data) {
+    std::unique_ptr<base::DictionaryValue> webstore_data) {
   // Takes ownership of |webstore_data|.
   webstore_fetcher_.reset();
 
@@ -682,8 +683,8 @@ bool KioskAppData::CheckResponseKeyValue(const base::DictionaryValue* response,
   return true;
 }
 
-void KioskAppData::MaybeLoadFromCrx() {
-  if (status_ == STATUS_LOADED || crx_file_.empty())
+void KioskAppData::LoadFromCrx() {
+  if (crx_file_.empty())
     return;
 
   scoped_refptr<CrxLoader> crx_loader(new CrxLoader(AsWeakPtr(), crx_file_));

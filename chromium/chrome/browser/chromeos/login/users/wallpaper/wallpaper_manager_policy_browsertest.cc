@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -16,7 +17,6 @@
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
@@ -143,14 +143,15 @@ class WallpaperManagerPolicyTest
         AccountId::FromUserEmail(LoginManagerTest::kEnterpriseUser2));
   }
 
-  scoped_ptr<policy::UserPolicyBuilder> GetUserPolicyBuilder(
+  std::unique_ptr<policy::UserPolicyBuilder> GetUserPolicyBuilder(
       const AccountId& account_id) {
-    scoped_ptr<policy::UserPolicyBuilder>
-        user_policy_builder(new policy::UserPolicyBuilder());
+    std::unique_ptr<policy::UserPolicyBuilder> user_policy_builder(
+        new policy::UserPolicyBuilder());
     base::FilePath user_keys_dir;
     EXPECT_TRUE(PathService::Get(DIR_USER_POLICY_KEYS, &user_keys_dir));
     const std::string sanitized_user_id =
-        CryptohomeClient::GetStubSanitizedUsername(account_id.GetUserEmail());
+        CryptohomeClient::GetStubSanitizedUsername(
+            cryptohome::Identification(account_id));
     const base::FilePath user_key_file =
         user_keys_dir.AppendASCII(sanitized_user_id)
                      .AppendASCII("policy.pub");
@@ -170,7 +171,7 @@ class WallpaperManagerPolicyTest
   // LoginManagerTest:
   void SetUpInProcessBrowserTestFixture() override {
     DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
-        scoped_ptr<SessionManagerClient>(fake_session_manager_client_));
+        std::unique_ptr<SessionManagerClient>(fake_session_manager_client_));
 
     LoginManagerTest::SetUpInProcessBrowserTestFixture();
     ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir_));
@@ -252,8 +253,8 @@ class WallpaperManagerPolicyTest
       builder->payload().Clear();
     }
     builder->Build();
-    fake_session_manager_client_->set_user_policy(account_id.GetUserEmail(),
-                                                  builder->GetBlob());
+    fake_session_manager_client_->set_user_policy(
+        cryptohome::Identification(account_id), builder->GetBlob());
     const user_manager::User* user =
         user_manager::UserManager::Get()->FindUser(account_id);
     ASSERT_TRUE(user);
@@ -273,9 +274,9 @@ class WallpaperManagerPolicyTest
   }
 
   base::FilePath test_data_dir_;
-  scoped_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<base::RunLoop> run_loop_;
   int wallpaper_change_count_;
-  scoped_ptr<policy::UserPolicyBuilder> user_policy_builders_[2];
+  std::unique_ptr<policy::UserPolicyBuilder> user_policy_builders_[2];
   FakeSessionManagerClient* fake_session_manager_client_;
   std::vector<AccountId> testUsers_;
 

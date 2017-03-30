@@ -35,7 +35,7 @@ enum MorphologyOperatorType {
 
 class PLATFORM_EXPORT FEMorphology final : public FilterEffect {
 public:
-    static PassRefPtrWillBeRawPtr<FEMorphology> create(Filter*, MorphologyOperatorType, float radiusX, float radiusY);
+    static FEMorphology* create(Filter*, MorphologyOperatorType, float radiusX, float radiusY);
     MorphologyOperatorType morphologyOperator() const;
     bool setMorphologyOperator(MorphologyOperatorType);
 
@@ -45,7 +45,7 @@ public:
     float radiusY() const;
     bool setRadiusY(float);
 
-    FloatRect mapRect(const FloatRect&, bool forward = true) final;
+    FloatRect mapRect(const FloatRect&, bool forward = true) const final;
 
     TextStream& externalRepresentation(TextStream&, int indention) const override;
 

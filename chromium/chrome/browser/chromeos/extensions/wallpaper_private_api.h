@@ -12,7 +12,12 @@
 #include "chrome/browser/chromeos/extensions/wallpaper_function_base.h"
 #include "chrome/common/extensions/api/wallpaper_private.h"
 #include "components/signin/core/account_id/account_id.h"
+#include "components/wallpaper/wallpaper_files_id.h"
 #include "net/url_request/url_fetcher_delegate.h"
+
+namespace base {
+class RefCountedBytes;
+}
 
 namespace chromeos {
 class UserImage;
@@ -69,7 +74,8 @@ class WallpaperPrivateSetWallpaperIfExistsFunction
   void ReadFileAndInitiateStartDecode(const base::FilePath& file_path,
                                       const base::FilePath& fallback_path);
 
-  scoped_ptr<extensions::api::wallpaper_private::SetWallpaperIfExists::Params>
+  std::unique_ptr<
+      extensions::api::wallpaper_private::SetWallpaperIfExists::Params>
       params;
 
   // User id of the active user when this api is been called.
@@ -100,9 +106,10 @@ class WallpaperPrivateSetWallpaperFunction : public WallpaperFunctionBase {
   void SaveToFile();
 
   // Sets wallpaper to the decoded image.
-  void SetDecodedWallpaper(scoped_ptr<gfx::ImageSkia> image);
+  void SetDecodedWallpaper(std::unique_ptr<gfx::ImageSkia> image);
 
-  scoped_ptr<extensions::api::wallpaper_private::SetWallpaper::Params> params;
+  std::unique_ptr<extensions::api::wallpaper_private::SetWallpaper::Params>
+      params;
 
   // The decoded wallpaper. It may accessed from UI thread to set wallpaper or
   // FILE thread to resize and save wallpaper to disk.
@@ -151,19 +158,20 @@ class WallpaperPrivateSetCustomWallpaperFunction
   // Generates thumbnail of custom wallpaper. A simple STRETCH is used for
   // generating thunbail.
   void GenerateThumbnail(const base::FilePath& thumbnail_path,
-                         scoped_ptr<gfx::ImageSkia> image);
+                         std::unique_ptr<gfx::ImageSkia> image);
 
   // Thumbnail is ready. Calls api function javascript callback.
   void ThumbnailGenerated(base::RefCountedBytes* data);
 
-  scoped_ptr<extensions::api::wallpaper_private::SetCustomWallpaper::Params>
+  std::unique_ptr<
+      extensions::api::wallpaper_private::SetCustomWallpaper::Params>
       params;
 
   // User account id of the active user when this api is been called.
   AccountId account_id_ = EmptyAccountId();
 
   // User id hash of the logged in user.
-  std::string user_id_hash_;
+  wallpaper::WallpaperFilesId wallpaper_files_id_;
 
   // Sequence token associated with wallpaper operations. Shared with
   // WallpaperManager.
@@ -300,6 +308,21 @@ class WallpaperPrivateGetOfflineWallpaperListFunction
   // Sequence token associated with wallpaper operations. Shared with
   // WallpaperManager.
   base::SequencedWorkerPool::SequenceToken sequence_token_;
+};
+
+// The wallpaper UMA is recorded when a new wallpaper is set, either by the
+// built-in Wallpaper Picker App, or by a third party App.
+class WallpaperPrivateRecordWallpaperUMAFunction
+    : public SyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("wallpaperPrivate.recordWallpaperUMA",
+                             WALLPAPERPRIVATE_RECORDWALLPAPERUMA)
+
+ protected:
+  ~WallpaperPrivateRecordWallpaperUMAFunction() override {}
+
+  // SyncExtensionFunction overrides.
+  bool RunSync() override;
 };
 
 #endif  // CHROME_BROWSER_CHROMEOS_EXTENSIONS_WALLPAPER_PRIVATE_API_H_

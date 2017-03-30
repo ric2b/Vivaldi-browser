@@ -35,7 +35,7 @@ namespace blink {
 void ContextLifecycleNotifier::notifyResumingActiveDOMObjects()
 {
     TemporaryChange<IterationType> scope(m_iterating, IteratingOverAll);
-    Vector<RawPtrWillBeUntracedMember<ContextLifecycleObserver>> snapshotOfObservers;
+    Vector<UntracedMember<ContextLifecycleObserver>> snapshotOfObservers;
     copyToVector(m_observers, snapshotOfObservers);
     for (ContextLifecycleObserver* observer : snapshotOfObservers) {
         // FIXME: Oilpan: At the moment, it's possible that a ActiveDOMObject
@@ -48,8 +48,10 @@ void ContextLifecycleNotifier::notifyResumingActiveDOMObjects()
             if (observer->observerType() != ContextLifecycleObserver::ActiveDOMObjectType)
                 continue;
             ActiveDOMObject* activeDOMObject = static_cast<ActiveDOMObject*>(observer);
-            ASSERT(activeDOMObject->executionContext() == context());
-            ASSERT(activeDOMObject->suspendIfNeededCalled());
+#if DCHECK_IS_ON()
+            DCHECK_EQ(activeDOMObject->getExecutionContext(), context());
+            DCHECK(activeDOMObject->suspendIfNeededCalled());
+#endif
             activeDOMObject->resume();
         }
     }
@@ -58,7 +60,7 @@ void ContextLifecycleNotifier::notifyResumingActiveDOMObjects()
 void ContextLifecycleNotifier::notifySuspendingActiveDOMObjects()
 {
     TemporaryChange<IterationType> scope(m_iterating, IteratingOverAll);
-    Vector<RawPtrWillBeUntracedMember<ContextLifecycleObserver>> snapshotOfObservers;
+    Vector<UntracedMember<ContextLifecycleObserver>> snapshotOfObservers;
     copyToVector(m_observers, snapshotOfObservers);
     for (ContextLifecycleObserver* observer : snapshotOfObservers) {
         // It's possible that the ActiveDOMObject is already destructed.
@@ -67,8 +69,10 @@ void ContextLifecycleNotifier::notifySuspendingActiveDOMObjects()
             if (observer->observerType() != ContextLifecycleObserver::ActiveDOMObjectType)
                 continue;
             ActiveDOMObject* activeDOMObject = static_cast<ActiveDOMObject*>(observer);
-            ASSERT(activeDOMObject->executionContext() == context());
-            ASSERT(activeDOMObject->suspendIfNeededCalled());
+#if DCHECK_IS_ON()
+            DCHECK_EQ(activeDOMObject->getExecutionContext(), context());
+            DCHECK(activeDOMObject->suspendIfNeededCalled());
+#endif
             activeDOMObject->suspend();
         }
     }
@@ -77,7 +81,7 @@ void ContextLifecycleNotifier::notifySuspendingActiveDOMObjects()
 void ContextLifecycleNotifier::notifyStoppingActiveDOMObjects()
 {
     TemporaryChange<IterationType> scope(m_iterating, IteratingOverAll);
-    Vector<RawPtrWillBeUntracedMember<ContextLifecycleObserver>> snapshotOfObservers;
+    Vector<UntracedMember<ContextLifecycleObserver>> snapshotOfObservers;
     copyToVector(m_observers, snapshotOfObservers);
     for (ContextLifecycleObserver* observer : snapshotOfObservers) {
         // It's possible that the ActiveDOMObject is already destructed.
@@ -86,8 +90,10 @@ void ContextLifecycleNotifier::notifyStoppingActiveDOMObjects()
             if (observer->observerType() != ContextLifecycleObserver::ActiveDOMObjectType)
                 continue;
             ActiveDOMObject* activeDOMObject = static_cast<ActiveDOMObject*>(observer);
-            ASSERT(activeDOMObject->executionContext() == context());
-            ASSERT(activeDOMObject->suspendIfNeededCalled());
+#if DCHECK_IS_ON()
+            DCHECK_EQ(activeDOMObject->getExecutionContext(), context());
+            DCHECK(activeDOMObject->suspendIfNeededCalled());
+#endif
             activeDOMObject->stop();
         }
     }
@@ -104,7 +110,7 @@ unsigned ContextLifecycleNotifier::activeDOMObjectCount() const
     return activeDOMObjects;
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool ContextLifecycleNotifier::contains(ActiveDOMObject* object) const
 {
     for (ContextLifecycleObserver* observer : m_observers) {

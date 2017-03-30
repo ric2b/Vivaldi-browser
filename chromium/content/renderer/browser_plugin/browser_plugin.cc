@@ -34,10 +34,8 @@
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
 #include "third_party/WebKit/public/web/WebView.h"
-#include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
-using blink::WebCanvas;
 using blink::WebPluginContainer;
 using blink::WebPoint;
 using blink::WebRect;
@@ -176,10 +174,6 @@ void BrowserPlugin::Detach() {
   attached_ = false;
   guest_crashed_ = false;
   EnableCompositing(false);
-  if (compositing_helper_.get()) {
-    compositing_helper_->OnContainerDestroy();
-    compositing_helper_ = nullptr;
-  }
 
   BrowserPluginManager::Get()->Send(
       new BrowserPluginHostMsg_Detach(browser_plugin_instance_id_));
@@ -200,17 +194,8 @@ void BrowserPlugin::OnAdvanceFocus(int browser_plugin_instance_id,
 void BrowserPlugin::OnGuestGone(int browser_plugin_instance_id) {
   guest_crashed_ = true;
 
-  // Turn off compositing so we can display the sad graphic. Changes to
-  // compositing state will show up at a later time after a layout and commit.
-  EnableCompositing(false);
-
-  // Queue up showing the sad graphic to give content embedders an opportunity
-  // to fire their listeners and potentially overlay the webview with custom
-  // behavior. If the BrowserPlugin is destroyed in the meantime, then the
-  // task will not be executed.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&BrowserPlugin::ShowSadGraphic,
-                            weak_ptr_factory_.GetWeakPtr()));
+  EnableCompositing(true);
+  compositing_helper_->ChildFrameGone();
 }
 
 void BrowserPlugin::OnSetCursor(int browser_plugin_instance_id,
@@ -253,13 +238,6 @@ void BrowserPlugin::OnShouldAcceptTouchEvents(int browser_plugin_instance_id,
   }
 }
 
-void BrowserPlugin::ShowSadGraphic() {
-  // If the BrowserPlugin is scheduled to be deleted, then container_ will be
-  // nullptr so we shouldn't attempt to access it.
-  if (container_)
-    container_->invalidate();
-}
-
 void BrowserPlugin::UpdateInternalInstanceId() {
   // This is a way to notify observers of our attributes that this plugin is
   // available in render tree.
@@ -274,6 +252,7 @@ void BrowserPlugin::UpdateGuestFocusState(blink::WebFocusType focus_type) {
   if (!attached())
     return;
   bool should_be_focused = ShouldGuestBeFocused();
+  if (!BrowserPluginManager::Get()->IsUpdatingFocusForGuests())
   BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_SetFocus(
       browser_plugin_instance_id_,
       should_be_focused,
@@ -295,8 +274,8 @@ WebPluginContainer* BrowserPlugin::container() const {
 }
 
 bool BrowserPlugin::initialize(WebPluginContainer* container) {
-  if (!container)
-    return false;
+  DCHECK(container);
+  DCHECK_EQ(this, container->plugin());
 
   container_ = container;
   container_->setWantsWheelEvents(true);
@@ -374,33 +353,6 @@ bool BrowserPlugin::canProcessDrag() const {
   return true;
 }
 
-void BrowserPlugin::paint(WebCanvas* canvas, const WebRect& rect) {
-  if (guest_crashed_) {
-    if (!sad_guest_)  // Lazily initialize bitmap.
-      sad_guest_ = GetContentClient()->renderer()->GetSadWebViewBitmap();
-    // content_shell does not have the sad plugin bitmap, so we'll paint black
-    // instead to make it clear that something went wrong.
-    if (sad_guest_) {
-      PaintSadPlugin(canvas, view_rect_, *sad_guest_);
-      return;
-    }
-  }
-  SkAutoCanvasRestore auto_restore(canvas, true);
-  canvas->translate(view_rect_.x(), view_rect_.y());
-  SkRect image_data_rect = SkRect::MakeXYWH(
-      SkIntToScalar(0),
-      SkIntToScalar(0),
-      SkIntToScalar(view_rect_.width()),
-      SkIntToScalar(view_rect_.height()));
-  canvas->clipRect(image_data_rect);
-  // Paint black or white in case we have nothing in our backing store or we
-  // need to show a gutter.
-  SkPaint paint;
-  paint.setStyle(SkPaint::kFill_Style);
-  paint.setColor(guest_crashed_ ? SK_ColorBLACK : SK_ColorWHITE);
-  canvas->drawRect(image_data_rect, paint);
-}
-
 // static
 bool BrowserPlugin::ShouldForwardToBrowserPlugin(
     const IPC::Message& message) {
@@ -416,7 +368,8 @@ void BrowserPlugin::updateGeometry(const WebRect& plugin_rect_in_viewport,
   // Convert the plugin_rect_in_viewport to window coordinates, which is css.
   WebRect rect_in_css(plugin_rect_in_viewport);
   blink::WebView* webview = container()->element().document().frame()->view();
-  RenderView::FromWebView(webview)->convertViewportToWindow(&rect_in_css);
+  RenderView::FromWebView(webview)->GetWidget()->convertViewportToWindow(
+      &rect_in_css);
   // gisli@vivalid.com:  keep track of old pos.
   int old_x = view_rect_.x();
   int old_y = view_rect_.y();
@@ -428,7 +381,8 @@ void BrowserPlugin::updateGeometry(const WebRect& plugin_rect_in_viewport,
     ready_ = true;
   }
 
-  if (delegate_ && (view_rect_.size() != old_view_rect.size()))
+  bool rect_size_changed = view_rect_.size() != old_view_rect.size();
+  if (delegate_ && rect_size_changed)
     delegate_->DidResizeElement(view_rect_.size());
 
   if (!attached())
@@ -437,8 +391,9 @@ void BrowserPlugin::updateGeometry(const WebRect& plugin_rect_in_viewport,
   // gisli@vivaldi.com: Also fire update geometry if the pos changes.  Note: the
   // BrowserPluginGuest seems to assume that all the geometry changes are pos
   // changes, so there is some mismatch here.
-  if (old_view_rect.size() == view_rect_.size() ||
-    old_x != plugin_rect_in_viewport.x || old_y != plugin_rect_in_viewport.y) {
+  if ((!delegate_ && rect_size_changed) ||
+      view_rect_.origin() != old_view_rect.origin() ||
+      old_x != plugin_rect_in_viewport.x || old_y != plugin_rect_in_viewport.y) {
     // Let the browser know about the updated view rect.
     BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_UpdateGeometry(
         browser_plugin_instance_id_, view_rect_));
@@ -465,10 +420,6 @@ void BrowserPlugin::updateVisibility(bool visible) {
   BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_SetVisibility(
       browser_plugin_instance_id_,
       visible));
-}
-
-bool BrowserPlugin::acceptsInputEvents() {
-  return true;
 }
 
 blink::WebInputEventResult BrowserPlugin::handleInputEvent(

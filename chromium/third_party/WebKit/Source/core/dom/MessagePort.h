@@ -27,6 +27,7 @@
 #ifndef MessagePort_h
 #define MessagePort_h
 
+#include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/ActiveDOMObject.h"
 #include "core/events/EventListener.h"
@@ -36,7 +37,6 @@
 #include "wtf/OwnPtr.h"
 #include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/WeakPtr.h"
@@ -57,11 +57,12 @@ typedef Vector<OwnPtr<WebMessagePortChannel>, 1> MessagePortChannelArray;
 
 class CORE_EXPORT MessagePort
     : public RefCountedGarbageCollectedEventTargetWithInlineData<MessagePort>
+    , public ActiveScriptWrappable
     , public ActiveDOMObject
     , public WebMessagePortChannelClient {
     DEFINE_WRAPPERTYPEINFO();
     REFCOUNTED_GARBAGE_COLLECTED_EVENT_TARGET(MessagePort);
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(MessagePort);
+    USING_GARBAGE_COLLECTED_MIXIN(MessagePort);
 public:
     static MessagePort* create(ExecutionContext&);
     ~MessagePort() override;
@@ -74,26 +75,31 @@ public:
     void entangle(PassOwnPtr<WebMessagePortChannel>);
     PassOwnPtr<WebMessagePortChannel> disentangle();
 
+    // Returns nullptr if the passed-in array is nullptr/empty.
     static PassOwnPtr<WebMessagePortChannelArray> toWebMessagePortChannelArray(PassOwnPtr<MessagePortChannelArray>);
+
+    // Returns an empty array if the passed array is empty.
     static MessagePortArray* toMessagePortArray(ExecutionContext*, const WebMessagePortChannelArray&);
 
-    // Returns 0 if there is an exception, or if the passed-in array is 0/empty.
+    // Returns nullptr if there is an exception, or if the passed-in array is nullptr/empty.
     static PassOwnPtr<MessagePortChannelArray> disentanglePorts(ExecutionContext*, const MessagePortArray*, ExceptionState&);
 
-    // Returns 0 if the passed array is 0/empty.
+    // Returns an empty array if the passed array is nullptr/empty.
     static MessagePortArray* entanglePorts(ExecutionContext&, PassOwnPtr<MessagePortChannelArray>);
 
     bool started() const { return m_started; }
 
     const AtomicString& interfaceName() const override;
-    ExecutionContext* executionContext() const override { return ActiveDOMObject::executionContext(); }
+    ExecutionContext* getExecutionContext() const override { return ActiveDOMObject::getExecutionContext(); }
     MessagePort* toMessagePort() override { return this; }
 
+    // ActiveScriptWrappable implementation.
+    bool hasPendingActivity() const final;
+
     // ActiveDOMObject implementation.
-    bool hasPendingActivity() const override;
     void stop() override { close(); }
 
-    void setOnmessage(PassRefPtrWillBeRawPtr<EventListener> listener)
+    void setOnmessage(RawPtr<EventListener> listener)
     {
         setAttributeEventListener(EventTypeNames::message, listener);
         start();

@@ -18,6 +18,10 @@ GPU_EXPORT extern const char kGpuTestingGLVendor[];
 GPU_EXPORT extern const char kGpuTestingGLRenderer[];
 GPU_EXPORT extern const char kGpuTestingGLVersion[];
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+GPU_EXPORT extern const char kEnablePlatformAcceleratedVideoDecoding[];
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+
 }  // namespace switches
 
 #endif  // GPU_CONFIG_GPU_SWITCHES_H_

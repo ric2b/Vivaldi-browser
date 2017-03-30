@@ -33,14 +33,15 @@ WebPresentationClient* presentationClient(ExecutionContext* executionContext)
 // static
 PresentationAvailability* PresentationAvailability::take(ScriptPromiseResolver* resolver, const KURL& url, bool value)
 {
-    PresentationAvailability* presentationAvailability = new PresentationAvailability(resolver->executionContext(), url, value);
+    PresentationAvailability* presentationAvailability = new PresentationAvailability(resolver->getExecutionContext(), url, value);
     presentationAvailability->suspendIfNeeded();
     presentationAvailability->updateListening();
     return presentationAvailability;
 }
 
 PresentationAvailability::PresentationAvailability(ExecutionContext* executionContext, const KURL& url, bool value)
-    : ActiveDOMObject(executionContext)
+    : ActiveScriptWrappable(this)
+    , ActiveDOMObject(executionContext)
     , PageLifecycleObserver(toDocument(executionContext)->page())
     , m_url(url)
     , m_value(value)
@@ -58,15 +59,15 @@ const AtomicString& PresentationAvailability::interfaceName() const
     return EventTargetNames::PresentationAvailability;
 }
 
-ExecutionContext* PresentationAvailability::executionContext() const
+ExecutionContext* PresentationAvailability::getExecutionContext() const
 {
-    return ActiveDOMObject::executionContext();
+    return ActiveDOMObject::getExecutionContext();
 }
 
-bool PresentationAvailability::addEventListenerInternal(const AtomicString& eventType, PassRefPtrWillBeRawPtr<EventListener> listener, const EventListenerOptions& options)
+bool PresentationAvailability::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const EventListenerOptions& options)
 {
     if (eventType == EventTypeNames::change)
-        UseCounter::count(executionContext(), UseCounter::PresentationAvailabilityChangeEventListener);
+        UseCounter::count(getExecutionContext(), UseCounter::PresentationAvailabilityChangeEventListener);
 
     return EventTarget::addEventListenerInternal(eventType, listener, options);
 }
@@ -115,11 +116,11 @@ void PresentationAvailability::setState(State state)
 
 void PresentationAvailability::updateListening()
 {
-    WebPresentationClient* client = presentationClient(executionContext());
+    WebPresentationClient* client = presentationClient(getExecutionContext());
     if (!client)
         return;
 
-    if (m_state == State::Active && (toDocument(executionContext())->pageVisibilityState() == PageVisibilityStateVisible))
+    if (m_state == State::Active && (toDocument(getExecutionContext())->pageVisibilityState() == PageVisibilityStateVisible))
         client->startListening(this);
     else
         client->stopListening(this);

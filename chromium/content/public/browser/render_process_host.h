@@ -22,6 +22,7 @@
 class GURL;
 
 namespace base {
+class SharedPersistentMemoryAllocator;
 class TimeDelta;
 }
 
@@ -111,10 +112,6 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual bool IsForGuestsOnly() const = 0;
 
   // Returns the storage partition associated with this process.
-  //
-  // TODO(nasko): Remove this function from the public API once
-  // URLRequestContextGetter's creation is moved into StoragePartition.
-  // http://crbug.com/158595
   virtual StoragePartition* GetStoragePartition() const = 0;
 
   // Try to shut down the associated renderer process without running unload
@@ -230,6 +227,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // process associated with this RenderProcessHost.
   virtual void SetWebRtcLogMessageCallback(
       base::Callback<void(const std::string&)> callback) = 0;
+  virtual void ClearWebRtcLogMessageCallback() = 0;
 
   typedef base::Callback<void(scoped_ptr<uint8_t[]> packet_header,
                               size_t header_length,
@@ -257,6 +255,14 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
 
   // Returns the ServiceRegistry for this process.
   virtual ServiceRegistry* GetServiceRegistry() = 0;
+
+  // Extracts any persistent-memory-allocator used for renderer metrics.
+  // Ownership is passed to the caller. To support sharing of histogram data
+  // between the Renderer and the Browser, the allocator is created when the
+  // process is created and later retrieved by the SubprocessMetricsProvider
+  // for management.
+  virtual scoped_ptr<base::SharedPersistentMemoryAllocator>
+  TakeMetricsAllocator() = 0;
 
   // PlzNavigate
   // Returns the time the first call to Init completed successfully (after a new

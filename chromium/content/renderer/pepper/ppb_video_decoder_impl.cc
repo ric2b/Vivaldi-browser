@@ -9,13 +9,14 @@
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
-#include "content/common/gpu/client/command_buffer_proxy_impl.h"
 #include "content/renderer/pepper/host_globals.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/pepper/plugin_module.h"
 #include "content/renderer/pepper/ppb_buffer_impl.h"
 #include "content/renderer/pepper/ppb_graphics_3d_impl.h"
 #include "content/renderer/render_thread_impl.h"
+#include "gpu/ipc/client/command_buffer_proxy_impl.h"
+#include "media/gpu/ipc/client/gpu_video_decode_accelerator_host.h"
 #include "media/video/picture.h"
 #include "media/video/video_decode_accelerator.h"
 #include "ppapi/c/dev/pp_video_dev.h"
@@ -118,7 +119,8 @@ bool PPB_VideoDecoder_Impl::Init(PP_Resource graphics_context,
   PPB_Graphics3D_Impl* graphics_3d =
       static_cast<PPB_Graphics3D_Impl*>(enter_context.object());
 
-  CommandBufferProxyImpl* command_buffer = graphics_3d->GetCommandBufferProxy();
+  gpu::CommandBufferProxyImpl* command_buffer =
+      graphics_3d->GetCommandBufferProxy();
   if (!command_buffer)
     return false;
 
@@ -127,8 +129,13 @@ bool PPB_VideoDecoder_Impl::Init(PP_Resource graphics_context,
 
   // This is not synchronous, but subsequent IPC messages will be buffered, so
   // it is okay to immediately send IPC messages.
-  decoder_ = command_buffer->CreateVideoDecoder();
-  return (decoder_ && decoder_->Initialize(PPToMediaProfile(profile), this));
+  gpu::GpuChannelHost* channel = command_buffer->channel();
+  if (channel) {
+    decoder_.reset(
+        new media::GpuVideoDecodeAcceleratorHost(channel, command_buffer));
+    return decoder_->Initialize(PPToMediaProfile(profile), this);
+  }
+  return false;
 }
 
 const PPP_VideoDecoder_Dev* PPB_VideoDecoder_Impl::GetPPP() {
@@ -178,10 +185,10 @@ void PPB_VideoDecoder_Impl::AssignPictureBuffers(
   for (uint32_t i = 0; i < no_of_buffers; i++) {
     PP_PictureBuffer_Dev in_buf = buffers[i];
     DCHECK_GE(in_buf.id, 0);
+    media::PictureBuffer::TextureIds ids;
+    ids.push_back(in_buf.texture_id);
     media::PictureBuffer buffer(
-        in_buf.id,
-        gfx::Size(in_buf.size.width, in_buf.size.height),
-        in_buf.texture_id);
+        in_buf.id, gfx::Size(in_buf.size.width, in_buf.size.height), ids);
     wrapped_buffers.push_back(buffer);
     UMA_HISTOGRAM_COUNTS_10000("Media.PepperVideoDecoderPictureHeight",
                                in_buf.size.height);
@@ -234,9 +241,11 @@ void PPB_VideoDecoder_Impl::Destroy() {
 
 void PPB_VideoDecoder_Impl::ProvidePictureBuffers(
     uint32_t requested_num_of_buffers,
+    uint32_t textures_per_buffer,
     const gfx::Size& dimensions,
     uint32_t texture_target) {
   DCHECK(RenderThreadImpl::current());
+  DCHECK_EQ(1u, textures_per_buffer);
   if (!GetPPP())
     return;
 
@@ -275,9 +284,8 @@ void PPB_VideoDecoder_Impl::NotifyError(
 
   PP_VideoDecodeError_Dev pp_error = MediaToPPError(error);
   GetPPP()->NotifyError(pp_instance(), pp_resource(), pp_error);
-  UMA_HISTOGRAM_ENUMERATION("Media.PepperVideoDecoderError",
-                            error,
-                            media::VideoDecodeAccelerator::LARGEST_ERROR_ENUM);
+  UMA_HISTOGRAM_ENUMERATION("Media.PepperVideoDecoderError", error,
+                            media::VideoDecodeAccelerator::ERROR_MAX + 1);
 }
 
 void PPB_VideoDecoder_Impl::NotifyResetDone() {

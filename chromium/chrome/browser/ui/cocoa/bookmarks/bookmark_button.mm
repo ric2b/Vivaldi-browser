@@ -9,12 +9,16 @@
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #import "base/mac/scoped_nsobject.h"
+#include "base/mac/sdk_forward_declarations.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_folder_window.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_button_cell.h"
+#import "chrome/browser/ui/cocoa/bookmarks/bookmark_folder_target.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/view_id_util.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "content/public/browser/user_metrics.h"
+#include "ui/base/clipboard/clipboard_util_mac.h"
+#include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/nsview_additions.h"
 #include "ui/gfx/scoped_ns_graphics_context_save_gstate_mac.h"
 
@@ -32,7 +36,14 @@ namespace {
 BookmarkButton* gDraggedButton = nil; // Weak
 };
 
-@interface BookmarkButton(Private)
+@interface BookmarkButton()
+
+// NSDraggingSource:
+- (void)draggingSession:(NSDraggingSession*)session
+           endedAtPoint:(NSPoint)aPoint
+              operation:(NSDragOperation)operation;
+- (NSDragOperation)draggingSession:(NSDraggingSession*)session
+    sourceOperationMaskForDraggingContext:(NSDraggingContext)context;
 
 // Make a drag image for the button.
 - (NSImage*)dragImage;
@@ -40,7 +51,6 @@ BookmarkButton* gDraggedButton = nil; // Weak
 - (void)installCustomTrackingArea;
 
 @end  // @interface BookmarkButton(Private)
-
 
 @implementation BookmarkButton
 
@@ -109,7 +119,7 @@ BookmarkButton* gDraggedButton = nil; // Weak
     NSRect bounds = [self bounds];
     point = NSMakePoint(NSMidX(bounds), NSMidY(bounds));
     point = [self convertPoint:point toView:nil];
-    point = [[self window] convertBaseToScreen:point];
+    point = ui::ConvertPointFromWindowToScreen([self window], point);
   }
 
   return point;
@@ -174,10 +184,6 @@ BookmarkButton* gDraggedButton = nil; // Weak
   // the stack.
   [self retain];
 
-  // Ask our delegate to fill the pasteboard for us.
-  NSPasteboard* pboard = [NSPasteboard pasteboardWithName:NSDragPboard];
-  [[self delegate] fillPasteboard:pboard forDragOfButton:self];
-
   // Lock bar visibility, forcing the overlay to stay visible if we are in
   // fullscreen mode.
   if ([[self delegate] dragShouldLockBarVisibility]) {
@@ -190,7 +196,7 @@ BookmarkButton* gDraggedButton = nil; // Weak
                                              delay:NO];
   }
   const BookmarkNode* node = [self bookmarkNode];
-  const BookmarkNode* parent = node ? node->parent() : NULL;
+  const BookmarkNode* parent = node->parent();
   if (parent && parent->type() == BookmarkNode::FOLDER) {
     content::RecordAction(UserMetricsAction("BookmarkBarFolder_DragStart"));
   } else {
@@ -201,12 +207,24 @@ BookmarkButton* gDraggedButton = nil; // Weak
   dragPending_ = YES;
   gDraggedButton = self;
 
-  CGFloat yAt = [self bounds].size.height;
-  NSSize dragOffset = NSMakeSize(0.0, 0.0);
   NSImage* image = [self dragImage];
   [self setHidden:YES];
-  [self dragImage:image at:NSMakePoint(0, yAt) offset:dragOffset
-            event:event pasteboard:pboard source:self slideBack:YES];
+
+  NSPasteboardItem* item = [[self delegate] pasteboardItemForDragOfButton:self];
+  if ([[self delegate] respondsToSelector:@selector(willBeginPasteboardDrag)])
+    [[self delegate] willBeginPasteboardDrag];
+
+  base::scoped_nsobject<NSDraggingItem> dragItem(
+      [[NSDraggingItem alloc] initWithPasteboardWriter:item]);
+  [dragItem setDraggingFrame:[self bounds] contents:image];
+
+  [self beginDraggingSessionWithItems:@[ dragItem.get() ]
+                                event:event
+                               source:self];
+  while (gDraggedButton != nil) {
+    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                             beforeDate:[NSDate distantFuture]];
+  }
   [self setHidden:NO];
 
   // And we're done.
@@ -214,6 +232,19 @@ BookmarkButton* gDraggedButton = nil; // Weak
   gDraggedButton = nil;
 
   [self autorelease];
+}
+
+- (NSDragOperation)draggingSession:(NSDraggingSession*)session
+    sourceOperationMaskForDraggingContext:(NSDraggingContext)context {
+  NSDragOperation operation = NSDragOperationCopy;
+
+  if (context == NSDraggingContextWithinApplication)
+    operation |= NSDragOperationMove;
+
+  if ([delegate_ canDragBookmarkButtonToTrash:self])
+    operation |= NSDragOperationDelete;
+
+  return operation;
 }
 
 // Overridden to release bar visibility.
@@ -229,20 +260,9 @@ BookmarkButton* gDraggedButton = nil; // Weak
   return kDraggableButtonImplUseBase;
 }
 
-- (NSDragOperation)draggingSourceOperationMaskForLocal:(BOOL)isLocal {
-  NSDragOperation operation = NSDragOperationCopy;
-  if (isLocal) {
-    operation |= NSDragOperationMove;
-  }
-  if ([delegate_ canDragBookmarkButtonToTrash:self]) {
-    operation |= NSDragOperationDelete;
-  }
-  return operation;
-}
-
-- (void)draggedImage:(NSImage *)anImage
-             endedAt:(NSPoint)aPoint
-           operation:(NSDragOperation)operation {
+- (void)draggingSession:(NSDraggingSession*)session
+           endedAtPoint:(NSPoint)aPoint
+              operation:(NSDragOperation)operation {
   gDraggedButton = nil;
   // Inform delegate of drag source that we're finished dragging,
   // so it can close auto-opened bookmark folders etc.
@@ -323,8 +343,6 @@ BookmarkButton* gDraggedButton = nil; // Weak
   }
   return kDraggableButtonMixinDidWork;
 }
-
-
 
 // mouseEntered: and mouseExited: are called from our
 // BookmarkButtonCell.  We redirect this information to our delegate.
@@ -427,11 +445,6 @@ BookmarkButton* gDraggedButton = nil; // Weak
   [self setNeedsDisplay:YES];
 }
 
-@end
-
-@implementation BookmarkButton(Private)
-
-
 - (void)installCustomTrackingArea {
   const NSTrackingAreaOptions options =
       NSTrackingActiveAlways |
@@ -449,7 +462,6 @@ BookmarkButton* gDraggedButton = nil; // Weak
                                       userInfo:nil];
   [self addTrackingArea:area_];
 }
-
 
 - (NSImage*)dragImage {
   NSRect bounds = [self bounds];
@@ -473,4 +485,4 @@ BookmarkButton* gDraggedButton = nil; // Weak
   return image.autorelease();
 }
 
-@end  // @implementation BookmarkButton(Private)
+@end

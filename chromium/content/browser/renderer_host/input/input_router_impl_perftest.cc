@@ -87,6 +87,9 @@ class NullInputRouterClient : public InputRouterClient {
   void DidFlush() override {}
   void DidOverscroll(const DidOverscrollParams& params) override {}
   void DidStopFlinging() override {}
+  void ForwardGestureEventWithLatencyInfo(
+      const blink::WebGestureEvent& event,
+      const ui::LatencyInfo& latency_info) override {}
 };
 
 class NullIPCSender : public IPC::Sender {
@@ -239,7 +242,7 @@ class InputRouterImplPerfTest : public testing::Test {
 
   void SendEventAckIfNecessary(const blink::WebInputEvent& event,
                                InputEventAckState ack_result) {
-    if (!WebInputEventTraits::WillReceiveAckFromRenderer(event))
+    if (!WebInputEventTraits::ShouldBlockEventStream(event))
       return;
     InputEventAck ack(event.type, ack_result);
     InputHostMsg_HandleInputEvent_ACK response(0, ack);

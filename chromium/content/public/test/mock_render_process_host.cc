@@ -172,7 +172,7 @@ bool MockRenderProcessHost::FastShutdownStarted() const {
 }
 
 base::ProcessHandle MockRenderProcessHost::GetHandle() const {
-  // Return the current-process handle for the IPC::GetFileHandleForProcess
+  // Return the current-process handle for the IPC::GetPlatformFileForTransit
   // function.
   if (process_handle)
     return *process_handle;
@@ -263,6 +263,11 @@ ServiceRegistry* MockRenderProcessHost::GetServiceRegistry() {
   return service_registry_.get();
 }
 
+scoped_ptr<base::SharedPersistentMemoryAllocator>
+MockRenderProcessHost::TakeMetricsAllocator() {
+  return nullptr;
+}
+
 const base::TimeTicks& MockRenderProcessHost::GetInitTimeForNavigationMetrics()
     const {
   static base::TimeTicks dummy_time = base::TimeTicks::Now();
@@ -312,8 +317,7 @@ void MockRenderProcessHost::EnableAudioDebugRecordings(
     const base::FilePath& file) {
 }
 
-void MockRenderProcessHost::DisableAudioDebugRecordings() {
-}
+void MockRenderProcessHost::DisableAudioDebugRecordings() {}
 
 void MockRenderProcessHost::EnableEventLogRecordings(
     const base::FilePath& file) {}
@@ -323,6 +327,8 @@ void MockRenderProcessHost::DisableEventLogRecordings() {}
 void MockRenderProcessHost::SetWebRtcLogMessageCallback(
     base::Callback<void(const std::string&)> callback) {
 }
+
+void MockRenderProcessHost::ClearWebRtcLogMessageCallback() {}
 
 RenderProcessHost::WebRtcStopRtpDumpCallback
 MockRenderProcessHost::StartRtpDump(

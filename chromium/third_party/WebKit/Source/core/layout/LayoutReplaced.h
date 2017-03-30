@@ -66,11 +66,23 @@ public:
     static const int defaultHeight;
     bool canHaveChildren() const override { return false; }
     virtual void paintReplaced(const PaintInfo&, const LayoutPoint&) const { }
-    LayoutRect localSelectionRect() const; // This is in local coordinates, but it's a physical rect (so the top left corner is physical top left).
+    LayoutRect localSelectionRect() const final;
 
-    bool hasObjectFit() const { return style()->objectFit() != ComputedStyle::initialObjectFit(); }
+    bool hasObjectFit() const { return style()->getObjectFit() != ComputedStyle::initialObjectFit(); }
 
     void paint(const PaintInfo&, const LayoutPoint&) const override;
+
+    struct IntrinsicSizingInfo {
+        STACK_ALLOCATED();
+        IntrinsicSizingInfo() : hasWidth(true), hasHeight(true) {}
+
+        FloatSize size;
+        FloatSize aspectRatio;
+        bool hasWidth;
+        bool hasHeight;
+
+        void transpose();
+    };
 
 protected:
     void willBeDestroyed() override;
@@ -78,7 +90,7 @@ protected:
     void layout() override;
 
     LayoutSize intrinsicSize() const final { return m_intrinsicSize; }
-    void computeIntrinsicSizingInfo(IntrinsicSizingInfo&) const override;
+    virtual void computeIntrinsicSizingInfo(IntrinsicSizingInfo&) const;
 
     void computePositionedLogicalWidth(LogicalExtentComputedValues&) const override;
     void computePositionedLogicalHeight(LogicalExtentComputedValues&) const override;
@@ -102,7 +114,7 @@ protected:
     // CSS properties like 'zoom' or 'image-orientation'.
     virtual void intrinsicSizeChanged();
 
-    virtual LayoutBox* embeddedContentBox() const { return nullptr; }
+    virtual LayoutReplaced* embeddedReplacedContent() const { return nullptr; }
 
     PositionWithAffinity positionForPoint(const LayoutPoint&) override;
 
@@ -111,8 +123,7 @@ private:
 
     bool canBeSelectionLeaf() const override { return true; }
 
-    LayoutRect selectionRectForPaintInvalidation(const LayoutBoxModelObject* paintInvalidationContainer) const final;
-    void computeIntrinsicSizingInfoForLayoutBox(LayoutBox*, IntrinsicSizingInfo&) const;
+    void computeIntrinsicSizingInfoForReplacedContent(LayoutReplaced*, IntrinsicSizingInfo&) const;
     FloatSize constrainIntrinsicSizeToMinMax(const IntrinsicSizingInfo&) const;
 
     mutable LayoutSize m_intrinsicSize;

@@ -64,7 +64,7 @@ AppListFolderView::AppListFolderView(AppsContainerView* container_view,
   view_model_->Add(items_grid_view_, kIndexChildItems);
 
   SetPaintToLayer(true);
-  SetFillsBoundsOpaquely(false);
+  layer()->SetFillsBoundsOpaquely(false);
 
   model_->AddObserver(this);
 }
@@ -294,7 +294,7 @@ void AppListFolderView::DispatchDragEventForReparent(
   AppsGridView* root_grid = container_view_->apps_grid_view();
   gfx::Point drag_point_in_root_grid = drag_point_in_folder_grid;
   ConvertPointToTarget(items_grid_view_, root_grid, &drag_point_in_root_grid);
-  root_grid->UpdateDragFromReparentItem(pointer, drag_point_in_folder_grid);
+  root_grid->UpdateDragFromReparentItem(pointer, drag_point_in_root_grid);
 }
 
 void AppListFolderView::DispatchEndDragEventForReparent(

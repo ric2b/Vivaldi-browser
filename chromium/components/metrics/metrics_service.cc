@@ -133,8 +133,8 @@
 #include "base/location.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/histogram_persistence.h"
 #include "base/metrics/histogram_samples.h"
+#include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/rand_util.h"
@@ -149,6 +149,7 @@
 #include "base/tracked_objects.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "components/metrics/data_use_tracker.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_log_manager.h"
 #include "components/metrics/metrics_log_uploader.h"
@@ -258,6 +259,7 @@ void MetricsService::RegisterPrefs(PrefRegistrySimple* registry) {
   DCHECK(IsSingleThreaded());
   MetricsStateManager::RegisterPrefs(registry);
   MetricsLog::RegisterPrefs(registry);
+  DataUseTracker::RegisterPrefs(registry);
 
   registry->RegisterInt64Pref(prefs::kInstallDate, 0);
 
@@ -294,6 +296,7 @@ MetricsService::MetricsService(MetricsStateManager* state_manager,
       log_upload_in_progress_(false),
       idle_since_last_transmission_(false),
       session_id_(-1),
+      data_use_tracker_(DataUseTracker::Create(local_state_)),
       self_ptr_factory_(this),
       state_saver_factory_(this) {
   DCHECK(IsSingleThreaded());
@@ -545,6 +548,16 @@ void MetricsService::PushExternalLog(const std::string& log) {
   log_manager_.StoreLog(log, MetricsLog::ONGOING_LOG);
 }
 
+UpdateUsagePrefCallbackType MetricsService::GetDataUseForwardingCallback() {
+  DCHECK(IsSingleThreaded());
+
+  if (data_use_tracker_) {
+    return data_use_tracker_->GetDataUseForwardingCallback(
+        base::ThreadTaskRunnerHandle::Get());
+  }
+  return UpdateUsagePrefCallbackType();
+}
+
 //------------------------------------------------------------------------------
 // private methods
 //------------------------------------------------------------------------------
@@ -746,8 +759,8 @@ void MetricsService::CloseCurrentLog() {
 
   // If a persistent allocator is in use, update its internal histograms (such
   // as how much memory is being used) before reporting.
-  base::PersistentMemoryAllocator* allocator =
-      base::GetPersistentHistogramMemoryAllocator();
+  base::PersistentHistogramAllocator* allocator =
+      base::GlobalHistogramAllocator::Get();
   if (allocator)
     allocator->UpdateTrackingHistograms();
 
@@ -866,7 +879,17 @@ void MetricsService::SendNextLog() {
   }
   if (!log_manager_.has_staged_log())
     log_manager_.StageNextLogForUpload();
-  SendStagedLog();
+
+  // Proceed to stage the log for upload if log size satisfies cellular log
+  // upload constrains.
+  bool is_cellular_logic = client_->IsUMACellularUploadLogicEnabled();
+  if (is_cellular_logic && data_use_tracker_ &&
+      !data_use_tracker_->ShouldUploadLogOnCellular(
+          log_manager_.staged_log_hash().size())) {
+    scheduler_->UploadCancelled();
+  } else {
+    SendStagedLog();
+  }
 }
 
 bool MetricsService::ProvidersHaveInitialStabilityMetrics() {

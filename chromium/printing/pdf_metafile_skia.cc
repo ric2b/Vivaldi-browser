@@ -51,14 +51,14 @@ struct Page {
   SkSize page_size_;
   SkRect content_area_;
   float scale_factor_;
-  skia::RefPtr<SkPicture> content_;
+  sk_sp<SkPicture> content_;
 };
 
 bool WriteAssetToBuffer(const SkStreamAsset* asset,
                         void* buffer,
                         size_t size) {
   // Calling duplicate() keeps original asset state unchanged.
-  scoped_ptr<SkStreamAsset> assetCopy(asset->duplicate());
+  std::unique_ptr<SkStreamAsset> assetCopy(asset->duplicate());
   size_t length = assetCopy->getLength();
   if (length > size)
     return false;
@@ -88,7 +88,7 @@ struct PdfMetafileSkiaData {
   SkPictureRecorder recorder_;  // Current recording
 
   std::vector<Page> pages_;
-  scoped_ptr<SkStreamAsset> pdf_data_;
+  std::unique_ptr<SkStreamAsset> pdf_data_;
 
 #if defined(OS_MACOSX)
   PdfMetafileCg pdf_cg_;
@@ -144,7 +144,7 @@ bool PdfMetafileSkia::FinishPage() {
     return false;
   DCHECK(!(data_->pages_.back().content_));
   data_->pages_.back().content_ =
-      skia::AdoptRef(data_->recorder_.endRecordingAsPicture());
+      data_->recorder_.finishRecordingAsPicture();
   return true;
 }
 
@@ -159,14 +159,6 @@ bool PdfMetafileSkia::FinishDocument() {
   SkDynamicMemoryWStream pdf_stream;
   skia::RefPtr<SkDocument> pdf_doc =
       skia::AdoptRef(SkDocument::CreatePDF(&pdf_stream));
-  for (const auto& page : data_->pages_) {
-    SkCanvas* canvas = pdf_doc->beginPage(
-        page.page_size_.width(), page.page_size_.height(), &page.content_area_);
-    // No need to save/restore, since this canvas is not reused after endPage()
-    canvas->scale(page.scale_factor_, page.scale_factor_);
-    canvas->drawPicture(page.content_.get());
-    pdf_doc->endPage();
-  }
   const std::string& user_agent = GetAgent();
   SkDocument::Attribute info[] = {
       SkDocument::Attribute(SkString("Creator"),
@@ -176,6 +168,14 @@ bool PdfMetafileSkia::FinishDocument() {
   };
   SkTime::DateTime now = TimeToSkTime(base::Time::Now());
   pdf_doc->setMetadata(info, SK_ARRAY_COUNT(info), &now, &now);
+  for (const auto& page : data_->pages_) {
+    SkCanvas* canvas = pdf_doc->beginPage(
+        page.page_size_.width(), page.page_size_.height(), &page.content_area_);
+    // No need to save/restore, since this canvas is not reused after endPage()
+    canvas->scale(page.scale_factor_, page.scale_factor_);
+    canvas->drawPicture(page.content_);
+    pdf_doc->endPage();
+  }
   if (!pdf_doc->close())
     return false;
 
@@ -257,7 +257,7 @@ bool PdfMetafileSkia::SaveTo(base::File* file) const {
     return false;
 
   // Calling duplicate() keeps original asset state unchanged.
-  scoped_ptr<SkStreamAsset> asset(data_->pdf_data_->duplicate());
+  std::unique_ptr<SkStreamAsset> asset(data_->pdf_data_->duplicate());
 
   const size_t maximum_buffer_size = 1024 * 1024;
   std::vector<char> buffer(std::min(maximum_buffer_size, asset->getLength()));
@@ -296,10 +296,10 @@ bool PdfMetafileSkia::SaveToFD(const base::FileDescriptor& fd) const {
 PdfMetafileSkia::PdfMetafileSkia() : data_(new PdfMetafileSkiaData) {
 }
 
-scoped_ptr<PdfMetafileSkia> PdfMetafileSkia::GetMetafileForCurrentPage() {
+std::unique_ptr<PdfMetafileSkia> PdfMetafileSkia::GetMetafileForCurrentPage() {
   // If we only ever need the metafile for the last page, should we
   // only keep a handle on one SkPicture?
-  scoped_ptr<PdfMetafileSkia> metafile(new PdfMetafileSkia);
+  std::unique_ptr<PdfMetafileSkia> metafile(new PdfMetafileSkia);
 
   if (data_->pages_.size() == 0)
     return metafile;

@@ -45,7 +45,6 @@ class HttpProxyClientSocketPool;
 class HttpResponseBodyDrainer;
 class HttpServerProperties;
 class NetLog;
-class NetworkDelegate;
 class ProxyDelegate;
 class ProxyService;
 class QuicClock;
@@ -77,7 +76,6 @@ class NET_EXPORT HttpNetworkSession
     ProxyService* proxy_service;
     SSLConfigService* ssl_config_service;
     HttpAuthHandlerFactory* http_auth_handler_factory;
-    NetworkDelegate* network_delegate;
     base::WeakPtr<HttpServerProperties> http_server_properties;
     NetLog* net_log;
     HostMappingRules* host_mapping_rules;
@@ -101,15 +99,15 @@ class NET_EXPORT HttpNetworkSession
     // Whether to enable Alt-Svc entries with hostname different than that of
     // the origin.
     bool enable_alternative_service_with_different_host;
-    // Only honor alternative service entries which have a higher probability
-    // than this value.
-    double alternative_service_probability_threshold;
 
     // Enables NPN support.  Note that ALPN is always enabled.
     bool enable_npn;
 
     // Enables Brotli Content-Encoding support.
     bool enable_brotli;
+
+    // Enable setting of HTTP/2 dependencies based on priority.
+    bool enable_priority_dependencies;
 
     // Enables QUIC support.
     bool enable_quic;
@@ -151,8 +149,9 @@ class NET_EXPORT HttpNetworkSession
     // Maximum number of server configs that are to be stored in
     // HttpServerProperties, instead of the disk cache.
     size_t quic_max_server_configs_stored_in_properties;
-    // If not empty, QUIC will be used for all connections to this origin.
-    HostPortPair origin_to_force_quic_on;
+    // If not empty, QUIC will be used for all connections to the set of
+    // origins in |origins_to_force_quic_on|.
+    std::set<HostPortPair> origins_to_force_quic_on;
     // Source of time for QUIC connections. Will be owned by QuicStreamFactory.
     QuicClock* quic_clock;
     // Source of entropy for QUIC connections.
@@ -185,6 +184,9 @@ class NET_EXPORT HttpNetworkSession
     // If true, active QUIC sessions experiencing poor connectivity may be
     // migrated onto a new network.
     bool quic_migrate_sessions_early;
+    // If true, bidirectional streams over QUIC will be disabled.
+    bool quic_disable_bidirectional_streams;
+
     ProxyDelegate* proxy_delegate;
     // Enable support for Token Binding.
     bool enable_token_binding;
@@ -227,9 +229,6 @@ class NET_EXPORT HttpNetworkSession
   QuicStreamFactory* quic_stream_factory() { return &quic_stream_factory_; }
   HttpAuthHandlerFactory* http_auth_handler_factory() {
     return http_auth_handler_factory_;
-  }
-  NetworkDelegate* network_delegate() {
-    return network_delegate_;
   }
   base::WeakPtr<HttpServerProperties> http_server_properties() {
     return http_server_properties_;
@@ -274,7 +273,6 @@ class NET_EXPORT HttpNetworkSession
   ClientSocketPoolManager* GetSocketPoolManager(SocketPoolType pool_type);
 
   NetLog* const net_log_;
-  NetworkDelegate* const network_delegate_;
   const base::WeakPtr<HttpServerProperties> http_server_properties_;
   CertVerifier* const cert_verifier_;
   HttpAuthHandlerFactory* const http_auth_handler_factory_;

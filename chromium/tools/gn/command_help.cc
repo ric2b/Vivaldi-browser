@@ -66,6 +66,7 @@ void PrintToplevelHelp() {
   PrintShortHelp(
       "input_conversion: Processing input from exec_script and read_file.");
   PrintShortHelp("label_pattern: Matching more than one label.");
+  PrintShortHelp("nogncheck: Annotating includes for checking.");
   PrintShortHelp("runtime_deps: How runtime dependency computation works.");
   PrintShortHelp("source_expansion: Map sources to outputs for scripts.");
   PrintShortHelp("switches: Show available command-line switches.");
@@ -126,6 +127,7 @@ void PrintAllHelp() {
   PrintLongHelp(kGrammar_Help);
   PrintLongHelp(kInputConversion_Help);
   PrintLongHelp(kLabelPattern_Help);
+  PrintLongHelp(kNoGnCheck_Help);
   PrintLongHelp(kRuntimeDeps_Help);
   PrintLongHelp(kSourceExpansion_Help);
   PrintSwitchHelp();
@@ -151,8 +153,21 @@ const char kHelp_HelpShort[] =
     "help: Does what you think.";
 const char kHelp_Help[] =
     "gn help <anything>\n"
+    "\n"
     "  Yo dawg, I heard you like help on your help so I put help on the help\n"
-    "  in the help.\n";
+    "  in the help.\n"
+    "\n"
+    "  You can also use \"all\" as the parameter to get all help at once.\n"
+    "\n"
+    "Switches\n"
+    "\n"
+    "  --markdown\n"
+    "      Format output in markdown syntax.\n"
+    "\n"
+    "Example\n"
+    "\n"
+    "  gn help --markdown all\n"
+    "      Dump all help to stdout in markdown format.\n";
 
 int RunHelp(const std::vector<std::string>& args) {
   std::string what;
@@ -231,6 +246,7 @@ int RunHelp(const std::vector<std::string>& args) {
     PrintLongHelp(kInputConversion_Help);
   };
   random_topics["label_pattern"] = []() { PrintLongHelp(kLabelPattern_Help); };
+  random_topics["nogncheck"] = []() { PrintLongHelp(kNoGnCheck_Help); };
   random_topics["runtime_deps"] = []() { PrintLongHelp(kRuntimeDeps_Help); };
   random_topics["source_expansion"] = []() {
     PrintLongHelp(kSourceExpansion_Help);

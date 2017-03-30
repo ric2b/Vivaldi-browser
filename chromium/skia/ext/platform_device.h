@@ -23,6 +23,7 @@ class SkRegion;
 namespace skia {
 
 class PlatformDevice;
+class ScopedPlatformPaint;
 
 // The following routines provide accessor points for the functionality
 // exported by the various PlatformDevice ports.  
@@ -61,23 +62,7 @@ class SK_API PlatformDevice {
   virtual CGContextRef GetBitmapContext() = 0;
 #endif
 
-  // The DC that corresponds to the bitmap, used for GDI operations drawing
-  // into the bitmap. This is possibly heavyweight, so it should be existant
-  // only during one pass of rendering.
-  virtual PlatformSurface BeginPlatformPaint();
-
-  // Finish a previous call to beginPlatformPaint.
-  virtual void EndPlatformPaint();
-
 #if defined(OS_WIN)
-  // Loads a SkPath into the GDI context. The path can there after be used for
-  // clipping or as a stroke. Returns false if the path failed to be loaded.
-  static bool LoadPathToDC(HDC context, const SkPath& path);
-
-  // Loads a SkRegion into the GDI context.
-  static void LoadClippingRegionToDC(HDC context, const SkRegion& region,
-                                     const SkMatrix& transformation);
-
   // Draws to the given screen DC, if the bitmap DC doesn't exist, this will
   // temporarily create it. However, if you have created the bitmap DC, it will
   // be more efficient if you don't free it until after this call so it doesn't
@@ -86,22 +71,13 @@ class SK_API PlatformDevice {
   virtual void DrawToHDC(HDC, int x, int y, const RECT* src_rect);
 #endif
 
- protected:
-#if defined(OS_WIN)
-  // Arrays must be inside structures.
-  struct CubicPoints {
-    SkPoint p[4];
-  };
-  typedef std::vector<CubicPoints> CubicPath;
-  typedef std::vector<CubicPath> CubicPaths;
+ private:
+  // The DC that corresponds to the bitmap, used for GDI operations drawing
+  // into the bitmap. This is possibly heavyweight, so it should be existant
+  // only during one pass of rendering.
+  virtual PlatformSurface BeginPlatformPaint();
 
-  // Loads the specified Skia transform into the device context, excluding
-  // perspective (which GDI doesn't support).
-  static void LoadTransformToDC(HDC dc, const SkMatrix& matrix);
-
-  // Transforms SkPath's paths into a series of cubic path.
-  static bool SkPathToCubicPaths(CubicPaths* paths, const SkPath& skpath);
-#endif
+  friend class ScopedPlatformPaint;
 };
 
 }  // namespace skia

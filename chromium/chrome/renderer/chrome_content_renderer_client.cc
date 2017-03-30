@@ -31,6 +31,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
 #include "chrome/grit/renderer_resources.h"
+#include "chrome/renderer/app_categorizer.h"
 #include "chrome/renderer/banners/app_banner_client.h"
 #include "chrome/renderer/benchmarking_extension.h"
 #include "chrome/renderer/chrome_render_frame_observer.h"
@@ -91,6 +92,7 @@
 #include "ppapi/c/private/ppb_pdf.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
+#include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
@@ -159,9 +161,11 @@ using autofill::PasswordGenerationAgent;
 using base::ASCIIToUTF16;
 using base::UserMetricsAction;
 using blink::WebCache;
+using blink::WebCachePolicy;
 using blink::WebConsoleMessage;
 using blink::WebDataSource;
 using blink::WebDocument;
+using blink::WebFrame;
 using blink::WebLocalFrame;
 using blink::WebPlugin;
 using blink::WebPluginParams;
@@ -355,7 +359,6 @@ void ChromeContentRendererClient::RenderThreadStarted() {
 #endif
 
   thread->AddObserver(chrome_observer_.get());
-  thread->AddObserver(web_cache_observer_.get());
 #if defined(FULL_SAFE_BROWSING)
   thread->AddObserver(phishing_classifier_.get());
 #endif
@@ -552,7 +555,7 @@ SkBitmap* ChromeContentRendererClient::GetSadWebViewBitmap() {
 
 bool ChromeContentRendererClient::OverrideCreatePlugin(
     content::RenderFrame* render_frame,
-    blink::WebLocalFrame* frame,
+    WebLocalFrame* frame,
     const WebPluginParams& params,
     WebPlugin** plugin) {
   std::string orig_mime_type = params.mimeType.utf8();
@@ -566,7 +569,7 @@ bool ChromeContentRendererClient::OverrideCreatePlugin(
   GURL url(params.url);
 #if defined(ENABLE_PLUGINS)
   ChromeViewHostMsg_GetPluginInfo_Output output;
-  WebString top_origin = frame->top()->securityOrigin().toString();
+  WebString top_origin = frame->top()->getSecurityOrigin().toString();
   render_frame->Send(new ChromeViewHostMsg_GetPluginInfo(
       render_frame->GetRoutingID(), url, blink::WebStringToGURL(top_origin),
       orig_mime_type, &output));
@@ -625,7 +628,7 @@ void ChromeContentRendererClient::DeferMediaLoad(
 #if defined(ENABLE_PLUGINS)
 WebPlugin* ChromeContentRendererClient::CreatePlugin(
     content::RenderFrame* render_frame,
-    blink::WebLocalFrame* frame,
+    WebLocalFrame* frame,
     const WebPluginParams& original_params,
     const ChromeViewHostMsg_GetPluginInfo_Output& output) {
   const WebPluginInfo& info = output.plugin;
@@ -677,19 +680,6 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         observer->IsPluginTemporarilyAllowed(identifier)) {
       status = ChromeViewHostMsg_GetPluginInfo_Status::kAllowed;
     }
-
-#if defined(OS_WIN)
-    // In Windows we need to check if we can load NPAPI plugins.
-    // For example, if the render view is in the Ash desktop, we should not.
-    // If user is on ALLOW or DETECT setting, loading needs to be blocked here.
-    if ((status == ChromeViewHostMsg_GetPluginInfo_Status::kAllowed ||
-         status ==
-             ChromeViewHostMsg_GetPluginInfo_Status::kPlayImportantContent) &&
-        info.type == content::WebPluginInfo::PLUGIN_TYPE_NPAPI) {
-        if (observer->AreNPAPIPluginsBlocked())
-          status = ChromeViewHostMsg_GetPluginInfo_Status::kNPAPINotSupported;
-    }
-#endif
 
     auto create_blocked_plugin = [&render_frame, &frame, &params, &info,
                                   &identifier, &group_name](
@@ -806,14 +796,6 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         return render_frame->CreatePlugin(frame, info, params,
                                           std::move(throttler));
       }
-      case ChromeViewHostMsg_GetPluginInfo_Status::kNPAPINotSupported: {
-        RenderThread::Get()->RecordAction(
-            UserMetricsAction("Plugin_NPAPINotSupported"));
-        placeholder = create_blocked_plugin(
-            IDR_BLOCKED_PLUGIN_HTML,
-            l10n_util::GetStringUTF16(IDS_PLUGIN_NOT_SUPPORTED_METRO));
-        break;
-      }
       case ChromeViewHostMsg_GetPluginInfo_Status::kDisabled: {
         PluginUMAReporter::GetInstance()->ReportPluginDisabled(orig_mime_type,
                                                                url);
@@ -847,12 +829,8 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
             IDR_BLOCKED_PLUGIN_HTML,
             l10n_util::GetStringFUTF16(IDS_PLUGIN_NOT_AUTHORIZED, group_name));
         placeholder->AllowLoading();
-        if (info.type != content::WebPluginInfo::PLUGIN_TYPE_NPAPI) {
-          render_frame->Send(new ChromeViewHostMsg_BlockedUnauthorizedPlugin(
-              render_frame->GetRoutingID(),
-              group_name,
-              identifier));
-        }
+        render_frame->Send(new ChromeViewHostMsg_BlockedUnauthorizedPlugin(
+            render_frame->GetRoutingID(), group_name, identifier));
         observer->DidBlockContentType(content_type, group_name);
         break;
       }
@@ -913,43 +891,8 @@ bool ChromeContentRendererClient::IsNaClAllowed(
     const Extension* extension,
     WebPluginParams* params) {
   // Temporarily allow these whitelisted apps and WebUIs to use NaCl.
-  std::string app_url_host = app_url.host();
-  std::string manifest_url_path = manifest_url.path();
-
   bool is_whitelisted_web_ui =
       app_url.spec() == chrome::kChromeUIAppListStartPageURL;
-
-  bool is_photo_app =
-      // Whitelisted apps must be served over https.
-      app_url.SchemeIsCryptographic() && manifest_url.SchemeIsCryptographic() &&
-      (base::EndsWith(app_url_host, "plus.google.com",
-                      base::CompareCase::INSENSITIVE_ASCII) ||
-       base::EndsWith(app_url_host, "plus.sandbox.google.com",
-                      base::CompareCase::INSENSITIVE_ASCII)) &&
-      manifest_url.DomainIs("ssl.gstatic.com") &&
-      (manifest_url_path.find("s2/oz/nacl/") == 1 ||
-       manifest_url_path.find("photos/nacl/") == 1);
-
-  std::string manifest_fs_host;
-  if (manifest_url.SchemeIsFileSystem() && manifest_url.inner_url()) {
-    manifest_fs_host = manifest_url.inner_url()->host();
-  }
-  bool is_hangouts_app =
-      // Whitelisted apps must be served over secure scheme.
-      app_url.SchemeIsCryptographic() && manifest_url.SchemeIsFileSystem() &&
-      manifest_url.inner_url()->SchemeIsCryptographic() &&
-      (base::EndsWith(app_url_host, "talkgadget.google.com",
-                      base::CompareCase::INSENSITIVE_ASCII) ||
-       base::EndsWith(app_url_host, "plus.google.com",
-                      base::CompareCase::INSENSITIVE_ASCII) ||
-       base::EndsWith(app_url_host, "plus.sandbox.google.com",
-                      base::CompareCase::INSENSITIVE_ASCII) ||
-       base::EndsWith(app_url_host, "hangouts.google.com",
-                      base::CompareCase::INSENSITIVE_ASCII)) &&
-      // The manifest must be loaded from the host's FileSystem.
-      (manifest_fs_host == app_url_host);
-
-  bool is_whitelisted_app = is_photo_app || is_hangouts_app;
 
   bool is_invoked_by_webstore_installed_extension = false;
   bool is_extension_unrestricted = false;
@@ -983,7 +926,7 @@ bool ChromeContentRendererClient::IsNaClAllowed(
   //  5) --enable-nacl is set.
   bool is_nacl_allowed_by_location =
       is_whitelisted_web_ui ||
-      is_whitelisted_app ||
+      AppCategorizer::IsWhitelistedApp(manifest_url, app_url) ||
       is_extension_unrestricted ||
       is_extension_force_installed ||
       is_invoked_by_webstore_installed_extension;
@@ -1047,16 +990,16 @@ bool ChromeContentRendererClient::ShouldSuppressErrorPage(
 
 void ChromeContentRendererClient::GetNavigationErrorStrings(
     content::RenderFrame* render_frame,
-    const blink::WebURLRequest& failed_request,
-    const blink::WebURLError& error,
+    const WebURLRequest& failed_request,
+    const WebURLError& error,
     std::string* error_html,
     base::string16* error_description) {
   const GURL failed_url = error.unreachableURL;
 
   bool is_post = base::EqualsASCII(
       base::StringPiece16(failed_request.httpMethod()), "POST");
-  bool is_ignoring_cache = failed_request.getCachePolicy() ==
-                           blink::WebURLRequest::ReloadBypassingCache;
+  bool is_ignoring_cache =
+      failed_request.getCachePolicy() == WebCachePolicy::BypassingCache;
   if (error_html) {
     NetErrorHelper::Get(render_frame)
         ->GetErrorHTML(error, is_post, is_ignoring_cache, error_html);
@@ -1093,7 +1036,7 @@ bool ChromeContentRendererClient::AllowPopup() {
 #endif
 }
 
-bool ChromeContentRendererClient::ShouldFork(blink::WebLocalFrame* frame,
+bool ChromeContentRendererClient::ShouldFork(WebLocalFrame* frame,
                                              const GURL& url,
                                              const std::string& http_method,
                                              bool is_initial_navigation,
@@ -1141,7 +1084,7 @@ bool ChromeContentRendererClient::ShouldFork(blink::WebLocalFrame* frame,
 }
 
 bool ChromeContentRendererClient::WillSendRequest(
-    blink::WebFrame* frame,
+    WebFrame* frame,
     ui::PageTransition transition_type,
     const GURL& url,
     const GURL& first_party_for_cookies,
@@ -1239,29 +1182,20 @@ ChromeContentRendererClient::OverrideSpeechSynthesizer(
 
 bool ChromeContentRendererClient::AllowPepperMediaStreamAPI(
     const GURL& url) {
-#if !defined(OS_ANDROID)
-  // Allow only the Hangouts app to use the MediaStream APIs. It's OK to check
-  // the whitelist in the renderer, since we're only preventing access until
-  // these APIs are public and stable.
-  std::string url_host = url.host();
-  if (url.SchemeIs("https") &&
-      (base::EndsWith(url_host, "talkgadget.google.com",
-                      base::CompareCase::INSENSITIVE_ASCII) ||
-       base::EndsWith(url_host, "plus.google.com",
-                      base::CompareCase::INSENSITIVE_ASCII) ||
-       base::EndsWith(url_host, "plus.sandbox.google.com",
-                      base::CompareCase::INSENSITIVE_ASCII)) &&
-      base::StartsWith(url.path(), "/hangouts/",
-                       base::CompareCase::INSENSITIVE_ASCII)) {
-    return true;
-  }
+#if defined(OS_ANDROID)
+  return false;
+#else
   // Allow access for tests.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnablePepperTesting)) {
     return true;
   }
+
+  // Allow only the Hangouts app to use the MediaStream APIs. It's OK to check
+  // the whitelist in the renderer, since we're only preventing access until
+  // these APIs are public and stable.
+  return (AppCategorizer::IsHangoutsUrl(url));
 #endif  // !defined(OS_ANDROID)
-  return false;
 }
 
 void ChromeContentRendererClient::AddKeySystems(
@@ -1295,7 +1229,7 @@ bool ChromeContentRendererClient::ShouldGatherSiteIsolationStats() const {
 blink::WebWorkerContentSettingsClientProxy*
 ChromeContentRendererClient::CreateWorkerContentSettingsClientProxy(
     content::RenderFrame* render_frame,
-    blink::WebFrame* frame) {
+    WebFrame* frame) {
   return new WorkerContentSettingsClientProxy(render_frame, frame);
 }
 
@@ -1378,7 +1312,7 @@ ChromeContentRendererClient::CreateAppBannerClient(
 }
 
 void ChromeContentRendererClient::AddImageContextMenuProperties(
-    const blink::WebURLResponse& response,
+    const WebURLResponse& response,
     std::map<std::string, std::string>* properties) {
   DCHECK(properties);
   WebString header_key(ASCIIToUTF16(
@@ -1439,8 +1373,4 @@ bool ChromeContentRendererClient::ShouldEnforceWebRTCRoutingPreferences() {
 #else
   return true;
 #endif
-}
-
-base::StringPiece ChromeContentRendererClient::GetOriginTrialPublicKey() {
-  return origin_trial_key_manager_.GetPublicKey();
 }

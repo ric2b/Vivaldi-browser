@@ -4,10 +4,12 @@
 
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 
+#include "core/inspector/InspectorInstrumentation.h"
+
 namespace blink {
 
 ScriptPromiseResolver::ScriptPromiseResolver(ScriptState* scriptState)
-    : ActiveDOMObject(scriptState->executionContext())
+    : ActiveDOMObject(scriptState->getExecutionContext())
     , m_state(Pending)
     , m_scriptState(scriptState)
     , m_timer(this, &ScriptPromiseResolver::onTimerFired)
@@ -16,10 +18,11 @@ ScriptPromiseResolver::ScriptPromiseResolver(ScriptState* scriptState)
     , m_isPromiseCalled(false)
 #endif
 {
-    if (executionContext()->activeDOMObjectsAreStopped()) {
+    if (getExecutionContext()->activeDOMObjectsAreStopped()) {
         m_state = Detached;
         m_resolver.clear();
     }
+    InspectorInstrumentation::asyncTaskScheduled(getExecutionContext(), "Promise", this);
 }
 
 void ScriptPromiseResolver::suspend()
@@ -42,6 +45,7 @@ void ScriptPromiseResolver::detach()
     m_resolver.clear();
     m_value.clear();
     m_keepAlive.clear();
+    InspectorInstrumentation::asyncTaskCanceled(getExecutionContext(), this);
 }
 
 void ScriptPromiseResolver::keepAliveWhilePending()
@@ -60,7 +64,7 @@ void ScriptPromiseResolver::keepAliveWhilePending()
 void ScriptPromiseResolver::onTimerFired(Timer<ScriptPromiseResolver>*)
 {
     ASSERT(m_state == Resolving || m_state == Rejecting);
-    if (!scriptState()->contextIsValid()) {
+    if (!getScriptState()->contextIsValid()) {
         detach();
         return;
     }
@@ -71,9 +75,10 @@ void ScriptPromiseResolver::onTimerFired(Timer<ScriptPromiseResolver>*)
 
 void ScriptPromiseResolver::resolveOrRejectImmediately()
 {
-    ASSERT(!executionContext()->activeDOMObjectsAreStopped());
-    ASSERT(!executionContext()->activeDOMObjectsAreSuspended());
+    ASSERT(!getExecutionContext()->activeDOMObjectsAreStopped());
+    ASSERT(!getExecutionContext()->activeDOMObjectsAreSuspended());
     {
+        InspectorInstrumentation::AsyncTask asyncTask(getExecutionContext(), this);
         if (m_state == Resolving) {
             m_resolver.resolve(m_value.newLocal(m_scriptState->isolate()));
         } else {

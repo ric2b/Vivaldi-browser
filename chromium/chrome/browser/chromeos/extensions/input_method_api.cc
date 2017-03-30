@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/values.h"
@@ -22,6 +23,7 @@
 #include "chrome/browser/spellchecker/spellcheck_factory.h"
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/input_method_private.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
@@ -33,6 +35,7 @@
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_util.h"
 
 namespace AddWordToDictionary =
@@ -49,11 +52,15 @@ namespace OnImeMenuActivationChanged =
     extensions::api::input_method_private::OnImeMenuActivationChanged;
 namespace OnImeMenuListChanged =
     extensions::api::input_method_private::OnImeMenuListChanged;
+namespace OnImeMenuItemsChanged =
+    extensions::api::input_method_private::OnImeMenuItemsChanged;
 
 namespace {
 
 // Prefix, which is used by XKB.
 const char kXkbPrefix[] = "xkb:";
+const char kErrorFailToShowInputView[] =
+    "Unable to show the input view window.";
 
 }  // namespace
 
@@ -69,11 +76,11 @@ InputMethodPrivateGetInputMethodConfigFunction::Run() {
       "isPhysicalKeyboardAutocorrectEnabled",
       !base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kDisablePhysicalKeyboardAutocorrect));
-  output->SetBoolean(
-      "isImeMenuActivated",
-      chromeos::switches::IsImeMenuEnabled() &&
-          Profile::FromBrowserContext(browser_context())->GetPrefs()
-          ->GetBoolean(prefs::kLanguageImeMenuActivated));
+  output->SetBoolean("isImeMenuActivated",
+                     base::FeatureList::IsEnabled(features::kOptInImeMenu) &&
+                         Profile::FromBrowserContext(browser_context())
+                             ->GetPrefs()
+                             ->GetBoolean(prefs::kLanguageImeMenuActivated));
   return RespondNow(OneArgument(output));
 #endif
 }
@@ -95,7 +102,7 @@ InputMethodPrivateSetCurrentInputMethodFunction::Run() {
 #if !defined(OS_CHROMEOS)
   EXTENSION_FUNCTION_VALIDATE(false);
 #else
-  scoped_ptr<SetCurrentInputMethod::Params> params(
+  std::unique_ptr<SetCurrentInputMethod::Params> params(
       SetCurrentInputMethod::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   scoped_refptr<chromeos::input_method::InputMethodManager::State> ime_state =
@@ -125,8 +132,8 @@ InputMethodPrivateGetInputMethodsFunction::Run() {
   chromeos::input_method::InputMethodUtil* util = manager->GetInputMethodUtil();
   scoped_refptr<chromeos::input_method::InputMethodManager::State> ime_state =
       manager->GetActiveIMEState();
-  scoped_ptr<chromeos::input_method::InputMethodDescriptors> input_methods =
-      ime_state->GetActiveInputMethods();
+  std::unique_ptr<chromeos::input_method::InputMethodDescriptors>
+      input_methods = ime_state->GetActiveInputMethods();
   for (size_t i = 0; i < input_methods->size(); ++i) {
     const chromeos::input_method::InputMethodDescriptor& input_method =
         (*input_methods)[i];
@@ -169,7 +176,7 @@ InputMethodPrivateAddWordToDictionaryFunction::Run() {
 #if !defined(OS_CHROMEOS)
   EXTENSION_FUNCTION_VALIDATE(false);
 #else
-  scoped_ptr<AddWordToDictionary::Params> params(
+  std::unique_ptr<AddWordToDictionary::Params> params(
       AddWordToDictionary::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   SpellcheckService* spellcheck = SpellcheckServiceFactory::GetForContext(
@@ -204,7 +211,7 @@ InputMethodPrivateGetEncryptSyncEnabledFunction::Run() {
           Profile::FromBrowserContext(browser_context()));
   if (!profile_sync_service)
     return RespondNow(Error("Sync service is not ready for current profile."));
-  scoped_ptr<base::Value> ret(new base::FundamentalValue(
+  std::unique_ptr<base::Value> ret(new base::FundamentalValue(
       profile_sync_service->IsEncryptEverythingEnabled()));
   return RespondNow(OneArgument(std::move(ret)));
 #endif
@@ -215,12 +222,43 @@ InputMethodPrivateSetXkbLayoutFunction::Run() {
 #if !defined(OS_CHROMEOS)
   EXTENSION_FUNCTION_VALIDATE(false);
 #else
-  scoped_ptr<SetXkbLayout::Params> params(SetXkbLayout::Params::Create(*args_));
+  std::unique_ptr<SetXkbLayout::Params> params(
+      SetXkbLayout::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   chromeos::input_method::InputMethodManager* manager =
       chromeos::input_method::InputMethodManager::Get();
   chromeos::input_method::ImeKeyboard* keyboard = manager->GetImeKeyboard();
   keyboard->SetCurrentKeyboardLayoutByName(params->xkb_name);
+  return RespondNow(NoArguments());
+#endif
+}
+
+ExtensionFunction::ResponseAction
+InputMethodPrivateShowInputViewFunction::Run() {
+#if !defined(OS_CHROMEOS)
+  EXTENSION_FUNCTION_VALIDATE(false);
+#else
+  keyboard::KeyboardController* keyboard_controller =
+      keyboard::KeyboardController::GetInstance();
+  if (keyboard_controller) {
+    keyboard_controller->ShowKeyboard(false);
+    return RespondNow(NoArguments());
+  }
+
+  if (keyboard::IsKeyboardEnabled())
+    return RespondNow(Error(kErrorFailToShowInputView));
+
+  // Forcibly enables the a11y onscreen keyboard if there is on keyboard enabled
+  // for now. And re-disables it after showing once.
+  keyboard::SetAccessibilityKeyboardEnabled(true);
+  ash::Shell::GetInstance()->CreateKeyboard();
+  keyboard_controller = keyboard::KeyboardController::GetInstance();
+  if (!keyboard_controller) {
+    keyboard::SetAccessibilityKeyboardEnabled(false);
+    return RespondNow(Error(kErrorFailToShowInputView));
+  }
+  keyboard_controller->ShowKeyboard(false);
+  keyboard::SetAccessibilityKeyboardEnabled(false);
   return RespondNow(NoArguments());
 #endif
 }
@@ -236,6 +274,8 @@ InputMethodAPI::InputMethodAPI(content::BrowserContext* context)
       ->RegisterObserver(this, OnImeMenuActivationChanged::kEventName);
   EventRouter::Get(context_)
       ->RegisterObserver(this, OnImeMenuListChanged::kEventName);
+  EventRouter::Get(context_)
+      ->RegisterObserver(this, OnImeMenuItemsChanged::kEventName);
   ExtensionFunctionRegistry* registry =
       ExtensionFunctionRegistry::GetInstance();
   registry->RegisterFunction<InputMethodPrivateGetInputMethodConfigFunction>();
@@ -246,6 +286,8 @@ InputMethodAPI::InputMethodAPI(content::BrowserContext* context)
       ->RegisterFunction<InputMethodPrivateFetchAllDictionaryWordsFunction>();
   registry->RegisterFunction<InputMethodPrivateAddWordToDictionaryFunction>();
   registry->RegisterFunction<InputMethodPrivateGetEncryptSyncEnabledFunction>();
+  registry->RegisterFunction<
+      InputMethodPrivateNotifyImeMenuItemActivatedFunction>();
 }
 
 InputMethodAPI::~InputMethodAPI() {
@@ -280,7 +322,8 @@ void InputMethodAPI::OnListenerAdded(
       dictionary_event_router_->DispatchLoadedEventIfLoaded();
     }
   } else if ((details.event_name == OnImeMenuActivationChanged::kEventName ||
-              details.event_name == OnImeMenuListChanged::kEventName) &&
+              details.event_name == OnImeMenuListChanged::kEventName ||
+              details.event_name == OnImeMenuItemsChanged::kEventName) &&
              !ime_menu_event_router_.get()) {
     ime_menu_event_router_.reset(
         new chromeos::ExtensionImeMenuEventRouter(context_));

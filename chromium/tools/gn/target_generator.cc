@@ -9,8 +9,10 @@
 #include "tools/gn/action_target_generator.h"
 #include "tools/gn/binary_target_generator.h"
 #include "tools/gn/build_settings.h"
+#include "tools/gn/bundle_data_target_generator.h"
 #include "tools/gn/config.h"
 #include "tools/gn/copy_target_generator.h"
+#include "tools/gn/create_bundle_target_generator.h"
 #include "tools/gn/err.h"
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/functions.h"
@@ -56,6 +58,9 @@ void TargetGenerator::Run() {
   if (!Visibility::FillItemVisibility(target_, scope_, err_))
     return;
 
+  if (!FillWriteRuntimeDeps())
+    return;
+
   // Do type-specific generation.
   DoRun();
 }
@@ -83,11 +88,19 @@ void TargetGenerator::GenerateTarget(Scope* scope,
   if (g_scheduler->verbose_logging())
     g_scheduler->Log("Defining target", label.GetUserVisibleName(true));
 
-  scoped_ptr<Target> target(new Target(scope->settings(), label));
+  std::unique_ptr<Target> target(new Target(scope->settings(), label));
   target->set_defined_from(function_call);
 
   // Create and call out to the proper generator.
-  if (output_type == functions::kCopy) {
+  if (output_type == functions::kBundleData) {
+    BundleDataTargetGenerator generator(
+        target.get(), scope, function_call, err);
+    generator.Run();
+  } else if (output_type == functions::kCreateBundle) {
+    CreateBundleTargetGenerator generator(target.get(), scope, function_call,
+                                          err);
+    generator.Run();
+  } else if (output_type == functions::kCopy) {
     CopyTargetGenerator generator(target.get(), scope, function_call, err);
     generator.Run();
   } else if (output_type == functions::kAction) {
@@ -372,4 +385,24 @@ bool TargetGenerator::FillGenericDeps(const char* var_name,
                         ToolchainLabelForScope(scope_), dest, err_);
   }
   return !err_->has_error();
+}
+
+bool TargetGenerator::FillWriteRuntimeDeps() {
+  const Value* value = scope_->GetValue(variables::kWriteRuntimeDeps, true);
+  if (!value)
+    return true;
+
+  // Compute the file name and make sure it's in the output dir.
+  SourceFile source_file = scope_->GetSourceDir().ResolveRelativeFile(
+      *value, err_, GetBuildSettings()->root_path_utf8());
+  if (err_->has_error())
+    return false;
+  if (!EnsureStringIsInOutputDir(GetBuildSettings()->build_dir(),
+          source_file.value(), value->origin(), err_))
+    return false;
+  OutputFile output_file(GetBuildSettings(), source_file);
+  target_->set_write_runtime_deps_output(output_file);
+
+  g_scheduler->AddWriteRuntimeDepsTarget(target_);
+  return true;
 }

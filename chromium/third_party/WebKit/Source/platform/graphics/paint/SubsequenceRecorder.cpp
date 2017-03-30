@@ -14,13 +14,17 @@ namespace blink {
 
 bool SubsequenceRecorder::useCachedSubsequenceIfPossible(GraphicsContext& context, const DisplayItemClient& client)
 {
-    if (context.paintController().displayItemConstructionIsDisabled() || context.paintController().subsequenceCachingIsDisabled())
+    if (context.getPaintController().displayItemConstructionIsDisabled() || context.getPaintController().subsequenceCachingIsDisabled())
         return false;
 
-    if (!context.paintController().clientCacheIsValid(client))
+    if (!context.getPaintController().clientCacheIsValid(client))
         return false;
 
-    context.paintController().createAndAppend<CachedDisplayItem>(client, DisplayItem::CachedSubsequence);
+    // TODO(pdr): Implement subsequence caching for spv2 (crbug.com/596983).
+    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+        return false;
+
+    context.getPaintController().createAndAppend<CachedDisplayItem>(client, DisplayItem::CachedSubsequence);
 
 #if ENABLE(ASSERT)
     // When under-invalidation checking is enabled, we output CachedSubsequence display item
@@ -33,7 +37,7 @@ bool SubsequenceRecorder::useCachedSubsequenceIfPossible(GraphicsContext& contex
 }
 
 SubsequenceRecorder::SubsequenceRecorder(GraphicsContext& context, const DisplayItemClient& client)
-    : m_paintController(context.paintController())
+    : m_paintController(context.getPaintController())
     , m_client(client)
     , m_beginSubsequenceIndex(0)
 {

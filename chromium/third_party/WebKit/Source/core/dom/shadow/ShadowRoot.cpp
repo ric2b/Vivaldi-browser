@@ -46,7 +46,7 @@ struct SameSizeAsShadowRoot : public DocumentFragment, public TreeScope, public 
 #if ENABLE(OILPAN)
     char emptyClassFieldsDueToGCMixinMarker[1];
 #endif
-    RawPtrWillBeMember<void*> willbeMember[3];
+    Member<void*> willbeMember[3];
     unsigned countersAndFlags[1];
 };
 
@@ -69,8 +69,8 @@ ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
 ShadowRoot::~ShadowRoot()
 {
 #if !ENABLE(OILPAN)
-    ASSERT(!m_prev);
-    ASSERT(!m_next);
+    DCHECK(!m_prev);
+    DCHECK(!m_next);
 
     if (m_shadowRootRareData && m_shadowRootRareData->styleSheets())
         m_shadowRootRareData->styleSheets()->detachFromDocument();
@@ -107,13 +107,13 @@ ShadowRoot* ShadowRoot::olderShadowRootForBindings() const
     ShadowRoot* older = olderShadowRoot();
     while (older && !older->isOpenOrV0())
         older = older->olderShadowRoot();
-    ASSERT(!older || older->isOpenOrV0());
+    DCHECK(!older || older->isOpenOrV0());
     return older;
 }
 
-PassRefPtrWillBeRawPtr<Node> ShadowRoot::cloneNode(bool, ExceptionState& exceptionState)
+RawPtr<Node> ShadowRoot::cloneNode(bool, ExceptionState& exceptionState)
 {
-    exceptionState.throwDOMException(DataCloneError, "ShadowRoot nodes are not clonable.");
+    exceptionState.throwDOMException(NotSupportedError, "ShadowRoot nodes are not clonable.");
     return nullptr;
 }
 
@@ -129,14 +129,14 @@ void ShadowRoot::setInnerHTML(const String& markup, ExceptionState& exceptionSta
         return;
     }
 
-    if (RefPtrWillBeRawPtr<DocumentFragment> fragment = createFragmentForInnerOuterHTML(markup, host(), AllowScriptingContent, "innerHTML", exceptionState))
+    if (RawPtr<DocumentFragment> fragment = createFragmentForInnerOuterHTML(markup, host(), AllowScriptingContent, "innerHTML", exceptionState))
         replaceChildrenWithFragment(this, fragment.release(), exceptionState);
 }
 
 void ShadowRoot::recalcStyle(StyleRecalcChange change)
 {
     // ShadowRoot doesn't support custom callbacks.
-    ASSERT(!hasCustomStyleCallbacks());
+    DCHECK(!hasCustomStyleCallbacks());
 
     StyleSharingDepthScope sharingScope(*this);
 
@@ -160,11 +160,11 @@ Node::InsertionNotificationRequest ShadowRoot::insertedInto(ContainerNode* inser
 {
     DocumentFragment::insertedInto(insertionPoint);
 
-    if (!insertionPoint->inDocument() || !isOldest())
+    if (!insertionPoint->inShadowIncludingDocument() || !isOldest())
         return InsertionDone;
 
     // FIXME: When parsing <video controls>, insertedInto() is called many times without invoking removedFrom.
-    // For now, we check m_registeredWithParentShadowroot. We would like to ASSERT(!m_registeredShadowRoot) here.
+    // For now, we check m_registeredWithParentShadowroot. We would like to DCHECK(!m_registeredShadowRoot) here.
     // https://bugs.webkit.org/show_bug.cig?id=101316
     if (m_registeredWithParentShadowRoot)
         return InsertionDone;
@@ -179,7 +179,7 @@ Node::InsertionNotificationRequest ShadowRoot::insertedInto(ContainerNode* inser
 
 void ShadowRoot::removedFrom(ContainerNode* insertionPoint)
 {
-    if (insertionPoint->inDocument()) {
+    if (insertionPoint->inShadowIncludingDocument()) {
         document().styleEngine().shadowRootRemovedFromDocument(this);
         if (m_registeredWithParentShadowRoot) {
             ShadowRoot* root = host()->containingShadowRoot();
@@ -214,7 +214,7 @@ void ShadowRoot::registerScopedHTMLStyleChild()
 
 void ShadowRoot::unregisterScopedHTMLStyleChild()
 {
-    ASSERT(m_numberOfStyles > 0);
+    DCHECK_GT(m_numberOfStyles, 0u);
     --m_numberOfStyles;
 }
 
@@ -223,7 +223,7 @@ ShadowRootRareData* ShadowRoot::ensureShadowRootRareData()
     if (m_shadowRootRareData)
         return m_shadowRootRareData.get();
 
-    m_shadowRootRareData = adoptPtrWillBeNoop(new ShadowRootRareData);
+    m_shadowRootRareData = new ShadowRootRareData;
     return m_shadowRootRareData.get();
 }
 
@@ -252,7 +252,7 @@ HTMLShadowElement* ShadowRoot::shadowInsertionPointOfYoungerShadowRoot() const
     return m_shadowRootRareData ? m_shadowRootRareData->shadowInsertionPointOfYoungerShadowRoot() : 0;
 }
 
-void ShadowRoot::setShadowInsertionPointOfYoungerShadowRoot(PassRefPtrWillBeRawPtr<HTMLShadowElement> shadowInsertionPoint)
+void ShadowRoot::setShadowInsertionPointOfYoungerShadowRoot(RawPtr<HTMLShadowElement> shadowInsertionPoint)
 {
     if (!m_shadowRootRareData && !shadowInsertionPoint)
         return;
@@ -295,9 +295,9 @@ void ShadowRoot::invalidateDescendantInsertionPoints()
     m_shadowRootRareData->clearDescendantInsertionPoints();
 }
 
-const WillBeHeapVector<RefPtrWillBeMember<InsertionPoint>>& ShadowRoot::descendantInsertionPoints()
+const HeapVector<Member<InsertionPoint>>& ShadowRoot::descendantInsertionPoints()
 {
-    DEFINE_STATIC_LOCAL(WillBePersistentHeapVector<RefPtrWillBeMember<InsertionPoint>>, emptyList, ());
+    DEFINE_STATIC_LOCAL(HeapVector<Member<InsertionPoint>>, emptyList, (new HeapVector<Member<InsertionPoint>>));
     if (m_shadowRootRareData && m_descendantInsertionPointsIsValid)
         return m_shadowRootRareData->descendantInsertionPoints();
 
@@ -306,7 +306,7 @@ const WillBeHeapVector<RefPtrWillBeMember<InsertionPoint>>& ShadowRoot::descenda
     if (!containsInsertionPoints())
         return emptyList;
 
-    WillBeHeapVector<RefPtrWillBeMember<InsertionPoint>> insertionPoints;
+    HeapVector<Member<InsertionPoint>> insertionPoints;
     for (InsertionPoint& insertionPoint : Traversal<InsertionPoint>::descendantsOf(*this))
         insertionPoints.append(&insertionPoint);
 
@@ -331,7 +331,7 @@ void ShadowRoot::didAddSlot()
 
 void ShadowRoot::didRemoveSlot()
 {
-    ASSERT(m_shadowRootRareData);
+    DCHECK(m_shadowRootRareData);
     m_shadowRootRareData->didRemoveSlot();
     invalidateDescendantSlots();
 }
@@ -347,18 +347,18 @@ unsigned ShadowRoot::descendantSlotCount() const
     return m_shadowRootRareData ? m_shadowRootRareData->descendantSlotCount() : 0;
 }
 
-const WillBeHeapVector<RefPtrWillBeMember<HTMLSlotElement>>& ShadowRoot::descendantSlots()
+const HeapVector<Member<HTMLSlotElement>>& ShadowRoot::descendantSlots()
 {
-    DEFINE_STATIC_LOCAL(WillBePersistentHeapVector<RefPtrWillBeMember<HTMLSlotElement>>, emptyList, ());
+    DEFINE_STATIC_LOCAL(HeapVector<Member<HTMLSlotElement>>, emptyList, (new HeapVector<Member<HTMLSlotElement>>));
     if (m_descendantSlotsIsValid) {
-        ASSERT(m_shadowRootRareData);
+        DCHECK(m_shadowRootRareData);
         return m_shadowRootRareData->descendantSlots();
     }
     if (descendantSlotCount() == 0)
         return emptyList;
 
-    ASSERT(m_shadowRootRareData);
-    WillBeHeapVector<RefPtrWillBeMember<HTMLSlotElement>> slots;
+    DCHECK(m_shadowRootRareData);
+    HeapVector<Member<HTMLSlotElement>> slots;
     slots.reserveCapacity(descendantSlotCount());
     for (HTMLSlotElement& slot : Traversal<HTMLSlotElement>::descendantsOf(rootNode()))
         slots.append(&slot);

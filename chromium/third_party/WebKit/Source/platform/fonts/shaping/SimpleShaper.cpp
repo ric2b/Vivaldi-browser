@@ -22,12 +22,12 @@
 
 #include "platform/fonts/shaping/SimpleShaper.h"
 
-#include "platform/fonts/Character.h"
 #include "platform/fonts/Font.h"
 #include "platform/fonts/GlyphBuffer.h"
 #include "platform/fonts/Latin1TextIterator.h"
 #include "platform/fonts/SimpleFontData.h"
 #include "platform/fonts/UTF16TextIterator.h"
+#include "platform/text/Character.h"
 #include "wtf/MathExtras.h"
 #include "wtf/text/CharacterNames.h"
 
@@ -49,7 +49,7 @@ SimpleShaper::SimpleShaper(const Font* font, const TextRun& run, const GlyphData
         m_expansionPerOpportunity = 0;
     } else {
         bool isAfterExpansion = m_isAfterExpansion;
-        unsigned expansionOpportunityCount = m_textRun.is8Bit() ? Character::expansionOpportunityCount(m_textRun.characters8(), m_textRun.length(), m_textRun.direction(), isAfterExpansion, m_textRun.textJustify()) : Character::expansionOpportunityCount(m_textRun.characters16(), m_textRun.length(), m_textRun.direction(), isAfterExpansion, m_textRun.textJustify());
+        unsigned expansionOpportunityCount = m_textRun.is8Bit() ? Character::expansionOpportunityCount(m_textRun.characters8(), m_textRun.length(), m_textRun.direction(), isAfterExpansion, m_textRun.getTextJustify()) : Character::expansionOpportunityCount(m_textRun.characters16(), m_textRun.length(), m_textRun.direction(), isAfterExpansion, m_textRun.getTextJustify());
         if (isAfterExpansion && !m_textRun.allowsTrailingExpansion())
             expansionOpportunityCount--;
 
@@ -72,7 +72,7 @@ float SimpleShaper::characterWidth(UChar32 character, const GlyphData& glyphData
     ASSERT(fontData);
 
     if (UNLIKELY(character == tabulationCharacter && m_textRun.allowTabs()))
-        return m_font->tabWidth(*fontData, m_textRun.tabSize(), m_textRun.xPos() + m_runWidthSoFar);
+        return m_font->tabWidth(*fontData, m_textRun.getTabSize(), m_textRun.xPos() + m_runWidthSoFar);
 
     float width = fontData->widthForGlyph(glyphData.glyph);
 
@@ -87,10 +87,10 @@ float SimpleShaper::adjustSpacing(float width, const CharacterData& charData)
 {
     // Account for letter-spacing.
     if (width)
-        width += m_font->fontDescription().letterSpacing();
+        width += m_font->getFontDescription().letterSpacing();
 
-    bool isExpansionOpportunity = Character::treatAsSpace(charData.character) || (m_textRun.textJustify() == TextJustifyDistribute);
-    if (isExpansionOpportunity || (m_textRun.textJustify() == TextJustifyAuto && Character::isCJKIdeographOrSymbol(charData.character))) {
+    bool isExpansionOpportunity = Character::treatAsSpace(charData.character) || (m_textRun.getTextJustify() == TextJustifyDistribute);
+    if (isExpansionOpportunity || (m_textRun.getTextJustify() == TextJustifyAuto && Character::isCJKIdeographOrSymbol(charData.character))) {
         // Distribute the run's total expansion evenly over all expansion opportunities in the run.
         if (m_expansion) {
             if (!isExpansionOpportunity && !m_isAfterExpansion) {
@@ -113,8 +113,8 @@ float SimpleShaper::adjustSpacing(float width, const CharacterData& charData)
         // We apply additional space between "words" by adding width to the space character.
         if (isExpansionOpportunity && (charData.character != tabulationCharacter || !m_textRun.allowTabs())
             && (charData.characterOffset || charData.character == noBreakSpaceCharacter)
-            && m_font->fontDescription().wordSpacing()) {
-            width += m_font->fontDescription().wordSpacing();
+            && m_font->getFontDescription().wordSpacing()) {
+            width += m_font->getFontDescription().wordSpacing();
         }
     } else {
         m_isAfterExpansion = false;
@@ -126,7 +126,7 @@ float SimpleShaper::adjustSpacing(float width, const CharacterData& charData)
 template <typename TextIterator>
 unsigned SimpleShaper::advanceInternal(TextIterator& textIterator, GlyphBuffer* glyphBuffer)
 {
-    bool hasExtraSpacing = (m_font->fontDescription().letterSpacing() || m_font->fontDescription().wordSpacing() || m_expansion)
+    bool hasExtraSpacing = (m_font->getFontDescription().letterSpacing() || m_font->getFontDescription().wordSpacing() || m_expansion)
         && !m_textRun.spacingDisabled();
 
     const SimpleFontData* lastFontData = m_font->primaryFont();

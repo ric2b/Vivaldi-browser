@@ -16,22 +16,23 @@
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
-#include "content/common/gpu/gpu_memory_uma_stats.h"
-#include "content/common/gpu/gpu_process_launch_causes.h"
+#include "content/common/gpu_process_launch_causes.h"
 #include "content/public/browser/browser_child_process_host_delegate.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/config/gpu_info.h"
+#include "gpu/ipc/common/gpu_memory_uma_stats.h"
+#include "gpu/ipc/common/surface_handle.h"
 #include "ipc/ipc_sender.h"
 #include "ipc/message_filter.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
-#include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
 
 struct GPUCreateCommandBufferConfig;
@@ -41,6 +42,7 @@ struct ChannelHandle;
 }
 
 namespace gpu {
+struct GpuPreferences;
 struct SyncToken;
 }
 
@@ -53,7 +55,7 @@ class RenderWidgetHostViewFrameSubscriber;
 class ShaderDiskCache;
 
 typedef base::Thread* (*GpuMainThreadFactoryFunction)(
-    const InProcessChildThreadParams&);
+    const InProcessChildThreadParams&, const gpu::GpuPreferences&);
 
 class GpuProcessHost : public BrowserChildProcessHostDelegate,
                        public IPC::Sender,
@@ -67,6 +69,15 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
 
   typedef base::Callback<void(const IPC::ChannelHandle&, const gpu::GPUInfo&)>
       EstablishChannelCallback;
+
+  struct EstablishChannelRequest {
+    EstablishChannelRequest();
+    EstablishChannelRequest(const EstablishChannelRequest& other);
+    ~EstablishChannelRequest();
+    int32_t client_id;
+    EstablishChannelCallback callback;
+    bool ignore_disallowed_gpu;
+  };
 
   typedef base::Callback<void(const gfx::GpuMemoryBufferHandle& handle)>
       CreateGpuMemoryBufferCallback;
@@ -193,15 +204,15 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
                         gpu::error::ContextLostReason reason,
                         const GURL& url);
   void OnDidDestroyOffscreenContext(const GURL& url);
-  void OnGpuMemoryUmaStatsReceived(const GPUMemoryUmaStats& stats);
+  void OnGpuMemoryUmaStatsReceived(const gpu::GPUMemoryUmaStats& stats);
 #if defined(OS_MACOSX)
   void OnAcceleratedSurfaceBuffersSwapped(const IPC::Message& message);
 #endif
 
 #if defined(OS_WIN)
   void OnAcceleratedSurfaceCreatedChildWindow(
-      const gfx::PluginWindowHandle& parent_handle,
-      const gfx::PluginWindowHandle& window_handle);
+      gpu::SurfaceHandle parent_handle,
+      gpu::SurfaceHandle window_handle);
 #endif
 
   void CreateChannelCache(int32_t client_id);
@@ -210,7 +221,8 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
                      const std::string& key,
                      const std::string& shader);
 
-  bool LaunchGpuProcess(const std::string& channel_id);
+  bool LaunchGpuProcess(const std::string& channel_id,
+                        gpu::GpuPreferences* gpu_preferences);
 
   void SendOutstandingReplies();
 
@@ -234,8 +246,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
 
   // These are the channel requests that we have already sent to
   // the GPU process, but haven't heard back about yet.
-  // Second value indicates whether disallowed gpu should be ignored.
-  std::queue<std::pair<EstablishChannelCallback, bool> > channel_requests_;
+  std::queue<EstablishChannelRequest> channel_requests_;
 
   // The pending create gpu memory buffer requests we need to reply to.
   std::queue<CreateGpuMemoryBufferCallback> create_gpu_memory_buffer_requests_;
@@ -291,7 +302,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
 
   // Statics kept around to send to UMA histograms on GPU process lost.
   bool uma_memory_stats_received_;
-  GPUMemoryUmaStats uma_memory_stats_;
+  gpu::GPUMemoryUmaStats uma_memory_stats_;
 
   typedef std::map<int32_t, scoped_refptr<ShaderDiskCache>>
       ClientIdToShaderCacheMap;

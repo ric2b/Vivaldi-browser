@@ -110,7 +110,7 @@ const char* kAtomsToCache[] = {
   "_NET_WM_WINDOW_TYPE_NOTIFICATION",
   "_NET_WM_WINDOW_TYPE_TOOLTIP",
   "XdndActionAsk",
-  "XdndActionCopy"
+  "XdndActionCopy",
   "XdndActionLink",
   "XdndActionList",
   "XdndActionMove",

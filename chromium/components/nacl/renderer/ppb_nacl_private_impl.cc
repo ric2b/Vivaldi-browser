@@ -22,6 +22,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -108,7 +109,7 @@ bool CanOpenViaFastPath(content::PepperPluginInstance* plugin_instance,
   // same-origin policy which prevents the app from requesting resources from
   // another app.
   blink::WebSecurityOrigin security_origin =
-      plugin_instance->GetContainer()->element().document().securityOrigin();
+      plugin_instance->GetContainer()->element().document().getSecurityOrigin();
   return security_origin.canRequest(gurl);
 }
 
@@ -333,7 +334,7 @@ blink::WebURLLoader* CreateWebURLLoader(const blink::WebDocument& document,
 
   // Options settings here follow the original behavior in the trusted
   // plugin and PepperURLLoaderHost.
-  if (document.securityOrigin().canRequest(gurl)) {
+  if (document.getSecurityOrigin().canRequest(gurl)) {
     options.allowCredentials = true;
   } else {
     // Allow CORS.
@@ -471,10 +472,8 @@ void PPBNaClPrivate::LaunchSelLdr(
   if (nexe_file_info->handle != PP_kInvalidFileHandle)
     nexe_for_transit = base::FileDescriptor(nexe_file_info->handle, true);
 #elif defined(OS_WIN)
-  // Duplicate the handle on the browser side instead of the renderer.
-  // This is because BrokerGetFileForProcess isn't part of content/public, and
-  // it's simpler to do the duplication in the browser anyway.
-  nexe_for_transit = nexe_file_info->handle;
+  nexe_for_transit = IPC::PlatformFileForTransit(nexe_file_info->handle,
+                                                 base::GetCurrentProcId());
 #else
 # error Unsupported target platform.
 #endif
@@ -1142,6 +1141,8 @@ bool ShouldUseSubzero(const PP_PNaClOptions* pnacl_options) {
   if (strcmp(arch, "x86-32") == 0)
     return true;
   if (strcmp(arch, "x86-64") == 0)
+    return true;
+  if (strcmp(arch, "arm") == 0)
     return true;
 
   return false;

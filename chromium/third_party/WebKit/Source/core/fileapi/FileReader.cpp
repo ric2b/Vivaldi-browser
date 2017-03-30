@@ -51,7 +51,6 @@ namespace blink {
 
 namespace {
 
-#if !LOG_DISABLED
 const CString utf8BlobUUID(Blob* blob)
 {
     return blob->uuid().utf8();
@@ -61,7 +60,6 @@ const CString utf8FilePath(Blob* blob)
 {
     return blob->hasBackingFile() ? toFile(blob)->path().utf8() : "";
 }
-#endif
 
 } // namespace
 
@@ -71,18 +69,18 @@ const CString utf8FilePath(Blob* blob)
 static const size_t kMaxOutstandingRequestsPerThread = 100;
 static const double progressNotificationIntervalMS = 50;
 
-class FileReader::ThrottlingController final : public NoBaseWillBeGarbageCollectedFinalized<FileReader::ThrottlingController>, public WillBeHeapSupplement<ExecutionContext> {
-    WILL_BE_USING_GARBAGE_COLLECTED_MIXIN(FileReader::ThrottlingController);
+class FileReader::ThrottlingController final : public GarbageCollectedFinalized<FileReader::ThrottlingController>, public Supplement<ExecutionContext> {
+    USING_GARBAGE_COLLECTED_MIXIN(FileReader::ThrottlingController);
 public:
     static ThrottlingController* from(ExecutionContext* context)
     {
         if (!context)
             return 0;
 
-        ThrottlingController* controller = static_cast<ThrottlingController*>(WillBeHeapSupplement<ExecutionContext>::from(*context, supplementName()));
+        ThrottlingController* controller = static_cast<ThrottlingController*>(Supplement<ExecutionContext>::from(*context, supplementName()));
         if (!controller) {
-            controller = new ThrottlingController();
-            WillBeHeapSupplement<ExecutionContext>::provideTo(*context, supplementName(), adoptPtrWillBeNoop(controller));
+            controller = new ThrottlingController;
+            provideTo(*context, supplementName(), controller);
         }
         return controller;
     }
@@ -97,7 +95,7 @@ public:
         if (!controller)
             return;
 
-        reader->m_asyncOperationId = InspectorInstrumentation::traceAsyncOperationStarting(context, "FileReader");
+        InspectorInstrumentation::asyncTaskScheduled(context, "FileReader", reader, true);
         controller->pushReader(reader);
     }
 
@@ -112,22 +110,19 @@ public:
 
     static void finishReader(ExecutionContext* context, FileReader* reader, FinishReaderType nextStep)
     {
-        InspectorInstrumentation::traceAsyncOperationCompleted(context, reader->m_asyncOperationId);
-
         ThrottlingController* controller = from(context);
         if (!controller)
             return;
 
         controller->finishReader(reader, nextStep);
+        InspectorInstrumentation::asyncTaskCanceled(context, reader);
     }
 
     DEFINE_INLINE_TRACE()
     {
-#if ENABLE(OILPAN)
         visitor->trace(m_pendingReaders);
         visitor->trace(m_runningReaders);
-#endif
-        WillBeHeapSupplement<ExecutionContext>::trace(visitor);
+        Supplement<ExecutionContext>::trace(visitor);
     }
 
 private:
@@ -187,8 +182,8 @@ private:
 
     const size_t m_maxRunningReaders;
 
-    using FileReaderDeque = PersistentHeapDequeWillBeHeapDeque<Member<FileReader>>;
-    using FileReaderHashSet = PersistentHeapHashSetWillBeHeapHashSet<Member<FileReader>>;
+    using FileReaderDeque = HeapDeque<Member<FileReader>>;
+    using FileReaderHashSet = HeapHashSet<Member<FileReader>>;
 
     FileReaderDeque m_pendingReaders;
     FileReaderHashSet m_runningReaders;
@@ -202,12 +197,12 @@ FileReader* FileReader::create(ExecutionContext* context)
 }
 
 FileReader::FileReader(ExecutionContext* context)
-    : ActiveDOMObject(context)
+    : ActiveScriptWrappable(this)
+    , ActiveDOMObject(context)
     , m_state(EMPTY)
     , m_loadingState(LoadingStateNone)
     , m_readType(FileReaderLoader::ReadAsBinaryString)
     , m_lastProgressNotificationTimeMS(0)
-    , m_asyncOperationId(0)
 {
 }
 
@@ -228,7 +223,7 @@ void FileReader::stop()
         return;
 
     if (hasPendingActivity())
-        ThrottlingController::finishReader(executionContext(), this, ThrottlingController::removeReader(executionContext(), this));
+        ThrottlingController::finishReader(getExecutionContext(), this, ThrottlingController::removeReader(getExecutionContext(), this));
     terminate();
 }
 
@@ -240,7 +235,7 @@ bool FileReader::hasPendingActivity() const
 void FileReader::readAsArrayBuffer(Blob* blob, ExceptionState& exceptionState)
 {
     ASSERT(blob);
-    WTF_LOG(FileAPI, "FileReader: reading as array buffer: %s %s\n", utf8BlobUUID(blob).data(), utf8FilePath(blob).data());
+    DVLOG(1) << "reading as array buffer: " << utf8BlobUUID(blob).data() << " " << utf8FilePath(blob).data();
 
     readInternal(blob, FileReaderLoader::ReadAsArrayBuffer, exceptionState);
 }
@@ -248,7 +243,7 @@ void FileReader::readAsArrayBuffer(Blob* blob, ExceptionState& exceptionState)
 void FileReader::readAsBinaryString(Blob* blob, ExceptionState& exceptionState)
 {
     ASSERT(blob);
-    WTF_LOG(FileAPI, "FileReader: reading as binary: %s %s\n", utf8BlobUUID(blob).data(), utf8FilePath(blob).data());
+    DVLOG(1) << "reading as binary: " << utf8BlobUUID(blob).data() << " " << utf8FilePath(blob).data();
 
     readInternal(blob, FileReaderLoader::ReadAsBinaryString, exceptionState);
 }
@@ -256,7 +251,7 @@ void FileReader::readAsBinaryString(Blob* blob, ExceptionState& exceptionState)
 void FileReader::readAsText(Blob* blob, const String& encoding, ExceptionState& exceptionState)
 {
     ASSERT(blob);
-    WTF_LOG(FileAPI, "FileReader: reading as text: %s %s\n", utf8BlobUUID(blob).data(), utf8FilePath(blob).data());
+    DVLOG(1) << "reading as text: " << utf8BlobUUID(blob).data() << " " << utf8FilePath(blob).data();
 
     m_encoding = encoding;
     readInternal(blob, FileReaderLoader::ReadAsText, exceptionState);
@@ -270,7 +265,7 @@ void FileReader::readAsText(Blob* blob, ExceptionState& exceptionState)
 void FileReader::readAsDataURL(Blob* blob, ExceptionState& exceptionState)
 {
     ASSERT(blob);
-    WTF_LOG(FileAPI, "FileReader: reading as data URL: %s %s\n", utf8BlobUUID(blob).data(), utf8FilePath(blob).data());
+    DVLOG(1) << "reading as data URL: " << utf8BlobUUID(blob).data() << " " << utf8FilePath(blob).data();
 
     readInternal(blob, FileReaderLoader::ReadAsDataURL, exceptionState);
 }
@@ -288,7 +283,7 @@ void FileReader::readInternal(Blob* blob, FileReaderLoader::ReadType type, Excep
         return;
     }
 
-    ExecutionContext* context = executionContext();
+    ExecutionContext* context = getExecutionContext();
     if (!context) {
         exceptionState.throwDOMException(AbortError, "Reading from a detached FileReader is not supported.");
         return;
@@ -321,7 +316,7 @@ void FileReader::executePendingRead()
     m_loader = FileReaderLoader::create(m_readType, this);
     m_loader->setEncoding(m_encoding);
     m_loader->setDataType(m_blobType);
-    m_loader->start(executionContext(), m_blobDataHandle);
+    m_loader->start(getExecutionContext(), m_blobDataHandle);
     m_blobDataHandle = nullptr;
 }
 
@@ -332,7 +327,7 @@ static void delayedAbort(FileReader* reader)
 
 void FileReader::abort()
 {
-    WTF_LOG(FileAPI, "FileReader: aborting\n");
+    DVLOG(1) << "aborting";
 
     if (m_loadingState != LoadingStateLoading
         && m_loadingState != LoadingStatePending) {
@@ -341,7 +336,7 @@ void FileReader::abort()
     m_loadingState = LoadingStateAborted;
 
     // Schedule to have the abort done later since abort() might be called from the event handler and we do not want the resource loading code to be in the stack.
-    executionContext()->postTask(
+    getExecutionContext()->postTask(
         BLINK_FROM_HERE, createSameThreadTask(&delayedAbort, this));
 }
 
@@ -354,14 +349,14 @@ void FileReader::doAbort()
     m_error = FileError::create(FileError::ABORT_ERR);
 
     // Unregister the reader.
-    ThrottlingController::FinishReaderType finalStep = ThrottlingController::removeReader(executionContext(), this);
+    ThrottlingController::FinishReaderType finalStep = ThrottlingController::removeReader(getExecutionContext(), this);
 
     fireEvent(EventTypeNames::error);
     fireEvent(EventTypeNames::abort);
     fireEvent(EventTypeNames::loadend);
 
     // All possible events have fired and we're done, no more pending activity.
-    ThrottlingController::finishReader(executionContext(), this, finalStep);
+    ThrottlingController::finishReader(getExecutionContext(), this, finalStep);
 }
 
 void FileReader::result(StringOrArrayBuffer& resultAttribute) const
@@ -419,13 +414,13 @@ void FileReader::didFinishLoading()
     m_state = DONE;
 
     // Unregister the reader.
-    ThrottlingController::FinishReaderType finalStep = ThrottlingController::removeReader(executionContext(), this);
+    ThrottlingController::FinishReaderType finalStep = ThrottlingController::removeReader(getExecutionContext(), this);
 
     fireEvent(EventTypeNames::load);
     fireEvent(EventTypeNames::loadend);
 
     // All possible events have fired and we're done, no more pending activity.
-    ThrottlingController::finishReader(executionContext(), this, finalStep);
+    ThrottlingController::finishReader(getExecutionContext(), this, finalStep);
 }
 
 void FileReader::didFail(FileError::ErrorCode errorCode)
@@ -441,21 +436,20 @@ void FileReader::didFail(FileError::ErrorCode errorCode)
     m_error = FileError::create(static_cast<FileError::ErrorCode>(errorCode));
 
     // Unregister the reader.
-    ThrottlingController::FinishReaderType finalStep = ThrottlingController::removeReader(executionContext(), this);
+    ThrottlingController::FinishReaderType finalStep = ThrottlingController::removeReader(getExecutionContext(), this);
 
     fireEvent(EventTypeNames::error);
     fireEvent(EventTypeNames::loadend);
 
     // All possible events have fired and we're done, no more pending activity.
-    ThrottlingController::finishReader(executionContext(), this, finalStep);
+    ThrottlingController::finishReader(getExecutionContext(), this, finalStep);
 }
 
 void FileReader::fireEvent(const AtomicString& type)
 {
-    InspectorInstrumentationCookie cookie = InspectorInstrumentation::traceAsyncCallbackStarting(executionContext(), m_asyncOperationId);
+    InspectorInstrumentation::AsyncTask asyncTask(getExecutionContext(), this);
     if (!m_loader) {
         dispatchEvent(ProgressEvent::create(type, false, 0, 0));
-        InspectorInstrumentation::traceAsyncCallbackCompleted(cookie);
         return;
     }
 
@@ -463,8 +457,6 @@ void FileReader::fireEvent(const AtomicString& type)
         dispatchEvent(ProgressEvent::create(type, true, m_loader->bytesLoaded(), m_loader->totalBytes()));
     else
         dispatchEvent(ProgressEvent::create(type, false, m_loader->bytesLoaded(), 0));
-
-    InspectorInstrumentation::traceAsyncCallbackCompleted(cookie);
 }
 
 DEFINE_TRACE(FileReader)

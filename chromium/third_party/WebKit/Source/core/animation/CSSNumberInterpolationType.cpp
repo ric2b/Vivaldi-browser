@@ -45,7 +45,7 @@ InterpolationValue CSSNumberInterpolationType::maybeConvertNeutral(const Interpo
     return createNumberValue(0);
 }
 
-InterpolationValue CSSNumberInterpolationType::maybeConvertInitial() const
+InterpolationValue CSSNumberInterpolationType::maybeConvertInitial(const StyleResolverState&) const
 {
     double initialNumber;
     if (!NumberPropertyFunctions::getInitialNumber(cssProperty(), initialNumber))
@@ -83,7 +83,7 @@ void CSSNumberInterpolationType::apply(const InterpolableValue& interpolableValu
 {
     double clampedNumber = NumberPropertyFunctions::clampNumber(cssProperty(), toInterpolableNumber(interpolableValue).value());
     if (!NumberPropertyFunctions::setNumber(cssProperty(), *environment.state().style(), clampedNumber))
-        StyleBuilder::applyProperty(cssProperty(), environment.state(), CSSPrimitiveValue::create(clampedNumber, CSSPrimitiveValue::UnitType::Number).get());
+        StyleBuilder::applyProperty(cssProperty(), environment.state(), CSSPrimitiveValue::create(clampedNumber, CSSPrimitiveValue::UnitType::Number));
 }
 
 } // namespace blink

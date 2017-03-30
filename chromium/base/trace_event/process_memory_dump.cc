@@ -5,12 +5,18 @@
 #include "base/trace_event/process_memory_dump.h"
 
 #include <errno.h>
+
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/process/process_metrics.h"
 #include "base/trace_event/process_memory_totals.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "build/build_config.h"
+
+#if defined(OS_IOS)
+#include <sys/sysctl.h>
+#endif
 
 #if defined(OS_POSIX)
 #include <sys/mman.h>
@@ -42,9 +48,28 @@ size_t GetSystemPageCount(size_t mapped_size, size_t page_size) {
 
 #if defined(COUNT_RESIDENT_BYTES_SUPPORTED)
 // static
+size_t ProcessMemoryDump::GetSystemPageSize() {
+#if defined(OS_IOS)
+  // On iOS, getpagesize() returns the user page sizes, but for allocating
+  // arrays for mincore(), kernel page sizes is needed. sysctlbyname() should
+  // be used for this. Refer to crbug.com/542671 and Apple rdar://23651782
+  int pagesize;
+  size_t pagesize_len;
+  int status = sysctlbyname("vm.pagesize", NULL, &pagesize_len, nullptr, 0);
+  if (!status && pagesize_len == sizeof(pagesize)) {
+    if (!sysctlbyname("vm.pagesize", &pagesize, &pagesize_len, nullptr, 0))
+      return pagesize;
+  }
+  LOG(ERROR) << "sysctlbyname(\"vm.pagesize\") failed.";
+  // Falls back to getpagesize() although it may be wrong in certain cases.
+#endif  // defined(OS_IOS)
+  return base::GetPageSize();
+}
+
+// static
 size_t ProcessMemoryDump::CountResidentBytes(void* start_address,
                                              size_t mapped_size) {
-  const size_t page_size = GetPageSize();
+  const size_t page_size = GetSystemPageSize();
   const uintptr_t start_pointer = reinterpret_cast<uintptr_t>(start_address);
   DCHECK_EQ(0u, start_pointer % page_size);
 
@@ -59,12 +84,12 @@ size_t ProcessMemoryDump::CountResidentBytes(void* start_address,
   size_t max_vec_size =
       GetSystemPageCount(std::min(mapped_size, kMaxChunkSize), page_size);
 #if defined(OS_MACOSX) || defined(OS_IOS)
-  scoped_ptr<char[]> vec(new char[max_vec_size]);
+  std::unique_ptr<char[]> vec(new char[max_vec_size]);
 #elif defined(OS_WIN)
-  scoped_ptr<PSAPI_WORKING_SET_EX_INFORMATION[]> vec(
+  std::unique_ptr<PSAPI_WORKING_SET_EX_INFORMATION[]> vec(
       new PSAPI_WORKING_SET_EX_INFORMATION[max_vec_size]);
 #elif defined(OS_POSIX)
-  scoped_ptr<unsigned char[]> vec(new unsigned char[max_vec_size]);
+  std::unique_ptr<unsigned char[]> vec(new unsigned char[max_vec_size]);
 #endif
 
   while (offset < mapped_size) {
@@ -121,28 +146,28 @@ size_t ProcessMemoryDump::CountResidentBytes(void* start_address,
 #endif  // defined(COUNT_RESIDENT_BYTES_SUPPORTED)
 
 ProcessMemoryDump::ProcessMemoryDump(
-    const scoped_refptr<MemoryDumpSessionState>& session_state)
+    scoped_refptr<MemoryDumpSessionState> session_state)
     : has_process_totals_(false),
       has_process_mmaps_(false),
-      session_state_(session_state) {}
+      session_state_(std::move(session_state)) {}
 
 ProcessMemoryDump::~ProcessMemoryDump() {}
 
 MemoryAllocatorDump* ProcessMemoryDump::CreateAllocatorDump(
     const std::string& absolute_name) {
   return AddAllocatorDumpInternal(
-      make_scoped_ptr(new MemoryAllocatorDump(absolute_name, this)));
+      WrapUnique(new MemoryAllocatorDump(absolute_name, this)));
 }
 
 MemoryAllocatorDump* ProcessMemoryDump::CreateAllocatorDump(
     const std::string& absolute_name,
     const MemoryAllocatorDumpGuid& guid) {
   return AddAllocatorDumpInternal(
-      make_scoped_ptr(new MemoryAllocatorDump(absolute_name, this, guid)));
+      WrapUnique(new MemoryAllocatorDump(absolute_name, this, guid)));
 }
 
 MemoryAllocatorDump* ProcessMemoryDump::AddAllocatorDumpInternal(
-    scoped_ptr<MemoryAllocatorDump> mad) {
+    std::unique_ptr<MemoryAllocatorDump> mad) {
   auto insertion_result = allocator_dumps_.insert(
       std::make_pair(mad->absolute_name(), std::move(mad)));
   DCHECK(insertion_result.second) << "Duplicate name: " << mad->absolute_name();
@@ -191,9 +216,9 @@ MemoryAllocatorDump* ProcessMemoryDump::GetSharedGlobalAllocatorDump(
 }
 
 void ProcessMemoryDump::AddHeapDump(const std::string& absolute_name,
-                                    scoped_refptr<TracedValue> heap_dump) {
+                                    std::unique_ptr<TracedValue> heap_dump) {
   DCHECK_EQ(0ul, heap_dumps_.count(absolute_name));
-  heap_dumps_[absolute_name] = heap_dump;
+  heap_dumps_[absolute_name] = std::move(heap_dump);
 }
 
 void ProcessMemoryDump::Clear() {
@@ -227,7 +252,10 @@ void ProcessMemoryDump::TakeAllDumpsFrom(ProcessMemoryDump* other) {
                                 other->allocator_dumps_edges_.end());
   other->allocator_dumps_edges_.clear();
 
-  heap_dumps_.insert(other->heap_dumps_.begin(), other->heap_dumps_.end());
+  for (auto& it : other->heap_dumps_) {
+    DCHECK_EQ(0ul, heap_dumps_.count(it.first));
+    heap_dumps_.insert(std::make_pair(it.first, std::move(it.second)));
+  }
   other->heap_dumps_.clear();
 }
 

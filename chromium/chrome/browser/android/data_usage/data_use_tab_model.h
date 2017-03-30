@@ -7,34 +7,32 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/containers/hash_tables.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/data_usage/tab_data_use_entry.h"
 #include "components/sessions/core/session_id.h"
+#include "url/gurl.h"
 
 namespace base {
 class SingleThreadTaskRunner;
 class TickClock;
 }
 
-class GURL;
-
 namespace chrome {
 
 namespace android {
 
 class DataUseMatcher;
-class ExternalDataUseObserver;
+class ExternalDataUseObserverBridge;
 
 // Models tracking and labeling of data usage within each Tab. Within each tab,
 // the model tracks the data use of a sequence of navigations in a "tracking
@@ -71,25 +69,30 @@ class DataUseTabModel {
   };
 
   // TabDataUseObserver provides the interface for getting notifications from
-  // the DataUseTabModel. TabDataUseObserver is called back on UI thread.
+  // the DataUseTabModel. The observer must be added on the UI thread, and the
+  // callbacks will be received on the UI thread.
   class TabDataUseObserver {
    public:
     virtual ~TabDataUseObserver() {}
 
-    // Notification callback when tab tracking sessions are started and ended.
-    // The callback will be received on the same thread AddObserver was called
-    // from.
+    // Notification callbacks when tab tracking sessions are started and ended.
     virtual void NotifyTrackingStarting(SessionID::id_type tab_id) = 0;
     virtual void NotifyTrackingEnding(SessionID::id_type tab_id) = 0;
+
+    // Notification callback that DataUseTabModel is ready to process the UI
+    // navigation events.
+    virtual void OnDataUseTabModelReady() = 0;
   };
 
   DataUseTabModel();
 
-  // Initializes |this| on UI thread. |external_data_use_observer| is the weak
-  // pointer to ExternalDataUseObserver object that owns |this|.
+  // Initializes |this| on UI thread. |external_data_use_observer_bridge| is the
+  // pointer to ExternalDataUseObserverBridge object. DataUseTabModel and
+  // ExternalDataUseObserverBridge objects are owned by ExternalDataUseObserver
+  // and DataUseTabModel is destroyed first followed by
+  // ExternalDataUseObserverBridge.
   void InitOnUIThread(
-      const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
-      const base::WeakPtr<ExternalDataUseObserver>& external_data_use_observer);
+      const ExternalDataUseObserverBridge* external_data_use_observer_bridge);
 
   virtual ~DataUseTabModel();
 
@@ -164,6 +167,11 @@ class DataUseTabModel {
   // package name match.
   bool IsCustomTabPackageMatch(SessionID::id_type tab_id) const;
 
+  // Returns true if DataUseTabModel is ready to process UI navigation events.
+  bool is_ready_for_navigation_event() const {
+    return is_ready_for_navigation_event_;
+  }
+
  protected:
   // Notifies the observers that a data usage tracking session started for
   // |tab_id|. Protected for testing.
@@ -172,6 +180,10 @@ class DataUseTabModel {
   // Notifies the observers that an active data usage tracking session ended for
   // |tab_id|. Protected for testing.
   void NotifyObserversOfTrackingEnding(SessionID::id_type tab_id);
+
+  // Notifies the observers that DataUseTabModel is ready to process navigation
+  // events.
+  void NotifyObserversOfDataUseTabModelReady();
 
  private:
   friend class DataUseTabModelTest;
@@ -187,6 +199,8 @@ class DataUseTabModel {
   FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest,
                            MultipleObserverMultipleStartEndEvents);
   FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest, ObserverStartEndEvents);
+  FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest,
+                           ProcessBufferedNavigationEventsAfterRuleFetch);
   FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest, TabCloseEvent);
   FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest, TabCloseEventEndsTracking);
   FRIEND_TEST_ALL_PREFIXES(DataUseTabModelTest,
@@ -250,10 +264,16 @@ class DataUseTabModel {
   const base::TimeDelta open_tab_expiration_duration_;
 
   // TickClock used for obtaining the current time.
-  scoped_ptr<base::TickClock> tick_clock_;
+  std::unique_ptr<base::TickClock> tick_clock_;
 
   // Stores the matching patterns.
-  scoped_ptr<DataUseMatcher> data_use_matcher_;
+  std::unique_ptr<DataUseMatcher> data_use_matcher_;
+
+  // True if DataUseTabModel is ready to process UI navigation events.
+  // DataUseTabModel will be considered ready when the first rule fetch is
+  // complete or the control app not installed callback was received, whichever
+  // is sooner.
+  bool is_ready_for_navigation_event_;
 
   // True if the external control app is installed.
   bool is_control_app_installed_;

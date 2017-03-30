@@ -27,38 +27,39 @@
 
 #include "bindings/core/v8/V8Binding.h"
 #include "wtf/text/StringHash.h"
+#include <utility>
 
 namespace blink {
 
 StringCacheMapTraits::MapType* StringCacheMapTraits::MapFromWeakCallbackInfo(
     const v8::WeakCallbackInfo<WeakCallbackDataType>& data)
 {
-    return &(V8PerIsolateData::from(data.GetIsolate())->stringCache()->m_stringCache);
+    return &(V8PerIsolateData::from(data.GetIsolate())->getStringCache()->m_stringCache);
 }
 
 void StringCacheMapTraits::Dispose(
     v8::Isolate* isolate, v8::Global<v8::String> value, StringImpl* key)
 {
-    V8PerIsolateData::from(isolate)->stringCache()->InvalidateLastString();
+    V8PerIsolateData::from(isolate)->getStringCache()->InvalidateLastString();
     key->deref();
 }
 
 void StringCacheMapTraits::DisposeWeak(const v8::WeakCallbackInfo<WeakCallbackDataType>& data)
 {
-    V8PerIsolateData::from(data.GetIsolate())->stringCache()->InvalidateLastString();
+    V8PerIsolateData::from(data.GetIsolate())->getStringCache()->InvalidateLastString();
     data.GetParameter()->deref();
 }
 
 void StringCacheMapTraits::OnWeakCallback(const v8::WeakCallbackInfo<WeakCallbackDataType>& data)
 {
-    V8PerIsolateData::from(data.GetIsolate())->stringCache()->InvalidateLastString();
+    V8PerIsolateData::from(data.GetIsolate())->getStringCache()->InvalidateLastString();
 }
 
 
 CompressibleStringCacheMapTraits::MapType* CompressibleStringCacheMapTraits::MapFromWeakCallbackInfo(
     const v8::WeakCallbackInfo<WeakCallbackDataType>& data)
 {
-    return &(V8PerIsolateData::from(data.GetIsolate())->stringCache()->m_compressibleStringCache);
+    return &(V8PerIsolateData::from(data.GetIsolate())->getStringCache()->m_compressibleStringCache);
 }
 
 void CompressibleStringCacheMapTraits::Dispose(
@@ -185,7 +186,7 @@ v8::Local<v8::String> StringCache::createStringAndInsertIntoCache(v8::Isolate* i
 
     stringImpl->ref();
     wrapper.MarkIndependent();
-    m_stringCache.Set(stringImpl, wrapper.Pass(), &m_lastV8String);
+    m_stringCache.Set(stringImpl, std::move(wrapper), &m_lastV8String);
     m_lastStringImpl = stringImpl;
 
     return newString;
@@ -211,7 +212,7 @@ v8::Local<v8::String> StringCache::createStringAndInsertIntoCache(v8::Isolate* i
     // object in a CompressibleStringImpl, uncompressed string will exists even
     // when compressing the string.
     CompressibleStringCacheMapTraits::MapType::PersistentValueReference unused;
-    m_compressibleStringCache.Set(stringImpl, wrapper.Pass(), &unused);
+    m_compressibleStringCache.Set(stringImpl, std::move(wrapper), &unused);
 
     return newString;
 }

@@ -34,7 +34,10 @@ enum DataReductionProxyBypassType {
 };
 
 // Values for the bypass actions that can be specified by the Data Reduction
-// Proxy in response to a client request.
+// Proxy in response to a client request. These are explicit bypass actions
+// specified by the Data Reduction Proxy in the Chrome-Proxy header, block-once,
+// bypass=1, block=300, etc. These are not used for Chrome initiated bypasses
+// due to a server error, missing Via header, etc.
 enum DataReductionProxyBypassAction {
 #define BYPASS_ACTION_TYPE(label, value) BYPASS_ACTION_TYPE_##label = value,
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_bypass_action_list.h"
@@ -75,9 +78,9 @@ const char* chrome_proxy_lo_fi_directive();
 // requests and responses.
 const char* chrome_proxy_lo_fi_preview_directive();
 
-// Gets the Chrome-Proxy directive used by data reduction proxy Lo-Fi control
-// experiment requests.
-const char* chrome_proxy_lo_fi_experiment_directive();
+// Gets the Chrome-Proxy directive used by data reduction proxy Lo-Fi preview
+// experiment to ignore the blacklist.
+const char* chrome_proxy_lo_fi_ignore_preview_blacklist_directive();
 
 // Returns true if the Chrome-Proxy header is present and contains a bypass
 // delay. Sets |proxy_info->bypass_duration| to the specified delay if greater

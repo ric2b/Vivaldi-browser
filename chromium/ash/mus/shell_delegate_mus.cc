@@ -8,6 +8,7 @@
 #include "ash/default_user_wallpaper_delegate.h"
 #include "ash/gpu_support_stub.h"
 #include "ash/media_delegate.h"
+#include "ash/mus/context_menu_mus.h"
 #include "ash/mus/shelf_delegate_mus.h"
 #include "ash/session/session_state_delegate.h"
 #include "ash/system/tray/default_system_tray_delegate.h"
@@ -69,7 +70,7 @@ class SessionStateDelegateStub : public SessionStateDelegate {
   bool screen_locked_;
 
   // A pseudo user info.
-  scoped_ptr<user_manager::UserInfo> user_info_;
+  std::unique_ptr<user_manager::UserInfo> user_info_;
 
   DISALLOW_COPY_AND_ASSIGN(SessionStateDelegateStub);
 };
@@ -95,6 +96,7 @@ class MediaDelegateStub : public MediaDelegate {
 }  // namespace
 
 ShellDelegateMus::ShellDelegateMus() {}
+
 ShellDelegateMus::~ShellDelegateMus() {}
 
 bool ShellDelegateMus::IsFirstRunAfterBoot() const {
@@ -158,6 +160,10 @@ void ShellDelegateMus::RemoveVirtualKeyboardStateObserver(
   NOTIMPLEMENTED();
 }
 
+void ShellDelegateMus::OpenUrl(const GURL& url) {
+  NOTIMPLEMENTED();
+}
+
 app_list::AppListViewDelegate* ShellDelegateMus::GetAppListViewDelegate() {
   NOTIMPLEMENTED();
   return nullptr;
@@ -197,12 +203,9 @@ MediaDelegate* ShellDelegateMus::CreateMediaDelegate() {
   return new MediaDelegateStub;
 }
 
-ui::MenuModel* ShellDelegateMus::CreateContextMenu(
-    aura::Window* root_window,
-    ShelfItemDelegate* item_delegate,
-    ShelfItem* item) {
-  NOTIMPLEMENTED();
-  return nullptr;
+ui::MenuModel* ShellDelegateMus::CreateContextMenu(ash::Shelf* shelf,
+                                                   const ShelfItem* item) {
+  return new ContextMenuMus(shelf);
 }
 
 GPUSupport* ShellDelegateMus::CreateGPUSupport() {

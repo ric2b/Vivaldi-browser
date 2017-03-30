@@ -12,21 +12,11 @@ namespace media_router {
 // static
 void MediaRouterMetrics::RecordMediaRouterDialogOrigin(
     MediaRouterDialogOpenOrigin origin) {
-  DCHECK_NE(static_cast<int>(origin),
+  DCHECK_LT(static_cast<int>(origin),
             static_cast<int>(MediaRouterDialogOpenOrigin::TOTAL_COUNT));
   UMA_HISTOGRAM_ENUMERATION(
       "MediaRouter.Icon.Click.Location", static_cast<int>(origin),
       static_cast<int>(MediaRouterDialogOpenOrigin::TOTAL_COUNT));
-}
-
-// static
-void MediaRouterMetrics::RecordMediaRouteProviderWakeReason(
-    MediaRouteProviderWakeReason reason) {
-  DCHECK_NE(static_cast<int>(reason),
-            static_cast<int>(MediaRouteProviderWakeReason::TOTAL_COUNT));
-  UMA_HISTOGRAM_ENUMERATION(
-      "MediaRouter.Provider.WakeReason", static_cast<int>(reason),
-      static_cast<int>(MediaRouteProviderWakeReason::TOTAL_COUNT));
 }
 
 // static
@@ -46,11 +36,21 @@ void MediaRouterMetrics::RecordMediaRouterDialogLoaded(
 // static
 void MediaRouterMetrics::RecordMediaRouterInitialUserAction(
     MediaRouterUserAction action) {
-  DCHECK_NE(static_cast<int>(action),
+  DCHECK_LT(static_cast<int>(action),
             static_cast<int>(MediaRouterUserAction::TOTAL_COUNT));
   UMA_HISTOGRAM_ENUMERATION(
       "MediaRouter.Ui.FirstAction", static_cast<int>(action),
       static_cast<int>(MediaRouterUserAction::TOTAL_COUNT));
+}
+
+// static
+void MediaRouterMetrics::RecordRouteCreationOutcome(
+    MediaRouterRouteCreationOutcome outcome) {
+  DCHECK_LT(static_cast<int>(outcome),
+            static_cast<int>(MediaRouterRouteCreationOutcome::TOTAL_COUNT));
+  UMA_HISTOGRAM_ENUMERATION(
+    "MediaRouter.Route.CreationOutcome", static_cast<int>(outcome),
+    static_cast<int>(MediaRouterRouteCreationOutcome::TOTAL_COUNT));
 }
 
 }  // namespace media_router

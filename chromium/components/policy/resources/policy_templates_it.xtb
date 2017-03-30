@@ -2,6 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="it">
 <translation id="101438888985615157">Ruota lo schermo di 180°</translation>
+<translation id="1015272884520659144">Definisce l'elenco di dispositivi USB a cui è consentito scollegarsi dal driver del kernel per essere utilizzati tramite l'API chrome.usb direttamente all'interno di un'applicazione web. Le voci sono coppie costituite dall'ID fornitore USB e dall'ID prodotto per identificare un hardware specifico.
+
+      Se la norma non è configurata, l'elenco di dispositivi USB scollegabili è considerato vuoto.</translation>
 <translation id="1017967144265860778">Gestione dell'alimentazione nella schermata di accesso</translation>
 <translation id="1019101089073227242">Imposta directory dati utente</translation>
 <translation id="1022361784792428773">ID delle estensioni (oppure * per tutte le estensioni) per cui non è consentita l'installazione</translation>
@@ -58,8 +61,6 @@
 
       Se la norma non viene impostata o se viene impostata su false, i pacchetti di crittografia RC4 in TLS non saranno attivati. In alternativa, la norma può essere impostata su true per mantenere la compatibilità con un server obsoleto. Si tratta di una soluzione temporanea ed è necessario configurare nuovamente il server.</translation>
 <translation id="1297182715641689552">Utilizza uno script proxy .pac</translation>
-<translation id="1300635491585192248">Prevedi le azioni di rete su qualsiasi rete che non sia
-          cellulare</translation>
 <translation id="1304973015437969093">ID app/estensioni e URL di aggiornamento da installare automaticamente</translation>
 <translation id="1310699457130669094">Qui puoi specificare un URL che rimanda a un file proxy .pac. Questa norma viene applicata soltanto se sono state selezionate le impostazioni proxy manuali in "Scegli come specificare le impostazioni del server proxy". Se hai selezionato un'altra modalità per l'impostazione delle norme relative al proxy, non dovresti impostare questa norma. Per esempi dettagliati, visita il sito all'indirizzo: <ph name="PROXY_HELP_URL" />.</translation>
 <translation id="1313457536529613143">Consente di specificare la percentuale di regolazione del ritardo di oscuramento dello schermo quando viene osservata l'attività dell'utente mentre lo schermo è oscurato o subito dopo lo spegnimento dello schermo.
@@ -78,6 +79,7 @@ Il fattore di regolazione minimo deve essere 100%.</translation>
 <translation id="1359553908012294236">Se questa norma viene impostata su true o non viene configurata, in <ph name="PRODUCT_NAME" /> verranno attivati gli accessi come ospite, che sono profili <ph name="PRODUCT_NAME" /> in cui tutte le finestre sono in modalità di navigazione in incognito.
 
       Se questa norma viene impostata su false, in <ph name="PRODUCT_NAME" /> non sarà possibile avviare profili ospite.</translation>
+<translation id="1363275621236827384">Attiva le query in Quirks Server per i profili hardware</translation>
 <translation id="1397855852561539316">URL di suggerimento del provider di ricerca predefinito</translation>
 <translation id="1398889361882383850">Consente di stabilire se consentire o meno ai siti web di eseguire automaticamente i plug-in. L'esecuzione automatica dei plug-in può essere consentita o negata per tutti i siti web.
 
@@ -200,7 +202,17 @@ Questa norma viene rispettata soltanto se la norma "DefaultSearchProviderEnabled
 <translation id="1865417998205858223">Autorizzazioni chiave</translation>
 <translation id="186719019195685253">Azione da compiere quando il ritardo di inattività viene raggiunto durante l'utilizzo della corrente CA</translation>
 <translation id="187819629719252111">Consente di accedere ai file locali presenti sul computer, permettendo a <ph name="PRODUCT_NAME" /> di visualizzare le finestre di dialogo di selezione dei file. Se attivi questa impostazione, gli utenti potranno aprire le finestre di dialogo di selezione dei file come di consueto. Se disattivi questa impostazione, ogni volta che l'utente eseguirà un'azione che apre una finestra di dialogo di selezione file (ad esempio importazione di Preferiti, caricamento di file, salvataggio di link e così via), verrà visualizzato un messaggio e il sistema presupporrà che l'utente abbia fatto clic sul pulsante Annulla della finestra di dialogo stessa. Se questa impostazione non viene impostata, gli utenti potranno aprire le finestre di dialogo di selezione file come di consueto.</translation>
+<translation id="1879485426724769439">Consente di specificare il fuso orario da utilizzare per il dispositivo. Gli utenti possono sostituire il fuso orario specificato per la sessione corrente. Tuttavia, dopo la disconnessione viene ripristinato il fuso orario specificato. Se viene specificato un valore non valido, la norma viene attivata comunque utilizzando il valore "GMT". Se viene specificata una stringa vuota, la norma viene ignorata.
+
+      Se la norma non viene utilizzata, rimane in uso il fuso orario attivo corrente, tuttavia gli utenti possono modificarlo e tale modifica è persistente. Pertanto la modifica di un utente incide sulla schermata di accesso e su tutti gli altri utenti.
+
+      Sui nuovi dispositivi è impostato il fuso orario "US/Pacific".
+
+      Il formato del valore segue quello dei nomi dei fusi orari dello "IANA Time Zone Database" (visita il sito "https://en.wikipedia.org/wiki/Tz_database"). In particolare, gran parte dei fusi orari può essere indicata come "continent/large_city" o "ocean/large_city".
+
+      Se questa norma viene impostata la scelta automatica del fuso orario in base alla posizione del dispositivo viene completamente disattivata. Sostituisce anche la norma SystemTimezoneAutomaticDetection.</translation>
 <translation id="1897365952389968758">Consenti l'esecuzione di JavaScript in tutti i siti</translation>
+<translation id="193259052151668190">Whitelist di dispositivi USB scollegabili</translation>
 <translation id="1933378685401357864">Immagine di sfondo</translation>
 <translation id="193900697589383153">Consente di aggiungere un pulsante di uscita all'area di notifica.
 
@@ -517,7 +529,6 @@ Se la norma non viene impostata l'impostazione verrà attivata ma gli utenti pot
 Se questa norma viene impostata su True o non viene impostata, l'utente non viene considerato inattivo durante la riproduzione dell'audio. In questo modo non viene raggiunto il timeout di inattività e l'azione per l'inattività non viene compiuta. Tuttavia, dopo i timeout configurati lo schermo viene oscurato, disattivato e bloccato, a prescindere dall'attività audio.
 
 Se questa norma viene impostata su False, l'attività audio non impedisce di considerare inattivo l'utente.</translation>
-<translation id="2948381198510798695"><ph name="PRODUCT_NAME" /> ignorerà i proxy relativi all'elenco di host specificato qui. Questa norma verrà applicata soltanto se sono state selezionate manualmente le impostazioni proxy manuali in "Scegli come specificare le impostazioni del server proxy". Se hai selezionato un'altra modalità per l'impostazione delle norme relative al proxy, non dovresti impostare questa norma. Per esempi più dettagliati, visita il sito all'indirizzo <ph name="PROXY_HELP_URL" />.</translation>
 <translation id="2956777931324644324">Questa norma è stata ritirata a partire dalla versione 36 di <ph name="PRODUCT_NAME" />.
 
       Consente di specificare se attivare o meno l'estensione di certificati associati al dominio TLS.
@@ -634,6 +645,13 @@ Il valore della norma deve essere specificato in millisecondi. I valori devono e
 
           Se questa norma non viene impostata, per tutti i siti verrà utilizzato il valore predefinito globale della norma "DefaultKeygenSetting", se è impostata, oppure verrà utilizzata la configurazione personale dell'utente.</translation>
 <translation id="3381968327636295719">Utilizza il browser host per impostazione predefinita</translation>
+<translation id="3398137877608138703">Consente di permettere o negare l'acquisizione video.
+
+      Se la norma viene attivata o non viene configurata (impostazione predefinita), all'utente verrà richiesto l'accesso all'acquisizione video, a eccezione degli URL configurati nell'elenco VideoCaptureAllowedUrls per cui verrà concesso l'accesso senza richieste. Le app ARC potranno accedere alla videocamera se è stata concessa l'autorizzazione.
+
+      Se questa norma viene disattivata, all'utente non verrà mai chiesto nulla e l'acquisizione video sarà disponibile soltanto per gli URL configurati in VideoCaptureAllowedUrls. Le app ARC non potranno accedere alla videocamera.
+
+      A eccezione delle app ARC, questa norma viene applicata per tutti i tipi di ingressi video e non soltanto per la videocamera integrata.</translation>
 <translation id="3417418267404583991">Se questa norma viene impostata su true o non viene configurata, in <ph name="PRODUCT_OS_NAME" /> verranno attivati gli accessi come ospite. Gli accessi come ospite sono sessioni utente anonime che non richiedono password.
 
       Se questa norma viene impostata su false, in <ph name="PRODUCT_OS_NAME" /> non sarà possibile avviare sessioni Ospite.</translation>
@@ -651,6 +669,25 @@ Se questa norma viene impostata su False o non viene impostata, i ritardi di ges
 <translation id="3478024346823118645">Cancella dati utente all'uscita</translation>
 <translation id="348495353354674884">Attiva tastiera virtuale</translation>
 <translation id="3496296378755072552">Gestione password</translation>
+<translation id="349667858031092827">Non rilevare mai automaticamente il fuso orario.</translation>
+<translation id="3502472987829488885">Consente di specificare il server proxy utilizzato da <ph name="PRODUCT_NAME" /> e dalle app ARC, nonché di impedire agli utenti di modificare le impostazioni proxy.
+
+          Se si decide di non utilizzare mai un server proxy e di collegarsi sempre direttamente, tutte le altre opzioni vengono ignorate. Le app ARC utilizzeranno il server proxy predefinito della rete corrente, se disponibile.
+
+          Se si decide di utilizzare le impostazioni proxy di sistema, tutte le altre opzioni vengono ignorate. Le app ARC utilizzeranno il server proxy predefinito della rete corrente, se disponibile.
+
+          Se si decide di rilevare automaticamente il server proxy, tutte le altre opzioni vengono ignorate.
+
+          Se si decide di utilizzare una modalità server proxy fissa, è possibile specificare ulteriori opzioni in "Indirizzo o URL del server proxy" e in "Elenco separato da virgole delle regole di bypass proxy".
+
+          Se si decide di utilizzare uno script proxy .pac, è necessario specificare l'URL per lo script in "URL di un file proxy .pac".
+
+          Per esempi dettagliati, visitare il sito:
+          <ph name="PROXY_HELP_URL" />
+
+          Se questa impostazione viene attivata, <ph name="PRODUCT_NAME" /> e le app ARC ignoreranno tutte le opzioni correlate al proxy specificate nella riga di comando.
+
+          Se questa norma non viene impostata, gli utenti potranno scegliere le impostazioni proxy che preferiscono.</translation>
 <translation id="3504791027627803580">Consente di specificare l'URL del motore di ricerca utilizzato per la ricerca di immagini. Le richieste di ricerca verranno inviate con il metodo GET. Se viene impostata la norma DefaultSearchProviderImageURLPostParams, per le richieste di ricerca di immagini viene utilizzato il metodo POST.
 
 Questa norma è facoltativa. Se non viene impostata, non verrà utilizzata la ricerca di immagini.
@@ -667,8 +704,16 @@ Questa norma viene rispettata soltanto se viene attivata la norma "DefaultSearch
 
       Il valore del criterio deve essere specificato in millisecondi. I valori sono limitati a un intervallo compreso tra 30 secondi e 24 ore.</translation>
 <translation id="3528000905991875314">Attiva pagine di errore sostitutive</translation>
+<translation id="3538538104630456270">L'impostazione associata veniva utilizzata prima dell'introduzione della riautenticazione per la visualizzazione delle password. Dopodiché l'impostazione e quindi la norma non hanno più inciso sul comportamento di Chrome. Ora Chrome funziona come se la norma fosse impostata in modo da disattivare la visualizzazione delle password in testo non criptato nella pagina delle impostazioni di Gestione password. Ciò significa che la pagina delle impostazioni contiene soltanto un segnaposto e che Chrome mostra la password soltanto se l'utente fa clic su "Mostra" (ed esegue la riautenticazione, se possibile). Di seguito è riportata la descrizione originale della norma.
+
+          Consente di stabilire se l'utente può visualizzare le password in testo non criptato in Gestione password.
+
+          Se questa impostazione viene disattivata, Gestione password impedisce la visualizzazione delle password memorizzate in testo non criptato nella finestra Gestione password.
+
+          Se questa norma viene attivata o non viene impostata, gli utenti potranno visualizzare le loro password in testo non criptato in Gestione password.</translation>
 <translation id="3547954654003013442">Impostazioni proxy</translation>
 <translation id="3570008976476035109">Blocca plug-in su questi siti</translation>
+<translation id="3591584750136265240">Configura il comportamento di autenticazione dell'accesso</translation>
 <translation id="3627678165642179114">Attiva o disattiva il servizio web di controllo ortografico</translation>
 <translation id="3646859102161347133">Impostazione tipo di ingrandimento dello schermo</translation>
 <translation id="3653237928288822292">Icona del provider di ricerca predefinito</translation>
@@ -747,7 +792,6 @@ Per impostazione predefinita sono autorizzati tutti gli host di messaggi nativi 
 
       Ogni voce dell'elenco contiene un dizionario che deve includere l'ID dell'estensione nel campo "extension-id" e il relativo URL di aggiornamento nel campo "update-url".</translation>
 <translation id="3891357445869647828">Abilita JavaScript</translation>
-<translation id="389421284571827139">Consente di specificare il server proxy utilizzato da <ph name="PRODUCT_NAME" /> e di impedire agli utenti di modificare le impostazioni del proxy. Se decidi di non utilizzare mai un server proxy e di eseguire sempre un collegamento diretto, tutte le altre opzioni vengono ignorate. Se scegli di rilevare automaticamente il server proxy, tutte le altre opzioni vengono ignorate. Per esempi dettagliati, visita il sito: <ph name="PROXY_HELP_URL" />. Se attivi questa impostazione, <ph name="PRODUCT_NAME" /> ignora tutte le opzioni correlate al proxy specificate dalla riga di comando. Se queste norme non vengono impostate, gli utenti potranno scegliere autonomamente le impostazioni del proxy.</translation>
 <translation id="3907986150060929099">Consente di impostare le impostazioni internazionali consigliate per una sessione pubblica</translation>
 <translation id="391531815696899618">Consente di disattivare la sincronizzazione di Google Drive nell'app File di <ph name="PRODUCT_OS_NAME" /> quando è impostata su True. In tal caso, non vengono caricati dati in Google Drive.
 
@@ -768,7 +812,6 @@ Per impostazione predefinita sono autorizzati tutti gli host di messaggi nativi 
 <translation id="402759845255257575">Non consentire ad alcun sito di eseguire JavaScript</translation>
 <translation id="4027608872760987929">Attiva il provider di ricerca predefinito</translation>
 <translation id="4039085364173654945">Consente di stabilire se per i contenuti secondari di terze parti presenti in una pagina è consentita la visualizzazione di una finestra di dialogo Autorizzazione di base HTTP. Generalmente questa norma non è attiva per tutela dal phishing. Se questa norma non viene impostata, l'impostazione verrà disattivata e per i contenuti secondari di terze parti non potrà essere visualizzata una finestra di dialogo Autorizzazione di base HTTP.</translation>
-<translation id="4052765007567912447">Consente di stabilire se l'utente può visualizzare le password in testo non crittografato in Gestione password. Se disattivi questa impostazione, Gestione password impedisce la visualizzazione delle password memorizzate in testo non crittografato nella finestra Gestione password. Se attivi questa norma o non la imposti, gli utenti potranno visualizzare le loro password in testo non crittografato in Gestione password.</translation>
 <translation id="4056910949759281379">Disabilita protocollo SPDY</translation>
 <translation id="4088589230932595924">Modalità di navigazione in incognito forzata</translation>
 <translation id="4088983553732356374">Consente di stabilire se consentire o meno ai siti web di impostare dati locali. L'impostazione dei dati locali può essere consentita o vietata per tutti i siti web.
@@ -776,6 +819,23 @@ Per impostazione predefinita sono autorizzati tutti gli host di messaggi nativi 
           Se questa norma viene impostata su "Conserva cookie per tutta la durata della sessione", i cookie vengono cancellati alla chiusura della sessione. Quando <ph name="PRODUCT_NAME" /> è in esecuzione in "modalità background", è possibile che la sessione non si chiuda quando viene chiusa l'ultima finestra. Leggere la norma "BackgroundModeEnabled" per avere ulteriori informazioni sulla configurazione di questo comportamento.
 
           Se questa norma non viene impostata, verrà utilizzata la norma "AllowCookies", che potrà essere modificata dall'utente.</translation>
+<translation id="4098957623809244159">Questa norma è obsoleta, utilizza ProxyMode al suo posto.
+
+          Consente di specificare il server proxy utilizzato da <ph name="PRODUCT_NAME" /> e dalle app ARC e impedisce agli utenti di modificare le impostazioni proxy.
+
+          Se scegli di non utilizzare mai un server proxy e di connetterti sempre direttamente, tutte le altre opzioni vengono ignorate.
+
+          Se scegli di utilizzare le impostazioni proxy del sistema o di rilevare automaticamente il server proxy, tutte le altre opzioni vengono ignorate.
+
+          Se scegli le impostazioni proxy manuali, puoi specificare ulteriori opzioni in "Indirizzo o URL del server proxy", "URL per file proxy .pac" ed "Elenco separato da virgole delle regole bypass proxy".
+
+          Per esempi dettagliati, visita il sito:
+          <ph name="PROXY_HELP_URL" />
+
+          Se attivi questa impostazione, <ph name="PRODUCT_NAME" /> ignora tutte le opzioni correlate al proxy specificate dalla riga di comando.
+
+          Se questa norma non viene impostata, gli utenti potranno scegliere autonomamente le impostazioni del proxy.</translation>
+<translation id="4103289232974211388">Reindirizza a IdP SAML dopo la conferma dell'utente</translation>
 <translation id="410478022164847452">Consente di specificare il periodo di tempo senza input dell'utente trascorso il quale viene compiuta l'azione stabilita per l'inattività quando viene utilizzata la corrente alternata.
 
 Se questa norma viene impostata, consente di specificare il periodo di tempo per cui l'utente deve rimanere inattivo prima che <ph name="PRODUCT_OS_NAME" /> compia l'azione di inattività, che può essere configurata separatamente.
@@ -961,13 +1021,6 @@ Questa norma viene rispettata soltanto se la norma "DefaultSearchProviderEnabled
           Il valore deve essere un array di dizionari JSON in stringa. Ogni dizionario deve avere questa forma: { "pattern": "$URL_PATTERN", "filter" : $FILTER }, dove $URL_PATTERN è un pattern di impostazione dei contenuti. $FILTER restringe i certificati client da cui il browser effettua automaticamente la selezione. Indipendentemente dal filtro, saranno selezionati solo certificati che soddisfano la richiesta di certificato del server. Se $FILTER presenta la forma { "ISSUER": { "CN": "$ISSUER_CN" } }, vengono inoltre selezionati solo i certificati client emessi da certificati con valore CommonName uguale a $ISSUER_CN. Se $FILTER è il dizionario vuoto {}, la selezione del certificato client non viene limitata ulteriormente.
 
           Se questa norma non viene impostata, la selezione automatica non avviene per nessun sito.</translation>
-<translation id="4980301635509504364">Consente di permettere o negare l'acquisizione video.
-
-Se la norma viene attivata o non viene configurata (impostazione predefinita), all'utente verrà richiesto l'accesso all'acquisizione video, ad eccezione degli URL configurati nell'elenco VideoCaptureAllowedUrls per cui verrà concesso l'accesso senza richieste.
-
-Se questa norma viene disattivata, all'utente non verrà mai chiesto nulla e l'acquisizione video sarà disponibile soltanto per gli URL configurati in VideoCaptureAllowedUrls.
-
-Questa norma viene applicata per tutti i tipi di ingressi video e non soltanto per la webcam integrata.</translation>
 <translation id="4980635395568992380">Tipo di dati:</translation>
 <translation id="4983201894483989687">Consenti esecuzione dei plug-in obsoleti</translation>
 <translation id="4988291787868618635">Azione da compiere a raggiungimento ritardo inattività</translation>
@@ -1110,7 +1163,6 @@ Se questa impostazione viene disattivata o non viene impostata, sia gli utenti l
       Se specificata, questa norma aggiunge un parametro di query chiamato "restrict" all'URL utilizzato per recuperare il numero di inizializzazione delle varianti. Il valore del parametro sarà il valore specificato in questa norma.
 
       Se non è specificata, questa norma non modifica l'URL del numero di inizializzazione delle varianti.</translation>
-<translation id="5564962323737505851">Configura Gestione password. Se Gestione password è abilitata, puoi scegliere di consentire o meno all'utente di visualizzare le password memorizzate in testo non crittografato.</translation>
 <translation id="556941986578702361">Controlla la visualizzazione automatica dello shelf in <ph name="PRODUCT_OS_NAME" />.
 
       Se il criterio è impostato su "AlwaysAutoHideShelf", lo scaffale non sarà mai visualizzato.
@@ -1150,7 +1202,6 @@ Se questa norma non viene impostata, il comportamento delle norme più specifich
 
       Se questa norma non viene impostata o se viene impostata su false, <ph name="PRODUCT_NAME" /> utilizzerà le impostazioni di controllo delle revoche online esistenti.</translation>
 <translation id="5732972008943405952">Importa i dati della Compilazione automatica dei moduli dal browser predefinito alla prima esecuzione</translation>
-<translation id="5761030451068906335">Consente di configurare le impostazioni proxy per <ph name="PRODUCT_NAME" />. Questa norma non è ancora pronta per essere utilizzata, pertanto invitiamo a non utilizzarla.</translation>
 <translation id="5765780083710877561">Descrizione:</translation>
 <translation id="5770738360657678870">Canale Dev (potrebbe essere instabile)</translation>
 <translation id="5774856474228476867">URL di ricerca del provider di ricerca predefinito</translation>
@@ -1175,13 +1226,6 @@ Il valore della norma deve essere specificato in millisecondi.</translation>
       Visita il sito https://www.chromium.org/administrators/policy-list-3/user-data-directory-variables per consultare un elenco di variabili utilizzabili.
 
       Se la norma non viene impostata, viene utilizzata la directory del profilo predefinita.</translation>
-<translation id="5819660021114910752">Consente di specificare il fuso orario da utilizzare per il dispositivo. Gli utenti possono sostituire il fuso orario specificato per la sessione corrente. Tuttavia, dopo la disconnessione viene ripristinato il fuso orario specificato. Se viene specificato un valore non valido, la norma viene attivata comunque utilizzando il valore "GMT". Se viene specificata una stringa vuota, la norma viene ignorata.
-
-      Se la norma non viene utilizzata, rimane in uso il fuso orario attivo, ma gli utenti possono modificarlo e tale modifica è persistente. La modifica di un utente incide sulla schermata di accesso e su tutti gli altri utenti.
-
-      Sui nuovi dispositivi è impostato il fuso orario "US/Pacific".
-
-      Il formato del valore segue quello dei nomi dei fusi orari dello "IANA Time Zone Database" (visita il sito "https://en.wikipedia.org/wiki/Tz_database"). In particolare, gran parte dei fusi orari può essere indicata come "continent/large_city" o "ocean/large_city".</translation>
 <translation id="5826047473100157858">Consente di specificare se l'utente può aprire o meno le pagine in modalità di navigazione in incognito in <ph name="PRODUCT_NAME" />. Se viene selezionata l'opzione "Attiva" o la norma non viene impostata, le pagine possono essere aperte in modalità di navigazione in incognito. Se viene selezionata l'opzione "Non attiva", le pagine non possono essere aperte in modalità di navigazione in incognito. Se viene selezionata l'opzione "Forzata", le pagine possono essere aperte SOLTANTO in modalità di navigazione in incognito.</translation>
 <translation id="5836064773277134605">Limita l'intervallo di porte UDP utilizzate dall'host di accesso remoto</translation>
 <translation id="5845159892130426052">Abilita API ShowModalDialog mediante 2015.04.30</translation>
@@ -1214,7 +1258,14 @@ Se la norma non viene impostata, la lettura vocale viene disattivata alla prima 
 <translation id="5893553533827140852">Se questa impostazione è attivata, le richieste di autenticazione Gnubby verranno trasferite al proxy attraverso una connessione host remota.
 
           Se questa impostazione è disattivata o non configurata, le richieste di autenticazione Gnubby non verranno trasferite al proxy.</translation>
-<translation id="5912364507361265851">Consenti agli utenti di mostrare le password in Gestione password</translation>
+<translation id="5900959132054596599"><ph name="PRODUCT_NAME" /> e le app ARC ignoreranno i proxy relativi all'elenco di host specificato qui.
+
+          Questa norma viene applicata soltanto se sono state selezionate le impostazioni proxy manuali in "Scegli come specificare le impostazioni del server proxy".
+
+          Se hai selezionato un'altra modalità per l'impostazione delle norme relative al proxy, non dovresti impostare questa norma.
+
+          Per esempi più dettagliati, visita il sito:
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="5921713479449475707">Permetti download di aggiornamento automatico tramite HTTP</translation>
 <translation id="5921888683953999946">Consente di impostare lo stato predefinito della funzione di accessibilità del puntatore grande nella schermata di accesso.
 
@@ -1347,6 +1398,7 @@ Questa norma viene rispettata soltanto se la norma "DefaultSearchProviderEnabled
 <translation id="6376659517206731212">Può essere obbligatoria</translation>
 <translation id="6378076389057087301">Specifica se l'attività audio incide sulla gestione dell'alimentazione</translation>
 <translation id="637934607141010488">Consente di indicare un elenco di utenti del dispositivo che hanno eseguito l'accesso di recente. Se la norma è impostata su False, gli utenti non vengono indicati.</translation>
+<translation id="639009029157091157">Consenti agli utenti di decidere.</translation>
 <translation id="6392973646875039351">Consente di attivare la funzione Compilazione automatica di <ph name="PRODUCT_NAME" /> e di permettere agli utenti di eseguire il completamento automatico dei moduli web utilizzando informazioni memorizzate in precedenza, come l'indirizzo o i dati della carta di credito. Se disattivi questa impostazione, gli utenti non potranno utilizzare la funzione Compilazione automatica. Se attivi questa impostazione o non imposti un valore, la funzione Compilazione automatica potrà essere gestita dagli utenti. Gli utenti potranno quindi configurare i profili di Compilazione automatica e attivare o disattivare a propria scelta la funzione Compilazione automatica.</translation>
 <translation id="6394350458541421998">La norma non è più supportata a partire dalla versione 29 di <ph name="PRODUCT_OS_NAME" />. Utilizza la norma PresentationScreenDimDelayScale.</translation>
 <translation id="6401669939808766804">Disconnetti l'utente</translation>
@@ -1359,7 +1411,7 @@ Questa norma viene rispettata soltanto se la norma "DefaultSearchProviderEnabled
       Se questa impostazione viene disattivata, gli utenti non potranno utilizzare la funzione Smart Lock.
 
       Se questa norma non viene impostata, per impostazione predefinita la funzione non è consentita per gli utenti gestiti dall'azienda ed è consentita per gli utenti non gestiti.</translation>
-<translation id="6513756852541213407">Consente di specificare il server proxy utilizzato da <ph name="PRODUCT_NAME" /> e di impedire agli utenti di modificare le impostazioni del proxy. Se decidi di non utilizzare mai un server proxy e di eseguire sempre un collegamento diretto, tutte le altre opzioni vengono ignorate. Se scegli di utilizzare le impostazioni proxy di sistema o di rilevare automaticamente il server proxy, tutte le altre opzioni vengono ignorate. Se scegli di utilizzare un server proxy fisso, puoi specificare ulteriori opzioni in "Indirizzo o URL del server proxy" e in "Elenco separato da virgole delle regole di bypass proxy". Se scegli di utilizzare uno script proxy .pac, devi specificare l'URL per lo script in "URL di un file proxy .pac". Per esempi dettagliati, visita il sito: <ph name="PROXY_HELP_URL" />. Se attivi questa impostazione, <ph name="PRODUCT_NAME" /> ignora tutte le opzioni correlate al proxy specificate dalla riga di comando. Se questa norma non viene impostata, gli utenti potranno scegliere autonomamente le impostazioni del proxy.</translation>
+<translation id="6491139795995924304">Consenti Bluetooth sul dispositivo</translation>
 <translation id="6520802717075138474">Importa motori di ricerca dal browser predefinito alla prima esecuzione</translation>
 <translation id="653608967792832033">Consente di specificare il periodo di tempo senza input dell'utente trascorso il quale lo schermo viene bloccato quando viene utilizzata la batteria.
 
@@ -1439,7 +1491,6 @@ Se questa norma non viene impostata o se l'elenco è vuoto, sarà possibile acce
 
       Se questa norma non viene impostata, la previsione di rete verrà attivata ma l'utente potrà modificarla.</translation>
 <translation id="6658245400435704251">Consente di specificare il numero di secondi massimo per cui un dispositivo può ritardare in modo casuale il download di un suo aggiornamento dal momento della pubblicazione dell'aggiornamento sul server. Il dispositivo può attendere una parte di questo tempo in termini di tempo reale e la parte rimanente in termini di numero di controlli della disponibilità di aggiornamenti. In ogni caso, la dispersione ha un limite massimo pari a un periodo di tempo costante in modo che un dispositivo non si blocchi mai in attesa di scaricare un aggiornamento.</translation>
-<translation id="6672934768721876104">Questa norma è obsoleta, quindi utilizza ProxyMode. Consente di specificare il server proxy utilizzato da <ph name="PRODUCT_NAME" /> e di impedire agli utenti di modificare le impostazioni proxy. Se decidi di non utilizzare mai un server proxy e di eseguire sempre un collegamento diretto, tutte le altre opzioni vengono ignorate. Se scegli di utilizzare le impostazioni proxy del sistema o di rilevare automaticamente il server proxy, tutte le altre opzioni vengono ignorate. Se scegli le impostazioni proxy manuali, puoi specificare ulteriori opzioni in "Indirizzo o URL del server proxy", "URL per file proxy .pac" ed "Elenco separato da virgole delle regole bypass proxy". Per esempi dettagliati, visita il sito: <ph name="PROXY_HELP_URL" />. Se attivi questa impostazione, <ph name="PRODUCT_NAME" /> ignorerà tutte le opzioni correlate al proxy specificate dalla riga di comando. Se questa norma non viene impostata, gli utenti potranno scegliere autonomamente le impostazioni del proxy.</translation>
 <translation id="6689792153960219308">Segnala lo stato dell'hardware</translation>
 <translation id="6693751878507293182">Se attivi questa impostazione, la ricerca automatica e l'installazione dei plug-in mancanti verranno disattivate in <ph name="PRODUCT_NAME" />. Se disattivi questa opzione o non la imposti, la funzione di ricerca dei plug-in sarà attiva.</translation>
 <translation id="6697474194550078937">Consente di limitare il tempo per cui un utente autenticato tramite SAML può eseguire l'accesso offline.
@@ -1563,6 +1614,7 @@ Se questa norma viene configurata, il gruppo di applicazioni è fisso e non può
 
 Se questa norma non viene impostata gli utenti possono modificare l'elenco di applicazioni bloccate in Avvio applicazioni.</translation>
 <translation id="7132877481099023201">URL a cui verrà concesso l'accesso ai dispositivi di acquisizione video senza richieste</translation>
+<translation id="7167436895080860385">Consenti agli utenti di mostrare le password in Gestione password (ritirata)</translation>
 <translation id="7173856672248996428">Profilo temporaneo</translation>
 <translation id="7187256234726597551">Se la norma viene impostata su true, l'attestazione da remoto viene consentita per il dispositivo e viene generato automaticamente un certificato che viene caricato sul Server di gestione del dispositivo.
 
@@ -1584,6 +1636,11 @@ Se l'azione è la sospensione, è possibile configurare separatamente il blocco 
 
           Se la norma "RestoreOnStartup" viene impostata in modo da ripristinare gli URL delle sessioni precedenti, questa norma non verrà rispettata e i cookie verranno memorizzati in modo permanente per i siti.</translation>
 <translation id="7207095846245296855">Forza il filtro SafeSearch di Google</translation>
+<translation id="7213425178181578730">Se questa norma è impostata su false, <ph name="PRODUCT_OS_NAME" /> disattiva il Bluetooth e l'utente non può riattivarlo.
+
+      Se questa norma è impostata su true o non viene affatto impostata, l'utente potrà attivare o disattivare il Bluetooth a seconda delle sue preferenze.
+
+      Se questa norma è impostata, l'utente non può modificarla né eseguirne l'override.</translation>
 <translation id="7216442368414164495">Consenti agli utenti di attivare i rapporti estesi di Navigazione sicura</translation>
 <translation id="7227967227357489766">Consente di definire l'elenco di utenti che possono eseguire l'accesso sul dispositivo. Le voci sono nel formato <ph name="USER_WHITELIST_ENTRY_FORMAT" />, ad esempio <ph name="USER_WHITELIST_ENTRY_EXAMPLE" />. Per consentire utenti arbitrari su un dominio, le voci devono essere nel formato <ph name="USER_WHITELIST_ENTRY_WILDCARD" />.
 
@@ -1663,6 +1720,11 @@ Il valore della norma deve essere specificato in millisecondi. I valori devono e
 <translation id="7523476810162382273">Consente di inviare heartbeat di monitoraggio al server di gestione</translation>
 <translation id="7529100000224450960">Consente di impostare un elenco di pattern URL che specificano i siti in cui è consentita l'apertura dei popup. Se questa norma non viene impostata, per tutti i siti verrà utilizzato il valore predefinito globale della norma "DefaultPopupsSetting", se è impostata, oppure verrà utilizzata la configurazione personale dell'utente.</translation>
 <translation id="7529144158022474049">Fattore di dispersione aggiornamento automatico</translation>
+<translation id="7553535237300701827">Se viene impostata questa norma, il flusso di autenticazione dell'accesso sarà uno dei seguenti, a seconda del valore dell'impostazione:
+
+      Se la norma viene impostata su GAIA, l'accesso verrà eseguito tramite il normale flusso di autenticazione GAIA.
+
+      Se viene impostata su SAML_INTERSTITIAL, durante l'accesso verrà mostrata una schermata interstitial che consentirà all'utente di procedere con l'autenticazione tramite l'IdP SAML del dominio di registrazione del dispositivo oppure di tornare al normale flusso di accesso GAIA.</translation>
 <translation id="7567380065339179813">Consenti plug-in su questi siti</translation>
 <translation id="7593523670408385997">Consente di configurare le dimensioni della cache che verranno utilizzate da <ph name="PRODUCT_NAME" /> per archiviare sul disco i file memorizzati nella cache.
 
@@ -1677,6 +1739,9 @@ Se questa norma non viene impostata, verranno utilizzate le dimensioni predefini
 <translation id="7632724434767231364">Nome della libreria GSSAPI</translation>
 <translation id="7635471475589566552">Consente di configurare in <ph name="PRODUCT_NAME" /> le impostazioni della lingua e di impedirne la modifica agli utenti. Se attivi questa impostazione, <ph name="PRODUCT_NAME" /> utilizzerà le impostazioni della lingua specificate. Se la lingua configurata non è supportata, verrà utilizzata la lingua "en-US". Se questa impostazione viene disattivata o non viene impostata, <ph name="PRODUCT_NAME" /> utilizzerà la lingua preferita specificata dall'utente (se configurata), quella del sistema o la lingua di fallback "en-US".</translation>
 <translation id="7651739109954974365">È possibile stabilire se attivare o meno il roaming dei dati per il dispositivo. Se la norma viene impostata su true, il roaming dei dati sarà consentito. Se non viene configurata o viene impostata su false, il roaming dei dati non sarà disponibile.</translation>
+<translation id="7667184304362487902">Consente di configurare le impostazioni proxy per <ph name="PRODUCT_NAME" /> e le app ARC.
+
+      Questa norma non è ancora pronta per essere utilizzata, pertanto invitiamo a non utilizzarla.</translation>
 <translation id="76810863974142048">URL in cui i client di accesso remoto devono ottenere il proprio token di autenticazione.
 
           Se viene impostata questa norma, l'host di accesso remoto richiederà che il client di autenticazione ottenga un token di autenticazione da questo URL per consentire la connessione. Deve essere utilizzato insieme a RemoteAccessHostTokenValidationUrl.
@@ -1743,10 +1808,36 @@ Se questa norma non viene impostata, <ph name="PRODUCT_NAME" /> utilizzerà il v
 <translation id="7842869978353666042">Configura opzioni di Google Drive</translation>
 <translation id="7843525027689416831">Consente di specificare i contrassegni da applicare all'avvio di <ph name="PRODUCT_NAME" />. I contrassegni specificati vengono applicati soltanto nella schermata di accesso. I contrassegni impostati tramite questa norma non vengono applicati anche alle sessioni utente.</translation>
 <translation id="7848840259379156480">Consente di configurare il renderer HTML predefinito quando <ph name="PRODUCT_FRAME_NAME" /> è installato. Per impostazione predefinita, il rendering viene eseguito dal browser host; tuttavia, in alternativa, puoi sostituire tale impostazione e consentire che l'esecuzione del rendering delle pagine HTML venga eseguita, per impostazione predefinita, da <ph name="PRODUCT_FRAME_NAME" />.</translation>
+<translation id="7853178359124471330">Se questa norma viene impostata, il flusso di rilevamento automatico del fuso orario sarà uno dei seguenti, a seconda del valore dell'impostazione:
+
+      Se la norma viene impostata su TimezoneAutomaticDetectionUsersDecide, gli utenti potranno controllare il rilevamento automatico del fuso orario tramite i normali controlli alla pagina chrome://settings.
+
+      Se la norma viene impostata su TimezoneAutomaticDetectionDisabled, i controlli per il rilevamento automatico del fuso orario alla pagina chrome://settings saranno disattivati. Il rilevamento automatico del fuso orario sarà sempre disattivato.
+
+      Se la norma viene impostata su TimezoneAutomaticDetectionIPOnly, i controlli per il rilevamento automatico del fuso orario alla pagina chrome://settings saranno disattivati. Il rilevamento automatico del fuso orario sarà sempre attivo. La funzione di rilevamento del fuso orario utilizzerà il metodo Solo IP per stabilire la posizione.
+
+      Se la norma viene impostata su TimezoneAutomaticDetectionSendWiFiAccessPoints, i controlli per il rilevamento automatico del fuso orario alla pagina chrome://settings saranno disattivati. Il rilevamento automatico del fuso orario sarà sempre attivo. L'elenco dei punti di accesso Wi-Fi visibili sarà sempre inviato al server dell'API di geolocalizzazione per rilevare il fuso orario con precisione.
+
+      Se la norma non viene impostata, verrà gestita come se fosse impostata su TimezoneAutomaticDetectionUsersDecide.
+
+      Se la norma SystemTimezone è impostata, sostituisce questa norma. In questo caso il rilevamento automatico del fuso orario viene completamente disattivato.</translation>
 <translation id="7882585827992171421">Questa norma è attiva soltanto in modalità retail.
 
       Consente di stabilire l'ID dell'estensione da utilizzare come screensaver nella schermata di accesso. L'estensione deve far parte dell'AppPack configurato per il dominio tramite la norma DeviceAppPack.</translation>
+<translation id="7882890448959833986">Elimina l'avviso di sistema operativo non supportato</translation>
 <translation id="7912255076272890813">Configura tipi di app/estensioni consentiti</translation>
+<translation id="7928112526630078979">Consente di specificare il server proxy utilizzato da <ph name="PRODUCT_NAME" /> e dalle app ARC, nonché di impedire agli utenti di modificare le impostazioni proxy.
+
+      Se si decide di non utilizzare mai un server proxy e di collegarsi sempre direttamente, tutte le altre opzioni vengono ignorate. Le app ARC utilizzeranno il server proxy predefinito della rete corrente, se disponibile.
+
+      Se si decide di rilevare automaticamente il server proxy, tutte le altre opzioni vengono ignorate.
+
+      Per esempi dettagliati, visitare il sito:
+      <ph name="PROXY_HELP_URL" />
+
+      Se questa impostazione viene attivata, <ph name="PRODUCT_NAME" /> e le app ARC ignoreranno tutte le opzioni correlate al proxy specificate nella riga di comando.
+
+      Se queste norme non vengono impostate, gli utenti potranno scegliere le impostazioni proxy che preferiscono.</translation>
 <translation id="793134539373873765">Consente di specificare se p2p deve essere utilizzato per i payload di aggiornamento del sistema operativo. Se questa norma viene impostata su True, i dispositivi condivideranno e proveranno a consumare i payload di aggiornamento sulla LAN, riducendo potenzialmente l'utilizzo e la congestione della larghezza di banda Internet. Se il payload di aggiornamento non è disponibile sulla LAN, il dispositivo ripiegherà sul download da un server di aggiornamento. Se la norma viene impostata su False o non viene configurata, non verrà utilizzato p2p.</translation>
 <translation id="7933141401888114454">Attivazione della creazione di utenti controllati</translation>
 <translation id="7936098023732125869">Consente di attivare l'utilizzo di un provider di ricerca predefinito.
@@ -1778,6 +1869,7 @@ Se questa norma non viene impostata, <ph name="PRODUCT_NAME" /> utilizzerà il v
 
           Se questa norma non viene impostata, l'impostazione viene attivata.</translation>
 <translation id="8073243368829195">Consente di attivare l'utilizzo di Smart Lock</translation>
+<translation id="8074052133552427532">Utilizza sempre il rilevamento approssimativo del fuso orario.</translation>
 <translation id="8099880303030573137">Ritardo inattività in caso di utilizzo della batteria</translation>
 <translation id="8102913158860568230">Impostazione stream multimediale predefinito</translation>
 <translation id="8104962233214241919">Seleziona automaticamente i certificati client per questi siti</translation>
@@ -1800,6 +1892,7 @@ Se questa norma non viene impostata, viene utilizzato un periodo di tempo predef
 Il valore della norma deve essere specificato in millisecondi. I valori devono essere inferiori o uguali al ritardo di inattività.</translation>
 <translation id="8140204717286305802">Consente di comunicare al server l'elenco di interfacce di rete con i relativi tipi e indirizzi hardware. Se la norma viene impostata su False, l'elenco di interfacce non viene comunicato.</translation>
 <translation id="8146727383888924340">Consenti agli utenti di utilizzare le offerte tramite la registrazione a Chrome OS</translation>
+<translation id="8148785525797916822">Elimina l'avviso che viene mostrato quando <ph name="PRODUCT_NAME" /> è in esecuzione su un computer o l'avviso di sistema operativo non più supportato.</translation>
 <translation id="8148901634826284024">Consente di attivare la funzione di accessibilità della modalità ad alto contrasto.
 
 Se la norma viene impostata su true, la modalità ad alto contrasto sarà sempre attiva.
@@ -1839,6 +1932,7 @@ Se la norma non viene configurata, la modalità ad alto contrasto viene inizialm
 <translation id="8197918588508433925">Questa norma specifica le estensioni autorizzate a utilizzare chrome.enterprise.platformKeysPrivate.challengeUserKey() dell'API Enterprise Platform Keys per l'attestazione da remoto. Le estensioni devono essere aggiunte a questo elenco per utilizzare l'API.
 
           Se un'estensione non è presente nell'elenco o l'elenco non è impostato, la chiamata all'API non riuscirà e verrà generato un codice di errore.</translation>
+<translation id="8214600119442850823">Consente di configurare Gestione password.</translation>
 <translation id="8244525275280476362">Ritardo di recupero massimo dopo l'invalidazione di una norma</translation>
 <translation id="8256688113167012935">Controlla il nome account visualizzato da <ph name="PRODUCT_OS_NAME" /> nella schermata di accesso per il corrispondente account del dispositivo.
 
@@ -1987,15 +2081,24 @@ Il fattore di regolazione minimo deve essere 100%. Valori che renderebbero il ri
       Se questa norma viene impostata su false, l'utente, le app e le estensioni non possono attivare la modalità a schermo intero.
 
       Su tutte le piattaforme, a eccezione di <ph name="PRODUCT_OS_NAME" />, la modalità kiosk non è disponibile quando la modalità a schermo intero è disattivata.</translation>
+<translation id="8795495354632096254">Invia sempre i punti di accesso Wi-Fi al server durante le operazioni per stabilire il fuso orario.</translation>
 <translation id="8818173863808665831">Consente di segnalare la posizione geografica del dispositivo.
 
 Se la norma non viene impostata o viene impostata su false, la posizione non viene segnalata.</translation>
+<translation id="8818768076343557335">Prevedi sempre le azioni di rete su ogni rete non cellulare.
+          (obsoleto nella versione 50, rimosso nella 52. Dopo la versione 52, se viene impostato il valore 1, viene gestito come 0; prevedi le azioni di rete su qualsiasi connessione di rete).</translation>
 <translation id="8828766846428537606">Configura la Pagina inziale predefinita in <ph name="PRODUCT_NAME" /> e impedisce agli utenti di modificarla. Le impostazioni relative alla Pagina iniziale dell'utente sono completamente bloccate solo se imposti come pagina inziale la pagina Nuova scheda, o se scegli URL e lo specifichi nella sezione Pagina inziale. Se non specifichi l'URL della pagina inziale, l'utente può impostare la pagina Nuova scheda come pagina inziale specificando "chrome://newtab".</translation>
+<translation id="8833109046074170275">Autenticazione tramite il flusso GAIA predefinito</translation>
 <translation id="8838303810937202360"><ph name="PRODUCT_OS_NAME" /> memorizza nella cache app ed estensioni per consentire a più utenti di uno stesso dispositivo di installarle senza doverle riscaricare.
       Se questa norma non viene configurata o se il valore è inferiore a 1 MB, <ph name="PRODUCT_OS_NAME" /> utilizzerà le dimensioni della cache predefinite.</translation>
 <translation id="8858642179038618439">Forza la Modalità di protezione di YouTube</translation>
 <translation id="8864975621965365890">Consente di eliminare il messaggio di richiesta di turndown che compare quando un sito viene visualizzato da <ph name="PRODUCT_FRAME_NAME" />.</translation>
 <translation id="8870318296973696995">Pagina iniziale</translation>
+<translation id="8889588091638298603">Quirks Server fornisce file di configurazione specifici per l'hardware, ad esempio profili ICC per regolare la calibrazione dei monitor.
+
+      Se questa norma viene impostata su false, il dispositivo non tenterà di contattare Quirks Server per scaricare i file di configurazione.
+
+      Se la norma viene impostata su true o non viene configurata, <ph name="PRODUCT_OS_NAME" /> contatterà automaticamente Quirks Server, scaricherà i file di configurazione, se disponibili, e li memorizzerà sul dispositivo. Tali file potrebbero essere utilizzati, ad esempio, per migliorare la qualità del display dei monitor collegati.</translation>
 <translation id="8905426178924715309">Questa norma è stata ritirata; utilizzare le norme ForceGoogleSafeSearch e ForceYouTubeSafetyMode. Questa norma viene ignorata se viene impostata la norma ForceGoogleSafeSearch o ForceYouTubeSafetyMode.
 
       Consente di forzare l'esecuzione delle query nella Ricerca Google con l'opzione SafeSearch attiva e di impedire agli utenti di modificare l'impostazione. Questa impostazione forza inoltre l'attivazione della Modalità di protezione su YouTube.
@@ -2035,6 +2138,7 @@ Il valore della norma deve essere specificato in millisecondi. I valori devono e
 <translation id="9042911395677044526">Consente di forzare l'applicazione della configurazione di rete per utente su un dispositivo <ph name="PRODUCT_OS_NAME" />. La configurazione di rete è una stringa in formato JSON definita secondo il formato Open Network Configuration descritto all'indirizzo <ph name="ONC_SPEC_URL" />.</translation>
 <translation id="9084985621503260744">Specifica se l'attività video incide sulla gestione dell'alimentazione</translation>
 <translation id="9088433379343318874">Abilita il provider di contenuti dell'utente supervisionato</translation>
+<translation id="9088444059179765143">Configura il metodo di rilevamento automatico del fuso orario</translation>
 <translation id="9096086085182305205">Whitelist server di autenticazione</translation>
 <translation id="9098553063150791878">Norme relative all'autenticazione HTTP</translation>
 <translation id="9104138886225968319">Consente di inviare heartbeat di monitoraggio al server di gestione per consentire a quest'ultimo di rilevare se il dispositivo è offline.
